@@ -21,7 +21,9 @@ require _model_tier
 // (`kokoro-82m.gguf` + `tts_oracle/kokoro/` under models_dir(), both minted by
 // performance/build_tts_data.das through harness/convert_kokoro.py and harness/kokoro_oracle.py):
 // the token rule against the reference pipeline, the parity rail of `_tts_parity.das` against
-// the PyTorch reference with captured noise, and a facade smoke cell that speaks one sentence
+// the PyTorch reference with captured noise, the Russian fine-tune's facade cell (`kokoro-ru.gguf`
+// + `tts_g2p_ru.bin`: the declared voice languages, the Russian front end, a Latin word spliced
+// in, sveta speaking the Russian string), and a facade smoke cell that speaks one sentence
 // through the front end's own inventory. The facade and GPU cells also need the front-end
 // packs (`tts_g2p.bin`, `tts_postag.bin`) beside the model; the GPU cells run on Metal or Vulkan,
 // skip where no device serves or the driver registers no seat for the stage, and red where a
@@ -200,6 +202,55 @@ def test_kokoro_dialects(t : T?) {
             let n_us = samples_for(m, tts_phonemize(m, spoken, "en-us"), "bf_emma")
             t |> success(n_gb != n_us, "the discriminator: the dialects speak {n_gb} and {n_us} samples")
             t |> equal(long_length(audio.pcm), n_gb, "bf_emma read the British inventory ({n_us} would be the American one)")
+        }
+    }
+}
+
+def private ru_gguf_path() : string => path_join(models_dir(), "kokoro-ru.gguf")
+
+[test]
+def test_kokoro_ru_facade(t : T?) {
+    t |> run("a Russian fine-tune: its packs speak the language the file declares, and the front end reads it") @(t : T?) {
+        return if (tts_data_missing(t, ru_gguf_path()) || ru_pack_missing(t))
+        var inscope packs <- tts_pack_names(ru_gguf_path())
+        t |> equal(length(packs), 1, "the file's voices ask for one pack, before any load: {packs}")
+        t |> equal(packs[0], "tts_g2p_ru.bin", "the Russian stress pack alone")
+        with_dasllama_jobque_() {
+            var inscope m <- load_tts_model(ru_gguf_path())
+            var inscope c <- caps(m)
+            t |> equal(length(c.voices), 2, "sveta and masha: {c.voices}")
+            for (lang in c.voice_langs) {
+                t |> equal(lang, "ru", "the file's declaration, not the name's shape")
+            }
+            t |> success(find_index(c.langs, "ru") >= 0, "the front end lists Russian: {c.langs}")
+            t |> equal(tts_voice_lang(m, "sveta"), "ru")
+            t |> equal(kokoro_voice_lang(m.model.kokoro, "sveta"), "ru", "the family record carries it")
+            t |> equal(kokoro_voice_lang("sveta"), "", "the name alone would carry none")
+            let line = "12 мешков муки нужно, чтобы открыть замок."   // nolint:STYLE039
+            let norm = tts_normalize(line, "ru")
+            t |> equal(norm, "двенадцать мешков муки нужно, чтобы открыть замок.")   // nolint:STYLE039
+            let ps = strip(tts_phonemize(m, norm, "ru"))
+            t |> equal(ps, "dvʲinˈɑtʦətʲ mʲiʃkˈof mˈukʲɪ nˈuʒnə, ʃtˈoby ɐtkrˈytʲ zˈɑmək.", "муки and замок read the pack's default - the corpus's more frequent reading - with no mark in the text")   // nolint:STYLE039
+            let other = strip(tts_phonemize(m, "мешков мук+и", "ru"))   // nolint:STYLE039
+            t |> equal(other, "mʲiʃkˈof mukʲˈi", "a mark in the text picks the other reading")   // nolint:STYLE039
+            var inscope cps <- utf8_to_cpts(ps)
+            var inscope ids <- kokoro_token_ids(m.model.kokoro, ps)
+            t |> equal(length(ids), length(cps) + 2, "every Russian symbol is in the model's vocabulary")
+            var inscope foreign <- kokoro_token_ids(m.model.kokoro, "{ps}ʘ")   // nolint:STYLE039
+            t |> equal(length(foreign), length(ids), "the control: a symbol outside the vocabulary (a click) adds no id")
+            let mixed = strip(tts_phonemize(m, "язык daslang компилируется", "ru"))   // nolint:STYLE039
+            t |> equal(mixed, "jɪzˈyk dˈæslæŋ kəmʲpʲilʲˈirujiʦə", "a Latin word inside Russian text is read by the English front end sitting beside the model")   // nolint:STYLE039
+            var inscope audio <- synthesize(m, line, "sveta")
+            t |> equal(audio.sample_rate, 24000)
+            t |> success(length(audio.pcm) > 24000 && length(audio.pcm) < 240000, "{length(audio.pcm)} samples")
+            let lv = speech_level(audio.pcm)
+            t |> success(lv.finite, "every sample finite")
+            t |> success(lv.peak > 0.05, "peak {lv.peak}: the model spoke")
+            let n_ru = samples_for(m, ps, "sveta")
+            let n_other = samples_for(m, "dvʲinˈɑtʦətʲ {other} nˈuʒnə, ʃtˈoby ɐtkrˈytʲ zɐmˈok.", "sveta")   // nolint:STYLE039
+            t |> success(n_other != n_ru, "the control: the other stress readings speak {n_other} samples against {n_ru}")
+            t |> equal(long_length(audio.pcm), n_ru, "the synthesis read the Russian front end: its sample count is the pack-default phoneme string's")
+            to_log(LOG_INFO, "kokoro-ru facade: {length(audio.pcm)} samples, peak {lv.peak}; {timings_line(audio.timings, audio.sample_rate)}\n")
         }
     }
 }

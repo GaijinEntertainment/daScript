@@ -2722,3 +2722,35 @@
     CPU rail against the untagged build and kept only where it moves the number - the kernels are
     already tuned and the hints already name the distinct buffers, so the expected gain is small
     or zero, and a row that measures nothing is closed with that figure.
+
+290. **The Russian front end decides a homograph and an unknown word without context.** `dasllama_g2p_ru.das`
+    reads a form with two stresses (за́мок / замо́к, му́ки / муки́ - 6450 forms of the pack) as the pack's first
+    variant, the one a corpus frequency count put first, whatever the sentence says, and a form the pack lacks
+    (loanwords, names, the dictionary's gaps) by the shape rule, the vowel before the last, which is wrong often
+    enough to hear; a mark in the text is the only override. Done = a small context model (the tagging shape of `ARCHITECTURE_TTS_FRONT_END.md#tts-heteronym-context`:
+    per letter, is this the stressed vowel; a homograph picked among the pack's variants, an unknown word
+    guessed from its letters), trained on the stress-marked corpora the fixture and the frequency table already
+    come from, held out against a hand-curated homograph set, shipped in the pack as a fourth table and read in
+    `ru_mark_word` where the pack's default and the shape rule stand now; the pack's exception list - the
+    known forms the model gets wrong - carried beside it so a known word never regresses.
+
+291. **The Russian stress pack carries two four-byte offset columns per form.** `tts_g2p_ru.bin` is 17.3 MB for
+    560,825 forms: 10.9 MB of keys and 4.5 MB of offsets in the byte-sorted string table every pack shares
+    (`dasllama_g2p_pack.das`), where the keys share long prefixes (every inflection of one lemma). Done = a
+    front-coded or trie form of the key blob behind the same `lex_find`, the English packs moved onto it in the
+    same change or left as they are by measurement (the pack loads once; the lookup is per word).
+
+292. **kokoro-ru has no oracle dump and no rig row.** `harness/kokoro_oracle.py` reads the pinned hexgrad
+    snapshot alone, so the parity rail of `_tts_parity.das` holds `kokoro-82m.gguf` and not the Russian
+    checkpoints, whose conversion is held only by the bring-up's comparison against the PyTorch reference
+    on five sentences and the facade cell's sample count; and
+    `harness/tts_rig.py` has no Russian sentence set or `TtsBoard` for them, so no WER or UTMOS figure guards a
+    change to the Russian front end the way `tests/test_tts_g2p.das`'s corpus cell guards the English one, and no
+    spawned cell's input reaches the Russian synthesis path (`lcpp_bench --tts` speaks the English corpus head through
+    the board's `TtsBoard` rows, and `harness/tts_ref_bench.py` runs the reference's own hexgrad model, not a
+    fine-tune) - the measurement checklist's spawned-cell duty for a new serving path is owed here.
+    Done = the oracle takes the checkpoint, config and voices as the converter does and dumps a kokoro-ru case
+    set beside `tts_oracle/kokoro`; a Russian sentence set with a GigaAM or Parakeet transcript arm in the rig,
+    a `TtsBoard` row for kokoro-ru in `performance/model_specs.das` with the reference instrument taking the
+    fine-tune's checkpoint, its figures in `PERF_LEDGER.md`, and the kokoro-ru rows of `harness/tts_model_card.md`
+    carrying the rig's figures.

@@ -10,6 +10,8 @@ require strings
 require daslib/fio
 require daslib/utf8_utils
 require dasllama/dasllama_unicode
+require dasllama/dasllama_textscan
+require dasllama/dasllama_g2p_pack
 
 //! Part-of-speech tagging for the TTS front end: an English tokenizer shaped like the
 //! reference pipeline's over normalized text (contractions and abbreviations from the packed
@@ -51,21 +53,9 @@ let private END2 = "-END2-"
 
 // ---------------------------------------------------------------- the packed file
 
-def private rd_u8(b : array<uint8> | #; o : int64) : int => int(b[o])
-def private rd_u16(b : array<uint8> | #; o : int64) : int => int(b[o]) | (int(b[o + 1l]) << 8)
-def private rd_u32(b : array<uint8> | #; o : int64) : uint => uint(b[o]) | (uint(b[o + 1l]) << 8u) | (uint(b[o + 2l]) << 16u) | (uint(b[o + 3l]) << 24u)
-def private rd_i32(b : array<uint8> | #; o : int64) : int => int(rd_u32(b, o))
 def private rd_f32(b : array<uint8> | #; o : int64) : float {
     let u = rd_u32(b, o)
     return unsafe(reinterpret<float>(u))
-}
-def private rd_str(b : array<uint8> | #; o : int64; n : int) : string {
-    var inscope bytes : array<uint8>
-    bytes |> resize(n)
-    for (i in range(n)) {
-        bytes[i] = b[o + int64(i)]
-    }
-    return string(bytes)
 }
 
 //! the header: magic, version, the three floats, the source note, the tag names and the
@@ -87,7 +77,7 @@ def private read_tagger_header(var tg : PosTagger; b : array<uint8>#; path : str
     o += 12l
     let src_len = rd_u16(b, o)
     o += 2l
-    tg.source = rd_str(b, o, src_len)
+    tg.source = bytes_str(b, o, src_len)
     o += int64(src_len)
     let n_tags = rd_i32(b, o)
     o += 4l
@@ -95,7 +85,7 @@ def private read_tagger_header(var tg : PosTagger; b : array<uint8>#; path : str
     for (_i in range(n_tags)) {
         let l = rd_u8(b, o)
         o++
-        tg.tags |> push(rd_str(b, o, l))
+        tg.tags |> push(bytes_str(b, o, l))
         o += int64(l)
     }
     let n_td = rd_i32(b, o)
@@ -103,7 +93,7 @@ def private read_tagger_header(var tg : PosTagger; b : array<uint8>#; path : str
     for (_i in range(n_td)) {
         let l = rd_u16(b, o)
         o += 2l
-        let w = rd_str(b, o, l)
+        let w = bytes_str(b, o, l)
         o += int64(l)
         tg.tagdict[w] = rd_u8(b, o)
         o++
@@ -160,7 +150,7 @@ def load_pos_tagger(path : string) : PosTagger {
         for (_i in range(n_exc)) {
             let l = rd_u16(b, o)
             o += 2l
-            let chunk = rd_str(b, o, l)
+            let chunk = bytes_str(b, o, l)
             o += int64(l)
             let n_parts = rd_u8(b, o)
             o++
@@ -168,7 +158,7 @@ def load_pos_tagger(path : string) : PosTagger {
             for (_p in range(n_parts)) {
                 let pl = rd_u16(b, o)
                 o += 2l
-                parts |> push(rd_str(b, o, pl))
+                parts |> push(bytes_str(b, o, pl))
                 o += int64(pl)
             }
             tg.exceptions[chunk] <- parts
@@ -201,12 +191,9 @@ def private feat0(name : string) : uint64 => fnv_sep(fnv_str(FNV_OFFSET, name))
 def private feat1(name, a : string) : uint64 => fnv_str(fnv_sep(fnv_str(FNV_OFFSET, name)), a)
 def private feat2(name, a, b : string) : uint64 => fnv_str(fnv_sep(fnv_str(fnv_sep(fnv_str(FNV_OFFSET, name)), a)), b)
 
-def private is_digit(cp : int) : bool => is_number(cp)
 def private is_letter(cp : int) : bool => cp >= 0 && cpt_is_letter(cp)
 def private is_lower(cp : int) : bool => is_letter(cp) && int(utf32_to_lower(uint(cp))) == cp
 def private is_upper(cp : int) : bool => is_letter(cp) && int(utf32_to_lower(uint(cp))) != cp
-def private cp_at(c : array<int>; i : int) : int => (i >= 0 && i < length(c)) ? c[i] : -1
-
 def private suffix_str(c : array<int>; n : int) : string => cpts_to_utf8(c, max(0, length(c) - n), length(c))
 def private prefix_str(c : array<int>; n : int) : string => cpts_to_utf8(c, 0, min(n, length(c)))
 
@@ -371,7 +358,6 @@ def private ctx_suffix(w : string) : string {
 
 // ---------------------------------------------------------------- tokenizer
 
-def private is_space(cp : int) : bool => cp >= 0 && cpt_is_whitespace(cp)
 def private is_hyphen(cp : int) : bool => cp == '-' || cp == 8211 || cp == 8212
 def private is_ellipsis(cp : int) : bool => cp == 8230
 //! punctuation a token starts with: dashes, ellipsis, clause marks, the quote

@@ -8,13 +8,14 @@ require dasllama/dasllama_lint public
 require math
 require strings
 require daslib/strings_boost
-require daslib/fio
 require daslib/utf8_utils
 require daslib/f16_cvt  // the pack stores the GRU as f16; the reader widens it once at load
 require dasllama/dasllama_unicode
 require dasllama/dasllama_postag
 require dasllama/dasllama_textnorm
+require dasllama/dasllama_textscan   // MAX_DIGITS_AS_NUMBER
 require dasllama/dasllama_gpu_math   // sigmoid_f32
+require dasllama/dasllama_g2p_pack
 require daslib/cmp
 
 //! Grapheme-to-phoneme conversion for the TTS front end, emitting the English inventory the
@@ -25,15 +26,6 @@ require daslib/cmp
 //! a fallback chain - CMUdict pre-rendered into the American inventory, then a GRU
 //! sequence-to-sequence spelling model - so no word is ever dropped. Data loads from
 //! tts_g2p.bin (harness/build_g2p_data.py); tokens and tags come from dasllama_postag.
-
-//! One byte-sorted string table of the pack: offsets into the mapped file
-struct LexTable {
-    n : int
-    key_off : int64
-    val_off : int64
-    key_blob : int64
-    val_blob : int64
-}
 
 //! The loaded pack: the file bytes (lexicons are searched in place), the three tables, and
 //! the GRU spelling model's weights and alphabets.
@@ -136,38 +128,6 @@ let private GB_SYMBOL <- {
 
 // ---------------------------------------------------------------- the packed file
 
-def private rd_u8(b : array<uint8> | #; o : int64) : int => int(b[o])
-def private rd_u16(b : array<uint8> | #; o : int64) : int => int(b[o]) | (int(b[o + 1l]) << 8)
-def private rd_u32(b : array<uint8> | #; o : int64) : uint => uint(b[o]) | (uint(b[o + 1l]) << 8u) | (uint(b[o + 2l]) << 16u) | (uint(b[o + 3l]) << 24u)
-def private rd_i32(b : array<uint8> | #; o : int64) : int => int(rd_u32(b, o))
-def private bytes_str(b : array<uint8> | #; o : int64; n : int) : string {
-    var inscope bytes : array<uint8>
-    bytes |> resize(n)
-    for (i in range(n)) {
-        bytes[i] = b[o + int64(i)]
-    }
-    return string(bytes)
-}
-
-def private read_lex_table(b : array<uint8>; var o : int64&) : LexTable {
-    var t = LexTable()
-    t.n = rd_i32(b, o)
-    o += 4l
-    t.key_off = o
-    o += int64(t.n + 1) * 4l
-    t.val_off = o
-    o += int64(t.n + 1) * 4l
-    let key_len = rd_i32(b, o)
-    o += 4l
-    t.key_blob = o
-    o += int64(key_len)
-    let val_len = rd_i32(b, o)
-    o += 4l
-    t.val_blob = o
-    o += int64(val_len)
-    return t
-}
-
 //! One GRU tensor, widened from the f16 the pack stores it as (dtype 0 is f32, kept so a
 //! future pack can carry a tensor at full width without a version bump).
 def private read_tensor(b : array<uint8>; var o : int64&; var dst : array<float>) : int {
@@ -215,33 +175,13 @@ def private read_alphabet(b : array<uint8>; var o : int64&) : array<string> {
 //! Load tts_g2p.bin. Panics on a missing file, a wrong magic or an unsupported version.
 def load_g2p(path : string) : G2pModel {
     var g = G2pModel()
-    let f = fopen(path, "rb")
-    if (f == null) {
+    g.data <- pack_read_bytes(path)
+    if (empty(g.data)) {
         panic("dasLLAMA tts: cannot open g2p data '{path}'")
     }
-    fmap(f) $(var b : array<uint8>#) {
-        g.data |> reserve(long_length(b))
-        g.data |> resize(long_length(b))
-        unsafe {
-            memcpy(addr(g.data[0]), addr(b[0]), long_length(b))
-        }
-    }
-    fclose(f)
     var o = 0l
-    if (rd_u32(g.data, o) != G2P_MAGIC) {
-        panic("dasLLAMA tts: bad magic in '{path}' (not a tts_g2p.bin)")
-    }
-    o += 4l
-    let version = rd_i32(g.data, o)
-    o += 4l
-    if (version != G2P_VERSION) {
-        panic("dasLLAMA tts: '{path}' is a tts_g2p.bin version {version} pack, and this build reads version {G2P_VERSION} - rebuild it with harness/build_g2p_data.py")
-    }
-    let src_len = rd_u16(g.data, o)
-    o += 2l
-    g.source = bytes_str(g.data, o, src_len)
+    g.source = read_pack_header(g.data, path, "tts_g2p.bin", "harness/build_g2p_data.py", G2P_MAGIC, G2P_VERSION, o)
     g.us_only = find(g.source, "dialect us") >= 0
-    o += int64(src_len)
     g.gold = read_lex_table(g.data, o)
     g.silver = read_lex_table(g.data, o)
     g.cmu = read_lex_table(g.data, o)
@@ -280,48 +220,13 @@ def load_g2p(path : string) : G2pModel {
 
 // ---------------------------------------------------------------- lexicon tables
 
-//! bytewise compare of a key of the table with the query bytes: <0, 0, >0
-def private key_compare(g : G2pModel; t : LexTable; i : int; q : array<uint8>) : int {
-    let a = t.key_blob + int64(rd_u32(g.data, t.key_off + int64(i) * 4l))
-    let klen = int(rd_u32(g.data, t.key_off + int64(i + 1) * 4l) - rd_u32(g.data, t.key_off + int64(i) * 4l))
-    let n = min(klen, length(q))
-    for (k in range(n)) {
-        let d = int(g.data[a + int64(k)]) - int(q[k])
-        return d if (d != 0)
-    }
-    return klen - length(q)
-}
-
-//! the entry index of `word` in a table, or -1
-def private lex_find(g : G2pModel; t : LexTable; word : string) : int {
-    var inscope q <- to_bytes(word)
-    var lo = 0
-    var hi = t.n - 1
-    while (lo <= hi) {
-        let mid = (lo + hi) >> 1
-        let c = key_compare(g, t, mid, q)
-        return mid if (c == 0)
-        if (c < 0) {
-            lo = mid + 1
-        } else {
-            hi = mid - 1
-        }
-    }
-    return -1
-}
-
-def private lex_value_span(g : G2pModel; t : LexTable; i : int; var a : int64&; var b : int64&) {
-    a = t.val_blob + int64(rd_u32(g.data, t.val_off + int64(i) * 4l))
-    b = t.val_blob + int64(rd_u32(g.data, t.val_off + int64(i + 1) * 4l))
-}
-
 //! One dialect's part of a merged entry as the span [a, b) over the mapped bytes, false when
 //! the entry carries no reading for it. A key of the merged table exists for either dialect;
 //! only the part says whether THIS one knows the word.
 def private lex_part(g : G2pModel; t : LexTable; i : int; british : bool; var a : int64&; var b : int64&) : bool {
     var v0 = 0l
     var v1 = 0l
-    lex_value_span(g, t, i, v0, v1)
+    lex_value_span(g.data, t, i, v0, v1)
     let flags = rd_u8(g.data, v0)
     var o = v0 + 1l
     if ((flags & 1) != 0) {
@@ -362,7 +267,7 @@ def private span_ps(g : G2pModel; a, b : int64) : string => bytes_str(g.data, a 
 def private lex_plain_single(g : G2pModel; t : LexTable; i : int) : string {
     var a = 0l
     var b = 0l
-    lex_value_span(g, t, i, a, b)
+    lex_value_span(g.data, t, i, a, b)
     return span_ps(g, a, b)
 }
 
@@ -601,11 +506,6 @@ def private is_digits(w : string) : bool {
     return ok
 }
 
-def private lower_word(w : string) : string {
-    var inscope c <- utf8_to_cpts(w)
-    var inscope out <- [for (cp in c); int(utf32_to_lower(uint(cp)))]
-    return cpts_to_utf8(out)
-}
 
 def private upper_cp(cp : int) : int {
     return cp - 32 if (cp >= 'a' && cp <= 'z')
@@ -618,7 +518,7 @@ def private upper_word(w : string) : string {
     return cpts_to_utf8(out)
 }
 
-def private is_lower_word(w : string) : bool => lower_word(w) == w
+def private is_utf8_to_lower(w : string) : bool => utf8_to_lower(w) == w
 def private is_upper_word(w : string) : bool => upper_word(w) == w
 
 //! first character upper, the rest lower
@@ -687,7 +587,7 @@ let private HETERONYM_OVERRIDES <- {
     "resume" => { "DEFAULT" => "ɹəzˈum", "NOUN" => "ɹˈɛzəmˌA" }   // nolint:STYLE039
 }
 
-[arch(at = "../ARCHITECTURE_TTS.md#tts-heteronym-context")]
+[arch(at = "../ARCHITECTURE_TTS_FRONT_END.md#tts-heteronym-context")]
 def private key_order(tag : string; ctx : TokenContext; has_ctx : bool) : array<string> {
     var keys : array<string>
     if (has_ctx && ctx.prev_text == "to" && ctx.prev_tag == "TO") {
@@ -711,7 +611,7 @@ def private key_order(tag : string; ctx : TokenContext; has_ctx : bool) : array<
 //! the entry of `word` this dialect knows: the key alone is not enough, since the merged table
 //! holds a key either dialect carries
 def private lex_find_part(g : G2pModel; t : LexTable; word : string; british : bool) : int {
-    let i = lex_find(g, t, word)
+    let i = lex_find(g.data, t, word)
     return (i >= 0 && lex_has(g, t, i, british)) ? i : -1
 }
 
@@ -721,7 +621,7 @@ def private grown_find(g : G2pModel; t : LexTable; word : string; british : bool
     let i = lex_find_part(g, t, word, british)
     return i if (i >= 0)
     return -1 if (cpt_count(word) < 2)
-    let lower = lower_word(word)
+    let lower = utf8_to_lower(word)
     let cap = capitalize_word(word)
     if (word == cap && lower != cap) {
         return lex_find_part(g, t, lower, british)
@@ -787,12 +687,12 @@ def private lookup(g : G2pModel; word_in : string; tag : string; stress : float;
     var is_nnp = false
     var nnp_case = false
     if (is_upper_word(word) && !in_golds(g, word, british)) {
-        word = lower_word(word)
+        word = utf8_to_lower(word)
         nnp_case = true
         is_nnp = tag == "NNP"
     }
     if (has_ctx) {
-        let wl = lower_word(word)
+        let wl = utf8_to_lower(word)
         var hit = ""
         // every collocation names a NOUN reading, so a verb tag out-ranks the whole table
         if (!starts_with(tag, "VB")) {
@@ -839,7 +739,7 @@ def private lookup(g : G2pModel; word_in : string; tag : string; stress : float;
 def private is_known(g : G2pModel; word : string; _tag : string; british : bool) : bool {
     return true if (in_golds(g, word, british) || key_exists(SYMBOLS, word) || in_silvers(g, word, british))
     return false if (!is_alpha_word(word) || !all_lexicon_cps(word))
-    return true if (cpt_count(word) == 1 || (is_upper_word(word) && in_golds(g, lower_word(word), british)))
+    return true if (cpt_count(word) == 1 || (is_upper_word(word) && in_golds(g, utf8_to_lower(word), british)))
     let rest = tail_from(word, 1)
     return rest == upper_word(rest)
 }
@@ -1041,9 +941,9 @@ def private get_word(g : G2pModel; word_in : string; tag : string; stress : floa
     let sp = special_case(g, word_in, tag, stress, ctx, british)
     return sp if (sp.ok)
     var word = word_in
-    let wl = lower_word(word)
+    let wl = utf8_to_lower(word)
     if (cpt_count(word) > 1 && is_alpha_word(replace(word, "'", "")) && word != wl && (tag != "NNP" || cpt_count(word) > 7)
-            && !in_golds(g, word, british) && !in_silvers(g, word, british) && (is_upper_word(word) || is_lower_word(tail_from(word, 1)))) {
+            && !in_golds(g, word, british) && !in_silvers(g, word, british) && (is_upper_word(word) || is_utf8_to_lower(tail_from(word, 1)))) {
         if (in_golds(g, wl, british) || in_silvers(g, wl, british) || stem_s(g, wl, tag, stress, ctx, true, british).ok
                 || stem_ed(g, wl, tag, stress, ctx, true, british).ok || stem_ing(g, wl, tag, stress, ctx, true, british).ok) {
             word = wl
@@ -1136,7 +1036,7 @@ def private is_number_word(word_in : string; is_head : bool) : bool {
 def private lexicon(g : G2pModel; tk : G2pToken; ctx : TokenContext; british : bool) : PsResult {
     let word = replace(replace(empty(tk.alias) ? tk.text : tk.alias, "‘", "'"), "’", "'")   // nolint:STYLE039
     var stress = NO_STRESS
-    if (word != lower_word(word)) {
+    if (word != utf8_to_lower(word)) {
         stress = is_upper_word(word) ? 2.0 : 0.5
     }
     let r = get_word(g, word, tk.tag, stress, ctx, british)
@@ -1268,7 +1168,7 @@ def private fallback_piece(g : G2pModel; low : string; british : bool) : string 
         ps = lex_plain_reading(g, g.silver, low, british)
     }
     return ps if (!empty(ps))
-    let k = lex_find(g, g.cmu, low)
+    let k = lex_find(g.data, g.cmu, low)
     if (k >= 0) {
         ps = lex_plain_single(g, g.cmu, k)
     } else {
@@ -1294,7 +1194,7 @@ def private fallback(g : G2pModel; text : string; british : bool) : PsResult {
         while (j < n && (is_ascii_alpha(c[j]) || (c[j] == '\'' && j + 1 < n && is_ascii_alpha(c[j + 1])))) {
             j++
         }
-        parts |> push(fallback_piece(g, lower_word(cpts_to_utf8(c, i, j)), british))
+        parts |> push(fallback_piece(g, utf8_to_lower(cpts_to_utf8(c, i, j)), british))
         i = j
     }
     return suffixed_ps(join(parts, ""), 2)
@@ -1550,7 +1450,7 @@ def private token_context(ctx : TokenContext; ps : string; has_ps : bool; tk : G
         }
     }
     next.future_to = tk.text == "to" || tk.text == "To" || (tk.text == "TO" && (tk.tag == "TO" || tk.tag == "IN"))
-    next.next_text = lower_word(tk.text)
+    next.next_text = utf8_to_lower(tk.text)
     next.next_tag = tk.tag
     return next
 }
@@ -1704,7 +1604,7 @@ def g2p_tokens(g : G2pModel; tagged : array<PosToken>; british : bool = false) :
         while (a > 0 && !pieces[a].is_head) {
             a--
         }
-        ctx.prev_text = a > 0 ? lower_word(pieces[a - 1].text) : ""
+        ctx.prev_text = a > 0 ? utf8_to_lower(pieces[a - 1].text) : ""
         ctx.prev_tag = a > 0 ? pieces[a - 1].tag : ""
         if (b - a == 1) {
             if (!pieces[a].has_ps) {

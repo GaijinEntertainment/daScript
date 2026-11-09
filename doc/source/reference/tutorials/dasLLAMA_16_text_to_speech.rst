@@ -55,14 +55,16 @@ which reads no British voice.
    print("phoneme pack: {base_name(g2p_pack_path(dir_name("kitten-nano.gguf")))}\n")
 
 A Pocket file reads text, so no pack sits beside it. ``tts_needs_packs``
-answers that from the file's own architecture metadata, before any load, so a
-program can check the file set it is about to serve.
+answers that from the file's own architecture metadata, before any load, and
+``tts_pack_names`` names the packs the file's voices read - the English pair
+where a voice speaks English, ``tts_g2p_ru.bin`` where one speaks Russian - so
+a program can check the file set it is about to serve.
 
 .. das-doc: given let path = "kitten-nano.gguf"
 .. code-block:: das
 
    if (tts_needs_packs(path)) {
-       print("wants tts_g2p.bin + tts_postag.bin beside it\n")
+       print("wants {join(tts_pack_names(path), " + ")} beside it\n")   // tts_g2p.bin + tts_postag.bin
    }
 
 caps(): ask, don't assume
@@ -153,10 +155,26 @@ synthesis would give.
    print("{voice} reads {lang}\n")
    print("{tts_phonemize(m, spoken, lang)}\n")  // the string that voice is asked to say
 
+The normalizer has the same language form. ``tts_normalize(text, lang)`` reads
+Russian for ``"ru"``, English for an English code, and hands any other
+language's text back as it is; ``synthesize`` picks the form by the voice's
+language, so kokoro-ru's ``sveta`` reads ``в 2024 году`` as ``в две тысячи
+двадцать четвёртом году`` before a phoneme is chosen. A Russian voice needs
+``tts_g2p_ru.bin`` beside the GGUF - the stress pack - and the English packs
+beside it too let a Latin word inside Russian text be read in English rather
+than spelled out.
+
+.. code-block:: das
+
+   let spoken = tts_normalize("В 2024 году вышло 12 игр.", "ru")
+   // output: В две тысячи двадцать четвёртом году вышло двенадцать игр.
+   print("{tts_phonemize(m, spoken, "ru")}\n")   // the Russian front end, stress and all
+
 A Pocket model reads text, not phonemes. ``tts_has_phonemes`` answers false
-for it, and ``tts_phonemize`` panics rather than invent a string. The English
-normalizer still runs in front of the English file; the other languages read
-their text as it is.
+for it, and ``tts_phonemize`` panics rather than invent a string - as it does
+for a language the model's front end has no pack for, the two-argument
+English form included. The English normalizer still runs in front of the
+English file; the other languages read their text as it is.
 
 .. code-block:: das
 

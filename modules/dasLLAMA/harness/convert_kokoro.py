@@ -1,18 +1,24 @@
 """Kokoro-82M checkpoint -> dasLLAMA GGUF.
 
     python convert_kokoro.py --out ~/Work/llama.cpp/models [--llama-cpp ~/Work/llama.cpp]
+    python convert_kokoro.py --out <dir> --checkpoint kokoro-ru-v2-base.pth --config config.json \
+                             --voices voices/ --name kokoro-ru --lang ru --source "zaakirio/kokoro-ru <revision>"
 
 Reads the pinned snapshot (kitten_graph.KOKORO_SNAPSHOT: config.json, kokoro-v1_0.pth, the
-54 voice packs), builds the reference model to fold weight-norm and read every convolution's
-geometry from the module itself, and writes `kokoro-82m.gguf` under the same tensor names and
-`styletts2.*` metadata the KittenTTS converter emits, so one loader serves both:
+54 voice packs) - or, for a fine-tune of the same architecture, the checkpoint, config and
+voice directory named on the command line, the packs as `.pt` tensors or raw float32 `.bin`
+rows - builds the reference model to fold weight-norm and read every convolution's geometry
+from the module itself, and writes `<name>.gguf` under the same tensor names and `styletts2.*`
+metadata the KittenTTS converter emits, so one loader serves both:
 
 - weights f32, [out, in] like PyTorch; LSTM directions stacked [2, 4H, ...] in PyTorch's i,f,g,o
   gate order with the two bias halves summed; the ALBERT layer group as `bert.layer.*`;
 - the STFT basis torch.stft / torch.istft implies (Hann 20, hop 5): forward cos / -sin windowed
   rows, inverse rows scaled by 1/N with the one-sided doubling, plus the window itself for the
   envelope normalization; `styletts2.stft_pad = reflect`, `styletts2.istft_norm = envelope`;
-- every voice pack as `voice.<name>` [510, 256]; the vocabulary as `kokoro.symbol_cpts/ids`.
+- every voice pack as `voice.<name>` [510, 256]; the vocabulary as `kokoro.symbol_cpts/ids`;
+  the language each pack speaks as `kokoro.voice_langs`, one code per `styletts2.voices` entry -
+  `--lang` for a fine-tune's packs, the pipeline's name shape (`af_heart` is en-us) otherwise.
 """
 import argparse
 import glob
@@ -104,10 +110,35 @@ def conv_geometry(model):
     return out
 
 
+NAME_SHAPE_LANGS = {"a": "en-us", "b": "en-gb", "e": "es", "f": "fr-fr", "h": "hi", "i": "it", "p": "pt-br", "j": "ja", "z": "zh"}
+
+
+def name_shape_lang(voice):
+    """the pipeline's `<language><f|m>_<name>` shape, read exactly as dasllama_kokoro.das reads it"""
+    if len(voice) < 4 or voice[1:3] not in ("f_", "m_"):
+        return ""
+    return NAME_SHAPE_LANGS.get(voice[0], "")
+
+
+def load_voice(path, torch):
+    """a pack as `.pt` (a [510, 1, 256] tensor) or as raw float32 rows (`.bin`), as [510, 256]"""
+    if path.endswith(".pt"):
+        return np.ascontiguousarray(torch.load(path, map_location="cpu", weights_only=True).squeeze(1).numpy().astype(np.float32))
+    rows = np.fromfile(path, dtype=np.float32)
+    assert rows.size % 256 == 0, (path, rows.size)
+    return np.ascontiguousarray(rows.reshape(-1, 256))
+
+
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--out", required=True, help="directory for kokoro-82m.gguf")
+    ap.add_argument("--out", required=True, help="directory for the GGUF")
     ap.add_argument("--llama-cpp", default=os.path.expanduser("~/Work/llama.cpp"), help="for gguf-py")
+    ap.add_argument("--checkpoint", help="a Kokoro-82M-architecture .pth (default: the pinned hexgrad snapshot's)")
+    ap.add_argument("--config", help="its config.json (default: the snapshot's)")
+    ap.add_argument("--voices", help="directory of voice packs, .pt or raw float32 .bin (default: the snapshot's)")
+    ap.add_argument("--name", default="kokoro-82m", help="the GGUF's file stem")
+    ap.add_argument("--lang", default="", help="the language every pack speaks, where the names carry none (ru)")
+    ap.add_argument("--source", help="the provenance line (default: the pinned hexgrad snapshot)")
     a = ap.parse_args()
     sys.path.insert(0, os.path.join(a.llama_cpp, "gguf-py"))
     import gguf
@@ -115,8 +146,12 @@ def main():
     from kokoro.model import KModel
 
     snap = kg.KOKORO_SNAPSHOT
-    cfg = json.load(open(snap + "config.json", encoding="utf8"))
-    model = KModel(repo_id="hexgrad/Kokoro-82M", config=snap + "config.json", model=snap + "kokoro-v1_0.pth")
+    config_path = a.config or snap + "config.json"
+    checkpoint = a.checkpoint or snap + "kokoro-v1_0.pth"
+    voices_dir = a.voices or snap + "voices"
+    source = a.source or f"hexgrad/Kokoro-82M @ {kg.KOKORO_REVISION}"
+    cfg = json.load(open(config_path, encoding="utf8"))
+    model = KModel(repo_id="hexgrad/Kokoro-82M", config=config_path, model=checkpoint)
     model.eval()
     fold_weight_norm(model)
     geometry = conv_geometry(model)
@@ -138,22 +173,24 @@ def main():
         assert w in tensors, w
 
     voices = {}
-    for f in sorted(glob.glob(snap + "voices/*.pt")):
-        name = os.path.basename(f)[:-3]
-        pack = torch.load(f, map_location="cpu", weights_only=True)
-        voices[name] = np.ascontiguousarray(pack.squeeze(1).numpy().astype(np.float32))
+    pack_files = sorted(glob.glob(os.path.join(voices_dir, "*.pt"))) or sorted(glob.glob(os.path.join(voices_dir, "*.bin")))
+    assert pack_files, f"no voice packs under {voices_dir}"
+    for f in pack_files:
+        name = os.path.splitext(os.path.basename(f))[0]
+        voices[name] = load_voice(f, torch)
         tensors["voice." + name] = voices[name]
     rows, style_dim = next(iter(voices.values())).shape
+    voice_langs = [a.lang or name_shape_lang(v) for v in voices]
     vocab = cfg["vocab"]
     symbols = sorted(vocab.items(), key=lambda kv: kv[1])
 
     long = [k for k in tensors if len(k) >= GGML_MAX_NAME]
     assert not long, long
-    path = os.path.join(a.out, "kokoro-82m.gguf")
+    path = os.path.join(a.out, a.name + ".gguf")
     w = gguf.GGUFWriter(path, ARCH)
-    w.add_name("Kokoro-82M v1.0")
-    w.add_string("kokoro.revision", kg.KOKORO_REVISION)
-    w.add_string("kokoro.source", "hexgrad/Kokoro-82M kokoro-v1_0.pth + voices")
+    w.add_name("Kokoro-82M v1.0" if a.checkpoint is None else a.name)
+    w.add_string("kokoro.revision", kg.KOKORO_REVISION if a.checkpoint is None else source.split("@")[-1].strip())
+    w.add_string("kokoro.source", f"{source}: {os.path.basename(checkpoint)} + voices")
     w.add_uint32("styletts2.sample_rate", 24000)
     w.add_uint32("styletts2.n_symbols", int(cfg["n_token"]))
     w.add_uint32("styletts2.style_dim", int(style_dim))
@@ -166,6 +203,7 @@ def main():
     w.add_string("styletts2.resample", "torch")
     w.add_array("kokoro.symbol_cpts", [ord(s) for s, _ in symbols])
     w.add_array("kokoro.symbol_ids", [int(i) for _, i in symbols])
+    w.add_array("kokoro.voice_langs", voice_langs)
     for name, geo in sorted(geometry.items()):
         w.add_array(f"styletts2.conv.{name}", [int(x) for x in geo])
     for name in sorted(tensors):
@@ -175,12 +213,18 @@ def main():
     w.write_tensors_to_file()
     w.close()
     with open(path + ".LICENSE", "w", encoding="utf8") as f:
-        f.write(f"kokoro-82m.gguf - Kokoro-82M v1.0 weights and voice packs (hexgrad, Apache License 2.0), converted from "
-                f"hexgrad/Kokoro-82M @ {kg.KOKORO_REVISION} by modules/dasLLAMA/harness/convert_kokoro.py; "
-                "see the dasLLAMA THIRD_PARTY_NOTICES.md\n")
+        if a.checkpoint is None:
+            f.write(f"kokoro-82m.gguf - Kokoro-82M v1.0 weights and voice packs (hexgrad, Apache License 2.0), converted from "
+                    f"hexgrad/Kokoro-82M @ {kg.KOKORO_REVISION} by modules/dasLLAMA/harness/convert_kokoro.py; "
+                    "see the dasLLAMA THIRD_PARTY_NOTICES.md\n")
+        else:
+            f.write(f"{a.name}.gguf - weights and voice packs converted from {source} ({os.path.basename(checkpoint)}, "
+                    f"voices {', '.join(voices)}) by modules/dasLLAMA/harness/convert_kokoro.py; the licence of that "
+                    "source applies - see the dasLLAMA THIRD_PARTY_NOTICES.md\n")
     total = sum(t.nbytes for t in tensors.values())
+    voice_list = ", ".join(f"{v}:{lang or '-'}" for v, lang in zip(voices, voice_langs))
     print(f"wrote {path}: {len(tensors)} tensors, {total / 1e6:.1f} MB f32, {len(geometry)} conv geometries, "
-          f"{len(voices)} voices, {len(symbols)} symbols; {os.path.getsize(path)} bytes on disk")
+          f"{len(voices)} voices ({voice_list}), {len(symbols)} symbols; {os.path.getsize(path)} bytes on disk")
 
 
 if __name__ == "__main__":

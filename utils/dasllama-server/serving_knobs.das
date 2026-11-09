@@ -104,10 +104,11 @@ def pick_tts_lane(s : string; tool : string = "dasllama-server") : string {
     return TTS_LANE_DEFAULT
 }
 
-//! The first file of a TTS model's set that is absent — the GGUF at `path`, then, for a phoneme
-//! family, each front-end pack (``tts_g2p.bin``, ``tts_postag.bin``) beside it (a Pocket TTS GGUF
-//! reads text and needs none). "" when the set is complete, and for an empty `path` (no TTS
-//! configured). This is the file ``configure_tts`` drops the route over.
+//! The first file of a TTS model's set that is absent — the GGUF at `path`, then each front-end pack
+//! its voices' languages read beside it (``tts_pack_names``: ``tts_g2p.bin`` and ``tts_postag.bin`` for
+//! English, ``tts_g2p_ru.bin`` for Russian; a Pocket TTS GGUF reads text and needs none). "" when the
+//! set is complete, and for an empty `path` (no TTS configured). This is the file ``configure_tts``
+//! drops the route over.
 def tts_missing_file(path : string) : string {
     if (empty(path)) {
         return ""
@@ -115,11 +116,9 @@ def tts_missing_file(path : string) : string {
     if (!stat(path).is_valid) {
         return path
     }
-    if (!tts_needs_packs(path)) {
-        return ""
-    }
     let dir = dir_name(path)
-    for (pack in TTS_FRONT_END_PACKS) {
+    var inscope packs <- tts_pack_names(path)
+    for (pack in packs) {
         let pack_path = path_join(dir, pack)
         if (!stat(pack_path).is_valid) {
             return pack_path

@@ -73,8 +73,8 @@ at https://huggingface.co/borisbat/dasllama-nmt with the licence text beside it.
 ## Text-to-speech front end
 
 The TTS front end and the three TTS families reimplement, and pack data from, the following
-works. The packed files (`tts_g2p.bin` and its American-only twin `tts_g2p_en_us.bin`, `tts_postag.bin`, `kitten-nano.gguf`,
-`kitten-mini.gguf`, `kokoro-82m.gguf`, `pocket-tts-<language>.gguf`, the `tts_oracle/` dumps) are built by the `harness/` scripts into the
+works. The packed files (`tts_g2p.bin` and its American-only twin `tts_g2p_en_us.bin`, `tts_postag.bin`, `tts_g2p_ru.bin`, `kitten-nano.gguf`,
+`kitten-mini.gguf`, `kokoro-82m.gguf`, `kokoro-ru.gguf`, `kokoro-ru-dima.gguf`, `pocket-tts-<language>.gguf`, the `tts_oracle/` dumps) are built by the `harness/` scripts into the
 model store (`performance/build_tts_data.das`), each beside a license file naming these
 sources; nothing under this repository redistributes the data itself.
 
@@ -106,6 +106,23 @@ sources; nothing under this repository redistributes the data itself.
   architecture is StyleTTS2 (Yinghao Aaron Li et al., MIT License - see `LICENSE.STYLETTS2`; the
   kokoro package's decoder and iSTFTNet modules are adapted from it), shared with KittenTTS in
   `dasllama/dasllama_styletts2.das` over the block home.
+- **kokoro-ru** (https://huggingface.co/zaakirio/kokoro-ru), the Russian fine-tune of Kokoro-82M.
+  Its weights and voice packs (`kokoro-ru-v2-base.pth`, `kokoro-ru-v2-dima.pth`, `voices/*.bin`, at
+  the revision `harness/tts_model_card.md` pins) are tagged `openrail` by their card, which carries
+  no licence text, and are converted into `kokoro-ru.gguf` / `kokoro-ru-dima.gguf` by
+  `harness/convert_kokoro.py`; its code is Apache License 2.0 - see `LICENSE.APACHE-2.0` - and the
+  respelling word lists of `dasllama/dasllama_g2p_ru.das` (the чн words said with шн, the -ого
+  adverbs) derive from its `ru_g2p.py`. The Russian front-end fixture
+  (`tests/_tts_fixtures/g2p_corpus_ru.json`) holds that front end's own phoneme output for
+  stress-marked sentences; no espeak-ng code or data is included.
+- **OpenRussian dictionary data** (https://github.com/Badestrand/russian-dictionary, openrussian.org),
+  CC BY-SA 4.0 - see `LICENSE.UD_EWT` for the licence text. Every inflected form's stressed vowel
+  and the ё spellings are packed into `tts_g2p_ru.bin` by `harness/build_g2p_ru_data.py`; the
+  dictionary itself is not redistributed.
+- **Balalaika** text corpora (https://huggingface.co/datasets/lab260/espeech_balalaika,
+  https://huggingface.co/datasets/lab260/biggest_ru_book_balalaika), Apache License 2.0 - see
+  `LICENSE.APACHE-2.0`. Their stress-marked transcripts are the sentences of the Russian front-end
+  fixture and the frequency table that orders a homograph's readings in `tts_g2p_ru.bin`.
 - **Pocket TTS** (https://github.com/kyutai-labs/pocket-tts), Kyutai, MIT License - see
   `LICENSE.POCKET_TTS` (the reference implementation, reimplemented in
   `dasllama/dasllama_pocket.das`; no Kyutai source is included).

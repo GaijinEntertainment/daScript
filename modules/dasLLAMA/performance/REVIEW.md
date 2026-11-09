@@ -26,8 +26,9 @@ branch cannot reach that commit.** An empty field names no commit, so it breaks 
 
 **Weakening any check in `REVIEW.das` is a defect.**
 
-**A diff that hand-edits a commit stamp under this folder names, in the PR body, each edited
-field, its old stamp, and its new value.**
+**A diff that hand-edits a commit stamp under this folder - a field, url, or recipe that names a
+git commit by its hash - names, in the PR body, each edited stamp, its old value, and its new
+value.**
 
 **A diff that re-stamps an archived sidecar (`records/<box>.tune.<sha12>.json`) re-hashes and
 renames the file and repoints every `records/<box>.json` row whose `tune_sha` named the old
@@ -140,6 +141,10 @@ an oracle, a twin file that cell reads beside it - names that companion in the n
 names it from that row too.** A box that fetches the row alone gets its companions with it, and
 the cell runs instead of skipping.
 
+**A diff that names, in a row's `companions`, a file another row's `companions` carries with a
+`url` writes that entry with an empty `url`.** Each `serve_*` function lists a companion only from
+the entry that has a `url`, so the file is listed once.
+
 **A diff that changes what any `serve_*` function in `model_specs.das` returns - a `serve_*`
 field on a row, the function's body, or a `companions` entry with a `url` on a row a `serve_*`
 view reads - runs `utils/dasllama-server/test_model_catalog.das` (repo root), and it passes on
@@ -165,11 +170,12 @@ pending, 0 failed` with the entry `ok`; and an unscoped `fetch_models.das --` wi
 entry `pending` (an untouched row the box lacks may be), ending `0 failed` when
 `fetch_models.das` changed.**
 
-**A diff that adds or re-points a `url` on a `model_specs.das` or `profile_common.das` row, or
-on one of that row's `companions` entries, records in the PR description a fetch through that
-url into a scratch dir, or the size and content sha the url's host reports for that file,
-pasted with the command that asked, matching the row's `bytes` and `sha256`** - `fetch_models`
-checks a file already on disk by size and hash, never through its url.
+**A diff that adds or changes a `url` on a `model_specs.das` or `profile_common.das` row or on one
+of its `companions` entries, or changes a constant such a `url` interpolates, records in the PR
+description, for each url it changes, a fetch through that url into a scratch dir, or the size and
+content sha the url's host reports for that file, pasted with the command that asked, matching
+that row's or entry's `bytes` and `sha256`** - `fetch_models` checks a file already on disk by size
+and hash, never through its url.
 
 **A diff that changes a `model_specs.das` row's `parity` - gives a row one, or changes any field
 of it, in place or through a shared `ids_*`/`ev_*` helper - records in the PR description, for

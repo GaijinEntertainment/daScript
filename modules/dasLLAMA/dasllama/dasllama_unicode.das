@@ -196,6 +196,22 @@ def cpt_is_mark(cpt : int) : bool => (range_flags(cpt) & 16) != 0
 //! True if codepoint is whitespace (regex \s), per the upstream whitespace set.
 def cpt_is_whitespace(cpt : int) : bool => find_index(WS, cpt) >= 0
 
+//! True if codepoint is a letter of the Russian alphabet, either case: А-я and Ё/ё.
+def cpt_is_cyrillic(cpt : int) : bool => (cpt >= 1040 && cpt <= 1103) || cpt == 1025 || cpt == 1105
+
+//! True if codepoint is a capital of the Russian alphabet: А-Я and Ё.
+def cpt_is_cyrillic_upper(cpt : int) : bool => (cpt >= 1040 && cpt <= 1071) || cpt == 1025
+
+//! `s` lowercased letter by letter, in every script `utf32_to_lower` covers (ASCII, Cyrillic with
+//! Ё, the Latin and Greek ranges); the strings `to_lower` reads ASCII alone.
+def utf8_to_lower(s : string) : string {
+    var inscope cps <- utf8_to_cpts(s)
+    for (cp in cps) {
+        cp = int(utf32_to_lower(uint(cp)))
+    }
+    return cpts_to_utf8(cps)
+}
+
 //! The codepoints a string holds - `length()` on a string is BYTES, and an em dash costs three of them; a stray
 //! continuation byte counts one, as `utf8_to_cpts` decodes it, so an index into the codepoints agrees with the
 //! count (`utf8_length` skips it).

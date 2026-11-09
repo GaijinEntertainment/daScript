@@ -13,12 +13,13 @@ A lasting allocation is a container (array, table, device buffer) that outlives 
 it - held by a module global, or by a field of a struct that outlives the call; a pooled buffer
 acquired and released inside one call is not one.
 
-A scaling count is a count the model file sets, the context a session serves (the model's own or
-one a caller pins), how many tokens one step computes at once, how many rows one media encode
-feeds (an image's patches, a clip's frames), or how many regions one buffer is split into (the K/V
-cache's device copy, one region per request served at once; an MoE dispatch's expert regions). A
-shape is one setting of the scaling counts. Peak footprint is the process's largest resident
-memory over a run.
+A model-file count is a count set by a file the model load reads: the GGUF, the `.dlim` prepared
+from it, or a data file in the GGUF's directory. A scaling count is a model-file count, the context
+a session serves (the model's own or one a caller pins), how many tokens one step computes at once,
+how many rows one media encode feeds (an image's patches, a clip's frames), or how many regions one
+buffer is split into (the K/V cache's device copy, one region per request served at once; an MoE
+dispatch's expert regions). A shape is one setting of the scaling counts. Peak footprint is the
+process's largest resident memory over a run.
 
 A team-lane body is anything reachable from a `team_parallel_for` / `team_parallel_for_indexed` /
 `team_parallel_stages` body (`daslib/jobque_boost.das`, repo root) or from a `maybe_parallel_for*`
@@ -42,14 +43,14 @@ dispatching caller sizes and passes in instead.** A pooled lane runs in another 
 resize acts on that context's out-of-date copy of the global.
 
 **An array a `dasllama/` function resizes through the builtin `resize` or any helper that reaches
-it, whose element count grows with a count the model file sets, and whose declaration - the
+it, whose element count grows with a model-file count, and whose declaration - the
 variable, parameter or struct field that the call in that function names as the array - is not
 `@exact_size` (`@scratch @exact_size` when it is `@scratch`), is a defect.** PERF032 - the lint
 that flags a `resize` with no reserve before it - checks a resize only when that declaration
 carries `@exact_size`.
 
-**Every `resize` of a buffer in `dasllama/` whose element count grows with a count the model
-file sets follows a `reserve(n)` or `ensure_capacity(n)` whose `n` is at least the resized count,
+**Every `resize` of a buffer in `dasllama/` whose element count grows with a model-file count
+follows a `reserve(n)` or `ensure_capacity(n)` whose `n` is at least the resized count,
 or goes through a `dasllama/dasllama_math.das` helper whose own body does that before it resizes
 (`reserve_resize`, `grow_resize`), or is the builtin `scratch_resize` on a `@scratch` buffer.**
 The lint never compares the two counts, and a resize past the heap's limit on unreserved growth

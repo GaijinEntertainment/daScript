@@ -19,11 +19,12 @@ states the same boundary.
   emitted kernel code finds identical or different, and a `provenance` value read in its
   `performance/defaults/<class>.tune-defaults.json` profile or tune sidecar are not figures; that
   value copied into other text is one.
+- **Served turn** - one request a serving path answers end to end: a chat or completion turn, or a
+  facade `transcribe` / `synthesize` / `translate` call, whether or not an app runs it as one stage
+  of a larger turn.
 - **Served-turn leg** - a chat or completion turn's prefill or token decode, a batched decode row,
-  or a whole served request end to end. A facade `transcribe` / `synthesize` / `translate` call is a
-  whole served request, so a leg, whether or not an app runs it as one stage of a larger turn. The
-  wall of one stage - one model component's forward pass or decode inside a facade call, or one
-  decoder block - is not a leg.
+  or a whole served turn. The wall of one stage - one model component's forward pass or decode
+  inside a facade call, or one decoder block - is not a leg.
 - **Instrument** - a file whose printed or returned result is a wall or rate of a run it drove,
   read by its own clock or by timestamps a GPU driver returns, wherever the file sits. A file
   reading a spawned child process's clock, and a report a serving path prints only under a

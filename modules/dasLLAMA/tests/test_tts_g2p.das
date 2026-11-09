@@ -120,7 +120,7 @@ let private BEYOND_REFERENCE <- { "ht001", "ht003", "ht010", "ht017", "ht024", "
     "lj024", "lj027", "lj037", "ov000", "ov001", "ov003", "ov004", "ov006", "ov009", "ov011", "ov012", "ov015", "ov016",
     "ov017", "ov018", "ov019", "ov020", "ov021", "ov022", "ov025", "ov027", "ov028" }
 
-[test, arch(at = "../ARCHITECTURE_TTS.md#tts-heteronym-context")]
+[test, arch(at = "../ARCHITECTURE_TTS_FRONT_END.md#tts-heteronym-context")]
 def test_heteronym_context(t : T?) {
     t |> run("a verb tag out-ranks the collocation table") @(t : T?) {
         return if (!data_present(t))

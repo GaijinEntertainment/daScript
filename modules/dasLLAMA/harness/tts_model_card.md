@@ -4,6 +4,7 @@ license_name: per-file
 license_link: https://github.com/GaijinEntertainment/daScript/blob/master/modules/dasLLAMA/THIRD_PARTY_NOTICES.md
 language:
   - en
+  - ru
   - de
   - es
   - it
@@ -27,13 +28,15 @@ tags:
 
 # dasLLAMA text-to-speech models
 
-The speech models dasLLAMA serves, converted to GGUF, and the two front-end packs the phoneme
+The speech models dasLLAMA serves, converted to GGUF, and the front-end packs the phoneme
 families load. dasLLAMA is the daslang inference engine
 (https://github.com/GaijinEntertainment/daScript, `modules/dasLLAMA`); the models are the
-StyleTTS2 lineage - KittenTTS nano and mini, Kokoro-82M - behind one facade and one das-native
-text front end (a normalizer, a part-of-speech tagger, a grapheme-to-phoneme pass), and Kyutai's
-Pocket TTS, a continuous-audio language model that reads text and clones a voice from a clip.
-No espeak-ng, no phonemizer: the front end is data, and the data is in the two packs.
+StyleTTS2 lineage - KittenTTS nano and mini, Kokoro-82M, and kokoro-ru, the Russian fine-tune of
+Kokoro-82M - behind one facade and one das-native text front end (an English normalizer, a
+part-of-speech tagger and a grapheme-to-phoneme pass; a Russian normalizer, a stress pass over
+the stress pack and a letter-to-sound pass), and Kyutai's Pocket TTS, a continuous-audio
+language model that reads text and clones a voice from a clip. No espeak-ng, no phonemizer: the
+front end is data, and the data is in the packs.
 
 ## Files
 
@@ -42,6 +45,9 @@ No espeak-ng, no phonemizer: the front end is data, and the data is in the two p
 | `kitten-nano.gguf` | KittenTTS nano 0.8, f32 | 59331456 | `4556948c36a29e4be5ad521e597a20ae817059c404fea3c5d935afa73506d9da` |
 | `kitten-mini.gguf` | KittenTTS mini 0.8, f32 | 295975008 | `e127a95c6ffa390eccc5956e7156ff055e9f30078cf16361cbcd0eea6c21fdb5` |
 | `kokoro-82m.gguf` | Kokoro-82M v1.0 with its 54 voice packs, f32 | 352965024 | `e0d6584b5b650730bd62e7b105a2e9502384bbe3fbebf3030113560355e6232f` |
+| `kokoro-ru.gguf` | kokoro-ru v2, the Russian fine-tune of Kokoro-82M, the base checkpoint with its two voice packs `sveta` and `masha`, f32 | 325804992 | `635a43debfcbff5cf1fd0380a4ffc55dfacff083ae16d057bae6d7e7c9a29c9f` |
+| `kokoro-ru-dima.gguf` | kokoro-ru v2, the second checkpoint with its one male voice pack `dima`, f32 | 325282688 | `7720e1087c0c9720577e7e0b383dd31f75b7f6ab45bcd88df1f28df3c08c56a6` |
+| `tts_g2p_ru.bin` | the Russian stress pack: every inflected form of the OpenRussian dictionary with its stressed vowel (a form with two readings carrying both, the corpus's more frequent one first), and the ё spellings a text written without ё needs | 17320693 | `775d9a308b81874328909ad7ea8426513a43401f34a83973d0f2ed437068c8b1` |
 | `tts_g2p.bin` | the grapheme-to-phoneme pack: misaki's gold and silver lexicons in both English dialects (one merged table per tier), CMUdict 0.7a rendered into the American inventory, the g2p_en GRU spelling model | 14011554 | `d7b6afea7a0901a877d10531054d3f967845c58f415f0ea937decd8a3081ccd5` |
 | `tts_g2p_en_us.bin` | the same pack with the American tier alone - no British values, CMUdict pruned of every word the American lexicon carries; the web serving set's pack, British voices are not offered on it | 10257455 | `6f69d2e74565bd7d876b8d1f4042bf8c1c5b615387fa26ff45215cf447932154` |
 | `tts_postag.bin` | the tokenizer exception table and the averaged-perceptron PTB tagger | 12566510 | `38c2e85f7fef3e57d561d2aa0af25fccda4276376ba1993c3dbc2ae0ebfa57b4` |
@@ -136,7 +142,12 @@ M1 Max (measured 2026-09-02 with the same rig). Its voices are `expr-voice-2-m` 
 drives the 28 English ones: the 20 American (`af_*`, `am_*` - `af_heart`, `am_adam`, ...) and
 the 8 British (`bf_*`, `bm_*` - `bf_emma`, `bm_george`, ...), each phonemized in its own
 dialect. The other 26 packs speak languages the front end does not phonemize yet, so they are
-not listed and are refused. Some Kokoro packs, the British ones most audibly, render a comma or
+not listed and are refused. kokoro-ru carries the Russian voices - `sveta` and `masha` in
+`kokoro-ru.gguf`, `dima` in `kokoro-ru-dima.gguf` - and needs `tts_g2p_ru.bin` beside it; with
+the English packs beside it too, a Latin word inside Russian text is read in English. Russian
+stress comes from the pack, or from the text itself: `+` before the stressed vowel (`зам+ок`) or
+U+0301 after it, which always wins, so a homograph the pack picks the other way can be fixed
+in the text. Some Kokoro packs, the British ones most audibly, render a comma or
 a full stop as a breath; the reference pipeline does the same, so it is the pack, not the
 engine. Every model speaks at 24 kHz. `GET /v1/stats` on the server lists the served model's
 voices.
@@ -150,6 +161,15 @@ voices.
 - `kokoro-82m.gguf`: converted by `modules/dasLLAMA/harness/convert_kokoro.py` from
   `hexgrad/Kokoro-82M` at `f3ff3571791e39611d31c381e3a41a3af07b4987` (`kokoro-v1_0.pth` and the
   voice packs).
+- `kokoro-ru.gguf` / `kokoro-ru-dima.gguf`: converted by `modules/dasLLAMA/harness/convert_kokoro.py`
+  (`--checkpoint`, `--config`, `--voices`, `--lang ru`) from `zaakirio/kokoro-ru` at
+  `d649c57b239b18c4c384378127cbf01dba039bc1` (`kokoro-ru-v2-base.pth` with `voices/sveta.bin` and
+  `voices/masha.bin`; `kokoro-ru-v2-dima.pth` with `voices/dima.bin`).
+- `tts_g2p_ru.bin`: `modules/dasLLAMA/harness/build_g2p_ru_data.py` over the OpenRussian dictionary
+  data (`Badestrand/russian-dictionary`: `nouns.csv`, `adjectives.csv`, `verbs.csv`, `others.csv`),
+  the pronoun inflections the dictionary leaves out added by the builder, the homograph defaults
+  ordered by a frequency table counted over the stress marks of two Balalaika text corpora
+  (`lab260/espeech_balalaika`, `lab260/biggest_ru_book_balalaika`).
 - `tts_g2p.bin`: `modules/dasLLAMA/harness/build_g2p_data.py` over misaki 0.9.4 (`us_gold.json`,
   `us_silver.json`, `gb_gold.json`, `gb_silver.json`), CMUdict 0.7a (the NLTK distribution) and
   g2p_en 2.1.0 (`checkpoint20.npz`), plus `harness/g2p_local_additions.json`.
@@ -186,6 +206,8 @@ the reference implementations (block by block, and the front end sentence by sen
 |---|---|---|
 | `kitten-nano.gguf`, `kitten-mini.gguf` | Apache-2.0 | KittenML's weights, converted; `LICENSE.APACHE-2.0`; the architecture is StyleTTS2 (MIT, `LICENSE.STYLETTS2`) |
 | `kokoro-82m.gguf` | Apache-2.0 | hexgrad's weights and voices, converted; the architecture is StyleTTS2 (MIT, `LICENSE.STYLETTS2`) |
+| `kokoro-ru.gguf`, `kokoro-ru-dima.gguf` | OpenRAIL | the kokoro-ru weights and voices, converted - the source repository tags them `openrail` and carries no licence text of its own; the voices come from the Dialogs corpus, which its card calls OpenRAIL; the architecture is StyleTTS2 (MIT, `LICENSE.STYLETTS2`) |
+| `tts_g2p_ru.bin` | CC BY-SA 4.0 | the OpenRussian dictionary data (openrussian.org, `LICENSE.UD_EWT` carries the same licence text); the frequency ordering of the homograph defaults is counted over the Balalaika corpora's stress marks (Apache-2.0) |
 | `tts_g2p.bin` | Apache-2.0 and BSD-2-Clause | misaki and g2p_en (Apache-2.0), CMUdict (`LICENSE.CMUDICT`, Carnegie Mellon University) |
 | `tts_postag.bin` | CC BY-SA 4.0 | the tagger weights are trained on UD English-EWT (`LICENSE.UD_EWT`); the exception table and the silver tags come from spaCy (MIT, `LICENSE.SPACY`); Gutenberg prose is public domain |
 | `pocket-tts-*.gguf` (every Pocket file, the two `-kq` ones included) | CC BY 4.0 | Kyutai's weights and tokenizer, converted (`LICENSE.CC-BY-4.0`); the reference implementation is MIT (`LICENSE.POCKET_TTS`) and not included; the voice clips: `voice-zero` and `voice-donations` CC0, VCTK (CSTR, University of Edinburgh) and Alba Mackenna CC BY 4.0 - the sidecar lists each |

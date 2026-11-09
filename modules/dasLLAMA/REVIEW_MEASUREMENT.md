@@ -11,7 +11,7 @@ carries unchanged.**
 
 The terms below are defined here, and a reviewer applies them as written.
 
-**A diff that changes a term's definition below changes that term's bullet in
+**A diff that adds a term below or changes a term's definition adds or changes that term's bullet in
 `ARCHITECTURE_MEASUREMENT_RELEASE.md#measurement-vocabulary` to match, in the same change.**
 
 A figure is any number a run produced, a ratio of two included, or an error reading that a
@@ -20,9 +20,9 @@ identical or different kernels between two kernel-code dumps, and a `provenance`
 `performance/defaults/<class>.tune-defaults.json` profile or tune sidecar are not figures; that
 value copied into other text is one.
 
-A served-turn leg is a chat or completion turn's prefill or token decode, a batched decode row, or
-a whole served request end to end; a facade `transcribe` / `synthesize` / `translate` call is a
-whole served request, so a leg. The wall of one stage - one model component's forward pass or
+A served turn is one request a serving path answers end to end - a chat or completion turn, or a
+facade `transcribe` / `synthesize` / `translate` call. A served-turn leg is a chat or completion
+turn's prefill or token decode, a batched decode row, or a whole served turn. The wall of one stage - one model component's forward pass or
 decode inside a facade call, or one decoder block - is not a leg.
 
 An instrument is a file that reports the wall or rate of a run it drove, timed on its own clock or
@@ -93,8 +93,8 @@ and a tag in a parenthesis with no figure covers nothing. A tag outside any pare
 figure-free sentence of a provenance line or of an entry's opening paragraph, covers the figures
 that line or paragraph covers.**
 
-**A `PERF_LEDGER.md` entry states a turn wall (the wall of one whole served request, whatever the
-modality) or a tok/s rate of the engine this repository builds only when one of these produced
+**A `PERF_LEDGER.md` entry states a turn wall (the wall of one whole served turn) or a tok/s rate
+of the engine this repository builds only when one of these produced
 it, named in the entry: `benchmarks/lcpp_bench.das`, as the released exe from `daspkg release` or
 as the `-jit` script; a spawned or manual cell; for a modality `lcpp_bench.das` has no
 command-line flag for, the `harness/` instrument, with its command line; for the browser build,

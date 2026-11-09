@@ -3,7 +3,8 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
 docs: `ARCHITECTURE.md`, `ARCHITECTURE_ENGINE.md`, `ARCHITECTURE_ENGINE_SERVING.md`,
 `ARCHITECTURE_ENGINE_FORMATS.md`, `ARCHITECTURE_GPU.md`, `ARCHITECTURE_GPU_SHARED_KERNELS.md`,
-`ARCHITECTURE_MEDIA.md`, `ARCHITECTURE_MEDIA_VISION.md`, `ARCHITECTURE_TTS.md`, `ARCHITECTURE_POCKET.md`. Planned work:
+`ARCHITECTURE_MEDIA.md`, `ARCHITECTURE_MEDIA_VISION.md`, `ARCHITECTURE_TTS.md`, `ARCHITECTURE_TTS_FRONT_END.md`,
+`ARCHITECTURE_POCKET.md`. Planned work:
 `followup_general.md`, `followup_vulkan.md` for Vulkan, `followup_metal.md` for Metal.
 
 A charter line is a file's line in the companion section that `ARCHITECTURE.md#file-charters` routes
@@ -19,6 +20,10 @@ a `require` - lands in the file whose charter line names its concern, or the dif
 to the charter line of the file it lands in. Another file's charter naming the same kind of code
 does not license the landing.**
 
+**A diff that lands a helper in its caller's file only because that file's charter line names the
+caller's concern is a defect - land the helper in the file whose charter line names what the helper
+itself computes, or add that to the charter line of the file it lands in.**
+
 **A landing in a file whose charter row carries a `must not hold` cell - the concerns that file
 never holds - naming the landed concern is a defect - land it where its concern is chartered, or
 change that charter row in the same change.**
@@ -28,10 +33,9 @@ change that charter row in the same change.**
 "on a build without das_metal" - the Vulkan file) is a defect - land it in the backend file the
 row names; a concern the row names without a backend lands in any file of the row.**
 
-**A diff adding a new item of the sort a charter line's parenthetical lists (a model family, a
-weight format, a dispatch arm - and a function of the sort a parenthetical of function names lists)
-lands it in that charter line's file, whether or not the parenthetical names it, and adds it to the
-parenthetical in the same change.**
+**When a charter line's parenthetical names, one by one, the items of one kind its file holds, a
+diff adding another item of that kind lands it in that file and adds its name to the parenthetical
+in the same change.**
 
 **Never add a charter line for a file outside `dasllama/` - state what it holds in its own
 folder's architecture doc or `CLAUDE.md` instead.**

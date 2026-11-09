@@ -388,7 +388,14 @@ def tts_data_missing(t : T?; gguf : string; postag : bool = true) : bool {
     if (!model_available(t, gguf)) {
         return true
     }
-    for (pack in (postag ? ["tts_g2p.bin", "tts_postag.bin"] : ["tts_g2p.bin"])) {
+    return tts_pack_missing(t, postag ? ["tts_g2p.bin", "tts_postag.bin"] : ["tts_g2p.bin"])
+}
+
+//! The Russian front end's data gate: its stress pack under models_dir(); absent skips loudly and answers true.
+def ru_pack_missing(t : T?) : bool => tts_pack_missing(t, ["tts_g2p_ru.bin"])
+
+def tts_pack_missing(t : T?; packs : array<string>) : bool {
+    for (pack in packs) {
         if (!stat(path_join(models_dir(), pack)).is_valid) {
             t |> skip("{pack} not present")
             return true

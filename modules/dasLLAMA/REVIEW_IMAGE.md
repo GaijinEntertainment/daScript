@@ -1,7 +1,7 @@
 # dasLLAMA image rail Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-doc: `ARCHITECTURE_IMAGE.md`. Planned work: `followup_general.md`.
+docs: `ARCHITECTURE_IMAGE.md`, `ARCHITECTURE_IMAGE_LEDGER.md`. Planned work: `followup_general.md`.
 
 A mint is the step that builds a `.dlim` image from a source file; a flavor is the
 backend-and-layout variant an image is baked for, one part of its identity.
@@ -17,7 +17,7 @@ mapped `.dlim`.
 
 **A diff that adds a weight carrier - anything that reads weights from a file and serves
 inference from them - serves it from its `.dlim`, minted first where it is missing, or records it
-in `ARCHITECTURE_IMAGE.md` as a carrier served without an image, in the same change.**
+in `ARCHITECTURE_IMAGE_LEDGER.md` as a carrier served without an image, in the same change.**
 
 **A weight carrier the image rail serves becomes live only through `build_image` and
 `parse_image` in `dasllama/dasllama_image.das`, and releases its image backing only through
@@ -87,6 +87,11 @@ meta serializes, or of one that struct nests, bumps `IMAGE_VERSION` (`dasllama/d
 in the same change.** An added or dropped field moves `layout_fingerprint()` and the load
 refuses that image; any other change leaves a stale image valid and serving a different model.
 
+**A diff that adds or drops a field of a struct an image's meta serializes, or of one that struct
+nests, and whose every other image change is that field's own serializer line, leaves
+`IMAGE_VERSION` unbumped.** The layout fingerprint already refuses that family's stale images; a
+bump re-mints every family's.
+
 **A diff that adds or changes a function a closure member calls to set the order, offset or size
 of a piece's or a plane's bytes - not their values - adds it to `REVIEW.das`'s `LAYOUT_HELPERS` in
 the same change, unless the layout-stamp closure holds it.** The closure is every top-level
@@ -107,10 +112,11 @@ family's image meta serializes, and every struct it nests, gains or loses no fie
 **A diff that adds a family or a flavor whose images live at new paths and re-stamps
 `IMAGE_LAYOUT_STAMP_HASH` names in the PR body every closure member it adds.**
 
-**Weakening a meta field-count tripwire - `IMAGE_META_FIELDS` and every `*_META_FIELDS`
-constant in a `dasllama/` file - is a defect.** Raising the constant
-without adding the field to the serializer leaves that field out of every image, and a
-serializer without the tripwire reads a forgotten field back as zero on every load.
+**Weakening a meta field-count tripwire - a `verify(count_meta_fields(x) == K)` in a `dasllama/`
+file - is a defect: deleting the verify, or changing `K` without adding or dropping the matching
+field in the serializer that holds the verify.** A raised `K` with no serializer line leaves that
+field out of every image, and a serializer with no tripwire reads a forgotten field back as zero on
+every load.
 
 **A decline on any sink an image save writes through - a sink is the file or the memory buffer
 the save writes its bytes into - wherever that code lives, never fails the load: warn, and serve

@@ -16,8 +16,8 @@ names, adds a file under `dasllama/`, or adds a STYLE037/STYLE038 suppression an
 applies `REVIEW_DOCS.md` (beside this file) too.**
 
 **A diff that adds, changes or drops a check in a `REVIEW.das` under this folder, adds or removes a
-name in a check's licensed set - the names a check does not flag - or changes a constant a check
-compares against, applies `REVIEW_GATES.md` (beside this file) too.**
+name in a check's licensed set - the names a check does not flag - or changes a literal a check
+compares the tree against, applies `REVIEW_GATES.md` (beside this file) too.**
 
 **A diff that cites a timing as the reason it picks one candidate over another, adds a race,
 changes which candidates a race times, or picks a numeric threshold by a race applies
@@ -64,9 +64,10 @@ winners to a box and submits that box's winners back), to a validator it calls (
 that loads a tune sidecar) reaching it, applies `performance/REVIEW.md` and `REVIEW_EXCHANGE.md`.**
 
 **A diff that adds a module under `dasllama/` whose code only some of `tests/run.das`'s areas run
-gives it a `MODULE_AREAS` row naming those areas and a `MODULE_WITNESSES` row naming every
-`model-free` or `stocked` `llm` test file that runs its code, in the same change.** A module with
-no row runs every area, one with `llm` and no witness row the core set: safe, and slower each PR.
+gives it a `MODULE_AREAS` row naming those areas and, where those areas include `llm`, a
+`MODULE_WITNESSES` row naming every `model-free` or `stocked` `llm` test file that runs its code,
+in the same change.** A module with no row runs every area; one with `llm` and no witness row runs
+every model-free `llm` file and the `LLM_CORE_WITNESSES` list: safe, and slower each PR.
 
 **A diff after which a test file runs an existing module's code, where that module's
 `MODULE_AREAS` row reaches the file through none of its areas and its `MODULE_WITNESSES` row does
@@ -150,17 +151,14 @@ of one image or audio turn inside a single model call - applies `REVIEW_VISION.m
 **A change to a file `dasllama/dasllama_tower*.das` matches - encoder-tower code no single backend
 owns, never a backend's tower driver - applies `REVIEW_AUDIO.md` and `REVIEW_VISION.md`.**
 
-**A change to a file `dasllama/dasllama_tts*.das` matches, `dasllama/dasllama_styletts2.das`,
-a TTS family file - a `dasllama/dasllama_<family>.das` holding exactly one voice model's code,
-never the two-family carrier `dasllama/dasllama_styletts2.das` - or a text front-end file - one
-stage of the pass that turns text into phonemes (`dasllama/dasllama_textnorm.das`,
-`dasllama/dasllama_postag.das`, `dasllama/dasllama_g2p.das`) - applies `REVIEW_TTS.md`.**
-
-**A change to the front-end packs' mint (`harness/build_g2p_data.py`, `harness/train_postag.py`,
-`harness/mint_postag_silver.py`, `performance/build_tts_data.das`), to the Pocket converter or its
-card (`harness/convert_pocket.py`, `harness/tts_model_card.md`), or to a call that pins a TTS
-weight lane (`set_tts_q8` / `set_styletts2_q8` / `set_pocket_q8`), wherever the diff puts it,
-applies `REVIEW_TTS.md`.**
+**A change to a `dasllama/` file that `dasllama/dasllama_tts*.das` matches, to
+`dasllama/dasllama_styletts2.das`, to a TTS family file (a `dasllama/dasllama_<family>.das` holding
+one voice model's code) or to a text front-end file - one `dasllama/dasllama_{textnorm,postag,g2p,textscan}*.das`
+matches, or any other `dasllama/` file holding one stage, in any language, of the pass that turns
+text into phonemes, or the codepoint scanning or pack file layout those stages share - applies
+`REVIEW_TTS.md`; so does a change to a script that writes a front-end pack (the data file a stage
+loads), a TTS fixture or a TTS GGUF, or to a call that pins a TTS weight lane (`set_tts_q8` /
+`set_styletts2_q8` / `set_pocket_q8`), wherever the diff puts it.**
 
 **A diff that adds a file under `dasllama/`, or adds or moves a top-level declaration (a `require`
 among them) in a file under `dasllama/`, applies `REVIEW_PLACEMENT.md`.**
@@ -197,9 +195,10 @@ GPU driver file's `[init]` sets), or registers a GPU backend's version of an exi
 `set_*_q8` lane setter under `dasllama/` or `harness/`.**
 
 **A diff that adds or changes an override - an environment knob, a non-private `dasllama/` setter
-a file outside `tests/` calls, or an on-disk state file a run writes or a user places, any of them
-moving a gate, policy or threshold off its default - or an override's announce (the line a run
-prints where the override changes the outcome) applies `REVIEW_OVERRIDES.md` too.**
+a file outside `tests/` calls, or an on-disk state file (one whose only job is to persist a setting;
+model data is not one) a run writes or a user places, any of them moving a gate, policy or threshold
+off its default - or an override's announce (the line a run prints where it changes the outcome)
+applies `REVIEW_OVERRIDES.md` too.**
 
 **A call site a diff adds - not a call it moved from another site - of a CPU or GPU matrix
 multiply whose weight operand is an f32 plane, outside a correctness-comparison path (one only
@@ -273,10 +272,10 @@ that entry names the re-export; any other re-export is a defect - the file's own
 the symbol through `dasllama/dasllama.das` instead.**
 
 **Checked-in text - docs, comments, or string data, any language - that describes a mechanism of
-the reference build (any third-party engine, library or runtime whose figure any checked-in text
-of this module compares with this module's own), or names that build, its binaries or symbols,
-wherever the diff puts it - and the commit message or PR body of such a diff - applies
-`REVIEW_UPSTREAM.md`.**
+the reference build (any third-party engine, library or runtime whose measured numbers any
+checked-in text of this module compares with this module's own; an output-parity fixture alone
+does not make it one), or names that build, its binaries or symbols, wherever the diff puts it -
+and the commit message or PR body of such a diff - applies `REVIEW_UPSTREAM.md`.**
 
 **A diff that adds a step, a file to touch, a table, fixture or probe entry, or a gate to the work
 a `HOW_TO_*.md` covers, where that HOW_TO does not name it, names it there in the same change.** A
@@ -284,9 +283,10 @@ how-to is the next author's whole brief: a step missing there is a step the next
 without knowing.
 
 **Legal attribution - a third party's copyright line, licence name, or licence text - lives in
-a model card (the provenance-and-licence page beside a released model or pack), this folder's
-`THIRD_PARTY_NOTICES.md`, the `LICENSE.*` files, or a ledger row naming a licence as a reason to
-adopt or reject a model, a dataset, or a dependency; anywhere else in prose it is a defect.**
+a model card (the provenance-and-licence page or `.LICENSE` file beside a released model or pack)
+or the string a script writes into one, this folder's `THIRD_PARTY_NOTICES.md`, the `LICENSE.*`
+files, or a ledger row naming a licence as a reason to adopt or reject a model, a dataset, or a
+dependency; anywhere else in checked-in text - docs, comments, or string data - it is a defect.**
 
 **A diff that writes a CPU feature name in a `[tune_perm]` `requires=` argument that
 `TUNE_KNOWN_FEATURES` (`modules/dasLLVM/daslib/llvm_tune.das`, repo root) does not list adds it

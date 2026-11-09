@@ -251,7 +251,7 @@ Run under ``-jit`` --- the interpreter is refused, it is far too slow for infere
    * - ``--tts``
      -
      - ---
-     - TTS model GGUF (kitten-nano, kitten-mini, kokoro-82m with the front-end packs ``tts_g2p.bin`` + ``tts_postag.bin`` beside them; or a ``pocket-tts-<lang>-q8`` file, which reads text, needs no pack and clones a voice) --- enables ``/v1/audio/speech``. Repeatable: each model serves under its file's stem, the first is the default (``--tts-lane`` and ``--tts-voices-dir`` are the first one's); the config's ``[[tts]]`` tables give each model its own ``id``, ``lane`` and ``voices_dir``
+     - TTS model GGUF (kitten-nano, kitten-mini, kokoro-82m, kokoro-ru with the front-end packs beside them --- ``tts_g2p.bin`` + ``tts_postag.bin`` for the English voices, ``tts_g2p_ru.bin`` for the Russian ones; or a ``pocket-tts-<lang>-q8`` file, which reads text, needs no pack and clones a voice) --- enables ``/v1/audio/speech``. Repeatable: each model serves under its file's stem, the first is the default (``--tts-lane`` and ``--tts-voices-dir`` are the first one's); the config's ``[[tts]]`` tables give each model its own ``id``, ``lane`` and ``voices_dir``
    * - ``--tts-lane``
      -
      - ``q8``

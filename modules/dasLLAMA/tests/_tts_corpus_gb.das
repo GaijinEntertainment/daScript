@@ -6,7 +6,7 @@ module _tts_corpus_gb shared public
 require dasllama/dasllama_lint public
 require dastest/testing_boost public
 require daslib/fio
-require _tts_corpus   // load_json_file
+require _tts_corpus   // load_json_file, tts_fixture_path
 
 //! One sentence of the British half of the TTS front-end fixture
 //! (`_tts_fixtures/g2p_corpus_gb.json`, minted by `harness/mint_tts_g2p_gb_fixture.py`): the
@@ -35,7 +35,7 @@ struct TtsGbCorpus {
     oov_words : array<TtsGbOov>
 }
 
-def tts_corpus_gb_path() : string => "{get_das_root()}/modules/dasLLAMA/tests/_tts_fixtures/g2p_corpus_gb.json"
+def tts_corpus_gb_path() : string => tts_fixture_path("g2p_corpus_gb.json")
 
 //! The whole British fixture. Panics on a missing or malformed file: the fixture is checked
 //! in, so its absence is a defect, never a skip.

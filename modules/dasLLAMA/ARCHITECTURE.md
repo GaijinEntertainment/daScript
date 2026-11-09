@@ -66,8 +66,9 @@ any sibling companion that sends a reader to it.
   bodies before them, and the instruments the readings come from (`ARCHITECTURE_GPU_SHARED_READINGS.md#gpu-shared-readings`).
 - `ARCHITECTURE_MEDIA.md` - the encoder-tower, audio and ASR charters (`ARCHITECTURE_MEDIA.md#tower-audio-charters`).
 - `ARCHITECTURE_MEDIA_VISION.md` - the vision charters (`ARCHITECTURE_MEDIA_VISION.md#vision-charters`).
-- `ARCHITECTURE_TTS.md` - the text-to-speech charters - the front end, the block home, the
-  shared assembly, the families and the facade.
+- `ARCHITECTURE_TTS.md` - the text-to-speech charters - the block home, the shared assembly, the families and the facade.
+- `ARCHITECTURE_TTS_FRONT_END.md` - the text front end's charters (`ARCHITECTURE_TTS_FRONT_END.md#tts-front-end`), the
+  heteronym context and the two-tier phoneme pack.
 - `ARCHITECTURE_POCKET.md` - the Pocket TTS family, a continuous-audio language model with its
   own assembly.
 - `ARCHITECTURE_TRANSLATE.md` - the Bergamot translation family (`ARCHITECTURE_TRANSLATE.md#nmt-charter`).
@@ -279,9 +280,8 @@ Each companion's sections are anchored by topic; a citation spells `<doc>.md#<an
   activation forms against the reference's
   (`ARCHITECTURE_CPU_KERNELS.md#q8-activation-forms`).
 
-- `ARCHITECTURE_TTS.md` - the TTS block home's two layouts, tap stacking, the padded concat
-  width, the served carrier on the image rail, the sine source's operation order, the heteronym
-  context, the rig's scoring, and the two-tier phoneme pack.
+- `ARCHITECTURE_TTS.md` - the TTS block home's two layouts, tap stacking, the padded concat width, the served carrier
+  on the image rail, the sine source's operation order, and the rig's scoring.
 - `ARCHITECTURE_TTS_MEMORY.md` - the per-synthesis carrier, the generator's six buffers, the
   chunk-sized peak with its cap and the idle release, and the harmonic source streaming in frame
   windows.

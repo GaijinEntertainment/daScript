@@ -175,7 +175,8 @@ reference splits abbreviations ("Dr." ends a sentence) and joins segments with s
 ("p.m." reads back "p. m."); a chunker of our own is a quality rung for the rig, not a
 parity matter. The English facade path normalizes the text first (numbers, units, abbreviations
 become words) - the reference does not, which is where its numeric WER comes from; a model in
-another language takes the text as it is, since the normalizer reads English.
+another language takes the text as it is, which is what its reference does in every language
+(the facade's Russian normalizer serves the Kokoro voices, not a Pocket file).
 
 ### The published file carries the served quants {#pocket-q8-file}
 

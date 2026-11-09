@@ -12,6 +12,8 @@ pinned backend active, so every CPU timing after it still measures that backend.
 
 **Weakening `check_last_bench_row` (`REVIEW.das` beside this file) is a defect.**
 
+**A change to `tts_model_card.md` applies `../REVIEW_TTS.md` too.**
+
 **Never set `@role = "alias"` or `"weight"` on a binding of a dispatch-macro class
 (`[vk_dispatch]`, `[cuda_dispatch]`, `[metal_dispatch]`) in this folder when the binding's only
 read sits in another file - move the read into the binding's own file instead.** Those macros

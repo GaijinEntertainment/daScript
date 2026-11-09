@@ -47,10 +47,15 @@ problem reproduces only on macOS; `followup_vulkan.md` for work that would chang
 driver or dispatch, outside every template the CUDA home also stamps, and no Metal or CUDA one;
 `followup_general.md` for everything else, rig and instrument rows included.**
 
-**A time, rate, ratio or error a box measured, written by a diff into an `ARCHITECTURE*.md` or a
-`followup_*.md`, names each box it holds on, and the `PERF_LEDGER.md` entry it comes from shows it
-on each of them; a `followup_*.md` row that carries one cites that entry.** A parity claim (X runs
-at Y's time) and a measured ordering with no number (the faster lane) are ratios.
+**A time, rate, ratio or error a diff writes into an `ARCHITECTURE*.md` or a `followup_*.md` -
+one whose value depends on the box that measured it - names each box it holds on, and the
+`PERF_LEDGER.md` entry it comes from shows it on each of them; a `followup_*.md` row that carries
+one cites that entry.** A parity claim (X runs at Y's time) and a measured ordering with no number
+(the faster lane) are ratios.
+
+**A figure a run measured that a diff writes into an `ARCHITECTURE*.md` or a `followup_*.md` -
+one whose value is the same on every box, such as a count over a checked-in fixture or a file's
+size - names the file, fixture or command that reproduces it.**
 
 **A diff that adds or removes an `ARCHITECTURE_*.md` companion adds or drops its line in
 `ARCHITECTURE.md`'s routing block (under `File charters` or `Mechanisms`) in the same change.**
