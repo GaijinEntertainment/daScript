@@ -34,6 +34,17 @@ class AdmissionServer : HvWebServer {
 def private upgrade_request(origin : string = "https://allowed.example") : string =>
     "GET /socket HTTP/1.1\r\nHost: localhost\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nOrigin: {origin}\r\nCookie: sid=fixture\r\nSec-WebSocket-Protocol: test.v1\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n"
 
+class ProbeWsClient : HvWebSocketClient {}
+
+[test(description = "A send on a WebSocket client that was never opened answers -1 at once, without waiting on a loop")]
+def send_before_open_answers_at_once(t : T?) {
+    var client = new ProbeWsClient()
+    let started = ref_time_ticks()
+    t |> equal(client->send_result("never sent"), -1, "no channel, no loop: refused")
+    t |> success(get_time_usec(started) < 1_000_000, "the refusal does not wait on a deadline")
+    unsafe { delete client }
+}
+
 [test(description = "A WebSocket upgrade waits for application approval without blocking plain HTTP requests")]
 def approval_precedes_upgrade_without_blocking_http(t : T?) {
     var server = new AdmissionServer()
