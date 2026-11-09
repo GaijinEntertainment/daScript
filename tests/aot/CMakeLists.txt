@@ -591,10 +591,13 @@ ADD_DEPENDENCIES(test_aot libDaScriptAot
 # changes module registration between the per-PR gate and the nightly binary).
 SET(TEST_AOT_INCLUDE_DIRS ${NEED_MODULES_PATH} ${PROJECT_SOURCE_DIR}/modules/dasUnitTest ${PROJECT_SOURCE_DIR}/modules/dasLiveHost/src ${AUDIO_INCLUDE_DIR} ${CIPIC_HRTF_INCLUDE_DIR} ${PROJECT_SOURCE_DIR}/modules/dasMinfft/minfft ${PROJECT_SOURCE_DIR}/modules/dasPUGIXML/pugixml ${PROJECT_SOURCE_DIR}/modules/dasHV/hv/$<CONFIG>/include ${SQLITE_INCLUDE_DIR})
 SET(TEST_AOT_COMPILE_DEFS DAS_TEST_AOT MINFFT_SINGLE HRTF_SAMPLE_RATE=${DAS_AUDIO_SAMPLE_RATE})
+# main.cpp compiles as it does in daslang: the precompiled header below is for the generated units
+set_source_files_properties(${DAS_DASCRIPT_MAIN_SRC} PROPERTIES SKIP_PRECOMPILE_HEADERS ON)
 
 target_include_directories(test_aot PRIVATE ${TEST_AOT_INCLUDE_DIRS})
 target_compile_definitions(test_aot PRIVATE ${TEST_AOT_COMPILE_DEFS})
 SETUP_CPP11(test_aot)
+DAS_AOT_PCH(test_aot)
 # No SETUP_LTO: LTCG over ~1080 AOT TUs was a 21-minute link on MSVC CI for a
 # test binary that measures correctness, not performance.
 
@@ -617,6 +620,7 @@ ADD_DEPENDENCIES(test_aot_subset libDaScriptAot
 target_include_directories(test_aot_subset PRIVATE ${TEST_AOT_INCLUDE_DIRS})
 target_compile_definitions(test_aot_subset PRIVATE ${TEST_AOT_COMPILE_DEFS})
 SETUP_CPP11(test_aot_subset)
+DAS_AOT_PCH(test_aot_subset)
 
 ### AOT bench host — the nightly benchmark stand's aot lane
 # Every benchmark under benchmarks/ (its `_*` helper modules as libs) over the full daslib closure
@@ -674,6 +678,7 @@ ADD_DEPENDENCIES(test_aot_bench libDaScriptAot
 target_include_directories(test_aot_bench PRIVATE ${TEST_AOT_INCLUDE_DIRS})
 target_compile_definitions(test_aot_bench PRIVATE ${TEST_AOT_COMPILE_DEFS})
 SETUP_CPP11(test_aot_bench)
+DAS_AOT_PCH(test_aot_bench)
 
 ### LLVM-AOT variant of test_aot (LLVM-only). Each .das is compiled by the LLVM backend into a
 ### self-registering native .o (das_aot_register load ctor) linked directly into the binary;
