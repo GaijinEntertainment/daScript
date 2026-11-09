@@ -12,7 +12,7 @@ def private feed_plan(total : int) {
     tune_progress_feed("@tune plan scope=probe total={total}")
 }
 
-[test]
+[test(description = "tuner lines without the @tune prefix are not progress events and start no display")]
 def test_non_event_lines_are_not_events(t : T?) {
     tune_progress_reset()
     t |> success(!tune_progress_feed("kernel tuner: default, N=4096"))
@@ -21,7 +21,7 @@ def test_non_event_lines_are_not_events(t : T?) {
     t |> success(!tune_progress_active(), "chatter must not start a display")
 }
 
-[test]
+[test(description = "a plan event starts the display with the bar leading the line and a 0/total outer counter")]
 def test_plan_starts_a_display(t : T?) {
     feed_plan(25)
     t |> success(tune_progress_active())
@@ -30,7 +30,7 @@ def test_plan_starts_a_display(t : T?) {
     t |> success(line |> find("[") == 0, "the bar leads the line")
 }
 
-[test]
+[test(description = "begin and step events render the kernel name, the pass with its inner counter, and the live-candidate count")]
 def test_kernel_counters_and_phase_render(t : T?) {
     feed_plan(25)
     t |> success(tune_progress_feed("@tune begin name=dot_q8q8 total=80"))
@@ -41,7 +41,7 @@ def test_kernel_counters_and_phase_render(t : T?) {
     t |> success(line |> find("4 live") >= 0, "live-candidate count")
 }
 
-[test]
+[test(description = "each end event advances the outer kernel counter by one")]
 def test_end_advances_the_outer_counter(t : T?) {
     feed_plan(3)
     tune_progress_feed("@tune begin name=a total=10")
@@ -52,7 +52,7 @@ def test_end_advances_the_outer_counter(t : T?) {
     t |> success(tune_progress_line(100) |> find("2/3") >= 0)
 }
 
-[test]
+[test(description = "an end event drops the finished kernel's inner counter and live count from the line")]
 def test_inner_counter_drops_out_between_kernels(t : T?) {
     feed_plan(3)
     tune_progress_feed("@tune begin name=a total=10")
@@ -64,7 +64,7 @@ def test_inner_counter_drops_out_between_kernels(t : T?) {
     t |> success(line |> find("live") < 0, "nor a stale live count")
 }
 
-[test]
+[test(description = "the progress bar is empty at 0 of N kernels and full at N of N")]
 def test_bar_fills_with_the_outer_counter(t : T?) {
     feed_plan(4)
     let empty_bar = tune_progress_line(100)
@@ -78,7 +78,7 @@ def test_bar_fills_with_the_outer_counter(t : T?) {
     t |> success(full_bar |> find("4/4") >= 0)
 }
 
-[test]
+[test(description = "on a narrow terminal the bar shrinks to its 8-cell floor and the counters survive")]
 def test_line_respects_a_narrow_terminal(t : T?) {
     feed_plan(25)
     tune_progress_feed("@tune begin name=dot_q8q8 total=80")
@@ -88,7 +88,7 @@ def test_line_respects_a_narrow_terminal(t : T?) {
     t |> success(narrow |> find("[--------]") >= 0, "the bar clamps to its 8-cell floor")
 }
 
-[test]
+[test(description = "malformed @tune events still count as events and leave the display and its counters intact")]
 def test_malformed_events_do_not_break_the_display(t : T?) {
     feed_plan(5)
     t |> success(tune_progress_feed("@tune "), "a bare prefix is still an event")
@@ -100,7 +100,7 @@ def test_malformed_events_do_not_break_the_display(t : T?) {
 
 // Fields are k=v split on spaces, so a value containing one truncates at the first space rather
 // than corrupting the display. gen_tune_probe shipped exactly this bug for its confirm step.
-[test]
+[test(description = "an event field value containing a space is cut at the space without corrupting the counters")]
 def test_a_spaced_value_truncates_but_does_not_corrupt(t : T?) {
     feed_plan(2)
     tune_progress_feed("@tune begin name=confirm (end-to-end prefill) total=0")
@@ -112,7 +112,7 @@ def test_a_spaced_value_truncates_but_does_not_corrupt(t : T?) {
 
 // One relay sees both dasllama tuner halves, so a second plan must not inherit the first
 // scope's kernel — there is fixture setup between a plan and its first begin to show it in.
-[test]
+[test(description = "a new plan event clears the previous scope's kernel, inner counter and live count")]
 def test_a_new_plan_clears_the_previous_scope(t : T?) {
     feed_plan(3)
     tune_progress_feed("@tune begin name=leftover total=9")
@@ -128,7 +128,7 @@ def test_a_new_plan_clears_the_previous_scope(t : T?) {
     t |> success(line |> find("0/7") >= 0, "the new plan's counters are in place")
 }
 
-[test]
+[test(description = "tune verbosity accepts silent, verbose and normal, and an unknown or empty spelling reads as normal")]
 def test_verbosity_parses_and_defaults(t : T?) {
     tune_set_verbosity("silent")
     t |> equal(tune_verbosity(), "silent")

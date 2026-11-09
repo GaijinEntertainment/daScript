@@ -86,7 +86,7 @@ docs: `ARCHITECTURE.md`, `ARCHITECTURE_CODEGEN_IDENTITY.md`, `ARCHITECTURE_DEBUG
 - **A diff that adds a kind of extern slot - a `UidNodes` getter (`daslib/llvm_dll_utils.das`) or
   `FN_JIT_*` name function (`daslib/llvm_jit_plan.das`) that `DllExternResolver` binds a slot
   through - adds to `other_slots` in `tests/_slot_names_fixture.das` a statement that makes the
-  resolver bind a slot of that kind, in the same change.** `tests/llvm_slot_names_key.das` folds
+  resolver bind a slot of that kind, in the same change.** `tests/llvm_jit_cache.das` folds
   `other_slots` in a second process and requires the same value, so a name that changes from run
   to run fails there.
 

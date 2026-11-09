@@ -319,7 +319,7 @@ def private report_sincos_divergence(t : T?; what : string; xs : array<float4>; 
     report_div(t, what, sincos_divergence(xs, dim, wantCos), 0.0, length(xs) * dim)
 }
 
-[test]
+[test(description = "the JIT's float4 sin stays within one ulp of libm over |x| up to 1e5")]
 def test_vector_sin_matches_libm(t : T?) {
     g_offset = 0.0
     let xs <- build_sincos_samples()
@@ -331,7 +331,7 @@ def test_vector_sin_matches_libm(t : T?) {
 
 // sin and cos mirror v_sincos instruction for instruction at every width the emitter serves, so the
 // two rails agree exactly - the zero bound tan carries, at float4, float3 and float2.
-[test]
+[test(description = "the JIT's sin and cos agree bit for bit with the interpreter at float4, float3 and float2")]
 def test_vector_sin_cos_rail_consistency(t : T?) {
     g_offset = 0.0
     let xs <- build_sincos_samples()
@@ -345,14 +345,14 @@ def test_vector_sin_cos_rail_consistency(t : T?) {
     report_sincos_divergence(t, "cos(float2)", xs, 2, true)
 }
 
-[test]
+[test(description = "the JIT's float4 cos stays within one ulp of libm over |x| up to 1e5")]
 def test_vector_cos_matches_libm(t : T?) {
     g_offset = 0.0
     let xs <- build_sincos_samples()
     report_abs(t, "cos(float4)", sincos_error(xs, true), bound(SINCOS_ABS), length(xs) * 4)
 }
 
-[test]
+[test(description = "the JIT's float2 and float3 sin hold the same libm bound as float4")]
 def test_vector_sin_narrow_widths(t : T?) {
     g_offset = 0.0
     let xs <- build_sincos_samples()
@@ -380,7 +380,7 @@ def private tan_away_from_poles : array<float4> {
     return <- xs
 }
 
-[test]
+[test(description = "the JIT's float4 tan holds its relative-error bands against libm away from poles and agrees bit for bit with the interpreter")]
 def test_vector_tan(t : T?) {
     g_offset = 0.0
     let ys <- ramp(-4.0, 4.0, 50000)
@@ -394,7 +394,7 @@ def test_vector_tan(t : T?) {
     report_divergence(t, "tan(float4) unfiltered |x|<1000", xs, ys, OP_TAN, 0.0)
 }
 
-[test]
+[test(description = "within 1e-3 of a pole the JIT's float4 tan still holds its bound and agrees bit for bit with the interpreter")]
 def test_vector_tan_near_poles(t : T?) {
     g_offset = 0.0
     // straddle 400 poles at +-1e-5 .. +-1e-3, where |tan| runs from 1e3 to 1e5
@@ -414,7 +414,7 @@ def test_vector_tan_near_poles(t : T?) {
 
 // ===== exp2 / log2 / log =====
 
-[test]
+[test(description = "the JIT's float4 exp2 stays within 4e-7 relative of libm and agrees bit for bit with the interpreter")]
 def test_vector_exp2(t : T?) {
     g_offset = 0.0
     let xs <- ramp(-125.0, 128.0, 50000)
@@ -443,7 +443,7 @@ def private log_mantissa_sweep : array<float4> {
 // roughly 300x a correctly rounded float log2, with the worst case sitting just below x == 1
 // where the p*(m-1) + e combine cancels. The interpreter and AOT have always returned exactly
 // this; the bounds record what it delivers rather than endorse it.
-[test]
+[test(description = "the JIT's float4 log2 and log hold the estimate's bound against libm across the mantissa and agree bit for bit with the interpreter")]
 def test_vector_log2_and_log(t : T?) {
     g_offset = 0.0
     let xs <- log_mantissa_sweep()
@@ -460,7 +460,7 @@ def test_vector_log2_and_log(t : T?) {
 // v_log2_est_p5 reads the exponent through a mask, so it never yields -inf or NaN: log2(0) is
 // -127, log2(-x) == log2(|x|). Those are the interpreter's answers and the JIT must repeat them
 // exactly, however unlike libm they look.
-[test]
+[test(description = "the JIT's log2 answers -127 for zero, the magnitude's log for a negative, exact powers of two, and the interpreter's value on every special input")]
 def test_vector_log_special_values(t : T?) {
     g_offset = 0.0
     let xs <- [float4(0.0, -0.0, -4.0, -1.0),           // zero, negative zero, negatives
@@ -525,7 +525,7 @@ def private log_divergence_narrow(xs, ys : array<float4>; which, dim : int) : Er
     return r
 }
 
-[test]
+[test(description = "the JIT's float2 and float3 log2, log and pow agree bit for bit with the interpreter where the polynomial rail applies")]
 def test_vector_log_narrow_widths(t : T?) {
     g_offset = 0.0
     let xs <- log_mantissa_sweep()
@@ -544,7 +544,7 @@ def test_vector_log_narrow_widths(t : T?) {
 
 // ===== pow =====
 
-[test]
+[test(description = "the JIT's float4 pow stays within 6e-5 relative of libm and agrees bit for bit with the interpreter")]
 def test_vector_pow(t : T?) {
     g_offset = 0.0
     let xs <- log_mantissa_sweep()
@@ -554,7 +554,7 @@ def test_vector_pow(t : T?) {
     report_divergence(t, "pow(float4)", xs, ys, OP_POW, 0.0)
 }
 
-[test]
+[test(description = "the JIT's pow(x, 0) is exactly 1 on every lane and agrees with the interpreter")]
 def test_vector_pow_zero_exponent(t : T?) {
     g_offset = 0.0
     var xs : array<float4>
@@ -568,7 +568,7 @@ def test_vector_pow_zero_exponent(t : T?) {
     report_divergence(t, "pow(float4) zero exponent", xs, ys, OP_POW, 0.0)
 }
 
-[test]
+[test(description = "the JIT's pow of a negative base flips the sign for an odd exponent, keeps it for an even one, and matches the interpreter lane for lane")]
 def test_vector_pow_negative_base(t : T?) {
     g_offset = 0.0
     var xs : array<float4>
@@ -623,7 +623,7 @@ def private nan_lane_cell_sincos(t : T?; what : string; xs : array<float4>; want
 // is asserted on both rails instead, and it holds on every target: off the polynomial rail the JIT
 // takes libm, which propagates NaN too. exp is the one member of the rail that cannot be here -
 // the interpreter answers inf for exp(NaN) while the JIT answers NaN (ARCHITECTURE_VECTOR_MATH.md sec.8.1).
-[test]
+[test(description = "a NaN lane stays NaN through tanh, sinh, cosh, tan, sin and cos on both the JIT and the interpreter")]
 def test_vector_nan_lanes(t : T?) {
     g_offset = 0.0
     let xs <- nan_samples()
@@ -642,7 +642,7 @@ def test_vector_nan_lanes(t : T?) {
 // and AOT call libm once per lane while the JIT runs the exp polynomial. The divergence bound
 // below is therefore a real behaviour difference between the rails, not rounding noise - it is
 // asserted so the size of that difference stays pinned.
-[test]
+[test(description = "the JIT's float4 tanh stays within 8e-7 relative of libm, near zero too, and its divergence from the interpreter's libm stays inside that bound")]
 def test_vector_tanh(t : T?) {
     g_offset = 0.0
     let xs <- ramp(-20.0, 20.0, 50000)
@@ -653,7 +653,7 @@ def test_vector_tanh(t : T?) {
     report_rel(t, "tanh(float4) near zero", op_error(near, ys, OP_TANH), bound(8.0e-7), length(near) * 4)
 }
 
-[test]
+[test(description = "the JIT's float4 sinh and cosh stay within 8e-7 relative of libm, and their divergence from the interpreter's libm stays inside that bound")]
 def test_vector_sinh_cosh(t : T?) {
     g_offset = 0.0
     let xs <- ramp(-20.0, 20.0, 50000)
@@ -670,7 +670,7 @@ def test_vector_sinh_cosh(t : T?) {
 // the quotient into NaN. The two rails saturate to different floats and that is expected: libm
 // returns the largest float below 1 at x = 9, the emitter's (t-1)/(t+1) rounds to exactly 1. Being
 // within one ulp of +-1 is asserted on every rail; exactness only where the emitter runs.
-[test]
+[test(description = "tanh saturates to within an ulp of +-1 with its sign kept past the clamp edge on every rail, and to exactly +-1 where the emitter runs")]
 def test_vector_tanh_saturates(t : T?) {
     g_offset = 0.0
     let xs <- [float4(9.0, -9.0, 20.0, -20.0),          // the clamp edge and just past it

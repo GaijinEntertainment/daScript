@@ -22,7 +22,7 @@ among them - is raced inside the exe at first start, because that race needs no 
    the per-class clones and companions, the dispatch chain over a runtime class MASK (one bit
    per ladder class, so a class's membership is its own full feature set - a vnni512 box
    without vbmi is not in `x86-vnni512` and takes the avx2 clone), `DAS_TUNE_FAT_CLASS`, the
-   `klass` column of `tune_status`. Test: `tests/llvm_tune_fat.das`.
+   `klass` column of `tune_status`. Test: `tests/llvm_tune.das`.
 3. **Emitter** - landed: the clone's `target-cpu` / `target-features` attributes, the tier
    gates swapped to the class around its generator, and `noinline` (AArch64's inliner would
    otherwise pull an intrinsic-free clone into the baseline). The dispatch is generated as

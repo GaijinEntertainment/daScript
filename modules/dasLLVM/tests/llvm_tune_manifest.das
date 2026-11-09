@@ -42,7 +42,7 @@ def private spawn_client(cmd : string; var lines : array<string>) : int {
     return rc
 }
 
-[test]
+[test(description = "a child stamps its kernel and companion from the per-app sidecar it wrote, while a binary-stale or other-box sidecar drops back to the fallback unless applied_box names this box", timeout = 1200)]
 def test_llvm_tune_manifest_roundtrip(t : T?) {   // nolint:STYLE038 - flat sequential sidecar-state arms over shared child-spawn state; no arm stands alone
     if (!jit_enabled()) {
         // the generator only fires under the LLVM JIT; the child needs -jit too
@@ -57,7 +57,7 @@ def test_llvm_tune_manifest_roundtrip(t : T?) {   // nolint:STYLE038 - flat sequ
         return
     }
     let clientPath = tmpRes as value
-    let tmplText = fread("{get_this_module_dir()}/llvm_tune_manifest_client.das")
+    let tmplText = fread("{get_this_module_dir()}/_llvm_tune_manifest_client.das")
     t |> success(!empty(tmplText))
     t |> success(fwrite(clientPath, tmplText))
     // the per-app sidecar: <root-script-stem>.tune.json beside the spawned script
@@ -196,7 +196,7 @@ def test_llvm_tune_manifest_roundtrip(t : T?) {   // nolint:STYLE038 - flat sequ
 
 // tune_sidecar_verdict: every refusal reason, in-process (the verdict is plain runtime code).
 // The boolean predicate must agree with the verdict on every case — the alignment invariant.
-[test]
+[test(description = "tune_sidecar_verdict names every refusal reason of a sidecar, and the boolean predicate agrees with the verdict on every case")]
 def test_llvm_tune_sidecar_verdict(t : T?) {   // nolint:STYLE038 - one sidecar walked through every verdict in sequence; each arm rewrites the file the arm before it left
     let tmpRes = create_temp_file_result("llvm_tune_verdict_", ".tune.json")
     if (tmpRes is error) {
@@ -290,7 +290,7 @@ def test_llvm_tune_sidecar_verdict(t : T?) {   // nolint:STYLE038 - one sidecar 
 
 // a save onto a binary-stale sidecar keeps the box's own "runtime" section and nothing else;
 // another box's stale file keeps nothing
-[test]
+[test(description = "a save onto this box's binary-stale sidecar keeps only its runtime section, and a save onto another box's stale sidecar keeps nothing")]
 def test_llvm_tune_stale_save_keeps_runtime(t : T?) {
     let tmpRes = create_temp_file_result("llvm_tune_stale_save_", ".tune.json")
     if (tmpRes is error) {

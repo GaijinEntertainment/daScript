@@ -29,7 +29,7 @@ code `init_globals` emits like any other; only the C++ modules, which have no da
 walk, are skipped. A shared module's global that holds `@@fn` is the shape daslib's dispatch
 tables and icon catalogs take, and a walk that skips such a module leaves the Func null: nothing
 references the function, LLVM drops it, and the first invoke throws.
-`tests/llvm_exe_shared_addr.das` holds the shape.
+`tests/llvm_exe.das` holds the shape.
 
 ## 3. A split exe's accessor slots {#split-exe-slots}
 
@@ -48,7 +48,7 @@ looked up by name, never added twice). Nothing in a split exe is exported: the w
 calls are plain external, the slots carry no DLL storage class, and the per-function hash globals
 of the DLL rail are not emitted, so the exe has no export table and no import library beside it.
 The partitions link once with no obj cache, and the objects and the response file go with the
-link, whether the link succeeded or not. `tests/llvm_exe_split_lto.das` holds the shape: a
+link, whether the link succeeded or not. `tests/llvm_exe.das` holds the shape: a
 body-level `@@`, a global table literal whose accessor a partition collected first, and the
 announces of each form.
 

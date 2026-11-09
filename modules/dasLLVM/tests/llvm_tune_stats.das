@@ -13,7 +13,7 @@ require math
 // The DAS_TUNE_* env loads ONCE at context init (g_env_tune), so in-process overrides go
 // through the tune setters — which also arm the child environment, the path the tuner uses.
 
-[test]
+[test(description = "tune_median takes the middle of an odd sample, the mean of the middle pair of an even one, 0 for none, and leaves its input in order")]
 def test_tune_median(t : T?) {
     var odd <- [3.0lf, 1.0lf, 2.0lf]
     t |> equal(tune_median(odd), 2.0lf)
@@ -30,7 +30,7 @@ def test_tune_median(t : T?) {
     delete one
 }
 
-[test]
+[test(description = "tune_cv_pct is 0 for a flat or single sample and 100 times the sample deviation over the mean otherwise")]
 def test_tune_cv_pct(t : T?) {
     var flat <- [5.0lf, 5.0lf, 5.0lf, 5.0lf]
     t |> equal(tune_cv_pct(flat), 0.0lf)
@@ -44,7 +44,7 @@ def test_tune_cv_pct(t : T?) {
     delete one
 }
 
-[test]
+[test(description = "the noise threshold ignores its paranoid argument and follows the in-process setters, which mark it overridden")]
 def test_tune_noise_env(t : T?) {
     // one protocol: the paranoid argument is ignored
     t |> equal(tune_noise_threshold_pct(false), tune_noise_threshold_pct(true))
@@ -58,7 +58,7 @@ def test_tune_noise_env(t : T?) {
     t |> success(tune_noise_override())
 }
 
-[test]
+[test(description = "two merges into one sidecar section keep both entries and leave the kernels section untouched")]
 def test_tune_sidecar_section_merge(t : T?) {
     let tmpRes = create_temp_file_result("llvm_tune_race_", ".tune.json")
     if (tmpRes is error) {
@@ -85,7 +85,7 @@ def test_tune_sidecar_section_merge(t : T?) {
     remove(sidecar)
 }
 
-[test]
+[test(description = "tune_history_archive copies an ok mint's sidecar into the history dir and writes a refused mint as a FAILED stub carrying its verdict")]
 def test_tune_history_archive(t : T?) {
     let dirRes = create_temp_directory_result("llvm_tune_history_")
     if (dirRes is error) {
@@ -114,7 +114,7 @@ def test_tune_history_archive(t : T?) {
     remove(sidecar)
 }
 
-[test]
+[test(description = "a provenance note lands in the sidecar beside the winner, and a note never overwrites the box identity")]
 def test_tune_provenance_note_roundtrip(t : T?) {
     let tmpRes = create_temp_file_result("llvm_tune_stats_", ".tune.json")
     if (tmpRes is error) {
@@ -138,7 +138,7 @@ def test_tune_provenance_note_roundtrip(t : T?) {
     remove(sidecar)
 }
 
-[test]
+[test(description = "the validate verdict passes reproductions, one-window flips and differing challengers, and fails the same challenger past the band in both windows or any rejection")]
 def test_tune_validate_verdict(t : T?) {
     // reproduced: no challengers, drift never enters the verdict
     var clean <- [TuneValidateRow(drift = 1.0lf), TuneValidateRow(drift = 7.0lf)]

@@ -1,3 +1,5 @@
+//! a [tuned] `perm=` pin naming a perm outside the grid refuses the
+//! compile
 // an explicit `perm=` pin naming a perm outside the grid is an authoring error and keeps the
 // hard compile refusal - the stale-SIDECAR fallback in dasllama_tune's [tuned] must not eat it
 // (the sidecar arm is the positive twin: test_tuned's stale-sidecar cell)

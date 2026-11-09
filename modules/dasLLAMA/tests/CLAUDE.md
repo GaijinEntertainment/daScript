@@ -4953,7 +4953,7 @@ Every `[test]` file requiring a `dasllama/*` module outside this folder, each wi
 - `utils/dasllama-server/test_exchange_client.das` - requires `dasllama/dasllama_exchange` by
   registered name (nothing pins it to that directory); it stays beside the server suites
   because its fixed test port is coordinated with theirs (see its `TEST_PORT` note).
-- `modules/dasLLVM/tests/test_grid.das`, `test_tune.das`, `test_tuned.das` - the tune
+- `modules/dasLLVM/tests/test_tune.das`, `test_tuned.das` - the tune
   framework's own tests; they require `dasllama/dasllama_tune` (the tuner contract) and
   live with dasLLVM under `modules/dasLLVM/REVIEW.md`.
 - `modules/dasLLAMA/benchmarks/matmul/test_matmul_par.das` - the bench self-check, requiring

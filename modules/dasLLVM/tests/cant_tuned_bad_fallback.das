@@ -1,3 +1,5 @@
+//! a [tuned] `fallback=` naming a perm outside the grid refuses the
+//! compile
 // the fallback arm of the stale-sidecar rescue keeps its own floor: a `fallback=` chain whose
 // picked perm is outside the grid still refuses the compile ("tuned: fallback perm ... not in
 // grid") - the sidecar rescue must never loop through a broken fallback (twin of

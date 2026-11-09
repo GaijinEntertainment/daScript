@@ -4,7 +4,7 @@ require daslib/fio
 require daslib/clargs
 
 // The child for the panic-teardown test in uncategorized.das, and the
-// root modules/dasLLVM/tests/llvm_exe_panic_teardown.das builds as an
+// root modules/dasLLVM/tests/llvm_exe.das builds as an
 // exe. The first argument picks what main leaves running when it
 // panics - the shutdown that would have stopped it never runs:
 //   (none)   a persistent que whose one job never returns, like a

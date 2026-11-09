@@ -30,7 +30,7 @@ def private reference(a, b : array<float>) : float {
 
 // b is all-ones so the dot is sum(a) — exactly representable and
 // order-independent, so vectorize/unroll reassociation stays bit-exact.
-[test]
+[test(description = "[dasllama_tune] emits a plain, u2, vec8 and vec8_u2 clone of a [tune] template, each matching the reference dot exactly", standalone = "[dasllama_tune] clones every [tune]-marked template in its module, so another file's templates would get a second, colliding set of clones")]
 def test_variants_match_reference(t : T?) {
     let a = [for (i in range(64)); float(i)]
     let b = [for (_i in range(64)); 1.0f]

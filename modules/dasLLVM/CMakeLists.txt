@@ -178,35 +178,17 @@ if(NOT DAS_TOOLS_DISABLED)
     das_lane_dastest_target(run_tests_llvm_env_registry COMMENT "Testing the dasLLVM env-knob registry"
         FILES modules/dasLLVM/tests/llvm_env_registry.das)
     das_lane_dastest_target(run_tests_llvm_jit_backend COMMENT "Testing the JIT backend"
-        JIT_FILES modules/dasLLVM/tests/llvm_compile_only.das modules/dasLLVM/tests/llvm_obj_cache.das
-                  modules/dasLLVM/tests/llvm_split_modules.das modules/dasLLVM/tests/llvm_ast_roundtrip.das
-                  modules/dasLLVM/tests/llvm_cache_selfheal.das modules/dasLLVM/tests/exe_host_cpu.das
-                  modules/dasLLVM/tests/llvm_jit_never_fast_math.das
-                  modules/dasLLVM/tests/llvm_jit_hint_folds.das modules/dasLLVM/tests/llvm_slot_names_key.das
-                  modules/dasLLVM/tests/llvm_class_target_gates.das modules/dasLLVM/tests/llvm_gep_inbounds.das
-                  modules/dasLLVM/tests/llvm_jit_baseline.das modules/dasLLVM/tests/llvm_jit_debug_info.das
-                  modules/dasLLVM/tests/llvm_jit_global_lookup.das modules/dasLLVM/tests/llvm_jit_link.das
-                  modules/dasLLVM/tests/llvm_jit_ptr_diff_inline.das
-                  modules/dasLLVM/tests/llvm_jit_remarks.das
-                  modules/dasLLVM/tests/llvm_jit_pointer_aliasing.das
-                  modules/dasLLVM/tests/llvm_jit_const_container_param.das
-                  modules/dasLLVM/tests/llvm_jit_strict_aliasing.das
-                  modules/dasLLVM/tests/llvm_jit_sanitize.das modules/dasLLVM/tests/llvm_layout_key.das
-                  modules/dasLLVM/tests/llvm_second_context.das)
+        JIT_FILES modules/dasLLVM/tests/llvm_jit_aliasing.das modules/dasLLVM/tests/llvm_jit_baseline.das
+                  modules/dasLLVM/tests/llvm_jit_cache.das modules/dasLLVM/tests/llvm_jit_debug_info.das
+                  modules/dasLLVM/tests/llvm_jit_hints.das modules/dasLLVM/tests/llvm_jit_sanitize.das
+                  modules/dasLLVM/tests/uncategorized.das)
     das_lane_dastest_target(run_tests_llvm_tune COMMENT "Testing the llvm_tune framework"
-        JIT_FILES modules/dasLLVM/tests/llvm_tune.das modules/dasLLVM/tests/llvm_tune_fat.das
-                  modules/dasLLVM/tests/llvm_cpu_class.das
-                  modules/dasLLVM/tests/llvm_tune_manifest.das modules/dasLLVM/tests/llvm_tune_modes.das
-                  modules/dasLLVM/tests/llvm_tune_modes_client.das
-                  modules/dasLLVM/tests/llvm_tune_progress.das modules/dasLLVM/tests/llvm_tune_requires.das
-                  modules/dasLLVM/tests/llvm_tune_stats.das
-                  modules/dasLLVM/tests/test_grid.das modules/dasLLVM/tests/test_tune.das
-                  modules/dasLLVM/tests/test_tuned.das)
+        JIT_FILES modules/dasLLVM/tests/llvm_tune.das modules/dasLLVM/tests/llvm_cpu_class.das
+                  modules/dasLLVM/tests/llvm_tune_manifest.das modules/dasLLVM/tests/llvm_tune_progress.das
+                  modules/dasLLVM/tests/llvm_tune_requires.das modules/dasLLVM/tests/llvm_tune_stats.das
+                  modules/dasLLVM/tests/test_tune.das modules/dasLLVM/tests/test_tuned.das)
     das_lane_dastest_target(run_tests_llvm_tune_slow COMMENT "Testing the llvm_tune framework (slow tuner runs)"
-        JIT_FILES modules/dasLLVM/tests/llvm_tune_profiles.das modules/dasLLVM/tests/llvm_tune_scope.das)
+        JIT_FILES modules/dasLLVM/tests/llvm_tune_scope.das)
     das_lane_dastest_target(run_tests_llvm_exe COMMENT "Testing the standalone exe"
-        JIT_FILES modules/dasLLVM/tests/llvm_exe_name_lookup.das modules/dasLLVM/tests/llvm_exe_native_paths.das
-                  modules/dasLLVM/tests/llvm_exe_optional_module.das modules/dasLLVM/tests/llvm_exe_panic_teardown.das
-                  modules/dasLLVM/tests/llvm_exe_shared_addr.das modules/dasLLVM/tests/llvm_exe_split_lto.das
-                  modules/dasLLVM/tests/llvm_exe_thread_collect.das modules/dasLLVM/tests/llvm_exe_thread_loop_collect.das modules/dasLLVM/tests/llvm_exe_threadlock.das)
+        JIT_FILES modules/dasLLVM/tests/llvm_exe.das)
 endif()
