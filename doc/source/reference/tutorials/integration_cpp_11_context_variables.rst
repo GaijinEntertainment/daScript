@@ -26,7 +26,7 @@ Prerequisites
 Global variable layout
 ========================
 
-After ``program->simulate(ctx, tout)``,
+After ``simulateProgram(program, ctx, tout)``,
 global variables live in a contiguous memory buffer inside the
 ``Context``.  The ``Context`` provides methods to find variables by
 name and access their raw data:

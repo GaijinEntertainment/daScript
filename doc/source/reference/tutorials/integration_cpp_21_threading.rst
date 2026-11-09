@@ -83,7 +83,7 @@ run it on a ``std::thread``.
    auto program = compileDaScript(getDasRoot() + SCRIPT_NAME,
                                   fAccess, tout, dummyLibGroup, policies);
    Context ctx(program->getContextStackSize());
-   program->simulate(ctx, tout);
+   simulateProgram(program, ctx, tout);
    auto fnCompute = ctx.findFunction("compute");
 
    // 2. Clone the context for the worker thread.
@@ -162,7 +162,7 @@ compilation benchmarks.
        auto program = compileDaScript(getDasRoot() + SCRIPT_NAME,
                                       fAccess, tout, dummyLibGroup, policies);
        Context ctx(program->getContextStackSize());
-       program->simulate(ctx, tout);
+       simulateProgram(program, ctx, tout);
        auto fn = ctx.findFunction("compute");
        vec4f res = ctx.evalWithCatch(fn, nullptr);
        result = cast<int32_t>::to(res);

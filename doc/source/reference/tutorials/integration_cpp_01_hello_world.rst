@@ -124,7 +124,7 @@ Step 4 — Create a context and simulate
 .. code-block:: cpp
 
    Context ctx(program->getContextStackSize());
-   if (!program->simulate(ctx, tout)) {
+   if (!simulateProgram(program, ctx, tout)) {
        // handle errors ...
    }
 

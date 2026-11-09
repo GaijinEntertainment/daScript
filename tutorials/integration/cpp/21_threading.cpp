@@ -73,7 +73,7 @@ static void part_a_run_on_thread() {
         return;
 
     Context ctx(program->getContextStackSize());
-    if (!program->simulate(ctx, tout)) {
+    if (!simulateProgram(program, ctx, tout)) {
         tout << "Simulation failed.\n";
         return;
     }
@@ -172,7 +172,7 @@ static void part_b_compile_on_thread() {
                 }
             } else {
                 Context ctx(program->getContextStackSize());
-                if (!program->simulate(ctx, tout)) {
+                if (!simulateProgram(program, ctx, tout)) {
                     tout << "  Worker simulation failed.\n";
                 } else {
                     auto fn = ctx.findFunction("compute");

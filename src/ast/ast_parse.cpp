@@ -2350,6 +2350,10 @@ namespace das {
         return res;
     }
 
+    bool simulateProgram ( const ProgramPtr & program, Context & context, TextWriter & logs, StackAllocator * sharedStack ) {
+        return program->simulate(context, logs, sharedStack);
+    }
+
     ProgramPtr compileDaScript ( const string & fileName,
                                 const FileAccessPtr & access,
                                 TextWriter & logs,
