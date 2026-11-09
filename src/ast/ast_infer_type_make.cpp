@@ -664,11 +664,18 @@ namespace das {
         reportAstChanged();
     }
     MakeFieldDeclPtr InferTypes::visitMakeStructureField(ExprMakeStruct *expr, int index, MakeFieldDecl *decl, bool last) {
+        auto mkBaseT = expr->makeType;
+        while (mkBaseT->baseType==Type::tFixedArray && mkBaseT->firstType) mkBaseT = mkBaseT->firstType;
+        if (mkBaseT->baseType == Type::tStructure && mkBaseT->structType) {
+            if (auto field = mkBaseT->structType->findField(decl->name)) {
+                if (seedAutoLiteralFromTarget(decl->value, field->type) == SeedLiteral::seeded) {
+                    return Visitor::visitMakeStructureField(expr, index, decl, last);
+                }
+            }
+        }
         if (!decl->value->type) {
             return Visitor::visitMakeStructureField(expr, index, decl, last);
         }
-        auto mkBaseT = expr->makeType;
-        while (mkBaseT->baseType==Type::tFixedArray && mkBaseT->firstType) mkBaseT = mkBaseT->firstType;
         if (decl->cloneSemantics) {
             if (mkBaseT->isAutoOrAlias() || mkBaseT->isExprType()) {
                 return Visitor::visitMakeStructureField(expr, index, decl, last);
@@ -1299,6 +1306,9 @@ namespace das {
             if (int64_t(expr->recordType->argTypes.size()) <= index) {
                 error("tuple element _" + to_string(index) + " out of element range", "", "",
                       init->at, CompilationError::exceeds_tuple_index);
+                return Visitor::visitMakeTupleIndex(expr, index, init, lastField);
+            }
+            if (seedAutoLiteralFromTarget(init, expr->recordType->argTypes[index]) == SeedLiteral::seeded) {
                 return Visitor::visitMakeTupleIndex(expr, index, init, lastField);
             }
             {

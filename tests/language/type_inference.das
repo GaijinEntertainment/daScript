@@ -348,3 +348,106 @@ def result_larger_than_int_max => new array<int[2000000000]>()
 def test_type_inference_fuzz(t : T?) {
     t |> equal(new_of_type_macro_in_option_result(), 1)
 }
+
+class EltClass {
+    n : int
+    def take(xs : array<int>) {
+        n = length(xs)
+    }
+    def take_table(tt : table<string; int>) {
+        n = length(tt)
+    }
+    def take_block(b : block<(x : int) : int>) {
+        n = invoke(b, 20)
+    }
+    def via_bare() {
+        take([])
+    }
+    def via_self() {
+        self->take_table({})  // nolint:STYLE028 - the explicit receiver is the shape under test
+    }
+    def via_block() {
+        take_block($(x) { return x + 1 })
+    }
+}
+
+struct EltStruct {
+    n : int
+    def take(xs : array<int>) {
+        n = length(xs)
+    }
+}
+
+struct EltHolder {
+    arr : array<int>
+    pair : tuple<array<int>; string>
+}
+
+def elt_array() : array<int> {  // nolint:STYLE042 - shape under test
+    return []
+}
+
+def elt_pair() : tuple<array<int>; string> {  // nolint:STYLE042 - shape under test
+    return ([], "ok")
+}
+
+typedef EltPairT = tuple<array<int>; int>
+
+[test(description = "an empty array, table or untyped block literal takes its type from a method parameter, an invoke parameter, a function or block return type, a move or copy target, a struct field and a named tuple's element")]
+def test_literal_takes_target_type(t : T?) {
+    t |> run("class method") @(t : T?) {
+        var c = new EltClass()
+        c->via_bare()
+        t |> equal(c.n, 0)
+        c.n = 7
+        c->via_self()
+        t |> equal(c.n, 0)
+        c->via_block()
+        t |> equal(c.n, 21)
+        unsafe {
+            delete c
+        }
+    }
+    t |> run("struct method") @(t : T?) {
+        var s = EltStruct(n = 5)
+        s->take([])
+        t |> equal(s.n, 0)
+    }
+    t |> run("lambda and function pointer") @(t : T?) {
+        let fn = @(xs : array<int>) : int { return length(xs) }
+        t |> equal(fn |> invoke([]), 0)
+        let fp = @@(xs : array<int>) : int { return length(xs) }
+        t |> equal(fp |> invoke([]), 0)
+        let fb = @@(b : block<(x : int) : int>) : int { return invoke(b, 1) }
+        t |> equal(fb |> invoke($(x) { return x + 41 }), 42)
+    }
+    t |> run("return") @(t : T?) {
+        t |> equal(length(elt_array()), 0)
+        let p <- elt_pair()
+        t |> equal(length(p._0), 0)
+        t |> equal(p._1, "ok")
+        let fromBlock <- invoke($() : array<int> { return [] })
+        t |> equal(length(fromBlock), 0)
+    }
+    t |> run("move and copy") @(t : T?) {
+        var a : array<int>
+        a |> push(1)
+        a <- []  // nolint:PERF030 - shape under test
+        t |> equal(length(a), 0)
+        var l : lambda<(x : int) : int>
+        l <- @(x) { return x * 2 }  // nolint:PERF030,STYLE011 - shape under test
+        t |> equal(l |> invoke(4), 8)
+        var f : function<(x : int) : int>
+        f = @@(x) { return x + 1 }  // nolint:STYLE011 - shape under test
+        t |> equal(f |> invoke(1), 2)
+    }
+    t |> run("struct field and tuple element") @(t : T?) {
+        let h = EltHolder(arr = [], pair = ([], "pair"))
+        t |> equal(length(h.arr), 0)
+        t |> equal(length(h.pair._0), 0)
+        t |> equal(h.pair._1, "pair")
+        let named <- EltPairT([], 5)
+        t |> equal(length(named._0), 0)
+        t |> equal(named._1, 5)
+    }
+}

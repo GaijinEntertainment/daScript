@@ -1756,6 +1756,54 @@ namespace das {
         return true;
     }
 
+    // ARCHITECTURE_INFER.md#literal-takes-target-type
+    InferTypes::SeedLiteral InferTypes::seedAutoLiteralFromTarget(Expression *arg, const TypeDeclPtr &target) {
+        if (!arg || !target || target->isAutoOrAlias()) return SeedLiteral::untouched;
+        if (arg->rtti_isMakeTuple() && target->baseType == Type::tTuple) {
+            auto mkTuple = static_cast<ExprMakeTuple*>(arg);
+            if (mkTuple->values.size() != target->argTypes.size()) return SeedLiteral::untouched;
+            auto result = SeedLiteral::untouched;
+            for (size_t i = 0, is = mkTuple->values.size(); i != is; ++i) {
+                if (seedAutoLiteralFromTarget(mkTuple->values[i], target->argTypes[i]) == SeedLiteral::seeded) {
+                    result = SeedLiteral::seeded;
+                }
+            }
+            return result;
+        }
+        if (!arg->type || !arg->type->isAuto()) return SeedLiteral::untouched;
+        TypeDeclPtr valueT = target;
+        if (target->ref) {
+            valueT = new TypeDecl(*target);
+            valueT->ref = false;
+        }
+        if (arg->type->isGoodBlockType() || arg->type->isGoodLambdaType() || arg->type->isGoodFunctionType()) {
+            if (!arg->rtti_isMakeBlock()) return SeedLiteral::untouched;
+            auto mkBlock = static_cast<ExprMakeBlock*>(arg);
+            auto block = static_cast<ExprBlock*>(mkBlock->block);
+            auto retT = TypeDecl::inferGenericType(mkBlock->type, valueT, true, true, nullptr);
+            if (!retT) return SeedLiteral::mismatch;
+            TypeDecl::applyAutoContracts(mkBlock->type, valueT);
+            TypeDecl::clone(block->returnType, retT->firstType);
+            for (size_t ba = 0, bas = retT->argTypes.size(); ba != bas; ++ba) {
+                TypeDecl::clone(block->arguments[ba]->type, retT->argTypes[ba]);
+            }
+            setBlockCopyMoveFlags(block);
+            reportAstChanged();
+            return SeedLiteral::seeded;
+        } else if (arg->type->isGoodArrayType() || arg->type->isGoodTableType()) {
+            if (!arg->rtti_isMakeStruct()) return SeedLiteral::untouched;
+            auto mkStruct = static_cast<ExprMakeStruct*>(arg);
+            if (!mkStruct->structs.empty()) return SeedLiteral::untouched;
+            auto retT = TypeDecl::inferGenericType(mkStruct->type, valueT, true, true, nullptr);
+            if (!retT) return SeedLiteral::mismatch;
+            TypeDecl::applyAutoContracts(mkStruct->type, valueT);
+            mkStruct->makeType = retT;
+            reportAstChanged();
+            return SeedLiteral::seeded;
+        }
+        return SeedLiteral::untouched;
+    }
+
     FunctionPtr InferTypes::inferFunctionCall(ExprLooksLikeCall *expr, InferCallError cerr, Function *lookupFunction, bool failOnMissingCtor, bool visCheck) {
         if ( inferDepth > 1 ) {
             error("infer expression depth exceeded maximum allowed", "", "",
@@ -1828,46 +1876,10 @@ namespace das {
             }
             // infer FORWARD types
             for (size_t iF = 0, iFs = expr->arguments.size(); iF != iFs; ++iF) {
-                auto &arg = expr->arguments[iF];
-                if (arg->type->isAuto()) {
-                    if (arg->type->isGoodBlockType() || arg->type->isGoodLambdaType() || arg->type->isGoodFunctionType()) {
-                        if (arg->rtti_isMakeBlock()) { // "it's always MakeBlock. unless its function and @@funcName
-                            auto mkBlock = static_cast<ExprMakeBlock*>(arg);
-                            auto block = static_cast<ExprBlock*>(mkBlock->block);
-                            auto retT = TypeDecl::inferGenericType(mkBlock->type, funcC->arguments[iF]->type, true, true, nullptr);
-                            if ( !retT ) {
-                                error("default arguments don't match the function signature of '" + funcC->name + "'", "", "", expr->at, CompilationError::mismatching_function_argument);
-                                return nullptr;
-                            }
-                            TypeDecl::applyAutoContracts(mkBlock->type, funcC->arguments[iF]->type);
-                            TypeDecl::clone(block->returnType, retT->firstType);
-                            for (size_t ba = 0, bas = retT->argTypes.size(); ba != bas; ++ba) {
-                                TypeDecl::clone(block->arguments[ba]->type, retT->argTypes[ba]);
-                            }
-                            setBlockCopyMoveFlags(block);
-                            reportAstChanged();
-                        }
-                    } else if (arg->type->isGoodArrayType() || arg->type->isGoodTableType()) {
-                        if (arg->rtti_isMakeStruct()) { // its always MakeStruct
-                            auto mkStruct = static_cast<ExprMakeStruct*>(arg);
-                            if (mkStruct->structs.size()) {
-                                error("internal compiler error: array<auto> type not under default<array<auto>> or default<table<auto;auto>>", "", "", expr->at, CompilationError::internal_array_type);
-                                return nullptr;
-                            }
-                            auto retT = TypeDecl::inferGenericType(mkStruct->type, funcC->arguments[iF]->type, true, true, nullptr);
-                            if ( !retT ) {
-                                error("default arguments don't match the function signature of '" + funcC->name + "'", "", "",
-                                    expr->at, CompilationError::mismatching_function_argument);
-                                return nullptr;
-                            }
-                            TypeDecl::applyAutoContracts(mkStruct->type, funcC->arguments[iF]->type);
-                            mkStruct->makeType = retT;
-                            reportAstChanged();
-                        } else {
-                            error("internal compiler error: unknown array<auto> type not under make struct", "", "", expr->at, CompilationError::internal_array_type);
-                            return nullptr;
-                        }
-                    }
+                if (seedAutoLiteralFromTarget(expr->arguments[iF], funcC->arguments[iF]->type) == SeedLiteral::mismatch) {
+                    error("default arguments don't match the function signature of '" + funcC->name + "'", "", "",
+                        expr->at, CompilationError::mismatching_function_argument);
+                    return nullptr;
                 }
             }
             // append default arguments
