@@ -757,9 +757,7 @@ def private emit_block_mx4(var te : TileEmit; var bi : LLVMOpaqueValue?; var f :
         var loBits = LLVMBuildShl(b, splat_i32n(te, int(0x00200000)), e32, "")
         var hiBits = LLVMBuildShl(b, LLVMBuildSub(b, e32, splat_i32n(te, 1), ""), splat_i32n(te, 23), "")
         var bits = LLVMBuildSelect(b, lt2, loBits, hiBits, "")
-        // name hoisted: a ternary string fed straight to a raw extern's string param SIGSEGVs the compiler
-        let s4name = qd == 0 ? "s4" : "s4{qd}"
-        s4[qd] = LLVMBuildBitCast(b, bits, te.vnf32, s4name)
+        s4[qd] = LLVMBuildBitCast(b, bits, te.vnf32, qd == 0 ? "s4" : "s4{qd}")
     }
     emit_block_fold(te, bi, s4, a, f, tokBase, tokCount)
 }
