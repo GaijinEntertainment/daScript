@@ -3,8 +3,12 @@ options _comment_hygiene = true
 options indenting = 4
 
 require dastest/testing_boost public
+require imgui/imgui_text_source_model
 require imgui/imgui_text_tree_sitter public
 require strings
+require daslib/strings_boost
+
+//! Tree-sitter documents: lexical recovery, JSON, grammar drift.
 
 def private style_at(document : TextSourceDocument const;
                      byte_offset : int) : TextSourceSyntaxStyle {
@@ -17,7 +21,7 @@ def private style_at(document : TextSourceDocument const;
     return TextSourceSyntaxStyle.none
 }
 
-[test]
+[test(description = "after a .das parse error the fallback lexer still colors keywords, names and types, keeps keywords inside comments and strings as comments and strings, and its spans cover every byte contiguously")]
 def test_das_fragment_recovers_lexical_syntax_after_parse_error(t : T?) {
     let source = "if (broken \{\n    value()\n\ndef public recovered(a : bool) : bool \{\n    var flag = true\n    return flag\n\}\n// def public comment_only\nlet text = \"def public string_only\"\n"
     var document <- tree_sitter_source_document(source, ".das", 17)
@@ -58,7 +62,7 @@ def test_das_fragment_recovers_lexical_syntax_after_parse_error(t : T?) {
     text_source_document_dispose(document)
 }
 
-[test]
+[test(description = "a truncated JSON diff fragment colors keys, strings, numbers, booleans and null, colors the unterminated string, and its spans cover every byte contiguously")]
 def test_json_lexical_syntax_handles_diff_fragments(t : T?) {
     let source = "\{\n  \"name\": \"sheep \\\"one\\\"\",\n  \"count\": -12.5e+2,\n  \"active\": true,\n  \"missing\": null,\n  \"partial\": \"unfinished"
     var document <- tree_sitter_source_document(source, "json", 23)
@@ -85,5 +89,170 @@ def test_json_lexical_syntax_handles_diff_fragments(t : T?) {
     }
     t |> equal(covered_until, length(source),
         "JSON spans cover every exact source byte")
+    text_source_document_dispose(document)
+}
+
+//! A tree-sitter error region swallows every construct after it.
+//! New syntax in ds2_parser.ypp gets a section here.
+//! Each snippet stays real daslang that compiles.
+struct private CanarySection {
+    name : string
+    snippet : string
+}
+
+let CANARY_SECTIONS : array<CanarySection> <- [
+    CanarySection(name = "options + optional-require guard",
+        snippet = "options gen2\noptions indenting = 4\n\nrequire ?zz_absent_guard daslib/algorithm\nrequire math\nrequire strings\nrequire daslib/stringify"),
+    CanarySection(name = "group require, bare and guarded",
+        snippet = "require [zz_absent_group]\nrequire ?zz_absent_guard [zz_absent_group] public"),
+    CanarySection(name = "enum with base type",
+        snippet = "enum CanMode : uint8 \{\n    one\n    two\n\}"),
+    CanarySection(name = "struct private + field default + @annotation",
+        snippet = "struct private CanS \{\n    a : int = 7\n    @safe_when_uninitialized b : int\n\}"),
+    CanarySection(name = "signed annotation numbers",
+        snippet = "[comment(min=-2, offset=-1.5, values=(-3, -2.5))]\nstruct CanSigned \{\n    @min=-2 @offset=-1.5\n    value : int\n\}"),
+    CanarySection(name = "wide annotation numbers",
+        snippet = "[comment(big=9007199254740991l, low=-9223372036854775808l, unsigned=18446744073709551615ul, hex=0x100000000l)]\nstruct CanWide \{\n    @limit=4102444800l\n    value : int64\n\}"),
+    CanarySection(name = "bitfield declaration",
+        snippet = "bitfield CanFlags \{\n    alpha\n    beta\n    gamma\n\}"),
+    CanarySection(name = "variant declaration",
+        snippet = "variant CanV \{\n    i : int\n    f : float\n\}"),
+    CanarySection(name = "typedef distinct (#3424)",
+        snippet = "typedef distinct CanId = int"),
+    CanarySection(name = "operator = / operator <- overloads",
+        snippet = "def operator = (var dst : CanId&; src : int) \{\n    dst !== CanId(src)\n\}\n\ndef operator <- (var dst : CanId&; var src : int) \{\n    dst !<- CanId(src)\n\}"),
+    CanarySection(name = "raw copy, move and clone: !== !<- !:=",
+        snippet = "def can_raw_assign() \{\n    var a = CanS()\n    var b = CanS()\n    a !== b\n    a !<- b\n    a !:= b\n    var id : CanId = 0\n    var one = 1\n    id <- one\n    print(\"\{*id\} \{a.a\}\\n\")\n\}"),
+    CanarySection(name = "fixed-array typedef",
+        snippet = "typedef CanRow = float[4]"),
+    CanarySection(name = "defaulted parameters",
+        snippet = "def named_stub(a : int; primary : bool = false; scope : int = 0) \{\n    pass\n\}"),
+    CanarySection(name = "bare named call arguments (#3410)",
+        snippet = "def can_bare_named() \{\n    named_stub(1, primary = true, scope = 2)\n    named_stub(3, primary = false)\n\}"),
+    CanarySection(name = "bracketed named call arguments",
+        snippet = "def can_bracket_named() \{\n    named_stub(1, [primary = true, scope = 2])\n    named_stub(4)\n\}"),
+    CanarySection(name = "arrow-body function",
+        snippet = "def can_arrow(a, b : int) : int => a + b"),
+    CanarySection(name = "arrow body on the next line",
+        snippet = "def can_arrow_next_line(a, b : int) : int =>\n    a * b"),
+    CanarySection(name = "OR-type parameter",
+        snippet = "def can_or_type(v : int | float) \{\n    print(\"x\\n\")\n    print(\"y\\n\")\n\}"),
+    CanarySection(name = "generic auto(TT)",
+        snippet = "def can_generic(x : auto(TT)) : auto \{\n    return x\n\}"),
+    CanarySection(name = "postfix guards + multi-source for",
+        snippet = "def can_flow() \{\n    var total = 0\n    for (index, twice in range(4), range(0, 8)) \{\n        continue if (index == 1)\n        total += twice\n        break if (total > 8)\n    \}\n    return if (total < 0)\n    print(\"\{total\}\\n\")\n\}"),
+    CanarySection(name = "static_if",
+        snippet = "def can_static_if() \{\n    static_if (true) \{\n        print(\"s\\n\")\n        print(\"t\\n\")\n    \}\n\}"),
+    CanarySection(name = "lambdas + function pointers",
+        snippet = "def can_lambdas() \{\n    let lam = @(x : int) => x + 1\n    let fp = @@(x : int) => x + 2\n    let a = invoke(lam, 1)\n    let b = invoke(fp, 2)\n    print(\"\{a + b\}\\n\")\n\}"),
+    CanarySection(name = "with (module ...)",
+        snippet = "def can_with_module() \{\n    with (module math) \{\n        let q = abs(-3)\n        print(\"\{q\}\\n\")\n    \}\n\}"),
+    CanarySection(name = "classes + inheritance + override",
+        snippet = "class CanBase \{\n    def def_can() : int \{\n        return 1\n    \}\n\}\n\nclass CanDerived : CanBase \{\n    def override def_can() : int \{\n        return 2\n    \}\n\}"),
+    CanarySection(name = "casts: cast/upcast/reinterpret/addr<T?>",
+        snippet = "def can_casts() \{\n    var iv = 5\n    let cv = int64(iv)\n    let ip = unsafe(addr<int?>(iv))\n    let rp = unsafe(reinterpret<uint8?>(ip))\n    var d = new CanDerived()\n    var b = cast<CanBase?>(d)\n    let back = unsafe(upcast<CanDerived?>(b))\n    print(\"\{cv\} \{ip != null\} \{rp != null\} \{b->def_can()\} \{back != null\}\\n\")\n    unsafe \{\n        delete d\n    \}\n\}"),
+    CanarySection(name = "typeinfo/typedecl/default<>",
+        snippet = "def can_typeinfo() \{\n    let cc = typeinfo can_copy(type<int>)\n    var dv = default<CanS>\n    let td : typedecl(dv.a) = 9\n    print(\"\{cc\} \{dv.a\} \{td\}\\n\")\n\}"),
+    CanarySection(name = "container literals + comprehensions",
+        snippet = "def can_literals() \{\n    var arr <- [1, 2, 3]\n    var tab <- \{ \"k\" => 1, \"j\" => 2 \}\n    var set_ : table<string> <- \{ \"a\", \"b\" \}\n    let fixed = fixed_array(1, 2, 3)\n    var comp <- [for (x in range(3)); x * x]\n    var tcomp <- \{ for (x in range(3)); x => x * x \}\n    print(\"\{length(arr)\} \{length(tab)\} \{length(set_)\} \{fixed[0]\} \{comp[2]\} \{length(tcomp)\}\\n\")\n    delete arr\n    delete tab\n    delete set_\n    delete comp\n    delete tcomp\n\}"),
+    CanarySection(name = "make-struct + new with named fields",
+        snippet = "def can_make_struct() \{\n    let s = CanS(a = 1)\n    var p = new CanS(a = 2)\n    print(\"\{s.a\} \{p.a\}\\n\")\n    unsafe \{\n        delete p\n    \}\n\}"),
+    CanarySection(name = "tuple fields + variant is/as",
+        snippet = "def can_tuple_variant() \{\n    let t = (1, 2.0f)\n    var v = CanV(i = 5)\n    if (v is i) \{\n        print(\"\{t._0\} \{v as i\}\\n\")\n    \}\n\}"),
+    CanarySection(name = "string interpolation + escapes + multi-line",
+        snippet = "def can_strings() \{\n    let x = 41\n    let s = \"value \\\{x\\\} is \{x\} padded \{x:d\}\"\n    let m = \"line one\nline two\"\n    print(\"\{s\} \{length(m)\}\\n\")\n\}"),
+    CanarySection(name = "reader macro",
+        snippet = "def can_reader_macro() \{\n    let blurb = %stringify~# Title\nbody line\n%%\n    print(\"\{length(blurb)\}\\n\")\n\}"),
+    CanarySection(name = "finally + try/recover",
+        snippet = "def can_finally_try() \{\n    var n = 0\n    \{\n        n = 1\n        n = 2\n    \} finally \{\n        n = 3\n    \}\n    try \{\n        panic(\"boom\")\n    \} recover \{\n        print(\"\{n\}\\n\")\n    \}\n\}"),
+    CanarySection(name = "unsafe expression + block",
+        snippet = "def can_unsafe_forms() \{\n    var q = 1\n    let pq = unsafe(addr(q))\n    unsafe \{\n        print(\"\{pq != null\}\\n\")\n        print(\"second\\n\")\n    \}\n\}"),
+    CanarySection(name = "multi-dimensional fixed arrays",
+        snippet = "def can_fixed_arrays() \{\n    var grid : int[3][4]\n    grid[0][1] = 5\n    var row : CanRow\n    row[2] = 1.5f\n    print(\"\{grid[0][1]\} \{row[2]\}\\n\")\n\}"),
+    CanarySection(name = "numeric literal zoo",
+        snippet = "def can_numbers() \{\n    let h = 0x3F\n    let u = 1ul\n    let d = 1.5lf\n    let hf = 1.5h\n    let ch = '('\n    print(\"\{h\} \{u\} \{d\} \{float(hf)\} \{ch\}\\n\")\n\}"),
+    CanarySection(name = "local variable @annotation",
+        snippet = "def can_local_annotation() \{\n    var @exact_size buf : array<int>\n    let @exact_size @other = 3 two = 2\n    buf |> reserve(two)\n    buf |> resize(two)\n    print(\"\{length(buf)\}\\n\")\n\}"),
+    CanarySection(name = "guarded require with a %/ path",
+        snippet = "require ?%/zz_absent_pct_guard daslib/algorithm"),
+    CanarySection(name = "generic type arguments",
+        snippet = "require daslib/option\n\nstruct CanHolder \{\n    maybe : Option<int>\n\}\n\ntypedef CanMaybe = Option<string>"),
+    CanarySection(name = "move into an array element",
+        snippet = "def can_move_element() \{\n    var inner <- [1, 2]\n    var outer <- [<- inner]\n    print(\"\{length(outer)\}\\n\")\n\}"),
+    CanarySection(name = "half literals without a fraction",
+        snippet = "def can_half_whole() \{\n    let zero = 0h\n    let three = 3h\n    let one = 1.0h\n    print(\"\{float(zero)\} \{float(three)\} \{float(one)\}\\n\")\n\}"),
+    CanarySection(name = "\\v, \\x and \\U escapes",
+        snippet = "def can_escapes() \{\n    let vt = \"a\\vb\"\n    let hx = \"\\x41\\x42\"\n    let uc = \"\\U00000041\"\n    print(\"\{length(vt)\} \{hx\} \{uc\}\\n\")\n\}"),
+    CanarySection(name = "the C escape set in character and string literals",
+        snippet = "def can_c_escapes() \{\n    let bell = '\\a'\n    let hex = '\\x41'u8\n" +
+            "    let oct = '\\101'\n    let s = \"\\a\\?\\'\\377\"\n" +
+            "    print(\"\{bell\} \{hex\} \{oct\} \{length(s)\}\\n\")\n\}"),
+    CanarySection(name = "annotation list after an arrow body",
+        snippet = "def can_arrow_annotated(x : int) : int => x + 1\n\n[sideeffects, unused_argument(y)]\ndef can_after_arrow(y : int) \{\n    print(\"after\\n\")\n\}"),
+    CanarySection(name = "one-line if before an if/elif/else chain",
+        snippet = "def can_if_chain(a : int) \{\n    if (a == 1) print(\"one\\n\")\n    if (a == 2) \{\n        print(\"two\\n\")\n    \} elif (a == 3) \{\n        print(\"three\\n\")\n    \} else print(\"other\\n\")\n\}"),
+    CanarySection(name = "if body on the next line",
+        snippet = "def can_braceless_next_line(n : int) \{\n    for (i in range(n)) \{\n        if (i == 1)\n            continue\n        print(\"\{i\}\\n\")\n    \}\n\}"),
+    CanarySection(name = "line continuation",
+        snippet = "def can_line_continuation(a, b : bool) \{\n    let both = a || \\\n        b\n    print(\"\{both\}\\n\")\n\}"),
+    CanarySection(name = "empty table literal",
+        snippet = "def can_empty_braces() \{\n    var tab : table<string; int> <- \{\}\n    print(\"\{length(tab)\}\\n\")\n\}"),
+    CanarySection(name = "new with an array literal",
+        snippet = "def can_new_array() \{\n    var p = new [1, 2, 3]\n    print(\"\{length(*p)\}\\n\")\n\}"),
+    CanarySection(name = "property operator += and prefix ++operator",
+        snippet = "struct CanProp \{\n    raw : int\n\}\n\ndef operator . value +=(var p : CanProp; v : int) \{\n    p.raw += v\n\}\n\ndef ++operator(var p : CanProp&) \{\n    p.raw++\n\}\n\ndef can_property_ops() \{\n    var p = CanProp()\n    p.value += 2\n    ++p\n    print(\"\{p.raw\}\\n\")\n\}"),
+    CanarySection(name = "class without a body",
+        snippet = "class CanBodiless;"),
+    CanarySection(name = "block arrow body that moves",
+        snippet = "def can_arrow_move() \{\n    var arr <- invoke($() => <- [1, 2])\n    print(\"\{length(arr)\}\\n\")\n\}"),
+    CanarySection(name = "named tuple type call",
+        snippet = "def can_named_tuple() \{\n    let nt = tuple<value : int>()\n    print(\"\{nt.value\}\\n\")\n\}"),
+    CanarySection(name = "float with a trailing dot",
+        snippet = "def can_trailing_dot() \{\n    let f = 2.\n    print(\"\{f\}\\n\")\n    0.\n\}"),
+    CanarySection(name = "comment between else and its brace",
+        snippet = "def can_comment_else(a : int) \{\n    if (a == 0) \{\n        print(\"zero\\n\")\n    \} else/* nothing to do */ \{\n    \}\n\}"),
+    CanarySection(name = "lambda capture list",
+        snippet = "def can_lambda_capture() \{\n    let total = 1\n    let lam = @ capture(copy(total)) () \{\n        print(\"\{total\}\\n\")\n    \}\n    invoke(lam)\n\}")
+]
+
+def private build_canary_source(var marker_rows : array<int>) : string {
+    var parts : array<string>
+    parts |> reserve(2 * length(CANARY_SECTIONS))
+    var index = 0
+    for (section in CANARY_SECTIONS) {
+        parts |> push(section.snippet)
+        parts |> push("def canary_marker_{index}() \{\n    print(\"a\\n\")\n    print(\"b\\n\")\n\}")
+        index++
+    }
+    let source = join(parts, "\n\n")
+    var inscope lines <- split(source, "\n")
+    for (row in range(length(lines))) {
+        if (lines[row] |> starts_with("def canary_marker_")) {
+            marker_rows |> push(row)
+        }
+    }
+    delete parts
+    return source
+}
+
+[test(description = "the tree-sitter grammar parses past every canary section, so each section's marker function still yields a function fold")]
+def test_grammar_swallow_canary(t : T?) {
+    var marker_rows : array<int>
+    let source = build_canary_source(marker_rows)
+    t |> equal(length(marker_rows), length(CANARY_SECTIONS),
+        "one marker per section assembled")
+    var document <- tree_sitter_source_document(source, "das", 1)
+    var fold_rows : table<int>
+    for (fold in document.folds) {
+        if (fold.kind == "function_declaration") {
+            fold_rows |> insert(fold.header_row)
+        }
+    }
+    for (row, section in marker_rows, CANARY_SECTIONS) {
+        t |> success(key_exists(fold_rows, row),
+            "grammar still parses past section '{section.name}'")
+    }
+    delete fold_rows
+    delete marker_rows
     text_source_document_dispose(document)
 }

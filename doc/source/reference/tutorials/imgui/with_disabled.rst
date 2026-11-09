@@ -145,9 +145,7 @@ internal stacks handle the LIFO ordering.
 
    Full source: :download:`modules/dasImgui/examples/tutorial/with_disabled.das <../../../../../modules/dasImgui/examples/tutorial/with_disabled.das>`
 
-   Integration tests: ``modules/dasImgui/tests/test_disabled_block.das``,
-   ``modules/dasImgui/tests/test_button_repeat.das``,
-   ``modules/dasImgui/tests/test_font_stack.das``.
+   Integration tests: ``modules/dasImgui/tests/test_style_scopes.das``.
 
    Companion tutorials: :ref:`tutorial_with_id`, :ref:`tutorial_with_style`,
    :ref:`tutorial_with_tab_stop` — other ``with_*`` scope helpers.

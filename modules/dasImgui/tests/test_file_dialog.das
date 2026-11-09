@@ -6,18 +6,14 @@ options no_unused_function_arguments = false
 
 require dastest/testing_boost public
 require imgui/imgui_playwright public
+require imgui
+require daslib/fio
 require daslib/json public
 require daslib/json_boost public
 require strings
 
-//! Integration smoke for the native `imgui_file_dialog` component, driven
-//! entirely through `imgui_playwright` (proving the dialog is registry-backed,
-//! not raw ImGui). Boots the tutorial demo, opens the dialog in open mode
-//! (asserts the breadcrumb / sortable table / OK button register), cancels,
-//! then opens save mode, types a filename, confirms, and checks the demo's
-//! result text echoes the typed name. Runs headless (no GL / no window) — it
-//! drives the dialog purely over the live API, so it runs in CI on both ubuntu
-//! and macOS via `--headless`, like the rest of the integration suite.
+//! The native `imgui_file_dialog` component, driven entirely through
+//! `imgui_playwright` against the tutorial demo.
 
 let FILE_DIALOG_FEATURE = "modules/dasImgui/examples/tutorial/file_dialog.das"
 
@@ -83,7 +79,67 @@ def private first_row(var snap : JsonValue?; want_folder : bool) : string {
 
 def private find_folder_row(app : ImguiApp) : string => first_row(snapshot(app), true)
 
-[test]
+let FIXTURE_NAME = "das_fd_dialog_test"
+
+def private make_fixture() : string {
+    let root = normalize(path_join(test_temp_dir(), FIXTURE_NAME))
+    rmdir_rec_result(root)                          // clear any leftover from a prior run
+    mkdir_rec(root)
+    mkdir_rec(path_join(root, "subdir"))
+    fwrite(path_join(root, "alpha.png"), "x")
+    fwrite(path_join(root, "beta.jpg"), "x")
+    fwrite(path_join(root, "gamma.txt"), "x")
+    return root
+}
+
+// Type-cell values of the rows currently RENDERED (not merely registered), folders
+// excluded — i.e. the set of file extensions the active filter is letting through.
+def private visible_file_types(var snap : JsonValue?) : array<string> {
+    var out : array<string>
+    for (i in range(64)) {
+        let cell = "FILEDLG/FILE_TABLE/TYPE_CELL[{i}]"
+        if (!widget_rendered(snap, cell)) {
+            continue
+        }
+        let v = widget_payload_field(snap, cell, "value") ?? ""
+        if (!empty(v) && v != "Folder") {
+            out |> push(v)
+        }
+    }
+    return <- out
+}
+
+def private has_type(types : array<string>; t : string) : bool {
+    for (x in types) {
+        if (x == t) {
+            return true
+        }
+    }
+    return false
+}
+
+def private folder_count(var snap : JsonValue?) : int {
+    var n = 0
+    for (i in range(64)) {
+        let cell = "FILEDLG/FILE_TABLE/TYPE_CELL[{i}]"
+        if (widget_rendered(snap, cell) && (widget_payload_field(snap, cell, "value") ?? "") == "Folder") {
+            n++
+        }
+    }
+    return n
+}
+
+def private any_date_shown(var snap : JsonValue?) : bool {
+    for (i in range(64)) {
+        let cell = "FILEDLG/FILE_TABLE/DATE_CELL[{i}]"
+        if (widget_rendered(snap, cell) && !empty(widget_payload_field(snap, cell, "value") ?? "")) {
+            return true
+        }
+    }
+    return false
+}
+
+[test(description = "the registry-backed dialog opens with its full chrome, enters folders and follows breadcrumbs without crashing, cancels, saves a typed name, and routes a save over an existing file through overwrite-confirm", timeout = 1200)]
 def test_file_dialog(t : T?) { // nolint:STYLE038
     with_imgui_app(FILE_DIALOG_FEATURE) $(d) {
         // demo window + the three trigger buttons render
@@ -168,7 +224,7 @@ def test_file_dialog(t : T?) { // nolint:STYLE038
     }
 }
 
-[test]
+[test(description = "after a save confirmed in a subfolder, reopening the save dialog lands back in that subfolder rather than the start dir", timeout = 1200)]
 def test_file_dialog_remembers_last_dir(t : T?) {
     with_imgui_app(FILE_DIALOG_FEATURE) $(d) {
         // Open save, navigate into a subfolder, confirm there — then REOPEN and assert the dialog lands
@@ -211,5 +267,119 @@ def test_file_dialog_remembers_last_dir(t : T?) {
         t |> success(wait_for_widget(d, "FILEDLG/FILE_TABLE", 10.0f) != null, "save dialog reopens")
         let p2 = widget_payload_field(snapshot(d), "FILEDLG/PATH_FIELD", "value") ?? ""
         t |> success(p2 == p1, "reopened at the remembered folder, not the start dir")
+    }
+}
+
+[test(description = "Escape with no field focused cancels the open dialog: RESULT echoes cancelled and the file table stops rendering", timeout = 1200)]
+def test_file_dialog_esc(t : T?) {
+    with_imgui_app(FILE_DIALOG_FEATURE) $(d) {
+        let snap = wait_for_widget(d, "FDLG_WIN/BTN_OPEN", 15.0f)
+        t |> success(snap != null, "demo window + Open trigger render")
+        if (snap == null) {
+            return
+        }
+
+        click(d, "FDLG_WIN/BTN_OPEN")
+        t |> success(wait_for_widget(d, "FILEDLG/FILE_TABLE", 10.0f) != null,
+                     "open dialog renders the file table")
+
+        // ESC cancels — no name/path field is focused on open, so the modal must close itself.
+        key_tap(d, int(ImGuiKey.Escape))
+        t |> success(wait_until_sec(d, 5.0f) $(var s) {
+                return find(widget_payload_field(s, "FDLG_WIN/RESULT", "value") ?? "", "cancelled") >= 0
+            } != null,
+            "ESC returns the cancelled result")
+        t |> success(wait_until_sec(d, 5.0f) $(var s) {
+                return !widget_rendered(s, "FILEDLG/FILE_TABLE")
+            } != null,
+            "ESC closes the dialog (table stops rendering)")
+    }
+}
+
+[test(description = "in a temp fixture reached through the path bar, the Images filter shows png and jpg but hides txt, dates render, and New Folder adds a listed directory", timeout = 1200)]
+def test_file_dialog_features(t : T?) {
+    let fixture = make_fixture()
+    with_imgui_app(FILE_DIALOG_FEATURE) $(d) {
+        let boot = wait_for_widget(d, "FDLG_WIN/BTN_OPEN", 15.0f)
+        t |> success(boot != null, "demo + Open trigger render")
+        if (boot != null) {
+            click(d, "FDLG_WIN/BTN_OPEN")
+            t |> success(wait_for_widget(d, "FILEDLG/PATH_FIELD", 10.0f) != null, "open dialog renders the path bar")
+
+            // Jump to the fixture via the editable path bar, then switch to the
+            // Images filter (index 1: daslang|Images|All files).
+            force_set_value(d, "FILEDLG/PATH_FIELD", JV(fixture))
+            click(d, "FILEDLG/GO")
+            force_set_value(d, "FILEDLG/FILTER_COMBO", JV(1))
+
+            // One wait covers: nav landed (png visible => we're in the fixture),
+            // multi-extension filter (jpg visible, txt hidden), and dates rendering.
+            var landed = wait_until_sec(d, 6.0f) $(var s) {
+                var types <- visible_file_types(s)
+                let ok = has_type(types, ".png") && has_type(types, ".jpg") && !has_type(types, ".txt")
+                delete types
+                return ok
+            }
+            t |> success(landed != null, "path bar navigates + Images filter shows png/jpg, hides txt")
+            if (landed != null) {
+                t |> success(any_date_shown(landed), "Modified column renders dates (format_time)")
+            }
+
+            // New Folder: the fixture has one folder (subdir); creating another makes two.
+            click(d, "FILEDLG/NEWFOLDER")
+            t |> success(wait_for_widget(d, "FILEDLG/NEWDIR/NEWDIR_NAME", 5.0f) != null,
+                "New Folder opens the NEWDIR sub-modal")
+            force_set_value(d, "FILEDLG/NEWDIR/NEWDIR_NAME", JV("fd_newdir"))
+            click(d, "FILEDLG/NEWDIR/NEWDIR_OK")
+            let created = wait_until_sec(d, 5.0f) $(var s) {
+                return folder_count(s) >= 2
+            } != null
+            t |> success(created, "New Folder creates a directory that appears in the list")
+        }
+    }
+    rmdir_rec_result(fixture)
+}
+
+[test(description = "save mode pre-fills default_name and Enter confirms it, and pick_dir mode hides the name field and Select Folder confirms the directory", timeout = 1200)]
+def test_file_dialog_modes(t : T?) {
+    with_imgui_app(FILE_DIALOG_FEATURE) $(d) {
+        var boot = wait_for_widget(d, "FDLG_WIN/BTN_SAVE", 15.0f)
+        t |> success(boot != null, "demo + Save As trigger render")
+        if (boot == null) {
+            return
+        }
+        t |> success(widget_exists(boot, "FDLG_WIN/BTN_PICKDIR"), "Pick Folder trigger present")
+
+        // --- save mode: default_name pre-fills the name field ---
+        click(d, "FDLG_WIN/BTN_SAVE")
+        let prefilled = wait_until_sec(d, 10.0f) $(var s) {
+            return (widget_payload_field(s, "FILEDLG/NAME_FIELD", "value") ?? "") == "untitled.das"
+        } != null
+        t |> success(prefilled, "save dialog opens with default_name 'untitled.das' pre-filled")
+
+        // --- keyboard: Enter confirms the save ---
+        force_set_value(d, "FILEDLG/NAME_FIELD", JV("kbd_enter_test"))
+        key_tap(d, int(ImGuiKey.Enter))
+        t |> success(wait_result(d, "kbd_enter_test"), "Enter confirms the save (keyboard)")
+
+        // --- pick_dir mode: folders-only, no name field, Select Folder confirms a dir ---
+
+        // Use wait_for_VISIBLE, not wait_for_widget: FILE_TABLE/BTN_OK were registered by the earlier
+        // save dialog, so wait_for_widget returns on the stale entry and the BTN_OK click then drops
+        // silently into a not-yet-laid-out target (the macOS-CI failure; ubuntu's cadence masked it).
+        click(d, "FDLG_WIN/BTN_PICKDIR")
+        var pd = wait_for_visible(d, "FILEDLG/FILE_TABLE", 10.0f)
+        t |> success(pd != null, "pick-folder dialog renders the table")
+        if (pd != null) {
+            t |> success(!widget_rendered(pd, "FILEDLG/NAME_FIELD"), "pick_dir hides the name field")
+            t |> success(widget_exists(pd, "FILEDLG/BTN_OK"), "Select Folder button present")
+        }
+        // gate the click on its target being painted this frame, else the host-side resolve misses
+        t |> success(wait_for_visible(d, "FILEDLG/BTN_OK", 5.0f) != null, "Select Folder button painted")
+        click(d, "FILEDLG/BTN_OK")
+        let confirmed = wait_until_sec(d, 5.0f) $(var s) {
+            return !widget_rendered(s, "FILEDLG/FILE_TABLE")
+        } != null
+        t |> success(confirmed, "Select Folder confirms the current directory and closes the dialog")
     }
 }

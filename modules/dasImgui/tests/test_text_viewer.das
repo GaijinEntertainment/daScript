@@ -23,7 +23,7 @@ def private viewer_state(app : ImguiApp) : JsonValue? =>
 def private source_range(app : ImguiApp; text : string) : JsonValue? =>
     post_command(app, "text_viewer_source_range", JV((text = text)))
 
-[test]
+[test(description = "the text viewer opens Markdown docked, switches to a styled source view with exact marker and emoji cells, routes copy, select-all and zoom-reset chords to semantic commands, and a new document inherits zoom with ordinary window lifecycle", timeout = 1200)]
 def test_text_viewer_open_modes_and_zoom(t : T?) { // nolint:STYLE038 — one event-gated scenario; splitting breaks the wait-chain
     with_imgui_app(FEATURE) $(app) {
         var initial : JsonValue?
@@ -227,7 +227,7 @@ def test_text_viewer_open_modes_and_zoom(t : T?) { // nolint:STYLE038 — one ev
     }
 }
 
-[test]
+[test(description = "an unedited save preserves BOM, spelling and mixed line endings byte for byte, and a checkbox click changes exactly its marker byte, keeps the control's size, and survives save and reload", timeout = 1200)]
 def test_text_viewer_checkbox_save_reload_roundtrip(t : T?) { // nolint:STYLE038 — one event-gated scenario; splitting breaks the wait-chain
     var temp_error : string
     let temp_dir = create_temp_directory("das_text_viewer_roundtrip", temp_error)
@@ -323,7 +323,7 @@ def test_text_viewer_checkbox_save_reload_roundtrip(t : T?) { // nolint:STYLE038
     rmdir_rec_result(temp_dir)
 }
 
-[test]
+[test(description = "find selects and steps through matches in rendered Markdown and exact bytes in plain source, regex find reports invalid patterns with no matches, and a .das file opens syntax-colored", timeout = 1200)]
 def test_text_viewer_find_both_modes(t : T?) { // nolint:STYLE038 — one event-gated scenario; splitting breaks the wait-chain
     with_imgui_app(FEATURE) $(app) {
         let ready = wait_cond(app, DEADLOCK_GUARD_SEC) $() : bool {
@@ -421,7 +421,7 @@ def test_text_viewer_find_both_modes(t : T?) { // nolint:STYLE038 — one event-
     }
 }
 
-[test]
+[test(description = "find next scrolls a far match into the viewport in rendered Markdown, a code-fence match included, and in the wrapped source view", timeout = 1200)]
 def test_text_viewer_find_scrolls_to_match(t : T?) { // nolint:STYLE038 — one event-gated scenario; splitting breaks the wait-chain
     var temp_error : string
     let temp_dir = create_temp_directory("das_text_viewer_find_scroll", temp_error)
@@ -522,7 +522,7 @@ def test_text_viewer_find_scrolls_to_match(t : T?) { // nolint:STYLE038 — one 
     rmdir_rec_result(temp_dir)
 }
 
-[test]
+[test(description = "every find bar button is an icon button, and reopening find after a close re-selects the current match with the match count kept", timeout = 1200)]
 def test_text_viewer_find_icons_and_reopen(t : T?) {
     with_imgui_app(FEATURE) $(app) {
         let ready = wait_cond(app, DEADLOCK_GUARD_SEC) $() : bool {
@@ -599,7 +599,7 @@ def test_text_viewer_find_icons_and_reopen(t : T?) {
     }
 }
 
-[test]
+[test(description = "a find jump expands a collapsed .das fold or Markdown code block to show the match, and the code-block copy action captures the block's content", timeout = 1200)]
 def test_text_viewer_folding_and_code_copy(t : T?) { // nolint:STYLE038 — one event-gated scenario; splitting breaks the wait-chain
     with_imgui_app(FEATURE) $(app) {
         let ready = wait_cond(app, DEADLOCK_GUARD_SEC) $() : bool {
@@ -725,7 +725,7 @@ def test_text_viewer_folding_and_code_copy(t : T?) { // nolint:STYLE038 — one 
     }
 }
 
-[test]
+[test(description = "clicks on a code block's fold and copy icons collapse, expand and copy it, and a .das gutter chevron collapses its region with toggles reusing the cached flow instead of reflowing", timeout = 1200)]
 def test_text_viewer_fold_clicks_and_no_reflow(t : T?) { // nolint:STYLE038 — one event-gated scenario; splitting breaks the wait-chain
     with_imgui_app(FEATURE) $(app) {
         let ready = wait_cond(app, DEADLOCK_GUARD_SEC) $() : bool {
@@ -894,7 +894,7 @@ def test_text_viewer_fold_clicks_and_no_reflow(t : T?) { // nolint:STYLE038 — 
     }
 }
 
-[test]
+[test(description = "the content child is the viewer's only scroller: in rendered and source modes, at extreme zoom and with find open, the dock window grows no scrollbar and the footer fits", timeout = 1200)]
 def test_text_viewer_single_scroller(t : T?) {
     //! The content child is the only scroller: the dock window must never grow
     //! its own scrollbar, and the right-aligned zoom cluster must fit at any
@@ -974,7 +974,7 @@ def private viewer_ready(t : T?; app : ImguiApp) : bool {
     return ready
 }
 
-[test]
+[test(description = "a printable keystroke in the viewer enters edit mode and lands once, save clears dirty and undo or redo across the save point toggles it, and leaving edit mode keeps the saved edit on disk", timeout = 1200)]
 def test_text_viewer_edit_mode_save_point(t : T?) { // nolint:STYLE038 — one event-gated scenario; splitting breaks the wait-chain
     with_imgui_app(FEATURE) $(app) {
         return if (!viewer_ready(t, app))
@@ -1061,7 +1061,7 @@ def test_text_viewer_edit_mode_save_point(t : T?) { // nolint:STYLE038 — one e
     }
 }
 
-[test]
+[test(description = "split editing previews the edit buffer and maps the caret into it, an external change or deletion is flagged without auto-reloading the buffer, reload refreshes it, and Done returns to the viewer", timeout = 1200)]
 def test_text_viewer_edit_preview_and_watch(t : T?) { // nolint:STYLE038 — one event-gated scenario; splitting breaks the wait-chain
     with_imgui_app(FEATURE) $(app) {
         return if (!viewer_ready(t, app))

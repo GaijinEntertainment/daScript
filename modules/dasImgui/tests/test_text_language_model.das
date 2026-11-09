@@ -7,7 +7,7 @@ require imgui/imgui_text_tree_sitter
 
 //! Pure-logic coverage for the language profile registry: no UI, no parser.
 
-[test]
+[test(description = "a language lookup canonicalizes extensions, dotted extensions and aliases to one profile name, falls back to plain for an unknown name, and reports known only for real profiles")]
 def test_language_lookup_canonicalizes(t : T?) {
     text_language_profile(".hpp") $(profile) {
         t |> equal(profile.name, "cpp", "extensions canonicalize to the language")
@@ -31,7 +31,7 @@ def test_language_lookup_canonicalizes(t : T?) {
     t |> success(!text_language_known("xyz"), "unknown language is not known")
 }
 
-[test]
+[test(description = "each language profile carries its own fold kinds - daslang structs, classes and block comments, C functions but no classes, C++ classes and namespaces, Markdown code fences, plain nothing")]
 def test_language_fold_kinds_migrated(t : T?) {
     text_language_profile("daslang") $(profile) {
         t |> success(key_exists(profile.fold_kinds, "struct_declaration"),
@@ -62,7 +62,7 @@ def test_language_fold_kinds_migrated(t : T?) {
     }
 }
 
-[test]
+[test(description = "the profiles set bracket pairs, indent pairs, comment tokens and string delimiters per language: daslang indents on braces only, Markdown never indents, JSON indents in braces and brackets")]
 def test_language_brackets_and_indent(t : T?) {
     text_language_profile("daslang") $(profile) {
         t |> equal(length(profile.bracket_pairs), 3, "das pairs parens braces brackets")
@@ -83,7 +83,7 @@ def test_language_brackets_and_indent(t : T?) {
     }
 }
 
-[test]
+[test(description = "daslang and C++ profiles offer their keywords, Markdown offers none, and ghost completion is on for daslang and Markdown but off for plain text")]
 def test_language_keywords_and_completion(t : T?) {
     text_language_profile("daslang") $(profile) {
         t |> success(find_index(profile.keywords, "def") >= 0, "das knows def")
@@ -102,7 +102,7 @@ def test_language_keywords_and_completion(t : T?) {
     }
 }
 
-[test]
+[test(description = "every daslang profile keyword has a fallback lexer style, and the lexer styles type names as types, booleans as numbers, null as a constant and plain identifiers as nothing")]
 def test_language_keywords_are_the_lexer_keywords(t : T?) {
     // the profile owns the keyword set; the fallback lexer only styles it
     var unstyled = 0

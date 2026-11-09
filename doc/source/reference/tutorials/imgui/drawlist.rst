@@ -197,7 +197,7 @@ mouse-cards can then target a specific call site by path:
 
 Because the synthesized key shifts on edits, tests typically enumerate
 drawlist entries by ``kind`` (``"add_rect"`` etc.) rather than hardcoding
-the line / column — see ``modules/dasImgui/tests/test_drawlist_path_key.das`` for
+the line / column — see ``modules/dasImgui/tests/test_drawlist.das`` for
 the walker pattern.
 
 Standalone vs live
@@ -211,8 +211,6 @@ on source edits.
 
    Full source: :download:`modules/dasImgui/examples/tutorial/drawlist.das <../../../../../modules/dasImgui/examples/tutorial/drawlist.das>`
 
-   Integration tests: ``modules/dasImgui/tests/test_drawlist_primitives.das``,
-   ``modules/dasImgui/tests/test_with_window_drawlist.das``,
-   ``modules/dasImgui/tests/test_drawlist_path_key.das``.
+   Integration tests: ``modules/dasImgui/tests/test_drawlist.das``.
 
    :ref:`Boost macros <stdlib_imgui_boost_section>` — the macro layer.

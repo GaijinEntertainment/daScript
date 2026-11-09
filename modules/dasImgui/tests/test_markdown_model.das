@@ -38,7 +38,7 @@ def private count_kind(doc : RichDocument const; kind : RichNodeKind) : int {
     return count
 }
 
-[test]
+[test(description = "a non-Markdown producer builds the same shared rich document and block tree, and Markdown-looking bytes gain no Markdown semantics without the Markdown adapter")]
 def test_non_markdown_producer_uses_shared_rich_document(t : T?) {
     let source = "Literal **markers** from another format."
     var document <- rich_plain_document(source)
@@ -58,7 +58,7 @@ def test_non_markdown_producer_uses_shared_rich_document(t : T?) {
     rich_document_dispose(document)
 }
 
-[test]
+[test(description = "an empty plain source is a valid rich document whose URI splitting keeps its single run at the source head with no display bytes")]
 def test_empty_source_inline_content_keeps_its_run(t : T?) {
     var document <- rich_plain_document("")
     t |> success(document.ok, "empty plain source is a valid rich document")
@@ -76,7 +76,7 @@ def test_empty_source_inline_content_keeps_its_run(t : T?) {
     rich_document_dispose(document)
 }
 
-[test]
+[test(description = "a tight list item's direct inline content keeps its text and its strong and regular runs and excludes the nested list")]
 def test_tight_list_direct_inline_content(t : T?) {
     let source = "- **Parent** item\n  - nested item\n- second item\n"
     let doc <- md_parse(source)
@@ -97,7 +97,7 @@ def test_tight_list_direct_inline_content(t : T?) {
                  "direct inline content retains strong and regular runs")
 }
 
-[test]
+[test(description = "a GFM document parses into typed nodes with exact UTF-8 leaf ranges, decoded entities, styled and linked inline runs, autolinks, task markers, table metadata and fenced code, with raw HTML disabled by default")]
 def test_markdown_gfm_model(t : T?) { // nolint:STYLE038
     let source = %stringify~# Unicode Привет 文档
 
@@ -227,7 +227,7 @@ print("hi")
                "raw inline HTML is disabled by default")
 }
 
-[test]
+[test(description = "a task checkbox becomes a toggle control with an exact source mapping whose event yields a lowercase-x edit guarding the original byte, and a stale event is rejected before any source mutation")]
 def test_markdown_checkbox_projects_to_revision_checked_source_edit(t : T?) {
     let source = "- [ ] todo\r\n- [X] done\n"
     let doc <- md_parse(source)
@@ -259,7 +259,7 @@ def test_markdown_checkbox_projects_to_revision_checked_source_edit(t : T?) {
     rich_document_projection_dispose(projection)
 }
 
-[test]
+[test(description = "restricted Markdown options still parse, and the strikethrough and table extensions can each be disabled")]
 def test_markdown_options(t : T?) {
     let source = "~~old~~\n\n| A |\n|---|\n| B |\n"
     let plain <- md_parse(source, MdParseOptions(
@@ -274,7 +274,7 @@ def test_markdown_options(t : T?) {
                "table extension can be disabled")
 }
 
-[test]
+[test(description = "invalid UTF-8 is rejected before native parsing with a stable diagnostic")]
 def test_markdown_rejects_invalid_utf8(t : T?) {
     let invalid = string([uint8(0xC3), uint8(0x28)])
     let doc <- md_parse(invalid)
@@ -283,7 +283,7 @@ def test_markdown_rejects_invalid_utf8(t : T?) {
                "invalid UTF-8 reports a stable diagnostic")
 }
 
-[test]
+[test(description = "plain Unicode and custom-scheme URIs in Markdown become semantic links mapped to exact source without fabricating a Markdown node")]
 def test_markdown_plain_unicode_uris(t : T?) {
     let source = "Plain https://example.com/文档/naïve/é?q=👩‍💻 and editor://workspace/文档."
     let doc <- md_parse(source)
@@ -306,7 +306,7 @@ def test_markdown_plain_unicode_uris(t : T?) {
                "shared detector supplements Markdown parser for plain Unicode/custom URIs")
 }
 
-[test]
+[test(description = "an image is one atomic inline run that displays its alt text as fallback, keeps destination, title, accessible alt and link activation, and claims no Markdown syntax range it lacks")]
 def test_markdown_image_is_atomic_with_plain_text_fallback(t : T?) {
     let source = "Before ![Unicode terminal preview](editor://assets/terminal.png \"Terminal preview\") after."
     let doc <- md_parse(source)
@@ -348,7 +348,7 @@ def test_markdown_image_is_atomic_with_plain_text_fallback(t : T?) {
                  "image selection reports both image and link semantics")
 }
 
-[test]
+[test(description = "a display selection maps to the original Markdown content bytes and reports its semantic styles: one combination, all regular, or mixed across styles")]
 def test_markdown_selection_source_and_styles(t : T?) {
     let source = "plain **bold** and *italic*, `code`, ~~gone~~, with [link](editor://item)."
     let doc <- md_parse(source)
@@ -395,7 +395,7 @@ def test_markdown_selection_source_and_styles(t : T?) {
                  "cross-style selection reports mixed combinations")
 }
 
-[test]
+[test(description = "a rich selection exports as plain display text, standalone Markdown syntax, escaped HTML with styles, links and images, and a URI list naming each destination once")]
 def test_markdown_selection_rich_export(t : T?) {
     let source = "**bold** and [link](editor://item) plus ![alt](img://preview \"T\") &amp;"
     let doc <- md_parse(source)

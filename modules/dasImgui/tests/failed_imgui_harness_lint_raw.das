@@ -6,7 +6,7 @@ require imgui/imgui_harness
 // the harness sets up. The HARNESS001 lint is the second line of defense.
 require live/glfw_live
 
-//! Negative test — default-on harness lint must trip HARNESS001
+//! Negative test - default-on harness lint must trip HARNESS001
 //! (macro_error code 50503) when a harness-using file forces a backend
 //! require to bypass the structural gate, then calls a backend symbol
 //! directly (here: ``live_create_window`` from ``glfw_live``).

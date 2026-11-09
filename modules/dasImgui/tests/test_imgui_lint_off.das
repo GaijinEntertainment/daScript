@@ -5,7 +5,7 @@ options _allow_imgui_legacy = true
 require imgui
 require imgui/imgui_lint
 
-//! Opt-out smoke — `imgui_lint` is loaded and default-on, but
+//! Opt-out smoke - `imgui_lint` is loaded and default-on, but
 //! `_allow_imgui_legacy = true` disables it. Raw imgui::Button compiles cleanly.
 
 [export]

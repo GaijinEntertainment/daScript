@@ -62,7 +62,7 @@ def private viewer_ready(t : T?; app : ImguiApp) : bool {
     return ready
 }
 
-[test]
+[test(description = "the footer radio switches the document between the Source editor, the side-by-side split preview and the live preview", timeout = 1200)]
 def test_hybrid_surface_three_way(t : T?) {
     with_imgui_app(FEATURE) $(app) {
         return if (!viewer_ready(t, app))
@@ -104,7 +104,7 @@ def test_hybrid_surface_three_way(t : T?) {
     }
 }
 
-[test]
+[test(description = "in the live preview the source island follows the caret to a new block, the block it left renders rich again, and rich runs flank the island", timeout = 1200)]
 def test_hybrid_unfold_follows_caret(t : T?) {
     with_imgui_app(FEATURE) $(app) {
         return if (!viewer_ready(t, app))
@@ -140,7 +140,7 @@ def test_hybrid_unfold_follows_caret(t : T?) {
     }
 }
 
-[test]
+[test(description = "a click on a rich block in the live preview moves the caret there and unfolds that block", timeout = 1200)]
 def test_hybrid_click_rich_block_moves_caret(t : T?) {
     with_imgui_app(FEATURE) $(app) {
         return if (!viewer_ready(t, app))
@@ -181,7 +181,7 @@ def test_hybrid_click_rich_block_moves_caret(t : T?) {
     }
 }
 
-[test]
+[test(description = "typing in a source island edits the buffer before any debounced reparse, and moving the caret out of a dirty island reparses at once", timeout = 1200)]
 def test_hybrid_typing_debounce_and_exit_snap(t : T?) {
     with_imgui_app(FEATURE) $(app) {
         return if (!viewer_ready(t, app))
@@ -226,7 +226,7 @@ def test_hybrid_typing_debounce_and_exit_snap(t : T?) {
     }
 }
 
-[test]
+[test(description = "the live preview and Source surfaces share one buffer, undo journal and save point, and find in the preview jumps the caret and unfolds the matched block", timeout = 1200)]
 def test_hybrid_editor_state_across_surfaces(t : T?) {
     with_imgui_app(FEATURE) $(app) {
         return if (!viewer_ready(t, app))

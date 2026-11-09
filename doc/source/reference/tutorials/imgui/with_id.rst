@@ -181,7 +181,7 @@ snapshot.
    features-side demo with the same surface plus a same-state shared-button
    demonstration.
 
-   Integration test: ``modules/dasImgui/tests/test_id_override.das``.
+   Integration test: ``modules/dasImgui/tests/test_snapshot.das``.
 
    Previous tutorial: :ref:`tutorial_with_style`
 

@@ -5,11 +5,12 @@ require dastest/testing_boost public
 require imgui/imgui_text_source_model
 require imgui/imgui_text_tree_sitter
 
-//! Fold extraction from the tree-sitter structure walk — no UI, no live host.
+//! Fold extraction from the tree-sitter structure walk - no UI, no
+//! live host.
 
 let DAS_FIXTURE = "options gen2\n\ndef add(a, b : int) : int \{\n    let c = a + b\n    return c\n\}\n\nstruct Point \{\n    x : int\n    y : int\n\}\n\nenum Mode \{\n    one\n    two\n\}\n\nclass Shape \{\n    area : float\n\}\n"
 
-[test]
+[test(description = "a daslang source yields one fold each for its function, struct, class and enum, the function fold spans its def line to its closing brace, and fold_at resolves bytes inside and outside it")]
 def test_das_fold_extraction(t : T?) {
     var document <- tree_sitter_source_document(DAS_FIXTURE, "das", 1)
     var kinds : table<string; int>
@@ -40,7 +41,7 @@ def test_das_fold_extraction(t : T?) {
     text_source_document_dispose(document)
 }
 
-[test]
+[test(description = "a call with bare named arguments parses, so the function declared after it still folds")]
 def test_das_folds_survive_bare_named_arguments(t : T?) {
     // the 0.6.4 bare named-call syntax was unparseable by the grammar and the
     // error region swallowed every fold after the first such call
@@ -58,7 +59,7 @@ def test_das_folds_survive_bare_named_arguments(t : T?) {
     text_source_document_dispose(document)
 }
 
-[test]
+[test(description = "a class method folds as a function declaration at its own header row")]
 def test_das_method_folds(t : T?) {
     let source = ("options gen2\n\nclass Shape \{\n    area : float\n"
         + "    def get_area() : float \{\n        return area\n    \}\n\}\n")
@@ -73,7 +74,7 @@ def test_das_method_folds(t : T?) {
     text_source_document_dispose(document)
 }
 
-[test]
+[test(description = "a Markdown source reports a fold for its fenced code block")]
 def test_markdown_fold_extraction(t : T?) {
     let source = "# Title\n\nprose\n\n```\ncode line one\ncode line two\n```\n"
     var document <- markdown_source_document(source, 1)

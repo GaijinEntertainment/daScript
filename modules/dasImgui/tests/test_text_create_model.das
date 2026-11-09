@@ -14,7 +14,7 @@ def private md_editor(source : string) : TextEditState {
     return <- ed
 }
 
-[test]
+[test(description = "the creation registry ships the built-in Markdown and daslang sets, md.bold as a wrap and das.if bound to daslang buffers")]
 def test_create_builtins_present(t : T?) {
     var ed = md_editor("")
     var found_bold = false
@@ -34,7 +34,7 @@ def test_create_builtins_present(t : T?) {
     text_edit_dispose(ed)
 }
 
-[test]
+[test(description = "a user creation_define under a built-in id replaces the built-in, so the overridden body is what executes")]
 def test_create_last_wins_override(t : T?) {
     var ed = md_editor("hello")
     text_edit_select(ed, 0, 0, 0, 5)
@@ -52,7 +52,7 @@ def test_create_last_wins_override(t : T?) {
     text_edit_dispose(ed)
 }
 
-[test]
+[test(description = "a creatable's can_create predicate hides and refuses it on a non-blank line and admits it on a blank one, where the inserted rule keeps a blank line above it")]
 def test_create_predicate_lambda(t : T?) {
     var ed = md_editor("text here\n")
     var definition = CreatableDefinition(id = "user.rule", title = "Rule",
@@ -80,7 +80,7 @@ def test_create_predicate_lambda(t : T?) {
     text_edit_dispose(ed)
 }
 
-[test]
+[test(description = "a list or image created on the only blank line between paragraphs re-opens blank lines on both sides, and one undo reverts the whole transform")]
 def test_create_separator_keeps_blank_neighbors(t : T?) {
     // play round 3: List on the separator line consumed the only blank, so
     // typing lazily glued the new item to BOTH neighbor paragraphs
@@ -101,7 +101,7 @@ def test_create_separator_keeps_blank_neighbors(t : T?) {
     text_edit_dispose(ed)
 }
 
-[test]
+[test(description = "the creation context reports heading level, list prefix, code-fence membership including both marker lines, statement start and line-comment position, and the fence gates the Markdown set")]
 def test_create_context_facts(t : T?) {
     var ed = md_editor("# Title\n\n- item\n```das\ncode\n```\ntail\n")
     text_edit_set_cursor(ed, 0, 2)
@@ -139,7 +139,7 @@ def test_create_context_facts(t : T?) {
     text_edit_dispose(das_ed)
 }
 
-[test]
+[test(description = "md.heading cycles a line one level deeper per call as one undo unit each, and wraps from level 6 back to plain")]
 def test_create_heading_cycle(t : T?) {
     var ed = md_editor("plain line")
     text_edit_set_cursor(ed, 0, 3)
@@ -160,7 +160,7 @@ def test_create_heading_cycle(t : T?) {
     text_edit_dispose(six)
 }
 
-[test]
+[test(description = "list transforms renumber an ordered list over the selection and keep it selected, swap ordered markers for dashes, and the checkbox transform adds a box then flips it by the first line's state")]
 def test_create_list_and_checkbox_transforms(t : T?) {
     var ed = md_editor("alpha\nbeta\ngamma")
     text_edit_select(ed, 0, 0, 2, 5)
@@ -180,7 +180,7 @@ def test_create_list_and_checkbox_transforms(t : T?) {
     text_edit_dispose(ed)
 }
 
-[test]
+[test(description = "md.quote toggles the quote prefix on and off, carrying the caret by the prefix width")]
 def test_create_quote_and_noop(t : T?) {
     var ed = md_editor("word")
     text_edit_set_cursor(ed, 0, 2)
@@ -192,7 +192,7 @@ def test_create_quote_and_noop(t : T?) {
     text_edit_dispose(ed)
 }
 
-[test]
+[test(description = "a wrap with no selection inserts both delimiters with the caret between them, and a snippet creatable inserts its template and arms a snippet session")]
 def test_create_wrap_degenerate_and_snippet(t : T?) {
     var ed = md_editor("")
     t |> success(creation_execute(ed, "md.bold"), "wrap without a selection")
@@ -206,7 +206,7 @@ def test_create_wrap_degenerate_and_snippet(t : T?) {
     text_edit_dispose(ed)
 }
 
-[test]
+[test(description = "das.if declines mid-expression and at a statement start inserts the block at the line's indent, with the line's tail after the body and the condition stop armed")]
 def test_create_das_statement_gate(t : T?) {
     var ed = TextEditState()
     text_edit_load(ed, "\tlet x = 1")

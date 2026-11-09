@@ -30,7 +30,7 @@ def private island_lines(t : T?; source : string; caret_line : int) : int2 {
     return int2(seg.line_first, seg.line_last)
 }
 
-[test]
+[test(description = "line starts give one entry per newline plus a trailing empty line, and an empty source is one line")]
 def test_hybrid_line_starts(t : T?) {
     var inscope starts : array<int>
     markdown_hybrid_line_starts("ab\ncd\n", starts)
@@ -42,7 +42,7 @@ def test_hybrid_line_starts(t : T?) {
     t |> equal(length(starts), 1, "empty source is one line")
 }
 
-[test]
+[test(description = "each paragraph unfolds as its own source island, the separating blank and trailing lines attach to the preceding block, and a caret on the blank unfolds that block")]
 def test_hybrid_two_paragraphs(t : T?) {
     let source = "alpha one\n\nbeta two\n"
     let first = island_lines(t, source, 0)
@@ -55,7 +55,7 @@ def test_hybrid_two_paragraphs(t : T?) {
     t |> equal(second.y, 3, "trailing lines attach to the last block")
 }
 
-[test]
+[test(description = "a caret in a code block splits the document into a rich run, the source island naming the excluded node, and a rich run resuming after it, in source order")]
 def test_hybrid_segment_order(t : T?) {
     var inscope segments : array<HybridSegment>
     let source = "# Title\n\n```das\nlet x = 1\n```\n\ntail\n"
@@ -75,7 +75,7 @@ def test_hybrid_segment_order(t : T?) {
         "top-level code block excludes itself")
 }
 
-[test]
+[test(description = "a fenced code island covers the opening fence, the closing fence and its blank, and a caret on the closing fence keeps the same island")]
 def test_hybrid_fenced_code_covers_fences(t : T?) {
     let source = "# Title\n\n```das\nlet x = 1\n```\n\ntail\n"
     let inside = island_lines(t, source, 3)
@@ -85,14 +85,14 @@ def test_hybrid_fenced_code_covers_fences(t : T?) {
     t |> equal(on_close.x, 2, "caret on the closing fence keeps one island")
 }
 
-[test]
+[test(description = "an unclosed fence's island starts at the fence and runs to the end of the document")]
 def test_hybrid_fence_at_eof_without_closer(t : T?) {
     let span = island_lines(t, "```das\nlet y = 2\n", 1)
     t |> equal(span.x, 0, "unclosed fence island starts at the fence")
     t |> equal(span.y, 2, "unclosed fence island runs to the end")
 }
 
-[test]
+[test(description = "each thematic break owns its marker line and the following blank, so consecutive breaks and the closing paragraph resolve to separate islands")]
 def test_hybrid_thematic_breaks(t : T?) {
     let source = "para\n\n---\n\n***\n\nend\n"
     let first_break = island_lines(t, source, 2)
@@ -104,14 +104,14 @@ def test_hybrid_thematic_breaks(t : T?) {
     t |> equal(tail.x, 6, "the end paragraph is its own island")
 }
 
-[test]
+[test(description = "a setext underline belongs to its heading's island, which reaches the start of the body")]
 def test_hybrid_setext_underline(t : T?) {
     let span = island_lines(t, "Title\n=====\n\nbody\n", 1)
     t |> equal(span.x, 0, "setext underline belongs to the heading block")
     t |> equal(span.y, 2, "heading cover reaches the body's start")
 }
 
-[test]
+[test(description = "a caret on a list item unfolds that item alone at its own nesting level, while a caret on the parent's head unfolds the parent with its nested subtree")]
 def test_hybrid_nested_list_items(t : T?) {
     let source = "- alpha\n- beta\n  - inner one\n  - inner two\n- gamma\n"
     let alpha = island_lines(t, source, 0)
@@ -125,7 +125,7 @@ def test_hybrid_nested_list_items(t : T?) {
     t |> equal(head.y, 3, "parent item island spans its nested subtree")
 }
 
-[test]
+[test(description = "a caret in a list item's code block unfolds just the fenced block without the marker line, while a caret on the item head unfolds the whole item")]
 def test_hybrid_item_with_code_block(t : T?) {
     let source = "- head\n  ```\n  code\n  ```\n- next\n"
     let span = island_lines(t, source, 2)
@@ -136,7 +136,7 @@ def test_hybrid_item_with_code_block(t : T?) {
     t |> equal(head.y, 3, "head unfold spans the item's block children")
 }
 
-[test]
+[test(description = "a block quote unfolds one inner paragraph at a time, excluding the inner paragraph node rather than the quote")]
 def test_hybrid_quote_inner_paragraph(t : T?) {
     var inscope segments : array<HybridSegment>
     let source = "> first para\n>\n> second para\n\ntail\n"
@@ -150,7 +150,7 @@ def test_hybrid_quote_inner_paragraph(t : T?) {
     t |> equal(second.x, 2, "second inner paragraph unfolds alone")
 }
 
-[test]
+[test(description = "an empty document is one source segment, leading blanks attach to the first block, and a single block owns the whole buffer")]
 def test_hybrid_edges(t : T?) {
     var inscope segments : array<HybridSegment>
     let island = segments_for(t, "", 0, segments)

@@ -7,5 +7,5 @@ doc: `CLAUDE.md`.
 for it, in the same change.**
 
 **A diff that adds syntax `grammar.js` or `src/scanner.c` accepts adds a `CanarySection` entry
-to `CANARY_SECTIONS` in `modules/dasImgui/tests/test_grammar_canary.das` (repo root), in the
+to `CANARY_SECTIONS` in `modules/dasImgui/tests/test_text_tree_sitter.das` (repo root), in the
 same change.**

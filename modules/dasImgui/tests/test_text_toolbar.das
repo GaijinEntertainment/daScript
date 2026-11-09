@@ -11,8 +11,8 @@ require strings
 require daslib/json public
 require daslib/json_boost public
 
-//! REAL-CLICK coverage for the live-preview creation flows — the class the
-//! rail-driven tests missed (Boris, play round 2): clicks on blank separator
+//! Real-click coverage for the live-preview creation flows: the
+//! class the rail-driven tests missed - clicks on blank separator
 //! lines, off-glyph clicks, and TOOLBAR buttons pressed while the island
 //! editor draws (the FocusItem reclaim used to cancel their press).
 
@@ -61,7 +61,7 @@ def private open_toolbar_fixture(t : T?; app : ImguiApp;
     return ready
 }
 
-[test]
+[test(description = "a real click on the gap between two rich paragraphs lands the caret on the separator line, and the toolbar image button inserts there with the snippet session armed", timeout = 1200)]
 def test_toolbar_image_between_paragraphs(t : T?) {
     // Boris's exact flow: click a paragraph, click the blank line after it,
     // click Img on the toolbar - all REAL clicks
@@ -113,7 +113,7 @@ def test_toolbar_image_between_paragraphs(t : T?) {
 
 let FENCE_FIXTURE = "# Title\n\nLead paragraph.\n\n```text\ncode line\n```\n\nTail paragraph.\n"
 
-[test]
+[test(description = "a gap click below a code fence lands the caret on the blank line after the closing fence, not on it, so the toolbar image inserts below the fence", timeout = 1200)]
 def test_toolbar_image_below_fence(t : T?) {
     // regression pin (Boris, play round 2): a gap click BELOW a code fence
     // parked the caret ON the closing ``` line (node source ranges exclude
@@ -173,7 +173,7 @@ def test_toolbar_image_below_fence(t : T?) {
     }
 }
 
-[test]
+[test(description = "toolbar buttons submitted before the island editor still complete their press, so +Section and a following heading cycle both apply", timeout = 1200)]
 def test_toolbar_buttons_fire_over_reclaim(t : T?) {
     // the FocusItem reclaim regression pin: toolbar buttons are submitted
     // BEFORE the island editor and must still complete their press
@@ -203,7 +203,7 @@ def test_toolbar_buttons_fire_over_reclaim(t : T?) {
     }
 }
 
-[test]
+[test(description = "a click right of a rich line's text snaps the caret to that line's end, and a click in the strip below the island's last row clamps to the nearest line", timeout = 1200)]
 def test_click_off_glyph_and_dead_strip(t : T?) {
     with_imgui_app(FEATURE) $(app) {
         return if (!viewer_ready(t, app))
@@ -285,7 +285,7 @@ def private open_viewing(t : T?; app : ImguiApp; path, text : string) : bool {
     return viewing
 }
 
-[test]
+[test(description = "a click on a paragraph in view mode enters edit mode with the caret on the clicked line", timeout = 1200)]
 def test_view_click_enters_editing(t : T?) {
     // Boris: "i need to press edit all the time. should be like never.
     // if i click somewhere - its for edit."
@@ -314,7 +314,7 @@ def test_view_click_enters_editing(t : T?) {
     }
 }
 
-[test]
+[test(description = "in view mode a drag selects text and a checkbox click toggles its marker, and neither enters edit mode", timeout = 1200)]
 def test_view_drag_and_checkbox_stay_viewing(t : T?) {
     with_imgui_app(FEATURE) $(app) {
         return if (!viewer_ready(t, app))
@@ -359,7 +359,7 @@ def test_view_drag_and_checkbox_stay_viewing(t : T?) {
 
 let CRLF_FIXTURE = "# Title line\r\n\r\nFirst paragraph body text.\r\n\r\nSecond paragraph body text.\r\n"
 
-[test]
+[test(description = "a view click on a CRLF document enters edit mode on the clicked line, since the caret carry maps by line and column rather than byte offset", timeout = 1200)]
 def test_click_to_edit_crlf_caret(t : T?) {
     // the caret carry maps view bytes by line/column, so a CRLF checkout
     // still lands the caret on the clicked line (byte offsets would drift)
@@ -387,7 +387,7 @@ def test_click_to_edit_crlf_caret(t : T?) {
     }
 }
 
-[test]
+[test(description = "a live reload keeps the open document, its unsaved buffer, the caret and edit mode", timeout = 1200)]
 def test_live_reload_keeps_documents(t : T?) {
     // the [before_reload]/[after_reload] document persistence: a reload keeps
     // the open doc, its unsaved buffer, the caret, and edit mode
@@ -423,7 +423,7 @@ def test_live_reload_keeps_documents(t : T?) {
     }
 }
 
-[test]
+[test(description = "Escape with nothing to cancel leaves edit mode", timeout = 1200)]
 def test_escape_exits_editing(t : T?) {
     with_imgui_app(FEATURE) $(app) {
         return if (!viewer_ready(t, app))

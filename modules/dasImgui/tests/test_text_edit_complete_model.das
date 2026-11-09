@@ -10,7 +10,7 @@ require strings
 
 //! Pure-logic coverage for the completion carrier + document-words provider.
 
-[test]
+[test(description = "the most frequent document word for the prefix before the caret becomes the ghost with runners-up listed, Tab accepts it instead of indenting, and moving the caret clears it")]
 def test_complete_document_words_ghost(t : T?) {
     var ed = TextEditState()
     var comp = TextEditCompletion()
@@ -35,7 +35,7 @@ def test_complete_document_words_ghost(t : T?) {
     text_edit_dispose(ed)
 }
 
-[test]
+[test(description = "the language profile's keywords complete like document words, and a plain-text buffer never shows a ghost")]
 def test_complete_keywords_and_kill_switch(t : T?) {
     var ed = TextEditState()
     var comp = TextEditCompletion()
@@ -58,7 +58,7 @@ def test_complete_keywords_and_kill_switch(t : T?) {
     text_edit_dispose(ed)
 }
 
-[test]
+[test(description = "the completion list opens only after the idle delay with keyboard focus left in the editor, Down and Up walk into and out of it, and Enter accepts only a selected row and closes the list")]
 def test_complete_list_flow(t : T?) {
     var ed = TextEditState()
     var comp = TextEditCompletion()
@@ -93,7 +93,7 @@ def test_complete_list_flow(t : T?) {
     text_edit_dispose(ed)
 }
 
-[test]
+[test(description = "moving the caret into a word or past a dot offers neither a ghost nor a list, even after the idle delay, while typing still offers")]
 def test_complete_navigation_stays_silent(t : T?) {
     // Boris's live catch: arrowing into a word must not ghost or pop the
     // list - only TYPED requests offer.
@@ -124,7 +124,7 @@ def test_complete_navigation_stays_silent(t : T?) {
     text_edit_dispose(ed)
 }
 
-[test]
+[test(description = "Escape keeps the completion list closed across later syncs of the same request, and only the next typed request may reopen it")]
 def test_complete_escape_dismissal_sticks(t : T?) {
     // Boris's live catch #2: Esc closed the list but the same idle request
     // reopened it next frame - the menu looked immovable.
@@ -152,7 +152,7 @@ def test_complete_escape_dismissal_sticks(t : T?) {
     text_edit_dispose(ed)
 }
 
-[test]
+[test(description = "typing a dot opens the list at once with every document word, accepting inserts the whole word for the empty prefix, and Escape closes it")]
 def test_complete_explicit_dot_trigger(t : T?) {
     var ed = TextEditState()
     var comp = TextEditCompletion()
@@ -171,7 +171,7 @@ def test_complete_explicit_dot_trigger(t : T?) {
     text_edit_dispose(ed)
 }
 
-[test]
+[test(description = "the daslang provider's worker compiles the buffer and offers every function and global matching the prefix, refreshing the ghost", timeout = 1200)]
 def test_das_provider_compiles_symbols(t : T?) {
     var ed = TextEditState()
     var comp = TextEditCompletion()
@@ -202,7 +202,7 @@ def test_das_provider_compiles_symbols(t : T?) {
     text_edit_dispose(ed)
 }
 
-[test]
+[test(description = "compiler output parses into findings with 0-based lines, already 0-based columns, a caret-width range end or unknown width, the message, and a path only for findings in another file")]
 def test_das_issue_parsing(t : T?) {
     var out : array<TextEditDiagnostic>
     let issues = ("error[30838]: can't locate variable 'zzz'\n"
@@ -230,7 +230,7 @@ def test_das_issue_parsing(t : T?) {
     delete out
 }
 
-[test]
+[test(description = "an idle daslang buffer compiles in the background: a broken one reports failed with pathless findings, and once fixed (as gen2 with no options) it reports ok and the findings clear", timeout = 1200)]
 def test_das_provider_reports_diagnostics(t : T?) {
     var ed = TextEditState()
     var comp = TextEditCompletion()
@@ -273,7 +273,7 @@ def test_das_provider_reports_diagnostics(t : T?) {
     text_edit_dispose(ed)
 }
 
-[test]
+[test(description = "a multi-line finding underlines from its start column, whole middle rows and up to its end column and nothing outside, an unknown width underlines to the word end, and a foreign file's finding draws nothing")]
 def test_multiline_diagnostic_spans(t : T?) {
     // squiggles across lines: first row from the column, middle rows whole,
     // last row to the end column; nothing outside; foreign files never span
@@ -304,7 +304,7 @@ def test_multiline_diagnostic_spans(t : T?) {
     text_edit_dispose(ed)
 }
 
-[test]
+[test(description = "the same prefix ranks keywords first at a statement start and document words first mid-expression")]
 def test_complete_statement_start_prefers_keywords(t : T?) {
     // Boris: typing re at statement start should offer return FIRST
     var ed = TextEditState()
@@ -331,7 +331,7 @@ def test_complete_statement_start_prefers_keywords(t : T?) {
     text_edit_dispose(ed)
 }
 
-[test]
+[test(description = "completion ranks compiled symbols over document words over keywords whatever order they arrive in, the ghost takes the best, and a duplicate at a better tier is promoted without duplicating")]
 def test_complete_rank_tiers(t : T?) {
     // Boris: ranking was backwards - compiled symbols arrived last and sat
     // at the bottom. Tiers: 0 compiled beats 1 doc words beats 2 keywords.
@@ -362,7 +362,7 @@ def test_complete_rank_tiers(t : T?) {
     text_edit_dispose(ed)
 }
 
-[test]
+[test(description = "clang errors and warnings parse into 0-based findings sized by caret and tildes, pathless for the checked buffer and with the path kept for a header")]
 def test_clang_output_parsing(t : T?) {
     var out : array<TextEditDiagnostic>
     let output = ("C:/tmp/_check_1.cpp:2:13: error: use of undeclared identifier 'yyy'\n"
@@ -384,7 +384,7 @@ def test_clang_output_parsing(t : T?) {
     delete out
 }
 
-[test]
+[test(description = "clang output with POSIX paths parses, a fatal missing-include error is a finding sized by its caret run, and a foreign POSIX path keeps its path and line")]
 def test_clang_output_parsing_posix_and_fatal(t : T?) {
     // the location split counts colons, so a drive-letter path and a POSIX one
     // must both parse; a missing #include only ever says "fatal error"
@@ -407,7 +407,7 @@ def test_clang_output_parsing_posix_and_fatal(t : T?) {
     delete out
 }
 
-[test]
+[test(description = "the C++ check is a syntax-only clang run that picks the C or C++ language and scratch suffix from the buffer, and an empty or unrunnable compiler is never available", timeout = 1200)]
 def test_cpp_check_argv_selects_language(t : T?) {
     // valid C fails the C++ front end, so a `c` buffer must not go through it
     var inscope cpp_argv <- text_edit_cpp_check_argv("clang", "cpp", "/tmp/x.cpp")
@@ -424,7 +424,7 @@ def test_cpp_check_argv_selects_language(t : T?) {
         "and neither is a name that does not run")
 }
 
-[test]
+[test(description = "with clang present a broken C++ buffer reports failed with a pathless finding on the bad line, and a clean buffer reports ok and clears the findings", timeout = 1200)]
 def test_cpp_provider_reports_diagnostics(t : T?) {
     let compiler = text_edit_cpp_compiler_discover()
     // fexist alone would skip forever wherever clang lives on PATH
@@ -469,7 +469,7 @@ def test_cpp_provider_reports_diagnostics(t : T?) {
     text_edit_dispose(ed)
 }
 
-[test]
+[test(description = "a C buffer is checked as C, so code legal only in C reports ok with no findings", timeout = 1200)]
 def test_cpp_provider_c_buffer_uses_c_dialect(t : T?) {
     let compiler = text_edit_cpp_compiler_discover()
     if (!text_edit_cpp_compiler_available(compiler)) {
@@ -497,7 +497,7 @@ def test_cpp_provider_c_buffer_uses_c_dialect(t : T?) {
     text_edit_dispose(ed)
 }
 
-[test]
+[test(description = "a compile that finishes after the buffer has moved on is dropped, reporting no status and underlining nothing on the newer content", timeout = 1200)]
 def test_das_provider_drops_stale_results(t : T?) {
     // a compile finishing after the buffer moved must not paint its findings
     // onto the newer content
@@ -525,7 +525,7 @@ def test_das_provider_drops_stale_results(t : T?) {
     text_edit_dispose(ed)
 }
 
-[test]
+[test(description = "an empty keyword offer leaves the open list showing the narrowed candidates, and only a prefix nothing matches closes it and clears the ghost")]
 def test_complete_list_survives_keywordless_prefix(t : T?) {
     // the keyword tier is offered first and is often empty; an empty offer used
     // to close the open list, so every such keystroke flickered it shut
@@ -553,7 +553,7 @@ def test_complete_list_survives_keywordless_prefix(t : T?) {
     text_edit_dispose(ed)
 }
 
-[test]
+[test(description = "an async offer under a stale request token is dropped whole, while one under the live token appends and refreshes the ghost")]
 def test_complete_offer_token_contract(t : T?) {
     var ed = TextEditState()
     var comp = TextEditCompletion()

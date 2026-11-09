@@ -16,7 +16,7 @@ def private das_editor(source : string) : TextEditState {
     return <- ed
 }
 
-[test]
+[test(description = "rich-das classifies // lines, indented // lines and block-comment interiors as full comments, code with a trailing comment as code, and nothing in a non-daslang buffer as rich")]
 def test_rich_das_classification(t : T?) {
     var ed = das_editor(FIXTURE)
     t |> success(rich_das_classify_line(ed, 0) == RichDasLineClass.full_comment,
@@ -39,7 +39,7 @@ def test_rich_das_classification(t : T?) {
     text_edit_dispose(plain)
 }
 
-[test]
+[test(description = "comment lines group by adjacency, with a blank line or an indent change starting a new group and a self-contained block comment forming its own")]
 def test_rich_das_grouping(t : T?) {
     var ed = das_editor(FIXTURE)
     var inscope spans : array<RichDasGroupSpan>
@@ -54,7 +54,7 @@ def test_rich_das_grouping(t : T?) {
     text_edit_dispose(ed)
 }
 
-[test]
+[test(description = "a block comment whose opener or closer shares a line with code, or which holds a blank interior line, forms no rich group")]
 def test_rich_das_block_comment_poisoning(t : T?) {
     var opener = das_editor("x = 1 /* note\nstill note\n*/\nlet z = 3\n")
     var inscope opener_spans : array<RichDasGroupSpan>
@@ -78,7 +78,7 @@ def test_rich_das_block_comment_poisoning(t : T?) {
     text_edit_dispose(gapped)
 }
 
-[test]
+[test(description = "a group's Markdown fragment strips the indent, the comment prefix and exactly one space per line, records the stripped bytes, and keeps block-comment interiors and indented code intact")]
 def test_rich_das_fragment_strip(t : T?) {
     var ed = das_editor(FIXTURE)
     var inscope spans : array<RichDasGroupSpan>
@@ -104,7 +104,7 @@ def test_rich_das_fragment_strip(t : T?) {
     text_edit_dispose(spaced)
 }
 
-[test]
+[test(description = "a caret in a rendered fragment maps back to the exact source line, with the stripped head bytes added back to the column")]
 def test_rich_das_caret_mapping(t : T?) {
     var ed = das_editor(FIXTURE)
     var st = RichDasState()
@@ -118,7 +118,7 @@ def test_rich_das_caret_mapping(t : T?) {
     text_edit_dispose(ed)
 }
 
-[test]
+[test(description = "rich-das sync reparses only what changed: nothing at the same revision, one group for an edit inside it, nothing for a code edit between groups, and only a new comment group when one appears")]
 def test_rich_das_adoption_cache(t : T?) {
     var ed = das_editor(FIXTURE)
     var st = RichDasState()

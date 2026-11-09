@@ -100,7 +100,7 @@ jobs:
         # /status races the 10s request timeout; serial removes the contention,
         # so its sweep timeout is bumped instead.
         # Excludes (all platforms): synth-IO-through-GLFW tests cannot pass
-        # headless (no GLFW event queue) — glfw_synth, key_hud; and
+        # headless (no GLFW event queue) — glfw_synth; and
         # embedded_terminal needs the Windows-only ConPTY backend.
         env:
           DASLIVE_HV_LOG: stderr

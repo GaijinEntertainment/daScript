@@ -58,7 +58,7 @@ def private viewer_ready(t : T?; app : ImguiApp) : bool {
     return ready
 }
 
-[test]
+[test(description = "in the live editor bold then italic wrap the selected text, the kept selection lets the wraps chain, and one undo peels exactly one wrap", timeout = 1200)]
 def test_create_wrap_chaining_and_undo(t : T?) {
     with_imgui_app(FEATURE) $(app) {
         return if (!viewer_ready(t, app))
@@ -103,7 +103,7 @@ def test_create_wrap_chaining_and_undo(t : T?) {
     }
 }
 
-[test]
+[test(description = "the link creatable arms a snippet with the url stop selected, typing replaces the placeholder, and Tab walks out of the session", timeout = 1200)]
 def test_create_link_snippet_tab_flow(t : T?) {
     with_imgui_app(FEATURE) $(app) {
         return if (!viewer_ready(t, app))
@@ -145,7 +145,7 @@ def test_create_link_snippet_tab_flow(t : T?) {
     }
 }
 
-[test]
+[test(description = "the heading command transforms the caret line, while inside a code fence the creatable set is empty and bold declines with a status message leaving the buffer untouched", timeout = 1200)]
 def test_create_transform_and_fence_gate(t : T?) {
     with_imgui_app(FEATURE) $(app) {
         return if (!viewer_ready(t, app))
@@ -188,7 +188,7 @@ def test_create_transform_and_fence_gate(t : T?) {
     }
 }
 
-[test]
+[test(description = "a real Ctrl+B chord through the editor's key poll drives create.md.bold on the selection end to end", timeout = 1200)]
 def test_create_real_ctrl_b_chord(t : T?) {
     with_imgui_app(FEATURE) $(app) {
         return if (!viewer_ready(t, app))

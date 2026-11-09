@@ -6,7 +6,7 @@ require imgui/imgui_boost_runtime
 
 var retained_widget_path : string
 
-[test]
+[test(description = "Repeated widget_path_key lookups under the same container return the same full path and allocate no strings in steady state.")]
 def repeated_widget_paths_do_not_allocate_strings(t : T?) {
     imgui_boost_runtime::begin_frame()
     container_path_push("Panel")
@@ -25,7 +25,7 @@ def repeated_widget_paths_do_not_allocate_strings(t : T?) {
     t |> equal(allocations, 0ul, "steady-state widget lookup does not allocate strings")
 }
 
-[test]
+[test(description = "widget_path_key prefixes each container on the path stack, nested and sibling alike, and begin_frame resets an unfinished stack to the root.")]
 def path_reuse_preserves_container_identity(t : T?) {
     imgui_boost_runtime::begin_frame()
     t |> equal(widget_path_key("Value"), "Value")
@@ -50,7 +50,7 @@ def path_reuse_preserves_container_identity(t : T?) {
     container_path_pop()
 }
 
-[test, no_jit]
+[test(description = "Twenty thousand transient ids return exact paths while the path tables stop growing and release on rollover, and a caller-held path survives turnover and collection."), no_jit]
 def changing_widget_ids_preserve_paths_across_cache_turnover(t : T?) {
     imgui_boost_runtime::begin_frame()
     container_path_push("Transient")
@@ -88,7 +88,7 @@ def changing_widget_ids_preserve_paths_across_cache_turnover(t : T?) {
     retained_widget_path = ""
 }
 
-[test]
+[test(description = "A path built from borrowed caller bytes keeps its value after the caller reuses that storage, because the cache owns copies of both key components.")]
 def borrowed_widget_identifiers_are_not_retained(t : T?) {
     imgui_boost_runtime::begin_frame()
     var parent = fixed_array(65u8, 108u8, 112u8, 104u8, 97u8, 0u8)
@@ -122,7 +122,7 @@ def borrowed_widget_identifiers_are_not_retained(t : T?) {
     imgui_boost_runtime::begin_frame()
 }
 
-[test, no_jit]
+[test(description = "A path cached from heap strings stays a cache hit with the same value after its source strings are dropped and the heap is collected."), no_jit]
 def cached_dynamic_keys_survive_collection(t : T?) {
     imgui_boost_runtime::begin_frame()
     var parent = clone_string("CollectedParent")

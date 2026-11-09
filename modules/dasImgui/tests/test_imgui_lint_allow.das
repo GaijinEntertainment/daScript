@@ -4,7 +4,7 @@ options _comment_hygiene = true
 require imgui
 require imgui/imgui_lint
 
-//! Allow-list smoke — default-on lint AND only allow-listed raw calls
+//! Allow-list smoke - default-on lint AND only allow-listed raw calls
 //! (`GetIO`, frame lifecycle, style queries). Must compile clean.
 
 [export]

@@ -21,7 +21,7 @@ def private marker_text(document : TextSourceDocument const) : string {
     return result
 }
 
-[test]
+[test(description = "a plain source document keeps the exact UTF-8 text and revision in one unstyled span covering every byte, an empty one has no spans, and dispose releases its line numbers")]
 def test_plain_source_document(t : T?) {
     let source = "plain 👩‍💻 text"  // nolint:STYLE039 (ZWJ emoji fixture)
     var document <- plain_source_document(source, 11)
@@ -48,7 +48,7 @@ def test_plain_source_document(t : T?) {
     text_source_document_dispose(empty_document)
 }
 
-[test]
+[test(description = "a Markdown source document marks every delimiter in source order as a bold marker span, with spans contiguous over every original byte")]
 def test_markdown_source_markers_preserve_original_bytes(t : T?) {
     let source = "# Heading\n**bold** and `code` [link](target) 👩‍💻\n- item\n"  // nolint:STYLE039 (ZWJ emoji fixture)
     var document <- markdown_source_document(source, 7)
@@ -75,7 +75,7 @@ def test_markdown_source_markers_preserve_original_bytes(t : T?) {
     text_source_document_dispose(document)
 }
 
-[test]
+[test(description = "an escaped asterisk stays regular text while the escape and the paired strikethrough delimiters are marked")]
 def test_markdown_source_escaped_marker_stays_regular(t : T?) {
     let source = "escaped \\* regular; ~~strike~~; > quote"
     var document <- markdown_source_document(source)

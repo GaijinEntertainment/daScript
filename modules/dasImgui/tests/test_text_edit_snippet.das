@@ -13,7 +13,7 @@ def private selection_of(ed : TextEditState const) : int4 {
     return int4(sel.start_line, sel.start_column, sel.end_line, sel.end_column)
 }
 
-[test]
+[test(description = "a snippet expands with its first placeholder selected, typing overtypes it without ending the session, and Tab past the last stop ends it at the tracked body end")]
 def test_snippet_expand_and_stops(t : T?) {
     var ed = TextEditState()
     text_edit_load(ed, "")
@@ -32,7 +32,7 @@ def test_snippet_expand_and_stops(t : T?) {
     text_edit_dispose(ed)
 }
 
-[test]
+[test(description = "a wrap snippet keeps the wrapped text selected so a second wrap nests around it, and each undo peels exactly one wrap")]
 def test_snippet_wrap_keeps_selection_for_chaining(t : T?) {
     var ed = TextEditState()
     text_edit_load(ed, "hello")
@@ -53,7 +53,7 @@ def test_snippet_wrap_keeps_selection_for_chaining(t : T?) {
     text_edit_dispose(ed)
 }
 
-[test]
+[test(description = "Tab and Shift+Tab walk the snippet stops in order, Shift+Tab clamps at the first, and Tab past the last ends the session with the caret at the body end")]
 def test_snippet_navigation(t : T?) {
     var ed = TextEditState()
     text_edit_load(ed, "")
@@ -72,7 +72,7 @@ def test_snippet_navigation(t : T?) {
     text_edit_dispose(ed)
 }
 
-[test]
+[test(description = "a multi-line snippet inherits the caret line's indentation on later lines, and an explicit final stop ends the session with the caret after the inner indent")]
 def test_snippet_indent_and_final_marker(t : T?) {
     var ed = TextEditState()
     text_edit_load(ed, "\t")
@@ -90,7 +90,7 @@ def test_snippet_indent_and_final_marker(t : T?) {
     text_edit_dispose(ed)
 }
 
-[test]
+[test(description = "a snippet expansion is one undo unit that later typing never coalesces into, and redo re-applies it at the stop-1 caret without resurrecting the session")]
 def test_snippet_one_undo_unit_and_fencing(t : T?) {
     var ed = TextEditState()
     text_edit_load(ed, "")
@@ -119,7 +119,7 @@ def test_snippet_one_undo_unit_and_fencing(t : T?) {
     text_edit_dispose(ed)
 }
 
-[test]
+[test(description = "growing one snippet stop shifts the later stops by the growth, and a stop growing past one line ends the session cleanly")]
 def test_snippet_tracking_shifts_later_stops(t : T?) {
     var ed = TextEditState()
     text_edit_load(ed, "")
@@ -135,7 +135,7 @@ def test_snippet_tracking_shifts_later_stops(t : T?) {
     text_edit_dispose(ed)
 }
 
-[test]
+[test(description = "a snippet session lives while the caret stays inside its region and ends once the caret leaves it")]
 def test_snippet_sync_watchdog(t : T?) {
     var ed = TextEditState()
     text_edit_load(ed, "tail")
@@ -150,7 +150,7 @@ def test_snippet_sync_watchdog(t : T?) {
     text_edit_dispose(ed)
 }
 
-[test]
+[test(description = "while a snippet session runs Tab advances its stops ahead of ghost completion and never inserts a literal tab")]
 def test_snippet_tab_precedence(t : T?) {
     var ed = TextEditState()
     text_edit_load(ed, "")
@@ -167,7 +167,7 @@ def test_snippet_tab_precedence(t : T?) {
     text_edit_dispose(ed)
 }
 
-[test]
+[test(description = "a body with no tab stops inserts with the caret at its end and no session, and a non-numeric token is emitted verbatim")]
 def test_snippet_sessionless_and_literal_forms(t : T?) {
     var ed = TextEditState()
     text_edit_load(ed, "")

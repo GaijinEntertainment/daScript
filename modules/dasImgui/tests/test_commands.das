@@ -1,12 +1,21 @@
 options gen2
 options _comment_hygiene = true
 options indenting = 4
+options no_unused_block_arguments = false
+options no_unused_function_arguments = false
 
 require dastest/testing_boost public
+require imgui public
 require imgui/imgui_commands public
+require imgui/imgui_playwright public
 require daslib/fio public
+require daslib/json public
+require daslib/json_boost public
 
-[test]
+//! The command registry: invocation, logical chords, binding
+//! persistence and conflicts, and chords under the macOS input model.
+
+[test(description = "an enabled command accepts and queues a menu invocation under its semantic ID, and a disabled one rejects every invocation source")]
 def test_command_invocation_is_input_source_agnostic(t : T?) {
     var registry = CommandRegistry()
     command_define(registry, CommandDefinition(
@@ -26,7 +35,7 @@ def test_command_invocation_is_input_source_agnostic(t : T?) {
     command_registry_dispose(registry)
 }
 
-[test]
+[test(description = "command_binding_chord puts a primary binding on the logical Ctrl bit and a secondary one on the logical Super bit on every platform")]
 def test_command_chords_speak_logical_ctrl(t : T?) {
     // Chords are logical on every platform: primary is the Ctrl bit, secondary
     // the Super bit. ImGui's ConfigMacOSXBehaviors swap inside AddKeyEvent owns
@@ -49,7 +58,7 @@ def test_command_chords_speak_logical_ctrl(t : T?) {
                "secondary is the logical Super bit on every platform")
 }
 
-[test]
+[test(description = "bindings report a same-scope chord conflict, round-trip an edited chord through an explicit config file, and keep an explicitly cleared binding across save and load")]
 def test_command_bindings_save_load_and_conflict_roundtrip(t : T?) {
     var temp_error : string
     let temp_dir = create_temp_directory("das_imgui_commands", temp_error)
@@ -94,7 +103,7 @@ def test_command_bindings_save_load_and_conflict_roundtrip(t : T?) {
     rmdir_rec_result(temp_dir)
 }
 
-[test]
+[test(description = "a binding with only a second chord has no primary, yet it and the command it collides with each report the conflict, and an alt-only default binding registers")]
 def test_command_alt_only_binding_reports_its_conflict(t : T?) {
     var registry = CommandRegistry()
     command_define(registry, CommandDefinition(
@@ -131,7 +140,7 @@ def test_command_alt_only_binding_reports_its_conflict(t : T?) {
     command_registry_dispose(registry)
 }
 
-[test]
+[test(description = "a config written before second chords existed loads with its saved primary and the default second chord kept, while a saved second chord still overrides the default")]
 def test_command_load_keeps_defaults_for_absent_alt_chord(t : T?) {
     var temp_error : string
     let temp_dir = create_temp_directory("das_imgui_alt_chord", temp_error)
@@ -173,4 +182,86 @@ def test_command_load_keeps_defaults_for_absent_alt_chord(t : T?) {
 
     command_registry_dispose(registry)
     rmdir_rec_result(temp_dir)
+}
+
+let GUARD_SEC = 15.0f
+
+def private probe(app : ImguiApp) : JsonValue? => post_command(app, "macos_chords_state", null)
+
+//! The feature app forces io.ConfigMacOSXBehaviors, so ImGui swaps
+//! Ctrl<->Super in AddKeyEvent exactly like a real Mac.
+[test(description = "under forced macOS behaviors bindings and synth chords speak logical Ctrl: Ctrl+K and Super+J fire their commands and capture files a held Ctrl as the primary modifier", timeout = 1200)]
+def test_macos_chords(t : T?) {
+    with_imgui_app("modules/dasImgui/examples/features/macos_chords.das") $(d) {
+        t |> run("bindings declare logical Ctrl chords") <| @(t : T?) {
+            var snap0 = wait_for_render(d, "MAIN_WIN", GUARD_SEC)
+            t |> success(snap0 != null, "MAIN_WIN renders")
+            if (snap0 == null) return
+            var state = probe(d)
+            t |> success(state?["macos_behaviors"] ?? false,
+                         "feature app runs with ConfigMacOSXBehaviors forced on")
+            t |> equal(state?["primary_chord"] ?? 0,
+                       int(ImGuiKey.K) | COMMAND_MOD_CTRL,
+                       "primary binding matches on the logical Ctrl bit - ImGui's input swap owns the Cmd mapping")
+            t |> equal(state?["secondary_chord"] ?? 0,
+                       int(ImGuiKey.J) | COMMAND_MOD_SUPER,
+                       "secondary binding matches on the logical Super bit")
+            t |> equal(state?["primary_text"] ?? "", "Cmd+K",
+                       "display text still speaks the platform key name")
+        }
+
+        t |> run("synth Ctrl surfaces as logical Ctrl") <| @(t : T?) {
+            let ctrl_key = int(ImGuiKey.LeftCtrl)
+            post_command(d, "imgui_key_press", JV((key = ctrl_key)))
+            let saw_ctrl = wait_until(d, 240) $(var snap) {
+                return ((snap?["io"]?["key_ctrl"] ?? false)
+                    && !(snap?["io"]?["key_super"] ?? true))
+            }
+            t |> success(saw_ctrl != null,
+                         "synth Ctrl held reads back as io.KeyCtrl under macOS behaviors")
+            post_command(d, "imgui_key_release", JV((key = ctrl_key)))
+            let cleared = wait_until(d, 240) $(var snap) {
+                return !(snap?["io"]?["key_ctrl"] ?? true)
+            }
+            t |> success(cleared != null, "io modifier clears after release")
+        }
+
+        t |> run("primary chord fires end-to-end") <| @(t : T?) {
+            let before = probe(d)?["primary_fired"] ?? 0
+            post_command(d, "imgui_key_chord", JV((mods = ["Ctrl"], key = "K")))
+            t |> success(wait_for_key_idle(d, 4.0f), "Ctrl+K chord completes")
+            let fired = wait_cond(d, GUARD_SEC) $() : bool {
+                return (probe(d)?["primary_fired"] ?? 0) > before
+            }
+            t |> success(fired, "logical Ctrl+K fires the primary-bound command")
+        }
+
+        t |> run("secondary chord fires end-to-end") <| @(t : T?) {
+            let before = probe(d)?["secondary_fired"] ?? 0
+            post_command(d, "imgui_key_chord", JV((mods = ["Super"], key = "J")))
+            t |> success(wait_for_key_idle(d, 4.0f), "Super+J chord completes")
+            let fired = wait_cond(d, GUARD_SEC) $() : bool {
+                return (probe(d)?["secondary_fired"] ?? 0) > before
+            }
+            t |> success(fired, "logical Super+J fires the secondary-bound command")
+        }
+
+        t |> run("capture stores the logical primary modifier") <| @(t : T?) {
+            let armed = post_command(d, "macos_chords_arm_capture", null)
+            t |> success(armed?["ok"] ?? false, "capture arms on probe.primary")
+            post_command(d, "imgui_key_chord", JV((mods = ["Ctrl"], key = "M")))
+            t |> success(wait_for_key_idle(d, 4.0f), "Ctrl+M chord completes")
+            let captured = wait_cond(d, GUARD_SEC) $() : bool {
+                return !(probe(d)?["capture_armed"] ?? true)
+            }
+            t |> success(captured, "capture consumes the chord")
+            var state = probe(d)
+            t |> equal(state?["primary_key"] ?? 0, int(ImGuiKey.M),
+                       "captured binding lands on the tapped key")
+            t |> success(state?["primary_is_primary"] ?? false,
+                         "held logical Ctrl captures as the PRIMARY modifier")
+            t |> success(!(state?["primary_is_secondary"] ?? true),
+                         "held logical Ctrl does not misfile as secondary")
+        }
+    }
 }
