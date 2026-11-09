@@ -201,7 +201,7 @@ def test_distinct_accessors_reject_other_annotations(t : T?) {
     t |> success(checked, "rtti_core carries no annotation to try")
 }
 
-[test(description = "the trailing doc comment of a distinct typedef reaches its typedef topic")]
+[test(description = "the trailing doc comment of a distinct typedef reaches its typedef topic, and a daslib module required beside the reader gets topics for its body doc comments", timeout = 1200)]
 def test_rst_comment_reads_distinct_typedef(t : T?) {
     var err : string
     let root = create_temp_directory("das_rst_comment", err)
@@ -216,7 +216,34 @@ def test_rst_comment_reads_distinct_typedef(t : T?) {
         let detail = fread("{root}/detail/typedef-_rst_distinct_mod-RstMeters.rst")
         t |> success(find(detail, "Distance along a path") >= 0, "detail: '{detail}' output: {output}")
     }
+    t |> run("a daslib module required beside the reader gets its body //! comments") @(t : T?) {
+        var lower_bound_topics = 0
+        dir("{root}/detail") $(name) {
+            if (name |> starts_with("function-algorithm-lower_bound-")) {
+                lower_bound_topics++
+            }
+        }
+        t |> success(lower_bound_topics > 0,
+            "no function-algorithm-lower_bound detail topic; output: {output}")
+    }
     rmdir_rec(root, err)
+}
+
+[test(description = "the label helpers escape every special character of a function name and spell an option type as its alternatives joined by a bar")]
+def test_rst_label_helpers(t : T?) {
+    t |> run("safe_function_name escapes") @(t : T?) {
+        let escaped = ("a_b_builtin_c_hh_d_c_e_at_f_ls_g_gr_h_rq_i_ex_j_eq_k"
+            + "_st_l_dot_m_q_n_ref_opq_lb_r_rb_st")
+        t |> equal(safe_function_name("a b$c#d:e@f<g>h`i!j=k*l.m?n&o(p)q[r]s|t"), escaped)
+    }
+    t |> run("describe_type_short joins an option type") @(t : T?) {
+        ast_gc_guard() {
+            var td <- new TypeDecl(baseType = Type.option)
+            td.argTypes |> push(new TypeDecl(baseType = Type.tInt))
+            td.argTypes |> push(new TypeDecl(baseType = Type.tFloat))
+            t |> equal(describe_type_short(td), "int|float")
+        }
+    }
 }
 
 [test(description = "annotationFilter reaches enumeration annotations too")]

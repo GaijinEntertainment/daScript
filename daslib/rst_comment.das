@@ -9,15 +9,17 @@ module rst_comment shared private
 
 //! Documentation comment extractor.
 //!
-//! Implements the ``[comment_reader]`` annotation that collects
-//! ``//!`` doc-comments from source files and writes per-symbol
-//! RST snippets to the ``detail/`` directory.
+//! Implements the comment reader that collects ``//!`` doc-comments
+//! from source files and writes per-symbol RST snippets to the
+//! ``detail/`` directory. It registers itself without ``ast_boost``
+//! and requires only ``ast``, ``rst_label`` and builtin modules: a
+//! module parsed before this reader registers never has its
+//! comments read.
 
-require daslib/ast_boost
-require daslib/rst
-require daslib/fio
+require daslib/ast
+require fio_core
 require strings
-require daslib/strings_boost
+require daslib/rst_label
 
 enum ParserState {
     //! State of the documentation comment parser.
@@ -72,11 +74,19 @@ def get_module_name(prog, mod) {
     let res = string(prog.thisModuleName)
     if (res != "") return res
 
-    return base_name(compiling_file_name()).split(".")[0]
+    let file_stem = base_name(compiling_file_name())
+    let dot = find(file_stem, ".")
+    return dot < 0 ? file_stem : slice(file_stem, 0, dot)
 }
 
 
-[comment_reader]
+[_macro, arch(at="ARCHITECTURE_RST.md#comment-reader-closure")]
+def private setup_rst_comment_reader() {
+    if (is_compiling_macros_in_module("rst_comment")) {
+        add_new_comment_reader("RstComment", new RstComment())
+    }
+}
+
 class RstComment : AstCommentReader {
     //! Comment reader that extracts `//!` doc comments.
     chars : array<uint8>

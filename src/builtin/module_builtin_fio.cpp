@@ -325,6 +325,7 @@ namespace das {
     bool builtin_remove_file_ec ( const char * path, char * & error, Context * ctx, LineInfoArg * at ) GENERATE_IO_STUB
     bool builtin_rename_file_ec ( const char * old_path, const char * new_path, char * & error, Context * ctx, LineInfoArg * at ) GENERATE_IO_STUB
     bool builtin_mkdir_ec ( const char * path, char * & error, Context * ctx, LineInfoArg * at ) GENERATE_IO_STUB
+    bool builtin_mkdir_rec_ec ( const char * path, char * & error, Context * ctx, LineInfoArg * at ) GENERATE_IO_STUB
     bool builtin_rmdir_ec ( const char * path, char * & error, Context * ctx, LineInfoArg * at ) GENERATE_IO_STUB
     bool builtin_rmdir_rec_ec ( const char * path, char * & error, Context * ctx, LineInfoArg * at ) GENERATE_IO_STUB
 #undef GENERATE_IO_STUB
@@ -353,6 +354,7 @@ namespace das {
     bool builtin_stat ( const char *, FStat & ) GENERATE_IO_STUB_RET
     bool builtin_chdir ( const char * ) GENERATE_IO_STUB_RET
     bool builtin_mkdir ( const char * ) GENERATE_IO_STUB_RET
+    bool builtin_mkdir_rec ( const char * ) GENERATE_IO_STUB_RET
     void builtin_exit ( int32_t, Context *, LineInfoArg * ) GENERATE_IO_STUB
     void builtin_exit_now ( int32_t, Context *, LineInfoArg * ) GENERATE_IO_STUB
     char * builtin_resolve_this_module_dir ( const char *, bool, Context * ) GENERATE_IO_STUB_RET
@@ -2522,6 +2524,32 @@ namespace das {
         return true;
     }
 
+    bool builtin_mkdir_rec ( const char * path ) {
+        if ( !path || !*path ) return true;
+        auto p = das_to_path(path);
+        if ( p.empty() ) return false;
+        std::error_code ec;
+        if ( std::filesystem::is_directory(p, ec) ) return true;
+        std::filesystem::create_directories(p, ec);
+        return !ec && std::filesystem::is_directory(p, ec);
+    }
+
+    bool builtin_mkdir_rec_ec ( const char * path, char * & error, Context * ctx, LineInfoArg * at ) {
+        error = nullptr;
+        if ( !path || !*path ) return true;
+        auto p = das_to_path(path);
+        if ( p.empty() ) { error = empty_path_error(ctx, at); return false; }
+        std::error_code ec;
+        if ( std::filesystem::is_directory(p, ec) ) return true;
+        std::filesystem::create_directories(p, ec);
+        if ( ec ) { error = ec_to_string(ec, ctx, at); return false; }
+        if ( !std::filesystem::is_directory(p, ec) ) {
+            error = ec_to_string(ec ? ec : std::make_error_code(std::errc::not_a_directory), ctx, at);
+            return false;
+        }
+        return true;
+    }
+
     bool builtin_rmdir_ec ( const char * path, char * & error, Context * ctx, LineInfoArg * at ) {
         error = nullptr;
         if ( !path ) { error = empty_path_error(ctx, at); return false; }
@@ -3445,6 +3473,12 @@ namespace das {
                     ->arg("path");
             addExtern<DAS_BIND_FUN(builtin_mkdir_ec)>(*this, lib, "mkdir",
                 SideEffects::modifyArgumentAndExternal, "builtin_mkdir_ec")
+                    ->args({"path","error","context","at"});
+            addExtern<DAS_BIND_FUN(builtin_mkdir_rec)>(*this, lib, "mkdir_rec",
+                SideEffects::modifyExternal, "builtin_mkdir_rec")
+                    ->arg("path");
+            addExtern<DAS_BIND_FUN(builtin_mkdir_rec_ec)>(*this, lib, "mkdir_rec",
+                SideEffects::modifyArgumentAndExternal, "builtin_mkdir_rec_ec")
                     ->args({"path","error","context","at"});
             addExtern<DAS_BIND_FUN(builtin_rmdir)>(*this, lib, "rmdir",
                 SideEffects::modifyExternal, "builtin_rmdir")

@@ -1692,6 +1692,8 @@ if (NOT ${DAS_TOOLS_DISABLED})
     file(GLOB DASLIB_SOURCES
         ${PROJECT_SOURCE_DIR}/daslib/*.das
     )
+    # the folder's gate is repo-internal; the bundle gate bans it
+    list(REMOVE_ITEM DASLIB_SOURCES ${PROJECT_SOURCE_DIR}/daslib/REVIEW.das)
     install(FILES ${DASLIB_SOURCES}
         DESTINATION ${DAS_INSTALL_DASLIBDIR}
     )

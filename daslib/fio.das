@@ -160,28 +160,6 @@ def long_fwrite(f : file; buf : array<auto(BufType)> const implicit) : int64 {
 }
 
 [generic]
-def mkdir_rec(path : string) : bool {
-    return true if (path == "")
-    var st : FStat
-    return true if (stat(path, st) && st.is_dir)
-    let parent = dir_name(path)
-    return true if (parent == path)
-    mkdir_rec(parent)
-    return mkdir(path)
-}
-
-[generic]
-def mkdir_rec(path : string; var error : string&) : bool {
-    return true if (path == "")
-    var st : FStat
-    return true if (stat(path, st) && st.is_dir)
-    let parent = dir_name(path)
-    return true if (parent == path)
-    if (!mkdir_rec(parent, error)) return false
-    return mkdir(path, error)
-}
-
-[generic]
 def fread(path : string) : string {
     var result : string
     fopen(path, "rb") $(f) {
