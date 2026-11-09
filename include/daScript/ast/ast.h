@@ -1816,6 +1816,8 @@ namespace das
         ModuleCacheStream stream = ModuleCacheStream() );
     DAS_CC_API ProgramPtr compileDaScriptSerialize ( const string & fileName, const FileAccessPtr & access,
         TextWriter & logs, ModuleGroup & libGroup, CodeOfPolicies policies = CodeOfPolicies() );
+    DAS_CC_API bool simulateProgram ( const ProgramPtr & program, Context & context, TextWriter & logs,
+        StackAllocator * sharedStack = nullptr );
     // src/ast/ARCHITECTURE_BUILT.md#built-programs
     DAS_CC_API ProgramPtr requireDefaultModules ( const FileAccessPtr & access, TextWriter & logs, ModuleGroup & libGroup,
         CodeOfPolicies & policies );

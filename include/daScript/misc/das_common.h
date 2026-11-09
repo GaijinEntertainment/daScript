@@ -8,7 +8,7 @@
 namespace das {
     inline ContextPtr SimulateWithErrReport(ProgramPtr program, TextWriter &tw) {
         ContextPtr pctx ( get_context(program->getContextStackSize()) );
-        if ( !program->simulate(*pctx, tw) ) {
+        if ( !simulateProgram(program, *pctx, tw) ) {
             tw << "failed to simulate\n";
             for ( auto & err : program->errors ) {
                 tw << reportError(err.at, err.what, err.extra, err.fixme, err.cerr);

@@ -83,7 +83,7 @@ Every C++ host follows the same pattern:
 
        // 2. Simulate (link + initialize)
        Context ctx(program->getContextStackSize());
-       if (!program->simulate(ctx, tout)) {
+       if (!simulateProgram(program, ctx, tout)) {
            for (auto & err : program->errors) {
                tout << reportError(err.at, err.what, err.extra,
                                    err.fixme, err.cerr);
@@ -113,7 +113,7 @@ The three-step flow is always the same:
 
 1. **Compile** — ``compileDaScript`` parses and type-checks the ``.das``
    file, producing a ``ProgramPtr``.
-2. **Simulate** — ``program->simulate(ctx, tout)`` generates the
+2. **Simulate** — ``simulateProgram(program, ctx, tout)`` generates the
    ``SimNode`` tree and initializes globals.
 3. **Evaluate** — ``ctx.evalWithCatch(fn, nullptr)`` runs a function.
 

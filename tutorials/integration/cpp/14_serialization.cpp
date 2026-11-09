@@ -52,7 +52,7 @@ void tutorial() {
     // function pointers and initializes the program fully.
     {
         Context ctx(program->getContextStackSize());
-        if (!program->simulate(ctx, tout)) {
+        if (!simulateProgram(program, ctx, tout)) {
             tout << "Simulation failed.\n";
             return;
         }
@@ -67,7 +67,7 @@ void tutorial() {
     auto writeTo = make_unique<SerializationStorageVector>();
     {
         AstSerializer ser(writeTo.get(), true);  // writing = true
-        program->serialize(ser);
+        ser.serializeScript(program);
         ser.moduleLibrary = nullptr;
     }
 
@@ -88,7 +88,7 @@ void tutorial() {
     {
         AstSerializer deser(readFrom.get(), false);  // writing = false
         program = make_smart<Program>();
-        program->serialize(deser);
+        deser.serializeScript(program);
         deser.moduleLibrary = nullptr;
     }
     tout << "  Deserialized successfully.\n";
@@ -99,7 +99,7 @@ void tutorial() {
     tout << "\n=== Stage 4: Simulate and run ===\n";
 
     Context ctx(program->getContextStackSize());
-    if (!program->simulate(ctx, tout)) {
+    if (!simulateProgram(program, ctx, tout)) {
         tout << "Simulation of deserialized program failed.\n";
         for (auto & err : program->errors) {
             tout << reportError(err.at, err.what, err.extra,

@@ -51,7 +51,7 @@ void tutorial() {
         }
 
         Context ctx(program->getContextStackSize());
-        if (!program->simulate(ctx, tout)) {
+        if (!simulateProgram(program, ctx, tout)) {
             tout << "Simulation failed\n";
             return;
         }
@@ -96,7 +96,7 @@ void tutorial() {
         }
 
         Context ctx(program->getContextStackSize());
-        if (!program->simulate(ctx, tout)) {
+        if (!simulateProgram(program, ctx, tout)) {
             tout << "Simulation failed\n";
             return;
         }

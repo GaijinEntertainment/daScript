@@ -82,7 +82,7 @@ ExprCalc::ExprCalc(const string & expr, const ExprVars & vars) {
 
     // --- Simulate into a shared context ---
     ctx = make_shared<Context>(program->getContextStackSize());
-    if (!program->simulate(*ctx, tout)) {
+    if (!simulateProgram(program, *ctx, tout)) {
         tout << "Simulation failed:\n";
         for (auto & err : program->errors) {
             tout << reportError(err.at, err.what, err.extra,

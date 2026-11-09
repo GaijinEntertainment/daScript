@@ -90,7 +90,7 @@ static bool run_script(const char * label,
     }
 
     Context ctx(program->getContextStackSize());
-    if (!program->simulate(ctx, tout)) {
+    if (!simulateProgram(program, ctx, tout)) {
         tout << "  Simulation failed\n";
         return false;
     }
