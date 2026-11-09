@@ -10,10 +10,10 @@ puts it.**
 **A diff that touches a cell `REVIEW_PINNED_GATES.md` (beside this file) pins, or any cell of a
 file it pins whole, or changes which `run.das` suites list one, applies that checklist too.**
 
-**A diff that adds a cell or an assert whose expected value restates, or reads, something
-maintained outside the cell - a bar, the tolerance a compare accepts when the cell computes both
-its sides, is never such a value, whatever model file it was measured on - or that a checked-in
-table names as its evidence, applies `REVIEW_PINNED_GATES.md` (beside this file) too.**
+**A diff that adds or changes an assert whose expected value restates or reads something
+maintained outside its cell, or whose expected value a checked-in table names as its evidence,
+applies `REVIEW_PINNED_GATES.md` (beside this file) too.** A bar on a compare whose two sides
+the cell computes is never such a value, whatever model file it was measured on.
 
 **A cell that calls - in its own code or through a helper - a `../dasllama/` call that sets a
 module or process global a later load, route choice or kernel dispatch reads (that property is
@@ -104,12 +104,11 @@ thinking gate - calls `set_thinking(c, false)` on its `ChatSession` before the f
 `ChatTemplate.think_default` is `true` unless a family clears it, so a first turn with no
 `set_thinking(c, false)` call renders the thinking gate and the cell asserts the wrong wire.
 
-**Every test RUN runs under `-jit` - never the interpreter, never AOT.** A compile-only CI lane
-passes dastest's `--compile-only`. Under the interpreter a model-gated suite's cells skip, and
-a run of skips is not the coverage the suite owes.
+**Every test RUN runs under `-jit` - never the interpreter, never AOT.** Under the interpreter a
+model-gated suite's cells skip, and a run of skips is not the coverage the suite owes.
 
-**A diff that registers a test file in this folder in a `CMakeLists.txt` is a defect - a
-`run.das` suite listing is the only registration these files get.**
+**A diff that registers a test file of this folder in a `CMakeLists.txt` is a defect - list it
+in a `run.das` suite instead.**
 
 **A diff that adds a test file here adds its `CLAUDE.md` entry in the same change, every clause
 of it true of the file as added.**

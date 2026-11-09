@@ -15,7 +15,8 @@ require daslib/jobque_boost
 require daslib/fio
 require dasllama/dasllama_math   // with_dasllama_jobque_ (the engine-standard jobque config)
 require dasllama/dasllama_gpu_resident   // moe_gpu_resident_active: the route lever kept the whole-model driver off the twin
-require dasllama/dasllama_gpu_tier   // moe_gpu_tier_installed / gpu_want_auto / moe_gpu_shexp_on_gpu / set_moe_gpu_shexp_route / set_gpu_resident_route
+require dasllama/dasllama_gpu_tier   // moe_gpu_shexp_on_gpu / set_moe_gpu_shexp_route / set_gpu_resident_route
+require _gpu_tier_armed   // gpu_tier_armed: the armed-tier skip
 require dasllama/dasllama_blocks   // shexp_gpu_prefill_layers: the device arm's engage witness
 require _model_tier   // models_dir() + model_available() presence/size-tier gate, the logits compares
 require _resident_feed   // feed_logits, the per-step bar
@@ -42,11 +43,7 @@ let private FED_STEPS = 4l
 //! one prompt of `n` tokens plus the fed steps through both arms of the route lever
 def private shexp_forced_feed(t : T?; n : int64) {
     let path = path_join(models_dir(), TWIN)
-    return if (!jit_model_available(t, path))
-    if (!moe_gpu_tier_installed() || !gpu_want_auto()) {
-        t |> skip("the GPU tier is not armed - needs DASLLAMA_GPU=1 on a device that serves the MoE tier")
-        return
-    }
+    return if (!jit_model_available(t, path) || !gpu_tier_armed(t))
     let route0 = gpu_resident_route_lever()
     set_gpu_resident_route(false)   //! the per-op rails' claims: the whole-model driver would take the twin (test_gpu_resident_moe.das holds that arm)
     var tr <- load_model_(path, QuantMode.q8)

@@ -3,7 +3,9 @@
 // StyleTTS2 tower row needs kitten-nano.gguf (and kokoro-82m.gguf for the torch-law stamps) under models_dir() and the kitten
 // family on, and skips without them; the Pocket row needs pocket-tts-en.gguf (and pocket-tts-en-kq.gguf for the q8 head stamps) and the pocket family on;
 // the Bergamot row needs bergamot/ru-en-tiny/model.ruen.intgemm.alphas.bin (its vocab.ruen.spm beside it) under models_dir() and
-// the bergamot family on, and runs on das_metal builds alone.
+// the bergamot family on, and runs on das_metal builds alone. The Metal census skips without das_metal in the build or
+// a Metal device; the Vulkan censuses skip without the vulkan module, and the serving census without an armed GPU tier
+// (DASLLAMA_GPU=1 on a device that serves the whole-model driver).
 options gen2
 options persistent_heap   // + explicit deletes: the models free before the process exits
 options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
@@ -50,6 +52,7 @@ require strings
 require _model_tier
 require ../performance/model_specs.das   // nolint:STYLE030,LINT019 — counting_prompt, read only inside the das_metal and vulkan static_if halves
 require _gpu_knobs   // nolint:STYLE030,LINT019 — gpu_knobs: the vulkan census's knob record, read inside the vulkan half
+require _gpu_tier_armed   // nolint:STYLE030,LINT019 — gpu_tier_armed: the serving census's armed-tier skip, inside the vulkan half
 require dasllama/dasllama_env   // nolint:STYLE030,LINT019 — the read sites sit in the apple static_if half; the linux lint flavor sees the require as unused
 
 // The KERNEL COVERAGE census (REVIEW_GPU_KERNEL_CLASSES.md: a Metal kernel class is dispatched by a census row here or named in
@@ -1123,7 +1126,7 @@ def test_metal_kernel_coverage(tst : T?) {
             return if (!arm_on(t, "coverage") || !jit_only(t))
             var dev = metal_create_system_default_device()
             if (dev == null) {
-                feint("no Metal device; kernel coverage census skipped\n")
+                t |> skip("no Metal device; kernel coverage census skipped")
                 return
             }
             metal_release(dev)
@@ -1159,7 +1162,7 @@ def test_metal_kernel_coverage(tst : T?) {
             select_kernel_backend(prior_backend)
             set_wscale_f16(prior_wscale)
         } else {
-            feint("das_metal is not built on this platform; nothing to census\n")
+            t |> skip("das_metal is not built on this platform; nothing to census")
         }
     }
 }
@@ -1552,7 +1555,7 @@ def private vk_cov_mode_sweep(t : T?) {
 def test_vulkan_kernel_coverage_serving(tst : T?) {
     tst |> run("Vulkan serving census: the local zoo across resident/arena/kq/deltanet/MoE") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
-            if (!arm_on(t, "coverage-vk")) {
+            if (!arm_on(t, "coverage-vk") || !gpu_tier_armed(t)) {
                 return
             }
             vk_kernel_coverage_reset()
@@ -1593,11 +1596,6 @@ def test_vulkan_kernel_coverage_serving(tst : T?) {
                     served++
                 }
             }
-            if (served == 0) {
-                delete cov
-                feint("no vulkan dispatches - arm DASLLAMA_GPU=1 on a device box (the census needs the serving tier)\n")
-                return
-            }
             for (blind in VK_CENSUS_NEVER_DISPATCHED) {
                 var named = false
                 for (k in keys(cov)) {
@@ -1624,7 +1622,7 @@ def test_vulkan_kernel_coverage_serving(tst : T?) {
                 to_log(LOG_INFO, "census floor not asserted (family filter '{famfilter}'): {served} served\n")
             }
         } else {
-            feint("vulkan is not built on this platform; nothing to census\n")
+            t |> skip("vulkan is not built on this platform; nothing to census")
         }
     }
 }
@@ -1650,7 +1648,7 @@ def test_vulkan_kernel_coverage_rail(tst : T?) {
             t |> equal(zeros, length(cov))
             delete cov
         } else {
-            feint("vulkan is not built on this platform; nothing to census\n")
+            t |> skip("vulkan is not built on this platform; nothing to census")
         }
     }
 }

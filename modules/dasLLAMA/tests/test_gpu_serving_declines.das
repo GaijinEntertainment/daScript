@@ -1,3 +1,6 @@
+// The Vulkan tier-gate cells (the ple f32 tile, the h128 twin, the subgroup pin, the prefill chunk cap) skip without
+// the vulkan module; the subgroup pin cell also skips without a Vulkan device, and the chunk-cap cell when
+// DASLLAMA_VK_CHUNK is set.
 options gen2
 options stack = 524288   // three Model shells live in one cell's frame - the default test stack overflows on them
 options _dasllama_internal = true
@@ -1834,6 +1837,8 @@ def test_ple_f32_tile_gates(t : T?) {
             t |> success(!ple_proj_bf16_hw(1536l), "the resident projection's bf16 rows take the word-pair stamp at the E2B's even dim")
             t |> success(ple_proj_bf16_hw(1537l), "... and the halfword stamp at an odd one")
             g_gpu = live
+        } else {
+            t |> skip("dasVulkan not present")
         }
     }
 }
@@ -1853,6 +1858,8 @@ def test_h128_twin_gate(t : T?) {
             shell.has_coopmat = false
             t |> success(!h128_twin_on(), "... and so does a device without coopmat")
             g_gpu = live
+        } else {
+            t |> skip("dasVulkan not present")
         }
     }
 }
@@ -1882,6 +1889,8 @@ def test_vk_subgroup_pin(t : T?) {
                 t |> equal(g_gpu.sg_pin, 0u, "a device at {int(own)} that cannot pin {want} runs at its own width")
                 t |> equal(g_gpu.subgroup_size, int64(own), "... which the tier reads")
             }
+        } else {
+            t |> skip("dasVulkan not present")
         }
     }
 }
@@ -1902,6 +1911,8 @@ def test_pf_chunk_cap(t : T?) {
             shell.integrated = true
             t |> equal(pf_chunk_cap(), 1l, "an integrated GPU caps a submit at one layer")
             g_gpu = live
+        } else {
+            t |> skip("dasVulkan not present")
         }
     }
 }

@@ -11,7 +11,8 @@ require dasllama/dasllama                               // facade: load/encode/g
 require dasllama/dasllama_blocks   // embed_text_rows: the media arms build rows from the prompt's own tokens
 require dasllama/dasllama_common   // layer_is_recurrent: the deltanet-on-GPU cell finds a recurrent layer to probe; eval_ / forward_prefill: the one-token segment cell's two dispatches
 require _compares   // mismatch_exact
-require dasllama/dasllama_gpu_tier   // moe_gpu_dnd_on_gpu: that cell skips unless the tier serves the decode step; moe_gpu_tier_installed / gpu_want_auto
+require dasllama/dasllama_gpu_tier   // moe_gpu_dnd_on_gpu: that cell skips unless the tier serves the decode step
+require _gpu_tier_armed   // gpu_tier_armed: the resident cells' armed-tier skip
 require dasllama/dasllama_gpu_resident   // moe_gpu_resident_active / moe_gpu_resident_verifies: the resident pick-ask cell's witnesses
 require daslib/jobque_boost
 require daslib/fio
@@ -1681,11 +1682,7 @@ def test_scheduler_capture_stops_ngram(t : T?) {
 [test]
 def test_scheduler_mtp_resident_picks(t : T?) {
     t |> run("scheduler mtp under the resident driver: every tick of a greedy stream asks a pick - the device verify lands picks alone and sample_ consumes each - the stream token for token the plain scheduler's on the same device rail, every round's verify served on the device (needs Qwen3.5-0.8B-MTP, DASLLAMA_GPU=1)") @(t : T?) {
-        return if (!jit_model_available(t, MTP_MODEL_PATH))
-        if (!moe_gpu_tier_installed() || !gpu_want_auto()) {
-            t |> skip("the GPU tier is not armed - needs DASLLAMA_GPU=1 on a device that serves the whole-model driver")
-            return
-        }
+        return if (!jit_model_available(t, MTP_MODEL_PATH) || !gpu_tier_armed(t))
         if (mirror_kv_dtype() != KVDtype.f16) {
             t |> skip("the scheduler's sessions are f16; under DASLLAMA_VK_KV32=1 the mirror is f32 and every call passes as codec")
             return
@@ -1732,11 +1729,7 @@ def test_scheduler_mtp_resident_picks(t : T?) {
 [test]
 def test_scheduler_mtp_device_home(t : T?) {
     t |> run("scheduler mtp in device mode under the resident driver: a speculating stream homed on the device - its K/V in the driver's region alone - drafts, verifies and rolls back there, token for token the host-cached speculating stream, every drafted round counted by the device's draft and verify counters (needs Qwen3.5-0.8B-MTP, DASLLAMA_GPU=1)") @(t : T?) {
-        return if (!jit_model_available(t, MTP_MODEL_PATH))
-        if (!moe_gpu_tier_installed() || !gpu_want_auto()) {
-            t |> skip("the GPU tier is not armed - needs DASLLAMA_GPU=1 on a device that serves the whole-model driver")
-            return
-        }
+        return if (!jit_model_available(t, MTP_MODEL_PATH) || !gpu_tier_armed(t))
         if (mirror_kv_dtype() != KVDtype.f16) {
             t |> skip("the scheduler's sessions are f16; under DASLLAMA_VK_KV32=1 the mirror is f32 and every call passes as codec")
             return
@@ -2097,7 +2090,7 @@ def test_scheduler_device_mode_switch(t : T?) {
             t |> success(!set_device_kv(sch, true), "a scheduler with a live stream keeps the session kind it has")
             drain(m, sch, events)
             t |> success(set_device_kv(sch, true), "the same scheduler, idle, switches")
-            t |> success(!set_device_kv(sch, false), "and back")
+            t |> success(!set_device_kv(sch, false), "and back to host-cached: the answer is the kind it now serves, so it reads false")
             delete events
             delete sch
             delete prompt
