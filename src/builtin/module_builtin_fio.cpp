@@ -246,6 +246,7 @@ namespace das {
     bool das_file_stat_utf8 ( const char *, uint64_t &, int64_t &, bool & ) { return false; }
     bool das_remove_utf8 ( const char * ) { return false; }
     bool das_rename_utf8 ( const char *, const char * ) { return false; }
+    bool das_rename_utf8 ( const char *, const char *, bool & targetHeldOpen ) { targetHeldOpen = false; return false; }
     void das_each_directory_entry ( const char *, void (*)(const char *, bool, void *), void * ) {}
     void builtin_map_file(const FILE* f, const TBlock<void, TTemporary<TArray<uint8_t>>>& blk, Context* context, LineInfoArg * at) GENERATE_IO_STUB
     void * builtin_fmap_open ( const char * name, uint64_t * size, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
@@ -472,6 +473,22 @@ namespace das {
 
     bool das_rename_utf8 ( const char * from, const char * to ) {
         return builtin_rename_file(from, to);
+    }
+
+    bool das_rename_utf8 ( const char * from, const char * to, bool & targetHeldOpen ) {
+        targetHeldOpen = false;
+        if ( !from || !to ) return false;
+#if defined(_WIN32)
+        auto wideFrom = das_utf8_to_wide(from);
+        auto wideTo = das_utf8_to_wide(to);
+        if ( wideFrom.empty() || wideTo.empty() ) return false;
+        if ( MoveFileExW(wideFrom.c_str(), wideTo.c_str(), MOVEFILE_REPLACE_EXISTING) != 0 ) return true;
+        DWORD err = GetLastError();
+        targetHeldOpen = err == ERROR_SHARING_VIOLATION || err == ERROR_ACCESS_DENIED || err == ERROR_USER_MAPPED_FILE;
+        return false;
+#else
+        return rename(from, to) == 0;
+#endif
     }
 
     void das_each_directory_entry ( const char * dir, void (*fn)(const char * name, bool isDirectory, void * user), void * user ) {

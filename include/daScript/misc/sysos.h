@@ -39,6 +39,8 @@ namespace das {
     DAS_API bool das_remove_utf8 ( const char * fileName );
     //! renames over an existing `to`
     DAS_API bool das_rename_utf8 ( const char * from, const char * to );
+    //! the same; on failure `targetHeldOpen` says Windows answered a sharing violation, access denied or a mapped file - what a process holding `to` open causes, though access denied also covers a read-only `to`, so the caller still checks it may write there (POSIX rename replaces an open file, so it is false there)
+    DAS_API bool das_rename_utf8 ( const char * from, const char * to, bool & targetHeldOpen );
     //! `fn` for every entry of `dir` but `.` and `..`, names in UTF-8
     DAS_API void das_each_directory_entry ( const char * dir, void (*fn)(const char * name, bool isDirectory, void * user), void * user );
 #if defined(_WIN32)

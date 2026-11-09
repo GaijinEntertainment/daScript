@@ -618,7 +618,9 @@ int compile_and_run ( const string & fn, const string & mainFnName, bool outputP
                 tout << "ser: wrote " << cres.wroteBytes << " bytes to '" << cacheWritePath << "'\n";
             }
         }
-        if ( cres.saveFailed ) {
+        // the default cache is best effort and quiet: a program that owns stdout for a
+        // protocol (the MCP and DAP bridges, the LSP) must not find host text in it
+        if ( cres.saveFailed && !cacheQuiet ) {
             tout << "ser: cannot write '" << cacheWritePath << "'\n";
         }
     };

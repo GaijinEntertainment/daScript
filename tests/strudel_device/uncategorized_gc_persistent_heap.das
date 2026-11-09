@@ -49,7 +49,10 @@ def sample_stretch(until : double; var prev : uint64&) : Stretch {
     var st = Stretch(lo = 0xFFFFFFFFFFFFFFFFul)
     st.finished = wait_worker_until(until) $ {
         let h = strudel_get_worker_heap_bytes()
-        return if (h == prev)          // the same tick as last time
+        // zero is a box read that gave up under a busy writer, not a heap
+        // size - the worker's output buffer lives in its heap, so it never
+        // publishes zero; equal to the last number is the same tick again
+        return if (h == 0ul || h == prev)
         if (prev != 0ul && h < prev) { st.drops++ }
         prev = h
         st.lo = min(st.lo, h)
