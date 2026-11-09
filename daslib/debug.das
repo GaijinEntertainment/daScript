@@ -1293,8 +1293,12 @@ class private DAgent : DapiDebugAgent {
                 server->tick()
             } else {
                 waitConnection = false
+                let exiting = server.exitRequested
                 unsafe {
                     delete server
+                }
+                if (exiting) {
+                    unsafe(fio::exit(0))
                 }
                 startServer()
             }
@@ -1487,6 +1491,7 @@ class private DAServer : Server {
     @do_not_delete agent : DAgent?
 
     disconnected : bool = false
+    exitRequested : bool = false   //! terminate answered: close the socket, then exit
 
     current_string : array<uint8>
     toRead : int = 0
@@ -1722,9 +1727,12 @@ class private DAServer : Server {
     }
 
     def reqTerminate(seq : double; command : string; data : JsonValue?) {
-        //! Handles the DAP terminate request, exiting the process.
+        //! Answers the DAP terminate request, then leaves the exit to the
+        //! agent's next tick, which closes the socket first: exiting with it
+        //! open aborts the connection on Windows before the reply is read.
         sendSuccessResponse(seq, command, null)
-        unsafe(fio::exit(0))
+        disconnected = true
+        exitRequested = true
     }
 
     def reqSetBreakpoints(seq : double; command : string; data : JsonValue?) {

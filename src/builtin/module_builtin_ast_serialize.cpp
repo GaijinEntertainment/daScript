@@ -3782,9 +3782,13 @@ namespace das {
             writeStorage.flush();
             if ( !writeFailed && !writeStorage.buffer.empty() ) {
                 // write-to-temp + rename: a concurrent reader on the same path sees a
-                // complete old or a complete new stream, never a torn one. The CRT rename
-                // cannot replace on Windows, so there is a missing-file blink there - a
-                // reader in that window just takes the cold path
+                // complete old or a complete new stream, never a torn one. On Windows the
+                // rename cannot replace a file another process holds open; the temp file
+                // was just created beside the target, so a rename refused for a holder
+                // (the error codes das_rename_utf8 classifies) onto a writable regular file
+                // there lost to that holder, whose complete stream stays in place - the
+                // cache is there, and the loser has nothing to report. POSIX rename
+                // replaces open files, so there every failure is one
                 static atomic<uint64_t> writebackSeq { 0 };
                 string tmpPath = writePath + "." + to_string(das_process_id()) + "." + to_string(writebackSeq.fetch_add(1)) + ".tmp";
                 ensureParentDirectories(writePath);
@@ -3792,11 +3796,21 @@ namespace das {
                     res.wroteBytes = uint64_t(fwrite(writeStorage.buffer.data(), 1, writeStorage.buffer.size(), f));
                     fclose(f);
                     res.wrote = res.wroteBytes == uint64_t(writeStorage.buffer.size());
+                    bool targetHeldByAnother = false;
                     if ( res.wrote ) {
-                        res.wrote = das_rename_utf8(tmpPath.c_str(), writePath.c_str());
+                        bool targetHeldOpen = false;
+                        res.wrote = das_rename_utf8(tmpPath.c_str(), writePath.c_str(), targetHeldOpen);
+#ifdef _WIN32
+                        if ( targetHeldOpen ) {
+                            uint64_t size = 0; int64_t mtime = 0; bool isDirectory = false;
+                            auto wideTarget = das_utf8_to_wide(writePath.c_str());
+                            targetHeldByAnother = das_file_stat_utf8(writePath.c_str(), size, mtime, isDirectory)
+                                && !isDirectory && !wideTarget.empty() && _waccess(wideTarget.c_str(), 2) == 0;
+                        }
+#endif
                     }
                     if ( !res.wrote ) das_remove_utf8(tmpPath.c_str());   // never leave a corpse
-                    res.saveFailed = !res.wrote;
+                    res.saveFailed = !res.wrote && !targetHeldByAnother;
                     if ( res.wrote ) evictModuleCache(writePath);
                 } else {
                     res.saveFailed = true;
