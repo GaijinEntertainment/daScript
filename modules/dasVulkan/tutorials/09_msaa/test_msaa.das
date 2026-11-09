@@ -35,7 +35,7 @@ def count_faint(pixels : array<uint8>) : int {
     return n
 }
 
-[test]
+[test(description = "the MSAA ball fills the central box over the clear-color corners and shows fewer faint edge pixels with multisampling than without", timeout = 1200, standalone = "the tutorial's own pixel oracle")]
 def test_msaa_oracle(t : T?) {
     var inscope ctx <- build_msaa_context()
     var on  <- render_msaa_frame(ctx, TEST_TIME, TEST_CAM, true)

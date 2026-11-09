@@ -13,7 +13,7 @@ options indenting = 4
 require dastest/testing_boost public
 require ../../examples/descriptor_heap.das
 
-[test]
+[test(description = "the descriptor-heap example squares every element through a resource heap, skipping where the extension is absent", timeout = 1200, standalone = "the example's compute shaders re-declare square_spv, which the integration fixtures already define")]
 def test_descriptor_heap_square(t : T?) {
     if (!descriptor_heap_available()) {
         t |> skip("VK_EXT_descriptor_heap not advertised by this device")
@@ -44,7 +44,7 @@ def heap_props(reserved, buf_size, buf_align, heap_align,
 
 def panics(blk : block<() : void>) : bool => !empty(panic_text(blk))
 
-[test]
+[test(description = "the resource heap layout aligns descriptors behind the reserved range and refuses sizes past the limit", standalone = "the example's compute shaders re-declare square_spv, which the integration fixtures already define")]
 def test_resource_heap_layout(t : T?) {
     let big = 0x2000000ul
     t |> run("reserved range first, descriptors aligned behind it, size rounded up") @(t : T?) {

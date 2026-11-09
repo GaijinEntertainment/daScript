@@ -92,7 +92,7 @@ frame contains all four regimes (sky, lit ground, the cast shadow, the box).
 
 .. literalinclude:: ../../../../../modules/dasVulkan/tutorials/15_raytracing/test_raytracing.das
    :language: das
-   :start-at: [test]
+   :start-at: [test(
 
 See it live
 -----------

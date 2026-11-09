@@ -1431,7 +1431,7 @@ def public external_memory_host_min_alignment(phys : VkPhysicalDevice) : uint64 
 //! ``shaderSampledImageArrayNonUniformIndexing`` (index a ``sampler2D[N]`` with ``nonuniformEXT``), via
 //! the 1.2-core features12 path. **``runtimeDescriptorArray`` deliberately NOT enabled** — use features12.
 //! The GPU regression tests under ``tests/integration/test_bindless_*.das`` and
-//! ``test_nonuniform_ext.das`` drive this entry point.
+//! ``test_descriptors.das`` drive this entry point.
 def public create_device_descriptor_indexing(phys : VkPhysicalDevice; queue_family : uint) : Device {
     let no_ext : array<string>
     var f12 : VkPhysicalDeviceVulkan12Features
@@ -1444,7 +1444,7 @@ def public create_device_descriptor_indexing(phys : VkPhysicalDevice; queue_fami
 //! Create a device with the GPU-driven-rendering set: ``multiDrawIndirect`` (>1 draw per
 //! ``vkCmdDrawIndirect``) on the base ``VkPhysicalDeviceFeatures``, plus ``shaderDrawParameters``
 //! (``gl_DrawID`` / BuiltIn DrawIndex) via Vulkan11Features — 1.1 core, so no extension string.
-//! Exercised by ``tests/integration/test_gl_draw_id.das``.
+//! Exercised by ``tests/integration/test_rendering.das``.
 def public create_device_draw_parameters(phys : VkPhysicalDevice; queue_family : uint) : Device {
     var base : VkPhysicalDeviceFeatures
     base.multiDrawIndirect = 1u

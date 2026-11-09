@@ -1,3 +1,5 @@
+//! a [tune_scope] version_of= with a bad spec, a missing module or
+//! a missing constant fails its apply
 // [tune_scope] version_of= validation — each bad declaration fails the annotation apply with
 // error 20800 (macro failed to apply).
 options gen2

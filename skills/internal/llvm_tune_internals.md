@@ -81,7 +81,7 @@ its target flags *with* host features and targets the host machine; the decision
 in `run_jit` (`exe_host_cpu`) before the flag pass and reused at `init_jit_target_flags`,
 `init_jit` and `write_exe`. Flags and machine must never diverge - host-F16C flags on a
 generic machine lower fp16 to libcalls msvcrt does not link. Witness: `g_target_host_features`
-plus the `llvm_code_selftest::host_features` probe in `modules/dasLLVM/tests/exe_host_cpu.das`.
+plus the `llvm_code_selftest::host_features` probe in `modules/dasLLVM/tests/llvm_jit_baseline.das`.
 
 ## The fat mode
 
@@ -139,14 +139,14 @@ tuner is a seconds-fast fake that upserts through `tune_manifest_set`. Two scope
 sidecar prove the upsert preserves the other's keys, and that tuned-ness is per-key
 completeness. `llvm_tune_manifest.das` covers the write->stamp round trip and the staleness
 rail (back-dating with `set_mtime` + `mktime`). Both run under `-jit` and short-circuit to
-pass when `!jit_enabled()`. The defaults-profile rail is `llvm_tune_profiles.das` (+ its
+pass when `!jit_enabled()`. The defaults-profile rail is `llvm_tune_scope.das` (+ its
 `_client` / `_lib` / `_tuner` fixtures): it copies the fixtures into a per-process temp
 directory, redirects the copied lib's `defaults =` at a `tune_defaults/` beside them, writes its
 profile files there at runtime, named by this box's own `tune_cpu_class()`, and fakes a
 less-capable minting box with an empty `features` field to force the unlocked-seat race. It
 never writes under the tracked `llvm_tune_profiles_defaults/`; `modules/dasLLVM/REVIEW.das`
-reds a test that does. The fat rail is `llvm_tune_fat.das` (+ `llvm_tune_fat_client.das` /
-`llvm_tune_fat_lib.das`): it writes a profile for the ladder's lowest and top class, builds
+reds a test that does. The fat rail is `llvm_tune.das` (+ `_llvm_tune_fat_client.das` /
+`_llvm_tune_fat_lib.das`): it writes a profile for the ladder's lowest and top class, builds
 the client as a fat exe with `--jit-dump`, asserts each clone's attribute group and the
 LLVM-side mask word in the IR, then runs the exe unpinned, pinned, and pinned outside the box
 or outside the carried clones; the client's `FORK` value dispatches from a pooled skip-init

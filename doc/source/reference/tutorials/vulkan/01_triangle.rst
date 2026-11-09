@@ -73,7 +73,7 @@ the vertex shader on the GPU.
 
 .. literalinclude:: ../../../../../modules/dasVulkan/tutorials/01_triangle/test_triangle.das
    :language: das
-   :start-at: [test]
+   :start-at: [test(
 
 Running it
 ----------

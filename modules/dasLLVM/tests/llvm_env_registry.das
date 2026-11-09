@@ -22,7 +22,7 @@ let SKIP_FILES = [
     "llvm_env_registry.das"
 ]
 
-[test]
+[test(description = "no dasLLVM source outside llvm_env.das reads the environment raw")]
 def test_no_env_reads_outside_the_declarations(t : T?) {
     t |> run("dasLLVM reads knobs as g_env_jit fields or the sanctioned live-read helpers") @(t : T?) {
         var offenders <- scan_env_raw_reads(STRICT_ROOTS, SKIP_FILES)
@@ -32,7 +32,7 @@ def test_no_env_reads_outside_the_declarations(t : T?) {
     }
 }
 
-[test]
+[test(description = "every environment variable dasLLVM reads or arms has an [EnvConfig] declaration, over a walk that visits more than 40 files")]
 def test_every_env_read_is_declared(t : T?) {
     t |> run("every environment variable read or armed anywhere has a declaration") @(t : T?) {
         var used : table<string>
@@ -48,7 +48,7 @@ def test_every_env_read_is_declared(t : T?) {
     }
 }
 
-[test]
+[test(description = "no dasLLVM source re-declares a private environment reader")]
 def test_no_ad_hoc_env_helpers(t : T?) {
     t |> run("nobody re-declares a private env reader") @(t : T?) {
         var offenders <- scan_env_banned_helpers(STRICT_ROOTS, SKIP_FILES)
@@ -58,7 +58,7 @@ def test_no_ad_hoc_env_helpers(t : T?) {
     }
 }
 
-[test]
+[test(description = "the checked-in ENVIRONMENT.md matches what the [EnvConfig] declarations render")]
 def test_environment_md_is_current(t : T?) {
     t |> run("the checked-in ENVIRONMENT.md matches what the declarations render") @(t : T?) {
         let path = "{get_das_root()}/modules/dasLLVM/ENVIRONMENT.md"
@@ -72,7 +72,7 @@ def test_environment_md_is_current(t : T?) {
     }
 }
 
-[test]
+[test(description = "every knob is declared once across the area structs, and more than 14 are declared")]
 def test_registry_has_no_duplicates(t : T?) {
     t |> run("each knob is declared once across the area structs") @(t : T?) {
         var names <- registered_env_names()
@@ -84,7 +84,7 @@ def test_registry_has_no_duplicates(t : T?) {
     }
 }
 
-[test]
+[test(description = "every knob's rendered ENVIRONMENT.md row carries a non-empty Effect column")]
 def test_every_knob_is_documented(t : T?) {
     t |> run("every rendered doc row carries a non-empty Effect column") @(t : T?) {
         var undocumented <- env_undocumented_rows(env_markdown())

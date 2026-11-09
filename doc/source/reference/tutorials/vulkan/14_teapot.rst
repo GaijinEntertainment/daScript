@@ -88,7 +88,7 @@ cleanly.
 
 .. literalinclude:: ../../../../../modules/dasVulkan/tutorials/14_teapot/test_teapot.das
    :language: das
-   :start-at: [test]
+   :start-at: [test(
 
 See it live
 -----------

@@ -15,14 +15,16 @@ require dastest/testing_boost public
 require teapot_tut
 require math
 
-//! Warm ceramic: red dominant and clearly lit — the teapot body/spout/handle/knob.
+//! Warm ceramic: red dominant and clearly lit - the teapot body,
+//! spout, handle and knob.
 def private is_ceramic_lit(c : int3) : bool => c.x > 120 && c.x > c.y && c.y > c.z
 
 //! Env sky: cool blue, blue channel dominant and bright. Distinct from the warm ceramic + gray floor.
 def private is_sky(c : int3) : bool => c.z > 150 && c.z > c.x + 20
 
-//! Ground floor: near-neutral gray (the checker), mid brightness — holds whether the tile is light,
-//! dark, or shadowed; distinct from the blue sky and the warm ceramic.
+//! Ground floor: near-neutral gray (the checker), mid brightness -
+//! holds whether the tile is light, dark, or shadowed; distinct from
+//! the blue sky and the warm ceramic.
 def private is_floor(c : int3) : bool => abs(c.x - c.z) < 25 && c.x > 30 && c.x < 230
 
 //! Average (r+g+b) over a box. Cancels the checker pattern so a shadowed region reads as a clean
@@ -40,7 +42,7 @@ def private box_luma3(pixels : array<uint8>; x0, x1, y0, y1 : int) : int {
     return n > 0 ? sum / n : 0
 }
 
-[test]
+[test(description = "the mesh-shaded teapot renders lit ceramic body, spout, handle and knob over a sky, a floor and its cast shadow", timeout = 1200, standalone = "the tutorial's own pixel oracle")]
 def test_teapot_render(t : T?) {
     if (!mesh_shader_available()) {
         feint("VK_EXT_mesh_shader not advertised by this device; skipping (CI lavapipe may predate 24.1)\n")

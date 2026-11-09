@@ -118,15 +118,18 @@ folder has one. When three tests in `uncategorized.das` belong together, the aut
 third moves them into a category file, new or existing. A file holds at most 100 `[test]`
 functions; `uncategorized_2.das` continues a full one. Every `[test]` carries
 `description = "..."`, the claim it proves. Two files are the only ones a change may create:
-a compile-fail fixture (its `expect <code>[:line]` header speaks for the whole file, so each
+a compile-fail fixture (its `expect <code>[:count]` header speaks for the whole file, so each
 expected error is a file of its own, with a `//!` first line stating what must not compile),
 and `uncategorized_<option>.das` for a test whose `options` fence it off from the plain
 `uncategorized.das` (`tests/ARCHITECTURE.md`, the fence signature section). The gate is the
 root's `REVIEW.das` (`daslang tests/REVIEW.das`, `daslang utils/REVIEW.das`,
-`daslang dastest/tests/REVIEW.das`; `tests/REVIEW.das -- --root <folder>` scans one folder);
-the index is generated from the descriptions by `daslang utils/internal/test-audit/main.das --
---readme` (`tests/README.md`; `--root utils --tests-only --index utils/TESTS.md` and
-`--root dastest/tests` for the other roots), and `--verify` is the CI check
+`daslang dastest/tests/REVIEW.das`, `daslang modules/<module>/tests/REVIEW.das` for dasLLVM and
+dasVulkan; `tests/REVIEW.das -- --root <folder>` scans one folder); the index is generated from
+the descriptions by `daslang utils/internal/test-audit/main.das -- --readme` (`tests/README.md`;
+`--root utils --tests-only --index utils/TESTS.md`, `--root dastest/tests`, `--root
+modules/dasLLVM/tests --index modules/dasLLVM/tests/TESTS.md`, `--root modules/dasVulkan/tests`
+and `--root modules/dasVulkan/tutorials --tests-only --index modules/dasVulkan/tutorials/TESTS.md`
+for the other roots), and `--verify` is the CI check
 (`check_tests_index`) - regenerate it in the same change that adds, moves or describes a test.
 
 ## Running the repo suite

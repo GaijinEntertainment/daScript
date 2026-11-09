@@ -34,7 +34,7 @@ def private is_occluder_gray(c : int3) : bool =>
 
 def private luma(c : int3) : int => (c.x * 77 + c.y * 150 + c.z * 29) / 256
 
-[test]
+[test(description = "GPU culling marks the hidden instance occluded, the off-screen one frustum-culled and draws exactly the visible ones", timeout = 1200, standalone = "the tutorial's own pixel oracle")]
 def test_gpu_driven_occlusion(t : T?) {
     if (!draw_indirect_count_available()) {
         feint("drawIndirectCount not advertised by this device; skipping (CI lavapipe may predate it)\n")

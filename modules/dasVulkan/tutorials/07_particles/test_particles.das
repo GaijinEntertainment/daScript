@@ -21,7 +21,7 @@ def bg(p : int3) : bool {
     return p.x < 35 && p.y < 5 && p.z < 60
 }
 
-[test]
+[test(description = "the particle field rasterizes most of the particles and reaches both the cool blue and the hot red ends of the palette", timeout = 1200, standalone = "the tutorial's own pixel oracle")]
 def test_particles_oracle(t : T?) {
     var pixels <- render_particle_swarm(TEST_TIME, TEST_CAM)
 

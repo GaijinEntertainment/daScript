@@ -91,7 +91,7 @@ swarm reached the rendered pixels).
 
 .. literalinclude:: ../../../../../modules/dasVulkan/tutorials/05_instancing/test_instancing.das
    :language: das
-   :start-at: [test]
+   :start-at: [test(
 
 See it live
 -----------

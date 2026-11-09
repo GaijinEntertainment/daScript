@@ -115,7 +115,7 @@ produce. It skips where ``vulkan14_supported`` is false.
 
 .. literalinclude:: ../../../../../modules/dasVulkan/tutorials/16_vulkan14/test_vulkan14.das
    :language: das
-   :start-at: [test]
+   :start-at: [test(
 
 Running it
 ----------

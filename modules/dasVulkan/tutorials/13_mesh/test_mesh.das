@@ -19,7 +19,7 @@ require mesh_tut
 
 def private is_background(c : int3) : bool => c.x < 100 && c.y < 100 && c.z < 100
 
-[test]
+[test(description = "the task shader culls meshlets 3 and 4 while the surviving meshlets render lit in the grid palette", timeout = 1200, standalone = "the tutorial's own pixel oracle")]
 def test_mesh_cull(t : T?) {
     if (!mesh_shader_available()) {
         feint("VK_EXT_mesh_shader not advertised by this device; skipping (CI lavapipe may predate 24.1)\n")

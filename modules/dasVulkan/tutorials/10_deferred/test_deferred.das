@@ -16,7 +16,7 @@ require math
 let TEST_TIME : float = 2.0
 let TEST_CAM  : float = 0.25
 
-[test]
+[test(description = "the deferred G-buffer scene resolves lit floor, brick albedo and specular highlights over a dark background", timeout = 1200, standalone = "the tutorial's own pixel oracle")]
 def test_deferred_oracle(t : T?) {   // nolint:STYLE038 - flat test cell
     var lit_pixels <- render_deferred_cube(TEST_TIME, TEST_CAM, DBG_LIT)
 

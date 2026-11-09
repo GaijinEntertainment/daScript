@@ -127,7 +127,7 @@ god view, while the visible instance shows its material.
 
 .. literalinclude:: ../../../../../modules/dasVulkan/tutorials/12_gpu_driven/test_gpu_driven.das
    :language: das
-   :start-at: [test]
+   :start-at: [test(
 
 See it live
 -----------

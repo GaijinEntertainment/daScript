@@ -25,7 +25,7 @@ def avg_px(pixels : array<uint8>; x0, y0 : int) : int3 {
     return sum / (side * side)
 }
 
-[test]
+[test(description = "the Vulkan 1.4 scene shows the lit sky gradient and the red, green and blue textured cubes", timeout = 1200, standalone = "the tutorial's own pixel oracle")]
 def test_vulkan14_scene(t : T?) {
     if (!vulkan14_available()) {
         feint("Vulkan 1.4 with pushDescriptor + hostImageCopy + dynamicRenderingLocalRead not available; skipping (lavapipe reports 1.4 from Mesa 25.0)\n")

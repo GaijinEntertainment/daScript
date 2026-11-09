@@ -79,7 +79,7 @@ checkered ground hit), and a warm-toned hero blob in the central band.
 
 .. literalinclude:: ../../../../../modules/dasVulkan/tutorials/03_sdf/test_sdf.das
    :language: das
-   :start-at: [test]
+   :start-at: [test(
 
 See it live
 -----------

@@ -19,7 +19,7 @@ require skybox_tut
 let TEST_TIME : float = 0.0
 let TEST_CAM  : float = 0.75        // camera elevated at (0, 2.2, -4.5), looking at the sphere
 
-[test]
+[test(description = "the skybox scene renders a lit sky with a sun glow, a reflective sphere and a light and dark checkerboard floor", timeout = 1200, standalone = "the tutorial's own pixel oracle")]
 def test_skybox_oracle(t : T?) {
     var pixels <- render_skybox(TEST_TIME, TEST_CAM)
 

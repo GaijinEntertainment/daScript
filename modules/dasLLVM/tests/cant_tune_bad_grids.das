@@ -1,3 +1,5 @@
+//! every malformed [tune] / [tune_perm] / [tune_companion] grid
+//! shape fails its annotation apply
 // [tune] / [tune_perm] / [tune_companion] validation — covers every grid-shape error branch
 // (llvm_tune.das). Each bad function fails one annotation apply with error 20800 (macro
 // failed to apply).

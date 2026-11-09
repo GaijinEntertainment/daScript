@@ -53,7 +53,7 @@ on deep in/out pairs and reflected coordinates.
 
 .. literalinclude:: ../../../../../modules/dasVulkan/tutorials/02_mandelbrot/test_mandelbrot.das
    :language: das
-   :start-at: [test]
+   :start-at: [test(
 
 See it live -- an animated zoom, two ways to present it
 -------------------------------------------------------

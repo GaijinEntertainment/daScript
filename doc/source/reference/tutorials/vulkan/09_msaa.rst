@@ -94,7 +94,7 @@ count -- the load-bearing visual element of this tutorial.
 
 .. literalinclude:: ../../../../../modules/dasVulkan/tutorials/09_msaa/test_msaa.das
    :language: das
-   :start-at: [test]
+   :start-at: [test(
 
 See it live
 -----------

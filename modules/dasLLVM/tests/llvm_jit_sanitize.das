@@ -78,7 +78,7 @@ def private with_temp_dir(t : T?; tag : string; blk : block<(dir : string) : voi
     rmdir_rec_result(dir)
 }
 
-[test]
+[test(description = "--jit-sanitize instruments the IR for address, none, the host's own default and address,undefined, and refuses an unknown name and address on the in-memory engine", timeout = 1200)]
 def test_jit_sanitize_options(t : T?) {
     with_child_env() {
         t |> run("--jit-sanitize=address instruments the emitted IR on a module that carries the target triple") @(t : T?) {
@@ -122,7 +122,7 @@ def test_jit_sanitize_options(t : T?) {
     }
 }
 
-[test]
+[test(description = "under --jit-sanitize=address the asan runtime stops every overflow and use-after-delete fixture interpreted and jitted while heap_collect keeps a live object, and a host without the runtime refuses by name", timeout = 1200)]
 def test_asan_runtime(t : T?) {
     if (!JIT_HOST_ASAN) {
         with_temp_dir(t, "llvm_jit_sanitize") $(dir) {
@@ -167,7 +167,7 @@ def test_asan_runtime(t : T?) {
     }
 }
 
-[test]
+[test(description = "under --jit-sanitize=undefined the ubsan runtime stops a heap read past its object that plain -jit runs unchecked", timeout = 1200)]
 def test_ubsan_runtime(t : T?) {
     if (!host_has_symbol(JIT_UBSAN_RUNTIME_SYMBOL)) {
         t |> skip("the ubsan handlers exist only in a daslang built with -DDAS_USE_SANITIZER=undefined")

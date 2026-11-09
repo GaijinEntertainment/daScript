@@ -18,7 +18,7 @@ let TEST_DIM = 128
 let TOL = 3          // per-channel UNORM8 tolerance for matching pixels
 let EDGE_BUDGET = 164   // ~1% of 128*128: silhouette pixels allowed to disagree beyond TOL
 
-[test]
+[test(description = "the hardware ray-traced frame matches the CPU reference except within the edge-pixel budget", timeout = 1200, standalone = "the tutorial's own pixel oracle")]
 def test_raytracing(t : T?) {
     if (!rt_available()) {
         feint("VK_KHR_ray_tracing_pipeline not supported by this device; skipping (CI lavapipe has no RT)\n")

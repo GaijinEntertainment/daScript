@@ -82,7 +82,7 @@ def private debug_info_dump(t : T?; debug_info : bool) : string {
     return out
 }
 
-[test]
+[test(description = "a JIT run without --jit-debug emits no compile unit, no variable metadata and no dbg records", timeout = 1200)]
 def test_debug_info_is_off_by_default(t : T?) {
     t |> run("no --jit-debug means no debug metadata at all") @(t : T?) {
         let out = debug_info_dump(t, false)
@@ -92,7 +92,7 @@ def test_debug_info_is_off_by_default(t : T?) {
     }
 }
 
-[test]
+[test(description = "under --jit-debug the whole module shares one compile unit, tagged DW_LANG_C_plus_plus", timeout = 1200)]
 def test_one_compile_unit_per_module(t : T?) {
     t |> run("the whole module shares one compile unit, tagged C++") @(t : T?) {
         let out = debug_info_dump(t, true)
@@ -103,7 +103,7 @@ def test_one_compile_unit_per_module(t : T?) {
     }
 }
 
-[test]
+[test(description = "under --jit-debug both halves of a function pair and main carry the das name as their subprogram name, with no linkage name", timeout = 1200)]
 def test_subprograms_carry_the_das_name(t : T?) {
     t |> run("a das function is named as its source names it, with no linkage name") @(t : T?) {
         let out = debug_info_dump(t, true)
@@ -115,7 +115,7 @@ def test_subprograms_carry_the_das_name(t : T?) {
     }
 }
 
-[test]
+[test(description = "under --jit-debug every argument and local gets a DILocalVariable and a dbg record, in one lexical block per open das block", timeout = 1200)]
 def test_locals_and_arguments_are_described(t : T?) {
     t |> run("every argument and local has a DILocalVariable in a lexical scope") @(t : T?) {
         let out = debug_info_dump(t, true)
@@ -134,7 +134,7 @@ def test_locals_and_arguments_are_described(t : T?) {
     }
 }
 
-[test]
+[test(description = "under --jit-debug a das global is described as a variable of each function that touches it, never as a static-address global expression", timeout = 1200)]
 def test_a_global_is_described(t : T?) {
     t |> run("a das global reads in every function that touches it") @(t : T?) {
         let out = debug_info_dump(t, true)
@@ -147,7 +147,7 @@ def test_a_global_is_described(t : T?) {
     }
 }
 
-[test]
+[test(description = "under --jit-debug structs, enums, strings, scalars, dims, containers, refs and vectors reach DWARF as their own type shapes, with scalar encodings and member offsets right", timeout = 1200)]
 def test_types_are_described(t : T?) {
     t |> run("a struct, an enum, a string and a vector each reach DWARF as themselves") @(t : T?) {
         let out = debug_info_dump(t, true)
@@ -182,7 +182,7 @@ def test_types_are_described(t : T?) {
     }
 }
 
-[test]
+[test(description = "under --jit-debug the fixture's DIFile names an absolute path and leaves the directory field empty", timeout = 1200)]
 def test_source_paths_are_absolute(t : T?) {
     t |> run("a DIFile names an absolute path, so a debugger lists the source from any cwd") @(t : T?) {
         let out = debug_info_dump(t, true)
@@ -197,7 +197,7 @@ def test_source_paths_are_absolute(t : T?) {
     }
 }
 
-[test]
+[test(description = "under --jit-debug the entry block carries no line and declares every argument, and a loop latch reports the loop's own line", timeout = 1200)]
 def test_hoisted_instructions_carry_no_stale_line(t : T?) {
     t |> run("the prologue carries no line, and every argument is declared in it") @(t : T?) {
         let out = debug_info_dump(t, true)

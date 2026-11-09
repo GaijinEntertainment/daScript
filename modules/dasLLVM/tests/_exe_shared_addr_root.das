@@ -1,6 +1,6 @@
 options gen2
 
-require llvm_exe_shared_addr_lib
+require _llvm_exe_shared_addr_lib
 
 // A function address taken in a shared module's global initializer reaches the standalone exe:
 // the catalog's entries dispatch through a table, and the bare function-pointer global invokes.

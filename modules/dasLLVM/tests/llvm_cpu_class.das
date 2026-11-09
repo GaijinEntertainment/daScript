@@ -15,7 +15,7 @@ require strings
 require llvm/daslib/llvm_cpu_class
 require _spawn_common
 
-[test]
+[test(description = "the arm64 class ladder runs arm-sve, arm-i8mm, arm-neon, each class carrying every feature of the class below it, with sve splitting the top two")]
 def test_arm_ladder_nests(t : T?) {
     let ladder <- [for (c in split(jit_cpu_class_ladder("arm64"), ";")); c; where !empty(c)]
     t |> equal(join(ladder, ";"), "arm-sve;arm-i8mm;arm-neon",
@@ -69,7 +69,7 @@ def private probe_class(t : T?; forced : string) : string {
     return ""
 }
 
-[test]
+[test(description = "an arm64 box reporting i8mm and SVE resolves to the arm-sve class", timeout = 1200)]
 def test_sve_box_is_arm_sve(t : T?) {
     if (get_architecture_name() != "arm64") {
         t |> success(true)
@@ -81,7 +81,7 @@ def test_sve_box_is_arm_sve(t : T?) {
 //! The forced features append to the detected ones, so this leg
 //! needs a box reporting no SVE of its own - the Apple class; a
 //! Neoverse box skips it.
-[test]
+[test(description = "an arm64 box reporting i8mm without SVE resolves to the arm-i8mm class", timeout = 1200)]
 def test_i8mm_box_without_sve_is_arm_i8mm(t : T?) {
     if (get_architecture_name() != "arm64") {
         t |> success(true)
