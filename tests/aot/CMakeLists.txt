@@ -421,6 +421,9 @@ SET(AOT_LANGUAGE_MODULE_FILES
     tests/language/_optimized_body_helper.das
     tests/language/_private_property_helper.das
     tests/language/_string_clone_init_helper.das
+    tests/language/_struct_alias_facade.das
+    tests/language/_struct_alias_helper.das
+    tests/language/_struct_alias_twin.das
 )
 
 # Single source of truth for the per-suite AOT scaffolding. Two loops build the uniform suites;
