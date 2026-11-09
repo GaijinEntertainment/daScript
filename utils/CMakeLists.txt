@@ -297,9 +297,7 @@ add_custom_target(das_shipped_exes ALL
     DEPENDS daslang
     COMMENT "Copying daslang beside itself as each shipped tool exe")
 
-# every arm spawns the lint tool as a child; a Windows Debug child runs past dastest's suite
-# timeout, so that cell leaves the ctest out and run_utils_tests keeps the file
-if(NOT DAS_TESTS_DISABLED AND NOT (WIN32 AND CMAKE_BUILD_TYPE STREQUAL "Debug"))
+if(NOT DAS_TESTS_DISABLED)
     file(GLOB _lint_project_tests CONFIGURE_DEPENDS
         ${PROJECT_SOURCE_DIR}/utils/lint/tests/module_cache/project_*.das)
     foreach(_test ${_lint_project_tests})
