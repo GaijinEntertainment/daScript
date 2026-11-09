@@ -3,7 +3,7 @@ require dastest/testing_boost public
 require lp_render
 require strings
 
-[test]
+[test(description = "The HDR check rejects pixels past half-float range, sky interpolation keeps the center ray pointing forward, and stretched surfaces light with inverse-transpose normals.")]
 def test_camera_and_normals(suite : T?) {
     suite |> run("HDR diagnostic rejects out-of-range half-float pixels") @(t : T?) {
         t |> success(hdr_pixel_valid(float4(1.0, 6.0, 0.0, 1.0)))
@@ -28,7 +28,7 @@ def test_camera_and_normals(suite : T?) {
     }
 }
 
-[test]
+[test(description = "The surface shader samples the sky cubemap with explicit LOD, storm flashes stay bounded and rare and turn off for reduced flashes, the hanging lamp swings on its tether, and the yard lights follow Patch's heading and the generator power.")]
 def test_twilight(suite : T?) {
     suite |> run("cubemap explicit LOD reaches the generated shader") @(t : T?) {
         t |> success(find(fs_latch_surface`shader_text, "textureLod") >= 0)
@@ -65,7 +65,7 @@ def test_twilight(suite : T?) {
     }
 }
 
-[test]
+[test(description = "A beveled box has unit normals, outward-facing triangles and exact bounds, a zero bevel gives a plain 24-vertex box, and an oversized radius still gives unit normals.")]
 def test_beveled_geometry(suite : T?) {
     suite |> run("rounded box has finite unit normals, outward triangles and exact bounds") @(t : T?) {
         var mesh <- gen_beveled_box(float3(2.0, 1.0, 0.5), 0.12, 3)

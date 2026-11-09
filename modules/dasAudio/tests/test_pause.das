@@ -7,7 +7,41 @@ require debugapi
 require math
 require dastest/testing_boost
 
-[test]
+//! Pause on the mixer, read back from the captured output: a
+//! channel's own pause, the global pause, and the exempt PCM that
+//! plays through a global pause.
+
+[test(description = "Pausing one channel fades it to silence at every fade length without attenuating another playing channel, and resuming makes it audible again.", timeout = 1200)]
+def individual_pause_settles_at_zero_without_muting_another_channel(t : T?) {
+    for (fade in fixed_array(0.0, 0.002, 0.01)) {
+        with_output_probe() $(box) {
+            var held <- constant_pcm(0.3); var continuing <- constant_pcm(0.2)
+            let first = play_sound_from_pcm(MA_SAMPLE_RATE, 1, held)
+            let second = play_sound_from_pcm(MA_SAMPLE_RATE, 1, continuing)
+            sleep(100u); t |> success(observe_output(box).peak > 0.4)
+            unsafe(invoke_in_context(mixer_context(), "capture_reset"))
+            set_pause(first, true, fade); sleep(100u)
+            t |> success(observe_output(box).minimum > 0.19,
+                         "the other channel is never attenuated during the fade")
+            unsafe(invoke_in_context(mixer_context(), "capture_reset"))
+            sleep(100u)
+            let paused = observe_output(box)
+            t |> success(paused.peak > 0.19 && paused.peak < 0.21,
+                         "only the continuing channel remains audible")
+            stop(second, 0.0); sleep(50u)
+            unsafe(invoke_in_context(mixer_context(), "capture_reset"))
+            sleep(100u); t |> equal(observe_output(box).peak, 0.0,
+                                    "the paused channel stays silent")
+            set_pause(first, false, fade); sleep(100u)
+            unsafe(invoke_in_context(mixer_context(), "capture_reset"))
+            sleep(100u); t |> success(observe_output(box).peak > 0.29,
+                                      "resumed channel becomes audible")
+            stop(first, 0.0)
+        }
+    }
+}
+
+[test(description = "Under the global pause ordinary PCM renders silence while exempt PCM is audible, and ordinary playback resumes from its retained source when the pause lifts.", timeout = 1200)]
 def global_pause_keeps_ordinary_pcm_silent_but_exempt_pcm_is_audible(t : T?) {
     with_output_probe() $(box) {
         set_global_pause(true)
@@ -31,7 +65,7 @@ def global_pause_keeps_ordinary_pcm_silent_but_exempt_pcm_is_audible(t : T?) {
     }
 }
 
-[test]
+[test(description = "Exempt PCM playing through the global pause still obeys its own pause, the master volume and stop.", timeout = 1200)]
 def exempt_pcm_keeps_individual_pause_stop_and_master_volume_controls(t : T?) {
     with_output_probe() $(box) {
         set_global_pause(true)
@@ -53,7 +87,8 @@ def exempt_pcm_keeps_individual_pause_stop_and_master_volume_controls(t : T?) {
         sleep(100u); t |> equal(observe_output(box).peak, 0.0)
     }
 }
-[test]
+
+[test(description = "Ordinary and exempt PCM mixed together stay under the 0.95 limiter ceiling, and exempt PCM that runs to its end is removed from the mix.", timeout = 1200)]
 def combined_buses_stay_bounded_and_finished_exempt_pcm_is_removed(t : T?) {
     with_output_probe() $(box) {
         var ordinary <- constant_pcm(0.8); var exempt <- constant_pcm(0.8)
@@ -69,7 +104,7 @@ def combined_buses_stay_bounded_and_finished_exempt_pcm_is_removed(t : T?) {
     }
 }
 
-[test]
+[test(description = "An ordinary buffer already playing stays frozen while exempt PCM plays alone under the global pause, and both sum when the pause lifts.", timeout = 1200)]
 def populated_ordinary_buffer_stays_frozen_during_exempt_playback(t : T?) {
     with_output_probe() $(box) {
         var ordinary <- constant_pcm(0.7)
@@ -90,7 +125,8 @@ def populated_ordinary_buffer_stays_frozen_during_exempt_playback(t : T?) {
         stop(normal, 0.0); stop(exempt, 0.0)
     }
 }
-[test]
+
+[test(description = "With no exempt output, an ordinary-only impulse keeps the smoothed limiter's existing peak above 0.95.", timeout = 1200)]
 def zero_exempt_output_preserves_existing_ordinary_transients(t : T?) {
     with_output_probe() $(box) {
         var impulse <- constant_pcm(0.0); impulse[64] = 1.0
@@ -102,7 +138,8 @@ def zero_exempt_output_preserves_existing_ordinary_transients(t : T?) {
         stop(normal, 0.0)
     }
 }
-[test]
+
+[test(description = "Exempt PCM started with an explicit sid inside a batch keeps that sid and its batched volume and pitch, and its natural end publishes the stopped state.", timeout = 1200)]
 def explicit_sid_batched_controls_and_natural_completion_publish_status(t : T?) {
     with_output_probe() $(box) {
         var status = seq_box_create()
@@ -125,7 +162,8 @@ def explicit_sid_batched_controls_and_natural_completion_publish_status(t : T?) 
         status |> seq_box_release
     }
 }
-[test]
+
+[test(description = "A looping ordinary sound mixed with exempt PCM sums correctly, and tearing the audio context down twice leaks no job-queue handle.", timeout = 1200)]
 def looping_pcm_and_repeated_context_teardown_release_handles(t : T?) {
     let baseline = count_jobque_leaks()
     for (_ in range(2)) {
@@ -145,7 +183,7 @@ def looping_pcm_and_repeated_context_teardown_release_handles(t : T?) {
     }
 }
 
-[test]
+[test(description = "After the global pause lifts, an ordinary sequence resumes at exactly the next sample it would have played, and exempt PCM that played during the pause is never replayed.", timeout = 1200)]
 def resume_preserves_exact_ordinary_sequence_without_replaying_exempt_pcm(t : T?) {
     with_output_probe() $(box) {
         var sequence : array<float>; resize(sequence, MA_SAMPLE_RATE)

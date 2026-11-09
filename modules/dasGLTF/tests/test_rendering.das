@@ -2,6 +2,7 @@ options gen2
 options persistent_heap
 require dastest/testing_boost public
 require daslib/defer
+require daslib/fio
 require daslib/safe_addr
 require glfw/glfw_boost
 require gltf/gltf_pbr
@@ -9,6 +10,68 @@ require gltf/gltf_types
 require gltf/gltf_processed_gl
 require math
 require strings
+
+//! Rendering: the PBR renderer drawn into float render targets on
+//! a hidden GL window, the packed vertex attributes and skin upload
+//! contracts, and the surface controls. The render-target test
+//! asserts on heap_bytes_allocated, which needs persistent_heap.
+
+[test(description = "Packed geometry keeps the skin and tangent attributes for every skinned mesh instance, leaves them off a rigid one, and omits vertex color for ordinary materials.")]
+def test_packed_geometry_preserves_skinning_for_every_skinned_mesh_instance(t : T?){
+    var scene : GltfScene
+    scene.materials |> push(GltfMaterial(normalTex = 0))
+    scene.nodes <- [GltfNode(mesh = 1, skin = -1), GltfNode(mesh = 0, skin = 0)]
+    let skinned = gltf_packed_primitive_attributes(scene, 0, 0)
+    let rigid = gltf_packed_primitive_attributes(scene, 1, -1)
+    t |> success((skinned & VERTEX_SKIN) != 0)
+    t |> success((skinned & VERTEX_TANGENT) != 0)
+    t |> success((skinned & VERTEX_COLOR) == 0, "ordinary packed materials omit vertex color")
+    t |> success((rigid & VERTEX_SKIN) == 0)
+}
+
+[test(description = "The processed draw mask marks exactly the generic attributes a vertex layout lacks, and none for a complete layout.")]
+def test_processed_draw_mask_tracks_only_missing_generic_attributes(t : T?){
+    let minimal = gltf_processed_missing_attributes(VERTEX_UV)
+    t |> success((minimal & GLTF_GL_ATTR_UV0) == 0u)
+    t |> success((minimal & GLTF_GL_ATTR_TANGENT) != 0u)
+    t |> success((minimal & GLTF_GL_ATTR_JOINTS0) != 0u)
+    t |> success((minimal & GLTF_GL_ATTR_WEIGHTS0) != 0u)
+    let complete = gltf_processed_missing_attributes(VERTEX_UV | VERTEX_TANGENT | VERTEX_SKIN | VERTEX_UV1 | VERTEX_COLOR)
+    t |> equal(complete, 0u)
+}
+
+[test(description = "The GL upload, the processed GL layout and the PBR shader source still carry the compact skin contract: canonicalized influences, joints and weights as 4 bytes each, and the first weight rebuilt from the other three.")]
+def test_compact_skin_upload_and_shader_source_contracts(t : T?){
+    let root = get_das_root()
+    let gl_source = fread("{root}/modules/dasGLTF/gltf/gltf_gl.das")
+    let processed_gl_source = fread("{root}/modules/dasGLTF/gltf/gltf_processed_gl.das")
+    let shader_source = fread("{root}/modules/dasGLTF/gltf/gltf_pbr.das")
+    t |> success(find(gl_source, "let skin = canonicalize_skin_influences(v.joints0, v.weights0)") >= 0)
+    t |> success(find(processed_gl_source, "packed_attribute(6u, 4, GL_UNSIGNED_BYTE, false, p.stride, at)") >= 0)
+    t |> success(find(processed_gl_source, "packed_attribute(7u, 4, GL_UNSIGNED_BYTE, true, p.stride, at + 4); at += 8") >= 0)
+    t |> success(find(shader_source, "let weights = float4(1.0 - a_weights0.y - a_weights0.z - a_weights0.w, a_weights0.yzw)") >= 0)
+    t |> success(find(shader_source, "if (weights.y > 0.0)") >= 0)
+    t |> success(find(shader_source, "if (weights.z > 0.0)") >= 0)
+    t |> success(find(shader_source, "if (weights.w > 0.0)") >= 0)
+}
+
+[test(description = "A new PBR renderer starts with unit material scale and no wetness or reflection, and with no wetness the surface roughness is the material's roughness factor.")]
+def test_surface_controls_preserve_standard_defaults(t : T?){
+    let renderer = GltfPbrRenderer()
+    t |> equal(renderer.materialScale, float2(1.0)); t |> equal(renderer.materialWetness, 0.0); t |> equal(renderer.reflectionAmount, 0.0)
+    u_material_scale = float2(1.0); u_material_wetness = 0.0; u_roughness_factor = .5
+    t |> equal(gltf_surface_roughness(float4(1.0)), .5)
+}
+
+[test(description = "Full wetness pulls surface roughness to 0.16 only where the red mask is set, and a tiny material scale cannot push roughness below 0.04.")]
+def test_optional_wetness_respects_red_mask_and_roughness_limits(t : T?){
+    u_material_scale = float2(1.0); u_roughness_factor = .8; u_material_wetness = 1.0
+    t |> success(abs(gltf_surface_roughness(float4(1.0)) - .16) < .0001)
+    t |> equal(gltf_surface_roughness(float4(0.0, 1.0, 0.0, 1.0)), .8)
+    u_material_wetness = 0.0; u_material_scale = float2(.01, 1.0)
+    t |> equal(gltf_surface_roughness(float4(1.0)), .04)
+    u_material_scale = float2(1.0); u_roughness_factor = 1.0
+}
 
 def private render_target(internal : int; format, attachment : uint) : uint {
     var texture : uint
@@ -611,7 +674,7 @@ def private check_depth_program_switches(t : T?) {
     }
 }
 
-[test]
+[test(description = "On a GL 3.3 window the PBR renderer's surface, motion, light, shadow, opacity, silhouette and depth passes write the expected values into float render targets, its creation leaves the texture bindings as they were, and its deletion releases its light texture; skipped without such a context or float MRT.")]
 def gltf_surface_motion_and_shadow_fallback_render_on_gl(t : T?){
     if (glfwInit() == 0){t |> skip("GLFW display unavailable"); return }
     glfwInitOpenGL(3, 3)

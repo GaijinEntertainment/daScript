@@ -37,7 +37,7 @@ def load_corpus() : array<CorpusCase> {
     return <- out
 }
 
-[test]
+[test(description = "Every byte-level grammar case of the lifted llama.cpp corpus builds, accepts each of its sentences and refuses each of its non-sentences.")]
 def test_gbnf_corpus(t : T?) {
     t |> run("the lifted grammar corpus: every byte-level case builds, accepts its sentences, refuses its non-sentences") @(tt : T?) {
         var cases <- load_corpus()
@@ -61,7 +61,7 @@ def test_gbnf_corpus(t : T?) {
     }
 }
 
-[test]
+[test(description = "Every sample grammar file builds, and json.gbnf accepts JSON documents, refuses malformed ones, refuses a raw control byte inside a string and passes UTF-8 through as whole characters.")]
 def test_gbnf_sample_grammars(t : T?) {
     t |> run("the sample grammar files build, and json.gbnf judges JSON text") @(tt : T?) {
         let dir = path_join(get_this_module_dir(), "_gbnf")
@@ -98,7 +98,7 @@ def test_gbnf_sample_grammars(t : T?) {
     }
 }
 
-[test]
+[test(description = "The GBNF dot matches exactly one character, a multi-byte UTF-8 character or a newline included.")]
 def test_gbnf_any_character(t : T?) {
     t |> run("`.` is any character but a newline, one whole UTF-8 character at a time") @(t : T?) {
         var err = ""
@@ -112,7 +112,7 @@ def test_gbnf_any_character(t : T?) {
     }
 }
 
-[test]
+[test(description = "The GBNF reader spells every escape form as its bytes, continues a rule on a leading-bar line, starts a new rule at the next head, refuses a rule defined twice, and repeats a multi-byte literal as a group.")]
 def test_gbnf_forms(t : T?) {
     t |> run("the reader's forms the corpora only build: escapes, a continued rule, a repeated multi-byte literal, the next rule's head") @(t : T?) {
         var err = ""
@@ -132,7 +132,7 @@ def test_gbnf_forms(t : T?) {
     }
 }
 
-[test]
+[test(description = "The GBNF reader refuses an undefined rule, a missing root, an unterminated literal, every token reference, a repetition past the cap and malformed UTF-8 with a message naming the fault, and builds a repetition at the cap.")]
 def test_gbnf_reader_errors(t : T?) {
     t |> run("the reader names what is wrong") @(t : T?) {
         var err = ""

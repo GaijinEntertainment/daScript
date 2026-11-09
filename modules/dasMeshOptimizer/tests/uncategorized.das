@@ -1,7 +1,7 @@
 options gen2
 require dastest/testing_boost public
 require meshoptimizer
-[test]
+[test(description = "Remapping drops a duplicate vertex, cache and fetch optimization keep the mesh, the vertex and index codecs restore it exactly with triangle orientation kept, and malformed input, a bad stride or an out-of-range index is refused.")]
 def test_optimize_and_codec_roundtrip(t : T?){
     var vertices : array<uint8>; vertices |> resize(64)
     for (v in range(4)){for (b in range(16)){vertices[v * 16 + b] = uint8((v % 3) * 20 + b)}}

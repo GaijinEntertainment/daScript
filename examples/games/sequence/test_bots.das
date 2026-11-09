@@ -10,7 +10,7 @@ require bot_lookahead
 
 var game = GameState()
 
-[test]
+[test(description = "The random bot finds a legal move for either player on a fresh deal.")]
 def test_bot_random_returns_legal_move(t : T?) {
     t |> run("random bot always returns a legal move") @(t : T?) {
         make_game(game, 2, 42)
@@ -26,7 +26,7 @@ def test_bot_random_returns_legal_move(t : T?) {
     }
 }
 
-[test]
+[test(description = "The random bot's seed changes its choice: some seed picks a different cell than seed 1.")]
 def test_bot_random_different_seeds(t : T?) {
     t |> run("different seeds can produce different moves") @(t : T?) {
         make_game(game, 2, 42)
@@ -43,7 +43,7 @@ def test_bot_random_different_seeds(t : T?) {
     }
 }
 
-[test]
+[test(description = "Holding only a red jack, the random bot plays it on an empty cell; holding only a black jack, it plays a legal removal of an opponent chip.")]
 def test_bot_random_handles_jacks(t : T?) {
     t |> run("bot with only a red jack plays it on an open cell") @(t : T?) {
         make_game(game, 2, 1)
@@ -73,7 +73,7 @@ def test_bot_random_handles_jacks(t : T?) {
     }
 }
 
-[test]
+[test(description = "With an empty hand the random bot returns the no-move answer, card index -1.")]
 def test_bot_random_no_moves(t : T?) {
     t |> run("bot returns empty move when no legal moves exist") @(t : T?) {
         make_game(game, 2, 1)
@@ -84,7 +84,7 @@ def test_bot_random_no_moves(t : T?) {
     }
 }
 
-[test]
+[test(description = "Every move the random bot makes over 100 turns of one game is legal.")]
 def test_bot_random_many_moves_all_legal(t : T?) {
     t |> run("100 bot moves are all legal across different game states") @(t : T?) {
         make_game(game, 2, 99)
@@ -103,7 +103,7 @@ def test_bot_random_many_moves_all_legal(t : T?) {
     }
 }
 
-[test]
+[test(description = "Two random bots play a game for up to 500 moves without getting stuck before the first move.")]
 def test_bot_random_full_game(t : T?) {
     t |> run("two random bots can play a full game to completion") @(t : T?) {
         make_game(game, 2, 777)
@@ -126,7 +126,7 @@ def test_bot_random_full_game(t : T?) {
 
 // --- Greedy bot tests (via bot_utils extraction) ---
 
-[test]
+[test(description = "The greedy bot finds a legal move on a fresh deal.")]
 def test_bot_greedy_returns_legal_move(t : T?) {
     t |> run("greedy bot always returns a legal move") @(t : T?) {
         make_game(game, 2, 42)
@@ -136,7 +136,7 @@ def test_bot_greedy_returns_legal_move(t : T?) {
     }
 }
 
-[test]
+[test(description = "Two greedy bots play a game for up to 500 moves without getting stuck before the first move.")]
 def test_bot_greedy_full_game(t : T?) {
     t |> run("two greedy bots play a full game to completion") @(t : T?) {
         make_game(game, 2, 777)
@@ -158,7 +158,7 @@ def test_bot_greedy_full_game(t : T?) {
 
 // --- Lookahead bot tests ---
 
-[test]
+[test(description = "The lookahead bot finds a legal move for either player on a fresh deal.")]
 def test_bot_lookahead_returns_legal_move(t : T?) {
     t |> run("lookahead bot returns a legal move") @(t : T?) {
         make_game(game, 2, 42)
@@ -175,7 +175,7 @@ def test_bot_lookahead_returns_legal_move(t : T?) {
     }
 }
 
-[test]
+[test(description = "Lookahead at depth 1 picks the same cell as the greedy bot.")]
 def test_bot_lookahead_depth1_like_greedy(t : T?) {
     t |> run("depth=1 lookahead behaves like greedy") @(t : T?) {
         make_game(game, 2, 42)
@@ -187,7 +187,7 @@ def test_bot_lookahead_depth1_like_greedy(t : T?) {
     }
 }
 
-[test]
+[test(description = "With an empty hand the lookahead bot returns the no-move answer, card index -1.")]
 def test_bot_lookahead_no_moves(t : T?) {
     t |> run("lookahead bot returns empty move when no legal moves") @(t : T?) {
         make_game(game, 2, 1)
@@ -197,7 +197,7 @@ def test_bot_lookahead_no_moves(t : T?) {
     }
 }
 
-[test]
+[test(description = "Every move the lookahead bot makes over 100 turns of one game is legal.")]
 def test_bot_lookahead_many_moves_all_legal(t : T?) {
     t |> run("100 lookahead moves are all legal") @(t : T?) {
         make_game(game, 2, 99)
@@ -216,7 +216,7 @@ def test_bot_lookahead_many_moves_all_legal(t : T?) {
     }
 }
 
-[test]
+[test(description = "Two lookahead bots play a game for up to 500 moves without getting stuck before the first move.")]
 def test_bot_lookahead_full_game(t : T?) {
     t |> run("two lookahead bots play a full game to completion") @(t : T?) {
         make_game(game, 2, 777)
@@ -236,7 +236,7 @@ def test_bot_lookahead_full_game(t : T?) {
     }
 }
 
-[test]
+[test(description = "Lookahead at depth 3 still returns a legal move.")]
 def test_bot_lookahead_depth3(t : T?) {
     t |> run("depth=3 lookahead returns legal move without crash") @(t : T?) {
         make_game(game, 2, 42)
@@ -247,7 +247,7 @@ def test_bot_lookahead_depth3(t : T?) {
     }
 }
 
-[test]
+[test(description = "With jack_lookahead = 0, so the inner search skips jacks, the lookahead bot still returns a legal move.")]
 def test_bot_lookahead_jack_lookahead_zero(t : T?) {
     t |> run("jack_lookahead=0 skips jacks in inner sim without crash") @(t : T?) {
         make_game(game, 2, 42)

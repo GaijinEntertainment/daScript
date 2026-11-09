@@ -3,7 +3,7 @@ require dastest/testing_boost public
 require stbimage/texture_blocks
 require math
 require daslib/fio
-[test]
+[test(description = "A solid 7x5 texture compresses to BC1 with a complete three-level mip chain that decodes within 6 of the source, and the block cache hits on a second lookup, rebuilds a corrupt entry, and keys on color space and content.")]
 def test_block_mips_cache_and_decode(t : T?){
     var pixels : array<uint8>; pixels |> resize(7 * 5 * 4)
     for (i in range(35)){pixels[i * 4] = 80u8; pixels[i * 4 + 1] = 120u8; pixels[i * 4 + 2] = 180u8; pixels[i * 4 + 3] = 255u8}
@@ -32,7 +32,7 @@ def test_block_mips_cache_and_decode(t : T?){
     delete pixels; delete image; delete decoded; delete first; delete second; delete rebuilt
 }
 
-[test]
+[test(description = "compress_block_texture panics on a pixel buffer whose length does not match the dimensions.")]
 def test_block_texture_rejects_bad_pixel_length(t : T?){
     var pixels : array<uint8>; pixels |> resize(4 * 4 * 4 - 1)
     var rejected = false
@@ -45,7 +45,7 @@ def test_block_texture_rejects_bad_pixel_length(t : T?){
     t |> success(rejected, "compression rejects pixel buffers that do not match dimensions")
     delete pixels
 }
-[test]
+[test(description = "BC3 keeps an alpha gradient within 20 of the source with its fully transparent and fully opaque ends exact.")]
 def test_bc3_preserves_alpha(t : T?){
     var pixels : array<uint8>; pixels |> resize(64)
     for (i in range(16)){pixels[i * 4] = 180u8; pixels[i * 4 + 1] = 90u8; pixels[i * 4 + 2] = 30u8; pixels[i * 4 + 3] = uint8(i * 17)}
@@ -56,7 +56,7 @@ def test_bc3_preserves_alpha(t : T?){
     delete pixels; delete image; delete decoded
 }
 
-[test]
+[test(description = "BC4 keeps the red channel and BC5 keeps red and green within 20 of the source.")]
 def test_bc4_and_bc5_channels(t : T?){
     var pixels : array<uint8>; pixels |> resize(64)
     for (i in range(16)){pixels[i * 4] = uint8(i * 17); pixels[i * 4 + 1] = uint8(255 - i * 17); pixels[i * 4 + 3] = 255u8}

@@ -9,7 +9,7 @@ require opengl/opengl_cache
 require daslib/fio
 require math
 
-[test]
+[test(description = "In a strict core-profile OpenGL context, the fixed-function cleanup and a font draw with its cleanup leave no GL error while VAO zero is bound.")]
 def test_core_profile_cleanup(t : T?) {
     if (glfwInit() == 0) { t |> skip("No window system available for the core-profile check"); return }
     glfwInitOpenGL(3, 3)

@@ -14,7 +14,7 @@ bin/Release/daslang.exe examples/games/boulder-dash/main.das
 # Headless smoke
 bin/Release/daslang.exe examples/games/boulder-dash/main.das -- --max-frames 3
 
-# Headless dastest suites (no GLFW) - one invocation per test_*.das in this folder
+# Headless dastest suites (no GLFW) - one invocation per suite file in this folder
 bin/Release/daslang.exe dastest/dastest.das -- --test examples/games/boulder-dash/test_cave.das
 ```
 
@@ -38,7 +38,7 @@ bin/Release/daslang.exe dastest/dastest.das -- --test examples/games/boulder-das
 - `cave_gen.das` - seeded generator
 - `sfx_gen.das` - pure PCM synthesis (no playback)
 - `main.das` - GLFW/OpenGL, audio playback, music, HUD, live commands
-- `test_*.das` - headless dastest
+- `test_cave.das`, `test_generate.das`, `uncategorized.das` - headless dastest suites
 
 ASCII legend lives next to `TILE_CH` in `cave.das`.
 

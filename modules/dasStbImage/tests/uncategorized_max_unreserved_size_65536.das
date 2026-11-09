@@ -3,7 +3,7 @@ options max_unreserved_size = 65536
 require dastest/testing_boost public
 require stbimage/texture_blocks
 
-[test]
+[test(description = "Compressing a 256x512 texture to BC1 and BC3 and decoding its top mip reserves every output buffer before growing it, so no resize past 64 KiB goes unreserved.")]
 def test_block_textures_reserve_large_outputs(t : T?){
     let width = 256; let height = 512
     var pixels : array<uint8>; pixels |> reserve(width * height * 4); pixels |> resize(width * height * 4)

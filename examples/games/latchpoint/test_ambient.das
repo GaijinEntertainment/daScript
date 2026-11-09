@@ -6,6 +6,11 @@ require lp_chatter
 require lp_dialogue
 require lp_audio
 require lp_lighting
+require lp_render
+require lp_runtime
+require lp_geology
+
+//! Ambient life: robot activity, chatter, sound, and scenery.
 
 def reset_ambient_test() {
     delete world
@@ -29,7 +34,7 @@ def reset_ambient_test() {
     queued_voice |> clear()
 }
 
-[test]
+[test(description = "The drill sparks only while spinning at full extension against the plate, stays clear of the track, and stops while its robot listens; Patch's work lamp follows its schedule and his listening without ever turning his eyes off.")]
 def test_robot_activity(suite : T?) {
     suite |> run("sparks only occur with a spinning drill fully touching the plate") @(t : T?) {
         reset_ambient_test()
@@ -65,7 +70,7 @@ def test_robot_activity(suite : T?) {
     }
 }
 
-[test]
+[test(description = "Background chatter cannot run a tool call or change the game, is dropped when the player is busy, takes a turn, changes the world, walks away, disables it or lets it expire, and queues its audio without replacing the player's conversation.")]
 def test_chatter_guards(suite : T?) {
     suite |> run("ambient tool calls are rejected before synthesis and cannot change gameplay") @(t : T?) {
         reset_ambient_test()
@@ -116,5 +121,86 @@ def test_chatter_guards(suite : T?) {
         t |> equal(reply_text, "The player's conversation.")
         t |> equal(conversation_resident, 0)
         queued_voice |> clear()
+    }
+}
+
+[test(description = "Music ducking combines capture and speech into one target, mechanical loops stay bounded with silent seams, the robot indicator is brighter listening than thinking and follows the speech level, robot lamps sit at their animation attachment, and background rocks stay outside the playable yard.")]
+def test_feedback_and_sound(suite : T?) {
+    suite |> run("one music target combines capture and speech ducking") @(t : T?) {
+        t |> equal(music_duck_factor(false, false), 1.0)
+        t |> equal(music_duck_factor(false, true), 0.27)
+        t |> equal(music_duck_factor(true, false), 0.1)
+        t |> equal(music_duck_factor(true, true), 0.1, "microphone and ASR remain intelligible over robot speech")
+    }
+    suite |> run("generated mechanical loops have bounded samples and quiet seams") @(t : T?) {
+        let samples <- mechanical_pcm(0.5, 60.0, 0.15, 0.5, true)
+        t |> equal(length(samples), EFFECT_RATE / 2)
+        t |> equal(samples[0], 0.0)
+        t |> equal(samples[length(samples) - 1], 0.0)
+        var energy = 0.0
+        for (value in samples) { t |> success(abs(value) < 0.6); energy += abs(value) }
+        t |> success(energy > 1.0)
+    }
+    suite |> run("listening is brighter than thinking and speech follows the envelope") @(t : T?) {
+        robot_phase[1] = RobotPhase.listening
+        let listening = robot_indicator(1, 0.0)
+        robot_phase[1] = RobotPhase.thinking
+        t |> success(listening > robot_indicator(1, 0.0))
+        robot_phase[1] = RobotPhase.speaking
+        robot_voice_level[1] = 0.0
+        let quiet = robot_indicator(1, 0.0)
+        robot_voice_level[1] = 1.0
+        t |> success(robot_indicator(1, 0.0) > quiet)
+    }
+    suite |> run("robot lamps share the same attachment as animation and voice") @(t : T?) {
+        update_yard_lights(3.0)
+        for (resident in range(3)) {
+            let attachment = robot_attachment(resident, 3.0)
+            t |> success(length(lp_light_pos[resident].xyz - attachment.position) < 0.0001)
+            t |> success(length(lp_light_direction[resident].xyz - attachment.direction) < 0.0001)
+        }
+    }
+    suite |> run("background rock geometry stays outside the playable yard") @(t : T?) {
+        init_barriers()
+        update_yard_lights(0.0)
+        build_yard()
+        for (item in scene_parts) {
+            if (item.shape != Shape.rock && item.shape != Shape.rock_alternate) { continue }
+            let extent = length(item.size.xy)
+            t |> success(abs(item.position.x) - extent > 13.6 || item.position.y - extent > 14.6 || item.position.y + extent < -12.6)
+        }
+    }
+}
+
+[test(description = "Robot voice processing colors each resident's voice slightly, stays within range and leaves the samples untouched when switched off, and outcrop meshes stay in their unit box with unit normals.")]
+def test_finishing_materials(suite : T?) {
+    suite |> run("voice coloration is subtle, bounded and bypassable") @(t : T?) {
+        let original <- mechanical_pcm(0.2, 210.0, 0.3, 0.2)
+        for (resident in range(3)) {
+            var inscope samples := original
+            voice_processing = true
+            process_robot_voice(samples, EFFECT_RATE, 1, resident)
+            var error = 0.0
+            for (sample, dry in samples, original) {
+                t |> success(abs(sample) <= 1.0)
+                error += abs(sample - dry)
+            }
+            t |> success(error > 0.0 && error / float(length(samples)) < 0.03)
+            samples := original
+            voice_processing = false
+            process_robot_voice(samples, EFFECT_RATE, 1, resident)
+            t |> equal(samples, original)
+        }
+        voice_processing = true
+    }
+    suite |> run("outcrop variants have bounded vertices and flat valid faces") @(t : T?) {
+        for (seed in fixed_array(1.0, 3.7)) {
+            let mesh <- fractured_outcrop(seed)
+            t |> success(length(mesh.indices) > 100)
+            for (vertex in mesh.vertices) {
+                t |> success(abs(vertex.xyz.x) <= 1.0 && abs(vertex.xyz.y) <= 1.0 && abs(vertex.xyz.z) <= 1.0)
+                t |> success(abs(length(vertex.normal) - 1.0) < 0.0001)
+            }
+        }
     }
 }

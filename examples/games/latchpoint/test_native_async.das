@@ -8,7 +8,7 @@ require main
 require lp_microphone
 require lp_chatter
 
-[test]
+[test(description = "A response that arrives after its request was cancelled is drained without applying the action it proposes.")]
 def test_cancelled_response(suite : T?) {
     suite |> run("cancelled response is drained without applying its proposed action") @(t : T?) {
         var output = unsafe(stream_create())
@@ -29,7 +29,7 @@ def test_cancelled_response(suite : T?) {
     }
 }
 
-[test]
+[test(description = "A silent recording is rejected before recognition starts, and retrying a typed message while the old request still drains keeps the typed text.")]
 def test_busy_input(suite : T?) {
     suite |> run("silent capture is rejected without starting recognition") @(t : T?) {
         t |> success(!recording_has_signal([0.0, 0.0, 0.0]))
@@ -54,7 +54,7 @@ def test_busy_input(suite : T?) {
     }
 }
 
-[test]
+[test(description = "A recognition result of only whitespace ends the turn as failed without opening the text editor.")]
 def test_empty_recognition(t : T?) {
     var output = unsafe(stream_create())
     var done = job_status_create()
@@ -72,7 +72,7 @@ def test_empty_recognition(t : T?) {
     t |> equal(conversation_stage, "failed")
 }
 
-[test]
+[test(description = "Shutdown releases a finished inference job and clears its handles, and a minimized framebuffer is not drawn while a visible one is.")]
 def test_finished_job_can_be_released_at_shutdown(t : T?) {
     var output = unsafe(stream_create())
     var done = job_status_create()
@@ -86,7 +86,7 @@ def test_finished_job_can_be_released_at_shutdown(t : T?) {
     t |> success(framebuffer_drawable(1280, 800, 2560, 1600), "a visible framebuffer can render")
 }
 
-[test]
+[test(description = "Shutdown hands a still-running inference job to the reaper and returns at once instead of waiting for the request to time out.")]
 def test_pending_job_is_handed_to_nonblocking_reaper(t : T?) {
     var output = unsafe(stream_create())
     var done = job_status_create()
@@ -103,7 +103,7 @@ def test_pending_job_is_handed_to_nonblocking_reaper(t : T?) {
     done |> notify_and_release()
 }
 
-[test]
+[test(description = "A chatter reply finished on a minimized frame clears the chatter stage without starting speech synthesis.")]
 def test_minimized_frame_drains_without_launching_ambient_followup(t : T?) {
     chatter_stage = "generating"
     chatter_topic = "test"

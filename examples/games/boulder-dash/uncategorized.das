@@ -28,7 +28,7 @@ def private legacy_sweep(freq_start, freq_end : float; duration, volume : float)
     return <- samples
 }
 
-[test]
+[test(description = "The pitch heard in a synthesized sweep, counted by zero crossings, matches the frequency its endpoints name, and a constant tone stays at its named pitch.")]
 def test_sweep_endpoints_are_what_is_heard(t : T?) {
     t |> run("the heard frequency across the sweep matches the named endpoints") @(tt : T?) {
         let f0 = 400.0
@@ -58,7 +58,7 @@ def test_sweep_endpoints_are_what_is_heard(t : T?) {
     }
 }
 
-[test]
+[test(description = "The legacy sweep formula over (fs, fe) and the corrected gen_sine_sweep over (fs, 2*fe - fs) give the same samples, so remapping the effect endpoints left every effect sounding as before.")]
 def test_bank_remap_preserves_audio(t : T?) {
     t |> run("legacy (fs, fe) equals corrected (fs, 2*fe - fs) sample for sample") @(tt : T?) {
         var cases <- [(180.0, 90.0, 0.05, 0.2), (980.0, 1560.0, 0.09, 0.28), (440.0, 80.0, 0.5, 0.3)]

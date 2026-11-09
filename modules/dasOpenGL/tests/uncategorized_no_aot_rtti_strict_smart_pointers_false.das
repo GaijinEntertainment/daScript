@@ -55,7 +55,7 @@ def private args_and_calls_of(func : FunctionPtr) : string {
     return "{join(args, " ")} -> {join(calls, "; ")}"
 }
 
-[test]
+[test(description = "[vertex_buffer] emits a pointer-offset binder and a named VAO binder whose GL calls carry each field's component count, GL_FLOAT, the stride and the field offsets, and each call shape instantiates its own overload.")]
 def test_vertex_buffer_emits_both_binders(t : T?) {
     compile_fixture("_vertex_buffer_fixture.das") $(ok, prog, issues) {
         if (!ok) {
@@ -93,7 +93,7 @@ def test_vertex_buffer_emits_both_binders(t : T?) {
     }
 }
 
-[test]
+[test(description = "[vertex_buffer] refuses to compile a struct with an int field or a double field, or one annotated twice, naming the cause.")]
 def test_vertex_buffer_rejects_unsupported_fields(t : T?) {
     compile_fixture("_vertex_buffer_fixture_reject_int.das") $(ok, _prog, issues) {
         t |> success(!ok, "an int field is rejected")

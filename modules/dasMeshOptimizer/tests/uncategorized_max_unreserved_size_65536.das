@@ -3,7 +3,7 @@ options max_unreserved_size = 65536
 require dastest/testing_boost public
 require meshoptimizer
 
-[test]
+[test(description = "Remapping, vertex and index encoding and decoding of a 20000-vertex mesh reserve every output buffer before growing it, so no resize past 64 KiB goes unreserved, and both codecs round-trip exactly.")]
 def test_meshoptimizer_reserves_large_outputs(t : T?){
     let vertex_count = 20000
     var vertices : array<uint8>; vertices |> reserve(vertex_count * 4); vertices |> resize(vertex_count * 4)

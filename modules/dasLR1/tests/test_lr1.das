@@ -43,7 +43,7 @@ def private arith() : Grammar {
     return <- build_grammar(gb, expr)
 }
 
-[test]
+[test(description = "A left-recursive sum grammar accepts its sentences and refuses the rest, refuses a second operator at once by the viable prefix, reports the next-byte set, and leaves the state unmoved after a refused probe.")]
 def test_lr1_arith(t : T?) {
     t |> run("a left-recursive sum of numbers: sentences, refusals, the viable prefix") @(t : T?) {
         var g <- arith()
@@ -68,7 +68,7 @@ def test_lr1_arith(t : T?) {
     }
 }
 
-[test]
+[test(description = "A nested-list grammar with an epsilon production accepts the empty list and deep nesting, refuses a trailing comma or an unclosed list, and offers only a comma or the close after an item.")]
 def test_lr1_epsilon_and_nesting(t : T?) {
     t |> run("optional pieces and nesting: list ::= '[' items? ']' ; items ::= item | items ',' item ; item ::= 'a' | list") @(t : T?) {
         var gb : GrammarBuilder
@@ -110,7 +110,7 @@ def test_lr1_epsilon_and_nesting(t : T?) {
     }
 }
 
-[test]
+[test(description = "A reduce/reduce-ambiguous grammar builds with its conflict counted and named and still accepts exactly its language, a reachable unproductive rule fails the build by name, an unreachable one is ignored, and lr_accepts answers without moving the state.")]
 def test_lr1_verdicts(t : T?) {
     t |> run("an ambiguous grammar reports its conflict and still accepts its language; an ill-formed one accepts nothing") @(t : T?) {
         // s ::= a | b ; a ::= 'x' ; b ::= 'x'  - a reduce/reduce conflict
@@ -165,7 +165,7 @@ def test_lr1_verdicts(t : T?) {
     }
 }
 
-[test]
+[test(description = "When the next byte would push the stack set past LR_MAX_STACKS the acceptor refuses it and keeps the set where it was, never dropping a live stack, while a sentence inside the cap completes.")]
 def test_lr1_stack_cap(t : T?) {
     t |> run("a grammar whose alternatives multiply past LR_MAX_STACKS has its byte refused, never a stack dropped") @(t : T?) {
         // s ::= a s | b s | '!' ; a ::= 'x' ; b ::= 'x'  - right recursion keeps every reading of every x on the
@@ -206,7 +206,7 @@ def test_lr1_stack_cap(t : T?) {
     }
 }
 
-[test]
+[test(description = "Overlapping byte sets partition into three byte classes, and a set spanning two classes still matches through either of them.")]
 def test_lr1_byte_classes(t : T?) {
     t |> run("overlapping byte sets partition into classes; a set spanning classes becomes alternatives") @(t : T?) {
         // root ::= hexdigit digit  - [0-9a-f] then [0-9]: the digits are one class, a-f another
