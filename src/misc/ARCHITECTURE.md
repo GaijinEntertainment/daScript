@@ -202,7 +202,8 @@ The recorder is armed by `DAS_DEPFILE` or by `-MD -MF`, and unarmed it costs two
 loads per file. The environment form is the one a build edge uses, and the reason is reach: a
 dastest worker subprocess, a `daslang -compile-only` a gate spawns per file, and a daslang-built
 `.exe` all inherit a variable and none of them would see a flag on the parent's command line.
-That is also why the recorder lives here, in the runtime library, rather than in the daslang CLI.
+That is also why the recorder lives in the compiler library, beside the `FsFileAccess` that reads
+the files, rather than in the daslang CLI.
 
 ## 10. Under AddressSanitizer the das heap tells ASan what it hands out
 

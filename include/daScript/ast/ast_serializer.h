@@ -116,7 +116,7 @@ namespace das {
         bool operator != ( const SerializeNodeId & o ) const noexcept { return index != o.index; }
     };
 
-    struct DAS_API AstSerializer {
+    struct DAS_CC_API AstSerializer {
         ~AstSerializer ();
         AstSerializer ( SerializationStorage * storage, bool isWriting );
 
@@ -341,7 +341,6 @@ namespace das {
         AstSerializer & operator << ( Module * & module );
         AstSerializer & operator << ( FileInfo * & info );
         AstSerializer & operator << ( FileInfoPtr & ptr );
-        AstSerializer & operator << ( FileAccessPtr & ptr );
         AstSerializer & operator << ( StructurePtr & struct_ );
         AstSerializer & operator << ( EnumerationPtr & enum_type );
         AstSerializer & operator << ( Enumeration::EnumEntry & entry );
@@ -362,7 +361,7 @@ namespace das {
         AstSerializer & serializeModule ( Module & module, bool already_exists );
 
         static constexpr uint32_t getVersion () {
-            return 269;   // 269: a function record carries no semantic hash
+            return 270;   // 270: a file record carries only its name and tab size
         }
 
         void serializeProgram ( ProgramPtr program, ModuleGroup & libGroup ) noexcept;
@@ -518,7 +517,7 @@ namespace das {
     #define DAS_SER_PROFILE(ser, name)
 #endif
 
-    struct DAS_API ModuleFileCache {
+    struct DAS_CC_API ModuleFileCache {
         enum class ReadVerdict {
             none,       // no reader installed, or nothing was ever read (e.g. debugger disabled the rail)
             clean,      // every module came from the cache
@@ -559,38 +558,38 @@ namespace das {
     };
 
     // Create a writing serializer.
-    AstSerializerState * rtti_create_ast_serializer ();
+    AstSerializerState * ast_create_serializer ();
 
     // Create a reading serializer from a blob.
-    AstSerializerState * rtti_create_ast_deserializer ( const TArray<uint8_t> & data );
+    AstSerializerState * ast_create_deserializer ( const TArray<uint8_t> & data );
 
     // Delete a serializer state.
-    void rtti_delete_ast_serializer ( AstSerializerState * state );
+    void ast_delete_serializer ( AstSerializerState * state );
 
     // Serialize one program (writing mode). Returns false on failure.
-    bool rtti_ast_serializer_serialize_program (
+    bool ast_serializer_serialize_program (
             AstSerializerState * state,
             const smart_ptr<Program> & program );
 
     // Deserialize one program (reading mode).
-    void rtti_ast_serializer_deserialize_program (
+    void ast_serializer_deserialize_program (
             AstSerializerState * state, ModuleGroup * libGroup,
             const TBlock<void,bool,smart_ptr<Program>,const string> & block,
             Context * context, LineInfoArg * at );
     // the same, with the access the restored program's late requires walk through
-    void rtti_ast_serializer_deserialize_program_ex (
+    void ast_serializer_deserialize_program_ex (
             AstSerializerState * state, smart_ptr<FileAccess> access, ModuleGroup * libGroup,
             const TBlock<void,bool,smart_ptr<Program>,const string> & block,
             Context * context, LineInfoArg * at );
 
     // Get serialized data from a writing serializer.
-    void rtti_ast_serializer_get_data (
+    void ast_serializer_get_data (
             AstSerializerState * state,
             const TBlock<void,TTemporary<TArray<uint8_t> const>> & block,
             Context * context, LineInfoArg * at );
 
     //! microseconds this state's reads spent inside finalizeModule, over every program it read
-    int64_t rtti_ast_serializer_finalize_usec ( AstSerializerState * state );
+    int64_t ast_serializer_finalize_usec ( AstSerializerState * state );
     //! microseconds this state's reads spent in the setup Program::serialize runs after the stream
-    int64_t rtti_ast_serializer_setup_usec ( AstSerializerState * state );
+    int64_t ast_serializer_setup_usec ( AstSerializerState * state );
 }

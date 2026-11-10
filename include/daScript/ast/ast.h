@@ -8,6 +8,7 @@
 #include "daScript/misc/rangetype.h"
 #include "daScript/simulate/data_walker.h"
 #include "daScript/simulate/debug_info.h"
+#include "daScript/ast/ast_file_access.h"
 #include "daScript/simulate/code_of_policies.h"
 #include "daScript/ast/ast_serialize_macro.h"
 #include "daScript/ast/compilation_errors.h"
@@ -72,8 +73,8 @@ namespace das
     typedef AnnotationDeclaration * AnnotationDeclarationPtr;
 
     enum class LogicAnnotationOp { And, Or, Xor, Not };
-    DAS_API AnnotationPtr newLogicAnnotation ( LogicAnnotationOp op );
-    DAS_API AnnotationPtr newLogicAnnotation ( LogicAnnotationOp op,
+    DAS_CC_API AnnotationPtr newLogicAnnotation ( LogicAnnotationOp op );
+    DAS_CC_API AnnotationPtr newLogicAnnotation ( LogicAnnotationOp op,
         const AnnotationDeclarationPtr & arg0, const AnnotationDeclarationPtr & arg1 );
 
 

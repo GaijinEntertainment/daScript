@@ -974,7 +974,6 @@ src/ast/ast_match.cpp
 src/ast/ast_module.cpp
 src/ast/ast_print.cpp
 src/ast/ast_program.cpp
-src/ast/ast_allocate_stack.cpp
 src/ast/ast_gc_collect.cpp
 src/ast/ast_annotations.cpp
 src/ast/ast_export.cpp
@@ -985,6 +984,7 @@ include/daScript/ast/ast_typedecl.h
 include/daScript/ast/ast_typefactory.h
 include/daScript/ast/ast.h
 include/daScript/ast/ast_expressions.h
+include/daScript/ast/ast_file_access.h
 include/daScript/ast/ast_visitor.h
 include/daScript/ast/ast_const_visitor.h
 include/daScript/ast/ast_interop.h
@@ -1007,7 +1007,6 @@ src/builtin/module_builtin_vector_ctor.cpp
 src/builtin/module_builtin_array.cpp
 src/builtin/module_builtin_math.cpp
 src/builtin/module_builtin_string.cpp
-src/builtin/module_builtin_ast_serialize.cpp
 src/builtin/module_builtin_rtti.h
 src/builtin/module_builtin_rtti.cpp
 src/builtin/module_builtin_ast.h
@@ -1019,7 +1018,6 @@ src/builtin/module_builtin_fio.cpp
 src/builtin/module_builtin_dasbind.cpp
 src/builtin/module_builtin_debugger.cpp
 src/builtin/module_builtin_jobque.cpp
-src/builtin/module_file_access.cpp
 )
 list(SORT BUILTIN_SRC)
 SOURCE_GROUP_FILES("module builtin" BUILTIN_SRC)
@@ -1053,7 +1051,6 @@ include/daScript/misc/uric.h
 include/daScript/misc/env_cfg.h
 include/daScript/misc/dep_recorder.h
 src/misc/env_cfg.cpp
-src/misc/dep_recorder.cpp
 src/misc/das_common.cpp
 src/misc/gc_node.cpp
 src/misc/globals.cpp
@@ -1113,6 +1110,7 @@ include/daScript/misc/crash_handler.h
 include/daScript/misc/network.h
 src/simulate/hash.cpp
 src/simulate/debug_info.cpp
+src/simulate/debug_info_fs.cpp
 src/simulate/runtime_string.cpp
 src/simulate/escape_string.cpp
 src/simulate/runtime_iterator.cpp
@@ -1349,6 +1347,11 @@ SET(LIBDASCRIPT_COMPILER_SRC
     src/simulate/fs_file_info.cpp
     src/ast/ast_visitor.cpp
     src/ast/ast_same.cpp
+    src/ast/ast_file_access.cpp
+    src/ast/ast_logic_annotation.cpp
+    src/builtin/module_builtin_ast_serialize.cpp
+    src/ast/ast_allocate_stack.cpp
+    src/misc/dep_recorder.cpp
     src/misc/network.cpp
     src/builtin/module_builtin_network.cpp
 )
@@ -1761,6 +1764,7 @@ endif()
 # This list should be significantly reduced, most of the files, except aot related should be private.
 SET(DAS_RELEASE_AST_INCLUDE
     include/daScript/ast/ast_expressions.h
+    include/daScript/ast/ast_file_access.h
     include/daScript/ast/ast.h
     include/daScript/ast/ast_handle.h
     include/daScript/ast/ast_interop.h

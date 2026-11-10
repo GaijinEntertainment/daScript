@@ -116,7 +116,6 @@ of the call is the only diagnosis anyone gets. Each of these stops the program i
 - `TypeAnnotation::walk` - walking a handled (C++-bound) type needs a registration only the
   compiler makes.
 - `makeAotJitNode` - a context generated with JIT nodes was generated for a different runtime.
-- `FileInfo::serialize` - nano carries no serializer.
 - `getSemanticHash` - nano carries no semantic hashes.
 
 `Context::setup` checks the `CodeOfPolicies` ABI stamp and stops on a mismatch. On nano both
