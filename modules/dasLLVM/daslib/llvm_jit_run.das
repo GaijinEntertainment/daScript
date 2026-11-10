@@ -37,7 +37,7 @@ var LINK_WHOLE_LIB = false // when true, standalone exe links against the whole 
 
 // Read by tests-cpp/small/test_jit_emitter_pin.cpp: FNV-1a64 of the emitter sources
 // (normalized to LF; file list in the test)
-let LLVM_JIT_EMITTER_HASH : uint64 = 0x6ad7ec5350ecda44ul
+let LLVM_JIT_EMITTER_HASH : uint64 = 0xcb06706700898bc0ul
 
 [arch(at = "../ARCHITECTURE_FAST_MATH.md#never-fast-math")]
 def private apply_fast_math_to_module(m : LLVMOpaqueModule?) {
@@ -136,7 +136,8 @@ def private apply_strict_aliasing_to_module(m : LLVMOpaqueModule?) {
 // reopen the freshly written DLL for the install phase + GC stale artifacts - the ONE tail both
 // the monolith and split arms share (the keep-mask decides which cached artifacts survive)
 [macro_function]
-def private reopen_and_gc_dll(var dll : DLLHandle?&; output_path : string; funcs : array<FunctionPtr>;
+def private reopen_and_gc_dll(var dll : DLLHandle?&; output_path : string;
+                              funcs : array<FunctionPtr>;
                               disabled : array<FunctionPtr>; var uids : UidNodes?; dll_hash_basename : string;
                               keep_objs : array<string>; mine : table<string>) {
     dll.reset()
@@ -461,7 +462,8 @@ def private run_split_codegen(prog : Program?; ctx : Context?; funcs : array<Fun
         let ptag = empty(pname) ? "main" : pname
         for (fun in buckets[pname]) {
             if (dump_hashes) {
-                to_log(LOG_INFO, "HASHDUMP {ptag} {get_mangled_name(fun)} {get_function_aot_hash(fun)}\n")
+                let fun_hash = get_function_aot_hash(fun)
+                to_log(LOG_INFO, "HASHDUMP {ptag} {get_mangled_name(fun)} {fun_hash}\n")
             }
             chain = (chain ^ hash(get_mangled_name(fun))) * JIT_FNV_PRIME   // a rename must re-key: the symbol lives in the .o
             chain = (chain ^ get_function_aot_hash(fun)) * JIT_FNV_PRIME
@@ -900,7 +902,8 @@ def public run_jit(prog : Program?; var ctx : Context?; cli_opts : JitCliOptions
                 // preserves exactly the current link set. The LTO probe's artifact set is one-off:
                 // skip its GC so a probe run cannot evict the normal cache generation.
                 let lto_probe = g_env_jit.jit_probe_lto
-                reopen_and_gc_dll(g_dynamic_lib_handle, output_path, funcs, disabled, uids, lto_probe ? "" : dll_hash_basename, sres.objs, g_published_names)
+                reopen_and_gc_dll(g_dynamic_lib_handle, output_path, funcs, disabled, uids,
+                    lto_probe ? "" : dll_hash_basename, sres.objs, g_published_names)
             }
         } elif (recompile_prog) {
             jit_has_externals = irgen_functions(ctx, uids, attrs, funcs, jit_flags, jit_mode, prog)
@@ -1001,7 +1004,8 @@ def public run_jit(prog : Program?; var ctx : Context?; cli_opts : JitCliOptions
                 emit_failed ||= !write_artifact(g_mod, output_path, JitArtifact.jit_dll, path_to_shared_lib, path_to_linker,
                     linker_string, LINK_WHOLE_LIB, true, debug_info, log_jit_time, opt_level |> uint)
                 let no_keep_objs : array<string>   // monolith artifacts all carry the dll-hash prefix
-                reopen_and_gc_dll(g_dynamic_lib_handle, output_path, funcs, disabled, uids, dll_hash_basename, no_keep_objs, g_published_names)
+                reopen_and_gc_dll(g_dynamic_lib_handle, output_path, funcs, disabled, uids,
+                    dll_hash_basename, no_keep_objs, g_published_names)
             }
         }
         t_emit = get_time_usec(phase_tm)

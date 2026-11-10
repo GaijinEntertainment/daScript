@@ -460,7 +460,8 @@ def genStandaloneSrc(var program : ProgramPtr;
                 }
             }
 
-            initFunctions = addFunctionInfo(collectProgramUsedFunctions(program, true, false), gen.helper);
+            let usedFunctions <- collectProgramUsedFunctions(program, true, false)
+            initFunctions = addFunctionInfo(usedFunctions, gen.helper);
             let globalInfos <- makeGlobalVarInfos(program, gen.helper, globals)
             type_defs += gen.declarations;
             gen.declarations = "";
@@ -546,7 +547,8 @@ def private checkAllUsedFunctionsCanAot(program : ProgramPtr) {
     });
 }
 
-def private prepareProgramForEmission(var program : ProgramPtr; context : Context) : BlockVariableCollector? {
+def private prepareProgramForEmission(var program : ProgramPtr;
+                                      context : Context) : BlockVariableCollector? {
     var noAotMarker = new NoAotMarker();
     var unmarked <- foreignUsedFunctions(program, true)
     make_visitor(*noAotMarker) $(adapter_no_aot) {

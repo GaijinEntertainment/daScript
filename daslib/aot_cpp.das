@@ -1270,7 +1270,9 @@ class public BlockVariableCollector : AstVisitor {
     tempCounter : uint64 = uint64(0)
 };
 
-def public describeCppFunc(fn : FunctionPtr; var collector : BlockVariableCollector?; cross_platform : bool; needName : bool = true; needInline : bool = true) {
+def public describeCppFunc(fn : FunctionPtr; var collector : BlockVariableCollector?;
+                           cross_platform : bool; needName : bool = true;
+                           needInline : bool = true) {
     //! Returns the C++ function signature string for an AOT-compiled function.
     return build_string() $(writer) {
         if (needInline) {
@@ -1511,7 +1513,8 @@ class public CppAot : AstVisitor {
         flow.ret_ptr = fn.result.flags.ref;
         flow.ret_slot = fn.result.isVoid ? "" : describeCppType(fn.result, DescribeConfig(skip_const = true,
             skip_ref = true, cross_platform = cross_platform)) + (flow.ret_ptr ? " *" : "");
-        if (!empty(aot_filter_function) && (fn.name == aot_filter_function || aotFuncName(fn) == aot_filter_function)) {
+        let filtered = fn.name == aot_filter_function || aotFuncName(fn) == aot_filter_function
+        if (!empty(aot_filter_function) && filtered) {
             write(*ss, "\n/*<<AOT_FUNC_BEGIN>>*/");
         }
         if (fastMath) {
@@ -1563,7 +1566,8 @@ class public CppAot : AstVisitor {
         if (fastMath) {
             write(*ss, "DAS_FAST_MATH_POP\n");
         }
-        if (!empty(aot_filter_function) && (fn.name == aot_filter_function || aotFuncName(fn) == aot_filter_function)) {
+        let filtered = fn.name == aot_filter_function || aotFuncName(fn) == aot_filter_function
+        if (!empty(aot_filter_function) && filtered) {
             write(*ss, "/*<<AOT_FUNC_END>>*/\n");
         }
         return fn;
@@ -4305,7 +4309,8 @@ def registerAotCpp(var logs : StringBuilderWriter?; program : ProgramPtr; var co
             let is_cmres = fn.flags.copyOnReturn || fn.flags.moveOnReturn ? "true" : "false";
             let fn_name = aotFuncName(fn);
             write(*logs, "    // {get_aot_hash_comment(fn)}\n");
-            write(*logs, "    \{ {fn.aotHash}, {is_cmres}, (void*)&{fn_name}, &__wrap_{fn_name} \},\n");
+            let row = "{fn.aotHash}, {is_cmres}, (void*)&{fn_name}, &__wrap_{fn_name}"
+            write(*logs, "    \{ {row} \},\n");
         }
         write(*logs, "};\n");
         write(*logs, "#ifdef _MSC_VER\n#pragma optimize(\"\", on)\n#endif\n");
@@ -4330,7 +4335,8 @@ def registerAotCpp(var logs : StringBuilderWriter?; program : ProgramPtr; var co
 }
 
 def public setAotHashes(program : ProgramPtr; ctx : Context) {
-    //! Computes semantic and AOT hashes for all used functions in the program.
+    //! Computes semantic and AOT hashes for all used functions in
+    //! the program.
     // compute semantic hash for each used function
     var fni = 0;
     program.get_ptr() |> for_each_module_no_order($(mod) {
@@ -4737,7 +4743,8 @@ let AOT_FUNC_BEGIN = "/*<<AOT_FUNC_BEGIN>>*/"
 let AOT_FUNC_END = "/*<<AOT_FUNC_END>>*/"
 
 [export]
-def public run_aot_function(prog : Program?; var pctx : Context?; cop : CodeOfPolicies; func_name : string) : string {
+def public run_aot_function(prog : Program?; var pctx : Context?; cop : CodeOfPolicies;
+                            func_name : string) : string {
     //! Generates AOT C++ for a single function, identified by name.
     //! Returns the extracted function body, or empty string if not found.
     let program <- unsafe(reinterpret<ProgramPtr>(prog));

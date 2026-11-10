@@ -1598,7 +1598,8 @@ class LintVisitor : AstVisitor {
     //! the variables `call` writes through a mutable by-reference parameter it writes during the
     //! call - a bare variable in a `var` slot of `&` or `isRefType` type - into `slot` of the frame
     //! that holds `call` as an argument
-    def private lint030_note_writes(call : ExprCall const?; slot : int; var into : array<Lint030Write>) : void {
+    def private lint030_note_writes(call : ExprCall const?; slot : int;
+                                    var into : array<Lint030Write>) : void {
         return if (call.func == null)
         for (k in range(min(length(call.arguments), length(call.func.arguments)))) {
             let p = call.func.arguments[k]
@@ -1673,10 +1674,12 @@ class LintVisitor : AstVisitor {
                 let slot = lint030_frames[parent].slot
                 if (slot >= 0 && frame.closure_depth == lint030_frames[parent].closure_depth) {
                     for (m in frame.mentions) {
-                        lint030_frames[parent].mentions |> push(Lint030Mention(slot = slot, v = m.v))
+                        let mention = Lint030Mention(slot = slot, v = m.v)
+                        lint030_frames[parent].mentions |> push(mention)
                     }
                     for (w in frame.writes) {
-                        lint030_frames[parent].writes |> push(Lint030Write(slot = slot, v = w.v, callee = w.callee))
+                        let write = Lint030Write(slot = slot, v = w.v, callee = w.callee)
+                        lint030_frames[parent].writes |> push(write)
                     }
                     lint030_note_writes(expr, slot, lint030_frames[parent].writes)
                 }
@@ -2026,8 +2029,10 @@ class LintVisitor : AstVisitor {
         }
         if (!empty(lint030_frames)) {
             let top = length(lint030_frames) - 1
-            if (lint030_frames[top].slot >= 0 && lint030_frames[top].closure_depth == lint021_closure_depth) {
-                lint030_frames[top].mentions |> push(Lint030Mention(slot = lint030_frames[top].slot, v = expr.variable))
+            let top_slot = lint030_frames[top].slot
+            if (top_slot >= 0 && lint030_frames[top].closure_depth == lint021_closure_depth) {
+                let mention = Lint030Mention(slot = top_slot, v = expr.variable)
+                lint030_frames[top].mentions |> push(mention)
             }
         }
         if (noLint || genericDepth > 0) return

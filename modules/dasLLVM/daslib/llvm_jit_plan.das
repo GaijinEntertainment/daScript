@@ -787,7 +787,8 @@ def public interpreter_function_addr(var ctx : Context?; func : Function?) : voi
     return MNH_ADDR == 0ul ? null : unsafe(reinterpret<void?>(MNH_ADDR))
 }
 
-def public get_dll_missing(fns : array<FunctionPtr>; disabled : array<FunctionPtr>; var dll : DLLHandle?; var uids : UidNodes?) {
+def public get_dll_missing(fns : array<FunctionPtr>; disabled : array<FunctionPtr>;
+                           var dll : DLLHandle?; var uids : UidNodes?) {
     verify(!(is_in_completion() || is_compiling_macros() || is_folding()))
 
     var missing = array<Function?>()
@@ -819,7 +820,8 @@ def public get_dll_missing(fns : array<FunctionPtr>; disabled : array<FunctionPt
 //! the candidate set against a DLL: a candidate the DLL holds under its own hash is bound; one
 //! the DLL lacks was dropped by the emitter's content gate and stays interpreted; a candidate
 //! held under another hash, or a `[no_jit]` function the DLL holds, is a miss
-def public probe_dll(var candidates : array<FunctionPtr>; disabled : array<FunctionPtr>; var dll : DLLHandle?; var uids : UidNodes?) {
+def public probe_dll(var candidates : array<FunctionPtr>; disabled : array<FunctionPtr>;
+                     var dll : DLLHandle?; var uids : UidNodes?) {
     verify(!(is_in_completion() || is_compiling_macros() || is_folding()))
     var bound : array<FunctionPtr>
     var mismatched = 0
