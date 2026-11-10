@@ -12,6 +12,9 @@ require _with_module_helper2
 require _finalize_collision_helper public
 require _lambda_vis_mid
 require _private_property_helper
+require _struct_alias_helper
+require _struct_alias_twin // nolint:STYLE030 - its SharedBox is the twin name
+require _struct_alias_facade // nolint:STYLE030 - its typedefs are the use
 
 // `require X as Y` registers the alias for every require form -
 // builtin, daslib, same-directory, path
@@ -210,4 +213,37 @@ def test_access_private_from_lambda(t : T?) {
         a->bang()
         t |> success(true)
     }
+}
+
+[test(description = "a struct and a typedef of it visible from two modules construct through the bare name, the struct's module and the alias's module, with and without fields")]
+def test_struct_alias_from_two_modules(t : T?) {
+    let bare = AliasedBox()
+    let fromStruct = _struct_alias_helper::AliasedBox()
+    let fromAlias = _struct_alias_facade::AliasedBox()
+    let bareFields = AliasedBox(x = 3)
+    let aliasFields = _struct_alias_facade::AliasedBox(x = 4)
+    t |> equal(bare.x, 0)
+    t |> equal(fromStruct.x, 0)
+    t |> equal(fromAlias.x, 0)
+    t |> equal(bareFields.x, 3)
+    t |> equal(aliasFields.x, 4)
+}
+
+[test(description = "a typedef naming a visible enum, a visible handled type, or the same type as another module's typedef is that one candidate, not a second")]
+def test_alias_of_enum_handle_and_twin_alias(t : T?) {
+    let hue = AliasedHue.green
+    t |> equal(int(hue), 1)
+    var mat : float4x4
+    mat[0] = float4(1.0, 2.0, 3.0, 4.0)
+    t |> equal(mat[0].y, 2.0)
+    let n : AliasedNum = 7
+    t |> equal(n, 7)
+}
+
+[test(description = "a typedef of a struct that shares its name with another visible struct constructs the aliased one, with and without arguments")]
+def test_alias_of_struct_with_a_twin_name(t : T?) {
+    let zero = SharedAl()
+    t |> equal(zero.v, 0)
+    let seven = SharedAl(7)
+    t |> equal(seven.v, 7)
 }

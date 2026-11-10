@@ -258,6 +258,27 @@ namespace das {
             library.findEnum(enums, pm, name, inWhichModule);
             library.findAlias(aliases, pm, name, inWhichModule);
         });
+        das::vector<das::TypeDeclPtr> distinctAliases;
+        for ( auto & alias : aliases ) {
+            auto duplicate = false;
+            if ( alias->baseType==Type::tStructure && alias->structType ) {
+                duplicate = find(structs.begin(), structs.end(), alias->structType) != structs.end();
+            } else if ( alias->baseType==Type::tEnumeration && alias->enumType ) {
+                duplicate = find(enums.begin(), enums.end(), alias->enumType) != enums.end();
+            } else if ( alias->baseType==Type::tHandle && alias->annotation ) {
+                duplicate = find(handles.begin(), handles.end(), alias->annotation) != handles.end();
+            }
+            if ( !duplicate ) {
+                for ( auto & seen : distinctAliases ) {
+                    if ( seen->isSameType(*alias, RefMatters::yes, ConstMatters::yes, TemporaryMatters::yes) ) {
+                        duplicate = true;
+                        break;
+                    }
+                }
+            }
+            if ( !duplicate ) distinctAliases.push_back(alias);
+        }
+        aliases = das::move(distinctAliases);
 
         if ( ((structs.size()!=0)+(handles.size()!=0)+(enums.size()!=0)+(aliases.size()!=0)) > 1 ) {
             string candidates = describeCandidates(structs);

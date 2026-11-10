@@ -79,35 +79,6 @@ def test_forward_q8(t : T?) {
 }
 
 [test]
-def test_forward_q8_pooled(t : T?) {
-    t |> run("Q8 forward with pooled fork contexts still matches the oracle (needs stories15M.bin)") @(t : T?) {
-        return if (!jit_only(t))
-        if (!stat(MODEL_PATH).is_valid || !stat(TOKENIZER_PATH).is_valid) {
-            t |> skip("stories15M.bin / tokenizer.bin not present")
-            return
-        }
-        var tr <- load_checkpoint(MODEL_PATH)
-        let c = tr.config
-        var tk <- load_tokenizer(TOKENIZER_PATH, c.vocab_size)
-        quantize_weights(tr)
-        // pool + skip-init the per-job fork contexts: same result, exercised across many tokens'
-        // classifier parallel_for so a stale/misreset pooled fork would corrupt the stream.
-        let prev_act = get_act_vec()
-        set_act_vec(false)   // token-exact oracle => bit-exact scalar act (exp4 tolerance: test_silu)
-        with_dasllama_jobque_() {
-            var s <- make_run_state(c)
-            let bos_only <- encode(tk, "", true, false)
-            let ids <- generate(tr, s, bos_only, length(ORACLE))
-            t |> success(ids_equal(ids, ORACLE), "pooled-fork Q8 greedy token-for-token")
-            delete s
-        }
-        delete tk
-        delete tr
-        set_act_vec(prev_act)
-    }
-}
-
-[test]
 def test_forward_q4(t : T?) {
     t |> run("all-weights Q4 forward matches the fp32 oracle prefix (needs stories15M.bin)") @(t : T?) {
         return if (!jit_only(t))

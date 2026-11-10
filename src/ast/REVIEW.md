@@ -65,14 +65,13 @@ docs: `ARCHITECTURE.md`, `ARCHITECTURE_INFER.md`, `ARCHITECTURE_MODULE_SCAN.md`.
   change.** A reader accepts a stream whose stored version equals `getVersion()`, so without the
   bump an older cache decodes the changed header as the old one with no diagnostic.
 
-- **A diff that makes a pass in this folder - a compile step whose result the module cache
-  stores: parse, infer, fold, inline, not simulate or the AOT link - reject source it accepted
-  before, or change what it leaves in a compiled module - an inferred flag, or a node folded,
-  inlined or rewritten - bumps `AstSerializer::getVersion()`
-  (`include/daScript/ast/ast_serializer.h`, repo root) in the same change.** A cached module
-  never runs through the passes again, and the cache key misses a rebuild of the runtime
-  library alone (a `-module-cache <path>` file records no binary at all), so without the bump a
-  rebuilt `daslang` serves modules the old pass accepted or produced.
+- **A diff that makes the compile reject source it accepted before, or changes any node, name
+  or flag in the AST the module cache stores for that source, bumps
+  `AstSerializer::getVersion()` (`include/daScript/ast/ast_serializer.h`, repo root) in the
+  same change.** A cached module never runs through the compile again, and the cache key
+  misses a rebuild of the runtime library alone (a `-module-cache <path>` file records no
+  binary at all), so without the bump a rebuilt `daslang` serves modules the old compile
+  accepted or produced.
 
 - **The `setDeferredModuleLoader` call in `require_dynamic_modules` (`dyn_modules.cpp`) stays,
   and stays above the first `init_modules_for_folder` call - removing it or moving it below is a

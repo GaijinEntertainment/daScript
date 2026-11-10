@@ -6343,7 +6343,8 @@ namespace das {
                     return mks;
                 } else if (aliasT->isStructure() && aliasT->structType) {
                     // this is Blah(args...) where Blah is a typedef for a struct — promote to StructName(args...)
-                    auto structName = aliasT->structType->name;
+                    auto structName = thisModule->isVisibleDirectly(aliasT->structType->module)
+                        ? aliasT->structType->getMangledName() : aliasT->structType->name;
                     if (structName != expr->name) {
                         reportAstChanged();
                         auto newCall = expr->clone();

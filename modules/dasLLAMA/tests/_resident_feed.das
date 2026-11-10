@@ -26,6 +26,7 @@ require dasllama/dasllama_blocks   // set_moe_host_first / moe_host_first_pin: t
 require dasllama/dasllama_env   // nolint:STYLE030,LINT019 — pf_window_rows / the pins: read under the vulkan static_if, unused in the darwin world
 require _compares   // argmax_of: the row's peak a red names; logits_of: the session's row copied
 require _model_tier   // logits_maxdiff, mirror_kv_dtype, live_maxabs, SUPPRESSED_LOGIT
+require _gpu_tier_armed   // gpu_tier_armed: resident_ready's armed-tier skip
 require _format_census   // census_plane, SiteCensus: a plane's tag against the file's tensor type
 require dasllama/dasllama_gguf   // parse_gguf_meta
 require daslib/fio   // fopen, fmap
@@ -109,11 +110,7 @@ def resident_feed(n : int64) : array<int64> => <- ramp_ids(n, 0l, 2000l, 53l, 40
 //! the JIT, the model at `path` present and in tier, and an armed GPU tier; false after the loud skip that names the missing one
 def resident_ready(t : T?; path : string) : bool {
     return false if (!jit_model_available(t, path))
-    if (!moe_gpu_tier_installed() || !gpu_want_auto()) {
-        t |> skip("the GPU tier is not armed - needs DASLLAMA_GPU=1 on a device that serves the whole-model driver")
-        return false
-    }
-    return true
+    return gpu_tier_armed(t)
 }
 
 //! the CUDA home asked for (`DASLLAMA_CUDA=1` beside `DASLLAMA_GPU=1`); false after the loud skip
