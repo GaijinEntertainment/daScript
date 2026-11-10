@@ -5,7 +5,10 @@ and the mechanisms the TTS files implement. `ARCHITECTURE_COMMON.md` (repo root)
 contract. What a synthesis allocates, holds and gives back - the carrier, the generator's
 buffers, the chunk cap and the idle release, the streamed source - is `ARCHITECTURE_TTS_MEMORY.md`.
 The text front end - its file charters, the heteronym context and the two-tier phoneme pack - is
-`ARCHITECTURE_TTS_FRONT_END.md`.
+`ARCHITECTURE_TTS_FRONT_END.md`; the Russian normalizer's rules (the case a numeral takes, count
+agreement, a placing distance, years, ordinal suffixes, telephone numbers, centuries and Roman
+numerals, a number joined to a word, a bare number before the noun it numbers) are
+`ARCHITECTURE_TTS_TEXTNORM_RU.md`.
 
 ## File charters
 

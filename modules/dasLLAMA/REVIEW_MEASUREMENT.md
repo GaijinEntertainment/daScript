@@ -1,9 +1,8 @@
 # dasLLAMA Measurement Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-docs: `ARCHITECTURE_MEASUREMENT.md`, `ARCHITECTURE_MEASUREMENT_RELEASE.md`,
-`ARCHITECTURE_MEASUREMENT_FAT_START.md`. Planned work: `followup_metal.md`, `followup_vulkan.md`,
-`followup_general.md`.
+docs: `ARCHITECTURE_MEASUREMENT*.md` (this folder). Planned work: `followup_metal.md`,
+`followup_vulkan.md`, `followup_general.md`.
 
 **A rule here that governs a figure binds only a figure the change writes or changes - in the repo
 outside `site*/` (repo root), in a commit message, or in its PR body - never one a changed line
@@ -29,7 +28,9 @@ An instrument is a file that reports the wall or rate of a run it drove, timed o
 by GPU timestamps; a file reading a spawned child's clock, and a report a serving path prints only
 under a profiling switch, are not. A harness is the `harness/` script that drove a run. A route is
 the end-to-end code path a served turn takes; the default route is the one a run with no arguments
-or environment overrides takes.
+or environment overrides takes. The TTS front end is the stages that turn a TTS request's text
+into its phoneme string - the text normalizer, the tagger and g2p - that no TTS board cell's wall
+includes.
 
 The flags of a serving run are the tier (`-jit` or not), `DAS_TUNE_POLICY`, the CPU kernel
 backend served, the GPU backend and device where one served, `DASLLAMA_COOPMAT` on Vulkan, and `DASLLAMA_CUDA_MMQ`
@@ -165,14 +166,12 @@ kernel that the same diff neither lands nor names as the Done of a `followup_*.m
 entry - that figure goes in the PR that lands the code.**
 
 **A diff that lets a served turn, or a media encode a turn takes (an image, a video frame or an
-audio chunk), reach code no spawned or manual cell's input reaches - a new dispatch arm, a
-window-size arm inside a path a cell drives at other sizes, or a changed default route - adds a
-spawned cell whose input reaches it, in the same change.**
-
-**A diff that lets a served turn, or a media encode a turn takes, reach code no earlier cell's
-input reached writes the figures of the spawned cell whose input reaches it from every board box of
-the author's that can mint them into a dated `PERF_LEDGER.md` entry, in the same change, and names
-in its PR body the `followup_general.md` row under which the release re-mint owes its rows.**
+audio chunk), reach code outside the TTS front end that no spawned or manual cell's input reaches
+- a new dispatch arm, a window-size arm inside a path a cell drives at other sizes, or a changed
+default route - adds a spawned cell whose input reaches it, writes that cell's figures from every
+board box of the author's that can mint them into a dated `PERF_LEDGER.md` entry, and names in its
+PR body the `followup_general.md` row under which the release re-mint owes its rows, all in the
+same change.**
 
 **A change that owes a ledger figure no box of the author's can mint, and that no rule above sends
 to a new spawned cell, names instead, in the same change, an artifact that shows the new code ran end to end - a record, a gate output, an
@@ -188,8 +187,8 @@ run printed none.** A fat exe is what `daspkg release --fat <class>` builds (`DA
 `ARCHITECTURE_MEASUREMENT_FAT_START.md#fat-first-start`).
 
 **A diff whose PR body, or a line it adds or changes, states that the diff makes an existing
-route - one the tree served before the diff - run faster or do less work, where a rig leg runs the
-changed lines, writes that leg's walls from every board box of the author's that can mint it into
+route - one the tree served before the diff - run faster or do less work, where a rig leg's wall
+includes the changed lines, writes that leg's walls from every board box of the author's that can mint it into
 a dated `PERF_LEDGER.md` entry naming the exe's commit and the command, and names in the PR body
 the `followup_general.md` row under which the release re-mint owes every board box's row.** The
 board is the module's committed record of what a release's exe costs to serve; a kernel win that
@@ -206,8 +205,8 @@ change.**
 other diff owes lands in a dated `PERF_LEDGER.md` entry.**
 
 **A diff whose PR body, or a line it adds or changes, states that the diff makes an existing
-route - one the tree served before the diff - run faster or do less work, where no rig leg runs
-the changed lines, states in its PR body that no rig leg runs them and names the instrument that
+route - one the tree served before the diff - run faster or do less work, where no rig leg's wall
+includes the changed lines, states in its PR body that none does and names the instrument that
 does, with its command line.**
 
 A cell change is a diff that changes what a board cell loads, runs, counts or times: the model or

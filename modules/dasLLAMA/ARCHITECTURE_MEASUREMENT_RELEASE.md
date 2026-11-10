@@ -25,6 +25,8 @@ states the same boundary.
 - **Served-turn leg** - a chat or completion turn's prefill or token decode, a batched decode row,
   or a whole served turn. The wall of one stage - one model component's forward pass or decode
   inside a facade call, or one decoder block - is not a leg.
+- **TTS front end** - the stages that turn a TTS request's text into its phoneme string (the text
+  normalizer, the tagger and g2p) that no TTS board cell's wall includes.
 - **Instrument** - a file whose printed or returned result is a wall or rate of a run it drove,
   read by its own clock or by timestamps a GPU driver returns, wherever the file sits. A file
   reading a spawned child process's clock, and a report a serving path prints only under a

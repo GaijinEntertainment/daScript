@@ -2754,3 +2754,15 @@
     a `TtsBoard` row for kokoro-ru in `performance/model_specs.das` with the reference instrument taking the
     fine-tune's checkpoint, its figures in `PERF_LEDGER.md`, and the kokoro-ru rows of `harness/tts_model_card.md`
     carrying the rig's figures.
+
+293. **The Russian normalizer leaves three kinds of number readings wrong.** `dasllama_textnorm_ru.das`
+    (1) has no rule for two shapes a rule of form can reach: a comparative or a time limit before a number takes
+    the genitive (не раньше 5 reads пять, not пяти; позже 8), and a quoted or bracketed word inside a number's
+    noun phrase breaks the phrase (с 2 "горячими" платами reads двух, not двумя); (2) reads by form alone where
+    no rule of form reaches: a number whose noun is left out or stands earlier in the sentence (1 ... а 2 ...
+    as первый ... второй), a number between a noun and its genitive that can count or number (сын 3 хокаге as
+    третьего, Пожар 3 двигателя), digits as wordplay (свою 7 for семью), a bare season pair (сезон 2012/13);
+    (3) reads a thousand a verb takes as its object in the nominative (купит ещё 1000 предметов reads тысяча,
+    not тысячу). Done = a rule for each of (1) and (3) with its pinned sentences in
+    `tests/test_tts_textnorm_ru.das`; (2) is left to a context model or to the writer's own words, and a mark
+    in the text is the override.

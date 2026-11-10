@@ -358,7 +358,6 @@ def private ctx_suffix(w : string) : string {
 
 // ---------------------------------------------------------------- tokenizer
 
-def private is_hyphen(cp : int) : bool => cp == '-' || cp == 8211 || cp == 8212
 def private is_ellipsis(cp : int) : bool => cp == 8230
 //! punctuation a token starts with: dashes, ellipsis, clause marks, the quote
 def private is_prefix_punct(cp : int) : bool => cp == 8212 || cp == 8211 || cp == 8230 || cp == ',' || cp == ':' || cp == ';' || cp == '!' || cp == '?' || cp == '\''
@@ -431,9 +430,9 @@ def private infix_len(c : array<int>; s, i, e : int) : int {
     return run if (run > 0)
     let prev = cp_at(c, i - 1)
     let has_prev = i > s
-    if (is_hyphen(cp)) {
+    if (is_dash(cp)) {
         var j = i
-        while (j < e && is_hyphen(c[j])) {
+        while (j < e && is_dash(c[j])) {
             j++
         }
         return (has_prev && is_letter_or_digit(prev) && j < e && is_letter(c[j])) ? j - i : 0

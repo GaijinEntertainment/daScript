@@ -47,16 +47,19 @@ or run mode meets and another does not: the device or its memory, whether the bu
 module (`typeinfo module_exists` or `typeinfo builtin_module_exists`), the value of an environment
 variable or runner flag the run reads, the value a tune companion returns (a function whose body is
 the winner the `[tune]` framework picked for this box), a host toolchain, or a stocked artifact's
-presence. These definitions bind the `REVIEW_*.md` companions beside this file wherever a companion
-does not define the term itself; a diff that changes one changes each companion's word-for-word
-copy of it too. A kernel-unit cell, a kernel class and a CPU oracle are as `REVIEW_KERNEL_CELLS.md` (beside
-this file) defines them; an encoder is as `REVIEW_MEDIA_CELLS.md` defines it.
+presence. A change reaches a test file or a cell when it alters anything its result depends on -
+its test file, a shared helper, engine code it exercises, an in-tree fixture or corpus it reads, or
+a name it asserts on; a comment-only edit reaches none. These definitions bind the `REVIEW_*.md` companions
+beside this file wherever a companion does not define the term itself; a diff that changes one
+changes each companion's word-for-word copy of it too. A kernel-unit cell, a kernel class and a CPU
+oracle are as `REVIEW_KERNEL_CELLS.md` (beside this file) defines them; an encoder is as
+`REVIEW_MEDIA_CELLS.md` defines it.
 
-**Every PR runs `run.das -- --suite model-free`, and `run.das -- --changed` on a box with the
-models stocked (every file its `PLAN` line counts), plus every test here the change reaches -
-never the whole directory.** A change reaches a test when it alters anything the test's
-result depends on - the test file, a shared helper, engine code it exercises, an in-tree fixture
-or corpus it reads, or a name it asserts on; a comment-only edit reaches none.
+**Every PR runs `run.das -- --suite model-free`, and `run.das -- --changed` on a box holding the
+stocked artifacts of every file its `PLAN` line counts, never a whole-directory run instead.**
+
+**A test file the change reaches that the `--changed` run does not plan, or whose reached cells it
+skips, runs on its own where those cells do not skip, and the PR body cites that run.**
 
 **A PR whose change reaches a cell that skips on, or picks its tolerance or its code path by, a
 hardware or build capability the box may lack - a device, a module the build may omit, a kernel the
@@ -73,9 +76,9 @@ the cell where that suite takes `--arm` - and names the box in the PR body.** A 
 **The `--changed` run a PR cites carries no `--exclude` and no `--only`.** A trimmed run never
 ran the coverage it dropped; an excluding run is the iteration form between PRs.
 
-**Every `--only` run a PR cites runs under `DASLLAMA_GPU=1 DASLLAMA_CUDA=1` beside the whole
-`--changed` run, never in its place, and a PR citing any `--only` run cites among them one
-`--changed --only <tokens>` run whose tokens match every file of `run.das`'s `CUDA_WITNESSES`.**
+**Every `--changed --only` run a PR cites runs under `DASLLAMA_GPU=1 DASLLAMA_CUDA=1` beside the
+whole `--changed` run, never in its place, and a PR citing any such run cites among them one whose
+tokens match every file of `run.das`'s `CUDA_WITNESSES`.**
 
 **A PR whose change reaches a test file holding a cell that runs on CUDA under `DASLLAMA_CUDA=1`
 cites a run under `DASLLAMA_GPU=1 DASLLAMA_CUDA=1` whose `ONLY` lines name that file.**
@@ -87,8 +90,7 @@ run holds one stocked test a family and backend, the stocked suite every one.
 
 **A test file in this folder whose cells cannot hold under `DASLLAMA_CPU_PREFILL=1` says so in its
 header (its top comment block) and joins the list of files that sit in no suite (`exempt` in
-`test_run_suites.das`) in the same change.** `DASLLAMA_CPU_PREFILL=1` is what the runner arms for
-every suite.
+`test_run_suites.das`) in the same change.** `DASLLAMA_CPU_PREFILL=1` is what the runner arms for every suite.
 
 **A diff that gives `run.das` a global whose initializer spawns, logs, writes the environment or
 touches the filesystem is a defect - do that work inside the function that needs it.** Anything
@@ -113,9 +115,9 @@ in a `run.das` suite instead.**
 **A diff that adds a test file here adds its `CLAUDE.md` entry in the same change, every clause
 of it true of the file as added.**
 
-**A diff that adds a cell or a gate function to a file whose `CLAUDE.md` entry accounts for every
-cell, or every gate function, of that file - by name or by a clause of its own - adds the new one
-to that entry in the same change.**
+**A diff that adds a cell or a gate function to a file whose `CLAUDE.md` entry names every one of
+that kind or states how many there are adds the new one to each such list and corrects each such
+count in the same change, every clause it adds true of the file as the diff leaves it.**
 
 **A diff that removes, moves or renames a cell or a gate function, or changes a cell's suite, its
 skip condition, or any fact a `CLAUDE.md` entry states about it - the class it dispatches, the
@@ -245,11 +247,10 @@ their parity on small models, through pins; a cell whose two sides both run on t
 streams nothing beside the device's bytes, and the tier does not bind it.
 
 **A cell never changes an environment-read knob - one the running config reads once, at context
-init - for its own process once that process has read it; it passes the value to a child it
-spawns, either as the spawn's environment argument or, for a spawn that inherits the parent's
-environment, by setting the knob right before the spawn and restoring the previous value right
-after (the empty string where it was unset).** A set after that process starts is invisible to a
-config already read.
+init - for its own process once that process has read it; it passes the value to a child it spawns,
+either as the spawn's environment argument or, for a spawn that inherits the parent's environment,
+by setting the knob right before the spawn and restoring the previous value right after (the empty
+string where it was unset).** A set after that process starts is invisible to a config already read.
 
 **A cell that picks its bar, its route or its expected value by an environment-read knob its own
 process has already read - a skip gate on the knob is no such pick - names that knob's value in

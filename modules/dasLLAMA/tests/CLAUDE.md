@@ -4301,14 +4301,31 @@ failing-first cases, and the 200-sentence corpus (`_tts_fixtures/g2p_corpus.json
 `_tts_corpus.das`) against the reference normalizer's output - or the fixture's hand-corrected
 `expected` form where that output is not what a person says - idempotence included.
 `test_tts_textnorm_ru.das` - model-free: the Russian normalizer - the cardinal reader with its
-scale words (две тысячи, пять тысяч), the grammatical number a count takes (рубль, рубля, рублей),
-the ordinal reader in every form a suffix or a date asks for (третьего, восьмом, две тысячи
-двадцать четвёртом, двухтысячный), the decimal reader (три целых четырнадцать сотых, одна целая
-пять десятых), and the sentence passes on pinned sentences - years after в and before года, dates
-in both spellings (a no-break space before the month a space), clock times with seconds and a
-second past 59 left alone, ordinal suffixes, units (both Celsius spellings), percentages with a
-decimal, money, a minus before a unit kept, a run past eighteen digits read digit by digit before its unit and after a
-currency sign, abbreviations with the sentence's dot kept at the end of the text, symbols,
+scale words (тысяча, двадцать одна тысяча, пять тысяч), the grammatical number a count takes
+(рубль, рубля, рублей), the ordinal reader in the forms a suffix or a date asks for (третьего,
+восьмом, две тысячи двадцать четвёртом, двухтысячный), the decimal reader (три целых
+четырнадцать сотых), and the sentence passes on pinned sentences - the case a cardinal takes from
+a preposition or governing word (около пятнадцати, в течение восьми, равна пяти гектарам), from
+its noun phrase's own ending (в 86 томах, за двумя упряжками, мать двух аутичных детей) and from
+the noun dictionary (в одной семье, одного окна, одна из этих собак, ни одного слова, сотен
+тысяч), the counted noun and its adjective agreeing in every case, the gender of one and two;
+ordinals by suffix (пятой танковой армией, к шестидесятым годам) and bare before the noun they
+number (на пятом курсе, уже третий день, на шестую войну, капитана первого ранга, каждый
+двадцатый, на первом и втором этажах), the enumeration во-первых; years after в and before года
+or г., a year after a month name, slash years (в 1554/55 году), day and year ranges (с десятого
+по шестнадцатое, в две тысячи первом - две тысячи третьем годах), dates in both spellings (a
+no-break space before the month a space); Roman numerals after a name, before a century, after a
+section noun and with a suffix, the gate that leaves DC, XL and XXV веке as written, an Arabic
+century (в 19 веке); clock times with часов and минут (a set score reads as plain numbers, not as
+a time); telephone and ISBN groups, the date shapes that are no telephone number, a leading-zero
+code and a code's tail; fractions and the half, quarter and third words (полчаса, полстакана,
+четверть века, полторы тонны, полтора года); money with its minor unit (один рубль пятьдесят
+копеек), scale words and ISO codes; a number joined to a word (двадцатипятилетний, в
+сорокаградусную жару); an inverted approximation and an age (метрах в двадцати, на вид лет
+сорока); square, cubic and per-time units (both Celsius spellings, кв. before a unit), a
+citation's pages and volumes (с. after a dash, т. after в or before a number), percentages with a
+decimal, a minus before a unit kept, a run past eighteen digits read digit by digit before its
+unit and after a currency sign, a unit's dot that ends the sentence kept, abbreviations, symbols,
 punctuation - a normalized sentence a fixed point.
 `test_tts_postag.das` - stocked suite; model-free cells: the tagger's word class and shape
 features (the trainer's own hyphen rule, the d/h/q suffixes), the tokenizer's comma and colon

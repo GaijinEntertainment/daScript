@@ -432,7 +432,7 @@ def document_module_dasllama(_root : string) {  // nolint:STYLE038 — flat doc-
 // modules a TtsModel field names are engine detail, so their types print plain.
 def document_module_dasllama_tts(_root : string) {
     for (engine in ["dasllama_styletts2", "dasllama_kitten", "dasllama_kokoro", "dasllama_pocket", "dasllama_g2p", "dasllama_postag",
-                    "dasllama_g2p_ru", "dasllama_textnorm_ru", "dasllama_g2p_pack", "dasllama_textscan"]) {
+                    "dasllama_g2p_ru", "dasllama_textnorm_ru", "dasllama_textnorm_ru_nouns", "dasllama_g2p_pack", "dasllama_textscan"]) {
         mark_module_pageless(engine)
     }
     var mod = [find_module("dasllama_tts"), find_module("dasllama_tts_types")]
