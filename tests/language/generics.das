@@ -328,3 +328,23 @@ def test_builtin_contracts(t : T?) {
         t |> equal(0, a)
     }
 }
+
+typedef SizeProbe0 = tuple<int; int>
+typedef SizeProbe1 = tuple<SizeProbe0; SizeProbe0>
+typedef SizeProbe2 = tuple<SizeProbe1; SizeProbe1>
+typedef SizeProbe3 = tuple<SizeProbe2; SizeProbe2>
+typedef SizeProbe4 = tuple<SizeProbe3; SizeProbe3>
+typedef SizeProbe5 = tuple<SizeProbe4; SizeProbe4>
+typedef SizeProbe6 = tuple<SizeProbe5; SizeProbe5>
+typedef SizeProbe7 = tuple<SizeProbe6; SizeProbe6>
+typedef SizeProbe8 = tuple<SizeProbe7; SizeProbe7>
+typedef SizeProbe9 = tuple<SizeProbe8; SizeProbe8>
+typedef SizeProbe10 = tuple<SizeProbe9; SizeProbe9>
+
+def size_of_argument(a) : int => typeinfo sizeof(a)
+
+[test(description = "a generic is instanced with an argument type of 4095 type nodes, one node under the instance size limit")]
+def test_generic_instance_at_the_size_limit(t : T?) {
+    let probe : SizeProbe10
+    t |> equal(size_of_argument(probe), 8192)
+}

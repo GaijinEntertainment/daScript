@@ -766,14 +766,45 @@ namespace das {
         return inferStack.size() ? inferStack[0].at : atL;
     }
 
+    static void describeTypeInError ( TextWriter & ss, const TypeDeclPtr & type ) {
+        uint32_t budget = 64;
+        if ( type->fitsNodeBudget(budget) ) {
+            ss << *type;
+        } else {
+            ss << das_to_string(type->baseType) << "<...>";
+        }
+    }
+
+    // src/ast/ARCHITECTURE.md#instance-type-size
+    static void describeSignatureInError ( TextWriter & ss, const Function * fn ) {
+        ss << fn->describeName();
+        if ( fn->arguments.size() ) {
+            ss << "(";
+            for ( auto & arg : fn->arguments ) {
+                ss << arg->name << ": ";
+                describeTypeInError(ss, arg->type);
+                if ( arg != fn->arguments.back() ) ss << "; ";
+            }
+            ss << ")";
+        }
+        if ( fn->result ) {
+            ss << ": ";
+            describeTypeInError(ss, fn->result);
+        }
+    }
+
     string Function::getLocationExtra() const {
         if ( !inferStack.size() ) {
             return "";
         }
         TextWriter ss;
-        ss << "\nwhile compiling " << describe() << "\n";
+        ss << "\nwhile compiling ";
+        describeSignatureInError(ss, this);
+        ss << "\n";
         for ( const auto & ih : inferStack ) {
-            ss << "instanced from " << ih.func->describe() << " at " << ih.at.describe() << "\n";
+            ss << "instanced from ";
+            describeSignatureInError(ss, ih.func);
+            ss << " at " << ih.at.describe() << "\n";
         }
         return ss.str();
     }

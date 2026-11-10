@@ -1936,6 +1936,16 @@ namespace das {
                     expr->name = callCloneName(genName);
                     reportAstChanged();
                 } else if (instancedFunctions.size() == 0) {
+                    // src/ast/ARCHITECTURE.md#instance-type-size
+                    uint32_t typeBudget = 4096;
+                    for (auto &passType : types) {
+                        if (!passType->fitsNodeBudget(typeBudget)) {
+                            error("generic '" + oneGeneric->name + "' is instanced with argument types too large to compile",
+                                "its argument types grow with every instance; a generic that calls itself with a type built from its own argument type never stops", "",
+                                expr->at, CompilationError::exceeds_instance_type);
+                            return nullptr;
+                        }
+                    }
                     auto clone = oneGeneric->clone();
                     clone->name = genName;
                     clone->fromGeneric = oneGeneric;

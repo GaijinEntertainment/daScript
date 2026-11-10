@@ -290,6 +290,7 @@ Type size exceeds limit.
 Type alias size exceeds limit.
 Typeinfo sizeof size exceeds limit.
 Constant value exceeds the allowed range.
+Argument type of a generic instance is too large.
 Ambiguous annotation.
 Ambiguous bitfield.
 Ambiguous call macro.

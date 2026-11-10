@@ -184,6 +184,7 @@ namespace das {
         void collectAliasList(vector<string> & aliases) const;
         bool isAutoArrayResolved() const;
         bool isAuto() const;
+        bool fitsNodeBudget ( uint32_t & budget ) const;
         bool isAutoOrAlias() const;
         bool isUnresolved() const;
         bool isUnresolved(bool autoReachable) const;

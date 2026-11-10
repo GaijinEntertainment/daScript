@@ -180,3 +180,27 @@ nested compile can run. The JIT's selection - which functions of a program a DLL
 third table, `jitSelected`, read through `is_jit_selected` and written through
 `set_jit_selected` / `clear_jit_selection`; `Function::requestJit` is the `[jit]` annotation
 only, an author's request the selection reads and never writes.
+
+## The size of a generic instance's argument types (`ast_infer_type_function.cpp`) {#instance-type-size}
+
+A generic that calls itself with a type built from its own argument type makes a new instance on
+every call, and the pass limit stops that chain only while each step adds a constant amount: the
+fiftieth instance of `foo([a])` holds an array nested fifty deep. A step that uses the argument
+type twice - `foo((a, a))`, a block `$(x : typedecl(a)) { return x }`, two arguments feeding
+each other - doubles the type instead, so the thirtieth instance would hold a billion type
+nodes, and every whole-type walk inference runs (`isAuto`, `canCopy`, the copy itself) is that
+large long before the pass limit counts fifty. `inferFunctionCall` therefore counts the type
+nodes of the argument types where it is about to create an instance
+(`TypeDecl::fitsNodeBudget`) and reports `exceeds_instance_type` past 4096, which is one walk
+per new instance and none per expression. The count is of nodes, never of depth: these types
+are a few dozen levels deep when they stop fitting in memory. A structure counts as one node
+whatever its fields, so the limit bounds only what type constructors nest.
+
+That error is the only one of its compile. A call that got no instance leaves its caller
+without a type, so the same pass reports errors that only restate it, and `inferTypes` drops
+every other error once one `exceeds_instance_type` is present.
+
+An inference error names the function it was compiling and every function that instance came
+from, each with its argument types, so one error on an oversized instance used to print each
+of those types in full. `Function::getLocationExtra` prints a type of more than 64 nodes as
+its constructor and `<...>`.

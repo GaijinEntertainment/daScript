@@ -955,6 +955,17 @@ namespace das
         argNames = decl.argNames;
     }
 
+    bool TypeDecl::fitsNodeBudget ( uint32_t & budget ) const {
+        if ( budget==0 ) return false;
+        budget --;
+        if ( firstType && !firstType->fitsNodeBudget(budget) ) return false;
+        if ( secondType && !secondType->fitsNodeBudget(budget) ) return false;
+        for ( auto & arg : argTypes ) {
+            if ( arg && !arg->fitsNodeBudget(budget) ) return false;
+        }
+        return true;
+    }
+
     void TypeDecl::clone ( TypeDeclPtr & dest, const TypeDeclPtr & src ) {
         // this only works when there are no duplicated types whatsoever
         // daslib/ast_verify reports a duplicated type; if you suspect this is whats causing a
