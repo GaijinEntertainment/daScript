@@ -53,6 +53,17 @@ def count_at(nm : string) : int2 {
     return s
 }
 
+let ELISION_GLOBAL_COUNT = 8
+
+[export] def target_induction_global_count : int {
+    var a : int[8]
+    var s = 0
+    for (i in range(ELISION_GLOBAL_COUNT)) { a[i] = i }
+    for (i in urange(8u)) { s += a[i] }
+    for (i in urange64(0ul, 8ul)) { s += a[i] }
+    return s
+}
+
 [export] def target_vector_const : float {
     let v = float4(1.0, 2.0, 3.0, 4.0)
     return v[0] + v[3]
@@ -92,11 +103,22 @@ def count_at(nm : string) : int2 {
     }
 }
 
-[test(description = "bound-check elision marks every index access proven in range - constant, induction, length-bounded, guarded, hinted - as unchecked, and none it cannot prove")]
+[sideeffects]
+def range(_from : int8; to : int8) : range => range(0, int(to) + 100)
+
+[export] def target_user_range : int {
+    let a : int[8]
+    var s = 0
+    for (i in range(int8(0), int8(4))) { s += a[i] }
+    return s
+}
+
+[test(description = "bound-check elision marks every index access proven in range - constant, induction, length-bounded, guarded, hinted - as unchecked, and none it cannot prove, a user function named range included")]
 def test_elision_fired(t : T?) {
     ast_gc_guard() {
         // all-elided cases: elided == total, and there is at least one access
         for (nm in ["target_const_fixed", "target_induction_fixed", "target_vector_const",
+                    "target_induction_global_count",
                     "target_dyn_length", "target_guard_then", "target_guard_early", "target_hint"]) {
             t |> run("all accesses elided: {nm}") <| @(t : T?) {
                 let r = count_at(nm)
@@ -105,7 +127,8 @@ def test_elision_fired(t : T?) {
             }
         }
         // not-provable cases: no access elided
-        for (nm in ["target_const_dyn", "target_unprovable", "target_mutated"]) {
+        for (nm in ["target_const_dyn", "target_unprovable", "target_mutated",
+                    "target_user_range"]) {
             t |> run("no access elided: {nm}") <| @(t : T?) {
                 let r = count_at(nm)
                 t |> success(r.y > 0, "{nm} has accesses ({r.y})")
@@ -120,6 +143,7 @@ def test_elision_fired(t : T?) {
 def test_elision_behavior(t : T?) {
     t |> equal(target_const_fixed(), 0 + 4 + 9)
     t |> equal(target_induction_fixed(), 28)
+    t |> equal(target_induction_global_count(), 56)
     t |> equal(target_vector_const(), 5.0)
     var d : array<int>
     d |> resize(5)

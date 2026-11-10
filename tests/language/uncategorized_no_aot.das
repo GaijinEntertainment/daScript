@@ -137,3 +137,48 @@ def test_jit_abi(t : T?) {
     test_vec_abi(t)
     test_func_abi(t)
 }
+
+def return_path_errors(fixture : string; lint_profile : bool) : tuple<ok : bool; count : int> {
+    var res = (ok = false, count = 0)
+    let path = path_join(get_das_root(), "tests/language/{fixture}")
+    var inscope access <- make_file_access("")
+    using() $(var mg : ModuleGroup) {
+        using() $(var cop : CodeOfPolicies) {
+            cop.threadlock_context = true
+            cop.export_all = true
+            cop.no_optimizations = lint_profile
+            cop.no_infer_time_folding = lint_profile
+            compile_file(path, access, unsafe(addr(mg)), cop) $(ok; _program; issues) {
+                res.ok = ok
+                res.count = length(split(string(issues), "error[30310]")) - 1
+            }
+        }
+    }
+    return res
+}
+
+[test(description = "the return-path check reports every loop a function can fall out of, in the folded profile and the lint profile alike")]
+def test_loops_that_fall_off_the_end_are_reported(t : T?) {
+    if (get_running_platform_name() == "emscripten") {
+        t |> skip("the fixtures sit outside the web build das root")
+        return
+    }
+    for (lint_profile in [false, true]) {
+        let r = return_path_errors("_fixture_loops_fall_off.das", lint_profile)
+        t |> success(!r.ok, "the fixture does not compile, lint profile {lint_profile}")
+        t |> equal(r.count, 13, "one error per function, lint profile {lint_profile}")
+    }
+}
+
+[test(description = "a for over non-empty constant ranges and a while (true) with only a dead break need no trailing return, folded or not")]
+def test_loops_that_always_return_compile(t : T?) {
+    if (get_running_platform_name() == "emscripten") {
+        t |> skip("the fixtures sit outside the web build das root")
+        return
+    }
+    for (lint_profile in [false, true]) {
+        let r = return_path_errors("_fixture_loops_return.das", lint_profile)
+        t |> success(r.ok, "the fixture compiles, lint profile {lint_profile}")
+        t |> equal(r.count, 0)
+    }
+}

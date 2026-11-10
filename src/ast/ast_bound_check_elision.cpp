@@ -20,49 +20,65 @@ namespace das {
     // we assume everything may alias everything) or by reassigning the index. An ExprAt whose
     // (index, array) matches a live fact - plus a constant index provably in a fixed dim - is marked
     // noBoundCheck. Conservative and provable-only: when unsure, no fact, so the runtime check stays.
+    std::optional<int64_t> constIntValue ( const Expression * e ) {
+        if ( e->rtti_isR2V() ) e = ((ExprRef2Value *)e)->subexpr;
+        if ( e->rtti_isVar() ) {
+            auto var = ((ExprVar *)e)->variable;
+            if ( var && var->global && var->type->constant && var->init ) return constIntValue(var->init);
+            return std::nullopt;
+        }
+        if ( !e->rtti_isConstant() || !e->type ) return std::nullopt;
+        switch ( e->type->baseType ) {
+        case Type::tInt:    return int64_t(((ExprConstInt *)e)->getValue());
+        case Type::tInt8:   return int64_t(((ExprConstInt8 *)e)->getValue());
+        case Type::tInt16:  return int64_t(((ExprConstInt16 *)e)->getValue());
+        case Type::tInt64:  return ((ExprConstInt64 *)e)->getValue();
+        case Type::tUInt:   return int64_t(((ExprConstUInt *)e)->getValue());
+        case Type::tUInt8:  return int64_t(((ExprConstUInt8 *)e)->getValue());
+        case Type::tUInt16: return int64_t(((ExprConstUInt16 *)e)->getValue());
+        case Type::tUInt64: {
+            auto u = ((ExprConstUInt64 *)e)->getValue();
+            if ( u>uint64_t(INT64_MAX) ) return std::nullopt;
+            return int64_t(u);
+        }
+        default:            return std::nullopt;
+        }
+    }
+    std::optional<std::pair<int64_t,int64_t>> constRange ( const Expression * src ) {
+        if ( src->rtti_isConstant() && src->type && src->type->isRange() ) {
+            if ( src->type->baseType==Type::tRange ) {
+                auto r = ((ExprConstRange *)src)->getValue(); return std::pair<int64_t,int64_t>{r.from, r.to};
+            } else if ( src->type->baseType==Type::tRange64 ) {
+                auto r = ((ExprConstRange64 *)src)->getValue(); return std::pair<int64_t,int64_t>{r.from, r.to};
+            } else if ( src->type->baseType==Type::tURange ) {
+                auto r = ((ExprConstURange *)src)->getValue(); return std::pair<int64_t,int64_t>{r.from, r.to};
+            } else if ( src->type->baseType==Type::tURange64 ) {
+                auto r = ((ExprConstURange64 *)src)->getValue();
+                if ( r.from>uint64_t(INT64_MAX) || r.to>uint64_t(INT64_MAX) ) return std::nullopt;
+                return std::pair<int64_t,int64_t>{int64_t(r.from), int64_t(r.to)};
+            }
+            return std::nullopt;
+        }
+        if ( src->rtti_isCall() ) {
+            auto call = (ExprCall *) src;
+            bool isCtor = call->name=="range" || call->name=="urange" || call->name=="range64" || call->name=="urange64";
+            if ( isCtor && call->func && call->func->builtIn ) {
+                if ( call->arguments.size()==1 ) {
+                    if ( auto hi = constIntValue(call->arguments[0]) ) return std::pair<int64_t,int64_t>{0, *hi};
+                } else if ( call->arguments.size()==2 ) {
+                    auto lo = constIntValue(call->arguments[0]);
+                    auto hi = constIntValue(call->arguments[1]);
+                    if ( lo && hi ) return std::pair<int64_t,int64_t>{*lo, *hi};
+                }
+            }
+        }
+        return std::nullopt;
+    }
     namespace {
         static std::optional<int64_t> fixedDim ( const TypeDeclPtr & t ) {
             if ( !t ) return std::nullopt;
             if ( t->baseType==Type::tFixedArray && t->fixedDim>0 ) return int64_t(t->fixedDim);
             if ( t->isVectorType() ) return int64_t(t->getVectorDim());
-            return std::nullopt;
-        }
-        static std::optional<int64_t> constIntValue ( const Expression * e ) {
-            if ( !e->rtti_isConstant() || !e->type ) return std::nullopt;
-            switch ( e->type->baseType ) {
-            case Type::tInt:    return int64_t(((ExprConstInt *)e)->getValue());
-            case Type::tInt8:   return int64_t(((ExprConstInt8 *)e)->getValue());
-            case Type::tInt16:  return int64_t(((ExprConstInt16 *)e)->getValue());
-            case Type::tInt64:  return ((ExprConstInt64 *)e)->getValue();
-            case Type::tUInt:   return int64_t(((ExprConstUInt *)e)->getValue());
-            case Type::tUInt8:  return int64_t(((ExprConstUInt8 *)e)->getValue());
-            case Type::tUInt16: return int64_t(((ExprConstUInt16 *)e)->getValue());
-            case Type::tUInt64: return int64_t(((ExprConstUInt64 *)e)->getValue());
-            default:            return std::nullopt;
-            }
-        }
-        // (lo, hi)
-        static std::optional<std::pair<int64_t,int64_t>> constRange ( const Expression * src ) {
-            if ( src->rtti_isConstant() && src->type && src->type->isRange() ) {
-                if ( src->type->baseType==Type::tRange ) {
-                    auto r = ((ExprConstRange *)src)->getValue(); return std::pair<int64_t,int64_t>{r.from, r.to};
-                } else if ( src->type->baseType==Type::tRange64 ) {
-                    auto r = ((ExprConstRange64 *)src)->getValue(); return std::pair<int64_t,int64_t>{r.from, r.to};
-                }
-                return std::nullopt;
-            }
-            if ( src->rtti_isCall() ) {
-                auto call = (ExprCall *) src;
-                if ( call->name=="range" || call->name=="urange" || call->name=="range64" || call->name=="urange64" ) {
-                    if ( call->arguments.size()==1 ) {
-                        if ( auto hi = constIntValue(call->arguments[0]) ) return std::pair<int64_t,int64_t>{0, *hi};
-                    } else if ( call->arguments.size()==2 ) {
-                        auto lo = constIntValue(call->arguments[0]);
-                        auto hi = constIntValue(call->arguments[1]);
-                        if ( lo && hi ) return std::pair<int64_t,int64_t>{*lo, *hi};
-                    }
-                }
-            }
             return std::nullopt;
         }
         static Variable * lengthOfVar ( const Expression * e ) {
