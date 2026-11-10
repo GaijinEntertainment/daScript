@@ -222,8 +222,16 @@ parsed type is longer than twice that. A postfix `?` is left-recursive and costs
 stack, so without the limit a pointer chain of any length parses and the first recursive walk
 over it overflows the C++ stack. The limit is sized for a host that compiles on a 1 MB thread
 stack in a build that inlines little: a type the parser accepts has to survive every recursive
-walk inference runs over it, and at 256 levels a Windows RelWithDebInfo build does not. Past
-the limit the parse ends with one `exceeds_type_nesting` error.
+walk inference runs over it. Past the limit the parse ends with one `exceeds_type_nesting`
+error.
+
+The stack one nesting level costs is the frame of the walk that recurses per level, and in a
+build that inlines little every string temporary of every error message a function can raise
+has its own slot in that frame. `InferTypes::verifyType` recurses once per level and can raise
+about thirty errors, so it builds none of their text itself: `typeError`,
+`malformedTypeError` and `templateStructureError` do, in frames that exist only while an
+error is reported. With the text inline, one level costs 4176 bytes in a Debug build and a type
+at the limit needs more than 512 KB; with it in the helpers the same type compiles in 256 KB.
 
 ## Lint before rewrites (`inferAndFinalizeModule`, `ast_parse.cpp`) {#lint-before-rewrites}
 
