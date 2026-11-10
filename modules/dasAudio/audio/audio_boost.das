@@ -322,11 +322,11 @@ class AudioChannel {
     [arch(at="../ARCHITECTURE.md#channel-pause-fades")]
     def mix(var data : array<float>#; channels, rate : int; dt : float) : bool {  // nolint:STYLE037,STYLE038 - one DSP stage per branch, linear pipeline
         if (!source->ready() || g_pitch == 0.) return true
+        if (stop && (paused || volume_mixer.volume == 0.)) return false
         if (paused) {
             publish_status(AudioChannelState.paused)
             return true
         }
-        if (stop && volume_mixer.volume == 0.) return false
         let inputRate = uint(float(source.bitrate) * pitch * doppler * g_pitch)
         ma_resampler_set_rate(unsafe(addr(resampler)), inputRate, uint(rate))
         var outputFrames = uint64(data |> length / channels)
@@ -1019,6 +1019,7 @@ def command_processor {  // nolint:STYLE038 - one arm per AudioCommand variant
         } elif (cmd is volume) {
             let vcmd = cmd as volume
             g_sid_2_channel |> get(vcmd.sid) $(var ch : AudioChannel?&) {
+                return if (ch.stop)
                 ch.volume = vcmd.volume
                 let g = ch.ignoreGlobalVolume ? 1.0 : g_volume
                 let effective = vcmd.volume * g
@@ -1057,6 +1058,7 @@ def command_processor {  // nolint:STYLE038 - one arm per AudioCommand variant
         } elif (cmd is ignore_global_volume) {
             let icmd = cmd as ignore_global_volume
             g_sid_2_channel |> get(icmd.sid) $(var ch : AudioChannel?&) {
+                return if (ch.stop)
                 ch.ignoreGlobalVolume = icmd.value
                 let effective = ch.volume * (ch.ignoreGlobalVolume ? 1.0 : g_volume)
                 ma_volume_mixer_set_volume(unsafe(addr(ch.volume_mixer)), effective)

@@ -397,7 +397,6 @@ void ma_sf2_voice_render ( ma_sf2_voice * voice, const short * sample_data, int 
     const int loop_start = voice->loop_start;
     const int loop_end = voice->loop_end;
     const int loop_len = loop_end - loop_start;
-    const int do_loop = (loop_mode == 1 || loop_mode == 3) && loop_len > 0;
     const double base_phase_inc = voice->phase_inc;
     const float inv_32768 = 1.0f / 32768.0f;
     // stereo-linked right channel invariants
@@ -407,6 +406,9 @@ void ma_sf2_voice_render ( ma_sf2_voice * voice, const short * sample_data, int 
     const int loop_start_r = voice->loop_start_r;
     const int loop_end_r = voice->loop_end_r;
     const int loop_len_r = loop_end_r - loop_start_r;
+    // looping requires a valid loop length on every channel actually played, or SF2_INTERP's
+    // "% loop_len" below would divide by zero for a malformed/corrupted SF2 loop region
+    const int do_loop = (loop_mode == 1 || loop_mode == 3) && loop_len > 0 && (!is_stereo || loop_len_r > 0);
 
     int f = 0;
     while ( f < frame_count ) {

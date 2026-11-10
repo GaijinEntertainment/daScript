@@ -184,6 +184,9 @@ in the callback. Source progress freezes after the current render block has been
 does not promise sample-accurate resumption within that block. Zero-duration fades
 still take one sample to reach the target.
 
+A stopped channel ends on its next mix pass whether or not it is paused, and it ignores later
+volume and ignore-global-volume commands, so nothing can lift its fade-out.
+
 ## Pause-exempt PCM {#pause-exempt-pcm}
 
 `play_sound_from_pcm` can opt a new two-dimensional PCM sound out of global pause.

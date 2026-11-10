@@ -6,6 +6,7 @@ require strudel/strudel
 require strudel/strudel_synth
 require strudel/strudel_scheduler
 require strudel/strudel_samples
+require audio
 require math
 
 // Helper: tick a scheduler with a pattern for N chunks and return concatenated output.
@@ -169,5 +170,36 @@ def test_reverb_supersaw(t : T?) {
         let sr = 48000
         let tailRms = rms_range(output, sr / 2, sr / 2 + sr / 4)
         t |> success(tailRms > 0.00001, "supersaw reverb tail should be non-zero")
+    }
+}
+
+[test(description = "a convolution reverb built with a non-positive lowpass frequency clamps it to 1 Hz and still renders finite output")]
+def test_conv_reverb_clamps_lowpass_frequency(t : T?) {
+    t |> run("zero and negative lowpass sweep ends") @(t : T?) {
+        var rev = new ConvolutionReverb
+        conv_reverb_init(rev, 48000, 0.5, 0.0, -5.0, 0.005, ConvReverbQuality.high, 0)
+        t |> equal(rev.lpFreqStart, 1.0)
+        t |> equal(rev.lpFreqEnd, 1.0)
+        var input, output : array<float>
+        input |> resize(1024)
+        output |> resize(1024)
+        input[0] = 1.0
+        input[1] = 1.0
+        var finite = true
+        for (_ in range(8)) {
+            unsafe {
+                conv_reverb_process(rev, addr(input[0]), addr(output[0]), 512)
+            }
+            input[0] = 0.0
+            input[1] = 0.0
+            for (sample in output) {
+                finite &&= sample == sample && abs(sample) < 1e6
+            }
+        }
+        t |> success(finite, "no NaN or runaway value from the IR")
+        conv_reverb_uninit(rev)
+        unsafe {
+            delete rev
+        }
     }
 }
