@@ -26,6 +26,8 @@ options indenting = 4
 require daslib/clargs
 require daslib/fio
 require daslib/strings_boost
+require daslib/rtti
+require daslib/ast
 require strings
 require math
 
@@ -58,6 +60,9 @@ struct Config {
 
     @clarg_doc = "Skip rule-0 module probes (NOT for audit runs)"
     no_probes : bool
+
+    @clarg_doc = "Compile every file in a child daslang process instead of in this one"
+    spawn : bool
 
     @clarg_short = "v"
     @clarg_doc = "Per-page progress"
@@ -1046,7 +1051,26 @@ def emit_page(page : PageSource; cfg : Config) : EmittedPage {
 
 // ===== compile driver =====
 
+//! compiles `path` in this process, where a shared module one page
+//! promotes serves every later page; 0 when it compiles
+def private compile_in_process(path : string; var output : string&) : int {
+    var rc = 1
+    var issues_text = ""
+    var inscope access <- make_file_access("")
+    using() $(var mg : ModuleGroup) {
+        using() $(var cop : CodeOfPolicies) {
+            compile_file(path, access, unsafe(addr(mg)), cop) $(ok, _program, issues) {
+                rc = ok ? 0 : 1
+                issues_text = clone_string("{issues}")
+            }
+        }
+    }
+    output = issues_text
+    return rc
+}
+
 def compile_file_rc(cfg : Config; path : string; var output : string&) : int {
+    return compile_in_process(normalize(path), output) if (!cfg.spawn)
     //! -dasroot names the tree whose modules the page's requires resolve from: the audited
     //! root, not the binary's own tree, so a worktree session checks its own sources
     let args <- [normalize(cfg.daslang), "-dasroot", normalize(cfg.root), "-compile-only", normalize(path)]
@@ -1248,6 +1272,12 @@ def main() : int {
     // a fixed "bin/daslang" default silently spawn-fails wherever the exe lives elsewhere (bin/Release, worktrees)
     if (empty(cfg.daslang)) {
         cfg.daslang = get_command_line_arguments()[0]
+    }
+    let audited_root = to_generic_path(get_full_file_name(cfg.root))
+    let own_root = to_generic_path(get_full_file_name(get_das_root()))
+    if (!cfg.spawn && audited_root != own_root) {
+        to_log(LOG_INFO, "doc-verify: --root is another tree, compiling in child processes\n")
+        cfg.spawn = true
     }
     mkdir_rec(path_join(cfg.out, "pages"))
     let pages <- scan_pages(cfg)
