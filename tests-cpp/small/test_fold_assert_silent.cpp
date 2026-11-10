@@ -17,7 +17,7 @@ namespace {
     };
 }
 
-TEST_CASE("an assert the constant folder trips reports nothing; the same assert at run time reports") {
+TEST_CASE("an assert the constant folder trips reports nothing, the same assert at run time reports") {
     TextPrinter tout;
     ModuleGroup libGroup;
     auto fAccess = make_smart<FsFileAccess>();

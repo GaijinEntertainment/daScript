@@ -73,3 +73,33 @@ TEST_CASE("bare `require fio` fails every time -- promoted daslib/fio is not nam
         CHECK(p->failed());
     }
 }
+
+TEST_CASE("a compile that ignores shared modules builds its own builtin, never the promoted one") {
+    {
+        ModuleGroup lib;
+        auto p = compileNamed("promote_builtin.das", "options gen2\n", lib);
+        REQUIRE(p);
+        REQUIRE_FALSE(p->failed());
+    }
+    auto promoted = Module::requireEx("builtin", true);
+    REQUIRE(promoted);
+    REQUIRE(bool(promoted->promoted));
+
+    ModuleGroup lib;
+    TextPrinter tout;
+    auto fAccess = make_smart<FsFileAccess>();
+    const char * src = "options gen2\n";
+    fAccess->setFileInfo("own_builtin.das", make_unique<TextFileInfo>(src, uint32_t(strlen(src)), false));
+    CodeOfPolicies policies;
+    policies.ignore_shared_modules = true;
+    auto p = compileDaScript("own_builtin.das", fAccess, tout, lib, policies);
+    REQUIRE(p);
+    REQUIRE_FALSE(p->failed());
+    Module * own = nullptr;
+    for ( auto m : lib.getModules() ) {
+        if ( m->name == "builtin" ) own = m;
+    }
+    REQUIRE(own);
+    CHECK(own != promoted);
+    CHECK_FALSE(bool(own->promoted));
+}

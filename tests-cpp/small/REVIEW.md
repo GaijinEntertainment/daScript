@@ -15,3 +15,7 @@ fewer patterns, looser comparison, or a dropped arm - is a defect.** That test h
 source position it records, field for field - is a defect.** The record codes a `LineInfo` as
 a delta against the previous one, so a compression change rounds a position off with nothing
 else noticing.
+
+**A `TEST_CASE` name never holds a `;`.** `doctest_discover_tests` registers each case with
+ctest through a CMake list, so the name splits at the `;` into two filters that match no case
+and report a pass. `tests-cpp/REVIEW.das` checks it.

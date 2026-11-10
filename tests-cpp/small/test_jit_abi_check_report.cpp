@@ -47,18 +47,18 @@ static std::string captureStderr ( Fn && fn ) {
     return out;
 }
 
-TEST_CASE("jit abi check: a drift is one stderr warning, never an abort; a clean sweep is silent") {
-    // rtti::LineInfo is a handled type every build registers; the host value is deliberately wrong
+TEST_CASE("jit abi check: a drift is one stderr warning, never an abort, and a clean sweep is silent") {
+    // rtti_core::LineInfo is a handled type every build registers; the host value is deliberately wrong
     std::string first = captureStderr([]() {
-        jit_check_handled_type_size("rtti", "LineInfo", 1);
+        jit_check_handled_type_size("rtti_core", "LineInfo", 1);
         jit_handled_abi_check_report();   // returns - the old report aborted here
     });
     CHECK_MESSAGE(first.find("JIT ABI CHECK: 1 handled-type layout mismatch") != std::string::npos, "stderr was: " << first);
-    CHECK_MESSAGE(first.find("size   rtti::LineInfo  host=1 target=") != std::string::npos, "stderr was: " << first);
+    CHECK_MESSAGE(first.find("size   rtti_core::LineInfo  host=1 target=") != std::string::npos, "stderr was: " << first);
 
     // the report reset its counters: a following sweep with no drift prints nothing
     std::string second = captureStderr([]() {
-        jit_check_handled_type_size("rtti", "LineInfo", uint32_t(sizeof(das::LineInfo)));
+        jit_check_handled_type_size("rtti_core", "LineInfo", uint32_t(sizeof(das::LineInfo)));
         jit_handled_abi_check_report();
     });
     CHECK_MESSAGE(second.empty(), "a clean sweep wrote to stderr: " << second);

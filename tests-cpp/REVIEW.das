@@ -1,6 +1,7 @@
 options gen2
 
 require strings
+require daslib/strings_boost
 require daslib/fio
 require dastest/review_gate
 
@@ -194,6 +195,25 @@ def private check_big_test_gating {
     }
 }
 
+//! no `TEST_CASE` name in tests-cpp/small holds a `;` - `doctest_discover_tests` hands each name to ctest through a CMake list, the `;` splits it, and each half becomes a filter matching no case that ctest reports as passed
+def private check_test_case_names {
+    let folder = "tests-cpp/small"
+    dir(folder) $(name) {
+        if (name |> ends_with(".cpp")) {
+            let f = "{folder}/{name}"
+            var inscope lines <- split(fread(f), "\n")
+            for (line, line_no in lines, count(1)) {
+                let at = find(line, "TEST_CASE(\"")
+                continue if (at < 0)
+                let close = find(line, "\")", at)
+                if (close > at && find(slice(line, at, close), ";") >= 0) {
+                    gate_finding(f, line_no, "a TEST_CASE name holds ';' - ctest splits the name there and runs two filters matching no case, so the test never runs and reports a pass; spell it with a comma or a dash")
+                }
+            }
+        }
+    }
+}
+
 [export]
 def main() : int {
     if (!fexist("tests-cpp/REVIEW.das")) {
@@ -202,5 +222,6 @@ def main() : int {
     }
     check_lane_wiring()
     check_big_test_gating()
+    check_test_case_names()
     return gate_verdict("tests-cpp")
 }

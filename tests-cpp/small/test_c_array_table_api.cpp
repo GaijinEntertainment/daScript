@@ -164,7 +164,7 @@ TEST_CASE("das_array borrowed: daslang reads C-owned data") {
     cleanup_inline_ctx(ic);
 }
 
-TEST_CASE("das_array context-owned: daslang grows; C reads via das_array_at") {
+TEST_CASE("das_array context-owned: daslang grows, C reads via das_array_at") {
     static const char * SRC =
         "options gen2\n"
         "[export] def fill_squares(var arr : array<int>; n : int) {\n"
@@ -229,7 +229,7 @@ TEST_CASE("das_array C-side resize / lock / unlock without daslang") {
     cleanup_inline_ctx(ic);
 }
 
-TEST_CASE("das_table fill from daslang; C reads via das_table_find") {
+TEST_CASE("das_table fill from daslang, C reads via das_table_find") {
     static const char * SRC =
         "options gen2\n"
         "[export] def count_values(var counts : table<int; int>; data : array<int>#) {\n"

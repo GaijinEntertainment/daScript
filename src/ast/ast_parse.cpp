@@ -1744,7 +1744,7 @@ namespace das {
             // same nameHash ends up in the library and causes
             // a hash-collision crash in addModule.
             auto promotedMod = Module::requireEx(modName, true);
-            if ( promotedMod && promotedMod->promoted ) {
+            if ( promotedMod && promotedMod->promoted && !policies.ignore_shared_modules ) {
                 promotedMod->fromExtraDependency = true;
                 libGroup.addModule(promotedMod);
                 return true;
