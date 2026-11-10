@@ -47,6 +47,44 @@ class DecltypeNoRefMacro : DecltypeMacro {
     override remove_ref = true
 }
 
+def private keep_aliases(t : TypeDeclPtr; var blk : ExprBlock?; var bound : table<string; bool>&;
+                         erased : bool; const_under_dim : bool) {
+    if (t == null) return
+    if (!empty(t.alias) && t.baseType != Type.alias && t.baseType != Type.autoinfer
+            && !key_exists(bound, string(t.alias))) {
+        bound |> insert(string(t.alias), true)
+        if (erased) {
+            var tt = clone_type(t)
+            if (const_under_dim) {
+                tt.flags.constant = true
+            }
+            var carrier = new TypeDecl(at = blk.at, baseType = Type.tFunction,
+                firstType <- new TypeDecl(at = blk.at, baseType = Type.tVoid))
+            carrier.argTypes |> emplace(tt)
+            var vlet = new ExprLet(at = blk.at, atInit = blk.at)
+            vlet.variables |> emplace_new() <| new Variable(at = blk.at,
+                name := "`alias`{t.alias}",
+                _type <- carrier,
+                flags = VariableFlags.generated | VariableFlags.can_shadow)
+            blk.list |> emplace(vlet, 0)
+        }
+    }
+    let under_dim = t.baseType == Type.tFixedArray && (t.flags.constant || const_under_dim)
+    keep_aliases(t.firstType, blk, bound, erased, under_dim)
+    keep_aliases(t.secondType, blk, bound, erased, false)
+    for (at in t.argTypes) {
+        keep_aliases(at, blk, bound, erased, false)
+    }
+}
+
+def private keep_erased_aliases(src : Function?; erased : table<string; bool>;
+                                var blk : ExprBlock?) {
+    var inscope bound : table<string; bool>
+    for (farg in src.arguments) {
+        keep_aliases(farg._type, blk, bound, key_exists(erased, string(farg.name)), false)
+    }
+}
+
 [function_macro(name="template")]
 class TemplateMacro : AstFunctionAnnotation {
     //! This macro is used to remove unused (template) arguments from the instantiation of the generic function.
@@ -66,6 +104,7 @@ class TemplateMacro : AstFunctionAnnotation {
         fclone.flags.privateFunction = true
         newcall.func = null
         var inscope hashes : array<uint64>
+        var inscope erased : table<string; bool>
         hashes |> reserve(length(fclone.annotations[taidx].arguments))
         for (t in fclone.annotations[taidx].arguments) {
             let argidx = find_index_if(each(fclone.arguments)) $(farg) {
@@ -88,9 +127,11 @@ class TemplateMacro : AstFunctionAnnotation {
                 let tname = describe_typedecl(argExpr._type, true, true, true)
                 hashes |> push(hash(tname))
             }
+            erased |> insert(string(t.name), true)
             fclone.arguments |> erase(argidx)
             newcall.arguments |> erase(argidx)
         }
+        keep_erased_aliases(ffunc, erased, fclone.body as ExprBlock)
         fclone.annotations |> erase(taidx)
         let extra = build_string() $(var w) {
             for (h in hashes) {
