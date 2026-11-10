@@ -1682,6 +1682,24 @@ namespace das {
     }
 #endif
 
+    void ast_simulate ( const smart_ptr<Program> & program,
+            const TBlock<void,bool,smart_ptr_raw<Context>,string> & block, Context * context, LineInfoArg * lineinfo ) {
+        TextWriter issues;
+        auto ctx = get_context(program->getContextStackSize());
+        ctx->addRef();
+        bool failed = !program->simulate(*ctx, issues);
+        if ( failed ) {
+            for ( auto & err : program->errors ) {
+                issues << reportError(err.at, err.what, err.extra, err.fixme, err.cerr );
+            }
+            string istr = issues.str();
+            das_invoke<void>::invoke<bool,smart_ptr_raw<Context>,const string &>(context,lineinfo,block,false,nullptr,istr);
+        } else {
+            das_invoke<void>::invoke<bool,smart_ptr_raw<Context>,const string &>(context,lineinfo,block,true,ctx,"");
+        }
+        ctx->delRef();
+    }
+
 #if !DAS_NO_FILEIO
 
     bool ast_set_file_source ( smart_ptr_raw<FileAccess> access, char * fname, char * str, Context * context, LineInfoArg * at ) {
@@ -1759,6 +1777,9 @@ namespace das {
         addExtern<DAS_BIND_FUN(rtti_builtin_compile_file)>(*this, lib, "compile_file",
             SideEffects::modifyExternal, "rtti_builtin_compile_file")
                 ->args({"module_name","fileAccess","moduleGroup","codeOfPolicies","block","context","line"});
+        addExtern<DAS_BIND_FUN(ast_simulate)>(*this, lib, "simulate",
+            SideEffects::modifyExternal, "ast_simulate")
+                ->args({"program","block","context","line"});
         addExtern<DAS_BIND_FUN(ast_create_serializer)>(*this, lib, "create_ast_serializer",
             SideEffects::modifyExternal, "ast_create_serializer");
         addExtern<DAS_BIND_FUN(ast_create_deserializer)>(*this, lib, "create_ast_deserializer",

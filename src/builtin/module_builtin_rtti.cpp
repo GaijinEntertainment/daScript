@@ -315,7 +315,6 @@ namespace das {
 }
 
 das::FileAccessPtr get_file_access( char * pak );//link time resolved dependencies
-das::Context * get_context ( int stackSize=0 );//link time resolved dependencies
 
 namespace das {
 
@@ -1239,24 +1238,6 @@ namespace das {
         return cast<VarInfo *>::from(ctx->getVariableInfo(index));
     }
 
-    void rtti_builtin_simulate ( const smart_ptr<Program> & program,
-            const TBlock<void,bool,smart_ptr_raw<Context>,string> & block, Context * context, LineInfoArg * lineinfo ) {
-        TextWriter issues;
-        auto ctx = get_context(program->getContextStackSize());
-        ctx->addRef();
-        bool failed = !program->simulate(*ctx, issues);
-        if ( failed ) {
-            for ( auto & err : program->errors ) {
-                issues << reportError(err.at, err.what, err.extra, err.fixme, err.cerr );
-            }
-            string istr = issues.str();
-            das_invoke<void>::invoke<bool,smart_ptr_raw<Context>,const string &>(context,lineinfo,block,false,nullptr,istr);
-        } else {
-            das_invoke<void>::invoke<bool,smart_ptr_raw<Context>,const string &>(context,lineinfo,block,true,ctx,"");
-        }
-        ctx->delRef();
-    }
-
     Module * rtti_get_this_module ( smart_ptr_raw<Program> program ) {
         return program->thisModule.get();
     }
@@ -2018,9 +1999,6 @@ namespace das {
                     ->args({"program","block","context","line"});
             addExtern<DAS_BIND_FUN(builtin_list_require)>(*this, lib, "for_each_require_declaration",
                 SideEffects::modifyExternal, "builtin_list_require")
-                    ->args({"program","block","context","line"});
-            addExtern<DAS_BIND_FUN(rtti_builtin_simulate)>(*this, lib, "simulate",
-                SideEffects::modifyExternal, "rtti_builtin_simulate")
                     ->args({"program","block","context","line"});
             addExtern<DAS_BIND_FUN(rtti_add_file_access_root)>(*this, lib, "add_file_access_root",
                 SideEffects::modifyExternal, "rtti_add_file_access_root")
