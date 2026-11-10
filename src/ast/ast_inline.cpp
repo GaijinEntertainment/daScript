@@ -2945,7 +2945,14 @@ namespace das {
             }
             ArgPlan plan;
             if ( !classifyArguments(caller, site, subj, in, plan) ) return;
-            bool exprBody = in.body->list.size()==1 && in.body->list.back()->rtti_isReturn()
+            bool storesInPlace = false;
+            if ( site.stmt->rtti_isOp2() && callLike->type && callLike->type->isRefType() && !callLike->type->ref ) {
+                auto store = static_cast<ExprOp2 *>(site.stmt);
+                storesInPlace = (store->op=="=" || store->op=="<-" || store->op==":=")
+                    && peelCasts(store->right)==callLike;
+            }
+            bool exprBody = !storesInPlace
+                && in.body->list.size()==1 && in.body->list.back()->rtti_isReturn()
                 && !static_cast<ExprReturn *>(in.body->list.back())->moveSemantics    // a substituted read would COPY where the callee moved
                 && !(calleeFn && calleeFn->hasUnsafe)   // the generated unsafe wrapper must be a statement
                 && !in.needScope;                       // so must the with (module) wrapper

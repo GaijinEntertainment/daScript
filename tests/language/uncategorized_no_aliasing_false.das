@@ -18,6 +18,13 @@ struct Bar {
     f : Foo
 }
 
+struct Pair {
+    x : int
+    y : int
+}
+
+def swap_pair(p : Pair) : Pair => Pair(x = p.y, y = p.x)
+
 // potential alias - cmres vs argument a
 def set(a : Foo) {
     var b = Foo(a = 13)
@@ -115,6 +122,15 @@ def set_with_2_extra_which_touches_global(var b : Foo; e1, e2 : int) : Foo {
 
 [test(description = "with no_aliasing off, every call, invoke and global-write shape whose result may alias an argument or global still computes the value a non-aliased copy would")]
 def test_aliasing(t : T?) {     // nolint:STYLE038 - one flat arm per aliasing scenario
+    t |> run("inlined make struct reads its own destination") @(t : T?) {
+        var p = Pair(x = 1, y = 2)
+        p = swap_pair(p)
+        t |> equal(2, p.x)
+        t |> equal(1, p.y)
+        p <- swap_pair(p)
+        t |> equal(1, p.x)
+        t |> equal(2, p.y)
+    }
     t |> run("straight up aliasing") @(t : T?) {
         var a = Foo(a = 1)
         var b : Foo
