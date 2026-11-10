@@ -191,7 +191,7 @@ namespace das {
         bool mark ( char * ptr, uint32_t size ) {
             size = (size + 15) & ~15;
             DAS_ASSERT(size && size<=DAS_MAX_SHOE_ALLOCATION);
-            if ( isLastChunk(ptr, size) ) {
+            if ( lastChunk && lastChunk->isOwnPtr(ptr) ) {
                 return lastChunk->mark(ptr);
             }
             uint32_t si = (size >> 4) - 1;
@@ -226,12 +226,9 @@ namespace das {
             }
             lastChunk = nullptr;
         }
-        __forceinline bool isLastChunk ( char * ptr, uint32_t size ) const {
-            return lastChunk && lastChunk->size == ((size + 15) & ~15u) && lastChunk->isOwnPtr(ptr);
-        }
         bool isOwnPtr ( char * ptr, uint32_t size ) const {
             DAS_ASSERT(size && size<=DAS_MAX_SHOE_ALLOCATION);
-            if ( isLastChunk(ptr, size) ) {
+            if ( lastChunk && lastChunk->isOwnPtr(ptr) ) {
                 return true;
             }
             uint32_t si = (size >> 4) - 1;
@@ -245,7 +242,7 @@ namespace das {
         }
         bool isAllocatedPtr ( char * ptr, uint32_t size ) const {
             DAS_ASSERT(size && size<=DAS_MAX_SHOE_ALLOCATION);
-            if ( isLastChunk(ptr, size) ) {
+            if ( lastChunk && lastChunk->isOwnPtr(ptr) ) {
                 return lastChunk->isAllocatedPtr(ptr);
             }
             uint32_t si = (size >> 4) - 1;

@@ -1105,11 +1105,10 @@ def describeVarLocalCppType(var writer : StringBuilderWriter?; vtype : TypeDeclP
     }
 }
 
-def public aotFuncName(program : ProgramPtr; func : Function?) {
+def public aotFuncName(func : Function?) {
     //! Returns the AOT C++ function name for a daslang function, including its hash suffix.
-    let hash = function_hash(program, func)
-    if (hash != uint64(0)) {
-        return "{aotSuffixNameEx(func.name,"_Func")}_{hash:x}";
+    if (func.hash != uint64(0)) {
+        return "{aotSuffixNameEx(func.name,"_Func")}_{func.hash:x}";
     } else {
         return "{aotSuffixNameEx(func.name,"_Func")}";
     }
@@ -1271,9 +1270,7 @@ class public BlockVariableCollector : AstVisitor {
     tempCounter : uint64 = uint64(0)
 };
 
-def public describeCppFunc(program : ProgramPtr; fn : FunctionPtr;
-                           var collector : BlockVariableCollector?; cross_platform : bool;
-                           needName : bool = true; needInline : bool = true) {
+def public describeCppFunc(fn : FunctionPtr; var collector : BlockVariableCollector?; cross_platform : bool; needName : bool = true; needInline : bool = true) {
     //! Returns the C++ function signature string for an AOT-compiled function.
     return build_string() $(writer) {
         if (needInline) {
@@ -1281,7 +1278,7 @@ def public describeCppFunc(program : ProgramPtr; fn : FunctionPtr;
         }
         describeLocalCppType(unsafe(addr(writer)), fn.result,
             cross_platform, CpptSubstitureRef.no, CpptSkipConst.yes);
-        write(writer, " {needName ? aotFuncName(program, fn) : "(*)"}");
+        write(writer, " {needName ? aotFuncName(fn) : "(*)"}");
             let prefix = fn.arguments |> empty() ? "" : ", "
             let args_str = (each(fn.arguments)
                 ._select(build_string() $(writer2) {
@@ -1450,7 +1447,7 @@ class public CppAot : AstVisitor {
         write(*ss, "\n");
         prog.getThisModule |> for_each_module_function($(var fn : FunctionPtr) {
             if (!fn.flags.builtIn && !fn.flags.noAot && !fn.moreFlags.isTemplate) {
-                write(*ss, "{describeCppFunc(program,fn,collector,cross_platform)};\n");
+                write(*ss, "{describeCppFunc(fn,collector,cross_platform)};\n");
             }
         });
         write(*ss, "\n");
@@ -1514,8 +1511,7 @@ class public CppAot : AstVisitor {
         flow.ret_ptr = fn.result.flags.ref;
         flow.ret_slot = fn.result.isVoid ? "" : describeCppType(fn.result, DescribeConfig(skip_const = true,
             skip_ref = true, cross_platform = cross_platform)) + (flow.ret_ptr ? " *" : "");
-        if (!empty(aot_filter_function) && (fn.name == aot_filter_function
-                || aotFuncName(program, fn) == aot_filter_function)) {
+        if (!empty(aot_filter_function) && (fn.name == aot_filter_function || aotFuncName(fn) == aot_filter_function)) {
             write(*ss, "\n/*<<AOT_FUNC_BEGIN>>*/");
         }
         if (fastMath) {
@@ -1523,7 +1519,7 @@ class public CppAot : AstVisitor {
         }
         write(*ss, "\ninline ");
         describeLocalCppType(ss, fn.result, cross_platform, CpptSubstitureRef.no, CpptSkipConst.yes);
-        write(*ss, " {aotFuncName(program, fn)} ( Context * __context__");
+        write(*ss, " {aotFuncName(fn)} ( Context * __context__");
     }
     def override preVisitFunctionBody(fn : FunctionPtr; expr : ExpressionPtr) {
         if (fn.flags.aotNeedPrologue || prologue) {
@@ -1567,8 +1563,7 @@ class public CppAot : AstVisitor {
         if (fastMath) {
             write(*ss, "DAS_FAST_MATH_POP\n");
         }
-        if (!empty(aot_filter_function) && (fn.name == aot_filter_function
-                || aotFuncName(program, fn) == aot_filter_function)) {
+        if (!empty(aot_filter_function) && (fn.name == aot_filter_function || aotFuncName(fn) == aot_filter_function)) {
             write(*ss, "/*<<AOT_FUNC_END>>*/\n");
         }
         return fn;
@@ -3357,7 +3352,7 @@ class public CppAot : AstVisitor {
                         write(*ss, queryByMNH(mangledName, hash));
                         write(*ss, ")");
                     } else {
-                        write(*ss, "{aotFuncName(program, call_func)}(__context__)");
+                        write(*ss, "{aotFuncName(call_func)}(__context__)");
                     }
                 }
                 write(*ss, ";\n");
@@ -3373,7 +3368,7 @@ class public CppAot : AstVisitor {
                         write(*ss, queryByMNH(mangledName, hash));
                         write(*ss, ")");
                     } else {
-                        write(*ss, "{aotFuncName(program, call_func)}(__context__)");
+                        write(*ss, "{aotFuncName(call_func)}(__context__)");
                     }
                     write(*ss, ";\n");
                 }
@@ -3863,7 +3858,7 @@ class public CppAot : AstVisitor {
                     write(*ss, queryByMNH(mangledName, hash));
                 }
             } else {
-                write(*ss, "{aotFuncName(program, call.func)}(__context__");
+                write(*ss, "{aotFuncName(call.func)}(__context__");
                 if (!call.arguments |> empty()) write(*ss, ",");
             }
         }
@@ -4172,13 +4167,8 @@ class ArgsConverter : AstVisitor {
     private arg_id : uint = 0u
     private ss : StringBuilderWriter?
     private cross_platform : bool
-    private program : ProgramPtr
 
-    def ArgsConverter(var ss_ : StringBuilderWriter?; cp : bool; prog : ProgramPtr) {
-        ss = ss_
-        cross_platform = cp
-        program := prog
-    }
+    def ArgsConverter(var ss_ : StringBuilderWriter?; cp : bool) { ss = ss_; cross_platform = cp; }
 
     def override canVisitFunction(fun : Function?) {
         if (fun.flags.noAot) return false;
@@ -4186,7 +4176,7 @@ class ArgsConverter : AstVisitor {
     }
 
     def override preVisitFunction(fn : FunctionPtr) {
-        write(*ss, "static vec4f __wrap_{aotFuncName(program, fn)} ( Context * __context__ ) \{\n")
+        write(*ss, "static vec4f __wrap_{aotFuncName(fn)} ( Context * __context__ ) \{\n")
         assert(arg_id == 0u)
     }
 
@@ -4221,7 +4211,7 @@ class ArgsConverter : AstVisitor {
             describeLocalCppType(ss, fn.result, cross_platform, CpptSubstitureRef.no, CpptSkipConst.yes)
             write(*ss, " *) __context__->abiCMRES) = ")
         }
-        write(*ss, "{aotFuncName(program, fn)}(__context__")
+        write(*ss, "{aotFuncName(fn)}(__context__")
         for (arg in fn.arguments) {
             write(*ss, ", arg_{aotSuffixNameEx(arg.name, "")}")
         }
@@ -4284,7 +4274,7 @@ def public collectProgramUsedFunctions(program : ProgramPtr; all_modules : bool;
 
 def registerAotCpp(var logs : StringBuilderWriter?; program : ProgramPtr; var context : Context; cross_platform; headers, all_modules : bool = false) {
     let fnn = collectProgramUsedFunctions(program, all_modules, false);
-    var visitor = new ArgsConverter(logs, cross_platform, program);
+    var visitor = new ArgsConverter(logs, cross_platform);
     make_visitor(*visitor) $(adapter_marker) {
         visit(program, adapter_marker);
         if (all_modules) {
@@ -4292,11 +4282,11 @@ def registerAotCpp(var logs : StringBuilderWriter?; program : ProgramPtr; var co
             // a generic instance several modules share has one name and gets one thunk
             var thunked : table<string>
             for (pfun in collectProgramUsedFunctions(program, false, false)) {
-                thunked |> insert(aotFuncName(program, pfun))
+                thunked |> insert(aotFuncName(pfun))
             }
             var foreign <- foreignUsedFunctions(program, false)
             for (fn in foreign) {
-                let name = aotFuncName(program, fn)
+                let name = aotFuncName(fn)
                 if (thunked |> key_exists(name)) continue
                 thunked |> insert(name)
                 visit(fn, adapter_marker)
@@ -4313,11 +4303,9 @@ def registerAotCpp(var logs : StringBuilderWriter?; program : ProgramPtr; var co
         write(*logs, "static AotFunction functions[] = \{\n");
         for (fn in fnn) {
             let is_cmres = fn.flags.copyOnReturn || fn.flags.moveOnReturn ? "true" : "false";
-            let fn_name = aotFuncName(program, fn);
-            write(*logs, "    // {get_aot_hash_comment(program, fn)}\n");
-            let aot_hash = get_function_aot_hash(program, fn)
-            let wrap = "&__wrap_{fn_name}"
-            write(*logs, "    \{ {aot_hash}, {is_cmres}, (void*)&{fn_name}, {wrap} \},\n");
+            let fn_name = aotFuncName(fn);
+            write(*logs, "    // {get_aot_hash_comment(fn)}\n");
+            write(*logs, "    \{ {fn.aotHash}, {is_cmres}, (void*)&{fn_name}, &__wrap_{fn_name} \},\n");
         }
         write(*logs, "};\n");
         write(*logs, "#ifdef _MSC_VER\n#pragma optimize(\"\", on)\n#endif\n");
@@ -4339,6 +4327,26 @@ def registerAotCpp(var logs : StringBuilderWriter?; program : ProgramPtr; var co
         write(*logs, "    resolveTypeInfoAnnotations();\n");
         write(*logs, "}\n");
     }
+}
+
+def public setAotHashes(program : ProgramPtr; ctx : Context) {
+    //! Computes semantic and AOT hashes for all used functions in the program.
+    // compute semantic hash for each used function
+    var fni = 0;
+    program.get_ptr() |> for_each_module_no_order($(mod) {
+        mod |> for_each_module_function($(pfun) {
+            let pindex = function_index(program, pfun)
+            if (pindex < 0 || !is_used(program, pfun)) return ;
+            pfun.hash = get_function_hash_by_id(pfun, pindex, unsafe(reinterpret<void?>(ctx)));
+            fni++;
+        })
+    });
+    program.get_ptr() |> for_each_module_no_order($(mod) {
+        mod |> for_each_module_function($(pfun) {
+            if (function_index(program, pfun) < 0 || !is_used(program, pfun)) return ;
+            pfun.aotHash = get_function_aot_hash(pfun);
+        });
+    });
 }
 
 def public dumpRegisterAot(var tw : StringBuilderWriter?; program : ProgramPtr; var context : Context; allModules : bool; cross_platform : bool) {
@@ -4678,6 +4686,9 @@ def public run_aot(prog : Program?; var pctx : Context?; cop : CodeOfPolicies) :
                     visit(program, flags_adapter)
                 }
 
+
+                setAotHashes(program, *pctx)
+
                 var cpp_aot = new CppAot(ss = unsafe(addr(tmp_writer)),
                                             program := program,
                                             collector = coll,
@@ -4726,8 +4737,7 @@ let AOT_FUNC_BEGIN = "/*<<AOT_FUNC_BEGIN>>*/"
 let AOT_FUNC_END = "/*<<AOT_FUNC_END>>*/"
 
 [export]
-def public run_aot_function(prog : Program?; var _pctx : Context?; cop : CodeOfPolicies;
-                            func_name : string) : string {
+def public run_aot_function(prog : Program?; var pctx : Context?; cop : CodeOfPolicies; func_name : string) : string {
     //! Generates AOT C++ for a single function, identified by name.
     //! Returns the extracted function body, or empty string if not found.
     let program <- unsafe(reinterpret<ProgramPtr>(prog));
@@ -4755,6 +4765,8 @@ def public run_aot_function(prog : Program?; var _pctx : Context?; cop : CodeOfP
             make_visitor(*flags) $(flags_adapter) {
                 visit(program, flags_adapter)
             }
+
+            setAotHashes(program, *pctx)
 
             var cpp_aot = new CppAot(ss = unsafe(addr(tmp_writer)),
                                         program := program,

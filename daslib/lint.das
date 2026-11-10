@@ -171,8 +171,6 @@ struct private Lint023Candidate {
 struct private Lint030Mention {
     slot : int
     @do_not_delete v : Variable const?
-    //! inside a block the call runs: counts only for the outer argument
-    in_block : bool
 }
 
 //! a variable a call somewhere inside argument `slot` writes through a mutable by-reference
@@ -181,8 +179,6 @@ struct private Lint030Write {
     slot : int
     @do_not_delete v : Variable const?
     callee : string
-    //! inside a block the call runs: counts only for the outer argument
-    in_block : bool
 }
 
 //! one call whose argument list the walk is inside: `slot` is the argument being walked,
@@ -703,7 +699,6 @@ def private lint022_fix(at : LineInfo; keyword : string; close : int) : LintFix 
 
 class LintVisitor : AstVisitor {
     lint030_frames : array<Lint030Frame>
-    lint030_plain_closures : array<bool>
     @do_not_delete lint014_candidates : array<Variable const?>
     @do_not_delete lint003_deferred : array<Variable const?>
     @do_not_delete lint004_deferred : array<Variable const?>
@@ -892,7 +887,6 @@ class LintVisitor : AstVisitor {
         lint021_closure_depth = 0
         lint023_deferred_depth = 0
         lint030_frames |> clear()
-        lint030_plain_closures |> clear()
         flow_jumps = false
         if (fun.moreFlags.isTemplate) {
             noLint = true
@@ -1013,7 +1007,6 @@ class LintVisitor : AstVisitor {
             branch_depth++
             lint021_closure_depth++
             lint023_deferred_depth++
-            lint030_plain_closures |> push(!bf.isLambdaBlock && !bf.isGeneratorBlock)
         }
     }
     def override visitExprBlock(var blk : ExprBlock?) : ExpressionPtr {
@@ -1025,7 +1018,6 @@ class LintVisitor : AstVisitor {
             branch_depth--
             lint021_closure_depth--
             lint023_deferred_depth--
-            lint030_plain_closures |> pop()
         }
         return <- blk
     }
@@ -1606,8 +1598,7 @@ class LintVisitor : AstVisitor {
     //! the variables `call` writes through a mutable by-reference parameter it writes during the
     //! call - a bare variable in a `var` slot of `&` or `isRefType` type - into `slot` of the frame
     //! that holds `call` as an argument
-    def private lint030_note_writes(call : ExprCall const?; slot : int; in_block : bool;
-                                    var into : array<Lint030Write>) : void {
+    def private lint030_note_writes(call : ExprCall const?; slot : int; var into : array<Lint030Write>) : void {
         return if (call.func == null)
         for (k in range(min(length(call.arguments), length(call.func.arguments)))) {
             let p = call.func.arguments[k]
@@ -1615,18 +1606,9 @@ class LintVisitor : AstVisitor {
                 || !lint030_callee_writes(call.func, k))
             let v = lint030_bare_var(call.arguments[k])
             if (v != null) {
-                into |> push(Lint030Write(slot = slot, v = v, callee = "{call.name}",
-                                          in_block = in_block))
+                into |> push(Lint030Write(slot = slot, v = v, callee = "{call.name}"))
             }
         }
-    }
-
-    //! 0: code at closure depth `depth` runs with a call at
-    //! `frame_depth`; 1: in a plain block the call runs; -1: later
-    def private lint030_nesting(frame_depth, depth : int) : int {
-        return 0 if (depth == frame_depth)
-        return 1 if (depth == frame_depth + 1 && back(lint030_plain_closures))
-        return -1
     }
 
     //! whether argument `slot` of `call` is `v` itself, or a plain field of it, handed over by
@@ -1642,10 +1624,9 @@ class LintVisitor : AstVisitor {
         return if (noLint || genericDepth > 0 || frame.call == null)
         var reported : table<int>
         for (w in frame.writes) {
-            continue if (w.in_block || key_exists(reported, w.slot))
+            continue if (key_exists(reported, w.slot))
             for (m in frame.mentions) {
-                continue if (m.in_block || m.slot == w.slot || m.v != w.v
-                    || lint030_passed_by_ref(frame.call, m.slot, m.v))
+                continue if (m.slot == w.slot || m.v != w.v || lint030_passed_by_ref(frame.call, m.slot, m.v))
                 lint_error("LINT030: argument {m.slot + 1} reads `{m.v.name}` while the call `{w.callee}(...)` in argument {w.slot + 1} writes it by reference - the order arguments are evaluated in is not defined, so the read sees the value before or after the write by the compiler's choice; run the writing call as a statement of its own first", frame.call.at)
                 reported |> insert(w.slot)
                 break
@@ -1690,19 +1671,14 @@ class LintVisitor : AstVisitor {
             if (!empty(lint030_frames)) {
                 let parent = length(lint030_frames) - 1
                 let slot = lint030_frames[parent].slot
-                let nesting = lint030_nesting(lint030_frames[parent].closure_depth,
-                                              frame.closure_depth)
-                if (slot >= 0 && nesting >= 0) {
-                    let in_block = nesting > 0
+                if (slot >= 0 && frame.closure_depth == lint030_frames[parent].closure_depth) {
                     for (m in frame.mentions) {
-                        lint030_frames[parent].mentions |> push(Lint030Mention(slot = slot,
-                            v = m.v, in_block = in_block))
+                        lint030_frames[parent].mentions |> push(Lint030Mention(slot = slot, v = m.v))
                     }
                     for (w in frame.writes) {
-                        lint030_frames[parent].writes |> push(Lint030Write(slot = slot,
-                            v = w.v, callee = w.callee, in_block = in_block))
+                        lint030_frames[parent].writes |> push(Lint030Write(slot = slot, v = w.v, callee = w.callee))
                     }
-                    lint030_note_writes(expr, slot, in_block, lint030_frames[parent].writes)
+                    lint030_note_writes(expr, slot, lint030_frames[parent].writes)
                 }
             }
         }
@@ -2050,10 +2026,8 @@ class LintVisitor : AstVisitor {
         }
         if (!empty(lint030_frames)) {
             let top = length(lint030_frames) - 1
-            let nesting = lint030_nesting(lint030_frames[top].closure_depth, lint021_closure_depth)
-            if (lint030_frames[top].slot >= 0 && nesting >= 0) {
-                lint030_frames[top].mentions |> push(Lint030Mention(
-                    slot = lint030_frames[top].slot, v = expr.variable, in_block = nesting > 0))
+            if (lint030_frames[top].slot >= 0 && lint030_frames[top].closure_depth == lint021_closure_depth) {
+                lint030_frames[top].mentions |> push(Lint030Mention(slot = lint030_frames[top].slot, v = expr.variable))
             }
         }
         if (noLint || genericDepth > 0) return

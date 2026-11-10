@@ -491,7 +491,7 @@ namespace das
     ,   cant_tuple                                                  =   30949    // 1 site(s)
     ,   cant_type                                                   =   30950    // 6 site(s)
     ,   cant_variant_field                                          =   30951    // 2 site(s)
-    ,   cant_write                                                  =   30952    // 5 site(s)
+    ,   cant_write                                                  =   30952    // 1 site(s)
 
 // unsafe_*
 

@@ -153,10 +153,9 @@ context, are decided per program - the symbol-use pass (`markSymbolUse` and its 
 what it marked; `markFunctionDependencies`, which `collect_dependencies` runs for a macro, walks
 one function's closure only, refreshing the use-edges it reaches and leaving the rest of the
 program's symbol state as it found it - while the `Function` and `Variable` objects of a shared module are one instance
-for every program in the process. The state therefore lives on `Program`, one record per object:
-`functionStates` maps a function to its `FunctionSymbolState`, `variableStates` a global to its
-`VariableSymbolState`, read through `isUsed` and `indexOf` and written through `setUsed` and
-`setIndex`; `clearSymbolUse` drops every use flag and `clearIndices` every slot.
+for every program in the process. The state therefore lives on `Program`: `usedFunctions` and
+`usedVariables` are sets, `functionIndices` and `variableIndices` maps, read through `isUsed`
+and `indexOf` and written through `setUsed` and `setIndex`; `clearSymbolUse` empties the sets.
 An index is `-1` for an object the allocation never saw, `-2` for one it saw and found unused,
 the context slot otherwise; the constant folder tells the first from the rest. Simulate reads
 the tables through `context.thisProgram`, and das code through the `ast` module's `is_used`,
@@ -174,23 +173,13 @@ read, nothing is used and nothing holds a slot. The index tables are per allocat
 folding round's slots do not survive into the final pass. A compile nested inside another - a
 macro calling `compile`, a late `require` (`#require-after-walk`), the folding program - fills its own tables
 and leaves the outer program's answers standing. The stream a module-cache record carries has
-no flag, slot or hash: the reading program recomputes them. Three per-compile
+neither the flag nor the slot: both are recomputed by the reading program. Three per-compile
 values still live on the objects: `Variable::stackTop` and `Function::totalStackSize` /
 `totalGenLabel`, which `allocateStack` writes and the same program's simulate reads before any
 nested compile can run. The JIT's selection - which functions of a program a DLL holds - is a
-flag of the same record, read through `is_jit_selected` and written through
+third table, `jitSelected`, read through `is_jit_selected` and written through
 `set_jit_selected` / `clear_jit_selection`; `Function::requestJit` is the `[jit]` annotation
-only, an author's request the selection reads and never writes. A function's semantic hash is
-in the record too: simulate hashes the nodes the program built for it (`setHash`), so the hash
-says how this program calls what the body calls, and das code reads it through
-`function_hash`. The AOT hash folds the hashes of the function's dependency closure; it is
-cached in the record by `getFunctionAotHash`, which takes the program; `hashFunctions`, the one
-writer of the hashes, drops every cached AOT hash before it rehashes. The records are compile state: after
-the main simulate the program frees every function record and every global's slot, keeping only a
-global's use flag, which hosts read. A reader after that point declares itself - a host that
-inspects the program sets `keep_symbol_tables`; `rtti`, which leaves the program bound to the
-context, the AOT generator, the JIT, the folder and a macro compile keep the tables by the same
-test.
+only, an author's request the selection reads and never writes.
 
 ## The size of a generic instance's argument types (`ast_infer_type_function.cpp`) {#instance-type-size}
 
@@ -232,67 +221,3 @@ about thirty errors, so it builds none of their text itself: `typeError`,
 `malformedTypeError` and `templateStructureError` do, in frames that exist only while an
 error is reported. With the text inline, one level costs 4176 bytes in a Debug build and a type
 at the limit needs more than 512 KB; with it in the helpers the same type compiles in 256 KB.
-
-## Lint before rewrites (`inferAndFinalizeModule`, `ast_parse.cpp`) {#lint-before-rewrites}
-
-A module's diagnostics read the program as written. Once infer converges and the annotation
-patches are quiet, `Program::lint` runs before any pass that changes the shape of code:
-`[inline]` and auto-inline splicing, escape analysis's `scope_free` insertion, the annotation
-fixups, `foldUnsafe` and `optimizeProgram`. A rewrite is free to reshape a function - splice a
-callee's body over a call, drop a read, merge statements - so a rule checked after it would
-judge the rewrite rather than the source: a spliced `delete super.self` no longer reads as a
-call to the parent finalizer, and a spliced read leaves its holder looking unused.
-
-Escape analysis runs after `buildAccessFlags`, so callee side-effect flags are final, and before
-`foldUnsafe`, so the dirty re-infer of the `scope_free` calls it inserts does not re-trip unsafe
-checks that are already folded. The inserted call is a generated terminal call that creates no
-new candidate and changes no side-effect flags, so one dirty re-infer is the fixpoint.
-
-`fixupAnnotations` runs after infer converges, when types are final, and before `foldUnsafe`
-and `optimizeProgram`, so what a `fixup()` generates - the shader-blob globals dasGlsl, dasSpirv
-and dasMetal fill - is folded and optimized like ordinary code. A call-shaped initializer a
-fixup sets is uninferred; the gated dirty re-infer resolves it before `foldUnsafe`.
-
-## Devirtualization (`ast_devirtualize.cpp`) {#devirtualization}
-
-A class method is a function-pointer field every instance carries, and every class below the one
-that first declares it - the family root - shares that slot. A call through static class `C`
-becomes a direct call of `C`'s function only when, for every object whose class is `C` or below,
-no class overrides the method and nothing assigns the field. A write through any class of the
-family reaches those objects, so the guarantee covers the whole family, not `C` alone.
-
-Two things give it. A promise: every class from `C` up to the family root seals the method - in
-practice a method a `class sealed` declares, since `def sealed` always overrides a base field that
-stays assignable. A closed world: a set of modules that holds every class of the family and every
-write to it. `FixedMethods` takes the compiling module as that world, where a family is closed when
-its root and every class deriving from it are private, since no other module can name them. The
-scan covers the module's functions - its generic instances live there - and its global
-initializers. A write is an assignment, a struct literal naming another function than the class's
-own, or any use of the field other than a read or a method call.
-
-Both proofs hold in every program that links the module, so `devirtualize` rewrites the invoke into
-a typed direct call in the module's AST, in optimized builds, after lint and before inline
-splicing: auto-inline splices it like a free function, and AOT and the JIT see a plain call.
-
-## Whole-program facts (`ast_whole_program.cpp`) {#whole-program-facts}
-
-Some conclusions need every module a program links: whether any class overrides a method, whether
-any code writes a method field. A shared module's AST is one instance for every program
-(`#program-scoped-symbol-state`), so such a conclusion is never written into it.
-`Program::wholeProgram` holds them for one program: a handle to a `WholeProgramFacts`
-(`ast_whole_program.h`), and `ast.h` declares only the handle, so `Program` carries no optimization's
-details. `analyzeWholeProgram` fills it at the start of `Program::simulate`, after linking, when
-symbol use and slots are final: it drops the old table, runs every pass of `wholeProgramPasses` in
-order into a fresh one, and installs it. An unoptimized program gets no table. The interpreter and
-the JIT read the table while they emit code and leave the AST as it is. The semantic hash hashes
-the nodes the interpreter built (`#program-scoped-symbol-state`), so a call the table makes direct
-is in it, and the JIT's cache keys, which fold it, keep one program's direct-call object from
-another program that overrides the method. AOT C++ does not read the table yet. A new
-whole-program optimization is a field of `WholeProgramFacts`, a pass that fills it, and a row in
-`wholeProgramPasses`.
-
-Devirtualization's whole-program pass (`collectDevirtualizedCalls`) takes the program's library as
-the world (`#devirtualization`): a method invoke left in a used function is fixed when no class in
-the library overrides the method below `C` and nothing writes its family. The scan reads every
-module of the library, used or not, and reads the optimized AST, so a call the optimizer removed
-writes nothing. The interpreter and the JIT emit a listed invoke as a direct call of its target.

@@ -228,6 +228,8 @@ namespace das {
                 offsetof(Function, sideEffectFlags), makeFunctionSideEffectFlags() );
             this->template addField<DAS_BIND_MANAGED_FIELD(inferStack)>("inferStack");
             this->template addField<DAS_BIND_MANAGED_FIELD(fromGeneric)>("fromGeneric");
+            this->template addField<DAS_BIND_MANAGED_FIELD(hash)>("hash");
+            this->template addField<DAS_BIND_MANAGED_FIELD(aotHash)>("aotHash");
             // properties
             this->template addProperty<DAS_BIND_MANAGED_PROP(getOriginPtr)>("origin","getOriginPtr");
             this->template addProperty<DAS_BIND_MANAGED_PROP(getMangledNameHash)>("getMangledNameHash");

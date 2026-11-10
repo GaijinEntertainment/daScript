@@ -32,9 +32,9 @@ require jit
 // llvm_macro.das, llvm_jit_common.das, runtime helper ABI, default
 // target triple). Cache filenames fold this in, so a bump makes every
 // previously written DLL miss the cache on the next run and get GC'd.
-// Current entry: a method call the whole program proves fixed
-// compiles to a direct call of its target.
-let public LLVM_JIT_CODEGEN_VERSION : uint64 = 0xAFul
+// Current entry: a solid-context array's base is hidden from code
+// generation after the pass pipeline.
+let public LLVM_JIT_CODEGEN_VERSION : uint64 = 0xAEul
 
 let public JIT_FNV_PRIME : uint64 = 1099511628211ul
 
@@ -669,7 +669,7 @@ def public jit_dll_basename(prog : Program?; funcs : array<FunctionPtr>; opt_lev
                             use_host_cpu : bool; sanitize : JitSanitize) : string {
     var h = LLVM_JIT_CODEGEN_VERSION
     for (fn in funcs) {
-        h = (h ^ get_function_aot_hash(prog, fn)) * JIT_FNV_PRIME
+        h = (h ^ get_function_aot_hash(fn)) * JIT_FNV_PRIME
     }
     h = fold_jit_only_inputs(prog, funcs, h)
     h = (h ^ jit_env_salt(opt_level, size_level, emit_prologue, debug_info, target_triple, split, use_host_cpu, sanitize)) * JIT_FNV_PRIME
@@ -787,8 +787,7 @@ def public interpreter_function_addr(var ctx : Context?; func : Function?) : voi
     return MNH_ADDR == 0ul ? null : unsafe(reinterpret<void?>(MNH_ADDR))
 }
 
-def public get_dll_missing(prog : Program?; fns : array<FunctionPtr>; disabled : array<FunctionPtr>;
-                           var dll : DLLHandle?; var uids : UidNodes?) {
+def public get_dll_missing(fns : array<FunctionPtr>; disabled : array<FunctionPtr>; var dll : DLLHandle?; var uids : UidNodes?) {
     verify(!(is_in_completion() || is_compiling_macros() || is_folding()))
 
     var missing = array<Function?>()
@@ -802,7 +801,7 @@ def public get_dll_missing(prog : Program?; fns : array<FunctionPtr>; disabled :
         for (fn in fns) {
             let dll_name = uids.get_dll_fn_name(fn)
             let written_hash = dll.get_function_hash(dll_name)
-            if (written_hash == null || get_function_aot_hash(prog, fn) != *written_hash) {
+            if (written_hash == null || get_function_aot_hash(fn) != *written_hash) {
                 missing |> push(unsafe(reinterpret<Function?>(fn)))
             }
         }
@@ -820,8 +819,7 @@ def public get_dll_missing(prog : Program?; fns : array<FunctionPtr>; disabled :
 //! the candidate set against a DLL: a candidate the DLL holds under its own hash is bound; one
 //! the DLL lacks was dropped by the emitter's content gate and stays interpreted; a candidate
 //! held under another hash, or a `[no_jit]` function the DLL holds, is a miss
-def public probe_dll(prog : Program?; var candidates : array<FunctionPtr>;
-                     disabled : array<FunctionPtr>; var dll : DLLHandle?; var uids : UidNodes?) {
+def public probe_dll(var candidates : array<FunctionPtr>; disabled : array<FunctionPtr>; var dll : DLLHandle?; var uids : UidNodes?) {
     verify(!(is_in_completion() || is_compiling_macros() || is_folding()))
     var bound : array<FunctionPtr>
     var mismatched = 0
@@ -831,7 +829,7 @@ def public probe_dll(prog : Program?; var candidates : array<FunctionPtr>;
             if (written_hash == null) {
                 continue
             }
-            if (get_function_aot_hash(prog, fn) != *written_hash) {
+            if (get_function_aot_hash(fn) != *written_hash) {
                 mismatched++
             } else {
                 bound |> push(fn)

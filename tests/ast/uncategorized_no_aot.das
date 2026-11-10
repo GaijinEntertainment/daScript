@@ -187,15 +187,11 @@ def private check_escape(t : T?; mod : Module?) {
     t |> equal(printed, "\"x\\u0000a\"")
 }
 
-def private hash_of(program : ProgramPtr; mod : Module?; name : string) : uint64 =>
-    function_hash(program, find_unique_function(mod, name))
-
-def private check_hash(t : T?; program : ProgramPtr; mod : Module?) {
-    let returned = hash_of(program, mod, "returned_a") != hash_of(program, mod, "returned_b")
-    t |> success(returned, "returned blobs hash alike")
-    let compared = hash_of(program, mod, "compared_a") != hash_of(program, mod, "compared_b")
-    t |> success(compared, "compared blobs hash alike")
-    t |> equal(hash_of(program, mod, "plain_a"), hash_of(program, mod, "plain_b"))
+def private check_hash(t : T?; mod : Module?) {
+    let hash_of = @(name : string) : uint64 => find_unique_function(mod, name).hash
+    t |> success(hash_of("returned_a") != hash_of("returned_b"), "returned blobs hash alike")
+    t |> success(hash_of("compared_a") != hash_of("compared_b"), "compared blobs hash alike")
+    t |> equal(hash_of("plain_a"), hash_of("plain_b"))
 }
 
 [test(description = "string constants keep embedded null bytes through escaping and hashing")]
@@ -203,7 +199,6 @@ def test_string_null_byte(t : T?) {
     var inscope access <- make_file_access("")
     using() $(var mg : ModuleGroup) {
         using() $(var cop : CodeOfPolicies) {
-            cop.keep_symbol_tables = true
             compile_file(null_byte_fixture_path(), access, unsafe(addr(mg)),
                          cop) $(ok; program; issues) {
                 t |> success(ok, "the fixture did not compile: {issues}")
@@ -213,7 +208,7 @@ def test_string_null_byte(t : T?) {
                 simulate(program) $(sok; _context; serrors) {
                     t |> success(sok, "the fixture did not simulate: {serrors}")
                     return if (!sok)
-                    check_hash(t, program, mod)
+                    check_hash(t, mod)
                 }
             }
         }

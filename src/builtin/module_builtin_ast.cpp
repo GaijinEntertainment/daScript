@@ -27,7 +27,6 @@
 MAKE_TYPE_FACTORY(StringBuilderWriter, StringBuilderWriter)
 
 #include "module_builtin_ast.h"
-#include "../ast/ast_whole_program.h"
 
 // get_file_access lives in the compiler lib (ast_parse.cpp); it compiles the pak.
 das::FileAccessPtr get_file_access ( char * pak );
@@ -700,6 +699,11 @@ namespace das {
         return context->allocateString(func->getMangledName(),at);
     }
 
+    char * get_aot_hash_comment_fn ( const Function * func, Context * context, LineInfoArg * at ) {
+        if ( !func ) context->throw_error_at(at,"expecting function");
+        return context->allocateString(getAotHashComment(func),at);
+    }
+
     char * get_mangled_name_t ( TypeDecl * typ, Context * context, LineInfoArg * at ) {
         if ( !typ ) context->throw_error_at(at,"expecting function");
         return context->allocateString(typ->getMangledName(),at);
@@ -1238,6 +1242,12 @@ namespace das {
         return program->getInitSemanticHashWithDep(semH);
     }
 
+    uint64_t getFunctionHashById(Function *fun, int id, void * pctx, Context * , LineInfoArg * ) {
+        auto fn = ((Context*)pctx)->getFunction(id);
+        DAS_ASSERT(fn->mangledName == fun->getMangledName());
+        return getFunctionHash(fun, fn->code, ((Context*)pctx));
+    }
+
     bool modAotRequire(Module *mod, StringBuilderWriter *ss, Context * , LineInfoArg * ) {
         return mod->aotRequire(*ss) != ModuleAotType::no_aot;
     }
@@ -1305,33 +1315,6 @@ namespace das {
         return ast_variable_index(program.get(), var, context, at);
     }
 
-    uint64_t ast_function_hash ( const Program * program, const Function * fn, Context * context, LineInfoArg * at ) {
-        return fn ? symbolStateProgram(program, "function_hash", context, at)->hashOf(fn) : 0;
-    }
-
-    uint64_t ast_function_aot_hash ( Program * program, const Function * fn, Context * context, LineInfoArg * at ) {
-        if ( !fn ) context->throw_error_at(at, "get_function_aot_hash: expecting function");
-        symbolStateProgram(program, "get_function_aot_hash", context, at);
-        return getFunctionAotHash(program, fn);
-    }
-
-    char * ast_aot_hash_comment ( const Program * program, const Function * fn, Context * context, LineInfoArg * at ) {
-        if ( !fn ) context->throw_error_at(at, "get_aot_hash_comment: expecting function");
-        return context->allocateString(getAotHashComment(symbolStateProgram(program, "get_aot_hash_comment", context, at), fn), at);
-    }
-
-    uint64_t ast_function_hash_sp ( smart_ptr_raw<Program> program, const Function * fn, Context * context, LineInfoArg * at ) {
-        return ast_function_hash(program.get(), fn, context, at);
-    }
-
-    uint64_t ast_function_aot_hash_sp ( smart_ptr_raw<Program> program, const Function * fn, Context * context, LineInfoArg * at ) {
-        return ast_function_aot_hash(program.get(), fn, context, at);
-    }
-
-    char * ast_aot_hash_comment_sp ( smart_ptr_raw<Program> program, const Function * fn, Context * context, LineInfoArg * at ) {
-        return ast_aot_hash_comment(program.get(), fn, context, at);
-    }
-
     bool ast_is_jit_selected ( const Program * program, const Function * fn, Context * context, LineInfoArg * at ) {
         return fn && symbolStateProgram(program, "is_jit_selected", context, at)->isJitSelected(fn);
     }
@@ -1343,11 +1326,6 @@ namespace das {
 
     void ast_clear_jit_selection ( const Program * program, Context * context, LineInfoArg * at ) {
         const_cast<Program *>(symbolStateProgram(program, "clear_jit_selection", context, at))->clearJitSelection();
-    }
-
-    Function * ast_devirtualized_call ( const Program * program, const ExprInvoke * expr, Context * context, LineInfoArg * at ) {
-        auto facts = symbolStateProgram(program, "devirtualized_call", context, at)->wholeProgram.get();
-        return facts && expr ? facts->devirtualizedCall(expr) : nullptr;
     }
 
     bool ast_is_jit_selected_sp ( smart_ptr_raw<Program> program, const Function * fn, Context * context, LineInfoArg * at ) {
@@ -2182,6 +2160,12 @@ namespace das {
             SideEffects::modifyExternal, "addModuleOption")
                 ->args({"module","option","type","context","at"});
         // hash
+        addExtern<DAS_BIND_FUN(getFunctionAotHash)>(*this, lib,  "get_function_aot_hash",
+            SideEffects::none, "getFunctionAotHash")
+                ->args({"fun"});
+        addExtern<DAS_BIND_FUN(get_aot_hash_comment_fn)>(*this, lib,  "get_aot_hash_comment",
+            SideEffects::none, "get_aot_hash_comment_fn")
+                ->args({"fun","context","line"})->setTempStringResult();
         // infer
         addExtern<DAS_BIND_FUN(inferGenericTypeEx)>(*this, lib,  "infer_generic_type",
             SideEffects::none, "inferGenericTypeEx")
@@ -2251,6 +2235,9 @@ namespace das {
         addExtern<DAS_BIND_FUN(getInitSemanticHashWithDep)>(*this, lib,  "getInitSemanticHashWithDep",
                                                           SideEffects::none, "getInitSemanticHashWithDep")
             ->args({"program","init"});
+        addExtern<DAS_BIND_FUN(getFunctionHashById)>(*this, lib,  "get_function_hash_by_id",
+                                                          SideEffects::modifyExternal, "getFunctionHashById")
+            ->args({    "fun", "id", "pctx", "context", "at"});
         addExtern<DAS_BIND_FUN(modAotRequire)>(*this, lib,  "aot_require",
                                                           SideEffects::modifyExternal, "modAotRequire")
             ->args({"mod", "ss", "context", "at"});
@@ -2350,27 +2337,6 @@ namespace das {
         addExtern<DAS_BIND_FUN(ast_variable_index_sp)>(*this, lib,  "variable_index",
             SideEffects::accessExternal, "ast_variable_index_sp")
                 ->args({"program","variable","context","at"});
-        addExtern<DAS_BIND_FUN(ast_function_hash)>(*this, lib,  "function_hash",
-            SideEffects::accessExternal, "ast_function_hash")
-                ->args({"program","function","context","at"});
-        addExtern<DAS_BIND_FUN(ast_function_hash_sp)>(*this, lib,  "function_hash",
-            SideEffects::accessExternal, "ast_function_hash_sp")
-                ->args({"program","function","context","at"});
-        addExtern<DAS_BIND_FUN(ast_function_aot_hash)>(*this, lib,  "get_function_aot_hash",
-            SideEffects::modifyExternal, "ast_function_aot_hash")
-                ->args({"program","function","context","at"});
-        addExtern<DAS_BIND_FUN(ast_function_aot_hash_sp)>(*this, lib,  "get_function_aot_hash",
-            SideEffects::modifyExternal, "ast_function_aot_hash_sp")
-                ->args({"program","function","context","at"});
-        addExtern<DAS_BIND_FUN(ast_aot_hash_comment)>(*this, lib,  "get_aot_hash_comment",
-            SideEffects::accessExternal, "ast_aot_hash_comment")
-                ->args({"program","function","context","at"})->setTempStringResult();
-        addExtern<DAS_BIND_FUN(ast_aot_hash_comment_sp)>(*this, lib,  "get_aot_hash_comment",
-            SideEffects::accessExternal, "ast_aot_hash_comment_sp")
-                ->args({"program","function","context","at"})->setTempStringResult();
-        addExtern<DAS_BIND_FUN(ast_devirtualized_call)>(*this, lib,  "devirtualized_call",
-            SideEffects::accessExternal, "ast_devirtualized_call")
-                ->args({"program","invoke","context","at"});
         addExtern<DAS_BIND_FUN(ast_is_jit_selected)>(*this, lib,  "is_jit_selected",
             SideEffects::accessExternal, "ast_is_jit_selected")
                 ->args({"program","function","context","at"});

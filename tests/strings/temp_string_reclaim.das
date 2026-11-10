@@ -388,18 +388,3 @@ def test_delete_temp_string_persistent(t : T?) {
         t.equal(tempString2, "") // temp string should be empty after removal
     }
 }
-
-[never_inline]
-def first_byte(s : string) : int => first_character(s)
-
-[test(description = "a reclaimed temporary with an embedded NUL byte, parked between temporaries of its real size class, does not free the wrong chunk")]
-def test_temp_string_reclaim_embedded_nul(t : T?) {
-    let withNul <- [for (i in range(20)); i == 4 ? 0u8 : uint8('A' + i)]
-    let plain <- [for (i in range(20)); uint8('A' + i)]
-    var total = 0
-    for (_ in range(100)) {
-        total += first_byte(string(withNul))
-        total += first_byte(string(plain))
-    }
-    t |> equal(total, 200 * 'A')
-}

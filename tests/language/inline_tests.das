@@ -7,6 +7,11 @@ require UnitTest
 require math
 require _inline_shadow_helper
 
+enum Color {
+    red
+    green
+}
+
 struct Defaults {
     a : int = 7
     b : int = 11
@@ -43,6 +48,11 @@ def defaults_sum() : int {
     let d = Defaults()
     return d.a + d.b
 }
+
+def take_witness(v : auto(VT)) : int => typeinfo sizeof(v) + (v == default<VT> ? 100 : 0)
+
+[inline]
+def pass_witness(t : auto(TT)) : int => take_witness(t)
 
 [never_inline]
 def other_array() : array<int> => <- [7, 8, 9]
@@ -112,6 +122,11 @@ def test_cloned_body_keeps_inferred_state(t : T?) {
     }
     t |> run("a struct literal in a spliced body runs its field initializers") @(t : T?) {
         t |> equal(defaults_sum(), 18)
+    }
+    t |> run("a type witness passed on by value becomes the type's zero") @(t : T?) {
+        t |> equal(pass_witness(type<int>), 104)
+        t |> equal(pass_witness(type<Color>), 104)
+        t |> equal(pass_witness(type<float>), 104)
     }
 }
 
