@@ -7,7 +7,6 @@ require daslib/clargs
 require daslib/fio
 require daslib/strings_boost
 require strings
-require ../common/parallel_workers.das
 require ../common/verify_pool.das
 
 // --ast-verify-batch prints its findings and exits 0, so the verdict is read from the output.
@@ -29,12 +28,6 @@ struct Config {
 
     @clarg_doc = "Base ref the changed set is taken against; DAS_CI_BASE_REF, else master"
     base_ref : string
-
-    @clarg_doc = "Children in flight under --changed; 0 = the box's physical cores"
-    workers : int
-
-    @clarg_doc = "Share a fresh module cache between the --changed children (deleted after the run)"
-    shared_cache : bool
 }
 
 struct ChangedSet {
@@ -91,16 +84,17 @@ def private report_result(file : string; r : VerifyResult) : bool {
     return false
 }
 
-def private verify_one(daslang, file : string) : bool {
+def private verify_one(daslang, file : string; file_timeout : float = FILE_TIMEOUT) : bool {
     return true if (is_unverifiable(file, false))
     return false if (!empty(range_failures([file], false)))
     var out : string
     let argv <- [daslang, "--ast-verify-batch", "-compile-only", file]
-    let ec = run_and_capture(argv, out, FILE_TIMEOUT)
-    return report_result(file, verify_verdict(out, ec, FILE_TIMEOUT))
+    let ec = run_and_capture(argv, out, file_timeout)
+    return report_result(file, verify_verdict(out, ec, file_timeout))
 }
 
-def private verify_batch(daslang; files : array<string>) : bool {
+def private verify_batch(daslang; files : array<string>;
+                         file_timeout : float = FILE_TIMEOUT) : bool {
     if (!empty(range_failures(files, false))) {
         return false
     }
@@ -110,7 +104,7 @@ def private verify_batch(daslang; files : array<string>) : bool {
         return true
     }
     var out : string
-    let timeout = FILE_TIMEOUT * float(length(argv) - 3)
+    let timeout = file_timeout * float(length(argv) - 3)
     let ec = run_and_capture(argv, out, timeout)
     let r = verify_verdict(out, ec, timeout)
     if (!r.unverifiable && empty(r.findings)) {
@@ -118,45 +112,11 @@ def private verify_batch(daslang; files : array<string>) : bool {
     }
     var ok = true
     for (f in files) {
-        if (!verify_one(daslang, f)) {
+        if (!verify_one(daslang, f, file_timeout)) {
             ok = false
         }
     }
     return ok
-}
-
-def private verify_changed(daslang : string; cfg : Config; changed : array<string>) : int {
-    let t0 = ref_time_ticks()
-    let files <- [for (f in changed); f; where !is_unverifiable(f, true)]
-    let ranges <- range_failures(files, true)
-    let ranges_ms = get_time_usec(t0) / 1000
-    to_log(LOG_INFO, "ast-verify: source ranges over {length(files)} file(s) in {ranges_ms}ms\n")
-    let children <- [for (f in files); f; where !key_exists(ranges, f)]
-    let workers = compute_worker_count(length(children), cfg.workers)
-    var tmp_error : string
-    let tmp = temp_directory(tmp_error)
-    let cache_dir = empty(tmp) ? "." : tmp
-    let cache = cfg.shared_cache ? path_join(cache_dir,
-                                             "ast_verify_{get_time_usec(t0)}.dascache") : ""
-    let cache_note = empty(cache) ? "no module cache" : "run cache {cache}"
-    let cap_s = int(CHANGED_TIMEOUT)
-    let pool = "{length(children)} child(ren), {workers} in flight"
-    to_log(LOG_INFO, "ast-verify: {pool}, {cap_s}s cap each, {cache_note}\n")
-    let results <- run_verify_pool(daslang, children, workers, CHANGED_TIMEOUT, cache)
-    if (!empty(cache)) {
-        remove(cache)
-    }
-    var failed = length(ranges)
-    for (f, r in children, results) {
-        failed += report_result(f, r) ? 0 : 1
-    }
-    let total_s = get_time_nsec(t0) / 1000000000l
-    to_log(LOG_INFO, "ast-verify: {length(changed)} changed file(s) in {total_s}s\n")
-    if (failed != 0) {
-        to_log(LOG_ERROR, "ast-verify: {failed} file(s) reported\n")
-        return 1
-    }
-    return 0
 }
 
 def private changed_files(base_ref : string) : ChangedSet {
@@ -204,5 +164,6 @@ def main() : int {
     if (!set.ok) {
         return 1
     }
-    return verify_changed(daslang, cfg, set.files)
+    let files <- [for (f in set.files); f; where !is_unverifiable(f, true)]
+    return verify_batch(daslang, files, CHANGED_TIMEOUT) ? 0 : 1
 }
