@@ -80,6 +80,12 @@ or starts it in a working directory inside `<dir>`, where `<dir>` is `test_temp_
 `create_temp_directory` directory.** A child writes its front-end module cache and its JIT DLL
 cache relative to its working directory otherwise, which is the tree two concurrent runs share.
 
+**A diff that adds or changes a test under `tests/language/` that reads a file by a path built
+from `get_das_root()` skips on `get_running_platform_name() == "emscripten"`, or hands
+`compile_file` its source with `set_file_source`.** The web lane's das root does not hold the repo
+(`ARCHITECTURE.md#web-lane`). `REVIEW.das` reports only a `compile_file` in a file with no
+emscripten skip anywhere; the reviewer checks every other read.
+
 **A diff that widens the `dasbind` skip in `.das_test` or drops one of the `[extern]` probe
 functions or one of their assertions from
 `dasbind/uncategorized_no_aot_rtti_strict_smart_pointers_false.das` is a defect.** This file is the

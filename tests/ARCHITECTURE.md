@@ -126,7 +126,7 @@ through a helper that returns such a path, or through a variable or field bound 
 writing `fopen` of a relative literal path. The gate treats the result of any call other than
 `get_das_root`, `path_join`, `join_path`, `dir_name`, `string` and the file's own root-path
 helpers as a path outside the tree, whatever its arguments name. `--root <dir>` points the gate
-at another folder, which the gate's own test in `dastest/uncategorized.das` (this folder) uses
+at another folder, which the gate's own test in `dastest/review_gate.das` (this folder) uses
 to run it over `dastest/_tests_gate_fixture/` and `dastest/_tests_shape_fixture/`.
 
 Ledgered: the tests of `jit_tests/jit_artifacts.das` write under the tree on purpose, because
@@ -147,3 +147,11 @@ subfolder's files are compiled only when a variable lists them. It runs every fi
 `.das_test` skips the file's folder under `--use-aot`. Per-PR CI builds only the subset binary
 (`test_aot_subset`, `tests/language` alone); the full `test_aot` runs nightly and under
 `preflight --full`.
+
+## What the web lane can read {#web-lane}
+
+The WebAssembly build runs `tests/language` under Node with the repo mounted at `/repo`, beside a
+das root that holds only the embedded `daslib` and `dastest`. A test finds its own file there,
+and a path built from `get_das_root()` names nothing. `REVIEW.das` reports a `compile_file` on
+such a path in a file with no `"emscripten"` skip, unless the function passes the source with
+`set_file_source` - that source is read from memory, so the path names no file to miss.
