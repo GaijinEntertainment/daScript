@@ -417,6 +417,11 @@ namespace das {
         return fileName.empty() || !access->getFileInfo(fileName) ? rootPath : fileName;
     }
 
+    static bool isSameModuleFile ( const FileAccessPtr & access, const string & a, const string & b ) {
+        if ( access->isSameFileName(a, b) ) return true;
+        return normalizeFileName(a.c_str()) == normalizeFileName(b.c_str());
+    }
+
     bool getPrerequisits ( const string & fileName,
                           const FileAccessPtr & access,
                           string &modName,
@@ -543,7 +548,7 @@ namespace das {
                             info.requireName = modRec.name;
                             req.push_back(info);
                         } else {
-                            if ( !access->isSameFileName(it_r->fileName, info.fileName) ) {
+                            if ( !isSameModuleFile(access, it_r->fileName, info.fileName) ) {
                                 if ( access->getFileInfo(info.fileName) ) {
                                     // same module name, different file name, both files exist
                                     if ( builtin_string_stricmp(it_r->fileName.c_str(), info.fileName.c_str()) == 0 ) {
