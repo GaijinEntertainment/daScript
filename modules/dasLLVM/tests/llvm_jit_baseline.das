@@ -9,6 +9,7 @@ options gen2
 options no_aot
 
 require dastest/testing_boost
+require daslib/ast
 require daslib/fio
 require daslib/strings_boost
 require strings

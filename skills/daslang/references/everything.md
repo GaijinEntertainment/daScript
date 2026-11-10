@@ -3728,7 +3728,6 @@ The RTTI module exposes runtime type information and program introspection facil
 
 - `for_each_expected_error` - Iterates through each expected compilation error declared in the `Program` (via `expect`), yielding the error code for each.
 - `for_each_require_declaration` - Iterates through each `require` declaration of the compiled `Program`, yielding the module name, public/private flag, and source `LineInfo`.
-- `simulate` - Simulates (links and initializes) a compiled `Program`, returning a `Context` pointer ready for function execution, or null on failure.
 
 ### File access
 
@@ -4175,6 +4174,7 @@ The AST module provides access to the abstract syntax tree representation of das
 - `parse_file_no_prerequisites` - Parses one file alone and stops there: no prerequisite walk, no type inference, no macro run, and the host's module-cache stream is hidden for the duration.
 - `require_module_now` - Compiles `module_name` - a `shared` module, named by its file - and its prerequisites into the process at the point of the call, or answers the module already there, under `codeOfPolicies`; a null `fileAccess` means the compiling program's own.
 - `set_file_source` - Registers a source code `string` for the given file name inside the `FileAccess` object, allowing in-memory compilation without disk files.
+- `simulate` - Simulates (links and initializes) a compiled `Program`, returning a `Context` pointer ready for function execution, or null on failure.
 
 ### AST serialization
 
