@@ -2,6 +2,7 @@
 
 #include "daScript/ast/ast.h"
 #include "ast_match.h"
+#include "ast_whole_program.h"
 #include "daScript/ast/ast_expressions.h"
 #include "daScript/ast/ast_visitor.h"
 #include "daScript/ast/ast_simulate.h"
@@ -201,7 +202,7 @@ namespace das
         SimNode * sv_makeLocalCopy(const LineInfo & at, uint32_t stackTop, ExpressionPtr rE);
         SimNode * sv_makeCopy(const LineInfo & at, ExpressionPtr lE, ExpressionPtr rE);
         SimNode * sv_makeMove(const LineInfo & at, ExpressionPtr lE, ExpressionPtr rE);
-        SimNode_CallBase * sv_simulateCall(const FunctionPtr & func, const ExprLooksLikeCall * expr, SimNode_CallBase * pCall);
+        SimNode_CallBase * sv_simulateCall(const FunctionPtr & func, const ExprLooksLikeCall * expr, SimNode_CallBase * pCall, int firstArg = 0);
         SimNode * sv_trySimulate(const Expression * expr, uint32_t extraOffset, const TypeDeclPtr & r2vType);
         SimNode * sv_trySimulate_Var(const ExprVar * expr, uint32_t extraOffset, const TypeDeclPtr & r2vType);
         SimNode * sv_trySimulate_Cast(const ExprCast * expr, uint32_t extraOffset, const TypeDeclPtr & r2vType);
@@ -1433,28 +1434,26 @@ namespace das
 
     void SimulateVisitor::visit(const ExprInvoke * expr) {
         const auto &at = expr->at;
+        auto facts = context.thisProgram->wholeProgram.get();
+        if ( auto target = facts ? facts->devirtualizedCall(expr) : nullptr ) {
+            vector<ExpressionPtr> args(expr->arguments.begin() + 1, expr->arguments.end());
+            auto pCall = static_cast<SimNode_CallBase *>(target->makeSimNode(context, args));
+            sv_simulateCall(target, expr, pCall, 1);
+            if ( expr->isCopyOrMove() ) pCall->cmresEval = context.code->makeNode<SimNode_GetLocal>(at, expr->stackTop);
+            setE(expr, sv_keepAlive(at, pCall));
+            return;
+        }
         auto blockT = expr->arguments[0]->type;
         SimNode_CallBase * pInvoke;
         uint32_t methodOffset = 0;
         if ( expr->isInvokeMethod ) {
-            bool foundOffset = false;
-            if ( expr->arguments[0]->rtti_isField() ) {
-                auto field = static_cast<ExprField*>(expr->arguments[0]);
-                methodOffset = field->fieldRef->offset;
-                foundOffset = true;
-            } else if ( expr->arguments[0]->rtti_isR2V() ) {
-                auto eR2V = static_cast<ExprRef2Value*>(expr->arguments[0]);
-                if ( eR2V->subexpr->rtti_isField() ) {
-                    auto field = static_cast<ExprField*>(eR2V->subexpr);
-                    methodOffset = field->fieldRef->offset;
-                    foundOffset = true;
-                }
-            }
-            if (!foundOffset) {
+            auto field = expr->methodField();
+            if ( !field ) {
                 context.thisProgram->error("internal compilation error, invoke method expects field", "", "", at, CompilationError::internal_field);
                 setE(expr, nullptr);
                 return;
             }
+            methodOffset = field->fieldRef->offset;
         }
         {
             if ( expr->isCopyOrMove() ) {
@@ -3450,7 +3449,7 @@ namespace das
         }
     }
 
-    SimNode_CallBase * SimulateVisitor::sv_simulateCall(const FunctionPtr & func, const ExprLooksLikeCall * expr, SimNode_CallBase * pCall) {
+    SimNode_CallBase * SimulateVisitor::sv_simulateCall(const FunctionPtr & func, const ExprLooksLikeCall * expr, SimNode_CallBase * pCall, int firstArg) {
         bool needTypeInfo = false;
         for ( auto & arg : func->arguments ) {
             if ( arg->type->baseType==Type::anyArgument )
@@ -3467,7 +3466,7 @@ namespace das
         } else {
             DAS_ASSERTF(0, "calling function which is not used. how?");
         }
-        if ( int nArg = (int) expr->arguments.size() ) {
+        if ( int nArg = (int) expr->arguments.size() - firstArg ) {
             pCall->arguments = (SimNode **) context.code->allocate(nArg * sizeof(SimNode *));
             if ( needTypeInfo ) {
                 pCall->types = (TypeInfo **) context.code->allocate(nArg * sizeof(TypeInfo *));
@@ -3476,10 +3475,10 @@ namespace das
             }
             pCall->nArguments = nArg;
             for ( int a=0; a!=nArg; ++a ) {
-                pCall->arguments[a] = getE(expr->arguments[a]);
+                pCall->arguments[a] = getE(expr->arguments[a + firstArg]);
                 if ( pCall->types ) {
                     if ( func->arguments[a]->type->baseType==Type::anyArgument ) {
-                        pCall->types[a] = context.thisHelper->makeTypeInfo(nullptr, expr->arguments[a]->type);
+                        pCall->types[a] = context.thisHelper->makeTypeInfo(nullptr, expr->arguments[a + firstArg]->type);
                     } else {
                         pCall->types[a] = nullptr;
                     }
@@ -3686,6 +3685,7 @@ namespace das
             updateKeepAliveFlags();
         }
         linkProgram(this, logs);
+        analyzeWholeProgram(this);
         isSimulating = true;
         // the simulate is this program's compile: its init script and its simulate macros run with it bound
         auto bound_env = daScriptEnvironment::getBound();
@@ -4092,11 +4092,7 @@ namespace das
         // never asked, and a function it shares with the user program gets hashed by that
         // program's own simulate
         if ( !isCompilingMacros ) {
-            for ( int i=0, is=context.totalFunctions; i!=is; ++i ) {
-                Function * func = indexToFunction[i];
-                SimFunction & fn = context.functions[i];
-                func->hash = getFunctionHash(func, fn.code, &context);
-            }
+            hashFunctions(context, indexToFunction);
         }
         for (auto pm : library.modules) {
             pm->structures.foreach([&](auto st){
@@ -4129,9 +4125,8 @@ namespace das
             // a host may keep the program, so free its tables after the main simulate; the folder and the macro
             // module simulate it mid-compile, AOT and JIT emitters read the tables later, hosts read usedVariables
             if ( !policies.keep_symbol_tables && !folding && !isCompilingMacros && !is_in_aot() && !policies.jit_enabled ) {
-                usedFunctions = {};
-                functionIndices = {};
-                variableIndices = {};
+                functionStates = {};
+                for ( auto & it : variableStates ) it.second.index = -1;
             }
         }
         if ( options.getBoolOption("log_total_compile_time",policies.log_total_compile_time)
@@ -4156,18 +4151,26 @@ namespace das
                 }
             });
         }
-        uint64_t res = getVariableListAotHash(globs, initHash);
+        uint64_t res = getVariableListAotHash(this, globs, initHash);
         // add init functions to dependencies
         const uint64_t fnv_prime = 1099511628211ul;
         for (auto& pm : library.modules) {
             pm->functions.foreach([&](auto pfun){
                 if (indexOf(pfun) < 0 || !isUsed(pfun) || !pfun->init)
                     return;
-                res = (res ^ pfun->aotHash) * fnv_prime;
+                res = (res ^ getFunctionAotHash(this, pfun)) * fnv_prime;
             });
         }
         initSemanticHashWithDep = res; // pass it to the standalone context registration
         return initSemanticHashWithDep;
+    }
+
+    // src/ast/ARCHITECTURE.md#program-scoped-symbol-state
+    void Program::hashFunctions ( Context & context, const das_hash_map<int,Function *> & byIndex ) {
+        for ( auto & it : functionStates ) it.second.aotHash = 0;
+        for ( auto & [index, func] : byIndex ) {
+            setHash(func, getFunctionHash(func, context.functions[index].code, &context));
+        }
     }
 
     void Program::linkCppAot ( Context & context, AotLibrary & aotLib, TextWriter & logs ) {
@@ -4184,19 +4187,14 @@ namespace das
                 indexToFunction[indexOf(pfun)] = pfun;
             });
         }
-        for ( int fni=0, fnis=context.totalFunctions; fni!=fnis; ++fni ) {
-            if ( !fnn[fni]->noAot ) {
-                SimFunction & fn = context.functions[fni];
-                fnn[fni]->hash = getFunctionHash(fnn[fni], fn.code, &context);
-            }
-        }
+        hashFunctions(context, indexToFunction);
         vector<pair<int,uint64_t>> misses;
         vector<pair<int,const char *>> declined;
         das_hash_map<Module *,int> linkedPerModule;
         for ( int fni=0, fnis=context.totalFunctions; fni!=fnis; ++fni ) {
             if ( !fnn[fni]->noAot && !(isLlvmAot && fnn[fni]->requestNoJit) ) {
                 SimFunction & fn = context.functions[fni];
-                uint64_t semHash = getFunctionAotHash(fnn[fni]);
+                uint64_t semHash = getFunctionAotHash(this, fnn[fni]);
                 auto it = aotLib.find(semHash);
                 if ( it != aotLib.end() && it->second.declineReason ) {
                     if ( logIt ) logs << "DECLINED " << fn.mangledName << " AOT=0x" << HEX << semHash << DEC << ": " << it->second.declineReason << "\n";
@@ -4233,7 +4231,7 @@ namespace das
                 tp << "other functions of module '" << fnModule->name << "' link, so its AOT artifact (C++ or LLVM object) is stale for this one\n";
                 tp << "regenerate the artifact and rebuild (skills/internal/aot_hash_desync_debugging.md)\n";
             }
-            tp << "// " << getAotHashComment(fnn[fni]) << "\n";
+            tp << "// " << getAotHashComment(this, fnn[fni]) << "\n";
             printSimFunction(tp, &context, indexToFunction[fni], fn.code, true);
             linkError(string(fn.mangledName), tp.str() );
         }

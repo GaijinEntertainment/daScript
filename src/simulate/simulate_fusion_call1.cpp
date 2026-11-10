@@ -102,8 +102,7 @@ __forceinline SimNode * safeArg1 ( SimNode * node, int index ) {
         NO_ASAN_INLINE vec4f compute(Context & context) { \
             DAS_PROFILE_NODE \
             vec4f argValues[1]; \
-            argValues[0] = v_zero(); \
-            memcpy(&argValues[0], subexpr.compute##COMPUTE(context), loadSize); \
+            argValues[0] = fusionLoadArgument(subexpr.compute##COMPUTE(context), loadSize); \
             auto aa = context.abiArg; \
             context.abiArg = argValues; \
             auto res = fnPtr->code->eval(context); \
@@ -130,8 +129,7 @@ __forceinline SimNode * safeArg1 ( SimNode * node, int index ) {
         NO_ASAN_INLINE vec4f compute(Context & context) { \
             DAS_PROFILE_NODE \
             vec4f argValues[1]; \
-            argValues[0] = v_zero(); \
-            memcpy(&argValues[0], subexpr.compute##COMPUTE(context), loadSize); \
+            argValues[0] = fusionLoadArgument(subexpr.compute##COMPUTE(context), loadSize); \
             context.enterCheckedFastCall(debugInfo, fnPtr); \
             auto aa = context.abiArg; \
             context.abiArg = argValues; \
@@ -160,8 +158,7 @@ __forceinline SimNode * safeArg1 ( SimNode * node, int index ) {
         NO_ASAN_INLINE vec4f compute(Context & context) { \
             DAS_PROFILE_NODE \
             vec4f argValues[1]; \
-            argValues[0] = v_zero(); \
-            memcpy(&argValues[0], subexpr.compute##COMPUTE(context), loadSize); \
+            argValues[0] = fusionLoadArgument(subexpr.compute##COMPUTE(context), loadSize); \
             return context.call(fnPtr, argValues, &debugInfo); \
         } \
         DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override { \
