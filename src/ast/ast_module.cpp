@@ -9,6 +9,7 @@
 #include "../simulate/simulate_fusion.h"
 #include "daScript/ast/dyn_modules.h"
 #include "daScript/ast/ast_serializer.h"
+#include "daScript/misc/das_asan.h"
 
 #include <atomic>
 #include <mutex>
@@ -312,7 +313,11 @@ namespace das {
             DAS_ASSERTF(g_resetFusionEngineFn, "fusion library not loaded");
             g_resetFusionEngineFn(false);
         } else if ( g_resetFusionEngineFn ) {
+#if DAS_TRACK_ALLOC || DAS_ASAN
+            g_resetFusionEngineFn(false);
+#else
             g_resetFusionEngineFn(true);
+#endif
         }
         daScriptEnvironment::setBound(nullptr);
         if ( daScriptEnvironment::getOwned() ) {

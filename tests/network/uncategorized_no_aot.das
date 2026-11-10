@@ -5,6 +5,7 @@ require dastest/testing_boost public
 require daslib/fio
 require daslib/network
 require strings
+require daslib/command_line   // get_das_exe
 
 //! the TCP client end of the network module against the server end in the same process: a
 //! connect, bytes both ways, the server's close seen by the client, and the port probe
@@ -132,4 +133,52 @@ def test_client_round_trip(t : T?) {
             delete client
         }
     }
+}
+
+//! a `Peer` connected to `port` once the child listens, else null
+def private connect_when_listening(port : int) : Peer? {
+    var client = new Peer()
+    for (_i in range(600)) {
+        return client if (client->connect("127.0.0.1", port, 200))
+        sleep(100u)
+    }
+    unsafe {
+        delete client
+    }
+    return null
+}
+
+[test(description = "a server process that answers, deletes its only socket object and exits still delivers the whole answer to a peer that had not read it yet", timeout = 1200)]
+def test_reply_survives_server_exit(t : T?) {
+    let port = probe_local_port("127.0.0.1", 0)
+    t |> success(port > 0, "the probe found a free port: {port}")
+    let fixture = path_join(get_das_root(), "tests/network/_fixture_reply_and_exit.das")
+    var got = 0
+    var connected = false
+    var saw_close = false
+    let child <- [get_das_exe(), "-dasroot", get_das_root(), fixture, "--", "{port}"]
+    let rc = unsafe(popen_argv(child, 600.0, $(_f) {
+        var client = connect_when_listening(port)
+        connected = client != null
+        return if (!connected)
+        let request = "one request"
+        client->send(unsafe(reinterpret<uint8?>(request)), length(request))
+        // the child answers, deletes its server and exits before the first
+        // read here
+        sleep(2000u)
+        for (_i in range(5000)) {
+            client->tick()
+            saw_close = client.disconnects == 1
+            break if (saw_close)
+            sleep(1u)
+        }
+        got = length(client.got)
+        unsafe {
+            delete client
+        }
+    }))
+    t |> equal(rc, 0, "the server process ran and exited clean")
+    t |> success(connected, "the client connected to the child")
+    t |> success(saw_close, "the client saw the server close")
+    t |> equal(got, 8192, "every byte of the answer arrived")
 }

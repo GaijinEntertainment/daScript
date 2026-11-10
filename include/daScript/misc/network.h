@@ -22,6 +22,7 @@ namespace das {
         bool is_connected() const;
         void tick();
         bool send_msg ( char * data, int size );
+        void close_sockets();
     public:
         static bool startup();      // platform specific startup sockets (WSAStartup etc)
         static void shutdown();     // platform specific shutdown sockets

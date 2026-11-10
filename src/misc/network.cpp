@@ -253,13 +253,19 @@ namespace das {
     }
 
     Server::~Server() {
+        close_sockets();
+    }
+
+    void Server::close_sockets() {
         errno = 0;
-        if ( client_fd >0 ) {
+        if ( client_fd >0 && !invalid_socket(client_fd) ) {
             close_after_peer_reads(client_fd);
         }
-        if ( server_fd ) {
+        client_fd = 0;
+        if ( server_fd && !invalid_socket(server_fd) ) {
             closesocket(server_fd);
         }
+        server_fd = 0;
     }
 
     bool Server::is_open() const {
