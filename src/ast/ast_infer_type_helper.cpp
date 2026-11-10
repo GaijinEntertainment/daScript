@@ -1,6 +1,7 @@
 #include "daScript/misc/platform.h"
 #include "daScript/ast/ast.h"
 #include "ast_generate.h"
+#include "ast_generate_typed.h"
 #include "ast_infer_type.h"
 #include "daScript/ast/ast_visitor.h"
 
@@ -849,10 +850,7 @@ namespace das {
                     compatibleCast = cT->structType->isCompatibleCast(*seT->structType);
                 }
                 if (compatibleCast) {
-                    auto exprType = new TypeDecl(*cT);
-                    exprType->ref = seT->ref;
-                    exprType->constant = seT->constant;
-                    return exprType;
+                    return makeStructCastType(seT, cT);
                 } else {
                     error("incompatible cast, can't cast " + seT->structType->name + " to " + cT->structType->name, "", "",
                           at, CompilationError::invalid_cast_structure);
@@ -870,10 +868,7 @@ namespace das {
                     compatibleCast = cT->firstType->structType->isCompatibleCast(*seT->firstType->structType);
                 }
                 if (compatibleCast) {
-                    auto exprType = new TypeDecl(*cT);
-                    exprType->ref = seT->ref;
-                    exprType->constant = seT->constant;
-                    return exprType;
+                    return makeStructCastType(seT, cT);
                 } else {
                     error("incompatible cast, can't cast '" + seT->firstType->structType->name + "?' to '" + cT->firstType->structType->name + "?'", "", "",
                           at, CompilationError::invalid_cast_structure_pointer);

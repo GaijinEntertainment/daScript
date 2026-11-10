@@ -1646,7 +1646,6 @@ namespace das {
         if ( !fn->body->rtti_isBlock() ) { err = "[inline] requires a block body"; return false; }
         if ( fn->generator ) { err = "[inline] does not support generators"; return false; }
         if ( fn->lambda ) { err = "[inline] does not support lambdas"; return false; }
-        if ( fn->isClassMethod || fn->classParent ) { err = "[inline] does not support class methods"; return false; }
         if ( fn->isCustomProperty || fn->propertyFunction ) { err = "[inline] does not support property functions"; return false; }
         // ExprOp-dispatched operator overloads splice; punctuation functions whose
         // call sites are other node kinds ([], ??, properties) can't honor the contract

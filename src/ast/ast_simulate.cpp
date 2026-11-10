@@ -1437,24 +1437,13 @@ namespace das
         SimNode_CallBase * pInvoke;
         uint32_t methodOffset = 0;
         if ( expr->isInvokeMethod ) {
-            bool foundOffset = false;
-            if ( expr->arguments[0]->rtti_isField() ) {
-                auto field = static_cast<ExprField*>(expr->arguments[0]);
-                methodOffset = field->fieldRef->offset;
-                foundOffset = true;
-            } else if ( expr->arguments[0]->rtti_isR2V() ) {
-                auto eR2V = static_cast<ExprRef2Value*>(expr->arguments[0]);
-                if ( eR2V->subexpr->rtti_isField() ) {
-                    auto field = static_cast<ExprField*>(eR2V->subexpr);
-                    methodOffset = field->fieldRef->offset;
-                    foundOffset = true;
-                }
-            }
-            if (!foundOffset) {
+            auto field = expr->methodField();
+            if ( !field ) {
                 context.thisProgram->error("internal compilation error, invoke method expects field", "", "", at, CompilationError::internal_field);
                 setE(expr, nullptr);
                 return;
             }
+            methodOffset = field->fieldRef->offset;
         }
         {
             if ( expr->isCopyOrMove() ) {

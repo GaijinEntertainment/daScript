@@ -1339,6 +1339,7 @@ SET(LIBDASCRIPT_COMPILER_SRC
     src/ast/ast_cfg.cpp
     src/ast/ast_dse.cpp
     src/ast/ast_cse.cpp
+    src/ast/ast_devirtualize.cpp
     src/ast/ast_inline.cpp
     src/ast/ast_generate_typed.cpp
 

@@ -242,3 +242,24 @@ new candidate and changes no side-effect flags, so one dirty re-infer is the fix
 and `optimizeProgram`, so what a `fixup()` generates - the shader-blob globals dasGlsl, dasSpirv
 and dasMetal fill - is folded and optimized like ordinary code. A call-shaped initializer a
 fixup sets is uninferred; the gated dirty re-infer resolves it before `foldUnsafe`.
+
+## Devirtualization (`ast_devirtualize.cpp`) {#devirtualization}
+
+A class method is a function-pointer field every instance carries, and every class below the one
+that first declares it - the family root - shares that slot. A call through static class `C`
+becomes a direct call of `C`'s function only when, for every object whose class is `C` or below,
+no class overrides the method and nothing assigns the field. A write through any class of the
+family reaches those objects, so the guarantee covers the whole family, not `C` alone.
+
+Two things give it. A promise: every class from `C` up to the family root seals the method - in
+practice a method a `class sealed` declares, since `def sealed` always overrides a base field that
+stays assignable. A closed world: a set of modules that holds every class of the family and every
+write to it. `FixedMethods` takes the compiling module as that world, where a family is closed when
+its root and every class deriving from it are private, since no other module can name them. The
+scan covers the module's functions - its generic instances live there - and its global
+initializers. A write is an assignment, a struct literal naming another function than the class's
+own, or any use of the field other than a read or a method call.
+
+Both proofs hold in every program that links the module, so `devirtualize` rewrites the invoke into
+a typed direct call in the module's AST, in optimized builds, after lint and before inline
+splicing: auto-inline splices it like a free function, and AOT and the JIT see a plain call.
