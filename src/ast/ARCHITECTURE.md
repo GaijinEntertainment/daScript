@@ -4,7 +4,7 @@ Contract: `ARCHITECTURE_COMMON.md` (repo root). This document carries the mechan
 that a rule cites; `ARCHITECTURE_INFER.md` the inference mechanisms code cites, `ARCHITECTURE_BUILT.md`
 host-built programs, `ARCHITECTURE_GC.md` gc roots, `ARCHITECTURE_SHARED.md` shared-module promotion,
 `ARCHITECTURE_MODULE_SCAN.md` the module scan and the descriptor manifest, `ARCHITECTURE_INLINE.md`
-the inliner's conditional call lowering.
+the inliner's conditional call lowering, `ARCHITECTURE_LIBRARIES.md` which library a source links into.
 The rest of inference, with parsing and simulation, is in `skills/internal/cpp_codebase_notes.md` (repo-only).
 
 ## Returned locals captured by blocks or heap literals {#return-local-storage}

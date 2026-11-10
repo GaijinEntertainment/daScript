@@ -7,7 +7,6 @@
 #include "runtime_string_delete.h"
 #include "daScript/simulate/simulate_nodes.h"
 #include "daScript/simulate/simulate_visit_op.h"
-#include "misc/include_fmt.h"
 
 namespace das {
 
@@ -906,12 +905,12 @@ namespace das {
     SimNode * SimNode_ForBase::visitFor ( SimVisitor & vis, int totalC, const char * loopName ) {
         char nbuf[32];
         V_BEGIN_CR();
-        auto result = fmt::format_to(nbuf, FMT_STRING("{}_{}"), loopName, total); *result = 0;
+        snprintf(nbuf, sizeof(nbuf), "%s_%u", loopName, uint32_t(total));
         vis.op(nbuf);
         for ( int t=0; t!=totalC; ++t ) {
-            result = fmt::format_to(nbuf, FMT_STRING("stackTop[{}]"), t); *result = 0;
+            snprintf(nbuf, sizeof(nbuf), "stackTop[%i]", t);
             vis.sp(stackTop[t],nbuf);
-            result = fmt::format_to(nbuf, FMT_STRING("strides[{}]"), t); *result = 0;
+            snprintf(nbuf, sizeof(nbuf), "strides[%i]", t);
             vis.arg(strides[t],nbuf);
             sources[t] = vis.sub(sources[t]);
         }
@@ -923,10 +922,10 @@ namespace das {
     SimNode * SimNode_ForWithIteratorBase::visitFor ( SimVisitor & vis, int totalC ) {
         char nbuf[32];
         V_BEGIN_CR();
-        auto result = fmt::format_to(nbuf, FMT_STRING("ForWithIterator_{}"), total); *result = 0;
+        snprintf(nbuf, sizeof(nbuf), "ForWithIterator_%u", uint32_t(total));
         vis.op(nbuf);
         for ( int t=0; t!=totalC; ++t ) {
-            result = fmt::format_to(nbuf, FMT_STRING("stackTop[{}]"), t); *result = 0;
+            snprintf(nbuf, sizeof(nbuf), "stackTop[%i]", t);
             vis.sp(stackTop[t],nbuf);
             source_iterators[t] = vis.sub(source_iterators[t]);
         }

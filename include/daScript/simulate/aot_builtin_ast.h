@@ -205,7 +205,7 @@ namespace das {
     DAS_CC_API char * get_mangled_name_b ( ExprBlock * expr, Context * context, LineInfoArg * at );
     DAS_CC_API TypeDeclPtr parseMangledNameFn ( const char * txt, ModuleGroup & lib, Module * thisModule, Context * context, LineInfoArg * at );
     DAS_CC_API void notInferred ( Function * func, Context * context, LineInfoArg * at );
-    DAS_API void collectDependencies ( FunctionPtr fun, const TBlock<void,TArray<Function *>,TArray<Variable *>> & block, Context * context, LineInfoArg * line );
+    DAS_CC_API void collectDependencies ( FunctionPtr fun, const TBlock<void,TArray<Function *>,TArray<Variable *>> & block, Context * context, LineInfoArg * line );
     DAS_CC_API void ast_simulate ( const smart_ptr<Program> & program,
         const TBlock<void,bool,smart_ptr_raw<Context>,string> & block, Context * context, LineInfoArg * lineinfo );
     DAS_CC_API bool ast_set_file_source ( smart_ptr_raw<FileAccess> access, char * fname, char * str, Context * context, LineInfoArg * );
