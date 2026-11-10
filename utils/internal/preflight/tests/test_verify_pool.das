@@ -45,7 +45,7 @@ def test_verify_argv(t : T?) {
         "a run cache is named")
 }
 
-[test(description = "the verifiers' skip set is one predicate: compile-fail fixtures by name always; the ast-fuzz self-test breakers and the whole-stack compiles (dasllama-server, dasllama-convert, das2rst) in changed mode only, so --file verifies what it names")]
+[test(description = "the verifiers' skip set is one predicate: compile-fail fixtures by name always; the ast-fuzz self-test breakers and the whole-stack compiles (every path naming dasllama, das2rst) in changed mode only, so --file verifies what it names")]
 def test_ast_verify_skips(t : T?) {
     t |> success(ast_verify_skips("tests/x/failed_thing.das", true), "a compile-fail fixture")
     t |> success(ast_verify_skips("tests/x/cant_thing.das", false), "cant_ in tree mode too")
@@ -61,6 +61,16 @@ def test_ast_verify_skips(t : T?) {
                  "a file named to --file is verified")
     t |> success(ast_verify_skips("utils/dasllama-convert/test_convert.das", true),
                  "dasllama-convert pulls the llama stack too")
+    t |> success(ast_verify_skips("modules/dasLLAMA/tests/test_facade.das", true),
+                 "a dasLLAMA file compiles the engine: its lint lane owns it")
+    t |> success(!ast_verify_skips("modules/dasLLAMA/tests/test_facade.das", false),
+                 "a dasLLAMA file named to --file is verified")
+    t |> success(ast_verify_skips("examples/dasLLAMA/parrot/main.das", true),
+                 "its examples, tutorials and tools too, in either case")
+    t |> success(ast_verify_skips("utils/internal/dasllama-ladder/ladder_server.das", true),
+                 "the ladder service is a dasllama tool")
+    t |> success(!ast_verify_skips("modules/dasLLVM/tests/llvm_exe.das", true),
+                 "the other modules are verified")
     t |> success(ast_verify_skips("doc/reflections/das2rst.das", true),
                  "das2rst requires every module")
     t |> success(!ast_verify_skips("doc/reflections/imgui2rst.das", true),

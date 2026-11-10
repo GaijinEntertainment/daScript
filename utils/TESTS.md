@@ -975,7 +975,7 @@ The green predicate of roll_toolchain.sh through its --green-check seam - one re
 
 - `test_verify_verdict` - a verify child's output and exit code classify as clean, AST verify, unverifiable, timed out, crashed, killed or failed to start, a compile error counting as clean
 - `test_verify_argv` - a verify child runs -dry-run --ast-verify-batch with the module cache off, or on the named run cache
-- `test_ast_verify_skips` - the verifiers' skip set is one predicate: compile-fail fixtures by name always; the ast-fuzz self-test breakers and the whole-stack compiles (dasllama-server, dasllama-convert, das2rst) in changed mode only, so --file verifies what it names
+- `test_ast_verify_skips` - the verifiers' skip set is one predicate: compile-fail fixtures by name always; the ast-fuzz self-test breakers and the whole-stack compiles (every path naming dasllama, das2rst) in changed mode only, so --file verifies what it names
 - `test_pool_reports_in_input_order` - the verify pool reports results in input order and the broken fixture fails on its second child too, past the cache the first one wrote
 
 ### requirefix/test_requirefix.das

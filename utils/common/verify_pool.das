@@ -17,11 +17,12 @@ require strings
 //! changed mode - every gate's mode, where the set is derived, not
 //! named - also the ast-fuzz self-test breakers (they report by
 //! design; test_ast_fuzz.das owns them) and the whole-stack compiles:
-//! `utils/dasllama-server/` and `utils/dasllama-convert/` pull every
-//! llama module into one compile, `doc/reflections/das2rst.das`
-//! requires every module in the tree, each past a 1200 s cap on a
-//! small runner with siblings in flight, and their own lanes compile
-//! them anyway. A file named to `--file` skips only as a fixture
+//! every path that names dasllama in any case (the module, its
+//! tools, examples and tutorials) pulls the llama engine into the
+//! compile, `doc/reflections/das2rst.das` requires every module in
+//! the tree, each past a 1200 s cap on a small runner with siblings
+//! in flight, and their own lanes compile them anyway. A file named
+//! to `--file` skips only as a fixture
 def public ast_verify_skips(file : string; changed_mode : bool) : bool {
     let name = base_name(file)
     let generic = to_generic_path(file)
@@ -29,8 +30,7 @@ def public ast_verify_skips(file : string; changed_mode : bool) : bool {
                     || name |> starts_with("invalid_"))
     return false if (!changed_mode)
     return (find(generic, "ast-fuzz/selftest/") >= 0
-            || find(generic, "utils/dasllama-server/") >= 0
-            || find(generic, "utils/dasllama-convert/") >= 0
+            || find(to_lower(generic), "dasllama") >= 0
             || generic |> ends_with("doc/reflections/das2rst.das"))
 }
 
