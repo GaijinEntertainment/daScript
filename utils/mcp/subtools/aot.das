@@ -39,7 +39,7 @@ def collect_aot_functions(program : smart_ptr<Program>) : array<AotFuncInfo> {
         }
         result |> emplace(AotFuncInfo(
             name = string(fn.name),
-            aot_name = aotFuncName(fn),
+            aot_name = aotFuncName(program, fn),
             signature = sig
         ))
     })

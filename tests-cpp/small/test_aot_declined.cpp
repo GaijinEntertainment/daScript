@@ -18,6 +18,7 @@ namespace {
         CodeOfPolicies policies;
         policies.aot = true;
         policies.fail_on_no_aot = strictAot;
+        policies.keep_symbol_tables = true;
         return compileDaScript("aot_declined_probe.das", access, tout, group, policies);
     }
 
@@ -62,7 +63,7 @@ TEST_CASE("a declined function links as a reported interpreter fallback, an erro
     REQUIRE(probe->simulate(first, tout));
     auto mainFn = mainOf(probe);
     REQUIRE(mainFn);
-    const uint64_t hash = getFunctionAotHash(mainFn);
+    const uint64_t hash = getFunctionAotHash(probe.get(), mainFn);
     aotLibraryEmplace(getGlobalAotLibrary(), hash, AotFactory::declined("the probe declines main"));
 
     auto strict = compileProbe(tout, group, true);

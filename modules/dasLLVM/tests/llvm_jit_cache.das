@@ -215,8 +215,8 @@ def private fixture_keys() : FixtureKeys {
                     let other <- named(mod, "other_slots")
                     return if (length(by_var) != 1 || length(by_let) != 1 || length(other) != 1)
                     res.compiled = true
-                    res.var_aot = get_function_aot_hash(by_var[0])
-                    res.let_aot = get_function_aot_hash(by_let[0])
+                    res.var_aot = get_function_aot_hash(prog, by_var[0])
+                    res.let_aot = get_function_aot_hash(prog, by_let[0])
                     res.var_key = dll_key(prog, by_var)
                     res.let_key = dll_key(prog, by_let)
                     res.other_fold = fold_extern_slot_names(prog, other, 0ul)
