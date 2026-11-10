@@ -4634,8 +4634,10 @@ compile-fail fixture: An [implements] class that omits abstract methods of its i
 
 ### jit_artifacts.das
 
+no_aot: every test here drives the JIT or a JIT-built artifact
+
 - `test_main` - the JIT DLL cache reuses its DLL for an unchanged script and compiles a new one when the script changes
-- `test_executable` - JIT-compiled executables for hello world, builtin global init, an init in a cloned context and a function-pointer global run and print the expected output
+- `test_executable` - JIT-compiled executables for hello world, builtin global init, an init and a block-initialized global in a cloned context, and a function-pointer global run and print the expected output
 - `test_jit_lib_shared` - daslang -lib builds a shared library with a C header that a daslang host loads and calls correctly
 - `test_jit_lib_static_and_export_all` - a static -lib-export-all build writes its archive and exports every function to its host
 - `test_jit_lib_result_slot_is_aligned` - a structure whose alignment exceeds the argument frame's crosses the library boundary intact

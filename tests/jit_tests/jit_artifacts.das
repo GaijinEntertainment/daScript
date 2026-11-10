@@ -1,4 +1,5 @@
 options gen2
+//! no_aot: every test here drives the JIT or a JIT-built artifact
 options no_aot
 
 require daslib/ast
