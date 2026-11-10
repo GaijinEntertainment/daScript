@@ -35,7 +35,7 @@ require jit
 // Current entry: a 16/8-bit lattice value passed by value to an
 // interop builtin rides the vec4f slot in the cast<T>::from
 // convention instead of declining the function.
-let public LLVM_JIT_CODEGEN_VERSION : uint64 = 0xABul
+let public LLVM_JIT_CODEGEN_VERSION : uint64 = 0xACul
 
 let public JIT_FNV_PRIME : uint64 = 1099511628211ul
 
