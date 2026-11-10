@@ -186,13 +186,15 @@ def write_clone_init_script() : bool {
             fprint(f, "[init]\n")
             fprint(f, "def mark_init() \{ g_init_marker = 777 \}\n")
             fprint(f, "def read_marker() : int \{ return g_init_marker \}\n")
+            fprint(f, "def through_block(blk : block<(x : int) : int>) : int \{ return invoke(blk, 20) + 1 \}\n")
+            fprint(f, "let g_from_block = through_block() $(x) \{ return x * 2 \}\n")
             fprint(f, "[export]\n")
             fprint(f, "def main() \{\n")
             fprint(f, "    var seen = -1\n")
             fprint(f, "    with_job_que() \{\n")
             fprint(f, "        with_channel(1) $(ch) \{\n")
             fprint(f, "            new_job() @() \{\n")
-            fprint(f, "                ch |> push_clone(IntVal(v = read_marker()))\n")
+            fprint(f, "                ch |> push_clone(IntVal(v = read_marker() * 1000 + g_from_block))\n")
             fprint(f, "                ch |> notify_and_release\n")
             fprint(f, "            \}\n")
             fprint(f, "            ch |> for_each_clone() $(val : IntVal#) \{\n")
@@ -200,7 +202,9 @@ def write_clone_init_script() : bool {
             fprint(f, "            \}\n")
             fprint(f, "        \}\n")
             fprint(f, "    \}\n")
-            fprint(f, "    print(\"CLONE_INIT_MARKER=[\{seen\}]\\n\")\n")
+            fprint(f, "    print(\"CLONE_INIT_MARKER=[\{seen / 1000\}]\\n\")\n")
+            fprint(f, "    print(\"CLONE_BLOCK_GLOBAL=[\{seen % 1000\}]\\n\")\n")
+            fprint(f, "    print(\"MAIN_BLOCK_GLOBAL=[\{g_from_block\}]\\n\")\n")
             fprint(f, "\}\n")
             ok = true
         }
@@ -301,6 +305,8 @@ def test_clone_init_in_thread(t : T?) {
     let output = run_exe(CLONE_INIT_EXE)
     t |> success(find(output, "CLONE_INIT_MARKER=[777]") != -1)
     t |> success(find(output, "CLONE_INIT_MARKER=[0]") == -1)
+    t |> success(find(output, "MAIN_BLOCK_GLOBAL=[41]") != -1, "a global initialized through a block: {output}")
+    t |> success(find(output, "CLONE_BLOCK_GLOBAL=[41]") != -1, "the same global in a cloned context: {output}")
 }
 
 // A function-pointer global (`var g = @@fn`) must codegen + run in a
@@ -313,7 +319,7 @@ def test_fnptr_global(t : T?) {
     t |> success(find(output, "FNPTR_RESULT=[42]") != -1)
 }
 
-[test(description = "JIT-compiled executables for hello world, builtin global init, an init in a cloned context and a function-pointer global run and print the expected output", timeout = 1200)]
+[test(description = "JIT-compiled executables for hello world, builtin global init, an init and a block-initialized global in a cloned context, and a function-pointer global run and print the expected output", timeout = 1200)]
 def test_executable(t : T?) {
     // Skip on Windows: standalone exes built here link against the
     // daslang shared lib, and Windows lacks RPATH so the spawned process
