@@ -303,7 +303,9 @@ add_custom_target(das_shipped_exes ALL
     DEPENDS daslang
     COMMENT "Copying daslang beside itself as each shipped tool exe")
 
-if(NOT DAS_TESTS_DISABLED)
+# every arm spawns the lint tool as a child; a Windows Debug child runs past dastest's suite
+# timeout, so that cell leaves the ctest out and run_utils_tests keeps the file
+if(NOT DAS_TESTS_DISABLED AND NOT (WIN32 AND CMAKE_BUILD_TYPE STREQUAL "Debug"))
     file(GLOB _lint_project_tests CONFIGURE_DEPENDS
         ${PROJECT_SOURCE_DIR}/utils/lint/tests/module_cache/project_*.das)
     foreach(_test ${_lint_project_tests})
@@ -433,6 +435,11 @@ add_dependencies(check_format_exe check_standalone_exes)
 # the lint suites spawn bin/das-lint.exe when a fresh one is there (lint/tests/_lint_cli.das);
 # built first, so a lane never meets a half-written exe or a stale one
 add_dependencies(run_utils_tests check_standalone_exes)
+# the lint_project_* ctests spawn the lint tool some thirty times a file: the exe starts at once,
+# the script form compiles the tool on every spawn and outruns dastest's suite watchdog
+if(TARGET test-small)
+    add_dependencies(test-small check_standalone_exes)
+endif()
 
 add_das_target(run_coverage
     COMMAND $<TARGET_FILE:daslang> ${PROJECT_SOURCE_DIR}/dastest/dastest.das -- --cov-path ${CMAKE_CURRENT_BINARY_DIR}/coverage.lcov --color --failures-only --test ${PROJECT_SOURCE_DIR}/tests/language --timeout 1800

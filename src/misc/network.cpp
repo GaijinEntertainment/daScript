@@ -3,6 +3,7 @@
 #include "daScript/misc/network.h"
 
 #include <chrono>
+#include <thread>
 
 #ifdef _WIN32
 
@@ -232,10 +233,29 @@ namespace das {
         }
     }
 
+    static const int CLOSE_DRAIN_MS = 1000;
+
+    static void close_after_peer_reads ( socket_t fd ) {
+#ifdef _WIN32
+        ::shutdown(fd, SD_SEND);
+#else
+        ::shutdown(fd, SHUT_WR);
+#endif
+        auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(CLOSE_DRAIN_MS);
+        char discard[1024];
+        while ( std::chrono::steady_clock::now() < deadline ) {
+            int res = recv(fd, discard, int(sizeof(discard)), 0);
+            if ( res > 0 ) continue;
+            if ( res == 0 || !socket_would_block(last_socket_error()) ) break;
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+        closesocket(fd);
+    }
+
     Server::~Server() {
         errno = 0;
         if ( client_fd >0 ) {
-            closesocket(client_fd);
+            close_after_peer_reads(client_fd);
         }
         if ( server_fd ) {
             closesocket(server_fd);
