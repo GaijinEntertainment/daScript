@@ -848,3 +848,32 @@ def test_guarded_load_through_an_odd_pointer_is_skipped(t : T?) {
     let out = join(lines, "\n")
     t |> equal(0, rc, "the guarded load through an odd pointer is skipped, got:\n{out}")
 }
+
+def private launder_calls(dump : string) : int {
+    let ln <- split(fread(dump), "\n")
+    return count_with(ln, "call ptr @llvm.launder.invariant.group")
+}
+
+[test(description = "under solid_context the address of a global array a loop indexes, shared or not, reaches code generation hidden in the one-module and the split build, and a scalar global's does not", timeout = 1200)]
+def test_solid_array_base_is_hidden_from_codegen(t : T?) {
+    if (!jit_enabled()) {
+        t |> skip("the child runs under -jit, which this build does not carry")
+        return
+    }
+    let bin = get_host_binary()
+    let root = get_das_root()
+    let cwd = "{OUTPUT_DIR}/solid_base_{ref_time_ticks()}"   // fresh: a cold cache
+    mkdir_rec(cwd)
+    var out : array<string>
+    let fixture = "{FIXTURE_DIR}/_fixture_solid_array_base.das"
+    let rc_one = spawn_child("\"{bin}\" -no-module-cache -jit -jit-no-cache \"{fixture}\" "
+        + "-- --jit-dump=\"{cwd}/one.ll\"", out)
+    t |> equal(rc_one, 0, "the one-module child runs, got:\n{join(out, "\n")}")
+    t |> equal(launder_calls("{cwd}/one.ll"), 2, "the one-module build hides the two arrays alone")
+    var split_out : array<string>
+    let rc_split = spawn("cd \"{cwd}\" && \"{bin}\" -dasroot \"{root}\" -no-module-cache "
+        + "-jit \"{fixture}\" -- --jit-dump=split.ll", split_out)
+    t |> equal(rc_split, 0, "the split child runs, got:\n{join(split_out, "\n")}")
+    t |> equal(launder_calls("{cwd}/split.ll"), 2, "the split build hides them too")
+    rmdir_rec_result(cwd)
+}

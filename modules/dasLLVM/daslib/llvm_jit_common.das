@@ -83,6 +83,27 @@ var public g_prim_t : PrimitiveTypes?
 var public g_mod : LLVMOpaqueModule?
 var public g_engine : LLVMExecutionEngineRef
 var public g_failed : bool = false
+//! the module in flight addresses a solid-context global
+var public g_solid_globals : bool = false
+
+def public take_solid_globals() : bool {
+    let solid = g_solid_globals
+    g_solid_globals = false
+    return solid
+}
+
+//! every instruction of `fn`, block by block
+def public for_each_instruction(fn : LLVMOpaqueValue?; blk : block<(inst : LLVMOpaqueValue?)>) {
+    var bb = LLVMGetFirstBasicBlock(fn)
+    while (bb != null) {
+        var inst = LLVMGetFirstInstruction(bb)
+        while (inst != null) {
+            invoke(blk, inst)
+            inst = LLVMGetNextInstruction(inst)
+        }
+        bb = LLVMGetNextBasicBlock(bb)
+    }
+}
 var public g_errors : array<string>
 
 var public g_t_simFunction : LLVMOpaqueType?
@@ -789,6 +810,7 @@ def public init_jit_state(cg_opt_level : uint; target_triple : string; host_feat
     g_ctx = LLVMContextCreate()
     g_prim_t = new PrimitiveTypes(g_ctx)
     g_failed = false
+    g_solid_globals = false
     g_fn_types |> clear()
     g_handled_field_offset_globals |> clear()
     g_str2v |> clear()
