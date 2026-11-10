@@ -120,3 +120,22 @@ def test_global_var_annotation(t : T?) {
         t |> equal(assert_color_block_b, 3)
     }
 }
+
+struct PropBits {
+    _bits0 : uint
+}
+
+def operator . low(s : PropBits) : uint => s._bits0 & 7u
+
+def operator . low :=(var s : PropBits; v : uint) {
+    s._bits0 = (s._bits0 & ~7u) | (v & 7u)
+}
+
+var g_prop_bits = fixed_array(PropBits(low = 3u), PropBits(low = 2u), PropBits(low = 5u))
+
+[test(description = "a global fixed_array of struct literals that name a property runs each element's setter on that element")]
+def test_global_array_of_property_literals(t : T?) {
+    t |> equal(g_prop_bits[0].low, 3u)
+    t |> equal(g_prop_bits[1].low, 2u)
+    t |> equal(g_prop_bits[2].low, 5u)
+}

@@ -981,7 +981,8 @@ namespace das
                 fakeVariable->aliasCMRES = true;
                 fakeVariable->extraLocalOffset = mks->extraOffset;
             } else if ( mks->useStackRef ) {
-                fakeVariable->stackTop = mks->stackTop + mks->extraOffset;
+                fakeVariable->stackTop = mks->stackTop;
+                fakeVariable->extraLocalOffset = mks->extraOffset;
                 fakeVariable->type->ref = true;
             } else {
                 fakeVariable->stackTop = mks->stackTop + mks->extraOffset;
