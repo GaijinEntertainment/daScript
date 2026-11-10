@@ -539,10 +539,11 @@ namespace das
         virtual SimNode * simulateNullCoalescing ( Context &, const LineInfo &, SimNode *, SimNode * ) const { return nullptr; }
         virtual SimNode * simulateGetNew ( Context &, const LineInfo & ) const { return nullptr; }
         virtual SimNode * simulateGetAt ( Context &, const LineInfo &, const TypeDeclPtr &,
-                                         ExpressionPtr, ExpressionPtr, uint32_t ) const { return nullptr; }
+                                         SimNode *, SimNode *, uint32_t ) const { return nullptr; }
         virtual SimNode * simulateGetAtR2V ( Context &, const LineInfo &, const TypeDeclPtr &,
-                                            ExpressionPtr, ExpressionPtr, uint32_t ) const { return nullptr; }
-        virtual SimNode * simulateGetIterator ( Context &, const LineInfo &, ExpressionPtr ) const { return nullptr; }
+                                            SimNode *, SimNode *, uint32_t ) const { return nullptr; }
+        virtual SimNode * simulateGetIterator ( Context &, const LineInfo &, SimNode * ) const { return nullptr; }
+        virtual bool constIndexLayout ( uint32_t &, uint32_t & ) const { return false; }
         // data walker
         virtual void walk ( DataWalker &, void * ) { }
         // familiar patterns
