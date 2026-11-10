@@ -324,8 +324,17 @@ namespace das {
     };
 
     void Program::clearSymbolUse() {
-        usedFunctions.clear();
-        usedVariables.clear();
+        for ( auto & it : functionStates ) it.second.used = false;
+        for ( auto & it : variableStates ) it.second.used = false;
+    }
+
+    void Program::clearIndices() {
+        for ( auto & it : functionStates ) it.second.index = -1;
+        for ( auto & it : variableStates ) it.second.index = -1;
+    }
+
+    void Program::clearJitSelection() {
+        for ( auto & it : functionStates ) it.second.jitSelected = false;
     }
 
     void Program::markModuleSymbolUse(TextWriter * logs) {

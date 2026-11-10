@@ -26,6 +26,21 @@ namespace das {
     typedef char * StringPtr;
     typedef void * VoidPtr;
 
+    __forceinline vec4f fusionLoadArgument ( const char * src, uint32_t size ) {
+        switch ( size ) {
+            case 4:     return v_ldu_x((const float *)src);
+            case 8:     return v_ldu_half(src);
+            case 16:    return v_ldu((const float *)src);
+            case 1:     return v_cast_vec4f(v_seti_x(*(const uint8_t *)src));
+            case 2:     return v_cast_vec4f(v_seti_x(*(const uint16_t *)src));
+            default: {
+                vec4f result = v_zero();
+                memcpy(&result, src, size);
+                return result;
+            }
+        }
+    }
+
     struct SimNodeInfo {
         string  name;
         string  typeName;

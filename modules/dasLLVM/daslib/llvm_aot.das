@@ -26,7 +26,7 @@ typedef AotCtorDtor = tuple<LLVMOpaqueValue?, LLVMOpaqueValue?>
 // instead of calling the artifact stale.
 def private emit_aot_register_ctor_dtor(types : PrimitiveTypes?; funcs : array<FunctionPtr>;
                                         declined : array<tuple<FunctionPtr; string>>;
-                                        uids : UidNodes?; _prog : Program?;
+                                        uids : UidNodes?; prog : Program?;
                                         glob_ctor : LLVMOpaqueValue?) : AotCtorDtor {
     let regType = LLVMFunctionType(types.t_void,
         fixed_array<LLVMTypeRef>(types.t_int64, types.LLVMVoidPtrType()))
@@ -46,7 +46,7 @@ def private emit_aot_register_ctor_dtor(types : PrimitiveTypes?; funcs : array<F
         if (publ == null) {
             continue
         }
-        let aot_hash = get_function_aot_hash(fun)
+        let aot_hash = get_function_aot_hash(prog, fun)
         var publ_ptr = LLVMBuildPointerCast(ctor_builder, publ, types.LLVMVoidPtrType(), "")
         var reg_args = array<LLVMValueRef>(types.ConstI64(aot_hash), publ_ptr)
         LLVMBuildCall2(ctor_builder, regType, regFn, reg_args, "")
@@ -56,7 +56,7 @@ def private emit_aot_register_ctor_dtor(types : PrimitiveTypes?; funcs : array<F
         for (d in declined) {
             let reason = get_string_constant_ptr(ctor_builder, d._1)
             var reason_ptr = LLVMBuildPointerCast(ctor_builder, reason, types.LLVMVoidPtrType(), "")
-            let aot_hash = get_function_aot_hash(d._0)
+            let aot_hash = get_function_aot_hash(prog, d._0)
             var declined_args = array<LLVMValueRef>(types.ConstI64(aot_hash), reason_ptr)
             LLVMBuildCall2(ctor_builder, regType, declined_reg_fn, declined_args, "")
         }
