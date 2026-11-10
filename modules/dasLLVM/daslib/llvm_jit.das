@@ -33,6 +33,7 @@ require daslib/safe_addr
 require daslib/strings_boost
 require daslib/defer
 require daslib/lpipe
+require daslib/try_exits
 require daslib/rtti
 require math
 require jit
@@ -65,6 +66,12 @@ struct private IteBlock {
     phi_false : LLVMOpaqueBasicBlock?
     if_true_terminates, if_false_terminates : bool
 }
+
+typedef BlockFunctionPair = tuple<func : LLVMOpaqueValue?; impl : LLVMOpaqueValue?>
+
+let private TRY_EXIT_BREAK = 1
+let private TRY_EXIT_CONTINUE = 2
+let private TRY_EXIT_RETURN = 3
 
 struct private LoopBlock {
     loop_start : LLVMOpaqueBasicBlock?
@@ -284,6 +291,12 @@ class public LlvmJitVisitor : AstVisitor {
     thisBlock : ExprBlock?
     subblocks : table<LLVMOpaqueBasicBlock?; LLVMOpaqueBasicBlock?>
     loop_stack : array<LoopBlock>
+    //! inside a try/recover arm: the enclosing frame's exit flag
+    //! (1 break, 2 continue, 3 return)
+    try_exit_flag : LLVMOpaqueValue?
+    //! inside a try/recover arm: the enclosing function's result slot
+    //! (its cmres target for a cmres result)
+    try_exit_slot : LLVMOpaqueValue?
     block_stack : array<ExprBlock?>
     jit_context : Context?
     @do_not_delete prog : Program?
@@ -1072,8 +1085,7 @@ class public LlvmJitVisitor : AstVisitor {
             } elif (thisBlock == null && thisFunc != null && thisFunc.result != null && !thisFunc.result.isVoid) {
                 LLVMBuildUnreachable(g_builder)
             } else {
-                build_epilogue()
-                LLVMBuildRetVoid(g_builder)
+                emit_ret(null)
             }
         }
     }
@@ -3768,10 +3780,34 @@ class public LlvmJitVisitor : AstVisitor {
 // ExprTryCatch
     def override canVisitTryCatchBody(expr : ExprTryCatch?) : bool => false
 
+    [arch(at="../ARCHITECTURE.md#try-arm-exits")]
     def override preVisitExprTryCatch(expr : ExprTryCatch?) : void {
-        let try_ptr = emit_block_value(expr.try_block, expr.at)
+        let exits = scan_try_exits(expr)
+        var flag, slot : LLVMOpaqueValue?
+        if (any_exit(exits)) {
+            let line = int(expr.at.line)
+            at_function_entry() {
+                flag = LLVMBuildAlloca(g_builder, types.t_int32, "try_exit_flag_{line}_")
+            }
+            LLVMBuildStore(g_builder, types.ConstI32(0ul), flag)
+            if (exits.hasReturn) {
+                if (try_exit_slot != null) {
+                    slot = try_exit_slot
+                } elif (thisFunc != null && !thisFunc.result.isVoid) {
+                    if (isCMRES(thisFunc)) {
+                        slot = get_cmres_param()
+                    } else {
+                        let abi = type_to_llvm_abi_type(thisFunc.result)
+                        at_function_entry() {
+                            slot = LLVMBuildAlloca(g_builder, abi, "try_exit_slot_{line}_")
+                        }
+                    }
+                }
+            }
+        }
+        let try_ptr = emit_block_value(expr.try_block, expr.at, flag, slot)
         return if (try_ptr == null)
-        let catch_ptr = emit_block_value(expr.catch_block, expr.at)
+        let catch_ptr = emit_block_value(expr.catch_block, expr.at, flag, slot)
         return if (catch_ptr == null)
         var params = fixed_array(
             try_ptr,                    // try block
@@ -3781,6 +3817,37 @@ class public LlvmJitVisitor : AstVisitor {
         )
         LLVMBuildCall2(g_builder, g_fn_types[FN_JIT_TRY_RECOVER],
             LLVMGetNamedFunction(g_mod, FN_JIT_TRY_RECOVER), params, "")
+        return if (flag == null)
+        let taken = LLVMBuildLoad2(g_builder, types.t_int32, flag, "try_exit_{int(expr.at.line)}_")
+        let after = append_basic_block("try_exit_none_{int(expr.at.line)}_")
+        var kinds : array<tuple<kind : int; name : string>>
+        if (exits.hasBreak) {
+            kinds |> push((kind = TRY_EXIT_BREAK, name = "break"))
+        }
+        if (exits.hasContinue) {
+            kinds |> push((kind = TRY_EXIT_CONTINUE, name = "continue"))
+        }
+        if (exits.hasReturn) {
+            kinds |> push((kind = TRY_EXIT_RETURN, name = "return"))
+        }
+        for (k in kinds) {
+            let hit = append_basic_block("try_exit_{k.name}_{int(expr.at.line)}_")
+            let miss = append_basic_block("try_exit_not_{k.name}_{int(expr.at.line)}_")
+            let is_kind = LLVMBuildICmp(g_builder, LLVMIntPredicate.LLVMIntEQ, taken,
+                types.ConstI32(uint64(k.kind)), "")
+            LLVMBuildCondBr(g_builder, is_kind, hit, miss)
+            LLVMPositionBuilderAtEnd(g_builder, hit)
+            if (k.kind == TRY_EXIT_BREAK) {
+                emit_break(expr.at)
+            } elif (k.kind == TRY_EXIT_CONTINUE) {
+                emit_continue(expr.at)
+            } else {
+                emit_return_from_slot(slot, expr.at)
+            }
+            LLVMPositionBuilderAtEnd(g_builder, miss)
+        }
+        LLVMBuildBr(g_builder, after)
+        LLVMPositionBuilderAtEnd(g_builder, after)
     }
 
 // ExprQuote
@@ -6587,13 +6654,16 @@ class public LlvmJitVisitor : AstVisitor {
         }
     }
 
+    def returns_through_arm(expr : ExprReturn?) => thisBlock != null && expr.returnFunc != null
+
     def override preVisitExprReturn(expr : ExprReturn?) {
-        if (thisBlock != null) {
-            if (expr.returnFunc != null) {
-                let fix = "move the return after the try"
-                failed_E(expr,
-                    "a return inside a try/recover arm is not supported under -jit; {fix}")
+        if (returns_through_arm(expr)) {
+            if (try_exit_flag == null) {
+                failed_E(expr, "a return of the function inside a block the lowering did not reach")
+            } elif (isCMRES(thisFunc) && expr.returnFlags.returnCallCMRES) {
+                make_call_to_cmres(expr.subexpr, try_exit_slot)
             }
+        } elif (thisBlock != null) {
             pre_visit_expr_return(expr, isCMRESType(thisBlock.returnType))
         } elif (thisFunc != null) {
             pre_visit_expr_return(expr, isCMRES(thisFunc))
@@ -6628,13 +6698,17 @@ class public LlvmJitVisitor : AstVisitor {
         LLVMBuildCall2(g_builder, typ, LLVMGetNamedFunction(g_mod, func_name), params, "")
     }
 
-    def visit_expr_return(expr : ExprReturn?; returnType : TypeDeclPtr; isCmres : bool) {
+    //! the returned value as the ABI carries it, or null for a void or
+    //! cmres result (a cmres result is copied into its target by the
+    //! caller of this)
+    def return_value_of(expr : ExprReturn?; returnType : TypeDeclPtr;
+                        isCmres : bool) : LLVMOpaqueValue? {
         var expr_res : LLVMOpaqueValue?
         if (!returnType.isVoid) {
             if (isCmres) {
                 pass
             } elif (returnType.isPointer && (expr.subexpr is ExprConstPtr)) {// return null
-                pass
+                expr_res = LLVMConstPointerNull(type_to_llvm_abi_type(returnType))
             } elif (returnType.isPointer) {
                 var resPtr = getE(expr.subexpr)
                 if (expr.subexpr._type.flags.ref && !returnType.flags.ref) {
@@ -6664,6 +6738,49 @@ class public LlvmJitVisitor : AstVisitor {
                 expr_res = getE(expr.subexpr)
             }
         }
+        return expr_res
+    }
+
+    [arch(at="../ARCHITECTURE.md#try-arm-exits")]
+    def visit_arm_return(expr : ExprReturn?) {
+        let returnType = thisFunc.result
+        let isCmres = isCMRES(thisFunc)
+        let expr_res = return_value_of(expr, returnType, isCmres)
+        if (isCmres) {
+            if (!expr.returnFlags.returnCMRES) {
+                if (expr.returnFlags.moveSemantics) {
+                    build_move(try_exit_slot, expr.subexpr, true)
+                } else {
+                    build_copy(try_exit_slot, expr.subexpr)
+                }
+            }
+        } elif (expr_res != null) {
+            let abi = coerce_scalar_to_abi(expr_res, type_to_llvm_abi_type(returnType))
+            LLVMBuildStore(g_builder, abi, try_exit_slot)
+        }
+        emit_arm_exit(TRY_EXIT_RETURN, "return", expr.at)
+    }
+
+    //! the dispatch's return after a try whose arm returned: the value
+    //! sits in `slot`
+    def emit_return_from_slot(slot : LLVMOpaqueValue?; at : LineInfo) {
+        if (try_exit_flag != null) {
+            emit_arm_exit(TRY_EXIT_RETURN, "return", at)
+            return
+        }
+        call_all_finally_blocks("return", false)
+        build_exit(at)
+        let returnType = thisFunc.result
+        var res : LLVMOpaqueValue? = null
+        if (!returnType.isVoid && !isCMRES(thisFunc)) {
+            let abi = type_to_llvm_abi_type(returnType)
+            res = LLVMBuildLoad2(g_builder, abi, slot, "try_exit_value")
+        }
+        emit_ret(res)
+    }
+
+    def visit_expr_return(expr : ExprReturn?; returnType : TypeDeclPtr; isCmres : bool) {
+        var expr_res = return_value_of(expr, returnType, isCmres)
 
         let any_afb =  has_any_finally_block(false)
         if (isCmres && any_afb) {
@@ -6715,21 +6832,36 @@ class public LlvmJitVisitor : AstVisitor {
             expr_res = LLVMBuildLoadData2Aligned(g_builder, type_to_llvm_abi_type(returnType), expr_res, returnType.alignOf, "return_temp_load_")
         }
 
-        build_epilogue()
-
         if (returnType.isVoid || isCmres) {
+            emit_ret(null)
+        } else {
+            emit_ret(coerce_scalar_to_abi(expr_res, type_to_llvm_abi_type(returnType)))
+        }
+    }
+
+    //! the function's epilogue and its ret: void for a null `res`
+    def emit_ret(res : LLVMOpaqueValue?) {
+        build_epilogue()
+        if (res == null) {
             LLVMBuildRetVoid(g_builder)
         } else {
-            if (returnType.isPointer && (expr.subexpr is ExprConstPtr)) {// return null
-                LLVMBuildRet(g_builder, LLVMConstPointerNull(type_to_llvm_abi_type(returnType)))
-            } else {
-                LLVMBuildRet(g_builder, coerce_scalar_to_abi(expr_res, type_to_llvm_abi_type(returnType)))
-            }
+            LLVMBuildRet(g_builder, res)
+        }
+    }
+
+    //! the finally blocks an exit runs on its way out, and the finally
+    //! chain's selector reset
+    def run_exit_finally(from_where : string; stopAtLoop : bool) {
+        call_all_finally_blocks(from_where, stopAtLoop)
+        if (callBlock != null) {
+            LLVMBuildStore(g_builder, types.ConstI32(0ul), callBlock)
         }
     }
 
     def override visitExprReturn(expr : ExprReturn?) : ExpressionPtr {
-        if (thisBlock != null) {
+        if (returns_through_arm(expr)) {
+            visit_arm_return(expr) if (try_exit_flag != null)
+        } elif (thisBlock != null) {
             visit_expr_return(expr, thisBlock.returnType, isCMRESType(thisBlock.returnType))
         } elif (thisFunc != null) {
             visit_expr_return(expr, thisFunc.result, isCMRES(thisFunc))
@@ -6738,21 +6870,42 @@ class public LlvmJitVisitor : AstVisitor {
     }
 
 // ExprBreak
-    def override preVisitExprBreak(expr : ExprBreak?) : void {
-        call_all_finally_blocks("break", true)
-        if (callBlock != null) {
-            LLVMBuildStore(g_builder, types.ConstI32(0ul), callBlock)
+    [arch(at="../ARCHITECTURE.md#try-arm-exits")]
+    def emit_arm_exit(kind : int; from_where : string; at : LineInfo) {
+        // the arm returns right after: no selector to reset
+        call_all_finally_blocks(from_where, kind != TRY_EXIT_RETURN)
+        LLVMBuildStore(g_builder, types.ConstI32(uint64(kind)), try_exit_flag)
+        build_exit(at)
+        emit_ret(null)
+    }
+
+    def in_try_arm_at_loop_depth => try_exit_flag != null && empty(loop_stack)
+
+    def emit_break(at : LineInfo) {
+        if (in_try_arm_at_loop_depth()) {
+            emit_arm_exit(TRY_EXIT_BREAK, "break", at)
+            return
         }
+        run_exit_finally("break", true)
         var lblk = loop_stack |> back()
         LLVMBuildBr(g_builder, lblk.loop_end)
     }
 
+    def override preVisitExprBreak(expr : ExprBreak?) : void {
+        emit_break(expr.at)
+    }
+
 // ExprContinue
     def override preVisitExprContinue(expr : ExprContinue?) : void {
-        call_all_finally_blocks("continue", true)
-        if (callBlock != null) {
-            LLVMBuildStore(g_builder, types.ConstI32(0ul), callBlock)
+        emit_continue(expr.at)
+    }
+
+    def emit_continue(at : LineInfo) {
+        if (in_try_arm_at_loop_depth()) {
+            emit_arm_exit(TRY_EXIT_CONTINUE, "continue", at)
+            return
         }
+        run_exit_finally("continue", true)
         var lblk = loop_stack |> back()
         let target = lblk.loop_continue != null ? lblk.loop_continue : lblk.loop_start
         let br = LLVMBuildBr(g_builder, target)
@@ -6807,7 +6960,9 @@ class public LlvmJitVisitor : AstVisitor {
         thisFunc = null
     }
 
-    def make_block_function(blockExpr : ExpressionPtr; captured : array<CapturedVariable>; first_field_index : int; captureType : LLVMOpaqueType?) : tuple<func : LLVMOpaqueValue?; impl : LLVMOpaqueValue?> {
+    def make_block_function(blockExpr : ExpressionPtr; captured : array<CapturedVariable>;
+                            first_field_index : int; captureType : LLVMOpaqueType?;
+                            exit_field_index : int = -1) : BlockFunctionPair {
         var astVisitor = new LlvmJitVisitor(prog, jit_context, types, uid, flags, mode, g_di_builder, attributes)
         var result, impl : LLVMOpaqueValue?
         make_visitor(*astVisitor) $(mv_adapter) {
@@ -6816,6 +6971,12 @@ class public LlvmJitVisitor : AstVisitor {
             var cblk = (*astVisitor)->before_function_entry()
             var carg = (*astVisitor)->get_capture_param()
             carg = LLVMBuildLoad2(astVisitor.g_builder, captureType, carg, "capture")
+            if (exit_field_index >= 0) {
+                let ab = astVisitor.g_builder
+                let fi = uint(exit_field_index)
+                astVisitor.try_exit_flag = LLVMBuildExtractValue(ab, carg, fi, "try_exit_flag")
+                astVisitor.try_exit_slot = LLVMBuildExtractValue(ab, carg, fi + 1u, "try_exit_slot")
+            }
             for (c, ai in captured, count()) {
                 var arg_i = LLVMBuildExtractValue(astVisitor.g_builder, carg, uint(ai + first_field_index), "var_{c.variable.name}_index_{ai}_stindex_{ai+first_field_index}")
                 if (c.eref) {
@@ -6859,16 +7020,23 @@ class public LlvmJitVisitor : AstVisitor {
         return slot
     }
 
-    def emit_block_value(blockExpr : ExpressionPtr; at : LineInfo) : LLVMOpaqueValue? {
+    def emit_block_value(blockExpr : ExpressionPtr; at : LineInfo;
+                         exit_flag : LLVMOpaqueValue? = null;
+                         exit_slot : LLVMOpaqueValue? = null) : LLVMOpaqueValue? {
         var captured <- capture_block(blockExpr)
         sort(captured) <| cmp_by(string(_.variable.name))
         // build block type
         var blk_fields <- build_block_type()
         blk_fields |> push(LLVMArrayType(types.LLVMFloat4Type(), 10u))
-        blk_fields |> reserve(length(blk_fields) + length(captured))
+        blk_fields |> reserve(length(blk_fields) + length(captured) + 2)
         let first_field_index = length(blk_fields)
         for (c in captured) {
             blk_fields |> push(LLVMPointerType(type_to_llvm_type(c.variable._type), 0u))
+        }
+        let exit_field_index = exit_flag != null ? first_field_index + length(captured) : -1
+        if (exit_flag != null) {
+            blk_fields |> push(types.LLVMVoidPtrType())
+            blk_fields |> push(types.LLVMVoidPtrType())
         }
         var this_block_type = StructType(types, blk_fields)
         // allocate block, set captured fields
@@ -6919,6 +7087,17 @@ class public LlvmJitVisitor : AstVisitor {
             }
             blkv = LLVMBuildInsertValue(g_builder, blkv, v_ptr, uint(idx + first_field_index), "capture_{c.variable.name}")
         }
+        if (exit_flag != null) {
+            let flag_v = LLVMBuildPointerCast(g_builder, exit_flag, types.LLVMVoidPtrType(), "")
+            let void_ptr = types.LLVMVoidPtrType()
+            var slot_v = LLVMConstPointerNull(void_ptr)
+            if (exit_slot != null) {
+                slot_v = LLVMBuildPointerCast(g_builder, exit_slot, void_ptr, "")
+            }
+            let fi = uint(exit_field_index)
+            blkv = LLVMBuildInsertValue(g_builder, blkv, flag_v, fi, "try_exit_flag")
+            blkv = LLVMBuildInsertValue(g_builder, blkv, slot_v, fi + 1u, "try_exit_slot")
+        }
         LLVMBuildStore(g_builder, blkv, blk)
 
         // make block function
@@ -6928,7 +7107,8 @@ class public LlvmJitVisitor : AstVisitor {
         if (noRetType) {
             rawBlock.returnType = new TypeDecl(baseType = Type.tVoid, at = at)
         }
-        var blk_make = make_block_function(blockExpr, captured, first_field_index, this_block_type)
+        var blk_make = make_block_function(blockExpr, captured, first_field_index, this_block_type,
+            exit_field_index)
         if (noRetType) {
             rawBlock.returnType = null
         }
@@ -7533,6 +7713,9 @@ class public LlvmJitVisitor : AstVisitor {
         if (!expr.makeFlags.useCMRES) return false
         if (!(heapMkaData |> empty)) return true
 
+        if (thisBlock != null && try_exit_slot != null && !isCMRESType(thisBlock.returnType)) {
+            return isCMRES(thisFunc)   // an arm builds the function's cmres result in place
+        }
         if (thisBlock != null) {
             return isCMRESType(thisBlock.returnType)
         } elif (thisFunc != null) {
@@ -7546,6 +7729,9 @@ class public LlvmJitVisitor : AstVisitor {
         // target arr.data (top of heapMkaData), not the enclosing function's cmres param.
         if (!(heapMkaData |> empty)) {
             return heapMkaData |> back()
+        }
+        if (thisBlock != null && try_exit_slot != null && !isCMRESType(thisBlock.returnType)) {
+            return try_exit_slot   // a try/recover arm's cmres return targets the function's slot
         }
         if (thisBlock != null) {
             return LLVMGetParam(ffunc, uint(thisBlock.arguments |> length + 2))
@@ -7905,6 +8091,7 @@ def public generate_llvm(prog : Program?; ctx : Context?; types : PrimitiveTypes
             }
         }
     }
+    g_failed ||= prog.flags.macroException   // a panic in a visitor callback is caught, not raised
     if (!empty(g_errors)) {
         let errors = g_errors |> join("\n")
         delete g_errors
@@ -8060,6 +8247,7 @@ def public generate_globals_initialization_fn(ctx : Context?; prog : Program?;
         LLVMPositionBuilderAtEnd(visitor.g_builder, entry)
         LLVMBuildBr(visitor.g_builder, body)
     }
+    g_failed ||= prog.flags.macroException   // a panic in a visitor callback is caught, not raised
     unsafe {
         delete visitor
     }

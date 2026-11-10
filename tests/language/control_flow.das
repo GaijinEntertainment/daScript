@@ -1225,8 +1225,9 @@ def test_try_recover(t : T?) {
 }
 
 var g_rounds = 5
+var g_refs <- [11, 22]
 
-[export, no_jit]
+[export]
 def break_in_for : int {
     var seen = 0
     for (i in range(0, g_rounds)) {
@@ -1240,7 +1241,7 @@ def break_in_for : int {
     return seen
 }
 
-[export, no_jit]
+[export]
 def continue_in_while : int {
     var seen = 0
     var i = 0
@@ -1256,7 +1257,7 @@ def continue_in_while : int {
     return seen
 }
 
-[export, no_jit]
+[export]
 def break_in_recover : int {
     var seen = 0
     for (i in range(0, g_rounds)) {
@@ -1271,7 +1272,7 @@ def break_in_recover : int {
     return seen
 }
 
-[export, no_jit]
+[export]
 def nested_try : int {
     var seen = 0
     for (i in range(0, g_rounds)) {
@@ -1289,7 +1290,7 @@ def nested_try : int {
     return seen
 }
 
-[export, no_jit]
+[export]
 def inner_loop_break : int {
     var seen = 0
     for (i in range(0, g_rounds)) {
@@ -1341,6 +1342,201 @@ def test_try_recover_control_flow(t : T?) {
     t |> equal(inner_loop_break(), 23, "break in a loop inside the try stays inner")
     t |> equal(inner_only_break(), 102, "a loop break with no loop around the try needs no exit")
     t |> equal(try_without_exit(), 5, "try with no exit is unaffected")
+}
+
+struct TryBig {
+    a, b, c, d, e : int
+}
+
+var g_try_big : TryBig? = new TryBig(a = 1)
+
+[export]
+def return_from_try(n : int) : int {
+    for (i in range(0, g_rounds)) {
+        try {
+            if (i == n) {
+                return 40 + i
+            }
+        } recover {
+        }
+    }
+    return -1
+}
+
+[export]
+def return_from_recover : int {
+    for (i in range(0, g_rounds)) {
+        try {
+            panic("stop") if (i == 2)
+        } recover {
+            return 7
+        }
+    }
+    return -1
+}
+
+[export]
+def return_string_from_try(n : int) : string {
+    try {
+        if (n > 0) {
+            return "yes{n}"
+        }
+    } recover {
+    }
+    return "no"
+}
+
+[export]
+def return_big_from_try(n : int) : TryBig {
+    try {
+        if (n > 0) {
+            return TryBig(a = n, e = n * 2)
+        }
+    } recover {
+    }
+    return TryBig(a = -1)
+}
+
+[export]
+def return_null_from_try(n : int) : TryBig? {
+    try {
+        if (n > 0) {
+            return null
+        }
+    } recover {
+    }
+    return g_try_big
+}
+
+[export]
+def return_from_nested_try : int {
+    for (i in range(0, g_rounds)) {
+        try {
+            try {
+                if (i == 2) {
+                    return 99
+                }
+            } recover {
+            }
+        } recover {
+        }
+    }
+    return -1
+}
+
+[export]
+def return_ref_from_try(n : int) : int& {
+    unsafe {
+        try {
+            if (n > 0) {
+                return g_refs[1]
+            }
+        } recover {
+        }
+        return g_refs[0]
+    }
+}
+
+var g_try_void = 0
+
+[export]
+def return_from_try_of_void(n : int) {
+    try {
+        if (n > 0) {
+            g_try_void = 1
+            return
+        }
+    } recover {
+    }
+    g_try_void = 2
+}
+
+[export]
+def return_big_copy_from_try(n : int) : TryBig {
+    try {
+        if (n > 0) {
+            let b = TryBig(a = n, e = n * 3)
+            return b
+        }
+    } recover {
+    }
+    return TryBig(a = -1)
+}
+
+[export]
+def return_big_move_from_try(n : int) : TryBig {
+    try {
+        if (n > 0) {
+            var b = TryBig(a = n, e = n * 4)
+            return <- b
+        }
+    } recover {
+    }
+    return TryBig(a = -1)
+}
+
+[never_inline]
+def make_try_big(n : int) : TryBig => TryBig(a = n, e = n * 2)
+
+[export]
+def return_big_call_from_try(n : int) : TryBig {
+    try {
+        if (n > 0) {
+            return make_try_big(n)
+        }
+    } recover {
+    }
+    return TryBig(a = -1)
+}
+
+var g_try_fin = 0
+
+[export]
+def return_through_finally_from_try(n : int) : int {
+    try {
+        if (n > 0) {
+            for (j in range(0, 4)) {
+                if (j == 2) {
+                    return 50 + j
+                }
+            }
+        } finally {
+            g_try_fin += 100
+        }
+    } recover {
+    }
+    return -1
+}
+
+[test(description = "a return inside a try or recover arm returns the function with its value - an int, a string, a struct returned through memory, a reference, and from a nested try")]
+def test_try_recover_return(t : T?) {
+    t |> equal(return_from_try(2), 42, "return from the try arm")
+    t |> equal(return_from_try(9), -1, "no return taken falls past the loop")
+    t |> equal(return_from_recover(), 7, "return from the recover arm")
+    t |> equal(return_string_from_try(4), "yes4", "a string result")
+    t |> equal(return_string_from_try(0), "no", "a string result past the try")
+    let big = return_big_from_try(3)
+    t |> equal(big.a, 3, "a struct result through memory")
+    t |> equal(big.e, 6, "... every field of it")
+    t |> equal(return_big_from_try(0).a, -1, "a struct result past the try")
+    t |> equal(return_from_nested_try(), 99, "a return chains out of a nested try")
+    t |> success(return_null_from_try(1) == null, "a null pointer result from the try arm")
+    t |> success(return_null_from_try(0) == g_try_big, "a pointer result past the try")
+    t |> equal(return_ref_from_try(1), 22, "a reference result from the try arm")
+    t |> equal(return_ref_from_try(0), 11, "a reference result past the try")
+    return_from_try_of_void(1)
+    t |> equal(g_try_void, 1, "a bare return from the try arm of a void function")
+    return_from_try_of_void(0)
+    t |> equal(g_try_void, 2, "... and the fall-through past it")
+    let copied = return_big_copy_from_try(3)
+    t |> equal(copied.e, 9, "a struct local copied into the result")
+    let moved = return_big_move_from_try(3)
+    t |> equal(moved.e, 12, "a struct local moved into the result")
+    let called = return_big_call_from_try(3)
+    t |> equal(called.e, 6, "a struct result a call builds in place")
+    g_try_fin = 0
+    t |> equal(return_through_finally_from_try(1), 52, "a return out of a loop inside the arm")
+    t |> equal(g_try_fin, 100, "... runs the arm's finally on its way out")
 }
 
 struct WithPoint {

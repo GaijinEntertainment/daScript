@@ -267,3 +267,22 @@ reference is an address the runtime made; a typed pointer parameter carries none
 value the program may hold at any address (`intptr` reads it, a parity test on it must run as
 written), and an `align` the language never promised lets LLVM fold a comparison of two odd
 pointer values or run a load a parity test guards.
+
+## 14. Exits out of a try or recover arm {#try-arm-exits}
+
+Each arm of a `try`/`recover` is emitted as a block function the runtime calls through
+`jit_try_recover`, so a `break`, `continue` or `return` inside the arm has no loop or function of
+its own to leave. `preVisitExprTryCatch` (`daslib/llvm_jit.das`) scans both arms with
+`scan_try_exits` (`daslib/try_exits.das`, repo root - the scan the AOT emitter uses for the same
+lowering) and, when any exit leaves the arm, puts an `i32` exit flag on the enclosing frame and,
+for a `return`, a slot for the function's result: an alloca of the ABI type, or the function's own
+cmres target when it returns through memory. Both pointers ride the arm's capture record as two
+trailing fields, and the arm's visitor reads them into `try_exit_flag` / `try_exit_slot`. An exit
+the arm takes at its own loop depth (`emit_arm_exit`) runs the arm's finally blocks, stores the
+kind in the flag (1 break, 2 continue, 3 return - a return first stores its value in the slot), and
+returns from the block function; the code after the `jit_try_recover` call branches on the flag to
+`emit_break`, `emit_continue` or `emit_return_from_slot`, the same emitters a direct exit uses. A
+try nested in an arm chains outward: its dispatch runs inside the outer arm's visitor, where those
+emitters see `try_exit_flag` and take the outer arm's exit instead, with the inner `return` already
+written into the shared slot. A loop inside the arm keeps its own `break`: the arm visitor's loop
+stack is empty only at the arm's own level.

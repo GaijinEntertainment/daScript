@@ -810,6 +810,28 @@ def test_cross_target_folds(t : T?) {
         t |> success(ln |> has("CROSS=[yes]"), "any cross target takes the cross arm")
     }
 }
+
+[test(description = "a break inside a try arm of a loop whose recover arm can panic leaves the loop under -jit on a cold cache and again on the warm one", timeout = 1200)]
+def test_break_inside_a_try_arm_leaves_the_loop_under_jit(t : T?) {
+    if (!jit_enabled()) {
+        t |> skip("the child runs under -jit, which this build does not carry")
+        return
+    }
+    let bin = get_host_binary()
+    let cwd = "{OUTPUT_DIR}/break_in_try_{ref_time_ticks()}"   // fresh: round one's cache is cold
+    mkdir_rec(cwd)
+    let fixture = "{FIXTURE_DIR}/_fixture_break_in_try.das"
+    let root = get_das_root()
+    for (round in range(2)) {
+        var inscope lines : array<string>
+        let rc = spawn("cd \"{cwd}\" && \"{bin}\" -dasroot \"{root}\" -jit \"{fixture}\"", lines)
+        let out = join(lines, "\n")
+        t |> equal(0, rc, "round {round}: the child runs under -jit, got:\n{out}")
+        t |> success(lines |> has("BREAK_IN_TRY 2"),
+                     "round {round}: the loop leaves at i == 2, got:\n{out}")
+    }
+}
+
 [test(description = "a load through an odd int? that a parity test guards is skipped under -jit: the pointer parameter carries no alignment the fold could use", timeout = 1200)]
 def test_guarded_load_through_an_odd_pointer_is_skipped(t : T?) {
     if (!jit_enabled()) {

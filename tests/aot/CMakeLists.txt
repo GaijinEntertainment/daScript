@@ -435,6 +435,8 @@ set(TEST_AOT_TARGETS "")
 set(TEST_AOT_GENVARS "")
 set(TEST_AOT_ALL_DAS "")   # test-body .das (not module libs); LLVM-AOT corpus emits each whole-program, covering its deps
 
+# jit_tests is absent on purpose: it tests JIT codegen, which an AOT build replaces, so an AOT
+# build of it tests nothing (tests/.das_test skips the folder under --use-aot for the same reason)
 set(DAS_AOT_SUITES
     algorithm apply archive assert_once ast_match async bare_block base64 bitfields bool_array
     class_boost daslib dasgltf daspeg dastest data_walker debug debug_agent decs depfile dynamic_cast_rtti escape_analysis fio
