@@ -1803,15 +1803,31 @@ namespace das
         } else if ( expr->subexpr->type->isGoodTableType() ) {
             return nullptr;
         } else if ( expr->subexpr->type->isHandle() ) {
+            auto annotation = expr->subexpr->type->annotation;
+            uint32_t stride = 0, count = 0;
+            if ( expr->index->rtti_isConstant() && annotation->constIndexLayout(stride, count) ) {
+                uint32_t idxC = cast<uint32_t>::to(static_cast<ExprConst *>(expr->index)->value);
+                if ( idxC >= count ) {
+                    context.thisProgram->error("matrix index out of range", "", "",
+                        expr->subexpr->at, CompilationError::exceeds_array_index);
+                    return nullptr;
+                }
+                gc_local<TypeDecl> readType = new TypeDecl(r2vType->baseType, cppBindingLineInfo());
+                if ( auto tnode = sv_trySimulate(expr->subexpr, idxC*stride + extraOffset, readType.ptr) ) {
+                    return tnode;
+                }
+            }
+            auto prv = simulateExpression(expr->subexpr);
+            auto pidx = simulateExpression(expr->index);
             SimNode * result;
             if ( r2vType->baseType!=Type::none ) {
-                result = expr->subexpr->type->annotation->simulateGetAtR2V(context, at, r2vType, expr->subexpr, expr->index, extraOffset);
+                result = annotation->simulateGetAtR2V(context, at, r2vType, prv, pidx, extraOffset);
                 if ( !result ) {
                     context.thisProgram->error("integration error, simulateGetAtR2V returned null", "", "",
                                                at, CompilationError::internal_expression );
                 }
             } else {
-                result = expr->subexpr->type->annotation->simulateGetAt(context, at, r2vType, expr->subexpr, expr->index, extraOffset);
+                result = annotation->simulateGetAt(context, at, r2vType, prv, pidx, extraOffset);
                 if ( !result ) {
                     context.thisProgram->error("integration error, simulateGetAt returned null", "", "",
                                                at, CompilationError::internal_expression );
@@ -3133,7 +3149,7 @@ namespace das
                     result->source_iterators[t] = expr->sources[t]->type->annotation->simulateGetIterator(
                         context,
                         expr->sources[t]->at,
-                        expr->sources[t]
+                        getE(expr->sources[t])
                     );
                 } else if ( expr->sources[t]->type->baseType==Type::tFixedArray ) {
                     result->source_iterators[t] = context.code->makeNode<SimNode_FixedArrayIterator>(

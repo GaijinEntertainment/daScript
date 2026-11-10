@@ -486,31 +486,30 @@ namespace das
             return new TypeDecl(*vecType);
         }
         virtual SimNode * simulateGetAt ( Context & context, const LineInfo & at, const TypeDeclPtr &,
-                                         ExpressionPtr rv, ExpressionPtr idx, uint32_t ofs ) const override {
+                                         SimNode * rv, SimNode * idx, uint32_t ofs ) const override {
             return context.code->makeNode<SimNode_AtStdVector>(at,
-                                                               simulateExpression(context, rv),
-                                                               simulateExpression(context, idx),
+                                                               rv,
+                                                               idx,
                                                                ofs);
         }
         virtual SimNode * simulateGetAtR2V ( Context & context, const LineInfo & at, const TypeDeclPtr & type,
-                                            ExpressionPtr rv, ExpressionPtr idx, uint32_t ofs ) const override {
+                                            SimNode * rv, SimNode * idx, uint32_t ofs ) const override {
             if ( type->isHandle() ) {
                 auto expr = context.code->makeNode<SimNode_AtStdVector>(at,
-                                                                simulateExpression(context, rv),
-                                                                simulateExpression(context, idx),
+                                                                rv,
+                                                                idx,
                                                                 ofs);
                 return GetR2V(context, at, type, expr);
             } else {
                 return context.code->makeValueNode<SimNode_AtStdVectorR2V>(type->baseType,
                                                                 at,
-                                                                simulateExpression(context, rv),
-                                                                simulateExpression(context, idx),
+                                                                rv,
+                                                                idx,
                                                                 ofs);
             }
         }
 
-        virtual SimNode * simulateGetIterator ( Context & context, const LineInfo & at, ExpressionPtr src ) const override {
-            auto rv = simulateExpression(context, src);
+        virtual SimNode * simulateGetIterator ( Context & context, const LineInfo & at, SimNode * rv ) const override {
             return context.code->makeNode<SimNode_AnyIterator<VectorType,StdVectorIterator<VectorType>>>(at, rv);
         }
         virtual void * jitGetEach () const override {

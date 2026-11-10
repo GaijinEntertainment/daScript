@@ -729,10 +729,10 @@ namespace das {
             return new TypeDecl(*fieldType);
         }
         virtual SimNode * simulateGetAt ( Context & context, const LineInfo & at, const TypeDeclPtr &,
-                                         ExpressionPtr rv, ExpressionPtr idx, uint32_t ofs ) const override {
+                                         SimNode * rv, SimNode * idx, uint32_t ofs ) const override {
             return context.code->makeNode<SimNode_DebugInfoAtField<ST>>(at,
-                                                                        simulateExpression(context, rv),
-                                                                        simulateExpression(context, idx),
+                                                                        rv,
+                                                                        idx,
                                                                         ofs);
         }
         virtual bool isIterable ( ) const override {
@@ -741,8 +741,7 @@ namespace das {
         virtual TypeDeclPtr makeIteratorType ( ExpressionPtr ) const override {
             return new TypeDecl(*fieldType);
         }
-        virtual SimNode * simulateGetIterator ( Context & context, const LineInfo & at, ExpressionPtr src ) const override {
-            auto rv = simulateExpression(context, src);
+        virtual SimNode * simulateGetIterator ( Context & context, const LineInfo & at, SimNode * rv ) const override {
             return context.code->makeNode<SimNode_AnyIterator<ST,DebugInfoIterator<VT,ST>>>(at, rv);
         }
         virtual void * jitGetEach () const override {

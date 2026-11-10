@@ -431,9 +431,8 @@ struct PtrSlotsAnnotation final : ManagedStructureAnnotation<PtrSlots,false> {
         return new TypeDecl(*atType);
     }
     virtual SimNode * simulateGetAt ( Context & context, const LineInfo & at, const TypeDeclPtr &,
-                                     ExpressionPtr rv, ExpressionPtr idx, uint32_t ofs ) const override {
-        return context.code->makeNode<SimNode_PtrSlotsAt>(at, simulateExpression(context, rv),
-                                                              simulateExpression(context, idx), ofs);
+                                     SimNode * rv, SimNode * idx, uint32_t ofs ) const override {
+        return context.code->makeNode<SimNode_PtrSlotsAt>(at, rv, idx, ofs);
     }
     virtual void * jitGetAt ( Type indexType ) const override {
         // one index type only: the key. The jit passes it natively typed, same as the ref-yielding
