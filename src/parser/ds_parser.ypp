@@ -1544,13 +1544,13 @@ type_declaration_no_options_list
     ;
 
 expression_keyword
-    :   KEYWORD[kwd] '<' { yyextra->das_arrow_depth ++; } type_declaration_no_options_list[declL] '>' { yyextra->das_arrow_depth --; } expr[subexpr] {
+    :   KEYWORD[kwd] '<' { if ( !das_type_arrow_enter(scanner,tokAt(scanner,@$)) ) YYABORT; } type_declaration_no_options_list[declL] '>' { yyextra->das_arrow_depth --; } expr[subexpr] {
         auto pCall = yyextra->g_Program->makeCall(tokAt(scanner,@kwd),tokAt(scanner,@subexpr),*$kwd);
         pCall->arguments = typesAndSequenceToList($declL,$subexpr);
         delete $kwd;
         $$ = pCall;
     }
-    |   TYPE_FUNCTION[kwd] '<' { yyextra->das_arrow_depth ++; } type_declaration_no_options_list[declL] '>' { yyextra->das_arrow_depth --; } optional_expr_list_in_braces[subexpr] {
+    |   TYPE_FUNCTION[kwd] '<' { if ( !das_type_arrow_enter(scanner,tokAt(scanner,@$)) ) YYABORT; } type_declaration_no_options_list[declL] '>' { yyextra->das_arrow_depth --; } optional_expr_list_in_braces[subexpr] {
         auto pCall = yyextra->g_Program->makeCall(tokAt(scanner,@kwd),tokAt(scanner,@subexpr),*$kwd);
         pCall->arguments = typesAndSequenceToList($declL,$subexpr);
         delete $kwd;
@@ -1635,7 +1635,7 @@ expression_delete
     ;
 
 new_type_declaration
-    :  '<' { yyextra->das_arrow_depth ++; } type_declaration[typeDecl] '>' { yyextra->das_arrow_depth --; } {
+    :  '<' { if ( !das_type_arrow_enter(scanner,tokAt(scanner,@$)) ) YYABORT; } type_declaration[typeDecl] '>' { yyextra->das_arrow_depth --; } {
         $$ = $typeDecl;
     }
     |   structure_type_declaration[typeDecl]   {
@@ -1839,15 +1839,15 @@ expression_let
     ;
 
 expr_cast
-    :   DAS_CAST[loc] '<' { yyextra->das_arrow_depth ++; } type_declaration_no_options[decl] '>' { yyextra->das_arrow_depth --; } expr[subexpr] {
+    :   DAS_CAST[loc] '<' { if ( !das_type_arrow_enter(scanner,tokAt(scanner,@$)) ) YYABORT; } type_declaration_no_options[decl] '>' { yyextra->das_arrow_depth --; } expr[subexpr] {
         $$ = new ExprCast(tokAt(scanner,@loc),$subexpr,$decl);
     }
-    |   DAS_UPCAST[loc] '<' { yyextra->das_arrow_depth ++; } type_declaration_no_options[decl] '>' { yyextra->das_arrow_depth --; } expr[subexpr] {
+    |   DAS_UPCAST[loc] '<' { if ( !das_type_arrow_enter(scanner,tokAt(scanner,@$)) ) YYABORT; } type_declaration_no_options[decl] '>' { yyextra->das_arrow_depth --; } expr[subexpr] {
         auto pCast = new ExprCast(tokAt(scanner,@loc),$subexpr,$decl);
         pCast->upcast = true;
         $$ = pCast;
     }
-    |   DAS_REINTERPRET[loc] '<' { yyextra->das_arrow_depth ++; } type_declaration_no_options[decl] '>' { yyextra->das_arrow_depth --; } expr[subexpr] {
+    |   DAS_REINTERPRET[loc] '<' { if ( !das_type_arrow_enter(scanner,tokAt(scanner,@$)) ) YYABORT; } type_declaration_no_options[decl] '>' { yyextra->das_arrow_depth --; } expr[subexpr] {
         auto pCast = new ExprCast(tokAt(scanner,@loc),$subexpr,$decl);
         pCast->reinterpret = true;
         $$ = pCast;
@@ -1855,7 +1855,7 @@ expr_cast
     ;
 
 expr_type_decl
-    :  DAS_TYPE[loc] '<' { yyextra->das_arrow_depth ++; } type_declaration[decl] '>' { yyextra->das_arrow_depth --; } {
+    :  DAS_TYPE[loc] '<' { if ( !das_type_arrow_enter(scanner,tokAt(scanner,@$)) ) YYABORT; } type_declaration[decl] '>' { yyextra->das_arrow_depth --; } {
         $$ = new ExprTypeDecl(tokAt(scanner,@loc),$decl);
     }
     ;
@@ -2133,12 +2133,12 @@ func_addr_expr
     :   '@' '@' func_addr_name[faddr]     {
         $$ = $faddr;
     }
-    |   '@' '@' '<' { yyextra->das_arrow_depth ++; } type_declaration_no_options[blockType] '>' { yyextra->das_arrow_depth --; } func_addr_name[faddr] {
+    |   '@' '@' '<' { if ( !das_type_arrow_enter(scanner,tokAt(scanner,@$)) ) YYABORT; } type_declaration_no_options[blockType] '>' { yyextra->das_arrow_depth --; } func_addr_name[faddr] {
         auto expr = (ExprAddr *) ($faddr->rtti_isAddr() ? $faddr : (((ExprTag *) $faddr)->value));
         expr->funcType = $blockType;
         $$ = $faddr;
     }
-    |   '@' '@' '<' { yyextra->das_arrow_depth ++; } optional_function_argument_list[list] optional_function_type[result] '>' { yyextra->das_arrow_depth --; } func_addr_name[faddr] {
+    |   '@' '@' '<' { if ( !das_type_arrow_enter(scanner,tokAt(scanner,@$)) ) YYABORT; } optional_function_argument_list[list] optional_function_type[result] '>' { yyextra->das_arrow_depth --; } func_addr_name[faddr] {
         auto expr = (ExprAddr *) ($faddr->rtti_isAddr() ? $faddr : (((ExprTag *) $faddr)->value));
         expr->funcType = new TypeDecl(Type::tFunction, expr->at);
         expr->funcType->firstType = $result;
@@ -2334,7 +2334,7 @@ expr
     |   expr[subexpr] '?'[loc] expr[left] ':' expr[right] {
             $$ = new ExprOp3(tokAt(scanner,@loc),"?",$subexpr,$left,$right);
         }
-    |   expr[subexpr] DAS_IS[loc] DAS_TYPE '<' { yyextra->das_arrow_depth ++; } type_declaration_no_options[decl] '>' { yyextra->das_arrow_depth --; } {
+    |   expr[subexpr] DAS_IS[loc] DAS_TYPE '<' { if ( !das_type_arrow_enter(scanner,tokAt(scanner,@$)) ) YYABORT; } type_declaration_no_options[decl] '>' { yyextra->das_arrow_depth --; } {
         $$ = new ExprIs(tokAt(scanner,@loc),$subexpr,$decl);
     }
     |   expr[subexpr] DAS_IS[loc] basic_type_declaration[decl] {
@@ -2350,7 +2350,7 @@ expr
         $$ = new ExprAsVariant(tokAt(scanner,@loc),$subexpr,*$vname);
         delete $vname;
     }
-    |   expr[subexpr] DAS_AS[loc] DAS_TYPE '<' { yyextra->das_arrow_depth ++; } type_declaration[decl] '>' { yyextra->das_arrow_depth --; } {
+    |   expr[subexpr] DAS_AS[loc] DAS_TYPE '<' { if ( !das_type_arrow_enter(scanner,tokAt(scanner,@$)) ) YYABORT; } type_declaration[decl] '>' { yyextra->das_arrow_depth --; } {
         auto vname = $decl->describe();
         $$ = new ExprAsVariant(tokAt(scanner,@loc),$subexpr,vname);
         delete $decl;
@@ -2362,7 +2362,7 @@ expr
         $$ = new ExprSafeAsVariant(tokAt(scanner,@loc),$subexpr,*$vname);
         delete $vname;
     }
-    |   expr[subexpr] '?' DAS_AS[loc] DAS_TYPE '<' { yyextra->das_arrow_depth ++; } type_declaration[decl] '>' { yyextra->das_arrow_depth --; } {
+    |   expr[subexpr] '?' DAS_AS[loc] DAS_TYPE '<' { if ( !das_type_arrow_enter(scanner,tokAt(scanner,@$)) ) YYABORT; } type_declaration[decl] '>' { yyextra->das_arrow_depth --; } {
         auto vname = $decl->describe();
         $$ = new ExprSafeAsVariant(tokAt(scanner,@loc),$subexpr,vname);
         delete $decl;
@@ -3251,7 +3251,7 @@ bitfield_type_declaration
             $$ = new TypeDecl($basicType, tokAt(scanner,@$));
             $$->at = tokAt(scanner,@basicType);
     }
-    |   DAS_TBITFIELD bitfield_basic_type_declaration[basicType] '<' { yyextra->das_arrow_depth ++; } bitfield_bits[nl] '>' { yyextra->das_arrow_depth --; } {
+    |   DAS_TBITFIELD bitfield_basic_type_declaration[basicType] '<' { if ( !das_type_arrow_enter(scanner,tokAt(scanner,@$)) ) YYABORT; } bitfield_bits[nl] '>' { yyextra->das_arrow_depth --; } {
             $$ = new TypeDecl($basicType, tokAt(scanner,@$));
             $$->argNames = *$nl;
             auto maxBits = $$->maxBitfieldBits();
@@ -3308,7 +3308,7 @@ type_declaration_no_options
     |   type_declaration_no_options[typeDecl] '[' ']' {
         $$ = appendAutoDim($typeDecl, tokAt(scanner,@2));
     }
-    |   DAS_TYPE '<' { yyextra->das_arrow_depth ++; } type_declaration[typeDecl] '>' { yyextra->das_arrow_depth --; } {
+    |   DAS_TYPE '<' { if ( !das_type_arrow_enter(scanner,tokAt(scanner,@$)) ) YYABORT; } type_declaration[typeDecl] '>' { yyextra->das_arrow_depth --; } {
         $typeDecl->autoToAlias = true;
         $$ = $typeDecl;
     }
@@ -3324,7 +3324,7 @@ type_declaration_no_options
         $$->typeMacroExpr.insert($$->typeMacroExpr.begin(), new ExprConstString(tokAt(scanner,@name), *$name));
         delete $name;
     }
-    |   '$' name_in_namespace[name] '<' { yyextra->das_arrow_depth ++; } type_declaration_no_options_list[declL] '>' { yyextra->das_arrow_depth --; } optional_expr_list_in_braces[arguments] {
+    |   '$' name_in_namespace[name] '<' { if ( !das_type_arrow_enter(scanner,tokAt(scanner,@$)) ) YYABORT; } type_declaration_no_options_list[declL] '>' { yyextra->das_arrow_depth --; } optional_expr_list_in_braces[arguments] {
         $$ = new TypeDecl(Type::typeMacro, tokAt(scanner,@$));
         $$->at = tokRangeAt(scanner,@name, @arguments);
         $$->typeMacroExpr = typesAndSequenceToList($declL,$arguments);
@@ -3381,35 +3381,37 @@ type_declaration_no_options
         $$ = $typeDecl;
     }
     |   type_declaration_no_options[typeDecl] '?' {
+        if ( !das_type_pointer_fits(scanner,$typeDecl,tokAt(scanner,@$)) ) YYABORT;
         $$ = new TypeDecl(Type::tPointer, tokAt(scanner,@$));
         $$->at = tokAt(scanner,@typeDecl);
         $$->firstType = $typeDecl;
     }
-    |   DAS_SMART_PTR[loc] '<' { yyextra->das_arrow_depth ++; } type_declaration[typeDecl] '>' { yyextra->das_arrow_depth --; } {
+    |   DAS_SMART_PTR[loc] '<' { if ( !das_type_arrow_enter(scanner,tokAt(scanner,@$)) ) YYABORT; } type_declaration[typeDecl] '>' { yyextra->das_arrow_depth --; } {
         $$ = new TypeDecl(Type::tPointer, tokAt(scanner,@$));
         $$->at = tokAt(scanner,@loc);
         $$->smartPtr = true;
         $$->firstType = $typeDecl;
     }
     |   type_declaration_no_options[typeDecl] QQ {
+        if ( !das_type_pointer_fits(scanner,$typeDecl,tokAt(scanner,@$)) ) YYABORT;
         $$ = new TypeDecl(Type::tPointer, tokAt(scanner,@$));
         $$->at = tokAt(scanner,@typeDecl);
         $$->firstType = new TypeDecl(Type::tPointer, tokAt(scanner,@$));
         $$->firstType->at = tokAt(scanner,@typeDecl);
         $$->firstType->firstType = $typeDecl;
     }
-    |   DAS_ARRAY[loc] '<' { yyextra->das_arrow_depth ++; } type_declaration[typeDecl] '>' { yyextra->das_arrow_depth --; } {
+    |   DAS_ARRAY[loc] '<' { if ( !das_type_arrow_enter(scanner,tokAt(scanner,@$)) ) YYABORT; } type_declaration[typeDecl] '>' { yyextra->das_arrow_depth --; } {
         $$ = new TypeDecl(Type::tArray, tokAt(scanner,@$));
         $$->at = tokAt(scanner,@loc);
         $$->firstType = $typeDecl;
     }
-    |   DAS_TABLE[loc] '<' { yyextra->das_arrow_depth ++; } table_type_pair[ttp] '>' { yyextra->das_arrow_depth --; } {
+    |   DAS_TABLE[loc] '<' { if ( !das_type_arrow_enter(scanner,tokAt(scanner,@$)) ) YYABORT; } table_type_pair[ttp] '>' { yyextra->das_arrow_depth --; } {
         $$ = new TypeDecl(Type::tTable, tokAt(scanner,@$));
         $$->at = tokAt(scanner,@loc);
         $$->firstType = $ttp.firstType;
         $$->secondType = $ttp.secondType;
     }
-    |   DAS_ITERATOR[loc] '<'  { yyextra->das_arrow_depth ++; } type_declaration[itTypeDecl] '>' { yyextra->das_arrow_depth --; } {
+    |   DAS_ITERATOR[loc] '<'  { if ( !das_type_arrow_enter(scanner,tokAt(scanner,@$)) ) YYABORT; } type_declaration[itTypeDecl] '>' { yyextra->das_arrow_depth --; } {
         $$ = new TypeDecl(Type::tIterator, tokAt(scanner,@$));
         $$->at = tokAt(scanner,@loc);
         $$->firstType = $itTypeDecl;
@@ -3420,12 +3422,12 @@ type_declaration_no_options
         $$->firstType = new TypeDecl(Type::tVoid, tokAt(scanner,@$));
         $$->firstType->at = $$->at;
     }
-    |   DAS_TBLOCK[loc] '<'  { yyextra->das_arrow_depth ++; } type_declaration[blockType] '>' { yyextra->das_arrow_depth --; } {
+    |   DAS_TBLOCK[loc] '<'  { if ( !das_type_arrow_enter(scanner,tokAt(scanner,@$)) ) YYABORT; } type_declaration[blockType] '>' { yyextra->das_arrow_depth --; } {
         $$ = new TypeDecl(Type::tBlock, tokAt(scanner,@$));
         $$->at = tokAt(scanner,@loc);
         $$->firstType = $blockType;
     }
-    |   DAS_TBLOCK[loc] '<'  { yyextra->das_arrow_depth ++; } optional_function_argument_list[list] optional_function_type[result] '>' { yyextra->das_arrow_depth --; } {
+    |   DAS_TBLOCK[loc] '<'  { if ( !das_type_arrow_enter(scanner,tokAt(scanner,@$)) ) YYABORT; } optional_function_argument_list[list] optional_function_type[result] '>' { yyextra->das_arrow_depth --; } {
         $$ = new TypeDecl(Type::tBlock, tokAt(scanner,@$));
         $$->at = tokAt(scanner,@loc);
         $$->firstType = $result;
@@ -3440,12 +3442,12 @@ type_declaration_no_options
         $$->firstType = new TypeDecl(Type::tVoid, tokAt(scanner,@$));
         $$->firstType->at = $$->at;
     }
-    |   DAS_TFUNCTION[loc] '<' { yyextra->das_arrow_depth ++; } type_declaration[blockType] '>' { yyextra->das_arrow_depth --; } {
+    |   DAS_TFUNCTION[loc] '<' { if ( !das_type_arrow_enter(scanner,tokAt(scanner,@$)) ) YYABORT; } type_declaration[blockType] '>' { yyextra->das_arrow_depth --; } {
         $$ = new TypeDecl(Type::tFunction, tokAt(scanner,@$));
         $$->at = tokAt(scanner,@loc);
         $$->firstType = $blockType;
     }
-    |   DAS_TFUNCTION[loc] '<' { yyextra->das_arrow_depth ++; } optional_function_argument_list[list] optional_function_type[result] '>' { yyextra->das_arrow_depth --; } {
+    |   DAS_TFUNCTION[loc] '<' { if ( !das_type_arrow_enter(scanner,tokAt(scanner,@$)) ) YYABORT; } optional_function_argument_list[list] optional_function_type[result] '>' { yyextra->das_arrow_depth --; } {
         $$ = new TypeDecl(Type::tFunction, tokAt(scanner,@$));
         $$->at = tokAt(scanner,@loc);
         $$->firstType = $result;
@@ -3460,12 +3462,12 @@ type_declaration_no_options
         $$->firstType = new TypeDecl(Type::tVoid, tokAt(scanner,@$));
         $$->firstType->at = $$->at;
     }
-    |   DAS_TLAMBDA[loc] '<' { yyextra->das_arrow_depth ++; } type_declaration[blockType] '>' { yyextra->das_arrow_depth --; } {
+    |   DAS_TLAMBDA[loc] '<' { if ( !das_type_arrow_enter(scanner,tokAt(scanner,@$)) ) YYABORT; } type_declaration[blockType] '>' { yyextra->das_arrow_depth --; } {
         $$ = new TypeDecl(Type::tLambda, tokAt(scanner,@$));
         $$->at = tokAt(scanner,@loc);
         $$->firstType = $blockType;
     }
-    |   DAS_TLAMBDA[loc] '<' { yyextra->das_arrow_depth ++; } optional_function_argument_list[list] optional_function_type[result] '>' { yyextra->das_arrow_depth --; } {
+    |   DAS_TLAMBDA[loc] '<' { if ( !das_type_arrow_enter(scanner,tokAt(scanner,@$)) ) YYABORT; } optional_function_argument_list[list] optional_function_type[result] '>' { yyextra->das_arrow_depth --; } {
         $$ = new TypeDecl(Type::tLambda, tokAt(scanner,@$));
         $$->at = tokAt(scanner,@loc);
         $$->firstType = $result;
@@ -3474,13 +3476,13 @@ type_declaration_no_options
             deleteVariableDeclarationList($list);
         }
     }
-    |   DAS_TTUPLE[loc] '<' { yyextra->das_arrow_depth ++; } tuple_type_list[list] '>' { yyextra->das_arrow_depth --; } {
+    |   DAS_TTUPLE[loc] '<' { if ( !das_type_arrow_enter(scanner,tokAt(scanner,@$)) ) YYABORT; } tuple_type_list[list] '>' { yyextra->das_arrow_depth --; } {
         $$ = new TypeDecl(Type::tTuple, tokAt(scanner,@$));
         $$->at = tokAt(scanner,@loc);
         varDeclToTypeDecl(scanner, $$, $list, true);
         deleteVariableDeclarationList($list);
     }
-    |   DAS_TVARIANT[loc] '<' { yyextra->das_arrow_depth ++; } variant_type_list[list] '>' { yyextra->das_arrow_depth --; } {
+    |   DAS_TVARIANT[loc] '<' { if ( !das_type_arrow_enter(scanner,tokAt(scanner,@$)) ) YYABORT; } variant_type_list[list] '>' { yyextra->das_arrow_depth --; } {
         $$ = new TypeDecl(Type::tVariant, tokAt(scanner,@$));
         $$->at = tokAt(scanner,@loc);
         varDeclToTypeDecl(scanner, $$, $list, true);
@@ -3868,7 +3870,7 @@ make_struct_decl
         ((ExprMakeStruct *)$msd)->forceVariant = true;
         $$ = $msd;
     }
-    |   DAS_DEFAULT [loc] '<' { yyextra->das_arrow_depth ++; } type_declaration_no_options[mkt] '>' { yyextra->das_arrow_depth --; } use_initializer[init] {
+    |   DAS_DEFAULT [loc] '<' { if ( !das_type_arrow_enter(scanner,tokAt(scanner,@$)) ) YYABORT; } type_declaration_no_options[mkt] '>' { yyextra->das_arrow_depth --; } use_initializer[init] {
         auto msd = new ExprMakeStruct();
         msd->at = tokAt(scanner,@loc);
         msd->makeType = $mkt;
@@ -3986,7 +3988,7 @@ make_dim_decl
         tam->arguments.push_back($msd);
         $$ = tam;
     }
-    |   DAS_ARRAY [loc] DAS_TTUPLE '<' { yyextra->das_arrow_depth ++; } tuple_type_list[list] '>' { yyextra->das_arrow_depth --; } '(' use_initializer[init] optional_make_struct_dim_decl[msd] ')'  {
+    |   DAS_ARRAY [loc] DAS_TTUPLE '<' { if ( !das_type_arrow_enter(scanner,tokAt(scanner,@$)) ) YYABORT; } tuple_type_list[list] '>' { yyextra->das_arrow_depth --; } '(' use_initializer[init] optional_make_struct_dim_decl[msd] ')'  {
         auto mkt = new TypeDecl(Type::tTuple, tokAt(scanner,@loc));
         varDeclToTypeDecl(scanner, mkt, $list, true);
         deleteVariableDeclarationList($list);
@@ -3999,7 +4001,7 @@ make_dim_decl
         tam->arguments.push_back($msd);
         $$ = tam;
     }
-    |   DAS_ARRAY [loc] DAS_TVARIANT '<' { yyextra->das_arrow_depth ++; } variant_type_list[list] '>' { yyextra->das_arrow_depth --; } '(' make_variant_dim[msd] ')'  {
+    |   DAS_ARRAY [loc] DAS_TVARIANT '<' { if ( !das_type_arrow_enter(scanner,tokAt(scanner,@$)) ) YYABORT; } variant_type_list[list] '>' { yyextra->das_arrow_depth --; } '(' make_variant_dim[msd] ')'  {
         auto mkt = new TypeDecl(Type::tVariant, tokAt(scanner,@loc));
         varDeclToTypeDecl(scanner, mkt, $list, true);
         deleteVariableDeclarationList($list);
@@ -4021,7 +4023,7 @@ make_dim_decl
         tam->arguments.push_back(mka);
         $$ = tam;
     }
-    |   DAS_ARRAY[loc] '<' { yyextra->das_arrow_depth ++; } type_declaration_no_options[mkt] '>' { yyextra->das_arrow_depth --; } '(' optional_expr_list[arguments] ')' {
+    |   DAS_ARRAY[loc] '<' { if ( !das_type_arrow_enter(scanner,tokAt(scanner,@$)) ) YYABORT; } type_declaration_no_options[mkt] '>' { yyextra->das_arrow_depth --; } '(' optional_expr_list[arguments] ')' {
         if ( $arguments ) {
             auto mka = new ExprMakeArray(tokAt(scanner,@loc));
             mka->values = sequenceToList($arguments);
@@ -4048,7 +4050,7 @@ make_dim_decl
         mka->gen2 = true;
         $$ = mka;
     }
-    |   DAS_FIXED_ARRAY[loc] '<' { yyextra->das_arrow_depth ++; } type_declaration_no_options[mkt] '>' { yyextra->das_arrow_depth --; } '(' expr_list[arguments] optional_comma ')' {
+    |   DAS_FIXED_ARRAY[loc] '<' { if ( !das_type_arrow_enter(scanner,tokAt(scanner,@$)) ) YYABORT; } type_declaration_no_options[mkt] '>' { yyextra->das_arrow_depth --; } '(' expr_list[arguments] optional_comma ')' {
         auto mka = new ExprMakeArray(tokAt(scanner,@loc));
         mka->values = sequenceToList($arguments);
         mka->makeType = $mkt;
