@@ -11657,7 +11657,7 @@ yyreduce:
 
   case 932: /* type_declaration_no_options_no_dim: type_declaration_no_options '?'  */
                                                   {
-        if ( !das_check_pointer_nesting(scanner,(yyvsp[-1].pTypeDecl),tokAt(scanner,(yyloc))) ) YYABORT;
+        if ( !das_check_pointer_nesting(scanner,(yyvsp[-1].pTypeDecl),1,tokAt(scanner,(yyloc))) ) YYABORT;
         (yyval.pTypeDecl) = new TypeDecl(Type::tPointer, tokAt(scanner,(yyloc)));
         (yyval.pTypeDecl)->at = tokAt(scanner,(yylsp[-1]));
         (yyval.pTypeDecl)->firstType = (yyvsp[-1].pTypeDecl);
@@ -11683,7 +11683,7 @@ yyreduce:
 
   case 936: /* type_declaration_no_options_no_dim: type_declaration_no_options "??"  */
                                                  {
-        if ( !das_check_pointer_nesting(scanner,(yyvsp[-1].pTypeDecl),tokAt(scanner,(yyloc))) ) YYABORT;
+        if ( !das_check_pointer_nesting(scanner,(yyvsp[-1].pTypeDecl),2,tokAt(scanner,(yyloc))) ) YYABORT;
         (yyval.pTypeDecl) = new TypeDecl(Type::tPointer, tokAt(scanner,(yyloc)));
         (yyval.pTypeDecl)->at = tokAt(scanner,(yylsp[-1]));
         (yyval.pTypeDecl)->firstType = new TypeDecl(Type::tPointer, tokAt(scanner,(yyloc)));

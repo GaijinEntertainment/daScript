@@ -3381,7 +3381,7 @@ type_declaration_no_options
         $$ = $typeDecl;
     }
     |   type_declaration_no_options[typeDecl] '?' {
-        if ( !das_check_pointer_nesting(scanner,$typeDecl,tokAt(scanner,@$)) ) YYABORT;
+        if ( !das_check_pointer_nesting(scanner,$typeDecl,1,tokAt(scanner,@$)) ) YYABORT;
         $$ = new TypeDecl(Type::tPointer, tokAt(scanner,@$));
         $$->at = tokAt(scanner,@typeDecl);
         $$->firstType = $typeDecl;
@@ -3393,7 +3393,7 @@ type_declaration_no_options
         $$->firstType = $typeDecl;
     }
     |   type_declaration_no_options[typeDecl] QQ {
-        if ( !das_check_pointer_nesting(scanner,$typeDecl,tokAt(scanner,@$)) ) YYABORT;
+        if ( !das_check_pointer_nesting(scanner,$typeDecl,2,tokAt(scanner,@$)) ) YYABORT;
         $$ = new TypeDecl(Type::tPointer, tokAt(scanner,@$));
         $$->at = tokAt(scanner,@typeDecl);
         $$->firstType = new TypeDecl(Type::tPointer, tokAt(scanner,@$));

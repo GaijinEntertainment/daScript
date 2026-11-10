@@ -56,6 +56,8 @@ TEST_CASE("a type nested to the limit compiles, one level past it is a parse err
     SUBCASE("double pointer tokens") {
         CHECK_FALSE(compileFieldType("int" + repeated("??", limit / 2)).failed);
         CHECK(reportsTooDeep(compileFieldType("int" + repeated("??", limit / 2 + 1))));
+        CHECK_FALSE(compileFieldType("int" + repeated("?", limit - 2) + "??").failed);
+        CHECK(reportsTooDeep(compileFieldType("int" + repeated("?", limit - 1) + "??")));
     }
     SUBCASE("angle bracket levels") {
         CHECK_FALSE(compileFieldType(repeated("array<", limit) + "int" + repeated(">", limit)).failed);
@@ -86,6 +88,7 @@ TEST_CASE("the gen1 grammar stops at the same nesting limit") {
     CHECK_FALSE(compileFieldTypeGen1("int" + repeated("?", limit)).failed);
     CHECK(reportsTooDeep(compileFieldTypeGen1("int" + repeated("?", limit + 1))));
     CHECK(reportsTooDeep(compileFieldTypeGen1("int" + repeated("??", limit / 2 + 1))));
+    CHECK(reportsTooDeep(compileFieldTypeGen1("int" + repeated("?", limit - 1) + "??")));
     CHECK(reportsTooDeep(compileFieldTypeGen1(repeated("array<", limit + 1) + "int" + repeated(">", limit + 1))));
 }
 

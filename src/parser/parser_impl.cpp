@@ -63,8 +63,8 @@ namespace das {
         return true;
     }
 
-    bool das_check_pointer_nesting ( yyscan_t scanner, const TypeDecl * inner, const LineInfo & at ) {
-        if ( das_type_nests_within(inner,DAS_MAX_TYPE_NESTING) ) return true;
+    bool das_check_pointer_nesting ( yyscan_t scanner, const TypeDecl * inner, int pointerLevels, const LineInfo & at ) {
+        if ( das_type_nests_within(inner,DAS_MAX_TYPE_NESTING + 1 - pointerLevels) ) return true;
         das_type_nesting_error(scanner,at);
         return false;
     }
