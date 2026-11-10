@@ -143,11 +143,11 @@ void * stackRunEntry ( void * arg ) {
 bool runOnStack ( size_t stackBytes, StackRun & run ) {
     pthread_attr_t attr;
     if ( pthread_attr_init(&attr) != 0 ) return false;
-    if ( pthread_attr_setstacksize(&attr, stackBytes) != 0 ) return false;
     pthread_t thread;
-    if ( pthread_create(&thread, &attr, stackRunEntry, &run) != 0 ) return false;
+    bool started = pthread_attr_setstacksize(&attr, stackBytes) == 0
+        && pthread_create(&thread, &attr, stackRunEntry, &run) == 0;
     pthread_attr_destroy(&attr);
-    return pthread_join(thread, nullptr) == 0;
+    return started && pthread_join(thread, nullptr) == 0;
 }
 #endif
 
