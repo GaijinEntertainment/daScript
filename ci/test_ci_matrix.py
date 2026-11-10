@@ -32,7 +32,7 @@ PR_BUILD = sorted([
     "windows-32-Release-none", "windows-64-Release-none",
 ])
 NIGHTLY_ONLY_BUILD = sorted(
-    ["linux-64-Release-none-fastmath"]
+    ["windows-64-Debug-none", "linux-64-Release-none-fastmath"]
     + ["linux-64-Release-%s-%s" % (san, phase) for san in ("asan", "tsan", "ubsan")
        for phase in ("tests", "slow", "backend")])
 
@@ -83,11 +83,11 @@ class BuildMatrix(unittest.TestCase):
                 self.assertIn(cell["phase"], ("tests", "slow", "backend"), cell)
 
     def test_half_speed_sweeps_carry_raised_watchdogs(self):
-        # the sanitizer cells run their sweeps at half speed and lose the default whole-suite
-        # watchdog to runner variance; every other cell keeps the defaults, so a hang still
-        # fails fast where the sweep is quick
+        # the sanitizer cells and windows Debug run their sweeps at half speed and lose the
+        # default whole-suite watchdog to runner variance; every other cell keeps the defaults,
+        # so a hang still fails fast where the sweep is quick
         for cell in ci_matrix.build_cells(True):
-            slow = cell["sanitizers"] != "none"
+            slow = cell["sanitizers"] != "none" or cell["cmake_preset"] == "Debug"
             for flag in ("-DDAS_TEST_TIMEOUT=3600", "-DDAS_TEST_TIMEOUT_ISOLATED=7200",
                          "-DDAS_TEST_TIMEOUT_AOT=3600"):
                 (self.assertIn if slow else self.assertNotIn)(flag, cell["cmake_extra"], cell)

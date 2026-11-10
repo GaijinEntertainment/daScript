@@ -60,7 +60,7 @@ working-tree copy.
 | Workflow | Trigger | Jobs |
 |---|---|---|
 | `build.yml` (per-PR) | every PR commit (`pull_request`) + pushes to `master` | `build` matrix (`build_matrix.yml`, lane `build`: Debug + Release on linux, linux_arm, darwin15, darwin26; windows 32 Release, windows 64 Release), `bundle_smoke`, `build_linux_gcc` |
-| `nightly.yml` | `schedule` cron (daily 02:00 UTC), `workflow_dispatch`, and a `pull_request` whose body says `#nightly` or that carries `run-nightly` / `nightly-failure` | `build` matrix (`build_matrix.yml`, lane `build_nightly`: the per-PR Release cells running `run_build_nightly` - the full AOT sweep and the three backend sweeps - plus the sanitizer cells - each three jobs, `tests`, `slow`, `backend`, sharing one sccache slot - and the fast-math cell), `build_windows_relwithdebinfo_nightly`, `build_windows_release_llvm_nightly`, `build_windows_mingw`, `build_windows_clangcl`, and calls to `extended_checks.yml` (lane `extended_nightly`), `nightly_daspkg_index.yml`, `nightly_imgui.yml`, `nightly_playground.yml` and `nightly_vulkan.yml` - the only cron. Breaks surface within ~24 h, not at PR time |
+| `nightly.yml` | `schedule` cron (daily 02:00 UTC), `workflow_dispatch`, and a `pull_request` whose body says `#nightly` or that carries `run-nightly` / `nightly-failure` | `build` matrix (`build_matrix.yml`, lane `build_nightly`: the per-PR Release cells running `run_build_nightly` - the full AOT sweep and the three backend sweeps - plus the sanitizer cells - each three jobs, `tests`, `slow`, `backend`, sharing one sccache slot - the fast-math cell and windows 64 Debug), `build_windows_relwithdebinfo_nightly`, `build_windows_release_llvm_nightly`, `build_windows_mingw`, `build_windows_clangcl`, and calls to `extended_checks.yml` (lane `extended_nightly`), `nightly_daspkg_index.yml`, `nightly_imgui.yml`, `nightly_playground.yml` and `nightly_vulkan.yml` - the only cron. Breaks surface within ~24 h, not at PR time |
 | `build_matrix.yml` | `workflow_call` from `build.yml` and `nightly.yml`, with the lane | the build matrix job - section below |
 | `nightly_imgui.yml` | `workflow_call` from `nightly.yml` + `workflow_dispatch` | dasImgui playwright suite on ubuntu + macos - section below |
 | `extended_checks.yml` (per-PR) | every PR | two darwin15-arm64 jobs, `core` and `modules` (`ci/ci_matrix.py extended`), ALL release modules ON, plus `commit_messages` (ubuntu, no build) - section below |
@@ -89,7 +89,7 @@ part of ALL) as a compile+link gate, and run no AOT tests.
 **The build matrix runs `run_build` (`run_tests_sweeps`, `test-small`), retried as
 `run_build_isolated` (`run_tests_sweeps_isolated`, `test-small`) when it fails, and, on the nightly
 lane, `run_build_nightly` (`run_tests_slow`, `run_backend_sweeps`, `test_aot_subset`).** The retry
-is the workflow's `||`, not a cmake target. The sanitizer cells
+is the workflow's `||`, not a cmake target. The windows 64 Debug cell and the sanitizer cells
 configure with raised watchdogs (`SLOW_SWEEP_BUDGETS` in `ci/ci_matrix.py`: 3600 s for a sweep
 and the full AOT suite, 7200 s isolated) - their sweeps run at half speed on their own and the
 default budgets fired on runner variance alone. Which sweeps
