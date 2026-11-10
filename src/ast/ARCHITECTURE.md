@@ -240,13 +240,13 @@ about thirty errors, so it builds none of their text itself: `typeError`,
 error is reported. With the text inline, one level costs 4176 bytes in a Debug build and a type
 at the limit needs more than 512 KB; with it in the helpers the same type compiles in 256 KB.
 
-## Two lookups into one table in one statement (`ast_lint.cpp`, `ast_inline.cpp`) {#table-lookup-collision}
+## Two lookups into one table in one statement (`ast_lint.cpp`) {#table-lookup-collision}
 
 `tab[k]` on a mutable table inserts, and an insert can move every slot. A statement holding a
 reference to one slot while it looks up another reads freed memory, so two non-dereferenced
 lookups into the same table (same source text) inside one statement are error 30250. Lint
-reports it; the inliner runs the same scan before a splice, because splicing would erase the
-error and keep the defect.
+reports it, and lint runs before any splice (`#lint-before-rewrites`), so the inliner cannot
+erase the error and keep the defect.
 
 A ternary's lookups are sequenced. Its condition is a
 `bool` by the time an arm runs, so a lookup in the condition holds no reference an arm's lookup
@@ -268,3 +268,23 @@ statement-position `unsafe { }` in a generator with its block and sets
 `Function::unsafeGenerator`; every later pass visits that function with unsafe allowed. The
 price is the scope: once a generator has one `unsafe` block, its whole body is unsafe-permitted.
 An expression-position `unsafe(...)` stays as written.
+
+## Lint before rewrites (`inferAndFinalizeModule`, `ast_parse.cpp`) {#lint-before-rewrites}
+
+A module's diagnostics read the program as written. Once infer converges and the annotation
+patches are quiet, `Program::lint` runs before any pass that changes the shape of code:
+`[inline]` and auto-inline splicing, escape analysis's `scope_free` insertion, the annotation
+fixups, `foldUnsafe` and `optimizeProgram`. A rewrite is free to reshape a function - splice a
+callee's body over a call, drop a read, merge statements - so a rule checked after it would
+judge the rewrite rather than the source: a spliced `delete super.self` no longer reads as a
+call to the parent finalizer, and a spliced read leaves its holder looking unused.
+
+Escape analysis runs after `buildAccessFlags`, so callee side-effect flags are final, and before
+`foldUnsafe`, so the dirty re-infer of the `scope_free` calls it inserts does not re-trip unsafe
+checks that are already folded. The inserted call is a generated terminal call that creates no
+new candidate and changes no side-effect flags, so one dirty re-infer is the fixpoint.
+
+`fixupAnnotations` runs after infer converges, when types are final, and before `foldUnsafe`
+and `optimizeProgram`, so what a `fixup()` generates - the shader-blob globals dasGlsl, dasSpirv
+and dasMetal fill - is folded and optimized like ordinary code. A call-shaped initializer a
+fixup sets is uninferred; the gated dirty re-infer resolves it before `foldUnsafe`.
