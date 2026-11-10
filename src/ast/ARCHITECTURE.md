@@ -216,12 +216,14 @@ from, each with its argument types. `Function::getLocationExtra` prints a type o
 nodes as its constructor and `<...>`, so an error on an oversized instance stays short.
 
 A type as written has its own limit, in the parser (`parser_impl.cpp`): both grammars stop at
-256 levels of `<...>` nesting (`das_type_arrow_enter`), and a pointer wraps a type only while
+64 levels of `<...>` nesting (`das_type_arrow_enter`), and a pointer wraps a type only while
 the nesting under it fits the same limit (`das_check_pointer_nesting`), so no path through a
 parsed type is longer than twice that. A postfix `?` is left-recursive and costs no parser
 stack, so without the limit a pointer chain of any length parses and the first recursive walk
-over it overflows the C++ stack. Past the limit the parse ends with one `exceeds_type_nesting`
-error.
+over it overflows the C++ stack. The limit is sized for a host that compiles on a 1 MB thread
+stack in a build that inlines little: a type the parser accepts has to survive every recursive
+walk inference runs over it, and at 256 levels a Windows RelWithDebInfo build does not. Past
+the limit the parse ends with one `exceeds_type_nesting` error.
 
 ## Lint before rewrites (`inferAndFinalizeModule`, `ast_parse.cpp`) {#lint-before-rewrites}
 
