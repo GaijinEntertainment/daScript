@@ -24,7 +24,6 @@ Invalid type aka.
 Invalid type alias.
 Missing module name.
 Bitfield size exceeds limit.
-Type is nested too deeply.
 Ambiguous function argument type.
 Enumeration already declared.
 Enumerator already declared.
