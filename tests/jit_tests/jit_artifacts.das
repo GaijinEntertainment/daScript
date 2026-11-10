@@ -1,4 +1,5 @@
 options gen2
+//! no_aot: every test here drives the JIT or a JIT-built artifact
 options no_aot
 
 require daslib/ast
@@ -186,13 +187,18 @@ def write_clone_init_script() : bool {
             fprint(f, "[init]\n")
             fprint(f, "def mark_init() \{ g_init_marker = 777 \}\n")
             fprint(f, "def read_marker() : int \{ return g_init_marker \}\n")
+            fprint(f, "def through_block(blk : block<(x : int) : int>) : int \{\n")
+            fprint(f, "    return invoke(blk, 20) + 1\n")
+            fprint(f, "\}\n")
+            fprint(f, "let g_from_block = through_block() $(x) \{ return x * 2 \}\n")
             fprint(f, "[export]\n")
             fprint(f, "def main() \{\n")
             fprint(f, "    var seen = -1\n")
             fprint(f, "    with_job_que() \{\n")
             fprint(f, "        with_channel(1) $(ch) \{\n")
             fprint(f, "            new_job() @() \{\n")
-            fprint(f, "                ch |> push_clone(IntVal(v = read_marker()))\n")
+            fprint(f, "                let v = read_marker() * 1000 + g_from_block\n")
+            fprint(f, "                ch |> push_clone(IntVal(v = v))\n")
             fprint(f, "                ch |> notify_and_release\n")
             fprint(f, "            \}\n")
             fprint(f, "            ch |> for_each_clone() $(val : IntVal#) \{\n")
@@ -200,7 +206,9 @@ def write_clone_init_script() : bool {
             fprint(f, "            \}\n")
             fprint(f, "        \}\n")
             fprint(f, "    \}\n")
-            fprint(f, "    print(\"CLONE_INIT_MARKER=[\{seen\}]\\n\")\n")
+            fprint(f, "    print(\"CLONE_INIT_MARKER=[\{seen / 1000\}]\\n\")\n")
+            fprint(f, "    print(\"CLONE_BLOCK_GLOBAL=[\{seen % 1000\}]\\n\")\n")
+            fprint(f, "    print(\"MAIN_BLOCK_GLOBAL=[\{g_from_block\}]\\n\")\n")
             fprint(f, "\}\n")
             ok = true
         }
@@ -301,6 +309,10 @@ def test_clone_init_in_thread(t : T?) {
     let output = run_exe(CLONE_INIT_EXE)
     t |> success(find(output, "CLONE_INIT_MARKER=[777]") != -1)
     t |> success(find(output, "CLONE_INIT_MARKER=[0]") == -1)
+    t |> success(find(output, "MAIN_BLOCK_GLOBAL=[41]") != -1,
+        "a global initialized through a block: {output}")
+    t |> success(find(output, "CLONE_BLOCK_GLOBAL=[41]") != -1,
+        "the same global in a cloned context: {output}")
 }
 
 // A function-pointer global (`var g = @@fn`) must codegen + run in a
@@ -313,7 +325,7 @@ def test_fnptr_global(t : T?) {
     t |> success(find(output, "FNPTR_RESULT=[42]") != -1)
 }
 
-[test(description = "JIT-compiled executables for hello world, builtin global init, an init in a cloned context and a function-pointer global run and print the expected output", timeout = 1200)]
+[test(description = "JIT-compiled executables for hello world, builtin global init, an init and a block-initialized global in a cloned context, and a function-pointer global run and print the expected output", timeout = 1200)]
 def test_executable(t : T?) {
     // Skip on Windows: standalone exes built here link against the
     // daslang shared lib, and Windows lacks RPATH so the spawned process
@@ -811,6 +823,11 @@ def test_cross_target_folds(t : T?) {
     }
 }
 
+//! the shell prefix that makes `dir` the child's working directory;
+//! on Windows a plain `cd` stays on the current drive
+def private cd_to(dir : string) : string =>
+    get_platform_name() == "windows" ? "cd /d \"{dir}\"" : "cd \"{dir}\""
+
 [test(description = "a break inside a try arm of a loop whose recover arm can panic leaves the loop under -jit on a cold cache and again on the warm one", timeout = 1200)]
 def test_break_inside_a_try_arm_leaves_the_loop_under_jit(t : T?) {
     if (!jit_enabled()) {
@@ -824,7 +841,7 @@ def test_break_inside_a_try_arm_leaves_the_loop_under_jit(t : T?) {
     let root = get_das_root()
     for (round in range(2)) {
         var inscope lines : array<string>
-        let rc = spawn("cd \"{cwd}\" && \"{bin}\" -dasroot \"{root}\" -jit \"{fixture}\"", lines)
+        let rc = spawn("{cd_to(cwd)} && \"{bin}\" -dasroot \"{root}\" -jit \"{fixture}\"", lines)
         let out = join(lines, "\n")
         t |> equal(0, rc, "round {round}: the child runs under -jit, got:\n{out}")
         t |> success(lines |> has("BREAK_IN_TRY 2"),
@@ -844,7 +861,7 @@ def test_guarded_load_through_an_odd_pointer_is_skipped(t : T?) {
     mkdir_rec(cwd)
     var lines : array<string>
     let flags = "-dasroot \"{get_das_root()}\" -no-module-cache -jit -jit-no-cache"
-    let rc = spawn("cd \"{cwd}\" && \"{bin}\" {flags} \"{fixture}\"", lines)
+    let rc = spawn("{cd_to(cwd)} && \"{bin}\" {flags} \"{fixture}\"", lines)
     let out = join(lines, "\n")
     t |> equal(0, rc, "the guarded load through an odd pointer is skipped, got:\n{out}")
 }
@@ -871,7 +888,7 @@ def test_solid_array_base_is_hidden_from_codegen(t : T?) {
     t |> equal(rc_one, 0, "the one-module child runs, got:\n{join(out, "\n")}")
     t |> equal(launder_calls("{cwd}/one.ll"), 2, "the one-module build hides the two arrays alone")
     var split_out : array<string>
-    let rc_split = spawn("cd \"{cwd}\" && \"{bin}\" -dasroot \"{root}\" -no-module-cache "
+    let rc_split = spawn("{cd_to(cwd)} && \"{bin}\" -dasroot \"{root}\" -no-module-cache "
         + "-jit \"{fixture}\" -- --jit-dump=split.ll", split_out)
     t |> equal(rc_split, 0, "the split child runs, got:\n{join(split_out, "\n")}")
     t |> equal(launder_calls("{cwd}/split.ll"), 2, "the split build hides them too")

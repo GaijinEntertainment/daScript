@@ -52,6 +52,21 @@ def gate_verdict(name : string) : int {
 //! True for `like-this` names: lowercase [a-z0-9] runs joined by single hyphens.
 def is_kebab_case(name : string) : bool => regex_match(KEBAB, name) >= 0
 
+//! every doctest case a C++ source names - the quoted name on a
+//! line holding `TEST_CASE` or `SCENARIO`, with its 1-based line
+def doctest_case_names(text : string) : array<tuple<name : string; line : int>> {
+    var out : array<tuple<name : string; line : int>>
+    var inscope lines <- split(text, "\n")
+    for (line, line_no in lines, count(1)) {
+        continue if (find(line, "TEST_CASE") < 0 && find(line, "SCENARIO") < 0)
+        let open_quote = find(line, "\"")
+        let close_quote = rfind(line, "\"")
+        continue if (close_quote <= open_quote)
+        out |> push((name = slice(line, open_quote + 1, close_quote), line = line_no))
+    }
+    return <- out
+}
+
 //! 1-based line number of the first occurrence of `needle` in `text`; 0 when absent.
 def find_line(text : string; needle : string) : int {
     var line = 0

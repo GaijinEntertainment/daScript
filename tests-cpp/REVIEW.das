@@ -138,10 +138,11 @@ def private switched_modules : table<string; SwitchedModule> {
     var out : table<string; SwitchedModule>
     for (f in cmakelists_under("modules")) {
         let text = fread(f)
-        var folder_switches <- [for (tok in keys(prefixed_tokens(text, "DAS_"))); tok; where key_exists(root_switches, tok)]
+        var inscope das <- prefixed_tokens(text, "DAS_")
+        var inscope folder_switches <- [for (t in keys(das)); t; where key_exists(root_switches, t)]
         continue if (empty(folder_switches))
         folder_switches |> sort
-        var folder_libs <- [for (tok in keys(prefixed_tokens(text, "libDasModule"))); tok]
+        var inscope folder_libs <- [for (tok in keys(prefixed_tokens(text, "libDasModule"))); tok]
         folder_libs |> sort
         for (name in cmake_command_targets(text, "add_module_cpp")) {
             out["Module_{name}"] <- SwitchedModule(folder = dir_name(f), switches := folder_switches, libs := folder_libs)
@@ -194,6 +195,25 @@ def private check_big_test_gating {
     }
 }
 
+//! no doctest case name in tests-cpp/small holds a `;` - ctest
+//! splits the name there into filters that match no case
+def private check_test_case_names {
+    let folder = "tests-cpp/small"
+    dir(folder) $(name) {
+        if (name |> ends_with(".cpp")) {
+            let f = "{folder}/{name}"
+            for (tc in doctest_case_names(fread(f))) {
+                if (find(tc.name, ";") >= 0) {
+                    let what = "the case name \"{tc.name}\" holds ';'"
+                    let why = "ctest splits the name there into filters matching no case"
+                    let fix = "the test never runs and reports a pass - use a comma or a dash"
+                    gate_finding(f, tc.line, "{what} - {why}, so {fix}")
+                }
+            }
+        }
+    }
+}
+
 [export]
 def main() : int {
     if (!fexist("tests-cpp/REVIEW.das")) {
@@ -202,5 +222,6 @@ def main() : int {
     }
     check_lane_wiring()
     check_big_test_gating()
+    check_test_case_names()
     return gate_verdict("tests-cpp")
 }

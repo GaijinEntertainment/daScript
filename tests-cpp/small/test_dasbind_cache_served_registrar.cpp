@@ -30,6 +30,7 @@ struct ProbeRun {
     string      exception;
     uint64_t    served = 0;
     bool        wrote = false;
+    string      cutoff;
 };
 
 ProbeRun run_probe ( const string & script, const string & cachePath ) {
@@ -51,6 +52,7 @@ ProbeRun run_probe ( const string & script, const string & cachePath ) {
         auto res = cache.finish();
         run.served = res.served;
         run.wrote = res.wrote;
+        run.cutoff = res.cutoffFile + ": " + res.cutoffReason;
         if ( run.simulated ) {
             auto fn = ctx.findFunction("probe");
             if ( fn ) {
@@ -86,7 +88,7 @@ TEST_CASE("dasbind: a registrar served from the module cache still retargets a f
     auto warm = run_probe(root + "test_dasbind_cache_drv_b.das", cachePath);
     REQUIRE_MESSAGE(warm.compiled, "warm compile failed");
     REQUIRE_MESSAGE(warm.simulated, "warm simulate failed");
-    CHECK_MESSAGE(warm.served >= 1, "the warm compile served nothing from the cache");
+    CHECK_MESSAGE(warm.served >= 1, "the warm compile served nothing from the cache; cutoff " << warm.cutoff);
     CHECK_MESSAGE(warm.called, "warm call threw: " << warm.exception);
     CHECK_EQ(warm.result, 109);
 

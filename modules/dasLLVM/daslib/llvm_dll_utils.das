@@ -117,6 +117,9 @@ class public UidNodes {
     namesp : string
     @do_not_delete thisFunc : Function?
     hints_only : bool   //! get_base and get_dll_fn_name_ptr return the raw hint alone - the cache key's view, which assigns no ids
+    //! set for a second walk of one initializer, so that
+    //! walk's blocks get names of their own
+    block_name_salt : string
 
     def UidNodes(prog : Program?; var tab : table<void?, uint64>) {
         namesp = prog.thisNamespace |> string()
@@ -174,11 +177,8 @@ class public UidNodes {
     def get_call(expr : ExprCallFunc?) : DllName =>
         get_base(expr, "call_{get_mangled_name(expr.func)}")
 
-    def public get_block_name_ptr(blk : ExprBlock?) : DllName =>
-        get_base(blk, "block_{get_mangled_name(blk)}")
-
     def public get_block_name(blk : ExprBlock?) : DllName =>
-        get_base(blk, "block_{get_mangled_name(blk)}")
+        get_base(blk, "block_{block_name_salt}{get_mangled_name(blk)}")
 
     def reset(var func : Function?) {
         thisFunc = func

@@ -90,3 +90,17 @@ TEST_CASE("promoted shared module matches by file across require spellings") {
     unpromote("promo_common");
     unpromote("promo_base");
 }
+
+TEST_CASE("one module file reached under two path spellings is one module") {
+    const string dir = getDasRoot() + "/tests-cpp/small";
+    TextWriter tout;
+    ModuleGroup libGroup;
+    auto fa = make_smart<FsFileAccess>();
+    REQUIRE(fa->addFsRoot("module_identity_mount", dir + "/../small"));
+    auto program = compileDaScript(dir + "/test_module_identity_root.das", fa, tout, libGroup);
+    REQUIRE(program);
+    for ( auto & err : program->errors ) {
+        MESSAGE(reportError(err.at, err.what, err.extra, err.fixme, err.cerr));
+    }
+    CHECK_FALSE(program->failed());
+}

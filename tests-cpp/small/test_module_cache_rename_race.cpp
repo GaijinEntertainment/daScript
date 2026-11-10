@@ -73,6 +73,10 @@ struct ProbeFiles {
 }
 
 TEST_CASE("module cache: a write that loses the rename to another writer is not a failed save") {
+    if ( Module::requireEx("debug", true) ) {
+        MESSAGE("skipped: the debugger is promoted in this process, so no compile serializes");
+        return;
+    }
     ProbeFiles files;
 
     write_text(files.script, "options gen2\n[export]\ndef main() {\n    print(\"one\\n\")\n}\n");

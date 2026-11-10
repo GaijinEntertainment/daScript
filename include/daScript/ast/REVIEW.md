@@ -3,6 +3,9 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture doc:
 `src/ast/ARCHITECTURE.md` (repo root).
 
+**A diff that changes a node field or a flag bit declared under this folder applies
+`src/REVIEW.md` (repo root) too.**
+
 - **A diff that changes the module or the name `ast_handle.h` itself registers an existing C++
   binding under (`vectorHomeModule`, `typeFactory<vector<TT>>::make`, `registerVectorFunctions`,
   and any name those templates compute) bumps `LLVM_JIT_CODEGEN_VERSION` in
