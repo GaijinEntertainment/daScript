@@ -36,6 +36,7 @@ static const char * EMITTER_FILES[] = {
     "llvm_code_shell.das",
     "llvm_jit_plan.das",
     "llvm_jit_link.das",
+    "/daslib/try_exits.das",   // root-relative: the arm-exit scan decides what the JIT lowers
 };
 
 // normalized to LF so Windows and Linux checkouts agree
@@ -66,7 +67,7 @@ TEST_CASE("jit emitter sources match the pinned hash") {
     const std::string daslib = getDasRoot() + "/modules/dasLLVM/daslib/";
     uint64_t emitterHash = 0xcbf29ce484222325ul;
     for ( const char * name : EMITTER_FILES ) {
-        std::string text = readWholeFile(daslib + name);
+        std::string text = readWholeFile(name[0] == '/' ? getDasRoot() + name : daslib + name);
         REQUIRE_MESSAGE(!text.empty(), "can't read emitter source: " << name);
         emitterHash = fnv1a64(emitterHash, name, strlen(name));
         emitterHash = fnv1a64(emitterHash, "\n", 1);

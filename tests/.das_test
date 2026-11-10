@@ -108,6 +108,7 @@ def can_visit_folder(folder_name : string; var result : bool?) {
         }
         return
     }
+    // jit_tests tests JIT codegen, which an AOT build replaces: an AOT run of it tests nothing
     if (folder_name == "jit_tests" || folder_name == ".cache") {
         let args <- get_command_line_arguments()
         for (arg in args) {

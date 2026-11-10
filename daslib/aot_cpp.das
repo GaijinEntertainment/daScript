@@ -13,6 +13,7 @@ require daslib/linq_boost
 
 require daslib/ast_print_flags
 require daslib/aot_constants
+require daslib/try_exits
 
 options strict_smart_pointers = false
 options unsafe_table_lookup = false
@@ -1299,12 +1300,6 @@ def public describeCppFunc(fn : FunctionPtr; var collector : BlockVariableCollec
 
 enum private ExitKind { None, Break, Continue, Return }
 
-struct private TryExits {
-    hasBreak : bool
-    hasContinue : bool
-    hasReturn : bool
-}
-
 struct private TryFlowLevel {
     isLoop : bool
     exits : TryExits
@@ -1317,37 +1312,6 @@ struct private TryFlowState {
     ret_slot : string
     ret_ptr : bool
 }
-
-class TryExitScanner : AstVisitor {
-    found : TryExits;
-    loopDepth : int = 0;
-
-    def override preVisitExprForBody(ffor : ExprFor?) {
-        loopDepth ++;
-    }
-    def override visitExprFor(var ffor : ExprFor?) : ExpressionPtr {
-        loopDepth --;
-        return ffor;
-    }
-    def override preVisitExprWhileBody(wh : ExprWhile?; body : ExpressionPtr) {
-        loopDepth ++;
-    }
-    def override visitExprWhile(var wh : ExprWhile?) : ExpressionPtr {
-        loopDepth --;
-        return wh;
-    }
-    def override preVisitExprBreak(that : ExprBreak?) {
-        found.hasBreak ||= loopDepth == 0;
-    }
-    def override preVisitExprContinue(that : ExprContinue?) {
-        found.hasContinue ||= loopDepth == 0;
-    }
-    def override preVisitExprReturn(expr : ExprReturn?) {
-        found.hasReturn ||= expr.returnFunc != null;
-    }
-};
-
-def private anyExit(exits : TryExits) => exits.hasBreak || exits.hasContinue || exits.hasReturn
 
 class public CppAot : AstVisitor {
     //! Main AST visitor that generates C++ ahead-of-time compiled code from daslang AST.
@@ -3083,17 +3047,9 @@ class public CppAot : AstVisitor {
             write(*ss, "return {slot == "" ? "" : (flow.ret_ptr ? "*" : "") + slot}");
         }
     }
-    def scanExits(tc : ExprTryCatch?) : TryExits {
-        var scanner = new TryExitScanner();
-        make_visitor(*scanner) $(adp) {
-            tc.try_block |> visit(adp);
-            tc.catch_block |> visit(adp);
-        }
-        return scanner.found;
-    }
     def override preVisitExprTryCatch(tc : ExprTryCatch?) {
-        var lvl = TryFlowLevel(exits = scanExits(tc));
-        if (anyExit(lvl.exits)) {
+        var lvl = TryFlowLevel(exits = scan_try_exits(tc));
+        if (any_exit(lvl.exits)) {
             lvl.flag = "__try_flow_{int(tc.at.line)}_{int(tc.at.column)}";
             write(*ss, "int32_t {lvl.flag} = {int(ExitKind.None)};\n{tabs()}");
             let at = flowLevel(ExitKind.Return);
@@ -3116,7 +3072,7 @@ class public CppAot : AstVisitor {
         write(*ss, ")");
         let lvl = flow.stack[length(flow.stack) - 1];
         flow.stack |> pop();
-        if (!anyExit(lvl.exits)) return tc;
+        if (!any_exit(lvl.exits)) return tc;
         write(*ss, ";");
         let taken = fixed_array(lvl.exits.hasBreak, lvl.exits.hasContinue, lvl.exits.hasReturn);
         let codes = fixed_array(ExitKind.Break, ExitKind.Continue, ExitKind.Return);

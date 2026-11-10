@@ -22,6 +22,7 @@ require daslib/ast_boost
 require daslib/templates_boost
 require daslib/rtti
 require daslib/flatten_opt
+require daslib/try_exits
 
 // Phase token carried as the "phase" argument of the [flatten] annotation on
 // the ORIGINAL function (which we own and may mutate in place). Cycle 1 lowers
@@ -462,52 +463,6 @@ def private collect_let_names(body : ExpressionPtr) : array<string> {
     return <- result
 }
 
-class private BreakContinueScan : AstVisitor {
-    depth       : int
-    hasBreak    : bool
-    hasContinue : bool
-    def override preVisitExprFor(expr : ExprFor?) : void {
-        depth ++
-    }
-    def override visitExprFor(var expr : ExprFor?) : ExpressionPtr {
-        depth --
-        return expr
-    }
-    def override preVisitExprWhile(expr : ExprWhile?) : void {
-        depth ++
-    }
-    def override visitExprWhile(var expr : ExprWhile?) : ExpressionPtr {
-        depth --
-        return expr
-    }
-    def override preVisitExprBreak(expr : ExprBreak?) : void {
-        if (depth == 0) {
-            hasBreak = true
-        }
-    }
-    def override preVisitExprContinue(expr : ExprContinue?) : void {
-        if (depth == 0) {
-            hasContinue = true
-        }
-    }
-}
-
-def private scan_break_continue(body : ExpressionPtr; var hasBreak : bool&; var hasContinue : bool&) {
-    var v = new BreakContinueScan()
-    make_visitor(*v) $(adapter) {
-        visit(body, adapter)
-    }
-    if (v.hasBreak) {
-        hasBreak = true
-    }
-    if (v.hasContinue) {
-        hasContinue = true
-    }
-    unsafe {
-        delete v
-    }
-}
-
 def private for_source_substs(var ctx : FlatCtx?; src : Expression?; at : LineInfo) : array<ExpressionPtr> {
     var substs : array<ExpressionPtr>
     if (src is ExprConstRange) {
@@ -570,9 +525,9 @@ def private lower_for(var ctx : FlatCtx?; efor : ExprFor?; structPred : Expressi
     let savedFactor = ctx.unrollFactor
     ctx.unrollFactor = int(projected)
     let localNames <- collect_let_names(efor.body)
-    var hasBreak = false
-    var hasContinue = false
-    scan_break_continue(efor.body, hasBreak, hasContinue)
+    let exits = scan_exits(efor.body)
+    let hasBreak = exits.hasBreak
+    let hasContinue = exits.hasContinue
     var pushed = false
     if (hasBreak || hasContinue) {
         var loopName = ""

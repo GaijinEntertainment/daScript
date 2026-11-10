@@ -42,6 +42,12 @@ Companion to `ARCHITECTURE.md` in this folder; section numbers are unique across
   (`include/daScript/simulate/ARCHITECTURE.md#fastcall-depth-guard`). An AOT
   run over a capped program whose recursion stays interpreted exercises
   this restoration.
+- **The exits an arm takes past its own end are scanned once for both emitters**:
+  `scan_try_exits` (`try_exits.das`) raises its loop depth on `ExprFor` and `ExprWhile` alone,
+  so a `break` or `continue` it reports sits at the arm's own level; `CppAot`'s `flowLevel`
+  and the JIT's `emit_arm_exit` (`modules/dasLLVM/daslib/llvm_jit.das`, whose arm visitor
+  starts with an empty loop stack) read the same level. The pair moves together; a mismatch
+  shows only under a JIT or full `test_aot` run of `tests/language/control_flow.das`.
 - **C++ identifier mangling**: `aotSuffixNameEx` prepends `_S`/`_E`/`_V`/`_f_` when a das
   name is a C++ keyword, holds a non-alnum char, or is `DELETE` (winnt.h). Structs and
   enums share ONE C++ namespace while daslang keeps separate tables, so `struct X` +

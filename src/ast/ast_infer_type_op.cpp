@@ -1132,13 +1132,8 @@ namespace das {
     }
     void InferTypes::preVisit(ExprTryCatch *expr) {
         Visitor::preVisit(expr);
-        tryDepth++;
         if (func)
             func->hasTryRecover = true;
-    }
-    ExpressionPtr InferTypes::visit(ExprTryCatch *expr) {
-        tryDepth--;
-        return Visitor::visit(expr);
     }
 
 }

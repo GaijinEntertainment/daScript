@@ -98,7 +98,7 @@ def private run_lint_argv(extra : array<string>; root : string; var output : str
     var after <- ["-q"]
     after |> push_from(extra)
     after |> push(root)
-    var argv <- lint_cli_argv([], after)
+    let argv <- lint_cli_argv([], after)
     return unsafe(popen_argv(argv, 0.0, $(f) {
         if (f != null) {
             output = fread(f)
@@ -541,5 +541,32 @@ def test_arch_modes(t : T?) {
         let rc = run_lint(path_join(dir, "ok.das"), out)
         t |> equal(count_of(out, "LINT026"), 3, "linting one file still checks its folder\n{out}")
         t |> equal(rc, 2, "a finding sets the issue exit code\n{out}")
+    }
+}
+
+
+[test(description = "a C++ pointer in the project's src/ or include/ keeps an anchor alive in a document outside those folders, whatever the lint's positional roots", timeout = 1200)]
+def test_arch_reverse_reads_cpp_homes(t : T?) {
+    t |> run("a header outside the document's folder tree is a citer") @(t : T?) {
+        let root = path_join(tmp_root(), "cpphome")
+        let sub = path_join(root, "sub")
+        let inc = path_join(root, "include")
+        mkdir_rec(sub)
+        mkdir_rec(inc)
+        plant_doc(sub, "ARCHITECTURE.md", ["alpha"])
+        plant(sub, "ok.das", "options gen2\n\n[export]\ndef main \{\n    print(\"ok\\n\")\n\}\n")
+        plant(inc, "x.h", "// sub/ARCHITECTURE.md#alpha\nint x;\n")
+        var out : string
+        let rc = run_lint(sub, out)
+        t |> equal(count_of(out, "LINT026"), 0, "the header's pointer keeps the anchor\n{out}")
+        t |> equal(rc, 0, "and the run is clean\n{out}")
+        // control: with no citer in the C++ homes the anchor is uncited again
+        var err : string
+        remove(path_join(inc, "x.h"), err)
+        var again : string
+        let rc2 = run_lint(sub, again)
+        t |> equal(count_of(again, "has no citation"), 1,
+            "without the header the anchor is uncited\n{again}")
+        t |> equal(rc2, 2, "and the uncited anchor sets the issue exit code\n{again}")
     }
 }

@@ -445,3 +445,70 @@ def test_a_runtime_integer_reinterpreted_to_bool_reads_its_low_byte(t : T?) {
         t |> equal(1, truth(int_to_bool(g_int_source)))
     }
 }
+
+[hint(noinline)]
+def via_void(var p, q : void?) : float {
+    unsafe {
+        var f = reinterpret<float?>(p)
+        var u = reinterpret<uint?>(q)
+        *f = 2.0f
+        *u = 0x3f800000u
+        return *f
+    }
+}
+
+[hint(noinline)]
+def via_float(var f, q : float?) : float {
+    var u = unsafe(reinterpret<uint?>(q))
+    *f = 2.0f
+    *u = 0x3f800000u
+    return *f
+}
+
+[test(description = "two typed views of one float taken through void? parameters alias: the write through the uint view is seen by the read through the float view, as through typed source pointers")]
+def test_a_view_taken_through_void_is_a_pun(t : T?) {
+    var x = 0.0f
+    var px = unsafe(addr(x))
+    t |> equal(1.0f, via_float(px, px), "typed source pointer")
+    t |> equal(1.0f, via_void(px, px), "void? source pointer")
+}
+
+struct OddPtrBox {
+    bits : uint
+}
+
+def odd_ptr_dummy(var a : int?; var b : OddPtrBox ??) : OddPtrBox? {
+    unsafe {
+        deref(a) = 1
+        deref(b) = reinterpret<OddPtrBox?>(uint64(7))
+        return reinterpret<OddPtrBox?>(uint64(1))
+    }
+}
+
+[sideeffects]
+def odd_ptr_compare(var insn : OddPtrBox?; var thread : OddPtrBox?;
+                    var delay_list : OddPtrBox?) : int {
+    unsafe {
+        var new_thread : OddPtrBox?
+        var must_annul : int
+        delay_list = odd_ptr_dummy(addr(must_annul), addr(new_thread))
+        if (delay_list == null && new_thread != null) {
+            thread = new_thread
+        }
+        if (delay_list != null && must_annul != 0) {
+            insn.bits = 1u
+        }
+        if (intptr(new_thread) != intptr(thread)) {
+            return 3
+        }
+        return 0
+    }
+}
+
+[test(description = "a typed pointer parameter carries no alignment promise: two odd pointer values compare by value instead of folding on an alignment the language never stated")]
+def test_misaligned_pointer_values_compare_by_value(t : T?) {
+    var baz : OddPtrBox
+    unsafe {
+        t |> equal(0, odd_ptr_compare(addr(baz), reinterpret<OddPtrBox?>(uint64(7)), null))
+    }
+}

@@ -674,6 +674,62 @@ def private ancestor_docs(roots : array<string>; seen : table<string; void?>) : 
     return <- docs
 }
 
+// The C/C++ sources under `path` the positional roots did not cover:
+// a C++ pointer is not bound to its document's folder tree, so the
+// reverse pass reads these as citers and reports nothing about them.
+def private scan_cpp_citers(path : string; var out : array<string>;
+                            var seen : table<string; void?>) {
+    return if (seen |> key_exists(path))
+    seen |> insert(path, null)
+    fio::dir(path) $(name) {
+        return if (name == "." || name == ".." || name |> starts_with("_") || is_skip_dir(name))
+        let full = "{path}/{name}"
+        let fst = stat(full)
+        return if (!fst.is_valid)
+        if (fst.is_dir) {
+            return if (is_skip_tree(full))
+            scan_cpp_citers(full, out, seen)
+        } elif (fst.is_reg && is_cpp_source(name)) {
+            out |> push(full)
+        }
+    }
+}
+
+// The C/C++ citers of every project the positional roots sit in,
+// beyond the roots themselves; none when no document needs them.
+def private cpp_citer_files(roots : array<string>; var seen : table<string; void?>;
+                            wanted : bool) : array<string> {
+    var files : array<string>
+    return <- files if (!wanted)
+    var projects : table<string>
+    for (root in roots) {
+        let project = arch_project_root(root)
+        if (!empty(project)) {
+            projects |> insert(project)
+        }
+    }
+    for (project in keys(projects)) {
+        for (croot in cpp_citer_roots(project)) {
+            scan_cpp_citers(croot, files, seen)
+        }
+    }
+    return <- files
+}
+
+// Every resolving citation the C++ homes make joins `cited`; a
+// failure there is not the pass's to report.
+def private cite_from_cpp_homes(files : array<string>; var docs : ArchDocs;
+                                var cited : table<string>) {
+    for (f in files) {
+        let text = fread(f)
+        continue if (empty(text) || find(text, ".md#") < 0)
+        for (c in collect_arch_citations(f, text)) {
+            continue if (empty(c.anchor) || !empty(citation_failure_reason(docs, f, c)))
+            cited |> insert("{c.doc}#{c.anchor}")
+        }
+    }
+}
+
 // [arch] citation pass, both directions off one read of each file: forward reports every
 // citation that does not resolve and every .das citation that resolves but sits inside a
 // comment, reverse every anchor no citation names - an anchor is a
@@ -689,6 +745,7 @@ def run_arch_pass(roots : array<string>) : array<LintIssue> {
     }
     mds |> sort
     dases |> sort
+    let cpp_citers <- cpp_citer_files(roots, seen, !empty(mds))
     var found : array<LintIssue>
     var docs : ArchDocs
     var cited : table<string>
@@ -712,6 +769,7 @@ def run_arch_pass(roots : array<string>) : array<LintIssue> {
                 "plain `<doc>.md#<anchor>` (\"{c.raw}\")"))
         }
     }
+    cite_from_cpp_homes(cpp_citers, docs, cited)
     for (md in mds) {
         let text = fread(md)
         continue if (empty(text) || find(text, ".md#") < 0)

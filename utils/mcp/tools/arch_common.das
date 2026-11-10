@@ -65,19 +65,7 @@ def scan_das_tree(path : string; var out : array<string>) {
 
 // The folders C++ sources live in - src/, include/, and every module's src/ - the homes a
 // document's census reads beyond its own subtree, since a C++ pointer is not bound to it.
-def cpp_roots() : array<string> {
-    let root = arch_path(get_das_root())
-    var out <- ["{root}/src", "{root}/include"]
-    fio::dir("{root}/modules") $(name) {
-        return if (arch_walk_skips(name))
-        let src = "{root}/modules/{name}/src"
-        let st = stat(src)
-        if (st.is_valid && st.is_dir) {
-            out |> push(src)
-        }
-    }
-    return <- out
-}
+def cpp_roots() : array<string> => <- cpp_citer_roots(arch_path(get_das_root()))
 
 // The symbol a citation on `line` annotates, for the languages the scan reads: a .das
 // declaration below or above the marker; "" for a C++ source, whose pointer sits inside a
