@@ -311,7 +311,7 @@ namespace das {
         vector<ExpressionPtr>   with;
     };
 
-    DAS_API AstContext generateAstContext( const ProgramPtr & prog, Expression * expr );
+    DAS_CC_API AstContext generateAstContext( const ProgramPtr & prog, Expression * expr );
 
     // DAS_CC_API (not DAS_API): PassVisitor's virtuals live in the compiler-lib
     // optimizer TUs (ast_const_folding/block_folding/unused.cpp). DAS_API would
