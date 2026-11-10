@@ -847,16 +847,9 @@ namespace das {
         }
         virtual ExpressionPtr visit ( ExprInvoke * expr ) override {
             Visitor::visit(expr);
-            if ( expr->isInvokeMethod ) {
-                auto arg0 = expr->arguments[0];
-                if ( arg0->rtti_isR2V() ) {
-                    arg0 = static_cast<ExprRef2Value*>(arg0)->subexpr;
-                }
-                if ( arg0->rtti_isField() ) {
-                    auto field = static_cast<ExprField*>(arg0);
-                    if ( field->value->rtti_isTypeDecl() ) {
-                        usedTypeExprs.erase(field->value);
-                    }
+            if ( auto field = expr->methodField() ) {
+                if ( field->value->rtti_isTypeDecl() ) {
+                    usedTypeExprs.erase(field->value);
                 }
             }
             return expr;

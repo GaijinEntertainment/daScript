@@ -29,6 +29,7 @@ union YYSTYPE;
 #define YY_NO_UNISTD_H
 #include "../parser/lex.yy.h"
 #include "../parser/lex2.yy.h"
+#include "devirtualize.h"
 
 void das_yybegin(const char * str, uint32_t len, yyscan_t yyscanner);
 int das_yyparse(yyscan_t yyscanner);
@@ -1469,6 +1470,9 @@ namespace das {
         // src/ast/ARCHITECTURE.md#lint-before-rewrites
         if ( !program->failed() ) {
             program->lint(logs, libGroup);
+        }
+        if ( !program->failed() && program->getOptimize() && devirtualize(program->thisModule.get()) ) {
+            program->buildAccessFlags(logs);
         }
         if ( !program->failed() && program->options.getBoolOption("no_aliasing", program->policies.no_aliasing) ) {
             program->checkAliases(logs);
