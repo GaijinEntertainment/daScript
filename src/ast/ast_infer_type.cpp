@@ -5237,8 +5237,42 @@ namespace das {
         with.pop_back();
         return Visitor::visit(expr);
     }
+    void InferTypes::resolveLoopHintCounts(AnnotationArgumentList &args, const LineInfo &at) {
+        for (auto &arg : args) {
+            if (arg.name != "unroll_count" && arg.name != "vectorize_width" && arg.name != "interleave_count") continue;
+            bool known = false;
+            int64_t count = 0;
+            if (arg.type == Type::tInt) {
+                known = true;
+                count = arg.iValue;
+            } else if (arg.type == Type::tInt64) {
+                known = true;
+                count = arg.lValue;
+            } else if (arg.type == Type::tUInt64) {
+                known = arg.ulValue <= uint64_t(INT32_MAX);
+                count = int64_t(arg.ulValue);
+            } else if (arg.type == Type::tString) {
+                auto vars = findMatchingVar(arg.sValue, false);
+                if (vars.size() == 1 && vars[0]->init) {
+                    if (!vars[0]->init->type) continue;
+                    Expression * value = vars[0]->type && vars[0]->type->constant ? getConstExpr(vars[0]->init) : nullptr;
+                    known = value && value->type && value->type->isInteger();
+                    if (known) count = getConstExprIntOrUInt(value);
+                }
+            }
+            if (known && count >= 0 && count <= INT32_MAX) {
+                arg.type = Type::tInt;
+                arg.iValue = int32_t(count);
+            } else {
+                error("loop hint " + arg.name + " takes an integer or the name of a constant integer global",
+                      arg.type == Type::tString ? "'" + arg.sValue + "' is neither" : "", "",
+                      arg.at.line ? arg.at : at, CompilationError::invalid_annotation);
+            }
+        }
+    }
     void InferTypes::preVisit(ExprWhile *expr) {
         Visitor::preVisit(expr);
+        resolveLoopHintCounts(expr->annotations, expr->at);
         loop.push_back(expr);
         markNoDiscard(expr->cond);
     }
@@ -5274,6 +5308,7 @@ namespace das {
     }
     void InferTypes::preVisit(ExprFor *expr) {
         Visitor::preVisit(expr);
+        resolveLoopHintCounts(expr->annotations, expr->at);
         // macro generated invisible variables
         // DAS_ASSERT(expr->visibility.line);
         if (!expr->body && expr != comprehensionFor) {  // a comprehension's embedded for legally has no body until lowering

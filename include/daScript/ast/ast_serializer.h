@@ -362,7 +362,7 @@ namespace das {
         AstSerializer & serializeModule ( Module & module, bool already_exists );
 
         static constexpr uint32_t getVersion () {
-            return 258;   // 258: a loop that can be left no longer satisfies the return-path check
+            return 259;   // 259: a loop count hint resolves a named constant and rejects any other non-integer
         }
 
         void serializeProgram ( ProgramPtr program, ModuleGroup & libGroup ) noexcept;

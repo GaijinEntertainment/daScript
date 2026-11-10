@@ -406,6 +406,45 @@ def sum_range_count(n : int) {
     return sum
 }
 
+let NAMED_UNROLL_COUNT = 2 + 2
+
+def sum_range_named_count(n : int) {
+    var sum = 0
+    for [unroll_count = NAMED_UNROLL_COUNT] (i in range(1, n + 1)) {
+        sum += i
+    }
+    return sum
+}
+
+def countdown_while_named_count(n0 : int) {
+    var n = n0
+    var steps = 0
+    while [unroll_count = NAMED_UNROLL_COUNT] (n > 0) {
+        n--
+        steps++
+    }
+    return steps
+}
+
+def sum_range_named_width(n : int) {
+    var sum = 0
+    for [vectorize_width = NAMED_UNROLL_COUNT] (i in range(1, n + 1)) {
+        sum += i
+    }
+    return sum
+}
+
+def sum_range_long_count(n : int) {
+    var sum = 0
+    for [unroll_count = 4ul] (i in range(1, n + 1)) {
+        sum += i
+    }
+    for [interleave_count = 2l] (i in range(1, n + 1)) {
+        sum += i
+    }
+    return sum
+}
+
 def sum_range_bare(n : int) {
     var sum = 0
     for (i in range(1, n + 1)) {
@@ -454,6 +493,18 @@ def test_per_loop_hints(t : T?) {
     }
     t |> run("for [unroll_count = N] matches bare") @(t : T?) {
         t |> equal(sum_range_count(100), sum_range_bare(100))
+    }
+    t |> run("a count hint that names a constant global matches bare, on for and while") @(t : T?) {
+        t |> equal(sum_range_named_count(100), sum_range_bare(100))
+        t |> equal(countdown_while_named_count(50), countdown_while_bare(50))
+        t |> equal(sum_range_named_width(100), sum_range_bare(100))
+        t |> equal(sum_range_long_count(100), 2 * sum_range_bare(100))
+        if (jit_enabled()) {
+            t |> success(is_jit_function(@@sum_range_named_count), "the for hint is a count")
+            t |> success(is_jit_function(@@countdown_while_named_count), "and the while hint")
+            t |> success(is_jit_function(@@sum_range_named_width), "and the width hint")
+            t |> success(is_jit_function(@@sum_range_long_count), "and a 64-bit literal")
+        }
     }
     t |> run("while [unroll_disable] matches bare") @(t : T?) {
         t |> equal(countdown_while_annotated(50), countdown_while_bare(50))

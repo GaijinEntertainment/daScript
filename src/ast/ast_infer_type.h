@@ -581,6 +581,7 @@ namespace das {
         virtual void preVisitWithBody(ExprWith *expr, Expression *body) override;
         virtual ExpressionPtr visit(ExprWith *expr) override;
         // ExprWhile
+        void resolveLoopHintCounts(AnnotationArgumentList &args, const LineInfo &at);
         virtual void preVisit(ExprWhile *expr) override;
         virtual ExpressionPtr visit(ExprWhile *expr) override;
         // ExprFor
