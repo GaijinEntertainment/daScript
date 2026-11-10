@@ -12416,15 +12416,15 @@ yyreduce:
     break;
 
   case 1038: /* $@119: %empty  */
-                             { yyextra->das_force_oxford_comma=true; yyextra->das_arrow_depth ++; }
+                             { yyextra->das_force_oxford_comma=true; if ( !das_type_arrow_enter(scanner,tokAt(scanner,(yyloc))) ) YYABORT; }
     break;
 
   case 1039: /* $@120: %empty  */
-                                                                                                                              { yyextra->das_arrow_depth --; }
+                                                                                                                                                                  { yyextra->das_arrow_depth --; }
     break;
 
   case 1040: /* make_tuple_call: "tuple" '<' $@119 tuple_type_list '>' $@120 '(' use_initializer optional_make_struct_dim_decl ')'  */
-                                                                                                                                                                                                                                 {
+                                                                                                                                                                                                                                                                     {
         auto mkt = new TypeDecl(Type::tTuple, tokAt(scanner,(yylsp[-9])));
         varDeclToTypeDecl(scanner, mkt, (yyvsp[-6].pVarDeclList), true);
         deleteVariableDeclarationList((yyvsp[-6].pVarDeclList));

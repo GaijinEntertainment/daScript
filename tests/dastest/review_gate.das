@@ -1,6 +1,7 @@
 options gen2
 
 require dastest/testing_boost public
+require dastest/review_gate
 require daslib/fio
 require daslib/strings_boost
 require strings
@@ -153,3 +154,24 @@ def private has_value_prefix(lines : array<string>; prefix : string) : bool {
     }
     return false
 }
+
+[test(description = "doctest_case_names reads the quoted name of every TEST_CASE, TEST_CASE_FIXTURE and SCENARIO line with its line number, and nothing from other lines")]
+def test_doctest_case_names(t : T?) {
+    let text = ("#include <doctest/doctest.h>\n" +
+        "TEST_CASE(\"first, plain\") \{\n" +
+        "    int x = 0; const char * s = \"body; text\";\n" +
+        "\}\n" +
+        "TEST_CASE_FIXTURE(Fx, \"second; split\") \{\}\n" +
+        "SCENARIO (\"third\") \{\}\n" +
+        "TEST_CASE(bare)\n")
+    var inscope cases <- doctest_case_names(text)
+    t |> equal(length(cases), 3)
+    return if (length(cases) != 3)
+    t |> equal(cases[0].name, "first, plain")
+    t |> equal(cases[0].line, 2)
+    t |> equal(cases[1].name, "second; split")
+    t |> equal(cases[1].line, 5)
+    t |> equal(cases[2].name, "third")
+    t |> equal(cases[2].line, 6)
+}
+

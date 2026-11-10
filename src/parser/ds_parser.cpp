@@ -12581,15 +12581,15 @@ yyreduce:
     break;
 
   case 970: /* $@92: %empty  */
-                             { yyextra->das_force_oxford_comma=true; yyextra->das_arrow_depth ++; }
+                             { yyextra->das_force_oxford_comma=true; if ( !das_type_arrow_enter(scanner,tokAt(scanner,(yyloc))) ) YYABORT; }
     break;
 
   case 971: /* $@93: %empty  */
-                                                                                                                                         { yyextra->das_arrow_depth --; }
+                                                                                                                                                                             { yyextra->das_arrow_depth --; }
     break;
 
   case 972: /* make_struct_decl: "struct" '<' $@92 type_declaration_no_options '>' $@93 '(' use_initializer optional_make_struct_dim_decl ')'  */
-                                                                                                                                                                                                                                            {
+                                                                                                                                                                                                                                                                                {
         (yyvsp[-1].pExpression)->at = tokAt(scanner,(yylsp[-9]));
         ((ExprMakeStruct *)(yyvsp[-1].pExpression))->makeType = (yyvsp[-6].pTypeDecl);
         ((ExprMakeStruct *)(yyvsp[-1].pExpression))->useInitializer = (yyvsp[-2].b);
@@ -12600,15 +12600,15 @@ yyreduce:
     break;
 
   case 973: /* $@94: %empty  */
-                            { yyextra->das_force_oxford_comma=true; yyextra->das_arrow_depth ++; }
+                            { yyextra->das_force_oxford_comma=true; if ( !das_type_arrow_enter(scanner,tokAt(scanner,(yyloc))) ) YYABORT; }
     break;
 
   case 974: /* $@95: %empty  */
-                                                                                                                                        { yyextra->das_arrow_depth --; }
+                                                                                                                                                                            { yyextra->das_arrow_depth --; }
     break;
 
   case 975: /* make_struct_decl: "class" '<' $@94 type_declaration_no_options '>' $@95 '(' use_initializer optional_make_struct_dim_decl ')'  */
-                                                                                                                                                                                                                                           {
+                                                                                                                                                                                                                                                                               {
         (yyvsp[-1].pExpression)->at = tokAt(scanner,(yylsp[-9]));
         ((ExprMakeStruct *)(yyvsp[-1].pExpression))->makeType = (yyvsp[-6].pTypeDecl);
         ((ExprMakeStruct *)(yyvsp[-1].pExpression))->useInitializer = (yyvsp[-2].b);
@@ -12618,15 +12618,15 @@ yyreduce:
     break;
 
   case 976: /* $@96: %empty  */
-                               { yyextra->das_force_oxford_comma=true; yyextra->das_arrow_depth ++; }
+                               { yyextra->das_force_oxford_comma=true; if ( !das_type_arrow_enter(scanner,tokAt(scanner,(yyloc))) ) YYABORT; }
     break;
 
   case 977: /* $@97: %empty  */
-                                                                                                                                  { yyextra->das_arrow_depth --; }
+                                                                                                                                                                      { yyextra->das_arrow_depth --; }
     break;
 
   case 978: /* make_struct_decl: "variant" '<' $@96 variant_type_list '>' $@97 '(' use_initializer make_variant_dim ')'  */
-                                                                                                                                                                                                                        {
+                                                                                                                                                                                                                                                            {
         auto mkt = new TypeDecl(Type::tVariant, tokAt(scanner,(yylsp[-9])));
         varDeclToTypeDecl(scanner, mkt, (yyvsp[-6].pVarDeclList), true);
         deleteVariableDeclarationList((yyvsp[-6].pVarDeclList));
@@ -12711,15 +12711,15 @@ yyreduce:
     break;
 
   case 988: /* $@100: %empty  */
-                             { yyextra->das_force_oxford_comma=true; yyextra->das_arrow_depth ++; }
+                             { yyextra->das_force_oxford_comma=true; if ( !das_type_arrow_enter(scanner,tokAt(scanner,(yyloc))) ) YYABORT; }
     break;
 
   case 989: /* $@101: %empty  */
-                                                                                                                              { yyextra->das_arrow_depth --; }
+                                                                                                                                                                  { yyextra->das_arrow_depth --; }
     break;
 
   case 990: /* make_tuple_call: "tuple" '<' $@100 tuple_type_list '>' $@101 '(' use_initializer optional_make_struct_dim_decl ')'  */
-                                                                                                                                                                                                                                 {
+                                                                                                                                                                                                                                                                     {
         auto mkt = new TypeDecl(Type::tTuple, tokAt(scanner,(yylsp[-9])));
         varDeclToTypeDecl(scanner, mkt, (yyvsp[-6].pVarDeclList), true);
         deleteVariableDeclarationList((yyvsp[-6].pVarDeclList));
@@ -12787,15 +12787,15 @@ yyreduce:
     break;
 
   case 996: /* $@102: %empty  */
-                                       { yyextra->das_force_oxford_comma=true; yyextra->das_arrow_depth ++; }
+                                       { yyextra->das_force_oxford_comma=true; if ( !das_type_arrow_enter(scanner,tokAt(scanner,(yyloc))) ) YYABORT; }
     break;
 
   case 997: /* $@103: %empty  */
-                                                                                                                                                   { yyextra->das_arrow_depth --; }
+                                                                                                                                                                                       { yyextra->das_arrow_depth --; }
     break;
 
   case 998: /* make_dim_decl: "array" "struct" '<' $@102 type_declaration_no_options '>' $@103 '(' use_initializer optional_make_struct_dim_decl ')'  */
-                                                                                                                                                                                                                                                      {
+                                                                                                                                                                                                                                                                                          {
         (yyvsp[-1].pExpression)->at = tokAt(scanner,(yylsp[-10]));
         ((ExprMakeStruct *)(yyvsp[-1].pExpression))->makeType = (yyvsp[-6].pTypeDecl);
         ((ExprMakeStruct *)(yyvsp[-1].pExpression))->useInitializer = (yyvsp[-2].b);

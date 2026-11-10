@@ -22,8 +22,7 @@ runtime or OS call that takes a `char *` file path - it reported before in each 
 to use.**
 
 **A diff that makes the compile reject source it accepted before - a new or tightened compile
-error does - or changes the AST the compile produces from unchanged source, bumps
-`AstSerializer::getVersion()` (`include/daScript/ast/ast_serializer.h`, repo root) in the same
-change.** A cached module never runs through the compile again, and the cache key misses a
-rebuild of the runtime library alone (a `-module-cache <path>` file records no binary at all),
-so without the bump a rebuilt `daslang` serves modules the old compile accepted or produced.
+error does - or changes a node, name, type or flag `AstSerializer` streams for unchanged
+source, bumps `AstSerializer::getVersion()` (`include/daScript/ast/ast_serializer.h`, repo
+root) in the same change.** A cached module skips the compile, so without the bump a rebuilt
+`daslang` serves what the old compile accepted or produced.

@@ -3845,7 +3845,7 @@ make_struct_decl
         tam->arguments.push_back($msd);
         $$ = tam;
     }
-    |   DAS_STRUCT [loc] '<' { yyextra->das_force_oxford_comma=true; yyextra->das_arrow_depth ++; } type_declaration_no_options[mkt] '>' { yyextra->das_arrow_depth --; } '(' use_initializer[init] optional_make_struct_dim_decl[msd] ')'  {
+    |   DAS_STRUCT [loc] '<' { yyextra->das_force_oxford_comma=true; if ( !das_type_arrow_enter(scanner,tokAt(scanner,@$)) ) YYABORT; } type_declaration_no_options[mkt] '>' { yyextra->das_arrow_depth --; } '(' use_initializer[init] optional_make_struct_dim_decl[msd] ')'  {
         $msd->at = tokAt(scanner,@loc);
         ((ExprMakeStruct *)$msd)->makeType = $mkt;
         ((ExprMakeStruct *)$msd)->useInitializer = $init;
@@ -3853,14 +3853,14 @@ make_struct_decl
         ((ExprMakeStruct *)$msd)->alwaysUseInitializer = true;
         $$ = $msd;
     }
-    |   DAS_CLASS [loc] '<' { yyextra->das_force_oxford_comma=true; yyextra->das_arrow_depth ++; } type_declaration_no_options[mkt] '>' { yyextra->das_arrow_depth --; } '(' use_initializer[init] optional_make_struct_dim_decl[msd] ')'  {
+    |   DAS_CLASS [loc] '<' { yyextra->das_force_oxford_comma=true; if ( !das_type_arrow_enter(scanner,tokAt(scanner,@$)) ) YYABORT; } type_declaration_no_options[mkt] '>' { yyextra->das_arrow_depth --; } '(' use_initializer[init] optional_make_struct_dim_decl[msd] ')'  {
         $msd->at = tokAt(scanner,@loc);
         ((ExprMakeStruct *)$msd)->makeType = $mkt;
         ((ExprMakeStruct *)$msd)->useInitializer = $init;
         ((ExprMakeStruct *)$msd)->forceClass = true;
         $$ = $msd;
     }
-    |   DAS_TVARIANT [loc] '<' { yyextra->das_force_oxford_comma=true; yyextra->das_arrow_depth ++; } variant_type_list[list] '>' { yyextra->das_arrow_depth --; } '(' use_initializer[init] make_variant_dim[msd] ')'  {
+    |   DAS_TVARIANT [loc] '<' { yyextra->das_force_oxford_comma=true; if ( !das_type_arrow_enter(scanner,tokAt(scanner,@$)) ) YYABORT; } variant_type_list[list] '>' { yyextra->das_arrow_depth --; } '(' use_initializer[init] make_variant_dim[msd] ')'  {
         auto mkt = new TypeDecl(Type::tVariant, tokAt(scanner,@loc));
         varDeclToTypeDecl(scanner, mkt, $list, true);
         deleteVariableDeclarationList($list);
@@ -3922,7 +3922,7 @@ make_tuple_call
         mkt->makeType = new TypeDecl(Type::autoinfer, tokAt(scanner,@$));
         $$ = mkt;
     }
-    |   DAS_TTUPLE [loc] '<' { yyextra->das_force_oxford_comma=true; yyextra->das_arrow_depth ++; } tuple_type_list[list] '>' { yyextra->das_arrow_depth --; } '(' use_initializer[init] optional_make_struct_dim_decl[msd] ')'  {
+    |   DAS_TTUPLE [loc] '<' { yyextra->das_force_oxford_comma=true; if ( !das_type_arrow_enter(scanner,tokAt(scanner,@$)) ) YYABORT; } tuple_type_list[list] '>' { yyextra->das_arrow_depth --; } '(' use_initializer[init] optional_make_struct_dim_decl[msd] ')'  {
         auto mkt = new TypeDecl(Type::tTuple, tokAt(scanner,@loc));
         varDeclToTypeDecl(scanner, mkt, $list, true);
         deleteVariableDeclarationList($list);
@@ -3978,7 +3978,7 @@ make_dim_decl
         tam->arguments.push_back($mka);
         $$ = tam;
     }
-    |   DAS_ARRAY [loc] DAS_STRUCT '<' { yyextra->das_force_oxford_comma=true; yyextra->das_arrow_depth ++; } type_declaration_no_options[mkt] '>' { yyextra->das_arrow_depth --; } '(' use_initializer[init] optional_make_struct_dim_decl[msd] ')'  {
+    |   DAS_ARRAY [loc] DAS_STRUCT '<' { yyextra->das_force_oxford_comma=true; if ( !das_type_arrow_enter(scanner,tokAt(scanner,@$)) ) YYABORT; } type_declaration_no_options[mkt] '>' { yyextra->das_arrow_depth --; } '(' use_initializer[init] optional_make_struct_dim_decl[msd] ')'  {
         $msd->at = tokAt(scanner,@loc);
         ((ExprMakeStruct *)$msd)->makeType = $mkt;
         ((ExprMakeStruct *)$msd)->useInitializer = $init;

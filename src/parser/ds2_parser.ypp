@@ -4229,7 +4229,7 @@ make_tuple_call
         mkt->makeType = new TypeDecl(Type::autoinfer, tokAt(scanner,@$));
         $$ = mkt;
     }
-    |   DAS_TTUPLE [loc] '<' { yyextra->das_force_oxford_comma=true; yyextra->das_arrow_depth ++; } tuple_type_list[list] '>' { yyextra->das_arrow_depth --; } '(' use_initializer[init] optional_make_struct_dim_decl[msd] ')'  {
+    |   DAS_TTUPLE [loc] '<' { yyextra->das_force_oxford_comma=true; if ( !das_type_arrow_enter(scanner,tokAt(scanner,@$)) ) YYABORT; } tuple_type_list[list] '>' { yyextra->das_arrow_depth --; } '(' use_initializer[init] optional_make_struct_dim_decl[msd] ')'  {
         auto mkt = new TypeDecl(Type::tTuple, tokAt(scanner,@loc));
         varDeclToTypeDecl(scanner, mkt, $list, true);
         deleteVariableDeclarationList($list);

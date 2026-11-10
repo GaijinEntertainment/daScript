@@ -13,8 +13,7 @@ string repeated ( const string & piece, int count ) {
     return out;
 }
 
-ProgramPtr compileFieldType ( const string & fieldType ) {
-    const string src = "options gen2\nstruct Deep {\n    x : " + fieldType + "\n}\n";
+ProgramPtr compileSource ( const string & src ) {
     TextWriter tout;
     ModuleGroup libGroup;
     auto fa = make_smart<FsFileAccess>();
@@ -22,17 +21,31 @@ ProgramPtr compileFieldType ( const string & fieldType ) {
     return compileDaScript("type_nesting_limit.das", fa, tout, libGroup);
 }
 
-bool reportsTooDeep ( const ProgramPtr & program ) {
-    for ( auto & err : program->errors ) {
-        if ( err.cerr == CompilationError::exceeds_type_nesting ) return true;
-    }
-    return false;
+ProgramPtr compileFieldType ( const string & fieldType ) {
+    return compileSource("options gen2\nstruct Deep {\n    x : " + fieldType + "\n}\n");
 }
+
+ProgramPtr compileFieldTypeGen1 ( const string & fieldType ) {
+    return compileSource("options gen2 = false\nstruct Deep\n    x : " + fieldType + "\n");
+}
+
+int tooDeepErrors ( const ProgramPtr & program ) {
+    int count = 0;
+    for ( auto & err : program->errors ) {
+        if ( err.cerr == CompilationError::exceeds_type_nesting ) count ++;
+    }
+    return count;
+}
+
+bool reportsTooDeep ( const ProgramPtr & program ) {
+    return tooDeepErrors(program) != 0;
+}
+
+const int limit = 256;
 
 }
 
 TEST_CASE("a type nested to the limit compiles, one level past it is a parse error") {
-    const int limit = 256;
     SUBCASE("pointer levels") {
         CHECK_FALSE(compileFieldType("int" + repeated("?", limit))->failed());
         CHECK(reportsTooDeep(compileFieldType("int" + repeated("?", limit + 1))));
@@ -44,18 +57,42 @@ TEST_CASE("a type nested to the limit compiles, one level past it is a parse err
     SUBCASE("angle bracket levels") {
         CHECK_FALSE(compileFieldType(repeated("array<", limit) + "int" + repeated(">", limit))->failed());
         CHECK(reportsTooDeep(compileFieldType(repeated("array<", limit + 1) + "int" + repeated(">", limit + 1))));
-        CHECK(reportsTooDeep(compileFieldType(repeated("function<():", limit + 1) + "int" + repeated(">", limit + 1))));
     }
     SUBCASE("pointer levels count the nesting under them") {
         const int overHalf = limit / 2 + 1;
-        const string inner = "tuple<int;int" + repeated("?", overHalf) + ">";
+        const string pointers = repeated("?", overHalf);
+        const string inner = "tuple<int;int" + pointers + ">";
         CHECK_FALSE(compileFieldType(inner)->failed());
-        CHECK(reportsTooDeep(compileFieldType("tuple<int;" + inner + repeated("?", overHalf) + ">")));
+        CHECK(reportsTooDeep(compileFieldType("tuple<int;" + inner + pointers + ">")));
+        CHECK(reportsTooDeep(compileFieldType("table<int;int" + pointers + ">" + pointers)));
     }
+}
+
+TEST_CASE("every nesting type constructor stops at the limit") {
+    const char * openers[] = {
+        "array<", "iterator<", "smart_ptr<", "table<int;", "tuple<int;", "variant<a:int;b:",
+        "function<():", "lambda<():", "block<():"
+    };
+    for ( auto opener : openers ) {
+        CAPTURE(opener);
+        CHECK(reportsTooDeep(compileFieldType(repeated(opener, limit + 1) + "int" + repeated(">", limit + 1))));
+    }
+}
+
+TEST_CASE("the gen1 grammar stops at the same nesting limit") {
+    CHECK_FALSE(compileFieldTypeGen1("int" + repeated("?", limit))->failed());
+    CHECK(reportsTooDeep(compileFieldTypeGen1("int" + repeated("?", limit + 1))));
+    CHECK(reportsTooDeep(compileFieldTypeGen1("int" + repeated("??", limit / 2 + 1))));
+    CHECK(reportsTooDeep(compileFieldTypeGen1(repeated("array<", limit + 1) + "int" + repeated(">", limit + 1))));
+}
+
+TEST_CASE("the parse ends at the first type nested too deeply") {
+    const string deep = "int" + repeated("?", limit + 1);
+    auto program = compileSource("options gen2\nstruct Deep {\n    x : " + deep + "\n    y : " + deep + "\n}\n");
+    CHECK(tooDeepErrors(program) == 1);
 }
 
 TEST_CASE("a pathologically deep type is one error, not a stack overflow") {
     auto program = compileFieldType("int" + repeated("?", 400000));
-    CHECK(reportsTooDeep(program));
-    CHECK(program->errors.size() == 1);
+    CHECK(tooDeepErrors(program) == 1);
 }

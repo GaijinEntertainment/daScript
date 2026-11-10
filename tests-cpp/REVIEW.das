@@ -1,7 +1,6 @@
 options gen2
 
 require strings
-require daslib/strings_boost
 require daslib/fio
 require dastest/review_gate
 
@@ -203,18 +202,12 @@ def private check_test_case_names {
     dir(folder) $(name) {
         if (name |> ends_with(".cpp")) {
             let f = "{folder}/{name}"
-            var inscope lines <- split(fread(f), "\n")
-            for (line, line_no in lines, count(1)) {
-                continue if (find(line, "TEST_CASE") < 0 && find(line, "SCENARIO") < 0)
-                let open_quote = find(line, "\"")
-                let close_quote = rfind(line, "\"")
-                continue if (close_quote <= open_quote)
-                let case_name = slice(line, open_quote + 1, close_quote)
-                if (find(case_name, ";") >= 0) {
-                    let what = "the case name \"{case_name}\" holds ';'"
+            for (tc in doctest_case_names(fread(f))) {
+                if (find(tc.name, ";") >= 0) {
+                    let what = "the case name \"{tc.name}\" holds ';'"
                     let why = "ctest splits the name there into filters matching no case"
                     let fix = "the test never runs and reports a pass - use a comma or a dash"
-                    gate_finding(f, line_no, "{what} - {why}, so {fix}")
+                    gate_finding(f, tc.line, "{what} - {why}, so {fix}")
                 }
             }
         }
