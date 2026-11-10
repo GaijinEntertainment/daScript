@@ -3230,11 +3230,8 @@ namespace das {
         // the debugger needs true frames and true lines - same reason it disables fastcall
         bool autoEnabled = getOptimize() && !getDebugger()
             && !options.getBoolOption("disable_auto_inline", policies.disable_auto_inline);
-        // under `options no_aliasing` call-result aliasing is an ERROR; splicing calls away
-        // would change which programs compile - diagnostics must not depend on a perf knob
         bool autoFns = autoEnabled
-            && options.getBoolOption("auto_inline_functions", policies.auto_inline_functions)
-            && !options.getBoolOption("no_aliasing", policies.no_aliasing);
+            && options.getBoolOption("auto_inline_functions", policies.auto_inline_functions);
         das_hash_map<Function *, bool> budgetCache;
         das_hash_set<Function *> budgetExempt;
         AutoInlineCfg autoCfg;

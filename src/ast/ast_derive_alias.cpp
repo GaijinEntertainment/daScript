@@ -299,8 +299,8 @@ namespace das {
 
     class AliasMarker : public Visitor {
     public:
-        AliasMarker ( const ProgramPtr & prog, bool permanent, bool everything, TextWriter & ls ) : program(prog), logs(ls) {
-            checkAliasing = program->options.getBoolOption("no_aliasing", program->policies.no_aliasing);
+        AliasMarker ( const ProgramPtr & prog, bool permanent, bool everything, bool report, TextWriter & ls ) : program(prog), logs(ls) {
+            checkAliasing = report;
             logAliasing = program->options.getBoolOption("log_aliasing", false);
             isPermanent = permanent;
             isEverything = everything;
@@ -628,17 +628,37 @@ namespace das {
         }
     };
 
-    void Program::deriveAliases(TextWriter & logs, bool permanent, bool everything) {
-        bool logAliasing = options.getBoolOption("log_aliasing", false);
-        if ( logAliasing ) logs << "ALIASING:\n";
-
-        if ( logAliasing ) logs << "module " << thisModule->name << ":\n";
-        thisModule->functions.foreach([&](const FunctionPtr & func){
+    static void deriveFunctionAliasing ( Program * program, TextWriter & logs, bool logAliasing ) {
+        if ( logAliasing ) logs << "module " << program->thisModule->name << ":\n";
+        program->thisModule->functions.foreach([&](const FunctionPtr & func){
             if ( func->builtIn || func->isTemplate ) return;
             deriveAliasing(func, logs, logAliasing);
         });
-        AliasMarker marker(this, permanent, everything, logs);
+    }
+
+    void Program::deriveAliases(TextWriter & logs, bool permanent, bool everything) {
+        bool logAliasing = options.getBoolOption("log_aliasing", false);
+        if ( logAliasing ) logs << "ALIASING:\n";
+        deriveFunctionAliasing(this, logs, logAliasing);
+        bool report = !aliasesChecked && options.getBoolOption("no_aliasing", policies.no_aliasing);
+        AliasMarker marker(this, permanent, everything, report, logs);
         visit(marker);
         if ( logAliasing ) logs << "\n";
+    }
+
+    void Program::checkAliases(TextWriter & logs) {
+        aliasesChecked = true;
+        auto savedFunctions = usedFunctions;
+        auto savedVariables = usedVariables;
+        if ( thisModule->isModule || policies.export_all ) {
+            markModuleSymbolUse();
+        } else {
+            markExecutableSymbolUse();
+        }
+        deriveFunctionAliasing(this, logs, false);
+        AliasMarker marker(this, false, false, true, logs);
+        visit(marker);
+        usedFunctions = das::move(savedFunctions);
+        usedVariables = das::move(savedVariables);
     }
 }

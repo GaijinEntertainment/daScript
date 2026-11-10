@@ -1461,6 +1461,9 @@ namespace das {
                 }
             }
         }
+        if ( !program->failed() && program->options.getBoolOption("no_aliasing", program->policies.no_aliasing) ) {
+            program->checkAliases(logs);
+        }
         if ( !program->failed() ) {
             while ( !program->failed() && program->patchInline() ) {
                 program->buildAccessFlags(logs);
