@@ -139,10 +139,10 @@ def private switched_modules : table<string; SwitchedModule> {
     var out : table<string; SwitchedModule>
     for (f in cmakelists_under("modules")) {
         let text = fread(f)
-        var folder_switches <- [for (tok in keys(prefixed_tokens(text, "DAS_"))); tok; where key_exists(root_switches, tok)]
+        var inscope folder_switches <- [for (tok in keys(prefixed_tokens(text, "DAS_"))); tok; where key_exists(root_switches, tok)]
         continue if (empty(folder_switches))
         folder_switches |> sort
-        var folder_libs <- [for (tok in keys(prefixed_tokens(text, "libDasModule"))); tok]
+        var inscope folder_libs <- [for (tok in keys(prefixed_tokens(text, "libDasModule"))); tok]
         folder_libs |> sort
         for (name in cmake_command_targets(text, "add_module_cpp")) {
             out["Module_{name}"] <- SwitchedModule(folder = dir_name(f), switches := folder_switches, libs := folder_libs)
@@ -195,7 +195,8 @@ def private check_big_test_gating {
     }
 }
 
-//! no `TEST_CASE` name in tests-cpp/small holds a `;` - `doctest_discover_tests` hands each name to ctest through a CMake list, the `;` splits it, and each half becomes a filter matching no case that ctest reports as passed
+//! no `TEST_CASE` name in tests-cpp/small holds a `;` - ctest
+//! splits the name there into filters that match no case
 def private check_test_case_names {
     let folder = "tests-cpp/small"
     dir(folder) $(name) {
@@ -207,7 +208,9 @@ def private check_test_case_names {
                 continue if (at < 0)
                 let close = find(line, "\")", at)
                 if (close > at && find(slice(line, at, close), ";") >= 0) {
-                    gate_finding(f, line_no, "a TEST_CASE name holds ';' - ctest splits the name there and runs two filters matching no case, so the test never runs and reports a pass; spell it with a comma or a dash")
+                    let why = "ctest splits the name there into filters matching no case"
+                    let fix = "the test never runs and reports a pass - use a comma or a dash"
+                    gate_finding(f, line_no, "a TEST_CASE name holds ';' - {why}, so {fix}")
                 }
             }
         }
