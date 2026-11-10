@@ -8,6 +8,18 @@
 
 namespace das {
 
+    // src/ast/ARCHITECTURE.md#instance-type-size
+    static constexpr uint32_t instanceArgumentTypeNodeLimit = 4096;
+
+    static bool argumentTypesFitInstance ( const vector<TypeDeclPtr> & types ) {
+        uint32_t budget = instanceArgumentTypeNodeLimit;
+        for ( auto & type : types ) {
+            if ( !type->fitsNodeBudget(budget) ) return false;
+        }
+        return true;
+    }
+
+
     static bool canBeAliasName(const string &callName) {
         string moduleName, funcName;
         splitTypeName(callName, moduleName, funcName);
@@ -1936,6 +1948,13 @@ namespace das {
                     expr->name = callCloneName(genName);
                     reportAstChanged();
                 } else if (instancedFunctions.size() == 0) {
+                    if (!argumentTypesFitInstance(types)) {
+                        error("generic '" + oneGeneric->name + "' would be instanced with argument types of more than " + to_string(instanceArgumentTypeNodeLimit) + " type nodes",
+                            "a generic that calls itself with a type built from its own argument type makes a larger type on every instance - "
+                            "pass a type that does not grow; a large type written out directly fits once it is a field of a structure, which counts as one node", "",
+                            expr->at, CompilationError::exceeds_instance_type);
+                        return nullptr;
+                    }
                     auto clone = oneGeneric->clone();
                     clone->name = genName;
                     clone->fromGeneric = oneGeneric;

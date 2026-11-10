@@ -72,6 +72,9 @@ namespace das {
     void das_yyerror ( yyscan_t scanner, const string & error, const LineInfo & at, CompilationError cerr );
     void das2_yyerror ( yyscan_t scanner, const string & error, const LineInfo & at, CompilationError cerr );
     ReaderMacro * das_unknown_reader_macro ();
+    constexpr int DAS_MAX_TYPE_NESTING = 256;
+    bool das_type_arrow_enter ( yyscan_t scanner, const LineInfo & at );
+    bool das_check_pointer_nesting ( yyscan_t scanner, const TypeDecl * inner, int pointerLevels, const LineInfo & at );
     void das_checkName ( yyscan_t scanner, const string & name, const LineInfo &at );
 
     template <typename ConstT, typename ValueT>

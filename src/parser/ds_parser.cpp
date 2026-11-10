@@ -1189,24 +1189,24 @@ static const yytype_int16 yyrline[] =
     3250,  3254,  3254,  3254,  3268,  3269,  3273,  3278,  3285,  3288,
     3294,  3295,  3296,  3297,  3298,  3308,  3311,  3311,  3311,  3315,
     3320,  3327,  3327,  3327,  3334,  3338,  3342,  3347,  3352,  3357,
-    3362,  3366,  3370,  3375,  3379,  3383,  3388,  3388,  3388,  3394,
-    3401,  3401,  3401,  3406,  3406,  3406,  3412,  3412,  3412,  3417,
-    3423,  3423,  3423,  3428,  3428,  3428,  3437,  3443,  3443,  3443,
-    3448,  3448,  3448,  3457,  3463,  3463,  3463,  3468,  3468,  3468,
-    3477,  3477,  3477,  3483,  3483,  3483,  3492,  3495,  3506,  3522,
-    3522,  3527,  3532,  3522,  3557,  3557,  3562,  3568,  3557,  3593,
-    3593,  3598,  3603,  3593,  3643,  3644,  3645,  3646,  3647,  3651,
-    3658,  3665,  3671,  3677,  3684,  3691,  3697,  3706,  3709,  3715,
-    3723,  3728,  3735,  3740,  3747,  3752,  3758,  3759,  3763,  3764,
-    3769,  3770,  3774,  3775,  3779,  3780,  3784,  3785,  3786,  3790,
-    3791,  3792,  3796,  3797,  3801,  3807,  3814,  3822,  3829,  3837,
-    3846,  3846,  3846,  3854,  3854,  3854,  3861,  3861,  3861,  3871,
-    3871,  3871,  3882,  3885,  3891,  3905,  3911,  3917,  3923,  3923,
-    3923,  3936,  3941,  3948,  3967,  3972,  3979,  3979,  3979,  3989,
-    3989,  3989,  4002,  4002,  4002,  4015,  4024,  4024,  4024,  4044,
-    4051,  4051,  4051,  4061,  4066,  4073,  4076,  4082,  4101,  4112,
-    4120,  4140,  4165,  4166,  4170,  4171,  4176,  4179,  4182,  4185,
-    4188,  4191
+    3362,  3366,  3370,  3375,  3379,  3383,  3389,  3389,  3389,  3395,
+    3403,  3403,  3403,  3408,  3408,  3408,  3414,  3414,  3414,  3419,
+    3425,  3425,  3425,  3430,  3430,  3430,  3439,  3445,  3445,  3445,
+    3450,  3450,  3450,  3459,  3465,  3465,  3465,  3470,  3470,  3470,
+    3479,  3479,  3479,  3485,  3485,  3485,  3494,  3497,  3508,  3524,
+    3524,  3529,  3534,  3524,  3559,  3559,  3564,  3570,  3559,  3595,
+    3595,  3600,  3605,  3595,  3645,  3646,  3647,  3648,  3649,  3653,
+    3660,  3667,  3673,  3679,  3686,  3693,  3699,  3708,  3711,  3717,
+    3725,  3730,  3737,  3742,  3749,  3754,  3760,  3761,  3765,  3766,
+    3771,  3772,  3776,  3777,  3781,  3782,  3786,  3787,  3788,  3792,
+    3793,  3794,  3798,  3799,  3803,  3809,  3816,  3824,  3831,  3839,
+    3848,  3848,  3848,  3856,  3856,  3856,  3863,  3863,  3863,  3873,
+    3873,  3873,  3884,  3887,  3893,  3907,  3913,  3919,  3925,  3925,
+    3925,  3938,  3943,  3950,  3969,  3974,  3981,  3981,  3981,  3991,
+    3991,  3991,  4004,  4004,  4004,  4017,  4026,  4026,  4026,  4046,
+    4053,  4053,  4053,  4063,  4068,  4075,  4078,  4084,  4103,  4114,
+    4122,  4142,  4167,  4168,  4172,  4173,  4178,  4181,  4184,  4187,
+    4190,  4193
 };
 #endif
 
@@ -8767,15 +8767,15 @@ yyreduce:
     break;
 
   case 346: /* $@9: %empty  */
-                         { yyextra->das_arrow_depth ++; }
+                         { if ( !das_type_arrow_enter(scanner,tokAt(scanner,(yyloc))) ) YYABORT; }
     break;
 
   case 347: /* $@10: %empty  */
-                                                                                                      { yyextra->das_arrow_depth --; }
+                                                                                                                                          { yyextra->das_arrow_depth --; }
     break;
 
   case 348: /* expression_keyword: "keyword" '<' $@9 type_declaration_no_options_list '>' $@10 expr  */
-                                                                                                                                                     {
+                                                                                                                                                                                         {
         auto pCall = yyextra->g_Program->makeCall(tokAt(scanner,(yylsp[-6])),tokAt(scanner,(yylsp[0])),*(yyvsp[-6].s));
         pCall->arguments = typesAndSequenceToList((yyvsp[-3].pTypeDeclList),(yyvsp[0].pExpression));
         delete (yyvsp[-6].s);
@@ -8784,15 +8784,15 @@ yyreduce:
     break;
 
   case 349: /* $@11: %empty  */
-                               { yyextra->das_arrow_depth ++; }
+                               { if ( !das_type_arrow_enter(scanner,tokAt(scanner,(yyloc))) ) YYABORT; }
     break;
 
   case 350: /* $@12: %empty  */
-                                                                                                            { yyextra->das_arrow_depth --; }
+                                                                                                                                                { yyextra->das_arrow_depth --; }
     break;
 
   case 351: /* expression_keyword: "type function" '<' $@11 type_declaration_no_options_list '>' $@12 optional_expr_list_in_braces  */
-                                                                                                                                                                                   {
+                                                                                                                                                                                                                       {
         auto pCall = yyextra->g_Program->makeCall(tokAt(scanner,(yylsp[-6])),tokAt(scanner,(yylsp[0])),*(yyvsp[-6].s));
         pCall->arguments = typesAndSequenceToList((yyvsp[-3].pTypeDeclList),(yyvsp[0].pExpression));
         delete (yyvsp[-6].s);
@@ -8898,15 +8898,15 @@ yyreduce:
     break;
 
   case 362: /* $@13: %empty  */
-           { yyextra->das_arrow_depth ++; }
+           { if ( !das_type_arrow_enter(scanner,tokAt(scanner,(yyloc))) ) YYABORT; }
     break;
 
   case 363: /* $@14: %empty  */
-                                                                           { yyextra->das_arrow_depth --; }
+                                                                                                               { yyextra->das_arrow_depth --; }
     break;
 
   case 364: /* new_type_declaration: '<' $@13 type_declaration '>' $@14  */
-                                                                                                            {
+                                                                                                                                                {
         (yyval.pTypeDecl) = (yyvsp[-2].pTypeDecl);
     }
     break;
@@ -9188,29 +9188,29 @@ yyreduce:
     break;
 
   case 405: /* $@15: %empty  */
-                          { yyextra->das_arrow_depth ++; }
+                          { if ( !das_type_arrow_enter(scanner,tokAt(scanner,(yyloc))) ) YYABORT; }
     break;
 
   case 406: /* $@16: %empty  */
-                                                                                                 { yyextra->das_arrow_depth --; }
+                                                                                                                                     { yyextra->das_arrow_depth --; }
     break;
 
   case 407: /* expr_cast: "cast" '<' $@15 type_declaration_no_options '>' $@16 expr  */
-                                                                                                                                                {
+                                                                                                                                                                                    {
         (yyval.pExpression) = new ExprCast(tokAt(scanner,(yylsp[-6])),(yyvsp[0].pExpression),(yyvsp[-3].pTypeDecl));
     }
     break;
 
   case 408: /* $@17: %empty  */
-                            { yyextra->das_arrow_depth ++; }
+                            { if ( !das_type_arrow_enter(scanner,tokAt(scanner,(yyloc))) ) YYABORT; }
     break;
 
   case 409: /* $@18: %empty  */
-                                                                                                   { yyextra->das_arrow_depth --; }
+                                                                                                                                       { yyextra->das_arrow_depth --; }
     break;
 
   case 410: /* expr_cast: "upcast" '<' $@17 type_declaration_no_options '>' $@18 expr  */
-                                                                                                                                                  {
+                                                                                                                                                                                      {
         auto pCast = new ExprCast(tokAt(scanner,(yylsp[-6])),(yyvsp[0].pExpression),(yyvsp[-3].pTypeDecl));
         pCast->upcast = true;
         (yyval.pExpression) = pCast;
@@ -9218,15 +9218,15 @@ yyreduce:
     break;
 
   case 411: /* $@19: %empty  */
-                                 { yyextra->das_arrow_depth ++; }
+                                 { if ( !das_type_arrow_enter(scanner,tokAt(scanner,(yyloc))) ) YYABORT; }
     break;
 
   case 412: /* $@20: %empty  */
-                                                                                                        { yyextra->das_arrow_depth --; }
+                                                                                                                                            { yyextra->das_arrow_depth --; }
     break;
 
   case 413: /* expr_cast: "reinterpret" '<' $@19 type_declaration_no_options '>' $@20 expr  */
-                                                                                                                                                       {
+                                                                                                                                                                                           {
         auto pCast = new ExprCast(tokAt(scanner,(yylsp[-6])),(yyvsp[0].pExpression),(yyvsp[-3].pTypeDecl));
         pCast->reinterpret = true;
         (yyval.pExpression) = pCast;
@@ -9234,15 +9234,15 @@ yyreduce:
     break;
 
   case 414: /* $@21: %empty  */
-                         { yyextra->das_arrow_depth ++; }
+                         { if ( !das_type_arrow_enter(scanner,tokAt(scanner,(yyloc))) ) YYABORT; }
     break;
 
   case 415: /* $@22: %empty  */
-                                                                                     { yyextra->das_arrow_depth --; }
+                                                                                                                         { yyextra->das_arrow_depth --; }
     break;
 
   case 416: /* expr_type_decl: "type" '<' $@21 type_declaration '>' $@22  */
-                                                                                                                      {
+                                                                                                                                                          {
         (yyval.pExpression) = new ExprTypeDecl(tokAt(scanner,(yylsp[-5])),(yyvsp[-2].pTypeDecl));
     }
     break;
@@ -9716,15 +9716,15 @@ yyreduce:
     break;
 
   case 502: /* $@24: %empty  */
-                    { yyextra->das_arrow_depth ++; }
+                    { if ( !das_type_arrow_enter(scanner,tokAt(scanner,(yyloc))) ) YYABORT; }
     break;
 
   case 503: /* $@25: %empty  */
-                                                                                                { yyextra->das_arrow_depth --; }
+                                                                                                                                    { yyextra->das_arrow_depth --; }
     break;
 
   case 504: /* func_addr_expr: '@' '@' '<' $@24 type_declaration_no_options '>' $@25 func_addr_name  */
-                                                                                                                                                       {
+                                                                                                                                                                                           {
         auto expr = (ExprAddr *) ((yyvsp[0].pExpression)->rtti_isAddr() ? (yyvsp[0].pExpression) : (((ExprTag *) (yyvsp[0].pExpression))->value));
         expr->funcType = (yyvsp[-3].pTypeDecl);
         (yyval.pExpression) = (yyvsp[0].pExpression);
@@ -9732,15 +9732,15 @@ yyreduce:
     break;
 
   case 505: /* $@26: %empty  */
-                    { yyextra->das_arrow_depth ++; }
+                    { if ( !das_type_arrow_enter(scanner,tokAt(scanner,(yyloc))) ) YYABORT; }
     break;
 
   case 506: /* $@27: %empty  */
-                                                                                                                              { yyextra->das_arrow_depth --; }
+                                                                                                                                                                  { yyextra->das_arrow_depth --; }
     break;
 
   case 507: /* func_addr_expr: '@' '@' '<' $@26 optional_function_argument_list optional_function_type '>' $@27 func_addr_name  */
-                                                                                                                                                                                     {
+                                                                                                                                                                                                                         {
         auto expr = (ExprAddr *) ((yyvsp[0].pExpression)->rtti_isAddr() ? (yyvsp[0].pExpression) : (((ExprTag *) (yyvsp[0].pExpression))->value));
         expr->funcType = new TypeDecl(Type::tFunction, expr->at);
         expr->funcType->firstType = (yyvsp[-3].pTypeDecl);
@@ -10154,15 +10154,15 @@ yyreduce:
     break;
 
   case 582: /* $@30: %empty  */
-                                               { yyextra->das_arrow_depth ++; }
+                                               { if ( !das_type_arrow_enter(scanner,tokAt(scanner,(yyloc))) ) YYABORT; }
     break;
 
   case 583: /* $@31: %empty  */
-                                                                                                                      { yyextra->das_arrow_depth --; }
+                                                                                                                                                          { yyextra->das_arrow_depth --; }
     break;
 
   case 584: /* expr: expr "is" "type" '<' $@30 type_declaration_no_options '>' $@31  */
-                                                                                                                                                       {
+                                                                                                                                                                                           {
         (yyval.pExpression) = new ExprIs(tokAt(scanner,(yylsp[-6])),(yyvsp[-7].pExpression),(yyvsp[-2].pTypeDecl));
     }
     break;
@@ -10190,15 +10190,15 @@ yyreduce:
     break;
 
   case 588: /* $@32: %empty  */
-                                               { yyextra->das_arrow_depth ++; }
+                                               { if ( !das_type_arrow_enter(scanner,tokAt(scanner,(yyloc))) ) YYABORT; }
     break;
 
   case 589: /* $@33: %empty  */
-                                                                                                           { yyextra->das_arrow_depth --; }
+                                                                                                                                               { yyextra->das_arrow_depth --; }
     break;
 
   case 590: /* expr: expr "as" "type" '<' $@32 type_declaration '>' $@33  */
-                                                                                                                                            {
+                                                                                                                                                                                {
         auto vname = (yyvsp[-2].pTypeDecl)->describe();
         (yyval.pExpression) = new ExprAsVariant(tokAt(scanner,(yylsp[-6])),(yyvsp[-7].pExpression),vname);
         delete (yyvsp[-2].pTypeDecl);
@@ -10219,15 +10219,15 @@ yyreduce:
     break;
 
   case 593: /* $@34: %empty  */
-                                                   { yyextra->das_arrow_depth ++; }
+                                                   { if ( !das_type_arrow_enter(scanner,tokAt(scanner,(yyloc))) ) YYABORT; }
     break;
 
   case 594: /* $@35: %empty  */
-                                                                                                               { yyextra->das_arrow_depth --; }
+                                                                                                                                                   { yyextra->das_arrow_depth --; }
     break;
 
   case 595: /* expr: expr '?' "as" "type" '<' $@34 type_declaration '>' $@35  */
-                                                                                                                                                {
+                                                                                                                                                                                    {
         auto vname = (yyvsp[-2].pTypeDecl)->describe();
         (yyval.pExpression) = new ExprSafeAsVariant(tokAt(scanner,(yylsp[-6])),(yyvsp[-8].pExpression),vname);
         delete (yyvsp[-2].pTypeDecl);
@@ -11658,15 +11658,15 @@ yyreduce:
     break;
 
   case 831: /* $@50: %empty  */
-                                                                     { yyextra->das_arrow_depth ++; }
+                                                                     { if ( !das_type_arrow_enter(scanner,tokAt(scanner,(yyloc))) ) YYABORT; }
     break;
 
   case 832: /* $@51: %empty  */
-                                                                                                                            { yyextra->das_arrow_depth --; }
+                                                                                                                                                                { yyextra->das_arrow_depth --; }
     break;
 
   case 833: /* bitfield_type_declaration: "bitfield" bitfield_basic_type_declaration '<' $@50 bitfield_bits '>' $@51  */
-                                                                                                                                                             {
+                                                                                                                                                                                                 {
             (yyval.pTypeDecl) = new TypeDecl((yyvsp[-5].type), tokAt(scanner,(yyloc)));
             (yyval.pTypeDecl)->argNames = *(yyvsp[-2].pNameList);
             auto maxBits = (yyval.pTypeDecl)->maxBitfieldBits();
@@ -11742,15 +11742,15 @@ yyreduce:
     break;
 
   case 846: /* $@52: %empty  */
-                     { yyextra->das_arrow_depth ++; }
+                     { if ( !das_type_arrow_enter(scanner,tokAt(scanner,(yyloc))) ) YYABORT; }
     break;
 
   case 847: /* $@53: %empty  */
-                                                                                     { yyextra->das_arrow_depth --; }
+                                                                                                                         { yyextra->das_arrow_depth --; }
     break;
 
   case 848: /* type_declaration_no_options: "type" '<' $@52 type_declaration '>' $@53  */
-                                                                                                                      {
+                                                                                                                                                          {
         (yyvsp[-2].pTypeDecl)->autoToAlias = true;
         (yyval.pTypeDecl) = (yyvsp[-2].pTypeDecl);
     }
@@ -11775,15 +11775,15 @@ yyreduce:
     break;
 
   case 851: /* $@54: %empty  */
-                                        { yyextra->das_arrow_depth ++; }
+                                        { if ( !das_type_arrow_enter(scanner,tokAt(scanner,(yyloc))) ) YYABORT; }
     break;
 
   case 852: /* $@55: %empty  */
-                                                                                                                     { yyextra->das_arrow_depth --; }
+                                                                                                                                                         { yyextra->das_arrow_depth --; }
     break;
 
   case 853: /* type_declaration_no_options: '$' name_in_namespace '<' $@54 type_declaration_no_options_list '>' $@55 optional_expr_list_in_braces  */
-                                                                                                                                                                                              {
+                                                                                                                                                                                                                                  {
         (yyval.pTypeDecl) = new TypeDecl(Type::typeMacro, tokAt(scanner,(yyloc)));
         (yyval.pTypeDecl)->at = tokRangeAt(scanner,(yylsp[-6]), (yylsp[0]));
         (yyval.pTypeDecl)->typeMacroExpr = typesAndSequenceToList((yyvsp[-3].pTypeDeclList),(yyvsp[0].pExpression));
@@ -11876,6 +11876,7 @@ yyreduce:
 
   case 865: /* type_declaration_no_options: type_declaration_no_options '?'  */
                                                   {
+        if ( !das_check_pointer_nesting(scanner,(yyvsp[-1].pTypeDecl),1,tokAt(scanner,(yyloc))) ) YYABORT;
         (yyval.pTypeDecl) = new TypeDecl(Type::tPointer, tokAt(scanner,(yyloc)));
         (yyval.pTypeDecl)->at = tokAt(scanner,(yylsp[-1]));
         (yyval.pTypeDecl)->firstType = (yyvsp[-1].pTypeDecl);
@@ -11883,15 +11884,15 @@ yyreduce:
     break;
 
   case 866: /* $@56: %empty  */
-                               { yyextra->das_arrow_depth ++; }
+                               { if ( !das_type_arrow_enter(scanner,tokAt(scanner,(yyloc))) ) YYABORT; }
     break;
 
   case 867: /* $@57: %empty  */
-                                                                                               { yyextra->das_arrow_depth --; }
+                                                                                                                                   { yyextra->das_arrow_depth --; }
     break;
 
   case 868: /* type_declaration_no_options: "smart_ptr" '<' $@56 type_declaration '>' $@57  */
-                                                                                                                                {
+                                                                                                                                                                    {
         (yyval.pTypeDecl) = new TypeDecl(Type::tPointer, tokAt(scanner,(yyloc)));
         (yyval.pTypeDecl)->at = tokAt(scanner,(yylsp[-5]));
         (yyval.pTypeDecl)->smartPtr = true;
@@ -11901,6 +11902,7 @@ yyreduce:
 
   case 869: /* type_declaration_no_options: type_declaration_no_options "??"  */
                                                  {
+        if ( !das_check_pointer_nesting(scanner,(yyvsp[-1].pTypeDecl),2,tokAt(scanner,(yyloc))) ) YYABORT;
         (yyval.pTypeDecl) = new TypeDecl(Type::tPointer, tokAt(scanner,(yyloc)));
         (yyval.pTypeDecl)->at = tokAt(scanner,(yylsp[-1]));
         (yyval.pTypeDecl)->firstType = new TypeDecl(Type::tPointer, tokAt(scanner,(yyloc)));
@@ -11910,15 +11912,15 @@ yyreduce:
     break;
 
   case 870: /* $@58: %empty  */
-                           { yyextra->das_arrow_depth ++; }
+                           { if ( !das_type_arrow_enter(scanner,tokAt(scanner,(yyloc))) ) YYABORT; }
     break;
 
   case 871: /* $@59: %empty  */
-                                                                                           { yyextra->das_arrow_depth --; }
+                                                                                                                               { yyextra->das_arrow_depth --; }
     break;
 
   case 872: /* type_declaration_no_options: "array" '<' $@58 type_declaration '>' $@59  */
-                                                                                                                            {
+                                                                                                                                                                {
         (yyval.pTypeDecl) = new TypeDecl(Type::tArray, tokAt(scanner,(yyloc)));
         (yyval.pTypeDecl)->at = tokAt(scanner,(yylsp[-5]));
         (yyval.pTypeDecl)->firstType = (yyvsp[-2].pTypeDecl);
@@ -11926,15 +11928,15 @@ yyreduce:
     break;
 
   case 873: /* $@60: %empty  */
-                           { yyextra->das_arrow_depth ++; }
+                           { if ( !das_type_arrow_enter(scanner,tokAt(scanner,(yyloc))) ) YYABORT; }
     break;
 
   case 874: /* $@61: %empty  */
-                                                                                     { yyextra->das_arrow_depth --; }
+                                                                                                                         { yyextra->das_arrow_depth --; }
     break;
 
   case 875: /* type_declaration_no_options: "table" '<' $@60 table_type_pair '>' $@61  */
-                                                                                                                      {
+                                                                                                                                                          {
         (yyval.pTypeDecl) = new TypeDecl(Type::tTable, tokAt(scanner,(yyloc)));
         (yyval.pTypeDecl)->at = tokAt(scanner,(yylsp[-5]));
         (yyval.pTypeDecl)->firstType = (yyvsp[-2].aTypePair).firstType;
@@ -11943,15 +11945,15 @@ yyreduce:
     break;
 
   case 876: /* $@62: %empty  */
-                               { yyextra->das_arrow_depth ++; }
+                               { if ( !das_type_arrow_enter(scanner,tokAt(scanner,(yyloc))) ) YYABORT; }
     break;
 
   case 877: /* $@63: %empty  */
-                                                                                                 { yyextra->das_arrow_depth --; }
+                                                                                                                                     { yyextra->das_arrow_depth --; }
     break;
 
   case 878: /* type_declaration_no_options: "iterator" '<' $@62 type_declaration '>' $@63  */
-                                                                                                                                  {
+                                                                                                                                                                      {
         (yyval.pTypeDecl) = new TypeDecl(Type::tIterator, tokAt(scanner,(yyloc)));
         (yyval.pTypeDecl)->at = tokAt(scanner,(yylsp[-5]));
         (yyval.pTypeDecl)->firstType = (yyvsp[-2].pTypeDecl);
@@ -11968,15 +11970,15 @@ yyreduce:
     break;
 
   case 880: /* $@64: %empty  */
-                             { yyextra->das_arrow_depth ++; }
+                             { if ( !das_type_arrow_enter(scanner,tokAt(scanner,(yyloc))) ) YYABORT; }
     break;
 
   case 881: /* $@65: %empty  */
-                                                                                              { yyextra->das_arrow_depth --; }
+                                                                                                                                  { yyextra->das_arrow_depth --; }
     break;
 
   case 882: /* type_declaration_no_options: "block" '<' $@64 type_declaration '>' $@65  */
-                                                                                                                               {
+                                                                                                                                                                   {
         (yyval.pTypeDecl) = new TypeDecl(Type::tBlock, tokAt(scanner,(yyloc)));
         (yyval.pTypeDecl)->at = tokAt(scanner,(yylsp[-5]));
         (yyval.pTypeDecl)->firstType = (yyvsp[-2].pTypeDecl);
@@ -11984,15 +11986,15 @@ yyreduce:
     break;
 
   case 883: /* $@66: %empty  */
-                             { yyextra->das_arrow_depth ++; }
+                             { if ( !das_type_arrow_enter(scanner,tokAt(scanner,(yyloc))) ) YYABORT; }
     break;
 
   case 884: /* $@67: %empty  */
-                                                                                                                                       { yyextra->das_arrow_depth --; }
+                                                                                                                                                                           { yyextra->das_arrow_depth --; }
     break;
 
   case 885: /* type_declaration_no_options: "block" '<' $@66 optional_function_argument_list optional_function_type '>' $@67  */
-                                                                                                                                                                        {
+                                                                                                                                                                                                            {
         (yyval.pTypeDecl) = new TypeDecl(Type::tBlock, tokAt(scanner,(yyloc)));
         (yyval.pTypeDecl)->at = tokAt(scanner,(yylsp[-6]));
         (yyval.pTypeDecl)->firstType = (yyvsp[-2].pTypeDecl);
@@ -12013,15 +12015,15 @@ yyreduce:
     break;
 
   case 887: /* $@68: %empty  */
-                               { yyextra->das_arrow_depth ++; }
+                               { if ( !das_type_arrow_enter(scanner,tokAt(scanner,(yyloc))) ) YYABORT; }
     break;
 
   case 888: /* $@69: %empty  */
-                                                                                                { yyextra->das_arrow_depth --; }
+                                                                                                                                    { yyextra->das_arrow_depth --; }
     break;
 
   case 889: /* type_declaration_no_options: "function" '<' $@68 type_declaration '>' $@69  */
-                                                                                                                                 {
+                                                                                                                                                                     {
         (yyval.pTypeDecl) = new TypeDecl(Type::tFunction, tokAt(scanner,(yyloc)));
         (yyval.pTypeDecl)->at = tokAt(scanner,(yylsp[-5]));
         (yyval.pTypeDecl)->firstType = (yyvsp[-2].pTypeDecl);
@@ -12029,15 +12031,15 @@ yyreduce:
     break;
 
   case 890: /* $@70: %empty  */
-                               { yyextra->das_arrow_depth ++; }
+                               { if ( !das_type_arrow_enter(scanner,tokAt(scanner,(yyloc))) ) YYABORT; }
     break;
 
   case 891: /* $@71: %empty  */
-                                                                                                                                         { yyextra->das_arrow_depth --; }
+                                                                                                                                                                             { yyextra->das_arrow_depth --; }
     break;
 
   case 892: /* type_declaration_no_options: "function" '<' $@70 optional_function_argument_list optional_function_type '>' $@71  */
-                                                                                                                                                                          {
+                                                                                                                                                                                                              {
         (yyval.pTypeDecl) = new TypeDecl(Type::tFunction, tokAt(scanner,(yyloc)));
         (yyval.pTypeDecl)->at = tokAt(scanner,(yylsp[-6]));
         (yyval.pTypeDecl)->firstType = (yyvsp[-2].pTypeDecl);
@@ -12058,15 +12060,15 @@ yyreduce:
     break;
 
   case 894: /* $@72: %empty  */
-                             { yyextra->das_arrow_depth ++; }
+                             { if ( !das_type_arrow_enter(scanner,tokAt(scanner,(yyloc))) ) YYABORT; }
     break;
 
   case 895: /* $@73: %empty  */
-                                                                                              { yyextra->das_arrow_depth --; }
+                                                                                                                                  { yyextra->das_arrow_depth --; }
     break;
 
   case 896: /* type_declaration_no_options: "lambda" '<' $@72 type_declaration '>' $@73  */
-                                                                                                                               {
+                                                                                                                                                                   {
         (yyval.pTypeDecl) = new TypeDecl(Type::tLambda, tokAt(scanner,(yyloc)));
         (yyval.pTypeDecl)->at = tokAt(scanner,(yylsp[-5]));
         (yyval.pTypeDecl)->firstType = (yyvsp[-2].pTypeDecl);
@@ -12074,15 +12076,15 @@ yyreduce:
     break;
 
   case 897: /* $@74: %empty  */
-                             { yyextra->das_arrow_depth ++; }
+                             { if ( !das_type_arrow_enter(scanner,tokAt(scanner,(yyloc))) ) YYABORT; }
     break;
 
   case 898: /* $@75: %empty  */
-                                                                                                                                       { yyextra->das_arrow_depth --; }
+                                                                                                                                                                           { yyextra->das_arrow_depth --; }
     break;
 
   case 899: /* type_declaration_no_options: "lambda" '<' $@74 optional_function_argument_list optional_function_type '>' $@75  */
-                                                                                                                                                                        {
+                                                                                                                                                                                                            {
         (yyval.pTypeDecl) = new TypeDecl(Type::tLambda, tokAt(scanner,(yyloc)));
         (yyval.pTypeDecl)->at = tokAt(scanner,(yylsp[-6]));
         (yyval.pTypeDecl)->firstType = (yyvsp[-2].pTypeDecl);
@@ -12094,15 +12096,15 @@ yyreduce:
     break;
 
   case 900: /* $@76: %empty  */
-                            { yyextra->das_arrow_depth ++; }
+                            { if ( !das_type_arrow_enter(scanner,tokAt(scanner,(yyloc))) ) YYABORT; }
     break;
 
   case 901: /* $@77: %empty  */
-                                                                                       { yyextra->das_arrow_depth --; }
+                                                                                                                           { yyextra->das_arrow_depth --; }
     break;
 
   case 902: /* type_declaration_no_options: "tuple" '<' $@76 tuple_type_list '>' $@77  */
-                                                                                                                        {
+                                                                                                                                                            {
         (yyval.pTypeDecl) = new TypeDecl(Type::tTuple, tokAt(scanner,(yyloc)));
         (yyval.pTypeDecl)->at = tokAt(scanner,(yylsp[-5]));
         varDeclToTypeDecl(scanner, (yyval.pTypeDecl), (yyvsp[-2].pVarDeclList), true);
@@ -12111,15 +12113,15 @@ yyreduce:
     break;
 
   case 903: /* $@78: %empty  */
-                              { yyextra->das_arrow_depth ++; }
+                              { if ( !das_type_arrow_enter(scanner,tokAt(scanner,(yyloc))) ) YYABORT; }
     break;
 
   case 904: /* $@79: %empty  */
-                                                                                           { yyextra->das_arrow_depth --; }
+                                                                                                                               { yyextra->das_arrow_depth --; }
     break;
 
   case 905: /* type_declaration_no_options: "variant" '<' $@78 variant_type_list '>' $@79  */
-                                                                                                                            {
+                                                                                                                                                                {
         (yyval.pTypeDecl) = new TypeDecl(Type::tVariant, tokAt(scanner,(yyloc)));
         (yyval.pTypeDecl)->at = tokAt(scanner,(yylsp[-5]));
         varDeclToTypeDecl(scanner, (yyval.pTypeDecl), (yyvsp[-2].pVarDeclList), true);
@@ -12579,15 +12581,15 @@ yyreduce:
     break;
 
   case 970: /* $@92: %empty  */
-                             { yyextra->das_force_oxford_comma=true; yyextra->das_arrow_depth ++; }
+                             { yyextra->das_force_oxford_comma=true; if ( !das_type_arrow_enter(scanner,tokAt(scanner,(yyloc))) ) YYABORT; }
     break;
 
   case 971: /* $@93: %empty  */
-                                                                                                                                         { yyextra->das_arrow_depth --; }
+                                                                                                                                                                             { yyextra->das_arrow_depth --; }
     break;
 
   case 972: /* make_struct_decl: "struct" '<' $@92 type_declaration_no_options '>' $@93 '(' use_initializer optional_make_struct_dim_decl ')'  */
-                                                                                                                                                                                                                                            {
+                                                                                                                                                                                                                                                                                {
         (yyvsp[-1].pExpression)->at = tokAt(scanner,(yylsp[-9]));
         ((ExprMakeStruct *)(yyvsp[-1].pExpression))->makeType = (yyvsp[-6].pTypeDecl);
         ((ExprMakeStruct *)(yyvsp[-1].pExpression))->useInitializer = (yyvsp[-2].b);
@@ -12598,15 +12600,15 @@ yyreduce:
     break;
 
   case 973: /* $@94: %empty  */
-                            { yyextra->das_force_oxford_comma=true; yyextra->das_arrow_depth ++; }
+                            { yyextra->das_force_oxford_comma=true; if ( !das_type_arrow_enter(scanner,tokAt(scanner,(yyloc))) ) YYABORT; }
     break;
 
   case 974: /* $@95: %empty  */
-                                                                                                                                        { yyextra->das_arrow_depth --; }
+                                                                                                                                                                            { yyextra->das_arrow_depth --; }
     break;
 
   case 975: /* make_struct_decl: "class" '<' $@94 type_declaration_no_options '>' $@95 '(' use_initializer optional_make_struct_dim_decl ')'  */
-                                                                                                                                                                                                                                           {
+                                                                                                                                                                                                                                                                               {
         (yyvsp[-1].pExpression)->at = tokAt(scanner,(yylsp[-9]));
         ((ExprMakeStruct *)(yyvsp[-1].pExpression))->makeType = (yyvsp[-6].pTypeDecl);
         ((ExprMakeStruct *)(yyvsp[-1].pExpression))->useInitializer = (yyvsp[-2].b);
@@ -12616,15 +12618,15 @@ yyreduce:
     break;
 
   case 976: /* $@96: %empty  */
-                               { yyextra->das_force_oxford_comma=true; yyextra->das_arrow_depth ++; }
+                               { yyextra->das_force_oxford_comma=true; if ( !das_type_arrow_enter(scanner,tokAt(scanner,(yyloc))) ) YYABORT; }
     break;
 
   case 977: /* $@97: %empty  */
-                                                                                                                                  { yyextra->das_arrow_depth --; }
+                                                                                                                                                                      { yyextra->das_arrow_depth --; }
     break;
 
   case 978: /* make_struct_decl: "variant" '<' $@96 variant_type_list '>' $@97 '(' use_initializer make_variant_dim ')'  */
-                                                                                                                                                                                                                        {
+                                                                                                                                                                                                                                                            {
         auto mkt = new TypeDecl(Type::tVariant, tokAt(scanner,(yylsp[-9])));
         varDeclToTypeDecl(scanner, mkt, (yyvsp[-6].pVarDeclList), true);
         deleteVariableDeclarationList((yyvsp[-6].pVarDeclList));
@@ -12637,15 +12639,15 @@ yyreduce:
     break;
 
   case 979: /* $@98: %empty  */
-                              { yyextra->das_arrow_depth ++; }
+                              { if ( !das_type_arrow_enter(scanner,tokAt(scanner,(yyloc))) ) YYABORT; }
     break;
 
   case 980: /* $@99: %empty  */
-                                                                                                    { yyextra->das_arrow_depth --; }
+                                                                                                                                        { yyextra->das_arrow_depth --; }
     break;
 
   case 981: /* make_struct_decl: "default" '<' $@98 type_declaration_no_options '>' $@99 use_initializer  */
-                                                                                                                                                           {
+                                                                                                                                                                                               {
         auto msd = new ExprMakeStruct();
         msd->at = tokAt(scanner,(yylsp[-6]));
         msd->makeType = (yyvsp[-3].pTypeDecl);
@@ -12709,15 +12711,15 @@ yyreduce:
     break;
 
   case 988: /* $@100: %empty  */
-                             { yyextra->das_force_oxford_comma=true; yyextra->das_arrow_depth ++; }
+                             { yyextra->das_force_oxford_comma=true; if ( !das_type_arrow_enter(scanner,tokAt(scanner,(yyloc))) ) YYABORT; }
     break;
 
   case 989: /* $@101: %empty  */
-                                                                                                                              { yyextra->das_arrow_depth --; }
+                                                                                                                                                                  { yyextra->das_arrow_depth --; }
     break;
 
   case 990: /* make_tuple_call: "tuple" '<' $@100 tuple_type_list '>' $@101 '(' use_initializer optional_make_struct_dim_decl ')'  */
-                                                                                                                                                                                                                                 {
+                                                                                                                                                                                                                                                                     {
         auto mkt = new TypeDecl(Type::tTuple, tokAt(scanner,(yylsp[-9])));
         varDeclToTypeDecl(scanner, mkt, (yyvsp[-6].pVarDeclList), true);
         deleteVariableDeclarationList((yyvsp[-6].pVarDeclList));
@@ -12785,15 +12787,15 @@ yyreduce:
     break;
 
   case 996: /* $@102: %empty  */
-                                       { yyextra->das_force_oxford_comma=true; yyextra->das_arrow_depth ++; }
+                                       { yyextra->das_force_oxford_comma=true; if ( !das_type_arrow_enter(scanner,tokAt(scanner,(yyloc))) ) YYABORT; }
     break;
 
   case 997: /* $@103: %empty  */
-                                                                                                                                                   { yyextra->das_arrow_depth --; }
+                                                                                                                                                                                       { yyextra->das_arrow_depth --; }
     break;
 
   case 998: /* make_dim_decl: "array" "struct" '<' $@102 type_declaration_no_options '>' $@103 '(' use_initializer optional_make_struct_dim_decl ')'  */
-                                                                                                                                                                                                                                                      {
+                                                                                                                                                                                                                                                                                          {
         (yyvsp[-1].pExpression)->at = tokAt(scanner,(yylsp[-10]));
         ((ExprMakeStruct *)(yyvsp[-1].pExpression))->makeType = (yyvsp[-6].pTypeDecl);
         ((ExprMakeStruct *)(yyvsp[-1].pExpression))->useInitializer = (yyvsp[-2].b);
@@ -12806,15 +12808,15 @@ yyreduce:
     break;
 
   case 999: /* $@104: %empty  */
-                                       { yyextra->das_arrow_depth ++; }
+                                       { if ( !das_type_arrow_enter(scanner,tokAt(scanner,(yyloc))) ) YYABORT; }
     break;
 
   case 1000: /* $@105: %empty  */
-                                                                                                  { yyextra->das_arrow_depth --; }
+                                                                                                                                      { yyextra->das_arrow_depth --; }
     break;
 
   case 1001: /* make_dim_decl: "array" "tuple" '<' $@104 tuple_type_list '>' $@105 '(' use_initializer optional_make_struct_dim_decl ')'  */
-                                                                                                                                                                                                     {
+                                                                                                                                                                                                                                         {
         auto mkt = new TypeDecl(Type::tTuple, tokAt(scanner,(yylsp[-10])));
         varDeclToTypeDecl(scanner, mkt, (yyvsp[-6].pVarDeclList), true);
         deleteVariableDeclarationList((yyvsp[-6].pVarDeclList));
@@ -12830,15 +12832,15 @@ yyreduce:
     break;
 
   case 1002: /* $@106: %empty  */
-                                         { yyextra->das_arrow_depth ++; }
+                                         { if ( !das_type_arrow_enter(scanner,tokAt(scanner,(yyloc))) ) YYABORT; }
     break;
 
   case 1003: /* $@107: %empty  */
-                                                                                                      { yyextra->das_arrow_depth --; }
+                                                                                                                                          { yyextra->das_arrow_depth --; }
     break;
 
   case 1004: /* make_dim_decl: "array" "variant" '<' $@106 variant_type_list '>' $@107 '(' make_variant_dim ')'  */
-                                                                                                                                                                      {
+                                                                                                                                                                                                          {
         auto mkt = new TypeDecl(Type::tVariant, tokAt(scanner,(yylsp[-9])));
         varDeclToTypeDecl(scanner, mkt, (yyvsp[-5].pVarDeclList), true);
         deleteVariableDeclarationList((yyvsp[-5].pVarDeclList));
@@ -12866,15 +12868,15 @@ yyreduce:
     break;
 
   case 1006: /* $@108: %empty  */
-                           { yyextra->das_arrow_depth ++; }
+                           { if ( !das_type_arrow_enter(scanner,tokAt(scanner,(yyloc))) ) YYABORT; }
     break;
 
   case 1007: /* $@109: %empty  */
-                                                                                                 { yyextra->das_arrow_depth --; }
+                                                                                                                                     { yyextra->das_arrow_depth --; }
     break;
 
   case 1008: /* make_dim_decl: "array" '<' $@108 type_declaration_no_options '>' $@109 '(' optional_expr_list ')'  */
-                                                                                                                                                                        {
+                                                                                                                                                                                                            {
         if ( (yyvsp[-1].pExpression) ) {
             auto mka = new ExprMakeArray(tokAt(scanner,(yylsp[-8])));
             mka->values = sequenceToList((yyvsp[-1].pExpression));
@@ -12907,15 +12909,15 @@ yyreduce:
     break;
 
   case 1010: /* $@110: %empty  */
-                                 { yyextra->das_arrow_depth ++; }
+                                 { if ( !das_type_arrow_enter(scanner,tokAt(scanner,(yyloc))) ) YYABORT; }
     break;
 
   case 1011: /* $@111: %empty  */
-                                                                                                       { yyextra->das_arrow_depth --; }
+                                                                                                                                           { yyextra->das_arrow_depth --; }
     break;
 
   case 1012: /* make_dim_decl: "fixed_array" '<' $@110 type_declaration_no_options '>' $@111 '(' expr_list optional_comma ')'  */
-                                                                                                                                                                                    {
+                                                                                                                                                                                                                        {
         auto mka = new ExprMakeArray(tokAt(scanner,(yylsp[-9])));
         mka->values = sequenceToList((yyvsp[-2].pExpression));
         mka->makeType = (yyvsp[-6].pTypeDecl);

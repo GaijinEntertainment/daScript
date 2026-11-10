@@ -54,6 +54,7 @@ namespace das
 // exceeds_*
 
     ,   exceeds_bitfield                                            =   20300    // 4 site(s)
+    ,   exceeds_type_nesting                                        =   20301    // 1 site(s)
 
 // ambiguous_*
 
@@ -358,6 +359,7 @@ namespace das
     ,   exceeds_type_alias                                          =   30513    // 1 site(s)
     ,   exceeds_typeinfo_sizeof                                     =   30514    // 1 site(s)
     ,   exceeds_constant_range                                      =   30515    // 1 site(s)
+    ,   exceeds_instance_type                                       =   30516    // 1 site(s)
 
 // ambiguous_*
 

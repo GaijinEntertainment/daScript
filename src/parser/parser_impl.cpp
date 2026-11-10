@@ -38,6 +38,37 @@ namespace das {
         yyextra->g_Program->error(error,"","",at,cerr);
     }
 
+    static void das_type_nesting_error ( yyscan_t scanner, const LineInfo & at ) {
+        yyextra->g_Program->error("type is nested too deeply, the limit is " + to_string(DAS_MAX_TYPE_NESTING) + " levels","","",
+            at,CompilationError::exceeds_type_nesting);
+    }
+
+    bool das_type_arrow_enter ( yyscan_t scanner, const LineInfo & at ) {
+        if ( yyextra->das_arrow_depth >= DAS_MAX_TYPE_NESTING ) {
+            das_type_nesting_error(scanner,at);
+            return false;
+        }
+        yyextra->das_arrow_depth ++;
+        return true;
+    }
+
+    static bool das_type_nests_within ( const TypeDecl * decl, int levels ) {
+        if ( !decl ) return true;
+        if ( levels<=0 ) return false;
+        if ( !das_type_nests_within(decl->firstType,levels-1) ) return false;
+        if ( !das_type_nests_within(decl->secondType,levels-1) ) return false;
+        for ( auto & arg : decl->argTypes ) {
+            if ( !das_type_nests_within(arg,levels-1) ) return false;
+        }
+        return true;
+    }
+
+    bool das_check_pointer_nesting ( yyscan_t scanner, const TypeDecl * inner, int pointerLevels, const LineInfo & at ) {
+        if ( das_type_nests_within(inner,DAS_MAX_TYPE_NESTING + 1 - pointerLevels) ) return true;
+        das_type_nesting_error(scanner,at);
+        return false;
+    }
+
     void das_checkName ( yyscan_t scanner, const string & name, const LineInfo &at ) {
         if ( name.length()>=2 && name[0]=='_' && name[1]=='_' ) {
             yyextra->g_Program->error("names starting with __ are reserved, " + name,"","",at,CompilationError::invalid_name);

@@ -6560,6 +6560,14 @@ namespace das {
         return evalAndFoldStringBuilder(expr);
     }
 
+    // src/ast/ARCHITECTURE.md#instance-type-size
+    static void keepOnlyInstanceTypeErrors(Program * program) {
+        auto isInstanceTypeError = [](const Error &e) { return e.cerr == CompilationError::exceeds_instance_type; };
+        auto & errors = program->errors;
+        if (!any_of(errors.begin(), errors.end(), isInstanceTypeError)) return;
+        errors.erase(remove_if(errors.begin(), errors.end(), [&](const Error &e) { return !isInstanceTypeError(e); }), errors.end());
+    }
+
     void inferTypes(Program * program, TextWriter &logs, ModuleGroup &libGroup) {
         program->newLambdaIndex = 1;
         // inferPassesUsed is NOT reset here — parseDaScript resets it once per module
@@ -6641,6 +6649,7 @@ namespace das {
                   "", "",
                   LineInfo(), CompilationError::exceeds_infer_passes);
         }
+        keepOnlyInstanceTypeErrors(program);
     }
 
     void inferTypesDirty(Program * program, TextWriter &logs, bool verbose) {

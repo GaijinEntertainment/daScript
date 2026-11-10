@@ -24,6 +24,7 @@ Invalid type aka.
 Invalid type alias.
 Missing module name.
 Bitfield size exceeds limit.
+Type is nested too deeply.
 Ambiguous function argument type.
 Enumeration already declared.
 Enumerator already declared.
@@ -290,6 +291,7 @@ Type size exceeds limit.
 Type alias size exceeds limit.
 Typeinfo sizeof size exceeds limit.
 Constant value exceeds the allowed range.
+Argument type of a generic instance is too large.
 Ambiguous annotation.
 Ambiguous bitfield.
 Ambiguous call macro.
