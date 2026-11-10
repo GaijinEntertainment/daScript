@@ -54,6 +54,7 @@ namespace das
 // exceeds_*
 
     ,   exceeds_bitfield                                            =   20300    // 4 site(s)
+    ,   exceeds_type_nesting                                        =   20301    // 1 site(s)
 
 // ambiguous_*
 
