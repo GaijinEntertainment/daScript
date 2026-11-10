@@ -2,6 +2,7 @@
 
 #include "daScript/ast/ast.h"
 #include "ast_generate.h"
+#include "ast_bound_check_elision.h"
 #include "daScript/ast/ast_expressions.h"
 #include "daScript/ast/ast_visitor.h"
 #include "daScript/simulate/aot_builtin_ast.h"
@@ -45,6 +46,48 @@ namespace das {
         return false;
     }
 
+    bool exprReturns ( ExpressionPtr expr );
+
+    static bool bodyLeavesPass ( Expression * expr, bool orContinues ) {
+        if ( expr->rtti_isBreak() || (orContinues && expr->rtti_isContinue()) ) {
+            return true;
+        } else if ( expr->rtti_isBlock() ) {
+            auto block = static_cast<ExprBlock*>(expr);
+            for ( auto & be : block->list ) {
+                if ( bodyLeavesPass(be,orContinues) ) return true;
+                if ( be->rtti_isContinue() || be->rtti_isGoto() || exprReturns(be) ) break;
+            }
+        } else if ( expr->rtti_isIfThenElse() ) {
+            auto ite = static_cast<ExprIfThenElse*>(expr);
+            return bodyLeavesPass(ite->if_true,orContinues) || (ite->if_false && bodyLeavesPass(ite->if_false,orContinues));
+        } else if ( expr->rtti_isWith() ) {
+            return bodyLeavesPass(static_cast<ExprWith*>(expr)->body,orContinues);
+        } else if ( expr->rtti_isUnsafe() ) {
+            return bodyLeavesPass(static_cast<ExprUnsafe*>(expr)->body,orContinues);
+        } else if ( strcmp(expr->__rtti,"ExprTryCatch")==0 ) {
+            auto tc = static_cast<ExprTryCatch*>(expr);
+            return bodyLeavesPass(tc->try_block,orContinues) || bodyLeavesPass(tc->catch_block,orContinues);
+        }
+        return false;
+    }
+
+    static bool bodyBreaks ( Expression * body ) { return bodyLeavesPass(body, false); }
+    static bool bodyBreaksOrContinues ( Expression * body ) { return bodyLeavesPass(body, true); }
+
+    static bool loopNeverFallsThrough ( ExprWhile * wh ) {
+        if ( !wh->cond->rtti_isConstant() || !wh->cond->type || wh->cond->type->baseType!=Type::tBool ) return false;
+        if ( !static_cast<ExprConstBool*>(wh->cond)->getValue() ) return false;
+        return !bodyBreaks(wh->body);
+    }
+
+    static bool loopNeverFallsThrough ( ExprFor * fr ) {
+        for ( auto & src : fr->sources ) {
+            auto r = constRange(src);
+            if ( !r || r->first>=r->second ) return false;
+        }
+        return exprReturns(fr->body) && !bodyBreaksOrContinues(fr->body);
+    }
+
     bool exprReturns ( ExpressionPtr expr ) {
         if ( expr->rtti_isReturn() ) {
             return true;
@@ -72,53 +115,12 @@ namespace das {
             auto wth = static_cast<ExprWith*>(expr);
             return exprReturns(wth->body);
         } else if ( expr->rtti_isWhile() ) {
-            auto wh = static_cast<ExprWhile*>(expr);
-            return exprReturns(wh->body);
+            return loopNeverFallsThrough(static_cast<ExprWhile*>(expr));
         } else if ( expr->rtti_isFor() ) {
-            auto fr = static_cast<ExprFor*>(expr);
-            return exprReturns(fr->body);
+            return loopNeverFallsThrough(static_cast<ExprFor*>(expr));
         } else if ( expr->rtti_isUnsafe() ) {
             auto us = static_cast<ExprUnsafe*>(expr);
             return exprReturns(us->body);
-        }
-        return false;
-    }
-
-   bool exprReturnsOrBreaks ( ExpressionPtr expr ) {
-        if ( expr->rtti_isReturn() ) {
-            return true;
-        } else if ( expr->rtti_isBlock() ) {
-            auto block = static_cast<ExprBlock*>(expr);
-            if ( hasLabels(block) ) {
-                // NOTE: block with labels assumed to always return for now. real world analysis is hard
-                return true;
-            } else {
-                for ( auto & be : block->list ) {
-                    if ( be->rtti_isBreak() || be->rtti_isContinue() || be->rtti_isGoto() ) {
-                        return true;
-                    }
-                    if ( exprReturnsOrBreaks(be) ) {
-                        return true;
-                    }
-                }
-            }
-        } else if ( expr->rtti_isIfThenElse() ) {
-            auto ite = static_cast<ExprIfThenElse*>(expr);
-            if ( ite->if_false ) {
-                return exprReturnsOrBreaks(ite->if_true) && exprReturnsOrBreaks(ite->if_false);
-            }
-        } else if ( expr->rtti_isWith() ) {
-            auto wth = static_cast<ExprWith*>(expr);
-            return exprReturnsOrBreaks(wth->body);
-        } else if ( expr->rtti_isWhile() ) {
-            auto wh = static_cast<ExprWhile*>(expr);
-            return exprReturns(wh->body);   // note has its own break
-        } else if ( expr->rtti_isFor() ) {
-            auto fr = static_cast<ExprFor*>(expr);
-            return exprReturns(fr->body);   // note has its own break
-        } else if ( expr->rtti_isUnsafe() ) {
-            auto us = static_cast<ExprUnsafe*>(expr);
-            return exprReturnsOrBreaks(us->body);
         }
         return false;
     }

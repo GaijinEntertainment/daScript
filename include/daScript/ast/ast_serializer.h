@@ -362,7 +362,7 @@ namespace das {
         AstSerializer & serializeModule ( Module & module, bool already_exists );
 
         static constexpr uint32_t getVersion () {
-            return 257;   // 257: a typedef-of-struct constructor call keeps the struct's module in its name
+            return 258;   // 258: a loop that can be left no longer satisfies the return-path check
         }
 
         void serializeProgram ( ProgramPtr program, ModuleGroup & libGroup ) noexcept;

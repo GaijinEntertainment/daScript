@@ -1555,3 +1555,50 @@ def test_with_statement(t : T?) {
         t |> equal(p.y, 2)
     }
 }
+
+def return_only_inside_while_true(x0 : int) : int {
+    var x = x0
+    while (true) {
+        for (i in range(3)) {
+            if (i == x) {
+                break
+            }
+        }
+        if (x > 5) {
+            return x
+        }
+        x ++
+    }
+}
+
+let RETURN_RANGE_COUNT = 3
+
+def return_only_inside_constant_range() : int {
+    for (i, j in range(RETURN_RANGE_COUNT), urange(5u, 7u)) {
+        if (i == 0) {
+            return int(j)
+        } else {
+            return -1
+        }
+    }
+}
+
+def return_before_unreachable_break(x : int) : int {
+    while (true) {
+        if (x > 0) {
+            return 1
+        } else {
+            return 2
+        }
+        break
+    }
+}
+
+[test(description = "a while (true) no reachable break leaves, and a for over non-empty constant ranges whose body returns, need no return after them")]
+def test_loop_without_trailing_return(t : T?) {
+    t |> equal(return_only_inside_while_true(1), 6)
+    t |> equal(return_only_inside_while_true(9), 9)
+    t |> equal(return_only_inside_constant_range(), 5)
+    t |> equal(return_before_unreachable_break(1), 1)
+    t |> equal(return_before_unreachable_break(0), 2)
+}
