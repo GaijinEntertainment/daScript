@@ -117,6 +117,46 @@ def public arch_cites_source(name : string) : bool =>
     name |> ends_with(".das") || is_cpp_source(name)
 
 
+//! the project root `folder` sits in: the nearest ancestor holding a `src`, `include` or
+//! `modules` folder; "" when no ancestor does
+def public arch_project_root(folder : string) : string {
+    var dir = normalize(folder) |> replace("\\", "/")
+    while (!empty(dir) && dir != ".") {
+        for (home in ["src", "include", "modules"]) {
+            let st = stat("{dir}/{home}")
+            return dir if (st.is_valid && st.is_dir)
+        }
+        let up = dir_name(dir)
+        break if (up == dir)
+        dir = up
+    }
+    return ""
+}
+
+
+//! the folders C++ sources live in under `root` - src/, include/, and every module's src/ -
+//! the homes a document's citers may sit in beyond its own folder tree, since a C++ pointer
+//! is not bound to it
+def public cpp_citer_roots(root : string) : array<string> {
+    var out : array<string>
+    for (home in ["src", "include"]) {
+        let st = stat("{root}/{home}")
+        if (st.is_valid && st.is_dir) {
+            out |> push("{root}/{home}")
+        }
+    }
+    fio::dir("{root}/modules") $(name) {
+        return if (name |> starts_with(".") || name |> starts_with("_"))
+        let src = "{root}/modules/{name}/src"
+        let st = stat(src)
+        if (st.is_valid && st.is_dir) {
+            out |> push(src)
+        }
+    }
+    return <- out
+}
+
+
 def private is_path_char(c : int) : bool =>
     is_alpha(c) || is_number(c) || c == '_' || c == '.' || c == '/' || c == '-'
 
