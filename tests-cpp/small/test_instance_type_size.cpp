@@ -7,10 +7,10 @@ using namespace das;
 namespace {
 
 struct Outcome {
-    int     instanceSizeErrors = 0;
+    int     instanceTypeErrors = 0;
     int     otherErrors = 0;
     size_t  longestExtra = 0;
-    bool    abbreviates = false;
+    bool    hasAbbreviatedType = false;
 };
 
 Outcome compileSource ( const string & src ) {
@@ -22,12 +22,12 @@ Outcome compileSource ( const string & src ) {
     Outcome outcome;
     for ( auto & err : program->errors ) {
         if ( err.cerr == CompilationError::exceeds_instance_type ) {
-            outcome.instanceSizeErrors ++;
+            outcome.instanceTypeErrors ++;
         } else {
             outcome.otherErrors ++;
         }
         outcome.longestExtra = max(outcome.longestExtra, err.extra.size());
-        if ( err.extra.find("<...>") != string::npos ) outcome.abbreviates = true;
+        if ( err.extra.find("<...>") != string::npos ) outcome.hasAbbreviatedType = true;
     }
     return outcome;
 }
@@ -44,7 +44,7 @@ TEST_CASE("an oversized generic instance is the only error of its compile") {
         "def main {\n"
         "    grow(1)\n"
         "}\n");
-    CHECK(outcome.instanceSizeErrors == 1);
+    CHECK(outcome.instanceTypeErrors == 1);
     CHECK(outcome.otherErrors == 0);
 }
 
@@ -58,7 +58,7 @@ TEST_CASE("an inference error abbreviates the oversized types of the functions i
         "def main {\n"
         "    print(\"{grow(1, 3)}\\n\")\n"
         "}\n");
-    CHECK(outcome.instanceSizeErrors == 1);
-    CHECK(outcome.abbreviates);
+    CHECK(outcome.instanceTypeErrors == 1);
+    CHECK(outcome.hasAbbreviatedType);
     CHECK(outcome.longestExtra < 64 * 1024);
 }

@@ -6560,6 +6560,14 @@ namespace das {
         return evalAndFoldStringBuilder(expr);
     }
 
+    // src/ast/ARCHITECTURE.md#instance-type-size
+    static void keepOnlyInstanceTypeErrors(Program * program) {
+        auto isInstanceTypeError = [](const Error &e) { return e.cerr == CompilationError::exceeds_instance_type; };
+        auto & errors = program->errors;
+        if (!any_of(errors.begin(), errors.end(), isInstanceTypeError)) return;
+        errors.erase(remove_if(errors.begin(), errors.end(), [&](const Error &e) { return !isInstanceTypeError(e); }), errors.end());
+    }
+
     void inferTypes(Program * program, TextWriter &logs, ModuleGroup &libGroup) {
         program->newLambdaIndex = 1;
         // inferPassesUsed is NOT reset here — parseDaScript resets it once per module
@@ -6635,18 +6643,13 @@ namespace das {
             inferTypesDirty(program, logs, true);
             program->reportingInferErrors = false;
         }
-        // src/ast/ARCHITECTURE.md#instance-type-size
-        auto isInstanceSize = [](const Error &e) { return e.cerr == CompilationError::exceeds_instance_type; };
-        if (any_of(program->errors.begin(), program->errors.end(), isInstanceSize)) {
-            auto others = remove_if(program->errors.begin(), program->errors.end(), [&](const Error &e) { return !isInstanceSize(e); });
-            program->errors.erase(others, program->errors.end());
-        }
         if (pass >= maxInferPasses) {
             program->error("type inference exceeded maximum allowed number of passes (" + to_string(maxInferPasses) + ")\n"
                                                                                                              "this is likely due to a macro continuously being applied",
                   "", "",
                   LineInfo(), CompilationError::exceeds_infer_passes);
         }
+        keepOnlyInstanceTypeErrors(program);
     }
 
     void inferTypesDirty(Program * program, TextWriter &logs, bool verbose) {

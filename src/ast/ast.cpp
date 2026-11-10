@@ -766,8 +766,8 @@ namespace das {
         return inferStack.size() ? inferStack[0].at : atL;
     }
 
-    static void describeTypeInError ( TextWriter & ss, const TypeDeclPtr & type ) {
-        uint32_t budget = 64;
+    static void describeTypeAbbreviated ( TextWriter & ss, const TypeDeclPtr & type, uint32_t typeNodeLimit ) {
+        uint32_t budget = typeNodeLimit;
         if ( type->fitsNodeBudget(budget) ) {
             ss << *type;
         } else {
@@ -775,35 +775,46 @@ namespace das {
         }
     }
 
-    // src/ast/ARCHITECTURE.md#instance-type-size
-    static void describeSignatureInError ( TextWriter & ss, const Function * fn ) {
-        ss << fn->describeName();
+    static void describeSignature ( TextWriter & ss, const Function * fn, Function::DescribeModule moduleName, Function::DescribeExtra extra, uint32_t typeNodeLimit ) {
+        if ( moduleName==Function::DescribeModule::yes && fn->module && !fn->module->name.empty() ) {
+            ss << fn->module->name << "::";
+        }
+        if ( !isalpha(fn->name[0]) && fn->name[0]!='_' && fn->name[0]!='`' ) {
+            ss << "operator ";
+        }
+        ss << fn->name;
         if ( fn->arguments.size() ) {
             ss << "(";
             for ( auto & arg : fn->arguments ) {
                 ss << arg->name << ": ";
-                describeTypeInError(ss, arg->type);
+                describeTypeAbbreviated(ss, arg->type, typeNodeLimit);
+                if ( extra==Function::DescribeExtra::yes && arg->init ) {
+                    ss << " = " << *arg->init;
+                }
                 if ( arg != fn->arguments.back() ) ss << "; ";
             }
             ss << ")";
         }
         if ( fn->result ) {
             ss << ": ";
-            describeTypeInError(ss, fn->result);
+            describeTypeAbbreviated(ss, fn->result, typeNodeLimit);
         }
     }
 
+    static constexpr uint32_t errorTypeNodeLimit = 64;
+
+    // src/ast/ARCHITECTURE.md#instance-type-size
     string Function::getLocationExtra() const {
         if ( !inferStack.size() ) {
             return "";
         }
         TextWriter ss;
         ss << "\nwhile compiling ";
-        describeSignatureInError(ss, this);
+        describeSignature(ss, this, DescribeModule::no, DescribeExtra::no, errorTypeNodeLimit);
         ss << "\n";
         for ( const auto & ih : inferStack ) {
             ss << "instanced from ";
-            describeSignatureInError(ss, ih.func);
+            describeSignature(ss, ih.func, DescribeModule::no, DescribeExtra::no, errorTypeNodeLimit);
             ss << " at " << ih.at.describe() << "\n";
         }
         return ss.str();
@@ -823,27 +834,7 @@ namespace das {
 
     string Function::describe(DescribeModule moduleName, DescribeExtra extra) const {
         TextWriter ss;
-        if ( moduleName==DescribeModule::yes && module && !module->name.empty() ) {
-            ss << module->name << "::";
-        }
-        if ( !isalpha(name[0]) && name[0]!='_' && name[0]!='`' ) {
-            ss << "operator ";
-        }
-        ss << name;
-        if ( arguments.size() ) {
-            ss << "(";
-            for ( auto & arg : arguments ) {
-                ss << arg->name << ": " << *arg->type;
-                if ( extra==DescribeExtra::yes && arg->init ) {
-                    ss << " = " << *arg->init;
-                }
-                if ( arg != arguments.back() ) ss << "; ";
-            }
-            ss << ")";
-        }
-        if ( result ) {
-            ss << ": " << result->describe();
-        }
+        describeSignature(ss, this, moduleName, extra, UINT32_MAX);
         return ss.str();
     }
 
