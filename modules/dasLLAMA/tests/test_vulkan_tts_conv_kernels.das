@@ -139,7 +139,7 @@ def private im2col_arm(t : T?; tag : string; g : ConvGeom; on_f16_lattice : bool
     }
 }
 
-[test]
+[test(description = "The half im2col through the f16 GEMM tile plus the bias pass matches the CPU `conv1d` at the approx bar on f16-exact operands, for a forward k5, a transposed k4 s2 and a forward k3 over row-major x")]
 def test_vkt_tts_im2col16(t0 : T?) {
     t0 |> run("the f16 tile: forward k5 s1 p2 over 22 channels into 40, transposed k4 s2 p1 over 16 into 32, forward k3 over 32 into 64 (a 96-wide row)") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -163,7 +163,7 @@ def test_vkt_tts_im2col16(t0 : T?) {
     }
 }
 
-[test]
+[test(description = "The f32 conv im2col fed through F32GemmB matches the CPU `conv1d` at the approx bar for a forward k5 conv, a transposed k4 s2 conv and a forward conv off row-major x, at element offsets, with poisoned slab pad columns kept out")]
 def test_vkt_tts_im2col(t0 : T?) {
     t0 |> run("forward k5 s1 p2 over 22 channels: im2col + F32GemmB == the CPU conv1d") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -333,7 +333,7 @@ def private lstm_arm(t : T?; hd : int) {
     }
 }
 
-[test]
+[test(description = "The LSTM direction stamp at hidden 64 and 200 over 23 steps reproduces the CPU `bilstm` at the approx bar for both directions into one row set and for the forward weights walked backward, and flipping `backward` moves the output")]
 def test_vkt_tts_lstm_dir(t0 : T?) {
     for (hd in fixed_array(64, 200)) {
         t0 |> run("one LSTM direction at hidden {hd}, both walks == the CPU bilstm") <| @(t : T?) {
@@ -403,7 +403,7 @@ def private pool_dw_arm(t : T?) {
     }
 }
 
-[test]
+[test(description = "The depthwise transposed pool k3 s2 p1 with output padding over 22 channels and 19 steps produces 38 rows matching `conv1d_rows_transposed_depthwise` at the approx bar, reading weights and bias between poisoned slots")]
 def test_vkt_tts_pool_dw(t0 : T?) {
     t0 |> run("the depthwise transposed pool k3 s2 p1 over 22 channels == the CPU conv1d_rows_transposed_depthwise") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {

@@ -278,7 +278,7 @@ def private q8q8_wrapper_gate(t : T?; n : int64; d : int64 = 64l; ntok_override 
     restore_kernel_backend(seat)
 }
 
-[test]
+[test(description = "At six widths, the stamped q8q8 tile4 and tile bit-match the stamped GEMV, and every backend's `matmul_q8q8` and batch stay within a per-element fp64 dequant bar (batch exact on portable, 1 percent of max on the bf16 tile), each with a poison control")]
 def test_q8q8_tile_gemv_reference(t : T?) {
     with_dasllama_jobque_() {
         for (n in WIDTHS) {
@@ -478,7 +478,7 @@ def private s16_wrapper_gate(t : T?; n : int64; ntok_override : int64 = 0l) {
     restore_kernel_backend(seat)
 }
 
-[test]
+[test(description = "The wscale_f16 twins of the q8q8 dot, rows, groupN, stamped tile and matmul overloads bit-match their f32-scale counterparts over the widened plane on every backend and stay within the per-element fp64 bar")]
 def test_q8q8_wscale_f16(t : T?) {
     with_dasllama_jobque_() {
         for (n in WIDTHS) {
@@ -538,7 +538,7 @@ def private idot4_ps_gate(t : T?; n : int64) {
     identical(t, y16, y, "dot_q8q8_idot4_ps_f16s bit-matches its f32 twin over the widened plane, n={n}")
 }
 
-[test]
+[test(description = "The portable wasm-form `dot_q8q8_idot4_ps` holds the per-element fp64 dequant bar at six widths (paired-block loop and single-block tail), and its f16-scale twin bit-matches it")]
 def test_q8q8_idot4_ps(t : T?) {
     for (n in WIDTHS) {
         t |> run("vector-epilogue idot4 dots vs fp64 and the s16 twin, n={n}") @(t : T?) {
@@ -617,7 +617,7 @@ def private group3_gate(t : T?; n : int64) {
     restore_kernel_backend(seat)
 }
 
-[test]
+[test(description = "On every backend, each region of `matmul_q8q8_group3` (row tail included) bit-matches its own GEMV and the fused image holds the fp64 bar; the s16-scale form bit-matches f32 on portable and holds the bar elsewhere")]
 def test_q8q8_group3(t : T?) {
     with_dasllama_jobque_() {
         for (n in WIDTHS) {
@@ -660,7 +660,7 @@ def private q8_f32x_gate(t : T?; n : int64) {
     held(t, ymm, ref, bar, "matmul_q8, n={n}")
 }
 
-[test]
+[test(description = "Both `matmul_q8` overloads bit-match the per-row `dot_q8` over float activations at six widths, and both hold the per-element fp64 dequant bar with a poison control")]
 def test_q8_f32_activation(t : T?) {
     with_dasllama_jobque_() {
         for (n in WIDTHS) {
@@ -788,7 +788,7 @@ def private mx4_batch_gate(t : T?; n : int64) {
     restore_kernel_backend(seat)
 }
 
-[test]
+[test(description = "Portable `matmul_mx4q8` bit-matches the scalar leaf, and on portable and every repacking backend the mx4 batch and batch groupN bit-match per-token and per-region GEMVs and hold the per-element fp64 bar")]
 def test_mx4q8_batch_family(t : T?) {
     with_dasllama_jobque_() {
         for (n in WIDTHS) {

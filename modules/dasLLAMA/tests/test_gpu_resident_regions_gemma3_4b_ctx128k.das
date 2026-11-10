@@ -20,37 +20,37 @@ require dasllama/dasllama_kv_dtype
 let private REGIONS_FILE = "gemma-3-4b-it-Q8_0.gguf"
 let private LONG = LongCtx(regions = 2l, ctx = 131072l, cpu_n = 12288l, cpu_bar_rel = 0.16, split_n = 120000l, split_cut = 65536l, streams_bar = LogitsBar.split_bar)
 
-[init]
-def private gemma3_init() {
-    pin_file_kv(KVDtype.q8_0)
-}
-
-[finalize]
-def private gemma3_restore() {
-    unpin_file_kv()
-}
-
-[test]
+[test(description = "A gemma-3-4b q8_0 mirror of two regions at the full 131072 context binds in several slab pairs, and single and batched steps over two sessions read bit for bit what each session reads alone")]
 def test_regions_slabbed_mirror_gemma3_4b(t : T?) {
-    cell_regions_slabbed_mirror(t, REGIONS_FILE, LONG)
+    with_kv_dtype(KVDtype.q8_0) {
+        cell_regions_slabbed_mirror(t, REGIONS_FILE, LONG)
+    }
 }
 
-[test]
+[test(description = "On the slabbed 131072-context gemma-3-4b q8_0 mirror a 12288-token prompt and its fed steps sit within 16% of the CPU chain's max logit, the one-step-off control past it")]
 def test_long_prompt_against_cpu_gemma3_4b(t : T?) {
-    cell_long_prompt_against_cpu(t, REGIONS_FILE, LONG)
+    with_kv_dtype(KVDtype.q8_0) {
+        cell_long_prompt_against_cpu(t, REGIONS_FILE, LONG)
+    }
 }
 
-[test]
+[test(description = "On gemma-3-4b at 131072 context a 120000-token prompt continued on the device from 65536, and four steps over it, sit within the split bar of the one-call prefill")]
 def test_long_continuation_gemma3_4b(t : T?) {
-    cell_long_continuation(t, REGIONS_FILE, LONG)
+    with_kv_dtype(KVDtype.q8_0) {
+        cell_long_continuation(t, REGIONS_FILE, LONG)
+    }
 }
 
-[test]
+[test(description = "Two gemma-3-4b device-home streams at 36700 and 60293 positions prefill bit for bit the host-cached sessions, and batched steps over both stay within the split bar of each alone")]
 def test_long_streams_gemma3_4b(t : T?) {
-    cell_long_streams(t, REGIONS_FILE, LONG)
+    with_kv_dtype(KVDtype.q8_0) {
+        cell_long_streams(t, REGIONS_FILE, LONG)
+    }
 }
 
-[test]
+[test(description = "Rows crossing the host at slabs past the first stay right: device-prefilled rows brought down carry CPU steps, and CPU-prefilled rows uploaded carry resident steps, both within 16% of the CPU chain")]
 def test_long_rows_through_host_gemma3_4b(t : T?) {
-    cell_long_rows_through_host(t, REGIONS_FILE, LONG)
+    with_kv_dtype(KVDtype.q8_0) {
+        cell_long_rows_through_host(t, REGIONS_FILE, LONG)
+    }
 }

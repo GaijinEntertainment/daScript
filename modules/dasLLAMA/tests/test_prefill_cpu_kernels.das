@@ -121,7 +121,7 @@ def private kq_batch_gate(t : T?; fmt : int; n, d, ntok : int64) {
     delete y
 }
 
-[test]
+[test(description = "For k4, k6 and q40 at many token counts, the per-position kq GEMV matches per-(token,row) disk dots bit for bit, and the generated backend's native batch matches the serial GEMV exactly (or the bf16 tile within 1 percent of max)")]
 def test_kq_batch(t : T?) {
     for (fmt in [4, 6, 40]) {
         for (ntok in [1l, 4l, 5l, 9l, 13l]) {
@@ -429,7 +429,7 @@ def private walk_slots(t : T?; fmt : int; n, d, ntok : int64; rounds : int) {
     delete a
 }
 
-[test]
+[test(description = "The k6 batch walk's panels are per-context and per-slot: two threads walking different planes at once, and a walk dispatched across the job queue, each reproduce their single-thread output bit for bit over 200 rounds")]
 def test_walk_panels(t : T?) {
     let k6 = kq_schema_id(KqFmt.k6)
     t |> run("two threads walking at once each read their own panels") @(t : T?) {
@@ -458,14 +458,14 @@ def private bf16_block_gate(t : T?) {
     set_q8_token_block(knob)
 }
 
-[test]
+[test(description = "`bf16_token_block` is the q8 token-block knob or its floor rounded to whole bf16 tiles, and an L2 budget that cuts the int8 walk's block to 215 leaves the bf16 block whole")]
 def test_bf16_token_block(t : T?) {
     t |> run("the bf16 walk's block is the knob or the floor in whole tiles, under no L2 clamp") @(t : T?) {
         bf16_block_gate(t)
     }
 }
 
-[test]
+[test(description = "`xbf16_build` returns a 64-byte aligned plane of q times its superblock scale rounded to nearest bf16 (truncation would miss the half-step bar), and two threads building at once each read their own plane")]
 def test_xbf16_build(t : T?) {
     t |> run("the bf16 activation plane is q times its scale, rounded to nearest, on a cache line") @(t : T?) {
         xbf16_gate(t, 512l, 3l)
@@ -591,7 +591,7 @@ def private kq_batch_groupn_gate(t : T?; fmt : int; n, d : int64; longRuns : boo
     delete want
 }
 
-[test]
+[test(description = "For k4, k6 and q40 MoE-prefill region walks, the per-expert per-token GEMV route matches per-(region,token) disk dots bit for bit, and the fused groupn batch matches rows-core calls exactly (or the bf16 tile within 1 percent of max)")]
 def test_kq_batch_groupn_portable(t : T?) {
     for (fmt in [4, 6, 40]) {
         t |> run("{fmt_tag(fmt)} fused MoE-prefill region walk (runs 1/4/6) on whatever backend is active") @(t : T?) {
@@ -687,7 +687,7 @@ def private repack_gate(t : T?; fmt : int; n, d : int64) {
     delete got
 }
 
-[test]
+[test(description = "For k4, k6 and q40 the grp repack preserves every row's dot bit for bit, and `repack_kq_weight` lands byte-identical on that grp layout (or is the identity on a tier with no kq slot)")]
 def test_repack_kq_weight(t : T?) {
     for (fmt in [4, 6, 40]) {
         t |> run("{fmt_tag(fmt)} the grp repack and repack_kq_weight preserve every row's dot") @(t : T?) {
@@ -800,7 +800,7 @@ def private kv_wide_gate(t : T?; n : int64) {
     delete got2
 }
 
-[test]
+[test(description = "`cvt_q8kv_to_f32` and `kv_row_to_f32` dequantize `quantize_q8kv_row` blocks bit-identical to a per-block scalar reference within half a step of the source, and the f32 and f16 overloads read a row at a non-zero base exactly")]
 def test_kv_q8_row_to_f32(t : T?) {
     t |> run("cvt_q8kv_to_f32 and kv_row_to_f32 invert quantize_q8kv_row's stored blocks") @(t : T?) {
         kv_q8_gate(t, 256l)
@@ -944,7 +944,7 @@ def private requant_q8k_gate(t : T?; par : bool; npos, n : int64) {
     delete xbsb
 }
 
-[test]
+[test(description = "Serial and parallel `requant_rows_q8` bit-match `quantize_q8_0` per row, and `requant_rows_q8k_bs` matches an in-test Q8_K reference in quants, per-256 scales and per-16 sums, each with a poison control")]
 def test_requant_rows(t : T?) {
     for (par in [false, true]) {
         t |> run("requant_rows_q8 par={par}: every row is quantize_q8_0 of that row") @(t : T?) {

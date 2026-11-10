@@ -22,7 +22,7 @@ require math
 // random bit patterns are valid quant data, scales come from finite f16 values, and the truth
 // side dequants each row through the SHIPPED dequant_k*_plane_superblock (the same math the
 // loaders and repack verifiers trust) and dots in double. Float GPU accumulation reassociates,
-// so the compare bar rides each output's DOT ENVELOPE (sum |w·x| — the test_metal_gemm
+// so the compare bar rides each output's DOT ENVELOPE (sum |w·x| — the test_metal_gemm_vs_portable
 // precedent): |gpu-cpu| <= max(2e-4 * env, 1e-3). y buffers are sentinel-filled and compared
 // WHOLE, so a write outside the guarded rows/columns is a red, not silence. Without das_metal in
 // the build, or with no Metal device, every check skips.
@@ -285,7 +285,7 @@ def private kq_half_gate(t : T?; var queue; fmt, n, d, nr, ys : int) {
 //! every K-quant format with a half-x route, by schema id (the race table's rows)
 let private KQ_HALF_FORMATS <- [for (f in [KqFmt.k2, KqFmt.k3, KqFmt.k4, KqFmt.k5, KqFmt.k6, KqFmt.iq2s, KqFmt.iq2xs, KqFmt.iq2xxs, KqFmt.iq3s, KqFmt.iq3xxs, KqFmt.q40, KqFmt.nv4, KqFmt.iq4xs, KqFmt.iq4nl]); kq_desc(f).schema_id]
 
-[test]
+[test(description = "Every K-quant format's half-x route (`enc_kq_rows_half`) over an f16 x twin matches the CPU reference at 2 to 8 live rows with pad rows and the guard band left at the sentinel, k4's wide forms included at K 1024 and 2560.")]
 def test_metal_kq_half_forms(t : T?) {
     t |> run("every format's half-x route matches the CPU reference at every row count the dispatcher serves") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
@@ -309,7 +309,7 @@ def test_metal_kq_half_forms(t : T?) {
     }
 }
 
-[test]
+[test(description = "The k4 pair walk (`enc_kq_mvb_k4_pairs`) on the production decode PSOs matches the CPU reference at 3, 4 and 5 columns - pairs plus an odd tail - with a row-pair tail and the guard band past d untouched.")]
 def test_metal_kq_k4_pair_walk(t : T?) {
     t |> run("the k4 pair walk matches the CPU reference at 3, 4 and 5 columns") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
@@ -1601,7 +1601,7 @@ def private kq_fat_gate(t : T?; var dev, queue; n, d0, d1, d2 : int) {
     }
 }
 
-[test]
+[test(description = "The Metal decode GEMV corpus - single-stream kq and iquant GEMVs, the fat-threadgroup and fused MoE chains, small-batch twins, expert-indexed GEMVs, fused QKV rope-store, W1-W3 activation and fixed-B q8 GEMVs - matches the plane-dequant CPU reference on row-tail shapes.")]
 def test_metal_kq_gemv_kernels(t : T?) {
     t |> run("kq GEMV / KqMv / MoeGemv-kq kernels == the plane-dequant CPU reference") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
@@ -1823,7 +1823,7 @@ def private w13sw_rows_gate(t : T?; var queue; nrows, ndim, hidden : int; gelu :
     }
 }
 
-[test]
+[test(description = "The verify's q8 row tilers (`enc_gemv_rows`, `enc_gemv_w13sw_rows`) write every live row at 2, 5 and 9 rows to the CPU reference, over the whole padded panel so a skipped row keeps its sentinel and fails.")]
 def test_metal_gemv_rows_tiles(t : T?) {
     t |> run("the verify's q8 row tilers write every live row at 2, 5 and 9 rows") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
@@ -1840,7 +1840,7 @@ def test_metal_gemv_rows_tiles(t : T?) {
     }
 }
 
-[test]
+[test(description = "The row-per-simdgroup q8 GEMV (`enc_gemv_sg`) matches the CPU dot on every row - the tail walk alone, four strides of the batched walk plus a tail, and the Qwen2.5-0.5B fused-QKV width.")]
 def test_metal_gemv_sg(t : T?) {
     t |> run("the row-per-simdgroup q8 GEMV matches the CPU dot on the tail, the strided walk and a 0.5B site") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {

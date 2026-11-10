@@ -33,7 +33,6 @@ require dasllama/dasllama_math   // with_dasllama_jobque_: the peel cell's rows 
 // compute capability 120), where the nv4 planes stay on the cm2 tiles; the q8_0 block-codec cell skips under DASLLAMA_VK_KV32=1,
 // which arms the f32 mirror over the codec asked.
 
-[init]
 def private cuda_qwen35_intent() {
     set_cuda_mmq_pin(CUDA_MMQ_WINNERS)   // the MMQ route every load of the file measures: the greedy chain's and the peel's loads among them
 }
@@ -55,8 +54,9 @@ let private GATED_Q8KV_BAR_REL = 0.06
 let private GATED_CODEC_DIST_REL = 1.15
 let private GATED_CODEC_PAIR_REL = 0.8
 
-[test]
+[test(description = "On the CUDA driver Qwen3.5-0.8B's gated attention over a q8_0 K/V mirror keeps forced-feed logits within 6 percent of the CPU q8_0 chain, and over a tq4 mirror sits within 1.15x the CPU tq4 chain's distance from f16 and 0.8x of it from that chain")]
 def test_gpu_resident_cuda_qwen35_block_codecs(t : T?) {
+    cuda_qwen35_intent()
     t |> run("{FILE_Q8}: a q8_0 K/V mirror under the gated attention, one window (40 tokens) and eight steps on the CUDA driver") @(t : T?) {
         return if (!cuda_home_asked(t))
         cell_codec_forced_feed(t, FILE_Q8, 40l, KVDtype.q8_0, GATED_Q8KV_BAR_REL)
@@ -69,16 +69,18 @@ def test_gpu_resident_cuda_qwen35_block_codecs(t : T?) {
 
 //! the greedy chain on the recurrent carrier: a miss puts the region's recurrent states back from the chain's snapshot, so the
 //! off-pick walk's logits are the plain walk's bit for bit
-[test]
+[test(description = "On the CUDA driver the greedy chain on recurrent Qwen3.5-0.8B restores the region's recurrent states from the snapshot on a miss, so the chained walks' tokens and logits equal the plain walks' bit for bit")]
 def test_gpu_resident_cuda_qwen35_greedy_chain(t : T?) {
+    cuda_qwen35_intent()
     t |> run("{FILE_Q8}: the greedy chain's walks on the CUDA driver, the states put back on a miss") @(t : T?) {
         return if (!cuda_home_asked(t))
         greedy_chain_cell(t, path_join(models_dir(), FILE_Q8))
     }
 }
 
-[test]
+[test(description = "On the CUDA driver the deltanet hybrid Qwen3.5-0.8B Q8_0 keeps forced-feed logits within 4 percent of max logit of the CPU chain over one window and across the two-window state seam")]
 def test_gpu_resident_cuda_qwen35_q8(t : T?) {
+    cuda_qwen35_intent()
     t |> run("{FILE_Q8}: one window (40 tokens) and eight steps on the CUDA driver") @(t : T?) {
         cuda_forced_feed(t, FILE_Q8, "qwen35", 40l, 1l, DN_LOGIT_BAR_REL)
     }
@@ -87,8 +89,9 @@ def test_gpu_resident_cuda_qwen35_q8(t : T?) {
     }
 }
 
-[test]
+[test(description = "On the CUDA driver the deltanet hybrid Qwen3.5-4B Q8_0 keeps one-window prefill and eight fed-step logits within 4 percent of max logit of the CPU chain")]
 def test_gpu_resident_cuda_qwen35_4b(t : T?) {
+    cuda_qwen35_intent()
     t |> run("{FILE_4B}: one window (40 tokens) and eight steps on the CUDA driver") @(t : T?) {
         cuda_forced_feed(t, FILE_4B, "qwen35", 40l, 1l, DN_LOGIT_BAR_REL)
     }
@@ -96,30 +99,36 @@ def test_gpu_resident_cuda_qwen35_4b(t : T?) {
 
 //! the short window's peel on the recurrent carrier: the tail's rows through the in-order rows seat (`cud_rdec_token_seq`), each
 //! recurrent row's ring image the one the row before it wrote, against the one-row steps of the same tokens
-[test]
+[test(description = "On the CUDA driver a short tail on Qwen3.5-0.8B peels through the token commands with recurrent rows in order in the region's slot, landing within the 6 percent split bar of one-row steps of the same tokens")]
 def test_gpu_resident_cuda_qwen35_peel(t : T?) {
+    cuda_qwen35_intent()
     t |> run("{FILE_Q8}: a short tail peels through the token commands on the CUDA driver, the recurrent rows in order in the region's slot, and reads what the one-row steps read") @(t : T?) {
         return if (!cuda_home_asked(t))
         let path = path_join(models_dir(), FILE_Q8)
         if (!resident_ready(t, path)) return
+        let levers = resident_levers()
+        cuda_feed_window()
         var tr <- load_resident(path, 1l)
         t |> success(moe_gpu_resident_active(), "the whole-model driver armed on the hybrid (the load log names any decline)")
         with_dasllama_jobque_() {
             recurrent_peel_cell(t, tr, SPLIT_BAR_REL)
         }
         delete tr
+        restore_resident_levers(levers)
     }
 }
 
-[test]
+[test(description = "On the CUDA driver the trunk of the NextN-headed Qwen3.5-0.8B-MTP with the head off keeps one-window prefill and eight plain steps within 4 percent of max logit of the CPU chain")]
 def test_gpu_resident_cuda_qwen35_mtp_trunk(t : T?) {
+    cuda_qwen35_intent()
     t |> run("{FILE_MTP}: the trunk on the CUDA driver with the head off, one window (40 tokens) and eight plain steps") @(t : T?) {
         cuda_forced_feed(t, FILE_MTP, "qwen35", 40l, 1l, DN_LOGIT_BAR_REL)
     }
 }
 
-[test]
+[test(description = "On the CUDA driver the NVFP4 Qwen3.5-0.8B twin's deltanet sites on the FP4 tensor leaf keep forced-feed logits within 20 percent of max logit of the CPU chain over one and two windows, and pinned off MMQ the cm2 tiles hold the 10 percent bar")]
 def test_gpu_resident_cuda_qwen35_nv4(t : T?) {
+    cuda_qwen35_intent()
     t |> run("{FILE_NV4}: one window (40 tokens) and eight steps on the CUDA driver under set_cuda_mmq_pin({cuda_mmq_name(CUDA_MMQ_WINNERS)}), the nv4 deltanet sites on the FP4 tensor leaf under the planes' factors") @(t : T?) {
         return if (!fp4_rung_on(t))
         with_cuda_mmq_pin(CUDA_MMQ_WINNERS) {
@@ -140,8 +149,9 @@ def test_gpu_resident_cuda_qwen35_nv4(t : T?) {
 }
 
 //! the K-quant twins' window sites on the int8 MMQ leaves (`set_cuda_mmq_pin(CUDA_MMQ_WINNERS)`): the bar is the Q8_0 feed's
-[test]
+[test(description = "On the CUDA driver with the int8 MMQ leaves, the Qwen3.5-0.8B Q4_K_M twin over one and two windows and the q8out mixed twin over one keep forced-feed logits within 10 percent of max logit of the CPU chain")]
 def test_gpu_resident_cuda_qwen35_kq(t : T?) {
+    cuda_qwen35_intent()
     t |> run("{FILE_KQ}: one window (40 tokens) and eight steps on the CUDA driver under set_cuda_mmq_pin({cuda_mmq_name(CUDA_MMQ_WINNERS)})") @(t : T?) {
         with_cuda_mmq_pin(CUDA_MMQ_WINNERS) {
             cuda_forced_feed(t, FILE_KQ, "qwen35", 40l, 1l, DN_LOGIT_BAR_REL_KQ)

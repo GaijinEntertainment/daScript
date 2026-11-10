@@ -458,7 +458,7 @@ def private continuation(trp, trd : Model; prompt : array<int64>; n_gen : int) :
 
 // the blob twin of a planar fixture (see test_metal_decode_parity's twin): an OWNED engine
 // load transformed to the GPU form — the drivers are blob-only
-[test, arch(at="../ARCHITECTURE_GPU_PREFILL.md#prefill-last-row-tail")]
+[test(description = "Each Metal prefill arm (GEMV tails, scale planes, K-quants, chunked and span windows, device attention, decode-mirror feeding, quantized KV) matches the CPU control greedy tokens on Llama-3.2, or its logits within 0.004 of the max, engage counters as witnesses"), arch(at="../ARCHITECTURE_GPU_PREFILL.md#prefill-last-row-tail")]
 def test_metal_prefill_parity(t : T?) {   // nolint:STYLE038 — flat arm list, one t |> run cell per arm
     t |> run("GPU-resident prefill == CPU control, 40-token greedy continuation (Llama-3.2-1B Q8)") <| @(t : T?) {
         if (!family_on(t, "llama")) return
@@ -1768,7 +1768,7 @@ def lastrow_ab(t : T?; var trsg : Model; prompt : array<int64>; tag : string; ba
 //! the last-layer tail narrowed on the gemma sandwich (`lastrow-g`): the attention and FFN branches each under its post norm, the
 //! layer's output scale on gemma-4, the per-layer embedding's branch over the final row on the E-series - gemma-3-1b, gemma-4-12B
 //! Q8_0 (large tier) and gemma-4-E2B Q8_0
-[test, arch(at="../ARCHITECTURE_GPU_PREFILL.md#prefill-last-row-tail")]
+[test(description = "On gemma-3, gemma-4 and gemma-4-E2B the Metal prefill narrowed last-layer tail keeps logits within 0.05 of the full panel and the same argmax, a changed last token lands outside, and keep_hidden restores the full plane bit for bit"), arch(at="../ARCHITECTURE_GPU_PREFILL.md#prefill-last-row-tail")]
 def test_metal_prefill_lastrow_sandwich(t : T?) {
     static_if (typeinfo builtin_module_exists(das_metal)) {
         for (fam, file, bar in fixed_array("gemma3", "gemma4", "gemma4e"), fixed_array("gemma-3-1b-it-Q8_0.gguf", "gemma-4-12B-it-Q8_0.gguf",
@@ -1803,7 +1803,7 @@ def test_metal_prefill_lastrow_sandwich(t : T?) {
     }
 }
 
-[test]
+[test(description = "On q8, K-quant and mx4 MoE models a short Metal prefill window rides the gathered expert route once, its last-row logits within 0.08 to 0.12 of the CPU peak with the same argmax, while a changed last token lands outside")]
 def test_metal_prefill_moe_gemv_route(t : T?) {
     t |> run("the gathered expert route == CPU control on a q8 MoE (Qwen1.5-MoE-A2.7B Q8_0)") <| @(t : T?) {
         if (!family_on(t, "qwen2moe") || !arm_on(t, "moe-gemv")) return
@@ -1917,7 +1917,7 @@ def private moe_base_form_cells(t : T?; path, tag, base_kernel, crown : string; 
     }
 }
 
-[test]
+[test(description = "On Q3_K and IQ2_XXS Qwen3 MoE stacks the routed GEMM keeps last-row logits within 0.10 or 0.15 of the CPU peak on the crowned twins and on the simdgroup base form, the base census zero under the crown and rising without it")]
 def test_metal_prefill_moe_base_form(t : T?) {
     t |> run("the routed simdgroup base form == CPU control on a Q3_K expert stack (Qwen3-30B-A3B UD-Q3_K_XL)") <| @(t : T?) {
         if (!family_on(t, "qwen3moe") || !arm_on(t, "moe-base")) return
@@ -1929,7 +1929,7 @@ def test_metal_prefill_moe_base_form(t : T?) {
     }
 }
 
-[test]
+[test(description = "On K-quant, grid and per-32 dense models short Metal windows ride the row-batched GEMV peel or split-K tile, last-row logits within 0.08 of the CPU peak with the same argmax, the peel-off and changed-token controls holding")]
 def test_metal_prefill_kq_tail(t : T?) {
     t |> run("the dense K-quant sites' row-batched GEMV peel == CPU control (Llama-3.2-1B Q4_K_M)") <| @(t : T?) {
         if (!family_on(t, "llama") || !arm_on(t, "kq-tail")) return
@@ -2109,7 +2109,7 @@ def private scratch_panel_cells(t : T?; path, tag : string; bar : float; twin_lo
     }
 }
 
-[test]
+[test(description = "On Llama-3.2-1B IQ4_XS, Q4_K_M, Q8_0 and Q5_1 the dense sites take dev-W scratch panels exactly where the base forms and crowned twin floors say, last-row logits within 0.08 of the CPU peak with the same argmax")]
 def test_metal_prefill_kq_scratch(t : T?) {
     t |> run("the dense split-format sites' scratch panels == CPU control, the crowned twin holding the short window (Llama-3.2-1B IQ4_XS)") <| @(t : T?) {
         if (!family_on(t, "llama") || !arm_on(t, "kq-scratch")) return
@@ -2136,7 +2136,7 @@ def private bf16_split_dispatches() : int64 => stamp_dispatches("MetalBf16MulMm"
 
 //! the bf16 plane's short-window split (`ARCHITECTURE_GPU_PREFILL_GEMM.md#prefill-split-k`) on the per-layer embedding's
 //! projection, the only bf16 site a text window serves
-[test]
+[test(description = "On gemma-4-E2B a 24-row Metal window projects the per-layer embedding on the bf16 tile through the split-K stamps under a widened knee, and with split-K off dispatches none of them")]
 def test_metal_prefill_bf16_split(t : T?) {
     t |> run("the per-layer embedding's bf16 projection splits its K on a short window, and walks it whole with split-K off (gemma-4-E2B Q8_0)") @(t : T?) {
         if (!family_on(t, "gemma4e") || !arm_on(t, "bf16-split")) return

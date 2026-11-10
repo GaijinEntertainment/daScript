@@ -39,7 +39,7 @@ let private GPTOSS_HEAT = MoeFixture(file = "gpt-oss-20b-mxfp4.gguf", shexp = fa
 //! argmax intact, the later steps 0.07 - so the two-window cell holds the routed block's bar too
 let private GPTOSS_WINDOWS = MoeFixture(file = "gpt-oss-20b-mxfp4.gguf", shexp = false, bar_rel = MOE_LOGIT_BAR_REL, window = 128l)
 
-[test]
+[test(description = "With the whole-model route off, the per-op tier places every gpt-oss-20b routed layer's mx4 stacks on the device, and a 40-token window plus six fed steps sit within the 5% logits bar of the CPU chain")]
 def test_gpu_perop_gptoss(t : T?) {
     t |> run("gpt-oss-20b with the whole-model route off: the per-op expert chain takes every routed layer's mx4 stacks under the biased clamped swiglu, the window and steps against the CPU chain") @(t : T?) {
         if (!family_on(t, "gptoss")) return
@@ -77,7 +77,7 @@ def test_gpu_perop_gptoss(t : T?) {
     }
 }
 
-[test]
+[test(description = "On the per-op tier with twelve gpt-oss-20b routed layers placed and the rest streamed under an eight-slot heat pool, the window and fed steps hold the routed bar of the CPU chain and the pool serves picks")]
 def test_gpu_perop_gptoss_heat(t : T?) {
     t |> run("gpt-oss-20b on the per-op tier: twelve routed layers placed, twelve streamed under the heat pool's mx4 slots with the biased clamped swiglu, against the CPU chain") @(t : T?) {
         if (!family_on(t, "gptoss")) return
@@ -101,7 +101,7 @@ def private biased_acts() : int64 {
 
 //! gpt-oss's biased stacks on the host-layers form: the window's picks through the per-expert chain under the clamped swiglu and the
 //! picks' gate and up bias rows - the streamed windows' rows against the same load with the stream off, on whichever discrete home is armed
-[test]
+[test(description = "With two gpt-oss-20b routed layers' experts on the host, the streamed window and eight steps sit within the stream twin's bar of the stream-off load, and the stream chain's acts take the picks' bias rows")]
 def test_gpu_resident_gptoss_host_stream(t : T?) {
     t |> run("gpt-oss-20b with {HOST_LAYERS_GPTOSS} routed layers' experts pinned to the host: the streamed windows' rows against the host's sums' at the stream twin's bar, one window (40 tokens) and eight steps; the chain's acts under the picks' bias rows") @(t : T?) {
         let path = path_join(models_dir(), GPTOSS.file)
@@ -121,7 +121,7 @@ let private CODEC_CTX = 8192l   //! the codec arms' context (`set_gpu_ctx_max`, 
 //! the sink stamps of the K/V codecs (one stamp a mirror codec, gpt-oss the one sink carrier): the q8_0 mirror and, under the
 //! environment's knob, the f32 mirror in the forced-feed form; the f16 stamp is the file's other cells' (the CUDA gpt-oss file's
 //! cell). No tq4 arm: the carrier's Q/K/V bias steps a tq4 ask down to q8_0 on every home, so the tq4 sink stamp has no carrier
-[test]
+[test(description = "The attention-sink stamps of the q8_0 and f32 K/V mirrors serve gpt-oss-20b, a 40-token window and eight fed steps held within the routed bar of the CPU chain in the forced-feed form")]
 def test_gpu_resident_gptoss_sink_codecs(t : T?) {
     for (kv in fixed_array(KVDtype.q8_0, KVDtype.f32)) {
         t |> run("gpt-oss-20b: a {kv} mirror - the codec's sink stamp - one window (40 tokens) and eight steps") @(t : T?) {
@@ -134,7 +134,7 @@ def test_gpu_resident_gptoss_sink_codecs(t : T?) {
     }
 }
 
-[test]
+[test(description = "The resident gpt-oss-20b driver - mx4 MoE window, biased router, sinked token command - holds the CPU chain's logits within the bar on one window and across two with the sliding layers masking, the one-step-off control past it")]
 def test_gpu_resident_gptoss(t : T?) {
     t |> run("gpt-oss-20b: the resident mx4 MoE prefill window + the biased, sinked token command vs the CPU chain, one window") @(t : T?) {
         moe_forced_feed(t, 40l, GPTOSS)

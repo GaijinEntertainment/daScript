@@ -29,7 +29,7 @@ def private fake_image(var b : array<uint8>) {
 
 def private image_base(b : array<uint8>) : uint8 const? => unsafe(addr<uint8 const?>(b[0]))
 
-[test]
+[test(description = "A PlaneF bound to a 128-byte section reports 32 elements, is not empty, and reads the exact floats written there through both int and int64 indices")]
 def test_plane_float_binds_and_reads(t : T?) {
     t |> run("PlaneF binds a byte range and reads the bytes that are there") @(t : T?) {
         var inscope b : array<uint8>
@@ -44,7 +44,7 @@ def test_plane_float_binds_and_reads(t : T?) {
     }
 }
 
-[test]
+[test(description = "A PlaneF bound at byte offset 64 has 16 elements and its element 0 is element 16 of the whole run, so reads start at the bind offset rather than the base")]
 def test_plane_float_offset_section(t : T?) {
     t |> run("a plane bound past the start reads from there, not from the base") @(t : T?) {
         var inscope b : array<uint8>
@@ -57,7 +57,7 @@ def test_plane_float_offset_section(t : T?) {
     }
 }
 
-[test]
+[test(description = "Binding a PlaneF to 126 bytes, not a whole number of floats, is declined and leaves the plane empty with length 0 instead of rounding")]
 def test_plane_float_rejects_ragged_section(t : T?) {
     t |> run("a section that does not divide into whole floats is declined, not rounded") @(t : T?) {
         var inscope b : array<uint8>
@@ -69,7 +69,7 @@ def test_plane_float_rejects_ragged_section(t : T?) {
     }
 }
 
-[test]
+[test(description = "A PlaneI8 over a 16-byte section counts one element per byte and reads the values back signed, -8 through 7")]
 def test_plane_int8_binds_and_reads(t : T?) {
     t |> run("PlaneI8 counts bytes as elements and reads them signed") @(t : T?) {
         var inscope b : array<uint8>
@@ -83,7 +83,7 @@ def test_plane_int8_binds_and_reads(t : T?) {
     }
 }
 
-[test]
+[test(description = "`plane_at` one element past the end of a float plane and of a byte plane panics with text naming the offset and the plane's range, while the end offset itself does not panic")]
 def test_plane_at_refuses_past_the_end(t : T?) {
     t |> run("plane_at one element past a plane's end panics naming the offset and the plane's length - a float plane and a byte plane") @(t : T?) {
         var inscope b : array<uint8>
@@ -105,7 +105,7 @@ def test_plane_at_refuses_past_the_end(t : T?) {
     }
 }
 
-[test]
+[test(description = "`plane_at` returns a raw pointer at an element offset whose reads match the backing floats, and the end offset yields a non-null pointer")]
 def test_plane_at_is_the_hot_path_form(t : T?) {
     t |> run("plane_at hands out a raw pointer at an element offset; end is legal") @(t : T?) {
         var inscope b : array<uint8>
@@ -120,7 +120,7 @@ def test_plane_at_is_the_hot_path_form(t : T?) {
     }
 }
 
-[test]
+[test(description = "`plane_release` leaves the plane empty with a null pointer and the backing bytes intact, so a fresh plane rebinds and reads the same values")]
 def test_plane_release_owns_nothing(t : T?) {
     t |> run("release drops the view and leaves the bytes alone") @(t : T?) {
         var inscope b : array<uint8>
@@ -138,7 +138,7 @@ def test_plane_release_owns_nothing(t : T?) {
     }
 }
 
-[test]
+[test(description = "Two overlapping PlaneF views of one backing both bind, and the same byte reads the same value through either view")]
 def test_plane_two_views_one_backing(t : T?) {
     t |> run("two planes may view the same bytes - neither owns them") @(t : T?) {
         var inscope b : array<uint8>

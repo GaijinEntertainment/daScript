@@ -252,7 +252,7 @@ def private twin_cell(t : T?; f : KqFmt) {
     check(t, "the host twin over the {f} device planes against the planar kernels", got, want, twin_bar(want), Shape(row_width = int(ROWS)))
 }
 
-[test]
+[test(description = "On the fifteen superblock formats the host twin over the engine gather of a planar stack into the device layout matches the planar kernels within 1e-4 relative, and they match a plain dequantized dot")]
 def test_host_twin_superblock(t : T?) {
     for (f in [KqFmt.k2, KqFmt.k3, KqFmt.k4, KqFmt.k5, KqFmt.k6, KqFmt.q40, KqFmt.iq4xs, KqFmt.iq4nl, KqFmt.iq3s, KqFmt.iq3xxs, KqFmt.iq3s4, KqFmt.nv4, KqFmt.iq2s, KqFmt.iq2xs, KqFmt.iq2xxs]) {
         t |> run("the host twin over a {f} expert stack") <| @(ct : T?) {
@@ -261,7 +261,7 @@ def test_host_twin_superblock(t : T?) {
     }
 }
 
-[test]
+[test(description = "On the four per-32 formats, mx4 and q8 the host twin over the gathered device planes matches the planar kernels within 1e-4 relative, and the planar kernels match a plain dequantized dot")]
 def test_host_twin_block32(t : T?) {
     for (f in [KqFmt.q51, KqFmt.iq4nl32, KqFmt.q4032, KqFmt.q5032, KqFmt.mx4, KqFmt.q8]) {
         t |> run("the host twin over a {f} expert stack") <| @(ct : T?) {
@@ -271,7 +271,7 @@ def test_host_twin_block32(t : T?) {
 }
 
 //! the row-major q8 kernel over the device planes the engine's gather made, against the planar kernels: the one-copy rail's kernel, the twin above its reference decode
-[test]
+[test(description = "The row-major q8 GEMV `q8q8_rm_gemv_gen` over the engine gathered device planes matches the planar q8 kernel within 1e-4 relative on eight rows off the superblock lattice")]
 def test_host_rm_q8(t : T?) {
     let f = KqFmt.q8
     let n = N_B32
@@ -323,7 +323,7 @@ def private rm_b32_rows(m : Model; f : KqFmt; x : array<float>; n, rows : int64)
     return <- got
 }
 
-[test]
+[test(description = "The row-major GEMVs for iq4nl32, q4032, q51, q5032 and mx4 over the gathered device planes match the planar kernels within 1e-4 relative on 22-block rows")]
 def test_host_rm_block32(t : T?) {
     for (f in [KqFmt.iq4nl32, KqFmt.q4032, KqFmt.q51, KqFmt.q5032, KqFmt.mx4]) {
         t |> run("the row-major kernel over a {f} expert stack") <| @(ct : T?) {
@@ -363,7 +363,7 @@ def private rm_kq_rows(m : Model; f : KqFmt; x : array<float>; n, rows : int64) 
     return <- got
 }
 
-[test]
+[test(description = "The row-major GEMVs of the fifteen superblock formats under the Q8_K activation match the planar kernels within 1e-4 relative over the gathered device planes on five-superblock rows")]
 def test_host_rm_superblock(t : T?) {
     for (f in [KqFmt.k4, KqFmt.k5, KqFmt.k6, KqFmt.k3, KqFmt.k2, KqFmt.q40, KqFmt.iq4nl, KqFmt.iq4xs, KqFmt.iq3s4, KqFmt.nv4,
                KqFmt.iq3s, KqFmt.iq3xxs, KqFmt.iq2s, KqFmt.iq2xs, KqFmt.iq2xxs]) {
@@ -417,7 +417,7 @@ def private rm_tile4_rows(m : Model; f : KqFmt; xs4 : array<float>; n, rows : in
     return <- got
 }
 
-[test]
+[test(description = "For every format the discrete homes stamp, the row-major four-token tile over the gathered device planes matches the planar kernels a token, four scaled activation rows, within 1e-4 relative")]
 def test_host_rm_tile4(t : T?) {
     for (f in type<KqFmt>) {
         t |> run("the row-major tile over a {f} expert stack") <| @(ct : T?) {

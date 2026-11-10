@@ -15,7 +15,7 @@ require daslib/strings_boost
 
 let WEATHER_TOOL = "\{\"type\": \"function\", \"function\": \{\"name\": \"get_weather\", \"description\": \"Get current weather\", \"parameters\": \{\"type\": \"object\", \"properties\": \{\"city\": \{\"type\": \"string\", \"description\": \"The city name\"}, \"unit\": \{\"type\": \"string\", \"enum\": [\"celsius\", \"fahrenheit\"]}}, \"required\": [\"city\"]}}}"
 
-[test]
+[test(description = "`harmony_tools_namespace` renders a tool list to the exact canonical Harmony TS namespace text, trailing commas and optional enum fields included, and a parameterless tool to the empty signature")]
 def test_harmony_namespace(t : T?) {
     t |> run("the developer-turn TS namespace renders canonically (trailing commas included)") @(t : T?) {
         var tools : array<string>
@@ -41,7 +41,7 @@ def test_harmony_namespace(t : T?) {
     }
 }
 
-[test]
+[test(description = "`harmony_system_body` carries exactly the requested reasoning level and the valid-channels line, and includes the functions routing line only when tools are present")]
 def test_harmony_system_body(t : T?) {
     t |> run("the harmony system body carries the reasoning level it is asked for, and the channel lines around it") @(t : T?) {
         for (level in ["low", "medium", "high"]) {
@@ -57,7 +57,7 @@ def test_harmony_system_body(t : T?) {
     }
 }
 
-[test]
+[test(description = "`harmony_parse` splits analysis and final into reasoning and content, extracts calls from both channel-header and role-header recipients, treats bare commentary as content, drops non-functions recipients, and passes headerless text")]
 def test_harmony_parse(t : T?) {
     t |> run("analysis -> final splits into reasoning + content") @(t : T?) {
         var r <- harmony_parse("<|channel|>analysis<|message|>THINK<|end|><|start|>assistant<|channel|>final<|message|>ANSWER")
@@ -101,7 +101,7 @@ def test_harmony_parse(t : T?) {
     }
 }
 
-[test]
+[test(description = "`mistral_parse` reads a [TOOL_CALLS] array or bare object with optional id and keeps prose before the marker as content, and `mistral_calls_text` renders calls back to the exact wire text")]
 def test_mistral_parse(t : T?) {
     t |> run("[TOOL_CALLS] + array with id parses; content before the marker survives") @(t : T?) {
         var r <- mistral_parse("Let me check.[TOOL_CALLS][\{\"name\": \"get_weather\", \"arguments\": \{\"city\": \"Paris\"}, \"id\": \"abc123def\"}]")
@@ -138,7 +138,7 @@ def test_mistral_parse(t : T?) {
     }
 }
 
-[test]
+[test(description = "`llama_json_parse` turns a trailing name/parameters JSON object (optionally type-prefixed) into one call with preceding prose as content, and leaves non-call braces in prose as plain content")]
 def test_llama_json_parse(t : T?) {
     t |> run("a whole-reply JSON object is a call; prose before it survives") @(t : T?) {
         var r <- llama_json_parse("\{\"name\": \"get_weather\", \"parameters\": \{\"city\": \"Paris\"}}")
@@ -167,7 +167,7 @@ def test_llama_json_parse(t : T?) {
     }
 }
 
-[test]
+[test(description = "The gemma4 call DSL parses quote tokens, bare keys, nesting, arrays, null and parallel blocks to exact JSON args, and the call, response and declaration DSL writers emit exact dict-sorted text")]
 def test_gemma4_codecs(t : T?) {
     t |> run("the call DSL parses to JSON args (quote tokens, bare keys, nesting)") @(t : T?) {
         var r <- gemma4_parse("I will check.<|tool_call>call:get_weather\{city:<|\"|>London<|\"|>,days:3,opts:\{fast:true}}<tool_call|> Done.")
@@ -204,7 +204,7 @@ def test_gemma4_codecs(t : T?) {
     }
 }
 
-[test]
+[test(description = "`mistral_parse` accepts a call-shaped JSON array with the [TOOL_CALLS] marker missing as a call, while a non-call array in prose stays content")]
 def test_mistral_markerless(t : T?) {
     t |> run("a bare call array parses (the SPM stream suppresses the [TOOL_CALLS] piece)") @(t : T?) {
         var r <- mistral_parse(" [\{\"name\": \"get_weather\", \"arguments\": \{\"city\": \"Paris\"}}]")
@@ -222,7 +222,7 @@ def test_mistral_markerless(t : T?) {
     }
 }
 
-[test]
+[test(description = "The shared codec helpers produce exact strings: `tool_call_of_json` normalizes or empties, `json_quoted` escapes, `json_value_or_quoted` passes JSON and quotes prose, and the mistral, llama and harmony wire builders")]
 def test_shared_codec_helpers(t : T?) {
     t |> run("tool_call_of_json normalizes the replay shape; garbage yields the empty call") @(t : T?) {
         let c = tool_call_of_json("\{\"name\": \"f\", \"arguments\": \{\"a\":1}, \"id\": \"xyz\"}")
@@ -253,7 +253,7 @@ def test_shared_codec_helpers(t : T?) {
     }
 }
 
-[test]
+[test(description = "Harmony recipient names stop at a space or <| in both header arms, a malformed gemma4 block drops without consuming the next block or the tail, and a segment after the final channel is reasoning, not content")]
 def test_review_round_hardening(t : T?) {
     t |> run("harmony recipient names truncate at space and at <| in both header arms") @(t : T?) {
         // role-header arm with no <|channel|>: the recipient runs to <|message|> and carries junk
@@ -290,7 +290,7 @@ def test_review_round_hardening(t : T?) {
     }
 }
 
-[test]
+[test(description = "`harmony_parse` on the live wire with the end token suppressed segments on a bare start-assistant header, yielding the analysis as reasoning and the commentary call with exact args")]
 def test_harmony_no_end_token(t : T?) {
     t |> run("the live wire: <|end|> suppressed, segments split on bare <|start|>assistant") @(t : T?) {
         var r <- harmony_parse("<|channel|>analysis<|message|>We need to call get_weather.<|start|>assistant<|channel|>commentary to=functions.get_weather <|constrain|>json<|message|>\{\"city\":\"Paris\"}")
@@ -304,7 +304,7 @@ def test_harmony_no_end_token(t : T?) {
     }
 }
 
-[test]
+[test(description = "`marker_parse` returns calls in order from complete marker spans with preceding text as content, and keeps the whole reply as content when there is no mark, an unterminated span, or only garbage spans")]
 def test_marker_parse(t : T?) {
     t |> run("no markers - everything is content") @(t : T?) {
         var r <- marker_parse("Just an answer.", "<tool_call>", "</tool_call>")
@@ -354,7 +354,7 @@ def test_marker_parse(t : T?) {
     }
 }
 
-[test]
+[test(description = "`parse_calls_` dispatches on the registered template: qwen3 separates think span, content and a hermes marker call, while gemma2 with no tool format returns the reply as content")]
 def test_parse_calls_dispatch(t : T?) {
     t |> run("hermes: think span + content + marker call classify into all three") @(t : T?) {
         var c = ChatSession()
@@ -382,7 +382,7 @@ def test_parse_calls_dispatch(t : T?) {
     }
 }
 
-[test]
+[test(description = "`tool_call_of_json` unwraps arguments sent as a JSON string to the object text and normalizes null or empty-string arguments to the empty object")]
 def test_string_arguments_passthrough(t : T?) {
     t |> run("arguments emitted as a JSON string pass through verbatim (the shared normalizer)") @(t : T?) {
         let c = tool_call_of_json("\{\"name\": \"a\", \"arguments\": \"\{\\\"x\\\": 1}\"}")
@@ -397,7 +397,7 @@ def test_string_arguments_passthrough(t : T?) {
 
 // ===== Qwen3.6 — <function=NAME> blocks: the template's own text is the fixture =====
 
-[test]
+[test(description = "The Qwen3.6 function-block codec renders replayed calls to the template's exact text and parses replies to exact args, typing values by declared parameter types when given, keeping unterminated or nameless blocks out of calls")]
 def test_xml_function_format(t : T?) {
     t |> run("a replayed call renders the template's block: string values verbatim, others as one-line JSON") @(t : T?) {
         t |> equal("<tool_call>\n<function=control>\n<parameter=point>\nlight.1\n</parameter>\n<parameter=value>\nfalse\n</parameter>\n</function>\n</tool_call>",

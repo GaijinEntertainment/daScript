@@ -5,6 +5,7 @@ options persistent_heap   // a dastest root frees what it deletes only on this h
 require dastest/testing_boost public
 require dasllama/dasllama_audio_io
 require dasllama/dasllama_gemma4a
+require dasllama/dasllama_version
 require daslib/fio
 require daslib/strings_boost
 require strings
@@ -51,7 +52,7 @@ def private spawn_boot_restore_fixture(below : bool; tag : string) : tuple<rc : 
     return spawn_compile_only(join(lines, "\n"), "boot_restore_{tag}", 120.0)
 }
 
-[test]
+[test(description = "A spawned compile proves `[boot_restore]` refuses a module with a function-pointer global declared below the restore function, naming the order, and compiles the same module with every global above")]
 def test_boot_restore_order_gate(t : T?) {
     t |> run("[boot_restore] refuses a function global declared below its restore function and compiles the module with every global above") @(t : T?) {
         let bad = spawn_boot_restore_fixture(true, "below")
@@ -62,7 +63,14 @@ def test_boot_restore_order_gate(t : T?) {
     }
 }
 
-[test]
+[test(description = "With `options _dasllama_internal` set, a file requiring the engine module `dasllama_version` directly compiles and reads `DASLLAMA_RELEASE`")]
+def test_lint_escape(t : T?) {
+    t |> run("options _dasllama_internal admits a direct engine require") @(t : T?) {
+        t |> success(DASLLAMA_RELEASE >= 4, "engine version constant readable through the direct require")
+    }
+}
+
+[test(description = "Spawned compiles prove the DASLLAMA001 allowed set: a program requiring the facade, scheduler, exchange schema and bench entries compiles clean, while a direct engine-internal require is refused with DASLLAMA001")]
 def test_allowed_set_admits_the_entry_modules(t : T?) {
     t |> run("a program on the facade, scheduler, exchange and bench entries with no escape compiles") @(t : T?) {
         let r = spawn_compile(["require dasllama/dasllama", "require dasllama/dasllama_scheduler",
@@ -77,7 +85,7 @@ def test_allowed_set_admits_the_entry_modules(t : T?) {
     }
 }
 
-[test]
+[test(description = "`load_audio_16k_mono` on a missing file returns an empty array rather than panicking")]
 def test_load_audio_16k_mono_contract(t : T?) {
     t |> run("a missing or unreadable file decodes to an EMPTY array, never a panic") @(t : T?) {
         let samples <- load_audio_16k_mono("this-file-does-not-exist.wav")
@@ -110,7 +118,7 @@ def fill_wav(var b : array<uint8>; rate : uint; data_bytes : int) {
     put_le(b, 40, uint(data_bytes), 4)
 }
 
-[test]
+[test(description = "`decode_audio_16k_mono` decodes a short 8 kHz WAV within the frame cap, refuses a 1 Hz decompression-bomb WAV to empty before decoding, and treats cap 0 as unbounded")]
 def test_decode_audio_frame_cap(t : T?) {
     t |> run("a well-formed clip under the cap decodes; a bomb over the cap decodes to EMPTY") @(t : T?) {
         let cap = 16000 * 10
@@ -130,7 +138,7 @@ def test_decode_audio_frame_cap(t : T?) {
     }
 }
 
-[test]
+[test(description = "`gemma4a_probe_proj_dim` returns 0 without panicking on a .dlim path, a missing file, and a file of non-GGUF bytes")]
 def test_gemma4a_probe_rejects_non_gguf(t : T?) {
     t |> run("the audio probe returns 0 (never panics) on a .dlim path and on non-GGUF bytes") @(t : T?) {
         t |> equal(0l, gemma4a_probe_proj_dim("some-prepared-image.dlim"), "a .dlim is not a gguf")

@@ -921,14 +921,14 @@ def private select_cell(t : T?; trg : Model; tag : string; prompt : array<int64>
     }
 }
 
-[test]
+[test(description = "On Qwen3.5-0.8B-MTP-Q8_0 the Metal MTP rail's verify rows stay within 0.5 of the plain GPU step on forced feed, with a one-step-off control, and speculative free-run emits the plain run's tokens exactly.")]
 def test_metal_mtp_parity_0_8b(t : T?) {
     t |> run("metal MTP rail vs plain GPU decode - Qwen3.5-0.8B-MTP-Q8_0") <| @(t : T?) {
         run_fixture(t, "Qwen3.5-0.8B-MTP-Q8_0.gguf", "0.8b")
     }
 }
 
-[test]
+[test(description = "On Qwen3.5-4B-MTP-Q8_0 the Metal MTP rail's verify rows stay within 0.5 of the plain GPU step on forced feed at depths 1, 2 and 4, and speculative free-run emits the plain run's tokens exactly.")]
 def test_metal_mtp_parity_4b(t : T?) {
     t |> run("metal MTP rail vs plain GPU decode - Qwen3.5-4B-MTP-Q8_0") <| @(t : T?) {
         if (!family_on(t, "qwen35")) return
@@ -936,7 +936,7 @@ def test_metal_mtp_parity_4b(t : T?) {
     }
 }
 
-[test]
+[test(description = "On Qwen3.5-9B-MTP UD-Q5_K_XL the Metal MTP rail's verify rows stay within 0.5 of the plain GPU step on forced feed, plain-vs-plain reads zero, and speculative free-run matches the plain run token for token.")]
 def test_metal_mtp_parity_9b(t : T?) {
     t |> run("metal MTP rail vs plain GPU decode - Qwen3.5-9B-MTP-UD-Q5_K_XL (large tier)") <| @(t : T?) {
         if (!family_on(t, "qwen35")) return
@@ -944,14 +944,14 @@ def test_metal_mtp_parity_9b(t : T?) {
     }
 }
 
-[test]
+[test(description = "On Qwen3.6-27B-MTP-Q4_K_M the Metal MTP rail's verify rows stay within 0.5 of the plain GPU step on forced feed and its replayed rounds, and speculative free-run emits the plain run's tokens exactly.")]
 def test_metal_mtp_parity_27b(t : T?) {
     t |> run("metal MTP rail vs plain GPU decode - Qwen3.6-27B-MTP-Q4_K_M (large tier)") <| @(t : T?) {
         run_fixture(t, "Qwen3.6-27B-MTP-Q4_K_M.gguf", "27b")
     }
 }
 
-[test]
+[test(description = "On the Qwen3.6-35B-A3B-MTP UD-Q4_K_M MoE carrier the Metal MTP rail's verify rows stay within 0.5 of the plain GPU step on forced feed, and speculative free-run emits the plain run's tokens exactly.")]
 def test_metal_mtp_parity_35b(t : T?) {
     t |> run("metal MTP rail vs plain GPU decode - Qwen3.6-35B-A3B-MTP-UD-Q4_K_M (large tier)") <| @(t : T?) {
         run_fixture(t, "Qwen3.6-35B-A3B-MTP-UD-Q4_K_M.gguf", "35b")
@@ -961,7 +961,7 @@ def test_metal_mtp_parity_35b(t : T?) {
 //! the format census's carrier: every big plane IQ4_XS on disk, the routed NextN head's eh_proj and expert stacks among them; the
 //! MoE bar, since its plain step (the fat chain) and the verify's rows (the routed pair) sum the routed experts in two fused
 //! orders - prose-b reads 0.65 with zero argmax flips
-[test]
+[test(description = "On the all-IQ4_XS Qwen3.6-35B-A3B-MTP carrier every served site keeps its own format by census, the verify rows hold the plain GPU step within the 2.0 MoE bar, and speculative free-run matches plain exactly.")]
 def test_metal_mtp_parity_35b_iq4xs(t : T?) {
     t |> run("metal MTP rail vs plain GPU decode - Qwen3.6-35B-A3B-MTP-IQ4_XS-pure (large tier)") <| @(t : T?) {
         run_fixture(t, "Qwen3.6-35B-A3B-MTP-IQ4_XS-pure.gguf", "35b-iq4xs", MOE_FF_TOL)
@@ -972,7 +972,7 @@ def test_metal_mtp_parity_35b_iq4xs(t : T?) {
 // without it), and the served pair here is the Q4_K_M trunk with the Q8_0 head - a
 // mixed-quant pair the mtp-<trunk basename> adjacency cannot name, so the fixture sets the
 // override knob (restored on exit) and the head rides the load as the last shard.
-[test]
+[test(description = "With the Qwen3.8-27B Q8_0 NextN head loaded as a split shard beside the Q4_K_M trunk, the Metal MTP rail's verify rows stay within 0.5 of the plain GPU step and speculative free-run matches plain exactly.")]
 def test_metal_mtp_parity_qwen38_split_head(t : T?) {
     t |> run("metal MTP rail vs plain GPU decode - Qwen3.8-27B-Q4_K_M + split head mtp-Qwen3.8-27B-Q8_0 (large tier)") <| @(t : T?) {
         let head = path_join(models_dir(), "mtp-Qwen3.8-27B-Q8_0.gguf")
@@ -1030,7 +1030,7 @@ def private run_fixture_served(t : T?; file, head, tag : string; tol : float) { 
 // The hyper-connection carrier: Qwen3.8-Flash-Next UD-IQ4_XS (three shards, 94 GB) with its split
 // `shared` Q8_0 head - the wide-residual carry into the draft head, the n-gram side input's panel form
 // and the sigmoid deltanet gate all ride the verify rows here and nowhere else. Large tier.
-[test]
+[test(description = "On the served-only Qwen3.8-Flash-Next hyper-connection twin with its split shared head, the MTP verify rows and the batch rail's distinct-session steps hold the GPU single step within 2.0, and speculative free-run matches plain.")]
 def test_metal_mtp_parity_flashnext(t : T?) {
     t |> run("metal MTP rail vs plain GPU decode - Qwen3.8-Flash-Next UD-IQ4_XS + split shared head (large tier)") <| @(t : T?) {
         run_fixture_served(t, "Qwen3.8-Flash-Next-GGUF/UD-IQ4_XS/Qwen3.8-Flash-Next-UD-IQ4_XS-00001-of-00003.gguf",
@@ -1158,7 +1158,7 @@ def private run_verify_fixture(t : T?; file, tag : string; tol : float; expect_d
     }
 }
 
-[test]
+[test(description = "On gemma-4-26B-A4B Q4_K_M the batch rail's same-slab verify rows and distinct-session steps hold the plain GPU step within the routed-expert bar of 24.0, and the drafter's speculative count matches plain where a sidecar sits.")]
 def test_metal_verify_gemma26(t : T?) {
     t |> run("batch-rail same-slab verify vs plain GPU decode - gemma-4-26B-A4B-it-Q4_K_M (large tier)") <| @(t : T?) {
         // the support matrix's gemma4moe Q4_K_M forced-step bar: the routed experts amplify any
@@ -1170,14 +1170,14 @@ def test_metal_verify_gemma26(t : T?) {
 
 // the control for the batch-rail same-slab verify: the batch parity fixture itself (attention-only,
 // batch B=2/3/6 token-exact vs the CPU control) - a failure here is the same-slab plumbing, not gemma
-[test]
+[test(description = "The control carrier Llama-3.2-1B Q8_0: the batch rail's same-slab verify rows and distinct-session steps hold the plain GPU step within 0.5, so a red elsewhere is the carrier, not the same-slab plumbing.")]
 def test_metal_verify_llama1b(t : T?) {
     t |> run("batch-rail same-slab verify vs plain GPU decode - Llama-3.2-1B-Instruct-Q8_0 (control)") <| @(t : T?) {
         run_verify_fixture(t, "Llama-3.2-1B-Instruct-Q8_0.gguf", "l1b", 0.5)
     }
 }
 
-[test]
+[test(description = "On gemma-4-12B Q4_K_M the batch rail serves the same-slab verify with no decline, its rows and distinct-session steps within 0.5 of the plain GPU step, and the drafter's speculative count matches plain where a sidecar sits.")]
 def test_metal_verify_gemma12(t : T?) {
     t |> run("batch-rail same-slab verify vs plain GPU decode - gemma-4-12B-it-Q4_K_M (large tier)") <| @(t : T?) {
         run_verify_fixture(t, "gemma-4-12B-it-Q4_K_M.gguf", "g12", 0.5)
@@ -1187,7 +1187,7 @@ def test_metal_verify_gemma12(t : T?) {
 //! the hybrid carrier (qwen35: deltanet layers, the 2x-wide gated Q), head-less: a same-slab verify is one
 //! session at k+1 positions, so its recurrent rows are one group walking that session's mirror row after
 //! row (`ARCHITECTURE_GPU_MTP.md#dn-group-stages`) - the rail must serve them
-[test]
+[test(description = "On head-less Qwen3.8-27B Q4_K_M the batch rail serves a same-slab verify's recurrent deltanet rows as one group, with no decline, and the rows hold the plain GPU step within 2.0.")]
 def test_metal_verify_qwen38_27b(t : T?) {
     t |> run("batch-rail same-slab verify serves a recurrent session's rows as one group - Qwen3.8-27B-Q4_K_M, no head (deltanet + gated Q, large tier)") <| @(t : T?) {
         run_verify_fixture(t, "Qwen3.8-27B-Q4_K_M.gguf", "q38", 2.0)
@@ -1195,7 +1195,7 @@ def test_metal_verify_qwen38_27b(t : T?) {
 }
 
 // plain-MoE control (qwen3moe: routed experts, no parallel dense branch) for the gemma-MoE cell
-[test]
+[test(description = "The plain-MoE control Qwen3-30B-A3B Q4_K_M: the batch rail's same-slab verify rows and distinct-session steps hold the plain GPU step within the 2.0 MoE bar, against which the gemma-MoE cell is read.")]
 def test_metal_verify_qwen30a3(t : T?) {
     t |> run("batch-rail same-slab verify vs plain GPU decode - Qwen3-30B-A3B-Instruct-2507-Q4_K_M (large tier)") <| @(t : T?) {
         run_verify_fixture(t, "Qwen3-30B-A3B-Instruct-2507-Q4_K_M.gguf", "q30", 2.0)

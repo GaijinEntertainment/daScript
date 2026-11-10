@@ -330,7 +330,7 @@ def private same_tokens(t : T?; tag : string; leg : Leg) {
     t |> success(!empty(leg.want), "{tag}: the net emits tokens")
 }
 
-[test]
+[test(description = "`rnnt_greedy` with zero_start and with the blank-embedding start each emits the scalar reference's ids, frames and durations with log-probs within 1e-5, and the two arms decode distinguishably")]
 def test_rnnt_zero_start(t : T?) {
     t |> run("zero_start reads a zero first input, the other arm the blank's (non-zero) embedding row") @(t : T?) {
         with_dasllama_jobque_() {
@@ -348,7 +348,7 @@ def test_rnnt_zero_start(t : T?) {
     }
 }
 
-[test]
+[test(description = "Poison control for the 1e-5 log-prob bar: the decoder over a net with token 0's joint row shifted by 0.125 lands outside the bar of the unmutated reference")]
 def test_rnnt_plog_bar_control(t : T?) {
     t |> run("PLOG_BAR's control: the decoder over a net with one joint row mutated lands outside the bar of the reference") @(t : T?) {
         with_dasllama_jobque_() {
@@ -369,7 +369,7 @@ def test_rnnt_plog_bar_control(t : T?) {
     }
 }
 
-[test]
+[test(description = "A joint biased to keep emitting token 0 stops at max_symbols=3 per frame, giving exactly twelve tokens over four frames, three per frame, matching the reference")]
 def test_rnnt_symbol_cap(t : T?) {
     t |> run("a joint that keeps emitting stops at max_symbols a frame") @(t : T?) {
         with_dasllama_jobque_() {
@@ -383,7 +383,7 @@ def test_rnnt_symbol_cap(t : T?) {
     }
 }
 
-[test]
+[test(description = "The RNN-T decoder matches the scalar reference with joint width differing from predictor width, on two-layer stacks in torch and i f o g gate orders, and on a predictor width off the float4 lattice")]
 def test_rnnt_shapes(t : T?) {
     t |> run("joint_dim != pred_dim") @(t : T?) {
         with_dasllama_jobque_() {
@@ -411,7 +411,7 @@ def test_rnnt_shapes(t : T?) {
     }
 }
 
-[test]
+[test(description = "With a TDT duration table the decoder matches the reference and some token takes a non-zero duration, and with no table every token's duration is 0 as in a plain RNN-T")]
 def test_rnnt_durations(t : T?) {
     t |> run("a TDT duration table moves the frame by the picked duration; an empty one is a plain RNN-T") @(t : T?) {
         with_dasllama_jobque_() {
@@ -431,7 +431,7 @@ def test_rnnt_durations(t : T?) {
     }
 }
 
-[test]
+[test(description = "The RNN-T decode in single-thread mode on one lane and the team decode on more than one lane both emit the reference's tokens for the same two-layer net")]
 def test_rnnt_one_lane(t : T?) {
     t |> run("the one-lane step decodes what the team publish does") @(t : T?) {
         with_dasllama_jobque_() {
@@ -461,7 +461,7 @@ def private layers_refusal(nl : int64) : string {
     return why
 }
 
-[test]
+[test(description = "A predictor of 0 or 3 layers panics at reset with text naming the layer count and the supported range of 1 to 2")]
 def test_rnnt_layer_count(t : T?) {
     t |> run("a predictor of 0 or 3 layers is refused at reset") @(t : T?) {
         for (nl in [0l, 3l]) {
@@ -471,7 +471,7 @@ def test_rnnt_layer_count(t : T?) {
     }
 }
 
-[test]
+[test(description = "`rnnt_step_lanes` picks 1 lane at pd 8, six at pd 320 and 25 at pd 640 (capped by the pool), and a narrowed decode matches the reference and restores the worker limit")]
 def test_rnnt_step_lanes(t : T?) {
     t |> run("a decode narrows the pool to its widest stage's work and puts it back") @(t : T?) {
         with_dasllama_jobque_() {
@@ -562,7 +562,7 @@ def private device_leg(t : T?; spec : NetSpec; tag : string) {
     t |> equal(r.run.declines, 0l, "{tag}: no decline")
 }
 
-[test]
+[test(description = "The device transducer seat decodes seven synthetic nets (starts, symbol cap, gate orders, durations, encoder half) to the reference's tokens, one device decode each, projecting the encoder half on device where laid")]
 def test_rnnt_device_twin(t : T?) {
     t |> run("the device seat decodes the synthetic nets as the reference does") @(t : T?) {
         with_dasllama_jobque_() {
@@ -577,7 +577,7 @@ def test_rnnt_device_twin(t : T?) {
     }
 }
 
-[test]
+[test(description = "A zero-frame clip on the device transducer seat yields no tokens, matching the reference, with one device decode and no decline")]
 def test_rnnt_device_zero_frames(t : T?) {
     t |> run("a clip of no frames serves as no tokens") @(t : T?) {
         return if (rnnt_seat_skip(t, "zero frames"))
@@ -618,7 +618,7 @@ def private decline_cases : array<DeclineCase> {
     return <- cases
 }
 
-[test]
+[test(description = "With the seat knob off a CPU net decodes on the CPU loop to the reference's tokens; shape, device, overrun and memory or gpu_error declines refuse a GPU-flavored net, each counting one decline of its reason")]
 def test_rnnt_device_declines(t : T?) {
     t |> run("the knob off keeps a CPU net on the CPU loop; every other seat decline refuses a GPU-flavored net; each counts its reason") @(t : T?) {
         return if (rnnt_seat_skip(t, "declines"))
@@ -660,7 +660,7 @@ def test_rnnt_device_declines(t : T?) {
     }
 }
 
-[test]
+[test(description = "Two sessions alternating on one transducer net upload its device weights once across three decodes, and a net differing in one joint bias uploads its own")]
 def test_rnnt_device_shared_weights(t : T?) {
     t |> run("sessions of one model share the device weights; another net uploads its own") @(t : T?) {
         return if (rnnt_seat_skip(t, "shared weights"))

@@ -24,7 +24,7 @@ def private mk_config(layers, heads, kv_heads, hs, ctx : int64) : Config {
         kv_dim = kv_heads * hs, shared_weights = true, rope_freq_base = 10000.0)
 }
 
-[test]
+[test(description = "Prefix-cache refcounts on a synthetic Config: inserted pages outlive the donor, an attach shares whole pages and copies the partial one up to one token short, a divergent prompt takes nothing, and release returns every page")]
 def test_prefix_accounting(t : T?) {
     t |> run("insert holds pages past session release; attach shares them; release returns all") @(t : T?) {
         let c = mk_config(2l, 4l, 2l, 16l, 32l)
@@ -83,7 +83,7 @@ def test_prefix_accounting(t : T?) {
     }
 }
 
-[test]
+[test(description = "A prefix cache capped at two pages LRU-drops the oldest of three donated pages while the session still holding it keeps it alive, and a chain whose first page dropped attaches nothing")]
 def test_prefix_lru_budget(t : T?) {
     t |> run("max_groups LRU-drops the oldest page; a dropped page a session still uses stays alive") @(t : T?) {
         let c = mk_config(2l, 4l, 2l, 16l, 32l)
@@ -113,7 +113,7 @@ def test_prefix_lru_budget(t : T?) {
     }
 }
 
-[test]
+[test(description = "Past the whole hits, a page sharing no row is not copied, each donation's next page is a candidate the prompt picks by shared rows, a partial take is an LRU touch, and a link to a dropped page attaches nothing")]
 def test_prefix_tail_edges(t : T?) {
     t |> run("the page past the whole hits: a prompt sharing none of its rows copies nothing, each donation's page past the hit is a candidate, a partial take is an LRU touch") @(t : T?) {
         let c = mk_config(2l, 4l, 2l, 16l, 32l)
@@ -195,7 +195,7 @@ def test_prefix_tail_edges(t : T?) {
     }
 }
 
-[test]
+[test(description = "With no whole-page hit, the first page sharing the most leading rows is copied and its chain credited, the same prompt again stops a token short, a prompt sharing no first row takes nothing, and an evicted first page leaves the candidates")]
 def test_prefix_first_page_edges(t : T?) {
     t |> run("no whole hit: the first page sharing the most leading rows is copied, a prompt sharing none takes nothing, an evicted first page is no candidate") @(t : T?) {
         let c = mk_config(2l, 4l, 2l, 16l, 32l)
@@ -301,7 +301,7 @@ def private attach_ringed(var cache : PrefixCache; var pool : KVPool; c : Config
     return out
 }
 
-[test]
+[test(description = "Each cached page carries its donor's ring floor: an attach and its probe cut to the longest run ending at or past every taken page's floor, and the session, or a sharing carrier, is left at the deepest floor taken")]
 def test_prefix_ring_floor(t : T?) {
     t |> run("a page carries its donor's ring floor: an attach ends at or past every taken page's floor and leaves the session at the deepest") @(t : T?) {
         let c = mk_config(2l, 4l, 2l, 16l, 32l)
@@ -361,7 +361,7 @@ def test_prefix_ring_floor(t : T?) {
     }
 }
 
-[test]
+[test(description = "Hashes only route: a cache entry whose stored tokens no longer match the prompt, as in a hash collision, refuses to attach, and the probe reads 0 too")]
 def test_prefix_verify_tokens(t : T?) {
     t |> run("hashes route, tokens verify: a corrupted entry refuses to attach") @(t : T?) {
         let c = mk_config(2l, 4l, 2l, 16l, 32l)
@@ -412,7 +412,7 @@ def private live_refs(pool : KVPool) : int {
     return live
 }
 
-[test]
+[test(description = "A recurrent session's donation is one checkpoint: whole pages shared, the last row's page copied even on a boundary, the donor's state restored on attach, a prompt it covers whole or leaves early attaching nothing")]
 def test_prefix_checkpoint_accounting(t : T?) {
     t |> run("a recurrent session's donation is one checkpoint: whole pages shared, the page of the last row copied, every page back at release") @(t : T?) {
         let c = mk_config(2l, 4l, 2l, 16l, 32l)
@@ -493,7 +493,7 @@ def test_prefix_checkpoint_accounting(t : T?) {
     }
 }
 
-[test]
+[test(description = "With `max_states` 2, a third checkpoint drops the one used longest ago, not the oldest inserted, returning its pages, and a budget of zero keeps no checkpoint")]
 def test_prefix_checkpoint_budget(t : T?) {
     t |> run("max_states drops the checkpoint used longest ago, and a budget of none keeps nothing") @(t : T?) {
         let c = mk_config(2l, 4l, 2l, 16l, 32l)
@@ -543,7 +543,7 @@ def test_prefix_checkpoint_budget(t : T?) {
     }
 }
 
-[test]
+[test(description = "The checkpoint byte budget sums each checkpoint's bytes and evicts tails before openings, a tail a prefill stops at is promoted to an opening, and the checkpoint just inserted is never the victim")]
 def test_prefix_checkpoint_kinds_and_bytes(t : T?) {
     t |> run("the byte budget drops checkpoints, tails before openings; a tail a prefill stops at becomes an opening") @(t : T?) {
         let c = mk_config(2l, 4l, 2l, 16l, 32l)
@@ -624,7 +624,7 @@ def test_prefix_checkpoint_kinds_and_bytes(t : T?) {
     }
 }
 
-[test]
+[test(description = "The checkpoint just inserted is never evicted: with only openings to drop, the opening used longest ago goes, and under a byte budget smaller than one checkpoint the newest stands alone")]
 def test_prefix_checkpoint_newest_stands(t : T?) {
     t |> run("the checkpoint just inserted is never the victim: among openings alone the opening used longest ago goes, and a budget under one checkpoint keeps the newest alone") @(t : T?) {
         let c = mk_config(2l, 4l, 2l, 16l, 32l)
@@ -673,7 +673,7 @@ def test_prefix_checkpoint_newest_stands(t : T?) {
     }
 }
 
-[test]
+[test(description = "Two checkpoints of one conversation sharing a page are charged to the byte budget as the sum of their own figures minus that page's bytes, and release returns the budget to zero")]
 def test_prefix_checkpoint_shared_pages(t : T?) {
     t |> run("the byte budget counts a page two checkpoints of one conversation share once, where their own figures count it twice") @(t : T?) {
         let c = mk_config(2l, 4l, 2l, 16l, 32l)
@@ -712,7 +712,7 @@ def test_prefix_checkpoint_shared_pages(t : T?) {
     }
 }
 
-[test]
+[test(description = "`prefix_checkpoint_at_` stops a recurrent prefill at the caller's opening, else one an earlier checkpoint shares, a token short of a prompt held whole, and nowhere under a page past the hit or without recurrent state")]
 def test_prefix_checkpoint_at(t : T?) {
     t |> run("the prefill stops at the caller's stable opening, else at an opening an earlier checkpoint shares, and nowhere on a model with no recurrent state") @(t : T?) {
         let c = mk_config(2l, 4l, 2l, 16l, 64l)
@@ -754,7 +754,7 @@ def test_prefix_checkpoint_at(t : T?) {
     }
 }
 
-[test]
+[test(description = "A device carrier session shares the whole pages the cache holds and writes the rest, a snapshot taken elsewhere files as opening or tail, and the split attach shares every page of the deepest opening and restores state")]
 def test_prefix_pool_carrier(t : T?) {   // nolint:STYLE038 — one pool and cache walked through the carrier's whole cycle: down, touch, the split attach
     t |> run("a device's opening enters through a carrier: the pages the cache holds shared, the rest written, the state taken elsewhere, the same accounting") @(t : T?) {
         let c = mk_config(2l, 4l, 2l, 16l, 32l)
@@ -876,7 +876,7 @@ def test_prefix_pool_carrier(t : T?) {   // nolint:STYLE038 — one pool and cac
     }
 }
 
-[test]
+[test(description = "Snapshots of dropped checkpoints wait for reuse with their arrays, at most two outside the byte budget, an empty cache hands out an empty snapshot, and release drops the spares")]
 def test_prefix_spare_snapshots(t : T?) {
     t |> run("a dropped checkpoint's snapshot waits for reuse, two at most, outside the byte budget; an empty cache hands an empty one") @(t : T?) {
         let c = mk_config(2l, 4l, 2l, 16l, 32l)
@@ -907,7 +907,7 @@ def test_prefix_spare_snapshots(t : T?) {
     }
 }
 
-[test]
+[test(description = "`prefix_insert_` answers an empty string for a kept, touched or dense donation, and a refusal naming its cause: a token list short of the session's position, no evaled row, or a cache keeping no checkpoints")]
 def test_prefix_insert_reasons(t : T?) {
     t |> run("a donation answers \"\" where its state was kept and names the cause where it was refused") @(t : T?) {
         let c = mk_config(2l, 4l, 2l, 16l, 32l)
@@ -951,7 +951,7 @@ def test_prefix_insert_reasons(t : T?) {
     }
 }
 
-[test]
+[test(description = "A snapshot filed at a stop the cache already keeps adds no checkpoint, insert count, byte charge or page reference, but marks the kept one used now and promotes it to an opening")]
 def test_prefix_snapshot_stop_touched(t : T?) {
     t |> run("a snapshot filed at a stop the cache keeps touches that checkpoint: no second one, used now, an opening where asked") @(t : T?) {
         let c = mk_config(2l, 4l, 2l, 16l, 32l)
@@ -998,7 +998,7 @@ def private restore_panics(var s : Session; snap : DnSnapshot) : bool {
     return tripped
 }
 
-[test]
+[test(description = "A checkpoint keeps the n-gram side input's last tokens and conv history as taken, restoring them on attach, and a snapshot of another state size is refused and leaves the session unchanged")]
 def test_prefix_checkpoint_side_state(t : T?) {
     t |> run("a checkpoint carries the n-gram side input's history with the recurrent state, and a state of another geometry is refused") @(t : T?) {
         let c = mk_config(2l, 4l, 2l, 16l, 32l)
@@ -1051,7 +1051,7 @@ def private logits_match(s : Session; all : array<float>; snap, vocab : int64) :
     return true
 }
 
-[test]
+[test(description = "On stories15M under classic prefill, shared prefix pages plus a tail eval reproduce the cold prefill's logits and eight greedy decode steps bit for bit, and a divergent suffix matches its own cold run")]
 def test_prefix_warm_equals_cold(t : T?) {   // nolint:STYLE038 — cold/warm/divergent phases share one pool + cache and one flat teardown
     t |> run("attached pages + tail eval == cold prefill, bit-exact (needs stories15M.bin)") @(t : T?) {
         return if (!jit_only(t))
@@ -1185,7 +1185,7 @@ def private attach_as_cold(t : T?; tr : Model; var cache : PrefixCache; var pool
 //! The page after the last whole hit serves the rows a prompt shares with it: the taker gets a COPY
 //! of the page (the donor's stays the cache's), prefills the rest from there and lands the cold
 //! prefill's logits bit for bit - the donation's partial tail whole, a whole page's leading rows, a tail's leading rows.
-[test]
+[test(description = "On stories15M, a prompt sharing rows of the page past the whole hits takes a copy, the donor's page staying the cache's alone, and lands the cold prefill's logits bit for bit for four row splits")]
 def test_prefix_tail_copy(t : T?) {
     t |> run("the page past the whole hits is copied for the rows the prompt shares with it, bit-exact against the cold prefill (needs stories15M.bin)") @(t : T?) {
         return if (!jit_only(t))

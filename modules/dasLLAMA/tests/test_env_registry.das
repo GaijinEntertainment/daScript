@@ -35,7 +35,7 @@ let SKIP_FILES = [
     "test_env_registry.das"
 ]
 
-[test]
+[test(description = "A source scan finds no raw environment read in modules/dasLLAMA or the dasllama server and convert tools outside `dasllama_env.das`")]
 def test_no_env_reads_outside_the_declarations(t : T?) {
     t |> run("engine and tool code reads knobs as g_env_* fields, never the environment") @(t : T?) {
         var offenders <- scan_env_raw_reads(STRICT_ROOTS, SKIP_FILES)
@@ -45,7 +45,7 @@ def test_no_env_reads_outside_the_declarations(t : T?) {
     }
 }
 
-[test]
+[test(description = "Every environment variable name read in the engine, tools, examples and tutorials has an EnvConfig declaration, with a walk-size guard of over 100 files so the scan cannot pass vacuously")]
 def test_every_env_read_is_declared(t : T?) {
     t |> run("every environment variable read anywhere has an [EnvConfig] declaration") @(t : T?) {
         var used : table<string>
@@ -62,7 +62,7 @@ def test_every_env_read_is_declared(t : T?) {
     }
 }
 
-[test]
+[test(description = "A source scan finds no re-declared private environment-reader helper anywhere in the engine or the dasllama tools")]
 def test_no_ad_hoc_env_helpers(t : T?) {
     t |> run("nobody re-declares a private env reader") @(t : T?) {
         var offenders <- scan_env_banned_helpers(STRICT_ROOTS, SKIP_FILES)
@@ -72,7 +72,7 @@ def test_no_ad_hoc_env_helpers(t : T?) {
     }
 }
 
-[test]
+[test(description = "The checked-in ENVIRONMENT.md equals what `env_markdown` renders from the declarations, line endings normalized")]
 def test_environment_md_is_current(t : T?) {
     t |> run("the checked-in ENVIRONMENT.md matches what the declarations render") @(t : T?) {
         let path = "{get_das_root()}/modules/dasLLAMA/ENVIRONMENT.md"
@@ -87,7 +87,7 @@ def test_environment_md_is_current(t : T?) {
     }
 }
 
-[test]
+[test(description = "The registered environment names number over 140 and contain no knob declared twice across the area structs")]
 def test_registry_has_no_duplicates(t : T?) {
     t |> run("each knob is declared once across the area structs") @(t : T?) {
         var names <- registered_env_names()
@@ -99,7 +99,7 @@ def test_registry_has_no_duplicates(t : T?) {
     }
 }
 
-[test]
+[test(description = "Every row of the rendered environment doc carries a non-empty Effect column")]
 def test_every_knob_is_documented(t : T?) {
     t |> run("every rendered doc row carries a non-empty Effect column") @(t : T?) {
         var undocumented <- env_undocumented_rows(env_markdown())
@@ -108,7 +108,7 @@ def test_every_knob_is_documented(t : T?) {
     }
 }
 
-[test]
+[test(description = "Every DASLLAMA-prefixed knob row `env_markdown` renders is present in `registered_env_names`, catching a struct wired into the doc renderer but not the registry")]
 def test_registry_covers_every_documented_knob(t : T?) {
     t |> run("every DASLLAMA-prefixed knob env_markdown renders is in registered_env_names") @(t : T?) {
         // both lists are hand-maintained in dasllama_env.das: a struct can sit in the doc

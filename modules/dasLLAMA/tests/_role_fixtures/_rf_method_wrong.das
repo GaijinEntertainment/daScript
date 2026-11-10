@@ -2,7 +2,7 @@ options gen2
 options indenting = 4
 options _dasllama_internal = true
 
-expect 20800   // the lens refuses this fixture BY DESIGN — see test_metal_role_infer.das
+expect 20800   // the lens refuses this fixture BY DESIGN — see uncategorized_no_aot_persistent_heap.das
 
 require metal/msl_shader
 require dasllama/dasllama_metal_lens

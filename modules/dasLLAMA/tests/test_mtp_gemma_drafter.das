@@ -56,7 +56,7 @@ def private q8_bytes(n : int64) : int64 => ((n / 32l) * 34l + 31l) / 32l * 32l
 
 // ===== refusals and the resolver (no model file needed) =====
 
-[test]
+[test(description = "`load_gemma_drafter` refuses a missing path and a magic-less file with a reason and no weights, and the sidecar resolver finds the gemma4-assistant head beside UD, K-quant and i-quant trunks but never a qwen35 NextN head of the same name")]
 def test_gemma_drafter_refusals(t : T?) {
     if (!arm_on(t, "mtp-gdraft-refuse")) {
         return
@@ -106,7 +106,7 @@ def test_gemma_drafter_refusals(t : T?) {
 }
 
 
-[test]
+[test(description = "The drafter attach's target check names a short trunk or a capture layer's mismatched head size or kv heads, the facade joins every backend's refusal, and the Vulkan driver check names the first missing fact while a complete driver passes")]
 def test_gemma_drafter_attach_checks(t : T?) {
     if (!arm_on(t, "mtp-gdraft-refuse")) {
         return
@@ -177,7 +177,7 @@ def test_gemma_drafter_attach_checks(t : T?) {
     }
 }
 
-[test]
+[test(description = "`assist_bind_rung` stops at the first failing rung - no armed driver, another codec, past the region's context, no free region - binds otherwise, and binds a session that owns its region whatever the others hold")]
 def test_gemma_drafter_bind_ladder(t : T?) {
     if (!arm_on(t, "mtp-gdraft-refuse")) {
         return
@@ -217,7 +217,7 @@ def private g26_drafter(c : Config) : GemmaDrafter {
     return <- dr
 }
 
-[test]
+[test(description = "The Metal drafter attach refuses a metal-blob trunk shell of the drafter's geometry whose token table the device gathers no row of, naming the table, and the shell cannot speculate")]
 def test_gemma_drafter_gather_refusal(t : T?) {
     if (!family_on(t, "gemma4moe") || !arm_on(t, "mtp-gdraft-refuse")) {
         return
@@ -243,7 +243,7 @@ def test_gemma_drafter_gather_refusal(t : T?) {
     }
 }
 
-[test]
+[test(description = "Loading the Q4_0 gemma-4 drafter head fails with a reason naming the tensor's Q4_0 type and the expected Q8_0")]
 def test_gemma_drafter_q40_head(t : T?) {
     if (!family_on(t, "gemma4moe") || !arm_on(t, "mtp-gdraft-refuse")) {
         return
@@ -260,7 +260,7 @@ def test_gemma_drafter_q40_head(t : T?) {
 
 // ===== loader shape (the drafter sidecar alone — no target) =====
 
-[test]
+[test(description = "The gemma-4-26B Q8_0 drafter sidecar loads with the contract's dims, per-layer head sizes, kv heads, sliding flags, capture layers 28,28,28,29 and layer scales, its blob the exact padded Q8_0 byte sum with every tensor 32-byte aligned")]
 def test_gemma_drafter_load(t : T?) {
     if (!family_on(t, "gemma4moe") || !arm_on(t, "mtp-gdraft-load")) {
         return
@@ -337,7 +337,7 @@ def test_gemma_drafter_load(t : T?) {
 
 // ===== the attach refuses a per-layer-embedding trunk =====
 
-[test]
+[test(description = "The drafter attach refuses the gemma-4 E2B trunk naming its per-layer embeddings and the E2B cannot speculate, while the same config without per-layer embeddings refuses on another clause")]
 def test_gemma_drafter_ple_refusal(t : T?) {
     if (!family_on(t, "gemma4e") || !arm_on(t, "mtp-gdraft-ple")) {
         return
@@ -368,7 +368,7 @@ def test_gemma_drafter_ple_refusal(t : T?) {
 
 // ===== the CPU oracle against a live target session =====
 
-[test]
+[test(description = "One CPU reference drafter step on gemma-4-26B, seeded with the target's argmax and its live K/V and hidden, yields finite vocab-wide logits, an in-range draft token and a finite nonzero h_next")]
 def test_gemma_drafter_cpu_step(t : T?) {
     if (!family_on(t, "gemma4moe") || !arm_on(t, "mtp-gdraft-cpu")) {
         return
@@ -804,7 +804,7 @@ def private gpu_step_vs_oracle(t : T?; trg : Model; var dr : GemmaDrafter; promp
     delete s
 }
 
-[test]
+[test(description = "The GPU drafter step on the served 26B agrees with the CPU oracle's draft token and sits within the home's logits and h_next bars (0.25 and 0.05 on Metal, 1.0 on a Q8_0 feed) at a short anchor and past the sliding window, an off-by-one seed landing outside")]
 def test_gemma_drafter_gpu_step(t : T?) {
     if (!family_on(t, "gemma4moe") || !arm_on(t, "mtp-gdraft-gpu")) {
         return
@@ -825,7 +825,7 @@ def test_gemma_drafter_gpu_step(t : T?) {
     }
 }
 
-[test]
+[test(description = "A scheduler speculating at depth 1 through the attached gemma-4 drafter emits the plain scheduler's counting tokens exactly, every draft counted by the device drafter, and with the drafter detached it stands down, drafts nothing, and still matches")]
 def test_gemma_drafter_served(t : T?) {
     if (!family_on(t, "gemma4moe") || !arm_on(t, "mtp-gdraft-sched")) {
         return
@@ -875,7 +875,7 @@ def private stepped_session(trg : Model; prompt : array<int64>; kv : KVDtype) : 
     return <- s
 }
 
-[test]
+[test(description = "On Metal a joint drafter verify over two streams on two KV codecs carries no stream and counts no round, each stream's step equal bit for bit to a plain decode step, while one codec across both carries both streams")]
 def test_gemma_drafter_verify_decline(t : T?) {
     if (!family_on(t, "gemma4moe") || !arm_on(t, "mtp-gdraft-vdecl")) {
         return
@@ -947,7 +947,7 @@ def test_gemma_drafter_verify_decline(t : T?) {
     }
 }
 
-[test]
+[test(description = "At drafter depths 3 and 1 the speculating scheduler drafts k tokens a round and emits the plain scheduler's counting tokens exactly across a page boundary, and a reasoning budget lands its forced close at the budget with the plain stream's tokens")]
 def test_gemma_drafter_depth_knob(t : T?) {
     if (!family_on(t, "gemma4moe") || !arm_on(t, "mtp-gdraft-depth")) {
         return
@@ -1012,7 +1012,7 @@ def test_gemma_drafter_depth_knob(t : T?) {
     }
 }
 
-[test]
+[test(description = "Three speculating streams at depths 1 and 2 ride one joint verify a tick, each emitting the plain scheduler's counting tokens exactly, while a lone stream counts no joint verify (the counter's control)")]
 def test_gemma_drafter_joint(t : T?) {
     if (!family_on(t, "gemma4moe") || !arm_on(t, "mtp-gdraft-joint")) {
         return
@@ -1050,7 +1050,7 @@ def test_gemma_drafter_joint(t : T?) {
     }
 }
 
-[test]
+[test(description = "On q8_0 and tq4 KV mirrors the drafter's rounds run on the device, accept drafts, and the speculating scheduler emits the same codec's plain scheduler tokens exactly")]
 def test_gemma_drafter_codecs(t : T?) {
     if (!family_on(t, "gemma4moe") || !arm_on(t, "mtp-gdraft-codec")) {
         return
@@ -1192,7 +1192,7 @@ def private ring_draft_run(t : T?; ring : int; budget : int64; count0 : int = 0)
     return <- run
 }
 
-[test]
+[test(description = "Past a sliding capture layer's KV ring the drafter at the same anchor drafts the flat mirror's tokens - logits bit for bit off Metal, the same pick on Metal - and the ringed stream matches the flat one with acceptance within 10 percent")]
 def test_gemma_drafter_past_ring(t : T?) {
     if (!family_on(t, "gemma4moe") || !arm_on(t, "mtp-gdraft-ring")) {
         return
@@ -1226,7 +1226,7 @@ def test_gemma_drafter_past_ring(t : T?) {
     }
 }
 
-[test]
+[test(description = "The drafter attaches to the UD-IQ3_XXS 26B trunk whose Q6_K token table the seed embed gathers, accepts drafts at depth 2, and emits the plain scheduler's counting tokens exactly")]
 def test_gemma_drafter_kquant_table(t : T?) {
     if (!family_on(t, "gemma4moe") || !arm_on(t, "mtp-gdraft-iq3")) {
         return

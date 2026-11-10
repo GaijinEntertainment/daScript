@@ -14,22 +14,22 @@ require _resident_regions
 // device the driver serves, or without the file under models_dir().
 let private REGIONS_FILE = "gpt-oss-20b-mxfp4.gguf"
 
-[test]
+[test(description = "On gpt-oss-20b the N-row command's routed block over the mx4 stacks, biased router and sinks batches two sessions within the routed bar of each session alone")]
 def test_regions_batched_steps_gptoss(t : T?) {
     cell_regions_batched_steps(t, REGIONS_FILE, LogitsBar.routed_bar)
 }
 
-[test]
+[test(description = "On gpt-oss-20b with both prompts past the unsplit position, the split N-row command batches two sessions within the routed bar of each session alone")]
 def test_regions_batched_steps_split_gptoss(t : T?) {
     cell_regions_batched_steps_split(t, REGIONS_FILE, LogitsBar.routed_bar)
 }
 
-[test]
+[test(description = "On gpt-oss-20b a batched step over two rows, a one-row step, then batched steps over three keep every row within the routed bar of its session alone as the N-row command records new row counts")]
 def test_regions_batched_widen_gptoss(t : T?) {
     cell_regions_batched_widen(t, REGIONS_FILE, LogitsBar.routed_bar)
 }
 
-[test]
+[test(description = "On gpt-oss-20b a batched step before any one-row step, one-row steps, then a batched step again all read what each session reads alone")]
 def test_regions_batched_first_gptoss(t : T?) {
     cell_regions_batched_first(t, REGIONS_FILE)
 }

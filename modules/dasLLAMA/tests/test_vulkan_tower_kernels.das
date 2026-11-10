@@ -123,7 +123,7 @@ def private vkt_fa_arm_on(khr : bool) : bool {
     }
 }
 
-[test]
+[test(description = "The bidirectional flash tile (cm2 and KHR, h64 and h128) over 77 rows matches the all-keys CPU attention at the 2e-3 approx bar, keeps sentinel slack rows past kvlen masked, and differs from its causal twin on row 0 only")]
 def test_vkt_fa_bidir(t0 : T?) {
     t0 |> run("bidirectional flash attention (h64 and the padded h128, cm2 and KHR arms) == the CPU oracle over every key") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -151,7 +151,7 @@ def test_vkt_fa_bidir(t0 : T?) {
     }
 }
 
-[test]
+[test(description = "The layernorm, post-add, bias-GELU and attention combine fused with the Q8_0 requant land the separate pass's Q8_0 bytes and scales exactly at widths 256, 384 and 1280, and their rows match the CPU forms at the approx bar")]
 def test_vkt_wdec_fused_rq(t0 : T?) {
     t0 |> run("the layernorm, the post-add, the bias-activation and the attention combine fused with the Q8_0 requant == the pass then TowerClampRq and the CPU forms, at the other cells' width, whisper tiny's and turbo's") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -169,7 +169,7 @@ def test_vkt_wdec_fused_rq(t0 : T?) {
     }
 }
 
-[test]
+[test(description = "`vt_tile_rows` rounds a GEMM record's rows up to a whole 256-wide l column (1500 to 1536, 1152 to 1280) and leaves the raw count for the m and s columns and the q8 batch tile")]
 def test_vkt_tile_rows(t0 : T?) {
     t0 |> run("a GEMM record's rows round up to the l column; the s and m columns and the batch tile keep the raw count") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -192,7 +192,7 @@ let private ROWS_HEADS = 4
 let private ROWS_EPS = 1.0e-6
 
 
-[test]
+[test(description = "The tower row classes match the CPU tower helpers over 37 rows: clamp, clamp copy (source untouched) and the f16 clamp feed bit for bit, rope2d and geglu at the approx bar, plus the shared rms, post-add, clamp+rq and plain post-add cases")]
 def test_vkt_tower_rows(t0 : T?) {   // nolint:STYLE038 — one flat gate over the five inline row classes: the fixture, one command buffer, five oracles and their controls
     t0 |> run("the tower row classes (clamp, clamp copy, clamp+cvt, rope2d, geglu; then the shared rms, post-add, clamp+rq and post-add plain cases) == the CPU tower helpers") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -314,7 +314,7 @@ let private VR_POOL_K = 3
 //! the vision chains' stem and tail stamps against the CPU forms: the patch im2col under the [0, 1] -> [-1, 1] map (the pad
 //! rows zero), the gemma4v 2-axis position add, the qwen3v merge-walk stem assemble, the grid mean pool and the standardize
 //! rows on both arms; every compare with its poisoned-expectation control
-[test]
+[test(description = "The vision stem and tail stamps match the CPU forms: patch im2col with the [-1, 1] map and zero pad rows, the 2-axis position add and the qwen3v merge-walk assemble bit for bit, grid mean pool and affine rows at the approx bar")]
 def test_vkt_tower_vision_rows(t0 : T?) {   // nolint:STYLE038 — one flat gate over the five vision row classes: the fixture, one command buffer, the oracles
     t0 |> run("the vision stem and tail rows (patch im2col, pos add 2d, stem assemble, grid pool, affine rows) == the CPU forms") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -425,7 +425,7 @@ def test_vkt_tower_vision_rows(t0 : T?) {   // nolint:STYLE038 — one flat gate
 }
 
 //! the chat projector tails' row classes on the templates both homes stamp, on the CUDA cell's case body
-[test]
+[test(description = "The chat projector tails' row-pair mean pool and swapped SwiGLU at an off-multiple width of 70 match the CPU forms at the approx bar with idle lanes untouched, and the unswapped gate lands elsewhere")]
 def test_vkt_tower_tail_rows(t0 : T?) {
     t0 |> run("the pair pool and the swapped SwiGLU rows == the CPU forms") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -444,7 +444,7 @@ def test_vkt_tower_tail_rows(t0 : T?) {
 
 //! the Conformer row classes: the unbiased silu stamp here, the GLU, the causal depthwise taps and the windowed RPE attention on
 //! both head widths on the CUDA cell's case body
-[test]
+[test(description = "The Conformer stamps (silu, GLU, causal depthwise taps, windowed RPE attention at head widths 64 and 128) match the CPU loops at the approx bar; scaled keys and a 4x softcap oracle land elsewhere, proving the cap engages")]
 def test_vkt_tower_conformer(t0 : T?) {
     t0 |> run("the Conformer row classes (silu, GLU, depthwise conv, windowed RPE attention) == the CPU forms") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -475,7 +475,7 @@ def test_vkt_tower_conformer(t0 : T?) {
     }
 }
 
-[test]
+[test(description = "The FastConformer conv tail (centered depthwise conv, folded BatchNorm, silu) on channel-major and tap-major taps, and gigaam's biased form, match the CPU loop at the approx bar with poison past npos never read")]
 def test_vkt_tower_fastconformer(t0 : T?) {
     t0 |> run("the FastConformer conv module tail (the centered depthwise conv + folded BN + silu) == the CPU form") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -495,7 +495,7 @@ def test_vkt_tower_fastconformer(t0 : T?) {
 //! gigaam's depthwise conv over the carrier's f16 taps (`TowerGaDwH`: FORM 3, tap-major, TAP_F16) on the shapes the Metal cell runs
 //! vs the CPU loop over the same halfwords (`fc_dw_bias_rows_f16`), itself held to the f32 loop over the widened taps to the
 //! bit; the control a poisoned halfword tap
-[test]
+[test(description = "Gigaam's f16-tap depthwise conv matches the CPU loop over the same halfwords within 1e-6 relative at k5 and k31, that loop is bit-exact to the f32 loop, and a poisoned halfword tap reds the bar")]
 def test_vkt_tower_ga_dwh(t0 : T?) {
     t0 |> run("the f16-tap depthwise conv == the CPU loop over the same halfwords") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -512,7 +512,7 @@ def test_vkt_tower_ga_dwh(t0 : T?) {
     }
 }
 
-[test]
+[test(description = "Parakeet's k3 s2 p1 depthwise conv2d over tap-major taps matches the CPU loop at the approx bar, unmasked and under a valid-length mask that measurably changes the rows, idle lanes untouched")]
 def test_vkt_tower_dw2d(t0 : T?) {
     t0 |> run("parakeet's subsample depthwise conv2d (k3 s2 p1) over tap-major taps == the CPU loop, the rows past the valid length masked") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -532,7 +532,7 @@ def test_vkt_tower_dw2d(t0 : T?) {
 let private LN_HS = 72   //! the SigLIP head width: off the flash tiles' 64 / 128, so the restride pads it to 128
 let private LN_HSP = 128
 
-[test]
+[test(description = "The biased-block classes match the CPU helpers: layernorm, five bias-activations (erf GELU at 1e-5, told apart from tanh), post-add+ln with its ln_on 0 and ascale 0.5 seams, exact head pad/unpad with zero tails, and the k-slot rope")]
 def test_vkt_tower_ln_rows(t0 : T?) {   // nolint:STYLE038 — one flat gate over the biased-block classes: the fixture, one command buffer, the oracles and their controls
     t0 |> run("the biased-block row classes (layernorm, bias+act, post-add+ln, the head restrides) == the CPU tower helpers") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -721,7 +721,7 @@ def test_vkt_tower_ln_rows(t0 : T?) {   // nolint:STYLE038 — one flat gate ove
     }
 }
 
-[test]
+[test(description = "Each f16-feed stamp is its f32 twin rounded to half bit for bit: bias_act_cvt16 on three activations, the biased head pads with zero tails, hunpad16, and the ln16 and post_add_ln16 halves, which also hold the layernorm bar")]
 def test_vkt_tower_f16_feeds(t0 : T?) {   // nolint:STYLE038 — one flat gate over the four inline stamps: the fixture, one command buffer, the twins and their controls
     t0 |> run("the f16-feed stamps (hpad_b, hpad16_b, hunpad16, bias_act_cvt16; then the shared ln16 and post_add_ln16 cases) == their f32 stamps rounded to half") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -828,7 +828,7 @@ def test_vkt_tower_f16_feeds(t0 : T?) {   // nolint:STYLE038 — one flat gate o
     }
 }
 
-[test]
+[test(description = "The whisper decoder's K/V store writes its F16, KX and VX layouts bit for bit as the CPU chain, and the chunked attention pair matches the CPU form at the approx bar on causal rows across a chunk boundary and on cross rows")]
 def test_vkt_wdec_classes(t0 : T?) {
     t0 |> run("the whisper decoder's K/V store and chunked attention pair == the CPU decoder forms") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -847,7 +847,7 @@ def test_vkt_wdec_classes(t0 : T?) {
 
 let private PAT_HEADS = 16   //! the SigLIP head count: sixteen 72-wide heads through the padded 128 route
 
-[test, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-routes")]
+[test(description = "The padded attention route (pad 72-wide heads to 128, the h128 bidirectional flash tile, unpad) over sixteen heads and 77 rows matches `attention_bidir` at the 2e-3 approx bar"), arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-routes")]
 def test_vkt_tower_padded_attn(t0 : T?) {
     t0 |> run("the padded attention route (pad, the h128 bidirectional tile, unpad) == attention_bidir at 72-wide heads") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -923,7 +923,7 @@ let private WIN_HS = 80      //! the qwen25v head width, the one the window clas
 let private WIN_HEADS = 4
 let private WIN_ROWS = 982   //! sixteen windows: fifteen of 64 rows and a ragged 22-row one
 
-[test, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-routes")]
+[test(description = "The window-attention class over 982 rows in sixteen windows, one ragged, matches `attention_bidir_windows` at the approx bar while full attention lands elsewhere; the f16 gated hidden and the rms seam match their CPU forms"), arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-routes")]
 def test_vkt_tower_win_rows(t0 : T?) {   // nolint:STYLE038 — the window route end to end plus the gated hidden: the fixture, the command buffer, the oracles and their controls
     t0 |> run("the window-attention classes (the f32 per-window attention, the rms seam, the gated hidden) == the CPU tower helpers") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -1011,7 +1011,7 @@ def test_vkt_tower_win_rows(t0 : T?) {   // nolint:STYLE038 — the window route
     }
 }
 
-[test]
+[test(description = "The audio fronts' data movers reproduce their CPU forms: im2col and shuffles as exact halves, one-head restrides with and without bias, clamp+halfword, the exact plane add touching nothing past it, and the qwen3a finish's bias and position rows")]
 def test_vkt_tower_front_movers(t0 : T?) {   // nolint:STYLE038 — one flat gate over the Vulkan-only movers: the fixture, one command buffer, the exact oracles and their controls
     t0 |> run("the audio fronts' data movers (im2col, the stem's half im2col, the shuffles and ln + relu on the CUDA cells' case bodies; the one-head restride, clamp + halfword, add plane, the q3a finish's bias passes) == their forms") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -1117,7 +1117,7 @@ def test_vkt_tower_front_movers(t0 : T?) {   // nolint:STYLE038 — one flat gat
     }
 }
 
-[test]
+[test(description = "The audio fronts' spectral classes match their CPU forms at the approx bar: the DFT magnitude and power arms, three mel-log floor laws, canary's mel normalization with an exact zero tail, depthwise conv and the rel sin-cos table")]
 def test_vkt_tower_front_mel(t0 : T?) {
     t0 |> run("the audio fronts' spectral classes (spec_dft, mel_log, mel_norm, dw_conv, rel_sincos) == their CPU forms") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -1139,7 +1139,7 @@ def test_vkt_tower_front_mel(t0 : T?) {
     }
 }
 
-[test]
+[test(description = "Gigaam's device front writes the windowed frames with their zero pads bit for bit, and its clamped-log mel matches the CPU form within 1e-6, a zero frame reading the floor's log and a loud one the ceiling's")]
 def test_vkt_tower_ga_mel(t0 : T?) {
     t0 |> run("gigaam's device mel classes (ga_frames, mel_log's clamp form) == the CPU frame loop and the clamped-log form") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -1157,7 +1157,7 @@ def test_vkt_tower_ga_mel(t0 : T?) {
     }
 }
 
-[test]
+[test(description = "Canary's rel-plane FastConformer attention over four 64-wide and two 128-wide heads matches the CPU rel-pos loop with u/v biases at the approx bar; scaled keys and a scaled rel table each land elsewhere")]
 def test_vkt_tower_cn_attn_rel_plane(t0 : T?) {
     t0 |> run("the rel-plane FastConformer attention (both head widths) over CPU-built planes == the CPU loop") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -1177,7 +1177,7 @@ def test_vkt_tower_cn_attn_rel_plane(t0 : T?) {
 //! the silero VAD's two classes against `_vad_oracle.das`'s references (the kernels' order in f32; the device parts by its fmas,
 //! exp, tanh, sqrt and the decoder's subgroup fold, a few ulp a stage, inside the approx bar): the encoder over three chunks,
 //! the recurrence at one chunk and five from a nonzero state in place
-[test]
+[test(description = "The silero VAD encoder over three chunks and its LSTM recurrence at one and five chunks from a nonzero state match the `_vad_oracle` references at the approx bar, the state moving off its input")]
 def test_vkt_tower_vad(t0 : T?) {
     t0 |> run("the silero VAD's encoder and recurrence == the CPU references") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -1196,7 +1196,7 @@ def test_vkt_tower_vad(t0 : T?) {
 
 //! the transducer decode's four stamps on the legs the Metal cells run (`test_metal_rnnt_kernels`), at both fixture shapes
 //! (`rc_shapes`), against `_rnnt_oracle.das`
-[test]
+[test(description = "The transducer decode's gates, predictor projection, joint window and pick stamps match the `_rnnt_oracle` references on the Metal cells' legs at both fixture shapes, including states that must leave outputs untouched")]
 def test_vkt_rnnt(t0 : T?) {
     t0 |> run("the transducer decode's gates, projection, joint and pick == the CPU references") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -1216,7 +1216,7 @@ def test_vkt_rnnt(t0 : T?) {
 //! The CTC head's pick (`CtcPick` on `GkCtcPick`) on the Metal cell's `ctc_pick_cases` (three widths, a tie, NaN pad slots, an
 //! all-NaN row picking class 0) against the CPU row loop: every record written, each class exact, each plog within 1e-5
 //! relative; the control a poisoned bias element moving a pick or a plog off the reference.
-[test]
+[test(description = "The CTC pick writes every row's record with the CPU loop's exact class (a tie taking the lower class, an all-NaN row class 0) and each plog within 1e-5 relative, and a poisoned bias element moves the plogs")]
 def test_vkt_ctc_pick(t0 : T?) {
     t0 |> run("the CTC head's pick == the CPU row loop, a tie picking the lower class, a NaN row picking class 0") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -1235,7 +1235,7 @@ def test_vkt_ctc_pick(t0 : T?) {
 
 //! The Bergamot step's three stamps (`NmtEmbed`, `NmtSsru`, `NmtPick`) on the legs the Metal cells run (`test_metal_nmt_kernels`),
 //! against `_nmt_oracle.das`
-[test]
+[test(description = "The Bergamot step's embed rows bit for bit, SSRU cell within 1e-6 relative with layer 0 kept, and greedy pick records exact at vocabularies 200, 1000 and 32000 match the `_nmt_oracle` references, each with a poisoned-input control")]
 def test_vkt_nmt(t0 : T?) {
     t0 |> run("the Bergamot step's embed, SSRU cell and pick == their CPU references") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -1398,7 +1398,7 @@ let private NMT_ATTN_Q_LEAD = 7     //! the floats ahead of the q bias row in `w
 //! The Bergamot attention pair (`NmtAttnPart` + `NmtAttnComb`, head width `pa.hs`) at heads of 32, 48 and 64 over 300 keys (two
 //! chunks) and 150 against `wdec_attn_ref` over the same halves; q rows strided twice the width, the K/V run behind a lead, the
 //! partial and output slack under the sentinel. The control the keys scaled twice, through `check_exceeds`.
-[test]
+[test(description = "The Bergamot attention part+combine pair at head widths 32, 48 and 64 over 300 keys (two chunks) and 150 matches `wdec_attn_ref` at the approx bar with the K/V run behind a lead, slack kept, doubled key scale landing elsewhere")]
 def test_vkt_nmt_attn(t0 : T?) {
     t0 |> run("the Bergamot attention pair at heads of 32, 48 and 64 == the CPU attention") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {

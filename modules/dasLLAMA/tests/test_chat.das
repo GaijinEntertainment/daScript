@@ -45,7 +45,7 @@ def private engine_prefill(m : Model; system, user : string) : array<int64> {
     return <- out
 }
 
-[test]
+[test(description = "The chat engine first-turn prefill for TinyLlama equals the hand-built Zephyr token sequence (BOS, system, user, assistant headers with EOS separators) token for token")]
 def test_chat_tinyllama_zephyr(t : T?) {
     t |> run("TinyLlama (arch=llama + SPM) renders the Zephyr prefill") @(t : T?) {
         let path = path_join(models_dir(), "tinyllama-1.1b-chat-v1.0.Q8_0.gguf")
@@ -68,7 +68,7 @@ def test_chat_tinyllama_zephyr(t : T?) {
     }
 }
 
-[test]
+[test(description = "The Gemma-2 first-turn prefill folds the system text into the first user turn and equals the hand-built start-of-turn token sequence token for token")]
 def test_chat_gemma(t : T?) {
     t |> run("Gemma-2 (SPM, no system role) folds system into the first user turn") @(t : T?) {
         let path = path_join(models_dir(), "gemma-2-2b-it-Q8_0.gguf")
@@ -90,7 +90,7 @@ def test_chat_gemma(t : T?) {
     }
 }
 
-[test]
+[test(description = "The Phi-3.5 first-turn prefill equals the hand-built Phi-3 sequence of system, user, end and assistant special ids around the encoded text token for token")]
 def test_chat_phi(t : T?) {
     t |> run("Phi-3.5 (SPM) renders the Phi-3 prefill") @(t : T?) {
         let path = path_join(models_dir(), "Phi-3.5-mini-instruct-Q4_K_M.gguf")
@@ -117,7 +117,7 @@ def test_chat_phi(t : T?) {
     }
 }
 
-[test]
+[test(description = "The Qwen2.5 prefill equals the hand-built ChatML sequence token for token, and the marked render reports the system turn as the first turn opening and none on a later turn")]
 def test_chat_qwen(t : T?) {
     t |> run("Qwen2.5 (BPE) renders the ChatML prefill") @(t : T?) {
         let path = path_join(models_dir(), "Qwen2.5-1.5B-Instruct-Q8_0.gguf")
@@ -161,7 +161,7 @@ def test_chat_qwen(t : T?) {
     }
 }
 
-[test]
+[test(description = "The Llama-3.2 prefill equals the hand-built header sequence with the knowledge-cutoff and pinned date lines, keeps those lines with no system message, and uses today when the date is unpinned")]
 def test_chat_llama3(t : T?) {
     t |> run("Llama-3 (arch=llama + BPE) renders the Llama-3 header prefill") @(t : T?) {
         let path = path_join(models_dir(), "Llama-3.2-1B-Instruct-Q8_0.gguf")
@@ -199,7 +199,7 @@ def test_chat_llama3(t : T?) {
     }
 }
 
-[test]
+[test(description = "A greedy Gemma-2 respond streams a non-empty reply, records the user and assistant turns, and its session stats count exactly the streamed tokens and a nonzero prefill")]
 def test_chat_end_to_end(t : T?) {
     t |> run("respond() streams a reply, stops on a stop token, records stats + transcript") @(t : T?) {
         return if (!jit_only(t))
@@ -237,7 +237,7 @@ def test_chat_end_to_end(t : T?) {
 // format instructions included — encodes as its single vocab id. <tools> and (on Qwen2.5, which
 // lacks the token) <tool_response> stay in the text runs.
 
-[test]
+[test(description = "On Qwen2.5 the Hermes system tool block, the default-system assistant tool-call replay and the tool-results turn render token for token, the tool-call markers as single vocab ids")]
 def test_chat_tools_hermes(t : T?) {   // nolint:STYLE038 — flat expected-token stream, one push per run
     t |> run("Qwen ChatML renders the Hermes tool block token-for-token (needs Qwen2.5-0.5B)") @(t : T?) {
         let path = path_join(models_dir(), "Qwen2.5-0.5B-Instruct-Q8_0.gguf")
@@ -345,7 +345,7 @@ def test_chat_tools_hermes(t : T?) {   // nolint:STYLE038 — flat expected-toke
 
 // ===== Non-thinking mode (the Qwen3 family's enable_thinking=false) =====
 
-[test]
+[test(description = "On Qwen3 set_thinking false appends the empty think block to the generation prompt, while on Qwen2.5 without think tokens it changes nothing and the reply think matcher stays unarmed")]
 def test_chat_think_suppress(t : T?) {
     t |> run("set_thinking(false) appends the empty think block to the generation prompt (needs Qwen3-0.6B)") @(t : T?) {
         let path = path_join(models_dir(), "Qwen3-0.6B-Q8_0.gguf")
@@ -427,7 +427,7 @@ def private replay_four(m : Model; preserve : bool; reasoning : string) : array<
     return <- got
 }
 
-[test]
+[test(description = "On Qwen3 a replayed assistant turn renders no think block with preserve_thinking off, the empty block with it on and no reasoning, and the reasoning between the markers when given")]
 def test_chat_preserve_thinking(t : T?) {
     t |> run("preserve_thinking replays an assistant turn with its think block - empty, or around its reasoning (needs Qwen3-0.6B)") @(t : T?) {
         let path = path_join(models_dir(), "Qwen3-0.6B-Q8_0.gguf")
@@ -501,7 +501,7 @@ def private pieces_text(m : Model; toks : array<int64>) : string {
     }
 }
 
-[test]
+[test(description = "A template with parameter blocks sniffs to the Qwen3.6 xml_function tool format, and on Qwen3.5 its first turn, call replay, results, thinking replay and back-to-back user turns render the template exact text")]
 def test_chat_xml_function(t : T?) {   // nolint:STYLE038 - one template, every form of its turns held to its own text
     t |> run("a template with <parameter= blocks installs the Qwen3.6 tool format (model-free)") @(t : T?) {
         var m = Model()
@@ -608,7 +608,7 @@ def test_chat_xml_function(t : T?) {   // nolint:STYLE038 - one template, every 
 // The instruct-mode TEXT turn through respond: the E-series rambles past its answer through a
 // stray channel marker, and the guard ends the turn there - the content half carries no marker
 // and the turn does not run to the budget.
-[test]
+[test(description = "Gemma-4 E2B with thinking off answers 2+2 with 4, keeps every channel marker out of the content half, and ends the turn on a stop before the 64-token budget")]
 def test_chat_gemma4_instruct_text_turn(t : T?) {
     t |> run("thinking off on E2B: '2+2' answers and a stray channel marker ends the turn") @(t : T?) {
         let path = path_join(models_dir(), "gemma-4-E2B-it-Q4_K_M.gguf")
@@ -675,7 +675,7 @@ def private log_top_token(m : Model; side : string; logits : array<float>) {
 let private E_BODY_NEAR = 0.25  //! of the logits' peak: one body against three calls differs by call shape alone - 0.11 here, and the same tokens as ids read 0.14 apart in one call and in three
 let private E_BODY_FAR = 1.0     //! of the peak: text rows under the padding token's per-layer input are another prompt - 1.9 here
 
-[test]
+[test(description = "On Gemma-4 E2B a fused media body whose text rows keep their token ids yields last-row logits within 0.25 of the peak of the text-rows-text split, while dropping the ids moves them past 1.0 of the peak")]
 def test_gemma4_e_media_body(t : T?) {
     t |> run("an E-series media body gives its text rows their own tokens' per-layer input: one call == text / rows / text (needs gemma-4-E2B)") @(t : T?) {
         let path = path_join(models_dir(), "gemma-4-E2B-it-Q4_K_M.gguf")
@@ -709,7 +709,7 @@ def test_gemma4_e_media_body(t : T?) {
     }
 }
 
-[test]
+[test(description = "On gpt-oss-20b the reasoning budget opens on the channel mark, analysis and message mark, leaves on the end mark, forces a close into the final channel, and ends the turn on a later channel mark")]
 def test_chat_gptoss_budget_marks(t : T?) {
     t |> run("gpt-oss: the reasoning budget's marks are harmony's analysis channel and its end (needs gpt-oss-20b, large tier)") @(t : T?) {
         let path = path_join(models_dir(), "gpt-oss-20b-mxfp4.gguf")
@@ -739,7 +739,7 @@ def test_chat_gptoss_budget_marks(t : T?) {
     }
 }
 
-[test]
+[test(description = "Gemma-4 E2B defaults to thinking with channel-thought budget marks; instruct mode adds the channel stops and renders the bare model turn, thinking-on gates the system turn, and no late gate appears")]
 def test_chat_gemma4_thinking(t : T?) {   // nolint:STYLE038 — flat expected-token stream, one push per run
     t |> run("default = thinking; instruct opt-out = the template's bare model turn (needs gemma-4-E2B)") @(t : T?) {
         let path = path_join(models_dir(), "gemma-4-E2B-it-Q4_K_M.gguf")
@@ -854,7 +854,7 @@ def test_chat_gemma4_thinking(t : T?) {   // nolint:STYLE038 — flat expected-t
 
 // ===== qwen35 Hermes tools (the qwen2/qwen3 block, kept by the 3.5 template) =====
 
-[test]
+[test(description = "The qwen35 registration declares the Hermes tool markers and prelude, and on Qwen3.5-0.8B the system tool block renders those markers as single vocab ids")]
 def test_chat_qwen35_tools(t : T?) {
     t |> run("the qwen35 registration declares the Hermes tool format (model-free)") @(t : T?) {
         var ct <- arch_chat("qwen35")
@@ -896,7 +896,7 @@ def test_chat_qwen35_tools(t : T?) {
 
 // ===== ToolMode declarations + the gemma-4 tool wire (the tool-formats arc) =====
 
-[test]
+[test(description = "Each family declares its ToolMode by registration or template detection, harmony reasoning level follows an explicit effort else the thinking flag, and a mode missing its control specials demotes to none")]
 def test_chat_tool_modes(t : T?) {
     t |> run("each family's registration/template declares its ToolMode (model-free)") @(t : T?) {
         var g <- arch_chat("gpt-oss")
@@ -961,7 +961,7 @@ def test_chat_tool_modes(t : T?) {
     }
 }
 
-[test]
+[test(description = "On Gemma-4 E2B the tool declaration DSL turn, the open call replay, the in-turn result and thinking re-open render token for token, and displaced results and a leaked open turn heal on the next render")]
 def test_chat_gemma4_tool_wire(t : T?) {   // nolint:STYLE038 — flat expected-token stream, one push per run
     t |> run("defs turn + call replay + result turn token-for-token (needs gemma-4-E2B)") @(t : T?) {
         let path = path_join(models_dir(), "gemma-4-E2B-it-Q4_K_M.gguf")
@@ -1180,7 +1180,7 @@ def private detected_special(src : string) : string {
     return first_user_special(ct)
 }
 
-[test]
+[test(description = "Template fragments sniff to each family distinctive user-turn special regardless of arch, INST-family templates close the assistant turn with EOS, and a template-less GGUF falls back by arch and tokenizer")]
 def test_chat_template_detection(t : T?) {
     t |> run("template sniffed from GGUF tokenizer.chat_template") @(t : T?) {
         // fragments carry each family's distinctive marker (no braces — das strings interpolate {})
@@ -1226,7 +1226,7 @@ def test_chat_template_detection(t : T?) {
 
 // ===== <think>-stripping (model-free) =====
 
-[test]
+[test(description = "strip_think removes a leading think block, whitespace before it included, empties an unclosed one, and passes through replies with no leading block or a mid-reply think tag")]
 def test_chat_strip_think(t : T?) {
     t |> run("leading think block is stripped from history content") @(t : T?) {
         t |> equal(strip_think("<think>\nreasoning here\n</think>\n\nThe answer is 42."), "The answer is 42.")
@@ -1243,7 +1243,7 @@ def test_chat_strip_think(t : T?) {
 
 // ===== pending consumption (regression: an audio-only turn must not resurrect prior text) =====
 
-[test]
+[test(description = "respond and add_assistant each clear the consumed pending user text, and add_assistant also clears queued image and audio rows and their buffers")]
 def test_chat_pending_cleared_on_consume(t : T?) {
     t |> run("respond()/add_assistant() clear the consumed user text (needs SmolLM2-135M)") @(t : T?) {
         let path = path_join(models_dir(), "SmolLM2-135M-Instruct-Q8_0.gguf")
@@ -1280,7 +1280,7 @@ def test_chat_pending_cleared_on_consume(t : T?) {
 
 // ===== render seam: render_assistant produces EXACTLY the tokens add_assistant evals =====
 
-[test]
+[test(description = "A renderer chat holds no KV and renders exactly the tokens add_assistant evals: the rendered stream prefilled on a fresh session leaves byte-equal key and value caches")]
 def test_chat_render_seam(t : T?) {
     t |> run("render_assistant == add_assistant evals; renderer chat holds no KV (needs SmolLM2-135M)") @(t : T?) {
         return if (!jit_only(t))
@@ -1339,7 +1339,7 @@ def private detok(m : Model; ids : array<int64>) : string {
     return replace(raw, "\n", "\\n")
 }
 
-[test]
+[test(description = "On voxtral an inline audio span renders as the splice head, the span position ids and the tail at any text offset, keeps its span in a replayed turn, and position ids differ by row and key")]
 def test_chat_inline_span(t : T?) {
     t |> run("an inline span renders the turn the splice pair renders, its position ids where the rows go - in a replayed turn too") @(t : T?) {
         let path = path_join(models_dir(), "voxtral-mini-3b-q8_0.gguf")
@@ -1396,7 +1396,7 @@ def private span_refused(m : Model; queued : array<int>; n_rows : int64; text_be
 
 // A template with no media markers takes a span only where the encoder's rows need none (a bare audio span); every span
 // has rows, and spans queue in text order.
-[test]
+[test(description = "On a marker-less template add_user_span_ queues a bare audio span in text order, and panics on a span of no rows, an image or marked audio span, or one ahead of the span queued before it")]
 def test_chat_span_refusals(t : T?) {
     t |> run("add_user_span_ refuses a span the template cannot mark, an empty span, and one out of text order") @(t : T?) {
         let path = path_join(models_dir(), "SmolLM2-135M-Instruct-Q8_0.gguf")
@@ -1419,7 +1419,7 @@ def test_chat_span_refusals(t : T?) {
 
 // A gemma-4 template's non-thinking generation prompt is read off the model's own template: the larger models close
 // an empty thought channel after the model turn's opener, the E-series opens the turn bare.
-[test]
+[test(description = "A gemma-4 template non-thinking opener follows the template: the 12B form closes an empty thought channel after the model turn, the E-series form opens bare, and both thinking openers are bare")]
 def test_gemma4_instruct_opener(t : T?) {
     t |> run("the non-thinking opener follows the template: a closed thought where it writes one, bare where it does not") @(t : T?) {
         let cases = [
@@ -1441,7 +1441,7 @@ def test_gemma4_instruct_opener(t : T?) {
 
 // A Llama-3.1+ template's system header is read off the template: the cutoff line, and the date line's date where the
 // template fixes one; a template with a clock states the day, and one with no header (Llama-3.0) states nothing.
-[test]
+[test(description = "The Llama-3 system header is read off the template (fixed date, clock or none), and on Llama-3.2 a tool turn adds the environment line before the cutoff while a pinned date overrides the template")]
 def test_llama_system_header(t : T?) {
     t |> run("the dated system header follows the template") @(t : T?) {
         let head = "\{\{- \"<|start_header_id|>system<|end_header_id|>\\n\\n\" }}\{\{- \"Cutting Knowledge Date: December 2023\\n\" }}\{\{- \"Today Date: \" + date_string + \"\\n\\n\" }}"
@@ -1501,7 +1501,7 @@ def private system_header_text(m : Model; date : string; with_tool : bool) : str
 
 // The system text a ChatML template states for a conversation with no system message, read off the three shapes the
 // stocked templates take; a span that carries an expression is the caller's own system turn and yields none.
-[test]
+[test(description = "A ChatML template default system text is its literal system string, from template text or a string literal, and empty where the system span is only an expression or absent")]
 def test_chatml_default_system(t : T?) {
     t |> run("the default system text is the template's literal, never one of its expressions") @(t : T?) {
         let cases = [
@@ -1546,7 +1546,7 @@ def private audio_splice_cell(t : T?; m : Model; before : int) {
 // The chat-audio marker gate: render_prompt_audio must bracket the soft-token splice in the
 // family's audio markers — the render-side half of the chat-audio rail (encoder numerics are
 // test_audio's; nothing else pins these template tags against a real vocab).
-[test]
+[test(description = "render_prompt_audio ends the voxtral head on BEGIN_AUDIO with no closing marker and splices at the asked text offset, and brackets qwen2audio rows in audio_bos and audio_eos")]
 def test_chat_audio_markers(t : T?) {
     t |> run("voxtral audio turn opens with [BEGIN_AUDIO] (no closing marker - mtmd shape)") @(t : T?) {
         let path = path_join(models_dir(), "voxtral-mini-3b-q8_0.gguf")

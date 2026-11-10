@@ -43,7 +43,6 @@ let private HOST_FIRST = 8l   //! the rarest experts the meet hands the host bef
 let private POOL_SLOTS = 8l   //! the pool cell's slot ask a layer: fewer than the carrier's experts, so the pool fills and misses land by DMA
 let private POOL_CTX = 8192l   //! the pool cell's context (`set_gpu_ctx_max`, put back): a mirror short enough to leave the K-quant carrier's pool its room on a 16 GB card
 
-[init]
 def private moe_host_intent() {
     set_cuda_mmq_pin(CUDA_MMQ_WINNERS)   // the MMQ route every load of the file measures: the K-quant and Q8_0 window sites on the int8 leaves
 }
@@ -160,7 +159,7 @@ def private pool_plan_held(t : T?) {
 //! the pinned stream stacks, the decode meet's picks claim through the window's meet over the pool, and both off as the control; the
 //! fed steps against the CPU chain at the MoE bar, each knob's counter the witness that it ran; then the same carrier with every
 //! expert on the device - no host layer, so no pool, no hit chain, no DMA fill and no met step (the pool counters' control)
-[test]
+[test(description = "On the CUDA driver with host-pinned routed layers and a hot expert pool, Qwen1.5-MoE Q4_K_M's steps fill misses by DMA and claim picks through the decode meet within 20 percent of the CPU chain, with both knobs off and an all-device load as counter controls")]
 def test_gpu_resident_cuda_moe_host_pool(t : T?) {   // nolint:STYLE038 - the pool's four legs (DMA + meet, both off, no host layer) are one flat list over one carrier
     t |> run("{FILE_K} with {HOST_LAYERS} routed layers' experts pinned to the host and {POOL_SLOTS} pool slots a layer asked (set_gpu_tier_want_, the want DASLLAMA_GPU_HEAT shadows) at a {POOL_CTX} context: the steps' misses filled by DMA off the stream stacks, the hit chains serving the pooled picks") @(t : T?) {
         return if (!pool_asked(t))
@@ -253,8 +252,9 @@ def test_gpu_resident_cuda_moe_host_pool(t : T?) {   // nolint:STYLE038 - the po
 
 //! the pool with the prompt stream off: no stream stack stands, so the chain's pool window and the DMA fill both decline by name and
 //! the host's fill lands every pooled expert; the decode's hit chains still serve off the slots, the fed steps the CPU chain's
-[test]
+[test(description = "With the prompt stream off and host-pinned routed layers on the CUDA driver, the DMA fill declines by name, the host fill lands every pooled expert, hit chains still serve, and fed steps stay within 20 percent of the CPU chain")]
 def test_gpu_resident_cuda_moe_host_pool_unstreamed(t : T?) {
+    moe_host_intent()
     t |> run("{FILE_K} with {HOST_LAYERS} routed layers' experts pinned to the host, {POOL_SLOTS} pool slots a layer at a {POOL_CTX} context and the prompt stream OFF: no stream stack stands, so the DMA fill declines by name and the host's fill lands every pooled expert; the fed steps still the CPU chain's") @(t : T?) {
         return if (!pool_asked(t))
         let pins = pin_stream()
@@ -285,8 +285,9 @@ let private HOST_LAYERS_GPTOSS = 2l
 
 //! gpt-oss's biased stacks on the host-layers form: the window's picks through the per-expert chain over the mx4 slot - the s column
 //! alone, the only tile the format has - the fed steps against the CPU chain at the routed block's bar (the CUDA MoE file's reading)
-[test]
+[test(description = "On the CUDA driver gpt-oss-20b with routed layers pinned to the host streams its biased mx4 stacks through the per-expert chain within the MoE bar of the CPU chain, and the streamed windows' rows match the host's sums at the stream twin's bar")]
 def test_gpu_resident_cuda_moe_host_gptoss(t : T?) {
+    moe_host_intent()
     t |> run("{FILE_GPTOSS} with {HOST_LAYERS_GPTOSS} routed layers' experts pinned to the host: the split token command and the cut window chain on the CUDA driver vs the CPU chain, one window (40 tokens) and eight steps; the biased mx4 stacks streamed through the per-expert chain") @(t : T?) {
         return if (!fp4_rung_on(t))
         let pins = pin_stream()
@@ -316,13 +317,15 @@ def test_gpu_resident_cuda_moe_host_gptoss(t : T?) {
 }
 
 
-[test]
+[test(description = "On the CUDA driver the Qwen1.5-MoE Q8_0 carrier with four routed layers on the host runs the split token command and cut window chain within 20 percent of the CPU chain over one and two windows, the meet splitting experts, and with the prompt stream off as control")]
 def test_gpu_resident_cuda_moe_host_q8(t : T?) {
+    moe_host_intent()
     host_cells(t, FILE_Q8)
 }
 
-[test]
+[test(description = "On the CUDA driver the Qwen1.5-MoE Q4_K_M twin with four routed layers on the host runs the split token command and cut window chain within 20 percent of the CPU chain over one and two windows, the meet splitting experts, and with the prompt stream off as control")]
 def test_gpu_resident_cuda_moe_host_kq(t : T?) {
+    moe_host_intent()
     host_cells(t, FILE_K)
 }
 
@@ -376,8 +379,9 @@ def private mtp_rounds_served(t : T?; tr : Model) {
     delete prompt
 }
 
-[test]
+[test(description = "On the CUDA driver the Qwen3.6-35B NextN hybrid with host routed layers stays within 20 percent of the CPU chain with the hot pool's hit chains serving picks, and every speculative round drafts and verifies on the device while plain steps draft and verify nothing")]
 def test_gpu_resident_cuda_moe_host_35b(t : T?) {
+    moe_host_intent()
     t |> run("{FILE_35B} with its first routed layer's experts asked onto the host (the plan moves what the card cannot hold): the split token command and the cut window chain on the CUDA driver vs the CPU chain, one window (40 tokens) and eight steps, the window's picks streamed through the per-expert chain over the pool's prefix, the hot expert pool's hit chains serving picks") @(t : T?) {
         let pins = pin_stream()
         let w0 = cud_stream_stats().windows
@@ -398,6 +402,8 @@ def test_gpu_resident_cuda_moe_host_35b(t : T?) {
         let path = cuda_model_path(t, FILE_35B)
         if (empty(path)) return
         let pins = pin_stream()
+        let levers = resident_levers()
+        cuda_feed_window()
         var tr <- load_resident(path, 1l, 0l, 1l)
         if (resident_admitted(t, "the whole-model driver armed on the 35B with host layers (the load log names any decline)", "")) {
             with_dasllama_jobque_() {
@@ -405,6 +411,7 @@ def test_gpu_resident_cuda_moe_host_35b(t : T?) {
             }
         }
         delete tr
+        restore_resident_levers(levers)
         restore_stream_pins(pins)
     }
 }

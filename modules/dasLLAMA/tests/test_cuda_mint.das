@@ -33,7 +33,7 @@ def private cuda_lane_named(t : T?; img : string) {
     t |> equal(dlim_file_lane(img), moe_gpu_backend_name(), "the lane file is the armed backend's lane ({base_name(img)})")
 }
 
-[test]
+[test(description = "A cold CUDA-armed load of Qwen3.5-0.8B-MTP mints the cuda lane alone, and the trimmed lane serves the device twin greedy tokens and CPU embed rows cold and maps back warm to the same tokens")]
 def test_cuda_mint_lanes(tst : T?) {
     tst |> run("Qwen3.5-0.8B-MTP: a cold CUDA-armed load mints the cuda lane alone; the trimmed lane serves the same tokens and embed rows, cold and warm") @(t : T?) {
         return if (!cuda_home_asked(t))
@@ -47,7 +47,7 @@ def test_cuda_mint_lanes(tst : T?) {
     }
 }
 
-[test]
+[test(description = "The Qwen3.5-0.8B Q4_K_M twin mints its cuda lane off its native K-quant planes, named for the armed backend, and maps back warm to the same greedy tokens")]
 def test_cuda_mint_kquant(tst : T?) {
     tst |> run("Qwen3.5-0.8B-Q4_K_M: the K-quant twin's cuda lane mints off its native planes and maps back warm to the same tokens") @(t : T?) {
         return if (!cuda_home_asked(t))
@@ -61,7 +61,7 @@ def test_cuda_mint_kquant(tst : T?) {
     }
 }
 
-[test]
+[test(description = "A trimmed cuda lane minted under a q8_0 K/V mirror maps under tq4 and f16 with no re-mint and serves at each codec the tokens the staged load serves there")]
 def test_cuda_mint_kv_codecs(tst : T?) {
     tst |> run("Qwen3.5-0.8B-MTP: the trimmed cuda lane minted under a q8_0 mirror maps under tq4 and f16 with no re-mint, and serves at each codec the tokens the staged load serves there") @(t : T?) {
         return if (!cuda_home_asked(t))
@@ -86,7 +86,7 @@ def private tag_budget_mb(tag : string) : int64 {
 
 //! the lane's identity carries the card's weight cap: unpinned, the total memory less the headroom (`cud_identity_cap`); under
 //! a VRAM pin (`set_gpu_tier_want_`'s `vram_mb`), the pinned figure
-[test]
+[test(description = "The cuda bake tag budget word reads the card total memory less at most 1 GB of headroom unpinned, and exactly the pinned figure under a 4096 MB VRAM pin")]
 def test_cuda_mint_identity_cap(tst : T?) {
     tst |> run("the cuda bake tag's budget word reads the card's total memory less the headroom unpinned, and the pinned figure under a VRAM pin of {VRAM_PIN_MB} MB") @(t : T?) {
         return if (!cuda_home_asked(t))

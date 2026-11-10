@@ -129,7 +129,7 @@ builders and the legacy `rope()`. An in-test angle reference makes them a subjec
 `sigmoid_gate` / `sigmoid_gate4` (`:2884, :2893`), `silu_mul4` (`:2911`), `silu4_batch`
 (`:2869`), `l2_norm_rows` (`:2677`), `gemm_f32` / `gemm_f32_jo` / `gemm_f32_uk_4x16`
 (`:834, :858, :828`; 23 engine sites, the tower and TTS float GEMM). Alongside the existing
-`test_silu.das` / `test_softmax.das` property tests.
+`test_silu` / `test_softmax` property tests (`test_math_activations.das`).
 
 **(e) Prefill and KV cells.** `matmul_kq_batch` (`:1944`, no test; portable has no slot, so
 the serial-GEMV fallback is also ungated), `matmul_kq_batch_groupn` (`:1918`, whose only gate
@@ -248,7 +248,7 @@ file.
    `dot_q8q8`; whether the `[init]` backend gates should also consult the exe's feature rail is a
    stage-2 question, alongside the same shape under AOT. Gates: `tests/jit_tests/aarch64_neon.das`
    (hardware vs reference per intrinsic), the baseline probe in `modules/dasLLVM/tests/llvm_jit_baseline.das`
-   (red on the pre-fix emitter), and `test_exe_smoke` under `DAS_TUNE_POLICY=reference`.
+   (red on the pre-fix emitter), and `test_facade.das`'s `test_exe_smoke` under `DAS_TUNE_POLICY=reference`.
 
 **Exit:** a `-DDAS_LLVM_DISABLED=ON` tree compiles the engine and its suite; a `-jit` run with
 the framework short-circuited is green on the stage-0 gates and parity; the floor is in

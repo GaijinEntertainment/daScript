@@ -41,7 +41,7 @@ let private FILE_NO_SHEXP = "Qwen3-30B-A3B-Instruct-2507-UD-IQ2_XXS.gguf"   //! 
 let private FILE_GPTOSS = "gpt-oss-20b-mxfp4.gguf"   //! 32 experts, 4 routed, the biased softmax router, native-MXFP4 stacks
 let private GPTOSS_BAR_REL = MOE_LOGIT_BAR_REL   //! held at `MOE_LOGIT_BAR_REL`, not the Vulkan gpt-oss file's 0.05 (the bar sits near 1.6 absolute on this file's rows): the rows' max distance reads 0.06-0.20 absolute, and one step in twelve a router near-tie flips under this home's summation order to 0.47-0.50, argmax intact; the one-step-off control reads 4.4-19 (RTX 5060 Ti, `-jit`, the MMQ pin on; the 2026-10-26 PERF_LEDGER entry)
 
-[test]
+[test(description = "On the CUDA whole-model driver the Qwen1.5-MoE Q4_K_M twin, routed K-quant stacks beside a gated shared expert, keeps forced-feed logits within 20 percent of max logit of the CPU chain over one and two windows")]
 def test_gpu_resident_cuda_moe(t : T?) {
     t |> run("{FILE_TWIN}: one window (40 tokens) and eight steps on the CUDA driver - the routed block beside the gated shared expert") @(t : T?) {
         cuda_forced_feed(t, FILE_TWIN, "qwen2moe", 40l, 1l, MOE_LOGIT_BAR_REL)
@@ -52,7 +52,7 @@ def test_gpu_resident_cuda_moe(t : T?) {
 }
 
 //! the Q8_0 expert path on this home against the CPU chain, at the Vulkan MoE file's bar
-[test]
+[test(description = "On the CUDA driver under the pinned MMQ winners, the Qwen1.5-MoE Q8_0 carrier's routed block over Q8_0 expert stacks keeps one-window forced-feed logits within 20 percent of max logit of the CPU chain")]
 def test_gpu_resident_cuda_moe_q8(t : T?) {
     t |> run("{FILE_Q8}: one window (40 tokens) and eight steps on the CUDA driver under set_cuda_mmq_pin({cuda_mmq_name(CUDA_MMQ_WINNERS)}) - the routed block over Q8_0 expert stacks beside the gated shared expert") @(t : T?) {
         with_cuda_mmq_pin(CUDA_MMQ_WINNERS) {
@@ -61,7 +61,7 @@ def test_gpu_resident_cuda_moe_q8(t : T?) {
     }
 }
 
-[test]
+[test(description = "On the CUDA driver Qwen3-30B-A3B UD-IQ2_XXS, routed experts with no shared expert on iq2xxs stacks, keeps forced-feed logits within 20 percent of max logit of the CPU chain over one and two windows")]
 def test_gpu_resident_cuda_moe_no_shexp(t : T?) {
     t |> run("{FILE_NO_SHEXP}: one window (40 tokens) and eight steps on the CUDA driver - the routed block alone at the FFN site") @(t : T?) {
         cuda_forced_feed(t, FILE_NO_SHEXP, "qwen3moe", 40l, 1l, MOE_LOGIT_BAR_REL)
@@ -73,7 +73,7 @@ def test_gpu_resident_cuda_moe_no_shexp(t : T?) {
 
 //! the window runs the schedule-fed FP4 leaf: the cells pin the MMQ route on and skip below the FP4 rung, where the window
 //! keeps the s and e tiles
-[test]
+[test(description = "On a CUDA card with the FP4 rung, gpt-oss-20b's biased-router MXFP4 routed block on the schedule-fed FP4 leaf keeps forced-feed logits within 20 percent of max logit of the CPU chain over one and two windows")]
 def test_gpu_resident_cuda_gptoss(t : T?) {
     t |> run("{FILE_GPTOSS}: one window (40 tokens) and eight steps on the CUDA driver under set_cuda_mmq_pin({cuda_mmq_name(CUDA_MMQ_WINNERS)}) - the mx4 routed block on the schedule-fed FP4 leaf, the biases, the sinks") @(t : T?) {
         return if (!fp4_rung_on(t))
@@ -94,7 +94,7 @@ let private CODEC_CTX = 8192l   //! the codec arms' context (`set_gpu_ctx_max`, 
 //! the sink stamps of the K/V codecs (one stamp a mirror codec, gpt-oss the one sink carrier): the q8_0 mirror and, under the
 //! environment's knob, the f32 mirror in the forced-feed form; the f16 stamp is the file's other cells'. No tq4 arm: the carrier's
 //! Q/K/V bias steps a tq4 ask down to q8_0 on every home, so the tq4 sink stamp has no carrier
-[test]
+[test(description = "On the CUDA driver the attention-sink stamps of the q8_0 and f32 K/V mirrors keep gpt-oss-20b's one-window forced-feed logits within 20 percent of max logit of the CPU chain at the same codec")]
 def test_gpu_resident_cuda_gptoss_sink_codecs(t : T?) {
     for (kv in fixed_array(KVDtype.q8_0, KVDtype.f32)) {
         t |> run("{FILE_GPTOSS}: a {kv} mirror - the codec's sink stamp - one window (40 tokens) and eight steps on the CUDA driver under set_cuda_mmq_pin({cuda_mmq_name(CUDA_MMQ_WINNERS)})") @(t : T?) {
@@ -115,7 +115,7 @@ let private RING_CTX = 32768l   //! the context both loads plan at (`set_gpu_ctx
 
 //! the sliding layers' rings on this home (`ring_vs_flat`, the gemma files' cell): the ringed load against the flat one bit for bit
 //! on the f16 and q8_0 mirrors, under the FP4 rung and the MMQ pin like the file's other gpt-oss cells
-[test]
+[test(description = "On the CUDA driver gpt-oss-20b's sliding layers on ringed K/V mirrors match a flat every-row mirror bit for bit over 1300 prose ids in 512-row windows that wrap the ring and eight steps, on f16 and q8_0 mirrors")]
 def test_gpu_resident_cuda_gptoss_ring(t : T?) {
     for (kv in fixed_array(KVDtype.f16, KVDtype.q8_0)) {
         t |> run("{FILE_GPTOSS}: the sliding layers' rings against every row kept, a {kv} mirror, {RING_IDS} prose ids in {RING_WINDOW}-row windows and eight steps under set_cuda_mmq_pin({cuda_mmq_name(CUDA_MMQ_WINNERS)})") @(t : T?) {

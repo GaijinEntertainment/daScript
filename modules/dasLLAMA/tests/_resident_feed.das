@@ -542,7 +542,7 @@ def sampled_stream(tr : Model; prompt : array<int64>; reply : int64; var sp : Sa
 
 //! the selection landing's agreement, both homes' one reading: the rows-landed stream asked no selection, the selection served
 //! the other's steps with no late landing, the two agree token for token (they share the device's logits and the seed and
-//! part only through the sampler's input; `test_sampling_landed.das` holds the landed draw's equivalence to the row draw) and
+//! part only through the sampler's input; `test_mtp_sampled_walk.das` holds the landed draw's equivalence to the row draw) and
 //! the walk accepts the same drafts (a stale carry under the selection drafts garbage the walk rejects: the tokens stay alike
 //! and the acceptance drops)
 def selection_agrees(t : T?; tr : Model; tag : string; rows, sel : SampledStream) {

@@ -1,6 +1,6 @@
-// The gemma cells of the whole-model resident driver, shared by the per-model test files
-// (test_gpu_resident_gemma*.das): ONE model a file, so a process loads one carrier and no test
-// inherits another model's device state. The GPU chains and the CPU chain are not bit-identical
+// The gemma cells of the whole-model resident driver, shared by the gemma resident test files
+// (test_gpu_resident_gemma*.das): a cell loads its carrier through the rig and deletes it before
+// it returns, so several carriers share a file. The GPU chains and the CPU chain are not bit-identical
 // (GPU exp / f32 accumulation order, the prefill's f16 activation feed against the CPU's Q8
 // activation blocks), so the gates are: the forced-feed logits-tolerance form (the same prose
 // tokens fed to both arms, the logits within a bar of the CPU chain after the prefill and at every
@@ -62,7 +62,6 @@ struct GemmaFile {
 [init]
 def private gemma_rig_init() {
     allow_cpu_prefill()   // the control arm (the model dropped off the device) prefills on the CPU by design
-    set_gpu_ctx_max(GEMMA_RIG_CTX)
 }
 require math
 require daslib/jobque_boost
@@ -94,6 +93,8 @@ let GEMMA_MOE_PPL_RATIO = 2.0
 //! the fixture loaded on the armed driver, or an empty model (`n_layers` 0) after the skip that says why
 def private gemma_model(t : T?; gf : GemmaFile) : Model {
     let path = path_join(models_dir(), gf.file)
+    let levers = resident_levers()
+    set_gpu_ctx_max(GEMMA_RIG_CTX)   //! the rig's mirror context, read as the driver arms; the levers go back after the load
     var tr <- resident_trunk(t, path, GEMMA_RIG_CTX, " - DASLLAMA_GPU_MIN_CTX=1024 arms the 12B Q8_0 file on a 16 GB card") $() : Model {
         var m <- load_resident(path, 0l, gf.host_experts ? GEMMA_RIG_CTX : 0l, gf.host_experts ? 1l : 0l)
         if (gf.host_experts) {   //! the pinned cap and the one routed layer asked onto the host decide the plan whatever the card (a card past the rig's holds the stacks beside the cap): a memory decline is the form missing, never a skip
@@ -101,6 +102,7 @@ def private gemma_model(t : T?; gf : GemmaFile) : Model {
         }
         return <- m
     }
+    restore_resident_levers(levers)
     return <- tr if (tr.config.n_layers == 0l)
     if (gf.host_experts) {
         let host = gpu_resident_host_layers()
@@ -188,7 +190,10 @@ def gemma_forced_feed(t : T?; n : int64; gf : GemmaFile; exact : bool = false; f
 [cold_path]
 def ring_vs_flat(t : T?; n : int64; gf : GemmaFile; kv : KVDtype) {
     return if (!arm_on(t, gf.arm))
+    let levers = resident_levers()
+    set_gpu_ctx_max(GEMMA_RIG_CTX)   //! the rig's mirror context for both loads; the levers go back after
     ring_vs_flat(t, n, path_join(models_dir(), gf.file), kv, GEMMA_RIG_CTX)
+    restore_resident_levers(levers)
 }
 
 let RESIDENT_RING_ON = "dasLLAMA: resident driver - the sliding layers' K/V rows ride rings of their window plus"

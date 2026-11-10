@@ -24,7 +24,7 @@ require _model_tier
 
 def private pack_path() : string => path_join(models_dir(), "tts_g2p_ru.bin")
 
-[test]
+[test(description = "Russian letter-to-sound turns pinned stress-marked words into kokoro-ru's exact IPA labels, applies cross-word voicing sandhi, and handles hyphenated words, punctuation and passed-through foreign phonemes exactly")]
 def test_letter_to_sound(t : T?) {
     t |> run("pinned words: the label shape kokoro-ru was trained on") @(t : T?) {
         let cases <- {
@@ -72,7 +72,7 @@ def test_letter_to_sound(t : T?) {
 //! a corpus word that carries its stress: a `+` or a ё - the words letter-to-sound alone decides
 def private is_marked(word : string) : bool => find(word, "+") >= 0 || find(word, "ё") >= 0 || find(word, "Ё") >= 0
 
-[test]
+[test(description = "On the 200-sentence Russian fixture, at least 1500 stress-marked words are compared with kokoro-ru's own front end and exactly 4 pinned words differ")]
 def test_corpus_ru(t : T?) {
     t |> run("phoneme-identical with kokoro-ru's front end on the marked words of 200 sentences") @(t : T?) {
         let rows <- load_tts_corpus_ru()
@@ -114,7 +114,7 @@ def private load_and_drop(path : string) {
     var inscope p <- load_ru_stress_pack(path)
 }
 
-[test]
+[test(description = "`load_ru_stress_pack` panics with a message naming the cause for a missing file, a foreign version (pointing at the build script), and another pack's magic")]
 def test_pack_refusals(t : T?) {
     t |> run("a missing pack panics naming it") @(t : T?) {
         let missing = scratch_path("no-such-tts_g2p_ru.bin")
@@ -147,7 +147,7 @@ def test_pack_refusals(t : T?) {
     }
 }
 
-[test]
+[test(description = "The Russian stress pack returns each form's stress variants and safe yo restorations, and `ru_mark_word` honours text marks, skips clitics, stresses reflexives via their base and unknown words by the shape rule, through to exact phonemes")]
 def test_stress_pack(t : T?) {
     t |> run("the pack's forms, variants and ё spellings") @(t : T?) {
         return if (ru_pack_missing(t))

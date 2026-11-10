@@ -698,7 +698,7 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
         // the tied float table: token_embd and per_layer_token_embd F16 - the classifier's decline by name, the PLE table's q8 transcode
         ModelSpec(file = "gemma-4-E2B-it-Q8_0-embf16-local.gguf",
             recipe = "llama-quantize --allow-requantize --token-embedding-type f16 gemma-4-E2B-it-Q8_0.gguf gemma-4-E2B-it-Q8_0-embf16-local.gguf q8_0"),
-        // the resident gates' large-tier carriers (tests/test_gpu_resident_gemma4_12b_q8 / _26b / _31b): provenance rows,
+        // the resident gates' large-tier carriers (tests/test_gpu_resident_gemma4_dense / _moe): provenance rows,
         // not board rows - resolve/main floats, so the bytes and sha256 pin the file
         ModelSpec(file = "gemma-4-12B-it-Q8_0.gguf",
             url = "{HF}/ggml-org/gemma-4-12B-it-GGUF/resolve/main/gemma-4-12B-it-Q8_0.gguf",
@@ -726,7 +726,7 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
             // BOTH MoE prefill paths off one load — bit-identical by construction
             parity <- ev_qwen_count([moe_reference = true])),
         // the small twin of the routed-experts arch for the resident MoE chain's cells
-        // (tests/test_gpu_moe_shexp.das): 9.5 GB, whole on a 16 GB card with room to spare
+        // (tests/test_gpu_resident_moe.das): 9.5 GB, whole on a 16 GB card with room to spare
         ModelSpec(file = "Qwen1.5-MoE-A2.7B-Chat-Q4_K_M-local.gguf",
             recipe = "llama-quantize --allow-requantize Qwen1.5-MoE-A2.7B-Chat.Q8_0.gguf Qwen1.5-MoE-A2.7B-Chat-Q4_K_M-local.gguf Q4_K_M",
             parity <- ev_qwen_count([kq_native = true, moe_reference = true])),

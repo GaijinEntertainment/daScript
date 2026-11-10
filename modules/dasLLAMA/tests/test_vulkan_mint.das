@@ -56,7 +56,7 @@ def private hold_feed_rows(t : T?; what : string; got, want : array<array<float>
     rows_within_control(t, what, got, want, MOE_LOGIT_BAR_REL, 1l, 1.0, $(r) => r == 0l ? "the prompt's row" : "step {r}")
 }
 
-[test]
+[test(description = "A cold Vulkan-armed load of Qwen3.5-0.8B-MTP mints the Vulkan lane alone; the trimmed lane, a smaller file, serves the untrimmed lane greedy tokens exactly and its CPU embed row bit for bit, cold and warm")]
 def test_vulkan_mint_lanes(tst : T?) {
     tst |> run("Qwen3.5-0.8B-MTP: a cold vulkan-armed load mints the vulkan lane alone; the trimmed lane serves the same tokens and embed rows, cold and warm") @(t : T?) {
         with_mint_file(t, "qwen35", MINT_FILE) $(path) {
@@ -73,7 +73,7 @@ let private MOE_HOST_LAYERS = 20l   //! routed layers asked onto the host: their
 //! reads the planar planes (none through the rail) and pinned on - `set_rare_arena(1)`, the in-process twin of
 //! DASLLAMA_RARE_ARENA=2 - reads the same picks off the mirrors through the rail, its rows within the routed block's bar of the
 //! planar kernels'; the trimmed lane's rail follows the knob's default policy (the pin put back as found)
-[test]
+[test(description = "Qwen1.5-MoE with twenty routed layers streamed to the host: the trimmed lane drops the planar families and its fed logit rows hold the routed-block bar against the untrimmed lane, cold and warm, through the rare rail")]
 def test_vulkan_mint_moe_streamed(tst : T?) {
     tst |> run("Qwen1.5-MoE Q4_K_M with twenty routed layers streamed: the trimmed lane drops the planar families and serves the untrimmed lane's tokens, cold and warm, off the mirrors; the untrimmed lane's picks through the rail under the arena pin alone") @(t : T?) {
         return if (!family_on(t, "qwen2moe"))
@@ -145,7 +145,7 @@ def test_vulkan_mint_moe_streamed(tst : T?) {
     }
 }
 
-[test]
+[test(description = "The Qwen3.5-0.8B Q4_K_M lane mints off its native K-quant planes with the plan, and its warm map onto the whole-model driver serves the cold mint tokens exactly and the same embed row bit for bit")]
 def test_vulkan_mint_kquant(tst : T?) {
     tst |> run("Qwen3.5-0.8B-Q4_K_M: the K-quant twin's lane mints off its native planes and maps back warm to the same tokens") @(t : T?) {
         with_mint_file(t, "qwen35", KQ_FILE) $(path) {
@@ -160,7 +160,7 @@ let private TRIM_PROBE = "trim-probe"
 [unused_argument(tr, s, npos, start_pos)]
 def private pass_prefill(tr : Model; var s : Session; npos : int64; start_pos : int64) : bool => false
 
-[test]
+[test(description = "The trim admits exactly what the whole-model driver serves: a foreign prefill override declines both with one text, keeps the trimmed lane on disk while serving planar, and lifting it mints the trimmed lane again")]
 def test_vulkan_mint_trim_follows_the_driver(tst : T?) {
     tst |> run("Qwen3.5-0.8B-MTP: the trim admits what the whole-model driver serves - a foreign prefill override declines both with one text, the trimmed lane on disk stays for the next run and this run serves planar from memory, a cold trim ask under the override writes the untrimmed lane the next load under it serves, and the load after the override lifts mints the trimmed lane over it") @(t : T?) {
         with_mint_file(t, "qwen35", MINT_FILE) $(path) {
@@ -226,7 +226,7 @@ def private load_refusal(path : string) : string {
     return why
 }
 
-[test]
+[test(description = "Under an injected resident upload fault a trimmed lane is refused at load with a panic naming the lane file and the decline, the file left as minted, while the same load with the driver armed serves")]
 def test_vulkan_mint_trim_refused_unarmed(tst : T?) {
     tst |> run("Qwen3.5-0.8B-MTP: a trimmed lane the whole-model driver does not arm for after the trim admitted it is refused at its load, naming the lane and the decline - never at a CPU forward; the same load with the driver armed serves") @(t : T?) {
         with_mint_file(t, "qwen35", MINT_FILE) $(path) {
@@ -256,7 +256,7 @@ def test_vulkan_mint_trim_refused_unarmed(tst : T?) {
     }
 }
 
-[test]
+[test(description = "A lane mint whose write the fault seam fails publishes no lane and leaves no temp file, yet the load serves from memory; with the seam off the next load mints the lane the driver serves")]
 def test_vulkan_mint_failed_write_leaves_nothing(tst : T?) {
     tst |> run("Qwen3.5-0.8B-MTP: a mint whose write fails writes no lane, leaves no temp file and still serves; the next load mints") @(t : T?) {
         with_mint_file(t, "qwen35", MINT_FILE) $(path) {
@@ -288,7 +288,7 @@ def test_vulkan_mint_failed_write_leaves_nothing(tst : T?) {
     }
 }
 
-[test]
+[test(description = "A trimmed lane minted under a q8_0 K/V mirror maps unchanged under tq4 and f16 and serves at each codec the staged load greedy tokens exactly, the codecs shown to move the tokens apart")]
 def test_vulkan_mint_kv_codecs(tst : T?) {
     tst |> run("Qwen3.5-0.8B-MTP: the trimmed lane minted under a q8_0 mirror maps under tq4 and f16 with no re-mint, and serves at each codec the tokens the staged load serves there") @(t : T?) {
         with_mint_file(t, "qwen35", MINT_FILE) $(path) {

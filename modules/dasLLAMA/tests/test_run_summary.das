@@ -11,7 +11,7 @@ require daslib/strings_boost
 // LAST line carrying " tests, ". End-of-file closes a line just like a newline does, so a run
 // killed mid-print still reports the summary it managed to write.
 
-[test]
+[test(description = "`log_summary` finds a newline-terminated summary line among noise and returns the whole line, including text before the marker")]
 def test_log_summary_terminated(t : T?) {
     t |> run("a terminated matching line is found among noise") @(t : T?) {
         let p = scratch_file("terminated.log",
@@ -25,7 +25,7 @@ def test_log_summary_terminated(t : T?) {
     }
 }
 
-[test]
+[test(description = "`log_summary` treats end of file as closing a line, so an unterminated final summary line, and a single-line log with no newline, are found")]
 def test_log_summary_unterminated(t : T?) {
     t |> run("an UNTERMINATED final line matches - end of file closes it") @(t : T?) {
         // a run killed mid-print leaves no trailing newline, and that line is the one worth having
@@ -38,7 +38,7 @@ def test_log_summary_unterminated(t : T?) {
     }
 }
 
-[test]
+[test(description = "When several lines carry the summary marker, `log_summary` returns the last one, terminated or not")]
 def test_log_summary_last_wins(t : T?) {
     t |> run("two matching lines: the LAST one wins") @(t : T?) {
         let p = scratch_file("two.log",
@@ -51,7 +51,7 @@ def test_log_summary_last_wins(t : T?) {
     }
 }
 
-[test]
+[test(description = "A line carrying the summary marker twice yields that one whole line from `log_summary`, whether terminated or the unterminated last line")]
 def test_log_summary_marker_twice(t : T?) {
     t |> run("a line carrying the marker TWICE yields one result: that line") @(t : T?) {
         // the walk reports whole lines, so a repeated marker inside one is still one result
@@ -64,7 +64,7 @@ def test_log_summary_marker_twice(t : T?) {
     }
 }
 
-[test]
+[test(description = "`log_summary` returns empty for a log with no marker, an empty log, near-miss tokens lacking the marker's spaces or comma, and a missing file")]
 def test_log_summary_no_match(t : T?) {
     t |> run("no marker returns empty (the run died before printing one)") @(t : T?) {
         let p = scratch_file("nomatch.log", "compiling...\nerror[20605]: missing prerequisite\n")
@@ -84,7 +84,7 @@ def test_log_summary_no_match(t : T?) {
     }
 }
 
-[test]
+[test(description = "`log_verdicts` collects line-start PASS and FAIL file verdicts by base name in order, color codes allowed, flags a root compile failure or refusal, and ignores per-test, mid-line and bare verdict words")]
 def test_log_verdicts(t : T?) {
     t |> run("plain verdict lines land in their sets, in order, by base name") @(t : T?) {
         let p = scratch_file("verdicts.log",

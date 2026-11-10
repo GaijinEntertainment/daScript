@@ -5,7 +5,7 @@ options persistent_heap   // a dastest root frees what it deletes only on this h
 require dastest/testing_boost public
 require dasllama/dasllama_math
 
-[test]
+[test(description = "`reserve_resize` leaves length equal to capacity exactly, for int and int64 sizes, including a 70M-byte array past max_unreserved_size without a panic")]
 def test_reserve_resize(t : T?) {
     t |> run("exact capacity, both widths, any element type") @(t : T?) {
         var f : array<float>
@@ -19,7 +19,7 @@ def test_reserve_resize(t : T?) {
     }
 }
 
-[test]
+[test(description = "`grow_resize` keeps capacity on shrink, at least doubles it on grow, survives a 70M-byte size without a panic, and zeroes the re-added tail when regrowing within capacity")]
 def test_grow_resize(t : T?) {
     t |> run("geometric growth, reused across shrink and grow") @(t : T?) {
         var a : array<int>
@@ -52,7 +52,7 @@ def test_grow_resize(t : T?) {
     }
 }
 
-[test]
+[test(description = "`ensure_length` never shrinks, keeps existing elements across a grow, zeroes the grown tail, and reaches 70M bytes without a panic")]
 def test_ensure_length(t : T?) {
     t |> run("grow-only: never shrinks, the grown tail zeroed") @(t : T?) {
         var a : array<int>
@@ -72,7 +72,7 @@ def test_ensure_length(t : T?) {
     }
 }
 
-[test]
+[test(description = "`overwrite_resize` shrinks length while keeping capacity, and an 80 MB grow reserves exactly the needed capacity without a panic")]
 def test_overwrite_resize(t : T?) {
     t |> run("grow-only no-init scratch") @(t : T?) {
         var s : array<float>

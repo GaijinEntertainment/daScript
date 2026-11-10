@@ -24,7 +24,7 @@ def private prompt_test_value() : TtsVoicePrompt {
     return <- prompt
 }
 
-[test]
+[test(description = "`tts_register_voice_prompt` copies the caller's latents, re-registering a name evicts its old PCM and conditioning state, the voice reaches caps and lookup, and a refused prompt or empty name leaves the existing voice intact")]
 def test_prepared_voice_registration_is_owned_and_transactional(t : T?) {
     var inscope model <- prompt_test_model()
     var inscope source_prompt <- prompt_test_value()
@@ -51,7 +51,7 @@ def test_prepared_voice_registration_is_owned_and_transactional(t : T?) {
     t |> equal(length(model.pocket.voice_names), 1)
 }
 
-[test]
+[test(description = "A voice prompt with a wrong kind, version, family, latent space, rate, width or stride, empty, partial or over-60-second latents, or a NaN, infinite or out-of-bound value is invalid and registers nothing, while exactly 60 seconds is accepted")]
 def test_prepared_voice_prompt_rejects_incompatible_data(t : T?) {
     for (invalid in ["kind", "version", "family", "latent_space", "rate", "width", "stride", "empty", "partial", "too_long", "nan", "positive_inf", "negative_inf", "positive_bound", "negative_bound"]) {
         var inscope model <- prompt_test_model()
@@ -81,7 +81,7 @@ def test_prepared_voice_prompt_rejects_incompatible_data(t : T?) {
     t |> success(tts_voice_prompt_valid(model, prompt), "exactly 60 seconds is accepted")
 }
 
-[test]
+[test(description = "`tts_prepare_voice_prompt` panics for a non-Pocket model, a model without the encoder, a reference at the wrong rate, an empty clip, or a clip past 60 seconds")]
 def test_prepared_voice_requires_valid_reference(t : T?) {
     for (invalid in ["kind", "encoder", "rate", "empty", "too_long"]) {
         var inscope model <- prompt_test_model()

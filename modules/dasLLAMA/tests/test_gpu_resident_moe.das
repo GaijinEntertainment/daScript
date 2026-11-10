@@ -10,6 +10,14 @@ require dasllama/dasllama_math   // with_dasllama_jobque_ (the engine-standard j
 require dasllama/dasllama_common   // kv_codec_for: the serving rule the biased twin's tq4 ask meets
 require dasllama/dasllama   // moe_gpu_drop_model
 require dasllama/dasllama_gpu_resident   // moe_gpu_resident_active
+require dasllama/dasllama_transformer   // umbrella fires each arch [init] registration (qwen2moe)
+require daslib/jobque_boost
+require daslib/fio
+require dasllama/dasllama_gpu_tier   // moe_gpu_shexp_on_gpu / set_moe_gpu_shexp_route / set_gpu_resident_route
+require _gpu_tier_armed   // gpu_tier_armed: the armed-tier skip
+require dasllama/dasllama_blocks   // shexp_gpu_prefill_layers: the device arm's engage witness
+require _model_tier   // models_dir() + model_available() presence/size-tier gate, the logits compares
+require _resident_feed   // feed_logits, the per-step bar
 
 // The whole-model resident driver on a MoE (Qwen1.5-MoE-A2.7B-Chat-Q4_K_M-local, the Q4_K_M mint of
 // the Q8_0 carrier, under DASLLAMA_GPU=1): the expert stacks in the arena beside the attention
@@ -32,7 +40,7 @@ let private TWIN = MoeFixture(file = "Qwen1.5-MoE-A2.7B-Chat-Q4_K_M-local.gguf",
 let private HYBRID = MoeFixture(file = "Qwen3.6-35B-A3B-UD-IQ2_XXS.gguf", shexp = true, bar_rel = MOE_LOGIT_BAR_REL, census = true, dn_chunk = true)   //! the deltanet hybrid MoE with a gated shared expert, the 16 GB card's whole-model fit
 let private NO_SHEXP = MoeFixture(file = "Qwen3-30B-A3B-Instruct-2507-UD-IQ2_XXS.gguf", shexp = false, bar_rel = MOE_LOGIT_BAR_REL, census = true)   //! the MoE with no shared expert: the routed block alone at the FFN site
 
-[test]
+[test(description = "On Qwen1.5-MoE-A2.7B Q4_K_M the resident routed window and token command hold the CPU chain's logits within the routed bar over one and two windows, the routed census growing by the MoE layer count")]
 def test_gpu_resident_moe(t : T?) {
     t |> run("Qwen1.5-MoE-A2.7B-Q4_K_M: the resident MoE prefill window + the routed token command vs the CPU chain, one window") @(t : T?) {
         moe_forced_feed(t, 40l, TWIN)
@@ -50,7 +58,7 @@ let private PER32_Q51 = MoeFixture(file = "Qwen1.5-MoE-A2.7B-Chat-Q5_1-local.ggu
 let private PER32_Q4032 = MoeFixture(file = "Qwen1.5-MoE-A2.7B-Chat-Q4_0-local.gguf", shexp = true, bar_rel = MOE_LOGIT_BAR_REL, census = true)
 let private PER32_Q5032 = MoeFixture(file = "Qwen1.5-MoE-A2.7B-Chat-Q5_0-pure-local.gguf", shexp = true, bar_rel = MOE_LOGIT_BAR_REL, census = true)
 
-[test]
+[test(description = "The per-32 mints of Qwen1.5-MoE - Q5_1, Q4_0 and Q5_0 routed and shared expert stacks - read every site in its own format on the device and hold the CPU chain's logits within the routed bar")]
 def test_gpu_resident_moe_per32(t : T?) {
     t |> run("Qwen1.5-MoE-A2.7B-Q5_1: the q51 shared expert and routed stacks on the device, every site in its own format, one window") @(t : T?) {
         if (!family_on(t, "qwen2moe") || !arm_on(t, "vk-per32-moe")) return
@@ -68,7 +76,7 @@ def test_gpu_resident_moe_per32(t : T?) {
 
 let private HEAT_HYBRID = MoeFixture(file = "Qwen3.6-35B-A3B-MTP-IQ4_XS-pure.gguf", shexp = true, bar_rel = MOE_LOGIT_BAR_REL)   //! the per-op census carrier: its per-op chain holds the routed bar
 
-[test]
+[test(description = "On the per-op tier with half the routed layers placed and half streamed under the heat pool, Qwen3.6-35B IQ4_XS and Qwen1.5-MoE Q5_1 hold the CPU chain's routed bar, every shared expert on the device")]
 def test_gpu_perop_moe_heat(t : T?) {
     t |> run("Qwen3.6-35B-A3B IQ4_XS on the per-op tier: twenty routed layers placed, twenty streamed under the heat pool, every layer's shared expert on the device after the routed chain or the pool's hits, against the CPU chain") @(t : T?) {
         if (!family_on(t, "qwen35moe")) return
@@ -86,7 +94,7 @@ def test_gpu_perop_moe_heat(t : T?) {
 let private MOE_CODEC_DIST_REL = 1.15
 let private MOE_CODEC_PAIR_REL = 1.4
 
-[test]
+[test(description = "The routed chain holds the CPU q8_0 chain over a q8_0 mirror, a tq4 ask on the Q/K/V-biased twin serves at q8_0 by the serving rule, and a 30B tq4 mirror's distance from f16 stays within 1.15 of the CPU tq4's")]
 def test_gpu_resident_moe_block_codecs(t : T?) {
     t |> run("Qwen1.5-MoE-A2.7B-Q4_K_M: the routed chain over a q8_0 K/V mirror vs the CPU chain on q8_0 sessions, one window") @(t : T?) {
         with_gpu_kv_dtype(t, KVDtype.q8_0) {
@@ -115,7 +123,7 @@ def test_gpu_resident_moe_block_codecs(t : T?) {
     }
 }
 
-[test]
+[test(description = "On the Qwen3.6-35B UD-IQ2_XXS deltanet hybrid MoE the recurrent head and routed block hold the CPU chain within the routed bar over one and two windows, every site read in its file format")]
 def test_gpu_resident_moe_hybrid(t : T?) {
     t |> run("Qwen3.6-35B-A3B-UD-IQ2_XXS: the deltanet hybrid MoE - the recurrent head beside the routed block, one window") @(t : T?) {
         moe_forced_feed(t, 40l, HYBRID)
@@ -125,7 +133,7 @@ def test_gpu_resident_moe_hybrid(t : T?) {
     }
 }
 
-[test]
+[test(description = "On Qwen3-30B UD-IQ2_XXS, a MoE with no shared expert, the routed block alone at the FFN site holds the CPU chain within the routed bar over one and two windows, every site in its file format")]
 def test_gpu_resident_moe_no_shexp(t : T?) {
     t |> run("Qwen3-30B-A3B-UD-IQ2_XXS: the MoE with no shared expert - the routed block alone at the FFN site, one window") @(t : T?) {
         moe_forced_feed(t, 40l, NO_SHEXP)
@@ -148,14 +156,14 @@ let private HOST_CTX = MoeFixture(file = "Qwen3.6-35B-A3B-UD-IQ2_XXS.gguf", shex
 //! first routed layers' experts on the host at a context asked whole
 let private CODER_NEXT = MoeFixture(file = "Qwen3-Coder-Next-Q4_K_M.gguf", shexp = true, bar_rel = MOE_LOGIT_BAR_REL, expect_host_layers = true, strict_ctx = 8192l)
 
-[test]
+[test(description = "The 512-expert Qwen3-Coder-Next arms the whole-model driver with host-layer experts and its device select past 256 experts holds the CPU chain within the routed bar over one window")]
 def test_gpu_resident_moe_512_experts(t : T?) {
     t |> run("Qwen3-Coder-Next-Q4_K_M: the 512-expert hybrid on the whole-model driver - the device select past 256 experts, the host-layer split, one window against the CPU chain") @(t : T?) {
         moe_forced_feed(t, 40l, CODER_NEXT)
     }
 }
 
-[test]
+[test(description = "Qwen3-30B Q4_K_M at 32768 context serves the experts the card cannot hold on the host, the split token command and cut window holding the CPU chain over one and two windows; a 30-layer ask raises the host count")]
 def test_gpu_resident_moe_host_layers(t : T?) {
     t |> run("Qwen3-30B-A3B-Q4_K_M: the experts the card does not hold serve on the host - the split token command and the cut window chain vs the CPU chain, one window") @(t : T?) {
         moe_forced_feed(t, 40l, HOST_LAYERS)
@@ -169,7 +177,7 @@ def test_gpu_resident_moe_host_layers(t : T?) {
     }
 }
 
-[test]
+[test(description = "At a 131072 context asked whole the Qwen3.6-35B hybrid's experts yield to the mirror and serve on the host, and the chain holds the CPU chain within the routed bar over two windows")]
 def test_gpu_resident_moe_ctx_strict(t : T?) {
     t |> run("Qwen3.6-35B-A3B-UD-IQ2_XXS at a context asked whole (131072): the experts yield to the mirror and serve on the host, the hybrid chain against the CPU over two windows") @(t : T?) {
         assert_pf_window(t)
@@ -178,7 +186,7 @@ def test_gpu_resident_moe_ctx_strict(t : T?) {
 }
 
 //! a two-token prompt on a MoE whose experts serve on the host takes the window chain: the token command's peel declines the host experts
-[test]
+[test(description = "On a MoE whose experts serve on the host, a two-token prompt runs through the window chain, because the token command's short-tail peel declines host experts")]
 def test_gpu_resident_moe_host_layers_short_window(t : T?) {
     t |> run("Qwen3-30B-A3B-Q4_K_M with host layers: a two-token prompt takes the window chain, not the token command's peel") @(t : T?) {
         let path = path_join(models_dir(), HOST_LAYERS.file)
@@ -190,5 +198,84 @@ def test_gpu_resident_moe_host_layers_short_window(t : T?) {
             }
         }
         delete tr
+    }
+}
+
+[init]
+def private allow_cpu_prefill_intent() {
+    allow_cpu_prefill()   // the CPU-form arm prefills its shared expert on the CPU by design
+}
+
+// The shared expert's prefill on the device: a qwen2moe layer's shexp triple rides the routed
+// experts' chain as one region over every position (ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-expert-chain). The
+// device chain and the CPU form are not bit-identical (the f16 gather, f32 accumulation order),
+// so the gate is the forced-feed logits-tolerance form over the tier's in-process route lever:
+// the same prompt and fed tokens with the route ON (the device arm) and OFF (the CPU form), the
+// logits within a bar of the CPU arm after the prefill and at every step, the one-step-off
+// control past it, and the engage witness - the arm's layer count grows by the model's layer
+// count per prefill on the device arm and not at all on the CPU arm. The whole-model driver is
+// pinned off for the load: it would take the twin whole (test_gpu_resident_moe.das is its gate).
+
+let private SHEXP_TWIN = "Qwen1.5-MoE-A2.7B-Chat-Q4_K_M-local.gguf"   //! the Q4_K_M mint of the Q8_0 carrier (its recipe row in ../performance/model_specs.das)
+//! of the step's max |logit|. The arms agree to 1e-8 at layer 0 and part from layer 1 on: the device chain's
+//! summation order moves the residual by ulps, the next layer's Q8 requant rounds a few elements the
+//! other way and the router flips a near-tie, and 24 layers of that read 0.05-0.10 on the twin under both
+//! tile modes (the routed chain is bit-stable session to session; the shared expert's rows themselves sit
+//! within 1e-4 of the CPU form on the sdot4 feed and 0.5% on the f16 feed - test_vulkan_moe_cm2's cells)
+let private SHEXP_LOGIT_BAR_REL = 0.12
+let private SHEXP_FED_STEPS = 4l
+
+//! one prompt of `n` tokens plus the fed steps through both arms of the route lever
+def private shexp_forced_feed(t : T?; n : int64) {
+    let path = path_join(models_dir(), SHEXP_TWIN)
+    return if (!jit_model_available(t, path) || !gpu_tier_armed(t))
+    let route0 = gpu_resident_route_lever()
+    set_gpu_resident_route(false)   //! the per-op rails' claims: the whole-model driver would take the twin (test_gpu_resident_moe.das holds that arm)
+    var tr <- load_model_(path, QuantMode.q8)
+    set_gpu_resident_route(route0)   //! the lever reads at the load alone
+    t |> success(!moe_gpu_resident_active(), "the route lever kept the whole-model driver off the twin")
+    t |> success(tr.config.n_ff_shexp > 0l && !tr.config.moe_dense_shexp, "the twin carries a gated shared expert")
+    let layers = tr.config.n_layers
+    var marked = 0l
+    for (l in range64(layers)) {
+        if (moe_gpu_shexp_on_gpu(l)) {
+            marked++
+        }
+    }
+    if (marked != layers) {
+        t |> skip("the shared experts are resident on {marked} of {layers} layers - the tier's budget or the shexp mark declined (the load log says which)")
+        delete tr
+        return
+    }
+    with_dasllama_jobque_() {
+        var prompt <- resident_prompt(n)
+        var toks <- resident_feed(SHEXP_FED_STEPS)
+        set_moe_gpu_shexp_route(true)
+        let served0 = shexp_gpu_prefill_layers()
+        let span0 = span_tokens()
+        var dev <- feed_alone(tr, KVDtype.f16, prompt, toks)
+        t |> equal(shexp_gpu_prefill_layers(), served0 + layers, "the device arm served the shared expert of every layer over the {n}-token prompt")
+        t |> equal(span_tokens(), span0 + SHEXP_FED_STEPS, "the decode span served every fed step on the device arm (the shared expert inside it)")
+        set_moe_gpu_shexp_route(false)
+        var cpu <- feed_alone(tr, KVDtype.f16, prompt, toks)
+        set_moe_gpu_shexp_route(true)   //! the tier as found
+        t |> equal(shexp_gpu_prefill_layers(), served0 + layers, "the CPU arm served no shared expert on the device")
+        t |> equal(span_tokens(), span0 + SHEXP_FED_STEPS, "the CPU arm's steps took the per-layer path - the span declines a shared expert off the device")
+        feed_steps_within(t, tr, "", n, dev, cpu, toks, SHEXP_LOGIT_BAR_REL, "the device shared expert", "the CPU form")
+        delete dev
+        delete cpu
+        delete prompt
+        delete toks
+    }
+    delete tr
+}
+
+[test(description = "On Qwen1.5-MoE Q4_K_M with the per-op tier, the shared expert prefilled on the device serves every layer and keeps forced-feed logits within 12 percent of max logit of the CPU form over 64- and 600-token prompts, with a one-step-off control red")]
+def test_gpu_moe_shexp_prefill(t : T?) {
+    t |> run("Qwen1.5-MoE-A2.7B-Q4_K_M: the shared expert's prefill on the device vs the CPU form, one 64-token prompt") @(t : T?) {
+        shexp_forced_feed(t, 64l)
+    }
+    t |> run("Qwen1.5-MoE-A2.7B-Q4_K_M: the same over a 600-token prompt (the chain's chunking)") @(t : T?) {
+        shexp_forced_feed(t, 600l)
     }
 }

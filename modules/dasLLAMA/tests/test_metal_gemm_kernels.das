@@ -1804,7 +1804,7 @@ def private attn_dev_pair_gate(t : T?; var dev, queue; mt, heads, hs, kv_mul, mp
 
 // the stage width is a stamp constant the emitter's census records: the double-buffered stamps
 // read the 128-wide body, the single-tile stamps the 64-wide one - device-free
-[test]
+[test(description = "The emitted census of the four q8 mul_mm tensor stamps records the stage width their constants set: the single-tile TH and TH128 stamps call the k64 body, the double-buffered THDb pair the k128 one.")]
 def test_q8_mulmm_stamp_widths(t : T?) {
     t |> run("q8 mul_mm stamps read the stage width their constants set") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
@@ -2328,7 +2328,7 @@ def private rows8_aff_gate(t : T?; var dev, queue; fmt : KqFmt; kdim, ndim, ys :
 
 //! the rows8 grid rule (`rows8_grid_of`) over the 27B's sites, each format's K block, rows off whole 16-row tiles and an empty
 //! plane - device-free
-[test]
+[test(description = "`rows8_grid_of` gives one threadgroup per 16-row tile on the 27B sites across mlx, k4, k6 and q8 formats, and returns zero for K off the format block, rows off whole tiles and an empty plane.")]
 def test_rows8_grid_rule(t : T?) {
     t |> run("rows8 grid: one threadgroup a 16-row tile, K whole blocks of the format, else no site") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
@@ -2351,7 +2351,7 @@ def test_rows8_grid_rule(t : T?) {
     }
 }
 
-[test]
+[test(description = "Every Metal prefill GEMM stamp - kq and iquant mul_mm with tensor, half-x, tall and eight-row forms, rows8, split-K, dev-W, bf16, f32, MoE gathered and the attention QK/AV pair - matches its CPU reference within the bar on aligned and ragged shapes.")]
 def test_metal_gemm_kernels(t : T?) {
     t |> run("prefill GEMM corpus (kq mul_mm trio + bf16 + Metal-4 tensor twins) == CPU references") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {

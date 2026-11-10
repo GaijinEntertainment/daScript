@@ -135,7 +135,7 @@ def private lane_steps(tr : Model; var s : Session; tok0, tok1, k : int64; carry
 
 //! one speculative round on the device (the draft, the two-row verify, the accept or the rollback): its two rows and wide carry rows
 //! against the split command's one-row steps and the CPU's on the round's pick lanes, the other row as each row's control
-[test]
+[test(description = "On Qwen3.8-Flash-Next with its NextN head, one device speculative round accepts exactly where row 0's argmax is the draft, and its two verify rows and wide carry rows sit within bar of the split command's and the CPU's one-row steps on the same pick lanes")]
 def test_gpu_resident_hc_mtp_verify(t : T?) {
     t |> run("Qwen3.8-Flash-Next + its split head: one speculative round with the draft and the two-row verify on the device against the CPU chain over the same tokens") @(t : T?) {
         if (!hc_ready(t)) return
@@ -193,7 +193,7 @@ def test_gpu_resident_hc_mtp_verify(t : T?) {
 }
 
 //! the NextN head on the hyper-connection chain: one device draft against the CPU forward_mtp over the same carry and the head rows the chain warmed (hydrated to the host), the CPU draft one row back as the control
-[test]
+[test(description = "One NextN draft through the resident head on the hyper-connection chain matches the CPU forward_mtp on the same token, carry and replayed pick within the logits and carry bars, its device pick the argmax, the draft one row back the control")]
 def test_gpu_resident_hc_mtp_draft(t : T?) {
     t |> run("Qwen3.8-Flash-Next + its split head: one NextN draft through the resident head on the chain against the CPU forward_mtp on the same token, wide carry and row") @(t : T?) {
         if (!hc_ready(t)) return
@@ -252,7 +252,7 @@ def test_gpu_resident_hc_mtp_draft(t : T?) {
     }
 }
 
-[test]
+[test(description = "On the Qwen3.8-Flash-Next hyper-connection MoE the window chain and split token command, with the CPU replaying the device's taped expert picks, hold every row within the routed bar of the CPU chain, the hot pool splitting picks between device and host")]
 def test_gpu_resident_hc(t : T?) {
     t |> run("Qwen3.8-Flash-Next: the window chain and the split token command (the mixers, the side input and the sigmoid out-gate on device, the routed experts on the host) vs the CPU chain") @(t : T?) {
         let path = path_join(models_dir(), FN_TRUNK)
@@ -305,7 +305,7 @@ def test_gpu_resident_hc(t : T?) {
 }
 
 //! a two-token prompt on the hyper-connection chain takes the window chain: the token command's peel declines the wide residual
-[test]
+[test(description = "On the hyper-connection chain a two-token prompt runs through the resident window chain, because the token command's short-tail peel declines the wide residual")]
 def test_gpu_resident_hc_short_window(t : T?) {
     t |> run("Qwen3.8-Flash-Next: a two-token prompt takes the window chain, not the token command's peel") @(t : T?) {
         if (!hc_ready(t)) return

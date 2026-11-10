@@ -11,14 +11,14 @@ require _gemma_resident
 // gemma-4-26B-A4B UD-IQ3_XXS under a plan room of a 16 GB card less its desktop, the rig's context asked whole: the plan
 // moves the first routed layers' experts to the host and keeps the dense branch, the norms and the router on the device
 // (`../ARCHITECTURE_GPU_VULKAN_MOE.md#vk-gemma4-moe-block`). Large tier: arm `host26`. Its own file, since the cap binds the
-// device's weight budget at the tier's first init. Skips as `test_gpu_resident_gemma4_26b.das` does, and where the pinned
-// cap does not decide the plan: `DASLLAMA_GPU_VRAM_MB` set to another room, or a device whose room is under the cap.
+// device's weight budget at the tier's first init. Skips as the IQ3_XXS cells of `test_gpu_resident_gemma4_moe.das` do, and
+// where the pinned cap does not decide the plan: `DASLLAMA_GPU_VRAM_MB` set to another room, or a device whose room is under
+// the cap.
 let private GEMMA4_26B_HOST_FILE = GemmaFile(file = "gemma-4-26B-A4B-it-UD-IQ3_XXS.gguf", arm = "host26", host_experts = true)
 let private HOST_CAP_MB = 8000l   //! about half the 8.9 GB of expert stacks fits beside the dense planes and the mirror
 let private GEMMA4_26B_HITS_SLACK = 12l   //! the device-expert file's slack: a router near-tie flips whole positions
 
-[init]
-def private host_cap() {
+def private pin_host_cap() {
     var want = g_gpu_want
     want.vram_mb = HOST_CAP_MB
     set_gpu_tier_want_(want)
@@ -44,8 +44,9 @@ def private cap_not_in_force(t : T?) : bool {
     return false
 }
 
-[test]
+[test(description = "Under a pinned 8000 MB plan room gemma-4-26B UD-IQ3_XXS moves its first routed layers' experts to the host, scores perplexity within 2x of the CPU chain, and its load log sizes the hot expert pool by room alone, never citing the gemma-4 form", standalone = "the test pins the GPU tier's plan room to 8000 MB and the pin outlives it, which would move the routed experts of any other carrier compiled beside it to the host")]
 def test_gpu_resident_gemma4_26b_host_experts(t : T?) {
+    pin_host_cap()
     t |> run("gemma-4-26B-A4B IQ3_XXS under an {HOST_CAP_MB} MB plan room: the first routed layers' experts on the host, 150 prose ids prefilled, 150 teacher-forced, scored as a perplexity against the CPU chain") @(t : T?) {
         return if (!arm_on(t, GEMMA4_26B_HOST_FILE.arm) || cap_not_in_force(t))
         ppl_compare(t, 150l, 150l, GEMMA4_26B_HOST_FILE, GEMMA4_26B_HITS_SLACK, GEMMA_MOE_PPL_RATIO)

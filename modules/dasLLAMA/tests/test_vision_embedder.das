@@ -12,7 +12,7 @@ require _model_tier   // models_dir() + model_available() gate
 // refusals by name, and (model-gated) the gemma4uv arms the 12B pair distinguishes. The gemma4v
 // arms are test_gemma4v.das / test_vision_chat.das's.
 
-[test]
+[test(description = "A default VisionEmbedder reports zero width, zero alignment, no family and the f32 stamp and panics on encode, and `load_vision_embedder` panics on a missing file and on an audio-only mmproj")]
 def test_vision_embedder_none(t : T?) {
     t |> run("a default carrier is the text-only arm") @(t : T?) {
         var e = VisionEmbedder()
@@ -56,7 +56,7 @@ def test_vision_embedder_none(t : T?) {
     }
 }
 
-[test]
+[test(description = "`vision_exec_fmt` stamps qwen3v f32 by default and q8 once its q8 flag is set, while qwen25v always stamps f32")]
 def test_vision_embedder_exec_fmt(t : T?) {
     t |> run("the qwen3v q8 flag reaches the exec_fmt stamp") @(t : T?) {
         var e3 = VisionEmbedder(kind = VisionKind.qwen3v)
@@ -70,7 +70,7 @@ def test_vision_embedder_exec_fmt(t : T?) {
     }
 }
 
-[test]
+[test(description = "The gemma-4 12B mmproj sniffs as gemma4uv with a 48 px superpatch alignment, a 3840-wide projection and the f32 exec stamp")]
 def test_vision_embedder_gemma4uv_arms(t : T?) {
     t |> run("the 12B mmproj sniffs as gemma4uv and reports its geometry") @(t : T?) {
         let mm = path_join(models_dir(), "mmproj-gemma-4-12B-it-BF16.gguf")

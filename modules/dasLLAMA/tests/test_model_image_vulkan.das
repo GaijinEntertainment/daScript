@@ -62,7 +62,7 @@ def private mint_matches_eager_bake(t : T?; minted : Model; path : string) {
     delete eager
 }
 
-[test]
+[test(description = "With the Vulkan tier armed, the device-free dry bake of SmolLM2 q8 collects a plan whose every entry is role-stamped and inside the blob, and the flavor image round-trips the plan and blob lengths", standalone = "the runner's image-vulkan suite is this one file")]
 def test_vulkan_dry_bake(tst : T?) {
     tst |> run("SmolLM2 q8: dry bake collects a role-stamped plan and the image round-trips") @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -112,7 +112,7 @@ def test_vulkan_dry_bake(tst : T?) {
     }
 }
 
-[test]
+[test(description = "A cold cached SmolLM2 load under the armed Vulkan tier mints only the vulkan lane, its plan and twin byte-equal to the eager dry bake (a poisoned byte misses), and the trimmed lane drops the q8 planes for a smaller file", standalone = "the runner's image-vulkan suite is this one file")]
 def test_vulkan_inline_bake(tst : T?) {
     tst |> run("SmolLM2 q8: a cold cached load under the armed tier mints the vulkan lane ALONE - the twin streamed off the gguf inside the save, no planar file - and the trimmed lane drops the planar families") @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {

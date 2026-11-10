@@ -152,7 +152,7 @@ def private distinct_count(vals : array<uint64>) : int {
     return n
 }
 
-[test]
+[test(description = "A worker thread's context borrows the device this context made, holds one extra reference while alive, sees this context's held bytes cut from its room and resident cap, and returns the reference at shutdown")]
 def test_vk_one_device_a_process(t : T?) {
     t |> run("a worker context borrows the process's device, holds a reference while it lives and gives it back at its shutdown") @(t : T?) {
         return if (!device_or_skip(t))
@@ -180,7 +180,7 @@ def test_vk_one_device_a_process(t : T?) {
     }
 }
 
-[test]
+[test(description = "One more worker context than the device has compute queues takes every queue round robin, two contexts share one, and every upload-readback round trip returns its bytes exactly")]
 def test_vk_shared_queue_submits(t : T?) {
     t |> run("more worker contexts than the device has queues: the takes go round robin, two share a queue, every submit under its lock, every round trip lands") @(t : T?) {
         return if (!device_or_skip(t))
@@ -234,7 +234,7 @@ def test_vk_shared_queue_submits(t : T?) {
     }
 }
 
-[test]
+[test(description = "`device_queue_count` answers the `set_device_queue_ask` ask clamped to at least one and at most the family's queue count, and one queue for a family past the device's")]
 def test_vk_device_queue_ask(t : T?) {
     t |> run("set_device_queue_ask clamps an ask to at least one queue, and device_queue_count answers the ask, at most what the family carries") @(t : T?) {
         return if (!device_or_skip(t))
@@ -290,7 +290,7 @@ let DESTROY_ERROR = "VUID-vkDestroy"
 let LAYER_INSERTED = "Insert instance layer"
 let LAYER_UNLOADED = "Unloading layer library"
 
-[test]
+[test(description = "The shared-queue cell rerun in a child under the Khronos validation layer passes with zero UNASSIGNED-Threading errors: every submit and wait on a shared queue holds its lock")]
 def test_vk_shared_queue_under_validation(t : T?) {
     t |> run("the shared-queue cell rerun in a child under the Khronos validation layer reports no threading error: every submit and wait on a shared queue holds its lock") @(t : T?) {
         return if (!device_or_skip(t))
@@ -302,7 +302,7 @@ def test_vk_shared_queue_under_validation(t : T?) {
     }
 }
 
-[test]
+[test(description = "The last context out destroys the device, clears the holder and its byte count; the next context makes a fresh device with one reference and serves on it, after volkFinalize too")]
 def test_vk_last_context_out(t : T?) {
     t |> run("the last context out destroys the device and clears the holder; the next context makes a fresh device and serves on it, a finalized loader included") @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -339,7 +339,7 @@ def test_vk_last_context_out(t : T?) {
     }
 }
 
-[test]
+[test(description = "The lifecycle cell rerun under the Khronos validation layer passes with no VUID-vkDestroy error, and the loader unloads the layer as often as it inserted it across the cell's three instances")]
 def test_vk_validation_last_context_out(t : T?) {   //! not a `test_vk_last_context_out` prefix: the child's name filter would rerun this cell too
     t |> run("the lifecycle cell rerun in a child under the Khronos validation layer reports no destroy-order error: the last context out destroys every object it made, the device before the instance") @(t : T?) {
         return if (!device_or_skip(t))

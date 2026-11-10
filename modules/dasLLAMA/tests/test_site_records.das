@@ -16,7 +16,7 @@ require dasllama/dasllama_exchange_schema     // RETIRED_BOXES — the boards th
 // records commit ships stale numbers to the live page. This cell IS the tool's --verify mode:
 // regenerate in memory, byte-compare against the committed files.
 
-[test]
+[test(description = "Drift gate: regenerating the site merge from performance/records in memory reproduces the committed bench_records.json and bench_cells.json byte for byte, and a missing committed file fails rather than skips")]
 def test_site_records_current(t : T?) {
     t |> run("the committed site merge and its projection match the record stores byte for byte") @(tt : T?) {
         if (!stat("modules/dasLLAMA/performance/records").is_valid) {
@@ -49,7 +49,7 @@ def test_site_records_current(t : T?) {
 // The projection contract the page's first paint relies on: every field the tables, bars and
 // hero read survives with its value, and every receipt-only field - what the page fetches from
 // the full store on the first receipt opened - is gone.
-[test]
+[test(description = "The bench_cells.json projection of a fully populated run re-reads with every render field's value intact, and none of the receipt-only values (cmd, env, tune, hashes, transcript, hardware detail) appear in its text")]
 def test_site_cells_projection(t : T?) {
     t |> run("bench_cells.json keeps the render fields and drops the receipt fields") @(tt : T?) {
         var run = BenchRun(engine = "das", backend = "cpu", flavor = "tuned", box = "m5", threads = 8,
@@ -154,7 +154,7 @@ def private void_clips_on(board : array<BenchModel>; engine, backend : string) :
 
 // The board's projection rules: the cards show the current release's rows of the current boards
 // alone, a held row never, and every audio run with the outlier rule's verdict on it.
-[test]
+[test(description = "`board_models` projects only current-release rows on non-retired boards with their paired references, drops held rows and their reference while the merge keeps them, and voids an audio outlier clip on the projection alone")]
 def test_board_projection(t : T?) {
     t |> run("a stale or retired row never reaches the projection; the current row is the control") @(tt : T?) {
         var models <- [

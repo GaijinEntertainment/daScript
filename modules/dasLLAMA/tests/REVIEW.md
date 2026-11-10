@@ -10,6 +10,9 @@ puts it.**
 **A diff that touches a cell `REVIEW_PINNED_GATES.md` (beside this file) pins, or any cell of a
 file it pins whole, or changes which `run.das` suites list one, applies that checklist too.**
 
+**A diff that adds, moves, merges, renames or removes a test file or a `[test]` applies
+`REVIEW_FILES.md` (beside this file) too - where a test lives, what the runner's file names keep.**
+
 **A diff that adds or changes an assert whose expected value restates or reads something
 maintained outside its cell, or whose expected value a checked-in table names as its evidence,
 applies `REVIEW_PINNED_GATES.md` (beside this file) too.** A bar on a compare whose two sides
@@ -108,9 +111,6 @@ thinking gate - calls `set_thinking(c, false)` on its `ChatSession` before the f
 
 **Every test RUN runs under `-jit` - never the interpreter, never AOT.** Under the interpreter a
 model-gated suite's cells skip, and a run of skips is not the coverage the suite owes.
-
-**A diff that registers a test file of this folder in a `CMakeLists.txt` is a defect - list it
-in a `run.das` suite instead.**
 
 **A diff that adds a test file here adds its `CLAUDE.md` entry in the same change, every clause
 of it true of the file as added.**

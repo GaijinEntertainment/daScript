@@ -12,7 +12,12 @@ let private HYBRID_WINDOW = 512l   //! the file's prompt window: the two-window 
 [init]
 def private allow_cpu_prefill_intent() {
     allow_cpu_prefill()   // the control arm (the model dropped off the device) prefills on the CPU by design
-    set_pf_window_rows_pin(HYBRID_WINDOW)   //! before every load of the file: the plan and the window chain read it
+}
+
+//! every test pins the window before its first load: the plan and the window chain read it, and
+//! an [init] pin would reach every batch-mate's context too
+def private pin_window_rows() {
+    set_pf_window_rows_pin(HYBRID_WINDOW)
 }
 require daslib/jobque_boost
 require daslib/fio
@@ -165,15 +170,17 @@ def private hybrid_forced_feed(t : T?; n : int64; file : string; planes : Hybrid
     delete tr
 }
 
-[test]
+[test(description = "On Qwen3.5-0.8B Q8_0 a 40-token resident prefill and eight fed steps with the deltanet layers on the device sit within the deltanet logits bar of the CPU chain, the one-step-off control past it")]
 def test_gpu_resident_hybrid_decode(t : T?) {
+    pin_window_rows()
     t |> run("Qwen3.5-0.8B: resident prefill + decode with deltanet layers on device vs the CPU chain, one window") @(t : T?) {
         hybrid_forced_feed(t, 40l, "Qwen3.5-0.8B-Q8_0.gguf", HybridPlanes.q8)
     }
 }
 
-[test]
+[test(description = "A Qwen3.5-0.8B prompt spanning two 512-row windows carries the conv tail and deltanet state across the seam, the prefill and eight fed steps within the deltanet bar of the CPU chain")]
 def test_gpu_resident_hybrid_two_windows(t : T?) {
+    pin_window_rows()
     t |> run("Qwen3.5-0.8B: the resident prefill across two windows (the conv tail and state carry the seam)") @(t : T?) {
         hybrid_forced_feed(t, HYBRID_WINDOW + 88l, "Qwen3.5-0.8B-Q8_0.gguf", HybridPlanes.q8)
     }
@@ -182,8 +189,9 @@ def test_gpu_resident_hybrid_two_windows(t : T?) {
 // the conv-tail edge: a prompt one past the window (the last window would carry one row, fewer
 // than the three conv taps - the chain keeps it at the taps by shortening the window before), and
 // a prompt shorter than the taps (one window, the ring's leading rows zero)
-[test]
+[test(description = "The conv-tail edges hold the CPU chain's logits within the deltanet bar on Qwen3.5-0.8B: a prompt one past the window, whose last window still carries the taps, and a two-token prompt shorter than the taps")]
 def test_gpu_resident_hybrid_short_windows(t : T?) {
+    pin_window_rows()
     t |> run("Qwen3.5-0.8B: a prompt one past the window - the last window still carries the conv taps") @(t : T?) {
         hybrid_forced_feed(t, HYBRID_WINDOW + 1l, "Qwen3.5-0.8B-Q8_0.gguf", HybridPlanes.q8)
     }
@@ -192,15 +200,17 @@ def test_gpu_resident_hybrid_short_windows(t : T?) {
     }
 }
 
-[test]
+[test(description = "On Qwen3.5-0.8B the greedy chain's steps reproduce the plain steps bit for bit, both where the fed token hits the device pick and where it misses it")]
 def test_gpu_resident_hybrid_greedy_chain(t : T?) {
+    pin_window_rows()
     t |> run("Qwen3.5-0.8B: the greedy chain's steps are the plain steps bit for bit, hits on the pick and misses off it") @(t : T?) {
         greedy_chain_cell(t, path_join(models_dir(), "Qwen3.5-0.8B-Q8_0.gguf"))
     }
 }
 
-[test]
+[test(description = "Qwen3.5-0.8B-Q4_K_M keeps its deltanet planes K-quant and holds the CPU chain within the K-quant bar over one and two windows, the f16 feed riding the k4 cm2 tiles, no further from the f32 chain than the CPU")]
 def test_gpu_resident_hybrid_kq(t : T?) {
+    pin_window_rows()
     t |> run("Qwen3.5-0.8B-Q4_K_M: K-quant deltanet planes on the resident driver vs the CPU chain, one window") @(t : T?) {
         hybrid_forced_feed(t, 40l, "Qwen3.5-0.8B-Q4_K_M.gguf", HybridPlanes.kq)
     }
@@ -210,8 +220,9 @@ def test_gpu_resident_hybrid_kq(t : T?) {
     }
 }
 
-[test]
+[test(description = "The mixed twin with K-quant deltanet qkv/z and a Q8_0 out plane holds the CPU chain within its bar over one and two windows, the qkv/z feed on the k4 tiles, no further from the f32 chain than the CPU")]
 def test_gpu_resident_hybrid_kq_q8out(t : T?) {
+    pin_window_rows()
     t |> run("Qwen3.5-0.8B-Q4_K_M-q8out: K-quant qkv/z with a Q8_0 out plane on the resident driver vs the CPU chain, one window") @(t : T?) {
         hybrid_forced_feed(t, 40l, "Qwen3.5-0.8B-Q4_K_M-q8out.gguf", HybridPlanes.kq_q8out)
     }
@@ -229,8 +240,9 @@ let private GATED_Q8KV_BAR_REL = 0.06
 let private GATED_CODEC_DIST_REL = 1.15
 let private GATED_CODEC_PAIR_REL = 0.8
 
-[test]
+[test(description = "Under the gated attention a q8_0 K/V mirror holds the CPU q8_0 chain within bar, and a tq4 mirror sits no further than 1.15 times the CPU tq4 chain's distance from the f16 rows")]
 def test_gpu_resident_hybrid_gated_block_codecs(t : T?) {
+    pin_window_rows()
     let file = "Qwen3.5-0.8B-Q8_0.gguf"
     t |> run("Qwen3.5-0.8B: a q8_0 K/V mirror under the gated attention - resident prefill + decode vs the CPU chain on q8_0 sessions") @(t : T?) {
         cell_codec_forced_feed(t, file, 40l, KVDtype.q8_0, GATED_Q8KV_BAR_REL)
@@ -241,13 +253,15 @@ def test_gpu_resident_hybrid_gated_block_codecs(t : T?) {
 }
 
 
-[test]
+[test(description = "On Qwen3.5-0.8B-MTP at depth 2 a seeded sampled stream through the device selection decodes the rows-landed stream token for token, and a plain sampled stream lands one selection a step")]
 def test_gpu_resident_hybrid_sampled_selection(t : T?) {
+    pin_window_rows()
     mtp_sampled_selection_cell(t)
 }
 
-[test]
+[test(description = "A short tail on the hybrid peels through the token commands within the split bar of one-row steps, the recurrent rows in order; on the NextN carrier speculation on sends the tail to the window chain instead")]
 def test_gpu_resident_hybrid_peel(t : T?) {
+    pin_window_rows()
     t |> run("Qwen3.5-0.8B: a short tail peels through the token commands, the recurrent rows in order in the region's slot, and reads what the one-row steps read") @(t : T?) {
         let path = path_join(models_dir(), "Qwen3.5-0.8B-Q8_0.gguf")
         if (!resident_ready(t, path)) return
@@ -270,8 +284,9 @@ def test_gpu_resident_hybrid_peel(t : T?) {
     }
 }
 
-[test]
+[test(description = "The Vulkan kernel census panics on a name no kernel seeded, so a misspelt key cannot read as a zero count, while a seeded class kernel answers by its SPIR-V name")]
 def test_kernel_census_by_name(t : T?) {
+    pin_window_rows()
     t |> run("the kernel census refuses a name no kernel seeded") @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             var tripped = false
@@ -288,8 +303,9 @@ def test_kernel_census_by_name(t : T?) {
     }
 }
 
-[test]
+[test(description = "row_bar scales with the finite elements of the reference row, so a NaN in the reference reads past the bar instead of widening it to infinity, the NaN-scaled bar the control")]
 def test_row_bar_nan_reference(t : T?) {
+    pin_window_rows()
     let rel = 0.04
     let cpu <- [1.0, -4.0, 2.0, 0.5]
     var gpu := cpu
@@ -319,8 +335,9 @@ def private tq4_bar_fails(g, c, off : array<float>) : int {
 
 //! the resident rigs' row bars on synthetic rows, run on a probe handle: a NaN in the device row or the reference row reds
 //! `rows_within_control` and `tq4_within`, the clean rows hold both (the control)
-[test]
+[test(description = "On synthetic rows rows_within_control and tq4_within red a NaN in the device or reference row, also with no control row, while clean rows hold; the tq4 share bound passes 0.8 and reds 0.9 of the one-off distance")]
 def test_row_bars_red_a_nan(t : T?) {
+    pin_window_rows()
     let cpu <- [1.0, -4.0, 2.0, 0.5]
     let off <- [3.0, -1.0, -2.0, 4.5]
     var gpu := cpu
@@ -354,97 +371,116 @@ def test_row_bars_red_a_nan(t : T?) {
     delete cr
 }
 
-[test]
+[test(description = "Under the depth-8 knob the driver prepares nine verify rows and the greedy speculative walk emits the plain decode token for token, every verify on the device with several drafts a round; depth 1 prepares two")]
 def test_gpu_resident_hybrid_mtp_depth8(t : T?) {
+    pin_window_rows()
     mtp_depth8_cell(t)
 }
 
-[test]
+[test(description = "The resident prefill and every step land the post-norm hidden as the speculative carry at its row's watermark, each within the deltanet bar of the CPU chain's carry, the previous carry the control")]
 def test_gpu_resident_hybrid_mtp_carry(t : T?) {
+    pin_window_rows()
     mtp_carry_cell(t)
 }
 
-[test]
+[test(description = "Two sessions batched through the N-row command land each row's speculative carry within the deltanet bar of each session run alone on the CPU chain, every batched step on the N-row command")]
 def test_gpu_resident_hybrid_mtp_carry_batched(t : T?) {
+    pin_window_rows()
     mtp_carry_batched_cell(t)
 }
 
-[test]
+[test(description = "With speculation off the NextN-headed hybrid lands no carry, the watermark 0 after the prefill and every step, while its logits stay within the deltanet bar of the spec-on run's")]
 def test_gpu_resident_hybrid_mtp_carry_gate(t : T?) {
+    pin_window_rows()
     mtp_carry_gate_cell(t)
 }
 
-[test]
+[test(description = "A NextN draft through the resident head matches the CPU forward_mtp on the same token, carry and row within the deltanet bar, its pick the argmax; a round drafts on the CPU with the seat unset and on the device with it back")]
 def test_gpu_resident_hybrid_mtp_draft(t : T?) {
+    pin_window_rows()
     mtp_draft_cell(t)
 }
 
-[test]
+[test(description = "A device draft past the head rows the device holds uploads the host's rows, a later CPU pass brings the drafted K row down, and the CPU draft over the same rows agrees with the device pick")]
 def test_gpu_resident_hybrid_mtp_draft_upload(t : T?) {
+    pin_window_rows()
     mtp_draft_upload_cell(t)
 }
 
-[test]
+[test(description = "Re-armed with the free draft's pick among the suppressed ids, the device draft pins that id's logit and picks another token, still the argmax of what it landed")]
 def test_gpu_resident_hybrid_mtp_draft_suppressed(t : T?) {
+    pin_window_rows()
     mtp_draft_suppressed_cell(t)
 }
 
-[test]
+[test(description = "A round's two device verify rows sit within twice the deltanet bar of one-row steps of the same tokens, argmax equal; the head rows stay on the device until a pass and the re-warm's K row is the draft's")]
 def test_gpu_resident_hybrid_mtp_verify(t : T?) {
+    pin_window_rows()
     mtp_verify_cell(t)
 }
 
-[test]
+[test(description = "Six speculative rounds under the caller's pick ask land picks alone yet draft, accept, advance and publish the same tokens as the same rounds landing full logits")]
 def test_gpu_resident_hybrid_mtp_verify_asked(t : T?) {
+    pin_window_rows()
     mtp_verify_asked_cell(t)
 }
 
-[test]
+[test(description = "A forced reject rolls the region back on the device with no snapshot: rows, head rows, dn_pos and carry at the token's row, and the deltanet state and next step within twice the deltanet bar of a one-row session")]
 def test_gpu_resident_hybrid_mtp_verify_reject(t : T?) {
+    pin_window_rows()
     mtp_verify_reject_cell(t)
 }
 
-[test]
+[test(description = "A forced reject under the caller's pick ask publishes verify row 0's device pick, the one-row step's argmax, without landing logits, reseeds the carry from row 0's hidden, and sample_ consumes the pick")]
 def test_gpu_resident_hybrid_mtp_verify_reject_asked(t : T?) {
+    pin_window_rows()
     mtp_verify_reject_asked_cell(t)
 }
 
-[test]
+[test(description = "Host residual rows poisoned with NaN before a resident prefill leave the carry and the device draft bit for bit the clean prefill's, proving the head's prompt rows warm on the device")]
 def test_gpu_resident_hybrid_mtp_xb_poison(t : T?) {
+    pin_window_rows()
     mtp_xb_poison_cell(t)
 }
 
-[test]
+[test(description = "The NextN head's K rows the window chain warms, read back, sit within twice the deltanet bar of the CPU warm's rows over one window and over two, the row one down the control")]
 def test_gpu_resident_hybrid_mtp_head_warm(t : T?) {
+    pin_window_rows()
     mtp_head_warm_cell(t)
 }
 
-[test]
+[test(description = "Six device speculative rounds match the CPU rounds' drafts up to near-ties, with equal accepts and positions; declined-seat rounds over device-hydrated head rows match too, poisoned head rows the control")]
 def test_gpu_resident_hybrid_mtp_rounds(t : T?) {
+    pin_window_rows()
     mtp_rounds_cell(t)
 }
 
-[test]
+[test(description = "A NaN carry through the resident head makes the draft panic naming the row and the non-finite logits it landed, and no draft is counted")]
 def test_gpu_resident_hybrid_mtp_nonfinite(t : T?) {
+    pin_window_rows()
     mtp_nonfinite_cell(t)
 }
 
-[test]
+[test(description = "A speculative round the device cannot verify - an f32 session under the f16 mirror, an unhomed session, a gap past the region - passes to the CPU rails by name as codec, unhomed or gap and completes without a panic")]
 def test_gpu_resident_hybrid_mtp_pass_arms(t : T?) {
+    pin_window_rows()
     mtp_pass_arms_cell(t)
 }
 
-[test]
+[test(description = "A round off the recurrent state's position passes its verify as rewind, and the CPU rails refuse it naming both positions, because the deltanet state is forward-only on every rail")]
 def test_gpu_resident_hybrid_mtp_rewind_refused(t : T?) {
+    pin_window_rows()
     mtp_rewind_refused_cell(t)
 }
 
-[test]
+[test(description = "With the NextN head kept off the device the plan has no verify rows, so a round passes as verify_rows and verify_window with the driver still armed, and the CPU verify's row 0 sits within the deltanet bar of the CPU step")]
 def test_gpu_resident_hybrid_mtp_head_off(t : T?) {
+    pin_window_rows()
     mtp_head_off_cell(t)
 }
 
-[test]
+[test(description = "The NextN draft, verify, head warm and six rounds hold their bars over a q8_0 K/V mirror, and the verify and forced-reject rollback hold over a tq4 mirror")]
 def test_gpu_resident_hybrid_mtp_block_codec(t : T?) {
+    pin_window_rows()
     mtp_block_codec_cell(t)
 }

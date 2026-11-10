@@ -26,7 +26,7 @@ require _scratch_dir  // scratch_path: the box's own image, minted for the direc
 
 // the audio twin of test_vision_embedder
 
-[test]
+[test(description = "A default AudioEmbedder reports width 0 and no family and panics on encode, a missing mmproj probes width 0 without panicking, and loading it panics by name")]
 def test_audio_embedder_none(t : T?) {
     t |> run("a default carrier is the no-audio arm") @(t : T?) {
         var e = AudioEmbedder()
@@ -59,7 +59,7 @@ def test_audio_embedder_none(t : T?) {
     }
 }
 
-[test]
+[test(description = "The E2B mmproj probes and loads as gemma4a at width 1536 and pads a sub-frame clip to one soft token, a CURRENT gemma4a .dlim routes on its baked tag, and E4B probes its decoder width 2560")]
 def test_audio_embedder_gemma4a_arm(t : T?) {
     t |> run("the E2B mmproj probes and loads as gemma4a with its width") @(t : T?) {
         let mm = path_join(models_dir(), "mmproj-gemma-4-E2B-it-bf16.gguf")
@@ -198,7 +198,7 @@ def private tower_arm_cell(t : T?; file, family : string; width, rows_per_chunk 
     delete st
 }
 
-[test]
+[test(description = "Ultravox and Omni mmprojs load as the whisper-class tower at the probed width, encode finite rows a chunk deterministically on a reused state without heap growth, and only ultravox probes a bare audio span")]
 def test_audio_embedder_tower_arm(t : T?) {
     t |> run("an ultravox mmproj loads as the whisper-class tower") @(t : T?) {
         with_dasllama_jobque() {
@@ -254,7 +254,7 @@ def private instruct_audio_turn(t : T?; m : Model; rows : array<float>; n : int6
     delete chat
 }
 
-[test]
+[test(description = "Gemma4a E2B rows on a plain chat append across clips, prefill as head plus rows plus tail and are consumed by the turn, while rows of the wrong length or beside a queued image panic")]
 def test_audio_rows_on_a_plain_chat(t : T?) {
     let mm = path_join(models_dir(), "mmproj-gemma-4-E2B-it-bf16.gguf")
     let dec = path_join(models_dir(), "gemma-4-E2B-it-Q4_K_M.gguf")
@@ -334,7 +334,7 @@ def test_audio_rows_on_a_plain_chat(t : T?) {
     }
 }
 
-[test]
+[test(description = "A chat template with no audio span markers (SmolLM2) panics on audio rows, yet queues rows flagged as a bare span that needs no marker")]
 def test_audio_rows_need_an_audio_arm(t : T?) {
     t |> run("a family with no audio span markers refuses the rows by name") @(t : T?) {
         let smol = path_join(models_dir(), "SmolLM2-135M-Instruct-Q8_0.gguf")

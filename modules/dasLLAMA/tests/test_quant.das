@@ -8,7 +8,7 @@ require math
 
 // Q8_0 round-trip properties. fp scaling isn't bit-exact, so we assert bounds, not values.
 
-[test]
+[test(description = "Q8_0 round trip: a constant block recovers, a zero block stays zero with scale 0, error stays within half a step at scale 1, and a ramp and a ragged 40-element tail clear 30 dB SNR")]
 def test_quant(t : T?) {
     // A constant block recovers (near-)exactly: amax=|c|, every q hits +-127, dq == c.
     t |> run("constant block round-trips") @(t : T?) {
@@ -93,7 +93,7 @@ def test_quant(t : T?) {
 // Q4_0 round-trip properties (on-disk layout: d = smax/-8, offset-8, split-half packing). 4 bits, so
 // the step is coarser than Q8: errors are bounded by half a step, and SNR lands ~20 dB lower.
 
-[test]
+[test(description = "Q4_0 round trip: a constant block packs to 16 bytes and recovers, a zero block stays zero, error stays within half a step at unit scale, and a three-block ramp clears 20 dB SNR")]
 def test_quant_q4(t : T?) {
     // A constant block recovers exactly: smax=c, d=c/-8, every element maps to nibble 0, dq == c.
     t |> run("constant block round-trips") @(t : T?) {
@@ -163,7 +163,7 @@ def test_quant_q4(t : T?) {
 // memory-honest loader uses. They must produce byte-identical quants/scales to the alloc versions
 // (writing at the given offsets), so a loaded model is the same whether built tensor-at-a-time or not.
 
-[test]
+[test(description = "`quantize_q8_0_into` and `quantize_q4_0_into` writing at a non-zero offset produce quants and scales identical to the allocating `quantize_q8_0` and `quantize_q4_0`")]
 def test_quant_into(t : T?) {
     // Q8: quantize_q8_0_into at a non-zero offset must match quantize_q8_0 element-for-element.
     t |> run("quantize_q8_0_into matches alloc version at offset") @(t : T?) {

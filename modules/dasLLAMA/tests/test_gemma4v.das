@@ -43,7 +43,7 @@ def private gate_encode(t : T?; tw : Gemma4vTower; var st : Gemma4vState; kind :
     }
 }
 
-[test]
+[test(description = "The gemma4v E2B tower on the exact lane reads its geometry and plane split off the mmproj and matches the mtmd encode dumps on eight canvases within 4e-3 of token rms, panicking on a grid past the position table or a ragged canvas")]
 def test_gemma4v_tier1(t : T?) {
     t |> run("tier-1 tower parity vs the mtmd encode dumps (E2B)") @(tt : T?) {
         let mm = path_join(models_dir(), "mmproj-gemma-4-E2B-it-bf16.gguf")
@@ -110,7 +110,7 @@ def test_gemma4v_tier1(t : T?) {
 
 // The GPU tier-1 gate: the same dumps through the Metal tower's block loop (bf16 mul_mm stages
 // f16 tiles, so the bar is scale-relative and wider than the CPU gate's).
-[test]
+[test(description = "The gemma4v lane policy is q8 with the Metal tower off and exact with it armed, and the Metal tower matches the E2B mtmd dumps within 8e-3 of token rms on five canvases, with a knob-off decline leg and the q8 lane served with a red poison control")]
 def test_gemma4v_tier1_gpu(t : T?) {
     t |> run("tier-1 GPU attempt vs the mtmd encode dumps (scale-relative rung)") @(tt : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
@@ -165,7 +165,7 @@ def test_gemma4v_tier1_gpu(t : T?) {
 // The clamp knockout: the same tower with every block clamp disarmed must MISS the oracle - the
 // sidecar scalars are load-bearing, not decoration (the E2B file's bounds sit where activations
 // live).
-[test]
+[test(description = "A knockout: every E2B block GEMM carries an active clamp, and disarming them all moves the encode more than 1e-3 off the mtmd dump on both the exact and the q8 lane, so the clamp scalars are load-bearing")]
 def test_gemma4v_clamps_bind(t : T?) {
     t |> run("disarming the block clamps moves tier-1 past the bar") @(tt : T?) {
         let mm = path_join(models_dir(), "mmproj-gemma-4-E2B-it-bf16.gguf")
@@ -243,7 +243,7 @@ def test_gemma4v_clamps_bind(t : T?) {
 // The standardize guard (std_bias / std_scale): absent on E2B, so the arm is reached through
 // staging - a neutral pair (bias 0, scale 1) must leave the encode bit-identical, a biased pair
 // must move it. The sign convention (x - bias) * scale is what the second half pins.
-[test]
+[test(description = "A synthesized std_bias / std_scale pair on the E2B tower leaves the encode bit-identical at bias 0 and scale 1, and bias 0.25 with scale -1 moves the tokens by more than 1e-2")]
 def test_gemma4v_std_guard(t : T?) {
     t |> run("synthesized std_bias/std_scale: neutral is identity, a bias moves the tokens") @(tt : T?) {
         let mm = path_join(models_dir(), "mmproj-gemma-4-E2B-it-bf16.gguf")
@@ -303,7 +303,7 @@ def test_gemma4v_std_guard(t : T?) {
 
 // The q8 serving lane (the CPU default): the same dumps on its own scale-relative bar. The
 // exact-plane gate above is the parity rail; this one says what serving costs in fidelity.
-[test]
+[test(description = "The gemma4v q8 serving lane holds exactly the block GEMM set in its qblob and matches the E2B mtmd dumps within 0.12 of token rms on four canvases, and the vision carrier stamps q8 or f32 by lane")]
 def test_gemma4v_tier1_q8(t : T?) {
     t |> run("tier-1 on the q8 block-GEMM lane (the serving default)") @(tt : T?) {
         let mm = path_join(models_dir(), "mmproj-gemma-4-E2B-it-bf16.gguf")
@@ -353,7 +353,7 @@ def private g4v_poison_leg(tt : T?; mm : string; kind : string; w, h : int; logn
 }
 
 //! the q8 lane's bar: the device runs the q8 chain's arithmetic with f16 weight scales and its own summation order
-[test]
+[test(description = "The gemma4v q8 tower on the serving discrete home's device matches the E2B mtmd dumps within the q8 lane's 0.12 of token rms on four canvases, each device-served, while a mid-stack zeroed-block poison exceeds the bar")]
 def test_gemma4v_tier1_vulkan(t : T?) {
     t |> run("tier-1 attempt on the serving discrete home's tower ({serving_tower_dev(TowerFamily.vision)}) vs the mtmd encode dumps (the q8 lane's bar)") @(tt : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -394,7 +394,7 @@ def private twin_encode(tt : T?; tw : Gemma4vTower; var st : Gemma4vState; tw_ex
         $(zb) { return <- mint_tower(mm, true, tw.n_layer, zb, serving_tower_dev(TowerFamily.vision)) }) $(t; var s; var out) => gemma4v_encode(t, s, planes, int64(w), int64(h), out)
 }
 
-[test, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN_VISION.md#vk-vision-chains")]
+[test(description = "The serving discrete home's gemma4v chain matches the CPU q8 chain on one- and two-block towers and the full tower across square, non-square and 128-aligned canvases, a zeroed-block poison reds, and the exact lane is served on the device"), arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN_VISION.md#vk-vision-chains")]
 def test_gemma4v_discrete_twin(t : T?) {
     t |> run("the serving discrete home's chain ({serving_tower_dev(TowerFamily.vision)}) vs the CPU q8 chain, and the exact lane served") @(tt : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -446,7 +446,7 @@ def test_gemma4v_discrete_twin(t : T?) {
 // The E4B rung: the larger E-series vehicle shares the tower geometry block for block - only the
 // soft-token width differs (2560 vs 1536) - so the dump set is the seam subset (smallest grid,
 // one product size, the orientation gate; mint_e4b.sh), with one GPU and one q8-lane fixture.
-[test]
+[test(description = "The gemma4v E4B tower shares E2B's geometry but a 2560 soft-token width and matches its mtmd dumps on the exact lane within 4e-3 of token rms, on Metal within 8e-3, and on the q8 lane and its discrete device rung within 0.12")]
 def test_gemma4v_tier1_e4b(t : T?) {
     t |> run("tier-1 tower parity vs the mtmd encode dumps (E4B)") @(tt : T?) {
         let mm = path_join(models_dir(), "mmproj-gemma-4-E4B-it-BF16.gguf")

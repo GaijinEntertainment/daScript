@@ -16,7 +16,7 @@ require _child_run
 
 def private run(cmd : string; var output : string&) : int => run_child(cmd, output)
 
-[test]
+[test(description = "In a child process the engine's first dispatch on an unconfigured job queue exits non-zero, naming setup_dasllama_jobque, and the program never runs on")]
 def test_bare_queue_panics(t : T?) {
     let cmd = child_cmd("_jobque_tripwire_root.das", [(name = "DASLLAMA_ALLOW_BARE_JOBQUE", value = "0")])
     var out : string
@@ -26,7 +26,7 @@ def test_bare_queue_panics(t : T?) {
     t |> success(find(out, "TRIPWIRE_DONE") < 0, "the program did not run on:\n{out}")
 }
 
-[test]
+[test(description = "With DASLLAMA_ALLOW_BARE_JOBQUE=1 a child's dispatch on an unconfigured queue still warns that it is not configured but exits 0 and runs to its end")]
 def test_allow_bare_jobque_warns_and_runs(t : T?) {
     let cmd = child_cmd("_jobque_tripwire_root.das", [(name = "DASLLAMA_ALLOW_BARE_JOBQUE", value = "1")])
     var out : string
@@ -36,7 +36,7 @@ def test_allow_bare_jobque_warns_and_runs(t : T?) {
     t |> success(find(out, "TRIPWIRE_DONE") >= 0, "and the program ran on:\n{out}")
 }
 
-[test]
+[test(description = "A panic inside a team chunk on a two-thread queue ends the child process non-zero, the report naming the job exception and the panic, and the program never runs on")]
 def test_team_job_panic_exits_nonzero(t : T?) {
     // the fallback tune policy: the root carries the engine's tune scope, and the default policy would mint and re-exec the child at startup - under a pipe that chain never closes
     // no worker pin: the child inherits this process's affinity mask, and a hard-pinned worker outside it never runs the chunk
@@ -50,7 +50,7 @@ def test_team_job_panic_exits_nonzero(t : T?) {
     t |> success(find(out, "TEAM_DONE") < 0, "the program did not run on:\n{out}")
 }
 
-[test]
+[test(description = "On a configured engine job queue maybe_parallel_for dispatches through the counted parallel arm without tripping the bare-queue check")]
 def test_configured_queue_is_silent(t : T?) {
     with_dasllama_jobque_() {
         let before = get_disp_count()

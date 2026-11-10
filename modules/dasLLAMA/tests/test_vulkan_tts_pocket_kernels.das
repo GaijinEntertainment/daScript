@@ -39,7 +39,7 @@ let private PR_WIDTH = 13   //! the window: 91 elements, off every workgroup and
 def private pk_window(dst : array<float>) : array<float> =>
     <- [for (e in range(PR_ROWS * PR_WIDTH)); dst[(PR_DR0 + e / PR_WIDTH) * PR_DS + PR_DC + e % PR_WIDTH]]
 
-[test]
+[test(description = "The Pocket row copy writes a 7 x 13 strided window bit for bit and its ELU twin matches `elu_rows` at the approx bar, moving only the negative elements, with every element outside the window left at its sentinel")]
 def test_vkt_pk_rows(t0 : T?) {
     t0 |> run("the row copies, plain and ELU, == the CPU window copy and elu_rows at strides and offsets off zero") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -100,7 +100,7 @@ let private RS_T = 37
 let private RS_C = 72
 let private RS_SOFF = 9
 
-[test]
+[test(description = "The in-place layer scale over 37 x 72 rows with the scale row at an offset equals the CPU `layer_scale_rows` bit for bit, leaving the slack past the rows untouched")]
 def test_vkt_pk_row_scale(t0 : T?) {
     t0 |> run("the layer scale == the CPU layer_scale_rows, exact, at t 37 x 72 with the scale row at an offset") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -242,7 +242,7 @@ def private pk_attn_device(kc : TtsKvCache; qfull : array<float>) : PkAttnOut {
     return <- out
 }
 
-[test]
+[test(description = "The causal cached attention row matches `attention_causal_rows` at the approx bar on a 45-query prompt, a decode step over an 8-key window and the prompt over 16 keys; a poisoned key before the window changes no bit")]
 def test_vkt_pk_attn(t0 : T?) {
     t0 |> run("the causal attention row == the CPU attention_causal_rows: a 45-query prompt, a decode step over an 8-key window, the prompt over 16") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -287,7 +287,7 @@ let private PGQ_CAP = 40
 let private PGQ_QS = 200
 let private PGQ_QCOL = 24
 
-[test]
+[test(description = "The attention row with four query heads over two key-value heads matches `attention_causal_rows` at the approx bar over every key and over an 8-key window, and the window measurably moves the late rows")]
 def test_vkt_pk_attn_grouped(t0 : T?) {
     t0 |> run("the attention row over grouped keys == the CPU attention_causal_rows: four query heads a pair of key-value heads, every key, then an 8-key window") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -497,7 +497,7 @@ def private pk_gemv_arm(t : T?; arm : string; quad : bool) {
     t |> success(outside_run(got.gate, PG_YOFF, PG_NOUT, POISON), "{arm} tts_pk_gemv_gate: the residual plane outside its row is untouched")
 }
 
-[test]
+[test(description = "The row GEMV's five stamps (dot, ln+modulate+silu, gated residual, add+silu, tail with latent) at nin 200, nout 45 match the CPU `linear_vec` chains at the approx bar with weight rows on and off the float4 lattice")]
 def test_vkt_pk_gemv(t0 : T?) {
     t0 |> run("the row GEMV's five stamps == the CPU linear_vec chains at nin 200 / nout 45, the slab's runs at offsets, the rows on and off the four lattice") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -522,7 +522,7 @@ let private PO_POS0 = 37
 let private PO_CAP = 64        //! the tables' positions, past the last row's
 let private PO_THETA = 10000.0
 
-[test]
+[test(description = "The table rope over the k span of 23 fused qkv rows from position 37 matches the CPU `rope_rows` at the approx bar, with the q and v spans and the slack left exactly as they were")]
 def test_vkt_pk_rope(t0 : T?) {
     t0 |> run("the rows rope == the CPU rope_rows on the k span of t 23 rows from position 37, the q and v spans untouched") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -632,7 +632,7 @@ def private pk_fused_fixture() : PkFusedFix {
     return <- f
 }
 
-[test]
+[test(description = "The frame loop's fused stamps match the CPU chains at the approx bar: the normed qkv row roped into y and written to the caches' one row (wide and grouped forms), the residual adds with and without scale, and the normed GELU")]
 def test_vkt_pk_gemv_fused(t0 : T?) {   // nolint:STYLE038 one fixture and one command buffer carry the wide and the grouped qkv forms together
     t0 |> run("the frame loop's fused stamps == the CPU chains: the normed qkv row roped into y and the caches, the residual adds, the normed GELU") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {

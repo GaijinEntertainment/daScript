@@ -28,7 +28,7 @@ def private tagger_present(t : T?) : bool {
     return true
 }
 
-[test]
+[test(description = "`pos_norm_word` folds tokens to the trainer's classes (hyphen not leading, year, digits, lower case) and `pos_word_shape` emits case shapes with the d, h, q suffixes in order, a leading hyphen not counting")]
 def test_word_features(t : T?) {
     t |> run("the word class is the trainer's normalize") @(t : T?) {
         // harness/train_postag.py: `if "-" in word and word[0] != "-"` - a hyphen ANYWHERE in a
@@ -56,7 +56,7 @@ def test_word_features(t : T?) {
     }
 }
 
-[test]
+[test(description = "With an empty exception table `pos_tokenize` splits dash, comma, colon and case-changing period infixes between letters but not before digits, and loading a missing tagger pack panics")]
 def test_tokenizer_split_rules(t : T?) {
     t |> run("the infix rules with no exception table") @(t : T?) {
         // an unloaded tagger carries an empty exception table, so the prefix, suffix and infix
@@ -90,7 +90,7 @@ def test_tokenizer_split_rules(t : T?) {
     }
 }
 
-[test]
+[test(description = "The loaded POS tokenizer matches the reference tokenizer token for token, spacing included, on all 200 corpus sentences, and splits contractions, abbreviations, dashes and possessives exactly on extra shapes")]
 def test_tokenizer(t : T?) {
     t |> run("token-for-token with the reference tokenizer on 200 normalized sentences") @(t : T?) {
         return if (!tagger_present(t))
@@ -139,7 +139,7 @@ def test_tokenizer(t : T?) {
     }
 }
 
-[test]
+[test(description = "The packed POS tagger meets its header floors, agrees with the reference tagger on at least 96 percent of corpus tokens and 80 percent of heteronym words, tags a pinned sentence exactly, and loads under 150 ms")]
 def test_tagger(t : T?) {
     t |> run("the packed file's own floors") @(t : T?) {
         return if (!tagger_present(t))

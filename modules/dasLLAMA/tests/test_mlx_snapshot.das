@@ -85,7 +85,7 @@ def private oracle_gate(t : T?; tag : string; lg : array<array<float>>; oracle :
     t |> equal(lead_miss, 0, "{tag}: every position the oracle leads by {ORACLE_TIE_GAP}+ keeps its top-1")
 }
 
-[test]
+[test(description = "The Llama-3.2-1B MLX 8-bit snapshot loads NEOX-roped with the Q8_0 twin's config and mlx8 planes everywhere, its teacher-forced logits within 8 percent of the twin's range and within 0.4 of the snapshot runtime's top-1 logits")]
 def test_mlx_llama_1b_8bit(t : T?) {
     t |> run("Llama-3.2-1B 8-bit snapshot: config = the Q8_0 twin's, mlx8 planes at every dense site, logits against both oracles") @(t : T?) {
         let snap = hf_snapshot_dir("mlx-community/Llama-3.2-1B-Instruct-8bit")
@@ -130,7 +130,7 @@ def test_mlx_llama_1b_8bit(t : T?) {
     }
 }
 
-[test]
+[test(description = "The Llama-3.2-3B MLX 4-bit snapshot serves mlx4 planes on the CPU, its teacher-forced logits within 0.4 of the snapshot runtime's top-1 at every position with no lead miss, and a greedy continuation decodes to text")]
 def test_mlx_llama_3b_4bit(t : T?) {
     t |> run("Llama-3.2-3B 4-bit snapshot: mlx4 planes, logits against the runtime oracle, a greedy continuation") @(t : T?) {
         let snap = hf_snapshot_dir("mlx-community/Llama-3.2-3B-Instruct-4bit")
@@ -287,7 +287,7 @@ def private metal_served_cell(t : T?; snap : string; f : KqFmt; tag : string; pr
     }
 }
 
-[test]
+[test(description = "On the Metal home the mlx8 and mlx4 Llama snapshots prefill in one device window and decode 16 greedy steps on the affine GEMV and embed stamps, emitting the CPU rails' ids exactly, with no leaked Metal objects")]
 def test_mlx_metal_served(t : T?) {
     for (spec in [(repo = "mlx-community/Llama-3.2-1B-Instruct-8bit", f = KqFmt.mlx8, arm = "metal-mlx8"),
                   (repo = "mlx-community/Llama-3.2-3B-Instruct-4bit", f = KqFmt.mlx4, arm = "metal-mlx4")]) {
@@ -415,7 +415,7 @@ def private metal_prefill_cell(t : T?; snap : string; f : KqFmt; tag : string) {
     }
 }
 
-[test]
+[test(description = "The mlx8 and mlx4 snapshots' Metal prefill window, uncrowned and with the `kq_mulmm` tensor twins crowned, lands its last logits row within 4.0 max-abs of the CPU rails', while the one-token-short control lands outside")]
 def test_mlx_metal_prefill(t : T?) {
     for (spec in [(repo = "mlx-community/Llama-3.2-1B-Instruct-8bit", f = KqFmt.mlx8, arm = "metal-prefill-mlx8"),
                   (repo = "mlx-community/Llama-3.2-3B-Instruct-4bit", f = KqFmt.mlx4, arm = "metal-prefill-mlx4")]) {
@@ -438,7 +438,7 @@ def test_mlx_metal_prefill(t : T?) {
 
 //! the 27B snapshot (BF16 pairs, the deltanet planes), large tier: its tokenizer.json gives the oracle's ids, and its
 //! teacher-forced logits on the CPU rails sit on mlx-lm's forward of the same weights
-[test]
+[test(description = "The Qwen3.8-27B MLX 4-bit snapshot serves mlx4b planes, its tokenizer.json encodes the oracle text to the oracle ids exactly, and its CPU teacher-forced logits sit within 0.4 of mlx-lm's top-1 with no lead miss")]
 def test_mlx_qwen38_27b_4bit(t : T?) {
     t |> run("Qwen3.8-27B 4-bit snapshot: mlx4b planes, the tokenizer's ids and the teacher-forced logits against mlx-lm's") @(t : T?) {
         if (!family_on(t, "qwen35")) return
@@ -486,7 +486,7 @@ def private moe_planes_all(m : Model; f : KqFmt) : bool {
 //! the 35B-A3B snapshot (routed experts, the shared expert, the 8-bit router), large tier: the expert geometry off config.json,
 //! every routed and shared plane in its own mlx4b member, the teacher-forced logits against mlx-lm's forward, and a greedy
 //! counting walk
-[test]
+[test(description = "The Qwen3.6-35B-A3B MLX snapshot reads its expert geometry off config.json, serves every routed and shared plane as mlx4b, holds 0.4 of mlx-lm's top-1 logits (the one-position-shifted control outside), and greedily continues a count")]
 def test_mlx_qwen36_35b_a3b_4bit(t : T?) {
     t |> run("Qwen3.6-35B-A3B 4-bit snapshot: the expert geometry, mlx4b routed and shared planes, the logits against mlx-lm's") @(t : T?) {
         if (!family_on(t, "qwen35moe")) return
@@ -528,7 +528,7 @@ def test_mlx_qwen36_35b_a3b_4bit(t : T?) {
 
 //! the 27B snapshot on the Metal rails, large tier: the teacher-forced logits, every position a device decode, against
 //! mlx-lm's forward; then the window and a short greedy walk against the CPU rails' (`metal_served_cell`)
-[test]
+[test(description = "On Metal the Qwen3.8-27B MLX snapshot decodes every teacher-forced position on the device within 0.4 of mlx-lm's top-1 logits, and its prefill window plus 8 greedy steps emit the CPU rails' ids exactly")]
 def test_mlx_qwen38_27b_metal(t : T?) {
     t |> run("Qwen3.8-27B 4-bit snapshot on Metal: the teacher-forced logits against mlx-lm's, the greedy walk == the CPU rails") @(t : T?) {
         if (!family_on(t, "qwen35") || !arm_on(t, "metal-27b")) return
@@ -692,7 +692,7 @@ def private metal_routed_cell(t : T?; snap : string; f : KqFmt; tag, text : stri
 
 //! the 35B-A3B snapshot on the Metal rails, large tier: the teacher-forced logits, every position a device decode, against
 //! mlx-lm's forward; then the routed window on the twins and on the base tile and a greedy walk against the CPU rails'
-[test]
+[test(description = "On Metal the Qwen3.6-35B-A3B MLX snapshot holds 0.4 of mlx-lm's top-1 logits per device decode, its routed window on tensor twins and on the base tile lands within 3.0 of the CPU row, and 8 greedy steps match the CPU ids")]
 def test_mlx_qwen36_35b_metal(t : T?) {
     t |> run("Qwen3.6-35B-A3B 4-bit snapshot on Metal: the logits against mlx-lm's, the routed window and walk == the CPU rails") @(t : T?) {
         if (!family_on(t, "qwen35moe") || !arm_on(t, "metal-35b")) return

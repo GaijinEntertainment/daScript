@@ -68,7 +68,7 @@ def private check_layout(t : T?; c : Config; tag : string) {
     delete s
 }
 
-[test]
+[test(description = "On synthetic Configs (uniform, gemma4-style ragged SWA, E-series shared KV), the f32 session's per-layer byte prefixes match an independent walk, shared layers alias their source slab, and the caches size exactly")]
 def test_kv_layout(t : T?) {
     t |> run("uniform model: prefixes match the definitional kv_cache_off") @(t : T?) {
         let c = mk_config(4l, 4l, 2l, 64l, 8l)
@@ -99,7 +99,7 @@ def test_kv_layout(t : T?) {
     }
 }
 
-[test]
+[test(description = "An f16 session's KV byte prefixes are twice the element prefixes and its caches half the f32 bytes, and a mixed f16 K / f32 V session walks each side at its own width")]
 def test_kv_layout_f16(t : T?) {
     t |> run("f16 sessions: byte prefixes halve, mixed K/V dtypes walk independently") @(t : T?) {
         let c = mk_config(4l, 4l, 2l, 64l, 8l)
@@ -124,7 +124,7 @@ def test_kv_layout_f16(t : T?) {
     }
 }
 
-[test]
+[test(description = "A q8_0 session's KV byte prefixes and cache sizes are 34 bytes per 32 elements exactly, and a mixed q8_0 K / f16 V session walks each side at its own width")]
 def test_kv_layout_q8(t : T?) {
     t |> run("q8_0 sessions: 34-bytes-per-32 prefixes, mixed dtypes walk independently") @(t : T?) {
         let c = mk_config(4l, 4l, 2l, 64l, 8l)
@@ -156,7 +156,7 @@ def private q8_row_elem(p : uint8 const?; bi, k : int64) : float {
     }
 }
 
-[test]
+[test(description = "q8_0 `kv_store_row` reads back within half a step plus f16-scale rounding, re-quantizing its own dequant is byte-identical, and a head-slot partial store lands at its block offset")]
 def test_kv_store_row_q8(t : T?) {
     t |> run("q8_0 kv_store_row: round-trip within d/2, idempotent re-quantize, head-slot placement") @(t : T?) {
         let c = mk_config(3l, 4l, 2l, 32l, 6l)
@@ -212,7 +212,7 @@ def test_kv_store_row_q8(t : T?) {
     }
 }
 
-[test]
+[test(description = "On a flat session, `kv_runs` returns exactly one identity run (row0 equal to j0) for whole, offset and one-row windows, none for empty or inverted ones, and `kv_phys_row` is the identity")]
 def test_kv_runs_flat(t : T?) {
     t |> run("flat sessions: every window is exactly one identity run; kv_phys_row is identity") @(t : T?) {
         let c = mk_config(2l, 4l, 2l, 64l, 16l)
@@ -241,7 +241,7 @@ def test_kv_runs_flat(t : T?) {
     }
 }
 
-[test]
+[test(description = "f16 `kv_store_row` stores every element as the round-to-nearest-even half of the source clamped to +-65504, so out-of-range values read back finite at the clamp")]
 def test_kv_store_row_f16(t : T?) {
     t |> run("f16 kv_store_row: RNE convert on store, clamp to +/-65504, exact read-back") @(t : T?) {
         let c = mk_config(3l, 4l, 2l, 16l, 4l)
@@ -300,7 +300,7 @@ def private fill_q8_query(var q : array<int8>; var qs : array<float>; n : int64;
     }
 }
 
-[test]
+[test(description = "`tq4_fill_signs` fills only +1 and -1, and the 32-wide sign vector is a prefix of the 64-wide one")]
 def test_kv_codec_signs(t : T?) {
     t |> run("tq4_fill_signs: +/-1 values, smaller head sizes are a prefix") @(t : T?) {
         var signs : array<float>
@@ -322,7 +322,7 @@ def test_kv_codec_signs(t : T?) {
     }
 }
 
-[test]
+[test(description = "The signed FWHT rotation preserves a dot of two 64-wide rows within 1e-4 relative, and `fwht_unsign_row` inverts it to within 1e-5 per element")]
 def test_kv_codec_fwht(t : T?) {
     t |> run("fwht: unsign inverts sign-rotate, the transform preserves dots") @(t : T?) {
         let hs = 64l
@@ -360,7 +360,7 @@ def test_kv_codec_fwht(t : T?) {
     }
 }
 
-[test]
+[test(description = "tq4 quantize then dequant lands every element within one quantization step (q4_0 saturates the positive extreme), and re-quantizing the dequant is byte-identical")]
 def test_kv_codec_tq4_roundtrip(t : T?) {
     t |> run("tq4 quantize/dequant: round-trip within one step, idempotent re-quantize") @(t : T?) {
         let n = 64l
@@ -399,7 +399,7 @@ def test_kv_codec_tq4_roundtrip(t : T?) {
     }
 }
 
-[test]
+[test(description = "Over a q8_0 KV row, `dot_q8kv` matches the float block reference within 1e-3 relative, and the integer-accumulating `dot_q8q8kv` matches its block reference bit for bit")]
 def test_kv_codec_q8_dots(t : T?) {
     t |> run("q8_0 dots agree with the scalar block reference") @(t : T?) {
         let n = 64l
@@ -446,7 +446,7 @@ def test_kv_codec_q8_dots(t : T?) {
     }
 }
 
-[test]
+[test(description = "`axpy_q8kv` adds a scaled q8_0 KV row into the destination bit for bit as one mad per element with the block scale, on any tuned perm")]
 def test_kv_codec_q8_axpy(t : T?) {
     t |> run("axpy_q8kv: one mad per element - bit-exact on any perm") @(t : T?) {
         let n = 64l
@@ -483,7 +483,7 @@ def test_kv_codec_q8_axpy(t : T?) {
     }
 }
 
-[test]
+[test(description = "`dot_q8tq4kv` of a hand-built Q8 query with a tq4 KV row matches the integer nibble block reference bit for bit")]
 def test_kv_codec_tq4_dot(t : T?) {
     t |> run("dot_q8tq4kv: integer inner sum - bit-exact vs the block reference") @(t : T?) {
         let n = 64l
@@ -516,7 +516,7 @@ def test_kv_codec_tq4_dot(t : T?) {
     }
 }
 
-[test]
+[test(description = "`axpy_tq4kv` adds a scaled tq4 KV row into the destination bit for bit as one mad per nibble element with the block scale, on any tuned perm")]
 def test_kv_codec_tq4_axpy(t : T?) {
     t |> run("axpy_tq4kv: one mad per nibble element - bit-exact on any perm") @(t : T?) {
         let n = 64l
@@ -555,7 +555,7 @@ def test_kv_codec_tq4_axpy(t : T?) {
     }
 }
 
-[test]
+[test(description = "The f16 row convert round-trips per element as scalar RNE with the +-65504 clamp, `dot_f16` matches the scalar mad chain within 1e-3 relative, and `axpy_f16` is bit-exact per element")]
 def test_kv_codec_f16(t : T?) {
     t |> run("f16 dot/axpy + convert's f16 row pair") @(t : T?) {
         let n = 48l
@@ -611,7 +611,7 @@ def test_kv_codec_f16(t : T?) {
 let MODEL_PATH = path_join(llama2c_dir(), "stories15M.bin")
 let N_STEPS = 24
 
-[test]
+[test(description = "On stories15M, a 24-step greedy decode over an f16 KV cache emits the f32 cache's token ids with final logits within 1.0, and fused and standard decode under f16 agree bit for bit")]
 def test_kv_f16_decode(t : T?) {
     t |> run("f16 KV: greedy trajectory matches f32, fused==std bit-exact under f16 (needs stories15M.bin)") @(t : T?) {
         return if (!jit_only(t))
@@ -680,7 +680,7 @@ def test_kv_f16_decode(t : T?) {
     }
 }
 
-[test]
+[test(description = "On stories15M with an f16 KV cache, a 16-token classic prefill leaves the logits and both cache planes bit-identical to decoding the same tokens one at a time")]
 def test_kv_f16_prefill_vs_decode(t : T?) {
     t |> run("f16 KV: prefill == per-token decode, logits bit-exact (needs stories15M.bin)") @(t : T?) {
         return if (!jit_only(t))
@@ -767,7 +767,7 @@ def private forced_logits(tr : Model; kdt, vdt : KVDtype; var out : array<float>
     delete s
 }
 
-[test]
+[test(description = "On SmolLM2-135M under the portable backend, teacher-forced logits over q8_0 and q8_0-K/f16-V caches stay within 4.0 of the f16 cache's, and fused and standard decode under q8_0 agree bit for bit")]
 def test_kv_q8_decode(t : T?) {
     t |> run("q8_0 KV: teacher-forced logits track f16, fused==std bit-exact under q8 (needs SmolLM2-135M)") @(t : T?) {
         if (gguf_missing(t)) {
@@ -815,7 +815,7 @@ def test_kv_q8_decode(t : T?) {
     }
 }
 
-[test]
+[test(description = "On SmolLM2-135M with a q8_0 KV cache, a 16-token classic prefill leaves the logits and both cache planes bit-identical to decoding the same tokens one at a time")]
 def test_kv_q8_prefill_vs_decode(t : T?) {
     t |> run("q8_0 KV: classic prefill == per-token decode, logits + cache bit-exact (needs SmolLM2-135M)") @(t : T?) {
         if (gguf_missing(t)) {
@@ -868,7 +868,7 @@ def test_kv_q8_prefill_vs_decode(t : T?) {
     }
 }
 
-[test]
+[test(description = "f32 `kv_store_row` lands a whole row and a head-slot partial row at their layer, row and sub-offset addresses, reading back exactly")]
 def test_kv_store_row_roundtrip(t : T?) {
     t |> run("f32 kv_store_row: whole row + partial row land at the layer/row/sub address") @(t : T?) {
         let c = mk_config(3l, 4l, 2l, 16l, 4l)
@@ -902,7 +902,7 @@ def test_kv_store_row_roundtrip(t : T?) {
     }
 }
 
-[test]
+[test(description = "A capacity tripwire: on stories15M cut to seq_len 8, a 16-token prefill and a decode step at position 8 both panic before any store, while an 8-token eval at capacity runs")]
 def test_kv_capacity_tripwire(t : T?) {
     t |> run("eval past config seq_len panics - never a silent write past the cache (needs stories15M.bin)") @(t : T?) {
         return if (!jit_only(t))
@@ -966,7 +966,7 @@ def private codec_pair_types(kdt, vdt : KVDtype; kp, vp : uint8 const?) : string
     return r
 }
 
-[test]
+[test(description = "The `kv_codec_side` macro binds each of the four codecs to its own cache-pointer type at the same address, and nested once per side yields all sixteen K x V type pairs")]
 def test_kv_codec_side_stamp(t : T?) {
     t |> run("kv_codec_side binds each codec's cache-pointer type; nested once per side it is the K x V matrix") @(t : T?) {
         var bytes : array<uint8>
@@ -990,7 +990,7 @@ def test_kv_codec_side_stamp(t : T?) {
 
 //! The constructors serve a codec the model cannot hold at the step-down codec: Qwen2's Q/K/V bias takes tq4 to q8_0 in a
 //! session and in a pool; a model without the bias keeps tq4; q8_0 asked stays q8_0.
-[test]
+[test(description = "A tq4 KV ask on Qwen2.5-0.5B, whose attention carries a Q/K/V bias, serves at q8_0 in a session, a pool and a chat, q8_0 asked stays q8_0, and bias-free Qwen3-0.6B keeps tq4")]
 def test_kv_codec_step_down(t : T?) {
     let path = path_join(models_dir(), "Qwen2.5-0.5B-Instruct-Q8_0.gguf")
     return if (!model_available(t, path))

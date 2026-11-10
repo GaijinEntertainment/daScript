@@ -6,7 +6,7 @@ require dasllama/dasllama
 require daslib/jobque_boost
 require strings
 
-// The fixture test_exe_smoke builds with `-jit -exe` and runs: one tiny load plus a 4-token
+// The fixture test_facade.das's test_exe_smoke builds with `-jit -exe` and runs: one tiny load plus a 4-token
 // generate through the facade, on the serialized-globals rail no `-jit` suite can reach.
 
 [export]

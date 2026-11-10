@@ -7,7 +7,7 @@ require dasllama/dasllama_math
 require dasllama/dasllama_rope   // the angle/table generation under test
 require math
 
-[test]
+[test(description = "`rope` is the identity at position 0, preserves each pair's norm, rotates a unit pair by exactly pos radians at head size 2, and makes q.k depend only on the position offset")]
 def test_rope(t : T?) {
     // Position 0 -> angle 0 -> identity (cos 0 = 1, sin 0 = 0): nothing moves.
     t |> run("pos 0 is identity") @(t : T?) {
@@ -63,7 +63,7 @@ def private ff_none() : array<float> {
     return <- e
 }
 
-[test]
+[test(description = "At position 0 both the two-table and packed rope builders write a cos row of exactly mscale and a sin row of exactly 0")]
 def test_rope_gen_pos0(t : T?) {
     t |> run("pos 0: cos row = mscale exactly, sin row = 0, both layouts") @(t : T?) {
         var ct, st : array<float>
@@ -85,7 +85,7 @@ def test_rope_gen_pos0(t : T?) {
     }
 }
 
-[test]
+[test(description = "`build_rope_tabs` with an all-ones rope_freqs factor array produces cos and sin tables bit-identical to the build with no factors")]
 def test_rope_gen_ff_ones(t : T?) {
     t |> run("all-ones rope_freqs is bit-identical to no rope_freqs") @(t : T?) {
         var ones : array<float>
@@ -123,7 +123,7 @@ def private ulps_apart(a, b : float) : int64 => abs(ulp_rank(a) - ulp_rank(b))
 //! the two layouts agree to the ulp, not the bit: under -jit the packed row's single loop vectorizes
 //! onto the aarch64 polynomial sin/cos rail while the tabs' nested loop stays on scalar libm, and the
 //! two disagree in the last bit on a few elements; the multiplication orders still coincide at fscale=1
-[test]
+[test(description = "At fscale=1 the packed rope row and the two-table row agree within 1 ulp on every cos and sin, a 2-ulp poison lands outside that bar, and the ulp metric treats the two zeros as one value")]
 def test_rope_gen_cross_layout(t : T?) {
     t |> run("packed row and two-tab row agree within 1 ulp at fscale=1 (the orders coincide there)") @(t : T?) {
         var ct, st : array<float>
@@ -152,7 +152,7 @@ def test_rope_gen_cross_layout(t : T?) {
     }
 }
 
-[test]
+[test(description = "`build_rope_tabs_rows` at position list [p] is bit-identical to `build_rope_tabs` starting at p for one position, with a non-trivial factor array")]
 def test_rope_gen_rows_twin(t : T?) {
     t |> run("rows([p]) is bit-identical to tabs(start=p, npos=1)") @(t : T?) {
         var ff : array<float>
@@ -190,7 +190,7 @@ def private imrope_axis_ref(j, sx, sy, sz, sw : int) : int {
     return 3
 }
 
-[test]
+[test(description = "The IMROPE table builder fed equal positions on all four axes produces tables bit-identical to the plain rows builder")]
 def test_rope_gen_imrope_collapse(t : T?) {
     let qsec = int4(24, 20, 20, 0)
     // Text rows: all four sections carry the same position, so every dim reads it and the
@@ -217,7 +217,7 @@ def test_rope_gen_imrope_collapse(t : T?) {
     }
 }
 
-[test]
+[test(description = "On an image row with sections 24/20/20/0, every IMROPE half-dim reads the axis a per-element ggml-order sector walk assigns, within 1e-5, and the tail dims 61 and 62 are the identity")]
 def test_rope_gen_imrope_reference(t : T?) {
     let qsec = int4(24, 20, 20, 0)
     // The sector walk, re-derived per element in a different loop order: every dim of
@@ -253,7 +253,7 @@ def test_rope_gen_imrope_reference(t : T?) {
     }
 }
 
-[test]
+[test(description = "Changing only the h position of an IMROPE row moves exactly the half-dims the sector walk assigns to h and no others")]
 def test_rope_gen_imrope_shape(t : T?) {
     let qsec = int4(24, 20, 20, 0)
     // Perturbing ONE axis moves exactly that axis's dims: h (the grid row) owns the
@@ -297,7 +297,7 @@ def private mrope_axis_ref(j, sx, sy, sz : int) : int {
     return 0
 }
 
-[test]
+[test(description = "The non-interleaved MROPE builder collapses bit-exactly to the rows builder on equal positions, reads each axis over its contiguous section within 1e-5, and differs from IMROPE on an image row")]
 def test_rope_gen_mrope_noninterleaved(t : T?) {
     let qsec = int4(16, 24, 24, 0)   // the qwen2vl decoder's sections
     t |> run("the contiguous-section walk: collapse, reference, and the imrope divergence") @(t : T?) {
@@ -349,7 +349,7 @@ def test_rope_gen_mrope_noninterleaved(t : T?) {
     }
 }
 
-[test]
+[test(description = "`mrope_span_positions` maps the head sequentially, the image span to (pos0, row, col, 0) and resumes the tail at pos0 plus the grid's long side, and panics when the span count mismatches the grid")]
 def test_mrope_span_positions(t : T?) {
     // the decoder walk: head sequential, span (pos0, pos0+i/nx, pos0+i%nx, 0), tail from
     // pos0 + max(nx, ny) — the grid's long side, not its row count
@@ -381,7 +381,7 @@ def test_mrope_span_positions(t : T?) {
     }
 }
 
-[test]
+[test(description = "The qwen3vl vision rope table lays the h ladder then a restarted w ladder per row within 1e-5 of a per-element reference, and position (0,0) is exactly the identity row")]
 def test_rope_gen_vision(t : T?) {
     // The qwen3vl ViT table: hs/2 slots per row — the h ladder then the w ladder restarted,
     // freq divisor hs/2 (VISION mode: sections hs/4 x4, each axis independent).
@@ -405,7 +405,7 @@ def test_rope_gen_vision(t : T?) {
     }
 }
 
-[test]
+[test(description = "mscale is a pure post-scale: rope tables built with mscale 2 equal exactly twice those built with mscale 1")]
 def test_rope_gen_mscale(t : T?) {
     t |> run("mscale is a pure post-scale: mscale=2 row == 2 x mscale=1 row") @(t : T?) {
         var ff <- ff_none()
@@ -425,7 +425,7 @@ def test_rope_gen_mscale(t : T?) {
     }
 }
 
-[test]
+[test(description = "`rope_factor_tensor` picks the long LongRoPE set only past the original context, the short set at or under it or with no original, a lone set at any context, rope_freqs alone, and none otherwise")]
 def test_rope_factor_tensor(t : T?) {
     t |> run("the factor tensor follows the file's tensors and its context") @(t : T?) {
         // Phi-3.5: two LongRoPE sets, the long one past the original

@@ -68,8 +68,8 @@ device and with `DASLLAMA_GPU=1` and `DASLLAMA_CUDA=1` set, `test_gemma4v_tier1_
 `test_vision_chat_gemma3`, `test_vision_chat_deepstack` and `test_vision_chat_qwen25o` in
 `tests/test_vision_chat.das`, and the audio files `tests/test_audio.das`,
 `tests/test_audio_embedder.das`, `tests/test_whisper.das`, `tests/test_cuda_tower_whisper_chain.das`,
-`tests/test_gigaam.das`, `tests/test_rnnt.das`, `tests/test_vad.das` and
-`tests/test_cuda_tower_g4a_chain.das`, and the CUDA tower kernel gates `tests/test_cuda_tower_front.das`,
+`tests/test_gigaam.das`, `tests/test_rnnt.das` and `tests/test_vad.das`, and the CUDA tower kernel
+gates `tests/test_cuda_tower_front.das`,
 `tests/test_cuda_tower_blocks.das` and `tests/test_cuda_tower_asr.das`; each twin and device-twin
 cell of the run sees the counter of every hook the cell covers rise; the two tier-1 cells run against the encode dumps of the reference
 build (the third-party engine this module's figures compare with), and a tier-1 cell that skips

@@ -189,7 +189,7 @@ def private race_perms(t : T?; s : TileShape; wide : bool) {
     t |> success(has_reference, "the grid carries the reference permutation '{reference}'")
 }
 
-[test]
+[test(description = "Every permutation of `f32_batch_tile` stays within its own summation order's random-walk error bound of a double oracle at the iSTFT GEMM shape and at a wide dot entering every vector body, with a poisoned-weight control red for each")]
 def test_f32_batch_tile_perms(t : T?) {
     t |> run("every permutation of the fp32 batch tile within its own order's bound, at the iSTFT GEMM") @(t : T?) {
         race_perms(t, ISTFT, false)
@@ -297,7 +297,7 @@ def private pin_restored_on_panic(t : T?) {
     t |> success(!f32_tile_pinned(), "the pin is put back after a panic")
 }
 
-[test]
+[test(description = "The reference fp32 tile pin serves both `matmul_batch` forms bit-exact to the reference lattice ahead of an armed float-batch override, which sees no call while pinned, and the pin is put back after the block and after a re-raised panic")]
 def test_f32_tile_pin_seat(t : T?) {
     t |> run("the pin serves both fp32 batch forms at the reference order, ahead of an armed float-batch override (DASLLAMA_ACCEL=1's accelerate seat, else a stand-in)") @(t : T?) {
         pin_serves_both_forms(t)
@@ -317,7 +317,7 @@ def private fb_row(out, kernel : string) : string {
     return strip(slice(out, from, eol < 0 ? length(out) : eol))
 }
 
-[test]
+[test(description = "`dasllama_tuned_fallbacks` in a child names the same `f32_batch_tile` fallback and the same kernel count on a warm compile whose modules the module cache served as on the cold compile")]
 def test_tuned_fallbacks_over_module_cache(t : T?) {
     t |> run("dasllama_tuned_fallbacks() names every kernel whether its module compiled or the module cache served it") @(tt : T?) {
         var src = ""

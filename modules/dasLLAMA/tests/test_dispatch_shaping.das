@@ -25,7 +25,7 @@ def private pin_shaping_baseline() {
     set_batch_grid_2d(0)
 }
 
-[test]
+[test(description = "Arming the GPU-served dispatch flag switches the job queue's spin window in force from the CPU window to the GPU window, and dropping it switches back")]
 def test_gpu_served_spin_window(t : T?) {
     //! the resident driver's arm and drop move the pool between the CPU and the GPU-served spin windows
     with_dasllama_jobque_() {
@@ -37,12 +37,12 @@ def test_gpu_served_spin_window(t : T?) {
     }
 }
 
-[test]
+[test(description = "A tripwire pinning the shipped `gemv_chunks_per_lane` default at 8, so a move forces a retune of the ladder tables")]
 def test_gemv_chunks_default(t : T?) {
     t |> equal(get_gemv_chunks_per_lane(), 8, "the shipped default - retune the ladder tables if this moves")
 }
 
-[test]
+[test(description = "`lanes_for_work` stays inline below twice the target chunk work, grows work over target lanes in the mid band, saturates to the live pool, honors caps and the worker limit, and moves with the target knob")]
 def test_lanes_for_work(t : T?) {
     with_job_que() {
         pin_shaping_baseline()
@@ -83,7 +83,7 @@ def test_lanes_for_work(t : T?) {
     }
 }
 
-[test]
+[test(description = "Batch `matmul_chunks` returns the inline signal under twice the target, whole lane-waves capped by the row grain on huge work, never fewer than the admitted lanes, the raw oversplit with grain off, and a wave width bounded by the batch cap")]
 def test_matmul_chunks_batch(t : T?) {
     with_job_que() {
         pin_shaping_baseline()
@@ -115,7 +115,7 @@ def test_matmul_chunks_batch(t : T?) {
     }
 }
 
-[test]
+[test(description = "`matmul_grid` stays 1-D with the knob off, goes 2-D at 16-token cells on grain-starved shapes under knob 1, makes whole lane-waves or falls back 1-D under knob 2, never exceeds the unit count, and clamps the knob to 0..2")]
 def test_matmul_grid(t : T?) {
     with_job_que() {
         pin_shaping_baseline()
@@ -172,7 +172,7 @@ def test_matmul_grid(t : T?) {
     }
 }
 
-[test]
+[test(description = "`matmul_chunks_gemv` returns the inline signal under twice the target, one chunk a lane past the GEMV grain, wave-fills grain-capped counts unless wave fill is off, honors the gemv cap, and in fine-grain mode makes whole 64-row waves capped at the per-lane count")]
 def test_matmul_chunks_gemv(t : T?) {
     with_job_que() {
         pin_shaping_baseline()

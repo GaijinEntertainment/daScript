@@ -44,7 +44,7 @@ require _child_run   // DASLLAMA_AUDIO_LANE loads once at context init: a value 
 // only where the serving tower's device stands up. The canary oracle cell is large tier (DASLLAMA_PARITY_FULL=1), and its device walk skips where no
 // GPU tower serves canary's default lane.
 
-[test]
+[test(description = "`f32_to_f16` round-trips every non-NaN f16 pattern through `f16_to_f32` and matches numpy float16 on round-to-nearest-even boundaries: the overflow tie, max, and the 2^-25 subnormal tie")]
 def test_f32_to_f16(t : T?) {
     t |> run("round-trips every non-nan f16 pattern") @(t : T?) {
         var bad = 0
@@ -71,7 +71,7 @@ def test_f32_to_f16(t : T?) {
     }
 }
 
-[test]
+[test(description = "`gelu_tanh_lut` reproduces ggml's GGML_GELU_FP16 table exactly on nine inputs (numpy f16 values), including the passthrough at 10 and the clamp to zero at -10 after f16 rounding")]
 def test_gelu_tanh_lut(t : T?) {
     t |> run("matches ggml's GGML_GELU_FP16 table semantics") @(t : T?) {
         var g = [1.0, -1.0, 0.5, 3.0, -0.25, 10.0, -10.0, 9.999, -9.999]
@@ -89,7 +89,7 @@ def test_gelu_tanh_lut(t : T?) {
     }
 }
 
-[test]
+[test(description = "The table form `gelu_tanh_lut_batch` equals the computed `gelu_tanh_lut` bit for bit on every finite f16 input and on a dense 200001-point f32 sweep of (-10.5, 10.5) that crosses the +-10 boundary roundings")]
 def test_gelu_lut_batch_exhaustive(t : T?) {
     t |> run("gelu_tanh_lut_batch == gelu_tanh_lut for EVERY finite f16 input") @(t : T?) {
         // every f16 pattern as an input row; the batch (table) form must reproduce the
@@ -147,7 +147,7 @@ def test_gelu_lut_batch_exhaustive(t : T?) {
     }
 }
 
-[test]
+[test(description = "The whisper log-mel of one second of silence has the expected frame counts and normalizes to exactly -1.5 everywhere, and its 3000-frame window keeps real frames then zero-fills past n_len")]
 def test_whisper_mel(t : T?) {
     t |> run("whisper-flavor mel: frame math and silence fill") @(t : T?) {
         // stand-in filterbank (the real one loads from the model file)
@@ -180,7 +180,7 @@ def test_whisper_mel(t : T?) {
     }
 }
 
-[test]
+[test(description = "`whisper_lang_id` follows whisper's language order: en is 0, zh is 1, yue is 99, and an unknown code is -1")]
 def test_whisper_lang_ids(t : T?) {
     t |> run("g_lang order") @(t : T?) {
         t |> equal(whisper_lang_id("en"), 0)
@@ -190,7 +190,7 @@ def test_whisper_lang_ids(t : T?) {
     }
 }
 
-[test]
+[test(description = "The decoder layer offsets at width 384 advance by exactly `dec_layer_stride` from layer to layer, and layer 0's last tensor ends where layer 1's first begins")]
 def test_dec_layer_layout(t : T?) {
     t |> run("decoder layer offsets tile by the stride") @(t : T?) {
         var w = WhisperModel()
@@ -206,7 +206,7 @@ def test_dec_layer_layout(t : T?) {
     }
 }
 
-[test]
+[test(description = "Loading ggml-tiny.bin yields whisper tiny's hyperparameters (51865 vocab, 384 wide, 4 layers, 99 languages), its special token ids, the tanh-LUT GELU flag and known vocab strings")]
 def test_whisper_loader(t : T?) {
     t |> run("tiny bin: hparams, special ids, vocab (needs ggml-tiny.bin)") @(t : T?) {
         let path = path_join(whisper_dir(), "ggml-tiny.bin")
@@ -232,7 +232,7 @@ def test_whisper_loader(t : T?) {
     }
 }
 
-[test]
+[test(description = "`load_asr_model` sniffs ggml-tiny.bin as whisper and its caps report exactly the 99 languages ending before yue, translate and segment timestamps, no streaming or prompt; an auto session defers language detection")]
 def test_asr_surface(t : T?) {
     t |> run("load_asr_model sniffs the bin + caps report whisper honestly") @(t : T?) {
         let model_path = path_join(whisper_dir(), "ggml-tiny.bin")
@@ -256,7 +256,7 @@ def test_asr_surface(t : T?) {
     }
 }
 
-[test]
+[test(description = "The qwen3a audio tower on the CPU f32 rail loads its shape and encodes jfk window 0 to a first token within 5e-3 of llama-mtmd's embeddings on its first four values")]
 def test_qwen3a_tower(t : T?) {
     t |> run("qwen3a tower: conv2d frontend + windowed encode matches mtmd on jfk") @(t : T?) {
         let path = path_join(models_dir(), "mmproj-Qwen3-ASR-0.6B-bf16.gguf")
@@ -298,7 +298,7 @@ def test_qwen3a_tower(t : T?) {
     }
 }
 
-[test]
+[test(description = "The qwen3a log-mel of a 10-second two-tone signal computed across the job lanes equals the single-lane image element for element")]
 def test_qwen3a_mel_lanes(t : T?) {
     t |> run("qwen3a mel: the lanes' image is the one-lane image, element for element") @(t : T?) {
         var samples : array<float>
@@ -324,7 +324,7 @@ def test_qwen3a_mel_lanes(t : T?) {
     }
 }
 
-[test]
+[test(description = "Parakeet-TDT v2 greedy on jfk.wav emits parakeet-cli's 33 tokens and text; a reused session and a flat heap hold, the other weight lane and the one-lane decode step give the same token ids")]
 def test_parakeet_oracle(t : T?) {
     t |> run("parakeet-TDT greedy on jfk.wav is token-for-token with parakeet-cli") @(t : T?) {
         let path = path_join(whisper_dir(), "ggml-parakeet-tdt-0.6b-v2-f32.bin")
@@ -400,7 +400,7 @@ def test_parakeet_oracle(t : T?) {
     }
 }
 
-[test]
+[test(description = "Parakeet-TDT v3 loads as a 25-language 8192-vocab model on the q8 lane and greedy on jfk.wav emits parakeet-cli's 38 tokens and exact text, reporting no detected language")]
 def test_parakeet_v3_oracle(t : T?) {
     t |> run("parakeet-TDT v3 (25-lang) greedy on jfk.wav is token-for-token with parakeet-cli") @(t : T?) {
         let path = path_join(whisper_dir(), "ggml-parakeet-tdt-0.6b-v3-f32.bin")
@@ -434,7 +434,7 @@ def test_parakeet_v3_oracle(t : T?) {
     }
 }
 
-[test]
+[test(description = "Whisper tiny greedy on jfk.wav emits whisper-cli's 26 token ids, one 0-10.5 s segment and its exact text; two-chunk feed+flush and an auto session that detects English land on the same text, avg_logprob in (-1, 0)")]
 def test_whisper_transcribe_oracle(t : T?) {
     t |> run("tiny greedy on jfk.wav is token-for-token with whisper-cli") @(t : T?) {
         let model_path = path_join(whisper_dir(), "ggml-tiny.bin")
@@ -718,7 +718,7 @@ def private wdec_f32_declines(tt : T?; name, model_path : string; samples : arra
 }
 
 //! The whisper lane whole on each side (`#tower-dev-block`): the CPU image on the CPU, the home's flavored image on the device, counters proving each, texts equal
-[test, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
+[test(description = "On the discrete GPU home, whisper tiny and turbo's q8 lane read jfk with the CPU q8 lane's text while counters prove each side ran where claimed; encoder rows hold the twin bar with a poison control, the f32 decoder and bad alignment decline"), arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
 def test_whisper_discrete_twin(t : T?) {
     for (name in ["ggml-tiny.bin", "ggml-large-v3-turbo.bin"]) {
         t |> run("{name}: the discrete home's q8 lane vs the CPU q8 lane on jfk") @(tt : T?) {
@@ -794,7 +794,7 @@ def test_whisper_discrete_twin(t : T?) {
 
 //! A whisper.cpp q8_0 bin loads: its Q8_0 tensors read as their blocks' scale times the quants, and it transcribes what the
 //! f16 bin of the same model does.
-[test]
+[test(description = "A whisper.cpp ggml-tiny-q8_0.bin loads with its Q8_0 tensors read as scale times quants and transcribes jfk to exactly the text the f16 tiny bin produces")]
 def test_whisper_q8_0_file(t : T?) {
     t |> run("ggml-tiny-q8_0.bin: a q8_0 bin loads and reads jfk as the f16 bin does") @(tt : T?) {
         let f16_path = path_join(whisper_dir(), "ggml-tiny.bin")
@@ -838,7 +838,7 @@ def private parakeet_text(path : string; q8 : bool; samples : array<float>) : st
 }
 
 //! A parakeet q8_0 bin loads through the reader the whisper bins share, and reads what the f32 bin of the same model does.
-[test]
+[test(description = "A parakeet-TDT v3 q8_0 bin loads through the reader the whisper bins share and transcribes jfk to exactly the text the f32 bin of the same model produces")]
 def test_parakeet_q8_0_file(t : T?) {
     t |> run("ggml-parakeet-tdt-0.6b-v3-q8_0.bin: a q8_0 bin loads and reads jfk as the f32 bin does") @(tt : T?) {
         let f32_path = path_join(whisper_dir(), "ggml-parakeet-tdt-0.6b-v3-f32.bin")
@@ -861,7 +861,7 @@ def test_parakeet_q8_0_file(t : T?) {
 //! The Metal tower fills the whisper blocks-with-post-norm seat: the post-norm runs behind the blocks on the device and the
 //! normed rows land in `xb`, where the CPU chain's post-norm would put them. The CPU leg runs the exact lane's CPU image, the
 //! device legs its Metal-flavored image (`#tower-dev-block`).
-[test]
+[test(description = "The Metal tower's blocks-with-post-norm seat on whisper tiny serves one device encode whose normed rows are the CPU post-norm of its own block rows within 1e-4 relative, while the un-normed rows miss by over 0.1")]
 def test_whisper_metal_ln_post(t : T?) {
     t |> run("ggml-tiny.bin: the encoder's post-norm on the Metal tower lands the CPU chain's normed rows") @(tt : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
@@ -946,7 +946,7 @@ def private wdec_lifetime_cell(tt : T?; body : block<(m : AsrModel; var s : AsrS
     }
 }
 
-[test]
+[test(description = "After a whole-model device drop between two transcriptions on one session, whisper tiny's GPU decoder serves the cross-KV window again and reads jfk token-identical to the first transcription")]
 def test_whisper_vulkan_wdec_lifetime(t : T?) {
     t |> run("ggml-tiny.bin: a model drop between two transcriptions of one session - the second serves again and reads the same") @(tt : T?) {
         wdec_lifetime_cell(tt) $(m; var s; samples) {
@@ -1029,7 +1029,7 @@ def private segs_text(segs : array<TranscribeSegment>) : string {
     }
 }
 
-[test]
+[test(description = "With GPU towers off, whisper tiny's default q8 load and the knob-pinned fp32 load transcribe jfk token-identical, same segment count and text")]
 def test_whisper_q8_gate(t : T?) {
     t |> run("tiny q8 tower (the load_asr_model default) stays token-identical to fp32 on jfk") @(t : T?) {
         let model_path = path_join(whisper_dir(), "ggml-tiny.bin")
@@ -1062,7 +1062,7 @@ def test_whisper_q8_gate(t : T?) {
     }
 }
 
-[test]
+[test(description = "`set_asr_tower_fp32` loads whisper tiny with the exact encoder (the f16 lane on a GPU home's flavor) beside the q8 decoder, stamps the exec format, and reads jfk token-identical to the q8 default with Metal crowns pinned off")]
 def test_whisper_tower_fp32_knob(t : T?) {
     t |> run("tiny mixed f32-enc/q8-dec (set_asr_tower_fp32, the GPU serving mode) stays token-identical on jfk") @(t : T?) {
         let model_path = path_join(whisper_dir(), "ggml-tiny.bin")
@@ -1153,7 +1153,7 @@ def private line_after(out, key : string) : string {
     return strip(slice(out, from, eol < 0 ? length(out) : eol))
 }
 
-[test]
+[test(description = "In a child process, DASLLAMA_AUDIO_LANE=16 loads tiny's exact encoder (f16 where the home is halfword) and =8 the q8 one, each lane line naming the knob, and both read the same jfk sentence past the words floor")]
 def test_whisper_audio_lane_env(t : T?) {
     t |> run("DASLLAMA_AUDIO_LANE=16 takes tiny's facade load onto the exact encoder (the home's f16 lane), =8 onto q8, one jfk sentence on both") @(t : T?) {
         let model_path = path_join(whisper_dir(), "ggml-tiny.bin")
@@ -1185,7 +1185,7 @@ def test_whisper_audio_lane_env(t : T?) {
     }
 }
 
-[test]
+[test(description = "With the Metal tensor crowns pinned on, whisper tiny's q8 and f32/q8 lanes both encode on the tower and decode on the crowned wdec, and read jfk word for word identical")]
 def test_whisper_crowned_word_level(t : T?) {
     t |> run("the CROWNED lanes agree at word level on jfk (the crowned-pipeline quality gate)") @(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
@@ -1406,7 +1406,7 @@ def private canary_oracle_clips() : array<tuple<wav : string; ids : array<int>>>
     ]
 }
 
-[test]
+[test(description = "Canary-Qwen 2.5B on three clips, on the CPU chain and the GPU tower's default lane, keeps every NeMo SALM oracle token within 0.25 logit of its argmax (one-step-early feed misses) and greedy ids match the oracle through the forced walk's agreement")]
 def test_canary_qwen_oracle(t : T?) {
     t |> run("Canary-Qwen 2.5B greedy is token-for-token with the NeMo SALM oracle") @(t : T?) {
         return if (!jit_only(t))
@@ -1465,7 +1465,7 @@ def test_canary_qwen_oracle(t : T?) {
 // q8 decoder's OWN ~0.6-logit near-tie (the upstream raw logits at that step: three tokens within
 // 0.6), the qwen3moe/gemma-26B situation. So the fixture asserts the confident head, not the tail.
 // Oracle: llama-mtmd-cli -m E2B-Q8 --mmproj bf16 --audio clip --temp 0 --jinja (no-think turn).
-[test]
+[test(description = "Gemma-4 E2B audio on the f32 KV rail transcribes gemma4a_test2.wav with the first 40 token ids of llama-mtmd-cli's greedy output, the confident prefix before its own near-tie, with a flat heap across reuse")]
 def test_gemma4a_audio_oracle(t : T?) {
     t |> run("Gemma-4 E2B audio greedy is token-for-token with llama-mtmd-cli (confident prefix)") @(t : T?) {
         return if (!jit_only(t))
@@ -1515,7 +1515,7 @@ def test_gemma4a_audio_oracle(t : T?) {
 }
 
 //! Gemma-4 E4B audio through the facade: the embedder widens 1536 to 2560, soft tokens off the serving GPU tower, the transcript jfk's words
-[test]
+[test(description = "Gemma-4 E4B audio through the ASR facade widens the encoder's 1536 to the decoder's 2560 and transcribes jfk past the words floor, with soft tokens off the serving GPU tower where its device stands up")]
 def test_gemma4a_e4b_audio_facade(t : T?) {
     t |> run("Gemma-4 E4B audio through the facade: the widening embedder's soft tokens transcribe jfk") @(t : T?) {
         return if (!jit_only(t))
@@ -1580,7 +1580,7 @@ def private check_q3omni_clip(t : T?; m : AsrModel; wav : string; expected : arr
 // llama-mtmd-cli on the same Q8 thinker + bf16 mmproj — the FULL id sequence incl. the trailing
 // <|im_end|> (151645), with NO near-tie divergence (unlike gemma4a/qwen3moe-decoder near-ties).
 // Oracle: llama-mtmd-cli -m Q8 --mmproj bf16 --audio clip -p "Transcribe the audio." --temp 0 --jinja.
-[test]
+[test(description = "Qwen3-Omni-30B audio-in, with the shared qwen3a AuT tower feeding the MoE thinker, transcribes jfk and two librispeech clips to llama-mtmd-cli's full greedy id sequences, trailing im_end included")]
 def test_qwen3omni_audio_oracle(t : T?) {
     t |> run("Qwen3-Omni-30B greedy audio transcription is token-for-token with llama-mtmd-cli") @(t : T?) {
         return if (!jit_only(t))
@@ -1618,7 +1618,7 @@ def test_qwen3omni_audio_oracle(t : T?) {
     }
 }
 
-[test]
+[test(description = "The gemma4a and canary log-mel of jfk computed twice on one reused state are bit-identical, a NaN counting as a difference")]
 def test_mel_state_reuse_deterministic(t : T?) {
     t |> run("gemma4a/canary log-mel is bit-identical across calls on one reused state") @(t : T?) {
         return if (!jit_only(t))

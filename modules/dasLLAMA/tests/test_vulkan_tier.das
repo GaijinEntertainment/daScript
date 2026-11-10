@@ -36,10 +36,10 @@ require _attn_oracle   // attn_row_oracle: the attention cells' softmax rows
 // A check skips without dasVulkan in the build, with no Vulkan device, or on an upload the
 // probe or budget refused.
 
-// The CPU-reference arms' tolerances were derived against the sdot4 reference kernels — pin
-// that mode ahead of the router's resolved default (cm2 or mm) so the oracles stay deterministic.
-// The coopmat kernels' numeric envelope is validated by the drift-class model gates, not here.
-[init]
+// The CPU-reference arms' tolerances were derived against the sdot4 reference kernels: every
+// test pins that mode before its first device use. Never an [init]: a batch runs it in every
+// batch-mate's context too, and their cm2 cells would then skip (the coopmat kernels' numeric
+// envelope is the drift-class model gates' business, not this file's).
 def private pin_reference_gemm_mode {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         vk_force_coopmat_mode(0)
@@ -207,8 +207,9 @@ def private held_nontrivial(t : T?; tag : string; got, want : array<float>; rel 
 //! prefill batch tier engages and again after a whole-model drop freed it: a server whose prefill runs on the CPU rails
 //! reaches the decode's cold upload with the tier never engaged, and one that drops and re-arms with it engaged once.
 //! Declared first on purpose: nothing has engaged the tier when it runs.
-[test]
+[test(description = "The shared one-shot command submits and retires an empty chain on a tier nothing engaged, and again after `moe_gpu_drop_model_state` freed every model-owned command, leaving zero VRAM held")]
 def test_vulkan_one_shot_command(t : T?) {
+    pin_reference_gemm_mode()
     t |> run("vulkan shared one-shot command - serves before the prefill batch tier engages and after a whole-model drop") @(tt : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             install_vk_moe_hooks()
@@ -231,8 +232,9 @@ def test_vulkan_one_shot_command(t : T?) {
     }
 }
 
-[test]
+[test(description = "The Vulkan q8 MoE fused FFN matches the CPU dequant reference within 1e-3 of its max on decode GEMV and 40-row batch shapes, and the device combine matches a CPU combine of its own rows, across two 8192-row chunks too")]
 def test_vulkan_moe_ffn_vs_ref(t : T?) {
+    pin_reference_gemm_mode()
     t |> run("vulkan MoE FFN tier == CPU reference (decode GEMV + prefill batch arms)") @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             install_vk_moe_hooks()
@@ -325,8 +327,9 @@ def test_vulkan_moe_ffn_vs_ref(t : T?) {
 let SWOFF = 20000000l
 let SSTRIDE = 100000l   // per-stack offset stride inside the streamed fixture (%32 == 0)
 
-[test]
+[test(description = "Three streamed q8 FFN layers dispatched in runtime order 2,1,0,2 through two pinned slots (cold copy, prefetch hit, rotation, eviction reload) each match the CPU reference within 1e-3 of its max")]
 def test_vulkan_moe_ffn_streamed(t : T?) {
+    pin_reference_gemm_mode()
     t |> run("vulkan MoE streamed prefill (pinned mirrors, 2 slots) == CPU reference") @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             install_vk_moe_hooks()
@@ -398,8 +401,9 @@ def private heat_hit_offs(o : array<int64>; nh : int64) : array<int64> {
     return <- offs
 }
 
-[test]
+[test(description = "The two-slot heat cache reports the hit mask of the pinned expert set, its async begin/join hit dispatch matches the CPU reference within 1e-3 of max, and a re-pin evicts and re-uploads so the new hit matches too")]
 def test_vulkan_moe_heat_cache(t : T?) {
+    pin_reference_gemm_mode()
     t |> run("vulkan heat-pinned expert cache == CPU reference (pins, eviction, split hits)") @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             install_vk_moe_hooks()
@@ -533,8 +537,9 @@ def private ref_ffn_kq(offs1, offs3, offs2 : array<int64>; bases : Bases; nreg :
     delete x
 }
 
-[test]
+[test(description = "The native K-quant MoE FFN (k4 gate/up with a k6 then a k5 down, two superblocks a row) matches the dequantized CPU reference within 1e-3 of max on decode and batch shapes, and the k6 classifier GEMV over two recorded resubmits")]
 def test_vulkan_moe_ffn_kq(t : T?) {
+    pin_reference_gemm_mode()
     t |> run("vulkan MoE kq tier (k4 gate/up + k5/k6 down) == CPU reference") @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             install_vk_moe_hooks()
@@ -601,8 +606,9 @@ let QWOFF2 = 43000000l
 // Q4_0 rides the k4 nibble tiling with one f16 d per 32-block and no min plane, so its quants
 // carry an implicit -8: the kernel folds that as an integer subtract against the block sums,
 // and a sign error there is exactly what this arm catches.
-[test]
+[test(description = "An all-Q4_0 MoE FFN triple matches the dequantized CPU reference within 1e-3 of max through the GEMV kernel and the q40 batch tile, catching a sign error in the implicit -8 fold")]
 def test_vulkan_moe_ffn_q40(t : T?) {
+    pin_reference_gemm_mode()
     t |> run("vulkan MoE q40 tier (all-Q4_0 triple) == CPU reference") @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             install_vk_moe_hooks()
@@ -644,8 +650,9 @@ let MXOFF1 = 210000000l
 let MXOFF3 = 220000000l
 let MXOFF2 = 230000000l
 
-[test]
+[test(description = "A mixed k4 gate/up with q8 down MoE FFN requants the hidden row in Q8_0 and matches the CPU reference within 1e-3 of max on both the decode GEMV and the batch path")]
 def test_vulkan_moe_ffn_mixed(t : T?) {
+    pin_reference_gemm_mode()
     t |> run("vulkan MoE mixed triple (k4 gate/up + q8 down) == CPU reference") @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             install_vk_moe_hooks()
@@ -682,8 +689,9 @@ def test_vulkan_moe_ffn_mixed(t : T?) {
     }
 }
 
-[test]
+[test(description = "The one-region dense GEMM rail matches a double-accumulated CPU GEMM within 1e-3 of max for q8 and k4 planes over 40 unpadded rows, and after `moe_gpu_drop_stacks` rolls back a later upload the earlier stack and the re-uploaded offset still serve")]
 def test_vulkan_dense_gemm(t : T?) {
+    pin_reference_gemm_mode()
     t |> run("vulkan dense GEMM rail == CPU reference (q8 + k4, one-region batch tiles)") @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             install_vk_moe_hooks()
@@ -1032,8 +1040,9 @@ def private dn_stacks_up(t : T?; seed, qoff, zoff, ooff : int64; var st : DnStac
     return true
 }
 
-[test]
+[test(description = "The Vulkan deltanet chain's out rows, final state (3e-3 of max) and conv tail (1e-3) match a CPU mirror of the chunked delta rule at 70 positions across the 64-chunk boundary and 1100 across the 1024-row window")]
 def test_vulkan_deltanet(t : T?) {
+    pin_reference_gemm_mode()
     t |> run("vulkan deltanet chain == CPU reference (chunk-boundary + multi-window arms)") @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             install_vk_moe_hooks()
@@ -1100,8 +1109,9 @@ let DN2O_WOFF = 28000000l
 //! the deltanet chain with its qkv and z planes in two activation classes - a q8 qkv plane fed Q8_0, a k4 z plane fed Q8_K through
 //! the call's second image (`set_moe_gpu_image2`) - on the window chain (70 rows) and the decode step (one row), against the CPU
 //! chain over each plane's own image; the z plane fed the qkv's Q8_0 image misses the rows (the control)
-[test]
+[test(description = "A deltanet chain with a q8 qkv plane fed Q8_0 and a k4 z plane fed Q8_K through the second image matches the CPU chain within 3e-3 of max at 70 and 1 rows, and misses it when z is fed the Q8_0 image (the control)")]
 def test_vulkan_deltanet_two_forms(t : T?) {
+    pin_reference_gemm_mode()
     t |> run("vulkan deltanet chain with qkv and z planes of two activation classes == CPU reference") @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             install_vk_moe_hooks()
@@ -1178,8 +1188,9 @@ let DNSZ_WOFF = 18000000l
 let DNSO_WOFF = 19000000l
 let DNSTEPS = 8l
 
-[test]
+[test(description = "Eight one-token deltanet decode steps with device-resident state, flushed and cold re-uploaded at token 4, match the straight-through CPU mirror's out rows, state and conv ring, the token-4 flush included")]
 def test_vulkan_deltanet_step(t : T?) {
+    pin_reference_gemm_mode()
     t |> run("vulkan deltanet decode step == CPU reference (state carry + mid-sequence flush)") @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             install_vk_moe_hooks()
@@ -1398,8 +1409,9 @@ def private ref_wo_gemm(op : array<float>; npos : int64; wo_k4 : bool; wo4 : arr
     return <- refy
 }
 
-[test]
+[test(description = "The Vulkan full-attention chain's out, roped K and V rows match a straight-softmax CPU mirror within 5e-3 of max across gated partial rope, ungated full rope, a k4 wo, projection bias, and a 1100-position multi-window arm")]
 def test_vulkan_attention(t : T?) {
+    pin_reference_gemm_mode()
     t |> run("vulkan attention chain == CPU reference (gated/ungated/kq-wo/multi-window arms)") @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             install_vk_moe_hooks()
@@ -1582,8 +1594,9 @@ def test_vulkan_attention(t : T?) {
 // Fused rope + KV-row store, BOTH rope arms — llama's NORM (adjacent pairs) and qwen/gemma's NEOX
 // (half-offset). This is the family-ledger kernel: llama is non-NEOX, which the attention rail's
 // existing rope arm does not cover. Verifies roped q + the stored K row (roped) + V row (raw).
-[test]
+[test(description = "`vk_rope_kv_store` ropes q and the stored K row like the engine's table rope within 1e-3 of max plus 1e-6, and stores V unchanged, in both the NORM (llama) and NEOX pair layouts")]
 def test_vulkan_rope_kv_store(t : T?) {
+    pin_reference_gemm_mode()
     t |> run("vulkan rope+kv-store == CPU reference (NORM + NEOX arms)") @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             let HS = 64l        // llama-family head size (the closed-rail case)
@@ -1648,8 +1661,9 @@ def test_vulkan_rope_kv_store(t : T?) {
 // Decode attention over the device K/V mirror. Populates the mirror through vk_rope_kv_store (the
 // real producer), capturing each stored row for the CPU reference, then attends with a fresh query
 // and checks GQA + online softmax against a plain CPU attention over the captured cache.
-[test]
+[test(description = "`vk_decode_attn` over a device KV mirror filled by five `vk_rope_kv_store` steps matches a CPU GQA softmax attention over the captured rows within 1e-3 of max plus 1e-5")]
 def test_vulkan_decode_attn(t : T?) {
+    pin_reference_gemm_mode()
     t |> run("vulkan decode attention == CPU reference (GQA over the device KV mirror)") @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             let HS = 64l
@@ -1757,8 +1771,9 @@ def private arena_serves(t : T?; tag : string; a : ArenaQ8; rows, npos : int64; 
 
 // Arena batch GEMM (prefill twin of the arena GEMV): npos rows through q8_moe_batch against an
 // arena-resident plane, vs a CPU reference. Two tensors again so the block offset must be honored.
-[test]
+[test(description = "The arena batch GEMM over 40 rows matches the double-accumulated CPU q8 GEMM within 1e-3 of max for two arena-resident tensors, so the second tensor's block offset is honored")]
 def test_vulkan_arena_gemm(t : T?) {
+    pin_reference_gemm_mode()
     t |> run("vulkan arena batch GEMM == CPU reference (npos rows, distinct blocks)") @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             let GROWS = 64l
@@ -1787,8 +1802,9 @@ def test_vulkan_arena_gemm(t : T?) {
 // The whole dense FFN against arena-resident planes: gate GEMV -> up GEMV -> fused act+requant ->
 // down GEMV, ONE submit. No new kernels — q8_moe_actrq is already region-free, so this is the
 // per-op chain with the weight base coming from an arena block index instead of a stack.
-[test]
+[test(description = "The one-submit arena dense FFN (gate and up GEMV, fused silu requant, down GEMV) over an arena-placed q8 triple matches the CPU fused-FFN reference within 1e-3 of max")]
 def test_vulkan_arena_ffn(t : T?) {
+    pin_reference_gemm_mode()
     t |> run("vulkan arena FFN chain == CPU reference (dense gate/up/down triple)") @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             if (!vk_arena_reserve(0, ARENA_BLOCKS)) {
@@ -1830,8 +1846,9 @@ def test_vulkan_arena_ffn(t : T?) {
 // The in-place residual check is NOT redundant with the y check and must not be dropped: RMSNorm
 // is SCALE-INVARIANT, so a lost uniform factor (ascale) divides straight back out of y and is
 // invisible there — mutation-probed, y stayed in tolerance while x was off by 1.125 on a 0.003 bar.
-[test]
+[test(description = "`vk_add_rms` matches a double CPU RMSNorm within 1e-3 of max on the fused add arm (ascale 0.75, non-zero addend) and the norm-only arm, and writes the scaled residual back into x, which y alone cannot show")]
 def test_vulkan_add_rms(t : T?) {
+    pin_reference_gemm_mode()
     t |> run("vulkan add+rms == CPU reference (fused arm + norm-only arm)") @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             if (!vk_device_ready()) {
@@ -1888,8 +1905,9 @@ def test_vulkan_add_rms(t : T?) {
 // block index, so a whole dense model costs one descriptor set per format instead of one per plane
 // (the MAX_STACKS cap). TWO tensors on purpose — a single one lands at block 0 and would pass even
 // if the arena base were ignored entirely; the second only matches if its offset is honored.
-[test]
+[test(description = "The resident arena packs two q8 tensors back to back by block count, and the arena GEMV over each matches the CPU q8 reference within 1e-3 of max, so the block offset is honored")]
 def test_vulkan_arena(t : T?) {
+    pin_reference_gemm_mode()
     t |> run("vulkan resident arena == CPU reference (two q8 tensors, distinct block offsets)") @(tt : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             let AROWS = 64l
@@ -1930,8 +1948,9 @@ def test_vulkan_arena(t : T?) {
 let DMWOFF = 50000000l
 let DMROWS = 64l
 
-[test]
+[test(description = "Two drop and re-arm cycles uploading different content at the same stack offset and arena each serve their own cycle's CPU reference within 1e-3 of max, and each whole-model drop leaves zero resident VRAM")]
 def test_vulkan_drop_model(t : T?) {
+    pin_reference_gemm_mode()
     t |> run("vulkan whole-model drop - stacks + arena rebuild and serve across two cycles") @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             install_vk_moe_hooks()
@@ -1986,8 +2005,9 @@ def test_vulkan_drop_model(t : T?) {
 // boundary). A forced tiny slab cap stands in for an over-4GiB dense model (the 8B-class
 // shape). Drops the whole model state first for a FRESH arena — the reserve must not reuse a
 // default-cap one — so it sits with the drop test, after every stack-serving test.
-[test]
+[test(description = "Under a forced 2.5-tensor slab cap, the third arena placement starts slab 1 at local block 0 (block 1 shl 32) after two in slab 0, and the GEMV over all three matches the CPU q8 reference")]
 def test_vulkan_arena_slabs(t : T?) {
+    pin_reference_gemm_mode()
     t |> run("vulkan arena slabs - placement crosses the slab boundary, both slabs serve gemv") @(tt : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             let SROWS = 64l

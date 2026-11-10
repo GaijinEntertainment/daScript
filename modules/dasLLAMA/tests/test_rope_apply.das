@@ -125,7 +125,7 @@ def private apply_gate(t : T?; pos, hs, nh : int64; theta, fscale, mscale : floa
     delete ff
 }
 
-[test]
+[test(description = "`rope_scaled` (interleaved pairs) matches an fp64 angle reference within 2e-3 abs at five positions on 64-, 96- and 40-wide heads, scaled and unscaled, with a poison control")]
 def test_rope_apply_norm(t : T?) {
     for (pos in [0l, 1l, 7l, 37l, 512l]) {
         t |> run("rope_scaled at pos {pos}: head 64x2, 96x1 and the 40-wide tail head vs the fp64 angles") @(t : T?) {
@@ -136,7 +136,7 @@ def test_rope_apply_norm(t : T?) {
     }
 }
 
-[test]
+[test(description = "`rope_scaled_neox` (half-split pairs) matches an fp64 angle reference within 2e-3 abs at five positions on 64-, 96- and 40-wide heads, scaled and unscaled, with a poison control")]
 def test_rope_apply_neox(t : T?) {
     for (pos in [0l, 1l, 7l, 37l, 512l]) {
         t |> run("rope_scaled_neox at pos {pos}: head 64x2, 96x1 and the 40-wide tail head vs the fp64 angles") @(t : T?) {
@@ -185,7 +185,7 @@ def private tab_gate(t : T?; pos, hs, nh : int64; theta, fscale, mscale : float;
     delete ff
 }
 
-[test]
+[test(description = "`rope_scaled_tab` over built cos/sin tables matches the fp64 angles within 2e-3 abs and its un-tabled `rope_scaled` twin within 1e-5 abs at four positions")]
 def test_rope_apply_tab(t : T?) {
     for (pos in [0l, 1l, 37l, 512l]) {
         t |> run("rope_scaled_tab at pos {pos}: the fp64 angles, and the un-tabled twin") @(t : T?) {
@@ -195,7 +195,7 @@ def test_rope_apply_tab(t : T?) {
     }
 }
 
-[test]
+[test(description = "`rope_scaled_neox_tab` over built cos/sin tables matches the fp64 angles within 2e-3 abs and its un-tabled `rope_scaled_neox` twin within 1e-5 abs at four positions")]
 def test_rope_apply_neox_tab(t : T?) {
     for (pos in [0l, 1l, 37l, 512l]) {
         t |> run("rope_scaled_neox_tab at pos {pos}: the fp64 angles, and the un-tabled twin") @(t : T?) {
@@ -283,7 +283,7 @@ def private tab_part_gate(t : T?; pos, hs, rot, nh : int64; theta, fscale, mscal
 def private ff_ramp(half, period : int64) : array<float> =>
     <- [for (j in range64(half)); 1.0 + 0.5 * float(j % period)]
 
-[test]
+[test(description = "Partial-rotary neox rope with per-pair frequency factors, direct and tabled, matches the fp64 reference within 2e-3 abs and the two forms agree within 1e-5 on 64-of-256 and 20-of-40 heads")]
 def test_rope_apply_part_factors(t : T?) {
     for (pos in [1l, 37l, 4096l]) {
         t |> run("partial rotary takes per-pair factors at pos {pos}: 64 of 256 (qwen35), 20 of 40") @(t : T?) {
@@ -307,7 +307,7 @@ def private ref_yarn_divisors(rot : int64; theta, factor, beta_fast, beta_slow :
     return <- [for (j in range64(rot / 2l)); float(1.0lf / (fscale + (1.0lf - clamp((double(j) - lo) / max(0.001lf, hi - lo), 0.0lf, 1.0lf)) * (1.0lf - fscale)))]
 }
 
-[test]
+[test(description = "`yarn_rope_freqs` emits one divisor per pair within 1e-5 of an fp64 spelling of llama.cpp's YaRN band on four geometries, from 1 to the factor, while a shifted beta_fast band lands outside the bar")]
 def test_yarn_rope_freqs_band(tst : T?) {
     tst |> run("yarn_rope_freqs: the NTK-by-parts band of llama.cpp's rope_yarn, spelled out in fp64") @(t : T?) {
         let bar = 1.0e-5
@@ -330,7 +330,7 @@ def test_yarn_rope_freqs_band(tst : T?) {
     }
 }
 
-[test]
+[test(description = "`rope_scaled_neox_part` matches the fp64 reference, equals the full neox leaf over the rotated prefix bit for bit, passes the unrotated dims through, and its tabled twin agrees within 1e-5")]
 def test_rope_apply_part(t : T?) {
     for (pos in [0l, 1l, 37l, 512l]) {
         t |> run("rope_scaled_neox_part at pos {pos}: 64 of 256 (qwen35), 32 of 96, 20 of 40") @(t : T?) {
@@ -347,7 +347,7 @@ def test_rope_apply_part(t : T?) {
     }
 }
 
-[test]
+[test(description = "`rope_apply` in pointer and array forms is bit-identical to the leaf its neox flag names, and use_ff false drops loaded frequency factors exactly while use_ff true lets them move the rotation")]
 def test_rope_apply_dispatch(t : T?) {
     t |> run("rope_apply lands on the leaf its `neox` flag names, pointer and array forms alike") @(t : T?) {
         let hs = 64l
@@ -457,7 +457,7 @@ def private ff_gate(t : T?; pos, hs, nh : int64; neox : bool) {
     delete without
 }
 
-[test]
+[test(description = "`rope_apply` with rope_freqs factors matches the fp64 reference that divides each pair's frequency within 2e-3 abs in both conventions, and all-ones factors equal no factors bit for bit")]
 def test_rope_apply_freq_factors(t : T?) {
     for (pos in [1l, 37l, 512l]) {
         t |> run("rope_freqs divide the per-pair frequency at pos {pos}, both conventions") @(t : T?) {
@@ -468,7 +468,7 @@ def test_rope_apply_freq_factors(t : T?) {
     }
 }
 
-[test]
+[test(description = "`build_rope_tabs` over 120000 positions at head 512 grows past the 64 MB unreserved-growth guard and builds full cos and sin tables with sane first and last rows")]
 def test_rope_tabs_long_prompt(t : T?) {
     t |> run("a table over a long prompt at a wide head grows past the unreserved-growth guard's 64 MB and builds") @(t : T?) {
         var ff <- ff_none()
@@ -484,7 +484,7 @@ def test_rope_tabs_long_prompt(t : T?) {
     }
 }
 
-[test]
+[test(description = "`build_rope_tabs` over zero positions leaves empty cos and sin tables, cutting tables that previously held two rows")]
 def test_rope_tabs_no_rows(t : T?) {
     t |> run("a table over no positions is empty, and a table that held rows is cut to it") @(t : T?) {
         var ff <- ff_none()

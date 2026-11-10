@@ -94,10 +94,8 @@ def suite_files(name : string) : array<string> {   // nolint:STYLE038 - a flat s
     } elif (name == "kernels") {
         return <- [ "modules/dasLLAMA/tests/test_metal_prefill_kernels.das",
                     "modules/dasLLAMA/tests/test_metal_decode_kernels.das",
-                    "modules/dasLLAMA/tests/test_metal_rope_kernels.das",
                     "modules/dasLLAMA/tests/test_metal_gemv_kernels.das",
                     "modules/dasLLAMA/tests/test_metal_misc_kernels.das",
-                    "modules/dasLLAMA/tests/test_metal_attn_kernels.das",
                     "modules/dasLLAMA/tests/test_metal_gemm_kernels.das" ]
     } elif (name == "image") {
         return <- [ "modules/dasLLAMA/tests/test_model_image.das" ]
@@ -109,11 +107,8 @@ def suite_files(name : string) : array<string> {   // nolint:STYLE038 - a flat s
         return <- [
                     "modules/dasLLAMA/tests/failed_dasllama_lint_require.das",
                     "modules/dasLLAMA/tests/failed_dasllama_lint_sidedoor.das",
-                    "modules/dasLLAMA/tests/test_accel_backend.das",
-                    "modules/dasLLAMA/tests/test_affinity_predicates.das",
                     "modules/dasLLAMA/tests/test_arch_registry.das",
                     "modules/dasLLAMA/tests/test_asr_verbs.das",
-                    "modules/dasLLAMA/tests/test_batch_grid.das",
                     "modules/dasLLAMA/tests/test_bench_records_schema.das",
                     "modules/dasLLAMA/tests/test_box_ident.das",
                     "modules/dasLLAMA/tests/test_box_profile.das",
@@ -121,15 +116,9 @@ def suite_files(name : string) : array<string> {   // nolint:STYLE038 - a flat s
                     "modules/dasLLAMA/tests/test_mtp_snapshot.das",
                     "modules/dasLLAMA/tests/test_mtp_sampled_walk.das",
                     "modules/dasLLAMA/tests/test_mtp_accept_walks.das",
-                    "modules/dasLLAMA/tests/test_sampling_landed.das",
-                    "modules/dasLLAMA/tests/test_dasllama_core.das",
-                    "modules/dasLLAMA/tests/test_dasllama_lib.das",
                     "modules/dasLLAMA/tests/test_dasllama_lint_contracts.das",
-                    "modules/dasLLAMA/tests/test_metal_float_a_gate.das",
-                    "modules/dasLLAMA/tests/test_dasllama_lint_escape.das",
                     "modules/dasLLAMA/tests/test_dispatch_shaping.das",
                     "modules/dasLLAMA/tests/test_driver_knob_getters.das",
-                    "modules/dasLLAMA/tests/test_dlim_wipe.das",
                     "modules/dasLLAMA/tests/test_env_registry.das",
                     "modules/dasLLAMA/tests/test_exchange_schema.das",
                     "modules/dasLLAMA/tests/test_f32_batch_tile_perms.das",
@@ -137,50 +126,35 @@ def suite_files(name : string) : array<string> {   // nolint:STYLE038 - a flat s
                     "modules/dasLLAMA/tests/test_fat_hook_umbrella.das",
                     "modules/dasLLAMA/tests/test_fat_start.das",
                     "modules/dasLLAMA/tests/test_gen_records_args.das",
-                    "modules/dasLLAMA/tests/test_from_template.das",
                     "modules/dasLLAMA/tests/test_gguf_quant.das",
                     "modules/dasLLAMA/tests/test_gguf_shards.das",
-                    "modules/dasLLAMA/tests/test_safetensors.das",
                     "modules/dasLLAMA/tests/test_gpu_serving_declines.das",
                     "modules/dasLLAMA/tests/test_gpu_home.das",
-                    "modules/dasLLAMA/tests/test_gpu_shared_units.das",
                     "modules/dasLLAMA/tests/test_gpu_tier.das",
                     "modules/dasLLAMA/tests/test_groupn.das",
                     "modules/dasLLAMA/tests/test_kernel_backend.das",
-                    "modules/dasLLAMA/tests/test_kgroup_repack.das",
                     "modules/dasLLAMA/tests/test_kqformat.das",
                     "modules/dasLLAMA/tests/test_math_activations.das",
                     "modules/dasLLAMA/tests/test_math_elementwise.das",
-                    "modules/dasLLAMA/tests/test_matmul.das",
                     "modules/dasLLAMA/tests/test_matmul_batch.das",
-                    "modules/dasLLAMA/tests/test_metal_gemm.das",
-                    "modules/dasLLAMA/tests/test_metal_role_infer.das",
                     "modules/dasLLAMA/tests/test_model_specs.das",
                     "modules/dasLLAMA/tests/test_mxfp4.das",
                     "modules/dasLLAMA/tests/test_par_indexed.das",
-                    "modules/dasLLAMA/tests/test_parity_cache.das",
                     "modules/dasLLAMA/tests/test_jobque_tripwire.das",
                     "modules/dasLLAMA/tests/test_plane.das",
                     "modules/dasLLAMA/tests/test_ple_check.das",
-                    "modules/dasLLAMA/tests/test_pod_fleet.das",
                     "modules/dasLLAMA/tests/test_prefill_cpu_kernels.das",
-                    "modules/dasLLAMA/tests/test_program_roots.das",
                     "modules/dasLLAMA/tests/test_q8q8_family.das",
                     "modules/dasLLAMA/tests/test_quant.das",
                     "modules/dasLLAMA/tests/test_qwen4exp.das",
                     "modules/dasLLAMA/tests/test_repack.das",
-                    "modules/dasLLAMA/tests/test_repack_lane_context.das",
-                    "modules/dasLLAMA/tests/test_review_howto.das",
-                    "modules/dasLLAMA/tests/test_rmsnorm.das",
                     "modules/dasLLAMA/tests/test_rnnt.das",
                     "modules/dasLLAMA/tests/test_rope.das",
                     "modules/dasLLAMA/tests/test_rope_apply.das",
                     "modules/dasLLAMA/tests/test_run_suites.das",
                     "modules/dasLLAMA/tests/test_run_summary.das",
-                    "modules/dasLLAMA/tests/test_silu.das",
                     "modules/dasLLAMA/tests/test_site_records.das",
                     "modules/dasLLAMA/tests/test_sizing_helpers.das",
-                    "modules/dasLLAMA/tests/test_softmax.das",
                     "modules/dasLLAMA/tests/test_think_split.das",
                     "modules/dasLLAMA/tests/test_tok_seed.das",
                     "modules/dasLLAMA/tests/test_tts_textnorm.das",
@@ -190,10 +164,7 @@ def suite_files(name : string) : array<string> {   // nolint:STYLE038 - a flat s
                     "modules/dasLLAMA/tests/test_tool_formats.das",
                     "modules/dasLLAMA/tests/test_tower_asr_kernels.das",
                     "modules/dasLLAMA/tests/test_tower_helpers.das",
-                    "modules/dasLLAMA/tests/test_tune_interrupt.das",
                     "modules/dasLLAMA/tests/test_served_bench.das",
-                    "modules/dasLLAMA/tests/test_vk_spv_diff.das",
-                    "modules/dasLLAMA/tests/test_unicode.das",
                     "modules/dasLLAMA/tests/test_vision.das",
                     "modules/dasLLAMA/tests/test_vulkan_dec_tail.das",
                     "modules/dasLLAMA/tests/test_vulkan_kv_codec_kernels.das",
@@ -203,6 +174,8 @@ def suite_files(name : string) : array<string> {   // nolint:STYLE038 - a flat s
                     "modules/dasLLAMA/tests/test_vulkan_tts_pocket_kernels.das",
                     "modules/dasLLAMA/tests/test_vulkan_tts_source_kernels.das",
                     "modules/dasLLAMA/tests/test_vulkan_kernels.das",
+                    "modules/dasLLAMA/tests/test_vulkan_kernels_attn.das",
+                    "modules/dasLLAMA/tests/test_vulkan_kernels_gemm.das",
                     "modules/dasLLAMA/tests/test_vulkan_moe_cm2.das",
                     "modules/dasLLAMA/tests/test_vulkan_host_twin.das",
                     "modules/dasLLAMA/tests/test_vulkan_tier.das",
@@ -211,21 +184,20 @@ def suite_files(name : string) : array<string> {   // nolint:STYLE038 - a flat s
                     "modules/dasLLAMA/tests/test_cuda_tower_front.das",
                     "modules/dasLLAMA/tests/test_cuda_tower_blocks.das",
                     "modules/dasLLAMA/tests/test_cuda_tower_asr.das",
-                    "modules/dasLLAMA/tests/test_cuda_tower_g4a_chain.das",
-                    "modules/dasLLAMA/tests/test_cuda_tower_whisper_chain.das" ]
+                    "modules/dasLLAMA/tests/test_cuda_tower_whisper_chain.das",
+                    "modules/dasLLAMA/tests/uncategorized__dasllama_internal_persistent_heap_stack_524288.das",
+                    "modules/dasLLAMA/tests/uncategorized_persistent_heap_stack_524288.das",
+                    "modules/dasLLAMA/tests/uncategorized_no_aot_persistent_heap.das" ]
     } elif (name == "stocked") {
         return <- [
                     "modules/dasLLAMA/tests/test_attn_span.das",
                     "modules/dasLLAMA/tests/test_audio.das",
                     "modules/dasLLAMA/tests/test_audio_embedder.das",
                     "modules/dasLLAMA/tests/test_batch_decode.das",
-                    "modules/dasLLAMA/tests/test_bench_rows.das",
                     "modules/dasLLAMA/tests/test_chat.das",
                     "modules/dasLLAMA/tests/test_deltanet.das",
                     "modules/dasLLAMA/tests/test_embeddings.das",
-                    "modules/dasLLAMA/tests/test_exe_smoke.das",
                     "modules/dasLLAMA/tests/test_facade.das",
-                    "modules/dasLLAMA/tests/test_flash.das",
                     "modules/dasLLAMA/tests/test_forward.das",
                     "modules/dasLLAMA/tests/test_fused_decode.das",
                     "modules/dasLLAMA/tests/test_gemma3v.das",
@@ -236,50 +208,32 @@ def suite_files(name : string) : array<string> {   // nolint:STYLE038 - a flat s
                     "modules/dasLLAMA/tests/test_mlx_qwen4exp.das",
                     "modules/dasLLAMA/tests/test_nmt.das",
                     "modules/dasLLAMA/tests/test_gpu_model_swap.das",
-                    "modules/dasLLAMA/tests/test_gpu_moe_shexp.das",
-                    "modules/dasLLAMA/tests/test_gpu_resident_gemma2.das",
-                    "modules/dasLLAMA/tests/test_gpu_resident_gemma3_1b.das",
-                    "modules/dasLLAMA/tests/test_gpu_resident_gemma3_4b.das",
-                    "modules/dasLLAMA/tests/test_gpu_resident_gemma4_12b_k.das",
-                    "modules/dasLLAMA/tests/test_gpu_resident_gemma4_12b_q8.das",
-                    "modules/dasLLAMA/tests/test_gpu_resident_gemma4_26b.das",
-                    "modules/dasLLAMA/tests/test_gpu_resident_gemma4_26b_k.das",
-                    "modules/dasLLAMA/tests/test_gpu_resident_gemma4_26b_mx4.das",
+                    "modules/dasLLAMA/tests/test_gpu_resident_gemma2_3.das",
+                    "modules/dasLLAMA/tests/test_gpu_resident_gemma4_dense.das",
+                    "modules/dasLLAMA/tests/test_gpu_resident_gemma4_moe.das",
                     "modules/dasLLAMA/tests/test_gpu_resident_gemma4_26b_host.das",
-                    "modules/dasLLAMA/tests/test_gpu_resident_gemma4_31b.das",
                     "modules/dasLLAMA/tests/test_gpu_resident_gemma4_e2b.das",
-                    "modules/dasLLAMA/tests/test_gpu_resident_gemma4_e4b.das",
                     "modules/dasLLAMA/tests/test_gpu_resident_gptoss.das",
                     "modules/dasLLAMA/tests/test_gpu_resident_hc.das",
                     "modules/dasLLAMA/tests/test_gpu_resident_hc_micro.das",
-                    "modules/dasLLAMA/tests/test_parity_dump.das",
-                    "modules/dasLLAMA/tests/test_gpu_resident_continuation.das",
-                    "modules/dasLLAMA/tests/test_gpu_resident_long_window.das",
+                    "modules/dasLLAMA/tests/test_gpu_resident_window.das",
                     "modules/dasLLAMA/tests/test_gpu_resident_hybrid.das",
                     "modules/dasLLAMA/tests/test_gpu_resident_llama.das",
                     "modules/dasLLAMA/tests/test_gpu_resident_cuda_llama.das",
-                    "modules/dasLLAMA/tests/test_gpu_resident_cuda_codec.das",
                     "modules/dasLLAMA/tests/test_gpu_resident_cuda_batch.das",
-                    "modules/dasLLAMA/tests/test_gpu_resident_cuda_qwen3.das",
-                    "modules/dasLLAMA/tests/test_gpu_resident_cuda_phi3.das",
+                    "modules/dasLLAMA/tests/test_gpu_resident_cuda_dense.das",
                     "modules/dasLLAMA/tests/test_gpu_resident_cuda_qwen35.das",
                     "modules/dasLLAMA/tests/test_gpu_resident_cuda_mtp.das",
                     "modules/dasLLAMA/tests/test_gpu_resident_cuda_moe_host.das",
                     "modules/dasLLAMA/tests/test_gpu_resident_cuda_moe.das",
                     "modules/dasLLAMA/tests/test_gpu_resident_cuda_gemma4.das",
-                    "modules/dasLLAMA/tests/test_gpu_resident_cuda_gemma.das",
-                    "modules/dasLLAMA/tests/test_gpu_resident_cuda_qwen2.das",
                     "modules/dasLLAMA/tests/test_gpu_resident_segments.das",
                     "modules/dasLLAMA/tests/test_gpu_resident_moe.das",
                     "modules/dasLLAMA/tests/test_gpu_resident_moe_host_pinned.das",
-                    "modules/dasLLAMA/tests/test_gpu_resident_moe_host_rows.das",
                     "modules/dasLLAMA/tests/test_gpu_resident_moe_formats.das",
                     "modules/dasLLAMA/tests/test_gpu_resident_format_census.das",
                     "modules/dasLLAMA/tests/test_gpu_perop_kv_codec.das",
-                    "modules/dasLLAMA/tests/test_gpu_perop_kv_codec_iq.das",
-                    "modules/dasLLAMA/tests/test_gpu_perop_kv_codec_k.das",
-                    "modules/dasLLAMA/tests/test_gpu_resident_codec_llama_iq.das",
-                    "modules/dasLLAMA/tests/test_gpu_resident_codec_llama_k.das",
+                    "modules/dasLLAMA/tests/test_gpu_resident_codec_llama.das",
                     "modules/dasLLAMA/tests/test_gpu_resident_qwen2.das",
                     "modules/dasLLAMA/tests/test_gpu_resident_regions.das",
                     "modules/dasLLAMA/tests/test_gpu_resident_regions_e2b.das",
@@ -287,23 +241,18 @@ def suite_files(name : string) : array<string> {   // nolint:STYLE038 - a flat s
                     "modules/dasLLAMA/tests/test_gpu_resident_regions_gemma3.das",
                     "modules/dasLLAMA/tests/test_gpu_resident_regions_gemma4.das",
                     "modules/dasLLAMA/tests/test_gpu_resident_regions_gptoss.das",
-                    "modules/dasLLAMA/tests/test_gpu_resident_regions_qwen3moe.das",
+                    "modules/dasLLAMA/tests/test_gpu_resident_regions_qwen_moe.das",
                     "modules/dasLLAMA/tests/test_gpu_resident_regions_qwen35moe.das",
-                    "modules/dasLLAMA/tests/test_gpu_resident_regions_qwen2moe.das",
                     "modules/dasLLAMA/tests/test_gpu_resident_regions_gemma4moe.das",
                     "modules/dasLLAMA/tests/test_gpu_resident_regions_hybrid.das",
-                    "modules/dasLLAMA/tests/test_gpu_resident_regions_hybrid_k.das",
-                    "modules/dasLLAMA/tests/test_gpu_resident_regions_hybrid_iq3s.das",
-                    "modules/dasLLAMA/tests/test_gpu_resident_regions_hybrid_q3kxl.das",
-                    "modules/dasLLAMA/tests/test_gpu_resident_regions_llama_k.das",
+                    "modules/dasLLAMA/tests/test_gpu_resident_regions_hybrid_formats.das",
+                    "modules/dasLLAMA/tests/test_gpu_resident_regions_kquant.das",
                     "modules/dasLLAMA/tests/test_gpu_resident_regions_llama3b_ctx32k.das",
                     "modules/dasLLAMA/tests/test_gpu_resident_regions_gemma3_4b_ctx128k.das",
                     "modules/dasLLAMA/tests/test_gpu_resident_regions_gemma4_e2b_ctx128k.das",
-                    "modules/dasLLAMA/tests/test_gpu_resident_regions_phi3.das",
                     "modules/dasLLAMA/tests/test_gpu_resident_regions_qwen3.das",
                     "modules/dasLLAMA/tests/test_gpu_resident_regions_q8kv.das",
                     "modules/dasLLAMA/tests/test_gpu_resident_regions_tq4kv.das",
-                    "modules/dasLLAMA/tests/test_gpu_slot_swap.das",
                     "modules/dasLLAMA/tests/test_kquant.das",
                     "modules/dasLLAMA/tests/test_kv_codec.das",
                     "modules/dasLLAMA/tests/test_kv_paged.das",
@@ -322,7 +271,6 @@ def suite_files(name : string) : array<string> {   // nolint:STYLE038 - a flat s
                     "modules/dasLLAMA/tests/test_qwen3v.das",
                     "modules/dasLLAMA/tests/test_qwen25v.das",
                     "modules/dasLLAMA/tests/test_sampling.das",
-                    "modules/dasLLAMA/tests/test_constraint.das",
                     "modules/dasLLAMA/tests/test_scheduler.das",
                     "modules/dasLLAMA/tests/test_storyteller_restart.das",
                     "modules/dasLLAMA/tests/test_storywish.das",
@@ -347,10 +295,8 @@ def suite_files(name : string) : array<string> {   // nolint:STYLE038 - a flat s
                     "modules/dasLLAMA/tests/test_metal_support_matrix.das",
                     "modules/dasLLAMA/tests/test_metal_prefill_kernels.das",
                     "modules/dasLLAMA/tests/test_metal_decode_kernels.das",
-                    "modules/dasLLAMA/tests/test_metal_rope_kernels.das",
                     "modules/dasLLAMA/tests/test_metal_gemv_kernels.das",
                     "modules/dasLLAMA/tests/test_metal_misc_kernels.das",
-                    "modules/dasLLAMA/tests/test_metal_attn_kernels.das",
                     "modules/dasLLAMA/tests/test_metal_gemm_kernels.das",
                     "modules/dasLLAMA/tests/test_model_image.das" ]
     }
@@ -367,7 +313,7 @@ let TESTS_DIR = "modules/dasLLAMA/tests"
 def area_tests(area : string) : array<string> {
     if (area == "audio") {
         return <- [ "test_asr_verbs.das", "test_audio.das", "test_audio_embedder.das", "test_cuda_tower_asr.das", "test_cuda_tower_blocks.das",
-                    "test_cuda_tower_front.das", "test_cuda_tower_g4a_chain.das", "test_cuda_tower_whisper_chain.das", "test_dasllama_lint_contracts.das", "test_gigaam.das",
+                    "test_cuda_tower_front.das", "test_cuda_tower_whisper_chain.das", "test_dasllama_lint_contracts.das", "test_gigaam.das",
                     "test_interpreter.das", "test_parrot.das", "test_rnnt.das", "test_tower_asr_kernels.das", "test_tower_helpers.das", "test_vad.das",
                     "test_vulkan_tower_kernels.das", "test_whisper.das" ]
     } elif (area == "vision") {
@@ -382,32 +328,33 @@ def area_tests(area : string) : array<string> {
     } elif (area == "translate") {
         return <- [ "test_interpreter.das", "test_nmt.das" ]
     } elif (area == "infra") {
-        return <- [ "failed_dasllama_lint_require.das", "failed_dasllama_lint_sidedoor.das", "test_bench_records_schema.das", "test_bench_rows.das",
+        return <- [ "failed_dasllama_lint_require.das", "failed_dasllama_lint_sidedoor.das", "test_bench_records_schema.das",
                     "test_box_ident.das", "test_box_profile.das", "test_compares.das", "test_dasllama_lint_contracts.das",
-                    "test_dasllama_core.das", "test_dasllama_lib.das",
-                    "test_dasllama_lint_escape.das", "test_dlim_wipe.das",
                     "test_env_registry.das",
-                    "test_exchange_schema.das", "test_exe_smoke.das", "test_facade_docs.das", "test_fat_hook_umbrella.das", "test_fat_start.das", "test_gen_records_args.das",
-                    "test_model_specs.das", "test_pod_fleet.das", "test_program_roots.das", "test_review_howto.das", "test_run_suites.das", "test_run_summary.das", "test_served_bench.das",
-                    "test_site_records.das", "test_sizing_helpers.das", "test_tok_seed.das", "test_tune_interrupt.das", "test_vk_spv_diff.das" ]
+                    "test_exchange_schema.das", "test_facade.das", "test_facade_docs.das", "test_fat_hook_umbrella.das", "test_fat_start.das", "test_gen_records_args.das",
+                    "test_model_specs.das", "test_run_suites.das", "test_run_summary.das", "test_served_bench.das",
+                    "test_site_records.das", "test_sizing_helpers.das", "test_tok_seed.das",
+                    "uncategorized__dasllama_internal_persistent_heap_stack_524288.das", "uncategorized_persistent_heap_stack_524288.das" ]
     } elif (area == "llm") {
-        return <- [ "test_accel_backend.das", "test_affinity_predicates.das", "test_arch_registry.das", "test_batch_decode.das", "test_bench_rows.das",
-                    "test_batch_grid.das", "test_chat.das", "test_deltanet.das", "test_dispatch_shaping.das", "test_driver_knob_getters.das", "test_facade.das",
-                    "test_flash.das", "test_forward.das", "test_from_template.das", "test_fused_decode.das", "test_gguf_quant.das", "test_gguf_shards.das", "test_safetensors.das", "test_mlx_snapshot.das", "test_mlx_qwen4exp.das",
-                    "test_gpu_home.das", "test_gpu_model_swap.das", "test_gpu_moe_shexp.das", "test_gpu_perop_kv_codec.das", "test_gpu_perop_kv_codec_iq.das", "test_gpu_perop_kv_codec_k.das", "test_gpu_resident_codec_llama_iq.das", "test_gpu_resident_codec_llama_k.das", "test_gpu_resident_gemma2.das", "test_gpu_resident_gemma3_1b.das", "test_gpu_resident_gemma3_4b.das", "test_gpu_resident_gemma4_12b_k.das", "test_gpu_resident_gemma4_12b_q8.das", "test_gpu_resident_gemma4_26b.das", "test_gpu_resident_gemma4_26b_k.das", "test_gpu_resident_gemma4_26b_mx4.das", "test_gpu_resident_gemma4_26b_host.das", "test_gpu_resident_moe_host_pinned.das", "test_gpu_resident_gemma4_31b.das", "test_gpu_resident_gemma4_e2b.das", "test_gpu_resident_gemma4_e4b.das", "test_gpu_resident_gptoss.das", "test_gpu_resident_hc.das", "test_gpu_resident_hc_micro.das", "test_parity_dump.das", "test_gpu_resident_continuation.das", "test_gpu_resident_long_window.das", "test_gpu_resident_hybrid.das", "test_gpu_resident_llama.das", "test_gpu_resident_cuda_llama.das", "test_gpu_resident_cuda_gemma.das", "test_gpu_resident_cuda_qwen2.das", "test_gpu_resident_cuda_codec.das", "test_gpu_resident_cuda_batch.das", "test_gpu_resident_cuda_qwen3.das", "test_gpu_resident_cuda_phi3.das", "test_gpu_resident_cuda_qwen35.das", "test_gpu_resident_cuda_mtp.das", "test_gpu_resident_cuda_moe.das", "test_gpu_resident_cuda_moe_host.das", "test_gpu_resident_cuda_gemma4.das", "test_gpu_resident_segments.das", "test_gpu_resident_moe.das", "test_gpu_resident_moe_host_rows.das", "test_gpu_resident_moe_formats.das", "test_gpu_resident_format_census.das", "test_gpu_resident_qwen2.das", "test_gpu_resident_regions.das", "test_gpu_resident_regions_e2b.das", "test_gpu_resident_regions_gptoss.das", "test_gpu_resident_regions_qwen3moe.das", "test_gpu_resident_regions_qwen35moe.das", "test_gpu_resident_regions_qwen2moe.das", "test_gpu_resident_regions_gemma4moe.das", "test_gpu_resident_regions_gemma2.das", "test_gpu_resident_regions_gemma3.das", "test_gpu_resident_regions_gemma4.das", "test_gpu_resident_regions_hybrid.das", "test_gpu_resident_regions_hybrid_k.das", "test_gpu_resident_regions_hybrid_iq3s.das", "test_gpu_resident_regions_hybrid_q3kxl.das", "test_gpu_resident_regions_llama_k.das", "test_gpu_resident_regions_llama3b_ctx32k.das", "test_gpu_resident_regions_gemma3_4b_ctx128k.das", "test_gpu_resident_regions_gemma4_e2b_ctx128k.das", "test_gpu_resident_regions_phi3.das", "test_gpu_resident_regions_qwen3.das", "test_gpu_resident_regions_q8kv.das", "test_gpu_resident_regions_tq4kv.das", "test_gpu_serving_declines.das", "test_gpu_shared_units.das", "test_gpu_slot_swap.das", "test_gpu_tier.das", "test_groupn.das",
-                    "test_embeddings.das", "test_jobque_tripwire.das", "test_kernel_backend.das", "test_kgroup_repack.das", "test_kqformat.das", "test_kquant.das",
+        return <- [ "test_arch_registry.das", "test_batch_decode.das", "test_bench_records_schema.das",
+                    "test_chat.das", "test_deltanet.das", "test_dispatch_shaping.das", "test_driver_knob_getters.das", "test_facade.das",
+                    "test_forward.das", "test_fused_decode.das", "test_gguf_quant.das", "test_gguf_shards.das", "test_mlx_snapshot.das", "test_mlx_qwen4exp.das",
+                    "test_gpu_home.das", "test_gpu_model_swap.das", "test_gpu_perop_kv_codec.das", "test_gpu_resident_codec_llama.das", "test_gpu_resident_gemma2_3.das", "test_gpu_resident_gemma4_dense.das", "test_gpu_resident_gemma4_moe.das", "test_gpu_resident_gemma4_26b_host.das", "test_gpu_resident_moe_host_pinned.das", "test_gpu_resident_gemma4_e2b.das", "test_gpu_resident_gptoss.das", "test_gpu_resident_hc.das", "test_gpu_resident_hc_micro.das", "test_gpu_resident_window.das", "test_gpu_resident_hybrid.das", "test_gpu_resident_llama.das", "test_gpu_resident_cuda_llama.das", "test_gpu_resident_cuda_dense.das", "test_gpu_resident_cuda_batch.das", "test_gpu_resident_cuda_qwen35.das", "test_gpu_resident_cuda_mtp.das", "test_gpu_resident_cuda_moe.das", "test_gpu_resident_cuda_moe_host.das", "test_gpu_resident_cuda_gemma4.das", "test_gpu_resident_segments.das", "test_gpu_resident_moe.das", "test_gpu_resident_moe_formats.das", "test_gpu_resident_format_census.das", "test_gpu_resident_qwen2.das", "test_gpu_resident_regions.das", "test_gpu_resident_regions_e2b.das", "test_gpu_resident_regions_gptoss.das", "test_gpu_resident_regions_qwen_moe.das", "test_gpu_resident_regions_qwen35moe.das", "test_gpu_resident_regions_gemma4moe.das", "test_gpu_resident_regions_gemma2.das", "test_gpu_resident_regions_gemma3.das", "test_gpu_resident_regions_gemma4.das", "test_gpu_resident_regions_hybrid.das", "test_gpu_resident_regions_hybrid_formats.das", "test_gpu_resident_regions_kquant.das", "test_gpu_resident_regions_llama3b_ctx32k.das", "test_gpu_resident_regions_gemma3_4b_ctx128k.das", "test_gpu_resident_regions_gemma4_e2b_ctx128k.das", "test_gpu_resident_regions_qwen3.das", "test_gpu_resident_regions_q8kv.das", "test_gpu_resident_regions_tq4kv.das", "test_gpu_serving_declines.das", "test_gpu_tier.das", "test_groupn.das",
+                    "test_embeddings.das", "test_jobque_tripwire.das", "test_kernel_backend.das", "test_kqformat.das", "test_kquant.das",
                     "test_kv_codec.das", "test_kv_paged.das", "test_kv_prefix.das", "test_metal_batched_row.das", "test_metal_format_census.das", "test_math_activations.das",
-                    "test_math_elementwise.das", "test_matmul.das", "test_matmul_batch.das", "test_f32_batch_tile_perms.das",
-                    "test_metal_float_a_gate.das", "test_metal_gemm.das", "test_metal_role_infer.das", "test_mtp.das",
-                    "test_mtp_gemma_drafter.das", "test_dflash_drafter.das", "test_mtp_sampled_walk.das", "test_mtp_snapshot.das", "test_mtp_accept_walks.das", "test_sampling_landed.das", "test_mxfp4.das",
-                    "test_par_indexed.das", "test_parity.das", "test_parity_cache.das", "test_parity_pregate.das",
+                    "test_math_elementwise.das", "test_matmul_batch.das", "test_f32_batch_tile_perms.das",
+                    "test_mtp.das",
+                    "test_mtp_gemma_drafter.das", "test_dflash_drafter.das", "test_mtp_sampled_walk.das", "test_mtp_snapshot.das", "test_mtp_accept_walks.das", "test_mxfp4.das",
+                    "test_par_indexed.das", "test_parity.das", "test_parity_pregate.das",
                     "test_plane.das", "test_ple_check.das", "test_ple_modes.das", "test_prefill.das", "test_prefill_cpu_kernels.das",
                     "test_q8q8_family.das", "test_quant.das", "test_qwen4exp.das",
-                    "test_repack.das", "test_repack_lane_context.das", "test_rmsnorm.das", "test_rope.das", "test_rope_apply.das",
-                    "test_sampling.das", "test_constraint.das", "test_cuda_kernels.das",
-                    "test_scheduler.das", "test_silu.das", "test_softmax.das", "test_storyteller_restart.das", "test_storywish.das", "test_think_split.das", "test_tokenizer.das",
-                    "test_tool_formats.das", "test_unicode.das", "test_vulkan_dec_tail.das", "test_vulkan_host_twin.das", "test_vulkan_kernels.das", "test_vulkan_kv_codec_kernels.das",
-                    "test_vulkan_mint.das", "test_cuda_mint.das", "test_vulkan_moe_cm2.das", "test_vulkan_tier.das", "test_vulkan_shared_device.das" ]
+                    "test_repack.das", "test_rope.das", "test_rope_apply.das",
+                    "test_sampling.das", "test_cuda_kernels.das",
+                    "test_scheduler.das", "test_storyteller_restart.das", "test_storywish.das", "test_think_split.das", "test_tokenizer.das",
+                    "test_tool_formats.das", "test_tts_textnorm.das", "test_vulkan_dec_tail.das", "test_vulkan_host_twin.das", "test_vulkan_kernels.das", "test_vulkan_kernels_attn.das", "test_vulkan_kernels_gemm.das", "test_vulkan_kv_codec_kernels.das",
+                    "test_vulkan_mint.das", "test_cuda_mint.das", "test_vulkan_moe_cm2.das", "test_vulkan_tier.das", "test_vulkan_shared_device.das",
+                    "uncategorized__dasllama_internal_persistent_heap_stack_524288.das", "uncategorized_persistent_heap_stack_524288.das",
+                    "uncategorized_no_aot_persistent_heap.das" ]
     }
     var none : array<string>
     return <- none
@@ -496,17 +443,17 @@ let MODULE_AREAS <- {
 //! set stays the pre-merge gate (`--suite stocked`, sharded over the fleet). Non-private: test_run_suites.das pins it
 let LLM_CORE_WITNESSES <- [
     "test_batch_decode.das", "test_deltanet.das", "test_forward.das", "test_gpu_perop_kv_codec.das",
-    "test_gpu_resident_codec_llama_k.das", "test_gpu_resident_cuda_llama.das", "test_gpu_resident_cuda_moe.das",
-    "test_gpu_resident_cuda_qwen35.das", "test_gpu_resident_gemma3_1b.das", "test_gpu_resident_gemma4_26b.das",
-    "test_gpu_resident_gemma4_e2b.das", "test_gpu_resident_gptoss.das", "test_gpu_resident_hybrid.das",
+    "test_gpu_resident_codec_llama.das", "test_gpu_resident_cuda_llama.das", "test_gpu_resident_cuda_moe.das",
+    "test_gpu_resident_cuda_qwen35.das", "test_gpu_resident_gemma2_3.das", "test_gpu_resident_gemma4_e2b.das",
+    "test_gpu_resident_gemma4_moe.das", "test_gpu_resident_gptoss.das", "test_gpu_resident_hybrid.das",
     "test_gpu_resident_llama.das", "test_gpu_resident_moe.das", "test_gpu_resident_qwen2.das",
-    "test_gpu_resident_regions.das", "test_gpu_resident_regions_phi3.das", "test_gpu_resident_regions_qwen3.das",
+    "test_gpu_resident_regions.das", "test_gpu_resident_regions_kquant.das", "test_gpu_resident_regions_qwen3.das",
     "test_gpu_resident_segments.das", "test_kv_codec.das", "test_mtp.das", "test_prefill.das", "test_scheduler.das" ]
 
-let CUDA_WITNESSES = "test_cuda_kernels.das,test_gpu_resident_cuda_llama.das,test_gpu_resident_cuda_codec.das,test_gpu_resident_cuda_batch.das,test_gpu_resident_cuda_qwen3.das,test_gpu_resident_cuda_phi3.das,test_gpu_resident_cuda_qwen35.das,test_gpu_resident_cuda_mtp.das,test_gpu_resident_cuda_moe.das,test_gpu_resident_cuda_moe_host.das,test_gpu_resident_cuda_gemma4.das,test_gpu_resident_cuda_gemma.das,test_gpu_resident_cuda_qwen2.das,test_gpu_resident_segments.das"
-let KV_CODEC_WITNESSES = "test_kv_codec.das,test_vulkan_kv_codec_kernels.das,test_gpu_resident_codec_llama_k.das,test_gpu_resident_codec_llama_iq.das,test_gpu_perop_kv_codec.das,test_gpu_perop_kv_codec_k.das,test_gpu_perop_kv_codec_iq.das,test_gpu_resident_cuda_codec.das,test_gpu_resident_regions_q8kv.das,test_gpu_resident_regions_tq4kv.das"
-let TOKENIZER_WITNESSES = "test_tokenizer.das,test_unicode.das,test_chat.das,test_tok_seed.das"
-let METAL_WITNESSES = "test_metal_batched_row.das,test_metal_format_census.das,test_metal_gemm.das,test_metal_role_infer.das,test_metal_float_a_gate.das"
+let CUDA_WITNESSES = "test_cuda_kernels.das,test_gpu_resident_cuda_llama.das,test_gpu_resident_cuda_batch.das,test_gpu_resident_cuda_dense.das,test_gpu_resident_cuda_qwen35.das,test_gpu_resident_cuda_mtp.das,test_gpu_resident_cuda_moe.das,test_gpu_resident_cuda_moe_host.das,test_gpu_resident_cuda_gemma4.das,test_gpu_resident_segments.das"
+let KV_CODEC_WITNESSES = "test_kv_codec.das,test_vulkan_kv_codec_kernels.das,test_gpu_resident_codec_llama.das,test_gpu_perop_kv_codec.das,test_gpu_resident_cuda_llama.das,test_gpu_resident_regions_q8kv.das,test_gpu_resident_regions_tq4kv.das"
+let TOKENIZER_WITNESSES = "test_tokenizer.das,test_tts_textnorm.das,test_chat.das,test_tok_seed.das"
+let METAL_WITNESSES = "test_metal_batched_row.das,test_metal_format_census.das,test_matmul_batch.das,uncategorized_no_aot_persistent_heap.das,uncategorized_persistent_heap_stack_524288.das"
 
 //! engine module stem -> the llm files a change to it reaches (base names, comma-separated) in place of the core
 //! witnesses: a leaf module's own carriers and kernel cells. A module with no row here and an llm reach in
@@ -515,41 +462,41 @@ let METAL_WITNESSES = "test_metal_batched_row.das,test_metal_format_census.das,t
 let MODULE_WITNESSES <- {
     "dasllama_cuda_common" => CUDA_WITNESSES, "dasllama_cuda_dispatch" => CUDA_WITNESSES, "dasllama_cuda_classes" => CUDA_WITNESSES,
     "dasllama_cuda_decode" => CUDA_WITNESSES, "dasllama_cuda_stream" => CUDA_WITNESSES, "dasllama_math_cuda" => CUDA_WITNESSES,
-    "dasllama_arch_llama" => "test_gpu_resident_llama.das,test_gpu_resident_cuda_llama.das,test_gpu_resident_regions_llama_k.das,test_gpu_resident_codec_llama_k.das,test_forward.das,test_prefill.das",
-    "dasllama_arch_qwen2" => "test_gpu_resident_qwen2.das,test_gpu_resident_cuda_qwen2.das,test_gpu_perop_kv_codec.das,test_gpu_perop_kv_codec_iq.das,test_gpu_resident_regions.das",
-    "dasllama_arch_qwen3" => "test_gpu_resident_cuda_qwen3.das,test_gpu_resident_regions_qwen3.das,test_gpu_perop_kv_codec_k.das",
-    "dasllama_arch_qwen35" => "test_gpu_resident_hybrid.das,test_gpu_resident_continuation.das,test_gpu_resident_cuda_qwen35.das,test_gpu_resident_cuda_mtp.das,test_gpu_resident_regions_hybrid.das,test_gpu_resident_long_window.das,test_gpu_resident_moe_formats.das,test_deltanet.das,test_mtp.das,test_vulkan_mint.das",
-    "dasllama_arch_qwen3moe" => "test_gpu_resident_regions_qwen3moe.das,test_gpu_resident_moe_formats.das,test_gpu_resident_format_census.das,test_gpu_resident_cuda_moe.das",
-    "dasllama_arch_qwen2moe" => "test_gpu_resident_moe.das,test_gpu_resident_cuda_moe.das,test_gpu_resident_cuda_moe_host.das,test_gpu_resident_regions_qwen2moe.das,test_gpu_moe_shexp.das,test_gpu_resident_moe_host_rows.das,test_gpu_resident_moe_host_pinned.das",
+    "dasllama_arch_llama" => "test_gpu_resident_llama.das,test_gpu_resident_cuda_llama.das,test_gpu_resident_regions_kquant.das,test_gpu_resident_codec_llama.das,test_forward.das,test_prefill.das",
+    "dasllama_arch_qwen2" => "test_gpu_resident_qwen2.das,test_gpu_resident_cuda_dense.das,test_gpu_perop_kv_codec.das,test_gpu_resident_regions.das",
+    "dasllama_arch_qwen3" => "test_gpu_resident_cuda_dense.das,test_gpu_resident_regions_qwen3.das,test_gpu_perop_kv_codec.das",
+    "dasllama_arch_qwen35" => "test_gpu_resident_hybrid.das,test_gpu_resident_window.das,test_gpu_resident_cuda_qwen35.das,test_gpu_resident_cuda_mtp.das,test_gpu_resident_regions_hybrid.das,test_gpu_resident_moe_formats.das,test_deltanet.das,test_mtp.das,test_vulkan_mint.das",
+    "dasllama_arch_qwen3moe" => "test_gpu_resident_regions_qwen_moe.das,test_gpu_resident_moe_formats.das,test_gpu_resident_format_census.das,test_gpu_resident_cuda_moe.das",
+    "dasllama_arch_qwen2moe" => "test_gpu_resident_moe.das,test_gpu_resident_cuda_moe.das,test_gpu_resident_cuda_moe_host.das,test_gpu_resident_regions_qwen_moe.das,test_gpu_resident_moe_host_pinned.das",
     "dasllama_arch_qwen4exp" => "test_qwen4exp.das,test_gpu_resident_hc.das,test_gpu_resident_hc_micro.das",
     "dasllama_arch_gptoss" => "test_gpu_resident_gptoss.das,test_gpu_resident_regions_gptoss.das,test_gpu_resident_cuda_moe.das",
-    "dasllama_arch_gemma2" => "test_gpu_resident_gemma2.das,test_gpu_resident_cuda_gemma.das,test_gpu_resident_regions_gemma2.das",
-    "dasllama_arch_gemma3" => "test_gpu_resident_gemma3_1b.das,test_gpu_resident_gemma3_4b.das,test_gpu_resident_cuda_gemma.das,test_gpu_resident_regions_gemma3.das",
-    "dasllama_arch_gemma4" => "test_gpu_resident_cuda_gemma4.das,test_gpu_resident_gemma4_e2b.das,test_gpu_resident_gemma4_e4b.das,test_gpu_resident_gemma4_12b_k.das,test_gpu_resident_gemma4_26b.das,test_gpu_resident_gemma4_31b.das,test_gpu_resident_regions_gemma4.das,test_gpu_resident_regions_gemma4moe.das,test_ple_modes.das,test_mtp_gemma_drafter.das",
-    "dasllama_arch_phi3" => "test_gpu_resident_cuda_phi3.das,test_gpu_resident_regions_phi3.das",
+    "dasllama_arch_gemma2" => "test_gpu_resident_gemma2_3.das,test_gpu_resident_cuda_dense.das,test_gpu_resident_regions_gemma2.das",
+    "dasllama_arch_gemma3" => "test_gpu_resident_gemma2_3.das,test_gpu_resident_cuda_dense.das,test_gpu_resident_regions_gemma3.das",
+    "dasllama_arch_gemma4" => "test_gpu_resident_cuda_gemma4.das,test_gpu_resident_gemma4_e2b.das,test_gpu_resident_gemma4_dense.das,test_gpu_resident_gemma4_moe.das,test_gpu_resident_regions_gemma4.das,test_gpu_resident_regions_gemma4moe.das,test_ple_modes.das,test_mtp_gemma_drafter.das",
+    "dasllama_arch_phi3" => "test_gpu_resident_cuda_dense.das,test_gpu_resident_regions_kquant.das",
     "dasllama_arch_glm4moe" => "test_mtp.das", "dasllama_arch_mistral3" => "test_chat.das,test_model_specs.das",
-    "dasllama_moe" => "test_gpu_resident_moe.das,test_gpu_resident_moe_formats.das,test_gpu_resident_cuda_moe.das,test_gpu_resident_gptoss.das,test_gpu_resident_gemma4_26b.das,test_gpu_moe_shexp.das,test_vulkan_dec_tail.das,test_vulkan_moe_cm2.das,test_vulkan_host_twin.das",
+    "dasllama_moe" => "test_gpu_resident_moe.das,test_gpu_resident_moe_formats.das,test_gpu_resident_cuda_moe.das,test_gpu_resident_gptoss.das,test_gpu_resident_gemma4_moe.das,test_vulkan_dec_tail.das,test_vulkan_moe_cm2.das,test_vulkan_host_twin.das",
     "dasllama_mtp_gemma" => "test_mtp_gemma_drafter.das", "dasllama_vulkan_mtp_gemma" => "test_mtp_gemma_drafter.das",
     "dasllama_cuda_mtp_gemma" => "test_mtp_gemma_drafter.das",
     "dasllama_dflash" => "test_dflash_drafter.das,test_mtp_accept_walks.das", "dasllama_metal_dflash" => "test_dflash_drafter.das",
     "dasllama_metal_decode" => METAL_WITNESSES, "dasllama_metal_prefill" => METAL_WITNESSES, "dasllama_metal_mtp_gemma" => METAL_WITNESSES,
     "dasllama_scheduler" => "test_scheduler.das",
-    "dasllama_sampling" => "test_sampling.das,test_sampling_landed.das,test_constraint.das,test_mtp_sampled_walk.das,test_mtp_accept_walks.das,test_scheduler.das",
-    "dasllama_batch" => "test_batch_decode.das,test_batch_grid.das,test_gpu_resident_cuda_batch.das",
+    "dasllama_sampling" => "test_sampling.das,test_mtp_sampled_walk.das,test_mtp_accept_walks.das,test_scheduler.das",
+    "dasllama_batch" => "test_batch_decode.das,test_matmul_batch.das,test_gpu_resident_cuda_batch.das",
     "dasllama_kv_codec" => KV_CODEC_WITNESSES, "dasllama_kv_dtype" => KV_CODEC_WITNESSES,
     "dasllama_prefix" => "test_kv_prefix.das,test_kv_paged.das",
     "dasllama_ple" => "test_ple_check.das,test_ple_modes.das,test_gpu_resident_gemma4_e2b.das,test_gpu_resident_regions_e2b.das",
-    "dasllama_parity" => "test_parity.das,test_parity_pregate.das,test_parity_cache.das,test_parity_dump.das",
-    "dasllama_bench" => "test_bench_rows.das,test_served_bench.das",
+    "dasllama_parity" => "test_parity.das,test_parity_pregate.das,uncategorized__dasllama_internal_persistent_heap_stack_524288.das",
+    "dasllama_bench" => "test_facade.das,test_served_bench.das",
     "dasllama_tokenizer" => TOKENIZER_WITNESSES, "dasllama_bpe" => TOKENIZER_WITNESSES, "dasllama_spm" => TOKENIZER_WITNESSES,
-    "dasllama_safetensors" => "test_safetensors.das,test_mlx_snapshot.das,test_mlx_qwen4exp.das,test_tokenizer.das",
+    "dasllama_safetensors" => "test_gguf_shards.das,test_mlx_snapshot.das,test_mlx_qwen4exp.das,test_tokenizer.das",
     "dasllama_pretok" => TOKENIZER_WITNESSES, "dasllama_unicode" => TOKENIZER_WITNESSES,
     "dasllama_chat" => "test_chat.das,test_tool_formats.das,test_think_split.das,test_scheduler.das",
     "dasllama_tools" => "test_chat.das,test_tool_formats.das,test_think_split.das,test_scheduler.das",
-    "dasllama_attn_prefill" => "test_prefill.das,test_prefill_cpu_kernels.das,test_flash.das,test_attn_span.das"
+    "dasllama_attn_prefill" => "test_prefill.das,test_prefill_cpu_kernels.das,test_attn_span.das"
 }
 
-let BENCH_WITNESSES <- ["test_bench_rows.das", "test_served_bench.das", "test_bench_records_schema.das"]
+let BENCH_WITNESSES <- ["test_facade.das", "test_served_bench.das", "test_bench_records_schema.das"]
 
 //! the files whose cells read the GPU tier as no home's entry armed it: a batch-mate requiring the engine core brings the
 //! Vulkan home's entry, which arms the tier at its init under the run's DASLLAMA_GPU=1, so each runs in a child of its own
@@ -641,7 +588,7 @@ def private any_reached(stems : array<string>; reached : table<string>) : bool {
 def tests_requiring(stem : string) : array<string> {
     var requires : table<string; array<string>>   // a file's base name -> the fixture stems it requires
     fio::dir(TESTS_DIR) $(name) {
-        if (name |> ends_with(".das") && (name |> starts_with("test_") || name |> starts_with("failed_") || name |> starts_with("_"))) {
+        if (name |> ends_with(".das") && (name |> starts_with("test_") || name |> starts_with("failed_") || name |> starts_with("uncategorized") || name |> starts_with("_"))) {
             var stems : array<string>
             fopen("{TESTS_DIR}/{name}", "rb") $(f) {
                 if (f != null) {
@@ -840,6 +787,12 @@ def private child_envs(cfg : RunArgs; win : bool; arm : string) : string {
         envs = (cfg.full ? "DASLLAMA_PARITY_FULL=1" : "DASLLAMA_TEST_ARMS='{arm}'") + " DASLLAMA_CPU_PREFILL=1 DASLLAMA_METAL_HAZARD_STRICT=1 "
         if (!empty(cfg.family)) {
             envs = "DASLLAMA_TEST_FAMILY='{cfg.family}' {envs}"
+        }
+        if (get_platform_name() == "linux") {
+            // glibc parks each late-loaded module's thread-local block in a 512-byte
+            // surplus; libLLVM, a shared module and the NVIDIA Vulkan driver's three
+            // libraries overrun it together, and vkCreateInstance then fails for good
+            envs = "GLIBC_TUNABLES=glibc.rtld.optional_static_tls=16384 {envs}"
         }
     }
     if (cfg.no_tune) {
@@ -1116,7 +1069,7 @@ def private run_files(cfg : RunArgs; files : array<string>; image_arms : string;
             let rc = unsafe(popen(cmd) $(f) {
                 let _drain = fread(f)   // output is redirected; drain keeps the pipe contract
             })
-            let secs = double(get_time_usec(t0)) / 1000000.0lf
+            let secs = double(get_time_nsec(t0)) / 1000000000.0lf
             let summary = log_summary(log_path)
             let verdict = !empty(summary) ? summary : "no dastest summary - the run died early (read the log)"
             to_log(rc == 0 ? LOG_INFO : LOG_ERROR, "DONE {tag}: exit={rc} {verdict} elapsed={secs}s log={log_path}\n")

@@ -24,7 +24,7 @@ let SMOKE_WORDS = "dragon, cake, moon"
 let START_LINE = "storywish: story 1 starts at frame 0 - words: dragon, cake, moon"
 let DONE_LINE = "storywish: story 1 written and read out"
 
-[test]
+[test(description = "`wish_words` normalizes a typed line to the corpus spelling - lower case, one space after each comma, empty entries and whitespace dropped, an all-empty line giving the empty string")]
 def test_wish_words(t : T?) {
     t |> run("the typed line becomes the words the corpus spells: lower case, one space after each comma, no empties") @(t : T?) {
         t |> equal("dragon, cake, moon", wish_words("Dragon,cake ,  MOON"))
@@ -35,7 +35,7 @@ def test_wish_words(t : T?) {
     }
 }
 
-[test]
+[test(description = "`build_prompt` emits the exact corpus layout - an optional Features: Dialogue line, then Words:, then Story: and a line break - compared as whole strings")]
 def test_build_prompt(t : T?) {
     t |> run("the prompt is the corpus's layout - Features first when asked, Words, then Story: and its line break") @(t : T?) {
         t |> equal("Words: dragon, cake, moon\nStory: \n", build_prompt("dragon, cake, moon", false))
@@ -43,7 +43,7 @@ def test_build_prompt(t : T?) {
     }
 }
 
-[test]
+[test(description = "`line_is_a_field` accepts a line opening with any of the five corpus field names after optional spaces, and rejects a partial field prefix, prose or a quote containing a field word, and the empty line")]
 def test_line_is_a_field(t : T?) {
     t |> run("a line opening with one of the corpus's field names ends the story; story text never does") @(t : T?) {
         t |> success(line_is_a_field("Summary: A dragon finds a cake."), "Summary:")
@@ -66,7 +66,7 @@ def private run_storywish(words : string; var out : string&) : int => run_exampl
 
 def private witness(out : string) : string => example_witness(out, "storywish")
 
-[test]
+[test(description = "The storywish smoke run with fixed words exits clean, logs story 1 starting at frame 0 with exactly those words, logs it written and read out, and prints a non-empty story")]
 def test_smoke_tells_the_wished_story(t : T?) {
     t |> run("the smoke rail tells a story from the words it was given and reads it out to the end") @(t : T?) {
         return if (!ready(t))

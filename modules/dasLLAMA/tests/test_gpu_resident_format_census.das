@@ -151,7 +151,7 @@ def private census_sum(names : array<string>) : int64 {
     return n
 }
 
-[test]
+[test(description = "Qwen3.6-35B IQ4_XS-pure tags every site with its own format and arms the whole-model driver with no layer decline, its forced-feed steps within 20 percent of the CPU chain, the census showing the IQ4_XS tile, GEMV and table gather on the device")]
 def test_gpu_resident_format_census_iq4xs(t : T?) {
     t |> run("{CENSUS.file}: every site's tag is the file's format, the whole-model driver armed, and its window and steps hold the CPU chain on the IQ4_XS kernels") @(t : T?) {
         if (!family_on(t, "qwen35moe") || !arm_on(t, "vk-census")) return
@@ -209,7 +209,7 @@ def test_gpu_resident_format_census_iq4xs(t : T?) {
     }
 }
 
-[test]
+[test(description = "With the whole-model route off, the per-op rails hold every deltanet layer and every native-format shared expert of Qwen3.6-35B IQ4_XS on the device, scanning and stepping each on device within 20 percent of the CPU chain, no layer on dense GEMMs")]
 def test_gpu_resident_format_census_perop(t : T?) {
     t |> run("{CENSUS.file} with the whole-model route off: the per-op rails keep every deltanet layer on the device over its IQ4_XS planes, the window and steps against the CPU chain") @(t : T?) {
         if (!family_on(t, "qwen35moe") || !arm_on(t, "vk-census")) return
@@ -293,7 +293,7 @@ def private load_perop(path : string; ffn : int) : Model {
     return <- tr
 }
 
-[test]
+[test(description = "With the whole-model route off, the per-op dense FFN rail on q8, K-quant, Q5_1 and iq4nl32 carriers runs every layer's q/o and FFN on the device, every step's FFN row counted, within 6 or 8 percent of the CPU chain, with rail-off as control")]
 def test_gpu_perop_dense_ffn(t : T?) {
     for (spec in PEROP_FFN) {
         let file = spec.file
@@ -355,7 +355,7 @@ def test_gpu_perop_dense_ffn(t : T?) {
     }
 }
 
-[test]
+[test(description = "Qwen3.6-35B UD-IQ2_XXS, whose deltanet beta and alpha rows ship F32, runs them through the f32 tile once per recurrent layer and the f32 router-form GEMV each step, with forced-feed steps within 20 percent of max logit of the CPU chain")]
 def test_gpu_resident_format_census_ba_f32(t : T?) {
     t |> run("{BA_F32.file}: the F32 beta/alpha rows ride the f32 GEMV and the f32 tile, no f16 router-form dispatch, the window and steps against the CPU chain") @(t : T?) {
         if (!family_on(t, "qwen35moe") || !arm_on(t, "vk-census")) return
@@ -394,7 +394,7 @@ def test_gpu_resident_format_census_ba_f32(t : T?) {
     }
 }
 
-[test]
+[test(description = "On Qwen3.6-35B IQ4_XS-MTP a device verify accepts exactly where row 0's argmax is the draft, its two logit and carry rows sit within 20 percent of two one-row steps, and four rounds land the logits and carry the same stream stepped lands")]
 def test_gpu_resident_format_census_verify_rows(t : T?) {
     t |> run("{CENSUS.file}: the verify's rows through the split command's segments hold the one-row steps, and a run of rounds commits the stream the steps commit") @(t : T?) {
         if (!family_on(t, "qwen35moe") || !arm_on(t, "vk-census")) return
@@ -485,7 +485,7 @@ def private rounds_agree(t : T?; tr : Model; host, home : array<Round>; bar_rel 
     to_log(LOG_INFO, "the device-home session rounds as the host-cached session for {agreed} of {long_length(host)} rounds before the drafts part\n")
 }
 
-[test]
+[test(description = "Qwen3.6-35B's routed NextN head warms its prompt rows on the device, drafts within 20 percent of the CPU head, drafts and verifies every round on the device, and a device-home session's rounds match the host-cached session's while drafts agree")]
 def test_gpu_resident_format_census_nextn(t : T?) {
     t |> run("{CENSUS.file}: the routed NextN head on the device - its prompt rows warmed by the window chain, its draft against the CPU head's, every speculative round drafted and verified there, and a device-home session's rounds token for token the host-cached session's") @(t : T?) {
         if (!family_on(t, "qwen35moe") || !arm_on(t, "vk-census")) return
@@ -597,7 +597,7 @@ def private emb_gather_cell(t : T?; file : string; bar_rel : float) {
 //! (`test_vkd_emb_gather_family`); the one-step-off control reads 5.4 and past
 let private QWEN_KQ_BAR_REL = 0.10
 
-[test]
+[test(description = "On the whole-model driver Qwen3-4B Q4_K_M's tied K-quant table is gathered on the device by the window and every fed step off its token id, with forced-feed steps within 10 percent of max logit of the CPU chain")]
 def test_gpu_resident_gather_tied_qwen3(t : T?) {
     t |> run("{TIED_QWEN}: the tied K-quant table gathered on the device by the window and by every decode step") @(t : T?) {
         if (!family_on(t, "qwen3") || !arm_on(t, "vk-gather")) return
@@ -626,7 +626,7 @@ def private per32_table_cell(t : T?; file : string; bar_rel : float) {
     emb_gather_cell(t, file, bar_rel)
 }
 
-[test]
+[test(description = "Qwen2.5-0.5B iq4nl32, q4032 and q5032 carriers and a Q5_1 Qwen3.5-MTP read every site in its own per-32 format, gather the tied table on the device each window and step, and hold forced-feed steps within 6 to 8 percent of the CPU chain")]
 def test_gpu_resident_per32_tables(t : T?) {
     for (spec in [(file = "Qwen2.5-0.5B-Instruct-IQ4_NL-pure-local.gguf", arm = "vk-per32-iq4nl32", bar = IQ4NL32_TABLE_BAR_REL),
                   (file = "Qwen2.5-0.5B-Instruct-Q4_0-local.gguf", arm = "vk-per32-q4032", bar = PER32_TABLE_BAR_REL),
@@ -649,7 +649,7 @@ def test_gpu_resident_per32_tables(t : T?) {
     }
 }
 
-[test]
+[test(description = "On the whole-model driver Llama-3.2-3B Q4_K_M's tied Q6_K table is gathered on the device by the window and every fed step off its token id, with forced-feed steps within the 6 percent split bar of the CPU chain")]
 def test_gpu_resident_gather_tied_llama(t : T?) {
     t |> run("{TIED_LLAMA}: the tied Q6_K table gathered on the device by the window and by every decode step") @(t : T?) {
         if (!family_on(t, "llama") || !arm_on(t, "vk-gather")) return

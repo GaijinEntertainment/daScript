@@ -21,8 +21,8 @@ it was measured on. The pinned set, one entry a line, each with what it must kee
   `LLM_CORE_WITNESSES` naming only census files, and every witness row's module existing with a
   `MODULE_AREAS` row that holds `llm` -, the children's module-cache folder, and the
   `options persistent_heap` line in every test file `run.das`'s `stocked` suite lists.
-- `test_program_roots.das` must hold the `ROOT_DIRS` sweep, `options stack = 524288` and the
-  prefill intent.
+- `test_facade_docs.das`'s `test_program_roots` cell must hold the `ROOT_DIRS` sweep,
+  `options stack = 524288` and the prefill intent.
 - `test_env_registry.das` must hold the `../ENVIRONMENT.md` knob contract.
 - `test_model_specs.das` must hold `../performance/model_specs.das`'s model-set table,
   `spec_by_file` answering by the models-dir path and by the gguf's base name (a split-shard row
@@ -33,9 +33,10 @@ it was measured on. The pinned set, one entry a line, each with what it must kee
   and no off-board row and no on-box parity oracle (`tts_oracle*`), and the companion contract: a
   companion two rows pin (each row's cell consumes it) carries one provenance - url, bytes,
   sha256 - on both, and the provenance view holds it once.
-- `test_metal_float_a_gate.das` must hold the MSL emitter's refusal of a float A operand (the
-  activation input) to `tmm2d_q8u_f32` in a kernel that lacks `[metal_kernel(float_a_ok=true)]`,
-  the error naming the FLOAT A operand, and the same kernel compiling under that annotation.
+- `uncategorized_persistent_heap_stack_524288.das`'s `test_float_a_gate` cell must hold the MSL
+  emitter's refusal of a float A operand (the activation input) to `tmm2d_q8u_f32` in a kernel
+  that lacks `[metal_kernel(float_a_ok=true)]`, the error naming the FLOAT A operand, and the same
+  kernel compiling under that annotation.
 - `test_rope.das` must hold `../dasllama/dasllama_rope.das`'s table builders (`build_rope_tabs`
   and its packed, rows, imrope, mrope and vision forms) against their per-element references and
   against each other bit for bit, `mrope_span_positions`' map and its refusal of a grid that does

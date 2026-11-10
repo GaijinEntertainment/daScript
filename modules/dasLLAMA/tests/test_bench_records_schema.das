@@ -40,7 +40,7 @@ def private make_model() : BenchModel {
         runs <- [ <- make_asr_run("das", "asr"), <- make_asr_run("whisper-cli", "asr")])
 }
 
-[test]
+[test(description = "Writing a record store to an unopenable path (a directory) returns false from both the text writer and the typed write_bench_records, never a silent partial write")]
 def test_write_reports_failure(t : T?) {
     t |> run("a record file that cannot be opened is a false return, never a silent partial write") @(t : T?) {
         // a directory is never openable for writing, on any platform
@@ -50,7 +50,7 @@ def test_write_reports_failure(t : T?) {
     }
 }
 
-[test]
+[test(description = "ASR-shaped das and reference runs round-trip the JSON store with workload, per-clip ms and audio_s, files, versions, noise, parity and the das-only release counter intact")]
 def test_asr_round_trip(t : T?) {
     t |> run("ASR-shaped runs survive write/read") @(t : T?) {
         var models : array<BenchModel>
@@ -80,7 +80,7 @@ def test_asr_round_trip(t : T?) {
     }
 }
 
-[test]
+[test(description = "A TTS cell das and mlx-audio rows round-trip the store under one test key with their ms and audio_s, and a TTS row and an LLM row of one model and leg upsert as two rows")]
 def test_tts_round_trip(t : T?) {
     t |> run("a TTS cell's das and reference rows survive write/read under one test key") @(t : T?) {
         let key = tts_test_key(20, "af_heart")
@@ -115,7 +115,7 @@ def test_tts_round_trip(t : T?) {
     }
 }
 
-[test]
+[test(description = "upsert_bench_run keys on workload: an LLM and an audio-chat run sharing box, engine, backend and flavor stay two rows, and a re-measure of the same workload replaces in place")]
 def test_upsert_workload_key(t : T?) {
     t |> run("workload joins the upsert identity") @(t : T?) {
         var m = BenchModel(gguf = "gemma-4-E4B-it-Q8_0.gguf")
@@ -139,7 +139,7 @@ def test_upsert_workload_key(t : T?) {
     }
 }
 
-[test]
+[test(description = "apply_annotations lands a model-level note on the model and an engine-scoped comment only on the selected run, and an annotation for an absent gguf lands nowhere")]
 def test_annotations(t : T?) {
     t |> run("model-level note + run-level comment land where selected") @(t : T?) {
         var models : array<BenchModel>
@@ -166,7 +166,7 @@ def private make_oracle_run(pp, tg : double) : BenchRun {
     return <- r
 }
 
-[test]
+[test(description = "oracle_compare is one-sided with a warn band: small drift is ok, -4% warns, -6% fails, a +10% gain stays ok but is flagged suspicious, and a missing or tok/s-less stored test fails")]
 def test_oracle_compare(t : T?) {
     t |> run("the oracle gate is one-sided with a warn band") @(t : T?) {
         let stored <- make_oracle_run(100.0lf, 50.0lf)
@@ -205,7 +205,7 @@ def test_oracle_compare(t : T?) {
     }
 }
 
-[test]
+[test(description = "The ASR catalog holds no untraceable clip, marks exactly the chat models audio-chat, matches metal_served to the pinned Metal-rail roster, and carries LibriSpeech on one model")]
 def test_asr_catalog_invariants(t : T?) {
     t |> run("catalog stays reproducible") @(t : T?) {
         var cat <- asr_catalog()
@@ -232,7 +232,7 @@ def test_asr_catalog_invariants(t : T?) {
     }
 }
 
-[test]
+[test(description = "The optional encode_ms, void_clips, remote_desktop hardware stamp and comment fields survive a write and re-read of the record store")]
 def test_optional_fields_round_trip(t : T?) {
     t |> run("encode_ms and void_clips survive write/read") @(t : T?) {
         var models : array<BenchModel>
@@ -256,7 +256,7 @@ def test_optional_fields_round_trip(t : T?) {
 
 let LINUX_COMM_WIDTH = 15   // the characters of an executable's name a Linux process list keeps
 
-[test]
+[test(description = "executable_in matches a listing line by executable file name, skips the excepted path and lines that merely mention the name, and the live process_listed finds the running executable")]
 def test_process_listed(t : T?) {
     t |> run("a listing names an executable by its file name, and the excepted path does not count") @(t : T?) {
         let system_daemon = "/System/Library/PrivateFrameworks/CoreParsec.framework/parsecd"
@@ -282,7 +282,7 @@ def test_process_listed(t : T?) {
     }
 }
 
-[test]
+[test(description = "An engine-scoped annotation carrying void_clips voids that clip on the selected reference run only, leaving the das run untouched")]
 def test_void_clips_annotation_lands(t : T?) {
     t |> run("an annotation's void_clips reaches only the selected run") @(t : T?) {
         var models : array<BenchModel>
@@ -298,7 +298,7 @@ def test_void_clips_annotation_lands(t : T?) {
     }
 }
 
-[test]
+[test(description = "list_record_stores admits only a plain box .json store, rejecting tune sidecars, annotations.json, underscore-prefixed scratch and non-json files")]
 def test_list_record_stores_strictness(t : T?) {
     t |> run("the store lister admits records/\{box\}.json ONLY") @(t : T?) {
         var terr = ""
@@ -320,7 +320,7 @@ def test_list_record_stores_strictness(t : T?) {
     }
 }
 
-[test]
+[test(description = "das_run_unstamped flags a das run missing either the tune or tune_sha stamp, clears it when both are present, and never flags a reference run")]
 def test_das_run_unstamped(t : T?) {
     t |> run("the store gate reads an empty tune stamp") @(t : T?) {
         var r <- make_asr_run("das", "asr")
@@ -336,7 +336,7 @@ def test_das_run_unstamped(t : T?) {
     }
 }
 
-[test]
+[test(description = "workload_scope maps all, llm, asr, image and tts to their pinned llm, asr, image and tts cell sets, with llm also taking image, and rejects an unknown or empty workload")]
 def test_workload_scope(t : T?) {
     t |> run("the -w scope table: llm/asr/image/tts cells per workload, unknown rejected") @(t : T?) {
         let all = workload_scope("all")
@@ -355,7 +355,7 @@ def test_workload_scope(t : T?) {
     }
 }
 
-[test]
+[test(description = "stored_row_leg resolves metal/tuned, cpu/tuned and cpu/accel to their rig legs and refuses every other backend and flavor pair, leaving no stale leg behind")]
 def test_stored_row_leg(t : T?) {
     t |> run("the stored-row -> rig-leg map: three stamps resolve, everything else refuses") @(t : T?) {
         var leg = "poison"
@@ -373,7 +373,7 @@ def test_stored_row_leg(t : T?) {
     }
 }
 
-[test]
+[test(description = "Every committed image-chat row in the record stores has a cmd receipt naming bench_image_fixture and passing an mmproj, and the sweep finds at least one such row")]
 def test_image_chat_rows_pin_the_fixture(t : T?) {
     t |> run("every committed image-chat row's receipt names the one pinned picture") @(t : T?) {
         // the oracle re-measures a stored image row with bench_image_fixture(); a BenchRun has
@@ -402,7 +402,7 @@ def test_image_chat_rows_pin_the_fixture(t : T?) {
     }
 }
 
-[test]
+[test(description = "Every committed batched row receipt carries its leg shape: GPU legs the flat 512-token shape with no cpu-only flag, cpu legs the 128 x 3 shape, and --no-op-offload on the stock cpu arm alone")]
 def test_batched_rows_carry_the_leg_shape(t : T?) {
     t |> run("every committed batched row's receipt carries its leg's shape, both engines alike") @(t : T?) {
         // the cpu legs' 128 x 3 shape and the stock cpu arm's --no-op-offload are what make a
@@ -444,7 +444,7 @@ def test_batched_rows_carry_the_leg_shape(t : T?) {
     }
 }
 
-[test]
+[test(description = "parse_mtmd_image sums the encode lines, splits prefill off MTMD_TIMING and carries the position counts, and refuses output missing the encode line, the timing line or the counts")]
 def test_parse_mtmd_image(t : T?) {
     t |> run("the image ref parse: encode lines sum, MTMD_TIMING splits, counts carry") @(t : T?) {
         // fixture text from a live patched-mtmd run (m1, E2B metal) - two noise lines around it
@@ -476,7 +476,7 @@ def test_parse_mtmd_image(t : T?) {
     }
 }
 
-[test]
+[test(description = "llama_batched_bench_tg reads the S_TG cell of the row at the asked npl and 0 for a missing row, table or numeric cell, and the batched reference row appends the leg arms and reads 0 with a reason for a dead exe")]
 def test_parse_llama_batched_bench(t : T?) {
     t |> run("the batched reference parse: the S_TG cell of the row at npl, the other rows and noise ignored") @(t : T?) {
         // fixture text from a live llama-batched-bench run (M5, the 1B) - the header, a separator, two rows
@@ -503,7 +503,7 @@ def test_parse_llama_batched_bench(t : T?) {
     }
 }
 
-[test]
+[test(description = "mtmd_versions stamps the llama.cpp engine name and the mtmd-timing patch tag for any bin argument, including a non-git path and the default CPU reference build")]
 def test_mtmd_versions_bin_param(t : T?) {
     t |> run("the version stamp follows the bin argument - the stock build stamps its own checkout") @(tt : T?) {
         // a non-git dir has no commit, so only the patch tag survives - the stamp's shape is
@@ -516,7 +516,7 @@ def test_mtmd_versions_bin_param(t : T?) {
     }
 }
 
-[test]
+[test(description = "marian_bin resolves the marian-decoder under the checkout inference build, and marian_versions stamps the checkout plus both patch hashes, or nothing without a checkout")]
 def test_marian_reference_stamp(t : T?) {
     t |> run("the translation reference: the patched decoder under the checkout's inference build, its stamp the commit and both patches' hashes") @(tt : T?) {
         let bin = marian_bin()
@@ -532,7 +532,7 @@ def test_marian_reference_stamp(t : T?) {
     }
 }
 
-[test]
+[test(description = "Every committed llama.cpp image-chat row carries -ngl 0 and --no-mmproj-offload exactly when it is labeled cpu, and --no-op-offload only on the stock cpu arm")]
 def test_image_ref_flag_invariants(t : T?) {
     t |> run("every committed llama.cpp image row's flags match its backend/flavor stamp") @(t : T?) {
         // the exact defect this gate pins: a stock -ngl 0 run without --no-mmproj-offload
@@ -561,7 +561,7 @@ def test_image_ref_flag_invariants(t : T?) {
     }
 }
 
-[test]
+[test(description = "Every committed das row carrying a tune_sha cites a generation whose .tune archive is committed beside the record stores, and the sweep finds stamped rows")]
 def test_das_rows_cite_archived_generations(t : T?) {
     t |> run("every das row's tune_sha resolves to a committed generation archive") @(t : T?) {
         // a row citing a generation with no archive is unverifiable by the oracle's crossgen
@@ -596,7 +596,7 @@ def test_das_rows_cite_archived_generations(t : T?) {
     }
 }
 
-[test]
+[test(description = "parse_mtmd_image refuses a zero prefill wall, a counts-only timing line and an encode line with no number, and skips an untagged prose line in favor of the MTMD_TIMING one")]
 def test_parse_mtmd_image_refusals(t : T?) {
     t |> run("the refusal arms nobody hit live: equality, counts-only, bad tail, noise lines") @(t : T?) {
         // encode == encode_prefill would divide a prefill rate by zero - refuse, never inf
@@ -617,7 +617,7 @@ def test_parse_mtmd_image_refusals(t : T?) {
     }
 }
 
-[test]
+[test(description = "sibling_mtmd answers the empty string for an empty llama-bench path and for one with no llama-mtmd-cli beside it, never a dead path")]
 def test_sibling_mtmd(t : T?) {
     t |> run("the stock llama-mtmd-cli resolves as llama-bench's sibling, or not at all") @(t : T?) {
         t |> equal(sibling_mtmd(""), "", "no stock ref = no sibling")
@@ -625,7 +625,7 @@ def test_sibling_mtmd(t : T?) {
     }
 }
 
-[test]
+[test(description = "An engine-scoped annotation held field lands only on the selected das run, not the reference run, and round-trips the record store")]
 def test_held_annotation_lands(t : T?) {
     t |> run("an annotation's held reaches only the selected run, and rides the store") @(t : T?) {
         var models : array<BenchModel>
@@ -653,7 +653,7 @@ def private omni_rates(jfk_ms : double) : table<string; double> {
     return <- { "jfk.wav" => jfk_ms / 11.0lf, "jfk3.wav" => 553.2lf / 33.0lf, "gb1.wav" => 7075.4lf / 198.734375lf }
 }
 
-[test]
+[test(description = "audio_outlier_clips flags a clip whose rate is past the multiple of the run median and none on an even or two-clip run, and a stored run is rated over the das row clip lengths")]
 def test_audio_outlier_rule(t : T?) {
     t |> run("a clip past the multiple of the run's median rate is the outlier; an even run has none") @(t : T?) {
         t |> equal(audio_outlier_clips(omni_rates(34960.4lf)), [ "jfk.wav" ], "3178 ms a second against a median of 36")
@@ -682,7 +682,7 @@ def test_audio_outlier_rule(t : T?) {
     }
 }
 
-[test]
+[test(description = "void_outlier_clips re-measures only the flagged clip once, voids it when the re-measure stays off, clears it when the re-measure lands inside the run, and re-measures nothing on an even run")]
 def test_void_outlier_pass(t : T?) {
     t |> run("the recorder re-measures the flagged clip once and voids what stays off") @(t : T?) {
         let lengths <- { "jfk.wav" => 11.0lf, "jfk3.wav" => 33.0lf, "gb1.wav" => 198.734375lf }
@@ -737,7 +737,7 @@ def test_void_outlier_pass(t : T?) {
     }
 }
 
-[test]
+[test(description = "The board helpers borrow the smallest positive clip length under one prefix, rate a clip by its own then the borrowed length, void rule and named clips once sorted, and select runs on empty-or-equal fields")]
 def test_board_policy_helpers(t : T?) {
     t |> run("a clip's length is the smallest positive one any run wrote, under its prefix alone") @(t : T?) {
         var lengths : table<string; double>
@@ -777,5 +777,32 @@ def test_board_policy_helpers(t : T?) {
         t |> success(!key_selects(RunKey(backend = "cpu"), run), "another backend")
         t |> success(!key_selects(RunKey(box = "gnr"), run), "another box")
         t |> success(!key_selects(RunKey(workload = "tts"), run), "another workload")
+    }
+}
+
+// affinity_on() (das-side scheduling classification: Windows pin, darwin QoS) and
+// lcpp_mask_on() (llama-bench --cpu-mask argv, Windows-only) split in the QoS arc.
+// This pins the observable: mask argv exists exactly when lcpp_mask_on() says so,
+// and the platform the test runs on classifies as expected.
+
+[test(description = "llama-bench cpu-mask argv is emitted exactly when lcpp_mask_on says so, and darwin classifies for affinity without mask argv while Windows both pins and emits it")]
+def test_affinity_predicates(t : T?) {
+    t |> run("mask argv matches lcpp_mask_on") @(t : T?) {
+        let argv <- lcpp_affinity_argv(8)
+        if (lcpp_mask_on()) {
+            t |> success(!empty(argv), "windows: mask argv present")
+        } else {
+            t |> equal(0, length(argv))
+        }
+    }
+    t |> run("platform classification") @(t : T?) {
+        if (get_platform_name() == "darwin") {
+            t |> success(affinity_on(), "darwin classifies")
+            t |> success(!lcpp_mask_on(), "darwin never emits lcpp mask argv")
+        }
+        if (get_platform_name() == "windows") {
+            t |> success(affinity_on(), "windows pins")
+            t |> success(lcpp_mask_on(), "windows emits lcpp mask argv")
+        }
     }
 }

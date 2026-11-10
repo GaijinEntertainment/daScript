@@ -308,7 +308,7 @@ def private variant_cells(tst : T?; kind, clips : string) {
     }
 }
 
-[test]
+[test(description = "GigaAM v3 CTC on its f16 carrier matches the upstream package's dumps stage by stage (mel, front, every layer, encoded within 1e-4, then the decode), and the q8 lane's transcript holds 90 percent of the oracle's words while a half-silenced clip does not")]
 def test_gigaam_ctc(tst : T?) {
     with_dasllama_jobque_() {
         variant_cells(tst, "ctc", "ru_short,ru_mid")
@@ -363,7 +363,7 @@ def private exact_reference(t : T?; clip : string; var want : string&) : bool {
 //! Q8_0: the carrier's own planes serve, named by their one K-quant member; the GPU block seats serve it (the parity cells
 //! `test_gigaam_discrete_twin` and `test_gigaam_metal_twin`); its Q8_0 seats are the carrier's blocks. Every lane's transcript
 //! holds the q8 bar against the f16 carrier's exact lane.
-[test]
+[test(description = "The Q4_K GigaAM carrier loads on the kq lane named k4 with members k4+q8, its transcripts hold the q8 word bar against the f16 lane on the CPU and on the serving GPU tower with no decline, and its Q8_0 seats equal the file's blocks bit for bit")]
 def test_gigaam_kq_lane(tst : T?) {
     with_dasllama_jobque_() {
         let path = kq_carrier()
@@ -411,7 +411,7 @@ def test_gigaam_kq_lane(tst : T?) {
 
 //! The Q4_K carrier under the lane flag and pins: the q8 flag a kq carrier's mint takes changes nothing, the family's pin reaches
 //! the facade load, and a pinned q8 or exact lane dequantizes the carrier into that lane's planes.
-[test]
+[test(description = "On the Q4_K carrier the q8 flag leaves the kq lane and transcript unchanged, the facade honors the q8 pin, kq encoder rows sit within 1.5x the pinned q8 lane's distance from the widened carrier, and pinned q8 and f32 lanes transcribe")]
 def test_gigaam_kq_lane_pins(tst : T?) {   // nolint:STYLE038 - a flat list of cells over one carrier
     with_dasllama_jobque_() {
         let path = kq_carrier()
@@ -498,7 +498,7 @@ def test_gigaam_kq_lane_pins(tst : T?) {   // nolint:STYLE038 - a flat list of c
 
 //! The facade's fp32 pin over the Q4_K carrier: the exact lane widens the carrier to f32, which no GPU chain reads, so the load
 //! maps the CPU image whatever the box serves.
-[test]
+[test(description = "The facade fp32 pin on the Q4_K GigaAM carrier loads the widened f32 lane on the CPU image, never a GPU flavor, and still transcribes the clip")]
 def test_gigaam_fp32_pin_load(tst : T?) {
     with_dasllama_jobque_() {
         let path = kq_carrier()
@@ -523,7 +523,7 @@ def test_gigaam_fp32_pin_load(tst : T?) {
 
 //! The kq lane over the other carriers: a mint mixing two K-quant members (Q4_K attention, Q6_K FF), whose held staging mints the
 //! streamed mint's model, and the Q8_0 carrier, whose every seat is Q8_0.
-[test]
+[test(description = "The kq lane serves a mixed Q4_K and Q6_K GigaAM carrier as kq with members k4+k6+q8, whose held staging mints the same transcript, and an all-Q8_0 carrier as q8 with seats equal to the file's blocks, both within the word bar")]
 def test_gigaam_kq_other_carriers(tst : T?) {
     with_dasllama_jobque_() {
         tst |> run("e2e_rnnt q4_k + q6_k: the kq lane serves a carrier mixing two K-quant members") @(t : T?) {
@@ -564,7 +564,7 @@ def test_gigaam_kq_other_carriers(tst : T?) {
 
 //! The Q4_K carrier's load on the box's GPU flavor (`#gigaam-planes`): the kq lane on the device where its chain serves that lane,
 //! else the kq lane on the CPU image - a Vulkan device off the f16 GEMM feed (`DASLLAMA_COOPMAT=sdot4`) among them.
-[test]
+[test(description = "Loading the Q4_K GigaAM carrier with the serving tower on lands the kq lane on the GPU flavor where the box's device stands up, else on the CPU image, and the transcript holds the word bar against the f16 lane")]
 def test_gigaam_kq_load_flavor(tst : T?) {
     with_dasllama_jobque_() {
         let path = kq_carrier()
@@ -678,7 +678,7 @@ def private ga_retyped_refusal(name : string; retype : table<string; int>; stage
 //! The kq lane planner's refusals, each over a copy of the Q4_K carrier with tensors retyped (`ga_retyped_carrier`): a float
 //! GEMM among the quantized ones, a member the lane has no seat for (a per-32 Q5_1, NVFP4), q, k and v across two classes, and a
 //! file that does not read; the lane peek's float disjuncts - BF16 and F32 GEMMs are the exact lane's, not the kq lane's.
-[test]
+[test(description = "Over retyped copies of the Q4_K carrier the kq planner refuses a float GEMM among quantized ones, a Q5_1 or NVFP4 seat, and q in Q8_0 beside K-quant k and v, each by name, stages an unchanged copy, and the lane peek tags BF16 and F32 GEMMs as the exact lane")]
 def test_gigaam_kq_refusals(tst : T?) {
     let path = kq_carrier()
     return if (!model_available(tst, path))
@@ -722,7 +722,7 @@ def test_gigaam_kq_refusals(tst : T?) {
 }
 
 //! A CTC carrier's device block carries no transducer half: the bake every GPU flavor runs places none, model-free.
-[test]
+[test(description = "`gigaam_rnnt_dev_bake` on a CTC-head model neither refuses nor places any transducer piece in the device build plan")]
 def test_gigaam_ctc_bakes_no_transducer(t : T?) {
     t |> run("the transducer half of a GPU flavor's bake is the RNNT head's alone") @(t : T?) {
         var inscope b = TowerDevBuild()
@@ -735,7 +735,7 @@ def test_gigaam_ctc_bakes_no_transducer(t : T?) {
 }
 
 //! `tower_mm`'s form without the Q8_K sums refuses a kq-lane model - its K-quant seats read them - model-free.
-[test]
+[test(description = "The `tower_mm` form without Q8_K sums panics on a kq-lane model, naming the form with the sums it must take")]
 def test_gigaam_tower_mm_needs_the_sums(t : T?) {
     t |> run("the tower_mm form with no Q8_K sums refuses a kq-lane model") @(t : T?) {
         let m = GigaamModel(kq_lane = true)
@@ -751,7 +751,7 @@ def test_gigaam_tower_mm_needs_the_sums(t : T?) {
 
 //! The kq lane's seat index over the chain's virtual offsets: every block GEMM of `gigaam_layer_offsets`'s record maps to its
 //! place in layout order, layer by layer - model-free, over the v3 geometry.
-[test]
+[test(description = "Over the v3 geometry `fc_gemm_seat_index` maps each of every layer's ten block GEMM virtual offsets, and the last GEMM's last element, to its seat in layout order")]
 def test_gigaam_seat_index(t : T?) {
     t |> run("the ten block GEMMs' virtual offsets map to their seats in layout order") @(t : T?) {
         var m = GigaamModel(d_model = 768l, n_ff = 3072l, n_layer = 16l, conv_kernel = 5l)
@@ -769,28 +769,28 @@ def test_gigaam_seat_index(t : T?) {
     }
 }
 
-[test]
+[test(description = "GigaAM v3 e2e RNNT on its f16 carrier matches the upstream dumps stage by stage within 1e-4 through the decode on two clips, and its q8 lane's transcript holds 90 percent of the oracle's words with a half-silenced control under the bar")]
 def test_gigaam_e2e_rnnt(tst : T?) {
     with_dasllama_jobque_() {
         variant_cells(tst, "e2e_rnnt", "ru_short,ru_mid")
     }
 }
 
-[test]
+[test(description = "GigaAM v3 e2e CTC on its f16 carrier matches the upstream dumps stage by stage within 1e-4 through the decode, and its q8 lane's transcript holds 90 percent of the oracle's words with a half-silenced control under the bar")]
 def test_gigaam_e2e_ctc(tst : T?) {
     with_dasllama_jobque_() {
         variant_cells(tst, "e2e_ctc", "ru_short")
     }
 }
 
-[test]
+[test(description = "GigaAM v3 char-wise RNNT on its f16 carrier matches the upstream dumps stage by stage within 1e-4 through the decode, and its q8 lane's transcript holds 90 percent of the oracle's words with a half-silenced control under the bar")]
 def test_gigaam_charwise_rnnt(tst : T?) {
     with_dasllama_jobque_() {
         variant_cells(tst, "rnnt", "ru_short")
     }
 }
 
-[test]
+[test(description = "A long Russian clip past the cap splits at silences into ascending non-overlapping spans of at most 25 s, one text segment each, whose joined transcript holds 95 percent of the FLEURS references' words in order while the reversed references miss")]
 def test_gigaam_long_form(tst : T?) {
     tst |> run("ru_long: past the cap the clip splits at silences into spans of at most 25 s, the words the references'") @(t : T?) {
         let path = carrier("e2e_rnnt")
@@ -839,7 +839,7 @@ def test_gigaam_long_form(tst : T?) {
     }
 }
 
-[test]
+[test(description = "Through the ASR facade a decoder GGUF needs its mmproj while the GigaAM carrier loads alone, its caps are Russian segment-timestamped whole-clip, an English session is refused, and transcribe yields the family's own one-segment transcript with a finite log-probability")]
 def test_gigaam_facade(tst : T?) {
     tst |> run("a decoder GGUF needs its mmproj, where the gigaam GGUF loads alone") @(t : T?) {
         let decoder = path_join(models_dir(), "SmolLM2-135M-Instruct-Q8_0.gguf")
@@ -915,7 +915,7 @@ def private refused_field(t : T?; fragment : string; edit : block<(var h : Gigaa
     refused_with(t, h, fragment, fragment)
 }
 
-[test]
+[test(description = "`gigaam_check_hparams` accepts the v3 CTC and one-layer RNNT headers and refuses, naming the field, a head neither ctc nor rnnt, a two-layer predictor, d_model or ff_dim off the 32 lattice, and an odd head_dim")]
 def test_gigaam_hparam_refusals(t : T?) {
     t |> run("the v3 headers are taken: ctc, and rnnt with its one predictor layer") @(t : T?) {
         t |> equal(hparams_refusal(good_hparams()), "", "the ctc header")
@@ -958,7 +958,7 @@ def test_gigaam_hparam_refusals(t : T?) {
     }
 }
 
-[test]
+[test(description = "Every other unsupported GigaAM header field (sample rate, centered STFT, attention, conv norm, window, heads, subsampling, kernels, blank, tokenizer, token count) is refused by its own clause, and `gigaam_check_arch` refuses a llama GGUF")]
 def test_gigaam_hparam_clauses(t : T?) {
     t |> run("every other header field the served encoder and decoders do not take is refused by its own clause") @(t : T?) {
         refused_field(t, "the sample rate is not 16 kHz") $(var h) {
@@ -1018,7 +1018,7 @@ def test_gigaam_hparam_clauses(t : T?) {
 
 def private span_list(spans : array<SpeechSegment>) : string => join([for (s in spans); "[{s.start},{s.end})"], " ")
 
-[test]
+[test(description = "`gigaam_spans` merges short speech regions under the cap, closes a span when the next region would pass it, cuts a region longer than the cap into ascending cap-sized spans, and yields none for no regions")]
 def test_gigaam_spans(t : T?) {
     t |> run("two short regions merge into one span under the cap") @(t : T?) {
         let spans <- gigaam_spans([SpeechSegment(start = 0l, end = 30l), SpeechSegment(start = 40l, end = 90l)], 100l)
@@ -1044,7 +1044,7 @@ def test_gigaam_spans(t : T?) {
     }
 }
 
-[test]
+[test(description = "`gigaam_chunks` on a silent clip past the cap panics naming a missing silero VAD weights path, and with the shipped weights returns no span and no refusal")]
 def test_gigaam_long_clip_needs_the_vad(t : T?) {
     t |> run("a clip past the cap splits at the VAD's silences, and refuses where the VAD weights are missing") @(t : T?) {
         var samples : array<float>
@@ -1069,7 +1069,7 @@ def test_gigaam_long_clip_needs_the_vad(t : T?) {
     }
 }
 
-[test]
+[test(description = "The GigaAM facade refuses a translate session at transcribe, `gguf_is_side_file` marks the ASR carrier and an mmproj but not a decoder, and the loader refuses another family's .dlim while mapping the carrier's own image")]
 def test_gigaam_facade_refusals(tst : T?) {
     tst |> run("a translate session on a model whose caps declare no translation is refused at transcribe") @(t : T?) {
         with_dasllama_jobque_() {
@@ -1123,7 +1123,7 @@ def test_gigaam_facade_refusals(tst : T?) {
     }
 }
 
-[test]
+[test(description = "A clip shorter than n_fft makes `gigaam_transcribe` return zero segments, hand out none, report Russian, and not panic")]
 def test_gigaam_short_span(t : T?) {
     t |> run("a clip shorter than n_fft transcribes no segment and does not panic") @(t : T?) {
         var inscope m = GigaamModel(n_fft = 320l, hop = 160l, n_mel = 64l)
@@ -1182,7 +1182,7 @@ def private device_decode_clip(t : T?; m, mc : GigaamModel; clip, tag : string) 
     }
 }
 
-[test]
+[test(description = "For the e2e and char-wise RNNT carriers on f16 and q8 lanes, the transducer decode on the build's device seat emits the CPU decoder's ids and frames with plog within 1e-5, counted once on the device")]
 def test_gigaam_device_decode_twin(tst : T?) {
     with_dasllama_jobque_() {
         for (kind in ["e2e_rnnt", "rnnt"]) {
@@ -1243,7 +1243,7 @@ def private ctc_head_metal_cell(t : T?; m, mc : GigaamModel; samples : array<flo
         }
     }
 }
-[test]
+[test(description = "On the Metal seat the GigaAM CTC head, f16 and q8 on both CTC carriers, picks the CPU head's classes but at near-ties with log-sums within the bar and the same ids and transcript, from device and uploaded rows, while a 1.05x louder clip exceeds the bar")]
 def test_gigaam_ctc_head_metal(tst : T?) {
     with_dasllama_jobque_() {
         for (kind, q8 in ["e2e_ctc", "ctc", "e2e_ctc", "ctc"], [false, false, true, true]) {
@@ -1370,7 +1370,7 @@ def private ctc_head_oracle_cell(t : T?; path, kind : string; q8 : bool) {
     }
 }
 
-[test]
+[test(description = "Over the oracle's encoder rows the GigaAM CTC head, on the CPU and the build's device seat, picks the oracle's argmax but at near-ties, emits tokens within 1e-4 of the oracle's softmax and its exact ids, while zeroing the head's halfwords leaves the oracle's ids")]
 def test_gigaam_ctc_head_oracle(tst : T?) {
     with_dasllama_jobque_() {
         for (kind, q8 in ["ctc", "e2e_ctc", "ctc", "e2e_ctc"], [false, false, true, true]) {
@@ -1396,7 +1396,7 @@ def private run_corpus_eval(args : array<string>; var out : string&) : int {
     return rc
 }
 
-[test]
+[test(description = "The asr_corpus_eval harness on the Q4_K carrier transcribes a FLEURS-layout split up to --limit into one hypothesis row carrying the clip's words, translating with a Bergamot student where present, and refuses an unknown --lane by name")]
 def test_gigaam_corpus_eval(tst : T?) {
     tst |> run("the corpus harness transcribes a FLEURS-layout split up to --limit, translating where --nmt names a student, and refuses a lane it has no name for") @(t : T?) {
         return if (!model_available(t, kq_carrier()))

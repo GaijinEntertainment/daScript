@@ -16,6 +16,8 @@ require _resident_feed
 require _cuda_feed
 require daslib/fio   // path_join
 require dasllama/dasllama   // load_model_: the declined-route cell's own load
+require dasllama/dasllama_kv_dtype
+require _kv_codec_cells
 
 // The CUDA home's whole-model driver on Llama-3.2-1B Q8_0 (`DASLLAMA_GPU=1 DASLLAMA_CUDA=1`): the dense slice - one
 // arena of Q8_0 planes, the f16 mirror, the token step as a captured graph, the prefill as the window chain over the
@@ -38,7 +40,7 @@ let private FILE_1B_Q40 = "Llama-3.2-1B-Instruct-Q4_0-local.gguf"       //! the 
 let private FILE_1B_NV4 = "Llama-3.2-1B-Instruct-NVFP4-local.gguf"      //! the nv4 planes: the window on the FP4 tensor rung (W4A4 - the activations quantized to e2m1 per token), the steps on the nv4 GEMV leaves
 let private FILE_3B = "Llama-3.2-3B-Instruct-Q8_0.gguf"   //! head size 128: the window's attention on the h128 flash tile
 
-[test]
+[test(description = "On the CUDA whole-model driver Llama-3.2-1B Q8_0 keeps prefill and eight fed-step logits within 6 percent of max logit of the all-CPU chain over one and two windows, serving every position and replaying the captured graph, one-step-off control past the bar")]
 def test_gpu_resident_cuda_llama_1b(t : T?) {
     t |> run("{FILE_1B}: one window (40 tokens) and eight steps on the CUDA driver") @(t : T?) {
         cuda_forced_feed(t, FILE_1B, "llama", 40l, 1l, LOGIT_BAR_REL)
@@ -50,7 +52,7 @@ def test_gpu_resident_cuda_llama_1b(t : T?) {
 
 //! the greedy chain on the CUDA home (`greedy_chain_cell`): the chained walks' tokens and logits bit for bit the plain walks', the
 //! hits and misses counted where the Vulkan llama file counts them
-[test]
+[test(description = "On the CUDA driver with Llama-3.2-1B Q8_0, the greedy chain's chained walks reproduce the plain walks' tokens and logits bit for bit, with hits and misses counted as on the Vulkan home")]
 def test_gpu_resident_cuda_llama_greedy_chain(t : T?) {
     t |> run("{FILE_1B}: the greedy chain's walks on the CUDA driver") @(t : T?) {
         return if (!cuda_home_asked(t))
@@ -61,7 +63,7 @@ def test_gpu_resident_cuda_llama_greedy_chain(t : T?) {
 //! a model the whole-model driver does not take under the CUDA ask runs on the CPU rails: this home has no per-op tier, so the
 //! route lever off leaves every plane on the host and the decline line names the CPU rails - the load, the window and eight steps
 //! run with no per-op stub reached
-[test]
+[test(description = "Under the CUDA ask with the whole-model route off, Llama-3.2-1B places no layer on the device, since this home has no per-op tier, and the CPU rails still run the window and eight steps")]
 def test_gpu_resident_cuda_llama_declined_runs_on_cpu(t : T?) {
     t |> run("{FILE_1B} with the whole-model route off under the CUDA ask: no per-op tier serves, the CPU rails run the window and eight steps") @(t : T?) {
         return if (!cuda_home_asked(t))
@@ -90,7 +92,7 @@ def test_gpu_resident_cuda_llama_declined_runs_on_cpu(t : T?) {
     }
 }
 
-[test]
+[test(description = "On the CUDA driver Llama-3.2-1B Q4_K_M, through the kq GEMV leaves, Q8_K feeds and kq cm2 tiles, keeps forced-feed logits within 6 percent of max logit of the CPU chain over one and two windows")]
 def test_gpu_resident_cuda_llama_1b_k4(t : T?) {
     t |> run("{FILE_1B_K}: one window (40 tokens) and eight steps on the CUDA driver") @(t : T?) {
         cuda_forced_feed(t, FILE_1B_K, "llama", 40l, 1l, LOGIT_BAR_REL)
@@ -100,7 +102,7 @@ def test_gpu_resident_cuda_llama_1b_k4(t : T?) {
     }
 }
 
-[test]
+[test(description = "On the CUDA driver a Q5_1 Llama-3.2-1B, through the per-32 GEMV leaves, s tile and q51 table gather, keeps forced-feed logits within 6 percent of max logit of the CPU chain over one and two windows")]
 def test_gpu_resident_cuda_llama_1b_q51(t : T?) {
     t |> run("{FILE_1B_Q51}: one window (40 tokens) and eight steps on the CUDA driver") @(t : T?) {
         cuda_forced_feed(t, FILE_1B_Q51, "llama", 40l, 1l, LOGIT_BAR_REL)
@@ -110,28 +112,28 @@ def test_gpu_resident_cuda_llama_1b_q51(t : T?) {
     }
 }
 
-[test]
+[test(description = "On the CUDA driver a Q5_0 Llama-3.2-1B keeps one-window prefill and eight fed-step logits within 6 percent of max logit of the CPU chain")]
 def test_gpu_resident_cuda_llama_1b_q50(t : T?) {
     t |> run("{FILE_1B_Q50}: one window (40 tokens) and eight steps on the CUDA driver") @(t : T?) {
         cuda_forced_feed(t, FILE_1B_Q50, "llama", 40l, 1l, LOGIT_BAR_REL)
     }
 }
 
-[test]
+[test(description = "On the CUDA driver Llama-3.2-1B IQ4_XS, decoding its codebook through the home's permute, keeps one-window prefill and eight fed-step logits within 6 percent of max logit of the CPU chain")]
 def test_gpu_resident_cuda_llama_1b_iq4xs(t : T?) {
     t |> run("{FILE_1B_IQ4XS}: one window (40 tokens) and eight steps on the CUDA driver") @(t : T?) {
         cuda_forced_feed(t, FILE_1B_IQ4XS, "llama", 40l, 1l, LOGIT_BAR_REL)
     }
 }
 
-[test]
+[test(description = "On the CUDA driver an IQ4_NL Llama-3.2-1B on its superblock planes keeps one-window prefill and eight fed-step logits within 6 percent of max logit of the CPU chain")]
 def test_gpu_resident_cuda_llama_1b_iq4nl(t : T?) {
     t |> run("{FILE_1B_IQ4NL}: one window (40 tokens) and eight steps on the CUDA driver") @(t : T?) {
         cuda_forced_feed(t, FILE_1B_IQ4NL, "llama", 40l, 1l, LOGIT_BAR_REL)
     }
 }
 
-[test]
+[test(description = "On the CUDA driver a Q4_0 Llama-3.2-1B on its superblock planes keeps one-window prefill and eight fed-step logits within 6 percent of max logit of the CPU chain")]
 def test_gpu_resident_cuda_llama_1b_q40(t : T?) {
     t |> run("{FILE_1B_Q40}: one window (40 tokens) and eight steps on the CUDA driver") @(t : T?) {
         cuda_forced_feed(t, FILE_1B_Q40, "llama", 40l, 1l, LOGIT_BAR_REL)
@@ -143,7 +145,7 @@ def test_gpu_resident_cuda_llama_1b_q40(t : T?) {
 //! window and eight steps the device reads 2.6 to 3.5 times the CPU chain's distance from the f32 chain, the control 18 to 21
 let private FP4_F32_DIST_REL = 4.0
 
-[test]
+[test(description = "On the CUDA driver an NVFP4 Llama-3.2-1B with windows on the W4A4 FP4 tensor leaf sits within 4x the CPU chain's distance from the f32 chain over one and two windows, and pinned off MMQ the cm2 tiles hold the dense 6 percent bar")]
 def test_gpu_resident_cuda_llama_1b_nv4(t : T?) {
     t |> run("{FILE_1B_NV4}: one window (40 tokens) and eight steps on the CUDA driver, the window on the FP4 tensor leaf") @(t : T?) {
         cuda_forced_feed_f32_witness(t, FILE_1B_NV4, "llama", 40l, 1l, FP4_F32_DIST_REL)
@@ -164,15 +166,18 @@ def test_gpu_resident_cuda_llama_1b_nv4(t : T?) {
 def private cuda_peel(t : T?; file : string) {
     let path = cuda_model_path(t, file)
     if (empty(path)) return
+    let levers = resident_levers()
+    cuda_feed_window()
     var tr <- load_resident(path, 1l)
     t |> success(moe_gpu_resident_active(), "the whole-model driver armed on the model (the load log names any decline)")
     with_dasllama_jobque_() {
         peel_cell(t, tr, SPLIT_BAR_REL, "{file} cuda, ", true)
     }
     delete tr
+    restore_resident_levers(levers)
 }
 
-[test]
+[test(description = "On the CUDA driver, short tails of 1, 2, 5 and 8 rows after a 40-row opening peel through the N-row command within the 6 percent split bar of the one-row steps on Q8_0, Q4_K_M and Q5_1 Llama-3.2-1B")]
 def test_gpu_resident_cuda_llama_peel(t : T?) {
     t |> run("{FILE_1B}: a short tail peels through the N-row command on the CUDA driver and reads what the one-row steps read") @(t : T?) {
         cuda_peel(t, FILE_1B)
@@ -185,12 +190,52 @@ def test_gpu_resident_cuda_llama_peel(t : T?) {
     }
 }
 
-[test]
+[test(description = "On the CUDA driver Llama-3.2-3B Q8_0, head size 128 on the h128 flash tile, keeps forced-feed logits within 6 percent of max logit of the CPU chain over one and two windows")]
 def test_gpu_resident_cuda_llama_3b(t : T?) {
     t |> run("{FILE_3B}: one window (40 tokens) and eight steps on the CUDA driver") @(t : T?) {
         cuda_forced_feed(t, FILE_3B, "llama", 40l, 1l, LOGIT_BAR_REL)
     }
     t |> run("{FILE_3B}: a {PF_WINDOW_ROWS + 88l}-token prompt (two windows) and eight steps on the CUDA driver") @(t : T?) {
         cuda_forced_feed(t, FILE_3B, "llama", PF_WINDOW_ROWS + 88l, 2l, LOGIT_BAR_REL)
+    }
+}
+
+// The CUDA home's whole-model driver under a q8_0 K/V mirror (`DASLLAMA_GPU=1 DASLLAMA_CUDA=1`): the rope stamps stage the
+// token's row, the codec's store quantizes it into the mirror, the decode attention's q8_0 stamps score the blocks, the window
+// chain stores its rows and attends the f16 shadow - the codec rig's forced-feed form (`_kv_codec_cells`) on Llama-3.2-1B
+// Q8_0 at one window and two, and on the Q4_K_M file, each at the 10% bar the Vulkan carriers hold (both chains quantize each
+// query, each its own, so two roundings part). Every cell skips off the JIT, without DASLLAMA_CUDA=1, without the armed tier,
+// without the file under models_dir(), or under DASLLAMA_VK_KV32=1 (the f32 mirror armed over the codec the cell asks).
+
+let private Q8KV_BAR_REL = 0.10   //! of the step's max |logit|: the Vulkan codec carriers' bar
+
+def private cuda_codec_cell(t : T?; file : string; n : int64) {
+    return if (!cuda_home_asked(t))
+    cell_codec_forced_feed(t, file, n, KVDtype.q8_0, Q8KV_BAR_REL)
+}
+
+[test(description = "On the CUDA whole-model driver with a q8_0 K/V mirror, Llama-3.2-1B Q8_0 over one and two windows and Q4_K_M over one keep forced-feed logits within 10 percent of max logit of the CPU chain on q8_0 sessions")]
+def test_gpu_resident_cuda_q8kv(t : T?) {
+    t |> run("{FILE_1B}: a q8_0 mirror, one window (40 tokens) and eight steps on the CUDA driver") @(t : T?) {
+        cuda_codec_cell(t, FILE_1B, 40l)
+    }
+    t |> run("{FILE_1B}: a q8_0 mirror, a {PF_WINDOW_ROWS + 88l}-token prompt (two windows) and eight steps on the CUDA driver") @(t : T?) {
+        cuda_codec_cell(t, FILE_1B, PF_WINDOW_ROWS + 88l)
+    }
+    t |> run("{FILE_1B_K}: a q8_0 mirror, one window (40 tokens) and eight steps on the CUDA driver") @(t : T?) {
+        cuda_codec_cell(t, FILE_1B_K, 40l)
+    }
+}
+
+//! tq4 in the distance form (no logit bar holds a 4-bit mirror): the device at tq4 against the f16 chain within `TQ4_DIST_REL` of
+//! the CPU tq4 chain's own distance, the two tq4 chains within `TQ4_PAIR_REL` of it - the Vulkan llama codec file's bars
+let private TQ4_DIST_REL = 1.15
+let private TQ4_PAIR_REL = 1.4
+
+[test(description = "On the CUDA whole-model driver with a tq4 K/V mirror, Llama-3.2-1B Q4_K_M sits within 1.15x the CPU tq4 chain's distance from the f16 chain and within 1.4x of it from the CPU tq4 chain")]
+def test_gpu_resident_cuda_tq4kv(t : T?) {
+    t |> run("{FILE_1B_K}: a tq4 mirror, the distance form over 40 tokens and eight steps on the CUDA driver") @(t : T?) {
+        return if (!cuda_home_asked(t))
+        cell_codec_distance(t, FILE_1B_K, 40l, KVDtype.tq4, false, TQ4_DIST_REL, TQ4_PAIR_REL)
     }
 }

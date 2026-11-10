@@ -37,9 +37,8 @@ doc: `../ARCHITECTURE.md`. Planned work: `../followup_general.md`, `../followup_
 
 **A diff that adds or edits a cell or `[test]` function, or code one reaches through a helper,
 makes every cell that reaches the edited code call every route-deciding setter BEFORE the first
-call or assert its value decides, even when the value it writes is the DEFAULT - in the cell, the
-`[test]` function that runs it, or the `[init]` of the file holding that function, directly or
-through a helper one of them calls.**
+call or assert its value decides, even when the value it writes is the DEFAULT - in the cell or
+the `[test]` function that runs it, directly or through a helper one of them calls.**
 
 **A cell whose claim depends on a family's serving lane pins that lane in the cell itself - through
 a lane setter or a loader parameter that takes the lane - never in the file's `[init]`.** A cell

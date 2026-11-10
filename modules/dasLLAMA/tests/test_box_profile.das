@@ -42,7 +42,7 @@ def private restore_defaults() {
     set_mtp_round_kind(MtpRoundKind.nextn)
 }
 
-[test]
+[test(description = "apply_box_profile_runtime sets every CPU runtime knob in a sidecar runtime section to its written value, read back through each getter")]
 def test_runtime_section_applies(t : T?) {
     var terr = ""
     let dir = temp_directory(terr)
@@ -79,7 +79,7 @@ def test_runtime_section_applies(t : T?) {
     restore_defaults()
 }
 
-[test]
+[test(description = "team_rank_gate is tri-state: a profile 0 stores force-off, a negative value is skipped as unset, and setup_dasllama_jobque_ lands 1 or 0 on the live que while unset leaves the que alone")]
 def test_team_rank_gate_tristate(t : T?) {
     restore_defaults()
     var terr = ""
@@ -117,7 +117,7 @@ def test_team_rank_gate_tristate(t : T?) {
     restore_defaults()
 }
 
-[test]
+[test(description = "A partial runtime section applies only its present key, and a sidecar with no runtime section, a missing file, invalid JSON or a threads-only advisory leaves every knob at its default")]
 def test_partial_and_missing_are_no_ops(t : T?) {
     restore_defaults()
     var terr = ""
@@ -154,7 +154,7 @@ def test_partial_and_missing_are_no_ops(t : T?) {
     remove(path)
 }
 
-[test]
+[test(description = "A runtime section jobque_pool and phase_decode_workers set the next job queue thread count and decode worker count to the written values")]
 def test_jobque_pool_knobs_apply(t : T?) {
     //! these knobs declare the NEXT que, never a live one - the [init] tier heuristic seeds
     //! them and a profile overrides
@@ -175,7 +175,7 @@ def test_jobque_pool_knobs_apply(t : T?) {
 // a sidecar minted before the hybrid split spells "uncapped" as gemv_lane_cap 0; on a slow-tier
 // box that value would hand the GEMV every lane, so the apply REFUSES it and the seeded
 // fast-tier cap stands. Any other value still applies.
-[test]
+[test(description = "On a slow-tier hybrid box a sidecar gemv_lane_cap of 0 is refused and the seeded cap stands, while a nonzero cap in the same profile shape applies")]
 def test_gemv_lane_cap_zero_refused_on_hybrid(t : T?) {
     if (!is_slow_tier_compute()) {
         t |> skip("homogeneous box - a 0 cap is the honest uncapped value here, nothing to refuse")
@@ -196,7 +196,7 @@ def test_gemv_lane_cap_zero_refused_on_hybrid(t : T?) {
     restore_defaults()
 }
 
-[test, arch(at="../ARCHITECTURE_RUNTIME_JOBQUE.md#hybrid-pool-policy")]
+[test(description = "A box classified as compute slow tier reports a known nonzero perf-core count strictly below its total hardware core count"), arch(at="../ARCHITECTURE_RUNTIME_JOBQUE.md#hybrid-pool-policy")]
 def test_slow_tier_kind_contract(t : T?) {
     if (is_slow_tier_compute()) {
         t |> success(get_total_perf_cores() > 0, "compute slow tier implies known perf-core topology")
@@ -206,7 +206,7 @@ def test_slow_tier_kind_contract(t : T?) {
     }
 }
 
-[test]
+[test(description = "The Metal, Vulkan and CUDA prefill knobs in a runtime section apply as written, a zero floor, panel or cvt row count is refused while a zero knee applies, and each setter refuses a negative knee")]
 def test_metal_prefill_knobs_apply(t : T?) {
     var terr = ""
     let dir = temp_directory(terr)
@@ -287,7 +287,7 @@ def test_metal_prefill_knobs_apply(t : T?) {
     remove(path)
 }
 
-[test]
+[test(description = "A runtime backend pin naming an unregistered backend keeps the active backend, and a pin to portable makes it the active kernel backend")]
 def test_backend_pin_applies(t : T?) {
     var terr = ""
     let dir = temp_directory(terr)
@@ -329,7 +329,7 @@ def private write_profile(t : T?; name : string; box : string; stale : bool; ker
 // The checked route (what the no-path apply takes): a sidecar older than the binary keeps its
 // runtime section - the knobs are this box's state and only the kernel winners died with the
 // rebuild - while another box's sidecar applies nothing.
-[test]
+[test(description = "A sidecar of this box back-dated under the binary reads stale_binary, and the checked apply still applies its runtime knobs and raises the applied flag")]
 def test_stale_binary_sidecar_keeps_runtime(t : T?) {
     let path = write_profile(t, "stale", tune_box_identity(), true)
     t |> equal(box_profile_verdict_at(path), "stale_binary", "reads as binary-stale")
@@ -340,7 +340,7 @@ def test_stale_binary_sidecar_keeps_runtime(t : T?) {
     restore_defaults()
 }
 
-[test]
+[test(description = "A sidecar whose provenance names another box reads foreign_box, and the checked apply sets no runtime knob and records foreign_box as the decline")]
 def test_foreign_sidecar_applies_nothing(t : T?) {
     let path = write_profile(t, "foreign", "dasllama-test-foreign-box", false)
     t |> equal(box_profile_verdict_at(path), "foreign_box", "reads as another box's")
@@ -351,7 +351,7 @@ def test_foreign_sidecar_applies_nothing(t : T?) {
     restore_defaults()
 }
 
-[test]
+[test(description = "A back-dated sidecar of another box reads foreign_box rather than stale, and the checked apply sets no knob and declines naming the box, not the date")]
 def test_stale_foreign_sidecar_applies_nothing(t : T?) {
     let path = write_profile(t, "stale_foreign", "dasllama-test-foreign-box", true)
     t |> equal(box_profile_verdict_at(path), "foreign_box", "another box's sidecar reads foreign whatever its date")
@@ -362,7 +362,7 @@ def test_stale_foreign_sidecar_applies_nothing(t : T?) {
     restore_defaults()
 }
 
-[test]
+[test(description = "A back-dated sidecar with no provenance reads unreadable rather than stale, and the checked apply sets no knob and declines as unreadable")]
 def test_stale_unreadable_sidecar_applies_nothing(t : T?) {
     let path = write_profile(t, "stale_unreadable", "", true)   // no provenance: not a tune sidecar, whatever its date
     t |> equal(box_profile_verdict_at(path), "unreadable", "a provenance-less sidecar reads unreadable, not stale")
@@ -374,7 +374,7 @@ def test_stale_unreadable_sidecar_applies_nothing(t : T?) {
 }
 
 // DASLLAMA_METAL_TENSOR is read at context init, so a child process shows what the knob leaves unapplied
-[test]
+[test(description = "In a child process DASLLAMA_METAL_TENSOR=0 leaves the profile Metal tensor crowns unapplied, while the same profile with the knob unset crowns mulmm_q8")]
 def test_metal_tensor_knob_leaves_the_crowns_unapplied(t : T?) {
     var out : string
     let rc = run_child(child_cmd("_metal_tensor_root.das", [(name = "DASLLAMA_METAL_TENSOR", value = "0")]), out)
@@ -386,7 +386,7 @@ def test_metal_tensor_knob_leaves_the_crowns_unapplied(t : T?) {
     t |> success(find(out2, "CROWNS=[mulmm_q8]") >= 0, "with the knob unset the same profile crowns mulmm_q8:\n{out2}")
 }
 
-[test]
+[test(description = "A sidecar of this box carrying only kernel winners and no runtime section makes the checked apply decline as no_runtime_section")]
 def test_kernels_only_sidecar_declines_as_no_runtime(t : T?) {
     let path = write_profile(t, "kernels_only", tune_box_identity(), false, true)
     apply_box_profile_runtime_checked(path)
@@ -395,7 +395,7 @@ def test_kernels_only_sidecar_declines_as_no_runtime(t : T?) {
     restore_defaults()
 }
 
-[test]
+[test(description = "The applied flag and decline reason describe only the most recent checked apply: an own-box apply clears an earlier foreign decline, and a later foreign one lowers the flag again")]
 def test_apply_status_describes_the_last_checked_apply(t : T?) {
     let foreign = write_profile(t, "last_foreign", "dasllama-test-foreign-box", false)
     let own = write_profile(t, "last_own", tune_box_identity(), false)
@@ -413,7 +413,7 @@ def test_apply_status_describes_the_last_checked_apply(t : T?) {
 }
 
 // The speculative depth: the box knobs decide per round kind until an explicit set wins.
-[test]
+[test(description = "The profile mtp_depth_nextn and mtp_depth_assistant knobs set the draft depth per round kind, an explicit set_mtp_depth wins over both, and clearing it hands the knobs back")]
 def test_mtp_depth_knobs_apply_per_round_kind(t : T?) {
     var terr = ""
     let dir = temp_directory(terr)

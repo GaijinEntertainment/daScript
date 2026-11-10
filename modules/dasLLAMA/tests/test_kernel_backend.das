@@ -12,7 +12,12 @@ require ?vulkan dasllama/dasllama_math_vulkan     // registers the batch-only "v
 require ?cuda dasllama/dasllama_math_cuda         // registers the batch-only "cuda" donor where dasCUDA builds
 require dasllama/dasllama_kqformat            // KqFmt + kq_fmt_stamp: the registry cell walks every format
 require ?vulkan dasllama/dasllama_env         // g_env_vulkan.vk_mac: the macOS decline's opt-out
+require ?das_accelerate dasllama/dasllama_math_accelerate
 require daslib/enum_trait                     // for (f in type<KqFmt>)
+require daslib/jobque_boost
+require daslib/math_bits   // nolint:STYLE030,LINT019 — used only inside the das_accelerate static_if half
+require math
+require _compares
 
 // The kernel-backend registry must self-populate at [init]: the portable Q8·Q8 backend is always
 // registered (the fallback everywhere), and one is auto-activated as the row-major default. A repack
@@ -28,7 +33,7 @@ def private registered(name : string) : bool {
     return false
 }
 
-[test]
+[test(description = "The kernel-backend registry self-populates at init: portable is registered, a non-empty registered backend is auto-activated, and an unknown name is not registered")]
 def test_portable_backend_always_registered(t : T?) {
     t |> run("portable backend registered + a row-major default auto-activated") @(t : T?) {
         t |> success(registered("portable"), "portable backend registered at [init]")
@@ -38,7 +43,7 @@ def test_portable_backend_always_registered(t : T?) {
     }
 }
 
-[test]
+[test(description = "Select and pin by name activate portable, an unknown name in either is a no-op keeping the current backend, and the for-load pick activates a registered backend")]
 def test_select_and_pin(t : T?) {
     t |> run("select / pin / for-load pick a registered backend and restore") @(t : T?) {
         let saved = active_kernel_backend()
@@ -67,7 +72,7 @@ def test_select_and_pin(t : T?) {
     }
 }
 
-[test]
+[test(description = "`restore_kernel_backend` puts back exactly the seat it was given: an unpinned seat clears a later pin and reactivates its backend, a pinned seat restores pin and backend over a for-load reselect")]
 def test_seat_restores_the_pin(t : T?) {
     t |> run("a restored seat keeps the pin it found, and no pin where there was none") @(t : T?) {
         let found = kernel_backend_seat()
@@ -97,7 +102,7 @@ def private other_available(not : string) : string {
     return ""
 }
 
-[test]
+[test(description = "`with_kernel_backend` runs its block on the pinned backend and puts the seat back, refuses an unknown backend without running the block, and an earlier pin survives a nested pin on a second backend")]
 def test_with_kernel_backend(t : T?) {
     t |> run("with_kernel_backend runs its block under the pin, puts the seat back, and refuses a pin that does not take") @(t : T?) {
         let found = kernel_backend_seat()
@@ -148,7 +153,7 @@ def private crossed_row(rows : array<auto(R)>) : string {
     return ""
 }
 
-[test, arch(at = "../ARCHITECTURE_MEASUREMENT_KERNEL_RACE.md#rm-family-race")]
+[test(description = "Where dasLLVM mounts, every kq format carries all eight tune registries or none with the reference row first, every format but q8 has rm rows with a witness keyed alike per perm, and no format's kernel row is another's"), arch(at = "../ARCHITECTURE_MEASUREMENT_KERNEL_RACE.md#rm-family-race")]
 def test_kq_registries(t : T?) {
     static_if (typeinfo module_exists(dasllama_math_gen)) {
         t |> run("kq_registries: a kq family's eight registries are all present with the reference row first, or all absent") @(t : T?) {
@@ -249,7 +254,7 @@ def private unavailable_repack(var wp : int8?; var sp : float?; n, d : int64) {
 }
 def private never_available() : bool => false
 
-[test]
+[test(description = "A priority-99 backend whose availability predicate answers false is skipped by the for-load select and refused by pin, and the probe reads unregistered names unavailable and portable available")]
 def test_backend_availability_predicate(t : T?) {
     t |> run("an unavailable backend is skipped by for-load select and refused by pin") @(t : T?) {
         let saved = active_kernel_backend()
@@ -273,7 +278,7 @@ def test_backend_availability_predicate(t : T?) {
     }
 }
 
-[test]
+[test(description = "The batch backend follows the active one unpinned, an unknown or repack donor on a row-major active backend is rejected, a row-major donor's pin survives reselection, and clearing restores whole-backend slots")]
 def test_batch_backend_pin(t : T?) {
     t |> run("batch pin overrides the batch slots, survives re-select, guards layout") @(t : T?) {
         let saved = active_kernel_backend()
@@ -319,7 +324,7 @@ def test_batch_backend_pin(t : T?) {
     }
 }
 
-[test]
+[test(description = "Every batch-only backend, including each metal, vulkan or cuda donor the build registers, leaves the active backend and pin unchanged under pin or select, and on macOS vulkan is unavailable without DASLLAMA_VK_MAC")]
 def test_batch_only_backends_refuse_the_whole_seat(t : T?) {
     t |> run("a batch-only backend is never pinned or selected as the whole backend") @(t : T?) {
         t |> success(!kernel_backend_batch_only("portable"), "the portable backend serves every slot")
@@ -371,7 +376,7 @@ def private pin_panics(name, env_pin : string) : bool {
     return tripped
 }
 
-[test]
+[test(description = "A pin that cannot take, unregistered or batch-only, is refused by name and panics only when DASLLAMA_PIN_BACKEND named it, warning when pinned in process, and sets no pin")]
 def test_env_pin_refuses_what_cannot_take(t : T?) {
     t |> run("a pin that cannot take: the reason named, the environment's pin panics, an in-process one warns") @(t : T?) {
         t |> equal(kernel_backend_pin_refusal("portable"), "", "the portable backend pins")
@@ -392,5 +397,260 @@ def test_env_pin_refuses_what_cannot_take(t : T?) {
         }
         restore_kernel_backend(seat)
         to_log(LOG_INFO, "batch-only backends checked: {checked}\n")
+    }
+}
+
+// The "+AMX" float-batch override (Accelerate sgemm — AMX on M1-M3, SME on M4+) vs the portable
+// fp32/bf16 batch matmuls on deterministic data. sgemm accumulates f32 in coprocessor order —
+// relative-tolerance compare, never bit-exact. Below the min-ntok gate the override must fall
+// through to the portable body and match it exactly. Off-Apple every check feints cleanly.
+
+let N = 96          // K: weight row length
+let D = 48          // output rows
+let NTOK = 40       // above the armed min-ntok gate (32)
+let SMALL_NTOK = 4  // below the gate — must fall through to the portable body
+
+def private fill01(var a : array<float>; salt : uint) {
+    for (i in range(length(a))) {
+        a[i] = float(int((uint(i) * 2654435761u + salt * 40503u) & 0xFFFFu)) / 65536.0 - 0.5
+    }
+}
+
+def private max_rel_err(a, b : array<float>) : float {
+    var m = 0.0
+    for (va, vb in a, b) {
+        m = max(m, nan_wide_diff(va, vb) / max(1.0, abs(va)))
+    }
+    return m
+}
+
+//! `acc` inside `bar` of `ref`, relative to ref's magnitude floored at 1; a NaN on either side is outside
+def private rel_ok(ref, acc, bar : float) : bool => abs(ref - acc) / max(1.0, abs(ref)) < bar
+
+//! the tolerance verdict: the max difference logged at its token and row, the last element poisoned by an added 0.5
+def private check_rel(t : T?; tag : string; yref, yacc : array<float>; bar : float) {
+    var bad = 0
+    for (vr, va in yref, yacc) {
+        if (!rel_ok(vr, va, bar)) {
+            bad++
+        }
+    }
+    let mi = maxdiff_at(yacc, yref)
+    to_log(LOG_INFO, "{tag}: max |acc - ref| {abs(yacc[mi] - yref[mi])} at token {mi / D} row {mi % D}\n")
+    t |> success(bad == 0, "{tag}: every element within {bar} of the portable form ({bad} of {length(yref)} off)")
+    let n = length(yref) - 1
+    t |> success(!rel_ok(yref[n] + 0.5, yacc[n], bar), "{tag}: the bar reds a poisoned element")
+}
+
+// static_if shims: every driver symbol reference lives behind builtin_module_exists so the
+// FILE compiles off-Apple (the [test] arm feints there, but helper bodies still typecheck)
+def private t_accel_enable() {
+    static_if (typeinfo builtin_module_exists(das_accelerate)) {
+        dasllama_accelerate_enable(32l)
+    }
+}
+
+def private t_accel_disable() {
+    static_if (typeinfo builtin_module_exists(das_accelerate)) {
+        dasllama_accelerate_disable()
+    }
+}
+
+def private t_accel_pin_floor() {
+    static_if (typeinfo builtin_module_exists(das_accelerate)) {
+        dasllama_accelerate_set_min_mmac(0l)
+    }
+}
+
+[unused_argument(on)]  // off-Apple the else arm never reads it
+def private t_accel_set_f16(on : bool) : bool {
+    static_if (typeinfo builtin_module_exists(das_accelerate)) {
+        return dasllama_accelerate_set_f16(on)
+    } else {
+        return false
+    }
+}
+
+def private t_accel_engaged() : int64 {
+    static_if (typeinfo builtin_module_exists(das_accelerate)) {
+        return dasllama_accelerate_engaged()
+    } else {
+        return 0l
+    }
+}
+
+def private t_accel_reset_engaged() {
+    static_if (typeinfo builtin_module_exists(das_accelerate)) {
+        dasllama_accelerate_reset_engaged()
+    }
+}
+
+// run the same mm twice — portable (override off) into yref, accelerate-armed into yacc
+def private ref_and_accel(ntok : int; run_mm : block<(var y : array<float>) : void>) : tuple<yref : array<float>; yacc : array<float>> {
+    var res : tuple<yref : array<float>; yacc : array<float>>
+    res.yref |> resize(ntok * D)
+    res.yacc |> resize(ntok * D)
+    clear_float_batch_override()
+    invoke(run_mm, res.yref)
+    t_accel_enable()
+    invoke(run_mm, res.yacc)
+    t_accel_disable()
+    return <- res
+}
+
+//! The float batch over f32 weights `w` (matmul_batch) or bf16 words (matmul_bf16_batch), portable against armed: bit-exact
+//! under `expect_exact`, else within the tolerance. `f16_lane` routes the accelerate half through the BNNS f16 lane (weights
+//! bf16->f16 exact, activations f32->f16 rounded, f32 accumulate) — one x rounding step, so a looser envelope.
+def private check_batch(t : T?; w : array<auto(WT)>; ntok : int; expect_exact : bool; f16_lane : bool) {
+    var x : array<float>
+    x |> resize(ntok * N)
+    fill01(x, 7u)
+    if (f16_lane && !t_accel_set_f16(true)) {
+        to_log(LOG_WARNING, "BNNS probe failed on this OS - f16 lane arm feints\n")
+        t |> success(true)
+        return
+    }
+    let r <- ref_and_accel(ntok) $(var y) {
+        static_if (typeinfo is_float(type<WT>)) {
+            matmul_batch(y, w, 0l, x, int64(N), int64(D), int64(ntok))
+        } else {
+            matmul_bf16_batch(y, w, 0l, x, int64(N), int64(D), int64(ntok))
+        }
+    }
+    static_if (typeinfo is_float(type<WT>)) {
+        if (f16_lane) {
+            t_accel_set_f16(false)
+        }
+    } else {
+        t_accel_set_f16(false)
+    }
+    if (expect_exact) {
+        for (va, vb in r.yref, r.yacc) {
+            t |> equal(va, vb)
+        }
+    } else {
+        let kind = typeinfo is_float(type<WT>) ? "fp32" : "bf16"
+        check_rel(t, "{kind} batch ntok {ntok}{f16_lane ? " f16 lane" : ""}", r.yref, r.yacc, f16_lane ? 1e-2 : 1e-4)
+    }
+}
+
+def private check_fp32(t : T?; ntok : int; expect_exact : bool; f16_lane : bool = false) {
+    var w : array<float>
+    w |> resize(D * N)
+    fill01(w, 3u)
+    check_batch(t, w, ntok, expect_exact, f16_lane)
+}
+
+def private check_bf16(t : T?; ntok : int; f16_lane : bool) {
+    var w : array<float>
+    w |> resize(D * N)
+    fill01(w, 3u)
+    let wbf <- pack_bf16(w)
+    check_batch(t, wbf, ntok, false, f16_lane)
+}
+
+// the counter a driver reads to tell an armed run that served from one that fell through
+def private check_engaged_witness(t : T?) {
+    var w : array<float>
+    w |> resize(D * N)
+    fill01(w, 3u)
+    var x : array<float>
+    x |> resize(NTOK * N)
+    fill01(x, 7u)
+    var y : array<float>
+    y |> resize(NTOK * D)
+    t_accel_reset_engaged()
+    clear_float_batch_override()
+    matmul_batch(y, w, 0l, x, int64(N), int64(D), int64(NTOK))
+    t |> equal(t_accel_engaged(), 0l, "the portable path serves no call")
+    t_accel_enable()
+    matmul_batch(y, w, 0l, x, int64(N), int64(D), int64(NTOK))
+    t |> equal(t_accel_engaged(), 1l, "an armed batch call counts once")
+    var ys : array<float>
+    ys |> resize(SMALL_NTOK * D)
+    matmul_batch(ys, w, 0l, x, int64(N), int64(D), int64(SMALL_NTOK))
+    t |> equal(t_accel_engaged(), 1l, "a below-gate call falls through before the counter")
+    t_accel_disable()
+    t_accel_reset_engaged()
+    t |> equal(t_accel_engaged(), 0l, "the reset reads 0")
+}
+
+[test(description = "The Accelerate float-batch override (fp32, bf16, BNNS f16 lane, strips) matches the portable batch matmul within a relative bar that reds a poisoned element, and below the min-ntok gate falls through bit-exact"), unused_argument(t)]  // off-Apple the feint arm never reads t
+def test_accel_float_batch(t : T?) {
+    static_if (typeinfo builtin_module_exists(das_accelerate)) {
+        with_dasllama_jobque_() {
+            t_accel_pin_floor()  // tiny test shapes must engage, not fall through
+            t_accel_set_f16(false)  // pin: env DASLLAMA_ACCEL_F16 must not leak into the sgemm arms
+            t |> run("fp32 batch vs portable (tolerance)") @(t : T?) {
+                check_fp32(t, NTOK, false)
+            }
+            t |> run("bf16 batch vs portable (tolerance)") @(t : T?) {
+                check_bf16(t, NTOK, false)
+            }
+            t |> run("bf16 BNNS f16 lane vs portable (tolerance)") @(t : T?) {
+                check_bf16(t, NTOK, true)
+            }
+            t |> run("below-gate ntok falls through bit-exact, and the engagement witness counts what served") @(t : T?) {
+                check_fp32(t, SMALL_NTOK, true)
+                check_engaged_witness(t)
+            }
+            t |> run("fp32 BNNS f16 lane vs portable (tolerance)") @(t : T?) {
+                check_fp32(t, NTOK, false, true)
+            }
+            t |> run("bf16 widen scratch clears the unreserved-size guard (E4B PLE-projection class)") @(t : T?) {
+                // the widen scratch is d*n floats: past max_unreserved_size (64 MiB) a bare
+                // resize panics - E4B's bf16 PLE projection is 27.5M elements (over the line),
+                // E2B's 15.7M is under
+                let bd = 4200l
+                let bn = 4096l
+                var w : array<float>
+                w |> reserve(bd * bn)
+                w |> resize(bd * bn)
+                fill01(w, 3u)
+                var wbf : array<uint16>
+                wbf |> reserve(bd * bn)
+                wbf |> resize(bd * bn)
+                for (dst, src in wbf, w) {
+                    dst = uint16(uint(float_bits_to_int(src)) >> 16u)
+                }
+                delete w
+                var x : array<float>
+                x |> resize(NTOK * int(bn))
+                fill01(x, 7u)
+                var yref : array<float>
+                yref |> resize(NTOK * int(bd))
+                var yacc : array<float>
+                yacc |> resize(NTOK * int(bd))
+                clear_float_batch_override()
+                matmul_bf16_batch(yref, wbf, 0l, x, bn, bd, int64(NTOK))
+                t_accel_enable()
+                matmul_bf16_batch(yacc, wbf, 0l, x, bn, bd, int64(NTOK))
+                t_accel_disable()
+                t |> success(max_rel_err(yref, yacc) < 1e-4)
+            }
+            t |> run("strips override serves correctly, incl. rows < strips") @(t : T?) {
+                dasllama_accelerate_set_strips(8l)
+                check_fp32(t, NTOK, false)
+                var w : array<float>
+                w |> resize(4 * N)
+                fill01(w, 5u)
+                var x : array<float>
+                x |> resize(NTOK * N)
+                fill01(x, 9u)
+                var yref : array<float>
+                yref |> resize(NTOK * 4)
+                var yacc : array<float>
+                yacc |> resize(NTOK * 4)
+                clear_float_batch_override()
+                matmul_batch(yref, w, 0l, x, int64(N), 4l, int64(NTOK))
+                t_accel_enable()
+                matmul_batch(yacc, w, 0l, x, int64(N), 4l, int64(NTOK))
+                t_accel_disable()
+                dasllama_accelerate_set_strips(0l)
+                t |> success(max_rel_err(yref, yacc) < 1e-4)
+            }
+        }
+    } else {
+        feint("das_accelerate is not built on this platform; nothing to compare\n")
     }
 }

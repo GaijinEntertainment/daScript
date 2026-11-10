@@ -48,7 +48,7 @@ def private lcg_signal(n : int) : array<float> {
     return <- out
 }
 
-[test]
+[test(description = "Silero VAD on a deterministic LCG signal yields 10 per-frame probabilities each within 1e-3 of the values frozen from onnxruntime op15")]
 def test_vad_forward_lcg(t : T?) {
     t |> run("per-frame prob matches onnxruntime op15 on a deterministic LCG signal") @(t : T?) {
         // frozen from harness/silero_vad_oracle.py on the same LCG (10 chunks)
@@ -66,7 +66,7 @@ def test_vad_forward_lcg(t : T?) {
     }
 }
 
-[test]
+[test(description = "An empty clip yields no probability from `vad_probs` or `vad_probs_cpu`, no speech region, and no streaming event, also with the stream GPU lever on")]
 def test_vad_empty_clip(t : T?) {
     t |> run("an empty clip: no probability, no speech region, no streaming event, nothing asked of a seat") @(t : T?) {
         with_dasllama_jobque_() {
@@ -93,7 +93,7 @@ def test_vad_empty_clip(t : T?) {
     }
 }
 
-[test]
+[test(description = "`find_speech_timestamps` on jfk.wav returns exactly the four segments silero get_speech_timestamps gives, start and end sample for sample")]
 def test_vad_segments_jfk(t : T?) {
     t |> run("find_speech_timestamps matches silero get_speech_timestamps on jfk.wav") @(t : T?) {
         let wav = asr_clip("jfk.wav")
@@ -200,7 +200,7 @@ def private twin_probs(t : T?; m : VadModel; tag : string; sig : array<float>) :
     return true
 }
 
-[test]
+[test(description = "The GPU VAD seat serves every chunk with probabilities within 1e-5 absolute of the CPU chunk step (a silenced-chunk control must exceed it), streams the CPU feed's exact events, and segments jfk and ru_long to the CPU's exact regions")]
 def test_vad_gpu_twin(t : T?) {
     t |> run("the GPU seat's probabilities against the CPU chunk step on the LCG signal, whole and ragged") @(t : T?) {
         with_dasllama_jobque_() {
@@ -281,7 +281,7 @@ def test_vad_gpu_twin(t : T?) {
     }
 }
 
-[test]
+[test(description = "The Metal VAD seat declines once per call on its knob, a slab-less model, a sub-1024-lane pipeline and an untakeable scratch, stepping no device chunk and answering the CPU probabilities bit for bit, then serves again")]
 def test_vad_metal_declines(t : T?) {
     t |> run("the Metal VAD seat declines on its knob, a model with no slab, a recurrence pipeline under 1024 lanes and a scratch it cannot take") @(t : T?) {
         static_if (!typeinfo builtin_module_exists(das_metal)) {
@@ -339,7 +339,7 @@ def private vad_decline_leg(t : T?; m : VadModel; sig : array<float>; reason : s
     check_exact(t, "{reason}: the CPU chunk step answered", probs, cpu)
 }
 
-[test]
+[test(description = "The Vulkan VAD seat declines once per call on its knob, a slab-less model, no tile family, and a slab or scratch past the storage range, answering the CPU probabilities bit for bit, then serves on a rebuilt scratch")]
 def test_vad_vulkan_declines(t : T?) {
     t |> run("the Vulkan VAD seat declines on its knob, a model with no slab, a device with neither tile family, a slab past the storage range on a released resident and a scratch past it, then serves on a rebuilt scratch") @(t : T?) {
         static_if (!typeinfo builtin_module_exists(vulkan) || typeinfo builtin_module_exists(das_metal)) {
@@ -398,7 +398,7 @@ def test_vad_vulkan_declines(t : T?) {
     }
 }
 
-[test]
+[test(description = "The CUDA VAD seat declines once per call on its knob, a slab-less model, a failed class build and a failed allocation, answering the CPU probabilities bit for bit, then serves on a rebuilt resident")]
 def test_vad_cuda_declines(t : T?) {
     t |> run("the CUDA VAD seat declines on its knob, a model with no slab, a class that failed to build and an allocation it cannot take, then serves on a rebuilt resident") @(t : T?) {
         static_if (!typeinfo builtin_module_exists(cuda) || typeinfo builtin_module_exists(das_metal)) {

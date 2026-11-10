@@ -34,7 +34,7 @@ def private trips(m : Model) : bool {
     return tripped
 }
 
-[test]
+[test(description = "The `ple_check_table` go-live tripwire panics on an empty or one-byte-short PLE table plane for every format arm (q8, k4/k5/k6/q40, q51/q5032), passes when the table is resident, and exempts a non-PLE model")]
 def test_ple_check_table(t : T?) {
     t |> run("a short PLE table plane panics at go-live, per format arm; a full one passes") @(t : T?) {
         var mq <- ple_shell(KqFmt.q8)
@@ -82,7 +82,7 @@ def test_ple_check_table(t : T?) {
     }
 }
 
-[test]
+[test(description = "Every row of a five-position `gemma4_router` batch call is bit-identical to the single-row decode call on that row, with distinct non-zero rows so the compare is not vacuous")]
 def test_gemma4_router_rows(t : T?) {
     t |> run("a prefill row of the gemma4 router input is bit-identical to the decode row (npos = 1)") @(t : T?) {
         let dim = 256l
@@ -124,7 +124,7 @@ def test_gemma4_router_rows(t : T?) {
     }
 }
 
-[test]
+[test(description = "On Metal, `ffn_second_hidden` returns 0 for uniform FFN widths, the second width when there are two, -1 for three, and a batch-shaped decode caller declines hetero widths")]
 def test_ffn_second_hidden(t : T?) {
     t |> run("the MatFormer width classifier: uniform 0, two widths the second, three -1") @(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
@@ -162,7 +162,7 @@ def private ple_planes_meta(gate, proj : array<int>) : GGUFMeta {
         GGUFTensorInfo(name = "blk.1.proj.weight", ggml_type = proj[1], n_elem = 256l * 256l)])
 }
 
-[test]
+[test(description = "`detect_ple_formats` keeps f32 rows for an all-F32 per-layer plane kind, tags a Q6_K stack k6, and panics naming the differing tensor and both types when a gate or proj stack mixes F32 with another type")]
 def test_ple_plane_formats(t : T?) {
     t |> run("a per-layer plane kind whose every layer ships F32 keeps the f32 rows, and a kind mixing F32 with another type declines the load") @(t : T?) {
         var shell <- ple_shell(KqFmt.q8)

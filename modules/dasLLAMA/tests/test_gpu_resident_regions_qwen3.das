@@ -14,37 +14,37 @@ require _resident_regions
 // fuse-bisect and the fused q/k norm cells skip under DASLLAMA_CUDA=1 - the fuse knob is the Vulkan driver's.
 let private REGIONS_FILE = "Qwen3-0.6B-Q8_0.gguf"
 
-[test]
+[test(description = "On the q/k-norm Qwen3-0.6B two sessions in separate regions, stepped one row at a time interleaved, each read what that session reads alone")]
 def test_regions_interleaved_single_steps_qwen3(t : T?) {
     cell_regions_interleaved_single_steps(t, REGIONS_FILE)
 }
 
-[test]
+[test(description = "On Qwen3-0.6B two sessions past the wide position take the token command's wide twin on one-row steps, each reading what that session reads alone")]
 def test_regions_wide_single_steps_qwen3(t : T?) {
     cell_regions_wide_single_steps(t, REGIONS_FILE)
 }
 
-[test]
+[test(description = "On Qwen3-0.6B a batched step before any one-row step, one-row steps, then a batched step again all read what each session reads alone")]
 def test_regions_batched_first_qwen3(t : T?) {
     cell_regions_batched_first(t, REGIONS_FILE)
 }
 
-[test]
+[test(description = "On Qwen3-0.6B every DASLLAMA_VK_FUSE_BISECT bit serves one-row logits within the split bar of the fused run, the one-token-off control outside, and the split-pair rows batch bit for bit")]
 def test_regions_fuse_bisect_qwen3(t : T?) {
     cell_regions_fuse_bisect(t, REGIONS_FILE)
 }
 
-[test]
+[test(description = "On Qwen3-0.6B the N-row command's q/k norm in the one-row form batches two sessions bit for bit what each session reads alone")]
 def test_regions_batched_steps_qwen3(t : T?) {
     cell_regions_batched_steps(t, REGIONS_FILE)
 }
 
-[test]
+[test(description = "On Qwen3-0.6B with both prompts past the unsplit position, the split N-row command batches two sessions bit for bit what each reads alone")]
 def test_regions_batched_steps_split_qwen3(t : T?) {
     cell_regions_batched_steps_split(t, REGIONS_FILE)
 }
 
-[test]
+[test(description = "On Qwen3-0.6B the window's fused q/k norm, rope and store pass reads within the split bar of the split pair over a two-window prompt and fed steps, the census counting each form's own stamp")]
 def test_window_qkn_fused(t : T?) {
     cell_window_qkn_fused(t, REGIONS_FILE)
 }

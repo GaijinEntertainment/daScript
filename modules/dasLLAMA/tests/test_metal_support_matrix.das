@@ -226,7 +226,7 @@ def private split_generate(trp, trd : Model; prompt : array<int64>; steps : int)
     return <- ids
 }
 
-[test]
+[test(description = "On Llama-3.2-1B every weights x wscale x KV-dtype cell engages the Metal prefill, decode and batch paths (GPU step counters rise), the planar-only npos window and MetalMode knob behave, and Q4_K_M GPU decode emits the CPU tokens exactly", standalone = "the runner's matrix suite is this one file")]
 def test_metal_support_matrix(t : T?) {
     t |> run("Metal support matrix: weights x wscale x kv x path engage/decline (Llama-3.2-1B)") <| @(t : T?) {
         if (!family_on(t, "llama")) return
@@ -2266,7 +2266,7 @@ def private gemma4_hetero_row(t : T?; path : string; tag : string = "gemma4-12b/
 // asserts per-path ENGAGE/DECLINE with the exact need_* reason — the descriptor refactor's
 // living expectation table. mistral3 (empty config = the llama shape) has no <= 35B fixture;
 // its coverage is the derivation pins on the families above plus the llama cells.
-[test]
+[test(description = "For each stocked family carrier `metal_needs` derives the expected feature bits, all three Metal paths engage, and a metal-overrides generate emits the CPU token ids exactly, with leak count zero at shutdown", standalone = "the runner's matrix suite is this one file")]
 def test_metal_family_matrix(t : T?) {
     t |> run("Metal family matrix: per-family needs derivation + path cells") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {

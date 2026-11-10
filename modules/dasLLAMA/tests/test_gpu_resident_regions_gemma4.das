@@ -13,17 +13,17 @@ require _resident_regions
 // without DASLLAMA_GPU=1 on a device the driver serves, or without the file under models_dir().
 let private REGIONS_FILE = "gemma-4-12B-it-Q8_0.gguf"
 
-[test]
+[test(description = "On gemma-4-12B with the capped, suppressing classifier, V-from-K global layers and per-layer output scale, a batched step over two sessions reads bit for bit what each session reads alone")]
 def test_regions_batched_steps_g4(t : T?) {
     cell_regions_batched_steps(t, REGIONS_FILE)
 }
 
-[test]
+[test(description = "On gemma-4-12B with both prompts past the unsplit position, the N-row command's split attention form batches two sessions bit for bit what each reads alone")]
 def test_regions_batched_steps_split_g4(t : T?) {
     cell_regions_batched_steps_split(t, REGIONS_FILE)
 }
 
-[test]
+[test(description = "On gemma-4-12B a batched step before any one-row step, one-row steps, then a batched step again all read what each session reads alone")]
 def test_regions_batched_first_g4(t : T?) {
     cell_regions_batched_first(t, REGIONS_FILE)
 }

@@ -44,7 +44,7 @@ def private typical_walk(rows : array<array<float>>; drafts : array<int64>; var 
     return (a = a, next = next)
 }
 
-[test]
+[test(description = "The typical MTP walk under a 0.9 nucleus accepts a runner-up inside the nucleus and the argmax but not a massless draft at every seed, parks one draw from the cut row's survivors using one random number, and `sample_` returns and clears it")]
 def test_typical_walk_accepts_the_nucleus(t : T?) {
     // row 0's draft is the runner-up inside a 0.9 nucleus, row 1's the argmax, row 2's has no mass: two accepted at any seed, the parked token one of row 2's survivors
     var rows <- [[4.0, 3.9, NO_MASS, NO_MASS, NO_MASS, NO_MASS, NO_MASS, NO_MASS],
@@ -77,7 +77,7 @@ def test_typical_walk_accepts_the_nucleus(t : T?) {
     delete rows
 }
 
-[test]
+[test(description = "The typical walk rejects exactly the drafts the sampler's cuts remove - the third largest under top-k 2, a token under half the max under min-p 0.5, the third under a 0.6 nucleus over two equal leaders - and parks a survivor")]
 def test_typical_walk_cuts(t : T?) {
     // each cut rejects a draft the exact walk might draw: top-k 2 drops the third largest, min-p 0.5 a token under half the max, a 0.6 nucleus over two equal leaders the third
     var rows <- [[4.0, 3.5, 3.0, NO_MASS, NO_MASS, NO_MASS, NO_MASS, NO_MASS],
@@ -112,7 +112,7 @@ def test_typical_walk_cuts(t : T?) {
     delete rows
 }
 
-[test]
+[test(description = "In both the exact and the typical accept walk a stop-id draft ends the run with the stop as the last accepted token and no parked draw, while without stop ids every matching draft is accepted")]
 def test_walk_cuts_at_a_stop(t : T?) {
     let drafts <- [0l, 1l, 3l, 5l]
     var stops <- [3l]
@@ -152,7 +152,7 @@ def test_walk_cuts_at_a_stop(t : T?) {
     delete stops
 }
 
-[test]
+[test(description = "A penalized greedy sampler's typical walk rejects the repeated draft and parks the penalized argmax with no random draw, and the MtpAccept knob makes a sampled walk accept every in-nucleus runner-up where the exact walk accepts fewer on some seed")]
 def test_typical_walk_greedy_and_knob(t : T?) {
     // a penalized greedy sampler judges as the exact walk does (the penalized argmax, no draw); the knob routes a sampled walk through the typical judge and is put back
     var s <- bare_session(VOCAB, DRAFTS)
@@ -214,7 +214,7 @@ def private draft_draw(var s : Session; head : array<float>; var sp : SamplingPa
     return (d = d, qn = s.mtp_qn[qi])
 }
 
-[test]
+[test(description = "`mtp_draft_sample` records the sampler's distribution over the head row as q - half each to two equal leaders under a 0.6 nucleus within 1e-5, a point mass for greedy, the two kept under top-k 2 - and draws the draft from it")]
 def test_rejection_drafter_records_q(t : T?) {
     // the head's row through the sampler is the recorded q: two equal leaders under a 0.6 nucleus hold half each, the third none; a greedy sampler records a point mass
     var s <- bare_session(VOCAB, DRAFTS)
@@ -263,7 +263,7 @@ def private rejection_walk(rows, heads : array<array<float>>; drafts : array<int
 //! the same with one sampler drafting and walking
 def private rejection_walk(rows, heads : array<array<float>>; drafts : array<int64>; var sp : SamplingParams; seed : int) : tuple<a : int64; next : int64> => rejection_walk(rows, heads, drafts, sp, sp, seed)
 
-[test]
+[test(description = "The rejection walk accepts a draft whose row gives it at least q's mass and rejects one the row gives none at every seed, its residual draw landing on a survivor of the rejecting row and never on the rejected draft")]
 def test_rejection_walk_accepts_by_p_over_q(t : T?) {
     // row 0 gives draft 0 at least q's mass (always accepted), row 1 gives draft 1 none (always rejected): one accepted at any seed, the parked token a row-1 survivor
     var heads <- [[4.0, 4.0, NO_MASS, NO_MASS, NO_MASS, NO_MASS, NO_MASS, NO_MASS],
@@ -319,7 +319,7 @@ def private whole_p_rows() : array<array<float>> => <- [[4.0, NO_MASS, NO_MASS, 
                                                        [4.0, NO_MASS, NO_MASS, NO_MASS, NO_MASS, NO_MASS, NO_MASS, NO_MASS],
                                                        [0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0]]
 
-[test]
+[test(description = "Under top-k 4 the rejection walk accepts a draft at p = q/2 on 160 to 240 of 400 seeds with every reject's residual on the underweighted token, while the p = q control accepts all 400")]
 def test_rejection_walk_top_k_path(t : T?) {
     // under a top-k within the candidate cap the judge and the residual run over the candidate list: q gives draft 0 half and the
     // row a quarter, so about half the seeds accept and every reject's residual lands on the token q underweights, never the draft
@@ -337,7 +337,7 @@ def test_rejection_walk_top_k_path(t : T?) {
     delete rows
 }
 
-[test]
+[test(description = "With a greedy drafter's point-mass q the rejection walk accepts a draft at p = 1/4 on 70 to 130 of 400 seeds, every reject's residual on the token q gave nothing, while p = 1 accepts all 400")]
 def test_rejection_walk_point_mass_q(t : T?) {
     // a greedy drafter records a point mass on the head's argmax, so the row's p alone accepts: a quarter of the mass on the
     // draft accepts about a quarter of the seeds, the whole mass every seed
@@ -357,7 +357,7 @@ def test_rejection_walk_point_mass_q(t : T?) {
     delete rows
 }
 
-[test]
+[test(description = "Under a 0.99 nucleus the rejection walk accepts a draft at p = q/2 on 160 to 240 of 400 seeds with every reject's residual on the token q gave nothing, while the p = q control accepts all 400")]
 def test_rejection_walk_accepts_at_half_q_half_the_time(t : T?) {
     // q gives draft 0 half, the row a quarter: accepted on about half the seeds, and a reject's residual lands on the token q underweights
     var heads <- [[4.0, 4.0, NO_MASS, NO_MASS, NO_MASS, NO_MASS, NO_MASS, NO_MASS],
@@ -383,7 +383,7 @@ def test_rejection_walk_accepts_at_half_q_half_the_time(t : T?) {
     delete rows
 }
 
-[test]
+[test(description = "Under the rejection knob a round whose drafts recorded no q walks typical, accepting every in-nucleus runner-up, and `mtp_round_begin` clears a previous round's q record so a stale one is never read")]
 def test_rejection_without_q_records_walks_typical(t : T?) {
     // the assistant drafter's device picks record no q: under the rejection knob the walk judges them typical, never reading past `mtp_qn`
     let knob = get_mtp_accept()
@@ -417,7 +417,7 @@ def test_rejection_without_q_records_walks_typical(t : T?) {
     delete s
 }
 
-[test]
+[test(description = "`mtp_drafts_sampled` is false under exact acceptance, true under rejection even at head temperature 0, and false for a greedy stream under rejection")]
 def test_nextn_drafts_sampled_by_mode(t : T?) {
     let knob = get_mtp_accept()
     let temp0 = get_mtp_draft_temp()
@@ -439,7 +439,7 @@ def test_nextn_drafts_sampled_by_mode(t : T?) {
     delete s
 }
 
-[test]
+[test(description = "The NextN head's draft temperature sets q: 0 drafts the argmax as a point mass with no draw, a negative value records the stream's softmax, and 0.5 records the head's softmax at 0.5 within 1e-6 and draws the closed-form cdf pick")]
 def test_nextn_draft_temp_records_q(t : T?) {
     let temp0 = get_mtp_draft_temp()
     var s <- bare_session(VOCAB, DRAFTS)
@@ -481,7 +481,7 @@ def test_nextn_draft_temp_records_q(t : T?) {
     delete s
 }
 
-[test]
+[test(description = "At head temperature 0 the rejection walk at p = 1/4 accepts 70 to 130 of 400 seeds with every residual on token 1, while the stream-temperature q control accepts 160 to 240, outside the quarter bound")]
 def test_nextn_point_mass_rejection_rate(t : T?) {
     let temp0 = get_mtp_draft_temp()
     var heads <- half_q_heads()
@@ -542,7 +542,7 @@ def private sum_of(w : array<float>) : float {
     return total
 }
 
-[test]
+[test(description = "`dflash_soft_pick` records the candidate scores' softmax within 1e-6 at temperatures 1 and 0.5, picks the closed-form cdf draw with one random draw and never the empty slot, and at temperature 0 picks the first best of a tie as a point mass")]
 def test_dflash_soft_pick_closed_form(t : T?) {
     var q_ref <- soft_ref(DF_SCORES, 1.0)
     var q : array<float>
@@ -588,7 +588,7 @@ def test_dflash_soft_pick_closed_form(t : T?) {
     delete q_ref
 }
 
-[test]
+[test(description = "`dflash_record_q` records the three non-empty candidates id-ascending, each at its own softmax mass within 1e-7, and a greedy draft as a point mass of one")]
 def test_dflash_record_q(t : T?) {
     var s <- bare_session(VOCAB, DRAFTS)
     var q <- soft_ref(DF_SCORES, 1.0)
@@ -628,7 +628,7 @@ def private df_residual_walk(rows : array<array<float>>; seed : int) : tuple<a :
     return (a = a, next = next)
 }
 
-[test]
+[test(description = "Over 400 seeds the rejection walk of a DFlash draft matches the closed form seed by seed - accept where u times q is under p, else the residual cdf draw off tokens q covers - with the rate within 0.08 of p/q, where a point-mass reading misreads")]
 def test_dflash_residual_closed_form(t : T?) {
     var rows <- [[0.0, 0.0, log(2.0), 0.0, 0.0, log(3.0), 0.0, NO_MASS],
                  [0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0]]
@@ -673,7 +673,7 @@ def test_dflash_residual_closed_form(t : T?) {
 //! a trunk with no NextN head still carries the verify's scratch: a block or assistant drafter's host-judged round embeds
 //! its verify rows into mtp_cat and reads row 0's logits and the row ids off the session (the mlx-community 27B snapshot
 //! ships no head; the drawn-drafts round indexed past an empty mtp_cat there)
-[test]
+[test(description = "A session over a synthetic trunk with no NextN head still sizes the verify scratch - mtp_cat for MTP_MAX_ROWS rows, the row ids and row 0's logits - while the NextN handoff mtp_h stays empty")]
 def test_verify_scratch_sized_on_a_headless_trunk(t : T?) {
     let c = Config(dim = 64l, hidden_dim = 128l, n_layers = 2l, n_heads = 2l, n_kv_heads = 2l, vocab_size = 100l,
         seq_len = 16l, head_size = 32l, kv_dim = 64l, rope_freq_base = 10000.0)

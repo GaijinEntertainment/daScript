@@ -254,7 +254,7 @@ def private arm_on() : bool => true
 
 def private arm_off() : bool => false
 
-[test]
+[test(description = "After resetting the home seats, uninstalled rdec slots decline, installed doubles receive exactly the forwarded arguments, the want state round-trips with one rail arming the tier, and the arm hook resets to unarmed")]
 def test_gpu_tier_contract(t : T?) {
     t |> success(reset_gpu_home_seats(), "the seats read as no home's entry filled them - the tier is unarmed, so the reset lands")
     t |> run("uninstalled slots decline - never serve") @(t : T?) {
@@ -333,7 +333,7 @@ def test_gpu_tier_contract(t : T?) {
 }
 
 //! env-backed: an exported DASLLAMA_GPU answers ahead of the want, so the rails-alone arms assert the DELTA against the ambient answer, never false
-[test]
+[test(description = "`gpu_resident_requested` turns on for an explicit resident want or the measured-best set and otherwise follows the ambient DASLLAMA_GPU, and resident alone does not turn `gpu_want_auto` on")]
 def test_gpu_tier_resident_ask(t : T?) {
     let ambient = g_env_gpu.gpu ?? false
     set_gpu_tier_want_(GpuTierWant(dn = true, attn = true, shexp = true))
@@ -347,7 +347,7 @@ def test_gpu_tier_resident_ask(t : T?) {
     t |> equal(gpu_resident_requested(), ambient, "a zero want resets to the ambient env answer")
 }
 
-[test]
+[test(description = "`gpu_cpu_passes_` lists one row per CPU-pass reason that fired, in reason order with its words and exact count, and re-setting the reasons starts the counts from zero")]
 def test_gpu_cpu_passes(t : T?) {
     set_gpu_cpu_pass_reasons(["codec", "paged", "cap"], ["a codec", "pages", "the cap"])
     t |> equal(length(gpu_cpu_passes_()), 0, "nothing fired: the device served every call")
@@ -365,7 +365,7 @@ def test_gpu_cpu_passes(t : T?) {
     t |> equal(length(gpu_cpu_passes_()), 0, "a model arming again starts from zero")
 }
 
-[test]
+[test(description = "The KV read and sync forwarders hand the installed doubles their layer and row window, and the read double's writes land through the caller's K and V pointers")]
 def test_rdec_readback_reaches_the_doubles(t : T?) {
     install_moe_gpu_resident(@@d_reserve, @@d_place, @@d_prepare, @@d_norms, @@d_set_layer,
                              @@d_set_cls, @@d_token, @@d_prefill, @@d_sync, @@d_read)
@@ -386,7 +386,7 @@ def test_rdec_readback_reaches_the_doubles(t : T?) {
     t |> success(g_sync_l == 4l && g_sync_row0 == 0l && g_sync_n == 9l, "the sync forwards its layer and row window")
 }
 
-[test]
+[test(description = "The speculative carry seat is uninstalled until its own install, then forwards the row to the double, which writes through the destination the forwarder handed it")]
 def test_rdec_carry_seat(t : T?) {
     t |> run("the speculative carry's landing installs separately and forwards the row and destination") @(t : T?) {
         t |> success(!rdec_carry_installed(), "no carry landing before its install")
@@ -401,7 +401,7 @@ def test_rdec_carry_seat(t : T?) {
     }
 }
 
-[test]
+[test(description = "The NextN draft seat declines unset, forwards token, row, hydrate start and pick ask to its double, survives an unset and reinstall, and the head's norms block sits past the trunk's q/k slots")]
 def test_rdec_draft_seat(t : T?) {
     t |> run("the NextN draft seat installs apart, forwards the row, the hydrate start and the pick ask, and unsets to a declining form the caller puts back") @(t : T?) {
         let rows : array<float>
@@ -448,7 +448,7 @@ def test_rdec_draft_seat(t : T?) {
     }
 }
 
-[test]
+[test(description = "The same-slab verify seat declines and steps no rows unset, and installed forwards ids, position, row count and pick ask, landing picks and hidden rows always and logits only without the pick ask")]
 def test_rdec_verify_seat(t : T?) {
     t |> run("the same-slab verify seat installs apart and forwards the rows, the position, the pick ask and every landing") @(t : T?) {
         let rows : array<float>
@@ -489,7 +489,7 @@ def test_rdec_verify_seat(t : T?) {
     }
 }
 
-[test]
+[test(description = "The verify's rollback seat declines without reaching any double while unset, and once installed forwards the committed row and returns the double's answer")]
 def test_rdec_rollback_seat(t : T?) {
     t |> run("the verify's rollback seat installs apart: unset it declines and reaches no double, installed it forwards the committed row") @(t : T?) {
         t |> success(!rdec_rollback_installed(), "no rollback seat before its install")
@@ -502,7 +502,7 @@ def test_rdec_rollback_seat(t : T?) {
     }
 }
 
-[test]
+[test(description = "The head warm seat keeps no ask and answers 0 rows unset, forwards the ask and row count installed, and the head's K/V sync and read forward layer n_layers with its row window")]
 def test_rdec_head_warm_seat(t : T?) {
     t |> run("the head's prompt-warm seat installs apart: unset it keeps no ask and answers no rows, installed it forwards the ask and the row count; the head's K/V row ranges ride the row seats at layer n_layers") @(t : T?) {
         var kb, vb : array<uint8>
@@ -533,7 +533,7 @@ def test_rdec_head_warm_seat(t : T?) {
     }
 }
 
-[test]
+[test(description = "The hybrid deltanet seats install apart and forward the layer, beta/alpha offset, uploaded row count, owned state pointer and prefill slot handoff to their doubles")]
 def test_rdec_dn_seats(t : T?) {
     t |> run("the hybrid seats install separately and forward what they are handed") @(t : T?) {
         t |> success(!rdec_dn_installed(), "no hybrid seats before their install")
@@ -558,7 +558,7 @@ def test_rdec_dn_seats(t : T?) {
     }
 }
 
-[test]
+[test(description = "The ids-form prefill seat declines embed setup and f32 upload unset, the f32 table charge is zero past its cap, and installed doubles receive block, format, scale, vocab and positions")]
 def test_rdec_prefill_ids_seam(t : T?) {
     t |> run("the ids-form prefill seat: unset declines, installed doubles receive the forwarded values") @(t : T?) {
         t |> success(!rdec_prefill_ids_installed(), "the seat starts uninstalled")
@@ -588,7 +588,7 @@ def test_rdec_prefill_ids_seam(t : T?) {
     }
 }
 
-[test]
+[test(description = "`dlim_vulkan_tag` changes when `dn_native` is set, so the vulkan image identity distinguishes a lane with native deltanet planes")]
 def test_dlim_vulkan_tag_dn_native(t : T?) {
     t |> run("the vulkan image identity carries the native-deltanet-planes bit") @(t : T?) {
         var v = DlimVulkanConfig()
@@ -598,7 +598,7 @@ def test_dlim_vulkan_tag_dn_native(t : T?) {
     }
 }
 
-[test]
+[test(description = "`kernel_dump_save` writes text and word payloads byte-exact under the knob's directory, succeeds writing nothing with the knob unset, and answers false for a missing directory")]
 def test_kernel_dump_save(t : T?) {
     t |> run("a kernel dump writes its payload under the knob's directory, writes nothing with the knob unset, and says where it could not write") @(t : T?) {
         let dir = test_temp_dir()
@@ -619,7 +619,7 @@ def private seg_probe_segments(_t : Model; var _segs : array<PrefillSeg>) : bool
 
 //! the segments form declines what the one-session call declines: a session roping from per-row tables or adding deepstack
 //! slices takes the window only where the active override registers that arm
-[test]
+[test(description = "Under a probe override with no mrope or deepstack arm, two plain sessions take the segments form, a per-row rope or deepstack session declines it until cleared, and no active override means no form")]
 def test_segments_served_by_override(t : T?) {
     t |> run("a per-row-table or deepstack session keeps the segments form off an override with no such arm") @(t : T?) {
         let found = active_prefill_override()
@@ -648,7 +648,7 @@ def test_segments_served_by_override(t : T?) {
 
 //! the say-once helper every GPU driver file shares: a reason set holds each `why` once, a second call with the same `why` leaves
 //! it as it was, another `why` joins it, and a cleared set says it again
-[test]
+[test(description = "`gpu_said_once` says and records a reason once, answers false and records nothing on a repeat, adds a new reason, and says a reason again after the set is cleared")]
 def test_gpu_said_once(t : T?) {
     t |> run("gpu_said_once keeps one entry a reason and says a cleared reason again") @(t : T?) {
         var said : table<string>
@@ -666,7 +666,7 @@ def test_gpu_said_once(t : T?) {
 }
 
 //! an unset seat with no CPU form panics naming the module that installs it
-[test]
+[test(description = "Calling the unset N-row token command or per-layer PLE planes seat panics with text naming `require dasllama/dasllama_math_vulkan`, the module that installs them")]
 def test_unset_seats_name_their_module(t : T?) {
     t |> run("the N-row token command and the per-layer planes, unset, panic naming dasllama/dasllama_math_vulkan") @(t : T?) {
         let token_why = panic_text() $ {
@@ -721,7 +721,7 @@ def private announce_child(t : T?; fuse : string) : string {
 
 //! every override the GPU homes announce prints its line where it takes effect, naming the setter and the env spelling, and
 //! prints nothing where it does not
-[test]
+[test(description = "In child runs, each GPU override announces its exact line, naming setter and env spelling, only where it moves off its default, and on Metal the fuse knob announces once a state, at context init under =0")]
 def test_override_announces(t : T?) {
     let out = announce_child(t, "")
     t |> run("the sliding layers' rings announce both states, and a model with no sliding layer says nothing") @(t : T?) {
@@ -804,7 +804,7 @@ def private home_words_child(t : T?; cuda : string) : string {
 //! the texts that follow the asked home, read off a child under each ask: what serves a model the whole-model driver declined
 //! (`rdec_fallback_words`: the per-op rails, or the CPU rails on the CUDA home, which has none), and each discrete home's
 //! dry-bake arm refusing by name a config the other home wrote (a lane minted off it would lie about its plan)
-[test]
+[test(description = "In child runs a declined model falls to the per-op rails, or to the CPU rails under DASLLAMA_CUDA=1 on a dasCUDA build, and each home's dry-bake arm refuses the other home's config by name")]
 def test_home_words(t : T?) {
     let plain = home_words_child(t, "")
     let cuda = home_words_child(t, "1")
@@ -837,7 +837,7 @@ def test_home_words(t : T?) {
 }
 
 //! the prompt window's rows: a pin or the knob rounded down to the chain's 128-row unit, never under it
-[test]
+[test(description = "`pf_window_rows` rounds a pin or the knob down to a 128-row multiple with a 128 floor, and with neither set serves the driver's pick, the narrow default before one, a pin outranking it")]
 def test_pf_window_rows_rounding(t : T?) {
     let was = pf_window_rows_pin()
     set_pf_window_rows_pin(300l)
@@ -867,7 +867,7 @@ def test_pf_window_rows_rounding(t : T?) {
 }
 
 //! the n-gram window seeded from a token list: the ids before position n, oldest first, -1 where the prompt is shorter
-[test]
+[test(description = "`ple_window_seed` fills a four-slot window with the ids before position n oldest first, -1 in slots before the prompt start, keeping the window's length")]
 def test_ple_window_seed(t : T?) {
     var win : array<int64>
     win |> resize(4)
@@ -882,7 +882,7 @@ def test_ple_window_seed(t : T?) {
 }
 
 //! the vulkan lane mints trimmed unless DASLLAMA_TRIM=0 or set_vulkan_trim says otherwise
-[test]
+[test(description = "The vulkan lane's trim knob defaults to trimmed, and with no `set_vulkan_trim` lever set `vulkan_trim` follows the knob")]
 def test_vulkan_trim_default(t : T?) {
     t |> success(VulkanEnv().trim, "the knob's default is the trimmed lane")
     if (!vulkan_trim_lever_set()) {
@@ -890,7 +890,7 @@ def test_vulkan_trim_default(t : T?) {
     }
 }
 
-[test]
+[test(description = "The home's entry installers run again over the test doubles so later files see the home's seats, and the tier stays unarmed afterward")]
 def test_gpu_tier_seats_put_back(t : T?) {
     t |> success(reinstall_gpu_home_seats(), "the home's entry installers run again over the doubles")
     t |> success(!moe_gpu_tier_arm_(), "the tier stays unarmed")

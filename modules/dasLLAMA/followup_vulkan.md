@@ -1440,7 +1440,7 @@ module) is independent and can land any time - it is pure structure.
     taken for them; the kernel cells hold the stamps meanwhile. The arms need the per-32 plane
     builders (the block-32 quant and scale planes) beside their kq ones, then the rows.
 68. **The routed 26B's perplexity cells measure the device compiler's rounding, not the driver.**
-    `test_gpu_resident_gemma4_26b.das` and `test_gpu_resident_gemma4_26b_k.das` hold the resident
+    `test_gpu_resident_gemma4_26b` and `test_gpu_resident_gemma4_26b_k` (`test_gpu_resident_gemma4_moe.das`) hold the resident
     perplexity to a ratio of the CPU chain's, and a kernel recompile alone - kernels bit-identical
     at the model's width in the kernel cells, no out-of-range access under the validation layer,
     the same readings with a barrier before every dispatch - moves the Q4_K_M file's 150-position
@@ -1498,9 +1498,10 @@ module) is independent and can land any time - it is pure structure.
     `DASLLAMA_VK_FUSE=0`, while the N-column GEMV leaves match the one-column class bit for bit in
     `tests/test_vulkan_kernels.das`; a Q8_0 carrier is exact. The difference sits among the arms
     the K-quant chain alone takes - the split add+rms and Q8_K requant a site, the `a:rq_x` and
-    `t:fin_rq` requants - and `test_gpu_resident_regions_llama_k.das` holds the split bar with the
-    one-token-off control meanwhile; `test_gpu_resident_regions_qwen3moe.das` (Qwen3-30B-A3B
-    Q4_K_M, its projections and experts all Q4_K) holds the same bar for the same reason - its rows
+    `t:fin_rq` requants - and the Llama `_k` cells of `test_gpu_resident_regions_kquant.das` hold
+    the split bar with the one-token-off control meanwhile; the `q30` cells of
+    `test_gpu_resident_regions_qwen_moe.das` (Qwen3-30B-A3B Q4_K_M, its projections and experts
+    all Q4_K) hold the same bar for the same reason - its rows
     read up to 0.63 of a logit apart at the same argmax (the qwen3moe regions cells' maxdiff lines on the pod, cm2 arm), where the gpt-oss file's Q8_0 projections
     read bit for bit. The work: the arm found by pinning each site's N-row form to its one-row twin
     in turn, then the exact bar restored in both files.
@@ -1594,7 +1595,8 @@ module) is independent and can land any time - it is pure structure.
     (`performance/model_specs.das`, 14 GB) serves through the N-row command like the other dense
     K-quant carriers, but no box of ours stocks it beside its models, so no regions file pins its
     rows and `PERF_LEDGER.md` carries no row. The work, on a box with the room: a regions file in
-    `test_gpu_resident_regions_llama_k.das`'s shape (the two batched-step cells on the split bar,
+    the shape of `test_gpu_resident_regions_kquant.das`'s `test_regions_batched_steps_k` /
+    `test_regions_batched_steps_split_k` pair (the two batched-step cells on the split bar,
     large tier) registered in `tests/run.das`, and the section's row form - `daslang -jit
     benchmarks/lcpp_bench.das --for-debug-purposes -r 3 -p 512 -n 128 -t 16 --npl 4` on the cm2
     arm and under `DASLLAMA_COOPMAT=mm`, beside llama.cpp b10660's `llama-batched-bench -c 4096 -b

@@ -89,7 +89,7 @@ def q8_gemv_run(t : T?; nreg, d, nb : int) {
     delete f
 }
 
-[test]
+[test(description = "The CUDA q8 GEMV class kernel stores every row and matches the CPU q8 oracle within 1e-3 of the larger magnitude on one, two and three interleaved regions with partial blocks, and the launch census counts it.")]
 def test_cud_q8_gemv(t0 : T?) {
     t0 |> run("CUDA q8 GEMV class kernel == the CPU oracle") <| @(t : T?) {
         if (!ensure_q8_gemv_cls()) {
@@ -103,7 +103,7 @@ def test_cud_q8_gemv(t0 : T?) {
 }
 
 //! the first measurement: the q8 GEMV at a llama-1B projection's shape, event-timed over repeated launches
-[test]
+[test(description = "The q8 GEMV at the llama-1B 2048 x 2048 projection shape matches the CPU oracle on its warm-up launch, then logs a positive event-timed rate over 50 launches.")]
 def test_cud_q8_gemv_rate(t0 : T?) {
     t0 |> run("CUDA q8 GEMV at n 2048 d 2048: a rate, logged") <| @(t : T?) {
         if (!ensure_q8_gemv_cls()) {
@@ -255,7 +255,7 @@ struct WorkerBind {
 //! gate binds the calling thread at EVERY entry - a ready device's too - so after the thread's binding is dropped the next entry
 //! binds again and the free-memory query (the plan's budget) answers as on the main thread; an entry that only answers "ready"
 //! leaves the thread unbound and the query reads nothing
-[test]
+[test(description = "A worker thread's context binds the CUDA device at every tier entry: with the thread's binding dropped, the ready device binds again and the free-memory query reads nonzero with the driver's error clear.")]
 def test_cud_worker_thread_binds(t0 : T?) {
     t0 |> run("a worker thread's context binds the CUDA device on every entry: dropped from the thread, the ready device binds again and the free-memory query answers") <| @(t : T?) {
         if (!cud_init()) {
@@ -285,7 +285,7 @@ def test_cud_worker_thread_binds(t0 : T?) {
     }
 }
 
-[test]
+[test(description = "The q8 cm2 s tile split two and four ways along K (the last chunk short at K 1280) and reduced matches the whole-K f16-feed oracle at 31 rows, the tile footprint past the region left at the sentinel.")]
 def test_cud_q8_cm2s_split(t0 : T?) {
     t0 |> run("CUDA q8 cm2 s-tile split in two and four k chunks + the reduce == the f16-feed CPU oracle: the short window's form") <| @(t : T?) {
         if (!ensure_q8_batch_cm2s_cls() || !ensure_splitk_reduce_cls()) {
@@ -300,7 +300,7 @@ def test_cud_q8_cm2s_split(t0 : T?) {
 
 //! every format's s column split along K at 31 rows - the short window's form on every plane the window admits - against the
 //! format's own oracle: the Vulkan short-split cell's rows (a per-32 row's K off the 256 grid splits in two, its last chunk short)
-[test]
+[test(description = "Every per-format cm2 s column compiles and, split along K at 31 rows and reduced, matches its format's own CPU oracle at the f16 operand bar, the tile footprint past the region left at the sentinel.")]
 def test_cud_cm2s_short_split_family(t0 : T?) {
     t0 |> run("CUDA s column split along K under 32 rows == the CPU oracle, every per-format tile row") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -326,7 +326,7 @@ def test_cud_cm2s_short_split_family(t0 : T?) {
 }
 
 
-[test]
+[test(description = "The CUDA cm2 pick under 32 rows keeps the s column whole with the split knee off and splits it by the shared rule on it (32x4x256, 32x2x768), while a full 32-row column takes the wave model's pick whatever the knee.")]
 def test_cud_short_window_pick(t0 : T?) {
     t0 |> run("the CUDA window pick under the s column's rows: whole off the knee, split by the shared rule on it") <| @(t : T?) {
         if (!ensure_q8_batch_cm2s_cls()) {
@@ -347,7 +347,7 @@ def test_cud_short_window_pick(t0 : T?) {
     }
 }
 
-[test]
+[test(description = "The q8 cm2 l tile split in two K chunks (576 as 512 + 64, and 2048) and reduced matches the whole-K f16-feed oracle at the tile bar over 300 rows, the tile footprint past the region left at the sentinel.")]
 def test_cud_q8_cm2l_split(t0 : T?) {
     t0 |> run("CUDA q8 cm2 l-tile split in two k chunks + the reduce == the f16-feed CPU oracle") <| @(t : T?) {
         if (!ensure_q8_batch_cm2l_cls() || !ensure_splitk_reduce_cls()) {
@@ -359,7 +359,7 @@ def test_cud_q8_cm2l_split(t0 : T?) {
     }
 }
 
-[test]
+[test(description = "The q8 cm2 l tile over two scheduled regions of 300 and 260 rows at K 576 stores every row and matches the f16-feed CPU oracle within 2e-3 of the plane's largest magnitude.")]
 def test_cud_q8_cm2l_batch(t0 : T?) {
     t0 |> run("CUDA q8 cm2 l-tile class kernel == the f16-feed CPU oracle") <| @(t : T?) {
         if (!ensure_q8_batch_cm2l_cls()) {
@@ -371,7 +371,7 @@ def test_cud_q8_cm2l_batch(t0 : T?) {
 }
 
 //! the reference: each block's exact int32 dot scaled by its weight and activation scales, summed in f32
-[test]
+[test(description = "The MMQ-shaped q8 int8 GEMM at K 768 over 256 weight rows and 256 tokens matches the block-scaled CPU reference (each block's exact int32 dot times its two scales) within 1e-3 of the larger magnitude.")]
 def test_cud_q8_mmq(t0 : T?) {
     t0 |> run("CUDA MMQ-shaped q8 GEMM == the block-scaled CPU reference") <| @(t : T?) {
         if (!ensure_q8_mmq()) {
@@ -458,7 +458,7 @@ def private fp4_moe_bucket_idx(counts : int[3]) : array<uint> {
 }
 
 //! the NVFP4 leaf on the FP4 tensor rung: the k4-tiled nv4 plane (sixteen UE4M3 strip codes a superblock as four words) against an FP4 feed in the (k, k + 8) pairing, the reference each element's e2m1 x UE4M3 on both sides under the row scale and the site scale
-[test]
+[test(description = "The NVFP4 MMQ leaf on the FP4 tensor rung over the k4-tiled nv4 plane matches the e2m1 x UE4M3 CPU reference under each token's row scale and the site scale, within 1e-3 of the larger magnitude.")]
 def test_cud_nv4_mmq(t0 : T?) {
     t0 |> run("CUDA NVFP4 GEMM on the FP4 tensor rung == the e2m1 x UE4M3 CPU reference under the row scales and the site scale") <| @(t : T?) {
         if (!ensure_nv4_mmq()) {
@@ -494,7 +494,7 @@ def test_cud_nv4_mmq(t0 : T?) {
 }
 
 //! the Q4_K leaf over the engine's repacked superblocks (element i the low nibble, i + 16 the high; five scale words a superblock) against the GEMV's fold of each block: xs x (d sc dot - dmin mn qsum)
-[test]
+[test(description = "The Q4_K MMQ leaf over four repacked superblocks matches the CPU per-block fold xs x (d sc dot - dmin mn qsum) at the f16 tiles' bar, its min terms f16-staged and folded in two groups of sixteen blocks.")]
 def test_cud_k4_mmq(t0 : T?) {
     t0 |> run("CUDA MMQ-shaped Q4_K GEMM == the block-scaled CPU reference") <| @(t : T?) {
         if (!ensure_k4_mmq()) {
@@ -568,7 +568,7 @@ def private cud_sb_mmq_run(t : T?; f : KqFmt) {
     check_rows(t, "{f} MMQ vs the block-scaled reference", y, want, Q8_GEMV_BAR, d)
 }
 
-[test]
+[test(description = "The min-term-free superblock MMQ leaves IQ4_XS, Q4_0 and IQ4_NL at K 1024 each match the block-scaled CPU reference (xs x scale x the block dot) within 1e-3 of the larger magnitude.")]
 def test_cud_sb_mmq(t0 : T?) {
     t0 |> run("CUDA MMQ-shaped superblock GEMMs without a min term (IQ4_XS, Q4_0, IQ4_NL) == the block-scaled CPU reference") <| @(t : T?) {
         if (!(ensure_iq4xs_mmq() && ensure_q40_mmq() && ensure_iq4nl_mmq())) {
@@ -611,7 +611,7 @@ def private cud_b32_mmq_run(t : T?; f : KqFmt) {
     check_rows(t, "{f} MMQ vs the dequantized reference", y, want, f == KqFmt.q51 ? TILE_BAR : Q8_GEMV_BAR, d)
 }
 
-[test]
+[test(description = "The per-32 MMQ leaves Q5_1, Q4_0, Q5_0 and IQ4_NL match the engine's own per-32 dequant dotted with the activation quants, per element at 1e-3, Q5_1 at the f16 tiles' bar for its f16-staged m term.")]
 def test_cud_b32_mmq(t0 : T?) {
     t0 |> run("CUDA MMQ-shaped per-32 GEMMs (Q5_1, Q4_0, Q5_0, IQ4_NL) == the dequantized CPU reference") <| @(t : T?) {
         if (!(ensure_q51_mmq() && ensure_q4032_mmq() && ensure_q5032_mmq() && ensure_iq4nl32_mmq())) {
@@ -713,14 +713,14 @@ def private fp4_moe_ladder_cell(t : T?; nv4 : bool) {
     }
 }
 
-[test]
+[test(description = "The nv4 FP4 expert leaf over the CPU schedule twin's s and m columns (buckets of 20, 150, 300 rows) matches the e2m1 x UE4M3 reference under each expert's site scale, the rows past the window kept at the sentinel.")]
 def test_cud_nv4_fp4_mmq_moe(t0 : T?) {
     t0 |> run("CUDA nv4 FP4 leaf over the expert schedule's s and m columns == the e2m1 x UE4M3 reference under each expert's site scale: packed buckets, the row and column guards, sentinel workgroups") <| @(t : T?) {
         fp4_moe_ladder_cell(t, true)
     }
 }
 
-[test]
+[test(description = "The mx4 FP4 expert leaf over the schedule's s and m columns at K 2880 (a k tail) matches the e2m1 x UE8M0 reference on every row of three packed buckets, the rows past the window kept at the sentinel.")]
 def test_cud_mx4_fp4_mmq_moe(t0 : T?) {
     t0 |> run("CUDA mx4 FP4 leaf over the expert schedule's s and m columns == the e2m1 x UE8M0 reference: packed buckets, the k tail at 2880, the row and column guards, sentinel workgroups") <| @(t : T?) {
         fp4_moe_ladder_cell(t, false)
@@ -729,7 +729,7 @@ def test_cud_mx4_fp4_mmq_moe(t0 : T?) {
 
 //! the K-quant cm2 tiles (the shared decode-in-load templates) on the l, m and s columns against the Vulkan cells' per-format oracles,
 //! over the Vulkan cells' hashed planes and two regions of activation rows (whole tiles and an edge each)
-[test]
+[test(description = "Every superblock format's kq cm2 tile on the l, m and s columns (mx4 on s and e alone) compiles and matches the Vulkan cells' per-format CPU oracle over two scheduled regions at the coopmat f16-operand bar.")]
 def test_cud_kq_cm2_family(t0 : T?) {
     t0 |> run("CUDA kq cm2 l/m/s tiles == the CPU oracle (every superblock format; mx4 on its s and e columns alone)") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -786,7 +786,7 @@ def test_cud_kq_cm2_family(t0 : T?) {
 
 //! the K-quant decode GEMV family (the shared `KqGemvLeafT` leaves) against the Vulkan cell's CPU oracle, every superblock
 //! format at the three lane splits, 256, 512 and 5120 wide - the Vulkan cell's shapes
-[test]
+[test(description = "Every kq GEMV leaf (all 15 superblock formats) compiles and matches the Vulkan cell's CPU oracle at 256, 512 and 5120 wide under the subgroup, 16- and 8-lane row splits, within 2e-3 under a poison control.")]
 def test_cud_kq_gemv_family(t0 : T?) {
     t0 |> run("CUDA kq GEMV leaves == the CPU oracle (all 15 formats)") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -850,7 +850,7 @@ def private b32_row_oracle(f : KqFmt; wq, ws, xq : array<uint>; xs : array<float
 
 //! the per-32 decode GEMVs (the shared `Blk32GemvRunT` leaves) against the engine's scalar dots at the Vulkan cells' widths - a
 //! subgroup a row, a lane a block over Q8_0 activations, two regions of three rows
-[test]
+[test(description = "The per-32 GEMV leaves (Q5_1, IQ4_NL, Q4_0, Q5_0, and mx4 up to gpt-oss's 2880) match the engine's scalar row dot at two widths each over two regions of three rows, within 2e-3 under a poison control.")]
 def test_cud_b32_gemv_family(t0 : T?) {
     t0 |> run("CUDA per-32 GEMV leaves == the scalar dot's float order (q51, iq4nl32, q4032, q5032, and mx4 at gpt-oss's 2880)") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -911,7 +911,7 @@ def private cud_gather_rows(t : T?; fmt : int; wq, ws, ids : array<uint>; xh : a
 //! the token-table gathers: every superblock format's `KqEmb<Fmt>` leaf against the class lane decode (the Vulkan cell's oracle),
 //! the per-32 leaves against the engine's plane dequant, and the exact f32 table's leaf against the rows' own floats - four rows,
 //! three ids off a five-row table past a one-row lead, one `EMB_ID_HOST` row copying the host's staged row
-[test]
+[test(description = "The token-table gathers of all 15 superblock formats, 4 per-32 formats and the f32 table match their oracles on three ids past a one-row lead plus a host-staged row within 2e-3, the f32 grid's footprint kept at the sentinel.")]
 def test_cud_emb_family(t0 : T?) {   // nolint:STYLE038 - one flat arm per gather stamp (every kq leaf, the q8 and the f32 table), a split would hide the arm list
     t0 |> run("CUDA token-table gather leaves == the oracles (15 superblock formats, 4 per-32 ones)") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -1001,7 +1001,7 @@ def test_cud_emb_family(t0 : T?) {   // nolint:STYLE038 - one flat arm per gathe
 //! the E-series pre-step's finish (`CuPleFinish`, a `GkPleFinish` stamp, the Vulkan cell's fixture): three layers' slices of 256
 //! over two rows in place, side = (side + pnorm . rms(proj)) / sqrt(2) against the CPU form at the approx bar; the slices read as
 //! one row miss it, the control
-[test]
+[test(description = "ple_finish rewrites six 256-wide side slices in place to (side + pnorm x rms-normed proj) / sqrt 2 within 2e-3 of the CPU finish a slice at a time, one norm over every slice the control that misses.")]
 def test_cud_ple_finish(t0 : T?) {
     t0 |> run("ple_finish: the side rows == the CPU finish a slice at a time") <| @(t : T?) {
         if (!ensure_ple_finish_cls()) {
@@ -1050,7 +1050,7 @@ def test_cud_ple_finish(t0 : T?) {
 //! the bf16 router-form GEMV stamps: the pairs stamp at an even dim and the halfword stamp at an odd one, ne rows at a row base,
 //! three columns in one dispatch under the output scale (`yscale`), against the CPU dot at the approx bar; the sentinel past the
 //! last column stands, a poisoned output the control
-[test]
+[test(description = "The bf16 router GEMV stamps (pairs at dim 1536, halfword at odd dim 1537) match the CPU dot of 32 rows over three columns at a row base and an output base under yscale within 2e-3, the sentinel outside kept.")]
 def test_cud_router_gemv_bf16(t0 : T?) {
     for (spec in [(dim = 1536, hw = false), (dim = 1537, hw = true)]) {
         t0 |> run("router_gemv_bf16{spec.hw ? "_hw" : ""} (dim {spec.dim}) == the CPU dot at a row base, an output base and three columns") <| @(t : T?) {
@@ -1101,7 +1101,7 @@ def test_cud_router_gemv_bf16(t0 : T?) {
 
 //! the small f16 x f16 GEMM on the cm2 tile (`CuF16GemmCm2`, the template both discrete homes stamp): the Vulkan cell's direct arm
 //! at its four shapes against the f32 dot of the same f16 values, the header under the output base kept
-[test]
+[test(description = "The small f16 GEMM on the cm2 tile matches the f32 dot of the same f16 values within 2e-5 of the largest magnitude on five shapes up to an E2B projection window, the header and the tile footprint past the rows kept at the sentinel.")]
 def test_cud_f16_gemm(t0 : T?) {
     t0 |> run("the small f16 GEMM on the cm2 tile (the E-series projection's window form) == the f32 dot, direct") <| @(t : T?) {
         if (!ensure_f16_gemm_cm2_cls()) {
@@ -1166,7 +1166,7 @@ def test_cud_f16_gemm(t0 : T?) {
 //! the per-layer-embedding projection's f16 panel (`CuPleBf16Cvt`, the Vulkan cell's form): bf16 halves widened by their bit shift
 //! and stored f16 bit for bit the language's half cast of the widened value, a value past the half range saturated, the elements
 //! past the count kept
-[test]
+[test(description = "ple_bf16_cvt stores 1030 bf16 values as f16 bit for bit the half of each widened value, saturating past the half range at 65504, and leaves the grid's footprint past the count untouched.")]
 def test_cud_ple_bf16_cvt(t0 : T?) {
     t0 |> run("ple_bf16_cvt: the bf16 rows as f16 == the widened value's half, saturated") <| @(t : T?) {
         if (!ensure_ple_bf16_cvt_cls()) {
@@ -1333,7 +1333,7 @@ def private cud_act_biased_arm(t : T?; var s : void?; act : uint; q8k : bool; f1
     }
 }
 
-[test]
+[test(description = "The gpt-oss biased act twins (Q8_0 and Q8_K requant, and f16) under silu and the clamped swiglu match the CPU act over the host-biased rows (quants within one step, scales and halves at 2e-3), the unbiased act a control that misses.")]
 def test_cud_act_biased(t0 : T?) {
     t0 |> run("CUDA biased act twins (gpt-oss) == the CPU act over the host-biased rows: the Q8_0 and Q8_K requant forms and the f16 form, under silu and the clamped swiglu") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -1445,7 +1445,7 @@ def private fp4_feed_compare(t : T?; tag : string; bufs : uint64[5]; qi, si, ri 
 }
 
 //! the FP4 feed kernels against the CPU feed: a float plane's rows bit for bit (the kernel is `precise`), the gate / up pair through the act (its fast-math exponential rounds a few strips' code or nibble the other way), the fused residual step + norm + feed
-[test]
+[test(description = "The FP4 feed kernels match the CPU feed: fp4_rows bit for bit, the silu gate/up feed and the fused residual + rmsnorm feed within one nibble or code word in 800, row scales at 2e-3, under a flipped-word count control.")]
 def test_cud_fp4_feeds(t0 : T?) {
     t0 |> run("CUDA FP4 feed kernels (fp4_rows, fp4_actrows, cls_ar_fp4_b) == the CPU feed") <| @(t : T?) {
         if (!ensure_fp4_rows() || !ensure_fp4_actrows() || !ensure_cls_ar_fp4_b()) {
@@ -1507,7 +1507,7 @@ def test_cud_fp4_feeds(t0 : T?) {
 }
 
 //! the FP4 expert leaf's admission: mx4 on the 64 lattice (gpt-oss's 2880 over 2880), nv4 on the 256 lattice with no expert bias rows (the 35B-A3B's 2048 over 768); a width off its lattice, a biased nv4 stack and a q40 stack keep the cm2 tiles
-[test]
+[test(description = "crd_moe_mmq_fits admits mx4 on the 64 lattice and unbiased nv4 on the 256 lattice (gpt-oss 2880 x 2880, the 35B-A3B 2048 x 768) and refuses an off-lattice width, a biased nv4 stack and a q40 stack.")]
 def test_cud_moe_mmq_fits(t : T?) {
     t |> run("moe_mmq_fits: the gate/up and down reduction widths on each stamp's lattice") @(t : T?) {
         let mx4 = int(KqFmt.mx4)
@@ -1527,7 +1527,7 @@ def test_cud_moe_mmq_fits(t : T?) {
 }
 
 //! mx4_rows bit for bit with the CPU feed (the kernel is `precise`); mx4_actrows and its biased twin (each row's expert's gate and up bias added first) allowed a few strips the act's fast-math exponential rounds the other way
-[test]
+[test(description = "The MXFP4 feed kernels at gpt-oss's 2880 match the CPU feed: mx4_rows bit for bit, mx4_actrows and its biased twin within one word in 800, the biased output landing past that allowance off the unbiased feed as the control.")]
 def test_cud_mx4_feeds(t0 : T?) {
     t0 |> run("CUDA MXFP4 feed kernels (mx4_rows, mx4_actrows, mx4_actrows_b) == the CPU feed") <| @(t : T?) {
         if (!ensure_mx4_rows() || !ensure_mx4_actrows() || !ensure_mx4_actrows_b()) {
@@ -1589,7 +1589,7 @@ def test_cud_mx4_feeds(t0 : T?) {
 
 //! the Q8_K feed kernels of a K-quant layer - the plain requant of f32 rows, the act + requant into a K-quant down plane's feed,
 //! the fused residual step + requant - against the Vulkan cells' CPU oracles, the Q8_0 stamps beside them
-[test]
+[test(description = "The Q8_K and Q8_0 feed kernels match the Vulkan cells' CPU oracles: the plain Q8_K requant bit for bit, the silu act + requant and the fused residual + rmsnorm + requant within one quant step, scales at 2e-3.")]
 def test_cud_q8k_feeds(t0 : T?) {
     t0 |> run("CUDA Q8_K feed kernels (cls_q8k_rq, q8k_actrq_cls, cls_ar_rqk) == the CPU oracle") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -1610,7 +1610,7 @@ def test_cud_q8k_feeds(t0 : T?) {
     }
 }
 
-[test]
+[test(description = "The words copy kernel carries 1000 and 1003 words (a quad-lane run and a three-word tail) from a mapped host block through the device to another mapped block bit for bit, the four words past n keeping their poison.")]
 def test_cud_words_copy(t0 : T?) {
     t0 |> run("CUDA words copy: a mapped host block in, the device, a mapped host block out") <| @(t : T?) {
         if (!ensure_words_copy()) {
@@ -1740,7 +1740,7 @@ def fa_run(t : T?; hs, window : int; gated : bool = false; sink : bool = false; 
     delete vh16
 }
 
-[test]
+[test(description = "The cm2 flash tile at head 64, f32 and f16 out, matches fa_oracle within 2e-3 of the plane's largest magnitude whole and under a 40-key window, and the gpt-oss sink stamps match it under a per-head sink logit, off the sink-free control.")]
 def test_cud_fa_h64(t0 : T?) {
     t0 |> run("CUDA cm2 flash tile at head 64, f32 and f16 out == the CPU attention oracle, whole and under a 40-key window; the sink stamps (gpt-oss) seeded with a per-head sink logit, whole and under the window") <| @(t : T?) {
         if (!(ensure_fa_cm2_h64_cls() && ensure_fa_cm2_h64_f16_cls() && ensure_fa_cm2_h64_sink_cls() && ensure_fa_cm2_h64_sink_f16_cls())) {
@@ -1799,7 +1799,7 @@ def private cud_q8_store_arm(t : T?; window : bool) {
     delete st
 }
 
-[test]
+[test(description = "The q8_0 K/V store at token rows and at window rows writes the CPU cache codec's mirror bytes bit for bit, a block scale past the half range clamped and every byte outside the stored rows left at its fill.")]
 def test_cud_q8_kv_store(t0 : T?) {
     t0 |> run("CUDA q8_0 K/V store == the CPU cache's bytes, at token rows and at window rows; a block scale past the half range clamped") <| @(t : T?) {
         if (!ensure_kv_q8_store_cls() || !ensure_kv_q8_store_b_cls()) {
@@ -1863,7 +1863,7 @@ def private cud_shadow_arm(t : T?; kv : KVDtype; kvd : int) {
     delete vm
 }
 
-[test]
+[test(description = "The q8_0 and tq4 mirrors' f16 shadow pass writes the CPU dequant rounded to half and clamped at 65504 bit for bit over its rows, the rows outside the pass left at their NaN fill.")]
 def test_cud_kv_shadow(t0 : T?) {
     t0 |> run("CUDA block-codec mirror's f16 shadow == the CPU dequant rounded to half and clamped, bit for bit, the rows outside the pass left alone") <| @(t : T?) {
         if (!ensure_kv_q8_shadow_cls() || !ensure_kv_tq4_shadow_cls()) {
@@ -1948,7 +1948,7 @@ def private cud_q8_attn_arm(t : T?; nheads, kv_mul : int; sink : bool = false; n
     delete q
 }
 
-[test]
+[test(description = "The q8_0 decode attention stamps (four- and two-head slabs, the eight-piece split form, the gpt-oss sink stamp) match the CPU attention over the dequantized mirror rows at 300 keys within 1e-4, off the unquantized or sink-free control.")]
 def test_cud_q8_da_attn(t0 : T?) {
     t0 |> run("CUDA decode attention's q8_0 stamps == the CPU attention over the dequantized mirror rows, the four-head and the two-head slab, and the sink stamp (gpt-oss) under a per-head sink logit") <| @(t : T?) {
         if (!(ensure_da_attn_q8_cls() && ensure_da_attn_q8_g2_cls() && ensure_da_attn_q8_sink_cls())) {
@@ -2038,7 +2038,7 @@ def private cud_tq4_store_arm(t : T?; hs, nqh, nkh : int; window : bool = false)
     delete want_v
 }
 
-[test]
+[test(description = "The tq4 K/V store at token and window rows writes the CPU rotation's cache bytes bit for bit and rotates the q rows in place exactly, heads 32 to 512, a scale past the half range clamped, shared-KV and no-q layers included.")]
 def test_cud_tq4_kv_store(t0 : T?) {
     t0 |> run("CUDA tq4 K/V store == the CPU rotation and the CPU cache's bytes, the q rows rotated in place, at token rows and at window rows") <| @(t : T?) {
         if (!ensure_kv_tq4_store_cls() || !ensure_kv_tq4_store_b_cls()) {
@@ -2098,7 +2098,7 @@ def private cud_unrot_arm(t : T?; hs, nh : int; gated : bool) {
     delete ungated
 }
 
-[test]
+[test(description = "The tq4 un-rotation matches the CPU un-rotation bit for bit at heads 32, 64 and 512 and within 2e-3 under the sigmoid of the q panel's gate half at head 128, the rows moved off their input and off the ungated form.")]
 def test_cud_tq4_unrot(t0 : T?) {
     t0 |> run("CUDA tq4 un-rotation == the CPU un-rotation, bit for bit, and under the head gate") <| @(t : T?) {
         if (!ensure_kv_tq4_unrot_cls()) {
@@ -2180,7 +2180,7 @@ def private cud_tq4_attn_arm(t : T?; nheads, kv_mul : int) {
     delete signs
 }
 
-[test]
+[test(description = "The tq4 decode attention stamps (four- and two-head slabs) match the CPU attention over the dequantized rotated mirror rows at 300 keys within 1e-4, the attention under the unrotated query the control that misses.")]
 def test_cud_tq4_da_attn(t0 : T?) {
     t0 |> run("CUDA decode attention's tq4 stamps == the CPU attention over the dequantized rotated rows, the four-head and the two-head slab") <| @(t : T?) {
         if (!ensure_da_attn_tq4_cls() || !ensure_da_attn_tq4_g2_cls()) {
@@ -2192,7 +2192,7 @@ def test_cud_tq4_da_attn(t0 : T?) {
     }
 }
 
-[test]
+[test(description = "The cm2 flash tile at head 96, f32 and f16 out, matches fa_oracle within 2e-3 of the plane's largest magnitude on 77 rows past a 64-key base, whole and under a 40-key window, the f16 slack rows poisoned.")]
 def test_cud_fa_h96(t0 : T?) {
     t0 |> run("CUDA cm2 flash tile at head 96, f32 and f16 out == the CPU attention oracle, whole and under a 40-key window") <| @(t : T?) {
         if (!ensure_fa_cm2_h96_cls() || !ensure_fa_cm2_h96_f16_cls()) {
@@ -2205,7 +2205,7 @@ def test_cud_fa_h96(t0 : T?) {
 }
 
 //! the flash tile at head 128: the 3B class's attention, 32 keys a step
-[test]
+[test(description = "The cm2 flash tile at head 128 (the 3B class's attention), f32 and f16 out, matches fa_oracle within 2e-3 of the plane's largest magnitude, whole and under a 40-key window, the f16 slack rows poisoned.")]
 def test_cud_fa_h128(t0 : T?) {
     t0 |> run("CUDA cm2 flash tile at head 128, f32 and f16 out == the CPU attention oracle, whole and under a 40-key window") <| @(t : T?) {
         if (!ensure_fa_cm2_h128_cls() || !ensure_fa_cm2_h128_f16_cls()) {
@@ -2218,7 +2218,7 @@ def test_cud_fa_h128(t0 : T?) {
 }
 
 //! head 256 is the deltanet hybrids' attention head
-[test]
+[test(description = "The cm2 flash tile at head 256, f32 and f16 out, matches fa_oracle within 2e-3 whole and under a 40-key window, plain and gated, the gated rows under the q panel's gate sigmoid and off the ungated oracle.")]
 def test_cud_fa_h256(t0 : T?) {
     t0 |> run("CUDA cm2 flash tile at head 256, f32 and f16 out, plain and gated == the CPU attention oracle, whole and under a 40-key window") <| @(t : T?) {
         if (!ensure_fa_cm2_h256_cls() || !ensure_fa_cm2_h256_f16_cls() || !ensure_fa_cm2_h256_g_cls() || !ensure_fa_cm2_h256_g_f16_cls()) {
@@ -2234,7 +2234,7 @@ def test_cud_fa_h256(t0 : T?) {
 
 //! the head-256 softcap stamps (gemma-2's shape, the Vulkan cell's cap of 50 over its wide scores): the capped CPU oracle, the
 //! uncapped one the control the rows must miss
-[test]
+[test(description = "The head-256 softcap stamps, f32 and f16 out, match the CPU attention oracle capped at 50 within 2e-3, whole and under a 40-key window, the scores running past the cap and the uncapped oracle the control.")]
 def test_cud_fa_h256_softcap(t0 : T?) {
     t0 |> run("CUDA cm2 flash tile at head 256 under a softcap of 50, f32 and f16 out == the capped CPU oracle, whole and under a 40-key window") <| @(t : T?) {
         if (!ensure_fa_cm2_h256_cap_cls() || !ensure_fa_cm2_h256_cap_f16_cls()) {
@@ -2247,7 +2247,7 @@ def test_cud_fa_h256_softcap(t0 : T?) {
 }
 
 //! the flash tile at head 512: gemma-4's global layers on the window (V off the raw k row), the Vulkan cell's h512 arm
-[test]
+[test(description = "The flash tile at head 512 on the KHR arm (gemma-4's global layers), f32 and f16 out, matches fa_oracle within 2e-3 of the plane's largest magnitude, whole and under a 40-key window.")]
 def test_cud_fa_h512(t0 : T?) {
     t0 |> run("CUDA flash tile at head 512 on the KHR arm, f32 and f16 out == the CPU attention oracle, whole and under a 40-key window") <| @(t : T?) {
         if (!ensure_fa_khr_h512_cls() || !ensure_fa_khr_h512_f16_cls()) {
@@ -2385,7 +2385,7 @@ def private cud_qkn_rope_arm(t : T?; f16 : bool) {
     delete wnh
 }
 
-[test]
+[test(description = "The fused q/k norm + rope + K/V store, f32 and f16 mirror stamps, matches qkn_rope_rows within 2e-3 on the q heads in place and the K and V mirror rows, the mirror rows ahead of the layer's kept at their fill.")]
 def test_cud_qkn_rope(t0 : T?) {
     t0 |> run("CUDA fused q/k norm + rope + K/V store == the CPU oracle, the f32 and the f16 mirror stamps") <| @(t : T?) {
         if (!ensure_qkn_rope_cls() || !ensure_qkn_rope_f16_cls()) {
@@ -2398,7 +2398,7 @@ def test_cud_qkn_rope(t0 : T?) {
 }
 
 //! the cm2 l tile at a llama-1B prefill window's shapes (512 rows by the projection and the FFN widths), event-timed
-[test]
+[test(description = "The q8 cm2 l tile at three 1B pp512 shapes holds its warm-up bit for bit to the f16-feed oracle on activation rows 0, 255, 256 and 511 over a fixture its f16 accumulator sums exactly, then logs a rate.")]
 def test_cud_q8_cm2l_rate(t0 : T?) {
     t0 |> run("CUDA q8 cm2 l-tile at pp512 shapes: a rate, logged") <| @(t : T?) {
         if (!ensure_q8_batch_cm2l_cls()) {
@@ -2444,7 +2444,7 @@ enum private DnStepArm {
     sig_f32_out
 }
 
-[test]
+[test(description = "The deltanet kernels at heads 32, 64 and 128 match their CPU oracles: conv and fused step (Q8_0, f32, sigmoid o rows) at 2e-3, the per-token and chunked scans under the silu and sigmoid out-norm at 1e-2, the ring tail bit for bit.")]
 def test_cud_dn_family(t0 : T?) {   // nolint:STYLE038 — the family's four cells over two head sizes, the Vulkan cell's shape
     t0 |> run("CUDA deltanet kernels == the CPU oracles (conv, fused step, scan + gate, ring tail)") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -3018,7 +3018,7 @@ def private cud_ar_comb_arm(t : T?; gated, with_sh, dbias : bool) {
     delete want_y
 }
 
-[test]
+[test(description = "Every routed-block routing kernel - router GEMM, top-k up to 512 experts, the bucket schedule word for word, the gathers and combines over a slot window, the combine-folded residual step - matches the shared CPU oracle.")]
 def test_cud_moe_routing(t0 : T?) {
     t0 |> run("CUDA routed-block routing kernels == the CPU oracles: router GEMM, per-row top-k (the one-deep stamp, and the two-deep one over 512 experts), the bucket schedule, the gather as halves and as floats, the per-expert chain's by-row gather and combine, the combine-folded residual step") <| @(t : T?) {
         if (!(ensure_router_gemm_cls() && ensure_topk_rows_cls() && ensure_moe_sched_cls() && ensure_moe_sched2_cls() && ensure_cls_ar_comb())) {
@@ -3050,7 +3050,7 @@ def test_cud_moe_routing(t0 : T?) {
 }
 
 //! the compile gate: every kernel of the CUDA home compiles through NVRTC and loads - the survey's count on the home itself
-[test]
+[test(description = "Every cuda_dispatch kernel of the CUDA home, at least 52 seeded, compiles through NVRTC and loads, with no kernel refused.")]
 def test_cud_compile_gate(t0 : T?) {
     t0 |> run("every [cuda_dispatch] kernel of the CUDA home compiles and loads") <| @(t : T?) {
         if (!cud_init()) {
@@ -3073,7 +3073,7 @@ def private shutdown_hook() {
 
 //! the leak gate: the registered shutdown hooks run ahead of the device (a module's device state goes with it), every device buffer
 //! freed, every module released at the shutdown, nothing counted live
-[test]
+[test(description = "The CUDA tier's shutdown runs a registered hook exactly once when the device came up (never without one) and leaves no CUDA object or allocation live; this gate never skips.")]
 def test_cud_shutdown_leaks(t0 : T?) {
     t0 |> run("the CUDA tier shuts down with nothing live, its registered hooks run") <| @(t : T?) {
         let up = cud_init()

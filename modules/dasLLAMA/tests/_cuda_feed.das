@@ -2,9 +2,9 @@
 // prefill logits and every step's within the bar, the one-step-off control past it, with the witnesses that the CUDA
 // driver served every position, ran the windows the prompt takes and replayed the captured graph past the first step,
 // a CPU run with the model off the device moving none of them (the control). One body for every carrier family the
-// home serves (`test_gpu_resident_cuda_llama.das`, `test_gpu_resident_cuda_phi3.das`, `test_gpu_resident_cuda_qwen3.das`).
-// Requiring it declares the CUDA resident files' CPU-prefill intent and pins their prompt window (its `[init]`); it also
-// carries the MMQ route pin and the FP4 rung's skip the FP4 cells take.
+// home serves (the `test_gpu_resident_cuda_*.das` files).
+// Requiring it declares the CUDA resident files' CPU-prefill intent; its rig sets their prompt window beside each load
+// (`cuda_feed_window`), and it carries the MMQ route pin and the FP4 rung's skip the FP4 cells take.
 
 options gen2
 options _dasllama_internal = true
@@ -23,13 +23,17 @@ require dasllama/dasllama_common   // allow_cpu_prefill
 require dasllama/dasllama_env   // set_pf_window_rows_pin
 require _model_tier
 require _resident_feed
+require daslib/defer
 
-//! the CUDA resident files' intent: the control arm (the model off the device) prefills on the CPU, and the prompt window is
-//! PF_WINDOW_ROWS rows where nothing pinned one - the cells size their prompts against it, and the plan's own pick would run the
-//! two-window prompt as one
+//! the CUDA resident files' intent: the control arm (the model off the device) prefills on the CPU
 [init]
 def private cuda_feed_init() {
     allow_cpu_prefill()
+}
+
+//! the prompt window at PF_WINDOW_ROWS rows where nothing pinned one, before a cell's load: the cells size their prompts
+//! against it, and the plan's own pick would run the two-window prompt as one; the caller's `resident_levers` put it back
+def cuda_feed_window() {
     if (pf_window_rows_pin() <= 0l) {
         set_pf_window_rows_pin(PF_WINDOW_ROWS)
     }
@@ -120,7 +124,13 @@ def private cuda_feed_served(t : T?; before : CudRdecStats; n, windows : int64; 
 //! the jobque with the counters as the load left them, then the counters' control - a CPU run with the model off the device
 def private cuda_feed_rig(t : T?; file, arch : string; host_layers : int64; host_more : bool; feed : block<(tr : Model; path : string; before : CudRdecStats) : void>) {
     let path = cuda_model_path(t, file)
-    if (empty(path) || !assert_pf_window(t)) return
+    if (empty(path)) return
+    let levers = resident_levers()
+    defer() {
+        restore_resident_levers(levers)
+    }
+    cuda_feed_window()
+    if (!assert_pf_window(t)) return
     var tr <- load_resident(path, 1l, 0l, host_layers)
     t |> equal(tr.arch, arch, "the file is a {arch}-family model")
     return if (!resident_admitted(t, "the whole-model driver armed on the model (the load log names any decline)", ""))

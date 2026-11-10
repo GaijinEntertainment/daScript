@@ -13,7 +13,7 @@ require _tts_corpus
 // and the 200-sentence corpus against the reference normalizer's output (rows the fixes change
 // carry their own expectation).
 
-[test]
+[test(description = "The English number readers give exact words for cardinals up to billions and negatives, decimals digit by digit, ordinals, and years read as pairs, hundreds or full numbers")]
 def test_number_words(t : T?) {
     t |> run("cardinals") @(t : T?) {
         t |> equal(number_to_words(0l), "zero")
@@ -67,7 +67,7 @@ def test_number_words(t : T?) {
     }
 }
 
-[test]
+[test(description = "`normalize_text` reproduces the reference normalizer's own examples exactly: money, percentages, ordinals, clock times, ranges, versions, HTML, URLs and emails, abbreviations, dates and whitespace")]
 def test_upstream_pipeline_shapes(t : T?) {
     t |> run("the reference normalizer's own examples") @(t : T?) {
         t |> equal(normalize_text("There are 1200 students and 42 teachers."), "There are twelve hundred students and forty-two teachers.")
@@ -105,7 +105,7 @@ def test_upstream_pipeline_shapes(t : T?) {
     }
 }
 
-[test]
+[test(description = "`normalize_text` gives the corrected reading for each upstream normalizer defect: bare commas, h:mm:ss, fractions, glued units, pence, degrees, decades, apostrophes, sentence-final versions, -ieth ordinals, dollar plurals, p.m., glued digits")]
 def test_upstream_defects_fixed(t : T?) {
     t |> run("a bare comma is not a number (etc.,)") @(t : T?) {
         t |> equal(normalize_text("Apples, pears, etc., and more."), "Apples, pears, etc., and more.")
@@ -169,7 +169,7 @@ def test_upstream_defects_fixed(t : T?) {
     }
 }
 
-[test]
+[test(description = "A digit run past 18 digits reads digit by digit while 18 digits read as a cardinal, `digit_string_value` holds values past 2^31, and exactly one of a unit reads singular, other counts plural")]
 def test_number_width_and_units(t : T?) {
     t |> run("a digit run past the accumulator's width reads digit by digit") @(t : T?) {
         t |> equal(normalize_text("Call 12345678901234567890 now."),
@@ -195,7 +195,7 @@ def test_number_width_and_units(t : T?) {
     }
 }
 
-[test]
+[test(description = "`normalize_text` spells www and scheme URLs as the reference does, reads ordinal edges up to millionth, and wraps a 24-hour time past noon only when a meridiem follows")]
 def test_normalizer_arms(t : T?) {
     t |> run("a www address spells out without a scheme") @(t : T?) {
         // the arm prepends "www dot " and then spells the whole thing, so the "dot" it added
@@ -217,7 +217,7 @@ def test_normalizer_arms(t : T?) {
     }
 }
 
-[test]
+[test(description = "`utf8_to_cpts` passes a malformed lead byte through as itself and still decodes the next byte, well-formed codepoints round-trip, and `cpts_to_utf8` maps values outside 0..U+10FFFF to U+FFFD")]
 def test_codepoint_codec(t : T?) {
     t |> run("a malformed lead passes through as its own byte") @(t : T?) {
         var inscope truncated <- utf8_to_cpts("a{cpt_to_utf8(195)}")   // 0xC3 with nothing after it
@@ -246,7 +246,7 @@ def test_codepoint_codec(t : T?) {
     }
 }
 
-[test, arch(at = "../ARCHITECTURE_TTS.md#tts-rig-scoring")]
+[test(description = "`normalize_text` matches the reference normalizer's output, or the fixture's corrected form where one is carried, on all 200 corpus sentences, and is idempotent on each"), arch(at = "../ARCHITECTURE_TTS.md#tts-rig-scoring")]
 def test_corpus(t : T?) {
     t |> run("200 sentences match the reference normalizer") @(t : T?) {
         let rows <- load_tts_corpus()
@@ -269,5 +269,47 @@ def test_corpus(t : T?) {
             let once = normalize_text(r.text)
             t |> equal(normalize_text(once), once, r.id)
         }
+    }
+}
+
+[test(description = "`cpt_is_letter`, `cpt_is_number` and `cpt_is_whitespace` classify ASCII and non-ASCII codepoints (A-umlaut, one-half, ideographic space) as the upstream flags do, and a multi-byte UTF-8 word round-trips")]
+def test_unicode(t : T?) {
+    // Category classification must match the upstream codepoint-flag classification.
+    t |> run("letters") @(t : T?) {
+        t |> success(cpt_is_letter(65))      // 'A'
+        t |> success(cpt_is_letter(122))     // 'z'
+        t |> success(cpt_is_letter(196))     // 'Ä' U+00C4
+        t |> success(!cpt_is_letter(48))     // '0'
+        t |> success(!cpt_is_letter(32))     // space
+        t |> success(!cpt_is_letter(33))     // '!'
+    }
+    t |> run("numbers") @(t : T?) {
+        t |> success(cpt_is_number(48))      // '0'
+        t |> success(cpt_is_number(57))      // '9'
+        t |> success(cpt_is_number(189))     // '½' U+00BD (category No)
+        t |> success(!cpt_is_number(65))     // 'A'
+        t |> success(!cpt_is_number(32))     // space
+    }
+    t |> run("whitespace") @(t : T?) {
+        t |> success(cpt_is_whitespace(32))  // space
+        t |> success(cpt_is_whitespace(9))   // tab
+        t |> success(cpt_is_whitespace(10))  // newline
+        t |> success(cpt_is_whitespace(13))  // CR
+        t |> success(cpt_is_whitespace(12288)) // U+3000 ideographic space
+        t |> success(!cpt_is_whitespace(65)) // 'A'
+        t |> success(!cpt_is_whitespace(48)) // '0'
+    }
+    // UTF-8 codec round-trips, including a multi-byte codepoint.
+    t |> run("utf8 round-trip") @(t : T?) {
+        let cpts <- utf8_to_cpts("Äpfel")   // nolint:STYLE039 the multi-byte codepoint IS the fixture
+        t |> success(length(cpts) == 5)
+        t |> success(cpts[0] == 196)         // Ä
+        t |> success(cpts[1] == 112)         // p
+        let rebuilt = build_string() $(var w) {
+            for (c in cpts) {
+                w |> write(cpt_to_utf8(c))
+            }
+        }
+        t |> success(rebuilt == "Äpfel")   // nolint:STYLE039 the multi-byte codepoint IS the fixture
     }
 }

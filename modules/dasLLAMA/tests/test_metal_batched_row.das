@@ -32,7 +32,7 @@ require _resident_feed   // batched_logits_rows: the batched gather cell's sessi
 // without the carrier under models_dir(), and on the large-tier shexp carrier unless
 // DASLLAMA_PARITY_FULL=1; the refusal contract lives in test_batch_decode.das.
 
-[test]
+[test(description = "On Llama-3.2-1B Q8 with no whole-model driver homing a stream, the batched bench row serves four host-cached streams at a rate, every timed step a Metal batched-driver device step, none on the CPU stack")]
 def test_metal_batched_row_llama(t : T?) {
     t |> run("the batched row serves host-cached streams through the batched driver (Llama-3.2-1B Q8)") <| @(t : T?) {
         if (!family_on(t, "llama")) return
@@ -62,7 +62,7 @@ def test_metal_batched_row_llama(t : T?) {
     }
 }
 
-[test]
+[test(description = "On gemma-4-E2B Q8, the batched bench row serves four streams at a rate through the Metal batched driver's PLE rows form, every timed step a device step, none on the CPU stack")]
 def test_metal_batched_row_eseries(t : T?) {
     t |> run("the batched row serves an E-series carrier through the batched driver's PLE rows form (gemma-4-E2B Q8)") <| @(t : T?) {
         if (!family_on(t, "gemma")) return
@@ -147,17 +147,17 @@ def private metal_batch_gather_cell(t : T?; file, family : string) {
     }
 }
 
-[test]
+[test(description = "On Llama-3.2-1B Q8, the Metal batched step gathers every row of three sessions off its token id on the device, its logits bit for bit those with the gather off, where the host embeds every row")]
 def test_metal_batch_gather_llama(t : T?) {
     metal_batch_gather_cell(t, "Llama-3.2-1B-Instruct-Q8_0.gguf", "llama")
 }
 
-[test]
+[test(description = "On gemma-4-E2B Q8, the Metal batched step gathers every row of three sessions off its token id on the device, its logits bit for bit those with the gather off, where the host embeds every row")]
 def test_metal_batch_gather_eseries(t : T?) {
     metal_batch_gather_cell(t, "gemma-4-E2B-it-Q8_0.gguf", "gemma")
 }
 
-[test]
+[test(description = "On the shared-expert Qwen1.5-MoE-A2.7B Q8, the batched bench row serves four streams at a rate through the Metal batched driver's rows site, every timed step a device step, none on the CPU stack")]
 def test_metal_batched_row_shexp(t : T?) {
     t |> run("the batched row serves a shared-expert MoE through the batched driver's rows site (Qwen1.5-MoE-A2.7B Q8)") <| @(t : T?) {
         if (!family_on(t, "qwen2moe")) return
@@ -189,7 +189,7 @@ def test_metal_batched_row_shexp(t : T?) {
 let SHEXP_SAMESLAB_BAR = 2.0
 let SHEXP_SAMESLAB_ROUNDS = 12l
 
-[test]
+[test(description = "On Qwen1.5-MoE-A2.7B Q8, one row through the batched driver's same-slab verify lands logits within 2.0 of the single-row step's over 12 rounds, while the one-step-off control lands outside that bar")]
 def test_metal_batched_row_shexp_sameslab(t : T?) {
     t |> run("one row of a shared-expert MoE through the batched driver's same-slab verify binds its own panels: its logits are the single-row step's (Qwen1.5-MoE-A2.7B Q8)") <| @(t : T?) {
         if (!family_on(t, "qwen2moe")) return
@@ -267,7 +267,7 @@ def test_metal_batched_row_shexp_sameslab(t : T?) {
     }
 }
 
-[test]
+[test(description = "On Qwen3.5-0.8B-MTP Q8 with speculation off, the batched row serves through the device driver, and after plain batched steps each stream's NextN carry trails its position by at most one")]
 def test_metal_batched_row_nextn_plain(t : T?) {
     t |> run("the plain batched row serves a NextN-headed model with GPU logits, each row's post-norm hidden landing as its stream's carry (Qwen3.5-0.8B-MTP Q8)") <| @(t : T?) {
         if (!family_on(t, "qwen35")) return
@@ -319,7 +319,7 @@ def test_metal_batched_row_nextn_plain(t : T?) {
     }
 }
 
-[test]
+[test(description = "On Qwen3.5-0.8B-MTP Q8 with self-speculation on, the batched row refuses by name (each stream's round runs alone), reads no rate, and counts no device or CPU batched step")]
 def test_metal_batched_row_mtp(t : T?) {
     t |> run("the batched row refuses self-speculative streams: each stream runs its own round a tick, no batched step (Qwen3.5-0.8B-MTP Q8)") <| @(t : T?) {
         if (!family_on(t, "qwen35")) return
@@ -349,7 +349,7 @@ def test_metal_batched_row_mtp(t : T?) {
     }
 }
 
-[test]
+[test(description = "On Qwen3.5-0.8B-MTP Q8, a depth-2 greedy MTP walk emits the depth-1 walk's tokens over 24 reply tokens while drafting more than it and accepting some drafts")]
 def test_metal_batched_row_mtp_depth2(t : T?) {
     t |> run("a depth-2 walk drafts its second token through the host chain and emits what the depth-1 walk emits (Qwen3.5-0.8B-MTP Q8)") <| @(t : T?) {
         if (!family_on(t, "qwen35")) return
@@ -392,7 +392,7 @@ def test_metal_batched_row_mtp_depth2(t : T?) {
     }
 }
 
-[test]
+[test(description = "On Qwen3.5-0.8B-MTP Q8, a greedy scheduler stream lands its device pick at most once a token and emits what `generate` emits off the host argmax, while a non-argmax sampler lands no pick")]
 def test_metal_pick_ask(t : T?) {
     t |> run("a greedy stream's steps land their pick in the logits' place and emit what generate() emits; a sampling stream lands none (Qwen3.5-0.8B-MTP Q8)") <| @(t : T?) {
         if (!family_on(t, "qwen35")) return
@@ -448,7 +448,7 @@ def test_metal_pick_ask(t : T?) {
     }
 }
 
-[test]
+[test(description = "On Qwen3.5-0.8B-MTP Q8, three self-speculative streams admitted together emit each solo stream's tokens, every tick stepping each through its own round, with draft and accept counts equal to the solo sums")]
 def test_metal_batched_row_mtp_joint_invariance(t : T?) {
     t |> run("three self-speculative streams through one scheduler emit what each emits alone (Qwen3.5-0.8B-MTP Q8)") <| @(t : T?) {
         if (!family_on(t, "qwen35")) return
@@ -515,7 +515,7 @@ def test_metal_batched_row_mtp_joint_invariance(t : T?) {
     }
 }
 
-[test]
+[test(description = "On Qwen3.5-0.8B-MTP Q8, three speculating streams, the last on a prompt past 200 tokens across 64-row chunk boundaries, emit each solo stream's tokens with every tick stepping their own rounds")]
 def test_metal_batched_row_mtp_joint_staggered(t : T?) {
     t |> run("three speculating streams at different depths across a 64-row chunk boundary emit what each emits alone (Qwen3.5-0.8B-MTP Q8)") <| @(t : T?) {
         if (!family_on(t, "qwen35")) return
@@ -582,7 +582,7 @@ def test_metal_batched_row_mtp_joint_staggered(t : T?) {
 //! chain's fused step (`MetalDnStepFused`: conv, scan and gate as one dispatch over the step's groups)
 def private dn_scan_dispatches() : int64 => metal_kernel_count_prefix("MetalDnScan") + metal_kernel_count_prefix("MetalDnStepFused")
 
-[test]
+[test(description = "On the deltanet hybrid Qwen3.5-0.8B Q8, the batched row serves four and nine streams through the device driver, with exactly one recurrent scan dispatch per recurrent layer per device call")]
 def test_metal_batched_row_deltanet(t : T?) {
     t |> run("the batched row serves a deltanet hybrid through the batched driver's recurrent rows form (Qwen3.5-0.8B Q8)") <| @(t : T?) {
         if (!family_on(t, "qwen35")) return
@@ -644,7 +644,7 @@ def private served_tokens(tr : Model; nst, page_rows, nnew : int64) : array<arra
 // Both sides run `served_tokens` on the same blob model through the same Metal drivers, and the
 // mirror gathers a paged session's pool rows byte for byte, so the two streams are one code path
 // over one set of bytes: the compare is exact. Each side's driver steps are counted on their own.
-[test]
+[test(description = "On Qwen3.5-0.8B Q8, one and two greedy streams of 40 reply tokens on 64-row pages emit the flat sessions' tokens exactly, both sides decoding on Metal, with a one-token reply as the step floor's control")]
 def test_metal_paged_deltanet(t : T?) {
     t |> run("paged sessions on a deltanet hybrid emit what flat sessions emit - the recurrent layers own no K/V rows (Qwen3.5-0.8B Q8)") <| @(t : T?) {
         if (!family_on(t, "qwen35")) return
@@ -698,7 +698,7 @@ let SEG_DN_NEW = 24l   //! the greedy steps after a segmented window: enough for
 
 //! Two sessions' tails as ONE window on the deltanet hybrid: each recurrent layer walks a segment's rows against that
 //! session's own state and conv history, so the steps after it read what the single-window session's read.
-[test]
+[test(description = "On Qwen3.5-0.8B Q8, two sessions' prompt tails prefilled as one segmented window leave each its own recurrent state: 24 device greedy steps per session equal its single-window run, and the streams differ")]
 def test_metal_segments_deltanet(t : T?) {
     t |> run("two sessions' chunks as one window on a deltanet hybrid emit what single windows emit - each segment's state its own (Qwen3.5-0.8B Q8)") <| @(t : T?) {
         if (!family_on(t, "qwen35")) return
@@ -757,7 +757,7 @@ def test_metal_segments_deltanet(t : T?) {
 //! A recurrent mirror evicted between two steps leaves its live state in a host stash, and the session's next step
 //! rebuilds the device state from it (`ARCHITECTURE_GPU_MTP.md#dn-mirror-pool`): on a blob-only load there is no CPU
 //! chain to fall to, so the steps after the eviction must serve on the device and read what an unevicted session reads.
-[test]
+[test(description = "On Qwen3.5-0.8B Q8, a deltanet session whose recurrent mirror is evicted mid-stream rebuilds it once from its stash and steps on the device, its 12 greedy tokens those of an unevicted session")]
 def test_metal_deltanet_evicted_mirror(t : T?) {
     t |> run("a deltanet session whose mirror is evicted mid-stream steps on the device from its stash, token for token the unevicted session (Qwen3.5-0.8B Q8)") <| @(t : T?) {
         if (!family_on(t, "qwen35")) return
@@ -804,7 +804,7 @@ def test_metal_deltanet_evicted_mirror(t : T?) {
 //! A released session's recurrent mirror and stash leave the pool (`ARCHITECTURE_GPU_MTP.md#dn-mirror-pool`), and a live
 //! session's evicted state stays in its stash however many sessions step in turn: on a blob-only load a lost state has no
 //! CPU chain to fall to, so a dropped live entry would decline `dn_state` and panic.
-[test]
+[test(description = "On Qwen3.5-0.8B Q8, a released deltanet session's mirror and stash leave the pool, and more than twice the mirror cap's live sessions stepping in turn decode on the device, each emitting its own solo tokens")]
 def test_metal_deltanet_released_sessions(t : T?) {
     t |> run("after as many sessions were released, more than twice the mirror cap's deltanet sessions stepping in turn serve every step on the device, each token for token itself alone (Qwen3.5-0.8B Q8)") <| @(t : T?) {
         if (!family_on(t, "qwen35")) return
@@ -892,7 +892,7 @@ def private fed_steps(tr : Model; var s : Session; pos, n, miss_every : int64; v
 
 //! The single row's greedy chain on a recurrent hybrid: the chained step reads the recurrent region the step in flight writes and
 //! writes the other, so a step the chain mispredicted leaves the live state whole (`ARCHITECTURE_GPU_MTP_DECODE_PICK.md#greedy-chain`)
-[test]
+[test(description = "On Qwen3.5-0.8B Q8, the single-row greedy chain over 24 device steps leaves tokens and every step's logits bit-identical to the plain run, greedy-fed and fed off the pick every third step")]
 def test_metal_deltanet_greedy_chain(t : T?) {
     t |> run("the greedy chain serves a deltanet hybrid: chained steps token for token the plain steps, and a mispredicted step's rerun reads the state the chain did not touch (Qwen3.5-0.8B Q8)") <| @(t : T?) {
         if (!family_on(t, "qwen35")) return
@@ -953,7 +953,7 @@ let CHAIN_STEPS = 24l   //! the steps a chain cell feeds
 let PAGED_MTP_NEW = 150l   //! past two 64-row pages, so rounds land on a page's last row
 
 //! A round verifies the row past its token, so a round at a page's last row writes the next page's first.
-[test]
+[test(description = "On Qwen3.5-0.8B-MTP Q8, a self-speculative stream of 150 reply tokens on 64-row pages, spanning three pages, emits the flat stream's tokens with drafts accepted on both sides")]
 def test_metal_paged_mtp(t : T?) {
     t |> run("a paged self-speculative stream emits what a flat one emits across page boundaries (Qwen3.5-0.8B-MTP Q8)") <| @(t : T?) {
         if (!family_on(t, "qwen35")) return
@@ -1028,7 +1028,7 @@ def private opening_of(a, b : array<int64>) : int64 {
 let CKPT_NEW = 24l
 
 //! A recurrent model's prefix cache is a checkpoint at one exact position: the second prompt with an opening leaves it, the third attaches it.
-[test]
+[test(description = "On Qwen3.5-0.8B-MTP Q8, a third prompt on a shared opening attaches the checkpoint the second left and replies as an uncached run at the same cut, and a marked stop inside a later window is captured")]
 def test_metal_prefix_checkpoint(t : T?) {
     t |> run("the third prompt on a shared opening attaches the checkpoint the second left, and replies as it does prefilled whole at the same cut (Qwen3.5-0.8B-MTP Q8)") <| @(t : T?) {
         if (!family_on(t, "qwen35")) return
@@ -1108,7 +1108,7 @@ def test_metal_prefix_checkpoint(t : T?) {
 }
 
 //! A caller that marks its prompt's stable opening gets the checkpoint from the first request on.
-[test]
+[test(description = "On Qwen3.5-0.8B-MTP Q8, a request marked with its stable opening leaves that checkpoint at once, which the next prompt attaches and replies with as uncached, while an unmarked request leaves none there")]
 def test_metal_prefix_checkpoint_hinted(t : T?) {
     t |> run("a request marked with its stable opening leaves the checkpoint at once, and the second prompt attaches it (Qwen3.5-0.8B-MTP Q8)") <| @(t : T?) {
         if (!family_on(t, "qwen35")) return
@@ -1164,7 +1164,7 @@ def test_metal_prefix_checkpoint_hinted(t : T?) {
 }
 
 //! The reply to a strongly prompted tail survives a lost recurrent state, so the checkpoint's contents are held on the logits.
-[test]
+[test(description = "On Qwen3.5-0.8B-MTP Q8, a session attached at an off-boundary checkpoint lands the donor's logits bit for bit after the same tail, while the checkpoint with its recurrent state zeroed lands 5% of the largest logit away or more")]
 def test_metal_prefix_checkpoint_logits(t : T?) {
     t |> run("a session attached at a checkpoint lands the logits of the session that left it, and a checkpoint with its recurrent state zeroed does not (Qwen3.5-0.8B-MTP Q8)") <| @(t : T?) {
         if (!family_on(t, "qwen35")) return
@@ -1266,7 +1266,7 @@ let CAPTURE_BAR_REL = 0.002
 
 //! A checkpoint a stop inside one prefill window leaves is the arena's capture, not the window's end state, so its contents
 //! are held on the logits.
-[test]
+[test(description = "On Qwen3.5-0.8B-MTP Q8, a checkpoint captured at a marked stop inside one prefill window, attached and fed the tail, lands within 0.2% of an uncached prefill's largest logit, and zeroing its recurrent state misses by 5% or more")]
 def test_metal_prefix_checkpoint_capture_logits(t : T?) {
     t |> run("a session attached at a checkpoint captured inside one prefill window lands an uncached prefill's logits, and the capture with its recurrent state zeroed does not (Qwen3.5-0.8B-MTP Q8)") <| @(t : T?) {
         if (!family_on(t, "qwen35")) return
@@ -1339,7 +1339,7 @@ def test_metal_prefix_checkpoint_capture_logits(t : T?) {
 }
 
 //! A finished turn leaves a checkpoint past its reply, so the conversation's next turn prefills only what is new.
-[test]
+[test(description = "On Qwen3.5-0.8B-MTP Q8, a conversation's next turn attaches the finished turn's checkpoint, prompt plus 40 tokens, and continues the count token for token against an uncached 80-token stream")]
 def test_metal_prefix_checkpoint_next_turn(t : T?) {
     t |> run("the next turn of a conversation attaches the finished turn's checkpoint and continues the count (Qwen3.5-0.8B-MTP Q8)") <| @(t : T?) {
         if (!family_on(t, "qwen35")) return
@@ -1455,7 +1455,7 @@ def private pre_encode_cell(t : T?; file : string) {   // nolint:LINT012,LINT019
     }
 }
 
-[test]
+[test(description = "On Llama-3.2-1B Q8, four greedy streams emit the same tokens with batched steps pre-encoded under the step before (16 or more taken) as encoded at call, and retiring a parked step leaks no Metal object")]
 def test_metal_batched_row_pre_encode(t : T?) {
     t |> run("four greedy streams emit the same tokens whether each batched step is encoded at its call or pre-encoded under the step before it (Llama-3.2-1B Q8)") <| @(t : T?) {
         if (!family_on(t, "llama")) return
@@ -1465,7 +1465,7 @@ def test_metal_batched_row_pre_encode(t : T?) {
 
 //! the recurrent rows ride the rail too: their mirrors move at commit, the pre-encoded step's group table names each row's
 //! state where the pool held it, and a moved pool or state retires the step unrun
-[test]
+[test(description = "On the deltanet hybrid Qwen3.5-0.8B Q8, four greedy streams emit the same tokens with batched steps pre-encoded under the step before as encoded at call, and retiring a parked step leaks no Metal object")]
 def test_metal_batched_row_pre_encode_deltanet(t : T?) {
     t |> run("four greedy streams on a deltanet hybrid emit the same tokens with the batched step pre-encoded under the one before (Qwen3.5-0.8B Q8)") <| @(t : T?) {
         if (!family_on(t, "qwen35")) return
@@ -1541,7 +1541,7 @@ def private sampled_pair(tr : Model; prompts : array<array<int64>>; var sp : Sam
 //! overwrites it. Both sides run each row through the one `forward` entry point on the same session state, so their logits are
 //! bit-identical and the streams token-exact; the device's own bound (the batched driver serves the tick) and the landing off
 //! are the census's and the selection count's controls
-[test]
+[test(description = "On Llama-3.2-1B Q8, two sampled streams through two-row ticks the batched driver declines step one row at a time, landing every selection, and emit what each samples right after its own forward")]
 def test_metal_per_row_tick_sampled(t : T?) {
     t |> run("a two-row tick stepped one row at a time on Metal: each sampled stream emits what it emits sampling right after its own forward (Llama-3.2-1B Q8)") <| @(t : T?) {
         if (!family_on(t, "llama")) return

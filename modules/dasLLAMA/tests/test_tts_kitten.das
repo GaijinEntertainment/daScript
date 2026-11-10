@@ -26,7 +26,7 @@ require _model_tier
 // where no device serves or the driver registers no seat for the stage, and red where a present
 // seat declines a stage.
 
-[test]
+[test(description = "`kitten_phonemes_from_misaki` rewrites all 200 corpus sentences to the fixture's espeak IPA exactly plus the calibrated rules, and `kitten_token_ids` emits pad-wrapped ids with punctuation as its own token and a closing ellipsis")]
 def test_symbol_map(t : T?) {
     t |> run("the corpus rewrites symbol for symbol") @(t : T?) {
         var inscope rows <- load_tts_corpus()
@@ -67,7 +67,7 @@ def private spectrum_fails(ours, ref : array<float>) : int {
     }
 }
 
-[test]
+[test(description = "`spectrum_diff` passes a clean spectrum within 1e-6 and fails when a NaN sits in any magnitude or phase element on our side or any magnitude element of the reference")]
 def test_spectrum_diff_reds_a_nan(t : T?) {
     let ref <- [1.0, 2.0, 3.0, 4.0, 0.1, 0.2, 0.3, 0.4]
     let ours <- [for (v in ref); v + 1e-6]
@@ -94,7 +94,7 @@ def private gguf_path(size : string) : string => path_join(models_dir(), "kitten
 def private kitten_ids_of(ps : string) : array<int> => <- kitten_token_ids(ps)
 
 // text in, speech out through the facade: the front end's packs sit beside the GGUF in the store
-[test]
+[test(description = "Kitten nano through the facade lists 8 voices at 24 kHz and speaks a 51-character sentence as 1 to 10 seconds of finite audio peaking above 0.05, with every stage clock running and the total covering its parts")]
 def test_kitten_facade(t : T?) {
     t |> run("nano: text in, speech out") @(t : T?) {
         facade_smoke(t, gguf_path("nano"), true, 8) $(var m : TtsModel; c : TtsCaps) {
@@ -162,7 +162,7 @@ def private hook_probe(path : string) : HookProbe {
     return r
 }
 
-[test]
+[test(description = "A registered StyleTTS2 generator hook is called once per chunk: when it declines nothing is counted served and the CPU chain still speaks, and when it serves its silent waveform reaches the facade and is counted")]
 def test_kitten_generator_hook(t : T?) {
     t |> run("nano: the generator hook declines into the CPU chain and serves when it answers") @(t : T?) {
         if (tts_data_missing(t, gguf_path("nano"), false)) {
@@ -179,7 +179,7 @@ def test_kitten_generator_hook(t : T?) {
     }
 }
 
-[test]
+[test(description = "Kitten nano on the GPU tower serves every seat once a chunk on the served lane, speaks above the 0.05 peak floor with a sample count within a twentieth of the CPU chain, then holds the f32 reference lane against the CPU")]
 def test_kitten_synthesis_metal(t : T?) {
     t |> run("nano: the synthesis on the Metal tower vs the CPU chain, the served lane") @(t : T?) {
         tts_gpu_synthesis(t, gguf_path("nano"), "The tower serves the generator, and the words still land.", "Bella")
@@ -188,7 +188,7 @@ def test_kitten_synthesis_metal(t : T?) {
 
 // ARCHITECTURE_TTS.md#tts-image-rail: q8 is the served default, f32 the reference lane the parity
 // rail holds against; a pin resets from the exact pin it took.
-[test]
+[test(description = "The TTS lane defaults to q8 when unpinned, an f32 pin reaches the StyleTTS2 family, a q8 pin holds, and `reset_tts_q8` returns to the q8 default from either pin")]
 def test_tts_lane_pin(t : T?) {
     t |> run("the served lane: q8 un-pinned, either lane on demand, the default back on reset") @(t : T?) {
         {
@@ -211,7 +211,7 @@ def test_tts_lane_pin(t : T?) {
 
 // The reference pipeline truncates a chunk past the encoder's positions and logs it; nothing on
 // the served path may panic on a long one.
-[test]
+[test(description = "`styletts2_synthesize` on kitten nano truncates an id sequence 64 past the encoder's max positions instead of panicking, producing samples that the timings count exactly")]
 def test_kitten_over_long_chunk(t : T?) {
     t |> run("nano: a chunk past the encoder's positions is truncated, not refused") @(t : T?) {
         if (!model_available(t, gguf_path("nano"))) {
@@ -237,7 +237,7 @@ def test_kitten_over_long_chunk(t : T?) {
     }
 }
 
-[test]
+[test(description = "Kitten nano and mini against onnxruntime dumps with captured noise: every case's token ids and sample count match the oracle, and each traced stage holds 1e-4 of the oracle's peak, with poisoned controls")]
 def test_kitten_oracle(t : T?) {
     for (size in ["nano", "mini"]) {
         t |> run("{size} against onnxruntime, captured noise") @(t : T?) {

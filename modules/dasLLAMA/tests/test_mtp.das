@@ -151,7 +151,7 @@ def private forced_invariance_ok(t : T?; tr : Model; prompt : array<int64>; n_ge
     t |> success(nd >= 3l && nd - na >= nd / 3l, "{tag} forced: {nd - na} of {nd} drafts rejected - reject branch covered")
 }
 
-[test]
+[test(description = "The Qwen3.5-0.8B-MTP GGUF loads 24 trunk layers plus one NextN block with its eh_proj, enorm, hnorm and shared head norm, and with speculation off its trunk continues the plain file's frozen counting fixture token for token")]
 def test_mtp_loader(t : T?) {
     t |> run("MTP/NextN loader (Qwen3.5-0.8B-MTP Q8): nextn extras + spec-off trunk parity") @(t : T?) {
         let path = path_join(models_dir(), "Qwen3.5-0.8B-MTP-Q8_0.gguf")
@@ -170,7 +170,7 @@ def test_mtp_loader(t : T?) {
     }
 }
 
-[test]
+[test(description = "Under pinned kernels, `generate_mtp_greedy` on Qwen3.5-0.8B-MTP emits plain greedy decode's tokens exactly on the accept-heavy counting prompt and the reject-heavier prose prompt, with the head actually drafting")]
 def test_mtp_output_invariance(t : T?) {
     t |> run("MTP self-spec greedy decode is output-invariant (Qwen3.5-0.8B-MTP Q8)") @(t : T?) {
         let path = path_join(models_dir(), "Qwen3.5-0.8B-MTP-Q8_0.gguf")
@@ -188,7 +188,7 @@ def test_mtp_output_invariance(t : T?) {
     }
 }
 
-[test]
+[test(description = "On the CPU rails the k-deep MTP round at depths 2, 3 (forced rejects) and 4 decodes the plain stream token for token, and depth 4 drafts and accepts more than depth 1 over the same 48 tokens, a rerun of depth 1 being the control")]
 def test_mtp_depth(t : T?) {
     t |> run("the k-deep round on the CPU rails: depths 2 and 4 decode token-for-token the plain stream, depth 4 drafts and accepts more than depth 1 over the same tokens, and the forced reject at depth 3 rolls back to the accepted prefix") @(t : T?) {
         let path = path_join(models_dir(), "Qwen3.5-0.8B-MTP-Q8_0.gguf")
@@ -232,7 +232,7 @@ def test_mtp_depth(t : T?) {
     }
 }
 
-[test]
+[test(description = "With the Qwen3.5-0.8B-MTP Q8 file requantized to the q4_0 tier, self-speculative greedy decode emits plain decode's tokens exactly on the counting prompt and the head drafts")]
 def test_mtp_q4_0(t : T?) {
     t |> run("MTP self-spec greedy decode rides the q4_0 requant tier (Qwen3.5-0.8B-MTP Q8 -> q4_0)") @(t : T?) {
         let path = path_join(models_dir(), "Qwen3.5-0.8B-MTP-Q8_0.gguf")
@@ -246,7 +246,7 @@ def test_mtp_q4_0(t : T?) {
     }
 }
 
-[test]
+[test(description = "A poisoned 2-row verify undone by `mtp_state_restore`, and a forced-reject round through the engine seam, both leave the next 6 decoded tokens equal to plain decode, and the device counts a rollback exactly when it served the verify")]
 def test_mtp_reject_rollback(t : T?) {
     t |> run("MTP rollback: poisoned 2-row verify + restore replays plain decode exactly, and a forced-reject round through the engine's seam does too") @(t : T?) {
         let path = path_join(models_dir(), "Qwen3.5-0.8B-MTP-Q8_0.gguf")
@@ -370,7 +370,7 @@ def private seam_row_kept(var tr : Model; serves, blob : bool) : bool {
     return kept
 }
 
-[test]
+[test(description = "In a continuation prefill a seam seat that serves leaves the head's poisoned K row untouched after one call for the window's first token and position, a declined seat on a planar model rewrites it on the CPU, and on a blob model nothing writes it")]
 def test_mtp_prefill_seam(t : T?) {
     t |> run("the continuation prefill's seam row (Qwen3.5-0.8B-MTP Q8): a seam seat that serves skips the CPU seam, a declined seat on a planar model falls to it, and a declined seat on a blob model warns and writes nothing") @(t : T?) {
         let path = path_join(models_dir(), "Qwen3.5-0.8B-MTP-Q8_0.gguf")
@@ -389,7 +389,7 @@ def test_mtp_prefill_seam(t : T?) {
     }
 }
 
-[test]
+[test(description = "A fake prefill driver that serves the CPU MTP round's speculative verify window makes `mtp_spec_eval` panic naming the driver, with the verify-window flag up only while it runs and down for the prompt prefill and after the round")]
 def test_mtp_verify_window(t : T?) {
     t |> run("the CPU round's fail-closed exit (Qwen3.5-0.8B-MTP Q8): a prefill driver that serves the speculative verify window - the verify-window flag up while it runs, down outside the round - panics naming the driver") @(t : T?) {
         let path = path_join(models_dir(), "Qwen3.5-0.8B-MTP-Q8_0.gguf")
@@ -448,7 +448,7 @@ def private verify_window_panic(tr : Model) : string {
 // arm regresses that whole bug class (layer_is_recurrent / layer_is_sliding / wv_offs guards)
 // besides being the model the feature is FOR (1.39x decode when frozen). Large tier (~16 GB):
 // DASLLAMA_PARITY_FULL=1.
-[test]
+[test(description = "On Qwen3.6-27B-MTP Q4_K_M, whose draft block sits at layer index 64 where per-layer masks once wrapped, self-speculative greedy decode emits plain decode's counting tokens exactly")]
 def test_mtp_invariance_27b(t : T?) {
     t |> run("MTP self-spec output-invariance (Qwen3.6-27B-MTP Q4_K_M, draft block at layer 64)") @(t : T?) {
         let path = path_join(models_dir(), "Qwen3.6-27B-MTP-Q4_K_M.gguf")
@@ -476,7 +476,7 @@ def test_mtp_invariance_27b(t : T?) {
 // end of t.bq. And glm4moe ships nextn.embed_tokens/shared_head_head as copies of the trunk's own
 // tables, which the loader shape-checks rather than disabling the head over.
 // Large tier (~73 GB, 2 shards): DASLLAMA_PARITY_FULL=1.
-[test]
+[test(description = "On non-recurrent GLM-4.5-Air with qkv bias and a NextN head, self-speculative decode of a code prompt emits plain decode's tokens exactly, including with every third draft forced through the recr_mask-zero reject branch")]
 def test_mtp_invariance_glm(t : T?) {
     t |> run("MTP self-spec output-invariance (GLM-4.5-Air Q4_K_M, non-recurrent reject path)") @(t : T?) {
         let path = path_join(models_dir(), "glm45air/Q4_K_M/GLM-4.5-Air-Q4_K_M-00001-of-00002.gguf")
@@ -516,7 +516,7 @@ def test_mtp_invariance_glm(t : T?) {
 // block and collapses through its own head mixer before the borrowed classifier. The counting fixture
 // (every Qwen-vocab carrier continues it identically) holds spec decode to plain decode token for
 // token. Large tier (94 GB, 3 shards + 2.6 GB head): DASLLAMA_PARITY_FULL=1.
-[test]
+[test(description = "Qwen3.8-Flash-Next with its split shared Q8_0 head loads the hyper-connection head mixer, and self-speculative decode of the counting prompt emits plain decode's tokens exactly, forced rejects included")]
 def test_mtp_invariance_flashnext(t : T?) {
     t |> run("MTP self-spec output-invariance (Qwen3.8-Flash-Next + split shared head, the wide-residual carry)") @(t : T?) {
         return if (!jit_only(t))

@@ -127,7 +127,7 @@ def private dn_step_cpu_control(t : T?; var m : Model; prompt, want : array<int6
     delete sch
 }
 
-[test]
+[test(description = "On the GPU tier, two Qwen3.5-0.8B deltanet streams decoded turn about match their solo generate references token for token, share decode steps, record fused deltanet steps on device, and pass nothing to the CPU rails")]
 def test_scheduler_batching_deltanet_gpu(t : T?) {
     t |> run("two interleaved deltanet streams on the GPU tier match their solo references, their deltanet steps counted on the device (needs Qwen3.5-0.8B-Q8_0, DASLLAMA_GPU=1)") @(t : T?) {
         return if (!jit_only(t))
@@ -204,7 +204,7 @@ def test_scheduler_batching_deltanet_gpu(t : T?) {
 
 // ===== scheduler ≡ generate (1 stream): greedy bit-exact, seeded sampling, stop finish =====
 
-[test]
+[test(description = "One SmolLM2 stream through the scheduler reproduces `generate` bit for bit in tokens and pieces under greedy and seeded sampling, ends at a declared stop id unemitted, and records length, TTFT and counters")]
 def test_scheduler_matches_generate(t : T?) {   // nolint:STYLE038 — one model load per test: every assertion runs against that model inside the same jobque scope
     t |> run("scheduler == generate: bit-exact stream, seeded sampling, stop/budget (needs SmolLM2-135M)") @(t : T?) {
         if (model_missing(t)) {
@@ -291,7 +291,7 @@ def test_scheduler_matches_generate(t : T?) {   // nolint:STYLE038 — one model
 
 // ===== stop strings: the hold-back scan on its own, then the stream it ends =====
 
-[test]
+[test(description = "`stop_scan` releases bytes that cannot begin a stop string, holds a growing partial match across pieces, cuts at a completed match, and with two stop strings cuts at the earliest")]
 def test_scheduler_stop_scan(t : T?) {
     t |> run("stop_scan releases what cannot begin a stop string, holds what can, cuts at the first match") @(t : T?) {
         let stops <- ["</think", "STOP"]
@@ -321,7 +321,7 @@ def test_scheduler_stop_scan(t : T?) {
     }
 }
 
-[test]
+[test(description = "A stop string spanning two greedy pieces ends the SmolLM2 stream with exactly the reference text before it, and a held tail no stop completes flushes as its own piece at the length finish")]
 def test_scheduler_stop_strings(t : T?) {
     t |> run("a stop string ends the stream where it begins; text held for a stop that never comes flushes at the budget (needs SmolLM2-135M)") @(t : T?) {
         if (model_missing(t)) {
@@ -386,7 +386,7 @@ def test_scheduler_stop_strings(t : T?) {
 
 // ===== the reasoning budget: the forced close lands after the budgeted tokens, the stream continues =====
 
-[test]
+[test(description = "A reasoning budget forces the close tokens right after the budgeted count with the reference elsewhere, stays inert when unopened, markless or self-closed, closes early at the length cap, and a re-open stops the turn")]
 def test_scheduler_think_budget(t : T?) {   // nolint:STYLE038 — one cell: the budget's six streams against one reference on one loaded model
     t |> run("a reasoning budget forces the span's close tokens after that many tokens; a budget with no close is inert (needs SmolLM2-135M)") @(t : T?) {
         return if (!jit_only(t) || !model_available(t, MODEL_PATH))
@@ -521,7 +521,7 @@ def test_scheduler_think_budget(t : T?) {   // nolint:STYLE038 — one cell: the
     }
 }
 
-[test]
+[test(description = "`idle_chunk_default` on a GPU is the larger of the 2048-token floor and the driver's prompt window, and on the CPU is the default chunk whatever the window")]
 def test_idle_chunk_follows_the_window(t : T?) {
     t |> run("the idle chunk on a GPU is the wider of the 2048 floor and the driver's prompt window; the CPU's is one window") @(t : T?) {
         t |> equal(idle_chunk_default(true, 4096l), 4096l, "the wide window picks the chunk: a 3k prompt sweeps the expert stacks once")
@@ -533,7 +533,7 @@ def test_idle_chunk_follows_the_window(t : T?) {
 
 // ===== chunked prefill: {1,3,17,64} produce the identical stream under classic prefill =====
 
-[test]
+[test(description = "Under classic prefill, SmolLM2 streams prefilled in chunks of 1, 3, 17 and 64 tokens emit the identical greedy stream")]
 def test_scheduler_chunk_sizes(t : T?) {
     t |> run("prefill chunk sizes 1/3/17/64 give the same stream - classic mode (needs SmolLM2-135M)") @(t : T?) {
         if (model_missing(t)) {
@@ -577,7 +577,7 @@ def test_scheduler_chunk_sizes(t : T?) {
     }
 }
 
-[test]
+[test(description = "A lone stream prefills its whole prompt in the first tick under the idle quantum and emits the chunked run's stream, unset sizes resolve to the backend's defaults, and beside a decoding stream a tick prefills one chunk")]
 def test_scheduler_idle_quantum(t : T?) {
     t |> run("a lone stream prefills in the idle quantum, a stream beside a decoding one in the chunk (needs SmolLM2-135M)") @(t : T?) {
         if (model_missing(t)) {
@@ -640,7 +640,7 @@ def test_scheduler_idle_quantum(t : T?) {
 
 // ===== the tick's order around a finishing stream, and admission behind a prefilling one =====
 
-[test]
+[test(description = "A tick that finishes a stream at its length prefills and emits nothing for the waiting stream and keeps the finished one's slot, and the next tick reaps it into the poll surface and prefills one chunk")]
 def test_scheduler_finishing_tick(t : T?) {
     t |> run("a tick that finishes a stream ends before its prefill chunk and reaps the stream on the next tick (needs SmolLM2-135M)") @(t : T?) {
         if (model_missing(t)) {
@@ -685,7 +685,7 @@ def test_scheduler_finishing_tick(t : T?) {
     }
 }
 
-[test]
+[test(description = "A tick whose decode step emitted a token runs no prefill chunk, the next tick runs exactly one chunk with no decode, the two alternate until the prompt is done, and then every tick decodes")]
 def test_scheduler_decode_events_precede_chunk(t : T?) {
     t |> run("a tick whose decode step emitted a token ends before its prefill chunk; the next tick runs the chunk alone (needs SmolLM2-135M)") @(t : T?) {
         if (model_missing(t)) {
@@ -745,7 +745,7 @@ def test_scheduler_decode_events_precede_chunk(t : T?) {
 //! stream (the wait for one is the Metal prefix-checkpoint cells'), the two prompts prefill as segments of the ticks'
 //! windows inside the quantum - the first stream's chunk whole, the second's rows as the quantum leaves room - and each
 //! stream reads its solo reference token for token.
-[test]
+[test(description = "A short request queued behind a long prefilling one is admitted on the first tick, rides the quantum's windows within the prefill call bound, and both streams match their solo greedy references")]
 def test_scheduler_admission_beside_prefill(t : T?) {
     t |> run("a request is admitted beside a prefilling stream with no checkpoint ahead, and both read their solo references (needs SmolLM2-135M)") @(t : T?) {
         if (model_missing(t)) {
@@ -805,7 +805,7 @@ def private probe_prefill_declines(t : Model; var s : Session; npos, start_pos :
 
 //! A one-token chunk beside a longer one keeps eval's dispatch - the decode step, which offers no prefill override its row -
 //! while the longer chunk is offered as a prefill; both chunks' logits are their own eval's, bit for bit.
-[test]
+[test(description = "`eval_segments` gives each segment its own eval's logits bit for bit, offering the prefill override only the longer chunk while the one-token chunk takes the decode step, with a forward_prefill control")]
 def test_eval_segments_one_token_chunk(t : T?) {
     t |> run("a one-token segment runs as eval does, the longer one as its own eval (needs SmolLM2-135M)") @(t : T?) {
         if (model_missing(t)) {
@@ -857,7 +857,7 @@ def test_eval_segments_one_token_chunk(t : T?) {
 
 // ===== staggered admit, queue overflow, queued eviction, multi-stream token match =====
 
-[test]
+[test(description = "Two-slot batching with staggered admit matches each stream's solo greedy reference, a full queue rejects submit, a queued eviction emits nothing, and no batch row pointer outlives its reaped stream")]
 def test_scheduler_batching(t : T?) {
     t |> run("staggered admit + queue overflow: every stream matches its solo reference (needs SmolLM2-135M)") @(t : T?) {
         if (model_missing(t)) {
@@ -925,7 +925,7 @@ def test_scheduler_batching(t : T?) {
 
 // ===== paged serving + prefix cache: a repeat request attaches pages and skips their prefill =====
 
-[test]
+[test(description = "A paged scheduler's repeat request attaches the donated pages up to np-1 tokens and emits the cold stream, and a stop-finished stream donates rows aligned with its close so a continuation attach equals cold")]
 def test_scheduler_prefix_cache(t : T?) {   // nolint:STYLE038 — one model load per test: every assertion runs against that model inside the same jobque scope
     t |> run("paged scheduler: repeat request attaches cached pages, identical stream (needs SmolLM2-135M)") @(t : T?) {
         if (model_missing(t)) {
@@ -1038,7 +1038,7 @@ def test_scheduler_prefix_cache(t : T?) {   // nolint:STYLE038 — one model loa
 
 // ===== active eviction mid-run + the context-exhaustion length pre-check =====
 
-[test]
+[test(description = "Evicting one of two decoding streams mid-run freezes its tokens and leaves the survivor equal to its solo reference, and a budget past the capped context finishes length at seq_len minus prompt plus one")]
 def test_scheduler_evict_and_context_length(t : T?) {
     t |> run("evict mid-run leaves the survivor exact; context exhaustion finishes 'length' (needs SmolLM2-135M)") @(t : T?) {
         if (model_missing(t)) {
@@ -1097,7 +1097,7 @@ let MTP_MODEL_PATH = path_join(models_dir(), "Qwen3.5-0.8B-MTP-Q8_0.gguf")
 let FLASH_NEXT_FILE = "Qwen3.8-Flash-Next-GGUF/UD-IQ4_XS/Qwen3.8-Flash-Next-UD-IQ4_XS-00001-of-00003.gguf"
 let FLASH_NEXT_HEAD = "Qwen3.8-Flash-Next-GGUF/MTP/mtp-Qwen3.8-Flash-Next-shared-Q8_0.gguf"
 
-[test]
+[test(description = "On Qwen3.5-0.8B-MTP with bit-exact kernels pinned, MTP self-speculative greedy, seeded top-k 1 and penalized-greedy streams equal the plain scheduler's tokens, draft and accept, and count per-row ticks")]
 def test_scheduler_mtp(t : T?) {   // nolint:STYLE038 — one model load per test: the greedy and the sampled leg run against that model inside the same jobque scope
     t |> run("scheduler mtp: self-spec greedy and sampled streams == plain scheduler, chunked prefill + paged (needs Qwen3.5-0.8B-MTP)") @(t : T?) {
         return if (!jit_only(t))
@@ -1362,7 +1362,7 @@ def private non_close_stop_cuts(t : T?; m : Model; prompt, ref : array<int64>) {
     delete close
 }
 
-[test]
+[test(description = "Depth-2 MTP streams ended by a stop at four cuts emit the plain reply before it and turn 2 attaches the finished-turn checkpoint and reads the plain turn 2, including non-close stops; stop-row and draft-rate controls hold")]
 def test_scheduler_mtp_stop_close(t : T?) {
     t |> run("scheduler mtp: a stream finished on a stop the verify evaled leaves the finished-turn checkpoint, the next turn attaches it whole (needs Qwen3.5-0.8B-MTP)") @(t : T?) {
         return if (!jit_model_available(t, MTP_MODEL_PATH))
@@ -1455,7 +1455,7 @@ def private length_cap_leg(t : T?; m : Model; prompt, ref : array<int64>; max_ne
     return <- run
 }
 
-[test]
+[test(description = "A depth-3 MTP stream capped at 2 or 7 tokens drafts no row past the cap, emits the plain reply, and its next turn attaches prompt and reply whole; depth 3 drafts more per tick than depth 1")]
 def test_scheduler_mtp_length_cap(t : T?) {
     t |> run("scheduler mtp: a deep round drafts no row past the reply's length cap, the finished turn attaches whole (needs Qwen3.5-0.8B-MTP)") @(t : T?) {
         return if (!jit_model_available(t, MTP_MODEL_PATH))
@@ -1585,7 +1585,7 @@ def private capture_stops_leg(t : T?; m : Model; prompt, stops : array<int64>; c
     return <- held
 }
 
-[test]
+[test(description = "Under recurrent and chunked deltanet prefill, four checkpoint stops captured inside one window stand with the right kinds, attach and continue as a fresh prefill does, and the captured state equals a window ending there bit for bit")]
 def test_scheduler_capture_stops(t : T?) {
     t |> run("recurrent prefill: three checkpoint stops ride ONE window, each attaches and continues as a fresh prefill does (needs Qwen3.5-0.8B-MTP)") @(t : T?) {
         return if (!jit_model_available(t, MTP_MODEL_PATH))
@@ -1622,7 +1622,7 @@ def test_scheduler_capture_stops(t : T?) {
     }
 }
 
-[test]
+[test(description = "On Metal with the Flash-Next n-gram carrier, four stops in one window attach and continue as a fresh prefill, and the captured side input holds exact last tokens and history within 1 percent of max")]
 def test_scheduler_capture_stops_ngram(t : T?) {
     t |> run("Metal prefill: the four stops ride ONE window on the n-gram side-input carrier, each attaches and continues as a fresh prefill does (needs Qwen3.8-Flash-Next, DASLLAMA_PARITY_FULL=1)") @(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
@@ -1679,7 +1679,7 @@ def test_scheduler_capture_stops_ngram(t : T?) {
 
 // ===== the speculative tick under the resident driver: a greedy stream asks a pick every tick and consumes it =====
 
-[test]
+[test(description = "Under the resident GPU driver a greedy MTP stream equals the plain scheduler's stream token for token, and every drafted round's verify is served on the device with its pick consumed")]
 def test_scheduler_mtp_resident_picks(t : T?) {
     t |> run("scheduler mtp under the resident driver: every tick of a greedy stream asks a pick - the device verify lands picks alone and sample_ consumes each - the stream token for token the plain scheduler's on the same device rail, every round's verify served on the device (needs Qwen3.5-0.8B-MTP, DASLLAMA_GPU=1)") @(t : T?) {
         return if (!jit_model_available(t, MTP_MODEL_PATH) || !gpu_tier_armed(t))
@@ -1726,7 +1726,7 @@ def test_scheduler_mtp_resident_picks(t : T?) {
     }
 }
 
-[test]
+[test(description = "A device-homed MTP stream under the resident driver equals the host-cached speculating stream token for token, with every draft and verify counted on the device and no CPU pass; speculation off counts none")]
 def test_scheduler_mtp_device_home(t : T?) {
     t |> run("scheduler mtp in device mode under the resident driver: a speculating stream homed on the device - its K/V in the driver's region alone - drafts, verifies and rolls back there, token for token the host-cached speculating stream, every drafted round counted by the device's draft and verify counters (needs Qwen3.5-0.8B-MTP, DASLLAMA_GPU=1)") @(t : T?) {
         return if (!jit_model_available(t, MTP_MODEL_PATH) || !gpu_tier_armed(t))
@@ -1799,7 +1799,7 @@ def test_scheduler_mtp_device_home(t : T?) {
 
 // A sampled stream consults the RNG once per token, so an extra or missing sample() call in the
 // paged path shows up as a diverged stream, not as a crash.
-[test]
+[test(description = "A paged scheduler's seeded sampled stream equals the seeded `generate` reference both cold and over a warm prefix cache that attached pages")]
 def test_scheduler_paged_sampled(t : T?) {
     t |> run("paged scheduler, seeded sampling: stream == generate() (needs SmolLM2-135M)") @(t : T?) {
         if (model_missing(t)) {
@@ -1904,7 +1904,7 @@ def private embd_span_logits(m : Model; prompt : array<int64>; lo, hi : int64) :
     return <- out
 }
 
-[test]
+[test(description = "Media rows built from the prompt's own embeddings, spliced at head, middle, tail or past a chunk, reproduce the all-token stream; a non-causal span matches `generate_embd`'s span form; paged spans attach off the cache")]
 def test_scheduler_media_splice(t : T?) {   // nolint:STYLE038 — one model load per test: every assertion runs against that model inside the same jobque scope
     t |> run("media rows == the same tokens as ids: splice at head/middle/tail (needs SmolLM2-135M)") @(t : T?) {
         if (model_missing(t)) {
@@ -2073,7 +2073,7 @@ def test_scheduler_media_splice(t : T?) {   // nolint:STYLE038 — one model loa
 
 // ===== media validation: submit refuses malformed shapes by panic =====
 
-[test]
+[test(description = "`set_device_kv` refuses to switch a scheduler with a live stream and switches it once idle, and submit panics on a media request in device mode while host-cached mode takes it")]
 def test_scheduler_device_mode_switch(t : T?) {
     t |> run("only an idle scheduler switches its session kind (needs SmolLM2-135M)") @(t : T?) {
         if (model_missing(t)) {
@@ -2135,7 +2135,7 @@ def test_scheduler_device_mode_switch(t : T?) {
     }
 }
 
-[test]
+[test(description = "Scheduler submit panics on a negative n_media, media_at outside the prompt, undersized or oversized rows, rows with n_media 0, and narrow image rows on a deepstack decoder")]
 def test_scheduler_media_validation(t : T?) {
     t |> run("submit panics on malformed media shapes (needs SmolLM2-135M)") @(t : T?) {
         if (model_missing(t)) {
@@ -2262,7 +2262,7 @@ def private mrope_paged_leg(t : T?; m : Model; prompt : array<int64>; lo, hi : i
     delete schp
 }
 
-[test]
+[test(description = "A media_grid span reproduces `generate_embd`'s mrope grid form solo, in a two-row batched decode beside a text stream, and paged where the repeat attaches the span and restores the rope advance")]
 def test_scheduler_mrope(t : T?) {
     t |> run("media_grid: the mrope walk reaches the quantum and survives the batched decode (needs SmolLM2-135M)") @(t : T?) {
         if (model_missing(t)) {
@@ -2332,7 +2332,7 @@ def test_scheduler_mrope(t : T?) {
 
 // ===== mrope validation: submit refuses malformed grids by panic =====
 
-[test]
+[test(description = "Scheduler submit panics on a media grid shaping more rows than n_media, a grid on causal rows, a one-sided grid, and a grid with n_media 0")]
 def test_scheduler_mrope_validation(t : T?) {
     t |> run("submit panics on malformed media grids (needs SmolLM2-135M)") @(t : T?) {
         if (model_missing(t)) {
@@ -2400,7 +2400,7 @@ def private inline_span_req(m : Model; id : int64; prompt : array<int64>; lo, hi
     return <- r
 }
 
-[test]
+[test(description = "A prefix hit that would end inside an inline non-causal span attaches nothing past the span's start, and both span streams match their own `generate_embd` span-form references")]
 def test_scheduler_span_cut(t : T?) {
     t |> run("a prefix hit that ends inside a span is no hit: the span evals whole (needs SmolLM2-135M)") @(t : T?) {
         return if (model_missing(t))
@@ -2477,7 +2477,7 @@ def private spans_req(m : Model; id : int64; prompt : array<int64>; spans : arra
     return <- r
 }
 
-[test]
+[test(description = "Submit takes a well-formed inline span and panics on empty, out-of-order, overlapping, past-the-end or token-edged spans, rows a float wide or a row short, a splice beside spans, and a span in device mode")]
 def test_scheduler_span_validation(t : T?) {
     t |> run("submit panics on malformed inline spans (needs SmolLM2-135M)") @(t : T?) {
         return if (model_missing(t))

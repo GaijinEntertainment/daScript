@@ -231,7 +231,7 @@ def private model_missing(t : T?) : bool {
     return false
 }
 
-[test]
+[test(description = "eval_batch_ over three ragged stories15M prompts with fp32 weights and f32 KV reproduces each sequential stream logits and final caches within 1e-6, while another row reference lands outside the bar")]
 def test_batch_decode_fp32(t : T?) {
     t |> run("batched decode == sequential, fp32 weights + f32 KV (needs stories15M.bin)") @(t : T?) {
         if (model_missing(t)) {
@@ -248,7 +248,7 @@ def test_batch_decode_fp32(t : T?) {
     }
 }
 
-[test]
+[test(description = "With Q8_0 weights on the portable backend, batched decode reproduces the sequential per-step logits and final KV caches of three ragged prompts within 1e-6, a cross-row control outside the bar")]
 def test_batch_decode_q8(t : T?) {
     t |> run("batched decode == sequential, Q8 weights (needs stories15M.bin)") @(t : T?) {
         if (model_missing(t)) {
@@ -309,7 +309,7 @@ def private hybrid_batch_cell(t : T?; kdt : KVDtype; tag, file : string; ba_f32 
     delete tr
 }
 
-[test]
+[test(description = "On the Qwen3.5 deltanet hybrid and its MoE sibling, every batched step runs on the CPU stack and matches sequential logits, KV, deltanet state and conv history within 1e-6, and decoding below the deltanet position panics")]
 def test_batch_decode_hybrid(t : T?) {
     t |> run("batched decode == sequential on the deltanet hybrid, f32 KV (needs Qwen3.5-0.8B-Q8_0)") @(t : T?) {
         hybrid_batch_cell(t, KVDtype.f32, "qwen35", "Qwen3.5-0.8B-Q8_0.gguf", false)
@@ -324,7 +324,7 @@ def test_batch_decode_hybrid(t : T?) {
     }
 }
 
-[test]
+[test(description = "Under the f16 KV codec with Q8_0 stories15M weights, batched decode reproduces the sequential per-step logits and decoded final caches within 1e-6, a cross-row control outside the bar")]
 def test_batch_decode_f16_kv(t : T?) {
     t |> run("batched decode == sequential under the f16 KV codec (needs stories15M.bin)") @(t : T?) {
         if (model_missing(t)) {
@@ -344,7 +344,7 @@ def test_batch_decode_f16_kv(t : T?) {
     }
 }
 
-[test]
+[test(description = "Under the q8_0 KV codec on SmolLM2-135M, batched decode reproduces the sequential per-step logits and dequantized final caches within 1e-6, a cross-row control outside the bar")]
 def test_batch_decode_q8_kv(t : T?) {
     t |> run("batched decode == sequential under the q8_0 KV codec (needs SmolLM2-135M)") @(t : T?) {
         return if (!jit_only(t))
@@ -367,7 +367,7 @@ def test_batch_decode_q8_kv(t : T?) {
     }
 }
 
-[test]
+[test(description = "Under the tq4 KV codec on SmolLM2-135M, batched decode reproduces the sequential per-step logits and dequantized final caches within 1e-6, a cross-row control outside the bar")]
 def test_batch_decode_tq4_kv(t : T?) {
     t |> run("batched decode == sequential under the tq4 KV codec (needs SmolLM2-135M)") @(t : T?) {
         return if (!jit_only(t))
@@ -391,7 +391,7 @@ def test_batch_decode_tq4_kv(t : T?) {
     }
 }
 
-[test]
+[test(description = "With Q4_0 weights every batched step runs on the CPU batched stack and reproduces the sequential greedy tokens, logits and caches bit-exact, since the batched GEMM is the GEMV dot over rows")]
 def test_batch_decode_q4(t : T?) {
     t |> run("batched decode == sequential, Q4_0 weights on the CPU batched stack (needs stories15M.bin)") @(t : T?) {
         if (model_missing(t)) {
@@ -414,7 +414,7 @@ def test_batch_decode_q4(t : T?) {
     }
 }
 
-[test]
+[test(description = "batch_step_census counts each two-row eval_batch_ step on the CPU batched stack with none per-row or on a device, and a one-row step as per-row only")]
 def test_batch_decode_step_census(t : T?) {
     t |> run("the step census: a B-row step counts on the CPU batched stack, a one-row step as per-row (needs stories15M.bin)") @(t : T?) {
         if (model_missing(t)) {
@@ -458,7 +458,7 @@ def test_batch_decode_step_census(t : T?) {
     }
 }
 
-[test]
+[test(description = "The batched bench row serves at a positive rate on the CPU batched stack, and with the classic rope path forcing per-row steps it refuses by name, reads 0 and the census counts the per-row steps")]
 def test_batch_decode_row_refuses_per_row(t : T?) {
     t |> run("the batched bench row refuses by name when a timed step ran its rows one at a time (needs SmolLM2-135M)") @(t : T?) {
         return if (!jit_only(t))
@@ -489,7 +489,7 @@ def test_batch_decode_row_refuses_per_row(t : T?) {
     }
 }
 
-[test]
+[test(description = "A one-row eval_batch_ delegates to forward, so its six greedy tokens, logits and final caches match the sequential stream bit for bit")]
 def test_batch_decode_b1_delegation(t : T?) {
     t |> run("B == 1 delegates to forward() bit-exactly (needs stories15M.bin)") @(t : T?) {
         if (model_missing(t)) {
@@ -539,7 +539,7 @@ def test_batch_decode_b1_delegation(t : T?) {
     }
 }
 
-[test]
+[test(description = "After the middle row retires mid-run, the two surviving batched rows keep their sequential greedy tokens, logits within 1e-6 and final caches within 1e-6")]
 def test_batch_decode_shrink(t : T?) {
     t |> run("mid-run shrink: survivors keep matching after a row retires (needs stories15M.bin)") @(t : T?) {
         if (model_missing(t)) {
@@ -615,7 +615,7 @@ def test_batch_decode_shrink(t : T?) {
     }
 }
 
-[test]
+[test(description = "On the box best kernel backend with no pin, batched decode fed the sequential tokens keeps per-step logits and final caches within 1e-3 of the sequential stream, a cross-row control outside the bar")]
 def test_batch_decode_tuned(t : T?) {
     t |> run("active-backend batch kernels: tokens match sequential within the FP budget (needs stories15M.bin)") @(t : T?) {
         if (model_missing(t)) {
@@ -705,7 +705,7 @@ def private verify_decline(t : T?; tr : Model; var ws : BatchWorkspace; var grou
     delete toks
 }
 
-[test]
+[test(description = "A batch override that declines every step, with its gather gate on or off, leaves the host embedding each row once and the CPU stack reading the plain batched step logits bit for bit")]
 def test_batch_decode_late_embed(t : T?) {
     t |> run("a batch override that declines after its gather gate took the rows: the rows embed late, the CPU stack reads the plain step's logits (needs stories15M.bin)") @(t : T?) {
         if (model_missing(t)) {
@@ -737,7 +737,7 @@ def test_batch_decode_late_embed(t : T?) {
     }
 }
 
-[test]
+[test(description = "verify_batch_groups declines an empty group, a group past the context, mixed K/V codecs and a flat beside a paged group before reaching the override, while two valid groups reach it")]
 def test_batch_decode_verify_declines(t : T?) {
     t |> run("verify_batch_groups declines a group of no rows, a group past the context and groups on two codecs or pools before the override (needs stories15M.bin)") @(t : T?) {
         if (model_missing(t)) {

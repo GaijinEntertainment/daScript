@@ -30,7 +30,7 @@ def private mk_shared_config() : Config {
     return c
 }
 
-[test]
+[test(description = "A paged KV pool on the E-series shared-KV Config maps shared layers to their source's blob, sizes each blob's K and V row bytes by its own dtype, and allocates nothing up front")]
 def test_kv_pool_layout(t : T?) {
     t |> run("blob_of aliases shared-KV layers; row bytes track the dtype; blobs start empty") @(t : T?) {
         let c = mk_shared_config()
@@ -49,7 +49,7 @@ def test_kv_pool_layout(t : T?) {
     }
 }
 
-[test]
+[test(description = "Pool groups allocate LIFO from a free list that grows geometrically (4 then 8 then 16), release returns a group at refcount 0, and growth inside a reserve moves no blob and keeps written rows")]
 def test_kv_pool_alloc_release(t : T?) {
     t |> run("alloc pops LIFO from a geometrically grown free list; release returns at refcnt 0") @(t : T?) {
         let c = mk_config(2l, 4l, 2l, 16l, 32l)
@@ -98,7 +98,7 @@ def test_kv_pool_alloc_release(t : T?) {
     }
 }
 
-[test]
+[test(description = "`kv_ensure` grows a paged session's block table to ceil(upto / page) pages, idempotently and never shrinking, and releasing returns every page so the pool's free list is back to capacity")]
 def test_kv_ensure_growth(t : T?) {
     t |> run("kv_ensure grows the block table to cover [0, upto); release returns every page") @(t : T?) {
         let c = mk_config(2l, 4l, 2l, 16l, 32l)
@@ -129,7 +129,7 @@ def test_kv_ensure_growth(t : T?) {
     }
 }
 
-[test]
+[test(description = "Paged `kv_runs` maps windows through the block table: physically consecutive pages merge into one run, shuffled pages split at every straddled boundary, and `kv_phys_row` follows the same table")]
 def test_kv_runs_paged(t : T?) {
     t |> run("paged kv_runs: page-span runs through the block table, physically-consecutive spans merge") @(t : T?) {
         let c = mk_config(2l, 4l, 2l, 16l, 16l)
@@ -186,7 +186,7 @@ def test_kv_runs_paged(t : T?) {
     }
 }
 
-[test]
+[test(description = "A paged pool's cache bytes at 10 positions are under half the flat slabs sized for seq_len 1024, and grow only as the context deepens to 600 positions")]
 def test_kv_paged_memory_proportional(t : T?) {
     t |> run("paged cache bytes track actual context, not seq_len") @(t : T?) {
         let c = mk_config(4l, 4l, 2l, 64l, 1024l)
@@ -214,7 +214,7 @@ def test_kv_paged_memory_proportional(t : T?) {
     }
 }
 
-[test]
+[test(description = "A `kv_store_row` through the paged layer base and `kv_phys_row` reads back exactly at the block-table row, and shared-KV layers' K and V bases alias their source layer's")]
 def test_kv_paged_store_roundtrip(t : T?) {
     t |> run("kv_store_row through kv_layer_kbase + kv_phys_row round-trips; shared layers alias") @(t : T?) {
         let c = mk_shared_config()
@@ -296,7 +296,7 @@ def private cache_rows_equal(var sf : Session; var sp : Session; c : Config; npo
     return true
 }
 
-[test]
+[test(description = "On stories15M, two paged f32 sessions interleaved on one pool fragment its pages yet match their flat references bit for bit in logits over 40 decode steps and in every cache row")]
 def test_kv_paged_decode(t : T?) {
     t |> run("interleaved paged sessions == flat, bit-exact under fragmentation (needs stories15M.bin)") @(t : T?) {
         return if (!jit_only(t))
@@ -350,7 +350,7 @@ def test_kv_paged_decode(t : T?) {
     }
 }
 
-[test]
+[test(description = "On SmolLM2-135M, two paged q8_0 sessions interleaved on one pool fragment its pages yet match flat q8_0 references bit for bit in logits over 40 decode steps and in every cache row")]
 def test_kv_paged_q8(t : T?) {
     t |> run("paged q8_0 sessions == flat q8_0, bit-exact under fragmentation (needs SmolLM2-135M)") @(t : T?) {
         return if (!jit_only(t))
@@ -405,7 +405,7 @@ def test_kv_paged_q8(t : T?) {
     }
 }
 
-[test]
+[test(description = "On stories15M, a 21-token prefill straddling three 8-row pages matches flat prefill bit for bit in logits and cache rows, and eight greedy decode steps on top stay bit-exact")]
 def test_kv_paged_prefill(t : T?) {
     t |> run("paged prefill == flat prefill: logits and cache rows bit-exact (needs stories15M.bin)") @(t : T?) {
         return if (!jit_only(t))
@@ -452,7 +452,7 @@ def test_kv_paged_prefill(t : T?) {
     }
 }
 
-[test]
+[test(description = "On stories15M, `eval_batch` over three paged sessions of ragged depth on one pool, one crossing a page mid-decode, matches flat sessions' logits bit for bit for six steps and the deepest cache rows byte for byte")]
 def test_kv_paged_eval_batch(t : T?) {
     t |> run("paged eval_batch == flat eval_batch, ragged depths on one pool (needs stories15M.bin)") @(t : T?) {
         return if (!jit_only(t))

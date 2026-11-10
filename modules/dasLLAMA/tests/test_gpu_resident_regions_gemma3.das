@@ -14,22 +14,22 @@ require _resident_regions
 // driver serves, or without the file under models_dir().
 let private REGIONS_FILE = "gemma-3-1b-it-Q8_0.gguf"
 
-[test]
+[test(description = "On gemma-3-1b with sandwich norms, sliding and global layers and GeGLU, a batched step over two sessions reads bit for bit what each session reads alone")]
 def test_regions_batched_steps_g3(t : T?) {
     cell_regions_batched_steps(t, REGIONS_FILE)
 }
 
-[test]
+[test(description = "On gemma-3-1b with both prompts past the unsplit position, the N-row command's split attention form batches two sessions bit for bit what each reads alone")]
 def test_regions_batched_steps_split_g3(t : T?) {
     cell_regions_batched_steps_split(t, REGIONS_FILE)
 }
 
-[test]
+[test(description = "On gemma-3-1b a batched step before any one-row step, one-row steps, then a batched step again all read what each session reads alone")]
 def test_regions_batched_first_g3(t : T?) {
     cell_regions_batched_first(t, REGIONS_FILE)
 }
 
-[test]
+[test(description = "On a ringed gemma-3-1b load the ring floor sits at the prompt's rows less the slack: a call under it panics, a prompt from 0 clears it, and a park, export or import under it refuses while every row moves with it")]
 def test_regions_ring_floor_g3(t : T?) {
     cell_ring_floor(t, REGIONS_FILE)
 }

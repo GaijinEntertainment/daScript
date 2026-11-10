@@ -58,7 +58,7 @@ def private shell(n_layers : int64; recr_mask : uint64) : Model {
     return <- m
 }
 
-[test]
+[test(description = "`resident_unserved_features` returns empty for a plain or qwen35-shaped Config and names each unserved attention feature, the sinks and the qkv bias only while their seat is uninstalled")]
 def test_resident_unserved_features(t : T?) {
     t |> run("a plain dense config has no unserved feature") @(t : T?) {
         let c = Config()
@@ -116,7 +116,7 @@ def test_resident_unserved_features(t : T?) {
     }
 }
 
-[test]
+[test(description = "The per-op attention chain names interleaved rope and the output bias but serves NEOX, partial rope and the qkv bias, and names each gemma generation's attention by its exact feature list")]
 def test_attn_chain_unserved_features(t : T?) {
     t |> run("interleaved rope is the one thing a plain config lacks; NEOX or partial rope serves") @(t : T?) {
         var c = Config()
@@ -165,7 +165,7 @@ def private dn_shell() : Model {
     return <- m
 }
 
-[test]
+[test(description = "On a deltanet shell both the whole-model driver and the per-op chain accept q8, K-quant and per-32 recurrent planes by tag and name an mx4 plane, the per-op chain also naming a layer without the triple")]
 def test_dn_plane_format_declines(t : T?) {
     t |> run("the whole-model driver reads q8, superblock and per-32 beta/alpha planes by tag and names an mx4 one") @(t : T?) {
         var m <- dn_shell()
@@ -201,7 +201,7 @@ def test_dn_plane_format_declines(t : T?) {
     }
 }
 
-[test]
+[test(description = "`perop_dense_ffn_decline` admits a per-32 gate beside a K-quant up and a single-form FFN, and names an mx4 up plane by site and `KqFmt` members in its exact decline text")]
 def test_perop_dense_ffn_mixed_forms(t : T?) {
     t |> run("the per-op FFN rail takes a gate and up of two activation forms - each GEMM over its own image; an unservable plane is named") @(t : T?) {
         var m = Model()
@@ -225,7 +225,7 @@ def test_perop_dense_ffn_mixed_forms(t : T?) {
 
 //! the tied classifier on a table no device plane carries: an F16 table (no q8 tag, no K-quant plane, no Metal-mode copy) is named,
 //! where the resident plan would seat a q8 plane at an offset that holds no bytes; a Q8_0, a K-quant and an untied table pass
-[test]
+[test(description = "`resident_cls_decline` names a tied classifier over a float token table with no classifier plane, and passes a tied Q8_0 table, a kept q8 copy, a tied K-quant table and an untied classifier")]
 def test_resident_cls_decline(t : T?) {
     t |> run("the tied classifier of an F32/F16/BF16 token table declines the whole-model driver by name") @(t : T?) {
         var m = Model()
@@ -247,7 +247,7 @@ def test_resident_cls_decline(t : T?) {
     }
 }
 
-[test]
+[test(description = "`resident_layer_decline` names by layer a recurrent layer without deltanet planes, an untileable out plane, an upward K/V donor, missing planes, off-shape heads and missing expert planes, while serving the shapes the kernels cover")]
 def test_resident_layer_decline(t : T?) {
     t |> run("a recurrent layer without deltanet planes is named by number; the attention layers around it pass") @(t : T?) {
         var m <- shell(3l, 2ul)
@@ -322,7 +322,7 @@ def test_resident_layer_decline(t : T?) {
     }
 }
 
-[test]
+[test(description = "For MoE configs `resident_unserved_features` serves softmax routers, router bias, 512 experts at ten picks and gpt-oss's stacks, and names the sigmoid router, selection bias and counts past the select's reach")]
 def test_resident_unserved_moe_features(t : T?) {
     t |> run("the routed block's reach: a softmax router with plain expert stacks is served, every other router shape is named") @(t : T?) {
         var c = Config()
@@ -390,7 +390,7 @@ def private moe_shell(fmt : KqFmt) : Model {
 
 //! the Metal prefill's one-row GEMV predicate (`kq_fmt_one_row_gemv`): q8 at any width, a served superblock format at a
 //! whole-superblock width and not at a partial one, a per-32 plane at whole 32-blocks, and an mx4 plane at no width
-[test]
+[test(description = "`kq_fmt_one_row_gemv` admits q8 at any width, superblock formats at whole superblocks, per-32 formats at whole 32-blocks and Q4_0 via its repack, and rejects partial blocks and mx4")]
 def test_kq_fmt_one_row_gemv(t : T?) {
     t |> run("the last-layer narrowing admits q8 at any width, a served superblock format at whole superblocks and a per-32 plane at whole blocks") @(t : T?) {
         t |> success(kq_fmt_one_row_gemv(KqFmt.q8, 100l), "q8 has a one-row GEMV at any width")
@@ -409,7 +409,7 @@ def test_kq_fmt_one_row_gemv(t : T?) {
 
 //! the Metal deltanet gates over every recurrent plane's tag: `dn_metal_ok` admits a plane with a one-row GEMV at its
 //! width, `dn_ba_metal_window_ok` a beta/alpha plane with the expert-form GEMV the window's rows ride
-[test]
+[test(description = "`dn_metal_ok` and `dn_ba_metal_window_ok` admit q8, IQ4_XS, Q2_K, lut IQ3_S, per-32 and mlx recurrent planes by tag, and decline an mx4 beta or out plane and an out width off whole superblocks")]
 def test_dn_metal_plane_formats(t : T?) {
     t |> run("the deltanet gates read each recurrent plane by its tag") @(t : T?) {
         var m <- shell(3l, 2ul)
@@ -449,7 +449,7 @@ def test_dn_metal_plane_formats(t : T?) {
     }
 }
 
-[test]
+[test(description = "`discrete_unstamped_plane` passes k4 expert stacks and names, in exact text, an mlx4b routed down plane and an mlx8 shared-expert up plane the discrete homes stamp no kernel for")]
 def test_discrete_unstamped_routed_planes(t : T?) {
     t |> run("the discrete homes' decline names a routed or shared-expert plane in a member they stamp no kernel for") @(t : T?) {
         var m <- moe_shell(KqFmt.k4)
@@ -463,7 +463,7 @@ def test_discrete_unstamped_routed_planes(t : T?) {
     }
 }
 
-[test]
+[test(description = "`moe_metal_ok` admits exactly the expert formats with Metal kernels, declining mx4 tags, mlx6b, repacked mx4 and NextN head stacks out of set, and a whole-`KqFmt` walk pins the kernel roster equal to `moe_site_ok`")]
 def test_moe_metal_expert_formats(t : T?) {
     t |> run("the Metal routed block admits exactly the expert plane formats it has kernels for; every other format declines") @(t : T?) {
         for (f in [KqFmt.q8, KqFmt.q51, KqFmt.iq4nl32, KqFmt.q4032, KqFmt.q5032, KqFmt.k4, KqFmt.k5, KqFmt.k6, KqFmt.k3, KqFmt.k2, KqFmt.q40, KqFmt.nv4, KqFmt.iq4xs, KqFmt.iq4nl, KqFmt.iq3s, KqFmt.iq3xxs, KqFmt.iq2s, KqFmt.iq2xs, KqFmt.iq2xxs, KqFmt.iq3s4,
@@ -533,7 +533,7 @@ def test_moe_metal_expert_formats(t : T?) {
     }
 }
 
-[test]
+[test(description = "The Metal routed block admits 256 and 512 experts and declines 513 on an otherwise unchanged shell, so the select stamps' ladder alone caps the expert count")]
 def test_moe_metal_expert_count(t : T?) {
     t |> run("the select stamps' ladder reaches 512 experts and no further") @(t : T?) {
         var m <- moe_shell(KqFmt.k4)
@@ -549,7 +549,7 @@ def test_moe_metal_expert_count(t : T?) {
     }
 }
 
-[test]
+[test(description = "A global `expert_weights_scale` of 2.5 leaves `moe_metal_ok` admitting the routed block, with 513 experts on the same shell declining as the control")]
 def test_moe_metal_expert_weights_scale(t : T?) {
     t |> run("a global expert_weights_scale serves on Metal: the select carries it") @(t : T?) {
         var m <- moe_shell(KqFmt.k4)
@@ -561,7 +561,7 @@ def test_moe_metal_expert_weights_scale(t : T?) {
     }
 }
 
-[test]
+[test(description = "`decode_shape_decline` ignores an off-lattice dense width on a routed model with no dense FFN on both the decode and batch masks, while the same width declines shape on a dense twin and a lattice width passes")]
 def test_decode_shape_dense_width(t : T?) {
     t |> run("the decode shape gate reads the dense FFN width only where a dense FFN dispatches") @(t : T?) {
         let saved_rope = get_rope_table_mode()
@@ -596,7 +596,7 @@ def test_decode_shape_dense_width(t : T?) {
 
 //! a plane format the Metal kernels do not read declines with a line naming the site and the `KqFmt` member: a dense plane under
 //! `kquant_native`, a routed stack under `graph`; the enum value the declines-by-reason table counts stays the gate's
-[test]
+[test(description = "A dense, token-table, classifier or routed plane the Metal kernels cannot read, including nv4 under a per-tensor scale, is named by layer, site and member in the exact decline line, while the gate keeps its enum reason")]
 def test_metal_fmt_decline_names_site(t : T?) {
     t |> run("a dense plane's unserved format names its layer, site and member; the decode gate still answers kquant_native") @(t : T?) {
         var m <- shell(2l, 0ul)
@@ -673,7 +673,7 @@ def test_metal_fmt_decline_names_site(t : T?) {
 }
 
 //! the routed block's other `graph` declines name their plane the same way: a sigmoid-gated shared expert's, a deltanet plane's
-[test]
+[test(description = "A sigmoid-gated shared expert or deltanet plane in an unread format, mx4 or nv4 under a per-tensor scale, declines the Metal graph gate and is named by layer, site and member in the exact decline line")]
 def test_metal_graph_decline_names_site(t : T?) {
     t |> run("a sigmoid-gated shared expert's unserved format names its layer, site and member under graph") @(t : T?) {
         var m <- moe_shell(KqFmt.k4)
@@ -744,7 +744,7 @@ def test_metal_graph_decline_names_site(t : T?) {
 }
 
 //! under `MetalMode.required` a plane-format decline panics with the words its warning line logs, not the bare reason
-[test]
+[test(description = "On a das_metal build a required-mode plane-format decline panics with the site and member words its warning logs, while a shape decline panics with the bare reason as the control")]
 def test_metal_decline_panic_names_site(t : T?) {
     t |> run("the required-mode panic carries the site and member the warning line names") @(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
@@ -774,7 +774,7 @@ def test_metal_decline_panic_names_site(t : T?) {
     }
 }
 
-[test]
+[test(description = "`mm_tile_widths_64_ok` passes a routed model's off-lattice dense width that no layer dispatches, and declines it once a dense lead layer or a dense twin dispatches it, a lattice width passing")]
 def test_mm_tile_widths_64_dense_width(t : T?) {
     t |> run("the mul_mm tile gate reads the dense FFN width only where a dense FFN dispatches: a routed model's odd dense width gates nothing") @(t : T?) {
         var routed <- moe_shell(KqFmt.k4)
@@ -797,7 +797,7 @@ def test_mm_tile_widths_64_dense_width(t : T?) {
     }
 }
 
-[test]
+[test(description = "`resident_region_ctx` gives each region its integer share of the one binding, keeps a session context under that share or with no cap known, and plans one region for a count under one")]
 def test_resident_region_ctx(t : T?) {
     t |> run("a region's context is its share of the mirror side's one binding") @(t : T?) {
         t |> equal(resident_region_ctx(131072l, 65535l, 1l), 65535l, "one region takes the whole binding")
@@ -808,7 +808,7 @@ def test_resident_region_ctx(t : T?) {
     }
 }
 
-[test]
+[test(description = "`resident_fit_ctx` returns the largest context whose mirror and block-codec shadow fill the room past weights, staged rows, hot pool and fixed rings less its eighth of slack, one position more not fitting")]
 def test_resident_fit_ctx(t : T?) {
     t |> run("a plan past its room shortens to the context the room holds: a block codec's shadow shortens with the mirror") @(t : T?) {
         let mb = 1_048_576l
@@ -844,7 +844,7 @@ def test_resident_fit_ctx(t : T?) {
     }
 }
 
-[test]
+[test(description = "`resident_binding_ctx` is one binding over the widest attention layer's row on hybrid, dense and shared-KV shells alike, block codecs stop at their byte cap where f16 takes the wider range, and no attention reads 0")]
 def test_resident_binding_ctx(t : T?) {
     t |> run("the KV mirror's binding cap is one slab's range over the widest attention layer's row, whatever the layer count") @(t : T?) {
         let bcap = 4_294_967_295l   //! the 4 GiB maxStorageBufferRange of the NV/AMD drivers
@@ -879,7 +879,7 @@ def test_resident_binding_ctx(t : T?) {
     }
 }
 
-[test]
+[test(description = "`resident_mirror_slabs` cuts owner layers into contiguous least-charge slabs at one stride, seats a sharer at its donor and the NextN head last, pinned by exact slab and base tables, and `resident_mirror_bytes` charges that cut")]
 def test_resident_mirror_slabs(t : T?) {
     t |> run("the mirror's slabs: contiguous layer runs under the cap, cut for the least charge, one stride for every slab, the donor's seat for a sharer, the head last") @(t : T?) {
         //! 8 layers, kv width 32 in f16: a layer's rows are 100 x 32 = 3200 units; a slab of 13000 holds four
@@ -942,7 +942,7 @@ def test_resident_mirror_slabs(t : T?) {
     }
 }
 
-[test]
+[test(description = "`slab_limit` picks the stride of the fewest slabs that keep every slab under the cap on varied widths, one slab for a cap past the total, one layer's width for a cap under it")]
 def test_slab_limit(t : T?) {
     t |> run("the cut's stride on varied widths: the fewest slabs the total admits can leave one past the cap, which no cut may") @(t : T?) {
         t |> equal(slab_limit([9l, 2l, 9l], 10l), 9l, "two slabs would hold 11 and 9 against a cap of 10, so three of at most 9 cut")
@@ -952,7 +952,7 @@ def test_slab_limit(t : T?) {
     }
 }
 
-[test]
+[test(description = "`resident_shadow_ctx` caps a block codec's region context at one binding of the widest K/V row as halves, equal under q8_0 and tq4, halved by a doubled row, 0 for a scalar codec or no attention")]
 def test_resident_shadow_ctx(t : T?) {
     t |> run("a block codec's f16 shadow caps a region's context at one binding of the widest K/V row's halves") @(t : T?) {
         let bcap = 4_294_967_295l
@@ -980,7 +980,7 @@ def private pass_prefill_probe(tr : Model; var s : Session; npos : int64; start_
 
 //! the trim's admission tells this run's declines (the route, a prefill pin or override, the tier's seams, the card's room) from the
 //! model's (experts, the residual, a feature): a lane minted under the first would be wrong for the next run, so the mint writes none
-[test]
+[test(description = "`resident_trim_decline_is_run_mode` classes route, room, seam, MoE-seat, host-split and a foreign prefill override's declines as the run's and shape or feature declines as the model's, so a lane mints only under the latter")]
 def test_trim_decline_kind(t : T?) {
     t |> run("a trimmed lane's decline is this run's or the model's") @(t : T?) {
         t |> success(resident_trim_decline_is_run_mode("the whole-model driver is not asked for (DASLLAMA_GPU_RESIDENT, set_gpu_resident_route)"), "the route is the run's")
@@ -1004,7 +1004,7 @@ def test_trim_decline_kind(t : T?) {
     }
 }
 
-[test]
+[test(description = "The mirror arms the asked KV codec where the head geometry holds it, steps tq4 down to q8_0 or f16 and f32 to f16 otherwise, the ask restores exactly, and codec names and ordinals round-trip with a named panic")]
 def test_resident_mirror_codec_ask(t : T?) {
     t |> run("a block codec's geometry: whole 32-blocks a row and a head, a power-of-two head under tq4") @(t : T?) {
         var m <- shell(2l, 0ul)
@@ -1072,7 +1072,7 @@ def test_resident_mirror_codec_ask(t : T?) {
     }
 }
 
-[test]
+[test(description = "`plan_room` gives the tier cap less WDDM's 27 percent or the 2 GiB floor with no OS answer, the OS budget less other processes and a 1 GiB reserve when it answers, and a pinned cap whole")]
 def test_plan_room(t : T?) {
     t |> run("the plan's room: the tier cap less headroom, capped by the OS's room when it answers") @(t : T?) {
         let gib = 1_073_741_824l
@@ -1095,7 +1095,7 @@ def test_plan_room(t : T?) {
     }
 }
 
-[test]
+[test(description = "With dasVulkan, `heap_room` takes the largest device-local heap by live budget on a discrete card and sums every heap on an integrated one, and `uma_spill_pick` picks only a coherent host-heap type")]
 def test_heap_room(t : T?) {
     t |> run("the plan's heaps: one device-local heap on a discrete card, every heap on an integrated device") @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -1145,7 +1145,7 @@ def test_heap_room(t : T?) {
     }
 }
 
-[test]
+[test(description = "`resident_hot_slots` and `resident_hot_fit` size the hot expert pool to the slots beside the mirror up to 32 taken from its context, an ask from the floor's room, none under four, charging the chain scratch only with a pool")]
 def test_resident_hot_slots(t : T?) {
     t |> run("the hot expert pool's slots: every slot that fits beside the whole mirror, up to 32 out of the mirror's context, a count asked from the floor's room, none under four") @(t : T?) {
         let mib = 1_048_576l
@@ -1185,7 +1185,7 @@ def test_resident_hot_slots(t : T?) {
     }
 }
 
-[test]
+[test(description = "The capped mirror's arm floor follows built-in, env and pin with a 256 minimum and a strict pin raising it, the fewest leading MoE layers go to the host, and a strict context past a region's binding declines")]
 def test_resident_arm_floor(t : T?) {
     t |> run("the smallest context a capped mirror arms at: the built-in floor, the env floor, and a caller's pin under either") @(t : T?) {
         t |> equal(4096l, resident_arm_floor(0l, 0l), "no env floor, no pin: the built-in 4096")
@@ -1231,7 +1231,7 @@ def test_resident_arm_floor(t : T?) {
     }
 }
 
-[test]
+[test(description = "With dasVulkan, `rd_routed_slots_fit` admits a rows-times-picks product up to the 128 routed slots (16x8, 12x10, 4x32) and rejects one past it (16x9, 5x32)")]
 def test_routed_slots_fit(t : T?) {
     t |> run("the routed planes' slot cap: every row's picks fit the 128 slots or the N-row command declines the model") @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -1322,7 +1322,7 @@ def private seat_dispatch(name : string; owns : bool) : SeatDispatch {
     return out
 }
 
-[test]
+[test(description = "Under a probe decode override the speculative seats are read only when its owner claims the model, returning the seat's rows cap and cold reason, while both round entries always open the common round")]
 def test_mtp_seat_owner(t : T?) {
     t |> run("the speculative seats serve only a model the active decode override's owner claims; the round itself is the common one on every home") @(t : T?) {
         let refused = seat_dispatch(PROBE_OWNED, false)
@@ -1366,7 +1366,7 @@ def private round_refuses_pick() : bool {
     return refused
 }
 
-[test]
+[test(description = "A landed pick is returned once by the next `sample_` over the logits argmax, a second landing before it panics and keeps the first, and the CPU round refuses a session with an unsampled pick")]
 def test_land_pick(t : T?) {
     t |> run("a landed pick is the next sample_'s answer in place of a logits row, consumed once; a second landing before that, and a round opened on it, refuse") @(t : T?) {
         var s : Session
@@ -1498,7 +1498,7 @@ def private round_under(name : string; var s : Session; m : Model; var hit : boo
     return why
 }
 
-[test]
+[test(description = "The speculative round fails closed on fake seats: a pick ask beside a sampled walk panics before any draft, and a rollback seat declining after a served verify panics naming the override")]
 def test_mtp_round_panics(t : T?) {
     t |> run("the round's fail-closed exits on a Model shell: a pick ask beside a sampled walk panics before any draft; a rollback seat declining after its verify seat served panics naming the override") @(t : T?) {
         round_seats_arm(5l, 7l, false)
@@ -1524,7 +1524,7 @@ def test_mtp_round_panics(t : T?) {
     }
 }
 
-[test]
+[test(description = "On fake seats a recurrent round without a rollback seat takes the CPU snapshot sized to the state, a plain one takes none, and a serving rollback seat rolls a reject back and re-seeds the carry from row 0")]
 def test_mtp_verify_snapshot(t : T?) {
     t |> run("mtp_verify_two's snapshot on a Model shell: a recurrent model with a verify seat that serves and no rollback seat takes the CPU snapshot before the seat, a non-recurrent one skips it, and a rollback seat that serves takes none - the reject rolling back through it and re-seeding the carry from row 0") @(t : T?) {
         round_seats_arm(5l, 5l, true)
@@ -1568,7 +1568,7 @@ def test_mtp_verify_snapshot(t : T?) {
 }
 
 //! the shape arms that keep a short window off the token command's peel, one at a time on a dense shell that fits
-[test]
+[test(description = "`rdec_peel_shape_why` fits dense, NextN and per-layer-embedding shells, names a hyper-connection chain and a recurrent model without the in-order rows command, and no unarmed model takes the segmented window")]
 def test_peel_shape_arms(t : T?) {
     t |> run("the peel's shape arms name the hyper-connection chain, the per-layer embedding and the recurrent state apart; a NextN head fits") @(t : T?) {
         var fits <- shell(2l, 0ul)
@@ -1617,7 +1617,7 @@ let private RING_CELL_WINDOW = 512l   //! the ring cells' prompt window: the row
 //! regions - the house shape - a sliding layer holds its window and the window chain's rows (pinned at 512 here), rounded to 64, and a
 //! global layer every position; the flat pin charges every layer the whole context, and the ring bytes are what the context does not
 //! scale; the pod's flat plan less the flat mirror plus the ringed one fits that card's room
-[test]
+[test(description = "On a gemma-4-26B shell at 32768 x 4 the sliding rings hold 1536 rows a layer, the ringed mirror is under a seventh of the flat one, and the house flat plan re-costed with rings fits the 32 GB card's room")]
 def test_resident_ring_mirror(t : T?) {
     t |> run("the 26B's mirror at 32768 x 4 under the rings: 1536 rows a sliding layer, every position a global one") @(t : T?) {
         var m <- gemma4_26b_shell()
@@ -1652,7 +1652,7 @@ def test_resident_ring_mirror(t : T?) {
 //! the ring pin sits outside a trimmed vulkan lane's identity (`../ARCHITECTURE_IMAGE_VULKAN.md#image-vulkan-mint`): it moves the
 //! mirror the plan charges, the plan a lane's map asks again, and no byte of the image - so a lane mapped by name declines under
 //! the run's knobs and names the pin among the knobs its identity leaves out
-[test]
+[test(description = "The KV ring pin leaves a trimmed vulkan lane's image identity unchanged while moving its planned mirror, and mapping a trimmed lane declines naming the ring pin, a planar shell mapping cleanly as control")]
 def test_trim_lane_ring_pin(t : T?) {
     t |> run("the ring pin moves the plan a trimmed lane's map asks again, never the lane's identity, and the map's decline names it") @(t : T?) {
         var m <- gemma4_26b_shell()
@@ -1702,7 +1702,7 @@ def test_trim_lane_ring_pin(t : T?) {
     }
 }
 
-[test]
+[test(description = "`kv_ring_floor_check` continues a call at or past the session's ring floor, panics on one under it, and a start at 0 clears the floor so the same call then continues")]
 def test_kv_ring_floor_check(t : T?) {
     t |> run("a call at or past the ring floor continues, one under it panics, and a start at 0 rebuilds the history and clears the floor") @(t : T?) {
         var s : Session
@@ -1718,7 +1718,7 @@ def test_kv_ring_floor_check(t : T?) {
     }
 }
 
-[test]
+[test(description = "The host-layers pin reads back, lifts on a negative and restores as found, and `resident_host_layers_want` passes an ask capped at the routed count only where the plain split form takes the model")]
 def test_resident_host_layers_pin(t : T?) {
     t |> run("the host-layers pin: set reads back, a negative lifts it, zero pins the plan's own count, put back as found") @(t : T?) {
         let pin0 = gpu_host_layers_pin_()
@@ -1752,7 +1752,7 @@ def test_resident_host_layers_pin(t : T?) {
 //! the E-series pre-step's shape gates: Metal's `metal_ple_dev_ok` serves any model dim on either projection form, any ple width,
 //! and a table bound on its own format's blocks, naming a table off them; Vulkan's bf16 projection takes the word-pair stamp at an
 //! even dim and base and the halfword stamp off them (`gk_bf16_pairs`)
-[test]
+[test(description = "`metal_ple_dev_ok` serves any dim and ple width and names a PLE table off its format's blocks by offset and block, `gk_bf16_pairs` needs an even dim and base, and Vulkan names an f16 panel past the storage range")]
 def test_ple_proj_dim_gates(t : T?) {
     t |> run("the pre-step's shapes on each home") @(t : T?) {
         var m = Model()
@@ -1815,7 +1815,7 @@ def test_ple_proj_dim_gates(t : T?) {
 
 //! the window's f32 per-layer rows: the staged tile on its k step under the knob, the scalar tile off either; the gate's k chunks
 //! fit the split-k scratch; the resident projection's bf16 rows take the halfword stamp at an odd dim
-[test]
+[test(description = "On a Vulkan shell the f32 PLE rows take the staged tile only with the knob on, dims on the 32 k step and subgroup 32, `pf_f32_split` never splits past the scratch, and odd dims take the bf16 halfword stamp")]
 def test_ple_f32_tile_gates(t : T?) {
     t |> run("the window's f32 per-layer rows take the staged tile only on its k step") @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -1844,7 +1844,7 @@ def test_ple_f32_tile_gates(t : T?) {
 }
 
 //! the h128 coopmat attention twin serves a KHR device at subgroup 32 alone: its fragment owners are 32-lane subgroups
-[test]
+[test(description = "On a Vulkan device shell `h128_twin_on` holds only for a coopmat device at subgroup 32, declining a wave64 device and one without coopmat")]
 def test_h128_twin_gate(t : T?) {
     t |> run("the h128 twin declines a wave64 device") @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -1866,7 +1866,7 @@ def test_h128_twin_gate(t : T?) {
 
 //! the subgroup pin: the class pipelines run at DASLLAMA_VK_SUBGROUP where the device's own width differs and it can pin, and
 //! the width-keyed routes read the pinned width
-[test]
+[test(description = "On the live Vulkan device the tier pins DASLLAMA_VK_SUBGROUP only where it differs from the device width and is pinnable, and the KHR kq tile and coopmat mode resolve at the pinned width")]
 def test_vk_subgroup_pin(t : T?) {
     t |> run("a device whose own width differs from the knob's pins where it can, and the routes read the pin") @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -1896,7 +1896,7 @@ def test_vk_subgroup_pin(t : T?) {
 }
 
 //! the prefill window's chunk cap: one layer a submit on an integrated GPU (the amdgpu watchdog), the ramp's hold on a discrete one
-[test]
+[test(description = "`pf_chunk_cap` holds the prefill ramp at `PF_CHUNK_MAX` layers a submit on a discrete device shell and caps it at one layer on an integrated one")]
 def test_pf_chunk_cap(t : T?) {
     t |> run("an integrated GPU submits the window one layer at a time") @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -1919,7 +1919,7 @@ def test_pf_chunk_cap(t : T?) {
 
 //! the expert cache's profile beside the lane: a file the writer made reads back whole for its model's shape, and another
 //! model's shape, a bad magic or a short file reads empty (the cache then keeps the first ids)
-[test]
+[test(description = "An expert heat profile written for a layers-by-experts shape reads back element for element, while another shape, a missing file, a bad magic or a short file reads empty")]
 def test_expert_heat_profile(t : T?) {
     let path = path_join(test_temp_dir(), "expert_heat_probe.heat")
     var heat <- [for (i in range64(3l * 4l)); i * 7l + 1l]
@@ -1944,7 +1944,7 @@ def test_expert_heat_profile(t : T?) {
     remove(path)
 }
 
-[test]
+[test(description = "`kv_codec_served` serves tq4 as asked on a plain 32-wide head, steps it to q8_0 naming a qkv bias or a non-power-of-two head, and lands tq4 and q8_0 at f16 on a 48-wide head")]
 def test_kv_codec_serving_rule(t : T?) {
     t |> run("the serving rule: tq4 steps down to q8_0 on a Q/K/V-biased attention and on a head it cannot rotate, to f16 where q8_0 holds no block either") @(t : T?) {
         var m <- shell(2l, 0ul)
@@ -1967,7 +1967,7 @@ def test_kv_codec_serving_rule(t : T?) {
     }
 }
 
-[test]
+[test(description = "`vk_baked_host_layers` reads a lane's host-layer split as the `host_split` marker entry's woff, and answers -1 for a plan minted before the marker or an empty plan")]
 def test_baked_host_layers(t : T?) {
     t |> run("a lane's host-layer split read off its plan's marker entry: the host_split entry's woff, -1 where the lane carries none") @(t : T?) {
         let arena = int(VkBakeRole.arena)
@@ -1985,7 +1985,7 @@ def test_baked_host_layers(t : T?) {
     }
 }
 
-[test]
+[test(description = "With no Vulkan device up, `vulkan_tower_front_route` answers false without a null dereference, so the scratch sizing can ask it ahead of the arm")]
 def test_vulkan_tower_route_before_a_device(t : T?) {
     t |> run("the audio fronts' route answers off before a device is up - the scratch sizing asks it ahead of the arm") @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {

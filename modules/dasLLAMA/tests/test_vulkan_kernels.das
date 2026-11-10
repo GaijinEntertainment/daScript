@@ -11,7 +11,6 @@ require daslib/enum_trait
 require dasllama/dasllama_math
 require _compares
 require _kernel_oracles   // rope_tab_ref: the rope and KV-writer cells' oracle
-require _attn_oracle   // attn_row_oracle: the batched decode attention cells' oracle
 require _sel_oracle   // select_rows_oracle, sel_words, SelRow: the selection cell's oracle and its result shape (vulkan-free)
 require _moe_routing_oracles   // the routing cells' fixtures and oracles, the CUDA kernel file's too
 require _vk_kq_fixtures
@@ -22,13 +21,11 @@ require ?vulkan _vk_codec_attn
 require ?vulkan vulkan
 require ?vulkan vulkan/vulkan_boost
 require ?vulkan dasllama/dasllama_vulkan_common
-require ?vulkan dasllama/dasllama_env   // g_env_vulkan.coopmat - the resolved-default ladder cell pins and restores it
 require ?vulkan dasllama/dasllama_vulkan_classes
 require dasllama/dasllama_gpu_math   // softcap_exp - the softcap cells' oracle
 require ?vulkan dasllama/dasllama_vulkan_prefill
 require ?vulkan dasllama/dasllama_vulkan_decode   // da_nsplit - the decode attention's key-split pick the tile-pick cell pins
 require ?vulkan dasllama/dasllama_vulkan_seams
-require ?vulkan dasllama/dasllama_gpu_knee   // vk_split_k_tgs: the tile-pick cell pins the short window's knee
 require ?vulkan dasllama/dasllama_kqformat
 require ?vulkan dasllama/dasllama_convert   // quantize_q8_0_into: the hyper-connection low-rank requant's oracle
 require ?vulkan spirv/spirv_dis   // foreach_inst / count_op_operand_at: the stamp-shape cells' instruction walks
@@ -42,230 +39,14 @@ require daslib/math_bits   // float_bits_to_uint / uint_bits_to_float: the NaN s
 require daslib/f16_cvt   // nolint:STYLE030,LINT019 — the half conversions of the vulkan cells, unused in the darwin world
 require _discrete_cells   // nolint:STYLE030,LINT019 — I8_SENTINEL_BITS and the f16 s-column case body both homes run, unused in the darwin world
 
-//! The Vulkan tier's kernel classes against their CPU oracles, one cell a class family: the decode GEMVs, the tile families
-//! (the cm2 l, m, s and e stamps, the KHR staged tile over every format and over a file's f32 rows, the sdot4 tiles), the
-//! acts, requants and combines, the attention, rope and K/V stores, the routing and schedules, the router GEMV's stamps
-//! (f32, bf16 word pairs, bf16 halfwords at an odd dim), the per-layer-embedding classes, the tile and split picks and the
-//! device roster. Skips: every cell without dasVulkan or a Vulkan device; the cm2 arms off a coopmat2 device created in cm2
-//! mode; the KHR arms (the KHR tiles, the staged f32 tile) without KHR cooperative matrices at subgroup 32; the tile-pick
-//! cell where DASLLAMA_CM2_TILE or DASLLAMA_CM2_SPLITK forces the pick; a class rail a device declines.
+//! The Vulkan tier's kernel classes against their CPU oracles, one cell a class family: the decode GEMVs, the acts,
+//! requants and combines, the rope and K/V stores, the routing and schedules, the router GEMV's stamps (f32, bf16 word
+//! pairs, bf16 halfwords at an odd dim), the per-layer-embedding classes and the device roster; the GEMM tiles are
+//! `test_vulkan_kernels_gemm.das`, the attention classes `test_vulkan_kernels_attn.das`. Skips: every cell without
+//! dasVulkan or a Vulkan device; the cm2 arms off a coopmat2 device created in cm2 mode; a class rail a device declines.
 
 let private NAN_HALF = 0x7E00   //! the sentinel half no kernel writes: a NaN
 let private NAN_HALF_PAIR = 0x7E007E00u   //! ... in both lanes of a word
-let private TILE_SLACK_ROWS = int(TILE_READ_SLACK)   //! the cm2 fixtures' rows past the last region, the engine's count: a stamp that loads partial columns unclamped (`STILE`) reads the last region's column rounded up to its BN, so the slack holds while every such stamp keeps BN <= slack + 1
-let private Q8_CELL_K = 544     //! the q8 cm2 s and e cells' K: 512 + 32, off the 64-deep stamp's k grid, so the tile takes its padded edge path (the l and m cells run K = 576, the fast path; TILE_CELL_K, the per-format cells' K, sits in _vk_kq_fixtures)
-
-let private ARM_CM2_L = 0
-let private ARM_CM2_M = 1
-let private ARM_CM2_S = 2
-let private ARM_KHR = 3
-let private ARM_CM2_E = 4
-let private ARM_TOY_STRIP = 5   //! the q8 l-tile toy stamp built with the four-wide decode stripped to the scalar callback
-let private ARM_TOY_TWIN = 6    //! ... and built as the device builds it
-
-def private cell_arm_name(arm : int) : string {
-    if (arm >= ARM_TOY_STRIP) return arm == ARM_TOY_STRIP ? "stripped toy l" : "twin toy l"
-    return arm == ARM_CM2_L ? "l" : (arm == ARM_CM2_M ? "m" : (arm == ARM_CM2_S ? "s" : (arm == ARM_KHR ? "khr" : "e")))
-}
-
-//! the arm helpers stay generic on purpose - a build without the vulkan module must never infer these bodies
-//! 256 is the l stamps' BN default, a column no schedule constant names (the l column is never a schedule piece)
-def private cell_arm_rows_per_wg(arm) => arm == ARM_CM2_L || arm == ARM_TOY_STRIP || arm == ARM_TOY_TWIN ? 256 : int(arm == ARM_CM2_S ? SCHED_S_ROWS : SCHED_M_ROWS)
-
-def private cell_arm_tc(arm) => arm == ARM_CM2_E ? CM2_TC_E : int64(cell_arm_rows_per_wg(arm))
-
-def private cell_arm_served(arm) => arm == ARM_KHR ? khr_kq_tile_on() : (g_gpu.coopmat_mode == COOPMAT_CM2 && g_gpu.has_coopmat2)
-
-def private cell_arm_set(arm, fmt : int; bufs; sizes; gbits) {
-    if (arm == ARM_KHR) {
-        if (!khr_cls_ensure(fmt)) panic("the KHR class rail for format {fmt} must engage on a coopmat device")
-        return khr_cls_set(fmt, bufs, sizes, gbits)
-    }
-    verify(g_gpu.coopmat_mode == COOPMAT_CM2, "a cm2 arm dispatched off cm2 mode - the ladder would hand back the KHR stamp")
-    if (arm >= ARM_TOY_STRIP) return arm == ARM_TOY_STRIP ? set_toy_q8_cm2_strip_cls(bufs, sizes, gbits) : set_toy_q8_cm2_twin_cls(bufs, sizes, gbits)
-    if (!cm2_cls_ensure(fmt, cell_arm_tc(arm))) panic("the {cell_arm_name(arm)} arm's class rail for format {fmt} must engage in cm2 mode")
-    return cm2_cls_set(fmt, cell_arm_tc(arm), bufs, sizes, gbits)
-}
-
-def private cell_arm_enc(arm, fmt : int; raw; var h; var s; var pc; groups : int64) {
-    if (arm == ARM_KHR) {
-        khr_cls_enc(fmt, raw, h, s, pc, groups)
-    } elif (arm == ARM_TOY_STRIP) {
-        enc_toy_q8_cm2_strip_cls(raw, h, s, pc, groups)
-    } elif (arm == ARM_TOY_TWIN) {
-        enc_toy_q8_cm2_twin_cls(raw, h, s, pc, groups)
-    } else {
-        cm2_cls_enc(fmt, cell_arm_tc(arm), raw, h, s, pc, groups)
-    }
-}
-
-def private tile_arms_all() : array<int> => <- [ARM_CM2_L, ARM_CM2_M, ARM_CM2_S, ARM_KHR, ARM_CM2_E]
-
-//! a tile cell's fixture: the format's packed weight and scale planes moved in, the f16 activation plane built here with the engine's read slack past the two regions
-struct TileFixture {
-    n, blk_k, rows : int
-    wqh, wsh, xfh : array<uint>
-}
-
-def private tile_fixture(n, blk_k : int; var wqh, wsh : array<uint>; xf_mul, xf_add : uint) : TileFixture {
-    let rows = TILE_CELL_ROWS0 + TILE_CELL_ROWS1
-    var f = TileFixture(n = n, blk_k = blk_k, rows = rows)
-    f.wqh <- wqh
-    f.wsh <- wsh
-    f.xfh <- ws_plane((rows + TILE_SLACK_ROWS) * n / 2, xf_mul, xf_add)   // f16 activation pairs
-    return <- f
-}
-
-//! the tile cells' q8 fmt-0 host planes from two seeds, K = n over both weight planes
-def private q8_planes(n : int; wq_seed, ws_seed : uint; var wqh, wsh : array<uint>) => q8_plane(2 * TILE_CELL_D * (n / 32), 1u, wq_seed, 1u, ws_seed, wqh, wsh)
-
-//! a tile cell's arms over one fixture, each the device serves: the schedule at the arm's rows a workgroup with two sentinel map words past it (the dispatch runs over them as the device-written schedules' upper bound does, and a tile that reads one returns before its first store), the y plane under the NaN sentinel, the format's oracle, the bars and their poison control; the cell skips when the device serves none of them; the last arm's oracle plane comes back
-def private tile_cell_arms(t : T?; tag : string; fmt : int; var f : TileFixture; arms : array<int>;
-                           oracle : function<(wq : array<uint>; wsu : array<uint>; xf : array<uint>; recs : array<uint>; nrec, n, d : int; var y : array<float>) : void>) : array<float> {
-    var y_ref : array<float>
-    static_if (typeinfo builtin_module_exists(vulkan)) {
-        var served = 0
-        for (arm in arms) {
-            served += cell_arm_served(arm) ? 1 : 0
-        }
-        if (served == 0) {
-            t |> skip("the {tag} tiles need cooperative matrices (cm2 in mode 4 on an NV_coopmat2 device, or KHR coopmat at subgroup 32)")
-            return <- y_ref
-        }
-        let d = TILE_CELL_D
-        y_ref |> resize(f.rows * d)
-        let tail = 2
-        for (arm in arms) {
-            continue if (!cell_arm_served(arm))
-            var sr <- two_region_sched(TILE_CELL_ROWS0, TILE_CELL_ROWS1, d * (f.n / f.blk_k), cell_arm_rows_per_wg(arm), (d + 127) / 128, tail)
-            let wgs = sr.wgs
-            var inscope sched <- sr.words
-            for (w in range(wgs, wgs + tail)) {
-                sched[8 + w] = SCHED_NONE
-            }
-            invoke(oracle, f.wqh, f.wsh, f.xfh, sched, 2, f.n, d, y_ref)
-            with_cell_planes() $(var cp : CellPlanes) {
-                let pwq = cp |> in_plain(f.wqh)
-                let pws = cp |> in_plain(f.wsh)
-                let psc = cp |> in_plain(sched)
-                let pxf = cp |> in_plain(f.xfh)
-                let py = cp |> out_(f.rows * d)
-                let planes = fixed_array(pwq, pws, psc, pxf, py)
-                var sc = cell_arm_set(arm, fmt, gather_planes(cp.dev, planes), gather_planes(cp.bytes, planes), gather_planes(cp.hazard_bit, planes))
-                var pc = BatchArgs(n = uint(f.n), d = uint(d), map_off = uint(2 * 4))
-                cp |> cell_record() $(raw2 : VkCommandBuffer; var h2 : VkHaz) {
-                    cell_arm_enc(arm, fmt, raw2, h2, sc, pc, int64(wgs + tail))
-                }
-                check_rows(t, "{tag} {cell_arm_name(arm)}-tile ({g_gpu.decvec_on ? "four-wide twin" : "scalar callback"}) vs the CPU oracle", cp |> plane_run(py), y_ref, cm_bar(y_ref), d)
-            }
-            delete sched
-        }
-    }
-    return <- y_ref
-}
-
-//! one per-format tile cell: the table row's planes through `tile_cell_arms` - the cm2 l/m/s/e tiles and the KHR tile, or s, e and
-//! KHR on a per-32 format - against its oracle; a row with a `control` then reads the same planes apart under the sibling codebook
-def private fmt_tile_cell(t : T?; fmt : KqFmt) {
-    static_if (typeinfo builtin_module_exists(vulkan)) {
-        if (!ensure_q8_batch_cls()) {   // engage the device without touching coopmat rails
-            t |> skip("no Vulkan device")
-            return
-        }
-        var rows <- fmt_tile_rows()
-        let at = find_index_if(rows) $(r : FmtTile) => r.fmt == fmt
-        if (at < 0) panic("format {fmt} has no row in the tile table")
-        var wqh, wsuh : array<uint>
-        fmt_tile_planes(rows[at], wqh, wsuh)
-        var f <- tile_fixture(rows[at].n, rows[at].blk_k, wqh, wsuh, 3u, rows[at].xf_add)
-        let arms <- fmt == KqFmt.mx4 ? [ARM_CM2_S, ARM_CM2_E, ARM_KHR] : tile_arms_all()   // the expert-only form has no dense l or m column
-        let name = "{fmt}"
-        var y_ref <- tile_cell_arms(t, name, int(fmt), f, arms, rows[at].oracle)
-        if (!empty(y_ref) && rows[at].control != null) {
-            let d = TILE_CELL_D
-            let recs <- [0u, 0u, uint(TILE_CELL_ROWS0), 0u, uint(d * (f.n / f.blk_k)), uint(TILE_CELL_ROWS0), uint(TILE_CELL_ROWS1), 0u]
-            var y_other : array<float>
-            y_other |> resize(f.rows * d)
-            invoke(rows[at].control, f.wqh, f.wsh, f.xfh, recs, 2, f.n, d, y_other)
-            t |> success(mismatch_rel("", y_other, y_ref, 2e-2, 4e-3 * logits_maxabs(y_ref)) > 0, "the {name} planes read apart under the sibling codebook's oracle (the fixture tells the two forms apart)")
-            delete y_other
-        }
-        delete y_ref
-        delete f
-        delete rows
-    } else {
-        t |> skip("dasVulkan not present")
-    }
-}
-
-//! one q8 fmt-0 tile cell at one arm: K = `k` over the planes `q8_planes` hashes from the two seeds, the f16 activation plane at `xf_mul` / `xf_add`
-def private q8_tile_cell(t : T?; arm, k : int; wq_seed, ws_seed, xf_mul, xf_add : uint) {
-    static_if (typeinfo builtin_module_exists(vulkan)) {
-        if (!ensure_q8_batch_cls()) {   // engage the device without touching coopmat rails
-            t |> skip("no Vulkan device")
-            return
-        }
-        var wqh, wsh : array<uint>
-        q8_planes(k, wq_seed, ws_seed, wqh, wsh)
-        var f <- tile_fixture(k, 32, wqh, wsh, xf_mul, xf_add)
-        var y_ref <- tile_cell_arms(t, "q8", int(KqFmt.q8), f, [arm], @@q8f16_gemm_oracle)
-        delete y_ref
-        delete f
-    } else {
-        t |> skip("dasVulkan not present")
-    }
-}
-
-//! the host planes of an sdot4-feed tile cell: the weight quants and scales, the activation quants and their per-unit scales
-struct private Sdot4Planes {
-    wqh, wsh, xqh : array<uint>
-    xsh : array<float>
-    ws_bytes : int64
-}
-
-//! the q8-seeded sdot4 planes: `units` weight units of `wq_words` quant words hashed at `i + 3`, `ws_words` scale words at
-//! `ws_word(i + 7)` (the device plane `ws_bytes` long), `xunits` activation units of `xq_words` at `hash_word(i * 13 + 1)`,
-//! their scales 0.375 + (i % 9) / 16 times `xs_mul`
-def private q8_sdot4_planes(units, wq_words, ws_words : int; ws_bytes : int64; xunits, xq_words : int; xs_mul : float) : Sdot4Planes {
-    var p = Sdot4Planes(ws_bytes = ws_bytes)
-    p.wqh <- hashed_words(units * wq_words, 1u, 3u)
-    p.wsh <- ws_plane(ws_words, 1u, 7u)
-    p.xqh <- hashed_words(xunits * xq_words, 13u, 1u)
-    p.xsh |> resize(xunits)
-    for (i in range(xunits)) {
-        p.xsh[i] = (0.375 + float(i % 9) * 0.0625) * xs_mul
-    }
-    return <- p
-}
-
-//! an sdot4-feed tile cell's device half over two regions of `cnt0` and `cnt1` rows at `tile` rows a workgroup, `d` weight
-//! rows a region at `wblk1` units apart: the planes uploaded (the scale plane bound at `ws_bytes`), the y plane under the
-//! sentinel - a row the tile never stores keeps it - `rec` sets the class over [w, ws, schedule, xq, xs, y] and encodes it at the
-//! map's workgroups; the rows come back with the schedule
-def private sdot4_tile_run(n, d, cnt0, cnt1, tile, wblk1 : int; p : Sdot4Planes; rec) : tuple<y : array<float>; sched : array<uint>> {
-    var sr <- two_region_sched(cnt0, cnt1, wblk1, tile, (d + tile - 1) / tile, 0)
-    var y : array<float>
-    static_if (typeinfo builtin_module_exists(vulkan)) {
-        with_cell_planes() $(var cp : CellPlanes) {
-            let pwq = cp |> in_plain(p.wqh)
-            let pws = cp |> in_plain(p.wsh)
-            let psc = cp |> in_plain(sr.words)
-            let pxq = cp |> in_plain(p.xqh)
-            let pxs = cp |> in_(p.xsh)
-            let py = cp |> out_((cnt0 + cnt1) * d)
-            let planes = fixed_array(pwq, pws, psc, pxq, pxs, py)
-            var sizes = gather_planes(cp.bytes, planes)
-            sizes[1] = p.ws_bytes
-            cp |> cell_record() $(raw2 : VkCommandBuffer; var h2 : VkHaz) {
-                invoke(rec, gather_planes(cp.dev, planes), sizes, gather_planes(cp.hazard_bit, planes), raw2, h2, int64(sr.wgs))
-            }
-            delete y
-            y <- cp |> plane_run(py)
-        }
-    }
-    var sched <- sr.words
-    return <- (y = y, sched = sched)
-}
 
 // The model-less Vulkan kernel-unit suite ([vk_dispatch] bring-up): a class kernel dispatched
 // through the GENERATED surface (ensure/set/enc — per-class layout, push constants, hazard rail)
@@ -279,7 +60,7 @@ def private sdot4_tile_run(n, d, cnt0, cnt1, tile, wblk1 : int; p : Sdot4Planes;
 // wide-head and the gated cells skip) and a coopmat device for their h128 arms. Without dasVulkan
 // (or with no device) every check skips or feints cleanly.
 
-[test]
+[test(description = "The toy class kernel dispatched through the generated vk_dispatch surface equals the same method run on the CPU bit for bit on 250 lanes, the CPU loop overrunning the range so the in-kernel guard is tested")]
 def test_vkd_class_dispatch(t0 : T?) {
     t0 |> run("class kernel through the generated [vk_dispatch] surface == CPU") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -328,7 +109,7 @@ def test_vkd_class_dispatch(t0 : T?) {
     }
 }
 
-[test]
+[test(description = "Every invocation of a class pipeline reads gl_SubgroupSize equal to the width the tier records, the device own width or the pin where the two differ, over 256 lanes")]
 def test_vkd_subgroup_width(t0 : T?) {
     t0 |> run("a class pipeline runs at the width the tier reads: the device's own, or the pin where the two differ") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -463,7 +244,7 @@ def private nonwritable_bindings(words : array<uint>) : table<int> {
     return <- res
 }
 
-[test]
+[test(description = "In the toy kernel SPIR-V the lens decorates NonWritable on the binding the kernel only reads and not on the one it writes, exactly one of the two")]
 def test_vkd_readonly_stamp(t0 : T?) {
     t0 |> run("the lens stamps NonWritable on every binding the kernel never writes, and on those alone") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -478,7 +259,7 @@ def test_vkd_readonly_stamp(t0 : T?) {
     }
 }
 
-[test]
+[test(description = "In the kept SPIR-V of the flash stamps at heads 64 to 512 the KHR arm alone declares its four Workgroup tiles and the KHR capability, the cm2 arm none and only NV cooperative-matrix capabilities")]
 def test_vkd_fa_stamp_words(t0 : T?) {
     t0 |> run("the folded flash template's stamps: the KHR arm's shared-memory tiles exist on its stamps alone, and each arm asks for its own cooperative-matrix capability") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -526,7 +307,7 @@ def test_vkd_fa_stamp_words(t0 : T?) {
     }
 }
 
-[test]
+[test(description = "The flash ensure and encode ladders panic before device work on a softcap or gated stamp off head 256, a head size no stamp serves, KHR head 96, and a sink stamp off head 64 or with a softcap")]
 def test_vkd_fa_stamp_refusals(t0 : T?) {
     t0 |> run("the flash stamp ladders refuse a softcap or gated stamp off head size 256 on either arm and a head size no stamp serves, before any device work") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -587,7 +368,7 @@ def private spawn_readonly_fixture(ro : bool; tag : string) : tuple<rc : int; ou
     return spawn_compile_only(src, "vk_lens_{tag}", 180.0)
 }
 
-[test]
+[test(description = "A compile-only child declaring readonly on a binding its vk_dispatch kernel writes fails with an error naming the member and binding, while the twin without the qualifier compiles")]
 def test_vkd_lens_readonly_gate(t0 : T?) {
     t0 |> run("[vk_dispatch] refuses @readonly on a binding a kernel writes and compiles the plain twin") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -649,7 +430,7 @@ def private spawn_kernel_prefix_fixture(kern, tag : string) : tuple<rc : int; ou
     return spawn_compile_only(src, "vk_prefix_{tag}", 180.0)
 }
 
-[test]
+[test(description = "A compile-only child whose vk_dispatch kernel= prefix matches two spirv_kernel methods fails with an error counting the matches, while the exact method name compiles")]
 def test_vkd_lens_kernel_prefix_gate(t0 : T?) {
     t0 |> run("[vk_dispatch] refuses a kernel= prefix that names two methods and compiles the exact twin") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -658,143 +439,6 @@ def test_vkd_lens_kernel_prefix_gate(t0 : T?) {
             t |> success(find(bad.out, "names 2 [spirv_kernel] methods") >= 0, "the refusal counts the matches: {bad.out}")
             let good = spawn_kernel_prefix_fixture("run_a", "ok")
             t |> equal(0, good.rc, "the exact name compiles: {good.out}")
-        } else {
-            t |> skip("dasVulkan not present")
-        }
-    }
-}
-
-//! the KHR arm loads and stores whole 16-row fragments, so the cell sizes its x and y planes past `rows` the way the prefill's are
-def private f16_gemm_cell(t : T?; tag : string; d, n, rows : int; khr : bool = false) {
-    static_if (typeinfo builtin_module_exists(vulkan)) {
-        {
-            let nsplit = 8
-            let ybase = 16   // the rows land past a header the kernels must leave alone
-            let rows_alloc = khr ? ((rows + 15) / 16) * 16 : rows   //! the KHR tile loads and stores whole 16-row fragments: the x and y planes carry the spare rows, as the prefill's do
-            let yn = ybase + rows_alloc * d + (khr ? 16 : 0)   //! a ragged d's last fragment may spill up to 15 elements past the plane on the KHR tile: the spare keeps the probe inside the buffer
-            var wh, xh : array<float16>
-            wh |> resize(d * n)
-            xh |> resize(rows_alloc * n)
-            for (i in range(d * n)) {
-                wh[i] = float16(float((i * 7) % 61) * 0.02 - 0.6)
-            }
-            for (i in range(rows_alloc * n)) {
-                xh[i] = float16(float((i * 11) % 53) * 0.03 - 0.8)
-            }
-            var ref : array<float>
-            ref |> resize(rows * d)
-            for (p in range(rows)) {
-                for (e in range(d)) {
-                    var s = 0.0
-                    for (kk in range(n)) {
-                        s += float(xh[p * n + kk]) * float(wh[e * n + kk])
-                    }
-                    ref[p * d + e] = s
-                }
-            }
-            //! both operands are f16-exact, so every product is exact in f32 and the arms differ by f32 reassociation over K
-            //! alone: 2e-5 of the max holds the cell's shapes, the poisoned expectation four bars off
-            let bar = Bar(kind = BarKind.rel_of_max, rel = 2e-5, poison = 8e-5, poison_of_max = true)
-            with_cell_planes() $(var cp : CellPlanes) {
-                let pw = cp |> in_plain(wh)
-                let px = cp |> in_plain(xh)
-                let yslack = yn - ybase - rows * d
-                let y0 = out_(cp, rows * d, ybase, yslack)
-                let y1 = khr ? -1 : out_(cp, rows * d, ybase, yslack)
-                let ys = fixed_array(y0, y1)
-                let pp = khr ? -1 : out_(cp, nsplit * rows * d)   //! the split arm's partial planes: a chunk the GEMM skipped would sum a stale plane into the reduce
-                let direct = fixed_array(pw, px, ys[0])
-                var sd = f16_gemm_set(khr, gather_planes(cp.dev, direct), gather_planes(cp.bytes, direct), gather_planes(cp.hazard_bit, direct))
-                cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
-                    var pc = F16GemmArgs(n = uint(n), d = uint(d), rows = uint(rows), woff = 0u, ybase = uint(ybase), ystride = uint(d), ksplit = 0u)
-                    f16_gemm_enc(khr, raw, h, sd, pc, int64(rows), int64(d))
-                    if (!khr) {   // the split arm is the cm2 stamp's alone: the KHR stamp reads no k split
-                        var sp = cp |> cls_set(fixed_array(pw, px, pp), @@set_f16_gemm_cm2_cls)
-                        var sr = cp |> cls_set(fixed_array(pp, ys[1]), @@set_splitk_reduce_cls)
-                        let bk = int(F16G_BK)
-                        let ksplit = max(bk, ((n / nsplit + bk - 1) / bk) * bk)   //! the class walks K in F16G_BK steps: a chunk shorter than a step would re-sum the first step, so a short K leaves the tail chunks empty (zero planes) instead
-                        var pc2 = F16GemmArgs(n = uint(n), d = uint(d), rows = uint(rows), woff = 0u, ybase = 0u, ystride = uint(d), ksplit = uint(ksplit))
-                        enc_f16_gemm_cm2_cls(raw, h, sp, pc2, f16_gemm_wgs(false, int64(rows), int64(d)) * int64(nsplit))
-                        splitk_reduce_enc(raw, h, sr, int64(rows * d), int64(nsplit), int64(ybase))
-                    }
-                }
-                let arms = fixed_array(khr ? "khr direct" : "direct", "split-k")
-                for (arm in range(khr ? 1 : 2)) {
-                    var inscope header <- copy_span(cp |> plane_whole(ys[arm]), 0, ybase)
-                    t |> success(outside_run(header, 0, 0, NAN_SENTINEL), "f16 GEMM {tag} {arms[arm]}: the {ybase} words under the base stay the sentinel")
-                    check_rows(t, "f16 GEMM {tag} {arms[arm]}: {rows} x {d} over K {n} vs the f32 dot", cp |> plane_run(ys[arm]), ref, bar, d)
-                    delete header
-                }
-            }
-            delete wh
-            delete xh
-            delete ref
-        }
-    }
-}
-
-[test]
-def test_vkd_f16_gemm(t0 : T?) {
-    t0 |> run("the small f16 GEMM on the cm2 tile (the router logits, the deltanet beta/alpha rows) == the f32 dot, direct and split-k [DASLLAMA_COOPMAT=cm2]") <| @(t : T?) {
-        static_if (typeinfo builtin_module_exists(vulkan)) {
-            if (!vk_moe_init()) {
-                t |> skip("no Vulkan device")
-                return
-            }
-            if (g_gpu.coopmat_mode != COOPMAT_CM2 || !ensure_f16_gemm_cm2_cls() || !ensure_splitk_reduce_cls()) {
-                t |> skip("no cm2 tile family on this device (the small f16 GEMM rides the cm2 tile alone)")
-                return
-            }
-            f16_gemm_cell(t, "ba-like", 32, 512, 70)
-            f16_gemm_cell(t, "router-like", 200, 1024, 130)
-            f16_gemm_cell(t, "odd router", 61, 512, 41)   //! rows x d off every 4-multiple: the reduce's element-guarded tail
-            f16_gemm_cell(t, "rel plane, ragged d, short K", 2495, 64, 37)   // canary's rel-plane GEMM shape, the cm2 twin of the KHR cell's arm
-        } else {
-            t |> skip("dasVulkan not present")
-        }
-    }
-}
-
-//! the f16 GEMM's s column (`F16GemmCm2S`, the tower GEMM sites `vt_f16_tc` puts on the 32-position column) against the f32 dot
-//! of the same halves and bit for bit its m column twin (`F16GemmCm2`), on the case body the CUDA s-column cell runs
-[test]
-def test_vkd_f16_gemm_s(t0 : T?) {
-    t0 |> run("the f16 GEMM's s column on the cm2 tile == the f32 dot of the same halves, bit for bit the m column [DASLLAMA_COOPMAT=cm2]") <| @(t : T?) {
-        static_if (typeinfo builtin_module_exists(vulkan)) {
-            if (!vk_moe_init()) {
-                t |> skip("no Vulkan device")
-                return
-            }
-            if (g_gpu.coopmat_mode != COOPMAT_CM2 || !ensure_f16_gemm_cm2_s_cls() || !ensure_f16_gemm_cm2_cls()) {
-                t |> skip("no cm2 tile family on this device (the f16 GEMM's s column rides the cm2 tile alone)")
-                return
-            }
-            with_cell_planes() $(var cp : CellPlanes) {
-                f16_gemm_s_case(t, cp)
-            }
-        } else {
-            t |> skip("dasVulkan not present")
-        }
-    }
-}
-
-[test]
-def test_vkd_f16_gemm_khr(t0 : T?) {
-    t0 |> run("the small f16 GEMM on KHR fragments == the f32 dot, direct (the E-series projection's shapes)") <| @(t : T?) {
-        static_if (typeinfo builtin_module_exists(vulkan)) {
-            if (!vk_moe_init()) {
-                t |> skip("no Vulkan device")
-                return
-            }
-            if (!khr_kq_tile_on() || !ensure_f16_gemm_khr_cls()) {
-                t |> skip("device lacks KHR cooperative matrices at subgroup 32")
-                return
-            }
-            f16_gemm_cell(t, "ba-like", 32, 512, 70, true)
-            f16_gemm_cell(t, "ple-like", 256, 1536, 77, true)   // E2B's projection geometry over one layer slice, rows off the 16-row fragment
-            f16_gemm_cell(t, "one fragment", 16, 64, 16, true)
-            f16_gemm_cell(t, "rel plane, ragged d, short K", 2495, 64, 37, true)   // canary's rel-plane GEMM: d = 2 npos - 1 off every fragment, K = the head width
-            f16_gemm_cell(t, "rel plane, ragged d, 128 K", 2495, 128, 37, true)
         } else {
             t |> skip("dasVulkan not present")
         }
@@ -812,7 +456,7 @@ def private roster_on(roster; prefix : string) : bool {
     return false
 }
 
-[test, arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-extension-roster")]
+[test(description = "Every device-init roster entry is named once, says what rides on it and names only a Vulkan-tier knob, and each arming field (coopmat, cm2, decvec, ReBAR, subgroup pin) reads as its entry says"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-extension-roster")]
 def test_vkd_ext_roster(t0 : T?) {
     t0 |> run("the device-init roster: one entry per capability, each saying what rides on it, agreeing with the arming") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -847,7 +491,7 @@ def test_vkd_ext_roster(t0 : T?) {
     }
 }
 
-[test, arch(at="../ARCHITECTURE_GPU_SHARED_GEMM.md#cm2-decode-16bit-lanes")]
+[test(description = "A spirv_decode method called directly from a kernel body on the plane element computes on the device bit for bit what the same method computes on the CPU over two q8-shaped blocks"), arch(at="../ARCHITECTURE_GPU_SHARED_GEMM.md#cm2-decode-16bit-lanes")]
 def test_vkd_direct_decode(t0 : T?) {
     t0 |> run("a [spirv_decode] method called directly from the kernel body == the same method on the CPU") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -901,7 +545,7 @@ def test_vkd_direct_decode(t0 : T?) {
     }
 }
 
-[test]
+[test(description = "The cls_ar add-rms class equals the shipped vk_add_rms seam bit for bit on the normed row and residual, and with the gpt-oss output bias partner it equals the seam fed the pre-added partner and the CPU oracle within 2e-3")]
 def test_vkd_ar_class(t0 : T?) {
     t0 |> run("ar_add_rms class twin == the vk_add_rms seam (bit-exact, same reduce order)") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -1094,7 +738,7 @@ def private cls_ar_run(x, a, w : array<float>; pc; nrows : int) : tuple<y : arra
 
 //! the E-series pre-step's finish (`PleFinish`, a `GkPleFinish` stamp): three layers' slices of 256 over two rows in place, side =
 //! (side + pnorm . rms(proj)) / sqrt(2) against the CPU form at the approx bar; the slices read as one row miss it, the control
-[test]
+[test(description = "PleFinish rewrites six 256-wide side slices in place as the CPU finish normed a slice at a time within 2e-3, the one-norm-over-every-slice form differing as control")]
 def test_vkd_ple_finish(t0 : T?) {
     t0 |> run("ple_finish: the side rows == the CPU finish a slice at a time") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -1174,7 +818,7 @@ def private cls_epi_rows_run(y : array<float>; supp : array<uint>; vocab, rows :
     return <- yc
 }
 
-[test]
+[test(description = "The classifier epilogue over four 1000-wide logits rows in one dispatch equals the one-row dispatch bit for bit, every logit within 1e-4 of the CPU softcap and every suppressed id pinned on every row")]
 def test_vkd_cls_epi_rows(t0 : T?) {
     t0 |> run("cls_epi over four logits rows == the one-row dispatch a row at a time, and the CPU softcap with the pins") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -1286,7 +930,7 @@ def private first_max_rows(y : array<float>; vocab, rows : int64) : array<uint> 
     return <- ids
 }
 
-[test]
+[test(description = "The two-pass device argmax picks the host first maximum on every row at 262144 and 1000 vocab: ties on the lower id, an all-equal or all-NaN row at id 0, NaN and -inf lanes skipped")]
 def test_vkd_cls_argmax(t0 : T?) {
     t0 |> run("cls_argmax: every row's pick is the first maximum's id through the two passes, at a 262144 and a 1000 vocab, ties, an all-equal row, a row with NaN and -inf lanes and an all-NaN row included") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -1370,7 +1014,7 @@ def private cls_select_run(y : array<float>; sel : array<uint>; vocab, rows : in
     return <- out
 }
 
-[test]
+[test(description = "cls_select lands per row the ids at or above the 1024th largest logit with their logits, max and denominator as select_rows_oracle does at 262144 and 1000 vocab, ties, overflow, NaN rows and the recent window included")]
 def test_vkd_cls_select(t0 : T?) {
     t0 |> run("cls_select: every row lands the ids at or above its 1024th largest logit with their logits, its max and its denominator at its temperature, at a 262144 and a 1000 vocab - ties at the K-th kept, a row whose ties overflow the landing flagged, NaN and -inf lanes, an all-equal and an all-NaN row, the recent window's logits beside") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -1403,7 +1047,7 @@ def test_vkd_cls_select(t0 : T?) {
     }
 }
 
-[test]
+[test(description = "cls_ar with a row base equals the vk_add_rms seam bit for bit on the rows from row0, the row below keeping its residual and the normed sentinel")]
 def test_vkd_cls_ar_row0(t0 : T?) {
     t0 |> run("cls_ar with a row base lands on the rows from row0 and leaves the rows below untouched") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -1462,7 +1106,7 @@ def test_vkd_cls_ar_row0(t0 : T?) {
     }
 }
 
-[test]
+[test(description = "actf16 dispatched at an element base writes bit for bit the halves the same row dispatched from zero writes, and the halves below the base keep their sentinel")]
 def test_vkd_actf16_base(t0 : T?) {
     t0 |> run("actf16 with an element base == the same row dispatched from zero; the halves below the base keep their sentinel") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -1508,7 +1152,7 @@ def test_vkd_actf16_base(t0 : T?) {
     }
 }
 
-[test]
+[test(description = "The tanh GELU act on gate values out to 300 matches the CPU form within 2e-3 with every half finite, and every Tanh in the actf16 SPIR-V reads an FClamp result")]
 def test_vkd_act_gelu_past_clamp(t0 : T?) {
     t0 |> run("the tanh GELU act on gate values past the tanh clamp (|v| to 300) == the CPU oracle, every half finite") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -1553,7 +1197,7 @@ def test_vkd_act_gelu_past_clamp(t0 : T?) {
 //! position-major side rows of three layers (`ubase` / `ustride` / `ulen`) against the CPU form, each half within the act's
 //! approx bar; then the same base with no stride, the contiguous row from `ubase` against its own CPU form (`gk_up_at`'s
 //! stride-0 arm: a form that drops the base reads the row from zero and misses), which misses the strided form - the control
-[test]
+[test(description = "actf16 over strided side rows (ubase, ustride, ulen) matches gelu of the gate times the layer side slice within 2e-3, and with no stride reads the contiguous row from ubase, which misses the strided form")]
 def test_vkd_actf16_strided(t0 : T?) {
     t0 |> run("actf16 over the strided side rows == gelu(gate) x the layer's side slice") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -1828,7 +1472,7 @@ def private per32_sum_rows_cell(t : T?; fmt : KqFmt; n, wq_words : int; wq_seed,
     }
 }
 
-[test]
+[test(description = "The decode GEMV of all fifteen kq leaf formats matches the class CPU oracle within 2e-3 at 1, 2 and 20 superblocks a row and at every lane split, and the oracle matches the float dequant witness where one exists")]
 def test_vkd_kq_gemv_family(t0 : T?) {
     t0 |> run("kq GEMV class family == the CPU oracle (all 15 formats)") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -1888,7 +1532,7 @@ def test_vkd_kq_gemv_family(t0 : T?) {
 //! ids off a five-row table past a one-row lead (the plane's block base), one `EMB_ID_HOST` row copying the host's staged row -
 //! against the class's own lane decode, and on the formats with a float witness each gathered row dotted with a Q8_K activation
 //! row against `kq_gemv_float_oracle` over the same table row (the lanes in element order, independent of the class bit-math)
-[test]
+[test(description = "The token-table gather of all fifteen superblock formats matches the class lane decode within 2e-3 on three ids past a lead row and one host-staged row, each gathered row dotting to the float GEMV within 1e-3")]
 def test_vkd_emb_gather_family(t0 : T?) {
     t0 |> run("the token-table gather's leaves == the class lane decode, and the float witness, for all 15 superblock formats") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -1949,7 +1593,7 @@ def test_vkd_emb_gather_family(t0 : T?) {
 
 //! the per-32 token-table gathers (`<Fmt>Emb`, `Blk32GemvRunT` under `EMB`) for q51, iq4nl32, q4032 and q5032: the same four rows
 //! against the engine's per-32 plane dequant (`dequant_b32_plane_block`) over the cell's own plane bytes, under the embed scale
-[test]
+[test(description = "The per-32 token-table gathers for q51, iq4nl32, q4032 and q5032 match the engine plane dequant under the embed scale within 2e-3, three ids past a lead row and one host-staged row")]
 def test_vkd_emb_gather_b32(t0 : T?) {
     t0 |> run("the per-32 token-table gathers == the engine's plane dequant, for q51, iq4nl32, q4032 and q5032") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -2015,7 +1659,7 @@ def test_vkd_emb_gather_b32(t0 : T?) {
 //! the kq experts' gate+up+act twins (Q4_K, IQ4_XS and the iq3s4 form of IQ3_S) against the family cell's oracle run twice:
 //! both stacks' rows in one plane (the up stack's regions after the gate's), the activated rows' Q8_0 blocks within a quant step at
 //! every lane split, the scales within 2e-3, and the three-kernel path's hidden rows byte for byte; a poisoned oracle element must red
-[test]
+[test(description = "The fused kq gate and up GEMV with gelu and Q8_0 requant (k4, iq4xs, iq3s4, iq2s) matches the CPU chain, quants within a step at every lane split, and the three-kernel path byte for byte")]
 def test_vkd_kq_gemv_k4_gu(t0 : T?) {
     t0 |> run("kq gate + up GEMVs, the act and its Q8_0 requant in one dispatch == the CPU chain") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -2123,7 +1767,7 @@ def test_vkd_kq_gemv_k4_gu(t0 : T?) {
     }
 }
 
-[test]
+[test(description = "The Q8_0 and Q8_K act requants under silu, clamped swiglu and strided gelu match the CPU oracle (quants within a step, scales within 2e-3), the biased swiglu twins need their bias rows, and the combine matches")]
 def test_vkd_act_family(t0 : T?) {
     t0 |> run("act/requant + combine class kernels == the CPU oracle") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -2405,7 +2049,7 @@ def private rope_kv_arm(t : T?; f16, biased : bool) {
     }
 }
 
-[test]
+[test(description = "The rope and K/V store with q/k/v bias past a pad matches the NEOX table rope oracle within 2e-3 on q in place and both mirrors, and qk_rms matches the per-head rms oracle within 2e-3")]
 def test_vkd_rope_family(t0 : T?) {
     t0 |> run("rope_kv_store + qk_rms class kernels == the CPU oracle") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -2481,1742 +2125,7 @@ def test_vkd_rope_family(t0 : T?) {
     }
 }
 
-[test]
-def test_vkd_q8_batch_tile(t0 : T?) {
-    t0 |> run("q8 batch tile class kernel == the CPU oracle (edge tiles + K tail)") <| @(t : T?) {
-        static_if (typeinfo builtin_module_exists(vulkan)) {
-            if (!ensure_q8_batch_cls()) {
-                t |> skip("no Vulkan device")
-                return
-            }
-            let n = 96                 // nbb = 3: exercises the zero-filled K tail (nsteps = 1, 8-block pass)
-            let nbb = n / 32
-            let d = 40                 // wtiles = 2 with a 8-col edge tile
-            let cnt0 = 35              // region 0: 2 x-tiles with a 3-row edge
-            let cnt1 = 20              // region 1: 1 x-tile
-            let totblk = 2 * d * nbb
-            var p <- q8_sdot4_planes(totblk, 8, totblk / 2 + 1, int64(totblk) * 2l, (cnt0 + cnt1) * nbb, 8, 1.0)
-            var r <- sdot4_tile_run(n, d, cnt0, cnt1, 32, d * nbb, p) $(bufs : uint64[6]; sizes : int64[6]; bits : uint[6]; raw2 : VkCommandBuffer; var h2 : VkHaz; wgs : int64) {
-                var sc = set_q8_batch_cls(bufs, sizes, bits)
-                var pc = BatchArgs(n = uint(n), d = uint(d), map_off = uint(2 * 4))
-                enc_q8_batch_cls(raw2, h2, sc, pc, wgs)
-            }
-            var y_ref : array<float>
-            y_ref |> resize((cnt0 + cnt1) * d)
-            q8_gemm_oracle(p.wqh, p.wsh, p.xqh, p.xsh, r.sched, 2, n, d, y_ref)
-            check_rows(t, "q8 batch against the CPU oracle", r.y, y_ref, BAR_APPROX_CTRL, d)
-            delete y_ref
-            delete r
-            delete p
-        } else {
-            t |> skip("dasVulkan not present")
-        }
-    }
-}
-
-[test]
-def test_vkd_kq_batch_family(t0 : T?) {
-    t0 |> run("kq batch tile class family == the CPU oracle (all 15 formats)") <| @(t : T?) {
-        static_if (typeinfo builtin_module_exists(vulkan)) {
-            if (!kq_leaf_rails_engage() <| $(fmt : int) => kq_batch_cls_ensure(fmt, false)) {
-                t |> skip("no Vulkan device, or a kq batch class pipeline failed to build")
-                return
-            }
-            let n = 512               // nsb = 2 superblocks
-            let nsb = n / 256
-            let d = 40                // 2 w-tiles with an 8-col edge
-            let cnt0 = 35
-            let cnt1 = 20
-            let rows = cnt0 + cnt1
-            let totsb = 2 * d * nsb   // superblocks across both regions
-            for (fmt in KQ_LEAF_FMTS) {
-                let sb_words = int(kq_qsb(kq_fmt_of_slot(fmt)) / 4l)
-                let wswords = totsb * int(kq_dev_ssb_i(fmt) / 4l)
-                var p = Sdot4Planes(ws_bytes = int64(wswords) * 4l)
-                p.wqh <- hashed_words(totsb * sb_words, 1u, uint(fmt) * 131u)
-                p.wsh <- kq_ws_plane(fmt, wswords, 1u, uint(fmt) * 17u)
-                p.xqh <- hashed_words(rows * nsb * 64, 7u, 2u)
-                p.xsh <- row_fill(rows * nsb, 1, 0, 0.05, -0.3, 11)
-                //! one family set serves every format; region 1's weights follow region 0's stack in superblock units
-                var r <- sdot4_tile_run(n, d, cnt0, cnt1, 32, d * nsb, p) $(bufs : uint64[6]; sizes : int64[6]; bits : uint[6]; raw2 : VkCommandBuffer; var h2 : VkHaz; wgs : int64) {
-                    var sc = set_kq_batch_cls(bufs, sizes, bits)
-                    var pc = BatchArgs(n = uint(n), d = uint(d), map_off = uint(2 * 4))
-                    kq_batch_cls_enc_for(fmt, false, raw2, h2, sc, pc, wgs)
-                }
-                var inscope y_ref : array<float>
-                y_ref |> resize(rows * d)
-                kq_gemm_oracle(fmt, p.wqh, p.wsh, p.xqh, p.xsh, r.sched, 2, n, d, y_ref)
-                check_rows(t, "kq batch fmt {fmt} against the CPU oracle", r.y, y_ref, BAR_APPROX_CTRL, d)
-                delete y_ref
-                delete r
-                delete p
-            }
-        } else {
-            t |> skip("dasVulkan not present")
-        }
-    }
-}
-
-[test]
-def test_vkd_blk32_batch_family(t0 : T?) {
-    t0 |> run("per-32 batch tiles (q51 iq4nl32 q4032 q5032 mx4) == scalar dots") <| @(t : T?) {
-        static_if (typeinfo builtin_module_exists(vulkan)) {
-            if (!ensure_q8_batch_cls()) {
-                t |> skip("no Vulkan device")
-                return
-            }
-            let n = 96                // nbb = 3: the zero-filled K tail of the 8-block pass
-            let nbb = n / 32
-            let d = 40                // 2 w-tiles with an 8-col edge
-            let cnt0 = 35
-            let cnt1 = 20
-            let rows = cnt0 + cnt1
-            let totblk = 2 * d * nbb
-            for (f in [KqFmt.q51, KqFmt.iq4nl32, KqFmt.q4032, KqFmt.q5032, KqFmt.mx4]) {
-                let fmt = int(f)
-                verify(kq_batch_cls_ensure(fmt, false), "the per-32 batch class rail must engage")
-                var wsh <- blk32_scale_plane(f, totblk)
-                let ws_bytes = long_length(wsh) * 4l
-                var p <- Sdot4Planes(wqh <- hashed_words(totblk * int(kq_qsb(f) / 4l), 1u, uint(fmt) * 131u), wsh <- wsh,
-                    ws_bytes = ws_bytes, xqh <- hashed_words(rows * nbb * 8, 7u, 2u), xsh <- row_fill(rows * nbb, 1, 0, 0.05, -0.3, 11))
-                var r <- sdot4_tile_run(n, d, cnt0, cnt1, 32, d * nbb, p) $(bufs : uint64[6]; sizes : int64[6]; bits : uint[6]; raw2 : VkCommandBuffer; var h2 : VkHaz; wgs : int64) {
-                    var sc = kq_batch_cls_set_for(fmt, false, bufs, sizes, bits)
-                    var pc = BatchArgs(n = uint(n), d = uint(d), map_off = uint(2 * 4))
-                    kq_batch_cls_enc_for(fmt, false, raw2, h2, sc, pc, wgs)
-                }
-                var inscope y_ref : array<float>
-                y_ref |> resize(rows * d)
-                blk32_gemm_oracle(f, p.wqh, p.wsh, p.xqh, p.xsh, r.sched, 2, n, d, y_ref)
-                check_rows(t, "{f} batch tile against the engine's scalar dot", r.y, y_ref, BAR_APPROX_CTRL, d)
-                delete r
-                delete p
-            }
-        } else {
-            t |> skip("dasVulkan not present")
-        }
-    }
-}
-
-//! the cm batch cell's five arms as the class router's variant ordinals: cmf16, cmi8, mm (the L tile), mm aligned-L, mm M-tile
-let private CM_CELL_VARIANTS = fixed_array(1, 2, 5, 4, 3)
-
-[test]
-def test_vkd_cm_batch_family(t0 : T?) {
-    t0 |> run("coopmat batch class kernels == the CPU oracle (per available mode)") <| @(t : T?) {
-        static_if (typeinfo builtin_module_exists(vulkan)) {
-            if (!ensure_q8_batch_cls()) {   // probe via a NON-coopmat ensure — a cm pipeline build
-                t |> skip("no Vulkan device")   // on a no-coopmat device panics, not feints
-                return
-            }
-            var ran = 0
-            // per variant: [tile, d, cnt0, cnt1, n] — cmi8 keeps rows/cols aligned (its loads are
-            // unguarded); mm/mm_m mix full and edge tiles; mm_a is the all-aligned twin
-            for (v in range(5)) {
-                var tile = 32
-                var d = 40
-                var cnt0 = 35
-                var cnt1 = 20
-                var n = 96
-                if (v == 1) {
-                    d = 64
-                    cnt0 = 32
-                    cnt1 = 32
-                } elif (v == 2) {
-                    tile = 128
-                    d = 128   // row-edge tiles only: non-128-multiple d ZEROES the whole mm
-                    cnt0 = 140   // dispatch (old kernel identical — latent, ledgered) — real model
-                    cnt1 = 116   // dims are 128-multiples, so serving never routes that shape
-                    n = 64
-                } elif (v == 3) {
-                    tile = 128
-                    d = 128
-                    cnt0 = 128
-                    cnt1 = 128
-                    n = 64
-                } elif (v == 4) {
-                    tile = 64
-                    d = 96
-                    cnt0 = 80
-                    cnt1 = 48
-                    n = 64
-                }
-                // the router picks this variant only in its coopmat mode — building a cm class
-                // pipeline on a device whose mode never routes it is wasted (and panics no-cm)
-                let mode = g_gpu.coopmat_mode
-                let on = (v == 0 && mode == 1) || (v == 1 && mode == 2) || (v >= 2 && mode >= 3)
-                if (!on) {
-                    continue
-                }
-                let cv = CM_CELL_VARIANTS[v]
-                let up = q8_batch_cls_ensure(cv)
-                assert(up, "class rail must engage in its coopmat mode")
-                ran++
-                let nbb = n / 32
-                let rows = cnt0 + cnt1
-                let totblk = 2 * d * nbb
-                //! 16x cooler activation scales than the sdot4 arms: the mm family ACCUMULATES in f16, and the hot form's |y| ~7e4 overflows f16's 65504 to inf
-                var p <- q8_sdot4_planes(totblk, 8, totblk / 2 + 1, int64(totblk) * 2l, rows * nbb, 8, 0.0625)
-                var r <- sdot4_tile_run(n, d, cnt0, cnt1, tile, d * nbb, p) $(bufs : uint64[6]; sizes : int64[6]; bits : uint[6]; raw2 : VkCommandBuffer; var h2 : VkHaz; wgs : int64) {
-                    var sc = q8_batch_cls_set(cv, bufs, sizes, bits)
-                    var pc = BatchArgs(n = uint(n), d = uint(d), map_off = uint(2 * 4))
-                    q8_batch_cls_enc(cv, raw2, h2, sc, pc, wgs)
-                }
-                // the cm kernels stage AND accumulate through f16, so their error scales with
-                // the running-sum magnitude (cancelled-small results included) — relative bar
-                // plus an absolute floor off the oracle's peak; wiring breaks are peak-sized
-                var inscope y_ref : array<float>
-                y_ref |> resize(rows * d)
-                q8_gemm_oracle(p.wqh, p.wsh, p.xqh, p.xsh, r.sched, 2, n, d, y_ref)
-                check_rows(t, "cm batch variant {v}, {g_gpu.decvec_on ? "four-wide twin" : "scalar callback"}", r.y, y_ref, cm_bar(y_ref), d)
-                delete y_ref
-                delete r
-                delete p
-            }
-            if (ran == 0) {
-                t |> skip("no coopmat batch pipes in this mode - set DASLLAMA_COOPMAT to cover")
-            }
-        } else {
-            t |> skip("dasVulkan not present")
-        }
-    }
-}
-
-[test]
-def test_vkd_kq_q40_cm_batch(t0 : T?) {
-    t0 |> run("q40 coopmat f16 batch class kernel == the CPU oracle") <| @(t : T?) {
-        static_if (typeinfo builtin_module_exists(vulkan)) {
-            if (!ensure_q8_batch_cls()) {   // engage the device without touching coopmat rails
-                t |> skip("no Vulkan device")
-                return
-            }
-            if (g_gpu.coopmat_mode != COOPMAT_F16) {
-                t |> skip("q40 rides the f16 coopmat twin only in mode 1 (DASLLAMA_COOPMAT=f16)")
-                return
-            }
-            verify(ensure_kq_batch_q40_cmf16_cls(), "class rail must engage in f16 coopmat mode")
-            let n = 256                // nsb = 1 superblock per row reduction
-            let nsb = n / 256
-            let d = 40                 // wtiles = 2 with a 8-col edge tile
-            let cnt0 = 35
-            let cnt1 = 20
-            let rows = cnt0 + cnt1
-            let totsb = 2 * d * nsb
-            //! the scale words hold the d halves - every u16 a finite half
-            var p <- q8_sdot4_planes(totsb, 32, totsb * 5, int64(totsb) * 20l, rows * nsb, 64, 1.0)
-            var r <- sdot4_tile_run(n, d, cnt0, cnt1, 32, d * nsb, p) $(bufs : uint64[6]; sizes : int64[6]; bits : uint[6]; raw2 : VkCommandBuffer; var h2 : VkHaz; wgs : int64) {
-                var sc = set_kq_batch_q40_cmf16_cls(bufs, sizes, bits)
-                var pc = BatchArgs(n = uint(n), d = uint(d), map_off = uint(2 * 4))
-                enc_kq_batch_q40_cmf16_cls(raw2, h2, sc, pc, wgs)
-            }
-            // f16-staged dequant on the MMA path — relative bar + peak-scaled floor
-            var y_ref : array<float>
-            y_ref |> resize(rows * d)
-            kq_gemm_oracle(int(KqFmt.q40), p.wqh, p.wsh, p.xqh, p.xsh, r.sched, 2, n, d, y_ref)
-            check_rows(t, "q40 cm batch, {g_gpu.decvec_on ? "four-wide twin" : "scalar callback"}", r.y, y_ref, cm_bar(y_ref), d)
-            delete y_ref
-            delete r
-            delete p
-        } else {
-            t |> skip("dasVulkan not present")
-        }
-    }
-}
-
-//! a KHR stamp's split arm over a tile fixture: its first region alone under two 256-aligned k chunks (`want_ck` and the rest) into
-//! the partial planes, then the reduce into the y plane, against the oracle's first region - the k0 / k1 / ybase prologue every KHR
-//! stamp shares with the cm2 tiles; `nsplit` 1 is the whole GEMM, its one partial plane through the reduce
-def private khr_split_arm(t : T?; tag : string; f : TileFixture; y_ref : array<float>; want_ck : int64; set_fn; enc_fn; nsplit : int = 2) {
-    verify(ensure_splitk_reduce_cls(), "the split-k reduce's class rail must engage")
-    let ck = nsplit > 1 ? cm2_chunk(int64(f.n), int64(nsplit)) : 0l
-    if (nsplit > 1) {
-        t |> equal(ck, want_ck, "the engine's chunk: K {f.n} in two 256-aligned chunks, {want_ck} and {int64(f.n) - want_ck} deep")
-    }
-    let cnt0 = TILE_CELL_ROWS0
-    let d = TILE_CELL_D
-    let swgs = ((cnt0 + 127) / 128) * ((d + 127) / 128) * nsplit
-    var y_ref0 <- copy_span(y_ref, 0, cnt0 * d)   // the oracle's first region is the split arm's whole answer
-    with_cell_planes() $(var cp : CellPlanes) {
-        let pwq = cp |> in_plain(f.wqh)
-        let pws = cp |> in_plain(f.wsh)
-        let psc = cp |> in_plain(one_region_words(cnt0, swgs))   // one region at row 0 over the first weight plane
-        let pxf = cp |> in_plain(f.xfh)
-        let pp = cp |> out_(cnt0 * d * nsplit)
-        let py = cp |> out_(cnt0 * d)
-        var scs = cp |> cls_set(fixed_array(pwq, pws, psc, pxf, pp), set_fn)
-        var srd = cp |> cls_set(fixed_array(pp, py), @@set_splitk_reduce_cls)
-        var pcs = BatchArgs(n = uint(f.n), d = uint(d), map_off = 4u, ksplit = uint(ck))
-        cp |> cell_record() $(raw3 : VkCommandBuffer; var h3 : VkHaz) {
-            invoke(enc_fn, raw3, h3, scs, pcs, int64(swgs))
-            splitk_reduce_enc(raw3, h3, srd, int64(cnt0 * d), int64(nsplit))
-        }
-        let form = nsplit > 1 ? "split in two k chunks + the reduce" : "whole, one region"
-        check_rows(t, "{tag} {form} vs the CPU oracle", cp |> plane_run(py), y_ref0, cm_bar(y_ref0), d)
-    }
-    delete y_ref0
-}
-
-[test]
-def test_vkd_q8_khr_batch(t0 : T?) {
-    t0 |> run("the KHR kq tile over Q8_0 blocks (q8_batch_khr) == the CPU oracle") <| @(t : T?) {
-        static_if (typeinfo builtin_module_exists(vulkan)) {
-            if (!ensure_q8_batch_cls()) {   // engage the device without touching coopmat rails
-                t |> skip("no Vulkan device")
-                return
-            }
-            if (!khr_kq_tile_on()) {
-                t |> skip("the KHR kq tile needs KHR cooperative matrices at subgroup 32")
-                return
-            }
-            var wqh, wsh : array<uint>
-            q8_planes(576, 17u, 991u, wqh, wsh)   // K off the 256 lattice: the 32-deep k step runs a tail past the last superblock
-            var f <- tile_fixture(576, 32, wqh, wsh, 3u, 5u)
-            var y_ref <- tile_cell_arms(t, "q8", int(KqFmt.q8), f, [ARM_KHR], @@q8f16_gemm_oracle)
-            // the split arm: the first region alone under two 256-aligned k chunks (512 and 64 deep) into the partial
-            // planes, then the reduce into the y plane - the k0 / k1 / ybase prologue the KHR stamp shares with the cm2 tiles
-            khr_split_arm(t, "q8 KHR tile", f, y_ref, 512l, @@set_q8_batch_khr_cls,
-                @@ < (raw : VkCommandBuffer; var h : VkHaz; var set_ : VkDescriptorSet; var pc : BatchArgs; wgs : int64) : void > enc_q8_batch_khr_cls)
-            delete y_ref
-            delete f
-        } else {
-            t |> skip("dasVulkan not present")
-        }
-    }
-}
-
-//! the f32 stamp's set off the KHR arm's five planes: it binds no scale plane, so the second plane stays unbound
-def private set_f32_khr_wo_scales(bufs; sizes; gbits) => set_f32_batch_khr_cls(fixed_array(bufs[0], bufs[2], bufs[3], bufs[4]),
-    fixed_array(sizes[0], sizes[2], sizes[3], sizes[4]), fixed_array(gbits[0], gbits[2], gbits[3], gbits[4]))
-
-[test]
-def test_vkd_f32_khr_batch(t0 : T?) {
-    t0 |> run("the staged KHR tile over a file's f32 rows (f32_batch_khr) == the CPU oracle") <| @(t : T?) {
-        static_if (typeinfo builtin_module_exists(vulkan)) {
-            if (!ensure_q8_batch_cls()) {   // engage the device without touching coopmat rails
-                t |> skip("no Vulkan device")
-                return
-            }
-            if (!khr_kq_tile_on()) {
-                t |> skip("the staged f32 tile needs KHR cooperative matrices at subgroup 32")
-                return
-            }
-            verify(ensure_f32_batch_khr_cls(), "the staged f32 tile's class rail must engage on a coopmat device")
-            let n = 544   //! seventeen 32-deep k steps, off every 64 and 256 lattice
-            var wqh <- [for (i in range(2 * TILE_CELL_D * n)); float_bits_to_uint(float(hash_word(uint(i) + 71u) % 4001u) * 0.0000317 - 0.0634)]   //! f32 words whose low mantissa bits the stage rounds away
-            var wsh <- [0u, 0u, 0u, 0u]   //! the fixture's scale plane, which the f32 stamp binds no slot for
-            var f <- tile_fixture(n, 4, wqh, wsh, 3u, 5u)
-            let d = TILE_CELL_D
-            var y_ref : array<float>
-            y_ref |> resize(f.rows * d)
-            var recs <- one_region_words(TILE_CELL_ROWS0, ((TILE_CELL_ROWS0 + 127) / 128) * ((d + 127) / 128))
-            f32f16_gemm_oracle(f.wqh, f.wsh, f.xfh, recs, 1, n, d, y_ref)   //! the stamp's one schedule form: a region at row 0, its map at word 4
-            khr_split_arm(t, "the staged f32 tile", f, y_ref, 0l, @@ < (bufs : uint64 const[5]; sizes : int64 const[5]; gbits : uint const[5]) : VkDescriptorSet > set_f32_khr_wo_scales,
-                @@ < (raw : VkCommandBuffer; var h : VkHaz; var set_ : VkDescriptorSet; var pc : BatchArgs; wgs : int64) : void > enc_f32_batch_khr_cls, 1)   // the projection's whole form
-            khr_split_arm(t, "the staged f32 tile", f, y_ref, 512l, @@ < (bufs : uint64 const[5]; sizes : int64 const[5]; gbits : uint const[5]) : VkDescriptorSet > set_f32_khr_wo_scales,
-                @@ < (raw : VkCommandBuffer; var h : VkHaz; var set_ : VkDescriptorSet; var pc : BatchArgs; wgs : int64) : void > enc_f32_batch_khr_cls)   // the window gate's split form
-            delete recs
-            delete y_ref
-            delete f
-        } else {
-            t |> skip("dasVulkan not present")
-        }
-    }
-}
-
-[test]
-def test_vkd_cm2l_batch(t0 : T?) {
-    t0 |> run("cm2 l-tile fmt-0 batch class kernel == the CPU oracle") <| @(t : T?) {
-        q8_tile_cell(t, ARM_CM2_L, 576, 17u, 991u, 3u, 5u)   // K off the 256 lattice: two unrolled superblock passes and a 64-deep tail step
-    }
-}
-
-[test]
-def test_vkd_cm2_decode_vector_pair(t0 : T?) {
-    t0 |> run("the four-wide decode twin and its stripped fallback, on the device, against one CPU oracle") <| @(t : T?) {
-        static_if (typeinfo builtin_module_exists(vulkan)) {
-            if (!ensure_q8_batch_cls()) {
-                t |> skip("no Vulkan device")
-                return
-            }
-            if (!(g_gpu.coopmat_mode == COOPMAT_CM2 && g_gpu.has_coopmat2)) {
-                t |> skip("the cm2 l-tile serves only in mode 4 on an NV_coopmat2 device (DASLLAMA_COOPMAT=cm2)")
-                return
-            }
-            let twin_device = g_gpu.decvec_on
-            // the strip stamp: words downgraded to the scalar callback whatever the device has
-            g_gpu.decvec_on = false
-            verify(ensure_toy_q8_cm2_strip_cls(), "the stripped toy stamp must engage")
-            g_gpu.decvec_on = twin_device
-            verify(ensure_toy_q8_cm2_twin_cls(), "the toy twin stamp must engage")
-            var wqh, wsh : array<uint>
-            q8_planes(576, 17u, 991u, wqh, wsh)
-            var f <- tile_fixture(576, 32, wqh, wsh, 3u, 5u)
-            var y_ref <- tile_cell_arms(t, "cm2 decode pair ({twin_device ? "the four-wide twin" : "the twin stamp on a device without the callback"})", int(KqFmt.q8), f, [ARM_TOY_STRIP, ARM_TOY_TWIN], @@q8f16_gemm_oracle)
-            delete y_ref
-            delete f
-        } else {
-            t |> skip("dasVulkan not present")
-        }
-    }
-}
-
-[test]
-def test_vkd_k4_cm2_batch(t0 : T?) {
-    t0 |> run("cm2 Q4_K l/m/s/e tiles and the KHR tile == the CPU oracle (decode-in-load over the repacked planes; the KHR arm stages the same decode)") <| @(t : T?) {
-        fmt_tile_cell(t, KqFmt.k4)
-    }
-}
-
-[test]
-def test_vkd_k5_cm2_batch(t0 : T?) {
-    t0 |> run("cm2 Q5_K l/m/s/e tiles and the KHR tile == the CPU oracle (5th-bit compose decode-in-load; the KHR arm stages the same decode)") <| @(t : T?) {
-        fmt_tile_cell(t, KqFmt.k5)
-    }
-}
-
-[test]
-def test_vkd_q51_cm2_batch(t0 : T?) {
-    t0 |> run("cm2 Q5_1 l/m/s/e tiles and the KHR tile == the CPU oracle (the per-32 plane verbatim: nibble | qh bit, d * q + m off one word)") <| @(t : T?) {
-        fmt_tile_cell(t, KqFmt.q51)
-    }
-}
-
-[test]
-def test_vkd_iq4nl32_cm2_batch(t0 : T?) {
-    t0 |> run("cm2 IQ4_NL per-32 l/m/s/e tiles and the KHR tile == the CPU oracle (the per-32 plane verbatim: d * LUT[nibble] off a half-word d)") <| @(t : T?) {
-        fmt_tile_cell(t, KqFmt.iq4nl32)
-    }
-}
-
-[test]
-def test_vkd_q4032_cm2_batch(t0 : T?) {
-    t0 |> run("cm2 Q4_0 per-32 l/m/s/e tiles and the KHR tile == the CPU oracle (iq4nl32's plane form: d * (nibble - 8) off a half-word d)") <| @(t : T?) {
-        fmt_tile_cell(t, KqFmt.q4032)
-    }
-}
-
-[test]
-def test_vkd_q5032_cm2_batch(t0 : T?) {
-    t0 |> run("cm2 Q5_0 per-32 l/m/s/e tiles and the KHR tile == the CPU oracle (q51's quant form under a half-word d: d * (q - 16), the qh bit as q's fifth)") <| @(t : T?) {
-        fmt_tile_cell(t, KqFmt.q5032)
-    }
-}
-
-[test]
-def test_vkd_mx4_cm2_batch(t0 : T?) {
-    t0 |> run("cm2 MXFP4 s and e tiles == the CPU oracle (the per-32 plane verbatim: e2m1 nibble, the doubled magnitude times the halved E8M0 scale off one byte)") <| @(t : T?) {
-        fmt_tile_cell(t, KqFmt.mx4)
-    }
-}
-
-[test]
-def test_vkd_q40_cm2_batch(t0 : T?) {
-    t0 |> run("cm2 Q4_0 l/m/s/e tiles and the KHR tile == the CPU oracle (per-block f16 d decode-in-load; the KHR arm stages the same decode)") <| @(t : T?) {
-        fmt_tile_cell(t, KqFmt.q40)
-    }
-}
-
-[test]
-def test_vkd_k2_cm2_batch(t0 : T?) {
-    t0 |> run("cm2 Q2_K l/m/s/e tiles and the KHR tile == the CPU oracle (pair-byte nibble scales decode-in-load; the KHR arm stages the same decode)") <| @(t : T?) {
-        fmt_tile_cell(t, KqFmt.k2)
-    }
-}
-
-[test]
-def test_vkd_iq4nl_cm2_batch(t0 : T?) {
-    t0 |> run("cm2 IQ4_NL l/m/s/e tiles and the KHR tile == the CPU oracle (codebook + per-block f16 d decode-in-load; the KHR arm stages the same decode)") <| @(t : T?) {
-        fmt_tile_cell(t, KqFmt.iq4nl)
-    }
-}
-
-[test]
-def test_vkd_nv4_cm2_batch(t0 : T?) {
-    t0 |> run("cm2 NVFP4 l/m/s/e tiles and the KHR tile == the CPU oracle (the doubled e2m1 codes under the UE4M3 sub-block scales at half, decode-in-load; the KHR arm stages the same decode)") <| @(t : T?) {
-        fmt_tile_cell(t, KqFmt.nv4)
-    }
-}
-
-[test]
-def test_vkd_iq4xs_cm2_batch(t0 : T?) {
-    t0 |> run("cm2 IQ4_XS l/m/s/e tiles and the KHR tile == the CPU oracle (workgroup-staged codebook decode-in-load; the KHR arm stages the same decode)") <| @(t : T?) {
-        fmt_tile_cell(t, KqFmt.iq4xs)
-    }
-}
-
-[test]
-def test_vkd_iq3s4_cm2_batch(t0 : T?) {
-    t0 |> run("cm2 iq3s4 l/m/s/e tiles and the KHR tile == the CPU oracle (the odd codebook staged, the iq3 row's 1 + 2s sub-scale); the iq4xs oracle is its control") <| @(t : T?) {
-        fmt_tile_cell(t, KqFmt.iq3s4)
-    }
-}
-
-[test]
-def test_vkd_k3_cm2_batch(t0 : T?) {
-    t0 |> run("cm2 Q3_K l/m/s/e tiles and the KHR tile == the CPU oracle (2-bit + hmask compose decode-in-load; the KHR arm stages the same decode)") <| @(t : T?) {
-        fmt_tile_cell(t, KqFmt.k3)
-    }
-}
-
-[test]
-def test_vkd_iq3s_cm2_batch(t0 : T?) {
-    t0 |> run("cm2 IQ3_S l/m/s/e tiles and the KHR tile == the CPU oracle (workgroup-staged grid decode-in-load; the KHR arm stages the same decode); the iq3xxs oracle is its control") <| @(t : T?) {
-        fmt_tile_cell(t, KqFmt.iq3s)
-    }
-}
-
-[test]
-def test_vkd_iq2s_cm2_batch(t0 : T?) {
-    t0 |> run("cm2 IQ2_S l/m/s/e tiles and the KHR tile == the CPU oracle (workgroup-staged u64 grid decode-in-load; the KHR arm stages the same decode)") <| @(t : T?) {
-        fmt_tile_cell(t, KqFmt.iq2s)
-    }
-}
-
-[test]
-def test_vkd_iq2xs_cm2_batch(t0 : T?) {
-    t0 |> run("cm2 IQ2_XS l/m/s/e tiles and the KHR tile == the CPU oracle (u64 grid + ksigns-by-parity decode-in-load; the KHR arm stages the same decode)") <| @(t : T?) {
-        fmt_tile_cell(t, KqFmt.iq2xs)
-    }
-}
-
-[test]
-def test_vkd_iq2xxs_cm2_batch(t0 : T?) {
-    t0 |> run("cm2 IQ2_XXS l/m/s/e tiles and the KHR tile == the CPU oracle (byte-grid + aux32 ksigns decode-in-load; the KHR arm stages the same decode)") <| @(t : T?) {
-        fmt_tile_cell(t, KqFmt.iq2xxs)
-    }
-}
-
-[test]
-def test_vkd_iq3xxs_cm2_batch(t0 : T?) {
-    t0 |> run("cm2 IQ3_XXS l/m/s/e tiles and the KHR tile == the CPU oracle (halved grid + parity signs decode-in-load; the KHR arm stages the same decode); the iq2xxs oracle is its control") <| @(t : T?) {
-        fmt_tile_cell(t, KqFmt.iq3xxs)
-    }
-}
-
-[test]
-def test_vkd_k6_cm2_batch(t0 : T?) {
-    t0 |> run("cm2 Q6_K l/m/s/e tiles and the KHR tile == the CPU oracle (6-bit compose decode-in-load; the KHR arm stages the same decode)") <| @(t : T?) {
-        fmt_tile_cell(t, KqFmt.k6)
-    }
-}
-
-[test]
-def test_vkd_cm2m_batch(t0 : T?) {
-    t0 |> run("cm2 m-tile fmt-0 batch class kernel == the CPU oracle") <| @(t : T?) {
-        q8_tile_cell(t, ARM_CM2_M, 576, 29u, 733u, 5u, 11u)   // K off the 256 lattice: two unrolled superblock passes and a 64-deep tail step
-    }
-}
-
-[test]
-def test_vkd_cm2e_batch(t0 : T?) {
-    t0 |> run("cm2 e-column fmt-0 batch class kernel == the CPU oracle") <| @(t : T?) {
-        q8_tile_cell(t, ARM_CM2_E, Q8_CELL_K, 31u, 739u, 5u, 13u)
-    }
-}
-
-[test]
-def test_vkd_cm2s_batch(t0 : T?) {
-    t0 |> run("cm2 s-tile fmt-0 batch class kernel == the CPU oracle") <| @(t : T?) {
-        q8_tile_cell(t, ARM_CM2_S, Q8_CELL_K, 29u, 733u, 5u, 11u)
-    }
-}
-
-//! One short window through the s column split along K (`ARCHITECTURE_GPU_VULKAN_GEMM.md#vk-short-split`): `rows` under the
-//! column's 32 in one region at row 0, `nsplit` 256-aligned chunks (`cm2_chunk`) into the partial planes and the reduce, against the format's
-//! oracle; `control` halves the chunk (the planes cover half of K, every element finite) and must red the bar
-[arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#vk-short-split")]
-def private short_split_arm(t : T?; tag : string; fmt : int; f : TileFixture; rows, nsplit : int; control : bool;
-                            oracle : function<(wq : array<uint>; wsu : array<uint>; xf : array<uint>; recs : array<uint>; nrec, n, d : int; var y : array<float>) : void>) {
-    static_if (typeinfo builtin_module_exists(vulkan)) {
-        let d = TILE_CELL_D
-        let ck = int(cm2_chunk(int64(f.n), int64(nsplit)))
-        verify(ck > 0, "a short-split cell's K takes its 256-aligned chunks")
-        let wgs = ((rows + 31) / 32) * ((d + 127) / 128) * nsplit
-        var inscope sched <- one_region_words(rows, wgs)
-        var inscope y_ref : array<float>
-        y_ref |> resize(rows * d)
-        invoke(oracle, f.wqh, f.wsh, f.xfh, sched, 1, f.n, d, y_ref)
-        with_cell_planes() $(var cp : CellPlanes) {
-            let pwq = cp |> in_plain(f.wqh)
-            let pws = cp |> in_plain(f.wsh)
-            let psc = cp |> in_plain(sched)
-            let pxf = cp |> in_plain(f.xfh)
-            let pad = ((rows + 31) / 32) * 32 - rows   //! the column's rows past the window: a store guard that slips writes there
-            let ppart = cp |> out_(rows * d * nsplit, 0, pad * d * nsplit)
-            let py = cp |> out_(rows * d, 0, pad * d)
-            let planes = fixed_array(pwq, pws, psc, pxf, ppart)
-            var sc = cell_arm_set(ARM_CM2_S, fmt, gather_planes(cp.dev, planes), gather_planes(cp.bytes, planes), gather_planes(cp.hazard_bit, planes))
-            var sr = cp |> cls_set(fixed_array(ppart, py), @@set_splitk_reduce_cls)
-            var pc = BatchArgs(n = uint(f.n), d = uint(d), map_off = 4u, ksplit = uint(control ? ck / 2 : ck))
-            cp |> cell_record() $(raw2 : VkCommandBuffer; var h2 : VkHaz) {
-                cell_arm_enc(ARM_CM2_S, fmt, raw2, h2, sc, pc, int64(wgs))
-                splitk_reduce_enc(raw2, h2, sr, int64(rows * d), int64(nsplit))
-            }
-            var inscope got <- cp |> plane_run(py)
-            let what = "{tag} s-tile short split, {rows} rows in {nsplit} chunks"
-            if (control) {
-                check_exceeds(t, "{what}: the whole-K control", got, y_ref, cm_bar(y_ref))
-            } else {
-                check_rows(t, "{what} vs the CPU oracle", got, y_ref, cm_bar(y_ref), d)
-            }
-            var inscope py_all <- cp |> plane_whole(py)
-            var inscope part_all <- cp |> plane_whole(ppart)
-            t |> equal(sentinel_off(copy_span(py_all, rows * d, pad * d)), 0, "{what}: the output's rows past the window keep their sentinel")
-            t |> equal(sentinel_off(copy_span(part_all, rows * d * nsplit, pad * d * nsplit)), 0, "{what}: the planes past the window's rows keep their sentinel")
-        }
-    }
-}
-
-[test]
-def test_vkd_cm2s_short_split(t0 : T?) {
-    t0 |> run("the s column split along K under 32 rows == the CPU oracle, q8 and every per-format tile row") <| @(t : T?) {
-        static_if (typeinfo builtin_module_exists(vulkan)) {
-            if (!ensure_q8_batch_cls()) {
-                t |> skip("no Vulkan device")
-                return
-            }
-            if (!cell_arm_served(ARM_CM2_S) || !ensure_splitk_reduce_cls()) {
-                t |> skip("the s column serves only in mode 4 on an NV_coopmat2 device (DASLLAMA_COOPMAT=cm2)")
-                return
-            }
-            let qn = 1024
-            var qwq, qws : array<uint>
-            q8_planes(qn, 43u, 337u, qwq, qws)
-            var qf <- tile_fixture(qn, 32, qwq, qws, 7u, 3u)
-            for (rows in [9, 31]) {
-                short_split_arm(t, "q8", int(KqFmt.q8), qf, rows, 4, false, @@q8f16_gemm_oracle)
-            }
-            short_split_arm(t, "q8", int(KqFmt.q8), qf, 31, 4, true, @@q8f16_gemm_oracle)
-            delete qf
-            var trows <- fmt_tile_rows()
-            for (r in trows) {
-                var wqh, wsuh : array<uint>
-                fmt_tile_planes(r, wqh, wsuh)
-                var f <- tile_fixture(r.n, r.blk_k, wqh, wsuh, 3u, r.xf_add)
-                short_split_arm(t, "{r.fmt}", int(r.fmt), f, 31, fmt_split_ways(f.n), false, r.oracle)
-                delete f
-            }
-            delete trows
-        } else {
-            t |> skip("dasVulkan not present")
-        }
-    }
-}
-
-[test]
-def test_vkd_cm2l_split(t0 : T?) {
-    t0 |> run("cm2 l-tile split-k + reduce == the CPU oracle") <| @(t : T?) {
-        static_if (typeinfo builtin_module_exists(vulkan)) {
-            if (!ensure_q8_batch_cls()) {   // engage the device without touching coopmat rails
-                t |> skip("no Vulkan device")
-                return
-            }
-            if (!(g_gpu.coopmat_mode == COOPMAT_CM2 && g_gpu.has_coopmat2)) {
-                t |> skip("the cm2 l-tile serves only in mode 4 on an NV_coopmat2 device (DASLLAMA_COOPMAT=cm2)")
-                return
-            }
-            verify(ensure_q8_batch_cm2l_cls(), "class rail must engage in cm2 mode")
-            verify(ensure_splitk_reduce_cls(), "reduce class rail must engage in cm2 mode")
-            // single region (split-k's contract): K = 2816 splits as [0, 1536) + [1536, 2816) —
-            // plane 0 runs six whole superblock passes, plane 1 five; d/rows keep edge tiles
-            let n = 2816
-            let nbb = n / 32
-            let d = 160
-            let rows = 300
-            let nsplit = 2
-            let ksplit = 1536
-            let wtiles = (d + 127) / 128
-            let ttiles = (rows + 255) / 256
-            let wgs = wtiles * ttiles * nsplit
-            let totblk = d * nbb
-            var wqh <- hashed_words(totblk * 8, 1u, 43u)     // arbitrary bytes — s8 quants
-            var wsh <- ws_plane((totblk + 1) / 2, 1u, 337u)   // f16 scale pairs, finite halves
-            var xfh <- ws_plane(rows * n / 2, 7u, 3u)   // f16 activation pairs
-            var sched <- one_region_words(rows, wgs)
-            var y_ref : array<float>
-            y_ref |> resize(rows * d)
-            q8f16_gemm_oracle(wqh, wsh, xfh, sched, 1, n, d, y_ref)
-            with_cell_planes() $(var cp : CellPlanes) {
-                let pwq = cp |> in_plain(wqh)
-                let pws = cp |> in_plain(wsh)
-                let psc = cp |> in_plain(sched)
-                let pxf = cp |> in_plain(xfh)
-                let partial_planes = cp |> out_(rows * d * nsplit)   // the GEMM writes partial planes into the scratch, the reduce sums into y
-                let py = cp |> out_(rows * d)
-                var sc = cp |> cls_set(fixed_array(pwq, pws, psc, pxf, partial_planes), @@set_q8_batch_cm2l_cls)
-                var sr = cp |> cls_set(fixed_array(partial_planes, py), @@set_splitk_reduce_cls)
-                var pc = BatchArgs(n = uint(n), d = uint(d), map_off = 4u, ksplit = uint(ksplit))
-                cp |> cell_record() $(raw2 : VkCommandBuffer; var h2 : VkHaz) {
-                    enc_q8_batch_cm2l_cls(raw2, h2, sc, pc, int64(wgs))
-                    splitk_reduce_enc(raw2, h2, sr, int64(rows * d), int64(nsplit))
-                }
-                check_rows(t, "cm2 l-tile split-k ({g_gpu.decvec_on ? "four-wide twin" : "scalar callback"}) vs the CPU oracle", cp |> plane_run(py), y_ref, cm_bar(y_ref), d)
-            }
-            delete sched
-            delete y_ref
-            delete wqh
-            delete wsh
-            delete xfh
-        } else {
-            t |> skip("dasVulkan not present")
-        }
-    }
-}
-
-[test]
-def test_vkd_da_attn_rqk(t0 : T?) {
-    t0 |> run("decode attention with the requant folded into its store == the CPU oracle's row, quantized: Q8_0 and Q8_K, the pass and the combine, the 256 and 512 heads") <| @(t : T?) {
-        static_if (typeinfo builtin_module_exists(vulkan)) {
-            if (!da_attn_stamps_ensure(KVDtype.f32)) {
-                t |> skip("no Vulkan device")
-                return
-            }
-            //! the two-head slab on the groups it serves - two heads a group (gemma-4's shape at 256 and 512), one head a group
-            //! (the dead lane through the pass's store and through the combine) - each held bit for bit to the four-head stamp
-            codec_attn_arm(t, CodecAttn(kv = KVDtype.f32, hs = 64, nheads = 4, kv_mul = 2, fold = Fold.q8_0, g4_twin = true))   //! the pass's own Q8_0 store
-            codec_attn_arm(t, CodecAttn(kv = KVDtype.f32, hs = 64, nheads = 4, kv_mul = 2, fold = Fold.q8_0, nsplit = 8, g4_twin = true))   //! the last piece's combine (three empty pieces)
-            codec_attn_arm(t, CodecAttn(kv = KVDtype.f32, hs = 256, nheads = 2, kv_mul = 2, keys = 70, fold = Fold.q8_k, g4_twin = true))   //! one superblock a head, the pass
-            codec_attn_arm(t, CodecAttn(kv = KVDtype.f32, hs = 256, nheads = 2, kv_mul = 1, keys = 70, fold = Fold.q8_k, g4_twin = true))
-            codec_attn_arm(t, CodecAttn(kv = KVDtype.f32, hs = 256, nheads = 2, kv_mul = 1, keys = 70, fold = Fold.q8_k, nsplit = 4, g4_twin = true))   //! ... the last piece's combine
-            codec_attn_arm(t, CodecAttn(kv = KVDtype.f32, hs = 512, nheads = 2, kv_mul = 2, keys = 70, fold = Fold.q8_k, nsplit = 4, g4_twin = true))   //! the wide head: two superblocks
-            codec_attn_arm(t, CodecAttn(kv = KVDtype.f32, hs = 512, nheads = 2, kv_mul = 2, keys = 70, fold = Fold.q8_0))   //! the wide head's Q8_0 blocks, the pass
-            codec_attn_arm(t, CodecAttn(kv = KVDtype.f32, hs = 64, nheads = 4, kv_mul = 4, fold = Fold.q8_0))   //! the four-head slab's own store
-            codec_attn_arm(t, CodecAttn(kv = KVDtype.f32, hs = 64, nheads = 4, kv_mul = 4, fold = Fold.q8_0, nsplit = 8))   //! ... and its combine's
-        } else {
-            t |> skip("dasVulkan not present")
-        }
-    }
-}
-
-[test]
-def test_vkd_da_attn(t0 : T?) {
-    t0 |> run("decode attention class kernel == the CPU oracle (chunk boundary)") <| @(t : T?) {
-        static_if (typeinfo builtin_module_exists(vulkan)) {
-            if (!(da_attn_stamps_ensure(KVDtype.f32) && da_attn_stamps_ensure(KVDtype.f16))) {
-                t |> skip("no Vulkan device")
-                return
-            }
-            codec_attn_arms(t, KVDtype.f32)
-            //! a two-head group's softcap (gemma-2's 4.0 cap the scaled scores overrun), whole and in eight key pieces
-            codec_attn_arm(t, CodecAttn(kv = KVDtype.f32, hs = 64, nheads = 4, kv_mul = 2, cap = 4.0))
-            codec_attn_arm(t, CodecAttn(kv = KVDtype.f32, hs = 64, nheads = 4, kv_mul = 2, cap = 4.0, nsplit = 8))
-            //! the sink stamp over a two-head group (gpt-oss): the pass folding the sink at its store, and the last piece's
-            //! combine seeding it - over the f32 mirror and over the f16 one (the resident driver's kv16 form)
-            for (kv in fixed_array(KVDtype.f32, KVDtype.f16)) {
-                codec_attn_arm(t, CodecAttn(kv = kv, hs = 64, nheads = 4, kv_mul = 2, sink = true))
-                codec_attn_arm(t, CodecAttn(kv = kv, hs = 64, nheads = 4, kv_mul = 2, sink = true, nsplit = 8))
-            }
-        } else {
-            t |> skip("dasVulkan not present")
-        }
-    }
-}
-
-[test]
-def test_vkd_da_attn_shapes(t0 : T?) {
-    t0 |> run("decode attention at the shapes the fixed cells leave out == the CPU oracle: ragged key groups, a full four-head slab, a short last slab, a 24-word head, two rows a dispatch") <| @(t : T?) {
-        static_if (typeinfo builtin_module_exists(vulkan)) {
-            if (!da_attn_stamps_ensure(KVDtype.f32)) {
-                t |> skip("no Vulkan device")
-                return
-            }
-            //! every split arm dispatches twice over the counters the first left: the arrival counters the pass resets rearm
-            codec_attn_arm(t, CodecAttn(kv = KVDtype.f32, hs = 96, nheads = 4, kv_mul = 1))   //! 21 key groups of 12 words: the ragged group count, no fold
-            codec_attn_arm(t, CodecAttn(kv = KVDtype.f32, hs = 96, nheads = 4, kv_mul = 1, nsplit = 4, resubmit = true))
-            codec_attn_arm(t, CodecAttn(kv = KVDtype.f32, hs = 128, nheads = 8, kv_mul = 4))   //! a full four-head slab (`live` 4): two fold rounds at subgroup 32
-            codec_attn_arm(t, CodecAttn(kv = KVDtype.f32, hs = 128, nheads = 8, kv_mul = 4, nsplit = 8, resubmit = true))
-            codec_attn_arm(t, CodecAttn(kv = KVDtype.f32, hs = 64, nheads = 10, kv_mul = 5))   //! a short last slab: `live` 1 on each kv head's second slab
-            codec_attn_arm(t, CodecAttn(kv = KVDtype.f32, hs = 192, nheads = 2, kv_mul = 2, keys = 70))   //! 24 words a V row, not a power of two: no fold
-            //! two rows a dispatch, each over its own mirror region: the row index and the slab arithmetic together, the
-            //! four-head stamp over the same rows held to the two-head slab bit for bit
-            codec_attn_arm(t, CodecAttn(kv = KVDtype.f32, hs = 64, nheads = 4, kv_mul = 2, nrows = 2, g4_twin = true))
-            codec_attn_arm(t, CodecAttn(kv = KVDtype.f32, hs = 64, nheads = 4, kv_mul = 2, nrows = 2, nsplit = 4, resubmit = true, g4_twin = true))
-            codec_attn_arm(t, CodecAttn(kv = KVDtype.f32, hs = 64, nheads = 4, kv_mul = 2, nrows = 4, nsplit = 4, resubmit = true))
-        } else {
-            t |> skip("dasVulkan not present")
-        }
-    }
-}
-
-[test]
-def test_vkd_at_attn(t0 : T?) {
-    t0 |> run("prefill attention class kernel == the CPU oracle (partial tiles, gated)") <| @(t : T?) {
-        static_if (typeinfo builtin_module_exists(vulkan)) {
-            if (!vk_moe_init()) {
-                t |> skip("no Vulkan device")
-                return
-            }
-            if (!ensure_at_attn_cls()) {
-                t |> skip("at_attn class declined on this device (workgroup cap)")
-                return
-            }
-            let nheads = 4
-            let kv_mul = 2
-            let rows = 13   // partial 8-tile: q0=8 has 5 valid rows — the row masks run
-            let w0 = 32     // nonzero window base: kend crosses the 32-position K tile → alpha rescale runs
-            let scale = 0.125
-            for (hs in [64, 256]) {   // dpl 2 (o0/o1 only) and dpl 8 (the o4..o7 arm); gate the wide one
-                let gated = hs == 256
-                let qd = nheads * hs
-                let kvd = (nheads / kv_mul) * hs
-                var f <- da_attn_b_fix(rows, nheads, kv_mul, hs, w0, 0, 0, 0.05, 1.8, 0.03, 1.4, false)   // K/V panels hold absolute positions [0, w0+rows)
-                var inscope gh <- row_fill(rows * qd, 29, 0, 0.06, 1.9, 61)
-                // oracle: causal rows (row r attends [0, w0 + r]); gated = out * sigmoid(gate)
-                var inscope y_ref <- da_attn_b_ref(f, scale, 0, 0.0)
-                if (gated) {
-                    for (i in range(rows * qd)) {
-                        y_ref[i] = sig_gate(y_ref[i], gh[i])
-                    }
-                }
-                with_cell_planes() $(var cp : CellPlanes) {
-                    // the class kernel: q@0, K@1, V@2, out@3 (pre-loaded with the gates)
-                    let pq = cp |> in_(f.qh)
-                    let pk = cp |> in_(f.kh)
-                    let pv = cp |> in_(f.vh)
-                    let py = cp |> io_(gh)
-                    var sc = cp |> cls_set(fixed_array(pq, pk, pv, py), @@set_at_attn_cls)
-                    var pc = AtAttnArgs(rows = uint(rows), w0 = uint(w0), qd = uint(qd),
-                        kvd = uint(kvd), hs = uint(hs), kv_mul = uint(kv_mul),
-                        flags = gated ? AT_ATTN_FLAG_GATED : 0u, dpl = uint(hs / 32), scale = scale)
-                    cp |> cell_record() $(raw2 : VkCommandBuffer; var h2 : VkHaz) {
-                        enc_at_attn_cls(raw2, h2, sc, pc, int64(nheads * ((rows + 7) / 8)))
-                    }
-                    check_rows(t, "at_attn hs {hs}{gated ? " gated" : ""} against the CPU oracle", cp |> plane_run(py), y_ref, BAR_APPROX_CTRL, qd, hs)
-                }
-                delete f
-                delete gh
-                delete y_ref
-            }
-        } else {
-            t |> skip("dasVulkan not present")
-        }
-    }
-}
-
-//! the cells' dispatch of one flash stamp through the prefill's ladders, the grid from the arm's rows a workgroup; generic so a build without the vulkan module never infers it
-def private enc_fa_tile(khr : bool; hs : int; gated, cap, sink, f16 : bool; raw; var h; var s; var pc; nheads, rows : int) {
-    fa_stamp_enc(khr, int64(hs), gated, cap, sink, f16, raw, h, s, pc, fa_stamp_wgs(khr, int64(nheads), int64(rows)))
-}
-
-def private fa_arm_ensure(khr : bool) : bool {
-    static_if (typeinfo builtin_module_exists(vulkan)) {
-        for (hs in fixed_array(64l, 128l, 256l, 512l)) {
-            if (!fa_stamp_pair_ensure(khr, hs, false, false, false, true)) return false
-        }
-        let h96_ok = khr || fa_stamp_pair_ensure(false, 96l, false, false, false, true)
-        if (!h96_ok || !fa_stamp_pair_ensure(khr, 64l, false, false, true, true)) return false
-    }
-    return true
-}
-
-//! a flash stamp's set over the cell planes `p` (q, the K and V shadows, the out plane), and the sink plane `psink` past them on a
-//! sink stamp; generic so a build without the vulkan module never infers it
-def private fa_cell_set(cp; khr, sink : bool; p; psink : int) {
-    if (sink) {
-        let p5 = fixed_array(p[0], p[1], p[2], p[3], psink)
-        return fa_stamp_sink_set(khr, gather_planes(cp.dev, p5), gather_planes(cp.bytes, p5), gather_planes(cp.hazard_bit, p5))
-    }
-    return fa_stamp_set(khr, gather_planes(cp.dev, p), gather_planes(cp.bytes, p), gather_planes(cp.hazard_bit, p))
-}
-
-//! the f16-out twin is held to the f32 stamp's output through the clamp-convert, not to the oracle: the two stamps agree bit for bit
-//! on a device that rounds the product to f32 before the f16 store, and within one f16 ulp on one that rounds the fused
-//! multiply-convert once (RDNA3's compiler), where an f32 product on an f16 midpoint lands one step apart - `f16_store_rounds_once`
-//! reads which off the device
-def private f16_store_rounds_once : bool {
-    static_if (typeinfo builtin_module_exists(vulkan)) {
-        if (!ensure_vkd_mulcvt()) {
-            return false
-        }
-        let n = 64
-        //! a times b is 1 + 2^-11 + 2^-34 - 2^-46: past the f16 midpoint 1 + 2^-11 by less than half an f32 ulp, so an f32 product sits on
-        //! the midpoint and ties to even (1), while the exact product rounds up (1 + 2^-10)
-        var xs, ys : array<float>
-        xs |> resize(n)
-        ys |> resize(n)
-        for (i in range(n)) {
-            xs[i] = 1.0 + 0.00048828125 - 0.00000011920928955078125
-            ys[i] = 1.0 + 0.00000011920928955078125
-        }
-        var hs : array<float16>
-        with_cell_planes() $(var cp : CellPlanes) {
-            let px = cp |> in_(xs)
-            let py = cp |> in_(ys)
-            let ph = cp |> out_words(int64(n) * 2l, NAN_SENTINEL_BITS)
-            var s = cp |> cls_set(fixed_array(px, py, ph), @@set_vkd_mulcvt)
-            var pc = VdArgs(n = uint(n))
-            cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
-                enc_vkd_mulcvt(raw, h, s, pc, int64(n))
-            }
-            delete hs
-            hs <- cp |> plane_as(ph, type<float16>, n)
-        }
-        let once = float(hs[0]) > 1.0
-        to_log(LOG_INFO, "the f16 store probe: (1 + 2^-11 - 2^-23) x (1 + 2^-23) stores as {float(hs[0])} - the device rounds the product {once ? "once" : "to f32 first"}\n")
-        delete xs
-        delete ys
-        delete hs
-        return once
-    } else {
-        return false
-    }
-}
-
-//! one f16 ulp at `v`
-def private f16_ulp(v : float) : float => v == 0.0 ? 0.0 : exp2(floor(log2(abs(v))) - 10.0)
-
-//! a ring arm's control holds: the ring's rows read a position a row (`flat`, empty on an arm with no ring) miss the oracle
-def private fa_ring_control(t : T?; tag : string; flat, want : array<float>) {
-    return if (empty(flat))
-    t |> success(mismatch_approx(flat, want) > 0, "{tag} control: the ring's rows read a position a row miss the oracle")
-}
-
-//! a ring arm's control: the flash tile's dispatch again with `ring` 0, its out plane read back; nothing off an arm with no ring
-def private fa_flat_read(var cp; khr : bool; hs : int; sink : bool; var sfa; pcf; nheads, rows, py : int) : array<float> {
-    return <- array<float>() if (pcf.ring == 0u)
-    var pflat = pcf
-    pflat.ring = 0u
-    cp |> plane_refill(py)
-    cp |> cell_record() $(raw2 : VkCommandBuffer; var h2 : VkHaz) {
-        enc_fa_tile(khr, hs, false, false, sink, false, raw2, h2, sfa, pflat, nheads, rows)
-    }
-    return <- cp |> plane_run(py)
-}
-
-def private fa_tile_run(t : T?; khr : bool) {   // nolint:STYLE037,LINT019 — one arm table over both flash arms; the head-96 skip is its one branch past the limit
-    static_if (typeinfo builtin_module_exists(vulkan)) {
-        let tag = khr ? "fa_khr" : "fa_cm2"
-        let once = f16_store_rounds_once()
-        let nheads = 4
-        let kv_mul = 2
-        let rows = 77    // partial 64-tile: q0=64 has 13 valid rows — clamp loads + store discard run (the KHR tile: five 16-row tiles, the last 13 deep)
-        let w0 = 64      // nonzero window base: the causal bound crosses K tiles mid-window
-        let scale = 0.125
-        //! the sink arms (gpt-oss): the h64 stamps seeded with a per-head sink logit, whole and under a sliding window
-        //! the lead arm: the rows sit `lead` rows into the q and out planes (`FaArgs.row0`, a segment's window row base), the lead rows poison the tile must leave
-        //! the ring arms: the K/V planes hold the last `ring` positions at their `kv_ring_row` slots, the rows past the ring the slack's value
-        for (arm in fixed_array((hs = 64, window = 0, sink = false, lead = 0, ring = 0), (hs = 128, window = 0, sink = false, lead = 0, ring = 0),
-                (hs = 256, window = 0, sink = false, lead = 0, ring = 0), (hs = 512, window = 0, sink = false, lead = 0, ring = 0),
-                (hs = 128, window = 40, sink = false, lead = 0, ring = 0), (hs = 64, window = 0, sink = true, lead = 0, ring = 0),
-                (hs = 64, window = 40, sink = true, lead = 0, ring = 0), (hs = 64, window = 0, sink = false, lead = 8, ring = 0),
-                (hs = 128, window = 40, sink = false, lead = 0, ring = 128), (hs = 256, window = 40, sink = false, lead = 0, ring = 128),
-                (hs = 96, window = 0, sink = false, lead = 0, ring = 0), (hs = 96, window = 40, sink = false, lead = 0, ring = 0))) {
-            let hs = arm.hs
-            continue if (khr && hs == 96)   // the KHR flash tile has no head-96 stamp (../ARCHITECTURE_GPU_SHARED_ATTN.md#flash-attn-tile)
-            let window = arm.window   //! a sliding layer's arm: the queries attend the `window` positions up to their own
-            let sink = arm.sink
-            let lead = arm.lead
-            let ring = arm.ring
-            let qrows = lead + rows
-            let stag = sink ? " sink" : (lead > 0 ? " row0 {lead}" : (ring > 0 ? " ring {ring}" : ""))
-            var inscope sinkh : array<float>
-            sinkh |> resize(nheads)
-            for (hh in range(nheads)) {
-                sinkh[hh] = 0.45 * float(hh) - 0.3   //! sink logits inside the scaled scores' range, one under and the rest over the row's typical max
-            }
-            let qd = nheads * hs
-            let kvd = (nheads / kv_mul) * hs
-            let kpos = w0 + rows
-            let kpad = kpos + FA_SHADOW_SLACK_ROWS
-            var inscope qh <- row_fill(rows * qd, 41, 0, 0.05, 1.8, 73)
-            var inscope qfull : array<float>   //! the q plane the tile reads: `lead` rows of poison, then the rows
-            qfull |> resize(qrows * qd)
-            for (i in range(qrows * qd)) {
-                qfull[i] = i < lead * qd ? 10000.0 : qh[i - lead * qd]
-            }
-            var inscope kh <- row_fill(kpos * kvd, 17, 0, 0.03, 1.4, 97)
-            var inscope vh <- row_fill(kpos * kvd, 53, 0, 0.04, 1.7, 89)
-            kh |> resize(kpad * kvd)
-            vh |> resize(kpad * kvd)
-            for (i in range(kpos * kvd, kpad * kvd)) {   //! the slack rows carry a large finite value, not zero: a masked probability that is not exactly zero would drag it into the output
-                kh[i] = 10000.0
-                vh[i] = 10000.0
-            }
-            var inscope kplane <- ring_laid_rows(kh, 1, kpad, kpos, kvd, ring, 0, 10000.0)
-            var inscope vplane <- ring_laid_rows(vh, 1, kpad, kpos, kvd, ring, 0, 10000.0)
-            var inscope y_cls : array<float>
-            var inscope y_flat_read : array<float>   //! a ring arm's control: the ring's rows read a position a row
-            var inscope y16_fused, y16_split : array<float16>
-            with_cell_planes() $(var cp : CellPlanes) {
-                let pq = cp |> in_(qfull)
-                let pk = cp |> in_(kplane)
-                let pv = cp |> in_(vplane)
-                let pk_shadow16 = cp |> out_words(int64(kpad * kvd) * 2l, NAN_SENTINEL_BITS)
-                let pv_shadow16 = cp |> out_words(int64(kpad * kvd) * 2l, NAN_SENTINEL_BITS)
-                let py = cp |> out_(qrows * qd)
-                //! the compared f16 planes under a NaN in both halves: a dead leg on either side reads as a mismatch
-                let py16f = cp |> out_words(int64(qrows * qd) * 2l, NAN_SENTINEL_BITS)   // the f16-out twin's plane
-                let py16s = cp |> out_words(int64(qrows * qd) * 2l, NAN_SENTINEL_BITS)   // the split pair's: f32 out -> the clamp-convert
-                let psink = cp |> in_(sinkh)
-                var sck = cp |> cls_set(fixed_array(pk, pk_shadow16), @@set_tower_clamp_cvt_cls)
-                var scv = cp |> cls_set(fixed_array(pv, pv_shadow16), @@set_tower_clamp_cvt_cls)
-                var sfa = fa_cell_set(cp, khr, sink, fixed_array(pq, pk_shadow16, pv_shadow16, py), psink)
-                var sfa16 = fa_cell_set(cp, khr, sink, fixed_array(pq, pk_shadow16, pv_shadow16, py16f), psink)
-                var scy = cp |> cls_set(fixed_array(py, py16s), @@set_tower_clamp_cvt_cls)
-                var pcv = gk_f16_rows_args(uint(kpad * kvd))
-                let cvtwgs = int64((kpad * kvd / 4 + 255) / 256)
-                var pcf = FaArgs(rows = uint(rows), w0 = uint(w0), qd = uint(qd),
-                    kvd = uint(kvd), kv_mul = uint(kv_mul), kvbase = 0u, scale = scale, window = uint(window), sinkoff = 0u, row0 = uint(lead),
-                    ring = uint(ring))
-                var pcy = gk_f16_rows_args(uint(qrows * qd))
-                cp |> cell_record() $(raw2 : VkCommandBuffer; var h2 : VkHaz) {
-                    enc_tower_clamp_cvt_cls(raw2, h2, sck, pcv, cvtwgs)
-                    enc_tower_clamp_cvt_cls(raw2, h2, scv, pcv, cvtwgs)
-                    enc_fa_tile(khr, hs, false, false, sink, false, raw2, h2, sfa, pcf, nheads, rows)
-                    enc_fa_tile(khr, hs, false, false, sink, true, raw2, h2, sfa16, pcf, nheads, rows)
-                    enc_tower_clamp_cvt_cls(raw2, h2, scy, pcy, int64((qrows * qd / 4 + 255) / 256))   // the split pair's own convert over the f32 out: the fused twin's true peer
-                }
-                delete y_cls
-                delete y16_fused
-                delete y16_split
-                var inscope y_full <- cp |> plane_run(py)
-                var inscope y16f_full <- cp |> plane_as(py16f, type<float16>, qrows * qd)
-                var inscope y16s_full <- cp |> plane_as(py16s, type<float16>, qrows * qd)
-                var lead_moved = 0
-                var lead_first = -1
-                for (i in range(lead * qd)) {   //! the lead rows stay the out plane's NaN sentinel: the tile wrote nothing under its row base
-                    if (unsafe(reinterpret<uint>(y_full[i])) != NAN_SENTINEL_BITS) {
-                        lead_first = lead_first < 0 ? i : lead_first
-                        lead_moved++
-                    }
-                }
-                t |> equal(lead_moved, 0, "{tag} hs {hs}{stag}: the {lead} lead rows under the row base stay untouched ({lead_moved} elements written, the first at {lead_first})")
-                y_cls <- [for (i in range(rows * qd)); y_full[lead * qd + i]]
-                y16_fused <- [for (i in range(rows * qd)); y16f_full[lead * qd + i]]
-                y16_split <- [for (i in range(rows * qd)); y16s_full[lead * qd + i]]
-                delete y_flat_read
-                y_flat_read <- fa_flat_read(cp, khr, hs, sink, sfa, pcf, nheads, rows, py)
-            }
-            // oracle mirrors the kernel's f16 grid: q pre-scales then rounds (the kernel's
-            // MatrixTimesScalar-then-convert), K/V round through the shadow; softmax stays f32. The cm2 kernel's
-            // O accumulates in f16 under the row-max bias (every P at an eighth or under, the normalized row a
-            // convex combination of V rows with |v| <= 1 on this fixture), so the f16 running sum's rounding
-            // stays under the 2e-3 relative bar mismatch_approx holds against the f32 oracle, and the f16 O
-            // twin against the f32 stamp pins the same bar - the bound is this fixture's magnitudes, not a proof.
-            // The KHR kernel rounds P to f16, sums each 64-key step in f32 and rounds the step once to f16 before its f32 o row: the same bar.
-            var inscope nosink : array<float>
-            var inscope y_ref <- sink ? fa_oracle(qh, kh, vh, rows, w0, nheads, hs, kv_mul, kvd, scale, window, false, sinkh) : fa_oracle(qh, kh, vh, rows, w0, nheads, hs, kv_mul, kvd, scale, window, false, nosink)
-            check_rows(t, "{tag} hs {hs} window {window}{stag} against the CPU oracle", y_cls, y_ref, BAR_APPROX_CTRL, qd, hs)
-            fa_ring_control(t, "{tag} hs {hs} window {window}{stag}", y_flat_read, y_ref)
-            if (sink) {   //! the sink control: the sink-free oracle over the same rows must miss - the phantom key carries mass
-                var inscope y_nosink <- fa_oracle(qh, kh, vh, rows, w0, nheads, hs, kv_mul, kvd, scale, window, false, nosink)
-                check_exceeds(t, "{tag} hs {hs} window {window} sink control: the sink moves the output off the sink-free oracle", y_cls, y_nosink, BAR_APPROX)
-            }
-            var bad16 = 0
-            var one_off = 0
-            for (i in range(rows * qd)) {
-                let fused = float(y16_fused[i])
-                let split = float(y16_split[i])
-                if (fused != split) {
-                    if (once && abs(fused - split) <= f16_ulp(split)) {
-                        one_off++
-                        continue
-                    }
-                    if (bad16 < 6) {
-                        to_log(LOG_INFO, "  {tag} hs {hs}{stag} f16-out twin differs at [{i}]: fused {fused} split {split}, the f32 stamp's {y_cls[i]} (bits {unsafe(reinterpret<uint>(y_cls[i]))})\n")
-                    }
-                    bad16++
-                }
-            }
-            let how = once ? " within one f16 ulp (the device rounds the store once; {one_off} one step apart)" : ""
-            t |> success(bad16 == 0, "{tag} hs {hs}{stag} f16-out twin == the f32 stamp's clamp-convert{how} ({bad16} of {rows * qd} off)")
-            delete sinkh
-            delete qh
-            delete kh
-            delete vh
-            delete y_ref
-            delete y_cls
-            delete y16_fused
-            delete y16_split
-        }
-    }
-}
-
-[test]
-def test_vkd_fa_cm2(t0 : T?) {
-    t0 |> run("cm2 flash-attention family == the CPU oracle (h64 + h128 + h256, clamp-convert-staged planes)") <| @(t : T?) {
-        static_if (typeinfo builtin_module_exists(vulkan)) {
-            if (!ensure_tower_clamp_cvt_cls()) {   // engage the device without touching coopmat rails
-                t |> skip("no Vulkan device")
-                return
-            }
-            if (!g_gpu.has_coopmat2_fa) {
-                t |> skip("device lacks the cm2 flash-attention trio")
-                return
-            }
-            verify(fa_arm_ensure(false), "the fa class rails and their f16-out twins must engage on an fa-capable device")
-            fa_tile_run(t, false)
-        } else {
-            t |> skip("dasVulkan not present")
-        }
-    }
-}
-
-[test]
-def test_vkd_fa_khr(t0 : T?) {
-    t0 |> run("KHR flash-attention family == the CPU oracle (h64 + h128 + h256 + h512, the window arm, clamp-convert-staged planes)") <| @(t : T?) {
-        static_if (typeinfo builtin_module_exists(vulkan)) {
-            if (!ensure_tower_clamp_cvt_cls()) {
-                t |> skip("no Vulkan device")
-                return
-            }
-            if (!khr_kq_tile_on()) {
-                t |> skip("device lacks KHR cooperative matrices at subgroup 32")
-                return
-            }
-            if (!fa_arm_ensure(true)) {
-                t |> skip("the KHR fa stamps decline on this device: their 38912 B of workgroup memory is past its floor")
-                return
-            }
-            fa_tile_run(t, true)
-        } else {
-            t |> skip("dasVulkan not present")
-        }
-    }
-}
-
-//! the h256 flash stamps at one geometry, the f32 and f16-out twins against the CPU oracle over the kernel's f16 grid. `gated`:
-//! a [q | gate] q panel (per-head stride 2 x hs), the oracle scaled by the sigmoid of the gate half - the Qwen3.5 attention shape;
-//! else the softcap stamps at gemma-2's shape, wide q and k values whose scaled scores run past `cap`, the oracle under the same
-//! cap. The control is the plain oracle - ungated, or uncapped - which must miss the kernel. Returns (f32 mismatches, f16-vs-f32
-//! mismatches, outputs compared - 0 when the control does not miss, f32 mismatches with one oracle element poisoned, f16-vs-f32
-//! mismatches with one f32 element poisoned, and the out planes' elements past the rows the last tile covers that moved).
-def private fa_h256_run(nheads, kv_mul, rows, w0 : int; gated : bool; cap : float; khr : bool) : tuple<bad : int; bad16 : int; n : int; poisoned : int; poisoned16 : int; slack_moved : int> {
-    static_if (typeinfo builtin_module_exists(vulkan)) {
-        let rows_pad = ((rows + 63) / 64) * 64   //! the cm2 tile covers 64 rows, the KHR tile 16: the out planes carry the larger tile's rows past `rows`
-        var slack_moved = 0
-        let hs = 256
-        let qhs = gated ? 2 * hs : hs
-        let scale = 0.0625
-        let qd = nheads * hs
-        let qrow = nheads * qhs
-        let kvd = (nheads / kv_mul) * hs
-        let kpos = w0 + rows
-        let kpad = kpos + FA_SHADOW_SLACK_ROWS
-        //! the softcap fixture's wide q and k values: the scaled scores run past the cap, so the cap is load-bearing
-        var qp <- row_fill(rows * qrow, 41, 0, gated ? 0.05 : 0.25, gated ? 1.8 : 9.0, 73)
-        var kh <- row_fill(kpos * kvd, 17, 0, gated ? 0.03 : 0.15, gated ? 1.4 : 7.0, 97)
-        var vh <- row_fill(kpos * kvd, 53, 0, 0.04, 1.7, 89)
-        kh |> resize(kpad * kvd)
-        vh |> resize(kpad * kvd)
-        var y_cls : array<float>
-        var y16 : array<float16>
-        with_cell_planes() $(var cp : CellPlanes) {
-            let pq = cp |> in_(qp)
-            let pk = cp |> in_(kh)
-            let pv = cp |> in_(vh)
-            let pk_shadow16 = cp |> out_words(int64(kpad * kvd) * 2l, NAN_SENTINEL_BITS)
-            let pv_shadow16 = cp |> out_words(int64(kpad * kvd) * 2l, NAN_SENTINEL_BITS)
-            let py = cp |> out_(rows * qd, 0, (rows_pad - rows) * qd)   //! the last tile's rows past `rows` stay under the sentinel
-            let py16 = cp |> out_words(int64(rows_pad * qd) * 2l, NAN_SENTINEL_BITS)
-            var sck = cp |> cls_set(fixed_array(pk, pk_shadow16), @@set_tower_clamp_cvt_cls)
-            var scv = cp |> cls_set(fixed_array(pv, pv_shadow16), @@set_tower_clamp_cvt_cls)
-            var sfa = fa_cell_set(cp, khr, false, fixed_array(pq, pk_shadow16, pv_shadow16, py), -1)
-            var sfa16 = fa_cell_set(cp, khr, false, fixed_array(pq, pk_shadow16, pv_shadow16, py16), -1)
-            var pcv = gk_f16_rows_args(uint(kpad * kvd))
-            let cvtwgs = int64((kpad * kvd / 4 + 255) / 256)
-            var pcf = FaArgs(rows = uint(rows), w0 = uint(w0), qd = uint(qd), kvd = uint(kvd), kv_mul = uint(kv_mul), kvbase = 0u,
-                scale = scale, cap = cap, qstride = gated ? uint(qrow) : 0u, qhs = gated ? uint(qhs) : 0u)
-            let capped = !gated
-            cp |> cell_record() $(raw2 : VkCommandBuffer; var h2 : VkHaz) {
-                enc_tower_clamp_cvt_cls(raw2, h2, sck, pcv, cvtwgs)
-                enc_tower_clamp_cvt_cls(raw2, h2, scv, pcv, cvtwgs)
-                enc_fa_tile(khr, hs, gated, capped, false, false, raw2, h2, sfa, pcf, nheads, rows)
-                enc_fa_tile(khr, hs, gated, capped, false, true, raw2, h2, sfa16, pcf, nheads, rows)
-            }
-            delete y_cls
-            delete y16
-            y_cls <- cp |> plane_run(py)
-            y16 <- cp |> plane_as(py16, type<float16>, rows * qd)
-            if (rows_pad > rows) {   //! a whole number of tiles leaves no slack to read
-                var inscope y_whole <- cp |> plane_whole(py)
-                var inscope slack16 <- cp |> plane_as(py16, type<uint>, (rows_pad - rows) * qd / 2, rows * qd / 2)
-                for (i in range(rows * qd, rows_pad * qd)) {
-                    slack_moved += float_bits_to_uint(y_whole[i]) != NAN_SENTINEL_BITS ? 1 : 0
-                }
-                for (w in slack16) {
-                    slack_moved += w != NAN_SENTINEL_BITS ? 1 : 0
-                }
-            }
-        }
-        // oracle: q (the gate halves too) pre-scales and rounds to f16 like the kernel, K / V round through the shadow; the gate reads the f32 panel
-        let nosink : array<float>
-        var y_ref <- fa_oracle(qp, kh, vh, rows, w0, nheads, hs, kv_mul, kvd, scale, 0, gated, nosink, cap)
-        var qplain <- q_halves(qp, rows, nheads, hs, qhs)
-        var y_plain <- fa_oracle(qplain, kh, vh, rows, w0, nheads, hs, kv_mul, kvd, scale, 0, false, nosink)   //! the plain rows: ungated, uncapped
-        let bad = mismatch_approx(y_cls, y_ref)
-        // the largest difference, pass or fail - the worst (row, head) by relative error and how much of it sits off: a whole
-        // row-head off is its softmax, one column its store
-        var worst = 0.0
-        var worst_at = 0
-        for (i in range(rows * qd)) {
-            let rel = abs(y_cls[i] - y_ref[i]) / max(abs(y_ref[i]), 1e-3)
-            if (rel > worst) {
-                worst = rel
-                worst_at = i
-            }
-        }
-        let wr = worst_at / qd
-        let wh = (worst_at % qd) / hs
-        var past = 0
-        var rel_sum = 0.0
-        for (c in range(hs)) {
-            let i = wr * qd + wh * hs + c
-            let rel = abs(y_cls[i] - y_ref[i]) / max(abs(y_ref[i]), 1e-3)
-            rel_sum += rel
-            past += rel > 1e-2 ? 1 : 0
-        }
-        let at = element_at(worst_at, Shape(row_width = qd, head_width = hs))
-        to_log(LOG_INFO, "  fa h256 {khr ? "khr" : "cm2"}{gated ? " gated" : ""} cap {cap}: the largest difference {at} kernel {y_cls[worst_at]} oracle {y_ref[worst_at]} ({worst} relative, {bad} of {rows * qd} past the bar); that row-head's mean relative error {rel_sum / float(hs)}, {past} of {hs} columns past 1e-2\n")
-        let bad_plain = mismatch_approx(y_cls, y_plain)   //! the control: the same rows without the gate or the cap must miss, or the fixture never reached them
-        y_ref[hs + 3] += 0.5
-        let poisoned = mismatch_approx(y_cls, y_ref)
-        y_ref[hs + 3] -= 0.5
-        // the f16 twin's 2e-3 bar: the cm2 arm accumulates O in f16 under the row-max bias; the KHR arm packs P to f16 and rounds
-        // each 64-key step's partial sum to f16 once before its f32 row - on this fixture |v| <= 1.7, every row a convex
-        // combination of V rows, so one f16 rounding of a partial sum is under 1.7 * 2^-11 = 8.3e-4 and the steps' roundings
-        // carry both signs; the bar is this fixture's magnitudes, not a proof (test_vkd_fa_cm2's oracle note says the same)
-        let bad16 = f16_twin_off(y16, y_cls)
-        y_cls[hs + 5] += 0.5   //! the control: one poisoned f32 element reds the f16 compare by exactly one
-        let poisoned16 = f16_twin_off(y16, y_cls)
-        y_cls[hs + 5] -= 0.5
-        delete qp
-        delete kh
-        delete vh
-        delete qplain
-        delete y_ref
-        delete y_plain
-        delete y_cls
-        delete y16
-        return (bad = bad, bad16 = bad16, n = bad_plain > 0 ? rows * qd : 0, poisoned = poisoned, poisoned16 = poisoned16, slack_moved = slack_moved)
-    } else {
-        return (bad = 0, bad16 = 0, n = 0, poisoned = 0, poisoned16 = 0, slack_moved = 0)
-    }
-}
-
-//! the f16-out twin's elements off the f32 stamp past 2e-3 of the larger magnitude
-def private f16_twin_off(y16 : array<float16>; y : array<float>) : int {
-    var off = 0
-    for (h, v in y16, y) {
-        if (!(abs(float(h) - v) <= 2e-3 * max(1.0, abs(v)))) {
-            off++
-        }
-    }
-    return off
-}
-
-//! a gated h256 cell at one geometry on the cm2 tile or the KHR one (`khr`): the gate moves the output, the kernel matches the
-//! gated oracle, the bar reds one poisoned oracle element, the f16-out twin matches the f32 stamp rounded
-def private fa_h256_gated_cell(t : T?; tag : string; nheads, kv_mul, rows, w0 : int; khr : bool) {
-    static_if (typeinfo builtin_module_exists(vulkan)) {
-        if (!ensure_tower_clamp_cvt_cls()) {
-            t |> skip("no Vulkan device")
-            return
-        }
-        if (khr ? !(g_gpu.has_coopmat && khr_kq_tile_on()) : !g_gpu.has_coopmat2_fa) {
-            t |> skip(khr ? "device lacks KHR cooperative matrices at subgroup 32" : "device lacks the cm2 flash-attention trio")
-            return
-        }
-        verify(fa_stamp_pair_ensure(khr, 256l, true, false, false, true), "the gated h256 fa rails must engage on a device that serves the tile")
-        let r = fa_h256_run(nheads, kv_mul, rows, w0, true, 0.0, khr)
-        t |> success(r.n > 0, "{tag}: the gate moves the output (the ungated oracle misses the kernel)")
-        t |> success(r.bad == 0, "{tag}: matches the CPU oracle ({r.bad} of {r.n} off)")
-        t |> equal(r.poisoned, 1, "{tag}: the bar reds one poisoned oracle element")
-        t |> success(r.bad16 == 0, "{tag}: f16-out twin == the f32 stamp rounded ({r.bad16} of {r.n} off)")
-        t |> equal(r.poisoned16, r.bad16 + 1, "{tag}: the f16 bar reds one poisoned f32 element")
-        t |> equal(r.slack_moved, 0, "{tag}: the out planes' rows past the last tile's rows stay under the sentinel ({r.slack_moved} moved)")
-    } else {
-        t |> skip("dasVulkan not present")
-    }
-}
-
-[test]
-def test_vkd_fa_cm2_h256_gated(t0 : T?) {
-    t0 |> run("cm2 flash-attention h256 gated == the CPU oracle (q at the head's stride, sigmoid gate on the output)") <| @(t : T?) {
-        fa_h256_gated_cell(t, "fa_cm2 h256 gated", 4, 2, 77, 64, false)   // partial 64-tile, a nonzero window base
-    }
-}
-
-[test]
-def test_vkd_fa_khr_h256_gated(t0 : T?) {
-    t0 |> run("KHR flash-attention h256 gated == the CPU oracle (q at the head's stride, sigmoid gate on the output)") <| @(t : T?) {
-        fa_h256_gated_cell(t, "fa_khr h256 gated", 4, 2, 77, 64, true)   // a partial 16-row tile, a nonzero window base
-    }
-    t0 |> run("KHR flash-attention h256 gated at the 35B-A3B geometry (16 heads / 2 kv, 512 rows at w0 0) == the CPU oracle") <| @(t : T?) {
-        fa_h256_gated_cell(t, "fa_khr h256 gated 35B", 16, 8, 512, 0, true)
-    }
-}
-
-//! the h256 softcap stamps under cap 50 on the cm2 tile or the KHR one (`khr`), 4 heads over 2 kv heads at 77 rows from
-//! position 64 (a partial 64-tile, a nonzero window base): the capped oracle matches, the uncapped one misses, the f16-out twin
-//! matches the f32 stamp rounded
-def private fa_h256_softcap_cell(t : T?; khr : bool) {
-    static_if (typeinfo builtin_module_exists(vulkan)) {
-        if (!ensure_tower_clamp_cvt_cls()) {
-            t |> skip("no Vulkan device")
-            return
-        }
-        if (khr ? !(g_gpu.has_coopmat && khr_kq_tile_on()) : !g_gpu.has_coopmat2_fa) {
-            t |> skip(khr ? "device lacks KHR cooperative matrices at subgroup 32" : "device lacks the cm2 flash-attention trio")
-            return
-        }
-        let tag = khr ? "fa_khr" : "fa_cm2"
-        verify(fa_stamp_pair_ensure(khr, 256l, false, true, false, true), "the softcap h256 fa rails must engage on a device that serves the tile")
-        let r = fa_h256_run(4, 2, 77, 64, false, 50.0, khr)
-        t |> success(r.n > 0, "the softcap fixture's scores reach the cap (the uncapped oracle misses the kernel)")
-        t |> success(r.bad == 0, "{tag} h256 softcap matches the capped CPU oracle ({r.bad} of {r.n} off)")
-        t |> equal(r.poisoned, 1, "{tag} h256 softcap: the bar reds one poisoned oracle element")
-        t |> success(r.bad16 == 0, "{tag} h256 softcap f16-out twin == the f32 stamp rounded ({r.bad16} of {r.n} off)")
-        t |> equal(r.poisoned16, r.bad16 + 1, "{tag} h256 softcap: the f16 bar reds one poisoned f32 element")
-        t |> equal(r.slack_moved, 0, "{tag} h256 softcap: the out planes' rows past the last tile's rows stay under the sentinel ({r.slack_moved} moved)")
-    } else {
-        t |> skip("dasVulkan not present")
-    }
-}
-
-[test]
-def test_vkd_fa_cm2_h256_softcap(t0 : T?) {
-    t0 |> run("cm2 flash-attention h256 softcap stamps == the CPU oracle under cap 50 (gemma-2's shape; the uncapped oracle as the control)") <| @(t : T?) {
-        fa_h256_softcap_cell(t, false)
-    }
-}
-
-[test]
-def test_vkd_fa_khr_h256_softcap(t0 : T?) {
-    t0 |> run("KHR flash-attention h256 softcap stamps == the CPU oracle under cap 50 (gemma-2's shape; the uncapped oracle as the control)") <| @(t : T?) {
-        fa_h256_softcap_cell(t, true)
-    }
-}
-
-// the 9B's own shape: 16 heads over 4 kv heads, a full 512-row window from position 0
-[test]
-def test_vkd_fa_cm2_h256_9b(t0 : T?) {
-    t0 |> run("cm2 flash-attention h256 gated at the 9B geometry (16 heads / 4 kv, 512 rows at w0 0) == the CPU oracle") <| @(t : T?) {
-        fa_h256_gated_cell(t, "fa_cm2 h256 gated 9B", 16, 4, 512, 0, false)
-    }
-}
-
-let private DAB_B = 0          //! the batched decode attention stamps: the 8-row tile, the wide-head 4-row tile, the h128 coopmat tile, and the f16-mirror twins of all three
-let private DAB_BW = 1
-let private DAB_H128 = 2
-let private DAB_B_F16 = 3
-let private DAB_H128_F16 = 4
-let private DAB_BW_F16 = 5
-
-//! whether a DAB_* stamp reads f16 mirrors
-def private dab_f16(stamp : int) : bool => stamp == DAB_B_F16 || stamp == DAB_H128_F16 || stamp == DAB_BW_F16
-
-//! a batched decode attention fixture: `npos` query rows over mirrors holding positions [0, w0 + npos) past `kbase` / `vbase` words
-struct private DaAttnBFix {
-    qh, kh, vh : array<float>
-    gate : array<float>   //! a gated model's gate half beside each head's q (`npos` x `nheads` x `hs`); empty = ungated
-    npos, nheads, kv_mul, hs, w0, kbase, vbase : int
-}
-
-//! q at (i * 41) % 73 x `qm` - `qa`, K at (i * 17) % 97 x `km` - `ka`, V at (i * 53) % 89 x 0.04 - 1.7; `f16` puts K and V on the f16 grid the f16 mirrors hold
-def private da_attn_b_fix(npos, nheads, kv_mul, hs, w0, kbase, vbase : int; qm, qa, km, ka : float; f16 : bool) : DaAttnBFix {
-    let qd = nheads * hs
-    let kvd = (nheads / kv_mul) * hs
-    let kpos = w0 + npos
-    var f = DaAttnBFix(npos = npos, nheads = nheads, kv_mul = kv_mul, hs = hs, w0 = w0, kbase = kbase, vbase = vbase)
-    f.qh <- [for (i in range(npos * qd)); float((i * 41) % 73) * qm - qa]
-    f.kh <- [for (i in range(kbase + kpos * kvd)); f16 ? f16r(float((i * 17) % 97) * km - ka) : float((i * 17) % 97) * km - ka]
-    f.vh <- [for (i in range(vbase + kpos * kvd)); f16 ? f16r(float((i * 53) % 89) * 0.04 - 1.7) : float((i * 53) % 89) * 0.04 - 1.7]
-    return <- f
-}
-
-//! the batched cells' oracle over the offset mirrors: row r attends [kstart, w0 + r], kstart the `window`'s start, every score under `cap`
-def private da_attn_b_ref(f : DaAttnBFix; scale : float; window : int; cap : float) : array<float> {
-    let qd = f.nheads * f.hs
-    let kvd = (f.nheads / f.kv_mul) * f.hs
-    var y : array<float>
-    y |> resize(f.npos * qd)
-    for (r in range(f.npos)) {
-        let cnt = f.w0 + r + 1
-        let kstart = window > 0 && cnt > window ? cnt - window : 0
-        attn_heads_oracle(f.qh, r * qd, f.kh, f.kbase, f.vh, f.vbase, kvd, f.nheads, f.hs, f.kv_mul, cnt, scale, y, r * qd, kstart, cap)
-    }
-    if (!empty(f.gate)) {
-        for (i in range(length(y))) {
-            y[i] = sig_gate(y[i], f.gate[i])
-        }
-    }
-    return <- y
-}
-
-//! the [q | gate] panel a gated model's q rows take: each head's `hs` q values, then its `hs` gate values
-def private gated_q_panel(f : DaAttnBFix) : array<float> {
-    let hs = f.hs
-    return <- [for (i in range(2 * length(f.qh))); (i / hs) % 2 == 0 ? f.qh[(i / (2 * hs)) * hs + i % hs] : f.gate[(i / (2 * hs)) * hs + i % hs]]
-}
-
-//! one batched decode attention dispatch through `stamp` (a DAB_*) over the fixture: q, the K and V mirrors (f16 halves on an f16
-//! stamp), the out plane under the sentinel, a workgroup a head per stamp tile of rows; the rows come back
-//! under `lead` > 0 the rows sit `lead` rows into the q and out planes (`DaAttnBArgs.row0`, a segment's window row base) behind
-//! poison rows, and the WHOLE out plane comes back - the lead rows at the NaN sentinel, then the rows
-//! `lead` poison rows ahead of the rows and `trail` behind them in the q and out planes (a co-segment's rows, left alone)
-def private da_attn_b_run(f : DaAttnBFix; stamp : int; scale, cap : float; window : int; lead : int = 0; trail : int = 0; ring : int = 0) : array<float> {
-    var y : array<float>
-    static_if (typeinfo builtin_module_exists(vulkan)) {
-        let f16 = dab_f16(stamp)
-        let tile = stamp == DAB_BW || stamp == DAB_BW_F16 ? 4 : (stamp == DAB_H128 || stamp == DAB_H128_F16 ? 32 : 8)
-        let qd = f.nheads * f.hs
-        let kvd = (f.nheads / f.kv_mul) * f.hs
-        let gated = !empty(f.gate)
-        let qrow = gated ? 2 * qd : qd
-        var qlead <- [for (_i in range(lead * qrow)); 10000.0]
-        with_cell_planes() $(var cp : CellPlanes) {
-            var qrows <- gated ? gated_q_panel(f) : clone_to_move(f.qh)
-            qlead |> push_from(qrows)
-            for (_i in range(trail * qrow)) {
-                qlead |> push(10000.0)
-            }
-            let pq = cp |> in_(qlead)
-            let pk = f16 ? in_plain(cp, pack_f16(f.kh)) : in_(cp, f.kh)
-            let pv = f16 ? in_plain(cp, pack_f16(f.vh)) : in_(cp, f.vh)
-            let py = cp |> out_((lead + f.npos + trail) * qd)
-            let planes = fixed_array(pq, pk, pv, py)
-            let bufs = gather_planes(cp.dev, planes)
-            let sizes = gather_planes(cp.bytes, planes)
-            let bits = gather_planes(cp.hazard_bit, planes)
-            var pc = DaAttnBArgs(npos = uint(f.npos), nh = uint(f.nheads), kvd = uint(kvd), hs = uint(f.hs), kv_mul = uint(f.kv_mul),
-                kbase = uint(f.kbase), vbase = uint(f.vbase), w0 = uint(f.w0), scale = scale, window = uint(window), cap = cap,
-                qhs = gated ? uint(2 * f.hs) : 0u, gated = gated ? 1u : 0u, row0 = uint(lead), ring = uint(ring))
-            let wgs = int64(f.nheads * ((f.npos + tile - 1) / tile))
-            cp |> cell_record() $(raw2 : VkCommandBuffer; var h2 : VkHaz) {
-                if (stamp == DAB_B) {
-                    var sc = set_da_attn_b_cls(bufs, sizes, bits)
-                    enc_da_attn_b_cls(raw2, h2, sc, pc, wgs)
-                } elif (stamp == DAB_BW) {
-                    var sc = set_da_attn_bw_cls(bufs, sizes, bits)
-                    enc_da_attn_bw_cls(raw2, h2, sc, pc, wgs)
-                } elif (stamp == DAB_H128) {
-                    var sc = set_da_attn_b_h128_cls(bufs, sizes, bits)
-                    enc_da_attn_b_h128_cls(raw2, h2, sc, pc, wgs)
-                } elif (stamp == DAB_B_F16) {
-                    var sc = set_da_attn_b_f16_cls(bufs, sizes, bits)
-                    enc_da_attn_b_f16_cls(raw2, h2, sc, pc, wgs)
-                } elif (stamp == DAB_BW_F16) {
-                    var sc = set_da_attn_bw_f16_cls(bufs, sizes, bits)
-                    enc_da_attn_bw_f16_cls(raw2, h2, sc, pc, wgs)
-                } else {
-                    var sc = set_da_attn_b_h128_f16_cls(bufs, sizes, bits)
-                    enc_da_attn_b_h128_f16_cls(raw2, h2, sc, pc, wgs)
-                }
-            }
-            y <- cp |> plane_run(py) // nolint:PERF030,LINT019 - fresh; Vulkan cell runs once
-        }
-    }
-    return <- y
-}
-
-//! the batched decode attention at a row base past zero on the three stamps with a row-base expression of their own - the 8-row
-//! tile, the wide-head tile and the h128 coopmat tile: the rows sit three rows into the q and out planes behind poison, the lead
-//! rows of the out plane stay at the sentinel and the rows read the oracle's
-[test]
-def test_vkd_da_attn_b_row0(t0 : T?) {
-    t0 |> run("da_attn_b at a row base: the lead rows untouched, the rows from row0 the CPU oracle's") <| @(t : T?) {
-        static_if (typeinfo builtin_module_exists(vulkan)) {
-            if (!vk_moe_init()) {
-                t |> skip("no Vulkan device")
-                return
-            }
-            if (!ensure_da_attn_b_cls()) {
-                t |> skip("da_attn_b class declined on this device (workgroup cap)")
-                return
-            }
-            let lead = 3
-            let trail = 2   //! the rows of a segment behind this one: the tile's padded store must stop at the segment's last row
-            for (stamp in fixed_array(DAB_B, DAB_BW, DAB_H128)) {
-                let tag = stamp == DAB_BW ? "da_attn_bw" : (stamp == DAB_H128 ? "da_attn_b_h128" : "da_attn_b")
-                if (stamp == DAB_BW && !ensure_da_attn_bw_cls()) {
-                    t |> skip("{tag} declined on this device (workgroup cap)")
-                    continue
-                }
-                if (stamp == DAB_H128 && !h128_twin_on()) {
-                    t |> skip("{tag}: the h128 twin serves on a coopmat device at subgroup 32 alone")
-                    continue
-                }
-                verify(stamp != DAB_H128 || ensure_da_attn_b_h128_cls(), "the h128 class rail must engage on a coopmat device")
-                let wide = stamp == DAB_BW   //! the gemma-4 global heads' shape and score scale on the wide tile, the 128-head shape on the others
-                let scale = wide ? 1.0 : 0.125
-                var f <- wide ? da_attn_b_fix(13, 4, 4, 512, 32, 64, 160, 0.005, 0.18, 0.003, 0.14, false) : da_attn_b_fix(13, 4, 2, 128, 32, 64, 160, 0.05, 1.8, 0.03, 1.4, false)
-                let qd = f.nheads * f.hs
-                var inscope y_full <- da_attn_b_run(f, stamp, scale, 0.0, 0, lead, trail)
-                var inscope y_ref <- da_attn_b_ref(f, scale, 0, 0.0)
-                var lead_moved = 0
-                var lead_first = -1
-                for (i in range(lead * qd)) {
-                    if (unsafe(reinterpret<uint>(y_full[i])) != NAN_SENTINEL_BITS) {
-                        lead_first = lead_first < 0 ? i : lead_first
-                        lead_moved++
-                    }
-                }
-                t |> equal(lead_moved, 0, "{tag}: the {lead} lead rows under the row base stay at the sentinel ({lead_moved} elements written, the first at {lead_first})")
-                var trail_moved = 0
-                var trail_first = -1
-                for (i in range((lead + f.npos) * qd, (lead + f.npos + trail) * qd)) {
-                    if (unsafe(reinterpret<uint>(y_full[i])) != NAN_SENTINEL_BITS) {
-                        trail_first = trail_first < 0 ? i : trail_first
-                        trail_moved++
-                    }
-                }
-                t |> equal(trail_moved, 0, "{tag}: the {trail} rows past the segment stay at the sentinel ({trail_moved} elements written, the first at {trail_first})")
-                var inscope y_cls <- [for (i in range(f.npos * qd)); y_full[lead * qd + i]]
-                check_rows(t, "{tag} at row0 {lead} against the CPU oracle", y_cls, y_ref, stamp == DAB_H128 ? cm_bar(y_ref) : BAR_APPROX_CTRL, qd, f.hs)
-                delete f
-            }
-        } else {
-            t |> skip("dasVulkan not present")
-        }
-    }
-}
-
-[test]
-def test_vkd_da_attn_b(t0 : T?) {
-    t0 |> run("batched decode attention class kernel == the CPU oracle (mirror offsets)") <| @(t : T?) {
-        static_if (typeinfo builtin_module_exists(vulkan)) {
-            if (!vk_moe_init()) {
-                t |> skip("no Vulkan device")
-                return
-            }
-            if (!ensure_da_attn_b_cls()) {
-                t |> skip("da_attn_b class declined on this device (workgroup cap)")
-                return
-            }
-            let scale = 0.125
-            for (hs in [32, 128, 256]) {   // dpl 1 / 4 / 8 — every guarded accumulator arm
-                //! 13 rows: a partial 8-tile, q0 = 8 has 5 valid rows - the row masks run; w0 32: kend crosses the 32-position K
-                //! tile, the alpha rescale runs; the mirrors' word offsets 64 / 160 - the offset plumbing must survive the port
-                var f <- da_attn_b_fix(13, 4, 2, hs, 32, 64, 160, 0.05, 1.8, 0.03, 1.4, false)
-                let n = length(f.qh)
-                var inscope y_cls <- da_attn_b_run(f, DAB_B, scale, 0.0, 0)
-                var inscope y_ref <- da_attn_b_ref(f, scale, 0, 0.0)
-                let bad = mismatch_approx(y_cls, y_ref)
-                t |> success(bad == 0, "da_attn_b hs {hs} matches the CPU oracle ({bad} of {n} off)")
-                // the softcap arm (gemma-2): the same tile under a cap the scaled scores overrun
-                let cap = 4.0
-                var inscope y_cap <- da_attn_b_run(f, DAB_B, scale, cap, 0)
-                let moved = mismatch_approx(y_cap, y_ref)
-                t |> success(moved > 0, "control: the {cap} cap moves the uncapped rows ({moved} of {n})")
-                var inscope y_ref_cap <- da_attn_b_ref(f, scale, 0, cap)
-                let badc = mismatch_approx(y_cap, y_ref_cap)
-                t |> success(badc == 0, "da_attn_b hs {hs} under a {cap} softcap matches the CPU oracle ({badc} of {n} off)")
-                delete f
-                delete y_ref
-                delete y_cls
-                delete y_cap
-                delete y_ref_cap
-            }
-        } else {
-            t |> skip("dasVulkan not present")
-        }
-    }
-}
-
-// the wide-head twin (heads past 256): the 4-row q tile over 16-position K/V stages, at 384 (the
-// guarded eighth dim lane) and 512, with the window mask on the long arm
-[test]
-def test_vkd_da_attn_bw(t0 : T?) {
-    t0 |> run("wide-head batched decode attention class kernel == the CPU oracle (mirror offsets, the window)") <| @(t : T?) {
-        static_if (typeinfo builtin_module_exists(vulkan)) {
-            if (!vk_moe_init()) {
-                t |> skip("no Vulkan device")
-                return
-            }
-            if (!ensure_da_attn_bw_cls()) {
-                t |> skip("da_attn_bw class declined on this device (workgroup cap)")
-                return
-            }
-            if (!ensure_da_attn_bw_f16_cls()) {
-                t |> skip("da_attn_bw_f16 class declined on this device (workgroup cap) - the f16-mirror arms")
-            }
-            let scale = 1.0     // the gemma-4 score scale
-            let f16_on = ensure_da_attn_bw_f16_cls()   //! the f16-mirror twin (the gemma-4 global heads on the f16 mirror) runs beside every arm
-            for (arm in range(4)) {
-                let hs = arm == 0 ? 384 : 512
-                let npos = arm >= 2 ? 120 : 13    //! 13: a partial 4-tile and a stage crossing; 120: thirty 4-tiles over a 620-position mirror (the second prefill window's shape)
-                let w0 = arm >= 2 ? 500 : 32
-                let window = arm == 3 ? 24 : 0    //! the last arm slides: every row sees the 24 positions up to its own
-                //! four heads over one kv head, the gemma-4 global layers' shape; the mirrors' word offsets 64 / 160
-                var f <- da_attn_b_fix(npos, 4, 4, hs, w0, 64, 160, 0.005, 0.18, 0.003, 0.14, false)
-                var inscope y_cls <- da_attn_b_run(f, DAB_BW, scale, 0.0, window)
-                var inscope y_ref <- da_attn_b_ref(f, scale, window, 0.0)
-                let bad = mismatch_approx(y_cls, y_ref)
-                t |> success(bad == 0, "da_attn_bw hs {hs} npos {npos} window {window} matches the CPU oracle ({bad} of {length(y_ref)} off)")
-                y_ref[0] += 0.5
-                t |> success(mismatch_approx(y_cls, y_ref) > 0, "da_attn_bw hs {hs} npos {npos} window {window}: the bar reds a poisoned oracle element")
-                if (f16_on) {
-                    var f16 <- da_attn_b_fix(npos, 4, 4, hs, w0, 64, 160, 0.005, 0.18, 0.003, 0.14, true)
-                    var inscope y16 <- da_attn_b_run(f16, DAB_BW_F16, scale, 0.0, window)
-                    var inscope y16_ref <- da_attn_b_ref(f16, scale, window, 0.0)
-                    check_rows(t, "da_attn_bw_f16 hs {hs} npos {npos} window {window} against the CPU oracle", y16, y16_ref, BAR_APPROX_CTRL, 4 * hs, hs)
-                    delete f16
-                    delete y16
-                    delete y16_ref
-                }
-                delete f
-                delete y_ref
-                delete y_cls
-            }
-        } else {
-            t |> skip("dasVulkan not present")
-        }
-    }
-}
-
-//! the chunked prefill tiles over a sliding layer's ring: 120 rows at w0 500 under a 40-position window over a 192-row ring (the
-//! window's keys across the slots' wrap), each stamp against the CPU oracle over the flat rows, the same rows read a position a row
-//! (`ring` 0) missing it as the control
-[test]
-def test_vkd_da_attn_b_ring(t0 : T?) {
-    t0 |> run("the chunked attention tiles read a sliding layer's ring == the CPU oracle over the positions") <| @(t : T?) {
-        static_if (typeinfo builtin_module_exists(vulkan)) {
-            if (!vk_moe_init()) {
-                t |> skip("no Vulkan device")
-                return
-            }
-            if (!(ensure_da_attn_b_cls() && ensure_da_attn_bw_cls())) {
-                t |> skip("da_attn_b classes declined on this device (workgroup cap)")
-                return
-            }
-            for (stamp in fixed_array(DAB_B, DAB_BW, DAB_H128)) {
-                if (stamp == DAB_H128 && !h128_twin_on()) {
-                    t |> skip("da_attn_b_h128: the h128 twin serves on a coopmat device at subgroup 32 alone")
-                    continue
-                }
-                verify(stamp != DAB_H128 || ensure_da_attn_b_h128_cls(), "the h128 class rail must engage on a coopmat device")
-                let wide = stamp == DAB_BW
-                let tag = wide ? "da_attn_bw" : (stamp == DAB_H128 ? "da_attn_b_h128" : "da_attn_b")
-                let scale = wide ? 1.0 : 0.125
-                var f <- wide ? da_attn_b_fix(120, 4, 4, 512, 500, 64, 160, 0.005, 0.18, 0.003, 0.14, false) : da_attn_b_fix(120, 4, 2, 128, 500, 64, 160, 0.05, 1.8, 0.03, 1.4, false)
-                var g := f   //! `f`'s K and V mirrors as rings of 192 rows past their bases
-                let kvd = (f.nheads / f.kv_mul) * f.hs
-                g.kh <- ring_laid_rows(f.kh, 1, f.w0 + f.npos, f.w0 + f.npos, kvd, 192, f.kbase, 0.0)
-                g.vh <- ring_laid_rows(f.vh, 1, f.w0 + f.npos, f.w0 + f.npos, kvd, 192, f.vbase, 0.0)
-                var inscope y <- da_attn_b_run(g, stamp, scale, 0.0, 40, 0, 0, 192)
-                var inscope y_ref <- da_attn_b_ref(f, scale, 40, 0.0)
-                let bar = stamp == DAB_H128 ? cm_bar(y_ref) : BAR_APPROX_CTRL
-                check_rows(t, "{tag} over a 192-row ring, a 40-position window, against the CPU oracle", y, y_ref, bar, 4 * f.hs, f.hs)
-                var inscope y_flat <- da_attn_b_run(g, stamp, scale, 0.0, 40)
-                t |> success(check_count(y_flat, y_ref, bar) > 0, "{tag} control: the ring's rows read a position a row miss the oracle")
-                delete f
-                delete g
-            }
-        } else {
-            t |> skip("dasVulkan not present")
-        }
-    }
-}
-
-[test]
-def test_vkd_da_attn_b_h128(t0 : T?) {
-    t0 |> run("h128 coopmat attention class kernel == the CPU oracle") <| @(t : T?) {
-        static_if (typeinfo builtin_module_exists(vulkan)) {
-            if (!vk_moe_init()) {
-                t |> skip("no Vulkan device")
-                return
-            }
-            if (!ensure_da_attn_b_cls()) {   // probe via the NON-coopmat twin — a cm pipeline build
-                t |> skip("da_attn_b class declined on this device (workgroup cap)")   // on a no-coopmat device panics, not feints
-                return
-            }
-            if (!h128_twin_on()) {
-                t |> skip("the h128 twin serves on a coopmat device at subgroup 32 alone")
-                return
-            }
-            verify(ensure_da_attn_b_h128_cls(), "the h128 class rail must engage on a coopmat device")
-            let scale = 0.125
-            var f <- da_attn_b_fix(45, 4, 2, 128, 32, 64, 160, 0.05, 1.8, 0.03, 1.4, false)   // 45 rows, two q tiles: the second has 13 valid rows - the row masks run
-            var y_cls <- da_attn_b_run(f, DAB_H128, scale, 0.0, 0)
-            // the h128 twin stages q/K/V through f16 pairs for the MMAs — floor-barred like the
-            // cm GEMMs (softmax weights bound the V fold, so the peak floor is generous enough)
-            var y_ref <- da_attn_b_ref(f, scale, 0, 0.0)
-            check_rows(t, "da_attn_b_h128 against the CPU oracle", y_cls, y_ref, cm_bar(y_ref), 4 * 128, 128)
-            delete f
-            delete y_ref
-            delete y_cls
-            //! a sliding window and the logit softcap, alone and together, over 120 rows at w0 500: the plain oracle misses each arm
-            for (arm in range(3)) {
-                let window = arm == 1 ? 0 : 40
-                let cap = arm == 0 ? 0.0 : 0.5
-                var fw <- da_attn_b_fix(120, 4, 2, 128, 500, 64, 160, 0.05, 1.8, 0.03, 1.4, false)
-                var inscope yw <- da_attn_b_run(fw, DAB_H128, scale, cap, window)
-                var inscope yw_ref <- da_attn_b_ref(fw, scale, window, cap)
-                let tag = "da_attn_b_h128 window {window} cap {cap}"
-                check_rows(t, "{tag} against the CPU oracle", yw, yw_ref, cm_bar(yw_ref), 4 * 128, 128)
-                var inscope yw_plain <- da_attn_b_ref(fw, scale, 0, 0.0)
-                t |> success(check_count(yw, yw_plain, cm_bar(yw_plain)) > 0, "{tag}: the unmasked, uncapped oracle misses the kernel")
-                delete fw
-            }
-        } else {
-            t |> skip("dasVulkan not present")
-        }
-    }
-}
-
-//! one gated chunked-attention arm: q read at the head's [q | gate] stride, the output under the sigmoid of the gate half -
-//! the gated oracle matches, the ungated one misses, the bar reds a poisoned element
-//! `bar_of` reads the bar off the oracle rows: a stamp staging q/K/V through halves takes `cm_bar`, the f32 stamps a fixed bar
-def private da_attn_b_gated_arm(t : T?; tag : string; stamp, npos, kv_mul, hs, w0 : int; qm, qa, km, ka : float; bar_of : block<(want : array<float>) : Bar>) {
-    var f <- da_attn_b_fix(npos, 4, kv_mul, hs, w0, 64, 160, qm, qa, km, ka, dab_f16(stamp))
-    f.gate <- [for (i in range(length(f.qh))); float((i * 29) % 61) * 0.08 - 2.4]
-    let scale = hs > 256 ? 1.0 : 0.125
-    var y_cls <- da_attn_b_run(f, stamp, scale, 0.0, 0)
-    var y_ref <- da_attn_b_ref(f, scale, 0, 0.0)
-    let bar = invoke(bar_of, y_ref)
-    check_rows(t, tag, y_cls, y_ref, bar, 4 * hs, hs)
-    delete f.gate
-    var y_plain <- da_attn_b_ref(f, scale, 0, 0.0)
-    t |> success(check_count(y_cls, y_plain, bar) > 0, "{tag}: the gate moves the output (the ungated oracle misses the kernel)")
-    delete f
-    delete y_cls
-    delete y_ref
-    delete y_plain
-}
-
-[test]
-def test_vkd_da_attn_b_gated(t0 : T?) {
-    t0 |> run("gated chunked attention == the gated CPU oracle on the 8-row, wide and h128 stamps") <| @(t : T?) {
-        static_if (typeinfo builtin_module_exists(vulkan)) {
-            if (!vk_moe_init()) {
-                t |> skip("no Vulkan device")
-                return
-            }
-            if (!(ensure_da_attn_b_cls() && ensure_da_attn_bw_cls())) {
-                t |> skip("da_attn_b classes declined on this device (workgroup cap)")
-                return
-            }
-            da_attn_b_gated_arm(t, "da_attn_b gated hs 128", DAB_B, 13, 2, 128, 32, 0.05, 1.8, 0.03, 1.4) $(want : array<float>) : Bar {
-                return BAR_APPROX
-            }
-            da_attn_b_gated_arm(t, "da_attn_bw gated hs 512", DAB_BW, 13, 4, 512, 32, 0.005, 0.18, 0.003, 0.14) $(want : array<float>) : Bar {
-                return BAR_APPROX
-            }
-            if (ensure_da_attn_bw_f16_cls()) {
-                da_attn_b_gated_arm(t, "da_attn_bw_f16 gated hs 512", DAB_BW_F16, 13, 4, 512, 32, 0.005, 0.18, 0.003, 0.14) $(want : array<float>) : Bar {
-                    return BAR_APPROX_CTRL
-                }
-            } else {
-                t |> skip("da_attn_bw_f16 class declined on this device (workgroup cap) - the f16 gated arm")
-            }
-            if (!h128_twin_on()) {
-                t |> skip("the h128 twin serves on a coopmat device at subgroup 32 alone - the h128 gated arm")
-                return
-            }
-            if (!ensure_da_attn_b_h128_cls()) {
-                t |> failure("the h128 class rail must engage on a coopmat device")
-                return
-            }
-            da_attn_b_gated_arm(t, "da_attn_b_h128 gated", DAB_H128, 45, 2, 128, 32, 0.05, 1.8, 0.03, 1.4) $(want : array<float>) : Bar {
-                return cm_bar(want)   //! the h128 stamp stages q/K/V through f16 pairs for its MMAs
-            }
-        } else {
-            t |> skip("dasVulkan not present")
-        }
-    }
-}
-
-[test]
+[test(description = "The fused add-rms Q8_0 requant matches the CPU chain (quants within a step, scales and residual within 2e-3), with and without the bias partner, its Q8_K and row-storing stamps agree, and the plain Q8_K requant is bit-exact")]
 def test_vkd_requant_family(t0 : T?) {
     t0 |> run("fused ar+requant + q8k requant class kernels == the CPU oracle") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -4385,7 +2294,7 @@ def test_vkd_requant_family(t0 : T?) {
     }
 }
 
-[test]
+[test(description = "The q51 decode GEMV over Q8_0 activations matches the scalar dot within 2e-3 at 704 and 1408 wide, and its summed twin folds one, two and four token rows of two weighted slots, wider rows bit for bit")]
 def test_vkd_q51_gemv(t0 : T?) {
     t0 |> run("q51 GEMV class kernel == the scalar dot's float order (one lane a block over Q8_0 activations; 704 and 1408 wide)") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -4403,7 +2312,7 @@ def test_vkd_q51_gemv(t0 : T?) {
     }
 }
 
-[test]
+[test(description = "The iq4nl32 decode GEMV over Q8_0 activations matches the scalar dot within 2e-3 at 640 and 1280 wide, and its summed twin folds one, two and four token rows of two weighted slots")]
 def test_vkd_iq4nl32_gemv(t0 : T?) {
     t0 |> run("iq4nl32 GEMV class kernel == the scalar dot's float order (one lane a block over Q8_0 activations; 640 and 1280 wide)") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -4421,7 +2330,7 @@ def test_vkd_iq4nl32_gemv(t0 : T?) {
     }
 }
 
-[test]
+[test(description = "The q4032 decode GEMV over Q8_0 activations matches the scalar dot within 2e-3 at 640 and 896 wide, and its summed twin folds one, two and four token rows of two weighted slots")]
 def test_vkd_q4032_gemv(t0 : T?) {
     t0 |> run("q4032 GEMV class kernel == the scalar dot's float order (the linear code over iq4nl32's blocks; 640 and 896 wide)") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -4438,7 +2347,7 @@ def test_vkd_q4032_gemv(t0 : T?) {
     }
 }
 
-[test]
+[test(description = "The q5032 decode GEMV over Q8_0 activations matches the scalar dot within 2e-3 at 896 and 1408 wide, and its summed twin folds one, two and four token rows of two weighted slots")]
 def test_vkd_q5032_gemv(t0 : T?) {
     t0 |> run("q5032 GEMV class kernel == the scalar dot's float order (q51's blocks re-centred to q - 16 under a half-word d; 896 and 1408 wide)") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -4457,7 +2366,7 @@ def test_vkd_q5032_gemv(t0 : T?) {
 
 //! the q5032 scalar dot (the GEMV cells' row oracle) against the plane bytes' own decode (`dequant_q5032_plane_block`, f64
 //! sums): the class oracle and the kernel share the dot, so the plane's bit layout is pinned by a witness neither reads
-[test]
+[test(description = "The q5032 scalar dot the GEMV cells use as oracle matches the plane-dequant float witness within 1e-4 over 44 hashed blocks, and zeroing the qh words moves the witness past 1e-3")]
 def test_vkd_q5032_float_witness(t0 : T?) {
     t0 |> run("q5032: the scalar dot == the plane-dequant float witness over hashed planes, and a dropped qh bit reads apart") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -4480,7 +2389,7 @@ def test_vkd_q5032_float_witness(t0 : T?) {
     }
 }
 
-[test]
+[test(description = "The mx4 decode GEMV over Q8_0 activations matches the scalar dot within 2e-3 at 704 and gpt-oss 2880 wide, and its summed twin folds one, two and four token rows of two weighted slots")]
 def test_vkd_mx4_gemv(t0 : T?) {
     t0 |> run("mx4 GEMV class kernel == the scalar dot's float order (one lane a block over Q8_0 activations; 704 and 2880 wide)") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -4620,7 +2529,7 @@ def private mx4_gemv_gu_run(t : T?; d, nreg : int; bias : bool) {
     }
 }
 
-[test]
+[test(description = "The fused mx4 gate and up GEMV with act and Q8_0 requant matches the scalar dots (gate rows within 2e-3, quants within a step), biased clamped swiglu and plain silu, and the split path byte for byte")]
 def test_vkd_mx4_gemv_gu(t0 : T?) {
     t0 |> run("mx4 gate + up GEMVs, the biased clamped-swiglu act and its Q8_0 requant in one dispatch == the scalar dot and the split path (gpt-oss's routed step)") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -4694,7 +2603,7 @@ def private q8_gemv_gu_run(t; n, hid : int; act : uint) {
     delete os
 }
 
-[test]
+[test(description = "The fused q8 gate and up GEMV with act and Q8_0 requant matches the CPU chain, scales matching and quants within a step, under gelu at 36 blocks deep and silu and clamped swiglu at 16")]
 def test_vkd_q8_gemv_gu(t0 : T?) {
     t0 |> run("fused q8 gate + up GEMV + act + Q8_0 requant == the CPU oracle (gelu, silu and the clamped swiglu; 36 and 16 blocks deep)") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -4898,7 +2807,7 @@ def private q8_gemv_ar_run(t; n, d : int; pre_on, raw : bool; ascale : float; ab
     delete normed
 }
 
-[test]
+[test(description = "The q8 GEMV with the residual step as its last workgroup epilogue matches the CPU chain on the residual row and Q8_0 blocks for sandwich, raw, plain and biased steps at several widths, the counter back at zero")]
 def test_vkd_q8_gemv_ar(t0 : T?) {
     t0 |> run("q8 GEMV with the residual step as its last workgroup's epilogue == the CPU chain (the sandwich step, the raw-quant step, a plain step)") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -4983,7 +2892,7 @@ def private q8_gemv_ar_twin_run(t; n, d : int; pre_on : bool; ascale : float) {
     delete os_row_h
 }
 
-[test]
+[test(description = "The q8 GEMV epilogue residual step equals the cls_ar_rq_b row kernel fed the same y row bit for bit on the residual row, scales and quants, sandwich and plain steps at gemma widths")]
 def test_vkd_q8_gemv_ar_row_twin(t0 : T?) {
     t0 |> run("q8 GEMV epilogue's residual step == the row kernel fed the same y row, bit for bit (the sandwich step and the plain step)") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -5243,7 +3152,7 @@ def private q8_gemv_gu_n_run(t; n, hid, ncols : int; act : uint) {
     delete xsh
 }
 
-[test]
+[test(description = "The N-column fused q8 gate-up stamps at 1 to 11 columns equal the one-row kernel run a column at a time word for word, slots past the last column untouched, and the one-row rows match the CPU chain")]
 def test_vkd_q8_gemv_gu_n(t0 : T?) {
     t0 |> run("fused q8 gate-up GEMV's N-column stamps == the one-row kernel a column at a time, bit for bit; the one-row rows == the CPU chain") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -5319,7 +3228,7 @@ def private q8_gemv_pleact_cols_run(t; n, d, ncols : int) {
     delete sh
 }
 
-[test]
+[test(description = "The fused per-layer-embedding gelu act, Q8_0 requant and q8 proj GEMV matches the CPU chain within the dot envelope bar at 256 and 128 wide, and its N-column form equals the one-row dispatches bit for bit")]
 def test_vkd_q8_gemv_pleact(t0 : T?) {
     t0 |> run("fused per-layer-embedding act + Q8_0 requant + q8 proj GEMV == the CPU chain (256 and 128 wide)") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -5338,7 +3247,7 @@ def test_vkd_q8_gemv_pleact(t0 : T?) {
     }
 }
 
-[test]
+[test(description = "The q8 decode GEMV over two regions of three rows at 512 wide matches the q8 GEMM oracle within 2e-3, unwritten rows read against the sentinel, a poisoned element reddening the bar")]
 def test_vkd_q8_gemv_pair(t0 : T?) {
     t0 |> run("q8 GEMV class kernel == the CPU oracle") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -5502,7 +3411,7 @@ def private gemv_ncol_arm(t : T?; f : KqFmt; n, d : int) {
     }
 }
 
-[test]
+[test(description = "For every format the discrete homes stamp, the N-column decode GEMV at 1 to 12 columns equals its one-column class column by column bit for bit, q8 row-pair stamps included, the one-column rows within 2e-3 of the oracle")]
 def test_vkd_gemv_ncol(t0 : T?) {
     t0 |> run("every format's N-column decode GEMV == its one-column class") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -5524,7 +3433,7 @@ def test_vkd_gemv_ncol(t0 : T?) {
     }
 }
 
-[test]
+[test(description = "The deltanet Q8_0 requant at an input offset matches the CPU requant bit-exact, and the f16 converters (gelu act, plain convert, clamped swiglu act) match the f32 oracle through their halves within 2e-3")]
 def test_vkd_cvt_family(t0 : T?) {
     t0 |> run("dn requant + cvt/act-f16 class kernels == the CPU oracle") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -6044,7 +3953,7 @@ def private qkn_window_run(q, kv, cs, wn : array<float>; pc; nr, mirn : int) : t
 //! the window's fused q/k norm, rope and K/V store: `qkn_rope_cls`'s window form over three rows past two lead rows of planes laid
 //! as the window lays them - q rows, the [k | v] projection rows, the rope rows - at positions 7 to 9 of the mirror, bit for bit
 //! the token rows' form over the same rows laid as the token command lays them ([q | k | v] a row, the positions off the token block)
-[test]
+[test(description = "The window form of qkn_rope_cls over three rows past two lead rows at positions 7 to 9 equals its token-rows form bit for bit on q and both mirrors, the lead q rows untouched")]
 def test_vkd_qkn_rope_window(t0 : T?) {
     t0 |> run("qkn_rope_cls's window form == its token rows' form over the same three rows, bit for bit, the lead rows untouched") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -6118,7 +4027,7 @@ def test_vkd_qkn_rope_window(t0 : T?) {
     }
 }
 
-[test]
+[test(description = "The batched rope and K/V store (split and merged k|v rows, biased, and at a row base past poison rows) and the fused qk-norm rope store match the CPU oracle within 2e-3, the N-row qkn form bit for bit")]
 def test_vkd_rope_b_pair(t0 : T?) {
     t0 |> run("batch rope + fused qkn-rope class kernels == the CPU oracle") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -6135,7 +4044,7 @@ def test_vkd_rope_b_pair(t0 : T?) {
     }
 }
 
-[test]
+[test(description = "The attention prep class run as the q and k passes matches the CPU oracle within 2e-3: gated q deinterleave, projection bias, per-head qk rms, partial NEOX rope, the k panel at absolute rows")]
 def test_vkd_at_prep(t0 : T?) {
     t0 |> run("attention prep class (q+k collapse) == the CPU oracle (gated+qknorm+partial rope+projection bias)") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -6293,7 +4202,7 @@ def private hct_comb_ref(res : array<float>; outr, inj, acc : array<float>; moe,
     return <- r
 }
 
-[test]
+[test(description = "The hyper-connection seams match their CPU forms within 2e-3: grouped rms with a per-stream gamma at a site offset, silu(lo / hc) Q8_0 requant within a quant step, the gated stream mean, and the scatter on its four flag paths")]
 def test_vkd_hc_seams(t0 : T?) {
     t0 |> run("hc_norm: stream c of the wide row under gamma row c == the CPU rmsnorm, the site's rows at an offset") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -6452,7 +4361,7 @@ def test_vkd_hc_seams(t0 : T?) {
 
 //! the window forms of the mixer seams: the norm at a row offset, the gated mean and the scatter over rows - each against the
 //! one-row CPU form applied a row at a time, the rows outside the dispatch's slice untouched
-[test]
+[test(description = "The window forms of the hyper-connection seams (hc_init copies, cat2 exact, hc_norm over rows and from row0, hc_mix and hc_comb over rows) match the one-row CPU form a row at a time within 2e-3, rows outside untouched")]
 def test_vkd_hc_rows(t0 : T?) {
     t0 |> run("hc_init: hc copies of every embedded row open the wide rows") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -6834,7 +4743,7 @@ def private ple_panel_case(t : T?; rows, pos0 : int; tok_pos : bool = false) {
     }
 }
 
-[test]
+[test(description = "The n-gram side input gate and conv match the CPU form within 2e-3 inside and under the taps reach, the ring slot written and others kept, in the window panel form and the verify form committing rows")]
 def test_vkd_ple_side(t0 : T?) {
     t0 |> run("ple_gate + ple_conv: the n-gram side input's gate, its ring slot and the conv's landing == the CPU form, inside and under the taps' reach") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -6870,7 +4779,7 @@ def private dn_cells_gate(t : T?) : bool {
     }
 }
 
-[test]
+[test(description = "dn_cap_tail writes for two captures in one dispatch, one past the taps and one under them reading the entry image, bit for bit the ring hand-off oracle, the words between the images keeping their sentinel")]
 def test_vkd_dn_cap_tail(t0 : T?) {
     t0 |> run("dn_cap_tail == the ring hand-off of a window cut at the capture's row, into the checkpoint row") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -6931,7 +4840,7 @@ def test_vkd_dn_cap_tail(t0 : T?) {
 
 //! the window chain's conv-history hand-off: the call's last window's rows into the per-channel ring image, and a window shorter
 //! than the taps (a continuation's lone short window) reading its leading rows off the image the call entered on
-[test]
+[test(description = "dn_tail writes the per-channel ring bit for bit as the CPU form at 5, 3, 2 and 1 window rows over 200 channels, short windows reading the entry image, and differs from the zero-history ring")]
 def test_vkd_dn_tail(t0 : T?) {
     t0 |> run("dn_tail == the per-channel ring the decode step reads: the last taps rows of a window, the leading rows of a window shorter than the taps off the entry image") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -7009,7 +4918,7 @@ def private dn_chunk_armed() : bool {
     }
 }
 
-[test]
+[test(description = "dn_conv and dn_scan at a row base past zero equal the row-0 dispatch bit for bit, lead rows untouched; a half-run capture equals the half-only scan exactly, and the chunked scan holds 1e-2 of peak")]
 def test_vkd_dn_rows_base(t0 : T?) {
     t0 |> run("dn_conv and dn_scan at a row base past zero == the same rows at row 0, bit for bit, the rows ahead of the base untouched") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -7228,7 +5137,7 @@ def test_vkd_dn_rows_base(t0 : T?) {
     }
 }
 
-[test]
+[test(description = "The deltanet conv, fused step and two-phase scan match their CPU oracles within 2e-3 at heads 64 and 128, the chunked scan holds its bar over 70 rows, and the sigmoid out-gate stamps miss the silu oracle")]
 def test_vkd_dn_family(t0 : T?) {
     t0 |> run("deltanet class kernels == the CPU oracle (conv, fused step, 2-phase scan)") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -7720,7 +5629,7 @@ def private dn_step_sameslot_arm(t : T?; ds : int; out_f32 : bool) {
     delete slots
 }
 
-[test]
+[test(description = "The fused deltanet step over three rows of one slot, a dispatch a row, equals the one-row dispatch chained on the state each row left, bit for bit on o rows, state and both ring images, at ds 64 and 128")]
 def test_vkd_dn_step_rows_sameslot(t0 : T?) {
     t0 |> run("dn_step_fused over three rows of one slot a dispatch a row == the one-row dispatch a row at a time, chained") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -7736,7 +5645,7 @@ def test_vkd_dn_step_rows_sameslot(t0 : T?) {
     }
 }
 
-[test]
+[test(description = "The fused deltanet step over two rows in two region slots equals the one-row dispatch a row at a time bit for bit on each o row, slot state and both ring images, at ds 64 and 128, q8 and f32 o")]
 def test_vkd_dn_step_rows(t0 : T?) {
     t0 |> run("dn_step_fused over two rows in two region slots == the one-row dispatch a row at a time") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -7752,7 +5661,7 @@ def test_vkd_dn_step_rows(t0 : T?) {
     }
 }
 
-[test]
+[test(description = "The prefill f32 beta and alpha GEMM dn_ba matches the CPU dot over the f32 weight rows within 1e-3 at 21 and 40 rows from a row base of 64, only written positions compared")]
 def test_vkd_dn_ba(t0 : T?) {
     t0 |> run("dn_ba (the prefill's f32 beta/alpha GEMM) == the CPU dot at a partial tile and past one workgroup") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -7904,7 +5813,7 @@ def private dn_scan_cell(t : T?; tag : string; ds, nkh, nvh, npos : int) {
 
 // the 9B-class geometry the small-model zoo never reaches: 32 value heads over ds 128 (the scan's
 // 8-lane column clusters, all three shuffle stages) and a full 64-row beta/alpha tile
-[test]
+[test(description = "The deltanet scan at the 9B geometry (32 heads, ds 128) matches the sequential CPU delta rule within 1e-2 of the peak at 512 rows, one row and the whole DN_WINDOW, the header kept")]
 def test_vkd_dn_9b_scan(t0 : T?) {
     t0 |> run("dn_scan at the 9B geometry (32 heads, ds 128, 512 rows) == the sequential CPU delta rule") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -7922,7 +5831,7 @@ def test_vkd_dn_9b_scan(t0 : T?) {
 // a narrow state: at ds 32 a column group spans 128 columns, so three of every four lanes are
 // idle - their reads clamp to column 0 and their stores stay off; the last head's idle columns
 // would otherwise read past the conv plane
-[test]
+[test(description = "The deltanet scan at a narrow ds 32 state over 64 rows, idle lanes clamped, matches the sequential CPU delta rule within 1e-2 of the peak, the header ahead of the o rows kept")]
 def test_vkd_dn_scan_narrow(t0 : T?) {
     t0 |> run("dn_scan at a narrow state (4 heads, ds 32, 64 rows) == the sequential CPU delta rule") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -7935,7 +5844,7 @@ def test_vkd_dn_scan_narrow(t0 : T?) {
     }
 }
 
-[test]
+[test(description = "dn_ba at the 9B geometry (dim 4096, 32 heads, 512 rows) from the second layer row base matches the CPU dot within 1e-3, a poisoned beta output reddening the bar")]
 def test_vkd_dn_9b_ba(t0 : T?) {
     t0 |> run("dn_ba at the 9B geometry (dim 4096, 32 heads, 512 rows) == the CPU dot") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -7953,7 +5862,7 @@ def test_vkd_dn_9b_ba(t0 : T?) {
 
 //! the bf16 router-form GEMV (the per-layer-embedding projection's own rows): ne rows at a row base, the ne outputs at an output base,
 //! and under an output scale (`yscale`, the projection's 1/sqrt(dim)) the same dots scaled
-[test]
+[test(description = "The bf16 router GEMV matches the CPU dot within 1e-3 at a row and output base, in the two-base form with the gap untouched, with the rms norm folded in, and under an output scale, each unfolded form missing")]
 def test_vkd_router_gemv_bf16(t0 : T?) {
     t0 |> run("router_gemv_bf16 (the bf16 router-form rows) == the CPU dot at a row base and an output base") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -8080,7 +5989,7 @@ def test_vkd_router_gemv_bf16(t0 : T?) {
 }
 
 //! the decode's f32 beta/alpha GEMV - the f32 stamp over the file's rows in its two-base form, one row and three rows a dispatch
-[test]
+[test(description = "The f32 router GEMV in its two-base form lands the beta and alpha rows within 1e-3 of the CPU dot at one and three columns, the words between the two bases untouched")]
 def test_vkd_router_gemv_f32_ba(t0 : T?) {
     t0 |> run("router_gemv (the decode's f32 beta/alpha rows) == the CPU dot over the f32 rows: the beta rows at one base, the alpha rows at the other, one and three columns") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -8148,16 +6057,6 @@ def test_vkd_router_gemv_f32_ba(t0 : T?) {
 
 // ===== the f16-KV-mirror instance family (the KT = float16 stamps of the codec templates) =====
 
-// f32 -> f16 rows for upload (the session/mirror codec form)
-def private pack_f16(src : array<float>) : array<float16> {
-    var out : array<float16>
-    out |> resize(length(src))
-    for (s, o in src, out) {
-        o = float16(s)
-    }
-    return <- out
-}
-
 // f16 readback rows -> f32 for the compares
 def private unpack_f16(src : array<float16>) : array<float> {
     var out : array<float>
@@ -8168,7 +6067,7 @@ def private unpack_f16(src : array<float16>) : array<float> {
     return <- out
 }
 
-[test]
+[test(description = "The f16-mirror writer stamps (rope_kv, batched rope_kv_b, qkn_rope) land K and V on the half grid within 2e-3 of the CPU oracle, with and without the q/k/v bias past a pad")]
 def test_vkd_kv16_writers(t0 : T?) {
     t0 |> run("f16-mirror writer instances == the CPU oracle (rope_kv / rope_kv_b / qkn_rope)") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -8192,53 +6091,7 @@ def test_vkd_kv16_writers(t0 : T?) {
     }
 }
 
-[test]
-def test_vkd_kv16_readers(t0 : T?) {
-    t0 |> run("f16-mirror reader instances == the CPU oracle (da_attn / da_attn_b / h128)") <| @(t : T?) {
-        static_if (typeinfo builtin_module_exists(vulkan)) {
-            if (!vk_moe_init()) {
-                t |> skip("no Vulkan device")
-                return
-            }
-            if (!(da_attn_stamps_ensure(KVDtype.f16) && ensure_da_attn_b_f16_cls())) {
-                t |> skip("f16 attention classes declined on this device")
-                return
-            }
-            // --- da_attn_f16: hs 64 the scalar head, 256 the one-word lane, 512 the two-word lane ---
-            codec_attn_arms(t, KVDtype.f16)
-            for (hs in [64, 256, 512]) {
-                codec_attn_arm(t, CodecAttn(kv = KVDtype.f16, hs = hs, nheads = 4, kv_mul = 2, g4_twin = true))
-            }
-            // --- da_attn_b_f16: batched window over f16 mirrors (dpl 1 and 8 arms) ---
-            for (hs in [32, 256]) {
-                var f <- da_attn_b_fix(13, 4, 2, hs, 32, 64, 160, 0.05, 1.8, 0.03, 1.4, true)
-                var inscope y_cls <- da_attn_b_run(f, DAB_B_F16, 0.125, 0.0, 0)
-                var inscope y_ref <- da_attn_b_ref(f, 0.125, 0, 0.0)
-                check_rows(t, "da_attn_b_f16 hs {hs} against the CPU oracle", y_cls, y_ref, BAR_APPROX_CTRL, 4 * hs, hs)
-                delete f
-                delete y_ref
-                delete y_cls
-            }
-            // --- da_attn_b_h128_f16: the coopmat twin over f16 mirrors ---
-            if (h128_twin_on()) {
-                verify(ensure_da_attn_b_h128_f16_cls(), "the h128 f16 class rail must engage on a coopmat device")
-                var f <- da_attn_b_fix(45, 4, 2, 128, 32, 64, 160, 0.05, 1.8, 0.03, 1.4, true)
-                var y_cls <- da_attn_b_run(f, DAB_H128_F16, 0.125, 0.0, 0)
-                var y_ref <- da_attn_b_ref(f, 0.125, 0, 0.0)
-                check_rows(t, "da_attn_b_h128_f16 against the CPU oracle", y_cls, y_ref, cm_bar(y_ref), 4 * 128, 128)
-                delete f
-                delete y_ref
-                delete y_cls
-            } else {
-                t |> skip("the h128 twin serves on a coopmat device at subgroup 32 alone - the h128 f16 arm")
-            }
-        } else {
-            t |> skip("dasVulkan not present")
-        }
-    }
-}
-
-[test]
+[test(description = "The q8 token-table gather equals the CPU dequant then embed scale bit for bit (the folded-scale order reading apart) and the f32 gather the scaled table rows, an EMB_ID_HOST row copying the staged host row")]
 def test_vkd_emb_gather_q8_f32(t0 : T?) {
     t0 |> run("the q8 and f32 token-table gathers == the CPU dequant and rows, an EMB_ID_HOST row the host's staged row") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -8368,7 +6221,7 @@ def test_vkd_emb_gather_q8_f32(t0 : T?) {
     }
 }
 
-[test]
+[test(description = "The hot pool combine with its slot window at 1 to k adds the hit rows under their weights to the host row within 1e-3 at width 300, zero-weight NaN rows skipped, and the window at 0 loses the host row")]
 def test_vkd_hot_combine(t0 : T?) {
     t0 |> run("the hot expert pool's combine (the slot window past 0 over slot rows 1 .. k): the hit rows add to the host's sum, a zero weight skips its stale row") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -8450,7 +6303,7 @@ def test_vkd_hot_combine(t0 : T?) {
     }
 }
 
-[test]
+[test(description = "The by-row f16 gather over a nine-row window of 21 bucket rows at widths 100, 256 and 300 lands each grid entry position row as halves within 1e-3 of the peak, the two slack rows keeping their sentinel")]
 def test_vkd_moe_gather_row(t0 : T?) {
     t0 |> run("the per-expert chain's by-row gather (moe_gather_f16_row_cls): window row b takes its grid entry's position row as halves, chunk-local; the rows past the window keep their sentinel") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -8508,7 +6361,7 @@ def test_vkd_moe_gather_row(t0 : T?) {
     }
 }
 
-[test]
+[test(description = "The by-row combine adds each window row weighted down row onto its position within 1e-5 of the peak at widths 100, 256 and 300, an unreached position untouched, and at a region base the chunk-row-0 read misses")]
 def test_vkd_combine_row(t0 : T?) {
     t0 |> run("the per-expert chain's by-row combine (combine_row_cls): window row b adds its weighted down row onto its position's accumulated row at every stride regime, a position no row reaches untouched") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -8580,7 +6433,7 @@ def test_vkd_combine_row(t0 : T?) {
     }
 }
 
-[test]
+[test(description = "The decode combine classes (routed sum, routed plus shared row gated and ungated) match the CPU sum within 1e-3 at width 300, the gate moving the shared row off unit weight")]
 def test_vkd_dec_combine_pair(t0 : T?) {
     t0 |> run("decode combine class kernels (routed, routed + shared gated and ungated) == the CPU sum") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -8768,7 +6621,7 @@ def private ar_fused_arm(t : T?; rq : bool) {
     }
 }
 
-[test]
+[test(description = "The fused add-rms Q8_0 requant cls_ar_rq_b over six 128-wide rows equals the split cls_ar plus cls_dn_rq pair bit for bit on quant words, scales and the residual row")]
 def test_vkd_ar_rq_fused(t0 : T?) {
     t0 |> run("fused batch ar+rq == the split cls_ar + cls_dn_rq pair, bit-exact") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -8783,141 +6636,7 @@ def test_vkd_ar_rq_fused(t0 : T?) {
     }
 }
 
-//! a GEMM pick as "column x chunks x chunk", so a miss prints all three
-
-[test]
-def test_vk_coopmat_default_and_tile_pick(t0 : T?) {
-    t0 |> run("the resolved coopmat default ladder and the cm2 tile pick (pure functions)") <| @(t : T?) {
-        static_if (typeinfo builtin_module_exists(vulkan)) {
-            if (!empty(g_env_vulkan.coopmat) && g_env_vulkan.coopmat != "auto") {
-                t |> skip("DASLLAMA_COOPMAT is set - the resolved default ladder is not what this box runs")
-                return
-            }
-            let saved_force = g_coopmat_mode_force
-            g_coopmat_mode_force = -1
-            t |> equal(resolve_coopmat_mode(true, true, 32l), 4)    // cm2 where the device has it
-            t |> equal(resolve_coopmat_mode(true, false, 32l), 3)   // else mm
-            t |> equal(resolve_coopmat_mode(false, false, 32l), 0)  // else sdot4
-            t |> equal(resolve_coopmat_mode(true, false, 64l), 0)   // a wave64 device: the coopmat tiles' four fragment owners are 32-lane subgroups
-            t |> equal(resolve_coopmat_mode(true, true, 64l), 0)
-            g_coopmat_mode_force = 3
-            t |> equal(resolve_coopmat_mode(true, false, 64l), 0)   //! ... and a forced mode follows the same rule
-            g_coopmat_mode_force = saved_force
-            if (!ensure_q8_batch_cls()) {
-                t |> skip("no Vulkan device for the tile pick (it reads the device's SM count)")
-                return
-            }
-            if (g_env_vulkan.cm2_tile != 0l || g_env_vulkan.cm2_splitk != 0l) {
-                t |> skip("DASLLAMA_CM2_TILE or DASLLAMA_CM2_SPLITK is set - the picks below are forced, not the heuristic")
-                return
-            }
-            let saved_sm = g_gpu.sm_count
-            let saved_mode = g_gpu.coopmat_mode
-            g_gpu.sm_count = 36
-            g_gpu.coopmat_mode = COOPMAT_MM
-            t |> success(!cm2_fa_on(), "under mm the cm2 flash pick follows the mode, whatever the card supports")
-            if (khr_kq_tile_on()) {
-                t |> success(pf_f16_feed(int(KqFmt.q8)), "under mm the f16 feed admits Q8_0: its dense GEMMs take the KHR kq tile")
-                t |> success(ple_proj_shape_ok(1536l, 8960l), "under mm the per-layer-embedding projection takes the KHR f16 GEMM at 16-multiples")
-                t |> success(!ple_proj_shape_ok(1536l, 8968l), "... and stays on the CPU off them")
-            } else {   //! a device without KHR cooperative matrices at subgroup 32 refuses both routes under mm too
-                t |> success(!pf_f16_feed(int(KqFmt.q8)), "without the KHR kq tile Q8_0 keeps the requant feed under mm")
-                t |> success(!ple_proj_shape_ok(1536l, 8960l), "... and the projection stays on the CPU")
-            }
-            t |> equal(cm2_tile_cols(8192l, 512l), 128l)                       // the KHR arm has one tile geometry
-            t |> equal(cm2_tile_cols(768l, 32l), 128l)                         // ... the bucket rule included
-            let khr_kv = cm2_gemm_pick(512l, 512l, 2048l)
-            t |> equal(khr_kv.tc, 128l)                                        // ... under the split too
-            t |> equal(khr_kv.nsplit, 2l)                                      // ... and the wave model's k chunks: the 1B k/v shape's 16 tiles under-fill 36 SMs
-            t |> equal(cm2_gemm_pick(2048l, 512l, 2048l).nsplit, 1l)           // ... where its q shape's 64 tiles run whole
-            g_gpu.coopmat_mode = COOPMAT_SDOT4
-            t |> success(!pf_f16_feed(int(KqFmt.q8)), "under sdot4 Q8_0 keeps the requant feed - the reference arm's quant path")
-            t |> success(fa_khr_serves(256l, 50.0, false) && fa_khr_serves(512l, 0.0, false) && fa_khr_serves(256l, 0.0, true), "the KHR flash pick: a 256 head under the softcap, a 512 head, a gated 256 head")
-            t |> success(!fa_khr_serves(128l, 50.0, false) && !fa_khr_serves(128l, 0.0, true) && !fa_khr_serves(96l, 0.0, false) && !fa_khr_serves(256l, 50.0, true), "... not a capped 128 head, a gated 128 head, a 96 head, or a gated head under the softcap")
-            g_gpu.coopmat_mode = COOPMAT_CM2
-            t |> equal(cm2_tile_cols(3072l, 128l), 128l)    // a short window never takes the half-empty l column
-            t |> equal(cm2_tile_cols(3072l, 512l), 128l)    // the 3B q/down shape: m on a strict wave win (96 tiles in 3 waves, 30 units, vs 48 in 2, 32)
-            t |> equal(cm2_tile_cols(8192l, 512l), 256l)    // the 3B gate/up shape: l (128 tiles in 4 waves, 64 units, vs 256 in 8, 80)
-            t |> equal(cm2_tile_cols(5632l, 512l), 256l)    // the tinyllama gate shape: l (88 tiles in 3 waves, 48 units, vs 176 in 5, 50)
-            t |> equal(cm2_tile_cols(768l, 32l), 32l)       // the expert-bucket shape (30B-A3B pp512: ~32 rows per region) takes s
-            t |> equal(cm2_tile_cols(768l, 64l), 32l)       // ... up to the half-m edge
-            t |> equal(cm2_tile_cols(768l, 65l), 128l)      // past it an m column is more than half full
-            t |> equal(batch_tile_edges(int(KqFmt.iq3s4), 672l, 112l, true).tc, 128l, "the batch arm's cm2 column follows the pick on a superblock format")
-            t |> equal(batch_tile_edges(int(KqFmt.iq4nl32), 2560l, 112l, true).tc, cm2_tile_cols(2560l, 112l), "... and on a per-32 plane, which carries the l and m columns too")
-            t |> equal(batch_tile_edges(int(KqFmt.q51), 2560l, 512l, true).tc, cm2_tile_cols(2560l, 512l), "... q51 too")
-            t |> equal(batch_tile_edges(int(KqFmt.mx4), 2880l, 512l, true).tc, 32l, "... and mx4")
-            t |> equal(cm2_tiles(512l, 512l), 16l)                             // the 1B k/v shape: four m columns of four
-            t |> equal(pick_str(cm2_gemm_pick(512l, 512l, 2048l)), "256x4x512")   // ... alone it fills under half the SMs: four l chunks (32 workgroups of 8 steps, 205 units with the reduce, against 320 whole)
-            let saved_knee = vk_split_k_tgs()
-            set_vk_split_k_tgs(0l)
-            t |> equal(pick_str(cm2_gemm_pick(1024l, 31l, 1024l)), "32x1x0")   //! the short window off its knee: under the column's rows the wave model splits nothing
-            set_vk_split_k_tgs(256l)
-            t |> equal(pick_str(cm2_gemm_pick(1024l, 31l, 1024l)), "32x4x256")   //! ... on it the shared rule splits the 8-workgroup grid into four 256-deep chunks
-            let short_plane = 31l * 1024l * 4l   //! one partial plane of the 31-row, 1024-wide window
-            t |> equal(pick_str(cm2_gemm_pick(1024l, 31l, 1024l, 0l, short_plane * 2l)), "32x2x512", "the short split halves to the two planes the scratch holds")
-            t |> equal(pick_str(cm2_gemm_pick(1024l, 31l, 1024l, 0l, short_plane * 2l - 1l)), "32x1x0", "... and stays whole where it holds fewer")
-            t |> equal(pick_str(cm2_gemm_pick(1024l, 31l, 1024l, 130l)), "32x1x0")   //! ... and keeps it whole where the co-running roles fill the grid past half the knee
-            t |> equal(pick_str(cm2_gemm_pick(1024l, 31l, 1536l)), "32x2x768")   //! a 1536-deep K stops doubling where the next share would leave the 256-wide chunks
-            t |> equal(pick_str(cm2_gemm_pick(1024l, 32l, 1024l)), "32x1x0")   //! a full column is the wave model's whatever the knee
-            set_vk_split_k_tgs(saved_knee)
-            t |> equal(cm2_gemm_pick(512l, 512l, 2048l, 80l).nsplit, 1l)       // ... beside q and the other kv projection (96 in the group): never
-            t |> equal(cm2_gemm_pick(2048l, 512l, 2048l).nsplit, 1l)           // the 1B q shape: 32 l tiles in one wave, no split pays
-            t |> equal(cm2_gemm_pick(512l, 512l, 2048l, 16l).nsplit, 1l)       // the 35B shexp gate beside up (32 in the group): whole, the pair co-runs
-            g_gpu.sm_count = 84
-            t |> equal(cm2_gemm_pick(512l, 512l, 2048l, 16l).nsplit, 1l, "on 84 SMs the pair takes the s column - 64 workgroups beside up's 16 fill the card in one wave: whole")
-            t |> equal(cm2_gemm_pick(512l, 512l, 2048l, 144l).nsplit, 1l, "k beside q's 128 and v's 16 workgroups: never")
-            let g3d = cm2_gemm_pick(1152l, 512l, 6912l)
-            t |> equal(g3d.tc, 256l, "gemma-3-1b's down (36 m tiles of 84): the l column under the split")
-            t |> equal(g3d.nsplit, 4l, "... in four chunks of 1792 (72 l tiles in one wave: 448 units and the reduce's 96 against 1080 whole)")
-            t |> equal(g3d.ksplit, 1792l)
-            t |> equal(cm2_tile_cols(256l, 512l), 32l, "gemma-3-1b's k/v shape (8 m tiles of 84): the s column")
-            t |> equal(cm2_tile_cols(1024l, 512l), 128l, "... its q shape (32 m tiles): m")
-            g_gpu.sm_count = 82
-            //! the narrow rule at the gemma-4 E2B's K-quant k/v widths on 82 SMs (`narrow:<fmt>`'s one-dispatch rows): every K-quant's s stamp
-            //! under its m stamp through 640, the m stamp under s past it
-            t |> equal(cm2_tile_cols(256l, 512l), 32l, "E2B's 256-wide k/v (8 m tiles of 82): the s column")
-            t |> equal(cm2_tile_cols(512l, 512l), 32l, "... its 512-wide k/v (16 m tiles): s")
-            t |> equal(cm2_tile_cols(640l, 512l), 32l, "... the widest plane the rule takes (20 m tiles, 80 of 82)")
-            t |> equal(cm2_tile_cols(768l, 512l), 128l, "... the first it leaves to the wave model (24 m tiles): m")
-            t |> equal(cm2_tile_cols(256l, 300l), 32l, "... a 300-row window's 256-wide k/v: s")
-            t |> equal(cm2_split_fit(224l, 224l / 256l), 1l, "a K under one 256-aligned chunk (224) asks no chunk and runs whole, never zero pieces")
-            t |> equal(cm2_split_fit(1536l, 6l, 512l * 256l * 4l, 2l * 512l * 256l * 4l), 2l, "the chunk count fits the scratch: two planes of room, two chunks")
-            let SPLIT_K_SCRATCH_PER_SM = 262_144l   //! the split-k scratch the prefill allocates an SM
-            let scratch82 = SPLIT_K_SCRATCH_PER_SM * 82l
-            t |> equal(pick_str(cm2_gemm_pick(1536l, 512l, 12288l, 0l, scratch82)), "256x3x4096", "E2B's 12288-deep down on 82 SMs: three l chunks")
-            t |> equal(pick_str(cm2_gemm_pick(2560l, 512l, 16384l, 0l, scratch82)), "256x2x8192", "E4B's 16384-deep down: two l chunks")
-            t |> equal(pick_str(cm2_gemm_pick(2560l, 512l, 8192l, 0l, scratch82)), "256x2x4096", "E4B's 8192-deep down: two l chunks")
-            t |> equal(pick_str(cm2_gemm_pick(2304l, 512l, 9216l, 0l, scratch82)), "256x2x4608", "gemma-2's down: two l chunks")
-            t |> equal(pick_str(cm2_gemm_pick(1536l, 512l, 2048l, 0l, scratch82)), "256x3x768", "E2B's wo at K 2048: three l chunks")
-            t |> equal(pick_str(cm2_gemm_pick(3840l, 512l, 15360l, 0l, scratch82)), "256x1x0", "the 12B's 15360-deep down: 60 l tiles whole - two m chunks would save under a tenth")
-            t |> equal(pick_str(cm2_gemm_pick(16384l, 512l, 2560l, 0l, scratch82)), "256x1x0", "E4B's 16384-wide gate: l whole, the split's planes past the scratch anyway")
-            t |> equal(pick_str(cm2_gemm_pick(16384l, 512l, 2560l, 256l, scratch82)), "256x1x0", "... beside up's 256 tiles still l: the siblings ride the whole GEMM's waves, never its column")
-            t |> equal(pick_str(cm2_gemm_pick(10240l, 512l, 2560l, 160l, scratch82)), "256x1x0", "gemma-3-4b's 10240-wide gate beside up: l whole")
-            t |> equal(cm2_gemm_pick(1152l, 512l, 1024l, 0l, scratch82).nsplit, 1l, "gemma-3-1b's wo at K 1024: under 2048 never splits")
-            t |> equal(da_nsplit(4l, 82l), 16l, "the decode attention's key split on 82 SMs: four heads take the cap of sixteen")
-            t |> equal(da_nsplit(32l, 82l), 6l, "... thirty-two heads take six splits (twice the SMs over the heads, rounded up)")
-            t |> equal(da_nsplit(200l, 82l), 1l, "... heads past twice the SM count take one")
-            t |> equal(da_nsplit(4l, 0l), 1l, "... an unknown SM count takes one")
-            g_gpu.sm_count = 36
-            t |> equal(pick_str(cm2_gemm_pick(2048l, 32l, 8192l, 0l, SPLIT_K_SCRATCH_PER_SM * 36l)), "32x2x4096")   // the sliced down shape from row 0: 16 s tiles of 36 take two chunks (383 units against 640 whole)
-            t |> equal(pf_split_pick(int(KqFmt.k4), 2048l, 32l, 8192l, 480l, 0l).nsplit, 1l)         // ... from row 480 it never splits (the window chain's pick reads the driver's scratch only from row 0)
-            t |> equal(pf_ffn_slice_row0(15l, 16l, 512l, true, true), 480l)   // the last layer on the f16 route starts 32 rows below the window's end
-            t |> equal(pf_ffn_slice_row0(15l, 16l, 20l, true, true), 0l)      // a window under 32 rows runs whole
-            t |> equal(pf_ffn_slice_row0(14l, 16l, 512l, true, true), 0l)     // an earlier layer runs whole
-            t |> equal(pf_ffn_slice_row0(15l, 16l, 512l, false, true), 0l)    // a feed off the f16 route runs whole
-            g_gpu.sm_count = 0
-            t |> equal(cm2_tile_cols(3072l, 64l), 32l)      // unknown SM count: the bucket rule still fires
-            t |> equal(cm2_tile_cols(3072l, 100l), 128l)    // unknown SM count: the short-window rule still fires
-            t |> equal(cm2_tile_cols(3072l, 512l), 256l)    // unknown SM count: l, never a split
-            g_gpu.sm_count = saved_sm
-            g_gpu.coopmat_mode = saved_mode
-        } else {
-            t |> skip("dasVulkan not present")
-        }
-    }
-}
-
-[test]
+[test(description = "The fused add-rms f16 store cls_ar_f16_b over six 128-wide rows equals the split cls_ar plus clamp-convert pair bit for bit on the half rows and the residual row")]
 def test_vkd_ar_f16_fused(t0 : T?) {
     t0 |> run("fused batch ar+f16 == the split cls_ar + tower_clamp_cvt_cls pair, bit-exact") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -9334,7 +7053,7 @@ def private topk_n_arm(t : T?; gptoss_router_bias : bool; ne : int = 40; k : int
     }
 }
 
-[test]
+[test(description = "The N-row top-k over four rows equals the one-row top-k bit for bit and the host select, plain and under the router bias; the two-deep stamp does so over 512 experts at ten picks, where the one-deep stamp misses")]
 def test_vkd_topk_n(t0 : T?) {
     t0 |> run("the N-row command's top-k == the one-row top-k a row at a time, bit for bit, and the host select") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -9469,7 +7188,7 @@ def private router_cols_arm(t : T?; ncols : int; norm_on, bf16 : bool; hw : bool
 //! the per-layer-embedding branch's f32 act (`PleActF32`, a `GkPleAct` stamp, the f32 projection's x): npos gate rows of ple against the side rows'
 //! layer-l slice, position-major rows `all` apart, gelu_tanh(gate) x side against the CPU form at the approx bar; the side read
 //! contiguously (as the stride were ple) misses it, the control
-[test]
+[test(description = "PleActF32 computes gelu of the gate times the layer slice of strided side rows within 2e-3 of the CPU form over five positions, the contiguous-read form differing as control")]
 def test_vkd_ple_act_f32(t0 : T?) {
     t0 |> run("ple_act_f32: gelu(gate) x the strided side rows == the CPU form") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -9520,7 +7239,7 @@ def test_vkd_ple_act_f32(t0 : T?) {
 
 //! the per-layer-embedding projection's per-window f16 panel (`PleBf16Cvt`): bf16 halves widened by their bit shift and stored f16
 //! bit for bit the language's half cast of the widened value, a value past the half range saturated, the elements past the count kept
-[test]
+[test(description = "PleBf16Cvt stores each bf16 element as the half of its widened value bit for bit over 1030 elements, saturating past-range values at 65504 and leaving the words past the count untouched")]
 def test_vkd_ple_bf16_cvt(t0 : T?) {
     t0 |> run("ple_bf16_cvt: the bf16 rows as f16 == the widened value's half, saturated") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -9561,7 +7280,7 @@ def test_vkd_ple_bf16_cvt(t0 : T?) {
     }
 }
 
-[test]
+[test(description = "The router GEMV over 3, 8 and 12 x rows as columns equals the one-row dispatch bit for bit on the f32, bf16 and odd-dim bf16 halfword stamps, with and without fused rms, and the CPU dot within its envelope bar")]
 def test_vkd_router_gemv_cols(t0 : T?) {
     t0 |> run("the router GEMV over x rows as columns == the one-row dispatch a row at a time, bit for bit, and the CPU dot") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -9584,7 +7303,7 @@ def test_vkd_router_gemv_cols(t0 : T?) {
     }
 }
 
-[test]
+[test(description = "The resident MoE routing kernels match CPU oracles: the router GEMM at a layer offset, per-row top-k against moe_select_core, the bucket schedule word for word at 20 and 512 experts, and the combine-folded residual step")]
 def test_vkd_moe_routing(t0 : T?) {
     t0 |> run("the resident MoE block's routing kernels == the CPU oracles: router GEMM, per-row top-k, the bucket schedule, the combine-folded residual step") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -9615,7 +7334,7 @@ def test_vkd_moe_routing(t0 : T?) {
 
 //! the GEMV family's lanes-per-row rule, pinned per (format, row length): the codebook and grid formats
 //! take fewer lanes than the k-lattice formats at the same length, the q8 GEMV always the whole subgroup
-[test]
+[test(description = "gemv_lanes_per_row returns the pinned lane split per row length from 768 to 8192: the grid and codebook formats, the k-lattice formats, and q8 always the whole subgroup")]
 def test_vkd_gemv_lane_rule(t0 : T?) {
     t0 |> run("gemv_lanes_per_row: the measured lane split per format class and row length") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -9644,7 +7363,7 @@ def test_vkd_gemv_lane_rule(t0 : T?) {
 //! slots, and subgroup 0's lane j gathers row j off the slot `gemv_lane_row_slot` names - row j's own dots, on the turn that serves it,
 //! for every row of the block, at every subgroup width and lanes-per-row split the shell runs; the rows each lane serves are the
 //! shell's earlier inline mapping, and the row's own index read as a slot is the control that misses
-[test]
+[test(description = "Re-derived on the CPU, the gate-up shell publish gathers every one of 32 rows exactly once off a slot holding that row at subgroup widths 32 and 64 and every lane split, the row index read as a slot missing")]
 def test_vkd_gu_publish_slots(t0 : T?) {
     t0 |> run("gu_shell: the slot each row's dots are gathered from holds that row") <| @(t : T?) {
         for (sgs in fixed_array(32u, 64u)) {
@@ -9683,7 +7402,7 @@ def test_vkd_gu_publish_slots(t0 : T?) {
     }
 }
 
-[test]
+[test(description = "A staging batch lands five pieces at odd and overlapping offsets byte for byte in one submit, and regions past the staging buffer flush mid-bracket or take the chunked path with every byte landing")]
 def test_vkd_upload_batch(t0 : T?) {
     t0 |> run("the staging batch: uploads opened as one batch land in one submit at their offsets, byte for byte, and the batch is closed after") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {

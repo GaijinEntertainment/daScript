@@ -24,37 +24,37 @@ require dasllama/dasllama_kv_dtype
 let private REGIONS_FILE = "gemma-4-E2B-it-Q8_0.gguf"
 let private LONG = LongCtx(regions = 4l, ctx = 131072l, cpu_n = 12288l, cpu_bar_rel = 0.24, split_n = 120000l, split_cut = 65536l, streams_rel = 0.14)
 
-[init]
-def private e2b_init() {
-    pin_file_kv(KVDtype.f16)
-}
-
-[finalize]
-def private e2b_restore() {
-    unpin_file_kv()
-}
-
-[test]
+[test(description = "A gemma-4-E2B f16 mirror of four regions at 131072 positions with every row kept binds in slab pairs, and single and batched steps over two sessions read bit for bit what each reads alone")]
 def test_regions_slabbed_mirror_gemma4_e2b(t : T?) {
-    cell_regions_slabbed_mirror(t, REGIONS_FILE, LONG)
+    with_kv_dtype(KVDtype.f16) {
+        cell_regions_slabbed_mirror(t, REGIONS_FILE, LONG)
+    }
 }
 
-[test]
+[test(description = "On the four-region 131072-context gemma-4-E2B mirror a 12288-token prompt and its fed steps sit within 24% of the CPU chain's max logit, the one-step-off control past it")]
 def test_long_prompt_against_cpu_gemma4_e2b(t : T?) {
-    cell_long_prompt_against_cpu(t, REGIONS_FILE, LONG)
+    with_kv_dtype(KVDtype.f16) {
+        cell_long_prompt_against_cpu(t, REGIONS_FILE, LONG)
+    }
 }
 
-[test]
+[test(description = "On gemma-4-E2B at 131072 context a 120000-token prompt continued on the device from 65536, and four steps over it, sit within the split bar of the one-call prefill")]
 def test_long_continuation_gemma4_e2b(t : T?) {
-    cell_long_continuation(t, REGIONS_FILE, LONG)
+    with_kv_dtype(KVDtype.f16) {
+        cell_long_continuation(t, REGIONS_FILE, LONG)
+    }
 }
 
-[test]
+[test(description = "Four gemma-4-E2B device-home streams at 36700 to 107479 positions prefill bit for bit the host-cached sessions, and batched steps over all stay within 14% of each alone's max logit")]
 def test_long_streams_gemma4_e2b(t : T?) {
-    cell_long_streams(t, REGIONS_FILE, LONG)
+    with_kv_dtype(KVDtype.f16) {
+        cell_long_streams(t, REGIONS_FILE, LONG)
+    }
 }
 
-[test]
+[test(description = "On the long-context gemma-4-E2B mirror, device-prefilled rows brought down carry CPU steps and CPU-prefilled rows uploaded carry resident steps, both within 24% of the CPU chain alone")]
 def test_long_rows_through_host_gemma4_e2b(t : T?) {
-    cell_long_rows_through_host(t, REGIONS_FILE, LONG)
+    with_kv_dtype(KVDtype.f16) {
+        cell_long_rows_through_host(t, REGIONS_FILE, LONG)
+    }
 }

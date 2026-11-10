@@ -159,7 +159,7 @@ def private ngram_table_cells(t : T?; m : GGUFMeta) {
     delete row
 }
 
-[test]
+[test(description = "A synthetic one-layer qwen4_exp safetensors snapshot maps to the qwen4exp GGUF KVs, 1 + w gains, split indexer q and k, concatenated draft head and n-gram row gather exactly, and a stray draft-head tensor refuses the snapshot")]
 def test_qwen4exp_snapshot_meta(t : T?) {
     let dir = write_fn_snapshot(false)
     t |> success(!empty(dir), "the synthetic qwen4_exp snapshot is written")
@@ -323,7 +323,7 @@ def private fn_paths(t : T?) : tuple<pack : string; bf16 : array<string>; served
     return <- (pack = ok ? fn_pack() : "", bf16 <- bf16, served = served, head = head)
 }
 
-[test]
+[test(description = "The Flash-Next MLX pack's integer, array and f32 KVs equal the served IQ4_XS GGUF's exactly, its draft-head count equals the sidecar's, and `hc_planes_unserved` declines the affine mixers only off the native rail")]
 def test_qwen4exp_pack_kvs(t : T?) {
     t |> run("the Flash-Next pack's KVs == the served GGUF's, the draft head's count == the sidecar's") @(t : T?) {
         if (!family_on(t, "qwen4exp")) return
@@ -376,7 +376,7 @@ def private pack_ngram_rows(t : T?; m : GGUFMeta; g : GGUFMeta; gb : array<uint8
     delete ng
 }
 
-[test]
+[test(description = "Flash-Next pack tensors match the BF16 shards and shared-head sidecar: gains bit for bit, quantized row windows within per-bit-width relative bars, with swapped-half and wrong-row controls landing outside the bar")]
 def test_qwen4exp_pack_tensors(t : T?) {
     t |> run("the Flash-Next pack tensor by tensor against the BF16 shards and the shared-head sidecar") @(t : T?) {
         if (!family_on(t, "qwen4exp")) return

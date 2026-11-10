@@ -47,7 +47,7 @@ let private G_N = 96        //! K: three 32-wide steps, the slab's lattice
 let private G_WSTRIDE = 128 //! the slab's padded row: the pad past n never reads
 let private G_XSTRIDE = 96
 
-[test]
+[test(description = "The f32 tile GEMM, plain and biased, at 37 x 100 x 96 off every tile multiple matches the k-ordered sum at the approx bar, stores every output element, and never reads the poisoned slab pad past n")]
 def test_vkt_f32_gemm(t0 : T?) {
     t0 |> run("the f32 tile GEMM, plain and biased, == the k-ordered fma sum at off-tile shapes") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -100,7 +100,7 @@ let private GA_VOCAB = 40
 let private GA_WORD = 5     //! the word rows' element base in the slab
 let private GA_OUT = 9      //! the output rows' element base: the prefix before it is never written
 
-[test]
+[test(description = "The embedding gather at element bases off zero equals the CPU word + position + type sum bit for bit, with neither add, each add alone and both, follows its ids, and leaves the prefix before out_off at its sentinel")]
 def test_vkt_row_gather(t0 : T?) {
     t0 |> run("the embedding gather == the CPU word + position + type sum, exact, at element bases off zero") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -178,7 +178,7 @@ def private elem_fixture() : array<float> {
     return <- x
 }
 
-[test]
+[test(description = "The tanh GELU over a 5203-element run at an offset matches the CPU `gelu` within 1e-5 relative, inputs at +-30 past the tanh clamp included, leaves the outside untouched, and the bar tells it from the f16 LUT form")]
 def test_vkt_gelu_tanh(t0 : T?) {
     t0 |> run("the tanh GELU == the CPU gelu at the f32 bar, the run's tail and the tanh clamp included") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -213,7 +213,7 @@ def test_vkt_gelu_tanh(t0 : T?) {
     }
 }
 
-[test]
+[test(description = "The leaky ReLU over a 5203-element run at an offset equals the CPU `leaky_relu` bit for bit at slope 0.2, the three-element tail included, with the elements outside the run untouched")]
 def test_vkt_leaky(t0 : T?) {
     t0 |> run("the leaky ReLU == the CPU leaky_relu, exact, the run's tail included") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -296,7 +296,7 @@ def private attn_arm(t : T?; rows, heads, hs : int) {
     }
 }
 
-[test]
+[test(description = "The TTS bidirectional attention matches the CPU `attention_rows` within 1e-5 relative at 37x4x64, 130x2x128 and 512x2x64 (two keys an invocation), and zeroing the last key moves the first query row, so every key is read")]
 def test_vkt_attn(t0 : T?) {
     t0 |> run("the bidirectional attention == the CPU attention_rows at hs 64 and 128, one and two keys an invocation") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -322,7 +322,7 @@ let private CC_F0S = 3      //! the F0 column's row stride
 let private CC_NS = 2       //! the noise column's row stride
 let private CC_WIDTH = 48   //! the padded arm's width: six zero columns past x, f0 and n
 
-[test]
+[test(description = "The concat rows equal the CPU concat bit for bit with one broadcast style row, and with the f0 and noise columns read at their row strides plus a zero pad to width 48")]
 def test_vkt_concat(t0 : T?) {
     t0 |> run("the concat rows == the CPU concat, exact: one style row broadcast, then f0 and n at strides and a zero pad") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -370,7 +370,7 @@ let private SG_NB = 50      //! the duration bins summed
 let private SG_LS = 64      //! the logit rows' stride: the columns past SG_NB carry POISON
 let private SG_SPEED = 1.3
 
-[test]
+[test(description = "The duration sigmoid sums over the first 50 of 64 logit columns at speed 1.3 match the CPU raw durations at the approx bar, with the poisoned columns past nb kept out of the sum")]
 def test_vkt_sigsum(t0 : T?) {
     t0 |> run("the sigmoid sums == the CPU raw durations over 50 of 64 columns at speed 1.3") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -477,7 +477,7 @@ def private colstats_arm(t : T?; rows, c : int) {
     }
 }
 
-[test]
+[test(description = "The four-pass column statistics match the double-precision channel means and squared deviations at the approx bar at 45x72, 300x20 (a short last block) and 1000x300 (lanes taking two channels)")]
 def test_vkt_colstats(t0 : T?) {
     t0 |> run("the column statistics == the double-precision mean and squared deviations, one and two strides a lane") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -549,7 +549,7 @@ def private adain_fixture() : AdainFixture {
     return <- f
 }
 
-[test]
+[test(description = "The fused AdaIN stamps over device column stats match the CPU `adain_rows_into` plus leaky ReLU or Snake at the approx bar, and the in-place leaky stamp equals the out-of-place one bit for bit with the slack untouched")]
 def test_vkt_adain(t0 : T?) {
     t0 |> run("the column stats + fused AdaIN, leaky and Snake stamps, == the CPU adain_rows_into, out of place and in place") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -601,7 +601,7 @@ def test_vkt_adain(t0 : T?) {
 let private AS_N = 1030     //! four whole workgroups and six more
 let private AS_SLACK = 5    //! elements past the run, left at the sentinel
 
-[test]
+[test(description = "The residual add-and-scale equals (a + b) / sqrt(2) in f32 bit for bit over 1030 elements, out of place and in place, with the elements past the run left as they were")]
 def test_vkt_add_scale(t0 : T?) {
     t0 |> run("the add-and-scale == (a + b) * 1/sqrt(2) in f32, exact, out of place and in place") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {

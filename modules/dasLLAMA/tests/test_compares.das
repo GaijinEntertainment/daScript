@@ -10,7 +10,7 @@ require math
 
 let INF = uint_bits_to_float(0x7f800000u)
 
-[test]
+[test(description = "logits_maxdiff, maxdiff_at and logits_maxabs read a NaN on either side at any position, or a length difference, as an infinite difference, while finite rows read their true difference")]
 def test_maxdiff_sees_nan(t : T?) {
     t |> run("a NaN on either side is the largest difference, wherever it sits") @(t : T?) {
         let ones <- [1.0, 1.0, 1.0, 1.0]
@@ -33,7 +33,7 @@ def test_maxdiff_sees_nan(t : T?) {
     }
 }
 
-[test]
+[test(description = "mismatch_exact counts each missing or extra element of a length difference as a mismatch, spans index correctly, and mismatch_rel counts a NaN as off at a relative or absolute bar")]
 def test_mismatch_counts(t : T?) {
     t |> run("the exact count takes a length difference as mismatches") @(t : T?) {
         t |> equal(mismatch_exact([1, 2, 3], [1, 2, 3]), 0, "control: equal rows")
@@ -72,7 +72,7 @@ def private probed_check(got : array<float>; want : array<auto(WT)>; bar : Bar; 
     return int2(off, fails)
 }
 
-[test]
+[test(description = "Every check bar kind (rel_of_larger, exact, rel_of_max, envelope, per_element) passes rows inside it and reds one element past it, and the poisoned-expectation control reds a bar too loose to see its poison")]
 def test_check_bars(t : T?) {
     t |> run("rel_of_larger: bar_ok's bar, the default kind") @(t : T?) {
         let want <- four_row()
@@ -142,7 +142,7 @@ def private four_row() : array<float> => [1.0, -10.0, 2.0, 4.0]
 
 let WIDE_BAR = Bar(abs_floor = 1.0e30, poison = 1.0e31)   //! a bar every finite difference sits inside, the poison past it
 
-[test]
+[test(description = "check reds a NaN on either side at any bar and a length difference, an empty compare reds its control, check_count counts without asserting, and check_exceeds passes only a finite miss")]
 def test_check_nan_and_length(t : T?) {
     t |> run("a NaN on either side is off at any bar") @(t : T?) {
         let want <- [1.0, 2.0, 3.0]
@@ -190,7 +190,7 @@ def test_check_nan_and_length(t : T?) {
     }
 }
 
-[test]
+[test(description = "check_exact on byte and word rows counts differences and length mismatches, reds an empty compare, and reds when the poisoned expectation rounds away as at 1e8 plus 1")]
 def test_check_exact_typed(t : T?) {
     t |> run("bytes and words: the count, the length rule and the poison") @(t : T?) {
         let a <- [int8(1), int8(-2), int8(3)]
@@ -224,7 +224,7 @@ def test_check_exact_typed(t : T?) {
     }
 }
 
-[test]
+[test(description = "The plane, poisoned-copy and span helpers build the exact rows asked, argmax_of picks the first largest within n, and opaque passes floats and words through unchanged")]
 def test_compare_helpers(t : T?) {
     t |> run("planes, copies and spans") @(t : T?) {
         t |> equal(plane_of(3, 2.5), [2.5, 2.5, 2.5], "a plane of the value")
@@ -246,7 +246,7 @@ def test_compare_helpers(t : T?) {
     }
 }
 
-[test]
+[test(description = "A length sweep tallies cases, elements, misses, the worst element, poisons inside the bar and inert elements, and report_sweep reds each defect and a sweep with no length or element")]
 def test_sweep_tally(t : T?) {
     t |> run("a length sweep tallies lengths, misses, poison legs and inert elements") @(t : T?) {
         var r : Sweep

@@ -12,7 +12,7 @@ require dasllama/dasllama_textnorm_ru
 // passes - years, dates, Roman numerals, clock times, percentages, units, money, telephone and
 // ISBN groups, abbreviations, symbols - on pinned sentences, idempotence included. Model-free.
 
-[test]
+[test(description = "The Russian number readers give exact words: cardinals with gender and scale-word agreement, `plural_ru` picking the right form by count, ordinals inflected on the last word, and decimals with the fraction-width denominator")]
 def test_number_words_ru(t : T?) {
     t |> run("cardinals, the scale words agreeing with their count") @(t : T?) {
         t |> equal(number_to_words_ru(0l), "ноль")
@@ -71,7 +71,7 @@ def test_number_words_ru(t : T?) {
     }
 }
 
-[test]
+[test(description = "`normalize_text_ru` expands years, dates, clock times, ordinal suffixes, units, percentages, money, abbreviations and symbols with grammatical agreement into exact pinned sentences, and is a fixed point on its own output")]
 def test_normalize_ru(t : T?) {
     t |> run("years, dates and clock times") @(t : T?) {
         t |> equal(normalize_text_ru("В 2024 году вышло 12 игр."), "В две тысячи двадцать четвёртом году вышло двенадцать игр.")

@@ -29,7 +29,6 @@ require dasllama/dasllama_core   // set_resident_prefill_allowed / resident_pref
 // under models_dir(), or without DASLLAMA_PARITY_FULL=1; the block-codec cells also skip under DASLLAMA_VK_KV32=1, which arms
 // the f32 mirror over the codec asked.
 
-[init]
 def private cuda_gemma4_intent() {
     set_cuda_mmq_pin(CUDA_MMQ_WINNERS)   // the MMQ route every load of the file measures
 }
@@ -48,8 +47,9 @@ let private FILE_26B_MX4 = GemmaFile(file = "gemma-4-26B-A4B-it-MXFP4_MOE-q4km-l
 let private GEMMA4_Q8_TWO_WINDOW_PPL_RATIO = 1.3
 let private HITS_SLACK = 12l   //! the Vulkan 26B files' slack: a router near-tie flips whole positions between the arms
 
-[test]
+[test(description = "On the CUDA whole-model driver gemma-4-12B Q4_K_M's window chain and token command agree over 8 and 300 tokens within 6x the CPU chain's own prefill-versus-decode gap, covering V-from-K 512-wide global heads and v-normed sliding layers")]
 def test_gpu_resident_cuda_gemma4_12b(t : T?) {
+    cuda_gemma4_intent()
     t |> run("gemma-4-12B Q4_K_M: eight tokens through the window chain against the token command on the CUDA driver, the CPU chain's own pair the yardstick - the V-from-K global layers on the wide-head window attention, the v-normed sliding layers") @(t : T?) {
         return if (!cuda_home_asked(t))
         prefill_vs_decode(t, 8l, FILE_12B)
@@ -62,8 +62,9 @@ def test_gpu_resident_cuda_gemma4_12b(t : T?) {
 
 //! the dense gemma-4 on the Q8_0 planes: the Vulkan 12B Q8_0 file's three cells on the CUDA driver (a 16 GB card arms it under
 //! DASLLAMA_GPU_MIN_CTX=1024)
-[test]
+[test(description = "On the CUDA driver gemma-4-12B Q8_0 keeps one-window forced-feed logits within 16 percent of max logit of the CPU chain, and its teacher-forced perplexity within 1.05x of the CPU chain's over 150 positions and 1.3x past two windows")]
 def test_gpu_resident_cuda_gemma4_12b_q8(t : T?) {
+    cuda_gemma4_intent()
     t |> run("gemma-4-12B Q8_0: resident prefill + decode on the CUDA driver - v-norm, V-from-K 512-heads, the layer scale, the capped and pinned logits - vs the CPU chain, one window") @(t : T?) {
         return if (!cuda_home_asked(t))
         gemma_forced_feed(t, 40l, FILE_12B_Q8)
@@ -80,8 +81,9 @@ def test_gpu_resident_cuda_gemma4_12b_q8(t : T?) {
 }
 
 //! the largest dense carrier (a 32 GB card): the Vulkan 31B file's one cell on the CUDA driver
-[test]
+[test(description = "On the CUDA whole-model driver gemma-4-31B Q4_K_M's window chain and token command agree over eight tokens within 6x the CPU chain's own prefill-versus-decode gap")]
 def test_gpu_resident_cuda_gemma4_31b(t : T?) {
+    cuda_gemma4_intent()
     t |> run("gemma-4-31B Q4_K_M: eight tokens through the window chain against the token command on the CUDA driver, both arms") @(t : T?) {
         return if (!cuda_home_asked(t))
         prefill_vs_decode(t, 8l, FILE_31B)
@@ -90,8 +92,9 @@ def test_gpu_resident_cuda_gemma4_31b(t : T?) {
 
 //! the native-MXFP4 routed rail on the CUDA driver: the Vulkan MXFP4_MOE file's two cells - every site in its own format, the
 //! expert stacks on the mx4 stamps, and the perplexity form at the routed model's slack
-[test]
+[test(description = "On the CUDA driver gemma-4-26B MXFP4_MOE serves every site in its own format with the native-MXFP4 expert stacks on the mx4 stamps and every call served, and its teacher-forced perplexity stays within 2x of the CPU chain's")]
 def test_gpu_resident_cuda_gemma4_26b_mx4(t : T?) {
+    cuda_gemma4_intent()
     t |> run("gemma-4-26B-A4B MXFP4_MOE: every site in its own format - the native-MXFP4 expert stacks among them - and the CUDA driver serving every call") @(t : T?) {
         return if (!cuda_home_asked(t))
         gemma_format_cell(t, FILE_26B_MX4, true)
@@ -105,8 +108,9 @@ def test_gpu_resident_cuda_gemma4_26b_mx4(t : T?) {
 //! the E-series on the CUDA home: the per-layer-embedding branch (the pre-step's side rows gathered off the ids and finished on the
 //! device, the gate and projection GEMVs around the strided act on the token command and the window) and the shared-K/V layers (q
 //! alone, the donor's mirror rows), the Vulkan E2B file's cells
-[test]
+[test(description = "On the CUDA driver gemma-4-E2B Q8_0 with per-layer embeddings and shared-KV layers keeps forced-feed logits within 16 percent of the CPU chain, perplexity within 1.05x, and window chain against token command within 6x the CPU's own gap")]
 def test_gpu_resident_cuda_gemma4_e2b(t : T?) {
+    cuda_gemma4_intent()
     t |> run("gemma-4-E2B Q8_0: resident prefill + decode on the CUDA driver - the per-layer-embedding branch, the shared-KV layers - vs the CPU chain, forty tokens") @(t : T?) {
         return if (!cuda_home_asked(t))
         gemma_forced_feed(t, 40l, FILE_E2B)
@@ -125,8 +129,9 @@ def test_gpu_resident_cuda_gemma4_e2b(t : T?) {
 //! router GEMV: tails of 2, 9 and 16 rows - one column tile, then past it - within the gemma logits bar of the row-at-a-time tail
 //! (the carrier's two token-command forms round up to 0.11 of the max logit apart, its window chain as far off the CPU chain; the
 //! one-step-off control reads 0.38 and up, a tail past the tile with its router columns untiled 1.6 and up)
-[test]
+[test(description = "On the CUDA driver gemma-4-E2B Q4_K_M, whose per-layer gate and projection rows ship F32, short tails of 2, 9 and 16 rows peeled through the token commands land within 16 percent of max logit of the row-at-a-time tail")]
 def test_gpu_resident_cuda_gemma4_e2b_k_peel(t : T?) {
+    cuda_gemma4_intent()
     t |> run("gemma-4-E2B Q4_K_M: short tails peel through the token commands on the CUDA driver, the f32 per-layer rows past one column tile") @(t : T?) {
         return if (!cuda_home_asked(t))
         with_gemma_rig(t, FILE_E2B_K) $(tr) {
@@ -138,8 +143,9 @@ def test_gpu_resident_cuda_gemma4_e2b_k_peel(t : T?) {
 
 //! the E2B on the block-codec mirrors (the Vulkan file's cells): a q8_0 mirror in the forced-feed form - the shared-KV layers store
 //! no row of their own - and a tq4 mirror scored as a perplexity - a shared-KV layer rotates its query and stores nothing
-[test]
+[test(description = "On the CUDA driver gemma-4-E2B Q8_0 under a q8_0 K/V mirror keeps forced-feed logits within 16 percent of the CPU chain, and under a tq4 mirror keeps teacher-forced perplexity within 1.05x of the CPU chain's")]
 def test_gpu_resident_cuda_gemma4_e2b_block_codecs(t : T?) {
+    cuda_gemma4_intent()
     t |> run("gemma-4-E2B Q8_0: a q8_0 K/V mirror on the CUDA driver - the shared-KV layers store no row of their own - vs the CPU chain, forty tokens") @(t : T?) {
         return if (!cuda_home_asked(t))
         with_gpu_kv_dtype(t, KVDtype.q8_0) {
@@ -156,8 +162,9 @@ def test_gpu_resident_cuda_gemma4_e2b_block_codecs(t : T?) {
 
 //! the E4B on the CUDA home (the Vulkan `g4f` file's cells): the E-series arms on the larger carrier, and its tq4 mirror - a
 //! shared-K/V layer rotates its query and stores nothing - scored as a perplexity
-[test]
+[test(description = "On the CUDA driver gemma-4-E4B Q8_0 keeps forced-feed logits within 16 percent of max logit of the CPU chain, and teacher-forced perplexity within 1.05x of the CPU chain's on the f16 mirror and on a tq4 mirror")]
 def test_gpu_resident_cuda_gemma4_e4b(t : T?) {
+    cuda_gemma4_intent()
     t |> run("gemma-4-E4B Q8_0: resident prefill + decode on the CUDA driver vs the CPU chain, forty tokens - the E-series arms on the larger carrier") @(t : T?) {
         return if (!cuda_home_asked(t))
         gemma_forced_feed(t, 40l, FILE_E4B)
@@ -178,8 +185,9 @@ def test_gpu_resident_cuda_gemma4_e4b(t : T?) {
 //! the side row the one-row command gathered off the step's token id, projected on the router GEMV, each finished on the device;
 //! then a load with the gather off, whose step brings the host's gathered row for the device to finish (the counter's control);
 //! and on the first load a prompt under the server's prefill pin, which the window chain never serves (the prefill counter's control)
-[test]
+[test(description = "On the CUDA driver gemma-4-E2B's per-layer side rows, from the window and from a step gathered off the token id or the host's row, match the CPU pre-step's within 1e-3 with no CPU pre-step row, and a prefill-pinned prompt passes to the CPU as pinned_off")]
 def test_gpu_resident_cuda_gemma4_e2b_ple_pre_step(t : T?) {
+    cuda_gemma4_intent()
     t |> run("gemma-4-E2B Q8_0: the step's side row built on the CUDA device is the CPU pre-step's row, gathered off the id and off the host's row") @(t : T?) {
         return if (!cuda_home_asked(t))
         with_gpu_resident_embed(1) {   // the step gathers its row off its token id
@@ -242,16 +250,18 @@ def private prefill_pinned_off_serves_none(t : T?; tr : Model) {
     delete prompt
 }
 
-[test]
+[test(description = "On the CUDA driver the routed gemma-4-26B UD-IQ3_XXS, held whole on the card, scores a teacher-forced perplexity over 150 prose positions within 2x of the CPU chain's, with the routed slack on hits")]
 def test_gpu_resident_cuda_gemma4_26b(t : T?) {
+    cuda_gemma4_intent()
     t |> run("gemma-4-26B-A4B IQ3_XXS: 150 prose ids prefilled, 150 teacher-forced, scored as a perplexity against the CPU chain - the gemma-4 routed form on the CUDA driver") @(t : T?) {
         return if (!cuda_home_asked(t))
         ppl_compare(t, 150l, 150l, FILE_26B, HITS_SLACK, GEMMA_MOE_PPL_RATIO)
     }
 }
 
-[test]
+[test(description = "On the CUDA driver gemma-4-26B Q4_K_M at the full rig context, with the first routed layers' experts moved to the host, scores a teacher-forced perplexity over 150 positions within 2x of the CPU chain's through the split command and cut window chain")]
 def test_gpu_resident_cuda_gemma4_26b_host(t : T?) {
+    cuda_gemma4_intent()
     t |> run("gemma-4-26B-A4B Q4_K_M with the rig's context asked whole: the first routed layers' experts on the host, 150 prose ids prefilled, 150 teacher-forced, scored as a perplexity against the CPU chain - the split command and the cut window chain under the gemma-4 form") @(t : T?) {
         return if (!cuda_home_asked(t))
         ppl_compare(t, 150l, 150l, FILE_26B_K, HITS_SLACK, GEMMA_MOE_PPL_RATIO)

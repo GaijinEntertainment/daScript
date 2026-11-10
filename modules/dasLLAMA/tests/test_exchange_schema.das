@@ -36,7 +36,7 @@ def private report(t : T?; tag : string; ok : bool; errors : array<string>) {
     }
 }
 
-[test]
+[test(description = "Every in-tree bench record store under performance/records, at least five of them, passes the exchange validator's shape-level validation")]
 def test_corpus_records(t : T?) {
     t |> run("every in-tree record store passes shape validation") @(t : T?) {
         var stores <- list_record_stores(RECORDS_DIR)
@@ -51,7 +51,7 @@ def test_corpus_records(t : T?) {
     }
 }
 
-[test]
+[test(description = "Every current-format tune sidecar in records parses with kernels and a box identity and is named by the sha12 of its own bytes, with at least four current sidecars outnumbering the legacy ones")]
 def test_corpus_sidecars(t : T?) {
     t |> run("every in-tree sidecar archive hashes to its own address and indexes") @(t : T?) {
         // parse_sidecar_info is the format discriminator: pre-box / four-field-box sidecars are
@@ -111,7 +111,7 @@ def private write_store(var runs : array<BenchRun>) : string {
     return read_text(TMP)
 }
 
-[test]
+[test(description = "The real bench record writer's stamped output passes shape and submission validation, while a store claiming official, an unstamped das run, or reference runs only is refused at submission grade")]
 def test_writer_round_trip(t : T?) {
     t |> run("the live writer's stamped output is submission-grade") @(t : T?) {
         var runs <- [ <- make_das_run(), <- make_ref_run()]
@@ -161,7 +161,7 @@ def test_writer_round_trip(t : T?) {
     }
 }
 
-[test]
+[test(description = "The record validator refuses garbage, wrong-shape roots and non-object models, and through the real writer refuses zero threads, a malformed date, a rateless or negative test row, and over-long parity or noise stamps")]
 def test_hostile_records(t : T?) {
     t |> run("malformed documents are rejected with named paths") @(t : T?) {
         var errors : array<string>
@@ -233,7 +233,7 @@ def test_hostile_records(t : T?) {
     }
 }
 
-[test]
+[test(description = "The record validator accepts a ledger-row held string and rejects a numeric held and one past 1024 characters, naming the .held path in both errors")]
 def test_held_bound(t : T?) {
     t |> run("the held annotation is a bounded string") @(t : T?) {
         var r1 <- make_das_run()
@@ -272,7 +272,7 @@ def private has_error_at(errors : array<string>; key : string) : bool {
     return false
 }
 
-[test]
+[test(description = "The record validator accepts a seventeen-family amx tune stamp and rejects a tune stamp past its own 8192-character bound")]
 def test_tune_stamp_bound(t : T?) {
     t |> run("the tune stamp names a perm a tile family, under a bound of its own") @(t : T?) {
         var r1 <- make_das_run()
@@ -294,7 +294,7 @@ def test_tune_stamp_bound(t : T?) {
     }
 }
 
-[test]
+[test(description = "A minimal versioned sidecar passes both grades and parses its info, while injection-shaped names, non-string winners, nested knobs, bad boxes, unknown sections, markup, and bad race demotion fields are rejected")]
 def test_hostile_sidecars(t : T?) {   // nolint:STYLE038 - flat one-shape-per-arm rejection list; no arm stands alone
     t |> run("a minimal versioned sidecar passes both grades") @(t : T?) {
         var good = %json~
@@ -419,7 +419,7 @@ def test_hostile_sidecars(t : T?) {   // nolint:STYLE038 - flat one-shape-per-ar
     }
 }
 
-[test]
+[test(description = "`redact_record_paths` strips usernames and leading directories from cmd, env and file paths while keeping flags, env keys and basenames, is idempotent, and returns empty on unparseable input")]
 def test_record_redaction(t : T?) {
     t |> run("cmd/env/file paths lose their leading directories") @(t : T?) {
         var store = %json~
@@ -448,7 +448,7 @@ def test_record_redaction(t : T?) {
     }
 }
 
-[test]
+[test(description = "`parse_box_string` reads platform, model id and cpu from a five-field box, allows blank model id and os build, and refuses four fields, an empty cpu and an empty string")]
 def test_box_parse(t : T?) {
     t |> run("box identity parsing") @(t : T?) {
         var b : BoxIdentity
@@ -467,7 +467,7 @@ def test_box_parse(t : T?) {
 // verbatim, so the phrase leaf (harness/tuner_phrases.das) is pinned against the validator's
 // render charset HERE — an archive carrying a pre-fix phrase is frozen history, but a writer
 // emitting one is a regression this test reds on.
-[test]
+[test(description = "The tuner's `settle_note` provenance phrase passes sidecar submission validation, while the pre-fix arrow-and-percent spelling is refused with an error naming noise_probes")]
 def test_writer_phrases(t : T?) {
     t |> run("tuner provenance phrases clear the render charset") @(t : T?) {
         var doc = %json~
@@ -497,7 +497,7 @@ def test_writer_phrases(t : T?) {
     }
 }
 
-[test]
+[test(description = "A textual pin: `dasllama_tune_scope.das` versions the tune scope off DASLLAMA_RELEASE under the wire key dasllama_version, so archived sidecars do not all read version-stale")]
 def test_tune_scope_wire_key(t : T?) {
     t |> run("the tune scope pins staleness under the schema-stable wire key") @(t : T?) {
         // the rename's load-bearing compensator: without version_key= the scope's staleness

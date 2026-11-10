@@ -136,7 +136,7 @@ def private displaced_sources(lines : array<OracleTokens>) : array<array<int64>>
     return <- [for (li in range(n)); clone_to_move(lines[(li + 1) % n].src_ids)]
 }
 
-[test]
+[test(description = "The SentencePiece model-file tokenizer encodes every Bergamot fixture line and normalizer edge line to Python sentencepiece's ids exactly, while dropping the charsmap misspells some edge line (the control)")]
 def test_nmt_spm(t : T?) {
     t |> run("the model-file tokenizer spells every fixture line as Python sentencepiece does") @(t : T?) {
         for (c in CASES) {
@@ -206,7 +206,7 @@ def private last_encoder_rows(m : NmtModel; var st : NmtState; src : array<int64
     return <- clone_to_move(got?["enc_l{m.n_enc}"] ?? default<array<float>>)
 }
 
-[test]
+[test(description = "Under marian's forced tokens the Bergamot exact lane matches the f32 oracle's dump at every stage within 1e-4 of the stage's max magnitude, and its free run agrees on at least 28 lines, with displaced-token and displaced-source controls outside")]
 def test_nmt_exact_lane(t : T?) {
     t |> run("the exact lane holds marian's f32 graph stage by stage under its own tokens, and its free run by a line floor") @(t : T?) {
         with_dasllama_jobque_() {
@@ -264,7 +264,7 @@ def private mint_cls_zeroed(path : string) : NmtModel {
     return <- m
 }
 
-[test]
+[test(description = "The ru/en Bergamot q8 lane serves its GEMMs and classifier off the Q8_0 plane and translates at least 25 fixture lines as the f32 oracle does, while zeroing the Q8_0 classifier moves every line and falls under the floor")]
 def test_nmt_q8_lane(t : T?) {
     t |> run("the q8 lane translates the ru/en fixtures close to marian's f32 graph, its classifier off the Q8_0 copy") @(t : T?) {
         with_dasllama_jobque_() {
@@ -384,7 +384,7 @@ def private device_declines(t : T?; tag : string; m : NmtModel; var st : NmtStat
     nmt_seat_shutdown()
 }
 
-[test]
+[test(description = "The device translation seat serves every ru/en fixture line, at least 26 matching the CPU q8 chain, across a model swap with no shutdown; a zeroed device classifier changes every line, and shape, length, buffer and quant_mode declines translate on the CPU")]
 def test_nmt_device(tst : T?) {
     tst |> run("the build's device seat translates the ru/en fixtures as the CPU q8 chain does, across a model swap with no shutdown") @(t : T?) {
         return if (nmt_seat_skip(t, "nmt device"))
@@ -703,7 +703,7 @@ def private unigram_vocab : array<uint8> {
     return <- spm_bytes(1, none)
 }
 
-[test]
+[test(description = "A synthetic float32 Marian student stages to f32 planes bit-identical to its intgemm8 twin's with every [in][out] GEMM transposed, an untransposed twin differing (the control), and the q8 lane lays the classifier's Q8_0 copy after the GEMMs")]
 def test_nmt_float32_student(t : T?) {
     t |> run("a float32 Marian student widens to the planes its intgemm8 twin does, every [in][out] GEMM transposed") @(t : T?) {
         var inscope v <- unigram_vocab()
@@ -730,7 +730,7 @@ def private stage_panic(path : string) : string {
     }
 }
 
-[test]
+[test(description = "`stage_nmt_model` stages a well-formed synthetic student and refuses by name each malformed one - wrong yml values, missing or misshaped items, bad framing, a split or BPE or absent vocabulary, a missing model")]
 def test_nmt_loader_refusals(t : T?) {
     t |> run("the student loader refuses each malformed file by name") @(t : T?) {
         var inscope v <- unigram_vocab()
@@ -803,7 +803,7 @@ def private spm_panic(name : string; bytes : array<uint8>) : string {
     }
 }
 
-[test]
+[test(description = "`load_spm_model_file` reads a trainer spec carrying a fixed64 field with every piece and later field intact, and refuses by name a varint cut at the end, a group wire type, and a field running past its message")]
 def test_nmt_spm_file_refusals(t : T?) {
     t |> run("the SentencePiece model-file reader refuses a malformed protobuf by name, and skips a fixed64 field") @(t : T?) {
         var inscope good <- unigram_vocab()
@@ -838,7 +838,7 @@ def test_nmt_spm_file_refusals(t : T?) {
     }
 }
 
-[test]
+[test(description = "The translator facade refuses an LLM with no direction or a self-direction, serves any two of its 46 languages, holds a Marian student to its own pair, and loads a synthetic student on the q8 lane by default and f32 under exact")]
 def test_translate_facade_contracts(t : T?) {
     t |> run("the facade's direction, coverage and language calls on a shell of each kind and a synthetic student") @(t : T?) {
         var inscope llm = Translator(kind = TranslatorKind.llm)
@@ -899,7 +899,7 @@ def private raw_completion(var tr : Translator; prompt_text : string; cap : int6
     }
 }
 
-[test]
+[test(description = "MiLMMT-46 through the facade translates ru to en (pharmacy) and back, stopping at the end of the first line where an unstopped completion runs on, its baked .dlim translates too, and a Bergamot student keeps its one direction")]
 def test_nmt_llm_translator(tst : T?) {
     tst |> run("a translation LLM through the facade: the direction picked, one sentence translated to the end of its line, a Bergamot pair kept") @(t : T?) {
         let path = path_join(models_dir(), "milmmt/MiLMMT-46-1B-v0.1.Q4_K_M.gguf")
@@ -955,7 +955,7 @@ def test_nmt_llm_translator(tst : T?) {
     }
 }
 
-[test]
+[test(description = "Qwen3-4B-Instruct through the translator facade's chat template translates a Russian sentence to one English line naming the pharmacy, with no reasoning block")]
 def test_nmt_chat_translator(tst : T?) {
     tst |> run("an instruct GGUF through the facade: its own chat template, the translation alone") @(t : T?) {
         let path = path_join(models_dir(), "Qwen3-4B-Instruct-2507-Q4_K_M.gguf")
@@ -988,7 +988,7 @@ def private chat_prompt_len(tr : Translator; text : string) : int64 {
 //! the reply budget the hybrid-thinking cell holds: a translation of one short line fits; a reasoning turn spends hundreds
 let private CHAT_REPLY_TOKENS = 48l
 
-[test]
+[test(description = "Hybrid-thinking Qwen3.5-0.8B through the translator facade answers with thinking off: a translation naming the pharmacy, no think block, within a 48-token reply")]
 def test_nmt_chat_thinking_off(tst : T?) {
     tst |> run("a hybrid-thinking chat model through the facade answers with thinking off: the translation alone, in a short reply") @(t : T?) {
         let path = path_join(models_dir(), "Qwen3.5-0.8B-Q8_0.gguf")
@@ -1008,7 +1008,7 @@ def test_nmt_chat_thinking_off(tst : T?) {
     }
 }
 
-[test]
+[test(description = "`nmt_step_lanes` gives a 512/2048 student up to eight lanes and a tiny step one, follows the lane-work seam and its restore, and `nmt_device_shape_ok` serves the students' geometry but declines widths off the 64-wide tiles and bad head splits")]
 def test_nmt_step_lanes_and_device_gate(t : T?) {
     t |> run("a decode step's lanes follow its widest GEMM through the shared lane rule; the device homes' shape gate") @(t : T?) {
         let lanes = get_dispatch_lanes()

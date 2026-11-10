@@ -72,7 +72,7 @@ def load_dec_4b() : Model {
     return <- m
 }
 
-[test]
+[test(description = "The gemma-4 12B image turn on the cats photo splices 130 rows between the image markers with the user text after them, refuses queued audio beside the image, and greedily captions the cats in over 40 characters, also with the Metal tower off")]
 def test_vision_chat(t : T?) {   // nolint:STYLE038 — one sequential turn story: shape → caption → tower legs
     t |> run("the image turn: stream shape, then the caption") @(tt : T?) {
         let mm = path_join(models_dir(), MM)
@@ -171,7 +171,7 @@ def test_vision_chat(t : T?) {   // nolint:STYLE038 — one sequential turn stor
 
 // The same turn through the gemma4v ViT tower (E-series): the carrier sniffs the family, the
 // splice and the span are the shared rail, so tier 2 is the same shape and tier 3 the same floor.
-[test]
+[test(description = "Through the gemma4v E2B tower the mmproj sniffs as gemma4v at 48 px, a carrier with no vision arm is refused at create, the cats turn splices 130 rows between the image markers, and the greedy caption names the cats")]
 def test_vision_chat_e2b(t : T?) {
     t |> run("the E2B image turn through the gemma4v tower: stream shape, then the caption") @(tt : T?) {
         let mm = path_join(models_dir(), MM_E2B)
@@ -230,7 +230,7 @@ def test_vision_chat_e2b(t : T?) {
 // The Q4_K_M decoder under the chat sampler preset at the session's default seed draws a channel
 // marker first on this box (greedy on the Q8_0 decoder does not), so the cell runs that shape;
 // the assert is the answer, since the first draw follows the box's tower lane.
-[test]
+[test(description = "The E2B Q4_K_M image turn with thinking off under the sampled preset ends on a stop before the budget, files any leading thought block as reasoning, and leaves a cats answer with no channel marker in the content and the history")]
 def test_vision_chat_e2b_nothink(t : T?) {
     t |> run("the E2B image turn on the first turn under set_thinking(false) answers") @(tt : T?) {
         let mm = path_join(models_dir(), MM_E2B)
@@ -277,7 +277,7 @@ def test_vision_chat_e2b_nothink(t : T?) {
 
 // The same turn through the gemma3 SigLIP tower: a THIRD family through the same splice rail —
 // its markers come from the gemma3 arch and its span is the fixed 256 (896² canvas).
-[test]
+[test(description = "The gemma-3-4b SigLIP pair sniffs as gemma3v at 56 px, splices the fixed 256 rows between start_of_image and end_of_image, and greedily captions the cats in over 40 characters")]
 def test_vision_chat_gemma3(t : T?) {
     t |> run("the gemma-3-4b image turn through the gemma3v tower: stream shape, then the caption") @(tt : T?) {
         let mm = path_join(models_dir(), MM_G3)
@@ -323,7 +323,7 @@ def test_vision_chat_gemma3(t : T?) {
 
 // The 12B gemma3 pair: the SAME SigLIP tower at projection width 3840 — the one dimension the
 // family varies per decoder; large tier, so DASLLAMA_PARITY_FULL gates it.
-[test]
+[test(description = "The gemma-3-12b pair sniffs as gemma3v with the 3840-wide projection, splices the fixed 256 image rows, and greedily captions the cats in over 40 characters")]
 def test_vision_chat_gemma3_12b(t : T?) {
     t |> run("the gemma-3-12b image turn: the widened projection, then the caption") @(tt : T?) {
         let mm = path_join(models_dir(), MM_G3_12B)
@@ -365,7 +365,7 @@ def test_vision_chat_gemma3_12b(t : T?) {
 
 // The same turn through the qwen3v tower (Qwen3-Omni): the mrope leg — grid rope positions
 // through the uniform span, position advance by the grid's long side. Large tier.
-[test]
+[test(description = "The Qwen3-Omni qwen3v image turn splices 300 rows on a 20x15 grid between the vision markers with user text after, captions the cats greedily, and leaves the session's rope delta at 20 - 300")]
 def test_vision_chat_omni(t : T?) {
     t |> run("the Omni image turn through the qwen3v tower: stream shape, the grid, the caption") @(tt : T?) {
         let mm = path_join(models_dir(), MM_OMNI)
@@ -416,7 +416,7 @@ def test_vision_chat_omni(t : T?) {
     }
 }
 
-[test]
+[test(description = "The Qwen3-VL 4B deepstack turn carries 10240-wide rows (1+3 taps of 2560) into the chat and captions the cats, and zeroing the deepstack slices moves the decoder's logits by over 1e-2")]
 def test_vision_chat_deepstack(t : T?) {   // nolint:STYLE038 — one sequential turn story: wide rows → caption → zeroed-slices control
     t |> run("the Qwen3-VL 4B image turn: deepstack wide rows through the chat, then the caption") @(tt : T?) {
         let mm = path_join(models_dir(), MM_4B)
@@ -502,7 +502,7 @@ def test_vision_chat_deepstack(t : T?) {   // nolint:STYLE038 — one sequential
 // The bench shape: pre-encoded rows injected into a PLAIN chat (no embedder attached) must
 // walk the very turn the embedder chat walks — lcpp_bench prices this seam, and a hand-splice
 // here once fed deepstack decoders a narrow scrambled span that still captioned the cats.
-[test]
+[test(description = "Pre-encoded wide rows fed to a plain chat through `add_user_image_rows_` produce the embedder chat's greedy reply token for token, and narrow rows on a deepstack decoder or a second image before respond panic")]
 def test_vision_chat_rows_seam(t : T?) {
     t |> run("pre-encoded wide rows through add_user_image_rows_ reproduce the embedder walk") @(tt : T?) {
         let mm = path_join(models_dir(), MM_4B)
@@ -579,7 +579,7 @@ def test_vision_chat_rows_seam(t : T?) {
     }
 }
 
-[test]
+[test(description = "The Qwen2.5-Omni turn loads contiguous qwen2vl MROPE sections, sniffs qwen25v at 2048 wide, splices 391 rows on a 23x17 grid, captions the cats, and sets the rope delta to 23 - 391")]
 def test_vision_chat_qwen25o(t : T?) {
     t |> run("the Qwen2.5-Omni image turn: window ViT + the NON-interleaved MROPE decoder, then the caption") @(tt : T?) {
         let mm = path_join(models_dir(), MM_25O)
@@ -625,7 +625,7 @@ def test_vision_chat_qwen25o(t : T?) {
 // The bench/scheduler shape: a PLAIN chat (no embedder attached) renders the image span, so
 // the Omni vocab-spelling fallback must live at the renderer, not only in the vision
 // constructor (lcpp_bench --image builds exactly this turn and panicked on <|vision_start|>).
-[test]
+[test(description = "A plain Qwen2.5-Omni chat with no embedder renders an image span whose head closes on the vocab's own vision_bos marker id")]
 def test_render_image_span_qwen25o(t : T?) {
     t |> run("a plain chat renders the Omni image span via the vocab's own spelling") @(tt : T?) {
         let dec = path_join(models_dir(), DEC_25O)
@@ -650,7 +650,7 @@ def test_render_image_span_qwen25o(t : T?) {
 // answer requires the image turn's history across the mrope position delta. Audio-in-chat
 // for the qwen3a conformer is a standing gap (the chat AudioTower serves the whisper-class
 // families only) — the full three-modality showcase lands with that slice.
-[test]
+[test(description = "One Qwen3-Omni session describes the cats on an image turn, then answers yes on a text follow-up that needs the image turn's history, the rope delta persisting at 20 - 300 across turns")]
 def test_omni_showcase(t : T?) {
     t |> run("one Omni session: image turn, then a text turn recalling it") @(tt : T?) {
         let mm = path_join(models_dir(), MM_OMNI)

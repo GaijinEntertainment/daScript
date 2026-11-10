@@ -98,7 +98,7 @@ def private q8_split_leg(tt : T?; m : Model) {
     }
 }
 
-[test]
+[test(description = "On Metal, Qwen3-Embedding 0.6B's embed rides one prefill window with no classifier and no decode mirror (a chat forward does both), takes split-K on q8 sites, matches the card matrix within 0.02, and its one-row vector is the CPU f32 model's")]
 def test_embeddings_hidden_only_window(t : T?) {
     t |> run("an embedding's Metal window runs no classifier and feeds no decode mirror, a chat window does both, and the card's matrix holds (0.6B Q8_0)") <| @(tt : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
@@ -168,7 +168,7 @@ def test_embeddings_hidden_only_window(t : T?) {
     }
 }
 
-[test]
+[test(description = "Qwen3-Embedding 0.6B Q8_0 reads last-token pooling and an appended EOS off the file, and its last-token read lands the model card's 2 x 2 cosine matrix within 0.02 while the mean read cannot separate the passages (control)")]
 def test_embeddings_qwen3_embedding(t : T?) {
     t |> run("Qwen3-Embedding reads its pooling and its EOS off the file, and lands the model card's cosine matrix (0.6B Q8_0)") <| @(tt : T?) {
         let path = path_join(models_dir(), "Qwen3-Embedding-0.6B-Q8_0.gguf")
@@ -193,7 +193,7 @@ def test_embeddings_qwen3_embedding(t : T?) {
     }
 }
 
-[test]
+[test(description = "On tinyllama, a text running past the context embeds to a finite unit vector at cosine above 0.9999 to its leading seq_len tokens alone, while the overflow text by itself embeds elsewhere")]
 def test_embeddings_past_the_context(t : T?) {
     t |> run("a text past the model's context embeds its leading seq_len tokens: a unit vector, no panic (tinyllama Q8)") <| @(tt : T?) {
         let path = path_join(models_dir(), "tinyllama-1.1b-chat-v1.0.Q8_0.gguf")
@@ -250,7 +250,7 @@ def test_embeddings_past_the_context(t : T?) {
     }
 }
 
-[test]
+[test(description = "A chat model file naming no pooling (tinyllama) defaults to mean pooling float for float, appends no EOS, and differs from both the last-token and the first-row reads")]
 def test_embeddings_chat_model_default_mean(t : T?) {
     t |> run("a chat model's file names no pooling: the mean is the default, the last row an override (tinyllama Q8)") <| @(tt : T?) {
         let path = path_join(models_dir(), "tinyllama-1.1b-chat-v1.0.Q8_0.gguf")
@@ -308,7 +308,7 @@ def private batch_texts() : array<string> {
     return <- texts
 }
 
-[test]
+[test(description = "`embed_batch` on Qwen3-Embedding 0.6B gives each text its single `embed` vector at cosine above 0.9999 in one window, in 40-row split windows and under the 256-dim Matryoshka cut, returned in input order")]
 def test_embeddings_batch_matches_single(t : T?) {
     t |> run("embed_batch gives each text the vector embed gives it alone, in input order - one window, split windows, the Matryoshka cut (0.6B Q8_0)") <| @(tt : T?) {
         let path = path_join(models_dir(), "Qwen3-Embedding-0.6B-Q8_0.gguf")
@@ -329,7 +329,7 @@ def test_embeddings_batch_matches_single(t : T?) {
     }
 }
 
-[test]
+[test(description = "In a host batch, exactly the one-row text runs `embed_forward` alone while multi-row texts share the window, and every text of a q4_0 load runs alone, each landing its single vector at cosine above 0.9999 with a shifted-text control missing")]
 def test_embeddings_lone_forwards(t : T?) {
     t |> run("a batch's one-row text and every text of a q4_0 model run embed_forward alone, outside the shared window, and land the vector embed gives them (0.6B Q8_0, and loaded as q4_0)") <| @(tt : T?) {
         let path = path_join(models_dir(), "Qwen3-Embedding-0.6B-Q8_0.gguf")
@@ -399,7 +399,7 @@ def private served_load(tt : T?; path : string; var m : Model) : bool {
     return true
 }
 
-[test]
+[test(description = "The whole-model Vulkan driver serves Qwen3-Embedding 0.6B on the device with no CPU-rail pass: the card matrix within 0.02, a batch packed in one scratch window matching its singles, and a long mean read equal to the CPU's")]
 def test_embeddings_on_the_resident_driver(t : T?) {
     t |> run("on an armed Vulkan tier the driver serves Qwen3-Embedding whole from the device: embed and embed_batch prefill on it with no call passed to the CPU rails, and land the card's matrix (0.6B Q8_0)") <| @(tt : T?) {
         let path = path_join(models_dir(), "Qwen3-Embedding-0.6B-Q8_0.gguf")
@@ -470,7 +470,7 @@ def test_embeddings_on_the_resident_driver(t : T?) {
 //! the packed window's seat on a model with sliding layers: neither discrete home seats segments back to back over a ring layer
 //! (`cud_rdec_segs_packed`, its Vulkan twin), so a batch's texts take a window each, no packed window is counted, and the batch's
 //! vectors are still the singles'; the packed form's own witness is the resident-driver cell on Qwen3-Embedding
-[test]
+[test(description = "On gemma-3-1b with sliding layers the whole-model driver's packed seat declines on either discrete home, so a batch takes no packed window, prefills every text on the device, and still matches its singles at cosine above 0.9999")]
 def test_embeddings_ring_layers_take_a_window_each(t : T?) {
     t |> run("gemma-3-1b Q8_0 on the whole-model driver: the packed seat declines a sliding layer's ring on either home, so the batch's texts take a window each and still match their singles") <| @(tt : T?) {
         let path = path_join(models_dir(), "gemma-3-1b-it-Q8_0.gguf")
@@ -521,7 +521,7 @@ def private windows_for(lens : array<int64>; window_rows : int64) : int64 {
     return windows
 }
 
-[test]
+[test(description = "`embed_window_rows` is the armed driver's capped region context for a served model, so a batch past 256 rows takes the predicted count of scratch windows and matches its singles, and is EMBED_WINDOW_ROWS for an unserved model")]
 def test_embeddings_window_rows_follow_the_region(t : T?) {
     t |> run("embed_window_rows: the armed driver's scratch region bounds a batch window where it serves the model - a batch past the region splits into windows and still matches its singles - and EMBED_WINDOW_ROWS bounds it elsewhere (0.6B Q8_0)") <| @(tt : T?) {
         let path = path_join(models_dir(), "Qwen3-Embedding-0.6B-Q8_0.gguf")
@@ -563,7 +563,7 @@ def test_embeddings_window_rows_follow_the_region(t : T?) {
     }
 }
 
-[test]
+[test(description = "With every device region held by a live session, `embed_batch` takes host-cached sessions and no scratch window yet reads the same vectors as with a region free, and parking the streams frees every region")]
 def test_embeddings_every_region_held(t : T?) {
     t |> run("with every region held by a live device-home session the embedding takes host-cached sessions, not the scratch window, and reads the vectors the free region gives (0.6B Q8_0)") <| @(tt : T?) {
         let path = path_join(models_dir(), "Qwen3-Embedding-0.6B-Q8_0.gguf")
@@ -608,7 +608,7 @@ def test_embeddings_every_region_held(t : T?) {
     }
 }
 
-[test]
+[test(description = "On the armed driver, gemma-4 E2B with per-layer embeddings and sliding layers is promised no scratch window, runs none, and its mean-pooled batch still matches its singles at cosine above 0.9999")]
 def test_embeddings_ple_model_takes_no_scratch(t : T?) {
     t |> run("a per-layer-embedding model with sliding layers on the armed driver is promised no scratch window - the packed seat seats no ring - takes none, and its batch still matches its singles (gemma-4 E2B Q8_0)") <| @(tt : T?) {
         let path = path_join(models_dir(), "gemma-4-E2B-it-Q8_0.gguf")
@@ -635,7 +635,7 @@ def test_embeddings_ple_model_takes_no_scratch(t : T?) {
     }
 }
 
-[test]
+[test(description = "`session_keeps_rows_only` is false exactly for recurrent state, a NextN head and the per-layer n-gram ring, and `embed_pool_key` tells two same-geometry models with empty fblobs apart while one model reads one key")]
 def test_embeddings_session_rules(t : T?) {
     t |> run("session_keeps_rows_only reads the session state a forward from 0 does not rewrite - recurrent state, a NextN head, the n-gram ring - and nothing else") @(tt : T?) {
         tt |> success(session_keeps_rows_only(Config()), "a plain decoder keeps only its rows")
@@ -657,7 +657,7 @@ def test_embeddings_session_rules(t : T?) {
     }
 }
 
-[test]
+[test(description = "A Qwen3.5 deltanet batch takes fresh sessions without rebuilding the embed pool and matches its singles, and a pooled model of another geometry rebuilds the pool once while the embedding model's next read returns its earlier vector")]
 def test_embeddings_batch_fresh_sessions(t : T?) {
     t |> run("a model whose session carries state past its rows (Qwen3.5 deltanet) takes fresh sessions: batch matches single; a pooled model of another geometry between two reads leaves the second read right (Qwen3.5 0.8B, tinyllama, 0.6B Q8_0)") <| @(tt : T?) {
         let path = path_join(models_dir(), "Qwen3.5-0.8B-Q8_0.gguf")

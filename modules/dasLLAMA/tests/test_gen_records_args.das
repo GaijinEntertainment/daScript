@@ -44,7 +44,7 @@ def private arg_value(args : array<string>; flag : string) : string {
     return at >= 0 && at + 1 < length(args) ? args[at + 1] : "<absent>"
 }
 
-[test]
+[test(description = "`asr_pybench_args` builds each reference arm's argv: onnx with the recovery --out and never a device, nemo forwarding the device only when asked, mlx on the MLX venv with the variant and neither")]
 def test_pybench_args(t : T?) {
     t |> run("the onnx arm carries the recovery --out and never a device") @(t : T?) {
         let args <- asr_pybench_args("onnx", "parakeet-v3-int8", ["jfk.wav", "gb1.wav"], 6, 2, "mps")
@@ -80,7 +80,7 @@ def test_pybench_args(t : T?) {
     }
 }
 
-[test]
+[test(description = "The ASR rosters name whisper-cli, mtmd, nemo and crispasr as GPU-paired, onnx and parakeet-cli as not, mlx alone as GPU-only, and `asr_engine_name` maps mlx and mtmd to their package and binary")]
 def test_gpu_pair_roster(t : T?) {
     t |> run("the gpu-pair roster names the tools with a GPU twin leg") @(t : T?) {
         t |> success(asr_gpu_pair_tool("whisper-cli"), "whisper-cli pairs (Metal build)")
@@ -102,7 +102,7 @@ def test_gpu_pair_roster(t : T?) {
     }
 }
 
-[test]
+[test(description = "The CrispASR reference parsers time a run from the finer of seconds and realtime factor, split output into per-file wall and transcript blocks, pick the fastest rep only when every rep timed, and pick CPU and Metal builds per leg")]
 def test_crispasr_parse(t : T?) {
     t |> run("the wall reads from the finer of the summary line's two fields") @(t : T?) {
         // a Metal run: 0.04 s at 10 ms is a 12 % step; 206.5x at 0.1 over 126720 samples is 0.02 %
@@ -169,7 +169,7 @@ def test_crispasr_parse(t : T?) {
     }
 }
 
-[test]
+[test(description = "`cmake_built_bin` prefers MSVC Release x.exe over x.exe over the bare name as each is planted, and returns the bare path when nothing is built")]
 def test_cmake_built_bin_layouts(t : T?) {
     t |> run("a cmake-built binary: MSVC's Release\\x.exe first, then x.exe, then the bare name, the bare path where none exists") @(t : T?) {
         var terr = ""
@@ -200,7 +200,7 @@ def test_cmake_built_bin_layouts(t : T?) {
     }
 }
 
-[test]
+[test(description = "The canary_qwen_bench.py reference script passes its own --self-test, and an argless run refuses with exit code 2 naming the required --wav before any model import")]
 def test_canary_bench_seams(t : T?) {
     t |> run("the canary reference bench's pure seams pass their self-test") @(t : T?) {
         var pv = ""
@@ -221,7 +221,7 @@ def test_canary_bench_seams(t : T?) {
     }
 }
 
-[test]
+[test(description = "`records_run_verdict` reds a run with zero cells measured (naming the guard) and any run with failed cells, and is green for one measured cell with no failures")]
 def test_zero_cells_refusal(t : T?) {
     t |> run("a run that measures nothing carries the red verdict") @(t : T?) {
         let empty_run = records_run_verdict(0, 0)
@@ -234,7 +234,7 @@ def test_zero_cells_refusal(t : T?) {
     }
 }
 
-[test]
+[test(description = "`argv_receipt` and `argv_line` spell every home directory as a tilde kept outside the quotes a spaced argument needs, on both POSIX and drive-letter paths")]
 def test_argv_receipt_spells_home_as_tilde(t : T?) {
     let line = argv_receipt(["/Users/ci/Work/bin/daslang", "-jit", "lcpp_bench.das", "--", "-m", "/Users/ci/models/q.gguf", "a b", "/Users/ci/my dir/x.gguf"])
     t |> equal(line, "~/Work/bin/daslang -jit lcpp_bench.das -- -m ~/models/q.gguf \"a b\" ~/\"my dir/x.gguf\"", "every home spelled ~ outside the quotes a shell would otherwise keep literal")
@@ -242,7 +242,7 @@ def test_argv_receipt_spells_home_as_tilde(t : T?) {
     t |> equal(argv_line(["C:\\Users\\ci\\my dir\\x.exe"]), "~\\\"my dir\\x.exe\"", "the drive form keeps ~ outside the quotes on its own separator")
 }
 
-[test]
+[test(description = "--catalog admits only the case-sensitive official and all, the CPU legs' batched shape needs both axes at 1 or more or none at all, and the batched row's shape follows the CPU leg's own knobs or the Metal leg's flat rows")]
 def test_catalog_scope(t : T?) {
     t |> run("--catalog admits official and all, and refuses every other spelling") @(t : T?) {
         t |> success(catalog_known("official"), "official - the public board")
@@ -274,7 +274,7 @@ def test_catalog_scope(t : T?) {
     }
 }
 
-[test]
+[test(description = "`board_store_refusal` refuses a --jit run, a --catalog all sweep and an mlx-lm store aimed at the public board store, by relative or absolute path, naming the flag and the fix, while the official board mint passes")]
 def test_board_store_guard(t : T?) {
     t |> run("a --jit run needs a store of its own") @(t : T?) {
         let refusal = board_store_refusal("official", true, "")
@@ -308,7 +308,7 @@ def test_board_store_guard(t : T?) {
     }
 }
 
-[test]
+[test(description = "`das_child_args` puts the released exe's own flags after one bare separator with no debug stamp, and a --jit child runs the lcpp_bench source through daslang with the separator after the script and the debug flag")]
 def test_das_child_args(t : T?) {
     t |> run("the released exe takes its rest after a bare separator") @(t : T?) {
         let args <- das_child_args("/opt/rig/dasllama-bench", false, ["-m", "x.gguf", "-r", "5"])
@@ -341,7 +341,7 @@ def private text_cell(engine : string; pp, pp_sd, tg, tg_sd : double) : array<Be
     return <- models
 }
 
-[test]
+[test(description = "`cell_rates` folds a das cell's pp and tg rows onto separate axes with the widest row's cv as worst, and a reference engine's rows reach neither axis nor the cv")]
 def test_cell_rates_split_the_axes(t : T?) {
     t |> run("a das cell's rows fold onto the pp and tg axes separately") @(t : T?) {
         let cell <- text_cell("das", 512.0lf, 20.0lf, 40.0lf, 0.4lf)
@@ -359,7 +359,7 @@ def test_cell_rates_split_the_axes(t : T?) {
     }
 }
 
-[test]
+[test(description = "`keep_cold` keeps the cold cell when a warm re-run is slower on either axis, even when the other axis gains, and keeps the warm cell when nothing was lost")]
 def test_heat_keeper(t : T?) {
     t |> run("a warm re-run slower on EITHER axis keeps the cold cell") @(t : T?) {
         let cold = CellRates(pp = 500.0lf, tg = 40.0lf, worst_cv = 0.09lf)
@@ -375,7 +375,7 @@ def test_heat_keeper(t : T?) {
     }
 }
 
-[test]
+[test(description = "`bench_env_line` spells a DASLLAMA_MODELS_DIR under the home as a tilde outside the quotes its space needs, and no home directory survives in the env receipt")]
 def test_bench_env_line_spells_home_as_tilde(t : T?) {
     let had = env_is_set("DASLLAMA_MODELS_DIR")
     let before = had ? env_value_of("DASLLAMA_MODELS_DIR") : ""
@@ -390,7 +390,7 @@ def test_bench_env_line_spells_home_as_tilde(t : T?) {
     t |> success(find(line, "/Users/") < 0, "no home directory survives in the env receipt")
 }
 
-[test]
+[test(description = "`tts_ref_args` runs the torch arm on the tts venv with one model at the das voice, the asked device, limit, passes and threads, the mlx arm with the mlx engine and no device, and the engine name follows the package")]
 def test_tts_ref_args(t : T?) {
     let kokoro = tts_spec_of("/models/kokoro-82m.gguf")
     t |> run("the torch arm runs the tts venv's instrument over one model on the asked device") @(t : T?) {
@@ -418,7 +418,7 @@ def test_tts_ref_args(t : T?) {
     }
 }
 
-[test]
+[test(description = "The TTS catalog finds rows by file name only for TTS files, every row carries its fields and a unique file, both engines record under one test key, and the das child and media legs carry the right flags")]
 def test_tts_catalog_seams(t : T?) {
     t |> run("a GGUF path finds its catalog row by file name; an unlisted one finds none") @(t : T?) {
         let s = tts_spec_of("/some/dir/kitten-mini.gguf")
@@ -461,7 +461,7 @@ def test_tts_catalog_seams(t : T?) {
     }
 }
 
-[test]
+[test(description = "The TTS reference output parsers read the BENCH row as summed generation ms and audio seconds for the asked sentence count only, and the VERSIONS field empty when absent and free of a preceding warning line")]
 def test_tts_reference_output(t : T?) {
     let out = "ref bench: x\nVERSIONS\ttorch 2.14.0 / kokoro 0.9.4 (tts_ref_bench.py --device cpu, requirements-tts.txt)\n  lj000 9.2 s\nkokoro-82m af_heart: ...\nBENCH\tkokoro-82m\tg2p20\t187.5000\t0\t14444.90\t0.07704\n"
     t |> run("the BENCH row reads back as the summed generation ms and audio seconds") @(t : T?) {
@@ -482,7 +482,7 @@ def test_tts_reference_output(t : T?) {
     }
 }
 
-[test]
+[test(description = "`tts_corpus_head` skips textless sentences, stops at n, returns fewer for a short corpus and none for unparsable JSON, and the committed corpus holds the default sentence count")]
 def test_tts_corpus_head(t : T?) {
     let corpus = "[\{\"id\": \"a\", \"text\": \"One.\"\}, \{\"id\": \"b\", \"text\": \"\"\}, \{\"id\": \"c\", \"text\": \"Three.\"\}, \{\"id\": \"d\", \"text\": \"Four.\"\}]"
     t |> run("the head skips a sentence with no text and stops at n") @(t : T?) {
@@ -501,7 +501,7 @@ def test_tts_corpus_head(t : T?) {
     }
 }
 
-[test]
+[test(description = "`tts_seat_verdict` reads none when no seat served, all when every called seat served every call, and partial when any call fell to the CPU or one seat never served beside another")]
 def test_tts_seat_verdict(t : T?) {
     t |> run("no serve is a CPU cell, every call served a GPU one, anything between neither") @(t : T?) {
         t |> equal(tts_seat_verdict([20, 20, 0], [0, 0, 0]), "none", "the knob-off cell")
@@ -512,7 +512,7 @@ def test_tts_seat_verdict(t : T?) {
     }
 }
 
-[test]
+[test(description = "`mlx_lm_bench_args` builds the flat reference argv on the MLX venv with --npl only past one stream, and `mlx_lm_rows` keeps only whole ROW lines with a positive numeric rate")]
 def test_mlx_lm_reference(t : T?) {
     t |> run("the mlx-lm argv is the flat reference's shape, the batched row only past one stream") @(t : T?) {
         let flat <- mlx_lm_bench_args("mlx-community/Qwen3.8-27B-4bit", 512, 128, 5, 1)
@@ -537,7 +537,7 @@ def test_mlx_lm_reference(t : T?) {
     }
 }
 
-[test]
+[test(description = "`board_refs_refusal` refuses a board mint whose CPU leg lacks --ref-clean or Metal leg lacks --ref-stock, and admits a metal-only run, a scratch das-only store and an asr or tts-only run")]
 def test_board_refs_guard(t : T?) {
     t |> run("a board mint refuses a leg whose llama-bench is unset") @(t : T?) {
         t |> success(find(board_refs_refusal(true, true, true, true, "", "/b/stock"), "--ref-clean") >= 0, "the cpu leg without its clean ref")
@@ -549,7 +549,7 @@ def test_board_refs_guard(t : T?) {
     }
 }
 
-[test]
+[test(description = "`gpu_leg_refusal` admits a Vulkan or CUDA leg only alone, off Apple, under its own asks on a build carrying the module, a board mint needs each leg's ref, and `cell_served_on` holds only when every das row stamps that home")]
 def test_gpu_leg_guards(t : T?) {
     t |> run("the vulkan leg runs alone, off Apple, under the GPU ask with the CUDA knob unset, on a dasVulkan build") @(t : T?) {
         t |> equal(gpu_leg_refusal("vulkan", false, true, true, false, false), "", "no vulkan leg - nothing to refuse")
@@ -605,7 +605,7 @@ def test_gpu_leg_guards(t : T?) {
     }
 }
 
-[test]
+[test(description = "`ref_py` returns the normalized override interpreter when set, else the named venv beside the ASR benches")]
 def test_ref_py(t : T?) {
     t |> run("a reference venv's interpreter: the env override when set, else the venv beside the asr benches") @(t : T?) {
         t |> equal(ref_py("/opt/py/bin/python3", "onnx"), normalize("/opt/py/bin/python3"), "the override wins")

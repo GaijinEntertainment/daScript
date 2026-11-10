@@ -23,7 +23,7 @@ require _gguf_writer   // gguf_header, gguf_tensor_info, gguf_pad_data: the synt
 require _child_run   // DASLLAMA_AUDIO_LANE loads once at context init: a value a process
 
 //! every lane tag a family the facade loads by image registers routes to that family: a lane `asr_image_route` misses panics a `.dlim` load by path
-[test]
+[test(description = "asr_image_route maps every lane tag the six ASR families register to its family, with at least two lanes a family as the sweep control, and routes chat-tower and unregistered lanes nowhere")]
 def test_asr_image_routes(tst : T?) {
     tst |> run("load_asr_model's image route accepts every lane its families register") @(t : T?) {
         let families <- ["whisper", "parakeet", "gigaam", "qwen3a", "gemma4a", "canary"]
@@ -82,7 +82,7 @@ def private ga_detok(m : GigaamModel; ids : array<int>) : string {
     return s
 }
 
-[test]
+[test(description = "gigaam_detokenize over toy vocabs joins charwise pieces verbatim, and in SPM mode turns the mark into a space, drops the leading one and renders control pieces as nothing")]
 def test_gigaam_detokenize(t : T?) {
     t |> run("charwise pieces join as they are, spaces included") @(t : T?) {
         var inscope m <- toy_gigaam(false)
@@ -106,7 +106,7 @@ def private caps_of(langs : array<string>) : AsrCaps {
     return <- c
 }
 
-[test]
+[test(description = "asr_default_lang picks the single listed language, auto for an empty list and English for several, and the GigaAM caps sheet resolves to ru")]
 def test_asr_default_lang(t : T?) {
     t |> run("no language asked: the one code a sheet lists, auto where it lists none, English where it lists several") @(t : T?) {
         let none : array<string>
@@ -124,7 +124,7 @@ def test_asr_default_lang(t : T?) {
     }
 }
 
-[test]
+[test(description = "gigaam_check_lang accepts ru, the empty string and auto without a panic, and panics on en with a message naming Russian (ru)")]
 def test_gigaam_check_lang(t : T?) {
     t |> run("ru, \"\" and auto are taken; any other code is refused naming Russian") @(t : T?) {
         var inscope m = GigaamModel()
@@ -141,7 +141,7 @@ def test_gigaam_check_lang(t : T?) {
     }
 }
 
-[test]
+[test(description = "Each ASR family exec_fmt verb, fed hand-set model structs, stamps the exact precision string for its q8, f32, f16 and K-quant lane flags")]
 def test_family_exec_fmt_verbs(t : T?) {
     t |> run("each family verb stamps its own precision") @(t : T?) {
         var w = WhisperModel()
@@ -197,7 +197,7 @@ def private seat_yes() : bool => true
 
 def private seat_no() : bool => false
 
-[test]
+[test(description = "gpu_exact_serves follows the serves hook when no exact ask is set, and an exact ask answering false or a non-serving seat stands the exact lane down to the q8 image")]
 def test_gpu_lane_seat_exact_ask(t : T?) {
     let plain = GpuLaneSeat(set = true, serves = @@seat_yes)
     let crowned = GpuLaneSeat(set = true, serves = @@seat_yes, exact_asks = true, exact = @@seat_yes)
@@ -210,7 +210,7 @@ def test_gpu_lane_seat_exact_ask(t : T?) {
     t |> equal(lane_why(bare, false), "the GPU tower serves the q8 image (the default lane)", "the stood-down seat still serves its q8 image")
 }
 
-[test]
+[test(description = "Each audio family q8 lane defaults to its policy, a pin flips it either way and reset returns to the policy, and the ASR decoder K/V dtype defaults to f16 and reads back its setter")]
 def test_audio_lane_knobs(t : T?) {
     t |> run("qwen3a: the q8 lane pin, and reset back to the policy") @(tt : T?) {
         tt |> success(qwen3a_serves_q8(), "the default is q8 on every home")
@@ -343,7 +343,7 @@ def private knob_lanes(t : T?; out, v : string) {
 
 //! DASLLAMA_AUDIO_LANE over every audio family's lane policy, one child a value: unset the policy, 8 and 16 the knob's lane
 //! under every API pin, any other value a warning and the policy
-[test]
+[test(description = "In child processes DASLLAMA_AUDIO_LANE=8 or 16 moves every un-pinned audio family to that lane while API pins still win and the lane lines name the knob; unset or a bad value leaves the policy lanes")]
 def test_audio_lane_env(t : T?) {
     let unset = audio_lane_child(t, "")
     let q8 = audio_lane_child(t, "8")
@@ -378,7 +378,7 @@ def test_audio_lane_env(t : T?) {
     }
 }
 
-[test]
+[test(description = "Each ASR family encode-total profiler bucket is its pinned name, and the facade asr_encode_bucket answers the same bucket for every AsrKind")]
 def test_family_encode_buckets(t : T?) {
     t |> run("encode-total buckets are family facts") @(t : T?) {
         t |> equal(whisper_encode_bucket(), "wh.encode_total")
@@ -412,7 +412,7 @@ def private gigaam_device_lane_of(dev : TowerDev) : string {
     return asr_device_lane(m)
 }
 
-[test]
+[test(description = "asr_device_lane for a parakeet or gigaam model names the GPU home its image is flavored for, cpu for an unflavored image and for gigaam where its GPU driver does not serve")]
 def test_asr_device_lane_names_home(t : T?) {
     t |> run("a one-file family's device lane names the home its image is flavored for") @(t : T?) {
         for (dev in [TowerDev.metal, TowerDev.vulkan, TowerDev.cuda]) {
@@ -449,7 +449,7 @@ def private kq_conversion_line(what, fmt : string) : string
     => "dasLLAMA qwen3a: the source stores an audio tensor as {what} - the load decodes it to f32 and re-encodes it into the {fmt} lane"
 
 //! the GPU flavor a source load takes over the formats of its audio tensors - a quantized tensor but Q8_0 keeps it, the load naming the conversion
-[test]
+[test(description = "Over synthetic GGUFs a quantized non-Q8_0 audio tensor keeps the CUDA flavor and the load says one conversion line naming the type, member and lane form, while Q8_0, float and non-audio sources say none")]
 def test_tower_kq_source_conversion(t : T?) {
     let dir = test_temp_dir()
     let q4k = path_join(dir, "a_q4k.gguf")
@@ -531,7 +531,7 @@ def private lane_tag_image(t : T?; dir, tag : string) : string {
 }
 
 //! the halfword-lane helpers over every flavor, the expectations written out: the exact pick stages halfwords on every GPU home
-[test]
+[test(description = "The halfword-lane helpers stage the exact pick as f16 on every GPU home and never the q8 pick or the CPU flavor, and tower_load_f16 reads a .dlim by its baked lane tag over the caller flavor")]
 def test_tower_lane_helpers(t : T?) {
     t |> run("tower_dev_halfword: every GPU home stages the exact pick as halfwords, the CPU flavor none") @(t : T?) {
         t |> equal(tower_dev_halfword(TowerDev.none), false, "the CPU flavor")
@@ -582,7 +582,7 @@ def test_tower_lane_helpers(t : T?) {
     }
 }
 
-[test]
+[test(description = "parakeet_detokenize strips the spaces of the first piece SPM marks but keeps them on later pieces, passes unmarked pieces through, drops control pieces and maps no tokens to the empty string")]
 def test_parakeet_detokenize(t : T?) {
     t |> run("the FIRST piece drops the spaces its ▁ prefix produced") @(t : T?) {   // nolint:STYLE039
         var inscope m <- toy_parakeet()

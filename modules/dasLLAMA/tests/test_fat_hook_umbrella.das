@@ -13,7 +13,7 @@ require dasllama/dasllama_common
 
 def private fake_race() : bool => false
 
-[test]
+[test(description = "A program requiring only the engine umbrella `dasllama_transformer`, not the facade, already has a first-start race hook installed by the umbrella's init set", standalone = "a file requiring dasllama_fat_start or the facade installs the hook itself, hiding whether the umbrella alone installs it")]
 def test_the_umbrella_registers_the_first_start_hook(t : T?) {
     t |> run("requiring the umbrella alone installs a first-start race hook") @(t : T?) {
         let old = set_runtime_race_hook(@@fake_race)

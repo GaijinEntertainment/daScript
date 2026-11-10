@@ -44,7 +44,7 @@ def private gate_encode(t : T?; emb : Gemma4uvEmbedder; var st : Gemma4uvState;
     }
 }
 
-[test]
+[test(description = "The gemma4uv embedder on the CPU reads the 12B mmproj geometry and matches the mtmd encode dumps per token within 2e-4 on square fixtures and a non-square 672 x 336 position fingerprint, and panics on a grid wider than the position table")]
 def test_gemma4uv_tier1(t : T?) {
     t |> run("tier-1 embedder parity vs the mtmd encode dumps") @(tt : T?) {
         let mm = path_join(models_dir(), "mmproj-gemma-4-12B-it-BF16.gguf")
@@ -96,7 +96,7 @@ def test_gemma4uv_tier1(t : T?) {
 // The f16-staged GEMMs cannot promise the CPU 2e-4, so the bar is the scale-relative rung
 // (TIER1_TOL + 4e-3 * token rms) with the CPU constant untouched; the log states which rung
 // each fixture actually held. Engage evidence is the encodes counter, per fixture.
-[test]
+[test(description = "On the Metal tower with the SIMDGROUP kernel set pinned, the gemma4uv embedder matches the mtmd encode dumps within 2e-4 plus 4e-3 of token rms on four fixtures, each GPU-served by one encode")]
 def test_gemma4uv_tier1_gpu(t : T?) {
     t |> run("tier-1 GPU attempt vs the mtmd encode dumps (scale-relative rung)") @(tt : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
@@ -153,7 +153,7 @@ def private mint_patch_zeroed(mm : string) : Gemma4uvEmbedder {
     return <- embp
 }
 
-[test, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN_VISION.md#vk-vision-chains")]
+[test(description = "On the serving discrete home the gemma4uv embedder, stem included, holds the twin bar against the CPU chain on square and non-square canvases with matching token counts, while a patch-zeroed embedder misses it"), arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN_VISION.md#vk-vision-chains")]
 def test_gemma4uv_device_twin(t : T?) {
     t |> run("the device embedder vs the CPU chain, dump-free, and the patch-zeroed control") @(tt : T?) {
         static_if (typeinfo builtin_module_exists(vulkan) || typeinfo builtin_module_exists(cuda)) {
@@ -217,7 +217,7 @@ def test_gemma4uv_device_twin(t : T?) {
 }
 
 //! the embedder whole on the serving device off the planes holds the CPU bar on the mtmd dumps; engage evidence: the encodes counter, per fixture
-[test]
+[test(description = "The gemma4uv embedder whole on the serving discrete home's device holds the CPU 2e-4 bar on the mtmd encode dumps with the stem on device, a patch-zeroed control reds, and it serves again after a model-state drop")]
 def test_gemma4uv_tier1_vulkan(t : T?) {
     t |> run("tier-1 encode on the serving discrete home's tower ({serving_tower_dev(TowerFamily.vision)}) vs the mtmd encode dumps") @(tt : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {

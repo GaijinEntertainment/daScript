@@ -3617,7 +3617,7 @@ def private ew2_gate(t : T?; var dev, queue; tag : string; st; x, y, want : arra
     return <- got
 }
 
-[test]
+[test(description = "Every Metal prefill kernel stamp (norms, rope, attention, mul_mm, quantized dense and expert GEMVs, MoE routing, deltanet, tower ops) matches its CPU twin, bit for bit on exact-arithmetic data, else within its cell bar (1e-4 relative for plain fp)")]
 def test_metal_prefill_kernels(t : T?) {
     t |> run("phase-6 prefill kernels == dasLLAMA CPU twins") @(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
@@ -5911,7 +5911,7 @@ def private b32_mm_kernels(f) {   //! generic, as the gates are: the Apple half 
 // is exact, so the whole padded y compares BIT-exact.
 //! device-free: the dev-W knee arithmetic (the pick the board's deep-dense cells ride).
 //! Expectations hold at the DEVW_SMALL_PANEL default (32 MiB) - no sidecar loads here
-[test]
+[test(description = "At the default small-panel knee devw_tile_pick returns the pinned dev-W tile count (whole, 16, 10, or decline) per panel shape, row floor and slow-fallback class, and devw_scratch_floor returns 64, 384 or 2048 rows")]
 def test_devw_tile_pick(t : T?) {
     static_if (typeinfo builtin_module_exists(das_metal)) {
         let cap = 16ul * 1024ul * 1024ul * 1024ul
@@ -5945,7 +5945,7 @@ def test_devw_tile_pick(t : T?) {
 
 //! device-free: the dense tall-kq pick - the byte knee, the 128-row floor, and the
 //! set_metal_prefill_tall A/B seat (the seat clause is what the override contract pins)
-[test]
+[test(description = "tallkq_pick takes the tall kq form only for an over-knee panel of at least 128 rows with the set_metal_prefill_tall seat on, declining under the byte knee, under the row floor, or with the seat off")]
 def test_tallkq_pick(t : T?) {
     static_if (typeinfo builtin_module_exists(das_metal)) {
         t |> success(tallkq_pick(512l, 16384l, 4096l, true), "over-knee tall panel takes")
@@ -5959,7 +5959,7 @@ def test_tallkq_pick(t : T?) {
 
 //! device-free: the window's pre-step projection pick - the bf16 tile at a dim of whole 32-element chunks and layers x ple of
 //! whole 64-row tiles, the position-blocked GEMV off either grid, the f32 rows on their own form (`pf_ple_proj_form`)
-[test]
+[test(description = "The PLE window projection takes the bf16 tile only at a dim of whole 32-element chunks and layers x ple of whole 64-row tiles, else the bf16 GEMV, while f32 PLE rows ride their own form (pf_bf16_tile_ok, pf_ple_proj_form)")]
 def test_pf_bf16_tile_pick(t : T?) {
     static_if (typeinfo builtin_module_exists(das_metal)) {
         t |> success(pf_bf16_tile_ok(1536l, 35l * 256l), "the E2B's projection takes the tile")
@@ -5986,7 +5986,7 @@ def test_pf_bf16_tile_pick(t : T?) {
 
 //! the resident panel registry's two classes on the driver's device: an uncharged panel (a routed layer's router rows)
 //! is served outside the dev-W budget and charges nothing, a charged one answers to the budget
-[test]
+[test(description = "The Metal resident panel registry makes an uncharged panel once at zero charge and reuses it by key, refuses a hit of another size, charges a budgeted panel exactly its bytes, and drops everything on shutdown with no leaks")]
 def test_resident_panel_charge(t : T?) {
     static_if (typeinfo builtin_module_exists(das_metal)) {
         with_metal_decode_gate(t) $(var queue : MetalCommandQueue?) {
@@ -7141,7 +7141,7 @@ def private routed_counts(npos, k, ne : int; seed : uint) : array<int> {
     return <- counts
 }
 
-[test]
+[test(description = "pf_moe_padded_rows hits its pinned values and bounds the bucket rail pad (padded_bases) over seeded routings, reached exactly at least once, with a one-row-fewer bound falling under the rail as the tightness control")]
 def test_moe_padded_bound(t : T?) {
     static_if (typeinfo builtin_module_exists(das_metal)) {
         t |> equal(pf_moe_padded_rows(0l, 256l), 0l, "no routed rows pad to nothing")
@@ -7307,7 +7307,7 @@ def private rnnt_pick_gate(t : T?; var dev, queue; sh : RcShape) {
     }
 }
 
-[test]
+[test(description = "The four Metal transducer decode stamps (LSTM gates, joint.pred, joint window, greedy pick) match their CPU references at both fixture shapes: values within 1e-5 relative, skipped legs, state words and records exact")]
 def test_metal_rnnt_kernels(t : T?) {
     t |> run("the transducer decode's four stamps == their CPU references, at both fixture shapes (`rc_shapes`)") @(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
@@ -7381,7 +7381,7 @@ def private ctc_pick_gate(t : T?; var dev, queue) {
     }
 }
 
-[test]
+[test(description = "The Metal CTC pick returns the CPU row loop's class exactly and its plog within 1e-5 relative at 34, 257 and 1025 classes, writes every record, picks class 0 on an all-NaN row, and a poisoned bias moves the result")]
 def test_metal_ctc_pick_kernel(t : T?) {
     t |> run("the CTC head's pick == the CPU row loop, a NaN row picking class 0") @(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
@@ -7545,7 +7545,7 @@ def private nmt_pick_gate(t : T?; var dev, queue) {
     }
 }
 
-[test]
+[test(description = "The Metal Bergamot step stamps match their CPU references: embed rows and greedy pick bit for bit, the SSRU cell within 1e-6 relative, plane slack kept, and a poisoned table, bias or forget-bias element moves each result")]
 def test_metal_nmt_kernels(t : T?) {
     t |> run("the Bergamot step's three stamps == their CPU references") @(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {

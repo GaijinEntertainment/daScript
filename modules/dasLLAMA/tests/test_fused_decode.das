@@ -23,7 +23,7 @@ let MODEL_PATH = path_join(llama2c_dir(), "stories15M.bin")
 let N_STEPS = 24
 let FUSED_CTX = 64l   //! the GGUF sessions' context: N_STEPS positions and room; a CPU f32 K/V at a file's whole context runs to tens of GB (77 on the 262144-position Qwen3-4B)
 
-[test]
+[test(description = "On Q8 stories15M with dispatch forced threaded, fused decode stage chains produce the per-op dispatch path's greedy ids and final logits bit for bit")]
 def test_fused_decode_bit_exact(t : T?) {
     t |> run("fused stage chains == per-op dispatches, ids + logits bit-exact (needs stories15M.bin)") @(t : T?) {
         return if (!jit_only(t))
@@ -118,7 +118,7 @@ def private fused_vs_std_bit_exact(t : T?; tr : Model) {
 // checked INSIDE the chain: set_flash_decode_check makes every sliced layer recompute exact
 // single-pass attention from the raw scores and panic past fp32 tolerance (1e-4). The logit
 // bound here is a loose structural backstop (a dropped/double-counted slice is O(10)).
-[test]
+[test(description = "Past 256 positions on SmolLM2-135M the fused flash-sliced attention passes an in-chain witness recomputing exact single-pass attention within 1e-4 at every sliced layer, and teacher-forced logits stay within a structural bound of 4 of the per-op path")]
 def test_fused_flash_deep_ctx(t : T?) {
     t |> run("flash-sliced fused chain: per-layer witness + structural logit bound (needs SmolLM2-135M)") @(t : T?) {
         return if (!jit_only(t))
@@ -181,7 +181,7 @@ def test_fused_flash_deep_ctx(t : T?) {
 // The q8_0-KV twin of the deep-ctx witness: the sliced K pass runs the int8×int8 quantized-query
 // dot and the witness recomputes through the SAME dot (kv_score), so the 1e-4 in-chain contract
 // holds under the block codec too.
-[test]
+[test(description = "Under a q8_0 K/V cache past 256 positions on SmolLM2-135M, the fused flash-sliced attention passes the in-chain 1e-4 witness through the same quantized dot, and teacher-forced logits stay within a structural bound of 4 of the per-op path")]
 def test_fused_flash_deep_ctx_q8(t : T?) {
     t |> run("flash-sliced fused chain under q8_0 KV: per-layer witness + structural logit bound (needs SmolLM2-135M)") @(t : T?) {
         return if (!jit_only(t))
@@ -244,7 +244,7 @@ def test_fused_flash_deep_ctx_q8(t : T?) {
 // pre_post_norm arches (Gemma2/3): the chains defer the residual add and run the post-norm as a
 // serial tail after the rendezvous. gemma-3-1b covers qk-norm + dual-rope sliding (5:1) + the
 // attn deferral; gemma-2-2b covers softcap + GeGLU + qd != dim + alternating sliding.
-[test]
+[test(description = "On the pre/post-norm arches gemma-3-1b, gemma-2-2b and gemma-4 E2B under the portable backend, fused decode chains match the per-op path's greedy ids and final logits bit for bit")]
 def test_fused_decode_pre_post_norm(t : T?) {
     t |> run("fused chains bit-exact on pre/post-norm arches (needs the gemma ggufs)") @(t : T?) {
         return if (!jit_only(t))
@@ -279,7 +279,7 @@ def test_fused_decode_pre_post_norm(t : T?) {
 // Qwen3-4B Q4_K_M covers k4 + k6. Bit-exact vs the per-op kq path, same contract as the q8
 // arms. Auto backend only: a kq load repacks (kq_repacked) only when the active backend
 // carries the kq rows cores — a pin without them would silently compare std vs std.
-[test]
+[test(description = "On Qwen3-4B Q5_K_M and Q4_K_M repacked for the native K-quant rows cores, fused decode chains with Q8_K activations match the per-op kq path's greedy ids and final logits bit for bit")]
 def test_fused_decode_kquant(t : T?) {
     t |> run("fused chains bit-exact on native K-quant layers (needs the kq ggufs)") @(t : T?) {
         return if (!jit_only(t))
@@ -310,7 +310,7 @@ def test_fused_decode_kquant(t : T?) {
 // The fused MoE expert chain (mx4 experts: gate+up rows + bias + act + requant -> down rows +
 // bias + weighted reduce as ONE rendezvous) vs the 3-dispatch groupn sequence. gpt-oss-20b is
 // the mx4 fixture (12GB — the large-tier PARITY_FULL gate, same rule as the fam cells).
-[test]
+[test(description = "On gpt-oss-20b mxfp4 with an mx4 rows core, the fused MoE expert chain matches the three-dispatch groupn path's greedy ids and final logits bit for bit")]
 def test_fused_decode_moe_chain(t : T?) {
     t |> run("fused MoE expert chain bit-exact on gpt-oss (needs the gguf + DASLLAMA_PARITY_FULL)") @(t : T?) {
         return if (!jit_only(t))
@@ -339,7 +339,7 @@ def test_fused_decode_moe_chain(t : T?) {
     }
 }
 
-[test]
+[test(description = "On SmolLM2-135M (head size 64, so the attention chain fuses too) fused decode matches the per-op path's greedy ids and final logits bit for bit on the auto backend's rows core and on the portable pin")]
 def test_fused_decode_attn_chain(t : T?) {
     t |> run("fused attention chain bit-exact on SmolLM2-135M (needs the gguf)") @(t : T?) {
         return if (!jit_only(t))

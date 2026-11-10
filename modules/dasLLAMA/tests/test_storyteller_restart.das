@@ -128,7 +128,7 @@ def private story_1_first(t : T?; out : string) {
     t |> success(last_1 < first_2, "the speech thread took story 1's sentences before story 2's:\n{witness(out)}")
 }
 
-[test]
+[test(description = "A restart fired as story 1's first clip begins stops that clip once, reports all but the playing sentence unheard, accounts every story 1 sentence as synthesized or skipped before story 2's, and story 2 reads out")]
 def test_restart_while_reading(t : T?) {
     t |> run("a space press as story 1's first clip begins stops it, drops its other sentences, and story 2 is read out") @(t : T?) {
         return if (!ready(t))
@@ -151,7 +151,7 @@ def test_restart_while_reading(t : T?) {
     }
 }
 
-[test]
+[test(description = "A restart after two sentences while story 1 is still written and the speech thread held makes the thread skip exactly the queued count of story 1 sentences, synthesize none, stop no clip, and read story 2 out")]
 def test_restart_skips_the_replaced_story_queue(t : T?) {
     t |> run("a restart while the speech thread is held off its sentences skips every queued sentence of the replaced story") @(t : T?) {
         return if (!ready(t))
@@ -171,7 +171,7 @@ def test_restart_skips_the_replaced_story_queue(t : T?) {
     }
 }
 
-[test]
+[test(description = "A 30-frame cap with the speech thread held stops the pinned story mid-writing with nothing synthesized, shutdown skips its queued sentences as closing, and with no restart rail no second story starts")]
 def test_frame_cap_and_no_restart_by_default(t : T?) {
     t |> run("the frame cap ends an unread story, and the rail restarts nothing on its own") @(t : T?) {
         return if (!ready(t))
@@ -189,7 +189,7 @@ def test_frame_cap_and_no_restart_by_default(t : T?) {
     }
 }
 
-[test]
+[test(description = "Two capped storyteller runs under the same --seed print the identical story text, and a different seed prints a different one")]
 def test_seed_pins_the_story(t : T?) {
     t |> run("one --seed writes one story, another seed another") @(t : T?) {
         return if (!ready(t))
@@ -209,7 +209,7 @@ def test_seed_pins_the_story(t : T?) {
     }
 }
 
-[test]
+[test(description = "A sentence-count restart rail the story never reaches fires once story 1 is fully told, and every one of its held sentences is skipped unsynthesized before story 2 reads out")]
 def test_sentence_rail_fires_on_a_told_story(t : T?) {
     t |> run("a sentence rail the story never reaches fires once the story is told, and its held sentences are skipped") @(t : T?) {
         return if (!ready(t))
@@ -226,7 +226,7 @@ def test_sentence_rail_fires_on_a_told_story(t : T?) {
     }
 }
 
-[test]
+[test(description = "The speech thread synthesizes a story's first sentence before that story's written line is logged - for story 1 with no hold, and for story 2 once a restart opens the held thread - by witness-line order, not timing")]
 def test_speech_runs_beside_the_writing(t : T?) {
     t |> run("with no hold, the speech thread reads story 1 while it is being written") @(t : T?) {
         return if (!ready(t))
