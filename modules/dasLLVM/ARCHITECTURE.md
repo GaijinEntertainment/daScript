@@ -262,4 +262,8 @@ address of a parameter's interior in memory and reads it back (a generator's fra
 `addr(self.i)`), and a pointer loaded from memory is not "based on" the parameter to LLVM, so a
 blanket `noalias` miscompiles the language's own lowering. A `noalias`, `nocapture` or `align16`
 hint naming no parameter is a compile error (`process_function_hints`), since a hint that names
-nothing would otherwise do nothing.
+nothing would otherwise do nothing. A reference parameter carries `align` of its type, since a
+reference is an address the runtime made; a typed pointer parameter carries none: a `T?` is a
+value the program may hold at any address (`intptr` reads it, a parity test on it must run as
+written), and an `align` the language never promised lets LLVM fold a comparison of two odd
+pointer values or run a load a parity test guards.

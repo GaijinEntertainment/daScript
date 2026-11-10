@@ -472,3 +472,43 @@ def test_a_view_taken_through_void_is_a_pun(t : T?) {
     t |> equal(1.0f, via_float(px, px), "typed source pointer")
     t |> equal(1.0f, via_void(px, px), "void? source pointer")
 }
+
+struct OddPtrBox {
+    bits : uint
+}
+
+def odd_ptr_dummy(var a : int?; var b : OddPtrBox ??) : OddPtrBox? {
+    unsafe {
+        deref(a) = 1
+        deref(b) = reinterpret<OddPtrBox?>(uint64(7))
+        return reinterpret<OddPtrBox?>(uint64(1))
+    }
+}
+
+[sideeffects]
+def odd_ptr_compare(var insn : OddPtrBox?; var thread : OddPtrBox?;
+                    var delay_list : OddPtrBox?) : int {
+    unsafe {
+        var new_thread : OddPtrBox?
+        var must_annul : int
+        delay_list = odd_ptr_dummy(addr(must_annul), addr(new_thread))
+        if (delay_list == null && new_thread != null) {
+            thread = new_thread
+        }
+        if (delay_list != null && must_annul != 0) {
+            insn.bits = 1u
+        }
+        if (intptr(new_thread) != intptr(thread)) {
+            return 3
+        }
+        return 0
+    }
+}
+
+[test(description = "a typed pointer parameter carries no alignment promise: two odd pointer values compare by value instead of folding on an alignment the language never stated")]
+def test_misaligned_pointer_values_compare_by_value(t : T?) {
+    var baz : OddPtrBox
+    unsafe {
+        t |> equal(0, odd_ptr_compare(addr(baz), reinterpret<OddPtrBox?>(uint64(7)), null))
+    }
+}

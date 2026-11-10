@@ -810,3 +810,19 @@ def test_cross_target_folds(t : T?) {
         t |> success(ln |> has("CROSS=[yes]"), "any cross target takes the cross arm")
     }
 }
+[test(description = "a load through an odd int? that a parity test guards is skipped under -jit: the pointer parameter carries no alignment the fold could use", timeout = 1200)]
+def test_guarded_load_through_an_odd_pointer_is_skipped(t : T?) {
+    if (!jit_enabled()) {
+        t |> skip("the child runs under -jit, which this build does not carry")
+        return
+    }
+    let bin = get_host_binary()
+    let fixture = "{FIXTURE_DIR}/_fixture_misaligned_pointer.das"
+    let cwd = "{OUTPUT_DIR}/misaligned_pointer"
+    mkdir_rec(cwd)
+    var lines : array<string>
+    let flags = "-dasroot \"{get_das_root()}\" -no-module-cache -jit -jit-no-cache"
+    let rc = spawn("cd \"{cwd}\" && \"{bin}\" {flags} \"{fixture}\"", lines)
+    let out = join(lines, "\n")
+    t |> equal(0, rc, "the guarded load through an odd pointer is skipped, got:\n{out}")
+}

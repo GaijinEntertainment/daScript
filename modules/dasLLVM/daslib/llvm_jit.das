@@ -675,8 +675,6 @@ class public LlvmJitVisitor : AstVisitor {
             var param = LLVMGetParam(fn, ai)
             if (a._type.isRef) {
                 LLVMSetParamAlignment(param, uint(a._type.alignOf))
-            } elif (a._type.isPointer && a._type.firstType != null) {
-                LLVMSetParamAlignment(param, uint(a._type.firstType.alignOf))
             }
             LLVMSetValueName(param, string(a.name))
             //! a container, or a type holding one, is lock-written by `for`:

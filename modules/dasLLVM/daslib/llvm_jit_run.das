@@ -37,7 +37,7 @@ var LINK_WHOLE_LIB = false // when true, standalone exe links against the whole 
 
 // Read by tests-cpp/small/test_jit_emitter_pin.cpp: FNV-1a64 of the emitter sources
 // (normalized to LF; file list in the test)
-let LLVM_JIT_EMITTER_HASH : uint64 = 0x53f70a0ffe7dcfc1ul
+let LLVM_JIT_EMITTER_HASH : uint64 = 0x3d1e1ebca5907053ul
 
 //! every instruction of `fn`, block by block
 def private for_each_instruction(fn : LLVMOpaqueValue?; blk : block<(inst : LLVMOpaqueValue?)>) {
