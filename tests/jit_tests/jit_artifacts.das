@@ -823,6 +823,11 @@ def test_cross_target_folds(t : T?) {
     }
 }
 
+//! the shell prefix that makes `dir` the child's working directory;
+//! on Windows a plain `cd` stays on the current drive
+def private cd_to(dir : string) : string =>
+    get_platform_name() == "windows" ? "cd /d \"{dir}\"" : "cd \"{dir}\""
+
 [test(description = "a break inside a try arm of a loop whose recover arm can panic leaves the loop under -jit on a cold cache and again on the warm one", timeout = 1200)]
 def test_break_inside_a_try_arm_leaves_the_loop_under_jit(t : T?) {
     if (!jit_enabled()) {
@@ -836,7 +841,7 @@ def test_break_inside_a_try_arm_leaves_the_loop_under_jit(t : T?) {
     let root = get_das_root()
     for (round in range(2)) {
         var inscope lines : array<string>
-        let rc = spawn("cd \"{cwd}\" && \"{bin}\" -dasroot \"{root}\" -jit \"{fixture}\"", lines)
+        let rc = spawn("{cd_to(cwd)} && \"{bin}\" -dasroot \"{root}\" -jit \"{fixture}\"", lines)
         let out = join(lines, "\n")
         t |> equal(0, rc, "round {round}: the child runs under -jit, got:\n{out}")
         t |> success(lines |> has("BREAK_IN_TRY 2"),
@@ -856,7 +861,7 @@ def test_guarded_load_through_an_odd_pointer_is_skipped(t : T?) {
     mkdir_rec(cwd)
     var lines : array<string>
     let flags = "-dasroot \"{get_das_root()}\" -no-module-cache -jit -jit-no-cache"
-    let rc = spawn("cd \"{cwd}\" && \"{bin}\" {flags} \"{fixture}\"", lines)
+    let rc = spawn("{cd_to(cwd)} && \"{bin}\" {flags} \"{fixture}\"", lines)
     let out = join(lines, "\n")
     t |> equal(0, rc, "the guarded load through an odd pointer is skipped, got:\n{out}")
 }
@@ -883,7 +888,7 @@ def test_solid_array_base_is_hidden_from_codegen(t : T?) {
     t |> equal(rc_one, 0, "the one-module child runs, got:\n{join(out, "\n")}")
     t |> equal(launder_calls("{cwd}/one.ll"), 2, "the one-module build hides the two arrays alone")
     var split_out : array<string>
-    let rc_split = spawn("cd \"{cwd}\" && \"{bin}\" -dasroot \"{root}\" -no-module-cache "
+    let rc_split = spawn("{cd_to(cwd)} && \"{bin}\" -dasroot \"{root}\" -no-module-cache "
         + "-jit \"{fixture}\" -- --jit-dump=split.ll", split_out)
     t |> equal(rc_split, 0, "the split child runs, got:\n{join(split_out, "\n")}")
     t |> equal(launder_calls("{cwd}/split.ll"), 2, "the split build hides them too")
