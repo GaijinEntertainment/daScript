@@ -186,7 +186,9 @@ def write_clone_init_script() : bool {
             fprint(f, "[init]\n")
             fprint(f, "def mark_init() \{ g_init_marker = 777 \}\n")
             fprint(f, "def read_marker() : int \{ return g_init_marker \}\n")
-            fprint(f, "def through_block(blk : block<(x : int) : int>) : int \{ return invoke(blk, 20) + 1 \}\n")
+            fprint(f, "def through_block(blk : block<(x : int) : int>) : int \{\n")
+            fprint(f, "    return invoke(blk, 20) + 1\n")
+            fprint(f, "\}\n")
             fprint(f, "let g_from_block = through_block() $(x) \{ return x * 2 \}\n")
             fprint(f, "[export]\n")
             fprint(f, "def main() \{\n")
@@ -194,7 +196,8 @@ def write_clone_init_script() : bool {
             fprint(f, "    with_job_que() \{\n")
             fprint(f, "        with_channel(1) $(ch) \{\n")
             fprint(f, "            new_job() @() \{\n")
-            fprint(f, "                ch |> push_clone(IntVal(v = read_marker() * 1000 + g_from_block))\n")
+            fprint(f, "                let v = read_marker() * 1000 + g_from_block\n")
+            fprint(f, "                ch |> push_clone(IntVal(v = v))\n")
             fprint(f, "                ch |> notify_and_release\n")
             fprint(f, "            \}\n")
             fprint(f, "            ch |> for_each_clone() $(val : IntVal#) \{\n")
@@ -305,8 +308,10 @@ def test_clone_init_in_thread(t : T?) {
     let output = run_exe(CLONE_INIT_EXE)
     t |> success(find(output, "CLONE_INIT_MARKER=[777]") != -1)
     t |> success(find(output, "CLONE_INIT_MARKER=[0]") == -1)
-    t |> success(find(output, "MAIN_BLOCK_GLOBAL=[41]") != -1, "a global initialized through a block: {output}")
-    t |> success(find(output, "CLONE_BLOCK_GLOBAL=[41]") != -1, "the same global in a cloned context: {output}")
+    t |> success(find(output, "MAIN_BLOCK_GLOBAL=[41]") != -1,
+        "a global initialized through a block: {output}")
+    t |> success(find(output, "CLONE_BLOCK_GLOBAL=[41]") != -1,
+        "the same global in a cloned context: {output}")
 }
 
 // A function-pointer global (`var g = @@fn`) must codegen + run in a

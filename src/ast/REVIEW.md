@@ -65,14 +65,6 @@ docs: `ARCHITECTURE.md`, `ARCHITECTURE_INFER.md`, `ARCHITECTURE_MODULE_SCAN.md`.
   change.** A reader accepts a stream whose stored version equals `getVersion()`, so without the
   bump an older cache decodes the changed header as the old one with no diagnostic.
 
-- **A diff that makes the compile reject source it accepted before - a new or tightened
-  compile error does - or changes anything the module cache stores for that source, bumps
-  `AstSerializer::getVersion()` (`include/daScript/ast/ast_serializer.h`, repo root) in the
-  same change.** A cached module never runs through the compile again, and the cache key
-  misses a rebuild of the runtime library alone (a `-module-cache <path>` file records no
-  binary at all), so without the bump a rebuilt `daslang` serves modules the old compile
-  accepted or produced.
-
 - **The `setDeferredModuleLoader` call in `require_dynamic_modules` (`dyn_modules.cpp`) stays,
   and stays above the first `init_modules_for_folder` call - removing it or moving it below is a
   defect.** That call compiles the descriptors, and a descriptor can require a module an earlier

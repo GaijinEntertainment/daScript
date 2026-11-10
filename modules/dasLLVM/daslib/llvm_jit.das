@@ -631,7 +631,7 @@ class public LlvmJitVisitor : AstVisitor {
 
     def process_finally(expr : ExpressionPtr) {
         var blk <- collect_finally(expr, false, true)
-        sort(blk) <| cmp_by(uid.get_block_name_ptr(_).publ())
+        sort(blk) <| cmp_by(uid.get_block_name(_).publ())
         for (bl in blk) {
             finallyBlocks[bl] = append_basic_block("finally_block_at_{int(bl.at.line)}_")
         }

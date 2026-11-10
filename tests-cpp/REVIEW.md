@@ -13,5 +13,5 @@ subfolder's checklist as well as this one.**
 builds, registers, or runs, names in the PR one configuration that executes the added or
 changed lines: its configure flags and its ctest command.**
 
-**A diff to `REVIEW.das` that weakens `check_lane_wiring` or `builds_nothing_for_its_tests` is
-a defect.** What each gate reports is stated at its definition in `REVIEW.das`.
+**A diff to `REVIEW.das` that weakens `check_lane_wiring`, `builds_nothing_for_its_tests` or
+`check_test_case_names` is a defect.** What each gate reports is stated at its definition in `REVIEW.das`.

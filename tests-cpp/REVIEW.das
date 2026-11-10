@@ -139,7 +139,8 @@ def private switched_modules : table<string; SwitchedModule> {
     var out : table<string; SwitchedModule>
     for (f in cmakelists_under("modules")) {
         let text = fread(f)
-        var inscope folder_switches <- [for (tok in keys(prefixed_tokens(text, "DAS_"))); tok; where key_exists(root_switches, tok)]
+        var inscope das <- prefixed_tokens(text, "DAS_")
+        var inscope folder_switches <- [for (t in keys(das)); t; where key_exists(root_switches, t)]
         continue if (empty(folder_switches))
         folder_switches |> sort
         var inscope folder_libs <- [for (tok in keys(prefixed_tokens(text, "libDasModule"))); tok]
@@ -195,7 +196,7 @@ def private check_big_test_gating {
     }
 }
 
-//! no `TEST_CASE` name in tests-cpp/small holds a `;` - ctest
+//! no doctest case name in tests-cpp/small holds a `;` - ctest
 //! splits the name there into filters that match no case
 def private check_test_case_names {
     let folder = "tests-cpp/small"
@@ -204,13 +205,16 @@ def private check_test_case_names {
             let f = "{folder}/{name}"
             var inscope lines <- split(fread(f), "\n")
             for (line, line_no in lines, count(1)) {
-                let at = find(line, "TEST_CASE(\"")
-                continue if (at < 0)
-                let close = find(line, "\")", at)
-                if (close > at && find(slice(line, at, close), ";") >= 0) {
+                continue if (find(line, "TEST_CASE") < 0 && find(line, "SCENARIO") < 0)
+                let open_quote = find(line, "\"")
+                let close_quote = rfind(line, "\"")
+                continue if (close_quote <= open_quote)
+                let case_name = slice(line, open_quote + 1, close_quote)
+                if (find(case_name, ";") >= 0) {
+                    let what = "the case name \"{case_name}\" holds ';'"
                     let why = "ctest splits the name there into filters matching no case"
                     let fix = "the test never runs and reports a pass - use a comma or a dash"
-                    gate_finding(f, line_no, "a TEST_CASE name holds ';' - {why}, so {fix}")
+                    gate_finding(f, line_no, "{what} - {why}, so {fix}")
                 }
             }
         }

@@ -32,22 +32,25 @@ bool reportsTooDeep ( const ProgramPtr & program ) {
 }
 
 TEST_CASE("a type nested to the limit compiles, one level past it is a parse error") {
+    const int limit = 256;
     SUBCASE("pointer levels") {
-        CHECK_FALSE(compileFieldType("int" + repeated("?", 256))->failed());
-        CHECK(reportsTooDeep(compileFieldType("int" + repeated("?", 257))));
+        CHECK_FALSE(compileFieldType("int" + repeated("?", limit))->failed());
+        CHECK(reportsTooDeep(compileFieldType("int" + repeated("?", limit + 1))));
     }
     SUBCASE("double pointer tokens") {
-        CHECK_FALSE(compileFieldType("int" + repeated("??", 128))->failed());
-        CHECK(reportsTooDeep(compileFieldType("int" + repeated("??", 129))));
+        CHECK_FALSE(compileFieldType("int" + repeated("??", limit / 2))->failed());
+        CHECK(reportsTooDeep(compileFieldType("int" + repeated("??", limit / 2 + 1))));
     }
     SUBCASE("angle bracket levels") {
-        CHECK_FALSE(compileFieldType(repeated("array<", 256) + "int" + repeated(">", 256))->failed());
-        CHECK(reportsTooDeep(compileFieldType(repeated("array<", 257) + "int" + repeated(">", 257))));
-        CHECK(reportsTooDeep(compileFieldType(repeated("function<():", 257) + "int" + repeated(">", 257))));
+        CHECK_FALSE(compileFieldType(repeated("array<", limit) + "int" + repeated(">", limit))->failed());
+        CHECK(reportsTooDeep(compileFieldType(repeated("array<", limit + 1) + "int" + repeated(">", limit + 1))));
+        CHECK(reportsTooDeep(compileFieldType(repeated("function<():", limit + 1) + "int" + repeated(">", limit + 1))));
     }
     SUBCASE("pointer levels count the nesting under them") {
-        CHECK_FALSE(compileFieldType("tuple<int;int" + repeated("?", 200) + ">")->failed());
-        CHECK(reportsTooDeep(compileFieldType("tuple<int;tuple<int;int" + repeated("?", 200) + ">" + repeated("?", 200) + ">")));
+        const int overHalf = limit / 2 + 1;
+        const string inner = "tuple<int;int" + repeated("?", overHalf) + ">";
+        CHECK_FALSE(compileFieldType(inner)->failed());
+        CHECK(reportsTooDeep(compileFieldType("tuple<int;" + inner + repeated("?", overHalf) + ">")));
     }
 }
 

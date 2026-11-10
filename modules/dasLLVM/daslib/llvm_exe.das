@@ -1255,9 +1255,9 @@ def public emit_standalone_context_init(builder : LLVMBuilderRef; fusion_builder
         // Clone variant: inits non-shared globals only (a clone is not the shared owner;
         // re-initializing shared globals would corrupt the parent's shared buffer). Used by
         // the clone init script below so a jobque/thread/audio clone matches the interpreter.
-        uids.block_tag = "clone`"
+        uids.block_name_salt = "clone`"
         let cpair = generate_globals_initialization_fn(program_context, prog, types, uids, jit_flags, LlvmJitMode.EXE, "init_globals_clone", true)
-        uids.block_tag = ""
+        uids.block_name_salt = ""
         clone_init_glob = cpair._0
     }
 
