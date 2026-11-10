@@ -362,7 +362,7 @@ namespace das {
         AstSerializer & serializeModule ( Module & module, bool already_exists );
 
         static constexpr uint32_t getVersion () {
-            return 260;   // 260: argument types of a generic instance past 4096 type nodes are an error
+            return 261;   // 261: a written type stops at 64 nesting levels
         }
 
         void serializeProgram ( ProgramPtr program, ModuleGroup & libGroup ) noexcept;

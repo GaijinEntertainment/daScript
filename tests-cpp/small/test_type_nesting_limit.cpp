@@ -44,7 +44,7 @@ bool reportsTooDeep ( const Outcome & outcome ) {
     return outcome.tooDeepErrors != 0;
 }
 
-const int limit = 256;
+const int limit = 64;
 
 }
 
