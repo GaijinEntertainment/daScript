@@ -8073,7 +8073,7 @@ def public generate_llvm(prog : Program?; ctx : Context?; types : PrimitiveTypes
         // No need in public symbols when generating executable
         let globalVar = LLVMAddGlobal(g_mod, types.t_int64, dll_name.id())
         set_public_linkage(globalVar)
-        let aot_hash : uint64 = get_function_aot_hash(fn)
+        let aot_hash : uint64 = get_function_aot_hash(prog, fn)
         // debug("initializer hash for {dll_name.publ()}: {aot_hash}")
         globalVar |> LLVMSetInitializer(types.ConstI64(aot_hash))
     }

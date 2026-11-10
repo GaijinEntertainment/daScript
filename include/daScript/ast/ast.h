@@ -1003,8 +1003,6 @@ namespace das
 
         vector<InferHistory> inferStack;
         FunctionPtr fromGeneric = nullptr;
-        uint64_t hash = 0;
-        uint64_t aotHash = 0;
 
         int32_t optimizationRound = 0;
         bool isFullyInferred = false;
@@ -1014,9 +1012,9 @@ namespace das
 
     DAS_API uint64_t getFunctionHash ( Function * fun, SimNode * node, Context * context );
 
-    DAS_API uint64_t getFunctionAotHash ( Function * fun );
-    DAS_API string getAotHashComment ( const Function * fun );
-    uint64_t getVariableListAotHash ( const vector<const Variable *> & globs, uint64_t initHash );
+    DAS_API uint64_t getFunctionAotHash ( Program * program, const Function * fun );
+    DAS_API string getAotHashComment ( const Program * program, const Function * fun );
+    uint64_t getVariableListAotHash ( const Program * program, const vector<const Variable *> & globs, uint64_t initHash );
 
     class DAS_API BuiltInFunction : public Function {
     public:
@@ -1587,6 +1585,20 @@ namespace das
 
     typedef function<void (const TypeDeclPtr & argType, const TypeDeclPtr & passType)> UpdateAliasMapCallback;
 
+    // src/ast/ARCHITECTURE.md#program-scoped-symbol-state
+    struct FunctionSymbolState {
+        uint64_t    hash = 0;
+        uint64_t    aotHash = 0;
+        int32_t     index = -1;
+        bool        used = false;
+        bool        jitSelected = false;
+    };
+
+    struct VariableSymbolState {
+        int32_t     index = -1;
+        bool        used = false;
+    };
+
     class DAS_API Program : public ptr_ref_count {
     public:
         Program();
@@ -1703,24 +1715,27 @@ namespace das
         int                         totalFunctions = 0;
         int                         totalVariables = 0;
         // src/ast/ARCHITECTURE.md#program-scoped-symbol-state
-        das_hash_set<const Function *>          usedFunctions;
-        das_hash_set<const Variable *>          usedVariables;
-        das_hash_map<const Function *, int32_t> functionIndices;
-        das_hash_map<const Variable *, int32_t> variableIndices;
-        __forceinline bool isUsed ( const Function * fn ) const { return usedFunctions.find(fn) != usedFunctions.end(); }
-        __forceinline bool isUsed ( const Variable * var ) const { return usedVariables.find(var) != usedVariables.end(); }
-        __forceinline void setUsed ( const Function * fn, bool used ) { if ( used ) usedFunctions.insert(fn); else usedFunctions.erase(fn); }
-        __forceinline void setUsed ( const Variable * var, bool used ) { if ( used ) usedVariables.insert(var); else usedVariables.erase(var); }
-        __forceinline int32_t indexOf ( const Function * fn ) const { auto it = functionIndices.find(fn); return it != functionIndices.end() ? it->second : -1; }
-        __forceinline int32_t indexOf ( const Variable * var ) const { auto it = variableIndices.find(var); return it != variableIndices.end() ? it->second : -1; }
-        __forceinline void setIndex ( const Function * fn, int32_t index ) { functionIndices[fn] = index; }
-        __forceinline void setIndex ( const Variable * var, int32_t index ) { variableIndices[var] = index; }
+        das_hash_map<const Function *, FunctionSymbolState> functionStates;
+        das_hash_map<const Variable *, VariableSymbolState> variableStates;
+        __forceinline const FunctionSymbolState * stateOf ( const Function * fn ) const { auto it = functionStates.find(fn); return it != functionStates.end() ? &it->second : nullptr; }
+        __forceinline const VariableSymbolState * stateOf ( const Variable * var ) const { auto it = variableStates.find(var); return it != variableStates.end() ? &it->second : nullptr; }
+        __forceinline bool isUsed ( const Function * fn ) const { auto st = stateOf(fn); return st && st->used; }
+        __forceinline bool isUsed ( const Variable * var ) const { auto st = stateOf(var); return st && st->used; }
+        __forceinline void setUsed ( const Function * fn, bool used ) { if ( used || stateOf(fn) ) functionStates[fn].used = used; }
+        __forceinline void setUsed ( const Variable * var, bool used ) { if ( used || stateOf(var) ) variableStates[var].used = used; }
+        __forceinline int32_t indexOf ( const Function * fn ) const { auto st = stateOf(fn); return st ? st->index : -1; }
+        __forceinline int32_t indexOf ( const Variable * var ) const { auto st = stateOf(var); return st ? st->index : -1; }
+        __forceinline void setIndex ( const Function * fn, int32_t index ) { functionStates[fn].index = index; }
+        __forceinline void setIndex ( const Variable * var, int32_t index ) { variableStates[var].index = index; }
+        __forceinline uint64_t hashOf ( const Function * fn ) const { auto st = stateOf(fn); return st ? st->hash : 0; }
+        __forceinline void setHash ( const Function * fn, uint64_t hash ) { functionStates[fn].hash = hash; }
+        __forceinline bool isJitSelected ( const Function * fn ) const { auto st = stateOf(fn); return st && st->jitSelected; }
+        __forceinline void setJitSelected ( const Function * fn, bool selected ) { if ( selected || stateOf(fn) ) functionStates[fn].jitSelected = selected; }
+        void clearJitSelection ();
+        void clearIndices ();
+        void hashFunctions ( Context & context, const das_hash_map<int,Function *> & byIndex );
         das_hash_map<const Function *, AstFuncLookup> functionLookups;
         AstFuncLookup & functionLookup ( const Function * fn );
-        das_hash_set<const Function *>          jitSelected;
-        __forceinline bool isJitSelected ( const Function * fn ) const { return jitSelected.find(fn) != jitSelected.end(); }
-        __forceinline void setJitSelected ( const Function * fn, bool selected ) { if ( selected ) jitSelected.insert(fn); else jitSelected.erase(fn); }
-        __forceinline void clearJitSelection () { jitSelected.clear(); }
         int                         newLambdaIndex = 1;
         int                         inferPassesUsed = 0;   // sum of inferTypesDirty inner-loop pass counts across all inferTypes calls (incl. restartInfer legs) for this module; reset by parseDaScript once per module-compile; used by per-module compile-time log
         vector<Error>               errors;

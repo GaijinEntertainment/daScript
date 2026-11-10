@@ -160,9 +160,10 @@ context, are decided per program - the symbol-use pass (`markSymbolUse` and its 
 what it marked; `markFunctionDependencies`, which `collect_dependencies` runs for a macro, walks
 one function's closure only, refreshing the use-edges it reaches and leaving the rest of the
 program's symbol state as it found it - while the `Function` and `Variable` objects of a shared module are one instance
-for every program in the process. The state therefore lives on `Program`: `usedFunctions` and
-`usedVariables` are sets, `functionIndices` and `variableIndices` maps, read through `isUsed`
-and `indexOf` and written through `setUsed` and `setIndex`; `clearSymbolUse` empties the sets.
+for every program in the process. The state therefore lives on `Program`, one record per object:
+`functionStates` maps a function to its `FunctionSymbolState`, `variableStates` a global to its
+`VariableSymbolState`, read through `isUsed` and `indexOf` and written through `setUsed` and
+`setIndex`; `clearSymbolUse` drops every use flag and `clearIndices` every slot.
 An index is `-1` for an object the allocation never saw, `-2` for one it saw and found unused,
 the context slot otherwise; the constant folder tells the first from the rest. Simulate reads
 the tables through `context.thisProgram`, and das code through the `ast` module's `is_used`,
@@ -180,11 +181,11 @@ read, nothing is used and nothing holds a slot. The index tables are per allocat
 folding round's slots do not survive into the final pass. A compile nested inside another - a
 macro calling `compile`, a late `require` (`#require-after-walk`), the folding program - fills its own tables
 and leaves the outer program's answers standing. The stream a module-cache record carries has
-neither the flag nor the slot: both are recomputed by the reading program. Three per-compile
+no flag, slot or hash: the reading program recomputes them. Three per-compile
 values still live on the objects: `Variable::stackTop` and `Function::totalStackSize` /
 `totalGenLabel`, which `allocateStack` writes and the same program's simulate reads before any
 nested compile can run. The JIT's selection - which functions of a program a DLL holds - is a
-third table, `jitSelected`, read through `is_jit_selected` and written through
+flag of the same record, read through `is_jit_selected` and written through
 `set_jit_selected` / `clear_jit_selection`; `Function::requestJit` is the `[jit]` annotation
 only, an author's request the selection reads and never writes. A fourth table,
 `usedTypedefModules`, holds every other module one of whose typedefs the program's own module
@@ -198,6 +199,17 @@ are both recorded. A name looked up from
 another module's scope - inside `with (module X)`, written or wrapped around an inlined body -
 records nothing, and neither does an alias of a structure, enumeration or handled type the same
 lookup already found under that name, which resolves as the type itself.
+A function's semantic hash is
+in the record too: simulate hashes the nodes the program built for it (`setHash`), so the hash
+says how this program calls what the body calls, and das code reads it through
+`function_hash`. The AOT hash folds the hashes of the function's dependency closure; it is
+cached in the record by `getFunctionAotHash`, which takes the program; `hashFunctions`, the one
+writer of the hashes, drops every cached AOT hash before it rehashes. The records are compile state: after
+the main simulate the program frees every function record and every global's slot, keeping only a
+global's use flag, which hosts read. A reader after that point declares itself - a host that
+inspects the program sets `keep_symbol_tables`; `rtti`, which leaves the program bound to the
+context, the AOT generator, the JIT, the folder and a macro compile keep the tables by the same
+test.
 
 ## The size of a generic instance's argument types (`ast_infer_type_function.cpp`) {#instance-type-size}
 
