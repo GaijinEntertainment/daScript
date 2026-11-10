@@ -445,3 +445,30 @@ def test_a_runtime_integer_reinterpreted_to_bool_reads_its_low_byte(t : T?) {
         t |> equal(1, truth(int_to_bool(g_int_source)))
     }
 }
+
+[hint(noinline)]
+def via_void(var p, q : void?) : float {
+    unsafe {
+        var f = reinterpret<float?>(p)
+        var u = reinterpret<uint?>(q)
+        *f = 2.0f
+        *u = 0x3f800000u
+        return *f
+    }
+}
+
+[hint(noinline)]
+def via_float(var f, q : float?) : float {
+    var u = unsafe(reinterpret<uint?>(q))
+    *f = 2.0f
+    *u = 0x3f800000u
+    return *f
+}
+
+[test(description = "two typed views of one float taken through void? parameters alias: the write through the uint view is seen by the read through the float view, as through typed source pointers")]
+def test_a_view_taken_through_void_is_a_pun(t : T?) {
+    var x = 0.0f
+    var px = unsafe(addr(x))
+    t |> equal(1.0f, via_float(px, px), "typed source pointer")
+    t |> equal(1.0f, via_void(px, px), "void? source pointer")
+}

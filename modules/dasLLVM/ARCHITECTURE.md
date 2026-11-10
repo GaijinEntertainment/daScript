@@ -247,7 +247,9 @@ loaded by a function that shares no global or call with the writer is the one es
 analysis does not follow; `[hint(no_strict_aliasing)]` on the reader is the answer there.
 `[hint(strict_aliasing)]` keeps a function tagged whatever its body does, `[hint(no_strict_aliasing)]`
 takes it out; both fold into the per-function hint fold. A `void?` or byte view is not punning: its
-accesses are untagged by the class rule.
+accesses are untagged by the class rule. A typed view taken FROM a `void?` or byte pointer is:
+the source carries no class, so the pointee check runs before the same-type test, which reads
+`void?` as the same type as any pointer.
 
 What `apply_impl_param_attrs` (`daslib/llvm_jit.das`) stamps on parameters is what the source
 states: `readonly` on a const indirect parameter the body never writes through and whose type can

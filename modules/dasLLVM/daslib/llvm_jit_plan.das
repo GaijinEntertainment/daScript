@@ -35,7 +35,7 @@ require jit
 // Current entry: a 16/8-bit lattice value passed by value to an
 // interop builtin rides the vec4f slot in the cast<T>::from
 // convention instead of declining the function.
-let public LLVM_JIT_CODEGEN_VERSION : uint64 = 0xA9ul
+let public LLVM_JIT_CODEGEN_VERSION : uint64 = 0xAAul
 
 let public JIT_FNV_PRIME : uint64 = 1099511628211ul
 
@@ -64,17 +64,25 @@ def public has_hint_flag(annotations : AnnotationList; flag : string) : bool {
     return false
 }
 
+//! a pointer to `void` or a byte: a view no class tags
+def private has_untyped_pointee(t : TypeDeclPtr) : bool {
+    let pointee = t.firstType
+    let pt = pointee == null ? Type.tVoid : pointee.baseType
+    return pt == Type.tVoid || pt == Type.tInt8 || pt == Type.tUInt8
+}
+
 //! a reinterpret that makes a typed view of memory: a pointer to
 //! anything but `void` or a byte, or a reference of another type (a
 //! `void?` or byte view is read through untagged accesses)
 def public is_punning_reinterpret(to_type, from_type : TypeDeclPtr) : bool {
+    if (to_type.isPointer) {
+        if (has_untyped_pointee(to_type)) return false
+        if (from_type.isPointer && has_untyped_pointee(from_type)) return true
+    }
     if (is_same_type(to_type, from_type, RefMatters.no, ConstMatters.no, TemporaryMatters.no)) {
         return false
     }
     if (to_type.isPointer) {
-        let pointee = to_type.firstType
-        let pt = pointee == null ? Type.tVoid : pointee.baseType
-        if (pt == Type.tVoid || pt == Type.tInt8 || pt == Type.tUInt8) return false
         return from_type.isPointer || from_type.isRef || from_type.isInteger
     }
     return to_type.isRef && from_type.isRef
