@@ -416,11 +416,6 @@ def private last_cp(s : string) : int {
     return empty(c) ? -1 : c[length(c) - 1]
 }
 
-def private drop_last_cp(s : string) : string {
-    var inscope c <- utf8_to_cpts(s)
-    return cpts_to_utf8(c, 0, max(0, length(c) - 1))
-}
-
 def private second_last_cp(s : string) : int {
     var inscope c <- utf8_to_cpts(s)
     return length(c) >= 2 ? c[length(c) - 2] : -1
@@ -538,13 +533,6 @@ def private tail_from(w : string; n : int) : string {
     var inscope c <- utf8_to_cpts(w)
     return cpts_to_utf8(c, min(n, length(c)), length(c))
 }
-
-def private head_to(w : string; n : int) : string {
-    var inscope c <- utf8_to_cpts(w)
-    return cpts_to_utf8(c, 0, clamp(n, 0, length(c)))
-}
-
-def private chop_end(w : string; n : int) : string => head_to(w, cpt_count(w) - n)
 
 // ---------------------------------------------------------------- the lexicon
 
@@ -763,7 +751,7 @@ def private suffix_ed(stem : string; british : bool) : string {
     }
     return "{stem}d" if (last != 't')
     return "{stem}ɪd" if (british || cpt_count(stem) < 2)   // nolint:STYLE039
-    return "{drop_last_cp(stem)}ɾᵻd" if (key_exists(US_TAUS, second_last_cp(stem)))   // nolint:STYLE039
+    return "{chop_end(stem, 1)}ɾᵻd" if (key_exists(US_TAUS, second_last_cp(stem)))   // nolint:STYLE039
     return "{stem}ᵻd"   // nolint:STYLE039
 }
 
@@ -776,7 +764,7 @@ def private suffix_ing(stem : string; british : bool) : string {
         return "{stem}ɪŋ"   // nolint:STYLE039
     }
     if (cpt_count(stem) > 1 && last_cp(stem) == 't' && key_exists(US_TAUS, second_last_cp(stem))) {
-        return "{drop_last_cp(stem)}ɾɪŋ"   // nolint:STYLE039
+        return "{chop_end(stem, 1)}ɾɪŋ"   // nolint:STYLE039
     }
     return "{stem}ɪŋ"   // nolint:STYLE039
 }

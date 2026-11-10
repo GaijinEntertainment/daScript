@@ -209,12 +209,11 @@ site that must stay f32 for another reason is ledgered on its file's charter lin
 the companion `ARCHITECTURE.md#file-charters` routes to, saying what the file holds); a call-site
 comment does not discharge this.
 
-**One decision computed twice along a call chain under this folder - a helper the caller calls
-counting as the caller - is a defect: compute it once and pass it.** An edit to one copy leaves
-the other testing a condition the first no longer applies.
-
-**Where a guard sits in both a caller and a `[cold_path]` callee whose every caller carries the
-same guard, the caller keeps it and the callee drops it.**
+**One decision - the result of a predicate, a lookup or a parse - computed twice anywhere along a
+call chain under this folder, in a caller, a helper it calls or a callee, is a defect: compute it
+once and pass it; a guard that a `[cold_path]` callee repeats from every one of its callers stays
+in the callers and leaves the callee.** An edit to one copy leaves the other answering by the rule
+the edit replaced.
 
 **Logic or a named constant that two files in one folder both use, and that neither the language nor
 the test contract forces them to restate (a test's CPU reference copy of the arithmetic it checks is

@@ -67,8 +67,8 @@ any sibling companion that sends a reader to it.
 - `ARCHITECTURE_MEDIA.md` - the encoder-tower, audio and ASR charters (`ARCHITECTURE_MEDIA.md#tower-audio-charters`).
 - `ARCHITECTURE_MEDIA_VISION.md` - the vision charters (`ARCHITECTURE_MEDIA_VISION.md#vision-charters`).
 - `ARCHITECTURE_TTS.md` - the text-to-speech charters - the block home, the shared assembly, the families and the facade.
-- `ARCHITECTURE_TTS_FRONT_END.md` - the text front end's charters (`ARCHITECTURE_TTS_FRONT_END.md#tts-front-end`), the
-  heteronym context and the two-tier phoneme pack.
+- `ARCHITECTURE_TTS_FRONT_END.md` - the text front end's charters (`ARCHITECTURE_TTS_FRONT_END.md#tts-front-end`), the heteronym context, the phoneme pack tiers.
+- `ARCHITECTURE_TTS_TEXTNORM_RU.md` - the Russian normalizer's case, count, placing-distance, year, suffix, phone, century and Roman, compound and numbered-noun rules.
 - `ARCHITECTURE_POCKET.md` - the Pocket TTS family, a continuous-audio language model with its
   own assembly.
 - `ARCHITECTURE_TRANSLATE.md` - the Bergamot translation family (`ARCHITECTURE_TRANSLATE.md#nmt-charter`).

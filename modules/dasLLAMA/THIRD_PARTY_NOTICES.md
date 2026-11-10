@@ -117,8 +117,10 @@ sources; nothing under this repository redistributes the data itself.
   stress-marked sentences; no espeak-ng code or data is included.
 - **OpenRussian dictionary data** (https://github.com/Badestrand/russian-dictionary, openrussian.org),
   CC BY-SA 4.0 - see `LICENSE.UD_EWT` for the licence text. Every inflected form's stressed vowel
-  and the ё spellings are packed into `tts_g2p_ru.bin` by `harness/build_g2p_ru_data.py`; the
-  dictionary itself is not redistributed.
+  and the ё spellings are packed into `tts_g2p_ru.bin` by `harness/build_g2p_ru_data.py`, and the
+  frequent nouns' nominatives and genitives are generated into
+  `dasllama/dasllama_textnorm_ru_nouns.das` by `harness/build_textnorm_ru_nouns.py`, which that
+  file's header names as its source; the rest of the dictionary is not redistributed.
 - **Balalaika** text corpora (https://huggingface.co/datasets/lab260/espeech_balalaika,
   https://huggingface.co/datasets/lab260/biggest_ru_book_balalaika), Apache License 2.0 - see
   `LICENSE.APACHE-2.0`. Their stress-marked transcripts are the sentences of the Russian front-end

@@ -17,12 +17,10 @@ checklist's own.
 **A top-level declaration under `dasllama/` - a def, a class (a kernel class among them), a
 struct, an enum, a typedef, a module global (`let` or `var`, private or not), a named constant or
 a `require` - lands in the file whose charter line names its concern, or the diff adds the concern
-to the charter line of the file it lands in. Another file's charter naming the same kind of code
+to the charter line of the file it lands in. A declaration's concern is what it computes or holds,
+never the concern of the code that calls it; a charter line naming code several files share claims
+a declaration of that kind with one caller too. Another file's charter naming the same kind of code
 does not license the landing.**
-
-**A diff that lands a helper in its caller's file only because that file's charter line names the
-caller's concern is a defect - land the helper in the file whose charter line names what the helper
-itself computes, or add that to the charter line of the file it lands in.**
 
 **A landing in a file whose charter row carries a `must not hold` cell - the concerns that file
 never holds - naming the landed concern is a defect - land it where its concern is chartered, or

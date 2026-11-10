@@ -127,7 +127,12 @@ Kitten model repo the recipe pins) on both sides - das reads it from the GGUF, t
 the pack's `config.json` - so a kitten pair speaks the same voice at the same speed prior (the
 per-voice rate multiplier the pack's `speed_priors` assigns) and compares on audio seconds and the
 real-time factor like every other TTS pair. `harness/tts_synth.das` and `harness/pocket_synth.py`
-stay the scoring rig's synthesis arms.
+stay the scoring rig's synthesis arms. The front end the das cell's wall leaves out - the text
+normalizer, the tagger and g2p - is a text pass far shorter than the synthesis it feeds, so no
+board cell's wall includes it and none is owed when it changes; its measurement is correctness,
+the Russian normalizer's against the readings of Google's Kestrel normalizer that the Sproat and
+Jaitly text normalization data carry, through `harness/textnorm_ru_kestrel.py` and
+`harness/textnorm_ru_run.das`.
 
 The Pocket family's reference rows outside the board take two more scripts under the same pocket-tts venv:
 `harness/pocket_ref_time.py <configs> <threads> <device>` times the package on the served bench's one sentence at

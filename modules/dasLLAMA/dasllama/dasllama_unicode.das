@@ -292,6 +292,12 @@ def cpts_to_utf8(c : array<int>; a, b : int) : string {
 //! Encode a whole codepoint array to a UTF-8 string.
 def cpts_to_utf8(c : array<int>) : string => cpts_to_utf8(c, 0, length(c))
 
+//! `w` without its last `n` codepoints; empty when it has no more than `n`
+def chop_end(w : string; n : int) : string {
+    var inscope c <- utf8_to_cpts(w)
+    return cpts_to_utf8(c, 0, length(c) > n ? length(c) - n : 0)
+}
+
 //! Encode a single codepoint to its UTF-8 bytes as a string (the stdlib encoder; a hot loop
 //! appends through `utf8_encode(var bytes, uint(cpt))` instead and never builds the string).
 def cpt_to_utf8(cpt : int) : string => string(utf8_encode(uint(cpt)))

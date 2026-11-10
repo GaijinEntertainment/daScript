@@ -10,12 +10,17 @@ require daslib/strings_boost
 require dasllama/dasllama_unicode
 
 //! The codepoint scanning the text front end's passes share, in no language: a bounds-safe read,
-//! the digit and whitespace classes, the run ends, a digit run's value, and the pieces of a pass's
-//! output - a string emitted as codepoints, a span taken back as a string.
+//! the digit, whitespace and dash classes, the run ends both ways, a digit run's value, and the
+//! pieces of a pass's output - a string emitted as codepoints, a span taken back as a string.
 
 def cp_at(c : array<int>; i : int) : int => (i >= 0 && i < length(c)) ? c[i] : -1
 def is_digit(cp : int) : bool => is_number(cp)
 def is_space(cp : int) : bool => cp >= 0 && cpt_is_whitespace(cp)
+
+let EN_DASH = 8211
+let EM_DASH = 8212
+//! the hyphen and the two dashes
+def is_dash(cp : int) : bool => cp == '-' || cp == EN_DASH || cp == EM_DASH
 
 //! the index past the digit run starting at `i`
 def digits_end(c : array<int>; i : int) : int {
@@ -34,6 +39,18 @@ def spaces_end(c : array<int>; i : int) : int {
     }
     return j
 }
+
+//! the start of the whitespace run ending at `i` (`i` itself when none ends there)
+def spaces_start(c : array<int>; i : int) : int {
+    var j = i
+    while (j > 0 && is_space(c[j - 1])) {
+        j--
+    }
+    return j
+}
+
+//! the last codepoint before `i` that is not whitespace; -1 at the start of the text
+def prev_nonspace(c : array<int>; i : int) : int => cp_at(c, spaces_start(c, i) - 1)
 
 //! the value of the digits in [a, b); any other codepoint among them is skipped
 def digits_value(c : array<int>; a, b : int) : int64 {

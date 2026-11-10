@@ -813,8 +813,7 @@ def private pack_ordinal(p : RuStressPack; lower : string) : int {
     var inscope variants <- ru_stress_variants(p, lower)
     return variants[0] if (!empty(variants))
     return 0 if (!(lower |> ends_with("ся")) && !(lower |> ends_with("сь")))
-    var inscope lcps <- utf8_to_cpts(lower)
-    var inscope base <- ru_stress_variants(p, cpts_to_utf8(lcps, 0, length(lcps) - 2))
+    var inscope base <- ru_stress_variants(p, chop_end(lower, 2))
     return empty(base) ? 0 : base[0]
 }
 

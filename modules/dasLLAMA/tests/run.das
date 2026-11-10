@@ -460,7 +460,7 @@ let MODULE_AREAS <- {
     "dasllama_qwen25v" => "vision", "dasllama_qwen3v" => "vision", "dasllama_vision" => "vision",
     "dasllama_vision_embedder" => "vision", "dasllama_vision_io" => "vision",
     "dasllama_g2p" => "tts", "dasllama_g2p_pack" => "tts", "dasllama_g2p_ru" => "tts", "dasllama_kitten" => "tts", "dasllama_kokoro" => "tts", "dasllama_pocket" => "tts", "dasllama_postag" => "tts",
-    "dasllama_styletts2" => "tts", "dasllama_textnorm" => "tts", "dasllama_textnorm_ru" => "tts", "dasllama_textscan" => "tts", "dasllama_tts" => "tts",
+    "dasllama_styletts2" => "tts", "dasllama_textnorm" => "tts", "dasllama_textnorm_ru" => "tts", "dasllama_textnorm_ru_nouns" => "tts", "dasllama_textscan" => "tts", "dasllama_tts" => "tts",
     "dasllama_tts_blocks" => "tts", "dasllama_tts_types" => "tts",
     "dasllama_exchange" => "infra", "dasllama_exchange_schema" => "infra", "dasllama_lint" => "infra",
     "dasllama_version" => "infra", "dasllama_fat_start" => "infra",

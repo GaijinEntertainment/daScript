@@ -1,8 +1,9 @@
 # dasLLAMA text-to-speech Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-docs: `ARCHITECTURE_TTS.md`, `ARCHITECTURE_TTS_FRONT_END.md`, `ARCHITECTURE_TTS_MEMORY.md`,
-`ARCHITECTURE_POCKET.md`, `ARCHITECTURE_GPU.md`. Planned work: `followup_general.md`.
+docs: `ARCHITECTURE_TTS.md`, `ARCHITECTURE_TTS_FRONT_END.md`, `ARCHITECTURE_TTS_TEXTNORM_RU.md`,
+`ARCHITECTURE_TTS_MEMORY.md`, `ARCHITECTURE_POCKET.md`, `ARCHITECTURE_GPU.md`. Planned work:
+`followup_general.md`.
 
 A TTS source file is a file the glob `dasllama/dasllama_tts*.das` matches,
 `dasllama/dasllama_styletts2.das`, a TTS family file - a `dasllama/dasllama_<family>.das` holding
@@ -111,10 +112,13 @@ flag-free synthesis per model the change reaches, of a text whose synthesis runs
 before and after, the two matching.**
 
 **A diff that changes what a flag-free run synthesizes from text in another language, on a model
-that synthesized that language before - a moved phoneme of that language's corpus cell
-(`test_corpus_ru` in `tests/test_tts_g2p_ru.das`) included - lists in the PR body each moved
-phoneme of that cell's fixture with the reason it moved, and names the `followup_general.md` row
-under which that language's rig arm is owed.** The rig measures English alone.
+that synthesized that language before, lists in the PR body what it moved, each with its reason:
+every word of that language's g2p corpus fixture (`tests/_tts_fixtures/g2p_corpus_<lang>.json`)
+for which the front end's phonemes change, and every pinned sentence of that language's normalizer
+test file (`tests/test_tts_textnorm_<lang>.das`) the diff adds or whose expected string it changes;
+and names the `followup_general.md` row under which that language's rig arm is owed.** The rig
+measures English alone; for a stage whose file that language lacks, the PR body lists by hand the
+inputs the diff moved there.
 
 **A diff that newly serves a model or a language no flag-free run could synthesize before ships,
 in the same change, a facade cell on that model - a synthesis whose sample count is the front
