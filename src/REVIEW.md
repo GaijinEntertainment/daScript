@@ -21,8 +21,8 @@ runtime or OS call that takes a `char *` file path - it reported before in each 
 `REVIEW.das` leaves without a `NARROW_PATH_FILES` row, each finding naming the call and the API
 to use.**
 
-**A diff that makes the compile reject source it accepted before - a new or tightened compile
-error does - or changes a node, name, type or flag `AstSerializer` streams for unchanged
+**A diff that makes the compile reject source it accepted before, by a new or tightened
+compile error too, or changes a node, name, type or flag `AstSerializer` streams for unchanged
 source, bumps `AstSerializer::getVersion()` (`include/daScript/ast/ast_serializer.h`, repo
 root) in the same change.** A cached module skips the compile, so without the bump a rebuilt
 `daslang` serves what the old compile accepted or produced.
