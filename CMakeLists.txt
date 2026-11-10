@@ -967,14 +967,12 @@ src/ast/ast_dispatch.cpp
 src/ast/ast_const_visitor.cpp
 src/ast/ast_interop.cpp
 src/ast/ast_tls.cpp
-src/ast/ast_visitor.cpp
 src/ast/ast_simulate.cpp
 src/ast/ast_link.cpp
 src/ast/ast_typedecl.cpp
 src/ast/ast_match.cpp
 src/ast/ast_module.cpp
 src/ast/ast_print.cpp
-src/ast/ast_same.cpp
 src/ast/ast_program.cpp
 src/ast/ast_allocate_stack.cpp
 src/ast/ast_gc_collect.cpp
@@ -1113,7 +1111,6 @@ src/hal/project_specific_crash_handler.cpp
 src/hal/wasm_thread_malloc.cpp
 include/daScript/misc/crash_handler.h
 include/daScript/misc/network.h
-src/misc/network.cpp
 src/simulate/hash.cpp
 src/simulate/debug_info.cpp
 src/simulate/runtime_string.cpp
@@ -1187,7 +1184,6 @@ include/daScript/simulate/aot_builtin_dasbind.h
 include/daScript/simulate/aot_builtin_uriparser.h
 include/daScript/simulate/aot_builtin_jit.h
 include/daScript/simulate/fs_file_info.h
-src/simulate/fs_file_info.cpp
 )
 
 
@@ -1349,6 +1345,10 @@ SET(LIBDASCRIPT_COMPILER_SRC
     src/builtin/module_builtin_ast_annotations_2.cpp
     src/builtin/module_builtin_ast_annotations_3.cpp
     src/builtin/module_builtin_ast_adapters.cpp
+    src/simulate/fs_file_info.cpp
+    src/ast/ast_visitor.cpp
+    src/ast/ast_same.cpp
+    src/misc/network.cpp
     src/builtin/module_builtin_network.cpp
 )
 
