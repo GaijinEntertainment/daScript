@@ -177,15 +177,6 @@ namespace das
         context.freeIterator((char *)this, debugInfo);
     }
 
-    vec4f SimNode_GoodArrayIterator::eval ( Context & context ) {
-        DAS_PROFILE_NODE
-        vec4f ll = source->eval(context);
-        Array * arr = cast<Array *>::to(ll);
-        char * iter = context.allocateIterator(sizeof(GoodArrayIterator),"array<> iterator", &debugInfo);
-        new (iter) GoodArrayIterator(arr, stride, &debugInfo);
-        return cast<char *>::from(iter);
-    }
-
     // FixedArrayIterator
 
     bool FixedArrayIterator::first ( Context &, char * _value )  {
@@ -210,33 +201,6 @@ namespace das
         context.freeIterator((char *)this, debugInfo);
     }
 
-    vec4f SimNode_FixedArrayIterator::eval ( Context & context ) {
-        DAS_PROFILE_NODE
-        vec4f ll = source->eval(context);
-        char * data = cast<char *>::to(ll);
-        char * iter = context.allocateIterator(sizeof(FixedArrayIterator),"fixed array iterator", &debugInfo);
-        new (iter) FixedArrayIterator(data, size, stride, &debugInfo);
-        return cast<char *>::from(iter);
-    }
-
     // delete
 
-    vec4f SimNode_DeleteArray::eval ( Context & context ) {
-        DAS_PROFILE_NODE
-        auto pArray = (Array *) subexpr->evalPtr(context);
-        pArray = pArray + total - 1;
-        for ( uint32_t i=0, is=total; i!=is; ++i, pArray-- ) {
-            if ( pArray->data ) {
-                if ( !pArray->isLocked() ) {
-                    uint64_t oldSize = pArray->capacity * uint64_t(stride);
-                    context.free(pArray->data, oldSize, &debugInfo);
-                } else {
-                    context.throw_error_at(debugInfo, "deleting locked array%s", errorMessage);
-                    return v_zero();
-                }
-            }
-            memset ( pArray, 0, sizeof(Array) );
-        }
-        return v_zero();
-    }
 }
