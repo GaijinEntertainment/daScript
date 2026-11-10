@@ -113,7 +113,7 @@ def private verify_batch(daslang; files : array<string>) : bool {
     let timeout = FILE_TIMEOUT * float(length(argv) - 3)
     let ec = run_and_capture(argv, out, timeout)
     let r = verify_verdict(out, ec, timeout)
-    if (r.unverifiable || empty(r.findings)) {
+    if (!r.unverifiable && empty(r.findings)) {
         return true
     }
     var ok = true
