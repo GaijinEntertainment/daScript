@@ -225,7 +225,7 @@ def test_generic_instance_origin(t : T?) {
     // the verdict guards the vacuous pass: a cache that silently fell back to parsing would
     // pass this test without ever restoring a module
     var warmOk = report_child(t, "warm", warmRc, warm, "deser: clean")
-    if (find(warm, "30341") >= 0) {
+    if (find(warm, "error[30341]") >= 0) {
         t |> failure("warm run lost generic-instance recovery (error[30341])")
         warmOk = false
     }
