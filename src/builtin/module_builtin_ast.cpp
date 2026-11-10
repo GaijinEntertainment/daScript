@@ -27,6 +27,7 @@
 MAKE_TYPE_FACTORY(StringBuilderWriter, StringBuilderWriter)
 
 #include "module_builtin_ast.h"
+#include "../ast/ast_whole_program.h"
 
 // get_file_access lives in the compiler lib (ast_parse.cpp); it compiles the pak.
 das::FileAccessPtr get_file_access ( char * pak );
@@ -1344,6 +1345,11 @@ namespace das {
         const_cast<Program *>(symbolStateProgram(program, "clear_jit_selection", context, at))->clearJitSelection();
     }
 
+    Function * ast_devirtualized_call ( const Program * program, const ExprInvoke * expr, Context * context, LineInfoArg * at ) {
+        auto facts = symbolStateProgram(program, "devirtualized_call", context, at)->wholeProgram.get();
+        return facts && expr ? facts->devirtualizedCall(expr) : nullptr;
+    }
+
     bool ast_is_jit_selected_sp ( smart_ptr_raw<Program> program, const Function * fn, Context * context, LineInfoArg * at ) {
         return ast_is_jit_selected(program.get(), fn, context, at);
     }
@@ -2362,6 +2368,9 @@ namespace das {
         addExtern<DAS_BIND_FUN(ast_aot_hash_comment_sp)>(*this, lib,  "get_aot_hash_comment",
             SideEffects::accessExternal, "ast_aot_hash_comment_sp")
                 ->args({"program","function","context","at"})->setTempStringResult();
+        addExtern<DAS_BIND_FUN(ast_devirtualized_call)>(*this, lib,  "devirtualized_call",
+            SideEffects::accessExternal, "ast_devirtualized_call")
+                ->args({"program","invoke","context","at"});
         addExtern<DAS_BIND_FUN(ast_is_jit_selected)>(*this, lib,  "is_jit_selected",
             SideEffects::accessExternal, "ast_is_jit_selected")
                 ->args({"program","function","context","at"});

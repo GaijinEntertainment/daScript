@@ -969,6 +969,7 @@ src/ast/ast_interop.cpp
 src/ast/ast_tls.cpp
 src/ast/ast_visitor.cpp
 src/ast/ast_simulate.cpp
+src/ast/ast_whole_program.cpp
 src/ast/ast_link.cpp
 src/ast/ast_typedecl.cpp
 src/ast/ast_match.cpp

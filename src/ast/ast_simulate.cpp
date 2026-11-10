@@ -2,6 +2,7 @@
 
 #include "daScript/ast/ast.h"
 #include "ast_match.h"
+#include "ast_whole_program.h"
 #include "daScript/ast/ast_expressions.h"
 #include "daScript/ast/ast_visitor.h"
 #include "daScript/ast/ast_simulate.h"
@@ -201,7 +202,7 @@ namespace das
         SimNode * sv_makeLocalCopy(const LineInfo & at, uint32_t stackTop, ExpressionPtr rE);
         SimNode * sv_makeCopy(const LineInfo & at, ExpressionPtr lE, ExpressionPtr rE);
         SimNode * sv_makeMove(const LineInfo & at, ExpressionPtr lE, ExpressionPtr rE);
-        SimNode_CallBase * sv_simulateCall(const FunctionPtr & func, const ExprLooksLikeCall * expr, SimNode_CallBase * pCall);
+        SimNode_CallBase * sv_simulateCall(const FunctionPtr & func, const ExprLooksLikeCall * expr, SimNode_CallBase * pCall, int firstArg = 0);
         SimNode * sv_trySimulate(const Expression * expr, uint32_t extraOffset, const TypeDeclPtr & r2vType);
         SimNode * sv_trySimulate_Var(const ExprVar * expr, uint32_t extraOffset, const TypeDeclPtr & r2vType);
         SimNode * sv_trySimulate_Cast(const ExprCast * expr, uint32_t extraOffset, const TypeDeclPtr & r2vType);
@@ -1433,6 +1434,15 @@ namespace das
 
     void SimulateVisitor::visit(const ExprInvoke * expr) {
         const auto &at = expr->at;
+        auto facts = context.thisProgram->wholeProgram.get();
+        if ( auto target = facts ? facts->devirtualizedCall(expr) : nullptr ) {
+            vector<ExpressionPtr> args(expr->arguments.begin() + 1, expr->arguments.end());
+            auto pCall = static_cast<SimNode_CallBase *>(target->makeSimNode(context, args));
+            sv_simulateCall(target, expr, pCall, 1);
+            if ( expr->isCopyOrMove() ) pCall->cmresEval = context.code->makeNode<SimNode_GetLocal>(at, expr->stackTop);
+            setE(expr, sv_keepAlive(at, pCall));
+            return;
+        }
         auto blockT = expr->arguments[0]->type;
         SimNode_CallBase * pInvoke;
         uint32_t methodOffset = 0;
@@ -3439,7 +3449,7 @@ namespace das
         }
     }
 
-    SimNode_CallBase * SimulateVisitor::sv_simulateCall(const FunctionPtr & func, const ExprLooksLikeCall * expr, SimNode_CallBase * pCall) {
+    SimNode_CallBase * SimulateVisitor::sv_simulateCall(const FunctionPtr & func, const ExprLooksLikeCall * expr, SimNode_CallBase * pCall, int firstArg) {
         bool needTypeInfo = false;
         for ( auto & arg : func->arguments ) {
             if ( arg->type->baseType==Type::anyArgument )
@@ -3456,7 +3466,7 @@ namespace das
         } else {
             DAS_ASSERTF(0, "calling function which is not used. how?");
         }
-        if ( int nArg = (int) expr->arguments.size() ) {
+        if ( int nArg = (int) expr->arguments.size() - firstArg ) {
             pCall->arguments = (SimNode **) context.code->allocate(nArg * sizeof(SimNode *));
             if ( needTypeInfo ) {
                 pCall->types = (TypeInfo **) context.code->allocate(nArg * sizeof(TypeInfo *));
@@ -3465,10 +3475,10 @@ namespace das
             }
             pCall->nArguments = nArg;
             for ( int a=0; a!=nArg; ++a ) {
-                pCall->arguments[a] = getE(expr->arguments[a]);
+                pCall->arguments[a] = getE(expr->arguments[a + firstArg]);
                 if ( pCall->types ) {
                     if ( func->arguments[a]->type->baseType==Type::anyArgument ) {
-                        pCall->types[a] = context.thisHelper->makeTypeInfo(nullptr, expr->arguments[a]->type);
+                        pCall->types[a] = context.thisHelper->makeTypeInfo(nullptr, expr->arguments[a + firstArg]->type);
                     } else {
                         pCall->types[a] = nullptr;
                     }
@@ -3675,6 +3685,7 @@ namespace das
             updateKeepAliveFlags();
         }
         linkProgram(this, logs);
+        analyzeWholeProgram(this);
         isSimulating = true;
         // the simulate is this program's compile: its init script and its simulate macros run with it bound
         auto bound_env = daScriptEnvironment::getBound();

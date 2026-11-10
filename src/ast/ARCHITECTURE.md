@@ -263,3 +263,26 @@ own, or any use of the field other than a read or a method call.
 Both proofs hold in every program that links the module, so `devirtualize` rewrites the invoke into
 a typed direct call in the module's AST, in optimized builds, after lint and before inline
 splicing: auto-inline splices it like a free function, and AOT and the JIT see a plain call.
+
+## Whole-program facts (`ast_whole_program.cpp`) {#whole-program-facts}
+
+Some conclusions need every module a program links: whether any class overrides a method, whether
+any code writes a method field. A shared module's AST is one instance for every program
+(`#program-scoped-symbol-state`), so such a conclusion is never written into it.
+`Program::wholeProgram` holds them for one program: a handle to a `WholeProgramFacts`
+(`ast_whole_program.h`), and `ast.h` declares only the handle, so `Program` carries no optimization's
+details. `analyzeWholeProgram` fills it at the start of `Program::simulate`, after linking, when
+symbol use and slots are final: it drops the old table, runs every pass of `wholeProgramPasses` in
+order into a fresh one, and installs it. An unoptimized program gets no table. The interpreter and
+the JIT read the table while they emit code and leave the AST as it is. The semantic hash hashes
+the nodes the interpreter built (`#program-scoped-symbol-state`), so a call the table makes direct
+is in it, and the JIT's cache keys, which fold it, keep one program's direct-call object from
+another program that overrides the method. AOT C++ does not read the table yet. A new
+whole-program optimization is a field of `WholeProgramFacts`, a pass that fills it, and a row in
+`wholeProgramPasses`.
+
+Devirtualization's whole-program pass (`collectDevirtualizedCalls`) takes the program's library as
+the world (`#devirtualization`): a method invoke left in a used function is fixed when no class in
+the library overrides the method below `C` and nothing writes its family. The scan reads every
+module of the library, used or not, and reads the optimized AST, so a call the optimizer removed
+writes nothing. The interpreter and the JIT emit a listed invoke as a direct call of its target.

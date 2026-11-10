@@ -4304,6 +4304,7 @@ The AST module provides access to the abstract syntax tree representation of das
 - `clear_jit_selection` - Empties `program`'s JIT selection - the state `mark_jit_selection` rebuilds before it marks the functions a DLL holds.
 - `compiling_module` - Returns the module currently being compiled.
 - `compiling_program` - Returns the program currently being compiled.
+- `devirtualized_call` - The function `program`'s whole-program facts prove the method call `invoke` always reaches, so a backend emits it as a direct call of that function; null when the call stays an invoke.
 - `find_macro_context` - Returns the macro context of `module` - every macro context carries the mutex `invoke_in_context` locks from its creation.
 - `function_index` - The slot `function` holds in `program`'s context: `-1` when the program never allocated it, `-2` when the allocation found it unused, its function-table index otherwise.
 - `function_hash` - The semantic hash `program` computed for `function` when it simulated, from the nodes it built for the body, so it says how this program calls what the body calls; `0` before simulate.

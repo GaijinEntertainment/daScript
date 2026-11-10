@@ -7,6 +7,7 @@ require daslib/ast
 require daslib/ast_boost
 require daslib/ast_print
 require strings
+require daslib/rtti
 require _devirtualization_module
 
 //! A call to a method a sealed class declares compiles to a direct
@@ -234,4 +235,38 @@ def test_sealed_class_from_another_module(t : T?) {
         let plain_call = printed_body(program, "call_module_plain")
         t |> success(find(plain_call, "invoke") >= 0, plain_call)
     }
+}
+
+[unused_argument(self)]
+def patched_read(var self : Base) : int => 100
+
+def private patch_method(var obj; name : string; fn) {
+    let info = class_info(*obj)
+    for (i in range(int(info.count))) {
+        let field = unsafe(info.fields[i])
+        if (field.name == name) {
+            unsafe {
+                memcpy(reinterpret<uint8?>(obj) + int(field.offset), addr(fn), typeinfo sizeof(fn))
+            }
+        }
+    }
+}
+
+def whole_program_private_root(var r : PrivateRoot?) : string => r->tag()
+
+def whole_program_module_plain(var m : ModulePlain?) : int => m->read()
+
+def whole_program_virtual(var b : Base?) : string => b->name()
+
+[test(description = "the interpreter and the JIT run a call to a method nothing in the program overrides or writes as a direct call, so a raw write to the method slot - which no analysis sees - does not reach it, while a call to an overridden method still does")]
+def test_whole_program_calls_are_direct_calls(t : T?) {
+    var root = new PrivateRoot()
+    patch_method(root, "tag", @@patched)
+    t |> equal(whole_program_private_root(root), "private root")
+    var module_plain = new ModulePlain()
+    patch_method(module_plain, "read", @@patched_read)
+    t |> equal(whole_program_module_plain(module_plain), 8)
+    var base = new Base()
+    patch_method(base, "name", @@patched)
+    t |> equal(whole_program_virtual(base), "patched")
 }

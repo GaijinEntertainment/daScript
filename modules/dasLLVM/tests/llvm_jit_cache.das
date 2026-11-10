@@ -260,6 +260,52 @@ def test_slot_names_key(t : T?) {
     }
 }
 
+struct private DevirtKeys {
+    compiled : bool
+    aot : uint64
+    key : string
+}
+
+//! `use_plain`'s keys in the program `fixture` builds
+def private devirt_keys(fixture : string) : DevirtKeys {
+    var res : DevirtKeys
+    var inscope access <- make_file_access("")
+    using() $(var mg : ModuleGroup) {
+        using() $(var cop : CodeOfPolicies) {
+            cop.keep_symbol_tables = true
+            let path = "{get_this_module_dir()}/{fixture}"
+            compile_file(path, access, unsafe(addr(mg)), cop) $(compiled; var program; _issues) {
+                return if (!compiled)
+                simulate(program) $(simulated; _context; _errors) {
+                    return if (!simulated)
+                    let prog = get_ptr(program)
+                    program_for_each_module(program) $(m) {
+                        return if (m.name != "_devirt_key_lib")
+                        let use_plain <- named(m, "use_plain")
+                        return if (length(use_plain) != 1)
+                        res.compiled = true
+                        res.aot = get_function_aot_hash(prog, use_plain[0])
+                        res.key = dll_key(prog, use_plain)
+                    }
+                }
+            }
+        }
+    }
+    return res
+}
+
+[test(description = "a shared function whose method call one program proves fixed and another overrides hashes apart in the two programs, so their JIT DLL keys differ", timeout = 1200)]
+def test_devirtualized_calls_key(t : T?) {
+    let closed = devirt_keys("_devirt_key_closed.das")
+    let open = devirt_keys("_devirt_key_open.das")
+    if (!closed.compiled || !open.compiled) {
+        t |> failure("a _devirt_key fixture did not compile and simulate")
+        return
+    }
+    t |> success(closed.aot != open.aot, "the direct call and the invoke hash apart")
+    t |> success(closed.key != open.key, "the two programs key the shared function's DLL apart")
+}
+
 def private salt(layouts : uint64) : uint64 =>
     jit_env_salt(3, 0, false, false, "", true, true, JitSanitize(), layouts)
 

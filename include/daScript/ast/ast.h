@@ -1585,6 +1585,8 @@ namespace das
         virtual void afterAlias ( const char * name, const LineInfo & at ) = 0;
     };
 
+    struct WholeProgramFacts;
+
     typedef function<void (const TypeDeclPtr & argType, const TypeDeclPtr & passType)> UpdateAliasMapCallback;
 
     // src/ast/ARCHITECTURE.md#program-scoped-symbol-state
@@ -1738,6 +1740,7 @@ namespace das
         void hashFunctions ( Context & context, const das_hash_map<int,Function *> & byIndex );
         das_hash_map<const Function *, AstFuncLookup> functionLookups;
         AstFuncLookup & functionLookup ( const Function * fn );
+        shared_ptr<WholeProgramFacts>   wholeProgram;
         int                         newLambdaIndex = 1;
         int                         inferPassesUsed = 0;   // sum of inferTypesDirty inner-loop pass counts across all inferTypes calls (incl. restartInfer legs) for this module; reset by parseDaScript once per module-compile; used by per-module compile-time log
         vector<Error>               errors;
