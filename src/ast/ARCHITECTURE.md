@@ -211,3 +211,23 @@ parsed type is longer than twice that. A postfix `?` is left-recursive and costs
 stack, so without the limit a pointer chain of any length parses and the first recursive walk
 over it overflows the C++ stack. Past the limit the parse ends with one `exceeds_type_nesting`
 error.
+
+## Lint before rewrites (`inferAndFinalizeModule`, `ast_parse.cpp`) {#lint-before-rewrites}
+
+A module's diagnostics read the program as written. Once infer converges and the annotation
+patches are quiet, `Program::lint` runs before any pass that changes the shape of code:
+`[inline]` and auto-inline splicing, escape analysis's `scope_free` insertion, the annotation
+fixups, `foldUnsafe` and `optimizeProgram`. A rewrite is free to reshape a function - splice a
+callee's body over a call, drop a read, merge statements - so a rule checked after it would
+judge the rewrite rather than the source: a spliced `delete super.self` no longer reads as a
+call to the parent finalizer, and a spliced read leaves its holder looking unused.
+
+Escape analysis runs after `buildAccessFlags`, so callee side-effect flags are final, and before
+`foldUnsafe`, so the dirty re-infer of the `scope_free` calls it inserts does not re-trip unsafe
+checks that are already folded. The inserted call is a generated terminal call that creates no
+new candidate and changes no side-effect flags, so one dirty re-infer is the fixpoint.
+
+`fixupAnnotations` runs after infer converges, when types are final, and before `foldUnsafe`
+and `optimizeProgram`, so what a `fixup()` generates - the shader-blob globals dasGlsl, dasSpirv
+and dasMetal fill - is folded and optimized like ordinary code. A call-shaped initializer a
+fixup sets is uninferred; the gated dirty re-infer resolves it before `foldUnsafe`.

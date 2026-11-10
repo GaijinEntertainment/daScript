@@ -1023,29 +1023,6 @@ namespace das {
             }
         }
 
-        // mirrors lint's 30250 detection: two non-deref ref lookups into the same table
-        // (by textual identity) within one statement. lint runs AFTER the patch slot -
-        // splicing such a statement would erase the diagnostic while keeping the UB
-        void scanStatementTableAts ( Expression * e, das_hash_set<uint64_t> & seen, bool & collides ) {
-            if ( !e || collides ) return;
-            if ( e->rtti_isAt() ) {
-                auto at = static_cast<ExprAt *>(e);
-                if ( !at->underDeref && at->subexpr->type && at->subexpr->type->isGoodTableType() ) {
-                    auto h = hash64z(at->subexpr->describe().c_str());
-                    if ( !seen.insert(h).second ) { collides = true; return; }
-                }
-            }
-            vector<pair<Expression *,EvalKind>> kids;
-            childrenInEvalOrder(e, kids);
-            for ( auto & k : kids ) scanStatementTableAts(k.first, seen, collides);
-        }
-        bool statementHasTableLookupCollision ( Expression * stmt ) {
-            das_hash_set<uint64_t> seen;
-            bool collides = false;
-            scanStatementTableAts(stmt, seen, collides);
-            return collides;
-        }
-
         // an lvalue chain whose root is a global variable, walked through field/index/cast views
         bool isGlobalRooted ( Expression * e ) {
             for ( ;; ) {
@@ -2154,10 +2131,6 @@ namespace das {
                                 return false;
                             }
                             subj.literal = bit->second.literal;
-                            // the splice eats this read, usually the holder's only one. lint runs
-                            // after the patch slot but before optimize reaps the dead `let`, so it
-                            // would report LINT002 on a variable the user demonstrably uses
-                            v->variable->marked_used = true;
                         }
                     }
                 }
@@ -2923,11 +2896,6 @@ namespace das {
             }
             int anchorIndex = liveAnchorIndex(site, state);
             if ( anchorIndex < 0 ) return;
-            // lint runs after the patch slot - splicing would erase the 30250 error, not the UB
-            if ( site.kind!=SiteKind::MustCall && statementHasTableLookupCollision(site.stmt) ) {
-                decline(site, "the statement has a potential table lookup collision (error 30250 preserved for lint)", callLike->at);
-                return;
-            }
             if ( site.kind==SiteKind::AutoCall && calleeFn ) {
                 int64_t calleeBytes = bodyCost(calleeFn->body).stackBytes;
                 if ( state.grownBytes + calleeBytes > AUTO_INLINE_CALLER_GROWTH_BYTES ) {
