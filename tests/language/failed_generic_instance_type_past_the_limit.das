@@ -1,6 +1,8 @@
 //! a generic instance takes argument types of up to 4096 type
-//! nodes; SizeProbe11 is a tuple tree of 8191
-expect 30516:1
+//! nodes: SizeProbe10 is a tuple tree of 4095, so one more pair
+//! around it is 4097; SizeProbe11 is 8191, under an array's first
+//! type and under a table's second
+expect 30516:3
 
 options gen2
 
@@ -17,12 +19,14 @@ typedef SizeProbe9 = tuple<SizeProbe8; SizeProbe8>
 typedef SizeProbe10 = tuple<SizeProbe9; SizeProbe9>
 typedef SizeProbe11 = tuple<SizeProbe10; SizeProbe10>
 
-def size_of_argument(a) : int {
-    return typeinfo sizeof(a)
-}
+def size_of_argument(a) : int => typeinfo sizeof(a)
 
 [export]
 def main {
-    var probe : SizeProbe11
-    print("{size_of_argument(probe)}\n")
+    let one_past : tuple<SizeProbe10; int>
+    var in_array : array<SizeProbe11>
+    var in_table : table<int; SizeProbe11>
+    print("{size_of_argument(one_past)}\n")
+    print("{size_of_argument(in_array)}\n")
+    print("{size_of_argument(in_table)}\n")
 }

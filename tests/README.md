@@ -5714,7 +5714,7 @@ compile-fail fixture: a generic that calls itself with a type built from its own
 
 ### failed_generic_instance_type_past_the_limit.das
 
-compile-fail fixture: a generic instance takes argument types of up to 4096 type nodes; SizeProbe11 is a tuple tree of 8191
+compile-fail fixture: a generic instance takes argument types of up to 4096 type nodes: SizeProbe10 is a tuple tree of 4095, so one more pair around it is 4097; SizeProbe11 is 8191, under an array's first type and under a table's second
 
 ### failed_generic_unknown_arg_type.das
 
@@ -6070,7 +6070,7 @@ The recursers live in a no_aot module, so this file runs under AOT and JIT as we
 - `test_option_type` - an option type picks its first matching alternative, so int& | auto binds by reference and auto | int& by value
 - `test_logical_ops` - contract annotations combine with !, ||, && and ^^ to gate which generic overload a call picks
 - `test_builtin_contracts` - the ==& contract routes a reference argument and a value argument to different generic overloads
-- `test_generic_instance_under_the_size_limit` - a generic is instanced with an argument type of 4095 type nodes, one node under the instance size limit
+- `test_generic_instance_at_the_size_limit` - a generic is instanced with an argument type of exactly 4096 type nodes, the instance size limit
 
 ### globals.das
 
