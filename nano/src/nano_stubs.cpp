@@ -98,18 +98,6 @@ namespace das {
     // virtual whether or not anything calls it. Their real bodies live in TUs that
     // need a file system and a serializer, so nano defines them here or does not
     // link at all. MSVC hides this: it emits a vtable only where one is used.
-    void FileInfo::serialize ( AstSerializer & ) {
-        DAS_FATAL_ERROR("FileInfo::serialize: nano carries no serializer");
-    }
-
-    void TextFileInfo::serialize ( AstSerializer & ) {
-        DAS_FATAL_ERROR("TextFileInfo::serialize: nano carries no serializer");
-    }
-
-    void FileAccess::serialize ( AstSerializer & ) {
-        DAS_FATAL_ERROR("FileAccess::serialize: nano carries no serializer");
-    }
-
     int64_t FileAccess::getFileMtime ( const string & ) const {
         DAS_FATAL_ERROR("FileAccess::getFileMtime: nano has no file system");
         return -1;

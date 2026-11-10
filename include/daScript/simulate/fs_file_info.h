@@ -1,6 +1,6 @@
 #pragma once
 
-#include "daScript/simulate/debug_info.h"
+#include "daScript/ast/ast_file_access.h"
 
 namespace das {
 

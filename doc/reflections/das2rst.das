@@ -485,8 +485,8 @@ def document_module_rtti(_root : string) {
         group_by_regex("Program access", mod, %regex~(program_for_each_module|program_for_each_registered_module|get_this_module|get_module|has_module|module_group_for_each_member)$%%),
         group_by_regex("Module access", mod, %regex~(module_for_each_structure|module_for_each_enumeration|module_for_each_function|module_for_each_generic|module_for_each_global|module_for_each_annotation|module_for_each_dependency)$%%),
         group_by_regex("Annotation access", mod, %regex~(get_annotation_argument_value|add_annotation_argument|get_annotation|get_annotation_argument|resolve_annotation|each_annotation|each_annotation_argument)$%%),
-        group_by_regex("Compilation and simulation", mod, %regex~(compile|compile_file|for_each_expected_error|for_each_require_declaration|simulate|create_ast_serializer|create_ast_deserializer|delete_ast_serializer|serialize_program|deserialize_program|ast_serializer_get_data|ast_serializer_finalize_usec|ast_serializer_setup_usec)$%%),
-        group_by_regex("File access", mod, %regex~(make_file_access|set_file_source|add_file_access_root|add_extra_module)$%%),
+        group_by_regex("Compilation and simulation", mod, %regex~(compile|compile_file|for_each_expected_error|for_each_require_declaration|simulate)$%%),
+        group_by_regex("File access", mod, %regex~(make_file_access|add_file_access_root|add_extra_module)$%%),
         group_by_regex("Structure access", mod, %regex~(rtti_builtin_structure_for_each_annotation|basic_struct_for_each_field|structure_for_each_annotation|basic_struct_for_each_parent)$%%),
         group_by_regex("Data walking and printing", mod, %regex~(sprint_data|sprint_json_at|sscan_json_at|describe|get_mangled_name)$%%),
         group_by_regex("Function and mangled name hash", mod, %regex~(get_function_by_mangled_name_hash|get_function_mangled_name_hash|get_function_address)$%%),
@@ -504,7 +504,8 @@ def document_module_rtti(_root : string) {
 def document_module_ast(_root : string) {
     var mod = [get_module("ast_core"), find_module("ast")]
     var groups <- array<DocGroup>(
-        group_by_regex("Compilation and file access", mod, %regex~(compile|compile_file|module_cache_path|parse_file|parse_file_no_prerequisites|make_file_access|require_module_now)$%%),
+        group_by_regex("Compilation and file access", mod, %regex~(compile|compile_file|module_cache_path|parse_file|parse_file_no_prerequisites|make_file_access|require_module_now|set_file_source)$%%),
+        group_by_regex("AST serialization", mod, %regex~(create_ast_serializer|create_ast_deserializer|delete_ast_serializer|serialize_program|deserialize_program|ast_serializer_get_data|ast_serializer_finalize_usec|ast_serializer_setup_usec)$%%),
         group_by_regex("Building programs from AST nodes", mod, %regex~(make_program|make_module|make_main_module)$%%),
         group_by_regex("Call generation", mod, %regex~(make_call)$%%),
         group_by_regex("Visitor pattern", mod, %regex~visit.*%%),

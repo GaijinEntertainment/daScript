@@ -11,6 +11,20 @@ das::Context * get_context ( int stackSize=0 );
 
 namespace das {
 
+    void TextFileInfo::getSourceAndLength ( const char * & src, uint32_t & len ) {
+        src = source;
+        len = source ? sourceLength : 0;    // a cached record carries sourceLength with no bytes; callers dereference src whenever len > 0
+    }
+
+    void TextFileInfo::freeSourceData() {
+        FileInfo::freeSourceData();
+        if ( source ) {
+            das_aligned_free16((void*)source);
+            source = nullptr;
+            sourceLength = 0;
+        }
+    }
+
     ModuleFileAccess::ModuleFileAccess() {
     }
 
@@ -77,18 +91,6 @@ namespace das {
         } else {
             DAS_FATAL_ERROR("failed to compile: %s\n%s", pak.c_str(), tout.str().c_str());
         }
-    }
-
-    int64_t FileAccess::getFileMtime ( const string & fileName) const {
-        uint64_t size; int64_t mtime; bool isDirectory;
-        if ( !das_file_stat_utf8(fileName.c_str(), size, mtime, isDirectory) ) return -1;  // never key a cache on uninitialized stack
-        return mtime;
-    }
-
-    int64_t FileAccess::getFileSize ( const string & fileName) const {
-        uint64_t size; int64_t mtime; bool isDirectory;
-        if ( !das_file_stat_utf8(fileName.c_str(), size, mtime, isDirectory) ) return -1;
-        return int64_t(size);
     }
 
     bool ModuleFileAccess::canModuleBeUnsafe ( const string & mod, const string & fileName ) const {
