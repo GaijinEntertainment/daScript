@@ -2945,7 +2945,14 @@ namespace das {
             }
             ArgPlan plan;
             if ( !classifyArguments(caller, site, subj, in, plan) ) return;
-            bool exprBody = in.body->list.size()==1 && in.body->list.back()->rtti_isReturn()
+            bool storesInPlace = false;
+            if ( site.stmt->rtti_isOp2() && callLike->type && callLike->type->isRefType() && !callLike->type->ref ) {
+                auto store = static_cast<ExprOp2 *>(site.stmt);
+                storesInPlace = (store->op=="=" || store->op=="<-" || store->op==":=")
+                    && peelCasts(store->right)==callLike;
+            }
+            bool exprBody = !storesInPlace
+                && in.body->list.size()==1 && in.body->list.back()->rtti_isReturn()
                 && !static_cast<ExprReturn *>(in.body->list.back())->moveSemantics    // a substituted read would COPY where the callee moved
                 && !(calleeFn && calleeFn->hasUnsafe)   // the generated unsafe wrapper must be a statement
                 && !in.needScope;                       // so must the with (module) wrapper
@@ -3223,11 +3230,8 @@ namespace das {
         // the debugger needs true frames and true lines - same reason it disables fastcall
         bool autoEnabled = getOptimize() && !getDebugger()
             && !options.getBoolOption("disable_auto_inline", policies.disable_auto_inline);
-        // under `options no_aliasing` call-result aliasing is an ERROR; splicing calls away
-        // would change which programs compile - diagnostics must not depend on a perf knob
         bool autoFns = autoEnabled
-            && options.getBoolOption("auto_inline_functions", policies.auto_inline_functions)
-            && !options.getBoolOption("no_aliasing", policies.no_aliasing);
+            && options.getBoolOption("auto_inline_functions", policies.auto_inline_functions);
         das_hash_map<Function *, bool> budgetCache;
         das_hash_set<Function *> budgetExempt;
         AutoInlineCfg autoCfg;

@@ -1639,6 +1639,7 @@ namespace das
         void dumpSymbolUse(TextWriter & logs);
         void allocateStack(TextWriter & logs, bool permanent, bool everything);
         void deriveAliases(TextWriter & logs, bool permanent, bool everything);
+        void checkAliases(TextWriter & logs);
         void updateSemanticHash();
         void updateKeepAliveFlags();
         bool simulate ( Context & context, TextWriter & logs, StackAllocator * sharedStack = nullptr );
@@ -1759,6 +1760,7 @@ namespace das
         vector<tuple<string,int64_t,uint64_t,bool>> moduleCacheDependencies;
         UpdateAliasMapCallback      updateAliasMapCallback;
         bool                        accessFlagsValid = false;
+        bool                        aliasesChecked = false;
     };
 
     // the shared capture/validate stat for Program::moduleCacheDependencies: size -1 + hash 0
