@@ -22,6 +22,7 @@ namespace das {
                 Server::startup();
         }
         virtual ~ServerAdapter() {
+            close_sockets();
             if ( !--g_moduleNetworkTotalSockets )
                 Server::shutdown();
         }
@@ -101,6 +102,7 @@ namespace das {
                 Server::startup();
         }
         virtual ~ClientAdapter() {
+            disconnect();
             if ( !--g_moduleNetworkTotalSockets )
                 Server::shutdown();
         }
