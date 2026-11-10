@@ -6271,6 +6271,7 @@ class public LlvmJitVisitor : AstVisitor {
                 let vptr = get_global_offset_by_mnh(mnh, expr.variable.flags.global_shared, "global_var_{expr.variable.name}_mnh_ptr")
                 tryV = LLVMBuildPointerCast(g_builder, vptr, get_type_pointer(expr.variable._type), "global_var_{expr.variable.name}")
             } elif (tryV == null) {
+                g_solid_globals = true
                 at_function_entry() {
                     // Globals base = context->globals, via the host-baked
                     // offsetof(Context, globals); index by stackTop. host==target
@@ -8333,10 +8334,73 @@ def public create_jit_pass_builder_options(inline_threshold : uint) : LLVMOpaque
     return pbopts
 }
 
+//! `getelementptr i8, ptr base, <constant>`: the base, and `off`
+def private const_offset_base(v : LLVMOpaqueValue?; var off : uint64&) : LLVMOpaqueValue? {
+    return null if (LLVMIsAGetElementPtrInst(v) == null || LLVMGetNumOperands(v) != 2)
+    let index = LLVMGetOperand(v, 1u)
+    return null if (LLVMIsAConstantInt(index) == null)
+    off = LLVMConstIntGetZExtValue(index)
+    return LLVMGetOperand(v, 0u)
+}
+
+def private is_solid_global_address(v : LLVMOpaqueValue?) : bool {
+    var off, slot : uint64
+    let globals = const_offset_base(v, off)
+    let loaded = globals != null && LLVMIsALoadInst(globals) != null
+    return false if (!loaded || const_offset_base(LLVMGetOperand(globals, 0u), slot) == null)
+    return (slot == uint64(CONTEXT_OFFSET_OF_GLOBALS)
+        || slot == uint64(CONTEXT_OFFSET_OF_SHARED))
+}
+
+def private has_gep_user(v : LLVMOpaqueValue?) : bool {
+    var use = LLVMGetFirstUse(v)
+    while (use != null) {
+        return true if (LLVMIsAGetElementPtrInst(LLVMGetUser(use)) != null)
+        use = LLVMGetNextUse(use)
+    }
+    return false
+}
+
+[macro_function, arch(at="../ARCHITECTURE.md#solid-array-base")]
+def public hide_solid_array_bases(mod : LLVMOpaqueModule?; ctx : LLVMOpaqueContext?) : int {
+    var hidden = 0
+    var ptrT = LLVMPointerTypeInContext(ctx, 0u)
+    var argTypes <- [ ptrT ]
+    let launder = intrinsic_id("llvm.launder.invariant.group")
+    var decl = LLVMGetIntrinsicDeclaration(mod, launder, argTypes)
+    let fnT = LLVMFunctionType(ptrT, [ ptrT ])
+    var bld = LLVMCreateBuilderInContext(ctx)
+    var fn = LLVMGetFirstFunction(mod)
+    while (fn != null) {
+        for_each_instruction(fn) $(inst) {
+            return if (!is_solid_global_address(inst) || !has_gep_user(inst))
+            LLVMPositionBuilderBefore(bld, LLVMGetNextInstruction(inst))
+            var args <- [ inst ]
+            let laundered = LLVMBuildCall2(bld, fnT, decl, args, "")
+            LLVMReplaceAllUsesWith(inst, laundered)
+            LLVMSetOperand(laundered, 0u, inst)
+            hidden++
+        }
+        fn = LLVMGetNextFunction(fn)
+    }
+    LLVMDisposeBuilder(bld)
+    return hidden
+}
+
 [macro_function]
 def public optimize_llvm_module(opt_level : uint; size_level : uint; inline_threshold : uint; use_host_cpu : bool; sanitize : JitSanitize) {
-    return if (is_in_completion() || is_compiling_macros() || is_folding()
-            || g_failed || !LLVM_ENABLE_OPT_PASS)
+    return if (is_in_completion() || is_compiling_macros() || is_folding() || g_failed)
+    if (LLVM_ENABLE_OPT_PASS) {
+        run_pass_pipeline(opt_level, size_level, inline_threshold, use_host_cpu, sanitize)
+    }
+    if (take_solid_globals()) {
+        hide_solid_array_bases(g_mod, g_ctx)
+    }
+}
+
+[macro_function]
+def public run_pass_pipeline(opt_level : uint; size_level : uint; inline_threshold : uint;
+                             use_host_cpu : bool; sanitize : JitSanitize) {
     var pbopts = create_jit_pass_builder_options(inline_threshold)
     // Ensure pbopts is released even if the pass run fails and we panic.
     defer() {

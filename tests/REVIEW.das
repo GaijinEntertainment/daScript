@@ -265,8 +265,23 @@ def private call_sites(chunk : string; needle : string; is_method : bool) : arra
     return <- sites
 }
 
+def private report_web_read(path : string; text : string; at : int; arg : string) {
+    let what = ("compile_file(...) reads `{arg}` from the repo tree, which the web lane cannot "
+        + "reach through its das root")
+    let fix = ("skip the test when get_running_platform_name() is \"emscripten\", or pass "
+        + "the source with set_file_source")
+    gate_finding(path, line_of(text, at), "{what} - {fix}")
+}
+
+//! the web lane runs this folder with the repo mounted beside its
+//! das root, so a path built from get_das_root() names no file there
+let private WEB_LANE_FOLDER = "/language/"
+let private WEB_SKIP = "get_running_platform_name() == \"emscripten\""
+
 def private check_file(path : string; calls : array<WriteCall>) {
     let text = strip_line_comments(fread(path))
+    let in_web_lane = find(to_generic_path(path), WEB_LANE_FOLDER) >= 0
+    let unskipped_web_test = in_web_lane && find(text, WEB_SKIP) < 0
     var inscope chunks <- top_level_chunks(text)
     var inscope root_funcs <- root_helpers(chunks)
     let top_level = join(
@@ -291,6 +306,14 @@ def private check_file(path : string; calls : array<WriteCall>) {
             if (length(args) >= 2 && is_write_mode(args[1])
                 && (is_root_path(args[0], root_funcs, vars) || is_cwd_relative_literal(args[0]))) {
                 report(path, text, offset + open, "fopen", args[0])
+            }
+        }
+        if (unskipped_web_test && find(chunk, "set_file_source(") < 0) {
+            for (open in call_sites(chunk, "compile_file", false)) {
+                var inscope args <- call_args(chunk, open)
+                if (!empty(args) && is_root_path(args[0], root_funcs, vars)) {
+                    report_web_read(path, text, offset + open, args[0])
+                }
             }
         }
         offset += length(chunk)

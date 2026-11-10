@@ -37,20 +37,7 @@ var LINK_WHOLE_LIB = false // when true, standalone exe links against the whole 
 
 // Read by tests-cpp/small/test_jit_emitter_pin.cpp: FNV-1a64 of the emitter sources
 // (normalized to LF; file list in the test)
-let LLVM_JIT_EMITTER_HASH : uint64 = 0x973aa0c21e2860eaul
-
-//! every instruction of `fn`, block by block
-def private for_each_instruction(fn : LLVMOpaqueValue?; blk : block<(inst : LLVMOpaqueValue?)>) {
-    var bb = LLVMGetFirstBasicBlock(fn)
-    while (bb != null) {
-        var inst = LLVMGetFirstInstruction(bb)
-        while (inst != null) {
-            invoke(blk, inst)
-            inst = LLVMGetNextInstruction(inst)
-        }
-        bb = LLVMGetNextBasicBlock(bb)
-    }
-}
+let LLVM_JIT_EMITTER_HASH : uint64 = 0x607b65a804830bc7ul
 
 [arch(at = "../ARCHITECTURE_FAST_MATH.md#never-fast-math")]
 def private apply_fast_math_to_module(m : LLVMOpaqueModule?) {
@@ -229,6 +216,7 @@ def reset_jit_globals_after_failure() {
     g_ctx = null
     g_mod = null
     g_failed = false
+    g_solid_globals = false
     unsafe {
         delete g_str2v
     }
@@ -339,6 +327,7 @@ struct private JitSplitPart {
     obj : string
     obj_final : string
     tag : string
+    solid : bool    //! the partition addresses a solid-context global
 }
 
 [arch(at = "../ARCHITECTURE_JIT_ENTRY.md#artifact-publish")]
@@ -380,6 +369,13 @@ def private publish_object(tmp, final : string; replace : bool) {
 // live split partitions between codegen and disposal - module-global so the failure path
 // (reset_jit_globals_after_failure) can drain them and a bulk run leaks nothing
 var g_split_parts : array<JitSplitPart>
+
+def private has_solid_part() : bool {
+    for (p in g_split_parts) {
+        return true if (p.solid)
+    }
+    return false
+}
 
 def private dispose_split_part(var p : JitSplitPart; dispose_state : bool) {
     LLVMDisposeTargetMachine(p.tm)
@@ -518,7 +514,7 @@ def private run_split_codegen(prog : Program?; ctx : Context?; funcs : array<Fun
         g_split_parts |> push(JitSplitPart(ctx = g_ctx, mod = g_mod, engine = g_engine, prim_t = g_prim_t,
             tm = create_default_target_machine(codegen_level, use_host_cpu),
             pbo = create_jit_pass_builder_options(LLVM_INLINE_THRESHOLD),
-            obj = obj, obj_final = obj_final, tag = ptag))
+            obj = obj, obj_final = obj_final, tag = ptag, solid = take_solid_globals()))
     }
     if (target.gen_exe) {
         let ptag = "exe_main"
@@ -560,7 +556,7 @@ def private run_split_codegen(prog : Program?; ctx : Context?; funcs : array<Fun
             g_split_parts |> push(JitSplitPart(ctx = g_ctx, mod = g_mod, engine = g_engine, prim_t = g_prim_t,
                 tm = create_default_target_machine(codegen_level, use_host_cpu),
                 pbo = create_jit_pass_builder_options(LLVM_INLINE_THRESHOLD),
-                obj = obj, obj_final = obj_final, tag = ptag))
+                obj = obj, obj_final = obj_final, tag = ptag, solid = take_solid_globals()))
         }
     }
     if (obj_cache) {
@@ -578,7 +574,13 @@ def private run_split_codegen(prog : Program?; ctx : Context?; funcs : array<Fun
             if (sanitize.address) {
                 mark_sanitize_address(p.mod)
             }
-            jit_par_emit_add(p.mod, p.tm, p.pbo, pipeline, lto_run ? "" : p.obj)   // an LTO partition leaves as bitcode: the pool optimizes it and emits no object
+        }
+    }
+    let hide_run = main_ok && !lto_run && has_solid_part()
+    if (main_ok) {
+        for (p in g_split_parts) {
+            // optimize only: LTO leaves as bitcode, a hide run emits in round two
+            jit_par_emit_add(p.mod, p.tm, p.pbo, pipeline, (lto_run || hide_run) ? "" : p.obj)
         }
     }
     let tIr = get_time_usec(phase_tm)
@@ -603,8 +605,21 @@ def private run_split_codegen(prog : Program?; ctx : Context?; funcs : array<Fun
             }
             lfns |> push(p)
         }
-        let ok = jit_par_emit_run(split_threads, int(LLVMCodeGenFileType.LLVMObjectFile),
+        var ok = jit_par_emit_run(split_threads, int(LLVMCodeGenFileType.LLVMObjectFile),
             lfns[0], lfns[1], lfns[2], lfns[3], lfns[4], lfns[5], log_jit_time)
+        if (ok && hide_run) {
+            for (p in g_split_parts) {
+                if (p.solid) {
+                    hide_solid_array_bases(p.mod, p.ctx)
+                }
+                if (dump_ir) {
+                    dump_module_ir(dump_to, p.mod)
+                }
+                jit_par_emit_add(p.mod, p.tm, p.pbo, "", p.obj)
+            }
+            ok = jit_par_emit_run(split_threads, int(LLVMCodeGenFileType.LLVMObjectFile),
+                lfns[0], lfns[1], lfns[2], lfns[3], lfns[4], lfns[5], log_jit_time)
+        }
         if (!ok) {
             reset_jit_globals_after_failure()
             panic("LLVM JIT: split parallel optimize+emit failed")
@@ -614,7 +629,7 @@ def private run_split_codegen(prog : Program?; ctx : Context?; funcs : array<Fun
         }
     }
     // phase C - the opt-in IR dump only (workers verified each module post-optimize, pre-emit; cached partitions have no live IR)
-    if (dump_ir) {
+    if (dump_ir && !hide_run) {
         for (p in g_split_parts) {
             dump_module_ir(dump_to, p.mod)
         }

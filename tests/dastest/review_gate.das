@@ -5,16 +5,17 @@ require daslib/fio
 require daslib/strings_boost
 require strings
 
-def private gate_findings_for(root : string; var rc : int&) : array<string> {
+def private gate_findings_for(root : string; var rc : int&;
+                              verb : string = " writes `") : array<string> {
     let exe = get_command_line_arguments()[0]
     var output : string
     rc = run_and_capture(
-                         [exe, "-dasroot", get_das_root(), "{get_das_root()}/tests/REVIEW.das",
-                          "--", "--root", root], output)
+                         [exe, "-dasroot", get_das_root(), "-no-module-cache",
+                          "{get_das_root()}/tests/REVIEW.das", "--", "--root", root], output)
     var findings : array<string>
     for (line in split(output, "\n")) {
         let at = find(line, ": ")
-        if (find(line, " writes `") >= 0 && at >= 0) {
+        if (find(line, verb) >= 0 && at >= 0) {
             findings |> push(strip(slice(line, at + 2)))
         }
     }
@@ -134,6 +135,16 @@ def test_tests_review_gate(tt : T?) {
         }
         t |> equal(length(findings), length(expected), "found:\n{join(findings, "\n")}")
     }
+}
+
+[test(description = "the tests/ gate flags a language test that compiles a file from the repo tree with no web skip, and passes one that skips or supplies the source", timeout = 1200)]
+def test_tests_review_gate_web_read(t : T?) {
+    var rc = 0
+    let fixture = "{get_das_root()}/tests/dastest/_tests_gate_fixture"
+    var inscope reads <- gate_findings_for(fixture, rc, " reads `")
+    t |> equal(length(reads), 1, "found:\n{join(reads, "\n")}")
+    t |> success(reads |> has_value_prefix("compile_file(...) reads `path`"),
+                 "found:\n{join(reads, "\n")}")
 }
 
 def private has_value_prefix(lines : array<string>; prefix : string) : bool {
