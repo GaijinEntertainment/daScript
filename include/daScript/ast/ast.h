@@ -1015,8 +1015,8 @@ namespace das
 
     DAS_API uint64_t getFunctionHash ( Function * fun, SimNode * node, Context * context );
 
-    DAS_API uint64_t getFunctionAotHash ( Function * fun );
-    DAS_API string getAotHashComment ( const Function * fun );
+    DAS_CC_API uint64_t getFunctionAotHash ( Function * fun );
+    DAS_CC_API string getAotHashComment ( const Function * fun );
     uint64_t getVariableListAotHash ( const vector<const Variable *> & globs, uint64_t initHash );
 
     class DAS_API BuiltInFunction : public Function {
