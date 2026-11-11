@@ -584,7 +584,6 @@ namespace das
             to_out(at, LogLevel::error, message);
         }
         virtual void breakPoint(const LineInfo & info, const char * reason = "breakpoint", const char * text = ""); // what to do in case of breakpoint
-        bool breakInDebugAgents(const LineInfo & info, const char * reason, const char * text);
 
         __forceinline vec4f * abiArguments() {
             return abiArg;

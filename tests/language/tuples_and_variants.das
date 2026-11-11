@@ -727,3 +727,9 @@ def test_destructure_after_early_return(t : T?) {
     t |> equal(relocated_destructure(-1, 100), -1)
     t |> equal(relocated_destructure(0, 100), 0)
 }
+
+[test(description = "a destructure pattern may itself name a variable at")]
+def test_destructure_names_at(t : T?) {
+    let (q, at, x, y) = (1, 2, 3, 4)
+    t |> equal(q + at * 10 + x * 100 + y * 1000, 4321)
+}

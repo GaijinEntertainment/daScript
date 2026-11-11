@@ -237,12 +237,11 @@ lookups into the same table (same source text) inside one statement are error 30
 reports it; the inliner runs the same scan before a splice, because splicing would erase the
 error and keep the defect.
 
-A builtin ternary is the one place two lookups in a statement are sequenced. Its condition is a
+A ternary is the one place two lookups in a statement are sequenced. Its condition is a
 `bool` by the time an arm runs, so a lookup in the condition holds no reference an arm's lookup
 could invalidate, and the arms never both run. A lookup in the condition does not collide with
 one in an arm, and the arms do not collide with each other; all three still collide with the
-rest of the statement. A user-defined ternary operator is a call that evaluates all three
-operands, and gets no such exemption.
+rest of the statement.
 
 ## An `unsafe` block in a generator (`ast_infer_type.cpp`) {#generator-unsafe-block}
 
@@ -258,4 +257,3 @@ statement-position `unsafe { }` in a generator with its block and sets
 `Function::unsafeGenerator`; every later pass visits that function with unsafe allowed. The
 price is the scope: once a generator has one `unsafe` block, its whole body is unsafe-permitted.
 An expression-position `unsafe(...)` stays as written.
-

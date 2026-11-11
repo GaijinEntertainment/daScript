@@ -1063,6 +1063,7 @@ namespace das {
         if (func)
             func->hasUnsafe = true;
     }
+    // src/ast/ARCHITECTURE.md#generator-unsafe-block
     ExpressionPtr InferTypes::visit(ExprUnsafe *expr) {
         unsafeDepth--;
         if (func && func->generator && blocks.empty() && expr->body->rtti_isBlock()) {

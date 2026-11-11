@@ -337,10 +337,33 @@ def target_addr_taken : bool => @@fold_shape_addr_target != null
 [export]
 def target_addr_taken_caller : bool => target_addr_taken()
 
+[export]
+def target_string_cast : uint64 => unsafe(reinterpret<uint64>("fold_shape"))
+
+[export]
+def target_string_cast_caller : uint64 => target_string_cast() + 1ul
+
+[export]
+def target_pointer_cast : uint64 {
+    var slot = 1
+    return unsafe(reinterpret<uint64>(unsafe(addr(slot))))
+}
+
+[export]
+def target_pointer_cast_caller : uint64 => target_pointer_cast() + 1ul
+
 [test(description = "a call whose result is built from a function address is not folded into a constant")]
 def test_function_address_is_not_folded(t : T?) {
     t |> success(body_of(t, "target_addr_caller") |> find("target_addr_cast") >= 0,
         "the address cast stays a call")
     t |> success(body_of(t, "target_addr_taken_caller") |> find("target_addr_taken") >= 0,
         "a function that takes an address stays a call")
+}
+
+[test(description = "a call whose result is a string or a pointer reinterpreted as an integer is not folded into a constant")]
+def test_address_cast_is_not_folded(t : T?) {
+    t |> success(body_of(t, "target_string_cast_caller") |> find("target_string_cast") >= 0,
+        "the string's address stays a call")
+    t |> success(body_of(t, "target_pointer_cast_caller") |> find("target_pointer_cast") >= 0,
+        "the pointer's address stays a call")
 }

@@ -1024,9 +1024,6 @@ namespace das {
         }
 
         // src/ast/ARCHITECTURE.md#table-lookup-collision
-        // mirrors lint's 30250 detection: two non-deref ref lookups into the same table
-        // (by textual identity) within one statement. lint runs AFTER the patch slot -
-        // splicing such a statement would erase the diagnostic while keeping the UB
         void scanStatementTableAts ( Expression * e, das_hash_set<uint64_t> & seen, bool & collides ) {
             if ( !e || collides ) return;
             if ( e->rtti_isAt() ) {
@@ -1038,16 +1035,14 @@ namespace das {
             }
             if ( e->rtti_isOp3() ) {
                 auto op3 = static_cast<ExprOp3 *>(e);
-                if ( !op3->func || op3->func->builtIn ) {
-                    auto before = seen;
-                    scanStatementTableAts(op3->subexpr, seen, collides);
-                    auto left = before;
-                    scanStatementTableAts(op3->left, left, collides);
-                    scanStatementTableAts(op3->right, before, collides);
-                    for ( auto h : left ) seen.insert(h);
-                    for ( auto h : before ) seen.insert(h);
-                    return;
-                }
+                auto before = seen;
+                scanStatementTableAts(op3->subexpr, seen, collides);
+                auto left = before;
+                scanStatementTableAts(op3->left, left, collides);
+                scanStatementTableAts(op3->right, before, collides);
+                for ( auto h : left ) seen.insert(h);
+                for ( auto h : before ) seen.insert(h);
+                return;
             }
             vector<pair<Expression *,EvalKind>> kids;
             childrenInEvalOrder(e, kids);

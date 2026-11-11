@@ -941,7 +941,7 @@ namespace das {
             if ( func && expr->func->module == func->module ) expr->func->addressTaken = true;
             if ( func ) func->sideEffectFlags |= uint32_t(SideEffects::accessGlobal);
         }
-    // cast
+    // cast - src/ast/ARCHITECTURE_EFFECTS.md#observable-effects
         virtual void preVisit ( ExprCast * expr ) override {
             Visitor::preVisit(expr);
             if ( !func || !expr->reinterpret || !expr->subexpr->type || !expr->castType ) return;

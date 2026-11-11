@@ -1053,18 +1053,17 @@ namespace das
         hwBpIndex = index;
     }
 
-    bool Context::breakInDebugAgents(const LineInfo & at, const char * reason, const char * text) {
-        if ( !debugger ) return false;
-        bool any = false;
-        for_each_debug_agent([&](const DebugAgentPtr & pAgent){
-            pAgent->onBreakpoint(this, at, reason, text);
-            any = true;
-        });
-        return any;
-    }
-
     void Context::breakPoint(const LineInfo & at, const char * reason, const char * text) {
-        if ( !breakInDebugAgents(at, reason, text) ) os_debug_break();
+        if ( debugger ) {
+            bool any = false;
+            for_each_debug_agent([&](const DebugAgentPtr & pAgent){
+                pAgent->onBreakpoint(this, at, reason, text);
+                any = true;
+            });
+            if ( any ) return;
+        }
+        if ( reason && strcmp(reason, "exception")==0 ) return;
+        os_debug_break();
     }
 
     static DAS_THREAD_LOCAL(bool) g_inLogger;

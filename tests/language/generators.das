@@ -846,7 +846,8 @@ def unsafe_block_locals(n : int) {
             unsafe {
                 var local = index * 10
                 yield local
-                local ++
+                var p = addr(local)
+                *p = *p + 1
                 yield local
             }
         }

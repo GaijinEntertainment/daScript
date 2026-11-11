@@ -896,10 +896,8 @@ namespace das {
         virtual void preVisit ( ExprOp3 * expr ) override {
             Visitor::preVisit(expr);
             verifyOnlyFastAot(expr->func, expr->at);
-            if ( selectsArmsLazily(expr) ) {
-                ternaryLookups.emplace_back();
-                ternaryLookups.back().before = tableLookupCollision.back();
-            }
+            ternaryLookups.emplace_back();
+            ternaryLookups.back().before = tableLookupCollision.back();
             if ( checkAotSideEffects ) {
                 if ( !expr->subexpr->noNativeSideEffects || !expr->left->noNativeSideEffects || !expr->right->noNativeSideEffects ) {
                     program->error("side effects may affect evaluation order", "", "", expr->at,
@@ -1230,29 +1228,22 @@ namespace das {
             return Visitor::visitBlockFinalExpression(block,expr);
         }
         // src/ast/ARCHITECTURE.md#table-lookup-collision
-        static bool selectsArmsLazily ( ExprOp3 * expr ) {
-            return !expr->func || expr->func->builtIn;
-        }
         virtual void preVisitLeft ( ExprOp3 * expr, Expression * left ) override {
             Visitor::preVisitLeft(expr, left);
-            if ( !selectsArmsLazily(expr) ) return;
             auto & frame = ternaryLookups.back();
             frame.seen = tableLookupCollision.back();
             tableLookupCollision.back() = frame.before;
         }
         virtual void preVisitRight ( ExprOp3 * expr, Expression * right ) override {
             Visitor::preVisitRight(expr, right);
-            if ( !selectsArmsLazily(expr) ) return;
             auto & frame = ternaryLookups.back();
             for ( auto h : tableLookupCollision.back() ) frame.seen.insert(h);
             tableLookupCollision.back() = frame.before;
         }
         virtual ExpressionPtr visit ( ExprOp3 * expr ) override {
-            if ( selectsArmsLazily(expr) ) {
-                auto & frame = ternaryLookups.back();
-                for ( auto h : frame.seen ) tableLookupCollision.back().insert(h);
-                ternaryLookups.pop_back();
-            }
+            auto & frame = ternaryLookups.back();
+            for ( auto h : frame.seen ) tableLookupCollision.back().insert(h);
+            ternaryLookups.pop_back();
             return Visitor::visit(expr);
         }
         virtual void preVisit ( ExprAt * expr ) override {

@@ -2,7 +2,7 @@
 //! not compile, since one insert can move the other's slot - in
 //! initializers, copy, clone, move and field-access forms
 options gen2
-expect 30250:10
+expect 30250:12
 
 def take_two_ret(var a : int&; var b : int&) : int {
     return a + b
@@ -96,6 +96,20 @@ def test_ternary_arm_outside(flag : bool) {
     var tab : table<int; Slot>
     var other : table<int; Slot>
     take_two(tab[1].v, flag ? tab[2].v : other[3].v)
+}
+
+// collision: a ternary's arm against a later part of the statement
+def test_ternary_arm_before(flag : bool) {
+    var tab : table<int; Slot>
+    var other : table<int; Slot>
+    take_two(flag ? tab[1].v : other[3].v, tab[2].v)
+}
+
+// collision: a ternary's condition against a later part of the statement
+def test_ternary_condition_before() {
+    var tab : table<int; Slot>
+    var one = 1
+    take_two(tab[1].on ? one : one, tab[2].v)
 }
 
 // collision: two lookups inside one arm

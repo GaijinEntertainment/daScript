@@ -4,30 +4,6 @@ options force_inscope_pod = true
 require dastest/testing_boost public
 require daslib/decs_boost
 
-[test(description = "set moves an array into its component, so the scope-exit collect of the source leaves the component intact")]
-def test_set_moves_container(t : T?) {
-    restart()
-    for (i in range(4)) {
-        create_entity() @(eid, cmp) {
-            var values <- [for (x in range(i)); int2(x, x + 13)]
-            cmp |> set("values", values)
-            t |> equal(length(values), 0, "the source is empty after set")
-            cmp.i := i
-        }
-    }
-    commit()
-    var churn <- [for (k in range(1000)); k * 7]
-    var seen = 0
-    query() $(values : array<int2>; i : int) {
-        t |> equal(length(values), i)
-        for (x, v in range(i), values) {
-            t |> equal(v, int2(x, x + 13))
-        }
-        seen ++
-    }
-    t |> equal(seen, 4)
-}
-
 def churn_heap() {
     var churn <- [for (k in range(1000)); k * 7]
 }
@@ -42,6 +18,28 @@ def expect_moved_values(t : T?; count : int) {
         seen ++
     }
     t |> equal(seen, count)
+}
+
+[test(description = "set moves an array into its component, so the scope-exit collect of the source leaves the component intact")]
+def test_set_moves_container(t : T?) {
+    restart()
+    for (i in range(4)) {
+        create_entity() @(eid, cmp) {
+            var values <- [for (x in range(i + 1)); int2(x, x + 13)]
+            if (i % 2 == 0) {
+                cmp |> set("moved_values", values)
+            } else {
+                set(cmp.moved_values, values)
+            }
+            t |> equal(length(values), 0, "the source is empty after set")
+            var index = i
+            cmp |> set("moved_i", index)
+            t |> equal(index, i, "a copyable source keeps its value")
+        }
+    }
+    commit()
+    churn_heap()
+    expect_moved_values(t, 4)
 }
 
 [test(description = "set_direct and set_direct_at move an array into archetype storage and leave the source empty")]
