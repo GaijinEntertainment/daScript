@@ -351,6 +351,26 @@ def test_qwen3v_tier1_deepstack(t : T?) {
     }
 }
 
+//! the q8-lane image's baked tag routes through the carrier sniff (the qwen3v-q8 arm), with the GPU towers off as the caller
+//! left them; the image is this build's own mint, never a file an earlier build left beside the mmproj
+def private q8_baked_tag_leg(tt : T?; mm : string) {
+    let img = path_join(test_temp_dir(), base_name(image_path_for(mm, "qwen3v-q8")))
+    remove(img)
+    set_qwen3v_q8(true)
+    with_image_destination(img) {
+        var inscope minted <- load_qwen3v_tower(mm)
+        tt |> success(minted.q8, "the q8 lane mints its CPU image")
+    }
+    reset_qwen3v_q8()
+    tt |> success(stat(img).is_valid, "the mint wrote the image the tag leg reads")
+    if (stat(img).is_valid) {
+        var inscope e <- load_vision_embedder(img)
+        tt |> equal(vision_family(e), "qwen3v", "the baked q8 tag sniffs to the qwen3v arm")
+        tt |> equal(vision_exec_fmt(e), "q8", "the carrier stamps the q8 lane")
+    }
+    remove(img)
+}
+
 // The q8 serving lane (the CPU default): the same dumps on their own scale-relative bars.
 [test(description = "The Omni-30B q8 serving lane matches the mtmd dumps within 1.0 of token rms at the reference f32 tile, a zeroed layer-13 qblob reds that bar, the baked q8 image sniffs to qwen3v, and the GPU q8 image mints and reloads")]
 def test_qwen3v_tier1_q8(t : T?) {
@@ -398,13 +418,7 @@ def test_qwen3v_tier1_q8(t : T?) {
             delete pout
             delete ptw
         }
-        // the q8-lane .dlim's baked tag routes through the carrier sniff (the qwen3v-q8 arm)
-        let img = image_path_for(mm, "qwen3v-q8")
-        if (stat(img).is_valid) {
-            var inscope e <- load_vision_embedder(img)
-            tt |> equal(vision_family(e), "qwen3v", "the baked q8 tag sniffs to the qwen3v arm")
-            tt |> equal(vision_exec_fmt(e), "q8", "the carrier stamps the q8 lane")
-        }
+        q8_baked_tag_leg(tt, mm)
         set_every_gpu_tower(true)   // the GPU leg's pin
         let dev = serving_tower_dev(TowerFamily.vision)
         if (serving_tower_device_up(TowerFamily.vision)) {
