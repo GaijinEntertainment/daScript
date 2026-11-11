@@ -27,3 +27,9 @@ volk's function pointers are process globals. `volkInitialize` runs once per pro
 every context dispatches through is the shared device's; `volkLoadInstance` after a device loaded loads the instance-level
 entries alone (`volkLoadInstanceOnly`), leaving the device table intact for a probe instance a context makes. A mutex guards
 the three and `volkFinalize`, which forgets the loaded device.
+
+A device's handle value is no identity once the device is gone: a driver hands the same value to the next device, whose
+extensions may differ, and a table kept for the old one holds null entries for the new one's. So the module's
+`vkDestroyDevice` entry forgets the loaded device before it destroys - whichever caller destroys, a boost handle's
+finalizer, the shared device's release or a script's own call - and the next `volkLoadDevice` loads again.
+`volk_device_loads` counts the loads.

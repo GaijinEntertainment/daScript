@@ -250,3 +250,28 @@ def test_opt_ptr_view_semantics(t : T?) {
     t |> equal(vcb.blendConstants[3], 1.0f)
     vk_view_destroy(cb)
 }
+
+//! a device on an instance of its own; the table loads the call made
+def private device_table_loads(t : T?; name : string; again : bool) : int {
+    let before = volk_device_loads()
+    var inscope instance <- create_instance(name, make_api_version(1u, 3u, 0u))
+    volkLoadInstance(boost_value_to_vk(instance))
+    let phys = select_physical_device(instance)
+    var inscope device <- create_device(phys, select_graphics_queue_family(phys))
+    volkLoadDevice(boost_value_to_vk(device))
+    if (again) {
+        volkLoadDevice(boost_value_to_vk(device))
+    }
+    t |> success(boost_value_to_vk(device) != null, "{name}: the device stands")
+    return volk_device_loads() - before
+}
+
+[test(description = "each new device loads the function table once, a second load for a live device is a no-op, and a device made after another was destroyed loads again even at the same handle value")]
+def test_device_table_reloads(t : T?) {
+    t |> success(volkInitialize() == 0, "volkInitialize succeeds")
+    t |> equal(device_table_loads(t, "dasVulkan table a", true), 1,
+               "a live device loads its table once, however often it is handed in")
+    t |> equal(device_table_loads(t, "dasVulkan table b", false), 1,
+               "a device made after the first was destroyed loads the table again")
+    t |> equal(device_table_loads(t, "dasVulkan table c", false), 1, "and so does the next one")
+}
