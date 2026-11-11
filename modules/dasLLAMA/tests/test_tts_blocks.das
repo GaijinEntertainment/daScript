@@ -6,8 +6,10 @@ options _dasllama_internal = true
 require dastest/testing_boost public
 require dasllama/dasllama_tts_blocks
 require dasllama/dasllama_math   // with_dasllama_jobque_
+require dasllama/dasllama_tower
 require _kq_fixtures   // the salted k4 planes and the leaf per row: the Q8_K rows and the disk-order dot
 require _compares   // check / check_count at the dot-envelope bar
+require _kernel_oracles   // layernorm_ref, attention_bidir_ref, gelu_form_ref: the BERT cells' double forms
 require daslib/jobque_boost
 require daslib/defer
 require daslib/rtti   // this_context().last_exception: a refusal read as text
@@ -738,6 +740,180 @@ def private align_expand_case(tc : T?) {
     check_envelope(tc, "align_expand_rows", got, want, env, 0.0)
 }
 
+// ===== the BERT encoder's embeddings and layer against a double-precision transcription =====
+
+let BERT_T = 37l   //! off the 16-key pad and the 4-row tile
+let BERT_HIDDEN = 64l
+let BERT_HEADS = 4l
+let BERT_FFN = 128l
+let BERT_EPS = 1e-12
+let BERT_REL = 1e-4   //! of the larger magnitude floored at 1: f32 GEMMs, softmax and norms against the same arithmetic in double
+
+struct BertCaseLayer {
+    q : TtsLinear = TtsLinear()
+    k : TtsLinear = TtsLinear()
+    v : TtsLinear = TtsLinear()
+    dense : TtsLinear = TtsLinear()
+    attn_ln : TtsNorm = TtsNorm()
+    ffn : TtsLinear = TtsLinear()
+    ffn_out : TtsLinear = TtsLinear()
+    full_ln : TtsNorm = TtsNorm()
+}
+
+def private bert_linear(var r : TtsRng; nin, nout : int64) : TtsLinear {
+    var l = TtsLinear(nin = nin, nout = nout)
+    rand_fill(r, l.w, nout * nin, 1.0 / sqrt(float(nin)))
+    rand_fill(r, l.b, nout, 0.2)
+    linear_prepare(l)
+    return <- l
+}
+
+def private bert_norm(var r : TtsRng; c : int64) : TtsNorm {
+    var n = TtsNorm()
+    rand_fill(r, n.w, c, 1.0)
+    rand_fill(r, n.b, c, 0.3)
+    for (w in n.w) {
+        w++
+    }
+    return <- n
+}
+
+def private bert_case_layer(seed : uint64) : BertCaseLayer {
+    var r = TtsRng()
+    rng_seed(r, seed)
+    return BertCaseLayer(q <- bert_linear(r, BERT_HIDDEN, BERT_HIDDEN), k <- bert_linear(r, BERT_HIDDEN, BERT_HIDDEN),
+        v <- bert_linear(r, BERT_HIDDEN, BERT_HIDDEN), dense <- bert_linear(r, BERT_HIDDEN, BERT_HIDDEN), attn_ln <- bert_norm(r, BERT_HIDDEN),
+        ffn <- bert_linear(r, BERT_HIDDEN, BERT_FFN), ffn_out <- bert_linear(r, BERT_FFN, BERT_HIDDEN), full_ln <- bert_norm(r, BERT_HIDDEN))
+}
+
+def private dlinear(l : TtsLinear; x : array<double>; t : int64) : array<double> {
+    var y : array<double>
+    y |> resize(t * l.nout)
+    for (i in range64(t)) {
+        for (o in range64(l.nout)) {
+            var s = double(l.b[o])
+            for (k in range64(l.nin)) {
+                s += double(l.w[o * l.nin + k]) * x[i * l.nin + k]
+            }
+            y[i * l.nout + o] = s
+        }
+    }
+    return <- y
+}
+
+//! `x` [t][c] under the LayerNorm `n`, in double
+def private dlayernorm(x : array<double>; t, c : int64; n : TtsNorm; eps : double) : array<double> {
+    var want : array<double>
+    var inscope env : array<double>
+    layernorm_ref(x, t, c, n.w, n.b, 0l, 0l, eps, want, env)
+    return <- want
+}
+
+//! `bert_layer_rows` transcribed in double
+def private dbert_layer(lw : BertCaseLayer; h : array<double>; t : int64; form : TtsGelu) : array<double> {
+    var inscope q <- dlinear(lw.q, h, t)
+    var inscope k <- dlinear(lw.k, h, t)
+    var inscope v <- dlinear(lw.v, h, t)
+    var inscope ctx <- attention_bidir_ref(q, k, v, t, BERT_HIDDEN, BERT_HEADS)
+    var inscope attn_sum <- dlinear(lw.dense, ctx, t)
+    for (a, x in attn_sum, h) {
+        a += x
+    }
+    var inscope attn <- dlayernorm(attn_sum, t, BERT_HIDDEN, lw.attn_ln, double(BERT_EPS))
+    var inscope f <- dlinear(lw.ffn, attn, t)
+    for (x in f) {
+        x = gelu_form_ref(x, form == TtsGelu.erf)
+    }
+    var inscope out <- dlinear(lw.ffn_out, f, t)
+    for (o, a in out, attn) {
+        o += a
+    }
+    return <- dlayernorm(out, t, BERT_HIDDEN, lw.full_ln, double(BERT_EPS))
+}
+
+def private bert_layer_case(t : T?; form : TtsGelu) {
+    var inscope lw <- bert_case_layer(0xbe57ul)
+    var r = TtsRng()
+    rng_seed(r, 0xbe58ul)
+    var inscope h : array<float>
+    rand_fill(r, h, BERT_T * BERT_HIDDEN, 1.5)
+    var inscope want <- [for (x in h); double(x)]
+    var inscope ref <- dbert_layer(lw, want, BERT_T, form)
+    let other = form == TtsGelu.erf ? TtsGelu.tanh : TtsGelu.erf
+    var inscope other_ref <- dbert_layer(lw, want, BERT_T, other)
+    var inscope sc = TtsBertScratch()
+    bert_layer_rows(lw, BERT_HEADS, BERT_EPS, form, h, BERT_T, sc)
+    check(t, "bert layer ({form})", h, ref, Bar(rel = BERT_REL), Shape(row_width = int(BERT_HIDDEN)))
+    check_exceeds(t, "bert layer ({form}) against the {other} transcription", h, other_ref, Bar(rel = BERT_REL))
+}
+
+def private bert_embed_case(t : T?) {
+    var r = TtsRng()
+    rng_seed(r, 0xbe59ul)
+    let vocab = 50l
+    var inscope word, pos, typ : array<float>
+    rand_fill(r, word, vocab * BERT_HIDDEN, 1.0)
+    rand_fill(r, pos, BERT_T * BERT_HIDDEN, 0.5)
+    rand_fill(r, typ, BERT_HIDDEN, 0.2)
+    var inscope ln <- bert_norm(r, BERT_HIDDEN)
+    var inscope ids <- [for (i in range64(BERT_T)); int((i * 7l + 3l) % vocab)]
+    var inscope sum, untyped : array<double>
+    sum |> resize(BERT_T * BERT_HIDDEN)
+    untyped |> resize(BERT_T * BERT_HIDDEN)
+    for (i in range64(BERT_T)) {
+        for (d in range64(BERT_HIDDEN)) {
+            untyped[i * BERT_HIDDEN + d] = double(word[int64(ids[i]) * BERT_HIDDEN + d]) + double(pos[i * BERT_HIDDEN + d])
+            sum[i * BERT_HIDDEN + d] = untyped[i * BERT_HIDDEN + d] + double(typ[d])
+        }
+    }
+    var inscope ref <- dlayernorm(sum, BERT_T, BERT_HIDDEN, ln, double(BERT_EPS))
+    var inscope untyped_ref <- dlayernorm(untyped, BERT_T, BERT_HIDDEN, ln, double(BERT_EPS))
+    var inscope got : array<float>
+    bert_embed_rows(ids, word, pos, typ, ln, BERT_EPS, BERT_HIDDEN, got)
+    check(t, "bert embeddings", got, ref, Bar(rel = BERT_REL), Shape(row_width = int(BERT_HIDDEN)))
+    check_exceeds(t, "bert embeddings against the sum with the type row dropped", got, untyped_ref, Bar(rel = BERT_REL))
+}
+
+def private gelu_rows_case(t : T?; form : TtsGelu) {
+    var r = TtsRng()
+    rng_seed(r, 0xbe5aul)
+    let rows = 37l
+    let c = BERT_FFN
+    var inscope x : array<float>
+    rand_fill(r, x, rows * c, 4.0)
+    var inscope whole := x
+    var inscope split := x
+    if (form == TtsGelu.erf) {
+        gelu_erf(whole, rows * c)
+    } else {
+        gelu(whole, rows * c)
+    }
+    gelu_rows(split, rows, c, form)
+    let off = mismatch_exact(split, whole)
+    to_log(LOG_INFO, "gelu_rows ({form}): {off} of {length(whole)} elements apart from the whole-array kernel, the first at {first_mismatch(split, whole)}\n")
+    t |> equal(off, 0, "gelu_rows ({form}): elements apart from the whole-array kernel")
+    t |> success(all_finite(x) && all_finite(split), "gelu_rows ({form}): the input and the output are finite")
+    let moved = mismatch_exact(split, x)
+    t |> success(moved > 0, "gelu_rows ({form}): the pass moved its input ({moved} elements)")
+}
+
+[test(description = "bert_embed_rows and bert_layer_rows on both GELU forms hold a double-precision transcription of their arithmetic")]
+def test_bert_blocks(t : T?) {
+    with_dasllama_jobque_() {
+        t |> run("gelu_rows on both forms: bit for bit the whole-array kernel over the same elements") @(t : T?) {
+            gelu_rows_case(t, TtsGelu.erf)
+            gelu_rows_case(t, TtsGelu.tanh)
+        }
+        t |> run("the BERT embeddings: word + position + type rows, then the LayerNorm") @(t : T?) {
+            bert_embed_case(t)
+        }
+        t |> run("one post-LN BERT layer under the erf GELU and under the tanh GELU") @(t : T?) {
+            bert_layer_case(t, TtsGelu.erf)
+            bert_layer_case(t, TtsGelu.tanh)
+        }
+    }
+}
+
 // ===== split invariance: one dispatch lane against as many as the box gives =====
 
 struct SplitCase {
@@ -904,6 +1080,42 @@ def private split_linear_case(nin, nout : int64; axis : SplitAxis) : SplitCase {
     return split_diff("linear_rows {nin}x{nout} @ {axis_name(axis)}", one, many)
 }
 
+def private split_bert_layer_case(axis : SplitAxis) : SplitCase {
+    var inscope lw <- bert_case_layer(0x5b1bul)
+    var r = TtsRng()
+    rng_seed(r, 0x5b1cul)
+    let t = 401l
+    var inscope h : array<float>
+    rand_fill(r, h, t * BERT_HIDDEN, 1.5)
+    var inscope one := h
+    var inscope many := h
+    var inscope sc = TtsBertScratch()
+    at_split(axis, true) {
+        bert_layer_rows(lw, BERT_HEADS, BERT_EPS, TtsGelu.erf, one, t, sc)
+    }
+    at_split(axis, false) {
+        bert_layer_rows(lw, BERT_HEADS, BERT_EPS, TtsGelu.erf, many, t, sc)
+    }
+    return split_diff("bert_layer_rows @ {axis_name(axis)}", one, many)
+}
+
+def private split_gelu_rows_case(axis : SplitAxis) : SplitCase {
+    var r = TtsRng()
+    rng_seed(r, 0x5b1dul)
+    let t = T_ROWS
+    var inscope x : array<float>
+    rand_fill(r, x, t * BERT_FFN, 4.0)
+    var inscope one := x
+    var inscope many := x
+    at_split(axis, true) {
+        gelu_rows(one, t, BERT_FFN, TtsGelu.erf)
+    }
+    at_split(axis, false) {
+        gelu_rows(many, t, BERT_FFN, TtsGelu.erf)
+    }
+    return split_diff("gelu_rows @ {axis_name(axis)}", one, many)
+}
+
 def private report_split(t : T?; r : SplitCase) {
     t |> equal(r.diffs, 0, "{r.name}: elements differing between one dispatch lane and many")
 }
@@ -1012,6 +1224,10 @@ def private split_arms(t : T?; axis : SplitAxis) {
         report_split(t, split_adain_case(66l, axis))
         report_split(t, split_attention_case(axis))
         report_split(t, split_linear_case(768l, 3072l, axis))
+    }
+    t |> run("the BERT layer lands the same bits ({ax})") @(t : T?) {
+        report_split(t, split_bert_layer_case(axis))
+        report_split(t, split_gelu_rows_case(axis))
     }
 }
 

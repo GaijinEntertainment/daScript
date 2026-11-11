@@ -11,6 +11,7 @@ require dasllama/dasllama_common   // encode_: the completion's raw continuation
 require dasllama/dasllama_sampling   // generate_, SamplingParams: the same
 require dasllama/dasllama_tokenizer   // eos_id: the completion's end token
 require dasllama/dasllama_chat   // the chat turn the hybrid-thinking cell renders to count its prompt
+require dasllama/dasllama_gguf   // gguf_put_le: the synthetic files' little-endian words
 require dasllama/dasllama_image   // dlim_inventory_: the LLM's baked image the facade loads back
 require strings
 require daslib/strings_boost   // join
@@ -445,17 +446,11 @@ def private put_key(var b : array<uint8>; num, wire : int) {
 }
 
 def private put_u32(var b : array<uint8>; v : uint) {
-    b |> reserve(length(b) + 4)
-    for (k in range(4)) {
-        b |> push(uint8((v >> uint(8 * k)) & 0xFFu))
-    }
+    gguf_put_le(b, uint64(v), 4)
 }
 
 def private put_u64(var b : array<uint8>; v : uint64) {
-    b |> reserve(length(b) + 8)
-    for (k in range(8)) {
-        b |> push(uint8((v >> uint64(8 * k)) & 0xFFul))
-    }
+    gguf_put_le(b, v, 8)
 }
 
 def private put_text(var b : array<uint8>; s : string) {

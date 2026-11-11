@@ -4,6 +4,8 @@
 doc: `../ARCHITECTURE_MEASUREMENT.md`. Planned work: `../followup_general.md`,
 `../followup_metal.md`, `../followup_vulkan.md`.
 
+**A change to `tts_model_card.md` applies `../REVIEW_TTS.md` too.**
+
 **In `tune_kernels.das`, never time a CPU kernel after any call that pins a kernel backend
 (`pin_kernel_backend`, `pin_kernel_backend_env`, or a helper that calls either) and before
 `restore_kernel_backend` - pin inside `with_kernel_backend` instead, or move the pin after every
@@ -11,8 +13,6 @@ CPU race and bench.** `clear_kernel_backend_pin` alone leaves the
 pinned backend active, so every CPU timing after it still measures that backend.
 
 **Weakening `check_last_bench_row` (`REVIEW.das` beside this file) is a defect.**
-
-**A change to `tts_model_card.md` applies `../REVIEW_TTS.md` too.**
 
 **Never set `@role = "alias"` or `"weight"` on a binding of a dispatch-macro class
 (`[vk_dispatch]`, `[cuda_dispatch]`, `[metal_dispatch]`) in this folder when the binding's only

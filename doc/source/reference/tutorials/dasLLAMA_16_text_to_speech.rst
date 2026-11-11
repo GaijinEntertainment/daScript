@@ -54,6 +54,19 @@ which reads no British voice.
    var m <- load_tts_model("kitten-nano.gguf")   // tts_g2p.bin + tts_postag.bin sit beside it
    print("phoneme pack: {base_name(g2p_pack_path(dir_name("kitten-nano.gguf")))}\n")
 
+``load_tts_model`` also takes a **directory**: it loads the front-end packs the
+directory holds, with no voice. Such a model normalizes, marks stress and
+phonemizes - text prepared here for a synthesis that runs somewhere else - and
+``tts_front_end_only`` says so. Its ``caps().voices`` is empty and a synthesis
+on it panics.
+
+.. code-block:: das
+
+   var front <- load_tts_model("models/tts")       // tts_g2p_ru.bin sits in it
+   if (tts_front_end_only(front)) {
+       print("{tts_mark_stress(front, "в замке", "ru")}\n")
+   }
+
 A Pocket file reads text, so no pack sits beside it. ``tts_needs_packs``
 answers that from the file's own architecture metadata, before any load, and
 ``tts_pack_names`` names the packs the file's voices read - the English pair
@@ -169,6 +182,17 @@ than spelled out.
    let spoken = tts_normalize("В 2024 году вышло 12 игр.", "ru")
    // output: В две тысячи двадцать четвёртом году вышло двенадцать игр.
    print("{tts_phonemize(m, spoken, "ru")}\n")   // the Russian front end, stress and all
+
+Russian spelling does not write stress, so the front end decides it for every
+word before a phoneme is chosen. ``tts_mark_stress(m, spoken, lang)`` shows
+that decision on the text itself: the sentence with ``+`` before each stressed
+vowel. A language whose front end marks no text - English - answers the empty
+string.
+
+.. code-block:: das
+
+   print("{tts_mark_stress(m, spoken, "ru")}\n")
+   // every stressed word carries one mark: ... год+у в+ышло ...
 
 A Pocket model reads text, not phonemes. ``tts_has_phonemes`` answers false
 for it, and ``tts_phonemize`` panics rather than invent a string - as it does

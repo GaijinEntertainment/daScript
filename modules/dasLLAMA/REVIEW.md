@@ -87,8 +87,8 @@ operand buffers - applies `tests/REVIEW_KERNEL_CELLS.md`.**
 there, in `tests/CLAUDE.md`'s "Out-of-folder test files" ledger in the same change.** A file
 reaching an engine module through another module's public require owes no row.
 
-**A new pre-tokenizer family, or a new tokenizer backend, ships a `corpus_case(...)` call for it in
-`tests/test_tokenizer.das`, naming its `ggml-vocab-*.gguf` fixture.**
+**A new pre-tokenizer family, or a new tokenizer backend, behind the LLM `Tokenizer` facade ships a
+`corpus_case(...)` call for it in `tests/test_tokenizer.das`, naming its `ggml-vocab-*.gguf` fixture.**
 
 **A diff that adds an ASR family ships a test comparing its transcript token for token against a
 reference - another backend's run, an external dump, or the CPU path.**

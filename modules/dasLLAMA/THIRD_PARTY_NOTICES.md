@@ -121,10 +121,25 @@ sources; nothing under this repository redistributes the data itself.
   frequent nouns' nominatives and genitives are generated into
   `dasllama/dasllama_textnorm_ru_nouns.das` by `harness/build_textnorm_ru_nouns.py`, which that
   file's header names as its source; the rest of the dictionary is not redistributed.
-- **Balalaika** text corpora (https://huggingface.co/datasets/lab260/espeech_balalaika,
-  https://huggingface.co/datasets/lab260/biggest_ru_book_balalaika), Apache License 2.0 - see
-  `LICENSE.APACHE-2.0`. Their stress-marked transcripts are the sentences of the Russian front-end
-  fixture and the frequency table that orders a homograph's readings in `tts_g2p_ru.bin`.
+- **Wiktionary** - the Russian entries of the English edition (https://en.wiktionary.org) and the
+  Russian edition (https://ru.wiktionary.org), read through the machine-readable extracts of
+  https://kaikki.org (Tatu Ylonen, "Wiktextract: Wiktionary as Machine-Readable Structured Data",
+  LREC 2022, pp. 1317-1325). The English edition is dual-licensed CC BY-SA 4.0 and GFDL
+  (https://en.wiktionary.org/wiki/Wiktionary:Copyrights); the Russian edition states CC BY-SA and
+  GFDL; kaikki.org releases its extracts under the same licences
+  (https://kaikki.org/dictionary/index.html, https://kaikki.org/ruwiktionary/). See
+  `LICENSE.UD_EWT` for the CC BY-SA 4.0 text. `harness/build_g2p_ru_data.py --extra` packs into
+  `tts_g2p_ru.bin` the stressed vowel of the forms the OpenRussian tables leave out, hyphenated
+  words among them, and `--amend` the readings an OpenRussian entry lacks; no other part of
+  either edition is redistributed.
+- **Russian Wikipedia** (https://ru.wikipedia.org) - the stress an article's lead sentence marks in
+  its words, names of people and places most of them. The text is dual-licensed CC BY-SA 4.0 and
+  GFDL, as the site's terms of use state; see `LICENSE.UD_EWT` for the
+  CC BY-SA 4.0 text. `harness/build_g2p_ru_data.py --extra` packs into `tts_g2p_ru.bin` the stressed
+  vowel of the forms neither source above holds; no other part of an article is redistributed.
+  `harness/build_g2p_ru_data.py --ruaccent` can read RUAccent's dictionary files
+  (https://github.com/Den4ikAI/ruaccent) as a further source; the shipped `tts_g2p_ru.bin` is built
+  without that option and holds nothing of them.
 - **Pocket TTS** (https://github.com/kyutai-labs/pocket-tts), Kyutai, MIT License - see
   `LICENSE.POCKET_TTS` (the reference implementation, reimplemented in
   `dasllama/dasllama_pocket.das`; no Kyutai source is included).
@@ -150,3 +165,13 @@ particular the NVIDIA Parakeet TDT and Canary-Qwen checkpoints are released unde
 CC-BY-4.0 (attribution required if the weights, or converted forms of them, are
 redistributed), and each LLM checkpoint carries its publisher's model license. Nothing in
 this repository redistributes those weights.
+
+The Russian stress-context model (`dasllama/dasllama_g2p_ru_stress.das`, `tts_ctx_ru.gguf`) is
+fine-tuned on a private dataset from one of two encoders, converted with its vocabulary and tokenizer settings by
+`harness/convert_ru_stress.py`; the fine-tuned checkpoints are not distributed, and a file
+converted from one carries its base model's terms, attribution included:
+
+- **ruBert-base** (https://huggingface.co/ai-forever/ruBert-base), ai-forever, Apache
+  License 2.0 - see `LICENSE.APACHE-2.0` - the `ru-stress-rubert-base-*.gguf` files.
+- **ruElectra-small** (https://huggingface.co/ai-forever/ruElectra-small), ai-forever, MIT
+  License as its model card states - the `ru-stress-ruelectra-small-*.gguf` files.

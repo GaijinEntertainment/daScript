@@ -363,12 +363,7 @@ def private read_linear(m : GGUFMeta; bytes : array<uint8> | #; prefix : string;
     }
     if (g_stage_native && gguf_tensor_type(m, wname) == GGML_TYPE_Q4_K) {
         // the kq lane: the file's own K-quant planes, straight into the layer (the width rule is the layer's own)
-        let n = l.nout * l.nin
-        var inscope kq, ks : array<uint8>
-        kq |> reserve_resize(n / 256l * kq_qsb(KqFmt.k4))
-        ks |> reserve_resize(n / 256l * kq_ssb(KqFmt.k4))
-        gguf_transcode_kq(m, bytes, wname, KqFmt.k4, kq, ks, 0l, n)
-        linear_take_kq(l, 4, kq, ks, true)   // repacked wherever the backend the load selected carries kq kernels
+        linear_read_kq(l, m, bytes, wname, KqFmt.k4)   // repacked wherever the backend the load selected carries kq kernels
         return <- l
     }
     if (g_stage_q8 && is_q8_tensor(m, wname)) {

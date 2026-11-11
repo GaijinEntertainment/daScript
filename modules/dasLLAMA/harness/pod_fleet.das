@@ -31,7 +31,7 @@ struct FleetArgs {
     @clarg_doc = "up: the GPU, as `runpodctl gpu list` names it"
     gpu : string = "NVIDIA RTX PRO 4500 Blackwell"
     @clarg_doc = "up: the network volume mounted at /workspace - the tree at /workspace/daScript, the models at /workspace/models"
-    volume : string = "xl56y905w1"
+    volume : string = "0xba7n8wvn"
     @clarg_doc = "up: the volume's data center"
     datacenter : string = "EU-RO-1"
     @clarg_doc = "up: the container image"

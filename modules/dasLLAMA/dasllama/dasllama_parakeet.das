@@ -10,12 +10,12 @@ require math
 require daslib/fio
 require strings
 require daslib/strings_boost
-require daslib/array_boost
 require daslib/apply
 require daslib/archive
 require dasllama/dasllama_env
 require dasllama/dasllama_math
 require dasllama/dasllama_gguf
+require dasllama/dasllama_unicode   // bytes_str: a vocabulary piece, a tensor record's name
 require dasllama/dasllama_plane public   // PlaneF/PlaneI8/PlaneI32/PlaneI64 — the borrowed weight planes
 require dasllama/dasllama_asr_types public   // TranscribeSegment/AsrCaps — the shared ASR floor
 require dasllama/dasllama_audio
@@ -405,17 +405,6 @@ struct private PkTensorRec {
     off : int64
 }
 
-def private pk_bytes_str(b : array<uint8> | #; o, n : int64) : string {
-    if (n <= 0l) {
-        return ""
-    }
-    var s = ""
-    unsafe {
-        s = string(temp_array(addr<uint8?>(b[o]), n, type<uint8>))
-    }
-    return s
-}
-
 def private pk_read(recs : table<string; PkTensorRec>; b : array<uint8> | #; name : string;
                     var dst : array<float>; dst_off, n : int64) {
     if (!key_exists(recs, name)) {
@@ -593,7 +582,7 @@ def stage_parakeet_model(path : string; q8, f16 : bool) : ParakeetStaging {
         st.e.vocab |> resize(nv)
         for (i in range64(nv)) {
             let len = int64(rd_u32(bytes, o)); o += 4l
-            st.e.vocab[i] = pk_bytes_str(bytes, o, len)
+            st.e.vocab[i] = bytes_str(bytes, o, len)
             o += len
         }
 
@@ -607,7 +596,7 @@ def stage_parakeet_model(path : string; q8, f16 : bool) : ParakeetStaging {
             for (_d in range64(n_dims)) {
                 n_elem *= int64(rd_i32(bytes, o)); o += 4l
             }
-            let name = pk_bytes_str(bytes, o, name_len)
+            let name = bytes_str(bytes, o, name_len)
             o += name_len
             recs[name] = PkTensorRec(ttype = ttype, n_elem = n_elem, off = o)
             o += ggml_bin_tensor_bytes(ttype, n_elem)

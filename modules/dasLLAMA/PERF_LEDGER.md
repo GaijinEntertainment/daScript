@@ -10,6 +10,30 @@ and coverage; this ledger is the backlog for the perf pass that follows them. Ev
 what it costs today and what the fix would change.
 
 ## Entries
+- **MEASURED (2026-11-11, the reference box: Threadripper 3990X, 64 lanes, Windows, `-jit`, `DAS_TUNE_POLICY` unset, the
+  CPU alone, the box idle; `direction-grade`) - the Russian stress-context model: its files and its pass's lanes.** The
+  files: `ru-stress-rubert-base-q4.gguf` 120,484,448 bytes (Q4_K layers, a Q8_0 word table), its f32 twin
+  `ru-stress-rubert-base-f32.gguf` 714,155,040; `ru-stress-ruelectra-small-q4.gguf` 38,362,048. The figures are
+  `bin/Release/daslang.exe -jit modules/dasLLAMA/harness/ru_stress_eval.das -- --model <gguf> --lane q8 --lane-race`'s:
+  one process a file, every candidate's forward once a round, 30 rounds after 2 warmup rounds, at 30 and at 96 pieces;
+  the kernels are the `x86-avx2` class profile's, the tune gate passed under `DASLLAMA_ALLOW_UNTUNED=1`. A candidate is `RU_STRESS_LANE_WORK` in multiply-adds a lane
+  and `RU_STRESS_MIN_LANES`, set through `set_ru_stress_lanes_probe_`; a cell is the lanes it gives of 64 and the
+  forward's median ms (its fastest round).
+
+    | lane work, floor | base, 30 pieces | base, 96 pieces | small, 30 pieces | small, 96 pieces |
+    | :--- | ---: | ---: | ---: | ---: |
+    | 4,194,304, 8 | 50: 13.5 (12.7) | 64: 31.4 (27.8) | 8: 6.6 (6.3) | 18: 12.2 (11.4) |
+    | 8,388,608, 8 | 25: 12.7 (11.7) | 64: 32.0 (27.6) | 8: 6.6 (6.1) | 9: 12.5 (11.8) |
+    | 16,777,216, 8 - shipped | 12: 14.1 (12.6) | 40: 26.4 (24.8) | 8: 6.5 (6.2) | 8: 12.5 (11.7) |
+    | 33,554,432, 8 | 8: 16.4 (14.6) | 20: 27.7 (26.2) | 8: 6.5 (6.2) | 8: 12.7 (11.8) |
+    | 67,108,864, 8 | 8: 16.1 (14.3) | 10: 35.7 (32.8) | 8: 6.5 (6.2) | 8: 12.6 (12.0) |
+    | 16,777,216, 1 | 12: 13.6 (12.3) | 40: 25.9 (24.4) | 1: 8.4 (7.8) | 4: 14.9 (12.9) |
+    | 16,777,216, 4 | 12: 13.3 (12.5) | 40: 25.5 (23.9) | 4: 7.4 (6.9) | 4: 14.8 (12.4) |
+    | 16,777,216, 16 | 16: 12.7 (11.7) | 40: 25.4 (24.2) | 16: 6.9 (6.6) | 16: 12.0 (11.2) |
+
+  The shipped pair stays: the whole pool costs the base model a fifth at 96 pieces, eight lanes cost it a quarter at
+  96 and a sixth at 30, and a floor under 8 costs the small model up to a quarter; the candidates between read within
+  a tenth of each other, the same candidate's rows apart by as much (the three base rows at 40 lanes).
 - **SIZED (2026-11-08, any box - a file's bytes, no run) - the Russian front end's lasting allocations.**
   `TtsModel.ru_stress.data` holds the whole of `tts_g2p_ru.bin`, 17,320,693 bytes (its pinned size), read once at a
   Russian-voiced model's load and kept for the model's life - the two string tables are searched in place, nothing is

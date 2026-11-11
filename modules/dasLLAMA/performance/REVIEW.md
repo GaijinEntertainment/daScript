@@ -26,9 +26,9 @@ branch cannot reach that commit.** An empty field names no commit, so it breaks 
 
 **Weakening any check in `REVIEW.das` is a defect.**
 
-**A diff that hand-edits a commit stamp under this folder - a field, url, or recipe that names a
-git commit by its hash - names, in the PR body, each edited stamp, its old value, and its new
-value.**
+**A diff that adds or hand-edits a commit stamp under this folder - a field, url, or recipe that
+names a git commit by its hash - names, in the PR body, each such stamp, its old value (none for
+an added stamp), and its new value.**
 
 **A diff that re-stamps an archived sidecar (`records/<box>.tune.<sha12>.json`) re-hashes and
 renames the file and repoints every `records/<box>.json` row whose `tune_sha` named the old
@@ -156,10 +156,10 @@ defect - `--fetch` downloads only.** Each has its own home: a conversion recipe 
 under `--convert`, a timing runs under `gen_bench_records.das` or a
 `../benchmarks/lcpp_bench.das` cell, and a tune sidecar is written under a `--tune` run.
 
-**A diff that adds a `recipe` row carrying no `sha256`, or changes such a row's `recipe`,
-records, in the PR description, the conversion command as run and the produced file's
-identity - its byte size, or a `file_identity` hash.** `fetch_models` reports such a row `ok`
-on presence alone, so its run cannot tell a re-mint from the stale file the old recipe made.
+**A diff that adds a row or a `companions` entry carrying a `recipe` and no `sha256`, or changes
+such a row's or entry's `recipe`, records, in the PR description, the conversion command as run
+and the produced file's identity - its byte size, or a `file_identity` hash.** `fetch_models`
+reports such a row or entry `ok` on presence alone, so its run cannot tell a re-mint from the stale file the old recipe made.
 
 **A diff that adds a row or a `companions` entry, or changes a `bytes`, `sha256` or `recipe`
 value, in `model_specs.das` or `profile_common.das`, changes what `models_provenance()` or

@@ -83,7 +83,7 @@ def private read_rst(folder : string; prefix : string; var out : array<string>) 
 }
 
 var private FACADE_DEFS_WITHOUT_TUTORIAL <- {
-    "finalize", "tts_finish_styletts2",   //! the runtime or a loader chain calls them, never a user - `ARCHITECTURE_TTS.md#text-to-speech` lists them
+    "finalize", "tts_finish_styletts2", "tts_ru_stress_model_path",   //! the runtime or a loader chain calls them, never a user - `ARCHITECTURE_TTS.md#text-to-speech` lists them
     "gpu_resident_mtp_device_home", "gpu_device_prefill_segments",   //! the scheduler's device-mode and segmented-window decisions; a user's program asks the scheduler
     "gpu_device_kv_claim", "gpu_device_kv_victim_claims", "gpu_device_kv_parked_pos",   //! the scheduler's region bookkeeping behind park and adopt
     "gpu_device_kv_checkpoint", "gpu_device_kv_checkpoints",   //! the scheduler's recurrent checkpoints on a parked region

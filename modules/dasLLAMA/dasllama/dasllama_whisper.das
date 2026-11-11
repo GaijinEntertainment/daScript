@@ -18,6 +18,7 @@ require dasllama/dasllama_plane public   // PlaneF/PlaneI8 — the borrowed weig
 require dasllama/dasllama_math
 require dasllama/dasllama_par
 require dasllama/dasllama_gguf
+require dasllama/dasllama_unicode   // bytes_str: a vocabulary piece, a tensor record's name
 require dasllama/dasllama_convert
 require dasllama/dasllama_asr_types public   // TranscribeSegment/AsrCaps — the shared ASR floor
 require dasllama/dasllama_audio
@@ -391,17 +392,6 @@ struct private WTensorRec {
     ttype : int
     n_elem : int64
     off : int64
-}
-
-def private bytes_str(b : array<uint8> | #; o, n : int64) : string {
-    if (n <= 0l) {
-        return ""
-    }
-    var s = ""
-    unsafe {
-        s = string(temp_array(addr<uint8?>(b[o]), n, type<uint8>))
-    }
-    return s
 }
 
 let private GGML_FTYPE_MOSTLY_Q8_0 = 7   //!< the file type whisper.cpp's quantizer stamps a q8_0 bin with

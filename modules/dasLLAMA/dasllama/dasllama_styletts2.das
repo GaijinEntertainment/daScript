@@ -861,13 +861,7 @@ struct St2Scratch {
     @scratch @exact_size wave : array<float>
     noise : TtsNoise = TtsNoise()
     @scratch @exact_size al_e : array<float>
-    @scratch @exact_size al_attn : array<float>
-    @scratch @exact_size al_f : array<float>
-    @scratch @exact_size al_f2 : array<float>
-    @scratch @exact_size att_q : array<float>
-    @scratch @exact_size att_k : array<float>
-    @scratch @exact_size att_v : array<float>
-    @scratch @exact_size att_ctx : array<float>
+    albert : TtsBertScratch = TtsBertScratch()
     @scratch @exact_size te_xtm : array<float>
     @scratch @exact_size te_a : array<float>
     @scratch @exact_size te_b : array<float>
@@ -933,20 +927,6 @@ def private trace_rows_strided(var dst : array<float>; rows : array<float>; t, c
     transpose_tc_strided(rows, t, c, stride, dst)
 }
 
-// Self-attention on token-major h [t][hidden]: the projections on the tiled GEMM, the heads
-// on the attention kernel, the output projection back on the tile.
-def private albert_attention(a : St2Albert; h : array<float>; t : int64; var out : array<float>; var sc : St2Scratch) {
-    var q & = unsafe(sc.att_q)
-    var k & = unsafe(sc.att_k)
-    var v & = unsafe(sc.att_v)
-    var ctx & = unsafe(sc.att_ctx)
-    linear_rows(a.q, h, t, q)
-    linear_rows(a.k, h, t, k)
-    linear_rows(a.v, h, t, v)
-    attention_rows(q, k, v, t, a.hidden, a.heads, ctx)
-    linear_rows(a.dense, ctx, t, out)
-}
-
 //! The PL-BERT encoder: embeddings, then one ALBERT layer applied n_layers times; out [T][hidden].
 def styletts2_albert(a : St2Albert; ids : array<int>; @scratch @exact_size var out : array<float>; var sc : St2Scratch) {
     let t = long_length(ids)
@@ -960,33 +940,10 @@ def styletts2_albert(a : St2Albert; ids : array<int>; @scratch @exact_size var o
             return
         }
     }
-    unsafe(scratch_resize(sc.al_e, t * a.emb_dim))
-    var e & = unsafe(sc.al_e)
-    for (i in range64(t)) {
-        let id = int64(ids[i])
-        for (d in range64(a.emb_dim)) {
-            e[i * a.emb_dim + d] = a.word_emb.a[id * a.emb_dim + d] + a.pos_emb.a[i * a.emb_dim + d] + a.type_emb.a[d]
-        }
-    }
-    layernorm_rows(e, t, a.emb_dim, a.emb_ln, ALBERT_EPS)
-    linear_rows(a.map_in, e, t, out)
-    var attn & = unsafe(sc.al_attn)
-    var f & = unsafe(sc.al_f)
-    var f2 & = unsafe(sc.al_f2)
-    let n = t * a.hidden
+    bert_embed_rows(ids, a.word_emb.a, a.pos_emb.a, a.type_emb.a, a.emb_ln, ALBERT_EPS, a.emb_dim, sc.al_e)
+    linear_rows(a.map_in, sc.al_e, t, out)
     for (_layer in range64(a.n_layers)) {
-        albert_attention(a, out, t, attn, sc)
-        for (i in range64(n)) {
-            attn[i] += out[i]
-        }
-        layernorm_rows(attn, t, a.hidden, a.attn_ln, ALBERT_EPS)
-        linear_rows(a.ffn, attn, t, f)
-        gelu(f, t * a.ffn.nout)
-        linear_rows(a.ffn_out, f, t, f2)
-        for (i in range64(n)) {
-            out[i] = f2[i] + attn[i]
-        }
-        layernorm_rows(out, t, a.hidden, a.full_ln, ALBERT_EPS)
+        bert_layer_rows(a, a.heads, ALBERT_EPS, TtsGelu.tanh, out, t, sc.albert)
     }
 }
 

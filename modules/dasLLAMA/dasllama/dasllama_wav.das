@@ -11,6 +11,7 @@ module dasllama_wav shared public
 require dasllama/dasllama_lint public
 require daslib/fio
 require math
+require dasllama/dasllama_gguf   // gguf_put_le: a little-endian header field
 
 def private put_u16(var b : array<uint8>; v : int) {
     b |> push(uint8(v & 0xFF))
@@ -18,10 +19,7 @@ def private put_u16(var b : array<uint8>; v : int) {
 }
 
 def private put_u32(var b : array<uint8>; v : uint) {
-    b |> push(uint8(v & 0xFFu))
-    b |> push(uint8((v >> 8u) & 0xFFu))
-    b |> push(uint8((v >> 16u) & 0xFFu))
-    b |> push(uint8((v >> 24u) & 0xFFu))
+    gguf_put_le(b, uint64(v), 4)
 }
 
 def private put_tag(var b : array<uint8>; tag : string) {

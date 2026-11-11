@@ -195,6 +195,7 @@ modules/dasLLAMA/
     dasllama_spm.das          #   SentencePiece backend (Llama-2 family, Phi-3, Gemma)
     dasllama_bpe.das          #   byte-level BPE backend (Llama-3 / tiktoken family — vocab, ranked merges)
     dasllama_pretok.das       #   the pre-tokenizer — one hand-compiled split per family, picked by `pre`
+    dasllama_wordpiece.das    #   WordPiece backend (the BERT / ELECTRA encoders - normalizer tables, ## longest match, piece spans)
     dasllama_common.das       #   engine core — Config / Model / Session, load + forward + generate + sample (incl. MTP/NextN self-spec decode)
     dasllama_blocks.das       #   the shared dense/grouped transformer block helpers (FFN, embed rows, eval bridges)
     dasllama_moe.das          #   MoE routing — select, expert dispatch, the GPU expert-tier hooks

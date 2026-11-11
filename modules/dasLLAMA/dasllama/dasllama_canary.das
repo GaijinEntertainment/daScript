@@ -17,6 +17,7 @@ require daslib/archive
 require dasllama/dasllama_env
 require dasllama/dasllama_math
 require dasllama/dasllama_gguf
+require dasllama/dasllama_unicode   // bytes_str: a tensor record's name
 require dasllama/dasllama_plane public   // PlaneF — the borrowed weight planes; re-exported so requirers can delete an encoder
 require dasllama/dasllama_asr_types public   // TranscribeSegment/AsrCaps — the shared ASR floor
 require dasllama/dasllama_audio
@@ -269,17 +270,6 @@ struct private CnRec {
     n_elem : int64
 }
 
-def private cn_bytes_str(b : array<uint8> | #; o, n : int64) : string {
-    if (n <= 0l) {
-        return ""
-    }
-    var s = ""
-    unsafe {
-        s = string(temp_array(addr<uint8?>(b[o]), n, type<uint8>))
-    }
-    return s
-}
-
 def private cn_rd_i64(b : array<uint8> | #; o : int64) : int64 =>
     int64(rd_u32(b, o)) | (int64(rd_u32(b, o + 4l)) << 32l)
 
@@ -508,7 +498,7 @@ def stage_canary_encoder(path : string; q8, f16 : bool) : CanaryStaging {
         var recs : table<string; CnRec>
         while (o + 4l <= n_bytes) {
             let name_len = int64(rd_i32(bytes, o)); o += 4l
-            let name = cn_bytes_str(bytes, o, name_len); o += name_len
+            let name = bytes_str(bytes, o, name_len); o += name_len
             let n_elem = cn_rd_i64(bytes, o); o += 8l
             recs[name] = CnRec(name = name, file_off = o, n_elem = n_elem)
             o += n_elem * 4l

@@ -45,18 +45,8 @@ let private DRAFTER_K4_FILE = "drafters/Qwen3.8-27B-DFlash2-GGUF/Qwen3.8-27B-DFl
 let private PROMPT = "Write a complete, well-commented Python module that implements a token-bucket rate limiter with per-key buckets, a sliding-window variant, a thread-safe wrapper, and a pytest test suite. Write at least 600 lines. Do not stop early."
 let private STEPS = 24l
 
-let private GGUF_U32 = 4ul   //! the GGUF value types the synthesized header writes
-let private GGUF_I32 = 5ul
-let private GGUF_F32 = 6ul
-let private GGUF_STRING = 8ul
+let private GGUF_I32 = 5ul   //! the GGUF value types the synthesized header writes beside `_gguf_writer.das`'s
 let private GGUF_ARRAY = 9ul
-
-//! one GGUF key with a u32 value
-def private kv_u32(var b : array<uint8>; key : string; v : uint64) {
-    gguf_put_str(b, key)
-    gguf_put_le(b, GGUF_U32, 4)
-    gguf_put_le(b, v, 4)
-}
 
 //! a one-layer `dflash` file 256 wide whose fc.weight is of disk type `fc_type`, its selector codebook Q8_0, and no other
 //! tensor: the loader reads the header, then fc.weight is the first plane it plans
@@ -64,25 +54,21 @@ def private synth_dflash(fc_type : int) : array<uint8> {
     let d = 256ul
     var b : array<uint8>
     gguf_header(b, 2ul, 17ul)
-    gguf_put_str(b, "general.architecture")
-    gguf_put_le(b, GGUF_STRING, 4)
-    gguf_put_str(b, "dflash")
+    gguf_kv_str(b, "general.architecture", "dflash")
     for (kv in [("block_count", 1ul), ("embedding_length", d), ("feed_forward_length", d), ("attention.head_count", 2ul),
                 ("attention.head_count_kv", 1ul), ("attention.key_length", 128ul), ("block_size", 8ul), ("conv_kernel_size", 2ul),
                 ("conv_group_size", 64ul), ("selector_rank", d), ("selector_top_k", 4ul), ("attention.sliding_window", 2048ul)]) {
-        kv_u32(b, "dflash.{kv._0}", kv._1)
+        gguf_kv_u32(b, "dflash.{kv._0}", kv._1)
     }
     for (kv in [("attention.layer_norm_rms_epsilon", 0x358637BDul), ("rope.freq_base", 0x49742400ul)]) {   //! 1e-6 and 1e6 as f32 bits
-        gguf_put_str(b, "dflash.{kv._0}")
-        gguf_put_le(b, GGUF_F32, 4)
-        gguf_put_le(b, kv._1, 4)
+        gguf_kv_f32_bits(b, "dflash.{kv._0}", kv._1)
     }
     gguf_put_str(b, "dflash.target_layers")
     gguf_put_le(b, GGUF_ARRAY, 4)
     gguf_put_le(b, GGUF_I32, 4)
     gguf_put_le(b, 1ul, 8)
     gguf_put_le(b, 2ul, 4)
-    kv_u32(b, "tokenizer.ggml.mask_token_id", 3ul)
+    gguf_kv_u32(b, "tokenizer.ggml.mask_token_id", 3ul)
     let fc_bytes = ggml_type_bytes(fc_type, int64(d * d))
     let fc_span = (fc_bytes + 31l) & ~31l
     gguf_tensor_info(b, "fc.weight", [d, d], fc_type, 0ul)

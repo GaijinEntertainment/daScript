@@ -18,6 +18,7 @@ require daslib/f16_cvt   // f32_to_f16: the depthwise taps' halfwords
 require dasllama/dasllama_plane   // PlaneF / PlaneU16: the CPU depthwise loops' planes
 require dasllama/dasllama_tower   // fc_dw_bias_rows / fc_dw_bias_rows_f16: the CPU depthwise loops
 require dasllama/dasllama_gpu_rail   // TowerBuf: the cell rigs' plane seats
+require _compares   // erf_series: the erf GELU's double form
 
 //! the rail role a cell rig seats its plane `p` at: a cell's planes ride the roles in the order the cell laid them
 def cell_role(p : int) : TowerBuf => unsafe(reinterpret<TowerBuf>(p))
@@ -976,4 +977,76 @@ def dn_step_ref(projh, sth, smh : array<float>; par, nvh, nkh, cd, ds, dconv, be
         }
     }
     return <- r
+}
+
+//! LayerNorm of `rows` rows of `x`, `dim` wide, in double: a row less its mean, over sqrt(variance + eps), times the weight
+//! row at `woff` of `w`, plus the bias row at `boff` of `b`, into `want`; `env` takes each element's |normed| + |bias|.
+def layernorm_ref(x : array<auto(XT)>; rows, dim : int64; w, b : array<float>; woff, boff : int64; eps : double;
+                  var want : array<double>; var env : array<double>) {
+    want |> resize(rows * dim)
+    env |> resize(rows * dim)
+    for (p in range64(rows)) {
+        let off = p * dim
+        var mean = 0.0lf
+        for (i in range64(dim)) {
+            mean += double(x[off + i])
+        }
+        mean /= double(dim)
+        var vr = 0.0lf
+        for (i in range64(dim)) {
+            let dv = double(x[off + i]) - mean
+            vr += dv * dv
+        }
+        vr /= double(dim)
+        let scale = 1.0lf / sqrt(vr + eps)
+        for (i in range64(dim)) {
+            let nrm = (double(x[off + i]) - mean) * scale * double(w[woff + i])
+            let bias = double(b[boff + i])
+            want[off + i] = nrm + bias
+            env[off + i] = abs(nrm) + abs(bias)
+        }
+    }
+}
+
+//! Bidirectional multi-head attention over `t` rows of `hidden`, `heads` heads, in double: every query over every key, the
+//! logits scaled by 1 / sqrt(head width), a softmax row, the value rows under it.
+def attention_bidir_ref(q, k, v : array<double>; t, hidden, heads : int64) : array<double> {
+    let dh = hidden / heads
+    var ctx : array<double>
+    ctx |> resize(t * hidden)
+    var inscope p : array<double>
+    p |> resize(t)
+    for (hd in range64(heads)) {
+        let off = hd * dh
+        for (i in range64(t)) {
+            var mx = -1e300lf
+            for (j in range64(t)) {
+                var s = 0.0lf
+                for (e in range64(dh)) {
+                    s += q[i * hidden + off + e] * k[j * hidden + off + e]
+                }
+                p[j] = s / sqrt(double(dh))
+                mx = max(mx, p[j])
+            }
+            var sum = 0.0lf
+            for (j in range64(t)) {
+                p[j] = exp(p[j] - mx)
+                sum += p[j]
+            }
+            for (e in range64(dh)) {
+                var acc = 0.0lf
+                for (j in range64(t)) {
+                    acc += p[j] * v[j * hidden + off + e]
+                }
+                ctx[i * hidden + off + e] = acc / sum
+            }
+        }
+    }
+    return <- ctx
+}
+
+//! GELU of `x` in double: the erf form where `erf`, else the tanh approximation.
+def gelu_form_ref(x : double; erf : bool) : double {
+    return 0.5lf * x * (1.0lf + erf_series(x / sqrt(2.0lf))) if (erf)
+    return 0.5lf * x * (1.0lf + tanh(sqrt(2.0lf / 3.141592653589793lf) * (x + 0.044715lf * x * x * x)))
 }
