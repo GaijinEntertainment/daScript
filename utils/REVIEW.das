@@ -24,7 +24,6 @@ var private SUPERVISED_TOOLS <- { "mcp", "lsp", "dap" }
 var private INTERNAL_REF_EXEMPT <- {
     "utils/REVIEW.md",              // states the rule
     "utils/REVIEW.das",             // carries the needle
-    "utils/TESTS.md",               // the generated test index names its generator
     "utils/CMakeLists.txt",         // builds and CI-tests internal tools, never ships
     "utils/daslang/tests/test_tool_dispatch.das"    // runs an internal tool to prove `daslang -tool`'s source-tree fallback; not installed
 }

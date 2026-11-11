@@ -29,7 +29,7 @@ Running only **some** selected benchmarks (uses `vector_alloc` as a filtering pr
 `[test]` marks a `def f()` or `def f(t : T?)` as a test and exports it. Its arguments, each optional:
 
 - `name = "..."`: the name the run prints and `--test-names` matches, in place of the function's name
-- `description = "..."`: one sentence stating what the test proves. It prints under the test's `--- FAIL` line and nowhere else; an index generator can read it without compiling the file
+- `description = "..."`: one sentence stating what the test proves. It prints under the test's `--- FAIL` line and nowhere else; the file census reads it without compiling the file
 - `timeout = seconds` (an int or a float): this one test's budget. A test that finishes past it is reported failed, naming the budget; the file's `--max-file-time` limit and, in isolated mode, its `--test-timeout` deadline grow by the same amount, so one slow test raises its own limit without loosening any other file's
 
 - `standalone = "..."`: why this test's file cannot share a program with any other - a program-wide registry it fills, a deliberate duplicate that breaks other tests. dastest ignores it; a test-tree gate reads it to accept a small file

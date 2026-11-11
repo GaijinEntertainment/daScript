@@ -5,9 +5,6 @@ at the repo root.
 
 ## File charters
 
-- `README.md` - the generated index: every run file, its tests and their descriptions. Written
-  by `utils/internal/test-audit/main.das --readme`; the `check_tests_index` CI target runs
-  `--verify` against it.
 - `REVIEW.das` - the mechanical half of the checklist: the write-path scan, and the file-shape
   rules of `dastest/test_shape.das` (repo root) over the census in `dastest/file_census.das`.
   The shape binds every test root the same way - this tree, each tool's suite under `utils/`,
@@ -26,8 +23,8 @@ at the repo root.
 dastest runs every `.das` under the `--test` root whose name, and the name of every directory
 on its path, does not start with `_`. A `_` name is a data file or a helper module another test
 reads or requires; it never runs on its own. The census - `dastest/file_census.das` (repo root),
-the one scan that classifies each run file and reads its `[test]` annotations for both the gate
-and the index - applies the same rule and also skips `REVIEW.das`: dastest runs it, but it is the
+the one scan that classifies each run file and reads its `[test]` annotations for the gate -
+applies the same rule and also skips `REVIEW.das`: dastest runs it, but it is the
 folder's gate, not a test.
 
 ## The three classes of run file {#file-classes}
@@ -98,7 +95,7 @@ value other than true joining its option's name, a `.` in a value spelled `_`:
 
 Every `[test]` in a suite carries `description = "..."`: one sentence stating what the test proves, in
 words that are not the function name again. dastest prints it under the test's `--- FAIL` line,
-and the index generator reads it without compiling the file, so the whole annotation sits on
+and the census reads it without compiling the file, so the whole annotation sits on
 one line. A compile-fail fixture carries its claim as a `//!` line above its first declaration
 instead.
 

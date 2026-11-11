@@ -61,8 +61,7 @@ its `options` goes to the `uncategorized_<signature>.das` of its fence signature
 estimate is a flake; the budget's job is to lift the file's caps, and the suite's own `--timeout`
 still ends a hang.
 
-**A diff that weakens a check of `REVIEW.das`, or the `check_tests_index` target, is a
-defect.** The checks hold the tree to `ARCHITECTURE.md#run-file`, `ARCHITECTURE.md#file-classes`
+**A diff that weakens a check of `REVIEW.das` is a defect.** The checks hold the tree to `ARCHITECTURE.md#run-file`, `ARCHITECTURE.md#file-classes`
 and `ARCHITECTURE.md#file-shape`.
 
 **A diff that adds or changes a test that writes a file or directory - itself, through any

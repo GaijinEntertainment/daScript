@@ -153,9 +153,7 @@ def test_basic(t : T?) {
 
 2. Nothing to do in CMake - `tests/aot/*.das` is globbed with `CONFIGURE_DEPENDS`. The only exception is a `_`-prefixed fixture module, which the glob filters out (`list(FILTER ... EXCLUDE REGEX "/_")`) and which therefore needs an explicit entry if its functions must be AOT'd.
 
-3. Update `tests/README.md` with a row for the new file.
-
-4. Rebuild: `cmake --build build --config Release --target test_aot`
+3. Rebuild: `cmake --build build --config Release --target test_aot`
 
 > **Build timing**: Always use `timeout: 0` when running CMake builds - they can take 15-25 minutes for clean builds and 2-10 minutes for incremental builds. Never assume the build is stuck just because there's no output; MSVC is silent during compilation.
 

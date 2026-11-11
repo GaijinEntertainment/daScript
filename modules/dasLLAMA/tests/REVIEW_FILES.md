@@ -4,8 +4,7 @@
 checklist is `REVIEW.md` (beside this file); the runner's tables are `run.das`.
 
 **A diff that adds or moves a `[test]` here applies `tests/REVIEW.md` (repo root) too, with this
-folder's `REVIEW.das` and the `check_tests_index` target over `TESTS.md` (beside this file) as
-its gates; a diff that weakens either is a defect.**
+folder's `REVIEW.das` as its gate; a diff that weakens it is a defect.**
 
 **A `[test]` a diff adds or moves into a file that an `--arm` suite lists (every `run.das` suite
 but `model-free` and `stocked`) gates each model-loading cell on `arm_on(t, name)`

@@ -15,8 +15,8 @@ CI runs every test file here through the `das_lane_dastest_target` lanes in `../
 which list their files one by one; a new test file joins one of them (`../REVIEW.das` reports a
 test file no lane names). `run_tests_llvm_tune_slow` - the full tuner runs in
 `llvm_tune_scope.das` - runs only in the nightly extended checks; every other lane also runs per
-PR. The generated index of every test here is `TESTS.md`; the shape rules a test file follows are
-`tests/ARCHITECTURE.md` at the repo root, applied by `REVIEW.das` beside this file.
+PR. The shape rules a test file follows are `tests/ARCHITECTURE.md` at the repo root, applied by
+`REVIEW.das` beside this file.
 
 A file whose name starts with `_` (a program root a test builds or runs through a child daslang, a
 client, a library a fixture requires) is a child-process fixture, never a test of its own.

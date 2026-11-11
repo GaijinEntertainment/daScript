@@ -40,10 +40,7 @@ three or more tests per category file, one `uncategorized.das` per directory, a 
 on every test, `timeout = 1200` on a test that builds, spawns or waits - are `tests/REVIEW.md`
 (repo root) and `tests/ARCHITECTURE.md`; `REVIEW.das` (beside this file) applies them to every
 suite under this folder in tests-only mode, where a `.das` with neither `[test]` nor `expect`
-is a tool's source or a fixture its suite feeds it. `TESTS.md` (beside this file) is the
-generated index of those suites: `daslang utils/internal/test-audit/main.das -- --root utils
---tests-only --index utils/TESTS.md --readme` writes it, and the `check_tests_index` target
-verifies it.
+is a tool's source or a fixture its suite feeds it.
 
 **A diff that changes how a tool builds a `.dlim` from a `.gguf` model file, how one loads it,
 or what identifies one - the fields that decide whether two `.dlim`s are the same image -
