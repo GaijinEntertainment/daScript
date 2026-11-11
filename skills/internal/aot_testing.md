@@ -195,7 +195,7 @@ AOT linking works by **semantic hash matching**. The AOT tool generates C++ stub
 
 ### Two-level hashing
 
-Every function has two hash values (see `src/simulate/simulate_fn_hash.cpp`):
+Every function has two hash values (the own hash in `src/simulate/simulate_fn_hash.cpp`, the AOT hash in `src/ast/ast_export.cpp`):
 
 1. **`hash`** (own hash) - the function's **SIM node tree** hash. Computed by `getFunctionHash()` which walks the simulated node tree and hashes every node type, constant value, and type descriptor. This captures the function's own behavior.
 
@@ -257,13 +257,13 @@ semantic hash is <runtime_aotHash>
 | Function | Location | Purpose |
 |---|---|---|
 | `getFunctionHash(fun, code, ctx)` | `simulate_fn_hash.cpp` | Compute own SIM hash |
-| `getFunctionAotHash(program, fun)` | `simulate_fn_hash.cpp` | Compute AOT hash (own + deps) |
-| `getAotHashComment(program, fun)` | `simulate_fn_hash.cpp` | Format diagnostic string with all dep hashes |
+| `getFunctionAotHash(program, fun)` | `ast_export.cpp` | Compute AOT hash (own + deps) |
+| `getAotHashComment(program, fun)` | `ast_export.cpp` | Format diagnostic string with all dep hashes |
 | `get_aot_hash_comment(program, fun)` | das binding in `module_builtin_ast.cpp` | Same, callable from das |
 
 ### Debug printf macros
 
-In `src/simulate/simulate_fn_hash.cpp`, two macros control debug output:
+Two macros control debug output, `debug_hash` in `src/simulate/simulate_fn_hash.cpp` and `debug_aot_hash` in `src/ast/ast_export.cpp`:
 
 ```cpp
 #if 1          // change to 0 to enable
