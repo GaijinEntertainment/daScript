@@ -2412,14 +2412,10 @@ namespace das {
     template <int argumentCount>
     struct SimNode_AotInterop : SimNode_AotInteropBase {
         template <typename ...VI>
-        __forceinline SimNode_AotInterop ( TypeInfo ** tinfo, VI... args ) {
+        __forceinline SimNode_AotInterop ( TypeInfo ** tinfo, VI... args ) : argValues{ args... } {
             nArguments = argumentCount;
             types = tinfo;
             argumentValues = argValues;
-            vec4f argsE[argumentCount] = { args... };
-            for ( int i=0; i!=argumentCount; ++i ) {
-                argumentValues[i] = argsE[i];
-            }
         };
         vec4f       argValues[argumentCount];
     };
