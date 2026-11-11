@@ -2444,6 +2444,7 @@ namespace das {
 
     DAS_API char * das_string_builder ( Context * __context__, const SimNode_AotInteropBase & node );
     DAS_API char * das_string_builder_temp ( Context * __context__, const SimNode_AotInteropBase & node );
+    DAS_API SimFunction * das_fn_by_mnh ( Context * __context__, uint64_t mnh );
 
 
     struct das_stack_prologue {

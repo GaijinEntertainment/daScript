@@ -270,15 +270,21 @@ def test_standalone_emit(t : T?) {   // nolint:STYLE038 - flat list of emit subc
         t |> success(!empty(entry), "the entry function body is found")
         let probe_name = emitted_name(source, "dep_probe_")
         t |> success(!empty(probe_name) && find(entry, "{probe_name}(__context__,") >= 0, "the entry body calls the foreign function by its C++ name: {probe_name}")
-        t |> success(find(entry, "fnByMangledName(/*@_standalone_dep_call::dep_probe ") < 0, "no Context lookup for a function this unit defines")
-        t |> success(find(entry, "fnByMangledName(/*@_standalone_dep_call::dep_hybrid ") >= 0, "a [hybrid] foreign function keeps the lookup - its body is patched at run time")
-        t |> success(find(entry, "fnByMangledName(/*@_standalone_dep_call::dep_jit ") >= 0, "a [jit] foreign function keeps the lookup")
+        let lookup = "das_fn_by_mnh(__context__,/*@_standalone_dep_call::"
+        t |> success(find(entry, "{lookup}dep_probe ") < 0,
+            "no Context lookup for a function this unit defines")
+        t |> success(find(entry, "{lookup}dep_hybrid ") >= 0,
+            "a [hybrid] foreign function keeps the lookup - its body is patched at run time")
+        t |> success(find(entry, "{lookup}dep_jit ") >= 0,
+            "a [jit] foreign function keeps the lookup")
         for (shape in ["dep_pair_", "dep_text_", "dep_fill_"]) {
             let name = emitted_name(source, shape)
             t |> success(!empty(name) && find(entry, "{name}(__context__,") >= 0, "a foreign call returning a struct, taking a string, or filling an array by reference is direct: {shape}{name}")
         }
-        t |> success(find(source, "fnByMangledName(/*@_standalone_dep_call::DepProbe`method ") >= 0, "a class method slot resolves through fnByMangledName - it needs a SimFunction")
-        t |> success(find(source, "fnByMangledName(/*@_standalone_dep_call::DepProbe'__finalize ") >= 0, "the finalizer slot resolves through fnByMangledName")
+        t |> success(find(source, "{lookup}DepProbe`method ") >= 0,
+            "a class method slot resolves through das_fn_by_mnh - it needs a SimFunction")
+        t |> success(find(source, "{lookup}DepProbe'__finalize ") >= 0,
+            "the finalizer slot resolves through das_fn_by_mnh")
     }
 
     t |> run("a generic two modules instantiate has one body, and a foreign body calls it directly") @(t : T?) {
@@ -294,12 +300,15 @@ def test_standalone_emit(t : T?) {   // nolint:STYLE038 - flat list of emit subc
         t |> equal(headers, 2, "the instance is declared once and defined once, whichever module's copy won")
         let dep_body = emitted_body(source, "dep_use_")
         t |> success(find(dep_body, "{instance}(__context__,") >= 0, "the required module's body calls the instance by its C++ name, not through a lookup")
-        t |> success(find(dep_body, "fnByMangledName") < 0, "no Context lookup inside the required module's body")
+        t |> success(find(dep_body, "das_fn_by_mnh") < 0,
+            "no Context lookup inside the required module's body")
     }
 
     t |> run("a regular AOT unit keeps the Context lookup for a call into another module") @(t : T?) {
         let source = generate_aot_source(t, "_standalone_foreign_call_fixture")
-        t |> success(find(source, "fnByMangledName(/*@_standalone_dep_call::dep_probe ") >= 0, "the foreign body lives in another unit, so the call resolves by name")
+        let lookup = "das_fn_by_mnh(__context__,/*@_standalone_dep_call::"
+        t |> success(find(source, "{lookup}dep_probe ") >= 0,
+            "the foreign body lives in another unit, so the call resolves by name")
     }
 
     t |> run("struct and enum signatures put the type definitions in the header") @(t : T?) {

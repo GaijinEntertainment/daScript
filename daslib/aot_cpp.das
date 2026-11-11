@@ -3117,7 +3117,7 @@ class public CppAot : AstVisitor {
         return ref2ptr;
     }
     def queryByMNH(name : string; hash : uint64) =>
-        "Func(__context__->fnByMangledName(/*{name}*/ 0x{hash:x}))"
+        "Func(das_fn_by_mnh(__context__,/*{name}*/ 0x{hash:x}))"
 
     def override preVisitExprAddr(expr : ExprAddr?) {
         if (expr.func != null) {

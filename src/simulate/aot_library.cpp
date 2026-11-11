@@ -10,6 +10,10 @@ namespace das {
 
     SimNode_AotInteropBase::SimNode_AotInteropBase() : SimNode_CallBase(LineInfo(),"") {}
 
+    SimFunction * das_fn_by_mnh ( Context * __context__, uint64_t mnh ) {
+        return __context__->fnByMangledName(mnh);
+    }
+
     SimNode* AotFactory::operator()(Context& ctx) const
     {
         if (declineReason) {
