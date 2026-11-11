@@ -32,7 +32,8 @@ def test_set_moves_container(t : T?) {
                 set(cmp.moved_values, values)
             }
             t |> equal(length(values), 0, "the source is empty after set")
-            var index = i
+            var index = 0
+            index = i
             cmp |> set("moved_i", index)
             t |> equal(index, i, "a copyable source keeps its value")
         }

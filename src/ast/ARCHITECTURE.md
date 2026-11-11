@@ -237,7 +237,7 @@ lookups into the same table (same source text) inside one statement are error 30
 reports it; the inliner runs the same scan before a splice, because splicing would erase the
 error and keep the defect.
 
-A ternary is the one place two lookups in a statement are sequenced. Its condition is a
+A ternary's lookups are sequenced. Its condition is a
 `bool` by the time an arm runs, so a lookup in the condition holds no reference an arm's lookup
 could invalidate, and the arms never both run. A lookup in the condition does not collide with
 one in an arm, and the arms do not collide with each other; all three still collide with the

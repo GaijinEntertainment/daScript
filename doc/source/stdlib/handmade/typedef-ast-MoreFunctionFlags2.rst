@@ -4,3 +4,4 @@ Result is always a fresh string allocation (or null), never a passthrough of an 
 Executing the body may hit a temp-string queue site (a builder or a wrappable call, transitively) - a caller must not hold a parked temp across a call to this function.
 Function may reach a heap collect point (transitively over direct calls) - its caller keeps a real stack frame, so carriers are denied fastcall.
 Extern bound via addExternInline - the interpreter call node is per-function (NTTP) and the callee is eligible to inline into it.
+Generator whose body had a statement-position unsafe block - inference dissolved the block and visits the whole function with unsafe allowed.

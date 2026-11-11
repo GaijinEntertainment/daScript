@@ -1,7 +1,7 @@
 //! Setting a component from a constant array must not compile through
 //! any of the writers: the array moves into the component, and a
-//! constant can't be emptied. set_direct forwards to set_direct_at, so
-//! the two share one failing instance.
+//! constant can't be emptied. set_direct forwards to set_direct_at,
+//! so the two share one failing instance.
 options gen2
 expect 31400:3
 

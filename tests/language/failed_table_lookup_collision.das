@@ -98,14 +98,14 @@ def test_ternary_arm_outside(flag : bool) {
     take_two(tab[1].v, flag ? tab[2].v : other[3].v)
 }
 
-// collision: a ternary's arm against a later part of the statement
+// collision: a ternary's arm against a later operand
 def test_ternary_arm_before(flag : bool) {
     var tab : table<int; Slot>
     var other : table<int; Slot>
     take_two(flag ? tab[1].v : other[3].v, tab[2].v)
 }
 
-// collision: a ternary's condition against a later part of the statement
+// collision: a ternary's condition against a later operand
 def test_ternary_condition_before() {
     var tab : table<int; Slot>
     var one = 1
