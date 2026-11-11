@@ -221,3 +221,18 @@ about thirty errors, so it builds none of their text itself: `typeError`,
 `malformedTypeError` and `templateStructureError` do, in frames that exist only while an
 error is reported. With the text inline, one level costs 4176 bytes in a Debug build and a type
 at the limit needs more than 512 KB; with it in the helpers the same type compiles in 256 KB.
+
+## Two lookups into one table in one statement (`ast_lint.cpp`, `ast_inline.cpp`) {#table-lookup-collision}
+
+`tab[k]` on a mutable table inserts, and an insert can move every slot. A statement holding a
+reference to one slot while it looks up another reads freed memory, so two non-dereferenced
+lookups into the same table (same source text) inside one statement are error 30250. Lint
+reports it; the inliner runs the same scan before a splice, because splicing would erase the
+error and keep the defect.
+
+A builtin ternary is the one place two lookups in a statement are sequenced. Its condition is a
+`bool` by the time an arm runs, so a lookup in the condition holds no reference an arm's lookup
+could invalidate, and the arms never both run. A lookup in the condition does not collide with
+one in an arm, and the arms do not collide with each other; all three still collide with the
+rest of the statement. A user-defined ternary operator is a call that evaluates all three
+operands, and gets no such exemption.

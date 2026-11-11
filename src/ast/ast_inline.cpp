@@ -1023,6 +1023,7 @@ namespace das {
             }
         }
 
+        // src/ast/ARCHITECTURE.md#table-lookup-collision
         // mirrors lint's 30250 detection: two non-deref ref lookups into the same table
         // (by textual identity) within one statement. lint runs AFTER the patch slot -
         // splicing such a statement would erase the diagnostic while keeping the UB
@@ -1033,6 +1034,19 @@ namespace das {
                 if ( !at->underDeref && at->subexpr->type && at->subexpr->type->isGoodTableType() ) {
                     auto h = hash64z(at->subexpr->describe().c_str());
                     if ( !seen.insert(h).second ) { collides = true; return; }
+                }
+            }
+            if ( e->rtti_isOp3() ) {
+                auto op3 = static_cast<ExprOp3 *>(e);
+                if ( !op3->func || op3->func->builtIn ) {
+                    auto before = seen;
+                    scanStatementTableAts(op3->subexpr, seen, collides);
+                    auto left = before;
+                    scanStatementTableAts(op3->left, left, collides);
+                    scanStatementTableAts(op3->right, before, collides);
+                    for ( auto h : left ) seen.insert(h);
+                    for ( auto h : before ) seen.insert(h);
+                    return;
                 }
             }
             vector<pair<Expression *,EvalKind>> kids;
