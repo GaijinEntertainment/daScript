@@ -1,7 +1,8 @@
 # Preflight - CI lane <-> local mirror
 
 `daslang utils/internal/preflight/main.das` runs the **fast tier**: format, lint,
-ast-verify, cpp-syntax, review-md, review-md-tests, md-ascii, hash-refs, untracked, dasgen, ci-das,
+ast-verify, cpp-syntax, review-md, review-md-tests, tests-index, md-ascii, hash-refs,
+untracked, dasgen, ci-das,
 ci-matrix (`python3 ci/test_ci_matrix.py`, when the diff touches `.github/` or `ci/`)
 and compile-sweep (every program root under `utils/`, `examples/`, `tutorials/`
 and the modules' examples and utils, compile-only, in parallel - the per-PR form

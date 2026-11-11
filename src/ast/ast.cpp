@@ -528,11 +528,6 @@ namespace das {
         return static_cast<ExprAddr*>(addr)->func;
     }
 
-    bool Structure::isSealedMethod ( const string & name ) const {
-        auto field = findField(name);
-        return field && field->classMethod && (field->sealed || sealed);
-    }
-
     const Structure * Structure::findFieldParent ( const string & na ) const {
         if ( parent ) {
             if ( parent->findField(na) ) {
@@ -1575,13 +1570,6 @@ namespace das {
         ExprLooksLikeCall::clone(cexpr);
         cexpr->isInvokeMethod = isInvokeMethod;
         return cexpr;
-    }
-
-    ExprField * ExprInvoke::methodField() const {
-        if ( !isInvokeMethod || arguments.empty() ) return nullptr;
-        auto callee = arguments[0];
-        if ( callee->rtti_isR2V() ) callee = static_cast<ExprRef2Value *>(callee)->subexpr;
-        return callee->rtti_isField() ? static_cast<ExprField *>(callee) : nullptr;
     }
 
     // ExprErase

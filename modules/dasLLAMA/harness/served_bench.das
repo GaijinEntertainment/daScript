@@ -785,48 +785,55 @@ def private scene_request(job : SceneJob) : SceneSample {
 //! under `round`.
 def scene_round(load : LoadJob; lanes : array<SceneJob>; var samples : array<SceneSample>; round : int = 0) {
     with_stream() $(var jobs : Stream?) {
-        var turn_job = load
-        jobs |> push_archive(turn_job)
         for (lane in lanes) {
             var mine = lane
             jobs |> push_archive(mine)
         }
+        var turn_job = load
+        jobs |> push_archive(turn_job)   // the last archive is the chat turn's: the lanes take theirs first
         with_channel(length(lanes) + 1) $(out) {
             with_atomic32() $(state) {
-                new_thread() @() {
-                    jobs |> pop_archive() $(var job : LoadJob) {   //! the first archive is the chat turn's
-                        let turn = run_turn(Plan(url = job.url, model = job.model), "You are a storyteller.", job.question, job.budget, state)
-                        state |> set(LOAD_ENDED)
-                        out |> push_clone(SceneSample(lane = SCENE_CHAT, value = empty(turn.why) ? rate(turn, float(turn.gen_us)) : -1.0, why = turn.why))
-                    }
-                    jobs |> release
-                    out |> notify_and_release
-                }
-                while (state |> get == 0) {
-                    sleep(1u)
-                }
-                for (_lane in lanes) {
-                    new_thread() @() {
-                        jobs |> pop_archive() $(var job : SceneJob) {
-                            while (state |> get == LOAD_DECODING) {
-                                let sent = ref_time_ticks()
-                                let sample = scene_request(job)
-                                break if (state |> get != LOAD_DECODING)   //! a request the turn did not outlast is not the scene's
-                                out |> push_clone(sample)
-                                while (state |> get == LOAD_DECODING && get_time_usec(sent) / 1000 < job.period_ms) {
+                with_atomic32() $(armed) {
+                    for (_lane in lanes) {
+                        new_thread() @() {
+                            jobs |> pop_archive() $(var job : SceneJob) {
+                                armed |> inc
+                                while (state |> get == 0) {
                                     sleep(1u)
                                 }
+                                while (state |> get == LOAD_DECODING) {
+                                    let sent = ref_time_ticks()
+                                    let sample = scene_request(job)
+                                    break if (state |> get != LOAD_DECODING)   //! a request the turn did not outlast is not the scene's
+                                    out |> push_clone(sample)
+                                    while (state |> get == LOAD_DECODING && get_time_usec(sent) / 1000 < job.period_ms) {
+                                        sleep(1u)
+                                    }
+                                }
                             }
+                            jobs |> release
+                            out |> notify_and_release
+                        }
+                    }
+                    // every lane waits before the turn is sent, so no thread's start-up lands in the turn's window
+                    while (armed |> get < length(lanes)) {
+                        sleep(1u)
+                    }
+                    new_thread() @() {
+                        jobs |> pop_archive() $(var job : LoadJob) {
+                            let turn = run_turn(Plan(url = job.url, model = job.model), "You are a storyteller.", job.question, job.budget, state)
+                            state |> set(LOAD_ENDED)
+                            out |> push_clone(SceneSample(lane = SCENE_CHAT, value = empty(turn.why) ? rate(turn, float(turn.gen_us)) : -1.0, why = turn.why))
                         }
                         jobs |> release
                         out |> notify_and_release
                     }
-                }
-                out |> for_each_clone() $(sample : SceneSample#) {
-                    var landed : SceneSample
-                    landed := sample
-                    landed.round = round
-                    samples |> emplace(landed)
+                    out |> for_each_clone() $(sample : SceneSample#) {
+                        var landed : SceneSample
+                        landed := sample
+                        landed.round = round
+                        samples |> emplace(landed)
+                    }
                 }
             }
         }

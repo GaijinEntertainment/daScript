@@ -969,7 +969,6 @@ src/ast/ast_interop.cpp
 src/ast/ast_tls.cpp
 src/ast/ast_visitor.cpp
 src/ast/ast_simulate.cpp
-src/ast/ast_whole_program.cpp
 src/ast/ast_link.cpp
 src/ast/ast_typedecl.cpp
 src/ast/ast_match.cpp
@@ -1340,7 +1339,6 @@ SET(LIBDASCRIPT_COMPILER_SRC
     src/ast/ast_cfg.cpp
     src/ast/ast_dse.cpp
     src/ast/ast_cse.cpp
-    src/ast/ast_devirtualize.cpp
     src/ast/ast_inline.cpp
     src/ast/ast_generate_typed.cpp
 

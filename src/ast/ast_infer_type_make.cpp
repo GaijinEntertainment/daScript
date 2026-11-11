@@ -693,11 +693,6 @@ namespace das {
             return Visitor::visitMakeStructureField(expr, index, decl, last);
         }
         if (mkBaseT->baseType == Type::tStructure) {
-            if (!(func && func->generated) && mkBaseT->structType->isSealedMethod(decl->name)) {
-                error("can't initialize sealed method " + mkBaseT->structType->name + "." + decl->name, "", "",
-                      decl->at, CompilationError::cant_write);
-                return Visitor::visitMakeStructureField(expr, index, decl, last);
-            }
             if (auto field = mkBaseT->structType->findField(decl->name)) {
                 auto copyFieldType = field->type;
                 if (field->capturedConstant) {

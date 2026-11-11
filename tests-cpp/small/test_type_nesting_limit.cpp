@@ -2,6 +2,13 @@
 
 #include "daScript/daScript.h"
 
+#ifdef _WIN32
+#include <windows.h>
+#include <process.h>
+#else
+#include <pthread.h>
+#endif
+
 using namespace das;
 
 namespace {
@@ -44,7 +51,7 @@ bool reportsTooDeep ( const Outcome & outcome ) {
     return outcome.tooDeepErrors != 0;
 }
 
-const int limit = 256;
+const int limit = 64;
 
 }
 
@@ -102,3 +109,64 @@ TEST_CASE("a pathologically deep type is one error, not a stack overflow") {
     auto outcome = compileFieldType("int" + repeated("?", 400000));
     CHECK(outcome.tooDeepErrors == 1);
 }
+
+namespace {
+
+struct StackRun {
+    daScriptEnvironment *   environment = nullptr;
+    string                  fieldType;
+    Outcome                 outcome;
+};
+
+void compileOnThisThread ( StackRun & run ) {
+    daScriptEnvironment::setBound(run.environment);
+    run.outcome = compileFieldType(run.fieldType);
+}
+
+#ifdef _WIN32
+unsigned __stdcall stackRunEntry ( void * arg ) {
+    compileOnThisThread(*(StackRun *)arg);
+    return 0;
+}
+bool runOnStack ( size_t stackBytes, StackRun & run ) {
+    auto thread = (HANDLE) _beginthreadex(nullptr, unsigned(stackBytes), stackRunEntry, &run, STACK_SIZE_PARAM_IS_A_RESERVATION, nullptr);
+    if ( !thread ) return false;
+    WaitForSingleObject(thread, INFINITE);
+    CloseHandle(thread);
+    return true;
+}
+#else
+void * stackRunEntry ( void * arg ) {
+    compileOnThisThread(*(StackRun *)arg);
+    return nullptr;
+}
+bool runOnStack ( size_t stackBytes, StackRun & run ) {
+    pthread_attr_t attr;
+    if ( pthread_attr_init(&attr) != 0 ) return false;
+    pthread_t thread;
+    bool started = pthread_attr_setstacksize(&attr, stackBytes) == 0
+        && pthread_create(&thread, &attr, stackRunEntry, &run) == 0;
+    pthread_attr_destroy(&attr);
+    return started && pthread_join(thread, nullptr) == 0;
+}
+#endif
+
+}
+
+TEST_CASE("a type at the nesting limit compiles on half of a 1 MB stack") {
+    const size_t stackBytes = 512 * 1024;
+    StackRun run;
+    run.environment = daScriptEnvironment::getBound();
+    SUBCASE("pointer levels") {
+        run.fieldType = "int" + repeated("?", limit);
+    }
+    SUBCASE("angle bracket levels") {
+        run.fieldType = repeated("array<", limit) + "int" + repeated(">", limit);
+    }
+    SUBCASE("pointers under angle brackets, the longest path") {
+        run.fieldType = repeated("array<", limit) + "int" + repeated("?", limit) + repeated(">", limit);
+    }
+    REQUIRE(runOnStack(stackBytes, run));
+    CHECK_FALSE(run.outcome.failed);
+}
+

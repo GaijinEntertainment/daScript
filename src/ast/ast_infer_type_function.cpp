@@ -265,10 +265,7 @@ namespace das {
             }
             // match auto argument
             if (argType->isAuto()) {
-                if (!TypeDecl::inferGenericType(argType, passType, true, true, options)) {
-                    return false;
-                }
-                return !(argType->isRef() && !argType->constant && passType->constant);
+                return TypeDecl::inferGenericType(argType, passType, true, true, options) != nullptr;
             }
         }
         // match inferable block

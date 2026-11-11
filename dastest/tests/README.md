@@ -91,4 +91,4 @@
 - `test_file_census` - the census reads a file's tests, arms, descriptions, timeouts, header and fence signature from its text, and classes suites, fixtures and scripts apart
 - `test_with_folder_filter` - with_folder_filter answers the root's .das_test per folder name, admits every folder where there is none, and refuses a .das_test that does not compile
 - `test_reported_batch_meets_the_budget` - a benchmark reports the batch that met the time budget, for both a fast op and a slow one
-- `test_isolated_mode` - isolated mode runs a suite in workers, keeps pre-`--` flags, folds crash and panic diagnostics into the failing test's log, and honors --failures-only
+- `test_isolated_mode` - isolated mode runs a suite in workers, keeps pre-`--` flags, folds crash and panic diagnostics into the failing test's log, and honors --failures-only and --compile-only

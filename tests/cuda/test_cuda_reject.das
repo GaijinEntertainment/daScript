@@ -200,7 +200,7 @@ def test_cuda_reject_body(t : T?) {
                 "        o[gl_GlobalInvocationID.x] = subgroupAdd(float4(o[0])).x"),
             body_arm("_reject_swizzle_range", "swizzle over range const has no CUDA form",
                 "        o[gl_GlobalInvocationID.x] = float(range(1, int(gl_GlobalInvocationID.x)).yx.x)"),
-            body_arm("_reject_op2_stmt", "top level no side effect operation +",
+            body_arm("_reject_op2_stmt", "operator `+` as a statement is not an assignment",
                 "        o[0] + o[1]\n        o[gl_GlobalInvocationID.x] = 1.0"),
             body_arm("_reject_op1_stmt", "unary `-` is not a statement",
                 "        -o[0]\n        o[gl_GlobalInvocationID.x] = 1.0"),

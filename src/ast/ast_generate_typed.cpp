@@ -71,23 +71,6 @@ namespace das {
         return true;
     }
 
-    TypeDecl * makeStructCastType ( TypeDecl * subexprT, TypeDecl * castT ) {
-        auto exprType = new TypeDecl(*castT);
-        exprType->ref = subexprT->ref;
-        exprType->constant = subexprT->constant;
-        return exprType;
-    }
-
-    ExprCall * makeTypedCall ( const LineInfo & at, Function * func, vector<ExpressionPtr> && args ) {
-        auto call = new ExprCall(at, func->module && !func->module->name.empty()
-            ? func->module->name + "::" + func->name : "_::" + func->name);
-        call->func = func;
-        call->genericFunction = true;
-        call->arguments = das::move(args);
-        TypeDecl::clone(call->type, func->result);
-        return call;
-    }
-
     Expression * makeTypeWitnessZero ( const LineInfo & at, TypeDecl * witnessT ) {
         auto vt = new TypeDecl(*witnessT);
         vt->ref = false;

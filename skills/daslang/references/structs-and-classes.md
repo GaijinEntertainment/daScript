@@ -173,9 +173,7 @@ class Circle : Shape {
 `sealed` already implies overriding, so `def sealed override` is a syntax error. Abstract form:
 `def [public|private] abstract [const] name : Ret`. `class sealed Unit : Circle` bans further
 inheritance (`error[20701]`); `def sealed area : float` overrides and bans further overriding
-(`error[20107]`). Assigning a method through a sealed class or a sealed method
-(`u.area = @@other`) or naming it in an initializer (`new Unit(area = @@other)`) is
-`error[30952]`.
+(`error[20107]`).
 
 | Call form | Notes |
 |---|---|

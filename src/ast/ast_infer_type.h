@@ -120,6 +120,9 @@ namespace das {
         string privateSetterInfo(ExprOp2 *expr) const;
 
     protected:
+        void typeError(const char *what, const TypeDecl *shown, const LineInfo &at, CompilationError cerr) const;
+        void malformedTypeError(const TypeDeclPtr &decl) const;
+        void templateStructureError(const TypeDeclPtr &decl) const;
         void verifyType(const TypeDeclPtr &decl, bool allowExplicit = false, bool classMethod = false, bool allowTemplate = false) const;
 
         bool jitEnabled() const;

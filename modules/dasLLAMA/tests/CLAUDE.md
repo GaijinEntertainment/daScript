@@ -3067,12 +3067,12 @@ brings down as the CPU cache's own bytes.
 bias serves a tq4 ask at q8_0) with the mirror asked in tq4 (the interleaved single steps,
 the two batched-step cells, the device-home cells, the scheduler's device mode, the handoff cell, the prefill-chunks cell,
 the tolerance cells, the guards, the driver's reports and the two passes), tq4's un-rotation among what they reach.
-Under a tq4 mirror no share of the peak holds a tolerance cell - two window splits of one prompt, and the split q/k
-norm against the fused one on the qwen3 file, read as far apart as a bit-for-bit carrier's row one off - so the rig holds each such row to a share of
-its distance from the one-token-off row instead (`tq4_within`, the share `TQ4_CTRL_SHARE` in `_resident_feed.das`: above
-the widest reading on any card the suite runs on - the 900-token prompt cut at 300 reads widest - and under 1.0, the
-one-off row's own distance; the readings per card sit in the constant's `//!`), and every bit-for-bit cell stays bit for
-bit.
+Under a tq4 mirror no share of the peak holds a tolerance cell, so the rig holds each such row nearer to its reference
+than to the one-token-off row instead (`tq4_within` in `_resident_feed.das`). The prefill-continuation cell goes further:
+a prefill window reads its own rows exact and an earlier window's through the 4-bit mirror, so two splits of one prompt
+differ by the codec's own noise - past the one-off row's distance on a 42-token prompt cut at 40 on the CUDA home - and
+the cell holds bit for bit the shape whose cut sits on a window boundary (both forms split alike) and reports the others
+and the second chat turn, redding them on a NaN alone (`hold_continued`, `tq4_reported`; the readings sit in the latter's `//!`).
 `test_gpu_resident_regions_qwen3.das` - the qwen3 file, Qwen3-0.6B Q8_0, a q/k-norm carrier: the interleaved single steps,
 the two batched-step cells - the N-row command's q/k norm in whichever form the one-row command takes, the fused norm + rope
 + store or the split pair - bit for bit, the batched-first cell, the wide single steps, the fuse bisect, and the window's
@@ -3157,7 +3157,9 @@ split-forms cell and the widening cell on the wide bar with the one-token-off co
 pinned off for the load, then the fold cell on the same bar, and the embed-gather cell.
 `test_gpu_resident_regions_llama3b_ctx32k.das` - Llama-3.2-3B Q4_K_M at four regions of 32768 positions: the 28 layers' f16
 rows at that context run past one binding's range, so the K/V mirror seats them in two or more slab pairs
-(`../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan`). The slab cell asserts the slab count, the region count and the
+(`../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan`). The slab cell asserts the slab count - more than one pair where a
+mirror side runs past the serving home's binding cap, exactly one on a home whose binding holds a whole side (the CUDA home
+has no binding range, so only a block codec's byte span slabs a mirror there) - the region count and the
 unshortened region context, then runs the interleaved single steps (the N-row counter's control: they move it by nothing)
 and the batched steps on the split bar; the long-context cells on the same load: a 12288-token prompt and eight steps
 against the CPU chain at the 10% bar with the one-step-off control, a 30000-token prompt continued from 20480 against the

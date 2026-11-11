@@ -2065,8 +2065,17 @@ namespace das {
             expr->type = new TypeDecl();
         }
         // we replace invoke/*method*/(cptr.method, cptr, ...) with invoke/*method*/(typedecl(cptr.type).method, cptr, ...)
-        if (auto eField = expr->methodField()) {
-            if (!eField->value->rtti_isTypeDecl() && !eField->value->type->isAutoOrAlias()) {
+        if (expr->isInvokeMethod && expr->arguments.size()) {
+            ExprField *eField = nullptr;
+            if (expr->arguments[0]->rtti_isField()) {
+                eField = (ExprField *)expr->arguments[0];
+            } else if (expr->arguments[0]->rtti_isR2V()) {
+                auto eR2V = (ExprRef2Value *)expr->arguments[0];
+                if (eR2V->subexpr->rtti_isField()) {
+                    eField = (ExprField *)eR2V->subexpr;
+                }
+            }
+            if (eField && !eField->value->rtti_isTypeDecl() && !eField->value->type->isAutoOrAlias()) {
                 auto fType = eField->value->type->isPointer() ? eField->value->type->firstType : eField->value->type;
                 auto cType = new TypeDecl(*fType);
                 auto mkType = new ExprTypeDecl(eField->at, cType);
