@@ -152,9 +152,11 @@ before any of its code runs, on the same report-and-close path as a missing regi
 module exporting no vintage symbol is refused the same way. The vintage folds `DAS_BUILD_ID`,
 `DAS_ABI_VERSION` and the `sizeof` of the core classes a module derives from or holds by value
 (`Module`, `Context`, `SimNode`, `TypeAnnotation`, ...): a field added to or removed from one of
-them moves a size, while a vtable change - a virtual added as a new slot, removed, reordered or re-signed, in
-any class the `include/daScript/ast` and `include/daScript/simulate` headers declare - moves
-none once the class has a vtable, so `DAS_ABI_VERSION` is the hand-bumped counter for that case,
-and those two headers' checklists bind the bump. A module built with another `DAS_BUILD_ID` fails the vintage check too,
+them usually moves a size. Two changes move none: a vtable change - a virtual added as a new
+slot, removed, reordered or re-signed, in any class the `include/daScript/ast` and
+`include/daScript/simulate` headers declare, once the class has a vtable - and a member of a
+folded class reordered, retyped, or added into padding. `DAS_ABI_VERSION` is the hand-bumped
+counter for both, and those two headers' checklists bind the bump to every vtable change and
+every data-member change of a folded class. A module built with another `DAS_BUILD_ID` fails the vintage check too,
 since the vintage folds the build id; the registrar's own build-id argument is the guard for a
 host that calls the registrar without reading the vintage first.
