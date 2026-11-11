@@ -121,8 +121,17 @@ endif()
 # The full binary is EXCLUDE_FROM_ALL; this target builds it on demand (nightly CI,
 # preflight --full).
 if(TARGET test_aot)
+    # Under a sanitizer the sweep leaves out the folders that test the compiler and the tools:
+    # their files compile programs and launch daslang children, so their time is the compiler's,
+    # multiplied by the sanitizer, and the interpreter sweep of the same cell already runs them.
+    set(_DAS_AOT_SWEEP_EXCLUDE "")
+    if(DAS_USE_SANITIZER AND NOT DAS_USE_SANITIZER STREQUAL "none")
+        foreach(_dir lsp lint module_cache dastest mcp)
+            list(APPEND _DAS_AOT_SWEEP_EXCLUDE --exclude tests/${_dir}/)
+        endforeach()
+    endif()
     add_das_target(run_tests_aot
-        COMMAND ${DAS_SANITIZER_ENV} $<TARGET_FILE:test_aot> -use-aot ${PROJECT_SOURCE_DIR}/dastest/dastest.das -- --use-aot --color --failures-only --timing-outliers 30 --timeout ${DAS_TEST_TIMEOUT_AOT} --test ${PROJECT_SOURCE_DIR}/tests
+        COMMAND ${DAS_SANITIZER_ENV} $<TARGET_FILE:test_aot> -use-aot ${PROJECT_SOURCE_DIR}/dastest/dastest.das -- --use-aot --color --failures-only --timing-outliers 30 --timeout ${DAS_TEST_TIMEOUT_AOT} ${_DAS_AOT_SWEEP_EXCLUDE} --test ${PROJECT_SOURCE_DIR}/tests
         DEPENDS test_aot
         WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
         COMMENT "Running tests (AOT)"

@@ -42,7 +42,7 @@ Any other argument, or a wrong type, is a compile error from the macro.
 - `--test-names <namePrefix>`: Run top-level tests matching "namePrefix", such as "namePrefix1"
 - `--test-list <path>`: Path to a file listing one test path per line; restricts the collected set to those paths
 - `--test-only <path>`: Restrict the collected set to this test path (repeatable)
-- `--exclude <substring>`: Skip test files whose base name contains this substring (repeatable)
+- `--exclude <substring>`: Skip test files whose base name contains this substring; a substring with a `/` is matched against the whole path, so `tests/lint/` skips a folder (repeatable)
 - `--test-project <path.das_project>`: Project file. Will be used to compile given tests
 - `--module-cache-dir <dir>`: Keep AST caches per test file and compile
   configuration, including isolated workers. `--verbose` prints each verdict.

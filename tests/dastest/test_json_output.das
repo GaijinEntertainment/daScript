@@ -152,6 +152,14 @@ def test_test_only_filter(tt : T?) {
     tt |> equal(run_dastest("pass", "--test-only {fixture}.other").total, 0)
 }
 
+[test(description = "--exclude matches a plain substring against the base name alone and a substring with a slash against the whole path")]
+def test_exclude_filter(tt : T?) {
+    tt |> equal(run_dastest("pass", "--exclude fixture_pass").total, 0)
+    tt |> equal(run_dastest("pass", "--exclude dastest").total, 2, "a bare folder name")
+    tt |> equal(run_dastest("pass", "--exclude tests/dastest/").total, 0)
+    tt |> equal(run_dastest("pass", "--exclude tests/nosuchfolder/").total, 2)
+}
+
 [test(description = "--test-names keeps only the tests whose names it lists")]
 def test_test_name_filter(tt : T?) {
     let report = run_dastest("pass", "--test-names test_passing")
