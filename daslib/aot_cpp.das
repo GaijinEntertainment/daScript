@@ -2580,7 +2580,7 @@ class public CppAot : AstVisitor {
         var ctext = aotEnumValueName(c.value);
         for (ee in c.enumType.list) {
             if (ee.name == c.value) {
-                if (!ee.cppName.empty()) {
+                if (!ee.cppName.empty() && ee.cppName != ee.name) {
                     ctext = string(ee.cppName);
                 }
                 break;
@@ -2799,7 +2799,8 @@ class public CppAot : AstVisitor {
     }
     def override canVisitWithAliasSubexpression(_expr : ExprAssume?) : bool => false
     def override preVisitExprAssume(expr : ExprAssume?) {
-        write(*ss, "\n#if 0 // assume {expr.alias} = {describe(expr.subexpr) |> replace("\n", " ")}\n");
+        let what = expr.subexpr != null ? describe(expr.subexpr) : describe(expr.assumeType);
+        write(*ss, "\n#if 0 // assume {expr.alias} = {what |> replace("\n", " ")}\n");
     }
     def override visitExprAssume(var expr : ExprAssume?) : ExpressionPtr {
         write(*ss, "\n#endif // assume {expr.alias}\n");
