@@ -80,7 +80,10 @@ class DecsTemplate : AstStructureAnnotation {
             blkArchSetup |> push(qmacro(cache |> push(decs::find_component_index(arch, $v("{prefix}{fld.name}")))))
             blkArchWrite |> push(qmacro(decs::set_direct_at(arch, cache[$v(ci)], eidx, src.$f(fld.name))))
         }
-        var fnArch = qmacro_function("apply_decs_template_arch") $(var arch : Archetype; eidx : int; eid : EntityId; src : $t(st); var cache : array<int>) : void {
+        var fnArch = qmacro_function("apply_decs_template_arch") $(var arch : Archetype;
+                                                                   eidx : int; eid : EntityId;
+                                                                   var src : $t(st);
+                                                                   var cache : array<int>) : void {
             pass
         }
         var blkA = unsafe(reinterpret<ExprBlock?>(fnArch.body))

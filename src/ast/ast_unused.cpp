@@ -939,6 +939,20 @@ namespace das {
         virtual void preVisit ( ExprAddr * expr ) override {
             Visitor::preVisit(expr);
             if ( func && expr->func->module == func->module ) expr->func->addressTaken = true;
+            if ( func ) func->sideEffectFlags |= uint32_t(SideEffects::accessGlobal);
+        }
+    // cast - src/ast/ARCHITECTURE_EFFECTS.md#observable-effects
+        virtual void preVisit ( ExprCast * expr ) override {
+            Visitor::preVisit(expr);
+            if ( !func || !expr->reinterpret || !expr->subexpr->type || !expr->castType ) return;
+            if ( isAddressType(expr->subexpr->type) && !isAddressType(expr->castType) ) {
+                func->sideEffectFlags |= uint32_t(SideEffects::accessGlobal);
+            }
+        }
+        static bool isAddressType ( const TypeDeclPtr & type ) {
+            if ( type->isPointer() || type->isString() ) return true;
+            auto bt = type->baseType;
+            return bt==Type::tFunction || bt==Type::tLambda || bt==Type::tBlock;
         }
     // if-then-else
         virtual void preVisit ( ExprIfThenElse * expr ) override {

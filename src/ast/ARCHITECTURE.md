@@ -145,6 +145,13 @@ a compile of its own and never joins another compile's stream: under `CodeOfPoli
 it reads and writes its own `ModuleFileCache` at the default path keyed by the target's file, as a
 script's `compile_file` does. A module whose parse failed pushes no record.
 
+The late walk compiles with `ignore_shared_modules` off, whatever its caller set. That policy
+makes the parser read `module X shared` as not shared, and a late require's target must be
+shared to outlive the walk, as must every module it requires (`canShareModule`). The walk's
+policies are its own copy, so the caller's program, its dependencies and every later compile
+keep the policy: a host that ignores shared modules still gets the JIT emitter, promoted
+beside its privately compiled program.
+
 ## Program-scoped symbol state (`ast.h`, `ast_export.cpp`, `ast_allocate_stack.cpp`) {#program-scoped-symbol-state}
 
 Whether a program uses a function or a global, and the slot each holds in that program's
@@ -221,3 +228,32 @@ about thirty errors, so it builds none of their text itself: `typeError`,
 `malformedTypeError` and `templateStructureError` do, in frames that exist only while an
 error is reported. With the text inline, one level costs 4176 bytes in a Debug build and a type
 at the limit needs more than 512 KB; with it in the helpers the same type compiles in 256 KB.
+
+## Two lookups into one table in one statement (`ast_lint.cpp`, `ast_inline.cpp`) {#table-lookup-collision}
+
+`tab[k]` on a mutable table inserts, and an insert can move every slot. A statement holding a
+reference to one slot while it looks up another reads freed memory, so two non-dereferenced
+lookups into the same table (same source text) inside one statement are error 30250. Lint
+reports it; the inliner runs the same scan before a splice, because splicing would erase the
+error and keep the defect.
+
+A ternary's lookups are sequenced. Its condition is a
+`bool` by the time an arm runs, so a lookup in the condition holds no reference an arm's lookup
+could invalidate, and the arms never both run. A lookup in the condition does not collide with
+one in an arm, and the arms do not collide with each other; all three still collide with the
+rest of the statement.
+
+## An `unsafe` block in a generator (`ast_infer_type.cpp`) {#generator-unsafe-block}
+
+A generator body is lowered in place during inference: a local moves into the generator's
+struct only once it is a statement of the body's own block, and a `yield` leaves a resume
+label that the entry `goto` reaches only at that level. Nested blocks get there because
+inference collapses them into their parent, pass by pass.
+
+`unsafe { }` is a wrapper around a block, not a block, and collapse does not see through it.
+Left in place, a local declared inside stays a stack local across a `yield`, and a `yield`
+inside leaves its label where the entry `goto` cannot reach. So inference replaces a
+statement-position `unsafe { }` in a generator with its block and sets
+`Function::unsafeGenerator`; every later pass visits that function with unsafe allowed. The
+price is the scope: once a generator has one `unsafe` block, its whole body is unsafe-permitted.
+An expression-position `unsafe(...)` stays as written.

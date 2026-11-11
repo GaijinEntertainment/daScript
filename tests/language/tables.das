@@ -916,3 +916,37 @@ def test_hash_enum(t : T?) {
         t.not_empty_hash(TEnum(a = a))
     }
 }
+
+struct LookupMember {
+    linked : bool
+    root : string
+}
+
+struct LookupCtx {
+    members : table<string; LookupMember>
+}
+
+def lookup_root_of(var ctx : LookupCtx; k : string) : string {
+    if (ctx.members[k].linked) {
+        return ctx.members[k].root
+    }
+    return k
+}
+
+def lookup_link(var ctx : LookupCtx; dst, src : string) {
+    let root = lookup_root_of(ctx, src)
+    ctx.members[dst].root = root
+}
+
+[test(description = "a ternary's condition and its arms may each look up one table, written out or produced by an inlined call")]
+def test_ternary_table_lookups(t : T?) {
+    var ctx : LookupCtx
+    ctx.members["a"] = LookupMember(linked = true, root = "r")
+    lookup_link(ctx, "b", "a")
+    t |> equal(ctx.members["b"].root, "r", "the inlined callee's two lookups")
+    let k = "a"
+    let direct = ctx.members[k].linked ? ctx.members[k].root : k
+    t |> equal(direct, "r", "condition and arm")
+    let either = k == "a" ? ctx.members["a"].root : ctx.members["b"].root
+    t |> equal(either, "r", "both arms")
+}

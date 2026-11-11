@@ -31,7 +31,7 @@ commit()  // entity now visible to queries
 
 Returns an `EntityId` you can keep - generation is set on creation, so the id is valid for `update_entity` / `delete_entity` / `query(eid, ...)` even before `commit()` runs (the queries themselves see nothing until commit).
 
-`set(cmp, "name", value)` and `cmp |> set("name", value)` are the longhand forms; `cmp.name := value` is the dot/`:=` shorthand. For an existing component slot they overwrite in place; type mismatch panics. The names "eid" and the implicit `eid` component are managed by the runtime - don't set "eid" yourself.
+`set(cmp, "name", value)` and `cmp |> set("name", value)` are the longhand forms; `cmp.name := value` is the dot/`:=` shorthand. For an existing component slot they overwrite in place; type mismatch panics. A value that can't be copied (an array, a table, a struct holding one) moves into the component and the variable you passed is left empty, so it must be a `var`: a constant one is a compile error. `set_direct` / `set_direct_at` move the same way. The names "eid" and the implicit `eid` component are managed by the runtime - don't set "eid" yourself.
 
 ## Queries - the workhorse
 

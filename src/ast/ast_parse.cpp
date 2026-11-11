@@ -2177,6 +2177,7 @@ namespace das {
     Module * requireModuleNow ( const string & requireName, const FileAccessPtr & access, TextWriter & logs, CodeOfPolicies policies ) {
         lock_guard<recursive_mutex> guard(g_requireModuleNowMutex);
         verifyCodeOfPoliciesStamp(policies);
+        policies.ignore_shared_modules = false;     // src/ast/ARCHITECTURE.md#require-after-walk
         auto env = daScriptEnvironment::getBound();
         // a relative target resolves against the file issuing the require, as a written require would
         auto info = access->getModuleInfo(requireName, env->g_compilingFileName ? env->g_compilingFileName : "");

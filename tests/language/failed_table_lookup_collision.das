@@ -2,7 +2,7 @@
 //! not compile, since one insert can move the other's slot - in
 //! initializers, copy, clone, move and field-access forms
 options gen2
-expect 30250:7
+expect 30250:12
 
 def take_two_ret(var a : int&; var b : int&) : int {
     return a + b
@@ -78,4 +78,50 @@ def test_separate_expressions() {
     let a = tab[1]
     let b = tab[2]
     feint("{a} {b}\n")
+}
+
+struct Slot {
+    on : bool
+    v : int
+}
+
+// collision: a ternary's condition against the rest of the statement
+def test_ternary_condition_outside() {
+    var tab : table<int; Slot>
+    tab[1].v = tab[2].on ? 1 : 2
+}
+
+// collision: a ternary's arm against the rest of the statement
+def test_ternary_arm_outside(flag : bool) {
+    var tab : table<int; Slot>
+    var other : table<int; Slot>
+    take_two(tab[1].v, flag ? tab[2].v : other[3].v)
+}
+
+// collision: a ternary's arm against a later operand
+def test_ternary_arm_before(flag : bool) {
+    var tab : table<int; Slot>
+    var other : table<int; Slot>
+    take_two(flag ? tab[1].v : other[3].v, tab[2].v)
+}
+
+// collision: a ternary's condition against a later operand
+def test_ternary_condition_before() {
+    var tab : table<int; Slot>
+    var one = 1
+    take_two(tab[1].on ? one : one, tab[2].v)
+}
+
+// collision: two lookups inside one arm
+def test_ternary_inside_arm(flag : bool) {
+    var tab : table<int; Slot>
+    let a = flag ? take_two_ret(tab[1].v, tab[2].v) : 0
+    feint("{a}\n")
+}
+
+// ok: a ternary's condition and its arms, and the two arms
+def test_ternary_sequenced(flag : bool) {
+    var tab : table<int; Slot>
+    let a = tab[1].on ? tab[1].v : tab[2].v
+    feint("{a}\n")
 }

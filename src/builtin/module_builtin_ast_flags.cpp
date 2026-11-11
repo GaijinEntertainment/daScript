@@ -214,7 +214,7 @@ namespace das {
         ft->alias = "MoreFunctionFlags2";
         ft->argNames = {
             "localFunction", "tempStringResult", "mayQueueTempString", "needCallerStackFrame",
-            "nttp"
+            "nttp", "unsafeGenerator"
         };
         return ft;
     }

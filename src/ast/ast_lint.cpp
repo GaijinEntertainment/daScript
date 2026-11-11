@@ -896,6 +896,8 @@ namespace das {
         virtual void preVisit ( ExprOp3 * expr ) override {
             Visitor::preVisit(expr);
             verifyOnlyFastAot(expr->func, expr->at);
+            ternaryLookups.emplace_back();
+            ternaryLookups.back().before = tableLookupCollision.back();
             if ( checkAotSideEffects ) {
                 if ( !expr->subexpr->noNativeSideEffects || !expr->left->noNativeSideEffects || !expr->right->noNativeSideEffects ) {
                     program->error("side effects may affect evaluation order", "", "", expr->at,
@@ -1225,6 +1227,25 @@ namespace das {
             tableLookupCollision.pop_back();
             return Visitor::visitBlockFinalExpression(block,expr);
         }
+        // src/ast/ARCHITECTURE.md#table-lookup-collision
+        virtual void preVisitLeft ( ExprOp3 * expr, Expression * left ) override {
+            Visitor::preVisitLeft(expr, left);
+            auto & frame = ternaryLookups.back();
+            frame.seen = tableLookupCollision.back();
+            tableLookupCollision.back() = frame.before;
+        }
+        virtual void preVisitRight ( ExprOp3 * expr, Expression * right ) override {
+            Visitor::preVisitRight(expr, right);
+            auto & frame = ternaryLookups.back();
+            for ( auto h : tableLookupCollision.back() ) frame.seen.insert(h);
+            tableLookupCollision.back() = frame.before;
+        }
+        virtual ExpressionPtr visit ( ExprOp3 * expr ) override {
+            auto & frame = ternaryLookups.back();
+            for ( auto h : frame.seen ) tableLookupCollision.back().insert(h);
+            ternaryLookups.pop_back();
+            return Visitor::visit(expr);
+        }
         virtual void preVisit ( ExprAt * expr ) override {
             Visitor::preVisit(expr);
             // we look for table at, and check 'subexpr' of it, which is the table.
@@ -1253,6 +1274,11 @@ namespace das {
         bool anyUnsafe = false;
         das_hash_set<Expression *> usedTypeExprs;
         vector<das_hash_set<uint64_t>> tableLookupCollision;
+        struct TernaryLookups {
+            das_hash_set<uint64_t> before;
+            das_hash_set<uint64_t> seen;
+        };
+        vector<TernaryLookups> ternaryLookups;
     };
 
     struct Option {

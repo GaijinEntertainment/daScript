@@ -1062,6 +1062,7 @@ namespace das
             });
             if ( any ) return;
         }
+        if ( reason && strcmp(reason, "exception")==0 ) return;
         os_debug_break();
     }
 

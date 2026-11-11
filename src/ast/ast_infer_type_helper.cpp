@@ -1336,6 +1336,12 @@ namespace das {
                 pos = npos + 1;
             }
         }
+        auto isNumber = [](const string & part) {
+            return !part.empty() && all_of(part.begin(), part.end(), [](char ch){ return ch>='0' && ch<='9'; });
+        };
+        if (parts.size() > 3 && parts[parts.size()-3] == "at" && isNumber(parts[parts.size()-2]) && isNumber(parts.back())) {
+            parts.resize(parts.size() - 3);     // ast_allocate_stack.cpp RelocatePotentiallyUninitialized rename
+        }
         // `_` is the discard: it binds nothing and collides with nothing, any number of times.
         // destructuring forces a name per position, so unlike a plain `let _` there is no way
         // to simply not write one

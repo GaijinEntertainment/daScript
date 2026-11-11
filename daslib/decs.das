@@ -177,8 +177,27 @@ def public operator .(var cmp : ComponentMap; name : string) : ComponentValue& {
     }
 }
 
-def public set(var cv : ComponentValue; val : auto) {
+def private release_moved(var value : auto(TT)) {
+    static_if (!typeinfo can_copy(value)) {
+        memzero(value)
+    }
+}
+
+def public set(var cv : ComponentValue; val : auto(TT) ==const) {
     //! Sets individual component value. Verifies that the value is of the correct type.
+    concept_assert(typeinfo can_copy(val),
+        "a component that can't be copied moves in; pass a mutable value")
+    set_value(cv, val)
+}
+
+def public set(var cv : ComponentValue; var val : auto(TT) ==const) {
+    //! Sets individual component value, verifying its type.
+    //! A value that can't be copied moves in; `val` is left empty.
+    set_value(cv, val)
+    release_moved(val)
+}
+
+def private set_value(var cv : ComponentValue; val : auto) {
     concept_assert(typeinfo sizeof(val) <= typeinfo sizeof(cv.data), "component type {typeinfo typename(val)} is too big for ComponentValue.data, which holds float4[4]")
     let cval = make_component(cv.name, val)
     assert(cv.info.hash == 0ul || cv.info.hash == cval.info.hash)
@@ -1182,9 +1201,23 @@ def private make_component(name : string; value : auto(TT)) {
     return cv
 }
 
-def public set(var cmp : ComponentMap; name : string; value : auto(TT)) {
+def public set(var cmp : ComponentMap; name : string; value : auto(TT) ==const) {
     //! Set component value specified by name and type.
     //! If value already exists, it is overwritten. If already existing value type is not the same - panic.
+    concept_assert(typeinfo can_copy(value),
+        "a component that can't be copied moves in; pass a mutable value")
+    set_named(cmp, name, value)
+}
+
+def public set(var cmp : ComponentMap; name : string; var value : auto(TT) ==const) {
+    //! Set component value specified by name and type; an existing
+    //! value is overwritten, and one of another type panics.
+    //! A value that can't be copied moves in; `value` is left empty.
+    set_named(cmp, name, value)
+    release_moved(value)
+}
+
+def private set_named(var cmp : ComponentMap; name : string; value : auto(TT)) {
     concept_assert(typeinfo sizeof(value) <= typeinfo sizeof(cmp[0].data), "component type {typeinfo typename(value)} is too big for ComponentValue.data, which holds float4[4]")
     let cv = make_component(name, value)
     let idx = lower_bound(cmp, ComponentValue(name = name)) <| cmp_by(_.name)
@@ -1208,18 +1241,42 @@ def public find_component_index(arch : Archetype; name : string) : int {
     return -1
 }
 
-def public set_direct_at(var arch : Archetype; comp_idx : int; eidx : int; value : auto(TT)) {
+def public set_direct_at(var arch : Archetype; comp_idx : int; eidx : int;
+                         value : auto(TT) ==const) {
     //! Writes a component value directly into archetype storage by pre-resolved component index.
     //! O(1) per write — use `find_component_index` once, then this for each entity.
+    concept_assert(typeinfo can_copy(value),
+        "a component that can't be copied moves in; pass a mutable value")
+    write_direct_at(arch, comp_idx, eidx, value)
+}
+
+def public set_direct_at(var arch : Archetype; comp_idx : int; eidx : int;
+                         var value : auto(TT) ==const) {
+    //! Writes a component value into archetype storage by
+    //! pre-resolved component index.
+    //! A value that can't be copied moves in; `value` is left empty.
+    write_direct_at(arch, comp_idx, eidx, value)
+    release_moved(value)
+}
+
+def private write_direct_at(var arch : Archetype; comp_idx : int; eidx : int; value : auto(TT)) {
     unsafe {
         memcpy(addr(arch.components[comp_idx].data[eidx * arch.components[comp_idx].stride]), addr(value), typeinfo sizeof(value))
     }
 }
 
-def public set_direct(var arch : Archetype; name : string; eidx : int; value : auto(TT)) {
+def public set_direct(var arch : Archetype; name : string; eidx : int; value : auto(TT) ==const) {
     //! Writes a component value directly into archetype storage at the given entity index.
     //! Convenience wrapper — does a name lookup per call. For bulk writes, prefer
     //! `find_component_index` + `set_direct_at` to resolve the name once.
+    set_direct_at(arch, find_component_index(arch, name), eidx, value)
+}
+
+def public set_direct(var arch : Archetype; name : string; eidx : int;
+                      var value : auto(TT) ==const) {
+    //! Writes a component value into archetype storage at the given
+    //! entity index, with a name lookup per call.
+    //! A value that can't be copied moves in; `value` is left empty.
     set_direct_at(arch, find_component_index(arch, name), eidx, value)
 }
 

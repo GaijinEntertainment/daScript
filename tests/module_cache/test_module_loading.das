@@ -293,6 +293,7 @@ var late_absent_why : string
 var late_plain_why : string
 var late_broken_why : string
 var late_named_why : string
+var late_ignoring_why : string
 
 [init]
 def late_probe {
@@ -333,6 +334,13 @@ def late_probe {
         }
         require_module_now(fixture("mc_late_named"), no_access, cop) $(var mod : Module?; issues : das_string) {
             late_named_why = mod == null ? string(issues) : "answered a module"
+        }
+    }
+    using() $(var cop : CodeOfPolicies) {
+        cop.ignore_shared_modules = true
+        let ignoring = fixture("mc_late_ignoring")
+        require_module_now(ignoring, no_access, cop) $(var mod : Module?; issues : das_string) {
+            late_ignoring_why = mod != null ? "answered {mod.name}" : string(issues)
         }
     }
 }
@@ -406,6 +414,9 @@ def test_require_module_now(t : T?) {
     t |> run("a shared module with no macro context is required, and macro_context_of answers null for it") @(t : T?) {
         t |> success(late_nomacro_mod != null && late_nomacro_mod.name == "mc_late_nomacro", "the late require answers the module")
         t |> success(late_nomacro_ctx == null, "no macro context to answer")
+    }
+    t |> run("a caller that ignores shared modules still gets a shared module") @(t : T?) {
+        t |> equal(late_ignoring_why, "answered mc_late_ignoring")
     }
     t |> run("a file nothing serves, a module that is not shared, one that does not compile, and one whose name is not its file's answer null with the reason") @(t : T?) {
         t |> success(find(late_absent_why, "mc_late_absent") >= 0, "the absent file is named: {late_absent_why}")

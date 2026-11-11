@@ -702,3 +702,34 @@ def test_permissive_tuple_const(t : T?) {
         t |> equal(exact_hits, 1)
     }
 }
+
+struct RelocatedSpec {
+    slot : int
+    name : string
+}
+
+def relocated_specs(n : int) {
+    var specs : array<RelocatedSpec>
+    if (n == 0) return <- (<- specs, false)
+    specs |> push(RelocatedSpec(slot = n, name = "x"))
+    return <- (<- specs, true)
+}
+
+def relocated_destructure(base : int; at : int) : int {
+    if (base < 0) return -1
+    var inscope(xs, ok) <- relocated_specs(base)
+    return ok ? length(xs) + base + at : 0
+}
+
+[test(description = "an inscope destructure after an early return compiles in a function with an argument named at")]
+def test_destructure_after_early_return(t : T?) {
+    t |> equal(relocated_destructure(10, 100), 111)
+    t |> equal(relocated_destructure(-1, 100), -1)
+    t |> equal(relocated_destructure(0, 100), 0)
+}
+
+[test(description = "a destructure pattern may itself name a variable at")]
+def test_destructure_names_at(t : T?) {
+    let (q, at, x, y) = (1, 2, 3, 4)
+    t |> equal(q + at * 10 + x * 100 + y * 1000, 4321)
+}
