@@ -738,7 +738,8 @@ def public sf2_create_c_voice(sf2 : SF2File;   // nolint:STYLE037,STYLE038 - one
     out_atten_state.base_atten_cb = atten_raw
     out_atten_state.velocity = velocity
     out_atten_state.key = note
-    out_atten_state.atten_mods <- sf2_collect_atten_modulators(*izone, global_izone, pzone, global_pzone)
+    var mods = sf2_collect_atten_modulators(*izone, global_izone, pzone, global_pzone)
+    out_atten_state.atten_mods <- mods
 
     // ─── Apply modulators ───
     // Compute modulator offsets from instrument zone, global instrument zone,

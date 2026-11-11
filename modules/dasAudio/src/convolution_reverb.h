@@ -508,6 +508,11 @@ void conv_reverb_init(ConvolutionReverb * rev, uint32_t sampleRate, float decayT
     // ir_length (negative -> huge via unsigned cast). Clamp once so every consumer sees it.
     if (decayTime < 0.01f) decayTime = 0.01f;
     rev->decayTime = decayTime;
+    // Floor both lowpass frequencies at 1 Hz: logf() of a non-positive
+    // one below gives -inf/NaN that seeds the whole IR, and a lowpass
+    // under 1 Hz passes nothing audible, so the floor costs nothing.
+    if (lpFreqStart < 1.0f) lpFreqStart = 1.0f;
+    if (lpFreqEnd < 1.0f) lpFreqEnd = 1.0f;
     rev->lpFreqStart = lpFreqStart;
     rev->lpFreqEnd = lpFreqEnd;
     rev->fadeIn = fadeIn;

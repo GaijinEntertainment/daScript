@@ -398,6 +398,51 @@ def private test_loop_mode_1(t : T?) {
     t |> success(cv.position < 200.0lf)
 }
 
+def private render_stereo_loop_voice(loop_end_r : int) : ma_sf2_voice {
+    var sample_data : array<int16>
+    sample_data |> resize(1000)
+    for (i in range(1000)) {
+        sample_data[i] = int16(sin(float(i) * 0.1) * 16000.0)
+    }
+    var cv : ma_sf2_voice
+    ma_sf2_voice_init(unsafe(addr(cv)), 48000.0)
+    cv.stereo = 1
+    cv.sample_start = 0
+    cv.sample_end = 500
+    cv.loop_start = 100
+    cv.loop_end = 200
+    cv.sample_start_r = 500
+    cv.sample_end_r = 1000
+    cv.loop_start_r = 600
+    cv.loop_end_r = loop_end_r
+    cv.loop_mode = 1
+    cv.phase_inc = 1.0lf
+    cv.attenuation = 1.0
+    cv.vol_env.stage = 4 // sustain
+    cv.vol_env.level = 1.0
+    cv.vol_env.sustain_level = 1.0
+    cv.vol_env.release_sec = 0.1
+    var output : array<float>
+    output |> resize(1600)
+    unsafe {
+        ma_sf2_voice_render(addr(cv), addr(sample_data[0]), length(sample_data),
+                            addr(output[0]), 0, 800)
+    }
+    return cv
+}
+
+[test(description = "a stereo voice loops only when both channels have a loop region, so a zero-length right loop plays through to the sample end instead of dividing by zero")]
+def test_stereo_loop_needs_both_channels(t : T?) {
+    t |> run("both loop regions valid: the voice loops continuously") <| @(t : T?) {
+        let cv = render_stereo_loop_voice(700)
+        t |> success(cv.finished == 0)
+    }
+    t |> run("right loop region empty: the voice does not loop and finishes") <| @(t : T?) {
+        let cv = render_stereo_loop_voice(600)
+        t |> success(cv.finished != 0)
+    }
+}
+
 [test(description = "loop mode 0 ends the voice at the sample end and loop mode 1 loops it")]
 def test_loop_modes(t : T?) {
     t |> run("loop mode 0: voice finishes at sample end") <| @(t : T?) {

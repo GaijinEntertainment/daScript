@@ -208,3 +208,77 @@ def resume_preserves_exact_ordinary_sequence_without_replaying_exempt_pcm(t : T?
         stop(normal, 0.0)
     }
 }
+
+def private status_state(box : SeqBox?) : AudioChannelState {
+    var state = AudioChannelState.playing
+    box |> read() $(sample : AudioChannelStatus) { state = sample.state }
+    return state
+}
+
+[test(description = "Stopping a channel that is paused ends it and publishes the stopped state instead of leaving it paused forever.", timeout = 1200)]
+def stopping_a_paused_channel_ends_it(t : T?) {
+    with_output_probe() $(_box) {
+        var status = seq_box_create()
+        var samples <- constant_pcm(0.3)
+        let sid = play_sound_loop_from_pcm(MA_SAMPLE_RATE, 1, samples)
+        set_status_update(sid, status)
+        sleep(100u)
+        set_pause(sid, true, 0.0); sleep(100u)
+        t |> equal(status_state(status), AudioChannelState.paused)
+        stop(sid, 0.0); sleep(100u)
+        t |> equal(status_state(status), AudioChannelState.stopped,
+                   "the stopped channel is removed even though it was paused")
+        status |> seq_box_release
+    }
+}
+
+[test(description = "A volume change or an ignore-global-volume change sent to a stopping channel is dropped, so the channel still fades out and ends.", timeout = 1200)]
+def volume_commands_do_not_revive_a_stopping_channel(t : T?) {
+    with_output_probe() $(box) {
+        var status = seq_box_create()
+        var samples <- constant_pcm(0.3)
+        let sid = play_sound_loop_from_pcm(MA_SAMPLE_RATE, 1, samples)
+        set_status_update(sid, status)
+        sleep(100u); t |> success(observe_output(box).peak > 0.2)
+        batch() $ {
+            stop(sid, 0.05)
+            set_volume(sid, 1.0, 0.0)
+            set_ignore_global_volume(sid, true)
+        }
+        sleep(400u)
+        t |> equal(status_state(status), AudioChannelState.stopped,
+                   "the late volume commands never lift the fade-out")
+        unsafe(invoke_in_context(mixer_context(), "capture_reset"))
+        sleep(100u); t |> equal(observe_output(box).peak, 0.0)
+        status |> seq_box_release
+    }
+}
+
+def private far_attenuation() : Attenuation =>
+    Attenuation(A = 0., B = 0., C = 0.1, D = 0., E = 0., F = 1.)
+
+def private steady_peak_after(box : SeqBox?; command : block<() : void>) : float {
+    unsafe(invoke_in_context(mixer_context(), "capture_reset"))
+    sleep(100u)
+    let steady = observe_output(box).peak
+    unsafe(invoke_in_context(mixer_context(), "capture_reset"))
+    invoke(command)
+    sleep(100u)
+    let after = observe_output(box).peak
+    return after / steady
+}
+
+[test(description = "A volume or ignore-global-volume command sent to a distant 3D channel leaves its distance-attenuated level alone instead of spiking it to full volume for a callback.", timeout = 1200)]
+def volume_commands_keep_the_3d_attenuation(t : T?) {
+    with_output_probe() $(box) {
+        var samples <- constant_pcm(0.5)
+        let sid = play_3d_sound_loop_from_pcm(float3(40., 0., 0.), far_attenuation(),
+                                              MA_SAMPLE_RATE, 1, samples)
+        sleep(200u)
+        let by_volume = steady_peak_after(box) $ { set_volume(sid, 1.0, 0.0) }
+        t |> success(by_volume < 1.5, "set_volume spiked the attenuated channel: {by_volume}x")
+        let by_flag = steady_peak_after(box) $ { set_ignore_global_volume(sid, true) }
+        t |> success(by_flag < 1.5, "ignore_global_volume spiked the channel: {by_flag}x")
+        stop(sid, 0.0)
+    }
+}
