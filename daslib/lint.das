@@ -1627,7 +1627,8 @@ class LintVisitor : AstVisitor {
         for (w in frame.writes) {
             continue if (key_exists(reported, w.slot))
             for (m in frame.mentions) {
-                continue if (m.slot == w.slot || m.v != w.v || lint030_passed_by_ref(frame.call, m.slot, m.v))
+                let by_ref = lint030_passed_by_ref(frame.call, m.slot, m.v)
+                continue if (m.slot == w.slot || m.v != w.v || by_ref)
                 lint_error("LINT030: argument {m.slot + 1} reads `{m.v.name}` while the call `{w.callee}(...)` in argument {w.slot + 1} writes it by reference - the order arguments are evaluated in is not defined, so the read sees the value before or after the write by the compiler's choice; run the writing call as a statement of its own first", frame.call.at)
                 reported |> insert(w.slot)
                 break
