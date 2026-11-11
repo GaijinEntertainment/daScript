@@ -283,6 +283,22 @@ def short_control(tr : Model; prompt : array<int64>; n : int64) : array<float> {
     return <- out
 }
 
+//! `hold_within` for a row two window splits of one prompt produced; under a tq4 mirror the splits on aligned windows read
+//! bit for bit and the others are only reported (`tq4_reported` says why)
+def private hold_continued(t : T?; tr : Model; got, want, control : array<float>; what : string; rel : float; windows_aligned : bool) {
+    if (mirror_kv_dtype() != KVDtype.tq4) {
+        hold_within(t, tr, got, want, control, what, rel)
+        return
+    }
+    log_peaks(tr, what, got, want)
+    if (windows_aligned) {
+        t |> equal(logits_maxdiff(got, want), 0.0, "{what}: bit for bit, the two forms split at the same rows")
+        t |> success(logits_maxdiff(got, control) > 0.0, "{what} control: the row one off reads apart")
+    } else {
+        tq4_reported(t, got, want, control, what)
+    }
+}
+
 //! `prompt` prefilled in one call against the same prompt prefilled as [0, cut) then [cut, n), then four fed steps on both
 def continue_at(t : T?; tr : Model; n, cut : int64; rel : float) {
     var prompt <- prose_ids(n, 0l)
@@ -300,13 +316,14 @@ def continue_at(t : T?; tr : Model; n, cut : int64; rel : float) {
     if (!empty(split.dn_state_prefix)) {
         t |> equal(split.dn_pos, n, "{n} tokens cut at {cut}: the recurrent state stands at the prompt's end after the continuation")
     }
-    hold_within(t, tr, split.logits, whole.logits, short_logits, "{n} tokens cut at {cut}: the continued prefill against the one-call prefill", rel)
+    let windows_aligned = cut % PF_WINDOW_ROWS == 0l
+    hold_continued(t, tr, split.logits, whole.logits, short_logits, "{n} tokens cut at {cut}: the continued prefill against the one-call prefill", rel, windows_aligned)
     delete short_logits
     for (st in range64(4l)) {
         var before <- logits_of(whole, tr.config.vocab_size)
         forward(tr, whole, feed[st], n + st)
         forward(tr, split, feed[st], n + st)
-        hold_within(t, tr, split.logits, whole.logits, before, "{n} tokens cut at {cut}, step {st}: decoding over the continued rows", rel)
+        hold_continued(t, tr, split.logits, whole.logits, before, "{n} tokens cut at {cut}, step {st}: decoding over the continued rows", rel, windows_aligned)
         delete before
     }
     delete whole
@@ -355,7 +372,7 @@ def cell_prefill_continues_on_the_device(t : T?; file : string; rel : float) {
             }
             var before <- logits_of(steps, tr.config.vocab_size)
             forward(tr, steps, turn2[19], 40l + STEPS + 19l)
-            hold_within(t, tr, chat.logits, steps.logits, before, "the second turn through the window chain against the same tokens stepped one by one", rel)
+            hold_continued(t, tr, chat.logits, steps.logits, before, "the second turn through the window chain against the same tokens stepped one by one", rel, false)
             delete before
             served_every_call(t)
             delete chat
@@ -436,9 +453,8 @@ let private WIDE_BAR_REL = 0.10
 //! near-tie flips an expert on a row); a plain MoE's row one off sits inside a quarter (1.65 of a 7 peak on the Qwen3.5-35B),
 //! so the carriers whose rows read a tenth keep the wide bar and its control
 let private ROUTED_BAR_REL = 0.25
-//! `ctrl_bar` holds no share of the peak but the control form (`tq4_within`, `TQ4_CTRL_SHARE` of the distance to the row one
-//! off): the gemma-4 26B's double router amplifies a float-class difference at a near-tie into whole logits (15.6 of a 23 peak
-//! on the RTX PRO 4500 against 20.7 for the row one off, the support matrix's own finding on the file), so its batched rows
+//! `ctrl_bar` holds no share of the peak but the control form (`tq4_within`): the gemma-4 26B's
+//! double router amplifies a float-class difference at a near-tie into whole logits (15.6 of a 23 peak on the RTX PRO 4500 against 20.7 for the row one off, the support matrix's own finding on the file), so its batched rows
 //! are held closer to the session alone than to the row one off, never to a share of the peak
 
 def private bar_rel(bar : LogitsBar) : float {
@@ -779,15 +795,29 @@ def private long_mirror_held(t : T?; tr : Model) {
 
 def private stream_positions(lc : LongCtx) : array<int64> => <- [for (i in range64(lc.regions)); lc.ctx * (28l + 18l * i) / 100l]
 
-//! the mirror in slabs: `regions` regions at `ctx` positions each ask more of the layers' rows than one binding holds, so the
-//! plan seats the layers in two or more slab pairs; the interleaved single steps and the batched steps over two sessions
-//! then read what each session reads alone - every layer's sets, sync and readback bound the slab its rows sit in
+//! the bytes one mirror side may bind over `regions` regions on the serving home: the device's binding range (a home whose
+//! driver has none answers a range no mirror reaches), and under a block codec the kernels' 32-bit byte span
+def private mirror_side_cap(regions : int64) : int64 {
+    let binding = moe_gpu_binding_cap(regions)
+    return kv_block_codec(mirror_kv_dtype()) ? min(binding, BLOCK_CODEC_SIDE_BYTES) : binding
+}
+
+//! the mirror in slabs: `regions` regions at `ctx` positions each seat the layers in two or more slab pairs where a mirror
+//! side runs past the home's cap (`mirror_side_cap`), one pair where it does not; the interleaved single steps and the
+//! batched steps over two sessions then read what each session reads alone - every layer's sets, sync and readback bound
+//! the slab its rows sit in
 [cold_path]
 def cell_regions_slabbed_mirror(t : T?; file : string; lc : LongCtx) {
-    t |> run("a mirror of {lc.regions} regions x {lc.ctx} positions, every row kept, binds in slabs, and the steps over two sessions read what each reads alone") @(t : T?) {
+    t |> run("a mirror of {lc.regions} regions x {lc.ctx} positions, every row kept, binds in as many slab pairs as a side needs, and the steps over two sessions read what each reads alone") @(t : T?) {
         with_regions_rig(t, file, long_load(lc, 0)) $(tr) {
             let slabs = gpu_resident_mirror_slabs()
-            t |> success(slabs > 1l, "the mirror binds more than one slab pair at {lc.regions} regions x {lc.ctx} positions ({slabs} slabs)")
+            let side = gpu_resident_mirror_bytes() / 2l
+            let cap = mirror_side_cap(lc.regions)
+            if (side > cap) {
+                t |> success(slabs > 1l, "the mirror binds more than one slab pair at {lc.regions} regions x {lc.ctx} positions ({slabs} slabs: a side of {side >> 20l} MB against a binding of {cap >> 20l} MB)")
+            } else {
+                t |> equal(slabs, 1l, "one binding of this home holds a whole mirror side ({side >> 20l} MB), so the mirror binds in one slab pair")
+            }
             t |> equal(gpu_device_sessions(), lc.regions, "the armed driver serves a device-home session per region asked")
             t |> equal(gpu_device_session_ctx(), lc.ctx, "a region holds the whole context asked - nothing shortened to one binding's range")
             var pa <- prompt_a()

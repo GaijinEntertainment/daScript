@@ -335,7 +335,7 @@ def private tq4_bar_fails(g, c, off : array<float>) : int {
 
 //! the resident rigs' row bars on synthetic rows, run on a probe handle: a NaN in the device row or the reference row reds
 //! `rows_within_control` and `tq4_within`, the clean rows hold both (the control)
-[test(description = "On synthetic rows rows_within_control and tq4_within red a NaN in the device or reference row, also with no control row, while clean rows hold; the tq4 share bound passes 0.8 and reds 0.9 of the one-off distance")]
+[test(description = "On synthetic rows rows_within_control and tq4_within red a NaN in the device or reference row, also with no control row, while clean rows hold; the tq4 bound passes 0.9 and reds 1.1 of the row one off's distance")]
 def test_row_bars_red_a_nan(t : T?) {
     pin_window_rows()
     let cpu <- [1.0, -4.0, 2.0, 0.5]
@@ -349,17 +349,17 @@ def test_row_bars_red_a_nan(t : T?) {
     t |> equal(rows_bar_fails(gpu, cpu, off), 0, "control: rows_within_control holds a device row within the bar, its row one off past it")
     t |> success(rows_bar_fails(nan_gpu, cpu, off) > 0, "rows_within_control reds a NaN in the device row")
     t |> success(rows_bar_fails(gpu, nan_cpu, off) > 0, "rows_within_control reds a NaN in the reference row")
-    t |> equal(tq4_bar_fails(gpu, cpu, off), 0, "control: tq4_within holds a device row nearer the reference than its share of the row one off")
+    t |> equal(tq4_bar_fails(gpu, cpu, off), 0, "control: tq4_within holds a device row nearer the reference than the row one off")
     t |> success(tq4_bar_fails(nan_gpu, cpu, off) > 0, "tq4_within reds a NaN in the device row")
     t |> success(tq4_bar_fails(gpu, nan_cpu, off) > 0, "tq4_within reds a NaN in the reference row")
-    //! the share's bound has teeth at TQ4_CTRL_SHARE: the row one off sits 4.0 from the reference, so a device row 0.8 of that
-    //! away holds and one 0.9 of it away reds
+    // the bound has teeth at the control: the row one off sits 4.0 from the reference and from both device rows, so a device
+    // row 0.9 of that from the reference holds and one 1.1 of it away reds
     var near := cpu
-    near[0] += 0.8 * 4.0
+    near[0] += 0.9 * 4.0
     var far := cpu
-    far[0] += 0.9 * 4.0
-    t |> equal(tq4_bar_fails(near, cpu, off), 0, "control: tq4_within holds a device row at 0.8 of the one-off row's distance")
-    t |> success(tq4_bar_fails(far, cpu, off) > 0, "tq4_within reds a device row at 0.9 of the one-off row's distance - past TQ4_CTRL_SHARE")
+    far[0] += 1.1 * 4.0
+    t |> equal(tq4_bar_fails(near, cpu, off), 0, "control: tq4_within holds a device row at 0.9 of the row one off's distance")
+    t |> success(tq4_bar_fails(far, cpu, off) > 0, "tq4_within reds a device row at 1.1 of the row one off's distance - no nearer than that row")
     //! a row with no control row (the hybrid carry's row 0): the NaN reference still reds through the bar alone
     var gr <- [ <- clone_to_move(gpu)]
     var cr <- [ <- clone_to_move(nan_cpu)]
