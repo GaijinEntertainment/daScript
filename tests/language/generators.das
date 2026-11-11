@@ -839,3 +839,26 @@ def test_co_await(t : T?) {
         t |> equal(g_main_log[3], "main_end")
     }
 }
+
+def unsafe_block_locals(n : int) {
+    return <- generator<int> {
+        for (index in range(n)) {
+            unsafe {
+                var local = index * 10
+                yield local
+                local ++
+                yield local
+            }
+        }
+        return false
+    }
+}
+
+[test(description = "a local declared in an unsafe block of a generator keeps its value across a yield")]
+def test_generator_unsafe_block_local(t : T?) {
+    let got <- [for (x in unsafe_block_locals(3)); x]
+    t |> equal(length(got), 6)
+    for (i, x in range(6), got) {
+        t |> equal(x, (i / 2) * 10 + i % 2)
+    }
+}

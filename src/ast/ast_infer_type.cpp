@@ -760,7 +760,7 @@ namespace das {
         oneReturn = nullptr;
         returnCount = 0;
         canFoldResult = true;
-        unsafeDepth = 0;
+        unsafeDepth = f->unsafeGenerator ? 1 : 0;
         consumeDepth = 0;
         func = f;
         func->hasReturn = false;
@@ -1065,6 +1065,16 @@ namespace das {
     }
     ExpressionPtr InferTypes::visit(ExprUnsafe *expr) {
         unsafeDepth--;
+        if (func && func->generator && blocks.empty() && expr->body->rtti_isBlock()) {
+            auto body = static_cast<ExprBlock *>(expr->body);
+            if (!body->isClosure && body->finalList.empty() && scopes.size()) {
+                func->unsafeGenerator = true;
+                body->isCollapseable = true;
+                scopes.back()->needCollapse = true;
+                reportAstChanged();
+                return body;
+            }
+        }
         // an expression-position wrapper (macro-made) carries its body's type; the
         // parser's statement-position `unsafe { }` wraps a statement block and stays untyped
         if (expr->body->type)

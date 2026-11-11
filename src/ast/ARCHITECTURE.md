@@ -236,3 +236,19 @@ could invalidate, and the arms never both run. A lookup in the condition does no
 one in an arm, and the arms do not collide with each other; all three still collide with the
 rest of the statement. A user-defined ternary operator is a call that evaluates all three
 operands, and gets no such exemption.
+
+## An `unsafe` block in a generator (`ast_infer_type.cpp`) {#generator-unsafe-block}
+
+A generator body is lowered in place during inference: a local moves into the generator's
+struct only once it is a statement of the body's own block, and a `yield` leaves a resume
+label that the entry `goto` reaches only at that level. Nested blocks get there because
+inference collapses them into their parent, pass by pass.
+
+`unsafe { }` is a wrapper around a block, not a block, and collapse does not see through it.
+Left in place, a local declared inside stays a stack local across a `yield`, and a `yield`
+inside leaves its label where the entry `goto` cannot reach. So inference replaces a
+statement-position `unsafe { }` in a generator with its block and sets
+`Function::unsafeGenerator`; every later pass visits that function with unsafe allowed. The
+price is the scope: once a generator has one `unsafe` block, its whole body is unsafe-permitted.
+An expression-position `unsafe(...)` stays as written.
+
