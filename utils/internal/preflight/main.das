@@ -473,8 +473,7 @@ def gate_review_md_tests(ctx : PreflightCtx) : GateResult {
     return GateResult(name = "review-md-tests", status = GateStatus.Pass, seconds = seconds_since(t0))
 }
 
-//! every generated test index CI's `check_tests_index` verifies, by
-//! running that target: the list of indexes lives in one place
+//! runs CMake's `check_tests_index`, the one place the list of indexes lives
 def gate_tests_index(ctx : PreflightCtx) : GateResult {
     let t0 = ref_time_ticks()
     let name = "tests-index"
