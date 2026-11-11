@@ -100,7 +100,7 @@ Task-specific instructions are split into skill files under `skills/`. You MUST 
 | `skills/das_formatting.md` | Creating or modifying any `.das` file |
 | `skills/comment_style_hygiene.md` | Writing or reviewing comments, names, or local code shape in ANY language |
 | `skills/writing_tests.md` | Writing or editing any dastest test - `[test(description = "...", timeout = N, standalone = "why")]`, the assertion API |
-| `skills/internal/tests_in_repo.md` | Adding/moving tests **in this repo** - WHERE a new `[test]` goes (its topic's file, else the folder's `uncategorized.das`; never a new file), the description every test carries, `tests/REVIEW.das` as the gate and `tests/README.md` as the generated index, AOT registration, the `.das_test` gating filter, deep-engine model tests, the `tests/spirv` emitter suite's local `spirv-val` run |
+| `skills/internal/tests_in_repo.md` | Adding/moving tests **in this repo** - WHERE a new `[test]` goes (its topic's file, else the folder's `uncategorized.das`; never a new file), the description every test carries, `tests/REVIEW.das` as the gate, AOT registration, the `.das_test` gating filter, deep-engine model tests, the `tests/spirv` emitter suite's local `spirv-val` run |
 | `skills/internal/writing_cpp_tests.md` | Writing or editing C++ tests under `tests-cpp/` |
 | `skills/internal/documentation_rst.md` | Editing RST in `doc/source/`, `//!` doc-comments in `daslib/*.das`, tutorial RST pages |
 | `skills/internal/tutorials.md` | Anything that looks like a tutorial - they live under `/tutorials/<area>/`, NEVER `modules/<X>/tutorial/` |

@@ -8,10 +8,7 @@ its gate names every test file a CI lane must run.
 in `uncategorized.das`, never in a new file, with a `description`, and with `timeout = 1200` when
 the test builds, spawns a child daslang or runs the tuner** - the shape rules are
 `tests/REVIEW.md` (repo root) and `tests/ARCHITECTURE.md`; `REVIEW.das` (beside this file) applies
-them, and `TESTS.md` (beside this file) is the generated index (`daslang
-utils/internal/test-audit/main.das -- --root modules/dasLLVM/tests --index
-modules/dasLLVM/tests/TESTS.md --readme`; the `check_tests_index` target verifies it). `README.md`
-beside this file is prose, not the index.
+them.
 
 **A diff that adds a `.das` file here that is not itself a test - a program root a test builds or
 runs through a child daslang, a client, a module a fixture requires - starts its name with `_`** -

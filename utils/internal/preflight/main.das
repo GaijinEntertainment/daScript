@@ -473,26 +473,6 @@ def gate_review_md_tests(ctx : PreflightCtx) : GateResult {
     return GateResult(name = "review-md-tests", status = GateStatus.Pass, seconds = seconds_since(t0))
 }
 
-//! runs CMake's `check_tests_index`, which owns the index list
-def gate_tests_index(ctx : PreflightCtx) : GateResult {
-    let t0 = ref_time_ticks()
-    let name = "tests-index"
-    if (empty(ctx.changed_das) && empty(ctx.changed_md)) {
-        return GateResult(name = name, status = GateStatus.Skip, seconds = seconds_since(t0),
-            detail = "no .das or .md changed vs {ctx.base}")
-    }
-    if (!fexist(path_join(ctx.build_dir, "CMakeCache.txt"))) {
-        return GateResult(name = name, status = GateStatus.Skip, seconds = seconds_since(t0),
-            detail = "no configured build at {ctx.build_dir} to run check_tests_index from")
-    }
-    let r = run_argv(["cmake", "--build", ctx.build_dir, "--config", ctx.config,
-        "--target", "check_tests_index"])
-    let stale = ("a generated test index is stale - regenerate the one it names " +
-                 "with utils/internal/test-audit/main.das -- --readme")
-    return GateResult(name = name, status = r.rc == 0 ? GateStatus.Pass : GateStatus.Fail,
-        seconds = seconds_since(t0), detail = r.rc == 0 ? "" : stale, output = r.out)
-}
-
 def gate_md_ascii(ctx : PreflightCtx) : GateResult {
     let t0 = ref_time_ticks()
     let changed = run_argv(["git", "diff", "--name-only", "{ctx.base}..HEAD"])
@@ -1572,8 +1552,6 @@ def gate_table() : array<GateInfo> {
         GateInfo(name = "hash-refs", tier = "fast", doc = "no bare #N in branch commit messages that GitHub would mislink - ledger cites spell out or backtick"),
         GateInfo(name = "review-md", tier = "fast", doc = "REVIEW.das gates of every folder the diff touches (utils/internal/review-md; CI's extended_checks step runs every gate)"),
         GateInfo(name = "review-md-tests", tier = "fast", doc = "the review-md discovery suites (walker fixtures, make-pr gate tests, preflight's own) when the diff touches a REVIEW.das or those tools (mirrors CI's extended_checks step)"),
-        GateInfo(name = "tests-index", tier = "fast",
-            doc = "every generated test index matches its tree (CI's check_tests_index target)"),
         GateInfo(name = "md-ascii", tier = "fast", doc = "ci/fix_md_ascii.py --check when the diff touches .md (mirrors CI's Markdown ASCII gate in extended_checks)"),
         GateInfo(name = "ast-verify", tier = "fast",
             doc = ("daslang -dry-run --ast-verify-batch on changed .das (parallel, 600s/file;"
@@ -1843,8 +1821,6 @@ def main() : int { // nolint:STYLE037,STYLE038 — the gate loop + CLI surface; 
                 r <- gate_review_md(ctx)
             } elif (info.name == "review-md-tests") {
                 r <- gate_review_md_tests(ctx)
-            } elif (info.name == "tests-index") {
-                r <- gate_tests_index(ctx)
             } elif (info.name == "md-ascii") {
                 r <- gate_md_ascii(ctx)
             } elif (info.name == "ast-verify") {

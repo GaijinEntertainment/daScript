@@ -29,8 +29,6 @@ mounts, and the sample fails to load with `missing prerequisite`.
 topic or in the game's `uncategorized.das`, never in a new file, with a `description`, and with
 `timeout = 1200` when the test spawns a child or waits on a peer** - the shape rules are
 `tests/REVIEW.md` (repo root) and `tests/ARCHITECTURE.md`; `REVIEW.das` (beside this file)
-applies them tests-only, since each game's sources sit beside its tests, and `TESTS.md` (beside
-this file) is the generated index (`daslang utils/internal/test-audit/main.das -- --root
-examples/games --tests-only --index examples/games/TESTS.md --readme`; the `check_tests_index`
-target verifies it). A game with a playground copy carries the same test files in both.
+applies them tests-only, since each game's sources sit beside its tests. A game with a
+playground copy carries the same test files in both.
 

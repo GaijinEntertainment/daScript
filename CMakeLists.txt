@@ -2305,8 +2305,6 @@ install(DIRECTORY ${PROJECT_SOURCE_DIR}/examples/
     PATTERN "REVIEW.md" EXCLUDE
     PATTERN "REVIEW.das" EXCLUDE
     PATTERN "ARCHITECTURE.md" EXCLUDE
-    # the generated test index names its repo-only generator
-    PATTERN "TESTS.md" EXCLUDE
     # soundfonts are fetched locally and carry unclear redistribution terms —
     # they must never ride into a release bundle
     PATTERN "*.sf2" EXCLUDE

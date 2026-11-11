@@ -126,17 +126,9 @@ root's `REVIEW.das` (`daslang tests/REVIEW.das`, `daslang utils/REVIEW.das`,
 `daslang dastest/tests/REVIEW.das`, `daslang modules/<module>/tests/REVIEW.das` for dasLLVM,
 dasVulkan, dasImgui and dasLLAMA, `daslang modules/REVIEW.das` for the module test folders with no
 checklist of their own, `daslang examples/games/REVIEW.das`; `tests/REVIEW.das -- --root
-<folder>` scans one folder); the index is generated from the descriptions by `daslang
-utils/internal/test-audit/main.das -- --readme` (`tests/README.md`; `--root utils --tests-only
---index utils/TESTS.md`, `--root dastest/tests`, `--root modules/dasLLVM/tests --index
-modules/dasLLVM/tests/TESTS.md`, `--root modules/dasVulkan/tests`, `--root
-modules/dasVulkan/tutorials --tests-only --index modules/dasVulkan/tutorials/TESTS.md`, `--root
-modules/dasImgui/tests --tests-only --index modules/dasImgui/tests/TESTS.md`, one `--root` per
-folder `modules/REVIEW.das` names into `modules/TESTS.md`, `--root examples/games
---tests-only --index examples/games/TESTS.md` and `--root modules/dasLLAMA/tests --tests-only
---index modules/dasLLAMA/tests/TESTS.md` for the other roots; `--root` repeats, and several
-roots share one index), and `--verify` is the CI check
-(`check_tests_index`) - regenerate it in the same change that adds, moves or describes a test.
+<folder>` scans one folder). No index of the tests is kept in the tree: a test's `description`
+is read in its file and under its `--- FAIL` line, and `daslang
+utils/internal/test-audit/main.das -- --root <folder>` prints how a tree packs.
 
 ## Running the repo suite
 

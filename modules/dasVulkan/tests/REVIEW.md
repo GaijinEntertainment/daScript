@@ -8,11 +8,7 @@ topic or in the folder's uncategorized file (`tests/ARCHITECTURE.md` names it), 
 file, with a `description`, and with `timeout = 1200` when the test builds a pipeline from source
 or spawns a child; a tutorial's pixel oracle stays the one test beside its tutorial, marked
 `standalone`** - the shape rules are `tests/REVIEW.md` (repo root) and `tests/ARCHITECTURE.md`;
-`REVIEW.das` (beside this file) applies them here and, tests-only, to `../tutorials/`. The
-generated indexes are `README.md` (beside this file) and `../tutorials/TESTS.md` (`daslang
-utils/internal/test-audit/main.das -- --root modules/dasVulkan/tests --readme`, and `--root
-modules/dasVulkan/tutorials --tests-only --index modules/dasVulkan/tutorials/TESTS.md --readme`);
-the `check_tests_index` target verifies both.
+`REVIEW.das` (beside this file) applies them here and, tests-only, to `../tutorials/`.
 
 **A diff that adds a `.das` file under `integration/` that is not itself a test - a shader
 module or a scene helper the suites require - starts its name with `_`** - dastest skips a `_`

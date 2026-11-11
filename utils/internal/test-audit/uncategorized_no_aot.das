@@ -32,8 +32,8 @@ def private make_tree(t : T?) : string {
     return tree
 }
 
-[test(description = "the audit counts a tree's run files by class, --readme writes the index from the descriptions, and --verify exits 0 on a matching index (LF or CRLF) and 1 on an edited one", timeout = 1200)]
-def test_audit(tt : T?) {  // nolint:STYLE038 - one arm per tool flag
+[test(description = "the audit counts a tree's run files by class and its undescribed tests, --tests-only leaves a tool's sources and an installed package out, and several roots share one audit", timeout = 1200)]
+def test_audit(tt : T?) {
     let tree = make_tree(tt)
 
     tt |> run("the audit reports files, suites, fixtures and the undescribed count") <| @(t : T?) {
@@ -46,34 +46,7 @@ def test_audit(tt : T?) {  // nolint:STYLE038 - one arm per tool flag
                      "expected one undescribed test, got:\n{output}")
     }
 
-    tt |> run("--readme writes the index and --verify accepts it") <| @(t : T?) {
-        var output : string
-        let wrote = run_audit(["--root", tree, "--readme"], output)
-        t |> equal(wrote, 0, output)
-        let index = fread(path_join(tree, "README.md"))
-        t |> success(index |> contains("## alpha/"), "expected the folder section, got:\n{index}")
-        t |> success(index |> contains("- `test_sum` - one and one make two"),
-                     "expected the described test, got:\n{index}")
-        t |> success(index |> contains("- `test_undescribed` - *(no description)*"),
-                     "expected the undescribed marker, got:\n{index}")
-        t |> success(index |> contains("compile-fail fixture: a string is not an int"),
-                     "expected the fixture's claim, got:\n{index}")
-        t |> success(!(index |> contains("_helper")), "a _ file is not a run file:\n{index}")
-        var verifyOutput : string
-        t |> equal(run_audit(["--root", tree, "--verify"], verifyOutput), 0, verifyOutput)
-    }
-
-    tt |> run("--verify accepts the index checked out with CRLF line endings") <| @(t : T?) {
-        let indexPath = path_join(tree, "README.md")
-        let lf = fread(indexPath)
-        t |> success(fwrite(indexPath, lf |> replace("\n", "\r\n")))
-        var output : string
-        t |> equal(run_audit(["--root", tree, "--verify"], output), 0, output)
-        t |> success(fwrite(indexPath, lf))
-    }
-
-    tt |> run("--tests-only leaves a tool's sources out and --index puts the index " +
-        "elsewhere") <| @(t : T?) {
+    tt |> run("--tests-only leaves a tool's sources out") <| @(t : T?) {
         let tool = path_join(test_temp_dir(), "audit_tool_tree")
         mkdir_rec(path_join(tool, "lint/tests"))
         t |> success(fwrite(path_join(tool, "lint/main.das"),
@@ -98,41 +71,13 @@ def test_audit(tt : T?) {  // nolint:STYLE038 - one arm per tool flag
         t |> equal(run_audit(["--root", tool, "--tests-only"], output), 0, output)
         t |> success(output |> contains("files: 1  (suites 1,"),
                      "the installed package's test is not counted, got:\n{output}")
-        let index = path_join(tool, "TESTS.md")
-        t |> equal(run_audit(["--root", tool, "--tests-only", "--index", index, "--readme"],
-                             output), 0, output)
-        t |> success(fexist(index), "expected the index at --index, got:\n{output}")
-        t |> success(!fexist(path_join(tool, "README.md")), "no README.md beside a --index")
-        t |> success(!(fread(index) |> contains("`main.das`")), "the source is not indexed")
-        t |> equal(run_audit(["--root", tool, "--tests-only", "--index", index, "--verify"],
-                             output), 0, output)
     }
 
-    tt |> run("several --root flags share one index, each root a section of its " +
-        "own") <| @(t : T?) {
-        let index = path_join(test_temp_dir(), "roots_TESTS.md")
-        let alpha = path_join(tree, "alpha")
-        let beta = path_join(tree, "beta")
+    tt |> run("several --root flags share one audit") <| @(t : T?) {
         var output : string
-        t |> equal(run_audit(["--root", alpha, "--root", beta, "--index", index, "--readme"],
-                             output), 0, output)
-        let text = fread(index)
-        t |> success(text |> contains("alpha/\n") && text |> contains("beta/\n"),
-                     "expected a section per root, got:\n{text}")
-        t |> success(text |> contains("### pairs.das"),
-                     "expected the file named under its root's section, got:\n{text}")
-        t |> equal(run_audit(["--root", alpha, "--root", beta, "--index", index, "--verify"],
-                             output), 0, output)
-        t |> success(output |> contains("matches the census"), output)
-    }
-
-    tt |> run("--verify exits 1 on an index that differs from the census") <| @(t : T?) {
-        let indexPath = path_join(tree, "README.md")
-        t |> success(fwrite(indexPath, fread(indexPath) + "\nhand edit\n"))
-        var output : string
-        let rc = run_audit(["--root", tree, "--verify"], output)
-        t |> equal(rc, 1, output)
-        t |> success(output |> contains("differs from the census"),
-                     "expected the mismatch message, got:\n{output}")
+        let roots <- ["--root", path_join(tree, "alpha"), "--root", path_join(tree, "beta")]
+        t |> equal(run_audit(roots, output), 0, output)
+        t |> success(output |> contains("files: 3  (suites 2, expect fixtures 1, bare scripts 0)"),
+                     "expected both roots counted together, got:\n{output}")
     }
 }

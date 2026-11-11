@@ -6,9 +6,7 @@
 **A diff that adds a `[test]` here puts it in the existing category file for its topic or in
 `uncategorized.das`, never in a new file, with a `description`, and with `timeout = 1200` when
 the test spawns a child dastest** - the shape rules are `tests/REVIEW.md` (repo root) and
-`tests/ARCHITECTURE.md`; `REVIEW.das` (beside this file) applies them, and `README.md` (beside
-this file) is the generated index (`daslang utils/internal/test-audit/main.das -- --root
-dastest/tests --readme`; the `check_tests_index` target verifies it).
+`tests/ARCHITECTURE.md`; `REVIEW.das` (beside this file) applies them.
 
 **A diff that adds a `.das` file here that is not itself a test - a fixture another test runs, or a
 module a fixture requires - starts its name, or the name of a directory on its path under this

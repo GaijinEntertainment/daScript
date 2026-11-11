@@ -57,7 +57,7 @@ def check_test_shape(root : string; cap : int;  // nolint:STYLE037,STYLE038 - fl
         let fullPath = "{root}/{c.path}"
         for (line in c.unparsedAnnotationLines) {
             gate_finding(fullPath, line, "the `[test(` annotation does not close on its " +
-                "line; keep the whole annotation on one line so the index generator can read it")
+                "line; keep the whole annotation on one line so the census can read it")
         }
         if (c.cls == TestFileClass.fixture) {
             if (empty(c.header)) {
