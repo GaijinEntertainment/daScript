@@ -28,7 +28,8 @@ token that stops matching drops its files from the run without a red.
 in a `run.das` suite instead. The per-PR lanes in `../CMakeLists.txt` are the exception: a diff
 adds a file there only when the file is in the `model-free` suite and guards something a PR
 without a pod run can break.** A second list drifts from the runner's tables, and a CMake lane
-has no models.
+has no models. A lane may run such a file interpreted (`FILES`, not `JIT_FILES`), outside the
+`-jit` rule of `REVIEW.md`, only when no cell of the file skips for want of the JIT.
 
 **An `[init]` in a test file here, or in a `_*.das` fixture one requires, calls nothing but
 `allow_cpu_prefill()`; the value a cell needs - a K/V codec, a prompt window, a mirror context,
