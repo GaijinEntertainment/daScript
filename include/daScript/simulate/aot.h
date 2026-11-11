@@ -2395,7 +2395,7 @@ namespace das {
 #endif
 
     struct SimNode_AotInteropBase : SimNode_CallBase {
-        __forceinline SimNode_AotInteropBase() : SimNode_CallBase(LineInfo(),"") {}
+        DAS_API SimNode_AotInteropBase();
         DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override {
             DAS_PROFILE_NODE
             return v_zero();

@@ -8,6 +8,8 @@ namespace das {
 
     AotListBase * AotListBase::head = nullptr;
 
+    SimNode_AotInteropBase::SimNode_AotInteropBase() : SimNode_CallBase(LineInfo(),"") {}
+
     SimNode* AotFactory::operator()(Context& ctx) const
     {
         if (declineReason) {
