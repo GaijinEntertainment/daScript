@@ -14,7 +14,7 @@ require _lambda_vis_mid
 require _private_property_helper
 require _struct_alias_helper
 require _struct_alias_twin // nolint:STYLE030 - its SharedBox is the twin name
-require _struct_alias_facade // nolint:STYLE030 - its typedefs are the use
+require _struct_alias_facade
 
 // `require X as Y` registers the alias for every require form -
 // builtin, daslib, same-directory, path

@@ -3001,7 +3001,9 @@ STYLE030 — entirely-unused ``require``
 ========================================
 
 A non-public ``require X`` where no symbol from ``X`` (or any module it
-re-exports) is referenced anywhere in the file. Remove it. Skipped when ``X``
+re-exports) is referenced anywhere in the file. Remove it. Naming a
+``typedef`` of ``X`` is a reference to ``X``, whatever module the aliased type
+lives in. Skipped when ``X``
 provides any macro or an ``[init]``, when a lifecycle hook is reachable only
 through ``X`` (as for STYLE029), or when ``X`` only re-exports builtins used
 through it. A ``require [group]`` is one unit: it is reported only when no

@@ -251,12 +251,15 @@ namespace das {
         das::vector<das::AnnotationPtr> handles;
         das::vector<das::EnumerationPtr> enums;
         das::vector<das::TypeDeclPtr> aliases;
+        das::vector<Module *> aliasHomes;
         if ( !perspective ) perspective = thisModule.get();
         library.findWithCallback(name, perspective, [&](Module * pm, const string &name, Module * inWhichModule) {
             library.findStructure(structs, pm, name, inWhichModule);
             library.findAnnotation(handles, pm, name, inWhichModule);
             library.findEnum(enums, pm, name, inWhichModule);
+            auto found = aliases.size();
             library.findAlias(aliases, pm, name, inWhichModule);
+            if ( aliases.size()!=found ) aliasHomes.push_back(pm);
         });
         das::vector<das::TypeDeclPtr> distinctAliases;
         for ( auto & alias : aliases ) {
@@ -347,6 +350,12 @@ namespace das {
             if ( aliases.size()==1 ) {
                 auto pTD = new TypeDecl(*aliases.back());
                 pTD->at = at;
+                // src/ast/ARCHITECTURE.md#program-scoped-symbol-state
+                if ( perspective==thisModule.get() ) {
+                    for ( auto home : aliasHomes ) {
+                        if ( home!=perspective ) usedTypedefModules.insert(home);
+                    }
+                }
                 return pTD;
             } else {
                 string candidates = describeCandidates(aliases);

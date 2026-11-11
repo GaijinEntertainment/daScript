@@ -362,7 +362,7 @@ namespace das {
         AstSerializer & serializeModule ( Module & module, bool already_exists );
 
         static constexpr uint32_t getVersion () {
-            return 266;   // 266: a no-argument call through a typedef of a struct in a module not visible directly keeps the typedef's name
+            return 267;   // 267: a program record carries the modules it used through a typedef
         }
 
         void serializeProgram ( ProgramPtr program, ModuleGroup & libGroup ) noexcept;

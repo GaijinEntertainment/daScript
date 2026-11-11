@@ -186,7 +186,18 @@ values still live on the objects: `Variable::stackTop` and `Function::totalStack
 nested compile can run. The JIT's selection - which functions of a program a DLL holds - is a
 third table, `jitSelected`, read through `is_jit_selected` and written through
 `set_jit_selected` / `clear_jit_selection`; `Function::requestJit` is the `[jit]` annotation
-only, an author's request the selection reads and never writes.
+only, an author's request the selection reads and never writes. A fourth table,
+`usedTypedefModules`, holds every other module one of whose typedefs the program's own module
+named: `Program::makeTypeDeclaration` is the one place a type name becomes an alias's type, and
+a constructor call through the alias keeps nothing of the module the alias came from, so that
+is where the alias's module is recorded, and `is_typedef_used` reads it; the module-cache record
+carries the table, since a served program never runs that lookup. The module recorded is the
+one the lookup found the alias in, never the alias type's own module pointer, which a typedef
+restored from the cache does not carry, and two modules declaring the same alias of one type
+are both recorded. A name looked up from
+another module's scope - inside `with (module X)`, written or wrapped around an inlined body -
+records nothing, and neither does an alias of a structure, enumeration or handled type the same
+lookup already found under that name, which resolves as the type itself.
 
 ## The size of a generic instance's argument types (`ast_infer_type_function.cpp`) {#instance-type-size}
 

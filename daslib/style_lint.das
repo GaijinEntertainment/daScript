@@ -4400,6 +4400,9 @@ class StyleLintVisitor : AstVisitor {
     def st029_check_requires(prog : ProgramPtr) : void {
         if (!analyze_requires || this_module == null) return
         let this_name = "{this_module.name}"
+        program_for_each_module(prog) $(mod) {
+            if (is_typedef_used(prog, mod)) st029_note_module(mod)
+        }
         var module_files : table<string>
         let primary = string(this_module.fileName)
         if (!empty(primary)) module_files |> insert(primary)

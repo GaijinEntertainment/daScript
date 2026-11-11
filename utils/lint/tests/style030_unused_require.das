@@ -1,6 +1,7 @@
 //! STYLE030 is reported for: non-public 'require X' that is entirely
 //! unused - no symbol from X (or anything it re-exports) is
-//! referenced.
+//! referenced - and stays silent on a module whose typedef is the
+//! only thing the file names from it.
 options gen2
 options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; splices rewrite them
 options _nolint = "STYLE042"
@@ -29,8 +30,14 @@ require _style030_unused        // genuinely unused source module (FIRES)
 require _style029_direct        // used directly — must NOT fire
 require _style030_finalize_only // lifecycle-hook-only module ([finalize]) — must NOT fire
 require _style030_hook_umbrella // nothing referenced, but its [init] dependency is reached only through it — must NOT fire
+require _style030_alias_target  // the struct both facades alias, used by type — must NOT fire
+require _style030_alias_facade  // only its typedef is named, as a declared type — must NOT fire
+require _style030_alias_ctor_facade // only its typedef is named, as a constructor — must NOT fire
 
 [export]
 def use_them() : int {
-    return style029_direct_value()
+    var declared : Style030Alias
+    declared.x = style029_direct_value()
+    let made = Style030CtorAlias()
+    return declared.x + made.x
 }

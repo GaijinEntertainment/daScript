@@ -4308,6 +4308,7 @@ The AST module provides access to the abstract syntax tree representation of das
 - `function_index` - The slot `function` holds in `program`'s context: `-1` when the program never allocated it, `-2` when the allocation found it unused, its function-table index otherwise.
 - `has_macro_context` - Returns true when `module` has a macro context - it declares a macro (a `[_macro]` function is the smallest) and was compiled with one.
 - `is_jit_selected` - True when `program`'s JIT selected `function` - the DLL the program runs holds it, so a call to it from jitted code goes into the DLL rather than through an interpreter slot.
+- `is_typedef_used` - True when `program`'s own module named a typedef that `module` declares.
 - `is_used` - True when `program`'s symbol-use pass reached `function`.
 - `set_jit_selected` - Marks `function` as selected by `program`'s JIT (`selected` true) or drops it from the selection (false).
 - `this_module` - Returns the main module attached to the current context, throwing an error if RTTI is disabled.

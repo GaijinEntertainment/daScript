@@ -3500,6 +3500,22 @@ namespace das {
         }
 
         ser << program->allRequireDecl;
+        // src/ast/ARCHITECTURE.md#program-scoped-symbol-state
+        uint32_t typedefModules = uint32_t(program->usedTypedefModules.size());
+        ser << typedefModules;
+        if ( ser.writing ) {
+            vector<Module *> mods;
+            mods.reserve(typedefModules);
+            for ( auto mod : program->usedTypedefModules ) mods.push_back(const_cast<Module *>(mod));
+            sort(mods.begin(), mods.end(), [] ( Module * a, Module * b ) { return a->nameHash < b->nameHash; });
+            for ( auto & mod : mods ) ser << mod;
+        } else {
+            for ( uint32_t i = 0; i != typedefModules; ++i ) {
+                Module * mod = nullptr;
+                ser << mod;
+                if ( mod ) program->usedTypedefModules.insert(mod);
+            }
+        }
         // the node table is per program
         clearNodeIds();
     }

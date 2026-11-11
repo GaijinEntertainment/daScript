@@ -1749,6 +1749,8 @@ namespace das
         das_map<CompilationError,int>   expectErrors;
         AnnotationArgumentList      options;
         CodeOfPolicies              policies;
+        das_hash_set<const Module *>    usedTypedefModules;     // src/ast/ARCHITECTURE.md#program-scoped-symbol-state
+        __forceinline bool isTypedefUsed ( const Module * mod ) const { return usedTypedefModules.find(mod) != usedTypedefModules.end(); }
         vector<tuple<Module *,string,string,bool,LineInfo>> allRequireDecl;
         das_hash_map<uint64_t,TypeDecl *> astTypeInfo;
         // compile-time inputs: (path, byte size, content hash, is source).
@@ -1911,7 +1913,7 @@ namespace das
     };
 
     // src/ast/ARCHITECTURE_MODULE_SCAN.md#shared-module-vintage
-    #define DAS_ABI_VERSION 1
+    #define DAS_ABI_VERSION 2
     constexpr DAS_ABI_LOCAL uint64_t das_abi_vintage () {
         constexpr uint64_t sizes[] = {
             uint64_t(DAS_BUILD_ID), uint64_t(DAS_ABI_VERSION),
