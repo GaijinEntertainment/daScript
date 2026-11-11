@@ -7,6 +7,15 @@
 
 namespace das {
 
+    static const Structure * sealedMethodOwner ( Expression * left ) {
+        if ( !left || !left->rtti_isField() ) return nullptr;
+        auto eField = static_cast<ExprField *>(left);
+        auto vt = eField->value ? eField->value->type : nullptr;
+        if ( vt && vt->isPointer() ) vt = vt->firstType;
+        if ( !vt || vt->baseType!=Type::tStructure || !vt->structType ) return nullptr;
+        return vt->structType->isSealedMethod(eField->name) ? vt->structType : nullptr;
+    }
+
     bool InferTypes::isBitfieldOp(const Function *fnc) const {
         if (fnc->module->name == "$" && fnc->arguments[0]->type->isBitfield()) {
             return true;
@@ -668,6 +677,11 @@ namespace das {
                 }
             }
         }
+        if (auto owner = sealedMethodOwner(expr->left)) {
+            error("can't assign to sealed method " + owner->name + "." + static_cast<ExprField *>(expr->left)->name, "", "",
+                  expr->at, CompilationError::cant_write);
+            return Visitor::visit(expr);
+        }
         if (expr->left->type && seedAutoLiteralFromTarget(expr->right, expr->left->type) == SeedLiteral::seeded)
             return Visitor::visit(expr);
         if (!expr->left->type || !expr->right->type)
@@ -836,6 +850,11 @@ namespace das {
             reportAstChanged();
             return nExpr;
         }
+        if (auto owner = sealedMethodOwner(expr->left)) {
+            error("can't assign to sealed method " + owner->name + "." + static_cast<ExprField *>(expr->left)->name, "", "",
+                  expr->at, CompilationError::cant_write);
+            return Visitor::visit(expr);
+        }
         if (expr->left->type && seedAutoLiteralFromTarget(expr->right, expr->left->type) == SeedLiteral::seeded)
             return Visitor::visit(expr);
         if (!expr->left->type || !expr->right->type)
@@ -955,6 +974,11 @@ namespace das {
         if (auto nExpr = promoteAssignmentToProperty(expr)) {
             reportAstChanged();
             return nExpr;
+        }
+        if (auto owner = sealedMethodOwner(expr->left)) {
+            error("can't assign to sealed method " + owner->name + "." + static_cast<ExprField *>(expr->left)->name, "", "",
+                  expr->at, CompilationError::cant_write);
+            return Visitor::visit(expr);
         }
         if (!expr->left->type || !expr->right->type) {
             return Visitor::visit(expr);

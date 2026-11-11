@@ -160,9 +160,10 @@ context, are decided per program - the symbol-use pass (`markSymbolUse` and its 
 what it marked; `markFunctionDependencies`, which `collect_dependencies` runs for a macro, walks
 one function's closure only, refreshing the use-edges it reaches and leaving the rest of the
 program's symbol state as it found it - while the `Function` and `Variable` objects of a shared module are one instance
-for every program in the process. The state therefore lives on `Program`: `usedFunctions` and
-`usedVariables` are sets, `functionIndices` and `variableIndices` maps, read through `isUsed`
-and `indexOf` and written through `setUsed` and `setIndex`; `clearSymbolUse` empties the sets.
+for every program in the process. The state therefore lives on `Program`, one record per object:
+`functionStates` maps a function to its `FunctionSymbolState`, `variableStates` a global to its
+`VariableSymbolState`, read through `isUsed` and `indexOf` and written through `setUsed` and
+`setIndex`; `clearSymbolUse` drops every use flag and `clearIndices` every slot.
 An index is `-1` for an object the allocation never saw, `-2` for one it saw and found unused,
 the context slot otherwise; the constant folder tells the first from the rest. Simulate reads
 the tables through `context.thisProgram`, and das code through the `ast` module's `is_used`,
@@ -180,11 +181,11 @@ read, nothing is used and nothing holds a slot. The index tables are per allocat
 folding round's slots do not survive into the final pass. A compile nested inside another - a
 macro calling `compile`, a late `require` (`#require-after-walk`), the folding program - fills its own tables
 and leaves the outer program's answers standing. The stream a module-cache record carries has
-neither the flag nor the slot: both are recomputed by the reading program. Three per-compile
+no flag, slot or hash: the reading program recomputes them. Three per-compile
 values still live on the objects: `Variable::stackTop` and `Function::totalStackSize` /
 `totalGenLabel`, which `allocateStack` writes and the same program's simulate reads before any
 nested compile can run. The JIT's selection - which functions of a program a DLL holds - is a
-third table, `jitSelected`, read through `is_jit_selected` and written through
+flag of the same record, read through `is_jit_selected` and written through
 `set_jit_selected` / `clear_jit_selection`; `Function::requestJit` is the `[jit]` annotation
 only, an author's request the selection reads and never writes. A fourth table,
 `usedTypedefModules`, holds every other module one of whose typedefs the program's own module
@@ -198,55 +199,25 @@ are both recorded. A name looked up from
 another module's scope - inside `with (module X)`, written or wrapped around an inlined body -
 records nothing, and neither does an alias of a structure, enumeration or handled type the same
 lookup already found under that name, which resolves as the type itself.
+A function's semantic hash is
+in the record too: simulate hashes the nodes the program built for it (`setHash`), so the hash
+says how this program calls what the body calls, and das code reads it through
+`function_hash`. The AOT hash folds the hashes of the function's dependency closure; it is
+cached in the record by `getFunctionAotHash`, which takes the program; `hashFunctions`, the one
+writer of the hashes, drops every cached AOT hash before it rehashes. The records are compile state: after
+the main simulate the program frees every function record and every global's slot, keeping only a
+global's use flag, which hosts read. A reader after that point declares itself - a host that
+inspects the program sets `keep_symbol_tables`; `rtti`, which leaves the program bound to the
+context, the AOT generator, the JIT, the folder and a macro compile keep the tables by the same
+test.
 
-## The size of a generic instance's argument types (`ast_infer_type_function.cpp`) {#instance-type-size}
-
-A generic that calls itself with a type built from its own argument type makes a new instance on
-every call, and the pass limit stops that chain only while each step adds a constant amount: the
-fiftieth instance of `foo([a])` holds an array nested fifty deep. A step that uses the argument
-type twice - `foo((a, a))`, a block `$(x : typedecl(a)) { return x }`, two arguments feeding
-each other - doubles the type instead, so the thirtieth instance holds, without a limit, a billion type
-nodes, and every whole-type walk inference runs (`isAuto`, `canCopy`, the copy itself) is that
-large long before the pass limit counts fifty. `inferFunctionCall` therefore counts the type
-nodes of the argument types where it is about to create an instance
-(`argumentTypesFitInstance`) and reports `exceeds_instance_type` past 4096, which is one walk
-per new instance and none per expression. The count is of nodes, never of depth: these types
-are a few dozen levels deep when they stop fitting in memory. A structure counts as one node
-whatever its fields, so the limit bounds only what type constructors nest.
-
-That error is the only one of its compile. A call that gets no instance leaves its caller
-without a type, so the same pass reports errors that only restate it, and `inferTypes` drops
-every other error once one `exceeds_instance_type` is present.
-
-An inference error names the function it was compiling and every function that instance came
-from, each with its argument types. `Function::getLocationExtra` prints a type of more than 64
-nodes as its constructor and `<...>`, so an error on an oversized instance stays short.
-
-A type as written has its own limit, in the parser (`parser_impl.cpp`): both grammars stop at
-64 levels of `<...>` nesting (`das_type_arrow_enter`), and a pointer wraps a type only while
-the nesting under it fits the same limit (`das_check_pointer_nesting`), so no path through a
-parsed type is longer than twice that. A postfix `?` is left-recursive and costs no parser
-stack, so without the limit a pointer chain of any length parses and the first recursive walk
-over it overflows the C++ stack. The limit is sized for a host that compiles on a 1 MB thread
-stack in a build that inlines little: a type the parser accepts has to survive every recursive
-walk inference runs over it. Past the limit the parse ends with one `exceeds_type_nesting`
-error.
-
-The stack one nesting level costs is the frame of the walk that recurses per level, and in a
-build that inlines little every string temporary of every error message a function can raise
-has its own slot in that frame. `InferTypes::verifyType` recurses once per level and can raise
-about thirty errors, so it builds none of their text itself: `typeError`,
-`malformedTypeError` and `templateStructureError` do, in frames that exist only while an
-error is reported. With the text inline, one level costs 4176 bytes in a Debug build and a type
-at the limit needs more than 512 KB; with it in the helpers the same type compiles in 256 KB.
-
-## Two lookups into one table in one statement (`ast_lint.cpp`, `ast_inline.cpp`) {#table-lookup-collision}
+## Two lookups into one table in one statement (`ast_lint.cpp`) {#table-lookup-collision}
 
 `tab[k]` on a mutable table inserts, and an insert can move every slot. A statement holding a
 reference to one slot while it looks up another reads freed memory, so two non-dereferenced
 lookups into the same table (same source text) inside one statement are error 30250. Lint
-reports it; the inliner runs the same scan before a splice, because splicing would erase the
-error and keep the defect.
+reports it, and lint runs before any splice (`#lint-before-rewrites`), so the inliner cannot
+erase the error and keep the defect.
 
 A ternary's lookups are sequenced. Its condition is a
 `bool` by the time an arm runs, so a lookup in the condition holds no reference an arm's lookup
@@ -254,17 +225,43 @@ could invalidate, and the arms never both run. A lookup in the condition does no
 one in an arm, and the arms do not collide with each other; all three still collide with the
 rest of the statement.
 
-## An `unsafe` block in a generator (`ast_infer_type.cpp`) {#generator-unsafe-block}
+## Lint before rewrites (`inferAndFinalizeModule`, `ast_parse.cpp`) {#lint-before-rewrites}
 
-A generator body is lowered in place during inference: a local moves into the generator's
-struct only once it is a statement of the body's own block, and a `yield` leaves a resume
-label that the entry `goto` reaches only at that level. Nested blocks get there because
-inference collapses them into their parent, pass by pass.
+A module's diagnostics read the program as written. Once infer converges and the annotation
+patches are quiet, `Program::lint` runs before any pass that changes the shape of code:
+`[inline]` and auto-inline splicing, escape analysis's `scope_free` insertion, the annotation
+fixups, `foldUnsafe` and `optimizeProgram`. A rewrite is free to reshape a function - splice a
+callee's body over a call, drop a read, merge statements - so a rule checked after it would
+judge the rewrite rather than the source: a spliced `delete super.self` no longer reads as a
+call to the parent finalizer, and a spliced read leaves its holder looking unused.
 
-`unsafe { }` is a wrapper around a block, not a block, and collapse does not see through it.
-Left in place, a local declared inside stays a stack local across a `yield`, and a `yield`
-inside leaves its label where the entry `goto` cannot reach. So inference replaces a
-statement-position `unsafe { }` in a generator with its block and sets
-`Function::unsafeGenerator`; every later pass visits that function with unsafe allowed. The
-price is the scope: once a generator has one `unsafe` block, its whole body is unsafe-permitted.
-An expression-position `unsafe(...)` stays as written.
+Escape analysis runs after `buildAccessFlags`, so callee side-effect flags are final, and before
+`foldUnsafe`, so the dirty re-infer of the `scope_free` calls it inserts does not re-trip unsafe
+checks that are already folded. The inserted call is a generated terminal call that creates no
+new candidate and changes no side-effect flags, so one dirty re-infer is the fixpoint.
+
+`fixupAnnotations` runs after infer converges, when types are final, and before `foldUnsafe`
+and `optimizeProgram`, so what a `fixup()` generates - the shader-blob globals dasGlsl, dasSpirv
+and dasMetal fill - is folded and optimized like ordinary code. A call-shaped initializer a
+fixup sets is uninferred; the gated dirty re-infer resolves it before `foldUnsafe`.
+
+## Devirtualization (`ast_devirtualize.cpp`) {#devirtualization}
+
+A class method is a function-pointer field every instance carries, and every class below the one
+that first declares it - the family root - shares that slot. A call through static class `C`
+becomes a direct call of `C`'s function only when, for every object whose class is `C` or below,
+no class overrides the method and nothing assigns the field. A write through any class of the
+family reaches those objects, so the guarantee covers the whole family, not `C` alone.
+
+Two things give it. A promise: every class from `C` up to the family root seals the method - in
+practice a method a `class sealed` declares, since `def sealed` always overrides a base field that
+stays assignable. A closed world: a set of modules that holds every class of the family and every
+write to it. `FixedMethods` takes the compiling module as that world, where a family is closed when
+its root and every class deriving from it are private, since no other module can name them. The
+scan covers the module's functions - its generic instances live there - and its global
+initializers. A write is an assignment, a struct literal naming another function than the class's
+own, or any use of the field other than a read or a method call.
+
+Both proofs hold in every program that links the module, so `devirtualize` rewrites the invoke into
+a typed direct call in the module's AST, in optimized builds, after lint and before inline
+splicing: auto-inline splices it like a free function, and AOT and the JIT see a plain call.

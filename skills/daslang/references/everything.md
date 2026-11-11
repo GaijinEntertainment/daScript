@@ -4306,6 +4306,7 @@ The AST module provides access to the abstract syntax tree representation of das
 - `compiling_program` - Returns the program currently being compiled.
 - `find_macro_context` - Returns the macro context of `module` - every macro context carries the mutex `invoke_in_context` locks from its creation.
 - `function_index` - The slot `function` holds in `program`'s context: `-1` when the program never allocated it, `-2` when the allocation found it unused, its function-table index otherwise.
+- `function_hash` - The semantic hash `program` computed for `function` when it simulated, from the nodes it built for the body, so it says how this program calls what the body calls; `0` before simulate.
 - `has_macro_context` - Returns true when `module` has a macro context - it declares a macro (a `[_macro]` function is the smallest) and was compiled with one.
 - `is_jit_selected` - True when `program`'s JIT selected `function` - the DLL the program runs holds it, so a call to it from jitted code goes into the DLL rather than through an interpreter slot.
 - `is_typedef_used` - True when `program`'s own module named a typedef that `module` declares.
@@ -4443,8 +4444,7 @@ The AST module provides access to the abstract syntax tree representation of das
 - `get_field_type` - Returns the type of a field if the target is a structure, variant, tuple, handled type, or pointer to any of those, or null otherwise.
 - `get_file_source_line` - Reads a single source line from a FileInfo and invokes the block with the line text as a temporary string.
 - `get_func_aot_prefix` - Returns the AOT function prefix string for the specified function.
-- `get_function_aot_hash` - Returns the hash of a function used for AOT matching.
-- `get_function_hash_by_id` - Returns the hash of a function given its unique identifier.
+- `get_function_aot_hash` - The hash `program` matches `function` against AOT with: its semantic hash folded with the semantic hashes of every function it depends on.
 - `get_handled_type_field_type` - Returns the runtime type information for a field within a handled (C++-bound) type annotation.
 - `get_handled_type_field_type_declaration` - Returns the type declaration for a field within a handled (C++-bound) type annotation, optionally as const.
 - `get_handled_type_index_type_declaration` - Returns the type declaration of the index operator for a handled type.

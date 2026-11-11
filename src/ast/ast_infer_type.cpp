@@ -1063,7 +1063,7 @@ namespace das {
         if (func)
             func->hasUnsafe = true;
     }
-    // src/ast/ARCHITECTURE.md#generator-unsafe-block
+    // src/ast/ARCHITECTURE_INFER.md#generator-unsafe-block
     ExpressionPtr InferTypes::visit(ExprUnsafe *expr) {
         unsafeDepth--;
         if (func && func->generator && blocks.empty() && expr->body->rtti_isBlock()) {
@@ -2076,17 +2076,8 @@ namespace das {
             expr->type = new TypeDecl();
         }
         // we replace invoke/*method*/(cptr.method, cptr, ...) with invoke/*method*/(typedecl(cptr.type).method, cptr, ...)
-        if (expr->isInvokeMethod && expr->arguments.size()) {
-            ExprField *eField = nullptr;
-            if (expr->arguments[0]->rtti_isField()) {
-                eField = (ExprField *)expr->arguments[0];
-            } else if (expr->arguments[0]->rtti_isR2V()) {
-                auto eR2V = (ExprRef2Value *)expr->arguments[0];
-                if (eR2V->subexpr->rtti_isField()) {
-                    eField = (ExprField *)eR2V->subexpr;
-                }
-            }
-            if (eField && !eField->value->rtti_isTypeDecl() && !eField->value->type->isAutoOrAlias()) {
+        if (auto eField = expr->methodField()) {
+            if (!eField->value->rtti_isTypeDecl() && !eField->value->type->isAutoOrAlias()) {
                 auto fType = eField->value->type->isPointer() ? eField->value->type->firstType : eField->value->type;
                 auto cType = new TypeDecl(*fType);
                 auto mkType = new ExprTypeDecl(eField->at, cType);
@@ -6571,7 +6562,7 @@ namespace das {
         return evalAndFoldStringBuilder(expr);
     }
 
-    // src/ast/ARCHITECTURE.md#instance-type-size
+    // src/ast/ARCHITECTURE_INFER.md#instance-type-size
     static void keepOnlyInstanceTypeErrors(Program * program) {
         auto isInstanceTypeError = [](const Error &e) { return e.cerr == CompilationError::exceeds_instance_type; };
         auto & errors = program->errors;

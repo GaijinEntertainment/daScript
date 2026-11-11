@@ -29,6 +29,7 @@ union YYSTYPE;
 #define YY_NO_UNISTD_H
 #include "../parser/lex.yy.h"
 #include "../parser/lex2.yy.h"
+#include "devirtualize.h"
 
 void das_yybegin(const char * str, uint32_t len, yyscan_t yyscanner);
 int das_yyparse(yyscan_t yyscanner);
@@ -1466,6 +1467,13 @@ namespace das {
                 }
             }
         }
+        // src/ast/ARCHITECTURE.md#lint-before-rewrites
+        if ( !program->failed() ) {
+            program->lint(logs, libGroup);
+        }
+        if ( !program->failed() && program->getOptimize() && devirtualize(program->thisModule.get()) ) {
+            program->buildAccessFlags(logs);
+        }
         if ( !program->failed() && program->options.getBoolOption("no_aliasing", program->policies.no_aliasing) ) {
             program->checkAliases(logs);
         }
@@ -1474,12 +1482,6 @@ namespace das {
                 program->buildAccessFlags(logs);
             }
         }
-        // escape analysis after buildAccessFlags so callee sideEffectFlags (rws) are final, but
-        // before lint/foldUnsafe so the re-infer of the inserted scope_free matches the original
-        // (in-infer-loop) ordering and does not re-trip the already-folded unsafe checks.
-        // the inserted scope_free is a generated terminal call creating no new candidate and
-        // changing no rws, so a single dirty re-type is the fixpoint - goto restartInfer would
-        // re-run the whole macro/pod/relocate infer leg for nothing
         if ( !program->failed() ) {
             escapeAnalysis(program.get(), logs);
             // build the CFG once at this stable point and share it: the unsafe-index (bound-check
@@ -1497,14 +1499,6 @@ namespace das {
             }
         }
         gcStageReportDelta(moduleName.c_str(), fileName.c_str(), "infer", logs);
-        // fixupAnnotations runs HERE — after infer converges (types are final) but BEFORE
-        // lint / foldUnsafe / optimize, so anything a fixup() generates (the shader-blob
-        // captures: dasGlsl / dasSpirv / dasMetal filling their `{name}` globals) flows
-        // through the whole back half of the pipeline like ordinary code. A call-shaped
-        // init (e.g. the array<uint> literal's to_array_move lowering) is uninferred when
-        // fixup sets it — the gated dirty re-infer resolves it, and sitting before
-        // foldUnsafe keeps the re-infer from re-tripping already-folded unsafe (the same
-        // ordering constraint escape-analysis' scope_free insertion documents above).
         if ( !program->failed() ) {
             program->fixupAnnotations();
             if ( !program->failed() ) {
@@ -1519,8 +1513,6 @@ namespace das {
         }
         if ( !program->failed() ) {
             program->normalizeOptionTypes();
-            if (!program->failed())
-                program->lint(logs, libGroup);
             if ( policies.macro_context_collect ) libGroup.collectMacroContexts();
             if (!program->failed() && !policies.no_fold_unsafe)
                 program->foldUnsafe();

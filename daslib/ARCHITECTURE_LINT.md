@@ -136,24 +136,24 @@ Companion to `ARCHITECTURE.md` in this folder; section numbers are unique across
   purity contract binds application code only.
 - **LINT030 keeps one frame per call on a stack and reads mentions off the ordinary walk.**
   `preVisitExprCall` pushes the frame, `preVisitExprCallArgument` advances its slot, and
-  `preVisitExprVar` records every variable read into the slot being walked - only at the
-  frame's own closure depth, since a lambda argument's body runs later. On `visitExprCall` the
-  frame pops, each argument that is a call is asked which mentioned variables it writes through
-  a mutable by-reference parameter (a bare variable in a `var` slot of `&`, array, table or
-  struct type) that the callee writes during the call - `Lint030WriteScan` reads the callee's
-  body once for the write marks the compiler left on that parameter, discounting an address
-  taken inside a `return`, since a callee that hands out a pointer touches nothing before the
-  caller uses it, discounting a pointer the parameter holds read out or reached through, since
-  the compiler marks a mutable pointer's source and a pointee's write alike while neither moves
-  the parameter (an assignment to the pointer field itself still counts), and deciding the mark
-  on a call argument by that callee's own body for that slot, since the compiler marks every
-  writable argument of a call whose callee modifies any argument; a callee with no body, a
-  builtin or an extern, is read as writing - and the
-  frame's mentions flow into the parent frame's current slot, so a read buried in a deeper
-  call still counts for the outer argument list. A mention that is the outer call's own
+  `preVisitExprVar` records every variable read into the slot being walked - at the frame's own
+  closure depth (a lambda argument's body runs later) or, as `in_block`, one plain block deeper:
+  the call runs it after its arguments, so only the outer argument counts it. On `visitExprCall`
+  the frame pops, each argument that is a call is asked which mentioned variables it writes through
+  a mutable by-reference parameter (a bare variable in a `var` slot of `&`, array, table or struct
+  type) that the callee writes during the call - `Lint030WriteScan` reads the callee's body once
+  for the write marks the compiler left on that parameter, discounting an address taken inside a
+  `return`, since a callee that hands out a pointer touches nothing before the caller uses it,
+  discounting a pointer the parameter holds read out or reached through, since the compiler marks a
+  mutable pointer's source and a pointee's write alike while neither moves the parameter (an
+  assignment to the pointer field itself still counts), and deciding the mark on a call argument by
+  that callee's own body for that slot, since the compiler marks every writable argument of a call
+  whose callee modifies any argument; a callee with no body, a builtin or an extern, is read as
+  writing - and the frame's mentions flow into the parent frame's current slot, so a read buried in
+  a deeper call still counts for the outer argument list. A mention that is the outer call's own
   by-reference argument - the variable, or a chain of plain fields rooted at it, since a field
-  behind a pointer is a value a write can repoint - is not a read: the callee sees the final
-  state whatever the order. The rule fires once per writing argument, on the outer call. It ships
+  behind a pointer is a value a write can repoint - is not a read: the callee sees the final state
+  whatever the order. The rule fires once per writing argument, on the outer call. It ships
   default-off in the SDK beside LINT029 (`seed_default_disabled`); `.lint_config` turns it on here.
 - **LINT031 follows the write target to its root instead of reading the compiler's marks.**
   The compiler marks a parameter written on `addr` and on a reassigned local pointer copy

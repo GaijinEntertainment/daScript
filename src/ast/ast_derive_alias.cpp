@@ -648,8 +648,8 @@ namespace das {
 
     void Program::checkAliases(TextWriter & logs) {
         aliasesChecked = true;
-        auto savedFunctions = usedFunctions;
-        auto savedVariables = usedVariables;
+        auto savedFunctions = functionStates;
+        auto savedVariables = variableStates;
         if ( thisModule->isModule || policies.export_all ) {
             markModuleSymbolUse();
         } else {
@@ -658,7 +658,7 @@ namespace das {
         deriveFunctionAliasing(this, logs, false);
         AliasMarker marker(this, false, false, true, logs);
         visit(marker);
-        usedFunctions = das::move(savedFunctions);
-        usedVariables = das::move(savedVariables);
+        functionStates = das::move(savedFunctions);
+        variableStates = das::move(savedVariables);
     }
 }

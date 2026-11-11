@@ -1436,24 +1436,13 @@ namespace das
         SimNode_CallBase * pInvoke;
         uint32_t methodOffset = 0;
         if ( expr->isInvokeMethod ) {
-            bool foundOffset = false;
-            if ( expr->arguments[0]->rtti_isField() ) {
-                auto field = static_cast<ExprField*>(expr->arguments[0]);
-                methodOffset = field->fieldRef->offset;
-                foundOffset = true;
-            } else if ( expr->arguments[0]->rtti_isR2V() ) {
-                auto eR2V = static_cast<ExprRef2Value*>(expr->arguments[0]);
-                if ( eR2V->subexpr->rtti_isField() ) {
-                    auto field = static_cast<ExprField*>(eR2V->subexpr);
-                    methodOffset = field->fieldRef->offset;
-                    foundOffset = true;
-                }
-            }
-            if (!foundOffset) {
+            auto field = expr->methodField();
+            if ( !field ) {
                 context.thisProgram->error("internal compilation error, invoke method expects field", "", "", at, CompilationError::internal_field);
                 setE(expr, nullptr);
                 return;
             }
+            methodOffset = field->fieldRef->offset;
         }
         {
             if ( expr->isCopyOrMove() ) {
@@ -4091,11 +4080,7 @@ namespace das
         // never asked, and a function it shares with the user program gets hashed by that
         // program's own simulate
         if ( !isCompilingMacros ) {
-            for ( int i=0, is=context.totalFunctions; i!=is; ++i ) {
-                Function * func = indexToFunction[i];
-                SimFunction & fn = context.functions[i];
-                func->hash = getFunctionHash(func, fn.code, &context);
-            }
+            hashFunctions(context, indexToFunction);
         }
         for (auto pm : library.modules) {
             pm->structures.foreach([&](auto st){
@@ -4128,9 +4113,8 @@ namespace das
             // a host may keep the program, so free its tables after the main simulate; the folder and the macro
             // module simulate it mid-compile, AOT and JIT emitters read the tables later, hosts read usedVariables
             if ( !policies.keep_symbol_tables && !folding && !isCompilingMacros && !is_in_aot() && !policies.jit_enabled ) {
-                usedFunctions = {};
-                functionIndices = {};
-                variableIndices = {};
+                functionStates = {};
+                for ( auto & it : variableStates ) it.second.index = -1;
             }
         }
         if ( options.getBoolOption("log_total_compile_time",policies.log_total_compile_time)
@@ -4155,18 +4139,26 @@ namespace das
                 }
             });
         }
-        uint64_t res = getVariableListAotHash(globs, initHash);
+        uint64_t res = getVariableListAotHash(this, globs, initHash);
         // add init functions to dependencies
         const uint64_t fnv_prime = 1099511628211ul;
         for (auto& pm : library.modules) {
             pm->functions.foreach([&](auto pfun){
                 if (indexOf(pfun) < 0 || !isUsed(pfun) || !pfun->init)
                     return;
-                res = (res ^ pfun->aotHash) * fnv_prime;
+                res = (res ^ getFunctionAotHash(this, pfun)) * fnv_prime;
             });
         }
         initSemanticHashWithDep = res; // pass it to the standalone context registration
         return initSemanticHashWithDep;
+    }
+
+    // src/ast/ARCHITECTURE.md#program-scoped-symbol-state
+    void Program::hashFunctions ( Context & context, const das_hash_map<int,Function *> & byIndex ) {
+        for ( auto & it : functionStates ) it.second.aotHash = 0;
+        for ( auto & [index, func] : byIndex ) {
+            setHash(func, getFunctionHash(func, context.functions[index].code, &context));
+        }
     }
 
     void Program::linkCppAot ( Context & context, AotLibrary & aotLib, TextWriter & logs ) {
@@ -4183,19 +4175,14 @@ namespace das
                 indexToFunction[indexOf(pfun)] = pfun;
             });
         }
-        for ( int fni=0, fnis=context.totalFunctions; fni!=fnis; ++fni ) {
-            if ( !fnn[fni]->noAot ) {
-                SimFunction & fn = context.functions[fni];
-                fnn[fni]->hash = getFunctionHash(fnn[fni], fn.code, &context);
-            }
-        }
+        hashFunctions(context, indexToFunction);
         vector<pair<int,uint64_t>> misses;
         vector<pair<int,const char *>> declined;
         das_hash_map<Module *,int> linkedPerModule;
         for ( int fni=0, fnis=context.totalFunctions; fni!=fnis; ++fni ) {
             if ( !fnn[fni]->noAot && !(isLlvmAot && fnn[fni]->requestNoJit) ) {
                 SimFunction & fn = context.functions[fni];
-                uint64_t semHash = getFunctionAotHash(fnn[fni]);
+                uint64_t semHash = getFunctionAotHash(this, fnn[fni]);
                 auto it = aotLib.find(semHash);
                 if ( it != aotLib.end() && it->second.declineReason ) {
                     if ( logIt ) logs << "DECLINED " << fn.mangledName << " AOT=0x" << HEX << semHash << DEC << ": " << it->second.declineReason << "\n";
@@ -4232,7 +4219,7 @@ namespace das
                 tp << "other functions of module '" << fnModule->name << "' link, so its AOT artifact (C++ or LLVM object) is stale for this one\n";
                 tp << "regenerate the artifact and rebuild (skills/internal/aot_hash_desync_debugging.md)\n";
             }
-            tp << "// " << getAotHashComment(fnn[fni]) << "\n";
+            tp << "// " << getAotHashComment(this, fnn[fni]) << "\n";
             printSimFunction(tp, &context, indexToFunction[fni], fn.code, true);
             linkError(string(fn.mangledName), tp.str() );
         }

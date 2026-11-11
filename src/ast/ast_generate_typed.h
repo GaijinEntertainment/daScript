@@ -12,6 +12,8 @@ namespace das {
     TypeDecl * inferLetInitType ( TypeDecl * autoT, TypeDecl * initT, bool viaClone, bool relaxedPointerConst );
     bool markSafeTableLookupInit ( Expression * init );
     Expression * makeTypeWitnessZero ( const LineInfo & at, TypeDecl * witnessT );
+    TypeDecl * makeStructCastType ( TypeDecl * subexprT, TypeDecl * castT );
+    ExprCall * makeTypedCall ( const LineInfo & at, Function * func, vector<ExpressionPtr> && args );
     void markUnderClone ( Expression * left );
     void markScopesEarlyOut ( const vector<ExprBlock *> & scopes );
     void resetBlockFlow ( ExprBlock * block );

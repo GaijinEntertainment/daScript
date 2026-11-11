@@ -94,7 +94,6 @@ namespace das {
     DAS_CC_API void get_file_source_line(FileInfo * info, uint32_t line, const TBlock<void,TTemporary<const char *>> & blk, Context * context, LineInfoArg * at);
     DAS_CC_API void for_each_module_function(Module *module, const TBlock<void,FunctionPtr> &blk, Context * context, LineInfoArg * at);
     DAS_CC_API uint64_t getInitSemanticHashWithDep(ProgramPtr program, uint64_t semH);
-    DAS_CC_API uint64_t getFunctionHashById(Function *fun, int id, void * pctx, Context * context, LineInfoArg * at);
     DAS_CC_API bool modAotRequire(Module *mod, StringBuilderWriter *ss, Context * context, LineInfoArg * at);
 
     template <typename TT, typename QQ>
@@ -202,7 +201,6 @@ namespace das {
     DAS_CC_API void getAstContext ( smart_ptr_raw<Program> prog, Expression * expr, const TBlock<void,bool,AstContext> & block, Context * context, LineInfoArg * at );
     DAS_CC_API char * get_mangled_name ( Function * func, Context * context, LineInfoArg * at );
     DAS_CC_API char * get_mangled_name_t ( TypeDecl * typ, Context * context, LineInfoArg * at );
-    DAS_CC_API char * get_aot_hash_comment_fn ( const Function * func, Context * context, LineInfoArg * at );
     DAS_CC_API char * get_mangled_name_v ( Variable * var, Context * context, LineInfoArg * at );
     DAS_CC_API char * get_mangled_name_b ( ExprBlock * expr, Context * context, LineInfoArg * at );
     DAS_CC_API TypeDeclPtr parseMangledNameFn ( const char * txt, ModuleGroup & lib, Module * thisModule, Context * context, LineInfoArg * at );
@@ -219,6 +217,12 @@ namespace das {
     DAS_CC_API int32_t ast_variable_index_sp ( smart_ptr_raw<Program> program, const Variable * var, Context * context, LineInfoArg * at );
     DAS_CC_API bool ast_is_typedef_used ( const Program * program, const Module * mod, Context * context, LineInfoArg * at );
     DAS_CC_API bool ast_is_typedef_used_sp ( smart_ptr_raw<Program> program, const Module * mod, Context * context, LineInfoArg * at );
+    DAS_CC_API uint64_t ast_function_hash ( const Program * program, const Function * fn, Context * context, LineInfoArg * at );
+    DAS_CC_API uint64_t ast_function_aot_hash ( Program * program, const Function * fn, Context * context, LineInfoArg * at );
+    DAS_CC_API char * ast_aot_hash_comment ( const Program * program, const Function * fn, Context * context, LineInfoArg * at );
+    DAS_CC_API uint64_t ast_function_hash_sp ( smart_ptr_raw<Program> program, const Function * fn, Context * context, LineInfoArg * at );
+    DAS_CC_API uint64_t ast_function_aot_hash_sp ( smart_ptr_raw<Program> program, const Function * fn, Context * context, LineInfoArg * at );
+    DAS_CC_API char * ast_aot_hash_comment_sp ( smart_ptr_raw<Program> program, const Function * fn, Context * context, LineInfoArg * at );
     DAS_CC_API bool ast_is_jit_selected ( const Program * program, const Function * fn, Context * context, LineInfoArg * at );
     DAS_CC_API void ast_set_jit_selected ( const Program * program, const Function * fn, bool selected, Context * context, LineInfoArg * at );
     DAS_CC_API void ast_clear_jit_selection ( const Program * program, Context * context, LineInfoArg * at );
