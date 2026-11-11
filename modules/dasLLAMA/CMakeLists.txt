@@ -124,7 +124,7 @@ if(NOT DAS_TOOLS_DISABLED)
             utils/dasllama-server/test_constraints.das)
     
     das_lane_dastest_target(run_tests_dasllama_convert COMMENT "Testing dasllama-convert"
-        JIT_FILES utils/dasllama-convert/test_convert.das)
+        FILES utils/dasllama-convert/test_convert.das)
 
     das_lane_dastest_target(run_tests_dasllama_env_registry COMMENT "Testing the dasLLAMA env-knob registry"
         FILES modules/dasLLAMA/tests/test_env_registry.das)
