@@ -1128,6 +1128,9 @@ src/simulate/aot_library.cpp
 src/simulate/simulate_tracking.cpp
 src/simulate/simulate_visit.cpp
 src/simulate/simulate_print.cpp
+src/simulate/simulate_node_base.cpp
+src/simulate/simulate_try_catch.cpp
+src/simulate/simulate_container_nodes.cpp
 src/simulate/simulate_fn_hash.cpp
 src/simulate/simulate_instrument.cpp
 include/daScript/simulate/cast.h

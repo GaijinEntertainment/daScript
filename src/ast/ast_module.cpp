@@ -15,6 +15,9 @@
 
 namespace das {
 
+    // fusion function pointers (defined here in main lib, set by fusion lib)
+    void (*g_fusionContextFn) ( Context & context, TextWriter & logs, bool enableFusion ) = nullptr;
+
     struct SubstituteModuleRefs : Visitor {
         SubstituteModuleRefs ( Module * from, Module * to ) : to(to), from(from) {}
         virtual void preVisit ( TypeDecl * td ) {

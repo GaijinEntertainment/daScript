@@ -25,9 +25,6 @@ das::Context * get_context ( int stackSize=0 );//link time resolved dependencies
 
 namespace das
 {
-    // fusion function pointers (defined here in main lib, set by fusion lib)
-    void (*g_fusionContextFn) ( Context & context, TextWriter & logs, bool enableFusion ) = nullptr;
-
     // src/ast/ARCHITECTURE.md#program-scoped-symbol-state
     static __forceinline int32_t programIndexOf ( const Context & context, const Function * fn ) {
         return context.thisProgram ? context.thisProgram->indexOf(fn) : -1;
@@ -628,26 +625,6 @@ namespace das
         }
     }
 
-    SimNode * Function::makeSimNode ( Context & context, const vector<ExpressionPtr> & ) {
-        if ( copyOnReturn || moveOnReturn ) {
-            if ( context.maxFramedCallDepth ) {
-                return context.code->makeNodeUnrollAny<SimNode_CallAndCopyOrMoveChecked>(int(arguments.size()), at);
-            }
-            return context.code->makeNodeUnrollAny<SimNode_CallAndCopyOrMove>(int(arguments.size()), at);
-        } else if ( fastCall ) {
-            // include/daScript/simulate/ARCHITECTURE.md#fastcall-depth-guard
-            if ( context.maxFastCallDepth ) {
-                return context.code->makeNodeUnrollAny<SimNode_FastCallChecked>(int(arguments.size()), at);
-            }
-            return context.code->makeNodeUnrollAny<SimNode_FastCall>(int(arguments.size()), at);
-        } else {
-            if ( context.maxFramedCallDepth ) {
-                return context.code->makeNodeUnrollAny<SimNode_CallChecked>(int(arguments.size()), at);
-            }
-            return context.code->makeNodeUnrollAny<SimNode_Call>(int(arguments.size()), at);
-        }
-    }
-
     SimNode * Function::simulate (Context & context) const {
         if ( builtIn ) {
             DAS_ASSERTF(0, "can only simulate non built-in function");
@@ -1235,14 +1212,6 @@ namespace das
 
     // r2v
 
-    SimNode * GetR2V ( Context & context, const LineInfo & at, const TypeDeclPtr & type, SimNode * expr ) {
-        if ( type->isRefType() ) {
-            return expr;
-        } else {
-            return context.code->makeValueNode<SimNode_Ref2Value>(type->getR2VType(), at, expr);
-        }
-    }
-
     void SimulateVisitor::visit(const ExprRef2Value * expr) {
         const auto &at = expr->at;
         setE(expr, GetR2V(context, at, expr->type, getE(expr->subexpr)));
@@ -1423,11 +1392,6 @@ namespace das
             context.thisHelper->appendLocalVariables(info, (Expression *)expr);
         }
         setE(expr, context.code->makeNode<SimNode_MakeBlock>(at, getE(expr->block), argSp, expr->stackTop, info));
-    }
-
-    bool ExprInvoke::isCopyOrMove() const {
-        auto blockT = arguments[0]->type;
-        return blockT->firstType && blockT->firstType->isRefType() && !blockT->firstType->ref;
     }
 
     void SimulateVisitor::visit(const ExprInvoke * expr) {
