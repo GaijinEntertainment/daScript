@@ -473,7 +473,7 @@ def gate_review_md_tests(ctx : PreflightCtx) : GateResult {
     return GateResult(name = "review-md-tests", status = GateStatus.Pass, seconds = seconds_since(t0))
 }
 
-//! runs CMake's `check_tests_index`, the one place the list of indexes lives
+//! runs CMake's `check_tests_index`, which owns the index list
 def gate_tests_index(ctx : PreflightCtx) : GateResult {
     let t0 = ref_time_ticks()
     let name = "tests-index"
