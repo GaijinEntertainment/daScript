@@ -19,7 +19,7 @@
 
 //  A opname B
 #define IMPLEMENT_ANY_OP2(INLINE,OPNAME,TYPE,CTYPE) \
-    struct FusionPoint_##OPNAME##_##CTYPE : FusionPointOp2 { \
+    struct FusionPoint_##OPNAME##_##CTYPE final : FusionPointOp2 { \
         IMPLEMENT_OP2_NODE(INLINE,OPNAME,TYPE,CTYPE,Global,Local); \
         IMPLEMENT_OP2_NODE(INLINE,OPNAME,TYPE,CTYPE,ThisBlockArgumentRef,ThisBlockArgument); \
         IMPLEMENT_OP2_NODE(INLINE,OPNAME,TYPE,CTYPE,ThisBlockArgument,ThisBlockArgument); \
@@ -52,7 +52,7 @@
         IMPLEMENT_OP2_NODE_ANYL(INLINE,OPNAME,TYPE,CTYPE,Local); \
         IMPLEMENT_OP2_NODE_ANYR(INLINE,OPNAME,TYPE,CTYPE,LocalRefOff); \
         IMPLEMENT_OP2_NODE_ANYL(INLINE,OPNAME,TYPE,CTYPE,LocalRefOff); \
-        virtual SimNode * match(const SimNodeInfoLookup & info, SimNode *, SimNode * node_l, SimNode * node_r, Context * context) override { \
+        virtual SimNode * match(const SimNodeInfoLookup & info, SimNode *, SimNode * node_l, SimNode * node_r, Context * context, bool & anyLeft, bool & anyRight) const override { \
             auto & ccode = *(context->code); \
             /* match op2 */ if ( !node_l || !node_r ) { return nullptr; } \
             MATCH_OP2(OPNAME,"GetThisBlockArgumentR2V","GetThisBlockArgument",ThisBlockArgumentRef,ThisBlockArgument) \
@@ -94,11 +94,11 @@
             MATCH_OP2_ANYL(OPNAME,"GetLocalRefOffR2V",LocalRefOff) \
             return nullptr; \
         } \
-        virtual void set(SimNode_Op2Fusion * result, SimNode * node) override { \
+        virtual void set(SimNode_Op2Fusion * result, SimNode * node) const override { \
             result->set(#OPNAME,Type(ToBasicType<CTYPE>::type),node->debugInfo); \
             IMPLEMENT_OP2_SETUP_NODE(result,node); \
         } \
-        virtual SimNode * fuse(const SimNodeInfoLookup & info, SimNode * node, Context * context) override { \
+        virtual SimNode * fuse(const SimNodeInfoLookup & info, SimNode * node, Context * context) const override { \
             return fuseOp2(info, node, FUSION_OP2_SUBEXPR_LEFT(CTYPE,node), FUSION_OP2_SUBEXPR_RIGHT(CTYPE,node), context); \
         } \
     };
@@ -107,7 +107,7 @@
 
 //  A opname B
 #define IMPLEMENT_ANY_OP2(INLINE,OPNAME,TYPE,CTYPE) \
-    struct FusionPoint_##OPNAME##_##CTYPE : FusionPointOp2 { \
+    struct FusionPoint_##OPNAME##_##CTYPE final : FusionPointOp2 { \
         IMPLEMENT_OP2_NODE_ANYR(INLINE,OPNAME,TYPE,CTYPE,Argument); \
         IMPLEMENT_OP2_NODE_ANYL(INLINE,OPNAME,TYPE,CTYPE,Argument); \
         IMPLEMENT_OP2_NODE_ANYR(INLINE,OPNAME,TYPE,CTYPE,ArgumentRefOff); \
@@ -120,7 +120,7 @@
         IMPLEMENT_OP2_NODE_ANYL(INLINE,OPNAME,TYPE,CTYPE,Local); \
         IMPLEMENT_OP2_NODE_ANYR(INLINE,OPNAME,TYPE,CTYPE,LocalRefOff); \
         IMPLEMENT_OP2_NODE_ANYL(INLINE,OPNAME,TYPE,CTYPE,LocalRefOff); \
-        virtual SimNode * match(const SimNodeInfoLookup & info, SimNode *, SimNode * node_l, SimNode * node_r, Context * context) override { \
+        virtual SimNode * match(const SimNodeInfoLookup & info, SimNode *, SimNode * node_l, SimNode * node_r, Context * context, bool & anyLeft, bool & anyRight) const override { \
             auto & ccode = *(context->code); \
             /* match op2 */ if ( !node_l || !node_r ) { return nullptr; } \
             MATCH_OP2_ANYR(OPNAME,"GetArgument",Argument) \
@@ -137,11 +137,11 @@
             MATCH_OP2_ANYL(OPNAME,"GetLocalRefOffR2V",LocalRefOff) \
             return nullptr; \
         } \
-        virtual void set(SimNode_Op2Fusion * result, SimNode * node) override { \
+        virtual void set(SimNode_Op2Fusion * result, SimNode * node) const override { \
             result->set(#OPNAME,Type(ToBasicType<CTYPE>::type),node->debugInfo); \
             IMPLEMENT_OP2_SETUP_NODE(result,node); \
         } \
-        virtual SimNode * fuse(const SimNodeInfoLookup & info, SimNode * node, Context * context) override { \
+        virtual SimNode * fuse(const SimNodeInfoLookup & info, SimNode * node, Context * context) const override { \
             return fuseOp2(info, node, FUSION_OP2_SUBEXPR_LEFT(CTYPE,node), FUSION_OP2_SUBEXPR_RIGHT(CTYPE,node), context); \
         } \
     };

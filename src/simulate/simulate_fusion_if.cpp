@@ -151,14 +151,15 @@ namespace das {
 
 #include "simulate_fusion_op1_reg.h"
 
-    void createFusionEngine_if()
-    {
-        REGISTER_OP1_WORKHORSE_FUSION_POINT(IfZeroThenElse);
-        REGISTER_OP1_WORKHORSE_FUSION_POINT(IfNotZeroThenElse);
+    static constexpr FusionEntry fusionEntries_if[] = {
+        REGISTER_OP1_WORKHORSE_FUSION_POINT(IfZeroThenElse)
+        REGISTER_OP1_WORKHORSE_FUSION_POINT(IfNotZeroThenElse)
 
-        REGISTER_OP1_WORKHORSE_FUSION_POINT(IfZeroThen);
-        REGISTER_OP1_WORKHORSE_FUSION_POINT(IfNotZeroThen);
-    }
+        REGISTER_OP1_WORKHORSE_FUSION_POINT(IfZeroThen)
+        REGISTER_OP1_WORKHORSE_FUSION_POINT(IfNotZeroThen)
+    };
+
+    FUSION_TABLE(fusionTable_if, fusionEntries_if)
 }
 
 #endif

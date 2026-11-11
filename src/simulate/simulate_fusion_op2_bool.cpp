@@ -32,16 +32,17 @@ namespace das {
     IMPLEMENT_OP2_NUMERIC(Gt);
     IMPLEMENT_OP2_NUMERIC(Less);
 
-    void createFusionEngine_op2_bool()
-    {
-        REGISTER_OP2_WORKHORSE(Equ);
-        REGISTER_OP2_WORKHORSE(NotEqu);
+    static constexpr FusionEntry fusionEntries_op2_bool[] = {
+        REGISTER_OP2_WORKHORSE(Equ)
+        REGISTER_OP2_WORKHORSE(NotEqu)
 
-        REGISTER_OP2_NUMERIC(LessEqu);
-        REGISTER_OP2_NUMERIC(GtEqu);
-        REGISTER_OP2_NUMERIC(Gt);
-        REGISTER_OP2_NUMERIC(Less);
-    }
+        REGISTER_OP2_NUMERIC(LessEqu)
+        REGISTER_OP2_NUMERIC(GtEqu)
+        REGISTER_OP2_NUMERIC(Gt)
+        REGISTER_OP2_NUMERIC(Less)
+    };
+
+    FUSION_TABLE(fusionTable_op2_bool, fusionEntries_op2_bool)
 }
 
 #endif

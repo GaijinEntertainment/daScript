@@ -420,20 +420,22 @@ namespace das {
 
     IMPLEMENT_ANY_SETOP(__forceinline, ArrayAt_U64, Ptr, StringPtr, StringPtr);
 
-    void createFusionEngine_at_array() {
-        REGISTER_SETOP_SCALAR(ArrayAtR2V);
-        REGISTER_SETOP_NUMERIC_VEC(ArrayAtR2V);
-        (*getFusionEngine())["ArrayAt"].emplace_back(new FusionPoint_Set_ArrayAt_StringPtr());
-        REGISTER_SETOP_SCALAR(ArrayAtR2VU);
-        REGISTER_SETOP_NUMERIC_VEC(ArrayAtR2VU);
-        (*getFusionEngine())["ArrayAtU"].emplace_back(new FusionPoint_Set_ArrayAtU_StringPtr());
-        REGISTER_SETOP_SCALAR(ArrayAtR2V_I64);
-        REGISTER_SETOP_NUMERIC_VEC(ArrayAtR2V_I64);
-        (*getFusionEngine())["ArrayAt_I64"].emplace_back(new FusionPoint_Set_ArrayAt_I64_StringPtr());
-        REGISTER_SETOP_SCALAR(ArrayAtR2V_U64);
-        REGISTER_SETOP_NUMERIC_VEC(ArrayAtR2V_U64);
-        (*getFusionEngine())["ArrayAt_U64"].emplace_back(new FusionPoint_Set_ArrayAt_U64_StringPtr());
-    }
+    static constexpr FusionEntry fusionEntries_at_array[] = {
+        REGISTER_SETOP_SCALAR(ArrayAtR2V)
+        REGISTER_SETOP_NUMERIC_VEC(ArrayAtR2V)
+        FUSION_ENTRY("ArrayAt","",FusionPoint_Set_ArrayAt_StringPtr)
+        REGISTER_SETOP_SCALAR(ArrayAtR2VU)
+        REGISTER_SETOP_NUMERIC_VEC(ArrayAtR2VU)
+        FUSION_ENTRY("ArrayAtU","",FusionPoint_Set_ArrayAtU_StringPtr)
+        REGISTER_SETOP_SCALAR(ArrayAtR2V_I64)
+        REGISTER_SETOP_NUMERIC_VEC(ArrayAtR2V_I64)
+        FUSION_ENTRY("ArrayAt_I64","",FusionPoint_Set_ArrayAt_I64_StringPtr)
+        REGISTER_SETOP_SCALAR(ArrayAtR2V_U64)
+        REGISTER_SETOP_NUMERIC_VEC(ArrayAtR2V_U64)
+        FUSION_ENTRY("ArrayAt_U64","",FusionPoint_Set_ArrayAt_U64_StringPtr)
+    };
+
+    FUSION_TABLE(fusionTable_at_array, fusionEntries_at_array)
 }
 
 #endif

@@ -22,16 +22,17 @@ namespace das {
     IMPLEMENT_OP2_INTEGER(BinRotl);
     IMPLEMENT_OP2_INTEGER(BinRotr);
 
-    void createFusionEngine_op2_bin()
-    {
-        REGISTER_OP2_INTEGER(BinAnd);
-        REGISTER_OP2_INTEGER(BinOr);
-        REGISTER_OP2_INTEGER(BinXor);
-        REGISTER_OP2_INTEGER(BinShl);
-        REGISTER_OP2_INTEGER(BinShr);
-        REGISTER_OP2_INTEGER(BinRotl);
-        REGISTER_OP2_INTEGER(BinRotr);
-    }
+    static constexpr FusionEntry fusionEntries_op2_bin[] = {
+        REGISTER_OP2_INTEGER(BinAnd)
+        REGISTER_OP2_INTEGER(BinOr)
+        REGISTER_OP2_INTEGER(BinXor)
+        REGISTER_OP2_INTEGER(BinShl)
+        REGISTER_OP2_INTEGER(BinShr)
+        REGISTER_OP2_INTEGER(BinRotl)
+        REGISTER_OP2_INTEGER(BinRotr)
+    };
+
+    FUSION_TABLE(fusionTable_op2_bin, fusionEntries_op2_bin)
 }
 
 #endif

@@ -29,21 +29,15 @@ namespace das {
     IMPLEMENT_OP2_INTEGER_VEC(BinShl);
     IMPLEMENT_OP2_INTEGER_VEC(BinShr);
 
-    void createFusionEngine_op2_bin_vec()
-    {
-        REGISTER_OP2_INTEGER_VEC(BinAnd);
-        REGISTER_OP2_INTEGER_VEC(BinOr);
-        REGISTER_OP2_INTEGER_VEC(BinXor);
-        REGISTER_OP2_INTEGER_VEC(BinShl);
-        REGISTER_OP2_INTEGER_VEC(BinShr);
-    }
-}
+    static constexpr FusionEntry fusionEntries_op2_bin_vec[] = {
+        REGISTER_OP2_INTEGER_VEC(BinAnd)
+        REGISTER_OP2_INTEGER_VEC(BinOr)
+        REGISTER_OP2_INTEGER_VEC(BinXor)
+        REGISTER_OP2_INTEGER_VEC(BinShl)
+        REGISTER_OP2_INTEGER_VEC(BinShr)
+    };
 
-#else
-
-namespace das {
-    void createFusionEngine_op2_bin_vec() {
-    }
+    FUSION_TABLE(fusionTable_op2_bin_vec, fusionEntries_op2_bin_vec)
 }
 
 #endif

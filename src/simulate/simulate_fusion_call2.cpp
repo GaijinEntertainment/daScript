@@ -439,13 +439,15 @@ IMPLEMENT_ANY_OP2(__forceinline, FastCallChecked, Ptr, StringPtr)
 
 IMPLEMENT_ANY_OP2(__forceinline, CallChecked, Ptr, StringPtr)
 
-    void createFusionEngine_call2() {
-        (*getFusionEngine())["Call"].emplace_back(new FusionPoint_Call_StringPtr());
-        (*getFusionEngine())["CallAndCopyOrMove"].emplace_back(new FusionPoint_CallAndCopyOrMove_StringPtr());
-        (*getFusionEngine())["FastCall"].emplace_back(new FusionPoint_FastCall_StringPtr());
-        (*getFusionEngine())["FastCallChecked"].emplace_back(new FusionPoint_FastCallChecked_StringPtr());
-        (*getFusionEngine())["CallChecked"].emplace_back(new FusionPoint_CallChecked_StringPtr());
-    }
+    static constexpr FusionEntry fusionEntries_call2[] = {
+        FUSION_ENTRY("Call","",FusionPoint_Call_StringPtr)
+        FUSION_ENTRY("CallAndCopyOrMove","",FusionPoint_CallAndCopyOrMove_StringPtr)
+        FUSION_ENTRY("FastCall","",FusionPoint_FastCall_StringPtr)
+        FUSION_ENTRY("FastCallChecked","",FusionPoint_FastCallChecked_StringPtr)
+        FUSION_ENTRY("CallChecked","",FusionPoint_CallChecked_StringPtr)
+    };
+
+    FUSION_TABLE(fusionTable_call2, fusionEntries_call2)
 }
 
 #endif

@@ -1183,9 +1183,7 @@ namespace das
         static void Initialize();
         static bool InitializeDependencies ( string & notInitialized );
         static void CollectFileInfo(das::vector<FileInfoPtr> &accesses);
-        // resetFusion=false orphans the fusion table: for a host whose process ends right after, the
-        // teardown is time spent on memory the OS reclaims anyway; a host that initializes again must reset
-        static void Shutdown( bool dumpHandleLeaks = true, bool resetFusion = true );
+        static void Shutdown( bool dumpHandleLeaks = true );
         // Runtime-only shutdown — for standalone exes built with `daslang -exe`,
         // which link libDaScript*_runtime without the fusion engine. See issue #2583.
         static void ShutdownStandalone( bool dumpHandleLeaks = false );
@@ -1295,7 +1293,7 @@ namespace das
         Module * next = nullptr;
         unique_ptr<FileInfo>    ownFileInfo;
         FileAccessPtr           promotedAccess;
-        static void shutdownInternal ( bool dumpHandleLeaks, bool resetFusion );
+        static void shutdownInternal ( bool dumpHandleLeaks );
     };
 
     #define REGISTER_MODULE(ClassName) \

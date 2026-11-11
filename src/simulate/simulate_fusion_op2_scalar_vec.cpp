@@ -37,20 +37,14 @@ namespace das {
     IMPLEMENT_OP2_NUMERIC_VEC(MulScalVec);
     IMPLEMENT_OP2_NUMERIC_VEC(DivScalVec);
 
-    void createFusionEngine_op2_scalar_vec()
-    {
-        REGISTER_OP2_NUMERIC_VEC(MulVecScal);
-        REGISTER_OP2_NUMERIC_VEC(DivVecScal);
-        REGISTER_OP2_NUMERIC_VEC(MulScalVec);
-        REGISTER_OP2_NUMERIC_VEC(DivScalVec);
-    }
-}
+    static constexpr FusionEntry fusionEntries_op2_scalar_vec[] = {
+        REGISTER_OP2_NUMERIC_VEC(MulVecScal)
+        REGISTER_OP2_NUMERIC_VEC(DivVecScal)
+        REGISTER_OP2_NUMERIC_VEC(MulScalVec)
+        REGISTER_OP2_NUMERIC_VEC(DivScalVec)
+    };
 
-#else
-
-namespace das {
-    void createFusionEngine_op2_scalar_vec() {
-    }
+    FUSION_TABLE(fusionTable_op2_scalar_vec, fusionEntries_op2_scalar_vec)
 }
 
 #endif

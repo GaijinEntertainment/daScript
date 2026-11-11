@@ -28,21 +28,15 @@ namespace das {
     IMPLEMENT_OP2_NUMERIC_VEC(Mod);
     IMPLEMENT_OP2_NUMERIC_VEC(Mul);
 
-    void createFusionEngine_op2_vec()
-    {
-        REGISTER_OP2_NUMERIC_VEC(Add);
-        REGISTER_OP2_NUMERIC_VEC(Sub);
-        REGISTER_OP2_NUMERIC_VEC(Div);
-        REGISTER_OP2_NUMERIC_VEC(Mod);
-        REGISTER_OP2_NUMERIC_VEC(Mul);
-    }
-}
+    static constexpr FusionEntry fusionEntries_op2_vec[] = {
+        REGISTER_OP2_NUMERIC_VEC(Add)
+        REGISTER_OP2_NUMERIC_VEC(Sub)
+        REGISTER_OP2_NUMERIC_VEC(Div)
+        REGISTER_OP2_NUMERIC_VEC(Mod)
+        REGISTER_OP2_NUMERIC_VEC(Mul)
+    };
 
-#else
-
-namespace das {
-    void createFusionEngine_op2_vec() {
-    }
+    FUSION_TABLE(fusionTable_op2_vec, fusionEntries_op2_vec)
 }
 
 #endif

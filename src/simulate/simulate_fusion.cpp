@@ -61,7 +61,7 @@ namespace das {
         V_END();
     }
 
-    SimNode * FusionPointOp1::fuseOp1(const SimNodeInfoLookup & info, SimNode * node, SimNode * node_x, Context * context) {
+    SimNode * FusionPointOp1::fuseOp1(const SimNodeInfoLookup & info, SimNode * node, SimNode * node_x, Context * context) const {
         SimNode_Op1Fusion * result = (SimNode_Op1Fusion *) match(info,node,node_x,context);
         if (result) {
             set(result, node);
@@ -77,9 +77,9 @@ namespace das {
         }
     }
 
-    SimNode * FusionPointOp2::fuseOp2(const SimNodeInfoLookup & info, SimNode * node, SimNode * node_l, SimNode * node_r, Context * context) {
-        anyLeft = anyRight = false;
-        SimNode_Op2Fusion * result = (SimNode_Op2Fusion *) match(info,node,node_l,node_r,context);
+    SimNode * FusionPointOp2::fuseOp2(const SimNodeInfoLookup & info, SimNode * node, SimNode * node_l, SimNode * node_r, Context * context) const {
+        bool anyLeft = false, anyRight = false;
+        SimNode_Op2Fusion * result = (SimNode_Op2Fusion *) match(info,node,node_l,node_r,context,anyLeft,anyRight);
         if ( result ) {
             set(result,node);
             if ( !anyLeft && node_l->rtti_node_isSourceBase() ) {
@@ -124,58 +124,57 @@ namespace das {
         return "???";
     }
 
-    string fuseName ( const string & name, const string & typeName ) {
-        return typeName.empty() ? name : (name + "<" + typeName + ">");
-    }
-
-    // TODO: at some point we should share fusion engine
-    inline DAS_THREAD_LOCAL(unique_ptr<FusionEngine>) g_fusionEngine;
-
-    unique_ptr<FusionEngine> &getFusionEngine() {
-        return *g_fusionEngine;
-    }
-
-    void resetFusionEngine( bool orphan ) {
-        if ( orphan ) {
-            (void) g_fusionEngine->release();   // the thread-local's destructor would otherwise free it all at exit
-        } else {
-            g_fusionEngine->reset();
-        }
-    }
-
-    void createFusionEngine() {
-        if ( !*g_fusionEngine ) {
-            *g_fusionEngine = make_unique<FusionEngine>();
 #if DAS_FUSION
-            // misc (note, misc before everything)
-            createFusionEngine_misc_copy_reference();
-            // op1
-            createFusionEngine_op1();
-            createFusionEngine_return();
-            createFusionEngine_ptrfdr();
-            createFusionEngine_if();
-            // scalar
-            createFusionEngine_op2();
-            createFusionEngine_op2_set();
-            createFusionEngine_op2_bool();
-            createFusionEngine_op2_bin();
-            // vector
-            createFusionEngine_op2_vec();
-            createFusionEngine_op2_set_vec();
-            createFusionEngine_op2_bool_vec();
-            createFusionEngine_op2_bin_vec();
-            createFusionEngine_op2_scalar_vec();
-            // at
-            createFusionEngine_at();
-            createFusionEngine_at_array();
-            createFusionEngine_tableindex();
-            createFusionEngine_tablewithhash();
-            // call
-            createFusionEngine_call1();
-            createFusionEngine_call2();
+    extern const FusionTable fusionTable_misc_copy_reference;
+    extern const FusionTable fusionTable_op1;
+    extern const FusionTable fusionTable_return;
+    extern const FusionTable fusionTable_ptrfdr;
+    extern const FusionTable fusionTable_if;
+    extern const FusionTable fusionTable_op2;
+    extern const FusionTable fusionTable_op2_set;
+    extern const FusionTable fusionTable_op2_bool;
+    extern const FusionTable fusionTable_op2_bin;
+#if DAS_FUSION>=2
+    extern const FusionTable fusionTable_op2_vec;
+    extern const FusionTable fusionTable_op2_set_vec;
+    extern const FusionTable fusionTable_op2_bool_vec;
+    extern const FusionTable fusionTable_op2_bin_vec;
+    extern const FusionTable fusionTable_op2_scalar_vec;
 #endif
-        }
-    }
+    extern const FusionTable fusionTable_at;
+    extern const FusionTable fusionTable_at_array;
+    extern const FusionTable fusionTable_tableindex;
+    extern const FusionTable fusionTable_tablewithhash;
+    extern const FusionTable fusionTable_call1;
+    extern const FusionTable fusionTable_call2;
+#endif
+
+#if DAS_FUSION
+    static const FusionTable * const g_fusionTables[] = {
+        &fusionTable_misc_copy_reference,
+        &fusionTable_op1,
+        &fusionTable_return,
+        &fusionTable_ptrfdr,
+        &fusionTable_if,
+        &fusionTable_op2,
+        &fusionTable_op2_set,
+        &fusionTable_op2_bool,
+        &fusionTable_op2_bin,
+#if DAS_FUSION>=2
+        &fusionTable_op2_vec,
+        &fusionTable_op2_set_vec,
+        &fusionTable_op2_bool_vec,
+        &fusionTable_op2_bin_vec,
+        &fusionTable_op2_scalar_vec,
+#endif
+        &fusionTable_at,
+        &fusionTable_at_array,
+        &fusionTable_tableindex,
+        &fusionTable_tablewithhash,
+        &fusionTable_call1,
+        &fusionTable_call2,
+    };
+#endif
 
     struct SimNodeCollector : SimVisitor {
         virtual void preVisit ( SimNode * node ) override {
@@ -197,24 +196,30 @@ namespace das {
     struct SimFusion : SimVisitor {
         SimFusion ( Context * ctx, TextWriter & wr,  das_hash_map<SimNode *,SimNodeInfo> && ni )
             : context(ctx), ss(wr), info(ni) {
-                createFusionEngine();
         }
         void fuse() {
             fused = true;
         }
         virtual SimNode * visit ( SimNode * node ) override {
+#if DAS_FUSION
             auto & ni = info[node];
-            auto it = (*g_fusionEngine)->find(fuseName(ni.name, ni.typeName));
-            if ( it != (*g_fusionEngine)->end() ) {
-                auto & nv = it->second;
-                for ( const auto & fe : nv ) {
-                    auto newNode = fe->fuse(info, node, context);
-                    if ( newNode != node ) {
-                        fuse();
-                        return newNode;
+            uint32_t hash = fusionHash(ni.name.c_str(), ni.typeName.c_str());
+            uint32_t bit = fusionFilterBit(hash);
+            for ( auto table : g_fusionTables ) {
+                if ( !(table->filter[bit >> 6] & (uint64_t(1) << (bit & 63))) ) continue;
+                for ( uint32_t slot = hash & table->mask; table->slots[slot].entry; slot = (slot + 1) & table->mask ) {
+                    if ( table->slots[slot].hash != hash ) continue;
+                    const FusionEntry & entry = table->entries[table->slots[slot].entry - 1];
+                    if ( strcmp(ni.name.c_str(), entry.name)==0 && strcmp(ni.typeName.c_str(), entry.typeName)==0 ) {
+                        auto newNode = entry.point->fuse(info, node, context);
+                        if ( newNode != node ) {
+                            fuse();
+                            return newNode;
+                        }
                     }
                 }
             }
+#endif
             return SimVisitor::visit(node);
         }
         Context * context = nullptr;
@@ -250,18 +255,12 @@ namespace das {
             }
         }
     }
-
-    void registerFusion ( const char * OpName, const char * CTypeName, FusionPoint * node ) {
-        (**g_fusionEngine)[fuseName(OpName,CTypeName)].emplace_back(node);
-    }
-
 }
 
 DAS_CC_API void register_fusion () {
     static std::once_flag fusionHooksOnce;
     std::call_once(fusionHooksOnce, [] {
         das::g_fusionContextFn = &das::fusionContext;
-        das::g_resetFusionEngineFn = &das::resetFusionEngine;
     });
 }
 

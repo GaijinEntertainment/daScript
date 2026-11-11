@@ -20,14 +20,15 @@ namespace das {
     IMPLEMENT_OP2_NUMERIC(Mod);
     IMPLEMENT_OP2_NUMERIC(Mul);
 
-    void createFusionEngine_op2()
-    {
-        REGISTER_OP2_NUMERIC(Add);
-        REGISTER_OP2_NUMERIC(Sub);
-        REGISTER_OP2_NUMERIC(Div);
-        REGISTER_OP2_NUMERIC(Mod);
-        REGISTER_OP2_NUMERIC(Mul);
-    }
+    static constexpr FusionEntry fusionEntries_op2[] = {
+        REGISTER_OP2_NUMERIC(Add)
+        REGISTER_OP2_NUMERIC(Sub)
+        REGISTER_OP2_NUMERIC(Div)
+        REGISTER_OP2_NUMERIC(Mod)
+        REGISTER_OP2_NUMERIC(Mul)
+    };
+
+    FUSION_TABLE(fusionTable_op2, fusionEntries_op2)
 }
 
 #endif

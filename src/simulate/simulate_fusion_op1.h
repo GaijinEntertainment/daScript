@@ -36,6 +36,6 @@
 #include "simulate_fusion_op1_set_perm.h"
 
 #define REGISTER_OP1_FUSION_POINT(OPNAME,TYPE,CTYPE) \
-    registerFusion(#OPNAME,typeName<CTYPE>::name(),new Op1FusionPoint_##OPNAME##_##CTYPE());
+    FUSION_ENTRY(#OPNAME,typeName<CTYPE>::name(),Op1FusionPoint_##OPNAME##_##CTYPE)
 
 #include "simulate_fusion_op1_reg.h"
