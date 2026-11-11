@@ -423,6 +423,7 @@ SET(AOT_LANGUAGE_MODULE_FILES
     tests/language/_string_clone_init_helper.das
     tests/language/_struct_alias_facade.das
     tests/language/_struct_alias_helper.das
+    tests/language/_struct_alias_unrequired.das
     tests/language/_struct_alias_twin.das
 )
 

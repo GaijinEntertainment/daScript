@@ -2129,8 +2129,9 @@ namespace das {
                         reportAstChanged();
                     } else if (aliasT->isStructure()) {
                         if (expr->arguments.size() == 0) {
-                            expr->name = thisModule->isVisibleDirectly(aliasT->structType->module)
-                                ? aliasT->structType->getMangledName() : aliasT->structType->name;
+                            if (thisModule->isVisibleDirectly(aliasT->structType->module)) {
+                                expr->name = aliasT->structType->getMangledName();
+                            }
                             bool isPrivate = aliasT->structType->privateStructure;
                             if (isPrivate && aliasT->structType->module != thisModule) {
                                 error("can't access private structure " + aliasT->structType->name, "", "",
