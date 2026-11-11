@@ -3447,10 +3447,13 @@ class public CppAot : AstVisitor {
         }
     }
     def override preVisitExprMakeArrayIndex(expr : ExprMakeArray?; index : int; init : ExpressionPtr; last : bool) {
+        let elem = (expr.makeArrayOnHeap
+            ? "{mkaName(expr)}[{index}]"
+            : "{mkaName(expr)}({index},__context__)")
         if (init._type.canCopy) {
-            write(*ss, "{tabs()}das_copy(({mkaName(expr)}({index},__context__)),(");
+            write(*ss, "{tabs()}das_copy(({elem}),(");
         } else {
-            write(*ss, "{tabs()}das_move({mkaName(expr)}({index},__context__),");
+            write(*ss, "{tabs()}das_move({elem},");
         }
     }
     def override visitExprMakeArrayIndex(expr : ExprMakeArray?; index : int; init : ExpressionPtr; last : bool) {
