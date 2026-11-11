@@ -7512,6 +7512,25 @@ def private function_has_annotation(f : Function const?; nm : string) : bool {
     return false
 }
 
+// True iff `f` (or its generic origin) carries `[tag_function(nm)]`:
+// a kernel file that also runs on the CPU spells a marker this way,
+// so it needs no dasSpirv require.
+def private function_has_tag(f : Function const?; nm : string) : bool {
+    if (f == null) return false
+    var fo = f
+    while (fo.fromGeneric != null) {
+        fo = fo.fromGeneric
+    }
+    for (ad in fo.annotations) {
+        if (ad != null && ad.annotation != null && "{ad.annotation.name}" == "tag_function") {
+            for (arg in ad.arguments) {
+                if ("{arg.name}" == nm) return true
+            }
+        }
+    }
+    return false
+}
+
 // Is this parameter WRITTEN THROUGH by the callee -- a Function pointer parameter fed by the
 // copy-in/copy-out temp at the call site, rather than a by-value OpFunctionParameter?
 //
@@ -7580,7 +7599,8 @@ def private register_user_func(var m : SpirvModule; var ctx : EmitCtx; f : Funct
             ptypes |> push(vt)
         }
     }
-    uf.inline_body = function_has_annotation(f, "spirv_inline")
+    uf.inline_body = (function_has_annotation(f, "spirv_inline")
+        || function_has_tag(f, "spirv_inline"))
     if (uf.valid && !uf.inline_body) {
         uf.fn_id = alloc_id(m)
         uf.type_id = type_function(m, uf.ret_type, ptypes)

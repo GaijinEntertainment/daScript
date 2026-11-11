@@ -6,7 +6,7 @@ require dasllama/dasllama_lint public
 require daslib/typemacro_boost
 require math
 require daslib/math_bits   // uint_bits_to_float: the bf16 word form widens each half by its bit shift
-require spirv/spirv_markers   // [spirv_inline]: the helpers the SPIR-V emitter visits at their call sites; the markers alone, no emitter
+require daslib/ast_boost   // [tag_function(spirv_inline)]: the helpers the SPIR-V emitter visits at their call sites, with no dasSpirv require
 
 struct GkAxpyArgs {
     nelem : uint
@@ -604,25 +604,25 @@ class template GkDwConvRows {
 }
 
 //! a bf16 pair word's low half widened to f32 by its bit shift (exact)
-[spirv_inline]
+[tag_function(spirv_inline)]
 def gk_bf16_lo(w : uint) : float => uint_bits_to_float(w << 16u)
 
 //! a bf16 pair word's high half widened to f32 (exact)
-[spirv_inline]
+[tag_function(spirv_inline)]
 def gk_bf16_hi(w : uint) : float => uint_bits_to_float(w & 0xFFFF0000u)
 
 //! a bf16 pair word's half widened to f32 (exact): the high one where `odd`
-[spirv_inline]
+[tag_function(spirv_inline)]
 def gk_bf16_at(w : uint; odd : bool) : float => odd ? gk_bf16_hi(w) : gk_bf16_lo(w)
 
 //! element `e`'s index in rows of `len` elements stored `stride` apart from `base` (a side input stored position-major); a zero
 //! `len` divides as one
-[spirv_inline]
+[tag_function(spirv_inline)]
 def gk_strided_at(e, base, stride, len : uint) : uint => base + (e / max(len, 1u)) * stride + e % max(len, 1u)
 
 //! the up element an act pairs with gate element `e`: rows of `len` `stride` apart from `base` (`gk_strided_at`) where `stride` is
 //! set, else the contiguous row from `base`
-[spirv_inline]
+[tag_function(spirv_inline)]
 def gk_up_at(e, base, stride, len : uint) : uint => stride != 0u ? gk_strided_at(e, base, stride, len) : base + e
 
 //! the 32-lane block's largest-magnitude value, the first on a tie, as the CPU's strict compare keeps it (`quantize_tq4kv_row`):
@@ -659,7 +659,7 @@ class template GkWgReduce {
     @template_constant RSQRT : bool = false   //!< `wg_rms_inv_into`'s inverse norm: `rsqrt`, else the CPU's `1 / sqrt`
 
     //! the 32 lanes of a row folded: a butterfly over the row's aligned lane group, every lane holding the row's sum
-    [spirv_inline]
+    [tag_function(spirv_inline)]
     def row_sum_into(var s : float&) {
         var a = s
         a += gk_subgroup_xor(a, 16u)
@@ -929,7 +929,7 @@ class template GkPkGemv : GkWgReduce {
     def abstract row_dot_into(row, lane : uint; var acc : float&) : void   //! row `row`'s dot with the staged x over its 32 lanes
 
     //! whether the rows' base, stride and width sit on the four lattice, under `QUAD`
-    [spirv_inline]
+    [tag_function(spirv_inline)]
     def quad_rows : bool {
         static_if (QUAD) {
             return ((pa.woff | pa.stride | pa.nin) & 3u) == 0u
@@ -939,7 +939,7 @@ class template GkPkGemv : GkWgReduce {
     }
 
     //! the f32 rows' dot over lanes: under `QUAD` float4 steps on the four lattice, floats otherwise
-    [spirv_inline]
+    [tag_function(spirv_inline)]
     def f32_row_dot_into(row, lane : uint; var acc : float&) {
         let wrow = pa.woff + row * pa.stride
         var a = acc
@@ -967,7 +967,7 @@ class template GkPkGemv : GkWgReduce {
     }
 
     //! the float rows' dot over lanes onto `a`
-    [spirv_inline]
+    [tag_function(spirv_inline)]
     def scalar_dot_add(wrow, lane : uint; var a : float&) {
         var s = a
         var j = lane
@@ -978,7 +978,7 @@ class template GkPkGemv : GkWgReduce {
         a = s
     }
 
-    [spirv_inline]
+    [tag_function(spirv_inline)]
     def aux_at(i : uint) : float {
         static_if (AUX_IN) {
             return wn[pa.aoff + i]
@@ -989,7 +989,7 @@ class template GkPkGemv : GkWgReduce {
 
     //! the input row staged into xs through the LayerNorm (lw, lb), then under NORM_MOD_IN the adaLN modulation; the inverse norm the
     //! stamp's spelling (`RSQRT`)
-    [spirv_inline]
+    [tag_function(spirv_inline)]
     def stage_normed(tid : uint) {
         var k = tid
         var s = 0.0
@@ -1022,7 +1022,7 @@ class template GkPkGemv : GkWgReduce {
     }
 
     //! workgroup `wg`'s four rows, thread `tid` of its 128
-    [spirv_inline]
+    [tag_function(spirv_inline)]
     def pk_gemv_body(wg, tid : uint) {
         static_if (NORM_MOD_IN || NORM_IN) {
             stage_normed(tid)
@@ -1084,7 +1084,7 @@ class template GkPkGemv : GkWgReduce {
 
     //! the rope-store epilogue over the pair (row, row + 1): the q span turned into y, the k span turned into the k cache's
     //! row p, the v span copied into the v cache's
-    [spirv_inline]
+    [tag_function(spirv_inline)]
     def rope_store(row : uint; r0, r1 : float) {
         static_if (ROPE_STORE) {
             let span = max(pa.span, 1u)
@@ -1722,7 +1722,7 @@ class template GkResidualRow : GkQ8BlockStore {
     def abstract pre_partner(base, k : uint) : float  //! the sandwich form's partner column: off the stash, or recomputed
 
     //! column `k` stepped a lane-stride on: `LANES`, or the threadgroup's own size where the stamp leaves it 0
-    [spirv_inline]
+    [tag_function(spirv_inline)]
     def next_col(var k : uint&) {
         static_if (LANES == 0u) {
             k += gl_WorkGroupSize.x
@@ -1732,11 +1732,11 @@ class template GkResidualRow : GkQ8BlockStore {
     }
 
     //! the next norm's weight row base in wn: `pa.woff`, or the stamp's own where its layout fixes it
-    [spirv_inline]
+    [tag_function(spirv_inline)]
     def norm_base : uint => pa.woff
 
     //! the add partner's post-norm weight row base in wn: `pa.pwoff`, or the stamp's own where its layout fixes it
-    [spirv_inline]
+    [tag_function(spirv_inline)]
     def pre_base : uint => pa.pwoff
 
     def norm_weight(e : uint) : float {
@@ -2879,7 +2879,7 @@ class template GkRouterGemv {
     @template_constant YSCALE : bool = false
 
     //! x's element i of the column at element xb (VW 1 and 2), under the norm row when `norm_on`
-    [spirv_inline]
+    [tag_function(spirv_inline)]
     def xn(xb, i : uint) : float {
         static_if (VW == 4u) {
             return 0.0
@@ -2893,7 +2893,7 @@ class template GkRouterGemv {
     }
 
     //! word i of the row dotted with the column at xb into a scalar - an accumulator pointer down the call stalls the Vulkan driver
-    [spirv_inline]
+    [tag_function(spirv_inline)]
     def word_dot_into(wv : KT; xb, i : uint; var d : float&) {
         static_if (VW == 4u) {
             static_if (NORM) {
@@ -2924,7 +2924,7 @@ class template GkRouterGemv {
         }
     }
 
-    [spirv_inline]
+    [tag_function(spirv_inline)]
     def bias_at(e : uint) : float {
         static_if (BIAS) {
             return pa.hasb != 0u ? rb[pa.boff + e] : 0.0
@@ -2934,7 +2934,7 @@ class template GkRouterGemv {
     }
 
     //! row e's logit of column cc
-    [spirv_inline]
+    [tag_function(spirv_inline)]
     def store_logit(e, cc : uint; v : float) {
         var o = pa.obase + cc * (pa.ne_split != 0u ? pa.ne_split : pa.ne) + e
         if (pa.ne_split != 0u && e >= pa.ne_split) {
@@ -2948,7 +2948,7 @@ class template GkRouterGemv {
     }
 
     //! a column's lane partial `v` summed over the subgroup in place, and under `ROW_WG` published at slot `slot` x 128 of the slab
-    [spirv_inline]
+    [tag_function(spirv_inline)]
     def col_part_into(var v : float&; c, slot : uint) {
         v = gk_subgroup_add(v)
         static_if (ROW_WG) {
@@ -2959,7 +2959,7 @@ class template GkRouterGemv {
     }
 
     //! under `ROW_WG`, column c's workgroup sum off the slab, after the barrier that follows the partials
-    [spirv_inline]
+    [tag_function(spirv_inline)]
     def col_total_into(c, slot : uint; var tot : float&) {
         static_if (ROW_WG) {
             var a = 0.0
@@ -2973,7 +2973,7 @@ class template GkRouterGemv {
     }
 
     //! the sum of squares of the column at element xb over the row's lanes' elements, onto `s`
-    [spirv_inline]
+    [tag_function(spirv_inline)]
     def col_sq_into(xb, lane, nl : uint; var s : float&) {
         static_if (NORM) {
             var a = 0.0
@@ -2996,7 +2996,7 @@ class template GkRouterGemv {
 
     //! row e's logits over the dispatch's columns, the row's lane `lane` of `nl`; under `COL_CLAMP` every one of NC columns unrolled, else
     //! a loop over the live ones
-    [spirv_inline]
+    [tag_function(spirv_inline)]
     def router_row(e, lane, nl : uint) {   // nolint:STYLE038 - the norm, the dot, the partials and the stores share the column registers
         let cb = gl_WorkGroupID.y * uint(NC)
         let nct = max(pa.ncols, 1u)
@@ -3744,7 +3744,7 @@ class template GkPostAddLn : GkQ8BlockStore {
         }
     }
 
-    [spirv_inline]
+    [tag_function(spirv_inline)]
     def inv_norm(ms : float) : float {
         static_if (RSQRT) {
             return rsqrt(ms)
@@ -4871,7 +4871,7 @@ class template GkMoeCombine : GkQ8BlockStore {
     }
 
     //! row p's k slots at element i added onto `acc` under their weights, in slot order
-    [spirv_inline]
+    [tag_function(spirv_inline)]
     def slot_sum_into(p, i : uint; var acc : float&) {
         let n = pa.n
         let k = pa.k
@@ -4926,7 +4926,7 @@ class template GkMoeCombine : GkQ8BlockStore {
     }
 
     //! the workgroup's row over its elements, 256 lanes striding: a position's row, or under `BYROW` a window row's onto its position
-    [spirv_inline]
+    [tag_function(spirv_inline)]
     def comb_body {
         var i = gl_LocalInvocationID.x
         while (i < pa.n) {
@@ -4980,16 +4980,16 @@ class template GkMoeCombG4 : GkMoeCombine {
 
     //! the norms plane's row bases - the routed post norm, the dense post norm, the post-FFN norm, the next norm: `pa`'s, or the
     //! stamp's own where its layout fixes them
-    [spirv_inline]
+    [tag_function(spirv_inline)]
     def rpost_base : uint => pa.rpost_off
 
-    [spirv_inline]
+    [tag_function(spirv_inline)]
     def dpost_base : uint => pa.dpost_off
 
-    [spirv_inline]
+    [tag_function(spirv_inline)]
     def spost_base : uint => pa.spost_off
 
-    [spirv_inline]
+    [tag_function(spirv_inline)]
     def next_base : uint => pa.nwoff
 
     def override normed_at(e : uint; mean, inv : float) : float => wn[next_base() + e] * (stashed(e) * inv)
