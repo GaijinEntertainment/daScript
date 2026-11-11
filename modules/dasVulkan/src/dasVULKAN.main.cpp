@@ -74,6 +74,34 @@ static int32_t das_volkInitialize_once() {
 static std::mutex g_volk_mtx;
 static bool g_volk_ready = false;
 static VkDevice g_volk_device = VK_NULL_HANDLE;
+static int32_t g_volk_device_loads = 0;
+static PFN_vkDestroyDevice g_volk_destroy_device = nullptr;
+
+static VKAPI_ATTR void VKAPI_CALL das_vkDestroyDevice_forgets(VkDevice device, const VkAllocationCallbacks * allocator) {
+    PFN_vkDestroyDevice destroy = nullptr;
+    {
+        std::lock_guard<std::mutex> guard(g_volk_mtx);
+        if (g_volk_device == device) {
+            g_volk_device = VK_NULL_HANDLE;
+        }
+        destroy = g_volk_destroy_device;
+    }
+    if (destroy) {
+        destroy(device, allocator);
+    }
+}
+
+static void das_volkHookDestroyDevice() {
+    if (vkDestroyDevice != das_vkDestroyDevice_forgets) {
+        g_volk_destroy_device = vkDestroyDevice;
+        vkDestroyDevice = das_vkDestroyDevice_forgets;
+    }
+}
+
+static int32_t das_volkDeviceLoads() {
+    std::lock_guard<std::mutex> guard(g_volk_mtx);
+    return g_volk_device_loads;
+}
 
 static int32_t das_volkInitialize() {
     std::lock_guard<std::mutex> guard(g_volk_mtx);
@@ -96,6 +124,7 @@ static void das_volkLoadInstance(VkInstance instance) {
     } else {
         volkLoadInstance(instance);
     }
+    das_volkHookDestroyDevice();
 }
 
 static void das_volkLoadDevice(VkDevice device) {
@@ -104,7 +133,9 @@ static void das_volkLoadDevice(VkDevice device) {
         return;
     }
     volkLoadDevice(device);
+    das_volkHookDestroyDevice();
     g_volk_device = device;
+    g_volk_device_loads++;
 }
 
 static void das_volkFinalize() {
@@ -112,6 +143,7 @@ static void das_volkFinalize() {
     volkFinalize();
     g_volk_ready = false;
     g_volk_device = VK_NULL_HANDLE;
+    g_volk_destroy_device = nullptr;
 }
 
 // ARCHITECTURE_SHARED_DEVICE.md#shared-device
@@ -496,6 +528,8 @@ Module_dasVULKAN::Module_dasVULKAN() : Module("vulkan") {
         SideEffects::modifyExternal, "das_volkLoadInstance")->args({"instance"});
     addExtern<DAS_BIND_FUN(das_volkLoadDevice)>(*this, lib, "volkLoadDevice",
         SideEffects::modifyExternal, "das_volkLoadDevice")->args({"device"});
+    addExtern<DAS_BIND_FUN(das_volkDeviceLoads)>(*this, lib, "volk_device_loads",
+        SideEffects::accessExternal, "das_volkDeviceLoads");
     addExtern<DAS_BIND_FUN(das_volkFinalize)>(*this, lib, "volkFinalize",
         SideEffects::modifyExternal, "das_volkFinalize");
     addExtern<DAS_BIND_FUN(das_vk_get_instance_proc_addr)>(*this, lib, "vk_get_instance_proc_addr",
