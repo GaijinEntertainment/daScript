@@ -176,7 +176,7 @@ namespace das
         uint32_t                    count;
         mutable Annotation *        resolved;       // lazy environment-lookup cache. WARNING: use Module::resolveAnnotation
         AnnotationInfo() = default;
-        AnnotationInfo ( const char * _name, const char * _module_name,
+        constexpr AnnotationInfo ( const char * _name, const char * _module_name,
                 AnnotationArgumentInfo * _arguments, uint32_t _count )
             : name(_name), module_name(_module_name)
             , arguments(_arguments), count(_count), resolved(nullptr) {}
@@ -466,6 +466,26 @@ namespace das
             size               = _size;
             hash               = _hash;
         }
+        constexpr TypeInfo ( Type _type, StructInfo * _structType, std::nullptr_t, std::nullptr_t,
+                    TypeInfo * _firstType, TypeInfo * _secondType, TypeInfo ** _argTypes, const char ** _argNames, uint32_t _argCount,
+                    uint32_t _dimSize, uint32_t * _dim, uint32_t _flags, uint32_t _size, uint64_t _hash )
+            : structType(_structType), firstType(_firstType), secondType(_secondType), argTypes(_argTypes), argNames(_argNames), dim(_dim),
+              hash(_hash), type(_type), flags(_flags), size(_size), argCount(_argCount), dimSize(_dimSize) {}
+        constexpr TypeInfo ( Type _type, std::nullptr_t, EnumInfo * _enumType, std::nullptr_t,
+                    TypeInfo * _firstType, TypeInfo * _secondType, TypeInfo ** _argTypes, const char ** _argNames, uint32_t _argCount,
+                    uint32_t _dimSize, uint32_t * _dim, uint32_t _flags, uint32_t _size, uint64_t _hash )
+            : enumType(_enumType), firstType(_firstType), secondType(_secondType), argTypes(_argTypes), argNames(_argNames), dim(_dim),
+              hash(_hash), type(_type), flags(_flags), size(_size), argCount(_argCount), dimSize(_dimSize) {}
+        constexpr TypeInfo ( Type _type, std::nullptr_t, std::nullptr_t, AnnotationInfo * _annotation_info,
+                    TypeInfo * _firstType, TypeInfo * _secondType, TypeInfo ** _argTypes, const char ** _argNames, uint32_t _argCount,
+                    uint32_t _dimSize, uint32_t * _dim, uint32_t _flags, uint32_t _size, uint64_t _hash )
+            : annotation_info(_annotation_info), firstType(_firstType), secondType(_secondType), argTypes(_argTypes), argNames(_argNames), dim(_dim),
+              hash(_hash), type(_type), flags(_flags), size(_size), argCount(_argCount), dimSize(_dimSize) {}
+        constexpr TypeInfo ( Type _type, std::nullptr_t, std::nullptr_t, std::nullptr_t,
+                    TypeInfo * _firstType, TypeInfo * _secondType, TypeInfo ** _argTypes, const char ** _argNames, uint32_t _argCount,
+                    uint32_t _dimSize, uint32_t * _dim, uint32_t _flags, uint32_t _size, uint64_t _hash )
+            : TypeInfo(_type, (StructInfo *)nullptr, nullptr, nullptr, _firstType, _secondType, _argTypes, _argNames, _argCount,
+                    _dimSize, _dim, _flags, _size, _hash) {}
         __forceinline bool isRef() const { return flags & flag_ref; }
         __forceinline bool isRefType() const { return flags & flag_refType; }
         __forceinline bool isRefValue() const { return flags & flag_refValue; }
@@ -537,21 +557,17 @@ namespace das
         uint32_t                    offset;
         uint32_t                    nextGcField;
         VarInfo() = default;
-        VarInfo(Type _type, StructInfo * _structType, EnumInfo * _enumType, AnnotationInfo * _annotation_info,
+        template <typename StructT, typename EnumT, typename AnnotationT>
+        constexpr VarInfo(Type _type, StructT _structType, EnumT _enumType, AnnotationT _annotation_info,
                 TypeInfo * _firstType, TypeInfo * _secondType, TypeInfo ** _argTypes, const char ** _argNames, uint32_t _argCount,
                 uint32_t _dimSize, uint32_t * _dim, uint32_t _flags, uint32_t _size,
                 uint64_t _hash, const char * _name, uint32_t _offset, uint32_t _nextGcField,
                 AnnotationArgumentInfo * _annotation_arguments = nullptr, uint32_t _annotation_argument_count = 0 ) :
             TypeInfo(_type,_structType,_enumType,_annotation_info,
                     _firstType,_secondType,_argTypes,_argNames,_argCount,
-                     _dimSize,_dim,_flags,_size,_hash) {
-                name               = _name;
-                offset             = _offset;
-                nextGcField        = _nextGcField;
-                annotation_arguments       = _annotation_arguments;
-                annotation_argument_count  = _annotation_argument_count;
-                value = v_zero();
-        }
+                     _dimSize,_dim,_flags,_size,_hash),
+            value{}, name(_name), annotation_arguments(_annotation_arguments),
+            annotation_argument_count(_annotation_argument_count), offset(_offset), nextGcField(_nextGcField) {}
     };
 
     struct StructInfo {
@@ -573,22 +589,13 @@ namespace das
         uint32_t    firstGcField;
         uint32_t    annotation_count;
         StructInfo() = default;
-        StructInfo(
+        constexpr StructInfo(
             const char * _name, const char * _module_name, uint32_t _flags, VarInfo ** _fields, uint32_t _count,
             uint32_t _size, uint64_t _init_mnh, AnnotationInfo * _annotations, uint32_t _annotation_count,
-            uint64_t _hash, uint32_t _firstGcField ) {
-                name =            _name;
-                module_name =     _module_name;
-                flags =           _flags;
-                fields =          _fields;
-                count =           _count;
-                size =            _size;
-                init_mnh =        _init_mnh;
-                annotations =     _annotations;
-                annotation_count = _annotation_count;
-                hash =            _hash;
-                firstGcField =    _firstGcField;
-        }
+            uint64_t _hash, uint32_t _firstGcField )
+            : name(_name), module_name(_module_name), fields(_fields), annotations(_annotations), hash(_hash),
+              init_mnh(_init_mnh), flags(_flags), count(_count), size(_size), firstGcField(_firstGcField),
+              annotation_count(_annotation_count) {}
     };
 
     struct EnumValueInfo {
@@ -683,25 +690,12 @@ namespace das
         // host's; 0 = none (builtins, AOT/JIT frames) - every gate check refuses
         uint32_t                spaceId;
         FuncInfo() = default;
-        FuncInfo( const char * _name, const char * _cppName, VarInfo ** _fields, uint32_t _count, uint32_t _stackSize,
+        constexpr FuncInfo( const char * _name, const char * _cppName, VarInfo ** _fields, uint32_t _count, uint32_t _stackSize,
                 TypeInfo * _result, LocalVariableInfo ** _locals, uint32_t _localCount, uint64_t _hash, uint32_t _flags,
-                AnnotationInfo * _annotations = nullptr, uint32_t _annotation_count = 0 ) {
-            name =       _name;
-            cppName =    _cppName;
-            fields =     _fields;
-            count =      _count;
-            stackSize =  _stackSize;
-            result =     _result;
-            locals =     _locals;
-            localCount = _localCount;
-            hash =       _hash;
-            flags =      _flags;
-            globals =    nullptr;
-            globalCount = 0;
-            annotations = _annotations;
-            annotation_count = _annotation_count;
-            spaceId = 0;
-        }
+                AnnotationInfo * _annotations = nullptr, uint32_t _annotation_count = 0 )
+            : name(_name), cppName(_cppName), fields(_fields), result(_result), locals(_locals), globals(nullptr),
+              annotations(_annotations), hash(_hash), flags(_flags), count(_count), stackSize(_stackSize),
+              localCount(_localCount), globalCount(0), annotation_count(_annotation_count), spaceId(0) {}
     };
 
     DAS_API string das_to_string ( Type t );
