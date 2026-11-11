@@ -717,7 +717,7 @@ def relocated_specs(n : int) {
 
 def relocated_destructure(base : int; at : int) : int {
     if (base < 0) return -1
-    var inscope (xs, ok) <- relocated_specs(base)
+    var inscope(xs, ok) <- relocated_specs(base)
     return ok ? length(xs) + base + at : 0
 }
 

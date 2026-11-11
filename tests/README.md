@@ -6293,6 +6293,7 @@ compile-fail fixture: a structure, a function, lambda or block argument, a local
 - `test_same_as_folds_fired` - folds on structurally identical pure operands - fields, swizzles, index reads, ternary arms - fire, while impure operands and float f - f without fast_math do not fold
 - `test_cond_folds_fired` - if/else-return chains fold into ternaries and void arms with a pure condition fold away, while an impure condition or a finally section blocks the fold
 - `test_same_as_folds_behavior` - same-shape folds preserve values, and impure same-shape operands still evaluate exactly twice
+- `test_function_address_is_not_folded` - a call whose result is built from a function address is not folded into a constant
 
 ### optimization_inline.das
 

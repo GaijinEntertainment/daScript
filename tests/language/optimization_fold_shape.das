@@ -322,3 +322,25 @@ def test_same_as_folds_behavior(t : T?) {
         t |> equal(g_side, 2)
     }
 }
+
+def fold_shape_addr_target(a, b : int) : int => a + b
+
+[export]
+def target_addr_cast : uint64 => unsafe(reinterpret<uint64>(@@fold_shape_addr_target))
+
+[export]
+def target_addr_caller : uint64 => target_addr_cast() + 1ul
+
+[export]
+def target_addr_taken : bool => @@fold_shape_addr_target != null
+
+[export]
+def target_addr_taken_caller : bool => target_addr_taken()
+
+[test(description = "a call whose result is built from a function address is not folded into a constant")]
+def test_function_address_is_not_folded(t : T?) {
+    t |> success(body_of(t, "target_addr_caller") |> find("target_addr_cast") >= 0,
+        "the address cast stays a call")
+    t |> success(body_of(t, "target_addr_taken_caller") |> find("target_addr_taken") >= 0,
+        "a function that takes an address stays a call")
+}

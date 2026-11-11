@@ -12,6 +12,12 @@ A pass reads it through `Function::hasObservableEffects` (or `observableEffects`
 bits), never `sideEffectFlags` itself, so a bit added to `SideEffects` that is not an observable
 effect does not silently turn every pure check off.
 
+`accessGlobal` also marks a function whose value depends on the process it runs in: one that
+takes a function's address (`@@fn`), or `reinterpret`s a pointer, function, lambda, block or
+string to a type that is none of those. An address is the compiler's while folding and the
+program's at run time, so a folded one would put the wrong value, and a different AOT hash per
+generation, into the program.
+
 Every consumer below needs the whole mask; none of them is safe with any one of its bits set:
 
 - **Dropping an evaluation** - `noSideEffects` on `ExprOp1`, `ExprOp2` and `ExprCall`, and `isNop`
