@@ -611,10 +611,10 @@ def gate_lint(ctx : PreflightCtx) : GateResult {
     }
     if (fixed > 0) {
         let relined = run_argv(line_length_argv(ctx.daslang, ctx.base))
-        if (!empty(line_length_fail_detail(relined.rc, ctx.base))) {
+        let relined_fail = line_length_fail_detail(relined.rc, ctx.base)
+        if (!empty(relined_fail)) {
             return GateResult(name = "lint", status = GateStatus.Fail, seconds = seconds_since(t0),
-                detail = ("--fix rewrote {fixed} file(s) and left a line over CI's limit - " +
-                          "reshape that line so the fixer keeps it within the limit"),
+                detail = "after --fix rewrote {fixed} file(s): {relined_fail}",
                 output = relined.out)
         }
     }
