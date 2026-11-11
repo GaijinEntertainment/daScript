@@ -609,6 +609,15 @@ def gate_lint(ctx : PreflightCtx) : GateResult {
         return GateResult(name = "lint", status = GateStatus.Fail, seconds = seconds_since(t0),
             detail = "host-flavor lint warnings — fix or nolint each (see skills/internal/make_pr.md §1)", output = host.out)
     }
+    if (fixed > 0) {
+        let relined = run_argv(line_length_argv(ctx.daslang, ctx.base))
+        if (!empty(line_length_fail_detail(relined.rc, ctx.base))) {
+            return GateResult(name = "lint", status = GateStatus.Fail, seconds = seconds_since(t0),
+                detail = ("--fix rewrote {fixed} file(s) and left a line over CI's limit - " +
+                          "reshape that line so the fixer keeps it within the limit"),
+                output = relined.out)
+        }
+    }
     var mirror_args <- [ctx.daslang, "--disable-module", "dasMetal",
                         "utils/lint/main.das", "--"]
     mirror_args |> push_from(files)
