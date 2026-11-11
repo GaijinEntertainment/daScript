@@ -234,7 +234,7 @@ add_custom_target(check_review_gates
     COMMENT "Running every REVIEW.das gate"
 )
 
-add_das_target(check_tests_index
+add_custom_target(check_tests_index
     COMMAND $<TARGET_FILE:daslang> ./utils/internal/test-audit/main.das -- --verify
     COMMAND $<TARGET_FILE:daslang> ./utils/internal/test-audit/main.das -- --root utils --tests-only --index utils/TESTS.md --verify
     COMMAND $<TARGET_FILE:daslang> ./utils/internal/test-audit/main.das -- --root dastest/tests --verify

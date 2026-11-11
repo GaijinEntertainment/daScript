@@ -243,7 +243,7 @@ def test_reported_batch_meets_the_budget(t : T?) {
     feint("{g_sink}")
 }
 
-[test(description = "isolated mode runs a suite in workers, keeps pre-`--` flags, folds crash and panic diagnostics into the failing test's log, and honors --failures-only", timeout = 1200)]
+[test(description = "isolated mode runs a suite in workers, keeps pre-`--` flags, folds crash and panic diagnostics into the failing test's log, and honors --failures-only and --compile-only", timeout = 1200)]
 def test_isolated_mode(tt : T?) {  // nolint:STYLE038 - one isolated sweep checked arm by arm
     tt |> run("isolated mode spawns 4 workers, fixture suite all passes, --worker-index round-trips") <| @(t : T?) {
         let exe = get_command_line_arguments()[0]
@@ -323,6 +323,16 @@ def test_isolated_mode(tt : T?) {  // nolint:STYLE038 - one isolated sweep check
             "expected the fixture's panic message in output, got:\n{output2}")
         t |> success(!(output2 |> contains("CALL STACK")),
             "without --stack-on-exception there must be no stack walk, got:\n{output2}")
+    }
+
+    tt |> run("isolated mode forwards --compile-only to its workers") <| @(t : T?) {
+        let exe = get_command_line_arguments()[0]
+        let flags = "--isolated-mode --isolated-mode-threads 1 --compile-only"
+        let cmd = "{exe} {dastest_root()}/dastest.das -- --test {fixture_dir_crash()} {flags}"
+        var output : string
+        var exit_code : int
+        run_dastest(cmd, output, exit_code)
+        t |> equal(exit_code, 0, "the crashing fixture is compiled, never run, got:\n{output}")
     }
 
     tt |> run("--run worker path honors --failures-only (PASS lines suppressed at the source)") <| @(t : T?) {
