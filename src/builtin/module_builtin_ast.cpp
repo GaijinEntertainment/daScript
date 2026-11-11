@@ -14,7 +14,7 @@
 #include "daScript/ast/ast_policy_types.h"
 #include "daScript/ast/ast_expressions.h"
 #include "daScript/ast/ast_visitor.h"
-#include "../ast/ast_generate.h"
+#include "daScript/ast/ast_generate.h"
 #include "daScript/ast/ast_simulate.h"
 #include "daScript/ast/ast_serializer.h"
 #include "daScript/misc/das_common.h"
@@ -1682,6 +1682,41 @@ namespace das {
     }
 #endif
 
+    void ast_simulate ( const smart_ptr<Program> & program,
+            const TBlock<void,bool,smart_ptr_raw<Context>,string> & block, Context * context, LineInfoArg * lineinfo ) {
+        TextWriter issues;
+        auto ctx = get_context(program->getContextStackSize());
+        ctx->addRef();
+        bool failed = !program->simulate(*ctx, issues);
+        if ( failed ) {
+            for ( auto & err : program->errors ) {
+                issues << reportError(err.at, err.what, err.extra, err.fixme, err.cerr );
+            }
+            string istr = issues.str();
+            das_invoke<void>::invoke<bool,smart_ptr_raw<Context>,const string &>(context,lineinfo,block,false,nullptr,istr);
+        } else {
+            das_invoke<void>::invoke<bool,smart_ptr_raw<Context>,const string &>(context,lineinfo,block,true,ctx,"");
+        }
+        ctx->delRef();
+    }
+
+#if !DAS_NO_FILEIO
+
+    bool ast_set_file_source ( smart_ptr_raw<FileAccess> access, char * fname, char * str, Context * context, LineInfoArg * at ) {
+        if ( !fname ) context->throw_error_at(at, "expecting file name");
+        const char * safeStr = str ? str : "";
+        uint32_t str_len = stringLength(*context, safeStr);
+        auto fileInfo = make_unique<TextFileInfo>(safeStr, str_len, false);
+        return access->setFileInfo(fname, das::move(fileInfo)) != nullptr;
+    }
+
+#else
+    bool ast_set_file_source ( smart_ptr_raw<FileAccess>, char *, char *, Context * context, LineInfoArg * at ) {
+        context->throw_error_at(at, "not supported with DAS_NO_FILEIO");
+        return false;
+    }
+#endif
+
     // src/ast/ARCHITECTURE.md#require-after-walk
     void rtti_builtin_require_module_now ( char * name, smart_ptr<FileAccess> access, const CodeOfPolicies & cop,
             const TBlock<void,Module *,const string> & block, Context * context, LineInfoArg * at ) {
@@ -1742,6 +1777,38 @@ namespace das {
         addExtern<DAS_BIND_FUN(rtti_builtin_compile_file)>(*this, lib, "compile_file",
             SideEffects::modifyExternal, "rtti_builtin_compile_file")
                 ->args({"module_name","fileAccess","moduleGroup","codeOfPolicies","block","context","line"});
+        addExtern<DAS_BIND_FUN(ast_simulate)>(*this, lib, "simulate",
+            SideEffects::modifyExternal, "ast_simulate")
+                ->args({"program","block","context","line"});
+        addExtern<DAS_BIND_FUN(ast_create_serializer)>(*this, lib, "create_ast_serializer",
+            SideEffects::modifyExternal, "ast_create_serializer");
+        addExtern<DAS_BIND_FUN(ast_create_deserializer)>(*this, lib, "create_ast_deserializer",
+            SideEffects::modifyExternal, "ast_create_deserializer")
+                ->args({"data"});
+        addExtern<DAS_BIND_FUN(ast_delete_serializer)>(*this, lib, "delete_ast_serializer",
+            SideEffects::modifyExternal, "ast_delete_serializer")
+                ->args({"serializer"});
+        addExtern<DAS_BIND_FUN(ast_serializer_serialize_program)>(*this, lib, "serialize_program",
+            SideEffects::modifyExternal, "ast_serializer_serialize_program")
+                ->args({"serializer","program"});
+        addExtern<DAS_BIND_FUN(ast_serializer_deserialize_program)>(*this, lib, "deserialize_program",
+            SideEffects::modifyExternal, "ast_serializer_deserialize_program")
+                ->args({"serializer","libGroup","block","context","line"});
+        addExtern<DAS_BIND_FUN(ast_serializer_deserialize_program_ex)>(*this, lib, "deserialize_program",
+            SideEffects::modifyExternal, "ast_serializer_deserialize_program_ex")
+                ->args({"serializer","access","libGroup","block","context","line"});
+        addExtern<DAS_BIND_FUN(ast_serializer_get_data)>(*this, lib, "ast_serializer_get_data",
+            SideEffects::modifyExternal, "ast_serializer_get_data")
+                ->args({"serializer","block","context","line"});
+        addExtern<DAS_BIND_FUN(ast_serializer_finalize_usec)>(*this, lib, "ast_serializer_finalize_usec",
+            SideEffects::none, "ast_serializer_finalize_usec")
+                ->args({"serializer"});
+        addExtern<DAS_BIND_FUN(ast_serializer_setup_usec)>(*this, lib, "ast_serializer_setup_usec",
+            SideEffects::none, "ast_serializer_setup_usec")
+                ->args({"serializer"});
+        addExtern<DAS_BIND_FUN(ast_set_file_source)>(*this, lib, "set_file_source",
+            SideEffects::modifyExternal, "ast_set_file_source")
+                ->args({"access","fileName","text","context","line"});
         addExtern<DAS_BIND_FUN(rtti_builtin_module_cache_path)>(
             *this, lib, "module_cache_path", SideEffects::accessExternal,
             "rtti_builtin_module_cache_path")

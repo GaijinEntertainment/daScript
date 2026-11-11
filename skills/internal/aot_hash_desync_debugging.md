@@ -66,7 +66,7 @@ otherwise the AOT-generated C++ is stale; regenerate it and rebuild
 
 What each piece means:
 
-- **`semantic hash is X`** - runtime's *combined* hash (own-hash + sorted dep hashes), `getFunctionAotHash` in [`src/simulate/simulate_fn_hash.cpp`](../src/simulate/simulate_fn_hash.cpp).
+- **`semantic hash is X`** - runtime's *combined* hash (own-hash + sorted dep hashes), `getFunctionAotHash` in [`src/ast/ast_export.cpp`](../src/ast/ast_export.cpp).
 - **`hash=0xY`** in the comment line - runtime's *own* hash for `<fn>` (`getFunctionHash`).
 - **`@dep::name=0xZ`** - runtime's own-hash for each dependency.
 - **The SimNode dump that follows** - the runtime function body, with per-node sub-hashes printed via `displayHash=true`.
@@ -178,7 +178,7 @@ After fixing:
 
 ## C++ debug helpers (last resort)
 
-If `log_nodes` isn't enough, [`src/simulate/simulate_fn_hash.cpp`](../src/simulate/simulate_fn_hash.cpp) has two `#if 1` switches at the top:
+If `log_nodes` isn't enough, [`src/simulate/simulate_fn_hash.cpp`](../src/simulate/simulate_fn_hash.cpp) (`debug_hash`) and [`src/ast/ast_export.cpp`](../src/ast/ast_export.cpp) (`debug_aot_hash`) each have an `#if 1` switch at the top:
 
 ```cpp
 #if 1

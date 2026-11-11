@@ -8,6 +8,7 @@
 #include "daScript/misc/rangetype.h"
 #include "daScript/simulate/data_walker.h"
 #include "daScript/simulate/debug_info.h"
+#include "daScript/ast/ast_file_access.h"
 #include "daScript/simulate/code_of_policies.h"
 #include "daScript/ast/ast_serialize_macro.h"
 #include "daScript/ast/compilation_errors.h"
@@ -72,8 +73,8 @@ namespace das
     typedef AnnotationDeclaration * AnnotationDeclarationPtr;
 
     enum class LogicAnnotationOp { And, Or, Xor, Not };
-    DAS_API AnnotationPtr newLogicAnnotation ( LogicAnnotationOp op );
-    DAS_API AnnotationPtr newLogicAnnotation ( LogicAnnotationOp op,
+    DAS_CC_API AnnotationPtr newLogicAnnotation ( LogicAnnotationOp op );
+    DAS_CC_API AnnotationPtr newLogicAnnotation ( LogicAnnotationOp op,
         const AnnotationDeclarationPtr & arg0, const AnnotationDeclarationPtr & arg1 );
 
 
@@ -539,10 +540,11 @@ namespace das
         virtual SimNode * simulateNullCoalescing ( Context &, const LineInfo &, SimNode *, SimNode * ) const { return nullptr; }
         virtual SimNode * simulateGetNew ( Context &, const LineInfo & ) const { return nullptr; }
         virtual SimNode * simulateGetAt ( Context &, const LineInfo &, const TypeDeclPtr &,
-                                         ExpressionPtr, ExpressionPtr, uint32_t ) const { return nullptr; }
+                                         SimNode *, SimNode *, uint32_t ) const { return nullptr; }
         virtual SimNode * simulateGetAtR2V ( Context &, const LineInfo &, const TypeDeclPtr &,
-                                            ExpressionPtr, ExpressionPtr, uint32_t ) const { return nullptr; }
-        virtual SimNode * simulateGetIterator ( Context &, const LineInfo &, ExpressionPtr ) const { return nullptr; }
+                                            SimNode *, SimNode *, uint32_t ) const { return nullptr; }
+        virtual SimNode * simulateGetIterator ( Context &, const LineInfo &, SimNode * ) const { return nullptr; }
+        virtual bool constIndexLayout ( uint32_t &, uint32_t & ) const { return false; }
         // data walker
         virtual void walk ( DataWalker &, void * ) { }
         // familiar patterns
@@ -1013,8 +1015,8 @@ namespace das
 
     DAS_API uint64_t getFunctionHash ( Function * fun, SimNode * node, Context * context );
 
-    DAS_API uint64_t getFunctionAotHash ( Program * program, const Function * fun );
-    DAS_API string getAotHashComment ( const Program * program, const Function * fun );
+    DAS_CC_API uint64_t getFunctionAotHash ( Program * program, const Function * fun );
+    DAS_CC_API string getAotHashComment ( const Program * program, const Function * fun );
     uint64_t getVariableListAotHash ( const Program * program, const vector<const Variable *> & globs, uint64_t initHash );
 
     class DAS_API BuiltInFunction : public Function {
@@ -1816,6 +1818,8 @@ namespace das
         ModuleCacheStream stream = ModuleCacheStream() );
     DAS_CC_API ProgramPtr compileDaScriptSerialize ( const string & fileName, const FileAccessPtr & access,
         TextWriter & logs, ModuleGroup & libGroup, CodeOfPolicies policies = CodeOfPolicies() );
+    DAS_CC_API bool simulateProgram ( const ProgramPtr & program, Context & context, TextWriter & logs,
+        StackAllocator * sharedStack = nullptr );
     // src/ast/ARCHITECTURE_BUILT.md#built-programs
     DAS_CC_API ProgramPtr requireDefaultModules ( const FileAccessPtr & access, TextWriter & logs, ModuleGroup & libGroup,
         CodeOfPolicies & policies );

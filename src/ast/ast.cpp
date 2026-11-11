@@ -1584,6 +1584,11 @@ namespace das {
         return callee->rtti_isField() ? static_cast<ExprField *>(callee) : nullptr;
     }
 
+    bool ExprInvoke::isCopyOrMove() const {
+        auto blockT = arguments[0]->type;
+        return blockT->firstType && blockT->firstType->isRefType() && !blockT->firstType->ref;
+    }
+
     // ExprErase
 
     ExpressionPtr ExprErase::clone( ExpressionPtr expr ) const {

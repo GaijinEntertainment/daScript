@@ -128,7 +128,7 @@ Stage 3 — Enable AOT in the host
                                   libGroup, policies);
 
    Context ctx(program->getContextStackSize());
-   program->simulate(ctx, tout);  // AOT functions linked here
+   simulateProgram(program, ctx, tout);  // AOT functions linked here
 
    auto fn = ctx.findFunction("test");
    // Check if AOT-linked:

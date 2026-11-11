@@ -5,7 +5,6 @@
 #include "daScript/simulate/aot_builtin.h"
 #include "daScript/misc/arraytype.h"
 #include "daScript/simulate/runtime_table.h"
-#include "daScript/ast/ast.h"
 
 namespace das {
 

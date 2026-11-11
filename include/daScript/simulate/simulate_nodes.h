@@ -878,7 +878,7 @@ namespace das {
     };
 
     // AT (INDEX)
-    struct DAS_API SimNode_SafeAt : SimNode_At {
+    struct DAS_CC_API SimNode_SafeAt : SimNode_At {
         DAS_PTR_NODE;
         SimNode_SafeAt ( const LineInfo & at, SimNode * rv, SimNode * idx, uint32_t strd, uint32_t o, uint32_t rng )
             : SimNode_At(at,rv,idx,strd,o,rng,"") {}
@@ -943,13 +943,13 @@ namespace das {
         uint32_t  stride, offset, range;
     };
 
-    struct DAS_API SimNode_At_I64 : SimNode_At_I64T<true> {
+    struct DAS_CC_API SimNode_At_I64 : SimNode_At_I64T<true> {
         SimNode_At_I64 ( const LineInfo & at, SimNode * rv, SimNode * idx, uint32_t strd, uint32_t o, uint32_t rng, const char * msg )
             : SimNode_At_I64T<true>(at,rv,idx,strd,o,rng,msg) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
     };
 
-    struct DAS_API SimNode_At_I64U : SimNode_At_I64T<false> {
+    struct DAS_CC_API SimNode_At_I64U : SimNode_At_I64T<false> {
         SimNode_At_I64U ( const LineInfo & at, SimNode * rv, SimNode * idx, uint32_t strd, uint32_t o, uint32_t rng )
             : SimNode_At_I64T<false>(at,rv,idx,strd,o,rng,"") {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
@@ -973,20 +973,20 @@ namespace das {
         uint32_t  stride, offset, range;
     };
 
-    struct DAS_API SimNode_At_U64 : SimNode_At_U64T<true> {
+    struct DAS_CC_API SimNode_At_U64 : SimNode_At_U64T<true> {
         SimNode_At_U64 ( const LineInfo & at, SimNode * rv, SimNode * idx, uint32_t strd, uint32_t o, uint32_t rng, const char * msg )
             : SimNode_At_U64T<true>(at,rv,idx,strd,o,rng,msg) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
     };
 
-    struct DAS_API SimNode_At_U64U : SimNode_At_U64T<false> {
+    struct DAS_CC_API SimNode_At_U64U : SimNode_At_U64T<false> {
         SimNode_At_U64U ( const LineInfo & at, SimNode * rv, SimNode * idx, uint32_t strd, uint32_t o, uint32_t rng )
             : SimNode_At_U64T<false>(at,rv,idx,strd,o,rng,"") {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
     };
 
     // SAFE AT (INDEX) - int64 index
-    struct DAS_API SimNode_SafeAt_I64 : SimNode_At_I64 {
+    struct DAS_CC_API SimNode_SafeAt_I64 : SimNode_At_I64 {
         DAS_PTR_NODE;
         SimNode_SafeAt_I64 ( const LineInfo & at, SimNode * rv, SimNode * idx, uint32_t strd, uint32_t o, uint32_t rng )
             : SimNode_At_I64(at,rv,idx,strd,o,rng,"") {}
@@ -1002,7 +1002,7 @@ namespace das {
     };
 
     // SAFE AT (INDEX) - uint64 index
-    struct DAS_API SimNode_SafeAt_U64 : SimNode_At_U64 {
+    struct DAS_CC_API SimNode_SafeAt_U64 : SimNode_At_U64 {
         DAS_PTR_NODE;
         SimNode_SafeAt_U64 ( const LineInfo & at, SimNode * rv, SimNode * idx, uint32_t strd, uint32_t o, uint32_t rng )
             : SimNode_At_U64(at,rv,idx,strd,o,rng,"") {}
@@ -1094,7 +1094,7 @@ namespace das {
     };
 
     // AT (INDEX) - unchecked, no bounds check (index proven in range)
-    struct DAS_API SimNode_AtU : SimNode_AtT<false> {
+    struct DAS_CC_API SimNode_AtU : SimNode_AtT<false> {
         SimNode_AtU ( const LineInfo & at, SimNode * rv, SimNode * idx, uint32_t strd, uint32_t o, uint32_t rng )
             : SimNode_AtT<false>(at,rv,idx,strd,o,rng,"") {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
@@ -1314,7 +1314,7 @@ SIM_NODE_AT_VECTOR(Float, float)
 
     // FUNCTION CALL via FASTCALL convention
 
-    struct SimNode_FastCallAny : SimNode_CallBase {
+    struct DAS_API SimNode_FastCallAny : SimNode_CallBase {
         SimNode_FastCallAny(const LineInfo& at) : SimNode_CallBase(at,"") {}
         virtual SimNode* visit(SimVisitor& vis) override;
     };
@@ -1382,7 +1382,7 @@ SIM_NODE_AT_VECTOR(Float, float)
     // FUNCTION CALL via FASTCALL convention, checked
 
     // include/daScript/simulate/ARCHITECTURE.md#fastcall-depth-guard
-    struct SimNode_FastCallCheckedAny : SimNode_CallBase {
+    struct DAS_API SimNode_FastCallCheckedAny : SimNode_CallBase {
         SimNode_FastCallCheckedAny(const LineInfo& at) : SimNode_CallBase(at,"") {}
         virtual SimNode* visit(SimVisitor& vis) override;
     };
@@ -1457,7 +1457,7 @@ SIM_NODE_AT_VECTOR(Float, float)
 
     // FUNCTION CALL
 
-    struct SimNode_CallAny : SimNode_CallBase {
+    struct DAS_API SimNode_CallAny : SimNode_CallBase {
         SimNode_CallAny ( const LineInfo & at ) : SimNode_CallBase(at,"") {}
         virtual SimNode * visit ( SimVisitor& vis ) override;
     };
@@ -1504,7 +1504,7 @@ SIM_NODE_AT_VECTOR(Float, float)
 
     // FUNCTION CALL, counted against max_framed_call_depth
 
-    struct SimNode_CallCheckedAny : SimNode_CallBase {
+    struct DAS_API SimNode_CallCheckedAny : SimNode_CallBase {
         SimNode_CallCheckedAny ( const LineInfo & at ) : SimNode_CallBase(at,"") {}
         virtual SimNode * visit ( SimVisitor& vis ) override;
     };
@@ -1563,7 +1563,7 @@ SIM_NODE_AT_VECTOR(Float, float)
 
     // FUNCTION CALL with copy-or-move-on-return
 
-    struct SimNode_CallAndCopyOrMoveAny : SimNode_CallBase {
+    struct DAS_API SimNode_CallAndCopyOrMoveAny : SimNode_CallBase {
         SimNode_CallAndCopyOrMoveAny(const LineInfo& at) : SimNode_CallBase(at,"") {}
         virtual SimNode* visit(SimVisitor& vis) override;
     };
@@ -1596,7 +1596,7 @@ SIM_NODE_AT_VECTOR(Float, float)
 
     // FUNCTION CALL with copy-or-move-on-return, counted against max_framed_call_depth
 
-    struct SimNode_CallAndCopyOrMoveCheckedAny : SimNode_CallBase {
+    struct DAS_API SimNode_CallAndCopyOrMoveCheckedAny : SimNode_CallBase {
         SimNode_CallAndCopyOrMoveCheckedAny(const LineInfo& at) : SimNode_CallBase(at,"") {}
         virtual SimNode* visit(SimVisitor& vis) override;
     };
@@ -3012,7 +3012,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         SimNode * subexpr;
     };
 
-    struct DAS_API SimNode_ReinterpretSlot : SimNode {
+    struct DAS_CC_API SimNode_ReinterpretSlot : SimNode {
         SimNode_ReinterpretSlot ( const LineInfo & at, SimNode * s )
             : SimNode(at), subexpr(s) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
@@ -3499,7 +3499,7 @@ SIM_NODE_AT_VECTOR(Float, float)
     };
 
     // COPY REFERENCE VALUE
-    struct DAS_API SimNode_CopyRefValue : SimNode {
+    struct DAS_CC_API SimNode_CopyRefValue : SimNode {
         SimNode_CopyRefValue(const LineInfo & at, SimNode * ll, SimNode * rr, size_t sz)
             : SimNode(at), l(ll), r(rr), size(uint32_t(sz)) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;

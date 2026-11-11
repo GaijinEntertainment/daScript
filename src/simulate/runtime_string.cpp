@@ -5,7 +5,7 @@
 #include "daScript/simulate/simulate.h"
 #include "daScript/simulate/aot.h"
 #include "daScript/simulate/debug_print.h"
-#include "runtime_string_delete.h"
+#include "daScript/simulate/runtime_string_delete.h"
 #include "daScript/simulate/simulate_nodes.h"
 #include "daScript/simulate/sim_policy.h"
 #include "misc/include_fmt.h"
@@ -656,25 +656,6 @@ namespace das
         return ssw.str();
     }
 
-    vec4f SimNode_StringBuilder::eval ( Context & context ) {
-        DAS_PROFILE_NODE
-        vec4f * argValues = (vec4f *)(alloca(nArguments * sizeof(vec4f)));
-        evalArgs(context, argValues);
-        StringBuilderWriter writer;
-        DebugDataWalker<StringBuilderWriter> walker(writer, PrintFlags::string_builder);
-        for ( int i=0, is=nArguments; i!=is; ++i ) {
-            walker.walk(argValues[i], types[i]);
-        }
-        uint64_t length = writer.tellp();
-        if ( length ) {
-            auto pStr = context.allocateString(writer.c_str(), uint32_t(length), &debugInfo, isTempString);
-            if ( isTempString ) context.freeTempString(pStr, &debugInfo);
-            return cast<char *>::from(pStr);
-        } else {
-            return v_zero();
-        }
-    }
-
     // string iteration
 
     bool StringIterator::first ( Context &, char * _value )  {
@@ -698,12 +679,4 @@ namespace das
         context.freeIterator((char *)this, debugInfo);
     }
 
-    vec4f SimNode_StringIterator::eval ( Context & context ) {
-        DAS_PROFILE_NODE
-        vec4f ll = source->eval(context);
-        char * str = cast<char *>::to(ll);
-        char * iter = context.allocateIterator(sizeof(StringIterator),"string iterator", &debugInfo);
-        new (iter) StringIterator(str, &debugInfo);
-        return cast<char *>::from(iter);
-    }
 }

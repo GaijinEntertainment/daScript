@@ -38,7 +38,7 @@ void tutorial() {
 
     // --- Create context and simulate ---
     Context ctx(program->getContextStackSize());
-    if (!program->simulate(ctx, tout)) {
+    if (!simulateProgram(program, ctx, tout)) {
         tout << "Simulation failed:\n";
         for (auto & err : program->errors) {
             tout << reportError(err.at, err.what, err.extra,

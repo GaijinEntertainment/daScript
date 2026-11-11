@@ -4,95 +4,14 @@
 #include "daScript/simulate/simulate_nodes.h"
 #include "daScript/simulate/runtime_string.h"
 #include "daScript/simulate/debug_print.h"
-#include "../misc/fpe.h"
+#include "daScript/misc/fpe.h"
 #include "daScript/misc/string_writer.h"
-#include "daScript/ast/ast.h"
 #include "misc/include_fmt.h"
 
 #include <atomic>
 
 namespace das
 {
-
-    GcRootLambda::GcRootLambda( const Lambda & that, Context * _context ) : Lambda(that.capture) {
-        context = _context;
-        context->addGcRoot( (void *)capture, nullptr );
-    }
-
-    GcRootLambda::~GcRootLambda() {
-        if ( capture && context && (context->category.value & uint32_t(das::ContextCategory::dead)) == 0u ) {
-            context->removeGcRoot( (void *)capture );
-        }
-    }
-
-    // this is here to occasionally investigate untyped evaluation paths
-    #define WARN_SLOW_CAST(TYPE)
-    // #define WARN_SLOW_CAST(TYPE)    DAS_ASSERTF(0, "internal perofrmance issue, casting eval to eval##TYPE" );
-
-    SimNode * SimNode::copyNode ( Context &, NodeAllocator * code ) {
-        auto prefix = ((NodePrefix *)this) - 1;
-#ifndef DAS_NO_ASSERTIONS
-        DAS_ASSERTF(prefix->magic==0xdeadc0de,"node was allocated on the heap without prefix");
-#endif
-        char * newNode;
-        if ( code->prefixWithHeader ) {
-            newNode = code->allocate(prefix->size + sizeof(NodePrefix));
-            memcpy ( newNode, ((char *)this) - sizeof(NodePrefix), sizeof(NodePrefix));
-            newNode += sizeof(NodePrefix);
-        } else {
-            newNode = code->allocate(prefix->size);
-        }
-        memcpy ( newNode, (char *)this, prefix->size );
-        return (SimNode *) newNode;
-    }
-
-    bool SimNode::evalBool ( Context & context ) {
-        WARN_SLOW_CAST(Bool);
-        return cast<bool>::to(eval(context));
-    }
-
-    float SimNode::evalFloat ( Context & context ) {
-        WARN_SLOW_CAST(Float);
-        return cast<float>::to(eval(context));
-    }
-
-    double SimNode::evalDouble(Context & context) {
-        WARN_SLOW_CAST(Double);
-        return cast<double>::to(eval(context));
-    }
-
-    int32_t SimNode::evalInt ( Context & context ) {
-        WARN_SLOW_CAST(Int);
-        return cast<int32_t>::to(eval(context));
-    }
-
-    uint32_t SimNode::evalUInt ( Context & context ) {
-        WARN_SLOW_CAST(UInt);
-        return cast<uint32_t>::to(eval(context));
-    }
-
-    int64_t SimNode::evalInt64 ( Context & context ) {
-        WARN_SLOW_CAST(Int64);
-        return cast<int64_t>::to(eval(context));
-    }
-
-    uint64_t SimNode::evalUInt64 ( Context & context ) {
-        WARN_SLOW_CAST(UInt64);
-        return cast<uint64_t>::to(eval(context));
-    }
-
-    char * SimNode::evalPtr ( Context & context ) {
-        WARN_SLOW_CAST(Ptr);
-        return cast<char *>::to(eval(context));
-    }
-
-    SimNode * SimNode_WithErrorMessage::copyNode ( Context & context, NodeAllocator * code ) {
-        SimNode_WithErrorMessage * that = (SimNode_WithErrorMessage *) SimNode::copyNode(context, code);
-        if ( errorMessage ) {
-            that->errorMessage = errorMessage[0]==0 ? "" : code->allocateName(errorMessage);
-        }
-        return that;
-    }
 
     vec4f SimNode_NOP::eval ( Context & ) {
         return v_zero();
@@ -464,56 +383,7 @@ namespace das
 
 #endif
 
-    // SimNode_CallBase
-
-    SimNode * SimNode_CallBase::copyNode ( Context & context, NodeAllocator * code ) {
-        SimNode_CallBase * that = (SimNode_CallBase *) SimNode_WithErrorMessage::copyNode(context, code);
-        if ( nArguments ) {
-            that->arguments = copyNodeArray(code, that->arguments, nArguments);
-            if ( that->types ) {
-                that->types = copyNodeArray(code, that->types, nArguments);
-            }
-        }
-        if ( fnPtr ) {
-            that->fnPtr = context.fnByMangledName(fnPtr->mangledNameHash);
-            // printf("CALL %p -> %p\n", fnPtr, fnPtr );
-        }
-        return that;
-    }
-
-    // SimNode_Final
-
-    SimNode * SimNode_Final::copyNode ( Context & context, NodeAllocator * code ) {
-        SimNode_Final * that = (SimNode_Final *) SimNode::copyNode(context, code);
-        if ( totalFinal ) {
-            that->finalList = copyNodeArray(code, that->finalList, totalFinal);
-        }
-        return that;
-    }
-
     // SimNode_Block
-
-    SimNode * SimNode_Block::copyNode ( Context & context, NodeAllocator * code ) {
-        SimNode_Block * that = (SimNode_Block *) SimNode_Final::copyNode(context, code);
-        if ( total ) {
-            that->list = copyNodeArray(code, that->list, total);
-        }
-        if ( totalLabels ) {
-            that->labels = copyNodeArray(code, that->labels, totalLabels);
-        }
-        return that;
-    }
-
-    vec4f SimNode_Block::eval ( Context & context ) {
-        DAS_PROFILE_NODE
-        SimNode ** __restrict tail = list + total;
-        for (SimNode ** __restrict body = list; body!=tail; ++body) {
-            (*body)->eval(context);
-            if ( context.stopFlags ) break;
-        }
-        evalFinal(context);
-        return v_zero();
-    }
 
 #if DAS_DEBUGGER
 
@@ -555,23 +425,6 @@ namespace das
     }
 
 #endif
-
-    vec4f SimNode_ClosureBlock::eval ( Context & context ) {
-        DAS_PROFILE_NODE
-        SimNode ** __restrict tail = list + total;
-        for (SimNode ** __restrict body = list; body!=tail; ++body) {
-            (*body)->eval(context);
-            if ( context.stopFlags ) break;
-        }
-        evalFinal(context);
-        if ( context.stopFlags & EvalFlags::stopForReturn ) {
-            context.stopFlags &= ~EvalFlags::stopForReturn;
-            return context.abiResult();
-        } else {
-            if ( needResult ) context.throw_error_at(debugInfo,"end of block without return");
-            return v_zero();
-        }
-    }
 
 #if DAS_DEBUGGER
 
@@ -975,5 +828,4 @@ namespace das
         return v_zero();
     }
 
-    const LineInfo * SimFunction::getLineInfo() const { return &code->debugInfo; }
 }

@@ -315,7 +315,6 @@ namespace das {
 }
 
 das::FileAccessPtr get_file_access( char * pak );//link time resolved dependencies
-das::Context * get_context ( int stackSize=0 );//link time resolved dependencies
 
 namespace das {
 
@@ -729,10 +728,10 @@ namespace das {
             return new TypeDecl(*fieldType);
         }
         virtual SimNode * simulateGetAt ( Context & context, const LineInfo & at, const TypeDeclPtr &,
-                                         ExpressionPtr rv, ExpressionPtr idx, uint32_t ofs ) const override {
+                                         SimNode * rv, SimNode * idx, uint32_t ofs ) const override {
             return context.code->makeNode<SimNode_DebugInfoAtField<ST>>(at,
-                                                                        simulateExpression(context, rv),
-                                                                        simulateExpression(context, idx),
+                                                                        rv,
+                                                                        idx,
                                                                         ofs);
         }
         virtual bool isIterable ( ) const override {
@@ -741,8 +740,7 @@ namespace das {
         virtual TypeDeclPtr makeIteratorType ( ExpressionPtr ) const override {
             return new TypeDecl(*fieldType);
         }
-        virtual SimNode * simulateGetIterator ( Context & context, const LineInfo & at, ExpressionPtr src ) const override {
-            auto rv = simulateExpression(context, src);
+        virtual SimNode * simulateGetIterator ( Context & context, const LineInfo & at, SimNode * rv ) const override {
             return context.code->makeNode<SimNode_AnyIterator<ST,DebugInfoIterator<VT,ST>>>(at, rv);
         }
         virtual void * jitGetEach () const override {
@@ -1240,24 +1238,6 @@ namespace das {
         return cast<VarInfo *>::from(ctx->getVariableInfo(index));
     }
 
-    void rtti_builtin_simulate ( const smart_ptr<Program> & program,
-            const TBlock<void,bool,smart_ptr_raw<Context>,string> & block, Context * context, LineInfoArg * lineinfo ) {
-        TextWriter issues;
-        auto ctx = get_context(program->getContextStackSize());
-        ctx->addRef();
-        bool failed = !program->simulate(*ctx, issues);
-        if ( failed ) {
-            for ( auto & err : program->errors ) {
-                issues << reportError(err.at, err.what, err.extra, err.fixme, err.cerr );
-            }
-            string istr = issues.str();
-            das_invoke<void>::invoke<bool,smart_ptr_raw<Context>,const string &>(context,lineinfo,block,false,nullptr,istr);
-        } else {
-            das_invoke<void>::invoke<bool,smart_ptr_raw<Context>,const string &>(context,lineinfo,block,true,ctx,"");
-        }
-        ctx->delRef();
-    }
-
     Module * rtti_get_this_module ( smart_ptr_raw<Program> program ) {
         return program->thisModule.get();
     }
@@ -1566,23 +1546,6 @@ namespace das {
         access->addExtraModule(modName, modFile);
     }
 
-
-#if !DAS_NO_FILEIO
-
-    bool introduceFile ( smart_ptr_raw<FileAccess> access, char * fname, char * str, Context * context, LineInfoArg * at ) {
-        if ( !fname ) context->throw_error_at(at, "expecting file name");
-        const char * safeStr = str ? str : "";
-        uint32_t str_len = stringLength(*context, safeStr);
-        auto fileInfo = make_unique<TextFileInfo>(safeStr, str_len, false);
-        return access->setFileInfo(fname, das::move(fileInfo)) != nullptr;
-    }
-
-#else
-    bool introduceFile ( smart_ptr_raw<FileAccess>, char *, char *, Context * context, LineInfoArg * at ) {
-        context->throw_error_at(at, "not supported with DAS_NO_FILEIO");
-        return false;
-    }
-#endif
 
     struct SimNode_RttiGetTypeDecl : SimNode_CallBase {
         DAS_PTR_NODE;
@@ -2037,38 +2000,6 @@ namespace das {
             addExtern<DAS_BIND_FUN(builtin_list_require)>(*this, lib, "for_each_require_declaration",
                 SideEffects::modifyExternal, "builtin_list_require")
                     ->args({"program","block","context","line"});
-            addExtern<DAS_BIND_FUN(rtti_builtin_simulate)>(*this, lib, "simulate",
-                SideEffects::modifyExternal, "rtti_builtin_simulate")
-                    ->args({"program","block","context","line"});
-            addExtern<DAS_BIND_FUN(rtti_create_ast_serializer)>(*this, lib, "create_ast_serializer",
-                SideEffects::modifyExternal, "rtti_create_ast_serializer");
-            addExtern<DAS_BIND_FUN(rtti_create_ast_deserializer)>(*this, lib, "create_ast_deserializer",
-                SideEffects::modifyExternal, "rtti_create_ast_deserializer")
-                    ->args({"data"});
-            addExtern<DAS_BIND_FUN(rtti_delete_ast_serializer)>(*this, lib, "delete_ast_serializer",
-                SideEffects::modifyExternal, "rtti_delete_ast_serializer")
-                    ->args({"serializer"});
-            addExtern<DAS_BIND_FUN(rtti_ast_serializer_serialize_program)>(*this, lib, "serialize_program",
-                SideEffects::modifyExternal, "rtti_ast_serializer_serialize_program")
-                    ->args({"serializer","program"});
-            addExtern<DAS_BIND_FUN(rtti_ast_serializer_deserialize_program)>(*this, lib, "deserialize_program",
-                SideEffects::modifyExternal, "rtti_ast_serializer_deserialize_program")
-                    ->args({"serializer","libGroup","block","context","line"});
-            addExtern<DAS_BIND_FUN(rtti_ast_serializer_deserialize_program_ex)>(*this, lib, "deserialize_program",
-                SideEffects::modifyExternal, "rtti_ast_serializer_deserialize_program_ex")
-                    ->args({"serializer","access","libGroup","block","context","line"});
-            addExtern<DAS_BIND_FUN(rtti_ast_serializer_get_data)>(*this, lib, "ast_serializer_get_data",
-                SideEffects::modifyExternal, "rtti_ast_serializer_get_data")
-                    ->args({"serializer","block","context","line"});
-            addExtern<DAS_BIND_FUN(rtti_ast_serializer_finalize_usec)>(*this, lib, "ast_serializer_finalize_usec",
-                SideEffects::none, "rtti_ast_serializer_finalize_usec")
-                    ->args({"serializer"});
-            addExtern<DAS_BIND_FUN(rtti_ast_serializer_setup_usec)>(*this, lib, "ast_serializer_setup_usec",
-                SideEffects::none, "rtti_ast_serializer_setup_usec")
-                    ->args({"serializer"});
-            addExtern<DAS_BIND_FUN(introduceFile)>(*this, lib, "set_file_source",
-                SideEffects::modifyExternal, "introduceFile")
-                    ->args({"access","fileName","text","context","line"});
             addExtern<DAS_BIND_FUN(rtti_add_file_access_root)>(*this, lib, "add_file_access_root",
                 SideEffects::modifyExternal, "rtti_add_file_access_root")
                     ->args({"access","mod","path"});

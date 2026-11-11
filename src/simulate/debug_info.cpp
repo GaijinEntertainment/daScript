@@ -885,20 +885,6 @@ namespace das
 #endif
     }
 
-    void TextFileInfo::getSourceAndLength ( const char * & src, uint32_t & len ) {
-        src = source;
-        len = source ? sourceLength : 0;    // a cached record carries sourceLength with no bytes; callers dereference src whenever len > 0
-    }
-
-    void TextFileInfo::freeSourceData() {
-        FileInfo::freeSourceData();
-        if ( source ) {
-            das_aligned_free16((void*)source);
-            source = nullptr;
-            sourceLength = 0;
-        }
-    }
-
     void FileInfo::buildLineIndex() {
         if ( lineIndexBuilt ) return;
         lineIndexBuilt = true;

@@ -3726,23 +3726,13 @@ The RTTI module exposes runtime type information and program introspection facil
 
 ### Compilation and simulation
 
-- `ast_serializer_finalize_usec` - Microseconds the reads through `deserialize_program` on this deserializer spent inside finalizeModule - the annotations, the macro-module re-simulation and the gc_collect of every program it restored; the decode is the read minus this and `ast_serializer_setup_usec`.
-- `ast_serializer_get_data` - Returns content of serializer.
-- `ast_serializer_setup_usec` - Microseconds the reads through `deserialize_program` on this deserializer spent in the program setup that follows the stream - symbol marking and stack allocation - over every program it restored.
-- `create_ast_deserializer` - Creates deserializer.
-- `create_ast_serializer` - Creates serializer object.
-- `delete_ast_serializer` - Frees memory for ast_serializer.
-- `deserialize_program` - Deserializes the next program from the stream and calls `block` with it, the way the three-argument form does, and gives the restored program `access` as its own: a stream carries no file access, and a `require_module_now` issued from the program's macros or `[init]` walks through its program's access, so a reader that restores programs whose code requires modules late passes the access it would have compiled them with.
 - `for_each_expected_error` - Iterates through each expected compilation error declared in the `Program` (via `expect`), yielding the error code for each.
 - `for_each_require_declaration` - Iterates through each `require` declaration of the compiled `Program`, yielding the module name, public/private flag, and source `LineInfo`.
-- `serialize_program` - Serializes program to serializer object.
-- `simulate` - Simulates (links and initializes) a compiled `Program`, returning a `Context` pointer ready for function execution, or null on failure.
 
 ### File access
 
 - `add_extra_module` - Adds extra module to `FileAccess`.
 - `add_file_access_root` - Adds an extra root directory (search path) to the given `FileAccess` object, expanding where `require` resolves files from.
-- `set_file_source` - Registers a source code `string` for the given file name inside the `FileAccess` object, allowing in-memory compilation without disk files.
 
 ### Structure access
 
@@ -4183,6 +4173,19 @@ The AST module provides access to the abstract syntax tree representation of das
 - `parse_file` - Parses a daslang file and stops there — no type inference, no optimization, no simulation.
 - `parse_file_no_prerequisites` - Parses one file alone and stops there: no prerequisite walk, no type inference, no macro run, and the host's module-cache stream is hidden for the duration.
 - `require_module_now` - Compiles `module_name` - a `shared` module, named by its file - and its prerequisites into the process at the point of the call, or answers the module already there, under `codeOfPolicies`; a null `fileAccess` means the compiling program's own.
+- `set_file_source` - Registers a source code `string` for the given file name inside the `FileAccess` object, allowing in-memory compilation without disk files.
+- `simulate` - Simulates (links and initializes) a compiled `Program`, returning a `Context` pointer ready for function execution, or null on failure.
+
+### AST serialization
+
+- `ast_serializer_finalize_usec` - Microseconds the reads through `deserialize_program` on this deserializer spent inside finalizeModule - the annotations, the macro-module re-simulation and the gc_collect of every program it restored; the decode is the read minus this and `ast_serializer_setup_usec`.
+- `ast_serializer_get_data` - Returns content of serializer.
+- `ast_serializer_setup_usec` - Microseconds the reads through `deserialize_program` on this deserializer spent in the program setup that follows the stream - symbol marking and stack allocation - over every program it restored.
+- `create_ast_deserializer` - Creates deserializer.
+- `create_ast_serializer` - Creates serializer object.
+- `delete_ast_serializer` - Frees memory for ast_serializer.
+- `deserialize_program` - Deserializes the next program from the stream and calls `block` with it, the way the three-argument form does, and gives the restored program `access` as its own: a stream carries no file access, and a `require_module_now` issued from the program's macros or `[init]` walks through its program's access, so a reader that restores programs whose code requires modules late passes the access it would have compiled them with.
+- `serialize_program` - Serializes program to serializer object.
 
 ### Building programs from AST nodes
 

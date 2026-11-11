@@ -9,7 +9,6 @@
 #if DAS_FUSION
 
 #include "daScript/simulate/sim_policy.h"
-#include "daScript/ast/ast.h"
 #include "daScript/simulate/simulate_visit_op.h"
 
 namespace das {

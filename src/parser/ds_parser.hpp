@@ -56,7 +56,7 @@ extern int das_yydebug;
 
     #include "daScript/misc/platform.h"
     #include "daScript/ast/ast.h"
-    #include "../ast/ast_generate.h"
+    #include "daScript/ast/ast_generate.h"
     #include "daScript/ast/ast_expressions.h"
 
     #include "parser_state.h"

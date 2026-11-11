@@ -6,6 +6,7 @@
 #include "daScript/misc/das_common.h"
 #include "daScript/daScriptModule.h"
 #include "daScript/misc/handle_registry.h"
+#include "daScript/simulate/simulate_fusion_hooks.h"
 #include "daScript/ast/dyn_modules.h"
 #include "daScript/ast/ast_serializer.h"
 #include "daScript/misc/das_asan.h"
@@ -14,6 +15,9 @@
 #include <mutex>
 
 namespace das {
+
+    // fusion function pointers (defined here in main lib, set by fusion lib)
+    void (*g_fusionContextFn) ( Context & context, TextWriter & logs, bool enableFusion ) = nullptr;
 
     struct SubstituteModuleRefs : Visitor {
         SubstituteModuleRefs ( Module * from, Module * to ) : to(to), from(from) {}

@@ -2,7 +2,7 @@
 
 #include "daScript/ast/ast.h"
 #include "daScript/ast/ast_visitor.h"
-#include "ast_generate.h"
+#include "daScript/ast/ast_generate.h"
 
 namespace das {
 

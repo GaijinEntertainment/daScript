@@ -1,9 +1,7 @@
 #include "daScript/misc/platform.h"
 
 #include "daScript/simulate/debug_print.h"
-#include "../misc/fpe.h"
-
-#include "daScript/ast/ast.h"
+#include "daScript/misc/fpe.h"
 
 
 namespace das {

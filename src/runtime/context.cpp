@@ -1,6 +1,6 @@
 #include "daScript/simulate/simulate.h"
 #include "daScript/ast/ast.h"
-#include "../misc/fpe.h"
+#include "daScript/misc/fpe.h"
 
 #include <stdarg.h>
 #include <thread>

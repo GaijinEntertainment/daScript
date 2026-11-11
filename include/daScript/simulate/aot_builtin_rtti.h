@@ -127,7 +127,6 @@ namespace das {
     DAS_API int32_t rtti_getDimVarInfo(const VarInfo & ti, int32_t index, Context * context, LineInfoArg * at);
 
     DAS_API smart_ptr<FileAccess> makeFileAccess( char * pak, Context * context, LineInfoArg * at );
-    DAS_API bool introduceFile ( smart_ptr_raw<FileAccess> access, char * fname, char * str, Context * context, LineInfoArg * );
     DAS_API bool rtti_add_file_access_root ( smart_ptr<FileAccess> access, const char * mod, const char * path );
     DAS_API void rtti_add_extra_module ( smart_ptr_raw<FileAccess> access, const char * modName, const char * modFile, Context * context, LineInfoArg * at );
 
@@ -155,9 +154,6 @@ namespace das {
     DAS_API bool rtti_has_module ( const char * name );
     DAS_API bool rtti_has_macro_context ( Module * mod );
     DAS_API Context & rtti_find_macro_context ( Module * mod, Context * context, LineInfoArg * at );
-
-    DAS_API void rtti_builtin_simulate ( const smart_ptr<Program> & program,
-        const TBlock<void,bool,smart_ptr_raw<Context>,string> & block, Context * context, LineInfoArg * lineinfo );
 
     DAS_API void rtti_builtin_context_for_each_init_function ( Context & ctx, const TBlock<void,uint64_t> & block, Context * context, LineInfoArg * at );
     DAS_API void rtti_builtin_program_for_each_module(smart_ptr_raw<Program> prog, const TBlock<void, Module *> & block, Context * context, LineInfoArg * lineinfo);

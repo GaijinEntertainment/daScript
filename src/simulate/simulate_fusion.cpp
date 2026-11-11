@@ -4,8 +4,8 @@
 #pragma warning(disable:4505)
 #endif
 
-#include "daScript/ast/ast.h"
 #include "simulate_fusion.h"
+#include "daScript/simulate/simulate_fusion_hooks.h"
 #include "daScript/simulate/sim_policy.h"
 #include "daScript/simulate/simulate_visit_op.h"
 

@@ -23,7 +23,7 @@
 #include "daScript/simulate/simulate.h"
 #include "daScript/simulate/simulate_visit_op.h"
 
-#include "../misc/fpe.h"
+#include "daScript/misc/fpe.h"
 #include "misc/include_fmt.h"
 #include "jit_runtime.h"
 

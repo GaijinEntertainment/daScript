@@ -270,49 +270,20 @@ namespace das {
             pt->ref = true;
             return pt;
         }
-        SimNode * trySimulate ( Context & context, ExpressionPtr subexpr, ExpressionPtr index,
-                               const TypeDeclPtr & r2vType, uint32_t ofs ) const {
-            if ( index->rtti_isConstant() ) {
-                // if its constant index, like a[3]..., we try to let node bellow simulate
-                auto idxCE = static_cast<ExprConst*>(index);
-                uint32_t idxC = cast<uint32_t>::to(idxCE->value);
-                if ( idxC >= RowC ) {
-                    context.thisProgram->error("matrix index out of range", "", "",
-                        subexpr->at, CompilationError::exceeds_array_index);
-                    return nullptr;
-                }
-                uint32_t stride = sizeof(float)*ColC;
-                auto tnode = trySimulateExpression(context, subexpr, idxC*stride + ofs, r2vType);
-                if ( tnode ) {
-                    return tnode;
-                }
-            }
-            return nullptr;
+        virtual bool constIndexLayout ( uint32_t & stride, uint32_t & count ) const override {
+            stride = sizeof(float)*ColC;
+            count = RowC;
+            return true;
         }
         virtual SimNode * simulateGetAt ( Context & context, const LineInfo & at, const TypeDeclPtr &,
-                                         ExpressionPtr rv, ExpressionPtr idx, uint32_t ofs ) const override {
-            gc_local<TypeDecl> none = new TypeDecl(Type::none, cppBindingLineInfo());
-            if ( auto tnode = trySimulate(context, rv, idx, none.ptr, ofs) ) {
-                return tnode;
-            } else {
-                return context.code->makeNode<SimNode_At>(at,
-                                                          simulateExpression(context, rv),
-                                                          simulateExpression(context, idx),
-                                                          uint32_t(sizeof(float)*ColC), ofs, RowC, "matrix[index]");
-            }
+                                         SimNode * rv, SimNode * idx, uint32_t ofs ) const override {
+            return context.code->makeNode<SimNode_At>(at, rv, idx,
+                                                      uint32_t(sizeof(float)*ColC), ofs, RowC, "matrix[index]");
         }
         virtual SimNode * simulateGetAtR2V ( Context & context, const LineInfo & at, const TypeDeclPtr & readType,
-                                            ExpressionPtr rv, ExpressionPtr idx, uint32_t ofs ) const override {
-            auto r2vType = readType->baseType;
-            gc_local<TypeDecl> r2vTypeDecl = new TypeDecl(r2vType, cppBindingLineInfo());
-            if ( auto tnode = trySimulate(context, rv, idx, r2vTypeDecl.ptr, ofs) ) {
-                return tnode;
-            } else {
-                return context.code->makeValueNode<SimNode_AtR2V>(  r2vType, at,
-                                                                    simulateExpression(context, rv),
-                                                                    simulateExpression(context, idx),
-                                                                    uint32_t(sizeof(float)*ColC), ofs, RowC, "matrix[index]");
-            }
+                                            SimNode * rv, SimNode * idx, uint32_t ofs ) const override {
+            return context.code->makeValueNode<SimNode_AtR2V>(readType->baseType, at, rv, idx,
+                                                              uint32_t(sizeof(float)*ColC), ofs, RowC, "matrix[index]");
         }
         virtual bool isRawPod() const override {
             return true;

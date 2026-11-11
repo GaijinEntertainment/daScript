@@ -5,12 +5,12 @@
 #include "daScript/ast/ast_expressions.h"
 #include "daScript/ast/ast_visitor.h"
 #include "daScript/ast/ast_simulate.h"
-#include "../simulate/simulate_fusion.h"
+#include "daScript/simulate/simulate_fusion_hooks.h"
 
 #include "daScript/simulate/runtime_array.h"
 #include "daScript/simulate/runtime_table_nodes.h"
 #include "daScript/simulate/runtime_range.h"
-#include "../simulate/runtime_string_delete.h"
+#include "daScript/simulate/runtime_string_delete.h"
 #include "daScript/simulate/hash.h"
 #include "daScript/simulate/das_qsort_r.h"
 
@@ -25,9 +25,6 @@ das::Context * get_context ( int stackSize=0 );//link time resolved dependencies
 
 namespace das
 {
-    // fusion function pointers (defined here in main lib, set by fusion lib)
-    void (*g_fusionContextFn) ( Context & context, TextWriter & logs, bool enableFusion ) = nullptr;
-
     // src/ast/ARCHITECTURE.md#program-scoped-symbol-state
     static __forceinline int32_t programIndexOf ( const Context & context, const Function * fn ) {
         return context.thisProgram ? context.thisProgram->indexOf(fn) : -1;
@@ -628,26 +625,6 @@ namespace das
         }
     }
 
-    SimNode * Function::makeSimNode ( Context & context, const vector<ExpressionPtr> & ) {
-        if ( copyOnReturn || moveOnReturn ) {
-            if ( context.maxFramedCallDepth ) {
-                return context.code->makeNodeUnrollAny<SimNode_CallAndCopyOrMoveChecked>(int(arguments.size()), at);
-            }
-            return context.code->makeNodeUnrollAny<SimNode_CallAndCopyOrMove>(int(arguments.size()), at);
-        } else if ( fastCall ) {
-            // include/daScript/simulate/ARCHITECTURE.md#fastcall-depth-guard
-            if ( context.maxFastCallDepth ) {
-                return context.code->makeNodeUnrollAny<SimNode_FastCallChecked>(int(arguments.size()), at);
-            }
-            return context.code->makeNodeUnrollAny<SimNode_FastCall>(int(arguments.size()), at);
-        } else {
-            if ( context.maxFramedCallDepth ) {
-                return context.code->makeNodeUnrollAny<SimNode_CallChecked>(int(arguments.size()), at);
-            }
-            return context.code->makeNodeUnrollAny<SimNode_Call>(int(arguments.size()), at);
-        }
-    }
-
     SimNode * Function::simulate (Context & context) const {
         if ( builtIn ) {
             DAS_ASSERTF(0, "can only simulate non built-in function");
@@ -1235,14 +1212,6 @@ namespace das
 
     // r2v
 
-    SimNode * GetR2V ( Context & context, const LineInfo & at, const TypeDeclPtr & type, SimNode * expr ) {
-        if ( type->isRefType() ) {
-            return expr;
-        } else {
-            return context.code->makeValueNode<SimNode_Ref2Value>(type->getR2VType(), at, expr);
-        }
-    }
-
     void SimulateVisitor::visit(const ExprRef2Value * expr) {
         const auto &at = expr->at;
         setE(expr, GetR2V(context, at, expr->type, getE(expr->subexpr)));
@@ -1423,11 +1392,6 @@ namespace das
             context.thisHelper->appendLocalVariables(info, (Expression *)expr);
         }
         setE(expr, context.code->makeNode<SimNode_MakeBlock>(at, getE(expr->block), argSp, expr->stackTop, info));
-    }
-
-    bool ExprInvoke::isCopyOrMove() const {
-        auto blockT = arguments[0]->type;
-        return blockT->firstType && blockT->firstType->isRefType() && !blockT->firstType->ref;
     }
 
     void SimulateVisitor::visit(const ExprInvoke * expr) {
@@ -1803,15 +1767,31 @@ namespace das
         } else if ( expr->subexpr->type->isGoodTableType() ) {
             return nullptr;
         } else if ( expr->subexpr->type->isHandle() ) {
+            auto annotation = expr->subexpr->type->annotation;
+            uint32_t stride = 0, count = 0;
+            if ( expr->index->rtti_isConstant() && annotation->constIndexLayout(stride, count) ) {
+                uint32_t idxC = cast<uint32_t>::to(static_cast<ExprConst *>(expr->index)->value);
+                if ( idxC >= count ) {
+                    context.thisProgram->error("matrix index out of range", "", "",
+                        expr->subexpr->at, CompilationError::exceeds_array_index);
+                    return nullptr;
+                }
+                gc_local<TypeDecl> readType = new TypeDecl(r2vType->baseType, cppBindingLineInfo());
+                if ( auto tnode = sv_trySimulate(expr->subexpr, idxC*stride + extraOffset, readType.ptr) ) {
+                    return tnode;
+                }
+            }
+            auto prv = simulateExpression(expr->subexpr);
+            auto pidx = simulateExpression(expr->index);
             SimNode * result;
             if ( r2vType->baseType!=Type::none ) {
-                result = expr->subexpr->type->annotation->simulateGetAtR2V(context, at, r2vType, expr->subexpr, expr->index, extraOffset);
+                result = annotation->simulateGetAtR2V(context, at, r2vType, prv, pidx, extraOffset);
                 if ( !result ) {
                     context.thisProgram->error("integration error, simulateGetAtR2V returned null", "", "",
                                                at, CompilationError::internal_expression );
                 }
             } else {
-                result = expr->subexpr->type->annotation->simulateGetAt(context, at, r2vType, expr->subexpr, expr->index, extraOffset);
+                result = annotation->simulateGetAt(context, at, r2vType, prv, pidx, extraOffset);
                 if ( !result ) {
                     context.thisProgram->error("integration error, simulateGetAt returned null", "", "",
                                                at, CompilationError::internal_expression );
@@ -3133,7 +3113,7 @@ namespace das
                     result->source_iterators[t] = expr->sources[t]->type->annotation->simulateGetIterator(
                         context,
                         expr->sources[t]->at,
-                        expr->sources[t]
+                        getE(expr->sources[t])
                     );
                 } else if ( expr->sources[t]->type->baseType==Type::tFixedArray ) {
                     result->source_iterators[t] = context.code->makeNode<SimNode_FixedArrayIterator>(

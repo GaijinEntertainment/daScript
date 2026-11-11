@@ -1,6 +1,6 @@
 #pragma once
 
-#include "daScript/simulate/debug_info.h"
+#include "daScript/ast/ast_file_access.h"
 
 namespace das {
 
@@ -16,7 +16,7 @@ namespace das {
         virtual FileInfo * tryOpenFile ( const string & fileName ) override;
     };
 
-    class DAS_API FsReadOnlyCachedFileSystem : public AnyFileSystem {
+    class DAS_CC_API FsReadOnlyCachedFileSystem : public AnyFileSystem {
     public:
         virtual ~FsReadOnlyCachedFileSystem();
         virtual FileInfo * tryOpenFile ( const string & fileName ) override;
@@ -26,7 +26,7 @@ namespace das {
     };
 #endif
 
-    class DAS_API FsFileAccess : public das::ModuleFileAccess {
+    class DAS_CC_API FsFileAccess : public das::ModuleFileAccess {
     public:
         FsFileAccess();
         FsFileAccess ( const string & pak, const smart_ptr<Program> & program );

@@ -19,7 +19,7 @@ void run_script() {
                                    fAccess, tout, dummyLibGroup);
     if (program->failed()) { /* report program->errors */ return; }
     Context ctx(program->getContextStackSize());
-    if (!program->simulate(ctx, tout)) { /* report errors */ return; }
+    if (!simulateProgram(program, ctx, tout)) { /* report errors */ return; }
     ctx.evalWithCatch(ctx.findFunction("test"), nullptr);
 }
 
