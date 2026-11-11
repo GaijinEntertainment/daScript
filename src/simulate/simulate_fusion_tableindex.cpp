@@ -81,10 +81,12 @@ namespace das {
     IMPLEMENT_SETOP_NUMERIC(TableIndex);
     IMPLEMENT_ANY_SETOP(__forceinline,TableIndex,Ptr,StringPtr,StringPtr); \
 
-    void createFusionEngine_tableindex() {
-        REGISTER_SETOP_NUMERIC(TableIndex);
-        REGISTER_SETOP(TableIndex,Ptr,StringPtr);
-    }
+    static constexpr FusionEntry fusionEntries_tableindex[] = {
+        REGISTER_SETOP_NUMERIC(TableIndex)
+        REGISTER_SETOP(TableIndex,Ptr,StringPtr)
+    };
+
+    FUSION_TABLE(fusionTable_tableindex, fusionEntries_tableindex)
 }
 
 #endif

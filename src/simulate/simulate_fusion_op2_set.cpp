@@ -30,24 +30,25 @@ namespace das {
     IMPLEMENT_SETOP_INTEGER(SetBinRotl);
     IMPLEMENT_SETOP_INTEGER(SetBinRotr);
 
-    void createFusionEngine_op2_set()
-    {
-        REGISTER_SETOP_WORKHORSE(Set);
+    static constexpr FusionEntry fusionEntries_op2_set[] = {
+        REGISTER_SETOP_WORKHORSE(Set)
 
-        REGISTER_SETOP_NUMERIC(SetAdd);
-        REGISTER_SETOP_NUMERIC(SetSub);
-        REGISTER_SETOP_NUMERIC(SetDiv);
-        REGISTER_SETOP_NUMERIC(SetMod);
-        REGISTER_SETOP_NUMERIC(SetMul);
+        REGISTER_SETOP_NUMERIC(SetAdd)
+        REGISTER_SETOP_NUMERIC(SetSub)
+        REGISTER_SETOP_NUMERIC(SetDiv)
+        REGISTER_SETOP_NUMERIC(SetMod)
+        REGISTER_SETOP_NUMERIC(SetMul)
 
-        REGISTER_SETOP_INTEGER(SetBinAnd);
-        REGISTER_SETOP_INTEGER(SetBinOr);
-        REGISTER_SETOP_INTEGER(SetBinXor);
-        REGISTER_SETOP_INTEGER(SetBinShl);
-        REGISTER_SETOP_INTEGER(SetBinShr);
-        REGISTER_SETOP_INTEGER(SetBinRotl);
-        REGISTER_SETOP_INTEGER(SetBinRotr);
-    }
+        REGISTER_SETOP_INTEGER(SetBinAnd)
+        REGISTER_SETOP_INTEGER(SetBinOr)
+        REGISTER_SETOP_INTEGER(SetBinXor)
+        REGISTER_SETOP_INTEGER(SetBinShl)
+        REGISTER_SETOP_INTEGER(SetBinShr)
+        REGISTER_SETOP_INTEGER(SetBinRotl)
+        REGISTER_SETOP_INTEGER(SetBinRotr)
+    };
+
+    FUSION_TABLE(fusionTable_op2_set, fusionEntries_op2_set)
 }
 
 #endif

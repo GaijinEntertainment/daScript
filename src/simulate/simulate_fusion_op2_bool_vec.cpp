@@ -28,18 +28,12 @@ namespace das {
     IMPLEMENT_OP2_NUMERIC_VEC(Equ);
     IMPLEMENT_OP2_NUMERIC_VEC(NotEqu);
 
-    void createFusionEngine_op2_bool_vec()
-    {
-        REGISTER_OP2_NUMERIC_VEC(Equ);
-        REGISTER_OP2_NUMERIC_VEC(NotEqu);
-    }
-}
+    static constexpr FusionEntry fusionEntries_op2_bool_vec[] = {
+        REGISTER_OP2_NUMERIC_VEC(Equ)
+        REGISTER_OP2_NUMERIC_VEC(NotEqu)
+    };
 
-#else
-
-namespace das {
-    void createFusionEngine_op2_bool_vec() {
-    }
+    FUSION_TABLE(fusionTable_op2_bool_vec, fusionEntries_op2_bool_vec)
 }
 
 #endif

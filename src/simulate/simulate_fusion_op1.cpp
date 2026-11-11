@@ -27,21 +27,22 @@ namespace das {
     IMPLEMENT_OP1_SET_NUMERIC_FUSION_POINT(IncPost);
     IMPLEMENT_OP1_SET_NUMERIC_FUSION_POINT(DecPost);
 
-    void createFusionEngine_op1()
-    {
+    static constexpr FusionEntry fusionEntries_op1[] = {
         // unary
-        REGISTER_OP1_NUMERIC_FUSION_POINT(Unm);
-        REGISTER_OP1_NUMERIC_FUSION_POINT(Unp);
+        REGISTER_OP1_NUMERIC_FUSION_POINT(Unm)
+        REGISTER_OP1_NUMERIC_FUSION_POINT(Unp)
         // binary
-        REGISTER_OP1_INTEGER_FUSION_POINT(BinNot);
+        REGISTER_OP1_INTEGER_FUSION_POINT(BinNot)
         // boolean
-        REGISTER_OP1_FUSION_POINT(BoolNot,Bool,bool);
+        REGISTER_OP1_FUSION_POINT(BoolNot,Bool,bool)
         // inc and dec
-        REGISTER_OP1_NUMERIC_FUSION_POINT(Inc);
-        REGISTER_OP1_NUMERIC_FUSION_POINT(Dec);
-        REGISTER_OP1_NUMERIC_FUSION_POINT(IncPost);
-        REGISTER_OP1_NUMERIC_FUSION_POINT(DecPost);
-    }
+        REGISTER_OP1_NUMERIC_FUSION_POINT(Inc)
+        REGISTER_OP1_NUMERIC_FUSION_POINT(Dec)
+        REGISTER_OP1_NUMERIC_FUSION_POINT(IncPost)
+        REGISTER_OP1_NUMERIC_FUSION_POINT(DecPost)
+    };
+
+    FUSION_TABLE(fusionTable_op1, fusionEntries_op1)
 }
 
 #endif

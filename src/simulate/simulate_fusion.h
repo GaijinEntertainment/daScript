@@ -35,16 +35,13 @@ namespace das {
     typedef das_hash_map<SimNode *,SimNodeInfo> SimNodeInfoLookup;
 
     struct FusionPoint {
-        FusionPoint () {}
-        virtual ~FusionPoint() {}
-        virtual SimNode * fuse ( const SimNodeInfoLookup &, SimNode * node, Context * ) { return node; }
+        virtual SimNode * fuse ( const SimNodeInfoLookup &, SimNode * node, Context * ) const { return node; }
         static bool is ( const SimNodeInfoLookup & info, SimNode * node, const char * name );
         static bool is2 ( const SimNodeInfoLookup & info, SimNode * lnode, SimNode * rnode, const char * lname, const char * rname );
         static bool is ( const SimNodeInfoLookup & info, SimNode * node, const char * name, const char * typeName );
+    protected:
+        ~FusionPoint() = default;
     };
-    typedef unique_ptr<FusionPoint> FusionPointPtr;
-
-    typedef das_hash_map<string,vector<FusionPointPtr>> FusionEngine;   // note: unordered map for thread safety
 
     const char * getSimSourceName(SimSourceType st);
 
@@ -75,60 +72,102 @@ namespace das {
     };
 
     struct FusionPointOp1 : FusionPoint {
-        virtual SimNode * match(const SimNodeInfoLookup &, SimNode *, SimNode *, Context *) = 0;
-        virtual void set(SimNode_Op1Fusion * result, SimNode * node) = 0;
-        virtual SimNode * fuseOp1(const SimNodeInfoLookup & info, SimNode * node, SimNode * node_x, Context * context);
+        virtual SimNode * match(const SimNodeInfoLookup &, SimNode *, SimNode *, Context *) const = 0;
+        virtual void set(SimNode_Op1Fusion * result, SimNode * node) const = 0;
+        SimNode * fuseOp1(const SimNodeInfoLookup & info, SimNode * node, SimNode * node_x, Context * context) const;
+    protected:
+        ~FusionPointOp1() = default;
     };
 
     struct FusionPointOp2 : FusionPoint {
-        FusionPointOp2() {}
-        virtual SimNode * match(const SimNodeInfoLookup &, SimNode *, SimNode *, SimNode *, Context *) = 0;
-        virtual void set(SimNode_Op2Fusion * result, SimNode * node) = 0;
-        virtual SimNode * fuseOp2(const SimNodeInfoLookup & info, SimNode * node, SimNode * node_l, SimNode * node_r, Context * context);
-        bool anyLeft, anyRight;
+        virtual SimNode * match(const SimNodeInfoLookup &, SimNode *, SimNode *, SimNode *, Context *, bool & anyLeft, bool & anyRight) const = 0;
+        virtual void set(SimNode_Op2Fusion * result, SimNode * node) const = 0;
+        SimNode * fuseOp2(const SimNodeInfoLookup & info, SimNode * node, SimNode * node_l, SimNode * node_r, Context * context) const;
+    protected:
+        ~FusionPointOp2() = default;
     };
 
+    struct FusionEntry {
+        const char *        name;
+        const char *        typeName;
+        const FusionPoint * point;
+    };
+
+    struct FusionSlot {
+        uint32_t hash;
+        uint32_t entry;
+    };
+
+    struct FusionTable {
+        uint64_t            filter[16];
+        const FusionEntry * entries;
+        const FusionSlot *  slots;
+        uint32_t            mask;
+    };
+
+    constexpr uint32_t fusionFilterBit ( uint32_t hash ) {
+        return (hash >> 16) & 1023;
+    }
+
+    constexpr uint32_t fusionHash ( const char * name, const char * typeName ) {
+        uint32_t hash = 2166136261u;
+        for ( ; *name; ++name ) hash = (hash ^ uint8_t(*name)) * 16777619u;
+        hash = (hash ^ uint8_t('<')) * 16777619u;
+        for ( ; *typeName; ++typeName ) hash = (hash ^ uint8_t(*typeName)) * 16777619u;
+        return hash;
+    }
+
+    constexpr uint32_t fusionIndexSize ( size_t count ) {
+        uint32_t size = 1;
+        while ( size < count * 4 ) size <<= 1;
+        return size;
+    }
+
+    template <size_t N>
+    struct FusionIndex {
+        static constexpr uint32_t size = fusionIndexSize(N);
+        FusionSlot slots[size] = {};
+        uint64_t filter[16] = {};
+    };
+
+    template <size_t N>
+    constexpr FusionIndex<N> makeFusionIndex ( const FusionEntry (&entries)[N] ) {
+        FusionIndex<N> index;
+        for ( size_t i = 0; i != N; ++i ) {
+            uint32_t hash = fusionHash(entries[i].name, entries[i].typeName);
+            uint32_t slot = hash & (index.size - 1);
+            while ( index.slots[slot].entry ) slot = (slot + 1) & (index.size - 1);
+            index.slots[slot] = { hash, uint32_t(i + 1) };
+            uint32_t bit = fusionFilterBit(hash);
+            index.filter[bit >> 6] |= uint64_t(1) << (bit & 63);
+        }
+        return index;
+    }
+
+    template <size_t N>
+    constexpr FusionTable makeFusionTable ( const FusionIndex<N> & index, const FusionEntry (&entries)[N] ) {
+        FusionTable table = {};
+        for ( int i = 0; i != 16; ++i ) table.filter[i] = index.filter[i];
+        table.entries = entries;
+        table.slots = index.slots;
+        table.mask = index.size - 1;
+        return table;
+    }
+
+    template <typename FP>
+    constexpr FP fusionPoint {};
+
+#define FUSION_ENTRY(NAME,TYPENAME,FP) \
+    { NAME, TYPENAME, &fusionPoint<FP> },
+
+#define FUSION_TABLE(TABLE,ENTRIES) \
+    static constexpr auto TABLE##_index = makeFusionIndex(ENTRIES); \
+    extern const FusionTable TABLE; \
+    const FusionTable TABLE = makeFusionTable(TABLE##_index, ENTRIES);
 
     // function pointers for fusion library decoupling
     // runtime defines these; fusion lib sets them via register_fusion()
     DAS_API extern void (*g_fusionContextFn) ( Context & context, TextWriter & logs, bool enableFusion );
-    DAS_API extern void (*g_resetFusionEngineFn) ( bool orphan );   // orphan: forget the table without freeing it (a process about to exit)
-
-    string fuseName ( const string & name, const string & typeName );
-    unique_ptr<FusionEngine> &getFusionEngine();
-    void resetFusionEngine( bool orphan );
-    void createFusionEngine();
-    void registerFusion ( const char * OpName, const char * CTypeName, FusionPoint * node );
-
-#if DAS_FUSION
-    // fusion engine subsections
-    // misc (note, misc before everything)
-    void createFusionEngine_misc_copy_reference();
-    // op1
-    void createFusionEngine_op1();
-    void createFusionEngine_return();
-    void createFusionEngine_ptrfdr();
-    void createFusionEngine_if();
-    // scalar
-    void createFusionEngine_op2();
-    void createFusionEngine_op2_set();
-    void createFusionEngine_op2_bool();
-    void createFusionEngine_op2_bin();
-    // vector
-    void createFusionEngine_op2_vec();
-    void createFusionEngine_op2_set_vec();
-    void createFusionEngine_op2_bool_vec();
-    void createFusionEngine_op2_bin_vec();
-    void createFusionEngine_op2_scalar_vec();
-    // at
-    void createFusionEngine_at();
-    void createFusionEngine_at_array();
-    void createFusionEngine_tableindex();
-    void createFusionEngine_tablewithhash();
-    // call
-    void createFusionEngine_call1();
-    void createFusionEngine_call2();
-#endif
 }
 
 extern DAS_CC_API void register_fusion ();

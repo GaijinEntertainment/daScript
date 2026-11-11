@@ -22,7 +22,7 @@ namespace das {
 
     // copy reference
     //  &a = b
-    struct FusionPoint_MiscCopyReference : FusionPointOp2 {
+    struct FusionPoint_MiscCopyReference final : FusionPointOp2 {
         struct SimNode_CopyReferenceLocAny : SimNode_Op2Fusion {
             DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override {
                 DAS_PROFILE_NODE
@@ -32,15 +32,15 @@ namespace das {
                 return v_zero();
             }
         };
-        virtual SimNode * match(const SimNodeInfoLookup & info, SimNode *, SimNode * node_l, SimNode *, Context * context) override {
+        virtual SimNode * match(const SimNodeInfoLookup & info, SimNode *, SimNode * node_l, SimNode *, Context * context, bool & anyLeft, bool & anyRight) const override {
             if (false) {}
             else if ( is(info, node_l, "GetLocal" )) { anyRight = true; return context->code->makeNode<SimNode_CopyReferenceLocAny>();  }
             return nullptr;
         }
-        virtual void set(SimNode_Op2Fusion * result, SimNode * node) override {
+        virtual void set(SimNode_Op2Fusion * result, SimNode * node) const override {
             result->set("CopyReference",Type::none,node->debugInfo);
         }
-        virtual SimNode * fuse(const SimNodeInfoLookup & info, SimNode * node, Context * context) override {
+        virtual SimNode * fuse(const SimNodeInfoLookup & info, SimNode * node, Context * context) const override {
             SimNode_CopyReference * crnode = static_cast<SimNode_CopyReference *>(node);
             return fuseOp2(info, node, crnode->l, crnode->r, context);
         }
@@ -97,7 +97,7 @@ namespace das {
 
     // copy reference value
     //  *a = *b
-    struct FusionPoint_MiscCopyRefValue : FusionPointOp2 {
+    struct FusionPoint_MiscCopyRefValue final : FusionPointOp2 {
         IMPLEMENT_OP2_COPYREF_NODE(AnyPtr, AnyPtr);
         IMPLEMENT_OP2_COPYREF_NODE(Local, AnyPtr);
         IMPLEMENT_OP2_COPYREF_NODE(AnyPtr, Local);
@@ -116,7 +116,7 @@ namespace das {
         IMPLEMENT_OP2_COPYREF_NODE(ArgumentRef, Argument);
         IMPLEMENT_OP2_COPYREF_NODE(ArgumentRef, AnyPtr);
         IMPLEMENT_OP2_COPYREF_NODE(AnyPtr, ArgumentRef);
-        virtual SimNode * match(const SimNodeInfoLookup & info, SimNode * node, SimNode * node_l, SimNode * node_r, Context * context) override {
+        virtual SimNode * match(const SimNodeInfoLookup & info, SimNode * node, SimNode * node_l, SimNode * node_r, Context * context, bool & anyLeft, bool & anyRight) const override {
             auto crnode = static_cast<SimNode_CopyRefValue *> (node);
             uint32_t size = crnode->size;
             auto & ccode = *(context->code);
@@ -150,22 +150,24 @@ namespace das {
             }
             return nullptr;
         }
-        virtual void set(SimNode_Op2Fusion * result, SimNode * node) override {
+        virtual void set(SimNode_Op2Fusion * result, SimNode * node) const override {
             auto opcresult = static_cast<SimNode_Op2FusionCopyRef *>(result);
             auto crnode = static_cast<SimNode_CopyRefValue *> (node);
             opcresult->set("CopyRefValue",Type::none,node->debugInfo);
             opcresult->size = crnode->size;
         }
-        virtual SimNode * fuse(const SimNodeInfoLookup & info, SimNode * node, Context * context) override {
+        virtual SimNode * fuse(const SimNodeInfoLookup & info, SimNode * node, Context * context) const override {
             SimNode_CopyRefValue * crnode = static_cast<SimNode_CopyRefValue *>(node);
             return fuseOp2(info, node, crnode->l, crnode->r, context);
         }
     };
 
-    void createFusionEngine_misc_copy_reference() {
-        (*getFusionEngine())["CopyReference"].emplace_back(new FusionPoint_MiscCopyReference());
-        (*getFusionEngine())["CopyRefValue"].emplace_back(new FusionPoint_MiscCopyRefValue());
-    }
+    static constexpr FusionEntry fusionEntries_misc_copy_reference[] = {
+        FUSION_ENTRY("CopyReference","",FusionPoint_MiscCopyReference)
+        FUSION_ENTRY("CopyRefValue","",FusionPoint_MiscCopyRefValue)
+    };
+
+    FUSION_TABLE(fusionTable_misc_copy_reference, fusionEntries_misc_copy_reference)
 }
 
 #endif

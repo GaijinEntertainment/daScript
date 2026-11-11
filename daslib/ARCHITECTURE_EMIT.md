@@ -245,11 +245,9 @@ Companion to `ARCHITECTURE.md` in this folder; section numbers are unique across
   instead: the context registers nothing and stops the program, by name, on a linked module
   the host did not register - the runtime cannot add to an initialized registry and keep
   `Initialize`/`Shutdown` balanced, and a second shutdown would walk a registry the first
-  one deleted. The shutdown is `Module::ShutdownStandalone`, never `Module::Shutdown`: the
-  latter resets the fusion engine through a function pointer only the interpreter's
-  `simulate_fusion.cpp` installs, and a standalone binary links no interpreter. Handled
-  types need the registry because `TypeInfo::resolveAnnotation` walks the bound
-  environment's module list; a context with none dereferences a null environment.
+  one deleted. The shutdown is `Module::ShutdownStandalone`. Handled types need the
+  registry because `TypeInfo::resolveAnnotation` walks the bound environment's module
+  list; a context with none dereferences a null environment.
 - **Type definitions live in the header, once** - struct/enum definitions (the
   dependency dump plus the entry module's own `declarations` capture) are emitted into
   the `.das.h`, which the `.das.cpp` includes; the source never redefines them. They sit

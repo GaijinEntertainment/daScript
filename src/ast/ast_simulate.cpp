@@ -27,7 +27,6 @@ namespace das
 {
     // fusion function pointers (defined here in main lib, set by fusion lib)
     void (*g_fusionContextFn) ( Context & context, TextWriter & logs, bool enableFusion ) = nullptr;
-    void (*g_resetFusionEngineFn) ( bool orphan ) = nullptr;
 
     // src/ast/ARCHITECTURE.md#program-scoped-symbol-state
     static __forceinline int32_t programIndexOf ( const Context & context, const Function * fn ) {
@@ -3902,11 +3901,11 @@ namespace das
         bool aot_hint = policies.aot && !folding && !thisModule->isModule;
 #if DAS_FUSION
         if ( !folding ) {               // note: only run fusion when not folding
-            DAS_ASSERTF(g_fusionContextFn, "fusion library not loaded, add call to NEED_FUSION macro.");
             // under the jit the interpreter's nodes are the fallback, not the product, so a
             // user context never fuses and a macro context fuses only when its module asks
             // (options fusion = true); without the jit the option keeps its meaning.
             // jit_emit_object must fuse exactly as the aot run that binds its object, or error[50101]
+            DAS_ASSERTF(g_fusionContextFn, "fusion library not loaded, add call to NEED_FUSION macro.");
             bool fusion = options.getBoolOption("fusion", policies.fusion);
             if ( policies.jit_enabled && !policies.jit_emit_object ) fusion = isCompilingMacros && options.getBoolOption("fusion", false);
             g_fusionContextFn(context, logs, fusion);

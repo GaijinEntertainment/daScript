@@ -433,24 +433,26 @@ namespace das {
     IMPLEMENT_ANY_SETOP(__forceinline, At_U64, Ptr, StringPtr, StringPtr);
     IMPLEMENT_ANY_SETOP(__forceinline, At_U64, Ptr, VoidPtr, StringPtr);
 
-    void createFusionEngine_at() {
-        REGISTER_SETOP_SCALAR(AtR2V);
-        REGISTER_SETOP_NUMERIC_VEC(AtR2V);
-        (*getFusionEngine())["At"].emplace_back(new FusionPoint_Set_At_StringPtr());
-        (*getFusionEngine())["At"].emplace_back(new FusionPoint_Set_At_VoidPtr());
-        REGISTER_SETOP_SCALAR(AtR2V_I64);
-        REGISTER_SETOP_NUMERIC_VEC(AtR2V_I64);
-        (*getFusionEngine())["At_I64"].emplace_back(new FusionPoint_Set_At_I64_StringPtr());
-        (*getFusionEngine())["At_I64"].emplace_back(new FusionPoint_Set_At_I64_VoidPtr());
-        REGISTER_SETOP_SCALAR(AtR2V_U64);
-        REGISTER_SETOP_NUMERIC_VEC(AtR2V_U64);
-        (*getFusionEngine())["At_U64"].emplace_back(new FusionPoint_Set_At_U64_StringPtr());
-        (*getFusionEngine())["At_U64"].emplace_back(new FusionPoint_Set_At_U64_VoidPtr());
-        REGISTER_SETOP_SCALAR(AtR2VU);
-        REGISTER_SETOP_NUMERIC_VEC(AtR2VU);
-        (*getFusionEngine())["AtU"].emplace_back(new FusionPoint_Set_AtU_StringPtr());
-        (*getFusionEngine())["AtU"].emplace_back(new FusionPoint_Set_AtU_VoidPtr());
-    }
+    static constexpr FusionEntry fusionEntries_at[] = {
+        REGISTER_SETOP_SCALAR(AtR2V)
+        REGISTER_SETOP_NUMERIC_VEC(AtR2V)
+        FUSION_ENTRY("At","",FusionPoint_Set_At_StringPtr)
+        FUSION_ENTRY("At","",FusionPoint_Set_At_VoidPtr)
+        REGISTER_SETOP_SCALAR(AtR2V_I64)
+        REGISTER_SETOP_NUMERIC_VEC(AtR2V_I64)
+        FUSION_ENTRY("At_I64","",FusionPoint_Set_At_I64_StringPtr)
+        FUSION_ENTRY("At_I64","",FusionPoint_Set_At_I64_VoidPtr)
+        REGISTER_SETOP_SCALAR(AtR2V_U64)
+        REGISTER_SETOP_NUMERIC_VEC(AtR2V_U64)
+        FUSION_ENTRY("At_U64","",FusionPoint_Set_At_U64_StringPtr)
+        FUSION_ENTRY("At_U64","",FusionPoint_Set_At_U64_VoidPtr)
+        REGISTER_SETOP_SCALAR(AtR2VU)
+        REGISTER_SETOP_NUMERIC_VEC(AtR2VU)
+        FUSION_ENTRY("AtU","",FusionPoint_Set_AtU_StringPtr)
+        FUSION_ENTRY("AtU","",FusionPoint_Set_AtU_VoidPtr)
+    };
+
+    FUSION_TABLE(fusionTable_at, fusionEntries_at)
 }
 
 #endif

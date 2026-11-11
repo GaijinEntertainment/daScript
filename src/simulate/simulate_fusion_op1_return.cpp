@@ -87,16 +87,17 @@ IMPLEMENT_ANY_OP1_FUSION_POINT(__forceinline,Return,,vec4f,vec4f)
 
 #undef REGISTER_OP1_FUSION_POINT
 #define REGISTER_OP1_FUSION_POINT(OPNAME,TYPE,CTYPE) \
-    (*getFusionEngine())[#OPNAME].emplace_back(new Op1FusionPoint_##OPNAME##_##CTYPE());
+    FUSION_ENTRY(#OPNAME,"",Op1FusionPoint_##OPNAME##_##CTYPE)
 
 #include "simulate_fusion_op1_reg.h"
 
-    void createFusionEngine_return()
-    {
-        REGISTER_OP1_WORKHORSE_FUSION_POINT(Return);
-        REGISTER_OP1_NUMERIC_VEC(Return);
-        (*getFusionEngine())["Return"].emplace_back(new Op1FusionPoint_Return_vec4f());
-    }
+    static constexpr FusionEntry fusionEntries_return[] = {
+        REGISTER_OP1_WORKHORSE_FUSION_POINT(Return)
+        REGISTER_OP1_NUMERIC_VEC(Return)
+        FUSION_ENTRY("Return","",Op1FusionPoint_Return_vec4f)
+    };
+
+    FUSION_TABLE(fusionTable_return, fusionEntries_return)
 }
 
 #endif

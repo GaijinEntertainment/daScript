@@ -201,13 +201,14 @@ __forceinline SimNode * safeArg1 ( SimNode * node, int index ) {
 
     IMPLEMENT_ANY_OP1_FUSION_POINT(__forceinline,CallChecked,,vec4f,vec4f)
 
-    void createFusionEngine_call1()
-    {
-        (*getFusionEngine())["FastCall"].emplace_back(new Op1FusionPoint_FastCall_vec4f());
-        (*getFusionEngine())["FastCallChecked"].emplace_back(new Op1FusionPoint_FastCallChecked_vec4f());
-        (*getFusionEngine())["Call"].emplace_back(new Op1FusionPoint_Call_vec4f());
-        (*getFusionEngine())["CallChecked"].emplace_back(new Op1FusionPoint_CallChecked_vec4f());
-    }
+    static constexpr FusionEntry fusionEntries_call1[] = {
+        FUSION_ENTRY("FastCall","",Op1FusionPoint_FastCall_vec4f)
+        FUSION_ENTRY("FastCallChecked","",Op1FusionPoint_FastCallChecked_vec4f)
+        FUSION_ENTRY("Call","",Op1FusionPoint_Call_vec4f)
+        FUSION_ENTRY("CallChecked","",Op1FusionPoint_CallChecked_vec4f)
+    };
+
+    FUSION_TABLE(fusionTable_call1, fusionEntries_call1)
 }
 
 #endif

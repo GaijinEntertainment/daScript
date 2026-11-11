@@ -116,10 +116,12 @@ namespace das {
 
     IMPLEMENT_SET_OP1_FUSION_POINT(__forceinline, SafeTableIndexWithHash, Ptr, VoidPtr, VoidPtr);
 
-    void createFusionEngine_tablewithhash() {
-        (*getFusionEngine())["TableIndexWithHash"].emplace_back(new Op1FusionPoint_TableIndexWithHash_VoidPtr());
-        (*getFusionEngine())["SafeTableIndexWithHash"].emplace_back(new Op1FusionPoint_SafeTableIndexWithHash_VoidPtr());
-    }
+    static constexpr FusionEntry fusionEntries_tablewithhash[] = {
+        FUSION_ENTRY("TableIndexWithHash","",Op1FusionPoint_TableIndexWithHash_VoidPtr)
+        FUSION_ENTRY("SafeTableIndexWithHash","",Op1FusionPoint_SafeTableIndexWithHash_VoidPtr)
+    };
+
+    FUSION_TABLE(fusionTable_tablewithhash, fusionEntries_tablewithhash)
 }
 
 #endif

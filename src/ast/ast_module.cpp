@@ -6,7 +6,6 @@
 #include "daScript/misc/das_common.h"
 #include "daScript/daScriptModule.h"
 #include "daScript/misc/handle_registry.h"
-#include "../simulate/simulate_fusion.h"
 #include "daScript/ast/dyn_modules.h"
 #include "daScript/ast/ast_serializer.h"
 #include "daScript/misc/das_asan.h"
@@ -282,7 +281,7 @@ namespace das {
         return handleRegistry_countAll();
     }
 
-    void Module::shutdownInternal ( bool dumpHandleLeaks, bool resetFusion ) {
+    void Module::shutdownInternal ( bool dumpHandleLeaks ) {
         DAS_ASSERT(daScriptEnvironment::getOwned()!=nullptr);
         DAS_ASSERT(daScriptEnvironment::getBound()!=nullptr);
         g_envTotal --;
@@ -306,19 +305,6 @@ namespace das {
         setDeferredModuleLoader(nullptr);
 
         clearGlobalAotLibrary();
-        // the standalone runtime links no fusion library and sets no hook; with one, a
-        // shutdown that does not reset orphans the table instead of leaving it to the
-        // thread-local's destructor at exit, which would free it all the same
-        if ( resetFusion ) {
-            DAS_ASSERTF(g_resetFusionEngineFn, "fusion library not loaded");
-            g_resetFusionEngineFn(false);
-        } else if ( g_resetFusionEngineFn ) {
-#if DAS_TRACK_ALLOC || DAS_ASAN
-            g_resetFusionEngineFn(false);
-#else
-            g_resetFusionEngineFn(true);
-#endif
-        }
         daScriptEnvironment::setBound(nullptr);
         if ( daScriptEnvironment::getOwned() ) {
             delete daScriptEnvironment::getOwned();
@@ -326,8 +312,8 @@ namespace das {
         }
     }
 
-    void Module::Shutdown( bool dumpHandleLeaks, bool resetFusion ) {
-        shutdownInternal(dumpHandleLeaks, resetFusion);
+    void Module::Shutdown( bool dumpHandleLeaks ) {
+        shutdownInternal(dumpHandleLeaks);
     }
 
     // Standalone exes built with `daslang -exe` link only libDaScript*_runtime
@@ -336,7 +322,7 @@ namespace das {
     // the runtime is still alive — avoids the __cxa_finalize_ranges race on
     // ref_count_mutex documented in issue #2583.
     void Module::ShutdownStandalone( bool dumpHandleLeaks ) {
-        shutdownInternal(dumpHandleLeaks, /*resetFusion=*/false);
+        shutdownInternal(dumpHandleLeaks);
     }
 
     void Module::Reset(bool debAg) {

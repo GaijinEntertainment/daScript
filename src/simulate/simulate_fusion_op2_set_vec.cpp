@@ -35,31 +35,25 @@ namespace das {
     IMPLEMENT_SETOP_NUMERIC_VEC(SetDivScal);
     IMPLEMENT_SETOP_NUMERIC_VEC(SetMulScal);
 
-    void createFusionEngine_op2_set_vec()
-    {
-        REGISTER_SETOP_NUMERIC_VEC(Set);
+    static constexpr FusionEntry fusionEntries_op2_set_vec[] = {
+        REGISTER_SETOP_NUMERIC_VEC(Set)
 
-        REGISTER_SETOP_NUMERIC_VEC(SetAdd);
-        REGISTER_SETOP_NUMERIC_VEC(SetSub);
-        REGISTER_SETOP_NUMERIC_VEC(SetDiv);
-        REGISTER_SETOP_NUMERIC_VEC(SetMod);
-        REGISTER_SETOP_NUMERIC_VEC(SetMul);
-        REGISTER_SETOP_NUMERIC_VEC(SetDivScal);
-        REGISTER_SETOP_NUMERIC_VEC(SetMulScal);
+        REGISTER_SETOP_NUMERIC_VEC(SetAdd)
+        REGISTER_SETOP_NUMERIC_VEC(SetSub)
+        REGISTER_SETOP_NUMERIC_VEC(SetDiv)
+        REGISTER_SETOP_NUMERIC_VEC(SetMod)
+        REGISTER_SETOP_NUMERIC_VEC(SetMul)
+        REGISTER_SETOP_NUMERIC_VEC(SetDivScal)
+        REGISTER_SETOP_NUMERIC_VEC(SetMulScal)
 
-        REGISTER_SETOP_INTEGER_VEC(SetBinAnd);
-        REGISTER_SETOP_INTEGER_VEC(SetBinOr);
-        REGISTER_SETOP_INTEGER_VEC(SetBinXor);
-        REGISTER_SETOP_INTEGER_VEC(SetBinShl);
-        REGISTER_SETOP_INTEGER_VEC(SetBinShr);
-    }
-}
+        REGISTER_SETOP_INTEGER_VEC(SetBinAnd)
+        REGISTER_SETOP_INTEGER_VEC(SetBinOr)
+        REGISTER_SETOP_INTEGER_VEC(SetBinXor)
+        REGISTER_SETOP_INTEGER_VEC(SetBinShl)
+        REGISTER_SETOP_INTEGER_VEC(SetBinShr)
+    };
 
-#else
-
-namespace das {
-    void createFusionEngine_op2_set_vec() {
-    }
+    FUSION_TABLE(fusionTable_op2_set_vec, fusionEntries_op2_set_vec)
 }
 
 #endif

@@ -165,16 +165,17 @@ namespace das {
 
 #include "simulate_fusion_op1_reg.h"
 
-    void createFusionEngine_ptrfdr()
-    {
-        REGISTER_OP1_WORKHORSE_FUSION_POINT(FieldDerefR2V);
-        REGISTER_OP1_NUMERIC_VEC(FieldDerefR2V);
-        (*getFusionEngine())["FieldDeref"].emplace_back(new Op1FusionPoint_FieldDeref_vec4f());
+    static constexpr FusionEntry fusionEntries_ptrfdr[] = {
+        REGISTER_OP1_WORKHORSE_FUSION_POINT(FieldDerefR2V)
+        REGISTER_OP1_NUMERIC_VEC(FieldDerefR2V)
+        FUSION_ENTRY("FieldDeref","",Op1FusionPoint_FieldDeref_vec4f)
 
-        REGISTER_OP1_WORKHORSE_FUSION_POINT(PtrFieldDerefR2V);
-        REGISTER_OP1_NUMERIC_VEC(PtrFieldDerefR2V);
-        (*getFusionEngine())["PtrFieldDeref"].emplace_back(new Op1FusionPoint_PtrFieldDeref_vec4f());
-    }
+        REGISTER_OP1_WORKHORSE_FUSION_POINT(PtrFieldDerefR2V)
+        REGISTER_OP1_NUMERIC_VEC(PtrFieldDerefR2V)
+        FUSION_ENTRY("PtrFieldDeref","",Op1FusionPoint_PtrFieldDeref_vec4f)
+    };
+
+    FUSION_TABLE(fusionTable_ptrfdr, fusionEntries_ptrfdr)
 }
 
 #endif
