@@ -179,10 +179,6 @@ namespace das {
     static constexpr auto TABLE##_index = makeFusionIndex(ENTRIES); \
     extern const FusionTable TABLE; \
     const FusionTable TABLE = makeFusionTable(TABLE##_index, ENTRIES);
-
-    // function pointers for fusion library decoupling
-    // runtime defines these; fusion lib sets them via register_fusion()
-    DAS_API extern void (*g_fusionContextFn) ( Context & context, TextWriter & logs, bool enableFusion );
 }
 
 extern DAS_CC_API void register_fusion ();
