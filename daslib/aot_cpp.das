@@ -1764,7 +1764,7 @@ class public CppAot : AstVisitor {
             if (variable._type.flags.constant && variable._type.isRefType && !variable._type.flags.ref) {
                 cvname += "_ConstRef";
             }
-            write(*ss, "; das_zero({cvname}); das_move({cvname}, ");
+            write(*ss, "; das_move({cvname}, ");
         } else {
             write(*ss, " = ");
         }
@@ -3117,7 +3117,7 @@ class public CppAot : AstVisitor {
         return ref2ptr;
     }
     def queryByMNH(name : string; hash : uint64) =>
-        "Func(__context__->fnByMangledName(/*{name}*/ 0x{hash:x}))"
+        "Func(das_fn_by_mnh(__context__,/*{name}*/ 0x{hash:x}))"
 
     def override preVisitExprAddr(expr : ExprAddr?) {
         if (expr.func != null) {
@@ -3447,10 +3447,13 @@ class public CppAot : AstVisitor {
         }
     }
     def override preVisitExprMakeArrayIndex(expr : ExprMakeArray?; index : int; init : ExpressionPtr; last : bool) {
+        let elem = (expr.makeArrayOnHeap
+            ? "{mkaName(expr)}[{index}]"
+            : "{mkaName(expr)}({index},__context__)")
         if (init._type.canCopy) {
-            write(*ss, "{tabs()}das_copy(({mkaName(expr)}({index},__context__)),(");
+            write(*ss, "{tabs()}das_copy(({elem}),(");
         } else {
-            write(*ss, "{tabs()}das_move({mkaName(expr)}({index},__context__),");
+            write(*ss, "{tabs()}das_move({elem},");
         }
     }
     def override visitExprMakeArrayIndex(expr : ExprMakeArray?; index : int; init : ExpressionPtr; last : bool) {

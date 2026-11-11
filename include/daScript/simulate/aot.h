@@ -2395,7 +2395,7 @@ namespace das {
 #endif
 
     struct SimNode_AotInteropBase : SimNode_CallBase {
-        __forceinline SimNode_AotInteropBase() : SimNode_CallBase(LineInfo(),"") {}
+        DAS_API SimNode_AotInteropBase();
         DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override {
             DAS_PROFILE_NODE
             return v_zero();
@@ -2412,14 +2412,10 @@ namespace das {
     template <int argumentCount>
     struct SimNode_AotInterop : SimNode_AotInteropBase {
         template <typename ...VI>
-        __forceinline SimNode_AotInterop ( TypeInfo ** tinfo, VI... args ) {
+        __forceinline SimNode_AotInterop ( TypeInfo ** tinfo, VI... args ) : argValues{ args... } {
             nArguments = argumentCount;
             types = tinfo;
             argumentValues = argValues;
-            vec4f argsE[argumentCount] = { args... };
-            for ( int i=0; i!=argumentCount; ++i ) {
-                argumentValues[i] = argsE[i];
-            }
         };
         vec4f       argValues[argumentCount];
     };
@@ -2446,35 +2442,9 @@ namespace das {
     DAS_API char * das_lexical_cast_int_u64 ( uint64_t x, bool hex, Context * __context__, LineInfoArg * at );
     DAS_API char * das_temp_string_result ( char * str, Context * __context__, LineInfoArg * at );
 
-    __forceinline char * das_string_builder ( Context * __context__, const SimNode_AotInteropBase & node ) {
-        StringBuilderWriter writer;
-        DebugDataWalker<StringBuilderWriter> walker(writer, PrintFlags::string_builder);
-        for ( int i=0, is=node.nArguments; i!=is; ++i ) {
-            walker.walk(node.argumentValues[i], node.types[i]);
-        }
-        auto length = writer.tellp();
-        if ( length ) {
-            return __context__->allocateString(writer.c_str(),uint32_t(length), &node.debugInfo);
-        } else {
-            return nullptr;
-        }
-    }
-
-    __forceinline char * das_string_builder_temp ( Context * __context__, const SimNode_AotInteropBase & node ) {
-        StringBuilderWriter writer;
-        DebugDataWalker<StringBuilderWriter> walker(writer, PrintFlags::string_builder);
-        for ( int i=0, is=node.nArguments; i!=is; ++i ) {
-            walker.walk(node.argumentValues[i], node.types[i]);
-        }
-        auto length = writer.tellp();
-        if ( length ) {
-            auto str = __context__->allocateTempString(writer.c_str(), uint32_t(length), &node.debugInfo);
-            __context__->freeTempString(str, &node.debugInfo);
-            return str;
-        } else {
-            return nullptr;
-        }
-    }
+    DAS_API char * das_string_builder ( Context * __context__, const SimNode_AotInteropBase & node );
+    DAS_API char * das_string_builder_temp ( Context * __context__, const SimNode_AotInteropBase & node );
+    DAS_API SimFunction * das_fn_by_mnh ( Context * __context__, uint64_t mnh );
 
 
     struct das_stack_prologue {
