@@ -16,10 +16,7 @@ def test_set_moves_container(t : T?) {
         }
     }
     commit()
-    var churn : array<int>
-    for (k in range(1000)) {
-        churn |> push(k * 7)
-    }
+    var churn <- [for (k in range(1000)); k * 7]
     var seen = 0
     query() $(values : array<int2>; i : int) {
         t |> equal(length(values), i)
@@ -32,10 +29,7 @@ def test_set_moves_container(t : T?) {
 }
 
 def churn_heap() {
-    var churn : array<int>
-    for (k in range(1000)) {
-        churn |> push(k * 7)
-    }
+    var churn <- [for (k in range(1000)); k * 7]
 }
 
 def expect_moved_values(t : T?; count : int) {
@@ -81,7 +75,7 @@ struct MovedTemplate {
 [test(description = "a template's bulk create moves each entity's array field into archetype storage")]
 def test_template_bulk_create_moves_container(t : T?) {
     restart()
-    create_entities`MovedTemplate(4) $(eid : EntityId; i : int; var entity : MovedTemplate) {
+    create_entities`MovedTemplate(4) $(_eid : EntityId; i : int; var entity : MovedTemplate) {
         entity.values <- [for (x in range(i + 1)); int2(x, x + 13)]
         entity.i = i
     }

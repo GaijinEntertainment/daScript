@@ -31,7 +31,7 @@ namespace das {
         if ( alwaysStackWalkOnException ) {
             stackWalkToErr(*this, at, showArgumentsOnException, showLocalVariablesOnException);
         }
-        if ( breakOnException ) breakPoint(at, "exception", exception);
+        if ( breakOnException ) breakInDebugAgents(at, "exception", exception);
         throw dasException(exception, at);
 #else
         if ( throwBuf ) {
@@ -41,7 +41,7 @@ namespace das {
             if ( alwaysStackWalkOnException ) {
                 stackWalkToErr(*this, at, showArgumentsOnException, showLocalVariablesOnException);
             }
-            if ( breakOnException ) breakPoint(at, "exception", exception);
+            if ( breakOnException ) breakInDebugAgents(at, "exception", exception);
 #if defined(WIN64) || defined(_WIN64)
             //  "An invalid or unaligned stack was encountered during an unwind operation." exception is issued via longjmp
             //  this is a known issue with longjmp on x64, and this workaround disables stack unwinding

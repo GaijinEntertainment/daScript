@@ -335,6 +335,17 @@ def test_isolated_mode(tt : T?) {  // nolint:STYLE038 - one isolated sweep check
         t |> equal(exit_code, 0, "the crashing fixture is compiled, never run, got:\n{output}")
     }
 
+    tt |> run("--debugger with no agent installed runs a recovered exception") <| @(t : T?) {
+        let exe = get_command_line_arguments()[0]
+        let file = "{dastest_root()}/tests/_fixture_caught_exception.das"
+        var output : string
+        var exit_code : int
+        run_dastest("{exe} {dastest_root()}/dastest.das -- --test {file} --debugger", output,
+                    exit_code)
+        t |> equal(exit_code, 0, "the recovered exception is not a trap, got:\n{output}")
+        t |> success(output |> contains("1 passed"), "the test ran, got:\n{output}")
+    }
+
     tt |> run("--run worker path honors --failures-only (PASS lines suppressed at the source)") <| @(t : T?) {
         // The worker (--run) path used to return before log::failuresOnly was
         // set, AND the parent never forwarded the flag — so every per-test
