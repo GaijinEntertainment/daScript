@@ -528,8 +528,9 @@ class private LintToolHash : AstSimulateMacro {
         return true if (is_in_completion() || is_compiling_macros() || is_folding() || prog.policies.jit_enabled)
         for_each_function(prog.getThisModule, "main") $(fn) {
             for (ann in fn.annotations) {
-                continue if (ann.annotation.name != "lint_tool_entry")
-                reset_lint_cache("{get_function_aot_hash(prog, fn)}")
+                if (ann.annotation.name == "lint_tool_entry") {
+                    reset_lint_cache("{get_function_aot_hash(fn)}")
+                }
             }
         }
         return true

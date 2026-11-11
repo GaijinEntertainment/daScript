@@ -231,46 +231,45 @@ namespace das {
         context->invoke(block, args, nullptr, line);
     }
 
-    uint64_t getFunctionAotHash ( Program * program, const Function * fun ) {
-        auto & state = program->functionStates[fun];
-        if ( state.aotHash != 0 ) return state.aotHash; // cached
+    uint64_t getFunctionAotHash ( Function * fun ) {
+        if ( fun->aotHash != 0 ) return fun->aotHash; // cached
         DependencyCollector collector;
         collector.collect(fun);
         auto vec = collector.getDependenciesByMangledName();
         vector<uint64_t> uvec;
         uvec.reserve(vec.size() + 1);
-        debug_aot_hash("HASH %s %" PRIx64 "\n", fun->getMangledName().c_str(), program->hashOf(fun));
-        uvec.push_back(program->hashOf(fun));
+        debug_aot_hash("HASH %s %" PRIx64 "\n", fun->getMangledName().c_str(), fun->hash);
+        uvec.push_back(fun->hash);
         for ( const auto & fn : vec ) {
             if ( !fn.first->noAot &&!fn.first->builtIn ) {
-                DAS_ASSERTF(program->hashOf(fn.first),"%s has dependency on %s, which hash hash of 0",
+                DAS_ASSERTF(fn.first->hash,"%s has dependency on %s, which hash hash of 0",
                     fun->getMangledName().c_str(), fn.first->getMangledName().c_str());
-                uvec.push_back(program->hashOf(fn.first));
-                debug_aot_hash("\t%s %" PRIx64 "\n", fn.second.c_str(), program->hashOf(fn.first));
+                uvec.push_back(fn.first->hash);
+                debug_aot_hash("\t%s %" PRIx64 "\n", fn.second.c_str(), fn.first->hash);
             }
         }
         uint64_t res = hash_block64((const uint8_t *)uvec.data(), uint32_t(uvec.size()*sizeof(uint64_t)));
         debug_aot_hash("AOT HASH %" PRIx64 "\n", res);
-        state.aotHash = res;
+        fun->aotHash = res;
         return res;
     }
 
-    string getAotHashComment ( const Program * program, const Function * fun ) {
+    string getAotHashComment ( const Function * fun ) {
         DependencyCollector collector;
         collector.collect(fun);
         auto vec = collector.getDependenciesByMangledName();
         TextWriter tw;
-        tw << fun->getMangledName() << " hash=0x" << HEX << program->hashOf(fun);
+        tw << fun->getMangledName() << " hash=0x" << HEX << fun->hash;
         for ( const auto & fn : vec ) {
             if ( !fn.first->noAot && !fn.first->builtIn && fn.first != fun ) {
-                tw << ", " << fn.second << "=0x" << program->hashOf(fn.first);
+                tw << ", " << fn.second << "=0x" << fn.first->hash;
             }
         }
         tw << DEC;
         return tw.str();
     }
 
-    uint64_t getVariableListAotHash ( const Program * program, const vector<const Variable *> & globs, uint64_t initHash ) {
+    uint64_t getVariableListAotHash ( const vector<const Variable *> & globs, uint64_t initHash ) {
         DependencyCollector collector;
         for ( const auto & var : globs ) {
             collector.collect(var);
@@ -281,7 +280,7 @@ namespace das {
         uvec.push_back(initHash);
         for ( const auto & fn : vec ) {
             if ( !fn.first->noAot ) {
-                uvec.push_back(program->hashOf(fn.first));
+                uvec.push_back(fn.first->hash);
             }
         }
         return hash_block64((const uint8_t *)uvec.data(), uint32_t(uvec.size()*sizeof(uint64_t)));

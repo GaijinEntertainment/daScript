@@ -94,6 +94,7 @@ namespace das {
     DAS_CC_API void get_file_source_line(FileInfo * info, uint32_t line, const TBlock<void,TTemporary<const char *>> & blk, Context * context, LineInfoArg * at);
     DAS_CC_API void for_each_module_function(Module *module, const TBlock<void,FunctionPtr> &blk, Context * context, LineInfoArg * at);
     DAS_CC_API uint64_t getInitSemanticHashWithDep(ProgramPtr program, uint64_t semH);
+    DAS_CC_API uint64_t getFunctionHashById(Function *fun, int id, void * pctx, Context * context, LineInfoArg * at);
     DAS_CC_API bool modAotRequire(Module *mod, StringBuilderWriter *ss, Context * context, LineInfoArg * at);
 
     template <typename TT, typename QQ>
@@ -201,6 +202,7 @@ namespace das {
     DAS_CC_API void getAstContext ( smart_ptr_raw<Program> prog, Expression * expr, const TBlock<void,bool,AstContext> & block, Context * context, LineInfoArg * at );
     DAS_CC_API char * get_mangled_name ( Function * func, Context * context, LineInfoArg * at );
     DAS_CC_API char * get_mangled_name_t ( TypeDecl * typ, Context * context, LineInfoArg * at );
+    DAS_CC_API char * get_aot_hash_comment_fn ( const Function * func, Context * context, LineInfoArg * at );
     DAS_CC_API char * get_mangled_name_v ( Variable * var, Context * context, LineInfoArg * at );
     DAS_CC_API char * get_mangled_name_b ( ExprBlock * expr, Context * context, LineInfoArg * at );
     DAS_CC_API TypeDeclPtr parseMangledNameFn ( const char * txt, ModuleGroup & lib, Module * thisModule, Context * context, LineInfoArg * at );

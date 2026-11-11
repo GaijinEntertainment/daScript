@@ -1,7 +1,6 @@
 #include "daScript/misc/platform.h"
 #include "daScript/ast/ast.h"
 #include "ast_generate.h"
-#include "ast_generate_typed.h"
 #include "ast_infer_type.h"
 #include "daScript/ast/ast_visitor.h"
 
@@ -86,6 +85,29 @@ namespace das {
     string InferTypes::describeFunction(const Function *fun) const {
         return verbose ? fun->describe() : "";
     }
+    ___noinline void InferTypes::typeError(const char *what, const TypeDecl *shown, const LineInfo &at, CompilationError cerr) const {
+        if (shown) {
+            error(string(what) + ": '" + describeType(shown) + "'", "", "", at, cerr);
+        } else {
+            error(what, "", "", at, cerr);
+        }
+    }
+
+    ___noinline void InferTypes::malformedTypeError(const TypeDeclPtr &decl) const {
+        string allNames = "\t";
+        for (const auto &na : decl->argNames) {
+            allNames += na + " ";
+        }
+        error("malformed type: '" + describeType(decl) + "'", allNames, "",
+              decl->at, CompilationError::invalid_type);
+    }
+
+    ___noinline void InferTypes::templateStructureError(const TypeDeclPtr &decl) const {
+        error("can't use template structure " + decl->structType->name + " without instantiation", "", "",
+              decl->at, CompilationError::invalid_structure_template);
+    }
+
+    // src/ast/ARCHITECTURE.md#instance-type-size
     void InferTypes::verifyType(const TypeDeclPtr &decl, bool allowExplicit, bool classMethod, bool allowTemplate) const {
         // TODO: enable and cleanup
         if (decl->isExplicit && !allowExplicit) {
@@ -97,39 +119,29 @@ namespace das {
         if (decl->baseType == Type::tFunction || decl->baseType == Type::tLambda || decl->baseType == Type::tBlock || decl->baseType == Type::tVariant ||
             decl->baseType == Type::tTuple) {
             if (decl->argNames.size() && decl->argNames.size() != decl->argTypes.size()) {
-                string allNames = "\t";
-                for (const auto &na : decl->argNames) {
-                    allNames += na + " ";
-                }
-                error("malformed type: '" + describeType(decl) + "'", allNames, "",
-                      decl->at, CompilationError::invalid_type);
+                malformedTypeError(decl);
             }
         }
         if (decl->baseType == Type::tVoid) {
             if (decl->ref) {
-                error("can't declare a void reference: '" + describeType(decl) + "'", "", "",
-                      decl->at, CompilationError::invalid_type);
+                typeError("can't declare a void reference", decl, decl->at, CompilationError::invalid_type);
             }
         } else if (decl->baseType == Type::tPointer) {
             if (auto ptrType = decl->firstType) {
                 if (ptrType->ref) {
-                    error("can't declare a pointer to a reference: '" + describeType(decl) + "'", "", "",
-                          ptrType->at, CompilationError::invalid_type);
+                    typeError("can't declare a pointer to a reference", decl, ptrType->at, CompilationError::invalid_type);
                 }
                 if (decl->smartPtr) {
                     if (ptrType->baseType != Type::tHandle) {
-                        error("can't declare a smart pointer to anything other than annotation: '" + describeType(decl) + "'", "", "",
-                              ptrType->at, CompilationError::invalid_type);
+                        typeError("can't declare a smart pointer to anything other than annotation", decl, ptrType->at, CompilationError::invalid_type);
                     } else if (!ptrType->annotation->isSmart()) {
-                        error("this annotation does not support smart pointers: '" + describeType(decl) + "'", "", "",
-                              ptrType->at, CompilationError::invalid_annotation_type);
+                        typeError("this annotation does not support smart pointers", decl, ptrType->at, CompilationError::invalid_annotation_type);
                     }
                 }
                 verifyType(ptrType, false, false, allowTemplate);
             } else {
                 if (decl->smartPtr) {
-                    error("can't declare a void smart pointer", "", "",
-                          decl->at, CompilationError::invalid_type);
+                    typeError("can't declare a void smart pointer", nullptr, decl->at, CompilationError::invalid_type);
                 }
             }
         } else if (decl->baseType == Type::tIterator) {
@@ -138,8 +150,7 @@ namespace das {
             }
         } else if (decl->baseType == Type::tFixedArray) {
             if (decl->fixedDim <= 0) {
-                error("array dimension can't be 0 or less: '" + describeType(decl) + "'", "", "",
-                      decl->at, CompilationError::invalid_array_dimension);
+                typeError("array dimension can't be 0 or less", decl, decl->at, CompilationError::invalid_array_dimension);
             } else {
                 // master parity: the infer-time limit is the flattened ELEMENT COUNT, not bytes;
                 // byte-size limits are enforced later by lint with site-specific errors
@@ -147,126 +158,103 @@ namespace das {
                 for (auto t = decl; t->baseType == Type::tFixedArray && t->firstType; t = t->firstType) {
                     if (t->fixedDim > 0) count *= uint64_t(t->fixedDim);
                     if (count > 0x7fffffff) {
-                        error("array is too big: '" + describeType(decl) + "'", "", "",
-                              decl->at, CompilationError::exceeds_array);
+                        typeError("array is too big", decl, decl->at, CompilationError::exceeds_array);
                         break;
                     }
                 }
             }
             if (auto elemType = decl->firstType) {
                 if (elemType->ref) {
-                    error("can't declare an array of references: '" + describeType(elemType) + "'", "", "",
-                          elemType->at, CompilationError::invalid_array);
+                    typeError("can't declare an array of references", elemType, elemType->at, CompilationError::invalid_array);
                 }
                 if (elemType->baseType == Type::tVoid) {
-                    error("can't declare an array of void: '" + describeType(decl) + "'", "", "",
-                          decl->at, CompilationError::invalid_array);
+                    typeError("can't declare an array of void", decl, decl->at, CompilationError::invalid_array);
                 }
                 verifyType(elemType, false, false, allowTemplate);
             }
         } else if (decl->baseType == Type::tDistinct) {
             auto underlying = decl->firstType;
             if (!underlying) {
-                error("distinct type is missing its underlying type: '" + describeType(decl) + "'", "", "",
-                      decl->at, CompilationError::invalid_distinct_type);
+                typeError("distinct type is missing its underlying type", decl, decl->at, CompilationError::invalid_distinct_type);
             } else if (underlying->baseType == Type::tDistinct) {
-                error("distinct type can't be defined in terms of another distinct type: '" + describeType(decl) + "'", "", "",
-                      decl->at, CompilationError::invalid_distinct_type);
+                typeError("distinct type can't be defined in terms of another distinct type", decl, decl->at, CompilationError::invalid_distinct_type);
             } else if (!underlying->isAutoOrAlias() && !underlying->isWorkhorseType()) {
-                error("distinct type underlying type must be a workhorse type: '" + describeType(decl) + "'", "", "",
-                      decl->at, CompilationError::invalid_distinct_type);
+                typeError("distinct type underlying type must be a workhorse type", decl, decl->at, CompilationError::invalid_distinct_type);
             }
         } else if (decl->baseType == Type::tArray) {
             if (auto arrayType = decl->firstType) {
                 if (arrayType->isAutoOrAlias()) {
-                    error("array type is not fully resolved: '" + describeType(arrayType) + "'", "", "",
-                      arrayType->at, CompilationError::not_resolved_yet_array_type);
+                    typeError("array type is not fully resolved", arrayType, arrayType->at, CompilationError::not_resolved_yet_array_type);
                 }
                 if (arrayType->ref) {
-                    error("can't declare an array of references: '" + describeType(arrayType) + "'", "", "",
-                          arrayType->at, CompilationError::invalid_array);
+                    typeError("can't declare an array of references", arrayType, arrayType->at, CompilationError::invalid_array);
                 }
                 if (arrayType->baseType == Type::tVoid) {
-                    error("can't declare a void array: '" + describeType(arrayType) + "'", "", "",
-                          arrayType->at, CompilationError::invalid_array);
+                    typeError("can't declare a void array", arrayType, arrayType->at, CompilationError::invalid_array);
                 }
                 if (!arrayType->canBePlacedInContainer()) {
-                    error("can't have array of non-trivial type: '" + describeType(arrayType) + "'", "", "",
-                          arrayType->at, CompilationError::invalid_array_type);
+                    typeError("can't have array of non-trivial type", arrayType, arrayType->at, CompilationError::invalid_array_type);
                 }
                 verifyType(arrayType, false, false, allowTemplate);
             }
         } else if (decl->baseType == Type::tTable) {
             if (auto keyType = decl->firstType) {
                 if (keyType->isAutoOrAlias()) {
-                    error("table key is not fully resolved: '" + describeType(keyType) + "'", "", "",
-                      keyType->at, CompilationError::not_resolved_yet_table_type);
+                    typeError("table key is not fully resolved", keyType, keyType->at, CompilationError::not_resolved_yet_table_type);
                 }
                 if (keyType->ref) {
-                    error("table key can't be declared as a reference: '" + describeType(keyType) + "'", "", "",
-                          keyType->at, CompilationError::invalid_table);
+                    typeError("table key can't be declared as a reference", keyType, keyType->at, CompilationError::invalid_table);
                 }
                 if (!keyType->isTableKeyType()) {
-                    error("table key has to be declared as a basic 'hashable' type: '" + describeType(keyType) + "'", "", "",
-                          keyType->at, CompilationError::invalid_table_type);
+                    typeError("table key has to be declared as a basic 'hashable' type", keyType, keyType->at, CompilationError::invalid_table_type);
                 }
                 verifyType(keyType, false, false, allowTemplate);
             }
             if (auto valueType = decl->secondType) {
                 if (valueType->isAutoOrAlias()) {
-                    error("table value is not fully resolved: '" + describeType(valueType) + "'", "", "",
-                      valueType->at, CompilationError::not_resolved_yet_table_type);
+                    typeError("table value is not fully resolved", valueType, valueType->at, CompilationError::not_resolved_yet_table_type);
                 }
                 if (valueType->ref) {
-                    error("table value can't be declared as a reference: '" + describeType(valueType) + "'", "", "",
-                          valueType->at, CompilationError::invalid_table);
+                    typeError("table value can't be declared as a reference", valueType, valueType->at, CompilationError::invalid_table);
                 }
                 if (!valueType->canBePlacedInContainer()) {
-                    error("can't have table value of non-trivial type: '" + describeType(valueType) + "'", "", "",
-                          valueType->at, CompilationError::invalid_table_type);
+                    typeError("can't have table value of non-trivial type", valueType, valueType->at, CompilationError::invalid_table_type);
                 }
                 verifyType(valueType, false, false, allowTemplate);
             }
         } else if (decl->baseType == Type::tBlock || decl->baseType == Type::tFunction || decl->baseType == Type::tLambda) {
             if (auto resultType = decl->firstType) {
                 if (!resultType->isReturnType()) {
-                    error("not a valid return type: '" + describeType(resultType) + "'", "", "",
-                          resultType->at, CompilationError::invalid_result_type);
+                    typeError("not a valid return type", resultType, resultType->at, CompilationError::invalid_result_type);
                 }
                 verifyType(resultType, false, false, allowTemplate);
             }
             for (auto &argType : decl->argTypes) {
                 if (!classMethod && (argType->ref && argType->isRefType())) {
-                    error("can't pass a boxed type by a reference: '" + describeType(argType) + "'", "", "",
-                          argType->at, CompilationError::invalid_argument_type);
+                    typeError("can't pass a boxed type by a reference", argType, argType->at, CompilationError::invalid_argument_type);
                 }
                 verifyType(argType, true, false, allowTemplate);
             }
         } else if (decl->baseType == Type::tTuple) {
             for (auto &argType : decl->argTypes) {
                 if (argType->ref) {
-                    error("tuple element can't be a reference: '" + describeType(argType) + "'", "", "",
-                          argType->at, CompilationError::invalid_tuple);
+                    typeError("tuple element can't be a reference", argType, argType->at, CompilationError::invalid_tuple);
                 }
                 if (argType->isVoid()) {
-                    error("tuple element can't be void", "", "",
-                          argType->at, CompilationError::invalid_tuple);
+                    typeError("tuple element can't be void", nullptr, argType->at, CompilationError::invalid_tuple);
                 }
                 if (!argType->canBePlacedInContainer()) {
-                    error("invalid tuple element type: '" + describeType(argType) + "'", "", "",
-                          argType->at, CompilationError::invalid_tuple_type);
+                    typeError("invalid tuple element type", argType, argType->at, CompilationError::invalid_tuple_type);
                 }
                 verifyType(argType, false, false, allowTemplate);
             }
         } else if (decl->baseType == Type::tVariant) {
             for (auto &argType : decl->argTypes) {
                 if (argType->ref) {
-                    error("variant element can't be a reference: '" + describeType(argType) + "'", "", "",
-                          argType->at, CompilationError::invalid_variant);
+                    typeError("variant element can't be a reference", argType, argType->at, CompilationError::invalid_variant);
                 }
                 if (!argType->isVoid() && !argType->canBePlacedInContainer()) {
-                    error("invalid variant element type: '" + describeType(argType) + "'", "", "",
-                          argType->at, CompilationError::invalid_variant_type);
+                    typeError("invalid variant element type", argType, argType->at, CompilationError::invalid_variant_type);
                 }
                 verifyType(argType, false, false, allowTemplate);
             }
@@ -276,8 +264,7 @@ namespace das {
             // inside type<>/typeinfo introspection, which is how the typemacro machinery
             // reads a template's fields to instantiate it -- those sites pass allowTemplate.
             if (!allowTemplate && decl->structType && decl->structType->isTemplate) {
-                error("can't use template structure " + decl->structType->name + " without instantiation", "", "",
-                        decl->at, CompilationError::invalid_structure_template);
+                templateStructureError(decl);
             }
         }
     }
@@ -850,7 +837,10 @@ namespace das {
                     compatibleCast = cT->structType->isCompatibleCast(*seT->structType);
                 }
                 if (compatibleCast) {
-                    return makeStructCastType(seT, cT);
+                    auto exprType = new TypeDecl(*cT);
+                    exprType->ref = seT->ref;
+                    exprType->constant = seT->constant;
+                    return exprType;
                 } else {
                     error("incompatible cast, can't cast " + seT->structType->name + " to " + cT->structType->name, "", "",
                           at, CompilationError::invalid_cast_structure);
@@ -868,7 +858,10 @@ namespace das {
                     compatibleCast = cT->firstType->structType->isCompatibleCast(*seT->firstType->structType);
                 }
                 if (compatibleCast) {
-                    return makeStructCastType(seT, cT);
+                    auto exprType = new TypeDecl(*cT);
+                    exprType->ref = seT->ref;
+                    exprType->constant = seT->constant;
+                    return exprType;
                 } else {
                     error("incompatible cast, can't cast '" + seT->firstType->structType->name + "?' to '" + cT->firstType->structType->name + "?'", "", "",
                           at, CompilationError::invalid_cast_structure_pointer);

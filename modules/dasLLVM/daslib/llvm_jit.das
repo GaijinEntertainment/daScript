@@ -1626,16 +1626,11 @@ class public LlvmJitVisitor : AstVisitor {
         return ofunc
     }
 
-    def build_call_params(expr : ExprCallFunc?; extern_func : Function? = null) =>
-        <- build_function_call_params(expr.func, expr, 0, extern_func)
-
-    def build_function_call_params(fn : Function?; call : ExprLooksLikeCall?; first : int;
-                                   extern_func : Function? = null) {
+    def build_call_params(expr : ExprCallFunc?; extern_func : Function? = null) {
         var params : array<LLVMOpaqueValue?>
 
-        for (ai in range(length(call.arguments) - first)) {
-            assume a = call.arguments[ai + first]
-            assume funcArg = fn.arguments[ai]
+        for (a, ai in expr.arguments, count()) {
+            assume funcArg = expr.func.arguments[ai]
             assume src = getE(a);
             if (funcArg._type.baseType == Type.anyArgument) {
                 params |> push(cast_to_vec4f(a._type, src))
@@ -1784,19 +1779,6 @@ class public LlvmJitVisitor : AstVisitor {
         return func
     }
 
-    //! a direct call of jitted `fn`: `params`, then the context and
-    //! the cmres pointer; returns `cmresEval` when the result goes there
-    def build_jitted_call(fn : Function?; var params : array<LLVMOpaqueValue?>;
-                          cmresEval : LLVMOpaqueValue?) : LLVMOpaqueValue? {
-        params |> push(get_context_param())
-        if (cmresEval != null) {
-            params |> push(LLVMBuildPointerCast(g_builder, cmresEval, types.LLVMVoidPtrType(), ""))
-        }
-        let (func, typ) = get_or_declare_impl(fn, uid.get_dll_fn_name_ptr(fn))
-        let ccall = LLVMBuildCall2(g_builder, typ, func, params, "")
-        return cmresEval != null ? cmresEval : ccall
-    }
-
     def make_call(expr : ExprCallFunc?; doesNotNeedSp : bool) {
         // nolint:STYLE014
         // $::length over an array truncates Array.size (u64) to i32 — guard the truncation to
@@ -1924,7 +1906,18 @@ class public LlvmJitVisitor : AstVisitor {
         } else {
             if (is_jit_selected(prog, expr.func)) {
                 var params <- build_call_params(expr)
-                setE(expr, build_jitted_call(expr.func, params, cmresEval))
+                params |> push(get_context_param())
+                if (cmresEval != null) {
+                    params |> push(LLVMBuildPointerCast(g_builder, cmresEval, types.LLVMVoidPtrType(), ""))
+                }
+                let fmna = uid.get_dll_fn_name_ptr(expr.func)
+                let (func, typ) = get_or_declare_impl(expr.func, fmna)
+                var ccall = LLVMBuildCall2(g_builder, typ, func, params, "")
+                if (cmresEval != null) {
+                    setE(expr, cmresEval)
+                } else {
+                    setE(expr, ccall)
+                }
             } else {
                 var args = build_array_of_arguments(expr.arguments)
                 var glob_fn_ptr : LLVMOpaqueValue?
@@ -5678,12 +5671,7 @@ class public LlvmJitVisitor : AstVisitor {
                 }
             }
         }
-        let isMethod = blockT.isGoodFunctionType && expr.isInvokeMethod
-        let target = isMethod ? devirtualized_call(prog, expr) : null
-        if (target != null && is_jit_selected(prog, target)) {
-            var params <- build_function_call_params(target, expr, 1)
-            setE(expr, build_jitted_call(target, params, cmresEval))
-        } elif (blockT.isGoodFunctionType && expr.isInvokeMethod) {
+        if (blockT.isGoodFunctionType && expr.isInvokeMethod) {
             var methodOffset = -1
             if (expr.arguments[0] is ExprField) {
                 var efield = expr.arguments[0] as ExprField
@@ -8085,7 +8073,7 @@ def public generate_llvm(prog : Program?; ctx : Context?; types : PrimitiveTypes
         // No need in public symbols when generating executable
         let globalVar = LLVMAddGlobal(g_mod, types.t_int64, dll_name.id())
         set_public_linkage(globalVar)
-        let aot_hash : uint64 = get_function_aot_hash(prog, fn)
+        let aot_hash : uint64 = get_function_aot_hash(fn)
         // debug("initializer hash for {dll_name.publ()}: {aot_hash}")
         globalVar |> LLVMSetInitializer(types.ConstI64(aot_hash))
     }

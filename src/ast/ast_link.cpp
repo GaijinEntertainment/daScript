@@ -29,7 +29,8 @@ namespace das {
             return true;
         }, "*");
         // allocate used variables and functions indices - per pass, so -1 means this pass never saw it
-        program->clearIndices();
+        program->functionIndices.clear();
+        program->variableIndices.clear();
         program->totalVariables = 0;
         program->totalFunctions = 0;
         program->globalStringHeapSize = 0;

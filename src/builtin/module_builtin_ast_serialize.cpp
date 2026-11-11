@@ -1858,6 +1858,7 @@ namespace das {
         }
         ser << totalStackSize  << totalGenLabel;
         ser << at            << atDecl          << module;
+        ser << hash          << aotHash;  // do not serialize inferStack
         {
             DAS_SER_PROFILE(ser, "Function.aliases");
             ser << resultAliases << argumentAliases << resultAliasesGlobals;

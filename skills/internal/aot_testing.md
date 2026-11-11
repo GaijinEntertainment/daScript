@@ -261,7 +261,7 @@ semantic hash is <runtime_aotHash>
 | `getFunctionHash(fun, code, ctx)` | `simulate_fn_hash.cpp` | Compute own SIM hash |
 | `getFunctionAotHash(fun)` | `simulate_fn_hash.cpp` | Compute AOT hash (own + deps) |
 | `getAotHashComment(fun)` | `simulate_fn_hash.cpp` | Format diagnostic string with all dep hashes |
-| `get_aot_hash_comment(program, fun)` | das binding in `module_builtin_ast.cpp` | Same, callable from das |
+| `get_aot_hash_comment(fun)` | das binding in `module_builtin_ast.cpp` | Same, callable from das |
 
 ### Debug printf macros
 

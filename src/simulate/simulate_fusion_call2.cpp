@@ -75,7 +75,8 @@ namespace das {
             DAS_PROFILE_NODE \
             vec4f argValues[2]; \
             argValues[0] = l.subexpr->eval(context); \
-            argValues[1] = fusionLoadArgument(r.compute##COMPUTEL(context), rightLoadSize); \
+            argValues[1] = v_zero(); \
+            memcpy(&argValues[1], r.compute##COMPUTEL(context), rightLoadSize); \
             return context.call(fnPtr, argValues, &debugInfo); \
         } \
         DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override { \
@@ -91,7 +92,8 @@ namespace das {
         NO_ASAN_INLINE auto compute ( Context & context ) { \
             DAS_PROFILE_NODE \
             vec4f argValues[2]; \
-            argValues[0] = fusionLoadArgument(l.compute##COMPUTER(context), leftLoadSize); \
+            argValues[0] = v_zero(); \
+            memcpy(&argValues[0], l.compute##COMPUTER(context), leftLoadSize); \
             argValues[1] = r.subexpr->eval(context); \
             return context.call(fnPtr, argValues, &debugInfo); \
         } \
@@ -108,8 +110,10 @@ namespace das {
         NO_ASAN_INLINE auto compute ( Context & context ) { \
             DAS_PROFILE_NODE \
             vec4f argValues[2]; \
-            argValues[0] = fusionLoadArgument(l.compute##COMPUTEL(context), leftLoadSize); \
-            argValues[1] = fusionLoadArgument(r.compute##COMPUTER(context), rightLoadSize); \
+            argValues[0] = v_zero(); \
+            memcpy(&argValues[0], l.compute##COMPUTEL(context), leftLoadSize); \
+            argValues[1] = v_zero(); \
+            memcpy(&argValues[1], r.compute##COMPUTER(context), rightLoadSize); \
             return context.call(fnPtr, argValues, &debugInfo); \
         } \
         DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override { \
@@ -163,7 +167,8 @@ IMPLEMENT_ANY_OP2(__forceinline, Call, Ptr, StringPtr)
             auto cmres = cmresEval->evalPtr(context); \
             vec4f argValues[2]; \
             argValues[0] = l.subexpr->eval(context); \
-            argValues[1] = fusionLoadArgument(r.compute##COMPUTEL(context), rightLoadSize); \
+            argValues[1] = v_zero(); \
+            memcpy(&argValues[1], r.compute##COMPUTEL(context), rightLoadSize); \
             return cast<char *>::to(context.callWithCopyOnReturn(fnPtr, argValues, cmres, &debugInfo)); \
         } \
         DAS_PTR_NODE; \
@@ -177,7 +182,8 @@ IMPLEMENT_ANY_OP2(__forceinline, Call, Ptr, StringPtr)
             DAS_PROFILE_NODE \
             auto cmres = cmresEval->evalPtr(context); \
             vec4f argValues[2]; \
-            argValues[0] = fusionLoadArgument(l.compute##COMPUTER(context), leftLoadSize); \
+            argValues[0] = v_zero(); \
+            memcpy(&argValues[0], l.compute##COMPUTER(context), leftLoadSize); \
             argValues[1] = r.subexpr->eval(context); \
             return cast<char *>::to(context.callWithCopyOnReturn(fnPtr, argValues, cmres, &debugInfo)); \
         } \
@@ -192,8 +198,10 @@ IMPLEMENT_ANY_OP2(__forceinline, Call, Ptr, StringPtr)
             DAS_PROFILE_NODE \
             auto cmres = cmresEval->evalPtr(context); \
             vec4f argValues[2]; \
-            argValues[0] = fusionLoadArgument(l.compute##COMPUTEL(context), leftLoadSize); \
-            argValues[1] = fusionLoadArgument(r.compute##COMPUTER(context), rightLoadSize); \
+            argValues[0] = v_zero(); \
+            memcpy(&argValues[0], l.compute##COMPUTEL(context), leftLoadSize); \
+            argValues[1] = v_zero(); \
+            memcpy(&argValues[1], r.compute##COMPUTER(context), rightLoadSize); \
             return cast<char *>::to(context.callWithCopyOnReturn(fnPtr, argValues, cmres, &debugInfo)); \
         } \
         DAS_PTR_NODE; \
@@ -213,7 +221,8 @@ IMPLEMENT_ANY_OP2(__forceinline, CallAndCopyOrMove, Ptr, StringPtr)
             DAS_PROFILE_NODE \
             vec4f argValues[2]; \
             argValues[0] = l.subexpr->eval(context); \
-            argValues[1] = fusionLoadArgument(r.compute##COMPUTEL(context), rightLoadSize); \
+            argValues[1] = v_zero(); \
+            memcpy(&argValues[1], r.compute##COMPUTEL(context), rightLoadSize); \
             auto aa = context.abiArg; \
             context.abiArg = argValues; \
             auto res = fnPtr->code->eval(context); \
@@ -234,7 +243,8 @@ IMPLEMENT_ANY_OP2(__forceinline, CallAndCopyOrMove, Ptr, StringPtr)
         NO_ASAN_INLINE auto compute ( Context & context ) { \
             DAS_PROFILE_NODE \
             vec4f argValues[2]; \
-            argValues[0] = fusionLoadArgument(l.compute##COMPUTER(context), leftLoadSize); \
+            argValues[0] = v_zero(); \
+            memcpy(&argValues[0], l.compute##COMPUTER(context), leftLoadSize); \
             argValues[1] = r.subexpr->eval(context); \
             auto aa = context.abiArg; \
             context.abiArg = argValues; \
@@ -256,8 +266,10 @@ IMPLEMENT_ANY_OP2(__forceinline, CallAndCopyOrMove, Ptr, StringPtr)
         NO_ASAN_INLINE auto compute ( Context & context ) { \
             DAS_PROFILE_NODE \
             vec4f argValues[2]; \
-            argValues[0] = fusionLoadArgument(l.compute##COMPUTEL(context), leftLoadSize); \
-            argValues[1] = fusionLoadArgument(r.compute##COMPUTER(context), rightLoadSize); \
+            argValues[0] = v_zero(); \
+            memcpy(&argValues[0], l.compute##COMPUTEL(context), leftLoadSize); \
+            argValues[1] = v_zero(); \
+            memcpy(&argValues[1], r.compute##COMPUTER(context), rightLoadSize); \
             auto aa = context.abiArg; \
             context.abiArg = argValues; \
             auto res = fnPtr->code->eval(context); \
@@ -285,7 +297,8 @@ IMPLEMENT_ANY_OP2(__forceinline, FastCall, Ptr, StringPtr)
             DAS_PROFILE_NODE \
             vec4f argValues[2]; \
             argValues[0] = l.subexpr->eval(context); \
-            argValues[1] = fusionLoadArgument(r.compute##COMPUTEL(context), rightLoadSize); \
+            argValues[1] = v_zero(); \
+            memcpy(&argValues[1], r.compute##COMPUTEL(context), rightLoadSize); \
             context.enterCheckedFastCall(debugInfo, fnPtr); \
             auto aa = context.abiArg; \
             context.abiArg = argValues; \
@@ -308,7 +321,8 @@ IMPLEMENT_ANY_OP2(__forceinline, FastCall, Ptr, StringPtr)
         NO_ASAN_INLINE auto compute ( Context & context ) { \
             DAS_PROFILE_NODE \
             vec4f argValues[2]; \
-            argValues[0] = fusionLoadArgument(l.compute##COMPUTER(context), leftLoadSize); \
+            argValues[0] = v_zero(); \
+            memcpy(&argValues[0], l.compute##COMPUTER(context), leftLoadSize); \
             argValues[1] = r.subexpr->eval(context); \
             context.enterCheckedFastCall(debugInfo, fnPtr); \
             auto aa = context.abiArg; \
@@ -332,8 +346,10 @@ IMPLEMENT_ANY_OP2(__forceinline, FastCall, Ptr, StringPtr)
         NO_ASAN_INLINE auto compute ( Context & context ) { \
             DAS_PROFILE_NODE \
             vec4f argValues[2]; \
-            argValues[0] = fusionLoadArgument(l.compute##COMPUTEL(context), leftLoadSize); \
-            argValues[1] = fusionLoadArgument(r.compute##COMPUTER(context), rightLoadSize); \
+            argValues[0] = v_zero(); \
+            memcpy(&argValues[0], l.compute##COMPUTEL(context), leftLoadSize); \
+            argValues[1] = v_zero(); \
+            memcpy(&argValues[1], r.compute##COMPUTER(context), rightLoadSize); \
             context.enterCheckedFastCall(debugInfo, fnPtr); \
             auto aa = context.abiArg; \
             context.abiArg = argValues; \

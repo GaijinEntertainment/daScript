@@ -53,8 +53,7 @@ def writeStandaloneContextMethods(var prog : ProgramPtr; var logs : StringBuilde
                                         |> map(@(v : VariablePtr) { return coll.getVarName(v); })
                                         |> join(", "))
             let maybe_comma = !empty(args_str) ? ", " : "";
-            let aot_name = aotFuncName(prog, fn)
-            write(logs, " \{\n    return {aot_name}(this{maybe_comma}{args_str});\n\}\n\n");
+            write(logs, " \{\n    return {aotFuncName(fn)}(this{maybe_comma}{args_str});\n\}\n\n");
         }
     }
 }
@@ -78,7 +77,7 @@ def collectInitFunctionAotNames(program : ProgramPtr; var context : Context) : a
             if (pfun.flags.noAot) {
                 macro_error(program, pfun.at, "standalone AOT cannot run [init] function: {pfun.name} is [no_aot]")
             } else {
-                mnhToAotName[pfun.getMangledNameHash] = aotFuncName(program, pfun)
+                mnhToAotName[pfun.getMangledNameHash] = aotFuncName(pfun)
             }
         });
     });
@@ -340,9 +339,9 @@ class StandaloneContextGen : CppAot {
         var inline_fns : array<string>
         inline_fns |> reserve(length(fnn))
         for (pfun in fnn) {
-            let name = aotFuncName(prog, pfun)
+            let name = aotFuncName(pfun)
             if (used_functions |> key_exists(name)) continue
-            inline_fns.push(describeCppFunc(prog, pfun, collector, cross_platform, true, true));
+            inline_fns.push(describeCppFunc(pfun, collector, cross_platform, true, true));
             used_functions.insert(name);
         }
         let sep = ";\n";
@@ -389,12 +388,12 @@ def writeRegistration(var source : StringBuilderWriter;
     write(source, "\} // namespace {cfg.context_name}\n");
 }
 
-def GetFunctionInfo(program : ProgramPtr; pfun : Function?; index : int; info : string) {
+def GetFunctionInfo(pfun : Function?; index : int; info : string) {
     return build_string() $(tw) {
         let args = ["\"{pfun.name}\"",
                     "\"{pfun |> get_mangled_name()}\"",
                     "0x{pfun.getMangledNameHash:x}",
-                    "0x{get_function_aot_hash(program, pfun):x}",
+                    "0x{pfun.aotHash:x}",
                     "{pfun.totalStackSize:d}",
                     "{pfun.flags.unsafeOperation}",
                     "{pfun.flags.fastCall}",
@@ -406,8 +405,7 @@ def GetFunctionInfo(program : ProgramPtr; pfun : Function?; index : int; info : 
     }
 }
 
-def addFunctionInfo(program : ProgramPtr; fnn : array<Function?>;
-                    var helper : AotDebugInfoHelper?) {
+def addFunctionInfo(fnn : array<Function?>; var helper : AotDebugInfoHelper?) {
     var lookupFunctionTable : array<tuple<Function?, FuncInfo?>>
     lookupFunctionTable |> reserve(length(fnn))
     for (pfun in fnn) {
@@ -420,7 +418,7 @@ def addFunctionInfo(program : ProgramPtr; fnn : array<Function?>;
     return build_string() $(tw) {
         var index = 0
         for ((fun_info, info) in lookupFunctionTable) {
-            write(tw, GetFunctionInfo(program, fun_info, index, funcInfoName(info)));
+            write(tw, GetFunctionInfo(fun_info, index, funcInfoName(info)));
             index++
         }
     }
@@ -452,18 +450,18 @@ def genStandaloneSrc(var program : ProgramPtr;
                 // a generic instance several modules instantiated is one C++ function: emit the first copy only
                 var emitted : table<string>
                 for (pfun in collectProgramUsedFunctions(program, false, false)) {
-                    emitted |> insert(aotFuncName(program, pfun))
+                    emitted |> insert(aotFuncName(pfun))
                 }
                 for (fn in foreign) {
-                    let name = aotFuncName(program, fn)
+                    let name = aotFuncName(fn)
                     if (emitted |> key_exists(name)) continue
                     emitted |> insert(name)
                     visit(fn, adapter)
                 }
             }
 
-            let used = collectProgramUsedFunctions(program, true, false)
-            initFunctions = addFunctionInfo(program, used, gen.helper);
+            let usedFunctions <- collectProgramUsedFunctions(program, true, false)
+            initFunctions = addFunctionInfo(usedFunctions, gen.helper);
             let globalInfos <- makeGlobalVarInfos(program, gen.helper, globals)
             type_defs += gen.declarations;
             gen.declarations = "";
@@ -549,7 +547,8 @@ def private checkAllUsedFunctionsCanAot(program : ProgramPtr) {
     });
 }
 
-def private prepareProgramForEmission(var program : ProgramPtr) : BlockVariableCollector? {
+def private prepareProgramForEmission(var program : ProgramPtr;
+                                      context : Context) : BlockVariableCollector? {
     var noAotMarker = new NoAotMarker();
     var unmarked <- foreignUsedFunctions(program, true)
     make_visitor(*noAotMarker) $(adapter_no_aot) {
@@ -569,6 +568,8 @@ def private prepareProgramForEmission(var program : ProgramPtr) : BlockVariableC
             visit(fn, adapter_p)
         }
     }
+
+    setAotHashes(program, context);
 
     var flags = new SetPrinterFlags();
     make_visitor(*flags) $(flags_adapter) {
@@ -710,7 +711,7 @@ def public runStandaloneVisitor(var program : ProgramPtr, modules : array<string
         return writeStandaloneSkipStub(program, cfg, no_aot)
     }
 
-    var coll = prepareProgramForEmission(program)
+    var coll = prepareProgramForEmission(program, context)
     let globals <- usedGlobals(program)
 
     let mod = program.getThisModule;

@@ -23,7 +23,14 @@ as a lean binary - the probe catches both.
 bin/daslang utils/internal/doc-verify/main.das                      # full corpus, report.json + exit code
 bin/daslang utils/internal/doc-verify/main.das -- --page 53_clargs  # one page (substring filter -
                                                            #   suffix with .rst to disambiguate)
+bin/daslang utils/internal/doc-verify/main.das -- --spawn           # one child daslang per file
 ```
+
+Every emitted file compiles inside the tool's own process, so a shared module the first page
+promotes serves every later page; the full corpus is seconds, not minutes. `--spawn` compiles
+each file in a child `daslang` instead: the mode to isolate a page that crashes or hangs the
+compiler (a child has a timeout, the tool's own process does not), and the one the tool
+switches to by itself when `--root` names a tree other than the running binary's.
 
 Default out dir `build/doc_verify/`; use a private `--out` when iterating so parallel runs
 don't clobber each other, and `rm` the report before a run you intend to read (a crashed

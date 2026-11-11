@@ -81,7 +81,7 @@ def public run_jit_linked(prog : Program?; var ctx : Context?) : bool {
     phase_tm = ref_time_ticks()
     var uids = create_uid_nodes(prog, plan.candidates, false)
     var dll = get_dll_by_path(plan.output_path)
-    var probe <- probe_dll(prog, plan.candidates, plan.disabled, dll, uids)
+    var probe <- probe_dll(plan.candidates, plan.disabled, dll, uids)
     let t_probe = get_time_usec(phase_tm)
     // a DLL holding none of the candidates is not a cache of this program: a pinned
     // `-output` path another program wrote

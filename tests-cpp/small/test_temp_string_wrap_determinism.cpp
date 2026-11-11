@@ -14,9 +14,7 @@ static uint64_t fixtureFnHash ( const char * entryPath ) {
     TextPrinter tout;
     ModuleGroup dummyLibGroup;
     auto fAccess = make_smart<FsFileAccess>();
-    CodeOfPolicies policies;
-    policies.keep_symbol_tables = true;
-    auto program = compileDaScript(getDasRoot() + entryPath, fAccess, tout, dummyLibGroup, policies);
+    auto program = compileDaScript(getDasRoot() + entryPath, fAccess, tout, dummyLibGroup);
     REQUIRE(program);
     REQUIRE_FALSE(program->failed());
     Context ctx(program->getContextStackSize());
@@ -25,8 +23,8 @@ static uint64_t fixtureFnHash ( const char * entryPath ) {
     REQUIRE(mod);
     auto fn = mod->findUniqueFunction("write_trimmed");
     REQUIRE(fn);
-    CHECK(program->hashOf(fn) != 0);
-    return program->hashOf(fn);
+    CHECK(fn->hash != 0);
+    return fn->hash;
 }
 
 TEST_CASE("module function hash is driver-independent under temp-string wrapping") {
