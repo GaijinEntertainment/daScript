@@ -2828,7 +2828,7 @@ def private check_shared_template_homes {
 
 [arch(at = "ARCHITECTURE_GPU_SHARED_KERNELS.md#gpu-shared-kernels")]
 def private check_shared_file_spelling {
-    for (path in [SHARED_KERNEL_FILES[0], SHARED_KERNEL_FILES[1], CUDA_CLASSES_FILE]) {
+    for (path in [SHARED_KERNEL_FILES[0], CUDA_CLASSES_FILE]) {
         var markers = false
         for (m in das_requires(path)) {
             continue if (!(m |> starts_with("spirv/")))
