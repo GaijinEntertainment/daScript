@@ -19,11 +19,9 @@ def test_generator_yield_in_unsafe_block(t : T?) {
     var a <- [1, 2, 3]
     var sum = 0
     var count = 0
-    unsafe {
-        for (x in each_ref_unsafe(addr(a), 3)) {
-            sum += x
-            count ++
-        }
+    for (x in each_ref_unsafe(unsafe(addr(a)), 3)) {
+        sum += x
+        count ++
     }
     t |> equal(count, 3)
     t |> equal(sum, 6)

@@ -145,6 +145,13 @@ a compile of its own and never joins another compile's stream: under `CodeOfPoli
 it reads and writes its own `ModuleFileCache` at the default path keyed by the target's file, as a
 script's `compile_file` does. A module whose parse failed pushes no record.
 
+The late walk compiles with `ignore_shared_modules` off, whatever its caller set. That policy
+makes the parser read `module X shared` as not shared, and a late require's target must be
+shared to outlive the walk, as must every module it requires (`canShareModule`). The walk's
+policies are its own copy, so the caller's program, its dependencies and every later compile
+keep the policy: a host that ignores shared modules still gets the JIT emitter, promoted
+beside its privately compiled program.
+
 ## Program-scoped symbol state (`ast.h`, `ast_export.cpp`, `ast_allocate_stack.cpp`) {#program-scoped-symbol-state}
 
 Whether a program uses a function or a global, and the slot each holds in that program's
