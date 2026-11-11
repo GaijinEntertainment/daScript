@@ -14,7 +14,7 @@ require _lambda_vis_mid
 require _private_property_helper
 require _struct_alias_helper
 require _struct_alias_twin // nolint:STYLE030 - its SharedBox is the twin name
-require _struct_alias_facade // nolint:STYLE030 - its typedefs are the use
+require _struct_alias_facade
 
 // `require X as Y` registers the alias for every require form -
 // builtin, daslib, same-directory, path
@@ -227,6 +227,16 @@ def test_struct_alias_from_two_modules(t : T?) {
     t |> equal(fromAlias.x, 0)
     t |> equal(bareFields.x, 3)
     t |> equal(aliasFields.x, 4)
+}
+
+[test(description = "a typedef of a struct whose module the file does not require constructs through the alias name, bare and module-qualified, with and without fields")]
+def test_struct_alias_of_unrequired_module(t : T?) {
+    let bare = UnrequiredAl()
+    let qualified = _struct_alias_facade::UnrequiredAl()
+    let fields = UnrequiredAl(x = 5)
+    t |> equal(bare.x, 0)
+    t |> equal(qualified.x, 0)
+    t |> equal(fields.x, 5)
 }
 
 [test(description = "a typedef naming a visible enum, a visible handled type, or the same type as another module's typedef is that one candidate, not a second")]

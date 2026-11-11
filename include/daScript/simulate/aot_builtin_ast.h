@@ -217,6 +217,8 @@ namespace das {
     DAS_CC_API bool ast_is_variable_used_sp ( smart_ptr_raw<Program> program, const Variable * var, Context * context, LineInfoArg * at );
     DAS_CC_API int32_t ast_function_index_sp ( smart_ptr_raw<Program> program, const Function * fn, Context * context, LineInfoArg * at );
     DAS_CC_API int32_t ast_variable_index_sp ( smart_ptr_raw<Program> program, const Variable * var, Context * context, LineInfoArg * at );
+    DAS_CC_API bool ast_is_typedef_used ( const Program * program, const Module * mod, Context * context, LineInfoArg * at );
+    DAS_CC_API bool ast_is_typedef_used_sp ( smart_ptr_raw<Program> program, const Module * mod, Context * context, LineInfoArg * at );
     DAS_CC_API bool ast_is_jit_selected ( const Program * program, const Function * fn, Context * context, LineInfoArg * at );
     DAS_CC_API void ast_set_jit_selected ( const Program * program, const Function * fn, bool selected, Context * context, LineInfoArg * at );
     DAS_CC_API void ast_clear_jit_selection ( const Program * program, Context * context, LineInfoArg * at );

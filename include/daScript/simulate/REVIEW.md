@@ -24,6 +24,12 @@ bumps `DAS_ABI_VERSION` (`include/daScript/ast/ast.h`) in the same change.** A s
 or re-signed in an existing vtable changes no class size, so only this counter makes the loader
 refuse a shared module built against the old slot order.
 
+**A diff that adds, removes, reorders or retypes a data member of a class declared under this
+folder whose `sizeof` is listed in `das_abi_vintage` (`include/daScript/ast/ast.h`), of a base of
+that class, or of a struct declared under this folder that the class holds by value, bumps
+`DAS_ABI_VERSION` (same header) in the same change.** A member reordered, retyped, or added into
+padding moves no size, so only that counter makes the loader refuse the stale shared module.
+
 **A diff that adds a field to `CodeOfPolicies` (`code_of_policies.h`) adds it to
 `DAS_MODULE_CACHE_POLICY_FIELDS` in `src/builtin/module_builtin_ast_serialize.cpp`, in the
 same change** - that list drives both the module-cache record's policy stream and the compare
@@ -38,9 +44,10 @@ still uses the old offsets.
 
 **A diff that changes `CodeOfPolicies`' layout or a field's meaning without changing its size - a
 reorder, a repurpose, a member that lands in a padding pocket, the appended `bool` among them -
-bumps `DAS_POLICIES_VERSION` (`code_of_policies.h`) in the same change.** The ABI stamp folds the
-version and the size alone, so a host built on the old headers passes the stamp check and the
-library reads the new field off the host's padding.
+bumps `DAS_POLICIES_VERSION` (`code_of_policies.h`) in the same change.**
+`CodeOfPolicies::expected_abi_stamp()` folds the version and the size alone, so a host built on
+the old headers passes the stamp check and the library reads the new field off the host's
+padding.
 
 **A diff that hashes a table key hashes a builtin key type - one in `heap.h`'s
 `makeTableKeyValueNode` list - as itself through `hash_function(context, key)` (`hash.h`),

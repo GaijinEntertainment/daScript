@@ -362,7 +362,7 @@ namespace das {
         AstSerializer & serializeModule ( Module & module, bool already_exists );
 
         static constexpr uint32_t getVersion () {
-            return 265;   // 265: a generator's unsafe block is dissolved into its body
+            return 267;   // 267: a program record carries the modules it used through a typedef
         }
 
         void serializeProgram ( ProgramPtr program, ModuleGroup & libGroup ) noexcept;

@@ -199,6 +199,45 @@ def test_compile_file_module_cache(t : T?) {
     rmdir_rec(tmp, err)
 }
 
+[test(description = "A program served from the module cache still answers which modules it used through a typedef", timeout = 1200)]
+def test_typedef_use_survives_the_cache(t : T?) {
+    if (aot_host_skips(t)) return
+    var terr : string
+    let tmp = create_temp_directory("das_mc_tu", terr)
+    if (empty(tmp)) {
+        t |> failure("create_temp_directory: {terr}")
+        return
+    }
+    let root = get_das_root()
+    let rootFile = path_join(tmp, "mc_tu_root.das")
+    var copied = true
+    for (name in ["mc_tu_root", "mc_tu_facade", "mc_tu_target"]) {
+        copied = fwrite(path_join(tmp, "{name}.das"), fread(fixture(name))) && copied
+    }
+    t |> success(copied, "the fixtures are copied")
+    let enter = get_platform_name() == "windows" ? "cd /d {tmp} &&" : "cd {tmp} &&"
+    let host = "{enter} {get_full_file_name(das_exe())} -dasroot {root}"
+    let drv = "{host} {fixture("mc_typedef_used_drv")} -- {rootFile} mc_tu_facade"
+    let marker = "MC_TYPEDEF_USED mc_tu_facade=true"
+    var cold : string
+    var coldOk = run_child_reported(t, "cold", drv, cold, marker)
+    coldOk = coldOk && !served(cold, rootFile)
+    t |> success(coldOk, "the cold compile parses the root and records the module:\n{cold}")
+    var warm : string
+    var warmOk = run_child_reported(t, "warm", drv, warm, marker)
+    warmOk = warmOk && served(warm, rootFile)
+    t |> success(warmOk, "the warm compile serves the root and still answers:\n{warm}")
+    //! an edited root reparses against a facade the cache serves
+    t |> success(fwrite(rootFile, "{fread(rootFile)}\n"), "the root is edited")
+    var mixed : string
+    var mixedOk = run_child_reported(t, "mixed", drv, mixed, marker)
+    let facadeFile = path_join(tmp, "mc_tu_facade.das")
+    mixedOk = mixedOk && !served(mixed, rootFile) && served(mixed, facadeFile)
+    t |> success(mixedOk, "a reparsed root still answers for a served facade:\n{mixed}")
+    var err : string
+    rmdir_rec(tmp, err)
+}
+
 // A generic instance restored from the module cache must keep its origin generic
 // (Function::fromGeneric). The child host restores its own module graph from the cache and
 // then compiles a fresh program in the same process - a null origin on any restored

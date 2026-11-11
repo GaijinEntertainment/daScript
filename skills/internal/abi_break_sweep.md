@@ -40,7 +40,10 @@ standalone configure - env vars do not reach daspkg's cmake).
 ## The checklist
 
 1. **Identify the breaking surface.** List every symbol removed, renamed, or
-   re-typed. In-repo impact: `cpp_grep_usage` / `grep_usage` MCP tools.
+   re-typed. In-repo impact: `cpp_grep_usage` / `grep_usage` MCP tools. A vtable change, or a
+   data-member change in a class whose `sizeof` `das_abi_vintage`
+   (`include/daScript/ast/ast.h`) lists, bumps `DAS_ABI_VERSION` there too, so the loader
+   refuses a shared module built before it.
 2. **Sweep external usage.** Grep each daspkg-index package (your local
    checkouts, or GitHub code search) for those symbols - including
    field-access shapes (`->dim`, `.dim`, `dimExpr`), not just call sites.

@@ -1291,6 +1291,14 @@ namespace das {
         return var && symbolStateProgram(program, "is_used", context, at)->isUsed(var);
     }
 
+    bool ast_is_typedef_used ( const Program * program, const Module * mod, Context * context, LineInfoArg * at ) {
+        return mod && symbolStateProgram(program, "is_typedef_used", context, at)->isTypedefUsed(mod);
+    }
+
+    bool ast_is_typedef_used_sp ( smart_ptr_raw<Program> program, const Module * mod, Context * context, LineInfoArg * at ) {
+        return ast_is_typedef_used(program.get(), mod, context, at);
+    }
+
     int32_t ast_function_index ( const Program * program, const Function * fn, Context * context, LineInfoArg * at ) {
         return fn ? symbolStateProgram(program, "function_index", context, at)->indexOf(fn) : -1;
     }
@@ -2337,6 +2345,12 @@ namespace das {
         addExtern<DAS_BIND_FUN(ast_variable_index_sp)>(*this, lib,  "variable_index",
             SideEffects::accessExternal, "ast_variable_index_sp")
                 ->args({"program","variable","context","at"});
+        addExtern<DAS_BIND_FUN(ast_is_typedef_used)>(*this, lib,  "is_typedef_used",
+            SideEffects::accessExternal, "ast_is_typedef_used")
+                ->args({"program","module","context","at"});
+        addExtern<DAS_BIND_FUN(ast_is_typedef_used_sp)>(*this, lib,  "is_typedef_used",
+            SideEffects::accessExternal, "ast_is_typedef_used_sp")
+                ->args({"program","module","context","at"});
         addExtern<DAS_BIND_FUN(ast_is_jit_selected)>(*this, lib,  "is_jit_selected",
             SideEffects::accessExternal, "ast_is_jit_selected")
                 ->args({"program","function","context","at"});

@@ -32,6 +32,12 @@
   makes the loader refuse a shared module built against the old vtable, and an out-of-tree
   subclass that omits `override` keeps compiling and silently stops being called.
 
+- **A diff that adds, removes, reorders or retypes a data member of a class declared under this
+  folder whose `sizeof` is listed in `das_abi_vintage` (`ast.h`), of a base of that class, or of
+  a struct declared under this folder that the class holds by value, bumps `DAS_ABI_VERSION`
+  (`ast.h`) in the same change.** A member reordered, retyped, or added into padding moves no
+  size, so only that counter makes the loader refuse the stale shared module.
+
 - **A diff that adds a field to `Function` or `Variable` (`ast.h`) whose value one compiled
   program decides, so two programs sharing the module would want different values, is a defect;
   the value goes into a per-program table on `Program` instead.** A shared module's objects are
