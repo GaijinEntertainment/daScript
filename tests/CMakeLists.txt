@@ -122,7 +122,7 @@ endif()
 # preflight --full).
 if(TARGET test_aot)
     add_das_target(run_tests_aot
-        COMMAND ${DAS_SANITIZER_ENV} $<TARGET_FILE:test_aot> -use-aot ${PROJECT_SOURCE_DIR}/dastest/dastest.das -- --use-aot --color --failures-only --timeout ${DAS_TEST_TIMEOUT_AOT} --test ${PROJECT_SOURCE_DIR}/tests
+        COMMAND ${DAS_SANITIZER_ENV} $<TARGET_FILE:test_aot> -use-aot ${PROJECT_SOURCE_DIR}/dastest/dastest.das -- --use-aot --color --failures-only --timing-outliers 30 --timeout ${DAS_TEST_TIMEOUT_AOT} --test ${PROJECT_SOURCE_DIR}/tests
         DEPENDS test_aot
         WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
         COMMENT "Running tests (AOT)"

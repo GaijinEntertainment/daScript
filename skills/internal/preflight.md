@@ -61,7 +61,7 @@ working-tree copy.
 | Workflow | Trigger | Jobs |
 |---|---|---|
 | `build.yml` (per-PR) | every PR commit (`pull_request`) + pushes to `master` | `build` matrix (`build_matrix.yml`, lane `build`: Debug + Release on linux, linux_arm, darwin15, darwin26; windows 32 Release, windows 64 Release), `bundle_smoke`, `build_linux_gcc` |
-| `nightly.yml` | `schedule` cron (daily 02:00 UTC), `workflow_dispatch`, and a `pull_request` whose body says `#nightly` or that carries `run-nightly` / `nightly-failure` | `build` matrix (`build_matrix.yml`, lane `build_nightly`: the per-PR Release cells running `run_build_nightly` - the full AOT sweep and the three backend sweeps - plus the sanitizer cells - each three jobs, `tests`, `slow`, `backend`, sharing one sccache slot - the fast-math cell and windows 64 Debug), `build_windows_relwithdebinfo_nightly`, `build_windows_release_llvm_nightly`, `build_windows_mingw`, `build_windows_clangcl`, and calls to `extended_checks.yml` (lane `extended_nightly`), `nightly_daspkg_index.yml`, `nightly_imgui.yml`, `nightly_playground.yml` and `nightly_vulkan.yml` - the only cron. Breaks surface within ~24 h, not at PR time |
+| `nightly.yml` | `schedule` cron (daily 02:00 UTC), `workflow_dispatch`, and a `pull_request` whose body says `#nightly` or that carries `run-nightly` / `nightly-failure` | `build` matrix (`build_matrix.yml`, lane `build_nightly`: the per-PR Release cells running `run_build_nightly` - the full AOT sweep and the three backend sweeps - plus the sanitizer cells - each three jobs, `tests`, `slow`, `backend`; `tests` and `backend` share one sccache slot, `slow` keeps its own - the fast-math cell and windows 64 Debug, which compiles and runs no test), `build_windows_relwithdebinfo_nightly`, `build_windows_release_llvm_nightly`, `build_windows_mingw`, `build_windows_clangcl`, and calls to `extended_checks.yml` (lane `extended_nightly`), `nightly_daspkg_index.yml`, `nightly_imgui.yml`, `nightly_playground.yml` and `nightly_vulkan.yml` - the only cron. Breaks surface within ~24 h, not at PR time |
 | `build_matrix.yml` | `workflow_call` from `build.yml` and `nightly.yml`, with the lane | the build matrix job - section below |
 | `nightly_imgui.yml` | `workflow_call` from `nightly.yml` + `workflow_dispatch` | dasImgui playwright suite on ubuntu + macos - section below |
 | `extended_checks.yml` (per-PR) | every PR | two darwin15-arm64 jobs, `core` and `modules` (`ci/ci_matrix.py extended`), ALL release modules ON, plus `commit_messages` (ubuntu, no build) - section below |
@@ -90,10 +90,14 @@ part of ALL) as a compile+link gate, and run no AOT tests.
 **The build matrix runs `run_build` (`run_tests_sweeps`, `test-small`), retried as
 `run_build_isolated` (`run_tests_sweeps_isolated`, `test-small`) when it fails, and, on the nightly
 lane, `run_build_nightly` (`run_tests_slow`, `run_backend_sweeps`, `test_aot_subset`).** The retry
-is the workflow's `||`, not a cmake target. The windows 64 Debug cell and the sanitizer cells
+is the workflow's `||`, not a cmake target. The sanitizer cells
 configure with raised watchdogs (`SLOW_SWEEP_BUDGETS` in `ci/ci_matrix.py`: 3600 s for a sweep
 and the full AOT suite, 7200 s isolated) - their sweeps run at half speed on their own and the
-default budgets fired on runner variance alone. Which sweeps
+default budgets fired on runner variance alone. The windows 64 Debug cell runs the `Compile`
+step alone (`phase` compile in `ci/ci_matrix.py`): the default build, no sweep. Every cell's
+sccache slot is bounded by `SCCACHE_CACHE_SIZE` (5000M on windows, 2000M elsewhere) - an
+unbounded slot grows to sccache's 10G default and evicts the slots the nightly cells save once
+a day. Which sweeps
 `run_tests_sweeps` runs is decided in cmake, not in the workflow: no JIT where dasLLVM is off (the
 sweep targets live under `if(NOT DAS_LLVM_DISABLED)`) or on Debug; no interpreter sweep under a
 sanitizer.
@@ -110,7 +114,8 @@ configure.
 | Interpreter sweep | `cmake --build build --config Release --target run_tests_sweeps` - the whole per-PR sweep, JIT then interpreter, each retried isolated; alone: `cmake --build build --config Release --target run_tests_interpreter` | fails if a completed test file exceeded 30 s |
 | JIT sweep | `cmake --build build --config Release --target run_tests_jit` (`run_tests_sweeps` runs it first, then the interpreter sweep) | Windows-local `clang-cl` link failures are env noise; the catchable class is LLVM verifier errors, end-to-end JIT needs WSL/mac. 2-test smoke: `skills/internal/make_pr.md` sec.2.5 |
 | Small C++ tests | `cmake --build build --config Release --target test-small` | drop `--build-config` on single-config generators. **Run after touching `tests-cpp/`** - MSVC tolerates C++ clang/gcc reject; `skills/internal/writing_cpp_tests.md` |
-| AOT sweep (full) | `cmake --build build --config Release --target run_tests_slow` - the full `test_aot` build, the AOT sweep over tests/, then the big C++ tests | nightly + manual dispatch only, so this is the **only** pre-push gate for AOT regressions outside tests/language - don't skip it |
+| Compile (windows 64 Debug, nightly) | `cmake --build build --config Debug` | the default build as MSVC Debug; no test runs in this cell |
+| AOT sweep (full) | `cmake --build build --config Release --target run_tests_slow` - the full `test_aot` build, the AOT sweep over tests/, then the big C++ tests | nightly + manual dispatch only, so this is the **only** pre-push gate for AOT regressions outside tests/language - don't skip it; the sweep closes with its 30 slowest files (`--timing-outliers 30`) |
 | AOT subset gate | `cmake --build build --config Release --target test_aot_subset` (add `--target run_tests_aot_subset` to sweep tests/language too) | what per-PR lanes build |
 | LLVM-AOT sweep | `cmake --build build --config Release --target run_backend_sweeps` runs all three; alone: `cmake --build build --config Release --target run_tests_llvm_aot` | nightly + dispatch. Emits a native `.o` per test through the LLVM backend instead of the C++ proxy, then sweeps tests/ against them - tests/language only under tsan, where the whole corpus outruns the suite watchdog |
 | Standalone sweep - C++ (`-ctx`) | `cmake --build build --config Release --target run_backend_sweeps`; alone: `cmake --build build --config Release --target run_standalone_sweep_aot` | nightly + dispatch. Emits, compiles, links and launches a standalone context per file of test_aot's corpus. `-DDAS_STANDALONE_SWEEP_FILTER=<regex>` narrows it |

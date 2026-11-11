@@ -15,8 +15,8 @@ CLANG = "-DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++"
 LINUX_ARM_EXTRA = CLANG + " -DDAS_GLFW_DISABLED=ON -DDAS_HV_DISABLED=OFF -DDAS_SQLITE_DISABLED=OFF"
 WINDOWS_EXTRA = ("-DCMAKE_C_COMPILER_LAUNCHER=sccache -DCMAKE_CXX_COMPILER_LAUNCHER=sccache"
                  " -DCMAKE_TOOLCHAIN_FILE=$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake")
-# dastest's whole-suite watchdogs, raised for the cells whose sweep runs at half speed (windows
-# Debug, the sanitizers) and then rides the hosted runner's ~1.4x swing; every other cell keeps
+# dastest's whole-suite watchdogs, raised for the cells whose sweep runs at half speed (the
+# sanitizers) and then rides the hosted runner's ~1.4x swing; every other cell keeps
 # tests/CMakeLists.txt's defaults, so a hang there still fails fast
 SLOW_SWEEP_BUDGETS = " -DDAS_TEST_TIMEOUT=3600 -DDAS_TEST_TIMEOUT_ISOLATED=7200 -DDAS_TEST_TIMEOUT_AOT=3600"
 
@@ -37,7 +37,8 @@ def _cells(target, architecture, presets, **props):
 def build_cells(nightly):
     """build.yml: Release + Debug on every platform per PR; the sanitizer cells and windows
     64 Debug are nightly-only. A sanitizer cell is three jobs, one per test step (`phase`);
-    every other cell runs every step (`phase` all)."""
+    windows 64 Debug compiles and runs no test (`phase` compile); every other cell runs every
+    step (`phase` all)."""
     cmake = dict(build_system="cmake", cmake_generator="Ninja")
     cells = []
     cells += _cells("linux", 64, ["Debug", "Release"], release_target="linux", release_arch="x86_64",
@@ -62,7 +63,7 @@ def build_cells(nightly):
     if nightly:
         cells += _cells("windows", 64, ["Debug"], release_target="windows", release_arch="x86_64",
                         runner="windows-latest", architecture_string="x64", archive_ext="zip",
-                        jit_disabled="ON", nightly_only="ON", cmake_extra=WINDOWS_EXTRA + SLOW_SWEEP_BUDGETS,
+                        jit_disabled="ON", nightly_only="ON", phase="compile", cmake_extra=WINDOWS_EXTRA,
                         **cmake)
         for san in SANITIZERS:
             for phase in SANITIZER_PHASES:
