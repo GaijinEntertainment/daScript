@@ -53,4 +53,34 @@ namespace das {
         g_AOT_lib->reset();
     }
 
+    char * das_string_builder ( Context * __context__, const SimNode_AotInteropBase & node ) {
+        StringBuilderWriter writer;
+        DebugDataWalker<StringBuilderWriter> walker(writer, PrintFlags::string_builder);
+        for ( int i=0, is=node.nArguments; i!=is; ++i ) {
+            walker.walk(node.argumentValues[i], node.types[i]);
+        }
+        auto length = writer.tellp();
+        if ( length ) {
+            return __context__->allocateString(writer.c_str(),uint32_t(length), &node.debugInfo);
+        } else {
+            return nullptr;
+        }
+    }
+
+    char * das_string_builder_temp ( Context * __context__, const SimNode_AotInteropBase & node ) {
+        StringBuilderWriter writer;
+        DebugDataWalker<StringBuilderWriter> walker(writer, PrintFlags::string_builder);
+        for ( int i=0, is=node.nArguments; i!=is; ++i ) {
+            walker.walk(node.argumentValues[i], node.types[i]);
+        }
+        auto length = writer.tellp();
+        if ( length ) {
+            auto str = __context__->allocateTempString(writer.c_str(), uint32_t(length), &node.debugInfo);
+            __context__->freeTempString(str, &node.debugInfo);
+            return str;
+        } else {
+            return nullptr;
+        }
+    }
+
 }
