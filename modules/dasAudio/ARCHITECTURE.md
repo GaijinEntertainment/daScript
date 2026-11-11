@@ -185,7 +185,9 @@ does not promise sample-accurate resumption within that block. Zero-duration fad
 still take one sample to reach the target.
 
 A stopped channel ends on its next mix pass whether or not it is paused, and it ignores later
-volume and ignore-global-volume commands, so nothing can lift its fade-out.
+volume and ignore-global-volume commands, so nothing can lift its fade-out. A 3D channel also
+ignores their gain write: `update_hrtf` owns its level, and the command's undamped write would
+ramp the callback in from full volume.
 
 ## Pause-exempt PCM {#pause-exempt-pcm}
 

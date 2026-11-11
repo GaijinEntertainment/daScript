@@ -1021,6 +1021,7 @@ def command_processor {  // nolint:STYLE038 - one arm per AudioCommand variant
             g_sid_2_channel |> get(vcmd.sid) $(var ch : AudioChannel?&) {
                 return if (ch.stop)
                 ch.volume = vcmd.volume
+                return if (ch.is3D)
                 let g = ch.ignoreGlobalVolume ? 1.0 : g_volume
                 let effective = vcmd.volume * g
                 if (vcmd.time > 0.) {
@@ -1060,6 +1061,7 @@ def command_processor {  // nolint:STYLE038 - one arm per AudioCommand variant
             g_sid_2_channel |> get(icmd.sid) $(var ch : AudioChannel?&) {
                 return if (ch.stop)
                 ch.ignoreGlobalVolume = icmd.value
+                return if (ch.is3D)
                 let effective = ch.volume * (ch.ignoreGlobalVolume ? 1.0 : g_volume)
                 ma_volume_mixer_set_volume(unsafe(addr(ch.volume_mixer)), effective)
             }

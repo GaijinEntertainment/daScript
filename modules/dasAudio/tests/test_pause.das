@@ -253,3 +253,32 @@ def volume_commands_do_not_revive_a_stopping_channel(t : T?) {
         status |> seq_box_release
     }
 }
+
+def private far_attenuation() : Attenuation =>
+    Attenuation(A = 0., B = 0., C = 0.1, D = 0., E = 0., F = 1.)
+
+def private steady_peak_after(box : SeqBox?; command : block<() : void>) : float {
+    unsafe(invoke_in_context(mixer_context(), "capture_reset"))
+    sleep(100u)
+    let steady = observe_output(box).peak
+    unsafe(invoke_in_context(mixer_context(), "capture_reset"))
+    invoke(command)
+    sleep(100u)
+    let after = observe_output(box).peak
+    return after / steady
+}
+
+[test(description = "A volume or ignore-global-volume command sent to a distant 3D channel leaves its distance-attenuated level alone instead of spiking it to full volume for a callback.", timeout = 1200)]
+def volume_commands_keep_the_3d_attenuation(t : T?) {
+    with_output_probe() $(box) {
+        var samples <- constant_pcm(0.5)
+        let sid = play_3d_sound_loop_from_pcm(float3(40., 0., 0.), far_attenuation(),
+                                              MA_SAMPLE_RATE, 1, samples)
+        sleep(200u)
+        let by_volume = steady_peak_after(box) $ { set_volume(sid, 1.0, 0.0) }
+        t |> success(by_volume < 1.5, "set_volume spiked the attenuated channel: {by_volume}x")
+        let by_flag = steady_peak_after(box) $ { set_ignore_global_volume(sid, true) }
+        t |> success(by_flag < 1.5, "ignore_global_volume spiked the channel: {by_flag}x")
+        stop(sid, 0.0)
+    }
+}
