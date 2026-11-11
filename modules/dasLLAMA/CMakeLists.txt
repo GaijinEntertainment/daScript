@@ -97,7 +97,7 @@ if(NOT DAS_TOOLS_DISABLED)
 endif()
 
 if(NOT DAS_TOOLS_DISABLED)
-    das_lane_dastest_target(run_tests_dasllama_server COMMENT "Testing dasllama-server"
+    das_lane_dastest_target(run_tests_dasllama_server COMMENT "Testing dasllama-server" TOGETHER
         COMPILE_ONLY_FILES
             utils/dasllama-server/test_openai_server.das
             utils/dasllama-server/test_openai_server_think.das
