@@ -1764,7 +1764,7 @@ class public CppAot : AstVisitor {
             if (variable._type.flags.constant && variable._type.isRefType && !variable._type.flags.ref) {
                 cvname += "_ConstRef";
             }
-            write(*ss, "; das_zero({cvname}); das_move({cvname}, ");
+            write(*ss, "; das_move({cvname}, ");
         } else {
             write(*ss, " = ");
         }
