@@ -808,7 +808,7 @@ namespace das {
 
     static constexpr uint32_t errorTypeNodeLimit = 64;
 
-    // src/ast/ARCHITECTURE.md#instance-type-size
+    // src/ast/ARCHITECTURE_INFER.md#instance-type-size
     string Function::getLocationExtra() const {
         if ( !inferStack.size() ) {
             return "";

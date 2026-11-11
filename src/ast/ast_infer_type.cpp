@@ -1063,7 +1063,7 @@ namespace das {
         if (func)
             func->hasUnsafe = true;
     }
-    // src/ast/ARCHITECTURE.md#generator-unsafe-block
+    // src/ast/ARCHITECTURE_INFER.md#generator-unsafe-block
     ExpressionPtr InferTypes::visit(ExprUnsafe *expr) {
         unsafeDepth--;
         if (func && func->generator && blocks.empty() && expr->body->rtti_isBlock()) {
@@ -6562,7 +6562,7 @@ namespace das {
         return evalAndFoldStringBuilder(expr);
     }
 
-    // src/ast/ARCHITECTURE.md#instance-type-size
+    // src/ast/ARCHITECTURE_INFER.md#instance-type-size
     static void keepOnlyInstanceTypeErrors(Program * program) {
         auto isInstanceTypeError = [](const Error &e) { return e.cerr == CompilationError::exceeds_instance_type; };
         auto & errors = program->errors;

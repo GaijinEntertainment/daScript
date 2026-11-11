@@ -108,7 +108,7 @@ namespace das {
               decl->at, CompilationError::invalid_structure_template);
     }
 
-    // src/ast/ARCHITECTURE.md#instance-type-size
+    // src/ast/ARCHITECTURE_INFER.md#instance-type-size
     void InferTypes::verifyType(const TypeDeclPtr &decl, bool allowExplicit, bool classMethod, bool allowTemplate) const {
         // TODO: enable and cleanup
         if (decl->isExplicit && !allowExplicit) {

@@ -93,3 +93,59 @@ initializer the compiler already promoted is not promoted again on the next pass
 generator-local store of such an initializer is raw; it matches names, not the `generated`
 mark, because a table read with field defaults is a generated call too and its initializer
 still reaches the operator.
+
+## The size of a generic instance's argument types (`ast_infer_type_function.cpp`) {#instance-type-size}
+
+A generic that calls itself with a type built from its own argument type makes a new instance on
+every call, and the pass limit stops that chain only while each step adds a constant amount: the
+fiftieth instance of `foo([a])` holds an array nested fifty deep. A step that uses the argument
+type twice - `foo((a, a))`, a block `$(x : typedecl(a)) { return x }`, two arguments feeding
+each other - doubles the type instead, so the thirtieth instance holds, without a limit, a billion type
+nodes, and every whole-type walk inference runs (`isAuto`, `canCopy`, the copy itself) is that
+large long before the pass limit counts fifty. `inferFunctionCall` therefore counts the type
+nodes of the argument types where it is about to create an instance
+(`argumentTypesFitInstance`) and reports `exceeds_instance_type` past 4096, which is one walk
+per new instance and none per expression. The count is of nodes, never of depth: these types
+are a few dozen levels deep when they stop fitting in memory. A structure counts as one node
+whatever its fields, so the limit bounds only what type constructors nest.
+
+That error is the only one of its compile. A call that gets no instance leaves its caller
+without a type, so the same pass reports errors that only restate it, and `inferTypes` drops
+every other error once one `exceeds_instance_type` is present.
+
+An inference error names the function it was compiling and every function that instance came
+from, each with its argument types. `Function::getLocationExtra` prints a type of more than 64
+nodes as its constructor and `<...>`, so an error on an oversized instance stays short.
+
+A type as written has its own limit, in the parser (`parser_impl.cpp`): both grammars stop at
+64 levels of `<...>` nesting (`das_type_arrow_enter`), and a pointer wraps a type only while
+the nesting under it fits the same limit (`das_check_pointer_nesting`), so no path through a
+parsed type is longer than twice that. A postfix `?` is left-recursive and costs no parser
+stack, so without the limit a pointer chain of any length parses and the first recursive walk
+over it overflows the C++ stack. The limit is sized for a host that compiles on a 1 MB thread
+stack in a build that inlines little: a type the parser accepts has to survive every recursive
+walk inference runs over it. Past the limit the parse ends with one `exceeds_type_nesting`
+error.
+
+The stack one nesting level costs is the frame of the walk that recurses per level, and in a
+build that inlines little every string temporary of every error message a function can raise
+has its own slot in that frame. `InferTypes::verifyType` recurses once per level and can raise
+about thirty errors, so it builds none of their text itself: `typeError`,
+`malformedTypeError` and `templateStructureError` do, in frames that exist only while an
+error is reported. With the text inline, one level costs 4176 bytes in a Debug build and a type
+at the limit needs more than 512 KB; with it in the helpers the same type compiles in 256 KB.
+
+## An `unsafe` block in a generator (`ast_infer_type.cpp`) {#generator-unsafe-block}
+
+A generator body is lowered in place during inference: a local moves into the generator's
+struct only once it is a statement of the body's own block, and a `yield` leaves a resume
+label that the entry `goto` reaches only at that level. Nested blocks get there because
+inference collapses them into their parent, pass by pass.
+
+`unsafe { }` is a wrapper around a block, not a block, and collapse does not see through it.
+Left in place, a local declared inside stays a stack local across a `yield`, and a `yield`
+inside leaves its label where the entry `goto` cannot reach. So inference replaces a
+statement-position `unsafe { }` in a generator with its block and sets
+`Function::unsafeGenerator`; every later pass visits that function with unsafe allowed. The
+price is the scope: once a generator has one `unsafe` block, its whole body is unsafe-permitted.
+An expression-position `unsafe(...)` stays as written.

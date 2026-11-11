@@ -977,7 +977,7 @@ namespace das
                 bool    mayQueueTempString : 1;      // executing the BODY may hit a temp-string queue site (builder or wrappable call, transitively) - a caller must not hold a parked temp across a call to this
                 bool    needCallerStackFrame : 1;    // may reach a collect point - its caller must keep a real stack frame, so carriers are denied fastcall (closure: ast_unused.cpp)
                 bool    nttp : 1;                    // extern bound via addExternInline - per-function NTTP interpreter node, callee eligible to inline into the call site
-                bool    unsafeGenerator : 1;         // src/ast/ARCHITECTURE.md#generator-unsafe-block
+                bool    unsafeGenerator : 1;         // src/ast/ARCHITECTURE_INFER.md#generator-unsafe-block
             };
             uint32_t moreFlags2 = 0;
         };

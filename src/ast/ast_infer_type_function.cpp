@@ -8,7 +8,7 @@
 
 namespace das {
 
-    // src/ast/ARCHITECTURE.md#instance-type-size
+    // src/ast/ARCHITECTURE_INFER.md#instance-type-size
     static constexpr uint32_t instanceArgumentTypeNodeLimit = 4096;
 
     static bool argumentTypesFitInstance ( const vector<TypeDeclPtr> & types ) {
