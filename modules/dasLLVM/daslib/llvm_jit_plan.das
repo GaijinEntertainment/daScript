@@ -32,9 +32,9 @@ require jit
 // llvm_macro.das, llvm_jit_common.das, runtime helper ABI, default
 // target triple). Cache filenames fold this in, so a bump makes every
 // previously written DLL miss the cache on the next run and get GC'd.
-// Current entry: Program gains the table of modules used through a
-// typedef.
-let public LLVM_JIT_CODEGEN_VERSION : uint64 = 0xB0ul
+// Current entry: a solid array's base is hidden behind a promoted
+// block argument and at offset 0 of its block.
+let public LLVM_JIT_CODEGEN_VERSION : uint64 = 0xB1ul
 
 let public JIT_FNV_PRIME : uint64 = 1099511628211ul
 

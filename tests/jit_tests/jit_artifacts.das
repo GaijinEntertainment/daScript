@@ -871,26 +871,43 @@ def private launder_calls(dump : string) : int {
     return count_with(ln, "call ptr @llvm.launder.invariant.group")
 }
 
-[test(description = "under solid_context the address of a global array a loop indexes, shared or not, reaches code generation hidden in the one-module and the split build, and a scalar global's does not", timeout = 1200)]
-def test_solid_array_base_is_hidden_from_codegen(t : T?) {
-    if (!jit_enabled()) {
-        t |> skip("the child runs under -jit, which this build does not carry")
-        return
-    }
+//! the launder calls of a one-module and a split build of `fixture`
+def private hidden_bases(t : T?; fixture : string) : tuple<one : int; split : int> {
     let bin = get_host_binary()
     let root = get_das_root()
     let cwd = "{OUTPUT_DIR}/solid_base_{ref_time_ticks()}"   // fresh: a cold cache
     mkdir_rec(cwd)
     var out : array<string>
-    let fixture = "{FIXTURE_DIR}/_fixture_solid_array_base.das"
     let rc_one = spawn_child("\"{bin}\" -no-module-cache -jit -jit-no-cache \"{fixture}\" "
         + "-- --jit-dump=\"{cwd}/one.ll\"", out)
     t |> equal(rc_one, 0, "the one-module child runs, got:\n{join(out, "\n")}")
-    t |> equal(launder_calls("{cwd}/one.ll"), 2, "the one-module build hides the two arrays alone")
     var split_out : array<string>
     let rc_split = spawn("{cd_to(cwd)} && \"{bin}\" -dasroot \"{root}\" -no-module-cache "
         + "-jit \"{fixture}\" -- --jit-dump=split.ll", split_out)
     t |> equal(rc_split, 0, "the split child runs, got:\n{join(split_out, "\n")}")
-    t |> equal(launder_calls("{cwd}/split.ll"), 2, "the split build hides them too")
+    let res = (one = launder_calls("{cwd}/one.ll"), split = launder_calls("{cwd}/split.ll"))
     rmdir_rec_result(cwd)
+    return res
+}
+
+[test(description = "under solid_context the address of a global array a loop indexes - shared or not, the first global of its block or a later one - reaches code generation hidden in the one-module and the split build, and a scalar global's does not")]
+def test_solid_array_base_is_hidden_from_codegen(t : T?) {
+    if (!jit_enabled()) {
+        t |> skip("the child runs under -jit, which this build does not carry")
+        return
+    }
+    let hidden = hidden_bases(t, "{FIXTURE_DIR}/_fixture_solid_array_base.das")
+    t |> equal(hidden.one, 3, "the one-module build hides the three arrays alone")
+    t |> equal(hidden.split, 3, "the split build hides them too")
+}
+
+[test(description = "under solid_context a function that only reads the block gets it as an argument, and the array it indexes through that argument is hidden too")]
+def test_solid_array_base_is_hidden_behind_a_promoted_argument(t : T?) {
+    if (!jit_enabled()) {
+        t |> skip("the child runs under -jit, which this build does not carry")
+        return
+    }
+    let hidden = hidden_bases(t, "{FIXTURE_DIR}/_fixture_solid_promoted_block.das")
+    t |> equal(hidden.one, 1, "the one-module build hides the array")
+    t |> equal(hidden.split, 1, "the split build hides it too")
 }

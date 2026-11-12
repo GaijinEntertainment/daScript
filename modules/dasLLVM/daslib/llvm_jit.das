@@ -8343,13 +8343,61 @@ def private const_offset_base(v : LLVMOpaqueValue?; var off : uint64&) : LLVMOpa
     return LLVMGetOperand(v, 0u)
 }
 
-def private is_solid_global_address(v : LLVMOpaqueValue?) : bool {
-    var off, slot : uint64
-    let globals = const_offset_base(v, off)
-    let loaded = globals != null && LLVMIsALoadInst(globals) != null
-    return false if (!loaded || const_offset_base(LLVMGetOperand(globals, 0u), slot) == null)
+//! a load of the context's globals or shared slot
+def private is_solid_block_load(v : LLVMOpaqueValue?) : bool {
+    var slot : uint64
+    let from = LLVMIsALoadInst(v) != null ? LLVMGetOperand(v, 0u) : null
+    return false if (from == null || const_offset_base(from, slot) == null)
     return (slot == uint64(CONTEXT_OFFSET_OF_GLOBALS)
         || slot == uint64(CONTEXT_OFFSET_OF_SHARED))
+}
+
+//! every use of local `fn` is a direct call with a block at `index`
+def private callers_pass_block(fn : LLVMOpaqueValue?; index : uint;
+                               blocks : table<LLVMOpaqueValue?>) : bool {
+    let linkage = LLVMGetLinkage(fn)
+    let is_local = (linkage == LLVMLinkage.LLVMInternalLinkage
+        || linkage == LLVMLinkage.LLVMPrivateLinkage)
+    var use = LLVMGetFirstUse(fn)
+    return false if (!is_local || use == null)
+    while (use != null) {
+        let call = LLVMGetUser(use)
+        let direct = LLVMIsACallInst(call) != null && LLVMGetCalledValue(call) == fn
+        let passed = direct && index < LLVMGetNumArgOperands(call)
+        return false if (!passed || !key_exists(blocks, LLVMGetOperand(call, index)))
+        use = LLVMGetNextUse(use)
+    }
+    return true
+}
+
+//! the values that hold a solid block: slot loads, promoted arguments
+def private solid_blocks(mod : LLVMOpaqueModule?) : table<LLVMOpaqueValue?> {
+    var blocks : table<LLVMOpaqueValue?>
+    var fn = LLVMGetFirstFunction(mod)
+    while (fn != null) {
+        for_each_instruction(fn) $(inst) {
+            if (is_solid_block_load(inst)) {
+                blocks |> insert(inst)
+            }
+        }
+        fn = LLVMGetNextFunction(fn)
+    }
+    var grew = true
+    while (grew) {
+        grew = false
+        fn = LLVMGetFirstFunction(mod)
+        while (fn != null) {
+            for (i in urange(LLVMCountParams(fn))) {
+                let param = LLVMGetParam(fn, i)
+                if (!key_exists(blocks, param) && callers_pass_block(fn, i, blocks)) {
+                    blocks |> insert(param)
+                    grew = true
+                }
+            }
+            fn = LLVMGetNextFunction(fn)
+        }
+    }
+    return <- blocks
 }
 
 def private has_gep_user(v : LLVMOpaqueValue?) : bool {
@@ -8361,6 +8409,31 @@ def private has_gep_user(v : LLVMOpaqueValue?) : bool {
     return false
 }
 
+//! hides `blk` from the indexed accesses based on it
+def private hide_block_indexing(bld : LLVMOpaqueBuilder?; fnT : LLVMOpaqueType?;
+                                decl, blk, before : LLVMOpaqueValue?) : int {
+    var indexed : array<LLVMOpaqueValue?>
+    var use = LLVMGetFirstUse(blk)
+    while (use != null) {
+        var user = LLVMGetUser(use)
+        var off : uint64
+        let based = (LLVMIsAGetElementPtrInst(user) != null
+            && LLVMGetOperand(user, 0u) == blk)
+        if (based && const_offset_base(user, off) == null) {
+            indexed |> push(user)
+        }
+        use = LLVMGetNextUse(use)
+    }
+    return 0 if (empty(indexed))
+    LLVMPositionBuilderBefore(bld, before)
+    var args <- [ blk ]
+    let laundered = LLVMBuildCall2(bld, fnT, decl, args, "")
+    for (user in indexed) {
+        LLVMSetOperand(user, 0u, laundered)
+    }
+    return 1
+}
+
 [macro_function, arch(at="../ARCHITECTURE.md#solid-array-base")]
 def public hide_solid_array_bases(mod : LLVMOpaqueModule?; ctx : LLVMOpaqueContext?) : int {
     var hidden = 0
@@ -8370,10 +8443,27 @@ def public hide_solid_array_bases(mod : LLVMOpaqueModule?; ctx : LLVMOpaqueConte
     var decl = LLVMGetIntrinsicDeclaration(mod, launder, argTypes)
     let fnT = LLVMFunctionType(ptrT, [ ptrT ])
     var bld = LLVMCreateBuilderInContext(ctx)
+    var inscope blocks <- solid_blocks(mod)
     var fn = LLVMGetFirstFunction(mod)
     while (fn != null) {
+        let entry = LLVMGetFirstBasicBlock(fn)
+        let params = entry != null ? LLVMCountParams(fn) : 0u
+        for (i in urange(params)) {
+            let param = LLVMGetParam(fn, i)
+            if (key_exists(blocks, param)) {
+                let first = LLVMGetFirstInstruction(entry)
+                hidden += hide_block_indexing(bld, fnT, decl, param, first)
+            }
+        }
         for_each_instruction(fn) $(inst) {
-            return if (!is_solid_global_address(inst) || !has_gep_user(inst))
+            if (key_exists(blocks, inst)) {
+                let next = LLVMGetNextInstruction(inst)
+                hidden += hide_block_indexing(bld, fnT, decl, inst, next)
+                return
+            }
+            var off : uint64
+            let base = const_offset_base(inst, off)
+            return if (base == null || !key_exists(blocks, base) || !has_gep_user(inst))
             LLVMPositionBuilderBefore(bld, LLVMGetNextInstruction(inst))
             var args <- [ inst ]
             let laundered = LLVMBuildCall2(bld, fnT, decl, args, "")
