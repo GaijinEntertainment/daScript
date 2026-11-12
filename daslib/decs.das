@@ -1260,8 +1260,14 @@ def public set_direct_at(var arch : Archetype; comp_idx : int; eidx : int;
 }
 
 def private write_direct_at(var arch : Archetype; comp_idx : int; eidx : int; value : auto(TT)) {
+    //! releases what the slot holds; a fresh slot is zero
+    let offset = eidx * arch.components[comp_idx].stride
     unsafe {
-        memcpy(addr(arch.components[comp_idx].data[eidx * arch.components[comp_idx].stride]), addr(value), typeinfo sizeof(value))
+        static_if (!typeinfo can_copy(value) && typeinfo can_delete(type<TT -const -& -#>)) {
+            var held = addr<TT -const -& -#?>(arch.components[comp_idx].data[offset])
+            delete * held
+        }
+        memcpy(addr(arch.components[comp_idx].data[offset]), addr(value), typeinfo sizeof(value))
     }
 }
 

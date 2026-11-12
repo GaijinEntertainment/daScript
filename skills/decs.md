@@ -262,7 +262,7 @@ Inside `for_each_archetype` (which is what `query` expands to), the component ar
 
 These are the primitives the query macro lowers to. Use them directly only when writing macros or low-level archetype iteration. For everything else, write `query()`.
 
-`find_component_index(arch, name)` returns the index in `arch.components`, and `set_direct_at(arch, idx, eidx, value)` writes by pre-resolved index - used by `apply_decs_template_arch` and the bulk-creator macros. `set_direct(arch, name, eidx, value)` does the lookup per call.
+`find_component_index(arch, name)` returns the index in `arch.components`, and `set_direct_at(arch, idx, eidx, value)` writes by pre-resolved index - used by `apply_decs_template_arch` and the bulk-creator macros. `set_direct(arch, name, eidx, value)` does the lookup per call. A direct write of a value that moves in - an array, a table, a struct that holds one - first releases the value the slot held, so a second write to one slot leaks nothing.
 
 ## Single-entity reads outside a query
 
