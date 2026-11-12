@@ -1341,7 +1341,7 @@ def private pair_vs_cpu(t : T?; tag : string; qs : array<array<int8>>; ss : arra
 //! the four fused row passes at row width `d` (a 64-multiple), `rows` and `nch` chunks, each byte for byte and scale for scale
 //! against the pass then `TowerClampRq`, every pass and stamp held to its CPU form as well, a poisoned input moving each fused
 //! stamp's bytes
-def private wdec_fused_rq_shape(t : T?; var cp : auto(C); d, rows, nch : int) {   // nolint:STYLE038 — one flat gate over the four fused classes: the fixture, the pairs, the oracles and their poisons
+def private wdec_fused_rq_shape(t : T?; var cp : auto(C); d, rows, nch : int; twins_exact : bool) {   // nolint:STYLE038 — one flat gate over the four fused classes: the fixture, the pairs, the oracles and their poisons
     cp |> cell_clear()
     let q8e = int(kq_elems(KqFmt.q8))
     let hs = int(WDEC_HS)
@@ -1399,7 +1399,11 @@ def private wdec_fused_rq_shape(t : T?; var cp : auto(C); d, rows, nch : int) { 
     var inscope yc_dev <- cp |> plane_run(b.yc)
     let names <- ["layernorm", "post-add + next norm", "bias + tanh GELU", "attention combine"]
     for (i in range(FUSED_PAIRS)) {
-        check_q8(t, "{names[i]} ({shape}) fused with the requant lands the separate pass's Q8_0 bytes and scales", qs[2 * i + 1], ss[2 * i + 1], qs[2 * i], ss[2 * i], 0.0, 0)
+        if (twins_exact) {
+            check_q8(t, "{names[i]} ({shape}) fused with the requant lands the separate pass's Q8_0 bytes and scales", qs[2 * i + 1], ss[2 * i + 1], qs[2 * i], ss[2 * i], 0.0, 0)
+        } else {
+            check_q8(t, "{names[i]} ({shape}) fused with the requant lands within a quant step of the separate pass, the scales at the approx bar", qs[2 * i + 1], ss[2 * i + 1], qs[2 * i], ss[2 * i], APPROX_REL, 1)
+        }
         check_written(t, "{names[i]} ({shape}): every block written", qs[2 * i + 1], I8_SENTINEL)
     }
     check_exact(t, "the fused post-add ({shape}) updates the residual rows in place as the separate pass does", x3, x2)
@@ -1456,10 +1460,11 @@ def private wdec_fused_rq_shape(t : T?; var cp : auto(C); d, rows, nch : int) { 
 
 //! the layernorm, the post-add, the bias-activation and the attention combine fused with the Q8_0 requant, at the other cells'
 //! width over two chunks, whisper tiny's (the strided loops' partial tail) and turbo's (the block pass's second trip)
-def wdec_fused_rq_case(t : T?; var cp : auto(C)) {
-    wdec_fused_rq_shape(t, cp, ROWS_D, ROWS_N, 2)
-    wdec_fused_rq_shape(t, cp, 384, ROWS_N, 1)
-    wdec_fused_rq_shape(t, cp, 1280, ROWS_N, 1)
+//! `twins_exact` holds the fused stamp to the separate pass's bytes; a fast-math home passes false and gets a quant step
+def wdec_fused_rq_case(t : T?; var cp : auto(C); twins_exact : bool) {
+    wdec_fused_rq_shape(t, cp, ROWS_D, ROWS_N, 2, twins_exact)
+    wdec_fused_rq_shape(t, cp, 384, ROWS_N, 1, twins_exact)
+    wdec_fused_rq_shape(t, cp, 1280, ROWS_N, 1, twins_exact)
 }
 
 //! the clamped Q8_0 feed against the CPU clamp and requant; the unclamped requant the control

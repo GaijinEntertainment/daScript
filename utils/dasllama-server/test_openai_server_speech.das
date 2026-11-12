@@ -287,13 +287,15 @@ def private check_input_cap_and_speed_range(t : T?; base_url : string) {
     }
 }
 
-// one burst of concurrent requests, each longer than the worker can finish while they arrive:
-// the first TTS_QUEUE_LIMIT queue, the rest must come back 503 rather than pile up
+// one burst of concurrent requests: the first TTS_QUEUE_LIMIT queue, the rest must come back 503
+// rather than pile up. Every thread waits at a gate until all of them stand there, so the burst
+// arrives together - a thread's start-up is longer than a synthesis on a fast card, and a burst
+// that trickles in is served one request at a time with the queue never past one
 def private check_queue_cap(t : T?; base_url : string) {
     let url = "{base_url}/v1/audio/speech"
     let body = build_string() $(w) {
         w |> write("\{\"input\": \"")
-        for (_i in range(3)) {   // long enough that no synthesis finishes while the burst arrives
+        for (_i in range(3)) {
             w |> write("the quick brown fox jumps over the lazy dog. ")
         }
         w |> write("\"}")
@@ -302,26 +304,38 @@ def private check_queue_cap(t : T?; base_url : string) {
     answers |> reserve(TTS_BURST)
     with_channel(TTS_BURST) $(ch) {
         with_job_status(TTS_BURST) $(done) {
-            for (_i in range(TTS_BURST)) {
-                new_thread <| @capture(= url, = body) {
-                    var status = 0
-                    var text = ""
-                    POST(url, body) $(resp) {
-                        if (resp != null) {
-                            status = int(resp.status_code)
-                            text := string(resp.body)
+            with_atomic32() $(at_gate) {
+                with_atomic32() $(gate_open) {
+                    for (_i in range(TTS_BURST)) {
+                        new_thread <| @capture(= url, = body) {
+                            at_gate |> inc
+                            while (gate_open |> get == 0) {
+                                sleep(1u)
+                            }
+                            var status = 0
+                            var text = ""
+                            POST(url, body) $(resp) {
+                                if (resp != null) {
+                                    status = int(resp.status_code)
+                                    text := string(resp.body)
+                                }
+                            }
+                            ch |> push_clone(BurstAnswer(status = status, body = text))
+                            ch |> notify()
+                            ch |> release()
+                            done |> notify_and_release()
                         }
                     }
-                    ch |> push_clone(BurstAnswer(status = status, body = text))
-                    ch |> notify()
-                    ch |> release()
-                    done |> notify_and_release()
+                    while (at_gate |> get < TTS_BURST) {
+                        sleep(1u)
+                    }
+                    gate_open |> set(1)
+                    for (a in each_clone(ch, type<BurstAnswer>)) {
+                        answers |> push(BurstAnswer(status = a.status, body = clone_string(a.body)))
+                    }
+                    done |> join()
                 }
             }
-            for (a in each_clone(ch, type<BurstAnswer>)) {
-                answers |> push(BurstAnswer(status = a.status, body = clone_string(a.body)))
-            }
-            done |> join()
         }
     }
     var refused = 0
