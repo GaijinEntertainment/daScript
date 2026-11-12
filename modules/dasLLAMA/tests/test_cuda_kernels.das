@@ -148,6 +148,37 @@ let TILE_D = 160            //! the tile cells' weight rows: one full 128-tile a
 let TILE_ROWS0 = 300        //! the two regions' rows: whole tiles and an edge each
 let TILE_ROWS1 = 260
 
+var private g_cud_k16_roundings = 0   //! `cud_k16_roundings`, read once a process
+
+//! how many times this card rounds the l tile's f16 accumulator in one 16-deep step: the q8 l tile over `k16_probe_planes`
+[arch(at="../ARCHITECTURE_GPU_SHARED_GEMM.md#cm2-tile-body")]
+def private cud_k16_roundings() : int {
+    return g_cud_k16_roundings if (g_cud_k16_roundings != 0)
+    let d = K16_PROBE_D
+    let rows = K16_PROBE_ROWS
+    var inscope p <- k16_probe_planes(int(TILE_READ_SLACK))
+    let wgs = (rows / 256) * ((d + 127) / 128)
+    var inscope sched <- one_region_words(rows, wgs)
+    var s = g_cud.stream
+    var bufs = fixed_array(buf_upload(p.wq, s), buf_upload(p.ws, s), buf_upload(sched, s), buf_upload(p.xf, s), buf_fill(rows * d, Y_SENTINEL, s))
+    var pc = BatchArgs(n = uint(K16_PROBE_K), d = uint(d), map_off = 4u)
+    enc_q8_batch_cm2l_cls(s, bufs, pc, int64(wgs))
+    cud_sync()
+    var inscope y <- buf_download(bufs[4], rows * d, type<float>)
+    cuda_mem_free(bufs)
+    let read = k16_roundings_of(y)
+    g_cud_k16_roundings = read.roundings
+    to_log(LOG_WARNING, "cuda home: the l tile sums 2048 + 1 + 1 whole at {read.kept} of {K16_PROBE_K - 2} positions - {read.roundings} rounding(s) of its f16 accumulator a 16-deep step; the accumulation bars scale by it\n")
+    return g_cud_k16_roundings
+}
+
+//! the l tile's accumulation bar on this card: `TILE_BAR` for one rounding a 16-deep step, twice it for two
+def private l_tile_bar() : Bar {
+    var bar = TILE_BAR
+    bar.rel *= float(cud_k16_roundings())
+    return bar
+}
+
 //! the cm2 l tile over two regions of activation rows against the f16-feed oracle: `k` the reduction width
 [arch(at="../ARCHITECTURE_GPU_SHARED_GEMM.md#cm2-tile-body")]
 def q8_cm2l_run(t : T?; k : int; wq_seed, ws_seed, xf_mul, xf_add : uint) {
@@ -180,7 +211,7 @@ def q8_cm2l_run(t : T?; k : int; wq_seed, ws_seed, xf_mul, xf_add : uint) {
         }
     }
     t |> equal(stale, 0, "q8 cm2 l tile k {k}: every row stored")
-    check_rows(t, "q8 cm2 l tile k {k} vs the f16-feed oracle", y, y_ref, TILE_BAR, d)
+    check_rows(t, "q8 cm2 l tile k {k} vs the f16-feed oracle", y, y_ref, l_tile_bar(), d)
     delete y
     delete y_ref
     delete sched
@@ -223,7 +254,7 @@ def cm2_split_run(t : T?; tag : string; fmt, tc, rows, d, n, nsplit : int; wqh, 
     var inscope parts <- buf_download(bufs[4], rows * d * nsplit + slack, type<float>)
     cuda_mem_free(bufs)
     cuda_mem_free(y)
-    check_rows(t, "{tag} split {nsplit} ways at k {n} + the reduce vs the whole-K oracle", got, y_ref, tc == CUD_CM2_TC_S ? cm_bar(y_ref) : TILE_BAR, d)
+    check_rows(t, "{tag} split {nsplit} ways at k {n} + the reduce vs the whole-K oracle", got, y_ref, tc == CUD_CM2_TC_S ? cm_bar(y_ref) : l_tile_bar(), d)
     if (slack > 0) {
         var inscope kept <- [for (_i in range(slack)); Y_SENTINEL]
         check_exact(t, "{tag} split {nsplit} ways: the {rows_pad - rows} rows of the tile's footprint past the region keep the partials' sentinel", copy_span(parts, rows * d * nsplit, slack), kept)

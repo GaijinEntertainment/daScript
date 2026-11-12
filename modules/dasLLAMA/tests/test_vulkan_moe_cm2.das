@@ -14,6 +14,7 @@ require _kernel_oracles
 require _compares
 require ?vulkan dasllama/dasllama_vulkan_common   // find_stack_idx: the fresh-base guard; a build with no Vulkan module skips the cells
 require ?vulkan dasllama/dasllama_env   // the split knob the streamed cells name in their tags
+require ?vulkan _vkd_oracles   // vkd_k16_roundings: the accumulation bar's scale on this card
 
 // The cm2 expert chain (dasllama_vulkan_prefill's f16-fed batch arm) against a CPU reference
 // that rounds exactly where the device does: the gathered activation rows to f16, the hidden
@@ -124,8 +125,10 @@ def private chain_cell(t : T?; tag : string; n, nfe, npos, k, cnt_a : int64; wof
                 ref_chain(w1, w3, w2, x, inv, w, expert_of_row, n, nfe, npos, k, refv)
             }
             t |> success(logits_maxabs(refv) > 0.0, "{tag} win {win}: the reference is non-trivial")
-            //! within 4e-3 of the reference's max, floored at 2e-2; the control moves element 0 by 1 + 2 x that max
-            let bar = Bar(kind = BarKind.rel_of_max, rel = 4e-3, abs_floor = 2e-2, poison = 2.0, poison_of_max = true, poison_abs = 1.0, poison_at = 0)
+            //! within 4e-3 of the reference's max a rounding of the f16 accumulator a 16-deep step (`vkd_k16_roundings`), floored
+            //! at 2e-2; the control moves element 0 by 1 + 2 x that max
+            let rel = 4e-3 * float(vkd_k16_roundings())
+            let bar = Bar(kind = BarKind.rel_of_max, rel = rel, abs_floor = 2e-2, poison = 2.0, poison_of_max = true, poison_abs = 1.0, poison_at = 0)
             check(t, "{tag} win {win}: cm2 expert chain", gout, refv, bar, Shape(row_width = int(n)))
         }
         delete wg

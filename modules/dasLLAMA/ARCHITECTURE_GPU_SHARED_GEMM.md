@@ -101,14 +101,22 @@ an indexing one.** `ACC` is `coopmatWgAcc_f16_128x256` in the Vulkan and the CUD
 copy) reads 0.35 of the f16 stamp's rate at two blocks an SM (the 128 x 256 f32 accumulator spills
 at 128 registers) and 0.57 to 0.77 at one block, on the three rate shapes of
 `harness/gemm_cuda_vs_vulkan.das`, the same-run Vulkan arm within 2 percent across the runs, so f16
-stays. The error it costs: a `mma.sync` k16 step sums its sixteen products wide and rounds the
-running sum to f16 once, so over `s = k / 16` steps the sum carries at most `s` roundings of
-`2^-11` of a partial sum (k 576: 36 steps, 1.8e-2 worst; k 2048: 128, 6.3e-2) and, the roundings
-uncorrelated, `sqrt(s) * 2^-11` typically (2.9e-3 and 5.5e-3 of a partial sum, which the hashed
-fixture holds under its output's largest magnitude). The q8 l-tile cells of `tests/test_cuda_kernels.das`
-read 1.7e-3 of the largest output at k 576 and 1.4e-3 at k 2048 against their 2e-3 bar
-(`TILE_BAR`): the bar measures the accumulation, not only the decode and the indexing, and a fixture
-whose partial sums run larger than its outputs will miss it before the tile is wrong.
+stays. The error it costs depends on the card: a 16-deep step's products are summed wide and the
+running sum rounded to f16, once a step where the tensor cores sum sixteen products before they
+round (the RTX PRO 6000 and 4500 Blackwell) and twice where they sum eight (the RTX 4090: its
+step loses a 1 added to 2048 in each half). With one rounding a step the sum carries at most
+`s = k / 16` roundings of `2^-11` of a partial sum (k 576: 36 steps, 1.8e-2 worst; k 2048: 128,
+6.3e-2) and, the roundings uncorrelated, `sqrt(s) * 2^-11` typically (2.9e-3 and 5.5e-3 of a
+partial sum, which the hashed fixture holds under its output's largest magnitude). The q8 l-tile
+cells of `tests/test_cuda_kernels.das` read 1.7e-3 of the largest output at k 576 and 1.4e-3 at
+k 2048 against their 2e-3 bar (`TILE_BAR`) on a one-rounding card, and 2.8e-3 at k 2048 split in
+two on the RTX 4090: the bar measures the accumulation, not only the decode and the indexing, so
+it scales by the card's roundings a step, and a fixture whose partial sums run larger than its
+outputs will miss it before the tile is wrong. The cells read the roundings off the home's own q8
+l tile (`cud_k16_roundings`, `vkd_k16_roundings`): unit weights against rows of 2048, 1 and one
+more 1 at each other k sum to 2050, and a row keeps it only where its two ones share a rounding;
+14 or 15 of the rows keep it at sixteen products a rounding, 6 or 7 at eight. The count does not
+depend on which k a tile's operand layout puts together, which differs between the two homes.
 
 **The tile's fast path is what makes the loads unclamped.** It runs when the weight tile is whole
 (`m0 + 128 <= d`), the token column is whole or the stamp carries the partial-column path (`STILE`:

@@ -301,6 +301,42 @@ def kq_ws_plane(fmt : int; n : int; mul, add : uint) : array<uint> {
     return <- w
 }
 
+let K16_PROBE_K = 64      //! the rounding probe's reduction width: two q8 blocks
+let K16_PROBE_ROWS = 256  //! one l tile of activation rows
+let K16_PROBE_D = 160     //! the tile cells' weight rows
+
+//! the rounding probe's planes for a q8 l tile: unit weights (every quant byte 1, every block scale 1.0) against activation rows
+//! of 2048 at k 0, 1 at k 1 and 1 at one more k - row `r` at k `r + 2`, a row a position - so every row sums to 2050 exactly.
+//! `slack_rows` is the home's read slack past the rows
+def k16_probe_planes(slack_rows : int) : tuple<wq : array<uint>; ws : array<uint>; xf : array<uint>> {
+    let blocks = K16_PROBE_D * (K16_PROBE_K / 32)
+    var wq <- [for (_i in range(blocks * 8)); 0x01010101u]
+    var ws <- [for (_i in range((blocks * 2 + 3) / 4)); packHalf2x16(float2(1.0, 1.0))]
+    var xf : array<uint>
+    xf |> resize((K16_PROBE_ROWS + slack_rows) * K16_PROBE_K / 2)
+    var row : float[K16_PROBE_K]
+    for (r in range(K16_PROBE_K - 2)) {
+        for (j in range(K16_PROBE_K)) {
+            row[j] = j == 0 ? 2048.0 : (j == 1 || j == r + 2 ? 1.0 : 0.0)
+        }
+        for (j in range(K16_PROBE_K / 2)) {
+            xf[r * K16_PROBE_K / 2 + j] = packHalf2x16(float2(row[2 * j], row[2 * j + 1]))
+        }
+    }
+    return <- (wq = wq, ws = ws, xf = xf)
+}
+
+//! the probe's readings (`y`, `K16_PROBE_D` a row) as roundings of the f16 accumulator a 16-deep step. A row reads 2050 when
+//! its two ones are summed before a rounding - they share a group - and 2048 when each meets 2048 alone and loses the tie.
+//! Sixteen products a rounding keep 14 or 15 of the rows, eight keep 6 or 7, whichever k the tile's operands put together
+def k16_roundings_of(y : array<float>) : tuple<roundings : int; kept : int> {
+    var kept = 0
+    for (r in range(K16_PROBE_K - 2)) {
+        kept += y[r * K16_PROBE_D] == 2050.0 ? 1 : 0
+    }
+    return (roundings = kept >= 12 ? 1 : 2, kept = kept)
+}
+
 //! `nblk` f16 block scales two a word, the small positive ramp `0.002 x (1 + b % 7)`: the CUDA q8 GEMV cells' scale plane
 def ramp_ws_plane(nblk : int) : array<uint> =>
     <- [for (i in range((nblk + 1) / 2)); packHalf2x16(float2(0.002 * float(1 + (2 * i) % 7), 0.002 * float(1 + (2 * i + 1) % 7)))]

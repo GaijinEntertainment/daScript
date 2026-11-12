@@ -184,6 +184,38 @@ def gather_planes(column : array<auto(TT)>; idx) {
     return r
 }
 
+var private g_vkd_k16_roundings = 0   //! `vkd_k16_roundings`, read once a process
+
+//! how many times this card rounds the cm2 l tile's f16 accumulator in one 16-deep step: the q8 l tile over
+//! `k16_probe_planes`. Read where the cm2 tiles serve; 1 anywhere else, where no cm2 accumulation bar applies
+[arch(at="../ARCHITECTURE_GPU_SHARED_GEMM.md#cm2-tile-body")]
+def vkd_k16_roundings() : int {
+    return g_vkd_k16_roundings if (g_vkd_k16_roundings != 0)
+    g_vkd_k16_roundings = 1
+    let fmt = int(KqFmt.q8)
+    let served = g_gpu.coopmat_mode == COOPMAT_CM2 && g_gpu.has_coopmat2 && cm2_cls_ensure(fmt, 256l)
+    return g_vkd_k16_roundings if (!served)
+    let d = K16_PROBE_D
+    let rows = K16_PROBE_ROWS
+    var inscope p <- k16_probe_planes(int(TILE_READ_SLACK))
+    let wgs = (rows / 256) * ((d + 127) / 128)
+    var read = (roundings = 1, kept = 0)
+    with_cell_planes() $(var cp : CellPlanes) {
+        let planes = fixed_array(cp |> in_plain(p.wq), cp |> in_plain(p.ws), cp |> in_plain(one_region_words(rows, wgs)),
+            cp |> in_plain(p.xf), cp |> out_(rows * d))
+        var sc = cm2_cls_set(fmt, 256l, gather_planes(cp.dev, planes), gather_planes(cp.bytes, planes), gather_planes(cp.hazard_bit, planes))
+        var pc = BatchArgs(n = uint(K16_PROBE_K), d = uint(d), map_off = 4u)
+        cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+            cm2_cls_enc(fmt, 256l, raw, h, sc, pc, int64(wgs))
+        }
+        var inscope y <- cp |> plane_run(planes[4])
+        read = k16_roundings_of(y)
+    }
+    g_vkd_k16_roundings = read.roundings
+    to_log(LOG_WARNING, "vulkan home: the l tile sums 2048 + 1 + 1 whole at {read.kept} of {K16_PROBE_K - 2} positions - {read.roundings} rounding(s) of its f16 accumulator a 16-deep step; the accumulation bars scale by it\n")
+    return g_vkd_k16_roundings
+}
+
 //! a class's descriptor set over the planes `idx`: `set_fn` is its generated `set_*_cls`
 def cls_set(cp : CellPlanes; idx; set_fn) =>
     invoke(set_fn, gather_planes(cp.dev, idx), gather_planes(cp.bytes, idx), gather_planes(cp.hazard_bit, idx))
