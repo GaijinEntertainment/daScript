@@ -2766,20 +2766,15 @@
     measured decision, per GPU home, whether its pass moves onto the voice's GPU seat or stays on the
     CPU, the figures in `PERF_LEDGER.md`.
 
-295. **The Russian stress pass decides only the catalog's homographs from context; an unknown word, a
-    е/ё pair and the rule tier have no context decision.** The context tier
+295. **The Russian stress pass decides only the catalog's forms from context; a word outside the
+    catalog has no context decision.** The context tier
     (`ARCHITECTURE_TTS_FRONT_END.md#tts-stress-context`) asks the stress-context model about the forms its
-    catalog lists and nothing else. Four gaps remain. (a) A form the pack lacks (loanwords, names, the
-    dictionary's gaps) still reads by the shape rule, the vowel before the last; the model scores only
-    the ordinals the catalog allows a listed form, so it has no answer for an unlisted word. (b) A form
-    whose е and ё spellings are both words (все / всё, небо / нёбо) is left as written: the pack restores
-    ё only where the е spelling is no word, the catalog spells no form with ё, and the model's tokenizer
-    folds ё into е, so nothing in the pass chooses between the two. (c) `ru_stress_rule` abstains on
-    every word - no agreement or collocation rule (на́ руки, за́ руку) answers ahead of the model, and no
-    exception list holds a known form the model reads wrong. (d) A homograph outside the catalog reads
-    the pack's default whatever its sentence says. Done = an open-vocabulary stress head (per letter, is
-    this the stressed vowel) read where the shape rule stands now, with a figure for unknown words on
-    the short-sentence set beside the shape rule's on the same set; the е/ё pairs decided by the same
-    pass and counted on their own; the rule seat filled where a rule beats the model on that set, with
-    an exception list beside it so a known word never regresses; each change scored through
+    catalog lists - the homographs and the е/ё pairs - and nothing else. Two gaps remain. (a) A form
+    the pack lacks (loanwords, names, the dictionary's gaps) reads by the model-less tiers
+    (`ARCHITECTURE_TTS_RU_STRESS.md#tts-ru-unknown-word`); the model scores only the classes the
+    catalog allows a listed form, so it has no answer for an unlisted word. (b) A homograph outside
+    the catalog reads the pack's default, or the rule tier's pick, whatever its sentence says. Done =
+    an open-vocabulary stress head (per letter, is this the stressed vowel) read where the model-less
+    tiers stand now, with a figure for unknown words on the short-sentence set beside theirs on the
+    same set, and an exception list so a known word never regresses; each change scored through
     `harness/ru_stress_eval.das --pack` against the current front end on the same set.

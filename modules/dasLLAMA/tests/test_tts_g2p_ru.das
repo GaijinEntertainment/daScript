@@ -36,7 +36,8 @@ require _tts_oracle
 //   the pack's other sources bring, the ё spellings restored and left alone, a hyphenated word by
 //   its whole key, the tiers that outrank a context pass's pick, and the model-less tiers on the
 //   shipped pack (`test_stress_modelless_tiers`);
-// - `tts_g2p_ru.bin` and `tts_ctx_ru.gguf`: the context pass (`test_stress_context`);
+// - `tts_g2p_ru.bin` and `tts_ctx_ru.gguf`: the context pass (`test_stress_context`); its е/ё
+//   cell skips as well where the `tts_ctx_ru.gguf` present has the 8-class head;
 // - `ru-stress-rubert-base.gguf` (`harness/convert_ru_stress.py` over ai-forever/ruBert-base with
 //   the oracle's seeded head): the tokenizer cells against the 226-sentence fixture
 //   `_tts_fixtures/ru_stress_tokens.json` - Russian sentences plus marked, Latin, digit, long-word,
@@ -218,6 +219,9 @@ def test_stress_pack_sources(t : T?) {
         for (word in fixed_array("все", "небо", "берег", "левин", "якушев")) {
             t |> equal(ru_yo_form(p, word), "", "'{word}' is a word of its own")
         }
+        t |> equal(ru_mark_word(p, "Ребенок"), "Ребёнок", "a restored word keeps the case it was written in")
+        t |> equal(ru_mark_word(p, "ЕЛКА"), "ЁЛКА", "and a capital Е becomes a capital Ё")
+        t |> equal(ru_mark_word(p, "ЕщЕ"), "ЕщЁ", "letter by letter")
         t |> equal(ru_mark_word(p, "Левин"), "Л+евин", "the name keeps its е and its stress")
         t |> equal(ru_yo_form(p, "елка"), "ёлка", "the control: a е spelling that is no word is restored")
     }
@@ -235,7 +239,9 @@ def test_stress_pack_sources(t : T?) {
         t |> equal(ru_mark_stress(p, "из-з+а"), "из-з+а", "a mark in the text skips the whole key: the marked side stands, the clitic side takes none")
         t |> equal(ru_mark_stress(p, "фывапролдж-запад"), "фыв+апролдж-з+апад", "the control: with no whole key each side is read alone")
         t |> equal(ru_mark_stress(p, "северо-фывапролдж"), "с+еверо-фыв+апролдж", "and a first half reads by its own key there")
-        t |> success(!ru_word_needs_context(p, "северо-запад"), "a hyphenated word is never a context pass's")
+        t |> success(ru_word_needs_context(p, "северо-запад"), "a hyphenated word is a context pass's where its catalog holds it")
+        t |> success(!ru_word_needs_context(p, "из-за"), "one made of clitics is not")
+        t |> success(!ru_word_needs_context(p, "все-таки"), "nor one the ё table restores")
     }
 }
 
@@ -279,6 +285,11 @@ def test_stress_modelless_tiers(t : T?) {
         var inscope p <- load_ru_stress_pack(pack_path())
         t |> equal(ru_mark_stress(p, "о чем"), "о чём")
         t |> equal(ru_mark_stress(p, "во всем мире"), "во всём м+ире")
+        t |> equal(ru_mark_stress(p, "в чем-то"), "в чём-т+о", "чем with a particle follows чем's prepositions, and the particle is read as in any hyphenated word")
+        t |> equal(ru_mark_stress(p, "О Чем-либо"), "О Чём-л+ибо", "in the letter's own case")
+        t |> equal(ru_mark_stress(p, "при чем-нибудь"), "при чём-ниб+удь")
+        t |> equal(ru_mark_stress(p, "по чем-то"), "по ч+ем-т+о", "the control: по is none of чем's prepositions")
+        t |> equal(ru_mark_stress(p, "о кем-то"), "о к+ем-т+о", "the control: another pronoun with the particle is not the rule's")
         t |> equal(ru_mark_stress(p, "по всем"), "по вс+ем", "the control: по governs another case")
         t |> equal(ru_mark_stress(p, "из стены"), "из стен+ы", "the genitive after из")
         t |> equal(ru_mark_stress(p, "от руки"), "от рук+и")
@@ -330,6 +341,20 @@ def private context_pairs() : array<RuContextCase> {
     ]
 }
 
+//! words that are a е word and a ё word, in sentences written without ё that ask for one spelling or the other
+def private yo_context_pairs() : array<RuContextCase> {
+    return <- [
+        RuContextCase(text = "они все пришли вовремя.", word = "все", marked = "вс+е"),
+        RuContextCase(text = "это все, что я знаю.", word = "все", marked = "всё"),
+        RuContextCase(text = "на нем был синий берет.", word = "берет", marked = "бер+ет"),
+        RuContextCase(text = "он берет книгу со стола.", word = "берет", marked = "берёт"),
+        RuContextCase(text = "туман осел на траву.", word = "осел", marked = "ос+ел"),
+        RuContextCase(text = "упрямый осел не хотел идти дальше.", word = "осел", marked = "осёл")
+    ]
+}
+
+let private YO_PACK_WRONG = 1  //! the sentences of `yo_context_pairs` the pack and its rule tier misread with no model
+
 def private with_context_model(t : T?; blk : block<(p : RuStressPack; m : RuStressModel; var sc : RuStressScratch) : void>) {
     return if (ru_pack_missing(t) || !model_available(t, ctx_path()))
     var inscope p <- load_ru_stress_pack(pack_path())
@@ -344,6 +369,19 @@ def private context_marked(p : RuStressPack; m : RuStressModel; text : string; v
     return ru_mark_stress(p, text, picks.picked)
 }
 
+//! every case read as its sentence asks with the model, the catalog listing its word with a class past `above` (a mask, 0 for any class), and exactly `pack_wrong` of them misread by the pack and its rule tier alone
+[cold_path]
+def private reads_both_ways(t : T?; p : RuStressPack; m : RuStressModel; var sc : RuStressScratch; cases : array<RuContextCase>; above : uint; pack_wrong : int) {
+    var wrong = 0
+    for (c in cases) {
+        t |> success(ru_stress_allowed(m, c.word) > above, "'{c.word}' is a form the catalog lists, its classes {ru_stress_allowed(m, c.word)} past {above}")
+        let got = context_marked(p, m, c.text, sc)
+        t |> success(find(got, c.marked) >= 0, "'{c.text}': {got} reads {c.marked}")
+        wrong += find(ru_mark_stress(p, c.text), c.marked) >= 0 ? 0 : 1
+    }
+    t |> equal(wrong, pack_wrong, "the control: without the model the pack and its rule tier misread {pack_wrong} of the {length(cases)} sentences")
+}
+
 //! the control of a sentence cut: after the pass over `text`, the scratch holds the pieces of `last` alone, the text's last sentence
 [cold_path]
 def private last_pass_reads(t : T?; p : RuStressPack; m : RuStressModel; text, last : string; var sc : RuStressScratch) {
@@ -355,7 +393,7 @@ def private last_pass_reads(t : T?; p : RuStressPack; m : RuStressModel; text, l
     t |> equal(picks.fallbacks, 0, "every asked word lies inside its sentence's pass")
 }
 
-[test(description = "the tiers ahead of a context pass - a mark in the text, a ё, a clitic, the pack's ё spelling, a hyphenated word - keep their reading under a hand-built pick, and `ru_word_needs_context` names exactly the words a pass may decide")]
+[test(description = "the tiers ahead of a context pass - a mark in the text, a ё, a clitic, the pack's ё spelling - keep their reading under a hand-built pick, `ru_word_needs_context` names exactly the words a pass may decide, and a head class becomes its pick: a stress class the vowel's ordinal, a ё class the word's ё spelling")]
 def test_stress_pick_order(t : T?) {
     t |> run("a pick for a closed word changes nothing; a pick for an open word is its reading") @(t : T?) {
         return if (ru_pack_missing(t))
@@ -377,6 +415,18 @@ def test_stress_pick_order(t : T?) {
         }
         t |> success(ru_word_needs_context(p, "замок"), "the control: 'замок' is a context pass's to decide")
         t |> success(ru_word_needs_context(p, "молоко"), "and so is a word of one reading: the catalog, not this gate, keeps it from the model")
+    }
+    t |> run("a head class is its pick: a stress class the vowel's ordinal, a class past them that vowel read as ё") @(t : T?) {
+        t |> equal(ru_stress_class_pick(1), 1)
+        t |> equal(ru_stress_class_pick(RU_STRESS_ORDINALS), RU_STRESS_ORDINALS, "the last stress class")
+        t |> equal(ru_stress_class_pick(RU_STRESS_ORDINALS + 1), RU_PICK_YO + 1, "the first ё class: the first vowel as ё")
+        t |> equal(ru_stress_class_pick(RU_STRESS_CLASSES), RU_PICK_YO + RU_STRESS_ORDINALS)
+        return if (ru_pack_missing(t))
+        var inscope p <- load_ru_stress_pack(pack_path())
+        var inscope picked <- { 1 => ru_stress_class_pick(RU_STRESS_ORDINALS + 1) }
+        t |> equal(ru_mark_stress(p, "мы все", picked), "м+ы всё", "the ё class of the first vowel marks the word as its ё spelling")
+        var inscope stressed <- { 1 => ru_stress_class_pick(1) }
+        t |> equal(ru_mark_stress(p, "мы все", stressed), "м+ы вс+е", "the control: the stress class of the same vowel keeps the е")
     }
 }
 
@@ -404,31 +454,52 @@ def private context_mark_and_pass_cells(t : T?) {
                 let lower = utf8_to_lower(cpts_to_utf8(cps, w.x, w.y))
                 continue if (!key_exists(picks.picked, k))
                 let single = ru_stress_pick(m, text, w, ru_stress_allowed(m, lower), sc)
-                t |> equal(picks.picked?[k] ?? 0, single.ordinal, "{lower}: the one pass and the single pick")
+                t |> equal(picks.picked?[k] ?? 0, ru_stress_class_pick(single.ordinal), "{lower}: the one pass and the single pick")
             }
         }
     }
 }
 
-[test(description = "the stress-context model picks a homograph's reading by its sentence, behind the text's own mark and ё, one pass for a sentence's every word, a catalog reading the pack lacks taken and counted")]
+[test(description = "the stress-context model picks a homograph's reading by its sentence, behind the text's own mark and ё, one pass for a sentence's every word, a word that is a е word and a ё word spelled by its sentence under the 16-class head, a catalog reading the pack lacks taken and counted")]
 def test_stress_context(t : T?) {
     with_dasllama_jobque_() {
         t |> run("twelve homographs read both ways by their sentences; the pack and its rule tier alone misread eight of the sentences") @(t : T?) {
             with_context_model(t) $(p, m; var sc) {
                 var inscope cases <- context_pairs()
                 t |> equal(length(cases), 24, "twelve pairs")
-                var pack_wrong = 0
                 for (c in cases) {
                     t |> equal(utf8_to_lower(replace(c.marked, "+", "")), c.word, "'{c.marked}' is a reading of '{c.word}'")
-                    t |> success(ru_stress_allowed(m, c.word) != 0u, "'{c.word}' is a form the catalog lists")
-                    let got = context_marked(p, m, c.text, sc)
-                    t |> success(find(got, c.marked) >= 0, "'{c.text}': {got} reads {c.marked}")
-                    pack_wrong += find(ru_mark_stress(p, c.text), c.marked) >= 0 ? 0 : 1
                 }
-                t |> equal(pack_wrong, 8, "the control: without the model the pack and its rule tier misread 8 of the 24 sentences")
+                reads_both_ways(t, p, m, sc, cases, 0u, 8)
             }
         }
         context_mark_and_pass_cells(t)
+        t |> run("a word that is a е word and a ё word is read both ways by its sentences, a hyphenated one among the words asked") @(t : T?) {
+            with_context_model(t) $(p, m; var sc) {
+                if (m.classes != RU_STRESS_CLASSES) {
+                    t |> skip("{ctx_path()} scores {m.classes} classes - a copy of a current ru-stress-*-q4.gguf scores {RU_STRESS_CLASSES}")
+                    return
+                }
+                var inscope cases <- yo_context_pairs()
+                reads_both_ways(t, p, m, sc, cases, (1u << uint(RU_STRESS_ORDINALS)) - 1u, YO_PACK_WRONG)
+                var inscope hyphenated <- ru_stress_context_picks(m, p, "он чем-то занят.", sc)
+                t |> equal(hyphenated.asked, 1, "чем-то is asked, whole")
+                let marked = ru_mark_stress(p, "он чем-то занят.", hyphenated.picked)
+                t |> success(find(marked, "ч+ем-т+о") >= 0, "and with no preposition before it keeps its е: {marked}")
+                let text = "это все, что я знаю."
+                var inscope spelled <- ru_stress_context_picks(m, p, text, sc)
+                var inscope yo_picks <- [for (pick in values(spelled.picked)); pick; where pick >= RU_PICK_YO]
+                t |> equal(length(yo_picks), 1, "one ё pick in '{text}': {ru_mark_stress(p, text, spelled.picked)}")
+                t |> equal(spelled.beyond_pack, 0, "a ё pick is no stress reading the pack lacks")
+                let free = ru_stress_pick(m, text, ru_stress_find_word(text, "все"), 0u, sc)
+                var best = 0
+                for (o in range(m.classes)) {
+                    best = free.logits[o] > free.logits[best] ? o : best
+                }
+                t |> equal(free.ordinal, best + 1, "a pick with no mask ranks every class of the head: logits {free.logits}")
+                t |> success(free.ordinal > RU_STRESS_ORDINALS, "and here the largest is a ё class ({free.ordinal}), past the stress classes")
+            }
+        }
         t |> run("a catalog reading the pack lacks is taken and counted; the pack's readings count nothing") @(t : T?) {
             with_context_model(t) $(p, m; var sc) {
                 t |> success(ru_stress_pack_has(p, "руки", 2), "руки́ is a reading the pack holds")
@@ -714,14 +785,14 @@ def private synth_tensor(var b : array<uint8>; var off : uint64&; name : string;
 }
 
 //! a `ru_stress` GGUF 256 wide: the shape keys and, `with_tensors`, zeroed embeddings and the first layer's query - its bias,
-//! and its weight of disk type `query_type` - so the loader reads up to that weight and judges its type
-def private synth_ru_stress(with_tensors : bool; query_type : int) : array<uint8> {
+//! and its weight of disk type `query_type` - so the loader reads up to that weight and judges its type; the head `classes` wide
+def private synth_ru_stress(with_tensors : bool; query_type : int; classes : uint64 = 8ul) : array<uint8> {
     let d = 256ul
     var b : array<uint8>
     gguf_header(b, with_tensors ? 7ul : 0ul, 11ul)
     gguf_kv_str(b, "general.architecture", "ru_stress")
     gguf_kv_str(b, "ru_stress.encoder", "bert")
-    for (kv in [("emb_dim", d), ("hidden", d), ("n_heads", 4ul), ("max_positions", 4ul), ("max_pieces", 4ul), ("n_ordinals", 8ul), ("n_layers", 1ul)]) {
+    for (kv in [("emb_dim", d), ("hidden", d), ("n_heads", 4ul), ("max_positions", 4ul), ("max_pieces", 4ul), ("n_ordinals", classes), ("n_layers", 1ul)]) {
         gguf_kv_u32(b, "ru_stress.{kv._0}", kv._1)
     }
     gguf_kv_f32_bits(b, "ru_stress.layer_norm_eps", 0x2B8CBCCCul)
@@ -771,7 +842,23 @@ def private load_tokenizer_and_drop(path : string) {
     var inscope tk <- load_wordpiece_gguf(path, "ru_stress")
 }
 
-[test(description = "`load_ru_stress` refuses, naming the cause, a missing file, a GGUF of another architecture, a file without a tensor it needs and a layer stored in a quantized type the layer GEMMs do not serve (the tensor, the site and the format member in the text); `load_wordpiece_gguf` refuses a tokenizer that is not bert, one without the sorted piece ids (the key and the converter in the text) and one whose sorted ids are not the pieces' byte order")]
+[cold_path]
+def private head_width_cell(t : T?) {
+    t |> run("a head of 12 classes is refused naming the count; a head of 16 is not refused") @(t : T?) {
+        let odd = synth_file("ru_stress_head_12.gguf", synth_ru_stress(false, GGML_TYPE_F32, 12ul))
+        let why = panic_text() {
+            load_model_and_drop(odd)
+        }
+        t |> success(find(why, "the head scores 12 classes, the reader 8 or 16") >= 0, why)
+        let wide = synth_file("ru_stress_head_16.gguf", synth_ru_stress(false, GGML_TYPE_F32, 16ul))
+        let next = panic_text() {
+            load_model_and_drop(wide)
+        }
+        t |> success(find(next, "tensor 'bert.embeddings.word_embeddings.weight' missing") >= 0, "the control: the load passes the head's width and stops at the next, absent tensor: {next}")
+    }
+}
+
+[test(description = "`load_ru_stress` refuses, naming the cause, a missing file, a GGUF of another architecture, a file without a tensor it needs, a head that is neither 8 nor 16 classes wide and a layer stored in a quantized type the layer GEMMs do not serve (the tensor, the site and the format member in the text); `load_wordpiece_gguf` refuses a tokenizer that is not bert, one without the sorted piece ids (the key and the converter in the text) and one whose sorted ids are not the pieces' byte order")]
 def test_stress_model_refusals(t : T?) {
     t |> run("a missing file panics naming it") @(t : T?) {
         let missing = scratch_path("no-such-ru-stress.gguf")
@@ -794,6 +881,7 @@ def test_stress_model_refusals(t : T?) {
         }
         t |> success(find(why, "tensor 'bert.embeddings.word_embeddings.weight' missing") >= 0, why)
     }
+    head_width_cell(t)
     t |> run("a layer weight stored Q8_0 or Q5_0 is refused naming the tensor, the layer GEMMs and the format member; Q4_K passes") @(t : T?) {
         let members = fixed_array("format q8", "format q5032")
         for (gtype, member in fixed_array(GGML_TYPE_Q8_0, GGML_TYPE_Q5_0), members) {

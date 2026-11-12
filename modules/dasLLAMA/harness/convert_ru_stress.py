@@ -27,8 +27,9 @@ corpus the caller supplies, one {"text": ...} row a line. Writes `<name>.gguf`:
 - with `--vocab-keep`, the vocabulary pruned to the pieces counted over `--vocab-corpus` (the N most
   frequent, every one that occurs at 0) plus the specials and every single character bare and as
   `##`, renumbered, the word-embedding rows sliced to match;
-- the catalog (`--catalog`): the forms whose stress depends on context, with the vowels each may
-  stress, as a byte-sorted form list and one bitmask a form (bit i = ordinal i + 1).
+- the catalog (`--catalog`): the forms whose reading depends on context, with the head classes each
+  may take, as a byte-sorted form list and one bitmask a form (bit i = class i + 1: a stressed vowel's
+  ordinal, or - under a head of 16 - STRESS_ORDINALS more for that vowel read as ё).
 """
 import argparse
 import json
@@ -40,7 +41,8 @@ import numpy as np
 
 ARCH = "ru_stress"
 GGML_MAX_NAME = 64
-N_ORDINALS = 8
+STRESS_ORDINALS = 8            # a head's stress classes: the stressed vowel's ordinal 1..8
+HEAD_WIDTHS = (STRESS_ORDINALS, 2 * STRESS_ORDINALS)   # the heads the reader runs: the stress classes, or those and each one's vowel read as ё
 MAX_PIECES = 96
 RUST_WHITE_SPACE = {9, 10, 11, 12, 13, 32, 0x85, 0xA0, 0x1680, *range(0x2000, 0x200B), 0x2028, 0x2029, 0x202F, 0x205F, 0x3000}
 CJK_RANGES = ((0x4E00, 0x9FFF), (0x3400, 0x4DBF), (0x20000, 0x2A6DF), (0x2A700, 0x2B73F), (0x2B740, 0x2B81F),
@@ -125,14 +127,16 @@ def encoder_tensors(model, model_type):
     return tensors
 
 
-def read_catalog(path):
+def read_catalog(path, classes):
+    """the catalog's forms and one mask a form over the head's `classes` classes; a variant's `ordinal` is its class
+    from 1: a stressed vowel's ordinal, or STRESS_ORDINALS more for that vowel read as ё"""
     masks = {}
     with open(path, encoding="utf8") as f:
         for line in f:
             row = json.loads(line)
             form = row["form"].lower()
             for v in row["variants"]:
-                assert 1 <= v["ordinal"] <= N_ORDINALS, (form, v["ordinal"])
+                assert 1 <= v["ordinal"] <= classes, (form, v["ordinal"], classes)
                 masks[form] = masks.get(form, 0) | (1 << (v["ordinal"] - 1))
     forms = sorted(masks, key=lambda s: s.encode("utf8"))
     return forms, [masks[f] for f in forms]
@@ -275,7 +279,8 @@ def main():
     head = torch.load(head_path, map_location="cpu")
     tensors["stress_head.weight"] = np.ascontiguousarray(head["weight"].numpy().astype(np.float32))
     tensors["stress_head.bias"] = np.ascontiguousarray(head["bias"].numpy().astype(np.float32))
-    assert tensors["stress_head.weight"].shape == (N_ORDINALS, cfg.hidden_size), tensors["stress_head.weight"].shape
+    classes = tensors["stress_head.weight"].shape[0]
+    assert classes in HEAD_WIDTHS and tensors["stress_head.weight"].shape == (classes, cfg.hidden_size), tensors["stress_head.weight"].shape
     long = [k for k in tensors if len(k) >= GGML_MAX_NAME]
     assert not long, long
     specials = {"unknown": tok.unk_token_id, "cls": tok.cls_token_id, "seperator": tok.sep_token_id,
@@ -306,7 +311,7 @@ def main():
     w.add_float32("ru_stress.layer_norm_eps", float(cfg.layer_norm_eps))
     w.add_string("ru_stress.activation", act)
     w.add_uint32("ru_stress.max_pieces", MAX_PIECES)
-    w.add_uint32("ru_stress.n_ordinals", N_ORDINALS)
+    w.add_uint32("ru_stress.n_ordinals", classes)
     w.add_tokenizer_model("bert")
     w.add_token_list([t for t, _ in vocab])
     for key, value in specials.items():
@@ -325,7 +330,7 @@ def main():
     w.add_array("ru_stress.tokenizer.rewrite_to", rw_to)
     n_forms = 0
     if a.catalog:
-        forms, masks = read_catalog(a.catalog)
+        forms, masks = read_catalog(a.catalog, classes)
         w.add_array("ru_stress.catalog.forms", forms)
         w.add_array("ru_stress.catalog.ordinals", masks)
         n_forms = len(forms)

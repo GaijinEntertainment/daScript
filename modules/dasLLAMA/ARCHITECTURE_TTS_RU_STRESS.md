@@ -67,6 +67,7 @@ whatever the word's case or place, and writes the pack's lowercase spelling.
 One place decides them: right after a preposition that governs the prepositional case, with nothing
 but spaces between, the word is the ё form. `ru_mark_words` spells it so, in the letter's own case:
 чём after в, на, о, при; нём after the same four; всём after во, на, обо, при; моём after в and о.
+чем with a particle joined to it (чем-то, чем-либо, чем-нибудь) follows чем's prepositions.
 Three guards keep the е: не before the preposition (не о чем), a full stop after нем that a small
 letter or a comma follows (на нем. яз.), and anything but spaces between the two words. A word the
 text marks or already spells with ё is not the rule's. по is left out: it governs the dative too
@@ -83,7 +84,11 @@ rule tier's two sides and a context pass's pick carry either kind; `mark_pick` w
 as the ё itself in the letter's own case, with no `+`, and leaves the word as written where that
 vowel is no е. This is how a pair the ё table leaves to the text (все and всё) is decided: the
 form sits in the rule tier with the е reading on one side and the ё reading on the other, its
-unruled side the spelling that speech uses more often.
+unruled side the spelling that speech uses more often. A context model decides the same pairs
+where its head is the wider one: classes 1 to 8 are the stressed vowel's ordinal, classes 9 to 16
+the same vowels read as ё, and `ru_stress_class_pick` turns a class into its pick. Its catalog
+lists a pair form with one class of each kind, so the sentence chooses between the two spellings
+as it chooses between two stresses.
 
 ### A hyphenated word {#tts-ru-hyphenated}
 
@@ -94,9 +99,9 @@ read one by one as words of their own, and the side the whole key marked is sett
 other sides take their stress from their own keys: the halves that never stand alone (нибудь,
 северо, юго) are keys with the reading they have inside a compound. A word with a mark or a ё in the
 text, or made of clitics alone (из-за, из-под), skips the lookup and its clitic sides take no
-stress; a context pass and the rule tier are never asked about one. Any other hyphenated word the
-rule tier holds as a form (чем-то) takes the tier's pick in place of the whole key's default, and
-its sides are then read as above.
+stress; a context pass and the rule tier are never asked about one. Any other hyphenated word that
+a context model's catalog or the rule tier holds as a form (чем-то) takes that pick - the context
+pass's first - in place of the whole key's default, and its sides are then read as above.
 
 ### A word the pack does not hold {#tts-ru-unknown-word}
 

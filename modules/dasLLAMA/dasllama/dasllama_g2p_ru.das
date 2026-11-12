@@ -1134,17 +1134,28 @@ def private all_sides_clitic(lower : string) : bool {
     return true
 }
 
+//! the word `cps` with a ё wherever `yo`, its lowercase ё spelling, has one, every letter in the case it was written in
+def private yo_in_case(var cps : array<int>; yo : string) : string {
+    var inscope spelled <- utf8_to_cpts(yo)
+    for (cp, low in cps, spelled) {
+        if (low == CYR_YO) {
+            cp = cp == CYR_E_CAP ? CYR_YO_CAP : CYR_YO
+        }
+    }
+    return cpts_to_utf8(cps)
+}
+
 def private ru_word_pre_lookup(p : RuStressPack; word : string) : RuPreLookup {
     var inscope cps <- utf8_to_cpts(word)
     return RuPreLookup(settled = true, text = word) if (empty(cps) || has_mark(cps))
     let lower = utf8_to_lower(word)
     return RuPreLookup(settled = true, text = word) if (all_sides_clitic(lower))
     let yo = ru_yo_form(p, lower)
-    return RuPreLookup(settled = !empty(yo), text = yo, lower = lower)
+    return RuPreLookup(settled = !empty(yo), text = empty(yo) ? "" : yo_in_case(cps, yo), lower = lower)
 }
 
-//! Whether a context pass may decide `word`: one word with no mark, no ё, no ё spelling to restore, and no clitic.
-def ru_word_needs_context(p : RuStressPack; word : string) : bool => find(word, "-") < 0 && !ru_word_pre_lookup(p, word).settled
+//! Whether a context pass may decide `word`: a word with no mark, no ё, no ё spelling to restore, and no clitic.
+def ru_word_needs_context(p : RuStressPack; word : string) : bool => !ru_word_pre_lookup(p, word).settled
 
 //! whether the `.`, `!`, `?` or ellipsis at `i` closes a sentence: whitespace or the text's end follows it
 def ru_is_sentence_end(cps : array<int>; i : int) : bool {
@@ -1263,6 +1274,8 @@ def ru_text_words(cps : array<int>) : array<int2> {
 let private YO_AFTER_PREPOSITION <- { "в чем", "на чем", "о чем", "при чем", "в нем", "на нем", "о нем", "при нем",
     "во всем", "на всем", "обо всем", "при всем", "в моем", "о моем" }
 let private YO_RULE_WORDS <- { "чем", "нем", "всем", "моем" }
+//! чем with a particle joined by a hyphen, and the letters the hyphen and the particle add
+let private YO_RULE_TAIL_LETTERS <- { "чем-то" => 3, "чем-либо" => 5, "чем-нибудь" => 7 }
 
 def private is_space_gap(cps : array<int>; from, to : int) : bool {
     for (i in range(from, to)) {
@@ -1281,12 +1294,16 @@ def private is_abbreviation_stop(cps : array<int>; at : int) : bool {
     return i < length(cps) && (cps[i] == ',' || (cpt_is_cyrillic(cps[i]) && !cpt_is_cyrillic_upper(cps[i])))
 }
 
-//! Whether word `k` is a е spelling the rule writes with ё: a pronoun form right after its preposition, nothing but spaces between.
+//! Where word `k` is a е spelling the rule writes with ё - a pronoun form right after its preposition, nothing but spaces between - the place of that е in `cps`, else -1.
 [arch(at = "../ARCHITECTURE_TTS_RU_STRESS.md#tts-ru-yo-rule")]
-def private ru_takes_yo_by_rule(cps : array<int>; words : array<int2>; lowers : array<string>; k : int) : bool {
-    return false if (k == 0 || !key_exists(YO_RULE_WORDS, lowers[k]) || !is_space_gap(cps, words[k - 1].y, words[k].x) || !key_exists(YO_AFTER_PREPOSITION, "{lowers[k - 1]} {lowers[k]}"))
+def private ru_yo_by_rule_at(cps : array<int>; words : array<int2>; lowers : array<string>; k : int) : int {
+    return -1 if (k == 0 || !is_space_gap(cps, words[k - 1].y, words[k].x))
+    let tail_letters = YO_RULE_TAIL_LETTERS?[lowers[k]] ?? 0
+    let pronoun = tail_letters > 0 ? "чем" : lowers[k]
+    return -1 if (!key_exists(YO_RULE_WORDS, pronoun) || !key_exists(YO_AFTER_PREPOSITION, "{lowers[k - 1]} {pronoun}"))
     let after_not = lowers[k] == "чем" && k >= 2 && lowers[k - 2] == "не" && is_space_gap(cps, words[k - 2].y, words[k - 1].x)
-    return !after_not && !(lowers[k] == "нем" && is_abbreviation_stop(cps, words[k].y))
+    return -1 if (after_not || (lowers[k] == "нем" && is_abbreviation_stop(cps, words[k].y)))
+    return words[k].y - tail_letters - 2  // the е of a `YO_RULE_WORDS` form is its letter before the last
 }
 
 //! the word at `w` with its е at `at` spelled ё in the letter's own case
@@ -1306,8 +1323,9 @@ def ru_mark_words(p : RuStressPack; cps : array<int>; words : array<int2>; picke
             for (i in range(pos, w.x)) {
                 wr |> write(cpt_to_utf8(cps[i]))
             }
-            if (ru_takes_yo_by_rule(cps, words, lowers, k)) {
-                wr |> write(yo_spelled(cps, w, w.y - 2))   // the е of a `YO_RULE_WORDS` form is its letter before the last
+            let yo_at = ru_yo_by_rule_at(cps, words, lowers, k)
+            if (yo_at >= 0) {
+                wr |> write(ru_mark_word(p, yo_spelled(cps, w, yo_at)))
             } else {
                 let by_context = picked?[k] ?? 0
                 let pick = by_context > 0 ? by_context : ru_stress_rule(p, lowers, sentences, k)

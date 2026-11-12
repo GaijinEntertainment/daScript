@@ -21,13 +21,15 @@ require dasllama/dasllama_g2p_ru
 
 //! The Russian stress-context model: a BERT or ELECTRA encoder reads the lowercased sentence
 //! through its own WordPiece tokenizer, the pieces covering one written word are mean-pooled,
-//! and a linear head scores which vowel of the word carries the stress (its ordinal, 1..8),
-//! the pick masked to the ordinals the word's form allows. The GGUF is
+//! and a linear head scores the word's readings: class k of the first `RU_STRESS_ORDINALS` is the
+//! stress on the word's k-th vowel, and a head of `RU_STRESS_CLASSES` adds as many classes for that
+//! vowel read as ё. The pick is masked to the classes the word's form allows. The GGUF is
 //! `harness/convert_ru_stress.py`'s: the encoder, the head, the tokenizer and the catalog of
-//! forms with their allowed ordinals. CPU only; a layer the file stores in a K-quant format serves
+//! forms with their allowed classes. CPU only; a layer the file stores in a K-quant format serves
 //! its own planes, an f32 layer its planes or, on the q8 lane, Q8_0 quants minted at load.
 
-let RU_STRESS_ORDINALS = 8   //! the head's width: the stressed vowel's ordinal 1..8
+let RU_STRESS_ORDINALS = 8   //! the stress classes: the stressed vowel's ordinal 1..8
+let RU_STRESS_CLASSES = 16   //! the widest head: the stress classes, then each one's vowel read as ё
 
 struct RuStressLayer {
     q : TtsLinear = TtsLinear()
@@ -67,7 +69,8 @@ struct RuStressModel {
     layers : array<RuStressLayer>
     head : TtsLinear = TtsLinear()
     tok : WordPieceTokenizer = WordPieceTokenizer()
-    catalog : table<string; uint>   //! written form -> its allowed ordinals, bit i = ordinal i + 1
+    catalog : table<string; uint>   //! written form -> its allowed classes, bit i = class i + 1
+    classes : int                   //! the head's width: `RU_STRESS_ORDINALS` or `RU_STRESS_CLASSES`
     encoder : string
     emb_dim : int64
     hidden_dim : int64
@@ -91,12 +94,17 @@ struct RuStressScratch {
     layer : TtsBertScratch = TtsBertScratch()
 }
 
-//! One word's answer: the head's logits over the eight ordinals and the allowed ordinal they rank
-//! first - 0 when no piece of the pass covers the word's span.
+//! One word's answer: the head's logits over its classes and the allowed class they rank first,
+//! counted from 1 - 0 when no piece of the pass covers the word's span. `ru_stress_class_pick`
+//! turns the class into the pick the stress pass marks.
 struct RuStressPick {
     ordinal : int
-    logits : float[RU_STRESS_ORDINALS]
+    logits : float[RU_STRESS_CLASSES]
 }
+
+//! The pick of a head class counted from 1: a stress class is its vowel's ordinal, a class past them that vowel's ё pick.
+[arch(at = "../ARCHITECTURE_TTS_RU_STRESS.md#tts-ru-yo-pick")]
+def ru_stress_class_pick(cls : int) : int => cls <= RU_STRESS_ORDINALS ? cls : RU_PICK_YO + cls - RU_STRESS_ORDINALS
 
 def private need_tensor(m : GGUFMeta; name : string) : int => gguf_need_tensor(m, name, "ru_stress")
 
@@ -203,8 +211,9 @@ def private read_model(m : GGUFMeta; bytes : array<uint8> | #; q8 : bool) : RuSt
         panic("dasLLAMA ru_stress: activation '{act}' - the encoder runs gelu (erf) or gelu_new (tanh)")
     }
     out.gelu_form = act == "gelu" ? TtsGelu.erf : TtsGelu.tanh
-    if (gguf_int(m, bytes, "ru_stress.n_ordinals") != int64(RU_STRESS_ORDINALS)) {
-        panic("dasLLAMA ru_stress: the head scores {gguf_int(m, bytes, "ru_stress.n_ordinals")} ordinals, the reader {RU_STRESS_ORDINALS}")
+    out.classes = int(gguf_int(m, bytes, "ru_stress.n_ordinals"))
+    if (out.classes != RU_STRESS_ORDINALS && out.classes != RU_STRESS_CLASSES) {
+        panic("dasLLAMA ru_stress: the head scores {out.classes} classes, the reader {RU_STRESS_ORDINALS} or {RU_STRESS_CLASSES}")
     }
     out.words <- read_word_table(m, bytes, out.emb_dim)
     out.pos_emb <- read_arr(m, bytes, "bert.embeddings.position_embeddings.weight")
@@ -219,7 +228,7 @@ def private read_model(m : GGUFMeta; bytes : array<uint8> | #; q8 : bool) : RuSt
         out.layers |> emplace(read_layer(m, bytes, i, q8, repack))
     }
     out.head <- TtsLinear(w <- read_arr(m, bytes, "stress_head.weight"), b <- read_arr(m, bytes, "stress_head.bias"),
-        nin = out.hidden_dim, nout = int64(RU_STRESS_ORDINALS))
+        nin = out.hidden_dim, nout = int64(out.classes))
     out.tok <- wordpiece_of_gguf(m, bytes, "ru_stress")
     out.catalog <- read_catalog(m, bytes)
     return <- out
@@ -245,7 +254,7 @@ def load_ru_stress(path : string; q8 : bool = false) : RuStressModel {
 //! Whether `m` holds a loaded model - the facade's empty one where no context model sits beside the voice.
 def ru_stress_loaded(m : RuStressModel) : bool => !empty(m.layers)
 
-//! The ordinals the catalog allows a written form (lowercase), bit i = ordinal i + 1; 0 for a form it does not list.
+//! The head classes the catalog allows a written form (lowercase), bit i = class i + 1; 0 for a form it does not list.
 def ru_stress_allowed(m : RuStressModel; form : string) : uint => m.catalog?[form] ?? 0u
 
 //! The embeddings of `ids` into `sc.emb` [n][emb_dim].
@@ -349,7 +358,7 @@ def ru_stress_encode(m : RuStressModel; sentence : string; var sc : RuStressScra
 }
 
 //! The head over the last pass's pieces that overlap `span` (codepoints [x, y) of the sentence),
-//! mean-pooled, its pick among the ordinals `allowed` sets (every ordinal when 0).
+//! mean-pooled, its pick among the classes `allowed` sets (every class of the head when 0).
 def ru_stress_pick_span(m : RuStressModel; span : int2; allowed : uint; var sc : RuStressScratch) : RuStressPick {
     var pick = RuStressPick()
     unsafe(scratch_resize(sc.pooled, m.hidden_dim))
@@ -369,8 +378,8 @@ def ru_stress_pick_span(m : RuStressModel; span : int2; allowed : uint; var sc :
         sc.pooled[d] /= float(n)
     }
     linear_vec(m.head, sc.pooled, sc.logits)
-    let mask = allowed == 0u ? (1u << uint(RU_STRESS_ORDINALS)) - 1u : allowed
-    for (o in range(RU_STRESS_ORDINALS)) {
+    let mask = allowed == 0u ? (1u << uint(m.classes)) - 1u : allowed
+    for (o in range(m.classes)) {
         pick.logits[o] = sc.logits[o]
         if ((mask & (1u << uint(o))) != 0u && (pick.ordinal == 0 || sc.logits[o] > pick.logits[pick.ordinal - 1])) {
             pick.ordinal = o + 1
@@ -386,7 +395,7 @@ def private need_mask_per_span(spans : array<int2>; allowed : array<uint>) {
 }
 
 //! Every word of one sentence from ONE encoder pass: `spans[i]` (codepoints [x, y)) picked among
-//! the ordinals `allowed[i]` sets.
+//! the classes `allowed[i]` sets.
 def ru_stress_pick_words(m : RuStressModel; sentence : string; spans : array<int2>; allowed : array<uint>; var sc : RuStressScratch) : array<RuStressPick> {
     need_mask_per_span(spans, allowed)
     ru_stress_encode(m, sentence, sc)
@@ -507,8 +516,9 @@ def ru_stress_context_picks(m : RuStressModel; p : RuStressPack; cps : array<int
                     res.fallbacks++
                     continue
                 }
-                res.picked[j] = pick.ordinal
-                res.beyond_pack += ru_stress_pack_has(p, lowers[j], pick.ordinal) ? 0 : 1
+                let picked = ru_stress_class_pick(pick.ordinal)
+                res.picked[j] = picked
+                res.beyond_pack += picked >= RU_PICK_YO || ru_stress_pack_has(p, lowers[j], picked) ? 0 : 1
             }
         }
         sentence_start = stop
