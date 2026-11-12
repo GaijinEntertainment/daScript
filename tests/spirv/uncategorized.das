@@ -1189,6 +1189,8 @@ def test_opcode_census(t : T?) { // nolint:STYLE038 — a flat one-add_set-per-f
         add_set(present, userfn_ref_words())
         add_set(present, userfn_inline_words())
         add_set(present, userfn_inline_method_words())
+        add_set(present, userfn_private_method_words())
+        add_set(present, userfn_public_method_words())
         add_set(present, userfn_inline_lazy_words())
         add_set(present, userfn_global_words())
         add_set(present, mesh_empty_words())

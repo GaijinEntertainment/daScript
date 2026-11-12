@@ -242,6 +242,23 @@ def test_msl_uniform_struct(t : T?) {
     }
 }
 
+[test(description = "A private kernel class's self-method calls splice to its public twin's text.")]
+def test_msl_private_class_methods(t : T?) {
+    t |> run("a closed class family's direct method calls splice like the invoke") <| @(t : T?) {
+        t |> success(find(pvkid_msl, "ys[i] = ") >= 0, "the inherited store splices its write")
+        t |> success(find(pvkid_msl, "(xs[i] * 2.0f)") >= 0, "the inherited pick splices a value")
+        t |> success(find(pvkid_msl, "device float* zs") >= 0,
+            "a buffer a method writes through its parameter is mutable")
+        t |> success(find(pvkid_msl, "self") < 0 && find(pvkid_msl, "PvBase") < 0,
+            "no self parameter and no class struct emit")
+        t |> equal(replace(pbkid_msl, "pbkid", "pvkid"), pvkid_msl,
+            "the private family's text is the public twin's")
+        if (replace(pbkid_msl, "pbkid", "pvkid") != pvkid_msl) {
+            to_log(LOG_ERROR, "PRIVATE:\n{pvkid_msl}\nPUBLIC:\n{pbkid_msl}\n")
+        }
+    }
+}
+
 [test(description = "A per-type overload keeps the shape constant literal in the emitted text.")]
 def test_msl_shape_stays_literal(t : T?) {
     t |> run("a per-type overload keeps the shape constant LITERAL in the emitted text") <| @(t : T?) {

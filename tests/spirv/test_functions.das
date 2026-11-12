@@ -129,6 +129,28 @@ def test_userfn_inline_method(t : T?) {
     }
 }
 
+[test(description = "A private kernel class's self-method calls lower to its public twin's words.")]
+def test_userfn_private_method(t : T?) {
+    t |> run("a closed class family's direct method calls lower like the invoke: " +
+            "one inlined value method, one called void method") <| @(t : T?) {
+        var words <- userfn_private_method_words()
+        var twin <- userfn_public_method_words()
+        t |> equal(words[1], 0x00010300u, "userfn_private_method: SPIR-V 1.3")
+        t |> equal(count_op(words, SpvOp.Function), 2, "the kernel and the called method")
+        t |> equal(count_op(words, SpvOp.FunctionCall), 1, "the void method is one call")
+        t |> equal(count_op(words, SpvOp.FunctionParameter), 2, "its two parameters, no self")
+        t |> equal(length(words), length(twin), "the private family's module is its twin's size")
+        var same = length(words) == length(twin)
+        for (a, b in words, twin) {
+            same = same && a == b
+        }
+        t |> success(same, "the private family's words are the public twin's")
+        validate(t, words, "userfn_private_method")
+        delete words
+        delete twin
+    }
+}
+
 [test(description = "A spirv_inline self-method whose ternary arm indexes a member array stays lazy.")]
 def test_userfn_inline_lazy(t : T?) {
     t |> run("[spirv_inline] self-method: a ternary arm indexing a member array " +

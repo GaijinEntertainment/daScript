@@ -20,6 +20,13 @@ Companion to `ARCHITECTURE.md` in this folder; section numbers are unique across
   declaration, so a lens that finds a kernel after the fact names the same globals. The CPU
   auto-inliner shares the annotation's `patch` slot while the emitter reads the tree at fixup, so
   the never-inline pin lands as a flag write, which needs no re-infer.
+- **A self-method call has two forms, and the rail reads both as one (`self_call_of`).** The
+  compiler hands a kernel a method call on its own self as the invoke through the instance's
+  method field or - where the class family is closed, so the compiler devirtualizes the invoke -
+  as the direct call of the method's function, self its first argument. An emitter resolves
+  either through the kernel class's own method table, so a private kernel family emits its public
+  twin's output; `spirv_emit`, which keys a call by its node, reads the direct form with its own
+  `direct_self_method`.
 
 ## 5. aot_cpp
 

@@ -20,6 +20,7 @@ require strings
 require daslib/ast
 require daslib/rtti
 require daslib/ast_boost
+require daslib/ast_cursor   // bare_name: a method function's name past its class
 // public: dasVulkan's host binder reaches compute_block_layout / BlockField through spirv_emit (its
 // existing spelling), so re-export the shared std140 module to keep that consumer compiling unchanged.
 require daslib/shader_block_layout public
@@ -2073,8 +2074,15 @@ def private invoke_self_method_field(self_arg : uint64; expr : ExprInvoke const?
     }
     let fld = pe ?as ExprField
     if (fld == null) return null
-    var be = expr.arguments[1]
-    // an inherited method's receiver may arrive cast to the base class — peel value/cast wrappers
+    return is_self_receiver(self_arg, expr.arguments[1]) ? fld : null
+}
+
+let private BASE_METHOD_REFUSAL = "names a base class's method the kernel class overrides"
+
+//! `e` is the function's own self: an inherited method's receiver may
+//! arrive cast to the base class, so value and cast wrappers peel
+def private is_self_receiver(self_arg : uint64; e : Expression const?) : bool {
+    var be = e
     while (be != null) {
         if (be is ExprRef2Value) {
             be = (be as ExprRef2Value).subexpr
@@ -2085,8 +2093,18 @@ def private invoke_self_method_field(self_arg : uint64; expr : ExprInvoke const?
         }
     }
     let bv = be ?as ExprVar
-    if (bv == null || !bv.varFlags.argument || intptr(bv.variable) != self_arg) return null
-    return fld
+    return bv != null && bv.varFlags.argument && intptr(bv.variable) == self_arg
+}
+
+//! the method a direct call names on the function's own self - the
+//! form a self-method call takes where the class family is closed and
+//! the compiler replaced the invoke - "" for any other call
+def private direct_self_method(self_arg : uint64; expr : ExprCall const?) : string {
+    let f = expr.func
+    let method = f != null && f.flags.isClassMethod && !f.moreFlags.isStaticClassMethod
+    let mine = self_arg != 0ul && method && !empty(expr.arguments)
+    return "" if (!mine || !is_self_receiver(self_arg, expr.arguments[0]))
+    return bare_name("{f.name}")
 }
 
 // Devirtualization: the concrete kernel class's method-field init IS the dispatch table — a kernel
@@ -4990,6 +5008,16 @@ class SpirvEmit : AstVisitor {
         var bm & = unsafe(*m)
         let name = "{expr.name}"
         let k = intptr(expr)
+        //! a self-method call the compiler made direct: the invoke
+        //! arm's call, self at argument 0
+        let mtgt = ctx.invoke_targets?[k] ?? 0ul
+        if (mtgt != 0ul) {
+            let muf = ctx.user_funcs?[mtgt] ?? UserFunc()
+            if (muf.valid) {
+                emit_call_core(bm, muf, expr.arguments, 1, 0, k)
+            }
+            return expr
+        }
         // A bounds-checked a[i] lowers to a `.[](base, index, __context__, __lineinfo__)` OPERATOR call
         // under -jit / no-opt (a const index folds to a raw ExprAt), so route base/index through the
         // same emit_index_read the ExprAt path uses. The __context__ / __lineinfo__ tail (a trapping
@@ -7479,7 +7507,11 @@ def private drive_emit(var m : SpirvModule; var ctx : EmitCtx; fn : FunctionPtr;
 // calls are intercepted by name (math -> GLSL.std.450, spirv_builtins -> texture/imageStore/...).
 def private is_user_shader_func(f : Function const?; entry : FunctionPtr) : bool {
     // `f == null` short-circuits first, so the later field reads never deref a null pointer.
-    if (f == null || intptr(f) == intptr(entry) || f.flags.builtIn || f.body == null) return false
+    //! a class method registers through the kernel class's own table
+    //! (`discover_kernel_methods`), never as a free function
+    let method = f != null && f.flags.isClassMethod && !f.moreFlags.isStaticClassMethod
+    let foreign = f == null || intptr(f) == intptr(entry) || f.flags.builtIn || f.body == null
+    if (foreign || method) return false
     // module "" is the user's own root module (a shader written without an explicit `module` line) —
     // a valid place for helper functions. Host/extern builtins are already excluded by flags.builtIn
     // above; the named modules below have their calls intercepted by name (math -> GLSL.std.450,
@@ -8026,7 +8058,10 @@ class SpirvCalleeScan : AstVisitor {
     @do_not_delete ctx : EmitCtx?
     callees : table<uint64>
     def override preVisitExprCall(expr : ExprCall?) : void {
-        if (expr.func != null && key_exists(ctx.user_funcs, intptr(expr.func))) {
+        let mtgt = ctx.invoke_targets?[intptr(expr)] ?? 0ul
+        if (mtgt != 0ul) {
+            callees |> insert(mtgt)
+        } elif (expr.func != null && key_exists(ctx.user_funcs, intptr(expr.func))) {
             callees |> insert(intptr(expr.func))
         }
     }
@@ -8073,6 +8108,12 @@ class private SpirvMethodScan : AstVisitor {
     // through the dispatch table now and suppress its structural read — the load arm passes the
     // function by ID (the DecodeFunc operand), no value is ever produced
     def override preVisitExprCall(expr : ExprCall?) : void {
+        let mname = direct_self_method(self_arg, expr)
+        if (!empty(mname)) {
+            let first = length(expr.arguments) > 1 ? expr.arguments[1] : null
+            note_self_method(intptr(expr), mname, first, expr.arguments[0], expr.func)
+            return
+        }
         let argc = length(expr.arguments)
         if (expr.func == null || (argc != 9 && argc != 10)) return
         var co = expr.func
@@ -8108,9 +8149,8 @@ class private SpirvMethodScan : AstVisitor {
         found_decode |> push(mfn)
     }
     [arch(at="../ARCHITECTURE_COOPMAT.md#direct-decode-call")]
-    def note_decode_elem_arg(mfn : FunctionPtr; expr : ExprInvoke const?) : void {
-        if (!function_has_annotation(mfn, "spirv_decode") || length(expr.arguments) < 3) return
-        let a0 = expr.arguments[2]
+    def note_decode_elem_arg(mfn : FunctionPtr; a0 : ExpressionPtr) : void {
+        if (!function_has_annotation(mfn, "spirv_decode") || a0 == null) return
         let r2v = a0 ?as ExprRef2Value
         let at = (r2v != null ? r2v.subexpr : a0) ?as ExprAt
         let sv = at != null ? self_member_of(at.subexpr) : null
@@ -8149,20 +8189,38 @@ class private SpirvMethodScan : AstVisitor {
     def override preVisitExprInvoke(expr : ExprInvoke?) : void {
         if (key_exists(ctx.invoke_targets, intptr(expr))) return
         let fld = invoke_self_method_field(self_arg, expr)
-        if (fld == null) return   // not a self-method shape: the emission preVisit rejects it
-        var lerr : array<string>
-        var mfn = resolve_kernel_method(ctx, "{fld.name}", lerr)
-        errs |> push_from(lerr)
-        delete lerr
-        if (mfn == null) return
-        ctx.invoke_targets |> insert(intptr(expr), intptr(mfn))
-        note_decode_elem_arg(mfn, expr)
-        // suppress the structural operands: the method-field read + its wrapper, and the WHOLE
-        // receiver chain (a base-class method's receiver arrives upcast: Ref2Value/Cast wrappers
-        // down to self) — the invoke arm consumes them without producing values
+        // no field: not a self-method shape, the emission preVisit rejects it
+        let first = length(expr.arguments) > 2 ? expr.arguments[2] : null
+        let self_op = expr.arguments[1]
+        if (fld == null || !note_self_method(intptr(expr), "{fld.name}", first, self_op)) return
+        // the method-field read and its wrapper are structural too
         ctx.invoke_fields |> insert(intptr(fld))
         ctx.invoke_fields |> insert(intptr(expr.arguments[0]))
-        var rc = expr.arguments[1]
+    }
+    //! a self-method call at node `key` - an invoke, or the direct
+    //! call the compiler made of one - resolved through the kernel
+    //! class's table and recorded as that node's target; `first` is
+    //! its first argument past self, `receiver` its self operand,
+    //! whose whole chain (a base-class method's receiver arrives
+    //! upcast: Ref2Value / Cast wrappers down to self) the call arm
+    //! consumes without producing values
+    def note_self_method(key : uint64; mname : string; first, receiver : ExpressionPtr;
+                         direct : Function const? = null) : bool {
+        return true if (key_exists(ctx.invoke_targets, key))
+        var lerr : array<string>
+        var mfn = resolve_kernel_method(ctx, mname, lerr)
+        errs |> push_from(lerr)
+        delete lerr
+        return false if (mfn == null)
+        //! a direct call names its function, not the override
+        if (direct != null && intptr(mfn) != intptr(direct)) {
+            let whose = "a kernel calls its own class's '{mname}'"
+            errs |> push("call '{direct.name}' {BASE_METHOD_REFUSAL} - {whose}")
+            return false
+        }
+        ctx.invoke_targets |> insert(key, intptr(mfn))
+        note_decode_elem_arg(mfn, first)
+        var rc = receiver
         while (rc != null) {
             ctx.invoke_fields |> insert(intptr(rc))
             if (rc is ExprRef2Value) {
@@ -8174,6 +8232,7 @@ class private SpirvMethodScan : AstVisitor {
             }
         }
         found |> push(mfn)
+        return true
     }
 }
 
@@ -8333,6 +8392,16 @@ class SpirvTempAlloc : AstVisitor {
         }
     }
     def override preVisitExprCall(expr : ExprCall?) : void {
+        let mtgt = ctx.invoke_targets?[intptr(expr)] ?? 0ul
+        //! a direct self-method call: self at argument 0, every
+        //! argument at its parameter's index
+        if (mtgt != 0ul) {
+            let muf = ctx.user_funcs?[mtgt] ?? UserFunc()
+            if (muf.valid) {
+                alloc_arg_temps(muf.fn, expr.arguments, 1, 0)
+            }
+            return
+        }
         let f = expr.func
         if (f == null || !key_exists(ctx.user_funcs, intptr(f))) return
         let uf = ctx.user_funcs?[intptr(f)] ?? UserFunc()
@@ -8422,7 +8491,7 @@ class SpirvInlineScan : AstVisitor {
         }
     }
     def override preVisitExprCall(expr : ExprCall?) : void {
-        note(intptr(expr.func))
+        note(ctx.invoke_targets?[intptr(expr)] ?? intptr(expr.func))
     }
     def override preVisitExprInvoke(expr : ExprInvoke?) : void {
         note(ctx.invoke_targets?[intptr(expr)] ?? 0ul)

@@ -2312,6 +2312,36 @@ def private scan_loop_exit(var ctx : CudaCtx; every : bool) {
     }
 }
 
+//! the method a self call reaches, through the kernel class's own
+//! table; a direct call naming another function - a base class's
+//! method the class overrides - is refused
+def private resolve_self_call(var ctx : CudaCtx; sc : SelfCall; at : LineInfo) : FunctionPtr {
+    var mfn = resolve_method(ctx, sc.mname, at)
+    return mfn if (self_call_reaches(sc, mfn))
+    let whose = "a kernel calls its own class's `{sc.mname}`"
+    shader_error(ctx, at, "call `{sc.direct.name}` {SELF_CALL_BASE_REFUSAL} - {whose}")
+    var none : FunctionPtr
+    return none
+}
+
+//! the scan of a self call: the method discovered through the kernel class's own table, its written parameters' arguments
+//! marked written
+def private scan_self_call(var ctx : CudaCtx; call : ExprLooksLikeCall?; sc : SelfCall) {
+    let mfn = resolve_self_call(ctx, sc, call.at)
+    return if (mfn == null)
+    let ui = discover_method(ctx, mfn, sc.mname, call.at)
+    return if (ui < 0)
+    if (ctx.cur_user_fn >= 0) {
+        ctx.user_fns[ctx.cur_user_fn].calls |> push(ui)
+    }
+    let np = min(length(call.arguments) - sc.base, length(mfn.arguments) - 1)   // the method's parameters start past its self
+    for (i in range(np)) {
+        if (param_is_written(mfn.arguments[i + 1]._type)) {
+            mark_write_target(ctx, call.arguments[i + sc.base])
+        }
+    }
+}
+
 def private scan_body(var ctx : CudaCtx; e : Expression?) {
     if (e == null) {
         return
@@ -2409,6 +2439,12 @@ def private scan_body(var ctx : CudaCtx; e : Expression?) {
         }
         scan_loop_body(ctx, (e as ExprFor).body)
         ctx.loops |> push(LoopSpan(start = pos_of(e.at), end = ctx.scan_at))
+    } elif (e is ExprCall && self_call_of(ctx, e).base >= 0) {
+        let ecm = e as ExprCall
+        scan_self_call(ctx, unsafe(reinterpret<ExprLooksLikeCall?>(ecm)), self_call_of(ctx, e))
+        for (i in range(1, length(ecm.arguments))) {
+            scan_body(ctx, ecm.arguments[i])
+        }
     } elif (e is ExprCall) {
         let ecs = e as ExprCall
         let scn = call_base_name("{ecs.name}")
@@ -2580,25 +2616,9 @@ def private scan_body(var ctx : CudaCtx; e : Expression?) {
         }
     } elif (e is ExprInvoke) {
         let ei = e as ExprInvoke
-        let mf = length(ei.arguments) >= 2 ? invoke_method_field(ei.arguments[0]) : null
-        if (ei.isInvokeMethod && mf != null && is_self_ref(ctx, ei.arguments[1])) {
-            let mname = string(mf.name)
-            let mfn = resolve_method(ctx, mname, ei.at)
-            if (mfn != null) {
-                let ui = discover_method(ctx, mfn, mname, ei.at)
-                if (ui >= 0) {
-                    if (ctx.cur_user_fn >= 0) {
-                        ctx.user_fns[ctx.cur_user_fn].calls |> push(ui)
-                    }
-                    let na = length(ei.arguments) - 2
-                    let np = length(mfn.arguments) - 1
-                    for (i in range(min(na, np))) {
-                        if (param_is_written(mfn.arguments[i + 1]._type)) {
-                            mark_write_target(ctx, ei.arguments[i + 2])
-                        }
-                    }
-                }
-            }
+        let sc = self_call_of(ctx, e)
+        if (sc.base >= 0) {
+            scan_self_call(ctx, unsafe(reinterpret<ExprLooksLikeCall?>(ei)), sc)
         }
         for (i in range(2, length(ei.arguments))) {
             scan_body(ctx, ei.arguments[i])
@@ -3526,6 +3546,8 @@ def private cuda_intrinsic_call(var ctx : CudaCtx; ec : ExprCall?; cname : strin
 }
 
 def private emit_call_value(var ctx : CudaCtx; ec : ExprCall?) : string {
+    let scall = self_call_of(ctx, ec)
+    return emit_self_call_value(ctx, unsafe(reinterpret<ExprLooksLikeCall?>(ec)), scall) if (scall.base >= 0)
     let cname = call_base_name("{ec.name}")
     let na = length(ec.arguments)
     let intrinsic = cuda_intrinsic_call(ctx, ec, cname)
@@ -3781,15 +3803,20 @@ def private emit_call_value(var ctx : CudaCtx; ec : ExprCall?) : string {
     return "/*call {cname}*/"
 }
 
-//! a method call: the devirtualized function with the caller's arguments, then what the body needs
 def private emit_invoke_value(var ctx : CudaCtx; ei : ExprInvoke?) : string {
-    let mf = length(ei.arguments) >= 2 ? invoke_method_field(ei.arguments[0]) : null
-    if (!ei.isInvokeMethod || mf == null || !is_self_ref(ctx, ei.arguments[1])) {
+    let sc = self_call_of(ctx, ei)
+    if (sc.base < 0) {
         shader_error(ctx, ei.at, "invoke is not a self method call - only self.method(...) lowers")
         return "/*invoke*/"
     }
-    let mname = string(mf.name)
-    let mfn = resolve_method(ctx, mname, ei.at)
+    return emit_self_call_value(ctx, unsafe(reinterpret<ExprLooksLikeCall?>(ei)), sc)
+}
+
+//! a method call on self, as an invoke or as the direct call of the method's function: the function the kernel class's own
+//! table names, with the caller's arguments past self, then what the body needs
+def private emit_self_call_value(var ctx : CudaCtx; ei : ExprLooksLikeCall?; sc : SelfCall) : string {
+    let mname = sc.mname
+    let mfn = resolve_self_call(ctx, sc, ei.at)
     if (mfn == null) {
         return "/*invoke {mname}*/"
     }
@@ -3798,7 +3825,7 @@ def private emit_invoke_value(var ctx : CudaCtx; ei : ExprInvoke?) : string {
         shader_error(ctx, ei.at, "internal: method `{mname}` was not discovered at scan time")
         return "/*invoke {mname}*/"
     }
-    var args <- [for (i in range(2, length(ei.arguments))); emit_value(ctx, ei.arguments[i])]
+    var args <- [for (i in range(sc.base, length(ei.arguments))); emit_value(ctx, ei.arguments[i])]
     let hidden <- hidden_args(ctx, ui)
     args |> push_from(hidden)
     census_kind(ctx, "call.method")
@@ -4136,6 +4163,9 @@ def private emit_stmt_inner(var ctx : CudaCtx; e : Expression?; indent : string;
     } elif (e is ExprInvoke) {
         census_kind(ctx, "stmt.call_method")
         lines |> push("{indent}{emit_invoke_value(ctx, e as ExprInvoke)};")
+    } elif (e is ExprCall && self_call_of(ctx, e).base >= 0) {
+        census_kind(ctx, "stmt.call_method")
+        lines |> push("{indent}{emit_self_call_value(ctx, unsafe(reinterpret<ExprLooksLikeCall?>(e)), self_call_of(ctx, e))};")
     } elif (e is ExprCall) {
         let ec = e as ExprCall
         let cname = call_base_name("{ec.name}")

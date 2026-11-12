@@ -315,6 +315,42 @@ def public is_self_ref(ctx : auto(CT); e : Expression?) : bool {
     return ev != null && ev.name == ctx.self_name
 }
 
+//! a method call on the kernel's own self, as the invoke or as the
+//! direct call a closed class family compiles to: the method's name
+//! and the index of its first argument past self; `base` -1 = not one
+struct public SelfCall {
+    mname : string
+    base : int = -1
+    direct : Function const?   //!< the function a direct call names; null for the invoke
+}
+
+def public self_call_of(ctx : auto(CT); e : Expression?) : SelfCall {
+    if (e is ExprInvoke) {
+        let ei = e as ExprInvoke
+        let mf = length(ei.arguments) >= 2 ? invoke_method_field(ei.arguments[0]) : null
+        let method = ei.isInvokeMethod && mf != null
+        if (method && is_self_ref(ctx, ei.arguments[1])) {
+            return SelfCall(mname = string(mf.name), base = 2)
+        }
+    } elif (e is ExprCall) {
+        let ec = e as ExprCall
+        let f = ec.func
+        let method = f != null && f.flags.isClassMethod && !f.moreFlags.isStaticClassMethod
+        if (method && !empty(ec.arguments) && is_self_ref(ctx, ec.arguments[0])) {
+            return SelfCall(mname = call_base_name("{f.name}"), base = 1, direct = f)
+        }
+    }
+    return SelfCall()
+}
+
+//! `mfn`, the method the kernel class's table gives a self call, is
+//! the function a direct call names: a call naming a base class's
+//! method the kernel class overrides reaches another function
+def public self_call_reaches(sc : SelfCall; mfn : FunctionPtr) : bool
+    => sc.direct == null || mfn == null || intptr(mfn) == intptr(sc.direct)
+
+let public SELF_CALL_BASE_REFUSAL = "names a base class's method the kernel class overrides"
+
 //! a lowered user function's emitted name: the safe base when free,
 //! else `base_N` - a method spelled like its class would be a
 //! constructor, so the class name counts as taken

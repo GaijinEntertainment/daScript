@@ -612,6 +612,38 @@ def private discover_method(var ctx : MslCtx; mfn : FunctionPtr; mname : string;
     return idx
 }
 
+//! the method a self call reaches, through the kernel class's own
+//! table; a direct call naming another function - a base class's
+//! method the class overrides - is refused
+def private resolve_self_call(var ctx : MslCtx; sc : SelfCall; at : LineInfo) : FunctionPtr {
+    var mfn = resolve_method(ctx, sc.mname, at)
+    return mfn if (self_call_reaches(sc, mfn))
+    let whose = "a kernel calls its own class's `{sc.mname}`"
+    shader_error(ctx, at, "call `{sc.direct.name}` {SELF_CALL_BASE_REFUSAL} - {whose}")
+    var none : FunctionPtr
+    return none
+}
+
+//! the scan of a self call: the method discovered through the kernel
+//! class's own table, its written parameters' arguments marked
+//! written
+def private scan_self_call(var ctx : MslCtx; call : ExprLooksLikeCall?; sc : SelfCall) {
+    let mfn = resolve_self_call(ctx, sc, call.at)
+    return if (mfn == null)
+    let ui = discover_method(ctx, mfn, sc.mname, call.at)
+    return if (ui < 0)
+    if (ctx.cur_user_fn >= 0) {
+        ctx.user_fns[ctx.cur_user_fn].calls |> push(ui)
+    }
+    // the method's parameters start past its self
+    let np = min(length(call.arguments) - sc.base, length(mfn.arguments) - 1)
+    for (i in range(np)) {
+        if (param_is_written(mfn.arguments[i + 1]._type)) {
+            mark_write_target(ctx, call.arguments[i + sc.base])
+        }
+    }
+}
+
 // a member passed to a callee's writable (non-const) array param is a write to that member
 def private mark_call_arg_writes(var ctx : MslCtx; fn : FunctionPtr; ec : ExprCall?) {
     let na = length(ec.arguments)
@@ -687,6 +719,12 @@ def private scan_body(var ctx : MslCtx; e : Expression?) {
             scan_body(ctx, src)
         }
         scan_body(ctx, (e as ExprFor).body)
+    } elif (e is ExprCall && self_call_of(ctx, e).base >= 0) {
+        let ecm = e as ExprCall
+        scan_self_call(ctx, unsafe(reinterpret<ExprLooksLikeCall?>(ecm)), self_call_of(ctx, e))
+        for (i in range(1, length(ecm.arguments))) {
+            scan_body(ctx, ecm.arguments[i])
+        }
     } elif (e is ExprCall) {
         let ecs = e as ExprCall
         // simdgroup_store writes through its buffer argument — without this the write-set scan
@@ -742,26 +780,9 @@ def private scan_body(var ctx : MslCtx; e : Expression?) {
         }
     } elif (e is ExprInvoke) {
         let ei = e as ExprInvoke
-        let mf = length(ei.arguments) >= 2 ? invoke_method_field(ei.arguments[0]) : null
-        if (ei.isInvokeMethod && mf != null && is_self_ref(ctx, ei.arguments[1])) {
-            let mname = string(mf.name)
-            let mfn = resolve_method(ctx, mname, ei.at)
-            if (mfn != null) {
-                let ui = discover_method(ctx, mfn, mname, ei.at)
-                if (ui >= 0) {
-                    if (ctx.cur_user_fn >= 0) {
-                        ctx.user_fns[ctx.cur_user_fn].calls |> push(ui)
-                    }
-                    // method params start at fn.arguments[1] (self); call args at arguments[2]
-                    let na = length(ei.arguments) - 2
-                    let np = length(mfn.arguments) - 1
-                    for (i in range(min(na, np))) {
-                        if (param_is_written(mfn.arguments[i + 1]._type)) {
-                            mark_write_target(ctx, ei.arguments[i + 2])
-                        }
-                    }
-                }
-            }
+        let sc = self_call_of(ctx, e)
+        if (sc.base >= 0) {
+            scan_self_call(ctx, unsafe(reinterpret<ExprLooksLikeCall?>(ei)), sc)
         }
         // args scan runs regardless — the emit pass reports unsupported invoke shapes
         for (i in range(2, length(ei.arguments))) {
@@ -1158,6 +1179,10 @@ let private MSL_DOT_HELPERS : table<string; string> <- {
 // only calls with a VALUE lowering (metal_builtins declares the simd set for float/int/uint; the
 // identity stub bodies never matter here — only the call AST is read)
 def private emit_call_value(var ctx : MslCtx; ec : ExprCall?) : string {
+    let sc = self_call_of(ctx, ec)
+    if (sc.base >= 0) {
+        return emit_self_call_value(ctx, unsafe(reinterpret<ExprLooksLikeCall?>(ec)), sc)
+    }
     let cname = call_base_name("{ec.name}")
     let na = length(ec.arguments)
     if (key_exists(MSL_MATH_UNARY, cname)) {
@@ -1672,16 +1697,18 @@ def private splice_ptr_local_type(var ctx : MslCtx; pt : TypeDecl?; arg : Expres
 
 // Per-parameter binding, argument texts emitted under the CALLER's frame. Substitution when
 // the shape allows it; a hoisted `_s<N>` decl otherwise (statement position only).
-def private bind_method_args(var ctx : MslCtx; mfn : FunctionPtr; mname : string; ei : ExprInvoke?; value_pos : bool; var bind : SpliceBind) {
+def private bind_method_args(var ctx : MslCtx; mfn : FunctionPtr; mname : string;
+                             ei : ExprLooksLikeCall?; base : int; value_pos : bool;
+                             var bind : SpliceBind) {
     bind.ok = true
     // infer pads defaulted arguments before the emitter sees the invoke, so the two counts always
     // agree and a defaulted parameter splices like any other — min() is bounds hygiene, not a gate
-    let np = min(length(ei.arguments) - 2, length(mfn.arguments) - 1)
+    let np = min(length(ei.arguments) - base, length(mfn.arguments) - 1)
     for (i in range(np)) {
         let pv = mfn.arguments[i + 1]
         let pt = pv._type
         let pname = string(pv.name)
-        let arg = ei.arguments[i + 2]
+        let arg = ei.arguments[i + base]
         if (pt == null) {
             shader_error(ctx, ei.at, "method `{mname}` parameter `{pname}` has no type")
             bind.ok = false
@@ -1784,14 +1811,19 @@ def private bind_method_args(var ctx : MslCtx; mfn : FunctionPtr; mname : string
 // value-position splice: the (devirtualized) body must be a single `return <expr>` — the
 // result is that expression under the param bindings, parenthesized
 def private emit_invoke_value(var ctx : MslCtx; ei : ExprInvoke?) : string {
-    let mf = length(ei.arguments) >= 2 ? invoke_method_field(ei.arguments[0]) : null
-    if (!(ei.isInvokeMethod && mf != null && is_self_ref(ctx, ei.arguments[1]))) {
+    let sc = self_call_of(ctx, ei)
+    if (sc.base < 0) {
         shader_error(ctx, ei.at,
             "invoke has no MSL lowering - only method calls on the kernel's own self lower")
         return "/*invoke*/"
     }
-    let mname = string(mf.name)
-    let mfn = resolve_method(ctx, mname, ei.at)
+    return emit_self_call_value(ctx, unsafe(reinterpret<ExprLooksLikeCall?>(ei)), sc)
+}
+
+def private emit_self_call_value(var ctx : MslCtx; ei : ExprLooksLikeCall?;
+                                 sc : SelfCall) : string {
+    let mname = sc.mname
+    let mfn = resolve_self_call(ctx, sc, ei.at)
     if (mfn == null) {
         return "/*invoke {mname}*/"
     }
@@ -1803,7 +1835,7 @@ def private emit_invoke_value(var ctx : MslCtx; ei : ExprInvoke?) : string {
     }
     ctx.splice_seq++
     var inscope bind = SpliceBind()
-    bind_method_args(ctx, mfn, mname, ei, true, bind)
+    bind_method_args(ctx, mfn, mname, ei, sc.base, true, bind)
     if (!bind.ok) {
         return "/*invoke {mname}*/"
     }
@@ -1827,14 +1859,19 @@ def private emit_invoke_value(var ctx : MslCtx; ei : ExprInvoke?) : string {
 // may reuse local names. A body containing `return` splices only at a kernel tail-position
 // site (a spliced return exits the whole kernel — correct exactly there).
 def private emit_method_splice(var ctx : MslCtx; ei : ExprInvoke?; indent : string; var lines : array<string>) {
-    let mf = length(ei.arguments) >= 2 ? invoke_method_field(ei.arguments[0]) : null
-    if (!(ei.isInvokeMethod && mf != null && is_self_ref(ctx, ei.arguments[1]))) {
+    let sc = self_call_of(ctx, ei)
+    if (sc.base < 0) {
         shader_error(ctx, ei.at,
             "invoke has no MSL lowering - only method calls on the kernel's own self lower")
         return
     }
-    let mname = string(mf.name)
-    let mfn = resolve_method(ctx, mname, ei.at)
+    emit_self_call_splice(ctx, unsafe(reinterpret<ExprLooksLikeCall?>(ei)), sc, indent, lines)
+}
+
+def private emit_self_call_splice(var ctx : MslCtx; ei : ExprLooksLikeCall?; sc : SelfCall;
+                                  indent : string; var lines : array<string>) {
+    let mname = sc.mname
+    let mfn = resolve_self_call(ctx, sc, ei.at)
     if (mfn == null) {
         return
     }
@@ -1850,7 +1887,7 @@ def private emit_method_splice(var ctx : MslCtx; ei : ExprInvoke?; indent : stri
     }
     ctx.splice_seq++
     var inscope bind = SpliceBind()
-    bind_method_args(ctx, mfn, mname, ei, false, bind)
+    bind_method_args(ctx, mfn, mname, ei, sc.base, false, bind)
     if (!bind.ok) {
         return
     }
@@ -3410,6 +3447,9 @@ def private emit_stmt(var ctx : MslCtx; e : Expression?; indent : string; var li
         ctx.tail_ok = save_tail
     } elif (e is ExprInvoke) {
         emit_method_splice(ctx, e as ExprInvoke, indent, lines)
+    } elif (e is ExprCall && self_call_of(ctx, e).base >= 0) {
+        let call = unsafe(reinterpret<ExprLooksLikeCall?>(e))
+        emit_self_call_splice(ctx, call, self_call_of(ctx, e), indent, lines)
     } elif (e is ExprCall) {
         let ec = e as ExprCall
         let cname = call_base_name("{ec.name}")
