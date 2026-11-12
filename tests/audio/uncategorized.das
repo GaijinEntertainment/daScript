@@ -3,6 +3,8 @@ options indenting = 4
 
 require dastest/testing_boost
 require audio/audio_wav
+require audio/audio_boost
+require daslib/jobque_boost
 require daslib/fio
 require strings
 require math
@@ -114,4 +116,64 @@ def test_write_wav_guards(t : T?) {
         t |> success(!write_wav("/nonexistent_dir_xyzzy_das/x.wav", [0.0], 44100u, 1), "returns false on an unwritable path")
         remove(path)
     }
+}
+
+def private silent_wav(frames : int) : string {
+    let tmp = create_temp_file_result("das_decoder_seek", ".wav")
+    if (!(tmp is value)) return ""
+    var samples : array<float>
+    samples |> resize(frames)
+    return write_wav(tmp as value, samples, uint(MA_SAMPLE_RATE), 1) ? tmp as value : ""
+}
+
+[test(description = "After a decoder seeks, ma_decoder_get_cursor_in_pcm_frames and ma_decoder_get_available_frames write the frame it landed on and the frames left through their out pointers, even with the result discarded")]
+def test_decoder_out_pointers_after_seek(t : T?) {
+    let path = silent_wav(4800)
+    if (empty(path)) {
+        t |> failure("could not write a temp wav")
+        return
+    }
+    var decoder = new ma_decoder
+    var config <- ma_decoder_config_init(ma_format.ma_format_f32, 1u, uint(MA_SAMPLE_RATE))
+    t |> equal(ma_decoder_init_file(path, unsafe(addr(config)), decoder), ma_result.MA_SUCCESS)
+    t |> equal(ma_decoder_seek_to_pcm_frame(decoder, 1000ul), ma_result.MA_SUCCESS)
+    var cursor = 0ul
+    ma_decoder_get_cursor_in_pcm_frames(decoder, unsafe(addr(cursor)))
+    t |> equal(cursor, 1000ul)
+    var available = 0ul
+    ma_decoder_get_available_frames(decoder, unsafe(addr(available)))
+    t |> equal(available, 3800ul)
+    ma_decoder_uninit(decoder)
+    unsafe {
+        delete decoder
+    }
+    remove(path)
+}
+
+[test(description = "set_playback_position on a decoded sound that does not loop publishes the frame it seeked to instead of jumping back to the start", timeout = 1200)]
+def test_streaming_seek_publishes_new_position(t : T?) {
+    let path = silent_wav(2 * MA_SAMPLE_RATE)
+    if (empty(path)) {
+        t |> failure("could not write a temp wav")
+        return
+    }
+    sound_set_null_device(true)
+    with_audio_system() $ {
+        var status = seq_box_create()
+        batch() $ {
+            let sid = play_sound_from_file(path, MA_SAMPLE_RATE, 1)
+            set_status_update(sid, status)
+            set_playback_position(sid, 72000ul)
+        }
+        var position = 0ul
+        for (_ in range(200)) {
+            status |> read() $(s : AudioChannelStatus) { position = s.playback_position }
+            if (position != 0ul) break
+            sleep(10u)
+        }
+        t |> success(position >= 72000ul, "playback continues from frame 72000, got {position}")
+        status |> seq_box_release
+    }
+    sound_set_null_device(false)
+    remove(path)
 }
