@@ -70,7 +70,20 @@ but spaces between, the word is the ё form. `ru_mark_words` spells it so, in th
 Three guards keep the е: не before the preposition (не о чем), a full stop after нем that a small
 letter or a comma follows (на нем. яз.), and anything but spaces between the two words. A word the
 text marks or already spells with ё is not the rule's. по is left out: it governs the dative too
-(по всем правилам).
+(по всем правилам). The rule answers ahead of the rule tier and of a context pass: the grammar
+leaves the word one reading there, and text that omits the ё in exactly these phrases (во всем
+мире) teaches a learned rule the wrong one.
+
+### A pick that is the ё spelling {#tts-ru-yo-pick}
+
+A pick names a word's stressed vowel by its ordinal. ё is always stressed, so the ё reading of a
+word written with е is a pick too: `RU_PICK_YO` added to the ordinal says that vowel, an е, is
+read as ё. A key holds fewer vowels than `RU_PICK_YO`, so an ordinal and a ё pick never meet. The
+rule tier's two sides and a context pass's pick carry either kind; `mark_pick` writes a ё pick
+as the ё itself in the letter's own case, with no `+`, and leaves the word as written where that
+vowel is no е. This is how a pair the ё table leaves to the text (все and всё) is decided: the
+form sits in the rule tier with the е reading on one side and the ё reading on the other, its
+unruled side the spelling that speech uses more often.
 
 ### A hyphenated word {#tts-ru-hyphenated}
 
@@ -81,7 +94,9 @@ read one by one as words of their own, and the side the whole key marked is sett
 other sides take their stress from their own keys: the halves that never stand alone (нибудь,
 северо, юго) are keys with the reading they have inside a compound. A word with a mark or a ё in the
 text, or made of clitics alone (из-за, из-под), skips the lookup and its clitic sides take no
-stress; a context pass and the rule tier are never asked about one.
+stress; a context pass and the rule tier are never asked about one. Any other hyphenated word the
+rule tier holds as a form (чем-то) takes the tier's pick in place of the whole key's default, and
+its sides are then read as above.
 
 ### A word the pack does not hold {#tts-ru-unknown-word}
 
@@ -93,9 +108,13 @@ vowel before the last.
 
 ### The form a word is a case of {#tts-ru-case-stem}
 
-`ru_stem_ordinal` sheds one case ending - -ими, -их, -у, -е, -ы, -и, -о, the longest first - and
+`ru_stem_pick` sheds one case ending - -ими, -их, -у, -е, -ы, -и, -о, the longest first - and
 looks the rest up as a pack form. Where the pack holds that stem with one reading and two vowels or
-more, the word takes the stem's stressed vowel: Федереру reads as Федерер does. The stem is the
+more, the word takes the stem's stressed vowel: Федереру reads as Федерер does. A stem the stress
+table lacks but the ё table restores to -ёв gives its ё as a ё pick (`#tts-ru-yo-pick`), so a
+surname and the place named after it keep the letter in every case: Королеву reads Королёву,
+Горбачево Горбачёво. Another restored stem is left alone: its ё does not carry to a longer word
+(пелён, but пелено is no form of it). The stem is the
 word's own key buffer at a shorter length, so the lookup allocates nothing. The list holds the
 endings under which a pack form keeps its stem's stress at least 97 times in 100, measured over the
 pack's own forms by the builder's tables; -а, -ам, -ами, -ах, -ом, -ов and the adjective endings
@@ -139,8 +158,10 @@ which changes no lookup. The shipped pack is built with `2:8:2:0.4`.
 ### The rule tier {#tts-ru-rule-tier}
 
 The `RULS` section reads a homograph by the words around it. It opens with a front-coded table of
-forms: a form to four values - its family, the ordinal of side 0, the ordinal of side 1, and its
-unruled side (0 for none, 1 for side 0, 2 for side 1). After the table come the family count, one
+forms: a form to four values - its family, the pick of side 0, the pick of side 1, and its
+unruled side (0 for none, 1 for side 0, 2 for side 1). A side's pick is a vowel's ordinal or a ё
+pick (`#tts-ru-yo-pick`), so the table holds a stress pair (за́мок, замо́к) and a pair of
+spellings (все, всё) alike. After the table come the family count, one
 u32 a family and one more - where each family's rules start - and the rules. A rule is three bytes
 and a key: the kind and the neighbour's slot in one byte, the verdict (the side in bit 0; bit 1, which the
 builder sets on its surest rules, is not read), the key's byte count, then the key in the pack's alphabet. The slots are the words

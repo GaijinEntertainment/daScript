@@ -1,8 +1,8 @@
 # dasLLAMA text-to-speech Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-docs: `ARCHITECTURE_TTS.md`, `ARCHITECTURE_TTS_FRONT_END.md`, `ARCHITECTURE_TTS_TEXTNORM_RU.md`,
-`ARCHITECTURE_TTS_MEMORY.md`, `ARCHITECTURE_POCKET.md`, `ARCHITECTURE_GPU.md`. Planned work:
+docs: `ARCHITECTURE_TTS.md`, `ARCHITECTURE_TTS_FRONT_END.md`, `ARCHITECTURE_TTS_RU_STRESS.md`,
+`ARCHITECTURE_TTS_TEXTNORM_RU.md`, `ARCHITECTURE_TTS_MEMORY.md`, `ARCHITECTURE_POCKET.md`, `ARCHITECTURE_GPU.md`. Planned work:
 `followup_general.md`.
 
 A TTS source file is a file the glob `dasllama/dasllama_tts*.das` matches,

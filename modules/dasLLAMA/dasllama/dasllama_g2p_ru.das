@@ -604,7 +604,7 @@ def private stress_lone_vowel(part : string) : string {
     return known if (!empty(known))
     var inscope cps <- utf8_to_cpts(part)
     return part if (has_mark(cps) || key_exists(HYPHEN_CLITICS, lower) || guess_vowel_count(cps) != 1)
-    return mark_ordinal(part, 1)
+    return mark_pick(part, 1)
 }
 
 def private opens_stressed(part : string) : bool {
@@ -708,7 +708,7 @@ def ru_phonemize_marked(text : string) : string {
 
 //! The stress pack: the file bytes (searched in place), the stress table (bare form -> its stressed vowel ordinals, the default first), the ё table
 //! (a form written with е -> its ё spelling) and the sections a pack may carry after them - the ending table (an ending, reversed -> the stressed
-//! vowel counted from the word's end) and the rule tier (a form -> its family, the ordinal of either side and its unruled side, then the rules).
+//! vowel counted from the word's end) and the rule tier (a form -> its family, the pick of either side and its unruled side, then the rules).
 struct RuStressPack {
     data : array<uint8>
     source : string
@@ -734,11 +734,13 @@ let private RULE_SLOTS_BEHIND = 3               //! the slots of the words behin
 let private RULE_SLOT_BITS = 3                  //! a rule's first byte holds the neighbour's slot in these low bits, its kind above them
 let private RULE_NEAR_BYTES = RULE_SLOTS * FRONT_KEY_MAX
 let private RULE_HEAD = 3l                      //! a rule's kind, verdict and key length
-let private RULE_VALUE_SIDES = 1l               //! a rule form's value run: its family, then the ordinal of side 0 and of side 1
+let private RULE_VALUE_SIDES = 1l               //! a rule form's value run: its family, then the pick of side 0 and of side 1
 let private RULE_VALUE_UNRULED = 3l             //! ... then its unruled side
 let private CYR_E_CAP = 1045
 let private KEY_HYPHEN = 1
 let private KEY_A = 2       //! а; the letters to п follow it
+let private KEY_V = 4       //! в
+let private KEY_E = 7       //! е
 let private KEY_R = 18      //! р; the letters to я follow it
 let private KEY_YO = 34
 let private UTF8_LEAD_A_TO_P : int = 0xD0
@@ -879,30 +881,40 @@ def ru_stress_pack_has(p : RuStressPack; lower : string; ordinal : int) : bool {
 //! the ё spelling of a form written with е, "" when the pack has none for it
 [arch(at = "../ARCHITECTURE_TTS_RU_STRESS.md#tts-ru-yo")]
 def ru_yo_form(p : RuStressPack; word : string) : string {
-    var o = ru_pack_find(p, p.yo, word)
+    let o = ru_pack_find(p, p.yo, word)
     return "" if (o < 0l)
+    let mask = yo_run_mask(p.data, o)
     return modify_data(word) $(var bytes : array<uint8>#) {
-        var group = int(p.data[o])
-        var bit = 0
+        var nth = 0
         var i = 0
         while (i + 1 < length(bytes)) {
             if (int(bytes[i]) == UTF8_LEAD_A_TO_P && int(bytes[i + 1]) == UTF8_E_TAIL) {
-                if (((group >> bit) & 1) != 0) {
+                if (yo_mask_has(mask, nth)) {
                     bytes[i] = uint8(UTF8_LEAD_R_TO_YO)
                     bytes[i + 1] = uint8(UTF8_YO_TAIL)
                 }
-                bit++
-                if (bit == FRONT_VALUE_BITS) {
-                    bit = 0
-                    let more = group >= FRONT_VALUE_MORE
-                    o += more ? 1l : 0l
-                    group = more ? int(p.data[o]) : 0
-                }
+                nth++
             }
             i += int(bytes[i]) == '-' ? 1 : 2
         }
     }
 }
+
+//! the ё table's value run at `o` as one mask over the key's е letters: bit `nth` set where the `nth` е, from 0, is a ё
+def private yo_run_mask(data : array<uint8>; o : int64) : uint64 {
+    var mask = 0ul
+    var at = o
+    var shift = 0
+    while (true) {
+        mask |= uint64(front_value(data, at)) << uint64(shift)
+        break if (!front_value_more(data, at))
+        at++
+        shift += FRONT_VALUE_BITS
+    }
+    return mask
+}
+
+def private yo_mask_has(mask : uint64; nth : int) : bool => ((mask >> uint64(nth)) & 1ul) != 0ul
 
 def private has_mark(cps : array<int>) : bool {
     for (cp in cps) {
@@ -911,15 +923,21 @@ def private has_mark(cps : array<int>) : bool {
     return false
 }
 
-//! `word` with `+` before its vowel of ordinal `ordinal` (1-based)
-def private mark_ordinal(word : string; ordinal : int) : string {
+let RU_PICK_YO = 64   //! added to a vowel's ordinal: that vowel, an е, read as ё
+
+//! `word` as `pick` reads it
+[arch(at = "../ARCHITECTURE_TTS_RU_STRESS.md#tts-ru-yo-pick")]
+def private mark_pick(word : string; pick : int) : string {
+    let as_yo = pick > RU_PICK_YO
+    let ordinal = as_yo ? pick - RU_PICK_YO : pick
     var inscope cps <- utf8_to_cpts(word)
     var n = 0
     for (i, cp in iter_range(cps), cps) {
         if (is_ru_vowel(int(utf32_to_lower(uint(cp))))) {
             n++
             if (n == ordinal) {
-                return "{cpts_to_utf8(cps, 0, i)}+{cpts_to_utf8(cps, i, length(cps))}"
+                return "{cpts_to_utf8(cps, 0, i)}+{cpts_to_utf8(cps, i, length(cps))}" if (!as_yo)
+                return cp == CYR_E || cp == CYR_E_CAP ? yo_spelled(cps, int2(0, length(cps)), i) : word
             }
         }
     }
@@ -980,22 +998,45 @@ def private is_capital_abbreviation(cps : array<int>) : bool {
 //! the case endings a word may shed to reach a form the pack holds, longest first
 let private CASE_ENDINGS = fixed_array("ими", "их", "у", "е", "ы", "и", "о")
 
-//! The stress of a lowercase word through the form it is a case of: the word less a case ending, where the pack holds that stem with one reading and two vowels or more, takes the stem's stressed vowel; 0 where no ending leaves such a stem. Allocates nothing.
+//! how many of the key's first `letters` bytes are vowels
+def private key_vowels(q : uint8[FRONT_KEY_MAX]; letters : int) : int {
+    var vowels = 0
+    for (k in range(letters)) {
+        vowels += key_is_vowel(q[k]) ? 1 : 0
+    }
+    return vowels
+}
+
+//! how many of the key's first `letters` bytes are an е
+def private key_e_count(q : uint8[FRONT_KEY_MAX]; letters : int) : int {
+    var count = 0
+    for (k in range(letters)) {
+        count += int(q[k]) == KEY_E ? 1 : 0
+    }
+    return count
+}
+
+//! The stem's pick, 0 where no ending leaves such a stem; allocates nothing.
 [arch(at = "../ARCHITECTURE_TTS_RU_STRESS.md#tts-ru-case-stem")]
-def ru_stem_ordinal(p : RuStressPack; lower : string) : int {
+def ru_stem_pick(p : RuStressPack; lower : string) : int {
     return 0 if (empty(p.data))
     var q : uint8[FRONT_KEY_MAX]
     let n = ru_pack_key(lower, q)
     for (ending in CASE_ENDINGS) {
         let stem_letters = n - utf8_length(ending)
         continue if (stem_letters < 2 || !ends_with(lower, ending))
+        let vowels = key_vowels(q, stem_letters)
+        continue if (vowels < 2)
         let o = front_find(p.data, p.stress, q, stem_letters)
-        continue if (o < 0l || front_value_more(p.data, o))
-        var vowels = 0
-        for (k in range(stem_letters)) {
-            vowels += key_is_vowel(q[k]) ? 1 : 0
+        if (o >= 0l) {
+            continue if (front_value_more(p.data, o))
+            return front_value(p.data, o)
         }
-        return front_value(p.data, o) if (vowels >= 2)
+        continue if (int(q[stem_letters - 1]) != KEY_V || int(q[stem_letters - 2]) != KEY_E)
+        let restored = front_find(p.data, p.yo, q, stem_letters)
+        continue if (restored < 0l)
+        let last_e = key_e_count(q, stem_letters) - 1
+        return RU_PICK_YO + vowels if (yo_run_mask(p.data, restored) == 1ul << uint64(last_e))
     }
     return 0
 }
@@ -1040,10 +1081,7 @@ def ru_patronymic_ordinal(p : RuStressPack; lower : string) : int {
     for (tail in range(PATRONYMIC_TAIL_MAX + 1)) {
         let eich = n - tail - eich_letters
         let ych = n - tail - ych_letters
-        var stem_vowels = 0
-        for (k in range(max(ych, 0))) {
-            stem_vowels += key_is_vowel(q[k]) ? 1 : 0
-        }
+        let stem_vowels = key_vowels(q, max(ych, 0))
         if (eich >= 2 && key_at(q, eich, short_eich, eich_letters)) {
             let ich = eich + 1
             let o = patronymic_full_ordinal(p, q, n, ich, ich_letters, "евич", stem_vowels)
@@ -1060,7 +1098,7 @@ def ru_patronymic_ordinal(p : RuStressPack; lower : string) : int {
 //! The stressed vowel of a word the pack does not hold, `word` as written and `lower` its lowercase: the vowel of the form it is a case of, else of the full patronymic it is short for, else an abbreviation's last vowel, else the ending table's vowel, else the shape rule's.
 [arch(at = "../ARCHITECTURE_TTS_RU_STRESS.md#tts-ru-unknown-word")]
 def private ru_unknown_ordinal(p : RuStressPack; word, lower : string) : int {
-    let by_stem = ru_stem_ordinal(p, lower)
+    let by_stem = ru_stem_pick(p, lower)
     return by_stem if (by_stem > 0)
     let by_patronymic = ru_patronymic_ordinal(p, lower)
     return by_patronymic if (by_patronymic > 0)
@@ -1140,7 +1178,7 @@ def private rule_fires(data : array<uint8>; key : int64; letters, kind : int; ne
     return bytes_compare(data, key, letters, near_keys, int64(near_at + near_letters - letters), letters) == 0
 }
 
-//! The rule tier's ordinal for word `i` of the lowercased words of a text, `sentences` their `ru_word_sentences`, or 0 to abstain: the first rule of the word's family that holds decides, and where none holds the form's own unruled side, if it names one. Allocates nothing.
+//! The rule tier's pick for word `i` of the lowercased words of a text, `sentences` their `ru_word_sentences`, or 0 to abstain: the first rule of the word's family that holds decides, and where none holds the form's own unruled side, if it names one. Allocates nothing.
 [arch(at = "../ARCHITECTURE_TTS_RU_STRESS.md#tts-ru-rule-tier")]
 def ru_stress_rule(p : RuStressPack; words : array<string>; sentences : array<int>; i : int) : int {
     return 0 if (p.rule_forms.n_keys == 0)
@@ -1178,19 +1216,19 @@ def ru_stress_rule(p : RuStressPack; words : array<string>; sentences : array<in
     return unruled == 0 ? 0 : front_value(p.data, form + int64(unruled))
 }
 
-//! A hyphenated word as the pack's whole key reads it - its ё spelling, else its default reading marked; the word as written where it carries a mark, is made of clitics, or the pack holds no such key.
+//! A hyphenated word as the pack's whole key reads it - its ё spelling, else `picked` (0 for none), else its default reading marked; the word as written where it carries a mark, is made of clitics, or the pack holds no such key and nothing picked.
 [arch(at = "../ARCHITECTURE_TTS_RU_STRESS.md#tts-ru-hyphenated")]
-def private ru_mark_whole(p : RuStressPack; word : string) : string {
+def private ru_mark_whole(p : RuStressPack; word : string; picked : int) : string {
     let pre = ru_word_pre_lookup(p, word)
     return pre.text if (pre.settled)
-    let ordinal = ru_stress_default(p, pre.lower)
-    return ordinal > 0 ? mark_ordinal(word, ordinal) : word
+    let pick = picked > 0 ? picked : ru_stress_default(p, pre.lower)
+    return pick > 0 ? mark_pick(word, pick) : word
 }
 
-//! One word of running text stress-marked: the text's own mark wins, then the clitics, the pack's ё spelling, `picked` (the ordinal the rule tier or a context pass picked, 0 for none), the pack's default reading, then a word the pack does not hold - an abbreviation's last vowel, the ending table, the shape rule; a hyphenated word as the pack's whole key marks it, then side by side.
+//! One word of running text stress-marked: the text's own mark wins, then the clitics, the pack's ё spelling, `picked` (the pick of the rule tier or of a context pass, 0 for none), the pack's default reading, then a word the pack does not hold - an abbreviation's last vowel, the ending table, the shape rule; a hyphenated word as the pack's whole key marks it, then side by side.
 def ru_mark_word(p : RuStressPack; word : string; picked : int = 0) : string {
     if (find(word, "-") >= 0) {
-        var inscope parts <- split(ru_mark_whole(p, word), "-")
+        var inscope parts <- split(ru_mark_whole(p, word, picked), "-")
         for (part in parts) {
             part = ru_mark_word(p, part)
         }
@@ -1199,8 +1237,8 @@ def ru_mark_word(p : RuStressPack; word : string; picked : int = 0) : string {
     let pre = ru_word_pre_lookup(p, word)
     return pre.text if (pre.settled)
     let known = picked > 0 ? picked : ru_pack_default(p, pre.lower)
-    let ordinal = known > 0 ? known : ru_unknown_ordinal(p, word, pre.lower)
-    return ordinal <= 0 ? word : mark_ordinal(word, ordinal)
+    let pick = known > 0 ? known : ru_unknown_ordinal(p, word, pre.lower)
+    return pick <= 0 ? word : mark_pick(word, pick)
 }
 
 //! The words of running text the stress pass marks, in order, as codepoint spans [x, y): runs of Cyrillic letters with their stress marks and inner hyphens.
@@ -1251,13 +1289,13 @@ def private ru_takes_yo_by_rule(cps : array<int>; words : array<int2>; lowers : 
     return !after_not && !(lowers[k] == "нем" && is_abbreviation_stop(cps, words[k].y))
 }
 
-//! the word at `w`, its last vowel - the е of a `YO_RULE_WORDS` form - spelled ё in the letter's own case
-def private yo_spelled(cps : array<int>; w : int2) : string {
-    let yo = cps[w.y - 2] == CYR_E_CAP ? CYR_YO_CAP : CYR_YO
-    return "{cpts_to_utf8(cps, w.x, w.y - 2)}{cpt_to_utf8(yo)}{cpt_to_utf8(cps[w.y - 1])}"
+//! the word at `w` with its е at `at` spelled ё in the letter's own case
+def private yo_spelled(cps : array<int>; w : int2; at : int) : string {
+    let yo = cps[at] == CYR_E_CAP ? CYR_YO_CAP : CYR_YO
+    return "{cpts_to_utf8(cps, w.x, at)}{cpt_to_utf8(yo)}{cpts_to_utf8(cps, at + 1, w.y)}"
 }
 
-//! The codepoints `cps` with every word of `words` (its `ru_text_words`) stress-marked (`ru_mark_word`), everything else as it was; `picked` maps a word's index to the ordinal a context pass picked, and a word it leaves out is the rule tier's to pick.
+//! The codepoints `cps` with every word of `words` (its `ru_text_words`) stress-marked (`ru_mark_word`), everything else as it was; `picked` maps a word's index to a context pass's pick, and a word it leaves out is the rule tier's to pick.
 [arch(at = "../ARCHITECTURE_TTS_FRONT_END.md#tts-stress-context")]
 def ru_mark_words(p : RuStressPack; cps : array<int>; words : array<int2>; picked : table<int; int>) : string {
     var inscope lowers <- [for (w in words); utf8_to_lower(cpts_to_utf8(cps, w.x, w.y))]
@@ -1269,7 +1307,7 @@ def ru_mark_words(p : RuStressPack; cps : array<int>; words : array<int2>; picke
                 wr |> write(cpt_to_utf8(cps[i]))
             }
             if (ru_takes_yo_by_rule(cps, words, lowers, k)) {
-                wr |> write(yo_spelled(cps, w))
+                wr |> write(yo_spelled(cps, w, w.y - 2))   // the е of a `YO_RULE_WORDS` form is its letter before the last
             } else {
                 let by_context = picked?[k] ?? 0
                 let pick = by_context > 0 ? by_context : ru_stress_rule(p, lowers, sentences, k)
@@ -1283,7 +1321,7 @@ def ru_mark_words(p : RuStressPack; cps : array<int>; words : array<int2>; picke
     }
 }
 
-//! Running text with every Russian word stress-marked; `picked` maps a word's index among `ru_text_words` to the ordinal a context pass picked.
+//! Running text with every Russian word stress-marked; `picked` maps a word's index among `ru_text_words` to a context pass's pick.
 def ru_mark_stress(p : RuStressPack; text : string; picked : table<int; int>) : string {
     var inscope cps <- utf8_to_cpts(text)
     var inscope words <- ru_text_words(cps)

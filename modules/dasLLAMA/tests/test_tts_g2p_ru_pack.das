@@ -464,7 +464,7 @@ def test_pack_lookup_allocates_nothing(t : T?) {
             misses += ru_pack_default(p, a) == 0 ? 1 : 0
             misses += empty(ru_yo_form(p, a)) ? 1 : 0
             by_ending += ru_ending_ordinal(p, w) > 0 ? 1 : 0
-            by_stem += ru_stem_ordinal(p, w) > 0 ? 1 : 0
+            by_stem += ru_stem_pick(p, w) > 0 ? 1 : 0
             by_rule += ru_stress_rule(p, words, one_sentence, k) > 0 ? 1 : 0
         }
         let heap1 = heap_allocation_count()
@@ -547,13 +547,34 @@ def test_case_ending_stem(t : T?) {
         for (word, want in keys(cases), values(cases)) {
             t |> equal(ru_mark_word(p, word), want, word)
         }
-        t |> equal(ru_stem_ordinal(p, "федереру"), 1, "the stem's vowel, counted from the word's start")
+        t |> equal(ru_stem_pick(p, "федереру"), 1, "the stem's vowel, counted from the word's start")
         t |> equal(ru_ending_ordinal(p, "федереру"), 4, "the control: the ending table alone reads the last vowel")
-        t |> equal(ru_stem_ordinal(p, "фывапролджу"), 0, "no such stem in the pack")
-        t |> equal(ru_stem_ordinal(p, "дубы"), 0, "a stem of one vowel is not read through")
-        t |> equal(ru_stem_ordinal(p, "замоку"), 0, "nor a stem the pack reads two ways")
-        t |> equal(ru_stem_ordinal(p, "федерера"), 0, "nor an ending outside the list")
+        t |> equal(ru_stem_pick(p, "фывапролджу"), 0, "no such stem in the pack")
+        t |> equal(ru_stem_pick(p, "дубы"), 0, "a stem of one vowel is not read through")
+        t |> equal(ru_stem_pick(p, "замоку"), 0, "nor a stem the pack reads two ways")
+        t |> equal(ru_stem_pick(p, "федерера"), 0, "nor an ending outside the list")
         t |> equal(ru_mark_word(p, "федерера"), "федер+ера", "which the shape rule reads")
+    }
+    t |> run("a stem the ё table restores") @(t : T?) {
+        var inscope s : SynthPack
+        s.stress <- { "дело" => [1] }
+        s.yo <- {
+            "королев" => "королёв", "лев" => "лёв", "пелен" => "пелён", "шевелев" => "шёвелев", "колерв" => "колёрв",
+            "теререререререлев" => "теререререререлёв"
+        }
+        var inscope p <- load_ru_stress_pack(write_synth_pack("synth_ru_yo_stem.bin", s, 16))
+        t |> equal(ru_stem_pick(p, "королеву"), RU_PICK_YO + 3, "the stem's ё, as a ё pick on its third vowel")
+        t |> equal(ru_mark_word(p, "Королеву"), "Королёву", "the word takes the ё")
+        t |> equal(ru_mark_word(p, "КОРОЛЕВО"), "КОРОЛЁВО", "in the letter's own case")
+        t |> equal(ru_stem_pick(p, "леву"), 0, "the control: a stem of one vowel is not read through")
+        t |> equal(ru_stem_pick(p, "пелено"), 0, "the control: a restored stem that does not end in -ёв")
+        t |> equal(ru_stem_pick(p, "шевелеву"), 0, "the control: a stem in -ев whose ё is another vowel")
+        t |> equal(ru_stem_pick(p, "королева"), 0, "the control: an ending outside the list")
+        t |> equal(ru_stem_pick(p, "колерву"), 0, "the control: a restored stem in -в whose letter before it is no е")
+        t |> equal(ru_stem_pick(p, "федереву"), 0, "the control: a stem in -ев neither table holds")
+        t |> equal(ru_stem_pick(p, "теререререререлеву"), RU_PICK_YO + 8, "a ё past the mask's first byte: the stem's eighth е")
+        t |> equal(ru_mark_word(p, "теререререререлеву"), "теререререререлёву")
+        t |> equal(ru_yo_form(p, "теререререререлев"), "теререререререлёв", "and the ё table restores the stem itself")
     }
 }
 
@@ -657,6 +678,33 @@ def test_rule_tier(t : T?) {
         t |> equal(ru_stress_rule(p, behind, sentence, 1), 0, "the control: the same word behind is not the rule's, and the form names no unruled side")
         t |> equal(ru_mark_stress(p, "дома нет"), "дом+а н+ет", "in running text")
     }
+    t |> run("a side that is the ё spelling") @(t : T?) {
+        var inscope s : SynthPack
+        s.stress <- { "все" => [1], "всем" => [1], "они" => [2], "время" => [1], "дома" => [1, 2] }
+        var inscope bare <- load_ru_stress_pack(write_synth_pack("synth_ru_yo_no_rules.bin", s, 16))
+        let yo_first = RU_PICK_YO + 1
+        s.rule_forms <- { "все" => [1, 1, yo_first, 2], "всем" => [2, 1, yo_first, 1], "чем-то" => [2, 1, yo_first, 2] }
+        s.rule_lists <- [
+            [SynthRule(kind = RuRuleKind.word, slot = SLOT_ONE_AHEAD, verdict = VERDICT_SURE, key = "они")],
+            [SynthRule(kind = RuRuleKind.word, slot = SLOT_ONE_AHEAD, verdict = VERDICT_SIDE_1, key = "времени")]
+        ]
+        var inscope p <- load_ru_stress_pack(write_synth_pack("synth_ru_yo_rules.bin", s, 16))
+        let cases <- {
+            "все они" => "вс+е он+и", "все время" => "всё вр+емя", "Все время" => "Всё вр+емя", "ВСЕ" => "ВСЁ",
+            "во всем" => "во всём", "по всем" => "по вс+ем", "вс+е время" => "вс+е вр+емя",
+            "чем-то" => "чём-т+о", "ч+ем-то" => "ч+ем-т+о"
+        }
+        for (text, want in keys(cases), values(cases)) {
+            t |> equal(ru_mark_stress(p, text), want, text)
+        }
+        t |> equal(ru_mark_stress(bare, "все время"), "вс+е вр+емя", "the control: without the section the е spelling stands")
+        t |> equal(ru_mark_stress(bare, "по всем"), "по вс+ем", "the control: the tier's unruled side for всем is the pack's own reading")
+        var inscope picked <- { 0 => 1 }
+        t |> equal(ru_mark_stress(p, "все время", picked), "вс+е вр+емя", "a context pass's pick outranks the tier's ё")
+        var inscope as_yo <- { 0 => yo_first }
+        t |> equal(ru_mark_stress(bare, "все они", as_yo), "всё он+и", "a context pass may pick the ё spelling")
+        t |> equal(ru_mark_word(p, "дома", yo_first), "дома", "a ё pick on a vowel that is no е leaves the word as written")
+    }
 }
 
 [test(description = "a word past the pack's 64-letter key is no key: no tier indexes past the key buffer, the word reads by the shape rule, and a pack that holds a longer key refuses to load naming the key's length")]
@@ -668,7 +716,7 @@ def test_word_longer_than_a_key(t : T?) {
         var inscope p <- load_ru_stress_pack(write_synth_pack("synth_ru_short_keys.bin", s, 16))
         let long_word = "{repeat("ба", 34)}ыч"
         t |> equal(ru_pack_default(p, long_word), 0, "no entry")
-        t |> equal(ru_stem_ordinal(p, long_word), 0, "no stem")
+        t |> equal(ru_stem_pick(p, long_word), 0, "no stem")
         t |> equal(ru_patronymic_ordinal(p, long_word), 0, "no full patronymic")
         t |> equal(ru_ending_ordinal(p, long_word), 0, "no ending")
         t |> equal(ru_mark_word(p, long_word), "{repeat("ба", 33)}б+аыч", "the shape rule: the vowel before the last")
