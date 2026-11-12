@@ -16,6 +16,7 @@ require math                                            // sqrt
 require strings                                         // find (control-page content-type/body checks)
 require daslib/utf8_utils                               // is_utf8_string_valid: a sanitized tool call's name and arguments
 require daslib/strings_boost                            // split: the SSE body into its data lines
+require daslib/env_registry                             // env_value_of: the stress cell's saved DASLLAMA_GC_STRESS
 
 // End-to-end conformance for the OpenAI-compatible server: spin it up on its own thread (a separate
 // context — so the model loads INSIDE that thread, since g_model is a per-context module global),
@@ -2227,6 +2228,7 @@ def test_openai_server_stream(t : T?) {   // nolint:STYLE038 — one live server
 }
 
 let TEST_PORT_GC = 18230
+let TEST_PORT_GC_STRESS = 18231
 let GC_SAFE_POINT_WAIT_MS = 1500u
 
 def private four_chats_at_once(base_url : string; cycle : int) : int {
@@ -2276,4 +2278,21 @@ def test_openai_server_gc_after_prefill(t : T?) {
             break if (!alive)
         }
     }
+}
+
+[test(description = "under DASLLAMA_GC_STRESS the server collects at every lifecycle safe point with no POST /gc, and four chats asked at once pass every one", timeout = 1200)]
+def test_openai_server_gc_stress(t : T?) {
+    return if (model_missing(t, MODEL_PATH))
+    let stress_was = env_value_of("DASLLAMA_GC_STRESS")
+    set_env_variable("DASLLAMA_GC_STRESS", "1")
+    with_spawned_server(t, "the stressed boot", TEST_PORT_GC_STRESS, ["--model", MODEL_PATH, "--gpu", "off"], "streams = 4\n") $(base_url) {
+        for (cycle in range(3)) {
+            t |> equal(four_chats_at_once(base_url, cycle), 4, "cycle {cycle}: the four chats answered 200")
+            sleep(GC_SAFE_POINT_WAIT_MS)
+            let alive = stats_answer(base_url)
+            t |> success(alive, "cycle {cycle}: GET /v1/stats answers with a collection after every tick")
+            break if (!alive)
+        }
+    }
+    set_env_variable("DASLLAMA_GC_STRESS", stress_was)
 }

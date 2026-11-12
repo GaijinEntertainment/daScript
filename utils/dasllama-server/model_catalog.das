@@ -143,6 +143,10 @@ def public gpu_env_master_off : bool
 def public env_noisy_diag : bool
     => g_env_engine.noisy
 
+//! `DASLLAMA_GC_STRESS`, read off the env rail so the facade-only server root never touches g_env_*
+def public env_gc_stress : bool
+    => g_env_test.gc_stress
+
 def private strip_trailing_sep(p : string) : string {
     if (!ends_with(p, "/") && !ends_with(p, "\\")) {
         return p

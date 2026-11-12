@@ -1004,6 +1004,9 @@ struct public TestEnv {
     @clarg_doc = "Comma-separated filter restricting which model families run."
     test_family : string = ""
 
+    @clarg_doc = "Debug: dasllama-server runs its validated collection at every lifecycle safe point, so a pointer left to a freed value fails at the tick that left it."
+    gc_stress : bool = false
+
     @clarg_path
     @clarg_doc = "Directory of llama2.c reference checkpoints for the forward/decode parity tests."
     llama2c_dir : string = ""

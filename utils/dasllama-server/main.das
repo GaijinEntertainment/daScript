@@ -1093,7 +1093,8 @@ def private log_memory_if_due() {
 // Standalone-loop GC. Every collectable request-local value lived inside update() and is dead by
 // the time main calls this function. daslang-live already collects between update calls.
 def maybe_collect_gc() {
-    let forced = take_gc_request()
+    let requested = take_gc_request()
+    let forced = requested || env_gc_stress()
     return if (is_live_mode() && !forced)
     let now = int64(get_clock())
     if (!forced && g_last_gc_at != 0l && now - g_last_gc_at < GC_MIN_INTERVAL_SECONDS) {
@@ -1104,11 +1105,11 @@ def maybe_collect_gc() {
         let gc_started = ref_time_ticks()
         to_log(
             LOG_INFO,
-            "dasllama-server: GC begin reason=forced_endpoint validate=true das_heap={heap_bytes_allocated()}/{heap_total_allocated()} string_heap={string_heap_bytes_allocated()}/{string_heap_total_allocated()}\n")
+            "dasllama-server: GC begin reason={requested ? "forced_endpoint" : "DASLLAMA_GC_STRESS"} validate=true das_heap={heap_bytes_allocated()}/{heap_total_allocated()} string_heap={string_heap_bytes_allocated()}/{string_heap_total_allocated()}\n")
         unsafe(heap_collect(true, true))
         to_log(
             LOG_INFO,
-            "dasllama-server: GC end reason=forced_endpoint elapsed_ms={int64(get_time_usec(gc_started)) / 1000l} das_heap={heap_bytes_allocated()}/{heap_total_allocated()} string_heap={string_heap_bytes_allocated()}/{string_heap_total_allocated()}\n")
+            "dasllama-server: GC end reason={requested ? "forced_endpoint" : "DASLLAMA_GC_STRESS"} elapsed_ms={int64(get_time_usec(gc_started)) / 1000l} das_heap={heap_bytes_allocated()}/{heap_total_allocated()} string_heap={string_heap_bytes_allocated()}/{string_heap_total_allocated()}\n")
         return
     }
     let string_used = string_heap_bytes_allocated()

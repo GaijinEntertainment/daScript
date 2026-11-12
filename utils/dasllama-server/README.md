@@ -878,6 +878,9 @@ absent; set `DASLLAMA_MODELS_DIR`):
   asked at once and then a `POST /gc`, three times over: the server answers after each validated
   collection, so no prefill left a pointer to a finished stream's session; needs
   `tinyllama-1.1b-chat-v1.0.Q8_0.gguf`.
+- `test_openai_server.das`, the stress cell - the same boot under `DASLLAMA_GC_STRESS` with no
+  `POST /gc`: the server answers through a collection at every lifecycle safe point; needs
+  `tinyllama-1.1b-chat-v1.0.Q8_0.gguf`.
 - `test_openai_server.das`, the stream cells - SSE chunk framing, the over-long-prompt 400, two concurrent
   clients batching on one server (`peak_active >= 2` via `/v1/stats`), mid-generation disconnect
   eviction, and a request served off the prefix cache repeating itself token for token; needs
