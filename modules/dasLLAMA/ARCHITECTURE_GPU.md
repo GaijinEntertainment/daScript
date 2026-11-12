@@ -273,7 +273,7 @@ tier, not the backend serving it. The roles:
   AST-emission core: `is_digit_tok`, `role_ok`, `derived_role`, `mk_uint_cast`, `mk_call1`,
   `mk_grid_dim`, `param_type`, and `kargs_as`, which gives a shared kernel's `@kargs` member the argument
   form each lens's emitter reads). One owner by design: a private copy per lens drifts (metal folding
-  only the literal "1" where vulkan folds any integer). Backend-specific lowering stays in that backend's lens.
+  only the literal "1" where vulkan folds any integer). Backend-specific lowering stays in that backend's lens. A buffer a kernel hands whole to a helper takes the helper's parameter direction, read off its declaration: the lens runs at the class, so the helper is declared above the class or in a required module. The lookup is by name over the program's modules - another module's private function has no vote, and public namesakes that disagree on the parameter's constness are refused.
 - **`dasllama_dispatch_scan.das`** - the member scan the two discrete lenses (`[vk_dispatch]`, `[cuda_dispatch]`) share, each refusal in the calling lens's words (`LensWords`): the annotation's arguments and the family ordinal (`lens_scan`), the `@ssbo` / args / `@workgroup` member walk and the distinct bindings, the kernel method and its derived masks against every declared `@role` (`lens_access`), and the encoder's `params=` arguments (`lens_params`). What a lens generates stays in the lens.
 - **The authoritative site of each constant kind.** Tile constant in a kernel body: the literal in the generated `*_msl` global or the
   SPIR-V dump (`DASLLAMA_VK_SPV_DUMP=<dir>` writes every class kernel's words). Grid constant: the class's `[metal_dispatch]` / `[vk_dispatch]`
