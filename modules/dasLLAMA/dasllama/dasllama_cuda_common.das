@@ -144,6 +144,7 @@ def cud_shutdown() {
 def cud_sync() : bool => g_cud.ready && cuda_stream_synchronize(g_cud.stream)
 
 var private g_cud_modules : array<CudaModule?>   //! every kernel module loaded under the live device, released at shutdown
+var private g_cud_off_rung : table<string>   //! the kernels this card has no target for: FP4 rung texts below `FP4_RUNG_SM`
 var private g_cud_epoch = 0   //! bumped at shutdown: a class built under an older epoch rebuilds
 
 struct CudClass {
@@ -210,6 +211,12 @@ def cud_class_fn(var c : CudClass; ord : int; text, entry : string; smem : uint6
         c.names |> push("")
         c.smem |> push(0u)
         c.blocks |> push(uint3(1u, 1u, 1u))
+    }
+    return false if (key_exists(g_cud_off_rung, kernel))
+    if (g_cud.sm < FP4_RUNG_SM && cuda_source_is_arch_specific(text)) {
+        g_cud_off_rung |> insert(kernel)
+        to_log(LOG_INFO, "dasLLAMA cuda tier: {kernel}: on the FP4 rung, which starts at compute capability {FP4_RUNG_SM}; this card is {g_cud.sm}, so it has no kernel\n")
+        return false
     }
     var err : string
     var mod : CudaModule?
@@ -360,10 +367,18 @@ def cud_census_seed(kernel : string; ensure : function<() : bool>) {
     g_cud_ensures[kernel] = ensure
 }
 
-//! every seeded kernel's ensure run: the names whose function did not compile or load (the home's NVRTC compile gate)
+//! every seeded kernel's ensure run: the names whose function did not compile or load (the home's NVRTC compile gate);
+//! a kernel this card has no target for (`cud_off_rung_names`) is not one of them
 def cud_ensure_all : array<string> {
-    var failed <- [for (name in cud_kernel_names()); name; where !invoke(g_cud_ensures[name])]
+    var failed <- [for (name in cud_kernel_names()); name; where !invoke(g_cud_ensures[name]) && !key_exists(g_cud_off_rung, name)]
     return <- failed
+}
+
+//! the kernels an ensure found on the FP4 rung with the card below it, sorted
+def cud_off_rung_names : array<string> {
+    var names <- [for (k in keys(g_cud_off_rung)); k]
+    names |> sort()
+    return <- names
 }
 
 //! the launches `kernel` took this process; a name nothing seeded panics, so a misspelt key cannot read as a zero count

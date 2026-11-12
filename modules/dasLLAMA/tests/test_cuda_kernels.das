@@ -3062,6 +3062,9 @@ def test_cud_compile_gate(t0 : T?) {
         to_log(LOG_INFO, "cuda home: {length(names)} kernels, {length(failed)} refused\n")
         t |> success(length(names) >= 52, "the home carries the token step's kernels ({length(names)} seeded)")
         t |> equal(length(failed), 0, "every kernel compiles and loads; refused: {failed}")
+        var inscope off_rung <- cud_off_rung_names()
+        let below = g_cud.sm < FP4_RUNG_SM
+        t |> equal(!empty(off_rung), below, "the FP4 rung's kernels are left uncompiled on a card below compute capability {FP4_RUNG_SM}, and only there (this card: {g_cud.sm}, left out: {off_rung})")
     }
 }
 

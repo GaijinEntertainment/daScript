@@ -590,11 +590,14 @@ def public cubin_cached(source, name : string; compile_opts : array<string>; var
     return <- image
 }
 
+//! a kernel text that uses the arch-specific tensor forms compiles for an `sm_<cc>a` target
+def public cuda_source_is_arch_specific(source : string) : bool => find(source, "__DAS_ARCH_A__") >= 0
+
 //! source text -> loaded module, cubin for the context's device (cached in `cache_dir`); null with `error` filled on a compile or load failure
 [arch(at="../ARCHITECTURE_EMIT.md#cuda-kernel-vocabulary-tiers")]
 def public module_from_source(cc : CudaContext?; source, name : string; var error : string&; arch_suffix : string = "";
                               cache_dir : string = CUDA_CACHE_DIR) : CudaModule? {
-    let suffix = !empty(arch_suffix) ? arch_suffix : (find(source, "__DAS_ARCH_A__") >= 0 ? "a" : "")
+    let suffix = !empty(arch_suffix) ? arch_suffix : (cuda_source_is_arch_specific(source) ? "a" : "")
     var image <- cubin_cached(source, name, cuda_compile_options(cc, suffix), error, cache_dir)
     return null if (empty(image))
     return cuda_load_module(image, error)
