@@ -7,7 +7,8 @@ Companions: `ARCHITECTURE_TARGET_FEATURES.md` (CPU feature truth, the tier gates
 (the entry module, the emitter-free cache hit, the candidate-set key), `ARCHITECTURE_EXE.md` (the
 standalone exe's link decision and startup - sec.10), `ARCHITECTURE_FAST_MATH.md`
 (`[never_fast_math]`), `ARCHITECTURE_CODEGEN_IDENTITY.md` (the DLL cache key and the split obj
-cache - sec.2) and `ARCHITECTURE_VECTOR_MATH.md` (the inline-polynomial vector math rail - sec.8).
+cache - sec.2), `ARCHITECTURE_VECTOR_MATH.md` (the inline-polynomial vector math rail - sec.8)
+and `ARCHITECTURE_SOLID_CONTEXT.md` (a solid array's hidden base - sec.15).
 
 ## 1. The jit backend pipeline
 
@@ -287,14 +288,7 @@ emitters see `try_exit_flag` and take the outer arm's exit instead, with the inn
 written into the shared slot. A loop inside the arm keeps its own `break`: the arm visitor's loop
 stack is empty only at the arm's own level.
 
-## 15. A solid array's base reaches code generation hidden {#solid-array-base}
+## 15. A solid array's base reaches code generation hidden
 
-Under `options solid_context` a global's address is the globals block plus a constant, and the
-optimizer uses that: two globals at different offsets do not overlap. The backend's loop strength
-reduction uses it too, rebasing a loop's induction variables on the block, which costs registers
-and spills. So after the pass pipeline and before the emit, `hide_solid_array_bases` wraps each
-such address that an indexed access is based on in `llvm.launder.invariant.group`, which code
-generation strips after the reduction ran. The one-module build does it in
-`optimize_llvm_module`; the split build runs its pool twice for a partition set that addresses a
-solid global - optimize, hide, emit - and writes the IR dump between the two. An LTO partition is
-left alone: its link optimizes again, and a hidden base would cost that pass the overlap facts.
+Moved to `ARCHITECTURE_SOLID_CONTEXT.md`: sec.1 (what `hide_solid_array_bases` hides, and
+from which values it finds a solid block).
