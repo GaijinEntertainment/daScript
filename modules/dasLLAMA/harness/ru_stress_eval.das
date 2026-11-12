@@ -4,7 +4,8 @@ options _dasllama_internal = true
 options _ascii_strings = false
 
 // Score the Russian stress-context model through the engine: every row of a jsonl of {id, text, form,
-// ordinal} has its word found (ru_stress_find_word), picked among the catalog's ordinals (ru_stress_pick)
+// ordinal} - the ordinal a head class, so 9..16 for a vowel read as ё - has its word found
+// (ru_stress_find_word), picked among the catalog's classes (ru_stress_pick)
 // and timed; prints the accuracy, the pieces and [UNK] rate, the agreement with a reference's picks (--torch,
 // rows of {id, pick}) and the milliseconds a sentence by piece-count bucket, and writes one jsonl row a
 // sentence; --subset scores only the rows a second jsonl lists (those it marks `agrees`). --text times the marking
@@ -215,20 +216,21 @@ def private run_front_end(cfg : EvalArgs; m : RuStressModel) : int {
         tally.beyond_pack += picks.beyond_pack
         var inscope words <- ru_text_words(utf8_to_cpts(norm))
         let got = front_ordinal(p, picks, words, r.form, span)
-        tally.ctx_right += got.front == r.ordinal ? 1 : 0
-        tally.pack_right += got.pack == r.ordinal ? 1 : 0
+        let gold = ru_stress_class_pick(r.ordinal)
+        tally.ctx_right += got.front == gold ? 1 : 0
+        tally.pack_right += got.pack == gold ? 1 : 0
         var inscope readings <- ru_stress_variants(p, r.form)
         if (length(readings) < 2) {
             tally.single_reading++
-            tally.single_right += got.front == r.ordinal ? 1 : 0
+            tally.single_right += got.front == gold ? 1 : 0
         }
         if (norm == r.text) {
             tally.same_text++
-            tally.same_ctx_right += got.front == r.ordinal ? 1 : 0
+            tally.same_ctx_right += got.front == gold ? 1 : 0
             let direct = ru_stress_pick(m, r.text, ru_stress_find_word(r.text, r.form), ru_stress_allowed(m, r.form), sc)
             tally.direct_right += direct.ordinal == r.ordinal ? 1 : 0
-            if (direct.ordinal != got.front) {
-                print("GAP\t{r.id}\t{r.form}\tgold {r.ordinal}\tfront end {got.front}\tdirect {direct.ordinal}\tpack {got.pack}\treadings {length(readings)}\t{r.text}\n")
+            if (ru_stress_class_pick(direct.ordinal) != got.front) {
+                print("GAP\t{r.id}\t{r.form}\tgold {gold}\tfront end {got.front}\tdirect {direct.ordinal}\tpack {got.pack}\treadings {length(readings)}\t{r.text}\n")
             }
         }
     }
@@ -331,7 +333,7 @@ def private run_eval(cfg : EvalArgs; m : RuStressModel) : int {
             }
         }
         out |> emplace(PickRow(id = r.id, form = r.form, ordinal = r.ordinal, pick = pick.ordinal, pieces = pieces, ms = ms,
-            logits <- [for (o in range(RU_STRESS_ORDINALS)); pick.logits[o]]))
+            logits <- [for (o in range(m.classes)); pick.logits[o]]))
     }
     let n = length(rows)
     print("ACCURACY\t{base_name(cfg.data)}\t{cfg.lane}\t{right} / {n} = {100.0lf * double(right) / double(max(n, 1))}%\tunfound {unfound}\n")

@@ -48,8 +48,8 @@ front end is data, and the data is in the packs.
 | `kokoro-ru.gguf` | kokoro-ru v2, the Russian fine-tune of Kokoro-82M, the base checkpoint with its two voice packs `sveta` and `masha`, f32 | 325804992 | `635a43debfcbff5cf1fd0380a4ffc55dfacff083ae16d057bae6d7e7c9a29c9f` |
 | `kokoro-ru-dima.gguf` | kokoro-ru v2, the second checkpoint with its one male voice pack `dima`, f32 | 325282688 | `7720e1087c0c9720577e7e0b383dd31f75b7f6ab45bcd88df1f28df3c08c56a6` |
 | `tts_g2p_ru.bin` | the Russian stress pack: every inflected form of the OpenRussian dictionary, the forms and readings the English and Russian Wiktionary add and the names Russian Wikipedia marks, each with its stressed vowel (a form with two readings carrying both, the more frequent one first), the ё spellings a text written without ё needs, and the rules that pick a reading from the words beside it - a stress (`з+амок` / `зам+ок`) or a spelling (`все` / `всё`) | 15388127 | `d7bd53375a304fb22a54c4b701ac30ddea12920168691dba12a923eb0c7ae23a` |
-| `ru-stress-rubert-base-q4.gguf` | the Russian stress-context model: reads a sentence and picks the reading of each word whose stress depends on the context (`зам+ок` / `з+амок`); ruBert-base fine-tuned on a private dataset, Q4_K with a Q8_0 embedding table. Optional: copy it beside a Russian voice as `tts_ctx_ru.gguf` | 120484448 | `ac370e5acb3f627f642ccd343768460a4802a7d0e137750403ef6288847d0cca` |
-| `ru-stress-ruelectra-small-q4.gguf` | the same model in the small form, ruElectra-small fine-tuned on a private dataset; used the same way | 38362048 | `ad6f633523c48be2ee2c00bdf1c379f0fa5d873018856ed28eb8c04d41a3212a` |
+| `ru-stress-rubert-base-q4.gguf` | the Russian stress-context model: reads a sentence and picks the reading of each word whose stress (`зам+ок` / `з+амок`) or ё spelling (`все` / `всё`) depends on the context; ruBert-base fine-tuned on a private dataset, Q4_K with a Q8_0 embedding table. Optional: copy it beside a Russian voice as `tts_ctx_ru.gguf` | 120522080 | `28692fe9fbea9cb7b06f6c39e18a78e4c1e30b37173f2040808865a1d7730624` |
+| `ru-stress-ruelectra-small-q4.gguf` | the same model in the small form, ruElectra-small fine-tuned on a private dataset; used the same way | 38428800 | `43475b1535fdcd3d142bb04ac845909f2557bee32b524af5e19eb1528bbc1ae3` |
 | `tts_g2p.bin` | the grapheme-to-phoneme pack: misaki's gold and silver lexicons in both English dialects (one merged table per tier), CMUdict 0.7a rendered into the American inventory, the g2p_en GRU spelling model | 14011554 | `d7b6afea7a0901a877d10531054d3f967845c58f415f0ea937decd8a3081ccd5` |
 | `tts_g2p_en_us.bin` | the same pack with the American tier alone - no British values, CMUdict pruned of every word the American lexicon carries; the web serving set's pack, British voices are not offered on it | 10257455 | `6f69d2e74565bd7d876b8d1f4042bf8c1c5b615387fa26ff45215cf447932154` |
 | `tts_postag.bin` | the tokenizer exception table and the averaged-perceptron PTB tagger | 12566510 | `38c2e85f7fef3e57d561d2aa0af25fccda4276376ba1993c3dbc2ae0ebfa57b4` |
@@ -152,8 +152,8 @@ U+0301 after it, which always wins, so a homograph the pack picks the other way 
 in the text. With `tts_ctx_ru.gguf` beside the voice - a copy of either `ru-stress-*-q4.gguf` -
 a word with two readings is stressed by its sentence; without it the pack's rules and its more
 frequent reading decide. A text written without ё gets the letter back: always where the е
-spelling is no word (`еще`, `объем`), and by the pack's rules where both spellings are words
-(`все` / `всё`). `dasllama-server --tts <directory holding the packs>` serves the front
+spelling is no word (`еще`, `объем`), and where both spellings are words (`все` / `всё`) by the
+sentence with `tts_ctx_ru.gguf`, by the pack's rules without it. `dasllama-server --tts <directory holding the packs>` serves the front
 end with no voice: `POST /v1/audio/phonemes` answers the text with `+` before each stressed
 vowel and its phonemes, for a synthesis that runs elsewhere. Some Kokoro packs, the British ones most audibly, render a comma or
 a full stop as a breath; the reference pipeline does the same, so it is the pack, not the

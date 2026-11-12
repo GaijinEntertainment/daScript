@@ -126,7 +126,7 @@ Russian stress pack and the stress tiers that need no model are `ARCHITECTURE_TT
   The 200-sentence fixture `tests/_tts_fixtures/g2p_corpus_ru.json` (`harness/mint_tts_g2p_ru_fixture.py`:
   sentences written for the fixture, stress-marked by `tts_mark_stress`, through kokoro-ru's own front end) is the parity rail for
   letter-to-sound alone - the stress it compares on is the fixture's, so a stress decision never
-  moves its numbers. The stress pass takes the ordinals a context pass picked (`ru_mark_stress`'s
+  moves its numbers. The stress pass takes the picks of a context pass (`ru_mark_stress`'s
   `picked`, by the word's index among `ru_text_words`) between the ё spelling and the pack's
   default (`ru_pack_default`); `ru_word_needs_context` names the words a context pass may decide,
   through the one function `ru_mark_word` reads its early tiers from, and `ru_stress_rule` is the
@@ -135,8 +135,10 @@ Russian stress pack and the stress tiers that need no model are `ARCHITECTURE_TT
 - **`dasllama_g2p_ru_stress.das`** - the Russian stress-context model and its pass: a BERT or
   ELECTRA encoder over the sentence, lowercased codepoint for codepoint, through its own WordPiece
   tokenizer (`dasllama_wordpiece.das`), cut to 96 pieces; the pieces covering one written word
-  mean-pooled over the last hidden state, and a `Linear(hidden, 8)` head scoring the stressed
-  vowel's ordinal, the pick masked to the ordinals the catalog allows the form. The GGUF is
+  mean-pooled over the last hidden state, and a linear head of 8 or 16 classes scoring the word's
+  readings - the stressed vowel's ordinal, and in the wider head as many classes again for that
+  vowel read as ё (`ARCHITECTURE_TTS_RU_STRESS.md#tts-ru-yo-pick`) - the pick masked to the classes
+  the catalog allows the form. The GGUF is
   `harness/convert_ru_stress.py`'s: the encoder, the head, the tokenizer and the catalog - the
   forms whose stress depends on context, with the vowels each may stress, as a byte-sorted form
   list beside one bitmask a form. The embeddings and the layers are the block home's

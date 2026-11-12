@@ -4470,7 +4470,8 @@ words left bare, to the reference's own stress, are counted apart - the mismatch
 3 (the reference's voiced final зь twice, its гч of облегчением once). Model-gated
 (`tts_g2p_ru.bin` under models_dir()): the pack's forms and
 variants (молоко́ one reading, замок two), ё restoration where the е spelling is no word and the
-ambiguous все left alone, the words the dictionary lacks read from the other sources
+ambiguous все left alone, a restored word keeping the case of every letter it was written in
+(Ребенок, ЕЛКА, ЕщЕ), the words the dictionary lacks read from the other sources
 (`test_stress_pack_sources`: назначена, назначен, сделана, написана, решена, получена, годы,
 годах, пяти, десяти, and происходит by its corrected entry, a made-up word of the same shape read
 by its ending as the control), ё spellings restored as the dictionary restores them and the true pairs
@@ -4486,19 +4487,27 @@ abbreviations by the last-vowel rule (the pack holding neither, the control) bes
 pack holds, four names in an oblique case read through the form they are a case of (none a pack
 form; an absent stem and an ending outside the list the controls), twelve words the pack lacks
 read by the ending table alone and one no ending of which is held on the shape rule, the ё after a
-preposition (по the control), and two homographs by the rule tier, a context pass's pick outranking
-it; and the tiers ahead of a context pass
+preposition (по the control) - чем with a particle joined to it among them (в чем-то, О Чем-либо,
+при чем-нибудь; по and кем-то the controls) - and two homographs by the rule tier, a context
+pass's pick outranking it; and the tiers ahead of a context pass
 (`test_stress_pick_order`): a hand-built pick for every word of a text leaves a marked word, a ё
-word, a clitic, a ё restoration and a hyphenated word as the pack alone reads them and gives the
-open word the pick, and `ru_word_needs_context` answers no for each closed word and yes for an
-open one. Model-gated on the stress-context model
+word, a clitic, a ё restoration and a word made of clitics as the pack alone reads them and gives the
+open word the pick, `ru_word_needs_context` answers no for each closed word and yes for an
+open one, and `ru_stress_class_pick` turns a head class into its pick - a stress class the vowel's
+ordinal, a ё class the pick that marks все as всё (the same vowel's stress class keeping the е, the
+control). Model-gated on the stress-context model
 as well (`tts_ctx_ru.gguf` beside the pack, `test_stress_context` and, for the sentence cuts and the
 windows, `test_stress_context_cuts`): twelve homographs, each in two
 sentences that ask for its two readings, read right both ways, the pack and its rule tier alone
 misreading eight of the 24 (the control, pinned); three sentences as one text reading what they
 read one by one, the last pass holding the last sentence's pieces alone after a period, an ellipsis
 and a `?!` (a comma ending no sentence, the control); a word the text marks and a ё word not asked,
-the mark standing; one pass for a whole sentence giving every word its single pick; a sentence
+the mark standing; one pass for a whole sentence giving every word its single pick; under the
+16-class head (a loud skip on an 8-class file) все, берет and осел each in two sentences written
+without ё that ask for its two spellings, read right both ways, the pack and its rule tier alone
+misreading a pinned count (the control), чем-то asked whole and keeping its е with no
+preposition before it, a ё pick counted in `beyond_pack` as nothing, and a pick with no mask
+ranking all 16 classes, its largest a ё class; a sentence
 past the piece budget read through a window of whole words around each word, its first and last
 homograph each right; among filler words of several pieces, every window (`ru_stress_window`)
 starting and ending on a word start, some shorter than the budget (the control: an edge moved); a
@@ -4517,7 +4526,8 @@ some with no split, tokenized as a test-side search of every slice length splits
 longest piece and the split into its shortest pieces counted a mismatch (the control). Model-free
 over synthesized headers (`test_stress_model_refusals`, `_gguf_writer.das`'s writers):
 `load_ru_stress` panicking by name on a missing file, another architecture, a file without the
-word table, and a layer weight stored Q8_0 or Q5_0 - the tensor, the layer GEMMs and the format
+word table, a head of 12 classes (the count in the text; a head of 16 passing that check and the load stopping
+at the next absent tensor the control), and a layer weight stored Q8_0 or Q5_0 - the tensor, the layer GEMMs and the format
 member in the text, a Q4_K weight read and the load stopping at the next absent tensor the
 control - and `load_wordpiece_gguf` on a tokenizer that is not bert, on one without
 `ru_stress.tokenizer.sorted_ids` (the key and the converter in the text), and on sorted ids in id
