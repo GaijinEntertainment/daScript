@@ -110,6 +110,10 @@ push through, and a `set_` on reload takes a reference per reload that the real 
 never drop. `REVIEW.das` reports those calls in any program that requires `live/audio_live`;
 a program whose reload design tears audio down drops the require instead.
 
+A strudel stream channel never ends by itself, so `strudel_shutdown()` stops it - but only
+through a command stream. A context fresh from a reload has none, and the old context has
+already stopped the channel, so there shutdown forgets the channel's sid without a stop.
+
 ## The waits cascade {#strudel-worker-backpressure}
 
 `strudel_init(setup, command)` spawns a stepped worker. Setup initializes tracks and
