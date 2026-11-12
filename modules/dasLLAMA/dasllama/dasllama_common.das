@@ -3853,15 +3853,15 @@ def eval_segments_(t : Model; var sessions : array<Session?>; toks : array<array
         }
     }
     let nw = long_length(g_eval_segs)
-    if (nw == 0l) return
     if (nw == 1l) {
         eval_(t, *g_eval_segs[0].s, toks[g_eval_segs[0].toki])
-        return
+    } elif (nw > 1l) {
+        forward_prefill_segments(t, g_eval_segs, toks)
+        for (sg in g_eval_segs) {
+            sg.s.n_past += sg.npos
+        }
     }
-    forward_prefill_segments(t, g_eval_segs, toks)
-    for (sg in g_eval_segs) {
-        sg.s.n_past += sg.npos
-    }
+    g_eval_segs |> clear()   // borrowed sessions: none outlives the call, or a validated collection walks a finished one
 }
 
 // ===== Per-app runtime profile (the tune sidecar's "runtime" section) =====

@@ -16,13 +16,15 @@ require math                                            // sqrt
 require strings                                         // find (control-page content-type/body checks)
 require daslib/utf8_utils                               // is_utf8_string_valid: a sanitized tool call's name and arguments
 require daslib/strings_boost                            // split: the SSE body into its data lines
+require daslib/env_registry                             // env_value_of: the stress cell's saved DASLLAMA_GC_STRESS
 
 // End-to-end conformance for the OpenAI-compatible server: spin it up on its own thread (a separate
 // context — so the model loads INSIDE that thread, since g_model is a per-context module global),
 // then drive /v1/models, /v1/embeddings and /v1/chat/completions over the real dashv HTTP client.
 // Model-gated (tinyllama-1.1b-chat-v1.0.Q8_0.gguf; the preserve_thinking cell Qwen3-0.6B-Q8_0; the recurrent-checkpoint
 // cells Qwen3.5-0.8B-Q8_0; the held-engine cell also skips on a box that runs its embeddings forward in under 400 ms)
-// + JIT-only, so it's a real regression locally and a clean skip in CI (no GGUF).
+// + JIT-only, so it's a real regression locally and a clean skip in CI (no GGUF). The collection cells boot main.das
+// as a child and also skip where main.das is not beside this file or the child's config cannot be written.
 // Lives here (not modules/dasLLAMA/tests/) because a require path can't contain the '-' in "dasllama-server":
 // a require_module_name is NAME tokens joined by / . % .. — so hyphenated-dir tools keep tests in-dir
 // and require the sibling module by BARE name (same convention as detect-dupe / find-dupe / mcp).
@@ -2223,4 +2225,74 @@ def test_openai_server_stream(t : T?) {   // nolint:STYLE038 — one live server
             }
         }
     }
+}
+
+let TEST_PORT_GC = 18230
+let TEST_PORT_GC_STRESS = 18231
+let GC_SAFE_POINT_WAIT_MS = 1500u
+
+def private four_chats_at_once(base_url : string; cycle : int) : int {
+    var answered = 0
+    with_atomic32() $(ok_count) {
+        with_job_status(4) $(done) {
+            for (k in range(4)) {
+                new_thread() <| @capture(= base_url, = ok_count, = done, = cycle, = k) {
+                    POST("{base_url}/v1/chat/completions",
+                         "\{\"messages\":[\{\"role\":\"user\",\"content\":\"Request {cycle}-{k}. Write three short sentences about the sea in winter.\"}],\"max_tokens\":8}") $(resp) {
+                        if (resp != null && resp.status_code == http_status.OK) {
+                            ok_count |> inc
+                        }
+                    }
+                    done |> notify_and_release
+                }
+            }
+            done |> join
+        }
+        answered = ok_count |> get
+    }
+    return answered
+}
+
+def private stats_answer(base_url : string) : bool {
+    var answered = false
+    GET("{base_url}/v1/stats") $(resp) {
+        answered = resp != null && resp.status_code == http_status.OK
+    }
+    return answered
+}
+
+[test(description = "a validated collection after four chats asked at once finds no session pointer their prefills left behind", timeout = 1200)]
+def test_openai_server_gc_after_prefill(t : T?) {
+    return if (model_missing(t, MODEL_PATH))
+    with_spawned_server(t, "the four-stream boot", TEST_PORT_GC, ["--model", MODEL_PATH, "--gpu", "off"], "streams = 4\n") $(base_url) {
+        for (cycle in range(3)) {
+            t |> equal(four_chats_at_once(base_url, cycle), 4, "cycle {cycle}: the four chats answered 200")
+            var gc_accepted = false
+            POST("{base_url}/gc", "") $(resp) {
+                gc_accepted = resp != null && resp.status_code == http_status.ACCEPTED
+            }
+            t |> success(gc_accepted, "cycle {cycle}: POST /gc was accepted")
+            sleep(GC_SAFE_POINT_WAIT_MS)
+            let alive = stats_answer(base_url)
+            t |> success(alive, "cycle {cycle}: GET /v1/stats answers after the collection")
+            break if (!alive)
+        }
+    }
+}
+
+[test(description = "under DASLLAMA_GC_STRESS the server collects at every lifecycle safe point with no POST /gc, and four chats asked at once pass every one", timeout = 1200)]
+def test_openai_server_gc_stress(t : T?) {
+    return if (model_missing(t, MODEL_PATH))
+    let stress_was = env_value_of("DASLLAMA_GC_STRESS")
+    set_env_variable("DASLLAMA_GC_STRESS", "1")
+    with_spawned_server(t, "the stressed boot", TEST_PORT_GC_STRESS, ["--model", MODEL_PATH, "--gpu", "off"], "streams = 4\n") $(base_url) {
+        for (cycle in range(3)) {
+            t |> equal(four_chats_at_once(base_url, cycle), 4, "cycle {cycle}: the four chats answered 200")
+            sleep(GC_SAFE_POINT_WAIT_MS)
+            let alive = stats_answer(base_url)
+            t |> success(alive, "cycle {cycle}: GET /v1/stats answers with a collection after every tick")
+            break if (!alive)
+        }
+    }
+    set_env_variable("DASLLAMA_GC_STRESS", stress_was)
 }

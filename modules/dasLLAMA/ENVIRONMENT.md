@@ -342,6 +342,7 @@ Apple Accelerate / AMX float lane. `DASLLAMA_ACCEL` arms the whole group.
 | `DASLLAMA_PARITY_FULL` | flag | off | Run the FULL parity matrix. Without it the big-model rows silently skip. |
 | `DASLLAMA_TEST_ARMS` | text | unset | Comma-separated filter restricting which parity arms run. |
 | `DASLLAMA_TEST_FAMILY` | text | unset | Comma-separated filter restricting which model families run. |
+| `DASLLAMA_GC_STRESS` | flag | off | Debug: dasllama-server runs its validated collection at every lifecycle safe point, so a pointer left to a freed value fails at the tick that left it. |
 | `DASLLAMA_LLAMA2C_DIR` | path | unset | Directory of llama2.c reference checkpoints for the forward/decode parity tests. |
 | `DASLLAMA_WHISPER_DIR` | path | unset | Directory of whisper models for the audio tests. |
 | `DISPLAY` | text | unset | Ambient platform variable; read only by the browser examples' smoke tests (storyteller, storywish, parrot) to tell whether a Linux box has a window server for the example's window. |
