@@ -575,6 +575,39 @@ def private create_entity(var arch : Archetype; eid : EntityId; cmp : ComponentM
     return eidx
 }
 
+//! a value that can't be copied has one owner: the slot it sits in
+def private owns_values(info : CTypeInfo) : bool {
+    return false if (info.eraser == null || info.mkTypeInfo == null)
+    let tinfo = invoke(info.mkTypeInfo)
+    return tinfo.firstType != null && !tinfo.firstType.canCopy
+}
+
+def private release_value(var comp : Component; index : int64) {
+    var one : array<uint8>
+    unsafe {
+        _builtin_make_temp_array(one, addr(comp.data[index * int64(comp.stride)]), comp.stride)
+    }
+    invoke(comp.info.eraser, one)
+}
+
+//! releases the row's owned values that `cmp` replaced or removed
+def private release_dropped(var arch : Archetype; index : int64; cmp : ComponentMap) {
+    for (c in arch.components) {
+        continue if (!owns_values(c.info))
+        let at = lower_bound(cmp, ComponentValue(name = c.name)) <| cmp_by(_.name)
+        var kept = at < length(cmp) && cmp[at].name == c.name
+        if (kept) {
+            unsafe {
+                let held = addr(c.data[index * int64(c.stride)])
+                kept = memcmp(held, addr(cmp[at].data), c.stride) == 0
+            }
+        }
+        if (!kept) {
+            release_value(c, index)
+        }
+    }
+}
+
 def private remove_entity(var arch : Archetype; di : int64) {
     //! Removes entity at specified index from the archetype.
     arch.size --
@@ -864,6 +897,7 @@ def private update_entity_imm(eid : EntityId; blk : lambda<(eid : EntityId; var 
     }
     invoke(blk, eid, cmp)
     cmp |> set("eid", eid)
+    release_dropped(decsState.allArchetypes[arch_index], eidx, cmp)
     let new_ahash = cmp_archetype_hash(cmp)
     if (old_ahash == new_ahash) {
         for (c, comp in decsState.allArchetypes[arch_index].components, cmp) {
@@ -906,7 +940,14 @@ def private delete_entity_imm(eid : EntityId) {
         let di = decsState.entityLookup[eid.id].index
         decsState.entityLookup[eid.id].generation = 0
         decsState.entityFreeList |> push(eid)
-        remove_entity(decsState.allArchetypes[unsafe(decsState.archetypeLookup[lookup.archetype]) - 1], di)
+        let arch_index = unsafe(decsState.archetypeLookup[lookup.archetype]) - 1
+        var arch & = unsafe(decsState.allArchetypes[arch_index])
+        for (c in arch.components) {
+            if (owns_values(c.info)) {
+                release_value(c, di)
+            }
+        }
+        remove_entity(arch, di)
     }
 }
 
