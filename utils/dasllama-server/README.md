@@ -874,6 +874,10 @@ absent; set `DASLLAMA_MODELS_DIR`):
 - `modules/dasLLAMA/tests/test_scheduler.das` - the continuous-batching scheduler against `generate()` references (moved with the module)
   (bit-exact single stream, chunk invariance, staggered admits, eviction); needs
   `SmolLM2-135M-Instruct-Q8_0.gguf`.
+- `test_openai_server.das`, the collection cell - `main.das` spawned on four streams, four chats
+  asked at once and then a `POST /gc`, three times over: the server answers after each validated
+  collection, so no prefill left a pointer to a finished stream's session; needs
+  `tinyllama-1.1b-chat-v1.0.Q8_0.gguf`.
 - `test_openai_server.das`, the stream cells - SSE chunk framing, the over-long-prompt 400, two concurrent
   clients batching on one server (`peak_active >= 2` via `/v1/stats`), mid-generation disconnect
   eviction, and a request served off the prefix cache repeating itself token for token; needs
