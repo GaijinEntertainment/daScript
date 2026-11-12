@@ -1549,7 +1549,7 @@ public:
         addExtern<DAS_BIND_FUN(ma_decoder_uninit)>(*this, lib, "ma_decoder_uninit",
             SideEffects::modifyArgumentAndExternal, "ma_decoder_uninit")->args({"decoder"});
         addExtern<DAS_BIND_FUN(ma_decoder_get_cursor_in_pcm_frames)>(*this, lib, "ma_decoder_get_cursor_in_pcm_frames",
-            SideEffects::none, "ma_decoder_get_cursor_in_pcm_frames")->args({"decoder", "pCursor"});
+            SideEffects::modifyArgument, "ma_decoder_get_cursor_in_pcm_frames")->args({"decoder", "pCursor"});
         addExtern<DAS_BIND_FUN(dasAudio_ma_decoder_get_length_in_pcm_frames)>(*this, lib, "ma_decoder_get_length_in_pcm_frames",
             SideEffects::none, "dasAudio_ma_decoder_get_length_in_pcm_frames")->args({"decoder"});
         addExtern<DAS_BIND_FUN(dasAudio_ma_decoder_read_pcm_frames)>(*this, lib, "ma_decoder_read_pcm_frames",
@@ -1557,7 +1557,7 @@ public:
         addExtern<DAS_BIND_FUN(ma_decoder_seek_to_pcm_frame)>(*this, lib, "ma_decoder_seek_to_pcm_frame",
             SideEffects::modifyArgument, "ma_decoder_seek_to_pcm_frame")->args({"decoder", "frameIndex"});
         addExtern<DAS_BIND_FUN(ma_decoder_get_available_frames)>(*this, lib, "ma_decoder_get_available_frames",
-            SideEffects::none, "ma_decoder_get_available_frames")->args({"decoder", "pAvailableFrames"});
+            SideEffects::modifyArgument, "ma_decoder_get_available_frames")->args({"decoder", "pAvailableFrames"});
         // limiter
         addAnnotation(new MALimiterAnnotation(lib));
         addExtern<DAS_BIND_FUN(ma_limiter_init)>(*this, lib, "ma_limiter_init",

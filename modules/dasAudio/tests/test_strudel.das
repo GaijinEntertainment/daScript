@@ -5,6 +5,7 @@ require strudel/strudel
 require strudel/strudel_pattern
 require strudel/strudel_player
 require audio/audio_boost
+require daslib/archive
 require daslib/fio
 require daslib/jobque_boost
 require daslib/runtime_memory
@@ -151,4 +152,19 @@ def track_controls_survive_playback_restart(t : T?){
         strudel_shutdown()
         t |> equal(strudel_track_gain(track), 0.0)
     }
+}
+
+[test(description = "Shutting down strudel playback whose channel was restored into a context with no audio command stream, as a context fresh from a reload is, clears the channel instead of failing to stop it.")]
+def shutdown_without_command_stream_clears_restored_channel(t : T?){
+    var ser = new MemSerializer()
+    var arch = Archive(reading = false, stream = ser)
+    var wall = g_wall_time; var cps = g_cps; var sid = 17ul; var sounds = 0
+    arch |> serialize(wall); arch |> serialize(cps)
+    arch |> serialize(sid); arch |> serialize(sounds)
+    var data <- ser->extractData()
+    unsafe { delete ser; }
+    t |> success(get_audio_command_stream() == null, "no audio system, as after a reload")
+    strudel_restore_state(data)
+    strudel_shutdown()
+    t |> success(empty(strudel_save_state()), "shutdown clears the restored channel")
 }

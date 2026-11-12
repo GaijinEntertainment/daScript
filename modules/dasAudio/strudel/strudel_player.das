@@ -1037,7 +1037,9 @@ def public strudel_shutdown() {
     }
     g_vis_index = 0
     if (g_sid != 0ul) {
-        stop(g_sid, 0.0)   // mixer voice outlives the worker unless stopped
+        if (get_audio_command_stream() != null) {
+            stop(g_sid, 0.0)
+        }
         g_sid = 0ul
     }
     // release SF2 soundfont (finalizer recursively frees instruments/presets/zones)
