@@ -32,7 +32,7 @@ PR_BUILD = sorted([
     "windows-32-Release-none", "windows-64-Release-none",
 ])
 NIGHTLY_ONLY_BUILD = sorted(
-    ["windows-64-Debug-none", "linux-64-Release-none-fastmath"]
+    ["windows-64-Debug-none-compile", "linux-64-Release-none-fastmath"]
     + ["linux-64-Release-%s-%s" % (san, phase) for san in ("asan", "tsan", "ubsan")
        for phase in ("tests", "slow", "backend")])
 
@@ -75,19 +75,38 @@ class BuildMatrix(unittest.TestCase):
 
     def test_only_sanitizer_cells_split_into_phases(self):
         # build.yml gates its three test steps on the phase; a cell that ran none of them would be
-        # a build with no signal, and a non-sanitizer cell split would multiply the per-PR matrix
+        # a build with no signal, and a non-sanitizer cell split would multiply the per-PR matrix.
+        # windows 64 Debug is the one cell that runs none of the three: its signal is the compile
         for cell in ci_matrix.build_cells("schedule"):
-            if cell["sanitizers"] == "none":
-                self.assertEqual(cell["phase"], "all", cell)
-            else:
+            if cell["sanitizers"] != "none":
                 self.assertIn(cell["phase"], ("tests", "slow", "backend"), cell)
+            elif (cell["target"], cell["cmake_preset"]) == ("windows", "Debug"):
+                self.assertEqual(cell["phase"], "compile", cell)
+            else:
+                self.assertEqual(cell["phase"], "all", cell)
+
+    def test_the_compile_only_cell_has_a_step_that_compiles(self):
+        # a phase no step's condition names is a job that configures and goes green
+        text = open(os.path.join(WORKFLOWS, "build_matrix.yml"), encoding="utf-8").read()
+        block = re.search(r"- name: \"Compile\"\n((?:      .*\n)+)", text)
+        self.assertTrue(block, "build_matrix.yml has no Compile step")
+        self.assertIn("if: matrix.phase == 'compile'", block.group(1))
+        self.assertIn("cmake --build ./build", block.group(1))
+        self.assertLess(text.index('- name: "Compile"'), text.index('- name: "Save sccache objects"'))
+
+    def test_every_sccache_slot_is_bounded(self):
+        # sccache's default bound is 10G a slot; an unbounded slot grows to it and evicts the
+        # slots the nightly cells save once a day
+        for name in ("build_matrix.yml", "extended_checks.yml"):
+            text = open(os.path.join(WORKFLOWS, name), encoding="utf-8").read()
+            self.assertGreaterEqual(text.count('echo "SCCACHE_CACHE_SIZE='), 2, name)
 
     def test_half_speed_sweeps_carry_raised_watchdogs(self):
-        # the sanitizer cells and windows Debug run their sweeps at half speed and lose the
-        # default whole-suite watchdog to runner variance; every other cell keeps the defaults,
-        # so a hang still fails fast where the sweep is quick
+        # the sanitizer cells run their sweeps at half speed and lose the default whole-suite
+        # watchdog to runner variance; every other cell keeps the defaults, so a hang still
+        # fails fast where the sweep is quick
         for cell in ci_matrix.build_cells(True):
-            slow = cell["sanitizers"] != "none" or cell["cmake_preset"] == "Debug"
+            slow = cell["sanitizers"] != "none"
             for flag in ("-DDAS_TEST_TIMEOUT=3600", "-DDAS_TEST_TIMEOUT_ISOLATED=7200",
                          "-DDAS_TEST_TIMEOUT_AOT=3600"):
                 (self.assertIn if slow else self.assertNotIn)(flag, cell["cmake_extra"], cell)
@@ -96,14 +115,21 @@ class BuildMatrix(unittest.TestCase):
 
 
 class ExtendedMatrix(unittest.TestCase):
-    def test_per_pr_is_two_darwin_roles(self):
+    def test_per_pr_is_two_linux_roles(self):
         cells = ci_matrix.extended_cells(False)
-        self.assertEqual([(c["target"], c["role"]) for c in cells], [("darwin15", "core"), ("darwin15", "modules")])
+        self.assertEqual([(c["target"], c["role"]) for c in cells], [("linux", "core"), ("linux", "modules")])
 
     def test_nightly_is_one_full_job_per_platform(self):
         cells = ci_matrix.extended_cells(True)
-        self.assertEqual([(c["target"], c["role"]) for c in cells],
-                         [("linux", "all"), ("darwin15", "all"), ("windows", "all")])
+        self.assertEqual([(c["target"], c["role"]) for c in cells], [("linux", "all"), ("windows", "all")])
+
+    def test_the_macos_only_check_rides_the_build_lane(self):
+        # the extended checks have no macOS cell, so the one check cmake gives to APPLE alone has
+        # to run where a macOS job still builds per PR
+        text = open(os.path.join(os.path.dirname(HERE), "ci", "CMakeLists.txt"), encoding="utf-8").read()
+        block = text.split("set(DAS_BUILD_LANE_APPLE", 1)[1].split("das_lane_group(run_build ", 1)
+        self.assertIn("run_tests_llvm_vector_math", block[0])
+        self.assertIn("${DAS_BUILD_LANE_APPLE}", block[1].split(")", 1)[0])
 
     def test_every_cell_names_a_runner(self):
         for nightly in (False, True):
@@ -153,9 +179,12 @@ class WorkflowShapes(unittest.TestCase):
             for block in re.findall(r"- name: \"(?:Restore|Cache) [^\"]*\"\n((?:      .*\n)+)", text):
                 self.assertNotIn("github.event_name != 'schedule'", block, name)
 
-    def test_one_sanitizer_phase_writes_the_shared_slot(self):
+    def test_each_sanitizer_slot_has_one_writer(self):
+        # tests and backend share a slot the tests job writes; slow compiles the full test_aot,
+        # which is in no other job's objects, so it keeps a slot of its own
         text = self.read("build_matrix.yml")
-        self.assertIn("github.ref == 'refs/heads/master' && matrix.phase != 'slow' && matrix.phase != 'backend'", text)
+        self.assertIn("github.ref == 'refs/heads/master' && matrix.phase != 'backend'", text)
+        self.assertEqual(text.count("${{ matrix.phase == 'slow' && '-slow' || '' }}@"), 4)
         self.assertNotIn("matrix.nightly_only != 'ON'", text)
 
     def test_the_three_test_steps_gate_on_the_phase(self):

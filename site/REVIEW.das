@@ -275,6 +275,9 @@ def private check_dl_names_are_defined {
 // into the playground beside it; the gate compiles each block with the binary running it.
 // A blog post is prose, not a page here; a block marked data-playground="none" is compiled
 // but owes no link (the ledgered case: a sample of an engine the wasm build does not carry)
+let private SAMPLE_COMPILE_TIMEOUT_S = 300.0   //! under the gate runner's cap
+let private SAMPLE_SLOW_S = 10.0lf
+
 def private check_embedded_samples {
     let argv <- get_command_line_arguments()
     let self_binary = argv[0]
@@ -312,13 +315,19 @@ def private check_embedded_samples {
             let tmp = unsafe(tmp_r.value)
             fwrite(tmp, blk.source)
             var output = ""
-            let rc = unsafe(popen_argv([self_binary, "-compile-only", tmp], 0.0) $(f) {
-                if (f != null) {
-                    output = fread(f)
-                }
-            })
+            let t0 = ref_time_ticks()
+            var inscope compile <- [self_binary, "-compile-only", tmp]
+            let rc = run_and_capture(compile, output, SAMPLE_COMPILE_TIMEOUT_S)
+            let took = double(get_time_usec(t0)) / 1000000.0lf
             remove(tmp)
-            if (rc != 0) {
+            if (took >= SAMPLE_SLOW_S) {
+                print("site: {page}:{line}: sample {k} took {int(took)} s to compile\n")
+            }
+            if (rc == popen_timed_out) {
+                let cap = int(SAMPLE_COMPILE_TIMEOUT_S)
+                gate_finding(page, line,
+                    "sample {k} did not compile in {cap} s - a compiler hang, or a slow machine")
+            } elif (rc != 0) {
                 let first_error = find_first_error_line(output)
                 gate_finding(page, line, "sample {k} does not compile with the current toolchain: {first_error}")
             }

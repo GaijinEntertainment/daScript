@@ -78,6 +78,10 @@ jobs:
         # Full history so the lint step can `git diff` against the PR base branch.
         fetch-depth: 0
 
+    - name: "Runner info"
+      shell: bash
+      run: bash ci/runner_info.sh
+
     - name: "Exclude workspace from Windows Defender"
       if: runner.os == 'Windows'
       shell: pwsh
@@ -112,12 +116,6 @@ jobs:
       run: |
         set -eux
         case "${{ matrix.target }}" in
-          darwin15)
-            brew install bison openssl
-            echo 'export PATH="/usr/local/opt/bison/bin:$PATH"' >> ~/.bash_profile
-            export LDFLAGS="-L/usr/local/opt/bison/lib -L$(brew --prefix openssl)/lib"
-            export CPPFLAGS="-I$(brew --prefix openssl)/include"
-            ;;
           linux)
             echo "MARCH=64" >> $GITHUB_ENV
             # apt.llvm.org carries LLVM 22 per Ubuntu codename; ubuntu-latest moves between them.
@@ -293,6 +291,11 @@ jobs:
           --jq 'sort_by(.createdAt) | reverse | .[1:] | .[].id' \
           | while read -r id; do gh cache delete "$id" -R ${{ github.repository }}; done
         true
+
+    - name: "Runner info at the end"
+      if: ${{ !cancelled() }}
+      shell: bash
+      run: bash ci/runner_info.sh
 
   commit_messages:
     if: github.event_name == 'pull_request' && inputs.lane != 'extended_nightly'

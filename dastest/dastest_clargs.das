@@ -74,7 +74,7 @@ struct DastestArgs {
     test_files : array<string>
 
     @clarg_name = "exclude"
-    @clarg_doc = "Skip test files whose base name contains this substring (repeatable)"
+    @clarg_doc = "Skip test files whose base name contains this substring; a substring with a '/' is matched against the whole path, so 'tests/lint/' skips a folder (repeatable)"
     exclude_files : array<string>
 
     @clarg_name = "test-list"

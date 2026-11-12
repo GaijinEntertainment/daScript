@@ -638,7 +638,10 @@ def main() : int {  // nolint:STYLE037,STYLE038 - CLI dispatch, one arm per mode
     if (!empty(test_args.exclude_files)) {
         files |> erase_if() $(f) {
             let base = base_name(f)
-            return (find_index_if(test_args.exclude_files) $(pat) => base |> contains(pat)) >= 0
+            let path = f |> replace("\\", "/")
+            return (find_index_if(test_args.exclude_files) $(pat) {
+                return (pat |> contains("/") ? path : base) |> contains(pat)
+            }) >= 0
         }
     }
 

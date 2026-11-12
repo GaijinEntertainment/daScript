@@ -120,8 +120,14 @@ das_lane_group(run_extended_modules "Running the extended checks (modules)" ${DA
 das_lane_group(run_extended_all "Running every extended check"
     ${DAS_EXTENDED_CORE} ${DAS_EXTENDED_MODULES} ${DAS_EXTENDED_NIGHTLY})
 
+# The dasLLVM vector-math rail pins vecmath's answers on Apple silicon; the extended checks have
+# no macOS cell, so the darwin build cells run it.
+set(DAS_BUILD_LANE_APPLE "")
+if(APPLE AND TARGET run_tests_llvm_vector_math AND NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
+    list(APPEND DAS_BUILD_LANE_APPLE run_tests_llvm_vector_math)
+endif()
 das_lane_group(run_build "Running the build lane"
-    run_tests_sweeps test-small run_tests_aot_subset)
+    run_tests_sweeps test-small run_tests_aot_subset ${DAS_BUILD_LANE_APPLE})
 das_lane_group(run_build_nightly "Running the build lane's nightly sweeps"
     run_tests_slow run_backend_sweeps test_aot_subset)
 das_lane_group(run_build_sanitizers "Running the sanitizer lane"
@@ -133,7 +139,7 @@ das_lane_group(run_build_mingw "Running the mingw lane"
 # The isolated retry of a lane whose sweep failed: the workflow chains `<lane> || <lane>_isolated`
 # (cmake has no retry primitive inside one target).
 das_lane_group(run_build_isolated "Retrying the build lane's sweeps in isolated mode"
-    run_tests_sweeps_isolated test-small run_tests_aot_subset)
+    run_tests_sweeps_isolated test-small run_tests_aot_subset ${DAS_BUILD_LANE_APPLE})
 das_lane_group(run_build_sanitizers_isolated "Retrying the sanitizer lane's sweep in isolated mode"
     run_tests_interpreter_isolated test-small)
 das_lane_group(run_build_mingw_isolated "Retrying the mingw lane's sweeps in isolated mode"
