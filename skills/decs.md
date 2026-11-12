@@ -178,6 +178,8 @@ commit()
 
 `get(cmp, name, default)` reads with type inference from the default. `cmp |> set(name, value)` writes (insert or overwrite); type mismatch panics. `cmp |> remove(name)` removes by name. `cmp |> has(name)` checks presence without inserting.
 
+**A component that can't be copied is owned by its entity.** An array, a table or a struct that holds one moves into the component and has one owner, the slot it sits in. `delete_entity` releases such a value, and so does an `update_entity` block that replaces it with `set` or drops it with `remove`; a value the block leaves alone moves with the entity, to another archetype if the component set changed. A component that copies (a number, a string, a pointer) is never released this way.
+
 ## Stage functions
 
 `[decs(stage = name)]` turns a function into a query that runs when you call `decs_stage("name")`. The function body becomes the query body; the function arguments become the query parameters. `decs_stage` calls `commit()` before and after running every registered function for that stage.
