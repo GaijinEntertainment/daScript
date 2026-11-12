@@ -13018,11 +13018,11 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
                             enc_add(enc, bx, 0ul, bds, uint64(l * npos * dim * 4l), u_total_dim, npos * dim)
                         }
                     }
-                    if (bblk != null) {   //! the layer's output rows for the block drafter, at the layer's slot
-                        let slot = mtp_block_layer_slot(l)
-                        if (slot >= 0l) {
-                            enc_copy_row(enc, bx, 0ul, bblk, uint64(slot * mp * dim * 4l), u_total_dim, npos * dim)
-                        }
+                }
+                if (bblk != null && !hcs.on && !narrow_last && (g4_step || pf_ew)) {   //! the layer's output rows for the block drafter, at the layer's slot
+                    let slot = mtp_block_layer_slot(l)
+                    if (slot >= 0l) {
+                        enc_copy_row(enc, bx, 0ul, bblk, uint64(slot * mp * dim * 4l), u_total_dim, npos * dim)
                     }
                 }
             }
