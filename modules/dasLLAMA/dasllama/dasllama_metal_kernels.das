@@ -538,6 +538,20 @@ struct SqAttnDArgs {
 //! a q head's stride: `hs`, or the gated head's `2 hs` the args carry
 def sq_qhs(qhs, hs : uint) : uint => qhs == 0u ? hs : qhs
 
+//! panel element `at` (column `col` of row `row`, rows `width` wide) into the rows8 table: a subgroup's 32 lanes one aligned
+//! 32-block, the block's halves at their k-slots and their sum at the block's token slot; a lane past the panel (`live`
+//! false) adds zero and stores nothing
+def rows8_table_put(var yt : array<float16>; var ys : array<float>; at, col, row, width : uint; v : float; live : bool) {
+    let h = live ? float16(v) : float16(0.0)
+    if (live) {
+        yt[rows8_slot_at(at)] = h
+    }
+    let s = simd_sum(float(h))
+    if (live && gl_SubgroupInvocationID == 0u) {
+        ys[rows8_sum_at(col, row, width)] = s
+    }
+}
+
 //! the attention out `o` of the q head's element at `qi`: under `gated` scaled by the sigmoid of its gate `hs` past it in `q`
 def sq_gated(o : float; q : array<float>; qi, hs, gated : uint) : float => gated != 0u ? sig_gate(o, q[qi + hs]) : o
 
@@ -3692,12 +3706,7 @@ class template MetalSqAttnCombDT {
             let at = bb * (nheads * hs) + col
             yo[at] = v
             static_if (XT) {
-                let hv = float16(v)
-                yt[rows8_slot_at(at)] = hv
-                let s = simd_sum(float(hv))
-                if (sl == 0u) {
-                    ys[rows8_sum_at(col, bb, nheads * hs)] = s
-                }
+                rows8_table_put(yt, ys, at, col, bb, nheads * hs, v, true)
             }
         }
     }
@@ -7125,12 +7134,7 @@ class template MetalRmsNormT : MetalTgReduceBase {
                 yh[row * dim + k] = float16(ov)
             }
             static_if (XT) {
-                let h = float16(ov)
-                yt[rows8_slot_at(row * dim + k)] = h
-                let s = simd_sum(float(h))
-                if (gl_SubgroupInvocationID == 0u) {
-                    ys[rows8_sum_at(k, row, dim)] = s
-                }
+                rows8_table_put(yt, ys, row * dim + k, k, row, dim, ov, true)
             }
             k += gl_WorkGroupSize.x
         }
@@ -16023,13 +16027,8 @@ class template MetalEw2T {
             gh[gid] = float16(res)
         }
         static_if (XT) {
-            let h = float16(res)
-            yt[rows8_slot_at(gid)] = h
-            let s = simd_sum(float(h))
-            if (gl_SubgroupInvocationID == 0u) {
-                let row = gid / xw
-                ys[rows8_sum_at(gid - row * xw, row, xw)] = s
-            }
+            let row = gid / xw
+            rows8_table_put(yt, ys, gid, gid - row * xw, row, xw, res, true)
         }
     }
 }
@@ -16087,15 +16086,8 @@ class MetalGegluSideXT : GkPleAct {
         let e = gl_GlobalInvocationID.x
         act_elem(e)
         let live = e < pa.nelem
-        let h = live ? float16(g[e]) : float16(0.0)
-        if (live) {
-            yt[rows8_slot_at(e)] = h
-        }
-        let s = simd_sum(float(h))
-        if (live && gl_SubgroupInvocationID == 0u) {
-            let row = e / pa.slen
-            ys[rows8_sum_at(e - row * pa.slen, row, pa.slen)] = s
-        }
+        let row = e / pa.slen
+        rows8_table_put(yt, ys, e, e - row * pa.slen, row, pa.slen, live ? g[e] : 0.0, live)
     }
 }
 
