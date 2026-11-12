@@ -48,6 +48,10 @@ jobs:
     - name: "SCM Checkout"
       uses: actions/checkout@v4
 
+    - name: "Runner info"
+      shell: bash
+      run: bash ci/runner_info.sh
+
     - name: "Exclude workspace from Windows Defender"
       if: runner.os == 'Windows'
       shell: pwsh
@@ -293,3 +297,8 @@ jobs:
           --jq 'sort_by(.createdAt) | reverse | .[1:] | .[].id' \
           | while read -r id; do gh cache delete "$id" -R ${{ github.repository }}; done
         true
+
+    - name: "Runner info at the end"
+      if: ${{ !cancelled() }}
+      shell: bash
+      run: bash ci/runner_info.sh
