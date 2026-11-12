@@ -48,8 +48,10 @@ where no other source holds it, and never changes an entry. The builder can add 
 `--ruaccent` (RUAccent's `accents.json.gz` less the machine-made forms of `accents_nn.json.gz`, its
 readings last); the shipped pack is built without it. A dictionary entry changes only through an
 `--amend` row: a second reading both editions give, placed after its own, its one reading replaced,
-or - an `after` of `-` - the entry taken out, so that the ё table restores a е spelling that is no
-form of its own.
+its readings put in another order, or - an `after` of `-` - the entry taken out, so that the ё
+table restores a е spelling that is no form of its own. A `before` of `-` goes the other way: it
+adds a е spelling that is a word beside its ё twin (мудрено́ beside мудрёно), so the ё table leaves
+that spelling to the text.
 
 ### ё restoration {#tts-ru-yo}
 
@@ -106,10 +108,20 @@ pass's first - in place of the whole key's default, and its sides are then read 
 ### A word the pack does not hold {#tts-ru-unknown-word}
 
 A word with no entry of its own, and no entry for its base where it ends in -ся or -сь, is read by
-five tiers in order (`ru_unknown_ordinal`): the form it is a case of (`#tts-ru-case-stem`), the
-full patronymic it is short for (`#tts-ru-short-patronymic`), the abbreviation rule
-(`#tts-ru-abbreviations`), the ending table (`#tts-ru-endings`), and last the shape rule - the
-vowel before the last.
+six tiers in order (`ru_unknown_ordinal`): the -ие form it is short for (`#tts-ru-short-ie`), the
+form it is a case of (`#tts-ru-case-stem`), the full patronymic it is short for
+(`#tts-ru-short-patronymic`), the abbreviation rule (`#tts-ru-abbreviations`), the ending table
+(`#tts-ru-endings`), and last the shape rule - the vowel before the last.
+
+### A short -ье form {#tts-ru-short-ie}
+
+Verse and speech write a noun in -ие with ь for the и and keep its stress: пенье is пение,
+желанья желания, в волненьи в волнении. `ru_short_ie_ordinal` takes a word with ь before a vowel
+in its last four letters and looks the form with и in the ь's place up; the fuller form's key is
+built in a local buffer, as a short patronymic's is, so the lookup allocates nothing. Where the pack holds the fuller form with one reading stressed
+ahead of the и, the short word takes the same vowel. A dictionary lists the fuller form of every
+such noun and few of the short ones, and the ending table reads the short ones on the ending,
+which is why the tier comes first.
 
 ### The form a word is a case of {#tts-ru-case-stem}
 

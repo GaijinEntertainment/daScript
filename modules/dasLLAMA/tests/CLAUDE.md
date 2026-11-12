@@ -4450,7 +4450,12 @@ first, the position counted from the end, an ending that is the whole word or na
 word lacks passed over, a pack entry winning, and the same word on a pack with no section read by
 the shape rule. The case-ending stem (`test_case_ending_stem`): a name in five oblique forms ahead
 of an ending the table holds; an absent stem, a stem of one vowel, a stem of two readings and an
-ending outside the list as the controls. The ё a preposition decides (`test_yo_after_preposition`):
+ending outside the list as the controls. A short -ье form (`test_short_ie_form`): Пенье, пеньем,
+волненьи and желаньями through their -ие forms ahead of the ending table (the table alone reading the
+last vowel, the control); no fuller form, a fuller form of two readings, one stressed past the и, a ь
+at the word's end, a ь before a consonant (the pack holding that word with и), a ь with no vowel
+before it, a ь more than three letters before the last and a word with no ь each answering 0. The ё a
+preposition decides (`test_yo_after_preposition`):
 twenty texts spelled with ё - every shipped pair, capitals, two spaces, a sentence's last word - and
 fourteen left as written (no preposition, по, a pair not shipped, не before the preposition, a
 comma between, an abbreviation's stop, a marked word, a ё word). The rule tier (`test_rule_tier`):
@@ -4485,7 +4490,11 @@ key and a marked side as the controls), marking a word - the text's mark winning
 mark, the clitics bare, a reflexive read through its base form (-ся and -сь) and falling to the
 shape rule where the pack lacks the base and every ending of it, a word the pack lacks read by its
 ending, a hyphenated clitic - and the whole text-to-phonemes path; the model-less tiers on the
-shipped pack (`test_stress_modelless_tiers`): the hand-ruled entries and the ё names restored, two
+shipped pack (`test_stress_modelless_tiers`): the hand-ruled entries and the ё names restored,
+thirteen entries corrected or added from fixed expressions and verse (наводит, поделом, здорова,
+сложа, пятки, немудрено with no ё, пенье and волненьи among them), the locative in -у after на by
+the pack's rule family (the stem stress with no preposition the control), a two-syllable
+preposition and надо carrying their own stress (передо leaning on the next word the control), two
 abbreviations by the last-vowel rule (the pack holding neither, the control) beside the ones the
 pack holds, four names in an oblique case read through the form they are a case of (none a pack
 form; an absent stem and an ending outside the list the controls), twelve words the pack lacks
