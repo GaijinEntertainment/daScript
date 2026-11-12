@@ -44,6 +44,7 @@ let POCKET_CLONE_PORT = 18146   // the Pocket boot with a voices directory
 let POCKET_NOCLONE_PORT = 18147   // the kitten boot under the same voices directory: ignored
 let HELD_PORT = 18163      // the LLM + TTS boot whose engine an embeddings forward holds
 let KOKORO_RU_PORT = 18164   // the Russian boot: its own worker, so its own port
+let FRONT_END_PORT = 18165   // the boot on a directory: a front end with no voice
 let TTS_BURST = 24      // past the server's queue cap (16): the overflow must be refused, not queued
 
 let TTS_PATH = path_join(models_dir(), "kitten-nano.gguf")
@@ -180,6 +181,9 @@ def test_configure_tts_degrades_a_boot_it_cannot_serve(t : T?) {
         let missing = tts_missing_file(packless)
         t |> success(find(missing, "tts_g2p.bin") >= 0, "the probe names the missing pack: {missing}")
         t |> success(!tts_files_present(packless), "the boot's setup-mode probe reads unservable")
+        let no_pack = tts_missing_file(dir)
+        t |> success(find(no_pack, "tts_g2p_ru.bin") >= 0, "a directory with no pack names one: {no_pack}")
+        t |> success(!tts_files_present(dir), "a directory with no pack reads unservable, as its load would refuse it")
         let why = panic_text() {
             configure_tts(packless)
         }
@@ -714,7 +718,7 @@ def test_phonemes_on_a_multi_language_model(t : T?) {
     }
 }
 
-[test(description = "the phonemes route on the Russian fine-tune: with the English packs beside it the front end lists en-us first, and a request naming no voice still previews in the default voice's language, the Russian normalizer's and phonemizer's")]
+[test(description = "the phonemes route on the Russian fine-tune: with the English packs beside it the front end lists en-us first, and a request naming no voice still previews in the default voice's language, the Russian normalizer's and phonemizer's, each chunk carrying its text with + before every stressed vowel")]
 def test_phonemes_on_a_russian_model(t : T?) {
     if (!jit_enabled()) {
         t |> skip("JIT-only: the interpreter is too slow to load a TTS model")
@@ -738,10 +742,65 @@ def test_phonemes_on_a_russian_model(t : T?) {
                     var inscope phons <- json_row_field(js?["chunks"], "phonemes")
                     t |> equal(length(phons), 1, "one chunk")
                     t |> success(length(phons) == 1 && find(phons[0], "ɡɐdˈu") >= 0, "the Russian phonemizer read году: {phons}")
+                    var inscope marked <- json_row_field(js?["chunks"], "marked")
+                    t |> success(length(marked) == 1 && find(marked[0], "год+у") >= 0 && find(marked[0], "в+ышло") >= 0, "the chunk's text with + before each stressed vowel: {marked}")
                     unsafe {
                         delete js
                     }
                 }
+            }
+        }
+    }
+}
+
+[test(description = "a directory served as a TTS model is a front end with no voice: the phonemes route answers in a named language with the marked text, picks the language from the text's script when none is named, refuses a language the directory has no pack for, and the speech route refuses with a 400 naming the missing voice", timeout = 1200)]
+def test_front_end_directory_served(t : T?) {
+    if (!jit_enabled()) {
+        t |> skip("JIT-only: the interpreter is too slow to load the front end")
+        return
+    }
+    if (!stat(path_join(models_dir(), "tts_g2p_ru.bin")).is_valid) {
+        t |> skip("tts_g2p_ru.bin not present under {models_dir()}")
+        return
+    }
+    t |> equal(tts_missing_file(models_dir()), "", "a directory is a complete set: the load reads the packs it holds")
+    with_speech_server(models_dir(), FRONT_END_PORT, "q8", "") $(base_url) {
+        t |> run("the Russian front end by its language, no voice named") @(t : T?) {
+            phonemes_request(base_url, "\{\"input\": \"В 2024 году вышло 12 игр.\", \"language\": \"ru\"}") $(status, text) {
+                t |> equal(status, 200, text)
+                var err = ""
+                var js = read_json(text, err)
+                t |> success(js != null, "the answer parses as JSON: {err}")
+                if (js != null) {
+                    t |> equal(js?["lang"] ?? "", "ru", "the named language")
+                    var inscope marked <- json_row_field(js?["chunks"], "marked")
+                    t |> success(length(marked) == 1 && find(marked[0], "год+у") >= 0 && find(marked[0], "в+ышло") >= 0, "the chunk's text with + before each stressed vowel: {marked}")
+                    unsafe {
+                        delete js
+                    }
+                }
+            }
+        }
+        t |> run("no language named: the text's own script decides") @(t : T?) {
+            phonemes_request(base_url, "\{\"input\": \"Вода и замок.\"}") $(status, text) {
+                t |> equal(status, 200, text)
+                t |> success(find(text, "\"lang\":\"ru\"") >= 0, "a Cyrillic text reads in Russian: {text}")
+            }
+            if (stat(path_join(models_dir(), "tts_postag.bin")).is_valid) {
+                phonemes_request(base_url, "\{\"input\": \"The water tower.\"}") $(status, text) {
+                    t |> equal(status, 200, text)
+                    t |> success(find(text, "\"lang\":\"en-us\"") >= 0, "the control: a Latin text reads in the first language the front end lists: {text}")
+                }
+            }
+        }
+        t |> run("the refusals: a language with no pack here, and a synthesis") @(t : T?) {
+            phonemes_request(base_url, "\{\"input\": \"Hello.\", \"language\": \"xx\"}") $(status, text) {
+                t |> equal(status, 400, text)
+                t |> success(find(text, "unknown language 'xx'") >= 0, text)
+            }
+            speech_request(base_url, "\{\"input\": \"Привет.\"}") $(status, _ctype, _bytes, text) {
+                t |> equal(status, 400, text)
+                t |> success(find(text, "no voice to speak") >= 0, text)
             }
         }
     }

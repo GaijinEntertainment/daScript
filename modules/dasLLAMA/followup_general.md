@@ -2724,17 +2724,6 @@
     already tuned and the hints already name the distinct buffers, so the expected gain is small
     or zero, and a row that measures nothing is closed with that figure.
 
-290. **The Russian front end decides a homograph and an unknown word without context.** `dasllama_g2p_ru.das`
-    reads a form with two stresses (за́мок / замо́к, му́ки / муки́ - 6450 forms of the pack) as the pack's first
-    variant, the one a corpus frequency count put first, whatever the sentence says, and a form the pack lacks
-    (loanwords, names, the dictionary's gaps) by the shape rule, the vowel before the last, which is wrong often
-    enough to hear; a mark in the text is the only override. Done = a small context model (the tagging shape of `ARCHITECTURE_TTS_FRONT_END.md#tts-heteronym-context`:
-    per letter, is this the stressed vowel; a homograph picked among the pack's variants, an unknown word
-    guessed from its letters), trained on the stress-marked corpora the fixture and the frequency table already
-    come from, held out against a hand-curated homograph set, shipped in the pack as a fourth table and read in
-    `ru_mark_word` where the pack's default and the shape rule stand now; the pack's exception list - the
-    known forms the model gets wrong - carried beside it so a known word never regresses.
-
 291. **The Russian stress pack carries two four-byte offset columns per form.** `tts_g2p_ru.bin` is 17.3 MB for
     560,825 forms: 10.9 MB of keys and 4.5 MB of offsets in the byte-sorted string table every pack shares
     (`dasllama_g2p_pack.das`), where the keys share long prefixes (every inflection of one lemma). Done = a
@@ -2767,3 +2756,30 @@
     not тысячу). Done = a rule for each of (1) and (3) with its pinned sentences in
     `tests/test_tts_textnorm_ru.das`; (2) is left to a context model or to the writer's own words, and a mark
     in the text is the override.
+
+294. **The stress-context model loads whole into RAM and serves on the CPU alone.** `load_ru_stress`
+    reads `tts_ctx_ru.gguf` into memory and serves the file's own Q4_K and Q8_0 planes
+    (`ARCHITECTURE_TTS_FRONT_END.md#tts-stress-lanes`); there is no `.dlim` image of it, no mapped
+    load, and no GPU seat - a Russian phonemize call on a GPU-served voice runs its context pass on the
+    CPU pool beside the synthesis. The pass's walls are in `PERF_LEDGER.md`, the entry "the Russian
+    stress-context model: its files and its pass's lanes". Done = the stress model's planes served from the mapped file with no copy, and a
+    measured decision, per GPU home, whether its pass moves onto the voice's GPU seat or stays on the
+    CPU, the figures in `PERF_LEDGER.md`.
+
+295. **The Russian stress pass decides only the catalog's homographs from context; an unknown word, a
+    е/ё pair and the rule tier have no context decision.** The context tier
+    (`ARCHITECTURE_TTS_FRONT_END.md#tts-stress-context`) asks the stress-context model about the forms its
+    catalog lists and nothing else. Four gaps remain. (a) A form the pack lacks (loanwords, names, the
+    dictionary's gaps) still reads by the shape rule, the vowel before the last; the model scores only
+    the ordinals the catalog allows a listed form, so it has no answer for an unlisted word. (b) A form
+    whose е and ё spellings are both words (все / всё, небо / нёбо) is left as written: the pack restores
+    ё only where the е spelling is no word, the catalog spells no form with ё, and the model's tokenizer
+    folds ё into е, so nothing in the pass chooses between the two. (c) `ru_stress_rule` abstains on
+    every word - no agreement or collocation rule (на́ руки, за́ руку) answers ahead of the model, and no
+    exception list holds a known form the model reads wrong. (d) A homograph outside the catalog reads
+    the pack's default whatever its sentence says. Done = an open-vocabulary stress head (per letter, is
+    this the stressed vowel) read where the shape rule stands now, with a figure for unknown words on
+    the short-sentence set beside the shape rule's on the same set; the е/ё pairs decided by the same
+    pass and counted on their own; the rule seat filled where a rule beats the model on that set, with
+    an exception list beside it so a known word never regresses; each change scored through
+    `harness/ru_stress_eval.das --pack` against the current front end on the same set.

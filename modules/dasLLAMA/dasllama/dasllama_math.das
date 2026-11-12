@@ -490,8 +490,10 @@ let STEP_LANE_WORK = 131072l
 var private g_step_lane_work = STEP_LANE_WORK
 
 //! The lanes a sequential decode step (a transducer's, a translation decoder's) publishes to: its widest stage's `work` over the
-//! lane work, at least one, at most the pool - the width `dispatch_lanes_narrow` narrows the pool to.
-def public step_lanes(work : int64) : int => int(clamp(work / g_step_lane_work, 1l, int64(get_dispatch_lanes())))
+//! lane work, at least one, at most the pool - the width `dispatch_lanes_narrow` narrows the pool to. A pass with its own
+//! measured grain names it: `lane_work` in place of the shared one (0 keeps it) and `min_lanes` as the floor.
+def public step_lanes(work : int64; lane_work : int64 = 0l; min_lanes : int64 = 1l) : int =>
+    int(clamp(work / (lane_work > 0l ? lane_work : g_step_lane_work), min_lanes, int64(get_dispatch_lanes())))
 
 //! Probe seam: the lane work `step_lanes` divides by, in place of `STEP_LANE_WORK` (0 restores it), so a race arm sweeps a decode
 //! team's width without narrowing an encoder's pool; answers the value it replaced.

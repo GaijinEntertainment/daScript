@@ -241,6 +241,15 @@ it was measured on. The pinned set, one entry a line, each with what it must kee
 - `test_nmt.das`'s `test_nmt_q8_lane` cell, an external-reference compare, must hold the q8 lane at
   `Q8_LINES_FLOOR` (25 of 30) lines of `tokens.json`'s ids on the ru/en base-memory pairs, the same
   file with its classifier's Q8_0 copy zeroed moving every line and falling under the floor.
+- `test_tts_g2p_ru.das`'s `test_ru_stress_encoder` cell, an external-reference compare, must hold, on the 20 sentences of
+  `tts_oracle/ru_stress/`, the piece ids the dumps' own, the last hidden state within `F32_BAR` on the f32 lane and
+  `Q8_BAR` on the q8 lane, the head's logits within the lane's logit bar and the f32 lane's every pick the reference's,
+  each lane with the word's pieces as `[UNK]` landing outside both bars.
+- `test_tts_g2p_ru.das`'s `test_ru_stress_api` cell must hold the word finder on the manifest's span and the catalog's
+  mask the manifest's for every case, the batch picks bit for bit the single picks, and a maskless pick on the largest logit.
+- `test_tts_kokoro.das`'s `test_kokoro_ru_mixed_script` cell must hold the facade's phonemes of a text with Latin runs
+  around two homographs to the context pass's marking of the normalized text, the Latin runs spliced after, the pack's
+  marking another string; and with no context model, the pack's marking, the same whether the splice runs first or last.
 
 **A diff that changes the contract a pinned test cell holds fixed - what its entry says it must
 keep holding, an axis gained or lost - updates that cell's entry in the pinned set in the same

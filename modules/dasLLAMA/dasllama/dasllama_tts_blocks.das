@@ -15,6 +15,7 @@ require dasllama/dasllama_convert
 require dasllama/dasllama_tower
 require dasllama/dasllama_gpu_math   // sigmoid_f32 and the STFT scalars: the one form the CPU chain and the kernel homes share
 require dasllama/dasllama_common
+require dasllama/dasllama_gguf
 require dasllama/dasllama_gemm_schema   // Q8K_SUM_ELEMS - the Q8_K activation form's sum block
 require dasllama/dasllama_image   // count_meta_fields - the leaf serializers' field tripwire
 
@@ -1131,6 +1132,18 @@ def linear_take_kq(var l : TtsLinear; fmt : int; var kq, ks : array<uint8>; repa
     release_plane(l.w)
 }
 
+//! Give layer `l` (its `nin` and `nout` set) tensor `name`'s own planes in the superblock format `fmt` the
+//! caller admits for it, read off the GGUF and handed to `linear_take_kq`.
+def linear_read_kq(var l : TtsLinear; m : GGUFMeta; bytes : array<uint8> | #; name : string; fmt : KqFmt) {
+    let n = l.nout * l.nin
+    var inscope @exact_size kq : array<uint8>
+    var inscope @exact_size ks : array<uint8>
+    kq |> reserve_resize(n / KQ_SB_ELEMS * kq_qsb(fmt))
+    ks |> reserve_resize(n / KQ_SB_ELEMS * kq_ssb(fmt))
+    gguf_transcode_kq(m, bytes, name, fmt, kq, ks, 0l, n)
+    linear_take_kq(l, kq_schema_id(fmt), kq, ks, true)
+}
+
 // one row [nin] through the K-quant GEMV: the row requantized to the Q8_K form where it sits,
 // then the backend's core over repacked planes or the portable one over disk order
 def private kq_gemv_row(l : TtsLinear; x : array<float>; xoff : int64; var y : array<float>; yoff : int64) {
@@ -1588,6 +1601,94 @@ def layernorm_rows_into(src : array<float>; @scratch @exact_size var dst : array
     unsafe {
         layernorm_batch_at(dst, src, addr<float const?>(n.w[0]), addr<float const?>(n.b[0]), c, t, eps)
     }
+}
+
+// ===== the BERT encoder's embeddings and layer =====
+
+//! The BERT embeddings of `ids` over token-major rows, e [t][emb_dim]: each id's word row plus its
+//! position's row plus token type 0's row, then the LayerNorm.
+def bert_embed_rows(ids : array<int>; word, pos, typ : array<float>; ln : TtsNorm; eps : float; emb_dim : int64;
+                    @scratch @exact_size var e : array<float>) {
+    let t = long_length(ids)
+    unsafe(scratch_resize(e, t * emb_dim))
+    for (i in range64(t)) {
+        let id = int64(ids[i])
+        for (d in range64(emb_dim)) {
+            e[i * emb_dim + d] = word[id * emb_dim + d] + pos[i * emb_dim + d] + typ[d]
+        }
+    }
+    layernorm_rows(e, t, emb_dim, ln, eps)
+}
+
+//! The GELU a BERT layer's feed-forward applies: the tanh approximation (ALBERT's gelu_new) or the erf form (BERT's gelu).
+enum TtsGelu {
+    tanh
+    erf
+}
+
+//! `gelu_form` over x [t][c] in place, row blocks across the lanes; elementwise, so any split lands the same bits
+def gelu_rows(var x : array<float>; t, c : int64; gelu_form : TtsGelu) {
+    return if (t * c <= 0l)
+    if (gelu_form == TtsGelu.erf) {
+        gelu_erf_batch(x, c, t)
+        return
+    }
+    var xp = unsafe(addr(x[0]))
+    maybe_parallel_for(0, int(t), lanes_for_work(t * c, 0)) $(rb, re) {
+        gelu(unsafe(xp + int64(rb) * c), int64(re - rb) * c)
+    }
+}
+
+//! One BERT layer's activations, reused layer to layer and call to call.
+struct TtsBertScratch {
+    @scratch @exact_size q : array<float>
+    @scratch @exact_size k : array<float>
+    @scratch @exact_size v : array<float>
+    @scratch @exact_size ctx : array<float>
+    @scratch @exact_size attn : array<float>
+    @scratch @exact_size f : array<float>
+    @scratch @exact_size f2 : array<float>
+}
+
+//! One post-LN BERT layer over token-major h [t][hidden], in place: self-attention, the residual and its LayerNorm, the feed-forward under `gelu_form`, the residual and the output LayerNorm.
+//! `lw` carries the layer's weights as `q`, `k`, `v`, `dense`, `attn_ln`, `ffn`, `ffn_out`, `full_ln`.
+//! `stage` runs after each stage with its name - `qkv`, `attention`, `attn_out`, `attn_norm`, `ffn_up`, `gelu`, `ffn_down`, `out_norm` - a profiler's clock.
+def bert_layer_rows(lw : auto(LW); heads : int64; eps : float; gelu_form : TtsGelu; var h : array<float>; t : int64; var sc : TtsBertScratch;
+                    stage : block<(name : string) : void>) {
+    let hidden = lw.dense.nout
+    let n = t * hidden
+    var attn & = unsafe(sc.attn)
+    var f & = unsafe(sc.f)
+    var f2 & = unsafe(sc.f2)
+    linear_rows(lw.q, h, t, sc.q)
+    linear_rows(lw.k, h, t, sc.k)
+    linear_rows(lw.v, h, t, sc.v)
+    invoke(stage, "qkv")
+    attention_rows(sc.q, sc.k, sc.v, t, hidden, heads, sc.ctx)
+    invoke(stage, "attention")
+    linear_rows(lw.dense, sc.ctx, t, attn)
+    invoke(stage, "attn_out")
+    for (i in range64(n)) {
+        attn[i] += h[i]
+    }
+    layernorm_rows(attn, t, hidden, lw.attn_ln, eps)
+    invoke(stage, "attn_norm")
+    linear_rows(lw.ffn, attn, t, f)
+    invoke(stage, "ffn_up")
+    gelu_rows(f, t, lw.ffn.nout, gelu_form)
+    invoke(stage, "gelu")
+    linear_rows(lw.ffn_out, f, t, f2)
+    invoke(stage, "ffn_down")
+    for (i in range64(n)) {
+        h[i] = f2[i] + attn[i]
+    }
+    layernorm_rows(h, t, hidden, lw.full_ln, eps)
+    invoke(stage, "out_norm")
+}
+
+//! `bert_layer_rows` with no stage clock.
+def bert_layer_rows(lw : auto(LW); heads : int64; eps : float; gelu_form : TtsGelu; var h : array<float>; t : int64; var sc : TtsBertScratch) {
+    bert_layer_rows(lw, heads, eps, gelu_form, h, t, sc) $(_stage) {}
 }
 
 //! LayerNorm over channels at every position of a [C][T] buffer, in place; identity affine

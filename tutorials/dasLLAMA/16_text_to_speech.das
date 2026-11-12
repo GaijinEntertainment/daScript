@@ -14,7 +14,8 @@ require strings
 // This tutorial covers:
 //   - load_tts_model — one loader for every TTS family, the front-end packs read beside the GGUF
 //   - caps() — the voices, the languages, the PCM rate, and what a loaded model can do
-//   - tts_normalize / tts_phonemize / tts_voice_lang — the text front end on its own, in the
+//   - tts_normalize / tts_phonemize / tts_mark_stress /
+//     tts_voice_lang — the text front end on its own, in the
 //     dialect the picked voice reads, without synthesizing; tts_has_phonemes says whether a
 //     model has a phoneme string to show at all
 //   - set_tts_q8 / reset_tts_q8 / tts_serves_q8 — the two weight lanes, and the pin discipline
@@ -51,6 +52,16 @@ let PARAGRAPH = "Dr. Smith read the report on Feb. 3. It ran to 3.5 pages, which
 def seconds(pcm : array<float>; sample_rate : int) : float =>
     float(length(pcm)) / float(sample_rate)
 
+// what a front end with no voice gives for one Russian sentence:
+// the spoken form, its stress, its phonemes
+def show_russian_front_end(m : TtsModel; c : TtsCaps) {
+    return if (find_index(c.langs, "ru") < 0)
+    let spoken = tts_normalize("В 2024 году вышло 12 игр.", "ru")
+    print("normalized: {spoken}\n")
+    print("stress:     {tts_mark_stress(m, spoken, "ru")}\n")
+    print("phonemes:   {tts_phonemize(m, spoken, "ru")}\n")
+}
+
 [export]
 def main {  // nolint:STYLE038 - one linear tutorial walkthrough
     let cmd <- get_command_line_arguments()
@@ -70,7 +81,8 @@ def main {  // nolint:STYLE038 - one linear tutorial walkthrough
         } elif (a == "--clone" && i + 1 < length(cmd)) {
             clip_path = cmd[i + 1]
             i++
-        } elif (ends_with(a, ".gguf")) {
+        } elif (ends_with(a, ".gguf") || stat(a).is_dir) {
+            // a directory: its packs alone, a front end with no voice
             model_path = a
         } elif (ends_with(a, ".wav")) {
             out_path = a
@@ -78,7 +90,9 @@ def main {  // nolint:STYLE038 - one linear tutorial walkthrough
         i++
     }
     if (empty(model_path)) {
-        print("usage: daslang.exe -jit tutorials/dasLLAMA/16_text_to_speech.das -- <tts-model.gguf> [out.wav] [--voice <name>] [--f32] [--clone <clip.wav>]\n")
+        print("usage: daslang.exe -jit tutorials/dasLLAMA/16_text_to_speech.das -- ")
+        print("<tts-model.gguf | directory of front-end packs> [out.wav] ")
+        print("[--voice <name>] [--f32] [--clone <clip.wav>]\n")
         return
     }
 
@@ -125,6 +139,16 @@ def main {  // nolint:STYLE038 - one linear tutorial walkthrough
     print("voices ({length(c.voices)}): {join(c.voices, ", ")}\n")
     print("languages: {join(c.langs, ", ")}\n")
     print("rate: {c.sample_rate} Hz; clones a voice: {c.cloning}; honours a speed: {c.speed}\n")
+    // load_tts_model also takes a DIRECTORY: the front-end packs it
+    // holds, with no voice. Such a model normalizes, marks stress and
+    // phonemizes - text prepared here for a synthesis that runs
+    // somewhere else - and tts_front_end_only says so; it has nothing
+    // to speak with.
+    if (tts_front_end_only(m)) {
+        print("{model_path} is a front end with no voice\n")
+        show_russian_front_end(m, c)
+        return
+    }
     // caps().voices can be EMPTY: a model whose every voice pack speaks a language this front
     // end does not phonemize offers none, and there is no first voice to fall back on.
     if (empty(voice) && empty(c.voices)) {
@@ -181,6 +205,14 @@ def main {  // nolint:STYLE038 - one linear tutorial walkthrough
         let american = vlang == "en-us"
         let ps = american ? tts_phonemize(m, spoken) : tts_phonemize(m, spoken, vlang)
         print("phonemes:   {ps}\n")
+        // Russian spelling does not write stress: tts_mark_stress shows
+        // where the front end put it, a + before each stressed vowel.
+        // A language whose front end marks no text answers the empty
+        // string.
+        let marked = tts_mark_stress(m, spoken, vlang)
+        if (!empty(marked)) {
+            print("stress:     {marked}\n")
+        }
     } else {
         print("phonemes:   none - this model reads the text\n")
     }

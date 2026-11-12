@@ -76,7 +76,8 @@ anchor.
   reference checkout's unicode data, and the re-stamp is the regeneration's receipt.
 - **`dasllama_unicode.das`** - the codepoint tables (RANGES, WS) and the UTF-8 codepoint helpers over
   a `string` the tokenizers and the TTS front end share: classification, `cpt_count`, the
-  decode/encode of one codepoint.
+  decode/encode of one codepoint; and the two byte-span helpers every reader of a byte array shares,
+  a span as a string (`bytes_str`) and two spans compared as unsigned bytes (`bytes_compare`).
 - **`dasllama_spm.das`** - the SentencePiece backend: score-greedy merges over vocab pieces (Llama-2, Phi-3, Gemma), the unigram Viterbi arm
   over the same pieces (`unigram_encode`, GGUF `"t5"`, `ARCHITECTURE_POCKET.md#pocket-tts`'s tokenizer), `<0xXX>` byte fallback, and the
   model-file reader with its charsmap normalizer (`load_spm_model_file`, `ARCHITECTURE_TRANSLATE.md#nmt-charter`). A byte piece is found by
@@ -101,7 +102,10 @@ anchor.
   lands here, never in the merge engine - the two change for different reasons (new model family
   vs. algorithm work). Every arm with an on-disk upstream corpus vocab is gated by its case in
   `test_tokenizer.das` (llama3, qwen2, qwen35, gpt-2); tekken has no corpus case, and gpt-4o is
-  pinned by frozen ids in `test_parity.das` only.
+  pinned by frozen ids in `test_parity.das` only. It also holds the BERT pre-tokenizer
+  (`pretok_split_bert`) the WordPiece backend calls: words over the classes its tables give - a
+  space ends a word, a punctuation mark or a CJK ideograph is a word alone
+  (`ARCHITECTURE_TTS_FRONT_END.md#wordpiece-tables`).
 
 ### The two tokenizer backends carry twin merge heaps {#bpe-merge-heap}
 
@@ -186,6 +190,9 @@ the file's F32, F16 or BF16 GEMMs at default levers - a
 converted copy the tower's image carries; the f16 lane's halfword plane, rounded from F32 or BF16 and saturated to the
 f16 range, is a converted copy only a pin reaches (`set_*_q8(false)`, `set_asr_fp32`, `set_asr_tower_fp32`); GigaAM's
 halfwords are its carrier's own F16, a served form; a chat tower on a box with no GPU tower reads the file's f32 rows.
+The Russian stress-context model's f32 layer GEMMs follow the TTS lane (`tts_serves_q8`): on the q8 lane they are a Q8_0
+requant minted at load and held in RAM, with no image; its K-quant layers serve the file's own planes on either lane
+(`ARCHITECTURE_TTS_FRONT_END.md#tts-stress-lanes`).
 Every `load_big` call names the form it
 fills - the plane's tag, or the `KqFmt` member a conversion serves - so the conversion reads at the call;
 `REVIEW.das`'s `check_load_big_format` reds a call with no format, and licenses no names.

@@ -4,8 +4,10 @@ The companion `ARCHITECTURE.md` indexes: the TTS file charters (`ARCHITECTURE_TT
 and the mechanisms the TTS files implement. `ARCHITECTURE_COMMON.md` (repo root) is the
 contract. What a synthesis allocates, holds and gives back - the carrier, the generator's
 buffers, the chunk cap and the idle release, the streamed source - is `ARCHITECTURE_TTS_MEMORY.md`.
-The text front end - its file charters, the heteronym context and the two-tier phoneme pack - is
-`ARCHITECTURE_TTS_FRONT_END.md`; the Russian normalizer's rules (the case a numeral takes, count
+The text front end - its file charters, the heteronym context, the two-tier phoneme pack, the Russian
+stress-context pass, the stress model's lanes and the WordPiece tables - is
+`ARCHITECTURE_TTS_FRONT_END.md`; the Russian stress pack and the stress tiers that need no model are
+`ARCHITECTURE_TTS_RU_STRESS.md`; the Russian normalizer's rules (the case a numeral takes, count
 agreement, a placing distance, years, ordinal suffixes, telephone numbers, centuries and Roman
 numerals, a number joined to a word, a bare number before the noun it numbers) are
 `ARCHITECTURE_TTS_TEXTNORM_RU.md`.
@@ -16,7 +18,8 @@ numerals, a number joined to a word, a bare number before the noun it numbers) a
 
 The text front end's charters - `dasllama_textnorm.das`, `dasllama_textnorm_ru.das`,
 `dasllama_postag.das`, `dasllama_g2p.das`, `dasllama_g2p_pack.das`, `dasllama_textscan.das` and
-`dasllama_g2p_ru.das` - are `ARCHITECTURE_TTS_FRONT_END.md#tts-front-end`.
+`dasllama_g2p_ru.das`, with the Russian stress-context model `dasllama_g2p_ru_stress.das` and its
+`dasllama_wordpiece.das` - are `ARCHITECTURE_TTS_FRONT_END.md#tts-front-end`.
 
 - **`dasllama_tts_types.das`** - the TTS floor: `TtsCaps`, `TtsAudio` (f32 PCM + rate), `TtsNoise`
   (the source noise a synthesis consumed - captured from the oracle, or drawn into a reused
@@ -33,7 +36,10 @@ The text front end's charters - `dasllama_textnorm.das`, `dasllama_textnorm_ru.d
   half-to-even rounding, PCG32 with a polar normal (a generator nobody seeded refuses), the
   harmonic-plus-noise sine source over a frame window with its carried phase (`SineSourceCarry`),
   the stream window knob record both windowed families share (`TtsStreamWindow`), multi-head
-  attention, and the STFT pieces (edge pad, magnitude
+  attention, the BERT embeddings and the post-LN BERT layer (`bert_embed_rows`, `bert_layer_rows` over any
+  record carrying `q`, `k`, `v`, `dense`, `attn_ln`, `ffn`, `ffn_out`, `full_ln`, the GELU form an argument,
+  run by row blocks in `gelu_rows`: PL-BERT's one shared ALBERT layer and the stress model's per-layer BERT),
+  and the STFT pieces (edge pad, magnitude
   and phase, polar to rectangular, reflection pad); for the continuous-audio family
   (`ARCHITECTURE_POCKET.md`) the causal cached attention over a per-layer `TtsKvCache` (keys
   transposed per head, values per head, a key window; the queries go in blocks, each scored over
@@ -96,7 +102,8 @@ The text front end's charters - `dasllama_textnorm.das`, `dasllama_textnorm_ru.d
   phoneme pack and `tts_postag.bin` where a voice speaks English, and where they merely sit
   there (the Latin words inside another language's text read through them), the full pack
   preferred over the American-only twin, `ARCHITECTURE_TTS_FRONT_END.md#tts-g2p-pack-tiers`; `tts_g2p_ru.bin`
-  where a voice speaks Russian, a panic naming it where it is missing; the voices it leaves out named once in the
+  where a voice speaks Russian, a panic naming it where it is missing, and the optional stress-context model
+  `tts_ctx_ru.gguf` beside it, probed once (`ARCHITECTURE_TTS_FRONT_END.md#tts-stress-context`); the voices it leaves out named once in the
   log; a Pocket file stands alone and `tts_needs_packs` says so from the file's architecture
   before any load, `tts_pack_names` naming the packs the file's voices read - the phoneme pack
   tier the directory holds with the tagger, the Russian stress pack, both, or none - from the
@@ -119,7 +126,12 @@ The text front end's charters - `dasllama_textnorm.das`, `dasllama_textnorm_ru.d
   (a normalized sentence in the front end's inventory, before a family rewrites its symbols;
   the language form takes a code from `caps` and refuses undeclared languages - "ru" runs the
   Russian front end, a run of Latin letters inside its text first read by the English front end
-  where its packs are loaded and spliced in as phonemes), the lane pin
+  where its packs are loaded and spliced in as phonemes), `tts_mark_stress` (a normalized
+  sentence with `+` before each stressed vowel as the Russian phonemizer reads it, empty for a
+  language whose front end marks no text), `tts_front_end_only` (a model `load_tts_model` read
+  from a DIRECTORY: the packs it holds and no voice, `TtsKind.front_end` - it normalizes, marks
+  stress and phonemizes, its roster is empty and a synthesis panics; the server's phonemes route
+  serves it so another server's voice can speak the marked text), the lane pin
   (`set_tts_q8`, `reset_tts_q8`, `tts_serves_q8`), the chunk cap (`tts_set_chunk_chars`, per
   model - the peak a say holds is the largest chunk's, `ARCHITECTURE_TTS_MEMORY.md#tts-idle-release`),
   `synthesize_stream` (text -> normalize in the voice's language -> the reference sentence chunker, 400 codepoints a
@@ -135,10 +147,10 @@ The text front end's charters - `dasllama_textnorm.das`, `dasllama_textnorm_ru.d
   draw, and `synthesize` and `synthesize_stream` stay sample-identical because both walk the same
   chunk list in the same order. Requires no `audio` module. `REVIEW.das`'s `check_tutorial_floor`
   walks the facade files - `dasllama.das`, `dasllama_core.das` and this one - and licenses a `def private` one, a
-  `def operator` overload, and the names in its `FACADE_DEFS_WITHOUT_TUTORIAL` set, each beside its reason. This file's two are `finalize`, the
-  language's own teardown hook the compiler calls at `delete`, and `tts_finish_styletts2`, the
+  `def operator` overload, and the names in its `FACADE_DEFS_WITHOUT_TUTORIAL` set, each beside its reason. This file's three are `finalize`, the
+  language's own teardown hook the compiler calls at `delete`, `tts_finish_styletts2`, the
   loader's tail that the parity rail's in-memory minter shares and that a user reaches only through
-  `load_tts_model`. No tutorial calls any of them by name, so none carries a teaching duty.
+  `load_tts_model`, and `tts_ru_stress_model_path`, the loader's answer to where a voice's stress model sits. No tutorial calls any of them by name, so none carries a teaching duty.
 
 Every local container on the TTS path is `var inscope`: the persistent heap frees nothing at
 scope exit, so a bare local holding a per-sentence buffer leaks once a sentence until the OS kills a long run.

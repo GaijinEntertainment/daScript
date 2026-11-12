@@ -315,6 +315,40 @@ def pretok_split_gpt4o(cpts : array<int>) : array<int> {   // nolint:STYLE037,ST
     return <- offs
 }
 
+//! What the BERT normalizer and pre-tokenizer see in one codepoint - the classes
+//! `harness/convert_ru_stress.py` writes per codepoint run, in its numbering.
+enum BertCharKind {
+    keep
+    drop
+    space
+    punct
+    cjk
+}
+
+//! The BERT pre-tokenizer: the words of a normalized codepoint run as [x, y) spans - a space ends
+//! a word and belongs to none, a punctuation mark or a CJK ideograph is a word of its own.
+def pretok_split_bert(kinds : array<BertCharKind>) : array<int2> {
+    var words : array<int2>
+    var start = -1
+    for (i, k in count(), kinds) {
+        if (k == BertCharKind.keep) {
+            start = start < 0 ? i : start
+            continue
+        }
+        if (start >= 0) {
+            words |> push(int2(start, i))
+            start = -1
+        }
+        if (k == BertCharKind.punct || k == BertCharKind.cjk) {
+            words |> push(int2(i, i + 1))
+        }
+    }
+    if (start >= 0) {
+        words |> push(int2(start, length(kinds)))
+    }
+    return <- words
+}
+
 // tekken pre-split (Mistral/Voxtral). Upstream has no custom splitter - it runs generic std::wregex
 // TRUE ECMAScript alternation with greedy backtracking (up*lo+ tried first), so "你A" splits "你"|"A"
 // unlike gpt-4o's merged-run reduction. No contraction arm; single-digit \p{N}; '/' in punct tail.

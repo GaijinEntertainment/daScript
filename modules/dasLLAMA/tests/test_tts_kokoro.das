@@ -7,6 +7,8 @@ require dastest/testing_boost public
 require dasllama/dasllama_kokoro
 require dasllama/dasllama_unicode   // cpt_to_utf8: building a phoneme the vocabulary lacks
 require dasllama/dasllama_tts
+require dasllama/dasllama_g2p_ru   // ru_mark_stress, ru_phonemize_marked: the mixed-script cell's expected reading
+require dasllama/dasllama_g2p_ru_stress
 require dasllama/dasllama_tts_types
 require dasllama/dasllama_styletts2   // the model driven straight from a phoneme string, to hold a synthesis against
 require dasllama/dasllama_math   // with_dasllama_jobque_
@@ -15,6 +17,7 @@ require daslib/fio
 require strings
 require _tts_parity
 require _model_tier
+require _scratch_dir   // scratch_path, scratch_file: the stress-model probe's directory
 
 // The Kokoro family. Model-free: the token rule and the style-row rule over a hand-built
 // vocabulary, including the drop of a symbol the vocabulary does not carry. Model-gated
@@ -23,7 +26,9 @@ require _model_tier
 // the token rule against the reference pipeline, the parity rail of `_tts_parity.das` against
 // the PyTorch reference with captured noise, the Russian fine-tune's facade cell (`kokoro-ru.gguf`
 // + `tts_g2p_ru.bin`: the declared voice languages, the Russian front end, a Latin word spliced
-// in, sveta speaking the Russian string), and a facade smoke cell that speaks one sentence
+// in, sveta speaking the Russian string; the context-model cell and the mixed-script cell also
+// skip without `tts_ctx_ru.gguf` under models_dir(), and the mixed-script cell reads the English
+// packs for its Latin words), the model-free probe for that file in a scratch directory, and a facade smoke cell that speaks one sentence
 // through the front end's own inventory. The facade and GPU cells also need the front-end
 // packs (`tts_g2p.bin`, `tts_postag.bin`) beside the model; the GPU cells run on Metal or Vulkan,
 // skip where no device serves or the driver registers no seat for the stage, and red where a
@@ -217,6 +222,7 @@ def test_kokoro_ru_facade(t : T?) {
         t |> equal(packs[0], "tts_g2p_ru.bin", "the Russian stress pack alone")
         with_dasllama_jobque_() {
             var inscope m <- load_tts_model(ru_gguf_path())
+            delete m.ru_stress_model
             var inscope c <- caps(m)
             t |> equal(length(c.voices), 2, "sveta and masha: {c.voices}")
             for (lang in c.voice_langs) {
@@ -230,7 +236,7 @@ def test_kokoro_ru_facade(t : T?) {
             let norm = tts_normalize(line, "ru")
             t |> equal(norm, "двенадцать мешков муки нужно, чтобы открыть замок.")   // nolint:STYLE039
             let ps = strip(tts_phonemize(m, norm, "ru"))
-            t |> equal(ps, "dvʲinˈɑtʦətʲ mʲiʃkˈof mˈukʲɪ nˈuʒnə, ʃtˈoby ɐtkrˈytʲ zˈɑmək.", "муки and замок read the pack's default - the corpus's more frequent reading - with no mark in the text")   // nolint:STYLE039
+            t |> equal(ps, "dvʲinˈɑtʦətʲ mʲiʃkˈof mukʲˈi nˈuʒnə, ʃtˈoby ɐtkrˈytʲ zˈɑmək.", "with no model and no mark in the text the rule tier reads муки́, and замок keeps the pack's default")   // nolint:STYLE039
             let other = strip(tts_phonemize(m, "мешков мук+и", "ru"))   // nolint:STYLE039
             t |> equal(other, "mʲiʃkˈof mukʲˈi", "a mark in the text picks the other reading")   // nolint:STYLE039
             var inscope cps <- utf8_to_cpts(ps)
@@ -252,6 +258,94 @@ def test_kokoro_ru_facade(t : T?) {
             t |> equal(long_length(audio.pcm), n_ru, "the synthesis read the Russian front end: its sample count is the pack-default phoneme string's")
             to_log(LOG_INFO, "kokoro-ru facade: {length(audio.pcm)} samples, peak {lv.peak}; {timings_line(audio.timings, audio.sample_rate)}\n")
         }
+    }
+    t |> run("with tts_ctx_ru.gguf beside the voices, the context model picks a homograph's reading by its sentence") @(t : T?) {
+        return if (tts_data_missing(t, ru_gguf_path()) || ru_pack_missing(t) || !model_available(t, path_join(models_dir(), "tts_ctx_ru.gguf")))
+        with_dasllama_jobque_() {
+            var inscope m <- load_tts_model(ru_gguf_path())
+            t |> success(ru_stress_loaded(m.ru_stress_model), "the loader read the context model beside the voices")
+            var inscope packs <- tts_pack_names(ru_gguf_path())
+            t |> equal(length(packs), 1, "the context model is optional: the required packs stay {packs}")
+            let lock = strip(tts_phonemize(m, "он открыл замок ключом.", "ru"))   // nolint:STYLE039
+            let castle = strip(tts_phonemize(m, "старинный замок стоит на горе.", "ru"))   // nolint:STYLE039
+            t |> success(find(lock, "zɐmˈok") >= 0, "a key opens a lock, замо́к: {lock}")   // nolint:STYLE039
+            t |> success(find(castle, "zˈɑmək") >= 0, "a castle on a hill, за́мок: {castle}")   // nolint:STYLE039
+            let marked = strip(tts_phonemize(m, "он открыл з+амок ключом.", "ru"))   // nolint:STYLE039
+            t |> success(find(marked, "zˈɑmək") >= 0, "the control: a mark in the text outranks the model: {marked}")   // nolint:STYLE039
+        }
+    }
+    t |> run("a directory's front end, asked outside any job queue, still reads by the context model") @(t : T?) {
+        return if (ru_pack_missing(t) || !model_available(t, path_join(models_dir(), "tts_ctx_ru.gguf")))
+        var inscope m <- load_tts_model(models_dir())
+        t |> success(tts_front_end_only(m) && ru_stress_loaded(m.ru_stress_model), "the directory loads as a front end with the context model")
+        var inscope packs <- tts_pack_names(models_dir())
+        t |> success(find_index(packs, "tts_g2p_ru.bin") >= 0, "a directory names the packs it holds: {packs}")
+        t |> success(tts_needs_packs(models_dir()), "and reads packs")
+        let lock = tts_mark_stress(m, "он открыл замок ключом.", "ru")   // nolint:STYLE039
+        let castle = tts_mark_stress(m, "старинный замок стоит на горе.", "ru")   // nolint:STYLE039
+        t |> success(find(lock, "зам+ок") >= 0, "a key opens a lock: {lock}")   // nolint:STYLE039
+        t |> success(find(castle, "з+амок") >= 0, "the control, a castle on a hill - the pack's default: {castle}")   // nolint:STYLE039
+    }
+}
+
+//! `text` with each of `latin` replaced by the English front end's phonemes for it
+def private replace_latin(m : TtsModel; text : string; latin : array<string>) : string {
+    var out = text
+    for (word in latin) {
+        out = replace(out, word, strip(tts_phonemize(m, word, "en-us")))
+    }
+    return out
+}
+
+//! the facade's Russian reading of a marked text: its Latin words spliced as phonemes, then letter-to-sound
+def private latin_spliced_phonemes(m : TtsModel; marked : string; latin : array<string>) : string =>
+    strip(ru_phonemize_marked(replace_latin(m, marked, latin)))
+
+[test(description = "Russian text with Latin words before, between and after two homographs: the facade marks every Russian word with the context pass's pick over the normalized text, and without the context model reads the pack's marking of the spliced text")]
+def test_kokoro_ru_mixed_script(t : T?) {
+    t |> run("Latin runs around the homographs: each Russian word reads the context pass's pick over the text as written") @(t : T?) {
+        return if (tts_data_missing(t, ru_gguf_path()) || ru_pack_missing(t) || !model_available(t, path_join(models_dir(), "tts_ctx_ru.gguf")) || !model_available(t, path_join(models_dir(), "tts_g2p.bin")) || !model_available(t, path_join(models_dir(), "tts_postag.bin")))
+        with_dasllama_jobque_() {
+            var inscope m <- load_tts_model(ru_gguf_path())
+            t |> success(ru_stress_loaded(m.ru_stress_model), "the context model is loaded")
+            t |> success(!empty(m.g2p.data), "the English packs are loaded: a Latin run is spliced as phonemes")
+            var inscope latin <- ["hello", "python", "world"]
+            let norm = tts_normalize("hello он открыл замок ключом. python старинный замок стоит на горе world.", "ru")   // nolint:STYLE039
+            for (word in latin) {
+                t |> success(find(norm, word) >= 0, "the normalizer keeps '{word}': {norm}")
+            }
+            var inscope sc = RuStressScratch()
+            var inscope picks <- ru_stress_context_picks(m.ru_stress_model, m.ru_stress, norm, sc)
+            t |> success(picks.asked >= 2, "both homographs are asked ({picks.asked})")
+            let in_context = ru_mark_stress(m.ru_stress, norm, picks.picked)
+            let by_pack = ru_mark_stress(m.ru_stress, norm)
+            let want = latin_spliced_phonemes(m, in_context, latin)
+            let pack_only = latin_spliced_phonemes(m, by_pack, latin)
+            let got = strip(tts_phonemize(m, norm, "ru"))
+            to_log(LOG_INFO, "mixed script: {in_context}\n  facade {got}\n  pack   {pack_only}\n")
+            t |> equal(got, want, "the facade's phonemes are the context pass's marking of the text as written, its Latin runs spliced after")
+            t |> success(find(in_context, "зам+ок") >= 0 && find(in_context, "з+амок") >= 0, "the two homographs take two readings: {in_context}")   // nolint:STYLE039
+            t |> success(got != pack_only, "the control: the pack alone reads another string")
+            for (word in latin) {
+                t |> success(find(got, strip(tts_phonemize(m, word, "en-us"))) >= 0, "'{word}' is read by the English front end")
+            }
+            delete m.ru_stress_model
+            let bare = strip(tts_phonemize(m, norm, "ru"))
+            t |> equal(bare, pack_only, "without the context model the facade reads the pack's marking")
+            let spliced_first = strip(ru_phonemize(m.ru_stress, replace_latin(m, norm, latin)))
+            t |> equal(bare, spliced_first, "and marking before the splice reads what marking the spliced text reads")
+        }
+    }
+}
+
+[test(description = "`tts_ru_stress_model_path` answers the stress-context model's path where `tts_ctx_ru.gguf` sits in the directory and nothing where it does not")]
+def test_ru_stress_model_probe(t : T?) {
+    t |> run("a directory without the file answers nothing; with the file, its path") @(t : T?) {
+        let dir = scratch_path(".")
+        t |> equal(tts_ru_stress_model_path(dir), "", "no tts_ctx_ru.gguf in the directory: the pack alone decides")
+        let stub = scratch_file("tts_ctx_ru.gguf", "a stub, never loaded")
+        t |> equal(tts_ru_stress_model_path(dir), path_join(dir, "tts_ctx_ru.gguf"), "the file beside the voice is the model")
+        t |> success(stat(stub).is_valid, "the stub is on disk")
     }
 }
 

@@ -39,7 +39,7 @@ any sibling companion that sends a reader to it.
   reasoning budget that closes a thinking span for the model, and the host pool behind
   device-home streams (`ARCHITECTURE_ENGINE_SERVING.md#device-home-pool`).
 - `ARCHITECTURE_ENGINE_FORMATS.md` - the format, load-rail and CPU-kernel-tier charters, plus
-  the shapes they key off - the bigram merge heap both tokenizer backends run
+  the shapes they key off - the bigram merge heap the two LLM tokenizer backends run
   (`ARCHITECTURE_ENGINE_FORMATS.md#bpe-merge-heap`), the one RoPE fill over a position source
   (`ARCHITECTURE_ENGINE_FORMATS.md#rope-one-fill`), and the Model's per-format plane table, its
   only `dim` field (`ARCHITECTURE_ENGINE_FORMATS.md#model-plane-table-dim`).
@@ -67,7 +67,7 @@ any sibling companion that sends a reader to it.
 - `ARCHITECTURE_MEDIA.md` - the encoder-tower, audio and ASR charters (`ARCHITECTURE_MEDIA.md#tower-audio-charters`).
 - `ARCHITECTURE_MEDIA_VISION.md` - the vision charters (`ARCHITECTURE_MEDIA_VISION.md#vision-charters`).
 - `ARCHITECTURE_TTS.md` - the text-to-speech charters - the block home, the shared assembly, the families and the facade.
-- `ARCHITECTURE_TTS_FRONT_END.md` - the text front end's charters (`ARCHITECTURE_TTS_FRONT_END.md#tts-front-end`), the heteronym context, the phoneme pack tiers.
+- `ARCHITECTURE_TTS_FRONT_END.md` - the text front end's charters (`ARCHITECTURE_TTS_FRONT_END.md#tts-front-end`), the heteronym context, the phoneme pack tiers, the Russian stress-context pass, the stress model's lanes, the WordPiece tables; `ARCHITECTURE_TTS_RU_STRESS.md` - the Russian stress pack and the stress tiers that need no model.
 - `ARCHITECTURE_TTS_TEXTNORM_RU.md` - the Russian normalizer's case, count, placing-distance, year, suffix, phone, century and Roman, compound and numbered-noun rules.
 - `ARCHITECTURE_POCKET.md` - the Pocket TTS family, a continuous-audio language model with its
   own assembly.

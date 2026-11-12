@@ -6,7 +6,9 @@ module dasllama_unicode shared public
 
 require dasllama/dasllama_lint public
 require daslib/utf8_utils   // utf8_encode - the codepoint -> bytes encoder cpt_to_utf8 wraps
+require daslib/array_boost  // temp_array - bytes_str's one copy
 require strings
+require math
 
 // Unicode classification + UTF-8 codec for the Llama-3 / tiktoken BPE pre-tokenizer.
 // GENERATED DATA: RANGES + WS are transcoded from the upstream unicode category/whitespace
@@ -263,28 +265,37 @@ def utf8_to_cpts(s : string) : array<int> {
 let private REPLACEMENT_CPT : int = 0xFFFD   // what a value outside the unicode range encodes as
 let private MAX_CPT : int = 0x10FFFF
 
+//! One codepoint's UTF-8 bytes appended to `bytes`, the bytes `cpts_to_utf8` spells it in: a
+//! value outside [0, U+10FFFF] as U+FFFD.
+def cpt_utf8_push(var bytes : array<uint8>; cpt : int) {
+    utf8_encode(bytes, uint((cpt < 0 || cpt > MAX_CPT) ? REPLACEMENT_CPT : cpt))
+}
+
+//! Bytes [o, o + n) of `b` as a string; empty where `n` is not positive.
+def bytes_str(b : array<uint8> | #; o : int64; n : int | int64) : string {
+    return "" if (int64(n) <= 0l)
+    unsafe {
+        return string(temp_array(addr<uint8?>(b[o]), n, type<uint8>))
+    }
+}
+
+//! Bytes [ao, ao + an) of `a` against bytes [bo, bo + bn) of `b`, compared as unsigned bytes: negative, zero or positive as
+//! the first span sorts before, at or after the second, a span sorting before every longer span it opens. Allocates nothing.
+def bytes_compare(a; ao : int64; an : int; b; bo : int64; bn : int) : int {
+    for (k in range(min(an, bn))) {
+        let d = int(a[ao + int64(k)]) - int(b[bo + int64(k)])
+        return d if (d != 0)
+    }
+    return an - bn
+}
+
 //! Encode codepoints [a, b) of an array to a UTF-8 string. A value outside [0, U+10FFFF]
 //! encodes as U+FFFD.
 def cpts_to_utf8(c : array<int>; a, b : int) : string {
     var inscope bytes : array<uint8>
     bytes |> reserve((b - a) * 4)
     for (i in range(a, b)) {
-        let cp = (c[i] < 0 || c[i] > MAX_CPT) ? REPLACEMENT_CPT : c[i]
-        if (cp < 128) {
-            bytes |> push(uint8(cp))
-        } elif (cp < 2048) {
-            bytes |> push(uint8(192 + (cp >> 6)))
-            bytes |> push(uint8(128 + (cp & 63)))
-        } elif (cp < 65536) {
-            bytes |> push(uint8(224 + (cp >> 12)))
-            bytes |> push(uint8(128 + ((cp >> 6) & 63)))
-            bytes |> push(uint8(128 + (cp & 63)))
-        } else {
-            bytes |> push(uint8(240 + (cp >> 18)))
-            bytes |> push(uint8(128 + ((cp >> 12) & 63)))
-            bytes |> push(uint8(128 + ((cp >> 6) & 63)))
-            bytes |> push(uint8(128 + (cp & 63)))
-        }
+        cpt_utf8_push(bytes, c[i])
     }
     return string(bytes)
 }

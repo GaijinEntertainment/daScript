@@ -3406,11 +3406,13 @@ Text to speech in pure daslang: load a converted StyleTTS2-lineage GGUF (KittenT
 - `caps` - What the loaded model offers: the canonical voice names the front end can drive, each with its language (a voice whose language it does not phonemize is left out; aliases resolve at synthesis), the PCM rate, the languages, whether it clones a voice, whether a speed applies.
 - `finalize` - Free the model's planes, the carrier and both packs; `delete m` runs it.
 - `g2p_pack_path`
-- `load_tts_model` - Load a TTS model: a converted GGUF (KittenTTS, Kokoro or Pocket TTS, picked from its architecture) or its prepared `.dlim` image; a phoneme family reads the packs its voices' languages ask for from the same directory (`tts_pack_names`; Pocket needs none).
+- `load_tts_model` - Load a TTS model: a converted GGUF (KittenTTS, Kokoro or Pocket TTS, picked from its architecture) or its prepared `.dlim` image, on the lane `tts_serves_q8` names (an image: the lane it was baked on); a phoneme family reads the packs its voices' languages ask for from the same directory (`tts_pack_names`; Pocket needs none).
 - `tts_finish_styletts2` - A StyleTTS2 carrier in `m.model`, loaded or minted from `path`, made a facade: its family's kind, the packs its voices' languages ask for from the same directory (the English pair also where it merely sits there, for the Latin words inside another language's text), the voices it cannot speak said once.
+- `tts_front_end_only` - Whether `m` is a front end loaded from a directory: it normalizes, marks stress and phonemizes in the languages `caps().langs` lists, and has no voice - `caps().voices` is empty and a synthesis panics.
 - `tts_has_phonemes` - Whether `tts_phonemize` has an answer for this model: the phoneme families yes, in the languages `caps().langs` lists (the two-argument form's English needs the English packs beside the model), a Pocket model no - it reads text.
 - `tts_needs_packs` - Whether the model at `path` reads any front-end pack from its directory: the phoneme families do (`tts_pack_names` says which), a Pocket TTS GGUF reads text and needs none - decided before any load, by the architecture test `load_tts_model` makes (a `.dlim` is a phoneme family).
-- `tts_pack_names` - The front-end packs the model at `path` reads from its directory, decided from the file's own metadata before any load: the phoneme pack tier the directory holds and `tts_postag.bin` where a voice speaks English, `tts_g2p_ru.bin` where one speaks Russian, none for a Pocket GGUF; a `.dlim` answers for the GGUF beside it, and names the English pair where none is.
+- `tts_pack_names` - The front-end packs the model at `path` reads from its directory, decided from the file's own metadata before any load: the phoneme pack tier the directory holds and `tts_postag.bin` where a voice speaks English, `tts_g2p_ru.bin` where one speaks Russian, none for a Pocket GGUF; a `.dlim` answers for the GGUF beside it, and names the English pair where none is; a directory - a front end with no voice - names the packs it holds.
+- `tts_ru_stress_model_path` - The Russian stress-context model a voice in `dir` reads - `tts_ctx_ru.gguf` there - or "" where the directory has none: the file is optional, and without it the pack alone decides the stress.
 - `tts_voice_lang` - The language the front end reads `voice` in - a canonical name from `caps` or a family alias, resolved the way `synthesize` resolves it.
 
 ### Voices
@@ -3423,6 +3425,7 @@ Text to speech in pure daslang: load a converted StyleTTS2-lineage GGUF (KittenT
 ### Text front end
 
 - `tts_chunks` - The chunks a synthesis on this model takes, by the family's own driver rule: Kitten's appends a comma to a chunk the split left bare, Kokoro's sends the text as it is (its voices render an added mark as a breath), Pocket's splits on its tokenizer's sentence marks under a token budget.
+- `tts_mark_stress` - One already-normalized sentence with `+` before every stressed vowel, as the phonemizer of `lang` reads it: Russian ("ru") marks each stressed word - "в з+амке" - by the stress pack, and by the stress-context model where its file sits beside the voice.
 - `tts_normalize` - The spoken form of `text`: the normalization pass every synthesis runs first (rules alone - it reads no pack), where "Dr." reads "Doctor", "3.5" reads "three point five" and "$12" reads "twelve dollars".
 - `tts_phonemize` - The phonemes one already-normalized sentence becomes, in the front end's own American inventory (`tts_postag.bin` tags the tokens, `tts_g2p.bin` reads them); a family wanting other symbols rewrites them.
 
@@ -4308,8 +4311,8 @@ The AST module provides access to the abstract syntax tree representation of das
 - `compiling_module` - Returns the module currently being compiled.
 - `compiling_program` - Returns the program currently being compiled.
 - `find_macro_context` - Returns the macro context of `module` - every macro context carries the mutex `invoke_in_context` locks from its creation.
-- `function_index` - The slot `function` holds in `program`'s context: `-1` when the program never allocated it, `-2` when the allocation found it unused, its function-table index otherwise.
 - `function_hash` - The semantic hash `program` computed for `function` when it simulated, from the nodes it built for the body, so it says how this program calls what the body calls; `0` before simulate.
+- `function_index` - The slot `function` holds in `program`'s context: `-1` when the program never allocated it, `-2` when the allocation found it unused, its function-table index otherwise.
 - `has_macro_context` - Returns true when `module` has a macro context - it declares a macro (a `[_macro]` function is the smallest) and was compiled with one.
 - `is_jit_selected` - True when `program`'s JIT selected `function` - the DLL the program runs holds it, so a call to it from jitted code goes into the DLL rather than through an interpreter slot.
 - `is_typedef_used` - True when `program`'s own module named a typedef that `module` declares.

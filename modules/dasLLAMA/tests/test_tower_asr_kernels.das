@@ -12,6 +12,7 @@ require dasllama/dasllama_plane
 require daslib/jobque_boost
 require math
 require _compares   // nan_plane: the outputs' sentinel fill
+require _kernel_oracles   // layernorm_ref: the LayerNorm cells' double form
 
 //! Model-free CPU units for the public tower, audio and TTS kernels the ASR and TTS paths run: every bar is an in-test fp64 reference over a seeded-LCG fixture, and every bar carries a must-EXCEED poison.
 var private g_lcg = 0x2545F4914F6CDD1Dul
@@ -190,29 +191,7 @@ def private ln_fixture(var x : array<float>; var wb : array<float>) {
 }
 
 def private ln_ref(x : array<float>; wb : array<float>; var want : array<double>; var env : array<double>) {
-    want |> resize(LN_POS * LN_DIM)
-    env |> resize(LN_POS * LN_DIM)
-    for (p in range64(LN_POS)) {
-        let off = p * LN_DIM
-        var mean = 0.0lf
-        for (i in range64(LN_DIM)) {
-            mean += double(x[off + i])
-        }
-        mean /= double(LN_DIM)
-        var vr = 0.0lf
-        for (i in range64(LN_DIM)) {
-            let dv = double(x[off + i]) - mean
-            vr += dv * dv
-        }
-        vr /= double(LN_DIM)
-        let scale = 1.0lf / sqrt(vr + double(LN_EPS))
-        for (i in range64(LN_DIM)) {
-            let nrm = (double(x[off + i]) - mean) * scale * double(wb[LN_OFF + i])
-            let bias = double(wb[LN_OFF + LN_DIM + i])
-            want[off + i] = nrm + bias
-            env[off + i] = abs(nrm) + abs(bias)
-        }
-    }
+    layernorm_ref(x, LN_POS, LN_DIM, wb, wb, LN_OFF, LN_OFF + LN_DIM, double(LN_EPS), want, env)
 }
 
 def private ln_scalar_run(x : array<float>; wb : array<float>) : array<float> {

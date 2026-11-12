@@ -624,12 +624,28 @@ def gguf_bool_or(m : GGUFMeta; bytes : array<uint8> | #; key : string; dflt : bo
 
 def gguf_str_or(m : GGUFMeta; bytes : array<uint8> | #; key : string; dflt : string) : string => key_exists(m.kv, key) ? gguf_str(m, bytes, key) : dflt
 
-//! Read an integer-typed value (any width / signedness) widened to int64.
-def gguf_int(m : GGUFMeta; bytes : array<uint8> | #; key : string) : int64 {
+//! where `key`'s value sits; a file without the key panics naming it
+def private gguf_loc(m : GGUFMeta; key : string) : GGUFKVLoc {
     if (!key_exists(m.kv, key)) {
         panic("gguf: missing key '{key}'")
     }
-    let loc = m.kv?[key] ?? default<GGUFKVLoc>
+    return m.kv?[key] ?? default<GGUFKVLoc>
+}
+
+let private GT_ANY = -1     //! `gguf_array_loc`'s element type for an array of any
+
+//! where the array `key` sits, its elements of type `arr_type`; a value that is no such array panics as not `what`
+def private gguf_array_loc(m : GGUFMeta; key : string; arr_type : int; what : string) : GGUFKVLoc {
+    let loc = gguf_loc(m, key)
+    if (loc.gtype != GT_ARRAY || (arr_type != GT_ANY && loc.arr_type != arr_type)) {
+        panic("gguf: key '{key}' is not {what}")
+    }
+    return loc
+}
+
+//! Read an integer-typed value (any width / signedness) widened to int64.
+def gguf_int(m : GGUFMeta; bytes : array<uint8> | #; key : string) : int64 {
+    let loc = gguf_loc(m, key)
     let o = loc.data_off
     let t = loc.gtype
     if (t == GT_U8 || t == GT_I8 || t == GT_BOOL) {
@@ -653,10 +669,7 @@ def gguf_int(m : GGUFMeta; bytes : array<uint8> | #; key : string) : int64 {
 
 //! Read a float32 value (also accepts the rare f64-typed key, narrowed).
 def gguf_f32(m : GGUFMeta; bytes : array<uint8> | #; key : string) : float {
-    if (!key_exists(m.kv, key)) {
-        panic("gguf: missing key '{key}'")
-    }
-    let loc = m.kv?[key] ?? default<GGUFKVLoc>
+    let loc = gguf_loc(m, key)
     if (loc.gtype == GT_F32) {
         return rd_f32(bytes, loc.data_off)
     }
@@ -669,10 +682,7 @@ def gguf_f32(m : GGUFMeta; bytes : array<uint8> | #; key : string) : float {
 
 //! Read a string value.
 def gguf_str(m : GGUFMeta; bytes : array<uint8> | #; key : string) : string {
-    if (!key_exists(m.kv, key)) {
-        panic("gguf: missing key '{key}'")
-    }
-    let loc = m.kv?[key] ?? default<GGUFKVLoc>
+    let loc = gguf_loc(m, key)
     if (loc.gtype != GT_STRING) {
         panic("gguf: key '{key}' is not a string (type {loc.gtype})")
     }
@@ -682,13 +692,7 @@ def gguf_str(m : GGUFMeta; bytes : array<uint8> | #; key : string) : string {
 
 //! Read a string array (e.g. tokenizer.upstream.tokens).
 def gguf_str_array(m : GGUFMeta; bytes : array<uint8> | #; key : string) : array<string> {
-    if (!key_exists(m.kv, key)) {
-        panic("gguf: missing key '{key}'")
-    }
-    let loc = m.kv?[key] ?? default<GGUFKVLoc>
-    if (loc.gtype != GT_ARRAY || loc.arr_type != GT_STRING) {
-        panic("gguf: key '{key}' is not a string array")
-    }
+    let loc = gguf_array_loc(m, key, GT_STRING, "a string array")
     var out : array<string>
     out |> reserve(int(loc.count))
     var o = loc.data_off
@@ -698,15 +702,53 @@ def gguf_str_array(m : GGUFMeta; bytes : array<uint8> | #; key : string) : array
     return <- out
 }
 
+//! A string array read with no string made: every element's bytes end to end, in the array's order.
+struct GGUFStrBlob {
+    bytes : array<uint8>
+    at : array<int>   //! element `i` is bytes[at[i] .. at[i + 1]): one entry more than the elements
+}
+
+//! Read a string array as one byte blob and its element starts (`GGUFStrBlob`).
+def gguf_str_array_blob(m : GGUFMeta; bytes : array<uint8> | #; key : string) : GGUFStrBlob {
+    let loc = gguf_array_loc(m, key, GT_STRING, "a string array")
+    var total = 0l
+    var o = loc.data_off
+    for (_i in range64(loc.count)) {
+        let n = rd_i64(bytes, o)
+        if (n < 0l || o + 8l + n > long_length(bytes)) {
+            panic("gguf: key '{key}' holds a string that runs past the file")
+        }
+        total += n
+        o += 8l + n
+    }
+    if (loc.count >= int64(INT_MAX) || total > int64(INT_MAX)) {
+        panic("gguf: key '{key}' holds {loc.count} strings of {total} bytes, past what one blob indexes")
+    }
+    var out = GGUFStrBlob()
+    out.bytes |> reserve(total)
+    out.bytes |> resize(total)
+    out.at |> reserve(loc.count + 1l)
+    o = loc.data_off
+    var w = 0l
+    for (_i in range64(loc.count)) {
+        let n = rd_i64(bytes, o)
+        o += 8l
+        out.at |> push(int(w))
+        if (n > 0l) {
+            unsafe {
+                memcpy(addr(out.bytes[w]), addr(bytes[o]), n)
+            }
+        }
+        w += n
+        o += n
+    }
+    out.at |> push(int(w))
+    return <- out
+}
+
 //! Read a float32 array (e.g. tokenizer.upstream.scores).
 def gguf_f32_array(m : GGUFMeta; bytes : array<uint8> | #; key : string) : array<float> {
-    if (!key_exists(m.kv, key)) {
-        panic("gguf: missing key '{key}'")
-    }
-    let loc = m.kv?[key] ?? default<GGUFKVLoc>
-    if (loc.gtype != GT_ARRAY || loc.arr_type != GT_F32) {
-        panic("gguf: key '{key}' is not a float32 array")
-    }
+    let loc = gguf_array_loc(m, key, GT_F32, "a float32 array")
     var out : array<float>
     out |> resize(loc.count)
     var o = loc.data_off
@@ -719,13 +761,7 @@ def gguf_f32_array(m : GGUFMeta; bytes : array<uint8> | #; key : string) : array
 
 //! Read an int32 array (e.g. tokenizer.upstream.token_type), widened to int64.
 def gguf_i32_array(m : GGUFMeta; bytes : array<uint8> | #; key : string) : array<int64> {
-    if (!key_exists(m.kv, key)) {
-        panic("gguf: missing key '{key}'")
-    }
-    let loc = m.kv?[key] ?? default<GGUFKVLoc>
-    if (loc.gtype != GT_ARRAY || loc.arr_type != GT_I32) {
-        panic("gguf: key '{key}' is not an int32 array")
-    }
+    let loc = gguf_array_loc(m, key, GT_I32, "an int32 array")
     var out : array<int64>
     out |> resize(loc.count)
     var o = loc.data_off
@@ -748,13 +784,7 @@ def gguf_is_array(m : GGUFMeta; key : string) : bool {
 //! Read an integer array of any element width (u8/i8/bool/u16/i16/u32/i32/u64/i64), widened to
 //! int64. gemma4 stores sliding_window_pattern as bool[] and head_count_kv as i32[].
 def gguf_int_array(m : GGUFMeta; bytes : array<uint8> | #; key : string) : array<int64> {
-    if (!key_exists(m.kv, key)) {
-        panic("gguf: missing key '{key}'")
-    }
-    let loc = m.kv?[key] ?? default<GGUFKVLoc>
-    if (loc.gtype != GT_ARRAY) {
-        panic("gguf: key '{key}' is not an array")
-    }
+    let loc = gguf_array_loc(m, key, GT_ANY, "an array")
     let et = loc.arr_type
     var out : array<int64>
     out |> resize(loc.count)

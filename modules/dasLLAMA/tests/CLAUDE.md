@@ -4424,6 +4424,37 @@ line beside it. Then the AMERICAN-ONLY pack (`tts_g2p_en_us.bin`, skips when abs
 with the full pack on the 200 sentences, British refused by name on it (the full pack reading
 British is the control), and the directory rule of `g2p_pack_path` - the full pack wins where
 both sit, the American twin serves alone, an empty directory panics naming it.
+`test_tts_g2p_ru_pack.das` - model-free: the Russian stress pack and its model-less tiers on
+synthetic version 2 packs a test-side writer builds. The load refusals (`test_pack_refusals`): a
+missing pack, a foreign version and version 1 by name (the same header at version 2 loading as the
+control), another pack's magic, a section whose byte count runs past the file, and a section of an
+unknown tag passed over with the tables ahead of it read as before. The front-coded tables
+(`test_pack_front_table`): a seven-key pack at four keys a block read at its first, last and
+block-edge keys, a form's two ordinals in their order (the other order the control), ten absent
+words - between two keys, shorter than a shared prefix, a capital, Latin, empty - and ё masks of one
+and two bytes; then some 2,900 forms and 900 ё spellings of 51 stems by 60 endings at 16, 3 and 1
+keys a block against the plain tables, every form's ordinals and three probes beside it, one changed
+entry of each table counting one mismatch (the controls). The lookups that return no container
+(`test_pack_lookup_allocates_nothing`): the default ordinal of a present, an absent and a reflexive
+word, a reading's presence, an absent ё spelling, the ending table's ordinal, the case-ending stem's
+and the rule tier's answer over the same forms inside one bracket of `heap_allocation_count` and
+`string_heap_allocation_count`, both unmoved, the ending table and the stem each answering a
+hundred words or more and the rule tier its two forms, the ordinals array and a returned ё spelling
+moving their counts (the controls). The abbreviation rule (`test_abbreviation_last_vowel`): six
+abbreviations on the last vowel; a pack entry, a final vowel, small letters, one capital, four
+vowels and one vowel as the controls. The ending table (`test_ending_table`): the longest ending
+first, the position counted from the end, an ending that is the whole word or names a vowel the
+word lacks passed over, a pack entry winning, and the same word on a pack with no section read by
+the shape rule. The case-ending stem (`test_case_ending_stem`): a name in five oblique forms ahead
+of an ending the table holds; an absent stem, a stem of one vowel, a stem of two readings and an
+ending outside the list as the controls. The ё a preposition decides (`test_yo_after_preposition`):
+twenty texts spelled with ё - every shipped pair, capitals, two spaces, a sentence's last word - and
+fourteen left as written (no preposition, по, a pair not shipped, не before the preposition, a
+comma between, an abbreviation's stop, a marked word, a ё word). The rule tier (`test_rule_tier`):
+a word rule, an ending rule and an edge rule over one form in running text and asked directly, the
+first rule that holds deciding, a neighbour in another sentence no neighbour, a form's unruled
+side answering where no rule holds, a context pass's
+pick and the text's mark outranking the tier, and a pack with no section abstaining.
 `test_tts_g2p_ru.das` - stocked suite; model-free cells: letter-to-sound on 50 pinned marked
 words (the label shape kokoro-ru was trained on - palatalization, the sign cases, voicing and
 final devoicing, the reduction, the respellings and the merged clusters, both mark spellings,
@@ -4433,17 +4464,98 @@ final soft consonant soft before a vowel and hard otherwise, a final вь devoic
 follows), hyphenated words (the one-vowel side stressed, the clitic side not, либо with its own
 stress whatever its case), punctuation (quotes and brackets go, the dash stays) and another script's run passing
 through; then the 200-sentence fixture `_tts_fixtures/g2p_corpus_ru.json` (loaded by
-`_tts_corpus_ru.das`, minted by `../harness/mint_tts_g2p_ru_fixture.py` from stress-marked
-Balalaika sentences through kokoro-ru's own front end) on its marked words - the words a bare
-corpus left to the reference's own stress are counted apart - the mismatch count pinned exactly at
-4 (three loanwords the reference reads from its dictionary, one voiced final зь); and the
-missing-pack panic, the version refusal and the wrong-magic refusal (synthetic headers in the
-per-process temp dir). Model-gated (`tts_g2p_ru.bin` under models_dir()): the pack's forms and
+`_tts_corpus_ru.das`, minted by `../harness/mint_tts_g2p_ru_fixture.py` from sentences written for the fixture and
+stress-marked by `tts_mark_stress`, through kokoro-ru's own front end) on its marked words - the
+words left bare, to the reference's own stress, are counted apart - the mismatch count pinned exactly at
+3 (the reference's voiced final зь twice, its гч of облегчением once). Model-gated
+(`tts_g2p_ru.bin` under models_dir()): the pack's forms and
 variants (молоко́ one reading, замок two), ё restoration where the е spelling is no word and the
-ambiguous все left alone, marking a word - the text's mark winning, the case kept, a ё its own
+ambiguous все left alone, the words the dictionary lacks read from the other sources
+(`test_stress_pack_sources`: назначена, назначен, сделана, написана, решена, получена, годы,
+годах, пяти, десяти, and происходит by its corrected entry, a made-up word of the same shape read
+by its ending as the control), ё spellings restored as the dictionary restores them and the true pairs
+and a name left alone, a hyphenated word read by its whole key and then side by side
+(что-нибудь, кто-то, когда-нибудь, какой-либо, северо-запад, по-русски; из-за and из-под, words made
+of clitics, left unstressed whatever their whole key says; a word with no whole
+key and a marked side as the controls), marking a word - the text's mark winning, the case kept, a ё its own
 mark, the clitics bare, a reflexive read through its base form (-ся and -сь) and falling to the
-shape rule where the pack lacks the base too, the shape rule on a word the pack lacks, a
-hyphenated clitic - and the whole text-to-phonemes path.
+shape rule where the pack lacks the base and every ending of it, a word the pack lacks read by its
+ending, a hyphenated clitic - and the whole text-to-phonemes path; the model-less tiers on the
+shipped pack (`test_stress_modelless_tiers`): the hand-ruled entries and the ё names restored, two
+abbreviations by the last-vowel rule (the pack holding neither, the control) beside the ones the
+pack holds, four names in an oblique case read through the form they are a case of (none a pack
+form; an absent stem and an ending outside the list the controls), twelve words the pack lacks
+read by the ending table alone and one no ending of which is held on the shape rule, the ё after a
+preposition (по the control), and two homographs by the rule tier, a context pass's pick outranking
+it; and the tiers ahead of a context pass
+(`test_stress_pick_order`): a hand-built pick for every word of a text leaves a marked word, a ё
+word, a clitic, a ё restoration and a hyphenated word as the pack alone reads them and gives the
+open word the pick, and `ru_word_needs_context` answers no for each closed word and yes for an
+open one. Model-gated on the stress-context model
+as well (`tts_ctx_ru.gguf` beside the pack, `test_stress_context` and, for the sentence cuts and the
+windows, `test_stress_context_cuts`): twelve homographs, each in two
+sentences that ask for its two readings, read right both ways, the pack and its rule tier alone
+misreading eight of the 24 (the control, pinned); three sentences as one text reading what they
+read one by one, the last pass holding the last sentence's pieces alone after a period, an ellipsis
+and a `?!` (a comma ending no sentence, the control); a word the text marks and a ё word not asked,
+the mark standing; one pass for a whole sentence giving every word its single pick; a sentence
+past the piece budget read through a window of whole words around each word, its first and last
+homograph each right; among filler words of several pieces, every window (`ru_stress_window`)
+starting and ending on a word start, some shorter than the budget (the control: an edge moved); a
+catalog reading the pack lacks (буха́л) taken and counted in `beyond_pack`,
+a pick among the pack's readings counting nothing, the pack alone reading its one reading (the
+control). Model-free on a hand-built tokenizer (`test_wordpiece_rules`): a word past the word cap one
+[UNK] over its span and a word at the cap split, a Hangul syllable under the accent strip split into
+its two or three jamo, each over the syllable's codepoint, and one unknown codepoint without the
+strip. The lookups, on a vocabulary `wordpiece_from_pieces` builds of 3,000 words bare and behind
+`##` (`test_wordpiece_lookup`): every word found at its id both ways, every word with a foreign
+letter missed, a piece's first bytes, a word one letter past a piece, the empty word and the
+prefix alone no piece, and `is_continuation` over every piece, all inside one bracket of
+`heap_allocation_count` and `string_heap_allocation_count`, both unmoved - `wordpiece_piece` and
+`wordpiece_encode` moving their counts (the controls); then 2,000 words of two or three pieces,
+some with no split, tokenized as a test-side search of every slice length splits them, бвг its one
+longest piece and the split into its shortest pieces counted a mismatch (the control). Model-free
+over synthesized headers (`test_stress_model_refusals`, `_gguf_writer.das`'s writers):
+`load_ru_stress` panicking by name on a missing file, another architecture, a file without the
+word table, and a layer weight stored Q8_0 or Q5_0 - the tensor, the layer GEMMs and the format
+member in the text, a Q4_K weight read and the load stopping at the next absent tensor the
+control - and `load_wordpiece_gguf` on a tokenizer that is not bert, on one without
+`ru_stress.tokenizer.sorted_ids` (the key and the converter in the text), and on sorted ids in id
+order or one short of the pieces, the true byte order read and the load stopping at the next
+absent key (the control). Model-gated on `ru-stress-ruelectra-small-q4.gguf`
+(`test_wordpiece_load_allocations`): the tokenizer read off the parsed header makes at most 24
+string-heap allocations (it reads 14) and 128 heap allocations (69) over more than a hundred
+thousand pieces, and spelling then tokenizing 129 pieces moves each count past its bound (the
+controls).
+The stress-context model (`dasllama_g2p_ru_stress.das`)
+against its PyTorch reference, model-gated: `ru-stress-rubert-base.gguf` (the f32 file
+`../harness/convert_ru_stress.py` writes with `ru_stress_oracle.py`'s seeded head) and the dumps
+`tts_oracle/ru_stress/` beside it. The tokenizer (`test_ru_stress_tokenizer`), on the 226-sentence fixture
+`_tts_fixtures/ru_stress_tokens.json` (Russian sentences plus marked, Latin, digit, long-word,
+punctuation, odd-codepoint and over-length cases): HuggingFace's pieces and codepoint spans on
+every sentence, an over-length sentence kept to [CLS], 94 pieces and [SEP], the accent strip (й
+as и, ё as е, a stress mark as nothing, the span kept), and the control - the rewrite tables
+emptied, the ё, й and marked sentences differ. The encoder (`test_ru_stress_encoder`): 20 sentences' last hidden state within
+1e-4 of PyTorch's on the f32 lane (reads 7e-6) and within 0.25 on the q8 lane (reads 0.084), the
+head's logits within 1e-4 / 0.06 (read 1.2e-6 / 0.018), the f32 lane's every pick the
+reference's, each lane with its poisoned-input control and its 20-case count asserted. The API
+(`test_ru_stress_api`): the word finder on every
+oracle span (a form inside a longer word passed over, an absent form), the catalog's ordinals,
+two words of one sentence from one pass bit for bit their single picks (both logit rows logged), and
+a pick with no mask on the largest of the eight logits (a one-bit mask picking its ordinal, the
+control). The shipped lane (`test_ru_stress_quantized_lane`:
+`ru-stress-rubert-base-q4.gguf` against the same model's `ru-stress-rubert-base-f32.gguf`, both
+under models_dir(); the cells skip without either): the pruned vocabulary spelling every fixture
+sentence in the whole vocabulary's pieces and spans (control: the pieces carry other ids), the
+Q8_0 word rows within `EMB_BAR` 0.05 of the f32 rows through the embedding norm (reads 0.036;
+control: every word piece one table row off, [CLS] and [SEP] kept), the Q4_K layers' allowed logits within `Q4_LOGIT_BAR` 0.12
+(reads 0.082) and their picks the f32 lane's but where the f32 margin is under `NEAR_TIE` 0.5
+(controls: the word's pieces as [UNK] land the logits outside the bar, and some of the 20 poisoned
+picks leave the f32 pick at a margin past `NEAR_TIE`). The ELECTRA lane (`test_ru_stress_electra`,
+`ru-stress-ruelectra-small-q4.gguf`): the embeddings through the 128-to-256 projection, two words of
+one sentence from one pass bit for bit their single picks with finite logits, and замок read both
+ways by its two sentences. The K-quant and per-32 word-table forms have no cell: no stocked file
+stores its table in one.
 `test_tts_kitten.das` - stocked suite; the symbol-map and token-rule cells run everywhere
 (the front end's inventory into espeak-style IPA against the reference rewrite over the corpus,
 the reference driver's re-spacing and wrapping), as does `test_spectrum_diff_reds_a_nan` (the
@@ -4494,7 +4606,17 @@ front end listing Russian, the Russian normalizer and phonemizer through the fac
 forms on a pinned line, every Russian symbol in the model's vocabulary by the token count (a
 click outside it adding no id, the control), a Latin word inside the Russian text read by the
 English front end sitting beside the model, `sveta` speaking finite non-silent PCM whose sample
-count is the pack-default phoneme string's and not the other stress readings' (the control);
+count is the pack-default phoneme string's and not the other stress readings' (the control; the
+cell deletes the loaded context model first, so it reads the pack alone); with `tts_ctx_ru.gguf`
+beside the voices, the loader reading it while `tts_pack_names` still names the stress pack alone,
+and the facade's phonemizer reading замо́к for a lock and за́мок for a castle by the sentence, a
+mark in the text outranking the model (the control); a text with Latin words before, between and
+after two homographs (`test_kokoro_ru_mixed_script`, the English packs beside the model too): the
+facade's phonemes the context pass's marking of the normalized text with the Latin words spliced
+after, the two homographs on two readings, the pack's marking another string (the control), and
+with the context model deleted the pack's marking, the same whether the splice runs before or after
+the marking; model-free, `tts_ru_stress_model_path` on a scratch directory without and with
+`tts_ctx_ru.gguf` (`test_ru_stress_model_probe`);
 model-gated (`kokoro-82m.gguf` +
 `tts_oracle/kokoro/`): the vocabulary and style-row rule, the parity rail of `_tts_parity.das`
 against the PyTorch reference, a facade smoke cell through the front end's own inventory (the 28
@@ -4669,7 +4791,15 @@ columns its taps read, both at strides off the whole row, on both arithmetics an
 two scales plus two more) bit-equal to the whole row, the source itself in 1-, 5- and 16-frame
 windows bit-equal to the whole run on both arithmetics over a synthetic F0 with unvoiced frames
 and a drawn noise stream, its mix through `linear_rows` in windows bit-equal to the whole
-run's on both split axes, and a window past the carry's reset refused.
+run's on both split axes, and a window past the carry's reset refused. The encoder blocks
+(`test_bert_blocks`): `gelu_rows` on both GELU forms bit for bit the whole-array kernel over the
+same elements (the mismatch count and first index logged; the pass moving its finite input, the
+control), `bert_embed_rows` and `bert_layer_rows` on both forms against a double-precision
+transcription of their arithmetic on synthetic weights (`_kernel_oracles.das`'s `layernorm_ref`,
+`attention_bidir_ref`, `gelu_form_ref`), each with a displaced-mechanism control outside the bar -
+the layer against the other GELU form's transcription, the embeddings against the sum with the type
+row dropped;
+`bert_layer_rows` and `gelu_rows` are arms of the split-invariance gate.
 `_tts_parity.das` - the rail both families run: token ids against the reference driver on every
 oracle case, identical durations on every case, and on the bring-up set every stage through the
 decoder output within 1e-4 of the oracle's peak, the sine source within `SOURCE_BAR` (5e-3, absolute:

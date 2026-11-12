@@ -47,7 +47,9 @@ front end is data, and the data is in the packs.
 | `kokoro-82m.gguf` | Kokoro-82M v1.0 with its 54 voice packs, f32 | 352965024 | `e0d6584b5b650730bd62e7b105a2e9502384bbe3fbebf3030113560355e6232f` |
 | `kokoro-ru.gguf` | kokoro-ru v2, the Russian fine-tune of Kokoro-82M, the base checkpoint with its two voice packs `sveta` and `masha`, f32 | 325804992 | `635a43debfcbff5cf1fd0380a4ffc55dfacff083ae16d057bae6d7e7c9a29c9f` |
 | `kokoro-ru-dima.gguf` | kokoro-ru v2, the second checkpoint with its one male voice pack `dima`, f32 | 325282688 | `7720e1087c0c9720577e7e0b383dd31f75b7f6ab45bcd88df1f28df3c08c56a6` |
-| `tts_g2p_ru.bin` | the Russian stress pack: every inflected form of the OpenRussian dictionary with its stressed vowel (a form with two readings carrying both, the corpus's more frequent one first), and the ё spellings a text written without ё needs | 17320693 | `775d9a308b81874328909ad7ea8426513a43401f34a83973d0f2ed437068c8b1` |
+| `tts_g2p_ru.bin` | the Russian stress pack: every inflected form of the OpenRussian dictionary, the forms and readings the English and Russian Wiktionary add and the names Russian Wikipedia marks, each with its stressed vowel (a form with two readings carrying both, the more frequent one first), the ё spellings a text written without ё needs, and the rules that pick a reading from the words beside it | 15380976 | `ece2cf66e3dcb1527cbca80fb5afb62bda0b9398766d8036b2d2d9074ab8ef13` |
+| `ru-stress-rubert-base-q4.gguf` | the Russian stress-context model: reads a sentence and picks the reading of each word whose stress depends on the context (`зам+ок` / `з+амок`); ruBert-base fine-tuned on a private dataset, Q4_K with a Q8_0 embedding table. Optional: copy it beside a Russian voice as `tts_ctx_ru.gguf` | 120484448 | `ac370e5acb3f627f642ccd343768460a4802a7d0e137750403ef6288847d0cca` |
+| `ru-stress-ruelectra-small-q4.gguf` | the same model in the small form, ruElectra-small fine-tuned on a private dataset; used the same way | 38362048 | `ad6f633523c48be2ee2c00bdf1c379f0fa5d873018856ed28eb8c04d41a3212a` |
 | `tts_g2p.bin` | the grapheme-to-phoneme pack: misaki's gold and silver lexicons in both English dialects (one merged table per tier), CMUdict 0.7a rendered into the American inventory, the g2p_en GRU spelling model | 14011554 | `d7b6afea7a0901a877d10531054d3f967845c58f415f0ea937decd8a3081ccd5` |
 | `tts_g2p_en_us.bin` | the same pack with the American tier alone - no British values, CMUdict pruned of every word the American lexicon carries; the web serving set's pack, British voices are not offered on it | 10257455 | `6f69d2e74565bd7d876b8d1f4042bf8c1c5b615387fa26ff45215cf447932154` |
 | `tts_postag.bin` | the tokenizer exception table and the averaged-perceptron PTB tagger | 12566510 | `38c2e85f7fef3e57d561d2aa0af25fccda4276376ba1993c3dbc2ae0ebfa57b4` |
@@ -147,7 +149,11 @@ not listed and are refused. kokoro-ru carries the Russian voices - `sveta` and `
 the English packs beside it too, a Latin word inside Russian text is read in English. Russian
 stress comes from the pack, or from the text itself: `+` before the stressed vowel (`зам+ок`) or
 U+0301 after it, which always wins, so a homograph the pack picks the other way can be fixed
-in the text. Some Kokoro packs, the British ones most audibly, render a comma or
+in the text. With `tts_ctx_ru.gguf` beside the voice - a copy of either `ru-stress-*-q4.gguf` -
+a word with two readings is stressed by its sentence; without it the pack's rules and its more
+frequent reading decide. `dasllama-server --tts <directory holding the packs>` serves the front
+end with no voice: `POST /v1/audio/phonemes` answers the text with `+` before each stressed
+vowel and its phonemes, for a synthesis that runs elsewhere. Some Kokoro packs, the British ones most audibly, render a comma or
 a full stop as a breath; the reference pipeline does the same, so it is the pack, not the
 engine. Every model speaks at 24 kHz. `GET /v1/stats` on the server lists the served model's
 voices.
@@ -167,9 +173,14 @@ voices.
   `voices/masha.bin`; `kokoro-ru-v2-dima.pth` with `voices/dima.bin`).
 - `tts_g2p_ru.bin`: `modules/dasLLAMA/harness/build_g2p_ru_data.py` over the OpenRussian dictionary
   data (`Badestrand/russian-dictionary`: `nouns.csv`, `adjectives.csv`, `verbs.csv`, `others.csv`),
-  the pronoun inflections the dictionary leaves out added by the builder, the homograph defaults
-  ordered by a frequency table counted over the stress marks of two Balalaika text corpora
-  (`lab260/espeech_balalaika`, `lab260/biggest_ru_book_balalaika`).
+  the forms and readings of the English and Russian Wiktionary (the machine-readable extracts of
+  kaikki.org) and the stress Russian Wikipedia's lead sentences mark, the pronoun inflections
+  the dictionary leaves out added by the builder, the homograph defaults ordered by a frequency
+  table.
+- `ru-stress-rubert-base-q4.gguf` / `ru-stress-ruelectra-small-q4.gguf`: converted by
+  `modules/dasLLAMA/harness/convert_ru_stress.py` from `ai-forever/ruBert-base` and
+  `ai-forever/ruElectra-small`, each fine-tuned on a private dataset; the fine-tuned checkpoints
+  are not distributed.
 - `tts_g2p.bin`: `modules/dasLLAMA/harness/build_g2p_data.py` over misaki 0.9.4 (`us_gold.json`,
   `us_silver.json`, `gb_gold.json`, `gb_silver.json`), CMUdict 0.7a (the NLTK distribution) and
   g2p_en 2.1.0 (`checkpoint20.npz`), plus `harness/g2p_local_additions.json`.
@@ -207,7 +218,9 @@ the reference implementations (block by block, and the front end sentence by sen
 | `kitten-nano.gguf`, `kitten-mini.gguf` | Apache-2.0 | KittenML's weights, converted; `LICENSE.APACHE-2.0`; the architecture is StyleTTS2 (MIT, `LICENSE.STYLETTS2`) |
 | `kokoro-82m.gguf` | Apache-2.0 | hexgrad's weights and voices, converted; the architecture is StyleTTS2 (MIT, `LICENSE.STYLETTS2`) |
 | `kokoro-ru.gguf`, `kokoro-ru-dima.gguf` | OpenRAIL | the kokoro-ru weights and voices, converted - the source repository tags them `openrail` and carries no licence text of its own; the voices come from the Dialogs corpus, which its card calls OpenRAIL; the architecture is StyleTTS2 (MIT, `LICENSE.STYLETTS2`) |
-| `tts_g2p_ru.bin` | CC BY-SA 4.0 | the OpenRussian dictionary data (openrussian.org, `LICENSE.UD_EWT` carries the same licence text); the frequency ordering of the homograph defaults is counted over the Balalaika corpora's stress marks (Apache-2.0) |
+| `tts_g2p_ru.bin` | CC BY-SA 4.0 | the OpenRussian dictionary data (openrussian.org), the English and Russian Wiktionary and Russian Wikipedia (`LICENSE.UD_EWT` carries the licence text); `tts_g2p_ru.bin.LICENSE` names each source |
+| `ru-stress-rubert-base-q4.gguf` | Apache-2.0 | fine-tuned from ai-forever's ruBert-base, converted (`LICENSE.APACHE-2.0`) |
+| `ru-stress-ruelectra-small-q4.gguf` | MIT | fine-tuned from ai-forever's ruElectra-small, converted; MIT as its model card states |
 | `tts_g2p.bin` | Apache-2.0 and BSD-2-Clause | misaki and g2p_en (Apache-2.0), CMUdict (`LICENSE.CMUDICT`, Carnegie Mellon University) |
 | `tts_postag.bin` | CC BY-SA 4.0 | the tagger weights are trained on UD English-EWT (`LICENSE.UD_EWT`); the exception table and the silver tags come from spaCy (MIT, `LICENSE.SPACY`); Gutenberg prose is public domain |
 | `pocket-tts-*.gguf` (every Pocket file, the two `-kq` ones included) | CC BY 4.0 | Kyutai's weights and tokenizer, converted (`LICENSE.CC-BY-4.0`); the reference implementation is MIT (`LICENSE.POCKET_TTS`) and not included; the voice clips: `voice-zero` and `voice-donations` CC0, VCTK (CSTR, University of Edinburgh) and Alba Mackenna CC BY 4.0 - the sidecar lists each |

@@ -432,14 +432,14 @@ def document_module_dasllama(_root : string) {  // nolint:STYLE038 — flat doc-
 // modules a TtsModel field names are engine detail, so their types print plain.
 def document_module_dasllama_tts(_root : string) {
     for (engine in ["dasllama_styletts2", "dasllama_kitten", "dasllama_kokoro", "dasllama_pocket", "dasllama_g2p", "dasllama_postag",
-                    "dasllama_g2p_ru", "dasllama_textnorm_ru", "dasllama_textnorm_ru_nouns", "dasllama_g2p_pack", "dasllama_textscan"]) {
+                    "dasllama_g2p_ru", "dasllama_g2p_ru_stress", "dasllama_textnorm_ru", "dasllama_textnorm_ru_nouns", "dasllama_g2p_pack", "dasllama_textscan"]) {
         mark_module_pageless(engine)
     }
     var mod = [find_module("dasllama_tts"), find_module("dasllama_tts_types")]
     var groups <- array<DocGroup>(
-        group_by_regex("Loading and capabilities", mod, %regex~(load_tts_model|tts_finish_styletts2|g2p_pack_path|caps|tts_voice_lang|tts_needs_packs|tts_pack_names|tts_has_phonemes|finalize)$%%),
+        group_by_regex("Loading and capabilities", mod, %regex~(load_tts_model|tts_finish_styletts2|g2p_pack_path|tts_ru_stress_model_path|caps|tts_voice_lang|tts_needs_packs|tts_pack_names|tts_has_phonemes|tts_front_end_only|finalize)$%%),
         group_by_regex("Voices", mod, %regex~(tts_register_voice|tts_prepare_voice_prompt|tts_voice_prompt_valid|tts_register_voice_prompt)$%%),
-        group_by_regex("Text front end", mod, %regex~(tts_normalize|tts_phonemize|tts_chunks)$%%),
+        group_by_regex("Text front end", mod, %regex~(tts_normalize|tts_mark_stress|tts_phonemize|tts_chunks)$%%),
         group_by_regex("Synthesis", mod, %regex~(synthesize|synthesize_stream|tts_release_scratch|tts_set_chunk_chars)$%%),
         group_by_regex("The served lane", mod, %regex~(set_tts_q8|reset_tts_q8|tts_serves_q8)$%%),
         group_by_regex("GPU seats", mod, %regex~(tts_seats|tts_seat_index|tts_seat_call|tts_seat_served|tts_seat_stats|tts_seat_names)$%%),

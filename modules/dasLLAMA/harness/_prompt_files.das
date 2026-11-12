@@ -24,5 +24,11 @@ def id_list(s : string) : array<int64> {
 //! the ids of a file of comma-separated token ids; an absent file holds none
 def read_ids(path : string) : array<int64> => <- id_list(fread(path))
 
-//! the non-empty lines of a text file, stripped; an absent file holds none
-def read_lines(path : string) : array<string> => <- non_empty_lines(fread(path))
+//! the non-empty lines of a text file, stripped - the first `limit` of them where `limit` is positive; an absent file holds none
+def read_lines(path : string; limit : int = 0) : array<string> {
+    var lines <- non_empty_lines(fread(path))
+    if (limit > 0 && length(lines) > limit) {
+        lines |> resize(limit)
+    }
+    return <- lines
+}

@@ -5526,6 +5526,7 @@ struct private TtsJob {
     id : int64
     text : string
     voice : string
+    language : string    // the phonemes route's own: the dialect named outright, over the voice's
     speed : float
     format : string      // wav | pcm
 }
@@ -5568,7 +5569,7 @@ let TTS_QUEUE_LIMIT = 16
 let TTS_WRITER_KEEPALIVE_MS = 600000
 let TTS_MAX_INPUT_CHARS = 4096
 let SPEECH_FIELDS : table<string> <- { "model", "input", "voice", "speed", "response_format", "instructions", "stream_format" }
-let PHONEMES_FIELDS : table<string> <- { "model", "input", "voice" }
+let PHONEMES_FIELDS : table<string> <- { "model", "input", "voice", "language" }
 
 def private emit_tts_event(events : Channel?; event : TtsEvent) {
     events |> push_clone(event)
@@ -5576,7 +5577,8 @@ def private emit_tts_event(events : Channel?; event : TtsEvent) {
 
 def private process_tts_job(var model : TtsModel; job : TtsJob; events : Channel?) {
     var inscope c <- caps(model)   // freed at scope exit: the worker context never collects, so a per-request caps struct would accumulate
-    let voice = empty(job.voice) ? c.voices[0] : job.voice   // the ready event refused an empty roster, so index 0 is there
+    // a served voice model's roster is never empty (the load refused one); a front end with no voice has none to default to, and the synthesis refuses it by name
+    let voice = empty(job.voice) && !empty(c.voices) ? c.voices[0] : job.voice
     var inscope audio <- synthesize(model, job.text, voice, job.speed)
     var inscope bytes <- job.format == "pcm" ? pcm16_bytes(audio.pcm) : wav_pcm16_bytes(audio.pcm, audio.sample_rate)
     let temp = create_temp_file_result("dasllama_speech", ".{job.format}")   // unguessable name: a shared tmpdir is not ours alone
@@ -5598,20 +5600,45 @@ def private process_tts_job(var model : TtsModel; job : TtsJob; events : Channel
 
 // The front end alone, on the same worker because the packs live with the model: the spoken form
 // the normalizer produces, then one row per chunk the synthesis would take, each row carrying that
-// chunk's text and the 45-symbol phoneme string the g2p pass reads out of it.
+// chunk's text, that text with + before every stressed vowel where the language's front end marks
+// stress (Russian), and the 45-symbol phoneme string the g2p pass reads out of it.
 // the dialect a phonemes request reads in. A model whose front end phonemizes ONE language has
 // only that answer to give, so every voice name reads in it - an alias, a name the model does not
 // carry, a name typed into the page's box. A model that phonemizes several reads in the named
 // voice's language - the default voice's where none is named, as the speech route speaks it -
 // and refuses an unservable one exactly as the speech route does.
-def private tts_phonemes_lang(model : TtsModel; voice : string) : string {
+// A request's `language` names the dialect itself, over any voice; a front end with no voice that
+// reads several languages and is told none reads Russian where the text holds a Cyrillic letter,
+// else the first language it lists.
+let private UTF8_CYRILLIC_LEADS = fixed_array(208, 209)   //! 0xD0 and 0xD1, the lead bytes of U+0400 to U+047F
+
+def private has_cyrillic(text : string) : bool {
+    var found = false
+    peek_data(text) $(d) {
+        for (b in d) {
+            found = found || int(b) == UTF8_CYRILLIC_LEADS[0] || int(b) == UTF8_CYRILLIC_LEADS[1]
+        }
+    }
+    return found
+}
+
+def private tts_phonemes_lang(model : TtsModel; text, voice, language : string) : string {
     var inscope c <- caps(model)
+    if (!empty(language)) {
+        if (find_index(c.langs, language) < 0) {
+            panic("unknown language '{language}' - this front end reads {join(c.langs, ", ")}")
+        }
+        return language
+    }
     return c.langs[0] if (length(c.langs) < 2)
+    if (tts_front_end_only(model)) {   // no voice to take the language from: the text's own script decides
+        return find_index(c.langs, "ru") >= 0 && has_cyrillic(text) ? "ru" : c.langs[0]
+    }
     return tts_voice_lang(model, empty(voice) ? c.voices[0] : voice)   // the ready event refused an empty roster, so index 0 is there
 }
 
 def private process_tts_phonemes(model : TtsModel; job : TtsJob; events : Channel?) {
-    let lang = tts_phonemes_lang(model, job.voice)
+    let lang = tts_phonemes_lang(model, job.text, job.voice, job.language)
     let norm = tts_normalize(job.text, lang)
     var inscope chunks <- tts_chunks(model, norm)
     let doc = build_string() $(w) {
@@ -5622,7 +5649,8 @@ def private process_tts_phonemes(model : TtsModel; job : TtsJob; events : Channe
             }
             // a model that reads text has no phoneme string to show; its chunks still say what it will read
             let phonemes = tts_has_phonemes(model) ? tts_phonemize(model, chunks[i], lang) : ""
-            w |> write("\{\"text\":{json_str(chunks[i])},\"phonemes\":{json_str(phonemes)}}")
+            let marked = tts_has_phonemes(model) ? tts_mark_stress(model, chunks[i], lang) : ""
+            w |> write("\{\"text\":{json_str(chunks[i])},\"marked\":{json_str(marked)},\"phonemes\":{json_str(phonemes)}}")
         }
         w |> write("]}")
     }
@@ -5635,6 +5663,7 @@ def private process_tts_phonemes(model : TtsModel; job : TtsJob; events : Channe
 // serve - the route would 500 on its own default voice - so the worker refuses to arm and takes
 // the degrade path a failed load takes
 def private refuse_voiceless_tts(model : TtsModel; model_path : string) {
+    return if (tts_front_end_only(model))   // a directory's packs: the phonemes route is all it is asked for
     var inscope c <- caps(model)
     if (empty(c.voices)) {
         panic("'{model_path}' carries no voice the front end can drive")
@@ -5742,9 +5771,10 @@ def private tts_worker_main(slot : int; model_path : string; lane : string; voic
             process_tts_job(model, job, events)
         }
     }, $(job : TtsJob; failure : string) {
-        // a voice the model lacks, or a speed on a model with no speed control, is the
-        // caller's mistake; anything else is ours
-        let client = find(failure, "unknown voice") >= 0 || find(failure, "speed control") >= 0
+        // a voice or a language the model lacks, a speed on a model with no speed control, or a
+        // synthesis asked of a front end with no voice, is the caller's mistake; anything else is ours
+        let client = (find(failure, "unknown voice") >= 0 || find(failure, "speed control") >= 0
+            || find(failure, "unknown language") >= 0 || find(failure, "no voice to speak") >= 0)
         to_log(LOG_ERROR, "[req {job.id}] tts: failed: {failure}\n")
         emit_tts_event(events, TtsEvent(
             kind = TtsEventKind.completed, id = job.id,
@@ -5814,7 +5844,7 @@ def private enqueue_tts_job(srv : FrontLink; writer : WriterRef; slot : int; job
     to_log(LOG_INFO, "[req {job.id}] tts: {note} on {g_tts[slot].id} (pending={g_tts_pending})\n")
 }
 
-// POST /v1/audio/phonemes: {"input", "voice"?} -> {"normalized", "lang", "chunks":[{"text","phonemes"}]}.
+// POST /v1/audio/phonemes: {"input", "voice"?, "language"?} -> {"normalized", "lang", "chunks":[{"text","marked","phonemes"}]}.
 // The front end's own view of what a synthesis of the same text in that voice would say, in the
 // voice's dialect, answered by the worker that owns the packs; the control page draws it under
 // the studio's waveform.
@@ -5836,7 +5866,7 @@ def private queue_phonemes(srv : FrontLink; req : FrontReq; writer : WriterRef) 
     if (empty(input)) {
         return
     }
-    enqueue_tts_job(srv, writer, slot, TtsJob(kind = TtsJobKind.phonemes, id = next_id(), text = input, voice = js?["voice"] ?? ""),
+    enqueue_tts_job(srv, writer, slot, TtsJob(kind = TtsJobKind.phonemes, id = next_id(), text = input, voice = js?["voice"] ?? "", language = js?["language"] ?? ""),
         "phonemes queued ({utf8_length(input)} chars)")
 }
 

@@ -16,20 +16,24 @@ require dasllama/dasllama_textnorm_ru
 require dasllama/dasllama_postag
 require dasllama/dasllama_g2p
 require dasllama/dasllama_g2p_ru
+require dasllama/dasllama_g2p_ru_stress
 require dasllama/dasllama_tts_types public
 require dasllama/dasllama_styletts2
 require dasllama/dasllama_kitten
 require dasllama/dasllama_kokoro
 require dasllama/dasllama_pocket
 require dasllama/dasllama_gguf   // gguf_file_arch: the family sniff before a load
+require dasllama/dasllama_math   // with_dasllama_jobque_: the stress-context pass of a caller outside any job queue
+require daslib/jobque_boost   // is_job_que_available
 
 //! The TTS facade: load a model by its GGUF, run text through the front end, synthesize.
 //! Returns PCM; writing a file is the caller's job through `dasllama_audio_io`.
 
 enum TtsKind {
-    kitten
-    kokoro
-    pocket
+    kitten      //! KittenTTS: phonemes in, the StyleTTS2 chain
+    kokoro      //! Kokoro and its fine-tunes: phonemes in, the StyleTTS2 chain with voice packs
+    pocket      //! Pocket TTS: text in, a continuous-audio language model that clones a voice
+    front_end   //! no voice: the packs of a directory alone, which normalize, mark stress and phonemize
 }
 
 struct TtsModel {
@@ -41,6 +45,8 @@ struct TtsModel {
     g2p : G2pModel                          //! ``tts_g2p.bin``: lexicons, rules and the fallback chain; empty where no voice speaks English and the directory has none
     tagger : PosTagger                      //! ``tts_postag.bin``: the tokenizer and part-of-speech tagger
     ru_stress : RuStressPack                //! ``tts_g2p_ru.bin``: the Russian stress tables; empty where no voice speaks Russian
+    ru_stress_model : RuStressModel = RuStressModel()   //! ``tts_ctx_ru.gguf``: the Russian stress-context model, read where a voice speaks Russian and the file sits beside the model; empty otherwise
+    ru_stress_scratch : RuStressScratch = RuStressScratch()   //! its activation carrier, reused by every synthesis chunk
     pocket : PocketModel = PocketModel()    //! the Pocket TTS family's model, when the GGUF is one; it reads text, not phonemes
     pocket_scratch : PocketScratch = PocketScratch()   //! its activation carrier
     chunk_chars : int = TTS_CHUNK_CHARS     //! the longest chunk a synthesis speaks, in codepoints (``tts_set_chunk_chars``)
@@ -55,6 +61,8 @@ def finalize(var m : TtsModel) {
     delete m.g2p
     delete m.tagger
     delete m.ru_stress
+    delete m.ru_stress_model
+    delete m.ru_stress_scratch
     delete m.pocket
     delete m.pocket_scratch
 }
@@ -67,6 +75,7 @@ def tts_release_scratch(var m : TtsModel) {
     if (!m.scratch.noise.captured) {
         delete m.scratch
     }
+    delete m.ru_stress_scratch
     pocket_release_scratch(m.pocket_scratch)   // the block home's scratch globals go with it, whichever family grew them
 }
 
@@ -97,10 +106,23 @@ def private voice_lang(m : TtsModel; vname : string) : string {
 }
 
 def load_tts_model(path : string) : TtsModel {
-    //! Load a TTS model: a converted GGUF (KittenTTS, Kokoro or Pocket TTS, picked from its architecture) or its prepared
-    //! ``.dlim`` image; a phoneme family reads the packs its voices' languages ask for from the same directory (``tts_pack_names``;
-    //! Pocket needs none). A GGUF serves the rows GEMMs on the lane ``tts_serves_q8`` names; an image serves the lane it was baked on.
+    //! Load a TTS model: a converted GGUF (KittenTTS, Kokoro or Pocket TTS, picked from its architecture) or its prepared ``.dlim`` image, on the lane ``tts_serves_q8`` names (an image: the lane it was baked on);
+    //! a phoneme family reads the packs its voices' languages ask for from the same directory (``tts_pack_names``; Pocket needs none).
+    //! A DIRECTORY loads the front end alone, with no voice - its packs and the Russian stress-context model where that sits there (``tts_front_end_only``).
     var inscope m = TtsModel()
+    if (stat(path).is_dir) {
+        m.kind = TtsKind.front_end
+        if (english_pack_present(path)) {
+            load_english_packs(m, path)
+        }
+        if (stat(path_join(path, RU_PACK_NAME)).is_valid) {
+            load_russian_packs(m, path)
+        }
+        if (!english_packs_loaded(m) && !ru_pack_loaded(m.ru_stress)) {
+            panic("dasLLAMA tts: the directory '{path}' holds no front-end pack - {RU_PACK_NAME} for Russian, tts_g2p.bin with tts_postag.bin for English")
+        }
+        return <- m
+    }
     if (!(path |> ends_with(".dlim")) && gguf_file_arch(path) == "pocket-tts") {
         m.kind = TtsKind.pocket
         m.pocket <- load_pocket(path)
@@ -131,18 +153,41 @@ def tts_finish_styletts2(var m : TtsModel; path : string) {
         speaks_russian = speaks_russian || lang == "ru"
     }
     if (speaks_english || english_pack_present(dir)) {
-        m.g2p <- load_g2p(g2p_pack_path(dir))
-        m.tagger <- load_pos_tagger(path_join(dir, "tts_postag.bin"))
+        load_english_packs(m, dir)
     }
     if (speaks_russian) {
-        m.ru_stress <- load_ru_stress_pack(path_join(dir, RU_PACK_NAME))
+        load_russian_packs(m, dir)
     }
     log_dropped_voices(m)
+}
+
+//! the English phoneme pack and the tagger of `dir` into `m`
+def private load_english_packs(var m : TtsModel; dir : string) {
+    m.g2p <- load_g2p(g2p_pack_path(dir))
+    m.tagger <- load_pos_tagger(path_join(dir, "tts_postag.bin"))
+}
+
+//! the Russian stress pack of `dir` into `m`, and the stress-context model where its file sits there
+def private load_russian_packs(var m : TtsModel; dir : string) {
+    m.ru_stress <- load_ru_stress_pack(path_join(dir, RU_PACK_NAME))
+    let stress_model = tts_ru_stress_model_path(dir)
+    if (!empty(stress_model)) {
+        m.ru_stress_model <- load_ru_stress(stress_model, tts_serves_q8())
+        to_log(LOG_INFO, "dasLLAMA tts: the Russian stress-context model {RU_STRESS_MODEL_NAME} ({m.ru_stress_model.encoder}, {length(m.ru_stress_model.layers)} layers) picks the stress of the words with two readings\n")
+    }
 }
 
 def private english_packs_loaded(m : TtsModel) : bool => !empty(m.g2p.data)
 
 let private RU_PACK_NAME = "tts_g2p_ru.bin"
+let private RU_STRESS_MODEL_NAME = "tts_ctx_ru.gguf"
+
+def tts_ru_stress_model_path(dir : string) : string {
+    //! The Russian stress-context model a voice in ``dir`` reads - ``tts_ctx_ru.gguf`` there - or "" where the
+    //! directory has none: the file is optional, and without it the pack alone decides the stress.
+    let path = path_join(dir, RU_STRESS_MODEL_NAME)
+    return stat(path).is_valid ? path : ""
+}
 
 //! the phoneme pack's two tiers in a directory, the full pack first
 def private english_pack_tiers(dir : string) : array<string> => [path_join(dir, "tts_g2p.bin"), path_join(dir, "tts_g2p_en_us.bin")]
@@ -190,8 +235,18 @@ def g2p_pack_path(dir : string) : string {
 def tts_pack_names(path : string) : array<string> {
     //! The front-end packs the model at ``path`` reads from its directory, decided from the file's own metadata before any load:
     //! the phoneme pack tier the directory holds and ``tts_postag.bin`` where a voice speaks English, ``tts_g2p_ru.bin`` where one
-    //! speaks Russian, none for a Pocket GGUF; a ``.dlim`` answers for the GGUF beside it, and names the English pair where none is.
+    //! speaks Russian, none for a Pocket GGUF; a ``.dlim`` answers for the GGUF beside it, and names the English pair where none is; a directory - a front end with no voice - names the packs it holds.
     var inscope out : array<string>
+    if (stat(path).is_dir) {
+        if (english_pack_present(path)) {
+            var inscope names <- english_pack_names(path)
+            out |> push_from(names)
+        }
+        if (stat(path_join(path, RU_PACK_NAME)).is_valid) {
+            out |> push(RU_PACK_NAME)
+        }
+        return <- out
+    }
     let dir = dir_name(path)
     if (path |> ends_with(".dlim")) {
         let source = image_source_gguf(path)
@@ -269,7 +324,7 @@ def private front_end_langs(m : TtsModel) : array<string> {
     }
     if (english_packs_loaded(m)) {
         langs |> push("en-us")
-        if (m.kind == TtsKind.kokoro && !m.g2p.us_only) {
+        if ((m.kind == TtsKind.kokoro || m.kind == TtsKind.front_end) && !m.g2p.us_only) {
             langs |> push("en-gb")
         }
     }
@@ -279,8 +334,10 @@ def private front_end_langs(m : TtsModel) : array<string> {
     return <- langs
 }
 
-def private family_name(m : TtsModel) : string =>
-    m.kind == TtsKind.pocket ? "pocket-tts {m.pocket.name}" : "{m.model.family} {m.model.name}"
+def private family_name(m : TtsModel) : string {
+    return "a front end with no voice" if (m.kind == TtsKind.front_end)
+    return m.kind == TtsKind.pocket ? "pocket-tts {m.pocket.name}" : "{m.model.family} {m.model.name}"
+}
 
 def private sample_rate_of(m : TtsModel) : int =>
     m.kind == TtsKind.pocket ? m.pocket.sample_rate : m.model.sample_rate
@@ -391,48 +448,69 @@ def tts_normalize(text : string; lang : string) : string {
     return text
 }
 
-//! a Latin run inside Russian text passes to the Russian reader as English phonemes where the English packs are loaded, as letters where not
-def private ru_phonemize_latin_spliced(m : TtsModel; norm : string) : string {
-    var text = norm
-    if (english_packs_loaded(m)) {
-        var inscope cps <- utf8_to_cpts(norm)
-        let n = length(cps)
-        text = build_string() $(var wr) {
-            var i = 0
-            while (i < n) {
-                let cp = cps[i]
-                let latin = is_alpha(cp)
-                if (!latin) {
-                    wr |> write(cpt_to_utf8(cp))
-                    i++
-                    continue
-                }
-                var j = i
-                while (j < n && ((is_alpha(cps[j])) || (j > i && (cps[j] == '\'' || cps[j] == '-') && j + 1 < n && (is_alpha(cps[j + 1]))))) {
-                    j++
-                }
-                wr |> write(strip(g2p_phonemize(m.g2p, m.tagger, cpts_to_utf8(cps, i, j))))
-                i = j
+//! `text` with every Latin run turned into English phonemes; the stress marks sit inside Cyrillic words, which no run reaches
+def private latin_runs_spliced(m : TtsModel; text : string) : string {
+    var inscope cps <- utf8_to_cpts(text)
+    let n = length(cps)
+    return build_string() $(var wr) {
+        var i = 0
+        while (i < n) {
+            let cp = cps[i]
+            let latin = is_alpha(cp)
+            if (!latin) {
+                wr |> write(cpt_to_utf8(cp))
+                i++
+                continue
             }
+            var j = i
+            while (j < n && ((is_alpha(cps[j])) || (j > i && (cps[j] == '\'' || cps[j] == '-') && j + 1 < n && (is_alpha(cps[j + 1]))))) {
+                j++
+            }
+            wr |> write(strip(g2p_phonemize(m.g2p, m.tagger, cpts_to_utf8(cps, i, j))))
+            i = j
         }
     }
-    return ru_phonemize(m.ru_stress, text)
 }
 
-def private phonemize_for(m : TtsModel; norm : string; lang : string) : string =>
-    lang == "ru" ? ru_phonemize_latin_spliced(m, norm) : g2p_phonemize(m.g2p, m.tagger, norm, lang == "en-gb")
+//! Normalized Russian text with `+` before every stressed vowel: the context model's reading where its file is loaded, the pack's own tiers where not
+[arch(at = "../ARCHITECTURE_TTS_FRONT_END.md#tts-stress-context")]
+def private ru_stress_marked(m : TtsModel; norm : string; var sc : RuStressScratch) : string {
+    return ru_mark_stress(m.ru_stress, norm) if (!ru_stress_loaded(m.ru_stress_model))
+    return ru_mark_stress_in_context(m.ru_stress_model, m.ru_stress, norm, sc) if (is_job_que_available())
+    var marked = ""
+    with_dasllama_jobque_() {   // a caller outside any job queue: the context pass runs on one of its own
+        marked = ru_mark_stress_in_context(m.ru_stress_model, m.ru_stress, norm, sc)
+    }
+    return marked
+}
+
+//! Normalized Russian text to phonemes: the stress marked on the text as written, then a Latin run passed to the Russian reader as English phonemes where the English packs are loaded, as letters where not
+[arch(at = "../ARCHITECTURE_TTS_FRONT_END.md#tts-stress-context")]
+def private ru_phonemize_latin_spliced(m : TtsModel; norm : string; var sc : RuStressScratch) : string {
+    let marked = ru_stress_marked(m, norm, sc)
+    return ru_phonemize_marked(english_packs_loaded(m) ? latin_runs_spliced(m, marked) : marked)
+}
+
+def private phonemize_for(m : TtsModel; norm : string; lang : string; var sc : RuStressScratch) : string =>
+    lang == "ru" ? ru_phonemize_latin_spliced(m, norm, sc) : g2p_phonemize(m.g2p, m.tagger, norm, lang == "en-gb")
 
 def tts_needs_packs(path : string) : bool {
     //! Whether the model at ``path`` reads any front-end pack from its directory: the phoneme families do
     //! (``tts_pack_names`` says which), a Pocket TTS GGUF reads text and needs none - decided before any
     //! load, by the architecture test ``load_tts_model`` makes (a ``.dlim`` is a phoneme family).
-    return (path |> ends_with(".dlim")) || gguf_file_arch(path) != "pocket-tts"
+    return (path |> ends_with(".dlim")) || stat(path).is_dir || gguf_file_arch(path) != "pocket-tts"
 }
 
 def tts_has_phonemes(m : TtsModel) : bool {
     //! Whether ``tts_phonemize`` has an answer for this model: the phoneme families yes, in the languages ``caps().langs``
     //! lists (the two-argument form's English needs the English packs beside the model), a Pocket model no - it reads text.
     return m.kind != TtsKind.pocket
+}
+
+def tts_front_end_only(m : TtsModel) : bool {
+    //! Whether ``m`` is a front end loaded from a directory: it normalizes, marks stress and phonemizes in the
+    //! languages ``caps().langs`` lists, and has no voice - ``caps().voices`` is empty and a synthesis panics.
+    return m.kind == TtsKind.front_end
 }
 
 def private phoneme_family_only(m : TtsModel) {
@@ -457,7 +535,18 @@ def tts_phonemize(m : TtsModel; text : string; lang : string) : string {
     if (find_index(langs, lang) < 0) {
         panic("dasLLAMA tts: this front end does not phonemize '{lang}'")
     }
-    return phonemize_for(m, text, lang)
+    var inscope sc = RuStressScratch()
+    return phonemize_for(m, text, lang, sc)
+}
+
+def tts_mark_stress(m : TtsModel; text : string; lang : string) : string {
+    //! One already-normalized sentence with ``+`` before every stressed vowel, as the phonemizer of ``lang`` reads it: Russian ("ru")
+    //! marks each stressed word - "в з+амке" - by the stress pack, and by the stress-context model where its file sits beside the voice.
+    //! A language whose front end marks no text answers the empty string; a Pocket model panics, as ``tts_phonemize`` does.
+    phoneme_family_only(m)
+    return "" if (lang != "ru" || !ru_pack_loaded(m.ru_stress))
+    var inscope sc = RuStressScratch()
+    return ru_stress_marked(m, text, sc)
 }
 
 // ===== chunking =====
@@ -629,7 +718,7 @@ def private synthesize_chunk(var m : TtsModel; norm : string; vname, lang : stri
     var inscope out = TtsAudio()
     out.sample_rate = m.model.sample_rate
     let clock = ref_time_ticks()
-    let ps_misaki = phonemize_for(m, norm, lang)
+    let ps_misaki = phonemize_for(m, norm, lang, m.ru_stress_scratch)
     let is_kitten = m.kind == TtsKind.kitten
     var inscope ids <- is_kitten ? kitten_token_ids(kitten_phonemes_from_misaki(ps_misaki)) : kokoro_token_ids(m.model.kokoro, ps_misaki)
     let row = is_kitten ? kitten_style_row(norm, m.model.style_rows) : kokoro_style_row(ps_misaki, m.model.style_rows)
@@ -647,6 +736,9 @@ def private synthesize_chunk(var m : TtsModel; norm : string; vname, lang : stri
 }
 
 def private resolve_voice(m : TtsModel; voice : string) : string {
+    if (m.kind == TtsKind.front_end) {
+        panic("dasLLAMA tts: a front end loaded from a directory has no voice to speak - load a voice model to synthesize")
+    }
     var vname = ""
     if (m.kind == TtsKind.pocket) {
         vname = pocket_has_voice(m.pocket, voice) ? voice : ""

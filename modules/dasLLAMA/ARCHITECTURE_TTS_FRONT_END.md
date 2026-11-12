@@ -1,9 +1,13 @@
 # dasLLAMA architecture - text to speech, the text front end
 
 A companion of `ARCHITECTURE_TTS.md`: the file charters of the text front end
-(`ARCHITECTURE_TTS_FRONT_END.md#tts-front-end`) and the mechanisms they implement. `ARCHITECTURE_COMMON.md`
+(`ARCHITECTURE_TTS_FRONT_END.md#tts-front-end`) and the mechanisms they implement - the heteronym context, the
+two-tier phoneme pack, the Russian stress-context pass (`#tts-stress-context`), the stress model's lanes
+(`#tts-stress-lanes`), the WordPiece tables (`#wordpiece-tables`) and the WordPiece vocabulary
+(`#wordpiece-pieces`). `ARCHITECTURE_COMMON.md`
 (repo root) is the contract. The block home, the shared assembly, the families and the facade are
-`ARCHITECTURE_TTS.md`. The Russian normalizer's mechanisms are `ARCHITECTURE_TTS_TEXTNORM_RU.md`.
+`ARCHITECTURE_TTS.md`. The Russian normalizer's mechanisms are `ARCHITECTURE_TTS_TEXTNORM_RU.md`; the
+Russian stress pack and the stress tiers that need no model are `ARCHITECTURE_TTS_RU_STRESS.md`.
 
 ## File charters
 
@@ -77,8 +81,10 @@ A companion of `ARCHITECTURE_TTS.md`: the file charters of the text front end
 - **`dasllama_g2p_pack.das`** - the front-end packs' file shape every language's reader shares:
   the little-endian scalar readers, the whole-file read, the header every pack opens with (magic,
   version, the source note - checked against the reader's own, the panic naming the file, the pack
-  and its builder), and the byte-sorted string table (an offset column per key and per value over
-  one key blob and one value blob) searched in place by binary search on the file bytes. The
+  and its builder), the byte-sorted string table (an offset column per key and per value over
+  one key blob and one value blob) searched in place by binary search on the file bytes, and the
+  front-coded table of `ARCHITECTURE_TTS_RU_STRESS.md#tts-ru-stress-pack`, which the English
+  packs do not use. The
   tagger's header carries its three floats between the version and the note, so `dasllama_postag.das`
   reads its own header over the same scalar readers. No language, no rule.
 - **`dasllama_textscan.das`** - the codepoint scanning the normalizers and the tokenizer share, in
@@ -90,19 +96,21 @@ A companion of `ARCHITECTURE_TTS.md`: the file charters of the text front end
   file.
 - **`dasllama_g2p_ru.das`** - the Russian front end, stress then letter-to-sound. Stress comes
   from the text (`+` before the stressed vowel or U+0301 after it, which always wins, a ё
-  carrying its own), else from the pack `tts_g2p_ru.bin` (`harness/build_g2p_ru_data.py`: every
-  inflected form of the OpenRussian dictionary with its stressed vowel's ordinal - a form with
-  two readings carries both, the first the default, a corpus frequency table ordering them - and
-  the ё spellings a text written without ё needs, where the е spelling is no word of its own;
-  pack version 1), a reflexive the pack has only without its -ся read through the base form,
-  else from the shape rule (the vowel before the last); the clitics (prepositions, conjunctions,
-  particles) take none. Letter-to-sound reproduces the label shape the kokoro-ru checkpoints
+  carrying its own), else from the pack `tts_g2p_ru.bin` (`harness/build_g2p_ru_data.py`: a
+  form's stressed vowel as an ordinal - a form with two readings carries both, the first the
+  default - and the ё spellings a text written without ё needs; pack version 2, a version 1 pack
+  refused by name; `ARCHITECTURE_TTS_RU_STRESS.md#tts-ru-stress-pack`), a reflexive the pack has
+  only without its -ся read through the base form, else from the tiers of
+  `ARCHITECTURE_TTS_RU_STRESS.md#tts-ru-unknown-word`, the shape rule (the vowel before the last)
+  the last of them; the clitics (prepositions, conjunctions, particles) take none. A hyphenated word is
+  `ARCHITECTURE_TTS_RU_STRESS.md#tts-ru-hyphenated`. Letter-to-sound reproduces the label shape the kokoro-ru checkpoints
   were trained on - the reference's espeak-ng Russian over acute-marked text, its positional
   vowel reduction (ɐ in the first pretonic syllable and word-initially, ə elsewhere, ɪ after a
   soft consonant) and its long щ: palatalization with the regressive cases (с з before a
   vowel-softened dental, т before тʲ дʲ нʲ, м before a soft labial), iotation with the sign
   cases (jj before an unstressed vowel after ь ъ, the stress mark before the j of я ю and after
-  the j of е ё), ь leaving л н and the labials hard and reading р as its own sound, voicing
+  the j of е ё), ь leaving л н and the labials hard - soft before a stressed о, as in бульон -
+  and reading р as its own sound, voicing
   assimilation read off the written letters (right to left, a final cluster devoicing through,
   д keeping its voice before ф and before a hard т, a sign blocking a т's voicing), the sandhi
   on the last consonant from what opens the next word (в ж ш ч and a soft з voiced before a
@@ -112,12 +120,41 @@ A companion of `ARCHITECTURE_TTS.md`: the file charters of the text front end
   чувств- здравств-), the merged clusters (сч зч жч as ɕː, сш зш as ʃʃ, сж зж as ʒʒ, -тся
   -ться as ʦə, дц as tʦ after the stress or right before it and ʦ further ahead of it, гк as xk,
   кк single, чш as tʃ before the stress), a hyphenated word read side by side (a one-vowel side stressed unless a
-  clitic, либо/нибудь/таки with their own stress). A run of another script passes through
+  clitic, либо/нибудь/таки with their own stress, a side's last vowel reading a where it is а, stressed, and the next
+  side opens stressed). A run of another script passes through
   unchanged - the facade's place to splice a Latin word already turned into English phonemes.
   The 200-sentence fixture `tests/_tts_fixtures/g2p_corpus_ru.json` (`harness/mint_tts_g2p_ru_fixture.py`:
-  stress-marked Balalaika sentences through kokoro-ru's own front end) is the parity rail for
+  sentences written for the fixture, stress-marked by `tts_mark_stress`, through kokoro-ru's own front end) is the parity rail for
   letter-to-sound alone - the stress it compares on is the fixture's, so a stress decision never
-  moves its numbers.
+  moves its numbers. The stress pass takes the ordinals a context pass picked (`ru_mark_stress`'s
+  `picked`, by the word's index among `ru_text_words`) between the ё spelling and the pack's
+  default (`ru_pack_default`); `ru_word_needs_context` names the words a context pass may decide,
+  through the one function `ru_mark_word` reads its early tiers from, and `ru_stress_rule` is the
+  rule tier (`ARCHITECTURE_TTS_RU_STRESS.md#tts-ru-rule-tier`), asked in `ru_mark_words` for every
+  word no context pass picked (`ARCHITECTURE_TTS_FRONT_END.md#tts-stress-context`).
+- **`dasllama_g2p_ru_stress.das`** - the Russian stress-context model and its pass: a BERT or
+  ELECTRA encoder over the sentence, lowercased codepoint for codepoint, through its own WordPiece
+  tokenizer (`dasllama_wordpiece.das`), cut to 96 pieces; the pieces covering one written word
+  mean-pooled over the last hidden state, and a `Linear(hidden, 8)` head scoring the stressed
+  vowel's ordinal, the pick masked to the ordinals the catalog allows the form. The GGUF is
+  `harness/convert_ru_stress.py`'s: the encoder, the head, the tokenizer and the catalog - the
+  forms whose stress depends on context, with the vowels each may stress, as a byte-sorted form
+  list beside one bitmask a form. The embeddings and the layers are the block home's
+  (`bert_embed_rows`, `bert_layer_rows`), per-layer weights where PL-BERT shares one layer. The pass
+  over a text (`ru_stress_context_picks`) and a sentence past the piece budget
+  (`ru_stress_pick_long`) are `ARCHITECTURE_TTS_FRONT_END.md#tts-stress-context`; the weight forms,
+  the row-gathered word table and the pool narrowing are
+  `ARCHITECTURE_TTS_FRONT_END.md#tts-stress-lanes`. CPU only, no image: the load reads the file into
+  RAM. The parity rail is `tests/test_tts_g2p_ru.das` against `harness/ru_stress_oracle.py`'s
+  dumps; `harness/ru_stress_eval.das` scores a file through the engine and through the front end.
+- **`dasllama_wordpiece.das`** - the WordPiece backend of the BERT and ELECTRA encoders: the BERT
+  normalizer as the two tables the converter folds the tokenizer's flags into
+  (`ARCHITECTURE_TTS_FRONT_END.md#wordpiece-tables`), the vocabulary as bytes and indices
+  (`ARCHITECTURE_TTS_FRONT_END.md#wordpiece-pieces`), the greedy longest match with the `##`
+  continuation - a word with no split, or longer than the word cap, one `[UNK]` - `[CLS]` / `[SEP]`
+  and the piece budget, and every piece's codepoint span of the input; the split itself is
+  `dasllama_pretok.das`'s `pretok_split_bert`. Not behind the LLM `Tokenizer` facade: no LLM family
+  reads it, the stress model owns it.
 
 ## Mechanisms
 
@@ -145,3 +182,105 @@ reads into `G2pModel.us_only`. `load_tts_model` takes the full pack from the mod
 it is there and the American-only twin otherwise, and panics when neither is. On the American-only
 pack `g2p_phonemize` refuses a British request by name and `caps` offers no British voice, so a
 Kokoro `bf_*` / `bm_*` pack is simply not on the list.
+
+### The Russian stress-context pass {#tts-stress-context}
+
+A word's stress is decided in this order: a mark in the text (`+` before the vowel, U+0301 after it)
+wins; a word written with ё is its own answer, and so is a pronoun form a preposition decides
+(`ARCHITECTURE_TTS_RU_STRESS.md#tts-ru-yo-rule`); a clitic takes none; the pack's ё spelling of a
+form written with е comes next; then the context model, for a form its catalog lists; then the
+rule tier (`ARCHITECTURE_TTS_RU_STRESS.md#tts-ru-rule-tier`), for a word the model left without
+a pick or a build with no model; then the pack's default reading; then the tiers of a word the pack does not hold
+(`ARCHITECTURE_TTS_RU_STRESS.md#tts-ru-unknown-word`), the shape rule last. The catalog spells no
+form with ё, and the model's tokenizer folds ё into е, so the lookup is the word's own lowercase
+spelling and a ё word never reaches it.
+
+The model is asked once a sentence. `ru_stress_context_picks` walks the normalized text the
+phonemizer is handed, cuts it after each `.`, `!`, `?` and ellipsis that ends a word, collects the
+catalog words of each piece, and asks `ru_stress_pick_long` once for all of them. A sentence whose
+pieces fit the model's budget (96 with `[CLS]` and `[SEP]`) is one pass. A longer one is read in
+windows: around the first unanswered word, a run of at most 94 pieces centred on its pieces, both
+edges moved onto word starts so the cut text tokenizes to the same pieces; every unanswered word
+whose pieces lie inside the window is answered by that window's one pass. A word the model is asked
+about takes the model's pick, which is always a reading the catalog lists. The pack holds one reading
+for some catalog forms; a pick it lacks is taken all the same and counted (`beyond_pack`), since the
+catalog is the model's own list of the form's readings. A word no piece covers keeps the pack's
+default and is counted (`fallbacks`). The picks key on the word's index among `ru_text_words`, and
+one split of the text into words serves both the picks and the marking (`ru_mark_stress_in_context`).
+The facade marks the normalized text as written and splices English phonemes for a Latin run after:
+a mark sits inside a Cyrillic word, and no Latin run reaches one.
+
+`tts_ctx_ru.gguf` beside a voice that speaks Russian is the model; `tts_finish_styletts2` probes for
+it once, at load (`tts_ru_stress_model_path`), and reads it on the lane the TTS setting names
+(`tts_serves_q8`). Without it the facade marks with `ru_mark_stress` alone: the pack and the tiers of
+`ARCHITECTURE_TTS_RU_STRESS.md`, the rule tier whole among them. The file is optional and stays off `tts_pack_names`, the list of packs a
+model needs. A synthesis reuses the scratch its `TtsModel` holds beside the model; `tts_phonemize`
+holds its own, so it reads the loaded model and writes nothing of it.
+
+### The stress model's lanes {#tts-stress-lanes}
+
+The shipped file stores the twelve layers' GEMM weights as Q4_K under an importance matrix, served on
+the block home's K-quant lane from the file's own planes; the word-embedding table as Q8_0 blocks; and
+a vocabulary pruned to the pieces a corpus holds, plus the specials and every single character bare
+and as `##`, so no word of known characters falls to `[UNK]`. The f32 file is the parity reference.
+The word table is read row by row: a pass decodes only its own pieces' rows into scratch
+(`ru_stress_embed`) and runs the shared embedding sum over them, so the table is never widened to f32.
+A 128-wide ELECTRA row is no whole superblock, so its 4-bit forms are the per-32 twins; the shipped
+form is Q8_0. ELECTRA's 128 to 256 embedding projection is no whole superblock either: the file
+stores it f32, and it serves those planes or, on the q8 lane, Q8_0 minted at load. The format a
+plane serves in is the engine's one rule (`kq_fmt_of`, then `kq_fmt_row_ok`). A layer GEMM serves f32
+or a superblock format on rows of whole superblocks, and the row gather reads f32, Q8_0 or a format
+whose blocks divide the row; the load refuses any other form, naming the tensor, the site and the
+format.
+
+A sentence's GEMMs are a few dozen rows, too few to feed the whole pool: the pass runs faster on a
+part of a wide pool than on all of it (`PERF_LEDGER.md`). `ru_stress_forward`, the pass's
+`[hot_path]` entry, narrows the pool with `dispatch_lanes_narrow`, the mechanism the transducer and
+translation decoders use, to `step_lanes` of one layer's GEMM multiply-adds over
+`RU_STRESS_LANE_WORK`, at least `RU_STRESS_MIN_LANES`, and restores it after. The lane work and the
+floor are the pass's own arguments, so no other family's dispatch reads them. A GEMM splits by
+weight rows, so the narrowing leaves every output bit as it was.
+
+### The BERT normalizer rides the GGUF as two tables {#wordpiece-tables}
+
+The reference normalizer drops NUL, U+FFFD and every C-category codepoint but tab, newline and
+carriage return; turns White_Space into a space; spaces CJK ideographs; strips accents (NFD,
+nonspacing marks dropped) when `strip_accents` says so or, where it is unset, when `lowercase` does;
+and lowercases per character. `harness/convert_ru_stress.py` evaluates exactly that on every
+codepoint with the checkpoint's own flags and writes the result: a class per codepoint run (kept,
+dropped, space, punctuation, CJK) and the rewrite of every codepoint the strip and the lowercasing
+change. The reader needs no Unicode tables and cannot disagree with a flag. ruBert-base leaves
+`strip_accents` unset with `lowercase` on: й reads as и, ё as е, U+0301 vanishes, and the vocabulary
+has no й (своей is `свое ##и`). Under the strip a Hangul syllable has no rewrite in the tables: the reader splits it into its jamo by arithmetic. A
+piece spans from its first normalized codepoint's source to its last one's source plus one, so a
+codepoint dropped at a piece boundary lies in no piece, as the reference's offsets put it.
+
+### The WordPiece vocabulary is bytes and indices {#wordpiece-pieces}
+
+A load makes no string a piece and no table. The tokenizer holds three arrays: every piece's UTF-8
+bytes end to end in id order, copied once out of `tokenizer.ggml.tokens` (`gguf_str_array_blob`);
+the piece starts, one integer a piece and one closing the last; and the piece ids in the ascending
+order of their bytes, compared as unsigned bytes, a piece sorting before every longer piece it
+opens. The converter writes that order as `<arch>.tokenizer.sorted_ids`
+(`ru_stress.tokenizer.sorted_ids`) beside the token list, which stays as other tools read it. The
+bytes are a copy because the load maps the file only while it reads it. The starts are built in
+the pass that copies the bytes: the token list already fixes them, so the file carries no second
+copy that could disagree. The load checks the sorted ids piece against piece - as many ids as
+pieces, each in range, each piece after the one before it - and refuses a file without the key or
+with another order, naming the key and the converter; it never sorts and never falls back to
+strings. For the 200,301 pieces of the small model that is 2.7 MB of bytes and 0.8 MB each of
+starts and sorted ids.
+
+The longest match is one walk down the sorted ids. A run is the pieces that share the bytes taken
+so far, and they are neighbours in the order; the piece that is exactly those bytes, if there is
+one, is the run's first. Each byte of the word narrows the run by two binary searches on that one
+byte of the run's pieces (`run_step`), and at every codepoint boundary the walk notes the run's
+first piece when it ends there. The last piece noted before the run empties is the longest slice
+that is a piece - the piece a search of every slice length, longest first, finds. A slice past the
+word's first starts from the run of the pieces behind the `##` prefix, found once at load
+(`continued`), so no prefixed string is built. The word's bytes are the normalizer's output, one
+byte array a sentence with a start a codepoint, spelled by the encoder `cpts_to_utf8` uses
+(`cpt_utf8_push`). A lookup allocates nothing. `wordpiece_find` is the same walk over a string's
+bytes for a test or a tool, and `wordpiece_piece` spells one piece as a string on demand, for a
+log or a test; the serving path calls neither, and asks whether a piece continues a word
+(`is_continuation`) by comparing its first bytes with the prefix.
