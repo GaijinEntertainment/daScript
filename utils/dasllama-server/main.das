@@ -122,6 +122,9 @@ struct ServerArgs {
     @clarg_doc = "Audio mmproj (a whisper-class tower: Qwen2-Audio, Qwen2.5-Omni, Ultravox, Voxtral; or gemma4a) for the default model — enables input_audio parts on /v1/chat/completions. An --image-mmproj that carries an audio tower arms it with no second flag"
     audio_mmproj : string
 
+    @clarg_doc = "DFlash / DFlash2 block drafter GGUF for the default model: the model speculates through it (the drafter proposes a block of tokens, the model's own verify accepts a run of them) at any stream count, on the Metal home. A [[models]] entry names its own with `drafter`. One block drafter serves a process."
+    drafter : string
+
     @clarg_doc = "Long-lived asynchronous ASR worker threads (default 1; 2 permits two parallel transcriptions; with several ASR models, the first one's)"
     asr_workers : int
 
@@ -222,6 +225,7 @@ struct ModelEntry {
     yarn_orig_ctx : int = 0      // 0 inherits
     image_mmproj : string   // vision mmproj (gemma4uv); empty = this model takes text only
     audio_mmproj : string   // audio mmproj; empty = the image mmproj's audio tower, where it carries one
+    drafter : string        // DFlash block drafter GGUF; empty = none
     is_default : bool = false
 }
 
@@ -297,7 +301,7 @@ var private g_cfg_sources : table<string; string>
 var private g_cfg_authoritative = false
 
 let CONFIG_KEYS = fixed_array("model", "port", "host", "quant", "kv_dtype", "metal", "gpu", "gpu_layers",
-    "gpu_stream", "gpu_dn", "gpu_attn", "gpu_dense", "gpu_vram_mb", "asr", "mmproj", "image_mmproj", "audio_mmproj", "asr_workers", "tts", "tts_lane", "tts_voices_dir",
+    "gpu_stream", "gpu_dn", "gpu_attn", "gpu_dense", "gpu_vram_mb", "asr", "mmproj", "image_mmproj", "audio_mmproj", "drafter", "asr_workers", "tts", "tts_lane", "tts_voices_dir",
     "translate", "ctx", "max_tokens", "streams", "threads", "team_dispatch", "affinity", "chunk", "chunk_idle", "page_rows",
     "prefix", "prefix_states", "prefix_state_mb", "flat", "mtp", "rope_scaling", "rope_scale", "yarn_orig_ctx", "lcpp_bin", "models_dir", "models")
 
@@ -536,6 +540,9 @@ def mark_cli_sources(cfg : ServerArgs) {   // nolint:STYLE037,STYLE038 — one f
     if (!empty(cfg.audio_mmproj)) {
         g_cfg_sources["audio_mmproj"] = "cli"
     }
+    if (!empty(cfg.drafter)) {
+        g_cfg_sources["drafter"] = "cli"
+    }
     if (cfg.asr_workers > 0) {
         g_cfg_sources["asr_workers"] = "cli"
     }
@@ -679,6 +686,7 @@ def apply_config(var cfg : ServerArgs) : bool {
     translate_from_toml(root, cfg, auth)
     cfg_from_toml(root, "image_mmproj", cfg.image_mmproj, auth)
     cfg_from_toml(root, "audio_mmproj", cfg.audio_mmproj, auth)
+    cfg_from_toml(root, "drafter", cfg.drafter, auth)
     cfg_from_toml(root, "asr_workers", cfg.asr_workers, auth)
     apply_session_keys(root, cfg, auth)
     cfg_from_toml(root, "lcpp_bin", cfg.lcpp_bin, auth)
@@ -803,6 +811,7 @@ def private apply_models_roster(root : JsonValue?) {
             yarn_orig_ctx = int(e?["yarn_orig_ctx"] ?? 0l),
             image_mmproj = e?["image_mmproj"] ?? "",
             audio_mmproj = e?["audio_mmproj"] ?? "",
+            drafter = e?["drafter"] ?? "",
             is_default = e?["default"] ?? false)
         if (ent.backend != "auto" && ent.backend != "cpu" && ent.backend != "gpu") {
             to_log(LOG_WARNING, "dasllama-server: [[models]] '{base_name(ent.path)}' backend '{ent.backend}' is not auto | cpu | gpu — using auto\n")
@@ -895,6 +904,7 @@ def boot_slot_opts(ent : ModelEntry) : SlotOpts {
         opts.kv_dtype_set = true
     }
     opts.mtp = ent.mtp
+    opts.drafter = ent.drafter
     opts.mtp_platforms = catalog_mtp_platforms(ent.path)
     return opts
 }
@@ -915,6 +925,7 @@ def private roster_entry_json(ent : ModelEntry) : JsonValue? {
         "page_rows" => JV(int64(ent.page_rows)), "prefix" => JV(int64(ent.prefix)),
         "image_mmproj" => JV(ent.image_mmproj),
         "audio_mmproj" => JV(ent.audio_mmproj),
+        "drafter" => JV(ent.drafter),
         "default" => JV(ent.is_default)
     }
     if (ent.mtp >= 0) {
@@ -976,6 +987,7 @@ def build_config_surface(cfg : ServerArgs; save_path : string) : string {
         translate = cfg.translate,
         image_mmproj = cfg.image_mmproj,
         audio_mmproj = cfg.audio_mmproj,
+        drafter = cfg.drafter,
         asr_workers = cfg.asr_workers > 0 ? cfg.asr_workers : 1,
         ctx = cfg.ctx,
         max_tokens = cfg.max_tokens > 0 ? cfg.max_tokens : 16384,
@@ -1140,6 +1152,13 @@ def maybe_collect_gc() {
     }
 }
 
+//! `path` where it is empty or its file is there, else "" with the drop logged as `what` ("--drafter - file", ...)
+def private present_or_dropped(path, what : string) : string {
+    return path if (empty(path) || stat(path).is_valid)
+    to_log(LOG_ERROR, "dasllama-server: dropping {what} not found: {path}\n")
+    return ""
+}
+
 [export]
 def init() {   // nolint:STYLE037,STYLE038 — boot sequence: the knobs are order-coupled (dispatch/affinity before the jobque, backend before the load), so the phases cannot move behind a function boundary
     if (!g_args_parsed) {
@@ -1236,14 +1255,10 @@ def init() {   // nolint:STYLE037,STYLE038 — boot sequence: the knobs are orde
             to_log(LOG_ERROR, "dasllama-server: skipping model '{empty(e.name) ? base_name(e.path) : e.name}' - file not found: {e.path} (fix the config, then POST /restart)\n")
             continue
         }
-        if (!empty(e.image_mmproj) && !stat(e.image_mmproj).is_valid) {
-            to_log(LOG_ERROR, "dasllama-server: dropping the vision arm of '{empty(e.name) ? base_name(e.path) : e.name}' - mmproj not found: {e.image_mmproj}\n")
-            e.image_mmproj = ""
-        }
-        if (!empty(e.audio_mmproj) && !stat(e.audio_mmproj).is_valid) {
-            to_log(LOG_ERROR, "dasllama-server: dropping the audio arm of '{empty(e.name) ? base_name(e.path) : e.name}' - mmproj not found: {e.audio_mmproj}\n")
-            e.audio_mmproj = ""
-        }
+        let owner = empty(e.name) ? base_name(e.path) : e.name
+        e.image_mmproj = present_or_dropped(e.image_mmproj, "the vision arm of '{owner}' - mmproj")
+        e.audio_mmproj = present_or_dropped(e.audio_mmproj, "the audio arm of '{owner}' - mmproj")
+        e.drafter = present_or_dropped(e.drafter, "the block drafter of '{owner}' - file")
         roster |> push(e)
     }
     delete g_models
@@ -1255,14 +1270,9 @@ def init() {   // nolint:STYLE037,STYLE038 — boot sequence: the knobs are orde
     } elif (empty(g_models) && !g_setup_mode) {
         to_log(LOG_WARNING, "dasllama-server: no loadable LLM model - serving the speech and translation routes only (the TTS, ASR and translation models still load)\n")
     }
-    if (!empty(g_cfg.image_mmproj) && !stat(g_cfg.image_mmproj).is_valid) {
-        to_log(LOG_ERROR, "dasllama-server: dropping --image-mmproj - file not found: {g_cfg.image_mmproj}\n")
-        g_cfg.image_mmproj = ""
-    }
-    if (!empty(g_cfg.audio_mmproj) && !stat(g_cfg.audio_mmproj).is_valid) {
-        to_log(LOG_ERROR, "dasllama-server: dropping --audio-mmproj - file not found: {g_cfg.audio_mmproj}\n")
-        g_cfg.audio_mmproj = ""
-    }
+    g_cfg.image_mmproj = present_or_dropped(g_cfg.image_mmproj, "--image-mmproj - file")
+    g_cfg.audio_mmproj = present_or_dropped(g_cfg.audio_mmproj, "--audio-mmproj - file")
+    g_cfg.drafter = present_or_dropped(g_cfg.drafter, "--drafter - file")
     if (!g_setup_mode) {
         //! an entry whose GGUF names its pooling is an embedding model: its own worker serves it, never an engine slot
         let embedder <- [for (ent in g_models); embedding_gguf(ent.path)]
@@ -1329,7 +1339,10 @@ def init() {   // nolint:STYLE037,STYLE038 — boot sequence: the knobs are orde
             clamp_ctx_to_device_room(m, ent.name, pick_kv_dtype(!empty(ent.kv_dtype) ? ent.kv_dtype : (empty(g_cfg.kv_dtype) ? "f16" : g_cfg.kv_dtype)))
             let ctx_note = ectx > 0l ? "" : " (model default)"
             to_log(LOG_INFO, "dasllama-server: {empty(ent.name) ? base_name(ent.path) : ent.name} ctx {m.config.seq_len}{ctx_note}\n")
-            let opts = boot_slot_opts(ent)
+            var opts = boot_slot_opts(ent)
+            if (empty(opts.drafter) && i == def_idx) {
+                opts.drafter = g_cfg.drafter   // --drafter names the default model's
+            }
             add_model(m, ent.name, opts, ent.path)   // captures this load's arm outcome + marks onto the slot
             if (gpu_is_discrete(gpu) && ent.backend != "cpu") {
                 set_slot_gpu_want(ent.name, slot_want)   // the want switch-in re-arms with

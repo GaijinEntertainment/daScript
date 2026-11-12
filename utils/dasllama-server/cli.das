@@ -78,6 +78,7 @@ struct private Rig {
     kv : KVDtype
     models_dir : string
     max_new : int64
+    drafter : string      // --drafter as given ("" = none)
 }
 
 def private arm_rig(c : CommonArgs; cfg : CliConfig; sampler : SamplerArgs; default_new : int64) : Rig {
@@ -101,7 +102,7 @@ def private arm_rig(c : CommonArgs; cfg : CliConfig; sampler : SamplerArgs; defa
     return Rig(gpu = gpu, vulkan_armed = armed, ctx = ctx,
                quant = pick_quant(c.quant, TOOL), kv = pick_kv_dtype(c.kv_dtype, TOOL),
                models_dir = catalog_models_dir(c.models_dir),
-               max_new = sampler.max_tokens > 0 ? int64(sampler.max_tokens) : default_new)
+               max_new = sampler.max_tokens > 0 ? int64(sampler.max_tokens) : default_new, drafter = c.drafter)
 }
 
 //! The LLM the plan names, loaded under the rig; "" in `why` when it loaded.
@@ -120,6 +121,15 @@ def private load_llm(rig : Rig; spec : string; var why : string&) : Model {
     if (rig.vulkan_armed) {
         let decline = gpu_resident_decline()
         note(empty(decline) ? "served whole from the GPU, the cache with it" : "served from the CPU with GPU rails: {decline}")
+    }
+    if (!empty(rig.drafter)) {
+        let dpath = resolve_aux(rig, rig.drafter, "block drafter", why)
+        let refused = empty(dpath) ? "" : attach_block_drafter(m, dpath)
+        if (!empty(refused)) {
+            why = "the block drafter {dpath} is not attached: {refused}"
+        } elif (!empty(dpath)) {
+            note("drafting through {dpath}")
+        }
     }
     return <- m
 }
@@ -640,9 +650,17 @@ def private run_complete(plan : CliPlan; cfg : CliConfig) : int {
         if (plan.sampler.seed != 0) {
             set_seed(s, plan.sampler.seed)
         }
-        generate(m, s, toks, params, rig.max_new) $(_id, piece) {
-            emit(piece)
-            return true
+        if (block_drafter_attached(m)) {
+            var inscope no_stops : array<int64>   // a completion runs its budget: no id ends it
+            generate_drafted(m, s, toks, params, rig.max_new, no_stops) $(_id, piece) {
+                emit(piece)
+                return true
+            }
+        } else {
+            generate(m, s, toks, params, rig.max_new) $(_id, piece) {
+                emit(piece)
+                return true
+            }
         }
         emit("\n")
         if (!plan.complete.quiet) {

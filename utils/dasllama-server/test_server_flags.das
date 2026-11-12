@@ -280,6 +280,71 @@ def test_speech_roster_from_toml(t : T?) {
     remove(path)
 }
 
+//! A string config key's precedence against its flag: with no flag the key is the arm, a flag wins over a config that is
+//! not authoritative, an authoritative config wins over the flag. `flag` sets the field as the command line would, `read`
+//! reads it back.
+def private string_key_precedence(t : T?; key : string; flag : block<(var a : ServerArgs) : void>; read : block<(a : ServerArgs) : string>) {
+    let path = path_join(test_temp_dir(), "{key}.toml")
+    t |> success(fwrite(path, "{key} = \"toml.gguf\"\n"), "wrote the config")
+    var plain = ServerArgs(config = path)
+    t |> success(apply_config(plain), "the config reads")
+    t |> equal(invoke(read, plain), "toml.gguf", "no flag: the key is the arm")
+    var flagged = ServerArgs(config = path)
+    invoke(flag, flagged)
+    set_cli_source(key, true)
+    t |> success(apply_config(flagged), "the config reads")
+    set_cli_source(key, false)
+    t |> equal(invoke(read, flagged), "cli.gguf", "the flag wins over a config that is not authoritative")
+    t |> success(fwrite(path, "authoritative = true\n{key} = \"toml.gguf\"\n"), "wrote the authoritative config")
+    var saved = ServerArgs(config = path)
+    invoke(flag, saved)
+    set_cli_source(key, true)
+    t |> success(apply_config(saved), "the authoritative config reads")
+    set_cli_source(key, false)
+    t |> equal(invoke(read, saved), "toml.gguf", "an authoritative config wins over the flag")
+    remove(path)
+}
+
+//! The block drafter's two spellings: `--drafter` on the command line and `drafter` in the config, and a roster entry's own
+//! path reaching its slot's options.
+[test(description = "--drafter parses onto the server arguments, the config key lands with no flag and under a flag only when the config is authoritative, a roster entry's drafter reaches its slot options, and both keys read back on the config surface")]
+def test_drafter_flag_and_key(t : T?) {
+    t |> run("--drafter parses onto the server's arguments") @(t : T?) {
+        let r <- parse_args(type<ServerArgs>, ["--drafter", "df.gguf", "--audio-mmproj", "au.gguf"])
+        t |> success(r |> is_ok, "the flags parse")
+        if (r |> is_ok) {
+            let cfg = r |> unwrap
+            t |> equal(cfg.drafter, "df.gguf")
+            t |> equal(cfg.audio_mmproj, "au.gguf", "and stays apart from the tower flag")
+        }
+    }
+    t |> run("the config's drafter lands, under a flag only when the config is authoritative") @(t : T?) {
+        string_key_precedence(t, "drafter", $(var a : ServerArgs) {
+            a.drafter = "cli.gguf"
+        }, $(a : ServerArgs) => a.drafter)
+    }
+    t |> run("a roster entry's drafter reaches its slot options, an entry without one carries none") @(t : T?) {
+        t |> equal(boot_slot_opts(ModelEntry(path = "m.gguf", drafter = "df.gguf")).drafter, "df.gguf")
+        t |> equal(boot_slot_opts(ModelEntry(path = "m.gguf")).drafter, "", "no key: no drafter (the control)")
+    }
+    t |> run("a [[models]] table's drafter key and the flat key both read back on the config surface") @(t : T?) {
+        let path = path_join(test_temp_dir(), "drafter_roster.toml")
+        t |> success(fwrite(path, "drafter = \"flat.gguf\"\n\n[[models]]\npath = \"a.gguf\"\ndrafter = \"df.gguf\"\n\n[[models]]\npath = \"b.gguf\"\n"), "wrote the roster")
+        var cfg = ServerArgs(config = path)
+        t |> success(apply_config(cfg), "the roster reads")
+        var err = ""
+        var js = read_json(build_config_surface(cfg, ""), err)
+        t |> equal(js?["config"]?["drafter"] ?? "", "flat.gguf", "the flat key is on the surface")
+        t |> equal(js?["sources"]?["drafter"] ?? "", "toml", "its source is the config")
+        t |> equal(js?["models"]?[0]?["drafter"] ?? "?", "df.gguf", "the first entry carries its own drafter")
+        t |> equal(js?["models"]?[1]?["drafter"] ?? "?", "", "an entry with no key carries none (the control)")
+        unsafe {
+            delete js
+        }
+        remove(path)
+    }
+}
+
 //! The audio tower's two spellings: `--audio-mmproj` on the command line and `audio_mmproj` in the config, the flag
 //! winning over a config that is not authoritative.
 [test(description = "--audio-mmproj parses onto the server arguments and the config key lands only when the config is authoritative")]
@@ -293,25 +358,11 @@ def test_audio_mmproj_flag_and_key(t : T?) {
             t |> equal(cfg.image_mmproj, "v.gguf", "and stays apart from the vision flag")
         }
     }
-    let path = path_join(test_temp_dir(), "audio_mmproj.toml")
     t |> run("the config's audio_mmproj lands, under a flag only when the config is authoritative") @(t : T?) {
-        t |> success(fwrite(path, "audio_mmproj = \"toml.gguf\"\n"), "wrote the config")
-        var plain = ServerArgs(config = path)
-        t |> success(apply_config(plain), "the config reads")
-        t |> equal(plain.audio_mmproj, "toml.gguf", "no flag: the key is the arm")
-        var flagged = ServerArgs(config = path, audio_mmproj = "cli.gguf")
-        set_cli_source("audio_mmproj", true)
-        t |> success(apply_config(flagged), "the config reads")
-        set_cli_source("audio_mmproj", false)
-        t |> equal(flagged.audio_mmproj, "cli.gguf", "the flag wins over a config that is not authoritative")
-        t |> success(fwrite(path, "authoritative = true\naudio_mmproj = \"toml.gguf\"\n"), "wrote the authoritative config")
-        var saved = ServerArgs(config = path, audio_mmproj = "cli.gguf")
-        set_cli_source("audio_mmproj", true)
-        t |> success(apply_config(saved), "the authoritative config reads")
-        set_cli_source("audio_mmproj", false)
-        t |> equal(saved.audio_mmproj, "toml.gguf", "an authoritative config wins over the flag")
+        string_key_precedence(t, "audio_mmproj", $(var a : ServerArgs) {
+            a.audio_mmproj = "cli.gguf"
+        }, $(a : ServerArgs) => a.audio_mmproj)
     }
-    remove(path)
 }
 
 //! The `translate` key and flag: the flag's comma list and the config's string or array of paths read as one spec, its

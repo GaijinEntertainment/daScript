@@ -84,6 +84,20 @@ def test_plan_verbose(t : T?) {
     }
 }
 
+[test(description = "--drafter parses as a shared flag carrying its path on every command and is empty by default")]
+def test_plan_drafter(t : T?) {
+    t |> run("--drafter is a shared flag on every command, empty by default") @(t : T?) {
+        let plain <- parse_cli(["complete", "-m", "x.gguf", "hi"])
+        t |> equal(plain.common.drafter, "", "empty by default")
+        for (cmd in ["complete", "chat", "talk", "bench"]) {
+            let plan <- parse_cli([cmd, "--drafter", "d.gguf", "-m", "x.gguf"])
+            t |> equal(plan.error, "", cmd)
+            t |> equal(plan.common.drafter, "d.gguf", "{cmd} --drafter")
+            t |> equal(plan.common.model, "x.gguf", "{cmd}: the drafter's value is not the model")
+        }
+    }
+}
+
 [test(description = "complete, transcribe, talk, chat, bench, tokenize and embed each land their own flags and bare tokens on one plan")]
 def test_plan_flags(t : T?) {
     t |> run("complete: the shared, the sampler and its own flags land on one plan") @(t : T?) {

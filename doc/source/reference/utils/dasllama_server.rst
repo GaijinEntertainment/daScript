@@ -326,6 +326,10 @@ Run under ``-jit`` --- the interpreter is refused, it is far too slow for infere
      -
      - ---
      - Flat preallocated KV sessions --- disables paged serving and the prefix cache
+   * - ``--drafter``
+     -
+     - ---
+     - DFlash / DFlash2 block drafter GGUF for the default model (``drafter = "<gguf>"`` on a ``[[models]]`` entry names that model's): the model speculates through it --- the drafter proposes a block of tokens, the model's own verify accepts a run of them, so the reply is the model's own --- at any stream count on the Metal home; a tick of more streams than a joint round pays for decodes as one plain batched step. One block drafter serves a process: the first slot that names one keeps it. A file that is not there is dropped at boot and a drafter the model refuses leaves the slot decoding plain, each logged; a model loaded at run time (``/v1/models/load``) takes none. ``mtp = false`` on the slot, or ``--mtp false``, leaves it off
    * - ``--mtp``
      -
      - *off*
@@ -437,7 +441,7 @@ model's GPU state lives in VRAM at a time (the tier drops and re-arms on
 switch; ``backend = "cpu"`` slots never evict the GPU owner). Blank keys
 inherit the flat defaults; ``backend`` is ``auto`` | ``cpu`` | ``gpu``, and
 per-entry ``ctx``, ``quant``, ``kv_dtype``, ``streams``, ``chunk``, ``chunk_idle``,
-``page_rows``, ``prefix``, ``mtp``, ``rope_scaling``, ``rope_scale``, ``yarn_orig_ctx``, ``image_mmproj`` and ``audio_mmproj`` override per model:
+``page_rows``, ``prefix``, ``mtp``, ``rope_scaling``, ``rope_scale``, ``yarn_orig_ctx``, ``image_mmproj``, ``audio_mmproj`` and ``drafter`` override per model:
 
 .. code-block:: toml
 
