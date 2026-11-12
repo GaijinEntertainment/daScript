@@ -115,14 +115,21 @@ class BuildMatrix(unittest.TestCase):
 
 
 class ExtendedMatrix(unittest.TestCase):
-    def test_per_pr_is_two_darwin_roles(self):
+    def test_per_pr_is_two_linux_roles(self):
         cells = ci_matrix.extended_cells(False)
-        self.assertEqual([(c["target"], c["role"]) for c in cells], [("darwin15", "core"), ("darwin15", "modules")])
+        self.assertEqual([(c["target"], c["role"]) for c in cells], [("linux", "core"), ("linux", "modules")])
 
     def test_nightly_is_one_full_job_per_platform(self):
         cells = ci_matrix.extended_cells(True)
-        self.assertEqual([(c["target"], c["role"]) for c in cells],
-                         [("linux", "all"), ("darwin15", "all"), ("windows", "all")])
+        self.assertEqual([(c["target"], c["role"]) for c in cells], [("linux", "all"), ("windows", "all")])
+
+    def test_the_macos_only_check_rides_the_build_lane(self):
+        # the extended checks have no macOS cell, so the one check cmake gives to APPLE alone has
+        # to run where a macOS job still builds per PR
+        text = open(os.path.join(os.path.dirname(HERE), "ci", "CMakeLists.txt"), encoding="utf-8").read()
+        block = text.split("set(DAS_BUILD_LANE_APPLE", 1)[1].split("das_lane_group(run_build ", 1)
+        self.assertIn("run_tests_llvm_vector_math", block[0])
+        self.assertIn("${DAS_BUILD_LANE_APPLE}", block[1].split(")", 1)[0])
 
     def test_every_cell_names_a_runner(self):
         for nightly in (False, True):

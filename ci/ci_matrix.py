@@ -80,18 +80,18 @@ def build_cells(nightly):
 
 
 def extended_cells(nightly):
-    """extended_checks.yml: per PR two darwin15 jobs split by role (core: the tree's own gates and
-    utils; modules: the module and service suites); the nightly runs every step on linux, darwin15
-    and windows in one job each (role all)."""
+    """extended_checks.yml: per PR two linux jobs split by role (core: the tree's own gates and
+    utils; modules: the module and service suites); the nightly runs every step on linux and
+    windows in one job each (role all). No macOS cell: the hosted macOS runner is 3 cores and
+    7 GB against linux's 4 and 16, and ran the same steps in about twice the time."""
     cmake = dict(build_system="cmake", cmake_generator="Ninja")
-    darwin = dict(target="darwin15", architecture="arm64", runner="macos-15", architecture_string="arm64", **cmake)
+    linux = dict(target="linux", architecture=64, runner="ubuntu-latest", **cmake)
     if nightly:
         return [
-            dict(target="linux", architecture=64, role="all", runner="ubuntu-latest", **cmake),
-            dict(role="all", **darwin),
+            dict(role="all", **linux),
             dict(target="windows", architecture=64, role="all", runner="windows-latest", architecture_string="x64", **cmake),
         ]
-    return [dict(role="core", **darwin), dict(role="modules", **darwin)]
+    return [dict(role="core", **linux), dict(role="modules", **linux)]
 
 
 def main(argv):

@@ -116,12 +116,6 @@ jobs:
       run: |
         set -eux
         case "${{ matrix.target }}" in
-          darwin15)
-            brew install bison openssl
-            echo 'export PATH="/usr/local/opt/bison/bin:$PATH"' >> ~/.bash_profile
-            export LDFLAGS="-L/usr/local/opt/bison/lib -L$(brew --prefix openssl)/lib"
-            export CPPFLAGS="-I$(brew --prefix openssl)/include"
-            ;;
           linux)
             echo "MARCH=64" >> $GITHUB_ENV
             # apt.llvm.org carries LLVM 22 per Ubuntu codename; ubuntu-latest moves between them.

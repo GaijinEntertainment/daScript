@@ -64,8 +64,8 @@ working-tree copy.
 | `nightly.yml` | `schedule` cron (daily 02:00 UTC), `workflow_dispatch`, and a `pull_request` whose body says `#nightly` or that carries `run-nightly` / `nightly-failure` | `build` matrix (`build_matrix.yml`, lane `build_nightly`: the per-PR Release cells running `run_build_nightly` - the full AOT sweep and the three backend sweeps - plus the sanitizer cells - each three jobs, `tests`, `slow`, `backend`; `tests` and `backend` share one sccache slot, `slow` keeps its own - the fast-math cell and windows 64 Debug, which compiles and runs no test), `build_windows_relwithdebinfo_nightly`, `build_windows_release_llvm_nightly`, `build_windows_mingw`, `build_windows_clangcl`, and calls to `extended_checks.yml` (lane `extended_nightly`), `nightly_daspkg_index.yml`, `nightly_imgui.yml`, `nightly_playground.yml` and `nightly_vulkan.yml` - the only cron. Breaks surface within ~24 h, not at PR time |
 | `build_matrix.yml` | `workflow_call` from `build.yml` and `nightly.yml`, with the lane | the build matrix job - section below |
 | `nightly_imgui.yml` | `workflow_call` from `nightly.yml` + `workflow_dispatch` | dasImgui playwright suite on ubuntu + macos - section below |
-| `extended_checks.yml` (per-PR) | every PR | two darwin15-arm64 jobs, `core` and `modules` (`ci/ci_matrix.py extended`), ALL release modules ON, plus `commit_messages` (ubuntu, no build) - section below |
-| `extended_checks.yml` (nightly) | `workflow_call` from `nightly.yml` | one job each on linux, darwin15 and windows running every step (role `all`), including the ones too slow for a PR: tutorial dry-runs, the run form of examples, coverage, the nano cross-compile, the AST verify tree sweep, doc-verify |
+| `extended_checks.yml` (per-PR) | every PR | two linux x86_64 jobs, `core` and `modules` (`ci/ci_matrix.py extended`), ALL release modules ON, plus `commit_messages` (ubuntu, no build) - section below |
+| `extended_checks.yml` (nightly) | `workflow_call` from `nightly.yml` | one job each on linux and windows running every step (role `all`), including the ones too slow for a PR: tutorial dry-runs, the run form of examples, coverage, the nano cross-compile, the AST verify tree sweep, doc-verify |
 | `wasm_build.yml` | every PR | emscripten build of `web/` on 3 OSes, the vecmath backend battery and `tests/language` under node, + `wasm_cross` |
 | `build_eastl.yml` | every PR | EASTL shadow-config build + no-fileio build (linux clang) |
 | `doc.yml` | only if `doc/**`, `daslib/**`, `src/builtin/**`, `modules/dasImgui/**`, `modules/dasVulkan/**`, or `modules/dasLLAMA/dasllama/**` changed; `release: prereleased` of a daslang tag (a `dasllama-*` tag runs nothing) | the doc gates |
@@ -172,20 +172,22 @@ headers live there, and TUs like `src/simulate/fs_file_info.cpp` include them.
 
 ## extended_checks.yml
 
-Per PR the workflow is two darwin15 jobs, `extended_checks (darwin15, core)` and
-`extended_checks (darwin15, modules)`, each inside the 35-minute budget: `core` runs the
+Per PR the workflow is two linux jobs, `extended_checks (linux, core)` and
+`extended_checks (linux, modules)`, each inside the 35-minute budget; no cell runs on macOS,
+whose hosted runner (3 cores, 7 GB) took about twice linux's time on the same steps: `core` runs the
 tree's own gates - dasgen, utils tests, standalone exes, formatter, lint, line length, ast-verify, the
 python gates, review-md discovery, dastest's own suite, the REVIEW.das gates, ci-das -
 and `modules` the module and service suites - ser/deser, MCP tools, boulder-dash,
-dasllama-server, env-knob registries, the dasLLVM vector-math rail, facade lint,
+dasllama-server, env-knob registries, facade lint,
 dasweb-playground, dasllama-ladder, dasweb-buildd, dasweb-verify, the sequence smoke, the
 dasGlfw touch layer, the daslang_static sweep. The role names a group target, so the nightly job
-(role `all`, one each on linux, darwin15, windows) runs every check plus the
+(role `all`, one each on linux and windows) runs every check plus the
 nightly-only ones: tutorial dry-runs and the run form of examples (preflight's `compile-sweep`
 is their per-PR mirror), the AST verify tree sweep and doc-verify (policy), coverage (a report,
-not a gate), and the nano cross-compile - platform-bound: its arm-none-eabi toolchain is an apt
-package no darwin cell and no developer box carries, so it has no per-PR cell and no local
-mirror. The cells are `ci/ci_matrix.py extended <event>`; `ci/test_ci_matrix.py` pins them and
+not a gate), and the nano cross-compile - its arm-none-eabi toolchain is an apt
+package no developer box carries, so it has no local mirror. The dasLLVM vector-math rail is
+Apple-only and runs in the darwin build cells' `run_build` lane (`DAS_BUILD_LANE_APPLE` in
+`ci/CMakeLists.txt`). The cells are `ci/ci_matrix.py extended <event>`; `ci/test_ci_matrix.py` pins them and
 the condition spelling.
 
 **CI configures with ALL release modules ON** - `ci/release_modules.txt` flips
@@ -244,11 +246,11 @@ test rather than a check that silently stopped running.
 | dasllama-convert carrier sniff | `cmake --build build --config Release --target run_tests_dasllama_convert` | the `modules` role; a cell whose model is absent skips |
 | dasOPENAI client tests | `cmake --build build --config Release --target run_tests_dasopenai` | the `modules` role; a cell that talks to a server the repo does not start skips without it |
 | env-knob registries | `cmake --build build --config Release --target run_tests_dasllama_env_registry` | |
-| dasLLVM inline-polynomial rail | `cmake --build build --config Release --target run_tests_llvm_vector_math` | the darwin15 cell pins vecmath's answers; needs `-jit` |
+| dasLLVM inline-polynomial rail | `cmake --build build --config Release --target run_tests_llvm_vector_math` | the darwin build cells run it inside `run_build` and pin vecmath's answers; needs `-jit` |
 | dasllama facade lint | `cmake --build build --config Release --target run_tests_dasllama_facade_lint` | the DASLLAMA001 smokes |
 | dasweb-playground / ladder / buildd / verify | `cmake --build build --config Release --target run_tests_dasweb_playground`, `run_tests_dasllama_ladder`, `run_tests_dasweb_buildd`, `run_tests_dasweb_verify` | in-dir suites `--test ./tests` never reaches; each server suite binds a loopback port and shuts itself down |
 | CI-only das surface | `cmake --build build --config Release --target check_gated_das` | reads the same `ci_only_das.txt` preflight's `ci-das` gate does |
-| nano cortex-m4 cross-compile - **nightly** (linux) | `cmake --build build --config Release --target check_nano_arm` | its arm-none-eabi toolchain is an apt package no darwin cell and no developer box carries |
+| nano cortex-m4 cross-compile - **nightly** (linux) | `cmake --build build --config Release --target check_nano_arm` | its arm-none-eabi toolchain is an apt package no developer box carries |
 | Bundle smoke (build.yml) | `cmake --build build --config Release --target check_bundle_smoke` | installs to `<build>/daslang_bundle` and runs `ci/smoke_test_bundle.sh` |
 | dasClangBind self-binder (mingw nightly) | `DAS_CLANG_INCLUDE=<libclang include> cmake --build build --config Release --target check_clangbind_fresh`, then `run_tests_cbind_const_preproc` | needs `DAS_CLANG_BIND_DISABLED=OFF` |
 | dasGlfw touch layer | `cmake --build build --config Release --target run_tests_glfw_touch` | the `modules` role; the EM_JS bodies run under node against fake GLFW/Browser fixtures, no browser and no window |
