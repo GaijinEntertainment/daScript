@@ -92,6 +92,13 @@ never what is compiled.
 | `DAS_DEPFILE_TARGET` | text | The target the rule names. Default: `DAS_DEPFILE` with a trailing `.d` removed, the way `-MD` names the object it is writing. |
 | `DAS_DEPFILE_EXCLUDE` | `;`-separated paths | Directories that contribute nothing. The build directory belongs here: a generated source is another edge's output, and naming one makes ninja build that edge to satisfy the check. |
 
+## Native libraries - `[extern]`
+
+| Variable | Type | Effect |
+|---|---|---|
+| `DAS_EXTERN_LIB_<ALIAS>` | path or `;`-separated candidates | Replaces the library of the `@extern_library` global `<alias>` (upper-cased: `DAS_EXTERN_LIB_LLVM` for dasLLVM's `llvm`). Read when the library first loads, so the bind names, the module cache and the JIT cache do not change with it; it also applies in a standalone exe. Empty means unset. |
+| `DAS_DLL_PATH` | directories, `;`-separated on Windows, `:` elsewhere | Extra directories dasbind searches for a library named without a path, after `-dll-path` and before `<das root>/lib`. Read once. |
+
 ## Diagnostics
 
 | Variable | Type | Effect |

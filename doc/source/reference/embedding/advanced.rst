@@ -348,6 +348,23 @@ that loads: a library installed under a per-version name
 with one declaration. Each name is looked up as written, then with the
 platform's shared-library extension appended.
 
+A library that many externs share is named once, by a global string tagged
+``@extern_library``, and each extern names that global with ``lib=``:
+
+.. code-block:: das
+
+   let @extern_library llvm = "LLVM.dll"
+
+   [extern(cdecl, name="LLVMGetHostCPUName", lib=llvm)]
+   def LLVMGetHostCPUName() : string {}
+
+The global is private to the module and must be declared above the extern;
+an alias the module does not declare is a compile error. The environment variable ``DAS_EXTERN_LIB_<ALIAS>`` (the alias in upper
+case, ``DAS_EXTERN_LIB_LLVM`` here) replaces the declared library when the
+library loads - in the interpreter, the JIT, and a standalone executable alike -
+so a deployment points the binding at another build without touching the
+source.
+
 Several such libraries coexist in one process, and so does a library inside a
 host that registered the daslang modules itself: whoever gets there first
 registers the runtime, and the rest bind to it. Several instances of one

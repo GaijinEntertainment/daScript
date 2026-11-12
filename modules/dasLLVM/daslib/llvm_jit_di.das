@@ -21,6 +21,8 @@ require math
 
 //! DWARF type and expression factory for the JIT's debug-info rail.
 
+let @extern_library llvm = "LLVM.dll"
+
 let public DW_TAG_STRUCTURE_TYPE = 0x13u
 
 let public DW_ATE_BOOLEAN = 0x02u
@@ -31,7 +33,7 @@ let public DW_ATE_UNSIGNED = 0x07u
 
 let public DW_OP_DEREF = 0x06ul
 
-[extern(cdecl, name="LLVMDIBuilderCreateStructType", library="LLVM.dll")]
+[extern(cdecl, name="LLVMDIBuilderCreateStructType", lib=llvm)]
 def private llvm_di_create_struct_type(Builder : LLVMOpaqueDIBuilder? implicit; Scope : LLVMOpaqueMetadata? implicit;
                                        Name : string implicit; NameLen : uint64; File : LLVMOpaqueMetadata? implicit;
                                        LineNumber : uint; SizeInBits : uint64; AlignInBits : uint; Flags : LLVMDIFlags;
