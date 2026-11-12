@@ -19,15 +19,18 @@ the rope-store grid stops at the Q pairs, so nothing is written into the source 
 attention reads through the aliased row prefix. A MoE's shared expert rides the batch the same
 way it rides the verify rows: the gate dot as a one-row router GEMV, the gate|up pair and the
 down as rows forms by each plane's tag over the expert panel once the routed W2 consumed it. A
-deltanet hybrid's recurrent layer runs its projections as rows GEMVs, each plane by its tag, then the conv, history,
+deltanet hybrid's recurrent layer runs its projections as rows sites, each plane by its tag on the step's own forms (the
+eight-row forms from `DASLLAMA_METAL_ROWS8_MIN` rows, row tiles past eight:
+`ARCHITECTURE_GPU_MTP_DECODE_ROWS.md#rows8-matrix-unit`), then the conv, history,
 norm, scan and gate once each over every row, a row a session against that session's own `DnMirror`
 (`recurrent_batch`, `ARCHITECTURE_GPU_MTP.md#dn-group-stages`), and the mirrors advance when the step lands
 (`BatchLanding.dn_uids`); a step whose rows have no resident, stashed or CPU-synced state declines `dn_state`. The
 mirror cache (`g_dn_mirrors`, an LRU over the pool's slots, `ARCHITECTURE_GPU_MTP.md#dn-mirror-pool`) rests at four
 sessions and grows to whatever a scheduler names through the tier's `gpu_dn_room_` seam at its creation
 (`create_scheduler` -> the facade's `gpu_dn_room`), and the batch build names its own row count too: a cache narrower
-than the batch would evict a row of the step it prepares. Every plane a rows GEMV lands in is sized to the rows form's four-row tile
-reach (`mr`), because the tile writes whole tiles past the live rows. `eval_batch_` hands a
+than the batch would evict a row of the step it prepares. Every plane a weight site lands in - the recurrent
+projections' and the gated q projection's among them - is sized to the step's padded rows (the wider of the four-row
+tile reach `mr` and the panel `mp`), because an eight-row form writes its whole panel past the live rows. `eval_batch_` hands a
 hybrid's rows to an armed device driver first and to the CPU stack's own hybrid form
 (`ArchBlocks.attn_batch`) when none is armed or the driver declines on a planar model; only a
 blob-only model's declined step falls to the single-row forward. The batch's split single-pass

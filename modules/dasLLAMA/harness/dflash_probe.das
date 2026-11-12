@@ -117,11 +117,9 @@ def private walk_traced(m : Model; var s : Session; prompt : array<int64>; steps
         print("round {round} at {s.n_past - a - 1l}: anchor {tok} drafted {drafted} accepted {a} in {get_time_usec(tr) / 1000} ms\n")
         static_if (typeinfo builtin_module_exists(das_metal)) {
             if (round == g_census_round) {
-                var inscope cov <- metal_kernel_coverage()
-                var inscope names <- [for (k, v in keys(cov), values(cov)); k; where v > 0l]
-                sort(names)
-                for (k in names) {
-                    print("  census {k}: {cov[k]}\n")
+                var inscope rows <- metal_kernel_coverage_served()
+                for (row in rows) {
+                    print("  census {row.name}: {row.n}\n")
                 }
             }
         }

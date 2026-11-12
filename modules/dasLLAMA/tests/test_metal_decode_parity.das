@@ -868,7 +868,7 @@ def test_metal_batch_mixed_sites(t : T?) {
             }
             t |> success(mixed, "a recurrent layer reads a Q8_0 out plane beside a K-quant qkv plane")
             var trg <- blob_twin(t, path, 512l)
-            for (nb in [3, 9, 12]) {   //! nine and twelve rows ride the GEMM tier, whose M pad the recurrent row planes hold
+            for (nb in [3, 9, 12]) {   //! nine and twelve rows ride row tiles on the matrix-unit form, the GEMM tier's panels elsewhere: either's pad the recurrent row planes hold
                 var inscope prompts : array<array<int64>>
                 prompts |> reserve(nb)
                 for (i in range(nb)) {

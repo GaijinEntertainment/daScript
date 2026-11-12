@@ -37,6 +37,9 @@ struct public EngineEnv {
     @clarg_doc = "Persist the prepared image beside the source; 0 builds it in memory and serves that, leaving no .dlim behind."
     image_save : bool = true
 
+    @clarg_doc = "A development lever: also accept a prepared image of this older image version where its meta layout fingerprint is this build's, in place of re-minting it (0 = the build's version alone). The caller vouches that nothing the image's lane holds changed between the two versions - a version that moved another lane's bytes; an image whose planes did change reads wrong with no diagnostic."
+    image_accept_version : int = 0
+
     @clarg_doc = "Allow the CPU prefill path even when a GPU prefill override is registered."
     cpu_prefill : bool = false
 
@@ -334,16 +337,19 @@ struct public MetalEnv {
     @clarg_doc = "The per-32 routed stacks' expert-indexed GEMV (q5_1, q5032 and the affine members; the codebook-table members iq4nl32 and q4032 keep the two-row form) takes the wide form - a whole block a lane, one expert row a simdgroup - on every expert of 512 rows or more; 0 pins the two-row form (the A/B rail)."
     b32_moe_wide : bool = true
 
-    @clarg_doc = "The rows sites of five to eight rows (the verify, the batch step's rows tier) take the eight-row tensor stamps - a K-quant plane's where the box crowned its tensor tile (kq_mulmm_<fmt>), a q8 plane's under mulmm_q8: W streamed and decoded once for the panel on the tensor op, where the row forms stream it twice or decode it once a column; 0 keeps the row forms (the A/B rail)."
+    @clarg_doc = "The rows sites of three to eight rows (the verify, the batch step's rows tier) take the eight-row tensor stamps - a K-quant plane's where the box crowned its tensor tile (kq_mulmm_<fmt>), a q8 plane's under mulmm_q8: W streamed and decoded once for the panel on the tensor op, where the row forms stream it twice or decode it once a column; 0 keeps the row forms (the A/B rail)."
     rows_mm8 : bool = true
 
-    @clarg_doc = "The rows sites of five to eight rows take the matrix-unit form where the box's layout probe passed: a 16 x 8 product a weight group with the codes filled from registers as exact halves and the scale applied once in fp32, K split over a threadgroup's eight simdgroups and met in threadgroup memory, no reduce dispatch; a k4, k6, iq4xs or q8 plane's and an affine member's (DASLLAMA_METAL_PREFILL_SKIP=rows8nomlx keeps the members on the small-batch forms, rows8noiq4xs the iq4xs planes on the eight-row stamps). 0 keeps the eight-row stamps (the A/B rail)."
+    @clarg_doc = "The rows sites of three to eight rows take the matrix-unit form where the box's layout probe passed: a 16 x 8 product a weight group with the codes filled from registers as exact halves and the scale applied once in fp32, K split over a threadgroup's eight simdgroups and met in threadgroup memory, no reduce dispatch; a k4, k6, iq4xs or q8 plane's and an affine member's (DASLLAMA_METAL_PREFILL_SKIP=rows8nomlx keeps the members on the small-batch forms, rows8noiq4xs the iq4xs planes on the eight-row stamps). 0 keeps the eight-row stamps (the A/B rail)."
     rows_mt : bool = true
+
+    @clarg_doc = "The fewest rows a rows site carries on the eight-row forms (the matrix-unit form, the eight-row tensor stamps), its panel padded to eight; fewer rows take the row forms."
+    rows8_min : int = 3
 
     @clarg_doc = "A step of two to sixteen rows reads each distinct routed expert once over the rows that picked it (the rows' expert union) instead of once a (row, slot), over iq4xs stacks: the fused pair's per-row arithmetic over each expert's rows, its values the pair's bit for bit. 1 is the oracle rail, never a serving default - it measures slower on the 35B's verify, whose repeated expert reads already hit in the cache; 0 keeps the fused pair."
     moe_union : bool = false
 
-    @clarg_doc = "The hyper-connection mixer of a five-to-eight-row step over four streams runs as four dispatches on the matrix unit: the grouped norm into the rows8 x table with the inverse norms and the inject rows' stream partials, the q8 down split by stream, the partials' finish through silu(lo / hc) into the up's table with the scatter logits, and the q8 up with the gated stream mean in its landing; 0 keeps the eight-dispatch chain (the A/B rail)."
+    @clarg_doc = "The hyper-connection mixer of a three-to-eight-row step over four streams runs as four dispatches on the matrix unit: the grouped norm into the rows8 x table with the inverse norms and the inject rows' stream partials, the q8 down split by stream, the partials' finish through silu(lo / hc) into the up's table with the scatter logits, and the q8 up with the gated stream mean in its landing; 0 keeps the eight-dispatch chain (the A/B rail)."
     hc_mix8 : bool = true
 
     @clarg_doc = "The one-row hyper-connection mixer over an affine member's planes (mlx4b, mlx6b, mlx8b) runs as the fused pair - the down under the grouped norm with the inject rows, the up over silu(lo / hc) with the gated stream mean - on the member's fill; 0 keeps those sites on the staged chain (the norm, the down GEMV, silu, the up GEMV, the mean), a q8 pair keeps the fused pair either way (the A/B rail)."
@@ -459,6 +465,9 @@ struct public MetalEnv {
 
     @clarg_doc = "Comma-separated dispatch names to skip in decode - a bring-up bisect that breaks correctness."
     decode_skip : string = ""
+
+    @clarg_doc = "Comma-separated kernel-name fragments: a dispatch of a kernel whose census name holds one is bound but not issued - per-kernel timing attribution, output is garbage."
+    kernel_skip : string = ""
 
     @clarg_doc = "Prefill twin of DASLLAMA_METAL_DECODE_SKIP."
     prefill_skip : string = ""

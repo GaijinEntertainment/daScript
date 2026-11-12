@@ -482,7 +482,7 @@ let MODULE_WITNESSES <- {
     "dasllama_dflash" => "test_dflash_drafter.das,test_mtp_accept_walks.das", "dasllama_metal_dflash" => "test_dflash_drafter.das",
     "dasllama_metal_decode" => METAL_WITNESSES, "dasllama_metal_prefill" => METAL_WITNESSES, "dasllama_metal_mtp_gemma" => METAL_WITNESSES,
     "dasllama_scheduler" => "test_scheduler.das",
-    "dasllama_sampling" => "test_sampling.das,test_mtp_sampled_walk.das,test_mtp_accept_walks.das,test_scheduler.das",
+    "dasllama_sampling" => "test_sampling.das,test_mtp_sampled_walk.das,test_mtp_accept_walks.das,test_scheduler.das,test_dflash_drafter.das",
     "dasllama_batch" => "test_batch_decode.das,test_matmul_batch.das,test_gpu_resident_cuda_batch.das",
     "dasllama_kv_codec" => KV_CODEC_WITNESSES, "dasllama_kv_dtype" => KV_CODEC_WITNESSES,
     "dasllama_prefix" => "test_kv_prefix.das,test_kv_paged.das",
@@ -492,7 +492,7 @@ let MODULE_WITNESSES <- {
     "dasllama_tokenizer" => TOKENIZER_WITNESSES, "dasllama_bpe" => TOKENIZER_WITNESSES, "dasllama_spm" => TOKENIZER_WITNESSES,
     "dasllama_safetensors" => "test_gguf_shards.das,test_mlx_snapshot.das,test_mlx_qwen4exp.das,test_tokenizer.das",
     "dasllama_pretok" => TOKENIZER_WITNESSES, "dasllama_unicode" => TOKENIZER_WITNESSES,
-    "dasllama_chat" => "test_chat.das,test_tool_formats.das,test_think_split.das,test_scheduler.das",
+    "dasllama_chat" => "test_chat.das,test_tool_formats.das,test_think_split.das,test_scheduler.das,test_dflash_drafter.das",
     "dasllama_tools" => "test_chat.das,test_tool_formats.das,test_think_split.das,test_scheduler.das",
     "dasllama_attn_prefill" => "test_prefill.das,test_prefill_cpu_kernels.das,test_attn_span.das"
 }

@@ -805,6 +805,78 @@ def generate_embd_(t : Model; var s : Session; embd : array<float>; npos : int64
     return nout
 }
 
+//! The speculative stream both walks below run: `prefill` evals the prompt under the speculation gate and answers its length,
+//! then after every drawn id a round evals it and hands `blk` the drafts the verify accepts, within the budget and no further
+//! than a draft among `stops` - an accepted stop is evaled already and comes back in `stop_row` (-1 = none). Returns the ids taken
+[arch(at="../ARCHITECTURE_GPU_MTP_ACCEPT.md#dflash-sampled-drafts")]
+def private drafted_stream_(t : Model; var s : Session; params : SamplingParams; max_tokens : int64; var stops : array<int64>;
+                            var stop_row, rounds : int64&; prefill : block<() : int64>;
+                            blk : block<(id : int64; piece : string) : bool>) : int64 {
+    stop_row = -1l
+    rounds = 0l
+    s.recent |> clear()
+    var sp = params
+    let spec0 = get_mtp_spec()
+    set_mtp_spec(true)
+    let t_pre = ref_time_ticks()
+    s.stat_n_prefill = invoke(prefill)
+    s.stat_prefill_us = int64(get_time_usec(t_pre))
+    s.spec_params = unsafe(addr(sp))
+    if (!empty(stops)) {
+        s.spec_stops = unsafe(addr(stops))
+    }
+    var one : array<int64>
+    one |> resize(1)
+    var nout = 0l
+    var ended = max_tokens <= 0l
+    let t_gen = ref_time_ticks()
+    var tok = ended ? -1l : sample_(s, sp)
+    s.stat_ttft_us = int64(get_time_usec(t_pre))   //! time-to-first-token spans the prefill and the first draw
+    while (!ended && tok >= 0l && invoke(blk, tok, piece_(t, tok))) {
+        nout++
+        s.recent |> push(tok)
+        if (nout >= max_tokens) {   //! the budget's last id is evaled alone, as generate_ leaves it
+            one[0] = tok
+            eval_(t, s, one)
+            break
+        }
+        s.mtp_depth_cap = max_tokens - nout
+        let a = mtp_spec_round(t, s, tok)
+        rounds++
+        for (i in range64(a)) {
+            let d = s.mtp_vbatch[i + 1l]
+            if (!invoke(blk, d, piece_(t, d))) {
+                stop_row = d
+                ended = true
+                break
+            }
+            nout++
+            s.recent |> push(d)
+        }
+        break if (ended || nout >= max_tokens)
+        tok = sample_(s, sp)
+    }
+    s.mtp_depth_cap = 0l
+    s.mtp_pre_drawn = false   //! a round's parked draw is the next stream's to make again
+    s.spec_params = null
+    s.spec_stops = null
+    set_mtp_spec(spec0)
+    s.stat_gen_us = int64(get_time_usec(t_gen))
+    s.stat_n_gen = nout
+    return nout
+}
+
+//! generate_ over a model whose block drafter is attached: the prompt continues the session where it stands, and the stream
+//! is `drafted_stream_`'s - `stops` the ids the caller's block ends it on, `stop_row` the stop a round evaled
+def generate_drafted_(t : Model; var s : Session; prompt : array<int64>; params : SamplingParams; max_tokens : int64;
+                      var stops : array<int64>; var stop_row : int64&; blk : block<(id : int64; piece : string) : bool>) : int64 {
+    var rounds = 0l
+    return drafted_stream_(t, s, params, max_tokens, stops, stop_row, rounds, $ {
+        eval_(t, s, prompt)
+        return long_length(prompt)
+    }, blk)
+}
+
 //! What a speculative sampled decode returns: the stream, the drafts drafted and accepted, the rounds, and the decode's time
 struct MtpSampledWalk {
     ids : array<int64>   //! the generated ids, the prompt not echoed (generate_'s convention)
@@ -823,52 +895,25 @@ def generate_mtp_sampled(t : Model; var s : Session; prompt : array<int64>; para
 }
 
 //! the same, the stream ending on the first id among `stops` (kept as its last id): a round's walk ends on a draft among them
-[arch(at="../ARCHITECTURE_GPU_MTP_ACCEPT.md#dflash-sampled-drafts")]
 def generate_mtp_sampled(t : Model; var s : Session; prompt : array<int64>; params : SamplingParams; steps : int64; var stops : array<int64>) : MtpSampledWalk {
     var w : MtpSampledWalk
     let np = long_length(prompt)
     return <- w if (steps <= 0l || np <= 0l)
     w.ids |> reserve(steps)
-    s.recent |> clear()
-    var sp = params
-    let spec0 = get_mtp_spec()
-    set_mtp_spec(true)
-    forward_prefill(t, s, prompt, np, 0l)
-    s.n_past = np
-    s.spec_params = unsafe(addr(sp))
-    if (!empty(stops)) {
-        s.spec_stops = unsafe(addr(stops))
-    }
     let d0 = s.mtp_drafted
     let a0 = s.mtp_accepted
-    let t_gen = ref_time_ticks()
-    var tok = sample_(s, sp)
-    var stopped = false
-    while (tok >= 0l && long_length(w.ids) < steps && !stopped) {
-        w.ids |> push(tok)
-        s.recent |> push(tok)
-        stopped = find_index(stops, tok) >= 0
-        break if (long_length(w.ids) >= steps || stopped)
-        let a = mtp_spec_round(t, s, tok)
-        w.rounds++
-        for (i in range64(a)) {
-            break if (long_length(w.ids) >= steps || stopped)
-            w.ids |> push(s.mtp_vbatch[i + 1l])
-            s.recent |> push(s.mtp_vbatch[i + 1l])
-            stopped = find_index(stops, s.mtp_vbatch[i + 1l]) >= 0
-        }
-        break if (long_length(w.ids) >= steps || stopped)
-        tok = sample_(s, sp)
+    var stop_row = -1l
+    drafted_stream_(t, s, params, steps, stops, stop_row, w.rounds, $ {
+        forward_prefill(t, s, prompt, np, 0l)
+        s.n_past = np
+        return np
+    }) $(id, _piece) {
+        w.ids |> push(id)
+        return find_index(stops, id) < 0
     }
-    if (s.mtp_pre_drawn) {   //! the budget ended inside a round: its parked draw is the next stream's to make again
-        s.mtp_pre_drawn = false
-    }
-    w.gen_us = int64(get_time_usec(t_gen))
+    w.gen_us = s.stat_gen_us
     w.drafted = s.mtp_drafted - d0
     w.accepted = s.mtp_accepted - a0
-    s.spec_params = null
-    s.spec_stops = null
-    set_mtp_spec(spec0)
     return <- w
 }
 

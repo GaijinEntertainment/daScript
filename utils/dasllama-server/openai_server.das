@@ -231,6 +231,7 @@ struct SlotOpts {
     kv_dtype_set : bool = false
     mtp : int = -1                  // -1 inherit | 0 off | 1 on
     mtp_platforms : string          //! the model's catalog `serve_mtp`: the platforms where an unset `mtp` arms ("" = none)
+    drafter : string                //! a DFlash block drafter GGUF the slot speculates through ("" = none)
 }
 
 //! One live served model: the loaded model, its scheduler (sessions + KV pool + prefix cache —
@@ -3129,6 +3130,10 @@ def private handle_model_unload(req : FrontReq; var resp : Reply) : http_status 
     }
     let had_towers = g_slots[mi].vision.kind != VisionKind.none || g_slots[mi].audio_armed
     let dead_name = g_slots[mi].name
+    if (g_block_drafter_slot == dead_name) {   //! the process's one block drafter goes with the model it is attached to
+        detach_block_drafter()
+        g_block_drafter_slot = ""
+    }
     delete g_slots[mi]
     g_slots |> erase(mi)
     erase_token_pieces(mi)
@@ -4667,14 +4672,14 @@ let private CONFIG_KEY_KINDS <- {
     "ctx" => "i", "max_tokens" => "i", "streams" => "i", "threads" => "i", "team_dispatch" => "s",
     "affinity" => "i", "chunk" => "i", "chunk_idle" => "i", "page_rows" => "i", "prefix" => "i", "prefix_states" => "i", "prefix_state_mb" => "i", "flat" => "b",
     "mtp" => "b", "rope_scaling" => "s", "rope_scale" => "f", "yarn_orig_ctx" => "i",
-    "lcpp_bin" => "s", "models_dir" => "s", "image_mmproj" => "s", "audio_mmproj" => "s", "models" => "a",
+    "lcpp_bin" => "s", "models_dir" => "s", "image_mmproj" => "s", "audio_mmproj" => "s", "drafter" => "s", "models" => "a",
     "exchange_url" => "s", "exchange_accept" => "s", "exchange_submit" => "s", "host" => "s"
 }
 
 let private MODEL_KEY_KINDS <- {
     "name" => "s", "path" => "s", "backend" => "s", "ctx" => "i", "quant" => "s",
     "kv_dtype" => "s", "streams" => "i", "chunk" => "i", "chunk_idle" => "i", "page_rows" => "i", "prefix" => "i",
-    "mtp" => "b", "default" => "b", "image_mmproj" => "s", "audio_mmproj" => "s",
+    "mtp" => "b", "default" => "b", "image_mmproj" => "s", "audio_mmproj" => "s", "drafter" => "s",
     "rope_scaling" => "s", "rope_scale" => "f", "yarn_orig_ctx" => "i"
 }
 
@@ -8070,7 +8075,9 @@ def private init_one_scheduler(var s : ModelSlot) {
     let s_kv = slot_kv_dtype(s.opts)
     let want = slot_mtp_want(s.opts, g_sched_defaults.mtp)
     var spec = slot_mtp_arms(s.opts, g_sched_defaults.mtp, s_streams, slot_flavor(s) == "metal", s.backend_effective)
-    if (spec && s.model.config.n_layer_nextn <= 0l) {
+    let drafted = want != 0 && slot_block_drafter(s)   //! a block drafter speculates at any stream count: its rounds join the streams and stand down where the plain batch outruns them
+    spec = spec || drafted
+    if (spec && !drafted && s.model.config.n_layer_nextn <= 0l) {
         let side = attach_mtp_sidecar(s.model, s.path)
         if (!empty(side)) {
             to_log(LOG_INFO, "dasllama-server: {s.name} speculates through the assistant drafter {base_name(side)}\n")
@@ -8117,6 +8124,26 @@ def private slot_default_chunk(var s : ModelSlot) {
         s.sched.idle_chunk_tokens = dflt.idle
     }
 }
+
+//! Attach the slot's block drafter (`SlotOpts.drafter`) to its model: true where it attached. One block drafter serves a
+//! process, so the first slot that names one keeps it and a later slot's is refused by name.
+def private slot_block_drafter(s : ModelSlot) : bool {
+    return false if (empty(s.opts.drafter))
+    if (!empty(g_block_drafter_slot) && g_block_drafter_slot != s.name) {
+        to_log(LOG_WARNING, "dasllama-server: {s.name} names a block drafter, but {g_block_drafter_slot} holds the process's one - {s.name} decodes plain\n")
+        return false
+    }
+    let why = attach_block_drafter(s.model, s.opts.drafter)
+    if (!empty(why)) {
+        to_log(LOG_WARNING, "dasllama-server: {s.name}: the block drafter {base_name(s.opts.drafter)} is not attached - {why}\n")
+        return false
+    }
+    g_block_drafter_slot = s.name
+    to_log(LOG_INFO, "dasllama-server: {s.name} speculates through the block drafter {base_name(s.opts.drafter)}\n")
+    return true
+}
+
+var private g_block_drafter_slot = ""   //! the slot whose model the process's block drafter is attached to
 
 // one scheduler per slot: the init args are the defaults, SlotOpts sentinels override per slot
 def private init_slot_schedulers(max_streams, max_queue, chunk_tokens, idle_chunk_tokens, page_rows, prefix_groups, prefix_states, prefix_state_bytes : int64; kv_dtype : KVDtype; mtp : int) {

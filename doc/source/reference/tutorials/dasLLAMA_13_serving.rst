@@ -318,6 +318,34 @@ cache on the host, so their calls ran on the CPU:
        print("{p.count} calls ran on the CPU: {p.words}\n")
    }
 
+A block drafter
+===============
+
+A DFlash or DFlash2 drafter is a small second model made for one trunk. It
+proposes a block of tokens at once; the trunk verifies the block in one step
+and keeps the run it agrees with, so the reply is the trunk's own and a
+rejected draft costs time, never a token. ``attach_block_drafter`` answers
+``""`` where the drafter attached and the reason where it did not. From then
+on a scheduler created with ``mtp`` on speculates through it, ``respond``
+drafts its text turns, and ``generate_drafted`` is ``generate`` with the
+rounds inside — its extra argument lists the ids our block ends the stream
+on, so a round never drafts past one. One block drafter is attached a
+process; ``detach_block_drafter`` puts plain decode back:
+
+.. code-block:: das
+
+   let why = attach_block_drafter(m, drafter)   // "" where it attached
+   print("attached: {block_drafter_attached(m)}\n")
+   var no_stops : array<int64>
+   let n = generate_drafted(m, s, prompt, SamplingParams(temp = 0.0), 32l, no_stops) $(_id, piece) {
+       print(piece)
+       return true
+   }
+   detach_block_drafter()
+
+Pass the drafter's file with ``--drafter`` ahead of the model's path; with
+none the section says so and skips.
+
 The same module, more streams
 =============================
 

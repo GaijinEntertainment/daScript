@@ -62,26 +62,32 @@ the kernel cells hold every format's route at every row count (`test_metal_kq_ha
 the rows parity cell holds k4 and k6 token for token (`test_metal_decode_parity.das`, the
 `batchB8-kq` arm's half-x leg).
 
-**Five to eight rows take the matrix-unit form (`#rows8-matrix-unit`) on a k4 or q8 plane where the box's layout probe
+**Three to eight rows take the matrix-unit form (`#rows8-matrix-unit`) on a k4 or q8 plane where the box's layout probe
 passed, else the eight-row tensor stamps where the plane's tensor tile is crowned.** The row forms above
 decode a K-quant weight once a column (the ALU bound at eight columns reads 3-3.5 passes a plane on the M5 Max) and
 stream a q8 plane twice through the fixed-B4 ladder; the eight-row stamps (`kq_mm:<fmt>:t8` / `tsk8` on every dense
 format's tensor class, `MetalQ8MulMmT8` / `TSk8` on the q8 blob: `MT = 8`) decode and stream a weight once for the whole
-panel and run the tensor op at eight rows. `enc_batch_site` offers them first at five to eight rows on every tier
+panel and run the tensor op at eight rows. `enc_batch_site` offers them first at three to eight rows on every tier
 but the q8 mul_mm rail, whose panels pad otherwise (`pf_enc_kq_mm8`, `pf_enc_q8_mm8` in the prefill module, which owns the tensor stamps): a plane whose format's tensor
 crown (`kq_mulmm_<fmt>`, `mulmm_q8`) is off, whose rows are not whole 64-row tiles, or - the q8 stamp - whose `d` is off 32
 falls through to the row forms, so an uncrowned box is unchanged. The whole-K stamp alone dispatches `rows / 64`
 threadgroups, too few to fill the device on a 5120-wide plane, so the split-K stamp carries the panel under the K-quant
 scaffold's grid target (`metal_split_k_tgs_kq`) for the q8 plane too - the q8 32-row knee would leave an eight-row tile
 at a quarter of the work on the same grid - and the reduce lands the partial planes at the site's y stride; a narrow
-plane of 32-column tiles alone takes the split stamp at one way. The panel holds eight rows at five and up
+plane of 32-column tiles alone takes the split stamp at one way. The panel holds eight rows at three and up
 (`ARCHITECTURE_GPU_MTP_DECODE.md#verify-row-pad`, the batch tier's pad), so the stamp's garbage rows land in owned scratch. On the M5 Max the 27B's
 same-slab eight-row step falls from 2.28 to 1.78 plain steps (`PERF_LEDGER.md`, the block drafter's entry);
-`DASLLAMA_METAL_ROWS_MM8=0` keeps the row forms (the A/B rail).
+`DASLLAMA_METAL_ROWS_MM8=0` keeps the row forms (the A/B rail). The fewest rows the eight-row forms carry is one
+answer every rows site asks (`rows8_rows`, `DASLLAMA_METAL_ROWS8_MIN`, 3): at two rows the two-row forms outrun a padded
+panel on a small trunk (the M5 Max, the same entry). Past eight rows a batched step's sites - a same-slab verify's and a plain batch's alike, to
+`METAL_BATCH_TILED_ROWS` rows - take row tiles of eight in one weight pass (`BatchTier.tiled`; the rows8 stamps read the
+tile count, one tile the eight-row site), and
+the step's recurrent projections, rows sites of their own tier, follow under the same scope (`g_rows_tiled`): on the
+M5 Max the 27B's plain batch of twelve streams runs 161 tok/s on tiles against 66 off them.
 
 ### The rows8 matrix-unit form {#rows8-matrix-unit}
 
-**A k4, k6, iq4xs or q8 plane - or an affine member's (`#rows8-affine`) - at five to eight rows runs on the matrix unit with the
+**A k4, k6, iq4xs or q8 plane - or an affine member's (`#rows8-affine`) - at three to eight rows runs on the matrix unit with the
 weight filled from registers: no threadgroup tile, no barrier, the codes exact.** The eight-row stamps above stage a decoded f16 tile in threadgroup memory for the
 tensor op, and on the M5 Max that stage alone costs 1.4 one-row passes (a 64-deep chunk touches every 128-byte weight
 line four times) while the op costs another 0.75 and the two never overlap inside a threadgroup. The rows8 kernels hand
@@ -160,7 +166,7 @@ flavor over the panel's halves in natural order, no token sums, y += d ls dot. A
 low nibble of byte i and element i + 16 in its high nibble, so lane kq's elements 4 kq + e and 16 + 4 kq + e of a row are the
 two nibbles of the sub-block's word kq: one 4-byte load a row a product. The arm shares k6's binds - the split scale plane's
 strips (the sub-scales, bytes 0 .. 7) and d tail, the quant plane at the third bind (`SPL`, the template's split-plane
-switch) - and its x: the step's producers write the f16 twin wherever a five-to-eight-row site holds an iq4xs plane on the
+switch) - and its x: the step's producers write the f16 twin wherever a three-to-eight-row site holds an iq4xs plane on the
 form (`rows8_table_rows`), and the deltanet's input sites, the shared expert's gate and up and the batch step's classifier
 read it; the deltanet and attention outputs convert their own panel (`MetalHalfRows`). The codebook lookup is the race's
 verdict (`harness/rows8_mt_race.das`, the 35B's dense shapes, three rounds): a 256-entry table of a code byte's two values
@@ -180,7 +186,7 @@ fed, `metal_rows8_sites_of` the sites a format. The eight-row step's cost over t
 stamps read 1.78 before the form).
 
 **The DFlash2 drafter's sites take the same ladder over planes no `Model` holds.** Its pass and its commits
-(`dasllama_metal_dflash`'s `df_mm`) offer the rows8 form first at five to eight rows, then the eight-row tensor stamps,
+(`dasllama_metal_dflash`'s `df_mm`) offer the rows8 form first at three to eight rows, then the eight-row tensor stamps,
 then the row forms - the q8 GEMV rows, and on a K-quant plane the f32-x rows route `enc_kq_rows_f32` - over the drafter's
 own buffers: the Q8_0 blob, and a K-quant format's verbatim quants and its scale plane in the trunk blob's device form
 (`metal_kq_scale_form`), bound at `kq_bind_offs` through the buffer-taking entries `pf_enc_rows8_kq_planes` and
@@ -201,7 +207,7 @@ that site instead of leaving the output unwritten.
 
 ### The affine members' rows8 form {#rows8-affine}
 
-**An affine member's plane (mlx4, mlx8, mlx4b, mlx8b, mlx6b) at five to eight rows runs the rows8 form one 64-group a product,
+**An affine member's plane (mlx4, mlx8, mlx4b, mlx8b, mlx6b) at three to eight rows runs the rows8 form one 64-group a product,
 its (scale, bias) pair in the epilogue.** A member's weight is s q + b with q unsigned
 (`ARCHITECTURE_ENGINE_FORMATS_MLX.md#mlx-affine-planes`): q, 0..15, 0..63 or 0..255, is an exact half, s q is not, so the scale does not
 fold into the operand as k4's does. The affine arms of `MetalRows8T` fill the LEFT operand with each code's half and run one
@@ -217,7 +223,7 @@ element ((c 2 + i) 2 + r) 4 + e, so lane kq's codes of a row in a group are elem
 run kq (byte e of word i) - two loads a row a group (`aff_run`); on the 6-bit member the 48-bit run at bit 48 kq of the group's
 twelve words (two words, at bit 16 of the first on an odd kq) and the same run 192 bits on, its four 24-bit quads' codes at bits
 6e. The producers that write k4's table and sums serve the members
-unchanged: a step whose five-to-eight-row sites hold a member on the form stores the twins and the tables for it whatever the
+unchanged: a step whose three-to-eight-row sites hold a member on the form stores the twins and the tables for it whatever the
 half-x crowns say (`rows8_table_rows`, `step_twins`). The members have no eight-row tensor stamp, so a site the form declines -
 K off whole 64-groups, rows off whole 16-row tiles, `DASLLAMA_METAL_PREFILL_SKIP=rows8nomlx` (the knockout) - rides the
 small-batch forms; `metal_rows8_sites_of` counts each member's sites.

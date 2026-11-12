@@ -68,6 +68,9 @@ struct CommonArgs {
     @clarg_doc = "Weight serving mode: fp32 | q8 (default; file-format spellings serve natively under q8) | q4 = legacy requant"
     quant : string
 
+    @clarg_doc = "DFlash / DFlash2 block drafter GGUF: a path, or a file name under --models-dir. The model speculates through it on the Metal home - the drafter proposes a block of tokens, the model's own verify accepts a run of them"
+    drafter : string
+
     @clarg_doc = "KV cache codec: f32 | f16 | q8_0 | tq4 (rotated 4-bit; needs pow2 head_size) (default f16); under --gpu vulkan the whole-model driver holds its cache in the same codec for f16, q8_0 and tq4"
     kv_dtype : string
 

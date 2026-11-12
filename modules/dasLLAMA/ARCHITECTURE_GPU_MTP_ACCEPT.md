@@ -3,7 +3,7 @@
 Companion to `ARCHITECTURE_GPU_MTP.md`; a section is cited by its anchor. This document carries
 what a sampled stream's speculative round does with its drafts on both GPU homes: the three
 acceptance modes, the seams the sampler installs for them, the drafter distribution a
-rejection-sampling round records, the DFlash2 block drafter's and the NextN head's drafts under each mode, and the chain cut. The round itself and the greedy walk every
+rejection-sampling round records, the DFlash2 block drafter's and the NextN head's drafts under each mode, the block drafter's rounds over a tick's streams (`#dflash-tick-rounds`), and the chain cut. The round itself and the greedy walk every
 stream shares are `ARCHITECTURE_GPU_MTP.md#mtp-round-one-join`; the sampler's own cuts and draws
 are the sampling file's charter in `ARCHITECTURE_ENGINE.md`.
 
@@ -128,3 +128,27 @@ The gated means the mixers form (`GkHcMix`, the head mixer) are not it: they wei
 the Flash-Next draft (`Qwen3.8-Flash-Next-DFlash2`) was distilled against the unweighted mean. The drafter's width stays
 the trunk's `dim`, so the same `fc`, ring and selector serve; the carry the NextN head reads stays the wide row
 (`mtp_h_dim`).
+
+### The block drafter's rounds of a tick {#dflash-tick-rounds}
+
+**A tick's streams draft in one joint pass and verify in one joint step, each stream then walking its own accept.** The
+scheduler hands every decoding stream to the round (`df_rounds_run`): the streams whose drafter context reaches their
+position are gathered, their blocks run the drafter's layers together as row tiles of one weight pass - four blocks a
+pass at most - and one classifier and selector tail picks every stream's drafts (`dflash_draft_joint`). The verify is one
+step over every stream's [token, drafts] rows: on a trunk with no recurrent layers the batch rail's same-slab groups
+(`verify_batch_groups`), on a hybrid the verify seat with each stream a group of its own shadow, tape and replay
+(`metal_mtp_verify_groups`), so a rejected stream rolls back alone. A tick whose streams ask for different depths
+drafts and verifies every stream at the shortest ask, keeping the pass and the step joint.
+
+The round's rows are a budget, not the block: a row tile of eight for every two streams, about four rows a stream,
+because a draft past that lands too seldom for the tile it opens. A drafter with no selector stage (a DFlash file:
+its drafts are the trunk classifier's pick a row) asks for three drafts, a round over routed experts for five - each
+verify row there pays its own experts - and a pinned depth takes the pass whole. Past the streams a round pays for,
+the tick is one plain batched step (`eval_batch_`): two streams on a trunk with no recurrent layers and on a hybrid of
+routed experts on one residual stream, four on a dense or hyper-connection hybrid (the M5 Max's counts). Off the
+matrix-unit form (`ARCHITECTURE_GPU_MTP_DECODE_ROWS.md#rows8-matrix-unit`; an M1 Max) a verify row costs near a plain
+step, so a round there drafts three for one stream and stands down past it (`PERF_LEDGER.md`, the block drafter's entry).
+
+A caller's own stream takes the same round a drawn id at a time (`generate_drafted_`): the ids that end the stream
+are stops the round's walk ends at, and a stop the round accepted is evaled already - its row stands in the session and
+the turn's close skips it, as the scheduler's does (`Stream.stop_row_tok`).

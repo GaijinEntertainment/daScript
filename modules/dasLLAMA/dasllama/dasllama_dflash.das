@@ -13,6 +13,7 @@ require dasllama/dasllama_gguf     // the container reader (+ f16_to_f32 through
 require dasllama/dasllama_math     // reserve_resize
 require dasllama/dasllama_math_default   // matmul_kq: the CPU decode's K-quant plane GEMV over disk-order planes
 require dasllama/dasllama_convert   // quantize_q8_k_into_ptr, dequant_kq_plane_sb: the K-quant planes' activation rows and codebook rows
+require dasllama/dasllama_tower    // add_bias_rows: a projection's bias row onto every row
 require dasllama/dasllama_par      // maybe_parallel_for: the q8 rows thread when a jobque is up
 require dasllama/dasllama_gemm_schema   // Q8_BLOCK_ELEMS / Q8_BLOCK_BYTES: the q8 planes' block strides
 require daslib/enum_trait   // the refusal names the KqFmt member a disk type is
@@ -23,6 +24,10 @@ require strings
 require math
 
 let DFLASH_ARCH = "dflash"
+let DFLASH_RING = 2048l       //! the context ring of a file that names no sliding window
+let DFLASH_PLAIN_DRAFTS = 3l   //! a drafter with no selector drafts this many a round by default: its fourth draft on lands too seldom for its verify row
+let DFLASH_ROUTED_DRAFTS = 5l   //! ... and any drafter over a trunk of routed experts this many: each verify row pays its own experts
+let DFLASH_MAX_BLOCK = 32l   //! the widest block a pass runs; a round verifies the first MTP_MAX_ROWS - 1 of its drafts
 let private DFLASH_FMTS = fixed_array(KqFmt.q8, KqFmt.k4, KqFmt.k5, KqFmt.k6)   //! the plane formats both arms of the pass serve
 
 //! a weight plane in its own format: a Q8_0 plane at a byte offset into `blob`, a K-quant plane at an element offset into
@@ -45,6 +50,7 @@ struct DflashDrafter {
     n_kv : int64
     hs : int64
     nblock : int64       //! the pass's rows: the anchor and nblock - 1 masks
+    v2 : bool            //! a DFlash2 file: the dynamic convs and the selector; else a DFlash file, each draft its row's best id
     conv_k : int64
     conv_g : int64       //! channels a dynamic coefficient
     rank : int64
@@ -52,6 +58,8 @@ struct DflashDrafter {
     window : int64
     eps : float
     theta : float
+    inv_freq : array<float>   //! [hs/2] the rope's inverse frequencies, YaRN's per-pair divisors folded in
+    attn_scale : float        //! a score's scale: 1/sqrt(hs), under YaRN's squared magnitude where the file scales its rope
     mask_id : int64
     target_layers : array<int64>   //! trunk layers (0-based) whose OUTPUT rows the context reads, in fc's order
     blob : array<uint8>
@@ -78,6 +86,11 @@ struct DflashDrafter {
     kn_offs : array<int64>
     aconv_base_offs : array<int64>   //! f32 [side][tap][dim]
     fconv_base_offs : array<int64>
+    biased : bool                    //! the attention planes carry bias rows (a gpt-oss draft)
+    bq_offs : array<int64>
+    bk_offs : array<int64>
+    bv_offs : array<int64>
+    bo_offs : array<int64>
 }
 
 //! A session's drafter state: the context ring (a layer's K and V rows a slot, slot = position mod window), the positions it
@@ -135,8 +148,68 @@ var private g_dflash_held = false       //! ... left on the device as the verify
 var private g_dflash_held_soft = false  //! ... drawn: their candidates and q land with them
 var private g_dflash_record = false
 var private g_dflash_recorded : array<int64>
+var private g_dflash_prompt_sums : array<float>
 var private g_dflash_draft_temp = -1.0   //! a rejection-sampling round's drafter temperature; negative = the stream's sampler temperature, 0 = the greedy walk, its drafts a point-mass q
 var private g_dflash_point_q = false    //! the round in flight records its greedy drafts as point masses at the land
+
+//! a home's joint select: every stream's pass and select in one submission, stream b's `nd` picks into picks[b * nd ..]
+typedef DflashJointSelect = function<(t : Model; dr : DflashDrafter; uids : array<uint64>; toks, pos, lo, nctx : array<int64>; rows, nd : int64; var picks : array<int64>) : bool>
+var private g_dflash_joint : DflashJointSelect
+var private g_dflash_joint_on = false
+var private @scratch g_jt_uids : array<uint64>
+var private @scratch g_jt_toks : array<int64>
+var private @scratch g_jt_lo : array<int64>
+var private @scratch g_jt_nctx : array<int64>
+var private @scratch g_jt_picks : array<int64>
+
+def register_dflash_joint(fn : DflashJointSelect) {
+    g_dflash_joint = fn
+    g_dflash_joint_on = true
+}
+
+//! the attached drafter's context for `s` ends at `pos`: a block drafts from there
+def dflash_ctx_reaches(s : Session; pos : int64) : bool {
+    let q = seq_of(s)
+    return q != null && q.ctx == pos
+}
+
+//! Every session's block drafted in one device submission from its anchor (`mtp_vbatch[0]`) at pos[i]: the greedy picks into
+//! each `mtp_vbatch[1 .. nd]`. False where the device arm has no joint select, a session samples its drafts, a context does not
+//! reach its position, or the submission fails - the caller drafts a stream at a time
+def dflash_draft_joint(t : Model; var sessions : array<Session?>; pos : array<int64>; nd : int64) : bool {
+    let dr & = g_dflash
+    let ns = long_length(sessions)
+    return false if (!g_dflash_dev_on || !g_dflash_joint_on || nd < 1l || nd >= dr.nblock)
+    g_jt_uids |> resize(ns)
+    g_jt_toks |> resize(ns)
+    g_jt_lo |> resize(ns)
+    g_jt_nctx |> resize(ns)
+    for (i in range64(ns)) {
+        let q = seq_of(*sessions[i])
+        return false if (q == null || q.ctx != pos[i] || mtp_drafts_sampled(*sessions[i]))
+        let span = ring_span(*q, pos[i], dr.nblock)
+        g_jt_uids[i] = sessions[i].uid
+        g_jt_toks[i] = sessions[i].mtp_vbatch[0]
+        g_jt_lo[i] = span.lo
+        g_jt_nctx[i] = span.nctx
+    }
+    g_dflash_land_nd = 0l
+    g_dflash_held = false
+    return false if (!invoke(g_dflash_joint, t, dr, g_jt_uids, g_jt_toks, pos, g_jt_lo, g_jt_nctx, dr.nblock, nd, g_jt_picks))
+    for (i in range64(ns)) {
+        var s & = unsafe(*sessions[i])
+        for (r in range64(nd)) {
+            s.mtp_vbatch[r + 1l] = g_jt_picks[i * nd + r]
+        }
+        if (g_dflash_record) {
+            g_dflash_recorded |> reserve(long_length(g_dflash_recorded) + nd)
+            for (r in range64(nd)) {
+                g_dflash_recorded |> push(s.mtp_vbatch[r + 1l])
+            }
+        }
+    }
+    return true
+}
 
 def register_dflash_device(name : string; var seams : DflashDeviceSeams) {
     g_dflash_dev[name] <- seams
@@ -174,6 +247,10 @@ def set_dflash_record(on : bool) {
 
 //! the drafts every round drafted since `set_dflash_record(true)`, in order
 def dflash_recorded_drafts : array<int64> => clone_to_move(g_dflash_recorded)
+
+//! Under `set_dflash_record`, the last commit from position 0: its last row's captured layer outputs, a sum of magnitudes a
+//! captured layer - what the prompt's forward handed the drafter
+def dflash_recorded_prompt_sums : array<float> => clone_to_move(g_dflash_prompt_sums)
 
 //! The drafter's own temperature under a rejection-sampling round (`MtpAccept.rejection` on a sampled stream): above 0 each
 //! position's draft is drawn from the softmax of its top-k selector scores at it, on the device selector where it serves, else on
@@ -292,6 +369,31 @@ def private plan_f32(var dr : DflashDrafter; m : GGUFMeta; bytes : array<uint8> 
     return off
 }
 
+//! the rope's inverse frequencies and the score scale: pow(theta, -2i/hs) a pair, under YaRN (`rope.scaling.type` yarn) over
+//! its per-pair divisors with the rotation's magnitude 1 + 0.1 ln(factor) squared into the scores
+def private rope_table(var dr : DflashDrafter; m : GGUFMeta; bytes : array<uint8> | #) {
+    let p = "{DFLASH_ARCH}.rope.scaling."
+    let half = dr.hs / 2l
+    dr.inv_freq |> reserve_resize(half)
+    for (i in range64(half)) {
+        dr.inv_freq[i] = pow(dr.theta, -2.0 * float(i) / float(dr.hs))
+    }
+    dr.attn_scale = 1.0 / sqrt(float(dr.hs))
+    return if (!gguf_has(m, "{p}type") || gguf_str(m, bytes, "{p}type") != "yarn" || !gguf_has(m, "{p}factor"))
+    let factor = gguf_f32(m, bytes, "{p}factor")
+    let orig = gguf_has(m, "{p}original_context_length") ? gguf_int(m, bytes, "{p}original_context_length") : 4096l
+    let beta_fast = gguf_has(m, "{p}yarn_beta_fast") ? gguf_f32(m, bytes, "{p}yarn_beta_fast") : 32.0
+    let beta_slow = gguf_has(m, "{p}yarn_beta_slow") ? gguf_f32(m, bytes, "{p}yarn_beta_slow") : 1.0
+    return if (factor <= 1.0 || orig <= 0l || beta_fast <= 0.0 || beta_slow <= 0.0)
+    var divs <- yarn_rope_freqs(dr.hs, dr.theta, factor, beta_fast, beta_slow, orig)
+    for (i in range64(half)) {
+        dr.inv_freq[i] /= divs[i]
+    }
+    delete divs
+    let mscale = 1.0 + 0.1 * log(factor)
+    dr.attn_scale *= mscale * mscale
+}
+
 def private read_meta(var dr : DflashDrafter; m : GGUFMeta; bytes : array<uint8> | #) : bool {
     if (!gguf_has(m, "general.architecture")) {
         return refuse(dr, "no general.architecture (not a GGUF model file)")
@@ -302,12 +404,21 @@ def private read_meta(var dr : DflashDrafter; m : GGUFMeta; bytes : array<uint8>
     }
     let p = "{DFLASH_ARCH}."
     for (k in ["block_count", "embedding_length", "feed_forward_length", "attention.head_count", "attention.head_count_kv",
-               "attention.key_length", "attention.layer_norm_rms_epsilon", "rope.freq_base", "block_size", "conv_kernel_size",
-               "conv_group_size", "selector_rank", "selector_top_k", "target_layers", "attention.sliding_window"]) {
+               "attention.key_length", "attention.layer_norm_rms_epsilon", "rope.freq_base", "block_size", "target_layers"]) {
         if (!gguf_has(m, "{p}{k}")) {
             return refuse(dr, "missing metadata key '{p}{k}'")
         }
     }
+    //! the four DFlash2 keys stand together: a file with none of them is a DFlash file
+    let v2_keys = fixed_array("conv_kernel_size", "conv_group_size", "selector_rank", "selector_top_k")
+    var v2_has = 0
+    for (k in v2_keys) {
+        v2_has += gguf_has(m, "{p}{k}") ? 1 : 0
+    }
+    if (v2_has != 0 && v2_has != length(v2_keys)) {
+        return refuse(dr, "a DFlash2 file carries all of conv_kernel_size, conv_group_size, selector_rank and selector_top_k; this one carries {v2_has}")
+    }
+    dr.v2 = v2_has != 0
     dr.n_layers = gguf_int(m, bytes, "{p}block_count")
     dr.dim = gguf_int(m, bytes, "{p}embedding_length")
     dr.hidden = gguf_int(m, bytes, "{p}feed_forward_length")
@@ -317,11 +428,15 @@ def private read_meta(var dr : DflashDrafter; m : GGUFMeta; bytes : array<uint8>
     dr.eps = gguf_f32(m, bytes, "{p}attention.layer_norm_rms_epsilon")
     dr.theta = gguf_f32(m, bytes, "{p}rope.freq_base")
     dr.nblock = gguf_int(m, bytes, "{p}block_size")
-    dr.conv_k = gguf_int(m, bytes, "{p}conv_kernel_size")
-    dr.conv_g = gguf_int(m, bytes, "{p}conv_group_size")
-    dr.rank = gguf_int(m, bytes, "{p}selector_rank")
-    dr.topk = gguf_int(m, bytes, "{p}selector_top_k")
-    dr.window = gguf_int(m, bytes, "{p}attention.sliding_window")
+    dr.topk = 1l
+    if (dr.v2) {
+        dr.conv_k = gguf_int(m, bytes, "{p}conv_kernel_size")
+        dr.conv_g = gguf_int(m, bytes, "{p}conv_group_size")
+        dr.rank = gguf_int(m, bytes, "{p}selector_rank")
+        dr.topk = gguf_int(m, bytes, "{p}selector_top_k")
+    }
+    //! a file with no window attends its whole context: the ring holds the last DFLASH_RING positions of it
+    dr.window = gguf_has(m, "{p}attention.sliding_window") ? gguf_int(m, bytes, "{p}attention.sliding_window") : DFLASH_RING
     dr.mask_id = gguf_int_or(m, bytes, "tokenizer.ggml.mask_token_id", -1l)
     let tl <- gguf_int_array(m, bytes, "{p}target_layers")
     dr.target_layers |> reserve(length(tl))
@@ -329,11 +444,16 @@ def private read_meta(var dr : DflashDrafter; m : GGUFMeta; bytes : array<uint8>
         dr.target_layers |> push(l - 1l)   //! the file counts a layer's output from one: the trunk's 0-based layer whose output it is
     }
     if (dr.n_layers <= 0l || dr.dim <= 0l || dr.hidden <= 0l || dr.n_heads <= 0l || dr.n_kv <= 0l || dr.hs <= 0l
-        || dr.n_heads % dr.n_kv != 0l || empty(dr.target_layers) || dr.conv_g <= 0l || dr.window <= 0l) {
+        || dr.n_heads % dr.n_kv != 0l || empty(dr.target_layers) || (dr.v2 && dr.conv_g <= 0l) || dr.window <= 0l) {
         return refuse(dr, "degenerate geometry (layers {dr.n_layers} dim {dr.dim} heads {dr.n_heads}/{dr.n_kv} targets {length(dr.target_layers)} conv group {dr.conv_g} window {dr.window})")
     }
-    if (dr.nblock < 2l || dr.nblock > MTP_MAX_ROWS || dr.conv_k != 2l || dr.dim % dr.conv_g != 0l || dr.topk < 1l || dr.rank <= 0l || dr.mask_id < 0l) {
-        return refuse(dr, "unsupported block {dr.nblock}, conv kernel {dr.conv_k}, group {dr.conv_g}, top-k {dr.topk}, rank {dr.rank}, mask id {dr.mask_id}")
+    if (dr.nblock < 2l || dr.nblock > DFLASH_MAX_BLOCK || dr.mask_id < 0l) {
+        return refuse(dr, "unsupported block {dr.nblock}, mask id {dr.mask_id}")
+    }
+    rope_table(dr, m, bytes)
+    return true if (!dr.v2)   //! a DFlash file names no vocabulary: its drafts are the trunk classifier's ids
+    if (dr.conv_k != 2l || dr.dim % dr.conv_g != 0l || dr.topk < 1l || dr.rank <= 0l) {
+        return refuse(dr, "unsupported conv kernel {dr.conv_k}, group {dr.conv_g}, top-k {dr.topk}, rank {dr.rank}")
     }
     let sp = gguf_find_tensor(m, "selector_predecessor.weight")
     if (sp < 0 || length(m.tensors[sp].dims) < 2) {
@@ -348,14 +468,16 @@ def private plan_planes(var dr : DflashDrafter; m : GGUFMeta; bytes : array<uint
     let ncap = long_length(dr.target_layers)
     reserve_kq_planes(dr, m)
     dr.fc = plan_w(dr, m, bytes, "fc.weight", ncap * d, d)
-    dr.sel_h = plan_w(dr, m, bytes, "selector_hidden.weight", d, dr.rank)
-    dr.sel_prev = plan_w(dr, m, bytes, "selector_predecessor.weight", dr.rank, dr.vocab)
-    dr.sel_next = plan_w(dr, m, bytes, "selector_successor.weight", dr.rank, dr.vocab)
+    if (dr.v2) {
+        dr.sel_h = plan_w(dr, m, bytes, "selector_hidden.weight", d, dr.rank)
+        dr.sel_prev = plan_w(dr, m, bytes, "selector_predecessor.weight", dr.rank, dr.vocab)
+        dr.sel_next = plan_w(dr, m, bytes, "selector_successor.weight", dr.rank, dr.vocab)
+    }
     dr.hnorm_off = plan_f32(dr, m, bytes, "enc.output_norm.weight", d)
     dr.norm_off = plan_f32(dr, m, bytes, "output_norm.weight", d)
     let qd = dr.n_heads * dr.hs
     let kvd = dr.n_kv * dr.hs
-    let projw = 2l * dr.conv_k * (d / dr.conv_g)
+    let projw = dr.v2 ? 2l * dr.conv_k * (d / dr.conv_g) : 0l
     dr.wq |> reserve(dr.n_layers)
     dr.wk |> reserve(dr.n_layers)
     dr.wv |> reserve(dr.n_layers)
@@ -371,7 +493,14 @@ def private plan_planes(var dr : DflashDrafter; m : GGUFMeta; bytes : array<uint
     dr.kn_offs |> reserve(dr.n_layers)
     dr.aconv_base_offs |> reserve(dr.n_layers)
     dr.fconv_base_offs |> reserve(dr.n_layers)
+    dr.biased = gguf_find_tensor(m, "blk.0.attn_q.bias") >= 0
     for (l in range64(dr.n_layers)) {
+        if (dr.biased) {
+            dr.bq_offs |> push(plan_f32(dr, m, bytes, "blk.{l}.attn_q.bias", qd))
+            dr.bk_offs |> push(plan_f32(dr, m, bytes, "blk.{l}.attn_k.bias", kvd))
+            dr.bv_offs |> push(plan_f32(dr, m, bytes, "blk.{l}.attn_v.bias", kvd))
+            dr.bo_offs |> push(plan_f32(dr, m, bytes, "blk.{l}.attn_output.bias", d))
+        }
         dr.wq |> push(plan_w(dr, m, bytes, "blk.{l}.attn_q.weight", d, qd))
         dr.wk |> push(plan_w(dr, m, bytes, "blk.{l}.attn_k.weight", d, kvd))
         dr.wv |> push(plan_w(dr, m, bytes, "blk.{l}.attn_v.weight", d, kvd))
@@ -379,14 +508,16 @@ def private plan_planes(var dr : DflashDrafter; m : GGUFMeta; bytes : array<uint
         dr.w1 |> push(plan_w(dr, m, bytes, "blk.{l}.ffn_gate.weight", d, dr.hidden))
         dr.w3 |> push(plan_w(dr, m, bytes, "blk.{l}.ffn_up.weight", d, dr.hidden))
         dr.w2 |> push(plan_w(dr, m, bytes, "blk.{l}.ffn_down.weight", dr.hidden, d))
-        dr.aconv_proj |> push(plan_w(dr, m, bytes, "blk.{l}.attn_conv_proj.weight", d, projw))
-        dr.fconv_proj |> push(plan_w(dr, m, bytes, "blk.{l}.ffn_conv_proj.weight", d, projw))
+        if (dr.v2) {
+            dr.aconv_proj |> push(plan_w(dr, m, bytes, "blk.{l}.attn_conv_proj.weight", d, projw))
+            dr.fconv_proj |> push(plan_w(dr, m, bytes, "blk.{l}.ffn_conv_proj.weight", d, projw))
+            dr.aconv_base_offs |> push(plan_f32(dr, m, bytes, "blk.{l}.attn_conv_base", 2l * dr.conv_k * d))
+            dr.fconv_base_offs |> push(plan_f32(dr, m, bytes, "blk.{l}.ffn_conv_base", 2l * dr.conv_k * d))
+        }
         dr.attn_norm_offs |> push(plan_f32(dr, m, bytes, "blk.{l}.attn_norm.weight", d))
         dr.ffn_norm_offs |> push(plan_f32(dr, m, bytes, "blk.{l}.ffn_norm.weight", d))
         dr.qn_offs |> push(plan_f32(dr, m, bytes, "blk.{l}.attn_q_norm.weight", dr.hs))
         dr.kn_offs |> push(plan_f32(dr, m, bytes, "blk.{l}.attn_k_norm.weight", dr.hs))
-        dr.aconv_base_offs |> push(plan_f32(dr, m, bytes, "blk.{l}.attn_conv_base", 2l * dr.conv_k * d))
-        dr.fconv_base_offs |> push(plan_f32(dr, m, bytes, "blk.{l}.ffn_conv_base", 2l * dr.conv_k * d))
         return false if (!empty(dr.why))
     }
     return empty(dr.why)
@@ -411,7 +542,7 @@ def load_dflash_drafter(path : string) : DflashDrafter {
 def dflash_target_why(t : Model; dr : DflashDrafter) : string {
     let c = t.config
     return "trunk dim {c.dim} is not the drafter's {dr.dim}" if (c.dim != dr.dim)
-    return "trunk vocabulary {c.vocab_size} is not the drafter's {dr.vocab}" if (c.vocab_size != dr.vocab)
+    return "trunk vocabulary {c.vocab_size} is not the drafter's {dr.vocab}" if (dr.v2 && c.vocab_size != dr.vocab)
     for (l in dr.target_layers) {
         return "the drafter reads layer {l}'s output of a {c.n_layers}-layer trunk" if (l < 0l || l >= c.n_layers)
     }
@@ -431,6 +562,27 @@ def private dflash_release(uid : uint64) {
     if (g_dflash_dev_on) {
         invoke(dev_seams().drop, uid)
     }
+}
+
+//! The facade's spellings: attach the block drafter at `path` to `t` ("" = attached, else why not), detach the process's,
+//! and whether one is attached to `t`
+def attach_block_drafter_(t : Model; path : string) : string => attach_dflash_drafter(t, path)
+
+def detach_block_drafter_() {
+    detach_dflash_drafter()
+}
+
+def block_drafter_attached_(t : Model) : bool => mtp_block_attached(t)
+
+//! A joint round's wall split, microseconds summed since the attach: the drafts, the verify, the rejects' rollbacks, the
+//! drafter's context commits, the rounds whole, and their count
+struct public DflashTickSplit {
+    draft_us : int64
+    verify_us : int64
+    rollback_us : int64
+    commit_us : int64
+    round_us : int64
+    rounds : int64
 }
 
 //! Attach the drafter at `path` to `t`; "" = attached, else why not (logged)
@@ -458,12 +610,12 @@ def attach_dflash_drafter(t : Model; path : string) : string {
     g_dflash_home = g_dflash_dev_on ? home : ""
     var layers := g_dflash.target_layers
     register_mtp_block_drafter(MtpBlockSeams(attached = @@dflash_attached, captured = @@dflash_capture, captured_rows = @@dflash_capture_rows,
-        draft = @@dflash_block_draft, land = @@dflash_land, commit = @@dflash_commit, layers <- layers, drafts = g_dflash.nblock - 1l))
+        draft = @@dflash_block_draft, land = @@dflash_land, commit = @@dflash_commit, layers <- layers, drafts = dflash_default_drafts(t, g_dflash)))
     if (!g_dflash_release_listening) {   //! the listener registry has no unregister: one registration a process
         register_session_release_listener(@@dflash_release)
         g_dflash_release_listening = true
     }
-    to_log(LOG_INFO, "dasLLAMA: DFlash2 drafter {base_name(path)} attached - {g_dflash.n_layers} layers, block {g_dflash.nblock}, top-{g_dflash.topk} over {length(g_dflash.target_layers)} target layers, the pass on the {g_dflash_dev_on ? home : (g_dflash_dev_knob ? "CPU" : "CPU (set_dflash_device(false))")}\n")
+    to_log(LOG_INFO, "dasLLAMA: {g_dflash.v2 ? "DFlash2" : "DFlash"} drafter {base_name(path)} attached - {g_dflash.n_layers} layers, block {g_dflash.nblock}, top-{g_dflash.topk} over {length(g_dflash.target_layers)} target layers, the pass on the {g_dflash_dev_on ? home : (g_dflash_dev_knob ? "CPU" : "CPU (set_dflash_device(false))")}\n")
     return ""
 }
 
@@ -543,11 +695,10 @@ def private mm_w(var y : array<float>; yoff : int64; dr : DflashDrafter; w : Dfl
 
 //! NEOX rope of a head's `hs` values at `off` for position `pos`: the pair (i, i + hs/2); pow(theta, -2i/hs) is the device
 //! pass's invf table bit for bit, which rope_scaled_neox's 1/pow(theta, 2i/hs) is not
-def private rope_head(var v : array<float>; off, hs, pos : int64; theta : float) {
+def private rope_head(var v : array<float>; off, hs, pos : int64; inv_freq : array<float>) {
     let half = hs / 2l
     for (i in range64(half)) {
-        let inv = pow(theta, -2.0 * float(i) / float(hs))
-        let ang = float(pos) * inv
+        let ang = float(pos) * inv_freq[i]
         let c = cos(ang)
         let s = sin(ang)
         let a = v[off + i]
@@ -653,6 +804,12 @@ def private dflash_capture_rows(var s : Session; img : array<float>; rows, pos0 
     q.caps_pos0 = pos0
 }
 
+//! the drafts a round asks for where no depth is set: the block's, under the cap of a selector-less drafter or a routed trunk
+def private dflash_default_drafts(t : Model; dr : DflashDrafter) : int64 {
+    let cap = !dr.v2 ? DFLASH_PLAIN_DRAFTS : t.config.n_expert > 0l ? DFLASH_ROUTED_DRAFTS : dr.nblock - 1l
+    return min(dr.nblock - 1l, cap)
+}
+
 //! the captured rows of positions pos0 .. pos0 + rows - 1 into the ring: c = norm(fc . [the layer outputs]), a layer's K
 //! (normed, roped at the position) and V rows into the position's slot; a commit past the ring's end starts the context over
 [no_env]
@@ -672,16 +829,24 @@ def private dflash_commit(var s : Session; pos0, rows : int64) {
     if (pos0 > q.ctx) {
         q.valid_lo = pos0
     }
-    if (g_dflash_trace) {
+    if (g_dflash_trace || (g_dflash_record && pos0 == 0l)) {
         var line = "dflash commit {pos0}+{rows}: last row slot sums"
+        if (pos0 == 0l) {
+            g_dflash_prompt_sums |> clear()
+        }
         for (sl in range64(ncap)) {
             var sum = 0.0
             for (i in range64(d)) {
                 sum += abs(q.caps[((rows - 1l) * ncap + sl) * d + i])
             }
-            line += " {sum}"   // nolint:PERF001 - a handful of slots, under the trace flag alone
+            if (pos0 == 0l) {
+                g_dflash_prompt_sums |> push(sum)
+            }
+            line += " {sum}"   // nolint:PERF001 - a handful of slots, under the trace or record flag alone
         }
-        print("{line}\n")
+        if (g_dflash_trace) {
+            print("{line}\n")
+        }
     }
     if (g_dflash_dev_on) {
         if (!invoke(dev_seams().commit, dr, s.uid, q.caps, rows, pos0)) {
@@ -703,15 +868,21 @@ def private dflash_commit(var s : Session; pos0, rows : int64) {
     }
     for (l in range64(dr.n_layers)) {
         mm_w(kv, 0l, dr, dr.wk[l], cr, 0l, d, kvd, rows)
+        if (dr.biased) {
+            add_bias_rows(kv, dr.fblob, dr.bk_offs[l], kvd, rows)
+        }
         for (r in range64(rows)) {
             let pos = pos0 + r
             let slot = l * lstride + (pos % w) * kvd
             for (h in range64(dr.n_kv)) {
                 rms_w(q.ring_k, slot + h * dr.hs, kv, r * kvd + h * dr.hs, dr.fblob, dr.kn_offs[l], dr.hs, dr.eps)
-                rope_head(q.ring_k, slot + h * dr.hs, dr.hs, pos, dr.theta)
+                rope_head(q.ring_k, slot + h * dr.hs, dr.hs, pos, dr.inv_freq)
             }
         }
         mm_w(kv, 0l, dr, dr.wv[l], cr, 0l, d, kvd, rows)
+        if (dr.biased) {
+            add_bias_rows(kv, dr.fblob, dr.bv_offs[l], kvd, rows)
+        }
         for (r in range64(rows)) {
             copy_floats(kv, r * kvd, q.ring_v, l * lstride + ((pos0 + r) % w) * kvd, kvd)
         }
@@ -739,7 +910,7 @@ def private block_attention(dr : DflashDrafter; q : DflashSeq; l : int64; qv : a
     let w = dr.window
     let lstride = w * kvd
     let grp = dr.n_heads / dr.n_kv
-    let scale = 1.0 / sqrt(float(hs))
+    let scale = dr.attn_scale
     let span = ring_span(q, pos0, rows)
     let lo = span.lo
     let nctx = span.nctx
@@ -801,12 +972,27 @@ def private block_attention(dr : DflashDrafter; q : DflashSeq; l : int64; qv : a
     delete sc
 }
 
+//! every head of `rows` rows of `heads` heads in `v` under the norm row at `noff`, then roped at its row's position from `pos0`
+def private heads_norm_rope(dr : DflashDrafter; var v : array<float>; heads, noff, rows, pos0 : int64) {
+    var tmp : array<float>
+    tmp |> reserve_resize(dr.hs)
+    for (t in range64(rows)) {
+        for (h in range64(heads)) {
+            let at = (t * heads + h) * dr.hs
+            rms_w(tmp, 0l, v, at, dr.fblob, noff, dr.hs, dr.eps)
+            copy_floats(tmp, 0l, v, at, dr.hs)
+            rope_head(v, at, dr.hs, pos0 + t, dr.inv_freq)
+        }
+    }
+    delete tmp
+}
+
 //! one drafter layer over the block's rows in place
 def private block_layer(dr : DflashDrafter; q : DflashSeq; l : int64; var x : array<float>; rows, pos0 : int64) {
     let d = dr.dim
     let qd = dr.n_heads * dr.hs
     let kvd = dr.n_kv * dr.hs
-    let projw = 2l * dr.conv_k * (d / dr.conv_g)
+    let projw = dr.v2 ? 2l * dr.conv_k * (d / dr.conv_g) : 0l
     var hn : array<float>
     hn |> reserve_resize(rows * d)
     var dyn : array<float>
@@ -814,8 +1000,10 @@ def private block_layer(dr : DflashDrafter; q : DflashSeq; l : int64; var x : ar
     for (t in range64(rows)) {
         rms_w(hn, t * d, x, t * d, dr.fblob, dr.attn_norm_offs[l], d, dr.eps)
     }
-    mm_w(dyn, 0l, dr, dr.aconv_proj[l], hn, 0l, d, projw, rows)
-    conv_taps(dr, hn, rows, dyn, dr.aconv_base_offs[l], 0l)
+    if (dr.v2) {
+        mm_w(dyn, 0l, dr, dr.aconv_proj[l], hn, 0l, d, projw, rows)
+        conv_taps(dr, hn, rows, dyn, dr.aconv_base_offs[l], 0l)
+    }
     var qv : array<float>
     qv |> reserve_resize(rows * qd)
     var kv : array<float>
@@ -825,35 +1013,35 @@ def private block_layer(dr : DflashDrafter; q : DflashSeq; l : int64; var x : ar
     mm_w(qv, 0l, dr, dr.wq[l], hn, 0l, d, qd, rows)
     mm_w(kv, 0l, dr, dr.wk[l], hn, 0l, d, kvd, rows)
     mm_w(vv, 0l, dr, dr.wv[l], hn, 0l, d, kvd, rows)
-    var tmp : array<float>
-    tmp |> reserve_resize(dr.hs)
-    for (t in range64(rows)) {
-        for (h in range64(dr.n_heads)) {
-            rms_w(tmp, 0l, qv, t * qd + h * dr.hs, dr.fblob, dr.qn_offs[l], dr.hs, dr.eps)
-            copy_floats(tmp, 0l, qv, t * qd + h * dr.hs, dr.hs)
-            rope_head(qv, t * qd + h * dr.hs, dr.hs, pos0 + t, dr.theta)
-        }
-        for (h in range64(dr.n_kv)) {
-            rms_w(tmp, 0l, kv, t * kvd + h * dr.hs, dr.fblob, dr.kn_offs[l], dr.hs, dr.eps)
-            copy_floats(tmp, 0l, kv, t * kvd + h * dr.hs, dr.hs)
-            rope_head(kv, t * kvd + h * dr.hs, dr.hs, pos0 + t, dr.theta)
-        }
+    if (dr.biased) {
+        add_bias_rows(qv, dr.fblob, dr.bq_offs[l], qd, rows)
+        add_bias_rows(kv, dr.fblob, dr.bk_offs[l], kvd, rows)
+        add_bias_rows(vv, dr.fblob, dr.bv_offs[l], kvd, rows)
     }
+    heads_norm_rope(dr, qv, dr.n_heads, dr.qn_offs[l], rows, pos0)
+    heads_norm_rope(dr, kv, dr.n_kv, dr.kn_offs[l], rows, pos0)
     var att : array<float>
     att |> reserve_resize(rows * qd)
     block_attention(dr, q, l, qv, kv, vv, rows, pos0, att)
     var o : array<float>
     o |> reserve_resize(rows * d)
     mm_w(o, 0l, dr, dr.wo[l], att, 0l, qd, d, rows)
-    conv_taps(dr, o, rows, dyn, dr.aconv_base_offs[l], 1l)
+    if (dr.biased) {
+        add_bias_rows(o, dr.fblob, dr.bo_offs[l], d, rows)
+    }
+    if (dr.v2) {
+        conv_taps(dr, o, rows, dyn, dr.aconv_base_offs[l], 1l)
+    }
     for (i in range64(rows * d)) {
         x[i] += o[i]
     }
     for (t in range64(rows)) {
         rms_w(hn, t * d, x, t * d, dr.fblob, dr.ffn_norm_offs[l], d, dr.eps)
     }
-    mm_w(dyn, 0l, dr, dr.fconv_proj[l], hn, 0l, d, projw, rows)
-    conv_taps(dr, hn, rows, dyn, dr.fconv_base_offs[l], 0l)
+    if (dr.v2) {
+        mm_w(dyn, 0l, dr, dr.fconv_proj[l], hn, 0l, d, projw, rows)
+        conv_taps(dr, hn, rows, dyn, dr.fconv_base_offs[l], 0l)
+    }
     var g : array<float>
     g |> reserve_resize(rows * dr.hidden)
     var u : array<float>
@@ -861,11 +1049,12 @@ def private block_layer(dr : DflashDrafter; q : DflashSeq; l : int64; var x : ar
     mm_w(g, 0l, dr, dr.w1[l], hn, 0l, d, dr.hidden, rows)
     mm_w(u, 0l, dr, dr.w3[l], hn, 0l, d, dr.hidden, rows)
     for (i in range64(rows * dr.hidden)) {
-        let a = g[i]
-        g[i] = a / (1.0 + exp(-a)) * u[i]
+        g[i] = g[i] / (1.0 + exp(-g[i])) * u[i]
     }
     mm_w(o, 0l, dr, dr.w2[l], g, 0l, dr.hidden, d, rows)
-    conv_taps(dr, o, rows, dyn, dr.fconv_base_offs[l], 1l)
+    if (dr.v2) {
+        conv_taps(dr, o, rows, dyn, dr.fconv_base_offs[l], 1l)
+    }
     for (i in range64(rows * d)) {
         x[i] += o[i]
     }
@@ -874,7 +1063,6 @@ def private block_layer(dr : DflashDrafter; q : DflashSeq; l : int64; var x : ar
     delete qv
     delete kv
     delete vv
-    delete tmp
     delete att
     delete o
     delete g
@@ -939,6 +1127,9 @@ def private block_embed(t : Model; dr : DflashDrafter; tok, rows : int64; var x 
         embed_row(t, tok, addr(x[0]))
         for (r in range64(1l, rows)) {
             embed_row(t, dr.mask_id, addr(x[r * d]))
+        }
+        if (t.config.embed_scale != 1.0) {
+            scale_inplace(addr(x[0]), t.config.embed_scale, rows * d)
         }
     }
 }
@@ -1096,8 +1287,10 @@ def private cpu_block_pass(t : Model; var s : Session; dr : DflashDrafter; q : D
     } else {
         mm_b_f(s, logits, t, cls_fmt_of(t), t.wcls_off, hn, d, vocab, nd)
     }
-    hsel |> reserve_resize(nd * dr.rank)
-    mm_w(hsel, 0l, dr, dr.sel_h, hn, 0l, d, dr.rank, nd)
+    if (dr.v2) {
+        hsel |> reserve_resize(nd * dr.rank)
+        mm_w(hsel, 0l, dr, dr.sel_h, hn, 0l, d, dr.rank, nd)
+    }
     delete x
     delete hn
 }
@@ -1120,7 +1313,8 @@ def private dflash_block_draft(t : Model; var s : Session; tok, pos, k : int64) 
     let vocab = t.config.vocab_size
     let t0 = ref_time_ticks()
     let records_q = mtp_drafts_sampled(s)
-    let draft_temp = !records_q ? 0.0 : g_dflash_draft_temp >= 0.0 ? g_dflash_draft_temp : s.spec_params != null ? deref(s.spec_params).temp : 0.0
+    //! a DFlash file's drafts are its rows' best ids at any temperature: point masses in a rejection-sampling round
+    let draft_temp = !records_q || !dr.v2 ? 0.0 : g_dflash_draft_temp >= 0.0 ? g_dflash_draft_temp : s.spec_params != null ? deref(s.spec_params).temp : 0.0
     g_dflash_point_q = records_q && draft_temp <= 0.0
     let soft = draft_temp > 0.0
     if (g_dflash_dev_on && invoke(dev_seams().selects, soft)) {
@@ -1152,8 +1346,12 @@ def private dflash_block_draft(t : Model; var s : Session; tok, pos, k : int64) 
             dflash_record_q(s, r, cids, r * topk, qs, r * topk, topk)
         }
         delete qs
-    } else {
+    } elif (dr.v2) {
         dflash_walk(dr, tok, nd, cids, cvals, hsel, s.mtp_vbatch)
+    } else {
+        for (r in range64(nd)) {
+            s.mtp_vbatch[r + 1l] = cids[r]
+        }
     }
     if (g_dflash_trace) {
         print("  draft pass {rows} rows, {nd} drafts: pass {t_pass / 1000} ms, select {(get_time_usec(t0) - t_pass) / 1000} ms\n")

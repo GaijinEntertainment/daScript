@@ -85,11 +85,9 @@ var private g_census = false
 def private print_census(nb : int64) {
     static_if (typeinfo builtin_module_exists(das_metal)) {
         return if (!g_census)
-        var inscope cov <- metal_kernel_coverage()
-        var inscope names <- [for (k, v in keys(cov), values(cov)); k; where v > 0l]
-        sort(names)
-        for (k in names) {
-            print("  census B={nb}: {k} {cov[k]}\n")
+        var inscope rows <- metal_kernel_coverage_served()
+        for (row in rows) {
+            print("  census B={nb}: {row.name} {row.n}\n")
         }
     }
 }
@@ -307,7 +305,7 @@ def main() : int {
         t.config.seq_len = min(t.config.seq_len, 512l)
         var prompt <- encode(tk, "The old lighthouse keeper watched the storm roll in from the west, counting the seconds between each flash and the thunder that followed, while the village below slept through it.", false)
         var base = 0.0lf
-        let arms <- cfg.knockouts ? [ "", "gemv", "attn", "ew", "moe_rt" ] : [ "" ]
+        let arms <- cfg.knockouts ? [ "", "gemv", "attn", "ew", "moe_rt", "cls", "cls_epi", "wo", "qkv" ] : [ "" ]
         let greedy_rows = cfg.sameslab && cfg.rows_feed == "greedy"   //! every step of every row count reads from the continuation's start
         var maxb = 1l
         for (bstr in split(cfg.bs, ",")) {

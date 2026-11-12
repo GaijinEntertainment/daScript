@@ -217,7 +217,7 @@ Each companion's sections are anchored by topic; a citation spells `<doc>.md#<an
   eras take.
 - `ARCHITECTURE_GPU_MTP.md` - the Metal speculative round over the batch driver's same-slab verify, and the box knob that sets the depth a round drafts.
 - `ARCHITECTURE_GPU_MTP_ROUND.md` - the round's two seams on the device: the verify encoded ahead of the pass's wait (`#verify-ahead`) and the n-gram commit as one stage (`#commit-one`).
-- `ARCHITECTURE_GPU_MTP_ACCEPT.md` - what a sampled stream's round does with its drafts on both homes: the three acceptances (`#mtp-accept-modes`), the sampler's seams, the drafter distribution a rejection round records, the DFlash2 drafter's drafts under each (`ARCHITECTURE_GPU_MTP_ACCEPT.md#dflash-sampled-drafts`), the drafter's draw temperature (`#nextn-draft-temp`), the hyper-connection stream-mean capture (`#dflash-hc-capture`), and the chain cut.
+- `ARCHITECTURE_GPU_MTP_ACCEPT.md` - what a sampled stream's round does with its drafts on both homes: the three acceptances (`#mtp-accept-modes`), the sampler's seams, the drafter distribution a rejection round records, the DFlash2 drafter's drafts under each (`ARCHITECTURE_GPU_MTP_ACCEPT.md#dflash-sampled-drafts`), its rounds over a tick's streams (`#dflash-tick-rounds`), the drafter's draw temperature (`#nextn-draft-temp`), the hyper-connection stream-mean capture (`#dflash-hc-capture`), and the chain cut.
 - `ARCHITECTURE_GPU_KV_RING.md` - both homes' sliding-layer K/V ring: a sliding layer's mirror rows as a ring of its
   window and one command's rows (`ARCHITECTURE_GPU_KV_RING.md#kv-sliding-ring`).
 - `ARCHITECTURE_GPU_MTP_ASSISTANT.md` - the gemma-4 assistant drafter on both GPU homes: one
@@ -225,7 +225,7 @@ Each companion's sections are anchored by topic; a citation spells `<doc>.md#<an
 - `ARCHITECTURE_GPU_MTP_DECODE.md` - the kernel argument-alignment contract enforced at every dispatch (`#metal-dispatch-requires`), the row-buffer pad a multi-row verify dispatches under (`#verify-row-pad`), the batch pre-encode (`#batch-pre-encode`), the decode layer encoder (`#metal-layer-enc`), the fat chain (`#metal-fat-chain`), the MoE union (`#moe-union`), the replay form (`#mtp-replay-form`) and the RoPE store rotation (`#metal-rope-store-rot`).
 - `ARCHITECTURE_GPU_MTP_DECODE_ROWS.md` - the K-quant small-batch crown and the rows8 matrix-unit form a multi-row verify's rows sites take.
 - `ARCHITECTURE_GPU_MTP_DECODE_PICK.md` - the single-row driver's greedy (`#greedy-chain`) and sampled (`#sampled-chain`) chains and the Metal selection landing (`#metal-selection-landing`).
-- `ARCHITECTURE_GPU_MTP_DECODE_HC.md` - the hyper-connection mixer's five-to-eight-row form on the
+- `ARCHITECTURE_GPU_MTP_DECODE_HC.md` - the hyper-connection mixer's three-to-eight-row form on the
   matrix unit.
 - `ARCHITECTURE_RUNTIME.md` - kernel shape, caches, lint policy, knobs, hot-path coverage and its
   call-graph terms, the GPU ramp.

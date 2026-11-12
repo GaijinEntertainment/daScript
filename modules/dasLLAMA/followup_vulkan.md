@@ -2217,4 +2217,3 @@ module) is independent and can land any time - it is pure structure.
     three-column form raced on the Vulkan home's tower sites and windows on the 5060 Ti and on the pod's
     82-SM card, adopted where it wins on both, and `ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default`
     restated to the measured pick.
-

@@ -2848,6 +2848,8 @@ def private hc_mix8_gate(t : T?; var dev, queue; nrows : int) {
         var rka = moe_router_args(int64(hc), int64(hcd), int64(nrows))
         var mka = GkHcMixArgs(dim = uint(dim), hc = uint(hc), rows = uint(nrows))
         var ka = Rows8HcMix(dim = uint(dim), hc = uint(hc), lr = uint(lr), rows = uint(nrows), eps = EPS)
+        let bu_t1 = mc |> in_plain([1u])
+        let bu_r8 = mc |> in_plain([8u])
         let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
             stamp_run(snorm, pnorm) {
                 invoke(snorm.enc, enc, mc.buf[bres], mc.buf[cxn], mc.buf[bwn], nka, int64(nrows * hc))
@@ -2855,22 +2857,22 @@ def private hc_mix8_gate(t : T?; var dev, queue; nrows : int) {
             stamp_run(srt, prt) {
                 invoke(srt.enc, enc, mc.buf[bwi], mc.buf[cxn], mc.buf[cinj], mc.buf[brb], rka, int64(hc), int64(nrows))
             }
-            invoke(kpb.enc, enc, ppb, mc.buf[cxn], 0ul, mc.buf[cxt], mc.buf[cxs], mc.buf[bu_hcd], int64(hcd / 32 * 8))
-            invoke(kq8.enc, enc, pq8, mc.buf[bdn], 0ul, mc.buf[bdn], mc.buf[cxt], mc.buf[clo], 0ul, mc.buf[cxs], mc.buf[bu_hcd], mc.buf[bu_lr], int64(lr), int64(8 * lr))
+            invoke(kpb.enc, enc, ppb, mc.buf[cxn], 0ul, mc.buf[cxt], mc.buf[cxs], mc.buf[bu_hcd], mc.buf[bu_r8], int64(hcd / 32 * 8))
+            invoke(kq8.enc, enc, pq8, mc.buf[bdn], 0ul, mc.buf[bdn], mc.buf[cxt], mc.buf[clo], 0ul, mc.buf[cxs], mc.buf[bu_hcd], mc.buf[bu_lr], mc.buf[bu_t1], int64(lr), int64(8 * lr), int64(lr / 16))
             stamp_run(slo, plo) {
                 invoke(slo.enc, enc, mc.buf[clo], 0ul, mc.buf[bu_tot], mc.buf[bu_hc], int64(nrows * lr))
             }
-            invoke(kpb.enc, enc, ppb, mc.buf[clo], 0ul, mc.buf[cxt], mc.buf[cxs], mc.buf[bu_lr], int64(lr / 32 * 8))
-            invoke(kq8.enc, enc, pq8, mc.buf[bup], 0ul, mc.buf[bup], mc.buf[cxt], mc.buf[cgt], 0ul, mc.buf[cxs], mc.buf[bu_lr], mc.buf[bu_hcd], int64(hcd), int64(8 * hcd))
+            invoke(kpb.enc, enc, ppb, mc.buf[clo], 0ul, mc.buf[cxt], mc.buf[cxs], mc.buf[bu_lr], mc.buf[bu_r8], int64(lr / 32 * 8))
+            invoke(kq8.enc, enc, pq8, mc.buf[bup], 0ul, mc.buf[bup], mc.buf[cxt], mc.buf[cgt], 0ul, mc.buf[cxs], mc.buf[bu_lr], mc.buf[bu_hcd], mc.buf[bu_t1], int64(hcd), int64(8 * hcd), int64(hcd / 16))
             stamp_run(smix, pmix) {
                 invoke(smix.enc, enc, mc.buf[cxn], mc.buf[cgt], mc.buf[cy], mka, int64(nrows * dim))
             }
             invoke(kpr.enc, enc, ppr, mc.buf[bres], mc.buf[bwn], mc.buf[bwi], mc.buf[fxt], mc.buf[fxs], mc.buf[finv], mc.buf[fip], ka, int64(hc), int64(nrows))
-            invoke(kdn.enc, enc, pdn, mc.buf[bdn], 0ul, mc.buf[bdn], mc.buf[fxt], mc.buf[fpart], 0ul, mc.buf[fxs], mc.buf[bu_hcd], mc.buf[bu_lr], mc.buf[bu_kseg],
+            invoke(kdn.enc, enc, pdn, mc.buf[bdn], 0ul, mc.buf[bdn], mc.buf[fxt], mc.buf[fpart], 0ul, mc.buf[fxs], mc.buf[bu_hcd], mc.buf[bu_lr], mc.buf[bu_kseg], mc.buf[bu_t1],
                 int64(lr), int64(hc * 8 * lr), int64(hc))
             invoke(kfn.enc, enc, pfn, mc.buf[fpart], mc.buf[fip], mc.buf[finj], mc.buf[fxt2], mc.buf[fxs2], ka, int64(lr / 32))
             invoke(kup.enc, enc, pup, mc.buf[bup], 0ul, mc.buf[bup], mc.buf[fxt2], mc.buf[fy], 0ul, mc.buf[fxs2], mc.buf[bu_lr], mc.buf[bu_lr],
-                mc.buf[bres], mc.buf[bwn], mc.buf[finv], ka, int64(dim), int64(nrows * dim))
+                mc.buf[bres], mc.buf[bwn], mc.buf[finv], ka, mc.buf[bu_t1], int64(dim), int64(nrows * dim))
         }
         return if (!ran)
         var inscope gates <- mc |> plane_run(cgt)
@@ -3373,12 +3375,75 @@ def private dispatch_align_gate(t : T?; var dev, queue) {
     }
 }
 
+//! The verify's tape kernel (`MetalDnTape`): `ng` groups of `n` rows, group g's slot its conv rows, its qkv rows, its beta rows
+//! and its alpha rows - the beta and alpha rows from two planes, or (`ba_rows`) from one plane holding a group's
+//! [beta rows ; alpha rows] - past a lead of `toff` bytes left at the sentinel; the other plane layout's tape the control
+def private dn_tape_gate(t : T?; var dev, queue; ba_rows : bool; cd, nvh, n, ng : int) {
+    let tag = "dn_tape ba_rows={ba_rows} cd={cd} nvh={nvh} n={n} ng={ng}"
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let st = stamp_of(@@enc_dn_tape)
+        var pso = mc |> keep_stamp(st, err)
+        return if (!pso_ok(t, tag, pso, err))
+        let gcd = n * cd
+        let gnv = n * nvh
+        let slot = 2 * (gcd + gnv)
+        let lead = 12
+        var inscope cv <- [for (i in range(ng * gcd)); 0.5 + float(i)]
+        var inscope qkv <- [for (i in range(ng * gcd)); -0.25 - float(i)]
+        var inscope bb <- [for (i in range(ng * 2 * gnv)); 1000.0 + float(i)]
+        var inscope ba <- [for (i in range(ng * gnv)); 5000.0 + float(i)]
+        var inscope want, other : array<float>
+        want |> resize(lead + ng * slot)
+        other |> resize(lead + ng * slot)
+        for (i in range(lead)) {
+            want[i] = -1000.0
+            other[i] = -1000.0
+        }
+        for (g in range(ng)) {
+            let tb = lead + g * slot
+            for (w in range(gcd)) {
+                want[tb + w] = cv[g * gcd + w]
+                want[tb + gcd + w] = qkv[g * gcd + w]
+                other[tb + w] = cv[g * gcd + w]
+                other[tb + gcd + w] = qkv[g * gcd + w]
+            }
+            for (w in range(gnv)) {
+                let joint = (beta = bb[g * 2 * gnv + w], alpha = bb[g * 2 * gnv + gnv + w])
+                let split = (beta = bb[g * gnv + w], alpha = ba[g * gnv + w])
+                want[tb + 2 * gcd + w] = ba_rows ? joint.beta : split.beta
+                want[tb + 2 * gcd + gnv + w] = ba_rows ? joint.alpha : split.alpha
+                other[tb + 2 * gcd + w] = ba_rows ? split.beta : joint.beta
+                other[tb + 2 * gcd + gnv + w] = ba_rows ? split.alpha : joint.alpha
+            }
+        }
+        t |> success(mismatch_exact(want, other) > 0, "{tag}: the other plane layout's tape differs (the control)")
+        let bcv = mc |> in_(cv)
+        let bqkv = mc |> in_(qkv)
+        let bbb = mc |> in_(bb)
+        let bba = mc |> in_(ba)
+        let btape = mc |> out_words(lead + ng * slot, -1000.0)
+        var ka = DnTapeArgs(cd = uint(cd), nvh = uint(nvh), n = uint(n), ng = uint(ng), ba_rows = ba_rows ? 1u : 0u)
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            stamp_run(st, pso) {
+                invoke(st.enc, enc, mc.buf[bcv], mc.buf[bqkv], mc.buf[bbb], mc.buf[ba_rows ? bbb : bba], mc.buf[btape], uint64(lead * 4), ka,
+                    int64(ng * n * max(cd, nvh)))
+            }
+        }
+        return if (!ran)
+        check_buf_exact(t, tag, mc.buf[btape], want)
+    }
+}
+
 [test(description = "The Metal decode and tower elementwise corpus - argmax and draft top-k, accept and draw, embed gathers, add-rms and norms, activations, im2col, whisper-decoder, hyper-connection mixer and PLE kernels - matches direct CPU oracles on served and tail shapes.")]
 def test_metal_misc_kernels(t : T?) {
     t |> run("decode elementwise/misc kernels == direct CPU oracles") @(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
             with_metal_gate(t) $(var dev : MetalDevice?; var queue : MetalCommandQueue?) {
                 copy_row_gate(t, dev, queue, 1000)
+                dn_tape_gate(t, dev, queue, false, 96, 16, 4, 3)
+                dn_tape_gate(t, dev, queue, true, 96, 16, 4, 3)
+                dn_tape_gate(t, dev, queue, true, 40, 72, 7, 2)   //! the beta rows wider than the conv rows: the grid follows the wider
                 argmax_gate(t, dev, queue, 5000, 4321, 1234)    // exact tie — lower index wins
                 argmax_gate(t, dev, queue, 700, 0, 699)         // winner at index 0
                 argmax_rows_gate(t, dev, queue, 5, 5000)        // the same-slab verify's per-row accept walk

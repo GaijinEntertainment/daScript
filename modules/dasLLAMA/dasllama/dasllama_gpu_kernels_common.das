@@ -1913,12 +1913,27 @@ class template GkAddRmsRows : GkResidualRow {
                 } else {
                     store_out(base, inv)
                 }
+            } else {
+                static_if (XT) {
+                    store_table_stream(r, base)
+                }
             }
         }
     }
 
-    //! `store_rows` over row `r` at `base` with the rows8 table beside: a subgroup's 32 lanes one aligned 32-block a step, the
-    //! block's halves at their k-slots and their sum at the block's token slot
+    //! the rows8 table of the stream row `r` at `base` as the step left it (a stamp storing no norm)
+    def store_table_stream(r, base : uint) {
+        static_if (XT) {
+            let tg = gl_WorkGroupSize.x
+            var j = gl_LocalInvocationID.x
+            while (j < pa.dim) {
+                table_put(r, base, j, stashed(j))
+                j += tg
+            }
+        }
+    }
+
+    //! `store_rows` over row `r` at `base` with the rows8 table beside
     def store_table_rows(r, base : uint; inv : float) {
         static_if (XT) {
             let tg = gl_WorkGroupSize.x
@@ -1926,13 +1941,21 @@ class template GkAddRmsRows : GkResidualRow {
             while (j < pa.dim) {
                 let v = normed_at(j, 0.0, inv)
                 put_out(base + j, v)
-                let h = float16(v)
-                yt[rows8_slot_at(base + j)] = h
-                let s = gk_subgroup_add(float(h))
-                if (gl_SubgroupInvocationID == 0u) {
-                    ys[rows8_sum_at(j, r)] = s
-                }
+                table_put(r, base, j, v)
                 j += tg
+            }
+        }
+    }
+
+    //! column `j` of row `r` at `base` into the rows8 table: a subgroup's 32 lanes one aligned 32-block, the block's halves
+    //! at their k-slots and their sum at the block's token slot
+    def table_put(r, base, j : uint; v : float) {
+        static_if (XT) {
+            let h = float16(v)
+            yt[rows8_slot_at(base + j)] = h
+            let s = gk_subgroup_add(float(h))
+            if (gl_SubgroupInvocationID == 0u) {
+                ys[rows8_sum_at(j, r, pa.dim)] = s
             }
         }
     }

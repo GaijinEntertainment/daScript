@@ -1887,6 +1887,21 @@ class MetalPreAdd : MetalAddRmsT {
     }
 }
 
+//! `GkAddRmsRows`' pre-add stamp with the updated stream rows' rows8 x table and token sums (`XT`): the decode rows'
+//! per-layer-embedding residual, whose gate site reads the stream
+[metal_dispatch(name = "enc_preadd_bxt_c", pso = "g_pso_preadd_xt", tgmem = "metal_pre_add_xt_msl_tgmem", tg = 256, grid = "nrows", params = "nrows : int64",
+                requires = "pa.dim % 32")]
+class MetalPreAddXT : MetalAddRmsT {
+    override PRE = true
+    override PRE_SWITCH = false
+    override XT = true
+
+    [metal_kernel(name="metal_pre_add_xt_msl")]
+    def metal_pre_add_xt {
+        add_rms_row(gl_WorkGroupID.x)
+    }
+}
+
 //! The fused rope and K/V store at one row, the f16-mirror stamp of the template both homes stamp (`GkRopeKvStore`): the q and
 //! k projections in the one QKV buffer (ksrc its second view, vsrc its view at the v offset), the mirror K and V rows bound at
 //! their (layer, pos) offsets, this position's rope row bound at its offset.
@@ -3605,18 +3620,20 @@ class MetalSqAttnDXF32 : MetalSqAttnDKvT {
 
 // Cross-slice combine for the D entries: PARALLEL over entries (4 sgs online-merge their
 // subsets with float4 loads — m and l arrive in ONE float4), a single tgmem cross-sg merge.
-[metal_dispatch(name = "enc_attncombd_c", pso = "g_pso_attncombd", tgmem = "metal_sq_attn_comb_d_msl_tgmem", tg = 128, grid = "nheads, nrows", params = "nheads : int64, nrows : int64")]
-class MetalSqAttnCombD {
+[ |> template_struct_instance]
+class template MetalSqAttnCombDT {
     @ssbo @binding = 0 @role = "read" part : array<float4>
     @ssbo @binding = 1 @role = "write" yo : array<float>
     @ssbo @binding = 2 @role = "read" @off = "rtoff" rt : array<uint4>
     @uniform @binding = 3 ka : SqAttnCombDArgs
+    @ssbo @binding = 14 @role = "write" @template_gate = XT yt : array<float16>   //! the rows in the rows8 x table's k-slot order
+    @ssbo @binding = 15 @role = "write" @template_gate = XT ys : array<float>     //! ... and their token sums
     @ssbo @binding = 20 @role = "weight" @default = g_one sink : array<float> //! [model heads] this layer's attention sinks (hass models)
     @workgroup wacc : float[512]
     @workgroup wml : float[8]
+    @template_constant XT : bool = false   //!< the rows8 table beside the rows: a head of whole 32-blocks, at most eight rows
 
-    [metal_kernel(name="metal_sq_attn_comb_d_msl")]
-    def metal_sq_attn_comb_d {
+    def comb_d {
         let nchmax = ka.nchmax
         let nheads = ka.nheads
         let hs = ka.hs
@@ -3670,8 +3687,39 @@ class MetalSqAttnCombD {
         let l = wml[1] * r0 + wml[3] * r1 + wml[5] * r2 + wml[7] * r3 + exp(max(snk - gm, -80.0)) * float(ka.hass)
         let acc = wacc[lid] * r0 + wacc[128u + lid] * r1 + wacc[256u + lid] * r2 + wacc[384u + lid] * r3
         if (lid < hs) {
-            yo[bb * (nheads * hs) + h * hs + lid] = acc / l
+            let v = acc / l
+            let col = h * hs + lid
+            let at = bb * (nheads * hs) + col
+            yo[at] = v
+            static_if (XT) {
+                let hv = float16(v)
+                yt[rows8_slot_at(at)] = hv
+                let s = simd_sum(float(hv))
+                if (sl == 0u) {
+                    ys[rows8_sum_at(col, bb, nheads * hs)] = s
+                }
+            }
         }
+    }
+}
+
+[metal_dispatch(name = "enc_attncombd_c", pso = "g_pso_attncombd", tgmem = "metal_sq_attn_comb_d_msl_tgmem", tg = 128, grid = "nheads, nrows", params = "nheads : int64, nrows : int64")]
+class MetalSqAttnCombD : MetalSqAttnCombDT {
+    [metal_kernel(name="metal_sq_attn_comb_d_msl")]
+    def metal_sq_attn_comb_d {
+        comb_d()
+    }
+}
+
+//! ... and the combined rows' rows8 x table and token sums, the out projection's x
+[metal_dispatch(name = "enc_attncombd_xt_c", pso = "g_pso_attncombd_xt", tgmem = "metal_sq_attn_comb_d_xt_msl_tgmem", tg = 128, grid = "nheads, nrows", params = "nheads : int64, nrows : int64",
+                requires = "ka.hs % 32")]
+class MetalSqAttnCombDXT : MetalSqAttnCombDT {
+    override XT = true
+
+    [metal_kernel(name="metal_sq_attn_comb_d_xt_msl")]
+    def metal_sq_attn_comb_d_xt {
+        comb_d()
     }
 }
 
@@ -4071,7 +4119,7 @@ def private metal_decode_env_announce {
         to_log(LOG_WARNING, "dasLLAMA metal decode: DASLLAMA_METAL_B32_MOE_WIDE=0 - the per-32 routed GEMVs take the two-row form (numerics move with the form)\n")
     }
     if (!g_env_metal.rows_mm8) {
-        to_log(LOG_WARNING, "dasLLAMA metal decode: DASLLAMA_METAL_ROWS_MM8=0 - the five-to-eight-row sites keep the row forms, no eight-row tensor stamps (numerics move with the form)\n")
+        to_log(LOG_WARNING, "dasLLAMA metal decode: DASLLAMA_METAL_ROWS_MM8=0 - the three-to-eight-row sites keep the row forms, no eight-row tensor stamps (numerics move with the form)\n")
     }
     if (g_env_metal.moe_union) {
         to_log(LOG_INFO, "dasLLAMA metal decode: DASLLAMA_METAL_MOE_UNION=1 - a two-to-sixteen-row step reads each routed iq4xs expert once over its rows (the oracle rail, bit for bit the fused pair)\n")
@@ -4126,6 +4174,8 @@ def metal_decode_init : bool {   // nolint:STYLE038 — a flat compile_pso per k
     g_pso_preaddrms = compile_stamp(metal_pre_add_rms_msl, ok)
     g_pso_preaddrms_hx = compile_stamp(metal_pre_add_rms_hx_msl, ok)
     g_pso_preadd = compile_stamp(metal_pre_add_msl, ok)
+    g_pso_preadd_xt = compile_stamp(metal_pre_add_xt_msl, ok)
+    g_pso_dn_tape = compile_stamp(metal_dn_tape_msl, ok)
     g_pso_swiglu = compile_stamp(MetalSwiglu_metal_ew2_msl, ok)
     g_pso_swiglu_hx = compile_stamp(MetalSwigluHX_metal_ew2_msl, ok)
     g_pso_swiglu_hxb = compile_stamp(MetalSwigluHXB_metal_ew2_msl, ok)
@@ -4149,6 +4199,7 @@ def metal_decode_init : bool {   // nolint:STYLE038 — a flat compile_pso per k
     }
     g_pso_geglu = compile_stamp(MetalGeglu_metal_ew2_msl, ok)
     g_pso_geglu_side = compile_stamp(metal_geglu_side_msl, ok)
+    g_pso_geglu_side_xt = compile_stamp(metal_geglu_side_xt_msl, ok)
     g_pso_ple_proj_bf16 = compile_stamp(metal_ple_proj_bf16_msl, ok)
     g_pso_ple_proj_bf16_one = compile_stamp(metal_ple_proj_bf16_one_msl, ok)
     g_pso_ple_finish = compile_stamp(metal_ple_finish_msl, ok)
@@ -4680,6 +4731,7 @@ def metal_decode_init : bool {   // nolint:STYLE038 — a flat compile_pso per k
     g_pso_attndx_q8 = compile_stamp(MetalSqAttnDXQ8_metal_sq_attn_d_msl, ok)
     g_pso_attndx_tq4 = compile_stamp(MetalSqAttnDXTq4_metal_sq_attn_d_msl, ok)
     g_pso_attncombd = compile_stamp(metal_sq_attn_comb_d_msl, ok)
+    g_pso_attncombd_xt = compile_stamp(metal_sq_attn_comb_d_xt_msl, ok)
     g_pso_rpstb16 = compile_stamp(MetalRopeStoreBF16_metal_rope_store_b_msl, ok)
     g_pso_rpstb32 = compile_stamp(MetalRopeStoreBF32_metal_rope_store_b_msl, ok)
     g_pso_rpstb_q8 = compile_stamp(metal_rope_store_b_q8_msl, ok)
@@ -6219,6 +6271,22 @@ def private enc_residual_table(enc : MetalComputeEncoder?; bx, ba, bw, by, byh, 
     }
 }
 
+//! the sandwich seam with no norm stored, in `form`: the rows form with the rows8 x table and sums beside it where `byt` is bound
+def private enc_residual_nonorm(enc : MetalComputeEncoder?; form : ResidualForm; bx, ba, bw : MetalBuffer?; var ka : GkAddRmsArgs; nrows : int64;
+                                wide : bool; byt, bys : MetalBuffer?) {
+    if (wide) {
+        enc_preadd_bw_c(enc, bx, ba, bw, ka, nrows)
+    } elif (byt != null && form == ResidualForm.rows) {
+        enc_preadd_bxt_c(enc, bx, ba, bw, byt, bys, ka, nrows)
+    } elif (form == ResidualForm.one_row) {
+        enc_preadd_c(enc, bx, ba, bw, ka)
+    } elif (form == ResidualForm.window) {
+        pf_enc_preadd_b_c(enc, bx, ba, bw, ka, nrows)
+    } else {
+        enc_preadd_b_c(enc, bx, ba, bw, ka, nrows)
+    }
+}
+
 //! the residual step's one dispatch in `form`: the plain step, the sandwich seam (`pre`), its no-norm form (`!out`), the f16 twin
 //! beside where `byh` is bound and the rows8 x table and sums beside it where `byt` is (the rows form alone); `wide` the decode
 //! rows' 1024-lane `w` builders, else 256 lanes
@@ -6232,15 +6300,7 @@ def enc_residual_fused(enc : MetalComputeEncoder?; form : ResidualForm; bx, ba, 
     let one = !wide && form == ResidualForm.one_row
     let win = !wide && form == ResidualForm.window
     if (!out) {
-        if (wide) {
-            enc_preadd_bw_c(enc, bx, ba, bw, ka, nrows)
-        } elif (one) {
-            enc_preadd_c(enc, bx, ba, bw, ka)
-        } elif (win) {
-            pf_enc_preadd_b_c(enc, bx, ba, bw, ka, nrows)
-        } else {
-            enc_preadd_b_c(enc, bx, ba, bw, ka, nrows)
-        }
+        enc_residual_nonorm(enc, form, bx, ba, bw, ka, nrows, wide, byt, bys)
     } elif (byh != null && byt != null) {
         enc_residual_table(enc, bx, ba, bw, by, byh, byt, bys, pre, ka, nrows, wide)
     } elif (pre) {
@@ -6661,6 +6721,7 @@ def metal_kernels_release {
         g_pso_kq_mvb2h_iq2xs, g_pso_kq_mvb4h_iq2xs, g_pso_kq_mvb8h_iq2xs, g_pso_kq_mvb2h_iq2xxs, g_pso_kq_mvb4h_iq2xxs, g_pso_kq_mvb8h_iq2xxs)
     release_handles(g_pso_addrms, g_pso_preaddrms, g_pso_preaddrms_hx, g_pso_preadd, g_one, g_zero, g_one_u)
     release_handles(g_pso_geglu, g_pso_geglu_hx, g_pso_rms_hxt, g_pso_addrms_hxt, g_pso_preaddrms_hxt, g_pso_swiglu_hxt, g_pso_geglu_hxt)
+    release_handles(g_pso_preadd_xt, g_pso_geglu_side_xt, g_pso_attncombd_xt, g_pso_dn_tape)
     release_handles(g_pso_geglu_side, g_pso_ple_proj_bf16, g_pso_ple_proj_bf16_one, g_pso_ple_finish, g_pso_f32_rows_one, g_pso_f32_rows_b)
     release_handles(g_pso_ple_proj_bf16_hw, g_pso_ple_proj_bf16_hw_one)
     release_handles(g_pso_ln, g_pso_bias_act, g_pso_act_rows, g_pso_posadd, g_pso_q3v_stem, g_pso_clamp, g_pso_clamp_copy)
@@ -7068,7 +7129,7 @@ class template MetalRmsNormT : MetalTgReduceBase {
                 yt[rows8_slot_at(row * dim + k)] = h
                 let s = simd_sum(float(h))
                 if (gl_SubgroupInvocationID == 0u) {
-                    ys[rows8_sum_at(k, row)] = s
+                    ys[rows8_sum_at(k, row, dim)] = s
                 }
             }
             k += gl_WorkGroupSize.x
@@ -15967,7 +16028,7 @@ class template MetalEw2T {
             let s = simd_sum(float(h))
             if (gl_SubgroupInvocationID == 0u) {
                 let row = gid / xw
-                ys[rows8_sum_at(gid - row * xw, row)] = s
+                ys[rows8_sum_at(gid - row * xw, row, xw)] = s
             }
         }
     }
@@ -16013,6 +16074,31 @@ class MetalGegluSide : GkPleAct {
     }
 }
 
+//! `GkPleAct`'s geglu with the acted rows' rows8 x table and token sums, the projection site's x (rows of `slen` columns,
+//! whole 32-blocks)
+[metal_dispatch(name = "enc_geglu_side_xt", pso = "g_pso_geglu_side_xt", tg = 64, grid = "total/64", params = "total : int64",
+                requires = "pa.slen % 32")]
+class MetalGegluSideXT : GkPleAct {
+    @ssbo @binding = 14 @role = "write" yt : array<float16>
+    @ssbo @binding = 15 @role = "write" ys : array<float>
+
+    [metal_kernel(name = "metal_geglu_side_xt_msl")]
+    def metal_geglu_side_xt {
+        let e = gl_GlobalInvocationID.x
+        act_elem(e)
+        let live = e < pa.nelem
+        let h = live ? float16(g[e]) : float16(0.0)
+        if (live) {
+            yt[rows8_slot_at(e)] = h
+        }
+        let s = simd_sum(float(h))
+        if (live && gl_SubgroupInvocationID == 0u) {
+            let row = e / pa.slen
+            ys[rows8_sum_at(e - row * pa.slen, row, pa.slen)] = s
+        }
+    }
+}
+
 [metal_dispatch(name = "enc_geglu_hxb", pso = "g_pso_geglu_hxb", tg = 64, grid = "total/64", params = "total : int64")]
 class MetalGegluHXB : MetalEw2T {
     override HX = true
@@ -16046,6 +16132,53 @@ class MetalGegluQuick : GkGeglu {
     [metal_kernel(name = "metal_geglu_quick_msl")]
     def metal_geglu_quick {
         geglu_body()
+    }
+}
+
+//! the recurrent tape's arguments: `ng` groups of `n` rows each, group g's rows g n .. g n + n - 1 of the stage planes
+struct DnTapeArgs {
+    cd : uint      //! a conv row's width
+    nvh : uint     //! a beta or alpha row's width
+    n : uint       //! rows a group
+    ng : uint
+    ba_rows : uint //! the beta and alpha rows share one plane, a group's block [beta rows ; alpha rows]
+}
+
+//! A recurrent layer's pre-scan operands of every group onto the verify's tape in one dispatch: group g's slot holds its conv
+//! rows, its qkv rows, its beta rows and its alpha rows, the layout the replay reads back (`encode_dn_replay`)
+[metal_dispatch(name = "enc_dn_tape", pso = "g_pso_dn_tape", tg = 256, grid = "total/256", params = "total : int64")]
+class MetalDnTape {
+    @ssbo @binding = 0 @role = "read" cv : array<float>
+    @ssbo @binding = 1 @role = "read" qkv : array<float>
+    @ssbo @binding = 2 @role = "read" bb : array<float>
+    @ssbo @binding = 3 @role = "read" ba : array<float>
+    @ssbo @binding = 4 @role = "write" @off = "toff" tape : array<float>
+    @uniform @binding = 5 ka : DnTapeArgs
+
+    [metal_kernel(name = "metal_dn_tape_msl")]
+    def metal_dn_tape {
+        let i = gl_GlobalInvocationID.x
+        let gcd = ka.n * ka.cd
+        let gnv = ka.n * ka.nvh
+        let slot = 2u * (gcd + gnv)   //! a group's tape elements
+        if (i < ka.ng * gcd) {
+            let g = i / gcd
+            let w = i - g * gcd
+            tape[g * slot + w] = cv[i]
+            tape[g * slot + gcd + w] = qkv[i]
+        }
+        if (i < ka.ng * gnv) {
+            let g = i / gnv
+            let w = i - g * gnv
+            let tb = g * slot + 2u * gcd
+            if (ka.ba_rows != 0u) {
+                tape[tb + w] = bb[g * 2u * gnv + w]
+                tape[tb + gnv + w] = bb[g * 2u * gnv + gnv + w]
+            } else {
+                tape[tb + w] = bb[i]
+                tape[tb + gnv + w] = ba[i]
+            }
+        }
     }
 }
 

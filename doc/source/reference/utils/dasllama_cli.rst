@@ -109,6 +109,8 @@ server's names; the config file fills whatever they leave empty (below).
      - The LLM GGUF: a path, or a file name under ``--models-dir``
    * - ``--quant`` / ``-q``
      - Weight serving mode: ``fp32`` | ``q8`` (default; the file-format spellings serve natively under ``q8``) | ``q4`` = the legacy requant tier
+   * - ``--drafter``
+     - DFlash / DFlash2 block drafter GGUF, a path or a file name under ``--models-dir``: the model speculates through it on the Metal home. A drafter the model refuses fails the command (the server drops it and serves plain)
    * - ``--kv-dtype``
      - KV cache codec: ``f32`` | ``f16`` (default) | ``q8_0`` | ``tq4`` (rotated 4-bit; needs a power-of-two head size); under ``--gpu vulkan`` the whole-model driver holds its cache in the same codec for ``f16``, ``q8_0`` and ``tq4``
    * - ``--gpu``
