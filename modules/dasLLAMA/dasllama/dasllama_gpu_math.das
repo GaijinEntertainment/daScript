@@ -313,7 +313,7 @@ let ACT_OAI = 2u    //! gpt-oss's clamped swiglu (`swiglu_oai`): the clamps and 
 def rows8_slot_at(i : uint) : uint => (i & 0xFFFFFFE0u) | (((i >> 2u) & 1u) << 4u) | (((i >> 3u) & 3u) << 2u) | (i & 3u)
 
 //! the rows8 token sums' index of column `col`'s 32-block in token row `row` ([blocks][8])
-def rows8_sum_at(col, row : uint) : uint => (col >> 5u) * 8u + row
+def rows8_sum_at(col, row, width : uint) : uint => ((row >> 3u) * (width >> 5u) + (col >> 5u)) * 8u + (row & 7u)
 
 //! the act kernels' `act` word from a model's flags
 def act_code(oai, gelu : bool) : uint => oai ? ACT_OAI : (gelu ? ACT_GELU : ACT_SILU)

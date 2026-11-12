@@ -139,7 +139,7 @@ the CPU lane, and every per-32 ladder names the member: the one-row GEMV, its K-
 GEMV, the two-, four- and eight-column small-batch stamps and their K-split twins (`B32_STAMP_FMTS`,
 `B32_GEMV_STEMS`, `B32_MVB_STEMS`, `B32_MOE_GEMV_STEMS`), the token-table gather, the simdgroup base mul_mm and its
 split-K stamp (`B32_MM_FORMS`), the dense tensor twins behind the member's `kq_mulmm_<member>` crown and its race
-(`race_kq_mulmm_b32`), the dev-W dequant pass, and the rows8 matrix-unit form at five to eight rows
+(`race_kq_mulmm_b32`), the dev-W dequant pass, and the rows8 matrix-unit form at three to eight rows
 (`ARCHITECTURE_GPU_MTP_DECODE_ROWS.md#rows8-affine`). Each form is its template's affine arm, selected by three
 template constants: `AFF` (codes verbatim, `scale * q + bias` off the block's 64-group pair - the halves at the
 group's even block, `blk & ~1`), `A8` (8-bit codes, eight words a block) or `A6` (6-bit codes, six words a block)
@@ -163,7 +163,7 @@ hc) with the gated mean - as stamps of the q8 one-row templates whose fill is th
 `MetalQ8GemvRsT`, `MetalGemvSgLoT` on `MetalQ8GemvT`, the affine fill under `AFF`): the per-32 family cannot carry q8, whose
 34-byte blocks are no whole words. Any other pair runs the staged chain - the grouped norm, the down site, silu(lo / hc), the up
 site, the gated stream mean - each site on its tag's own forms: the one-row GEMV (the down's K split, the up's wide stamp),
-the small-batch stamps at two to four rows, and the window's dense tile (`pf_enc_site_mm`). At five to eight rows a q8,
+the small-batch stamps at two rows, and the window's dense tile (`pf_enc_site_mm`). At three to eight rows a q8,
 mlx6b or mlx8b pair (`metal_hc_mix8_fmt`) takes the eight-row mixer's four dispatches, the down and up arms the rows8
 affine arms under `KSPL` and `HCMIX` (`ARCHITECTURE_GPU_MTP_DECODE_HC.md#metal-hc-mix8`). The n-gram key and value
 projections ride the same one-row, small-batch and window forms in their tags. `hc_planes_metal_unserved` declines a plane

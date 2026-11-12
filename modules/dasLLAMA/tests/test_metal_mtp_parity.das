@@ -309,11 +309,12 @@ def private count_cell(t : T?; tr, trg : Model; tag : string; count : array<int6
     var drafted = 0l
     var parked = 0l
     mtp_pos_reset()
-    var chained0, wide0 : int64   //! the das_metal half reads both counters before the run
+    var chained0, wide0, tiled0 : int64   //! the das_metal half reads the counters before the run
     static_if (typeinfo builtin_module_exists(das_metal)) {
         metal_kernel_coverage_reset()
         chained0 = metal_mtp_chained_rounds()
         wide0 = metal_kq_mvb_wide_count()
+        tiled0 = metal_rows8_tiled_sites()
     }
     var served = 0l
     with_metal_attn_d(true) $ {
@@ -330,10 +331,13 @@ def private count_cell(t : T?; tr, trg : Model; tag : string; count : array<int6
                 t |> equal(chained, chains ? drafted : 0l, "{tag} {kind} k1: every drafted round {chains ? "rode" : "kept off"} one command buffer (table {trg.emb_fmt}, {chained} chained of {drafted} rounds)")
             }
             if (depth == 8l) {
-                //! nine verify rows on a small-batch plane are one dispatch; a carrier with none dispatches none
+                //! nine verify rows are one dispatch a superblock plane: over two row tiles on the rows8 form where the box runs it
+                //! and the format takes it, else on the wide small-batch form; a carrier with no such plane dispatches no wide one
                 let kq = has_wide_rows_sites(tr)
-                to_log(LOG_INFO, "{tag} {kind} k8: {wide} K-quant dispatches past eight rows (small-batch rows sites: {kq})\n")
-                t |> success(kq ? wide > 0l : wide == 0l, "{tag} {kind} k8: the verify's nine rows rode one dispatch a small-batch site and none elsewhere ({wide} past-eight dispatches, small-batch sites {kq})")
+                let tiled = metal_rows8_tiled_sites() - tiled0
+                to_log(LOG_INFO, "{tag} {kind} k8: {wide} K-quant dispatches past eight rows, {tiled} sites over row tiles (small-batch rows sites: {kq}, the rows8 form on: {metal_rows8_on()})\n")
+                t |> success(kq ? wide + tiled > 0l : wide == 0l, "{tag} {kind} k8: the verify's nine rows rode one dispatch a superblock site - a tiled rows8 site or a wide small-batch one - and no wide one elsewhere ({wide} past-eight dispatches, {tiled} tiled sites, small-batch sites {kq})")
+                t |> success(metal_rows8_on() || tiled == 0l, "{tag} {kind} k8: no site took the row tiles on a box that does not run the rows8 form ({tiled} tiled sites)")
             }
         }
     }

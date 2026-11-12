@@ -40,6 +40,7 @@ require dasllama/dasllama_wav public           // mono f32 PCM to WAV / PCM16 by
 require dasllama/dasllama_tts public           // uniform TTS surface (KittenTTS, Kokoro, Pocket TTS): load_tts_model / synthesize / synthesize_stream / tts_register_voice
 require dasllama/dasllama_translate public     // the translation surface (Bergamot): load_translator / translate / translator_langs
 require dasllama/dasllama_config public        // the explicit .dlim bake configuration — the --config / identity contract
+require dasllama/dasllama_dflash               // the DFlash block drafter's attach (wrapped below, not re-exported)
 require dasllama/dasllama_math                 // engine-level knobs (wrapped below, not re-exported)
 require dasllama/dasllama_par                  // the single-thread gate of the dispatch macros (wrapped below, not re-exported)
 require dasllama/dasllama_gpu_tier             // GPU tier status + marks (wrapped below, not re-exported)
@@ -263,6 +264,32 @@ def generate(model : Model; var session : Session; prompt : array<int64>; params
     //! with ``(id, piece)``; return ``false`` from the block to stop early. Prefills the prompt in
     //! one ``eval``, then samples one token at a time; returns the number of tokens emitted.
     return generate_(model, session, prompt, params, max_tokens, blk)
+}
+
+def generate_drafted(model : Model; var session : Session; prompt : array<int64>; params : SamplingParams;
+                     max_tokens : int64; var stops : array<int64>; blk : block<(id : int64; piece : string) : bool>) : int64 {
+    //! ``generate`` over a model with a block drafter attached (``attach_block_drafter``): after every drawn id a round
+    //! evals it and hands the block the drafts the model's own verify accepts, so the stream is the model's own. A round
+    //! accepts nothing past an id in ``stops``, the ids the caller's block ends on. Returns the number of tokens emitted.
+    var stop_row = -1l
+    return generate_drafted_(model, session, prompt, params, max_tokens, stops, stop_row, blk)
+}
+
+def attach_block_drafter(model : Model; path : string) : string {
+    //! Attach the DFlash / DFlash2 block drafter GGUF at ``path`` to ``model``: "" where it attached, else why not
+    //! (logged). A scheduler created with ``mtp`` on then speculates through it, ``respond`` drafts its text turns,
+    //! and ``generate_drafted`` streams with it. One block drafter is attached a process: a second attach replaces it.
+    return attach_block_drafter_(model, path)
+}
+
+def detach_block_drafter() {
+    //! Detach the process's block drafter, if one is attached; plain decode serves.
+    detach_block_drafter_()
+}
+
+def block_drafter_attached(model : Model) : bool {
+    //! Whether a block drafter is attached to ``model``.
+    return block_drafter_attached_(model)
 }
 
 def generate_embd(model : Model; var session : Session; embd : array<float>; npos : int64;

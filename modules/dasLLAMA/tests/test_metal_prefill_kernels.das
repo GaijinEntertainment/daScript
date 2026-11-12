@@ -5779,24 +5779,25 @@ def private hc_mix_aff_gate(t : T?; var dev, queue; fdown, fup : KqFmt; nrows : 
         let fxt2 = mc |> out_words(8 * lr, float16(nan))
         let fxs2 = mc |> out_words(lr / 32 * 8, nan)
         let bu_kseg = mc |> in_plain([uint(dim / 64)])
+        let bu_t1 = mc |> in_plain([1u])
         var ka = Rows8HcMix(dim = uint(dim), hc = uint(hc), lr = uint(lr), rows = uint(nrows), eps = EPS)
         let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
             if (mix8) {
                 invoke(kpr.enc, enc, ppr, mc.buf[bres], mc.buf[bwn], mc.buf[bwi], mc.buf[fxt], mc.buf[fxs], mc.buf[finv], mc.buf[fip], ka, int64(hc), int64(nrows))
                 if (fdown == KqFmt.mlx6b) {
-                    invoke(kd6.enc, enc, pd6, mc.buf[bds], 0ul, mc.buf[bdq], 0ul, mc.buf[fxt], mc.buf[fpart], 0ul, mc.buf[fxs], mc.buf[bu_hcd], mc.buf[bu_lr], mc.buf[bu_kseg],
+                    invoke(kd6.enc, enc, pd6, mc.buf[bds], 0ul, mc.buf[bdq], 0ul, mc.buf[fxt], mc.buf[fpart], 0ul, mc.buf[fxs], mc.buf[bu_hcd], mc.buf[bu_lr], mc.buf[bu_kseg], mc.buf[bu_t1],
                         int64(lr), int64(hc * 8 * lr), int64(hc))
                 } else {
-                    invoke(kd8.enc, enc, pd8, mc.buf[bds], 0ul, mc.buf[bdq], 0ul, mc.buf[fxt], mc.buf[fpart], 0ul, mc.buf[fxs], mc.buf[bu_hcd], mc.buf[bu_lr], mc.buf[bu_kseg],
+                    invoke(kd8.enc, enc, pd8, mc.buf[bds], 0ul, mc.buf[bdq], 0ul, mc.buf[fxt], mc.buf[fpart], 0ul, mc.buf[fxs], mc.buf[bu_hcd], mc.buf[bu_lr], mc.buf[bu_kseg], mc.buf[bu_t1],
                         int64(lr), int64(hc * 8 * lr), int64(hc))
                 }
                 invoke(kfn.enc, enc, pfn, mc.buf[fpart], mc.buf[fip], mc.buf[binj], mc.buf[fxt2], mc.buf[fxs2], ka, int64(lr / 32))
                 if (fup == KqFmt.mlx6b) {
                     invoke(ku6.enc, enc, pu6, mc.buf[bus], 0ul, mc.buf[buq], 0ul, mc.buf[fxt2], mc.buf[by], 0ul, mc.buf[fxs2], mc.buf[bu_lr], mc.buf[bu_lr],
-                        mc.buf[bres], mc.buf[bwn], mc.buf[finv], ka, int64(dim), int64(nrows * dim))
+                        mc.buf[bres], mc.buf[bwn], mc.buf[finv], ka, mc.buf[bu_t1], int64(dim), int64(nrows * dim))
                 } else {
                     invoke(ku8.enc, enc, pu8, mc.buf[bus], 0ul, mc.buf[buq], 0ul, mc.buf[fxt2], mc.buf[by], 0ul, mc.buf[fxs2], mc.buf[bu_lr], mc.buf[bu_lr],
-                        mc.buf[bres], mc.buf[bwn], mc.buf[finv], ka, int64(dim), int64(nrows * dim))
+                        mc.buf[bres], mc.buf[bwn], mc.buf[finv], ka, mc.buf[bu_t1], int64(dim), int64(nrows * dim))
                 }
                 return
             }

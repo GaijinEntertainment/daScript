@@ -224,7 +224,7 @@ Each format's `stage16` takes one of three forms, inherited from that format's b
 Every format stamps the same forms - `T` (`XT = float`), `TH` (`XT = float16`), the `TH128`
 tall stamp (form 1), the double-buffered `THDb` / `THDb128` pair off the scaffold's one
 `metal_kq_mulmm_db` kernel, the split-K `THSk` / `TSk` / `THSk16` / `TSk16`, and the eight-row pair
-`T8` / `TSk8` (`MT = 8`: the rows sites' panel of five to eight rows, the tensor op at eight rows -
+`T8` / `TSk8` (`MT = 8`: the rows sites' panel of three to eight rows, the tensor op at eight rows -
 `ARCHITECTURE_GPU_MTP_DECODE_ROWS.md#kq-rows-crown`) - the per-32 stage (`MetalKqMulMmB32TensorT`)
 indexing its 32-blocks off `kdim`. Every stamp compiles only behind its own crown (`metal_tensor_crowned("kq_mulmm_<fmt>")`),
 `pf_enc_kq_dense_site` dispatches a twin only when both the crown flag and the PSO are live, and

@@ -300,6 +300,40 @@ def check_hx_narrow(t : T?; tag : string; bh, bf : MetalBuffer?; n, live : int) 
     return check_buf_h(t, tag, bh, wanth, BAR_EXACT, FLAT_SHAPE)
 }
 
+
+//! The rows8 x table and token sums a twin's `nrows` live rows of `width` (whole 32-blocks) make, in the prep's own slot law: slot
+//! 4 kq + i of a 32-block from physical 8 kq + i, slot 16 + 4 kq + i from 8 kq + 4 + i; each block's sum of its halves; the rows
+//! past `nrows` of the eight the sentinels
+struct Rows8Table {
+    xt : array<float>   //! [8][width] halves widened, in k-slot order
+    xs : array<float>   //! [width / 32][8]
+}
+
+def rows8_table_of(h : array<float16>; nrows, width : int; tsent, ssent : float) : Rows8Table {
+    var out : Rows8Table
+    out.xt |> resize(8 * width)
+    out.xs |> resize(width / 32 * 8)
+    for (r in range(8)) {
+        for (b in range(width / 32)) {
+            var sum = 0.0lf
+            for (s in range(32)) {
+                let kq = (s & 15) >> 2
+                let i = s & 3
+                let phys = s < 16 ? 8 * kq + i : 8 * kq + 4 + i
+                let at = r * width + b * 32
+                if (r < nrows) {
+                    out.xt[at + s] = float(h[at + phys])
+                    sum += double(float(h[at + phys]))
+                } else {
+                    out.xt[at + s] = tsent
+                }
+            }
+            out.xs[b * 8 + r] = r < nrows ? float(sum) : ssent
+        }
+    }
+    return <- out
+}
+
 //! `check_exact` over the first length(want) elements of `buf`, read as `want`'s type
 def check_buf_exact(t : T?; tag : string; buf : MetalBuffer?; want : array<auto(TT)>) : int {
     var inscope got <- buf_download(buf, length(want), type<TT>)

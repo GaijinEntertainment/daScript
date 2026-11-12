@@ -80,6 +80,11 @@ let private CENSUS_NEVER_DISPATCHED <- [
     // the sampled chain's draw over the landing rides a sampled single-row stream (the zoo steps greedy); its coverage is
     // sel_draw_gate in test_metal_misc_kernels.das and arm15 in test_metal_decode_parity.das
     "metal_sel_draw",
+    // the verify seat's tape kernel rides a joint verify of a hybrid's groups (Qwen3.8-27B under a block drafter), and the
+    // per-layer-embedding residual's and side geglu's table stamps a gemma-4 E-series step of three rows or more (E2B); the
+    // zoo's rows run no verify and no E-series batch. Their coverage is dn_tape_gate in test_metal_misc_kernels.das and
+    // rows8_table_inplace_gate in test_metal_gemm_kernels.das
+    "metal_dn_tape", "metal_pre_add_xt", "metal_geglu_side_xt",
     // the MoE expert mul_mm tall M-tile pair (128-row floor + remainder) in q5_K: the zoo
     // stocks no Q5_K MoE carrier, where every other format's pair rides a census row's
     // window. Its coverage is the tall-pair kernel-unit gate in test_metal_gemm_kernels.das

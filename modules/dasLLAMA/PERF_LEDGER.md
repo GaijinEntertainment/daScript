@@ -10,6 +10,42 @@ and coverage; this ledger is the backlog for the perf pass that follows them. Ev
 what it costs today and what the fix would change.
 
 ## Entries
+- **MEASURED (2026-11-12, `direction-grade`) - the block drafter under the scheduler and the plain batched step past
+  eight rows (the M5 Max under High Power, each run gated on the fans at idle; an M1 Max for the row-forms box).**
+  `harness/dflash_sched_probe.das -- -m <trunk> -r <drafter> --prompts <four chat questions> --streams N --steps 256`
+  (128 past eight streams), greedy, thinking off, the decode rate from the first decode tick, plain against drafting in
+  one process; `-jit`, the box's tuned profile (`DAS_TUNE_MANIFEST`, `DAS_TUNE_POLICY` unset), the Metal home, one run a
+  cell (no spread: a figure here ranks forms, it is no board row). Drafting at 1 / 2 / 3 / 4 streams against plain, tok/s total: gemma-4 E2B Q8_0 + DFlash2 228 / 340 /
+  stand-down against 162 / 269 / 357 / 466; gemma-4-26B-A4B Q4_K_M + DFlash (no selector, three drafts a round) 161 / 225
+  / stand-down against 121 / 177 / 217 / 256, the same prompt's walk llama.cpp b12286's round for round (87 rounds, 169
+  accepted); Qwen3.6-35B-A3B IQ4_XS + DFlash2 248 / 286 / stand-down against 202 / 221 / 315 / 370; Qwen3.8-Flash-Next
+  IQ4_XS + DFlash2 151 / 154 / 162 / 161 against 81 / 103 / 136 / 150; Qwen3.8-27B Q4_K_M + DFlash2 87 / 94 / 109 / 116
+  against 29 / 49 / 70 / 82. A joint round takes a row tile of eight for every two streams: a second tile for two streams
+  lost on every trunk (the 35B 235 against 283, E2B 292 against 338), and a 32-row verify lost on the 27B (56, 85 and 106 ms
+  at two, three and four tiles: the matrix-unit product is about 22 ms a tile there, the weight read shared). The plain
+  batched step past eight rows on row tiles against the per-row-group tier it replaced: the 27B 161 / 191 / 193 at 12 /
+  16 / 32 streams against 66 / 78 at 12 / 16 (164 at eight either way), the 35B 626 / 686 against 427 / 450 at 12 / 16
+  (596 at eight), the Flash-Next 239 / 268 against 169 / 171 (251 at eight), E2B 1254 / 1444 at 16 / 32 against 889 at
+  16 (849 at eight). The eight-row forms from three rows (`DASLLAMA_METAL_ROWS8_MIN`) against five: a four-row verify
+  runs the 35B at 231 against 172, the Flash-Next at 132 against 94, the 27B at 66 against 57, and a plain batch of three
+  and four streams runs the 35B at 315 and 370 against 261 and 298; from two rows the E2B and 26B plain batches of two
+  lose a tenth. On the M1 Max (no matrix-unit form; its worktree's own mint) E2B's rounds lose at seven drafts (70
+  against 97 tok/s at one stream, 114 against 147 at two) and pay at three drafts for one stream (104 against 97), so
+  off the form a round drafts three for one stream and stands down past it. A drafted stream parts from its plain walk
+  on some prompts past 200 ids on the hybrids (the 27B at id 219 or 224, the 35B at 233 or 97, by stream count) with the
+  tensor and matrix-unit forms on or off, and holds at three and four streams over the same positions: a verify row's
+  form against the single-row step's at a near tie, unmeasured as a margin. One rows8 stamp a format reads the row-tile
+  count, the eight-row site its one-tile dispatch: against stamps with no tile count E2B reads 162 / 269 / 357 / 468
+  plain and 228 / 339 drafting, the 27B 29 / 49 / 69 / 91 and 90 / 93 / 115 / 125 - the figures above. At nine
+  streams, the tiles' low end, against the matrix-unit form off (`DASLLAMA_METAL_ROWS_MT=0`, the per-row-group tier): E2B
+  790 against 537, the 27B 133 against 52 - a ninth stream opens a second tile, so nine total less than eight. The
+  compares: drafted against plain is the driver against itself (both walks on the Metal home, the steps counted on the
+  device), the 26B's round count against llama.cpp b12286 an external reference. The legs with a knob ran it on one
+  build - `DASLLAMA_METAL_ROWS8_MIN=5` for the five-row floor, `DASLLAMA_METAL_ROWS_MT=0` for the form off,
+  `--depth` for a pinned depth; the second tile for two streams, the 32-row verify and the per-row-group tier at 12 and 16
+  streams ran on builds of this change's branch that the tree does not keep. The 26B's prompt captures hold a new bar,
+  0.05 relative on a captured layer's summed magnitudes against the CPU route's (`CAPTURE_REL`,
+  `tests/test_dflash_drafter.das`: reads 3.2% at the deepest layers, a prompt one token short 7% and up).
 - **MEASURED (2026-11-11, the reference box: Threadripper 3990X, 64 lanes, Windows, `-jit`, `DAS_TUNE_POLICY` unset, the
   CPU alone, the box idle; `direction-grade`) - the Russian stress-context model: its files and its pass's lanes.** The
   files: `ru-stress-rubert-base-q4.gguf` 120,484,448 bytes (Q4_K layers, a Q8_0 word table), its f32 twin

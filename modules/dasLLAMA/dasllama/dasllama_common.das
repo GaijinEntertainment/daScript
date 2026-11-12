@@ -688,10 +688,57 @@ def private mtp_block_land(var s : Session) {
 }
 
 //! the rows of positions `pos0 ..` the forward committed reach the block drafter's context
-def private mtp_block_commit(t : Model; var s : Session; pos0, rows : int64) {
+def mtp_block_commit(t : Model; var s : Session; pos0, rows : int64) {
     if (g_mtp_block_set && invoke(g_mtp_block.attached, t)) {
         invoke(g_mtp_block.commit, s, pos0, rows)
     }
+}
+
+//! the block drafter's drafts from the anchor `tok` at `pos`, landed into `s.mtp_vbatch[1 ..]`: their count, 0 = the round
+//! steps plain (`MtpBlockSeams.draft`, then its `land`: a joint round's verify reads every stream's ids on the host)
+def mtp_block_draft_landed(t : Model; var s : Session; tok, pos, k : int64) : int64 {
+    let n = invoke(g_mtp_block.draft, t, s, tok, pos, k)
+    invoke(g_mtp_block.land, s)
+    return n
+}
+
+//! A GPU home's joint round of the block drafter: `serves` = its joint verify takes the trunk; `seat_serves` = its
+//! single-stream verify seat takes the trunk's shape and the session's codec; `rounds` = a tick's streams each draft their
+//! block and one verify carries every warm stream's rows - `MtpAssistantSeams.rounds`'s contract at depth `k`
+struct MtpBlockRoundSeams {
+    serves : function<(t : Model) : bool>
+    seat_serves : function<(t : Model; s : Session) : bool>
+    rounds : function<(t : Model; var sessions : array<Session?>; toks : array<int64>; k : int64; var acc : array<int64>) : int64>
+}
+var private g_mtp_block_rounds : table<string; MtpBlockRoundSeams>
+
+def register_mtp_block_rounds(name : string; seams : MtpBlockRoundSeams) {
+    g_mtp_block_rounds[name] = seams
+}
+
+//! the active home registered a block drafter's joint round
+def private mtp_block_rounds_home() : bool => !empty(g_decode_override_name) && key_exists(g_mtp_block_rounds, g_decode_override_name)
+
+//! the active home's single-stream verify seat takes a block drafter's round on `t` for `s` (a home with no word says yes)
+def private mtp_block_seat_serves(t : Model; s : Session) : bool
+    => !mtp_block_rounds_home() || invoke(g_mtp_block_rounds[g_decode_override_name].seat_serves, t, s)
+
+//! the block drafter's round of `sessions` runs on the active home's joint verify: the home serves `t` there, and its seat
+//! declines the trunk or the tick carries several streams
+def private mtp_block_joint(t : Model; sessions : array<Session?>) : bool
+    => mtp_block_attached(t) && mtp_block_joint_attached(t, sessions)
+
+//! ... of a `t` with its block drafter attached
+def private mtp_block_joint_attached(t : Model; sessions : array<Session?>) : bool {
+    return false if (!mtp_block_rounds_home())
+    let seams & = unsafe(g_mtp_block_rounds[g_decode_override_name])   // nolint:PERF026 — key_exists guards the index
+    return invoke(seams.serves, t) && (long_length(sessions) > 1l || !invoke(seams.seat_serves, t, *sessions[0]))
+}
+
+//! the block drafter's round depth at the asked `k`: the drafter's whole block unless a depth is set
+def private mtp_block_depth(k : int64) : int64 {
+    let k_ask = clamp(k, 1l, MTP_MAX_ROWS - 1l)
+    return g_mtp_depth_explicit ? min(g_mtp_block.drafts, k_ask) : min(g_mtp_block.drafts, MTP_MAX_ROWS - 1l)
 }
 
 //! whether the MTP seats registered under a decode override's name serve model `t`: the override that owns `t`'s
@@ -1128,6 +1175,23 @@ def mtp_round_gather(var g : MtpRoundGather; var sessions : array<Session?>; tok
     return long_length(g.sessions)
 }
 
+//! a gather's verify rows into `toks`, a group's [token, drafts] after a group's; returns the rows
+def mtp_round_rows(g : MtpRoundGather; var toks : array<int64>) : int64 {
+    var rows = 0l
+    for (nr in g.nr) {
+        rows += nr
+    }
+    toks |> resize(rows)   // nolint:PERF026,LINT019 — fires from the [hot_path] rounds' compiles; grows to the round's rows once, the callers pass reused scratch
+    var row = 0l
+    for (gi in range64(long_length(g.nr))) {
+        for (i in range64(g.nr[gi])) {
+            toks[row] = g.sessions[gi].mtp_vbatch[i]
+            row++
+        }
+    }
+    return rows
+}
+
 let MTP_COLD_PAST_CONTEXT = "the round would run past the context"   //! the one cold reason that is the work's size
 
 //! why neither home drafts the round ("" where it can): nothing evaled yet (the zero-init `mtp_h_pos1` sentinel collides with
@@ -1245,23 +1309,31 @@ def private mtp_assistant_rounds(t : Model; var sessions : array<Session?>; toks
     return invoke(g_mtp_assistants[be].rounds, t, sessions, toks, k, acc)   // nolint:PERF026 — the backend was found in the table
 }
 
-//! `t` can run a speculative round: a NextN head of its own, or an assistant drafter attached.
+//! `t` can run a speculative round: a NextN head of its own, an assistant drafter attached, or a block drafter attached.
 def mtp_capable_(t : Model) : bool
-    => t.config.n_layer_nextn > 0l || mtp_assistant_attached(t)
+    => t.config.n_layer_nextn > 0l || mtp_assistant_attached(t) || mtp_block_attached(t)
 
 //! One speculative round at the configured depth (get_mtp_depth): commits `tok`, returns the
 //! accepted draft count a with the accepted drafts in s.mtp_vbatch[1..a]: the k-deep round (`mtp_spec_round_k`) on the active decode
 //! override's seats where it owns `t` (`mtp_seats_own`), else on the CPU's.
 [hot_path]   // the per-round entry a greedy walk re-enters once per committed token
 def mtp_spec_round(t : Model; var s : Session; tok : int64) : int64 {
-    if (mtp_assistant_attached(t)) {
+    let assistant = mtp_assistant_attached(t)
+    if (assistant || mtp_block_attached(t)) {   //! a drafter's rounds seam takes a tick's streams: this one as a tick of one
         g_round1_s |> resize(1)
         g_round1_s[0] = unsafe(addr(s))
         g_round1_tok |> resize(1)
         g_round1_tok[0] = tok
-        mtp_assistant_rounds(t, g_round1_s, g_round1_tok, get_mtp_depth(), g_round1_acc)
+        var ran = true
+        if (assistant) {
+            mtp_assistant_rounds(t, g_round1_s, g_round1_tok, get_mtp_depth(), g_round1_acc)
+        } elif (mtp_block_joint_attached(t, g_round1_s)) {
+            invoke(g_mtp_block_rounds[g_decode_override_name].rounds, t, g_round1_s, g_round1_tok, mtp_block_depth(get_mtp_depth()), g_round1_acc)   // nolint:PERF026 — mtp_block_joint_attached holds key_exists
+        } else {
+            ran = false
+        }
         g_round1_s[0] = null   // borrowed
-        return g_round1_acc[0]
+        return g_round1_acc[0] if (ran)
     }
     return mtp_spec_round_k(t, s, tok, get_mtp_depth())
 }
@@ -6816,6 +6888,9 @@ def mtp_spec_eval_batch(t : Model; var sessions : array<Session?>; toks : array<
     if (mtp_assistant_attached(t)) {
         return mtp_assistant_rounds(t, sessions, toks, get_mtp_depth(), accepted)
     }
+    if (n > 0l && mtp_block_joint(t, sessions)) {
+        return invoke(g_mtp_block_rounds[g_decode_override_name].rounds, t, sessions, toks, mtp_block_depth(get_mtp_depth()), accepted)   // nolint:PERF026 — mtp_block_joint holds key_exists
+    }
     accepted |> resize(n)   // nolint:PERF026 — the caller's reused per-stream row: it grows to the stream count once and keeps its capacity
     let k = get_mtp_depth()
     for (i in range64(n)) {
@@ -6823,6 +6898,15 @@ def mtp_spec_eval_batch(t : Model; var sessions : array<Session?>; toks : array<
     }
     return 0l
 }
+
+//! one stream's `n` rows (`mtp_vbatch[0 .. n)`) at `pos` on the active home's verify seat, for a joint round whose joint verify
+//! declined: its rows' logits and picks landed as the round's own verify lands them
+def mtp_block_verify_alone(t : Model; var s : Session; n, pos : int64) : bool
+    => mtp_verify_rows(t, s, mtp_seated(t, g_mtp_verify_overrides), n, pos, false)
+
+//! ... and that verify's reject after `a` accepted drafts
+def mtp_block_rollback_alone(t : Model; var s : Session; pos, a : int64) : bool
+    => t.config.recr_mask == 0ul || mtp_rollback_served(t, s, pos, a)
 
 //! A round's depth for `s`: the round's `k` under the session's cap (`Session.mtp_depth_cap`, 0 = none)
 def mtp_depth_for(s : Session; k : int64) : int64 => s.mtp_depth_cap > 0l ? min(k, s.mtp_depth_cap) : k
@@ -7062,6 +7146,11 @@ def mtp_spec_round_k(t : Model; var s : Session; tok : int64; k_req : int64) : i
     }
     let pos = s.n_past
     mtp_round_begin(s)
+    if (blockd && seated && !mtp_block_seat_serves(t, s)) {   //! the seat declines the trunk's shape and no joint verify took the round
+        forward(t, s, tok, pos)
+        s.n_past = pos + 1l
+        return 0l
+    }
     if (blockd) {
         mtp_block_prepare(s, c)
     } elif (c.n_layer_nextn <= 0l || mtp_round_cold_host(t, s, pos, k, mtp_h_dim(c)) || !empty(mtp_round_cold_seat(t, s, pos, k))) {
@@ -7137,7 +7226,7 @@ def mtp_spec_round_k(t : Model; var s : Session; tok : int64; k_req : int64) : i
 
 //! a block drafter's round on a trunk with no NextN head: the rows the verify and the reject land - the committed row's
 //! carry, the draft head's seed, row 0's logits - sized once, as a NextN session sizes them at its start
-def private mtp_block_prepare(var s : Session; c : Config) {
+def mtp_block_prepare(var s : Session; c : Config) {
     let hd = mtp_h_dim(c)
     if (long_length(s.mtp_h) < hd) {
         s.mtp_h |> reserve_resize(hd)   // nolint:PERF026,LINT019 — once per session

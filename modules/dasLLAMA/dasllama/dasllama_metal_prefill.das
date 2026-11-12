@@ -212,7 +212,7 @@ class MetalQ8MulMmTSk16 : MetalQ8MulMmTensorT {
     override MT = 16u
 }
 
-//! the eight-row stamps: a verify's or a batch step's panel of five to eight rows on the tensor op at eight rows - W streamed
+//! the eight-row stamps: a verify's or a batch step's panel of three to eight rows on the tensor op at eight rows - W streamed
 //! once for the panel, where the fixed-B GEMV ladder streams it twice; split along K under the knee, whole past it
 [metal_dispatch(name = "enc_gemm_mm_tsk8_c", pso = "g_pf_pso_mm_tsk8", tgmem = "MetalQ8MulMmTSk8_metal_q8_mulmm_t_msl_tgmem", tg = 128, grid = "mp/8, d/32, nsk", params = "mp : int64, d : int64, nsk : int64", requires = "mp % 8, d % 32")]
 class MetalQ8MulMmTSk8 : MetalQ8MulMmTensorT {
@@ -925,7 +925,7 @@ class MetalKqMulMmK4TH : MetalKqMulMmK45TensorT {
     typedef XT = float16
 }
 
-//! the eight-row stamps: a verify's or a batch step's panel of five to eight rows on the tensor op at eight rows - W decoded once
+//! the eight-row stamps: a verify's or a batch step's panel of three to eight rows on the tensor op at eight rows - W decoded once
 //! for the panel, where the row forms decode it once a column
 [metal_dispatch(stamp = "kq_mm:k4:t8", kernel = "metal_kq_mulmm_t", pso = "g_pf_pso_kq_mm4_t8", requires = "mp % 8, rows % 64")]
 class MetalKqMulMmK4T8 : MetalKqMulMmK45TensorT {
@@ -9220,34 +9220,36 @@ def rows8_k4_mn8(z, w : uint) : uint2 => uint2(z & 0x3F3F3F3Fu, ((w >> 4u) & 0x0
 //! byte `s` of the eight packed in the (low four, high four) pair
 def rows8_byte8(p : uint2; s : uint) : uint => ((s < 4u ? p.x : p.y) >> (8u * (s & 3u))) & 0xFFu
 
-//! The x table and the token sums a rows8 site reads: the f32 panel [8][kdim] (row stride kdim) as halves in the products'
-//! k-slot order - slot 4 kq + i of a 32-block at physical 8 kq + i, slot 16 + 4 kq + i at 8 kq + 4 + i, so a lane's eight codes
-//! of a row are eight contiguous bytes - and each token row's sum over every 32-block. One thread a (block, token).
+//! The x table and token sums a rows8 site reads off the f32 panel [nrow][kdim], whole tiles of eight rows: its halves in the
+//! products' k-slot order (slot 4 kq + i of a 32-block at physical 8 kq + i, slot 16 + 4 kq + i at 8 kq + 4 + i) and each token
+//! row's sum over every 32-block, a tile's after the tile before's. One thread a (tile, block, token)
 [metal_dispatch(name = "enc_rows8_prep_c", pso = "g_pf_pso_rows8_prep", tg = 256, grid = "items/256", params = "items : int64")]
 class MetalRows8Prep {
     @ssbo @binding = 0 @role = "read" @off = "xoff" xf : array<float>
     @ssbo @binding = 1 @role = "write" xt : array<float16>
     @ssbo @binding = 2 @role = "write" xs : array<float>
     @uniform @binding = 3 kdim : uint
+    @uniform @binding = 4 nrow : uint
 
     [metal_kernel]
     def metal_rows8_prep {
         let gid = gl_GlobalInvocationID.x
         let nb = kdim / 32u
-        if (gid < nb * 8u) {
-            let blk = gid >> 3u
-            let t = gid & 7u
+        if (gid < nb * nrow) {
+            let blk = (gid >> 3u) % nb
+            let t = (gid / (nb * 8u)) * 8u + (gid & 7u)
             let row = t * kdim + blk * 32u
+            let xr = unsafe(addr(xf[row]))
             var sum = 0.0
             for [unroll_full] (slot in range(32)) {
                 let kq = uint(slot & 15) >> 2u
                 let i = uint(slot & 3)
                 let phys = slot < 16 ? 8u * kq + i : 8u * kq + 4u + i
-                let v = float16(xf[row + phys])
+                let v = float16(unsafe(xr[phys]))
                 xt[row + uint(slot)] = v
                 sum += float(v)
             }
-            xs[blk * 8u + t] = sum
+            xs[(gid >> 3u) * 8u + (gid & 7u)] = sum
         }
     }
 }
@@ -9310,6 +9312,7 @@ class template MetalRows8T {
     @uniform @binding = 6 ndim : uint   //!< y's row stride
     @uniform @binding = 14 @template_gate = KSPL kseg : uint   //!< the K split's blocks a segment
     @template_constant KSPL : bool = false   //!< the K split: the grid's y the segment, its `kseg` blocks, its partial rows at [segment][token]
+    @uniform @binding = 19 ntile : uint   //!< the token-row tiles of eight the panel holds: the grid's x is weight tile * ntile + row tile, so a weight tile's row tiles run side by side and its weights stream once; row tile t reads the x table and sums of rows 8 t .. 8 t + 7 and writes those rows
     @ssbo @binding = 15 @role = "read" @template_gate = HCMIX hres : array<float>   //!< the mixer's wide rows [token][hc][dim]
     @ssbo @binding = 16 @role = "read" @template_gate = HCMIX hwn : array<float>    //!< the site's gamma rows [hc][dim]
     @ssbo @binding = 17 @role = "read" @template_gate = HCMIX hinv : array<float>   //!< the inverse norms [token][hc]
@@ -9513,21 +9516,24 @@ class template MetalRows8T {
 
     //! the token sums a product's epilogue reads, the lane's four tokens: the two 32-blocks of k4's sub-block pair and of an
     //! affine member's group, q8's block in `s0`; k6 reads none
-    def sums(b, tq : uint; var s0, s1 : float4&) {
+    def sums(b, tq, sb : uint; var s0, s1 : float4&) {
         static_if (K4F) {
-            s0 = xs4[b * 4u + (tq >> 2u)]
-            s1 = xs4[b * 4u + 2u + (tq >> 2u)]
+            s0 = xs4[sb + b * 4u + (tq >> 2u)]
+            s1 = xs4[sb + b * 4u + 2u + (tq >> 2u)]
         } else {
             static_if (Q8F) {
-                s0 = xs4[b * 2u + (tq >> 2u)]
+                s0 = xs4[sb + b * 2u + (tq >> 2u)]
             } else {
                 static_if (AFF) {
-                    s0 = xs4[b * 4u + (tq >> 2u)]
-                    s1 = xs4[b * 4u + 2u + (tq >> 2u)]
+                    s0 = xs4[sb + b * 4u + (tq >> 2u)]
+                    s1 = xs4[sb + b * 4u + 2u + (tq >> 2u)]
                 }
             }
         }
     }
+
+    //! the threadgroup's weight tile in x and its row tile in y
+    def tiles_of : uint2 => uint2(gl_WorkGroupID.x / ntile, gl_WorkGroupID.x % ntile)
 
     //! the scale law: the product's element `dot` into `y` under the block's scale words `sw` and factors `f`, block `b`, load `l`,
     //! product `g`, the token's sums - k4 d (dot - 1024 sum_x) - dmin (mn_0 sum_0 + mn_1 sum_1) over the block's sub-block pair
@@ -9579,16 +9585,20 @@ class template MetalRows8T {
         let m0 = rows8_m0(lane)
         let kq = rows8_kq(lane)
         let pad = rows8_pad(lane)
-        let tile = gl_WorkGroupID.x
+        let wt = tiles_of()
+        let tile = wt.x
+        let rt = wt.y
+        let xbase = rt * 8u * kdim                 //! the row tile's x table
+        let sbase = rt * (kdim / 32u) * 2u         //! ... and its token sums, two float4 a 32-block
         let seg = seg_of()
         let off = uint3(0u)
         let ra = HCMIX ? (ks >> 1u) * hc_dim() + tile * 16u + m0 : tile * 16u + m0
         let rb = ra + 8u
         var acc : float[128]
         static_if (SPL) {
-            tmm2d_rx_begin_i8(acc, unsafe(addr(xt[0])), kdim, 16u, 8u, DEPTH)
+            tmm2d_rx_begin_i8(acc, unsafe(addr(xt[xbase])), kdim, 16u, 8u, DEPTH)
         } else {
-            tmm2d_rx_begin(acc, unsafe(addr(xt[0])), kdim, 16u, 8u, DEPTH)
+            tmm2d_rx_begin(acc, unsafe(addr(xt[xbase])), kdim, 16u, 8u, DEPTH)
         }
         var y8 : float[8]
         let tq = pad ? 0u : 4u * kq
@@ -9661,7 +9671,7 @@ class template MetalRows8T {
                     }
                     tmm2d_rx_run(acc, k_at(b, l, g))
                     var s0v, s1v : float4
-                    sums(b, tq, s0v, s1v)
+                    sums(b, tq, sbase, s0v, s1v)
                     for [unroll_full] (i in range(4)) {
                         epilogue(tmm2d_rx_dest(acc, uint(i)), y8[i], swa, fa, b, l, g, s0v[i], s1v[i])
                         epilogue(tmm2d_rx_dest(acc, 4u + uint(i)), y8[4 + i], swb, fb, b, l, g, s0v[i], s1v[i])
@@ -9689,7 +9699,7 @@ class template MetalRows8T {
             static_if (KSPL) {
                 yk[(seg * 8u + t) * ndim + row] = s
             } else {
-                yk[t * ndim + row] = s
+                yk[(rt * 8u + t) * ndim + row] = s
             }
         }
     }
@@ -9697,16 +9707,16 @@ class template MetalRows8T {
 
 //! the k4 arm: one 16 x 8 x 64 product a superblock quarter, the left operand the exact halves 1024 + q sc (sc the sub-block's
 //! 6-bit scale) off the lane's 8-byte run
-[metal_dispatch(name = "enc_rows8_k4_c", pso = "g_pf_pso_rows8_k4", tgmem = "MetalRows8K4_metal_rows8_msl_tgmem", tg = 256, grid = "rows/16",
-                params = "rows : int64, reach : int64", requires = "rows % 16")]
+[metal_dispatch(name = "enc_rows8_k4_c", pso = "g_pf_pso_rows8_k4", tgmem = "MetalRows8K4_metal_rows8_msl_tgmem", tg = 256, grid = "ntg",
+                params = "rows : int64, reach : int64, ntg : int64", requires = "rows % 16")]
 class MetalRows8K4 : MetalRows8T {
     override K4F = true
     override U2 = true
 }
 
 //! the q8 arm: 34-byte blocks (f16 d, 32 int8) a 32-element product, the codes entering as the exact halves 1024 + (q + 128)
-[metal_dispatch(name = "enc_rows8_q8_c", pso = "g_pf_pso_rows8_q8", tgmem = "MetalRows8Q8_metal_rows8_msl_tgmem", tg = 256, grid = "rows/16",
-                params = "rows : int64, reach : int64", requires = "rows % 16")]
+[metal_dispatch(name = "enc_rows8_q8_c", pso = "g_pf_pso_rows8_q8", tgmem = "MetalRows8Q8_metal_rows8_msl_tgmem", tg = 256, grid = "ntg",
+                params = "rows : int64, reach : int64, ntg : int64", requires = "rows % 16")]
 class MetalRows8Q8 : MetalRows8T {
     override Q8F = true
     override BLOCK = 32u
@@ -9895,8 +9905,8 @@ class MetalHcFin8 {
 
 //! the k6 arm: one 16 x 8 x 16 product a scale block, eight a superblock half, the left operand the exact int8 codes q - 32, the right
 //! the panel's halves in natural order
-[metal_dispatch(name = "enc_rows8_k6_c", pso = "g_pf_pso_rows8_k6", tgmem = "MetalRows8K6_metal_rows8_msl_tgmem", tg = 256, grid = "rows/16",
-                params = "rows : int64, reach : int64", requires = "rows % 16")]
+[metal_dispatch(name = "enc_rows8_k6_c", pso = "g_pf_pso_rows8_k6", tgmem = "MetalRows8K6_metal_rows8_msl_tgmem", tg = 256, grid = "ntg",
+                params = "rows : int64, reach : int64, ntg : int64", requires = "rows % 16")]
 class MetalRows8K6 : MetalRows8T {
     override K6F = true
     override SPL = true
@@ -9908,8 +9918,8 @@ class MetalRows8K6 : MetalRows8T {
 
 //! the iq4xs arm: one 16 x 8 x 32 product a sub-block, the left operand the codes' exact int8 kvalues, the right the panel's halves
 //! in natural order, the sub-block's signed scale in the epilogue
-[metal_dispatch(name = "enc_rows8_iq4xs_c", pso = "g_pf_pso_rows8_iq4xs", tgmem = "MetalRows8Iq4xs_metal_rows8_msl_tgmem", tg = 256, grid = "rows/16",
-                params = "rows : int64, reach : int64", requires = "rows % 16")]
+[metal_dispatch(name = "enc_rows8_iq4xs_c", pso = "g_pf_pso_rows8_iq4xs", tgmem = "MetalRows8Iq4xs_metal_rows8_msl_tgmem", tg = 256, grid = "ntg",
+                params = "rows : int64, reach : int64, ntg : int64", requires = "rows % 16")]
 class MetalRows8Iq4xs : MetalRows8T {
     override IQ4F = true
     override SPL = true
@@ -9918,31 +9928,31 @@ class MetalRows8Iq4xs : MetalRows8T {
 }
 
 //! the affine arms: one 16 x 8 x 64 product a 64-group, the left operand each code's exact half
-[metal_dispatch(name = "enc_rows8_mlx4_c", pso = "g_pf_pso_rows8_mlx4", tgmem = "MetalRows8Mlx4_metal_rows8_msl_tgmem", tg = 256, grid = "rows/16",
-                params = "rows : int64, reach : int64", requires = "rows % 16")]
+[metal_dispatch(name = "enc_rows8_mlx4_c", pso = "g_pf_pso_rows8_mlx4", tgmem = "MetalRows8Mlx4_metal_rows8_msl_tgmem", tg = 256, grid = "ntg",
+                params = "rows : int64, reach : int64, ntg : int64", requires = "rows % 16")]
 class MetalRows8Mlx4 : MetalRows8T {
     override AFF = true
     override U1 = true
 }
 
-[metal_dispatch(name = "enc_rows8_mlx8_c", pso = "g_pf_pso_rows8_mlx8", tgmem = "MetalRows8Mlx8_metal_rows8_msl_tgmem", tg = 256, grid = "rows/16",
-                params = "rows : int64, reach : int64", requires = "rows % 16")]
+[metal_dispatch(name = "enc_rows8_mlx8_c", pso = "g_pf_pso_rows8_mlx8", tgmem = "MetalRows8Mlx8_metal_rows8_msl_tgmem", tg = 256, grid = "ntg",
+                params = "rows : int64, reach : int64, ntg : int64", requires = "rows % 16")]
 class MetalRows8Mlx8 : MetalRows8T {
     override AFF = true
     override U2 = true
     override A8 = true
 }
 
-[metal_dispatch(name = "enc_rows8_mlx4b_c", pso = "g_pf_pso_rows8_mlx4b", tgmem = "MetalRows8Mlx4b_metal_rows8_msl_tgmem", tg = 256, grid = "rows/16",
-                params = "rows : int64, reach : int64", requires = "rows % 16")]
+[metal_dispatch(name = "enc_rows8_mlx4b_c", pso = "g_pf_pso_rows8_mlx4b", tgmem = "MetalRows8Mlx4b_metal_rows8_msl_tgmem", tg = 256, grid = "ntg",
+                params = "rows : int64, reach : int64, ntg : int64", requires = "rows % 16")]
 class MetalRows8Mlx4b : MetalRows8T {
     override AFF = true
     override U1 = true
     override BF = true
 }
 
-[metal_dispatch(name = "enc_rows8_mlx8b_c", pso = "g_pf_pso_rows8_mlx8b", tgmem = "MetalRows8Mlx8b_metal_rows8_msl_tgmem", tg = 256, grid = "rows/16",
-                params = "rows : int64, reach : int64", requires = "rows % 16")]
+[metal_dispatch(name = "enc_rows8_mlx8b_c", pso = "g_pf_pso_rows8_mlx8b", tgmem = "MetalRows8Mlx8b_metal_rows8_msl_tgmem", tg = 256, grid = "ntg",
+                params = "rows : int64, reach : int64, ntg : int64", requires = "rows % 16")]
 class MetalRows8Mlx8b : MetalRows8T {
     override AFF = true
     override U2 = true
@@ -9951,8 +9961,8 @@ class MetalRows8Mlx8b : MetalRows8T {
 }
 
 //! the 6-bit arm: the 4-bit arm's products and slot law, each lane's sixteen codes of a group unpacked from its 48-bit runs
-[metal_dispatch(name = "enc_rows8_mlx6b_c", pso = "g_pf_pso_rows8_mlx6b", tgmem = "MetalRows8Mlx6b_metal_rows8_msl_tgmem", tg = 256, grid = "rows/16",
-                params = "rows : int64, reach : int64", requires = "rows % 16")]
+[metal_dispatch(name = "enc_rows8_mlx6b_c", pso = "g_pf_pso_rows8_mlx6b", tgmem = "MetalRows8Mlx6b_metal_rows8_msl_tgmem", tg = 256, grid = "ntg",
+                params = "rows : int64, reach : int64, ntg : int64", requires = "rows % 16")]
 class MetalRows8Mlx6b : MetalRows8T {
     override AFF = true
     override U1 = true
@@ -10005,6 +10015,9 @@ class MetalRows8Probe {
 var private g_pf_pso_rows8_prep, g_pf_pso_rows8_k4, g_pf_pso_rows8_q8, g_pf_pso_rows8_k6, g_pf_pso_rows8_probe : MetalComputePipeline?
 var private g_pf_pso_rows8_mlx4, g_pf_pso_rows8_mlx8, g_pf_pso_rows8_mlx4b, g_pf_pso_rows8_mlx8b : MetalComputePipeline?
 var private g_pf_pso_rows8_iq4xs : MetalComputePipeline?
+var private g_rows8_u_tiles : array<MetalBuffer?>   //!< the tile count's uniform, index tiles
+var private g_rows8_u_rows : array<MetalBuffer?>    //!< ... and the panel's rows, 8 tiles
+let ROWS8_TILES_MAX = 4   //!< the row tiles of eight a tiled site carries: 32 token rows a weight pass
 var private g_pf_pso_rows8_mlx6b : MetalComputePipeline?
 var private g_pf_rows8_ok = false          //!< the layout probe passed: the rows8 kernels' geometry is this box's
 var private g_rows8_xt, g_rows8_xs : MetalBuffer?   //!< the x table and sums scratch, sized once for ROWS8_KDIM_CAP
@@ -10012,6 +10025,10 @@ var private g_rows8_sites = 0l
 var private g_rows8_fmt_sites : int64[KQ_FMT_COUNT]
 var private g_rows8_table_sites = 0l   //!< the sites that read a producer's table instead of prepping one
 var private g_rows8_preps = 0l
+var private g_rows8_tiled_sites = 0l   //!< the sites dispatched over row tiles: a panel past eight rows on one weight pass
+
+//! the rows8 sites dispatched over row tiles since the driver came up
+def public metal_rows8_tiled_sites : int64 => g_rows8_tiled_sites
 let private ROWS8_KDIM_CAP = 32768l   //!< the widest site the scratch serves; a wider one keeps its stamps
 var private g_pf_pso_hc_prep8, g_pf_pso_hc_fin8, g_pf_pso_rows8_q8_hc, g_pf_pso_rows8_q8_hcmix : MetalComputePipeline?   //!< the eight-row mixer
 var private g_hc8_xt, g_hc8_xs, g_hc8_part, g_hc8_ipart, g_hc8_inv, g_hc8_xt2, g_hc8_xs2 : MetalBuffer?   //!< its scratch at `g_hc8_shape`
@@ -10025,10 +10042,10 @@ var private g_hc8_sites = 0l
 def public metal_hc_mix8_sites : int64 => g_hc8_sites
 
 //! whether the eight-row mixer's four-dispatch form serves a mixer of `nr` rows over `hc` streams of `dim` at low rank `lr`: the
-//! knob, the rows8 form on the box, five to eight rows, four streams, whole 32-blocks (so whole 16-row tiles), a stream's blocks
+//! knob, the rows8 form on the box, three to eight rows, four streams, whole 32-blocks (so whole 16-row tiles), a stream's blocks
 //! within the prep's lanes, and a site with scatter logits (the head mixer keeps the chain)
 def public metal_hc_mix8_serves(dim, hc, lr, nr : int64; scatter : bool) : bool {
-    return (g_env_metal.hc_mix8 && g_pf_rows8_ok && g_pf_pso_hc_prep8 != null && scatter && hc == 4l && nr >= 5l && nr <= 8l
+    return (g_env_metal.hc_mix8 && g_pf_rows8_ok && g_pf_pso_hc_prep8 != null && scatter && hc == 4l && rows8_rows(nr)
         && dim % 32l == 0l && dim / 32l <= 1024l && lr % 32l == 0l)
 }
 
@@ -10070,23 +10087,23 @@ def public pf_enc_hc_mix8(enc : MetalComputeEncoder?; t : Model; bres, bwn, bwi 
     let pd = rows8_model_planes(t, fdown, down_off)
     let reach = hc * 8l * lr
     if (fdown == KqFmt.mlx6b) {
-        enc_rows8_mlx6b_hc_c(enc, pd.b0.buf, pd.b0.off, pd.b1.buf, pd.b1.off, g_hc8_xt, g_hc8_part, 0ul, g_hc8_xs, g_hc8_u_hcd, g_hc8_u_lr, g_hc8_u_kseg64, lr, reach, hc)
+        enc_rows8_mlx6b_hc_c(enc, pd.b0.buf, pd.b0.off, pd.b1.buf, pd.b1.off, g_hc8_xt, g_hc8_part, 0ul, g_hc8_xs, g_hc8_u_hcd, g_hc8_u_lr, g_hc8_u_kseg64, g_rows8_u_tiles[1], lr, reach, hc)
     } elif (fdown == KqFmt.mlx8b) {
-        enc_rows8_mlx8b_hc_c(enc, pd.b0.buf, pd.b0.off, pd.b1.buf, pd.b1.off, g_hc8_xt, g_hc8_part, 0ul, g_hc8_xs, g_hc8_u_hcd, g_hc8_u_lr, g_hc8_u_kseg64, lr, reach, hc)
+        enc_rows8_mlx8b_hc_c(enc, pd.b0.buf, pd.b0.off, pd.b1.buf, pd.b1.off, g_hc8_xt, g_hc8_part, 0ul, g_hc8_xs, g_hc8_u_hcd, g_hc8_u_lr, g_hc8_u_kseg64, g_rows8_u_tiles[1], lr, reach, hc)
     } else {
-        enc_rows8_q8_hc_c(enc, pd.b0.buf, pd.b0.off, pd.b1.buf, g_hc8_xt, g_hc8_part, 0ul, g_hc8_xs, g_hc8_u_hcd, g_hc8_u_lr, g_hc8_u_kseg, lr, reach, hc)
+        enc_rows8_q8_hc_c(enc, pd.b0.buf, pd.b0.off, pd.b1.buf, g_hc8_xt, g_hc8_part, 0ul, g_hc8_xs, g_hc8_u_hcd, g_hc8_u_lr, g_hc8_u_kseg, g_rows8_u_tiles[1], lr, reach, hc)
     }
     enc_hc_fin8_c(enc, g_hc8_part, g_hc8_ipart, binj, g_hc8_xt2, g_hc8_xs2, ka, lr / 32l)
     let pu = rows8_model_planes(t, fup, up_off)
     if (fup == KqFmt.mlx6b) {
         enc_rows8_mlx6b_hcmix_c(enc, pu.b0.buf, pu.b0.off, pu.b1.buf, pu.b1.off, g_hc8_xt2, by, 0ul, g_hc8_xs2, g_hc8_u_lr, g_hc8_u_lr, bres, bwn, g_hc8_inv, ka,
-            dim, nr * dim)
+            g_rows8_u_tiles[1], dim, nr * dim)
     } elif (fup == KqFmt.mlx8b) {
         enc_rows8_mlx8b_hcmix_c(enc, pu.b0.buf, pu.b0.off, pu.b1.buf, pu.b1.off, g_hc8_xt2, by, 0ul, g_hc8_xs2, g_hc8_u_lr, g_hc8_u_lr, bres, bwn, g_hc8_inv, ka,
-            dim, nr * dim)
+            g_rows8_u_tiles[1], dim, nr * dim)
     } else {
         enc_rows8_q8_hcmix_c(enc, pu.b0.buf, pu.b0.off, pu.b1.buf, g_hc8_xt2, by, 0ul, g_hc8_xs2, g_hc8_u_lr, g_hc8_u_lr, bres, bwn, g_hc8_inv, ka,
-            dim, nr * dim)
+            g_rows8_u_tiles[1], dim, nr * dim)
     }
 }
 
@@ -10134,6 +10151,14 @@ def private rows8_release {
     release_handle(g_pf_pso_rows8_mlx8b)
     release_handle(g_pf_pso_rows8_mlx6b)
     release_handle(g_pf_pso_rows8_probe)
+    for (u in g_rows8_u_tiles) {
+        release_handle(u)
+    }
+    for (u in g_rows8_u_rows) {
+        release_handle(u)
+    }
+    g_rows8_u_tiles |> clear()
+    g_rows8_u_rows |> clear()
     release_handle(g_rows8_xt)
     release_handle(g_rows8_xs)
     release_handles(g_pf_pso_hc_prep8, g_pf_pso_hc_fin8, g_pf_pso_rows8_q8_hc, g_pf_pso_rows8_q8_hcmix)
@@ -10179,10 +10204,13 @@ def private rows8_probe_once(k0 : array<uint>) : bool {
 def private rows8_init(var ok : bool&) {
     g_pf_rows8_ok = false
     if (!g_env_metal.rows_mt) {
-        to_log(LOG_WARNING, "dasLLAMA metal prefill: DASLLAMA_METAL_ROWS_MT=0 - the five-to-eight-row sites keep the eight-row stamps, off the matrix-unit form (numerics move with the form)\n")
+        to_log(LOG_WARNING, "dasLLAMA metal prefill: DASLLAMA_METAL_ROWS_MT=0 - the three-to-eight-row sites keep the eight-row stamps, off the matrix-unit form; a step past eight rows takes no row tiles and a block drafter's rounds carry one stream (numerics move with the form)\n")
+    }
+    if (g_env_metal.rows8_min != 3) {
+        to_log(LOG_WARNING, "dasLLAMA metal prefill: DASLLAMA_METAL_ROWS8_MIN={g_env_metal.rows8_min} - the eight-row forms carry that many rows and up (numerics move with the form)\n")
     }
     if (!g_env_metal.hc_mix8) {
-        to_log(LOG_WARNING, "dasLLAMA metal prefill: DASLLAMA_METAL_HC_MIX8=0 - a five-to-eight-row step's hyper-connection mixer keeps the eight-dispatch chain (numerics move with the form)\n")
+        to_log(LOG_WARNING, "dasLLAMA metal prefill: DASLLAMA_METAL_HC_MIX8=0 - a three-to-eight-row step's hyper-connection mixer keeps the eight-dispatch chain (numerics move with the form)\n")
     }
     if (!g_env_metal.rows_mt || !g_pf_tensor_ok) {
         return
@@ -10214,8 +10242,16 @@ def private rows8_init(var ok : bool&) {
     }
     let a <- [for (t in range(8)); uint(7 * t + 3)]
     let b <- [for (t in range(8)); uint(60 - 7 * t)]
-    g_rows8_xt = metal_new_buffer(g_dev, uint64(8l * ROWS8_KDIM_CAP * 2l))
-    g_rows8_xs = metal_new_buffer(g_dev, uint64(ROWS8_KDIM_CAP / 32l * 8l * 4l))
+    g_rows8_xt = metal_new_buffer(g_dev, uint64(8l * ROWS8_KDIM_CAP * 2l) * uint64(ROWS8_TILES_MAX))
+    g_rows8_xs = metal_new_buffer(g_dev, uint64(ROWS8_KDIM_CAP / 32l * 8l * 4l) * uint64(ROWS8_TILES_MAX))
+    g_rows8_u_tiles |> clear()
+    g_rows8_u_rows |> clear()
+    g_rows8_u_tiles |> reserve(ROWS8_TILES_MAX + 1)
+    g_rows8_u_rows |> reserve(ROWS8_TILES_MAX + 1)
+    for (i in range(ROWS8_TILES_MAX + 1)) {
+        g_rows8_u_tiles |> push(ubuf_u32(uint(i)))
+        g_rows8_u_rows |> push(ubuf_u32(uint(8 * i)))
+    }
     g_pf_rows8_ok = g_rows8_xt != null && g_rows8_xs != null && rows8_probe_once(a) && rows8_probe_once(b)
     if (!g_pf_rows8_ok) {
         to_log(LOG_WARNING, "dasLLAMA metal prefill: the matrix unit's cooperative layout is not the rows8 kernels' - the eight-row stamps serve\n")
@@ -10224,16 +10260,16 @@ def private rows8_init(var ok : bool&) {
     ok = ok && true
 }
 
-//! the x table and sums for the panel `bx` of width `n` into the scratch - or, `natural`, its eight rows as halves in natural
-//! order, the k6 site's x - for a site whose panel's producer wrote none: such a site preps its own, since a panel's pointer
-//! says nothing about its contents between two sites - false past the scratch's width
-def private rows8_prep(enc : MetalComputeEncoder?; bx : MetalBuffer?; n : int64; bn : MetalBuffer?; natural : bool) : bool {
+//! the x table and sums for the panel `bx` of width `n` and `tiles` row tiles into the scratch, every tile in one dispatch - or,
+//! `natural`, its rows as halves in natural order, the k6 site's x - for a site whose panel's producer wrote none: such a site
+//! preps its own, since a panel's pointer says nothing about its contents between two sites - false past the scratch's width
+def private rows8_prep(enc : MetalComputeEncoder?; bx : MetalBuffer?; n : int64; bn : MetalBuffer?; natural : bool; tiles : int64) : bool {
     return false if (n > ROWS8_KDIM_CAP || (natural && g_pf_pso_half_rows == null))
     if (g_pf_skip != "rows8prep" || g_rows8_preps == 0l) {   //! the knockout: every prep but the first skipped - garbage rows, the preps' cost
         if (natural) {
-            tw_half(enc, bx, g_rows8_xt, 8l * n)
+            tw_half(enc, bx, g_rows8_xt, 8l * tiles * n)
         } else {
-            enc_rows8_prep_c(enc, bx, 0ul, g_rows8_xt, g_rows8_xs, bn, n / 32l * 8l)
+            enc_rows8_prep_c(enc, bx, 0ul, g_rows8_xt, g_rows8_xs, bn, g_rows8_u_rows[int(tiles)], n / 32l * 8l * tiles)
         }
     }
     g_rows8_preps++
@@ -10242,22 +10278,23 @@ def private rows8_prep(enc : MetalComputeEncoder?; bx : MetalBuffer?; n : int64;
 
 //! the natural half rows a k6 site reads are at hand: the producer's f16 twin where given, else the scratch the site's own
 //! conversion fills; false where neither serves
-def private rows8_xhalf_ok(enc : MetalComputeEncoder?; bx : MetalBuffer?; n : int64; bxh : MetalBuffer?) : bool {
+def private rows8_xhalf_ok(enc : MetalComputeEncoder?; bx : MetalBuffer?; n : int64; bxh : MetalBuffer?; tiles : int64) : bool {
     if (bxh != null) {
         g_rows8_table_sites++
         return true
     }
-    return rows8_prep(enc, bx, n, null, true)
+    return rows8_prep(enc, bx, n, null, true, tiles)
 }
 
 //! the table and sums a rows8 site reads: the producer's pair where both are given, else the scratch the site's own prep fills;
 //! null where neither serves (the scratch is narrower than the site)
-def private rows8_xtab(enc : MetalComputeEncoder?; bx : MetalBuffer?; n : int64; bn, bxt, bxs : MetalBuffer?) : tuple<xt : MetalBuffer?; xs : MetalBuffer?> {
+def private rows8_xtab(enc : MetalComputeEncoder?; bx : MetalBuffer?; n : int64; bn, bxt, bxs : MetalBuffer?;
+                       tiles : int64) : tuple<xt : MetalBuffer?; xs : MetalBuffer?> {
     if (bxt != null && bxs != null) {
         g_rows8_table_sites++
         return (xt = bxt, xs = bxs)
     }
-    return (xt = null, xs = null) if (!rows8_prep(enc, bx, n, bn, false))
+    return (xt = null, xs = null) if (!rows8_prep(enc, bx, n, bn, false, tiles))
     return (xt = g_rows8_xt, xs = g_rows8_xs)
 }
 
@@ -10312,66 +10349,69 @@ def private rows8_model_planes(t : Model; fmt : KqFmt; woff : int64) : Rows8Plan
     return rows8_planes_of(fmt, bq.buf, bq.qoff, bs.buf, bs.soff, bs.doff)
 }
 
-//! A one-plane rows8 dispatch of format `fmt`: the planes at the bindings `pl`, the x table `xt` and sums `xs` (k6: the natural
-//! halves in `xt`), the output `o`, counted as a site of the format
-def private rows8_dispatch(enc : MetalComputeEncoder?; fmt : KqFmt; pl : Rows8Planes; xt, xs, bn : MetalBuffer?; o : Rows8Out) {
+//! A one-plane rows8 dispatch of format `fmt` over `tiles` row tiles: the planes at the bindings `pl`, the x table `xt` and sums
+//! `xs` (k6: the natural halves in `xt`), the output `o`, the threadgroups of every tile, counted as a site of the format
+def private rows8_dispatch(enc : MetalComputeEncoder?; fmt : KqFmt; pl : Rows8Planes; xt, xs, bn : MetalBuffer?; o : Rows8Out; tiles : int64) {
     g_rows8_sites++
     g_rows8_fmt_sites[int(fmt)]++
-    let r = 7l * o.ys + o.rows
+    if (tiles > 1l) {
+        g_rows8_tiled_sites++
+    }
+    let r = (8l * tiles - 1l) * o.ys + o.rows
+    let ntg = o.rows / 16l * tiles
+    let ut = g_rows8_u_tiles[int(tiles)]
     if (fmt == KqFmt.k4) {
-        enc_rows8_k4_c(enc, pl.b0.buf, pl.b0.off, pl.b1.buf, pl.b1.off, xt, o.by, o.yoff, xs, bn, o.bys, o.rows, r)
+        enc_rows8_k4_c(enc, pl.b0.buf, pl.b0.off, pl.b1.buf, pl.b1.off, xt, o.by, o.yoff, xs, bn, o.bys, ut, o.rows, r, ntg)
     } elif (fmt == KqFmt.k6) {
-        enc_rows8_k6_c(enc, pl.b0.buf, pl.b0.off, pl.b1.buf, pl.b1.off, xt, o.by, o.yoff, pl.b4.buf, pl.b4.off, bn, o.bys, o.rows, r)
+        enc_rows8_k6_c(enc, pl.b0.buf, pl.b0.off, pl.b1.buf, pl.b1.off, xt, o.by, o.yoff, pl.b4.buf, pl.b4.off, bn, o.bys, ut, o.rows, r, ntg)
     } elif (fmt == KqFmt.iq4xs) {
-        enc_rows8_iq4xs_c(enc, pl.b0.buf, pl.b0.off, pl.b1.buf, pl.b1.off, xt, o.by, o.yoff, pl.b4.buf, pl.b4.off, bn, o.bys, o.rows, r)
+        enc_rows8_iq4xs_c(enc, pl.b0.buf, pl.b0.off, pl.b1.buf, pl.b1.off, xt, o.by, o.yoff, pl.b4.buf, pl.b4.off, bn, o.bys, ut, o.rows, r, ntg)
     } elif (fmt == KqFmt.q8) {
-        enc_rows8_q8_c(enc, pl.b0.buf, pl.b0.off, pl.b1.buf, xt, o.by, o.yoff, xs, bn, o.bys, o.rows, r)
+        enc_rows8_q8_c(enc, pl.b0.buf, pl.b0.off, pl.b1.buf, xt, o.by, o.yoff, xs, bn, o.bys, ut, o.rows, r, ntg)
     } elif (fmt == KqFmt.mlx4) {
-        enc_rows8_mlx4_c(enc, pl.b0.buf, pl.b0.off, pl.b1.buf, pl.b1.off, xt, o.by, o.yoff, xs, bn, o.bys, o.rows, r)
+        enc_rows8_mlx4_c(enc, pl.b0.buf, pl.b0.off, pl.b1.buf, pl.b1.off, xt, o.by, o.yoff, xs, bn, o.bys, ut, o.rows, r, ntg)
     } elif (fmt == KqFmt.mlx8) {
-        enc_rows8_mlx8_c(enc, pl.b0.buf, pl.b0.off, pl.b1.buf, pl.b1.off, xt, o.by, o.yoff, xs, bn, o.bys, o.rows, r)
+        enc_rows8_mlx8_c(enc, pl.b0.buf, pl.b0.off, pl.b1.buf, pl.b1.off, xt, o.by, o.yoff, xs, bn, o.bys, ut, o.rows, r, ntg)
     } elif (fmt == KqFmt.mlx4b) {
-        enc_rows8_mlx4b_c(enc, pl.b0.buf, pl.b0.off, pl.b1.buf, pl.b1.off, xt, o.by, o.yoff, xs, bn, o.bys, o.rows, r)
+        enc_rows8_mlx4b_c(enc, pl.b0.buf, pl.b0.off, pl.b1.buf, pl.b1.off, xt, o.by, o.yoff, xs, bn, o.bys, ut, o.rows, r, ntg)
     } elif (fmt == KqFmt.mlx6b) {
-        enc_rows8_mlx6b_c(enc, pl.b0.buf, pl.b0.off, pl.b1.buf, pl.b1.off, xt, o.by, o.yoff, xs, bn, o.bys, o.rows, r)
+        enc_rows8_mlx6b_c(enc, pl.b0.buf, pl.b0.off, pl.b1.buf, pl.b1.off, xt, o.by, o.yoff, xs, bn, o.bys, ut, o.rows, r, ntg)
     } else {
-        enc_rows8_mlx8b_c(enc, pl.b0.buf, pl.b0.off, pl.b1.buf, pl.b1.off, xt, o.by, o.yoff, xs, bn, o.bys, o.rows, r)
+        enc_rows8_mlx8b_c(enc, pl.b0.buf, pl.b0.off, pl.b1.buf, pl.b1.off, xt, o.by, o.yoff, xs, bn, o.bys, ut, o.rows, r, ntg)
     }
 }
 
 //! the x a rows8 dispatch of format `fmt` reads off the panel `bx`: k6 and iq4xs the natural halves (the producer's twin `bxh`, else
 //! the scratch its conversion fills), every other format the table and sums (the producer's `bxt` / `bxs`, else its own prep); null
 //! where neither serves
-def private rows8_x_of(enc : MetalComputeEncoder?; fmt : KqFmt; bx : MetalBuffer?; n : int64; bn, bxt, bxs, bxh : MetalBuffer?) : tuple<xt : MetalBuffer?; xs : MetalBuffer?> {
+def private rows8_x_of(enc : MetalComputeEncoder?; fmt : KqFmt; bx : MetalBuffer?; n : int64; bn, bxt, bxs, bxh : MetalBuffer?;
+                       tiles : int64) : tuple<xt : MetalBuffer?; xs : MetalBuffer?> {
     if (rows8_natural(fmt)) {
-        return (xt = null, xs = null) if (!rows8_xhalf_ok(enc, bx, n, bxh))
+        return (xt = null, xs = null) if (!rows8_xhalf_ok(enc, bx, n, bxh, tiles))
         return (xt = bxh != null ? bxh : g_rows8_xt, xs = null)
     }
-    return rows8_xtab(enc, bx, n, bn, bxt, bxs)
+    return rows8_xtab(enc, bx, n, bn, bxt, bxs, tiles)
 }
 
-//! a one-plane rows8 site: the x, then the dispatch over the single output; false where no x serves
-def private rows8_site(enc : MetalComputeEncoder?; fmt : KqFmt; pl : Rows8Planes; n : int64; bx, bn, bxt, bxs, bxh : MetalBuffer?; o : Rows8Out) : bool {
-    let x = rows8_x_of(enc, fmt, bx, n, bn, bxt, bxs, bxh)
+//! a one-plane rows8 site over `tiles` row tiles (one to ROWS8_TILES_MAX): the x, then the dispatch over the single output;
+//! false where no x serves
+def private rows8_site(enc : MetalComputeEncoder?; fmt : KqFmt; pl : Rows8Planes; n : int64; bx, bn, bxt, bxs, bxh : MetalBuffer?; o : Rows8Out;
+                       tiles : int64) : bool {
+    return false if (tiles < 1l || tiles > int64(ROWS8_TILES_MAX))
+    let x = rows8_x_of(enc, fmt, bx, n, bn, bxt, bxs, bxh, tiles)
     return false if (x.xt == null)
-    rows8_dispatch(enc, fmt, pl, x.xt, x.xs, bn, o)
+    rows8_dispatch(enc, fmt, pl, x.xt, x.xs, bn, o, tiles)
     return true
 }
 
-//! A k4, k6 or affine member's site over an eight-row panel (`bx` [8][n], f32) on the matrix-unit form into `by` (`ys` wide, at `yoff`,
-//! `bys` the stride's uniform), off the producer's x table and sums `bxt` / `bxs` (k6: its f16 twin `bxh`), else its own prep; false
-//! where the form is off, the format is none of them, or the plane is off its grid - the caller's stamps serve
+//! A k4, k6 or affine member's site over a panel of `tiles` row tiles of eight (`bx` [8 tiles][n], f32) on the matrix-unit form
+//! into `by` (`ys` wide, at `yoff`) in one dispatch, off the producer's x table and sums `bxt` / `bxs` (k6: its f16 twin `bxh`),
+//! else its own prep; false where the form is off or declines the format or the plane's grid - the caller's stamps serve
 [arch(at="../ARCHITECTURE_GPU_MTP_DECODE_ROWS.md#rows8-matrix-unit")]
 def pf_enc_rows8_kq(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; woff, rows, n, ys : int64; bx, by : MetalBuffer?; yoff : uint64; bn, bys : MetalBuffer?;
-                    bxt : MetalBuffer? = null; bxs : MetalBuffer? = null; bxh : MetalBuffer? = null) : bool {
+                    bxt : MetalBuffer? = null; bxs : MetalBuffer? = null; bxh : MetalBuffer? = null; tiles : int64 = 1l) : bool {
     return false if (!rows8_kq_admits(fmt, rows, n))
-    if (kq_mlx_affine(fmt)) {
-        let bp = b32_planes_of(g_dev, t, fmt, woff)
-        return pf_enc_rows8_kq_planes(enc, fmt, bp.qbuf, bp.qoff, bp.sbuf, bp.soff, 0ul, rows, n, ys, bx, by, yoff, bn, bys, bxt, bxs)
-    }
-    let bq = kq_quants_of(g_dev, t, fmt, woff)
-    let bs = kq_scales_of(g_dev, t, fmt, woff)
-    return pf_enc_rows8_kq_planes(enc, fmt, bq.buf, bq.qoff, bs.buf, bs.soff, bs.doff, rows, n, ys, bx, by, yoff, bn, bys, bxt, bxs, bxh)
+    return rows8_site(enc, fmt, rows8_model_planes(t, fmt, woff), n, bx, bn, bxt, bxs, bxh, (rows = rows, by = by, yoff = yoff, ys = ys, bys = bys), tiles)
 }
 
 //! the rows8 form is on and serves the format on this plane (`rows8_grid_of`); the format's knockout is not set
@@ -10389,17 +10429,17 @@ def private rows8_kq_admits(fmt : KqFmt; rows, n : int64) : bool {
 [arch(at="../ARCHITECTURE_GPU_MTP_DECODE_ROWS.md#rows8-matrix-unit")]
 def pf_enc_rows8_kq_planes(enc : MetalComputeEncoder?; fmt : KqFmt; bq : MetalBuffer?; qoff : uint64; bs : MetalBuffer?; soff, doff : uint64; rows, n, ys : int64;
                            bx, by : MetalBuffer?; yoff : uint64; bn, bys : MetalBuffer?;
-                           bxt : MetalBuffer? = null; bxs : MetalBuffer? = null; bxh : MetalBuffer? = null) : bool {
+                           bxt : MetalBuffer? = null; bxs : MetalBuffer? = null; bxh : MetalBuffer? = null; tiles : int64 = 1l) : bool {
     return false if (!rows8_kq_admits(fmt, rows, n))
-    return rows8_site(enc, fmt, rows8_planes_of(fmt, bq, qoff, bs, soff, doff), n, bx, bn, bxt, bxs, bxh, (rows = rows, by = by, yoff = yoff, ys = ys, bys = bys))
+    return rows8_site(enc, fmt, rows8_planes_of(fmt, bq, qoff, bs, soff, doff), n, bx, bn, bxt, bxs, bxh, (rows = rows, by = by, yoff = yoff, ys = ys, bys = bys), tiles)
 }
 
-//! A q8 site over a panel of eight rows on the matrix-unit form, the table pair as the k4 site's; false where the form is off or the
-//! plane is off its grid
+//! A q8 site over a panel of `tiles` row tiles of eight on the matrix-unit form, the table pair as the k4 site's; false where the
+//! form is off or the plane is off its grid
 def pf_enc_rows8_q8(enc : MetalComputeEncoder?; bw : MetalBuffer?; wboff : uint64; bx, by : MetalBuffer?; yoff : uint64; bn, bys : MetalBuffer?; n, rows, ys : int64;
-                    bxt : MetalBuffer? = null; bxs : MetalBuffer? = null) : bool {
+                    bxt : MetalBuffer? = null; bxs : MetalBuffer? = null; tiles : int64 = 1l) : bool {
     return false if (!g_pf_rows8_ok || rows8_grid_of(KqFmt.q8, rows, n) == 0l || g_pf_skip == "rows8noq8")
-    return rows8_site(enc, KqFmt.q8, rows8_planes_of(KqFmt.q8, bw, wboff, null, 0ul, 0ul), n, bx, bn, bxt, bxs, null, (rows = rows, by = by, yoff = yoff, ys = ys, bys = bys))
+    return rows8_site(enc, KqFmt.q8, rows8_planes_of(KqFmt.q8, bw, wboff, null, 0ul, 0ul), n, bx, bn, bxt, bxs, null, (rows = rows, by = by, yoff = yoff, ys = ys, bys = bys), tiles)
 }
 
 //! the superblock formats' rows
@@ -11034,23 +11074,6 @@ def public metal_prefill_moe_gemv_stats() : int64 => g_pf_moe_gemv_windows
 def public pf_moe_gemv_knee : int64 {
     let knob = metal_moe_gemv_max()
     return knob >= 0l ? knob : 16l
-}
-
-var private @scratch g_pf_cap_img : array<float>   //! a segment's [rows][slot][dim] capture image for the block drafter, reused a window
-
-//! a segment's rows of the window's capture image ([slot][mp][dim] on the device) to the block drafter as [rows][slot][dim]
-def private pf_land_block_captures(var s : Session; bcap : MetalBuffer?; row0, rows, pos0, mp, dim : int64) {
-    let ncap = mtp_block_ncap()
-    g_pf_cap_img |> reserve_resize(rows * ncap * dim)   // nolint:PERF026,LINT019 — grows to the widest window once, reused
-    unsafe {
-        let cp = reinterpret<float const?>(metal_buffer_contents(bcap))
-        for (sl in range64(ncap)) {
-            for (r in range64(rows)) {
-                memcpy(addr<void?>(g_pf_cap_img[(r * ncap + sl) * dim]), reinterpret<void const?>(cp + (sl * mp + row0 + r) * dim), dim * 4l)
-            }
-        }
-    }
-    mtp_block_land_rows(s, g_pf_cap_img, rows, pos0)
 }
 
 //! whether this window's routed block rides the decode's gathered expert GEMVs: the window is within the knee and every
@@ -13163,7 +13186,7 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
         for (sg, i in segs, count()) {
             var ss & = unsafe(*sg.s)
             if (bblk != null) {
-                pf_land_block_captures(ss, bblk, sg.row0, sg.npos, sg.start_pos, mp, dim)
+                land_block_capture_rows(ss, bblk, mp, sg.row0, sg.npos, sg.start_pos, dim)
             }
             unsafe {
                 memcpy(addr < void? >(ss.x_b[0]), contents_at(warm ? bwm_res : bx, uint64(sg.row0 * dim * 4l)), sg.npos * dim * 4l)

@@ -2778,3 +2778,25 @@
     tiers stand now, with a figure for unknown words on the short-sentence set beside theirs on the
     same set, and an exception list so a known word never regresses; each change scored through
     `harness/ru_stress_eval.das --pack` against the current front end on the same set.
+296. **The discrete homes' batched decode past four streams is unaudited for the caps the Metal home carried.**
+    A server on a discrete home holds one total from four concurrent requests to 32, each wave of four
+    answering one wave time after the last. That shape is the scheduler's stream cap
+    (`create_scheduler`'s `max_streams`, the server's `streams`, 4 by default): past it requests queue, so
+    the first check is the same load with `streams` at the concurrency. With the cap lifted, the Metal home
+    held four more limits of the same kind, each fixed there and each a place to look on Vulkan and CUDA
+    (`ARCHITECTURE_GPU_MTP_DECODE_ROWS.md#rows8-matrix-unit`, `ARCHITECTURE_GPU_BATCH.md`; the figures the M5
+    Max's, `PERF_LEDGER.md`'s block-drafter entry):
+    (a) the batched step's wide form began at five rows, so a step of three or four rows ran the
+    small-batch forms - a plain batch of three and four streams ran Qwen3.6-35B-A3B at 261 and 298 tok/s
+    where the wide form runs 315 and 370; (b) past eight rows the step left the one-weight-pass form for a
+    per-row-group tier - Qwen3.8-27B ran twelve streams at 66 tok/s against 164 at eight, 161 once the
+    step took row tiles; (c) a recurrent layer's projections are rows sites of their own tier and stayed
+    row by row past eight after the step's other sites moved; (d) a weight site's plane sized to a four-row
+    reach is overrun by a form that writes a whole eight-row panel - the gated q projection's was, and a
+    recurrent trunk decoded later batches wrong. The instrument is one plain batched decode at 1, 2, 4, 8,
+    12, 16 and 32 streams with the queue as deep as the stream count (`harness/dflash_sched_probe.das`'s
+    plain leg is the Metal form): a total that falls or flattens between two counts names a cap, a per-kernel
+    knockout (`DASLLAMA_METAL_KERNEL_SKIP`'s twin on the home) the site. Done = that sweep on the Vulkan
+    home and the CUDA home over a dense trunk, a recurrent hybrid and a MoE, every count's total at or
+    above the count below it up to the card's compute bound, each cap found fixed or ledgered with its
+    measurement, and the rows in `PERF_LEDGER.md`.

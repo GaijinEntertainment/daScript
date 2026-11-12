@@ -29,6 +29,7 @@ let ENGINE_FILES = [
     "modules/dasLLAMA/dasllama/dasllama_blocks.das",    // eval_embd_ / embed_
     "modules/dasLLAMA/dasllama/dasllama_batch.das",     // eval_batch_ / create_batch_workspace_
     "modules/dasLLAMA/dasllama/dasllama_sampling.das",  // sample_ / generate_ / generate_embd_ / stats_ / set_seed_
+    "modules/dasLLAMA/dasllama/dasllama_dflash.das",    // attach_block_drafter_ / detach_block_drafter_ / block_drafter_attached_
     "modules/dasLLAMA/dasllama/dasllama_prefix.das",
     "modules/dasLLAMA/dasllama/dasllama_chat.das",
     "modules/dasLLAMA/dasllama/dasllama_gemma4uv.das",   // encode_image_ (the vision splice's encode half)

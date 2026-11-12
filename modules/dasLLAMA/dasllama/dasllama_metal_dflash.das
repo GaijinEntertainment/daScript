@@ -13,6 +13,7 @@ require metal/das_metal_boost
 require dasllama/dasllama_common
 require dasllama/dasllama_math   // reserve_resize - the landing's sizing
 require dasllama/dasllama_dflash
+require dasllama/dasllama_batch   // verify_batch_groups: the joint round's verify
 require dasllama/dasllama_metal_common
 require dasllama/dasllama_metal_lens   // release_handles, compile_stamp
 require dasllama/dasllama_metal_kernels
@@ -30,6 +31,7 @@ struct DflashConvArgs {
     side : uint
     convk : uint   //! taps
     rows : uint
+    blk : uint     //! rows a block where the panel holds several blocks (0 = one): a block's first row has no predecessor
 }
 
 //! row t of `y` = (base[side][0] + dyn[t][side][0]) * x[t] + (base[side][1] + dyn[t][side][1]) * x[t - 1], a dynamic coefficient a
@@ -53,7 +55,7 @@ class MetalDflashConv {
         let gi = c / ka.g
         let tap0 = ka.side * ka.convk
         var o = (base[tap0 * ka.dim + c] + dyn[t * ka.projw + tap0 * ka.ng + gi]) * x[gid]
-        if (t > 0u) {
+        if ((ka.blk == 0u ? t : t % ka.blk) > 0u) {
             o += (base[(tap0 + 1u) * ka.dim + c] + dyn[t * ka.projw + (tap0 + 1u) * ka.ng + gi]) * x[gid - ka.dim]
         }
         y[gid] = o
@@ -119,6 +121,7 @@ struct DflashAttnArgs {
     kvd : uint
     qd : uint
     scale : float
+    rbase : uint   //! the block's first row of the q, K, V and output panels (several blocks a panel)
 }
 
 let private DFLASH_ATTN_KEYS = 2304   //! the scores a threadgroup stages: a window of 2048 and the block's rows
@@ -147,7 +150,7 @@ class MetalDflashAttn {
         let hs = ka.hs
         let kh = (h / ka.grp) * hs
         let qpos = int(ka.pos0 + t)
-        qs[i] = q[t * ka.qd + h * hs + i]
+        qs[i] = q[(ka.rbase + t) * ka.qd + h * hs + i]
         barrier()
         let nkeys = ka.nctx + ka.rows
         var mx = -3.0e38
@@ -169,7 +172,7 @@ class MetalDflashAttn {
             } else {
                 let kpos = int(ka.pos0 + (j - ka.nctx))
                 if (qpos - kpos < int(ka.w) && kpos - qpos < int(ka.w)) {
-                    let kb0 = (j - ka.nctx) * ka.kvd + kh
+                    let kb0 = (ka.rbase + j - ka.nctx) * ka.kvd + kh
                     var e = 0u
                     while (e < hs) {
                         dot += qs[e] * kb[kb0 + e]
@@ -205,11 +208,11 @@ class MetalDflashAttn {
         while (j < nkeys) {
             let p = sc[j]
             if (p != 0.0) {
-                acc += p * vb[(j - ka.nctx) * ka.kvd + kh + i]
+                acc += p * vb[(ka.rbase + j - ka.nctx) * ka.kvd + kh + i]
             }
             j++
         }
-        o[t * ka.qd + h * hs + i] = acc / tot
+        o[(ka.rbase + t) * ka.qd + h * hs + i] = acc / tot
     }
 }
 
@@ -416,6 +419,8 @@ struct public DflashWalkArgs {
     pq0 : uint
     nq0 : uint
     temp : float   //! the sampled stamp's drafter temperature (above 0)
+    tbase : uint   //! the anchor's index in `tok` (a stream's block in a joint pass)
+    rbase : uint   //! the walk's first row of `hsel` / `cid` / `cval`: stream b's b nd, its anchor at b (nd + 1) of `ids`, the picks past it
 }
 
 //! The selector's walk in one threadgroup: A[pred] staged, every (A[pred][i] * h_r[i]) * B[cand][i] staged, a lane a candidate
@@ -500,8 +505,8 @@ class template public MetalDflashWalkT {
         let lid = gl_LocalInvocationID.x
         let nt = gl_WorkGroupSize.x
         if (lid == 0u) {
-            pick[0] = tok[0]
-            ids[0] = tok[0]
+            pick[0] = tok[ka.tbase]
+            ids[ka.rbase + ka.rbase / ka.nd] = tok[ka.tbase]
         }
         barrier()
         var r = 0u
@@ -519,11 +524,11 @@ class template public MetalDflashWalkT {
             while (x < ka.k * ka.rank) {
                 let j = x / ka.rank
                 let e = x % ka.rank
-                let cand = cid[r * ka.k + j]
+                let cand = cid[(ka.rbase + r) * ka.k + j]
                 if (cand != 0xFFFFFFFFu) {
                     var b = 0.0
                     dflash_cb_into(nq, nqh, ns, nsh, ka.nfmt, ka.rank, ka.nq0, cand, e, b)
-                    let ah = arow[e] * hsel[r * ka.rank + e]
+                    let ah = arow[e] * hsel[(ka.rbase + r) * ka.rank + e]
                     prod[x] = ah * b
                 }
                 x += nt
@@ -531,8 +536,8 @@ class template public MetalDflashWalkT {
             barrier()
             if (lid < ka.k) {
                 var s = -3.4e38
-                if (cid[r * ka.k + lid] != 0xFFFFFFFFu) {
-                    s = cval[r * ka.k + lid]
+                if (cid[(ka.rbase + r) * ka.k + lid] != 0xFFFFFFFFu) {
+                    s = cval[(ka.rbase + r) * ka.k + lid]
                     var e = 0u
                     while (e < ka.rank) {
                         s = s + prod[lid * ka.rank + e]
@@ -547,7 +552,7 @@ class template public MetalDflashWalkT {
                 var bests = -3.0e38
                 var j = 0u
                 while (j < ka.k) {
-                    if (cid[r * ka.k + j] != 0xFFFFFFFFu && scs[j] > bests) {
+                    if (cid[(ka.rbase + r) * ka.k + j] != 0xFFFFFFFFu && scs[j] > bests) {
                         bests = scs[j]
                         best = j
                     }
@@ -557,9 +562,9 @@ class template public MetalDflashWalkT {
                 static_if (SOFT) {
                     soft_pick(r, best, pk)
                 }
-                let w = cid[r * ka.k + pk]
+                let w = cid[(ka.rbase + r) * ka.k + pk]
                 pick[0] = w
-                ids[r + 1u] = w
+                ids[ka.rbase + ka.rbase / ka.nd + r + 1u] = w
             }
             barrier()
             r++
@@ -647,9 +652,23 @@ struct private DflashRing {
     bv : MetalBuffer?
 }
 
+let private DF_JOINT_PASS_STREAMS = 4l   //! the streams one joint pass carries at most
+
+//! A session's staged commit: its captured rows of one ring run, encoded at the head of the next pass
+struct private DflashPend {
+    uid : uint64
+    pos0 : int64             //! the run's first position
+    rows : int64             //! rows staged in `bcaps` (0 = the slot is free)
+    bcaps : MetalBuffer?     //! [cap][ncap][dim] the captured layer outputs
+    cap : int64
+}
+
+let private DF_PEND_SLOTS = 4   //! the sessions whose commits stay staged together; one more flushes them all
+
 //! The attached drafter on the device: its planes uploaded once, the pass's row buffers at the block's rows, the commit's at the
 //! widest commit so far, the width uniforms, and a ring a session
 struct private DflashGpu {
+    plain : bool   //! a DFlash file's pass: no convs, no selector - each draft its row's best id, into `bcid`
     ready : bool
     bblob : MetalBuffer?    //! the q8 planes (the region cache owns it); null where the drafter carries none
     bfblob : MetalBuffer?   //! the f32 planes (the same)
@@ -658,6 +677,7 @@ struct private DflashGpu {
     kq_nsb : array<int64>        //! ... its superblocks
     binvf : MetalBuffer?    //! [hs/2] the rope's inverse frequencies
     btok : MetalBuffer?     //! [nblock] the pass's token ids
+    bdx : MetalBuffer?      //! [nblock][dim] a joint pass's draft rows, a stream after a stream
     bx : MetalBuffer?       //! [nblock][dim] the residual rows
     bhn : MetalBuffer?      //! [nblock][dim] the normed rows
     bhc : MetalBuffer?      //! [nblock][dim] the normed rows after the input convolution
@@ -690,13 +710,10 @@ struct private DflashGpu {
     sel_ok : bool           //! the device selector serves this drafter's shapes
     bacc_words : MetalBuffer?   //! [nblock + 2] the device accept's landing: the count, the next anchor, every row's pick
     bacc_row : MetalBuffer?     //! [vocab] ... the committed row's logits
-    bcaps : MetalBuffer?    //! [caps_rows][ncap][dim] the staged commits' captured layer outputs
-    bfc : MetalBuffer?      //! [caps_rows][dim] fc's rows
+    pends : DflashPend[DF_PEND_SLOTS]   //! the staged commits, a session a slot
+    bfc : MetalBuffer?      //! [caps_rows][dim] fc's rows of the commit being encoded
     bcr : MetalBuffer?      //! ... normed
     caps_rows : int64
-    pend_uid : uint64       //! the staged commit's session
-    pend_pos0 : int64       //! ... first position
-    pend_rows : int64       //! ... rows in `bcaps` (0 = none staged): one ring run, encoded at the head of the next pass
     u_d : MetalBuffer?
     u_projw : MetalBuffer?
     u_qd : MetalBuffer?
@@ -731,7 +748,7 @@ var private g_df_sites : int64[KQ_FMT_COUNT]
 var private g_df_rows8_sites : int64[KQ_FMT_COUNT]
 
 //! the pass's device-busy and host-encode microseconds, and the passes and commits they cover, since the attach
-def metal_dflash_stats : tuple<gpu_us : int64; encode_us : int64; passes : int64; commits : int64>
+def public metal_dflash_stats : tuple<gpu_us : int64; encode_us : int64; passes : int64; commits : int64>
     => (gpu_us = g_df.us_gpu, encode_us = g_df.us_encode, passes = g_df.passes, commits = g_df.commits)
 
 //! the passes the device selector ended, and of them those committed unwaited with the verify reading their picks, since the attach
@@ -881,7 +898,12 @@ def private df_release(var g : DflashGpu) {
     release_handles(g.bacc_words, g.bacc_row)
     release_handles(g.binvf, g.btok, g.bx, g.bhn, g.bhc, g.bdyn)
     release_handles(g.bq, g.bk, g.bv, g.batt, g.bo, g.boc)
-    release_handles(g.bg, g.bu, g.bhsel, g.blog, g.bcaps, g.bfc, g.bcr)
+    release_handles(g.bg, g.bu, g.bhsel, g.blog, g.bfc, g.bcr, g.bdx)
+    for (pd in g.pends) {
+        release_handle(pd.bcaps)
+        pd.rows = 0l
+        pd.cap = 0l
+    }
     release_handles(g.bcid, g.bcval, g.bpid, g.bpval, g.bids, g.sel_ps, g.sel_ns)
     release_handles(g.bsq, g.brng)
     g.sel_pq = null
@@ -913,18 +935,15 @@ def private df_release(var g : DflashGpu) {
     g.bblob = null
     g.bfblob = null
     g.caps_rows = 0l
-    g.pend_rows = 0l
     g.ready = false
 }
 
-//! the commit buffers at `rows` rows at least
+//! the commit's scratch rows at `rows` rows at least (nothing staged reads them)
 def private df_caps_rows(dr : DflashDrafter; var g : DflashGpu; rows : int64) {
     return if (g.caps_rows >= rows)
-    release_handles(g.bcaps, g.bfc, g.bcr)
+    release_handles(g.bfc, g.bcr)
     let d = dr.dim
-    let ncap = long_length(dr.target_layers)
     g.caps_rows = max(rows, 2l * g.caps_rows)
-    g.bcaps = metal_new_buffer(g_dev, uint64(g.caps_rows * ncap * d * 4l))
     g.bfc = metal_new_buffer(g_dev, uint64(g.caps_rows * d * 4l))
     g.bcr = metal_new_buffer(g_dev, uint64(g.caps_rows * d * 4l))
 }
@@ -940,40 +959,38 @@ def private df_ready(t : Model; dr : DflashDrafter) : bool {
     let n = dr.nblock
     let qd = dr.n_heads * dr.hs
     let kvd = dr.n_kv * dr.hs
-    let projw = 2l * dr.conv_k * (d / dr.conv_g)
+    let projw = dr.v2 ? 2l * dr.conv_k * (d / dr.conv_g) : 0l
     let ncap = length(dr.target_layers)
     let f4 = 4ul
+    g.plain = !dr.v2
     g.vocab = t.config.vocab_size
     if (!empty(dr.blob)) {
         g.bblob = upload_region(unsafe(addr<void?>(dr.blob[0])), uint64(long_length(dr.blob)))
     }
     g.bfblob = upload_region(unsafe(addr<void?>(dr.fblob[0])), uint64(long_length(dr.fblob)) * f4)
     let kq_ok = df_upload_kq(dr, g)
-    var invf : array<float>
-    invf |> reserve_resize(dr.hs / 2l)
-    for (i in range64(dr.hs / 2l)) {
-        invf[i] = pow(dr.theta, -2.0 * float(i) / float(dr.hs))
-    }
     g.binvf = metal_new_buffer(g_dev, uint64(dr.hs / 2l) * f4)
     unsafe {
-        memcpy(metal_buffer_contents(g.binvf), addr<void?>(invf[0]), uint64(dr.hs / 2l) * f4)
+        memcpy(metal_buffer_contents(g.binvf), addr<void?>(dr.inv_freq[0]), uint64(dr.hs / 2l) * f4)
     }
-    delete invf
-    g.btok = metal_new_buffer(g_dev, uint64(n) * f4)
-    g.bx = metal_new_buffer(g_dev, uint64(n * d) * f4)
-    g.bhn = metal_new_buffer(g_dev, uint64(n * d) * f4)
-    g.bhc = metal_new_buffer(g_dev, uint64(n * d) * f4)
-    g.bdyn = metal_new_buffer(g_dev, uint64(n * projw) * f4)
-    g.bq = metal_new_buffer(g_dev, uint64(n * qd) * f4)
-    g.bk = metal_new_buffer(g_dev, uint64(n * kvd) * f4)
-    g.bv = metal_new_buffer(g_dev, uint64(n * kvd) * f4)
-    g.batt = metal_new_buffer(g_dev, uint64(n * qd) * f4)
-    g.bo = metal_new_buffer(g_dev, uint64(n * d) * f4)
-    g.boc = metal_new_buffer(g_dev, uint64(n * d) * f4)
-    g.bg = metal_new_buffer(g_dev, uint64(n * dr.hidden) * f4)
-    g.bu = metal_new_buffer(g_dev, uint64(n * dr.hidden) * f4)
-    g.bhsel = metal_new_buffer(g_dev, uint64(n * dr.rank) * f4)
-    g.blog = metal_new_buffer(g_dev, uint64(n * g.vocab) * f4)
+    g.btok = metal_new_buffer(g_dev, uint64(max(n * DF_JOINT_PASS_STREAMS, DF_PASS_ROWS)) * f4)
+    let jr = max(n, DF_JOINT_ROWS)   //! the rows a joint pass's tail holds: every stream's draft rows
+    g.bdx = metal_new_buffer(g_dev, uint64(jr * d) * f4)
+    let pr = max(n, DF_PASS_ROWS)   //! the rows a joint pass's layers hold: every stream's block
+    g.bx = metal_new_buffer(g_dev, uint64(pr * d) * f4)
+    g.bhn = metal_new_buffer(g_dev, uint64(max(n, DF_JOINT_ROWS) * d) * f4)
+    g.bhc = metal_new_buffer(g_dev, uint64(pr * d) * f4)
+    g.bdyn = metal_new_buffer(g_dev, uint64(max(pr * projw, 1l)) * f4)
+    g.bq = metal_new_buffer(g_dev, uint64(pr * qd) * f4)
+    g.bk = metal_new_buffer(g_dev, uint64(pr * kvd) * f4)
+    g.bv = metal_new_buffer(g_dev, uint64(pr * kvd) * f4)
+    g.batt = metal_new_buffer(g_dev, uint64(pr * qd) * f4)
+    g.bo = metal_new_buffer(g_dev, uint64(pr * d) * f4)
+    g.boc = metal_new_buffer(g_dev, uint64(pr * d) * f4)
+    g.bg = metal_new_buffer(g_dev, uint64(pr * dr.hidden) * f4)
+    g.bu = metal_new_buffer(g_dev, uint64(pr * dr.hidden) * f4)
+    g.bhsel = metal_new_buffer(g_dev, uint64(max(jr * dr.rank, 1l)) * f4)
+    g.blog = metal_new_buffer(g_dev, uint64(jr * g.vocab) * f4)
     g.sel_ok = df_ready_select(dr, g)
     g.u_d = ubuf_u32(uint(d))
     g.u_projw = ubuf_u32(uint(projw))
@@ -986,9 +1003,9 @@ def private df_ready(t : Model; dr : DflashDrafter) : bool {
     g.u_eps = ubuf_f32(dr.eps)
     g.u_act = ubuf_u32(0u)
     g.u_escale = ubuf_f32(t.config.embed_scale)
-    g.u_tot |> reserve(n + 1l)
-    g.u_toth |> reserve(n + 1l)
-    for (r in range64(n + 1l)) {
+    g.u_tot |> reserve(pr + 1l)
+    g.u_toth |> reserve(pr + 1l)
+    for (r in range64(pr + 1l)) {
         g.u_tot |> push(ubuf_u32(uint(r * d)))
         g.u_toth |> push(ubuf_u32(uint(r * dr.hidden)))
     }
@@ -1053,15 +1070,19 @@ def private sel_codebook(dr : DflashDrafter; var g : DflashGpu; w : DflashW) : t
 //! the device selector's buffers and the walk's codebook binds; false where a shape is past the kernels' or a pipeline failed
 [cold_path]
 def private df_ready_select(dr : DflashDrafter; var g : DflashGpu) : bool {
+    if (!dr.v2) {   //! a DFlash file: the rows' argmax is the whole select
+        g.bcid = metal_new_buffer(g_dev, uint64(max(dr.nblock, DF_JOINT_ROWS) * 4l))
+        return g.bcid != null
+    }
     return false if (g_df_pso_topk_slices == null || g_df_pso_topk_merge == null || g_df_pso_walk == null
         || dr.topk > int64(DFLASH_SEL_K) || dr.rank > int64(DFLASH_SEL_RANK) || dr.topk * dr.rank > int64(DFLASH_SEL_PRODS))
-    let nd = dr.nblock - 1l
+    let nd = max(dr.nblock, DF_JOINT_ROWS)   //! a joint pass's draft rows over every stream
     g.sel_nsl = (g.vocab + int64(DFLASH_SEL_SPAN) - 1l) / int64(DFLASH_SEL_SPAN)
     g.bcid = metal_new_buffer(g_dev, uint64(nd * dr.topk * 4l))
     g.bcval = metal_new_buffer(g_dev, uint64(nd * dr.topk * 4l))
     g.bpid = metal_new_buffer(g_dev, uint64(nd * g.sel_nsl * dr.topk * 4l))
     g.bpval = metal_new_buffer(g_dev, uint64(nd * g.sel_nsl * dr.topk * 4l))
-    g.bids = metal_new_buffer(g_dev, uint64(dr.nblock * 4l))
+    g.bids = metal_new_buffer(g_dev, uint64(2l * nd * 4l))
     g.bsq = metal_new_buffer(g_dev, uint64(nd * dr.topk * 4l))
     g.brng = metal_new_buffer(g_dev, 16ul)
     var p = sel_codebook(dr, g, dr.sel_prev)
@@ -1102,6 +1123,217 @@ def private df_upload_kq(dr : DflashDrafter; var g : DflashGpu) : bool {
 [cold_path]
 def private df_detach {
     df_release(g_df)
+    if (g_df_ws_ok) {
+        delete g_df_ws
+        g_df_ws_ok = false
+    }
+}
+
+var private g_df_ws : BatchWorkspace   //! the joint round's verify workspace, made at the first round of an attach
+var private g_df_ws_ok = false
+var private @scratch g_df_gw : MtpRoundGather   //! the tick's warm streams, a verify group each
+var private @scratch g_df_gw_toks : array<int64>
+var private g_df_joint_rounds = 0l
+var private g_df_joint_max = 0l
+
+//! the joint rounds since load, and the most streams one verify carried
+def public metal_dflash_joint_rounds() : tuple<rounds : int64; streams_max : int64> => (rounds = g_df_joint_rounds, streams_max = g_df_joint_max)
+
+//! the joint round's verify serves `t`: a served image on the device (a hybrid's groups ride the verify seat, each with its
+//! own shadow recurrent region)
+def private df_joint_serves(t : Model) : bool
+    => g_dev != null && t.metal_blob
+
+//! a stream the joint round cannot carry at `pos`: no mirror, a round past the context, or a mirror short of the position or
+//! of the round's rows
+def private df_round_cold(t : Model; s : Session; pos, k : int64) : bool =>
+    pos + k + 1l > t.config.seq_len || mtp_mirror_short(s, pos, k)
+
+def private df_plain_step(t : Model; var s : Session; tok, pos : int64) {
+    forward(t, s, tok, pos)
+    s.n_past = pos + 1l
+}
+
+let private DF_ROW_BUDGET = 8l      //! a tick's verify rows over every stream on the batch rail: the rows the eight-row forms carry
+let private DF_PASS_ROWS = METAL_BATCH_TILED_ROWS    //! the rows a joint pass's layers carry: every stream's block as row tiles of one weight pass
+let private DF_JOINT_ROWS = METAL_BATCH_TILED_ROWS   //! the draft rows over every stream one joint pass's classifier and selector carry
+let private DF_ROWS_DRAFTS = 3l            //! the drafts a round verifies on the row forms, where no matrix unit shares the weight pass over its rows (an M1 Max: gemma-4 E2B's rounds pay at three, lose at seven)
+let private DF_JOINT_STREAMS = 2l          //! the streams a drafted tick carries on a trunk with no recurrent layers: a wider tick's plain batched step outruns its rounds (gemma-4 E2B)
+let private DF_JOINT_STREAMS_HYBRID = 4l   //! ... on a hybrid, whose verify is one weight pass at any row count (Qwen3.8-27B)
+
+var private g_df_split : DflashTickSplit
+
+def public metal_dflash_tick_split : DflashTickSplit => g_df_split
+
+//! a hybrid's gathered streams on the verify seat's joint step: every stream's rows a group of one step, each stream's accept,
+//! its group's recurrent replay on a reject, its commit; where the seat declines the groups each stream verifies its own rows
+//! on the seat in turn
+def private df_rounds_seat(t : Model; ng : int64; var acc : array<int64>) : int64 {
+    let c = t.config
+    var even = true
+    for (nr in g_df_gw.nr) {
+        even = even && nr == g_df_gw.nr[0]
+    }
+    let tv = ref_time_ticks()
+    let joint = even && metal_mtp_verify_groups(t, g_df_gw.sessions, g_df_gw.pos, g_df_gw.nr[0])
+    g_df_split.verify_us += int64(get_time_usec(tv))
+    for (gi in range64(ng)) {
+        var s & = unsafe(*g_df_gw.sessions[gi])
+        let pos = g_df_gw.pos[gi]
+        let kd = g_df_gw.nr[gi] - 1l
+        if (!joint && !mtp_block_verify_alone(t, s, kd + 1l, pos)) {
+            df_plain_step(t, s, s.mtp_vbatch[0], pos)
+            continue
+        }
+        let a = mtp_accept_walk(s, kd, c.vocab_size) $(vr) => s.mtp_picks[vr]
+        mtp_round_take(s, a, kd, mtp_h_dim(c))
+        if (a < kd) {
+            let tr = ref_time_ticks()
+            let rolled = joint ? metal_mtp_rollback_group(t, s, pos, a) : mtp_block_rollback_alone(t, s, pos, a)
+            g_df_split.rollback_us += int64(get_time_usec(tr))
+            verify(rolled, "dasLLAMA metal dflash: a joint round's reject found no parked verify to roll back - engine bug")
+        }
+        mtp_round_commit(s, pos, kd, a)
+        let tc = ref_time_ticks()
+        mtp_block_commit(t, s, pos, a + 1l)
+        g_df_split.commit_us += int64(get_time_usec(tc))
+        acc[g_df_gw.idx[gi]] = a
+    }
+    if (joint) {
+        g_df_joint_rounds++
+        g_df_joint_max = max(g_df_joint_max, ng)
+    }
+    g_df_gw.sessions |> clear()   // borrowed handles
+    return joint ? ng : 0l
+}
+
+//! The block drafter's joint round over a tick's streams at depth `k`: every warm stream drafts its block from its own anchor,
+//! one verify carries each stream's [token, drafts] as a group, then each stream's accept walk, commit and context commit; a
+//! stream the round cannot carry takes one plain step. `acc[i]` is stream i's accepted count; returns the streams carried
+[hot_path, arch(at="../ARCHITECTURE_GPU_MTP_ASSISTANT.md#assistant-drafter-rounds")]
+def private df_rounds(t : Model; var sessions : array<Session?>; toks : array<int64>; k : int64; var acc : array<int64>) : int64 {
+    let t0 = ref_time_ticks()
+    let joined = df_rounds_run(t, sessions, toks, k, acc)
+    g_df_split.round_us += int64(get_time_usec(t0))
+    g_df_split.rounds++
+    return joined
+}
+
+[arch(at="../ARCHITECTURE_GPU_MTP_ACCEPT.md#dflash-tick-rounds")]
+def private df_rounds_run(t : Model; var sessions : array<Session?>; toks : array<int64>; k : int64; var acc : array<int64>) : int64 {
+    let c = t.config
+    if (!g_df_ws_ok) {
+        df_ws_make(t)
+    }
+    let n = long_length(sessions)
+    let form = metal_rows8_on()
+    if (n > df_tick_joins(c, form)) {   //! past the streams a drafted tick pays for, the tick is one plain batched step
+        acc |> resize(n)   // nolint:PERF026 — grows to the stream count once, the callers pass reused scratch
+        for (a in acc) {
+            a = 0l
+        }
+        eval_batch_(t, g_df_ws, sessions, toks)   // nolint:PERF026 — the workspace's rows grow to the stream count once
+        return 0l
+    }
+    let kb = df_tick_depth(n, k, form)
+    let together = n > 1l   //! several streams draft in one joint pass, after the gather
+    let td = ref_time_ticks()
+    let ng = mtp_round_gather(g_df_gw, sessions, toks, kb, acc) $(var s : Session; i, pos, ki : int64) : int64 {
+        if (!df_round_cold(t, s, pos, ki)) {
+            mtp_block_prepare(s, c)
+            if (together) {
+                return 0l if (dflash_ctx_reaches(s, pos))   // nolint:PERF026 — a stream's sequence slot is made at its first commit
+            } else {
+                return 0l if (mtp_block_draft_landed(t, s, toks[i], pos, ki) == ki)
+            }
+        }
+        df_plain_step(t, s, toks[i], pos)
+        return -1l
+    }
+    return 0l if (ng == 0l)
+    if (together) {
+        df_tick_drafts(t, ng)
+    }
+    g_df_split.draft_us += int64(get_time_usec(td))
+    return c.recr_mask != 0ul ? df_rounds_seat(t, ng, acc) : df_rounds_rail(t, ng, acc)
+}
+
+//! the joint round's verify workspace, made at the first round of an attach
+[cold_path]
+def private df_ws_make(t : Model) {
+    g_df_ws <- create_batch_workspace_(t)   // nolint:PERF030 — fresh: the detach deleted the attach before's
+    g_df_ws_ok = true
+}
+
+//! the streams a drafted tick carries: off the matrix-unit form (`form`) a verify's rows each cost near a plain step, so a
+//! round pays for one stream alone; a hybrid of routed experts on one residual stream joins two, its plain batched step of
+//! three rows and up riding the eight-row forms and outrunning its rounds (Qwen3.6-35B-A3B)
+def private df_tick_joins(c : Config; form : bool) : int64 {
+    let wide = c.recr_mask != 0ul && (c.n_expert == 0l || c.hyper_conn)
+    return !form ? 1l : wide ? DF_JOINT_STREAMS_HYBRID : DF_JOINT_STREAMS
+}
+
+//! the drafts a stream of a tick of `n` takes at the asked depth `k`: the tick's verify rows within one weight pass, a row
+//! tile for every two streams - about four rows a stream, past which a draft lands too seldom for the tile it opens; a pinned
+//! depth takes the pass whole
+def private df_tick_depth(n, k : int64; form : bool) : int64 {
+    let pinned = mtp_depth_pin().pinned
+    let pass_rows = form ? METAL_VERIFY_TILED_ROWS : DF_ROW_BUDGET
+    let budget = pinned ? pass_rows : min(DF_ROW_BUDGET * ((n + 1l) / 2l), pass_rows)
+    return clamp(budget / n - 1l, 1l, min(k, form || pinned ? 7l : DF_ROWS_DRAFTS))
+}
+
+//! the gathered streams' drafts in one joint pass at the shortest ask among them - a stream near its budget asks for fewer,
+//! and one depth keeps the tick one pass and one verify - else a stream at a time
+def private df_tick_drafts(t : Model; ng : int64) {
+    var shortest = g_df_gw.nr[0]
+    for (nr in g_df_gw.nr) {
+        shortest = min(shortest, nr)
+    }
+    for (nr in g_df_gw.nr) {
+        nr = shortest
+    }
+    return if (shortest >= 2l && dflash_draft_joint(t, g_df_gw.sessions, g_df_gw.pos, shortest - 1l))   // nolint:PERF026 — a stream's sequence slot is made at its first commit
+    for (gi in range64(ng)) {   //! a stream whose pass fails verifies its own token again and accepts none
+        var s & = unsafe(*g_df_gw.sessions[gi])
+        let kd = g_df_gw.nr[gi] - 1l
+        if (mtp_block_draft_landed(t, s, s.mtp_vbatch[0], g_df_gw.pos[gi], kd) != kd) {
+            for (r in range64(kd)) {
+                s.mtp_vbatch[r + 1l] = s.mtp_vbatch[0]
+            }
+        }
+    }
+}
+
+//! the gathered streams' rows as one same-slab batch verify, then each stream's accept, commit and context commit; a verify
+//! the rail declines leaves every stream one plain step. Returns the streams the verify carried
+def private df_rounds_rail(t : Model; ng : int64; var acc : array<int64>) : int64 {
+    let tv = ref_time_ticks()
+    finish_pending_step()
+    mtp_round_rows(g_df_gw, g_df_gw_toks)
+    let vok = verify_batch_groups(t, g_df_ws, g_df_gw.sessions, g_df_gw_toks, g_df_gw.pos, g_df_gw.nr)
+    finish_pending_step()
+    g_df_split.verify_us += int64(get_time_usec(tv))
+    var row = 0l
+    for (gi in range64(ng)) {
+        var s & = unsafe(*g_df_gw.sessions[gi])
+        let pos = g_df_gw.pos[gi]
+        if (!vok) {
+            df_plain_step(t, s, s.mtp_vbatch[0], pos)
+            continue
+        }
+        let a = mtp_round_accept(t.config, s, pos, g_df_gw.nr[gi] - 1l, row)
+        let tc = ref_time_ticks()
+        mtp_block_commit(t, s, pos, a + 1l)
+        g_df_split.commit_us += int64(get_time_usec(tc))
+        acc[g_df_gw.idx[gi]] = a
+        row += g_df_gw.nr[gi]
+    }
+    g_df_gw.sessions |> clear()   // borrowed handles
+    return 0l if (!vok)
+    g_df_joint_rounds++
+    g_df_joint_max = max(g_df_joint_max, ng)
+    return ng
 }
 
 def private df_drop(uid : uint64) {
@@ -1109,8 +1341,10 @@ def private df_drop(uid : uint64) {
         df_ring_release(g_df.rings[uid])
         g_df.rings |> erase(uid)
     }
-    if (g_df.pend_rows > 0l && g_df.pend_uid == uid) {
-        g_df.pend_rows = 0l
+    for (pd in g_df.pends) {
+        if (pd.rows > 0l && pd.uid == uid) {
+            pd.rows = 0l
+        }
     }
 }
 
@@ -1126,27 +1360,33 @@ def private df_ring(dr : DflashDrafter; uid : uint64) : DflashRing {
 //! a norm weight row of the f32 planes as its own buffer (the region cache keys it on the pointer)
 def private fw(dr : DflashDrafter; off, n : int64) : MetalBuffer? => upload_region(unsafe(addr<void?>(dr.fblob[off])), uint64(n * 4l))
 
-def private conv_args(dr : DflashDrafter; side : uint; rows : int64) : DflashConvArgs {
+def private conv_args(dr : DflashDrafter; side : uint; rows : int64; blk : int64 = 0l) : DflashConvArgs {
     let ng = uint(dr.dim / dr.conv_g)
     return DflashConvArgs(dim = uint(dr.dim), g = uint(dr.conv_g), ng = ng, projw = 2u * uint(dr.conv_k) * ng,
-        side = side, convk = uint(dr.conv_k), rows = uint(rows))
+        side = side, convk = uint(dr.conv_k), rows = uint(rows), blk = uint(blk))
 }
 
 def private qkn_args(dr : DflashDrafter; xs, ys, pos0 : int64) : DflashQknArgs =>
     DflashQknArgs(hs = uint(dr.hs), xs = uint(xs), ys = uint(ys), pos0 = uint(pos0), eps = dr.eps)
 
-//! `rows` rows of x (n wide, in a panel of eight rows at least) through plane `w` into y rows `d` apart at `yoff`: at five to
-//! eight rows, where `wide8` lets a form write all eight (W streamed once for the panel), the rows8 matrix-unit form, then the
-//! eight-row tensor stamps; the row forms under five rows, past eight, or where both decline
+//! `rows` rows of x (n wide, a panel of eight rows at least) through plane `w` into y rows `d` apart at `yoff`. Where `wide8`
+//! lets a form write whole panels: whole tiles of eight past eight rows on the rows8 form over row tiles, the eight-row forms'
+//! row counts (`rows8_rows`) on that form, then the eight-row tensor stamps; else, or where they decline, the row forms
 def private df_mm(enc : MetalComputeEncoder?; g : DflashGpu; w : DflashW; bx, by, u_n, u_d : MetalBuffer?; n, d, rows : int64; yoff : uint64 = 0ul;
                   wide8 : bool = true) {
     g_df_sites[int(w.fmt)]++
-    let eight = wide8 && rows >= 5l && rows <= 8l
+    let eight = wide8 && rows8_rows(rows)
     if (w.fmt != KqFmt.q8) {
         df_mm_kq(enc, g, w, bx, by, u_n, u_d, n, d, rows, yoff, eight)
         return
     }
     let boff = uint64(w.off)
+    if (wide8 && rows > 8l && rows % 8l == 0l) {   //! whole row tiles past eight rows: one dispatch, the plane streamed once
+        if (pf_enc_rows8_q8(enc, g.bblob, boff, bx, by, yoff, u_n, u_d, n, d, d, null, null, rows / 8l)) {
+            g_df_rows8_sites[int(w.fmt)]++
+            return
+        }
+    }
     if (eight) {
         if (pf_enc_rows8_q8(enc, g.bblob, boff, bx, by, yoff, u_n, u_d, n, d, d)) {
             g_df_rows8_sites[int(w.fmt)]++
@@ -1163,6 +1403,12 @@ def private df_mm_kq(enc : MetalComputeEncoder?; g : DflashGpu; w : DflashW; bx,
                      eight : bool) {
     let i = int(w.fmt)
     let at = kq_bind_offs(w.fmt, g.kq_nsb[i], w.off)
+    if (rows > 8l && rows % 8l == 0l) {   //! whole row tiles past eight rows: one dispatch, the plane streamed once
+        if (pf_enc_rows8_kq_planes(enc, w.fmt, g.kq_q[i], at.qoff, g.kq_s[i], at.soff, at.doff, d, n, d, bx, by, yoff, u_n, u_d, null, null, null, rows / 8l)) {
+            g_df_rows8_sites[i]++
+            return
+        }
+    }
     if (eight) {
         if (pf_enc_rows8_kq_planes(enc, w.fmt, g.kq_q[i], at.qoff, g.kq_s[i], at.soff, at.doff, d, n, d, bx, by, yoff, u_n, u_d)) {
             g_df_rows8_sites[int(w.fmt)]++
@@ -1193,11 +1439,11 @@ let private DF_PEND_CAP = 512l   //! the rows one staged commit holds at most; a
 
 //! the staged commit's `rows` rows of captures at `pos0 ..` (one ring run): c = norm(fc . caps), a layer's K rows normed and roped
 //! in place in the ring, its V rows straight into the ring
-def private df_encode_commit(enc : MetalComputeEncoder?; dr : DflashDrafter; g : DflashGpu; ring : DflashRing; rows, pos0 : int64) {
+def private df_encode_commit(enc : MetalComputeEncoder?; dr : DflashDrafter; g : DflashGpu; ring : DflashRing; bcaps : MetalBuffer?; rows, pos0 : int64) {
     let d = dr.dim
     let kvd = dr.n_kv * dr.hs
     let ncap = long_length(dr.target_layers)
-    df_mm(enc, g, dr.fc, g.bcaps, g.bfc, g.u_fcn, g.u_d, ncap * d, d, rows)
+    df_mm(enc, g, dr.fc, bcaps, g.bfc, g.u_fcn, g.u_d, ncap * d, d, rows)
     enc_rms_b(enc, g.bfc, 0ul, fw(dr, dr.hnorm_off, d), g.bcr, g.u_d, g.u_eps, rows)
     let slot0 = pos0 % dr.window
     let fits = slot0 + 8l <= dr.window   //! the eight-row forms write eight slots: past the ring's end the row forms write `rows` alone
@@ -1205,23 +1451,51 @@ def private df_encode_commit(enc : MetalComputeEncoder?; dr : DflashDrafter; g :
     for (l in range64(dr.n_layers)) {
         let lb = uint64((l * dr.window + slot0) * kvd * 4l)
         df_mm(enc, g, dr.wk[l], g.bcr, ring.bk, g.u_d, g.u_kvd, d, kvd, rows, lb, fits)
+        if (dr.biased) {
+            df_bias(enc, dr, g, ring.bk, lb, dr.bk_offs[l], kvd, rows)
+        }
         enc_dflash_qkn(enc, ring.bk, lb, g.bfblob, uint64(dr.kn_offs[l] * 4l), g.binvf, ring.bk, lb, kka, dr.n_kv, rows, dr.hs)
         df_mm(enc, g, dr.wv[l], g.bcr, ring.bv, g.u_d, g.u_kvd, d, kvd, rows, lb, fits)
+        if (dr.biased) {
+            df_bias(enc, dr, g, ring.bv, lb, dr.bv_offs[l], kvd, rows)
+        }
     }
 }
 
-//! the staged commit onto `enc`, then nothing is staged
+//! every staged commit onto `enc`, then nothing is staged
 def private df_encode_pending(enc : MetalComputeEncoder?; dr : DflashDrafter) {
     var g & = g_df
-    return if (g.pend_rows <= 0l)
-    df_encode_commit(enc, dr, g, df_ring(dr, g.pend_uid), g.pend_rows, g.pend_pos0)
-    g.commits++
-    g.pend_rows = 0l
+    for (pd in g.pends) {
+        continue if (pd.rows <= 0l)
+        df_encode_commit(enc, dr, g, df_ring(dr, pd.uid), pd.bcaps, pd.rows, pd.pos0)
+        g.commits++
+        pd.rows = 0l
+    }
+}
+
+//! a commit is staged
+def private df_pending : bool {
+    for (pd in g_df.pends) {
+        return true if (pd.rows > 0l)
+    }
+    return false
+}
+
+//! the slot `uid`'s commit stages in: its own where it holds one, else a free one, else -1 (every slot is another session's)
+def private df_pend_slot(uid : uint64) : int {
+    var free = -1
+    for (i in range(DF_PEND_SLOTS)) {
+        return i if (g_df.pends[i].rows > 0l && g_df.pends[i].uid == uid)
+        if (free < 0 && g_df.pends[i].rows == 0l) {
+            free = i
+        }
+    }
+    return free
 }
 
 //! the staged commit in a command buffer of its own: a commit that cannot join it, or a pass that must see it, comes next
 def private df_flush(dr : DflashDrafter) : bool {
-    return true if (g_df.pend_rows <= 0l)
+    return true if (!df_pending())
     return df_run_cb() $(enc) {
         df_encode_pending(enc, dr)
     }
@@ -1240,81 +1514,152 @@ def private df_commit(dr : DflashDrafter; uid : uint64; caps : array<float>; row
     while (done < rows) {
         let p = pos0 + done
         let run = min(rows - done, w - p % w)
-        let joins = (g.pend_rows > 0l && g.pend_uid == uid && g.pend_pos0 + g.pend_rows == p && g.pend_pos0 % w + g.pend_rows + run <= w
-            && g.pend_rows + run <= DF_PEND_CAP && g.pend_rows + run <= g.caps_rows)
-        if (g.pend_rows > 0l && !joins) {
+        var si = df_pend_slot(uid)
+        //! a run joins its session's staged one where it continues it inside the ring's run, the slot's rows and the cap
+        let joins = (si >= 0 && g.pends[si].rows > 0l && g.pends[si].pos0 + g.pends[si].rows == p
+            && g.pends[si].pos0 % w + g.pends[si].rows + run <= w
+            && g.pends[si].rows + run <= DF_PEND_CAP && g.pends[si].rows + run <= g.pends[si].cap)
+        if (si < 0 || (g.pends[si].rows > 0l && !joins)) {
             return false if (!df_flush(dr))
+            si = 0
         }
-        df_caps_rows(dr, g, run)
+        var pd & = unsafe(g.pends[si])
+        if (pd.rows == 0l && pd.cap < run) {
+            release_handle(pd.bcaps)
+            pd.cap = max(run, 2l * pd.cap)
+            pd.bcaps = metal_new_buffer(g_dev, uint64(pd.cap * ncap * d * 4l))
+        }
+        df_caps_rows(dr, g, pd.rows + run)
         unsafe {
-            let dst = reinterpret<float?>(metal_buffer_contents(g.bcaps)) + g.pend_rows * ncap * d
+            let dst = reinterpret<float?>(metal_buffer_contents(pd.bcaps)) + pd.rows * ncap * d
             memcpy(reinterpret<void?>(dst), addr<void?>(caps[done * ncap * d]), uint64(run * ncap * d * 4l))
         }
-        if (g.pend_rows == 0l) {
-            g.pend_uid = uid
-            g.pend_pos0 = p
+        if (pd.rows == 0l) {
+            pd.uid = uid
+            pd.pos0 = p
         }
-        g.pend_rows += run
+        pd.rows += run
         done += run
     }
     return true
 }
 
+//! the bias row at `boff` of the f32 planes onto `rows` rows of `w` in `by` at byte `yoff` (a file with no biases: nothing)
+def private df_bias(enc : MetalComputeEncoder?; dr : DflashDrafter; g : DflashGpu; by : MetalBuffer?; yoff : uint64; boff, w, rows : int64) {
+    return if (!dr.biased)
+    tw_bias(enc, by, g.bfblob, GkBiasActArgs(d = uint(w), nelem = uint(rows * w), boff = uint(boff), xoff = uint(yoff / 4ul), act = BIAS_ACT_NONE))
+}
+
 //! one drafter layer over the block's `rows` in `bx`, at `pos ..` against `ring`'s positions in view
 def private df_encode_layer(enc : MetalComputeEncoder?; dr : DflashDrafter; g : DflashGpu; ring : DflashRing; l, rows, pos : int64; var ka : DflashAttnArgs) {
+    df_layer_head(enc, dr, g, l, rows, 0l)
+    df_layer_attn(enc, dr, g, ring, l, rows, 0l, pos, ka)
+    df_layer_tail(enc, dr, g, l, rows, 0l)
+}
+
+//! one drafter layer over `nb` streams' blocks of `n` rows each in `bx` (block b's rows b n ..): every weight site over all the
+//! rows at once - the row tiles of one weight pass - the head norm and rope, and the attention, a block at a time against its
+//! own ring and positions
+def private df_encode_layer_blocks(enc : MetalComputeEncoder?; dr : DflashDrafter; g : DflashGpu; uids : array<uint64>; l, n, nb : int64;
+                                   pos : array<int64>; kas : array<DflashAttnArgs>) {
+    df_layer_head(enc, dr, g, l, n * nb, n)
+    for (b in range64(nb)) {
+        var ka = kas[b]
+        df_layer_attn(enc, dr, g, df_ring(dr, uids[b]), l, n, b, pos[b], ka)
+    }
+    df_layer_tail(enc, dr, g, l, n * nb, n)
+}
+
+//! a layer's attention inputs over `rows` rows of `bx` (conv blocks of `blk` rows, 0 = one block): the norm and the q, k and
+//! v projections
+def private df_layer_head(enc : MetalComputeEncoder?; dr : DflashDrafter; g : DflashGpu; l, rows, blk : int64) {
     let d = dr.dim
     let qd = dr.n_heads * dr.hs
     let kvd = dr.n_kv * dr.hs
-    let projw = 2l * dr.conv_k * (d / dr.conv_g)
-    let total = rows * d
-    let u_tot = g.u_tot[rows]
-    let abase = uint64(dr.aconv_base_offs[l] * 4l)
-    let fbase = uint64(dr.fconv_base_offs[l] * 4l)
-    var cin = conv_args(dr, 0u, rows)
-    var cout = conv_args(dr, 1u, rows)
+    let bhc = dr.v2 ? g.bhc : g.bhn   //! a DFlash file's sites read the normed rows and add their outputs as they are
+    enc_rms_b(enc, g.bx, 0ul, fw(dr, dr.attn_norm_offs[l], d), g.bhn, g.u_d, g.u_eps, rows)
+    if (dr.v2) {
+        var cin = conv_args(dr, 0u, rows, blk)
+        df_mm(enc, g, dr.aconv_proj[l], g.bhn, g.bdyn, g.u_d, g.u_projw, d, 2l * dr.conv_k * (d / dr.conv_g), rows)
+        enc_dflash_conv(enc, g.bhn, g.bhc, g.bdyn, g.bfblob, uint64(dr.aconv_base_offs[l] * 4l), cin, rows * d)
+    }
+    df_mm(enc, g, dr.wq[l], bhc, g.bq, g.u_d, g.u_qd, d, qd, rows)
+    df_mm(enc, g, dr.wk[l], bhc, g.bk, g.u_d, g.u_kvd, d, kvd, rows)
+    df_mm(enc, g, dr.wv[l], bhc, g.bv, g.u_d, g.u_kvd, d, kvd, rows)
+    if (dr.biased) {
+        df_bias(enc, dr, g, g.bq, 0ul, dr.bq_offs[l], qd, rows)
+        df_bias(enc, dr, g, g.bk, 0ul, dr.bk_offs[l], kvd, rows)
+        df_bias(enc, dr, g, g.bv, 0ul, dr.bv_offs[l], kvd, rows)
+    }
+}
+
+//! block `b`'s `n` rows at `pos ..` through the head norm and rope, then its attention against `ring`'s positions in view
+def private df_layer_attn(enc : MetalComputeEncoder?; dr : DflashDrafter; g : DflashGpu; ring : DflashRing; l, n, b, pos : int64; var ka : DflashAttnArgs) {
+    let qd = dr.n_heads * dr.hs
+    let kvd = dr.n_kv * dr.hs
+    let qo = uint64(b * n * qd * 4l)
+    let ko = uint64(b * n * kvd * 4l)
     var qka = qkn_args(dr, qd, qd, pos)
     var kka = qkn_args(dr, kvd, kvd, pos)
-    enc_rms_b(enc, g.bx, 0ul, fw(dr, dr.attn_norm_offs[l], d), g.bhn, g.u_d, g.u_eps, rows)
-    df_mm(enc, g, dr.aconv_proj[l], g.bhn, g.bdyn, g.u_d, g.u_projw, d, projw, rows)
-    enc_dflash_conv(enc, g.bhn, g.bhc, g.bdyn, g.bfblob, abase, cin, total)
-    df_mm(enc, g, dr.wq[l], g.bhc, g.bq, g.u_d, g.u_qd, d, qd, rows)
-    df_mm(enc, g, dr.wk[l], g.bhc, g.bk, g.u_d, g.u_kvd, d, kvd, rows)
-    df_mm(enc, g, dr.wv[l], g.bhc, g.bv, g.u_d, g.u_kvd, d, kvd, rows)
-    enc_dflash_qkn(enc, g.bq, 0ul, g.bfblob, uint64(dr.qn_offs[l] * 4l), g.binvf, g.bq, 0ul, qka, dr.n_heads, rows, dr.hs)
-    enc_dflash_qkn(enc, g.bk, 0ul, g.bfblob, uint64(dr.kn_offs[l] * 4l), g.binvf, g.bk, 0ul, kka, dr.n_kv, rows, dr.hs)
+    enc_dflash_qkn(enc, g.bq, qo, g.bfblob, uint64(dr.qn_offs[l] * 4l), g.binvf, g.bq, qo, qka, dr.n_heads, n, dr.hs)
+    enc_dflash_qkn(enc, g.bk, ko, g.bfblob, uint64(dr.kn_offs[l] * 4l), g.binvf, g.bk, ko, kka, dr.n_kv, n, dr.hs)
     let lb = uint64(l * dr.window * kvd * 4l)
-    enc_dflash_attn(enc, g.bq, g.bk, g.bv, ring.bk, lb, ring.bv, lb, g.batt, ka, dr.n_heads, rows, dr.hs)
+    enc_dflash_attn(enc, g.bq, g.bk, g.bv, ring.bk, lb, ring.bv, lb, g.batt, ka, dr.n_heads, n, dr.hs)
+}
+
+//! a layer past its attention over `rows` rows (conv blocks of `blk` rows, 0 = one block): the output projection and its
+//! residual, the FFN and its residual - the fused q8 ladder off the eight-row forms, to twelve rows
+def private df_layer_tail(enc : MetalComputeEncoder?; dr : DflashDrafter; g : DflashGpu; l, rows, blk : int64) {
+    let d = dr.dim
+    let v2 = dr.v2
+    let qd = dr.n_heads * dr.hs
+    let total = rows * d
+    let u_tot = g.u_tot[rows]
+    let abase = v2 ? uint64(dr.aconv_base_offs[l] * 4l) : 0ul
+    let fbase = v2 ? uint64(dr.fconv_base_offs[l] * 4l) : 0ul
+    var cin = v2 ? conv_args(dr, 0u, rows, blk) : DflashConvArgs()
+    var cout = v2 ? conv_args(dr, 1u, rows, blk) : DflashConvArgs()
+    let bhc = v2 ? g.bhc : g.bhn
+    let boc = v2 ? g.boc : g.bo
     df_mm(enc, g, dr.wo[l], g.batt, g.bo, g.u_qd, g.u_d, qd, d, rows)
-    enc_dflash_conv(enc, g.bo, g.boc, g.bdyn, g.bfblob, abase, cout, total)
-    enc_add(enc, g.bx, 0ul, g.boc, 0ul, u_tot, total)
+    if (dr.biased) {
+        df_bias(enc, dr, g, g.bo, 0ul, dr.bo_offs[l], d, rows)
+    }
+    if (v2) {
+        enc_dflash_conv(enc, g.bo, g.boc, g.bdyn, g.bfblob, abase, cout, total)
+    }
+    enc_add(enc, g.bx, 0ul, boc, 0ul, u_tot, total)
     enc_rms_b(enc, g.bx, 0ul, fw(dr, dr.ffn_norm_offs[l], d), g.bhn, g.u_d, g.u_eps, rows)
-    df_mm(enc, g, dr.fconv_proj[l], g.bhn, g.bdyn, g.u_d, g.u_projw, d, projw, rows)
-    enc_dflash_conv(enc, g.bhn, g.bhc, g.bdyn, g.bfblob, fbase, cin, total)
-    let fused = (rows < 5l || rows > 8l) && dr.w1[l].fmt == KqFmt.q8 && dr.w3[l].fmt == KqFmt.q8   //! the fused q8 ladder under five rows
-    if (fused) {
-        enc_gemv_w13sw_rows(enc, rows, g.bblob, uint64(dr.w1[l].off), uint64(dr.w3[l].off), g.bhc, g.bg, g.u_d, g.u_hidden, g.u_act, d, dr.hidden)
+    if (v2) {
+        df_mm(enc, g, dr.fconv_proj[l], g.bhn, g.bdyn, g.u_d, g.u_projw, d, 2l * dr.conv_k * (d / dr.conv_g), rows)
+        enc_dflash_conv(enc, g.bhn, g.bhc, g.bdyn, g.bfblob, fbase, cin, total)
+    }
+    if (blk == 0l && !rows8_rows(rows) && rows <= 12l && dr.w1[l].fmt == KqFmt.q8 && dr.w3[l].fmt == KqFmt.q8) {
+        enc_gemv_w13sw_rows(enc, rows, g.bblob, uint64(dr.w1[l].off), uint64(dr.w3[l].off), bhc, g.bg, g.u_d, g.u_hidden, g.u_act, d, dr.hidden)
     } else {
-        df_mm(enc, g, dr.w1[l], g.bhc, g.bg, g.u_d, g.u_hidden, d, dr.hidden, rows)
-        df_mm(enc, g, dr.w3[l], g.bhc, g.bu, g.u_d, g.u_hidden, d, dr.hidden, rows)
+        df_mm(enc, g, dr.w1[l], bhc, g.bg, g.u_d, g.u_hidden, d, dr.hidden, rows)
+        df_mm(enc, g, dr.w3[l], bhc, g.bu, g.u_d, g.u_hidden, d, dr.hidden, rows)
         enc_swiglu(enc, g.bg, 0ul, g.bu, 0ul, g.u_toth[rows], rows * dr.hidden)
     }
     df_mm(enc, g, dr.w2[l], g.bg, g.bo, g.u_hidden, g.u_d, dr.hidden, d, rows)
-    enc_dflash_conv(enc, g.bo, g.boc, g.bdyn, g.bfblob, fbase, cout, total)
-    enc_add(enc, g.bx, 0ul, g.boc, 0ul, u_tot, total)
+    if (v2) {
+        enc_dflash_conv(enc, g.bo, g.boc, g.bdyn, g.bfblob, fbase, cout, total)
+    }
+    enc_add(enc, g.bx, 0ul, boc, 0ul, u_tot, total)
 }
 
 //! the block's token rows poked into `btok` (the anchor, then the masks) and the block attention's arguments
-def private df_pass_args(dr : DflashDrafter; g : DflashGpu; tok, pos, rows, lo, nctx : int64) : DflashAttnArgs {
+def private df_pass_args(dr : DflashDrafter; g : DflashGpu; tok, pos, rows, lo, nctx : int64; tbase : int64 = 0l) : DflashAttnArgs {
     unsafe {
         var tp = reinterpret<uint?>(metal_buffer_contents(g.btok))
-        tp[0] = uint(tok)
+        tp[tbase] = uint(tok)
         for (r in range64(1l, rows)) {
-            tp[r] = uint(dr.mask_id)
+            tp[tbase + r] = uint(dr.mask_id)
         }
     }
     return DflashAttnArgs(rows = uint(rows), pos0 = uint(pos), lo = uint(lo), nctx = uint(nctx), w = uint(dr.window), hs = uint(dr.hs),
         nheads = uint(dr.n_heads), grp = uint(dr.n_heads / dr.n_kv), kvd = uint(dr.n_kv * dr.hs), qd = uint(dr.n_heads * dr.hs),
-        scale = 1.0 / sqrt(float(dr.hs)))
+        scale = dr.attn_scale)
 }
 
 //! the pass onto `enc`: the staged commit, the block's token rows off the trunk's table, the layers, the first `nd` draft rows
@@ -1327,23 +1672,56 @@ def private df_encode_pass(enc : MetalComputeEncoder?; t : Model; dr : DflashDra
     for (l in range64(dr.n_layers)) {
         df_encode_layer(enc, dr, g, ring, l, rows, pos, ka)
     }
-    enc_rms_b(enc, g.bx, uint64(d * 4l), fw(dr, dr.norm_off, d), g.bhn, g.u_d, g.u_eps, nd)
-    enc_block_cls_rows(enc, t, g.bhn, g.blog, g.u_d, g.u_vocab, nd)
-    df_mm(enc, g, dr.sel_h, g.bhn, g.bhsel, g.u_d, g.u_rank, d, dr.rank, nd)
+    df_encode_draft_rows(enc, t, dr, g.bx, uint64(d * 4l), nd)
 }
 
-//! the device selector after the pass on `enc`: each draft row's top-k over its logits - a list a slice, the slices' lists
-//! merged - then the walk into `bids`, greedy, or at `temp` above 0 drawn off the LCG state in `brng` with each position's q
-//! into `bsq`
-def private df_encode_select(enc : MetalComputeEncoder?; g : DflashGpu; nd : int64; temp : float) {
+//! `nr` draft rows at `xoff` of `bx` normed, the trunk's classifier over them (row tiles past eight) and the selector's
+//! projection where the file carries one
+def private df_encode_draft_rows(enc : MetalComputeEncoder?; t : Model; dr : DflashDrafter; bx : MetalBuffer?; xoff : uint64; nr : int64) {
+    let g & = g_df
+    enc_rms_b(enc, bx, xoff, fw(dr, dr.norm_off, dr.dim), g.bhn, g.u_d, g.u_eps, nr)
+    if (nr > 8l) {
+        metal_rows_tiled_scope() {
+            enc_block_cls_rows(enc, t, g.bhn, g.blog, g.u_d, g.u_vocab, nr)
+        }
+    } else {
+        enc_block_cls_rows(enc, t, g.bhn, g.blog, g.u_d, g.u_vocab, nr)
+    }
+    if (dr.v2) {
+        df_mm(enc, g, dr.sel_h, g.bhn, g.bhsel, g.u_d, g.u_rank, dr.dim, dr.rank, nr)
+    }
+}
+
+//! the device selector after the pass on `enc` over `ns` streams' `nd` draft rows each (blocks of `rows` token rows): each
+//! draft row's top-k over its logits - a list a slice, the slices' lists merged - then a stream's walk into `bids`, greedy, or
+//! at `temp` above 0 drawn off the LCG state in `brng` with each position's q into `bsq`
+def private df_encode_select(enc : MetalComputeEncoder?; g : DflashGpu; nd : int64; temp : float; ns : int64 = 1l; rows : int64 = 0l) {
+    if (g.plain) {
+        enc_argmax_rows(enc, g.blog, g.bcid, g.u_vocab, ns * nd)
+        return
+    }
+    df_encode_topk(enc, g, ns * nd)
+    for (b in range64(ns)) {
+        df_encode_walk(enc, g, nd, temp, uint(b * rows), uint(b * nd))
+    }
+}
+
+//! each of `rows` draft rows' top-k over its logits: a list a slice, the slices' lists merged
+def private df_encode_topk(enc : MetalComputeEncoder?; g : DflashGpu; rows : int64) {
     let k = g.sel_args.k
     var ska = DflashTopkArgs(vocab = uint(g.vocab), k = k, span = uint(DFLASH_SEL_SPAN), nsl = uint(g.sel_nsl))
     var mka = DflashTopkArgs(vocab = uint(g.sel_nsl) * k, k = k, span = 0u, nsl = 1u)
+    enc_dflash_topk_slices(enc, g.blog, g.blog, g.bpid, g.bpval, ska, g.sel_nsl, rows)
+    enc_dflash_topk_merge(enc, g.bpval, g.bpid, g.bcid, g.bcval, mka, rows)
+}
+
+//! the walk over `nd` positions from the anchor at `tbase` of `btok`, the rows from `rbase`, into its stream's slots of `bids`
+def private df_encode_walk(enc : MetalComputeEncoder?; g : DflashGpu; nd : int64; temp : float; tbase, rbase : uint) {
     var wka = g.sel_args
     wka.nd = uint(nd)
     wka.temp = temp
-    enc_dflash_topk_slices(enc, g.blog, g.blog, g.bpid, g.bpval, ska, g.sel_nsl, nd)
-    enc_dflash_topk_merge(enc, g.bpval, g.bpid, g.bcid, g.bcval, mka, nd)
+    wka.tbase = tbase
+    wka.rbase = rbase
     let ps = g.sel_ps != null ? g.sel_ps : g.sel_pq
     let ns = g.sel_ns != null ? g.sel_ns : g.sel_nq
     if (temp > 0.0) {
@@ -1370,13 +1748,14 @@ def private df_land_soft(g : DflashGpu; nd : int64; var rng : int4&; var cids : 
     }
 }
 
-//! the walk's `nd` picks into drafts[1 .. nd] (a slot no id filled as -1)
-def private df_land_ids(g : DflashGpu; var drafts : array<int64>; nd : int64) {
+//! stream `b`'s `nd` picks into out[at .. at + nd) (a slot no id filled as -1)
+def private df_land_ids(g : DflashGpu; var out : array<int64>; nd : int64; at : int64 = 1l; b : int64 = 0l) {
     unsafe {
-        let ip = reinterpret<uint const?>(metal_buffer_contents(g.bids))
+        let ip = reinterpret<uint const?>(metal_buffer_contents(g.plain ? g.bcid : g.bids))
+        let first = g.plain ? b * nd : b * (nd + 1l) + 1l   //! a walk's picks stand past its anchor; a DFlash file's rows' best ids from the first
         for (r in range64(nd)) {
-            let id = ip[r + 1l]
-            drafts[r + 1l] = id == DFLASH_SEL_NONE ? -1l : int64(id)
+            let id = ip[r + first]
+            out[at + r] = id == DFLASH_SEL_NONE ? -1l : int64(id)
         }
     }
 }
@@ -1409,7 +1788,7 @@ def private df_select(t : Model; dr : DflashDrafter; uid : uint64; tok, pos, row
     if (soft) {
         *unsafe(reinterpret<int?>(metal_buffer_contents(g.brng))) = rng.x
     }
-    let greedy_hold = may_hold && !soft
+    let greedy_hold = may_hold && !soft && !g.plain   //! a held pass's picks are the walk's rows in `bids`
     let takes = metal_verify_takes_device_rows(t)
     let late = !takes && g_df_ahead >= 2 && metal_verify_takes_device_rows_late(t)
     if ((greedy_hold || (g_df_ahead >= 1 && may_hold_ahead)) && (takes || late)) {
@@ -1446,6 +1825,62 @@ def private df_select(t : Model; dr : DflashDrafter; uid : uint64; tok, pos, row
     }
     return DflashSelect.landed
 }
+
+//! The joint select: every stream's pass in one command buffer - its block through the layers, its first `nd` draft rows
+//! gathered a stream after a stream - then one norm, one classifier pass and one select over all of them, waited once; stream
+//! b's picks into picks[b * nd ..]. False where the selector, the shapes or the buffer declines (a stream drafts at a time)
+[no_env]
+def private df_select_joint(t : Model; dr : DflashDrafter; uids : array<uint64>; toks, pos, lo, nctx : array<int64>; rows, nd : int64;
+                            var picks : array<int64>) : bool {
+    let ns = long_length(uids)
+    return false if (!df_selects(false) || g_df_held != null || ns < 1l || ns > DF_JOINT_PASS_STREAMS || rows != dr.nblock || nd < 1l || nd >= rows
+        || ns * nd > DF_JOINT_ROWS || g_df.bdx == null)
+    for (b in range64(ns)) {
+        return false if (nctx[b] + rows > int64(DFLASH_ATTN_KEYS))
+    }
+    var g & = g_df
+    let d = dr.dim
+    let r_all = ns * nd
+    let ok = df_run_cb() $(enc) {
+        df_encode_pending(enc, dr)
+        if (ns > 1l && ns * rows <= DF_PASS_ROWS && (ns * rows) % 8l == 0l) {   //! every stream's block through the layers together
+            g_df_kas |> resize(ns)
+            for (b in range64(ns)) {
+                g_df_kas[b] = df_pass_args(dr, g, toks[b], pos[b], rows, lo[b], nctx[b], b * rows)
+                g_df_kas[b].rbase = uint(b * rows)
+            }
+            enc_embed_dev(enc, t, g.btok, 0ul, g.bx, 0ul, ns * rows, g.u_d, g.u_escale)
+            for (l in range64(dr.n_layers)) {
+                df_encode_layer_blocks(enc, dr, g, uids, l, rows, ns, pos, g_df_kas)
+            }
+            for (b in range64(ns)) {
+                enc_copy_row(enc, g.bx, uint64((b * rows + 1l) * d * 4l), g.bdx, uint64(b * nd * d * 4l), g.u_tot[nd], nd * d)
+            }
+        } else {
+            for (b in range64(ns)) {
+                let ring = df_ring(dr, uids[b])
+                var ka = df_pass_args(dr, g, toks[b], pos[b], rows, lo[b], nctx[b], b * rows)
+                enc_embed_dev(enc, t, g.btok, uint64(b * rows * 4l), g.bx, 0ul, rows, g.u_d, g.u_escale)
+                for (l in range64(dr.n_layers)) {
+                    df_encode_layer(enc, dr, g, ring, l, rows, pos[b], ka)
+                }
+                enc_copy_row(enc, g.bx, uint64(d * 4l), g.bdx, uint64(b * nd * d * 4l), g.u_tot[nd], nd * d)
+            }
+        }
+        df_encode_draft_rows(enc, t, dr, g.bdx, 0ul, r_all)
+        df_encode_select(enc, g, nd, 0.0, ns, rows)
+    }
+    return false if (!ok)
+    g.passes += ns
+    g.selected += ns
+    picks |> resize(r_all)
+    for (b in range64(ns)) {
+        df_land_ids(g, picks, nd, b * nd, b)
+    }
+    return true
+}
+
+var private @scratch g_df_kas : array<DflashAttnArgs>   //! a joint pass's blocks' attention arguments
 
 var private g_df_trace_prev_end = 0.0lf   //! the traced round before's verify GPU end (seconds), 0 = none
 
@@ -1523,7 +1958,9 @@ def private df_pass(t : Model; dr : DflashDrafter; uid : uint64; tok, pos, rows,
     hsel |> reserve_resize(nd * dr.rank)
     unsafe {
         memcpy(addr<void?>(logits[0]), metal_buffer_contents(g.blog), uint64(nd * g.vocab * 4l))
-        memcpy(addr<void?>(hsel[0]), metal_buffer_contents(g.bhsel), uint64(nd * dr.rank * 4l))
+        if (dr.v2) {
+            memcpy(addr<void?>(hsel[0]), metal_buffer_contents(g.bhsel), uint64(nd * dr.rank * 4l))
+        }
     }
     return true
 }
@@ -1532,4 +1969,6 @@ def private df_pass(t : Model; dr : DflashDrafter; uid : uint64; tok, pos, rows,
 def metal_dflash_init {
     register_dflash_device("metal", DflashDeviceSeams(ready = @@df_ready, commit = @@df_commit, draft_pass = @@df_pass, selects = @@df_selects,
         select_pass = @@df_select, land = @@df_land, drop = @@df_drop, detach = @@df_detach))
+    register_dflash_joint(@@df_select_joint)
+    register_mtp_block_rounds("metal", MtpBlockRoundSeams(serves = @@df_joint_serves, seat_serves = @@metal_mtp_seat_shape_ok, rounds = @@df_rounds))
 }

@@ -2008,6 +2008,7 @@ def private respond_media_or_text_(m : Model; var c : ChatSession; params : Samp
     var inscope stops := c.stop_ids
     var inscope guard <- make_nothink_guard_(c)
     var inscope reply_parts : array<string>
+    var stop_row = -1l   //! the stop a drafted round evaled before the turn ended on it: its row stands in the session
     if (c.n_audio_rows > 0l || c.n_image_rows > 0l) {
         // media turn: spans around the splice; ONE kind per turn (the add_user_* pair enforces it)
         let is_image = c.n_image_rows > 0l
@@ -2037,8 +2038,16 @@ def private respond_media_or_text_(m : Model; var c : ChatSession; params : Samp
         var inscope pre : array<int64>
         render_prompt(m, c, pre)
         render_think_suppress(m, c, pre)
-        generate_(m, c.session, pre, params, c.max_new) $(id, piece) {
-            return admit_piece_(stops, guard, reply_parts, blk, id, piece)
+        if (mtp_block_attached(m)) {   //! a block drafter's rounds: every id the turn may end on is a stop the round's walk ends at
+            var inscope round_stops := stops
+            round_stops |> push_from(guard.ids)
+            generate_drafted_(m, c.session, pre, params, c.max_new, round_stops, stop_row) $(id, piece) {
+                return admit_piece_(stops, guard, reply_parts, blk, id, piece)
+            }
+        } else {
+            generate_(m, c.session, pre, params, c.max_new) $(id, piece) {
+                return admit_piece_(stops, guard, reply_parts, blk, id, piece)
+            }
         }
     }
     let prompt_opened = prompt_opens_think_(c)   //! read before the consume below clears the pending turn it looks at
@@ -2049,10 +2058,15 @@ def private respond_media_or_text_(m : Model; var c : ChatSession; params : Samp
     if (reply_ends_open) {
         c.turn_open = true
     } else {
-        // close the assistant turn so the next turn continues cleanly
+        // close the assistant turn; a stop a drafted round evaled is the close's first id already, or stands in its place
         var close : array<int64>
         render_parts(m, c.close_parts, "", close)
-        eval_(m, c.session, close)
+        if (stop_row < 0l) {
+            eval_(m, c.session, close)
+        } elif (length(close) > 1 && close[0] == stop_row) {
+            var inscope rest <- [for (i in range(1, length(close))); close[i]]
+            eval_(m, c.session, rest)
+        }
     }
     // history holds only the answer - reasoning spans strip (legacy <think> strip on undeclared)
     let stored = (c.tmpl.think_mode == ThinkMode.none ? strip_think(reply)

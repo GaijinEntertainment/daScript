@@ -8,6 +8,7 @@ module dasllama_metal_common shared public
 require dasllama/dasllama_lint public
 require math
 require strings
+require daslib/strings_boost   // split: the kernel knockout's fragment list
 require dasllama/dasllama_env  // the g_env_* knob globals ([EnvConfig] declarations; ENVIRONMENT.md is generated from them)
 require metal/das_metal_boost
 require dasllama/dasllama_common
@@ -693,6 +694,8 @@ var g_pso_attndw_tq4 : MetalComputePipeline?
 var g_pso_attndx_q8 : MetalComputePipeline?   // ... and of 512
 var g_pso_attndx_tq4 : MetalComputePipeline?
 var g_pso_attncombd : MetalComputePipeline?
+var g_pso_dn_tape : MetalComputePipeline?     //! a recurrent layer's pre-scan operands of every group onto the verify's tape
+var g_pso_preadd_xt, g_pso_geglu_side_xt, g_pso_attncombd_xt : MetalComputePipeline?   //! the rows8 table stamps of the stream residual, the side act and the attention combine
 var g_pso_rpstb16 : MetalComputePipeline?
 var g_pso_rpstb32 : MetalComputePipeline?
 var g_pso_rpstb_q8 : MetalComputePipeline?
@@ -938,7 +941,7 @@ def lru_victim(tab : table<uint64; auto(TM)>; keep : uint64; honor_pin : bool) :
 }
 
 // the stages the single-row and batch decode drivers honor as a knockout (g_skip != "<stage>")
-let DECODE_SKIP_STAGES <- ["gemv", "attn", "ew", "moe_rt", "moe_sh", "qkv", "wo"]
+let DECODE_SKIP_STAGES <- ["gemv", "attn", "ew", "moe_rt", "moe_sh", "qkv", "wo", "cls", "cls_epi"]
 
 //! The knockout rail as an in-process setter (timing attribution — served output is GARBAGE while
 //! non-empty; `""` restores full math). Same rail as `DASLLAMA_METAL_DECODE_SKIP`.
@@ -2652,6 +2655,14 @@ def public metal_kernel_coverage_of(kernel : string) : int64 {
     return cov?[kernel] ?? 0l
 }
 
+//! The census's dispatched kernels in name order: every kernel counted above zero since the last reset, with its count
+def public metal_kernel_coverage_served() : array<tuple<name : string; n : int64>> {
+    var inscope cov <- metal_kernel_coverage()
+    var inscope names <- [for (k, v in keys(cov), values(cov)); k; where v > 0l]
+    sort(names)
+    return <- [for (k in names); (name = k, n = cov?[k] ?? 0l)]
+}
+
 def public metal_kernel_coverage_reset {
     g_kcov |> clear()
     g_kcov_folded |> clear()
@@ -2663,8 +2674,34 @@ def public metal_kernel_coverage_report {
     kernel_coverage_report("metal", "compiled", cov)
 }
 
+var private g_kskip_hit = false   //! the pipeline last set is one DASLLAMA_METAL_KERNEL_SKIP names: its dispatch is not issued
+
+var private g_kskip : array<string>   //! DASLLAMA_METAL_KERNEL_SKIP's fragments, split once at the driver's init (`kskip_arm`)
+
+//! Split the kernel knockout knob into its fragments: the dispatch rail then matches a census name against them with no
+//! allocation
+[cold_path]
+def kskip_arm {
+    delete g_kskip
+    g_kskip <- [for (frag in split(g_env_metal.kernel_skip, ",")); frag; where !empty(frag)]
+}
+
+//! `pso` is a kernel DASLLAMA_METAL_KERNEL_SKIP names: its census name holds one of the knob's fragments
+def private kskip_of(pso : MetalComputePipeline?) : bool {
+    return false if (empty(g_kskip))
+    let nm = g_kcov_names?[intptr(pso)] ?? ""
+    for (frag in g_kskip) {
+        return true if (find(nm, frag) >= 0)
+    }
+    return false
+}
+
+//! `nrows` rows ride the eight-row forms: DASLLAMA_METAL_ROWS8_MIN rows to `most` (eight: one panel)
+def rows8_rows(nrows : int64; most : int64 = 8l) : bool => nrows >= int64(g_env_metal.rows8_min) && nrows <= most
+
 def kn_pipeline(enc : MetalComputeEncoder?; pso : MetalComputePipeline?) {
     if (!g_gr_on) {
+        g_kskip_hit = kskip_of(pso)
         g_kcov[intptr(pso)]++
         metal_set_pipeline(enc, pso)
         return
@@ -2718,7 +2755,9 @@ def kn_tgmem(enc : MetalComputeEncoder?; bytes : uint64; idx : int) {
 
 def kn_dispatch(enc : MetalComputeEncoder?; grid, tg : uint3) {
     if (!g_gr_on) {
-        metal_dispatch_threadgroups(enc, grid, tg)
+        if (!g_kskip_hit) {
+            metal_dispatch_threadgroups(enc, grid, tg)
+        }
         return
     }
     let i = length(g_gr_nodes) - 1
@@ -2763,7 +2802,9 @@ def private gr_encode_node(enc : MetalComputeEncoder?; n : KNode) {
         }
     }
     hz_gate(enc)
-    metal_dispatch_threadgroups(enc, n.grid, n.tg)
+    if (!kskip_of(n.pso)) {
+        metal_dispatch_threadgroups(enc, n.grid, n.tg)
+    }
 }
 
 def graph_flush(enc : MetalComputeEncoder?) {
@@ -2976,6 +3017,7 @@ struct BatchLanding {
     bxf : MetalBuffer?            //!< the rows' post-final-norm hidden (nrows x dim)
     bxf_bytes : int64
     bvarg : MetalBuffer?          //!< the rows' GPU argmax (uint per row), landed into g_sameslab_arg
+    bcap : MetalBuffer?           //!< the same-slab step's layer outputs the block drafter reads, [slot][rows][dim]; each group's rows land in its session
     xb : MetalBuffer?             //!< production sync + CPU-classifier path: x_b writeback
     xb_dst : void?                //!< ... into the caller's workspace (borrowed, sync-only)
     xb_bytes : int64
@@ -3021,6 +3063,24 @@ var g_lp_i = 0                 //!< the pending step's slot; the pre-encoded ste
 var g_land_err = false         //!< sticky per-step dispatch-error signal for sync callers
 var g_prev_gpu_end = 0.0lf     //!< last finished step's gpu_end - the handoff stat's anchor
 var @scratch g_sameslab_arg : array<int64>
+var private @scratch g_block_cap_img : array<float>   //! a landing's capture image, [rows][slot][dim], reused a landing
+
+//! Land `rows` rows of the block drafter's capture image `bcap` - a slot's rows `stride` apart, from row `row0` - as `s`'s
+//! captured rows at `pos0` (no image: nothing)
+def land_block_capture_rows(var s : Session; bcap : MetalBuffer?; stride, row0, rows, pos0, dim : int64) {
+    return if (bcap == null)
+    let ncap = mtp_block_ncap()
+    g_block_cap_img |> reserve_resize(rows * ncap * dim)   // nolint:PERF026,LINT019 — grows to the widest landing once, reused
+    unsafe {
+        let cp = reinterpret<float const?>(metal_buffer_contents(bcap))
+        for (sl in range64(ncap)) {
+            for (r in range64(rows)) {
+                memcpy(addr<void?>(g_block_cap_img[(r * ncap + sl) * dim]), reinterpret<void const?>(cp + (sl * stride + row0 + r) * dim), dim * 4l)
+            }
+        }
+    }
+    mtp_block_land_rows(s, g_block_cap_img, rows, pos0)
+}
 
 def pending_active() : bool => g_land[g_lp_i].active
 
@@ -3044,6 +3104,7 @@ def release_landing(var L : BatchLanding&) {
     L.grp_nr |> clear()
     L.bxf = null
     L.bvarg = null
+    L.bcap = null
     L.xb = null
     L.xb_dst = null
     L.bx = null
@@ -3120,6 +3181,7 @@ def private land_sameslab_rows(var L : BatchLanding&; lgp : uint8?) {
                 }
                 memcpy(addr < void? >(sg.mtp_hrows[0]), reinterpret<void?>(reinterpret<uint8?>(metal_buffer_contents(L.bxf)) + row0 * hb), n * hb)
             }
+            land_block_capture_rows(*sg, L.bcap, L.nrows, row0, n, L.positions[row0], L.dim)
         }
         row0 += n
     }

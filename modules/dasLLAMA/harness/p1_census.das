@@ -44,16 +44,10 @@ def main {
             measure_one(tr, 512l)   //! warm
             metal_kernel_coverage_reset()
             measure_one(tr, 512l)   //! the counted forward
-            var cov <- metal_kernel_coverage()
-            var names <- [for (name in keys(cov)); name]
-            names |> sort()
-            for (name in names) {
-                if (cov[name] > 0l) {
-                    print("census {name} = {cov[name]}\n")
-                }
+            var inscope rows <- metal_kernel_coverage_served()
+            for (row in rows) {
+                print("census {row.name} = {row.n}\n")
             }
-            delete names
-            delete cov
         }
         delete tr
     } else {

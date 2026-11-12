@@ -58,8 +58,13 @@ struct ImgSection {
 }
 
 [arch(at = "../ARCHITECTURE_IMAGE.md#image-identity-backend-order")]
-def image_identity(tag : string = ""; quant : string = "q8") : string =>
-    image_identity_of(image_config_for(tag, quant), tag)
+def image_identity(tag : string = ""; quant : string = "q8"; version : int = IMAGE_VERSION) : string =>
+    image_identity_of(image_config_for(tag, quant), tag, version)
+
+//! an image baked at `version` is this build's own, or the older one the development lever vouches for
+//! (`DASLLAMA_IMAGE_ACCEPT_VERSION`)
+def image_version_accepted(version : int) : bool
+    => version == IMAGE_VERSION || (g_env_engine.image_accept_version > 0 && version == g_env_engine.image_accept_version)
 
 //! The configuration an image under `tag` is keyed and stored by: the box's current one, or the
 //! default one for a family registered config-free (no CPU knob shapes its bytes, so its image
@@ -74,8 +79,8 @@ def image_config_for(tag : string; quant : string = "q8") : DlimConfiguration {
 //! The identity of an explicit configuration — the ONE spelling every identity consumer (the
 //! loader, the peek verdicts, the converter's want/have compare, the tests) formats through, so
 //! the schema version and the pack-code version can never be folded in two different ways.
-def image_identity_of(c : DlimConfiguration; tag : string = "") : string =>
-    dlim_identity(c, IMAGE_VERSION, tag, PACK_VERSION,
+def image_identity_of(c : DlimConfiguration; tag : string = ""; version : int = IMAGE_VERSION) : string =>
+    dlim_identity(c, version, tag, PACK_VERSION,
         tag == METAL_IMAGE_TAG && c.metal_on && c.metal.devw)
 
 //! the CPU lane's spelling: the box's tune class where the tune framework is built, the architecture alone otherwise -
@@ -327,6 +332,20 @@ def dlim_current_identities : table<string> {
     for (t in g_family_tags) {
         idents |> insert(image_identity(t))   // family tags fold their flavor into the tag itself
     }
+    let older = g_env_engine.image_accept_version
+    if (older > 0 && older != IMAGE_VERSION) {   //! the vouched-for version's identities stand as current beside the build's
+        for (q in ["q8", "fp32", "q4_0"]) {
+            idents |> insert(image_identity("", q, older))
+            idents |> insert(image_identity(METAL_IMAGE_TAG, q, older))
+            let vk = moe_gpu_bake_tag()
+            if (vk != "") {
+                idents |> insert(image_identity(vk, q, older))
+            }
+        }
+        for (t in g_family_tags) {
+            idents |> insert(image_identity(t, "q8", older))
+        }
+    }
     return <- idents
 }
 
@@ -380,7 +399,7 @@ def dlim_image_verdict(p : DlimPeek; current : table<string>) : string {
     if (!p.valid) {
         return "BROKEN"
     }
-    if (p.version != IMAGE_VERSION) {
+    if (!image_version_accepted(p.version)) {
         return "STALE v{p.version}"
     }
     if (dlim_layout_stale(p)) {
@@ -1658,7 +1677,8 @@ def private bind_plane_section(bp : uint8 const?; msize : uint64; path : string;
 def private parse_image(base : void?; msize : uint64; path : string; var t; tag : string; quant : string) : bool {
     select_matmul_backend_for_load_()
     var bp = unsafe(reinterpret<uint8 const?>(base))
-    if (read_u32(bp, 0l) != IMAGE_MAGIC || read_u32(bp, 4l) != uint(IMAGE_VERSION)
+    let baked_version = int(read_u32(bp, 4l))
+    if (read_u32(bp, 0l) != IMAGE_MAGIC || !image_version_accepted(baked_version)
             || read_u32(bp, 8l) != uint(IMAGE_PAGE)) {
         // a version mismatch makes the meta layout unknowable, so this arm names raw fields, not the baked identity
         to_log(LOG_WARNING, "dasLLAMA image: '{path}' declined - size {msize} magic {read_u32(bp, 0l)} version {read_u32(bp, 4l)} (want {IMAGE_VERSION}) page {read_u32(bp, 8l)}\n")
@@ -1677,7 +1697,10 @@ def private parse_image(base : void?; msize : uint64; path : string; var t; tag 
         to_log(LOG_WARNING, "dasLLAMA image: '{path}' declined - meta layout fingerprint {read_u64(bp, 48l)} vs this build's {layout_fingerprint(t)} (a struct in the meta closure changed shape) - regenerate from the source\n")
         return false
     }
-    let want_ident = image_identity(tag, quant)
+    let want_ident = image_identity(tag, quant, baked_version)
+    if (baked_version != IMAGE_VERSION) {
+        to_log(LOG_WARNING, "dasLLAMA image: '{path}' is image version {baked_version}, accepted for this build's {IMAGE_VERSION} as asked (DASLLAMA_IMAGE_ACCEPT_VERSION): its planes are taken as unchanged between the two\n")
+    }
     if (read_u64(bp, 40l) != hash(want_ident)) {
         var baked_ident = ""
         let read = read_meta_head(bp, meta_off, meta_bytes) $(var harch : Archive) {

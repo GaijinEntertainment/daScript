@@ -607,8 +607,10 @@ let private D_CAP = 0.05   //! a logit cap inside the fixture's score range: an 
 //! as wide - `cnts / 4` keys, four heads of 128 to the combine - over a query row as wide as the head.
 //! `window` keys of sliding span (0 = the whole context) and, under `sinks`, a sink logit a head that differs head to head.
 //! `softcap` > 0 caps every logit; the ragged counts leave lanes past a slice's rows, which must still weigh nothing under it.
+//! `xtab` runs the combine's table stamp (`enc_attncombd_xt_c`) beside it: its rows the plain combine's bit for bit, the rows8
+//! x table those rows' halves at their k-slots, the sums within 1e-5, the rows read in their own order the control.
 def private sq_d_gate(t : T?; var dev, queue; codec : string; cnts : array<int>; nsgs : int; hs : int = D_HS; lead : int = 0;
-                      window : int = 0; sinks : bool = false; softcap : float = 0.0; gated : bool = false) {
+                      window : int = 0; sinks : bool = false; softcap : float = 0.0; gated : bool = false; xtab : bool = false) {
     let halves = hs > D_HS ? hs / D_HS : 1
     let wide = halves > 1
     let rowx = wide ? halves : (D_HS % hs == 0 ? 1 : 3)   //! fixture rows read as ONE kernel row: a wide head's halves, three for a head of 96 (four K/V heads of 96)
@@ -680,6 +682,32 @@ def private sq_d_gate(t : T?; var dev, queue; codec : string; cnts : array<int>;
         }
         return if (!ran)
         check_buf(t, tag, mc.buf[by], want, BAR_ATTN, Shape(row_width = qd_row, head_width = hs))
+        return if (!xtab)
+        let width = nheads * hs
+        t |> equal(width, qd_row, "{tag}: the table cell's rows are the combine's width")
+        let sx = stamp_of(@@enc_attncombd_xt_c)
+        var pso_x = mc |> keep_stamp(sx, err)
+        return if (!pso_ok(t, "{tag} comb xt", pso_x, err))
+        let sent = -1000.0
+        let by2 = mc |> out_words(nb2 * qd_row, sent)
+        let bxt = mc |> out_words(8 * width, float16(sent))
+        let bxs = mc |> out_words(width / 32 * 8, sent)
+        let ran2 = mc |> cell_record(t, "{tag} xt") $(enc : MetalComputeEncoder?) {
+            stamp_run(sx, pso_x) {
+                invoke(sx.enc, enc, mc.buf[bpart], mc.buf[by2], mc.buf[brt], rtoff, kac, mc.buf[bxt], mc.buf[bxs], mc.buf[bsink], int64(nheads * halves), int64(nb2))
+            }
+        }
+        return if (!ran2)
+        var inscope y1 <- buf_download(mc.buf[by], nb2 * qd_row, type<float>)
+        check_buf_exact(t, "{tag} xt rows", mc.buf[by2], y1)
+        var inscope h <- [for (v in y1); float16(v)]
+        var inscope tab <- rows8_table_of(h, nb2, width, float(float16(sent)), sent)
+        check_buf_h(t, "{tag} xt table", mc.buf[bxt], tab.xt, BAR_EXACT, Shape(row_width = width))
+        check_buf(t, "{tag} xt sums", mc.buf[bxs], tab.xs, Bar(rel = 1e-5), Shape(row_width = 8))
+        var inscope plain <- [for (k in range(8 * width)); float(k < nb2 * width ? h[k] : float16(sent))]
+        var inscope got <- buf_download(mc.buf[bxt], 8 * width, type<float16>)
+        var inscope gotf <- [for (v in got); float(v)]
+        check_exceeds(t, "{tag}: the table against the rows' own order (the k-slot order's control)", gotf, plain, BAR_EXACT)
     }
 }
 
@@ -719,6 +747,9 @@ def test_metal_attn_codec_kernels(t : T?) {
                 sq_d_gate(t, dev, queue, "f16", [21, 64, 200], 3)
                 sq_d_gate(t, dev, queue, "f32", [40, 130], 5)
                 sq_d_gate(t, dev, queue, "f16", [21, 64, 200], 3, hs = 64)
+                sq_d_gate(t, dev, queue, "f16", [21, 64, 200], 3, xtab = true)            //! the combine's table stamp, three rows of eight
+                sq_d_gate(t, dev, queue, "f32", [40, 130], 5, hs = 64, xtab = true)
+                sq_d_gate(t, dev, queue, "f16", [21, 64, 200], 3, window = 40, sinks = true, softcap = D_CAP, xtab = true)
                 sq_d_gate(t, dev, queue, "f32", [40, 130], 5, hs = 64)
                 sq_d_gate(t, dev, queue, "f16", [21, 64, 200], 3, hs = 64, lead = 2)
                 sq_d_gate(t, dev, queue, "f16", [42, 128, 200], 3, hs = 256)   //! the wide stamps: 21, 64 and 100 keys of a 256 head, the last past the slice groups

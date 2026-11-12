@@ -4,7 +4,7 @@ Companion to `ARCHITECTURE_GPU_MTP_DECODE.md`; a section is cited by its anchor.
 
 ### The eight-row mixer is four dispatches on the matrix unit {#metal-hc-mix8}
 
-**At five to eight rows over four streams the mixer site runs as four dispatches, not the eight of the rows chain.** The
+**At three to eight rows over four streams the mixer site runs as four dispatches, not the eight of the rows chain.** The
 rows chain (`hc_mix_rows` at any other row count, or under `DASLLAMA_METAL_HC_MIX8=0`) runs the grouped norm, the inject
 router, a rows8 prep and the q8 down, `silu(lo / hc)`, a second prep and the q8 up, and the gated mean; its down is a plane
 of 320 rows - 20 rows8 threadgroups on a GPU of 40 cores - and every prep is a dependent link. `pf_enc_hc_mix8`

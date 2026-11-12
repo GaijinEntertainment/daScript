@@ -121,6 +121,7 @@ struct private BatchTier {
     mp : int64
     nrows : int64
     bpsk : MetalBuffer?
+    tiled : bool   //! a same-slab verify: its sites past eight rows take the rows8 form over row tiles
 }
 
 let private ROUTE_ROW_BYTES = 16ul   //! one KV route row: k base, v base, cap, key count
@@ -291,6 +292,9 @@ struct private StepRes {
     bytes_fgs : uint64
     xt_ok : bool               //! the norm that set xh_ok wrote bxt / bxs beside the twin
     fgt_ok : bool              //! the activation that set fgh_ok wrote bfgt / bfgs
+    xt_att : bool              //! bxt / bxs hold the table of bxb as the attention combine wrote it (no twin): the out projection's x
+    xt_x : bool                //! bxt / bxs hold the table of the stream rows bx as the no-norm residual left them: the per-layer gate's x
+    fgt_ple : bool             //! bfgt / bfgs hold the table of bh12 as the side act wrote it (no twin): the per-layer projection's x
     bmoe_rt : MetalBuffer?     // gemma4: router-input row, reused as the routed-branch acc
     u_moe_invd : MetalBuffer?  // gemma4: 1/sqrt(dim) router scale
     u_moe_gmode : MetalBuffer? // select gating mode (1 = gpt-oss softmax_weight)
@@ -492,7 +496,8 @@ def private acquire_step(t : Model; s : Session; pos : int64; koff, voff : uint6
     let nsh = moe ? c.n_ff_shexp : 0l
     let h2 = max(2l * hid_mx, max(2l * knfe, 2l * nsh))   // moe: bh12 holds k gate rows | k up rows (+ the shexp pair)
     let rot = c.rope_dim > 0l ? c.rope_dim : head_size   // partial-rope tables are rot/2 wide
-    let mp = nrows <= 1l ? 1l : ((nrows + 3l) / 4l) * 4l
+    //! the panels' rows: whole fours to eight rows, whole row tiles of eight past them (the tiled rows8 sites read every tile's eight)
+    let mp = nrows <= 1l ? 1l : nrows > 8l ? ((nrows + 7l) / 8l) * 8l : rows8_rows(nrows) ? 8l : ((nrows + 3l) / 4l) * 4l
     var r = StepRes(valid = true, pos = pos, chain_pos = pos, uid = s.uid, nrows = nrows,
         kdt = s.kv_dtype_k, s16 = t.wscale_f16, hetero = hetero, moe = moe,
         dn = c.recr_mask != 0ul,
@@ -511,14 +516,15 @@ def private acquire_step(t : Model; s : Session; pos : int64; koff, voff : uint6
         r.bytes_cap = uint64(mtp_block_ncap() * mp * dim * 4l)
         r.bcap = pool_acquire(g_pool, g_dev, r.bytes_cap)
     }
-    if (step_twins(t, nrows)) {
+    if (step_twins(t, nrows, true)) {
         r.bytes_xh = uint64(max(mp, KQ_HALF_TWIN_ROWS) * max(dim, qd_mx) * 2l)
         r.bytes_fgh = uint64(max(mp, KQ_HALF_TWIN_ROWS) * hid_mx * 2l)
         r.bxh = pool_acquire(g_pool, g_dev, r.bytes_xh)
         r.bfgh = pool_acquire(g_pool, g_dev, r.bytes_fgh)
-        if (rows8_table_rows(t, nrows)) {
-            r.bytes_xs = uint64(max(dim, qd_mx) / 32l * 8l * 4l)
-            r.bytes_fgs = uint64(hid_mx / 32l * 8l * 4l)
+        if (rows8_table_rows(t, nrows, true)) {
+            let tiles = max(mp, 8l) / 8l   //! a row tile's sums follow the tile before it
+            r.bytes_xs = uint64(max(dim, qd_mx) / 32l * 8l * 4l * tiles)
+            r.bytes_fgs = uint64(hid_mx / 32l * 8l * 4l * tiles)
             r.bxt = pool_acquire(g_pool, g_dev, r.bytes_xh)
             r.bxs = pool_acquire(g_pool, g_dev, r.bytes_xs)
             r.bfgt = pool_acquire(g_pool, g_dev, r.bytes_fgh)
@@ -1055,7 +1061,8 @@ def private attn_d_serves(head_size, hs_sw : int64) : bool
 //! route base is already the layer's; else the kernel steps a stream's slab to the layer. `window` is a sliding layer's span in
 //! keys (0 = the whole context), `bsnk` the layer's sink logits (null = none).
 def private encode_attn_d(t : Model; r : StepRes; enc : MetalComputeEncoder?; l, head_size, n_heads : int64;
-                          window : uint; bsnk : MetalBuffer?; rtoff : uint64 = 0ul; route_per_layer : bool = false) {
+                          window : uint; bsnk : MetalBuffer?; rtoff : uint64 = 0ul; route_per_layer : bool = false;
+                          bct : MetalBuffer? = null; bcs : MetalBuffer? = null) {
     let blockc = r.kdt == KVDtype.q8_0 || r.kdt == KVDtype.tq4
     let c = t.config
     let kvd = uint(layer_kv_dim(c, l))
@@ -1072,7 +1079,19 @@ def private encode_attn_d(t : Model; r : StepRes; enc : MetalComputeEncoder?; l,
     let halves = attn_d_halves(head_size)   // the wide head's partials are two or four heads of 128 to the combine
     var cka = SqAttnCombDArgs(nchmax = uint(r.d_nsgs), nheads = uint(n_heads * halves), hs = uint(head_size / halves),
         hass = bsnk != null ? 1u : 0u, hdiv = uint(halves))
-    enc_attncombd_c(enc, r.bpart, r.bxb, r.brt, rtoff, cka, bsnk, n_heads * halves, r.nrows)
+    if (bct != null) {
+        enc_attncombd_xt_c(enc, r.bpart, r.bxb, r.brt, rtoff, cka, bct, bcs, bsnk, n_heads * halves, r.nrows)
+    } else {
+        enc_attncombd_c(enc, r.bpart, r.bxb, r.brt, rtoff, cka, bsnk, n_heads * halves, r.nrows)
+    }
+}
+
+//! the attention combine writes the out projection's rows8 table: the step carries the tables, the combine's lanes are whole
+//! 32-blocks of a head, and no pass stands between the combine and the projection (the rotated mirror's un-rotate, the gate)
+def private attn_d_tables(t : Model; r : StepRes; head_size : int64) : bool {
+    let c = t.config
+    return (r.bxt != null && (head_size / attn_d_halves(head_size)) % 32l == 0l
+        && r.kdt != KVDtype.tq4 && !(c.q_gated && !qg_direct(c, r.kdt)))
 }
 
 //! the single row's attention: past the single-form ceiling the fused single-pass form where it serves the model and the chunked pair elsewhere, else one dispatch
@@ -1210,7 +1229,7 @@ def private norm_rows(enc : MetalComputeEncoder?; single : bool; bx, bw, by, u_d
 }
 
 //! The mixer `site` over `bres`'s nrows wide rows, its planes in the site's tags: the fused pair at one row (`hc_mixer_fused_fmt`),
-//! the four eight-row dispatches at five to eight (`metal_hc_mix8_fmt`), else the staged chain over the tags' own forms
+//! the four eight-row dispatches at three to eight (`metal_hc_mix8_fmt`), else the staged chain over the tags' own forms
 [arch(at="../ARCHITECTURE_ENGINE_FORMATS_MLX.md#mlx-metal-forms")]
 def private hc_mix_rows(r : StepRes; t : Model; enc : MetalComputeEncoder?; bres : MetalBuffer?; norm_off, down_off, up_off, inject_off, site : int64;
                         by, binj : MetalBuffer?) {
@@ -1365,14 +1384,16 @@ def private enc_commit_ple_rows(t : Model; r : StepRes; enc : MetalComputeEncode
     }
 }
 
-//! the n-gram conv ring saved before the verify's rows land in it (`save`), or put back from the save, on `enc`
-def private enc_ple_ring_copy(enc : MetalComputeEncoder?; save : bool) {
-    let g = g_v_groups[0]
+//! group `gi`'s n-gram conv ring saved before the verify's rows land in it (`save`), or put back from the save, on `enc`: a
+//! group a ring's width of the save
+def private enc_ple_ring_copy(enc : MetalComputeEncoder?; save : bool; gi : int64 = 0l) {
+    let g = g_v_groups[gi]
     let n = long_length(g.s.ple_conv_hist)
+    let so = uint64(gi * n * 4l)
     if (save) {
-        enc_copy_row(enc, dn_pool_buffer(), g.ple_base, g_v_ring_save, 0ul, g_v_ring_u, n)
+        enc_copy_row(enc, dn_pool_buffer(), g.ple_base, g_v_ring_save, so, g_v_ring_u, n)
     } else {
-        enc_copy_row(enc, g_v_ring_save, 0ul, dn_pool_buffer(), g.ple_base, g_v_ring_u, n)
+        enc_copy_row(enc, g_v_ring_save, so, dn_pool_buffer(), g.ple_base, g_v_ring_u, n)
     }
 }
 
@@ -1581,9 +1602,11 @@ struct template LayerEncT {
                 site(self, t, enc, SiteKind.wo, fmt_at(t.wo_fmt, l), t.wo_offs[l], dim, qd, dim, r.bxb, r.bxb2, u_qd_l, r.u_dim, r.u_dim, 0l)
                 if (c.attn_out_bias) {
                     var bwo_b = upload_region(addr < void? >(t.bo[l * dim]), uint64(dim * 4l))
-                    add(self, enc, r.bxb2, 0ul, bwo_b, 0ul, dim, null)
+                    //! the one bias row onto every row of the step: the element-wise add reads its partner a float a float
+                    tw_bias(enc, r.bxb2, bwo_b, GkBiasActArgs(d = uint(dim), nelem = uint(r.nrows * dim), boff = 0u, act = BIAS_ACT_NONE))
                 }
             }
+            r.xt_att = false   //! the combine's table was the out projection's alone: bxb holds other rows from here
             // ffn: [post-attn norm ->] fused add+norm -> W1|W3 -> swiglu/geglu -> W2 [-> post-ffn norm] -> fused add + next attn norm (pre_post_norm norms IN PLACE — the CPU order)
             if (r.hc) {   // the attention output scatters into the streams; the ffn site's mixer makes the next block input
                 if (!scattered) {
@@ -1605,6 +1628,7 @@ struct template LayerEncT {
             }
             if (g4_step) {   //! the routed sum, both branches' norms, the residual and the next norm: one step
                 moe_g4_step(self, t, enc, l)
+                capture_block_rows(t, enc, l)
                 return
             }
             if (moe_with_dense && g_skip != "ew") {
@@ -1644,13 +1668,18 @@ struct template LayerEncT {
             } elif (g_skip != "ew" && !r.fat) {   //! the fat chain's FFN landed on the residual stream; the next layer norms it in its prologue
                 residual(self, t, enc, r.bx, r.bxb, r.bxb, seam(post_ffn, next_norm, osc))
             }
-            if (r.bcap != null) {   //! the layer's output rows for the block drafter, at the layer's slot
-                let slot = mtp_block_layer_slot(l)
-                if (slot >= 0l) {
-                    let tn = total(self, r.u_dim, dim)
-                    enc_copy_row(enc, r.bx, 0ul, r.bcap, uint64(slot * r.nrows * dim * 4l), tn.b, tn.n)
-                }
-            }
+            capture_block_rows(t, enc, l)
+        }
+    }
+
+    //! layer `l`'s output rows for the block drafter, at the layer's slot of the step's capture
+    def capture_block_rows(t : Model; enc : MetalComputeEncoder?; l : int64) {
+        return if (r.bcap == null)
+        let slot = mtp_block_layer_slot(l)
+        if (slot >= 0l) {
+            let dim = t.config.dim
+            let tn = total(self, r.u_dim, dim)
+            enc_copy_row(enc, r.bx, 0ul, r.bcap, uint64(slot * r.nrows * dim * 4l), tn.b, tn.n)
         }
     }
 
@@ -1881,7 +1910,7 @@ def private enc_ple_f32(enc : MetalComputeEncoder?; t : Model; pp : PlePlane; bx
 //! layer l's PLE branch over `nrows` rows between the FFN residual and the layer's last seam: proj·(gelu(gate·x) ⊙ side[l]) into
 //! bxb, a plane in its own format through the stamp's weight site (`site`: the plane, x, y and their two widths' uniforms), the
 //! file's f32 rows on the router GEMV; the side multiply over the layer's block of the layer-major side plane
-def private ple_branch(r : StepRes; t : Model; enc : MetalComputeEncoder?; l, nrows : int64;
+def private ple_branch(r : StepRes; t : Model; enc : MetalComputeEncoder?; l, nrows : int64; tab : bool;
                        site : block<(pp : PlePlane; bx, by, bn, bd : MetalBuffer?) : void>) {
     let ple = t.config.n_embd_per_layer
     let pg = ple_plane(t, l, false)
@@ -1895,7 +1924,11 @@ def private ple_branch(r : StepRes; t : Model; enc : MetalComputeEncoder?; l, nr
     }
     if (g_skip != "ew") {
         var ka = GkPleActArgs(nelem = uint(nrows * ple), sbase = uint(l * ple), sstride = uint(t.config.n_layers * ple), slen = uint(ple))
-        enc_geglu_side(enc, r.bh12, r.bple, ka, nrows * ple)
+        if (tab) {   //! the acted rows' rows8 table beside, the projection site's x
+            enc_geglu_side_xt(enc, r.bh12, r.bple, r.bfgt, r.bfgs, ka, nrows * ple)
+        } else {
+            enc_geglu_side(enc, r.bh12, r.bple, ka, nrows * ple)
+        }
     }
     if (g_skip != "gemv") {
         if (pp.f32) {
@@ -1908,16 +1941,22 @@ def private ple_branch(r : StepRes; t : Model; enc : MetalComputeEncoder?; l, nr
 
 //! the single row's PLE branch: the planes on the one-row GEMV
 def private ple_single(var e : auto(ET); t : Model; enc : MetalComputeEncoder?; l : int64) {
-    ple_branch(*e.r, t, enc, l, 1l) $(pp; bx, by, bn, bd) {
+    ple_branch(*e.r, t, enc, l, 1l, false) $(pp; bx, by, bn, bd) {
         enc_site_gemv(enc, t, pp.f, pp.off, pp.d, pp.n, bx, by, bn, bd)
     }
 }
 
 //! the rows' PLE branch: the planes as row sites
 def private ple_rows(var e : BatchLayerEnc; t : Model; enc : MetalComputeEncoder?; l : int64) {
-    ple_branch(*e.r, t, enc, l, e.r.nrows) $(pp; bx, by, bn, bd) {
+    var r & = unsafe(*e.r)
+    let ple = t.config.n_embd_per_layer
+    //! the side act writes the projection's table where the step carries the tables and the side rows are whole 32-blocks
+    r.fgt_ple = r.bfgt != null && r.nrows <= 8l && ple % 32l == 0l && g_skip != "ew"
+    ple_branch(r, t, enc, l, r.nrows, r.fgt_ple) $(pp; bx, by, bn, bd) {
         site_batch(e, t, enc, SiteKind.other, pp.f, pp.off, pp.d, pp.n, pp.d, bx, by, bn, bd, bd, 0l)
     }
+    r.fgt_ple = false
+    r.xt_x = false
 }
 
 //! the single-row step's layer encoder
@@ -2088,6 +2127,10 @@ var private g_chain_rounds = 0l   //! rounds whose draft and verify ran as one c
 [arch(at="../ARCHITECTURE_GPU_MTP.md#mtp-nextn-chain")]
 def public metal_mtp_chained_rounds() : int64 => g_chain_rounds
 
+//! the single-stream verify seat takes `t`'s shape and `s`'s codec (`metal_mtp_verify_ok`): the block drafter's round asks
+//! before it seats a verify
+def metal_mtp_seat_shape_ok(t : Model; s : Session) : bool => metal_mtp_verify_ok(t, s)
+
 //! the verify's shape gate: one K/V codec on both sides (every mirror codec the decode serves), a silu FFN (dense or routed MoE with
 //! or without the shared expert), no epilogue exotics; a missing attn_v and the moe_with_dense / mx4 MoE forms have no verify arm
 def private metal_mtp_verify_ok(t : Model; s : Session) : bool {
@@ -2132,8 +2175,13 @@ def private residual_rows(var e : auto(ET); t : Model; enc : MetalComputeEncoder
     let twin = r.bxh != null && stores
     let tab = twin && r.bxt != null
     let split = g_b_addrms_unfused || (sm.pre_off >= 0l && !decode_fuse_pre())
+    //! the per-layer-embedding residual stores no norm: its one dispatch writes the stream rows' table for the gate site
+    let stream = (r.ple && by == null && sm.norm_off < 0l && sm.pre_off >= 0l && r.bxt != null && !split
+        && !residual_wide(ResidualForm.rows, t.config.dim))
     enc_residual(enc, t, bx, ba, by, twin ? r.bxh : null, sm, r.nrows, ResidualForm.rows, split, ResidualUniforms(bdim = r.u_dim, beps = r.u_eps, btot = r.u_total_dim),
-        tab ? r.bxt : null, tab ? r.bxs : null)
+        tab || stream ? r.bxt : null, tab || stream ? r.bxs : null)
+    r.xt_att = false
+    r.xt_x = stream && bx == r.bx
     if (stores) {
         r.xh_ok = twin
         r.xt_ok = tab
@@ -2186,22 +2234,22 @@ def private kq_half_rows(t : Model; nrows : int64) : bool {
 //! widths are whole 32-blocks (a producer's subgroup one block), and a site the producers feed is an affine member on the form,
 //! k4 or q8 where the half-x forms' twins exist, or an iq4xs plane on the form (its arm reads the twin)
 [arch(at="../ARCHITECTURE_GPU_MTP_DECODE_ROWS.md#rows8-matrix-unit")]
-def private rows8_table_rows(t : Model; nrows : int64) : bool {
+def private rows8_table_rows(t : Model; nrows : int64; tiled : bool = false) : bool {
     let blocks = t.config.dim % 32l == 0l && layer_hidden(t, 0l) % 32l == 0l && ffn_second_hidden(t) % 32l == 0l
-    return false if (!metal_rows8_on() || nrows < 5l || nrows > 8l || !blocks)
-    let half = kq_half_rows(t, nrows)
+    //! a verify step's producers write every row tile's table (`tiled`): its sites past eight rows read them
+    return false if (!metal_rows8_on() || !rows8_rows(nrows, tiled ? METAL_VERIFY_TILED_ROWS : 8l) || !blocks)
     let iq4 = metal_rows8_iq4xs_on()
     for (l in range64(t.config.n_layers)) {
         for (f in [fmt_at(t.wq_fmt, l), fmt_at(t.wk_fmt, l), fmt_at(t.wv_fmt, l), fmt_at(t.w1_fmt, l), fmt_at(t.w3_fmt, l), fmt_at(t.w2_fmt, l),
                    fmt_at(t.dnqkv_fmt, l), fmt_at(t.dngate_fmt, l), fmt_at(t.wsh1_fmt, l), fmt_at(t.wsh3_fmt, l)]) {
-            return true if (metal_rows8_aff_on(f) || (half && (f == KqFmt.k4 || f == KqFmt.q8)) || (iq4 && f == KqFmt.iq4xs))
+            return true if (metal_rows8_aff_on(f) || f == KqFmt.k4 || f == KqFmt.q8 || (iq4 && f == KqFmt.iq4xs))
         }
     }
     return false
 }
 
 //! the step's producers store the f16 twins: the half-x forms read them, or the rows8 tables ride beside them
-def private step_twins(t : Model; nrows : int64) : bool => kq_half_rows(t, nrows) || rows8_table_rows(t, nrows)
+def private step_twins(t : Model; nrows : int64; tiled : bool = false) : bool => kq_half_rows(t, nrows) || rows8_table_rows(t, nrows, tiled)
 
 //! the twin a site's x carries, and the rows8 table pair beside it: bxb's where the norm that wrote bxb stored them, the gate
 //! panel's where the activation did
@@ -2211,6 +2259,10 @@ def private site_x_twin(e : auto(ET); bx : MetalBuffer?; blk : block<(bxh, bxt, 
         invoke(blk, r.bxh, r.xt_ok ? r.bxt : null, r.xt_ok ? r.bxs : null)
     } elif (bx == r.bh12 && r.fgh_ok) {
         invoke(blk, r.bfgh, r.fgt_ok ? r.bfgt : null, r.fgt_ok ? r.bfgs : null)
+    } elif ((bx == r.bxb && r.xt_att) || (bx == r.bx && r.xt_x)) {
+        invoke(blk, null, r.bxt, r.bxs)
+    } elif (bx == r.bh12 && r.fgt_ple) {
+        invoke(blk, null, r.bfgt, r.bfgs)
     } else {
         invoke(blk, null, null, null)
     }
@@ -2300,7 +2352,9 @@ def private attention_verify(var e : VerifyLayerEnc; t : Model; enc : MetalCompu
     let qhs = gd ? uint(2l * head_size) : 0u
     let gated = gd && r.kdt != KVDtype.tq4 ? 1u : 0u
     if (r.attn_d) {
-        encode_attn_d(t, r, enc, l, head_size, n_heads, 0u, null, rtoff, true)
+        let tab = attn_d_tables(t, r, head_size)
+        encode_attn_d(t, r, enc, l, head_size, n_heads, 0u, null, rtoff, true, tab ? r.bxt : null, tab ? r.bxs : null)
+        (*e.r).xt_att = tab
     } elif (r.chunked) {
         var pka = SqAttnPartBArgs(lay = 0u, kstride = kstride, nheads = uint(n_heads),
             kv_mul = uint(n_heads / c.n_kv_heads), hs = uint(head_size), scale = vscale,
@@ -2436,13 +2490,13 @@ def private recurrent_verify(var e : VerifyLayerEnc; t : Model; enc : MetalCompu
     enc_dn_proj_rows(r, t, enc, l)
     enc_dn_front(enc, t, l, dnli, d)
     if (r.dn_split) {
-        for (g in g_v_groups) {
-            let tb = g.tape_base + r.tape_slot * uint64(dnli)
-            let cvb = uint64(g.nr * cd * 4l)
-            enc_copy_row(enc, r.bdn_cv, uint64(g.row0 * cd * 4l), r.btape, tb, r.u_tcd, g.nr * cd)
-            enc_copy_row(enc, r.bdn_qkv, uint64(g.row0 * cd * 4l), r.btape, tb + cvb, r.u_tcd, g.nr * cd)
-            enc_dn_tape_ba(r, enc, nvh, g.row0, g.nr, tb + 2ul * cvb, false)
-        }
+        //! every group's operands in one dispatch: the groups hold the same rows, group g's from row g n, its slot g slots on
+        let ng = long_length(g_v_groups)
+        let n = g_v_groups[0].nr
+        var ka = DnTapeArgs(cd = uint(cd), nvh = uint(nvh), n = uint(n), ng = uint(ng),
+            ba_rows = r.dn_ba_rows ? 1u : 0u)
+        enc_dn_tape(enc, r.bdn_cv, r.bdn_qkv, r.bdn_b, r.dn_ba_rows ? r.bdn_b : r.bdn_g, r.btape, r.tape_slot * uint64(dnli), ka,
+            ng * n * max(cd, nvh))
     }
     enc_dn_back(enc, t, l, dnli, d)
     enc_dn_out_rows(r, t, enc, l)
@@ -2515,6 +2569,8 @@ def private encode_verify_step(t : Model; var r : StepRes; dev_rows : MetalBuffe
     let c = t.config
     let dim = c.dim
     let nr = r.nrows   //! every group's rows together
+    let tiled_was = g_rows_tiled
+    g_rows_tiled = true
     var brt = group_routes(t, r, nr)
     var cb = metal_new_command_buffer_unretained(g_queue)
     var enc = metal_new_compute_encoder(cb)
@@ -2578,6 +2634,7 @@ def private encode_verify_step(t : Model; var r : StepRes; dev_rows : MetalBuffe
     r.committed = commit
     r.cb = cb
     pool_release(g_upool, brt.buf, brt.bytes)
+    g_rows_tiled = tiled_was
 }
 
 //! the NextN head over the verify's rows after the trunk's: its carry hiddens, its prelude and its layer, whose K/V rows warm the
@@ -2637,7 +2694,7 @@ def private enc_cls_tail_rows(t : Model; var r : StepRes; enc : MetalComputeEnco
                               hc_norm_off : int64 = -1l; hc_down_off : int64 = -1l; hc_up_off : int64 = -1l; single : bool = false) {
     let c = t.config
     let dim = c.dim
-    let twin = !single && !r.hc && r.bxh != null && nr >= 5l && nr <= 8l && metal_rows8_twin_fed(cls_fmt_of(t))   //! the rows8 site reads the norm's f16 twin, no prep
+    let twin = !single && !r.hc && r.bxh != null && rows8_rows(nr) && metal_rows8_twin_fed(cls_fmt_of(t))   //! the rows8 site reads the norm's f16 twin, no prep
     if (r.hc) {   // the head mixer over every wide row stands where the final norm would (the trunk's, or the draft head's own)
         hc_mix_rows(r, t, enc, r.bhc, hc_norm_off >= 0l ? hc_norm_off : t.hc_head_norm_off,
             hc_down_off >= 0l ? hc_down_off : t.hc_head_down_off, hc_up_off >= 0l ? hc_up_off : t.hc_head_up_off, -1l,
@@ -2768,6 +2825,25 @@ def private encode_dn_replay(t : Model; var r : StepRes; gi : int64; nrun : int6
 def mtp_round_commit(var s : Session; pos, k, a : int64) {
     g_mirrors[s.uid].watermark = pos + a + 1l
     mtp_round_commit_host(s, pos, k, a)
+}
+
+//! a stream's accept off the same-slab batch verify whose rows for it start at `r0`: the walk over its `kd` drafts, the take
+//! and the commit at `pos` (traced under `trace`, the drafter's tag); returns the accepted count
+def mtp_round_accept(c : Config; var s : Session; pos, kd, r0 : int64; trace : string = "") : int64 {
+    let a = mtp_accept_walk(s, kd, c.vocab_size) $(vr) => sameslab_argmax(r0 + vr)
+    if (!empty(trace)) {
+        mtp_round_trace(trace, s, pos, kd, kd + 1l, a, c.vocab_size)
+    }
+    mtp_round_take(s, a, kd, c.dim)
+    mtp_round_commit(s, pos, kd, a)
+    return a
+}
+
+//! `s` has no mirror, or one short of `pos` or of a round's `k` drafts past it
+def mtp_mirror_short(s : Session; pos, k : int64) : bool {
+    return true if (!key_exists(g_mirrors, s.uid))
+    let mr = g_mirrors[s.uid]
+    return mr.watermark < pos || mr.cap_rows < pos + k + 1l
 }
 
 //! one route entry per (layer, row): (k base, v base, cap, cnt) - the row at g.pos + i lands as row cnt - 1 of its stream's slab
@@ -3008,6 +3084,7 @@ def private mtp_verify_unpark() {
     release_step(g_v_rd)
     ple_ring_release()
     g_v_parked = false
+    g_v_park_multi = false
     g_v_park_uid = 0ul
     g_v_groups |> clear()
 }
@@ -3255,34 +3332,14 @@ def private metal_mtp_verify_seat(t : Model; var s : Session; toks : array<int64
         r.bvarg = pool_acquire(g_pool, g_dev, uint64(max(n, 16l) * 4l))
     }
     if (!refused && r.dn) {
-        let cd = dn_conv_dim(c)
-        let nvh = c.ssm_dt_rank
-        r.n_dn_taped = 0l
-        for (l in range64(c.n_layers)) {
-            if (layer_is_recurrent(c, l)) {
-                r.n_dn_taped++
-            }
-        }
-        r.dn_split = true
-        r.tape_slot = uint64(2l * n * cd * 4l + 2l * n * nvh * 4l)
-        r.btape = pool_acquire(g_pool, g_dev, r.tape_slot * uint64(r.n_dn_taped))
-        r.u_tcd = uniform_u32(uint(n * cd))
-        r.u_tnvh = uniform_u32(uint(n * nvh))
+        let group_tape = verify_dn_tape(c, r, n, 1l)
         let ts_dn = ref_time_ticks()
         dn_mirror_room(1l)
         let dm = dn_mirror_prepare(s, pos)
         g_v_split.dn_us = int64(get_time_usec(ts_dn))
         refused = !dm.ok
         if (!refused) {
-            var g & = unsafe(g_v_groups[0])
-            g.dn_sbase = dm.state_off
-            g.dn_cbase = dm.conv_off
-            g.dn_salt = dm.state_alt
-            g.dn_calt = dm.conv_alt
-            g.ple_base = dm.ple_off
-            g.tape_base = 0ul
-            dn_grp_clear()
-            dn_grp_push(0l, n, g.dn_sbase, g.dn_salt, g.dn_cbase, g.dn_calt)
+            verify_dn_group(0l, n, dm, group_tape)
             dn_grp_take(r, 1l, n)
         }
     }
@@ -3347,6 +3404,210 @@ def private metal_mtp_verify_seat(t : Model; var s : Session; toks : array<int64
     return true
 }
 
+//! a group's landing off the joint verify `r`: its picks, its post-norm rows, the drafter's captures, its last row's logits, its
+//! shadow recurrent region flipped live at `g.pos + g.nr`, its mirror's watermark
+def private verify_land_group(t : Model; var s : Session; r : StepRes; g : MtpVerifyGroup) {
+    unsafe {
+        verify_land_picks(s, reinterpret<uint?>(metal_buffer_contents(r.bvarg)) + int(g.row0), g.nr)
+    }
+    verify_land_rows(t, s, r, g.row0, g.nr, g.pos, true)
+    g_mirrors[s.uid].watermark = g.pos + g.nr
+}
+
+//! the recurrent tape of a verify `r` over `ng` groups of `n` rows - a layer's slot one share a group, the copies a group at a
+//! time - and the group list emptied; returns a group's share of a layer's slot
+def private verify_dn_tape(c : Config; var r : StepRes; n, ng : int64) : uint64 {
+    let cd = dn_conv_dim(c)
+    let nvh = c.ssm_dt_rank
+    r.n_dn_taped = recurrent_layer_count(c)
+    let group_tape = uint64(2l * n * cd * 4l + 2l * n * nvh * 4l)
+    r.dn_split = true
+    r.tape_slot = group_tape * uint64(ng)
+    r.btape = pool_acquire(g_pool, g_dev, r.tape_slot * uint64(r.n_dn_taped))
+    r.u_tcd = uniform_u32(uint(n * cd))
+    r.u_tnvh = uniform_u32(uint(n * nvh))
+    dn_grp_clear()
+    return group_tape
+}
+
+//! verify group `i`'s shadow recurrent region `dm` and tape share bound, its `n` rows pushed on the group list
+def private verify_dn_group(i, n : int64; dm; group_tape : uint64) {
+    var g & = unsafe(g_v_groups[i])
+    g.dn_sbase = dm.state_off
+    g.dn_cbase = dm.conv_off
+    g.dn_salt = dm.state_alt
+    g.dn_calt = dm.conv_alt
+    g.ple_base = dm.ple_off
+    g.tape_base = group_tape * uint64(i)
+    dn_grp_push(g.row0, n, g.dn_sbase, g.dn_salt, g.dn_cbase, g.dn_calt)
+}
+
+//! a verify's `n` device picks at `ap` into `s`
+def private verify_land_picks(var s : Session; ap : uint?; n : int64) {
+    s.mtp_picks |> resize(n)
+    for (i in range64(n)) {
+        s.mtp_picks[i] = int64(unsafe(ap[i]))
+    }
+}
+
+//! the `n` rows from row `row0` of the verify `r` into `s`, the stream at `pos`: the post-norm rows and the last one beside,
+//! the drafter's captures, the last row's logits under `logits`, the shadow recurrent region flipped live at `pos + n`
+def private verify_land_rows(t : Model; var s : Session; r : StepRes; row0, n, pos : int64; logits : bool) {
+    let c = t.config
+    let hd = mtp_h_dim(c)
+    s.mtp_hrows |> overwrite_resize(n * hd)
+    unsafe {
+        memcpy(addr<void?>(s.mtp_hrows[0]), reinterpret<void?>(reinterpret<uint8?>(metal_buffer_contents(r.hc ? r.bhc_save : r.bxf)) + uint64(row0 * hd * 4l)),
+            uint64(n * hd * 4l))
+    }
+    land_block_capture_rows(s, r.bcap, r.nrows, row0, n, pos, c.dim)
+    copy_floats(s.mtp_hrows, (n - 1l) * hd, s.mtp_h, 0l, hd)
+    s.mtp_h_pos1 = pos + n
+    if (logits) {
+        copy_floats(s.mtp_logits_b, (n - 1l) * c.vocab_size, s.logits, 0l, c.vocab_size)
+    }
+    if (r.dn) {
+        dn_mirror_flip(s.uid, pos + n)
+    }
+}
+
+var private g_v_park_multi = false   //! the parked step carries several streams' groups: each rolls back by its own group
+var private g_v_group_rounds = 0l
+
+//! the joint verifies the seat ran over several streams' groups, since the process began
+def public metal_mtp_group_verifies : int64 => g_v_group_rounds
+
+//! The verify seat over several streams: every session's `n` rows (`mtp_vbatch[0 .. n)`) from pos[i] a group of one step, each
+//! over its own mirror slab and - on a hybrid - its own shadow recurrent region and tape slot, so a stream's reject replays
+//! its group alone; an n-gram trunk's group saves its own conv ring. False = declined, nothing changed: a stream a round
+[arch(at="../ARCHITECTURE_GPU_MTP.md#mtp-dn-shadow-replay")]
+def public metal_mtp_verify_groups(t : Model; var sessions : array<Session?>; pos : array<int64>; n : int64) : bool {   // nolint:STYLE038 — the seat's prep, tape, poke, encode and land over the groups share the step's locals
+    let c = t.config
+    let ng = long_length(sessions)
+    return false if (g_dev == null || ng < 1l || n < 2l || n > MTP_MAX_ROWS || ng * n > max(MTP_MAX_ROWS, metal_verify_pass_rows()))
+    for (i in range64(ng)) {
+        return false if (!key_exists(g_mirrors, sessions[i].uid) || !metal_mtp_verify_ok(t, *sessions[i])
+            || sessions[i].kv_dtype_k != sessions[0].kv_dtype_k || c.recr_mask != 0ul && !dn_mirror_at(sessions[i].uid, pos[i]))
+    }
+    g_v_dev_rows = null
+    g_v_dev_accept = false
+    g_v_dev_late = false
+    mtp_verify_unpark()
+    msel_install()
+    finish_pending_step()
+    discard_batch_pre()
+    chain_draft_drop()
+    g_v_groups |> clear()
+    var deepest = 0l
+    g_v_groups |> reserve(ng)
+    for (i in range64(ng)) {
+        var s & = unsafe(*sessions[i])
+        kv_ensure(s, pos[i] + n)
+        let mr = g_mirrors[s.uid]
+        g_v_groups |> push(MtpVerifyGroup(s = sessions[i], tok = s.mtp_vbatch[0], pos = pos[i], trunk = pos[i], nr = n, row0 = i * n,
+            koff = mr.koff, voff = mr.voff, cap = mr.cap_rows))
+        deepest = max(deepest, pos[i])
+    }
+    let mr0 = g_mirrors[sessions[0].uid]
+    let total = ng * n
+    var r = acquire_step(t, *sessions[0], pos[0] + 1l, mr0.koff, mr0.voff, mr0.cap_rows, [nrows = total, deepest = deepest + 1l])
+    var refused = !r.gpu_logits
+    if (!refused) {
+        r.bvarg = pool_acquire(g_pool, g_dev, uint64(max(total, 16l) * 4l))
+    }
+    if (!refused && r.dn) {
+        let group_tape = verify_dn_tape(c, r, n, ng)
+        dn_mirror_room(ng)
+        for (i in range64(ng)) {
+            let dm = dn_mirror_prepare(*sessions[i], pos[i])
+            refused = refused || !dm.ok
+            verify_dn_group(i, n, dm, group_tape)
+        }
+        if (!refused) {
+            dn_grp_take(r, ng, n)
+        }
+    }
+    if (refused) {
+        release_step(r)
+        g_v_groups |> clear()
+        return false
+    }
+    let rowb = uint64(c.dim * 4l)
+    let tabb = r.bytes_tab / uint64(total)   //! a row's rope table bytes
+    for (i in range64(ng)) {
+        var s & = unsafe(*sessions[i])
+        s.mtp_cat |> ensure_length(n * c.dim)
+        mtp_verify_prep_n(t, s, s.mtp_vbatch, n, pos[i])
+        if (r.png) {   //! the group's n-gram input rows, gathered off its own window
+            mtp_ple_rows_gather(t, s, n, pos[i])
+            unsafe {
+                memcpy(reinterpret<void?>(reinterpret<uint8?>(metal_buffer_contents(r.bple_emb)) + uint64(i * n) * r.bytes_ple_in),
+                    addr<void?>(s.ple_emb_b[0]), uint64(n) * r.bytes_ple_in)
+            }
+        }
+        unsafe {
+            let row0 = uint64(i * n)
+            memcpy(reinterpret<void?>(reinterpret<uint8?>(metal_buffer_contents(r.bx)) + row0 * rowb), addr<void?>(s.mtp_cat[0]), uint64(n) * rowb)
+            memcpy(reinterpret<void?>(reinterpret<uint8?>(metal_buffer_contents(r.bcos)) + row0 * tabb), addr<void?>(s.rope_cos[0]), uint64(n) * tabb)
+            memcpy(reinterpret<void?>(reinterpret<uint8?>(metal_buffer_contents(r.bsin)) + row0 * tabb), addr<void?>(s.rope_sin[0]), uint64(n) * tabb)
+        }
+    }
+    encode_verify_step(t, r, null, false, false)
+    if (!finish_verify_step(t, r, true, false)) {
+        release_step(r)
+        if (c.recr_mask != 0ul) {
+            for (g in g_v_groups) {
+                dn_mirror_drop(g.s.uid)
+            }
+        }
+        g_v_groups |> clear()
+        return false
+    }
+    if (r.png) {
+        ple_ring_acquire(*sessions[0], ng)
+    }
+    for (i in range64(ng)) {
+        verify_land_group(t, *sessions[i], r, g_v_groups[i])
+        if (r.png) {   //! the group's ring saved as it stood, then its rows into it and its window over them
+            ple_ring_copy(true, i)
+            commit_ple_rows(t, r, i, n)
+            mtp_ple_window_commit(t, *sessions[i], n, pos[i])
+        }
+    }
+    g_v_rd = r
+    g_v_parked = true
+    g_v_park_multi = true
+    g_v_park_uid = 0ul
+    g_v_park_pos = -1l
+    g_v_park_n = n
+    g_v_group_rounds++
+    return true
+}
+
+//! A joint verify's reject for `s` after `a` accepted drafts at `pos`: its group's recurrent replay over rows 0 .. a and its
+//! mirror's watermark; the parked step stays for the tick's other groups. False = no joint verify parked this stream at `pos`
+[arch(at="../ARCHITECTURE_GPU_MTP.md#mtp-dn-shadow-replay")]
+def public metal_mtp_rollback_group(t : Model; var s : Session; pos, a : int64) : bool {
+    return false if (!g_v_parked || !g_v_park_multi)
+    for (gi in range64(long_length(g_v_groups))) {
+        let g = g_v_groups[gi]
+        continue if (g.s.uid != s.uid || g.pos != pos)
+        if (g_v_rd.dn) {
+            encode_dn_replay(t, g_v_rd, gi, a + 1l, false)
+            dn_mirror_set_pos(s.uid, pos + a + 1l)
+        }
+        if (g_v_rd.png) {   //! the group's ring back as it stood, the accepted rows into it, the window over them
+            ple_ring_copy(false, gi)
+            commit_ple_rows(t, g_v_rd, gi, a + 1l)
+            mtp_ple_window_restore(s)
+            mtp_ple_window_commit(t, s, a + 1l, pos)
+        }
+        g_mirrors[s.uid].watermark = pos + a + 1l
+        return true
+    }
+    return false
+}
+
 //! the block drafter's token rows off the device's table: `toks` gathered into dst ([n][dim]) in one command buffer
 def private metal_block_embed_rows(t : Model; toks : array<int64>; var dst : array<float>) : bool {
     return false if (!emb_dev_gather_ok(t))
@@ -3399,8 +3660,12 @@ def private metal_block_cls_rows(t : Model; rows : array<float>; n : int64; var 
     let c = t.config
     let dim = c.dim
     let vocab = c.vocab_size
-    var bxf = metal_buffer_from(g_dev, uint64(n * dim * 4l), unsafe(addr<void?>(rows[0])))
-    let bytes_log = uint64(n * vocab * 4l)
+    let pad = n > 1l ? (n + 7l) / 8l * 8l : 1l   //! the eight-row forms read and write whole panels of eight
+    var bxf = metal_new_buffer(g_dev, uint64(pad * dim * 4l))
+    unsafe {
+        memcpy(metal_buffer_contents(bxf), addr<void?>(rows[0]), n * dim * 4l)
+    }
+    let bytes_log = uint64(pad * vocab * 4l)
     var blog = pool_acquire(g_pool, g_dev, bytes_log)
     var u_dim = uniform_u32(uint(dim))
     var u_vocab = uniform_u32(uint(vocab))
@@ -3425,57 +3690,21 @@ def private metal_block_cls_rows(t : Model; rows : array<float>; n : int64; var 
     return ok
 }
 
-var private @scratch g_cap_img : array<float>   //! the landing's [rows][slot][dim] image, reused a step
-
-//! the step's captured layer outputs ([slot][rows][dim] on the device) to the block drafter as its [rows][slot][dim] image
-def private land_block_captures(var s : Session; r : StepRes; rows, pos0, dim : int64) {
-    return if (r.bcap == null)
-    let ncap = mtp_block_ncap()
-    g_cap_img |> reserve_resize(rows * ncap * dim)   // nolint:PERF026,LINT019 — grows to the widest verify once, reused every step
-    unsafe {
-        let cp = reinterpret<float const?>(metal_buffer_contents(r.bcap))
-        for (sl in range64(ncap)) {
-            for (row in range64(rows)) {
-                memcpy(addr<void?>(g_cap_img[(row * ncap + sl) * dim]), reinterpret<void const?>(cp + (sl * r.nrows + row) * dim), dim * 4l)
-            }
-        }
-    }
-    mtp_block_land_rows(s, g_cap_img, rows, pos0)
-}
-
 [arch(at="../ARCHITECTURE_GPU_MTP.md#mtp-round-one-join")]
 def private metal_verify_land(t : Model; var s : Session; var r : StepRes; n, pos : int64; pick_only, dev_accept, ple_tail : bool) {
     let c = t.config
-    let vocab = c.vocab_size
-    let hd = mtp_h_dim(c)
     let ts_land = prof_ticks()
-    s.mtp_picks |> resize(n)
     unsafe {
         let wp = reinterpret<uint?>(metal_buffer_contents(dev_accept ? g_v_accept.words : r.bvarg))
-        let ap = dev_accept ? wp + 2 : wp
-        for (i in range64(n)) {
-            s.mtp_picks[i] = int64(ap[i])
-        }
+        verify_land_picks(s, dev_accept ? wp + 2 : wp, n)
         if (dev_accept) {
             if (!pick_only) {
-                memcpy(addr < void? >(s.logits[0]), metal_buffer_contents(g_v_accept.row), vocab * 4l)
+                memcpy(addr < void? >(s.logits[0]), metal_buffer_contents(g_v_accept.row), c.vocab_size * 4l)
             }
             mtp_seat_accept_landed(int64(wp[0]))
         }
     }
-    s.mtp_hrows |> overwrite_resize(n * hd)
-    unsafe {
-        memcpy(addr < void? >(s.mtp_hrows[0]), metal_buffer_contents(r.hc ? r.bhc_save : r.bxf), uint64(n * hd * 4l))
-    }
-    land_block_captures(s, r, n, pos, c.dim)
-    copy_floats(s.mtp_hrows, (n - 1l) * hd, s.mtp_h, 0l, hd)
-    s.mtp_h_pos1 = pos + n
-    if (!pick_only && !dev_accept) {
-        copy_floats(s.mtp_logits_b, (n - 1l) * vocab, s.logits, 0l, vocab)
-    }
-    if (r.dn) {
-        dn_mirror_flip(s.uid, pos + n)
-    }
+    verify_land_rows(t, s, r, 0l, n, pos, !pick_only && !dev_accept)
     if (r.png) {
         if (!ple_tail) {
             ple_ring_acquire(s)
@@ -3487,6 +3716,7 @@ def private metal_verify_land(t : Model; var s : Session; var r : StepRes; n, po
     g_mirrors[s.uid].watermark = pos + n
     g_v_rd = r
     g_v_parked = true
+    g_v_park_multi = false
     g_v_park_uid = s.uid
     g_v_park_pos = pos
     g_v_park_n = n
@@ -3494,8 +3724,8 @@ def private metal_verify_land(t : Model; var s : Session; var r : StepRes; n, po
 }
 
 //! the save of `s`'s n-gram conv ring and its width uniform, released at the unpark
-def private ple_ring_acquire(s : Session) {
-    let rb = uint64(long_length(s.ple_conv_hist)) * 4ul
+def private ple_ring_acquire(s : Session; ng : int64 = 1l) {
+    let rb = uint64(long_length(s.ple_conv_hist) * ng) * 4ul
     g_v_ring_bytes = rb
     g_v_ring_save = pool_acquire(g_pool, g_dev, rb)
     g_v_ring_u = uniform_u32(uint(long_length(s.ple_conv_hist)))
@@ -3517,10 +3747,10 @@ def private ple_ring_release() {
     g_v_ring_u = null
 }
 
-def private ple_ring_copy(save : bool) {
+def private ple_ring_copy(save : bool; gi : int64 = 0l) {
     var cb = metal_new_command_buffer_unretained(g_queue)
     var enc = metal_new_compute_encoder(cb)
-    enc_ple_ring_copy(enc, save)
+    enc_ple_ring_copy(enc, save, gi)
     metal_end_encoding(enc)
     metal_release(enc)
     metal_commit(cb)
@@ -3682,7 +3912,7 @@ def private finish_step(t : Model; var s : Session; r : StepRes) : bool {
         let c = t.config
         let pos = r.pos
         let cap = r.cap
-        land_block_captures(s, r, 1l, pos, c.dim)
+        land_block_capture_rows(s, r.bcap, r.nrows, 0l, 1l, pos, c.dim)
         unsafe {
             memcpy(addr < void? >(s.x[0]), metal_buffer_contents(r.bx), r.bytes_x)
             if (r.hc) {   // the wide residual is the session's state the CPU path would continue from
@@ -4349,19 +4579,22 @@ def private enc_batch_site(enc : MetalComputeEncoder?; t : Model; bt : BatchTier
                            ycol : int64; mv_ok : bool; sk : int64 = 0l; gemm64 : bool = false; bxh : MetalBuffer? = null;
                            bxt : MetalBuffer? = null; bxs : MetalBuffer? = null) {
     let yoff = uint64(ycol * 4l)
-    let rows8 = bt.nrows >= 5l && bt.nrows <= 8l   //! the matrix-unit form first, then the eight-row stamps; the panel holds eight rows at five and up (`acquire_step`'s pad, the batch tier's)
+    //! a step past eight rows: the rows8 form over whole row tiles, the plane streamed once
+    let tiles = (g_rows_tiled || bt.tiled) && bt.nrows > 8l && !bt.use_mm ? (bt.nrows + 7l) / 8l : 1l
+    let one = tiles == 1l
+    let rows8 = !one || rows8_rows(bt.nrows)   //! the matrix-unit form first, then the eight-row stamps; the panel holds eight rows at three and up (`acquire_step`'s pad, the batch tier's)
     if (fmt != KqFmt.q8) {
         if (rows8) {
-            return if (pf_enc_rows8_kq(enc, t, fmt, woff, rows, n, ys, bx, by, yoff, bn, bys, bxt, bxs, bxh)
-                || (g_env_metal.rows_mm8 && pf_enc_kq_mm8(enc, t, fmt, woff, rows, n, ys, bx, by, yoff, bn, bd, bys)))
+            return if (pf_enc_rows8_kq(enc, t, fmt, woff, rows, n, ys, bx, by, yoff, bn, bys, bxt, bxs, bxh, tiles)
+                || (one && g_env_metal.rows_mm8 && pf_enc_kq_mm8(enc, t, fmt, woff, rows, n, ys, bx, by, yoff, bn, bd, bys)))
         }
         enc_kq_site_b(enc, t, fmt, woff, rows, n, bx, n, by, ys, ycol, bn, bd, bys, bt.nrows, bt.mp, bxh)
         return
     }
     let bw = blob_of(g_dev, t, woff)
     if (!bt.use_mm && rows8) {
-        return if (pf_enc_rows8_q8(enc, bw.buf, bw.boff, bx, by, yoff, bn, bys, n, rows, ys, bxt, bxs)
-            || (g_env_metal.rows_mm8 && rows >= ROWS_MM8_Q8_MIN_ROWS && pf_enc_q8_mm8(enc, bw.buf, bw.boff, bx, by, yoff, bn, bd, bys, n, rows, ys)))
+        return if (pf_enc_rows8_q8(enc, bw.buf, bw.boff, bx, by, yoff, bn, bys, n, rows, ys, bxt, bxs, tiles)
+            || (one && g_env_metal.rows_mm8 && rows >= ROWS_MM8_Q8_MIN_ROWS && pf_enc_q8_mm8(enc, bw.buf, bw.boff, bx, by, yoff, bn, bd, bys, n, rows, ys)))
     }
     if (bt.use_mm) {
         enc_gemm_mm_b(enc, bw.buf, bw.boff, bx, by, uint64(ycol * 4l), bn, bys, bt.mp, rows)
@@ -4377,6 +4610,23 @@ def private enc_batch_site(enc : MetalComputeEncoder?; t : Model; bt : BatchTier
     } else {
         enc_gemv_rows(enc, bt.nrows, bw.buf, bw.boff, bx, by, bn, bd, bys, n, rows, ys, yoff)
     }
+}
+
+var private g_rows_tiled = false   //! the step being encoded takes the tiled rows8 sites past eight rows: a verify's, a draft pass's classifier rows
+
+//! the verify seat carries this many rows on one weight pass: the row tiles the rows8 form holds where the box runs it, else the
+//! eight-row forms' eight
+def public metal_verify_pass_rows : int64 => metal_rows8_on() ? METAL_VERIFY_TILED_ROWS : 8l
+
+let METAL_BATCH_TILED_ROWS = 8l * int64(ROWS8_TILES_MAX)   //! every row tile a rows8 site carries: the widest batched step on the tiled form
+let METAL_VERIFY_TILED_ROWS = 16l   //! two row tiles: the widest joint verify the round asks for
+
+//! the classifier's rows of a draft pass past eight ride the tiled sites while `blk` encodes them
+def public metal_rows_tiled_scope(blk : block) {
+    let was = g_rows_tiled
+    g_rows_tiled = true
+    invoke(blk)
+    g_rows_tiled = was
 }
 
 let private ROWS_MM8_Q8_MIN_ROWS = 256l   //! a narrower q8 plane rides the row forms: its tile stamp and split-K reduce outweigh its bytes
@@ -4490,7 +4740,9 @@ def private attention_batch(var e : BatchLayerEnc; t : Model; enc : MetalCompute
     let qhs = gd ? uint(2l * head_size) : 0u
     let gated = gd && r.kdt != KVDtype.tq4 ? 1u : 0u
     if (r.attn_d) {
-        encode_attn_d(t, r, enc, l, head_size, n_heads, window_l, bsnk)
+        let tab = attn_d_tables(t, r, head_size)
+        encode_attn_d(t, r, enc, l, head_size, n_heads, window_l, bsnk, 0ul, false, tab ? r.bxt : null, tab ? r.bxs : null)
+        r.xt_att = tab
     } elif (r.chunked) {
         // each row derives wstart from its own cnt; the comb skips that row's below-window chunks
         var pka = SqAttnPartBArgs(lay = lay_l, kstride = kstride_l, nheads = uint(n_heads),
@@ -4909,7 +5161,7 @@ def batch_step_build(t : Model; ws : BatchWorkspace; var sessions : array<Sessio
     let use_mm = (use_gemm && g_env_batch_mm &&
         (dim % 64l) == 0l && (qd % 64l) == 0l && (kv_dim % 64l) == 0l && (hidden % 64l) == 0l && (hid2 % 64l) == 0l &&
         (qd_sw % 64l) == 0l && (kvd_sw % 64l) == 0l)
-    let mp = use_gemm ? ((nrows + 31l) / 32l) * 32l : (nrows <= 2l ? 2l : nrows <= 4l ? 4l : 8l)
+    let mp = use_gemm ? ((nrows + 31l) / 32l) * 32l : (rows8_rows(nrows) ? 8l : nrows <= 2l ? 2l : nrows <= 4l ? 4l : 8l)
     // per-site GEMM policy (see g_bsk): each split-K site gates on its OWN K's nkb % S == 0 (the
     // partial planes assume mp == 32); ineligible sites stay on the planar v2. Hetero serves via
     // per-class twins; the wo gate must hold for BOTH classes' qd.
@@ -4962,14 +5214,18 @@ def batch_step_build(t : Model; ws : BatchWorkspace; var sessions : array<Sessio
         nrows * n_heads * nchmax * (hs_mx + 2l) * 4l)
     var bx = pool_acquire(g_pool, g_dev, bytes_x)
     var bxb = pool_acquire(g_pool, g_dev, bytes_xb)
-    let twins = step_twins(t, nrows)
+    let bytes_cap = same && mtp_block_attached(t) ? uint64(mtp_block_ncap() * nrows * dim * 4l) : 0ul   //! the same-slab rows' layer outputs the block drafter reads
+    var bcap = bytes_cap > 0ul ? pool_acquire(g_pool, g_dev, bytes_cap) : null
+    let tiles = same || (metal_rows8_on() && nrows > 8l && nrows <= METAL_BATCH_TILED_ROWS)   //! past eight rows the step's sites take row tiles of one weight pass: a same-slab verify's, and a plain batch's
+    let twins = step_twins(t, nrows, tiles)
     let bytes_xh = twins ? uint64(max(mp, KQ_HALF_TWIN_ROWS) * max(dim, qd_mx) * 2l) : 0ul
     let bytes_fgh = twins ? uint64(max(mp, KQ_HALF_TWIN_ROWS) * hid_mx * 2l) : 0ul
     var bxh = twins ? pool_acquire(g_pool, g_dev, bytes_xh) : null
     var bfgh = twins ? pool_acquire(g_pool, g_dev, bytes_fgh) : null
-    let tabs = twins && rows8_table_rows(t, nrows)
-    let bytes_xs = tabs ? uint64(max(dim, qd_mx) / 32l * 8l * 4l) : 0ul
-    let bytes_fgs = tabs ? uint64(hid_mx / 32l * 8l * 4l) : 0ul
+    let tabs = twins && rows8_table_rows(t, nrows, tiles)
+    let tab_tiles = (max(nrows, 8l) + 7l) / 8l   //! a row tile's sums follow the tile before it
+    let bytes_xs = tabs ? uint64(max(dim, qd_mx) / 32l * 8l * 4l * tab_tiles) : 0ul
+    let bytes_fgs = tabs ? uint64(hid_mx / 32l * 8l * 4l * tab_tiles) : 0ul
     var bxt = tabs ? pool_acquire(g_pool, g_dev, bytes_xh) : null
     var bxs = tabs ? pool_acquire(g_pool, g_dev, bytes_xs) : null
     var bfgt = tabs ? pool_acquire(g_pool, g_dev, bytes_fgh) : null
@@ -4993,7 +5249,7 @@ def batch_step_build(t : Model; ws : BatchWorkspace; var sessions : array<Sessio
         bytes_sk = max(bytes_sk, uint64(w2_sk * 32l * dim * 4l))
     }
     var bpsk = bytes_sk > 0ul ? pool_acquire(g_pool, g_dev, bytes_sk) : null
-    var bt = BatchTier(use_mm = use_mm, use_gemm = use_gemm, mp = mp, nrows = nrows, bpsk = bpsk)
+    var bt = BatchTier(use_mm = use_mm, use_gemm = use_gemm, mp = mp, nrows = nrows, bpsk = bpsk, tiled = tiles)
     let bytes_mlg = uint64(mr * (c.n_expert + 1l) * 4l)
     let bytes_msel = uint64(mr * 2l * c.n_expert_used * 4l)
     let bytes_mdn = uint64(mr * c.n_expert_used * dim * 4l)
@@ -5028,7 +5284,7 @@ def batch_step_build(t : Model; ws : BatchWorkspace; var sessions : array<Sessio
     if (dn) {
         dn_tab = dn_grp_upload()
     }
-    let bytes_qg = uint64(mr * qd * 4l)
+    let bytes_qg = uint64(mdn * qd * 4l)   //! the gated q projection is a weight site too: an eight-row form writes its whole panel
     var bdn_qg = c.q_gated ? pool_acquire(g_pool, g_dev, 2ul * bytes_qg) : null
     var bdn_gate = c.q_gated ? pool_acquire(g_pool, g_dev, bytes_qg) : null
     var u_dn_qd2 = c.q_gated ? uniform_u32(uint(2l * qd)) : null
@@ -5227,7 +5483,7 @@ def batch_step_build(t : Model; ws : BatchWorkspace; var sessions : array<Sessio
     }
     var r = StepRes(valid = true, pos = maxcnt - 1l, chain_pos = maxcnt - nrows, nrows = nrows, kdt = kdt, hetero = hetero, moe = moe,
         chunked = chunked, attn_d = use_attn_d, d_nsgs = d_nsgs, nchmax = nchmax, hid0 = hidden,
-        u_hidden2 = u_hidden2, u_total_h2 = u_total_h2,
+        u_hidden2 = u_hidden2, u_total_h2 = u_total_h2, bcap = bcap, bytes_cap = bytes_cap,
         ple = plef, bple = ple_r.bple, u_ple = u_ple, bytes_ple = bytes_ple, ple_dev = ple_r.ple_dev,
         bple_proj = ple_r.bple_proj, u_ple_all = ple_r.u_ple_all, u_ple_sq = ple_r.u_ple_sq,
         hc = hc, png = png, batch_rows = true, bytes_hcd = bytes_hcd, bytes_lr = bytes_lr, bytes_hc = bytes_hc, bytes_ple_in = bytes_ple_in,
@@ -5265,6 +5521,8 @@ def batch_step_build(t : Model; ws : BatchWorkspace; var sessions : array<Sessio
         k_moe_knfe = k_moe_knfe, k_moe_kdim = k_moe_kdim, k_moe_gmode = k_moe_gmode)
     var le = BatchLayerEnc(r = unsafe(addr(r)))
     var dnli = 0l
+    let tiled_was = g_rows_tiled
+    g_rows_tiled = tiles   //! the recurrent layers' projections are rows sites of their own tier: they take the step's row tiles too
     for (l in range64(c.n_layers)) {
         le->encode(t, enc, l, dnli)
         // group boundary: commit this slice so the driver schedules it under the earlier
@@ -5282,10 +5540,11 @@ def batch_step_build(t : Model; ws : BatchWorkspace; var sessions : array<Sessio
             hz_arm(conc)   // fresh encoder — start the tracker clean (queue order covers cross-cb)
         }
     }
+    g_rows_tiled = tiled_was
     var nc_all = false
     if (gpu_logits) {
         // batched final rmsnorm + classifier — the caller's CPU classifier step is skipped; the hyper-connection head mixer stands where the norm would
-        let cls_twin = !hc && r.bxh != null && nrows >= 5l && nrows <= 8l && metal_rows8_twin_fed(cls_fmt)   //! the rows8 site reads the norm's f16 twin, no prep
+        let cls_twin = !hc && r.bxh != null && rows8_rows(nrows) && metal_rows8_twin_fed(cls_fmt)   //! the rows8 site reads the norm's f16 twin, no prep
         if (hc) {
             hc_mix_rows(r, t, enc, r.bhc, t.hc_head_norm_off, t.hc_head_down_off, t.hc_head_up_off, -1l, hc_head_site(t.config), bxf, null)
         } else {
@@ -5296,9 +5555,11 @@ def batch_step_build(t : Model; ws : BatchWorkspace; var sessions : array<Sessio
                 enc_rms_b(enc, bx, 0ul, bwfin, bxf, u_dim, u_eps, nrows)
             }
         }
-        enc_batch_site(enc, t, bt, cls_fmt, t.wcls_off, c.vocab_size, dim, c.vocab_size, bxf, blog, u_dim, u_vocab, u_vocab, 0l, mv_kdim, 0l, cls64,
-            cls_twin ? r.bxh : null)
-        if (c.final_logit_softcap > 0.0 || bsupp != null) {   //! the final softcap, then the suppressed ids, over the live rows
+        if (g_skip != "cls") {
+            enc_batch_site(enc, t, bt, cls_fmt, t.wcls_off, c.vocab_size, dim, c.vocab_size, bxf, blog, u_dim, u_vocab, u_vocab, 0l, mv_kdim, 0l, cls64,
+                cls_twin ? r.bxh : null)
+        }
+        if (g_skip != "cls_epi" && (c.final_logit_softcap > 0.0 || bsupp != null)) {   //! the final softcap, then the suppressed ids, over the live rows
             enc_cls_epi_rows(enc, blog, bsupp, c.vocab_size, nrows, c.final_logit_softcap, nsupp)
         }
         // zero-copy logits: scatter each staging row into its session's wrapped storage ON the cb
@@ -5332,8 +5593,11 @@ def batch_step_build(t : Model; ws : BatchWorkspace; var sessions : array<Sessio
     // the landing stash (the slot was emptied by its last finish or discard)
     L.cbs <- cbs   // emptied by release_landing's clear(); capacity deliberately retained
     // every run below APPENDS: the same-slab argmax and the embed-scale uniform were pushed during the encode
-    L.pooled |> push((buf = bx, size = bytes_x))   // nolint:STYLE012
-    L.pooled |> push((buf = bxb, size = bytes_xb))
+    L.pooled |> push((buf = bx, size = bytes_x))
+    if (bcap != null) {
+        L.pooled |> push((buf = bcap, size = bytes_cap))
+    }
+    L.pooled |> push((buf = bxb, size = bytes_xb))   // nolint:STYLE012 — appends, as above
     L.pooled |> push((buf = bxb2, size = bytes_x))
     L.pooled |> push((buf = bqkv, size = bytes_qkv))
     L.pooled |> push((buf = bhb, size = bytes_h))
@@ -5497,6 +5761,7 @@ def batch_step_build(t : Model; ws : BatchWorkspace; var sessions : array<Sessio
     }
     L.blog = gpu_logits && !nc_all ? blog : null   // nc steps: the GPU scatter already fed s.logits
     L.sameslab = same
+    L.bcap = bcap
     L.grp_nr |> clear()
     if (same) {
         for (n in g_b_grp_nr) {
@@ -5641,6 +5906,10 @@ def dasllama_metal_decode_register() {
     }
     g_env_mtp_debug = g_env_metal.mtp_debug
     g_wait_spin = g_env_metal.wait_spin   // the single-row finish_step reads it too, so it resolves here, not in the batch driver's knob loader
+    kskip_arm()
+    if (!empty(g_env_metal.kernel_skip)) {
+        to_log(LOG_WARNING, "dasLLAMA metal: DASLLAMA_METAL_KERNEL_SKIP={g_env_metal.kernel_skip} - timing-attribution mode, the named kernels dispatch nothing and output is GARBAGE\n")
+    }
     if (!empty(g_env_metal.decode_skip)) {
         set_metal_decode_skip(g_env_metal.decode_skip)   // routes through the unknown-token guard
         to_log(LOG_WARNING, "dasLLAMA metal decode: SKIP={g_skip} - timing-attribution mode, output is GARBAGE\n")

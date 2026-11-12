@@ -3179,12 +3179,15 @@ CPU large-language-model inference in pure daslang: load a GGUF model, tokenize,
 
 ### Model loading and sessions
 
+- `attach_block_drafter` - Attach the DFlash / DFlash2 block drafter GGUF at `path` to `model`: "" where it attached, else why not (logged).
 - `attach_mtp_drafter` - Attach the assistant drafter at `path` to `model` for speculative decode on the GPU driver that serves it (Metal or the Vulkan resident driver); false where every driver refused it (a drafter made for another target, a model the driver does not serve whole), each refusal logged.
 - `attach_mtp_sidecar` - Attach the assistant drafter that sits beside the model at `model_path` (`mtp_drafter_sidecar`): the drafter's path where it attached, "" where none sits there or every driver refused it (each refusal logged).
+- `block_drafter_attached` - Whether a block drafter is attached to `model`.
 - `caps` - What `model` honestly supports at the chat layer (see LlmCaps) — e.g.
 - `create_batch_workspace` - Create the caller-owned scratch that `eval_batch` steps through — one per concurrent batch, reused across calls (buffers grow to the largest batch seen).
 - `create_kv_pool` - Create a caller-owned PAGED KV pool over `model`'s cache geometry: sessions over it allocate pages of `page_rows` positions on demand instead of the full `seq_len` slab, so many sessions share one elastic pool; keep it alive as long as sessions live.
 - `create_session` - Create a fresh session (KV cache + scratch) sized to `model.config.seq_len` — one model, many independent conversations.
+- `detach_block_drafter` - Detach the process's block drafter, if one is attached; plain decode serves.
 - `detach_mtp_drafter` - Detach `model`'s assistant drafter, if one is attached; its rounds stop and plain decode serves.
 - `load_model` - Load a model AND its tokenizer from a GGUF file — architecture and tokenizer backend are auto-selected from metadata; `mode` picks the weight quantization.
 - `mtp_capable` - Whether `model` can run a speculative round: a NextN head of its own, or an assistant drafter attached - what a scheduler's `mtp` asks for.
@@ -3249,6 +3252,7 @@ CPU large-language-model inference in pure daslang: load a GGUF model, tokenize,
 ### Generation
 
 - `generate` - Stream-generate up to `max_tokens` from `prompt`, invoking the trailing block per token with `(id, piece)`; return `false` from the block to stop early.
+- `generate_drafted` - `generate` over a model with a block drafter attached (`attach_block_drafter`): after every drawn id a round evals it and hands the block the drafts the model's own verify accepts, so the stream is the model's own.
 - `generate_embd` - `generate`'s embedding-prefill twin: prefill `npos` pre-built embedding rows (the multimodal splice — see `eval_embd`), then stream-sample exactly like `generate`.
 
 ### Embeddings

@@ -1252,3 +1252,12 @@ whose kernel calls an inherited helper therefore does not compile; the block dra
 Done = the emitter splices a direct call to a method on the kernel's own `self` as it splices the invoke - the argument
 binding, the value form, the write-target and reference walks - with a cell holding a private kernel class's inherited
 helper to its public twin's source, and those six classes private again.
+
+## 74. A free helper cannot write a kernel's buffer
+
+`[metal_dispatch]` refuses a tracked buffer passed whole to a free function (`tracked buffer 'ys' passed whole to call`), so
+a store shared by kernels of unrelated class families is written out in each: the rows8 table put (the halves at
+`rows8_slot_at`, the subgroup sum at `rows8_sum_at` from lane 0) stands in `MetalSqAttnCombDT`, `MetalRmsNormT`, `MetalEw2T`
+and `MetalGegluSideXT`, beside the one method the shared norm family holds (`table_put`,
+`dasllama_gpu_kernels_common.das`). Done = the emitter lowers a buffer argument of a free helper with the role the callee's
+writes derive, and those four sites call one `rows8_table_put`.

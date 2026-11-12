@@ -526,12 +526,8 @@ def private gemma_plain_step(t : Model; var s : Session; tok, pos : int64) {
 //! a stream that cannot speculate this round: no Metal blob or device, no carried hidden at its position, a round past the
 //! context, a K/V codec the round does not serve, or a mirror short of the position or of the round's rows
 def private gemma_round_cold(t : Model; s : Session; pos, k : int64) : bool {
-    if (g_dev == null || !t.metal_blob || mtp_round_cold_host(t, s, pos, k, g_gemma_drafter.tdim) || !gemma_kv_ok(s)
-            || !key_exists(g_mirrors, s.uid)) {
-        return true
-    }
-    let mr = g_mirrors[s.uid]
-    return mr.watermark < pos || mr.cap_rows < pos + k + 1l
+    return (g_dev == null || !t.metal_blob || mtp_round_cold_host(t, s, pos, k, g_gemma_drafter.tdim) || !gemma_kv_ok(s)
+        || mtp_mirror_short(s, pos, k))
 }
 
 var private @scratch g_gw : MtpRoundGather   //! the tick's warm streams, a verify group each
@@ -543,7 +539,7 @@ var private @scratch g_gw_toks : array<int64>
 //! (`verify_batch_groups`); each stream's accept walk and commit. `acc[i]` is stream i's accepted count, the drafts in
 //! `mtp_vbatch[1..a]`, its token always committed; a cold stream takes one plain GPU step. Returns the warm streams the verify carried
 [hot_path, arch(at="../ARCHITECTURE_GPU_MTP.md#mtp-round-one-join"), arch(at="../ARCHITECTURE_GPU_MTP_ASSISTANT.md#assistant-drafter-rounds")]
-def private gemma_mtp_spec_rounds(t : Model; var sessions : array<Session?>; toks : array<int64>; k_req : int64; var acc : array<int64>) : int64 {   // nolint:STYLE038 — draft chains / one verify / accept walks / commits is one sequential protocol on shared locals
+def private gemma_mtp_spec_rounds(t : Model; var sessions : array<Session?>; toks : array<int64>; k_req : int64; var acc : array<int64>) : int64 {
     let c = t.config
     let k = clamp(k_req, 1l, MTP_MAX_ROWS - 1l)
     let dr & = g_gemma_drafter
@@ -559,10 +555,7 @@ def private gemma_mtp_spec_rounds(t : Model; var sessions : array<Session?>; tok
     let td = ref_time_ticks()
     let ts_draft = prof_ticks()
     let gpu_chain = !g_gemma_draft_cpu
-    var rows = 0l
-    for (nr in g_gw.nr) {
-        rows += nr
-    }
+    let rows = mtp_round_rows(g_gw, g_gw_toks)   //! the device rows gather their own ids; the host rows read these where it does not
     var chain_ok = true
     if (gpu_chain) {   //! the chains encode inside the verify's build (`gemma_encode_chains`)
         gemma_token_rows(g_gemma_gpu, rows)
@@ -571,19 +564,12 @@ def private gemma_mtp_spec_rounds(t : Model; var sessions : array<Session?>; tok
             var s & = unsafe(*g_gw.sessions[gi])
             chain_ok = chain_ok && gemma_draft_chain_cpu(t, s, g_gw.pos[gi], g_gw.nr[gi] - 1l) == g_gw.nr[gi] - 1l
         }
+        mtp_round_rows(g_gw, g_gw_toks)   //! the host chains' drafts
     }
     g_gemma_stats.draft_us += int64(get_time_usec(td))
     prof_add("mtp.draft", ts_draft)
     let tv = ref_time_ticks()
     let ts_verify = prof_ticks()
-    g_gw_toks |> resize(rows)
-    var row = 0l
-    for (gi in range64(ng)) {
-        for (i in range64(g_gw.nr[gi])) {
-            g_gw_toks[row] = g_gw.sessions[gi].mtp_vbatch[i]   //! the device rows gather their own ids; the host rows read these where it does not
-            row++
-        }
-    }
     if (gpu_chain) {
         set_batch_same_slab_chain(g_gemma_gpu.bvtok, @@gemma_encode_chains)
     }
@@ -600,7 +586,7 @@ def private gemma_mtp_spec_rounds(t : Model; var sessions : array<Session?>; tok
     }
     prof_add("mtp.verify", ts_verify)
     let ts_walk = prof_ticks()
-    row = 0l
+    var row = 0l
     for (gi in range64(ng)) {
         var s & = unsafe(*g_gw.sessions[gi])
         let pos = g_gw.pos[gi]
@@ -614,12 +600,7 @@ def private gemma_mtp_spec_rounds(t : Model; var sessions : array<Session?>; tok
                 }
             }
         }
-        let a = mtp_accept_walk(s, kd, c.vocab_size) $(vr) => sameslab_argmax(r0 + vr)
-        if (g_gemma_trace) {
-            mtp_round_trace("gemma", s, pos, kd, kd + 1l, a, c.vocab_size)
-        }
-        mtp_round_take(s, a, kd, c.dim)
-        mtp_round_commit(s, pos, kd, a)
+        let a = mtp_round_accept(c, s, pos, kd, r0, g_gemma_trace ? "gemma" : "")
         g_gemma_stats.drafted += kd
         g_gemma_stats.accepted += a
         g_gemma_stats.rounds++

@@ -365,6 +365,21 @@ the family tag `qwen35`), its arms:
   exact walk's to compare; the closed form is `test_mtp_accept_walks.das`'s), the three rates logged, both streams
   decoded in the log; on the device arm the exact walk's passes ending on the device selector and the drawn drafts' none
   (the control);
+- `dflash-26b-capture` (family `gemma4moe`, large tier: gemma-4-26B-A4B Q4_K_M with its DFlash Q8_0 drafter, a drafter
+  with no selector) - the Metal prefill window hands the drafter the prompt's layer rows on a trunk whose layers close on
+  the gemma MoE step: the prompt commit's last row, a sum of magnitudes a captured layer (`dflash_recorded_prompt_sums`),
+  is the CPU route's within 5% at every captured layer, the prompt counted as a device prefill; the CPU route's row for a
+  prompt one token short is outside the bar (the control); skips without das_metal;
+- `dflash-e2b-facade` (family `gemma4e`: gemma-4-E2B Q8_0 with its DFlash2 Q8_0 drafter) - the facade's streams over an
+  attached block drafter (`attach_block_drafter`): a two-turn greedy chat's replies through `respond` and a greedy
+  completion's ids through `generate_drafted` are the plain model's token for token, the chat's turns counted as draft
+  passes and device steps and the completion accepting drafts; two streams through the scheduler at three drafts a round
+  ride joint rounds (the scheduler's `mtp_joined_max` 2, a stream alone 1 - the control), each the plain scheduler's
+  token for token, the two together accepting what each accepts alone within a fifth; the detach reported; a stream given a stop id emits exactly the ids before that id's first
+  occurrence, the stopless stream running past it (the control); skips without das_metal;
+- `dflash-27b-joint` (large tier) - the same two-stream leg on the 27B hybrid: the joint verifies ride the verify seat's
+  groups (`metal_mtp_group_verifies`), each stream the plain scheduler's token for token, the acceptance within a fifth of
+  the streams alone; skips without das_metal;
 - `dflash-27b-mlx-metal` / `dflash-27b-mlx-sampled` - `dflash-27b-metal` and `dflash-27b-sampled-metal` again over the same
   model's mlx-community 4-bit snapshot (mlx4b planes, no NextN head; large tier, the directory through `hf_snapshot_dir` as
   `test_mlx_snapshot.das`'s 27B cell) with the Q8_0 drafter: the lossless arm also counts the trunk's verify sites on the
@@ -808,9 +823,12 @@ combine reading two heads of 128) and 512 (four times as wide, four heads of 128
 float and the block-codec (q8_0, tq4) stamps, with the route table bound past foreign rows whose key
 count is 1 - the offset a kernel reading the table from its start would miss the bar on - and
 under a sliding window (inside one slice, cutting a slice, wider than every stream), a sink
-logit that differs head to head and the logit cap, on the float, quantized and wide stamps. The
-gemm file's `rows8_k4_gate` / `rows8_q8_gate` cells run the rows8 matrix-unit kernels - the x-table prep, then the
-kernel writing y at the site's own row stride and at a wider one, the gap past each row the fill - against the dense
+logit that differs head to head and the logit cap, on the float, quantized and wide stamps; under `xtab` the combine's
+table stamp (`enc_attncombd_xt_c`) runs beside the plain combine - its rows bit for bit, the rows8 x table their halves at
+their k-slots, the sums within 1e-5, the rows read in their own order the control - plain, at a head of 64, and under a
+window, sinks and the cap. The
+gemm file's `rows8_gate` cells run the k4 and q8 rows8 matrix-unit kernels over one to four row tiles of eight - the x-table
+prep, then the kernel writing y at the site's own row stride and at a wider one, the gap past each row the fill - against the dense
 reference over the f16-rounded panel, after `rows8_probe_ok`, the layout probe the engine runs at init, which skips the
 cells where the matrix unit's cooperative layout is another generation's - the q8 cell also at 96 rows, six threadgroups;
 `rows8_split_gate` runs
@@ -821,7 +839,9 @@ mlx4b, mlx8b) the same way over `mlx_test_planes` - fed by the x-table prep (als
 (`enc_rms_bhxt`) at eight live rows and at five with the pad rows' table and sums NaN; `test_rows8_grid_rule` holds the
 grid rule (a threadgroup a 16-row tile, K whole blocks of the format) device-free; `rows8_k4_fed_gate` runs the k4 kernel over the table and sums the norm's table mode
 wrote (`enc_rms_bhxt`) at eight live rows and at five with the pad rows' table and sums NaN, the live rows against the
-dense reference over the norm's own halves, and `rows8_table_gate` holds every producer's table mode (the norm, the
+dense reference over the norm's own halves, `rows8_table_inplace_gate` holds the two producers with no f16 twin (the
+per-layer-embedding residual, the side rows' geglu) to their plain stamps the same way - a width off the 256-lane stride and
+five rows of 96 with lanes past the panel among the shapes - and `rows8_table_gate` holds every producer with an HX twin (the norm, the
 residual step's plain and sandwich builders at 256 and 1024 lanes, swiglu, geglu) to its HX stamp on the same inputs -
 the rows and twin bit for bit, the table the twin's halves in the prep's slot law, the sums within 1e-5, the pad rows
 untouched, the plain twin's order the control the table must miss; its device pair arms (`attn_qk_mm_gate` with `pair_mt`, `attn_dev_pair_gate`) run both

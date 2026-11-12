@@ -278,18 +278,20 @@ prefill, the FP4 expert rung, the nv4 nibble decode, the MMQ pin) in `ARCHITECTU
 - **The affine members' fused levers are Metal-only** (`DASLLAMA_METAL_HC_FUSED_AFF`, `DASLLAMA_METAL_MOE_AFF_PAIR`): the
   one-row hyper-connection mixer's fused pair and the routed fused pair over mlx4b / mlx8b stacks, each against its staged
   chain in another sum order; the discrete homes stamp no affine member (`ARCHITECTURE_ENGINE_FORMATS_MLX.md`), so they serve none.
-- **The five-to-eight-row forms' levers are Metal-only** (`DASLLAMA_METAL_ROWS_MM8`, `DASLLAMA_METAL_ROWS_MT`,
-  `DASLLAMA_METAL_HC_MIX8`, `DASLLAMA_METAL_MOE_UNION`; `ARCHITECTURE_GPU_MTP_DECODE_ROWS.md#rows8-matrix-unit`,
+- **The eight-row forms' levers are Metal-only** (`DASLLAMA_METAL_ROWS_MM8`, `DASLLAMA_METAL_ROWS_MT`, `DASLLAMA_METAL_ROWS8_MIN`
+  - their fewest rows, 3 -, `DASLLAMA_METAL_HC_MIX8`, `DASLLAMA_METAL_MOE_UNION`; `ARCHITECTURE_GPU_MTP_DECODE_ROWS.md#rows8-matrix-unit`,
   `ARCHITECTURE_GPU_MTP_DECODE_HC.md#metal-hc-mix8`, `ARCHITECTURE_GPU_MTP_DECODE.md#moe-union`): the verify's and the batch
   step's rows take the eight-row tensor stamps, the matrix-unit form with exact-half codes and an fp32 scale, the four-dispatch
-  mixer, or - bit for bit the fused pair - the rows' expert union, each over the row forms it would replace; the discrete
-  homes' N-row commands carry one form a site, so there is no twin to pick.
-- **The block drafter's device arm and its levers are Metal-only** (`set_dflash_device`, `register_dflash_device`'s one
-  registrant; `DASLLAMA_METAL_DFLASH_SELECT` / `set_metal_dflash_select`, `DASLLAMA_METAL_DFLASH_SOFT_PICK` /
+  mixer, or - bit for bit the fused pair - the rows' expert union, each over the row forms it would replace; past eight rows,
+  to 32, a batched step's and a joint verify's sites take the matrix-unit form over row tiles of eight. The discrete homes'
+  N-row commands carry one form a site: no twin to pick. `DASLLAMA_METAL_KERNEL_SKIP` (a kernel's dispatches dropped by name, its rows garbage by design) is Metal's alone too.
+- **The block drafter's device arm, its joint rounds and its levers are Metal-only** (`set_dflash_device`,
+  `register_dflash_device`'s, `register_dflash_joint`'s and `register_mtp_block_rounds`' one registrant; `DASLLAMA_METAL_DFLASH_SELECT` / `set_metal_dflash_select`, `DASLLAMA_METAL_DFLASH_SOFT_PICK` /
   `set_metal_dflash_soft_pick`, `DASLLAMA_METAL_DFLASH_ACCEPT` / `set_metal_dflash_accept`, `DASLLAMA_METAL_VERIFY_AHEAD` /
   `set_metal_verify_ahead`; `ARCHITECTURE_GPU_MTP_ACCEPT.md#dflash-sampled-drafts`, `ARCHITECTURE_GPU_MTP_ROUND.md#verify-ahead`):
   the pass, its top-k selector, a sampled round's draw off the stream's rng and the greedy accept run on the device, and the verify
-  is encoded behind the pass; the discrete homes register no device arm, so their drafter's pass, selection and accept run on the CPU.
+  is encoded behind the pass, and a tick's streams draft and verify jointly (`ARCHITECTURE_GPU_MTP_ACCEPT.md#dflash-tick-rounds`);
+  the discrete homes register neither, so their drafter's pass, selection and accept run on the CPU, a stream a round.
 - **The speculative rollback's buffer levers are Metal-only** (`DASLLAMA_METAL_REPLAY_UNWAITED` / `set_metal_replay_unwaited`,
   `DASLLAMA_METAL_REPLAY_TAPE` / `set_metal_replay_tape`, `DASLLAMA_METAL_COMMIT_ONE` / `set_metal_commit_one`;
   `ARCHITECTURE_GPU_MTP_DECODE.md#mtp-replay-form`, `ARCHITECTURE_GPU_MTP_ROUND.md#commit-one`): a rejected Metal round replays

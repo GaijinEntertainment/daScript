@@ -20,10 +20,13 @@ require strings
 //     (capture, rearm, hydrate, drop, the resident-prefill pin)
 //   - Streams served from the device: device-home sessions, their K/V regions,
 //     park and adopt, and the counter that says a call ran on the CPU
+//   - A block drafter (DFlash / DFlash2): attach_block_drafter,
+//     generate_drafted
 //
 // Prerequisites: tutorials 02 and 04.
 //
 // Run: daslang.exe -jit tutorials/dasLLAMA/13_serving.das -- <path/to/model.gguf>
+// Section 6 takes --drafter <drafter.gguf> ahead of the model's path.
 
 let SYSTEM = ("You are a concise, knowledgeable assistant. Answer in at most two short " +
     "sentences, plain language, no lists. If a question has a factual answer, give the " +
@@ -46,6 +49,15 @@ def model_path() : string {
         return cmd[length(cmd) - 1]
     }
     return get_env_variable("DASLLAMA_MODEL")
+}
+
+// The block drafter's path: the argument after --drafter, else "".
+def drafter_path() : string {
+    let cmd <- get_command_line_arguments()
+    for (i in range(length(cmd) - 1)) {
+        return cmd[i + 1] if (cmd[i] == "--drafter")
+    }
+    return ""
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -335,6 +347,47 @@ def section_device_streams(m : Model; var sch : Scheduler) {
     print("calls that ran on the CPU instead: {passes}\n")
 }
 
+// ──────────────────────────────────────────────────────────────────
+// Section 6 — A block drafter
+// ──────────────────────────────────────────────────────────────────
+//
+// A DFlash / DFlash2 drafter is a small second model made for one
+// trunk: it proposes a block of tokens at once, the trunk verifies
+// the block in one step and keeps the run it agrees with. The reply
+// is the trunk's own - a rejected draft costs time, never a token.
+// attach_block_drafter answers "" where the drafter attached and the
+// reason where it did not (a drafter made for another trunk, a home
+// with no device arm). From then on a scheduler created with mtp on
+// speculates through it, respond drafts its text turns, and
+// generate_drafted is generate with the rounds inside. One block
+// drafter is attached a process.
+
+def section_block_drafter(m : Model; drafter : string) {
+    print("\n=== 6. a block drafter ===\n")
+    if (empty(drafter)) {
+        print("no --drafter given: skipped\n")
+        return
+    }
+    let why = attach_block_drafter(m, drafter)
+    if (!empty(why)) {
+        print("the drafter is not attached: {why}\n")
+        return
+    }
+    print("attached: {block_drafter_attached(m)}\n")
+    var s = make_run_state(m.config, KVDtype.f16, KVDtype.f16)
+    let prompt <- encode(m, QUESTIONS[0], true)
+    var no_stops : array<int64>   // the ids the block below would end on: none
+    let greedy = SamplingParams(temp = 0.0)
+    let n = generate_drafted(m, s, prompt, greedy, MAX_NEW, no_stops) $(_id, piece) {
+        print(piece)
+        return true
+    }
+    print("\n{n} tokens, the trunk's own\n")
+    delete s
+    detach_block_drafter()   // plain decode serves from here
+    print("attached: {block_drafter_attached(m)}\n")
+}
+
 [export]
 def main() {
     let path = model_path()
@@ -403,6 +456,7 @@ def main() {
         }
 
         section_gpu_slots(m)
+        section_block_drafter(m, drafter_path())
     }
     // From here the OpenAI-compatible server is the same module with more streams:
     // utils/dasllama-server drives this exact scheduler under HTTP + SSE.
