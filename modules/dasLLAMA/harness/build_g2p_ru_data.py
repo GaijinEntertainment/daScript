@@ -133,11 +133,24 @@ def tsv_rows(path, columns):
                 yield parts
 
 
+PICK_YO = 64   # added to a vowel's ordinal: that vowel, an е, read as ё (the reader's RU_PICK_YO)
+
+
+def pick_list(text, form):
+    """a comma separated pick list of `form`: a vowel's ordinal, or PICK_YO more for that vowel - an е - read as ё"""
+    picks = [int(x) for x in text.split(",")]
+    vowels = [ch for ch in form if ch in VOWELS]
+    for pick in picks:
+        ordinal = pick - PICK_YO if pick > PICK_YO else pick
+        assert 0 < ordinal <= len(vowels) and ordinal < PICK_YO and (pick < PICK_YO or vowels[ordinal - 1] == "е"), (form, text)
+    assert picks and len(set(picks)) == len(picks), (form, text)
+    return picks
+
+
 def ordinal_list(text, form):
     """a comma separated ordinal list of `form`, every ordinal one of its vowels"""
-    ordinals = [int(x) for x in text.split(",")]
-    vowels = sum(1 for ch in form if ch in VOWELS)
-    assert ordinals and len(set(ordinals)) == len(ordinals) and all(0 < o <= vowels for o in ordinals), (form, text)
+    ordinals = pick_list(text, form)
+    assert all(o < PICK_YO for o in ordinals), (form, text)
     return ordinals
 
 
@@ -458,8 +471,9 @@ def endings_section(table):
 
 
 def read_rules(path):
-    """a rules file: `family \\t id \\t name`, `word \\t form \\t family id \\t ordinal of side 0 \\t ordinal of side 1
-    [\\t unruled]` (the side read where no rule holds: 1 for side 0, 2 for side 1, 0 or absent to abstain) and
+    """a rules file: `family \\t id \\t name`, `word \\t form \\t family id \\t pick of side 0 \\t pick of side 1
+    [\\t unruled]` (a pick is `pick_list`'s: a vowel's ordinal, or that vowel read as ё; unruled is the side read
+    where no rule holds: 1 for side 0, 2 for side 1, 0 or absent to abstain) and
     `rule \\t family id \\t feature \\t side \\t sure`, a family's rules in the order they are tried. A feature is
     `w<pos>=<word>` (the neighbour is the word), `w<pos>=<s>` or `w<pos>=</s>` (the sentence holds no such neighbour),
     `e2<pos>=` and `e3<pos>=` (the neighbour's last two or three letters, the neighbour two letters longer at least);
@@ -470,7 +484,7 @@ def read_rules(path):
         if parts[0] == "family":
             families.append(parts[1])
         elif parts[0] == "word":
-            form, family, sides = parts[1], parts[2], ordinal_list(f"{parts[3]},{parts[4]}", parts[1])
+            form, family, sides = parts[1], parts[2], pick_list(f"{parts[3]},{parts[4]}", parts[1])
             unruled = int(parts[5]) if len(parts) > 5 else 0
             assert EXTRA_FORM_RE.fullmatch(form) and family in families and form not in forms and unruled in (0, 1, 2), parts
             forms[form] = (family, sides[0], sides[1], unruled)

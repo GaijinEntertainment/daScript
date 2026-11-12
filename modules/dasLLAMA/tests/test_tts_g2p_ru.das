@@ -260,8 +260,8 @@ def test_stress_modelless_tiers(t : T?) {
             t |> equal(ru_mark_word(p, word), want, "{word}: the stress of the form it is a case of")
             t |> equal(ru_pack_default(p, utf8_to_lower(word)), 0, "the control: '{word}' is no pack form")
         }
-        t |> equal(ru_stem_ordinal(p, "фывапролджу"), 0, "the control: a word whose stem the pack lacks")
-        t |> equal(ru_stem_ordinal(p, "федерера"), 0, "the control: an ending the fallback does not shed")
+        t |> equal(ru_stem_pick(p, "фывапролджу"), 0, "the control: a word whose stem the pack lacks")
+        t |> equal(ru_stem_pick(p, "федерера"), 0, "the control: an ending the fallback does not shed")
         let by_ending <- {
             "абракадабрация" => "абракадабр+ация", "бокренок" => "бокрен+ок", "курдячить" => "курд+ячить", "зюзюкинский" => "зюз+юкинский",
             "штрудельный" => "штруд+ельный", "хливкие" => "хл+ивкие", "шорьки" => "шорьк+и", "мюмзики" => "м+юмзики", "зелюки" => "зелюк+и",
@@ -269,7 +269,7 @@ def test_stress_modelless_tiers(t : T?) {
         }
         for (word, want in keys(by_ending), values(by_ending)) {
             t |> equal(ru_mark_word(p, word), want, word)
-            t |> success(ru_pack_default(p, word) == 0 && ru_stem_ordinal(p, word) == 0 && ru_ending_ordinal(p, word) > 0, "'{word}' is read by the ending table alone")
+            t |> success(ru_pack_default(p, word) == 0 && ru_stem_pick(p, word) == 0 && ru_ending_ordinal(p, word) > 0, "'{word}' is read by the ending table alone")
         }
         t |> equal(ru_ending_ordinal(p, "фывапролджся"), 0, "the control: a word no ending of which the table holds")
         t |> equal(ru_mark_word(p, "фывапролджся"), "фывапр+олджся", "falls to the shape rule")
