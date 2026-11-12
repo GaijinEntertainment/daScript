@@ -124,6 +124,7 @@ def cud_shutdown() {
         cuda_release(m)
     }
     g_cud_modules |> clear()
+    g_cud_off_rung |> clear()
     g_cud_epoch++
     cuda_stream_destroy(g_cud.stream)
     g_cud.stream = null
