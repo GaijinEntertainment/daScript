@@ -890,7 +890,7 @@ def private hidden_bases(t : T?; fixture : string) : tuple<one : int; split : in
     return res
 }
 
-[test(description = "under solid_context the address of a global array a loop indexes - shared or not, the first global of its block or a later one - reaches code generation hidden in the one-module and the split build, and a scalar global's does not")]
+[test(description = "under solid_context the address of a global array a loop indexes - shared or not, the first global of its block or a later one - reaches code generation hidden in the one-module and the split build, and a scalar global's does not", timeout = 1200)]
 def test_solid_array_base_is_hidden_from_codegen(t : T?) {
     if (!jit_enabled()) {
         t |> skip("the child runs under -jit, which this build does not carry")
@@ -901,7 +901,7 @@ def test_solid_array_base_is_hidden_from_codegen(t : T?) {
     t |> equal(hidden.split, 3, "the split build hides them too")
 }
 
-[test(description = "under solid_context a function that only reads the block gets it as an argument, and the array it indexes through that argument is hidden too")]
+[test(description = "under solid_context a function that only reads the block gets it as an argument, and the array it indexes through that argument is hidden too", timeout = 1200)]
 def test_solid_array_base_is_hidden_behind_a_promoted_argument(t : T?) {
     if (!jit_enabled()) {
         t |> skip("the child runs under -jit, which this build does not carry")
