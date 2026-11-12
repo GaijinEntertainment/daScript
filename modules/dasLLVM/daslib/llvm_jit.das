@@ -8434,7 +8434,7 @@ def private hide_block_indexing(bld : LLVMOpaqueBuilder?; fnT : LLVMOpaqueType?;
     return 1
 }
 
-[macro_function, arch(at="../ARCHITECTURE.md#solid-array-base")]
+[macro_function, arch(at="../ARCHITECTURE_SOLID_CONTEXT.md#solid-array-base")]
 def public hide_solid_array_bases(mod : LLVMOpaqueModule?; ctx : LLVMOpaqueContext?) : int {
     var hidden = 0
     var ptrT = LLVMPointerTypeInContext(ctx, 0u)
