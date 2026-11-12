@@ -233,7 +233,7 @@ struct public DflashTopkArgs {
 //! rounds pick the threadgroup's best head and its lane steps past it; NaN never enters. The slice stage reads a row's logits
 //! (the id the index), the merge stage the slices' lists (the id read beside the value)
 [ |> template_struct_instance]
-class template MetalDflashTopkT {
+class template public MetalDflashTopkT {
     @ssbo @binding = 0 @role = "read" lg : array<float>     //! the values
     @ssbo @binding = 1 @role = "read" sid : array<uint>     //! the merge's ids beside them
     @ssbo @binding = 2 @role = "write" oid : array<uint>    //! the lists' ids
@@ -323,7 +323,7 @@ class template MetalDflashTopkT {
 //! the top-k's first stage, a threadgroup a `span`-long slice of a row's logits: the slice's list into `oid` / `oval`
 [metal_dispatch(name = "enc_dflash_topk_slices", pso = "g_df_pso_topk_slices", tgmem = "metal_dflash_topk_slices_msl_tgmem", tg = 256,
     grid = "nslices, nrows", params = "nslices : int64, nrows : int64")]
-class MetalDflashTopkSlices : MetalDflashTopkT {
+class public MetalDflashTopkSlices : MetalDflashTopkT {
     [metal_kernel(name = "metal_dflash_topk_slices_msl")]
     def metal_dflash_topk_slices {
         let row = gl_WorkGroupID.y
@@ -337,7 +337,7 @@ class MetalDflashTopkSlices : MetalDflashTopkT {
 //! the host's `dflash_top_k_row` bit for bit
 [metal_dispatch(name = "enc_dflash_topk_merge", pso = "g_df_pso_topk_merge", tgmem = "metal_dflash_topk_merge_msl_tgmem", tg = 256,
     grid = "nrows", params = "nrows : int64")]
-class MetalDflashTopkMerge : MetalDflashTopkT {
+class public MetalDflashTopkMerge : MetalDflashTopkT {
     [metal_kernel(name = "metal_dflash_topk_merge_msl")]
     def metal_dflash_topk_merge {
         let row = gl_WorkGroupID.x
@@ -422,7 +422,7 @@ struct public DflashWalkArgs {
 //! summing logit + its products in ascending i over codebooks in the host's dequant arithmetic; the pick the first best slot
 //! (`dflash_walk`'s), or under `SOFT` one LCG draw from the candidates' softmax at `temp`, q landed (`dflash_soft_pick`'s)
 [ |> template_struct_instance]
-class template MetalDflashWalkT {
+class template public MetalDflashWalkT {
     @template_constant SOFT : bool = false
     @ssbo @binding = 0 @role = "read" tok : array<uint>       //! the anchor at 0
     @ssbo @binding = 1 @role = "read" hsel : array<float>     //! [nd][rank]
@@ -569,7 +569,7 @@ class template MetalDflashWalkT {
 
 //! the greedy walk: each position's first best slot
 [metal_dispatch(name = "enc_dflash_walk", pso = "g_df_pso_walk", tgmem = "metal_dflash_walk_msl_tgmem", tg = 256, grid = "1")]
-class MetalDflashWalk : MetalDflashWalkT {
+class public MetalDflashWalk : MetalDflashWalkT {
     [metal_kernel(name = "metal_dflash_walk_msl")]
     def metal_dflash_walk {
         walk_body()
@@ -578,7 +578,7 @@ class MetalDflashWalk : MetalDflashWalkT {
 
 //! the sampled walk: each position's draw from its candidates' softmax at `temp`, its q landed in `qo`
 [metal_dispatch(name = "enc_dflash_walk_soft", pso = "g_df_pso_walk_soft", tgmem = "metal_dflash_walk_soft_msl_tgmem", tg = 256, grid = "1")]
-class MetalDflashWalkSoft : MetalDflashWalkT {
+class public MetalDflashWalkSoft : MetalDflashWalkT {
     override SOFT = true
 
     [metal_kernel(name = "metal_dflash_walk_soft_msl", fastmath = false)]
