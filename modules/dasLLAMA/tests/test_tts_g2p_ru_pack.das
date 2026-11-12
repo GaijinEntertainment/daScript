@@ -603,6 +603,33 @@ def test_short_patronymic(t : T?) {
     }
 }
 
+[test(description = "a word the pack does not hold, written with ь for the и of -ие, takes the stressed vowel of that fuller form, a case ending of three letters at most kept, ahead of the ending table; a fuller form the pack lacks, reads two ways or stresses past the и, a ь with no vowel after it or none before it and a ь more than three letters before the last each leave it to the tiers after")]
+def test_short_ie_form(t : T?) {
+    t |> run("short -ье forms in four cases, and the controls") @(t : T?) {
+        var inscope s : SynthPack
+        s.stress <- {
+            "пение" => [1], "пением" => [1], "волнении" => [2], "желаниями" => [2],
+            "бытие" => [3], "сомнение" => [1, 2], "ниями" => [1], "пениемало" => [1], "сеник" => [1]
+        }
+        s.endings <- { "нье" => 1, "ньем" => 1, "ньи" => 1, "ньями" => 2 }
+        var inscope p <- load_ru_stress_pack(write_synth_pack("synth_ru_short_ie.bin", s, 16))
+        let cases <- { "Пенье" => "П+енье", "пеньем" => "п+еньем", "волненьи" => "волн+еньи", "желаньями" => "жел+аньями" }
+        for (word, want in keys(cases), values(cases)) {
+            t |> equal(ru_mark_word(p, word), want, word)
+        }
+        t |> equal(ru_short_ie_ordinal(p, "волненьи"), 2, "the fuller form's vowel, counted from the word's start")
+        t |> equal(ru_ending_ordinal(p, "волненьи"), 3, "the control: the ending table alone reads the last vowel")
+        t |> equal(ru_short_ie_ordinal(p, "терпенье"), 0, "no fuller form in the pack")
+        t |> equal(ru_short_ie_ordinal(p, "сомненье"), 0, "nor a fuller form the pack reads two ways")
+        t |> equal(ru_short_ie_ordinal(p, "бытье"), 0, "nor a fuller form stressed past the и")
+        t |> equal(ru_short_ie_ordinal(p, "пень"), 0, "nor a ь with no vowel after it")
+        t |> equal(ru_short_ie_ordinal(p, "сеньк"), 0, "nor a ь before a consonant, though the pack holds the word with и there")
+        t |> equal(ru_short_ie_ordinal(p, "ньями"), 0, "nor a ь with no vowel before it: the fuller form's stress is on the и itself, and the short word has no stem vowel to take it")
+        t |> equal(ru_short_ie_ordinal(p, "пеньемало"), 0, "nor a ь more than three letters before the word's last")
+        t |> equal(ru_short_ie_ordinal(p, "пение"), 0, "nor a word with no ь")
+    }
+}
+
 [test(description = "a text written without ё has чем, нем, всем and моем spelled with ё right after the prepositions that leave them no other reading, in the letter's own case; without the preposition, across anything but spaces, after не, before an abbreviation's stop, marked or already spelled, the word stands as written")]
 def test_yo_after_preposition(t : T?) {
     t |> run("the forms the rule spells, and the controls it leaves") @(t : T?) {

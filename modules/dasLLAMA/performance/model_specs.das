@@ -426,7 +426,7 @@ let GIGAAM_RECIPE = "fetched: cstr/gigaam-v3-GGUF, converted by CrispASR's model
 let GIGAAM_Q4K_RECIPE = "fetched: cstr/gigaam-v3-GGUF's q4_k file, CrispASR's crispasr-quantize over the f16 carrier (the attention and FF GEMMs Q4_K, the conv pointwise GEMMs Q8_0, the rest as the f16 file); serves on the kq lane as its own planes; THIRD_PARTY_NOTICES.md (module root) carries the attribution"
 let CANARY_ENC_RECIPE = "convert: modules/dasLLAMA/harness/convert_canary_to_ggml.py over nvidia/canary-qwen-2.5b (nemo venv; encoder is a repack - sha canonical everywhere)"
 let CANARY_DEC_RECIPE = "convert: modules/dasLLAMA/harness/convert_canary_to_ggml.py over nvidia/canary-qwen-2.5b (nemo venv), then llama-quantize Q8_0 (a Q8_0 disk embedding lets the tied classifier serve cls_q8 on the Metal rail); bytes are per-arch (fp16 LoRA merge) - gate via asr_bench --text over jfk/jfk3/gb1 vs benchmarks/asr/canary_transcripts.expected"
-let TTS_HF = "{HF}/borisbat/dasllama-tts/resolve/f3b80ca6334e8e4904d508388d698a7836aae9df"   //! the published set, commit-pinned
+let TTS_HF = "{HF}/borisbat/dasllama-tts/resolve/0fd9f116865dee7c42dfae4e99d6f1444ea80016"   //! the published set, commit-pinned
 let TTS_KITTEN_RECIPE = "convert: modules/dasLLAMA/performance/build_tts_data.das -- --root <g2p experiment root> --out <models dir> runs harness/convert_kitten.py over KittenML/kitten-tts-nano-0.8 @ 7a1db645b1f3ab9420761d87428e042b9cec3f26 and kitten-tts-mini-0.8 @ c02725660cea441db4c383af69f1f26f5cd00947 (the ONNX weights into GGUF, f32); THIRD_PARTY_NOTICES.md (repo root) carries the attribution"
 let TTS_KOKORO_RECIPE = "convert: modules/dasLLAMA/performance/build_tts_data.das -- --root <g2p experiment root> --out <models dir> runs harness/convert_kokoro.py at 807f0164c3 (a later converter also writes kokoro.voice_langs; the pinned file carries none, its voices named in the pipeline's shape) over hexgrad/Kokoro-82M @ f3ff3571791e39611d31c381e3a41a3af07b4987 (kokoro-v1_0.pth + the voice packs into GGUF, f32); THIRD_PARTY_NOTICES.md (repo root) carries the attribution"
 let TTS_KOKORO_RU_RECIPE = "convert: harness/convert_kokoro.py --checkpoint <pth> --config config.json --voices <dir of .bin packs> --name <stem> --lang ru --source 'zaakirio/kokoro-ru @ d649c57b239b18c4c384378127cbf01dba039bc1' (kokoro-ru-v2-base.pth with sveta and masha into kokoro-ru.gguf, kokoro-ru-v2-dima.pth with dima into kokoro-ru-dima.gguf, f32); THIRD_PARTY_NOTICES.md carries the attribution"
@@ -1113,8 +1113,8 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
             sha256 = "635a43debfcbff5cf1fd0380a4ffc55dfacff083ae16d057bae6d7e7c9a29c9f",
             companions <- [
                 ProvEntry(name = "tts_g2p_ru.bin", root = "llm", recipe = TTS_PACKS_RU_RECIPE,
-                    url = "{TTS_HF}/tts_g2p_ru.bin", bytes = 15388127l,
-                    sha256 = "d7bd53375a304fb22a54c4b701ac30ddea12920168691dba12a923eb0c7ae23a"),
+                    url = "{TTS_HF}/tts_g2p_ru.bin", bytes = 15387767l,
+                    sha256 = "74b8f3c4d3a3e140b7c7937d15da95a37328e7e3347392088514e47e68e5265d"),
                 ProvEntry(name = "tts_g2p.bin", root = "llm", recipe = TTS_PACKS_RECIPE),
                 ProvEntry(name = "tts_postag.bin", root = "llm", recipe = TTS_PACKS_RECIPE),
                 ProvEntry(name = "tts_ctx_ru.gguf", root = "llm", recipe = TTS_RU_STRESS_Q4_RECIPE)]),

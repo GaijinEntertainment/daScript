@@ -761,8 +761,8 @@ enum RuRuleKind : uint8 {
 
 //! the prepositions, conjunctions and particles that lean on the next word and take no stress of their own
 let private RU_CLITICS <- { "и", "а", "но", "да", "не", "ни", "же", "ж", "бы", "б", "ли", "ль", "на", "за", "по", "под", "подо",
-    "над", "надо", "об", "обо", "о", "от", "ото", "до", "из", "изо", "без", "безо", "при", "про", "для", "с", "со", "в", "во",
-    "к", "ко", "у", "что", "уж", "аж", "перед", "передо", "через", "сквозь", "между", "ради" }
+    "над", "об", "обо", "о", "от", "ото", "до", "из", "изо", "без", "безо", "при", "про", "для", "с", "со", "в", "во",
+    "к", "ко", "у", "что", "уж", "аж", "передо", "сквозь" }
 //! the tagged sections after the two tables, from `at` to the file's end; a tag this build does not know is passed over
 [arch(at = "../ARCHITECTURE_TTS_RU_STRESS.md#tts-ru-stress-pack")]
 def private read_ru_pack_sections(var p : RuStressPack; path : string; at : int64) {
@@ -1043,8 +1043,8 @@ def ru_stem_pick(p : RuStressPack; lower : string) : int {
 
 let private PATRONYMIC_TAIL_MAX = 2     //! the longest case ending read past a short patronymic's suffix
 
-//! the pack's ordinal for the full patronymic of the key `q` of `n` letters: `cut` letters at `at` replaced by `full`, the case ending past them kept; 0 where the pack holds no such form, reads it two ways, or stresses it past the `stem_vowels` first vowels
-def private patronymic_full_ordinal(p : RuStressPack; q : uint8[FRONT_KEY_MAX]; n, at, cut : int; full : string; stem_vowels : int) : int {
+//! the pack's ordinal for the fuller form of the key `q` of `n` letters: `cut` letters at `at` replaced by `full`, the letters past them kept; 0 where the pack holds no such form, reads it two ways, or stresses it past the `stem_vowels` first vowels
+def private spliced_ordinal(p : RuStressPack; q : uint8[FRONT_KEY_MAX]; n, at, cut : int; full : string; stem_vowels : int) : int {
     var full_key : uint8[FRONT_KEY_MAX]
     let full_letters = ru_pack_key(full, full_key)
     return 0 if (n - cut + full_letters > FRONT_KEY_MAX)
@@ -1084,20 +1084,39 @@ def ru_patronymic_ordinal(p : RuStressPack; lower : string) : int {
         let stem_vowels = key_vowels(q, max(ych, 0))
         if (eich >= 2 && key_at(q, eich, short_eich, eich_letters)) {
             let ich = eich + 1
-            let o = patronymic_full_ordinal(p, q, n, ich, ich_letters, "евич", stem_vowels)
+            let o = spliced_ordinal(p, q, n, ich, ich_letters, "евич", stem_vowels)
             return o if (o > 0)
         }
         if (ych >= 2 && key_at(q, ych, short_ych, ych_letters)) {
-            let o = patronymic_full_ordinal(p, q, n, ych, ych_letters, "ович", stem_vowels)
+            let o = spliced_ordinal(p, q, n, ych, ych_letters, "ович", stem_vowels)
             return o if (o > 0)
         }
     }
     return 0
 }
 
-//! The stressed vowel of a word the pack does not hold, `word` as written and `lower` its lowercase: the vowel of the form it is a case of, else of the full patronymic it is short for, else an abbreviation's last vowel, else the ending table's vowel, else the shape rule's.
+let private KEY_SOFT = 30   //! ь
+let private SOFT_IE_TAIL_MAX = 3    //! the longest case ending past the ь of a short -ье form (-ями)
+
+//! The stressed vowel of a short -ье word (пенье, волненьи) by its fuller -ие form, 0 where the pack gives none.
+[arch(at = "../ARCHITECTURE_TTS_RU_STRESS.md#tts-ru-short-ie")]
+def ru_short_ie_ordinal(p : RuStressPack; lower : string) : int {
+    return 0 if (empty(p.data))
+    var q : uint8[FRONT_KEY_MAX]
+    let n = ru_pack_key(lower, q)
+    for (tail in range(1, SOFT_IE_TAIL_MAX + 1)) {
+        let at = n - tail - 1
+        continue if (at < 1 || int(q[at]) != KEY_SOFT || !key_is_vowel(q[at + 1]))
+        return spliced_ordinal(p, q, n, at, 1, "и", key_vowels(q, at))
+    }
+    return 0
+}
+
+//! The stressed vowel of a word the pack does not hold, `word` as written and `lower` its lowercase: the vowel of the -ие form it is short for, else of the form it is a case of, else of the full patronymic it is short for, else an abbreviation's last vowel, else the ending table's vowel, else the shape rule's.
 [arch(at = "../ARCHITECTURE_TTS_RU_STRESS.md#tts-ru-unknown-word")]
 def private ru_unknown_ordinal(p : RuStressPack; word, lower : string) : int {
+    let by_short_ie = ru_short_ie_ordinal(p, lower)
+    return by_short_ie if (by_short_ie > 0)
     let by_stem = ru_stem_pick(p, lower)
     return by_stem if (by_stem > 0)
     let by_patronymic = ru_patronymic_ordinal(p, lower)

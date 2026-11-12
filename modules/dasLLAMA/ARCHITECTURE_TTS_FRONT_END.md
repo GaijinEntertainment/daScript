@@ -102,7 +102,9 @@ Russian stress pack and the stress tiers that need no model are `ARCHITECTURE_TT
   refused by name; `ARCHITECTURE_TTS_RU_STRESS.md#tts-ru-stress-pack`), a reflexive the pack has
   only without its -ся read through the base form, else from the tiers of
   `ARCHITECTURE_TTS_RU_STRESS.md#tts-ru-unknown-word`, the shape rule (the vowel before the last)
-  the last of them; the clitics (prepositions, conjunctions, particles) take none. A hyphenated word is
+  the last of them; the clitics (the one-syllable prepositions, conjunctions and particles, and the
+  prepositions' forms with an added о) take none, while a preposition of two syllables with a stress of
+  its own (через, между, перед, ради) and надо are words like any other. A hyphenated word is
   `ARCHITECTURE_TTS_RU_STRESS.md#tts-ru-hyphenated`. Letter-to-sound reproduces the label shape the kokoro-ru checkpoints
   were trained on - the reference's espeak-ng Russian over acute-marked text, its positional
   vowel reduction (ɐ in the first pretonic syllable and word-initially, ə elsewhere, ɪ after a

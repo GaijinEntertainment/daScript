@@ -245,7 +245,7 @@ def test_stress_pack_sources(t : T?) {
     }
 }
 
-[test(description = "with no context model the shipped pack reads its hand-ruled entries and restored ё names, an abbreviation by the last-vowel rule behind its own entries, a name's oblique case through the form it is a case of, twelve words it does not hold by their endings, the pronoun forms a preposition decides with ё, and a homograph by the rule tier behind a context pass's pick")]
+[test(description = "with no context model the shipped pack reads its hand-ruled entries and restored ё names, the entries corrected or added from fixed expressions and verse, the locative in -у after its preposition, a two-syllable preposition and надо with their own stress, an abbreviation by the last-vowel rule behind its own entries, a name's oblique case through the form it is a case of, twelve words it does not hold by their endings, the pronoun forms a preposition decides with ё, and a homograph by the rule tier behind a context pass's pick")]
 def test_stress_modelless_tiers(t : T?) {
     t |> run("entries, abbreviations, case stems and endings") @(t : T?) {
         return if (ru_pack_missing(t))
@@ -258,6 +258,20 @@ def test_stress_modelless_tiers(t : T?) {
         for (word, want in keys(entries), values(entries)) {
             t |> equal(ru_mark_word(p, word), want, word)
         }
+        let corrected <- {
+            "наводит" => "нав+одит", "наводят" => "нав+одят", "поделом" => "подел+ом", "здорова" => "здор+ова", "милей" => "мил+ей",
+            "сложа" => "слож+а", "взашей" => "взаш+ей", "пятки" => "п+ятки", "востро" => "востр+о",
+            "немудрено" => "немудрен+о", "издалека" => "издалек+а", "пенье" => "п+енье", "волненьи" => "волн+еньи"
+        }
+        for (word, want in keys(corrected), values(corrected)) {
+            t |> equal(ru_mark_word(p, word), want, "{word}: an entry corrected or added from fixed expressions and verse")
+        }
+        t |> equal(ru_mark_stress(p, "бельмо на глазу"), "бельм+о на глаз+у", "the locative in -у after на, by the pack's rule family")
+        t |> equal(ru_mark_stress(p, "приятно глазу"), "при+ятно гл+азу", "the control: with no preposition the stem keeps the stress")
+        t |> equal(ru_mark_stress(p, "через мост, между домами, перед сном, ради него"), "ч+ерез м+ост, м+ежду дом+ами, п+еред сн+ом, р+ади нег+о",
+            "a preposition of two syllables carries its own stress")
+        t |> equal(ru_mark_stress(p, "надо идти"), "н+адо идт+и")
+        t |> equal(ru_mark_stress(p, "передо мной"), "передо мн+ой", "the control: a preposition's form with an added о leans on the next word")
         t |> equal(ru_mark_word(p, "АЭС"), "А+ЭС", "an abbreviation the pack does not hold: the last vowel")
         t |> equal(ru_mark_word(p, "УФСИН"), "УФС+ИН")
         t |> equal(ru_pack_default(p, "аэс"), 0, "the control: the pack holds no such form")

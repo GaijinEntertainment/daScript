@@ -5,7 +5,7 @@
 #     vowel), lowercase and bare, with the ordinal of its stressed vowel; a form two lemmas or cases
 #     stress apart carries every ordinal, the first one the default (a frequency table, when given,
 #     puts the most frequent first); then the forms of the `--extra` lists the dictionary lacks, and
-#     the `--amend` rows over the dictionary's own entries,
+#     the `--amend` rows, which rewrite an entry, take one out or add a е spelling beside its ё twin,
 #   - the ё table: every form spelled with ё whose е spelling is not itself a form, keyed by that е
 #     spelling - the restoration a text written without ё needs,
 #   - with --endings, the ending table: an ending -> the stressed vowel counted from the word's end, read
@@ -19,7 +19,7 @@
 #   python build_g2p_ru_data.py --openrussian <dir of the four csv files> --out tts_g2p_ru.bin
 #                               [--frequency <tsv: word \t stressed vowel ordinal \t count>]...
 #                               [--extra <tsv: form \t ordinals \t source>]...
-#                               [--amend <tsv: form \t ordinals before \t ordinals after (or -) \t source>]...
+#                               [--amend <tsv: form \t ordinals before (or -) \t ordinals after (or -) \t source>]...
 #                               [--endings LMIN:LMAX:N:SHARE] [--rules <rules file>]
 #                               [--ruaccent <dir>]    (an optional third source; the shipped pack is built without it)
 #   python build_g2p_ru_data.py --dump tts_g2p_ru.bin --out tables.txt [--dump-sections]
@@ -306,10 +306,15 @@ def add_variants(forms, ra, wanted):
 def apply_amend(forms, path, sources):
     """the dictionary's own entries rewritten: form \\t ordinals before \\t ordinals after \\t source. A row
     whose `before` is not the entry the table holds stops the build. An `after` of `-` takes the entry out: a е
-    spelling that is no form, so the ё table restores it. Answers the rows applied."""
+    spelling that is no form, so the ё table restores it. A `before` of `-` adds an entry the table lacks: a е
+    spelling that is a word of its own beside its ё twin (мудрено́ beside мудрёно), which an `--extra` list cannot
+    add because the ё table answers the spelling. Answers the rows applied."""
     amended = 0
     for form, before, after, source in (parts[:4] for parts in tsv_rows(path, 4)):
-        assert forms.get(form) == ordinal_list(before, form), (form, before, forms.get(form))
+        if before == "-":
+            assert form not in forms and after != "-", (form, after, forms.get(form))
+        else:
+            assert forms.get(form) == ordinal_list(before, form), (form, before, forms.get(form))
         if after == "-":
             del forms[form]
         else:
@@ -640,7 +645,7 @@ def main():
     ap.add_argument("--extra", action="append", default=[],
                     help="form \\t ordinals \\t source: the forms of another source the dictionary lacks; repeatable")
     ap.add_argument("--amend", action="append", default=[],
-                    help="form \\t ordinals before \\t ordinals after \\t source: a dictionary entry rewritten; repeatable")
+                    help="form \\t ordinals before \\t ordinals after \\t source: an entry rewritten, taken out (after = -) or added (before = -); repeatable")
     ap.add_argument("--ruaccent", help="directory of RUAccent's dictionary files (accents.json.gz, accents_nn.json.gz, "
                     "omographs.json.gz, yo_words.json.gz, yo_homographs.json.gz): an optional third source of forms and "
                     "readings; the shipped pack is NOT built with it")
