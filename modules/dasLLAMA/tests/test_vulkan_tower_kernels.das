@@ -161,7 +161,7 @@ def test_vkt_wdec_fused_rq(t0 : T?) {
                 return
             }
             with_cell_planes() $(var cp : CellPlanes) {
-                wdec_fused_rq_case(t, cp)
+                wdec_fused_rq_case(t, cp, true)
             }
         } else {
             t |> skip("dasVulkan not present")

@@ -1263,6 +1263,9 @@ rows inside the first chunk with the second chunk's partial empty (the partials 
 cross run), the scaled-keys and
 causal-versus-cross controls), and its fused row passes (`test_vkt_wdec_fused_rq`: the layernorm, the post-add with its next
 norm, the bias + tanh GELU and the attention combine, each fused with the Q8_0 requant, byte for byte and scale for scale
+(the CUDA home's twin cell, `test_cud_wdec_fused_rq`, holds its pairs within a quant step and the approx scale bar: NVRTC
+compiles that home's kernels under fast math, so two kernels need not round one expression alike, and whether they do
+follows the target - the twins agree to the bit on an RTX PRO 4500 and part by an ulp of a scale on an RTX 4090)
 against the pass followed by `TowerClampRq` at three shapes - the 256-wide row of the other cells, the 384-wide row of whisper
 tiny (the strided loops' partial tail) and turbo's 1280 (the block pass's second trip), the combine at one chunk and at two -
 every pass and fused stamp held to its CPU form as well - the layernorm and the post-add's next norm against

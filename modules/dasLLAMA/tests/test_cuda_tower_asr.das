@@ -28,13 +28,13 @@ def test_cud_wdec_classes(t0 : T?) {
     }
 }
 
-[test(description = "The layernorm, post-add, bias-activation and attention combine fused with the Q8_0 requant on the CUDA home match the separate pass then requant and the CPU forms at three widths incl. whisper tiny and turbo")]
+[test(description = "The layernorm, post-add, bias-activation and attention combine fused with the Q8_0 requant on the CUDA home land within a quant step of the separate pass then requant, and match the CPU forms, at three widths incl. whisper tiny and turbo")]
 def test_cud_wdec_fused_rq(t0 : T?) {
-    t0 |> run("the layernorm, the post-add, the bias-activation and the attention combine fused with the Q8_0 requant on the CUDA home == the pass then the requant and the CPU forms, at the other cells' width, whisper tiny's and turbo's") <| @(t : T?) {
+    t0 |> run("the layernorm, the post-add, the bias-activation and the attention combine fused with the Q8_0 requant on the CUDA home: within a quant step of the pass then the requant, == the CPU forms, at the other cells' width, whisper tiny's and turbo's") <| @(t : T?) {
         return if (!cuda_up(t) || !stamps_built(t, ensure_tower_ln_rq_cls() && ensure_tower_post_add_ln_rq_cls() && ensure_tower_bias_act_rq_cls() && ensure_tower_wdec_attn_comb_rq_cls()
             && ensure_tower_ln_cls() && ensure_tower_post_add_ln_cls() && ensure_tower_bias_act_cls() && ensure_tower_clamp_rq_cls() && ensure_tower_wdec_attn_comb_cls(), "the fused row passes and their separate twins"))
         with_cu_planes() $(var cp) {
-            wdec_fused_rq_case(t, cp)
+            wdec_fused_rq_case(t, cp, false)   // NVRTC compiles the home's kernels under fast math
         }
     }
 }
