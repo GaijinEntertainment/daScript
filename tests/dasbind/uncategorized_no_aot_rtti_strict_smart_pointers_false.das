@@ -1,5 +1,5 @@
 options gen2
-options no_aot
+options no_aot // [extern] calls have no AOT form
 options rtti = true
 options strict_smart_pointers = false
 
@@ -7,12 +7,38 @@ require dastest/testing_boost public
 require dasbind
 require daslib/ast
 require daslib/rtti
+require daslib/fio
+require strings
+require _extern_library_module
 
 //! every probe sums its arguments under distinct multipliers, so one argument landing in the
 //! wrong register or stack slot changes the total; the library is tests/dasbind/probe
 
 //! declares this file's probe_stack14 again, so compiling it re-applies the extern in the process
 let REAPPLY_FIXTURE = "{get_das_root()}/tests/dasbind/_reapply_fixture.das"
+
+//! each alias there fails: undeclared, untagged, computed
+let UNKNOWN_ALIAS_FIXTURE = "{get_das_root()}/tests/dasbind/_unknown_alias_fixture.das"
+
+let @extern_library probe = "dasbind_probe"
+
+//! no such library: the test sets DAS_EXTERN_LIB_PROBE_ENV first
+let @extern_library probe_env = "dasbind_no_such_probe"
+
+[extern(cdecl, name="dasbind_probe_dbl_at45", lib=probe)]
+def probe_dbl_at45_alias(a0, a1, a2, a3 : int64; a4, a5 : double) : double => 0.0lf
+
+[extern(cdecl, late, name="dasbind_probe_dbl_at45", lib=probe_env)]
+def probe_dbl_at45_env_alias(a0, a1, a2, a3 : int64; a4, a5 : double) : double => 0.0lf
+
+//! the test sets DAS_EXTERN_LIB_PROBE_EMPTY to ""
+let @extern_library probe_empty = "dasbind_probe"
+
+[extern(cdecl, late, name="dasbind_probe_dbl_at45", lib=probe_empty)]
+def probe_dbl_at45_empty_env(a0, a1, a2, a3 : int64; a4, a5 : double) : double => 0.0lf
+
+[extern(cdecl, name="dasbind_probe_dbl_at45", library="dasbind_no_such_probe", lib=probe)]
+def probe_dbl_at45_lib_and_library(a0, a1, a2, a3 : int64; a4, a5 : double) : double => 0.0lf
 
 [extern(cdecl, name="dasbind_probe_dbl_at45", library="dasbind_probe")]
 def probe_dbl_at45(a0, a1, a2, a3 : int64; a4, a5 : double) : double => 0.0lf
@@ -135,5 +161,43 @@ def test_extern_argument_passing(t : T?) {
             }
         }
         t |> equal(probe_stack14(int8(1), int16(2), 3, 4l, 0.5, 0.25lf, 6, int8(7), int8(8), int16(9), 10, 11l, true, 13), 5576l)
+    }
+}
+
+[test(description = "an [extern] lib= names an @extern_library global declared above it in its own module, also when another module calls it; lib= wins over library=; a non-empty DAS_EXTERN_LIB_<ALIAS> overrides the library; an undeclared, untagged or computed alias fails the compile")]
+def test_extern_library_alias(t : T?) {
+    t |> run("an alias declared in the same module binds its library") @(t : T?) {
+        t |> equal(probe_dbl_at45_alias(1l, 2l, 3l, 4l, 1.5lf, 2.5lf), 4331.5lf)
+    }
+    t |> run("a call from another module resolves the alias in the extern's module") @(t : T?) {
+        t |> equal(probe_dbl_at45_other_module(1l, 2l, 3l, 4l, 1.5lf, 2.5lf), 4331.5lf)
+    }
+    t |> run("lib= wins over library= on the same extern") @(t : T?) {
+        t |> equal(probe_dbl_at45_lib_and_library(1l, 2l, 3l, 4l, 1.5lf, 2.5lf), 4331.5lf)
+    }
+    t |> run("the environment variable replaces the declared library") @(t : T?) {
+        set_env_variable("DAS_EXTERN_LIB_PROBE_ENV", "dasbind_probe")
+        t |> equal(probe_dbl_at45_env_alias(1l, 2l, 3l, 4l, 1.5lf, 2.5lf), 4331.5lf)
+    }
+    t |> run("an empty environment variable keeps the declared library") @(t : T?) {
+        set_env_variable("DAS_EXTERN_LIB_PROBE_EMPTY", "")
+        t |> equal(probe_dbl_at45_empty_env(1l, 2l, 3l, 4l, 1.5lf, 2.5lf), 4331.5lf)
+    }
+    t |> run("an undeclared, untagged or computed alias is a compile error naming it") @(t : T?) {
+        var inscope access <- make_file_access("")
+        using() $(var mg : ModuleGroup) {
+            using() $(var cop : CodeOfPolicies) {
+                compile_file(UNKNOWN_ALIAS_FIXTURE, access, unsafe(addr(mg)),
+                             cop) $(ok, program, issues) {
+                    t |> success(!ok, "the fixture must not compile")
+                    peek(issues) $(text) {
+                        for (alias in ["no_such_alias", "not_tagged", "not_literal"]) {
+                            t |> success(find(text, "lib={alias} ") >= 0,
+                                         "the error names {alias}: {text}")
+                        }
+                    }
+                }
+            }
+        }
     }
 }

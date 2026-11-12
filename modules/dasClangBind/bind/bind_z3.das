@@ -43,6 +43,7 @@ class Z3GenDinamic : DasGenBind {
     override MAX_ARGUMENTS = 14
     def Z3GenDinamic(pfn, pfp : string; args : array<string>) {
         super(pfn, pfp, args)
+        extern_library = (alias = "z3", path = "libz3.dll")
     }
     def override skip_const(name : string) : bool {
         return name == "true" || name == "false"
@@ -69,9 +70,6 @@ class Z3GenDinamic : DasGenBind {
     }
     def override skip_struct(name : string) {
         return !(name |> starts_with("_Z3_"))
-    }
-    def override output_dasbind(function_name : string) {
-        fprint(func_decl_file, "[extern(cdecl, name=\"{function_name}\", library=\"libz3.dll\")]\n")
     }
 }
 

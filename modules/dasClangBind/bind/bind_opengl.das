@@ -9,6 +9,8 @@ class OpenGLBind : DasGenBind {
     def OpenGLBind(pfn, pfp : string) {
         let args <- array<string>("-DGL_GLEXT_PROTOTYPES")
         super(pfn, pfp, args)
+        extern_library = (alias = "opengl", path = "Opengl32")
+        extern_attributes = "opengl, late"
         init_defaults()
     }
     def init_defaults {
@@ -35,9 +37,6 @@ class OpenGLBind : DasGenBind {
             TypeRules.function_proto_is_void_ptr |
             TypeRules.structure_ptr_is_void_ptr
         )
-    }
-    def override output_dasbind(function_name : string) {
-        fprint(func_decl_file, "[extern(opengl,late,name=\"{function_name}\",library=\"Opengl32\")]\n")
     }
 }
 

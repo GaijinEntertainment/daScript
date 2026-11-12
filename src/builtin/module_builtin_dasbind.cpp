@@ -369,6 +369,26 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
         return libhandle;
     }
 
+    static vector<string> libraryCandidates ( const string & library ) {
+        string list = library;
+        auto eq = library.find('=');
+        if ( eq!=string::npos ) {
+            string envName = "DAS_EXTERN_LIB_";
+            for ( size_t i=0; i!=eq; ++i ) envName += char(toupper(uint8_t(library[i])));
+            auto envValue = das_getenv(envName.c_str());
+            list = envValue && *envValue ? string(envValue) : library.substr(eq + 1);
+        }
+        vector<string> candidates;
+        size_t pos = 0;
+        while ( pos <= list.length() ) {
+            auto next = list.find(';', pos);
+            if ( next==string::npos ) next = list.length();
+            if ( next > pos ) candidates.push_back(list.substr(pos, next-pos));
+            pos = next + 1;
+        }
+        return candidates;
+    }
+
     static void * bindDynamicLibrary ( const string & library ) {
         lock_guard<mutex> guard(g_dasBindLibMutex);
         // LLVM.dll pulls in libz3, whose static initializer leaks 40 bytes nothing here can free.
@@ -378,12 +398,9 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
             return it->second;
         } else {
             void * libhandle = nullptr;
-            size_t pos = 0;
-            while ( !libhandle && pos <= library.length() ) {
-                auto next = library.find(';', pos);
-                if ( next==string::npos ) next = library.length();
-                if ( next > pos ) libhandle = searchDynamicLibraryWithExtension(library.substr(pos, next-pos));
-                pos = next + 1;
+            for ( auto & candidate : libraryCandidates(library) ) {
+                libhandle = searchDynamicLibraryWithExtension(candidate);
+                if ( libhandle ) break;
             }
             g_dasBindLib[library] = libhandle;
             return libhandle;
@@ -514,14 +531,27 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
     }
 
 
-    pair<bool, ExternBindArgs> parseExternArgs ( const AnnotationArgumentList & args, string &err ) {
+    static string externLibrarySpec ( Module * mod, const string & alias, string & err ) {
+        if ( !mod && daScriptEnvironment::getBound()->g_Program ) mod = daScriptEnvironment::getBound()->g_Program->thisModule.get();
+        auto var = mod ? mod->findVariable(alias) : nullptr;
+        if ( !var || !var->annotation.getBoolOption("extern_library") || !var->init || !var->init->rtti_isStringConstant() ) {
+            err = "[extern] lib=" + alias + " needs `let @extern_library " + alias + " = \"<library>\"` above it";
+            return string();
+        }
+        return alias + "=" + static_cast<ExprConstString *>(var->init)->getValue();
+    }
+
+    pair<bool, ExternBindArgs> parseExternArgs ( const AnnotationArgumentList & args, Module * mod, string &err ) {
         ExternBindArgs result;
         string platform_library;
+        string alias;
         for ( auto & arg : args ) {
             if ( arg.name=="name" && arg.type==Type::tString ) {
                 result.fn_name = arg.sValue;
             } else if ( arg.name=="library" && arg.type==Type::tString ) {
                 result.library = arg.sValue;
+            } else if ( arg.name=="lib" && arg.type==Type::tString ) {
+                alias = arg.sValue;
             } else if ( arg.name=="WINAPI" || arg.name=="winapi" || arg.name=="stdcall" || arg.name=="__stdcall" || arg.name=="STDCALL" ) {
                 result.api = ApiType::api_stdcall;
             } else if ( arg.name=="CDECL" || arg.name=="cdecl" || arg.name=="__cdecl" ) {
@@ -547,6 +577,10 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
         }
         if ( !platform_library.empty() ) {
             result.library = platform_library;
+        }
+        if ( !alias.empty() ) {
+            result.library = externLibrarySpec(mod, alias, err);
+            if ( result.library.empty() ) return {false, {}};
         }
         if ( result.fn_name.empty() ) {
             err = "missing name";
@@ -655,7 +689,7 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
             fun->noAot = true;         // TODO: generate custom C++ to invoke the call directly
             fun->requestNoJit = true;  // the body is a placeholder - transformCall rewrites the call sites
             // parse annotation arguments
-            auto [is_ok, ba] = parseExternArgs(args, err);
+            auto [is_ok, ba] = parseExternArgs(args, fun->module, err);
             if ( !is_ok ) {
                 return false;
             }
@@ -737,7 +771,7 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
         string bindNameOf ( Function * fun, string & err ) {
             for ( auto & decl : fun->annotations ) {
                 if ( decl->annotation != this ) continue;
-                auto [is_ok, ba] = parseExternArgs(decl->arguments, err);
+                auto [is_ok, ba] = parseExternArgs(decl->arguments, fun->module, err);
                 if ( !is_ok ) return string();
                 string bindName = mangleFunction(ba.fn_name, ba.library, ba.api);
                 auto owner = fun->module;

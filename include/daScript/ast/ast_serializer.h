@@ -361,7 +361,7 @@ namespace das {
         AstSerializer & serializeModule ( Module & module, bool already_exists );
 
         static constexpr uint32_t getVersion () {
-            return 270;   // 270: a file record carries only its name and tab size
+            return 271;   // 271: [extern] lib= resolves an @extern_library global into the bind name
         }
 
         void serializeProgram ( ProgramPtr program, ModuleGroup & libGroup ) noexcept;

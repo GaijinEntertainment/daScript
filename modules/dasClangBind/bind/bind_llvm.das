@@ -137,6 +137,7 @@ class LlvmGen : CppGenBind {
 class LlvmGenDinamic : DasGenBind {
     def LlvmGenDinamic(pfn, pfp : string; args : array<string>) {
         super(pfn, pfp, args)
+        extern_library = (alias = "llvm", path = "LLVM.dll")
     }
     def override skip_const(name : string) : bool {
         return name == "true" || name == "false"
@@ -167,9 +168,6 @@ class LlvmGenDinamic : DasGenBind {
 
     def override skip_file(fname : string) : bool {
         return !any <| [iterator for(h in llvm_c_headers); fname |> ends_with(h)]
-    }
-    def override output_dasbind(function_name : string) {
-        fprint(func_decl_file, "[extern(cdecl, name=\"{function_name}\", library=\"LLVM.dll\")]\n")
     }
 }
 

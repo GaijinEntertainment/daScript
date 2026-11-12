@@ -823,6 +823,9 @@ class DasGenBind : AnyGenBind {
     struct_class_file : FILE const?
     enum_class_file : FILE const?
     module_name : string
+    extern_library : tuple<alias : string; path : string> //! [extern]s use lib=<alias>
+    extern_attributes : string = "cdecl"
+    extern_library_written : bool
     // Must not exceed MAX_ARGUMENTS in src/builtin/generate_x86_64_calls.das —
     // the dasbind fastcall wrapper table is what actually dispatches these calls.
     MAX_ARGUMENTS = 24
@@ -867,7 +870,17 @@ class DasGenBind : AnyGenBind {
         return clang_typeToDasType(ctype, rules)
     }
     def output_dasbind(function_name : string) {
-        fprint(func_decl_file, "[extern(name=\"{function_name}\")]\n")
+        if (empty(extern_library.alias)) {
+            fprint(func_decl_file, "[extern(name=\"{function_name}\")]\n")
+            return
+        }
+        if (!extern_library_written) {
+            extern_library_written = true
+            let (alias, path) = extern_library
+            fprint(func_decl_file, "let @extern_library {alias} = \"{path}\"\n\n")
+        }
+        fprint(func_decl_file, "[extern({extern_attributes}, name=\"{function_name}\", "
+            + "lib={extern_library.alias})]\n")
     }
     def override parse_Struct(var c : CXCursor; struct_name : string) {
         return if (struct_class_file == null || struct_name |> starts_with <| "(") // do nothing for anonymous unions/structs
