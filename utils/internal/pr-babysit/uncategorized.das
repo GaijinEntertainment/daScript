@@ -71,3 +71,25 @@ def test_watch_verdict(t : T?) {
         t |> equal(poll_budget(1, 0), 60)
     }
 }
+
+[test(description = "a green tip whose review never came is reported once the wait for the review is spent, and never ahead of red CI, a conflict, a running matrix or an open thread")]
+def test_watch_green_unreviewed(t : T?) {
+    t |> run("the wait decides, and every other verdict outranks it") @(t : T?) {
+        let green = WatchVerdict.green_unreviewed
+        let polling = WatchVerdict.keep_polling
+        t |> equal(watch_verdict(0, 0, false, 0, false, true), green)
+        t |> equal(watch_verdict(0, 0, false, 0, false, false), polling, "the wait is not spent")
+        t |> equal(watch_verdict(0, 2, false, 0, false, true), polling, "the matrix still runs")
+        t |> equal(watch_verdict(0, 0, false, 3, false, true), polling, "older threads stay open")
+        t |> equal(watch_verdict(1, 0, false, 0, false, true), WatchVerdict.ci_red)
+        t |> equal(watch_verdict(0, 0, false, 0, true, true), WatchVerdict.conflict)
+        t |> equal(watch_verdict(0, 0, true, 0, false, true), WatchVerdict.ready_to_merge)
+        t |> equal(exit_for(green), 6)
+    }
+    t |> run("the review wait in polls: zero minutes waits for nothing") @(t : T?) {
+        t |> equal(review_wait_polls(5, 30), 10)
+        t |> equal(review_wait_polls(0, 30), 0)
+        t |> equal(review_wait_polls(1, 0), 60)
+        t |> equal(review_wait_polls(-3, 30), 0)
+    }
+}
