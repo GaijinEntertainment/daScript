@@ -23,7 +23,8 @@ require daslib/env_registry                             // env_value_of: the str
 // then drive /v1/models, /v1/embeddings and /v1/chat/completions over the real dashv HTTP client.
 // Model-gated (tinyllama-1.1b-chat-v1.0.Q8_0.gguf; the preserve_thinking cell Qwen3-0.6B-Q8_0; the recurrent-checkpoint
 // cells Qwen3.5-0.8B-Q8_0; the held-engine cell also skips on a box that runs its embeddings forward in under 400 ms)
-// + JIT-only, so it's a real regression locally and a clean skip in CI (no GGUF). The collection cells boot main.das
+// + JIT-only, so it's a real regression locally and a clean skip in CI (no GGUF). A model_missing cell also skips on an
+// incomplete split and above the model tier unless DASLLAMA_PARITY_FULL=1. The collection cells boot main.das
 // as a child and also skip where main.das is not beside this file or the child's config cannot be written.
 // Lives here (not modules/dasLLAMA/tests/) because a require path can't contain the '-' in "dasllama-server":
 // a require_module_name is NAME tokens joined by / . % .. — so hyphenated-dir tools keep tests in-dir

@@ -18,10 +18,9 @@ require strings
 
 // The server's half of structured output, without a server: the request fields read to a grammar text or
 // a refusal (model-free), and the grammar constraint walking a model's own tokens (tinyllama, JIT only;
-// skips without the model).
+// skips without the model, on an incomplete split, and above the model tier unless DASLLAMA_PARITY_FULL=1).
 
 let MODEL_PATH = path_join(models_dir(), "tinyllama-1.1b-chat-v1.0.Q8_0.gguf")
-let LARGE_TIER_BYTES = 6ul * 1024ul * 1024ul * 1024ul   //! the model tier's ceiling, as modules/dasLLAMA/tests/_model_tier.das states it
 
 def private spec_of(req : string; tools : array<string>; call_open = ""; call_close = ""; mode = ToolMode.hermes) : ConstraintSpec {
     var err = ""
@@ -194,19 +193,7 @@ def private ids_spelling(pieces : table<string; int64>; text : string) : array<i
 [test(description = "the grammar constraint admits a model's tokens along a sentence and the stop token only at its end")]
 def test_grammar_constraint_walk(t : T?) {
     t |> run("the grammar constraint admits a model's tokens along a sentence and the stop token at its end alone (tinyllama Q8)") @(t : T?) {
-        if (!jit_enabled()) {
-            t |> skip("interpreted (the piece table decodes the vocabulary)")
-            return
-        }
-        let st = stat(MODEL_PATH)
-        if (!st.is_valid) {
-            t |> skip("{base_name(MODEL_PATH)} not present (set DASLLAMA_MODELS_DIR)")
-            return
-        }
-        if (st.size > LARGE_TIER_BYTES) {
-            t |> skip("{base_name(MODEL_PATH)} is above the model tier")
-            return
-        }
+        return if (model_missing(t, MODEL_PATH))
         with_dasllama_jobque() {
             grammar_walk_cell(t)
         }

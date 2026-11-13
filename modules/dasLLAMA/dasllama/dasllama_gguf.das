@@ -470,6 +470,22 @@ def gguf_shard_paths(path : string; missing_ok : bool = false) : array<string> {
     return <- res
 }
 
+let MODEL_TIER_CEILING_BYTES = 6ul * 1024ul * 1024ul * 1024ul   //! a model whose files total more is large-tier: 6 GiB splits the 5 GB carriers from the 7.7 GB ones
+
+//! Why a test leaves the model at `path` alone, "" when it may load it: the file or a sibling shard is missing, or
+//! its shards total over `ceiling` and the run is not a `full` one (DASLLAMA_PARITY_FULL=1).
+def model_tier_skip_reason(path : string; full : bool; ceiling : uint64 = MODEL_TIER_CEILING_BYTES) : string {
+    return "{base_name(path)} not present" if (!stat(path).is_valid)
+    var inscope shards <- gguf_shard_paths(path, [missing_ok = true])
+    return "{base_name(path)} split is incomplete (missing sibling shard)" if (empty(shards))
+    var total = 0ul
+    for (shard in shards) {
+        total += stat(shard).size
+    }
+    return "" if (full || total <= ceiling)
+    return "{base_name(path)} is large-tier ({int64(total / (1024ul * 1024ul * 1024ul))} GB) - set DASLLAMA_PARITY_FULL=1 to run"
+}
+
 //! A header-only read of the GGUF at `path`: its parsed metadata and mapped bytes, handed to `blk`. A missing file, one
 //! that is not a GGUF, or one cut short of its own metadata (the way a download that stopped is) never reaches `blk`; a
 //! panic in the parse or in `blk` is recovered, so the read never panics. False when `blk` did not run to its end.
