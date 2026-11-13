@@ -1,0 +1,9 @@
+/*FULLY INFERRED*/
+// [user_scenario][modify_external][access_global]
+[export]
+[shader_dsl_boost::pixel_shader(flattened:bool=true,packed:bool=true,optimized:bool=true,fused:bool=true,folded:bool=true)]
+def public cap_helper_swizzle(inp:PbrInput const) : PbrOutput {
+	let _cse_0:float3 const = (inp.worldPos * scale);
+	let m:float const = dot(_cse_0,float3(0.5f,1f,-0.25f));
+	return struct<PbrOutput>(albedo = (m * tint), emission = float3(0f,0f,0f), emissionStrength = saturate(m), metalness = 0f, roughness = 1f, ao = 1f);
+}

@@ -1,0 +1,15 @@
+/*FULLY INFERRED*/
+// [user_scenario][modify_external][access_global]
+[export]
+[shader_dsl_boost::pixel_shader(flattened:bool=true,packed:bool=true,optimized:bool=true,fused:bool=true,folded:bool=true)]
+def public triplanar(inp:PbrInput const) : PbrOutput {
+	let _preshader_0:float3 const = float3(blendSharpness);
+	let p:float3 const = (inp.worldPos * texScale);
+	let an:float3 const = pow(abs(inp.worldNormal),_preshader_0);
+	let sumW:float const = dot(an,float3(1f,1f,1f));
+	let w:float3 const = (an / sumW);
+	var __ssa_blended_2:float4 = (tex2d(albedo_texture,p.zy) * w.x);
+	var __ssa_blended_3:float4 = mad(tex2d(albedo_texture,p.xz),w.y,__ssa_blended_2);
+	var __ssa_blended_4:float4 = mad(tex2d(albedo_texture,p.xy),w.z,__ssa_blended_3);
+	return struct<PbrOutput>(albedo = (__ssa_blended_4.xyz * tint), alpha = __ssa_blended_4.w, alphaCutoff = 0.1f, metalness = 0f, roughness = 0.85f, emission = float3(0f,0f,0f), emissionStrength = 0f, ao = 1f);
+}

@@ -1,0 +1,14 @@
+/*FULLY INFERRED*/
+// [user_scenario][modify_external][access_global]
+[export]
+[shader_dsl_boost::pixel_shader(flatten:bool=false)]
+def public plasma_scalar(inp:PbrInput const) : PbrOutput {
+	let t:float const = (g_Time * 1.5f);
+	let uv:float2 const = (inp.uv * 4f);
+	let v1:float const = sin(uv.x + t);
+	let v2:float const = sin(uv.y + (t * 0.7f));
+	let v3:float const = sin((uv.x + uv.y) + (t * 0.5f));
+	let v4:float const = sin(length(uv - float2(2f,2f)) - t);
+	let v:float const = (((((v1 + v2) + v3) + v4) * 0.125f) + 0.5f);
+	return struct<PbrOutput>(albedo = float3(v,v,v), emission = float3(0f,0f,0f), emissionStrength = 0f, metalness = 0f, roughness = 1f, ao = 1f);
+}

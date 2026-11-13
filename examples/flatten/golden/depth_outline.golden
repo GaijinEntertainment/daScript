@@ -1,0 +1,26 @@
+/*FULLY INFERRED*/
+// [user_scenario][modify_external][access_global]
+[export]
+[shader_dsl_boost::pixel_shader(flattened:bool=true,packed:bool=true,optimized:bool=true,fused:bool=true,folded:bool=true)]
+def public depth_outline(inp:PostEffectInput const) : PostEffectOutput {
+	let _preshader_0:float2 const = float2(0f,outlineThickness);
+	let _preshader_cse_0:float const = -outlineThickness;
+	let _preshader_1:float2 const = float2(0f,_preshader_cse_0);
+	let _preshader_2:float2 const = float2(outlineThickness,0f);
+	let _preshader_3:float2 const = float2(_preshader_cse_0,0f);
+	let _preshader_4:float const = (depthThreshold * 3f);
+	let _preshader_5:float const = (maxDepth * 0.98f);
+	let uv:float2 const = inp.screenPos;
+	let scene:float3 const = sample_scene_color(uv);
+	let c:float const = sample_scene_depth(uv);
+	let n:float const = sample_scene_depth(_preshader_0 + uv);
+	let s:float const = sample_scene_depth(_preshader_1 + uv);
+	let e:float const = sample_scene_depth(_preshader_2 + uv);
+	let w:float const = sample_scene_depth(_preshader_3 + uv);
+	let maxDiff:float const = max(max(abs(c - n),abs(c - s)),max(abs(c - e),abs(c - w)));
+	let edge:float const = smooth_step(depthThreshold,_preshader_4,maxDiff);
+	let skyMask:float const = step(_preshader_5,c);
+	let outline:float3 const = (((1f - skyMask) * edge) * outlineColor);
+	let dimmed:float3 const = lerp(darken * scene,scene,1f - edge);
+	return struct<PostEffectOutput>(out_color = (dimmed + outline));
+}

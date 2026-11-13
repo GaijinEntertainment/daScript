@@ -1,0 +1,16 @@
+/*FULLY INFERRED*/
+// [user_scenario][modify_external][access_global]
+[export]
+[shader_dsl_boost::pixel_shader(flattened:bool=true,packed:bool=true,optimized:bool=true,fused:bool=true,folded:bool=true)]
+def public sharpen_2d(inp:PbrInput const) : PbrOutput {
+	let _preshader_0:float2 const = float2(step_size,0f);
+	let _preshader_1:float2 const = float2(0f,step_size);
+	let _preshader_2:float const = mad(amount,4f,1f);
+	let c:float4 const = tex2d(albedo_texture,inp.uv);
+	let l:float3 const = tex2d(albedo_texture,inp.uv - _preshader_0).xyz;
+	let r:float3 const = tex2d(albedo_texture,_preshader_0 + inp.uv).xyz;
+	let u:float3 const = tex2d(albedo_texture,inp.uv - _preshader_1).xyz;
+	let d:float3 const = tex2d(albedo_texture,_preshader_1 + inp.uv).xyz;
+	let result:float3 const = ((_preshader_2 * c.xyz) - ((((d + l) + r) + u) * amount));
+	return struct<PbrOutput>(albedo = saturate(result), alpha = c.w, alphaCutoff = 0.5f, metalness = 0f, roughness = 1f, ao = 1f);
+}

@@ -14,6 +14,7 @@ call-free code.
 ```
 ./run.sh                 # regression: compile every shader, report pass/fail
 ./run.sh cel_shading     # print one shader's opcode graph
+./run.sh --update-golden # rewrite golden/*.golden, the flattened source of every shader
 ./capability/check.sh    # capability: control-flow shaders lower through flatten
 ```
 
@@ -22,6 +23,8 @@ call-free code.
 | Path | What |
 |---|---|
 | `shaders/user_shaders/`, `shaders/user_shaders_2d/` | The real EdenSpark sample shaders (3D + 2D post-fx), **unedited**. |
+| `shaders/post_effect/` | The EdenSpark post-effect sample shaders (`PostEffectInput` / `sample_scene_color`), **unedited**. |
+| `golden/` | One `<name>.golden` per shader under `shaders/`, `capability/` and `scalar_packing/`: its flattened daslang source, the text `./run.sh --das` prints. EdenSpark's shader compilation goldens carry the same text below their GPU and CPU programs; `tests/flatten/no_aot/test_flatten_fold.das` compares every shader against it. |
 | `shaders/features/` | Feature fixtures: loop-unroll source forms (array-literal / parallel multi-iterator / `urange`) that compile **only** because flatten unrolls them, plus `angle_spin.shader` exercising the native `radians`/`degrees` -> `mul` lowering. flatten is load-bearing, not transparent. |
 | `backend/shader_dsl_primitives.das` | I/O contract structs (`PbrInput`/`PbrOutput`) + the leaf primitives. The component-wise math ops are the native daslang `math` builtins (`require math public`); only the engine-specific leaves (`tex2d`/`noise`/`frac`/`remap`/`one_minus`/`fresnel`/`unpack_normal`) remain `[hint]` stubs. |
 | `backend/shader_dsl_boost.das` | The validator + graph IR builder + the `[pixel_shader]` annotation. **This is where flatten is wired in.** |

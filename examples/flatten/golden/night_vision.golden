@@ -1,0 +1,22 @@
+/*FULLY INFERRED*/
+// [user_scenario][modify_external][access_global]
+[export]
+[shader_dsl_boost::pixel_shader(flattened:bool=true,packed:bool=true,optimized:bool=true,fused:bool=true,folded:bool=true)]
+def public night_vision(inp:PostEffectInput const) : PostEffectOutput {
+	let _preshader_0:float2 const = float2(g_Time,g_Time * 0.7f);
+	let _preshader_1:float const = (1f / (fogEnd - fogStart));
+	let _preshader_2:float const = (vignetteRadius + vignetteSoftness);
+	let uv:float2 const = inp.screenPos;
+	let col:float3 const = sample_scene_color(uv);
+	let depth:float const = sample_scene_depth(uv);
+	let luma:float const = (dot(col,float3(0.299f,0.587f,0.114f)) * brightness);
+	let grain:float const = (frac(sin(dot(_preshader_0 + uv,float2(127.1f,311.7f))) * 43758.5f) * noiseStrength);
+	let lit:float const = saturate(grain + luma);
+	let scan:float const = lerp(scanlineDark,1f,step(0.5f,frac(scanlineCount * uv.y)));
+	let fogT:float const = saturate((depth - fogStart) * _preshader_1);
+	let foggedLit:float const = lerp(lit,lit * 0.3f,fogT);
+	let d:float const = length(uv - float2(0.5f,0.5f));
+	let vig:float const = smooth_step(_preshader_2,vignetteRadius,d);
+	let final:float3 const = (((foggedLit * phosphorColor) * scan) * vig);
+	return struct<PostEffectOutput>(out_color = final);
+}

@@ -1,0 +1,10 @@
+/*FULLY INFERRED*/
+// [user_scenario][modify_external][access_global]
+[export]
+[shader_dsl_boost::pixel_shader(flattened:bool=true,packed:bool=true,optimized:bool=true,fused:bool=true,folded:bool=true)]
+def public depth_vis(inp:PostEffectInput const) : PostEffectOutput {
+	let _preshader_0:float const = (1f / max_depth);
+	let depth:float const = sample_scene_depth(inp.screenPos);
+	let t:float const = smooth_step(1f,0f,depth * _preshader_0);
+	return struct<PostEffectOutput>(out_color = float3(t));
+}

@@ -1,0 +1,18 @@
+/*FULLY INFERRED*/
+// [user_scenario][modify_external][access_global]
+[export]
+[shader_dsl_boost::pixel_shader(flattened:bool=true,packed:bool=true,optimized:bool=true,fused:bool=true,folded:bool=true)]
+def public heat_haze(inp:PostEffectInput const) : PostEffectOutput {
+	let _preshader_0:float const = (g_Time * hazeSpeed);
+	let _preshader_1:float const = (_preshader_0 * 0.6f);
+	let uv:float2 const = inp.screenPos;
+	let heatMask:float const = pow(1f - uv.y,heightFalloff);
+	let _cse_0:float const = (hazeScale * uv.x);
+	let _cse_1:float const = (hazeScale * uv.y);
+	let n1:float const = noise(float2(_cse_0,mad(_cse_1,0.5f,_preshader_0)));
+	let n2:float const = noise(float2(_cse_0 * 1.7f,(_cse_1 * 0.8f) - _preshader_1));
+	let offset:float2 const = ((float2(n1 - 0.5f,n2 - 0.5f) * hazeStrength) * heatMask);
+	let scene:float3 const = sample_scene_color(offset + uv);
+	let tinted:float3 const = lerp(scene,scene * tintColor,heatMask * 0.4f);
+	return struct<PostEffectOutput>(out_color = tinted);
+}

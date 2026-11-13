@@ -1,0 +1,38 @@
+/*FULLY INFERRED*/
+// [user_scenario][modify_external][access_global]
+[export]
+[shader_dsl_boost::pixel_shader(flattened:bool=true,packed:bool=true,optimized:bool=true,fused:bool=true,folded:bool=true)]
+def public bloom(inp:PbrInput const) : PbrOutput {
+	let _preshader_0:float const = (radius * 0.7f);
+	let _preshader_cse_1:float const = -radius;
+	let _preshader_1:float2 const = float2(_preshader_cse_1,0f);
+	let _preshader_2:float const = (threshold + 0.15f);
+	let _preshader_3:float2 const = float2(radius,0f);
+	let _preshader_4:float2 const = float2(0f,_preshader_cse_1);
+	let _preshader_5:float2 const = float2(0f,radius);
+	let _preshader_cse_0:float const = -_preshader_0;
+	let _preshader_6:float2 const = float2(_preshader_cse_0,_preshader_cse_0);
+	let _preshader_7:float2 const = float2(_preshader_0,_preshader_cse_0);
+	let _preshader_8:float2 const = float2(_preshader_cse_0,_preshader_0);
+	let _preshader_9:float2 const = float2(_preshader_0,_preshader_0);
+	let c:float4 const = tex2d(albedo_texture,inp.uv);
+	let __flat_loc_2:float3 const = tex2d(albedo_texture,_preshader_1 + inp.uv).xyz;
+	var __ssa_acc_2:float3 = (__flat_loc_2 * smooth_step(threshold,_preshader_2,dot(__flat_loc_2,float3(0.299f,0.587f,0.114f))));
+	let __flat_loc_7:float3 const = tex2d(albedo_texture,_preshader_3 + inp.uv).xyz;
+	var __ssa_acc_3:float3 = mad(__flat_loc_7,smooth_step(threshold,_preshader_2,dot(__flat_loc_7,float3(0.299f,0.587f,0.114f))),__ssa_acc_2);
+	let __flat_loc_12:float3 const = tex2d(albedo_texture,_preshader_4 + inp.uv).xyz;
+	var __ssa_acc_4:float3 = mad(__flat_loc_12,smooth_step(threshold,_preshader_2,dot(__flat_loc_12,float3(0.299f,0.587f,0.114f))),__ssa_acc_3);
+	let __flat_loc_17:float3 const = tex2d(albedo_texture,_preshader_5 + inp.uv).xyz;
+	var __ssa_acc_5:float3 = mad(__flat_loc_17,smooth_step(threshold,_preshader_2,dot(__flat_loc_17,float3(0.299f,0.587f,0.114f))),__ssa_acc_4);
+	let __flat_loc_22:float3 const = tex2d(albedo_texture,_preshader_6 + inp.uv).xyz;
+	var __ssa_acc_6:float3 = mad(__flat_loc_22,smooth_step(threshold,_preshader_2,dot(__flat_loc_22,float3(0.299f,0.587f,0.114f))),__ssa_acc_5);
+	let __flat_loc_27:float3 const = tex2d(albedo_texture,_preshader_7 + inp.uv).xyz;
+	var __ssa_acc_7:float3 = mad(__flat_loc_27,smooth_step(threshold,_preshader_2,dot(__flat_loc_27,float3(0.299f,0.587f,0.114f))),__ssa_acc_6);
+	let __flat_loc_32:float3 const = tex2d(albedo_texture,_preshader_8 + inp.uv).xyz;
+	var __ssa_acc_8:float3 = mad(__flat_loc_32,smooth_step(threshold,_preshader_2,dot(__flat_loc_32,float3(0.299f,0.587f,0.114f))),__ssa_acc_7);
+	let __flat_loc_37:float3 const = tex2d(albedo_texture,_preshader_9 + inp.uv).xyz;
+	var __ssa_acc_9:float3 = mad(__flat_loc_37,smooth_step(threshold,_preshader_2,dot(__flat_loc_37,float3(0.299f,0.587f,0.114f))),__ssa_acc_8);
+	let bloomColor:float3 const = (((__ssa_acc_9 * glowTint) * intensity) * 0.125f);
+	let result:float3 const = (bloomColor + c.xyz);
+	return struct<PbrOutput>(albedo = result, emission = bloomColor, emissionStrength = 2f, alpha = max(c.w,saturate(dot(bloomColor,float3(0.333f,0.333f,0.333f)))), alphaCutoff = 0.5f, metalness = 0f, roughness = 1f, ao = 1f);
+}

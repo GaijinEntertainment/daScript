@@ -1,0 +1,47 @@
+/*FULLY INFERRED*/
+// [user_scenario][modify_external][access_global]
+[export]
+[shader_dsl_boost::pixel_shader(flattened:bool=true,packed:bool=true,optimized:bool=true,fused:bool=true,folded:bool=true)]
+def public voronoi(inp:PbrInput const) : PbrOutput {
+	let _preshader_0:float const = (g_Time * speed);
+	let _preshader_1:float2 const = (float2(sin(_preshader_0),cos(_preshader_0 * 0.7f)) * 0.3f);
+	let _preshader_2:float const = (edgeWidth * 3f);
+	let _preshader_3:float const = (edgeWidth * 2f);
+	let _preshader_4:float const = (_preshader_0 * 0.1f);
+	let _preshader_5:float const = (_preshader_0 * 0.07f);
+	let uvs:float2 const = mad(inp.uv,scale,_preshader_1);
+	let uvx:float const = uvs.x;
+	let uvy:float const = uvs.y;
+	let corner:float2 const = floor(uvs + float2(0.5f,0.5f));
+	let cx:float const = corner.x;
+	let cy:float const = corner.y;
+	let _cse_9:float const = (cy - 1f);
+	let _cse_0:float const = (_cse_9 * 311.7f);
+	let _cse_8:float const = (cx - 1f);
+	let _cse_2:float const = (_cse_8 * 127.1f);
+	let __flat_loc_7:float const = ((_cse_8 + frac(sin(_cse_2 + _cse_0) * 43758.5f)) - uvx);
+	let _cse_1:float const = (_cse_8 * 269.5f);
+	let _cse_3:float const = (_cse_9 * 183.3f);
+	let __flat_loc_8:float const = ((_cse_9 + frac(sin(_cse_1 + _cse_3) * 43758.5f)) - uvy);
+	let d0:float const = mad(__flat_loc_7,__flat_loc_7,__flat_loc_8 * __flat_loc_8);
+	let _cse_6:float const = (cx * 127.1f);
+	let __flat_loc_17:float const = ((cx + frac(sin(_cse_0 + _cse_6) * 43758.5f)) - uvx);
+	let _cse_4:float const = (cx * 269.5f);
+	let __flat_loc_18:float const = ((_cse_9 + frac(sin(_cse_3 + _cse_4) * 43758.5f)) - uvy);
+	let d1:float const = mad(__flat_loc_17,__flat_loc_17,__flat_loc_18 * __flat_loc_18);
+	let _cse_7:float const = (cy * 311.7f);
+	let __flat_loc_27:float const = ((_cse_8 + frac(sin(_cse_2 + _cse_7) * 43758.5f)) - uvx);
+	let _cse_5:float const = (cy * 183.3f);
+	let __flat_loc_28:float const = ((cy + frac(sin(_cse_1 + _cse_5) * 43758.5f)) - uvy);
+	let d2:float const = mad(__flat_loc_27,__flat_loc_27,__flat_loc_28 * __flat_loc_28);
+	let __flat_loc_37:float const = ((cx + frac(sin(_cse_6 + _cse_7) * 43758.5f)) - uvx);
+	let __flat_loc_38:float const = ((cy + frac(sin(_cse_4 + _cse_5) * 43758.5f)) - uvy);
+	let d3:float const = mad(__flat_loc_37,__flat_loc_37,__flat_loc_38 * __flat_loc_38);
+	let md:float const = min(min(d0,d1),min(d2,d3));
+	let dist:float const = sqrt(md);
+	let edge:float const = smooth_step(edgeWidth,_preshader_2,dist);
+	let glow:float const = smooth_step(_preshader_3,0f,dist);
+	let fill:float3 const = lerp(fillA,fillB,noise(float2(_preshader_4 + cx,_preshader_5 + cy)));
+	let col:float3 const = lerp(edgeColor,fill,edge);
+	return struct<PbrOutput>(albedo = col, emission = mad(glowColor,glow,col), emissionStrength = 1f, metalness = 0f, roughness = 1f, ao = 1f);
+}

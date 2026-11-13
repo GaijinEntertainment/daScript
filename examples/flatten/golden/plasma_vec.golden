@@ -1,0 +1,12 @@
+/*FULLY INFERRED*/
+// [user_scenario][modify_external][access_global]
+[export]
+[shader_dsl_boost::pixel_shader(flatten:bool=false)]
+def public plasma_vec(inp:PbrInput const) : PbrOutput {
+	let t:float const = (g_Time * 1.5f);
+	let uv:float2 const = (inp.uv * 4f);
+	let args:float4 const = float4(uv.x + t,uv.y + (t * 0.7f),(uv.x + uv.y) + (t * 0.5f),length(uv - float2(2f,2f)) - t);
+	let s:float4 const = sin(args);
+	let v:float const = (((((s.x + s.y) + s.z) + s.w) * 0.125f) + 0.5f);
+	return struct<PbrOutput>(albedo = float3(v,v,v), emission = float3(0f,0f,0f), emissionStrength = 0f, metalness = 0f, roughness = 1f, ao = 1f);
+}

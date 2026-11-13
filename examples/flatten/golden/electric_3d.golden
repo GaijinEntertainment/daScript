@@ -1,0 +1,28 @@
+/*FULLY INFERRED*/
+// [user_scenario][modify_external][access_global]
+[export]
+[shader_dsl_boost::pixel_shader(flattened:bool=true,packed:bool=true,optimized:bool=true,fused:bool=true,folded:bool=true)]
+def public electric_3d(inp:PbrInput const) : PbrOutput {
+	let _preshader_0:float const = (g_Time * speed);
+	let _preshader_1:float3 const = (float3(1f,0f,0f) * _preshader_0);
+	let _preshader_2:float3 const = (_preshader_0 * float3(0.7f,0f,0f));
+	let _preshader_3:float const = (noiseScale * 1.5f);
+	let _preshader_4:float3 const = (float3(0f,1f,0.3f) * _preshader_0);
+	let _preshader_5:float3 const = (_preshader_0 * float3(0f,0.7f,0.21000001f));
+	let _preshader_6:float const = (noiseScale * 0.7f);
+	let _preshader_7:float3 const = (float3(-0.5f,0f,1f) * _preshader_0);
+	let _preshader_8:float3 const = (_preshader_0 * float3(-0.35f,0f,0.7f));
+	let _preshader_9:float const = (branchThreshold + 0.08f);
+	let _preshader_10:float const = mad(sin(_preshader_0 * 3f),0.5f,0.5f);
+	let _preshader_11:float const = mad(sin(mad(_preshader_0,7.3f,1.1f)),0.5f,0.5f);
+	let _preshader_12:float const = saturate(g_LightDirection.y);
+	let _preshader_13:float const = lerp(0.5f,2.5f,_preshader_12);
+	let _cse_0:float3 const = (inp.worldPos * noiseScale);
+	let b0:float const = ((noise(_cse_0 + _preshader_1) * noise((_cse_0 * 2f) - _preshader_2)) * 2f);
+	let b1:float const = ((noise(mad(inp.worldPos,_preshader_3,_preshader_4)) * noise((_cse_0 * 3f) - _preshader_5)) * 2f);
+	let b2:float const = ((noise(mad(inp.worldPos,_preshader_6,_preshader_7)) * noise((_cse_0 * 1.4f) - _preshader_8)) * 2f);
+	let bolt:float const = step(branchThreshold,max(b0,b1));
+	let arc:float const = (step(_preshader_9,b2) * (1f - bolt));
+	let glow:float const = smooth_step(0.45f,branchThreshold,mad(b1,0.6f,b0));
+	return struct<PbrOutput>(albedo = float3(0f,0f,0f), emission = mad(electricColor,glow,mad(arc * arcColor,_preshader_11,(bolt * coreColor) * _preshader_10)), emissionStrength = ((dot(float3(arc,glow,bolt),float3(0.7f,0.5f,1f)) * _preshader_10) * _preshader_13), metalness = 0f, roughness = 1f, ao = 1f);
+}

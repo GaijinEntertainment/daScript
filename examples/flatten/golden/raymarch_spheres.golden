@@ -1,0 +1,46 @@
+/*FULLY INFERRED*/
+// [user_scenario][modify_external][access_global]
+[export]
+[shader_dsl_boost::pixel_shader(flattened:bool=true,packed:bool=true,optimized:bool=true,fused:bool=true,folded:bool=true)]
+def public raymarch_spheres(inp:PbrInput const) : PbrOutput {
+	let _preshader_0:float const = (g_Time * 0.7f);
+	let _preshader_cse_0:float const = sin(_preshader_0);
+	let _preshader_1:float3 const = float3(_preshader_cse_0 * 0.32f,cos(_preshader_0 * 1.1f) * 0.28f,sin(_preshader_0 * 0.6f) * 0.22f);
+	let _preshader_2:float3 const = (float3(cos(_preshader_0 * 1.3f),sin(_preshader_0 * 0.7f),_preshader_cse_0 * 0.8666666f) * 0.3f);
+	let _preshader_3:float3 const = float3(sin(_preshader_0 * 0.9f) * 0.26f,cos(_preshader_0) * 0.32f,cos(_preshader_0 * 1.2f) * 0.3f);
+	let _preshader_4:float const = (1f / smoothK);
+	let _preshader_5:float const = (1f / marchDist);
+	let _preshader_6:float const = (_preshader_0 * 1.5f);
+	let ro:float3 const = inp.localPos;
+	let rd:float3 const = -(inp.viewDir);
+	let ds_0_0:float const = (length(ro - _preshader_1) - sphereRadius);
+	let h_0_0:float const = saturate(mad((2f - ds_0_0) * _preshader_4,0.5f,0.5f));
+	var __ssa_d_0_5:float = mad((h_0_0 - 1f) * h_0_0,smoothK,lerp(2f,ds_0_0,h_0_0));
+	let ds_0_1:float const = (length(ro - _preshader_2) - sphereRadius);
+	let h_0_1:float const = saturate(mad((__ssa_d_0_5 - ds_0_1) * _preshader_4,0.5f,0.5f));
+	var __ssa_d_0_6:float = mad((h_0_1 - 1f) * h_0_1,smoothK,lerp(__ssa_d_0_5,ds_0_1,h_0_1));
+	let ds_0_2:float const = (length(ro - _preshader_3) - sphereRadius);
+	let h_0_2:float const = saturate(mad((__ssa_d_0_6 - ds_0_2) * _preshader_4,0.5f,0.5f));
+	var __ssa_d_0_7:float = mad((h_0_2 - 1f) * h_0_2,smoothK,lerp(__ssa_d_0_6,ds_0_2,h_0_2));
+	var __ssa_notHit_9:float = step(0.003f,__ssa_d_0_7);
+	var __ssa_depth_10:float = (__ssa_d_0_7 * __ssa_notHit_9);
+	let p_1:float3 const = mad(rd,__ssa_depth_10,ro);
+	let ds_1_0:float const = (length(p_1 - _preshader_1) - sphereRadius);
+	let h_1_0:float const = saturate(mad((2f - ds_1_0) * _preshader_4,0.5f,0.5f));
+	var __ssa_d_1_12:float = mad((h_1_0 - 1f) * h_1_0,smoothK,lerp(2f,ds_1_0,h_1_0));
+	let ds_1_1:float const = (length(p_1 - _preshader_2) - sphereRadius);
+	let h_1_1:float const = saturate(mad((__ssa_d_1_12 - ds_1_1) * _preshader_4,0.5f,0.5f));
+	var __ssa_d_1_13:float = mad((h_1_1 - 1f) * h_1_1,smoothK,lerp(__ssa_d_1_12,ds_1_1,h_1_1));
+	let ds_1_2:float const = (length(p_1 - _preshader_3) - sphereRadius);
+	let h_1_2:float const = saturate(mad((__ssa_d_1_13 - ds_1_2) * _preshader_4,0.5f,0.5f));
+	var __ssa_d_1_14:float = mad((h_1_2 - 1f) * h_1_2,smoothK,lerp(__ssa_d_1_13,ds_1_2,h_1_2));
+	var __ssa_hitDist_15:float = lerp(__ssa_d_0_7,__ssa_d_1_14,__ssa_notHit_9);
+	var __ssa_notHit_16:float = (__ssa_notHit_9 * step(0.003f,__ssa_d_1_14));
+	var __ssa_depth_17:float = mad(__ssa_d_1_14,__ssa_notHit_16,__ssa_depth_10);
+	var __ssa_depth_18:float = (__ssa_depth_17 * _preshader_5);
+	let hit:float const = (1f - step(0.02f,__ssa_hitDist_15));
+	let phase:float const = mad(__ssa_depth_18,5f,_preshader_6);
+	let rainbow:float3 const = mad(float3(0.5f,0.5f,0.5f),cos(float3(phase) + float3(0f,2f,4f)),float3(0.5f,0.5f,0.5f));
+	let col:float3 const = lerp(glowColor,rainbow * sphereColor,1f - saturate(__ssa_depth_18 * 1.3f));
+	return struct<PbrOutput>(albedo = float3(0f,0f,0f), emission = (col * hit), emissionStrength = (hit * 1.3f), alpha = hit, alphaCutoff = 0.5f, metalness = 0f, roughness = 1f, ao = 1f);
+}

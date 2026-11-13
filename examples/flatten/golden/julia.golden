@@ -1,0 +1,75 @@
+/*FULLY INFERRED*/
+// [user_scenario][modify_external][access_global]
+[export]
+[shader_dsl_boost::pixel_shader(flattened:bool=true,packed:bool=true,optimized:bool=true,fused:bool=true,folded:bool=true)]
+def public julia(inp:PbrInput const) : PbrOutput {
+	let _preshader_cse_14:float const = (g_Time * morphSpeed);
+	let _preshader_0:float2 const = (float2(cos(_preshader_cse_14),sin(_preshader_cse_14)) * cRadius);
+	let z0:float2 const = (((inp.uv - float2(0.5f,0.5f)) * float2(2f,-2f)) * zoom);
+	var __ssa_zx_1:float = z0.x;
+	var __ssa_zy_2:float = z0.y;
+	var __flat_loop_0:bool;
+	let _cse_10:float const = (__ssa_zx_1 * __ssa_zx_1);
+	let _cse_11:float const = (__ssa_zy_2 * __ssa_zy_2);
+	__flat_loop_0 = (_cse_10 + _cse_11) <= 4f;
+	let nx_0:float const = ((_cse_10 + _preshader_0.x) - _cse_11);
+	let ny_0:float const = mad(__ssa_zx_1 * 2f,__ssa_zy_2,_preshader_0.y);
+	var __ssa_zx_4:float = (__flat_loop_0 ? nx_0 : __ssa_zx_1);
+	var __ssa_zy_5:float = (__flat_loop_0 ? ny_0 : __ssa_zy_2);
+	var __ssa_iter_6:float = (__flat_loop_0 ? 1f : 0f);
+	let _cse_12:float const = (__ssa_zx_4 * __ssa_zx_4);
+	let _cse_13:float const = (__ssa_zy_5 * __ssa_zy_5);
+	__flat_loop_0 = __flat_loop_0 && ((_cse_12 + _cse_13) <= 4f);
+	let nx_1:float const = ((_cse_12 + _preshader_0.x) - _cse_13);
+	let ny_1:float const = mad(__ssa_zx_4 * 2f,__ssa_zy_5,_preshader_0.y);
+	var __ssa_zx_7:float = (__flat_loop_0 ? nx_1 : __ssa_zx_4);
+	var __ssa_zy_8:float = (__flat_loop_0 ? ny_1 : __ssa_zy_5);
+	var __ssa_iter_9:float = (__flat_loop_0 ? (__ssa_iter_6 + 1f) : __ssa_iter_6);
+	let _cse_8:float const = (__ssa_zx_7 * __ssa_zx_7);
+	let _cse_9:float const = (__ssa_zy_8 * __ssa_zy_8);
+	__flat_loop_0 = __flat_loop_0 && ((_cse_8 + _cse_9) <= 4f);
+	let nx_2:float const = ((_cse_8 + _preshader_0.x) - _cse_9);
+	let ny_2:float const = mad(__ssa_zx_7 * 2f,__ssa_zy_8,_preshader_0.y);
+	var __ssa_zx_10:float = (__flat_loop_0 ? nx_2 : __ssa_zx_7);
+	var __ssa_zy_11:float = (__flat_loop_0 ? ny_2 : __ssa_zy_8);
+	var __ssa_iter_12:float = (__flat_loop_0 ? (__ssa_iter_9 + 1f) : __ssa_iter_9);
+	let _cse_0:float const = (__ssa_zx_10 * __ssa_zx_10);
+	let _cse_4:float const = (__ssa_zy_11 * __ssa_zy_11);
+	__flat_loop_0 = __flat_loop_0 && ((_cse_0 + _cse_4) <= 4f);
+	let nx_3:float const = ((_cse_0 + _preshader_0.x) - _cse_4);
+	let ny_3:float const = mad(__ssa_zx_10 * 2f,__ssa_zy_11,_preshader_0.y);
+	var __ssa_zx_13:float = (__flat_loop_0 ? nx_3 : __ssa_zx_10);
+	var __ssa_zy_14:float = (__flat_loop_0 ? ny_3 : __ssa_zy_11);
+	var __ssa_iter_15:float = (__flat_loop_0 ? (__ssa_iter_12 + 1f) : __ssa_iter_12);
+	let _cse_1:float const = (__ssa_zx_13 * __ssa_zx_13);
+	let _cse_5:float const = (__ssa_zy_14 * __ssa_zy_14);
+	__flat_loop_0 = __flat_loop_0 && ((_cse_1 + _cse_5) <= 4f);
+	let nx_4:float const = ((_cse_1 + _preshader_0.x) - _cse_5);
+	let ny_4:float const = mad(__ssa_zx_13 * 2f,__ssa_zy_14,_preshader_0.y);
+	var __ssa_zx_16:float = (__flat_loop_0 ? nx_4 : __ssa_zx_13);
+	var __ssa_zy_17:float = (__flat_loop_0 ? ny_4 : __ssa_zy_14);
+	var __ssa_iter_18:float = (__flat_loop_0 ? (__ssa_iter_15 + 1f) : __ssa_iter_15);
+	let _cse_2:float const = (__ssa_zx_16 * __ssa_zx_16);
+	let _cse_6:float const = (__ssa_zy_17 * __ssa_zy_17);
+	__flat_loop_0 = __flat_loop_0 && ((_cse_2 + _cse_6) <= 4f);
+	let nx_5:float const = ((_cse_2 + _preshader_0.x) - _cse_6);
+	let ny_5:float const = mad(__ssa_zx_16 * 2f,__ssa_zy_17,_preshader_0.y);
+	var __ssa_zx_19:float = (__flat_loop_0 ? nx_5 : __ssa_zx_16);
+	var __ssa_zy_20:float = (__flat_loop_0 ? ny_5 : __ssa_zy_17);
+	var __ssa_iter_21:float = (__flat_loop_0 ? (__ssa_iter_18 + 1f) : __ssa_iter_18);
+	let _cse_3:float const = (__ssa_zx_19 * __ssa_zx_19);
+	let _cse_7:float const = (__ssa_zy_20 * __ssa_zy_20);
+	__flat_loop_0 = __flat_loop_0 && ((_cse_3 + _cse_7) <= 4f);
+	let nx_6:float const = ((_cse_3 + _preshader_0.x) - _cse_7);
+	let ny_6:float const = mad(__ssa_zx_19 * 2f,__ssa_zy_20,_preshader_0.y);
+	var __ssa_zx_22:float = (__flat_loop_0 ? nx_6 : __ssa_zx_19);
+	var __ssa_zy_23:float = (__flat_loop_0 ? ny_6 : __ssa_zy_20);
+	var __ssa_iter_24:float = (__flat_loop_0 ? (__ssa_iter_21 + 1f) : __ssa_iter_21);
+	let inside:bool const = (__ssa_iter_24 > 6.5f);
+	let r2:float const = mad(__ssa_zx_22,__ssa_zx_22,__ssa_zy_23 * __ssa_zy_23);
+	let smooth:float const = mad(log(max(r2,1.0001f)),-0.25f,__ssa_iter_24);
+	let tNorm:float const = sqrt(saturate(smooth * 0.14285715f));
+	let grad:float3 const = ((tNorm < 0.5f) ? lerp(colorA,colorB,tNorm * 2f) : lerp(colorB,colorC,(tNorm - 0.5f) * 2f));
+	let col:float3 const = lerp(grad,insideColor,inside ? 1f : 0f);
+	return struct<PbrOutput>(albedo = col, emission = col, emissionStrength = (inside ? 0f : 1.5f), metalness = 0f, roughness = 1f, ao = 1f);
+}

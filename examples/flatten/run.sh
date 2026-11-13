@@ -11,8 +11,12 @@
 #   ./run.sh                         # regression: compile every shader, report pass/fail
 #   ./run.sh <name>                  # print one shader's opcode graph
 #                                    #   e.g. ./run.sh cel_shading
-#   ./run.sh [--das] <name|path>     # --das also prints the flattened daslang source
-#                                    #   (the branchless rewrite) above the opcodes;
+#   ./run.sh --update-golden         # rewrite golden/<name>.golden, the flattened daslang
+#                                    #   source of every shader under shaders/, capability/
+#                                    #   and scalar_packing/
+#                                    #   (test_flatten_fold.das compares each shader with it)
+#   ./run.sh [--das] <name|path>     # --das prints the flattened daslang source (the
+#                                    #   branchless rewrite) instead of the opcode graph;
 #                                    #   <name|path> accepts a bare name or a .shader path,
 #                                    #   e.g. ./run.sh --das capability/cap_control.shader
 #
@@ -35,11 +39,24 @@ find_daslang() {
 }
 daslang="$(find_daslang)"
 
+# the backend logs its opcode graph at debug level
+export DAS_LOG_LEVEL="${DAS_LOG_LEVEL:-debug}"
+
+flattened_source() {   # the flattened daslang source of shader $1; fails when its compile does
+    local dump
+    dump="$(env DAS_LOG_LEVEL=warning FLATTEN_DUMP_DAS=1 \
+        "$daslang" -compile-only -project "$proj" "$1" 2>&1)" || return 1
+    echo "$dump" | sed -n '/^;; ---- flattened daslang ----$/,$p' | tail -n +2
+}
+
 dump_das=0
+update_golden=0
 shaders=()
 for a in "$@"; do
     if [[ "$a" == "--das" ]]; then
         dump_das=1
+    elif [[ "$a" == "--update-golden" ]]; then
+        update_golden=1
     else
         shaders+=("$a")
     fi
@@ -48,6 +65,22 @@ done
 if [[ -z "$daslang" || ! -x "$daslang" ]]; then
     echo "error: no daslang binary found — build daScript first (cmake --build build --config Release) or set DASLANG" >&2
     exit 1
+fi
+
+if [[ "$update_golden" -eq 1 ]]; then
+    mkdir -p "$here/golden"
+    count=0
+    for f in "$here"/shaders/*/*.shader "$here"/capability/*.shader \
+             "$here"/scalar_packing/*.shader; do
+        if ! out="$(flattened_source "$f")" || [[ -z "$out" ]]; then
+            echo "error: no flattened source for $f" >&2
+            exit 1
+        fi
+        printf '%s\n' "$out" > "$here/golden/$(basename "$f" .shader).golden"
+        count=$((count + 1))
+    done
+    echo "golden: $count written"
+    exit 0
 fi
 
 find_shader() {
@@ -68,7 +101,7 @@ if [[ "${#shaders[@]}" -ge 1 ]]; then
         exit 1
     fi
     if [[ "$dump_das" -eq 1 ]]; then
-        exec env FLATTEN_DUMP_DAS=1 "$daslang" -compile-only -project "$proj" "$f"
+        exec env DAS_LOG_LEVEL=warning FLATTEN_DUMP_DAS=1 "$daslang" -compile-only -project "$proj" "$f"
     fi
     exec "$daslang" -compile-only -project "$proj" "$f"
 fi

@@ -1,0 +1,13 @@
+/*FULLY INFERRED*/
+// [user_scenario][modify_external][access_global]
+[export]
+[shader_dsl_boost::pixel_shader(flattened:bool=true,packed:bool=true,optimized:bool=true,fused:bool=true,folded:bool=true)]
+def public cap_inline_accumulator(inp:PbrInput const) : PbrOutput {
+	let _preshader_0:float const = (1f / levels);
+	let cell:float const = floor(frac(inp.uv.x) * 4f);
+	var __ssa___flat_loc_2_3:float = ((cell == 1f) ? 0.5f : 0f);
+	var __ssa___flat_loc_2_4:float = ((cell == 2f) ? 0.25f : __ssa___flat_loc_2_3);
+	var __ssa___flat_loc_2_5:float = ((cell == 3f) ? 0.75f : __ssa___flat_loc_2_4);
+	let q:float const = (floor(mad(inp.uv.y,levels,__ssa___flat_loc_2_5)) * _preshader_0);
+	return struct<PbrOutput>(albedo = float3(q,q,q), emission = float3(0f,0f,0f), emissionStrength = 0f, metalness = 0f, roughness = 1f, ao = 1f);
+}

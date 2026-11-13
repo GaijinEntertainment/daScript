@@ -1,0 +1,13 @@
+/*FULLY INFERRED*/
+// [user_scenario][modify_external][access_global]
+[export]
+[shader_dsl_boost::pixel_shader(flattened:bool=true,packed:bool=true,optimized:bool=true,fused:bool=true,folded:bool=true)]
+def public angle_spin(inp:PbrInput const) : PbrOutput {
+	let _preshader_0:float const = radians(g_Time * spinDegPerSec);
+	let _preshader_1:float const = cos(_preshader_0);
+	let _preshader_2:float const = sin(_preshader_0);
+	let p:float2 const = (inp.uv - float2(0.5f,0.5f));
+	let rp:float2 const = float2((_preshader_1 * p.x) - (p.y * _preshader_2),mad(_preshader_1,p.y,p.x * _preshader_2));
+	let shade:float const = (degrees(inp.worldNormal.y) * 0.01f);
+	return struct<PbrOutput>(albedo = float3(rp.x + 0.5f,rp.y + 0.5f,shade), roughness = 0.5f);
+}

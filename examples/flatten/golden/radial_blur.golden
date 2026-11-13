@@ -1,0 +1,26 @@
+/*FULLY INFERRED*/
+// [user_scenario][modify_external][access_global]
+[export]
+[shader_dsl_boost::pixel_shader(flattened:bool=true,packed:bool=true,optimized:bool=true,fused:bool=true,folded:bool=true)]
+def public radial_blur(inp:PostEffectInput const) : PostEffectOutput {
+	let _preshader_0:float const = (1f / samples);
+	let _preshader_1:float const = (_preshader_0 * strength);
+	let _preshader_2:float const = (_preshader_1 * 2f);
+	let _preshader_3:float const = (_preshader_1 * 3f);
+	let _preshader_4:float const = (_preshader_1 * 4f);
+	let _preshader_5:float const = (_preshader_1 * 5f);
+	let _preshader_6:float const = (_preshader_1 * 6f);
+	let _preshader_7:float const = (_preshader_1 * 7f);
+	let _preshader_8:float2 const = float2(center_x,center_y);
+	let uv:float2 const = inp.screenPos;
+	var __ssa_acc_2:float3 = sample_scene_color(uv);
+	let _cse_0:float2 const = (uv - _preshader_8);
+	var __ssa_acc_3:float3 = (__ssa_acc_2 + sample_scene_color(uv - (_cse_0 * _preshader_1)));
+	var __ssa_acc_4:float3 = (__ssa_acc_3 + sample_scene_color(uv - (_cse_0 * _preshader_2)));
+	var __ssa_acc_5:float3 = (__ssa_acc_4 + sample_scene_color(uv - (_cse_0 * _preshader_3)));
+	var __ssa_acc_6:float3 = (__ssa_acc_5 + sample_scene_color(uv - (_cse_0 * _preshader_4)));
+	var __ssa_acc_7:float3 = (__ssa_acc_6 + sample_scene_color(uv - (_cse_0 * _preshader_5)));
+	var __ssa_acc_8:float3 = (__ssa_acc_7 + sample_scene_color(uv - (_cse_0 * _preshader_6)));
+	var __ssa_acc_9:float3 = (__ssa_acc_8 + sample_scene_color(uv - (_cse_0 * _preshader_7)));
+	return struct<PostEffectOutput>(out_color = (__ssa_acc_9 * _preshader_0));
+}

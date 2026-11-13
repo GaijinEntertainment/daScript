@@ -1,0 +1,16 @@
+/*FULLY INFERRED*/
+// [user_scenario][modify_external][access_global]
+[export]
+[shader_dsl_boost::pixel_shader(flatten:bool=false)]
+def public cell_scalar(inp:PbrInput const) : PbrOutput {
+	let uv:float2 const = (inp.uv * 5f);
+	let t:float const = (g_Time * 0.3f);
+	let ncx:float const = floor(uv.x);
+	let ncy:float const = floor(uv.y);
+	let hx:float const = frac(sin((ncx * 127.1f) + (ncy * 311.7f)) * 43758.5f);
+	let hy:float const = frac(sin((ncx * 269.5f) + (ncy * 183.3f)) * 43758.5f);
+	let dx:float const = (mad(sin(mad(hx,6.28f,t)),0.3f,mad(hx,0.5f,ncx)) - uv.x);
+	let dy:float const = (mad(cos(mad(hy,6.28f,t)),0.3f,mad(hy,0.5f,ncy)) - uv.y);
+	let d:float const = sqrt(mad(dx,dx,dy * dy));
+	return struct<PbrOutput>(albedo = float3(d,d,d), emission = float3(0f,0f,0f), emissionStrength = 0f, metalness = 0f, roughness = 1f, ao = 1f);
+}

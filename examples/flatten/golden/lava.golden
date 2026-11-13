@@ -1,0 +1,14 @@
+/*FULLY INFERRED*/
+// [user_scenario][modify_external][access_global]
+[export]
+[shader_dsl_boost::pixel_shader(flattened:bool=true,packed:bool=true,optimized:bool=true,fused:bool=true,folded:bool=true)]
+def public lava(inp:PbrInput const) : PbrOutput {
+	let _preshader_0:float const = (flowSpeed * g_Time);
+	let _preshader_1:float3 const = float3(0,_preshader_0,0);
+	let uv:float3 const = mad(inp.worldPos,noiseScale,_preshader_1);
+	let n:float const = noise(uv);
+	let crackMask:float const = smooth_step(0.55f,0.85f,n);
+	let warmMask:float const = smooth_step(0.3f,0.7f,n);
+	let surface:float3 const = lerp(coolColor,hotColor,warmMask);
+	return struct<PbrOutput>(albedo = surface, emission = (crackMask * glowColor), emissionStrength = (crackMask * 1.5f), metalness = 0f, roughness = 0.85f, ao = 1f);
+}

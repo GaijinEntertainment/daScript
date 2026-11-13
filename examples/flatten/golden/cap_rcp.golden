@@ -1,0 +1,12 @@
+/*FULLY INFERRED*/
+// [user_scenario][modify_external][access_global]
+[export]
+[shader_dsl_boost::pixel_shader(flattened:bool=true,packed:bool=true,optimized:bool=true,fused:bool=true,folded:bool=true)]
+def public cap_rcp(inp:PbrInput const) : PbrOutput {
+	let _preshader_0:float const = (1f / exposure);
+	let c:float3 const = tex2d(albedo_texture,inp.uv).xyz;
+	let toned:float3 const = (c * _preshader_0);
+	let glow:float const = (dot(c,float3(1f,1f,0f)) * _preshader_0);
+	let result:float3 const = (float3(glow * 0.1f,0f,0f) + toned);
+	return struct<PbrOutput>(albedo = result, emission = result, emissionStrength = 1f, metalness = 0f, roughness = 1f, ao = 1f);
+}

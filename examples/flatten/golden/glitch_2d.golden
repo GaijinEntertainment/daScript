@@ -1,0 +1,24 @@
+/*FULLY INFERRED*/
+// [user_scenario][modify_external][access_global]
+[export]
+[shader_dsl_boost::pixel_shader(flattened:bool=true,packed:bool=true,optimized:bool=true,fused:bool=true,folded:bool=true)]
+def public glitch_2d(inp:PbrInput const) : PbrOutput {
+	let _preshader_0:float const = (g_Time * speed);
+	let _preshader_1:float const = (1f / barFreq);
+	let _preshader_2:float const = lerp(0.3f,1.5f,g_LightDirection.y);
+	let bar:float const = (floor(mad(barFreq,inp.uv.y,_preshader_0)) * _preshader_1);
+	let noise:float const = frac(sin(mad(bar,127.1f,_preshader_0)) * 43758.5f);
+	let shift:float const = (((noise - 0.5f) * intensity) * step(0.7f,noise));
+	let _cse_0:float2 const = float2(shift,0);
+	let uvR:float2 const = (inp.uv + _cse_0);
+	let uvB:float2 const = (inp.uv - _cse_0);
+	let r:float4 const = tex2d(albedo_texture,uvR);
+	let g:float4 const = tex2d(albedo_texture,inp.uv);
+	let b:float4 const = tex2d(albedo_texture,uvB);
+	let col:float3 const = float3(r.x,g.y,b.z);
+	let a:float const = g.w;
+	let scanline:float const = (step(0.85f,noise) * step(0f,shift));
+	let _cse_1:float3 const = mad(glitchColorB,b.z,glitchColorA * r.x);
+	let tint:float3 const = lerp(col,_cse_1,scanline * 0.6f);
+	return struct<PbrOutput>(albedo = (a * tint), emission = ((_cse_1 * a) * scanline), emissionStrength = (scanline * _preshader_2), alpha = a, alphaCutoff = 0.1f, metalness = 0f, roughness = 1f, ao = 1f);
+}

@@ -1,0 +1,31 @@
+/*FULLY INFERRED*/
+// [user_scenario][modify_external][access_global]
+[export]
+[shader_dsl_boost::pixel_shader(flattened:bool=true,packed:bool=true,optimized:bool=true,fused:bool=true,folded:bool=true)]
+def public dithering(inp:PbrInput const) : PbrOutput {
+	let _preshader_0:float const = (1f / (pixelSize * 128f));
+	let _preshader_1:float const = (1f / levels);
+	let _cse_0:float2 const = ((inp.uv * pixelSize) * 128f);
+	let pixelUV:float2 const = (floor(_cse_0) * _preshader_0);
+	let c:float3 const = (tex2d(albedo_texture,pixelUV).xyz * tint);
+	let gray:float const = dot(c,float3(0.299f,0.587f,0.114f));
+	let __flat_loc_4:float const = mad(floor(frac(_cse_0.y * 0.25f) * 4f),4f,floor(frac(_cse_0.x * 0.25f) * 4f));
+	var __ssa___flat_loc_5_3:float = ((__flat_loc_4 == 1f) ? 0.5f : 0f);
+	var __ssa___flat_loc_5_4:float = ((__flat_loc_4 == 2f) ? 0.125f : __ssa___flat_loc_5_3);
+	var __ssa___flat_loc_5_5:float = ((__flat_loc_4 == 3f) ? 0.625f : __ssa___flat_loc_5_4);
+	var __ssa___flat_loc_5_6:float = ((__flat_loc_4 == 4f) ? 0.75f : __ssa___flat_loc_5_5);
+	var __ssa___flat_loc_5_7:float = ((__flat_loc_4 == 5f) ? 0.25f : __ssa___flat_loc_5_6);
+	var __ssa___flat_loc_5_8:float = ((__flat_loc_4 == 6f) ? 0.875f : __ssa___flat_loc_5_7);
+	var __ssa___flat_loc_5_9:float = ((__flat_loc_4 == 7f) ? 0.375f : __ssa___flat_loc_5_8);
+	var __ssa___flat_loc_5_10:float = ((__flat_loc_4 == 8f) ? 0.1875f : __ssa___flat_loc_5_9);
+	var __ssa___flat_loc_5_11:float = ((__flat_loc_4 == 9f) ? 0.6875f : __ssa___flat_loc_5_10);
+	var __ssa___flat_loc_5_12:float = ((__flat_loc_4 == 10f) ? 0.0625f : __ssa___flat_loc_5_11);
+	var __ssa___flat_loc_5_13:float = ((__flat_loc_4 == 11f) ? 0.5625f : __ssa___flat_loc_5_12);
+	var __ssa___flat_loc_5_14:float = ((__flat_loc_4 == 12f) ? 0.9375f : __ssa___flat_loc_5_13);
+	var __ssa___flat_loc_5_15:float = ((__flat_loc_4 == 13f) ? 0.4375f : __ssa___flat_loc_5_14);
+	var __ssa___flat_loc_5_16:float = ((__flat_loc_4 == 14f) ? 0.8125f : __ssa___flat_loc_5_15);
+	var __ssa___flat_loc_5_17:float = ((__flat_loc_4 == 15f) ? 0.3125f : __ssa___flat_loc_5_16);
+	let quantized:float const = (floor(mad(gray,levels,__ssa___flat_loc_5_17)) * _preshader_1);
+	let result:float3 const = (c * (quantized / max(gray,0.001f)));
+	return struct<PbrOutput>(albedo = result, emission = ((quantized * result) * 0.3f), emissionStrength = 0.4f, metalness = 0f, roughness = 1f, ao = 1f);
+}

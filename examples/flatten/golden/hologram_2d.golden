@@ -1,0 +1,15 @@
+/*FULLY INFERRED*/
+// [user_scenario][modify_external][access_global]
+[export]
+[shader_dsl_boost::pixel_shader(flattened:bool=true,packed:bool=true,optimized:bool=true,fused:bool=true,folded:bool=true)]
+def public hologram_2d(inp:PbrInput const) : PbrOutput {
+	let _preshader_0:float const = (g_Time * 2f);
+	let _preshader_1:float const = remap(sin(flickerSpeed * g_Time),float2(-1f,1f),float2(0.85f,1f));
+	let _preshader_2:float const = saturate(g_LightDirection.y);
+	let _preshader_3:float const = lerp(0.3f,1.2f,_preshader_2);
+	let c:float3 const = tex2d(albedo_texture,inp.uv).xyz;
+	let gray:float const = dot(c,float3(0.299f,0.587f,0.114f));
+	let scan:float const = mad(sin(mad(inp.uv.y,scanFreq,_preshader_0)),0.5f,0.5f);
+	let result:float3 const = (((_preshader_1 * gray) * holoColor) * scan);
+	return struct<PbrOutput>(albedo = float3(0f,0f,0f), emission = result, emissionStrength = _preshader_3, metalness = 0f, roughness = 1f, ao = 1f);
+}

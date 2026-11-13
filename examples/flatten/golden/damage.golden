@@ -1,0 +1,19 @@
+/*FULLY INFERRED*/
+// [user_scenario][modify_external][access_global]
+[export]
+[shader_dsl_boost::pixel_shader(flattened:bool=true,packed:bool=true,optimized:bool=true,fused:bool=true,folded:bool=true)]
+def public damage(inp:PostEffectInput const) : PostEffectOutput {
+	let _preshader_0:float const = mad(sin(g_Time * pulseSpeed),0.5f,0.5f);
+	let _preshader_1:float2 const = float2(g_Time * 12f,0f);
+	let _preshader_2:float2 const = float2(0f,g_Time * 11.3f);
+	let _preshader_3:float const = (desaturation * _preshader_0);
+	let uv:float2 const = inp.screenPos;
+	let shakeX:float const = (((noise(_preshader_1) - 0.5f) * shakeStrength) * _preshader_0);
+	let shakeY:float const = (((noise(_preshader_2) - 0.5f) * shakeStrength) * _preshader_0);
+	let scene:float3 const = sample_scene_color(float2(shakeX,shakeY) + uv);
+	let gray:float const = dot(scene,float3(0.299f,0.587f,0.114f));
+	let desat:float3 const = lerp(scene,float3(gray),_preshader_3);
+	let dist:float const = (length(uv - float2(0.5f,0.5f)) * 1.41421f);
+	let vignette:float const = ((smooth_step(0.4f,1f,dist) * vignetteStrength) * _preshader_0);
+	return struct<PostEffectOutput>(out_color = lerp(desat,vignetteColor,vignette));
+}

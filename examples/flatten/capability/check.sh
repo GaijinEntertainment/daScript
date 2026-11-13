@@ -105,6 +105,8 @@ if [[ -z "$daslang" || ! -x "$daslang" ]]; then
     exit 1
 fi
 
+# the backend logs its opcode graph at debug level
+export DAS_LOG_LEVEL="${DAS_LOG_LEVEL:-debug}"
 compile() { "$daslang" -compile-only -project "$proj" "$1" 2>&1; }
 hist()    { compile "$1" | grep '^node ' | awk '{print $3}' | sort | uniq -c; }
 

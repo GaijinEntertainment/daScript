@@ -1,0 +1,12 @@
+/*FULLY INFERRED*/
+// [user_scenario][modify_external][access_global]
+[export]
+[shader_dsl_boost::pixel_shader(flattened:bool=true,packed:bool=true,optimized:bool=true,fused:bool=true,folded:bool=true)]
+def public cse_taps(inp:PbrInput const) : PbrOutput {
+	let c:float3 const = tex2d(albedo_texture,inp.uv).xyz;
+	let n:float3 const = inp.worldNormal;
+	let v:float3 const = inp.viewDir;
+	let _cse_0:float const = pow(1f - dot(n,v),5f);
+	let result:float3 const = float3(_cse_0 * c.x,_cse_0 * c.y,_cse_0 + c.z);
+	return struct<PbrOutput>(albedo = result, emission = result, emissionStrength = 1f, metalness = 0f, roughness = 1f, ao = 1f);
+}

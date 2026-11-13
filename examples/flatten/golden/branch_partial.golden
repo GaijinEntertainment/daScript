@@ -1,0 +1,11 @@
+/*FULLY INFERRED*/
+// [user_scenario][modify_external][access_global]
+[export]
+[shader_dsl_boost::pixel_shader(flattened:bool=true,packed:bool=true,optimized:bool=true,fused:bool=true,folded:bool=true)]
+def public branch_partial(inp:PbrInput const) : PbrOutput {
+	let c:float3 const = tex2d(albedo_texture,inp.uv).xyz;
+	var __ssa_a_3:float3 = ((inp.uv.x > 0.5f) ? float3(1f,0f,0f) : float3(0f,0f,0f));
+	var __ssa_b_4:float3 = ((inp.uv.x <= 0.5f) ? float3(0f,1f,0f) : float3(0f,0f,0f));
+	let result:float3 const = ((__ssa_a_3 + __ssa_b_4) * c);
+	return struct<PbrOutput>(albedo = result, emission = result, emissionStrength = 1f, metalness = 0f, roughness = 1f, ao = 1f);
+}
