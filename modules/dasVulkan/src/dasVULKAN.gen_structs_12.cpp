@@ -12,7 +12,7 @@ struct VkPhysicalDevicePrimitiveTopologyListRestartFeaturesEXT_Ann : ManagedStru
     virtual bool canMove() const override { return true; }
     void init();
 };
-static VkPhysicalDevicePrimitiveTopologyListRestartFeaturesEXT_Ann * ann_VkPhysicalDevicePrimitiveTopologyListRestartFeaturesEXT = nullptr;
+static thread_local VkPhysicalDevicePrimitiveTopologyListRestartFeaturesEXT_Ann * ann_VkPhysicalDevicePrimitiveTopologyListRestartFeaturesEXT = nullptr;
 void VkPhysicalDevicePrimitiveTopologyListRestartFeaturesEXT_Ann::init() {
     addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
     addFieldEx("pNext", "pNext", offsetof(VkPhysicalDevicePrimitiveTopologyListRestartFeaturesEXT, pNext), makeType<void *>(*mlib));
@@ -29,7 +29,7 @@ struct VkAttachmentDescriptionStencilLayout_Ann : ManagedStructureAnnotation<VkA
     virtual bool canMove() const override { return true; }
     void init();
 };
-static VkAttachmentDescriptionStencilLayout_Ann * ann_VkAttachmentDescriptionStencilLayout = nullptr;
+static thread_local VkAttachmentDescriptionStencilLayout_Ann * ann_VkAttachmentDescriptionStencilLayout = nullptr;
 void VkAttachmentDescriptionStencilLayout_Ann::init() {
     addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
     addFieldEx("pNext", "pNext", offsetof(VkAttachmentDescriptionStencilLayout, pNext), makeType<void *>(*mlib));
@@ -46,7 +46,7 @@ struct VkPhysicalDevicePipelineExecutablePropertiesFeaturesKHR_Ann : ManagedStru
     virtual bool canMove() const override { return true; }
     void init();
 };
-static VkPhysicalDevicePipelineExecutablePropertiesFeaturesKHR_Ann * ann_VkPhysicalDevicePipelineExecutablePropertiesFeaturesKHR = nullptr;
+static thread_local VkPhysicalDevicePipelineExecutablePropertiesFeaturesKHR_Ann * ann_VkPhysicalDevicePipelineExecutablePropertiesFeaturesKHR = nullptr;
 void VkPhysicalDevicePipelineExecutablePropertiesFeaturesKHR_Ann::init() {
     addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
     addFieldEx("pNext", "pNext", offsetof(VkPhysicalDevicePipelineExecutablePropertiesFeaturesKHR, pNext), makeType<void *>(*mlib));
@@ -62,7 +62,7 @@ struct VkPipelineInfoKHR_Ann : ManagedStructureAnnotation<VkPipelineInfoKHR> {
     virtual bool canMove() const override { return true; }
     void init();
 };
-static VkPipelineInfoKHR_Ann * ann_VkPipelineInfoKHR = nullptr;
+static thread_local VkPipelineInfoKHR_Ann * ann_VkPipelineInfoKHR = nullptr;
 void VkPipelineInfoKHR_Ann::init() {
     addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
     addFieldEx("pNext", "pNext", offsetof(VkPipelineInfoKHR, pNext), makeType<void *>(*mlib));
@@ -78,7 +78,7 @@ struct VkPipelineExecutablePropertiesKHR_Ann : ManagedStructureAnnotation<VkPipe
     virtual bool canMove() const override { return true; }
     void init();
 };
-static VkPipelineExecutablePropertiesKHR_Ann * ann_VkPipelineExecutablePropertiesKHR = nullptr;
+static thread_local VkPipelineExecutablePropertiesKHR_Ann * ann_VkPipelineExecutablePropertiesKHR = nullptr;
 void VkPipelineExecutablePropertiesKHR_Ann::init() {
     addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
     addFieldEx("pNext", "pNext", offsetof(VkPipelineExecutablePropertiesKHR, pNext), makeType<void *>(*mlib));
@@ -97,7 +97,7 @@ struct VkPipelineExecutableInfoKHR_Ann : ManagedStructureAnnotation<VkPipelineEx
     virtual bool canMove() const override { return true; }
     void init();
 };
-static VkPipelineExecutableInfoKHR_Ann * ann_VkPipelineExecutableInfoKHR = nullptr;
+static thread_local VkPipelineExecutableInfoKHR_Ann * ann_VkPipelineExecutableInfoKHR = nullptr;
 void VkPipelineExecutableInfoKHR_Ann::init() {
     addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
     addFieldEx("pNext", "pNext", offsetof(VkPipelineExecutableInfoKHR, pNext), makeType<void *>(*mlib));
@@ -114,7 +114,7 @@ struct VkPipelineExecutableStatisticValueKHR_Ann : ManagedStructureAnnotation<Vk
     virtual bool canMove() const override { return true; }
     void init();
 };
-static VkPipelineExecutableStatisticValueKHR_Ann * ann_VkPipelineExecutableStatisticValueKHR = nullptr;
+static thread_local VkPipelineExecutableStatisticValueKHR_Ann * ann_VkPipelineExecutableStatisticValueKHR = nullptr;
 void VkPipelineExecutableStatisticValueKHR_Ann::init() {
     addField<DAS_BIND_MANAGED_FIELD(b32)>("b32", "b32");
     addField<DAS_BIND_MANAGED_FIELD(i64)>("i64", "i64");
@@ -131,7 +131,7 @@ struct VkPipelineExecutableStatisticKHR_Ann : ManagedStructureAnnotation<VkPipel
     virtual bool canMove() const override { return true; }
     void init();
 };
-static VkPipelineExecutableStatisticKHR_Ann * ann_VkPipelineExecutableStatisticKHR = nullptr;
+static thread_local VkPipelineExecutableStatisticKHR_Ann * ann_VkPipelineExecutableStatisticKHR = nullptr;
 void VkPipelineExecutableStatisticKHR_Ann::init() {
     addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
     addFieldEx("pNext", "pNext", offsetof(VkPipelineExecutableStatisticKHR, pNext), makeType<void *>(*mlib));
@@ -150,7 +150,7 @@ struct VkPipelineExecutableInternalRepresentationKHR_Ann : ManagedStructureAnnot
     virtual bool canMove() const override { return true; }
     void init();
 };
-static VkPipelineExecutableInternalRepresentationKHR_Ann * ann_VkPipelineExecutableInternalRepresentationKHR = nullptr;
+static thread_local VkPipelineExecutableInternalRepresentationKHR_Ann * ann_VkPipelineExecutableInternalRepresentationKHR = nullptr;
 void VkPipelineExecutableInternalRepresentationKHR_Ann::init() {
     addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
     addFieldEx("pNext", "pNext", offsetof(VkPipelineExecutableInternalRepresentationKHR, pNext), makeType<void *>(*mlib));
@@ -170,7 +170,7 @@ struct VkPhysicalDeviceShaderDemoteToHelperInvocationFeatures_Ann : ManagedStruc
     virtual bool canMove() const override { return true; }
     void init();
 };
-static VkPhysicalDeviceShaderDemoteToHelperInvocationFeatures_Ann * ann_VkPhysicalDeviceShaderDemoteToHelperInvocationFeatures = nullptr;
+static thread_local VkPhysicalDeviceShaderDemoteToHelperInvocationFeatures_Ann * ann_VkPhysicalDeviceShaderDemoteToHelperInvocationFeatures = nullptr;
 void VkPhysicalDeviceShaderDemoteToHelperInvocationFeatures_Ann::init() {
     addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
     addFieldEx("pNext", "pNext", offsetof(VkPhysicalDeviceShaderDemoteToHelperInvocationFeatures, pNext), makeType<void *>(*mlib));
@@ -186,7 +186,7 @@ struct VkPhysicalDeviceTexelBufferAlignmentFeaturesEXT_Ann : ManagedStructureAnn
     virtual bool canMove() const override { return true; }
     void init();
 };
-static VkPhysicalDeviceTexelBufferAlignmentFeaturesEXT_Ann * ann_VkPhysicalDeviceTexelBufferAlignmentFeaturesEXT = nullptr;
+static thread_local VkPhysicalDeviceTexelBufferAlignmentFeaturesEXT_Ann * ann_VkPhysicalDeviceTexelBufferAlignmentFeaturesEXT = nullptr;
 void VkPhysicalDeviceTexelBufferAlignmentFeaturesEXT_Ann::init() {
     addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
     addFieldEx("pNext", "pNext", offsetof(VkPhysicalDeviceTexelBufferAlignmentFeaturesEXT, pNext), makeType<void *>(*mlib));
@@ -202,7 +202,7 @@ struct VkPhysicalDeviceTexelBufferAlignmentProperties_Ann : ManagedStructureAnno
     virtual bool canMove() const override { return true; }
     void init();
 };
-static VkPhysicalDeviceTexelBufferAlignmentProperties_Ann * ann_VkPhysicalDeviceTexelBufferAlignmentProperties = nullptr;
+static thread_local VkPhysicalDeviceTexelBufferAlignmentProperties_Ann * ann_VkPhysicalDeviceTexelBufferAlignmentProperties = nullptr;
 void VkPhysicalDeviceTexelBufferAlignmentProperties_Ann::init() {
     addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
     addFieldEx("pNext", "pNext", offsetof(VkPhysicalDeviceTexelBufferAlignmentProperties, pNext), makeType<void *>(*mlib));
@@ -221,7 +221,7 @@ struct VkPhysicalDeviceSubgroupSizeControlFeatures_Ann : ManagedStructureAnnotat
     virtual bool canMove() const override { return true; }
     void init();
 };
-static VkPhysicalDeviceSubgroupSizeControlFeatures_Ann * ann_VkPhysicalDeviceSubgroupSizeControlFeatures = nullptr;
+static thread_local VkPhysicalDeviceSubgroupSizeControlFeatures_Ann * ann_VkPhysicalDeviceSubgroupSizeControlFeatures = nullptr;
 void VkPhysicalDeviceSubgroupSizeControlFeatures_Ann::init() {
     addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
     addFieldEx("pNext", "pNext", offsetof(VkPhysicalDeviceSubgroupSizeControlFeatures, pNext), makeType<void *>(*mlib));
@@ -238,7 +238,7 @@ struct VkPhysicalDeviceSubgroupSizeControlProperties_Ann : ManagedStructureAnnot
     virtual bool canMove() const override { return true; }
     void init();
 };
-static VkPhysicalDeviceSubgroupSizeControlProperties_Ann * ann_VkPhysicalDeviceSubgroupSizeControlProperties = nullptr;
+static thread_local VkPhysicalDeviceSubgroupSizeControlProperties_Ann * ann_VkPhysicalDeviceSubgroupSizeControlProperties = nullptr;
 void VkPhysicalDeviceSubgroupSizeControlProperties_Ann::init() {
     addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
     addFieldEx("pNext", "pNext", offsetof(VkPhysicalDeviceSubgroupSizeControlProperties, pNext), makeType<void *>(*mlib));
@@ -257,7 +257,7 @@ struct VkPipelineShaderStageRequiredSubgroupSizeCreateInfo_Ann : ManagedStructur
     virtual bool canMove() const override { return true; }
     void init();
 };
-static VkPipelineShaderStageRequiredSubgroupSizeCreateInfo_Ann * ann_VkPipelineShaderStageRequiredSubgroupSizeCreateInfo = nullptr;
+static thread_local VkPipelineShaderStageRequiredSubgroupSizeCreateInfo_Ann * ann_VkPipelineShaderStageRequiredSubgroupSizeCreateInfo = nullptr;
 void VkPipelineShaderStageRequiredSubgroupSizeCreateInfo_Ann::init() {
     addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
     addFieldEx("pNext", "pNext", offsetof(VkPipelineShaderStageRequiredSubgroupSizeCreateInfo, pNext), makeType<void *>(*mlib));
@@ -273,7 +273,7 @@ struct VkSubpassShadingPipelineCreateInfoHUAWEI_Ann : ManagedStructureAnnotation
     virtual bool canMove() const override { return true; }
     void init();
 };
-static VkSubpassShadingPipelineCreateInfoHUAWEI_Ann * ann_VkSubpassShadingPipelineCreateInfoHUAWEI = nullptr;
+static thread_local VkSubpassShadingPipelineCreateInfoHUAWEI_Ann * ann_VkSubpassShadingPipelineCreateInfoHUAWEI = nullptr;
 void VkSubpassShadingPipelineCreateInfoHUAWEI_Ann::init() {
     addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
     addFieldEx("pNext", "pNext", offsetof(VkSubpassShadingPipelineCreateInfoHUAWEI, pNext), makeType<void *>(*mlib));
@@ -290,7 +290,7 @@ struct VkPhysicalDeviceSubpassShadingPropertiesHUAWEI_Ann : ManagedStructureAnno
     virtual bool canMove() const override { return true; }
     void init();
 };
-static VkPhysicalDeviceSubpassShadingPropertiesHUAWEI_Ann * ann_VkPhysicalDeviceSubpassShadingPropertiesHUAWEI = nullptr;
+static thread_local VkPhysicalDeviceSubpassShadingPropertiesHUAWEI_Ann * ann_VkPhysicalDeviceSubpassShadingPropertiesHUAWEI = nullptr;
 void VkPhysicalDeviceSubpassShadingPropertiesHUAWEI_Ann::init() {
     addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
     addFieldEx("pNext", "pNext", offsetof(VkPhysicalDeviceSubpassShadingPropertiesHUAWEI, pNext), makeType<void *>(*mlib));
@@ -306,7 +306,7 @@ struct VkPhysicalDeviceClusterCullingShaderPropertiesHUAWEI_Ann : ManagedStructu
     virtual bool canMove() const override { return true; }
     void init();
 };
-static VkPhysicalDeviceClusterCullingShaderPropertiesHUAWEI_Ann * ann_VkPhysicalDeviceClusterCullingShaderPropertiesHUAWEI = nullptr;
+static thread_local VkPhysicalDeviceClusterCullingShaderPropertiesHUAWEI_Ann * ann_VkPhysicalDeviceClusterCullingShaderPropertiesHUAWEI = nullptr;
 void VkPhysicalDeviceClusterCullingShaderPropertiesHUAWEI_Ann::init() {
     addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
     addFieldEx("pNext", "pNext", offsetof(VkPhysicalDeviceClusterCullingShaderPropertiesHUAWEI, pNext), makeType<void *>(*mlib));
@@ -325,7 +325,7 @@ struct VkMemoryOpaqueCaptureAddressAllocateInfo_Ann : ManagedStructureAnnotation
     virtual bool canMove() const override { return true; }
     void init();
 };
-static VkMemoryOpaqueCaptureAddressAllocateInfo_Ann * ann_VkMemoryOpaqueCaptureAddressAllocateInfo = nullptr;
+static thread_local VkMemoryOpaqueCaptureAddressAllocateInfo_Ann * ann_VkMemoryOpaqueCaptureAddressAllocateInfo = nullptr;
 void VkMemoryOpaqueCaptureAddressAllocateInfo_Ann::init() {
     addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
     addFieldEx("pNext", "pNext", offsetof(VkMemoryOpaqueCaptureAddressAllocateInfo, pNext), makeType<void *>(*mlib));
@@ -341,7 +341,7 @@ struct VkDeviceMemoryOpaqueCaptureAddressInfo_Ann : ManagedStructureAnnotation<V
     virtual bool canMove() const override { return true; }
     void init();
 };
-static VkDeviceMemoryOpaqueCaptureAddressInfo_Ann * ann_VkDeviceMemoryOpaqueCaptureAddressInfo = nullptr;
+static thread_local VkDeviceMemoryOpaqueCaptureAddressInfo_Ann * ann_VkDeviceMemoryOpaqueCaptureAddressInfo = nullptr;
 void VkDeviceMemoryOpaqueCaptureAddressInfo_Ann::init() {
     addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
     addFieldEx("pNext", "pNext", offsetof(VkDeviceMemoryOpaqueCaptureAddressInfo, pNext), makeType<void *>(*mlib));
@@ -357,7 +357,7 @@ struct VkPhysicalDeviceLineRasterizationFeatures_Ann : ManagedStructureAnnotatio
     virtual bool canMove() const override { return true; }
     void init();
 };
-static VkPhysicalDeviceLineRasterizationFeatures_Ann * ann_VkPhysicalDeviceLineRasterizationFeatures = nullptr;
+static thread_local VkPhysicalDeviceLineRasterizationFeatures_Ann * ann_VkPhysicalDeviceLineRasterizationFeatures = nullptr;
 void VkPhysicalDeviceLineRasterizationFeatures_Ann::init() {
     addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
     addFieldEx("pNext", "pNext", offsetof(VkPhysicalDeviceLineRasterizationFeatures, pNext), makeType<void *>(*mlib));
@@ -378,7 +378,7 @@ struct VkPhysicalDeviceLineRasterizationProperties_Ann : ManagedStructureAnnotat
     virtual bool canMove() const override { return true; }
     void init();
 };
-static VkPhysicalDeviceLineRasterizationProperties_Ann * ann_VkPhysicalDeviceLineRasterizationProperties = nullptr;
+static thread_local VkPhysicalDeviceLineRasterizationProperties_Ann * ann_VkPhysicalDeviceLineRasterizationProperties = nullptr;
 void VkPhysicalDeviceLineRasterizationProperties_Ann::init() {
     addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
     addFieldEx("pNext", "pNext", offsetof(VkPhysicalDeviceLineRasterizationProperties, pNext), makeType<void *>(*mlib));
@@ -394,7 +394,7 @@ struct VkPipelineRasterizationLineStateCreateInfo_Ann : ManagedStructureAnnotati
     virtual bool canMove() const override { return true; }
     void init();
 };
-static VkPipelineRasterizationLineStateCreateInfo_Ann * ann_VkPipelineRasterizationLineStateCreateInfo = nullptr;
+static thread_local VkPipelineRasterizationLineStateCreateInfo_Ann * ann_VkPipelineRasterizationLineStateCreateInfo = nullptr;
 void VkPipelineRasterizationLineStateCreateInfo_Ann::init() {
     addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
     addFieldEx("pNext", "pNext", offsetof(VkPipelineRasterizationLineStateCreateInfo, pNext), makeType<void *>(*mlib));
@@ -413,7 +413,7 @@ struct VkPhysicalDevicePipelineCreationCacheControlFeatures_Ann : ManagedStructu
     virtual bool canMove() const override { return true; }
     void init();
 };
-static VkPhysicalDevicePipelineCreationCacheControlFeatures_Ann * ann_VkPhysicalDevicePipelineCreationCacheControlFeatures = nullptr;
+static thread_local VkPhysicalDevicePipelineCreationCacheControlFeatures_Ann * ann_VkPhysicalDevicePipelineCreationCacheControlFeatures = nullptr;
 void VkPhysicalDevicePipelineCreationCacheControlFeatures_Ann::init() {
     addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
     addFieldEx("pNext", "pNext", offsetof(VkPhysicalDevicePipelineCreationCacheControlFeatures, pNext), makeType<void *>(*mlib));
@@ -429,7 +429,7 @@ struct VkPhysicalDeviceVulkan11Features_Ann : ManagedStructureAnnotation<VkPhysi
     virtual bool canMove() const override { return true; }
     void init();
 };
-static VkPhysicalDeviceVulkan11Features_Ann * ann_VkPhysicalDeviceVulkan11Features = nullptr;
+static thread_local VkPhysicalDeviceVulkan11Features_Ann * ann_VkPhysicalDeviceVulkan11Features = nullptr;
 void VkPhysicalDeviceVulkan11Features_Ann::init() {
     addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
     addFieldEx("pNext", "pNext", offsetof(VkPhysicalDeviceVulkan11Features, pNext), makeType<void *>(*mlib));
@@ -456,7 +456,7 @@ struct VkPhysicalDeviceVulkan11Properties_Ann : ManagedStructureAnnotation<VkPhy
     virtual bool canMove() const override { return true; }
     void init();
 };
-static VkPhysicalDeviceVulkan11Properties_Ann * ann_VkPhysicalDeviceVulkan11Properties = nullptr;
+static thread_local VkPhysicalDeviceVulkan11Properties_Ann * ann_VkPhysicalDeviceVulkan11Properties = nullptr;
 void VkPhysicalDeviceVulkan11Properties_Ann::init() {
     addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
     addFieldEx("pNext", "pNext", offsetof(VkPhysicalDeviceVulkan11Properties, pNext), makeType<void *>(*mlib));
@@ -486,7 +486,7 @@ struct VkPhysicalDeviceVulkan12Features_Ann : ManagedStructureAnnotation<VkPhysi
     virtual bool canMove() const override { return true; }
     void init();
 };
-static VkPhysicalDeviceVulkan12Features_Ann * ann_VkPhysicalDeviceVulkan12Features = nullptr;
+static thread_local VkPhysicalDeviceVulkan12Features_Ann * ann_VkPhysicalDeviceVulkan12Features = nullptr;
 void VkPhysicalDeviceVulkan12Features_Ann::init() {
     addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
     addFieldEx("pNext", "pNext", offsetof(VkPhysicalDeviceVulkan12Features, pNext), makeType<void *>(*mlib));
@@ -548,7 +548,7 @@ struct VkPhysicalDeviceVulkan12Properties_Ann : ManagedStructureAnnotation<VkPhy
     virtual bool canMove() const override { return true; }
     void init();
 };
-static VkPhysicalDeviceVulkan12Properties_Ann * ann_VkPhysicalDeviceVulkan12Properties = nullptr;
+static thread_local VkPhysicalDeviceVulkan12Properties_Ann * ann_VkPhysicalDeviceVulkan12Properties = nullptr;
 void VkPhysicalDeviceVulkan12Properties_Ann::init() {
     addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
     addFieldEx("pNext", "pNext", offsetof(VkPhysicalDeviceVulkan12Properties, pNext), makeType<void *>(*mlib));
@@ -615,7 +615,7 @@ struct VkPhysicalDeviceVulkan13Features_Ann : ManagedStructureAnnotation<VkPhysi
     virtual bool canMove() const override { return true; }
     void init();
 };
-static VkPhysicalDeviceVulkan13Features_Ann * ann_VkPhysicalDeviceVulkan13Features = nullptr;
+static thread_local VkPhysicalDeviceVulkan13Features_Ann * ann_VkPhysicalDeviceVulkan13Features = nullptr;
 void VkPhysicalDeviceVulkan13Features_Ann::init() {
     addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
     addFieldEx("pNext", "pNext", offsetof(VkPhysicalDeviceVulkan13Features, pNext), makeType<void *>(*mlib));
@@ -645,7 +645,7 @@ struct VkPhysicalDeviceVulkan13Properties_Ann : ManagedStructureAnnotation<VkPhy
     virtual bool canMove() const override { return true; }
     void init();
 };
-static VkPhysicalDeviceVulkan13Properties_Ann * ann_VkPhysicalDeviceVulkan13Properties = nullptr;
+static thread_local VkPhysicalDeviceVulkan13Properties_Ann * ann_VkPhysicalDeviceVulkan13Properties = nullptr;
 void VkPhysicalDeviceVulkan13Properties_Ann::init() {
     addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
     addFieldEx("pNext", "pNext", offsetof(VkPhysicalDeviceVulkan13Properties, pNext), makeType<void *>(*mlib));
@@ -705,7 +705,7 @@ struct VkPhysicalDeviceVulkan14Features_Ann : ManagedStructureAnnotation<VkPhysi
     virtual bool canMove() const override { return true; }
     void init();
 };
-static VkPhysicalDeviceVulkan14Features_Ann * ann_VkPhysicalDeviceVulkan14Features = nullptr;
+static thread_local VkPhysicalDeviceVulkan14Features_Ann * ann_VkPhysicalDeviceVulkan14Features = nullptr;
 void VkPhysicalDeviceVulkan14Features_Ann::init() {
     addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
     addFieldEx("pNext", "pNext", offsetof(VkPhysicalDeviceVulkan14Features, pNext), makeType<void *>(*mlib));
@@ -741,7 +741,7 @@ struct VkPhysicalDeviceVulkan14Properties_Ann : ManagedStructureAnnotation<VkPhy
     virtual bool canMove() const override { return true; }
     void init();
 };
-static VkPhysicalDeviceVulkan14Properties_Ann * ann_VkPhysicalDeviceVulkan14Properties = nullptr;
+static thread_local VkPhysicalDeviceVulkan14Properties_Ann * ann_VkPhysicalDeviceVulkan14Properties = nullptr;
 void VkPhysicalDeviceVulkan14Properties_Ann::init() {
     addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
     addFieldEx("pNext", "pNext", offsetof(VkPhysicalDeviceVulkan14Properties, pNext), makeType<void *>(*mlib));
@@ -781,7 +781,7 @@ struct VkPipelineCompilerControlCreateInfoAMD_Ann : ManagedStructureAnnotation<V
     virtual bool canMove() const override { return true; }
     void init();
 };
-static VkPipelineCompilerControlCreateInfoAMD_Ann * ann_VkPipelineCompilerControlCreateInfoAMD = nullptr;
+static thread_local VkPipelineCompilerControlCreateInfoAMD_Ann * ann_VkPipelineCompilerControlCreateInfoAMD = nullptr;
 void VkPipelineCompilerControlCreateInfoAMD_Ann::init() {
     addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
     addFieldEx("pNext", "pNext", offsetof(VkPipelineCompilerControlCreateInfoAMD, pNext), makeType<void *>(*mlib));
@@ -797,7 +797,7 @@ struct VkPhysicalDeviceCoherentMemoryFeaturesAMD_Ann : ManagedStructureAnnotatio
     virtual bool canMove() const override { return true; }
     void init();
 };
-static VkPhysicalDeviceCoherentMemoryFeaturesAMD_Ann * ann_VkPhysicalDeviceCoherentMemoryFeaturesAMD = nullptr;
+static thread_local VkPhysicalDeviceCoherentMemoryFeaturesAMD_Ann * ann_VkPhysicalDeviceCoherentMemoryFeaturesAMD = nullptr;
 void VkPhysicalDeviceCoherentMemoryFeaturesAMD_Ann::init() {
     addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
     addFieldEx("pNext", "pNext", offsetof(VkPhysicalDeviceCoherentMemoryFeaturesAMD, pNext), makeType<void *>(*mlib));
@@ -813,7 +813,7 @@ struct VkGpaPerfBlockPropertiesAMD_Ann : ManagedStructureAnnotation<VkGpaPerfBlo
     virtual bool canMove() const override { return true; }
     void init();
 };
-static VkGpaPerfBlockPropertiesAMD_Ann * ann_VkGpaPerfBlockPropertiesAMD = nullptr;
+static thread_local VkGpaPerfBlockPropertiesAMD_Ann * ann_VkGpaPerfBlockPropertiesAMD = nullptr;
 void VkGpaPerfBlockPropertiesAMD_Ann::init() {
     addField<DAS_BIND_MANAGED_FIELD(blockType)>("blockType", "blockType");
     addFieldEx("flags", "flags", offsetof(VkGpaPerfBlockPropertiesAMD, flags), makeVkFlags_VkGpaPerfBlockPropertiesFlagsAMD());
@@ -833,7 +833,7 @@ struct VkPhysicalDeviceGpaFeaturesAMD_Ann : ManagedStructureAnnotation<VkPhysica
     virtual bool canMove() const override { return true; }
     void init();
 };
-static VkPhysicalDeviceGpaFeaturesAMD_Ann * ann_VkPhysicalDeviceGpaFeaturesAMD = nullptr;
+static thread_local VkPhysicalDeviceGpaFeaturesAMD_Ann * ann_VkPhysicalDeviceGpaFeaturesAMD = nullptr;
 void VkPhysicalDeviceGpaFeaturesAMD_Ann::init() {
     addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
     addFieldEx("pNext", "pNext", offsetof(VkPhysicalDeviceGpaFeaturesAMD, pNext), makeType<void *>(*mlib));
@@ -852,7 +852,7 @@ struct VkPhysicalDeviceGpaPropertiesAMD_Ann : ManagedStructureAnnotation<VkPhysi
     virtual bool canMove() const override { return true; }
     void init();
 };
-static VkPhysicalDeviceGpaPropertiesAMD_Ann * ann_VkPhysicalDeviceGpaPropertiesAMD = nullptr;
+static thread_local VkPhysicalDeviceGpaPropertiesAMD_Ann * ann_VkPhysicalDeviceGpaPropertiesAMD = nullptr;
 void VkPhysicalDeviceGpaPropertiesAMD_Ann::init() {
     addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
     addFieldEx("pNext", "pNext", offsetof(VkPhysicalDeviceGpaPropertiesAMD, pNext), makeType<void *>(*mlib));
@@ -872,7 +872,7 @@ struct VkPhysicalDeviceGpaProperties2AMD_Ann : ManagedStructureAnnotation<VkPhys
     virtual bool canMove() const override { return true; }
     void init();
 };
-static VkPhysicalDeviceGpaProperties2AMD_Ann * ann_VkPhysicalDeviceGpaProperties2AMD = nullptr;
+static thread_local VkPhysicalDeviceGpaProperties2AMD_Ann * ann_VkPhysicalDeviceGpaProperties2AMD = nullptr;
 void VkPhysicalDeviceGpaProperties2AMD_Ann::init() {
     addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
     addFieldEx("pNext", "pNext", offsetof(VkPhysicalDeviceGpaProperties2AMD, pNext), makeType<void *>(*mlib));
@@ -888,7 +888,7 @@ struct VkGpaPerfCounterAMD_Ann : ManagedStructureAnnotation<VkGpaPerfCounterAMD>
     virtual bool canMove() const override { return true; }
     void init();
 };
-static VkGpaPerfCounterAMD_Ann * ann_VkGpaPerfCounterAMD = nullptr;
+static thread_local VkGpaPerfCounterAMD_Ann * ann_VkGpaPerfCounterAMD = nullptr;
 void VkGpaPerfCounterAMD_Ann::init() {
     addField<DAS_BIND_MANAGED_FIELD(blockType)>("blockType", "blockType");
     addField<DAS_BIND_MANAGED_FIELD(blockInstance)>("blockInstance", "blockInstance");
@@ -904,7 +904,7 @@ struct VkGpaSampleBeginInfoAMD_Ann : ManagedStructureAnnotation<VkGpaSampleBegin
     virtual bool canMove() const override { return true; }
     void init();
 };
-static VkGpaSampleBeginInfoAMD_Ann * ann_VkGpaSampleBeginInfoAMD = nullptr;
+static thread_local VkGpaSampleBeginInfoAMD_Ann * ann_VkGpaSampleBeginInfoAMD = nullptr;
 void VkGpaSampleBeginInfoAMD_Ann::init() {
     addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
     addFieldEx("pNext", "pNext", offsetof(VkGpaSampleBeginInfoAMD, pNext), makeType<void *>(*mlib));
@@ -933,7 +933,7 @@ struct VkGpaDeviceClockModeInfoAMD_Ann : ManagedStructureAnnotation<VkGpaDeviceC
     virtual bool canMove() const override { return true; }
     void init();
 };
-static VkGpaDeviceClockModeInfoAMD_Ann * ann_VkGpaDeviceClockModeInfoAMD = nullptr;
+static thread_local VkGpaDeviceClockModeInfoAMD_Ann * ann_VkGpaDeviceClockModeInfoAMD = nullptr;
 void VkGpaDeviceClockModeInfoAMD_Ann::init() {
     addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
     addFieldEx("pNext", "pNext", offsetof(VkGpaDeviceClockModeInfoAMD, pNext), makeType<void *>(*mlib));
@@ -951,7 +951,7 @@ struct VkGpaDeviceGetClockInfoAMD_Ann : ManagedStructureAnnotation<VkGpaDeviceGe
     virtual bool canMove() const override { return true; }
     void init();
 };
-static VkGpaDeviceGetClockInfoAMD_Ann * ann_VkGpaDeviceGetClockInfoAMD = nullptr;
+static thread_local VkGpaDeviceGetClockInfoAMD_Ann * ann_VkGpaDeviceGetClockInfoAMD = nullptr;
 void VkGpaDeviceGetClockInfoAMD_Ann::init() {
     addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
     addFieldEx("pNext", "pNext", offsetof(VkGpaDeviceGetClockInfoAMD, pNext), makeType<void *>(*mlib));
@@ -970,7 +970,7 @@ struct VkGpaSessionCreateInfoAMD_Ann : ManagedStructureAnnotation<VkGpaSessionCr
     virtual bool canMove() const override { return true; }
     void init();
 };
-static VkGpaSessionCreateInfoAMD_Ann * ann_VkGpaSessionCreateInfoAMD = nullptr;
+static thread_local VkGpaSessionCreateInfoAMD_Ann * ann_VkGpaSessionCreateInfoAMD = nullptr;
 void VkGpaSessionCreateInfoAMD_Ann::init() {
     addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
     addFieldEx("pNext", "pNext", offsetof(VkGpaSessionCreateInfoAMD, pNext), makeType<void *>(*mlib));
@@ -986,7 +986,7 @@ struct VkPhysicalDeviceToolProperties_Ann : ManagedStructureAnnotation<VkPhysica
     virtual bool canMove() const override { return true; }
     void init();
 };
-static VkPhysicalDeviceToolProperties_Ann * ann_VkPhysicalDeviceToolProperties = nullptr;
+static thread_local VkPhysicalDeviceToolProperties_Ann * ann_VkPhysicalDeviceToolProperties = nullptr;
 void VkPhysicalDeviceToolProperties_Ann::init() {
     addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
     addFieldEx("pNext", "pNext", offsetof(VkPhysicalDeviceToolProperties, pNext), makeType<void *>(*mlib));
@@ -1006,7 +1006,7 @@ struct VkSamplerCustomBorderColorCreateInfoEXT_Ann : ManagedStructureAnnotation<
     virtual bool canMove() const override { return true; }
     void init();
 };
-static VkSamplerCustomBorderColorCreateInfoEXT_Ann * ann_VkSamplerCustomBorderColorCreateInfoEXT = nullptr;
+static thread_local VkSamplerCustomBorderColorCreateInfoEXT_Ann * ann_VkSamplerCustomBorderColorCreateInfoEXT = nullptr;
 void VkSamplerCustomBorderColorCreateInfoEXT_Ann::init() {
     addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
     addFieldEx("pNext", "pNext", offsetof(VkSamplerCustomBorderColorCreateInfoEXT, pNext), makeType<void *>(*mlib));
@@ -1023,7 +1023,7 @@ struct VkPhysicalDeviceCustomBorderColorPropertiesEXT_Ann : ManagedStructureAnno
     virtual bool canMove() const override { return true; }
     void init();
 };
-static VkPhysicalDeviceCustomBorderColorPropertiesEXT_Ann * ann_VkPhysicalDeviceCustomBorderColorPropertiesEXT = nullptr;
+static thread_local VkPhysicalDeviceCustomBorderColorPropertiesEXT_Ann * ann_VkPhysicalDeviceCustomBorderColorPropertiesEXT = nullptr;
 void VkPhysicalDeviceCustomBorderColorPropertiesEXT_Ann::init() {
     addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
     addFieldEx("pNext", "pNext", offsetof(VkPhysicalDeviceCustomBorderColorPropertiesEXT, pNext), makeType<void *>(*mlib));
@@ -1039,7 +1039,7 @@ struct VkPhysicalDeviceCustomBorderColorFeaturesEXT_Ann : ManagedStructureAnnota
     virtual bool canMove() const override { return true; }
     void init();
 };
-static VkPhysicalDeviceCustomBorderColorFeaturesEXT_Ann * ann_VkPhysicalDeviceCustomBorderColorFeaturesEXT = nullptr;
+static thread_local VkPhysicalDeviceCustomBorderColorFeaturesEXT_Ann * ann_VkPhysicalDeviceCustomBorderColorFeaturesEXT = nullptr;
 void VkPhysicalDeviceCustomBorderColorFeaturesEXT_Ann::init() {
     addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
     addFieldEx("pNext", "pNext", offsetof(VkPhysicalDeviceCustomBorderColorFeaturesEXT, pNext), makeType<void *>(*mlib));
@@ -1056,7 +1056,7 @@ struct VkSamplerBorderColorComponentMappingCreateInfoEXT_Ann : ManagedStructureA
     virtual bool canMove() const override { return true; }
     void init();
 };
-static VkSamplerBorderColorComponentMappingCreateInfoEXT_Ann * ann_VkSamplerBorderColorComponentMappingCreateInfoEXT = nullptr;
+static thread_local VkSamplerBorderColorComponentMappingCreateInfoEXT_Ann * ann_VkSamplerBorderColorComponentMappingCreateInfoEXT = nullptr;
 void VkSamplerBorderColorComponentMappingCreateInfoEXT_Ann::init() {
     addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
     addFieldEx("pNext", "pNext", offsetof(VkSamplerBorderColorComponentMappingCreateInfoEXT, pNext), makeType<void *>(*mlib));
@@ -1073,7 +1073,7 @@ struct VkPhysicalDeviceBorderColorSwizzleFeaturesEXT_Ann : ManagedStructureAnnot
     virtual bool canMove() const override { return true; }
     void init();
 };
-static VkPhysicalDeviceBorderColorSwizzleFeaturesEXT_Ann * ann_VkPhysicalDeviceBorderColorSwizzleFeaturesEXT = nullptr;
+static thread_local VkPhysicalDeviceBorderColorSwizzleFeaturesEXT_Ann * ann_VkPhysicalDeviceBorderColorSwizzleFeaturesEXT = nullptr;
 void VkPhysicalDeviceBorderColorSwizzleFeaturesEXT_Ann::init() {
     addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
     addFieldEx("pNext", "pNext", offsetof(VkPhysicalDeviceBorderColorSwizzleFeaturesEXT, pNext), makeType<void *>(*mlib));
@@ -1090,7 +1090,7 @@ struct VkDeviceOrHostAddressKHR_Ann : ManagedStructureAnnotation<VkDeviceOrHostA
     virtual bool canMove() const override { return true; }
     void init();
 };
-static VkDeviceOrHostAddressKHR_Ann * ann_VkDeviceOrHostAddressKHR = nullptr;
+static thread_local VkDeviceOrHostAddressKHR_Ann * ann_VkDeviceOrHostAddressKHR = nullptr;
 void VkDeviceOrHostAddressKHR_Ann::init() {
     addField<DAS_BIND_MANAGED_FIELD(deviceAddress)>("deviceAddress", "deviceAddress");
     addFieldEx("hostAddress", "hostAddress", offsetof(VkDeviceOrHostAddressKHR, hostAddress), makeType<void *>(*mlib));

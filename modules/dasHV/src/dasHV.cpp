@@ -2,6 +2,7 @@
 
 #include <future>
 #include <atomic>
+#include <mutex>
 #include <cstdlib>
 #include <chrono>
 
@@ -1845,18 +1846,21 @@ public:
         //   DASLIVE_HV_LOG=silent          → disable libhv logging entirely
         // DASLIVE_HV_LOG_LEVEL=DEBUG/INFO/WARN/ERROR overrides the level.
         // Default unset → file_logger (unchanged).
-        if (const char * route = std::getenv("DASLIVE_HV_LOG")) {
-            if (!strcmp(route, "stderr") || !strcmp(route, "1")) {
-                hlog_set_handler(stderr_logger);
-            } else if (!strcmp(route, "stdout")) {
-                hlog_set_handler(stdout_logger);
-            } else if (!strcmp(route, "silent")) {
-                hlog_disable();
+        static std::once_flag logConfigured;
+        std::call_once(logConfigured, []() {
+            if (const char * route = std::getenv("DASLIVE_HV_LOG")) {
+                if (!strcmp(route, "stderr") || !strcmp(route, "1")) {
+                    hlog_set_handler(stderr_logger);
+                } else if (!strcmp(route, "stdout")) {
+                    hlog_set_handler(stdout_logger);
+                } else if (!strcmp(route, "silent")) {
+                    hlog_disable();
+                }
             }
-        }
-        if (const char * lvl = std::getenv("DASLIVE_HV_LOG_LEVEL")) {
-            hlog_set_level_by_str(lvl);
-        }
+            if (const char * lvl = std::getenv("DASLIVE_HV_LOG_LEVEL")) {
+                hlog_set_level_by_str(lvl);
+            }
+        });
 
         ModuleLibrary lib;
         lib.addModule(this);
