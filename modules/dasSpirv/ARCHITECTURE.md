@@ -188,7 +188,7 @@ a fused multiply-add does not rest it on `mad`.
 ### 3.11 A `[spirv_inline]` helper is visited at its call sites {#emit-time-inline}
 
 A helper marked `[spirv_inline]` gets no `OpFunction`: every call to it - a plain call or a kernel-class self-method
-invoke - visits its body in the caller, a value parameter bound to the argument's value id and a by-reference
+call, as an invoke or as the direct call a closed class family compiles to - visits its body in the caller, a value parameter bound to the argument's value id and a by-reference
 parameter to the argument's lvalue pointer (an element of a local array included, with no copy-in / copy-out temp),
 and its tail `return` gives the call's result id with no terminator. The caller's entry block takes the inlined
 bodies' locals and temps, each body's once, in the prepass that already leads it with its own. An inlined body

@@ -131,6 +131,23 @@ class K \{
 \}
 "
 
+let BASE_CALL = "options gen2
+module _reject_base_call shared public
+require cuda/cuda_kernel public
+class KBase \{
+    @ssbo @binding = 0 o : array<float>
+    def scale(v : float) : float => v * 2.0
+\}
+class K : KBase \{
+    def override scale(v : float) : float => v * 3.0
+    [cuda_kernel(name=\"base_call_cuda\", local_size_x = 64)]
+    def run \{
+        let i = gl_GlobalInvocationID.x
+        o[i] = KBase`scale(self, o[i])
+    \}
+\}
+"
+
 let FREE_KERNEL = "options gen2
 module _reject_free_kernel shared public
 require cuda/cuda_kernel public
@@ -140,14 +157,15 @@ def free_kernel \{
 \}
 "
 
-[test(description = "A 3-lane struct field, a returned value, a parameter or a free function in a kernel fails to compile with a specific diagnostic.")]
+[test(description = "A 3-lane struct field, a returned value, a parameter, a free function or a call of a base method the kernel class overrides fails to compile with a specific diagnostic.")]
 def test_cuda_reject_kernel_shape(t : T?) {
-    t |> run("a 3-lane struct field, a returned value, a parameter, a free function") <| @(t : T?) {
+    t |> run("a 3-lane struct field, a returned value, a parameter, a free function, an overridden base method called by name") <| @(t : T?) {
         check_arms(t, [
             RejectArm(name = "_reject_vec3_field", needle = "field `n` is a 3-lane vector", text = VEC3_FIELD),
             RejectArm(name = "_reject_ret_value", needle = "kernels return void", text = RET_VALUE),
             RejectArm(name = "_reject_with_params", needle = "must take no parameters beyond self", text = WITH_PARAMS),
-            RejectArm(name = "_reject_free_kernel", needle = "is not a class method", text = FREE_KERNEL)
+            RejectArm(name = "_reject_free_kernel", needle = "is not a class method", text = FREE_KERNEL),
+            RejectArm(name = "_reject_base_call", needle = "names a base class's method the kernel class overrides", text = BASE_CALL)
         ])
     }
 }

@@ -821,6 +821,55 @@ class UfxKid : UfxBase {
     }
 }
 
+// A private kernel class family beside its public twin: the compiler
+// replaces a closed family's self-method invoke with a direct call of
+// the method's function, and both forms splice to the same text.
+class private PvBase {
+    @ssbo @binding = 0 xs : array<float>
+    @ssbo @binding = 1 ys : array<float>
+    @ssbo @binding = 2 zs : array<float>
+
+    def pick(i : uint) : float => xs[i] * 2.0
+    def store(i : uint; v : float) {
+        ys[i] = v
+    }
+    def put(var dst : array<float>; i : uint; v : float) {
+        dst[i] = v
+    }
+}
+
+class private PvKid : PvBase {
+    [metal_kernel(name="pvkid_msl"), marker(no_coverage)]
+    def pvkid {
+        let i = gl_GlobalInvocationID.x
+        store(i, pick(i))
+        put(zs, i, pick(i))
+    }
+}
+
+class PbBase {
+    @ssbo @binding = 0 xs : array<float>
+    @ssbo @binding = 1 ys : array<float>
+    @ssbo @binding = 2 zs : array<float>
+
+    def pick(i : uint) : float => xs[i] * 2.0
+    def store(i : uint; v : float) {
+        ys[i] = v
+    }
+    def put(var dst : array<float>; i : uint; v : float) {
+        dst[i] = v
+    }
+}
+
+class PbKid : PbBase {
+    [metal_kernel(name="pbkid_msl"), marker(no_coverage)]
+    def pbkid {
+        let i = gl_GlobalInvocationID.x
+        store(i, pick(i))
+        put(zs, i, pick(i))
+    }
+}
+
 // The remaining state-member kinds: a fixed-ARRAY state member (a kernel-entry thread-local
 // array — the per-thread scratch a rider carries across splices) and a MUTABLE-pointee pointer
 // rider. Taking a writable pointer into a buffer IS the write declaration (no deref tracking),
@@ -1549,7 +1598,7 @@ def public all_msl_censuses : array<string> {
         sgmat_tiled_msl_census, sgmat_rolled_msl_census, mathcalls_msl_census, userfns_msl_census,
         ufxcls_msl_census, ukargs_msl_census, ukstride_msl_census, tmpl_call_msl_census,
         consttab_msl_census,
-        statearr_msl_census,
+        statearr_msl_census, pvkid_msl_census, pbkid_msl_census,
         tmmhw_msl_census, tmmhwh_msl_census, tmmq8u_msl_census, tmmq8uh_msl_census,
         tmmq8uh64_msl_census, tmmq8uh128_msl_census, tmmdeva_msl_census, tmmdevbar_msl_census,
         tmmdevaf_msl_census, tmmnt_msl_census, tmmdevant_msl_census, tmmdevab_msl_census,

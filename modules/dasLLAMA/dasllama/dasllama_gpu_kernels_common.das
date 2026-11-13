@@ -1951,12 +1951,7 @@ class template GkAddRmsRows : GkResidualRow {
     //! at their k-slots and their sum at the block's token slot
     def table_put(r, base, j : uint; v : float) {
         static_if (XT) {
-            let h = float16(v)
-            yt[rows8_slot_at(base + j)] = h
-            let s = gk_subgroup_add(float(h))
-            if (gl_SubgroupInvocationID == 0u) {
-                ys[rows8_sum_at(j, r, pa.dim)] = s
-            }
+            rows8_table_put(yt, ys, base + j, j, r, pa.dim, v, true)   //! the Metal home's, the one home that stamps `XT`
         }
     }
 

@@ -7,8 +7,10 @@ require dastest/testing_boost public
 require daslib/ast
 require strings   // nolint:STYLE030,LINT019 — used only inside the das_metal static_if half
 
-// The @role derivation's whole-buffer rule: a tracked buffer handed WHOLE to a same-module
-// helper takes its direction from the callee's PARAMETER — `var` means the callee may store
+// The @role derivation's whole-buffer rule: a tracked buffer handed
+// WHOLE to a helper - the compiling module's, else a required
+// module's - takes its direction from the callee's PARAMETER:
+// `var` means the callee may store
 // through it, anything else is read-only, which is exactly what the emitters lower it to
 // (`device` vs `device const`). Both directions are gated here: the read fixture compiles
 // clean against its declared roles, the write fixture must be REFUSED because the declared
@@ -68,6 +70,22 @@ def test_role_whole_buffer_rule(t : T?) {   // nolint:STYLE038 — parallel per-
             }
         } else {
             feint("das_metal is not built on this platform; the lens does not load\n")
+        }
+    }
+    t |> run("a helper of a required module decides the direction too; one declared below the class is refused by name") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            let good = compile_issues(fixture("_rf_module_through"))
+            t |> success(good.ok, "a required module's `var` helper parameter derives 'write': {good.issues}")
+            let bad = compile_issues(fixture("_rf_module_wrong"))
+            t |> success(!bad.ok, "the declared 'read' against that module's `var` parameter must be refused")
+            t |> success(find(bad.issues, "declares @role='read' but the body derives 'write'") >= 0,
+                "the refusal names the contradiction: {bad.issues}")
+            let below = compile_issues(fixture("_rf_helper_below"))
+            t |> success(!below.ok, "a helper declared below the class cannot give its parameter's direction")
+            t |> success(find(below.issues, "declared above the class that calls it or in a required module") >= 0,
+                "the refusal says where a helper goes: {below.issues}")
+        } else {
+            t |> skip("das_metal is not built on this platform; the lens does not load")
         }
     }
     t |> run("a POINTER into a tracked buffer takes the callee's pointee const") <| @(t : T?) {

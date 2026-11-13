@@ -1388,6 +1388,55 @@ class UfInlKern {
 
 def public userfn_inline_method_words : array<uint> => <- clone_to_move(userfn_inline_method_spv)
 
+// userfn_private_method: a private kernel class family beside its
+// public twin - the compiler replaces a closed family's self-method
+// invoke with a direct call of the method's function, and both forms
+// lower to the same words: an inlined value method and a called void
+// method
+class private SpPvBase {
+    @ssbo @binding = 0 xs : array<float>
+    @ssbo @binding = 1 ys : array<float>
+
+    [spirv_inline]
+    def pick(i : uint) : float => xs[i] * 2.0
+
+    def store(i : uint; v : float) {
+        ys[i] = v
+    }
+}
+
+class private SpPvKid : SpPvBase {
+    [spirv_kernel(local_size_x=64, name="userfn_private_method_spv"), marker(no_coverage)]
+    def run {
+        let i = gl_GlobalInvocationID.x
+        store(i, pick(i))
+    }
+}
+
+def public userfn_private_method_words : array<uint> => <- clone_to_move(userfn_private_method_spv)
+
+class SpPbBase {
+    @ssbo @binding = 0 xs : array<float>
+    @ssbo @binding = 1 ys : array<float>
+
+    [spirv_inline]
+    def pick(i : uint) : float => xs[i] * 2.0
+
+    def store(i : uint; v : float) {
+        ys[i] = v
+    }
+}
+
+class SpPbKid : SpPbBase {
+    [spirv_kernel(local_size_x=64, name="userfn_public_method_spv"), marker(no_coverage)]
+    def run {
+        let i = gl_GlobalInvocationID.x
+        store(i, pick(i))
+    }
+}
+
+def public userfn_public_method_words : array<uint> => <- clone_to_move(userfn_public_method_spv)
+
 class UfInlLazyKern {
     @ssbo @binding = 0 xs : array<float>
     @ssbo @binding = 1 ys : array<float>

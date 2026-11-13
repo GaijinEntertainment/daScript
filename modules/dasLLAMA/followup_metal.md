@@ -1240,24 +1240,3 @@ defaults to q8 on every GPU home. The q8 lanes of whisper, qwen3a, the chat towe
 have no timing against their f16 lanes. Done = the Metal q8 GEMM path of the tower chain brought level with or ahead of
 the half tensor GEMM on GigaAM's shapes and GigaAM's un-pinned lane moved to q8, with the q8 and f16 lanes of every other
 audio family timed on a Metal box and the rows in `PERF_LEDGER.md`.
-
-## 73. The MSL emitter lowers a kernel's helper call only in its virtual form
-
-A private class family's method call compiles to a direct call in optimized builds (`src/ast/ARCHITECTURE.md#devirtualization`),
-and `modules/dasMetal/metal/msl_emit.das` splices a helper method into a kernel only where the call is the invoke through
-the instance's method field (`emit_method_splice`, `emit_invoke_value`): a direct call lowers as a free function with a
-`self` parameter and the kernel is refused (`parameter self type has no MSL form`). A kernel class in a private module
-whose kernel calls an inherited helper therefore does not compile; the block drafter's selector and walk families
-(`MetalDflashTopkT`, `MetalDflashWalkT` and their stamps in `dasllama_metal_dflash.das`) are public for that reason alone.
-Done = the emitter splices a direct call to a method on the kernel's own `self` as it splices the invoke - the argument
-binding, the value form, the write-target and reference walks - with a cell holding a private kernel class's inherited
-helper to its public twin's source, and those six classes private again.
-
-## 74. A free helper cannot write a kernel's buffer
-
-`[metal_dispatch]` refuses a tracked buffer passed whole to a free function (`tracked buffer 'ys' passed whole to call`), so
-a store shared by kernels of unrelated class families is written out in each: the rows8 table put (the halves at
-`rows8_slot_at`, the subgroup sum at `rows8_sum_at` from lane 0) stands in `MetalSqAttnCombDT`, `MetalRmsNormT`, `MetalEw2T`
-and `MetalGegluSideXT`, beside the one method the shared norm family holds (`table_put`,
-`dasllama_gpu_kernels_common.das`). Done = the emitter lowers a buffer argument of a free helper with the role the callee's
-writes derive, and those four sites call one `rows8_table_put`.

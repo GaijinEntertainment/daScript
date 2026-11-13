@@ -171,7 +171,8 @@ def public callee_base_name(cname : string) : string {
     return tick >= 0 ? slice(n, tick + 1) : n
 }
 
-// Direction of the `idx`-th parameter of the same-module helper `cname`: "write" when the callee
+// Direction of the `idx`-th parameter of the helper `cname` - the compiling module's, else a
+// required module's: "write" when the callee
 // may store through it, "read" otherwise — the same rule the MSL and SPIR-V emitters lower to
 // `device` vs `device const`. Every declaration matching the base name must AGREE; a genuine
 // overload set that does not keeps the ratchet's refusal.
@@ -197,13 +198,31 @@ def private callee_param_dir(mod : Module?; cname : string; idx : int) : string 
     var dir = ""
     var found = false
     var conflict = false
-    mod |> for_each_function(base) $(cfn) {
-        scan_param_dir(cfn, base, idx, dir, found, conflict)
-    }
-    mod |> for_each_generic(base) $(cfn) {
-        scan_param_dir(cfn, base, idx, dir, found, conflict)
+    scan_module_param_dir(mod, base, idx, false, dir, found, conflict)
+    if (!found) {   //! a helper of a module the compiling one requires: the kernel calls it by its bare name all the same
+        program_for_each_module(compiling_program()) $(other) {
+            if (other != mod) {
+                scan_module_param_dir(other, base, idx, true, dir, found, conflict)
+            }
+        }
     }
     return found && !conflict ? dir : ""
+}
+
+//! `scan_param_dir` over every function and generic of `mod` named
+//! `base`; a `foreign` module's private ones are not callable here
+def private scan_module_param_dir(mod : Module?; base : string; idx : int; foreign : bool;
+                                  var dir : string&; var found : bool&; var conflict : bool&) {
+    mod |> for_each_function(base) $(cfn) {
+        if (!foreign || !cfn.flags.privateFunction) {
+            scan_param_dir(cfn, base, idx, dir, found, conflict)
+        }
+    }
+    mod |> for_each_generic(base) $(cfn) {
+        if (!foreign || !cfn.flags.privateFunction) {
+            scan_param_dir(cfn, base, idx, dir, found, conflict)
+        }
+    }
 }
 
 // one tracked buffer handed WHOLE to a helper — the driver resolves the direction, since the
@@ -591,7 +610,8 @@ def private analyze_one(fn : Function?; mod : Module?; st : StructurePtr; tracke
         }
         if (empty(dir)) {
             let escape = fieldMode ? "declare the @role (access_force)" : "declare [vk_access]"
-            astVisitor.err = "tracked buffer '{wa.buf}' passed whole to call '{wa.callee}' - teach the intrinsic table or {escape}"
+            astVisitor.err = ("tracked buffer '{wa.buf}' passed whole to call '{wa.callee}', whose parameter the classifier cannot read - a helper is declared above the class that calls it or in a required module, and its overloads agree on that parameter's constness; " +
+                "else teach the intrinsic table or {escape}")
         } elif (dir == "write") {
             res.writes |> insert(wa.buf)
         } else {

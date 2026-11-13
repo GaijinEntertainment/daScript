@@ -4047,7 +4047,8 @@ box the arm needs `clang++` on PATH and skips without it) and reads the same `EX
 Metal kernel lens's `@role` derivation over the `_role_fixtures/` kernels.
 `test_grid_micro_grammar` and `test_role_whole_buffer_rule`: the `@role` derivation over the `_role_fixtures/` kernels,
 each compiled at run time - the grid micro-grammar, a buffer passed whole taking the callee
-parameter's direction (a contradicting `@role` refused), a pointer into a tracked buffer taking the
+parameter's direction (a contradicting `@role` refused), a required module's helper deciding it the same way (a private namesake of opposite direction in another required module having no vote) and a
+helper declared below the class refused naming where a helper goes (that cell skips without das_metal), a pointer into a tracked buffer taking the
 pointee's const, the staged GEMM's device step and the device-pair step and store deriving their
 inline-addr operands (a wrong role on either refused), a generic helper resolved by base name, and
 a body that delegates to methods. Without das_metal the device-pair cell skips and the other cells

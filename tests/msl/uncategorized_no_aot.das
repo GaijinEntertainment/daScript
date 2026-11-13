@@ -79,6 +79,8 @@ def test_fail_closed_rejections(t : T?) {
         check_rejects(t, "_fc_ustruct_nested", "only int/uint/float fields lower")
         check_rejects(t, "_fc_method_recursion", "method `mrec` is recursive")
         check_rejects(t, "_fc_method_abstract", "has no resolvable body")
+        check_rejects(t, "_fc_base_method_call",
+            "names a base class's method the kernel class overrides")
         check_rejects(t, "_fc_wg_binding", "threadgroup memory is not a bindable buffer")
         check_rejects(t, "_fc_wg_type", "@workgroup member `tile` must be a scalar, vector, or single-dimension fixed array")
         check_rejects(t, "_fc_lattice_wide", "is CPU-only (8/16-lane lattice forms do not exist in shaders")

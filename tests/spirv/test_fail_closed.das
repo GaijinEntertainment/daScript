@@ -116,6 +116,8 @@ def test_fail_closed_rejections(t : T?) {   // nolint:STYLE038 — flat one-chec
         check_rejects(t, "_fc_recursion", "recursion is not supported")
         check_rejects(t, "_fc_mutual", "recursion is not supported")
         check_rejects(t, "_fc_badparam", "parameter 'x' of type tRange is not supported")
+        check_rejects(t, "_fc_base_method_call",
+            "names a base class's method the kernel class overrides")
         check_rejects(t, "_fc_badret", "return type tRange is not supported")
         check_rejects(t, "_fc_inline_early_return",
             "an inlined function returns only from its last statement")

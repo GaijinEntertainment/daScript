@@ -29,6 +29,54 @@ class MulAB {
     }
 }
 
+// A private kernel class family beside its public twin: the compiler replaces a closed family's self-method invoke with
+// a direct call of the method's function, and both forms lower to the same text.
+class private CuPvBase {
+    @ssbo @binding = 0 xs : array<float>
+    @ssbo @binding = 1 ys : array<float>
+    @ssbo @binding = 2 zs : array<float>
+
+    def pick(i : uint) : float => xs[i] * 2.0
+    def store(i : uint; v : float) {
+        ys[i] = v
+    }
+    def put(var dst : array<float>; i : uint; v : float) {
+        dst[i] = v
+    }
+}
+
+class private CuPvKid : CuPvBase {
+    [cuda_kernel(name="pvkid_cuda", local_size_x = 64), marker(no_coverage)]
+    def run {
+        let i = gl_GlobalInvocationID.x
+        store(i, pick(i))
+        put(zs, i, pick(i))
+    }
+}
+
+class CuPbBase {
+    @ssbo @binding = 0 xs : array<float>
+    @ssbo @binding = 1 ys : array<float>
+    @ssbo @binding = 2 zs : array<float>
+
+    def pick(i : uint) : float => xs[i] * 2.0
+    def store(i : uint; v : float) {
+        ys[i] = v
+    }
+    def put(var dst : array<float>; i : uint; v : float) {
+        dst[i] = v
+    }
+}
+
+class CuPbKid : CuPbBase {
+    [cuda_kernel(name="pbkid_cuda", local_size_x = 64), marker(no_coverage)]
+    def run {
+        let i = gl_GlobalInvocationID.x
+        store(i, pick(i))
+        put(zs, i, pick(i))
+    }
+}
+
 struct AxpyArgs {
     nelem : uint
     scale : float
@@ -1705,13 +1753,15 @@ def public all_cuda_censuses : array<string> {
         userfns_cuda_census, atomics_cuda_census, consttab_cuda_census, lattice_cuda_census, ptrs_cuda_census,
         alias_cuda_census, blocks_cuda_census, packs_cuda_census, coop_cuda_census, cm2_cuda_census, cm2flash_cuda_census, cm2flash_loads_first_cuda_census, cm2w8_cuda_census,
         cm2dec_cuda_census, cm2deck_cuda_census, cm2raw_cuda_census, cm2i8_cuda_census, intrin_cuda_census, intrin_fp4_cuda_census,
-        diverge_cuda_census, pins_cuda_census]
+        diverge_cuda_census, pins_cuda_census, pvkid_cuda_census, pbkid_cuda_census]
 }
 
 //! `min_cc`: the lowest compute capability whose NVRTC target compiles the text, 0 for every card
 def public all_cuda_texts : array<tuple<name : string; text : string; entry : string; min_cc : int>> {
     return <- [(name = "mul_ab", text = mul_ab_cuda, entry = mul_ab_cuda_entry, min_cc = 0),
         (name = "axpy", text = axpy_cuda, entry = axpy_cuda_entry, min_cc = 0),
+        (name = "pvkid", text = pvkid_cuda, entry = pvkid_cuda_entry, min_cc = 0),
+        (name = "pbkid", text = pbkid_cuda, entry = pbkid_cuda_entry, min_cc = 0),
         (name = "uarith", text = uarith_cuda, entry = uarith_cuda_entry, min_cc = 0),
         (name = "iarith", text = iarith_cuda, entry = iarith_cuda_entry, min_cc = 0),
         (name = "farith", text = farith_cuda, entry = farith_cuda_entry, min_cc = 0),

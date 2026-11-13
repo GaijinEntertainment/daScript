@@ -38,6 +38,14 @@ def test_cuda_signature(t : T?) {
         lacks(t, mul_ab_cuda, "__shared__", "no shared memory")
         lacks(t, mul_ab_cuda, "struct half", "no half prelude")
     }
+    t |> run("a closed class family's direct method calls lower like the invoke") <| @(t : T?) {
+        has(t, pvkid_cuda, "store(", "the inherited void method is a call")
+        has(t, pvkid_cuda, "pick(", "the inherited value method is a call")
+        has(t, pvkid_cuda, "    float* zs = __das_b.zs;", "a buffer a method writes through its parameter is mutable")
+        lacks(t, pvkid_cuda, "self", "no self parameter")
+        lacks(t, pvkid_cuda, "struct CuPvBase", "no class struct")
+        t |> equal(replace(pbkid_cuda, "CuPbKid", "CuPvKid"), pvkid_cuda, "the private family's text is the public twin's")
+    }
     t |> run("the args struct rides by value, a method is a __device__ function with hidden parameters") <| @(t : T?) {
         has(t, axpy_cuda, "struct __align__(8) AxpyArgs \{\n    uint nelem;\n    float scale;\n    uint zero;\n\};", "kargs struct")
         has(t, axpy_cuda, "Axpy_run(const Axpy_run_bufs __das_b, const AxpyArgs ka)", "kargs param")
