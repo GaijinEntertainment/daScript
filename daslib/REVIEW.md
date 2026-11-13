@@ -5,8 +5,9 @@ docs: `ARCHITECTURE.md`, `ARCHITECTURE_CAPI.md`, `ARCHITECTURE_CURSOR.md`, `ARCH
 `ARCHITECTURE_JOBQUE.md`, `ARCHITECTURE_LINQ.md`, `ARCHITECTURE_LINQ_FOLD.md`,
 `ARCHITECTURE_LINQ_FOLD_SOURCES.md`, `ARCHITECTURE_LINT.md`, `ARCHITECTURE_MEMORY.md`,
 `ARCHITECTURE_RST.md`, `ARCHITECTURE_SHADER.md`, `ARCHITECTURE_SQL_LINQ.md`,
-`ARCHITECTURE_SYNTAX.md`. A diff touching the linq family - `linq*.das`, `sql_*.das` - applies
-`REVIEW_LINQ.md` too. A diff that changes compile-time AST-building code - a class deriving an
+`ARCHITECTURE_STYLE_LINT.md`, `ARCHITECTURE_SYNTAX.md`. A diff touching the linq family -
+`linq*.das`, `sql_*.das` - applies `REVIEW_LINQ.md` too. A diff that changes compile-time
+AST-building code - a class deriving an
 `Ast*Annotation` or `Ast*Macro`, an `AstVisitor` a macro or an annotation runs at compile time
 (the `aot_cpp.das` visitors included), a `[macro_function]`, or any function that calls
 `qmacro*`, `apply_template`, `macro_error`, or `macro_sticky_error` - applies

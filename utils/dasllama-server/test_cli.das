@@ -17,7 +17,7 @@ require daslib/strings_boost                              // join / split
 require strings
 
 let CELL_TIMEOUT_SEC = 300.0   // a cold cell parses, JITs, loads its models and answers
-let JFK_PATH = "modules/dasLLAMA/models/jfk_ask_not.wav"   // in-tree, 4 s, 16 kHz mono
+let JFK_PATH = get_full_file_name(path_join(get_das_root(), "modules/dasLLAMA/models/jfk_ask_not.wav"))   // in-tree, 4 s, 16 kHz mono
 let CATS = "coco-val2017-000000039769.jpg"
 
 // the fastest column
@@ -36,13 +36,9 @@ let E2B = "gemma-4-E2B-it-Q4_K_M.gguf"
 let E2B_MMPROJ = "mmproj-gemma-4-E2B-it-bf16.gguf"
 let POCKET = "pocket-tts-en-q8.gguf"
 
-def private model(name : string) : string => path_join(models_dir(), name)
+def private model(name : string) : string => get_full_file_name(path_join(models_dir(), name))
 
-def private scratch(name : string) : string {
-    var terr : string
-    let tmp = temp_directory(terr)
-    return path_join(empty(tmp) ? "." : tmp, "dasllama_cli_{name}_{ref_time_ticks()}")
-}
+def private scratch(name : string) : string => path_join(test_temp_dir(), "dasllama_cli_{name}_{ref_time_ticks()}")
 
 //! The cell's argv: the daslang this test runs under, -jit, cli.das, then the subcommand and its flags.
 def private cli_argv(args : array<string>) : array<string> {
@@ -56,15 +52,11 @@ struct private CellResult {
     out : string
 }
 
-//! One dasllama-cli invocation as a user runs it; a [tune] bootstrap exit relaunches once.
+//! One dasllama-cli invocation as a user runs it, from the test's own temp folder.
 def private run_cli(args : array<string>) : CellResult {
-    let argv <- cli_argv(args)
+    let run <- child_in_temp_dir(cli_argv(args), NO_IMAGE_ENV)
     var out = ""
-    var rc = run_and_capture(argv, out, CELL_TIMEOUT_SEC)
-    if (rc == 3 && find(out, "restart to apply") >= 0) {
-        out = ""   // the child adopted this box's kernels and exited with the restart code
-        rc = run_and_capture(argv, out, CELL_TIMEOUT_SEC)
-    }
+    let rc = run_child(run, out, CELL_TIMEOUT_SEC)
     return CellResult(rc = rc, out = out)
 }
 
@@ -424,7 +416,8 @@ def test_preload_hosts(t : T?) {
         var argv <- cli_argv(["complete", "-m", "x.gguf", "hi"])
         argv |> erase(1)   // drop the -jit
         var out = ""
-        let rc = run_and_capture(argv, out, CELL_TIMEOUT_SEC)
+        let no_env : array<string>
+        let rc = run_and_capture(argv, test_temp_dir(), no_env, out, CELL_TIMEOUT_SEC)
         t |> equal(rc, 1, "exit 1: {tail_of(out)}")
         t |> success(find(out, "run under the JIT") >= 0, "the refusal names the JIT")
     }
@@ -698,7 +691,7 @@ def test_doc_scenarios(t : T?) {
         let argv <- cli_argv(["complete", "-m", llm, "-n", "6", "The capital of France is"])
         let quoted <- [for (a in argv); "'{a}'"]
         var out = ""
-        let rc = run_and_capture(["/bin/sh", "-c", "{join(quoted, " ")} 2>/dev/null"], out, CELL_TIMEOUT_SEC)
+        let rc = run_and_capture(["/bin/sh", "-c", "{join(quoted, " ")} 2>/dev/null"], test_temp_dir(), NO_IMAGE_ENV, out, CELL_TIMEOUT_SEC)
         t |> equal(rc, 0, "exit 0: {tail_of(out)}")
         var non_empty = 0
         for (ln in split(out, "\n")) {
@@ -720,12 +713,12 @@ def test_doc_scenarios(t : T?) {
         let argv <- cli_argv(["complete", "-m", llm, "-n", "4", "--quiet", "--gpu", "off", "--verbose", "hi"])
         let quoted <- [for (a in argv); "'{a}'"]
         var err_only = ""
-        let rc_e = run_and_capture(["/bin/sh", "-c", "{join(quoted, " ")} 2>&1 >/dev/null"], err_only, CELL_TIMEOUT_SEC)
+        let rc_e = run_and_capture(["/bin/sh", "-c", "{join(quoted, " ")} 2>&1 >/dev/null"], test_temp_dir(), NO_IMAGE_ENV, err_only, CELL_TIMEOUT_SEC)
         t |> equal(rc_e, 0, "exit 0: {tail_of(err_only)}")
         t |> success(find(err_only, "[info] dasllama-cli: tune status") >= 0, "the tune status record is echoed as a plain [info] line: {tail_of(err_only)}")
         t |> success(find(err_only, "\"level\":\"info\"") < 0, "the console gets the plain line, not the file's JSON")
         var out_only = ""
-        let rc_o = run_and_capture(["/bin/sh", "-c", "{join(quoted, " ")} 2>/dev/null"], out_only, CELL_TIMEOUT_SEC)
+        let rc_o = run_and_capture(["/bin/sh", "-c", "{join(quoted, " ")} 2>/dev/null"], test_temp_dir(), NO_IMAGE_ENV, out_only, CELL_TIMEOUT_SEC)
         t |> equal(rc_o, 0, "exit 0: {tail_of(out_only)}")
         t |> success(find(out_only, "[info] ") < 0, "no record on stdout: {out_only}")
     }

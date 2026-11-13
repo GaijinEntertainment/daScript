@@ -28,10 +28,6 @@ require dasllama/dasllama_gpu_resident   // resident_mirror_dtype — the mirror
 require ../performance/model_specs.das   // prefix_match_len / fixture_ok — the fixture compare the board gates read too
 require _compares public
 
-// Models larger than this are large-tier. 6 GiB cleanly splits the ~5GB-and-under carriers
-// (incl. gemma-4-E2B at 4.97GB) from the 7.7GB+ heavies.
-let LARGE_TIER_BYTES = 6ul * 1024ul * 1024ul * 1024ul
-
 //! The KV codec a session takes to be served by the mirror the last load armed - a session on another codec rides the CPU rails.
 def mirror_kv_dtype() : KVDtype => gpu_device_session_dtype_()
 
@@ -410,33 +406,14 @@ def tts_pack_missing(t : T?; packs : array<string>) : bool {
 // of masquerading as a pass (two real x64 failures hid behind the passing form for months).
 // `skip` does NOT unwind: the caller's `if (!model_available(t, path)) return` exits the arm.
 def model_available(t : T?; path : string) : bool {
-    let st = stat(path)
-    if (!st.is_valid) {
-        t |> skip("{base_name(path)} not present")
-        return false
-    }
-    var total = st.size
-    // split models tier on their TOTAL size; an incomplete split is "not present" (skip), not a panic
-    let shards <- gguf_shard_paths(path, [missing_ok = true])
-    if (empty(shards)) {
-        t |> skip("{base_name(path)} split is incomplete (missing sibling shard)")
-        return false
-    }
-    if (length(shards) > 1) {
-        total = 0ul
-        for (s in shards) {
-            total += stat(s).size
-        }
-    }
-    if (!parity_full_mode() && total > LARGE_TIER_BYTES) {
-        t |> skip("{base_name(path)} is large-tier ({int64(total / (1024ul * 1024ul * 1024ul))} GB) - set DASLLAMA_PARITY_FULL=1 to run")
-        return false
-    }
-    return true
+    let why = model_tier_skip_reason(path, parity_full_mode())
+    return true if (empty(why))
+    t |> skip(why)
+    return false
 }
 
 //! `model_available` for a snapshot directory (an HF-cache snapshot, a pack): `dir` holds a `config.json`, and its files total
-//! under `LARGE_TIER_BYTES` unless DASLLAMA_PARITY_FULL=1 is set; else a loud skip on `t` and false
+//! under `MODEL_TIER_CEILING_BYTES` unless DASLLAMA_PARITY_FULL=1 is set; else a loud skip on `t` and false
 def snapshot_available(t : T?; snap : string) : bool {
     if (!fexist(path_join(snap, "config.json"))) {
         t |> skip("snapshot {snap} not present")
@@ -448,7 +425,7 @@ def snapshot_available(t : T?; snap : string) : bool {
             total += stat(path_join(snap, name)).size
         }
     }
-    if (!parity_full_mode() && total > LARGE_TIER_BYTES) {
+    if (!parity_full_mode() && total > MODEL_TIER_CEILING_BYTES) {
         t |> skip("snapshot {base_name(snap)} is large-tier ({int64(total / (1024ul * 1024ul * 1024ul))} GB) - set DASLLAMA_PARITY_FULL=1 to run")
         return false
     }

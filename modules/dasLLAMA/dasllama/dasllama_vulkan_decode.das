@@ -4907,6 +4907,7 @@ def vk_rdec_kv_xfer(var spans_in : array<RdecKvSpan>; up : bool) : bool {
         pool_xfer_batch(spans, i, j, up)
         i = j
     }
+    g_pool_xfer_runs |> clear()
     return true
 }
 

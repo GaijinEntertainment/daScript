@@ -82,6 +82,10 @@ struct Session {
 def overwrite_resize(@scratch var a : array<numT>; need : int64) { ... }
 ```
 
+A `@scratch` container that outlives the call (a global, or a field of one) and holds raw
+pointers is emptied on every exit of the function that fills it: LINT034 reports a borrowed
+pointer still in it on return.
+
 A sizing call whose destination reaches a `@scratch` declaration is not descended into - a struct
 field, a by-ref helper parameter, or a module global (`var @scratch g : array<T>`; the annotation
 goes AFTER `var`, before it is a syntax error). The mark covers the sizing set

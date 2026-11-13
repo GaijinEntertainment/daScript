@@ -286,25 +286,18 @@ def private perf033_delete_frees_shared(td : TypeDeclPtr; var seen : table<Struc
     return false
 }
 
-def private has_annotation(annotations; name : string) : bool {
-    for (a in annotations) {
-        if (a.name == name) return true
-    }
-    return false
-}
-
 def private is_annotated_dest(var expr : Expression?; name : string) : bool {
     return false if (expr == null)
     if (expr is ExprField) {
         var f = expr as ExprField
         let fd = f.field
-        if (fd != null && has_annotation(fd.annotation, name)) return true
+        if (fd != null && lint_has_annotation(fd.annotation, name)) return true
         return is_annotated_dest(f.value, name)
     }
     if (expr is ExprVar) {
         var v = (expr as ExprVar).variable
         if (v != null) {
-            if (has_annotation(v.annotation, name)) return true
+            if (lint_has_annotation(v.annotation, name)) return true
             if (v._type != null && v._type.flags.ref && v.init != null) {
                 return is_annotated_dest(v.init, name)
             }
@@ -323,7 +316,7 @@ def private is_scratch_dest(var expr : Expression?) : bool => is_annotated_dest(
 def private takes_scratch_arg(fn : Function?) : bool {
     return false if (fn == null)
     for (arg in fn.arguments) {
-        if (has_annotation(arg.annotation, "scratch")) return true
+        if (lint_has_annotation(arg.annotation, "scratch")) return true
     }
     return false
 }
@@ -2423,7 +2416,7 @@ class PerfLintVisitor : AstVisitor {
     }
 
     def check_perf032_declaration(td : TypeDeclPtr; annotations : AnnotationArgumentList; at : LineInfo) : void {
-        if (td == null || !has_annotation(annotations, "exact_size")) return
+        if (td == null || !lint_has_annotation(annotations, "exact_size")) return
         if (td.baseType != Type.tArray) {
             perf_warning("PERF032: @exact_size does not apply to " +
                 "`{describe(td, false, false, false)}` - the annotation is an array contract " +

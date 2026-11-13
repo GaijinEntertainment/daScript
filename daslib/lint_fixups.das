@@ -235,3 +235,12 @@ def public lint_module_visible(fn : Function?; name : string) : bool {
     let m = find_module(compiling_program(), name)
     return m != null && is_visible_directly(fn._module, m)
 }
+
+def public lint_has_annotation(annotations; name : string) : bool {
+    //! true when the annotation list of a variable, a field or an
+    //! argument carries `name`
+    for (a in annotations) {
+        return true if (a.name == name)
+    }
+    return false
+}

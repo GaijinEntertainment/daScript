@@ -4441,7 +4441,7 @@ class StyleLintVisitor : AstVisitor {
         st030_report_requires(prog, module_files, this_name, hook_reach)
     }
 
-    [arch(at="ARCHITECTURE_LINT.md#style-lint-require-group")]
+    [arch(at="ARCHITECTURE_STYLE_LINT.md#style-lint-require-group")]
     def st030_report_requires(prog : ProgramPtr; module_files : table<string>; // nolint:STYLE038
                               this_name : string; hook_reach : table<string; int>) : void {
         var group_line : table<string; bool>
@@ -4828,7 +4828,8 @@ class StyleLintVisitor : AstVisitor {
     }
 
     def override visitExpression(var expr : ExpressionPtr) : ExpressionPtr {
-        //! The frame is the subtree's unsafe-requirement summary; mechanics in daslib/ARCHITECTURE_LINT.md.
+        //! The frame is the subtree's unsafe-requirement summary;
+        //! mechanics in daslib/ARCHITECTURE_STYLE_LINT.md.
         let n = length(unsafe_stack)
         var frame = unsafe_stack[n - 1]
         unsafe_stack |> pop

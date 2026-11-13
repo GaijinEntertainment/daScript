@@ -56,6 +56,19 @@ def test_shard_split_expansion(t : T?) {
     remove(paths[1])
 }
 
+[test(description = "`model_tier_skip_reason` names a missing file, an incomplete split and a model over the ceiling, and answers nothing for a model under the ceiling or a full run")]
+def test_model_tier_skip_reason(t : T?) {
+    let whole = path_join(test_temp_dir(), "dasllama_tier_whole.gguf")
+    let lone = path_join(test_temp_dir(), "dasllama_tier_lone-00001-of-00002.gguf")
+    t |> success(fwrite(whole, "0123456789") && fwrite(lone, "x"), "the files are written")
+    t |> success(find(model_tier_skip_reason(path_join(test_temp_dir(), "dasllama_tier_absent.gguf"), false), "not present") >= 0, "a missing file")
+    t |> success(find(model_tier_skip_reason(lone, false), "split is incomplete") >= 0, "a split with a shard missing")
+    t |> equal(model_tier_skip_reason(whole, false), "", "ten bytes sit under the tier's ceiling")
+    t |> equal(model_tier_skip_reason(whole, false, 10ul), "", "a model of exactly the ceiling is not over it")
+    t |> success(find(model_tier_skip_reason(whole, false, 9ul), "large-tier") >= 0, "ten bytes over a ceiling of nine")
+    t |> equal(model_tier_skip_reason(whole, true, 9ul), "", "a full run takes the large tier")
+}
+
 [test(description = "`gguf_shard_paths` appends the NextN head as the last shard: the same-named mtp sibling, else the stem Q8_0 head (also for a -UD trunk), or the override exclusively; a missing override attaches nothing and a head never recurses")]
 def test_shard_mtp_head_sidecar(t : T?) {
     var terr = ""
