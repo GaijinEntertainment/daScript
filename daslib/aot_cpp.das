@@ -377,7 +377,7 @@ def describeCppTypeEx(typeDecl : TypeDeclPtr;   // nolint:STYLE038 - one arm per
                 write(writer, "TTuple<{typeDecl.tupleSize},{types}>")
             }
         } elif (baseType == Type.tVariant) {
-            let allBare = (each(typeDecl.argTypes)._all(_.baseType == Type.tVoid)._fold())
+            let allBare = (each(typeDecl.argTypes)._all(_.sizeOf == 0)._fold())
             let types = allBare ? "" : (each(typeDecl.argTypes)
                 ._select(describeCppTypeEx(_, DescribeConfig(cross_platform = cfg.cross_platform), useAlias))
                 .to_array()

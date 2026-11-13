@@ -733,3 +733,12 @@ def test_destructure_names_at(t : T?) {
     let (q, at, x, y) = (1, 2, 3, 4)
     t |> equal(q + at * 10 + x * 100 + y * 1000, 4321)
 }
+
+tuple EmptyPayload {}
+
+[test(description = "a variant whose only case holds an empty tuple carries no payload and still tests its case")]
+def test_variant_of_empty_tuple(t : T?) {
+    let v : variant<only : EmptyPayload>
+    t |> success(v is only)
+    t |> equal(typeinfo sizeof(v), 4)
+}
