@@ -11,10 +11,12 @@ enum public WatchVerdict {
     review_to_triage
     ready_to_merge
     conflict
+    green_unreviewed
 }
 
 def public watch_verdict(fail_count : int; pending_count : int; reviewed_tip : bool;
-                         unresolved : int; conflicted : bool = false) : WatchVerdict {
+                         unresolved : int; conflicted : bool = false;
+                         review_wait_over : bool = false) : WatchVerdict {
     // a tip that conflicts with its base outranks a red check: nothing
     // merges before the rebase, and the rebase re-runs CI
     return WatchVerdict.conflict if (conflicted)
@@ -24,8 +26,16 @@ def public watch_verdict(fail_count : int; pending_count : int; reviewed_tip : b
     // triage does not wait for the matrix - the loop iterates against the review, not CI
     return WatchVerdict.review_to_triage if (reviewed_tip && unresolved > 0)
     return WatchVerdict.ready_to_merge if (reviewed_tip && unresolved == 0 && pending_count == 0)
+    // a reviewer over its limit answers nothing at all: once CI is
+    // green and the wait for the review is spent, the watch says so
+    let green = pending_count == 0 && unresolved == 0
+    return WatchVerdict.green_unreviewed if (green && !reviewed_tip && review_wait_over)
     return WatchVerdict.keep_polling
 }
+
+// polls a green, unreviewed tip is given to wait for its review
+def public review_wait_polls(wait_min : int; interval_sec : int) : int =>
+    max(0, (wait_min * 60) / max(1, interval_sec))
 
 // "<bucket> <name>" check lines -> failing names + pending count; other buckets pass or skip.
 // A cancelled lane is red until it is re-run - between a cancel and a rerun it must not read as "nothing pending".
@@ -63,6 +73,7 @@ def public exit_for(verdict : WatchVerdict) : int {
     return 3 if (verdict == WatchVerdict.review_to_triage)
     return 4 if (verdict == WatchVerdict.conflict)
     return 0 if (verdict == WatchVerdict.ready_to_merge)
+    return 6 if (verdict == WatchVerdict.green_unreviewed)
     return -1
 }
 

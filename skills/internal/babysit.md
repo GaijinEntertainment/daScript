@@ -8,7 +8,8 @@ GitHub mechanics live in the tool:
 `daslang utils/internal/pr-babysit/main.das -- --pr <N> --watch`. Exit codes: `0` ready to
 merge, `1` request/API failure, `2` CI red (failing checks named), `3` a review targets the
 tip with unresolved threads, `4` the tip conflicts with its base (GitHub's `mergeable` read
-false), `5` nothing actionable within the timeout. Run it BARE in the
+false), `5` nothing actionable within the timeout, `6` CI green with no review of the tip
+(below). Run it BARE in the
 background, never piped - a pipeline reports the last command's exit code, and the exit code
 IS the verdict. A lane red on master, with its control posted on the PR (Section 2), is passed
 as `--ignore "<check name>"` (repeatable) so the watch keeps reporting the lanes that are the
@@ -39,6 +40,12 @@ open. CI *does* auto-run on every commit via the `pull_request` trigger.
 
 `--watch` exit `0` means CI green, tip reviewed, zero unresolved; the replies and the
 changed-nothing judgment are yours.
+
+**`--watch` exit `6` means CI is green, no thread is open, and no review of the tip arrived
+within `--review-wait-min` (5 by default) of the matrix finishing.** A reviewer over its
+limit leaves no review, no comment and no request on the PR, so the missing review is the
+only signal. Report the green tip and the missing review to the user; the merge is the
+user's call, never yours.
 
 ## 1. The loop
 

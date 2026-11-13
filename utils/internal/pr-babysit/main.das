@@ -3,7 +3,9 @@ options gen2
 // pr-babysit - the GitHub mechanics of the babysit loop (skills/internal/babysit.md keeps the policy).
 // Exit codes: 0 ready to merge, 1 request/api failure, 2 CI red, 3 review to triage,
 // 4 the tip conflicts with its base (rebase before anything else),
-// 5 watch timeout. Thread resolution is GraphQL-only - REST has none.
+// 5 watch timeout, 6 CI green but no review of the tip within
+// --review-wait-min (a reviewer over its limit leaves no trace).
+// Thread resolution is GraphQL-only - REST has none.
 // Bot reviewers never
 // appear in requested_reviewers or reviewRequests and Copilot converts a request into a
 // review within seconds, so the only trustworthy signal is the review arriving in
@@ -45,6 +47,9 @@ struct Config {
 
     @clarg_doc = "Watch timeout, minutes"
     timeout_min : int = 45
+
+    @clarg_doc = "Minutes a green tip waits for its review before --watch exits 6"
+    review_wait_min : int = 5
 }
 
 def private gh(args : array<string>; var out : string&) : int {
@@ -168,8 +173,11 @@ def private request_review_graphql(cfg : Config) : bool {
 
 def private watch(cfg : Config) : int {
     let polls = poll_budget(cfg.timeout_min, cfg.interval_sec)
+    let review_polls = review_wait_polls(cfg.review_wait_min, cfg.interval_sec)
     var last_state = ""
     var escalated = false
+    var waited_head = ""
+    var waited_polls = 0
     for (poll in range(polls)) {
         if (poll != 0) {
             sleep(uint(cfg.interval_sec * 1000))
@@ -197,12 +205,19 @@ def private watch(cfg : Config) : int {
             to_log(LOG_INFO, "pr-babysit: {state}\n")
             last_state = state
         }
+        let green_unreviewed = empty(cls.fails) && cls.pending == 0 && !reviewed
+        waited_polls = green_unreviewed && head == waited_head ? waited_polls + 1 : 0
+        waited_head = head
         let verdict = watch_verdict(length(cls.fails), cls.pending, reviewed, unresolved,
-            conflicted)
+            conflicted, waited_polls >= review_polls)
         if (verdict == WatchVerdict.conflict) {
             to_log(LOG_ERROR, "pr-babysit: the tip conflicts with its base - rebase first\n")
         } elif (verdict == WatchVerdict.ci_red) {
             to_log(LOG_ERROR, "pr-babysit: CI red - {join(cls.fails, ", ")}\n")
+        } elif (verdict == WatchVerdict.green_unreviewed) {
+            to_log(LOG_WARNING, "pr-babysit: CI green on {slice(head, 0, 9)}, no review of the " +
+                "tip within {cfg.review_wait_min} min - the reviewer may be over its limit; " +
+                "the merge is the user's call\n")
         }
         let ec = exit_for(verdict)
         return ec if (ec >= 0)

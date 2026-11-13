@@ -11,7 +11,7 @@ then
     hookSpecificOutput: {
       hookEventName: "PreToolUse",
       permissionDecision: "deny",
-      permissionDecisionReason: "Hand-rolled PR watching. The babysit driver is `daslang utils/internal/pr-babysit/main.das -- --pr <N> --watch` — it watches CI, the latest review against the tip, and unresolved threads, and its exit code is the verdict (0 merge-ready, 2 CI red, 3 review needs action, 5 timeout). Run it BARE in a background Bash, never piped. See skills/internal/babysit.md."
+      permissionDecisionReason: "Hand-rolled PR watching. The babysit driver is `daslang utils/internal/pr-babysit/main.das -- --pr <N> --watch` — it watches CI, the latest review against the tip, and unresolved threads, and its exit code is the verdict (0 merge-ready, 2 CI red, 3 review needs action, 5 timeout, 6 CI green with no review of the tip). Run it BARE in a background Bash, never piped. See skills/internal/babysit.md."
     }
   }
 else
