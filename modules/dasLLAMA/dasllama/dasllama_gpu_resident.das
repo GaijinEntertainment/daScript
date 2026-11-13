@@ -3414,6 +3414,7 @@ def gpu_resident_assist_verify(t : Model; var sessions : array<Session?>; toks :
             tok0 += nr[g]
         }
         rdec_token_n(g_rdec_x_n, g_rdec_cos_n, g_rdec_ple_rows, false, g_rdec_row_ids, g_rdec_poss, g_rdec_cnts, g_rdec_regs, rows, g_rdec_lrows, g_rdec_picks)
+        g_rdec_lrows |> clear()
         g_rdec_av_hid |> grow_resize(dim)
         row = 0l
         for (g in range64(g0, g1)) {
@@ -6179,6 +6180,7 @@ def private rdec_prefill_peel(t : Model; var s : Session; r, npos, start_pos : i
             rdec_row_plane(i, start_pos + i, r, i == npos - 1l ? unsafe(addr(s.logits[0])) : null)
         }
         rdec_token_n(g_rdec_x_n, g_rdec_cos_n, g_rdec_ple_rows, ple_raw, g_rdec_row_ids, g_rdec_poss, g_rdec_cnts, g_rdec_regs, npos, g_rdec_lrows, g_rdec_picks)
+        g_rdec_lrows |> clear()
     }
     g_rdec_peels++
 }
@@ -6347,6 +6349,7 @@ def private rdec_batch_group(t : Model; ws : BatchWorkspace; var sessions : arra
     prof_add("nrow_prep", ts_prep)
     let ts_gpu = prof_ticks()
     rdec_token_n(g_rdec_x_n, g_rdec_cos_n, g_rdec_ple_rows, ple_raw, g_rdec_row_ids, g_rdec_poss, g_rdec_cnts, g_rdec_regs, nrows, g_rdec_lrows, g_rdec_picks)
+    g_rdec_lrows |> clear()
     prof_add("nrow_gpu", ts_gpu)
     let ts_land = prof_ticks()
     for (i in range64(nrows)) {
