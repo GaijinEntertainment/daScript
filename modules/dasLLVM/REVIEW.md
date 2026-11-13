@@ -22,11 +22,13 @@ docs: `ARCHITECTURE.md`, `ARCHITECTURE_CODEGEN_IDENTITY.md`, `ARCHITECTURE_DEBUG
   or the `register_module_group("tune_framework", ...)` row in `.das_module` - is reviewed with
   `skills/internal/llvm_tune_internals.md`.**
 
-- **A change to any file under this module but a `.md` runs the module-owned suite** (command
-  and build gate: `tests/README.md` here), **and a change to a file the emitter pin hashes
-  (`EMITTER_FILES` in `tests-cpp/small/test_jit_emitter_pin.cpp`, repo root) also runs that test
-  and `dastest/dastest.das -jit -- --test tests` (repo root).** CI runs some of its test files
-  only nightly, so before merge this run is the only one that covers every file.
+- **A change to any file under this module but a `.md` runs the module-owned suite (command
+  and build gate: `tests/README.md` here).** CI runs some test files of that suite only nightly,
+  so before merge this run is the only one that covers every one of them.
+
+- **A change to a file under `daslib/` here that `EMITTER_FILES`
+  (`tests-cpp/small/test_jit_emitter_pin.cpp`, repo root) names also runs
+  `dastest/dastest.das -jit -- --test tests` (repo root).**
 
 - **A diff that adds or changes a branch keyed on what `get_platform_name()`,
   `get_architecture_name()`, `cpu_supports()`, or `host_llvm_feature()` returns, directly or

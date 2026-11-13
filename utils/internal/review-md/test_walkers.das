@@ -4,6 +4,7 @@ require dastest/testing_boost public
 require strings
 require daslib/strings_boost
 require daslib/fio
+require dastest/review_gate
 require gate
 
 // End-to-end walker coverage against planted fixture repos, spawned exactly as CI runs
@@ -792,10 +793,27 @@ def test_vulkan_gate_fixtures(t : T?) {
 // name never reaches a traced variable a write line mentions.
 let LLVM_TESTS_GREEN = "options gen2\n\nlet private WORK_DEFAULTS = \"tune_defaults\"\n\ndef private copy_one(name, dstdir : string) \{\n    let text = fread(\"\{get_this_module_dir()\}/\{name\}\")\n    fwrite(path_join(dstdir, name), text)\n\}\n\ndef private stage(work : string) \{\n    let dst = path_join(work, WORK_DEFAULTS)\n    mkdir_rec(dst)\n    copy_one(\"arm64.tune-defaults.json\", dst)\n    remove(path_join(dst, \"arm64.tune-defaults.json\"))\n\}\n\ndef private read_tracked() : string \{\n    return fread(\"\{get_this_module_dir()\}/llvm_tune_profiles_defaults/arm64.tune-defaults.json\")\n\}\n"
 
+let LLVM_TOY_EMITTER = "options gen2\n"
+let LLVM_PIN_TEST = "tests-cpp/small/test_jit_emitter_pin.cpp"
+let LLVM_HASH_FILE = "modules/dasLLVM/daslib/llvm_jit_run.das"
+let LLVM_TOY_PIN_TEST = ("static const char * EMITTER_FILES[] = \{\n" +
+    "    \"llvm_toy.das\",   // \"llvm_commented.das\" must not count\n\};\n")
+
+def reports(t : T?; gate_output, finding : string) {
+    t |> success(find(gate_output, finding) >= 0, "finding fired: {finding}\n{gate_output}")
+}
+
+def llvm_toy_pin(emitter_text : string) : string =>
+    "0x{fnv1a(emitter_text, fnv1a("llvm_toy.das\n", FNV1A_SEED)):x}ul"
+
 def make_llvm_fixture(t : T?; tree, root : string) {
-    write_at(t, root, "modules/dasLLVM/daslib/llvm_toy.das", "options gen2\n")
+    write_at(t, root, "modules/dasLLVM/daslib/llvm_toy.das", LLVM_TOY_EMITTER)
+    write_at(t, root, LLVM_HASH_FILE,
+        "options gen2\nlet LLVM_JIT_EMITTER_HASH : uint64 = {llvm_toy_pin(LLVM_TOY_EMITTER)}\n")
+    write_at(t, root, LLVM_PIN_TEST, LLVM_TOY_PIN_TEST)
     write_at(t, root, "modules/dasLLVM/bindings/llvm_toy_bind.das", "options gen2\n")
-    write_at(t, root, "modules/dasLLVM/.das_module", "\"llvm\", \"llvm_toy\", \"llvm_toy_bind\"\n")
+    write_at(t, root, "modules/dasLLVM/.das_module",
+        "\"llvm\", \"llvm_toy\", \"llvm_toy_bind\", \"llvm_jit_run\"\n")
     write_at(t, root, "modules/dasLLVM/REVIEW.md", "rules\n")
     write_at(t, root, "modules/dasLLVM/tests/llvm_tune_profiles_defaults/arm64.tune-defaults.json", "\{\}\n")
     write_at(t, root, "modules/dasLLVM/tests/llvm_toy_profiles.das", LLVM_TESTS_GREEN)
@@ -844,6 +862,51 @@ def test_llvm_gate_fixtures(t : T?) {
                     "names llvm_gone, but no census dir (modules/dasLLVM/daslib, modules/dasLLVM/bindings) holds llvm_gone.das"]) {
         t |> success(find(red.out, needle) >= 0, "finding fired: {needle}")
     }
+
+    t |> success(rmdir_rec_result(fixture) is value, "fixture removed")
+}
+
+[test(description = "the dasLLVM gate reports an emitter pin that no longer matches the sources with the value to set, a listed source that is gone, a missing pin constant and a missing file list", timeout = 1200)]
+def test_llvm_gate_emitter_pin(t : T?) {
+    let tree = getcwd()
+    let fixture = repo_fixture(t, "modules/dasLLVM/REVIEW.das", "review_llvm_pin")
+    if (empty(fixture)) return
+    make_llvm_fixture(t, tree, fixture)
+    let gate = [path_join(fixture, "modules/dasLLVM/REVIEW.das")]
+
+    let crlf = "options gen2\r\n"
+    write_at(t, fixture, "modules/dasLLVM/daslib/llvm_toy.das", crlf)
+    let same = spawn_at(fixture, gate)
+    t |> equal(0, same.rc, "a CRLF checkout of the same source keeps the pin: {same.out}")
+
+    let changed = "options gen2\nlet CHANGED = 1\n"
+    write_at(t, fixture, "modules/dasLLVM/daslib/llvm_toy.das", changed)
+    let stale = spawn_at(fixture, gate)
+    t |> equal(1, stale.rc, "a changed emitter source is red")
+    reports(t, stale.out, "{LLVM_HASH_FILE}:2: the JIT emitter sources changed")
+    reports(t, stale.out, "set LLVM_JIT_EMITTER_HASH = {llvm_toy_pin(changed)}")
+
+    write_at(t, fixture, LLVM_PIN_TEST, "static const char * EMITTER_FILES[] = \{\n" +
+        "    \"llvm_toy.das\",\n    \"llvm_gone.das\",\n\};\n")
+    let gone = spawn_at(fixture, gate)
+    t |> equal(1, gone.rc, "a listed source that does not exist is red")
+    reports(t, gone.out, "{LLVM_PIN_TEST}:3: EMITTER_FILES names llvm_gone.das, " +
+        "and modules/dasLLVM/daslib/llvm_gone.das does not exist")
+    t |> success(find(gone.out, "set LLVM_JIT_EMITTER_HASH") < 0,
+        "no value is offered over a partial file set: {gone.out}")
+
+    write_at(t, fixture, LLVM_PIN_TEST, LLVM_TOY_PIN_TEST)
+    write_at(t, fixture, LLVM_HASH_FILE, "options gen2\n")
+    let unpinned = spawn_at(fixture, gate)
+    t |> equal(1, unpinned.rc, "a missing pin constant is red")
+    reports(t, unpinned.out,
+        "{LLVM_HASH_FILE}: the pin constant `let LLVM_JIT_EMITTER_HASH` is missing")
+
+    write_at(t, fixture, LLVM_PIN_TEST, "// no list\n")
+    let listless = spawn_at(fixture, gate)
+    t |> equal(1, listless.rc, "a pin test with no file list is red")
+    reports(t, listless.out,
+        "{LLVM_PIN_TEST}: the emitter file list is not where the pin gate reads it")
 
     t |> success(rmdir_rec_result(fixture) is value, "fixture removed")
 }

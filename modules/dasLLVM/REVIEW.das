@@ -11,6 +11,9 @@ require dastest/review_gate
 
 let private TESTS_DIR = "modules/dasLLVM/tests"
 let private DESCRIPTOR = "modules/dasLLVM/.das_module"
+let private EMITTER_PIN_TEST = "tests-cpp/small/test_jit_emitter_pin.cpp"
+let private EMITTER_HASH_FILE = "modules/dasLLVM/daslib/llvm_jit_run.das"
+let private EMITTER_DIR = "modules/dasLLVM/daslib"
 
 // Directories under TESTS_DIR whose contents git tracks. A suite run that creates,
 // overwrites or deletes inside one leaves the tree dirty or destroys a checked-in fixture.
@@ -192,6 +195,66 @@ def private check_tests_folder {
     }
 }
 
+def private emitter_file_names : array<string> {
+    let text = strip_line_comments(fread(EMITTER_PIN_TEST))
+    let from = find(text, "EMITTER_FILES[] = \{")
+    let to = from < 0 ? -1 : find(text, "\};", from)
+    if (to < 0) {
+        var none : array<string>
+        return <- none
+    }
+    return <- quoted_segments(slice(text, from, to))
+}
+
+def private emitter_source_path(name : string) : string =>
+    name |> starts_with("/") ? slice(name, 1) : "{EMITTER_DIR}/{name}"
+
+def private emitter_sources_hash(names : array<string>) : uint64 {
+    var h = FNV1A_SEED
+    for (name in names) {
+        h = fnv1a("{name}\n", h)
+        h = fnv1a(replace(fread(emitter_source_path(name)), "\r", ""), h)
+    }
+    return h
+}
+
+[arch(at = "ARCHITECTURE.md#codegen-tier")]
+def private check_emitter_pin {
+    var inscope names <- emitter_file_names()
+    if (empty(names)) {
+        gate_finding(EMITTER_PIN_TEST, "the emitter file list is not where the pin gate reads it " +
+            "(`EMITTER_FILES[] = \{` up to `\};`, one quoted name an entry)")
+        return
+    }
+    var missing = false
+    for (name in names) {
+        let path = emitter_source_path(name)
+        if (!fexist(path)) {
+            gate_finding(EMITTER_PIN_TEST, find_line(fread(EMITTER_PIN_TEST), "\"{name}\""),
+                "EMITTER_FILES names {name}, and {path} does not exist")
+            missing = true
+        }
+    }
+    return if (missing)
+    let expected_pin = "0x{emitter_sources_hash(names):x}ul"
+    let hash_file_text = fread(EMITTER_HASH_FILE)
+    let line_no = find_line(hash_file_text, "let LLVM_JIT_EMITTER_HASH")
+    if (line_no == 0) {
+        gate_finding(EMITTER_HASH_FILE, "the pin constant `let LLVM_JIT_EMITTER_HASH` is missing")
+        return
+    }
+    var inscope lines <- split(hash_file_text, "\n")
+    if (find(lines[line_no - 1], expected_pin) < 0) {
+        gate_finding(EMITTER_HASH_FILE, line_no,
+            "the JIT emitter sources changed (EMITTER_FILES in {EMITTER_PIN_TEST}) " +
+            "and LLVM_JIT_EMITTER_HASH still pins the old text: bump " +
+            "LLVM_JIT_CODEGEN_VERSION in modules/dasLLVM/daslib/llvm_jit_plan.das first if " +
+            "the emitted code for the same input can differ (that file is in the hashed " +
+            "set, so a bump moves the hash again), then run this gate once more and set " +
+            "LLVM_JIT_EMITTER_HASH = {expected_pin}")
+    }
+}
+
 [export]
 def main() : int {
     if (!fexist("modules/dasLLVM/REVIEW.das") || !fexist(DESCRIPTOR)) {
@@ -199,6 +262,7 @@ def main() : int {
         return 2
     }
     check_tests_folder()
+    check_emitter_pin()
     gate_lane_census("modules/dasLLVM/CMakeLists.txt", TESTS_DIR)
     gate_descriptor_census(DESCRIPTOR, ["modules/dasLLVM/daslib", "modules/dasLLVM/bindings"],
         DESCRIPTOR_CATEGORY_TOKENS)
