@@ -5938,6 +5938,7 @@ namespace das {
         if ( callDepth >= program->policies.max_call_depth ) {
             error("call expression depth exceeded maximum allowed (" + to_string(program->policies.max_call_depth) + ")", "", "",
                   call->at, CompilationError::exceeds_call_depth);
+            call->argumentsFailedToInfer = true;
             return false;
         }
         return true;
