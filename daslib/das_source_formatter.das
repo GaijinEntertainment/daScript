@@ -992,7 +992,9 @@ def fmt_function_call_param_paren_call(var ctx : FormatterCtx) {
 def fmt_spaces_around_operators(var ctx : FormatterCtx) {
     for (i in range(1, length(ctx.tokens) - 1)) {
         if (!empty(ctx.tokens[i].str)) {
-            if (is_unary(ctx, i) && !new_line_before(ctx, i)) {
+            let signGlues = ((ctx |> eq(i, "-") || ctx |> eq(i, "+"))
+                && starts_with(ctx.tokens[i + 1].str, ctx.tokens[i].str))
+            if (is_unary(ctx, i) && !new_line_before(ctx, i) && !signGlues) {
                 ctx |> remove_space_before(i + 1)
             }
             if (ctx |> need_space_only_before(i) && !is_unary(ctx, i)) {

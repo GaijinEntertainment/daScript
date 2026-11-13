@@ -108,3 +108,13 @@ def test_wrap_long_lines(t : T?) {
         delete bytes
     }
 }
+
+[test(description = "the formatter keeps the space between adjacent unary signs, so a double negation never becomes a decrement")]
+def test_adjacent_unary_signs_stay_apart(t : T?) {
+    for (expr in ["- -i", "+ +i", "- - -i", "+ ++i", "- --i"]) {
+        let source = "options gen2\n\ndef f(var i : int) : int \{\n    return {expr}\n\}\n"
+        let formatted = format_source_string(source)
+        t |> success(find(formatted, "return {expr}\n") >= 0, "{expr}: {formatted}")
+        t |> equal(format_source_string(formatted), formatted)
+    }
+}
