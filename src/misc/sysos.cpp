@@ -717,7 +717,8 @@ namespace das {
         return dasPathSuffix(req);
     }
 
-    string g_dasRoot;
+    static mutex g_dasRootMutex;
+    static string g_dasRoot;
 
     // src/misc/ARCHITECTURE_DAS_ROOT.md#das-root-absolute
     static string absolute_das_root ( const string & dr ) {
@@ -737,32 +738,37 @@ namespace das {
 #endif
     }
 
-    void setDasRoot ( const string & dr ) {
-        g_dasRoot = absolute_das_root(dr);
-        replace(g_dasRoot.begin(), g_dasRoot.end(), '\\', '/');     // callers concatenate with '/'
+    static string normalized_das_root ( const string & dr ) {
+        string root = absolute_das_root(dr);
+        replace(root.begin(), root.end(), '\\', '/');     // callers concatenate with '/'
+        return root;
     }
 
+    static string executable_das_root ( void ) {
+        string efp = getExecutableFileName();   // ?/bin/debug/binary.exe
+        if ( efp.find_last_of("\\/") == string::npos ) return ".";
+        auto ep = get_prefix(efp);              // remove file name
+        string root = readDasRootSidecar(ep);   // src/misc/ARCHITECTURE_DAS_ROOT.md#root-sidecar
+        if ( !root.empty() ) return root;
+        auto layout = dasBinLayoutOf(ep);
+        if ( !layout.underBin ) return ".";
+        #ifdef DAS_INSTALL_BINDIR
+        if ( layout.bin == DAS_INSTALL_BINDIR ) return DAS_INSTALL_DATADIR;
+        #endif
+        return layout.root;
+    }
+
+    // src/misc/ARCHITECTURE_DAS_ROOT.md#das-root-lock
+    void setDasRoot ( const string & dr ) {
+        string root = normalized_das_root(dr);
+        lock_guard<mutex> guard(g_dasRootMutex);
+        g_dasRoot = das::move(root);
+    }
+
+    // src/misc/ARCHITECTURE_DAS_ROOT.md#das-root-lock
     string getDasRoot ( void ) {
-        if ( g_dasRoot.empty() ) {
-            string efp = getExecutableFileName();   // ?/bin/debug/binary.exe
-            auto np = efp.find_last_of("\\/");
-            if ( np != string::npos ) {
-                auto ep = get_prefix(efp);          // remove file name
-                g_dasRoot = readDasRootSidecar(ep);     // src/misc/ARCHITECTURE_DAS_ROOT.md#root-sidecar
-                if ( g_dasRoot.empty() ) {
-                    auto layout = dasBinLayoutOf(ep);
-                    g_dasRoot = layout.underBin ? layout.root : ".";
-                    #ifdef DAS_INSTALL_BINDIR
-                    if ( layout.underBin && layout.bin == DAS_INSTALL_BINDIR ) {
-                        g_dasRoot = DAS_INSTALL_DATADIR;
-                    }
-                    #endif
-                }
-            } else {
-                g_dasRoot = ".";
-            }
-            setDasRoot(g_dasRoot);
-        }
+        lock_guard<mutex> guard(g_dasRootMutex);
+        if ( g_dasRoot.empty() ) g_dasRoot = normalized_das_root(executable_das_root());
         return g_dasRoot;
     }
 }
