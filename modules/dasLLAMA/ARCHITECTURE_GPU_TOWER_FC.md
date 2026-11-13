@@ -80,5 +80,7 @@ the prefill's dense K-quant site (`pf_enc_kq_mm`: the tensor twins behind their 
 the seat, the split-K form under its knee, the staged base tile otherwise) over the same half feed the q8 lane takes. The
 stamps read disk-order superblocks alone, which every Metal image holds, its staging laying no CPU interleave. The flavor
 pick (`metal_gigaam_serves_model`) takes the kq lane only where every superblock format a carrier can hold has a base tile on
-the build, so a carrier the chain could not run maps its CPU image instead. The Vulkan chain's form is
+the build, so a carrier the chain could not run maps its CPU image instead. A quantized Parakeet GGUF rides the lane the
+same way (`metal_parakeet_serves_model`, `tw_fc_kq_bake`): its binds are keyed by seat number, the front's three GEMMs
+seated behind the blocks' records and run through `fc_kq_mm` over the front's own half feed. The Vulkan chain's form is
 `ARCHITECTURE_GPU_TOWER_VULKAN_FC.md#vk-tower-fc-kq`.

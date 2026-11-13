@@ -21,11 +21,15 @@ require ?vulkan dasllama/dasllama_vulkan_common   // g_gpu: the storage range th
 require _ctc_oracle   // nolint:STYLE030,LINT019 — ctc_leg / ctc_cpu_leg / ctc_hard_flips, inside the vulkan arm alone
 require daslib/linq   // sequence_equal: the twin legs' ids
 require daslib/strings_boost   // split: a kq carrier's members by name
+require strings   // find: a refusal's words
+require dasllama/dasllama_gguf   // GGML_TYPE_*: the retyped carriers' tensor types
+require _gguf_writer   // gguf_retyped_copy: the retyped carriers the kq planner refuses
 require dasllama/dasllama_kqformat   // kq_fmt_of_slot / kq_qsb: the poisoned kq leg's member planes
 require dasllama/dasllama_gemma4a
 require dasllama/dasllama_canary
 require dasllama/dasllama_qwen3a
 require dasllama/dasllama_parakeet
+require dasllama/dasllama_asr   // load_asr_model, asr_needs_mmproj: the facade's Parakeet GGUF route
 require dasllama/dasllama_gigaam
 require dasllama/dasllama_audio_io
 require _tower_twin
@@ -51,7 +55,9 @@ require ?cuda dasllama/dasllama_cuda_common   // cud_kernel_census_of: the kq la
 // (`test_fc_metal_twin`: canary and parakeet v3; `test_gemma4a_metal_twin`: E2B and E4B) skip on a build without
 // das_metal, with no Metal device standing up for the tower, under a family filter leaving the family out, without
 // their carriers (the canary and parakeet v3 f32 encoders, the E2B / E4B mmprojs) and without jfk.wav; the gemma4a
-// one also when interpreted.
+// one also when interpreted. The Parakeet GGUF cells skip without parakeet-tdt-0.6b-v3-Q4_K_M.gguf (the carrier cell's
+// first run and the lane-tag controls without parakeet-tdt-0.6b-v3-F32.gguf or the v3 f32 bin), the encode cells without
+// jfk.wav, `test_parakeet_kq_discrete_twin` as the discrete-home twins do, `test_parakeet_kq_metal_twin` as the Metal twins do.
 
 [test(description = "gelu_erf reproduces the exact-erf form x times Phi(x) at 1, -1, 0, 3 and 0.5 to within 1e-6 (1e-5 at 3) of the closed-form values")]
 def test_gelu_erf(t : T?) {
@@ -654,10 +660,17 @@ def test_canary_discrete_twin(tst : T?) {
     }
 }
 
-//! parakeet staged and minted in memory on the lane asked; `zero_block` >= 0 zeroes the eleven GEMM planes of `poison_blocks` blocks from it on
-def private mint_pk(path : string; q8 : bool; zero_block : int64; dev : TowerDev = TowerDev.none) : ParakeetModel {
-    var inscope stg <- tower_dev_staged(dev) $ { return <- stage_parakeet_model(path, q8) }
-    if (q8) {
+//! parakeet staged and minted in memory on the lane asked - `kq` a quantized GGUF's own planes, else `q8` or the exact lane; `zero_block` >= 0 zeroes the GEMM planes of the blocks from it on
+def private mint_pk(path : string; q8 : bool; zero_block : int64; dev : TowerDev = TowerDev.none; kq : bool = false) : ParakeetModel {
+    var inscope stg <- tower_dev_staged(dev) $ {
+        return <- stage_parakeet_kq_model(path) if (kq)
+        return <- stage_parakeet_model(path, q8)
+    }
+    if (kq) {
+        if (zero_block >= 0l) {
+            poison_kq_seats(stg.gemm_seats, zero_block * PK_LAYER_SEATS, stg.e.n_layer * PK_LAYER_SEATS, stg.kq, stg.qblob)
+        }
+    } elif (q8) {
         poison_fc_blocks(stg.qblob, stg.e.n_layer, zero_block, stg.e.n_state, 4l * stg.e.n_state) $(b) => pk_fc_layer(pk_layer_offsets(stg.e, b))
     } elif (stg.e.gemm_f16) {
         poison_fc_blocks(stg.wblob, stg.e.n_layer, zero_block, stg.e.n_state, 4l * stg.e.n_state) $(b) => pk_fc_layer(pk_layer_offsets(stg.e, b))
@@ -846,6 +859,378 @@ def test_parakeet_discrete_twin(tst : T?) {
             }
         } else {
             t |> skip("no discrete GPU home in this build (dasVulkan, dasCUDA)")
+        }
+    }
+}
+
+//! a Parakeet-TDT v3 carrier of the GGUF set by its quant name (`F32`, `Q4_K_M`)
+def private pk_gguf(quant : string) : string => path_join(models_dir(), "parakeet-tdt-0.6b-v3-{quant}.gguf")
+
+//! a held kq-lane staging's seats zeroed from seat `first` up to seat `past` (the seats behind it kept): the quant bytes of every
+//! K-quant and Q8_0 seat between them, the planes' ends where `past` is the seat count
+def private poison_kq_seats(seats : array<int64>; first, past : int64; var kq : array<uint8>; var qblob : array<int8>) {
+    let q8 = int64(int(KqFmt.q8))
+    var kq_lo = long_length(kq)
+    var kq_hi = long_length(kq)
+    var q8_lo = long_length(qblob)
+    var q8_hi = long_length(qblob)
+    for (i in range64(first, long_length(seats) / TOWER_SEAT_WORDS)) {
+        let at = seats[i * TOWER_SEAT_WORDS + 1l]
+        if (seats[i * TOWER_SEAT_WORDS] == q8) {
+            q8_lo = min(q8_lo, at)
+            q8_hi = i >= past ? min(q8_hi, at) : q8_hi
+        } else {
+            kq_lo = min(kq_lo, at)
+            kq_hi = i >= past ? min(kq_hi, at) : kq_hi
+        }
+    }
+    for (i in range64(kq_lo, kq_hi)) {
+        kq[i] = 0u8
+    }
+    for (i in range64(q8_lo, q8_hi)) {
+        qblob[i] = int8(0)
+    }
+}
+
+//! a quantized Parakeet GGUF staged on the kq lane and minted in memory; `zero_block` >= 0 poisons the blocks from it on
+def private mint_pk_kq(path : string; zero_block : int64; dev : TowerDev = TowerDev.none) : ParakeetModel
+    => <- mint_pk(path, false, zero_block, dev, true)
+
+//! the encoder rows of `samples` through `m` on the CPU chain
+def private pk_cpu_rows(m : ParakeetModel; samples : array<float>) : array<float> {
+    var out : array<float>
+    var st = ParakeetState()
+    with_gpu_knobs() {
+        with_dasllama_jobque_() {
+            set_serving_gpu_tower(false, TowerFamily.parakeet)
+            pk_twin_encode(m, st, samples, out)
+        }
+    }
+    delete st
+    return <- out
+}
+
+[test(description = "The F32 Parakeet GGUF stages the f32 ggml bin's planes and encodes jfk to the same rows, and the Q4_K_M file's kq lane, named k4, holds its CPU rows within 2.5x the q8 lane's distance from the dequantized chain with a zeroed half outside it"), arch(at = "../ARCHITECTURE_MEDIA_ASR.md#parakeet-gguf")]
+def test_parakeet_gguf_carrier(tst : T?) {
+    tst |> run("parakeet-TDT 0.6B v3: the F32 GGUF against the f32 ggml bin") @(t : T?) {
+        let bin = path_join(whisper_dir(), "ggml-parakeet-tdt-0.6b-v3-f32.bin")
+        let gguf = pk_gguf("F32")
+        return if (!model_available(t, bin) || !model_available(t, gguf))
+        let samples <- load_audio_16k_mono(asr_clip("jfk.wav"))
+        if (empty(samples)) {
+            t |> skip("jfk.wav not present")
+            return
+        }
+        var mb <- mint_pk(bin, false, -1l)
+        var mg <- mint_pk(gguf, false, -1l)
+        t |> equal(mg.n_layer, mb.n_layer, "the block count")
+        t |> equal(mg.n_vocab, mb.n_vocab, "the vocabulary without the blank")
+        t |> equal(mg.blob.n, mb.blob.n, "the f32 blob's length")
+        var inscope rb <- pk_cpu_rows(mb, samples)
+        var inscope rg <- pk_cpu_rows(mg, samples)
+        var got = TowerParityStats()
+        if (tower_parity_stats(t, "parakeet gguf vs bin", rb, rg, got)) {
+            to_log(LOG_INFO, "test_audio: parakeet F32 gguf vs f32 bin on jfk: rel_l2 {got.rel_l2}\n")
+            t |> success(got.rel_l2 <= PK_GGUF_BIN_BAR, "the GGUF's encoder rows are the bin's ({got.rel_l2})")
+        }
+        var inscope loud <- [for (v in samples); v * 0.5]
+        var inscope rl <- pk_cpu_rows(mb, loud)
+        var ctl = TowerParityStats()
+        if (long_length(rl) == long_length(rb) && tower_parity_stats(t, "parakeet gguf vs bin control", rl, rg, ctl)) {
+            t |> success(is_finite(ctl.rel_l2) && ctl.rel_l2 > PK_GGUF_BIN_BAR, "the bin's rows of the clip at half volume land outside the bar ({ctl.rel_l2}) - the control")
+        }
+        delete mg
+        delete mb
+    }
+    tst |> run("parakeet-TDT 0.6B v3 Q4_K_M: the kq lane on the CPU against the q8 lane, the dequantized f32 chain the reference") @(t : T?) {
+        let path = pk_gguf("Q4_K_M")
+        return if (!model_available(t, path))
+        let samples <- load_audio_16k_mono(asr_clip("jfk.wav"))
+        if (empty(samples)) {
+            t |> skip("jfk.wav not present")
+            return
+        }
+        var mx <- mint_pk(path, false, -1l)
+        var mq <- mint_pk(path, true, -1l)
+        var mk <- mint_pk_kq(path, -1l)
+        t |> success(mk.kq_lane && !mk.q8 && !mx.kq_lane && mq.q8, "the kq lane's model beside the exact and the q8 lanes'")
+        t |> equal(parakeet_exec_fmt(mk), "k4", "the lane's name: its one K-quant member's disk type")
+        t |> success(mk.kq.n > 0l && mk.qblob.n > 0l, "K-quant seats beside Q8_0 ones: the attention outputs and the pointwise convs")
+        var inscope ex <- pk_cpu_rows(mx, samples)
+        var inscope q8 <- pk_cpu_rows(mq, samples)
+        var inscope kq <- pk_cpu_rows(mk, samples)
+        var q8_ex = TowerParityStats()
+        var kq_ex = TowerParityStats()
+        if (tower_parity_stats(t, "parakeet q8 vs exact", ex, q8, q8_ex) && tower_parity_stats(t, "parakeet kq vs exact", ex, kq, kq_ex)) {
+            let bar = PK_KQ_CPU_SLACK * q8_ex.rel_l2 + TWIN_REL_L2_FLOOR
+            to_log(LOG_INFO, "test_audio: parakeet Q4_K_M on jfk: rel_l2 from the dequantized chain - kq {kq_ex.rel_l2}, q8 {q8_ex.rel_l2}, the bar {bar}\n")
+            t |> success(kq_ex.rel_l2 <= bar, "the kq lane's rows within {PK_KQ_CPU_SLACK}x the q8 lane's rel_l2 from the dequantized chain ({kq_ex.rel_l2} vs {q8_ex.rel_l2})")
+            var mz <- mint_pk_kq(path, mk.n_layer / 2l)
+            var inscope bad <- pk_cpu_rows(mz, samples)
+            var bad_ex = TowerParityStats()
+            if (tower_parity_stats(t, "parakeet poisoned kq vs exact", ex, bad, bad_ex)) {
+                t |> success(is_finite(bad_ex.rel_l2) && bad_ex.rel_l2 > bar, "zeroed seats from the middle block on EXCEED the bar ({bad_ex.rel_l2} vs {bar})")
+            }
+            delete mz
+        }
+        delete mk
+        delete mq
+        delete mx
+    }
+}
+
+let private PK_GGUF_BIN_BAR = 1e-4lf   //! the two carriers' rows apart: one model's f32 tensors, the GGUF's filterbank and window rebuilt from its header
+let private PK_KQ_CPU_SLACK = 2.5lf    //! the CPU kq lane's rel_l2 over the q8 lane's, which it sits at about twice: a K-quant seat's Q8_K feed holds one scale a 256 elements where Q8_0's holds one a 32
+
+//! the kq planner's refusal of the Q4_K_M carrier with `retype` applied, staged on the kq lane - "" where it staged
+[cold_path]
+def private pk_retyped_refusal(name : string; retype : table<string; int>) : string {
+    return gguf_retyped_refusal(pk_gguf("Q4_K_M"), name, retype) $(p) {
+        var inscope st <- stage_parakeet_kq_model(p)
+    }
+}
+
+[test(description = "Over retyped copies of the Q4_K_M Parakeet carrier the kq planner refuses a Q5_1 seat, q in Q8_0 beside K-quant k and v, and one block's position linear in Q8_0, each by name, stages an unchanged copy, refuses a ggml bin, and the load tag is the kq lane's for a quantized GGUF asked for q8 un-pinned alone"), arch(at = "../ARCHITECTURE_MEDIA_ASR.md#parakeet-kq-seats")]
+def test_parakeet_kq_refusals(tst : T?) {
+    let path = pk_gguf("Q4_K_M")
+    return if (!model_available(tst, path))
+    tst |> run("the kq planner refuses what its lane cannot seat") @(t : T?) {
+        let b0 = "enc.blocks.0."
+        let seat = pk_retyped_refusal("pk_seat", { "{b0}ff1.linear1.weight" => GGML_TYPE_Q5_1 })
+        t |> success(find(seat, "has no seat for") >= 0 && find(seat, "{b0}ff1.linear1.weight") >= 0, "a Q5_1 GEMM refused at its seat naming the tensor: '{seat}'")
+        let qkv = pk_retyped_refusal("pk_qkv", { "{b0}attn.linear_q.weight" => GGML_TYPE_Q8_0 })
+        t |> success(find(qkv, "attention q, k and v mix Q8_0 with a K-quant format") >= 0, "q in Q8_0 beside K-quant k and v refused: '{qkv}'")
+        let pos = pk_retyped_refusal("pk_pos", { "enc.blocks.1.attn.linear_pos.weight" => GGML_TYPE_Q8_0 })
+        t |> success(find(pos, "position linears mix Q8_0 with a K-quant format") >= 0 && find(pos, "block 1") >= 0, "one block's position linear in Q8_0 refused naming the block: '{pos}'")
+        let nothing : table<string; int>
+        t |> equal(pk_retyped_refusal("pk_clean", nothing), "", "the copy with nothing retyped stages (the control)")
+    }
+    tst |> run("the kq lane is a quantized GGUF's alone") @(t : T?) {
+        reset_parakeet_q8()
+        t |> equal(parakeet_load_tag(path, true), PARAKEET_KQ_TAG, "the Q4_K_M GGUF asked for q8, un-pinned: the kq lane")
+        t |> equal(parakeet_load_tag(path, false), "parakeet-f32", "asked for the exact lane: the f32 lane")
+        set_parakeet_q8(true)
+        t |> equal(parakeet_load_tag(path, true), "parakeet-q8", "pinned q8: the q8 lane, the carrier dequantized")
+        reset_parakeet_q8()
+        let f32 = pk_gguf("F32")
+        if (model_available(t, f32)) {
+            t |> equal(parakeet_load_tag(f32, true), "parakeet-q8", "the F32 GGUF asked for q8: the q8 lane (the control)")
+        }
+        let bin = path_join(whisper_dir(), "ggml-parakeet-tdt-0.6b-v3-f32.bin")
+        if (model_available(t, bin)) {
+            let why = panic_text() $ {
+                var inscope st <- stage_parakeet_kq_model(bin)
+            }
+            t |> success(find(why, "is a ggml bin") >= 0, "the kq lane refuses a ggml bin: '{why}'")
+        }
+    }
+}
+
+//! jfk-style clip `samples` transcribed through `m` on the CPU chain and the CPU decode
+def private pk_cpu_text(m : ParakeetModel; samples : array<float>) : string {
+    var text = ""
+    var st = ParakeetState()
+    with_gpu_knobs() {
+        with_dasllama_jobque_() {
+            set_serving_gpu_tower(false, TowerFamily.parakeet)
+            parakeet_log_mel(samples, m, st)
+            let tt = parakeet_encode(m, st)
+            parakeet_tdt_decode(m, st, tt)
+            text = parakeet_detokenize(m, st.toks)
+        }
+    }
+    delete st
+    return text
+}
+
+//! the loader's refusal of the Q4_K_M carrier with byte `v` written at offset `at` of header key `key`'s value - "" where it staged
+[cold_path]
+def private pk_header_refusal(name, key : string; at, v : int) : string {
+    let dst = path_join(test_temp_dir(), "{name}.gguf")
+    let nothing : table<string; int>
+    gguf_retyped_copy(pk_gguf("Q4_K_M"), dst, nothing, [(key = key, at = at, v = v)])
+    let why = panic_text() $ {
+        var inscope st <- stage_parakeet_kq_model(dst)
+    }
+    remove(dst)
+    return why
+}
+
+//! the kq lane's name over the Q4_K_M carrier with `retype` applied, staged
+[cold_path]
+def private pk_retyped_lane_name(name : string; retype : table<string; int>) : string {
+    let dst = path_join(test_temp_dir(), "{name}.gguf")
+    gguf_retyped_copy(pk_gguf("Q4_K_M"), dst, retype)
+    var inscope st <- stage_parakeet_kq_model(dst)
+    remove(dst)
+    return parakeet_exec_fmt(st.e)
+}
+
+[test(description = "The Parakeet GGUF loader refuses a foreign architecture, linear biases, input scaling, an FF off four times the width, a token count off the predictor's and a front end off 16 kHz by name; the F32 GGUF transcribes jfk as the f32 bin does and the Q4_K_M kq lane holds jfk's word floor; a Q6_K seat names the lane kq, a BF16 GEMM stages, the Q8_0 file names it q8"), arch(at = "../ARCHITECTURE_MEDIA_ASR.md#parakeet-gguf")]
+def test_parakeet_gguf_loads(tst : T?) {
+    let path = pk_gguf("Q4_K_M")
+    return if (!model_available(tst, path))
+    tst |> run("the header's refusals") @(t : T?) {
+        let enc = "stt.parakeet.encoder"
+        t |> success(find(pk_header_refusal("pk_bias", "{enc}.use_bias", 0, 1), "{enc}.use_bias") >= 0, "linear biases refused naming the key")
+        t |> success(find(pk_header_refusal("pk_xs", "{enc}.xscaling", 0, 1), "{enc}.xscaling") >= 0, "input scaling refused naming the key")
+        t |> success(find(pk_header_refusal("pk_dff", "{enc}.d_model", 0, 1), "an FF four times the model width") >= 0, "an FF off four times the width refused")
+        t |> success(find(pk_header_refusal("pk_tok", "stt.parakeet.predictor.vocab", 0, 7), "the blank is the last of them") >= 0, "a token count off the predictor's refused")
+        t |> success(find(pk_header_refusal("pk_rate", "stt.frontend.sample_rate", 0, 129), "Hz front end") >= 0, "a front end off 16 kHz refused")
+        t |> success(find(pk_header_refusal("pk_hop", "stt.frontend.hop_length", 0, 161), "Hz front end") >= 0, "a hop off 160 refused")
+        t |> equal(pk_header_refusal("pk_same", "stt.frontend.hop_length", 0, 160), "", "the header rewritten with its own byte stages (the control)")
+        let ga = path_join(models_dir(), "gigaam-v3-e2e-rnnt-f16.gguf")
+        if (model_available(t, ga)) {
+            let why = panic_text() $ {
+                var inscope st <- stage_parakeet_model(ga, false)
+            }
+            t |> success(find(why, "parakeet") >= 0 && !empty(why), "a GigaAM GGUF refused by the Parakeet reader: '{why}'")
+        }
+    }
+    tst |> run("the lane's name follows its seats") @(t : T?) {
+        let b0 = "enc.blocks.0."
+        t |> equal(pk_retyped_lane_name("pk_mix", { "{b0}ff1.linear1.weight" => GGML_TYPE_Q6_K }), "kq", "a Q6_K seat beside the Q4_K ones: the members mix")
+        t |> equal(pk_retyped_lane_name("pk_bf16", { "{b0}ff1.linear1.weight" => GGML_TYPE_BF16 }), "k4", "a BF16 GEMM takes a Q8_0 seat: the lane keeps its one member's name")
+        let nothing : table<string; int>
+        t |> equal(pk_retyped_lane_name("pk_plain", nothing), "k4", "the copy with nothing retyped (the control)")
+        let q8 = pk_gguf("Q8_0")
+        if (model_available(t, q8)) {
+            var inscope st <- stage_parakeet_kq_model(q8)
+            t |> equal(parakeet_exec_fmt(st.e), "q8", "the Q8_0 file: every seat Q8_0")
+            t |> equal(parakeet_load_tag(pk_gguf("F16"), true) == PARAKEET_KQ_TAG, false, "an F16 GGUF is no kq carrier") if (model_available(t, pk_gguf("F16")))
+        }
+    }
+    tst |> run("the decoder half: transcripts on jfk") @(t : T?) {
+        let samples <- load_audio_16k_mono(asr_clip("jfk.wav"))
+        if (empty(samples)) {
+            t |> skip("jfk.wav not present")
+            return
+        }
+        var mk <- mint_pk_kq(path, -1l)
+        let kq_text = pk_cpu_text(mk, samples)
+        to_log(LOG_INFO, "test_audio: parakeet Q4_K_M kq jfk: {kq_text}\n")
+        jfk_words_floor(t, "parakeet Q4_K_M kq lane", kq_text)
+        delete mk
+        let bin = path_join(whisper_dir(), "ggml-parakeet-tdt-0.6b-v3-f32.bin")
+        let f32 = pk_gguf("F32")
+        if (model_available(t, bin) && model_available(t, f32)) {
+            var mb <- mint_pk(bin, false, -1l)
+            var mg <- mint_pk(f32, false, -1l)
+            let bin_text = pk_cpu_text(mb, samples)
+            t |> equal(pk_cpu_text(mg, samples), bin_text, "the F32 GGUF's transcript is the f32 bin's: the predictor, the joint and the durations read alike")
+            jfk_words_floor(t, "parakeet f32 bin", bin_text)
+            delete mg
+            delete mb
+        }
+    }
+}
+
+[test(description = "The ASR facade loads the Q4_K_M Parakeet GGUF alone on the kq lane's CPU image, names the lane k4, holds jfk's word floor, and loads the lane's image back by path to the same transcript"), arch(at = "../ARCHITECTURE_MEDIA_ASR.md#parakeet-kq-seats")]
+def test_parakeet_gguf_facade(tst : T?) {
+    let path = pk_gguf("Q4_K_M")
+    return if (!model_available(tst, path))
+    tst |> run("the facade loads the GGUF alone, and its kq image back by path") @(t : T?) {
+        let samples <- load_audio_16k_mono(asr_clip("jfk.wav"))
+        if (empty(samples)) {
+            t |> skip("jfk.wav not present")
+            return
+        }
+        t |> success(!asr_needs_mmproj(path), "a Parakeet GGUF is a one-file carrier")
+        with_gpu_knobs() {
+            set_serving_gpu_tower(false, TowerFamily.parakeet)
+            reset_parakeet_q8()
+            var inscope am <- load_asr_model(path)
+            t |> success(am.kind == AsrKind.parakeet && am.pk.kq_lane && am.pk.dev_backend == TowerDev.none, "the GGUF routes to parakeet on the kq lane's CPU image")
+            t |> equal(asr_exec_fmt(am), "k4", "the facade names the lane by its member")
+            let text = pk_cpu_text(am.pk, samples)
+            jfk_words_floor(t, "parakeet Q4_K_M through the facade", text)
+            let img = "{path}.{PARAKEET_KQ_TAG}.dlim"
+            var fs : FStat
+            if (stat(img, fs) && fs.is_reg) {
+                var inscope im <- load_asr_model(img)
+                t |> success(im.kind == AsrKind.parakeet && im.pk.kq_lane, "the image routes by its tag to the kq lane")
+                t |> equal(pk_cpu_text(im.pk, samples), text, "the image by path transcribes as the load that minted it")
+            } else {
+                t |> skip("no prepared image beside the carrier (the image rail is off)")
+            }
+        }
+    }
+}
+
+[test(description = "The Q4_K_M Parakeet GGUF on the discrete home serves its front and every block from the kq lane's device planes within the three-way bar on jfk, a k4 tile counted, and zeroed seats exceed the bar"), arch(at = "../ARCHITECTURE_MEDIA_ASR.md#parakeet-kq-seats")]
+def test_parakeet_kq_discrete_twin(tst : T?) {
+    tst |> run("parakeet-TDT 0.6B v3 Q4_K_M: the discrete home's chain on the kq lane vs the CPU kq chain on jfk, the dequantized chain the reference") @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan) || typeinfo builtin_module_exists(cuda)) {
+            let path = pk_gguf("Q4_K_M")
+            jfk_twin_cell(t, path, false, TowerFamily.parakeet) $(samples) {
+                let home = serving_tower_dev(TowerFamily.parakeet)
+                var mx <- mint_pk(path, false, -1l)
+                var m <- mint_pk_kq(path, -1l)
+                var md <- mint_pk_kq(path, -1l, home)
+                t |> success(m.kq_lane && md.kq_lane && md.dev_backend == home, "the kq lane's CPU image, its {home} image beside")
+                t |> equal(parakeet_exec_fmt(md), "k4", "the {home} image's lane is named by its one K-quant member's disk type")
+                t |> equal(md.kq.n + md.ks.n + md.qblob.n, 0l, "the {home} image carries the device planes alone")
+                var stx = ParakeetState()
+                var st = ParakeetState()
+                var std = ParakeetState()
+                let k4_0 = kq_tile_count("k4", TowerFamily.parakeet)
+                let spec = TwinSpec(family = "parakeet", tag = "parakeet kq jfk", n_layer = m.n_layer, metric = TwinMetric.rel_l2, seat_family = TowerFamily.parakeet)
+                let r <- twin_three_way(t, spec, m, st, md, std, mx, stx, $(e; var s; var out) => pk_twin_encode(e, s, samples, out)) $(legs) {
+                    t |> equal(legs.n_dev, legs.n_exact, "parakeet kq jfk: the device chain's frame count")
+                    t |> equal(legs.dev.encodes - legs.pre.encodes, 1l, "parakeet kq jfk: the device served the encode")
+                    t |> equal(legs.dev.blocks - legs.pre.blocks, m.n_layer, "parakeet kq jfk: every block ran on the driver")
+                    front_served(t, "parakeet kq jfk", legs.dev.convs - legs.pre.convs, 1l, legs.dev.declines - legs.cpu.declines)
+                }
+                t |> success(kq_tile_count("k4", TowerFamily.parakeet) > k4_0, "parakeet kq jfk: a k4 tile served the K-quant seats (the census counter rose)")
+                if (r.bar > 0.0lf) {
+                    var mp <- mint_pk_kq(path, m.n_layer / 2l, home)
+                    var stp = ParakeetState()
+                    twin_poison(t, r, m.n_layer / 2l, mp, stp) $(e; var s; var out) => pk_twin_encode(e, s, samples, out)
+                    delete stp
+                    delete mp
+                }
+                delete std
+                delete st
+                delete stx
+                delete md
+                delete m
+                delete mx
+                gpu_tower_shutdown(TowerFamily.parakeet)
+            }
+        } else {
+            t |> skip("no discrete GPU home in this build (dasVulkan, dasCUDA)")
+        }
+    }
+}
+
+[test(description = "The Q4_K_M Parakeet GGUF on the Metal FastConformer chain serves its front and every block from the kq lane's slabs within the three-way bar on jfk with no quant_mode decline, a K-quant mul_mm stamp counted, and zeroed seats exceed the bar"), arch(at = "../ARCHITECTURE_MEDIA_ASR.md#parakeet-kq-seats")]
+def test_parakeet_kq_metal_twin(tst : T?) {
+    tst |> run("parakeet-TDT 0.6B v3 Q4_K_M: the Metal chain on the kq lane vs the CPU kq chain on jfk, the dequantized chain the reference") @(t : T?) {
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            let path = pk_gguf("Q4_K_M")
+            return if (!family_on(t, "parakeet"))
+            metal_jfk_twin_cell(t, path, false, TowerFamily.parakeet) $(samples) {
+                var mx <- mint_pk(path, false, -1l)
+                var m <- mint_pk_kq(path, -1l)
+                var md <- mint_pk_kq(path, -1l, TowerDev.metal)
+                t |> success(m.kq_lane && md.kq_lane && md.dev_backend == TowerDev.metal, "the kq lane's CPU image, its Metal image beside")
+                t |> equal(parakeet_exec_fmt(md), "k4", "the Metal image's lane is named by its one K-quant member's disk type")
+                var stx = ParakeetState()
+                var st = ParakeetState()
+                var std = ParakeetState()
+                let mm0 = kq_mm_count()
+                metal_q8_twin(t, "parakeet kq metal jfk", TowerFamily.parakeet, m, st, md, std, mx, stx, $ { return <- mint_pk_kq(path, m.n_layer / 2l, TowerDev.metal) }) $(e; var s; var out) => pk_twin_encode(e, s, samples, out)
+                t |> success(kq_mm_count() > mm0, "parakeet kq metal jfk: a K-quant mul_mm stamp served the K-quant seats (the census counter rose)")
+                delete std
+                delete st
+                delete stx
+                delete md
+                delete m
+                delete mx
+                metal_tower_shutdown()
+            }
+        } else {
+            t |> skip("no Metal build")
         }
     }
 }
@@ -1492,7 +1877,9 @@ def test_gemma4a_metal_twin(tst : T?) {
 def private mint_ga(path : string; q8 : bool; zero_block : int64; dev : TowerDev = TowerDev.none) : GigaamModel {
     var inscope stg <- tower_dev_staged(dev) $ { return <- stage_gigaam_model(path, q8, zero_block >= 0l) }
     if (stg.e.kq_lane) {
-        poison_ga_kq_blocks(stg, zero_block)
+        if (zero_block >= 0l) {
+            poison_kq_seats(stg.gemm_seats, zero_block * FC_BLOCK_GEMMS, long_length(stg.gemm_seats) / TOWER_SEAT_WORDS, stg.kq, stg.qblob)
+        }
     } elif (q8) {
         poison_fc_blocks(stg.qblob, stg.e.n_layer, zero_block, stg.e.d_model, stg.e.n_ff) $(b) => gigaam_layer_offsets(stg.e, b)
     } else {
@@ -1501,27 +1888,6 @@ def private mint_ga(path : string; q8 : bool; zero_block : int64; dev : TowerDev
     var m = GigaamModel()
     mint_gigaam_model(stg, m, q8, dev)
     return <- m
-}
-
-//! a held kq-lane staging's block GEMMs zeroed from block `zero_block` on (none where it is negative): every K-quant seat's quant
-//! bytes and every Q8_0 seat's quants, found through the plan's jobs
-def private poison_ga_kq_blocks(var stg : GigaamStaging; zero_block : int64) {
-    return if (zero_block < 0l)
-    for (j in stg.plan.jobs) {
-        continue if (!(j.plane == GigaamPlane.kq || (j.plane == GigaamPlane.q8 && j.fmt >= 0)))
-        let layer = to_int64(slice(j.name, length("encoder.layers."), find(j.name, ".", length("encoder.layers."))), false)
-        continue if (layer < zero_block)
-        if (j.plane == GigaamPlane.kq) {
-            let f = kq_fmt_of_slot(j.fmt)
-            for (i in range64((j.n / kq_elems(f)) * kq_qsb(f))) {
-                stg.kq[j.off + i] = 0u8
-            }
-        } else {
-            for (i in range64(j.n)) {
-                stg.qblob[j.off + i] = int8(0)
-            }
-        }
-    }
 }
 
 //! `mint_ga` in the flavor the lane serves on this build (`#tower-dev-block`): the GPU driver's where its chain serves the lane,
@@ -1697,10 +2063,10 @@ def private ga_discrete_lane_policy_cell(t : T?) {
 
 //! the device's k4 cm2 and KHR tile dispatches: the kq lane's K-quant seats run on one of them, by the device's mode and the column pick
 //! the dispatches of the K-quant member `fmt`'s batch tiles (`kq_batch_<fmt>_*`) the census counted
-[unused_argument(fmt)]
-def private kq_tile_count(fmt : string) : int64 {
+[unused_argument(fmt, fam)]
+def private kq_tile_count(fmt : string; fam : TowerFamily = TowerFamily.gigaam) : int64 {
     static_if (typeinfo builtin_module_exists(cuda)) {
-        if (tower_family_cuda(TowerFamily.gigaam)) {
+        if (tower_family_cuda(fam)) {
             return (max(cud_kernel_census_of("kq_batch_{fmt}_cm2l_cls_cuda"), 0l) + max(cud_kernel_census_of("kq_batch_{fmt}_cm2m_cls_cuda"), 0l)
                 + max(cud_kernel_census_of("kq_batch_{fmt}_cm2s_cls_cuda"), 0l))
         }

@@ -21,28 +21,11 @@ require dasllama/dasllama_rnnt   // RnntToken: the twins' tokens
 require ?das_metal dasllama/dasllama_metal_asr_dec   // the Metal transducer seat's pin and counters
 require ?das_metal dasllama/dasllama_metal_common    // metal_common_init: whether the box has a Metal device
 require ?vulkan dasllama/dasllama_vulkan_asr_dec     // the Vulkan seat's, on a build without das_metal
-require ?vulkan dasllama/dasllama_vulkan_tower       // vulkan_tower_arms: whether the tier serves on this box; VK_RNNT_PIECE
+require ?vulkan dasllama/dasllama_vulkan_tower       // vulkan_tower_arms: whether the tier serves on this box
 require ?das_metal dasllama/dasllama_metal_tower     // MT_RNNT_PIECE: the Metal block's transducer prefix
 require _gpu_knobs   // tower_family_cuda: the transducer's discrete home
 require ?cuda dasllama/dasllama_cuda_tower_fc   // CUF_RNNT_PIECE: the CUDA block's transducer prefix
 require ?cuda dasllama/dasllama_cuda_asr_dec_fc   // the CUDA seat's pin, counters and declines
-
-//! The prefix the build's seat reads a GPU-flavored net's halves and slab under in its device block (`#tower-dev-block`); "" where
-//! the build has no seat
-def rnnt_seat_piece : string {
-    static_if (typeinfo builtin_module_exists(das_metal)) {
-        return MT_RNNT_PIECE
-    } else {
-        static_if (typeinfo builtin_module_exists(cuda)) {
-            return CUF_RNNT_PIECE if (tower_family_cuda(TowerFamily.transducer))
-        }
-        static_if (typeinfo builtin_module_exists(vulkan)) {
-            return VK_RNNT_PIECE
-        } else {
-            return ""
-        }
-    }
-}
 
 //! The build's device transducer seat: Metal, else its discrete home (CUDA for a `CUDA_AUDIO_FAMILIES` row under the ask, else Vulkan), else none.
 def rnnt_seat_name : string {

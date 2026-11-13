@@ -8,6 +8,8 @@ options _dasllama_internal = true
 module _gguf_writer shared public
 
 require strings   // peek_data: a string's bytes
+require math   // min / max: the retyped copy's offsets
+require dastest/testing_boost   // panic_text, test_temp_dir: the retyped copy's refusal
 require daslib/fio   // fopen / fwrite: the synthetic file
 require daslib/strings_boost   // repeat: the safetensors header pad
 require daslib/f16_cvt   // f32_to_f16: the F16 half
@@ -124,6 +126,100 @@ def gguf_pad_data(var b : array<uint8>) {
 
 //! `v` as a half word: BF16 (`bf16`) or F16, each rounded to nearest even
 def half_bits(v : float; bf16 : bool) : uint => bf16 ? uint(bf16_bits(v)) : f32_to_f16(v)
+
+//! a copy of the GGUF at `src` written to `dst` with the tensors `retype` names retyped, every weight byte zero and every
+//! offset recomputed - a loader's refusals read the tensors' types alone, so a carrier no quantize tool mints stands in for one
+[cold_path]
+def gguf_retyped_copy(src, dst : string; retype : table<string; int>) {
+    var inscope no_bytes : array<tuple<key : string; at : int; v : int>>
+    gguf_retyped_copy(src, dst, retype, no_bytes)
+}
+
+//! ... with `kv_bytes` written over the header: byte `v` at offset `at` of key `key`'s value
+[cold_path]
+def gguf_retyped_copy(src, dst : string; retype : table<string; int>; kv_bytes : array<tuple<key : string; at : int; v : int>>) {
+    var out : array<uint8>
+    var zeros = 0l
+    let f = fopen(src, "rb")
+    fmap(f) $(var bytes : array<uint8>#) {
+        var inscope m <- parse_gguf_meta(bytes)
+        var kv_last = 24l   // the tensor table starts at the first tensor's name record, past the last KV's value
+        for (loc in values(m.kv)) {
+            kv_last = max(kv_last, loc.data_off)
+        }
+        var rec : array<uint8>
+        gguf_put_str(rec, m.tensors[0].name)
+        var table_at = -1l
+        for (o in range64(kv_last, long_length(bytes) - long_length(rec))) {
+            var hit = true
+            for (i in range64(long_length(rec))) {
+                if (bytes[o + i] != rec[i]) {
+                    hit = false
+                    break
+                }
+            }
+            if (hit) {
+                table_at = o
+                break
+            }
+        }
+        verify(table_at > 0l, "the carrier's tensor table not found")
+        gguf_header(out, uint64(long_length(m.tensors)), uint64(long_length(m.kv)))
+        let head = long_length(out)
+        out |> resize(head + table_at - 24l)
+        for (i in range64(24l, table_at)) {
+            out[head + i - 24l] = bytes[i]
+        }
+        for (kb in kv_bytes) {
+            if (!key_exists(m.kv, kb.key)) {
+                panic("the carrier holds no key '{kb.key}'")
+            }
+            out[head + (m.kv?[kb.key] ?? default<GGUFKVLoc>).data_off + int64(kb.at) - 24l] = uint8(kb.v)
+        }
+        var off = 0l
+        for (ti in m.tensors) {
+            let gt = retype?[ti.name] ?? ti.ggml_type
+            gguf_put_str(out, ti.name)
+            gguf_put_le(out, uint64(long_length(ti.dims)), 4)
+            for (dim in ti.dims) {
+                gguf_put_le(out, uint64(dim), 8)
+            }
+            gguf_put_le(out, uint64(gt), 4)
+            gguf_put_le(out, uint64(off), 8)
+            off = (off + ggml_type_bytes(gt, ti.n_elem) + m.alignment - 1l) / m.alignment * m.alignment
+        }
+        let data_at = (long_length(out) + m.alignment - 1l) / m.alignment * m.alignment
+        zeros = data_at - long_length(out) + off
+    }
+    fclose(f)
+    let w = fopen(dst, "wb")
+    fwrite(w, out)
+    var chunk : array<uint8>
+    chunk |> resize(1048576)
+    while (zeros > 0l) {   // the pad to the data's alignment, then every tensor's zero bytes
+        let n = min(zeros, long_length(chunk))
+        if (n < long_length(chunk)) {
+            chunk |> resize(n)
+        }
+        fwrite(w, chunk)
+        zeros -= n
+    }
+    fclose(w)
+    delete chunk
+    delete out
+}
+
+//! the refusal `stage` raises over the carrier at `src` with `retype` applied (`gguf_retyped_copy`, the copy named `name`) - "" where it staged
+[cold_path]
+def gguf_retyped_refusal(src, name : string; retype : table<string; int>; stage : block<(path : string) : void>) : string {
+    let dst = path_join(test_temp_dir(), "{name}.gguf")
+    gguf_retyped_copy(src, dst, retype)
+    let why = panic_text() $ {
+        invoke(stage, dst)
+    }
+    remove(dst)
+    return why
+}
 
 //! `v`'s half words (`half_bits`), two little-endian bytes each
 def half_bytes(v : array<float>; bf16 : bool) : array<uint8> {

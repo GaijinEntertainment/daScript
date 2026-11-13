@@ -27,7 +27,7 @@ require _gpu_knobs   // with_gpu_knobs / set_serving_gpu_tower: the device decod
 require dasllama/dasllama_load   // load_gguf: the foreign family's image the loader refuses
 require dasllama/dasllama_gguf   // parse_gguf_meta: the Q8_0 seats' disk blocks; gguf_put_*: the retyped carriers' bytes
 require daslib/f16_cvt           // f16_to_f32: a disk block's scale
-require _gguf_writer             // gguf_header: the retyped carriers the planner refuses
+require _gguf_writer             // gguf_retyped_copy: the retyped carriers the planner refuses
 require dasllama/dasllama_image   // save_model_image
 require dasllama/dasllama_common   // QuantMode
 require ?das_metal dasllama/dasllama_metal_tower   // set_metal_tower: the Metal CTC cell's pin
@@ -594,88 +594,7 @@ def test_gigaam_kq_load_flavor(tst : T?) {
     }
 }
 
-//! a copy of the carrier at `src` written to `dst` with the tensors `retype` names retyped, every weight byte zero and every
-//! offset recomputed - the planner's refusals read the tensors' types alone, so a carrier no quantize tool mints stands in for one
-[cold_path]
-def private ga_retyped_carrier(src, dst : string; retype : table<string; int>) {
-    var out : array<uint8>
-    var zeros = 0l
-    let f = fopen(src, "rb")
-    fmap(f) $(var bytes : array<uint8>#) {
-        var inscope m <- parse_gguf_meta(bytes)
-        var kv_last = 24l   // the tensor table starts at the first tensor's name record, past the last KV's value
-        for (loc in values(m.kv)) {
-            kv_last = max(kv_last, loc.data_off)
-        }
-        var rec : array<uint8>
-        gguf_put_str(rec, m.tensors[0].name)
-        var table_at = -1l
-        for (o in range64(kv_last, long_length(bytes) - long_length(rec))) {
-            var hit = true
-            for (i in range64(long_length(rec))) {
-                if (bytes[o + i] != rec[i]) {
-                    hit = false
-                    break
-                }
-            }
-            if (hit) {
-                table_at = o
-                break
-            }
-        }
-        verify(table_at > 0l, "the carrier's tensor table not found")
-        gguf_header(out, uint64(long_length(m.tensors)), uint64(long_length(m.kv)))
-        let head = long_length(out)
-        out |> resize(head + table_at - 24l)
-        for (i in range64(24l, table_at)) {
-            out[head + i - 24l] = bytes[i]
-        }
-        var off = 0l
-        for (ti in m.tensors) {
-            let gt = retype?[ti.name] ?? ti.ggml_type
-            gguf_put_str(out, ti.name)
-            gguf_put_le(out, uint64(long_length(ti.dims)), 4)
-            for (dim in ti.dims) {
-                gguf_put_le(out, uint64(dim), 8)
-            }
-            gguf_put_le(out, uint64(gt), 4)
-            gguf_put_le(out, uint64(off), 8)
-            off = (off + ggml_type_bytes(gt, ti.n_elem) + m.alignment - 1l) / m.alignment * m.alignment
-        }
-        let data_at = (long_length(out) + m.alignment - 1l) / m.alignment * m.alignment
-        zeros = data_at - long_length(out) + off
-    }
-    fclose(f)
-    let w = fopen(dst, "wb")
-    fwrite(w, out)
-    var chunk : array<uint8>
-    chunk |> resize(1048576)
-    while (zeros > 0l) {   // the pad to the data's alignment, then every tensor's zero bytes
-        let n = min(zeros, long_length(chunk))
-        if (n < long_length(chunk)) {
-            chunk |> resize(n)
-        }
-        fwrite(w, chunk)
-        zeros -= n
-    }
-    fclose(w)
-    delete chunk
-    delete out
-}
-
-//! the planner's refusal of the Q4_K carrier with `retype` applied, run through `stage` - "" where it staged
-[cold_path]
-def private ga_retyped_refusal(name : string; retype : table<string; int>; stage : block<(path : string) : void>) : string {
-    let dst = path_join(test_temp_dir(), "{name}.gguf")
-    ga_retyped_carrier(kq_carrier(), dst, retype)
-    let why = panic_text() $ {
-        invoke(stage, dst)
-    }
-    remove(dst)
-    return why
-}
-
-//! The kq lane planner's refusals, each over a copy of the Q4_K carrier with tensors retyped (`ga_retyped_carrier`): a float
+//! The kq lane planner's refusals, each over a copy of the Q4_K carrier with tensors retyped (`gguf_retyped_copy`): a float
 //! GEMM among the quantized ones, a member the lane has no seat for (a per-32 Q5_1, NVFP4), q, k and v across two classes, and a
 //! file that does not read; the lane peek's float disjuncts - BF16 and F32 GEMMs are the exact lane's, not the kq lane's.
 [test(description = "Over retyped copies of the Q4_K carrier the kq planner refuses a float GEMM among quantized ones, a Q5_1 or NVFP4 seat, and q in Q8_0 beside K-quant k and v, each by name, stages an unchanged copy, and the lane peek tags BF16 and F32 GEMMs as the exact lane")]
@@ -684,22 +603,22 @@ def test_gigaam_kq_refusals(tst : T?) {
     return if (!model_available(tst, path))
     let l0 = "encoder.layers.0."
     tst |> run("the kq carrier's planner refuses what its lane cannot seat") @(t : T?) {
-        let mixed = ga_retyped_refusal("ga_mixed", { "{l0}ff1.linear1.weight" => GGML_TYPE_F16 }) $(p) {
+        let mixed = gguf_retyped_refusal(kq_carrier(), "ga_mixed", { "{l0}ff1.linear1.weight" => GGML_TYPE_F16 }) $(p) {
             gigaam_lane_tag(p, false, false)
         }
         t |> success(find(mixed, "mix quantized and float tensors") >= 0, "a float GEMM among quantized ones refused at the lane peek: '{mixed}'")
         for (gt in [GGML_TYPE_Q5_1, GGML_TYPE_NVFP4]) {
-            let why = ga_retyped_refusal("ga_seat_{gt}", { "{l0}ff1.linear1.weight" => gt }) $(p) {
+            let why = gguf_retyped_refusal(kq_carrier(), "ga_seat_{gt}", { "{l0}ff1.linear1.weight" => gt }) $(p) {
                 var inscope st <- stage_gigaam_model(p)
             }
             t |> success(find(why, "has no seat for") >= 0 && find(why, "{l0}ff1.linear1.weight") >= 0, "a {ggml_type_name(gt)} GEMM refused at its seat naming the tensor: '{why}'")
         }
-        let qkv = ga_retyped_refusal("ga_qkv", { "{l0}attn.q.weight" => GGML_TYPE_Q8_0 }) $(p) {
+        let qkv = gguf_retyped_refusal(kq_carrier(), "ga_qkv", { "{l0}attn.q.weight" => GGML_TYPE_Q8_0 }) $(p) {
             var inscope st <- stage_gigaam_model(p)
         }
         t |> success(find(qkv, "mix Q8_0 with a K-quant format") >= 0, "q in Q8_0 beside a Q4_K k and v refused: '{qkv}'")
         let nothing : table<string; int>
-        let none = ga_retyped_refusal("ga_clean", nothing) $(p) {
+        let none = gguf_retyped_refusal(kq_carrier(), "ga_clean", nothing) $(p) {
             var inscope st <- stage_gigaam_model(p)
         }
         t |> equal(none, "", "the copy with nothing retyped stages (the control)")
@@ -713,24 +632,11 @@ def test_gigaam_kq_refusals(tst : T?) {
         var retype <- {for (i in range(16 * length(gemms))); "encoder.layers.{i / length(gemms)}.{gemms[i % length(gemms)]}.weight" => GGML_TYPE_BF16}
         retype["{l0}attn.q.weight"] = GGML_TYPE_F32
         let dst = path_join(test_temp_dir(), "ga_float.gguf")
-        ga_retyped_carrier(path, dst, retype)
+        gguf_retyped_copy(path, dst, retype)
         t |> equal(gigaam_lane_tag(dst, false, false), "gigaam-f16", "BF16 and F32 GEMMs: the exact lane's tag")
         t |> equal(gigaam_lane_tag(path, false, false), "gigaam-kq", "the Q4_K carrier: the kq lane's tag (the control)")
         remove(dst)
         delete retype
-    }
-}
-
-//! A CTC carrier's device block carries no transducer half: the bake every GPU flavor runs places none, model-free.
-[test(description = "`gigaam_rnnt_dev_bake` on a CTC-head model neither refuses nor places any transducer piece in the device build plan")]
-def test_gigaam_ctc_bakes_no_transducer(t : T?) {
-    t |> run("the transducer half of a GPU flavor's bake is the RNNT head's alone") @(t : T?) {
-        var inscope b = TowerDevBuild()
-        let why = panic_text() $ {
-            gigaam_rnnt_dev_bake(GigaamModel(head = GigaamHead.ctc, d_model = 768l), b, "probe.rnnt")
-        }
-        t |> equal(why, "", "a CTC carrier's bake does not refuse")
-        t |> equal(long_length(b.plan), 0l, "and places no transducer piece")
     }
 }
 

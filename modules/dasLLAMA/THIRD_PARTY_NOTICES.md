@@ -19,6 +19,12 @@ Whisper-family audio front-end derive from the whisper.cpp project
 (https://github.com/ggml-org/whisper.cpp), Copyright (c) 2023-2026 The ggml authors, MIT
 License - see `LICENSE.PARAKEET`. Its `ggml-*.bin` model container is read by this module.
 
+The module also reads Parakeet-TDT carriers in the GGUF layout of the transcribe.cpp project
+(https://github.com/handy-computer/transcribe.cpp, Copyright (c) 2026 The transcribe.cpp authors,
+MIT License); no transcribe.cpp source is included. The files are fetched from
+`handy-computer/parakeet-tdt-0.6b-v3-gguf` on Hugging Face, a conversion of
+`nvidia/parakeet-tdt-0.6b-v3` (CC-BY-4.0, below), and are not redistributed here.
+
 ## GigaAM (MIT)
 
 The GigaAM ASR implementation (`dasllama/dasllama_gigaam.das`) reimplements the GigaAM v3

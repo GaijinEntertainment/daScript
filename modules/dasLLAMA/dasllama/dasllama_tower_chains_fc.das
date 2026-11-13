@@ -50,7 +50,6 @@ let FC_REC_FF2B = 10l
 let FC_FRONT_REC_C3 = 0l    //! the subsample front's GEMM records: the two pointwise convs, the input projection
 let FC_FRONT_REC_C6 = 1l
 let FC_FRONT_REC_PRE = 2l
-let FC_FRONT_RECORDS = 3l
 
 let TOWER_FC_MEL_FLOOR = 5.960464477539063e-08   //! 2^-24, canary's log-mel floor (the CPU front's own)
 
@@ -158,13 +157,23 @@ def tower_fc_of_cn(t : CanaryEncoder; @scratch @exact_size var offs : array<Cana
         proj_w = t.proj_w, proj_b = t.proj_b, proj_dim = t.proj_dim, dev_backend = t.dev_backend, dev = t.dev, devplan = t.devplan)
 }
 
-//! parakeet's chain descriptor, its block offsets mapped onto canary's record into `offs`
-def tower_fc_of_pk(m : ParakeetModel; @scratch @exact_size var offs : array<CanaryLayerOffs>) : TowerFc {
+//! parakeet's chain descriptor on `home`'s image: block offsets on canary's record into `offs`, a CPU kq image's record seats into `gseats`
+[arch(at = "../ARCHITECTURE_MEDIA_ASR.md#parakeet-kq-seats")]
+def tower_fc_of_pk(m : ParakeetModel; home : string; @scratch @exact_size var offs : array<CanaryLayerOffs>; @scratch @exact_size var gseats : array<TowerGemmSeat>) : TowerFc {
     offs |> grow_resize(m.n_layer)
     for (l in range64(m.n_layer)) {
         offs[l] = pk_fc_layer(pk_layer_offsets(m, l))
     }
+    let nseats = parakeet_fc_seat_count(m)
+    gseats |> grow_resize(nseats)
+    var kq_fmts = 0u
+    if (nseats > 0l) {
+        kq_fmts = parakeet_fc_record_seats(m, gseats)
+    } elif (m.kq_lane) {
+        kq_fmts = uint(tower_dev_word(m.dev, m.devplan, tower_fc_piece(home, "kq.fmts"), 0l))
+    }
     return TowerFc(family = "parakeet", front_name = "parakeet-front", q8 = m.q8, qblob = m.qblob, qscales = m.qscales, blob = m.blob,
+        kq_lane = m.kq_lane, kq = m.kq_lane ? m.kq : PlaneU8(), ks = m.kq_lane ? m.ks : PlaneU8(), kq_repacked = m.kq_repacked, kq_fmts = kq_fmts,
         f16w = m.gemm_f16, wblob = m.wblob, w_off = 0l, w_n = m.wblob.n, n_layer = m.n_layer, d = m.n_state, ff = 4l * m.n_state, n_head = m.n_head, conv_kernel = m.n_conv_kernel, eps = m.eps,
         biased = false, tap_major = true, device_mel = false, n_mel = m.n_mel, n_fft = m.n_fft, n_fb = m.n_fft / 2l + 1l, nch = m.n_sub_ch,
         c0_w = m.c0_w, c0_b = m.c0_b, c2_w = m.c2_w, c2_b = m.c2_b, c3_w = m.c3_w, c3_b = m.c3_b, c5_w = m.c5_w, c5_b = m.c5_b,
@@ -205,29 +214,23 @@ struct TowerFcKqPlan {
 }
 
 [cold_path]
-def private tower_fc_kq_plan(fc : TowerFc; offs : array<CanaryLayerOffs>; gseats : array<TowerGemmSeat>) : TowerFcKqPlan {
+def private tower_fc_kq_plan(recs : array<Q8Region>; gseats : array<TowerGemmSeat>) : TowerFcKqPlan {
     let q8e = kq_elems(KqFmt.q8)
-    let nrec = fc.n_layer * FC_GEMM_RECORDS
     var p : TowerFcKqPlan
-    p.seats |> reserve_resize(nrec)
-    for (l in range64(fc.n_layer)) {
-        let recs = fc_gemm_records(offs[l], fc.d, fc.ff)
-        for (g in range64(FC_GEMM_RECORDS)) {
-            let rid = l * FC_GEMM_RECORDS + g
-            let seat = gseats[rid]
-            p.seats[rid] = TowerFcSeat(fmt = KqFmt.q8, wblk0 = 0l)
-            continue if (recs[g].rows == 0l)
-            if (seat.fmt == KqFmt.q8) {
-                p.regions |> push(Q8Region(woff = seat.qoff, n = recs[g].n, rows = recs[g].rows))
-                p.seats[rid] = TowerFcSeat(fmt = KqFmt.q8, wblk0 = seat.qoff / q8e)
-            } else {
-                let fmt = int(seat.fmt)
-                let bytes = dev_rows_bytes(seat.fmt, recs[g].n, recs[g].rows)
-                let q0 = p.qbytes?[fmt] ?? 0l
-                p.seats[rid] = TowerFcSeat(fmt = seat.fmt, wblk0 = q0 / kq_qsb(seat.fmt))
-                p.qbytes[fmt] = q0 + bytes.q
-                p.sbytes[fmt] = (p.sbytes?[fmt] ?? 0l) + bytes.s
-            }
+    p.seats |> reserve_resize(long_length(recs))
+    for (r, seat, ps in recs, gseats, p.seats) {
+        ps = TowerFcSeat(fmt = KqFmt.q8, wblk0 = 0l)
+        continue if (r.rows == 0l)
+        if (seat.fmt == KqFmt.q8) {
+            p.regions |> push(Q8Region(woff = seat.qoff, n = r.n, rows = r.rows))
+            ps = TowerFcSeat(fmt = KqFmt.q8, wblk0 = seat.qoff / q8e)
+        } else {
+            let fmt = int(seat.fmt)
+            let bytes = dev_rows_bytes(seat.fmt, r.n, r.rows)
+            let q0 = p.qbytes?[fmt] ?? 0l
+            ps = TowerFcSeat(fmt = seat.fmt, wblk0 = q0 / kq_qsb(seat.fmt))
+            p.qbytes[fmt] = q0 + bytes.q
+            p.sbytes[fmt] = (p.sbytes?[fmt] ?? 0l) + bytes.s
         }
     }
     return <- p
@@ -235,23 +238,17 @@ def private tower_fc_kq_plan(fc : TowerFc; offs : array<CanaryLayerOffs>; gseats
 
 //! one K-quant member's seats gathered in the tier's device layout at their block bases (`seats`) into `wq` / `ws`
 [cold_path]
-def private tower_fc_gather_kq_member(fc : TowerFc; offs : array<CanaryLayerOffs>; gseats : array<TowerGemmSeat>; fmt : int; seats : array<TowerFcSeat>;
+def private tower_fc_gather_kq_member(fc : TowerFc; recs : array<Q8Region>; gseats : array<TowerGemmSeat>; fmt : int; seats : array<TowerFcSeat>;
                                       q_bytes, s_bytes : int64; var wq, ws : array<uint8>) {
     var inscope no_site_words : array<uint>
     wq |> reserve_resize(q_bytes)
     ws |> reserve_resize(s_bytes)
-    for (l in range64(fc.n_layer)) {
-        let recs = fc_gemm_records(offs[l], fc.d, fc.ff)
-        for (g in range64(FC_GEMM_RECORDS)) {
-            let rid = l * FC_GEMM_RECORDS + g
-            let seat = gseats[rid]
-            continue if (recs[g].rows == 0l || int(seat.fmt) != fmt)
-            let kf = seat.fmt
-            let base = seats[rid].wblk0
-            kq_gather_rows_dev(kf, plane_at(fc.kq, seat.qoff), plane_at(fc.ks, seat.soff), recs[g].n, recs[g].rows, recs[g].rows,
-                fc.kq_repacked, fc.kq_repacked ? active_kq_layout_mr(kq_schema_id(kf)) : 1l,
-                wq, ws, base * kq_qsb(kf), base * kq_dev_ssb(kf), no_site_words)
-        }
+    for (r, seat, ps in recs, gseats, seats) {
+        continue if (r.rows == 0l || int(seat.fmt) != fmt)
+        let kf = seat.fmt
+        kq_gather_rows_dev(kf, plane_at(fc.kq, seat.qoff), plane_at(fc.ks, seat.soff), r.n, r.rows, r.rows,
+            fc.kq_repacked, fc.kq_repacked ? active_kq_layout_mr(kq_schema_id(kf)) : 1l,
+            wq, ws, ps.wblk0 * kq_qsb(kf), ps.wblk0 * kq_dev_ssb(kf), no_site_words)
     }
 }
 
@@ -261,7 +258,12 @@ def tower_fc_bake(fc : TowerFc; offs : array<CanaryLayerOffs>; gseats : array<To
     let lay = active_q8_repack_layout(false)
     var wq, ws : array<uint8>
     if (fc.kq_lane) {
-        var inscope p <- tower_fc_kq_plan(fc, offs, gseats)
+        var kq_front : Q8Region[3]
+        if (!fc.rotary) {
+            kq_front = fc_front_records(fc.c3_w, fc.c6_w, fc.pre_w, fc.nch, fc.n_mel, fc.d)
+        }
+        var inscope recs <- fc_kq_records(offs, fc.n_layer, fc.d, fc.ff, kq_front)
+        var inscope p <- tower_fc_kq_plan(recs, gseats)
         if (fc.qblob.n > 0l) {
             wq |> reserve_resize(fc.qblob.n)
             ws |> reserve_resize(fc.qscales.n * 2l)
@@ -277,7 +279,7 @@ def tower_fc_bake(fc : TowerFc; offs : array<CanaryLayerOffs>; gseats : array<To
         tower_dev_put(b, tower_fc_piece(home, "kq.fmts"), fmts)
         for (fmt, qb in keys(p.qbytes), values(p.qbytes)) {
             var kq, ks : array<uint8>
-            tower_fc_gather_kq_member(fc, offs, gseats, fmt, p.seats, qb, p.sbytes?[fmt] ?? 0l, kq, ks)
+            tower_fc_gather_kq_member(fc, recs, gseats, fmt, p.seats, qb, p.sbytes?[fmt] ?? 0l, kq, ks)
             tower_dev_put(b, tower_fc_kq_piece(home, fmt, false), unsafe(addr<uint8 const?>(kq[0])), long_length(kq))
             tower_dev_put(b, tower_fc_kq_piece(home, fmt, true), unsafe(addr<uint8 const?>(ks[0])), long_length(ks))
             delete kq
@@ -698,9 +700,13 @@ def private tower_fc_cvt16(var rl : auto(R); src, dst : TowerBuf; nelem : int64)
     enc_tower_clamp_cvt_cls(rl, fixed_array(src, dst), pc, rq_wgs(false, nelem))
 }
 
-//! a front GEMM x [rows x n] -> y [rows x dout]: the rows cast to the `feat16` feed, then `tower_fc_lane_mm` (front record `rid` on the q8 lane)
-def private tower_fc_front_mm(var rl : auto(R); fc : TowerFc; site : RailSite; rid : int64; x, y : TowerBuf; n, dout, rows, woff : int64) {
+//! a front GEMM x [rows x n] -> y [rows x dout]: the rows cast to the `feat16` feed, then `tower_fc_lane_mm` (front record `rid`
+//! on the q8 lane; on the kq lane the site bound to its seat, behind the blocks')
+def private tower_fc_front_mm(var rl : auto(R); fc : TowerFc; seats : array<TowerFcSeat>; site : RailSite; rid : int64; x, y : TowerBuf; n, dout, rows, woff : int64) {
     tower_fc_cvt16(rl, x, TowerBuf.feat16, rows * n)
+    if (fc.kq_lane) {
+        tower_fc_bind_seat(rl, site, seats[fc.n_layer * FC_GEMM_RECORDS + rid])
+    }
     tower_fc_lane_mm(rl, fc, site, rid, x, y, n, dout, rows, woff)
 }
 
@@ -715,7 +721,7 @@ def private tower_fc_dw2d(var rl : auto(R); tap_major : bool; src, dst : TowerBu
 
 //! the canary / parakeet subsample front over `n_len` frames (`n_valid` live): canary's mel off `planes` or parakeet's CPU rows in `mel`, into `rows_out`
 [arch(at = "../ARCHITECTURE_GPU_TOWER_RAIL.md#fc-chains")]
-def tower_fc_front(var rl : auto(R); fc : TowerFc; n_len, n_valid : int64) {   // nolint:STYLE038 — the dispatch chain is the shape
+def tower_fc_front(var rl : auto(R); fc : TowerFc; seats : array<TowerFcSeat>; n_len, n_valid : int64) {   // nolint:STYLE038 — the dispatch chain is the shape
     let nb = rl.norms_base
     let n_mel = fc.n_mel
     let n_fb = fc.n_fb
@@ -750,36 +756,38 @@ def tower_fc_front(var rl : auto(R); fc : TowerFc; n_len, n_valid : int64) {   /
     var pc_dw2 = GkDwConv2dArgs(iw = uint(g.w1), ih = uint(g.t1), ih_valid = uint(l0), ch = uint(nch), woff = uint(fc.c2_w - nb), boff = uint(fc.c2_b - nb))
     tower_fc_dw2d(rl, fc.tap_major, TowerBuf.stage1, TowerBuf.stage2, pc_dw2, (rows2 * nch + 255l) / 256l)
     rail_pt(rl, RailProfRole.dwconv)
-    tower_fc_front_mm(rl, fc, RailSite.front1, FC_FRONT_REC_C3, TowerBuf.stage2, TowerBuf.stage3, nch, nch, rows2, fc.c3_w)
+    tower_fc_front_mm(rl, fc, seats, RailSite.front1, FC_FRONT_REC_C3, TowerBuf.stage2, TowerBuf.stage3, nch, nch, rows2, fc.c3_w)
     rail_pt(rl, RailProfRole.gemm_pw)
     tower_fc_bias(rl, true, TowerBuf.stage3, nch, rows2 * nch, fc.c3_b, BIAS_ACT_RELU)
     rail_pt(rl, RailProfRole.bias)
     var pc_dw5 = GkDwConv2dArgs(iw = uint(g.w2), ih = uint(g.t2), ih_valid = uint(l2), ch = uint(nch), woff = uint(fc.c5_w - nb), boff = uint(fc.c5_b - nb))
     tower_fc_dw2d(rl, fc.tap_major, TowerBuf.stage3, TowerBuf.stage4, pc_dw5, (rows3 * nch + 255l) / 256l)
     rail_pt(rl, RailProfRole.dwconv)
-    tower_fc_front_mm(rl, fc, RailSite.front2, FC_FRONT_REC_C6, TowerBuf.stage4, TowerBuf.stage5, nch, nch, rows3, fc.c6_w)
+    tower_fc_front_mm(rl, fc, seats, RailSite.front2, FC_FRONT_REC_C6, TowerBuf.stage4, TowerBuf.stage5, nch, nch, rows3, fc.c6_w)
     rail_pt(rl, RailProfRole.gemm_pw)
     tower_fc_bias(rl, true, TowerBuf.stage5, nch, rows3 * nch, fc.c6_b, BIAS_ACT_RELU)
     rail_pt(rl, RailProfRole.bias)
     var pc_sh = GkFeatShuffleArgs(w = uint(g.w3), ch = uint(nch), t = uint(tt), rows_pad = uint(tt))
     enc_tower_feat_shuffle_cls(rl, fixed_array(TowerBuf.stage5, TowerBuf.feat), pc_sh, (tt * feat + 255l) / 256l)
     rail_pt(rl, RailProfRole.shuffle)
-    tower_fc_front_mm(rl, fc, RailSite.front3, FC_FRONT_REC_PRE, TowerBuf.feat, TowerBuf.rows_out, feat, d, tt, fc.pre_w)
+    tower_fc_front_mm(rl, fc, seats, RailSite.front3, FC_FRONT_REC_PRE, TowerBuf.feat, TowerBuf.rows_out, feat, d, tt, fc.pre_w)
     rail_pt(rl, RailProfRole.gemm_pw)
     tower_fc_bias(rl, true, TowerBuf.rows_out, d, tt * d, fc.pre_b, BIAS_ACT_NONE)
     rail_pt(rl, RailProfRole.bias)
 }
 
 //! the front's three schedule records, each on its own front site, at their raw rows: the stage planes hold exactly them
-def tower_fc_front_rec(rl : auto(R); fc : TowerFc; n_len, rid : int64) : TowerSchedRec {
+def tower_fc_front_rec(rl : auto(R); fc : TowerFc; seats : array<TowerFcSeat>; n_len, rid : int64) : TowerSchedRec {
     let g = tower_fc_geom(n_len, fc.n_mel)
     let q8e = kq_elems(KqFmt.q8)
+    let woff = rid == FC_FRONT_REC_C3 ? fc.c3_w : (rid == FC_FRONT_REC_C6 ? fc.c6_w : fc.pre_w)
+    let wblk0 = fc.kq_lane ? seats[fc.n_layer * FC_GEMM_RECORDS + rid].wblk0 : woff / q8e
     if (rid == FC_FRONT_REC_C3) {
-        return TowerSchedRec(wblk0 = fc.c3_w / q8e, rows = g.t2 * g.w2, groups = rail_site_groups(rl, RailSite.front1, fc.nch, g.t2 * g.w2))
+        return TowerSchedRec(wblk0 = wblk0, rows = g.t2 * g.w2, groups = rail_site_groups(rl, RailSite.front1, fc.nch, g.t2 * g.w2))
     } elif (rid == FC_FRONT_REC_C6) {
-        return TowerSchedRec(wblk0 = fc.c6_w / q8e, rows = g.t3 * g.w3, groups = rail_site_groups(rl, RailSite.front2, fc.nch, g.t3 * g.w3))
+        return TowerSchedRec(wblk0 = wblk0, rows = g.t3 * g.w3, groups = rail_site_groups(rl, RailSite.front2, fc.nch, g.t3 * g.w3))
     }
-    return TowerSchedRec(wblk0 = fc.pre_w / q8e, rows = g.t3, groups = rail_site_groups(rl, RailSite.front3, fc.d, g.t3))
+    return TowerSchedRec(wblk0 = wblk0, rows = g.t3, groups = rail_site_groups(rl, RailSite.front3, fc.d, g.t3))
 }
 
 //! the front's three GEMM sites fed off the feature rows' f16 feed

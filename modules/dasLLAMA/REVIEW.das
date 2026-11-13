@@ -106,13 +106,14 @@ var private FACADE_DEFS_WITHOUT_TUTORIAL <- {
     "register_gigaam_gpu", "register_gigaam_gpu_exact", "register_gigaam_gpu_encode", "register_gigaam_gpu_ctc", "register_rnnt_gpu",   //! the Metal and Vulkan towers and decoders register their device seats through them
     "rnnt_greedy", "rnnt_decode", "rnnt_n_logits", "rnnt_joint_blocks", "rnnt_step_lanes",   //! the shared transducer decode the parakeet and gigaam families drive
     "rnnt_dev_args", "rnnt_dev_cap", "rnnt_dev_faulted", "rnnt_dev_first_input", "rnnt_dev_key",   //! the host half of the device transducer decode the Metal and Vulkan seats call
+    "rnnt_bake", "rnnt_net_baked",   //! the transducer decoder's image form: a family's staging bakes it, its served net reads it
     "rnnt_dev_land_tokens", "rnnt_dev_layer_args", "rnnt_dev_layout", "rnnt_dev_round_budget",   //! the host half of the device transducer decode the Metal and Vulkan seats call
-    "rnnt_dev_rounds", "rnnt_dev_shape_ok", "rnnt_dev_slab", "rnnt_dev_state_words",   //! the host half of the device transducer decode the Metal and Vulkan seats call
+    "rnnt_dev_rounds", "rnnt_dev_shape_ok", "rnnt_dev_planes_ok", "rnnt_dev_state_words",   //! the host half of the device transducer decode the Metal and Vulkan seats call
     "set_rnnt_dev_fault", "set_rnnt_dev_round_budget",    //! probe seams a fixture sets to force a device fault, a round budget or a lane split
     "set_rnnt_trace",   //! the CPU transducer decode's per-frame trace an engine developer flips while bringing a family up
     "gigaam_gemm_stride", "gigaam_lane_tag", "gigaam_kq_members",   //! the kq lane's seat geometry, image tag and members - the next line's reasons
-    "gigaam_fc_record_seats", "gigaam_kq_members_of",   //! the kq lane's seat geometry a test pins, the lane's image tag the bake tool names, the lane's members the load log and the tests read, the record seats the device chains read
-    "gigaam_dev_flavor", "gigaam_rnnt_dev_bake", "rnnt_gpu_projects", "rnnt_dev_bake", "gigaam_gpu_lane_planes"   //! the load's and the tests' pick of the GPU flavor, the transducer halves a driver's bake places in its device block (`#tower-dev-block`), the lane's planes a driver's serves predicate asks
+    "gigaam_fc_record_seats", "tower_kq_members_of",   //! the kq lane's seat geometry a test pins, the lane's image tag the bake tool names, the lane's members the load log and the tests read, the record seats the device chains read
+    "gigaam_dev_flavor", "rnnt_gpu_projects", "gigaam_gpu_lane_planes"   //! the load's and the tests' pick of the GPU flavor, the transducer halves a driver's bake places in its device block (`#tower-dev-block`), the lane's planes a driver's serves predicate asks
 }
 
 [arch(at = "ARCHITECTURE_TTS.md#text-to-speech")]
@@ -1410,8 +1411,8 @@ let private TTS_BLOCKS_FILE = "modules/dasLLAMA/dasllama/dasllama_tts_blocks.das
 // the TTS block file's *_prepare mints, the layout helpers and the layout constants' declaration
 // lines, hashed in file order. A closure change with IMAGE_VERSION unmoved is red; the finding prints the
 // value to re-stamp with.
-let private IMAGE_LAYOUT_STAMP_VERSION = 61
-let private IMAGE_LAYOUT_STAMP_HASH = 0x49d5bc286a4211e7ul
+let private IMAGE_LAYOUT_STAMP_VERSION = 62
+let private IMAGE_LAYOUT_STAMP_HASH = 0x32ba475c12ef70b4ul
 
 // The helpers that decide WHERE bytes land: the page pad, the plane and total sizing, the
 // writer's append / zero-fill / header patch, the header's scalar stores, the lattice
@@ -1426,7 +1427,8 @@ var private LAYOUT_HELPERS <- {
     "vk_mint_plane", "vk_mint_walk", "vk_mint_sink_append",
     "gg_stream_plane", "gg_job_span", "gg_plane_total", "tower_dev_put", "tower_bake_q8",
     "kq_gather_rows_dev", "pack_iq_dev_row", "wd_gather", "tower_fc_gather_kq_member", "tower_gather_q8_regions",
-    "q8_gather_rows", "q8_gather_slice", "rnnt_dev_slab", "rnnt_dev_layout",
+    "fc_kq_records", "tower_kq_seat_take", "parakeet_fc_record_seats", "tw_fc_kq_attach",
+    "q8_gather_rows", "q8_gather_slice", "rnnt_dev_slab", "rnnt_dev_layout", "rnnt_bake",
     "fc_q8_regions", "fc_gemm_records", "fc_front_records", "tower_fc_kq_plan", "tower_aud_regions", "ln_block_regions",
     "tower_ct_regions", "tower_q3a_regions", "gemma4a_all_regions", "gemma4a_block_regions",
     "tower_aud_stem16", "tower_aud_stem_kdp", "tower_g4a_front16", "tower_q3a_front16", "tower_q3a_stages", "tower_conv_stage",

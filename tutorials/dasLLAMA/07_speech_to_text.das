@@ -85,8 +85,8 @@ def main {  // nolint:STYLE038 - one linear tutorial walkthrough
     // ──────────────────────────────────────────────────────────────────────────
     //
     // One entry point for every family. A ggml bin routes to whisper or parakeet by its
-    // vocabulary size; a GigaAM GGUF is one file; any other GGUF
-    // decoder needs its audio-encoder mmproj as the second path.
+    // vocabulary size; a GigaAM or Parakeet GGUF is one file; any other
+    // GGUF decoder needs its audio-encoder mmproj as the second path.
     let cmd <- get_command_line_arguments()
     let paths <- [for (a in cmd); a; where ends_with(a, ".bin") || ends_with(a, ".gguf") || ends_with(a, ".wav")]
     if (length(paths) < 2) {

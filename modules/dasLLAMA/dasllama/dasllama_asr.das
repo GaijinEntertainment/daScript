@@ -152,7 +152,7 @@ def set_asr_tower_q8(on : bool) {
 [arch(at = "../ARCHITECTURE_MEDIA.md#tower-weight-lane")]
 def asr_image_route(tag : string) : string {
     if (tag == "whisper-q8" || tag == "whisper-f32" || tag == "whisper-f32-q8" || tag == "whisper-f16-q8") return "whisper"
-    if (tag == "parakeet-q8" || tag == "parakeet-f32" || tag == "parakeet-f16") return "parakeet"
+    if (tag == "parakeet-q8" || tag == "parakeet-f32" || tag == "parakeet-f16" || tag == PARAKEET_KQ_TAG) return "parakeet"
     if (tag == "gigaam-q8" || tag == "gigaam-f16" || tag == GIGAAM_KQ_TAG) return "gigaam"
     if (tag == "qwen3a-f32" || tag == "qwen3a-f16" || tag == "qwen3a-q8") return "qwen3a"
     if (tag == "gemma4a-f32" || tag == "gemma4a-f16" || tag == "gemma4a-q8") return "gemma4a"
@@ -207,6 +207,11 @@ def load_asr_model(path : string) : AsrModel {
             gm.ga <- load_gigaam_model(path, !pinned && gigaam_serves_q8(), pinned)
             return <- gm
         }
+        if (gguf_file_arch(path) == PARAKEET_ARCH) {
+            var pm = AsrModel(kind = AsrKind.parakeet)
+            pm.pk <- load_parakeet_model(path, !asr_fp32_pinned() && parakeet_serves_q8())
+            return <- pm
+        }
         panic("dasLLAMA asr: '{path}' is a GGUF decoder - pass its mmproj too: load_asr_model(path, mmproj_path)")
     }
     let ggml = asr_ggml_kind(magic, vocab)
@@ -244,12 +249,12 @@ def asr_ggml_kind(magic : uint; n_vocab : int) : AsrGgmlKind {
 }
 
 //! True when ``path`` is a GGUF decoder that loads only beside its mmproj (the two-argument ``load_asr_model``);
-//! a ggml bin, a ``.dlim`` and a one-file GGUF (GigaAM) load alone
+//! a ggml bin, a ``.dlim`` and a one-file GGUF (GigaAM, Parakeet) load alone
 def asr_needs_mmproj(path : string) : bool => ends_with(path, ".gguf") && !gguf_is_asr_carrier(path)
 
-def private is_asr_carrier_arch(arch : string) : bool => arch == GIGAAM_ARCH
+def private is_asr_carrier_arch(arch : string) : bool => arch == GIGAAM_ARCH || arch == PARAKEET_ARCH
 
-//! True when ``path`` is a one-file GGUF ASR carrier (GigaAM): it transcribes alone and is no chat model
+//! True when ``path`` is a one-file GGUF ASR carrier (GigaAM, Parakeet): it transcribes alone and is no chat model
 def gguf_is_asr_carrier(path : string) : bool => ends_with(path, ".gguf") && is_asr_carrier_arch(gguf_file_arch(path))
 
 //! True when ``path`` is a GGUF that serves no chat on its own: a one-file ASR carrier, or a projector (an mmproj, its

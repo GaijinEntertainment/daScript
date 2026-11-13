@@ -288,7 +288,7 @@ def private vt_decline(r : VtResident; why : TowerDecline) : bool
 //! the kq-lane decline - "a reason naming the site and the member" (REVIEW_KQ_FORMATS.md)
 [cold_path]
 def private vt_decline_kq(r : VtResident; members : string) : bool
-    => g_vt_declines |> note("the {r.family} tower", "{TowerDecline.kq_lane}", "the Vulkan image's chain cannot run: the GigaAM block GEMMs ({members}) - {vt_decline_words(TowerDecline.kq_lane)}")
+    => g_vt_declines |> note("the {r.family} tower", "{TowerDecline.kq_lane}", "the Vulkan image's chain cannot run: the {r.family} block GEMMs ({members}) - {vt_decline_words(TowerDecline.kq_lane)}")
 
 //! a scratch or upload builder's outcome: built, or the reason the seat declines
 enum private VtBuild {
@@ -1221,6 +1221,11 @@ def private vt_fc_rail_seats(var rl : VtRail; r : VtResident; fc : TowerFc) {
     rail_seat(rl, TowerBuf.rel_ph, r.cn_ph_dev, (ww + TILE_READ_SLACK) * 128l * 2l, VT_CN_REL_PANEL)
     rail_seat(rl, TowerBuf.rel_r, r.cn_r_dev, cap * ww * 4l, VT_CN_REL_PLANE)
     rail_seat(rl, TowerBuf.taps, r.taps_dev, r.taps_bytes, 0u)
+    vt_fc_kq_member_seats(rl, r, fc)
+}
+
+//! the kq lane's member pairs on the rail in slot order: the blocks' rail and the rel-form front's
+def private vt_fc_kq_member_seats(var rl : VtRail; r : VtResident; fc : TowerFc) {
     var m = 0
     for (fmt in range(KQ_FMT_COUNT)) {
         continue if ((fc.kq_fmts & (1u << uint(fmt))) == 0u || m >= TOWER_KQ_MEMBERS)
@@ -1260,12 +1265,24 @@ def private vt_fc_lane_ok(fc : TowerFc; gemm_khr : bool) : bool {
 
 //! asked after `vt_fc_lane_ok`, which holds the f16 feed these tiles read
 [arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN_FC.md#vk-tower-fc-kq")]
-def private vt_fc_kq_tiles_ok(fc : TowerFc; npos : int64) : bool {
+def private vt_fc_kq_tiles_ok(fc : TowerFc; npos, ww : int64) : bool {
     return true if (!fc.kq_lane)
     for (fmt in range(KQ_FMT_COUNT)) {
         continue if ((fc.kq_fmts & (1u << uint(fmt))) == 0u)
-        if (!vt_tile_ensure(vt_tile(true, fc.d, npos, fmt)) || !vt_tile_ensure(vt_tile(true, fc.ff, npos, fmt)) || !vt_tile_ensure(vt_tile(true, 2l * fc.d, npos, fmt))) {
+        if (!vt_tile_ensure(vt_tile(true, fc.d, npos, fmt)) || !vt_tile_ensure(vt_tile(true, fc.ff, npos, fmt)) || !vt_tile_ensure(vt_tile(true, 2l * fc.d, npos, fmt))
+                || (!fc.rotary && !vt_tile_ensure(vt_tile(true, fc.d, ww, fmt)))) {
             return false
+        }
+    }
+    return true
+}
+
+//! the rel-form front's three GEMM tiles at the columns `tcs`, a class each of the q8 slot's and of every K-quant member's
+def private vt_fc_front_tiles_ok(fc : TowerFc; tcs : int64 const[3]) : bool {
+    for (fmt in range(KQ_FMT_COUNT)) {
+        continue if (fmt != int(KqFmt.q8) && (fc.kq_fmts & (1u << uint(fmt))) == 0u)
+        for (tc in tcs) {
+            return false if (!cm2_cls_ensure(fmt, tc))
         }
     }
     return true
@@ -1278,7 +1295,7 @@ def private vt_fc_admits(fc : TowerFc; npos, ww : int64; khr, gemm_khr : bool) :
     let rope_n = npos * (tower_fc_hs(fc.d, fc.n_head) / 2l)
     return (tower_fc_shape_ok(fc.rotary, fc.d, fc.ff, fc.n_head, fc.conv_kernel, npos, ww, rope_n) && vt_fc_range_ok(fc, npos)
         && vt_fc_classes_ok(fc.rotary, fc.d, fc.ff, fc.n_head, npos, ww, khr, gemm_khr, vt_cm2_feed()) && vt_fc_lane_ok(fc, gemm_khr)
-        && vt_fc_kq_tiles_ok(fc, npos))
+        && vt_fc_kq_tiles_ok(fc, npos, ww))
 }
 
 [arch(at = "../ARCHITECTURE_GPU_TOWER_RAIL.md#fc-chains")]
@@ -1301,8 +1318,8 @@ def private vt_fc_blocks(var r : VtResident; fc : TowerFc; var x : array<float>;
     if (!vt_fc_classes_ok(fc.rotary, d, ff, fc.n_head, npos, ww, arm.khr, arm.gemm_khr, cm2) || !vt_fc_lane_ok(fc, arm.gemm_khr)) {
         return vt_decline(r, TowerDecline.device)
     }
-    if (!vt_fc_kq_tiles_ok(fc, npos)) {
-        return vt_decline_kq(r, gigaam_kq_members_of(fc.kq_fmts, fc.qblob.n > 0l))
+    if (!vt_fc_kq_tiles_ok(fc, npos, ww)) {
+        return vt_decline_kq(r, tower_kq_members_of(fc.kq_fmts, fc.qblob.n > 0l))
     }
     let v = vt_tile(cm2, d, npos)
     let vff = vt_tile(cm2, ff, npos)
@@ -1391,7 +1408,7 @@ def private vulkan_parakeet_encode(m : ParakeetModel; var st : ParakeetState) : 
         vt_decline(r, TowerDecline.shape)
         return -1l
     }
-    let fc = tower_fc_of_pk(m, g_vt_fc_offs)
+    let fc = tower_fc_of_pk(m, VT_HOME, g_vt_fc_offs, g_vt_fc_gseats)
     let tt = vt_fc_front(r, fc, unsafe(addr<float const?>(st.mel.data[0])), long_length(st.mel.data), st.mel.n_len, st.mel.n_len, st.x, true)
     let first = !r.served_said   //! read past the front, whose attach re-keys the resident
     if (tt < 0l || !vt_fc_blocks(r, fc, st.x, tt, 2l * tt - 1l)) {
@@ -1512,21 +1529,17 @@ def private vulkan_gigaam_serves_model(e : GigaamModel) : bool {
 [cold_path, arch(at = "../ARCHITECTURE_IMAGE_GPU_PLANES.md#tower-dev-block")]
 def private vulkan_gigaam_bake(m : GigaamModel; var b : TowerDevBuild) : bool {
     tower_fc_bake(tower_fc_of_ga(m, VT_HOME, g_vt_fc_offs, g_vt_fc_gseats), g_vt_fc_offs, g_vt_fc_gseats, b, VT_HOME)
-    gigaam_rnnt_dev_bake(m, b, VK_RNNT_PIECE)
     return tower_ga_front_bake(m, b, VT_HOME)
 }
 
 //! Parakeet's Vulkan device block (`#tower-dev-block`): the chain's planes, then the front's f16 conv panel
 [cold_path, arch(at = "../ARCHITECTURE_IMAGE_GPU_PLANES.md#tower-dev-block")]
 def private vulkan_parakeet_bake(m : ParakeetModel; var b : TowerDevBuild) : bool {
-    let fc = tower_fc_of_pk(m, g_vt_fc_offs)
+    let fc = tower_fc_of_pk(m, VT_HOME, g_vt_fc_offs, g_vt_fc_gseats)
     tower_fc_bake(fc, g_vt_fc_offs, g_vt_fc_gseats, b, VT_HOME)
     tower_cn_front_bake(fc, b, VT_HOME)
-    parakeet_rnnt_dev_bake(m, b, VK_RNNT_PIECE)
     return true
 }
-
-let VK_RNNT_PIECE = "vk.rnnt"   //! the transducer decoder's halves' and slab's prefix in a Vulkan device block
 
 //! Canary's Vulkan device block (`#tower-dev-block`): the chain's planes with the projector's, then the front's f16 conv panel
 [cold_path, arch(at = "../ARCHITECTURE_IMAGE_GPU_PLANES.md#tower-dev-block")]
@@ -1544,6 +1557,9 @@ def private vulkan_fc_serves_model(q8 : bool) : bool {
     return vt_flavor_refused("canary / parakeet", VK_DECLINE_WORDS_DEVICE) if (!vulkan_tower_arms() || !vulkan_tower_tiles_on())
     return vt_cm2_feed() || vt_flavor_refused("canary / parakeet", "the front rides the f16 GEMM feed, off on this device")
 }
+
+//! parakeet's lanes (`e`, the lane's meta) on the Vulkan chain: q8, the exact pick, and the kq lane, whose tiles read the same f16 feed
+def private vulkan_parakeet_serves_model(e : ParakeetModel) : bool => vulkan_fc_serves_model(e.q8)
 
 //! canary's projector on the device behind its blocks (`#tower-dev-block`): the GEMM on the chain's lane, its bias, rows into `out`; false with the decline counted
 def private vt_fc_proj(var r : VtResident; fc : TowerFc; npos : int64; @scratch @exact_size var out : array<float>) : bool {
@@ -3045,6 +3061,7 @@ def private vt_cn_front_seats(var rl : VtRail; r : VtResident; fc : TowerFc) {
     rail_seat(rl, TowerBuf.ws, r.ws_dev, r.ws_bytes, 0u)
     rail_seat(rl, TowerBuf.wb, r.wq_dev, r.wq_bytes, 0u) if (fc.f16w)   // the exact lane's halfwords sit in the q8 plane's seat (`vt_upload_f16`)
     rail_seat(rl, TowerBuf.meta, r.fmeta.buf, r.fmeta_bytes, 0u)
+    vt_fc_kq_member_seats(rl, r, fc)
 }
 
 [cold_path, unused_argument(gemm_khr)]
@@ -3101,8 +3118,15 @@ def private vt_fc_front(var r : VtResident; fc : TowerFc; src : float const?; sr
     let rows3 = g.t3 * g.w3
     let tt = g.t3
     let feat = g.w3 * nch
-    if (n_len < 1l || nch % 64l != 0l || feat % 64l != 0l || d % 64l != 0l || n_fb != n_fft / 2l + 1l || src_elems < n_len * (fc.device_mel ? n_fft : n_mel)
-            || !vt_cn_rows_ok(tt, d, fc.ff)) {
+    if (n_len < 1l || nch % 64l != 0l || feat % 64l != 0l || d % 64l != 0l || n_fb != n_fft / 2l + 1l || src_elems < n_len * (fc.device_mel ? n_fft : n_mel)) {
+        vt_decline(r, TowerDecline.shape)
+        return -1l
+    }
+    if (!vulkan_tower_arms()) {   // the range check below reads the device's limits: an image loaded by its path reaches here with no device yet
+        vt_decline(r, TowerDecline.device)
+        return -1l
+    }
+    if (!vt_cn_rows_ok(tt, d, fc.ff)) {
         vt_decline(r, TowerDecline.shape)
         return -1l
     }
@@ -3113,7 +3137,7 @@ def private vt_fc_front(var r : VtResident; fc : TowerFc; src : float const?; sr
         $(_gemm_khr : bool) => (ensure_tower_im2col_cls() && ensure_tower_spec_dft_cls() && ensure_tower_mel_log_cls() && ensure_tower_mel_norm_cls()
             && ensure_tower_dw_conv_cls() && ensure_tower_pk_dw2d_cls() && ensure_tower_feat_shuffle_cls() && ensure_tower_bias_act_cls()
             && ensure_tower_clamp_cvt_cls()
-            && (fc.f16w || (cm2_cls_ensure(int(KqFmt.q8), tc2) && cm2_cls_ensure(int(KqFmt.q8), tc3) && cm2_cls_ensure(int(KqFmt.q8), tcx)))),
+            && (fc.f16w || vt_fc_front_tiles_ok(fc, fixed_array(tc2, tc3, tcx)))),
         $(var rr : VtResident) => vt_fc_planes(rr, fc) && (rr.front || vt_cn_front_slab(rr, fc)),
         $(var rr : VtResident; cap : int64; gemm_khr : bool) => vt_cn_front_scratch(rr, fc, cap, gemm_khr))
     if (!arm.ok || (blocks_behind && !vt_fc_admits(fc, tt, 2l * tt - 1l, arm.khr, arm.gemm_khr))) {
@@ -3129,7 +3153,7 @@ def private vt_fc_front(var r : VtResident; fc : TowerFc; src : float const?; sr
         rl.sites[int(RailSite.front2)] = VtTile(tc = tc3)
         rl.sites[int(RailSite.front3)] = VtTile(tc = tcx)
         tower_sched_walk(rl.maps, unsafe(reinterpret<uint?>(r.fmeta.mapped)), FC_FRONT_RECORDS) $(rid : int64) : TowerSchedRec {
-            return tower_fc_front_rec(rl, fc, n_len, rid)
+            return tower_fc_front_rec(rl, fc, r.kq_seats, n_len, rid)
         }
     }
     if (fc.device_mel) {
@@ -3139,7 +3163,7 @@ def private vt_fc_front(var r : VtResident; fc : TowerFc; src : float const?; sr
     }
     let bx = tt * d * 4l
     vt_rail_one_shot(rl, fc.front_name, 3l, tt) $ {
-        tower_fc_front(rl, fc, n_len, n_valid)
+        tower_fc_front(rl, fc, r.kq_seats, n_len, n_valid)
         vhz_dep(rl.raw, rl.h, VTF_X, 0u, true)
         cmd_copy_range(rl.raw, r.fx_dev, 0l, r.fhost.buf, 0l, bx)
         vt_pt(rl.raw, RailProfRole.copy_out)
@@ -3593,7 +3617,7 @@ def vulkan_tower_install_audio_of(fam : TowerAudioFamily) {
             register_canary_flavor(TowerDev.vulkan, @@vulkan_fc_serves_model, @@vulkan_canary_bake)
         } elif (fam == TowerAudioFamily.parakeet) {
             register_parakeet_gpu_encode(@@vulkan_parakeet_encode)
-            register_parakeet_flavor(TowerDev.vulkan, @@vulkan_fc_serves_model, @@vulkan_parakeet_bake)
+            register_parakeet_flavor(TowerDev.vulkan, @@vulkan_parakeet_serves_model, @@vulkan_parakeet_bake)
         } elif (fam == TowerAudioFamily.gigaam) {
             set_vulkan_gigaam_exact_lane(g_env_vulkan.vk_gigaam_exact)
             register_gigaam_gpu_encode(@@vulkan_gigaam_encode)

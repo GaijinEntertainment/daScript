@@ -65,4 +65,15 @@ input into. The lane therefore needs the f16 feed as every lane does: off it (th
 fails to compile (`vt_fc_kq_tiles_ok`, asked at the chain's three widths) is a device fault: the chain declines `kq_lane`
 naming the carrier's members, and the Vulkan image's encode refuses rather than reach the CPU; a carrier the lane refuses at
 load never reaches the chain.
+
+A quantized Parakeet GGUF rides the same lane on its own images (`parakeet-kq-vulkan`, `-cuda`, `-metal`; the flavor's
+`serves` reads the lane's meta, as GigaAM's does). Its seats are numbers (`ARCHITECTURE_MEDIA_ASR.md#parakeet-kq-seats`):
+`parakeet_fc_record_seats` hands the chain the blocks' records in order - the rel table's projection among them, its tile
+asked at the window's rows beside the chain's three widths - and the front's three behind them, which the bake plans and
+gathers as it does the blocks' and the front's GEMMs bind at `n_layer * FC_GEMM_RECORDS` + the record
+(`tower_fc_front_mm`), each member's tile ensured at the front's three columns. A GPU staging keeps the joint's encoder
+linear f32 in the blob, which the device's exact tile projects, so the lane holds no joint seat there
+(`parakeet_fc_seat_count`). Every seat reads the f16 feed, so a device encode sits nearer the dequantized chain than the
+CPU's, whose K-quant seats read a Q8_K feed of one scale a 256 elements.
+
 The Metal chain's form is `ARCHITECTURE_GPU_TOWER_FC.md#tower-fc-kq`.

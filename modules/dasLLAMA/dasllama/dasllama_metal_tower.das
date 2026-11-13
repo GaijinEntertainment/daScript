@@ -323,7 +323,12 @@ def private metal_qwen3a_serves_model(q8 : bool) : bool => metal_tower_lane_ok("
 def private metal_canary_serves_model(q8 : bool) : bool => metal_tower_lane_ok("canary", q8) && pf_fc_ready(false) && pf_cn_front_ready()
 
 //! parakeet's Metal flavor pick: the lane, the FastConformer block pipelines on the tap-major taps and the subsample front's
-def private metal_parakeet_serves_model(q8 : bool) : bool => metal_tower_lane_ok("parakeet", q8) && pf_fc_ready(true) && pf_pk_front_ready()
+def private metal_parakeet_serves_model(e : ParakeetModel) : bool {
+    if (e.kq_lane) {
+        return g_tw_env_tower && metal_tower_init() && tw_fc_kq_tiles("parakeet") && pf_fc_ready(true) && pf_pk_front_ready()
+    }
+    return metal_tower_lane_ok("parakeet", e.q8) && pf_fc_ready(true) && pf_pk_front_ready()
+}
 
 //! gemma4a's Metal flavor pick: the lane, the Conformer block pipelines and the whole-chunk front's
 def private metal_gemma4a_serves_model(q8 : bool) : bool => metal_tower_lane_ok("gemma4a", q8) && pf_g4a_ready() && pf_g4a_front_ready()
@@ -378,7 +383,6 @@ def private tw_q8_attach(t : AudioTower) : bool {
     return ok
 }
 
-let MT_RNNT_PIECE = "mt.rnnt"   //! the transducer decoder's halves' and slab's prefix in a Metal device block
 let private TW_AUD_Q8_PIECE = "mt.aud.q8"            //! a whisper-class tower's q8 slab in a Metal device block
 let private TW_AUD_Q8_OFFS_PIECE = "mt.aud.q8.offs"  //! ... its regions' byte offsets, a word each, the stem's second conv last
 let private TW_AUD_CONV1_PIECE = "mt.aud.conv1"      //! ... its stem's first conv padded to the 32 lattice
@@ -1159,23 +1163,32 @@ def private tw_fc_conv0_bake(blob : PlaneF; c0_w, nch : int64; tap_major : bool;
     tower_dev_put(b, TW_FC_CONV0_PIECE, unsafe(addr<uint8 const?>(host[0])), long_length(host) * 4l)
 }
 
-//! one weighted GEMM of the chain: the q8 slab's region on the q8 lane, the half tensor form over the halfwords where it
-//! serves, the f32 tile form otherwise
+//! one weighted GEMM of the chain on its route (`fc_route_mm`)
 def private fc_mm(enc : MetalComputeEncoder?; c : FcGpuCtx; woff : int64; bx, by, bk, bn : MetalBuffer?; rows, nd, kdim : int64) {
-    if (c.kq) {
-        let b = tw_fc_kq_bind(woff)
-        if (c.bxh != null) {
-            tw_half(enc, bx, c.bxh, rows * kdim)
-        }
-        if (b.fmt == KqFmt.q8) {
-            pf_enc_q8_mm(enc, g_tw_q8_fc.slab.buf, b.qoff, bx, c.bxh, by, bk, bn, rows, nd, kdim)
-        } else {
-            pf_enc_kq_mm(enc, b.fmt, int64(b.qoff), (buf = g_tw_kq_fc.buf, qoff = b.qoff), (buf = g_tw_kq_fc.buf, soff = b.soff, doff = b.doff),
-                bx, c.bxh, by, bk, bn, rows, nd, kdim)
-        }
+    fc_route_mm(enc, c.kq, c.q8, c.f16w, c.bwh, c.bblob, c.bxh, woff, bx, by, bk, bn, rows, nd, kdim)
+}
+
+//! one GEMM of a FastConformer chain or front on its route: the kq lane's seat at `woff` (`fc_kq_mm`), else the family's lane (`fc_lane_mm`); `bxh` the half feed
+def private fc_route_mm(enc : MetalComputeEncoder?; kq, q8, f16w : bool; bwh, bblob, bxh : MetalBuffer?; woff : int64; bx, by, bk, bn : MetalBuffer?; rows, nd, kdim : int64) {
+    if (kq) {
+        fc_kq_mm(enc, woff, bxh, bx, by, bk, bn, rows, nd, kdim)
         return
     }
-    fc_lane_mm(enc, g_tw_q8_fc, c.q8, c.f16w, c.bwh, c.bblob, c.bxh, woff, bx, by, bk, bn, rows, nd, kdim)
+    fc_lane_mm(enc, g_tw_q8_fc, q8, f16w, bwh, bblob, bxh, woff, bx, by, bk, bn, rows, nd, kdim)
+}
+
+//! one kq-lane GEMM off the seat at the chain's offset `woff`: a Q8_0 seat in the q8 slab, a K-quant seat in the kq slab; `bxh` the half feed where the ladder reads one
+def private fc_kq_mm(enc : MetalComputeEncoder?; woff : int64; bxh, bx, by, bk, bn : MetalBuffer?; rows, nd, kdim : int64) {
+    let b = tw_fc_kq_bind(woff)
+    if (bxh != null) {
+        tw_half(enc, bx, bxh, rows * kdim)
+    }
+    if (b.fmt == KqFmt.q8) {
+        pf_enc_q8_mm(enc, g_tw_q8_fc.slab.buf, b.qoff, bx, bxh, by, bk, bn, rows, nd, kdim)
+    } else {
+        pf_enc_kq_mm(enc, b.fmt, int64(b.qoff), (buf = g_tw_kq_fc.buf, qoff = b.qoff), (buf = g_tw_kq_fc.buf, soff = b.soff, doff = b.doff),
+            bx, bxh, by, bk, bn, rows, nd, kdim)
+    }
 }
 
 //! one GEMM on a family's lane: slab `q`'s region at `woff` (`q8`, `bxh` its half feed), the half tensor GEMM over `bwh` (`f16w`), else the f32 tile over `bblob`
@@ -1270,8 +1283,8 @@ struct private TwKqBind {
 }
 
 var private g_tw_kq_fc : St2SlabBase                     //!< the served kq lane's K-quant members' planes as one device blob: each member's superblocks, then its Metal-form scale plane
-var private @exact_size g_tw_kq_fc_binds : array<TwKqBind>   //!< every GEMM record's bind, by ascending virtual offset (`tw_fc_kq_bind`)
-var private @scratch @exact_size g_tw_fc_gseats : array<TowerGemmSeat>   //!< the kq lane's seat a GEMM record (eleven a block in the chain's order, the rel record empty)
+var private @exact_size g_tw_kq_fc_binds : array<TwKqBind>   //!< every GEMM record's bind, by ascending chain offset - a virtual element offset, or a seat number (`tw_fc_kq_bind`)
+var private @scratch @exact_size g_tw_fc_gseats : array<TowerGemmSeat>   //!< the kq lane's seat a GEMM record (eleven a block in the chain's order, a rel-form front's three behind them)
 
 def private tw_fc_kq_bind(woff : int64) : TwKqBind {
     let i = lower_bound(g_tw_kq_fc_binds, woff) $(b : TwKqBind; w : int64) => b.woff < w
@@ -1339,12 +1352,8 @@ def private tw_fc_kq_attach(fc : TwFc) : bool {
     let key = tw_kq_key(fc)
     return true if (st2_slab_current(g_tw_kq_fc, key) && (fc.qblob.n == 0l || st2_slab_current(g_tw_q8_fc.slab, tw_q8_key(fc.qblob, fc.qscales))))
     st2_slab_free(g_tw_kq_fc)
-    let nrec = fc.n_layer * FC_GEMM_RECORDS
-    var @exact_size recs : array<Q8Region>
-    recs |> reserve(nrec)
-    for (l in range64(fc.n_layer)) {
-        recs |> push_from(fc_gemm_records(g_tw_fc_offs[l], fc.d, fc.ff))
-    }
+    var recs <- fc_kq_records(g_tw_fc_offs, fc.n_layer, fc.d, fc.ff, fc.front)
+    let nrec = long_length(recs)
     g_tw_kq_fc_binds |> reserve(nrec)
     g_tw_kq_fc_binds |> resize(nrec)
     var @exact_size q8rg : array<Q8Region>
@@ -1446,17 +1455,39 @@ def private tw_fc_dev_bind(fc : TwFc) : bool {
 //! planes read through - a lane the chain would decline maps the CPU image instead (`#tower-dev-block`)
 def private metal_gigaam_serves_model(e : GigaamModel) : bool {
     return false if (!g_tw_env_tower || !metal_tower_init())
-    if (e.kq_lane) {
-        for (fmt in range(KQ_FMT_COUNT)) {
-            let f = kq_fmt_of_slot(fmt)
-            if (kq_sb(f) && !(kq_fmt_gpu_supported(f) && kq_has_mm_base_tile(f))) {
-                to_log(LOG_INFO, "dasLLAMA metal tower: GigaAM's kq lane declines - the block GEMMs' {f} member has no Metal tile on this device; the load maps the CPU image\n")
-                return false
-            }
-        }
-        return true
-    }
+    return tw_fc_kq_tiles("GigaAM") if (e.kq_lane)
     return e.q8 || (e.gemm_f16 && tw_half_pick("gigaam"))
+}
+
+//! a base mul_mm tile for every superblock member a carrier's kq lane can hold; false, said once, where `family`'s lane declines
+def private tw_fc_kq_tiles(family : string) : bool {
+    for (fmt in range(KQ_FMT_COUNT)) {
+        let f = kq_fmt_of_slot(fmt)
+        if (kq_sb(f) && !(kq_fmt_gpu_supported(f) && kq_has_mm_base_tile(f))) {
+            to_log(LOG_INFO, "dasLLAMA metal tower: {family}'s kq lane declines - the GEMMs' {f} member has no Metal tile on this device; the load maps the CPU image\n")
+            return false
+        }
+    }
+    return true
+}
+
+//! a FastConformer kq lane's slabs and binds into their pieces (`#tower-dev-block`): the kq slab, every GEMM record's bind, the Q8_0 seats' slab; false where a slab cannot be made
+[cold_path]
+def private tw_fc_kq_bake(fc : TwFc; var b : TowerDevBuild) : bool {
+    g_tw_bake_rowmajor = true
+    let built = tw_fc_kq_attach(fc)
+    g_tw_bake_rowmajor = false
+    return false if (!built)
+    tw_dev_put_slab(b, TW_FC_KQ_PIECE, g_tw_kq_fc)
+    var inscope words : array<int64>
+    for (bind in g_tw_kq_fc_binds) {
+        words |> push_from([bind.woff, int64(int(bind.fmt)), int64(bind.qoff), int64(bind.soff), int64(bind.doff)])
+    }
+    tower_dev_put(b, TW_FC_KQ_BINDS_PIECE, words)
+    if (g_tw_q8_fc.slab.buf != null && fc.qblob.n > 0l) {
+        tw_dev_put_slab(b, TW_FC_Q8_PIECE, g_tw_q8_fc.slab)
+    }
+    return true
 }
 
 //! GigaAM's Metal device block (`#tower-dev-block`): the attach's own builders run once over the CPU-form model - the q8 slab
@@ -1466,23 +1497,10 @@ def private metal_gigaam_bake(m : GigaamModel; var b : TowerDevBuild) : bool {
     return false if (!metal_tower_init())
     let fc = tw_fc_of_ga(m)
     if (fc.kq_lane) {
-        g_tw_bake_rowmajor = true
-        let built = tw_fc_kq_attach(fc)
-        g_tw_bake_rowmajor = false
-        return false if (!built)
-        tw_dev_put_slab(b, TW_FC_KQ_PIECE, g_tw_kq_fc)
-        var inscope words : array<int64>
-        for (bind in g_tw_kq_fc_binds) {
-            words |> push_from([bind.woff, int64(int(bind.fmt)), int64(bind.qoff), int64(bind.soff), int64(bind.doff)])
-        }
-        tower_dev_put(b, TW_FC_KQ_BINDS_PIECE, words)
-        if (g_tw_q8_fc.slab.buf != null && fc.qblob.n > 0l) {
-            tw_dev_put_slab(b, TW_FC_Q8_PIECE, g_tw_q8_fc.slab)
-        }
+        return false if (!tw_fc_kq_bake(fc, b))
     } elif (!tw_fc_q8_bake(fc, b)) {
         return false
     }
-    gigaam_rnnt_dev_bake(m, b, MT_RNNT_PIECE)
     let g = tw_ga_mel_geo(m)
     return false if (tw_ga_mel_panel(m, g) == null)
     tw_dev_put_slab(b, TW_GA_MEL_PIECE, g_tw_ga_mel_panel)
@@ -2026,7 +2044,12 @@ def private tw_fc_of_pk(t : ParakeetModel) : TwFc {
     for (l in range64(t.n_layer)) {
         g_tw_fc_offs[l] = pk_fc_layer(pk_layer_offsets(t, l))
     }
+    let nseats = parakeet_fc_seat_count(t)   // a Metal image's binds stand in for the seats
+    g_tw_fc_gseats |> reserve(nseats)
+    g_tw_fc_gseats |> resize(nseats)
+    let kq_fmts = nseats > 0l ? parakeet_fc_record_seats(t, g_tw_fc_gseats) : 0u
     return TwFc(blob = t.blob, wblob = t.gemm_f16 ? t.wblob : PlaneU16(), qblob = t.qblob, qscales = t.qscales, mapped = t.image_map != null,
+        kq_lane = t.kq_lane, kq_repacked = t.kq_repacked, kq = t.kq_lane ? t.kq : PlaneU8(), ks = t.kq_lane ? t.ks : PlaneU8(), kq_fmts = kq_fmts,
         q8 = t.q8, front = fc_front_records(t.c3_w, t.c6_w, t.pre_w, t.n_sub_ch, t.n_mel, t.n_state),
         dev_backend = t.dev_backend, dev = t.dev, devplan = t.devplan, d = t.n_state, ff = 4l * t.n_state, n_head = t.n_head,
         nk = t.n_conv_kernel, n_layer = t.n_layer, eps = t.eps, form = FcForm(tap_major = true, holds_rows = true, prof = "pk"))
@@ -2128,6 +2151,7 @@ let private CONV0_KDP = 32l   //! the fronts' first conv's column width: its nin
 struct private TwFcFront {
     tap_major : bool        //! parakeet's [9][ch] taps on the depthwise stamp; canary's are channel-major
     q8 : bool               //! the 1x1 convs and the pre-projection off the q8 slab, `bfxh` the half feed where the ladder reads one
+    kq : bool               //! ... off their kq-lane seats (`fc_kq_mm`), the same feed
     f16w : bool             //! ... else on the half tensor GEMM over the halfwords in `bwh`
     bwh : MetalBuffer?
     bblob : MetalBuffer?
@@ -2162,6 +2186,11 @@ struct private TwFcFront {
     u_d : MetalBuffer?
 }
 
+//! one of the front's GEMMs on the family's route (`fc_route_mm`)
+def private tw_fc_front_mm(enc : MetalComputeEncoder?; f : TwFcFront; woff : int64; bx, by, bk, bn : MetalBuffer?; rows, nd, kdim : int64) {
+    fc_route_mm(enc, f.kq, f.q8, f.f16w, f.bwh, f.bblob, f.bfxh, woff, bx, by, bk, bn, rows, nd, kdim)
+}
+
 def private tw_fc_front_convs(enc : MetalComputeEncoder?; var f : TwFcFront; bmel, bcol0, y0, y2, y3, y5, y6, xf, out : MetalBuffer?) {
     enc_im2col2d(enc, bmel, bcol0, GkIm2col2dArgs(iw = uint(f.n_mel), ih = uint(f.n_len), cin = 1u, sstride = 1u, kdp = uint(CONV0_KDP), rows = uint(f.rows0), soff = 0u), f.rows0 * CONV0_KDP)
     enc_f32_mm(enc, f.bw0, 0ul, bcol0, y0, 0ul, f.u_k0, f.u_nch, f.mp0, f.nch)
@@ -2171,17 +2200,17 @@ def private tw_fc_front_convs(enc : MetalComputeEncoder?; var f : TwFcFront; bme
     } else {
         enc_cn_dw2d(enc, y0, y2, f.bblob, f.d2, f.rows2 * f.nch)
     }
-    fc_lane_mm(enc, g_tw_q8_fc, f.q8, f.f16w, f.bwh, f.bblob, f.bfxh, f.c3_w, y2, y3, f.u_nch, f.u_nch, f.mp2, f.nch, f.nch)
+    tw_fc_front_mm(enc, f, f.c3_w, y2, y3, f.u_nch, f.u_nch, f.mp2, f.nch, f.nch)
     tw_bias(enc, y3, f.bblob, GkBiasActArgs(d = uint(f.nch), nelem = uint(f.rows2 * f.nch), boff = uint(f.c3_b), act = BIAS_ACT_RELU))
     if (f.tap_major) {
         enc_pk_dw2d(enc, y3, y5, f.bblob, f.d5, f.rows3 * f.nch)
     } else {
         enc_cn_dw2d(enc, y3, y5, f.bblob, f.d5, f.rows3 * f.nch)
     }
-    fc_lane_mm(enc, g_tw_q8_fc, f.q8, f.f16w, f.bwh, f.bblob, f.bfxh, f.c6_w, y5, y6, f.u_nch, f.u_nch, f.mp3, f.nch, f.nch)
+    tw_fc_front_mm(enc, f, f.c6_w, y5, y6, f.u_nch, f.u_nch, f.mp3, f.nch, f.nch)
     tw_bias(enc, y6, f.bblob, GkBiasActArgs(d = uint(f.nch), nelem = uint(f.rows3 * f.nch), boff = uint(f.c6_b), act = BIAS_ACT_RELU))
     enc_pk_xf(enc, y6, xf, f.axf, f.mpt * f.feat)
-    fc_lane_mm(enc, g_tw_q8_fc, f.q8, f.f16w, f.bwh, f.bblob, f.bfxh, f.pre_w, xf, out, f.u_feat, f.u_d, f.mpt, f.d, f.feat)
+    tw_fc_front_mm(enc, f, f.pre_w, xf, out, f.u_feat, f.u_d, f.mpt, f.d, f.feat)
     tw_bias(enc, out, f.bblob, GkBiasActArgs(d = uint(f.d), nelem = uint(f.tt * f.d), boff = uint(f.pre_b), act = BIAS_ACT_NONE))
 }
 
@@ -2344,7 +2373,7 @@ def private metal_parakeet_encode(t : ParakeetModel; var st : ParakeetState) : i
     var by5 = buf_set_take(c.scratch, g_tw_pool, bytes_y5)
     var by6 = buf_set_take(c.scratch, g_tw_pool, bytes_y5)
     var bxf = buf_set_take(c.scratch, g_tw_pool, uint64(c.mp * feat * 4l))
-    var bfxh = (c.f16w || (c.q8 && c.bxh != null)) ? buf_set_take(c.scratch, g_tw_pool, uint64(max(mp2 * nch, c.mp * feat) * 2l), c.wplane) : null
+    var bfxh = (c.f16w || ((c.q8 || c.kq) && c.bxh != null)) ? buf_set_take(c.scratch, g_tw_pool, uint64(max(mp2 * nch, c.mp * feat) * 2l), c.wplane) : null
     return -1l if (fc_ctx_declined(c, false))
     unsafe {
         memcpy(metal_buffer_contents(bmel), addr(st.mel.data[0]), bytes_mel)
@@ -2360,7 +2389,7 @@ def private metal_parakeet_encode(t : ParakeetModel; var st : ParakeetState) : i
     let axf = GkFeatShuffleArgs(w = y5_geo.ow, ch = y5_geo.ch, t = y5_geo.oh, rows_pad = uint(c.mp))
     let d2 = GkDwConv2dArgs(iw = y2_geo.iw, ih = y2_geo.ih, ih_valid = y2_geo.ih, ch = y2_geo.ch, woff = uint(t.c2_w), boff = uint(t.c2_b))
     let d5 = GkDwConv2dArgs(iw = y5_geo.iw, ih = y5_geo.ih, ih_valid = y5_geo.ih, ch = y5_geo.ch, woff = uint(t.c5_w), boff = uint(t.c5_b))
-    var front = TwFcFront(tap_major = true, q8 = c.q8, f16w = c.f16w, bwh = c.bwh, bblob = c.bblob, bfxh = bfxh, bw0 = bw0, c0_b = t.c0_b, c3_w = t.c3_w, c3_b = t.c3_b,
+    var front = TwFcFront(tap_major = true, q8 = c.q8, kq = c.kq, f16w = c.f16w, bwh = c.bwh, bblob = c.bblob, bfxh = bfxh, bw0 = bw0, c0_b = t.c0_b, c3_w = t.c3_w, c3_b = t.c3_b,
         c6_w = t.c6_w, c6_b = t.c6_b, pre_w = t.pre_w, pre_b = t.pre_b, n_mel = t.n_mel, n_len = n_len, rows0 = rows0, mp0 = mp0, rows2 = rows2, mp2 = mp2,
         rows3 = rows3, mp3 = mp3, mpt = c.mp, nch = nch, feat = feat, d = d, tt = tt, d2 = d2, d5 = d5, axf = axf, u_k0 = u_k0, u_nch = u_nch, u_feat = u_feat, u_d = c.u_d)
     let served = fc_submit(c, st.x, d, t.n_layer, false) $(enc) {
@@ -2777,13 +2806,17 @@ def private metal_canary_bake(t : CanaryEncoder; var b : TowerDevBuild) : bool {
     return tw_fc_q8_bake(tw_fc_of_cn(t), b)
 }
 
-//! Parakeet's Metal device block (`#tower-dev-block`): the front's first conv panel, the transducer decoder's halves, the q8 lane's slab
+//! Parakeet's Metal device block (`#tower-dev-block`): the front's first conv panel, the transducer decoder's halves, the q8 lane's slab or the kq lane's slabs and binds
 [cold_path, arch(at = "../ARCHITECTURE_IMAGE_GPU_PLANES.md#tower-dev-block")]
 def private metal_parakeet_bake(t : ParakeetModel; var b : TowerDevBuild) : bool {
     return false if (!metal_tower_init())
     tw_fc_conv0_bake(t.blob, t.c0_w, t.n_sub_ch, true, b)
-    parakeet_rnnt_dev_bake(t, b, MT_RNNT_PIECE)
-    return tw_fc_q8_bake(tw_fc_of_pk(t), b)
+    let fc = tw_fc_of_pk(t)
+    return tw_fc_q8_bake(fc, b) if (!fc.kq_lane)
+    let baked = tw_fc_kq_bake(fc, b)
+    st2_slab_free(g_tw_q8_fc.slab)   // the CPU form the slabs were keyed by goes away after the bake
+    st2_slab_free(g_tw_kq_fc)
+    return baked
 }
 
 //! gemma4a's Metal device block (`#tower-dev-block`): the chunk's front panels, each staged into scratch and copied to its offset, then the q8 slab

@@ -235,7 +235,7 @@ Each companion's sections are anchored by topic; a citation spells `<doc>.md#<an
 - `ARCHITECTURE_MEDIA_TOWER.md` - the padded tower GEMM widths
   (`ARCHITECTURE_MEDIA_TOWER.md#tower-padded-widths`).
 - `ARCHITECTURE_MEDIA_ASR.md` - the ASR families' mechanisms - the facade's carrier sniff order, the
-  oracle a family is specified by, the family's tokens, language and long-form policy, the GigaAM
+  oracle a family is specified by, its tokens, language and long-form policy, Parakeet's GGUF carrier and kq lane, the GigaAM
   Conformer chain's log-mel (`ARCHITECTURE_MEDIA_ASR.md#gigaam-log-mel`), rotary input and planes, and
   the shared transducer's decode step (`ARCHITECTURE_MEDIA_ASR.md#rnnt-decode-step`) and its device loop
   (`ARCHITECTURE_MEDIA_ASR.md#rnnt-device-decode`), and the plain-Model ASR decoders

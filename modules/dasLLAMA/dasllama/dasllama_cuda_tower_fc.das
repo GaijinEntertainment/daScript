@@ -31,7 +31,6 @@ require dasllama/dasllama_parakeet
 require dasllama/dasllama_gigaam
 require dasllama/dasllama_tower_chains_fc
 
-let CUF_RNNT_PIECE = "cu.rnnt"   //! the transducer decoder's halves' and slab's prefix in a CUDA device block
 
 //! the FastConformer chains' planes the shared resident does not carry, by role: the rel quartet and canary's rel plane, the
 //! f16 taps, the fronts' stage planes, slabs and rows
@@ -235,7 +234,7 @@ def private cuf_blocks(var r : CufResident; fc : TowerFc; var x : array<float>; 
     rail_bind_rel(rl)
     if (!fc.f16w) {
         if (!cuf_site(rl, r, fc, RailSite.d, d, npos, true) || !cuf_site(rl, r, fc, RailSite.ff, ff, npos, true) || !cuf_site(rl, r, fc, RailSite.d2, 2l * d, npos, true)
-                || (!fc.rotary && !cuf_site(rl, r, fc, RailSite.rel, d, ww, false))) {
+                || (!fc.rotary && !cuf_site(rl, r, fc, RailSite.rel, d, ww, true))) {
             return cut_decline(r.t, fc.kq_lane ? TowerDecline.kq_lane : TowerDecline.device)
         }
         let nrec = fc.n_layer * FC_GEMM_RECORDS
@@ -334,17 +333,17 @@ def private cuf_cn_front_ensure : bool
 //! the q8 lane's front sites at `n_len` frames - each pick's tile built - and their schedule up; false with the decline counted
 def private cuf_front_sched(var rl : CutRail; var r : CufResident; fc : TowerFc; n_len : int64) : bool {
     let g = tower_fc_geom(n_len, fc.n_mel)
-    if (!cuf_site(rl, r, fc, RailSite.front1, fc.nch, g.t2 * g.w2, false) || !cuf_site(rl, r, fc, RailSite.front2, fc.nch, g.t3 * g.w3, false)
-            || !cuf_site(rl, r, fc, RailSite.front3, fc.d, g.t3, false)) {
-        return cut_decline(r.t, TowerDecline.device)
+    if (!cuf_site(rl, r, fc, RailSite.front1, fc.nch, g.t2 * g.w2, true) || !cuf_site(rl, r, fc, RailSite.front2, fc.nch, g.t3 * g.w3, true)
+            || !cuf_site(rl, r, fc, RailSite.front3, fc.d, g.t3, true)) {
+        return cut_decline(r.t, fc.kq_lane ? TowerDecline.kq_lane : TowerDecline.device)
     }
     var map_words = 0l
     for (rid in range64(FC_FRONT_RECORDS)) {
-        map_words += tower_fc_front_rec(rl, fc, n_len, rid).groups
+        map_words += tower_fc_front_rec(rl, fc, r.kq_seats, n_len, rid).groups
     }
     g_cuf_fsched |> grow_resize(FC_FRONT_RECORDS * 4l + map_words)
     tower_sched_walk(rl.maps, unsafe(addr(g_cuf_fsched[0])), FC_FRONT_RECORDS) $(rid : int64) : TowerSchedRec {
-        return tower_fc_front_rec(rl, fc, n_len, rid)
+        return tower_fc_front_rec(rl, fc, r.kq_seats, n_len, rid)
     }
     cut_up(r.t, r.fsched, unsafe(addr<void?>(g_cuf_fsched[0])), long_length(g_cuf_fsched) * 4l)
     return !r.t.oom || cut_decline(r.t, TowerDecline.memory)
@@ -397,7 +396,7 @@ def private cuf_fc_front(var r : CufResident; fc : TowerFc; src : float const?; 
     cut_htod(fc.device_mel ? r.t.planes.dev : cp_dev(r.p, TowerBuf.mel), unsafe(reinterpret<void?>(src)), n_len * (fc.device_mel ? fc.n_fft : fc.n_mel) * 4l)
     cuf_rail_seats(rl, r)
     cut_seat(rl, TowerBuf.meta, r.fsched)
-    tower_fc_front(rl, fc, n_len, n_valid)
+    tower_fc_front(rl, fc, r.kq_seats, n_len, n_valid)
     let bx = tt * d * 4l
     ensure_length(x, tt * d)
     if (blocks_behind) {
@@ -439,7 +438,7 @@ def private cuda_parakeet_encode(m : ParakeetModel; var st : ParakeetState) : in
         cut_decline(r.t, TowerDecline.shape)
         return -1l
     }
-    let fc = tower_fc_of_pk(m, g_cuf_offs)
+    let fc = tower_fc_of_pk(m, CUT_HOME, g_cuf_offs, g_cuf_gseats)
     let tt = cuf_fc_front(r, fc, unsafe(addr<float const?>(st.mel.data[0])), long_length(st.mel.data), st.mel.n_len, st.mel.n_len, st.x, true)
     let first = !r.t.served_said   //! read past the front, whose attach re-keys the resident
     if (tt < 0l || !cuf_blocks(r, fc, st.x, tt, 2l * tt - 1l)) {
@@ -569,6 +568,9 @@ def set_cuda_gigaam_exact_lane(on : bool) : bool {
 def private cuda_fc_serves_model(q8 : bool) : bool
     => cut_lane_arms("canary / parakeet", q8) && cut_flavor_classes("canary / parakeet", cuf_blocks_ensure(false, 64l) && cuf_cn_front_ensure())
 
+//! parakeet's lanes (`e`, the lane's meta) on this chain: q8, the exact pick's f16 image, and the kq lane on the tiles of the f16 feed
+def private cuda_parakeet_serves_model(e : ParakeetModel) : bool => cuda_fc_serves_model(e.q8)
+
 //! GigaAM's chain serves a carrier on its lane: the knob, the device, the chain's and the front's classes, the block GEMM planes it reads
 def private cuda_gigaam_serves_model(m : GigaamModel) : bool
     => (gigaam_gpu_lane_planes(m) && cut_lane_arms("gigaam", m.q8)
@@ -584,17 +586,15 @@ def private cuda_canary_bake(m : CanaryEncoder; var b : TowerDevBuild) : bool {
 
 [cold_path, arch(at = "../ARCHITECTURE_IMAGE_GPU_PLANES.md#tower-dev-block")]
 def private cuda_parakeet_bake(m : ParakeetModel; var b : TowerDevBuild) : bool {
-    let fc = tower_fc_of_pk(m, g_cuf_offs)
+    let fc = tower_fc_of_pk(m, CUT_HOME, g_cuf_offs, g_cuf_gseats)
     tower_fc_bake(fc, g_cuf_offs, g_cuf_gseats, b, CUT_HOME)
     tower_cn_front_bake(fc, b, CUT_HOME)
-    parakeet_rnnt_dev_bake(m, b, CUF_RNNT_PIECE)
     return true
 }
 
 [cold_path, arch(at = "../ARCHITECTURE_IMAGE_GPU_PLANES.md#tower-dev-block")]
 def private cuda_gigaam_bake(m : GigaamModel; var b : TowerDevBuild) : bool {
     tower_fc_bake(tower_fc_of_ga(m, CUT_HOME, g_cuf_offs, g_cuf_gseats), g_cuf_offs, g_cuf_gseats, b, CUT_HOME)
-    gigaam_rnnt_dev_bake(m, b, CUF_RNNT_PIECE)
     return tower_ga_front_bake(m, b, CUT_HOME)
 }
 
@@ -607,7 +607,7 @@ def cuda_tower_install_fc(fam : TowerAudioFamily) {
         register_canary_flavor(TowerDev.cuda, @@cuda_fc_serves_model, @@cuda_canary_bake)
     } elif (fam == TowerAudioFamily.parakeet) {
         register_parakeet_gpu_encode(@@cuda_parakeet_encode)
-        register_parakeet_flavor(TowerDev.cuda, @@cuda_fc_serves_model, @@cuda_parakeet_bake)
+        register_parakeet_flavor(TowerDev.cuda, @@cuda_parakeet_serves_model, @@cuda_parakeet_bake)
     } elif (fam == TowerAudioFamily.gigaam) {
         if (g_env_vulkan.vk_gigaam_exact) {
             to_log(LOG_INFO, "dasLLAMA cuda tower: DASLLAMA_VK_GIGAAM_EXACT=1 reaches this home too - GigaAM's un-pinned loads take the exact lane on CUDA (unset it for the q8 lane)\n")

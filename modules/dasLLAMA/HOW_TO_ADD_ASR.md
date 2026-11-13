@@ -56,7 +56,7 @@ lines of the PR body.
    (`zero_start`: the first step reads a zero input; `torch_gates`: gate rows i, f, g, o;
    `two_biases`: torch's `b_ih` and `b_hh`), an empty `durations` a plain RNN-T, and an `RnntEnc`
    naming the joint's encoder half; the family's block projects the encoder rows for the CPU loop
-   (`rnnt_greedy`, off half-precision halves laid once a session,
+   (`rnnt_greedy`, off the half-precision planes and the f32 slab the family's staging bakes into its image with `rnnt_bake`,
    `ARCHITECTURE_MEDIA_ASR.md#rnnt-decode-step`), while a GPU build decodes the whole loop on the
    device, projecting there wherever the half sits in the f32 plane
    (`ARCHITECTURE_MEDIA_ASR.md#rnnt-device-decode`).
