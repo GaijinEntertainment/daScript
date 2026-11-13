@@ -1272,14 +1272,16 @@ def private find_runtime_lib(override_path : string) : Option<string> {
     return stat(candidate).is_valid ? some(candidate) : none(type<string>)
 }
 
-def public write_wasm(mod : LLVMOpaqueModule?; out_path : string; triple : string; path_to_emcc : string; needs_runtime : bool; explicit_runtime : string = ""; emit_object_only : bool = false) : bool {
-    var wasm_ok = true
+//! the wasm triple of a cross run whose command line names none
+def private wasm_triple_or_default(triple : string) : string =>
+    !(triple |> empty()) ? triple : "wasm64-unknown-emscripten"
+
+//! writes `mod` as one wasm object at `obj`, verbatim; false when
+//! no object is on disk after
+def public emit_wasm_object(mod : LLVMOpaqueModule?; obj : string; triple : string) : bool {
+    var emitted = false
     LLVMInitializeWasmTarget()
-    let real_triple = (!(triple |> empty()) ? triple : "wasm64-unknown-emscripten")
-    let runtime_lib = find_runtime_lib(explicit_runtime)
-    if (needs_runtime && is_none(runtime_lib)) {
-        to_log(LOG_WARNING, "wasm: runtime symbols referenced but libDaScript_runtime.a not found at web/output64/lib/ - run the web/ emscripten build to link in the runtime, or pass --jit-runtime-lib=<path>\n")
-    }
+    let real_triple = wasm_triple_or_default(triple)
     // Match the feature set web/CMakeLists.txt compiles the runtime archive with (-msimd128
     // -mnontrapping-fptoint): without +simd128 the host lowers vec4f returns via sret while emcc
     // returns native v128 — wasm-ld signature mismatches and `unreachable` traps on any vec4f helper.
@@ -1292,32 +1294,57 @@ def public write_wasm(mod : LLVMOpaqueModule?; out_path : string; triple : strin
         LLVMSetModuleDataLayout(mod, dl)
         LLVMSetTarget(mod, real_triple)
         LLVMDisposeTargetData(dl)
-
+        remove(obj)
         let error : string?
-        // emit_object_only: write the object verbatim to out_path (no `.o.o`
-        // double extension) so the caller has a predictable, linkable artifact.
-        let obj = emit_object_only ? out_path : artifact_path(out_path, JitArtifact.object)
-        let filetype = LLVMCodeGenFileType.LLVMObjectFile
-        LLVMTargetMachineEmitToFile(targetMachine, mod, obj, filetype, error)
-        if (emit_object_only) {
-            // The caller (e.g. daspkg release wasm) runs emcc; verify the object
-            // exists so a failed emit doesn't silently hand off a missing file.
-            if (error != null || !stat(obj).is_valid) {
-                to_log(LOG_ERROR, "write_wasm: failed to emit object {obj} (LLVMTargetMachineEmitToFile error)\n")
-                wasm_ok = false
-                return
-            }
-            to_log(LOG_INFO, "wasm: emitted object {obj} (link skipped; --jit-emit-object)\n")
-            return
-        }
-        let runtime_arg = needs_runtime ? (runtime_lib ?? "") : ""
-        let ok = link_wasm(obj, "{out_path}.wasm", runtime_arg, path_to_emcc, true)
-        if (!ok) {
-            to_log(LOG_ERROR, "write_wasm: link failed for {out_path}.wasm\n")
-            wasm_ok = false
-        }
+        let failed = LLVMTargetMachineEmitToFile(targetMachine, mod, obj,
+            LLVMCodeGenFileType.LLVMObjectFile, error)
+        emitted = failed == 0 && stat(obj).is_valid
     }
-    return wasm_ok
+    if (!emitted) {
+        to_log(LOG_ERROR, "wasm: failed to emit object {obj} (LLVMTargetMachineEmitToFile error)\n")
+    }
+    return emitted
+}
+
+//! a wasm library is one wasm object at `<out_path>.o`: the emcc
+//! link that consumes it brings the runtime archive, and a host
+//! archiver need not index a wasm object
+def public write_wasm_lib(mod : LLVMOpaqueModule?; out_path : string; triple : string;
+                          link_whole_lib : bool) : bool {
+    let obj = artifact_path(out_path, JitArtifact.object)
+    return false if (!emit_wasm_object(mod, obj, triple))
+    if (link_whole_lib) {
+        to_log(LOG_WARNING, "LLVM LIB: {obj} registers a module from the compiler library, " +
+            "which the wasm runtime archive does not carry\n")
+    }
+    to_log(LOG_INFO, "LLVM LIB: wasm object {obj} written - link it with emcc and the wasm " +
+        "runtime archive ({out_path}.h names the flags)\n")
+    return true
+}
+
+def public write_wasm(mod : LLVMOpaqueModule?; out_path : string; triple : string;
+                      path_to_emcc : string; needs_runtime : bool; explicit_runtime : string = "";
+                      emit_object_only : bool = false) : bool {
+    //! an emitted-only object lands at `out_path` verbatim, no `.o.o`:
+    //! daspkg links that path
+    let obj = emit_object_only ? out_path : artifact_path(out_path, JitArtifact.object)
+    return false if (!emit_wasm_object(mod, obj, triple))
+    if (emit_object_only) {
+        to_log(LOG_INFO, "wasm: emitted object {obj} (link skipped; --jit-emit-object)\n")
+        return true
+    }
+    let runtime_lib = find_runtime_lib(explicit_runtime)
+    if (needs_runtime && is_none(runtime_lib)) {
+        to_log(LOG_WARNING, "wasm: runtime symbols referenced but libDaScript_runtime.a " +
+            "not found at web/output64/lib/ - run the web/ emscripten build to link in the " +
+            "runtime, or pass --jit-runtime-lib=<path>\n")
+    }
+    let runtime_arg = needs_runtime ? (runtime_lib ?? "") : ""
+    if (!link_wasm(obj, "{out_path}.wasm", runtime_arg, path_to_emcc, true)) {
+        to_log(LOG_ERROR, "write_wasm: link failed for {out_path}.wasm\n")
+        return false
+    }
+    return true
 }
 
 def public build_string_constant(message : string) {

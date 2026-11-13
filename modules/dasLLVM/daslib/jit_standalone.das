@@ -21,18 +21,38 @@ require daslib/safe_addr
 require daslib/defer
 
 
-def public lib_link_note(static_lib : bool; link_whole_lib : bool) : string {
+def public lib_link_note(kind : JitArtifact; link_whole_lib : bool) : string {
     let windows = get_platform_name() == "windows"
-    let rt_static = windows ? "libDaScript_runtime.lib" : "liblibDaScript_runtime.a"
-    let cc_static = windows ? "libDaScript.lib" : "liblibDaScript.a"
-    let rt_shared = windows ? "libDaScriptDyn_runtime.dll" : (get_platform_name() == "darwin" ? "liblibDaScriptDyn_runtime.dylib" : "liblibDaScriptDyn_runtime.so")
-    if (static_lib) {
-        let whole = link_whole_lib ? " Add <das_root>/lib/{cc_static} too - this library\nregisters a module that lives in the compiler library." : ""
-        let sys = windows ? "" : " Also link the platform libraries the runtime needs:\n-lpthread -ldl -lm -lstdc++."
-        return "Link this archive plus <das_root>/lib/{rt_static}.{whole}{sys}"
+    match (kind) {
+        JitArtifact.static_lib => $ {
+            let rt_static = windows ? "libDaScript_runtime.lib" : "liblibDaScript_runtime.a"
+            let cc_static = windows ? "libDaScript.lib" : "liblibDaScript.a"
+            let whole = link_whole_lib ? " Add <das_root>/lib/{cc_static} too - this library\nregisters a module that lives in the compiler library." : ""
+            let sys = windows ? "" : " Also link the platform libraries the runtime needs:\n-lpthread -ldl -lm -lstdc++."
+            return "Link this archive plus <das_root>/lib/{rt_static}.{whole}{sys}"
+        }
+        JitArtifact.object => $ {
+            let threads = g_target_wasm_threads ? " -pthread" : ""
+            let whole = (link_whole_lib
+                ? ("\nThis library registers a module that lives in the compiler library, " +
+                    "and the wasm runtime\narchive does not carry the compiler library.")
+                : "")
+            return ("Link this wasm object into an emscripten program together with the wasm64 " +
+                "runtime archive\n" +
+                "<das_root>/web/output64/lib/liblibDaScript_runtime.a:\n" +
+                "  emcc <sources> <this>.o <runtime> -fwasm-exceptions " +
+                "-sWASM_LEGACY_EXCEPTIONS=0 -msimd128 -sMEMORY64=2{threads}\n" +
+                "A JavaScript caller also lists the entry points it calls in " +
+                "-sEXPORTED_FUNCTIONS.{whole}")
+        }
+        JitArtifact.shared_lib => $ {
+            let rt_shared = windows ? "libDaScriptDyn_runtime.dll" : (get_platform_name() == "darwin" ? "liblibDaScriptDyn_runtime.dylib" : "liblibDaScriptDyn_runtime.so")
+            let whole = link_whole_lib ? " It also needs the compiler library beside it - this library\nregisters a module that lives there." : ""
+            return "Link this shared library. At load it needs {rt_shared}, which it looks for beside itself,\nin ../lib, and in <das_root>/lib; otherwise put it on the loader path.{whole}"
+        }
+        JitArtifact.exe || JitArtifact.jit_dll => panic("lib_link_note: {kind} is not a library")
     }
-    let whole = link_whole_lib ? " It also needs the compiler library beside it - this library\nregisters a module that lives there." : ""
-    return "Link this shared library. At load it needs {rt_shared}, which it looks for beside itself,\nin ../lib, and in <das_root>/lib; otherwise put it on the loader path.{whole}"
+    return ""
 }
 
 

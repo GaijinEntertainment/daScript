@@ -619,6 +619,63 @@ def test_wasm_finally_return(tt : T?) {
     }
 }
 
+def private is_wasm_object(path : string) : bool {
+    var magic : array<uint8>
+    magic |> resize(4)
+    var read = 0
+    fopen(path, "rb") $(f) {
+        if (f != null) {
+            read = fread(f, magic)
+        }
+    }
+    return (read == 4 && magic[0] == 0u8 && magic[1] == uint8('a') && magic[2] == uint8('s')
+        && magic[3] == uint8('m'))
+}
+
+
+def private build_wasm_lib(stem, triple : string; var lines : array<string>) : int {
+    mkdir_rec(OUTPUT_DIR)
+    let bin = get_host_binary()
+    return spawn("cd \"{get_das_root()}\" && \"{bin}\" -lib \"{FIXTURE_DIR}/_jit_lib_probe.das\" " +
+        "-output \"{stem}\" -- --jit-target={triple} --jit-static " +
+        "--jit-lib-bindings \"{stem}_c.das\"", lines)
+}
+
+
+[test(description = "a wasm64 -lib build writes one wasm object and a header naming its emcc link, ignores --jit-static and --jit-lib-bindings, and a wasm32 library is refused", timeout = 1200)]
+def test_jit_lib_wasm(tt : T?) {
+    if (!jit_enabled()) {
+        tt |> success(true, "-lib needs the LLVM backend")
+        return
+    }
+    tt |> run("a wasm64 library is one wasm object and its header") @(t : T?) {
+        let stem = path_join(OUTPUT_DIR, "jit_lib_wasm64")
+        var lines : array<string>
+        let rc = build_wasm_lib(stem, "wasm64-unknown-emscripten", lines)
+        let output = join(lines, "\n")
+        t |> equal(rc, 0, output)
+        t |> success(is_wasm_object("{stem}.o"), "{stem}.o is a wasm object:\n{output}")
+        t |> success(!fexist(static_artifact(stem)) && !fexist(shared_artifact(stem)),
+            "no host archive or shared library is written")
+        t |> success(!fexist("{stem}_c.das"), "no dasbind bindings are written")
+        t |> success(find(output, "--jit-static ignored") >= 0, output)
+        t |> success(find(output, "--jit-lib-bindings names a shared library") >= 0, output)
+        let header = fread("{stem}.h")
+        t |> success(find(header, "-fwasm-exceptions") >= 0 && find(header, "-sMEMORY64=2") >= 0
+            && find(header, "liblibDaScript_runtime.a") >= 0, header)
+    }
+    tt |> run("a wasm32 library is refused") @(t : T?) {
+        let stem = path_join(OUTPUT_DIR, "jit_lib_wasm32")
+        var lines : array<string>
+        let rc = build_wasm_lib(stem, "wasm32-unknown-emscripten", lines)
+        let output = join(lines, "\n")
+        t |> success(rc != 0, output)
+        t |> success(find(output, "wasm64 only") >= 0, output)
+        t |> success(!fexist("{stem}.o"), "no object is written")
+    }
+}
+
+
 // The signed idot family on the wasm64 cross target lowers to the
 // ISA's exact int8 dot halves - the i16x8 extmul products summed by
 // i32x4.extadd_pairwise_i16x8_s and folded even/odd - and never to

@@ -1354,6 +1354,30 @@ def private resolve_static_option(var plan : JitPlan; cli_opts : JitCliOptions; 
     }
 }
 
+//! a wasm library is wasm64 only - the host bakes 8-byte pointer
+//! layouts into the object - and has no shared library for dasbind
+def private resolve_wasm_lib_options(var plan : JitPlan; announce : bool) {
+    return if (!plan.gen_lib || !plan.gen_wasm)
+    if (!(plan.target_triple |> starts_with("wasm64"))) {
+        plan.refusal = ("a wasm library cross-compiles to wasm64 only - the 64-bit host bakes " +
+            "8-byte pointer layouts that a wasm32 runtime reads as 4")
+    }
+    if (plan.lib_static) {
+        if (announce) {
+            to_log(LOG_WARNING, "LLVM JIT: a wasm library is always one wasm object - " +
+                "--jit-static ignored\n")
+        }
+        plan.lib_static = false
+    }
+    if (!empty(plan.lib_bindings)) {
+        if (announce) {
+            to_log(LOG_WARNING, "LLVM JIT: --jit-lib-bindings names a shared library for dasbind " +
+                "to load - a wasm library has none, ignored\n")
+        }
+        plan.lib_bindings = ""
+    }
+}
+
 //! the plan for `prog`; `announce` prints the one-time lines (the baseline class, the exe host
 //! CPU) - the first computation in a run passes true, a recomputation false
 def public make_jit_plan(prog : Program?; var ctx : Context?; announce : bool) : JitPlan =>
@@ -1455,6 +1479,7 @@ def public make_jit_plan(prog : Program?; var ctx : Context?; announce : bool; c
     g_jit_fast_math = (prog._options |> find_arg("fast_math") ?as tBool ?? (prog.policies.fast_math || HOST_FAST_MATH)) || (prog._options |> find_arg("_jit_fast_math") ?as tBool ?? false)
     g_jit_strict_aliasing = prog._options |> find_arg("strict_aliasing") ?as tBool ?? true
     resolve_static_option(plan, cli_opts, announce)
+    resolve_wasm_lib_options(plan, announce)
     resolve_sanitize_option(plan, cli_opts, prog, announce)
 
     // nolint:STYLE014

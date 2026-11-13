@@ -37,7 +37,7 @@ var LINK_WHOLE_LIB = false // when true, standalone exe links against the whole 
 
 // Read by tests-cpp/small/test_jit_emitter_pin.cpp: FNV-1a64 of the emitter sources
 // (normalized to LF; file list in the test)
-let LLVM_JIT_EMITTER_HASH : uint64 = 0x8e09303fbcae5614ul
+let LLVM_JIT_EMITTER_HASH : uint64 = 0xb2bdba98ac893990ul
 
 [arch(at = "../ARCHITECTURE_FAST_MATH.md#never-fast-math")]
 def private apply_fast_math_to_module(m : LLVMOpaqueModule?) {
@@ -977,17 +977,25 @@ def public run_jit(prog : Program?; var ctx : Context?; cli_opts : JitCliOptions
                 emit_failed ||= !emit_object_only(g_mod, output_path, use_host_cpu)
             } elif (gen_lib) {
                 mkdir_rec(dir_name(output_path))
-                emit_failed ||= !write_artifact(g_mod, output_path, lib_static ? JitArtifact.static_lib : JitArtifact.shared_lib,
-                    path_to_shared_lib, path_to_linker, linker_string, LINK_WHOLE_LIB, exe_host_cpu,
-                    debug_info, log_jit_time)
+                let lib_kind = (gen_wasm ? JitArtifact.object
+                    : (lib_static ? JitArtifact.static_lib : JitArtifact.shared_lib))
+                let written = (lib_kind == JitArtifact.object
+                    ? write_wasm_lib(g_mod, output_path, target_triple, LINK_WHOLE_LIB)
+                    : write_artifact(g_mod, output_path, lib_kind, path_to_shared_lib,
+                        path_to_linker, linker_string, LINK_WHOLE_LIB, exe_host_cpu, debug_info,
+                        log_jit_time))
+                emit_failed ||= !written
                 let lib_names = CNames(prefix = lib_prefix_from_path(output_path), this_module = prog.getThisModule)
-                if (!emit_c_header(g_lib_exports, lib_names, string(prog.getThisModule.fileName),
-                        output_path, lib_link_note(lib_static, LINK_WHOLE_LIB))) {
-                    to_log(LOG_ERROR, "LLVM LIB: the library is written but its C header is not - {output_path}.h\n")
+                let src_name = string(prog.getThisModule.fileName)
+                let header_ok = written && emit_c_header(g_lib_exports, lib_names, src_name,
+                    output_path, lib_link_note(lib_kind, LINK_WHOLE_LIB))
+                if (written && !header_ok) {
+                    to_log(LOG_ERROR, "LLVM LIB: the library is written but its C header is " +
+                        "not - {output_path}.h\n")
                     emit_failed = true
                 }
-                if (!(lib_bindings |> empty())) {
-                    emit_failed ||= !write_das_bindings(g_lib_exports, lib_names, string(prog.getThisModule.fileName),
+                if (written && !(lib_bindings |> empty())) {
+                    emit_failed ||= !write_das_bindings(g_lib_exports, lib_names, src_name,
                         output_path, lib_bindings, lib_static)
                 }
             } elif (gen_wasm) {
