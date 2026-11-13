@@ -204,7 +204,7 @@ def private convert_asr(cfg : ConvertArgs; kind : AsrCarrierKind; qm : QuantMode
     if (kind == AsrCarrierKind.whisper) {
         tag = q8 ? "whisper-q8" : "whisper-f32"
     } elif (kind == AsrCarrierKind.parakeet) {
-        tag = q8 ? "parakeet-q8" : "parakeet-f32"
+        tag = parakeet_load_tag(cfg.model, q8)
     } elif (kind == AsrCarrierKind.gigaam) {
         tag = gigaam_lane_tag(cfg.model, q8, gigaam_pinned)
     } elif (kind == AsrCarrierKind.canary) {

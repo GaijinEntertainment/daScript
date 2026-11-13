@@ -56,8 +56,9 @@ struct RnntNet {
     prof_pick : string = "rnnt.dec.pick"     //!< the bucket of a row's pick
     prof_joint : string = "rnnt.dec.joint"   //!< the bucket of a blank step's joint
     dev_only : bool                //!< a GPU-flavored image's net: the CPU never runs it, so a device decline panics
-    dev : PlaneU8 = PlaneU8()      //!< ... its image's device block: the seat's halves and slab are pieces of it (`rnnt_dev_bake`)
-    devplan : PlaneI64 = PlaneI64()
+    baked : bool                   //!< the image's form (`rnnt_bake`): the halves in `wh` / `jw`, and at `embed` one f32 slab in `rnnt_dev_layout`'s order - the f32 weight offsets name nothing
+    wh : PlaneU16 = PlaneU16()     //!< ... the stack's weights as halves, the layout of `RnntState.wh`
+    jw : PlaneU16 = PlaneU16()     //!< ... the joint net's columns as halves, the layout of `RnntState.joint_wt`
 }
 
 //! The decoder's per-session state: the LSTM's h/c, the projected prediction, the halves the session lays
@@ -139,9 +140,10 @@ def private rnnt_reset(net : RnntNet; var s : RnntState) {
         s.h[i] = 0.0
         s.c[i] = 0.0
     }
-    return if (net.dev_only)   // a GPU-flavored net's halves are its image's pieces: the device seat binds them
-    rnnt_pred_halves(net, s)
+    return if (net.dev_only)   // a GPU-flavored net never decodes on the CPU: the device seat binds its planes
     ensure_length(s.logits, rnnt_joint_blocks(n_logits) * RNNT_JOINT_BLOCK)   // whole blocks: the joint writes zeros past the last logit
+    return if (net.baked)
+    rnnt_pred_halves(net, s)
     rnnt_joint_cols(net, s, s.logits, net.joint_dim, n_logits)
 }
 
@@ -272,8 +274,10 @@ def private rnnt_step(net : RnntNet; var s : RnntState; encp : array<float>; tok
         var a = RnntStepArgs(
             xip = addr(s.xin[0]), gp = addr(s.gates[0]), hp = addr(s.h[0]), cp = addr(s.c[0]),
             pp = addr(s.pred[0]), yp = addr(s.logits[0]),
-            whp = addr<uint16 const?>(s.wh[0]), wtp = addr<uint16 const?>(s.joint_wt[0]),
-            bjp = plane_at(net.blob, net.joint_pred_b), lbp = addr<float const?>(s.bias[0]),
+            whp = net.baked ? plane_at(net.wh, 0l) : addr<uint16 const?>(s.wh[0]),
+            wtp = net.baked ? plane_at(net.jw, 0l) : addr<uint16 const?>(s.joint_wt[0]),
+            bjp = plane_at(net.blob, net.joint_pred_b),
+            lbp = net.baked ? plane_at(net.blob, net.lstm_b[0]) : addr<float const?>(s.bias[0]),
             ep = addr<float const?>(encp[t * jd]), ybp = plane_at(net.blob, net.joint_net_b),
             pd = pd, jd = jd, n_logits = n_logits, nl = nl, ngate = ngate)
         if (token >= 0) {
@@ -560,6 +564,18 @@ def private rnnt_key_region(h : uint64; net : RnntNet; off, n : int64; whole : b
     return k
 }
 
+//! a strided sample of a halves plane folded into `h`
+def private rnnt_key_halves(h : uint64; pl : PlaneU16) : uint64 {
+    var k = h
+    let step = max(pl.n / 256l, 1l)
+    var i = 0l
+    while (i < pl.n) {
+        k = hash_combine64(k, uint64(pl[i]))
+        i += step
+    }
+    return k
+}
+
 //! The device copy's identity: the plane, every offset and flag the halves and the slab are laid by, the encoder half, the small
 //! regions' values whole and a strided sample of the large ones'. Two sessions of one model share it; a net laid at a freed
 //! plane's address with other values does not.
@@ -568,6 +584,21 @@ def rnnt_dev_key(net : RnntNet; enc : RnntEnc) : uint64 {
     let jd = net.joint_dim
     let n_logits = rnnt_n_logits(net)
     var h = hash_combine64(intptr(plane_at(net.blob, 0l)), uint64(length(net.blob)))
+    if (net.baked) {
+        let lay = rnnt_dev_layout(net)
+        for (v in fixed_array(net.n_layers, pd, jd, net.n_tokens, int64(net.blank_id), net.embed, enc.d, enc.w, enc.b, enc.q8 ? 1l : 0l,
+                int64(intptr(plane_at(net.wh, 0l))), net.wh.n, int64(intptr(plane_at(net.jw, 0l))), net.jw.n)) {
+            h = hash_combine64(h, uint64(v))
+        }
+        h = rnnt_key_region(h, net, net.embed, lay.jpb, false)
+        h = rnnt_key_region(h, net, net.embed + lay.jpb, lay.wf_floats - lay.jpb, true)
+        h = rnnt_key_halves(h, net.wh)
+        h = rnnt_key_halves(h, net.jw)
+        if (!enc.q8) {
+            h = rnnt_key_region(h, net, enc.w, jd * enc.d, false)
+        }
+        return h
+    }
     for (v in fixed_array(net.n_layers, pd, jd, net.n_tokens, int64(net.blank_id), net.embed, net.joint_pred_w, net.joint_pred_b,
             net.joint_net_w, net.joint_net_b, enc.d, enc.w, enc.b, net.torch_gates ? 1l : 0l, net.two_biases ? 1l : 0l, enc.q8 ? 1l : 0l)) {
         h = hash_combine64(h, uint64(v))
@@ -616,19 +647,58 @@ struct RnntDevLayout {
     jw_halves : int64   //! the state's `joint_wt`
 }
 
-def rnnt_dev_layout(net : RnntNet) : RnntDevLayout {
-    let pd = net.pred_dim
-    let jd = net.joint_dim
-    let n_logits = rnnt_n_logits(net)
-    let jpb = net.n_tokens * pd
+def rnnt_dev_layout(net : RnntNet) : RnntDevLayout => rnnt_dev_layout(net.n_layers, net.pred_dim, net.joint_dim, net.n_tokens, rnnt_n_logits(net))
+
+//! ... over a net's dimensions: `n_layers` layers `pd` wide, a joint `jd` wide, `n_tokens` tokens and `n_logits` joint logits
+def rnnt_dev_layout(n_layers, pd, jd, n_tokens, n_logits : int64) : RnntDevLayout {
+    let jpb = n_tokens * pd
     let lb = jpb + 2l * jd + n_logits
-    return RnntDevLayout(embed = 0l, jpb = jpb, jnb = jpb + jd, jeb = jpb + jd + n_logits, lb = lb, wf_floats = lb + net.n_layers * 4l * pd,
-        wh_halves = net.n_layers * 8l * pd * pd + jd * pd, jw_halves = rnnt_joint_blocks(n_logits) * jd * RNNT_JOINT_BLOCK)
+    return RnntDevLayout(embed = 0l, jpb = jpb, jnb = jpb + jd, jeb = jpb + jd + n_logits, lb = lb, wf_floats = lb + n_layers * 4l * pd,
+        wh_halves = n_layers * 8l * pd * pd + jd * pd, jw_halves = rnnt_joint_blocks(n_logits) * jd * RNNT_JOINT_BLOCK)
+}
+
+//! A decoder as an image stores it: the stack's and the joint net's halves, and the f32 slab
+struct RnntBaked {
+    @exact_size wh : array<uint16>
+    @exact_size jw : array<uint16>
+    @exact_size wf : array<float>
+}
+
+//! The image's form of `net`, a net over a staging's f32 tensors (the offsets its file's order names): the halves the decode
+//! step runs on and the slab - the token table, the joint biases, the encoder projection's bias from `enc_b` of the net's
+//! plane (zeros where it is negative), the summed gate biases - every home's decode and device seat reading these bytes as stored.
+[cold_path, arch(at = "../ARCHITECTURE_MEDIA_ASR.md#rnnt-decode-step")]
+def rnnt_bake(net : RnntNet; enc_b : int64) : RnntBaked {
+    var s = RnntState()
+    rnnt_reset(net, s)
+    let lay = rnnt_dev_layout(net)
+    var r : RnntBaked
+    r.wf <- rnnt_dev_slab(net, s, RnntEnc(b = enc_b, q8 = enc_b < 0l), lay)   // no bias row named: the slot stays zero
+    r.wh |> reserve_resize(lay.wh_halves)
+    r.jw |> reserve_resize(lay.jw_halves)
+    unsafe {
+        memcpy(addr(r.wh[0]), addr(s.wh[0]), lay.wh_halves * 2l)
+        memcpy(addr(r.jw[0]), addr(s.joint_wt[0]), lay.jw_halves * 2l)
+    }
+    delete s
+    return <- r
+}
+
+//! `net` as the baked form over its planes: the slab at `slab` of ``blob``, the halves in `wh` and `jw`
+def rnnt_net_baked(var net : RnntNet; slab : int64; wh, jw : PlaneU16) {
+    let lay = rnnt_dev_layout(net)
+    net.baked = true
+    net.wh = wh
+    net.jw = jw
+    net.embed = slab + lay.embed
+    net.joint_pred_b = slab + lay.jpb
+    net.joint_net_b = slab + lay.jnb
+    net.lstm_b[0] = slab + lay.lb
 }
 
 //! The slab at `lay`'s offsets off the net's plane and the state's summed biases; the encoder projection's bias stays zero where
 //! the family hands its projection over biased.
-def rnnt_dev_slab(net : RnntNet; s : RnntState; enc : RnntEnc; lay : RnntDevLayout) : array<float> {
+def private rnnt_dev_slab(net : RnntNet; s : RnntState; enc : RnntEnc; lay : RnntDevLayout) : array<float> {
     let pd = net.pred_dim
     let jd = net.joint_dim
     var wf : array<float>
@@ -646,19 +716,9 @@ def rnnt_dev_slab(net : RnntNet; s : RnntState; enc : RnntEnc; lay : RnntDevLayo
     return <- wf
 }
 
-//! A net's device halves and slab into a device block (`#tower-dev-block`) as `<prefix>.wh`, `.jw` and `.wf` - the planes a seat
-//! uploads, laid at mint off the CPU-form net
-[cold_path, arch(at = "../ARCHITECTURE_IMAGE_GPU_PLANES.md#tower-dev-block")]
-def rnnt_dev_bake(net : RnntNet; enc : RnntEnc; var b : TowerDevBuild; prefix : string) {
-    var s = RnntState()
-    rnnt_reset(net, s)
-    let lay = rnnt_dev_layout(net)
-    var inscope wf <- rnnt_dev_slab(net, s, enc, lay)
-    tower_dev_put(b, "{prefix}.wh", unsafe(addr<uint8 const?>(s.wh[0])), lay.wh_halves * 2l)
-    tower_dev_put(b, "{prefix}.jw", unsafe(addr<uint8 const?>(s.joint_wt[0])), lay.jw_halves * 2l)
-    tower_dev_put(b, "{prefix}.wf", unsafe(addr<uint8 const?>(wf[0])), long_length(wf) * 4l)
-    delete s
-}
+//! Whether a seat can bind `net`: the baked form with planes of the layout's sizes
+def rnnt_dev_planes_ok(net : RnntNet; lay : RnntDevLayout) : bool
+    => net.baked && net.wh.n == lay.wh_halves && net.jw.n == lay.jw_halves && net.blob.n >= net.embed + lay.wf_floats
 
 //! The token records a clip of `frames` holds at most.
 def rnnt_dev_cap(net : RnntNet; frames : int64) : int64 => frames * int64(max(net.max_symbols, 1)) + 1l

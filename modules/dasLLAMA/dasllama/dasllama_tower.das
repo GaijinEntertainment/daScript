@@ -55,6 +55,7 @@ struct Q8Region {
 }
 
 let FC_GEMM_RECORDS = 11l   //! a FastConformer block's GEMM records, in `fc_gemm_records`' order
+let FC_FRONT_RECORDS = 3l   //! a rel-form front's GEMM records, in `fc_front_records`' order
 
 //! A FastConformer block's GEMM records over its layer offsets `lo` (`d` wide, `ff` the hidden width), in the order the GPU
 //! chains index them: ff1a, ff1b, q, k, v, the rel-position projection, o, pw1, pw2, ff2a, ff2b. A rotary block has no rel
@@ -98,6 +99,19 @@ def fc_front_records(c3_w, c6_w, pre_w, nch, n_mel, d : int64) : Q8Region[3] {
         Q8Region(woff = c3_w, n = nch, rows = nch),
         Q8Region(woff = c6_w, n = nch, rows = nch),
         Q8Region(woff = pre_w, n = w3 * nch, rows = d))
+}
+
+//! a FastConformer kq lane's GEMM records in seat order: every block's (`fc_gemm_records`), then a rel-form front's three (`front`; no rows on a family without them)
+def fc_kq_records(offs : array<CanaryLayerOffs>; n_layer, d, ff : int64; front : Q8Region[3]) : array<Q8Region> {
+    var @exact_size recs : array<Q8Region>
+    recs |> reserve(n_layer * FC_GEMM_RECORDS + FC_FRONT_RECORDS)
+    for (l in range64(n_layer)) {
+        recs |> push_from(fc_gemm_records(offs[l], d, ff))
+    }
+    if (front[0].rows > 0l) {
+        recs |> push_from(front)
+    }
+    return <- recs
 }
 
 //! a family's GPU tower seat as the lane policy reads it: registered, whether the driver's f32 tiles are its faster lane (the
@@ -590,10 +604,16 @@ def tower_dev_find(plan : PlaneI64; name : string) : tuple<off : int64; bytes : 
     return (off = -1l, bytes = 0l)
 }
 
-//! The seat of the kq-lane block GEMM at the chain's virtual element offset `woff`.
+//! the kq-lane seat of the GEMM at `woff`: a virtual element offset on a model carrying ``gemm_stride``, else the seat's number
+[arch(at="../ARCHITECTURE_MEDIA_ASR.md#parakeet-kq-seats")]
 def tower_gemm_seat(m : auto(MT); woff : int64) : TowerGemmSeat {
-    let i = fc_gemm_seat_index(m.d_model, m.n_ff, m.gemm_off, m.gemm_stride, woff) * TOWER_SEAT_WORDS
-    return TowerGemmSeat(fmt = kq_fmt_of_slot(int(m.gemm_seats[i])), qoff = m.gemm_seats[i + 1l], soff = m.gemm_seats[i + 2l])
+    static_if (typeinfo has_field<gemm_stride>(m)) {
+        let i = fc_gemm_seat_index(m.d_model, m.n_ff, m.gemm_off, m.gemm_stride, woff) * TOWER_SEAT_WORDS
+        return TowerGemmSeat(fmt = kq_fmt_of_slot(int(m.gemm_seats[i])), qoff = m.gemm_seats[i + 1l], soff = m.gemm_seats[i + 2l])
+    } else {
+        let i = woff * TOWER_SEAT_WORDS
+        return TowerGemmSeat(fmt = kq_fmt_of_slot(int(m.gemm_seats[i])), qoff = m.gemm_seats[i + 1l], soff = m.gemm_seats[i + 2l])
+    }
 }
 
 [arch(at="../ARCHITECTURE_MEDIA_ASR.md#gigaam-planes")]
@@ -1677,6 +1697,7 @@ def private fc_ffn_half_cpu(m : auto(MT); var st : auto(ST); form : FcCpuForm; p
 //! The rel-pos attention: q, k, v off one normed activation (one q8 requant feeds all three) and the layer's projection of
 //! the pos table, then per head the content and rel scores over `FC_ATN_BLOCK`-row slabs, the mask, softmax and P V into
 //! ``st.ao``. Each job owns one slab; 4-aligned row groups keep `gemm_f32_jo` bit-exact.
+[arch(at = "../ARCHITECTURE_MEDIA_ASR.md#parakeet-kq-seats")]
 def private fc_attention_cpu(m : auto(MT); var st : auto(ST); form : FcCpuForm; lo : auto(LO); pos : FcRelPos; tt : int64) { // nolint:STYLE038 — the head loop's three phases share the pack pointers
     let d = form.d
     let n_head = form.n_head
@@ -1716,7 +1737,11 @@ def private fc_attention_cpu(m : auto(MT); var st : auto(ST); form : FcCpuForm; 
         add_bias_rows(st.vv, m.blob, lo.v_b, d, tt)
     }
     tq = ref_time_ticks()
-    tower_mm(m, st.posl, lo.pos_w, st.pos_emb, st.posq, st.poss, d, d, ww)
+    static_if (typeinfo has_field<posbs>(st)) {
+        tower_mm(m, st.posl, lo.pos_w, st.pos_emb, st.posq, st.poss, st.posbs, d, d, ww)
+    } else {
+        tower_mm(m, st.posl, lo.pos_w, st.pos_emb, st.posq, st.poss, d, d, ww)
+    }
     asr_prof_add(form.prof.proj_pos, tq)
     asr_prof_add(form.prof.proj, tp)
     tp = ref_time_ticks()

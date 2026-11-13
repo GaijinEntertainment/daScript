@@ -14,7 +14,7 @@ sniffs the file format, one verb set, and a ``caps()`` call that tells you what
 the loaded model honestly supports. No family names appear in the API — the
 same program runs a whisper.cpp bin, a Qwen3-ASR (or Qwen3-Omni) GGUF pair, a
 Gemma-4 E-series GGUF pair, a Canary-Qwen decoder + "CNRY" bin, a
-Parakeet-TDT bin, or a GigaAM v3 GGUF (Russian).
+Parakeet-TDT bin or GGUF, or a GigaAM v3 GGUF (Russian).
 
 Run it with any supported model and a 16 kHz mono PCM16 WAV::
 
@@ -28,7 +28,7 @@ One loader, sniffed formats
 
 ``load_asr_model`` looks at the file, not the filename: a ggml bin routes to
 whisper or Parakeet by its vocabulary size; a GGUF whose architecture is
-``gigaam`` is the whole model in one file; any other GGUF decoder takes its audio
+``gigaam`` or ``parakeet`` is the whole model in one file; any other GGUF decoder takes its audio
 front end as a second path — itself sniffed (a Qwen3-ASR/Qwen3-Omni AuT
 mmproj, a Gemma-4 Conformer mmproj, or a Canary-Qwen "CNRY" bin). A prepared
 ``.dlim`` image loads by either route and routes on its baked family tag. A

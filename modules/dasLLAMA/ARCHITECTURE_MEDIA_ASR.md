@@ -2,8 +2,9 @@
 
 Companion to `ARCHITECTURE.md`; a section is cited by its anchor. This document carries how the
 ASR facade picks a family from a file, the oracle a family is specified by, the family's tokens,
-language and long-form policy, the transducer decode step parakeet and GigaAM share and its device
-loop (`#rnnt-device-decode`), and the GigaAM Conformer chain's own mechanisms - its log-mel, its
+language and long-form policy, Parakeet's two containers and its kq lane (`#parakeet-gguf`,
+`#parakeet-kq-seats`), the transducer decode step parakeet and GigaAM share and its device loop
+(`#rnnt-device-decode`), and the GigaAM Conformer chain's own mechanisms - its log-mel, its
 rotary input and its planes.
 
 ### The ASR facade picks a family from the file, in one order {#asr-carrier-sniff}
@@ -11,7 +12,7 @@ rotary input and its planes.
 `load_asr_model` reads a path in a fixed order: a `.dlim` routes on its baked family tag
 (`<family>-q8` or the exact lane's tag); a ggml bin routes on its magic, then on its vocabulary
 size (whisper at 51864-51866, parakeet's SPM vocabularies at 1k and 8k); a GGUF routes on
-`gguf_file_arch` when the file is the whole model (`gigaam`); any other GGUF is a decoder that
+`gguf_file_arch` when the file is the whole model (`gigaam`, `parakeet`); any other GGUF is a decoder that
 needs its mmproj, and the one-argument overload panics `pass its mmproj too`. The two-argument
 overload routes on the mmproj - its magic (canary's encoder) or a GGUF mmproj's
 `clip.audio.projector_type` - with the GGUF as the decoder. The arch read comes before the panic, so a one-file GGUF family loads through the
@@ -119,11 +120,11 @@ is refused naming the tensor, the pinned lanes being the way to dequantize it. T
 (`gigaam_exec_fmt`: `k4`), `kq` where the members mix, `q8` where every GEMM is Q8_0 - that carrier serves its blocks
 exactly where the q8 lane would requantize them. Pinned (`set_gigaam_q8`, the facade's fp32 rails), a quantized carrier
 dequantizes into the pinned lane's planes, as the f16 carrier would. `REVIEW.das`'s facade-tutorial check licenses
-`gigaam_gemm_stride`, `gigaam_lane_tag`, `gigaam_kq_members`, `gigaam_fc_record_seats` and `gigaam_kq_members_of` beside
+`gigaam_gemm_stride`, `gigaam_lane_tag`, `gigaam_kq_members`, `gigaam_fc_record_seats` and `tower_kq_members_of` beside
 the family's loader chain: defs no user program calls - the loader lays the seat index by the stride, the bake tool names
 the lane's image tag, the load log and the tests read the members, the device chains read the record seats and name the
-members in a decline. It licenses the GPU flavor's names too - `gigaam_dev_flavor`, `gigaam_rnnt_dev_bake`,
-`rnnt_gpu_projects`, `rnnt_dev_bake` and `gigaam_gpu_lane_planes`: the load and the tests pick the flavor, a driver's
+members in a decline. It licenses the GPU flavor's names too - `gigaam_dev_flavor`,
+`rnnt_gpu_projects` and `gigaam_gpu_lane_planes`: the load and the tests pick the flavor, a driver's
 bake places the transducer halves in its device block (`ARCHITECTURE_IMAGE_GPU_PLANES.md#tower-dev-block`), and a
 driver's serves predicate asks the lane's planes. The flavor's registrar `register_gigaam_flavor` is emitted by
 `[tower_flavor]`, not written in the file's text, so the check never reads it and it holds no row. f16 depthwise taps
@@ -184,6 +185,54 @@ its rows (the cm2 tile or the KHR one), an f32 head's f32 tile (`F32Gemm`); then
 - d off the f16 GEMM's 64 lattice -, `device` - an f16 head on a device with no f16 GEMM tile -, `memory`); a decline leaves
 the head to the CPU.
 
+### Parakeet reads two containers into one staging {#parakeet-gguf}
+
+A Parakeet-TDT carrier is a ggml bin or a GGUF of architecture `parakeet` (the layout of the
+transcribe.cpp project's files). `stage_parakeet_model` reads either: the bin's header and tensor
+records, or the GGUF's keys and tensor table (`pk_gguf_header`), fill the same staging, and one walk
+lays the planes out. The walk names every tensor as the bin does; a GGUF answers through
+`pk_gguf_name`, which maps the name onto the carrier's own (`encoder.layers.N.self_attn.linear_q`
+is `enc.blocks.N.attn.linear_q`). The two files hold the same numbers in the same element order,
+with three differences the loader closes:
+
+- The GGUF holds no mel filterbank and no STFT window. They are built from its front-end keys: the
+  Slaney filterbank over `num_mels` and `n_fft`, and the symmetric Hann window of `win_length`.
+- Its vocabulary lists the blank as the last token. The table keeps the tokens before it.
+- Its predictor LSTM is in PyTorch's gate order (i, f, g, o) with the two biases summed; the bin
+  holds the engine's order (i, f, o, g). `pk_read_lstm` reads the rows as stored and the model's
+  ``torch_gates`` hands the order to the decode (`RnntNet.torch_gates`).
+
+A tensor of any element type the GGUF reader decodes loads on the pinned lanes: it is read as f32,
+then served as f32, halfwords or Q8_0 as the lane asks. The loader serves the TDT head of the plain
+encoder alone: another head, a carrier with the variant keys `encoder.length_masking` or
+`vad.hidden`, an encoder with linear biases or input scaling, and a front end off 16 kHz at a hop of 160 are refused naming what was found.
+
+### Parakeet's kq lane seats every GEMM by number {#parakeet-kq-seats}
+
+Un-pinned, a GGUF whose attention GEMMs are stored quantized (`pk_is_kq_carrier`) takes the kq lane
+(the image tag `parakeet-kq`): each GEMM serves as the file's own planes through one seat in
+``gemm_seats`` (`TOWER_SEAT_WORDS`: the format slot, the quant offset, the scale offset). A block
+holds `PK_LAYER_SEATS` seats in `PkSeat` order - the order of the GPU chains' GEMM records
+(`fc_gemm_records`), the position linear among them - and four more follow the blocks on a CPU
+image: the front's two channel mixes, its output linear and the joint's encoder linear. On this lane a GEMM's offset in
+the model is its seat's number: `pk_layer_offsets` hands the chain `l * PK_LAYER_SEATS` + the
+member, and `tower_gemm_seat` reads a seat by number on a model that carries no `gemm_stride` (a
+GigaAM record's virtual element offsets go through `fc_gemm_seat_index`).
+
+`pk_kq_fill` moves each tensor into its seat by its element type: a superblock K-quant tensor is
+transcoded into the byte planes ``kq``/``ks`` and repacked for the load's backend where it carries
+kq kernels; a Q8_0 tensor's blocks move exactly into ``qblob``/``qscales``; a float tensor - the conv
+pointwise GEMMs, which the files keep f16 because their one-element rows fit no block format, and
+the front's two channel mixes - is quantized to Q8_0 there, as the q8 lane quantizes every GEMM. Any
+other type is refused naming the tensor, the pinned lanes being the way to dequantize it. The seats
+that read one activation image hold to one class, Q8_0 or K-quant: a block's q, k and v, and every
+block's position linear, whose image of the position table (`tower_requant` into the session's
+``posq``/``poss``/``posbs``) is built once an encode. The lane's name is its one K-quant member
+(`k4`), `kq` where they mix, `q8` where every seat is Q8_0.
+
+Every GPU home serves the lane on its own image, the seats handed to its chain by
+`parakeet_fc_record_seats` (`ARCHITECTURE_GPU_TOWER_VULKAN_FC.md#vk-tower-fc-kq`).
+
 ### The transducer decode step is one team publish over half-precision weights {#rnnt-decode-step}
 
 `rnnt_greedy` decodes a TDT head (a duration table, its logits behind the tokens') and a plain
@@ -191,12 +240,12 @@ RNN-T head (no table: a blank advances one frame, a token stays up to `max_symbo
 `RnntNet` - offsets into the family's f32 plane - and encoder rows the family projected through
 the joint's encoder half, a GEMM its own weight lane serves. A step is a few hundred thousand
 multiply-adds a lane, so the bytes it reads and the times it meets the team set its time. Both
-lanes decode off HALVES `RnntState` lays once a weight plane - the LSTM stack and the joint's
+lanes decode off HALVES the image stores, baked at staging (`rnnt_bake`) - the LSTM stack and the joint's
 prediction projection (`wh`, gate rows repacked i, f, o, g, the biases summed into `bias`), the
 joint net transposed into logit blocks (`joint_wt`: a block of `RNNT_JOINT_BLOCK` logits holds
 its input columns back to back, so a lane walks its block forward; a lane's slice of a whole-row
 column table is short runs a column apart, which the prefetcher does not follow); `dasllama_repack`
-holds both layouts, the state the cache. The halves read
+holds both layouts; an f32 slab beside them holds the token table and the biases (`rnnt_dev_layout`). The halves read
 through `dot_f16` and `axpy_f16`: a parakeet token's predictor reads 13 MB where f32 was 26.
 
 `rnnt_step` runs a step as ONE `team_parallel_stages` publish: a layer's gate dots (the input's
@@ -222,9 +271,9 @@ the family records that generation on its state after the encode (`tower_rows_ge
 seat (`RnntEnc.gen`), so a CPU encode, another session's encode, or a freed array's address never names the held rows -
 or over rows uploaded where the CPU encoded; a lane whose projection lives in a q8 plane (parakeet's
 q8 lane) projects on the CPU and the device decodes off the result, the discrete seats' serves line naming where the
-projection runs (`rnnt_dev_announce`). The weights are the CPU state's halves and summed biases,
-laid once a model: the seat keys its copy on the net's plane, offsets and lay flags, the encoder half, the small regions'
-values whole and a strided sample of the large ones' (`rnnt_dev_key`), so two sessions of one model share it and a net laid
+projection runs (`rnnt_dev_announce`). The weights are the image's halves and slab, the bytes the CPU step reads,
+uploaded as stored: the seat keys its copy on the net's planes, the encoder half, the slab's small regions
+whole and a strided sample of the large ones' (`rnnt_dev_key`), so two sessions of one model share it and a net laid
 at a freed plane's address with other values uploads its own. Everything but the buffers and the dispatches is one host form
 in `dasllama_rnnt` both drivers call - the admission (`rnnt_dev_shape_ok`), the slab layout, the kargs, the start words, the
 rounds loop and the record decode.

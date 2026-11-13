@@ -3534,7 +3534,8 @@ built in-test, against a scalar reference written in the file - the zero and bla
 RNN-T, the one-lane step against the team publish, the layer-count refusal and the pool's narrowing; `PLOG_BAR`'s control a
 net with one joint row mutated landing outside it. The device-seat cells (`rnnt_seat_skip`: skip on a build or box with no
 device transducer seat) decode the same nets as a GPU-flavored image carries them (`make_dev`: the halves and slab baked
-under the seat's piece prefix, `rnnt_seat_piece`, into a device block the net reads, `dev_only` set) on the build's seat
+by `rnnt_bake`, the net reading them as its planes, `dev_only` set) - `test_rnnt_baked_cpu` holds the same baked form on the CPU loop
+to the scalar reference, model-free - on the build's seat
 against the reference, a clip of no frames, the knob off keeping a CPU net on the CPU loop, each other decline (a shape past
 the staged rows, a device fault, the round budget, a failed command buffer on Metal or a failed allocation on Vulkan)
 refusing the GPU-flavored net with its reason counted, and two sessions sharing one model's device weights. Its kernel references and fixture are `_rnnt_oracle.das`'s, at two shapes (`rc_shapes`: one off every lattice,
@@ -3567,7 +3568,7 @@ carrier with every seat Q8_0; `test_gigaam_kq_load_flavor` the Q4_K carrier's lo
 the Q4_K carrier with tensors retyped - a float GEMM among quantized ones at the lane peek, a Q5_1 and an NVFP4 GEMM at their
 seat naming the tensor, q in Q8_0 beside a Q4_K k and v, a file that does not read, the copy with nothing retyped staging (the
 control) - and the lane peek reading BF16 and F32 block GEMMs as the exact lane's, the Q4_K carrier the kq lane's (the
-control); `test_gigaam_ctc_bakes_no_transducer` (model-free) a CTC carrier's device-block bake placing no transducer piece;
+control);
 `test_gigaam_tower_mm_needs_the_sums` (model-free) `tower_mm`'s form without the Q8_K sums refusing a kq-lane model;
 `test_gigaam_corpus_eval` the corpus harness (`../harness/asr_corpus_eval.das`, spawned with the image rail off) over a
 FLEURS-layout split up to `--limit`, translating where `--nmt` names a student, and refusing a lane it has no name for;
@@ -3641,7 +3642,26 @@ lattice served by the CPU with the counter unmoved, another clip's mel outside t
 `test_qwen3a_vulkan_front` (the three-way cells described under `test_vulkan_tower_kernels.das`),
 `test_parakeet_discrete_twin` (parakeet-TDT 0.6B v2 over jfk through `parakeet_encode` - the front and the blocks on the
 device, the same three-way bar, counters and poison as the canary twin, the q8 and exact models minted in memory
-through `stage_parakeet_model`); `test_vulkan_short_clips` (gemma4a E2B, canary and parakeet v2, each lane's CPU image and
+through `stage_parakeet_model`); the Parakeet GGUF carriers (the `parakeet-tdt-0.6b-v3-*.gguf` rows of
+`../performance/profile_common.das`): `test_parakeet_gguf_carrier` (the F32 GGUF's encoder rows on jfk the f32 bin's within
+`PK_GGUF_BIN_BAR`, the bin's rows of the clip at half volume the control; the Q4_K_M file's kq lane on the CPU named `k4`,
+its rows within `PK_KQ_CPU_SLACK` x the q8 lane's rel_l2 from the dequantized chain, zeroed seats from the middle block on
+outside it), `test_parakeet_kq_refusals` (over `gguf_retyped_copy` copies of the Q4_K_M file: a Q5_1 seat, q in Q8_0 beside
+K-quant k and v, one block's position linear in Q8_0, each refused by name, the unchanged copy staging; the load tag the kq
+lane's for a quantized GGUF asked for q8 un-pinned alone; a ggml bin refused on the kq lane),
+`test_parakeet_gguf_loads` (the header refusals over copies with one header byte rewritten - linear biases, input scaling, an
+FF off four times the width, a token count off the predictor's, a front end off 16 kHz or a hop off 160, the copy rewritten
+with its own byte staging; a GigaAM GGUF refused; a Q6_K seat naming the lane `kq`, a BF16 GEMM staging, the Q8_0 file
+named `q8`; the F32 GGUF's jfk transcript the f32 bin's and the kq lane's at jfk's word floor - the predictor, joint and
+durations), `test_parakeet_gguf_facade` (`load_asr_model` on the Q4_K_M file alone: the kq lane's CPU image, the lane named `k4`,
+jfk's word floor, the lane's image loaded back by path to the same transcript),
+`test_parakeet_kq_discrete_twin` (the Q4_K_M file's kq image on the serving discrete home three ways on jfk - the front and
+every block on the device, a k4 tile counted, the image holding no CPU planes, the poisoned image past the bar) and
+`test_parakeet_kq_metal_twin` (Apple builds: the kq image on the Metal chain through `metal_q8_twin` - the front and every
+block on the device, a K-quant mul_mm stamp counted, the poisoned image past the bar); these six skip without the
+Q4_K_M GGUF (the F32 cells without the F32 GGUF or the v3 f32 bin), the encode cells without jfk.wav, the two twins as
+their homes' twins do;
+`test_vulkan_short_clips` (gemma4a E2B, canary and parakeet v2, each lane's CPU image and
 its Vulkan-flavored image minted in memory: clips of 320 to 1600 samples - a few mel frames, under the device fronts' old
 four-frame floor and past it - each one device encode with no decline on the Vulkan image, the row count the CPU image's
 and the rows within `SHORT_CLIP_BAR` of them, a seeded noise clip's CPU rows outside the bar of the first clip's the
@@ -3683,7 +3703,7 @@ halfwords against the CPU image's f32 at `TWIN_EXACT_REL_L2_VK`, with its contro
 `test_mel_spectrum_magnitude` (model-free: `mel_spectrum_rows`' magnitude and power forms on a synthetic DFT table
 against a double DFT, the magnitude rows against the power reference the control) - the Vulkan twins with
 `test_encoder_blocks_vulkan`'s ultravox row among them (the gated-MLP projector tail on the device, its counter
-`vulkan_tower_tail_encodes` once on the device leg) - all of which skip without their carriers (the qwen2audio / voxtral / omni-3b f32 mmprojs, the E2B bf16
+`vulkan_tower_tail_encodes` once on the device leg) - all of which, the Parakeet GGUF cells aside, skip without their carriers (the qwen2audio / voxtral / omni-3b f32 mmprojs, the E2B bf16
 mmproj, the canary f32 encoder, the parakeet f32 encoder, the ultravox f16 mmproj, the Qwen3-ASR bf16 mmproj), without
 jfk.wav, without the serving discrete home's twin seat (the CUDA tower's under the CUDA ask, else a Vulkan device
 under `DASLLAMA_GPU=1`), and on a das_metal build.

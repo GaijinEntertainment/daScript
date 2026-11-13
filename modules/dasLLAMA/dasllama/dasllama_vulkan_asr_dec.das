@@ -529,12 +529,10 @@ def private rv_attach_build(net : RnntNet; enc : RnntEnc; key : uint64) : bool {
     rv_release()
     r.oom = false
     r.lay = rnnt_dev_layout(net)
-    let src = VtDevSrc(on = true, dev = net.dev, devplan = net.devplan)
     r.wh_bytes = r.lay.wh_halves * 2l
     r.jw_bytes = r.lay.jw_halves * 2l
-    r.wf_bytes = vt_piece_bytes(src, "{VK_RNNT_PIECE}.wf")
-    if (vt_piece_bytes(src, "{VK_RNNT_PIECE}.wh") != r.wh_bytes || vt_piece_bytes(src, "{VK_RNNT_PIECE}.jw") != r.jw_bytes
-            || r.wf_bytes != r.lay.wf_floats * 4l) {
+    r.wf_bytes = r.lay.wf_floats * 4l
+    if (!rnnt_dev_planes_ok(net, r.lay)) {
         return rv_decline(RnntDevDecline.shape)
     }
     r.wenc_bytes = enc.q8 ? 0l : net.joint_dim * enc.d * 4l
@@ -550,9 +548,9 @@ def private rv_attach_build(net : RnntNet; enc : RnntEnc; key : uint64) : bool {
         rv_release()
         return rv_decline(RnntDevDecline.memory)
     }
-    vt_put_piece(src, "{VK_RNNT_PIECE}.wh", r.wh_dev)
-    vt_put_piece(src, "{VK_RNNT_PIECE}.jw", r.jw_dev)
-    vt_put_piece(src, "{VK_RNNT_PIECE}.wf", r.wf_dev)
+    upload_region_at(r.wh_dev, 0l, unsafe(reinterpret<uint8 const?>(plane_at(net.wh, 0l))), r.wh_bytes)
+    upload_region_at(r.jw_dev, 0l, unsafe(reinterpret<uint8 const?>(plane_at(net.jw, 0l))), r.jw_bytes)
+    upload_region_at(r.wf_dev, 0l, unsafe(reinterpret<uint8 const?>(plane_at(net.blob, net.embed))), r.wf_bytes)
     if (!enc.q8) {
         upload_region_at(r.wenc_dev, 0l, unsafe(reinterpret<uint8 const?>(plane_at(net.blob, enc.w))), r.wenc_bytes)
     }

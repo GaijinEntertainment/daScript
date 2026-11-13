@@ -51,18 +51,23 @@ struct private Fixture {
     enc : array<float>
     durs : array<int>
     net : RnntNet = RnntNet()
+    ref : RnntNet = RnntNet()   //!< the net over the raw f32 tensors, which the reference reads whatever form ``net`` serves in
     x : array<float>      //!< the encoder rows [n_frames][d_enc], where the spec lays the encoder half
     enc_half : RnntEnc    //!< the encoder half's offsets in the plane: `enc` is its projection of `x`, bias included
-    devb : TowerDevBuild  //!< the device block `make_dev` bakes, which a GPU-flavored net reads
+    baked : RnntBaked     //!< the image's form `make_dev` bakes (`rnnt_bake`), which a GPU-flavored net reads
 }
 
-//! `f`'s net as a GPU-flavored image carries it (`#tower-dev-block`): its halves and slab baked under the seat's piece prefix into
-//! `f.devb`, the net reading that block and `dev_only` - the form the device seat serves, and whose decline refuses
+//! `f`'s net as a GPU-flavored image carries it: baked (`rnnt_bake`) - the slab appended to the plane, the halves beside - and
+//! `dev_only`, the form the device seat serves, and whose decline refuses
 def private make_dev(var f : Fixture) {
-    rnnt_dev_bake(f.net, f.enc_half, f.devb, rnnt_seat_piece())
+    f.baked <- rnnt_bake(f.net, f.enc_half.b)
+    let slab = long_length(f.data)
+    f.data |> push_from(f.baked.wf)
     unsafe {
-        f.net.dev = PlaneU8(p = addr<uint8 const?>(f.devb.blob[0]), n = long_length(f.devb.blob))
-        f.net.devplan = PlaneI64(p = addr<int64 const?>(f.devb.plan[0]), n = long_length(f.devb.plan))
+        f.net.blob = PlaneF(p = addr<float const?>(f.data[0]), n = long_length(f.data))
+        f.ref.blob = f.net.blob
+        rnnt_net_baked(f.net, slab, PlaneU16(p = addr<uint16 const?>(f.baked.wh[0]), n = long_length(f.baked.wh)),
+            PlaneU16(p = addr<uint16 const?>(f.baked.jw[0]), n = long_length(f.baked.jw)))
     }
     f.net.dev_only = true
 }
@@ -137,6 +142,7 @@ def private build(spec : NetSpec) : Fixture {
         }
     }
     f.net = net
+    f.ref = net
     return <- f
 }
 
@@ -151,7 +157,7 @@ struct private RefState {
 //! The predictor over input `x` ([pd]): each layer's four gates (rows i, f, g, o under torch, else i, f, o, g) from
 //! ih . x + hh . h + b (+ b2), then c and h, the layer's h the next layer's input; joint.pred over the last h.
 def private ref_predict(f : Fixture; var r : RefState; x0 : array<double>) {
-    let net = f.net
+    let net = f.ref
     let pd = net.pred_dim
     var x := x0
     let gi = 0l
@@ -194,7 +200,7 @@ def private ref_predict(f : Fixture; var r : RefState; x0 : array<double>) {
 
 //! The joint's logits at frame `t`: b + W . relu(enc[t] + pred).
 def private ref_joint(f : Fixture; var r : RefState; t : int64) {
-    let net = f.net
+    let net = f.ref
     let jd = net.joint_dim
     let n_logits = net.n_tokens + long_length(f.durs)
     for (i in range64(n_logits)) {
@@ -214,7 +220,7 @@ def private ref_step(f : Fixture; var r : RefState; token : int; zero : bool; t 
     x |> resize(f.net.pred_dim)
     if (!zero) {
         for (j in range64(f.net.pred_dim)) {
-            x[j] = double(f.data[f.net.embed + int64(token) * f.net.pred_dim + j])
+            x[j] = double(f.data[f.ref.embed + int64(token) * f.ref.pred_dim + j])
         }
     }
     ref_predict(f, r, x)
@@ -224,7 +230,7 @@ def private ref_step(f : Fixture; var r : RefState; token : int; zero : bool; t 
 //! The greedy transducer walk, written out: the token argmax and the duration argmax a row, a blank advancing by its
 //! duration (at least a frame), a token by its own, a duration-0 token staying on the frame up to `max_symbols`.
 def private ref_greedy(f : Fixture) : array<RnntToken> {
-    let net = f.net
+    let net = f.ref
     let n_tok = int(net.n_tokens)
     let n_dur = length(f.durs)
     let n_frames = long_length(f.enc) / net.joint_dim
@@ -343,6 +349,27 @@ def test_rnnt_zero_start(t : T?) {
                     Bar(abs_floor = 10.0 * PLOG_BAR))
             } else {
                 to_log(LOG_INFO, "test_rnnt: the two first inputs decode apart: {token_list(zero.want)} / {token_list(blank.want)}\n")
+            }
+        }
+    }
+}
+
+[test(description = "A baked net - the halves and the slab an image stores - decodes on the CPU loop to the scalar reference's ids, frames and durations with log-probs within 1e-5: one and two layers, either gate order, one and two bias rows, a TDT head"), arch(at = "../ARCHITECTURE_MEDIA_ASR.md#rnnt-decode-step")]
+def test_rnnt_baked_cpu(t : T?) {
+    t |> run("the CPU loop over the image's form") @(t : T?) {
+        with_dasllama_jobque_() {
+            for (spec, tag in [NetSpec(seed = 41u), NetSpec(nl = 2l, seed = 43u), NetSpec(torch_gates = false, two_biases = false, zero_start = false, seed = 45u),
+                    NetSpec(n_dur = 4, seed = 47u)], ["one layer", "two layers", "the engine's gate order, one bias row, the blank's start", "a TDT head"]) {
+                var f <- build(spec)
+                make_dev(f)
+                f.net.dev_only = false
+                var leg = Leg(lanes = 1)
+                leg.got <- engine_greedy(f)
+                leg.want <- ref_greedy(f)
+                same_tokens(t, "baked, {tag}", leg)
+                unsafe {
+                    delete f
+                }
             }
         }
     }

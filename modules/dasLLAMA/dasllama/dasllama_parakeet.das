@@ -22,6 +22,7 @@ require dasllama/dasllama_audio
 require dasllama/dasllama_tower
 require dasllama/dasllama_tower_image
 require dasllama/dasllama_tower_flavor   // [tower_flavor]: the family's GPU flavor seat
+require dasllama/dasllama_load   // kq_fmt_of: the format a plane's disk type serves in
 require dasllama/dasllama_convert
 require dasllama/dasllama_par
 require dasllama/dasllama_common   // apply_box_profile_runtime for the parakeet-image identity
@@ -117,16 +118,11 @@ struct ParakeetModel {
     aux_layers_off : int64     // fp32 walk of the layer span (== layers_off/layer_stride on an
     aux_layer_stride : int64   // fp32 load; on a q8 load the GEMM regions collapse out of it)
     // prediction network + joint
-    embed_off : int64          // [n_vocab+1][pred_dim]
-    lstm_ih : PlaneI64 = PlaneI64()     // per layer
-    lstm_hh : PlaneI64 = PlaneI64()
-    lstm_b : PlaneI64 = PlaneI64()
+    dec_slab : int64           //! the transducer decoder's f32 slab in ``blob``: the token table, the joint biases, the summed gate biases (`rnnt_dev_layout`)
+    rnnt_wh : PlaneU16 = PlaneU16()   //! the predictor stack's and joint.pred's weights as the halves the decode step runs on (`rnnt_bake`)
+    rnnt_jw : PlaneU16 = PlaneU16()   //! the joint net's weight as half columns in logit blocks
     joint_enc_w : int64
     joint_enc_b : int64
-    joint_pred_w : int64
-    joint_pred_b : int64
-    joint_net_w : int64
-    joint_net_b : int64
     // Q8 fast path (default load): Q8_0 image of the GEMM regions at their full-layout
     // offsets, repacked for the active backend; transcoded straight from the mapped file.
     q8 : bool
@@ -135,6 +131,12 @@ struct ParakeetModel {
     qscales : PlaneF = PlaneF()
     gemm_f16 : bool                  //! a GPU home's exact lane (`tower_dev_halfword`): the encoder GEMMs in ``wblob`` at their full-layout offsets
     wblob : PlaneU16 = PlaneU16()    //! the encoder GEMM regions as halfwords, the file's f32 saturated to f16 at staging; the joint stays f32
+    kq_lane : bool                   //! a quantized GGUF's own planes (`#parakeet-kq-seats`): every GEMM offset is its seat's number in ``gemm_seats``
+    kq_repacked : bool               //! the K-quant planes are in the load's backend layout, else disk order
+    kq_fmt : int                     //! the lane's one K-quant member (a `KqFmt` slot), `q8` where every seat is Q8_0, TOWER_KQ_MIXED where they mix
+    kq : PlaneU8 = PlaneU8()         //! the K-quant seats' quant bytes
+    ks : PlaneU8 = PlaneU8()         //! ... and their scale bytes
+    gemm_seats : PlaneI64 = PlaneI64()   //! `TOWER_SEAT_WORDS` a seat: the format slot, the quant offset, the scale offset
     dev_backend : TowerDev    //! the GPU flavor whose device block the image carries (`#tower-dev-block`); `none` on the CPU image
     dev : PlaneU8 = PlaneU8()
     devplan : PlaneI64 = PlaneI64()
@@ -158,10 +160,10 @@ def finalize(var t : ParakeetModel) {
     }
 }
 
-// the tripwire: serialize_image_meta(ParakeetModel) covers 43 fields (vocab rides the meta
+// the tripwire: serialize_image_meta(ParakeetModel) covers 42 fields (vocab rides the meta
 // blob — string arrays can't be raw planes); fft (rebuilt at load) + image_map + image_bytes
 // are deliberate skips.
-let private PARAKEET_META_FIELDS = 43 + 3
+let private PARAKEET_META_FIELDS = 42 + 3
 
 // every meta-carried ParakeetModel field, explicitly, both directions (see dasllama_image)
 def private serialize_image_meta(var arch : Archive; var t : ParakeetModel) {
@@ -198,17 +200,16 @@ def private serialize_image_meta(var arch : Archive; var t : ParakeetModel) {
     arch |> serialize_raw(t.layer_stride)
     arch |> serialize_raw(t.aux_layers_off)
     arch |> serialize_raw(t.aux_layer_stride)
-    arch |> serialize_raw(t.embed_off)
+    arch |> serialize_raw(t.dec_slab)
     arch |> serialize_raw(t.joint_enc_w)
     arch |> serialize_raw(t.joint_enc_b)
-    arch |> serialize_raw(t.joint_pred_w)
-    arch |> serialize_raw(t.joint_pred_b)
-    arch |> serialize_raw(t.joint_net_w)
-    arch |> serialize_raw(t.joint_net_b)
     arch |> serialize_raw(t.q8)
     arch |> serialize_raw(t.jenc_exact)
     arch |> serialize_raw(t.gemm_f16)
     arch |> serialize_raw(t.dev_backend)
+    arch |> serialize_raw(t.kq_lane)
+    arch |> serialize_raw(t.kq_repacked)
+    arch |> serialize_raw(t.kq_fmt)
 }
 
 def private image_post_load(var t : ParakeetModel) {
@@ -222,6 +223,29 @@ def private register_parakeet_image_tags {
     register_image_family_tag("parakeet-f16", config_free = true)
     register_tower_dev_tags("parakeet-q8")
     register_tower_dev_tags("parakeet-f16")
+    register_image_family_tag(PARAKEET_KQ_TAG)
+    register_tower_dev_tags(PARAKEET_KQ_TAG)
+}
+
+let PARAKEET_KQ_TAG = "parakeet-kq"   //! the image tag of the kq lane: a quantized GGUF's own planes
+let PK_LAYER_SEATS = 11l              //! a block's kq-lane seats, in `PkSeat` order
+let PK_FRONT_GEMMS = 3l               //! the front's seats behind the blocks': its two channel mixes, its output linear
+let PK_FRONT_SEATS = PK_FRONT_GEMMS + 1l   //! ... and the joint's encoder linear, on a CPU image
+
+//! a block's kq-lane seats in seat order - the order of the GPU chains' GEMM records (`fc_gemm_records`), so a seat's
+//! number in its block is its record's; `pk_layer_offsets` hands the chain `l * PK_LAYER_SEATS` + the member
+enum PkSeat {
+    ff1a
+    ff1b
+    q
+    k
+    v
+    pos
+    o
+    pw1
+    pw2
+    ff2a
+    ff2b
 }
 
 //! the image tag of a lane: q8, the exact pick's halfwords (`f16`), or the file's f32
@@ -230,12 +254,13 @@ def parakeet_lane_tag(q8, f16 : bool) : string => tower_lane_tag("parakeet", q8,
 //! the image tag of the lane a load of `path` on `q8` takes under flavor `dev` (`tower_load_f16`)
 def parakeet_image_tag(path : string; q8 : bool; dev : TowerDev) : string => parakeet_lane_tag(q8, tower_load_f16(path, q8, dev))
 
+[arch(at = "../ARCHITECTURE_MEDIA_ASR.md#parakeet-kq-seats")]
 def pk_layer_offsets(m : ParakeetModel; l : int64) : PkLayerOffs {
     let d = m.n_state
     let ff = 4l * d
     let dh = d / m.n_head
     // dual walk: `o` is the full GEMM layout (qblob on a q8 load, wblob on an f16 one); `a` is the fp32 walk of m.blob (identical on an fp32 load)
-    let g = (m.q8 || m.gemm_f16) ? 0l : 1l
+    let g = (m.q8 || m.gemm_f16 || m.kq_lane) ? 0l : 1l
     var o = m.layers_off + l * m.layer_stride
     var a = m.aux_layers_off + l * m.aux_layer_stride
     var r = PkLayerOffs()
@@ -267,6 +292,20 @@ def pk_layer_offsets(m : ParakeetModel; l : int64) : PkLayerOffs {
     r.ff2b_w = o; o += d * ff; a += g * d * ff
     r.nout_w = a; a += d; o += d
     r.nout_b = a; a += d; o += d
+    if (m.kq_lane) {   // the GEMMs' offsets are their seats' numbers (`#parakeet-kq-seats`)
+        let s = l * PK_LAYER_SEATS
+        r.ff1a_w = s + int64(PkSeat.ff1a)
+        r.ff1b_w = s + int64(PkSeat.ff1b)
+        r.q_w = s + int64(PkSeat.q)
+        r.k_w = s + int64(PkSeat.k)
+        r.v_w = s + int64(PkSeat.v)
+        r.pos_w = s + int64(PkSeat.pos)
+        r.o_w = s + int64(PkSeat.o)
+        r.pw1_w = s + int64(PkSeat.pw1)
+        r.pw2_w = s + int64(PkSeat.pw2)
+        r.ff2a_w = s + int64(PkSeat.ff2a)
+        r.ff2b_w = s + int64(PkSeat.ff2b)
+    }
     return r
 }
 
@@ -319,6 +358,13 @@ def private pk_repack_all(var st : ParakeetStaging) {
 
 // ===== per-session scratch =====
 
+//! the quantized image a session holds of its position table: none (the float lanes), Q8_0, or the kq lane's Q8_K
+enum PkPosImage {
+    none
+    q8
+    q8k
+}
+
 //! Every hot-path buffer of the parakeet pipeline (mel, conv subsampling, encoder, requant,
 //! TDT decode) so a transcribe allocates NOTHING per call. Arrays grow reserve-exact and never
 //! shrink; a default-constructed value is ready to use.
@@ -343,11 +389,12 @@ struct ParakeetState {
     kk : array<float>
     vv : array<float>
     pos_emb : array<float>
-    pos_tt : int64              //!< the frame count `pos_emb` holds the table of (0 = none), at width `pos_d`, requantized when `pos_q8`
+    pos_tt : int64              //!< the frame count `pos_emb` holds the table of (0 = none), at width `pos_d`, its quantized image `pos_image`
     pos_d : int64
-    pos_q8 : bool
+    pos_image : PkPosImage
     posq : array<int8>
     poss : array<float>
+    posbs : array<int>          //!< the kq lane's Q8_K image of the table: its per-16 sums
     posl : array<float>
     qu : array<float>
     qv : array<float>
@@ -361,7 +408,7 @@ struct ParakeetState {
     // q8 activation image (q/k/v share one requant; decode reuses it)
     xqi : array<int8>
     xsi : array<float>
-    xbsi : array<int>   //!< the Q8_K image's per-16 sums (a kq-lane tower's; the FC chain passes it, parakeet never fills it)
+    xbsi : array<int>   //!< the Q8_K image's per-16 sums (the kq lane's; empty on the others)
     // decode
     encp : array<float>
     @scratch toks : array<ParakeetToken>
@@ -405,23 +452,51 @@ struct private PkTensorRec {
     off : int64
 }
 
-def private pk_read(recs : table<string; PkTensorRec>; b : array<uint8> | #; name : string;
+let PARAKEET_ARCH = "parakeet"   //! `general.architecture` of a Parakeet GGUF carrier
+let private PK_WHO = "dasLLAMA parakeet"
+
+//! The tensors of a carrier, either container: a ggml bin's records by name, or a GGUF's own table (`gguf`), whose
+//! tensors answer to the bin's names through `pk_gguf_name`
+struct private PkSource {
+    gguf : bool
+    recs : table<string; PkTensorRec>
+    meta : GGUFMeta = GGUFMeta()
+}
+
+[arch(at = "../ARCHITECTURE_MEDIA_ASR.md#parakeet-gguf")]
+def private pk_gguf_name(name : string) : string => replace_multiple(name, [
+    (text = "encoder.layers.", replacement = "enc.blocks."), (text = "encoder.pre_encode.", replacement = "enc.pre_encode."),
+    (text = ".norm_feed_forward1.", replacement = ".norm_ff1."), (text = ".feed_forward1.", replacement = ".ff1."),
+    (text = ".norm_feed_forward2.", replacement = ".norm_ff2."), (text = ".feed_forward2.", replacement = ".ff2."),
+    (text = ".norm_self_att.", replacement = ".norm_attn."), (text = ".self_attn.", replacement = ".attn."),
+    (text = ".pointwise_conv1.", replacement = ".pointwise1."), (text = ".pointwise_conv2.", replacement = ".pointwise2."),
+    (text = ".depthwise_conv.", replacement = ".depthwise."), (text = ".batch_norm.", replacement = ".bn."),
+    (text = "decoder.prediction.embed.", replacement = "pred.embed."), (text = "joint.joint_net.2.", replacement = "joint.out.")])
+
+def private pk_read(src : PkSource; b : array<uint8> | #; name : string;
                     var dst : array<float>; dst_off, n : int64) {
-    if (!key_exists(recs, name)) {
-        panic("dasLLAMA parakeet: missing tensor '{name}' in model file")
+    if (src.gguf) {
+        let gname = pk_gguf_name(name)
+        gguf_expect_elems(src.meta, gname, n, PK_WHO)
+        gguf_read_tensor_f32(src.meta, b, gname, dst, dst_off, n)
+        return
     }
-    let r = recs?[name] ?? default<PkTensorRec>
+    if (!key_exists(src.recs, name)) {
+        panic("{PK_WHO}: missing tensor '{name}' in model file")
+    }
+    let r = src.recs?[name] ?? default<PkTensorRec>
     if (r.n_elem != n) {
-        panic("dasLLAMA parakeet: tensor '{name}' has {r.n_elem} elements, want {n}")
+        panic("{PK_WHO}: tensor '{name}' has {r.n_elem} elements, want {n}")
     }
     ggml_bin_read_f32(b, r.ttype, r.off, n, dst, dst_off)
 }
 
 //! a GEMM weight read: q8 transcodes into qblob/qscales at its full-layout offset, f16 into wblob's halfwords, fp32 into the blob
-def private pk_read_gemm(recs : table<string; PkTensorRec>; b : array<uint8> | #; name : string;
+def private pk_read_gemm(src : PkSource; b : array<uint8> | #; name : string;
                          var st : ParakeetStaging; var scratch : array<float>; woff, n : int64) {
+    return if (st.e.kq_lane)   // the kq lane's GEMMs are its seats: `pk_kq_fill` moves every one of them
     if (!st.e.q8 && !st.e.gemm_f16) {
-        pk_read(recs, b, name, st.blob, woff, n)
+        pk_read(src, b, name, st.blob, woff, n)
         return
     }
     if (woff % 32l != 0l) {
@@ -431,7 +506,7 @@ def private pk_read_gemm(recs : table<string; PkTensorRec>; b : array<uint8> | #
         scratch |> reserve(n)
         scratch |> resize(n)
     }
-    pk_read(recs, b, name, scratch, 0l, n)
+    pk_read(src, b, name, scratch, 0l, n)
     if (st.e.gemm_f16) {
         unsafe {
             cvt_f32_to_f16_sat(addr(st.wblob[woff]), addr<float const?>(scratch[0]), n)
@@ -441,11 +516,309 @@ def private pk_read_gemm(recs : table<string; PkTensorRec>; b : array<uint8> | #
     }
 }
 
-//! Loads a converted Parakeet-TDT ggml bin (convert-parakeet-to-ggml.py output; f32 or f16).
-//! With ``q8`` the encoder/joint GEMM weights transcode to Q8_0 straight from the mapped file (~4x CPU fast path); conv im2col, depthwise, LSTM, and joint_net stay fp32 (a few % of encode).
+//! a ggml bin's header into the staging and its tensor records into `src`
+def private pk_bin_header(var st : ParakeetStaging; var src : PkSource; bytes : array<uint8>#; n_bytes : int64; path : string) {
+    var o = 0l
+    if (rd_u32(bytes, o) != ASR_GGML_MAGIC) {
+        panic("{PK_WHO}: bad magic in '{path}'")
+    }
+    o += 4l
+    st.e.n_vocab = int64(rd_i32(bytes, o)); o += 4l
+    o += 4l   // n_audio_ctx (unused: full-clip encode)
+    st.e.n_state = int64(rd_i32(bytes, o)); o += 4l
+    st.e.n_head = int64(rd_i32(bytes, o)); o += 4l
+    st.e.n_layer = int64(rd_i32(bytes, o)); o += 4l
+    st.e.n_mel = int64(rd_i32(bytes, o)); o += 4l
+    o += 4l   // ftype (per-record types below)
+    st.e.n_fft = int64(rd_i32(bytes, o)); o += 4l
+    st.e.subsampling = int64(rd_i32(bytes, o)); o += 4l
+    st.e.n_sub_ch = int64(rd_i32(bytes, o)); o += 4l
+    st.e.n_conv_kernel = int64(rd_i32(bytes, o)); o += 4l
+    st.e.n_pred_dim = int64(rd_i32(bytes, o)); o += 4l
+    st.e.n_pred_layers = int64(rd_i32(bytes, o)); o += 4l
+    st.e.n_durations = int64(rd_i32(bytes, o)); o += 4l
+    st.e.n_max_tokens = int64(rd_i32(bytes, o)); o += 4l
+
+    // mel filterbank
+    let fb_mel = int64(rd_i32(bytes, o)); o += 4l
+    let fb_n = int64(rd_i32(bytes, o)); o += 4l
+    if (fb_mel != st.e.n_mel || fb_n != st.e.n_fft / 2l + 1l) {
+        panic("{PK_WHO}: filterbank is {fb_mel}x{fb_n}, want {st.e.n_mel}x{st.e.n_fft / 2l + 1l}")
+    }
+    st.filters |> resize(fb_mel * fb_n)
+    for (i in range64(fb_mel * fb_n)) {
+        st.filters[i] = rd_f32(bytes, o + i * 4l)
+    }
+    o += fb_mel * fb_n * 4l
+
+    // STFT window
+    let n_window = int64(rd_i32(bytes, o)); o += 4l
+    st.window |> resize(n_window)
+    for (i in range64(n_window)) {
+        st.window[i] = rd_f32(bytes, o + i * 4l)
+    }
+    o += n_window * 4l
+
+    // TDT durations
+    st.durations |> resize(st.e.n_durations)
+    for (i in range64(st.e.n_durations)) {
+        st.durations[i] = int(rd_u32(bytes, o + i * 4l))
+    }
+    o += st.e.n_durations * 4l
+
+    // vocab (SPM pieces; blank = id n_vocab lives outside the table)
+    let nv = int64(rd_i32(bytes, o)); o += 4l
+    st.e.vocab |> resize(nv)
+    for (i in range64(nv)) {
+        let len = int64(rd_u32(bytes, o)); o += 4l
+        st.e.vocab[i] = bytes_str(bytes, o, len)
+        o += len
+    }
+
+    // tensor records
+    while (o + 12l <= n_bytes) {
+        let n_dims = int64(rd_i32(bytes, o)); o += 4l
+        let name_len = int64(rd_i32(bytes, o)); o += 4l
+        let ttype = rd_i32(bytes, o); o += 4l
+        var n_elem = 1l
+        for (_d in range64(n_dims)) {
+            n_elem *= int64(rd_i32(bytes, o)); o += 4l
+        }
+        let name = bytes_str(bytes, o, name_len)
+        o += name_len
+        src.recs[name] = PkTensorRec(ttype = ttype, n_elem = n_elem, off = o)
+        o += ggml_bin_tensor_bytes(ttype, n_elem)
+    }
+}
+
+let private PK_GGUF = "stt.parakeet"
+
+[arch(at = "../ARCHITECTURE_MEDIA_ASR.md#parakeet-gguf")]
+def private pk_gguf_header(var st : ParakeetStaging; var src : PkSource; bytes : array<uint8>#; path : string) {
+    src.gguf = true
+    src.meta <- parse_gguf_meta(bytes)
+    let arch = gguf_str_or(src.meta, bytes, "general.architecture", "")
+    if (arch != PARAKEET_ARCH) {
+        panic("{PK_WHO}: '{path}' is a '{arch}' GGUF, not a {PARAKEET_ARCH} carrier")
+    }
+    let head = gguf_str_or(src.meta, bytes, "{PK_GGUF}.head_kind", "")
+    if (head != "tdt") {
+        panic("{PK_WHO}: '{path}' carries the '{head}' head - the loader serves the TDT head")
+    }
+    for (key in fixed_array("{PK_GGUF}.encoder.length_masking", "{PK_GGUF}.vad.hidden")) {
+        if (gguf_has(src.meta, key)) {
+            panic("{PK_WHO}: '{path}' carries '{key}' - a variant of the family the loader does not serve")
+        }
+    }
+    for (key in fixed_array("{PK_GGUF}.encoder.use_bias", "{PK_GGUF}.encoder.xscaling")) {
+        if (gguf_bool_or(src.meta, bytes, key, false)) {
+            panic("{PK_WHO}: '{path}' sets '{key}' - the chain runs the family's bias-free, unscaled encoder")
+        }
+    }
+    st.e.n_vocab = gguf_int(src.meta, bytes, "{PK_GGUF}.predictor.vocab") - 1l   // the carrier counts the blank
+    st.e.n_state = gguf_int(src.meta, bytes, "{PK_GGUF}.encoder.d_model")
+    st.e.n_head = gguf_int(src.meta, bytes, "{PK_GGUF}.encoder.n_heads")
+    st.e.n_layer = gguf_int(src.meta, bytes, "{PK_GGUF}.encoder.n_layers")
+    st.e.subsampling = gguf_int(src.meta, bytes, "{PK_GGUF}.encoder.subsampling_factor")
+    st.e.n_sub_ch = gguf_int(src.meta, bytes, "{PK_GGUF}.encoder.subsampling_channels")
+    st.e.n_conv_kernel = gguf_int(src.meta, bytes, "{PK_GGUF}.encoder.conv_kernel")
+    st.e.n_pred_dim = gguf_int(src.meta, bytes, "{PK_GGUF}.predictor.hidden")
+    st.e.n_pred_layers = gguf_int(src.meta, bytes, "{PK_GGUF}.predictor.n_layers")
+    st.e.n_max_tokens = gguf_int(src.meta, bytes, "{PK_GGUF}.tdt.max_symbols")
+    st.e.n_mel = gguf_int(src.meta, bytes, "stt.frontend.num_mels")
+    st.e.n_fft = gguf_int(src.meta, bytes, "stt.frontend.n_fft")
+    let d_ff = gguf_int(src.meta, bytes, "{PK_GGUF}.encoder.d_ff")
+    if (d_ff != 4l * st.e.n_state) {
+        panic("{PK_WHO}: '{path}' has d_ff {d_ff} over d_model {st.e.n_state} - the chain runs an FF four times the model width")
+    }
+    var inscope durations <- gguf_int_array(src.meta, bytes, "{PK_GGUF}.tdt.durations")
+    st.e.n_durations = long_length(durations)
+    st.durations <- [for (d in durations); int(d)]
+    let rate = gguf_int(src.meta, bytes, "stt.frontend.sample_rate")
+    let hop = gguf_int(src.meta, bytes, "stt.frontend.hop_length")
+    if (rate != AUDIO_SAMPLE_RATE || hop != PARAKEET_HOP) {
+        panic("{PK_WHO}: '{path}' asks a {rate} Hz front end at a hop of {hop} - the mel path runs {AUDIO_SAMPLE_RATE} Hz at a hop of {PARAKEET_HOP}")
+    }
+    st.filters <- build_mel_filterbank(st.e.n_mel, st.e.n_fft, rate)
+    st.window <- build_hann_window(gguf_int(src.meta, bytes, "stt.frontend.win_length"), false)
+    st.e.vocab <- gguf_str_array(src.meta, bytes, "tokenizer.ggml.tokens")
+    if (long_length(st.e.vocab) != st.e.n_vocab + 1l) {
+        panic("{PK_WHO}: '{path}' lists {long_length(st.e.vocab)} tokens, the predictor {st.e.n_vocab + 1l} - the blank is the last of them")
+    }
+    st.e.vocab |> resize(st.e.n_vocab)
+}
+
+//! one predictor layer's weights and gate bias into `dst` at `ih`, `hh` and `b`, each container's rows as stored
+[arch(at = "../ARCHITECTURE_MEDIA_ASR.md#parakeet-gguf")]
+def private pk_read_lstm(src : PkSource; b : array<uint8>#; var dst : array<float>; pd, l, ih, hh, bias : int64) {
+    if (!src.gguf) {
+        pk_read(src, b, "decoder.prediction.dec_rnn.lstm.weight_ih_l{l}", dst, ih, 4l * pd * pd)
+        pk_read(src, b, "decoder.prediction.dec_rnn.lstm.weight_hh_l{l}", dst, hh, 4l * pd * pd)
+        pk_read(src, b, "decoder.prediction.dec_rnn.lstm.bias_h_l{l}", dst, bias, 4l * pd)
+        return
+    }
+    for (name, off, n in fixed_array("Wx", "Wh", "bias"), fixed_array(ih, hh, bias), fixed_array(4l * pd * pd, 4l * pd * pd, 4l * pd)) {
+        let gname = "pred.lstm.{l}.{name}"
+        gguf_expect_elems(src.meta, gname, n, PK_WHO)
+        gguf_read_tensor_f32(src.meta, b, gname, dst, off, n)
+    }
+}
+
+//! The transducer decoder into the staging in the image's form (`rnnt_bake`): the carrier's f32 tensors read into scratch under a
+//! net of their own offsets - a GGUF's predictor in torch gate order - then the halves into ``rnnt_wh`` / ``rnnt_jw`` and the slab
+//! into ``blob`` at ``dec_slab``
+[arch(at = "../ARCHITECTURE_MEDIA_ASR.md#rnnt-decode-step")]
+def private pk_bake_decoder(var st : ParakeetStaging; src : PkSource; b : array<uint8>#) {
+    let pd = st.e.n_pred_dim
+    let n_tokens = st.e.n_vocab + 1l
+    let n_logits = n_tokens + st.e.n_durations
+    var net = RnntNet(n_layers = st.e.n_pred_layers, pred_dim = pd, joint_dim = pd, n_tokens = n_tokens, torch_gates = src.gguf)
+    var at = 0l
+    net.embed = at; at += n_tokens * pd
+    for (l in range64(net.n_layers)) {
+        net.lstm_ih[l] = at; at += 4l * pd * pd
+        net.lstm_hh[l] = at; at += 4l * pd * pd
+        net.lstm_b[l] = at; at += 4l * pd
+    }
+    net.joint_pred_w = at; at += pd * pd
+    net.joint_pred_b = at; at += pd
+    net.joint_net_w = at; at += n_logits * pd
+    net.joint_net_b = at; at += n_logits
+    let enc_b = at; at += pd
+    var inscope raw : array<float>
+    raw |> reserve_resize(at)
+    pk_read(src, b, "decoder.prediction.embed.weight", raw, net.embed, n_tokens * pd)
+    for (l in range64(net.n_layers)) {
+        pk_read_lstm(src, b, raw, pd, l, net.lstm_ih[l], net.lstm_hh[l], net.lstm_b[l])
+    }
+    pk_read(src, b, "joint.pred.weight", raw, net.joint_pred_w, pd * pd)
+    pk_read(src, b, "joint.pred.bias", raw, net.joint_pred_b, pd)
+    pk_read(src, b, "joint.joint_net.2.weight", raw, net.joint_net_w, n_logits * pd)
+    pk_read(src, b, "joint.joint_net.2.bias", raw, net.joint_net_b, n_logits)
+    pk_read(src, b, "joint.enc.bias", raw, enc_b, pd)
+    unsafe {
+        plane_bind(net.blob, addr<uint8 const?>(raw[0]), 0l, at * 4l)
+        plane_bind(net.durations, addr<uint8 const?>(st.durations[0]), 0l, st.e.n_durations * 4l)
+    }
+    var inscope baked <- rnnt_bake(net, enc_b)
+    plane_release(net.blob)
+    plane_release(net.durations)
+    for (v, i in baked.wf, count()) {
+        st.blob[st.e.dec_slab + int64(i)] = v
+    }
+    st.rnnt_wh <- baked.wh
+    st.rnnt_jw <- baked.jw
+}
+
+//! one kq-lane seat's source: the GGUF tensor, its row width (the GEMM's input) and its rows (the output)
+struct private PkSeatJob {
+    name : string
+    width : int64
+    rows : int64
+}
+
+[arch(at = "../ARCHITECTURE_MEDIA_ASR.md#parakeet-kq-seats")]
+def private pk_kq_jobs(e : ParakeetModel) : array<PkSeatJob> {
+    let d = e.n_state
+    let ff = 4l * d
+    let nch = e.n_sub_ch
+    var jobs : array<PkSeatJob>
+    jobs |> reserve(e.n_layer * PK_LAYER_SEATS + PK_FRONT_SEATS)
+    for (l in range64(e.n_layer)) {
+        let b = "enc.blocks.{l}"
+        jobs |> push(PkSeatJob(name = "{b}.ff1.linear1.weight", width = d, rows = ff))
+        jobs |> push(PkSeatJob(name = "{b}.ff1.linear2.weight", width = ff, rows = d))
+        jobs |> push(PkSeatJob(name = "{b}.attn.linear_q.weight", width = d, rows = d))
+        jobs |> push(PkSeatJob(name = "{b}.attn.linear_k.weight", width = d, rows = d))
+        jobs |> push(PkSeatJob(name = "{b}.attn.linear_v.weight", width = d, rows = d))
+        jobs |> push(PkSeatJob(name = "{b}.attn.linear_pos.weight", width = d, rows = d))
+        jobs |> push(PkSeatJob(name = "{b}.attn.linear_out.weight", width = d, rows = d))
+        jobs |> push(PkSeatJob(name = "{b}.conv.pointwise1.weight", width = d, rows = 2l * d))
+        jobs |> push(PkSeatJob(name = "{b}.conv.pointwise2.weight", width = d, rows = d))
+        jobs |> push(PkSeatJob(name = "{b}.ff2.linear1.weight", width = d, rows = ff))
+        jobs |> push(PkSeatJob(name = "{b}.ff2.linear2.weight", width = ff, rows = d))
+    }
+    jobs |> push(PkSeatJob(name = "enc.pre_encode.conv.3.weight", width = nch, rows = nch))
+    jobs |> push(PkSeatJob(name = "enc.pre_encode.conv.6.weight", width = nch, rows = nch))
+    jobs |> push(PkSeatJob(name = "enc.pre_encode.out.weight", width = (e.n_mel / e.subsampling) * nch, rows = d))
+    if (!e.jenc_exact) {
+        jobs |> push(PkSeatJob(name = "joint.enc.weight", width = d, rows = e.n_pred_dim))
+    }
+    return <- jobs
+}
+
+[arch(at = "../ARCHITECTURE_MEDIA_ASR.md#parakeet-kq-seats")]
+def private pk_kq_check_classes(e : ParakeetModel; seats : array<int64>) {
+    let q8 = int64(int(KqFmt.q8))
+    let pos0 = seats[int64(PkSeat.pos) * TOWER_SEAT_WORDS] == q8
+    for (l in range64(e.n_layer)) {
+        let s = l * PK_LAYER_SEATS
+        let q = seats[(s + int64(PkSeat.q)) * TOWER_SEAT_WORDS] == q8
+        if (q != (seats[(s + int64(PkSeat.k)) * TOWER_SEAT_WORDS] == q8) || q != (seats[(s + int64(PkSeat.v)) * TOWER_SEAT_WORDS] == q8)) {
+            panic("{PK_WHO}: block {l}'s attention q, k and v mix Q8_0 with a K-quant format - they read one activation image; pin a lane (set_parakeet_q8) to dequantize them")
+        }
+        if (pos0 != (seats[(s + int64(PkSeat.pos)) * TOWER_SEAT_WORDS] == q8)) {
+            panic("{PK_WHO}: the blocks' position linears mix Q8_0 with a K-quant format (block {l} against block 0) - they read one image of the position table; pin a lane (set_parakeet_q8) to dequantize them")
+        }
+    }
+}
+
+[arch(at = "../ARCHITECTURE_MEDIA_ASR.md#parakeet-kq-seats")]
+def private pk_kq_fill(var st : ParakeetStaging; src : PkSource; b : array<uint8>#) {
+    var inscope jobs <- pk_kq_jobs(st.e)
+    var cur = TowerKqCursor()
+    st.gemm_seats |> reserve(long_length(jobs) * TOWER_SEAT_WORDS)
+    for (j in jobs) {
+        gguf_expect_elems(src.meta, j.name, j.width * j.rows, PK_WHO)
+        let f = tower_kq_seat_fmt(src.meta, j.name, j.width, true, PK_WHO, "set_parakeet_q8")
+        let seat = tower_kq_seat_take(cur, f, j.width * j.rows)
+        st.gemm_seats |> push_from([int64(int(f)), seat.qoff, seat.soff])
+    }
+    pk_kq_check_classes(st.e, st.gemm_seats)
+    st.e.kq_fmt = tower_kq_lane_fmt(st.gemm_seats)
+    st.qblob |> reserve(cur.q8)
+    st.qblob |> resize(cur.q8)
+    st.qscales |> reserve(cur.q8 / KQ_B32_ELEMS)
+    st.qscales |> resize(cur.q8 / KQ_B32_ELEMS)
+    st.kq |> reserve_resize(cur.kq)
+    st.ks |> reserve_resize(cur.ks)
+    let repack_q8 = tower_repack_backend()
+    st.e.kq_repacked = repack_q8 && kernel_backend_has_kq()
+    var inscope scratch : array<float>
+    for (j, i in jobs, count()) {
+        tower_kq_seat_fill(src.meta, b, j.name, tower_gemm_seat(st, int64(i)), j.width, j.width * j.rows, repack_q8, st.e.kq_repacked,
+            st.qblob, st.qscales, st.kq, st.ks, scratch, PK_WHO)
+    }
+    let front = st.e.n_layer * PK_LAYER_SEATS
+    st.e.c3_w = front
+    st.e.c6_w = front + 1l
+    st.e.pre_w = front + 2l
+    if (!st.e.jenc_exact) {
+        st.e.joint_enc_w = front + 3l
+    }
+}
+
+//! Loads a Parakeet-TDT carrier: a converted ggml bin (f32, f16 or Q8_0) or a GGUF of architecture `parakeet` (`ARCHITECTURE_MEDIA_ASR.md#parakeet-gguf`).
+//! With ``q8`` the encoder/joint GEMM weights serve quantized (~4x CPU fast path): transcoded to Q8_0 off the mapped file, or - un-pinned, a quantized GGUF - as the file's own planes; conv im2col, depthwise, LSTM, and joint_net stay fp32.
 //! Like ``load_model``, caches a box/knob-specific PREPARED IMAGE for fast reload; ``DASLLAMA_IMAGE=0`` disables it, a ``.dlim`` path loads one directly.
+[arch(at = "../ARCHITECTURE_MEDIA_ASR.md#parakeet-kq-seats")]
 def load_parakeet_model(path : string; q8 : bool = false) : ParakeetModel {
-    let dev = path |> ends_with(".dlim") ? TowerDev.none : parakeet_dev_flavor(q8)
+    let is_dlim = path |> ends_with(".dlim")
+    let kq = is_dlim ? image_tag_lane(image_family_tag(path)) == PARAKEET_KQ_TAG : parakeet_load_tag(path, q8) == PARAKEET_KQ_TAG
+    if (kq) {
+        let kq_dev = is_dlim ? TowerDev.none : parakeet_dev_flavor(ParakeetModel(kq_lane = true))
+        var m <- load_staged_image_dev(path, PARAKEET_KQ_TAG, "parakeet", "source model", type<ParakeetModel>, kq_dev, g_parakeet_flavor.bake, PARAKEET_DEV_CONSUMED) {
+            return <- stage_parakeet_kq_model(path)
+        }
+        var layout = m.kq_repacked ? "repacked for {active_kernel_backend()}" : "in disk order (the portable batch GEMM)"
+        if (m.dev_backend != TowerDev.none) {
+            layout = "gathered for the {m.dev_backend} tiles"
+        }
+        let unheard = audio_lane_unheard("a quantized carrier's own planes (set_parakeet_q8 dequantizes them)")
+        to_log(LOG_INFO, "{PK_WHO}: GEMM lane kq ({parakeet_exec_fmt(m)}) - the GEMMs as the carrier's own planes, {layout}{unheard}\n")
+        return <- m
+    }
+    let dev = is_dlim ? TowerDev.none : parakeet_dev_flavor(q8)
     let f16 = tower_load_f16(path, q8, dev)
     let tag = parakeet_lane_tag(q8, f16)
     announce_lane("parakeet", q8, f16, "set_parakeet_q8", g_pk_pin != GemmLane.unset, false)
@@ -454,17 +827,38 @@ def load_parakeet_model(path : string; q8 : bool = false) : ParakeetModel {
     }
 }
 
+//! The image tag a CPU load of `path` on `q8` takes: the kq lane's for a quantized GGUF asked for q8 with no lane pinned, else the q8 or f32 lane's
+def parakeet_load_tag(path : string; q8 : bool) : string
+    => q8 && g_pk_pin == GemmLane.unset && pk_is_kq_carrier(path) ? PARAKEET_KQ_TAG : parakeet_lane_tag(q8, false)
+
+[arch(at = "../ARCHITECTURE_MEDIA_ASR.md#parakeet-kq-seats")]
+def pk_is_kq_carrier(path : string) : bool {
+    return false if (!(path |> ends_with(".gguf")))
+    var quantized = false
+    gguf_header_read(path) $(m; bytes) {
+        let ti = gguf_find_tensor(m, "enc.blocks.0.attn.linear_q.weight")
+        if (gguf_str_or(m, bytes, "general.architecture", "") == PARAKEET_ARCH && ti >= 0) {
+            let gt = m.tensors[ti].ggml_type
+            quantized = !tower_float_type(gt)
+        }
+    }
+    return quantized
+}
+
 //! A GPU driver's Parakeet flavor (`#tower-dev-block`): the backend whose image it mints, whether its chain serves a lane, and
 //! the bake that converts a CPU-form model into the driver's device block
-[tower_flavor(family = "parakeet", model = "ParakeetModel")]
+[tower_flavor(family = "parakeet", model = "ParakeetModel", lane = "model")]
 struct ParakeetFlavor {}
 
-let private PARAKEET_DEV_CONSUMED <- ["qblob", "qscales"]   //! the planes a Parakeet bake converts: a GPU flavor carries their device forms instead
+let private PARAKEET_DEV_CONSUMED <- ["qblob", "qscales", "kq", "ks", "gemm_seats"]   //! the planes a Parakeet bake converts: a GPU flavor carries their device forms instead
 
-//! The device flavor a load on the `q8` lane takes: the registered driver's where its chain and the device decode serve the
-//! lane, else `none` - the CPU image
-def parakeet_dev_flavor(q8 : bool) : TowerDev =>
-    rnnt_gpu_projects(RnntEnc()) ? tower_dev_flavor(g_parakeet_flavor, q8) : TowerDev.none
+//! The device flavor a load of a carrier with lane meta `e` takes: the registered driver's where its chain and the device
+//! decode serve the lane, else `none` - the CPU image
+def parakeet_dev_flavor(e : ParakeetModel) : TowerDev =>
+    rnnt_gpu_projects(RnntEnc()) ? tower_dev_flavor(g_parakeet_flavor, e) : TowerDev.none
+
+//! ... of a load on the `q8` lane, or the exact one
+def parakeet_dev_flavor(q8 : bool) : TowerDev => parakeet_dev_flavor(ParakeetModel(q8 = q8))
 
 //! A GPU-flavored model reached a CPU path at `stage`: the device seat declined what the load handed it, and the CPU never runs
 //! that image (`#tower-dev-block`)
@@ -479,12 +873,14 @@ struct ParakeetStaging {
     filters : array<float>
     window : array<float>
     blob : array<float>
-    lstm_ih : array<int64>
-    lstm_hh : array<int64>
-    lstm_b : array<int64>
+    @exact_size rnnt_wh : array<uint16>
+    @exact_size rnnt_jw : array<uint16>
     qblob : array<int8>
     qscales : array<float>
     @exact_size wblob : array<uint16>
+    @exact_size kq : array<uint8>
+    @exact_size ks : array<uint8>
+    @exact_size gemm_seats : array<int64>
     @exact_size dev : array<uint8>       //!< a GPU-flavored mint's device block (`TowerDevBuild`)
     @exact_size devplan : array<int64>   //!< ... and its plan
 }
@@ -504,114 +900,56 @@ def private image_post_load(var st : ParakeetStaging) {}
 //! The off-rail control for suites: a live model that came from no `.dlim` file; `dev` names the GPU flavor (the staging read
 //! under `with_tower_dev_staging(dev)`), `none` the CPU image (`tower_mint_flavor`).
 def mint_parakeet_model(var st : ParakeetStaging; var out : ParakeetModel; q8 : bool = false; dev : TowerDev = TowerDev.none) {
-    tower_mint_flavor(st, out, parakeet_lane_tag(q8, st.e.gemm_f16), "parakeet", dev, g_parakeet_flavor, PARAKEET_DEV_CONSUMED)
+    let tag = st.e.kq_lane ? PARAKEET_KQ_TAG : parakeet_lane_tag(q8, st.e.gemm_f16)
+    tower_mint_flavor(st, out, tag, "parakeet", dev, g_parakeet_flavor, PARAKEET_DEV_CONSUMED)
 }
 
-//! The ggml-bin reader proper under the running staging's flavor: its halfword lane is the staging's (`tower_load_f16`).
+//! The carrier reader proper (a ggml bin or a GGUF) under the running staging's flavor: its halfword lane is the staging's (`tower_load_f16`).
 def stage_parakeet_model(path : string; q8 : bool = false) : ParakeetStaging
     => <- stage_parakeet_model(path, q8, tower_load_f16(path, q8, tower_staging_dev()))
 
-//! The ggml-bin reader proper: scalars land in the served model, plane bytes in the staging
+//! The carrier reader proper: scalars land in the served model, plane bytes in the staging
 //! arrays beside it. Nothing here is servable — the image build is what produces a live model.
-def stage_parakeet_model(path : string; q8, f16 : bool) : ParakeetStaging {
+def stage_parakeet_model(path : string; q8, f16 : bool) : ParakeetStaging => <- stage_parakeet_model(path, q8, f16, false)
+
+//! the reader on the kq lane: a quantized GGUF's own planes (`#parakeet-kq-seats`)
+def stage_parakeet_kq_model(path : string) : ParakeetStaging => <- stage_parakeet_model(path, false, false, true)
+
+//! ... with `kq` the kq lane (a quantized GGUF's own planes; `q8` and `f16` then both off)
+def stage_parakeet_model(path : string; q8, f16, kq : bool) : ParakeetStaging {
     var st = ParakeetStaging()
     st.e.q8 = q8
     st.e.gemm_f16 = f16
-    let gemms_own_plane = q8 || f16
+    st.e.kq_lane = kq
+    let gemms_own_plane = q8 || f16 || kq
     let n_bytes = int64(stat(path).size)
     let f = fopen(path, "rb")
     if (f == null) {
-        panic("dasLLAMA parakeet: cannot open model '{path}'")
+        panic("{PK_WHO}: cannot open model '{path}'")
     }
     fmap(f) $(var bytes : array<uint8>#) {
-        var o = 0l
-        if (rd_u32(bytes, o) != ASR_GGML_MAGIC) {
-            panic("dasLLAMA parakeet: bad magic in '{path}'")
+        var inscope src = PkSource()
+        if (gguf_magic_ok(bytes)) {
+            pk_gguf_header(st, src, bytes, path)
+        } else {
+            pk_bin_header(st, src, bytes, n_bytes, path)
         }
-        o += 4l
-        st.e.n_vocab = int64(rd_i32(bytes, o)); o += 4l
-        o += 4l   // n_audio_ctx (unused: full-clip encode)
-        st.e.n_state = int64(rd_i32(bytes, o)); o += 4l
-        st.e.n_head = int64(rd_i32(bytes, o)); o += 4l
-        st.e.n_layer = int64(rd_i32(bytes, o)); o += 4l
-        st.e.n_mel = int64(rd_i32(bytes, o)); o += 4l
-        o += 4l   // ftype (per-record types below)
-        st.e.n_fft = int64(rd_i32(bytes, o)); o += 4l
-        st.e.subsampling = int64(rd_i32(bytes, o)); o += 4l
-        st.e.n_sub_ch = int64(rd_i32(bytes, o)); o += 4l
-        st.e.n_conv_kernel = int64(rd_i32(bytes, o)); o += 4l
-        st.e.n_pred_dim = int64(rd_i32(bytes, o)); o += 4l
-        st.e.n_pred_layers = int64(rd_i32(bytes, o)); o += 4l
-        st.e.n_durations = int64(rd_i32(bytes, o)); o += 4l
-        st.e.n_max_tokens = int64(rd_i32(bytes, o)); o += 4l
         st.e.blank_id = int(st.e.n_vocab)
         if (st.e.n_fft != 512l) {   // FFT_FRAME in the mel worker is sized for 512-pt frames
-            panic("dasLLAMA parakeet: n_fft {st.e.n_fft} - the mel path is built for the family's 512-pt STFT")
+            panic("{PK_WHO}: n_fft {st.e.n_fft} - the mel path is built for the family's 512-pt STFT")
         }
         st.e.fft <- build_fft_plan(st.e.n_fft)
 
-        // mel filterbank
-        let fb_mel = int64(rd_i32(bytes, o)); o += 4l
-        let fb_n = int64(rd_i32(bytes, o)); o += 4l
-        if (fb_mel != st.e.n_mel || fb_n != st.e.n_fft / 2l + 1l) {
-            panic("dasLLAMA parakeet: filterbank is {fb_mel}x{fb_n}, want {st.e.n_mel}x{st.e.n_fft / 2l + 1l}")
-        }
-        st.filters |> resize(fb_mel * fb_n)
-        for (i in range64(fb_mel * fb_n)) {
-            st.filters[i] = rd_f32(bytes, o + i * 4l)
-        }
-        o += fb_mel * fb_n * 4l
-
-        // STFT window
-        let n_window = int64(rd_i32(bytes, o)); o += 4l
-        st.window |> resize(n_window)
-        for (i in range64(n_window)) {
-            st.window[i] = rd_f32(bytes, o + i * 4l)
-        }
-        o += n_window * 4l
-
-        // TDT durations
-        st.durations |> resize(st.e.n_durations)
-        for (i in range64(st.e.n_durations)) {
-            st.durations[i] = int(rd_u32(bytes, o + i * 4l))
-        }
-        o += st.e.n_durations * 4l
-
-        // vocab (SPM pieces; blank = id n_vocab lives outside the table)
-        let nv = int64(rd_i32(bytes, o)); o += 4l
-        st.e.vocab |> resize(nv)
-        for (i in range64(nv)) {
-            let len = int64(rd_u32(bytes, o)); o += 4l
-            st.e.vocab[i] = bytes_str(bytes, o, len)
-            o += len
-        }
-
-        // tensor records
-        var recs : table<string; PkTensorRec>
-        while (o + 12l <= n_bytes) {
-            let n_dims = int64(rd_i32(bytes, o)); o += 4l
-            let name_len = int64(rd_i32(bytes, o)); o += 4l
-            let ttype = rd_i32(bytes, o); o += 4l
-            var n_elem = 1l
-            for (_d in range64(n_dims)) {
-                n_elem *= int64(rd_i32(bytes, o)); o += 4l
-            }
-            let name = bytes_str(bytes, o, name_len)
-            o += name_len
-            recs[name] = PkTensorRec(ttype = ttype, n_elem = n_elem, off = o)
-            o += ggml_bin_tensor_bytes(ttype, n_elem)
-        }
-
         // blob layout — dual walk: `bo` is the full layout (qblob on a q8 load, blob on an
         // fp32 load); `ao` is the fp32 walk of blob, which the GEMM regions collapse out of
-        // on a q8 load (g = 0). On an fp32 load the walks are identical (ao ends == bo).
+        // wherever the GEMMs own a plane (g = 0). On an fp32 load the walks are identical (ao ends == bo).
         let d = st.e.n_state
         let ff = 4l * d
         let dh = d / st.e.n_head
         let nch = st.e.n_sub_ch
         let g = gemms_own_plane ? 0l : 1l
-        let gj = q8 && tower_staging_dev() == TowerDev.none ? 0l : 1l   // a GPU flavor's joint encoder half stays the source's f32
-        st.e.jenc_exact = q8 && gj == 1l
+        let gj = (q8 || kq) && tower_staging_dev() == TowerDev.none ? 0l : 1l   // a GPU flavor's joint encoder half stays the source's f32
+        st.e.jenc_exact = (q8 || kq) && gj == 1l
         var bo = 0l
         var ao = 0l
         st.e.c0_w = ao; ao += nch * 9l; bo += nch * 9l
@@ -633,25 +971,22 @@ def stage_parakeet_model(path : string; q8, f16 : bool) : ParakeetStaging {
         st.e.aux_layer_stride = gemms_own_plane ? pk_aux_layer_stride(d, st.e.n_conv_kernel) : st.e.layer_stride
         bo += st.e.n_layer * st.e.layer_stride
         ao += st.e.n_layer * st.e.aux_layer_stride
-        st.e.embed_off = ao; ao += (st.e.n_vocab + 1l) * st.e.n_pred_dim; bo += (st.e.n_vocab + 1l) * st.e.n_pred_dim
         let pd = st.e.n_pred_dim
-        for (_l in range64(st.e.n_pred_layers)) {
-            st.lstm_ih |> push(ao); ao += 4l * pd * pd; bo += 4l * pd * pd
-            st.lstm_hh |> push(ao); ao += 4l * pd * pd; bo += 4l * pd * pd
-            st.lstm_b |> push(ao); ao += 4l * pd; bo += 4l * pd
-        }
-        st.e.joint_enc_w = gj == 1l ? ao : bo; bo += pd * d; ao += gj * pd * d
-        st.e.joint_enc_b = ao; ao += pd; bo += pd
-        st.e.joint_pred_w = ao; ao += pd * pd; bo += pd * pd
-        st.e.joint_pred_b = ao; ao += pd; bo += pd
         let n_logits = st.e.n_vocab + 1l + st.e.n_durations
-        st.e.joint_net_w = ao; ao += n_logits * pd; bo += n_logits * pd
-        st.e.joint_net_b = ao; ao += n_logits; bo += n_logits
+        let dec = rnnt_dev_layout(st.e.n_pred_layers, pd, pd, st.e.n_vocab + 1l, n_logits)
+        st.e.dec_slab = ao; ao += dec.wf_floats
+        st.e.joint_enc_w = gj == 1l ? ao : bo; bo += pd * d; ao += gj * pd * d
+        st.e.joint_enc_b = st.e.dec_slab + dec.jeb
         // exact allocations: reserve defeats the array allocator's pow2 rounding, which on the
         // 0.6b f32 bin would back 2.4 GiB of blob floats with a 4 GiB allocation
         st.blob |> reserve(ao)
         st.blob |> resize(ao)
-        if (q8) {
+        if (kq) {
+            if (!src.gguf) {
+                panic("{PK_WHO}: the kq lane serves a GGUF carrier's own planes - '{path}' is a ggml bin")
+            }
+            pk_kq_fill(st, src, bytes)
+        } elif (q8) {
             st.qblob |> reserve(bo)
             st.qblob |> resize(bo)
             st.qscales |> reserve(bo / 32l)
@@ -661,70 +996,60 @@ def stage_parakeet_model(path : string; q8, f16 : bool) : ParakeetStaging {
         }
 
         var wscratch : array<float>   // q8 transcode staging, one GEMM tensor at a time
-        pk_read(recs, bytes, "encoder.pre_encode.conv.0.weight", st.blob, st.e.c0_w, nch * 9l)
+        pk_read(src, bytes, "encoder.pre_encode.conv.0.weight", st.blob, st.e.c0_w, nch * 9l)
         pk_conv_tap_major(st.blob, st.e.c0_w, nch, 9l)   // c0 kernel reads tap-major too
-        pk_read(recs, bytes, "encoder.pre_encode.conv.0.bias", st.blob, st.e.c0_b, nch)
-        pk_read(recs, bytes, "encoder.pre_encode.conv.2.weight", st.blob, st.e.c2_w, nch * 9l)
+        pk_read(src, bytes, "encoder.pre_encode.conv.0.bias", st.blob, st.e.c0_b, nch)
+        pk_read(src, bytes, "encoder.pre_encode.conv.2.weight", st.blob, st.e.c2_w, nch * 9l)
         pk_conv_tap_major(st.blob, st.e.c2_w, nch, 9l)
-        pk_read(recs, bytes, "encoder.pre_encode.conv.2.bias", st.blob, st.e.c2_b, nch)
-        pk_read_gemm(recs, bytes, "encoder.pre_encode.conv.3.weight", st, wscratch, st.e.c3_w, nch * nch)
-        pk_read(recs, bytes, "encoder.pre_encode.conv.3.bias", st.blob, st.e.c3_b, nch)
-        pk_read(recs, bytes, "encoder.pre_encode.conv.5.weight", st.blob, st.e.c5_w, nch * 9l)
+        pk_read(src, bytes, "encoder.pre_encode.conv.2.bias", st.blob, st.e.c2_b, nch)
+        pk_read_gemm(src, bytes, "encoder.pre_encode.conv.3.weight", st, wscratch, st.e.c3_w, nch * nch)
+        pk_read(src, bytes, "encoder.pre_encode.conv.3.bias", st.blob, st.e.c3_b, nch)
+        pk_read(src, bytes, "encoder.pre_encode.conv.5.weight", st.blob, st.e.c5_w, nch * 9l)
         pk_conv_tap_major(st.blob, st.e.c5_w, nch, 9l)
-        pk_read(recs, bytes, "encoder.pre_encode.conv.5.bias", st.blob, st.e.c5_b, nch)
-        pk_read_gemm(recs, bytes, "encoder.pre_encode.conv.6.weight", st, wscratch, st.e.c6_w, nch * nch)
-        pk_read(recs, bytes, "encoder.pre_encode.conv.6.bias", st.blob, st.e.c6_b, nch)
-        pk_read_gemm(recs, bytes, "encoder.pre_encode.out.weight", st, wscratch, st.e.pre_w, d * feat)
-        pk_read(recs, bytes, "encoder.pre_encode.out.bias", st.blob, st.e.pre_b, d)
+        pk_read(src, bytes, "encoder.pre_encode.conv.5.bias", st.blob, st.e.c5_b, nch)
+        pk_read_gemm(src, bytes, "encoder.pre_encode.conv.6.weight", st, wscratch, st.e.c6_w, nch * nch)
+        pk_read(src, bytes, "encoder.pre_encode.conv.6.bias", st.blob, st.e.c6_b, nch)
+        pk_read_gemm(src, bytes, "encoder.pre_encode.out.weight", st, wscratch, st.e.pre_w, d * feat)
+        pk_read(src, bytes, "encoder.pre_encode.out.bias", st.blob, st.e.pre_b, d)
         for (l in range64(st.e.n_layer)) {
             let lo = pk_layer_offsets(st.e, l)
-            pk_read(recs, bytes, "encoder.layers.{l}.norm_feed_forward1.weight", st.blob, lo.nf1_w, d)
-            pk_read(recs, bytes, "encoder.layers.{l}.norm_feed_forward1.bias", st.blob, lo.nf1_b, d)
-            pk_read_gemm(recs, bytes, "encoder.layers.{l}.feed_forward1.linear1.weight", st, wscratch, lo.ff1a_w, ff * d)
-            pk_read_gemm(recs, bytes, "encoder.layers.{l}.feed_forward1.linear2.weight", st, wscratch, lo.ff1b_w, d * ff)
-            pk_read(recs, bytes, "encoder.layers.{l}.norm_self_att.weight", st.blob, lo.nat_w, d)
-            pk_read(recs, bytes, "encoder.layers.{l}.norm_self_att.bias", st.blob, lo.nat_b, d)
-            pk_read(recs, bytes, "encoder.layers.{l}.self_attn.pos_bias_u", st.blob, lo.bias_u, dh * st.e.n_head)
-            pk_read(recs, bytes, "encoder.layers.{l}.self_attn.pos_bias_v", st.blob, lo.bias_v, dh * st.e.n_head)
-            pk_read_gemm(recs, bytes, "encoder.layers.{l}.self_attn.linear_q.weight", st, wscratch, lo.q_w, d * d)
-            pk_read_gemm(recs, bytes, "encoder.layers.{l}.self_attn.linear_k.weight", st, wscratch, lo.k_w, d * d)
-            pk_read_gemm(recs, bytes, "encoder.layers.{l}.self_attn.linear_v.weight", st, wscratch, lo.v_w, d * d)
-            pk_read_gemm(recs, bytes, "encoder.layers.{l}.self_attn.linear_out.weight", st, wscratch, lo.o_w, d * d)
-            pk_read_gemm(recs, bytes, "encoder.layers.{l}.self_attn.linear_pos.weight", st, wscratch, lo.pos_w, d * d)
-            pk_read(recs, bytes, "encoder.layers.{l}.norm_conv.weight", st.blob, lo.ncv_w, d)
-            pk_read(recs, bytes, "encoder.layers.{l}.norm_conv.bias", st.blob, lo.ncv_b, d)
-            pk_read_gemm(recs, bytes, "encoder.layers.{l}.conv.pointwise_conv1.weight", st, wscratch, lo.pw1_w, 2l * d * d)
-            pk_read(recs, bytes, "encoder.layers.{l}.conv.depthwise_conv.weight", st.blob, lo.dw_w, st.e.n_conv_kernel * d)
+            pk_read(src, bytes, "encoder.layers.{l}.norm_feed_forward1.weight", st.blob, lo.nf1_w, d)
+            pk_read(src, bytes, "encoder.layers.{l}.norm_feed_forward1.bias", st.blob, lo.nf1_b, d)
+            pk_read_gemm(src, bytes, "encoder.layers.{l}.feed_forward1.linear1.weight", st, wscratch, lo.ff1a_w, ff * d)
+            pk_read_gemm(src, bytes, "encoder.layers.{l}.feed_forward1.linear2.weight", st, wscratch, lo.ff1b_w, d * ff)
+            pk_read(src, bytes, "encoder.layers.{l}.norm_self_att.weight", st.blob, lo.nat_w, d)
+            pk_read(src, bytes, "encoder.layers.{l}.norm_self_att.bias", st.blob, lo.nat_b, d)
+            pk_read(src, bytes, "encoder.layers.{l}.self_attn.pos_bias_u", st.blob, lo.bias_u, dh * st.e.n_head)
+            pk_read(src, bytes, "encoder.layers.{l}.self_attn.pos_bias_v", st.blob, lo.bias_v, dh * st.e.n_head)
+            pk_read_gemm(src, bytes, "encoder.layers.{l}.self_attn.linear_q.weight", st, wscratch, lo.q_w, d * d)
+            pk_read_gemm(src, bytes, "encoder.layers.{l}.self_attn.linear_k.weight", st, wscratch, lo.k_w, d * d)
+            pk_read_gemm(src, bytes, "encoder.layers.{l}.self_attn.linear_v.weight", st, wscratch, lo.v_w, d * d)
+            pk_read_gemm(src, bytes, "encoder.layers.{l}.self_attn.linear_out.weight", st, wscratch, lo.o_w, d * d)
+            pk_read_gemm(src, bytes, "encoder.layers.{l}.self_attn.linear_pos.weight", st, wscratch, lo.pos_w, d * d)
+            pk_read(src, bytes, "encoder.layers.{l}.norm_conv.weight", st.blob, lo.ncv_w, d)
+            pk_read(src, bytes, "encoder.layers.{l}.norm_conv.bias", st.blob, lo.ncv_b, d)
+            pk_read_gemm(src, bytes, "encoder.layers.{l}.conv.pointwise_conv1.weight", st, wscratch, lo.pw1_w, 2l * d * d)
+            pk_read(src, bytes, "encoder.layers.{l}.conv.depthwise_conv.weight", st.blob, lo.dw_w, st.e.n_conv_kernel * d)
             pk_conv_tap_major(st.blob, lo.dw_w, d, st.e.n_conv_kernel)   // [d][k] -> [k][d] for the f4 row core
-            pk_read(recs, bytes, "encoder.layers.{l}.conv.batch_norm.weight", st.blob, lo.bn_w, d)
-            pk_read(recs, bytes, "encoder.layers.{l}.conv.batch_norm.bias", st.blob, lo.bn_b, d)
-            pk_read(recs, bytes, "encoder.layers.{l}.conv.batch_norm.running_mean", st.blob, lo.bn_mean, d)
-            pk_read(recs, bytes, "encoder.layers.{l}.conv.batch_norm.running_var", st.blob, lo.bn_var, d)
+            pk_read(src, bytes, "encoder.layers.{l}.conv.batch_norm.weight", st.blob, lo.bn_w, d)
+            pk_read(src, bytes, "encoder.layers.{l}.conv.batch_norm.bias", st.blob, lo.bn_b, d)
+            pk_read(src, bytes, "encoder.layers.{l}.conv.batch_norm.running_mean", st.blob, lo.bn_mean, d)
+            pk_read(src, bytes, "encoder.layers.{l}.conv.batch_norm.running_var", st.blob, lo.bn_var, d)
             pk_fold_bn(st.blob, lo.bn_w, lo.bn_b, lo.bn_mean, lo.bn_var, d)
-            pk_read_gemm(recs, bytes, "encoder.layers.{l}.conv.pointwise_conv2.weight", st, wscratch, lo.pw2_w, d * d)
-            pk_read(recs, bytes, "encoder.layers.{l}.norm_feed_forward2.weight", st.blob, lo.nf2_w, d)
-            pk_read(recs, bytes, "encoder.layers.{l}.norm_feed_forward2.bias", st.blob, lo.nf2_b, d)
-            pk_read_gemm(recs, bytes, "encoder.layers.{l}.feed_forward2.linear1.weight", st, wscratch, lo.ff2a_w, ff * d)
-            pk_read_gemm(recs, bytes, "encoder.layers.{l}.feed_forward2.linear2.weight", st, wscratch, lo.ff2b_w, d * ff)
-            pk_read(recs, bytes, "encoder.layers.{l}.norm_out.weight", st.blob, lo.nout_w, d)
-            pk_read(recs, bytes, "encoder.layers.{l}.norm_out.bias", st.blob, lo.nout_b, d)
+            pk_read_gemm(src, bytes, "encoder.layers.{l}.conv.pointwise_conv2.weight", st, wscratch, lo.pw2_w, d * d)
+            pk_read(src, bytes, "encoder.layers.{l}.norm_feed_forward2.weight", st.blob, lo.nf2_w, d)
+            pk_read(src, bytes, "encoder.layers.{l}.norm_feed_forward2.bias", st.blob, lo.nf2_b, d)
+            pk_read_gemm(src, bytes, "encoder.layers.{l}.feed_forward2.linear1.weight", st, wscratch, lo.ff2a_w, ff * d)
+            pk_read_gemm(src, bytes, "encoder.layers.{l}.feed_forward2.linear2.weight", st, wscratch, lo.ff2b_w, d * ff)
+            pk_read(src, bytes, "encoder.layers.{l}.norm_out.weight", st.blob, lo.nout_w, d)
+            pk_read(src, bytes, "encoder.layers.{l}.norm_out.bias", st.blob, lo.nout_b, d)
         }
-        pk_read(recs, bytes, "decoder.prediction.embed.weight", st.blob, st.e.embed_off, (st.e.n_vocab + 1l) * st.e.n_pred_dim)
-        for (l in range64(st.e.n_pred_layers)) {
-            pk_read(recs, bytes, "decoder.prediction.dec_rnn.lstm.weight_ih_l{l}", st.blob, st.lstm_ih[l], 4l * st.e.n_pred_dim * st.e.n_pred_dim)
-            pk_read(recs, bytes, "decoder.prediction.dec_rnn.lstm.weight_hh_l{l}", st.blob, st.lstm_hh[l], 4l * st.e.n_pred_dim * st.e.n_pred_dim)
-            pk_read(recs, bytes, "decoder.prediction.dec_rnn.lstm.bias_h_l{l}", st.blob, st.lstm_b[l], 4l * st.e.n_pred_dim)
-        }
-        if (gj == 1l) {   // the joint's encoder half in the f32 blob: the exact lanes and a GPU flavor's q8 one
-            pk_read(recs, bytes, "joint.enc.weight", st.blob, st.e.joint_enc_w, st.e.n_pred_dim * d)
+        if (gj == 1l) {   // the joint's encoder half in the f32 blob: the exact lanes and a GPU flavor's q8 or kq one
+            pk_read(src, bytes, "joint.enc.weight", st.blob, st.e.joint_enc_w, st.e.n_pred_dim * d)
         } else {
-            pk_read_gemm(recs, bytes, "joint.enc.weight", st, wscratch, st.e.joint_enc_w, st.e.n_pred_dim * d)
+            pk_read_gemm(src, bytes, "joint.enc.weight", st, wscratch, st.e.joint_enc_w, st.e.n_pred_dim * d)
         }
-        pk_read(recs, bytes, "joint.enc.bias", st.blob, st.e.joint_enc_b, st.e.n_pred_dim)
-        pk_read(recs, bytes, "joint.pred.weight", st.blob, st.e.joint_pred_w, st.e.n_pred_dim * st.e.n_pred_dim)
-        pk_read(recs, bytes, "joint.pred.bias", st.blob, st.e.joint_pred_b, st.e.n_pred_dim)
-        pk_read(recs, bytes, "joint.joint_net.2.weight", st.blob, st.e.joint_net_w, (st.e.n_vocab + 1l + st.e.n_durations) * st.e.n_pred_dim)
-        pk_read(recs, bytes, "joint.joint_net.2.bias", st.blob, st.e.joint_net_b, st.e.n_vocab + 1l + st.e.n_durations)
+        pk_bake_decoder(st, src, bytes)
         delete wscratch
     }
     fclose(f)
@@ -736,9 +1061,12 @@ def stage_parakeet_model(path : string; q8, f16 : bool) : ParakeetStaging {
 
 // ===== mel (frame-major!) =====
 
-//! The loaded precision (one tag — parakeet is a single carrier): the facade's
+//! The loaded lane's name - on the kq lane its one K-quant member, `kq` where they mix: the facade's
 //! [[asr_exec_fmt]] arm.
-def parakeet_exec_fmt(p : ParakeetModel) : string => tower_lane_fmt(p.q8, p.gemm_f16)
+def parakeet_exec_fmt(p : ParakeetModel) : string {
+    return tower_lane_fmt(p.q8, p.gemm_f16) if (!p.kq_lane)
+    return tower_kq_lane_name(p.kq_fmt)
+}
 
 //! Parakeet's log-mel: preemphasis 0.97, zero center-pad n_fft/2, the file's STFT window, power
 //! spectra, mel dot, NATURAL log(sum + 2⁻²⁴), then per-feature mean/std normalization over the
@@ -1012,17 +1340,22 @@ def parakeet_max_frames() : int64 => LOCAL_ATTN_THRESHOLD
 //! The rel-pos embedding table of `tt` frames into `st.pos_emb`: [2 tt - 1 x d], interleaved (sin, cos) pairs,
 //! and on the q8 lane its requant - one serves every layer's pos projection. A session keeps the table of the
 //! frame count it last built.
+[arch(at = "../ARCHITECTURE_MEDIA_ASR.md#parakeet-kq-seats")]
 def parakeet_pos_table(m : ParakeetModel; var st : ParakeetState; tt : int64) {
     let d = m.n_state
-    return if (st.pos_tt == tt && st.pos_d == d && (st.pos_q8 || !m.q8))
+    let block0_pos_seat = m.kq_lane ? int64(PkSeat.pos) : 0l
+    let image = m.kq_lane ? (tower_gemm_seat(m, block0_pos_seat).fmt == KqFmt.q8 ? PkPosImage.q8 : PkPosImage.q8k) : (m.q8 ? PkPosImage.q8 : PkPosImage.none)
+    return if (st.pos_tt == tt && st.pos_d == d && (st.pos_image == image || image == PkPosImage.none))
     let ww = 2l * tt - 1l
     rel_pos_table(st.pos_emb, d, tt, ww)
-    if (m.q8) {
+    if (m.kq_lane) {
+        tower_requant(m, block0_pos_seat, st.pos_emb, d, ww, st.posq, st.poss, st.posbs)
+    } elif (m.q8) {
         requant_rows_q8_sized(st.pos_emb, d, ww, st.posq, st.poss)
     }
     st.pos_tt = tt
     st.pos_d = d
-    st.pos_q8 = m.q8
+    st.pos_image = image
 }
 
 //! FastConformer encoder over the whole mel: conv subsampling, then 24 conformer blocks - global attention only, panics past
@@ -1058,13 +1391,13 @@ def private pk_encode_rows(m : ParakeetModel; var st : ParakeetState) : int64 {
     ensure_length(st.y3, t2 * w2 * nch)
     pk_scan("y0", st.y0, t1 * w1 * nch)
     pk_scan("y2", st.y2, t2 * w2 * nch)
-    tower_mm_rq(m, st.y3, m.c3_w, st.y2, st.xqi, st.xsi, nch, nch, t2 * w2)   // 1x1 conv = per-position channel mix
+    tower_mm_rq(m, st.y3, m.c3_w, st.y2, st.xqi, st.xsi, st.xbsi, nch, nch, t2 * w2)   // 1x1 conv = per-position channel mix
     bias_relu_rows(st.y3, m.blob, m.c3_b, nch, t2 * w2)
     pk_conv2d_dw_s2(st.y5, st.y3, m.blob, m.c5_w, m.c5_b, w2, t2, nch)
     let w3 = conv_s2_out(w2)
     let t3 = conv_s2_out(t2)
     ensure_length(st.y6, t3 * w3 * nch)
-    tower_mm_rq(m, st.y6, m.c6_w, st.y5, st.xqi, st.xsi, nch, nch, t3 * w3)
+    tower_mm_rq(m, st.y6, m.c6_w, st.y5, st.xqi, st.xsi, st.xbsi, nch, nch, t3 * w3)
     bias_relu_rows(st.y6, m.blob, m.c6_b, nch, t3 * w3)
 
     // features per time row: v[f + w3·c] = y6[t][f][c]; then pre_out into the residual stream
@@ -1077,7 +1410,7 @@ def private pk_encode_rows(m : ParakeetModel; var st : ParakeetState) : int64 {
     pk_xf_permute(st.xf, st.y6, tt, w3, nch)
     ensure_length(st.x, tt * d)
     pk_scan("y6", st.y6, t3 * w3 * nch)
-    tower_mm_rq(m, st.x, m.pre_w, st.xf, st.xqi, st.xsi, feat, d, tt)
+    tower_mm_rq(m, st.x, m.pre_w, st.xf, st.xqi, st.xsi, st.xbsi, feat, d, tt)
     add_bias_rows(st.x, m.blob, m.pre_b, d, tt)
     pk_scan("pre", st.x, tt * d)
     asr_prof_add("pk.conv_subsample", tp)
@@ -1111,7 +1444,7 @@ def parakeet_device_gpu(m : ParakeetModel) : bool => m.dev_backend != TowerDev.n
 
 var private g_pk_pin = GemmLane.unset
 
-//! Pin the parakeet weight format for subsequent loads: q8 (the default on every home) vs the
+//! Pin the parakeet weight format for subsequent loads: q8 (the default on every home; un-pinned, a quantized GGUF serves its own planes instead) vs the
 //! exact lane (the halfword lane on a GPU home, the f32 planes on the CPU; also the parity legs).
 //! ``reset_parakeet_q8`` returns to the policy default.
 def set_parakeet_q8(on : bool) {
@@ -1141,6 +1474,24 @@ def pk_fc_layer(lo : PkLayerOffs) : CanaryLayerOffs {
         nout_w = lo.nout_w, nout_b = lo.nout_b)
 }
 
+//! The kq lane's record seats into `seats`, which the driver sizes to `parakeet_fc_seat_count`; answers the K-quant members' format-slot bits.
+[arch(at = "../ARCHITECTURE_MEDIA_ASR.md#parakeet-kq-seats")]
+def parakeet_fc_record_seats(m : ParakeetModel; var seats : array<TowerGemmSeat>) : uint {
+    var kq_fmts = 0u
+    verify(long_length(seats) == parakeet_fc_seat_count(m), "the driver sizes the record seats to the chain")
+    for (s, i in seats, count()) {
+        s = tower_gemm_seat(m, int64(i))
+        if (s.fmt != KqFmt.q8) {
+            kq_fmts |= 1u << uint(int(s.fmt))
+        }
+    }
+    return kq_fmts
+}
+
+//! the GEMM records a device chain seats off a CPU-form kq model: none on another lane, or where a GPU image carries its own
+def parakeet_fc_seat_count(m : ParakeetModel) : int64
+    => m.kq_lane && m.dev_backend == TowerDev.none ? m.n_layer * PK_LAYER_SEATS + PK_FRONT_GEMMS : 0l
+
 //! parakeet's CPU block form: no GEMM bias, tap-major taps, the folded BatchNorm, its stage buckets and the NaN scan
 def private pk_cpu_form(m : ParakeetModel) : FcCpuForm {
     return FcCpuForm(d = m.n_state, ff = 4l * m.n_state, n_head = m.n_head, nk = m.n_conv_kernel, biased = false,
@@ -1165,21 +1516,9 @@ def private pk_blocks_cpu(m : ParakeetModel; var st : ParakeetState; tt, ww, n_r
 def private pk_rnnt_net(m : ParakeetModel) : RnntNet {
     var net = RnntNet(blob = m.blob, n_layers = m.n_pred_layers, pred_dim = m.n_pred_dim, joint_dim = m.n_pred_dim,
         n_tokens = m.n_vocab + 1l, blank_id = m.blank_id, durations = m.durations, max_symbols = int(m.n_max_tokens),
-        embed = m.embed_off, joint_pred_w = m.joint_pred_w, joint_pred_b = m.joint_pred_b,
-        joint_net_w = m.joint_net_w, joint_net_b = m.joint_net_b,
-        prof_step = "pk.dec.step", prof_pick = "pk.dec.pick", prof_joint = "pk.dec.joint", dev_only = m.dev_backend != TowerDev.none,
-        dev = m.dev, devplan = m.devplan)
-    for (l in range64(m.n_pred_layers)) {
-        net.lstm_ih[l] = m.lstm_ih[l]
-        net.lstm_hh[l] = m.lstm_hh[l]
-        net.lstm_b[l] = m.lstm_b[l]
-    }
+        prof_step = "pk.dec.step", prof_pick = "pk.dec.pick", prof_joint = "pk.dec.joint", dev_only = m.dev_backend != TowerDev.none)
+    rnnt_net_baked(net, m.dec_slab, m.rnnt_wh, m.rnnt_jw)
     return net
-}
-
-//! The transducer decoder's device halves and slab into a GPU flavor's block under `prefix` (`rnnt_dev_bake`), off the CPU-form model
-def parakeet_rnnt_dev_bake(m : ParakeetModel; var b : TowerDevBuild; prefix : string) {
-    rnnt_dev_bake(pk_rnnt_net(m), RnntEnc(d = m.n_state, w = m.joint_enc_w, b = m.joint_enc_b, q8 = m.q8 && !m.jenc_exact), b, prefix)
 }
 
 // NaN/Inf stage scan (debug rail, pairs with the fast_math x64 investigation): bit-pattern
@@ -1233,12 +1572,12 @@ def private pk_scan(tag : string; x : array<float>; n : int64) {
 def parakeet_tdt_decode(m : ParakeetModel; var st : ParakeetState; n_frames : int64) {
     let d = m.n_state
     let pd = m.n_pred_dim
-    let enc = RnntEnc(d = d, w = m.joint_enc_w, b = m.joint_enc_b, q8 = m.q8 && !m.jenc_exact, gen = st.enc_gen)
+    let enc = RnntEnc(d = d, w = m.joint_enc_w, b = m.joint_enc_b, q8 = (m.q8 || m.kq_lane) && !m.jenc_exact, gen = st.enc_gen)
     rnnt_decode(pk_rnnt_net(m), st.dec, enc, st.x, st.encp, n_frames, st.toks) $(var encp) {
         pk_cpu_refuse(m, "joint's encoder projection")
         let ts_encp = ref_time_ticks()
         ensure_length(encp, n_frames * pd)
-        tower_mm_rq(m, encp, m.joint_enc_w, st.x, st.xqi, st.xsi, d, pd, n_frames)
+        tower_mm_rq(m, encp, m.joint_enc_w, st.x, st.xqi, st.xsi, st.xbsi, d, pd, n_frames)
         add_bias_rows(encp, m.blob, m.joint_enc_b, pd, n_frames)
         asr_prof_add("pk.dec.encp", ts_encp)
     }

@@ -26,11 +26,16 @@ def private sniff_cell(t : T?; name : string; want : AsrCarrierKind) {
     t |> equal(sniff_asr_kind(path), want, name)
 }
 
-[test(description = "the converter sniffs a GGUF as gigaam, decoder, qwen3a or bergamot and refuses a non-Marian item table")]
+[test(description = "the converter sniffs a GGUF as gigaam, parakeet, decoder, qwen3a or bergamot and refuses a non-Marian item table")]
 def test_sniff_asr_kind(t : T?) {
     t |> run("the four GigaAM v3 carriers sniff as gigaam") @(t : T?) {
         for (v in ["ctc", "rnnt", "e2e-ctc", "e2e-rnnt"]) {
             sniff_cell(t, "gigaam-v3-{v}-f16.gguf", AsrCarrierKind.gigaam)
+        }
+    }
+    t |> run("the F32 and Q4_K_M Parakeet GGUFs sniff as parakeet") @(t : T?) {
+        for (q in ["F32", "Q4_K_M"]) {
+            sniff_cell(t, "parakeet-tdt-0.6b-v3-{q}.gguf", AsrCarrierKind.parakeet)
         }
     }
     t |> run("a decoder GGUF with no projector sniffs as a decoder") @(t : T?) {

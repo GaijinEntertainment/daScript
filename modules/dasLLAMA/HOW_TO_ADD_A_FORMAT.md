@@ -257,6 +257,8 @@ plane-pair format panics in `stream_job_transcode`. What still keys on the forma
 - `dasllama_load.das`: `LayoutSizes.<fmt>_n`, `KqCursors.<fmt>`, the `kq_take` arm, the landing
   memcpy, the plane alloc's format list, `g_stream_plane_total["<fmt>q"]` and `stream_field_of`.
 - `dasllama_layout.das`: `metal_blob_off_ok`.
+- `dasllama_tower_image.das`: `tower_kq_seat_fmt`, the tower kq lanes' seat pick - a superblock format or Q8_0 takes a
+  seat, NVFP4 and the other per-32 formats are refused.
 - `dasllama_image.das`: the quant-plane names in `streamed_q_planes`, the scale planes summed in
   `vk_mint_extra_bytes`, and `IMAGE_VERSION`.
 - `dasllama_config.das`: `DlimCpuConfig.<fmt>_mr` in the identity string and its arms in

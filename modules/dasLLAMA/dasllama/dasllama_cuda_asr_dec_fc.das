@@ -100,15 +100,12 @@ def private cur_attach_build(net : RnntNet; enc : RnntEnc; key : uint64) : bool 
     cur_release()
     var r & = g_cur
     r.lay = rnnt_dev_layout(net)
-    let wh = tower_dev_find(net.devplan, "{CUF_RNNT_PIECE}.wh")
-    let jw = tower_dev_find(net.devplan, "{CUF_RNNT_PIECE}.jw")
-    let wf = tower_dev_find(net.devplan, "{CUF_RNNT_PIECE}.wf")
-    if (wh.bytes != r.lay.wh_halves * 2l || jw.bytes != r.lay.jw_halves * 2l || wf.bytes != r.lay.wf_floats * 4l) {
+    if (!rnnt_dev_planes_ok(net, r.lay)) {
         return cur_decline(RnntDevDecline.shape)
     }
-    cut_put_piece(r.t, r.p.b[int(TowerBuf.pred_w16)], net, "{CUF_RNNT_PIECE}.wh")
-    cut_put_piece(r.t, r.p.b[int(TowerBuf.joint_w16)], net, "{CUF_RNNT_PIECE}.jw")
-    cut_put_piece(r.t, r.p.b[int(TowerBuf.net_rows)], net, "{CUF_RNNT_PIECE}.wf")
+    cut_up(r.t, r.p.b[int(TowerBuf.pred_w16)], unsafe(reinterpret<void?>(plane_at(net.wh, 0l))), r.lay.wh_halves * 2l)
+    cut_up(r.t, r.p.b[int(TowerBuf.joint_w16)], unsafe(reinterpret<void?>(plane_at(net.jw, 0l))), r.lay.jw_halves * 2l)
+    cut_up(r.t, r.p.b[int(TowerBuf.net_rows)], unsafe(reinterpret<void?>(plane_at(net.blob, net.embed))), r.lay.wf_floats * 4l)
     if (!enc.q8) {
         cp_up(r.t, r.p, TowerBuf.enc_proj_w, unsafe(reinterpret<void?>(plane_at(net.blob, enc.w))), net.joint_dim * enc.d * 4l)
     }

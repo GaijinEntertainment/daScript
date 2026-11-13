@@ -16,6 +16,7 @@ require dasllama/dasllama_gguf   // gguf_header_read: a source's tensor types
 require dasllama/dasllama_load   // kq_fmt_of: a disk type's member
 require dasllama/dasllama_layout   // q8_gather_rows: the discrete homes' row-major gather
 require dasllama/dasllama_math   // active_q8_repack_layout: the gather's plain layout
+require daslib/math_boost   // round_up: a kq seat on its format's strides
 require strings
 require daslib/strings_boost
 require daslib/fio                // nolint:STYLE030 - ... `stat` / `remove` on the image path
@@ -284,4 +285,98 @@ def tower_mint_flavor(var st : auto(S); var out : auto(T); lane, who : string; d
     tower_flavor_registered(f, dev, who)
     var gst = S()
     tower_mint_dev(st, gst, out, "", lane, who, dev, f.bake, consumed)
+}
+
+let TOWER_KQ_MIXED = -1   //! a kq lane's `kq_fmt` where its K-quant seats mix
+
+//! a float disk type: a tensor the kq lane holds no plane of its own for
+def tower_float_type(gt : int) : bool => gt == GGML_TYPE_F32 || gt == GGML_TYPE_F16 || gt == GGML_TYPE_BF16
+
+//! the seats' one K-quant member (a `KqFmt` slot), `q8` where every seat is Q8_0, TOWER_KQ_MIXED where the K-quant seats mix
+def tower_kq_lane_fmt(seats : array<int64>) : int {
+    var fmt = int(KqFmt.q8)
+    for (s in range64(long_length(seats) / TOWER_SEAT_WORDS)) {
+        let f = int(seats[s * TOWER_SEAT_WORDS])
+        continue if (f == int(KqFmt.q8))
+        if (fmt == int(KqFmt.q8)) {
+            fmt = f
+        } elif (fmt != f) {
+            return TOWER_KQ_MIXED
+        }
+    }
+    return fmt
+}
+
+//! a kq lane's name off its `kq_fmt`: its one K-quant member's disk type, `kq` where the members mix
+def tower_kq_lane_name(kq_fmt : int) : string => kq_fmt != TOWER_KQ_MIXED ? "{kq_fmt_of_slot(kq_fmt)}" : "kq"
+
+//! The format a kq-lane seat serves tensor `name` in on a `width`-wide row: a superblock K-quant format or Q8_0 as stored, and
+//! with `floats_q8` the q8 slot for a float tensor the lane quantizes; any other type panics under `who`, `pin` the knob that dequantizes it
+def tower_kq_seat_fmt(m : GGUFMeta; name : string; width : int64; floats_q8 : bool; who, pin : string) : KqFmt {
+    let gt = gguf_tensor_type(m, name)
+    return KqFmt.q8 if (floats_q8 && tower_float_type(gt))
+    let f = kq_fmt_row_ok(kq_fmt_of(gt), width)   // the tag kq_tag reads, without its q8-rail demotion note: the lane refuses a demoted row
+    let served = f == KqFmt.q8 ? gt == GGML_TYPE_Q8_0 : (kq_sb(f) && f != KqFmt.nv4)
+    if (!served) {
+        panic("{who}: '{name}' is {ggml_type_name(gt)} on a {width}-wide row (tagged {f}), which the kq lane has no seat for - the superblock formats and Q8_0 serve as their own planes; pin a lane ({pin}) to dequantize it")
+    }
+    return f
+}
+
+//! a kq lane's fill cursors: the Q8_0 planes' next element, the K-quant planes' next quant and scale bytes
+struct TowerKqCursor {
+    q8 : int64
+    kq : int64
+    ks : int64
+}
+
+//! the seat a GEMM of `n` elements in format `f` takes at `cur`, which moves past it: Q8_0 elements, or K-quant quant and scale
+//! bytes on the format's own strides - a carrier mixing members leaves the cursors off the next one's
+def tower_kq_seat_take(var cur : TowerKqCursor; f : KqFmt; n : int64) : TowerGemmSeat {
+    if (f == KqFmt.q8) {
+        let s = TowerGemmSeat(fmt = f, qoff = cur.q8, soff = cur.q8 / KQ_B32_ELEMS)
+        cur.q8 += n
+        return s
+    }
+    let nsb = n / kq_elems(f)
+    cur.kq = round_up(cur.kq, kq_qsb(f))
+    cur.ks = round_up(cur.ks, kq_ssb(f))
+    let s = TowerGemmSeat(fmt = f, qoff = cur.kq, soff = cur.ks)
+    cur.kq += nsb * kq_qsb(f)
+    cur.ks += nsb * kq_ssb(f)
+    return s
+}
+
+//! A kq-lane seat's tensor into its planes: K-quant blocks transcoded into `kq` / `ks` (repacked where `rep_kq`), Q8_0 blocks
+//! moved into `qblob` / `qscales`, a float tensor quantized there (both repacked where `rep_q8`)
+def tower_kq_seat_fill(m : GGUFMeta; b : array<uint8> | #; name : string; s : TowerGemmSeat; width, n : int64; rep_q8, rep_kq : bool;
+                       var qblob : array<int8>; var qscales : array<float>; var kq, ks : array<uint8>; @scratch var wscratch : array<float>; who : string) {
+    if (s.fmt != KqFmt.q8) {
+        gguf_transcode_kq_at(m, b, name, s.fmt, kq, ks, s.qoff, s.soff, n)
+        if (rep_kq) {
+            unsafe {
+                repack_kq_weight_at(kq_schema_id(s.fmt), addr(kq[s.qoff]), addr(ks[s.soff]), width, n / width)
+            }
+        }
+        return
+    }
+    if (gguf_tensor_type(m, name) == GGML_TYPE_Q8_0) {
+        gguf_transcode_q8_0(m, b, name, qblob, qscales, s.qoff, s.soff, n)
+    } else {
+        tower_read_gemm_q8(m, b, name, qblob, qscales, wscratch, s.qoff, n, who)
+    }
+    if (rep_q8) {
+        repack_q8q8_weight(qblob, qscales, s.qoff, width, n / width)
+    }
+}
+
+//! The kq lane's members by name from the format slots a chain holds: the K-quant members in slot order, `q8` last where
+//! Q8_0 seats ride beside them, `+`-joined - a decline's words.
+[cold_path]
+def tower_kq_members_of(kq_fmts : uint; has_q8 : bool) : string {
+    var names <- [for (fmt in range(KQ_FMT_COUNT)); "{kq_fmt_of_slot(fmt)}"; where(kq_fmts & (1u << uint(fmt))) != 0u]
+    if (has_q8) {
+        names |> push("q8")
+    }
+    return join(names, "+")
 }

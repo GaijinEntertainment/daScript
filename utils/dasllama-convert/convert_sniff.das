@@ -56,6 +56,8 @@ def sniff_asr_kind(path : string) : AsrCarrierKind {
             }
             if (gguf_str_or(m, bytes, "general.architecture", "") == GIGAAM_ARCH) {
                 kind = AsrCarrierKind.gigaam
+            } elif (gguf_str_or(m, bytes, "general.architecture", "") == PARAKEET_ARCH) {
+                kind = AsrCarrierKind.parakeet
             } elif (proj == "qwen3a") {
                 kind = AsrCarrierKind.qwen3a
             } elif (proj == "gemma4a") {

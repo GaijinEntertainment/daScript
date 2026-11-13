@@ -189,7 +189,7 @@ GPU home - Vulkan, CUDA and Metal - with the chat towers included, is a Q8_0 req
 the file's F32, F16 or BF16 GEMMs at default levers - a
 converted copy the tower's image carries; the f16 lane's halfword plane, rounded from F32 or BF16 and saturated to the
 f16 range, is a converted copy only a pin reaches (`set_*_q8(false)`, `set_asr_fp32`, `set_asr_tower_fp32`); GigaAM's
-halfwords are its carrier's own F16, a served form; a chat tower on a box with no GPU tower reads the file's f32 rows.
+halfwords are its carrier's own F16, a served form; on Parakeet's kq lane the K-quant and Q8_0 tensors are the file's own planes and its float GEMMs - the F16 pointwise convs, the front's channel mixes - a Q8_0 requant the image carries (`ARCHITECTURE_MEDIA_ASR.md#parakeet-kq-seats`); a chat tower on a box with no GPU tower reads the file's f32 rows.
 The Russian stress-context model's f32 layer GEMMs follow the TTS lane (`tts_serves_q8`): on the q8 lane they are a Q8_0
 requant minted at load and held in RAM, with no image; its K-quant layers serve the file's own planes on either lane
 (`ARCHITECTURE_TTS_FRONT_END.md#tts-stress-lanes`).

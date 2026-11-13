@@ -40,7 +40,7 @@ require dasllama/dasllama_gemm_schema   // the q8 block geometry the mint's zero
 // WhisperModel.enc) contribute their planes under dotted names ("enc.fblob"); string-array
 // fields ride the meta blob via serialize_strings — raw string pointers can't be planes.
 
-let IMAGE_VERSION = 61   // the tower images' device blocks: the shared tower bakes, and the Metal GigaAM f16 lane with no fc twin piece
+let IMAGE_VERSION = 62   // the transducer decoder in its baked form: the halves and one f32 slab, no f32 predictor or joint weights
 
 //! The metal (blob-only) flavor's identity tag: q8 planes ride the 34B block_q8_0 blob and the
 //! kq scale planes their GPU forms (convert_model_to_metal_blob) — flavors are per-config and
