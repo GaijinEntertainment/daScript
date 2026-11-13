@@ -64,3 +64,21 @@ def test_parsed_ranges(t : T?) {
             "siblings out of source order are not reported")
     }
 }
+
+[test(description = "parse_mangled_name reads past the expression hash an unresolved dimension or typedecl carries")]
+def parse_mangled_name_skips_expression_hash(t : T?) {
+    ast_gc_guard() {
+        using() $(var mg : ModuleGroup) {
+            let dim = parse_mangled_name("[-2]<12345>i", mg, null)
+            t |> equal(dim.baseType, Type.tFixedArray)
+            t |> equal(dim.fixedDim, -2)
+            t |> equal(dim.firstType.baseType, Type.tInt)
+            let decl = parse_mangled_name("D<777>", mg, null)
+            t |> equal(decl.baseType, Type.typeDecl)
+            let nested = parse_mangled_name("1<[-2]<5>f>A", mg, null)
+            t |> equal(nested.baseType, Type.tArray)
+            t |> equal(nested.firstType.fixedDim, -2)
+            t |> equal(nested.firstType.firstType.baseType, Type.tFloat)
+        }
+    }
+}

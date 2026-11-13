@@ -348,3 +348,136 @@ def test_generic_instance_at_the_size_limit(t : T?) {
     let probe : tuple<SizeProbe10>
     t |> equal(size_of_argument(probe), 8192)
 }
+
+let PICK_DIM = 3
+
+let PICK_SAMPLE = 1.0
+
+def pick_named_dim(_a : int[PICK_DIM]; _b : auto) : int => 1
+
+def pick_named_dim(_a : auto; _b : auto) : int => 2
+
+def pick_typedecl(_a : typedecl(PICK_SAMPLE)) : int => 1
+
+def pick_typedecl(_a : auto) : int => 2
+
+[test(description = "a generic whose argument is a fixed array with a named dimension, or a typedecl of a constant, is chosen over a generic that takes any type")]
+def test_generic_argument_type_expression(t : T?) {
+    let three : int[3]
+    let four : int[4]
+    t |> equal(pick_named_dim(three, 0), 1)
+    t |> equal(pick_named_dim(four, 0), 2)
+    t |> equal(pick_typedecl(2.0), 1)
+    t |> equal(pick_typedecl(2), 2)
+}
+
+[test(description = "a call ahead of an overload whose signature names a later typedef or a named dimension waits for that signature, and does not take the generic that takes any type")]
+def test_call_ahead_of_unresolved_overload(t : T?) {
+    let three : int[3]
+    t |> equal(pick_late_alias(2.0), 1)
+    t |> equal(pick_late_alias(2), 2)
+    t |> equal(pick_late_dim(three), 1)
+    t |> equal(pick_late_generic_alias(2.0, 0), 1)
+    t |> equal(pick_late_generic_alias(2, 0), 2)
+}
+
+def pick_late_alias(_a : LatePickFloat) : int => 1
+
+def pick_late_alias(_a : auto) : int => 2
+
+def pick_late_dim(_a : int[PICK_DIM]) : int => 1
+
+def pick_late_dim(_a : auto) : int => 2
+
+def pick_late_generic_alias(_a : LatePickFloat; _b : auto) : int => 1
+
+def pick_late_generic_alias(_a : auto; _b : auto) : int => 2
+
+typedef LatePickFloat = float
+
+[test(description = "a call ahead of a generic whose argument names a typedef that takes a second pass to resolve waits for that typedef, and does not take the generic that takes any type")]
+def test_call_ahead_of_second_pass_typedef_generic(t : T?) {
+    t |> equal(pick_second_pass_alias(2.0, 0), 1)
+    t |> equal(pick_second_pass_alias(2, 0), 2)
+}
+
+def pick_second_pass_alias(_a : SecondPassPickAlias; _b : auto) : int => 1
+
+def pick_second_pass_alias(_a : auto; _b : auto) : int => 2
+
+typedef SecondPassPickAlias = typedecl(second_pass_pick_sample())
+
+def second_pass_pick_sample() => 1.0
+
+struct PickNotAKey {
+    a : array<int>
+}
+
+[test(description = "a generic argument that mixes the generic's own type variable with a typedef that takes a second pass waits for that typedef, and one whose resolved typedef makes no valid type is a plain mismatch that leaves the other overload callable")]
+def test_generic_argument_alias_mix(t : T?) {
+    t |> equal(pick_mixed_alias((2.0, 1), 1), 1)
+    t |> equal(pick_mixed_alias(2, 1), 2)
+    t |> equal(pick_bad_key_alias(5, 0), 2)
+}
+
+def pick_mixed_alias(_a : tuple<SecondPassPickAlias; TT>; _b : auto(TT)) : int => 1
+
+def pick_mixed_alias(_a : auto; _b : auto) : int => 2
+
+def pick_bad_key_alias(_a : table<PickBadKeyAlias; int>; _b : auto) : int => 1
+
+def pick_bad_key_alias(_a : auto; _b : auto) : int => 2
+
+typedef PickBadKeyAlias = PickNotAKey
+
+let PICK_TYPEDECL_INT = 1
+
+def pick_typedecl_pair(_a : typedecl(PICK_SAMPLE)) : int => 1
+
+def pick_typedecl_pair(_a : typedecl(PICK_TYPEDECL_INT)) : int => 2
+
+def pick_own_alias(_a : auto(PickOwnAlias); _b : PickOwnAlias) : string =>
+    typeinfo typename(type<PickOwnAlias>)
+
+[test(description = "two generics that differ only in the expression of a typedecl argument both declare and each takes its own type, and a generic's own type variable is not replaced by a module typedef of the same name")]
+def test_generic_typedecl_pair_and_own_alias(t : T?) {
+    t |> equal(pick_typedecl_pair(2.0), 1)
+    t |> equal(pick_typedecl_pair(2), 2)
+    t |> equal(pick_own_alias(1.0, 2.0), "float const")
+}
+
+typedef PickOwnAlias = int
+
+def pick_before_resolved() : int => pick_same_pass(2.0)
+
+def pick_same_pass(_a : SamePassFloat) : int => 1
+
+def pick_same_pass(_a : auto) : int => 2
+
+def pick_after_resolved() : int => pick_same_pass(2.0)
+
+typedef SamePassFloat = float
+
+[test(description = "a call that waited on an unresolved signature leaves no cached mismatch behind: a later call with the same argument types, visited after the signature resolved in the same pass, takes the resolved overload")]
+def test_pending_lookup_is_not_cached(t : T?) {
+    t |> equal(pick_before_resolved(), 1)
+    t |> equal(pick_after_resolved(), 1)
+}
+
+[test(description = "a call ahead of a generic whose typedecl argument takes a second pass, and a global initializer that calls a generic with a named dimension, both take that generic and not the one that takes any type")]
+def test_second_pass_typedecl_and_global_init(t : T?) {
+    t |> equal(pick_second_pass_typedecl(2.0, 0), 1)
+    t |> equal(pick_second_pass_typedecl(2, 0), 2)
+    t |> equal(g_pick_named_dim, 1)
+}
+
+let g_pick_named_dim = pick_named_dim(pick_three(), 0)
+
+def pick_three() {
+    var a : int[3]
+    return <- a
+}
+
+def pick_second_pass_typedecl(_a : typedecl(second_pass_pick_sample()); _b : auto) : int => 1
+
+def pick_second_pass_typedecl(_a : auto; _b : auto) : int => 2

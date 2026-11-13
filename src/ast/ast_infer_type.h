@@ -9,6 +9,23 @@ namespace das {
     // todo: check for eastl and look for better container
     typedef vector<Function *> MatchingFunctions;
 
+    enum class TypeNodeWalk { match, stop, descend };
+
+    template <typename Pred>
+    bool anyTypeNode ( const TypeDecl * type, Pred && pred ) {
+        switch ( pred(type) ) {
+            case TypeNodeWalk::match:   return true;
+            case TypeNodeWalk::stop:    return false;
+            case TypeNodeWalk::descend: break;
+        }
+        if ( type->firstType && anyTypeNode(type->firstType, pred) ) return true;
+        if ( type->secondType && anyTypeNode(type->secondType, pred) ) return true;
+        for ( auto & argType : type->argTypes ) {
+            if ( anyTypeNode(argType, pred) ) return true;
+        }
+        return false;
+    }
+
     class CaptureLambda : public Visitor {
     public:
         CaptureLambda() = delete;
@@ -97,9 +114,13 @@ namespace das {
         bool   inArgumentInit = false;
         int32_t callDepth = 0;
         int32_t inferDepth = 0;
+        mutable uint32_t pendingCandidateCount = 0;
+        mutable const Function * pendingCandidate = nullptr;
+        das_hash_set<const Function *> pendingGenerics;
 
     public:
         vector<FunctionPtr> extraFunctions;
+        bool genericArgumentsFolded = false;
 
     protected:
         string generateNewLambdaName(const LineInfo &at);
@@ -132,6 +153,7 @@ namespace das {
         // find type alias name, and resolve it to type
         // without one generic function
         TypeDeclPtr findFuncAlias(const FunctionPtr &fptr, const string &name, bool *constUnderDim = nullptr) const;
+        static TypeDecl *findArgumentOrResultAlias(Function *fn, const string &name, bool allowAuto, bool *constUnderDim = nullptr);
 
         // find type alias name, and resolve it to type
         // within current context
@@ -204,6 +226,12 @@ namespace das {
         MatchingFunctions findMissingGenericCandidates(const string &name, bool identicalName) const;
 
         bool isMatchingArgument(const FunctionPtr &pFn, TypeDeclPtr argType, TypeDeclPtr passType, bool inferAuto, bool inferBlock, AliasMap *aliases = nullptr, OptionsMap *options = nullptr) const;
+        bool isMatchingResolvedArgument(const FunctionPtr &pFn, TypeDeclPtr argType, TypeDeclPtr passType, bool inferAuto, bool inferBlock, AliasMap *aliases, OptionsMap *options) const;
+
+        static bool hasTypeExpression(const TypeDecl *type);
+        bool isPendingArgument(const Function *pFn, const TypeDecl *argType, bool inferAuto) const;
+        bool pendingSince(uint32_t mark) const { return pendingCandidateCount != mark; }
+        void reportPendingSignature(const string &name, const LineInfo &at);
 
         bool isFunctionCompatible(Function *pFn, const vector<TypeDeclPtr> &types, bool inferAuto, bool inferBlock, bool checkLastArgumentsInit = true) const;
 
@@ -329,7 +357,9 @@ namespace das {
 
         vector<TypeMacro *> findTypeMacro(const string &name) const;
 
-        bool inferTypeExpr(TypeDeclPtr &type);
+        bool inferTypeExpr(TypeDeclPtr &type, bool expandTypeMacros = true);
+        void foldGenericArguments(Function *generic);
+        bool foldArgumentAliases(Function *generic, TypeDeclPtr &type, bool canFold);
 
     protected:
         // type
@@ -371,6 +401,7 @@ namespace das {
         virtual void preVisitGlobalLetInit(const VariablePtr &var, Expression *init) override;
         virtual ExpressionPtr visitGlobalLetInit(const VariablePtr &var, Expression *init) override;
         virtual VariablePtr visitGlobalLet(const VariablePtr &var) override;
+        virtual void visitGlobalLetBody(Program *prog) override;
         // function
         bool safeExpression(Expression *expr) const;
         virtual bool canVisitFunction(Function *fun) override;
@@ -689,6 +720,7 @@ namespace das {
         ExpressionPtr inferGenericOperator3(const string &opN, const LineInfo &expr_at, ExpressionPtr arg0, ExpressionPtr arg1, ExpressionPtr arg2, InferCallError err = InferCallError::tryOperator);
         ExpressionPtr inferGenericOperator(const string &opN, const LineInfo &expr_at, ExpressionPtr arg0, ExpressionPtr arg1, InferCallError err = InferCallError::tryOperator);
         ExpressionPtr inferGenericOperatorWithName(const string &opN, const LineInfo &expr_at, ExpressionPtr arg0, const string &arg1, InferCallError err = InferCallError::tryOperator);
+        ExpressionPtr inferNamedThenByNameOperator(const string &namedOpN, const string &byNameOpN, const LineInfo &expr_at, ExpressionPtr arg0, const string &name);
 
         Variable *findMatchingBlockOrLambdaVariable(const string &name);
 

@@ -1732,3 +1732,27 @@ def test_fixed_method_calls_are_direct_calls(t : T?) {
     devirt_patch_slot(base_obj, "read", @@devirt_patched_read)
     t |> equal(call_devirt_private(base_obj), 100)
 }
+
+class LateSuperRoot {
+    def hit(_v : float) : int => 1
+}
+
+class LateSuperMiddle : LateSuperRoot {
+}
+
+class LateSuperLeaf : LateSuperMiddle {
+    def override hit(v : float) : int => super.hit(v) * 10
+}
+
+def LateSuperMiddle`hit(var _self : LateSuperMiddle; _v : LateSuperFloat) : int => 2
+
+typedef LateSuperFloat = float
+
+[test(description = "super.method ahead of the parent's method whose signature names a later typedef waits for that method, and does not skip to the grandparent's")]
+def test_super_call_ahead_of_unresolved_signature(t : T?) {
+    var leaf = new LateSuperLeaf()
+    t |> equal(leaf->hit(1.0), 20)
+    unsafe {
+        delete leaf
+    }
+}

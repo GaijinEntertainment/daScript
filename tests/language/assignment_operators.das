@@ -485,3 +485,64 @@ def test_class_operator(t : T?) {
         }
     }
 }
+
+struct LateCopied {
+    v : int
+}
+
+struct LateMoved {
+    v : int
+}
+
+struct LateCloned {
+    v : int
+}
+
+struct LateDeleted {
+    v : int
+}
+
+var g_late_finalize_count = 0
+
+[test(description = "a =, <-, := or delete ahead of a user operator whose signature names a later typedef waits for that operator, and does not take the built-in copy, move, clone or finalizer")]
+def test_assignment_ahead_of_unresolved_signature(t : T?) {
+    var copy_to, copy_from : LateCopied
+    copy_from.v = 4
+    copy_to = copy_from
+    t |> equal(copy_to.v, 104)
+    var move_to, move_from : LateMoved
+    move_from.v = 6
+    move_to <- move_from
+    t |> equal(move_to.v, 106)
+    var clone_to, clone_from : LateCloned
+    clone_from.v = 5
+    clone_to := clone_from
+    t |> equal(clone_to.v, 105)
+    var deleted : LateDeleted
+    delete deleted
+    t |> equal(g_late_finalize_count, 1)
+}
+
+def operator =(var a : LateCopiedValue&; b : LateCopiedValue) {
+    a.v = b.v + 100
+}
+
+def operator <-(var a : LateMovedValue&; b : LateMovedValue&) {
+    a.v = b.v + 100
+}
+
+def clone(var a : LateClonedValue; b : LateClonedValue) {
+    a.v = b.v + 100
+}
+
+def finalize(var _a : LateDeletedValue) {
+    g_late_finalize_count ++
+}
+
+typedef LateCopiedValue = LateCopied
+
+typedef LateMovedValue = LateMoved
+
+typedef LateClonedValue = LateCloned
+
+typedef LateDeletedValue = LateDeleted

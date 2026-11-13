@@ -1424,8 +1424,10 @@ namespace das {
         if (!expr->defaultValue->type || expr->defaultValue->type->isAliasOrExpr())
             return Visitor::visit(expr); // failed to infer
         if (!expr->no_promotion) {
+            const auto pendingMark = pendingCandidateCount;
             if (auto opE = inferGenericOperator("??", expr->at, expr->subexpr, expr->defaultValue))
                 return opE;
+            if (pendingSince(pendingMark)) return Visitor::visit(expr);
         }
         // infer
         expr->subexpr = Expression::autoDereference(expr->subexpr);
@@ -1739,7 +1741,12 @@ namespace das {
                             }
                             while (baseClass) {
                                 auto callName = "_::" + baseClass->name + "`" + eField->name;
+                                const auto pendingMark = pendingCandidateCount;
                                 auto fnCandidates = findMatchingFunctions(callName, argTypes, false);
+                                if (pendingSince(pendingMark)) {
+                                    reportPendingSignature("super." + eField->name, expr->at);
+                                    return Visitor::visit(expr);
+                                }
                                 if (fnCandidates.size() == 1) {
                                     reportAstChanged();
                                     auto newCall = new ExprCall(expr->at, callName);
@@ -2235,9 +2242,7 @@ namespace das {
         if ( !expr->typeexpr->isAutoOrAlias() ) {
             if (!expr->no_promotion) {
                 auto tname = das_to_string(expr->typeexpr->baseType);
-                if (auto opE = inferGenericOperator("`is`" + tname, expr->at, expr->subexpr, nullptr))
-                    return opE;
-                if (auto opE = inferGenericOperatorWithName("`is", expr->at, expr->subexpr, tname))
+                if (auto opE = inferNamedThenByNameOperator("`is`" + tname, "`is", expr->at, expr->subexpr, tname))
                     return opE;
             }
         } else {
@@ -3041,7 +3046,12 @@ namespace das {
             return Visitor::visit(expr);
         // lets see if there is clone operator already (a user operator can ignore all the rules bellow)
         if (!expr->native) {
+            const auto pendingMark = pendingCandidateCount;
             auto fnList = getFinalizeFunc(expr->subexpr->type);
+            if (pendingSince(pendingMark)) {
+                reportPendingSignature("delete", expr->at);
+                return Visitor::visit(expr);
+            }
             if (fnList.size()) {
                 if (verifyFinalizeFunc(fnList, expr->at)) {
                     reportAstChanged();
@@ -3460,10 +3470,12 @@ namespace das {
         if (!expr->index->type || expr->index->type->isAliasOrExpr())
             return Visitor::visit(expr); // failed to infer
         if (!expr->no_promotion && !expr->underClone) {
+            const auto pendingMark = pendingCandidateCount;
             if (auto opE = inferGenericOperator("[]", expr->at, expr->subexpr, expr->index)) {
                 opE->alwaysSafe = expr->alwaysSafe;
                 return opE;
             }
+            if (pendingSince(pendingMark)) return Visitor::visit(expr);
         }
         expr->index = Expression::autoDereference(expr->index);
         auto seT = expr->subexpr->type;
@@ -4015,9 +4027,7 @@ namespace das {
                 return substitute;
             }
             // generic operator
-            if (auto opE = inferGenericOperator("`as`" + expr->name, expr->at, expr->value, nullptr))
-                return opE;
-            if (auto opE = inferGenericOperatorWithName("`as", expr->at, expr->value, expr->name))
+            if (auto opE = inferNamedThenByNameOperator("`as`" + expr->name, "`as", expr->at, expr->value, expr->name))
                 return opE;
         }
         // regular infer
@@ -4051,11 +4061,7 @@ namespace das {
                 return substitute;
             }
             // generic operator
-            if (auto opE = inferGenericOperator("?as`" + expr->name, expr->at, expr->value, nullptr)) {
-                reportAstChanged();
-                return opE;
-            }
-            if (auto opE = inferGenericOperatorWithName("?as", expr->at, expr->value, expr->name)) {
+            if (auto opE = inferNamedThenByNameOperator("?as`" + expr->name, "?as", expr->at, expr->value, expr->name)) {
                 reportAstChanged();
                 return opE;
             }
@@ -4103,9 +4109,7 @@ namespace das {
                 return substitute;
             }
             // generic operator
-            if (auto opE = inferGenericOperator("`is`" + expr->name, expr->at, expr->value, nullptr))
-                return opE;
-            if (auto opE = inferGenericOperatorWithName("`is", expr->at, expr->value, expr->name))
+            if (auto opE = inferNamedThenByNameOperator("`is`" + expr->name, "`is", expr->at, expr->value, expr->name))
                 return opE;
         }
         // regular infer
@@ -4247,10 +4251,12 @@ namespace das {
             return Visitor::visit(expr);
         }
         if (!expr->underClone) {
+            const auto pendingMark = pendingCandidateCount;
             if (auto getProp = promoteToProperty(expr, nullptr)) {
                 reportAstChanged();
                 return getProp;
             }
+            if (pendingSince(pendingMark)) return Visitor::visit(expr);
         }
         auto valT = expr->value->type;
         if (valT->isPointer()) {
@@ -4428,9 +4434,7 @@ namespace das {
         if (!expr->value->type || expr->value->type->isAliasOrExpr())
             return Visitor::visit(expr); // failed to infer
         if (!expr->no_promotion) {
-            if (auto opE = inferGenericOperator("?.`" + expr->name, expr->at, expr->value, nullptr))
-                return opE;
-            if (auto opE = inferGenericOperatorWithName("?.", expr->at, expr->value, expr->name))
+            if (auto opE = inferNamedThenByNameOperator("?.`" + expr->name, "?.", expr->at, expr->value, expr->name))
                 return opE;
         }
         auto valT = expr->value->type;
@@ -6654,6 +6658,32 @@ namespace das {
         keepOnlyInstanceTypeErrors(program);
     }
 
+    // src/ast/ARCHITECTURE_INFER.md#mangled-key-refresh
+    template <typename Box>
+    static bool refreshMangledKeys(Program * program, Box &box, vector<Error> &report) {
+        vector<tuple<Function *, uint64_t, uint64_t>> stale;
+        box.foreach_with_hash([&](auto fn, uint64_t hash) {
+            auto mnh = fn->getMangledNameHash();
+            if ( hash != mnh ) {
+                stale.emplace_back(make_tuple(fn, hash, mnh));
+                program->functionLookups.erase(fn);
+                fn->notInferred();
+            } });
+        bool failed = false;
+        for (auto &[fn, oldHash, newHash] : stale) {
+            if (box.refresh_key(oldHash, newHash)) continue;
+            if (auto other = box.find(newHash)) {
+                report.emplace_back("function is already defined " + fn->getMangledName(),
+                    "\t" + other->describe() + " at " + other->at.describe(), "",
+                    fn->at, CompilationError::already_declared_function);
+            } else {
+                report.emplace_back("internal compiler error: failed to refresh '" + fn->getMangledName() + "'", "", "", fn->at, CompilationError::internal_function_refresh);
+            }
+            failed = true;
+        }
+        return failed;
+    }
+
     void inferTypesDirty(Program * program, TextWriter &logs, bool verbose) {
         program->astChanged();
         int pass = 0;
@@ -6711,19 +6741,12 @@ namespace das {
             for (auto efn : context.extraFunctions) {
                 program->addFunction(efn);
             }
-            vector<tuple<Function *, uint64_t, uint64_t>> refreshFunctions;
-            program->thisModule->functions.foreach_with_hash([&](auto fn, uint64_t hash) {
-                auto mnh = fn->getMangledNameHash();
-                if ( hash != mnh ) {
-                    refreshFunctions.emplace_back(make_tuple(fn, hash, mnh));
-                    program->functionLookups.erase(fn);
-                    fn->notInferred();
-                } });
-            for (auto rfn : refreshFunctions) {
-                if (!program->thisModule->functions.refresh_key(get<1>(rfn), get<2>(rfn))) {
-                    program->error("internal compiler error: failed to refresh '" + get<0>(rfn)->getMangledName() + "'", "", "", get<0>(rfn)->at, CompilationError::internal_function_refresh);
-                    goto failedIt;
-                }
+            bool refreshFailed = refreshMangledKeys(program, program->thisModule->functions, program->errors);
+            if (context.genericArgumentsFolded)
+                refreshFailed |= refreshMangledKeys(program, program->thisModule->generics, program->stickyErrors);
+            if (refreshFailed) {
+                program->failToCompile = true;
+                goto failedIt;
             }
             bool anyMacrosDidWork = false;
             auto modMacro = [&](Module *mod) -> bool {

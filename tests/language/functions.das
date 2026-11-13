@@ -583,3 +583,17 @@ def test_nodiscard_consumed_forms(t : T?) {
     t |> equal(x, 42)
     t |> equal(answer() + 0, 42)
 }
+
+[test(description = "a piped block that reaches its parameter only across a default waits for an overload whose block type names a later typedef, and does not land on the overload that takes any block")]
+def test_piped_block_ahead_of_unresolved_signature(t : T?) {
+    let picked = piped_late_pick(1) $(v : int) {
+        return v
+    }
+    t |> equal(picked, 1)
+}
+
+def piped_late_pick(_a : int; _b : float = 1.0; _blk : PipedLateBlock) : int => 1
+
+def piped_late_pick(_a : int; _b : float = 1.0; _blk : auto) : int => 2
+
+typedef PipedLateBlock = block<(v : int) : int>

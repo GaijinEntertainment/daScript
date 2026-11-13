@@ -280,14 +280,18 @@ namespace das {
             subexprType->temporary = false; // array<int#> -> int
         }
     }
-    TypeDeclPtr InferTypes::findFuncAlias(const FunctionPtr &fptr, const string &name, bool *constUnderDim) const {
-        for (auto &arg : fptr->arguments) {
-            if (auto aT = arg->type->findAlias(name, true, constUnderDim)) {
+    TypeDecl *InferTypes::findArgumentOrResultAlias(Function *fn, const string &name, bool allowAuto, bool *constUnderDim) {
+        for (auto &arg : fn->arguments) {
+            if (!arg->type) continue;
+            if (auto aT = arg->type->findAlias(name, allowAuto, constUnderDim)) {
                 return aT;
             }
         }
-        if (auto rT = fptr->result->findAlias(name, true, constUnderDim)) {
-            return rT;
+        return fn->result ? fn->result->findAlias(name, allowAuto, constUnderDim) : nullptr;
+    }
+    TypeDeclPtr InferTypes::findFuncAlias(const FunctionPtr &fptr, const string &name, bool *constUnderDim) const {
+        if (auto aT = findArgumentOrResultAlias(fptr, name, true, constUnderDim)) {
+            return aT;
         }
         TypeDeclPtr rT = nullptr;
         thisModule->globals.find_first([&](auto gvar) {
@@ -708,7 +712,7 @@ namespace das {
                 return true; }, moduleName);
         return result;
     }
-    bool InferTypes::inferTypeExpr(TypeDeclPtr &type) {
+    bool InferTypes::inferTypeExpr(TypeDeclPtr &type, bool expandTypeMacros) {
         bool any = false;
         if (type->baseType == Type::tFixedArray && type->fixedDim == TypeDecl::dimConst) {
             if (type->fixedDimExpr) {
@@ -757,6 +761,7 @@ namespace das {
                   type->at, CompilationError::not_resolved_yet_type);
             }
         } else if (type->baseType == Type::typeMacro) {
+            if (!expandTypeMacros) return any;
             auto tmn = type->typeMacroName();
             auto tms = findTypeMacro(tmn);
             if (tms.size() == 0) {
@@ -778,15 +783,75 @@ namespace das {
             }
         }
         if (type->firstType) {
-            any |= inferTypeExpr(type->firstType);
+            any |= inferTypeExpr(type->firstType, expandTypeMacros);
         }
         if (type->secondType) {
-            any |= inferTypeExpr(type->secondType);
+            any |= inferTypeExpr(type->secondType, expandTypeMacros);
         }
         for (auto &argType : type->argTypes) {
-            any |= inferTypeExpr(argType);
+            any |= inferTypeExpr(argType, expandTypeMacros);
         }
         return any;
+    }
+    static bool hasTypeMacro(const TypeDecl *type) {
+        return anyTypeNode(type, [](const TypeDecl *node) {
+            return node->baseType == Type::typeMacro ? TypeNodeWalk::match : TypeNodeWalk::descend;
+        });
+    }
+    bool InferTypes::foldArgumentAliases(Function *generic, TypeDeclPtr &type, bool canFold) {
+        vector<string> names;
+        type->collectAliasList(names);
+        bool bound = false;
+        for (auto &name : names) {
+            if (findArgumentOrResultAlias(generic, name, true)) {
+                bound = true;
+                continue;
+            }
+            auto moduleAlias = thisModule->aliasTypes.find(name);
+            if (moduleAlias && moduleAlias->isAliasOrExpr()) {
+                pendingGenerics.insert(generic);
+                return false;
+            }
+        }
+        if (bound || !canFold) return false;
+        auto aliasT = inferAlias(type);
+        if (!aliasT) return false;
+        type = aliasT;
+        return true;
+    }
+    // src/ast/ARCHITECTURE_INFER.md#generic-argument-fold
+    void InferTypes::foldGenericArguments(Function *generic) {
+        const bool savedFolding = enableInferTimeFolding;
+        enableInferTimeFolding = true;
+        bool hasMacroArgument = false;
+        for (auto &arg : generic->arguments) {
+            hasMacroArgument |= arg->type && hasTypeMacro(arg->type);
+        }
+        for (auto &arg : generic->arguments) {
+            if (!arg->type) continue;
+            bool folded = false;
+            if (arg->type->isAlias()) {
+                folded = foldArgumentAliases(generic, arg->type, !hasMacroArgument && !arg->type->isAuto());
+            }
+            if (hasTypeExpression(arg->type)) {
+                func = generic;
+                arg->type->visit(*this, false);
+                folded |= inferTypeExpr(arg->type, false);
+                func = nullptr;
+            }
+            if (folded) {
+                genericArgumentsFolded = true;
+                reportAstChanged();
+            }
+        }
+        enableInferTimeFolding = savedFolding;
+    }
+    // src/ast/ARCHITECTURE_INFER.md#generic-argument-fold
+    void InferTypes::visitGlobalLetBody(Program *prog) {
+        Visitor::visitGlobalLetBody(prog);
+        thisModule->generics.foreach([&](auto &generic) {
+            if (!generic->isTemplate) foldGenericArguments(generic);
+        });
     }
     FunctionPtr InferTypes::getOrCreateDummy(Module *mod) {
         auto dummy = new Function();
@@ -991,10 +1056,12 @@ namespace das {
     ExpressionPtr InferTypes::tryProperty(const PropertyProbe &probe, const LineInfo &at, ExpressionPtr value, ExpressionPtr right) {
         if (right)
             return inferGenericOperator(probe.fnName, at, value, right);
+        const auto pendingMark = pendingCandidateCount;
         if (probe.hasNamed) {
             if (auto opE = inferGenericOperator(probe.fnName, at, value, nullptr))
                 return opE;
         }
+        if (pendingSince(pendingMark)) return nullptr;
         if (probe.hasWithName) {
             if (auto opE = inferGenericOperatorWithName(".", at, value, probe.fieldName))
                 return opE;

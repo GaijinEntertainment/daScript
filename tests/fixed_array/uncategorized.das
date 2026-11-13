@@ -168,3 +168,18 @@ def test_each_and_parallel(t : T?) {
         delete b
     }
 }
+
+let NAMED_DIM_THREE = 3
+let NAMED_DIM_FOUR = 4
+
+def named_dim_pick(_a : int[NAMED_DIM_THREE]) : int => 3
+
+def named_dim_pick(_a : int[NAMED_DIM_FOUR]) : int => 4
+
+[test(description = "two overloads that differ only in a named fixed-array dimension both declare, and a call picks the one whose dimension matches")]
+def test_named_dim_overloads(t : T?) {
+    let three : int[3]
+    let four : int[4]
+    t |> equal(named_dim_pick(three), 3)
+    t |> equal(named_dim_pick(four), 4)
+}

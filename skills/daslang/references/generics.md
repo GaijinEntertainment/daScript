@@ -207,6 +207,19 @@ def table_by_id(t : auto(T)) {
 // for struct A { id : string } -> table<string const; A const>
 ```
 
+In an argument's type, a named dimension and a `typedecl(expr)` are resolved from the module,
+before any call is matched. They may read constants and globals, never the generic's own
+`auto(T)` or another argument - that is a compile error, because no call could match it:
+
+```das
+let N = 3
+let sample = 1.0
+
+def scaled_first(a : int[N]; scale : auto) => a[0] * scale   // takes int[3] only
+
+def like_sample(a : typedecl(sample)) => a * 2.0             // takes float only
+```
+
 ## Pattern matching
 
 `require daslib/match` adds `match` and `static_match` - macros
