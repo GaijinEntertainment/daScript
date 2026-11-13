@@ -2,7 +2,7 @@
 
 Companion to `ARCHITECTURE.md` in this folder; section numbers are unique across the family.
 
-## 7. flatten
+## 7. flatten {#flatten}
 
 - **Predicated lowering carries one live-mask per exit flavor** - `__flat_live` for
   return, a per-loop break mask (persists across unrolled copies) and continue mask
@@ -11,15 +11,28 @@ Companion to `ARCHITECTURE.md` in this folder; section numbers are unique across
   gets a fresh live mask and lowers with `ctx.loopMasks` moved OUT, so its break/continue
   can never reach the caller's loops.
 - **`flatten_preshade_cse` is a joint fixpoint, not a pipeline** - extraction, regroup,
-  CSE and alias elimination mutually enable each other; the `_preshader_`/`_cse_` counters
-  are owned by that loop and re-seeded from surviving suffixes (per-call numbering
-  re-mints a live name).
+  CSE and alias elimination mutually enable each other; every run of the extraction or
+  the CSE re-seeds its `_preshader_`/`_cse_` counter from the surviving suffixes (per-call
+  numbering re-mints a live name).
 - **A CSE/regroup tally counts exactly the regions its rewrite can change** - a duplicate
   counted where the rewrite cannot reach never drops below 2 and runs the fixpoint to its
   iteration cap.
 - **`__flat_ret` carries `safeWhenUninitialized` only while every write is a
   self-referential select** - a lowering change that makes the bare-decl read observable
   turns the flag into a real uninitialized read.
+- **A constant condition is the fold's, never the select-chain fusion's**
+  (`build_select_chain`). Inference folds a guard on the loop counter alone to a literal, so
+  two skipped iterations share the condition `false`. If they fuse, the first one's true arm
+  becomes a statement of its own that nothing reads, and a leaf the backend cannot drop (a
+  texture sample) stays in the graph.
+- **The fuse pass runs after the preshader pass, so `flatten_fuse` opens every round with
+  the preshader extraction again** (`preshade_after_fuse`). Re-vectorizing
+  `float2(p.x - a, p.y - b)` into `p - float2(a, b)` builds a vector of uniforms the first
+  extraction never saw. The fuse entry without a barrier set cannot tell a per-pixel call
+  from a uniform one, so it passes `BARRIER_EVERY_CALL` and the round takes call-free
+  subtrees only; the overload that takes the caller's barrier set takes every uniform
+  subtree. Either way the round is `extract_preshader` itself, so it has one gate with
+  `flatten_opt_residuals` and never moves a read of a name the function writes.
 - **CSE is local value numbering over one converged basic block, and it is complete** -
   pure subtrees keyed by `describe()`; value-stability = reads no reassigned name; a store
   through index/field/swizzle destabilizes its base; an unrecognized node fails closed as

@@ -517,6 +517,12 @@ Public API
     after ``flatten_optimize``'s re-infer (the type gates need settled types) and
     **iterate across re-inference while it reports change**, exactly like the
     fold — each round strictly drops a ``+``/``-`` node, so it converges.
+    A round opens with the preshader extraction again, because
+    re-vectorization builds vectors of uniforms after ``flatten_optimize`` has
+    run; that round reports change and fuses nothing. Without a barrier set it
+    hoists call-free subtrees only. ``flatten_fuse(func, barriers,
+    no_fast_math, hadd_min_width)`` takes the set given to
+    ``flatten_optimize`` and hoists every uniform subtree.
     ``[flatten]`` runs it automatically; the ``[pixel_shader]`` backend mirrors it.
 
 ``flatten_opt_residuals(var func, no_fast_math = false, hadd_min_width = 3) : array<string>``

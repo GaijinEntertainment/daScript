@@ -137,6 +137,24 @@ def r_anyconst(b : float; e : float; c : float) : float {
 [flatten]
 def r_notwin(b : float; e : float) : float => 1.0 - b + e
 
+// ----- fuse re-vectorizes these into `p - floatN(uniforms)` -----
+[flatten]
+def hu_ret(p : float2) : float2 => float2(p.x - G_GAIN, p.y - G_BIAS)
+
+[flatten]
+def hu_call(p : float3) : float3 =>
+    float3(p.x - sin(G_GAIN), p.y - G_BIAS, p.z - G_GAIN)
+
+var G_WRITTEN = 1.0
+
+// ----- a global the function writes is not uniform -----
+[flatten]
+def hu_written(x : float) : float2 {
+    G_WRITTEN = x
+    let v = float2(G_WRITTEN, 2.0)
+    return v * x
+}
+
 var GRID <- [-100.0, -3.5, -1.0, 0.0, 1.0, 2.5, 7.0, 100.0]
 
 def cmp3f(t : T?; a, b : float3) {
@@ -153,7 +171,23 @@ def cmp3f_approx(t : T?; a, b : float3) {
 }
 
 [test(description = "preshader extraction, common-subexpression elimination and regrouping keep each twin's result equal to its original", standalone = "no_aot/test_flatten_fold.das compiles this file by path as a unit and checks its twins structurally")]
-def test_flatten_opt(t : T?) {
+def test_flatten_opt(t : T?) {   // nolint:STYLE038 - a flat list of value cells
+    t |> run("preshader after fuse: a re-vectorized uniform vector") @(t : T?) {
+        for (v in GRID) {
+            let p2 = float2(v, -v)
+            t |> equal(hu_ret_flat(p2).x, hu_ret(p2).x)
+            t |> equal(hu_ret_flat(p2).y, hu_ret(p2).y)
+            cmp3f(t, hu_call_flat(float3(v, v * 0.5, -v)), hu_call(float3(v, v * 0.5, -v)))
+        }
+    }
+    t |> run("preshader after fuse: a vector of a written global is not moved") @(t : T?) {
+        for (v in GRID) {
+            let twin = hu_written_flat(v)
+            let orig = hu_written(v)
+            t |> equal(twin.x, orig.x)
+            t |> equal(twin.y, orig.y)
+        }
+    }
     t |> run("preshader: whole-uniform let -> _preshader_") @(t : T?) {
         for (v in GRID) {
             t |> equal(p_whole_flat(v), p_whole(v))
