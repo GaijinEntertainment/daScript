@@ -1010,9 +1010,11 @@ namespace das {
             }
         }
         if (!rawCloneOfCopyable) {
+            const auto pendingMark = pendingCandidateCount;
             if (auto opClone = inferAssignOperator("clone", expr)) {
                 return opClone;
             }
+            if (pendingSince(pendingMark)) return Visitor::visit(expr);
         }
         // infer
         if (!isSameSmartPtrType(expr->left->type, expr->right->type, true)) {

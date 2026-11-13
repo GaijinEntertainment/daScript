@@ -361,7 +361,7 @@ namespace das {
         AstSerializer & serializeModule ( Module & module, bool already_exists );
 
         static constexpr uint32_t getVersion () {
-            return 271;   // 271: [extern] lib= resolves an @extern_library global into the bind name
+            return 272;   // 272: an unresolved dimension or typedecl mangles with a hash of its expression
         }
 
         void serializeProgram ( ProgramPtr program, ModuleGroup & libGroup ) noexcept;

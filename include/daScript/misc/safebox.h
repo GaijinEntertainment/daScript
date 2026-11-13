@@ -422,7 +422,7 @@ namespace das {
             DAS_ASSERT(!locked);
             DAS_VERIFYF(!frozen, "refresh_key in a frozen safebox");
             auto it = objects.find(oldKey);
-            if ( it != objects.end() ) {
+            if ( it != objects.end() && objects.find(newKey) == objects.end() ) {
                 auto pObj = it->second;
                 objects.erase(it);
                 objects[newKey] = pObj;

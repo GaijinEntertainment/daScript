@@ -242,7 +242,31 @@ namespace das {
                 return true; }, moduleName);
         return result;
     }
-    bool InferTypes::isMatchingArgument(const FunctionPtr &pFn, TypeDeclPtr argType, TypeDeclPtr passType, bool inferAuto, bool inferBlock, AliasMap *aliases, OptionsMap *options) const {
+    bool InferTypes::hasTypeExpression(const TypeDecl *type) {
+        return anyTypeNode(type, [](const TypeDecl *node) {
+            if (node->baseType == Type::typeMacro) return TypeNodeWalk::stop;
+            const bool expression = node->baseType == Type::typeDecl ||
+                (node->baseType == Type::tFixedArray && node->fixedDim == TypeDecl::dimConst);
+            return expression ? TypeNodeWalk::match : TypeNodeWalk::descend;
+        });
+    }
+    // src/ast/ARCHITECTURE_INFER.md#pending-signature
+    bool InferTypes::isPendingArgument(const Function *pFn, const TypeDecl *argType, bool inferAuto) const {
+        if (!pFn || pFn->module != thisModule) return false;
+        if (!inferAuto) return argType->isAutoOrAlias() || argType->isAliasOrExpr();
+        return hasTypeExpression(argType) || pendingGenerics.find(pFn) != pendingGenerics.end();
+    }
+    void InferTypes::reportPendingSignature(const string &name, const LineInfo &at) {
+        const size_t qualifier = name.compare(0, 3, "_::") == 0 ? 3 : name.compare(0, 4, "__::") == 0 ? 4 : 0;
+        string candidate = "a candidate";
+        if (verbose && pendingCandidate) {
+            candidate = describeFunction(pendingCandidate) + " at " + pendingCandidate->at.describe();
+        }
+        error("'" + name.substr(qualifier) + "' waits for " + candidate + ", whose signature is not resolved yet", "", "",
+              at, CompilationError::not_resolved_yet_function);
+        if (func) func->notInferred();
+    }
+    bool InferTypes::isMatchingResolvedArgument(const FunctionPtr &pFn, TypeDeclPtr argType, TypeDeclPtr passType, bool inferAuto, bool inferBlock, AliasMap *aliases, OptionsMap *options) const {
         if (!passType) {
             return false;
         }
@@ -295,6 +319,14 @@ namespace das {
         }
         // all good
         return true;
+    }
+    bool InferTypes::isMatchingArgument(const FunctionPtr &pFn, TypeDeclPtr argType, TypeDeclPtr passType, bool inferAuto, bool inferBlock, AliasMap *aliases, OptionsMap *options) const {
+        if (isMatchingResolvedArgument(pFn, argType, passType, inferAuto, inferBlock, aliases, options)) return true;
+        if (passType && isPendingArgument(pFn, argType, inferAuto)) {
+            pendingCandidateCount++;
+            pendingCandidate = pFn;
+        }
+        return false;
     }
     bool InferTypes::isFunctionCompatible(Function *pFn, const vector<TypeDeclPtr> &types, bool inferAuto, bool inferBlock, bool checkLastArgumentsInit) const {
         if (pFn->arguments.size() < types.size()) {
@@ -544,7 +576,9 @@ namespace das {
     bool InferTypes::tryPipedCallPadding(ExprLooksLikeCall *expr, vector<TypeDeclPtr> &types, MatchingFunctions &functions, MatchingFunctions &generics, bool visCheck) {
         das_hash_map<Function *, pair<int, int>> landing;
         MatchingFunctions pipedFns, pipedGens;
+        const auto pendingMark = pendingCandidateCount;
         findMatchingPipedFunctionsAndGenerics(pipedFns, pipedGens, expr->name, types, visCheck, landing);
+        if (pendingSince(pendingMark)) return false;
         if (pipedFns.empty() && pipedGens.empty()) {
             return false;
         }
@@ -981,10 +1015,11 @@ namespace das {
                                         }
                                         continue;
                                     }
+                                    const auto pendingMark = pendingCandidateCount;
                                     if ( isFunctionCompatible(pFn, types, false, inferBlock) ) {
                                         result.push_back(pFn);
                                         *itLook = fragile_bit_set::set_true(argHash);
-                                    } else {
+                                    } else if ( !pendingSince(pendingMark) ) {
                                         *itLook = fragile_bit_set::set_false(argHash);
                                     }
                                 }
@@ -1109,10 +1144,11 @@ namespace das {
                                             }
                                             continue;
                                         }
+                                        const auto pendingMark = pendingCandidateCount;
                                         if ( isFunctionCompatible(pFn, types, false, inferBlock) ) {
                                             resultFunctions.push_back(pFn);
                                             *itLook = fragile_bit_set::set_true(argHash);
-                                        } else {
+                                        } else if ( !pendingSince(pendingMark) ) {
                                             *itLook = fragile_bit_set::set_false(argHash);
                                         }
                                     }
@@ -1140,10 +1176,11 @@ namespace das {
                                         }
                                         continue;
                                     }
+                                    const auto pendingMark = pendingCandidateCount;
                                     if ( isFunctionCompatible(pFn, types, true, true) ) {   // infer block here?
                                         resultGenerics.push_back(pFn);
                                         *itLook = fragile_bit_set::set_true(argHash);
-                                    } else {
+                                    } else if ( !pendingSince(pendingMark) ) {
                                         *itLook = fragile_bit_set::set_false(argHash);
                                     }
                                 }
@@ -1833,8 +1870,13 @@ namespace das {
             return nullptr;
         }
         MatchingFunctions functions, generics;
+        const auto pendingMark = pendingCandidateCount;
         if (!lookupFunction) {
             findMatchingFunctionsAndGenerics(functions, generics, expr->name, types, true, visCheck);
+            if (pendingSince(pendingMark)) {
+                reportPendingSignature(expr->name, expr->at);
+                return nullptr;
+            }
             applyLSP(types, functions);
             if (functions.empty() && generics.empty() && trySeedTupleShorthand(expr, visCheck)) {
                 reportAstChanged();
@@ -2066,19 +2108,7 @@ namespace das {
                         }
                         // now, we go through alias map - and see, which ones are 'lost' ie no longer part of argument or results
                         for (auto it : aliases) {
-                            bool found = false;
-                            for (auto &arg : clone->arguments) {
-                                if (arg->type->findAlias(it.first)) {
-                                    found = true;
-                                    break;
-                                }
-                            }
-                            if (!found && clone->result) {
-                                if (clone->result->findAlias(it.first)) {
-                                    found = true;
-                                }
-                            }
-                            if (!found) {
+                            if (!findArgumentOrResultAlias(clone, it.first, false)) {
                                 auto localAlias = new ExprAssume(expr->at, it.first, it.second);
                                 DAS_ASSERT(clone->body->rtti_isBlock());
                                 auto blk = (ExprBlock *)clone->body;
@@ -2238,6 +2268,13 @@ namespace das {
             gc_free_now(conststring);
         }
         return opE;
+    }
+    // src/ast/ARCHITECTURE_INFER.md#pending-signature
+    ExpressionPtr InferTypes::inferNamedThenByNameOperator(const string &namedOpN, const string &byNameOpN, const LineInfo &expr_at, ExpressionPtr arg0, const string &name) {
+        const auto pendingMark = pendingCandidateCount;
+        if (auto opE = inferGenericOperator(namedOpN, expr_at, arg0, nullptr)) return opE;
+        if (pendingSince(pendingMark)) return nullptr;
+        return inferGenericOperatorWithName(byNameOpN, expr_at, arg0, name);
     }
     Variable *InferTypes::findMatchingBlockOrLambdaVariable(const string &name) {
         // local (that on the stack)

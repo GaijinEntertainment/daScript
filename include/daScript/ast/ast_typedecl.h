@@ -62,6 +62,7 @@ namespace das {
         TypeDecl(Enumeration * ep);
         TypeDecl(Enumeration * ep, const LineInfo & att);
         TypeDeclPtr visit ( Visitor & vis );
+        TypeDeclPtr visit ( Visitor & vis, bool typeMacros );
         friend StringWriter& operator<< (StringWriter& stream, const TypeDecl & decl);
         string getMangledName ( bool fullName=false ) const;
         void getMangledName ( TextWriter & tw, bool fullName=false ) const;

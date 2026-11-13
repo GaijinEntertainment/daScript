@@ -45,7 +45,9 @@ call to it, and the built-in operation runs only when there is none. An `ExprClo
 same lookup for `clone`, the name `operator :=` declares. Each lookup starts with the module
 library's cached name probe (`hasFunctionOrGenericNamed`), so a program that declares no such
 operator pays no temporary call per copy or move, and it does not run while either operand's
-type is still unresolved, void, or an expression type.
+type is still unresolved, void, or an expression type. While a candidate's own signature is
+unresolved the lookup is pending (`#pending-signature`): the pass reports it and is not the
+last one, so the next pass repeats the lookup, and `:=` returns before its built-in rewrite.
 
 The raw forms `!==`, `!<-` and `!:=` set the flag, and a rewrite of a flagged node - the
 relaxed-assign move, the in-scope POD move, the `ExprCopy` the built-in clone of a copyable
@@ -93,6 +95,97 @@ initializer the compiler already promoted is not promoted again on the next pass
 generator-local store of such an initializer is raw; it matches names, not the `generated`
 mark, because a table read with field defaults is a generated call too and its initializer
 still reaches the operator.
+
+## A signature that is not resolved yet (`ast_infer_type_function.cpp`) {#pending-signature}
+
+An argument type is unresolved while it still holds a name or an expression the pass has not
+replaced: an alias the module declares further down, a dimension written as a constant
+(`int[N]`), a `typedecl(...)`, an `auto` that takes its type from a default value. Inference
+resolves a function's arguments when it visits that function, so a caller visited earlier in
+the same pass meets the unresolved form, and an unresolved type equals no passed type.
+
+A candidate that fails to match on such an argument is pending, not rejected.
+`isMatchingArgument` is the one matcher every lookup path shares. When it fails on an argument
+of a candidate that belongs to the module being compiled, and that argument type is
+unresolved, it counts the candidate as pending (`pendingCandidateCount`) and keeps the candidate
+for the error text. A pending mismatch is not written to the lookup cache. A candidate of
+another module is never pending: its signature resolved when its own module compiled.
+
+A lookup that met a pending candidate selects nothing, whatever else matched - the candidates
+that did match are the fallbacks the pending one may beat once it resolves. `inferFunctionCall`
+reports `not_resolved_yet_function`, an operator probe included, leaves the call without a
+function or a type, and returns. The error marks the calling function not inferred and keeps
+the pass from being the last one, so the next pass visits the function again and repeats the
+lookup against the resolved signature. A signature that never resolves carries its own error,
+so that compile fails with both.
+
+That alone is enough wherever a failed lookup falls back to a built-in form that only types
+the node in place - `=`, `<-`, `?[]`, `?.`, `is`, `as`, a property write: the node is still
+there on the next visit and the lookup runs again. It is not enough where the fallback can
+not be taken back. Those sites save the count before the lookup and return the node
+unrewritten and without a type when `pendingSince` of the saved value is true:
+
+- `:=`, `delete` and `super.method()` rewrite the node into the built-in clone, a generated
+  finalizer, or a call to the grandparent's method;
+- `[]`, `??` and a property read give the node the built-in element, pointee or field type,
+  and a local declared from it in the same pass keeps that type;
+- `is`, `as`, `?as`, `?.` and a property read try the named operator and then the by-name
+  one, and a pending first step must not let the second one win
+  (`inferNamedThenByNameOperator`, `tryProperty`);
+- a piped block that fits no overload as written is tried again across default arguments, and
+  a pending candidate there must not let another overload take the padded call
+  (`tryPipedCallPadding`).
+
+A site that looks up without `inferFunctionCall` reports the error itself
+(`reportPendingSignature`).
+
+## Argument types of a generic (`ast_infer_type_helper.cpp`) {#generic-argument-fold}
+
+Inference never visits a generic; only its instances are functions. So what a generic's
+argument type can know without a call is folded in place, once per pass, after the module's
+globals and before any function body (`visitGlobalLetBody`): a dimension expression, a
+`typedecl(...)`, and an alias that names a type of the module. The fold runs in the generic's
+own module, and a module that requires it sees the folded types.
+
+An argument's aliases are folded only when the generic binds none of them. `auto(TT)` in any
+argument or in the result binds `TT`, and a type macro among the arguments can bind any name,
+so an argument that mixes a bound alias with a module type, and every argument of a generic
+with a type macro, keeps its aliases for the call to resolve. Folded or not, an alias the
+generic does not bind that names a typedef of this module which has no type yet makes the
+generic pending for the pass (`pendingGenerics`, `#pending-signature`). A typedef that has
+its type never does: an argument that still fails to fold then - a table whose key type is
+not a key, say - is a plain mismatch, as it is at a call.
+
+The result type, the default values and the body are not folded. They may depend on the types
+a call binds - `typedecl(selector(type<TT>))` as a result type is the common case - and the
+instance resolves them. A type macro is not evaluated either: it runs against the passed type
+when a call is matched.
+
+A dimension or a `typedecl` in an argument that does not fold - it reads the generic's own
+`TT`, or a value that is not constant - is a compile error on the generic, called or not. No
+call can ever match it.
+
+## Function tables are keyed by the mangled name (`ast_infer_type.cpp`, `ast_typedecl.cpp`) {#mangled-key-refresh}
+
+`Module::functions` and `Module::generics` map the hash of a mangled name to its function, and
+a mangled name spells the argument types, so it changes when an argument resolves. After each
+pass `inferTypesDirty` compares every key of `functions` with the current hash, moves the
+entries that differ (`refresh_key`), and drops their lookup caches. A generic's name changes
+only when the fold of `#generic-argument-fold` changes one of its arguments, so `generics` is
+compared only after a pass in which that happened (`genericArgumentsFolded`).
+
+Two declarations can differ only until they resolve: `f(a : int[N])` beside `f(a : int[3])`
+with `N = 3`, or `f(a : MyInt)` beside `f(a : int)`. Each unresolved form therefore keeps its
+own identity in the name: an unresolved dimension mangles as `[-2]<hash>` and a `typedecl` as
+`D<hash>`, the hash being of the printed expression. Two different expressions are two keys,
+so `f(a : int[N])` and `f(a : int[M])` both enter the table at parse. `MangledNameParser`
+reads past the `<hash>`.
+
+When the refresh finds the new key already taken, the two declarations are one function.
+`refresh_key` refuses to overwrite, and the pass ends with `already_declared_function` naming
+both declarations, whether or not anything calls them. A function's stale key is found again
+on every pass. A generic's is not - no later pass folds it a second time - so its collision is
+recorded as a sticky error, which every later inference leg reports again.
 
 ## The size of a generic instance's argument types (`ast_infer_type_function.cpp`) {#instance-type-size}
 

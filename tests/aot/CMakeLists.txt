@@ -439,6 +439,11 @@ set(TEST_AOT_ALL_DAS "")   # test-body .das (not module libs); LLVM-AOT corpus e
 
 # jit_tests is absent on purpose: it tests JIT codegen, which an AOT build replaces, so an AOT
 # build of it tests nothing (tests/.das_test skips the folder under --use-aot for the same reason)
+# ast is absent on purpose: its tests drive the compiler front end at run time, which cannot
+# AOT-link in the full-tree batch, so tests/.das_test skips the folder under --use-aot and an AOT
+# build of it would have nothing to run
+# typer_errors is absent on purpose: it holds compile-fail fixtures, which no AOT build compiles,
+# and one file marked `options no_aot`
 set(DAS_AOT_SUITES
     algorithm apply archive assert_once ast_match async bare_block base64 bitfields bool_array
     class_boost daslib dasgltf daspeg dastest data_walker debug debug_agent decs depfile dynamic_cast_rtti escape_analysis fio

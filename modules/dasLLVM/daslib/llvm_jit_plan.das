@@ -32,9 +32,9 @@ require jit
 // llvm_macro.das, llvm_jit_common.das, runtime helper ABI, default
 // target triple). Cache filenames fold this in, so a bump makes every
 // previously written DLL miss the cache on the next run and get GC'd.
-// Current entry: LLVM's [extern] proxies bind as lib=llvm, so their
-// names carry llvm=LLVM.dll.
-let public LLVM_JIT_CODEGEN_VERSION : uint64 = 0xB2ul
+// Current entry: an unresolved dimension or typedecl mangles with a
+// hash of its expression.
+let public LLVM_JIT_CODEGEN_VERSION : uint64 = 0xB3ul
 
 let public JIT_FNV_PRIME : uint64 = 1099511628211ul
 

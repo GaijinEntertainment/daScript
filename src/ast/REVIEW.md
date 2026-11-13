@@ -1,7 +1,7 @@
 # AST Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-docs: `ARCHITECTURE.md`, `ARCHITECTURE_INFER.md`, `ARCHITECTURE_MODULE_SCAN.md`. A diff touching
+docs: the `ARCHITECTURE*.md` files of this folder. A diff touching
 `promoteInitToAssign` (`ast_infer_type_function.cpp`) or `isPromotedInitCall`
 (`ast_generate.cpp`) applies `daslib/REVIEW.md` (repo root) too - the `daslib/builtin.das`
 (repo root) helpers they name change with them.
@@ -53,9 +53,9 @@ docs: `ARCHITECTURE.md`, `ARCHITECTURE_INFER.md`, `ARCHITECTURE_MODULE_SCAN.md`.
 
 - **A diff that makes a compile entry point in `ast_parse.cpp` rebind a `daScriptEnvironment`
   field has that entry point hold a `CompileEnvScope` for the whole compile and puts that field in
-  it, in the same change. A compile entry point is any
-  function there that daslang code reaches through a builtin that compiles, builds or requires a
-  module (`src/builtin/module_builtin_ast.cpp`, repo root).** A macro can start such a compile
+  it, in the same change. A compile entry point is any function there that daslang code reaches
+  through a builtin that compiles, builds or requires a module
+  (`src/builtin/module_builtin_ast.cpp`, repo root).** A macro can start such a compile
   inside another module's parse or build, and a field restored by a plain statement after the
   compile is not restored when an exception unwinds through it.
 
@@ -65,16 +65,38 @@ docs: `ARCHITECTURE.md`, `ARCHITECTURE_INFER.md`, `ARCHITECTURE_MODULE_SCAN.md`.
   change.** A reader accepts a stream whose stored version equals `getVersion()`, so without the
   bump an older cache decodes the changed header as the old one with no diagnostic.
 
-- **The `setDeferredModuleLoader` call in `require_dynamic_modules` (`dyn_modules.cpp`) stays,
-  and stays above the first `init_modules_for_folder` call - removing it or moving it below is a
+- **Removing the `setDeferredModuleLoader` call from `require_dynamic_modules`
+  (`dyn_modules.cpp`), or moving it below the first `init_modules_for_folder` call, is a
   defect.** That call compiles the descriptors, and a descriptor can require a module an earlier
   replay deferred, which fails with no loader installed.
 
-- **A diff that changes how `Function::getMangledName` (`ast.cpp`) forms a name, or which module
-  `Module::addFunction` (`ast_module.cpp`) files a builtin function under, bumps
-  `LLVM_JIT_CODEGEN_VERSION` in `modules/dasLLVM/daslib/llvm_jit_plan.das` (repo root), in the
-  same change.** The JIT's DLL cache key folds the codegen version and each function's AST hash,
-  never the name an extern binds under, so a cached DLL binds the old name and crashes on the hit.
+- **A diff that changes the name `Function::getMangledName` (`ast.cpp`) returns - in its own
+  body, or in `TypeDecl::getMangledName` (`ast_typedecl.cpp`), which writes each argument type
+  into it - or which module `Module::addFunction` (`ast_module.cpp`) files a builtin function
+  under, bumps `LLVM_JIT_CODEGEN_VERSION` in `modules/dasLLVM/daslib/llvm_jit_plan.das` (repo
+  root), in the same change.** The JIT's DLL cache key is built from the codegen version and each
+  function's AST hash, never from the name an extern binds under, so a cached DLL binds the old
+  name and the program crashes when it loads that DLL.
+
+- **A diff that changes what `TypeDecl::getMangledName` (`ast_typedecl.cpp`) writes teaches
+  `MangledNameParser::parseTypeFromMangledName` (same file) to read the new form, in the same
+  change (`ARCHITECTURE_INFER.md#mangled-key-refresh`).** The parser reads a written name back
+  into a type - `parse_mangled_name` and the C API's type-by-name calls go through it - so a form
+  it does not know fails to parse.
+
+- **A diff that adds or changes, in `InferTypes` (`ast_infer_type*.cpp`), a lookup of an overload
+  whose miss sends the site to a fallback inference cannot take back - rewriting the node,
+  giving the node the built-in type so that a local declared from it in the same pass keeps that
+  type, or running a second lookup - saves `pendingCandidateCount` before the lookup and, when
+  `pendingSince` of the saved value is true after it, returns the node unrewritten, without a
+  type, and without the second lookup (`ARCHITECTURE_INFER.md#pending-signature`).** Inference
+  never repeats the lookup on a node it rewrote or a local it typed, so the built-in form taken
+  while the user function is declared but not resolved yet is permanent.
+
+- **A diff that adds or changes such an early return in `InferTypes`, at a lookup that does not
+  go through `inferFunctionCall`, calls `reportPendingSignature` before it returns.** The error
+  keeps the pass from being the last one. Without it, inference ends with the node never
+  resolved.
 
 - **A diff that builds an `ExprCopy`, `ExprMove` or `ExprClone` standing in for no `=`, `<-`
   or `:=` the user wrote passes `true` as the constructor's `no_promo` argument, or sets

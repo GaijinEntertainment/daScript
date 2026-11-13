@@ -940,3 +940,91 @@ def test_rpipe(t : T?) {
         t |> equal(c, 4)
     }
 }
+
+struct LateOpCell {
+    v : int
+}
+
+struct LateOpHolder {
+    x : LateOpCell
+}
+
+[test(description = "a [], ?? or property read ahead of a user operator whose signature names a later typedef waits for that operator, and does not take the built-in element, pointer or field read")]
+def test_operator_ahead_of_unresolved_signature(t : T?) {
+    let row : LateOpCell[2]
+    let element = row[1]
+    t |> equal(element, 42)
+    var missing : LateOpCell?
+    let fallback : LateOpCell
+    let coalesced = missing ?? fallback
+    t |> equal(coalesced, 103)
+    let holder : LateOpHolder
+    let property = holder.x
+    t |> equal(property, 101)
+}
+
+def operator [] (_a : LateOpRow; _i : int) : int => 42
+
+def operator ??(_a : LateOpCellPtr; _b : LateOpCellValue) : int => 103
+
+def operator . x(_a : LateOpHolderValue) : int => 101
+
+typedef LateOpRow = LateOpCell[2]
+
+typedef LateOpCellPtr = LateOpCell?
+
+typedef LateOpCellValue = LateOpCell
+
+typedef LateOpHolderValue = LateOpHolder
+
+struct LatePairHolder {
+    v : int
+}
+
+[test(description = "a property read ahead of its named operator, whose signature names a later typedef, waits for it and does not take the by-name operator . of the same struct")]
+def test_named_property_ahead_of_by_name_operator(t : T?) {
+    let holder : LatePairHolder
+    t |> equal(holder.x, 101)
+}
+
+def operator . x(_h : LatePairHolderValue) : int => 101
+
+def operator .(_h : LatePairHolder; _name : string) : int => 7
+
+typedef LatePairHolderValue = LatePairHolder
+
+struct LateByNameFoo {
+    a : int
+}
+
+struct LateByNameBar {
+    a : float
+}
+
+var g_late_by_name_named = 101
+
+var g_late_by_name_other = 7
+
+[test(description = "is, as and ?. ahead of their named operator, whose signature names a later typedef, wait for it and do not take the by-name operator of the same type")]
+def test_named_operator_ahead_of_by_name_operator(t : T?) {
+    var foo : LateByNameFoo
+    t |> success(foo is LateByNameBar)
+    t |> equal(foo as LateByNameBar, 101)
+    t |> equal(unsafe(addr(foo))?.x ?? 0, 101)
+}
+
+def operator is LateByNameBar(_f : LateByNameFooValue) : bool => true
+
+def operator is(_f : LateByNameFoo; _name : string) : bool => false
+
+def operator as LateByNameBar(_f : LateByNameFooValue) : int => 101
+
+def operator as(_f : LateByNameFoo; _name : string) : int => 7
+
+def operator ?. x(_f : LateByNameFooPtr) : int? => unsafe(addr(g_late_by_name_named))
+
+def operator ?.(_f : LateByNameFoo?; _name : string) : int? => unsafe(addr(g_late_by_name_other))
+
+typedef LateByNameFooValue = LateByNameFoo
+
+typedef LateByNameFooPtr = LateByNameFoo?

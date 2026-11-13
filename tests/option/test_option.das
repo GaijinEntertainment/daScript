@@ -314,3 +314,21 @@ def option_brittle_unwrap_or_default(t : T?) {
         t |> equal(v.name, "default")
     }
 }
+
+let OPTION_PICK_DIM = 2
+
+def option_pick_own_alias(_o : $Option<auto(OptionPickAlias)>; _v : OptionPickAlias) : string =>
+    typeinfo typename(type<OptionPickAlias>)
+
+def option_pick_dim(_o : tuple<int[OPTION_PICK_DIM]; $Option<auto(TT)>>; _v : TT) : int => 1
+
+def option_pick_dim(_o : auto; _v : auto) : int => 2
+
+[test(description = "a generic whose type variable is bound inside an Option argument keeps that variable when a module typedef has the same name, and a named dimension beside an Option in one argument still matches")]
+def option_generic_argument_fold(t : T?) {
+    t |> equal(option_pick_own_alias(some(1.0), 2.0), "float const")
+    let row : tuple<int[2]; $Option<float>>
+    t |> equal(option_pick_dim(row, 2.0), 1)
+}
+
+typedef OptionPickAlias = int

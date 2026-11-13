@@ -187,6 +187,11 @@ namespace das
     }
 
     TypeDeclPtr TypeDecl::visit ( Visitor & vis ) {
+        return visit(vis, true);
+    }
+
+    TypeDeclPtr TypeDecl::visit ( Visitor & vis, bool typeMacros ) {
+        if ( baseType==Type::typeMacro && !typeMacros ) return this;
         if ( baseType==Type::typeDecl || baseType==Type::typeMacro ) {
             for ( size_t i=0, is=typeMacroExpr.size(); i!=is; ++i ) {
                 if ( typeMacroExpr[i] ) {
@@ -200,15 +205,15 @@ namespace das
         }
         if ( firstType ) {
             vis.preVisit(firstType);
-            firstType = firstType->visit(vis);
+            firstType = firstType->visit(vis, typeMacros);
         }
         if ( secondType ) {
             vis.preVisit(secondType);
-            secondType = secondType->visit(vis);
+            secondType = secondType->visit(vis, typeMacros);
         }
         for ( auto & argType : argTypes ) {
             vis.preVisit(argType);
-            argType = argType->visit(vis);
+            argType = argType->visit(vis, typeMacros);
         }
         return this;
     }
@@ -3743,6 +3748,16 @@ namespace das
         return ss.str();
     }
 
+    // src/ast/ARCHITECTURE_INFER.md#mangled-key-refresh
+    static uint64_t expressionTextHash ( const vector<ExpressionPtr> & exprs, size_t first ) {
+        TextWriter tw;
+        for ( size_t i=first; i<exprs.size(); ++i ) {
+            if ( i!=first ) tw << ",";
+            tw << *exprs[i];
+        }
+        return hash64z(tw.str().c_str());
+    }
+
     void TypeDecl::getMangledName ( TextWriter & ss, bool fullName ) const {
         if ( constant )     ss << "C";
         if ( ref )          ss << "&";
@@ -3754,8 +3769,11 @@ namespace das
         if ( aotAlias )     ss << "F";
         if ( baseType==Type::tFixedArray ) {
             // natural recursion: this node's [d] + alias, then the element directly (no 1<>
-            // wrapper) — unaliased chains stay byte-identical to the old dim-vector text
+            // wrapper) — resolved unaliased chains stay byte-identical to the old dim-vector text
             ss << "[" << fixedDim << "]";
+            if ( fixedDim==TypeDecl::dimConst && fixedDimExpr ) {
+                ss << "<" << expressionTextHash({fixedDimExpr}, 0) << ">";
+            }
             if ( fullName ) {
                 if ( removeDim )        ss << "-[]";
                 if ( removeConstant )   ss << "-C";
@@ -3843,12 +3861,7 @@ namespace das
                 ss << (smartPtrNative ? "W" : "M");
             }
         } else if ( baseType==Type::typeMacro ) {
-            TextWriter tw;
-            for ( size_t i=1; i<typeMacroExpr.size(); ++i ) {
-                if ( i!=1 ) tw << ",";
-                tw << *typeMacroExpr[i];
-            }
-            ss << "^<" << typeMacroName() << ";" << hash64z(tw.str().c_str()) << ">";
+            ss << "^<" << typeMacroName() << ";" << expressionTextHash(typeMacroExpr, 1) << ">";
         } else {
             switch ( baseType ) {
                 case Type::anyArgument:     ss << "*"; break;
@@ -3856,7 +3869,12 @@ namespace das
                 case Type::fakeLineInfo:    ss << "_l"; break;
                 case Type::autoinfer:       ss << "."; break;
                 case Type::option:          ss << "|"; break;
-                case Type::typeDecl:        ss << "D"; break;
+                case Type::typeDecl:
+                    ss << "D";
+                    if ( typeMacroExpr.size()==1 && typeMacroExpr[0] ) {
+                        ss << "<" << expressionTextHash(typeMacroExpr, 0) << ">";
+                    }
+                    break;
                 case Type::alias:           ss << "L"; break;
                 case Type::tIterator:       ss << "G"; break;
                 case Type::tArray:          ss << "A"; break;
@@ -4500,7 +4518,8 @@ namespace das
                 if ( neg ) di = -di;
                 auto pt = new TypeDecl(Type::tFixedArray, at);
                 pt->fixedDim = di;
-                // fullName remove-suffixes emitted right after this node's [d] land back on it
+                if ( *ch=='<' ) parseAnyNameInBrackets(ch,false);
+                // fullName remove-suffixes emitted after this node's [d] and its expression hash land back on it
                 for ( ;; ) {
                     if ( ch[0]=='-' && ch[1]=='[' && ch[2]==']' )   { ch += 3; pt->removeDim = true; }
                     else if ( ch[0]=='-' && ch[1]=='C' )            { ch += 2; pt->removeConstant = true; }
@@ -4700,7 +4719,7 @@ namespace das
                 else                                        { ch+=1; return new TypeDecl(Type::tFloat, at); }
             case '.':   ch++; return new TypeDecl(Type::autoinfer, at);
             case '|':   ch++; return new TypeDecl(Type::option, at);
-            case 'D':   ch++; return new TypeDecl(Type::typeDecl, at);
+            case 'D':   ch++; if ( *ch=='<' ) parseAnyNameInBrackets(ch,false); return new TypeDecl(Type::typeDecl, at);
             case '^':   ch++; return new TypeDecl(Type::typeMacro, at);
             case '*':   ch++; return new TypeDecl(Type::anyArgument, at);
             case 'L':   ch++; return new TypeDecl(Type::alias, at);
