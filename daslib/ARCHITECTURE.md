@@ -3,7 +3,7 @@
 Design rationale not evident in code; numbered module sections are anchored to symbols.
 
 Companion documents carry separate concerns.
-- `ARCHITECTURE_LINT.md` - sec. 1-4: perf_lint, lint_config, lint, style_lint.
+- `ARCHITECTURE_LINT.md` - sec. 1-3: perf_lint, lint_config, lint; `ARCHITECTURE_STYLE_LINT.md` - sec. 4: style_lint.
 - `ARCHITECTURE_EMIT.md` - sec. 5-6: aot_cpp, aot_standalone; `ARCHITECTURE_SHADER.md` - sec. 7, 28-29: flatten, the shader rails.
 - `ARCHITECTURE_CAPI.md` - sec. 30: c_api_header, the C surface both backends emit.
 - `ARCHITECTURE_LINQ.md` - the in-memory linq family (linq, linq_boost, linq_das); `ARCHITECTURE_LINQ_FOLD.md` - the `_fold` splice kernel, `ARCHITECTURE_LINQ_FOLD_SOURCES.md` - its array, decs, json, table and sql adapters; `ARCHITECTURE_SQL_LINQ.md` - sql_linq and sql_migrate.

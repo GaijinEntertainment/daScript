@@ -156,6 +156,32 @@ def test_lint031_callee_memo_is_per_program(t : T?) {
     }
 }
 
+[test(description = "every LINT034 shape is reported on its own marked line, and no unmarked line is")]
+def test_lint034_sites(t : T?) {
+    t |> run("each line marked LINT034 gets one finding, the rest get none") @@(t : T?) {
+        let path = lint031_fixture_path("_fixture_lint034_scratch_borrowed_pointer.das")
+        compile_and_collect(t, path) $(issues; count) {
+            t |> success(count > 0, "the fixture reports")
+            var found <- [for (issue in issues); issue; where find(issue, "LINT034") >= 0]
+            var marked = 0
+            var lines <- split(fread(path), "\n")
+            for (text, i in lines, count(1)) {
+                let here_mark = ".das:{i}:"
+                var inscope at_line <- [for (issue in found); issue;
+                    where find(issue, here_mark) >= 0]
+                let here = length(at_line)
+                let wants = find(text, "// LINT034") >= 0 ? 1 : 0
+                marked += wants
+                t |> equal(here, wants, "line {i}: {text}")
+            }
+            t |> success(marked > 30, "the fixture carries its marks ({marked})")
+            t |> equal(length(found), marked, "one finding per marked line: {join(found, "; ")}")
+            delete lines
+            delete found
+        }
+    }
+}
+
 // PERF030 false positive: a `delete v` releases the old contents, so
 // a following `v <- ...` leaks nothing. One release covers one move -
 // the second move in the fixture is reported, because the first one

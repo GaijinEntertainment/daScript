@@ -701,7 +701,519 @@ def private lint022_fix(at : LineInfo; keyword : string; close : int) : LintFix 
                    last_column = 0, replacement = "")
 }
 
+//! a `@scratch` container that outlives the call: `root` is the
+//! variable it hangs off, `field` the annotated field's `.name`
+//! when the annotation sits on a field
+struct private Lint034Container {
+    key : string
+    field : string
+    @do_not_delete root : Variable const?
+}
+
+//! one store into a container (`fills`) or one emptying of it;
+//! `slot` is the written element's text when the event touches it
+//! alone, `filled_by` the callee a store came through
+struct private Lint034Event {
+    container : Lint034Container
+    fills : bool
+    slot : string
+    filled_by : string
+    @do_not_delete site : Expression const?
+}
+
+//! what holds on one path through a function: the stores still in
+//! place, and the containers emptied and not filled since; `reached`
+//! is false once the path has left by return, break or continue
+struct private Lint034State {
+    reached : bool
+    filled : array<Lint034Event>
+    emptied : array<Lint034Container>
+}
+
+struct private Lint034Flow {
+    now : Lint034State
+    loop_jumps : Lint034State
+    exits : Lint034State
+    stale : array<Lint034Event>
+    @do_not_delete finals : array<ExprBlock?>
+}
+
+//! what a call does to the `@scratch` containers that outlive it:
+//! `stale` are the stores an exit leaves in place, `emptied` the
+//! containers every exit leaves empty
+struct private Lint034Summary {
+    stale : array<Lint034Event>
+    emptied : array<Lint034Container>
+}
+
+var private lint034_summary_memo : table<uint64; Lint034Summary>
+var private lint034_touches_memo : table<uint64; bool>
+var private lint034_reaches_memo : table<uint64; bool>
+var private lint034_home_module : uint64
+
+def private lint034_holds_pointer(t : TypeDecl const?; depth : int) : bool {
+    return false if (t == null || depth > 8)
+    let bt = t.baseType
+    return !t.flags.smartPtr if (bt == Type.tPointer)
+    return lint034_holds_pointer(t.firstType, depth + 1) if (bt == Type.tArray)
+    if (bt == Type.tTable) {
+        return (lint034_holds_pointer(t.firstType, depth + 1)
+            || lint034_holds_pointer(t.secondType, depth + 1))
+    }
+    if (bt == Type.tStructure && t.structType != null) {
+        for (fld in t.structType.fields) {
+            return true if (lint034_holds_pointer(fld._type, depth + 1))
+        }
+    } elif (bt == Type.tTuple || bt == Type.tVariant) {
+        for (arg in t.argTypes) {
+            return true if (lint034_holds_pointer(arg, depth + 1))
+        }
+    }
+    return false
+}
+
+def private lint034_type_reaches_scratch(t : TypeDecl const?; depth : int) : bool {
+    //! true when a value of type `t` carries a `@scratch` field
+    //! that can hold a raw pointer
+    return false if (t == null || depth > 8)
+    let bt = t.baseType
+    if (bt == Type.tPointer || bt == Type.tArray) {
+        return lint034_type_reaches_scratch(t.firstType, depth + 1)
+    }
+    return lint034_type_reaches_scratch(t.secondType, depth + 1) if (bt == Type.tTable)
+    return false if (bt != Type.tStructure || t.structType == null)
+    for (fld in t.structType.fields) {
+        let slot = (lint_has_annotation(fld.annotation, "scratch")
+            && lint034_holds_pointer(fld._type, 0))
+        return true if (slot || lint034_type_reaches_scratch(fld._type, depth + 1))
+    }
+    return false
+}
+
+def private lint034_reaches_scratch(v : Variable const?) : bool {
+    return false if (v == null)
+    let key = intptr(v)
+    return lint034_reaches_memo?[key] ?? false if (key_exists(lint034_reaches_memo, key))
+    let slot = lint_has_annotation(v.annotation, "scratch") && lint034_holds_pointer(v._type, 0)
+    let reaches = slot || lint034_type_reaches_scratch(v._type, 0)
+    lint034_reaches_memo[key] = reaches
+    return reaches
+}
+
+def private lint034_names_scratch_global(expr : ExprVar const?) : bool {
+    //! true when `expr` names a global that reaches a `@scratch`
+    //! slot able to hold a raw pointer
+    return (!expr.varFlags.local && !expr.varFlags.argument && !expr.varFlags._block
+        && lint034_reaches_scratch(expr.variable))
+}
+
+def private lint034_container(expr : Expression const?; annotated_only : bool) : Lint034Container {
+    //! the container `expr` writes into; `root` stays null when
+    //! the container dies with the call or, under `annotated_only`,
+    //! when nothing on the way to it is `@scratch`
+    var dest : Lint034Container
+    var e = expr
+    var annotated = false
+    while (e != null) {
+        if (e is ExprField) {
+            let f = e as ExprField
+            let scratch = f.field != null && lint_has_annotation(f.field.annotation, "scratch")
+            if (!annotated && scratch) {
+                annotated = true
+                dest.field = ".{f.name}"
+            }
+            e = f.value
+        } elif (e is ExprVar) {
+            let ev = e as ExprVar
+            let v = ev.variable
+            return dest if (v == null || ev.varFlags._block || ev.varFlags.thisBlock)
+            annotated ||= lint_has_annotation(v.annotation, "scratch")
+            if (ev.varFlags.local) {
+                return dest if (v._type == null || !v._type.flags.ref || v.init == null)
+                e = v.init
+            } else {
+                return dest if (annotated_only && !annotated)
+                dest.root = v
+                dest.key = "{v.name}{dest.field}"
+                return dest
+            }
+        } else {
+            e = lint_value_source(e)
+        }
+    }
+    return dest
+}
+
+class private Lint034BorrowScan : AstVisitor {
+    found : bool = false
+    call_depth : int = 0
+    def override preVisitExprCall(_expr : ExprCall?) : void {
+        call_depth++
+    }
+    def override visitExprCall(var expr : ExprCall?) : ExpressionPtr {
+        call_depth--
+        return expr
+    }
+    def override preVisitExprVar(expr : ExprVar?) : void {
+        let v = expr.variable
+        return if (found || call_depth > 0 || v == null || !lint034_holds_pointer(v._type, 0))
+        if (expr.varFlags.local) {
+            found = !(v.init != null && (v.init is ExprNew || v.init is ExprAscend))
+        } else {
+            found = expr.varFlags.argument || expr.varFlags._block
+        }
+    }
+}
+
+def private lint034_borrows(var value : Expression?) : bool {
+    //! true when `value` carries a pointer the function was handed
+    //! and does not own
+    return false if (value == null || !lint034_holds_pointer(value._type, 0))
+    var scan = new Lint034BorrowScan()
+    make_visitor(*scan) $(adapter) {
+        visit(value, adapter)
+    }
+    let found = scan.found
+    unsafe {
+        delete scan
+    }
+    return found
+}
+
+def private lint034_is_fill(origin : string) : bool {
+    return (origin == "push" || origin == "push_clone" || origin == "emplace"
+            || origin == "push_from" || origin == "push_clone_from"
+            || origin == "emplace_from" || origin == "insert" || origin == "insert_clone")
+}
+
+def private lint034_is_empty(call : ExprCall?; origin : string) : bool {
+    //! `delete c` reaches lint as a `finalize(c)` call
+    return true if (origin == "clear" || origin == "finalize")
+    return (origin == "resize" && length(call.arguments) == 2
+        && call.arguments[1] is ExprConstInt && (call.arguments[1] as ExprConstInt).value == 0)
+}
+
+class private Lint034Events : AstVisitor {
+    events : array<Lint034Event>
+    def note_fill(container : Lint034Container; slot, filled_by : string;
+                  site : Expression const?) : void {
+        events |> push(Lint034Event(container = container, fills = true, slot = slot,
+            filled_by = filled_by, site = site))
+    }
+    def note_empty(container : Lint034Container; slot : string; site : Expression const?) : void {
+        events |> push(Lint034Event(container = container, fills = false, slot = slot, site = site))
+    }
+    def note_store(var left, right, site : Expression?) : void {
+        let dest = lint034_container(left, true)
+        return if (dest.root == null || !lint034_holds_pointer(left._type, 0))
+        if (right is ExprConstPtr) {
+            note_empty(dest, describe(left), site)
+        } elif (lint034_borrows(right)) {
+            note_fill(dest, describe(left), "", site)
+        }
+    }
+    def callee_container(var expr : ExprCall?; theirs : Lint034Container) : Lint034Container {
+        //! the caller's name for a container a callee's summary
+        //! speaks of: a global as it is, one hanging off a
+        //! parameter through the argument passed for it
+        let arg = lint034_arg_index(expr.func, theirs.root)
+        return theirs if (arg < 0)
+        var mine : Lint034Container
+        return mine if (arg >= length(expr.arguments))
+        mine = lint034_container(expr.arguments[arg], empty(theirs.field))
+        if (mine.root != null && !empty(theirs.field)) {
+            mine.field = theirs.field
+            mine.key = "{mine.root.name}{theirs.field}"
+        }
+        return mine
+    }
+    def note_call_summary(var expr : ExprCall?) : void {
+        var reaches = lint034_touches(expr.func)
+        for (p in expr.func.arguments) {
+            reaches ||= lint034_reaches_scratch(p)
+        }
+        return if (!reaches)
+        var summary = lint034_summary_of(expr.func)
+        for (theirs in summary.emptied) {
+            let mine = callee_container(expr, theirs)
+            note_empty(mine, "", expr) if (mine.root != null)
+        }
+        for (stale in summary.stale) {
+            let mine = callee_container(expr, stale.container)
+            note_fill(mine, stale.slot, "{expr.func.name}", expr) if (mine.root != null)
+        }
+    }
+    def override preVisitExprCall(var expr : ExprCall?) : void {
+        return if (expr.func == null)
+        let origin = string(root_generic(expr.func).name)
+        let empties = lint034_is_empty(expr, origin)
+        if (empty(expr.arguments) || (!empties && !lint034_is_fill(origin))) {
+            note_call_summary(expr) if (!expr.func.flags.builtIn && expr.func.body != null)
+            return
+        }
+        let dest = lint034_container(expr.arguments[0], true)
+        return if (dest.root == null)
+        if (empties) {
+            note_empty(dest, "", expr)
+            return
+        }
+        for (i in range(1, length(expr.arguments))) {
+            if (lint034_borrows(expr.arguments[i])) {
+                note_fill(dest, "", "", expr)
+                return
+            }
+        }
+    }
+    def override preVisitExprCopy(var expr : ExprCopy?) : void {
+        note_store(expr.left, expr.right, expr)
+    }
+    def override preVisitExprMove(var expr : ExprMove?) : void {
+        note_store(expr.left, expr.right, expr)
+    }
+}
+
+def private lint034_events(var e : Expression?) : array<Lint034Event> {
+    var scan = new Lint034Events()
+    make_visitor(*scan) $(adapter) {
+        visit(e, adapter)
+    }
+    var events <- scan.events
+    unsafe {
+        delete scan
+    }
+    return <- events
+}
+
+def private lint034_filled_at(state : Lint034State; key, slot : string) : int {
+    //! the store into `key` at `slot`; any store into `key` when
+    //! `slot` is "*"
+    for (ev, i in state.filled, count()) {
+        return i if (ev.container.key == key && (slot == "*" || ev.slot == slot))
+    }
+    return -1
+}
+
+def private lint034_emptied_at(emptied : array<Lint034Container>; key : string) : int {
+    for (c, i in emptied, count()) {
+        return i if (c.key == key)
+    }
+    return -1
+}
+
+def private lint034_join(var into : Lint034State; from : Lint034State) : void {
+    //! two paths meet: a store on either one stays, a container
+    //! stays emptied only when both emptied it
+    return if (!from.reached)
+    if (!into.reached) {
+        into := from
+        return
+    }
+    for (ev in from.filled) {
+        into.filled |> push(ev) if (lint034_filled_at(into, ev.container.key, ev.slot) < 0)
+    }
+    var both <- [for (c in into.emptied); c; where lint034_emptied_at(from.emptied, c.key) >= 0]
+    into.emptied <- both
+}
+
+def private lint034_apply(var flow : Lint034Flow; var e : Expression?) : void {
+    return if (e == null)
+    for (ev in lint034_events(e)) {
+        let key = ev.container.key
+        if (ev.fills) {
+            flow.now.filled |> push(ev) if (lint034_filled_at(flow.now, key, ev.slot) < 0)
+            let was_emptied = lint034_emptied_at(flow.now.emptied, key)
+            flow.now.emptied |> erase(was_emptied) if (was_emptied >= 0)
+        } elif (!empty(ev.slot)) {
+            let stored = lint034_filled_at(flow.now, key, ev.slot)
+            flow.now.filled |> erase(stored) if (stored >= 0)
+        } else {
+            var stored = lint034_filled_at(flow.now, key, "*")
+            while (stored >= 0) {
+                flow.now.filled |> erase(stored)
+                stored = lint034_filled_at(flow.now, key, "*")
+            }
+            let known = lint034_emptied_at(flow.now.emptied, key) >= 0
+            flow.now.emptied |> push(ev.container) if (!known)
+        }
+    }
+}
+
+def private lint034_exit(var flow : Lint034Flow) : void {
+    //! the function returns from here: every enclosing `finally`
+    //! runs first, innermost first
+    var after <- flow.now
+    flow.now := after
+    var finals <- flow.finals
+    for (i in range(length(finals))) {
+        var blk = finals[length(finals) - 1 - i]
+        for (s in blk.finalList) {
+            lint034_flow(flow, s)
+        }
+    }
+    for (ev in flow.now.filled) {
+        var seen = false
+        for (st in flow.stale) {
+            seen ||= st.container.key == ev.container.key
+        }
+        flow.stale |> push(ev) if (!seen)
+    }
+    lint034_join(flow.exits, flow.now)
+    flow.finals <- finals
+    flow.now <- after
+    flow.now.reached = false
+}
+
+def private lint034_flow_block(var flow : Lint034Flow; var blk : ExprBlock?) : void {
+    let has_final = !empty(blk.finalList)
+    flow.finals |> push(blk) if (has_final)
+    for (s in blk.list) {
+        lint034_flow(flow, s)
+    }
+    flow.finals |> pop() if (has_final)
+    for (s in blk.finalList) {
+        lint034_flow(flow, s)
+    }
+}
+
+def private lint034_flow_if(var flow : Lint034Flow; var ite : ExprIfThenElse?) : void {
+    lint034_apply(flow, ite.cond)
+    let entry := flow.now
+    lint034_flow(flow, ite.if_true)
+    let after_true <- flow.now
+    flow.now := entry
+    lint034_flow(flow, ite.if_false)
+    lint034_join(flow.now, after_true)
+}
+
+def private lint034_flow_loop(var flow : Lint034Flow; var body : Expression?) : void {
+    let entry := flow.now
+    var outer <- flow.loop_jumps
+    // the second round's exits see what the first round's end left
+    for (_round in range(2)) {
+        lint034_flow(flow, body)
+        lint034_join(flow.now, entry)
+        lint034_join(flow.now, flow.loop_jumps)
+    }
+    flow.loop_jumps <- outer
+}
+
+def private lint034_flow_try(var flow : Lint034Flow; var tc : ExprTryCatch?) : void {
+    let entry := flow.now
+    lint034_flow(flow, tc.try_block)
+    lint034_join(flow.now, entry)
+    let after_try := flow.now
+    lint034_flow(flow, tc.catch_block)
+    lint034_join(flow.now, after_try)
+}
+
+def private lint034_flow(var flow : Lint034Flow; var e : Expression?) : void {
+    //! walks one statement on the current path; a path that has
+    //! left the function walks nothing
+    return if (e == null || !flow.now.reached)
+    if (e is ExprBlock) {
+        lint034_flow_block(flow, e as ExprBlock)
+    } elif (e is ExprIfThenElse) {
+        lint034_flow_if(flow, e as ExprIfThenElse)
+    } elif (e is ExprWith) {
+        lint034_flow(flow, (e as ExprWith).body)
+    } elif (e is ExprUnsafe) {
+        lint034_flow(flow, (e as ExprUnsafe).body)
+    } elif (e is ExprFor) {
+        var loop = e as ExprFor
+        for (s in loop.sources) {
+            lint034_apply(flow, s)
+        }
+        lint034_flow_loop(flow, loop.body)
+    } elif (e is ExprWhile) {
+        var loop = e as ExprWhile
+        lint034_apply(flow, loop.cond)
+        lint034_flow_loop(flow, loop.body)
+    } elif (e is ExprTryCatch) {
+        lint034_flow_try(flow, e as ExprTryCatch)
+    } elif (e is ExprReturn) {
+        lint034_apply(flow, (e as ExprReturn).subexpr)
+        lint034_exit(flow)
+    } elif (e is ExprBreak || e is ExprContinue) {
+        lint034_join(flow.loop_jumps, flow.now)
+        flow.now.reached = false
+    } else {
+        lint034_apply(flow, e)
+    }
+}
+
+def private lint034_arg_index(fn : Function const?; v : Variable const?) : int {
+    for (p, i in fn.arguments, count()) {
+        return i if (intptr(p) == intptr(v))
+    }
+    return -1
+}
+
+def private lint034_summarize(var fn : Function?) : Lint034Summary {
+    var flow : Lint034Flow
+    flow.now.reached = true
+    lint034_flow(flow, fn.body)
+    lint034_exit(flow) if (flow.now.reached)
+    return <- Lint034Summary(stale <- flow.stale, emptied <- flow.exits.emptied)
+}
+
+def private lint034_passes_to_caller(fn : Function const?; stale : Lint034Event) : bool {
+    //! true when the caller is the one to empty this container: it
+    //! hangs off a parameter, or `fn` is private
+    return lint034_arg_index(fn, stale.container.root) >= 0 || fn.flags.privateFunction
+}
+
+def private lint034_summary_of(var fn : Function?) : Lint034Summary {
+    //! what a call to `fn` leaves its caller to empty, and what it
+    //! empties for the caller
+    var for_callers : Lint034Summary
+    return <- for_callers if (fn == null || fn.body == null)
+    let key = fn.getMangledNameHash
+    if (key_exists(lint034_summary_memo, key)) {
+        for_callers := lint034_summary_memo[key]
+        return <- for_callers
+    }
+    lint034_summary_memo[key] <- for_callers
+    var full = lint034_summarize(fn)
+    for_callers.emptied <- full.emptied
+    for (stale in full.stale) {
+        for_callers.stale |> push(stale) if (lint034_passes_to_caller(fn, stale))
+    }
+    lint034_summary_memo[key] := for_callers
+    return <- for_callers
+}
+
+class private Lint034TouchScan : AstVisitor {
+    found : bool = false
+    def override preVisitExprVar(expr : ExprVar?) : void {
+        found ||= lint034_names_scratch_global(expr)
+    }
+    def override preVisitExprCall(expr : ExprCall?) : void {
+        found ||= lint034_touches(expr.func)
+    }
+}
+
+def private lint034_touches(fn : Function const?) : bool {
+    //! true when `fn`, or a function of the module under lint that
+    //! it calls, names a `@scratch` container that outlives the call
+    return false if (fn == null || fn.body == null || fn.flags.builtIn
+        || intptr(fn._module) != lint034_home_module)
+    let key = fn.getMangledNameHash
+    return lint034_touches_memo?[key] ?? false if (key_exists(lint034_touches_memo, key))
+    lint034_touches_memo[key] = false
+    var scan = new Lint034TouchScan()
+    make_visitor(*scan) $(adapter) {
+        visit(fn.body, adapter)
+    }
+    let found = scan.found
+    unsafe {
+        delete scan
+    }
+    lint034_touches_memo[key] = found
+    return found
+}
+
 class LintVisitor : AstVisitor {
+    lint034_armed : bool = false
     lint030_frames : array<Lint030Frame>
     lint030_plain_closures : array<bool>
     @do_not_delete lint014_candidates : array<Variable const?>
@@ -862,6 +1374,9 @@ class LintVisitor : AstVisitor {
     def override preVisitProgram(_prog : ProgramPtr) : void {
         lint030_writers |> clear()
         lint031_writers |> clear()
+        lint034_summary_memo |> clear()
+        lint034_touches_memo |> clear()
+        lint034_reaches_memo |> clear()
     }
 
     def override preVisitFunction(var fun : FunctionPtr) : void {
@@ -869,6 +1384,8 @@ class LintVisitor : AstVisitor {
         lint_mut_result = fun.result
         funcFile = fun.at.fileInfo != null ? "{fun.at.fileInfo.name}" : ""
         lint_fun = fun
+        lint034_armed = false
+        lint034_home_module = intptr(fun._module)
         lint_fun_names_ready = false
         lint022_self_struct = null
         if (fun.flags.isClassMethod || fun.flags.generated) {
@@ -948,6 +1465,21 @@ class LintVisitor : AstVisitor {
         }
     }
 
+    def lint034_report(var fun : FunctionPtr) : void {
+        return if (!lint034_armed || flow_jumps || noLint || genericDepth != 0
+            || key_exists(disabled_codes, "LINT034"))
+        var summary = lint034_summarize(fun)
+        for (stale in summary.stale) {
+            continue if (lint034_passes_to_caller(fun, stale))
+            let key = stale.container.key
+            let through = empty(stale.filled_by) ? "" : " through `{stale.filled_by}`"
+            lint_error("LINT034: @scratch `{key}` still holds a pointer that `{fun.name}` " +
+                "received from its caller{through} when `{fun.name}` returns. The caller may " +
+                "free that object, and the next reader or garbage collection then reads " +
+                "freed memory. Empty `{key}` on every exit; one `finally` block covers them all.",
+                stale.site.at)
+        }
+    }
     def override visitFunction(var fun : FunctionPtr) : FunctionPtr {
         if (!noLint && genericDepth == 0) {
             for (v in lint014_candidates) {
@@ -1000,6 +1532,7 @@ class LintVisitor : AstVisitor {
             }
         }
         lint021_candidates |> clear()
+        lint034_report(fun)
         noLint = false
         if (fun.fromGeneric != null || fun.flags.generated) {
             genericDepth--
@@ -1662,6 +2195,7 @@ class LintVisitor : AstVisitor {
 
     def override preVisitExprCall(expr : ExprCall?) : void {
         mut_use_arguments(expr)
+        lint034_armed ||= lint034_touches(expr.func)
         lint030_frames |> emplace(Lint030Frame(call = expr, slot = -1, closure_depth = lint021_closure_depth))
         var kind = Lint021CallKind.plain
         if (!noLint && genericDepth == 0) {
@@ -2057,6 +2591,7 @@ class LintVisitor : AstVisitor {
             }
         }
         if (noLint || genericDepth > 0) return
+        lint034_armed ||= lint034_names_scratch_global(expr)
         if (key_exists(lint023_store_nodes, intptr(expr))) {
             lint029_note_mutation(expr.variable)
         }

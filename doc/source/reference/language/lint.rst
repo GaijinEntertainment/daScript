@@ -16,6 +16,8 @@ Lint Tools
 .. das-doc: given require daslib/json_boost
 .. das-doc: given struct Box { value : int }
 .. das-doc: given struct Session { pos : int64 }
+.. das-doc: given struct Seg { s : Session?; npos : int }
+.. das-doc: given def consume(segs : array<Seg>) : int { return length(segs) }
 .. das-doc: given struct SomeStruct { value : int64 }
 .. das-doc: given struct Foo { x : int }
 .. das-doc: given struct State { mark : int; claimed : array<int> }
@@ -1326,6 +1328,58 @@ const contract and is not judged.
             var p = reinterpret<int?>(dst)
             *p = v
         }
+    }
+
+LINT034 — a ``@scratch`` container keeps a borrowed pointer
+===========================================================
+
+A ``@scratch`` container is a buffer a function refills on every call. When it
+lives longer than the call — a module global, or a field of one — and the
+function stores a pointer it was handed, that pointer stays in the container
+after the function returns, while the caller is free to release the object.
+The next reader, or the next validated collection, then walks freed memory.
+The rule fires on the store when any exit of the function leaves it in place.
+The fix is to empty the container on every exit; one ``finally`` block covers
+them all.
+
+A store counts when the value carries a raw pointer out of a parameter, a
+block argument or a local that was not made with ``new``; a pointer a call
+returns is taken as owned. ``clear``, ``resize(c, 0)`` and ``delete`` empty
+the container, and a store of ``null`` takes back the store into that same
+element and no other. The walk follows ``if``, loops, ``try`` and ``finally``:
+a container counts as emptied only where every path empties it, so a clear on
+one branch, in a conditional ``finally``, or behind a ``return`` still fires.
+A function that uses ``goto`` is not judged.
+
+A function that fills a container hanging off one of its parameters is not the
+finding: the caller owns that container, and the rule moves to the call. A
+private function that fills a global hands the duty to its callers the same
+way, and a call to a function that empties the container on every path counts
+as the clear — so a queue function and a flush function pair up without a
+suppression. A ``@scratch`` local dies with the call and is never reported.
+
+.. das-doc: alt
+.. code-block:: das
+
+    var private @scratch g_segs : array<Seg>
+
+    // Flagged at the push — g_segs still holds the sessions on return
+    def run_segments(var sessions : array<Session?>) : int {
+        g_segs |> clear()
+        for (s in sessions) {
+            g_segs |> push(Seg(s = s, npos = 1))    // LINT034
+        }
+        return consume(g_segs)
+    }
+
+    // Emptied on every exit
+    def run_segments_clean(var sessions : array<Session?>) : int {
+        for (s in sessions) {
+            g_segs |> push(Seg(s = s, npos = 1))
+        }
+        return consume(g_segs)
+    } finally {
+        g_segs |> clear()
     }
 
 .. _perf_lint:
