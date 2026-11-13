@@ -276,3 +276,15 @@ directory is made absolute with `GetFullPathNameA` and loaded by `LoadLibraryExA
 flag fails with `ERROR_INVALID_PARAMETER` for anything but an absolute path, and
 `GetFullPathNameA` turns a bare name into `<CWD>/<name>`, an absolute path to no file, so the
 second route cannot carry a bare name.
+
+## A sink change takes the printer's lock {#text-printer-sink}
+
+`setTextPrinterSink` and `textPrinterToFile` change the sink, and close the file the old sink
+wrote to, while they hold `TextPrinter::pmut` - the lock every `TextPrinter::output` holds for
+its whole write. A change waits for a print in progress, and no print reaches a closed file. A
+running script changes the sink too (`diagnostics_to_stderr`, `diagnostics_to_file`), so a host
+cannot finish changing it before the first print. The lock is recursive: a sink may change the
+sink from inside the print it is serving. The sink pointer and the file are atomics because
+`das_fatal_log` reads both with no lock: it reports from the allocator and the smart-pointer
+guard, where the fatal may already hold the printer's lock. A fatal that lands inside a file
+change can write to the file being closed.

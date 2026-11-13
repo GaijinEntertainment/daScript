@@ -484,7 +484,7 @@ namespace das {
         double emitSec = 0.0;
         string error;
     };
-    static vector<JitParEmitJob> g_jitParEmitJobs;
+    static thread_local vector<JitParEmitJob> g_jitParEmitJobs;
 
     void jit_par_emit_begin () {
         g_jitParEmitJobs.clear();
@@ -523,23 +523,24 @@ namespace das {
         auto disposeErrMsg = (DisposeFn) fnDisposeErrorMessage;
         auto disposeMsg = (DisposeFn) fnDisposeMessage;
         auto li = LineInfoArg();
+        auto & callerJobs = g_jitParEmitJobs;
         // the das caller validates each symbol by name first; this is the complete backstop so a
         // future caller can't run workers that leak diagnostics through null dispose/message fns
         if ( !runPasses || !verifyModule || !emitToFile || !getErrMsg || !disposeErrMsg || !disposeMsg
-                || g_jitParEmitJobs.empty() ) {
+                || callerJobs.empty() ) {
             toLog(LogLevel::error, "jit_par_emit_run: missing entry points or no jobs\n", context, &li);
-            g_jitParEmitJobs.clear();
+            callerJobs.clear();
             return false;
         }
         int nThreads = threads > 0 ? threads : JobQue::get_num_threads();
-        nThreads = std::max(1, std::min(nThreads, int(g_jitParEmitJobs.size())));
+        nThreads = std::max(1, std::min(nThreads, int(callerJobs.size())));
         std::atomic<size_t> nextJob{0};
         constexpr int32_t LLVM_RETURN_STATUS_ACTION = 2;   // LLVMReturnStatusAction
         auto worker = [&]() {
             for ( ;; ) {
                 size_t i = nextJob.fetch_add(1);
-                if ( i >= g_jitParEmitJobs.size() ) break;
-                auto & job = g_jitParEmitJobs[i];
+                if ( i >= callerJobs.size() ) break;
+                auto & job = callerJobs[i];
                 auto t0 = ref_time_ticks();
                 if ( !job.pipeline.empty() ) {
                     void * err = runPasses(job.mod, job.pipeline.c_str(), job.tm, job.pbo);
@@ -581,7 +582,7 @@ namespace das {
             for ( auto & th : pool ) th.join();
         }
         bool ok = true;
-        for ( auto & job : g_jitParEmitJobs ) {
+        for ( auto & job : callerJobs ) {
             if ( !job.error.empty() ) {
                 ok = false;
                 string msg = string("LLVM JIT: parallel emit: ") + job.error + "\n";
@@ -592,7 +593,7 @@ namespace das {
                 toLog(LogLevel::info, msg.c_str(), context, &li);
             }
         }
-        g_jitParEmitJobs.clear();
+        callerJobs.clear();
         return ok;
     }
 

@@ -453,8 +453,25 @@ The dynamic binary discovers modules automatically from the
 
 ``require_dynamic_modules`` scans every directory under ``modules/``
 for a ``.das_module`` file and executes it.  The ``getDasRoot()``
-function returns the daslang installation root (set via the
-``DAS_ROOT`` environment variable or auto-detected).
+function returns the daslang installation root: the folder a
+``daslang.root`` file beside the executable names; otherwise the folder
+above ``bin`` when the executable sits in ``bin/`` or
+``bin/<config>/``; otherwise the current working directory.  A host
+that keeps the tree elsewhere calls ``setDasRoot`` first.
+
+.. note::
+
+   Scan once per process.  An environment is the set of modules a
+   thread registers and ``Module::Initialize()`` prepares, until
+   ``Module::Shutdown()`` frees it; a host may run several.  Scan in
+   one of them, on the thread that initializes it, before any other
+   thread compiles.  What the scan records - the require paths, the
+   modules it loaded, and the modules it left to load at the first
+   ``require`` that names them - belongs to the process, not to an
+   environment.  A second environment that scans drops the first one's
+   waiting modules, and an environment that shuts down drops them too,
+   for every environment.  Several environments that each scan a module
+   tree of their own are not supported.
 
 Each entry in ``load_modules`` is the path to a single module folder
 (the one containing ``.das_module``), bypassing the

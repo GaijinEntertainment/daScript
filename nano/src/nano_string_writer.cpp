@@ -17,7 +17,7 @@ namespace das {
     DAS_API StringWriterTag FIXEDFP;
     DAS_API StringWriterTag SCIENTIFIC;
 
-    mutex TextPrinter::pmut;
+    recursive_mutex TextPrinter::pmut;
 
     static StringWriter & writeFormatted ( StringWriter & w, const char * fmt, ... ) {
         char buf[128];
@@ -194,7 +194,7 @@ namespace das {
     }
 
     void TextPrinter::output() {
-        lock_guard<mutex> guard(pmut);
+        lock_guard<recursive_mutex> guard(pmut);
         uint64_t newPos = tellp();
         if (newPos != pos) {
             string st(data() + pos, size_t(newPos - pos));

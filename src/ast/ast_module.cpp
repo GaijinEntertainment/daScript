@@ -285,11 +285,11 @@ namespace das {
         return handleRegistry_countAll();
     }
 
+    // src/ast/ARCHITECTURE_MODULE_SCAN.md#one-scan-per-process
     void Module::shutdownInternal ( bool dumpHandleLeaks ) {
         DAS_ASSERT(daScriptEnvironment::getOwned()!=nullptr);
         DAS_ASSERT(daScriptEnvironment::getBound()!=nullptr);
-        g_envTotal --;
-        if ( g_envTotal==0 ) {
+        if ( --g_envTotal==0 ) {
             shutdownDebugAgent();
         }
         auto m = daScriptEnvironment::getBound()->modules;

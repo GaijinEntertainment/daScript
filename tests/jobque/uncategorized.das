@@ -152,3 +152,40 @@ def panic_with_a_parked_job_exits(t : T?) {
         t |> success(!contains(output, "exiting without teardown"), output)
     }
 }
+
+struct ArgCount {
+    count : int
+}
+
+def argument_count() : int => length(get_command_line_arguments())
+
+[test(description = "with_argv replaces the command line for the calling thread only: a job started inside the block still reads the process arguments, and nested blocks restore the outer one")]
+def test_with_argv_is_per_thread(t : T?) {
+    let process_count = argument_count()
+    let outer <- [for (i in range(process_count + 2)); "outer{i}"]
+    let inner <- [for (i in range(process_count + 5)); "inner{i}"]
+    var seen_by_job = -1
+    with_argv(outer) {
+        t |> equal(process_count + 2, argument_count(), "the block's thread reads its own")
+        with_argv(inner) {
+            t |> equal(process_count + 5, argument_count(), "a nested block reads the inner ones")
+        }
+        t |> equal(process_count + 2, argument_count(), "the nested block restored the outer")
+        with_job_que() {
+            with_channel(1) $(ch) {
+                with_wait_group(1) $(wg) {
+                    new_job() @() {
+                        ch |> push_clone(ArgCount(count = argument_count()))
+                        ch |> notify_and_release
+                        wg |> done
+                    }
+                }
+                ch |> for_each_clone() $(val : ArgCount#) {
+                    seen_by_job = val.count
+                }
+            }
+        }
+    }
+    t |> equal(process_count, seen_by_job, "a job started inside the block reads the process ones")
+    t |> equal(process_count, argument_count(), "leaving the block restores the process arguments")
+}

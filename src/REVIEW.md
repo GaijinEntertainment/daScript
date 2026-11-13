@@ -1,7 +1,7 @@
 # src Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-doc: `misc/ARCHITECTURE_DAS_ROOT.md`.
+doc: `ARCHITECTURE.md`.
 
 Subfolders of this folder carry their own `REVIEW.md` checklists - a diff applies the
 `REVIEW.md` of every folder between this one and each file it changes.
@@ -26,3 +26,9 @@ before, or changes a node, name, type or flag `AstSerializer` streams for unchan
 bumps `AstSerializer::getVersion()` (`include/daScript/ast/ast_serializer.h`, repo root) in the
 same change.** A cached module skips the compile, so without the bump a rebuilt
 `daslang` serves what the old compile accepted or produced.
+
+**A diff under this folder that adds an object with static storage duration, or adds or changes
+code that reads or writes one, makes that object - when code writes it outside its initializer
+or a global constructor - a `thread_local`, a field reached through `daScriptEnvironment`, a
+lock, an atomic, or an object read and written only under one named lock
+(`ARCHITECTURE.md#static-storage-homes`).**

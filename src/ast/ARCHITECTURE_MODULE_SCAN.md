@@ -160,3 +160,21 @@ counter for both, and those two headers' checklists bind the bump to every vtabl
 every data-member change of a folded class. A module built with another `DAS_BUILD_ID` fails the vintage check too,
 since the vintage folds the build id; the registrar's own build-id argument is the guard for a
 host that calls the registrar without reading the vintage first.
+
+## One scan per process {#one-scan-per-process}
+
+The scan's state belongs to the process, not to an environment: the deferred rows and their
+loader, the rows still pending a retry, the registered modules and native paths, the module
+groups, and the replayed manifests waiting for a module name. A scan starts by clearing the
+deferred rows and those manifests, and the shutdown of any environment clears the deferred rows
+and removes the loader (`#module-scan-manifest` says what each is for). A process therefore
+scans in one environment, on the thread that initializes it, before another thread compiles. A
+second environment that scans drops the first one's deferred rows, and one that shuts down
+takes the rows and the loader from the rest, so several environments that each scan a module
+tree of their own are not a supported setup
+(`doc/source/reference/embedding/external_modules.rst` says so to a host). What a thread other
+than the scanning one reaches is guarded - the deferred rows and the module groups by a mutex
+each, the loader as an atomic, a deferred load by a lock of its own - because a compile on one
+thread loads a deferred module while a running script on another asks `has_module`. The
+pending rows, the registered modules and paths and the waiting manifests take no lock: the scan
+writes them.

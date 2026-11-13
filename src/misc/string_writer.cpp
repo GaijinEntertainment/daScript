@@ -12,7 +12,7 @@ namespace das {
     DAS_API StringWriterTag FIXEDFP;
     DAS_API StringWriterTag SCIENTIFIC;
 
-    mutex TextPrinter::pmut;
+    recursive_mutex TextPrinter::pmut;
 
     // string writer
 
@@ -205,50 +205,48 @@ namespace das {
         fflush(stderr);
     }
 
-    static FILE * g_textPrinterFile = nullptr;
+    static atomic<FILE *> g_textPrinterFile { nullptr };
 
     static void textPrinterToFileSink ( const char * text ) {
-        fprintf(g_textPrinterFile, "%s", text);
-        fflush(g_textPrinterFile);
+        FILE * f = g_textPrinterFile.load();
+        if ( !f ) return;
+        fprintf(f, "%s", text);
+        fflush(f);
     }
 
-    static TextPrinterSink g_textPrinterSink = &textPrinterToStdout;
+    static atomic<TextPrinterSink> g_textPrinterSink { &textPrinterToStdout };
 
+    static void replaceTextPrinterSink ( TextPrinterSink sink, FILE * file ) {
+        FILE * was = g_textPrinterFile.exchange(file);
+        g_textPrinterSink = sink;
+        if ( was ) fclose(was);
+    }
+
+    // src/misc/ARCHITECTURE.md#text-printer-sink
     void setTextPrinterSink ( TextPrinterSink sink ) {
-        auto newSink = sink ? sink : &textPrinterToStdout;
-        // the file is closed exactly when it stops BEING the sink, on the same
-        // contract the sink itself rests on: nothing prints while it is being set,
-        // which is the one moment closing it is safe.  A handle left open holds the
-        // file against deletion on Windows, where fopen does not share delete
-        if ( newSink!=&textPrinterToFileSink && g_textPrinterFile ) {
-            fclose(g_textPrinterFile);
-            g_textPrinterFile = nullptr;
-        }
-        g_textPrinterSink = newSink;
+        lock_guard<recursive_mutex> guard(TextPrinter::pmut);
+        replaceTextPrinterSink(sink ? sink : &textPrinterToStdout, nullptr);
     }
 
     void textPrinterToStderr() {
         setTextPrinterSink(&textPrinterToStderrSink);
     }
 
+    // src/misc/ARCHITECTURE.md#text-printer-sink
     bool textPrinterToFile ( const char * path ) {
         FILE * f = das_fopen_utf8(path, "ab");
         if ( !f ) return false;
-        FILE * was = g_textPrinterFile;
-        g_textPrinterFile = f;
-        // the sink does not change kind here, so setting it closes nothing: the
-        // file it replaces is closed right after, on the same being-set contract
-        setTextPrinterSink(&textPrinterToFileSink);
-        if ( was ) fclose(was);
+        lock_guard<recursive_mutex> guard(TextPrinter::pmut);
+        replaceTextPrinterSink(&textPrinterToFileSink, f);
         return true;
     }
 
     void TextPrinter::output() {
-        lock_guard<mutex> guard(pmut);
+        lock_guard<recursive_mutex> guard(pmut);
         uint64_t newPos = tellp();
         if (newPos != pos) {
             string st(data() + pos, size_t(newPos - pos));
-            g_textPrinterSink(st.c_str());
+            g_textPrinterSink.load()(st.c_str());
             pos = newPos;
         }
     }
@@ -288,5 +286,5 @@ void das_fatal_log ( const char * format, ... ) {
     vsnprintf(buf, sizeof(buf), format, args);
     va_end(args);
     buf[sizeof(buf) - 1] = 0;
-    das::g_textPrinterSink(buf);
+    das::g_textPrinterSink.load()(buf);
 }
