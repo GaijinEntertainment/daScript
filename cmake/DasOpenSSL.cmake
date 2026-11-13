@@ -81,9 +81,22 @@ include(ExternalProject)
 			# bundle or an SDK install runs on a Mac with no Homebrew at all.
 			SET(OPENSSL_USE_STATIC_LIBS TRUE)
 		ENDIF()
-		find_package(OpenSSL REQUIRED)
+		find_package(OpenSSL QUIET)
 		SET(OPENSSL_LIBRARIES_FILES OpenSSL::Crypto OpenSSL::SSL)
 	ENDIF()
+
+# DAS_OPENSSL_FOUND gates every includer; DAS_OPENSSL_MISSING says why it is off.
+SET(DAS_OPENSSL_FOUND TRUE)
+SET(DAS_OPENSSL_MISSING "")
+IF(NOT OPENSSL_FROM_SOURCES)
+	IF(NOT OpenSSL_FOUND)
+		SET(DAS_OPENSSL_FOUND FALSE)
+		SET(DAS_OPENSSL_MISSING "OpenSSL not found (install the OpenSSL development package or set OPENSSL_ROOT_DIR)")
+	ELSEIF(OPENSSL_VERSION VERSION_LESS "1.1.1")
+		SET(DAS_OPENSSL_FOUND FALSE)
+		SET(DAS_OPENSSL_MISSING "OpenSSL ${OPENSSL_VERSION} is older than 1.1.1")
+	ENDIF()
+ENDIF()
 
 
 function(das_link_openssl target)
@@ -131,7 +144,3 @@ function(das_copy_openssl_runtime target module_folder)
 	ENDIF()
 
 endfunction()
-
-if(NOT OPENSSL_FROM_SOURCES AND OPENSSL_VERSION VERSION_LESS "1.1.1")
-    message(FATAL_ERROR "OpenSSL 1.1.1 or newer is required")
-endif()

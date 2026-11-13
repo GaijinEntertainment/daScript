@@ -17,6 +17,16 @@ ENDIF()
 # superbuild that disables either also drops dasImgui (the dasOPENAI-off-dasHV
 # pattern). Standalone configures never define the sibling options — the
 # NOT DEFINED arms keep the module on there.
+IF((NOT DAS_IMGUI_INCLUDED) AND (NOT EMSCRIPTEN)
+        AND ((NOT ${DAS_IMGUI_DISABLED}) OR (NOT DEFINED DAS_IMGUI_DISABLED))
+        AND ((NOT ${DAS_GLFW_DISABLED}) OR (NOT DEFINED DAS_GLFW_DISABLED)))
+    FIND_PACKAGE(OpenGL QUIET)
+    IF(NOT OPENGL_FOUND)
+        MESSAGE(WARNING "dasImgui disabled: OpenGL not found (its app backend renders through OpenGL 3). Install the OpenGL development package and reconfigure, or pass -DDAS_IMGUI_DISABLED=ON to silence this.")
+        SET(DAS_IMGUI_DISABLED ON)
+    ENDIF()
+ENDIF()
+
 IF((NOT DAS_IMGUI_INCLUDED)
         AND ((NOT ${DAS_IMGUI_DISABLED}) OR (NOT DEFINED DAS_IMGUI_DISABLED))
         AND ((NOT ${DAS_GLFW_DISABLED}) OR (NOT DEFINED DAS_GLFW_DISABLED))

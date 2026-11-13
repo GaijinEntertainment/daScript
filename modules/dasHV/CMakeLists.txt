@@ -1,5 +1,13 @@
 
 IF ((NOT DAS_HV_INCLUDED) AND ((NOT ${DAS_HV_DISABLED}) OR (NOT DEFINED DAS_HV_DISABLED)))
+    include(${PROJECT_SOURCE_DIR}/cmake/DasOpenSSL.cmake)
+    IF(NOT DAS_OPENSSL_FOUND)
+        MESSAGE(WARNING "dasHV disabled: ${DAS_OPENSSL_MISSING}. Pass -DDAS_HV_DISABLED=ON to silence this.")
+        SET(DAS_HV_DISABLED ON)
+    ENDIF()
+ENDIF()
+
+IF ((NOT DAS_HV_INCLUDED) AND ((NOT ${DAS_HV_DISABLED}) OR (NOT DEFINED DAS_HV_DISABLED)))
     SET(DAS_HV_INCLUDED TRUE)
     MESSAGE(STATUS "dasHV module included.")
 
@@ -7,7 +15,6 @@ IF ((NOT DAS_HV_INCLUDED) AND ((NOT ${DAS_HV_DISABLED}) OR (NOT DEFINED DAS_HV_D
 
 	include(ExternalProject)
 
-    include(${PROJECT_SOURCE_DIR}/cmake/DasOpenSSL.cmake)
     if(WIN32 AND MSVC)
         set(HV_LIBRARIES ${DAS_HV_DIR}/hv/$<CONFIG>/lib/hv_static.lib)
     elseif(WIN32)
