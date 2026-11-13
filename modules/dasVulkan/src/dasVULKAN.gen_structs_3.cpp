@@ -12,7 +12,7 @@ struct VkValidationFeaturesEXT_Ann : ManagedStructureAnnotation<VkValidationFeat
     virtual bool canMove() const override { return true; }
     void init();
 };
-static VkValidationFeaturesEXT_Ann * ann_VkValidationFeaturesEXT = nullptr;
+static thread_local VkValidationFeaturesEXT_Ann * ann_VkValidationFeaturesEXT = nullptr;
 void VkValidationFeaturesEXT_Ann::init() {
     addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
     addFieldEx("pNext", "pNext", offsetof(VkValidationFeaturesEXT, pNext), makeType<void *>(*mlib));
@@ -31,7 +31,7 @@ struct VkLayerSettingsCreateInfoEXT_Ann : ManagedStructureAnnotation<VkLayerSett
     virtual bool canMove() const override { return true; }
     void init();
 };
-static VkLayerSettingsCreateInfoEXT_Ann * ann_VkLayerSettingsCreateInfoEXT = nullptr;
+static thread_local VkLayerSettingsCreateInfoEXT_Ann * ann_VkLayerSettingsCreateInfoEXT = nullptr;
 void VkLayerSettingsCreateInfoEXT_Ann::init() {
     addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
     addFieldEx("pNext", "pNext", offsetof(VkLayerSettingsCreateInfoEXT, pNext), makeType<void *>(*mlib));
@@ -48,7 +48,7 @@ struct VkLayerSettingEXT_Ann : ManagedStructureAnnotation<VkLayerSettingEXT> {
     virtual bool canMove() const override { return true; }
     void init();
 };
-static VkLayerSettingEXT_Ann * ann_VkLayerSettingEXT = nullptr;
+static thread_local VkLayerSettingEXT_Ann * ann_VkLayerSettingEXT = nullptr;
 void VkLayerSettingEXT_Ann::init() {
     addFieldEx("pLayerName", "pLayerName", offsetof(VkLayerSettingEXT, pLayerName), makeType<char *>(*mlib));
     addFieldEx("pSettingName", "pSettingName", offsetof(VkLayerSettingEXT, pSettingName), makeType<char *>(*mlib));
@@ -66,7 +66,7 @@ struct VkPipelineRasterizationStateRasterizationOrderAMD_Ann : ManagedStructureA
     virtual bool canMove() const override { return true; }
     void init();
 };
-static VkPipelineRasterizationStateRasterizationOrderAMD_Ann * ann_VkPipelineRasterizationStateRasterizationOrderAMD = nullptr;
+static thread_local VkPipelineRasterizationStateRasterizationOrderAMD_Ann * ann_VkPipelineRasterizationStateRasterizationOrderAMD = nullptr;
 void VkPipelineRasterizationStateRasterizationOrderAMD_Ann::init() {
     addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
     addFieldEx("pNext", "pNext", offsetof(VkPipelineRasterizationStateRasterizationOrderAMD, pNext), makeType<void *>(*mlib));
@@ -82,7 +82,7 @@ struct VkDebugMarkerObjectNameInfoEXT_Ann : ManagedStructureAnnotation<VkDebugMa
     virtual bool canMove() const override { return true; }
     void init();
 };
-static VkDebugMarkerObjectNameInfoEXT_Ann * ann_VkDebugMarkerObjectNameInfoEXT = nullptr;
+static thread_local VkDebugMarkerObjectNameInfoEXT_Ann * ann_VkDebugMarkerObjectNameInfoEXT = nullptr;
 void VkDebugMarkerObjectNameInfoEXT_Ann::init() {
     addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
     addFieldEx("pNext", "pNext", offsetof(VkDebugMarkerObjectNameInfoEXT, pNext), makeType<void *>(*mlib));
@@ -100,7 +100,7 @@ struct VkDebugMarkerObjectTagInfoEXT_Ann : ManagedStructureAnnotation<VkDebugMar
     virtual bool canMove() const override { return true; }
     void init();
 };
-static VkDebugMarkerObjectTagInfoEXT_Ann * ann_VkDebugMarkerObjectTagInfoEXT = nullptr;
+static thread_local VkDebugMarkerObjectTagInfoEXT_Ann * ann_VkDebugMarkerObjectTagInfoEXT = nullptr;
 void VkDebugMarkerObjectTagInfoEXT_Ann::init() {
     addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
     addFieldEx("pNext", "pNext", offsetof(VkDebugMarkerObjectTagInfoEXT, pNext), makeType<void *>(*mlib));
@@ -120,7 +120,7 @@ struct VkDebugMarkerMarkerInfoEXT_Ann : ManagedStructureAnnotation<VkDebugMarker
     virtual bool canMove() const override { return true; }
     void init();
 };
-static VkDebugMarkerMarkerInfoEXT_Ann * ann_VkDebugMarkerMarkerInfoEXT = nullptr;
+static thread_local VkDebugMarkerMarkerInfoEXT_Ann * ann_VkDebugMarkerMarkerInfoEXT = nullptr;
 void VkDebugMarkerMarkerInfoEXT_Ann::init() {
     addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
     addFieldEx("pNext", "pNext", offsetof(VkDebugMarkerMarkerInfoEXT, pNext), makeType<void *>(*mlib));
@@ -137,7 +137,7 @@ struct VkDedicatedAllocationImageCreateInfoNV_Ann : ManagedStructureAnnotation<V
     virtual bool canMove() const override { return true; }
     void init();
 };
-static VkDedicatedAllocationImageCreateInfoNV_Ann * ann_VkDedicatedAllocationImageCreateInfoNV = nullptr;
+static thread_local VkDedicatedAllocationImageCreateInfoNV_Ann * ann_VkDedicatedAllocationImageCreateInfoNV = nullptr;
 void VkDedicatedAllocationImageCreateInfoNV_Ann::init() {
     addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
     addFieldEx("pNext", "pNext", offsetof(VkDedicatedAllocationImageCreateInfoNV, pNext), makeType<void *>(*mlib));
@@ -153,7 +153,7 @@ struct VkDedicatedAllocationBufferCreateInfoNV_Ann : ManagedStructureAnnotation<
     virtual bool canMove() const override { return true; }
     void init();
 };
-static VkDedicatedAllocationBufferCreateInfoNV_Ann * ann_VkDedicatedAllocationBufferCreateInfoNV = nullptr;
+static thread_local VkDedicatedAllocationBufferCreateInfoNV_Ann * ann_VkDedicatedAllocationBufferCreateInfoNV = nullptr;
 void VkDedicatedAllocationBufferCreateInfoNV_Ann::init() {
     addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
     addFieldEx("pNext", "pNext", offsetof(VkDedicatedAllocationBufferCreateInfoNV, pNext), makeType<void *>(*mlib));
@@ -169,7 +169,7 @@ struct VkDedicatedAllocationMemoryAllocateInfoNV_Ann : ManagedStructureAnnotatio
     virtual bool canMove() const override { return true; }
     void init();
 };
-static VkDedicatedAllocationMemoryAllocateInfoNV_Ann * ann_VkDedicatedAllocationMemoryAllocateInfoNV = nullptr;
+static thread_local VkDedicatedAllocationMemoryAllocateInfoNV_Ann * ann_VkDedicatedAllocationMemoryAllocateInfoNV = nullptr;
 void VkDedicatedAllocationMemoryAllocateInfoNV_Ann::init() {
     addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
     addFieldEx("pNext", "pNext", offsetof(VkDedicatedAllocationMemoryAllocateInfoNV, pNext), makeType<void *>(*mlib));
@@ -186,7 +186,7 @@ struct VkExternalImageFormatPropertiesNV_Ann : ManagedStructureAnnotation<VkExte
     virtual bool canMove() const override { return true; }
     void init();
 };
-static VkExternalImageFormatPropertiesNV_Ann * ann_VkExternalImageFormatPropertiesNV = nullptr;
+static thread_local VkExternalImageFormatPropertiesNV_Ann * ann_VkExternalImageFormatPropertiesNV = nullptr;
 void VkExternalImageFormatPropertiesNV_Ann::init() {
     addField<DAS_BIND_MANAGED_FIELD(imageFormatProperties)>("imageFormatProperties", "imageFormatProperties");
     addFieldEx("externalMemoryFeatures", "externalMemoryFeatures", offsetof(VkExternalImageFormatPropertiesNV, externalMemoryFeatures), makeVkFlags_VkExternalMemoryFeatureFlagsNV());
@@ -203,7 +203,7 @@ struct VkExternalMemoryImageCreateInfoNV_Ann : ManagedStructureAnnotation<VkExte
     virtual bool canMove() const override { return true; }
     void init();
 };
-static VkExternalMemoryImageCreateInfoNV_Ann * ann_VkExternalMemoryImageCreateInfoNV = nullptr;
+static thread_local VkExternalMemoryImageCreateInfoNV_Ann * ann_VkExternalMemoryImageCreateInfoNV = nullptr;
 void VkExternalMemoryImageCreateInfoNV_Ann::init() {
     addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
     addFieldEx("pNext", "pNext", offsetof(VkExternalMemoryImageCreateInfoNV, pNext), makeType<void *>(*mlib));
@@ -219,7 +219,7 @@ struct VkExportMemoryAllocateInfoNV_Ann : ManagedStructureAnnotation<VkExportMem
     virtual bool canMove() const override { return true; }
     void init();
 };
-static VkExportMemoryAllocateInfoNV_Ann * ann_VkExportMemoryAllocateInfoNV = nullptr;
+static thread_local VkExportMemoryAllocateInfoNV_Ann * ann_VkExportMemoryAllocateInfoNV = nullptr;
 void VkExportMemoryAllocateInfoNV_Ann::init() {
     addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
     addFieldEx("pNext", "pNext", offsetof(VkExportMemoryAllocateInfoNV, pNext), makeType<void *>(*mlib));
@@ -235,7 +235,7 @@ struct VkImportMemoryWin32HandleInfoNV_Ann : ManagedStructureAnnotation<VkImport
     virtual bool canMove() const override { return true; }
     void init();
 };
-static VkImportMemoryWin32HandleInfoNV_Ann * ann_VkImportMemoryWin32HandleInfoNV = nullptr;
+static thread_local VkImportMemoryWin32HandleInfoNV_Ann * ann_VkImportMemoryWin32HandleInfoNV = nullptr;
 void VkImportMemoryWin32HandleInfoNV_Ann::init() {
     addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
     addFieldEx("pNext", "pNext", offsetof(VkImportMemoryWin32HandleInfoNV, pNext), makeType<void *>(*mlib));
@@ -252,7 +252,7 @@ struct VkExportMemoryWin32HandleInfoNV_Ann : ManagedStructureAnnotation<VkExport
     virtual bool canMove() const override { return true; }
     void init();
 };
-static VkExportMemoryWin32HandleInfoNV_Ann * ann_VkExportMemoryWin32HandleInfoNV = nullptr;
+static thread_local VkExportMemoryWin32HandleInfoNV_Ann * ann_VkExportMemoryWin32HandleInfoNV = nullptr;
 void VkExportMemoryWin32HandleInfoNV_Ann::init() {
     addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
     addFieldEx("pNext", "pNext", offsetof(VkExportMemoryWin32HandleInfoNV, pNext), makeType<void *>(*mlib));
@@ -269,7 +269,7 @@ struct VkWin32KeyedMutexAcquireReleaseInfoNV_Ann : ManagedStructureAnnotation<Vk
     virtual bool canMove() const override { return true; }
     void init();
 };
-static VkWin32KeyedMutexAcquireReleaseInfoNV_Ann * ann_VkWin32KeyedMutexAcquireReleaseInfoNV = nullptr;
+static thread_local VkWin32KeyedMutexAcquireReleaseInfoNV_Ann * ann_VkWin32KeyedMutexAcquireReleaseInfoNV = nullptr;
 void VkWin32KeyedMutexAcquireReleaseInfoNV_Ann::init() {
     addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
     addFieldEx("pNext", "pNext", offsetof(VkWin32KeyedMutexAcquireReleaseInfoNV, pNext), makeType<void *>(*mlib));
@@ -291,7 +291,7 @@ struct VkPhysicalDeviceDeviceGeneratedCommandsFeaturesNV_Ann : ManagedStructureA
     virtual bool canMove() const override { return true; }
     void init();
 };
-static VkPhysicalDeviceDeviceGeneratedCommandsFeaturesNV_Ann * ann_VkPhysicalDeviceDeviceGeneratedCommandsFeaturesNV = nullptr;
+static thread_local VkPhysicalDeviceDeviceGeneratedCommandsFeaturesNV_Ann * ann_VkPhysicalDeviceDeviceGeneratedCommandsFeaturesNV = nullptr;
 void VkPhysicalDeviceDeviceGeneratedCommandsFeaturesNV_Ann::init() {
     addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
     addFieldEx("pNext", "pNext", offsetof(VkPhysicalDeviceDeviceGeneratedCommandsFeaturesNV, pNext), makeType<void *>(*mlib));
@@ -307,7 +307,7 @@ struct VkPushConstantBankInfoNV_Ann : ManagedStructureAnnotation<VkPushConstantB
     virtual bool canMove() const override { return true; }
     void init();
 };
-static VkPushConstantBankInfoNV_Ann * ann_VkPushConstantBankInfoNV = nullptr;
+static thread_local VkPushConstantBankInfoNV_Ann * ann_VkPushConstantBankInfoNV = nullptr;
 void VkPushConstantBankInfoNV_Ann::init() {
     addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
     addFieldEx("pNext", "pNext", offsetof(VkPushConstantBankInfoNV, pNext), makeType<void *>(*mlib));
@@ -323,7 +323,7 @@ struct VkPhysicalDevicePushConstantBankFeaturesNV_Ann : ManagedStructureAnnotati
     virtual bool canMove() const override { return true; }
     void init();
 };
-static VkPhysicalDevicePushConstantBankFeaturesNV_Ann * ann_VkPhysicalDevicePushConstantBankFeaturesNV = nullptr;
+static thread_local VkPhysicalDevicePushConstantBankFeaturesNV_Ann * ann_VkPhysicalDevicePushConstantBankFeaturesNV = nullptr;
 void VkPhysicalDevicePushConstantBankFeaturesNV_Ann::init() {
     addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
     addFieldEx("pNext", "pNext", offsetof(VkPhysicalDevicePushConstantBankFeaturesNV, pNext), makeType<void *>(*mlib));
@@ -339,7 +339,7 @@ struct VkPhysicalDevicePushConstantBankPropertiesNV_Ann : ManagedStructureAnnota
     virtual bool canMove() const override { return true; }
     void init();
 };
-static VkPhysicalDevicePushConstantBankPropertiesNV_Ann * ann_VkPhysicalDevicePushConstantBankPropertiesNV = nullptr;
+static thread_local VkPhysicalDevicePushConstantBankPropertiesNV_Ann * ann_VkPhysicalDevicePushConstantBankPropertiesNV = nullptr;
 void VkPhysicalDevicePushConstantBankPropertiesNV_Ann::init() {
     addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
     addFieldEx("pNext", "pNext", offsetof(VkPhysicalDevicePushConstantBankPropertiesNV, pNext), makeType<void *>(*mlib));
@@ -358,7 +358,7 @@ struct VkPhysicalDeviceDeviceGeneratedCommandsComputeFeaturesNV_Ann : ManagedStr
     virtual bool canMove() const override { return true; }
     void init();
 };
-static VkPhysicalDeviceDeviceGeneratedCommandsComputeFeaturesNV_Ann * ann_VkPhysicalDeviceDeviceGeneratedCommandsComputeFeaturesNV = nullptr;
+static thread_local VkPhysicalDeviceDeviceGeneratedCommandsComputeFeaturesNV_Ann * ann_VkPhysicalDeviceDeviceGeneratedCommandsComputeFeaturesNV = nullptr;
 void VkPhysicalDeviceDeviceGeneratedCommandsComputeFeaturesNV_Ann::init() {
     addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
     addFieldEx("pNext", "pNext", offsetof(VkPhysicalDeviceDeviceGeneratedCommandsComputeFeaturesNV, pNext), makeType<void *>(*mlib));
@@ -376,7 +376,7 @@ struct VkDevicePrivateDataCreateInfo_Ann : ManagedStructureAnnotation<VkDevicePr
     virtual bool canMove() const override { return true; }
     void init();
 };
-static VkDevicePrivateDataCreateInfo_Ann * ann_VkDevicePrivateDataCreateInfo = nullptr;
+static thread_local VkDevicePrivateDataCreateInfo_Ann * ann_VkDevicePrivateDataCreateInfo = nullptr;
 void VkDevicePrivateDataCreateInfo_Ann::init() {
     addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
     addFieldEx("pNext", "pNext", offsetof(VkDevicePrivateDataCreateInfo, pNext), makeType<void *>(*mlib));
@@ -392,7 +392,7 @@ struct VkPrivateDataSlotCreateInfo_Ann : ManagedStructureAnnotation<VkPrivateDat
     virtual bool canMove() const override { return true; }
     void init();
 };
-static VkPrivateDataSlotCreateInfo_Ann * ann_VkPrivateDataSlotCreateInfo = nullptr;
+static thread_local VkPrivateDataSlotCreateInfo_Ann * ann_VkPrivateDataSlotCreateInfo = nullptr;
 void VkPrivateDataSlotCreateInfo_Ann::init() {
     addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
     addFieldEx("pNext", "pNext", offsetof(VkPrivateDataSlotCreateInfo, pNext), makeType<void *>(*mlib));
@@ -408,7 +408,7 @@ struct VkPhysicalDevicePrivateDataFeatures_Ann : ManagedStructureAnnotation<VkPh
     virtual bool canMove() const override { return true; }
     void init();
 };
-static VkPhysicalDevicePrivateDataFeatures_Ann * ann_VkPhysicalDevicePrivateDataFeatures = nullptr;
+static thread_local VkPhysicalDevicePrivateDataFeatures_Ann * ann_VkPhysicalDevicePrivateDataFeatures = nullptr;
 void VkPhysicalDevicePrivateDataFeatures_Ann::init() {
     addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
     addFieldEx("pNext", "pNext", offsetof(VkPhysicalDevicePrivateDataFeatures, pNext), makeType<void *>(*mlib));
@@ -424,7 +424,7 @@ struct VkPhysicalDeviceDeviceGeneratedCommandsPropertiesNV_Ann : ManagedStructur
     virtual bool canMove() const override { return true; }
     void init();
 };
-static VkPhysicalDeviceDeviceGeneratedCommandsPropertiesNV_Ann * ann_VkPhysicalDeviceDeviceGeneratedCommandsPropertiesNV = nullptr;
+static thread_local VkPhysicalDeviceDeviceGeneratedCommandsPropertiesNV_Ann * ann_VkPhysicalDeviceDeviceGeneratedCommandsPropertiesNV = nullptr;
 void VkPhysicalDeviceDeviceGeneratedCommandsPropertiesNV_Ann::init() {
     addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
     addFieldEx("pNext", "pNext", offsetof(VkPhysicalDeviceDeviceGeneratedCommandsPropertiesNV, pNext), makeType<void *>(*mlib));
@@ -448,7 +448,7 @@ struct VkPhysicalDeviceClusterAccelerationStructureFeaturesNV_Ann : ManagedStruc
     virtual bool canMove() const override { return true; }
     void init();
 };
-static VkPhysicalDeviceClusterAccelerationStructureFeaturesNV_Ann * ann_VkPhysicalDeviceClusterAccelerationStructureFeaturesNV = nullptr;
+static thread_local VkPhysicalDeviceClusterAccelerationStructureFeaturesNV_Ann * ann_VkPhysicalDeviceClusterAccelerationStructureFeaturesNV = nullptr;
 void VkPhysicalDeviceClusterAccelerationStructureFeaturesNV_Ann::init() {
     addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
     addFieldEx("pNext", "pNext", offsetof(VkPhysicalDeviceClusterAccelerationStructureFeaturesNV, pNext), makeType<void *>(*mlib));
@@ -464,7 +464,7 @@ struct VkPhysicalDeviceClusterAccelerationStructurePropertiesNV_Ann : ManagedStr
     virtual bool canMove() const override { return true; }
     void init();
 };
-static VkPhysicalDeviceClusterAccelerationStructurePropertiesNV_Ann * ann_VkPhysicalDeviceClusterAccelerationStructurePropertiesNV = nullptr;
+static thread_local VkPhysicalDeviceClusterAccelerationStructurePropertiesNV_Ann * ann_VkPhysicalDeviceClusterAccelerationStructurePropertiesNV = nullptr;
 void VkPhysicalDeviceClusterAccelerationStructurePropertiesNV_Ann::init() {
     addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
     addFieldEx("pNext", "pNext", offsetof(VkPhysicalDeviceClusterAccelerationStructurePropertiesNV, pNext), makeType<void *>(*mlib));
@@ -487,7 +487,7 @@ struct VkStridedDeviceAddressNV_Ann : ManagedStructureAnnotation<VkStridedDevice
     virtual bool canMove() const override { return true; }
     void init();
 };
-static VkStridedDeviceAddressNV_Ann * ann_VkStridedDeviceAddressNV = nullptr;
+static thread_local VkStridedDeviceAddressNV_Ann * ann_VkStridedDeviceAddressNV = nullptr;
 void VkStridedDeviceAddressNV_Ann::init() {
     addField<DAS_BIND_MANAGED_FIELD(startAddress)>("startAddress", "startAddress");
     addField<DAS_BIND_MANAGED_FIELD(strideInBytes)>("strideInBytes", "strideInBytes");
@@ -502,7 +502,7 @@ struct VkRayTracingPipelineClusterAccelerationStructureCreateInfoNV_Ann : Manage
     virtual bool canMove() const override { return true; }
     void init();
 };
-static VkRayTracingPipelineClusterAccelerationStructureCreateInfoNV_Ann * ann_VkRayTracingPipelineClusterAccelerationStructureCreateInfoNV = nullptr;
+static thread_local VkRayTracingPipelineClusterAccelerationStructureCreateInfoNV_Ann * ann_VkRayTracingPipelineClusterAccelerationStructureCreateInfoNV = nullptr;
 void VkRayTracingPipelineClusterAccelerationStructureCreateInfoNV_Ann::init() {
     addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
     addFieldEx("pNext", "pNext", offsetof(VkRayTracingPipelineClusterAccelerationStructureCreateInfoNV, pNext), makeType<void *>(*mlib));
@@ -518,7 +518,7 @@ struct VkClusterAccelerationStructureMoveObjectsInfoNV_Ann : ManagedStructureAnn
     virtual bool canMove() const override { return true; }
     void init();
 };
-static VkClusterAccelerationStructureMoveObjectsInfoNV_Ann * ann_VkClusterAccelerationStructureMoveObjectsInfoNV = nullptr;
+static thread_local VkClusterAccelerationStructureMoveObjectsInfoNV_Ann * ann_VkClusterAccelerationStructureMoveObjectsInfoNV = nullptr;
 void VkClusterAccelerationStructureMoveObjectsInfoNV_Ann::init() {
     addField<DAS_BIND_MANAGED_FIELD(srcAccelerationStructure)>("srcAccelerationStructure", "srcAccelerationStructure");
 }
@@ -532,7 +532,7 @@ struct VkClusterAccelerationStructureBuildClustersBottomLevelInfoNV_Ann : Manage
     virtual bool canMove() const override { return true; }
     void init();
 };
-static VkClusterAccelerationStructureBuildClustersBottomLevelInfoNV_Ann * ann_VkClusterAccelerationStructureBuildClustersBottomLevelInfoNV = nullptr;
+static thread_local VkClusterAccelerationStructureBuildClustersBottomLevelInfoNV_Ann * ann_VkClusterAccelerationStructureBuildClustersBottomLevelInfoNV = nullptr;
 void VkClusterAccelerationStructureBuildClustersBottomLevelInfoNV_Ann::init() {
     addField<DAS_BIND_MANAGED_FIELD(clusterReferencesCount)>("clusterReferencesCount", "clusterReferencesCount");
     addField<DAS_BIND_MANAGED_FIELD(clusterReferencesStride)>("clusterReferencesStride", "clusterReferencesStride");
@@ -548,7 +548,7 @@ struct VkClusterAccelerationStructureGetTemplateIndicesInfoNV_Ann : ManagedStruc
     virtual bool canMove() const override { return true; }
     void init();
 };
-static VkClusterAccelerationStructureGetTemplateIndicesInfoNV_Ann * ann_VkClusterAccelerationStructureGetTemplateIndicesInfoNV = nullptr;
+static thread_local VkClusterAccelerationStructureGetTemplateIndicesInfoNV_Ann * ann_VkClusterAccelerationStructureGetTemplateIndicesInfoNV = nullptr;
 void VkClusterAccelerationStructureGetTemplateIndicesInfoNV_Ann::init() {
     addField<DAS_BIND_MANAGED_FIELD(clusterTemplateAddress)>("clusterTemplateAddress", "clusterTemplateAddress");
 }
@@ -562,7 +562,7 @@ struct VkClusterAccelerationStructureClustersBottomLevelInputNV_Ann : ManagedStr
     virtual bool canMove() const override { return true; }
     void init();
 };
-static VkClusterAccelerationStructureClustersBottomLevelInputNV_Ann * ann_VkClusterAccelerationStructureClustersBottomLevelInputNV = nullptr;
+static thread_local VkClusterAccelerationStructureClustersBottomLevelInputNV_Ann * ann_VkClusterAccelerationStructureClustersBottomLevelInputNV = nullptr;
 void VkClusterAccelerationStructureClustersBottomLevelInputNV_Ann::init() {
     addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
     addFieldEx("pNext", "pNext", offsetof(VkClusterAccelerationStructureClustersBottomLevelInputNV, pNext), makeType<void *>(*mlib));
@@ -579,7 +579,7 @@ struct VkClusterAccelerationStructureTriangleClusterInputNV_Ann : ManagedStructu
     virtual bool canMove() const override { return true; }
     void init();
 };
-static VkClusterAccelerationStructureTriangleClusterInputNV_Ann * ann_VkClusterAccelerationStructureTriangleClusterInputNV = nullptr;
+static thread_local VkClusterAccelerationStructureTriangleClusterInputNV_Ann * ann_VkClusterAccelerationStructureTriangleClusterInputNV = nullptr;
 void VkClusterAccelerationStructureTriangleClusterInputNV_Ann::init() {
     addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
     addFieldEx("pNext", "pNext", offsetof(VkClusterAccelerationStructureTriangleClusterInputNV, pNext), makeType<void *>(*mlib));
@@ -602,7 +602,7 @@ struct VkClusterAccelerationStructureMoveObjectsInputNV_Ann : ManagedStructureAn
     virtual bool canMove() const override { return true; }
     void init();
 };
-static VkClusterAccelerationStructureMoveObjectsInputNV_Ann * ann_VkClusterAccelerationStructureMoveObjectsInputNV = nullptr;
+static thread_local VkClusterAccelerationStructureMoveObjectsInputNV_Ann * ann_VkClusterAccelerationStructureMoveObjectsInputNV = nullptr;
 void VkClusterAccelerationStructureMoveObjectsInputNV_Ann::init() {
     addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
     addFieldEx("pNext", "pNext", offsetof(VkClusterAccelerationStructureMoveObjectsInputNV, pNext), makeType<void *>(*mlib));
@@ -620,7 +620,7 @@ struct VkClusterAccelerationStructureOpInputNV_Ann : ManagedStructureAnnotation<
     virtual bool canMove() const override { return true; }
     void init();
 };
-static VkClusterAccelerationStructureOpInputNV_Ann * ann_VkClusterAccelerationStructureOpInputNV = nullptr;
+static thread_local VkClusterAccelerationStructureOpInputNV_Ann * ann_VkClusterAccelerationStructureOpInputNV = nullptr;
 void VkClusterAccelerationStructureOpInputNV_Ann::init() {
     addFieldEx("pClustersBottomLevel", "pClustersBottomLevel", offsetof(VkClusterAccelerationStructureOpInputNV, pClustersBottomLevel), makeType<VkClusterAccelerationStructureClustersBottomLevelInputNV *>(*mlib));
     addFieldEx("pTriangleClusters", "pTriangleClusters", offsetof(VkClusterAccelerationStructureOpInputNV, pTriangleClusters), makeType<VkClusterAccelerationStructureTriangleClusterInputNV *>(*mlib));
@@ -636,7 +636,7 @@ struct VkClusterAccelerationStructureInputInfoNV_Ann : ManagedStructureAnnotatio
     virtual bool canMove() const override { return true; }
     void init();
 };
-static VkClusterAccelerationStructureInputInfoNV_Ann * ann_VkClusterAccelerationStructureInputInfoNV = nullptr;
+static thread_local VkClusterAccelerationStructureInputInfoNV_Ann * ann_VkClusterAccelerationStructureInputInfoNV = nullptr;
 void VkClusterAccelerationStructureInputInfoNV_Ann::init() {
     addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
     addFieldEx("pNext", "pNext", offsetof(VkClusterAccelerationStructureInputInfoNV, pNext), makeType<void *>(*mlib));
@@ -656,7 +656,7 @@ struct VkClusterAccelerationStructureCommandsInfoNV_Ann : ManagedStructureAnnota
     virtual bool canMove() const override { return true; }
     void init();
 };
-static VkClusterAccelerationStructureCommandsInfoNV_Ann * ann_VkClusterAccelerationStructureCommandsInfoNV = nullptr;
+static thread_local VkClusterAccelerationStructureCommandsInfoNV_Ann * ann_VkClusterAccelerationStructureCommandsInfoNV = nullptr;
 void VkClusterAccelerationStructureCommandsInfoNV_Ann::init() {
     addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
     addFieldEx("pNext", "pNext", offsetof(VkClusterAccelerationStructureCommandsInfoNV, pNext), makeType<void *>(*mlib));
@@ -679,7 +679,7 @@ struct VkPhysicalDeviceMultiDrawPropertiesEXT_Ann : ManagedStructureAnnotation<V
     virtual bool canMove() const override { return true; }
     void init();
 };
-static VkPhysicalDeviceMultiDrawPropertiesEXT_Ann * ann_VkPhysicalDeviceMultiDrawPropertiesEXT = nullptr;
+static thread_local VkPhysicalDeviceMultiDrawPropertiesEXT_Ann * ann_VkPhysicalDeviceMultiDrawPropertiesEXT = nullptr;
 void VkPhysicalDeviceMultiDrawPropertiesEXT_Ann::init() {
     addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
     addFieldEx("pNext", "pNext", offsetof(VkPhysicalDeviceMultiDrawPropertiesEXT, pNext), makeType<void *>(*mlib));
@@ -695,7 +695,7 @@ struct VkGraphicsShaderGroupCreateInfoNV_Ann : ManagedStructureAnnotation<VkGrap
     virtual bool canMove() const override { return true; }
     void init();
 };
-static VkGraphicsShaderGroupCreateInfoNV_Ann * ann_VkGraphicsShaderGroupCreateInfoNV = nullptr;
+static thread_local VkGraphicsShaderGroupCreateInfoNV_Ann * ann_VkGraphicsShaderGroupCreateInfoNV = nullptr;
 void VkGraphicsShaderGroupCreateInfoNV_Ann::init() {
     addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
     addFieldEx("pNext", "pNext", offsetof(VkGraphicsShaderGroupCreateInfoNV, pNext), makeType<void *>(*mlib));
@@ -714,7 +714,7 @@ struct VkGraphicsPipelineShaderGroupsCreateInfoNV_Ann : ManagedStructureAnnotati
     virtual bool canMove() const override { return true; }
     void init();
 };
-static VkGraphicsPipelineShaderGroupsCreateInfoNV_Ann * ann_VkGraphicsPipelineShaderGroupsCreateInfoNV = nullptr;
+static thread_local VkGraphicsPipelineShaderGroupsCreateInfoNV_Ann * ann_VkGraphicsPipelineShaderGroupsCreateInfoNV = nullptr;
 void VkGraphicsPipelineShaderGroupsCreateInfoNV_Ann::init() {
     addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
     addFieldEx("pNext", "pNext", offsetof(VkGraphicsPipelineShaderGroupsCreateInfoNV, pNext), makeType<void *>(*mlib));
@@ -733,7 +733,7 @@ struct VkBindShaderGroupIndirectCommandNV_Ann : ManagedStructureAnnotation<VkBin
     virtual bool canMove() const override { return true; }
     void init();
 };
-static VkBindShaderGroupIndirectCommandNV_Ann * ann_VkBindShaderGroupIndirectCommandNV = nullptr;
+static thread_local VkBindShaderGroupIndirectCommandNV_Ann * ann_VkBindShaderGroupIndirectCommandNV = nullptr;
 void VkBindShaderGroupIndirectCommandNV_Ann::init() {
     addField<DAS_BIND_MANAGED_FIELD(groupIndex)>("groupIndex", "groupIndex");
 }
@@ -747,7 +747,7 @@ struct VkBindIndexBufferIndirectCommandNV_Ann : ManagedStructureAnnotation<VkBin
     virtual bool canMove() const override { return true; }
     void init();
 };
-static VkBindIndexBufferIndirectCommandNV_Ann * ann_VkBindIndexBufferIndirectCommandNV = nullptr;
+static thread_local VkBindIndexBufferIndirectCommandNV_Ann * ann_VkBindIndexBufferIndirectCommandNV = nullptr;
 void VkBindIndexBufferIndirectCommandNV_Ann::init() {
     addField<DAS_BIND_MANAGED_FIELD(bufferAddress)>("bufferAddress", "bufferAddress");
     addField<DAS_BIND_MANAGED_FIELD(size)>("size", "size");
@@ -763,7 +763,7 @@ struct VkBindVertexBufferIndirectCommandNV_Ann : ManagedStructureAnnotation<VkBi
     virtual bool canMove() const override { return true; }
     void init();
 };
-static VkBindVertexBufferIndirectCommandNV_Ann * ann_VkBindVertexBufferIndirectCommandNV = nullptr;
+static thread_local VkBindVertexBufferIndirectCommandNV_Ann * ann_VkBindVertexBufferIndirectCommandNV = nullptr;
 void VkBindVertexBufferIndirectCommandNV_Ann::init() {
     addField<DAS_BIND_MANAGED_FIELD(bufferAddress)>("bufferAddress", "bufferAddress");
     addField<DAS_BIND_MANAGED_FIELD(size)>("size", "size");
@@ -779,7 +779,7 @@ struct VkSetStateFlagsIndirectCommandNV_Ann : ManagedStructureAnnotation<VkSetSt
     virtual bool canMove() const override { return true; }
     void init();
 };
-static VkSetStateFlagsIndirectCommandNV_Ann * ann_VkSetStateFlagsIndirectCommandNV = nullptr;
+static thread_local VkSetStateFlagsIndirectCommandNV_Ann * ann_VkSetStateFlagsIndirectCommandNV = nullptr;
 void VkSetStateFlagsIndirectCommandNV_Ann::init() {
     addField<DAS_BIND_MANAGED_FIELD(data)>("data", "data");
 }
@@ -793,7 +793,7 @@ struct VkIndirectCommandsStreamNV_Ann : ManagedStructureAnnotation<VkIndirectCom
     virtual bool canMove() const override { return true; }
     void init();
 };
-static VkIndirectCommandsStreamNV_Ann * ann_VkIndirectCommandsStreamNV = nullptr;
+static thread_local VkIndirectCommandsStreamNV_Ann * ann_VkIndirectCommandsStreamNV = nullptr;
 void VkIndirectCommandsStreamNV_Ann::init() {
     addField<DAS_BIND_MANAGED_FIELD(buffer)>("buffer", "buffer");
     addField<DAS_BIND_MANAGED_FIELD(offset)>("offset", "offset");
@@ -808,7 +808,7 @@ struct VkIndirectCommandsLayoutTokenNV_Ann : ManagedStructureAnnotation<VkIndire
     virtual bool canMove() const override { return true; }
     void init();
 };
-static VkIndirectCommandsLayoutTokenNV_Ann * ann_VkIndirectCommandsLayoutTokenNV = nullptr;
+static thread_local VkIndirectCommandsLayoutTokenNV_Ann * ann_VkIndirectCommandsLayoutTokenNV = nullptr;
 void VkIndirectCommandsLayoutTokenNV_Ann::init() {
     addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
     addFieldEx("pNext", "pNext", offsetof(VkIndirectCommandsLayoutTokenNV, pNext), makeType<void *>(*mlib));
@@ -836,7 +836,7 @@ struct VkIndirectCommandsLayoutCreateInfoNV_Ann : ManagedStructureAnnotation<VkI
     virtual bool canMove() const override { return true; }
     void init();
 };
-static VkIndirectCommandsLayoutCreateInfoNV_Ann * ann_VkIndirectCommandsLayoutCreateInfoNV = nullptr;
+static thread_local VkIndirectCommandsLayoutCreateInfoNV_Ann * ann_VkIndirectCommandsLayoutCreateInfoNV = nullptr;
 void VkIndirectCommandsLayoutCreateInfoNV_Ann::init() {
     addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
     addFieldEx("pNext", "pNext", offsetof(VkIndirectCommandsLayoutCreateInfoNV, pNext), makeType<void *>(*mlib));
@@ -857,7 +857,7 @@ struct VkGeneratedCommandsInfoNV_Ann : ManagedStructureAnnotation<VkGeneratedCom
     virtual bool canMove() const override { return true; }
     void init();
 };
-static VkGeneratedCommandsInfoNV_Ann * ann_VkGeneratedCommandsInfoNV = nullptr;
+static thread_local VkGeneratedCommandsInfoNV_Ann * ann_VkGeneratedCommandsInfoNV = nullptr;
 void VkGeneratedCommandsInfoNV_Ann::init() {
     addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
     addFieldEx("pNext", "pNext", offsetof(VkGeneratedCommandsInfoNV, pNext), makeType<void *>(*mlib));
@@ -885,7 +885,7 @@ struct VkGeneratedCommandsMemoryRequirementsInfoNV_Ann : ManagedStructureAnnotat
     virtual bool canMove() const override { return true; }
     void init();
 };
-static VkGeneratedCommandsMemoryRequirementsInfoNV_Ann * ann_VkGeneratedCommandsMemoryRequirementsInfoNV = nullptr;
+static thread_local VkGeneratedCommandsMemoryRequirementsInfoNV_Ann * ann_VkGeneratedCommandsMemoryRequirementsInfoNV = nullptr;
 void VkGeneratedCommandsMemoryRequirementsInfoNV_Ann::init() {
     addField<DAS_BIND_MANAGED_FIELD(sType)>("sType", "sType");
     addFieldEx("pNext", "pNext", offsetof(VkGeneratedCommandsMemoryRequirementsInfoNV, pNext), makeType<void *>(*mlib));

@@ -678,7 +678,7 @@ def public emit_structs(reg : VkRegistry; em : EmitModel; out_dir : string; var 
                 fprint(f, "    virtual bool canMove() const override {OB} return true; {CB}\n")
                 fprint(f, "    void init();\n")
                 fprint(f, "{CB};\n")
-                fprint(f, "static {s.name}_Ann * ann_{s.name} = nullptr;\n")
+                fprint(f, "static thread_local {s.name}_Ann * ann_{s.name} = nullptr;\n")
                 fprint(f, "void {s.name}_Ann::init() {OB}\n")
                 for (m in s.members) {
                     let das_name = das_safe_name(m.name)

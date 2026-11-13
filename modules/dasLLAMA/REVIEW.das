@@ -1524,17 +1524,6 @@ def private function_bodies(path : string; pick : block<(header : string) : bool
     return <- out
 }
 
-def private fnv1a(text : string; seed : uint64) : uint64 {
-    var h = seed
-    peek_data(text) $(d) {
-        for (b in d) {
-            h ^= uint64(b)
-            h *= 0x100000001b3ul
-        }
-    }
-    return h
-}
-
 // A field write into the archive, in every spelling the serializers use: the pipe form
 // (`arch |> serialize`, which covers `serialize_raw`) and the call form a nested or bulk
 // serializer takes (`serialize(arch, ...)`, `serialize_pod_array(arch, ...)`).
@@ -1591,7 +1580,7 @@ def private check_image_layout_stamp {
         }
     }
     files |> sort()
-    var h = 0xcbf29ce484222325ul
+    var h = FNV1A_SEED
     for (name in files) {
         let p = "{DASLLAMA_DIR}/{name}"
         var inscope consts <- layout_constant_lines(p)
@@ -2514,7 +2503,7 @@ def private check_unicode_tables_stamp {
         gate_finding(UNICODE_FILE, "the WS table literal has no closing `]` line")
         return
     }
-    let h = fnv1a(slice(text, from, ws_end + 2), 0xcbf29ce484222325ul)
+    let h = fnv1a(slice(text, from, ws_end + 2), FNV1A_SEED)
     if (h != UNICODE_TABLES_HASH) {
         gate_finding(UNICODE_FILE, "the RANGES / WS tables changed - a hand edit is a defect: regenerate them by retranscoding the reference checkout's unicode data, then re-stamp UNICODE_TABLES_HASH = {h}ul in modules/dasLLAMA/REVIEW.das")
     }
@@ -2528,7 +2517,7 @@ let private GEMM_GEN_STAMP_HASH = 0x54d049dbeea4a900ul
 
 [arch(at = "ARCHITECTURE_ENGINE_FORMATS.md#cpu-kernel-tiers")]
 def private check_gemm_gen_stamp {
-    var h = 0xcbf29ce484222325ul
+    var h = FNV1A_SEED
     for (path in GEMM_GEN_FILES) {
         return if (!fexist(path))   //! a fixture tree without the generated tier has no generator to stamp
         h = fnv1a("{base_name(path)}\n", h)
@@ -3167,10 +3156,8 @@ let private CENSUS_TABLES = ["let private CENSUS_NEVER_DISPATCHED <- [", "let pr
 def private pinned_set(var names : table<string>; var whole_files : table<string>) {
     for (line in split(read_lf(PINNED_DOC), "\n")) {
         var inscope parts <- split(line, "`")
-        for (i in range(length(parts))) {
-            if (i % 2 == 1) {
-                names |> insert(parts[i])
-            }
+        for (name in quoted_segments(line, "`")) {
+            names |> insert(name)
         }
         if (line |> starts_with("- `") && length(parts) >= 3 && parts[1] |> ends_with(".das") && parts[2] |> starts_with(" must")) {
             whole_files |> insert(parts[1])

@@ -1446,11 +1446,12 @@ namespace das {
 
     void withJobQue ( const TBlock<void> & block, Context * context, LineInfoArg * lineInfo ) {
         {
-            lock_guard<mutex> guard(g_jobQueMutex);
-            if ( !g_jobQue ) g_jobQue = make_shared<JobQue>();  // check under the lock: create_job_que can also init g_jobQue concurrently
-        }
-        {
-            shared_ptr<JobQue> jq = g_jobQue;
+            shared_ptr<JobQue> jq;
+            {
+                lock_guard<mutex> guard(g_jobQueMutex);
+                if ( !g_jobQue ) g_jobQue = make_shared<JobQue>();  // check under the lock: create_job_que can also init g_jobQue concurrently
+                jq = g_jobQue;
+            }
             context->invoke(block, nullptr, nullptr, lineInfo);
         }
         // Batch dispatch is a thread-local, block-scoped contract: flush any stragglers and reset the

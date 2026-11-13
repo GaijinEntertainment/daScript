@@ -68,6 +68,8 @@ phase binds. The file set that carries this surface is `EMITTER_FILES` in
 `tests-cpp/small/test_jit_emitter_pin.cpp` (repo root); the pin test makes every text change to one
 of those files visible (re-pin `LLVM_JIT_EMITTER_HASH`), and the bump is owed when the emitted code for
 identical inputs can differ - a comment, a nolint, or a same-value rewrite inside an emitter file re-pins without a bump.
+`REVIEW.das` recomputes the same hash from the same list, so a stale pin is a finding before
+anything is built.
 
 The per-artifact entry emitters are OUTSIDE that surface: `llvm_exe.das` (a standalone exe's
 `main`) and its `-lib` half (the C entry points and thunks) emit startup glue for artifacts

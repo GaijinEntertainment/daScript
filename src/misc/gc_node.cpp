@@ -8,10 +8,6 @@
 
 namespace das {
 
-    // debugging id - to break on
-
-    static uint64_t gc_break_on_id = 0;
-
     // installed by the AST layer (ast_gc_report.cpp); see gc_node.h
     DAS_API gc_describe_fn gc_node_describe_hook = nullptr;
 
@@ -133,7 +129,7 @@ namespace das {
     }
 
     // ---- gc_node debug break ----
-    // Set gc_break_on_id via debugger or env DAS_GC_BREAK_ON_ID to break
+    // Set env DAS_GC_BREAK_ON_ID to break
     // when a specific gc_id is assigned. Useful for tracing where a leaked node was born.
 
     static uint64_t gc_init_break_on_id() {
@@ -144,10 +140,7 @@ namespace das {
     }
 
     static void gc_check_break ( uint64_t id ) {
-        if ( gc_break_on_id == 0 ) {
-            static bool once = true;
-            if ( once ) { once = false; gc_break_on_id = gc_init_break_on_id(); }
-        }
+        static const uint64_t gc_break_on_id = gc_init_break_on_id();
         if ( gc_break_on_id && id == gc_break_on_id ) {
             DAS_FATAL_LOG("gc_node break: id=%" PRIu64 "\n", id);
             print_current_stack_trace();

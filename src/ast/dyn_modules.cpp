@@ -635,6 +635,7 @@ static bool load_deferred_module_for_require(const string & name) {
     return loaded;
 }
 
+// src/ast/ARCHITECTURE_MODULE_SCAN.md#one-scan-per-process
 bool require_dynamic_modules(FileAccessPtr file_access,
                              const das::string &das_root,
                              const das::string &project_root,

@@ -61,6 +61,30 @@ def test_find_line(t : T?) {
     t |> equal(0, find_line("", "x"))
 }
 
+[test(description = "quoted_segments returns each run between a quote pair in order, empty runs included, for any quote string")]
+def test_quoted_segments(t : T?) {
+    var inscope names <- quoted_segments("x = [\"a.das\", \"\", \"/b/c.das\"] // \"tail")
+    t |> equal(4, length(names))
+    t |> equal("a.das", names[0])
+    t |> equal("", names[1])
+    t |> equal("/b/c.das", names[2])
+    t |> equal("tail", names[3], "an unclosed quote still opens a run")
+    var inscope ticks <- quoted_segments("- `one` must, `two` may", "`")
+    t |> equal(2, length(ticks))
+    t |> equal("one", ticks[0])
+    t |> equal("two", ticks[1])
+    var inscope none <- quoted_segments("no quotes here")
+    t |> equal(0, length(none))
+}
+
+[test(description = "fnv1a matches the published FNV-1a 64 vectors, leaves the seed for empty text, and chains piece by piece")]
+def test_fnv1a(t : T?) {
+    t |> equal(FNV1A_SEED, fnv1a("", FNV1A_SEED))
+    t |> equal(0xaf63dc4c8601ec8cul, fnv1a("a", FNV1A_SEED))
+    t |> equal(0x85944171f73967e8ul, fnv1a("foobar", FNV1A_SEED))
+    t |> equal(fnv1a("foobar", FNV1A_SEED), fnv1a("bar", fnv1a("foo", FNV1A_SEED)))
+}
+
 [test(description = "das_requires lists the required module paths, skipping comments, indentation noise and ?guard tokens")]
 def test_das_requires(t : T?) {
     let fixture_r = create_temp_file_result("review_gate_req", ".das")

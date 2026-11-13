@@ -191,11 +191,8 @@ def private packaged_tool_names() : array<string> {
     var names : array<string>
     for (ln in split(fread("ci/packaging/packages.py"), "\n")) {
         continue if (!starts_with(ln, "DASLANG_TOOLS = ["))
-        for (piece, i in split(ln, "\""), count()) {
-            if (i % 2 == 1) {
-                names |> push(piece)
-            }
-        }
+        var inscope quoted <- quoted_segments(ln)
+        names |> push_from(quoted)
     }
     return <- names
 }

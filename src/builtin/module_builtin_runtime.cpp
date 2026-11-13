@@ -1644,20 +1644,31 @@ namespace das
         return cast<bool>::from(ok);
     }
 
-    Array  g_CommandLineArguments;
+    static Array  g_CommandLineArguments;
+    static mutex  g_CommandLineArgumentsMutex;
+    static thread_local const Array * g_CommandLineArgumentsOverride = nullptr;
+
+    // src/builtin/ARCHITECTURE.md#command-line-arguments
+    static Array commandLineArguments () {
+        if ( g_CommandLineArgumentsOverride ) return *g_CommandLineArgumentsOverride;
+        lock_guard<mutex> guard(g_CommandLineArgumentsMutex);
+        return g_CommandLineArguments;
+    }
 
     void setCommandLineArguments ( int argc, char * argv[] ) {
+        lock_guard<mutex> guard(g_CommandLineArgumentsMutex);
         array_mark_locked(g_CommandLineArguments, (char *)argv, uint32_t(argc));
     }
 
     void getCommandLineArguments( Array & arr ) {
-        arr = g_CommandLineArguments;
+        arr = commandLineArguments();
     }
 
     string commandLineArgumentOccurrences ( const string & flag ) {
         string out;
-        auto argv = (char **) g_CommandLineArguments.data;
-        uint32_t argc = g_CommandLineArguments.size;
+        const Array args = commandLineArguments();
+        auto argv = (char **) args.data;
+        uint32_t argc = args.size;
         string eq = flag + "=";
         for ( uint32_t i=0; i<argc; ++i ) {
             const char * a = argv[i] ? argv[i] : "";
@@ -1676,10 +1687,12 @@ namespace das
     }
 
     void withCommandLineArguments( const Array & arr, const TBlock<void> & body, Context * context, LineInfoArg * at ) {
-        auto prev = g_CommandLineArguments;
-        g_CommandLineArguments = arr;
+        struct OverrideScope {
+            const Array * outer = g_CommandLineArgumentsOverride;
+            ~OverrideScope() { g_CommandLineArgumentsOverride = outer; }
+        } scope;
+        g_CommandLineArgumentsOverride = &arr;
         context->invoke(body, nullptr, nullptr, at);
-        g_CommandLineArguments = prev;
     }
 
     char * builtin_das_root ( Context * context, LineInfoArg * at ) {
@@ -2041,8 +2054,9 @@ namespace das
     // target (dasOpenGL registers its wasm GLES3 module for emscripten; a desktop run keeps the
     // pure-das opengl.das).
     const char * das_get_target_triple() {
-        char ** argv = (char **) g_CommandLineArguments.data;
-        uint64_t n = g_CommandLineArguments.size;
+        const Array args = commandLineArguments();
+        char ** argv = (char **) args.data;
+        uint64_t n = args.size;
         const char * found = "";   // the LAST occurrence wins, as every other argv reader here takes it
         for ( uint64_t i=0; i<n; ++i ) {
             const char * a = argv[i];
@@ -2318,7 +2332,7 @@ namespace das
         addExternInline<DAS_BIND_FUN(is_safe_hash)>(*this, lib, "is_safe_hash",
             SideEffects::none, "is_safe_hash");
         addExternInline<DAS_BIND_FUN(withCommandLineArguments)>(*this, lib,  "with_argv",
-            SideEffects::invoke, "withArgv")
+            SideEffects::invoke, "withCommandLineArguments")
                 ->args({"new_arguments", "block","context","line"});
         // compile-time functions
         addExternInline<DAS_BIND_FUN(is_compiling)>(*this, lib, "is_compiling",

@@ -86,3 +86,23 @@ Windows resolves the path with `normalizeFileName`; Linux, macOS and Haiku with
 `std::filesystem`. The root stays as given on every other target (the web build, a console, a
 `DAS_NO_FILEIO` build), and wherever the resolve fails - a path past `MAX_PATH`, a working
 directory that cannot be read.
+
+## One lock guards the root, and one thread derives it {#das-root-lock}
+
+`getDasRoot` and `setDasRoot` take one mutex, and the stored root changes in a single assignment
+under it. `setDasRoot` builds the absolute form in a local before it locks. The first
+`getDasRoot` of a process that set no root derives one from the executable's path, in a local,
+while it holds the lock: threads that ask at the same moment wait for that one derivation and
+all get its answer. `getDasRoot` answers a copy, so no caller holds a reference into the stored
+string. `setDasRoot("")` clears the stored root, and the next `getDasRoot` derives it again.
+
+The reason is a host that compiles on several threads. Every compile asks for the root -
+`daslib/` paths, the module scan, the anonymous-module hash - and nothing orders the first
+compile of one thread against the first compile of another. A root stored in steps (the sidecar
+text, then the absolute form, then the slashes) is a root a second thread can copy half-made or
+free a second time; a half-made root that does not crash is a relative or back-slashed path, and
+`#das-root-absolute` is what that breaks.
+
+The lock makes a late `setDasRoot` safe, not coherent: a compile that already built paths from
+the old root keeps them. Every host in the tree sets the root while it reads its arguments,
+before it starts a thread that compiles.

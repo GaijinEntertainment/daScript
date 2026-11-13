@@ -84,17 +84,25 @@ docs: the `ARCHITECTURE*.md` files of this folder. A diff touching
   into a type - `parse_mangled_name` and the C API's type-by-name calls go through it - so a form
   it does not know fails to parse.
 
-- **A diff that adds or changes, in `InferTypes` (`ast_infer_type*.cpp`), a lookup of an overload
-  whose miss sends the site to a fallback inference cannot take back - rewriting the node,
-  giving the node the built-in type so that a local declared from it in the same pass keeps that
-  type, or running a second lookup - saves `pendingCandidateCount` before the lookup and, when
-  `pendingSince` of the saved value is true after it, returns the node unrewritten, without a
-  type, and without the second lookup (`ARCHITECTURE_INFER.md#pending-signature`).** Inference
-  never repeats the lookup on a node it rewrote or a local it typed, so the built-in form taken
-  while the user function is declared but not resolved yet is permanent.
+- **A diff that adds or changes, in `InferTypes` (`ast_infer_type*.cpp`), an overload lookup
+  whose miss leads to a fallback that inference cannot take back - rewriting the node, giving
+  the node the built-in type (a local declared from the node in the same pass keeps that type),
+  or running a second lookup - saves `pendingCandidateCount` before the lookup and, when
+  `pendingSince` of the saved value is true after it, returns the node unrewritten, untyped, and
+  without the second lookup (`ARCHITECTURE_INFER.md#pending-signature`).** Inference never
+  repeats the lookup on a node it rewrote or a local it typed, so a built-in form taken before
+  the user function resolves is permanent.
 
-- **A diff that adds or changes such an early return in `InferTypes`, at a lookup that does not
-  go through `inferFunctionCall`, calls `reportPendingSignature` before it returns.** The error
+- **A diff that adds or changes, in `InferTypes`, a lookup that first tries the operator whose
+  function name carries the type or field name (`` `as`foo ``) and then the operator that takes
+  that name as an argument (`` `as ``) makes both lookups through one call to
+  `inferNamedThenByNameOperator`, or to `tryProperty` for a property read - never through two
+  calls at the site.** Those helpers skip the second lookup when the first met a pending
+  candidate.
+
+- **A diff that adds or changes, in `InferTypes`, an early return taken when `pendingSince` is
+  true, at a lookup that does not go through `inferFunctionCall`, calls `reportPendingSignature`
+  before it returns.** The error
   keeps the pass from being the last one. Without it, inference ends with the node never
   resolved.
 

@@ -96,7 +96,10 @@ namespace das {
     }
 
     // Runs an object's glob-init once: the slot is cleared as it is consumed.
+    // src/builtin/ARCHITECTURE.md#llvm-aot-glob-init
     static void runLlvmAotGlobInitOf ( Context & ctx, void * publ ) {
+        static recursive_mutex globInitMutex;
+        lock_guard<recursive_mutex> guard(globInitMutex);
         auto it = llvmAotGlobInitOfPubl().find(publ);
         if ( it==llvmAotGlobInitOfPubl().end() ) return;
         auto & fn = llvmAotGlobInits()[it->second];

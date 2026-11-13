@@ -4205,7 +4205,7 @@ namespace das
         {   Type::tVariant,     "Variant"  }
     };
 
-    static string g_aotMainModuleName;
+    static thread_local string g_aotMainModuleName;
 
     void setAotMainModuleName ( const string & name ) {
         g_aotMainModuleName = name;

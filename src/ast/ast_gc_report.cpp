@@ -138,9 +138,8 @@ namespace das {
     // ---- per-stage delta ----
 
     bool gcStageReportEnabled () {
-        static int cached = -1;
-        if ( cached < 0 ) cached = get_dasenv_gc_stage_report() ? 1 : 0;
-        return cached != 0;
+        static const bool enabled = get_dasenv_gc_stage_report() ? true : false;
+        return enabled;
     }
 
     // signed per-(file,line) delta: cur - prev. n[] can go negative when a stage reclaims.

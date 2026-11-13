@@ -107,8 +107,7 @@ namespace das {
     // Where every TextPrinter lands, process-wide. It defaults to stdout, which
     // is what a program's own output is; a program whose stdout carries a
     // protocol instead (a stdio JSON-RPC server) points this elsewhere, so a
-    // leak dump or a fatal can never corrupt a frame. Set it before any thread
-    // can print.
+    // leak dump or a fatal can never corrupt a frame.
     typedef void ( * TextPrinterSink ) ( const char * text );
     DAS_API void setTextPrinterSink ( TextPrinterSink sink );
     DAS_API void textPrinterToStderr();
@@ -121,8 +120,10 @@ namespace das {
         TextPrinter() {}
         virtual void output() override;
     protected:
+        friend DAS_API void setTextPrinterSink ( TextPrinterSink sink );
+        friend DAS_API bool textPrinterToFile ( const char * path );
         uint64_t pos = 0;
-        static mutex pmut;
+        static recursive_mutex pmut;
     };
 
 

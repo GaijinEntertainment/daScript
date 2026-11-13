@@ -230,3 +230,24 @@ report Emscripten native stack size, allocator use, and heap extent. On other ta
 they return zero as an unavailable measurement. Consumers check the platform before
 displaying those values. The job queue's team panics are `ARCHITECTURE_JOBQUE.md`; the
 interpreter's `[extern]` call is `ARCHITECTURE_DASBIND.md`.
+
+## An LLVM-AOT object's glob-init runs once, under a lock {#llvm-aot-glob-init}
+
+A linked LLVM-AOT object registers its functions and one glob-init, which fills the object's own
+globals. `makeAotJitNode` runs that init the first time a context links any function of the
+object: `runLlvmAotGlobInitOf` takes the slot, clears it and calls it, all under one mutex, so a
+second thread linking the same object waits until the globals are filled and then finds the
+slot empty. Without the lock two threads both read the slot as full and both run the init. The
+mutex is recursive because the init is generated code that calls back into the runtime, and
+nothing rules out that it links a function of another object on the same thread.
+
+## The process command line, and a thread's view of it {#command-line-arguments}
+
+`setCommandLineArguments` stores the process arguments once, at host startup, under a mutex.
+`with_argv` does not replace them: it puts its array over them for the calling thread only, for
+the length of its block, and nested blocks restore the outer one as they leave. Everything that
+reads the arguments - `get_command_line_arguments`, the module cache's host options, the
+`--jit-target` reader - reads the calling thread's override when it has one and the process
+arguments otherwise. A thread or job started inside the block reads the process arguments. One
+shared override cannot be scoped: two blocks open on two threads restore each other's saved
+value, and the process ends up with one block's arguments.

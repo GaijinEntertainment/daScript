@@ -14,6 +14,8 @@ var private g_findings : array<string>
 
 var private KEBAB <- %regex~^[a-z0-9]+(-[a-z0-9]+)*$%%
 
+let FNV1A_SEED = 0xcbf29ce484222325ul //! the offset basis every [[fnv1a]] hash starts from
+
 //! Record one finding against a file.
 def gate_finding(path : string; msg : string) {
     g_findings |> push("{path}: {msg}")
@@ -81,6 +83,20 @@ def find_line(text : string; needle : string) : int {
         }
     }
     return line
+}
+
+def fnv1a(text : string; seed : uint64) : uint64 {
+    //! 64-bit FNV-1a of the bytes of `text`, continued from `seed`:
+    //! `FNV1A_SEED` starts a hash and an earlier result chains the
+    //! next piece onto it.
+    var h = seed
+    peek_data(text) $(d) {
+        for (b in d) {
+            h ^= uint64(b)
+            h *= 0x100000001b3ul
+        }
+    }
+    return h
 }
 
 //! Module paths from a file's line-level `require` statements (`require a/b public` → "a/b";
@@ -240,25 +256,37 @@ def private strip_to_line_comment(text : string; script_quotes : bool) : string 
 //! single quote does too, `script_urls` is the scanner that reads it correctly.
 def strip_line_comments(text : string) : string => strip_to_line_comment(text, false)
 
-def private quoted_ident_tokens(text : string) : array<string> {
+def quoted_segments(text : string; quote : string = "\"") : array<string> {
+    //! Every run of `text` between an opening `quote` and the `quote`
+    //! that closes it, in order, empty runs included. No escape is
+    //! read: a `quote` always opens or closes.
     var out : array<string>
     var inside = false
-    for (seg in split(text, "\"")) {
-        if (inside && !empty(seg)) {
-            var all_ident = true
-            peek_data(seg) $(d) {
-                for (i in range(length(d))) {
-                    if (!is_ident_byte(int(d[i]))) {
-                        all_ident = false
-                        break
-                    }
-                }
-            }
-            if (all_ident) {
-                out |> push(seg)
-            }
+    for (seg in split(text, quote)) {
+        if (inside) {
+            out |> push(seg)
         }
         inside = !inside
+    }
+    return <- out
+}
+
+def private quoted_ident_tokens(text : string) : array<string> {
+    var out : array<string>
+    for (seg in quoted_segments(text)) {
+        continue if (empty(seg))
+        var all_ident = true
+        peek_data(seg) $(d) {
+            for (i in range(length(d))) {
+                if (!is_ident_byte(int(d[i]))) {
+                    all_ident = false
+                    break
+                }
+            }
+        }
+        if (all_ident) {
+            out |> push(seg)
+        }
     }
     return <- out
 }

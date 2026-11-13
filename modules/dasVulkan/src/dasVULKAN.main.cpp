@@ -397,15 +397,13 @@ namespace {
     const uint32_t PDH_FMT_LARGE_ = 0x00000400u;
     const int32_t PDH_MORE_DATA_ = (int32_t) 0x800007D2;
 
-    uint64_t pdh_adapter_usage(uint32_t luid_lo, uint32_t luid_hi, const char * counter_path) {
-        static PfnPdhOpenQueryA open_q = nullptr;
-        static PfnPdhAddEnglishCounterA add_c = nullptr;
-        static PfnPdhCollectQueryData collect = nullptr;
-        static PfnPdhGetFormattedCounterArrayA get_arr = nullptr;
-        static PfnPdhCloseQuery close_q = nullptr;
-        static bool resolved = false;
-        if (!resolved) {
-            resolved = true;
+    struct PdhEntryPoints {
+        PfnPdhOpenQueryA open_q = nullptr;
+        PfnPdhAddEnglishCounterA add_c = nullptr;
+        PfnPdhCollectQueryData collect = nullptr;
+        PfnPdhGetFormattedCounterArrayA get_arr = nullptr;
+        PfnPdhCloseQuery close_q = nullptr;
+        PdhEntryPoints() {
             if (void * pdh = LoadLibraryA("pdh.dll")) {
                 open_q = (PfnPdhOpenQueryA) GetProcAddress(pdh, "PdhOpenQueryA");
                 add_c = (PfnPdhAddEnglishCounterA) GetProcAddress(pdh, "PdhAddEnglishCounterA");
@@ -414,20 +412,24 @@ namespace {
                 close_q = (PfnPdhCloseQuery) GetProcAddress(pdh, "PdhCloseQuery");
             }
         }
-        if (!open_q || !add_c || !collect || !get_arr || !close_q) {
+    };
+
+    uint64_t pdh_adapter_usage(uint32_t luid_lo, uint32_t luid_hi, const char * counter_path) {
+        static const PdhEntryPoints pdh;
+        if (!pdh.open_q || !pdh.add_c || !pdh.collect || !pdh.get_arr || !pdh.close_q) {
             return 0;
         }
         void * query = nullptr;
-        if (open_q(nullptr, 0, &query) != 0 || !query) {
+        if (pdh.open_q(nullptr, 0, &query) != 0 || !query) {
             return 0;
         }
         uint64_t total = 0;
         void * counter = nullptr;
-        if (add_c(query, counter_path, 0, &counter) == 0 && collect(query) == 0) {
+        if (pdh.add_c(query, counter_path, 0, &counter) == 0 && pdh.collect(query) == 0) {
             uint32_t bytes = 0, count = 0;
-            if (get_arr(counter, PDH_FMT_LARGE_, &bytes, &count, nullptr) == PDH_MORE_DATA_ && bytes > 0) {
+            if (pdh.get_arr(counter, PDH_FMT_LARGE_, &bytes, &count, nullptr) == PDH_MORE_DATA_ && bytes > 0) {
                 std::vector<char> buf(bytes);
-                if (get_arr(counter, PDH_FMT_LARGE_, &bytes, &count, (PdhFmtCounterValueItemA *) buf.data()) == 0) {
+                if (pdh.get_arr(counter, PDH_FMT_LARGE_, &bytes, &count, (PdhFmtCounterValueItemA *) buf.data()) == 0) {
                     char prefix[64];
                     snprintf(prefix, sizeof(prefix), "luid_0x%08x_0x%08x_phys", luid_hi, luid_lo);
                     const PdhFmtCounterValueItemA * items = (const PdhFmtCounterValueItemA *) buf.data();
@@ -445,7 +447,7 @@ namespace {
                 }
             }
         }
-        close_q(query);
+        pdh.close_q(query);
         return total;
     }
     struct D3dkmtLuid { uint32_t LowPart; int32_t HighPart; };
@@ -465,20 +467,22 @@ namespace {
     typedef int32_t (__stdcall * PfnD3dkmtOpen)(D3dkmtOpenAdapterFromLuid *);
     typedef int32_t (__stdcall * PfnD3dkmtQuery)(D3dkmtQueryVideoMemoryInfo *);
     typedef int32_t (__stdcall * PfnD3dkmtClose)(const D3dkmtCloseAdapter *);
+
+    struct D3dkmtEntryPoints {
+        PfnD3dkmtOpen open_fn = nullptr;
+        PfnD3dkmtQuery query_fn = nullptr;
+        PfnD3dkmtClose close_fn = nullptr;
+        D3dkmtEntryPoints() {
+            if (void * gdi = LoadLibraryA("gdi32.dll")) {
+                open_fn = (PfnD3dkmtOpen) GetProcAddress(gdi, "D3DKMTOpenAdapterFromLuid");
+                query_fn = (PfnD3dkmtQuery) GetProcAddress(gdi, "D3DKMTQueryVideoMemoryInfo");
+                close_fn = (PfnD3dkmtClose) GetProcAddress(gdi, "D3DKMTCloseAdapter");
+            }
+        }
+    };
 }
 static uint64_t das_vk_os_video_memory(uint32_t luid_lo, uint32_t luid_hi, int32_t query) {
-    static PfnD3dkmtOpen open_fn = nullptr;
-    static PfnD3dkmtQuery query_fn = nullptr;
-    static PfnD3dkmtClose close_fn = nullptr;
-    static bool resolved = false;
-    if (!resolved) {
-        resolved = true;
-        if (void * gdi = LoadLibraryA("gdi32.dll")) {
-            open_fn = (PfnD3dkmtOpen) GetProcAddress(gdi, "D3DKMTOpenAdapterFromLuid");
-            query_fn = (PfnD3dkmtQuery) GetProcAddress(gdi, "D3DKMTQueryVideoMemoryInfo");
-            close_fn = (PfnD3dkmtClose) GetProcAddress(gdi, "D3DKMTCloseAdapter");
-        }
-    }
+    static const D3dkmtEntryPoints d3dkmt;
     if ((luid_lo == 0 && luid_hi == 0) || query < OSVM_BUDGET || query > OSVM_ADAPTER_SHARED) {
         return 0;
     }
@@ -488,22 +492,22 @@ static uint64_t das_vk_os_video_memory(uint32_t luid_lo, uint32_t luid_hi, int32
     if (query == OSVM_ADAPTER_SHARED) {
         return pdh_adapter_usage(luid_lo, luid_hi, "\\GPU Adapter Memory(*)\\Shared Usage");
     }
-    if (!open_fn || !query_fn || !close_fn) {
+    if (!d3dkmt.open_fn || !d3dkmt.query_fn || !d3dkmt.close_fn) {
         return 0;
     }
     D3dkmtOpenAdapterFromLuid oa{};
     oa.AdapterLuid.LowPart = luid_lo;
     oa.AdapterLuid.HighPart = (int32_t) luid_hi;
-    if (open_fn(&oa) != 0) {
+    if (d3dkmt.open_fn(&oa) != 0) {
         return 0;
     }
     D3dkmtQueryVideoMemoryInfo q{};
     q.hAdapter = oa.hAdapter;
     q.MemorySegmentGroup = D3DKMT_SEGMENT_LOCAL;
-    const int32_t st = query_fn(&q);
+    const int32_t st = d3dkmt.query_fn(&q);
     D3dkmtCloseAdapter ca{};
     ca.hAdapter = oa.hAdapter;
-    close_fn(&ca);
+    d3dkmt.close_fn(&ca);
     if (st != 0) {
         return 0;
     }
