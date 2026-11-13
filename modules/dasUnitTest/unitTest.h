@@ -218,7 +218,7 @@ struct TestObjectNotNullPtr {
 DAS_MOD_API int *getPtr();
 
 DAS_MOD_API void testFields ( das::Context * ctx );
-DAS_MOD_API void test_das_string(const das::Block & block, das::Context * context, das::LineInfoArg * lineinfo);
+DAS_MOD_API void test_das_string(const das::TBlock<void,das::string,das::string> & block, das::Context * context, das::LineInfoArg * lineinfo);
 DAS_MOD_API uint64_t testBlockAnnotationData(const das::Block & blk, das::Context * context, das::LineInfoArg * at);
 DAS_MOD_API uint64_t testBlockAnnotationDataPayload();
 DAS_MOD_API void testPipedDefaults(int32_t a, float b, const das::TBlock<void, int32_t, float> & blk, das::Context * context, das::LineInfoArg * at);

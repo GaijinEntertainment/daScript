@@ -238,3 +238,21 @@ def test_lpipe_after_return_message(t : T?) {
         }
     }
 }
+
+[test(description = "a tuple and a variant over an uninstantiated struct template with a typedecl field compile")]
+def test_holder_over_uninstantiated_template_compiles(t : T?) {
+    for (holder in ["tuple", "variant"]) {
+        let path = "{get_das_root()}/tests/ast/_virtual_template_holder.das"
+        var inscope access <- make_file_access("")
+        let source = ("options gen2\n{holder} H \{\n    a : S\n\}\n"
+            + "struct template S \{\n    f : typedecl(1)\n\}\n")
+        set_file_source(access, path, source)
+        using() $(var mg : ModuleGroup) {
+            using() $(var cop : CodeOfPolicies) {
+                compile_file(path, access, unsafe(addr(mg)), cop) $(ok; _program; issues) {
+                    t |> success(ok, "{holder}: {issues}")
+                }
+            }
+        }
+    }
+}

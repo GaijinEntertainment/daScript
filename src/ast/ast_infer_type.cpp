@@ -3342,7 +3342,7 @@ namespace das {
         }
         // infer
         if (expr->typeexpr->isAlias()) {
-            if (auto aT = findAlias(expr->typeexpr->alias)) {
+            if (auto aT = inferAlias(expr->typeexpr)) {
                 auto nameAt = expr->typeexpr->at;
                 TypeDecl::clone(expr->typeexpr, aT);
                 expr->typeexpr->at = nameAt.fileInfo ? nameAt : expr->at;
@@ -5942,6 +5942,7 @@ namespace das {
         if ( callDepth >= program->policies.max_call_depth ) {
             error("call expression depth exceeded maximum allowed (" + to_string(program->policies.max_call_depth) + ")", "", "",
                   call->at, CompilationError::exceeds_call_depth);
+            call->argumentsFailedToInfer = true;
             return false;
         }
         return true;

@@ -172,7 +172,7 @@ struct CheckRange : StructureAnnotation {
     }
 };
 
-void test_das_string(const Block & block, Context * context, LineInfoArg * at) {
+void test_das_string(const TBlock<void,das::string,das::string> & block, Context * context, LineInfoArg * at) {
     string str = "test_das_string";
     string str2;
     vec4f args[2];
