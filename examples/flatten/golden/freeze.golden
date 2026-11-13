@@ -1,0 +1,18 @@
+/*FULLY INFERRED*/
+// [user_scenario][modify_external][access_global]
+[export]
+[shader_dsl_boost::pixel_shader(flattened:bool=true,packed:bool=true,optimized:bool=true,fused:bool=true,folded:bool=true)]
+def public freeze(inp:PbrInput const) : PbrOutput {
+	let _preshader_cse_1:float const = -freezeAmount;
+	let _preshader_0:float const = (_preshader_cse_1 + 0.9f);
+	let _preshader_1:float const = (_preshader_cse_1 + 1.1f);
+	let _preshader_2:float const = saturate(g_LightDirection.y);
+	let _preshader_3:float const = lerp(0.3f,1.5f,_preshader_2);
+	let c:float3 const = tex2d(albedo_texture,inp.uv).xyz;
+	let n:float const = noise(inp.uv * noiseScale);
+	let iceMask:float const = smooth_step(_preshader_0,_preshader_1,n);
+	let crystal:float const = (step(0.75f,n) * iceMask);
+	let _cse_0:float3 const = ((crystal * frostColor) * 0.5f);
+	let result:float3 const = (lerp(c,iceColor,iceMask * 0.7f) + _cse_0);
+	return struct<PbrOutput>(albedo = result, emission = mad(iceColor * iceMask,0.2f,_cse_0), emissionStrength = _preshader_3, metalness = 0f, roughness = 0.1f, ao = 1f);
+}

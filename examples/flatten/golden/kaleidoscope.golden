@@ -1,0 +1,17 @@
+/*FULLY INFERRED*/
+// [user_scenario][modify_external][access_global]
+[export]
+[shader_dsl_boost::pixel_shader(flattened:bool=true,packed:bool=true,optimized:bool=true,fused:bool=true,folded:bool=true)]
+def public kaleidoscope(inp:PbrInput const) : PbrOutput {
+	let _preshader_0:float const = (g_Time * speed);
+	let _preshader_1:float const = (6.28318f / segments);
+	let _preshader_2:float const = (1f / _preshader_1);
+	let _preshader_3:float const = (_preshader_1 * 0.5f);
+	let _cse_2:float2 const = (inp.uv - float2(0.5f,0.5f));
+	let _cse_1:float const = length(_cse_2);
+	let __flat_loc_10:float const = (frac((atan2(_cse_2.y,_cse_2.x) + mad(_cse_1,twist,_preshader_0)) * _preshader_2) * _preshader_1);
+	let _cse_0:float const = ((__flat_loc_10 > _preshader_3) ? (_preshader_1 - __flat_loc_10) : __flat_loc_10);
+	let folded:float2 const = mad(float2(cos(_cse_0),sin(_cse_0)) * _cse_1,zoom,float2(0.5f,0.5f));
+	let c:float4 const = tex2d(albedo_texture,folded);
+	return struct<PbrOutput>(albedo = c.xyz, emission = (c.xyz * 0.3f), emissionStrength = 0.5f, metalness = 0f, roughness = 1f, ao = 1f);
+}

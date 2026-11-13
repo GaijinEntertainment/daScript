@@ -729,6 +729,14 @@ def public scalar_float_const(e : ExpressionPtr; var v : float&) : bool {
     return true
 }
 
+def public float_ctor_of(e : ExpressionPtr) : ExprCall? {
+    if (e == null || !(e is ExprCall)) return null
+    var c = e as ExprCall
+    let nm = simple_name("{c.name}")
+    if (nm != "float2" && nm != "float3" && nm != "float4") return null
+    return c
+}
+
 def public make_float_splat(d : int; at : LineInfo; var sc : ExpressionPtr) : ExpressionPtr {
     let nm = d == 2 ? "float2" : (d == 3 ? "float3" : "float4")
     var c = new ExprCall(at = at, name := nm)

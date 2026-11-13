@@ -1,0 +1,13 @@
+/*FULLY INFERRED*/
+// [user_scenario][modify_external][access_global]
+[export]
+[shader_dsl_boost::pixel_shader(flattened:bool=true,packed:bool=true,optimized:bool=true,fused:bool=true,folded:bool=true)]
+def public gradient_map(inp:PbrInput const) : PbrOutput {
+	let c:float4 const = tex2d(albedo_texture,inp.uv);
+	let luma:float const = dot(c.xyz,float3(0.299f,0.587f,0.114f));
+	let _cse_0:float const = (luma * 2f);
+	let lowMix:float3 const = lerp(shadowColor,midColor,saturate(_cse_0));
+	let highMix:float3 const = lerp(midColor,highColor,saturate(_cse_0 - 1f));
+	let result:float3 const = lerp(lowMix,highMix,step(0.5f,luma));
+	return struct<PbrOutput>(albedo = result, alpha = c.w, alphaCutoff = 0.5f, metalness = 0f, roughness = 1f, ao = 1f);
+}

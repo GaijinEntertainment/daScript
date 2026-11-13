@@ -1,0 +1,13 @@
+/*FULLY INFERRED*/
+// [user_scenario][modify_external][access_global]
+[export]
+[shader_dsl_boost::pixel_shader(flattened:bool=true,packed:bool=true,optimized:bool=true,fused:bool=true,folded:bool=true)]
+def public loop_array(inp:PbrInput const) : PbrOutput {
+	let _preshader_0:float2 const = float2(-blurSize,0f);
+	let _preshader_1:float2 const = float2(blurSize,0f);
+	var __ssa_acc_2:float3 = tex2d(albedo_texture,_preshader_0 + inp.uv).xyz;
+	var __ssa_acc_3:float3 = (__ssa_acc_2 + tex2d(albedo_texture,inp.uv).xyz);
+	var __ssa_acc_4:float3 = (__ssa_acc_3 + tex2d(albedo_texture,_preshader_1 + inp.uv).xyz);
+	let result:float3 const = (__ssa_acc_4 * 0.33333334f);
+	return struct<PbrOutput>(albedo = result, emission = result, emissionStrength = 1f, metalness = 0f, roughness = 1f, ao = 1f);
+}

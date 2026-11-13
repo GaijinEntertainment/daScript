@@ -1,0 +1,21 @@
+/*FULLY INFERRED*/
+// [user_scenario][modify_external][access_global]
+[export]
+[shader_dsl_boost::pixel_shader(flattened:bool=true,packed:bool=true,optimized:bool=true,fused:bool=true,folded:bool=true)]
+def public iridescent(inp:PbrInput const) : PbrOutput {
+	let _preshader_cse_3:float const = (g_Time * timeShift);
+	let _preshader_1:float const = (_preshader_cse_3 * 0.7f);
+	let f:float const = fresnel(1f,inp.worldNormal,inp.viewDir);
+	let _cse_4:float const = (bandFreq * f);
+	let _cse_1:float const = (_cse_4 + _preshader_cse_3);
+	let macroFilm:float3 const = mad(sin(float3(_cse_1 + bandPhaseR,_cse_1 + bandPhaseG,_cse_1 + bandPhaseB)),0.5f,float3(0.5f,0.5f,0.5f));
+	let _cse_0:float const = mad(_cse_4,3.1f,_preshader_1);
+	let microFilm:float3 const = mad(sin(float3(_cse_0 + bandPhaseB,_cse_0 + bandPhaseR,_cse_0 + bandPhaseG)),0.5f,float3(0.5f,0.5f,0.5f));
+	let surfaceVar:float const = (noise(inp.worldNormal * microDetailScale) * microDetailAmount);
+	let film:float3 const = lerp(macroFilm,microFilm,surfaceVar);
+	let intensity:float const = pow(f,1.5f);
+	let viewAngle:float const = saturate(dot(inp.worldNormal,inp.viewDir));
+	let grazeBoost:float const = (pow(1f - viewAngle,3f) * 0.4f);
+	let _cse_2:float const = (grazeBoost + intensity);
+	return struct<PbrOutput>(albedo = baseTint, emission = (_cse_2 * film), emissionStrength = (_cse_2 * 0.6f), metalness = 1f, roughness = lerp(0.05f,0.25f,surfaceVar), ao = 1f);
+}

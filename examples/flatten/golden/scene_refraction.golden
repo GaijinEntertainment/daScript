@@ -1,0 +1,21 @@
+/*FULLY INFERRED*/
+// [user_scenario][modify_external][access_global]
+[export]
+[shader_dsl_boost::pixel_shader(flattened:bool=true,packed:bool=true,optimized:bool=true,fused:bool=true,folded:bool=true)]
+def public scene_refraction(inp:PbrInput const) : PbrOutput {
+	let _preshader_0:float const = (g_Time * noiseSpeed);
+	let _preshader_1:float3 const = float3(_preshader_0,0f,_preshader_0 * 0.5f);
+	let _preshader_2:float const = (1f / tintDepth);
+	let __flat_loc_8:float const = (noise(mad(inp.worldPos,noiseScale,_preshader_1)) * 0.5f);
+	let _cse_0:float const = (__flat_loc_8 * 0.3f);
+	let offset:float2 const = (float2(dot(inp.worldNormal,g_CameraRight) + _cse_0,dot(inp.worldNormal,g_CameraUp) + _cse_0) * refractStrength);
+	let refractUV:float2 const = (inp.screenPos + offset);
+	let sceneColor:float3 const = sample_scene_color(refractUV);
+	let surfaceDepth:float const = length(inp.worldPos - g_CameraPosition);
+	let sceneDepth:float const = sample_scene_depth(inp.screenPos);
+	let depthBehind:float const = clamp((sceneDepth - surfaceDepth) * _preshader_2,0f,1f);
+	let tinted:float3 const = lerp(sceneColor,tintColor,depthBehind * 0.6f);
+	let f:float const = fresnel(fresnelPower,inp.worldNormal,inp.viewDir);
+	let edge:float3 const = lerp(tinted,edgeColor,pow(f,2f) * 0.5f);
+	return struct<PbrOutput>(albedo = edge, alpha = lerp(0.5f,0.95f,f), emission = (edgeColor * pow(f,4f)), emissionStrength = 0.4f, metalness = 0f, roughness = 0.05f, ao = 1f);
+}

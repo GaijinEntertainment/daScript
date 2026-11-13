@@ -1,0 +1,30 @@
+/*FULLY INFERRED*/
+// [user_scenario][modify_external][access_global]
+[export]
+[shader_dsl_boost::pixel_shader(flattened:bool=true,packed:bool=true,optimized:bool=true,fused:bool=true,folded:bool=true)]
+def public crt(inp:PbrInput const) : PbrOutput {
+	let _preshader_0:float2 const = float2(glowSize,0f);
+	let _preshader_1:float2 const = (glowSize * float2(-2f,0f));
+	let _preshader_2:float2 const = (glowSize * float2(2f,0f));
+	let _preshader_3:float2 const = (glowSize * float2(0f,-2f));
+	let _preshader_4:float2 const = (glowSize * float2(0f,2f));
+	let _preshader_5:float const = (1f - (flickerAmt * mad(sin(flickerSpeed * g_Time),0.5f,0.5f)));
+	let _cse_1:float2 const = mad(inp.uv,2f,float2(-1f,-1f));
+	let distUV:float2 const = mad(_cse_1 * mad(dot(_cse_1,_cse_1),barrelStrength,1f),0.5f,float2(0.5f,0.5f));
+	let inBounds:float const = (((step(0f,distUV.x) * step(distUV.x,1f)) * step(0f,distUV.y)) * step(distUV.y,1f));
+	let _cse_0:float3 const = tex2d(albedo_texture,distUV).xyz;
+	let r:float const = tex2d(albedo_texture,distUV + _preshader_0).x;
+	let g:float const = _cse_0.y;
+	let b:float const = tex2d(albedo_texture,distUV - _preshader_0).z;
+	let rgb:float3 const = float3(r,g,b);
+	let scanMask:float const = lerp(scanlineDark,1f,step(0.5f,frac(distUV.y * scanlineCount)));
+	let scanned:float3 const = (rgb * scanMask);
+	var __ssa___flat_loc_10_2:float3 = tex2d(albedo_texture,distUV + _preshader_1).xyz;
+	var __ssa___flat_loc_10_3:float3 = (__ssa___flat_loc_10_2 + _cse_0);
+	var __ssa___flat_loc_10_4:float3 = (__ssa___flat_loc_10_3 + tex2d(albedo_texture,distUV + _preshader_2).xyz);
+	var __ssa___flat_loc_10_5:float3 = (__ssa___flat_loc_10_4 + tex2d(albedo_texture,distUV + _preshader_3).xyz);
+	var __ssa___flat_loc_10_6:float3 = (__ssa___flat_loc_10_5 + tex2d(albedo_texture,distUV + _preshader_4).xyz);
+	let glow:float3 const = (__ssa___flat_loc_10_6 * 0.2f);
+	let result:float3 const = ((mad(glow,0.3f,scanned) * _preshader_5) * inBounds);
+	return struct<PbrOutput>(albedo = result, emission = ((glow * 0.5f) * inBounds), emissionStrength = 0.8f, metalness = 0f, roughness = 1f, ao = 1f);
+}

@@ -1,0 +1,28 @@
+/*FULLY INFERRED*/
+// [user_scenario][modify_external][access_global]
+[export]
+[shader_dsl_boost::pixel_shader(flattened:bool=true,packed:bool=true,optimized:bool=true,fused:bool=true,folded:bool=true)]
+def public blur(inp:PbrInput const) : PbrOutput {
+	let _preshader_cse_0:float const = -blurSize;
+	let _preshader_0:float2 const = float2(_preshader_cse_0,_preshader_cse_0);
+	let _preshader_1:float2 const = float2(0f,_preshader_cse_0);
+	let _preshader_2:float2 const = float2(blurSize,_preshader_cse_0);
+	let _preshader_3:float2 const = float2(_preshader_cse_0,0f);
+	let _preshader_4:float2 const = float2(blurSize,0f);
+	let _preshader_5:float2 const = float2(_preshader_cse_0,blurSize);
+	let _preshader_6:float2 const = float2(0f,blurSize);
+	let _preshader_7:float2 const = float2(blurSize,blurSize);
+	let _preshader_8:float const = saturate(g_LightDirection.y);
+	let _preshader_9:float const = lerp(0.5f,2f,_preshader_8);
+	var __ssa_acc_2:float3 = tex2d(albedo_texture,inp.uv + _preshader_0).xyz;
+	var __ssa_acc_3:float3 = (__ssa_acc_2 + tex2d(albedo_texture,inp.uv + _preshader_1).xyz);
+	var __ssa_acc_4:float3 = (__ssa_acc_3 + tex2d(albedo_texture,inp.uv + _preshader_2).xyz);
+	var __ssa_acc_5:float3 = (__ssa_acc_4 + tex2d(albedo_texture,inp.uv + _preshader_3).xyz);
+	var __ssa_acc_6:float3 = (__ssa_acc_5 + tex2d(albedo_texture,inp.uv).xyz);
+	var __ssa_acc_7:float3 = (__ssa_acc_6 + tex2d(albedo_texture,inp.uv + _preshader_4).xyz);
+	var __ssa_acc_8:float3 = (__ssa_acc_7 + tex2d(albedo_texture,inp.uv + _preshader_5).xyz);
+	var __ssa_acc_9:float3 = (__ssa_acc_8 + tex2d(albedo_texture,inp.uv + _preshader_6).xyz);
+	var __ssa_acc_10:float3 = (__ssa_acc_9 + tex2d(albedo_texture,inp.uv + _preshader_7).xyz);
+	let result:float3 const = (__ssa_acc_10 * 0.11111111f);
+	return struct<PbrOutput>(albedo = result, emission = result, emissionStrength = _preshader_9, metalness = 0f, roughness = 1f, ao = 1f);
+}

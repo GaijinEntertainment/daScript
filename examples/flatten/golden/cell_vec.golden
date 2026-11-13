@@ -1,0 +1,14 @@
+/*FULLY INFERRED*/
+// [user_scenario][modify_external][access_global]
+[export]
+[shader_dsl_boost::pixel_shader(flatten:bool=false)]
+def public cell_vec(inp:PbrInput const) : PbrOutput {
+	let uv:float2 const = (inp.uv * 5f);
+	let t:float const = (g_Time * 0.3f);
+	let nc:float2 const = floor(uv);
+	let h:float2 const = frac(sin(float2((nc.x * 127.1f) + (nc.y * 311.7f),(nc.x * 269.5f) + (nc.y * 183.3f))) * 43758.5f);
+	let trig:float2 const = float2(sin(mad(h.x,6.28f,t)),cos(mad(h.y,6.28f,t)));
+	let dvec:float2 const = (mad(trig,0.3f,mad(h,0.5f,nc)) - uv);
+	let d:float const = length(dvec);
+	return struct<PbrOutput>(albedo = float3(d,d,d), emission = float3(0f,0f,0f), emissionStrength = 0f, metalness = 0f, roughness = 1f, ao = 1f);
+}

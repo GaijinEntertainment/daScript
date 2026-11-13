@@ -1,0 +1,16 @@
+/*FULLY INFERRED*/
+// [user_scenario][modify_external][access_global]
+[export]
+[shader_dsl_boost::pixel_shader(flattened:bool=true,packed:bool=true,optimized:bool=true,fused:bool=true,folded:bool=true)]
+def public toon(inp:UnlitInput const) : UnlitOutput {
+	let _preshader_0:float3 const = normalize(lightDir);
+	let _preshader_1:float const = (1f / bands);
+	let _preshader_2:float const = saturate(g_LightDirection.y);
+	let nDotL:float const = saturate(dot(normalize(inp.worldNormal),_preshader_0));
+	let stepped:float const = (floor(bands * nDotL) * _preshader_1);
+	let lit:float3 const = lerp(shadowColor,baseColor,stepped);
+	let f:float const = fresnel(1f,inp.worldNormal,inp.viewDir);
+	let rimMask:float const = smooth_step(rimStart,rimEnd,f);
+	let outColor:float3 const = lerp(lit,rimColor,rimMask);
+	return struct<UnlitOutput>(color = outColor);
+}

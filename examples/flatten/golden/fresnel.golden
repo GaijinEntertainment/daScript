@@ -1,0 +1,12 @@
+/*FULLY INFERRED*/
+// [user_scenario][modify_external][access_global]
+[export]
+[shader_dsl_boost::pixel_shader(flattened:bool=true,packed:bool=true,optimized:bool=true,fused:bool=true,folded:bool=true)]
+def public fresnel(inp:PbrInput const) : PbrOutput {
+	let _preshader_0:float const = remap(sin(g_Time * 4f),float2(-1f,1f),float2(0f,1f));
+	let _preshader_1:float const = saturate(g_LightDirection.y);
+	let _preshader_2:float const = lerp(0.2f,10,_preshader_1);
+	let rim:float3 const = (fresnel(3f,inp.worldNormal,inp.viewDir) * fresnelColor);
+	let color:float3 const = (rim * _preshader_0);
+	return struct<PbrOutput>(emission = color.xyz, emissionStrength = (length(color.xyz) * _preshader_2), metalness = 0f, roughness = 0f);
+}

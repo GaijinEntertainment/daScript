@@ -666,6 +666,20 @@ def public flatten_pack(var func : FunctionPtr; no_fast_math : bool = false) : b
 [macro_function]
 def public flatten_fuse(var func : FunctionPtr; no_fast_math : bool = false; hadd_min_width : int = 3) : bool {
     //! PHASE_FUSED finishing pass (delegates to `fuse_body`): collapse same-vector lane sums into `dot(v, mask)`, independent scalar sums into `hadd` (groups of width [hadd_min_width..4]), re-pack ctor lane patterns, `a*b ± c` into mad, and the expanded lerp shape back into lerp.
+    //! A round opens with `preshade_after_fuse` over call-free
+    //! subtrees, and returns true when that hoists.
+    let call_free <- { BARRIER_EVERY_CALL }
+    return true if (preshade_after_fuse(func, call_free, no_fast_math))
+    return fuse_body(func, no_fast_math, hadd_min_width)
+}
+
+[macro_function]
+def public flatten_fuse(var func : FunctionPtr; barriers : table<string>; no_fast_math : bool;
+                        hadd_min_width : int) : bool {
+    //! `flatten_fuse` for a caller that holds the barrier set it gave
+    //! `flatten_optimize`: the opening preshader round then takes
+    //! every uniform subtree, calls included.
+    return true if (preshade_after_fuse(func, barriers, no_fast_math))
     return fuse_body(func, no_fast_math, hadd_min_width)
 }
 
@@ -834,7 +848,8 @@ class FlattenAnnotation : AstFunctionAnnotation {
         let phNow = args |> find_arg("phase") ?as tInt ?? -1
         if (phNow == PHASE_OPTIMIZED || phNow == PHASE_FUSED) {
             set_flatten_phase(args, PHASE_FUSED)
-            if (flatten_fuse(twin, flatten_no_fast_math(), flatten_hadd_pack_pairs() ? 2 : 3)) {
+            let width = flatten_hadd_pack_pairs() ? 2 : 3
+            if (flatten_fuse(twin, FLATTEN_BARRIERS, flatten_no_fast_math(), width)) {
                 astChanged = true
                 return true
             }

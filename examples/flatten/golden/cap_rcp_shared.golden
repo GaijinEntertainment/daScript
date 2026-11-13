@@ -1,0 +1,12 @@
+/*FULLY INFERRED*/
+// [user_scenario][modify_external][access_global]
+[export]
+[shader_dsl_boost::pixel_shader(flattened:bool=true,packed:bool=true,optimized:bool=true,fused:bool=true,folded:bool=true)]
+def public cap_rcp_shared(inp:PbrInput const) : PbrOutput {
+	let _preshader_0:float const = (6.28318f / segments);
+	let _preshader_1:float const = (1f / _preshader_0);
+	let c:float3 const = tex2d(albedo_texture,inp.uv).xyz;
+	let folded:float const = (frac(c.x * _preshader_1) * _preshader_0);
+	let result:float3 const = (c * folded);
+	return struct<PbrOutput>(albedo = result, emission = result, emissionStrength = 1f, metalness = 0f, roughness = 1f, ao = 1f);
+}

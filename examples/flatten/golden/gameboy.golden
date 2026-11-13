@@ -1,0 +1,13 @@
+/*FULLY INFERRED*/
+// [user_scenario][modify_external][access_global]
+[export]
+[shader_dsl_boost::pixel_shader(flattened:bool=true,packed:bool=true,optimized:bool=true,fused:bool=true,folded:bool=true)]
+def public gameboy(inp:PbrInput const) : PbrOutput {
+	let _preshader_0:float const = saturate(g_LightDirection.y);
+	let _preshader_1:float const = lerp(0.5f,2f,_preshader_0);
+	let c:float3 const = tex2d(albedo_texture,inp.uv).xyz;
+	let gray:float const = dot(c,float3(0.299f,0.587f,0.114f));
+	let level:float const = (floor(gray * 4f) * 0.25f);
+	let result:float3 const = lerp(darkColor,lightColor,level);
+	return struct<PbrOutput>(albedo = result, emission = result, emissionStrength = _preshader_1, metalness = 0f, roughness = 1f, ao = 1f);
+}

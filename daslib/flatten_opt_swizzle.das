@@ -33,14 +33,6 @@ def private lane_letter(i : int) : string {
     return "w"
 }
 
-def private float_ctor_of(e : ExpressionPtr) : ExprCall? {
-    if (e == null || !(e is ExprCall)) return null
-    var c = e as ExprCall
-    let nm = simple_name("{c.name}")
-    if (nm != "float2" && nm != "float3" && nm != "float4") return null
-    return c
-}
-
 def private r2v_unwrap(var e : ExpressionPtr) : ExpressionPtr =>
     e is ExprRef2Value ? (e as ExprRef2Value).subexpr : e
 

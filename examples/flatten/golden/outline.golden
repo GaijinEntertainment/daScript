@@ -1,0 +1,9 @@
+/*FULLY INFERRED*/
+// [user_scenario][modify_external][access_global]
+[export]
+[shader_dsl_boost::pixel_shader(flattened:bool=true,packed:bool=true,optimized:bool=true,fused:bool=true,folded:bool=true)]
+def public outline(inp:PbrInput const) : PbrOutput {
+	let f:float const = fresnel(outlineSharpness,inp.worldNormal,inp.viewDir);
+	let outlineMask:float const = step(outlineThreshold,f);
+	return struct<PbrOutput>(albedo = ((1f - outlineMask) * baseColor), emission = float3(0f,0f,0f), emissionStrength = 0f, metalness = 0f, roughness = 1f, ao = 1f);
+}

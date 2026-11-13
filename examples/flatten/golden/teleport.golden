@@ -1,0 +1,20 @@
+/*FULLY INFERRED*/
+// [user_scenario][modify_external][access_global]
+[export]
+[shader_dsl_boost::pixel_shader(flattened:bool=true,packed:bool=true,optimized:bool=true,fused:bool=true,folded:bool=true)]
+def public teleport(inp:PbrInput const) : PbrOutput {
+	let _preshader_0:float const = (g_Time * speed);
+	let _preshader_1:float const = ((sin(_preshader_0 * 13f) * 0.008f) * intensity);
+	let _preshader_2:float2 const = float2(_preshader_1,(sin(_preshader_0 * 7f) * 0.005f) * intensity);
+	let _preshader_3:float const = (_preshader_0 * 4f);
+	let _preshader_4:float const = mad(sin(_preshader_0 * 23f),0.5f,0.5f);
+	let _preshader_5:float const = lerp(0.7f,1f,_preshader_4);
+	let _preshader_6:float const = saturate(g_LightDirection.y);
+	let _preshader_7:float3 const = (glowColor * intensity);
+	let _preshader_8:float const = lerp(0.5f,2f,_preshader_6);
+	let uv:float2 const = (inp.uv + _preshader_2);
+	let c:float3 const = tex2d(albedo_texture,uv).xyz;
+	let scanline:float const = step(0.7f,mad(sin(mad(inp.uv.y,80f,_preshader_3)),0.5f,0.5f));
+	let result:float3 const = ((mad(intensity * scanline,-0.4f,1f) * c) * _preshader_5);
+	return struct<PbrOutput>(albedo = result, emission = mad(_preshader_7 * scanline,0.3f,result), emissionStrength = _preshader_8, metalness = 0f, roughness = 1f, ao = 1f);
+}

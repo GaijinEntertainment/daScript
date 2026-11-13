@@ -1,0 +1,16 @@
+/*FULLY INFERRED*/
+// [user_scenario][modify_external]
+[export]
+[shader_dsl_boost::pixel_shader(flattened:bool=true,packed:bool=true,optimized:bool=true,fused:bool=true,folded:bool=true)]
+def public select_cmp(inp:PbrInput const) : PbrOutput {
+	let x:float const = inp.uv.x;
+	let y:float const = inp.uv.y;
+	let r:float const = ((x > 0.5f) ? 1f : 0f);
+	let g:float const = ((x < 0.3f) ? 1f : 0f);
+	let inBand:float const = (((x >= 0.25f) && (x <= 0.75f)) ? 1f : 0f);
+	let onEdge:float const = (((x < 0.1f) || (x > 0.9f)) ? 1f : 0f);
+	let eq:float const = ((x == y) ? 1f : 0f);
+	let ne:float const = ((x != y) ? 1f : 0f);
+	let blended:float4 const = lerp(float4(0f,0f,0f,0f),float4(1f,1f,1f,1f),float4(x,y,x,y));
+	return struct<PbrOutput>(albedo = float3(inBand + r,g + onEdge,eq), metalness = ne, roughness = blended.x);
+}

@@ -1,0 +1,8 @@
+/*FULLY INFERRED*/
+// [user_scenario][modify_external][access_global]
+[export]
+[shader_dsl_boost::pixel_shader(flattened:bool=true,packed:bool=true,optimized:bool=true,fused:bool=true,folded:bool=true)]
+def public new_shader_pure(inp:PbrInput const) : PbrOutput {
+	let textureColor:float4 const = tex2d(albedo_texture,inp.uv);
+	return struct<PbrOutput>(albedo = (albedo * textureColor.xyz), alpha = (alpha * textureColor.w), alphaCutoff = 0.5f, metalness = 0f, roughness = 1f, emission = float3(0f,0f,0f), emissionStrength = 1f, ao = 1f);
+}

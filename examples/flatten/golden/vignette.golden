@@ -1,0 +1,12 @@
+/*FULLY INFERRED*/
+// [user_scenario][modify_external][access_global]
+[export]
+[shader_dsl_boost::pixel_shader(flattened:bool=true,packed:bool=true,optimized:bool=true,fused:bool=true,folded:bool=true)]
+def public vignette(inp:PostEffectInput const) : PostEffectOutput {
+	let _preshader_0:float const = (radius - softness);
+	let uv:float2 const = inp.screenPos;
+	let col:float3 const = sample_scene_color(uv);
+	let d:float const = (length(uv - float2(0.5f,0.5f)) * strength);
+	let mask:float const = smooth_step(_preshader_0,radius,d);
+	return struct<PostEffectOutput>(out_color = lerp(col,vignetteColor,mask));
+}

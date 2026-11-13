@@ -1,0 +1,15 @@
+/*FULLY INFERRED*/
+// [user_scenario][modify_external][access_global]
+[export]
+[shader_dsl_boost::pixel_shader(flattened:bool=true,packed:bool=true,optimized:bool=true,fused:bool=true,folded:bool=true)]
+def public ripple(inp:PbrInput const) : PbrOutput {
+	let _preshader_0:float const = (g_Time * rippleSpeed);
+	let _preshader_1:float const = saturate(g_LightDirection.y);
+	let _preshader_2:float const = lerp(0.5f,2f,_preshader_1);
+	let uv:float2 const = (inp.uv - float2(0.5f,0.5f));
+	let dist:float const = length(uv);
+	let offset:float const = (sin((dist * rippleFreq) - _preshader_0) * rippleAmp);
+	let warped:float2 const = mad(normalize(uv),offset,inp.uv);
+	let result:float3 const = tex2d(albedo_texture,warped).xyz;
+	return struct<PbrOutput>(albedo = result, emission = result, emissionStrength = _preshader_2, metalness = 0f, roughness = 1f, ao = 1f);
+}

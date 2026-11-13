@@ -1,0 +1,18 @@
+/*FULLY INFERRED*/
+// [user_scenario][modify_external][access_global]
+[export]
+[shader_dsl_boost::pixel_shader(flattened:bool=true,packed:bool=true,optimized:bool=true,fused:bool=true,folded:bool=true)]
+def public glow(inp:PbrInput const) : PbrOutput {
+	let _preshader_0:float2 const = float2(0,glowSize);
+	let _preshader_1:float2 const = float2(glowSize,0);
+	let _preshader_2:float const = mad(sin(g_Time * 3f),pulse,1f - pulse);
+	let _preshader_3:float3 const = (glowColor * _preshader_2);
+	let _preshader_4:float const = lerp(0.5f,2.5f,g_LightDirection.y);
+	let c:float3 const = tex2d(albedo_texture,inp.uv).xyz;
+	let n:float3 const = tex2d(albedo_texture,inp.uv + _preshader_0).xyz;
+	let e:float3 const = tex2d(albedo_texture,inp.uv + _preshader_1).xyz;
+	let edgeN:float const = length(c - n);
+	let edgeE:float const = length(c - e);
+	let rim:float const = smooth_step(0.1f,0.5f,max(edgeN,edgeE));
+	return struct<PbrOutput>(albedo = c, emission = (_preshader_3 * rim), emissionStrength = (rim * _preshader_4), metalness = 0f, roughness = 1f, ao = 1f);
+}

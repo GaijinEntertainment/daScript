@@ -1,0 +1,17 @@
+/*FULLY INFERRED*/
+// [user_scenario][modify_external][access_global]
+[export]
+[shader_dsl_boost::pixel_shader(flattened:bool=true,packed:bool=true,optimized:bool=true,fused:bool=true,folded:bool=true)]
+def public scanner(inp:PostEffectInput const) : PostEffectOutput {
+	let _preshader_0:float const = (g_Time * speed);
+	let uv:float2 const = inp.screenPos;
+	let col:float3 const = sample_scene_color(uv);
+	let raw_depth:float const = sample_scene_depth(uv);
+	let sky_mask:float const = step(100f,raw_depth);
+	let depth:float const = min(raw_depth,50f);
+	let s:float const = smooth_step(1f,0f,depth * 0.02f);
+	let phase:float const = ((depth * frequency) - _preshader_0);
+	let wave:float const = (((pow(saturate(sin(phase * 3.1415927f)),sharpness) * intensity) * (1f - sky_mask)) * s);
+	let scene_dim:float const = lerp(dim_scene,1f,sky_mask);
+	return struct<PostEffectOutput>(out_color = mad(col,scene_dim,scan_color * wave));
+}

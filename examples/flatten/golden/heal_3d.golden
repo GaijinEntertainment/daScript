@@ -1,0 +1,17 @@
+/*FULLY INFERRED*/
+// [user_scenario][modify_external][access_global]
+[export]
+[shader_dsl_boost::pixel_shader(flattened:bool=true,packed:bool=true,optimized:bool=true,fused:bool=true,folded:bool=true)]
+def public heal_3d(inp:PbrInput const) : PbrOutput {
+	let _preshader_0:float const = (g_Time * riseSpeed);
+	let _preshader_1:float3 const = float3(0,-_preshader_0,0);
+	let _preshader_2:float const = mad(sin(g_Time * 3f),0.3f,0.7f);
+	let _preshader_3:float const = saturate(g_LightDirection.y);
+	let _preshader_4:float3 const = (healColor * 0.3f);
+	let _preshader_5:float const = lerp(0.2f,1.5f,_preshader_3);
+	let n:float const = noise(mad(inp.worldPos,noiseScale,_preshader_1));
+	let h:float const = mad(inp.localPos.y,0.5f,0.5f);
+	let particle:float const = (step(0.72f,n) * h);
+	let glow:float const = (smooth_step(0.55f,0.72f,n) * h);
+	return struct<PbrOutput>(albedo = lerp(baseColor,_preshader_4,glow), emission = mad(coreColor * particle,_preshader_2,(glow * healColor) * 0.5f), emissionStrength = (mad(glow,0.3f,particle * _preshader_2) * _preshader_5), metalness = 0f, roughness = 0.8f, ao = 1f);
+}

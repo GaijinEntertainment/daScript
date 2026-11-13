@@ -1,0 +1,15 @@
+/*FULLY INFERRED*/
+// [user_scenario][modify_external][access_global]
+[export]
+[shader_dsl_boost::pixel_shader(flattened:bool=true,packed:bool=true,optimized:bool=true,fused:bool=true,folded:bool=true)]
+def public wipe_horizontal(inp:PbrInput const) : PbrOutput {
+	let _preshader_0:float const = remap(sin(g_Time * 0.8f),float2(-1f,1f),float2(0f,1f));
+	let _preshader_1:float const = (_preshader_0 - edgeWidth);
+	let _preshader_2:float const = saturate(g_LightDirection.y);
+	let _preshader_3:float const = lerp(1f,3f,_preshader_2);
+	let c:float3 const = tex2d(albedo_texture,inp.uv).xyz;
+	let mask:float const = step(_preshader_0,inp.uv.x);
+	let edge:float const = (smooth_step(_preshader_1,_preshader_0,inp.uv.x) * one_minus(mask));
+	let _cse_0:float3 const = (edge * edgeColor);
+	return struct<PbrOutput>(albedo = mad(c,mask,_cse_0), emission = _cse_0, emissionStrength = (edge * _preshader_3), alpha = (edge + mask), alphaCutoff = 0.5f, metalness = 0f, roughness = 1f, ao = 1f);
+}

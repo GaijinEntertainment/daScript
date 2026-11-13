@@ -1,0 +1,13 @@
+/*FULLY INFERRED*/
+// [user_scenario][modify_external][access_global]
+[export]
+[shader_dsl_boost::pixel_shader(flattened:bool=true,packed:bool=true,optimized:bool=true,fused:bool=true,folded:bool=true)]
+def public cap_loop_cond(inp:PbrInput const) : PbrOutput {
+	let _preshader_0:float const = (blurSize * 2f);
+	let _preshader_1:float2 const = float2(_preshader_0,_preshader_0);
+	let _preshader_2:float const = (blurSize * 3f);
+	let _preshader_3:float2 const = float2(_preshader_2,_preshader_2);
+	var __ssa_acc_4:float3 = tex2d(albedo_texture,_preshader_1 + inp.uv).xyz;
+	var __ssa_acc_5:float3 = (__ssa_acc_4 + tex2d(albedo_texture,_preshader_3 + inp.uv).xyz);
+	return struct<PbrOutput>(albedo = __ssa_acc_5, emission = __ssa_acc_5, emissionStrength = 1f, metalness = 0f, roughness = 1f, ao = 1f);
+}

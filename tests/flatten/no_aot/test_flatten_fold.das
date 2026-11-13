@@ -8,6 +8,10 @@ require daslib/ast_boost
 require daslib/rtti
 require strings
 require daslib/fio
+require daslib/flatten_opt_fold
+require daslib/strings_boost
+require daslib/regex_boost
+require daslib/templates_boost
 
 //! Fold-completeness verification over the ACTUAL compiled output. It
 //! compiles REAL flatten units and asserts no const-foldable residual
@@ -124,6 +128,40 @@ def private twin_opt_residuals(t : T?; path, twin : string; haddMinWidth : int) 
     return <- res
 }
 
+var private MANGLED_CALL_NAME <- %regex~__::[^`]*`([^`]*)`[0-9]*%%
+
+//! The flattened source of the shader at `path`, in the text the
+//! backend's AST dump prints (`run.sh --das`): mangled call names cut
+//! to the bare name, the primitives' module prefix dropped.
+def private flattened_source(t : T?; proj, path : string) : string {
+    var text = ""
+    var inscope access <- make_file_access(proj)
+    using() $(var mg : ModuleGroup) {
+        using() $(var cop : CodeOfPolicies) {
+            cop.threadlock_context = true
+            cop.version_2_syntax = true
+            compile_file(path, access, unsafe(addr(mg)), cop) $(ok; program; iss) {
+                if (!ok) {
+                    t |> failure("compile failed: {path}\n{iss}")
+                    return
+                }
+                program_for_each_module(program) $(mod) {
+                    for_each_function(mod, "") $(func) {
+                        let fi = func.at.fileInfo
+                        let inShaderFile = fi != null && fi.name == path
+                        if (inShaderFile && func.body != null && is_flatten_output(func)) {
+                            text = regex_replace(MANGLED_CALL_NAME, func.describe(), "$1")
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return replace(text, "shader_dsl_primitives::", "")
+}
+
+def private trimmed_without_cr(text : string) : string => strip(replace(text, "\r", ""))
+
 // Compile `path` and return describe() of each `*_flat` twin body,
 // keyed by twin name — the structural skip-proof half of the
 // `_flatten_no_fast_math` tests (a skipped fold computes the same
@@ -154,7 +192,7 @@ def private twin_bodies(t : T?; path : string) : table<string; string> {
     return <- bodies
 }
 
-[test(description = "compiled flatten corpora leave no const-foldable residual in the final AST and show the structural marks each rewrite is meant to leave", standalone = "compiles the other flatten corpora by path, so the corpora must stay separate files")]
+[test(description = "compiled flatten corpora leave no const-foldable residual in the final AST and show the structural marks each rewrite is meant to leave; a constant condition forms no select chain; every example shader has a golden and its flattened source matches it", timeout = 1200, standalone = "compiles the other flatten corpora by path, so the corpora must stay separate files")]
 def test_flatten_fold(t : T?) {  // nolint:STYLE038 — flat list of independent `t |> run` corpora, one per flatten pass
     let root = get_das_root()
     t |> run("[flatten] reveal-cascade corpus folds clean") @(t : T?) {
@@ -212,7 +250,7 @@ def test_flatten_fold(t : T?) {  // nolint:STYLE038 — flat list of independent
     }
     t |> run("optimize corpus folds clean (test_flatten_opt.das twins)") @(t : T?) {
         let n = check_unit(t, "", "{root}/tests/flatten/test_flatten_opt.das")
-        t |> success(n >= 14, "expected >=14 twins, checked {n}")
+        t |> success(n >= 17, "expected >=17 twins, checked {n}")
         // regroup-to-share FIRED proof: reassoc canonicalizes alpha to `(e -
         // b) + 1f`, so a shared `_cse_` let only appears when the regroup
         // re-paired `1f - b` for the CSE
@@ -222,6 +260,15 @@ def test_flatten_fold(t : T?) {  // nolint:STYLE038 — flat list of independent
                      "regrouped '1 - b' must CSE-share with the albedo use: {rg}")
         let ra = bodies?["r_anyconst_flat"] ?? ""
         t |> success(ra |> find("_cse_") >= 0, "regrouped '0.5 - b' must CSE-share: {ra}")
+        // fuse builds a vector of uniforms after the preshader pass:
+        // the round that opens the fuse entry moves it up
+        let hr = bodies?["hu_ret_flat"] ?? ""
+        t |> success(hr |> find("p - _preshader_") >= 0, "hu_ret: {hr}")
+        let hc = bodies?["hu_call_flat"] ?? ""
+        t |> success(hc |> find("p - _preshader_") >= 0, "hu_call: {hc}")
+        let hw = bodies?["hu_written_flat"] ?? ""
+        t |> success(hw |> find("float2(G_WRITTEN") >= 0 && hw |> find("_preshader_") < 0,
+                     "hu_written: a written global stays per pixel: {hw}")
         delete bodies
     }
     t |> run("dot corpus fuses clean (test_flatten_dot.das twins)") @(t : T?) {
@@ -476,5 +523,52 @@ def test_flatten_fold(t : T?) {  // nolint:STYLE038 — flat list of independent
             }
         }
         t |> success(total >= 60, "expected >=60 shaders, checked {total}")
+    }
+    t |> run("a runtime condition fuses, a constant one does not") @(t : T?) {
+        ast_gc_guard() {
+            var guarded = qmacro_block() {
+                var b2 = c ? (b1 + x) : b1
+                var b3 = c ? (b2 + y) : b2
+            }
+            t |> success(has_fusable_select_chain(guarded as ExprBlock),
+                "two selects on `c` form a chain")
+            var skipped = qmacro_block() {
+                var a2 = false ? (a1 + x) : a1
+                var a3 = false ? (a2 + y) : a2
+            }
+            t |> success(!has_fusable_select_chain(skipped as ExprBlock),
+                "two selects on `false` form no chain: `a1 + x` would run with no reader")
+        }
+    }
+    t |> run("each example shader has a golden and its flattened source matches it") @(t : T?) {
+        let ex = "{root}/examples/flatten"
+        let proj = "{ex}/flatten_shaders.das_project"
+        let golden_dir = "{ex}/golden"
+        if (!stat(golden_dir).is_dir) {
+            t |> success(true, "no examples/flatten/golden folder - nothing to compare")
+            return
+        }
+        var subs <- ["capability", "scalar_packing"]
+        fio::dir("{ex}/shaders") $(dirname) {
+            let listed = !(dirname |> starts_with(".")) && stat("{ex}/shaders/{dirname}").is_dir
+            subs |> push("shaders/{dirname}") if (listed)
+        }
+        var total = 0
+        for (sub in subs) {
+            fio::dir("{ex}/{sub}") $(fn) {
+                return if (!(fn |> ends_with(".shader")))
+                let golden_path = "{golden_dir}/{trim_suffix(fn, ".shader")}.golden"
+                if (!stat(golden_path).is_valid) {
+                    t |> failure("{sub}/{fn} has no golden - " +
+                        "run examples/flatten/run.sh --update-golden")
+                    return
+                }
+                total ++
+                let got = trimmed_without_cr(flattened_source(t, proj, "{ex}/{sub}/{fn}"))
+                t |> equal(got, trimmed_without_cr(fread(golden_path)), "{sub}/{fn}")
+            }
+        }
+        delete subs
+        t |> success(total >= 120, "expected >=120 shaders with a golden, checked {total}")
     }
 }

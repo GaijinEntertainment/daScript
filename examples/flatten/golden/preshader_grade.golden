@@ -1,0 +1,13 @@
+/*FULLY INFERRED*/
+// [user_scenario][modify_external][access_global]
+[export]
+[shader_dsl_boost::pixel_shader(flattened:bool=true,packed:bool=true,optimized:bool=true,fused:bool=true,folded:bool=true)]
+def public preshader_grade(inp:PbrInput const) : PbrOutput {
+	let _preshader_0:float const = pow(2f,exposure - 1f);
+	let _preshader_1:float const = mad(1f - contrast,0.25f,contrast * 0.5f);
+	let _preshader_2:float3 const = float3(_preshader_1);
+	let c:float3 const = tex2d(albedo_texture,inp.uv).xyz;
+	let graded:float3 const = lerp(_preshader_2,c * _preshader_0,contrast);
+	let result:float3 const = (graded * whiteBalance);
+	return struct<PbrOutput>(albedo = result, emission = result, emissionStrength = 1f, metalness = 0f, roughness = 1f, ao = 1f);
+}

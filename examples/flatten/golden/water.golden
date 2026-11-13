@@ -1,0 +1,25 @@
+/*FULLY INFERRED*/
+// [user_scenario][modify_external][access_global]
+[export]
+[shader_dsl_boost::pixel_shader(flattened:bool=true,packed:bool=true,optimized:bool=true,fused:bool=true,folded:bool=true)]
+def public water(inp:PbrInput const) : PbrOutput {
+	let _preshader_0:float const = (g_Time * waveSpeed);
+	let _preshader_1:float3 const = float3(_preshader_0,_preshader_0 * 0.3f,_preshader_0 * 0.7f);
+	let _preshader_2:float const = (waveScale * 2.1f);
+	let _preshader_3:float3 const = (float3(1.6f,0.48000002f,1.12f) * _preshader_0);
+	let _preshader_4:float const = (waveScale * 0.5f);
+	let _preshader_5:float3 const = (float3(0.28f,0.08400001f,0.196f) * _preshader_0);
+	let _preshader_6:float const = (foamThreshold + 0.15f);
+	let _preshader_7:float3 const = (float3(0.6f,0.18f,0.42000002f) * _preshader_0);
+	let _cse_0:float3 const = (inp.worldPos * waveScale);
+	let n1:float const = noise(_cse_0 + _preshader_1);
+	let n2:float const = noise(mad(inp.worldPos,_preshader_2,_preshader_3));
+	let n3:float const = noise(mad(inp.worldPos,_preshader_4,_preshader_5));
+	let n:float const = dot(float3(n1,n2,n3),float3(0.5f,0.3f,0.2f));
+	let depthMix:float3 const = lerp(deepColor,shallowColor,n);
+	let foamMask:float const = smooth_step(foamThreshold,_preshader_6,n);
+	let surface:float3 const = lerp(depthMix,foamColor,foamMask);
+	let __flat_loc_23:float const = noise(_cse_0 + _preshader_7);
+	let nrm:float3 const = normalize(float3(-((noise(mad(inp.worldPos + float3(0.05f,0f,0f),waveScale,_preshader_7)) - __flat_loc_23)) * normalStrength,1f,-((noise(mad(inp.worldPos + float3(0f,0f,0.05f),waveScale,_preshader_7)) - __flat_loc_23)) * normalStrength));
+	return struct<PbrOutput>(albedo = surface, emission = (foamColor * foamMask), emissionStrength = (foamMask * 0.8f), normalMap = nrm, metalness = 0f, roughness = lerp(0.15f,0.4f,foamMask), ao = 1f);
+}

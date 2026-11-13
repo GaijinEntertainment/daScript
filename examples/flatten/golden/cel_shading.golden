@@ -1,0 +1,21 @@
+/*FULLY INFERRED*/
+// [user_scenario][modify_external][access_global]
+[export]
+[shader_dsl_boost::pixel_shader(flattened:bool=true,packed:bool=true,optimized:bool=true,fused:bool=true,folded:bool=true)]
+def public cel_shading(inp:PbrInput const) : PbrOutput {
+	let _preshader_0:float3 const = normalize(lightDir);
+	let _preshader_1:float const = (1f / bands);
+	let _preshader_2:float const = saturate(g_LightDirection.y);
+	let _preshader_3:float const = lerp(0.1f,0.8f,_preshader_2);
+	let _cse_0:float3 const = normalize(inp.worldNormal);
+	let nDotL:float const = saturate(dot(_cse_0,_preshader_0));
+	let stepped:float const = (floor(bands * nDotL) * _preshader_1);
+	let cel:float3 const = lerp(shadowColor,baseColor,stepped);
+	let h:float3 const = normalize(_preshader_0 + normalize(inp.viewDir));
+	let nDotH:float const = saturate(dot(_cse_0,h));
+	let spec:float const = step(specularThreshold,pow(nDotH,specularPower));
+	let f:float const = fresnel(outlineSharpness,inp.worldNormal,inp.viewDir);
+	let outline:float const = step(outlineThreshold,f);
+	let noOutline:float const = (1f - outline);
+	return struct<PbrOutput>(albedo = float3(0f,0f,0f), emission = (lerp(cel,specularColor,spec) * noOutline), emissionStrength = (noOutline * _preshader_3), metalness = 0f, roughness = 1f, ao = 1f);
+}

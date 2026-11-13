@@ -1,0 +1,15 @@
+/*FULLY INFERRED*/
+// [user_scenario][modify_external][access_global]
+[export]
+[shader_dsl_boost::pixel_shader(flattened:bool=true,packed:bool=true,optimized:bool=true,fused:bool=true,folded:bool=true)]
+def public shadow_2d(inp:PbrInput const) : PbrOutput {
+	let _preshader_0:float2 const = float2(offsetX,offsetY);
+	let c:float3 const = tex2d(albedo_texture,inp.uv).xyz;
+	let cs:float3 const = tex2d(albedo_texture,inp.uv - _preshader_0).xyz;
+	let shadowGray:float const = dot(cs,float3(0.299f,0.587f,0.114f));
+	let isShadowArea:float const = (smooth_step(0.3f,0.7f,shadowGray) * shadowStrength);
+	let shifted:float const = dot(c,float3(0.299f,0.587f,0.114f));
+	let isOriginal:float const = step(0.1f,shifted);
+	let result:float3 const = lerp(lerp(c,shadowColor,isShadowArea * one_minus(isOriginal)),c,isOriginal);
+	return struct<PbrOutput>(albedo = result, emission = result, emissionStrength = 0.15f, metalness = 0f, roughness = 1f, ao = 1f);
+}

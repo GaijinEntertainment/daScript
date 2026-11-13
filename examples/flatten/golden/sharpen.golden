@@ -1,0 +1,20 @@
+/*FULLY INFERRED*/
+// [user_scenario][modify_external][access_global]
+[export]
+[shader_dsl_boost::pixel_shader(flattened:bool=true,packed:bool=true,optimized:bool=true,fused:bool=true,folded:bool=true)]
+def public sharpen(inp:PostEffectInput const) : PostEffectOutput {
+	let _preshader_cse_0:float const = -sampleStep;
+	let _preshader_0:float2 const = float2(_preshader_cse_0,0f);
+	let _preshader_1:float2 const = float2(sampleStep,0f);
+	let _preshader_2:float2 const = float2(0f,_preshader_cse_0);
+	let _preshader_3:float2 const = float2(0f,sampleStep);
+	let uv:float2 const = inp.screenPos;
+	let c:float3 const = sample_scene_color(uv);
+	var __ssa_blur_2:float3 = sample_scene_color(_preshader_0 + uv);
+	var __ssa_blur_3:float3 = (__ssa_blur_2 + sample_scene_color(_preshader_1 + uv));
+	var __ssa_blur_4:float3 = (__ssa_blur_3 + sample_scene_color(_preshader_2 + uv));
+	var __ssa_blur_5:float3 = (__ssa_blur_4 + sample_scene_color(_preshader_3 + uv));
+	var __ssa_blur_6:float3 = (__ssa_blur_5 * 0.25f);
+	let sharpened:float3 const = mad(c - __ssa_blur_6,strength,c);
+	return struct<PostEffectOutput>(out_color = max(sharpened,float3(0f,0f,0f)));
+}

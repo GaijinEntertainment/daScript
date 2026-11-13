@@ -1,0 +1,15 @@
+/*FULLY INFERRED*/
+// [user_scenario][modify_external][access_global]
+[export]
+[shader_dsl_boost::pixel_shader(flattened:bool=true,packed:bool=true,optimized:bool=true,fused:bool=true,folded:bool=true)]
+def public depth_fog_3d(inp:PbrInput const) : PbrOutput {
+	let _preshader_0:float const = (1f / softDepth);
+	let _preshader_1:float const = (edgeThreshold + 0.15f);
+	let surfaceDepth:float const = length(inp.worldPos - g_CameraPosition);
+	let thickness:float const = clamp((sample_scene_depth(inp.screenPos) - surfaceDepth) * _preshader_0,0f,1f);
+	let edgeMask:float const = (smooth_step(edgeThreshold,_preshader_1,thickness) * smooth_step(1f,0.7f,thickness));
+	let bodyColor:float3 const = lerp(shallowColor,deepColor,thickness);
+	let color:float3 const = lerp(bodyColor,edgeColor,edgeMask);
+	let f:float const = fresnel(2f,inp.worldNormal,inp.viewDir);
+	return struct<PbrOutput>(albedo = color, alpha = mad(f,0.2f,lerp(0.05f,opacity,thickness)), emission = ((edgeColor * edgeMask) * 0.5f), emissionStrength = (edgeMask * 0.8f), metalness = 0f, roughness = 0.1f, ao = 1f);
+}

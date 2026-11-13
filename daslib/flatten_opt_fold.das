@@ -576,13 +576,15 @@ def private chain_successor(var ub : FlatUsesBuilder?; var blk : ExprBlock?; acc
     return j
 }
 
+[arch(at="ARCHITECTURE_SHADER.md#flatten")]
 def private build_select_chain(var ub : FlatUsesBuilder?; var blk : ExprBlock?; mutableVars : table<string>;
                                consumed : table<int>; i : int) : array<int> {
     var chain : array<int>
     let headName = select_let_name(blk.list[i])
     if (headName == "") return <- chain
     var headSel = sel3((blk.list[i] as ExprLet).variables[0].init)
-    if (reads_mutable(headSel.subexpr, mutableVars)) return <- chain
+    let leftToFold = headSel.subexpr |> is_expr_const()
+    if (leftToFold || reads_mutable(headSel.subexpr, mutableVars)) return <- chain
     let condKey = describe(headSel.subexpr)
     chain |> push(i)
     var accName = headName

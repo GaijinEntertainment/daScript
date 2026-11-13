@@ -1,0 +1,11 @@
+/*FULLY INFERRED*/
+// [user_scenario][modify_external][access_global]
+[export]
+[shader_dsl_boost::pixel_shader(flattened:bool=true,packed:bool=true,optimized:bool=true,fused:bool=true,folded:bool=true)]
+def public cap_regroup(inp:PbrInput const) : PbrOutput {
+	let c:float3 const = tex2d(albedo_texture,inp.uv).xyz;
+	let mask:float const = saturate(mad(inp.uv.y,2f,-0.3f));
+	let edge:float const = saturate(inp.uv.x);
+	let _cse_0:float const = (1f - mask);
+	return struct<PbrOutput>(albedo = (_cse_0 * c), emission = float3(0f,0f,0f), emissionStrength = 1f, metalness = 0f, roughness = 1f, ao = 1f, alpha = (_cse_0 + edge));
+}

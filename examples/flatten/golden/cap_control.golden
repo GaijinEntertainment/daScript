@@ -1,0 +1,11 @@
+/*FULLY INFERRED*/
+// [user_scenario][modify_external][access_global]
+[export]
+[shader_dsl_boost::pixel_shader(flattened:bool=true,packed:bool=true,optimized:bool=true,fused:bool=true,folded:bool=true)]
+def public cap_control(inp:PbrInput const) : PbrOutput {
+	let _preshader_0:float3 const = normalize(lightDir);
+	let nDotL:float const = saturate(dot(normalize(inp.worldNormal),_preshader_0));
+	var __ssa_lit_2:float3 = ((nDotL > threshold) ? baseColor : float3(0f,0f,0f));
+	var __ssa_lit_3:float3 = ((nDotL <= threshold) ? shadowColor : __ssa_lit_2);
+	return struct<PbrOutput>(albedo = float3(0f,0f,0f), emission = __ssa_lit_3, emissionStrength = 1f, metalness = 0f, roughness = 1f, ao = 1f);
+}

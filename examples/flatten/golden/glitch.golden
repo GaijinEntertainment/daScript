@@ -1,0 +1,19 @@
+/*FULLY INFERRED*/
+// [user_scenario][modify_external][access_global]
+[export]
+[shader_dsl_boost::pixel_shader(flattened:bool=true,packed:bool=true,optimized:bool=true,fused:bool=true,folded:bool=true)]
+def public glitch(inp:PbrInput const) : PbrOutput {
+	let _preshader_0:float const = (g_Time * glitchSpeed);
+	let _preshader_1:float const = mad(sin(g_Time * 1.7f),0.5f,0.5f);
+	let _preshader_2:float const = (_preshader_0 * 1.3f);
+	let _preshader_3:float const = saturate(g_LightDirection.y);
+	let _preshader_4:float const = lerp(0.8f,2f,_preshader_3);
+	let bar:float const = mad(sin(mad(barFreq,inp.worldPos.y,_preshader_0)),0.5f,0.5f);
+	let glitchMask:float const = step(0.85f,bar);
+	let basePhase:float const = mad(inp.worldPos.y,12f,_preshader_2);
+	let rgb:float3 const = mad(sin(float3(basePhase) + float3(0f,1f,2f)),0.5f,float3(0.5f,0.5f,0.5f));
+	let rgbSplit:float3 const = mad(rgb,splitStrength,baseColor);
+	let final_col:float3 const = lerp(baseColor,rgbSplit,glitchMask);
+	let _cse_0:float const = (glitchMask * _preshader_1);
+	return struct<PbrOutput>(albedo = final_col, emission = (_cse_0 * rgbSplit), emissionStrength = (_cse_0 * _preshader_4), metalness = 0f, roughness = 0.6f, ao = 1f);
+}

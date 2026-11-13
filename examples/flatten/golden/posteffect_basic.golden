@@ -1,0 +1,9 @@
+/*FULLY INFERRED*/
+// [user_scenario][modify_external]
+[export]
+[shader_dsl_boost::pixel_shader(flattened:bool=true,packed:bool=true,optimized:bool=true,fused:bool=true,folded:bool=true)]
+def public posteffect_basic(inp:PostEffectInput const) : PostEffectOutput {
+	let col:float3 const = sample_scene_color(inp.screenPos);
+	let lum:float const = dot(col,float3(0.299f,0.587f,0.114f));
+	return struct<PostEffectOutput>(out_color = lerp(col,float3(lum),0.5f));
+}

@@ -1,0 +1,41 @@
+/*FULLY INFERRED*/
+// [user_scenario][modify_external][access_global]
+[export]
+[shader_dsl_boost::pixel_shader(flattened:bool=true,packed:bool=true,optimized:bool=true,fused:bool=true,folded:bool=true)]
+def public frost(inp:PostEffectInput const) : PostEffectOutput {
+	let _preshader_0:float const = frac(g_Time * 0.4f);
+	let _preshader_1:float const = smooth_step(0f,0.2f,_preshader_0);
+	let _preshader_2:float const = smooth_step(1f,0.25f,_preshader_0);
+	let _preshader_3:float const = ((freezeAmount * _preshader_1) * _preshader_2);
+	let _preshader_cse_5:float const = (1f - _preshader_3);
+	let _preshader_5:float const = (_preshader_cse_5 * 0.35f);
+	let _preshader_6:float const = (branchSharpness * 0.7f);
+	let _preshader_7:float const = (branchSharpness * 1.4f);
+	let uv:float2 const = inp.screenPos;
+	let d:float const = (length(uv - float2(0.5f,0.5f)) * 1.415f);
+	let edgeMask:float const = smooth_step(_preshader_cse_5,1f,d);
+	let topEdge:float const = (((smooth_step(_preshader_5,0f,uv.y) * 0.6f) * _preshader_1) * _preshader_2);
+	let botEdge:float const = (((smooth_step(0.65f,1f,uv.y) * 0.4f) * _preshader_1) * _preshader_2);
+	let iceMask:float const = saturate(hadd(float3(botEdge,edgeMask,topEdge)));
+	let _cse_6:float2 const = (crystalScale * uv);
+	let _cse_0:float2 const = (_cse_6 * 0.5f);
+	let __flat_loc_4:float const = noise(_cse_0 + float2(1.7f,0.3f));
+	let __flat_loc_5:float const = noise(_cse_0 + float2(0.2f,2.1f));
+	let __flat_loc_7:float2 const = mad(float2(__flat_loc_4 - 0.5f,__flat_loc_5 - 0.5f),0.6f,_cse_6);
+	let _cse_1:float const = (crystalScale * uv.x);
+	let _cse_2:float const = (crystalScale * uv.y);
+	let crystal:float const = (dot(float3(pow(1f - abs(mad(noise(__flat_loc_7),2f,-1f)),branchSharpness),pow(1f - abs(mad(noise(__flat_loc_7 + float2(0.4f,0.7f)),2f,-1f)),_preshader_6),pow(1f - abs(mad(noise(float2(dot(float3(_cse_1,__flat_loc_4,_cse_2),float3(1.8f,0.4f,1f)),mad(_cse_2,1.8f,__flat_loc_5 * 0.4f) - _cse_1)),2f,-1f)),_preshader_7)),float3(0.5f,0.3f,0.2f)) * smooth_step(0.35f,0.65f,noise(mad(_cse_6,0.25f,float2(3.1f,1.4f)))));
+	let frost:float const = (crystal * iceMask);
+	let uvx:float const = uv.x;
+	let uvy:float const = uv.y;
+	let _cse_3:float const = (crystalScale * uvx);
+	let _cse_4:float const = (crystalScale * uvy);
+	let wn:float const = noise(float2(_cse_3,_cse_4));
+	let offset:float2 const = ((float2(wn - 0.5f,noise(float2(_cse_4,_cse_3)) - 0.5f) * 0.004f) * iceMask);
+	let scene:float3 const = sample_scene_color(offset + uv);
+	let gray:float const = dot(scene,float3(0.299f,0.587f,0.114f));
+	let tinted:float3 const = lerp(scene,deepIceColor * float3(gray,gray,gray),iceMask * 0.7f);
+	let bright:float3 const = ((crystalColor * frost) * 2.2f);
+	let result:float3 const = mad(bright,mad(frost,-0.5f,1f),lerp(tinted,crystalColor,frost * frostOpacity));
+	return struct<PostEffectOutput>(out_color = saturate(result));
+}

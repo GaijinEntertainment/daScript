@@ -46,6 +46,10 @@ def private psh_has_compute(e : ExpressionPtr) : bool {
     return false
 }
 
+//! in a barrier set: every call but a float vector constructor is a
+//! barrier
+let public BARRIER_EVERY_CALL = "*"
+
 struct private PEX {
     paramNames : table<string>
     localColor : table<string; bool>
@@ -107,7 +111,8 @@ def private pex_eligible(pe : PEX; barriers : table<string>; e : ExpressionPtr) 
     }
     if (e is ExprCall) {
         let c = e as ExprCall
-        if (key_exists(barriers, simple_name("{c.name}"))) return false
+        let barred = key_exists(barriers, BARRIER_EVERY_CALL) && float_ctor_of(e) == null
+        if (barred || key_exists(barriers, simple_name("{c.name}"))) return false
         for (a in c.arguments) {
             if (!pex_eligible(pe, barriers, a)) return false
         }
@@ -790,6 +795,17 @@ def private log_cse_cache(func : FunctionPtr; var blk : ExprBlock?) {
     delete ks
     delete cks
     delete mutableVars
+}
+
+[arch(at="ARCHITECTURE_SHADER.md#flatten")]
+def public preshade_after_fuse(var func : FunctionPtr; barriers : table<string>;
+                               no_fast_math : bool) : bool {
+    //! The preshader extraction once more, over what the fuse pass
+    //! built. True on a change.
+    return false if (!(func.body is ExprBlock))
+    var counter = 0
+    var blk = func.body as ExprBlock
+    return extract_preshader(func, blk, barriers, counter, no_fast_math)
 }
 
 def public flatten_preshade_cse(var func : FunctionPtr; barriers : table<string>; no_fast_math : bool = false; log_cse : bool = false) : bool {

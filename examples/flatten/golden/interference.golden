@@ -1,0 +1,13 @@
+/*FULLY INFERRED*/
+// [user_scenario][modify_external][access_global]
+[export]
+[shader_dsl_boost::pixel_shader(flattened:bool=true,packed:bool=true,optimized:bool=true,fused:bool=true,folded:bool=true)]
+def public interference(inp:PbrInput const) : PbrOutput {
+	let _preshader_0:float const = (g_Time * speed);
+	let _preshader_1:float const = (_preshader_0 * 0.5f);
+	let uv:float2 const = inp.uv;
+	let wave:float const = hadd(float3(sin(mad(freqA,uv.x,_preshader_0)),sin((freqB * uv.y) - _preshader_0),sin(mad(dot(uv,float2(1f,1f)),freqC,_preshader_1))));
+	let h:float const = mad(wave,0.1666667f,0.5f);
+	let col:float3 const = (h * tint);
+	return struct<PbrOutput>(albedo = col, emission = (col * 0.3f), emissionStrength = 0.4f, metalness = 0f, roughness = 0.8f, ao = 1f);
+}

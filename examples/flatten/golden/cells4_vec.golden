@@ -1,0 +1,24 @@
+/*FULLY INFERRED*/
+// [user_scenario][modify_external][access_global]
+[export]
+[shader_dsl_boost::pixel_shader(flatten:bool=false)]
+def public cells4_vec(inp:PbrInput const) : PbrOutput {
+	let uv:float2 const = (inp.uv * 5f);
+	let t:float const = (g_Time * 0.3f);
+	let cx:float const = floor(uv.x);
+	let cy:float const = floor(uv.y);
+	let cx1:float const = (cx + 1f);
+	let cy1:float const = (cy + 1f);
+	let ncx:float4 const = float4(cx,cx1,cx,cx1);
+	let ncy:float4 const = float4(cy,cy,cy1,cy1);
+	let t4:float4 const = float4(t);
+	let uvx4:float4 const = float4(uv.x);
+	let uvy4:float4 const = float4(uv.y);
+	let hx:float4 const = frac(sin((ncx * 127.1f) + (ncy * 311.7f)) * 43758.5f);
+	let hy:float4 const = frac(sin((ncx * 269.5f) + (ncy * 183.3f)) * 43758.5f);
+	let dx:float4 const = (mad(sin(mad(hx,float4(6.28f,6.28f,6.28f,6.28f),t4)),float4(0.3f,0.3f,0.3f,0.3f),mad(hx,float4(0.5f,0.5f,0.5f,0.5f),ncx)) - uvx4);
+	let dy:float4 const = (mad(cos(mad(hy,float4(6.28f,6.28f,6.28f,6.28f),t4)),float4(0.3f,0.3f,0.3f,0.3f),mad(hy,float4(0.5f,0.5f,0.5f,0.5f),ncy)) - uvy4);
+	let d:float4 const = sqrt(mad(dx,dx,dy * dy));
+	let m:float const = min(min(d.x,d.y),min(d.z,d.w));
+	return struct<PbrOutput>(albedo = float3(m,m,m), emission = float3(0f,0f,0f), emissionStrength = 0f, metalness = 0f, roughness = 1f, ao = 1f);
+}

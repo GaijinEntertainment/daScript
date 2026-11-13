@@ -1,0 +1,32 @@
+/*FULLY INFERRED*/
+// [user_scenario][modify_external][access_global]
+[export]
+[shader_dsl_boost::pixel_shader(flattened:bool=true,packed:bool=true,optimized:bool=true,fused:bool=true,folded:bool=true)]
+def public helmet(inp:PostEffectInput const) : PostEffectOutput {
+	let _preshader_0:float const = mad(sin(g_Time * 2f),0.15f,0.85f);
+	let uv:float2 const = inp.screenPos;
+	let centered:float2 const = (uv - float2(0.5f,0.5f));
+	let oval:float2 const = (centered * float2(0.85f,1.15f));
+	let ovalDist:float const = length(oval);
+	let r2:float const = dot(centered,centered);
+	let distUV:float2 const = mad(centered,mad(lensDistort,r2,1f),float2(0.5f,0.5f));
+	let scene:float3 const = sample_scene_color(distUV);
+	let inside:float const = smooth_step(0.52f,0.5f,ovalDist);
+	let innerEdge:float const = smooth_step(0.45f,0.43f,ovalDist);
+	let frame:float const = ((1f - innerEdge) * inside);
+	let outside:float const = smooth_step(0.5f,0.58f,ovalDist);
+	let reflectUV:float2 const = (centered + float2(0.15f,0.2f));
+	let reflectDist:float const = length(reflectUV * float2(2.5f,0.6f));
+	let reflection:float const = ((smooth_step(0.18f,0f,reflectDist) * innerEdge) * 0.35f);
+	let _cse_0:float const = abs(centered.x);
+	let hudLine:float const = ((smooth_step(0.004f,0f,abs(centered.y + 0.12f)) * smooth_step(0.35f,0.3f,_cse_0)) * innerEdge);
+	let bx:float const = (_cse_0 - 0.28f);
+	let by:float const = (abs(centered.y) - 0.18f);
+	let bracketX:float const = (((smooth_step(0.003f,0f,abs(bx)) * smooth_step(0f,0.04f,by)) * smooth_step(0.07f,0.03f,by)) * innerEdge);
+	let bracketY:float const = (((smooth_step(0.003f,0f,abs(by)) * smooth_step(0f,0.04f,bx)) * smooth_step(0.07f,0.03f,bx)) * innerEdge);
+	let brackets:float const = saturate(bracketX + bracketY);
+	let base:float3 const = (mad(outside,-0.97f,1f) * scene);
+	let withRim:float3 const = (mad(frame * visorColor,0.9f,base) + float3(reflection));
+	let result:float3 const = mad((brackets + hudLine) * hudColor,_preshader_0,withRim);
+	return struct<PostEffectOutput>(out_color = result);
+}

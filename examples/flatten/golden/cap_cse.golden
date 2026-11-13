@@ -1,0 +1,12 @@
+/*FULLY INFERRED*/
+// [user_scenario][modify_external][access_global]
+[export]
+[shader_dsl_boost::pixel_shader(flattened:bool=true,packed:bool=true,optimized:bool=true,fused:bool=true,folded:bool=true)]
+def public cap_cse(inp:PbrInput const) : PbrOutput {
+	let c:float3 const = tex2d(albedo_texture,inp.uv).xyz;
+	let _cse_0:float const = dot(c,float3(0.299f,0.587f,0.114f));
+	let a:float const = (_cse_0 * 2f);
+	let b:float const = (_cse_0 + 0.1f);
+	let result:float3 const = float3(a,b,a);
+	return struct<PbrOutput>(albedo = result, emission = result, emissionStrength = 1f, metalness = 0f, roughness = 1f, ao = 1f);
+}

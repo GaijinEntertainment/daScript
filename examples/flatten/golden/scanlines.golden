@@ -1,0 +1,15 @@
+/*FULLY INFERRED*/
+// [user_scenario][modify_external][access_global]
+[export]
+[shader_dsl_boost::pixel_shader(flattened:bool=true,packed:bool=true,optimized:bool=true,fused:bool=true,folded:bool=true)]
+def public scanlines(inp:PbrInput const) : PbrOutput {
+	let _preshader_0:float const = (g_Time * scrollSpeed);
+	let _preshader_1:float const = (1f - lineStrength);
+	let _preshader_2:float const = saturate(g_LightDirection.y);
+	let _preshader_3:float const = lerp(0.5f,2f,_preshader_2);
+	let c:float3 const = tex2d(albedo_texture,inp.uv).xyz;
+	let scan:float const = mad(sin((_preshader_0 + inp.uv.y) * lineFreq),0.5f,0.5f);
+	let mask:float const = step(0.5f,scan);
+	let result:float3 const = (c * lerp(_preshader_1,1f,mask));
+	return struct<PbrOutput>(albedo = result, emission = result, emissionStrength = _preshader_3, metalness = 0f, roughness = 1f, ao = 1f);
+}

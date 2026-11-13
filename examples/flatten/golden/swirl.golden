@@ -1,0 +1,15 @@
+/*FULLY INFERRED*/
+// [user_scenario][modify_external][access_global]
+[export]
+[shader_dsl_boost::pixel_shader(flattened:bool=true,packed:bool=true,optimized:bool=true,fused:bool=true,folded:bool=true)]
+def public swirl(inp:PbrInput const) : PbrOutput {
+	let _preshader_0:float const = sin(g_Time * swirlSpeed);
+	let _preshader_1:float const = saturate(g_LightDirection.y);
+	let _preshader_2:float const = lerp(0.5f,2f,_preshader_1);
+	let uv:float2 const = (inp.uv - float2(0.5f,0.5f));
+	let dist:float const = length(uv);
+	let angle:float const = mad(dist * swirlStrength,_preshader_0,atan2(uv.y,uv.x));
+	let warped:float2 const = mad(float2(cos(angle),sin(angle)),dist,float2(0.5f,0.5f));
+	let result:float3 const = tex2d(albedo_texture,warped).xyz;
+	return struct<PbrOutput>(albedo = result, emission = result, emissionStrength = _preshader_2, metalness = 0f, roughness = 1f, ao = 1f);
+}

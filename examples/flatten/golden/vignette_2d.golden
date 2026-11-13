@@ -1,0 +1,15 @@
+/*FULLY INFERRED*/
+// [user_scenario][modify_external][access_global]
+[export]
+[shader_dsl_boost::pixel_shader(flattened:bool=true,packed:bool=true,optimized:bool=true,fused:bool=true,folded:bool=true)]
+def public vignette(inp:PbrInput const) : PbrOutput {
+	let _preshader_0:float const = (radius + softness);
+	let _preshader_1:float const = saturate(g_LightDirection.y);
+	let _preshader_2:float const = lerp(0.5f,2f,_preshader_1);
+	let c:float3 const = tex2d(albedo_texture,inp.uv).xyz;
+	let uv:float2 const = (inp.uv - float2(0.5f,0.5f));
+	let dist:float const = (length(uv) * 1.6f);
+	let vign:float const = smooth_step(_preshader_0,radius,dist);
+	let result:float3 const = (c * vign);
+	return struct<PbrOutput>(albedo = result, emission = result, emissionStrength = _preshader_2, metalness = 0f, roughness = 1f, ao = 1f);
+}

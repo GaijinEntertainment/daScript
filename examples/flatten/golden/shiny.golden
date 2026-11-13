@@ -1,0 +1,17 @@
+/*FULLY INFERRED*/
+// [user_scenario][modify_external][access_global]
+[export]
+[shader_dsl_boost::pixel_shader(flattened:bool=true,packed:bool=true,optimized:bool=true,fused:bool=true,folded:bool=true)]
+def public shiny(inp:PbrInput const) : PbrOutput {
+	let _preshader_0:float const = remap(sin(g_Time * shineSpeed),float2(-1f,1f),float2(-0.2f,1.2f));
+	let _preshader_1:float const = (_preshader_0 - shineWidth);
+	let _preshader_2:float const = (_preshader_0 + shineWidth);
+	let _preshader_3:float const = saturate(g_LightDirection.y);
+	let _preshader_4:float const = lerp(1f,3f,_preshader_3);
+	let c:float3 const = tex2d(albedo_texture,inp.uv).xyz;
+	let diag:float const = dot(inp.uv,float2(1f,1f));
+	let shine:float const = (smooth_step(_preshader_1,_preshader_0,diag) * smooth_step(_preshader_2,_preshader_0,diag));
+	let _cse_0:float3 const = (shine * shineColor);
+	let result:float3 const = (_cse_0 + c);
+	return struct<PbrOutput>(albedo = result, emission = _cse_0, emissionStrength = (shine * _preshader_4), metalness = 0.3f, roughness = 0.3f, ao = 1f);
+}

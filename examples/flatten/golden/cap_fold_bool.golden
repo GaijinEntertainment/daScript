@@ -1,0 +1,11 @@
+/*FULLY INFERRED*/
+// [user_scenario][modify_external][access_global]
+[export]
+[shader_dsl_boost::pixel_shader(flattened:bool=true,packed:bool=true,optimized:bool=true,fused:bool=true,folded:bool=true)]
+def public cap_fold_bool(inp:PbrInput const) : PbrOutput {
+	let base:float3 const = tex2d(albedo_texture,inp.uv).xyz;
+	let bright:bool const = (inp.uv.x > 0.5f);
+	let dim:bool const = (inp.uv.y > 0.5f);
+	let result:float3 const = (bright ? (dim ? base : (base * 0.5f)) : (base * 0.25f));
+	return struct<PbrOutput>(albedo = result, emission = result, emissionStrength = 1f, metalness = 0f, roughness = 1f, ao = 1f);
+}
