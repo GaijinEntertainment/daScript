@@ -498,7 +498,8 @@ namespace das {
         virtual void preVisitAlias ( TypeDecl * td, const string & name ) override {
             Visitor::preVisitAlias(td,name);
             if ( !td->isAuto() ) {
-                if ( td->getSizeOf64()>0x7fffffff ) {
+                bool failed = false;
+                if ( td->getSizeOf64(failed)>0x7fffffff && !failed ) {
                     program->error("alias '" + name + "' is too big", "", "",
                         td->at, CompilationError::exceeds_type_alias );
                 }

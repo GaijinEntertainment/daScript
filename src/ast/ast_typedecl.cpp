@@ -3574,7 +3574,7 @@ namespace das
         } else if ( isEnumT() ) {
             return enumType ? getTypeBaseSize(enumType->baseType) : getTypeBaseSize(Type::tInt);
         } else {
-            if ( baseType==Type::alias || baseType==Type::autoinfer || baseType==Type::option || baseType==Type::typeMacro ) {
+            if ( baseType==Type::alias || baseType==Type::autoinfer || baseType==Type::option || baseType==Type::typeDecl || baseType==Type::typeMacro ) {
                 failed = true;
                 return 0;
             }
@@ -3620,7 +3620,7 @@ namespace das
         } else if ( isEnumT() ) {
             return enumType ? getTypeBaseAlign(enumType->baseType) : getTypeBaseAlign(Type::tInt);
         } else {
-            if ( baseType==Type::alias || baseType==Type::autoinfer || baseType==Type::option || baseType==Type::typeMacro ) {
+            if ( baseType==Type::alias || baseType==Type::autoinfer || baseType==Type::option || baseType==Type::typeDecl || baseType==Type::typeMacro ) {
                 failed = true;
                 return 0;
             }
