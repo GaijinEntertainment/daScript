@@ -229,6 +229,8 @@ class AudioChannel {
     hrtf : ma_hrtf
     def AudioChannel(var src : AudioSource?) {
         source = src
+    }
+    def init_in_place {
         // resampler
         var resampler_config <- ma_resampler_config_init(
             ma_format.ma_format_f32,
@@ -897,6 +899,13 @@ def setup_command_processor(var s : Stream?) {
     g_command_stream |> add_ref
 }
 
+[arch(at="../ARCHITECTURE.md#channel-native-state-in-place")]
+def private new_channel(var src : AudioSource?) : AudioChannel? {
+    var channel = new AudioChannel(src)
+    channel->init_in_place()
+    return channel
+}
+
 def add_channel(sid : SID; var channel : AudioChannel?) {
     g_channels |> push(channel)
     if (sid != INVALID_SID) {
@@ -929,7 +938,7 @@ def private add_pcm_channel(var command : AudioCommandAddPCM; unpaused : bool) {
     } else {
         decoder = new AudioSourcePCM(command.channels, command.rate, command.samples)
     }
-    var channel = new AudioChannel(decoder)
+    var channel = new_channel(decoder)
     channel.ignoreGlobalPause = unpaused
     add_channel(command.sid, channel)
 }
@@ -958,7 +967,7 @@ def command_processor {  // nolint:STYLE038 - one arm per AudioCommand variant
             }
             decoder->initFromDecoder(unsafe(reinterpret<ma_decoder?>(dcmd.decoder)), dcmd.rate,
                                      dcmd.channels)
-            add_channel(dcmd.sid) <| new AudioChannel(decoder)
+            add_channel(dcmd.sid) <| new_channel(decoder)
         } elif (cmd is add_decoder_3d) {
             assume dcmd = cmd as add_decoder_3d
             var decoder : AudioSourceDecoder?
@@ -969,15 +978,15 @@ def command_processor {  // nolint:STYLE038 - one arm per AudioCommand variant
             }
             decoder->initFromDecoder(unsafe(reinterpret<ma_decoder?>(dcmd.decoder)), dcmd.rate,
                                      dcmd.channels)
-            add_channel_3d(dcmd.sid, dcmd.position, dcmd.attenuation) <| new AudioChannel(decoder)
+            add_channel_3d(dcmd.sid, dcmd.position, dcmd.attenuation) <| new_channel(decoder)
         } elif (cmd is add_pcm_stream) {
             assume pcmd = cmd as add_pcm_stream
             var decoder = new AudioSourcePCMStream(pcmd.channels, pcmd.rate)
-            add_channel(pcmd.sid) <| new AudioChannel(decoder)
+            add_channel(pcmd.sid) <| new_channel(decoder)
         } elif (cmd is add_pcm_stream_3d) {
             assume pcmd = cmd as add_pcm_stream_3d
             var decoder = new AudioSourcePCMStream(pcmd.channels, pcmd.rate)
-            add_channel_3d(pcmd.sid, pcmd.position, pcmd.attenuation) <| new AudioChannel(decoder)
+            add_channel_3d(pcmd.sid, pcmd.position, pcmd.attenuation) <| new_channel(decoder)
         } elif (cmd is add_pcm) {
             add_pcm_channel(cmd as add_pcm, false)
         } elif (cmd is add_pcm_unpaused) {
@@ -990,7 +999,7 @@ def command_processor {  // nolint:STYLE038 - one arm per AudioCommand variant
             } else {
                 decoder = new AudioSourcePCM(pcmd.channels, pcmd.rate, pcmd.samples)
             }
-            add_channel_3d(pcmd.sid, pcmd.position, pcmd.attenuation) <| new AudioChannel(decoder)
+            add_channel_3d(pcmd.sid, pcmd.position, pcmd.attenuation) <| new_channel(decoder)
         } elif (cmd is append_pcm) {
             assume pcmd = cmd as append_pcm
             g_sid_2_channel |> get(pcmd.sid) $(var ch : AudioChannel?&) {
