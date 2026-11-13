@@ -33,6 +33,10 @@ Companion to `ARCHITECTURE.md` in this folder; section numbers are unique across
   subtrees only; the overload that takes the caller's barrier set takes every uniform
   subtree. Either way the round is `extract_preshader` itself, so it has one gate with
   `flatten_opt_residuals` and never moves a read of a name the function writes.
+- **A constant's reciprocal is the same in every host build** - `recip_const` divides each
+  lane in double and narrows the result. A float vector division in a fast-math host goes
+  through a reciprocal estimate, so `1 / 8` folds to `0.12499999f` there and the flattened
+  source differs by build.
 - **CSE is local value numbering over one converged basic block, and it is complete** -
   pure subtrees keyed by `describe()`; value-stability = reads no reassigned name; a store
   through index/field/swizzle destabilizes its base; an unrecognized node fails closed as
