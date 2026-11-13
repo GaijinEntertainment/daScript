@@ -48,6 +48,31 @@ def private check_live_clients {
     }
 }
 
+let CHANNEL_NEW = "new AudioChannel("
+
+let CHANNEL_FACTORY = "def private new_channel("
+
+let CHANNEL_FIX = "use new_channel - the constructor leaves the native state uninitialized"
+
+def private check_channel_construction {
+    var files : array<string>
+    walk_das("modules/dasAudio", files)
+    files |> sort
+    for (path in files) {
+        continue if (base_name(path) == "REVIEW.das")
+        var in_factory = false
+        var line_no = 0
+        for (line in split(strip_line_comments(fread(path)), "\n")) {
+            line_no++
+            if (line |> starts_with("def ")) {
+                in_factory = line |> starts_with(CHANNEL_FACTORY)
+            }
+            continue if (in_factory || find(line, CHANNEL_NEW) < 0)
+            gate_finding(path, line_no, "{CHANNEL_NEW}...) outside new_channel: {CHANNEL_FIX}")
+        }
+    }
+}
+
 [export]
 def main : int {
     if (!fexist("modules/dasAudio/REVIEW.das")) {
@@ -55,5 +80,6 @@ def main : int {
         return 2
     }
     check_live_clients()
+    check_channel_construction()
     return gate_verdict("modules/dasAudio/REVIEW.das")
 }

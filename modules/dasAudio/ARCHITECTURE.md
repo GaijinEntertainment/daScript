@@ -193,6 +193,15 @@ volume and ignore-global-volume commands, so nothing can lift its fade-out. A 3D
 ignores their gain write: `update_hrtf` owns its level, and the command's undamped write would
 ramp the callback in from full volume.
 
+## A channel's native state is built at its heap address {#channel-native-state-in-place}
+
+An initialized `ma_resampler` points into itself: its backend pointer and backend user data
+are addresses inside the struct. A class constructor builds the object in a local and the
+`new` expression copies it to the heap, so a resampler initialized inside the constructor
+keeps pointing at the dead local - the callback then reads and frees through a stale stack
+address. The `AudioChannel` constructor therefore only binds the source, and `new_channel`
+runs `init_in_place` on the heap object, which never moves afterwards.
+
 ## Pause-exempt PCM {#pause-exempt-pcm}
 
 `play_sound_from_pcm` can opt a new two-dimensional PCM sound out of global pause.

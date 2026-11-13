@@ -177,3 +177,56 @@ def test_streaming_seek_publishes_new_position(t : T?) {
     sound_set_null_device(false)
     remove(path)
 }
+
+[test(description = "A 3D sound decoded from a file publishes an advancing playback position", timeout = 1200)]
+def test_3d_file_sound_publishes_position(t : T?) {
+    let path = silent_wav(2 * MA_SAMPLE_RATE)
+    if (empty(path)) {
+        t |> failure("could not write a temp wav")
+        return
+    }
+    sound_set_null_device(true)
+    with_audio_system() $ {
+        var status = seq_box_create()
+        batch() $ {
+            let sid = play_3d_sound_from_file(path, float3(1., 0., 0.), default_attenuation(),
+                                              MA_SAMPLE_RATE, 1)
+            set_status_update(sid, status)
+        }
+        var position = 0ul
+        for (_ in range(200)) {
+            status |> read() $(s : AudioChannelStatus) { position = s.playback_position }
+            if (position != 0ul) break
+            sleep(10u)
+        }
+        t |> success(position > 0ul, "the 3D channel never advanced")
+        status |> seq_box_release
+    }
+    sound_set_null_device(false)
+    remove(path)
+}
+
+[test(description = "A 3D PCM stream consumes the frames appended to it", timeout = 1200)]
+def test_3d_pcm_stream_consumes_frames(t : T?) {
+    sound_set_null_device(true)
+    with_audio_system() $ {
+        var status = seq_box_create()
+        let sid = play_3d_sound_from_pcm_stream(float3(1., 0., 0.), default_attenuation(),
+                                                MA_SAMPLE_RATE, 1)
+        set_status_update(sid, status)
+        var data : array<float>
+        data |> resize(960)
+        append_to_pcm(sid, data)
+        var consumed = 0ul
+        for (_ in range(200)) {
+            status |> read() $(s : AudioChannelStatus) { consumed = s.consumed_position }
+            if (consumed != 0ul) break
+            sleep(10u)
+        }
+        t |> success(consumed > 0ul, "the 3D stream never consumed a frame")
+        stop(sid)
+        unset_status_update(sid)
+        status |> seq_box_release
+    }
+    sound_set_null_device(false)
+}

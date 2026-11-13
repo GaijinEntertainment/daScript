@@ -332,6 +332,7 @@ rounds inside — its extra argument lists the ids our block ends the stream
 on, so a round never drafts past one. One block drafter is attached a
 process; ``detach_block_drafter`` puts plain decode back:
 
+.. das-doc: given let prompt <- [1l, 2l, 3l]
 .. code-block:: das
 
    let why = attach_block_drafter(m, drafter)   // "" where it attached

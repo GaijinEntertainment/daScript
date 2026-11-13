@@ -674,8 +674,8 @@ def public recip_const(e : ExpressionPtr) : ExpressionPtr {
     if (L.kind != CK_FLOAT) return null
     for (k in range(L.dim)) {
         if (L.f[k] == 0.0) return null
+        L.f[k] = float(1.0lf / double(L.f[k]))
     }
-    L.f = float4(1.0, 1.0, 1.0, 1.0) / L.f
     return make_const_lanes(L, e.at)
 }
 
