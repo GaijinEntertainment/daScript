@@ -3332,7 +3332,7 @@ namespace das {
         }
         // infer
         if (expr->typeexpr->isAlias()) {
-            if (auto aT = findAlias(expr->typeexpr->alias)) {
+            if (auto aT = inferAlias(expr->typeexpr)) {
                 auto nameAt = expr->typeexpr->at;
                 TypeDecl::clone(expr->typeexpr, aT);
                 expr->typeexpr->at = nameAt.fileInfo ? nameAt : expr->at;
