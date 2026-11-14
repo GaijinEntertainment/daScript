@@ -863,3 +863,288 @@ def test_generator_unsafe_block_local(t : T?) {
         t |> equal(x, (i / 2) * 10 + i % 2)
     }
 }
+
+struct SquaresHolder {
+    by_root : table<int; int>
+}
+
+struct WideSquaresHolder : SquaresHolder {
+    width : int
+}
+
+struct SquaresRow {
+    in_order : int[6]
+}
+
+variant SquaresOrCount {
+    squares : table<int; int>
+    count : int
+}
+
+var g_squares_made : int = 0
+
+def make_squares(n : int) : table<int; int> {
+    g_squares_made ++
+    return <- {for (i in range(n)); i => i * i}
+}
+
+def make_squares_holder(n : int) : SquaresHolder =>
+    <- SquaresHolder(by_root <- make_squares(n))
+
+def make_wide_squares_holder(n : int) : WideSquaresHolder {
+    var wide : WideSquaresHolder
+    wide.by_root <- make_squares(n)
+    return <- wide
+}
+
+def make_squares_pair(n : int) : table<int; int>[2] {
+    var pair : table<int; int>[2]
+    pair[0] <- make_squares(n)
+    return <- pair
+}
+
+def make_squares_variant(n : int) : SquaresOrCount =>
+    <- SquaresOrCount(squares <- make_squares(n))
+
+def make_squares_row() : SquaresRow {
+    var row : SquaresRow
+    for (i in range(6)) {
+        row.in_order[i] = i * i
+    }
+    return row
+}
+
+def same_container(var container : auto(TT)) : TT& {
+    unsafe {
+        return container
+    }
+}
+
+def address_of_squares(var tab : table<int; int>) : table<int; int>? {
+    unsafe {
+        return addr(tab)
+    }
+}
+
+def first_squares(var first : table<int; int>; _second : table<int; int>) : table<int; int>& {
+    unsafe {
+        return first
+    }
+}
+
+def zero_after_overwriting_stack(seed : int) : int {
+    var pad : int[2048]
+    for (i in range(2048)) {
+        pad[i] = -1 - i - seed
+    }
+    return pad[seed] + 1 + 2 * seed
+}
+
+def sum_over_dead_frames(var gen : iterator<int>) : int {
+    var total = 0
+    var count = 0
+    for (v in gen) {
+        count ++
+        total += v + zero_after_overwriting_stack(count)
+    }
+    return total
+}
+
+[test(description = "a yielding generator loop over the keys, values or pairs of a table the generator declares needs no unsafe and yields every entry")]
+def test_generator_loop_over_a_local_table(t : T?) {
+    var gen <- generator<int> {
+        var tab <- { 1 => 10, 2 => 20 }
+        for (v in values(tab)) {
+            yield v
+        }
+        for (k in keys(tab)) {
+            yield k
+        }
+        for (kv in each_kv(tab)) {
+            yield kv.value
+        }
+        for (k, v in keys(tab), values(tab)) {
+            yield k + v
+        }
+        return false
+    }
+    t |> equal(sum_over_dead_frames(gen), 96)
+}
+
+[test(description = "a table made in the header of a yielding generator loop - by a call, a literal or a conditional - is made once and outlives every yield")]
+def test_generator_loop_over_a_temporary(t : T?) {
+    t |> run("values of a returned table") @(t : T?) {
+        g_squares_made = 0
+        t |> equal(sum_over_dead_frames(generator<int> {
+            for (v in values(make_squares(6))) {
+                yield v
+            }
+            return false
+        }), 55)
+        t |> equal(g_squares_made, 1)
+    }
+    t |> run("keys of a returned table") @(t : T?) {
+        t |> equal(sum_over_dead_frames(generator<int> {
+            for (k in keys(make_squares(6))) {
+                yield k * k
+            }
+            return false
+        }), 55)
+    }
+    t |> run("pairs of a returned table") @(t : T?) {
+        t |> equal(sum_over_dead_frames(generator<int> {
+            for (kv in each_kv(make_squares(6))) {
+                yield kv.value - kv.key
+            }
+            return false
+        }), 40)
+    }
+    t |> run("two sources, each over its own returned table") @(t : T?) {
+        t |> equal(sum_over_dead_frames(generator<int> {
+            for (k, v in keys(make_squares(6)), values(make_squares(6))) {
+                yield v - k
+            }
+            return false
+        }), 40)
+    }
+    t |> run("values of a table literal") @(t : T?) {
+        t |> equal(sum_over_dead_frames(generator<int> {
+            for (v in values({ 1 => 1, 2 => 4, 3 => 9 })) {
+                yield v
+            }
+            return false
+        }), 14)
+    }
+    t |> run("values of a conditional over two returned tables") @(t : T?) {
+        g_squares_made = 0
+        let wide = g_squares_made == 0
+        t |> equal(sum_over_dead_frames(generator<int> {
+            for (v in values(wide ? make_squares(6) : make_squares(3))) {
+                yield v
+            }
+            return false
+        }), 55)
+        t |> equal(g_squares_made, 1)
+    }
+    t |> run("a fixed array field of a struct a ?? gives by value") @(t : T?) {
+        t |> equal(sum_over_dead_frames(generator<int> {
+            var none : SquaresRow?
+            for (v in (none ?? make_squares_row()).in_order) {
+                yield v
+            }
+            return false
+        }), 55)
+    }
+}
+
+[test(description = "a table made in the header of a yielding generator loop outlives every yield when the source reaches it through a field, an index, a variant, a cast, a pointer or a call that returns a reference")]
+def test_generator_loop_reaches_a_temporary(t : T?) {
+    t |> run("under a call that returns a reference") @(t : T?) {
+        t |> equal(sum_over_dead_frames(generator<int> {
+            for (v in values(same_container(make_squares(6)))) {
+                yield v
+            }
+            return false
+        }), 55)
+    }
+    t |> run("two tables under one call that returns a reference") @(t : T?) {
+        t |> equal(sum_over_dead_frames(generator<int> {
+            for (v in values(first_squares(make_squares(6), make_squares(3)))) {
+                yield v
+            }
+            return false
+        }), 55)
+    }
+    t |> run("a field of a returned struct") @(t : T?) {
+        t |> equal(sum_over_dead_frames(generator<int> {
+            for (v in values(make_squares_holder(6).by_root)) {
+                yield v
+            }
+            return false
+        }), 55)
+    }
+    t |> run("a field of a struct literal") @(t : T?) {
+        t |> equal(sum_over_dead_frames(generator<int> {
+            for (v in values(SquaresHolder(by_root <- make_squares(6)).by_root)) {
+                yield v
+            }
+            return false
+        }), 55)
+    }
+    t |> run("an element of a returned fixed array") @(t : T?) {
+        t |> equal(sum_over_dead_frames(generator<int> {
+            for (v in values(make_squares_pair(6)[0])) {
+                yield v
+            }
+            return false
+        }), 55)
+    }
+    t |> run("an alternative of a returned variant") @(t : T?) {
+        t |> equal(sum_over_dead_frames(generator<int> {
+            for (v in values(make_squares_variant(6) as squares)) {
+                yield v
+            }
+            return false
+        }), 55)
+    }
+    t |> run("the base part of a returned struct") @(t : T?) {
+        t |> equal(sum_over_dead_frames(generator<int> {
+            for (v in values(cast<SquaresHolder>(make_wide_squares_holder(6)).by_root)) {
+                yield v
+            }
+            return false
+        }), 55)
+    }
+    t |> run("behind a pointer a call returns") @(t : T?) {
+        t |> equal(sum_over_dead_frames(generator<int> {
+            for (v in values(*address_of_squares(make_squares(6)))) {
+                yield v
+            }
+            return false
+        }), 55)
+    }
+    t |> run("behind a pointer on the left of a ??") @(t : T?) {
+        t |> equal(sum_over_dead_frames(generator<int> {
+            var other <- make_squares(2)
+            for (v in values(address_of_squares(make_squares(6)) ?? other)) {
+                yield v
+            }
+            return false
+        }), 55)
+    }
+}
+
+[test(description = "a yielding generator loop over an array or a table a call returns by reference, or a conditional picks, reads the owner's storage and leaves the owner its contents")]
+def test_generator_loop_leaves_the_owner_its_contents(t : T?) {
+    t |> run("an array returned by reference") @(t : T?) {
+        t |> equal(sum_over_dead_frames(generator<int> {
+            var owner <- [1, 2, 3]
+            for (v in same_container(owner)) {
+                yield v
+            }
+            yield 100 * length(owner)
+            return false
+        }), 306)
+    }
+    t |> run("a table returned by reference") @(t : T?) {
+        t |> equal(sum_over_dead_frames(generator<int> {
+            var owner <- make_squares(4)
+            for (v in values(same_container(owner))) {
+                yield v
+            }
+            yield 100 * length(owner)
+            return false
+        }), 414)
+    }
+    t |> run("one of two local tables, picked by a conditional") @(t : T?) {
+        t |> equal(sum_over_dead_frames(generator<int> {
+            var narrow <- make_squares(3)
+            var wide <- make_squares(4)
+            for (v in values(length(narrow) < length(wide) ? wide : narrow)) {
+                yield v
+            }
+            yield 100 * length(wide) + 1000 * length(narrow)
+            return false
+        }), 3414)
+    }
+}

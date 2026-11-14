@@ -1424,13 +1424,67 @@ namespace das {
         return blk;
     }
 
-    bool srcNeedTempVar ( Expression * src, TypeDecl * type ) {
-        if ( !type->isRef() ) return false;
-        // an iterator source is consumed directly by the source variable's move-init;
-        // a temp would evaluate the source expression a second time
-        if ( type->isGoodIteratorType() ) return false;
-        return src->rtti_isCallLikeExpr() || src->rtti_isMakeLocal();
+    static bool isValueMadeInPlace ( Expression * e ) {
+        if ( !e->type || e->type->ref || !e->type->isRefType() || e->type->isGoodIteratorType() ) return false;
+        return e->rtti_isCallLikeExpr() || e->rtti_isMakeLocal() || e->rtti_isNullCoalescing();
     }
+
+    static bool resultPointsIntoArguments ( Expression * e ) {
+        if ( !e->rtti_isCallLikeExpr() || !e->type ) return false;
+        return e->type->ref || e->type->isPointer() || e->type->isGoodIteratorType();
+    }
+
+    // src/ast/ARCHITECTURE_LOOP_SOURCE.md#generator-for-source-temporary
+    static bool isSafeOnlyAsLoopSource ( Expression * src ) {
+        if ( !src->rtti_isCall() ) return false;
+        auto func = static_cast<ExprCall *>(src)->func;
+        return func && func->unsafeOutsideOfFor && !func->unsafeOperation;
+    }
+
+    // src/ast/ARCHITECTURE_LOOP_SOURCE.md#generator-for-source-temporary
+    struct GeneratorSourceTemporaries {
+        ExprFor *   loop;
+        ExprBlock * blk;
+        string      srcName;
+        int         heldCount = 0;
+        ExpressionPtr hold ( ExpressionPtr e ) {
+            if ( isValueMadeInPlace(e) ) {
+                auto var = new Variable();
+                var->generated = true;
+                var->at = loop->at;
+                var->name = srcName + "_temp_var" + (heldCount ? "_" + to_string(heldCount) : "");
+                var->type = new TypeDecl(Type::autoinfer, var->at);
+                var->init_via_move = true;
+                var->init = e;
+                auto let = new ExprLet();
+                let->at = loop->at;
+                let->atInit = loop->at;
+                let->visibility = loop->visibility;
+                let->variables.push_back(var);
+                blk->list.push_back(let);
+                heldCount ++;
+                return new ExprVar(loop->at, var->name);
+            }
+            if ( e->rtti_isField() || e->rtti_isAsVariant() ) {
+                auto field = static_cast<ExprField *>(e);
+                field->value = hold(field->value);
+            } else if ( e->rtti_isAt() ) {
+                auto index = static_cast<ExprAt *>(e);
+                index->subexpr = hold(index->subexpr);
+            } else if ( e->rtti_isPtr2Ref() ) {
+                auto deref = static_cast<ExprPtr2Ref *>(e);
+                deref->subexpr = hold(deref->subexpr);
+            } else if ( e->rtti_isCast() ) {
+                auto cast = static_cast<ExprCast *>(e);
+                cast->subexpr = hold(cast->subexpr);
+            } else if ( resultPointsIntoArguments(e) ) {
+                for ( auto & arg : static_cast<ExprLooksLikeCall *>(e)->arguments ) {
+                    arg = hold(arg);
+                }
+            }
+            return e;
+        }
+    };
 
     ExpressionPtr makeCounterRef ( const LineInfo & at, const string & pVarName, const TypeDeclPtr & elemType ) {
         auto ptrT = new TypeDecl(Type::tPointer, at);
@@ -1568,23 +1622,8 @@ namespace das {
             const auto & src = expr->sources[si];
             const auto & iterv = expr->iteratorVariables[si];
             const bool plainRange = src->type->isRange();
-            // if its a temp ref type, we need to create a temp variable
-            ExprLet * tempLet = nullptr;
-            if ( srcNeedTempVar(src, src->type) ) {
-                tempLet = new ExprLet();
-                tempLet->at = expr->at;
-                tempLet->atInit = expr->at;
-                tempLet->visibility = expr->visibility;
-                auto svar = new Variable();
-                svar->generated = true;
-                svar->at = expr->at;
-                svar->name = srcName + "_temp_var";
-                svar->type = new TypeDecl(Type::autoinfer, svar->at);
-                svar->init_via_move = true;
-                svar->init = src->clone();
-                tempLet->variables.push_back(svar);
-                blk->list.push_back(tempLet);
-            }
+            GeneratorSourceTemporaries temporaries = { expr, blk, srcName };
+            ExpressionPtr heldSrc = temporaries.hold(src->clone());
             // let src0 = each(blah) or let src0 = blah if its iterator
             auto seqt = new ExprLet();
             seqt->at = expr->at;
@@ -1597,16 +1636,13 @@ namespace das {
             svar->type = new TypeDecl(Type::autoinfer, svar->at);
             svar->init_via_move = !plainRange;
             if ( src->type->isGoodIteratorType() || plainRange ) {
-                svar->init = src->clone();
+                if ( isSafeOnlyAsLoopSource(src) ) heldSrc->alwaysSafe = true;
+                svar->init = heldSrc;
             } else {
                 auto ceach = new ExprCall(expr->at, "each");
                 ceach->generated = true;
                 ceach->alwaysSafe = true;
-                if ( tempLet ) {
-                    ceach->arguments.push_back(new ExprVar(expr->at, srcName + "_temp_var"));
-                } else {
-                    ceach->arguments.push_back(src->clone());
-                }
+                ceach->arguments.push_back(heldSrc);
                 svar->init = ceach;
             }
             seqt->variables.push_back(svar);
