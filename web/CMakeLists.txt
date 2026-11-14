@@ -340,8 +340,8 @@ else()
         # may diverge (degraded but builds) rather than hard-failing the sub-build.
         if(DAS_HOST_CXX MATCHES "clang")
             set(_host_abi_args
-                "-DCMAKE_CXX_FLAGS:STRING=-stdlib=libc++ -DDAS_ENABLE_EXCEPTIONS=1 -D_LIBCPP_DISABLE_DEPRECATION_WARNINGS"
-                "-DCMAKE_C_FLAGS:STRING=-DDAS_ENABLE_EXCEPTIONS=1"
+                "-DCMAKE_CXX_FLAGS:STRING=-stdlib=libc++ -D_LIBCPP_DISABLE_DEPRECATION_WARNINGS"
+                "-DDAS_CPP_EXCEPTIONS=ON"
                 "-DCMAKE_EXE_LINKER_FLAGS:STRING=-stdlib=libc++"
                 "-DCMAKE_SHARED_LINKER_FLAGS:STRING=-stdlib=libc++")
         else()

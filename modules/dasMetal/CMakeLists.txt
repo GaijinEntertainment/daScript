@@ -51,8 +51,10 @@ IF ((NOT DAS_METAL_INCLUDED) AND ((NOT ${DAS_METAL_DISABLED}) OR (NOT DEFINED DA
         # dasClipboard enables OBJCXX before this module is included. Once CMake
         # recognizes .mm as OBJCXX, CMAKE_CXX_FLAGS_* no longer supplies the
         # runtime's optimized-build -fno-rtti ABI flag to dasMetal.mm.
-        TARGET_COMPILE_OPTIONS(${lib} PRIVATE
-            "$<$<AND:$<COMPILE_LANGUAGE:OBJCXX>,$<OR:$<CONFIG:Release>,$<CONFIG:MinSizeRel>,$<CONFIG:RelWithDebInfo>>>:-fno-rtti>")
+        IF (NOT DAS_CPP_EXCEPTIONS)
+            TARGET_COMPILE_OPTIONS(${lib} PRIVATE
+                "$<$<AND:$<COMPILE_LANGUAGE:OBJCXX>,$<OR:$<CONFIG:Release>,$<CONFIG:MinSizeRel>,$<CONFIG:RelWithDebInfo>>>:-fno-rtti>")
+        ENDIF()
         SETUP_CPP11(${lib})
     ENDMACRO()
     SETUP_METAL_LIB(libDasModuleMetal)

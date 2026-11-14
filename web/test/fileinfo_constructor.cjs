@@ -18,6 +18,7 @@ function run(command, args) {
 try {
   const object = path.join(temporary, "fixture.o"), output = path.join(temporary, "fixture.js");
   const fixture = path.join(__dirname, "fileinfo_constructor", "constructor_fileinfo_threaded_startup_long_path.das");
+  assert.match(run(compiler, ["-no-module-cache", fixture]), /FILEINFO_CONSTRUCTOR_OK/);
   run(compiler, ["-no-module-cache", "-exe", "-output", object,
     fixture, "--",
     "--jit-target=wasm64-unknown-emscripten", "--jit-emit-object", "--jit-threads", "--jit-debug", "--jit-stack", "--jit-check-abi",

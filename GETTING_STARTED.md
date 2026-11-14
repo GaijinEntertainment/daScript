@@ -22,6 +22,10 @@ The compiler lands at `bin/Release/daslang.exe` (Windows / MSVC), or
 `bin/daslang` / `build/daslang` (Make and Ninja layouts). Add it to your
 `PATH` or alias it - the rest of this guide writes `daslang`.
 
+For C++-exception runtime builds, configure `-DDAS_CPP_EXCEPTIONS=ON`. This
+also enables native C++ RTTI so exception identity is shared across runtime and
+compiler libraries. The WebAssembly host build script selects this configuration.
+
 ## Compile a small program
 
 ```das

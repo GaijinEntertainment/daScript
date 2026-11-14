@@ -103,3 +103,14 @@ with the lowered 64-bit memory ABI and full assertions/safe-heap checks, verifie
 clock uses a direct floating-point import, and tests fractional-millisecond deadlines
 at a large time origin, zero windows, expiration and renewal. Output is temporary
 and removed on completion; no browser, audio model or installed runtime is required.
+
+## Threaded file-metadata startup regression
+
+With Emscripten activated and a matching LLVM host plus threaded wasm64 runtime
+built, run `node web/test/fileinfo_constructor.cjs bin/daslang web/output64/lib`.
+The test first requires native interpreted exception recovery, then compiles and
+links an optimized fixture and requires successful startup
+and exception recovery under Node. Its long source filename makes FileInfo
+initialization allocate, checking that user constructors run after Emscripten
+initializes the main thread. Compiler outputs and caches use a unique temporary
+directory and are removed afterward.
