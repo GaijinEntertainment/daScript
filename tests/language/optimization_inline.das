@@ -143,6 +143,36 @@ def find_nested(m : array<array<int>>; k : int) : int {
 }
 
 [inline]
+def first_row_with(m : array<array<int>>; k : int) : int {
+    var row_index = 0;
+    for (row in m) {
+        for (v in row) {
+            if (v == k) {
+                return row_index;
+            }
+        }
+        row_index++;
+    }
+    return -1;
+}
+
+[inline]
+def first_row_with_while(m : array<array<int>>; k : int) : int {
+    var row_index = 0;
+    for (row in m) {
+        var i = 0;
+        while (i < length(row)) {
+            if (row[i] == k) {
+                return row_index;
+            }
+            i++;
+        }
+        row_index++;
+    }
+    return -1;
+}
+
+[inline]
 def early_void(var s : SVec; x : int) {
     if (x < 0) {
         return ;
@@ -243,6 +273,16 @@ def target_loop_ret(src : array<int>; k : int) : int {
     return find_first_gt(src, k); // return under a loop: generated flag + break
 }
 
+[export]
+def target_nested_loop_ret(m : array<array<int>>; k : int) : int {
+    return first_row_with(m, k);
+}
+
+[export]
+def target_nested_while_ret(m : array<array<int>>; k : int) : int {
+    return first_row_with_while(m, k);
+}
+
 def has(s, sub : string) : bool => find(s, sub, 0) >= 0
 
 def count_of(s, sub : string) : int => length(split(s, sub)) - 1
@@ -289,6 +329,20 @@ def test_inline_fired(t : T?) {
             let b = body_of(t, "target_loop_ret");
             t |> equal(count_of(b, "find_first_gt("), 0);
             t |> success(has(b, "_ret"), "loop return rides the flag: {b}");
+            t |> equal(count_of(b, "_ret )"), 1,
+                "the flag is tested once, after the loop, never per iteration: {b}");
+        }
+        t |> run("return under nested loops retests the flag in the outer loop only") @(t : T?) {
+            let b = body_of(t, "target_nested_loop_ret");
+            t |> equal(count_of(b, "first_row_with("), 0);
+            t |> equal(count_of(b, "_ret )"), 2,
+                "one retest after the inner loop, one after the outer: {b}");
+        }
+        t |> run("return under a while inside a for retests the flag after the while") @(t : T?) {
+            let b = body_of(t, "target_nested_while_ret");
+            t |> equal(count_of(b, "first_row_with_while("), 0);
+            t |> equal(count_of(b, "_ret )"), 2,
+                "one retest after the inner loop, one after the outer: {b}");
         }
     }
 }
@@ -395,6 +449,19 @@ def test_inline_behavior(t : T?) {  // nolint:STYLE038 - flat list of independen
         m |> emplace(r2);
         t |> equal(find_nested(m, 4), 1);
         t |> equal(find_nested(m, 9), 0);
+        var rows_sharing_key : array<array<int>>;
+        var first_row <- [1, 2];
+        var second_row <- [2, 3];
+        rows_sharing_key |> emplace(first_row);
+        rows_sharing_key |> emplace(second_row);
+        t |> equal(target_nested_loop_ret(rows_sharing_key, 2), 0,
+            "the first row that holds the key, though the second holds it too");
+        t |> equal(target_nested_loop_ret(rows_sharing_key, 3), 1);
+        t |> equal(target_nested_loop_ret(rows_sharing_key, 9), -1);
+        t |> equal(target_nested_while_ret(rows_sharing_key, 2), 0,
+            "a while inside a for stops the outer loop too");
+        t |> equal(target_nested_while_ret(rows_sharing_key, 3), 1);
+        t |> equal(target_nested_while_ret(rows_sharing_key, 9), -1);
     }
     t |> run("void early return skips the write") @(t : T?) {
         var v = SVec(x = 0, y = 7);

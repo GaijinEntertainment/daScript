@@ -1368,7 +1368,7 @@ namespace das {
         // the store runs before the unwind. NO goto: a label would disqualify the whole
         // caller from CSE and DSE
 
-        enum class RetExit { None, Maybe, Always };
+        enum class RetExit { None, Maybe, FromInnerLoop, Always };
 
         struct ReturnStoreRewrite {
             ReturnStoreRewrite ( Variable * res, Variable * flag, Function * nf )
@@ -1572,12 +1572,11 @@ namespace das {
                         list.resize(i+1);   // anything after is dead
                         return RetExit::Always;
                     }
-                    if ( exitKind!=RetExit::Maybe ) continue;
+                    if ( exitKind==RetExit::None ) continue;
                     overall = RetExit::Maybe;
                     if ( inLoop ) {
-                        // control past a flagged inner exit leaves this loop too; for a
-                        // non-loop Maybe the returning paths already broke - the guard is
-                        // dead there and folds away
+                        // the returning paths of any other statement already broke out of this loop
+                        if ( exitKind!=RetExit::FromInnerLoop ) continue;
                         auto brkBlk = new ExprBlock();
                         brkBlk->at = list[i]->at;
                         brkBlk->list.push_back(new ExprBreak(list[i]->at));
@@ -1627,6 +1626,7 @@ namespace das {
                     RetExit a = transformArm(ite->if_true, inLoop);
                     RetExit b = ite->if_false ? transformArm(ite->if_false, inLoop) : RetExit::None;
                     if ( a==RetExit::Always && ite->if_false && b==RetExit::Always ) return RetExit::Always;
+                    if ( a==RetExit::FromInnerLoop || b==RetExit::FromInnerLoop ) return RetExit::FromInnerLoop;
                     if ( a!=RetExit::None || b!=RetExit::None ) return RetExit::Maybe;
                     return RetExit::None;
                 }
@@ -1637,7 +1637,7 @@ namespace das {
                     auto f = static_cast<ExprFor *>(s);
                     if ( f->body && f->body->rtti_isBlock() ) {
                         if ( transformBlock(static_cast<ExprBlock *>(f->body), true)!=RetExit::None ) {
-                            return RetExit::Maybe;  // may have exited via a flagged break
+                            return RetExit::FromInnerLoop;  // may have exited via a flagged break
                         }
                     }
                     return RetExit::None;
@@ -1646,7 +1646,7 @@ namespace das {
                     auto w = static_cast<ExprWhile *>(s);
                     if ( w->body && w->body->rtti_isBlock() ) {
                         if ( transformBlock(static_cast<ExprBlock *>(w->body), true)!=RetExit::None ) {
-                            return RetExit::Maybe;
+                            return RetExit::FromInnerLoop;
                         }
                     }
                     return RetExit::None;
