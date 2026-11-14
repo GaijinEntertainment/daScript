@@ -361,7 +361,7 @@ namespace das {
         AstSerializer & serializeModule ( Module & module, bool already_exists );
 
         static constexpr uint32_t getVersion () {
-            return 272;   // 272: an unresolved dimension or typedecl mangles with a hash of its expression
+            return 273;   // 273: a const pointer is no match for a generic var parameter
         }
 
         void serializeProgram ( ProgramPtr program, ModuleGroup & libGroup ) noexcept;
