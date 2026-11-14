@@ -5,6 +5,7 @@ require dasllama/dasllama
 require daslib/jobque_boost
 require strings
 require daslib/strings_boost   // join
+require daslib/fio
 
 // Tutorial dasLLAMA-17: Translation
 //
@@ -19,6 +20,8 @@ require daslib/strings_boost   // join
 //   - set_translator_langs / translator_serves /
 //     translator_languages — a translation LLM (MiLMMT-46, a GGUF):
 //     any direction among 46 languages, picked per call
+//   - load_translator(base, bytes) — a model the host program
+//     already holds in memory
 //
 // The models are the small students Firefox ships for offline
 // translation: a transformer encoder reads the sentence, and a
@@ -48,6 +51,46 @@ let EN_LINES = [
     "Hello! How are you?",
     "Today we are going to the mountains if it does not rain.",
     "Where is the nearest pharmacy?"]
+
+// A file's bytes inside `raw`, on the boundary a prepared image
+// starts on - what a host's own file system would hand over.
+def read_image_bytes(path : string; var raw : array<uint8>) : tuple<base : void?; size : uint64> {
+    let size = stat(path).size
+    let page = uint64(prepared_image_alignment())
+    raw |> reserve(int64(size + page))
+    raw |> resize(int64(size + page))
+    var base : void?
+    unsafe {
+        let first = reinterpret<uint64>(addr(raw[0]))
+        base = reinterpret<void?>((first + page - 1ul) / page * page)
+    }
+    let f = fopen(path, "rb")
+    fmap(f) $(var mapped : array<uint8>#) {
+        unsafe(memcpy(base, addr(mapped[0]), size))
+    }
+    fclose(f)
+    return (base = base, size = size)
+}
+
+// ------------------------------------------------------------------
+// Section 4 - A model the program holds in memory
+// ------------------------------------------------------------------
+//
+// A game engine keeps its files in its own packs, so it hands a
+// model over as bytes. Pass the `.dlim` that section 1 baked as the
+// model path to see it: load_translator(base, bytes) borrows the
+// image in place, with no copy, so the bytes stay ours until the
+// translator is deleted. They start on a
+// prepared_image_alignment() boundary.
+def translate_from_memory(image_path, line : string) {
+    var raw : array<uint8>
+    let image = read_image_bytes(image_path, raw)
+    {
+        var inscope held <- load_translator(image.base, image.size)
+        print("from memory: {translate(held, line)}\n")
+    }
+    delete raw   // after the translator: it read the image in place
+}
 
 struct Args {
     model_path : string
@@ -147,6 +190,10 @@ def main {
             let t0 = ref_time_ticks()
             let out = translate(tr, ln)
             print("{ln}\n  -> {out}   ({double(get_time_usec(t0)) / 1000.0lf} ms)\n")
+        }
+
+        if (tr.kind == TranslatorKind.marian && ends_with(model_path, ".dlim")) {
+            translate_from_memory(model_path, lines[0])
         }
     }
 }

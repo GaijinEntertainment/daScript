@@ -3329,6 +3329,8 @@ CPU large-language-model inference in pure daslang: load a GGUF model, tokenize,
 - `get_jobque_spin_us` - The CPU spin window — `set_jobque_spin_us`'s read half.
 - `get_single_thread` - Whether every kernel runs on the calling thread — `set_single_thread`'s read half.
 - `kernel_backend_available` - True when kernel backend `name` is registered AND its availability witness passes on this box — the detection probe behind defaults-first backend selection (the vulkan witness enumerates devices once and caches its verdict).
+- `kernel_report` - One line naming the CPU kernels this build runs: a fat build's classes and the ones this box picks, else the stamped kernel families by source (a forced or adopted tune file is named).
+- `prepared_image_alignment` - The boundary, in bytes, a prepared image its host holds in memory starts on; a load from another address panics.
 - `select_matmul_backend_for_load` - Select the best matmul backend for the NEXT model load (honors a pin).
 - `set_dispatch_worker_limit` - Cap the kernel-dispatch worker count (0 = no limit, all job-que workers).
 - `set_jobque_spin_gpu_us` - The workers' spin-before-park window while the whole-model GPU driver serves the loaded model (default 500 us; a worker still spinning at the step's submit starves the driver).

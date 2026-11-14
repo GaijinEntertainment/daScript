@@ -9,9 +9,10 @@ require daslib/strings_boost
 require jobque
 require math
 
-// dasLLAMA behind a C ABI - text completion, speech to text and speech synthesis. Both backends build
-// this one file; README.md says how. A C caller reads each entry point as
-// <library name>_<def name>: dasllama_lib_open, and so on.
+// dasLLAMA behind a C ABI - text completion, speech to text, translation and speech synthesis. Both
+// backends build this one file; README.md says how. A C caller reads each entry point as
+// <library name>_<def name>: dasllama_lib_open, and so on. A model opens from a path, or - the
+// *_memory calls - from bytes the host already holds.
 
 var g_model = Model()
 var g_session = Session()
@@ -46,6 +47,8 @@ var g_take_base = 0l
 var g_utterance_start = -1l     // the stream sample the open utterance starts at, -1 when none is open
 var g_rs_pos = 0.0lf            // the resampler's read position, relative to the next chunk
 var g_rs_prev = 0.0             // the previous chunk's last sample, read at position -1
+var g_translator = Translator()
+var g_translator_loaded = false
 
 def private refuse(why : string) : bool {
     g_reason = why
@@ -63,10 +66,27 @@ def private queue_acquire() {
 }
 
 def private queue_release() {
-    if (g_owns_queue && !g_loaded && !g_asr_loaded && !g_tts_loaded) {
+    if (g_owns_queue && !g_loaded && !g_asr_loaded && !g_tts_loaded && !g_translator_loaded) {
         destroy_job_que()
         g_owns_queue = false
     }
+}
+
+[export_c(comment = "One line naming the CPU kernels this build runs - a fat build's classes and the ones this\nbox picks, or the stamped set and the tune file it came from. For the host's log at start.")]
+def kernels() : string => kernel_report()
+
+[export_c(comment = "The boundary, in bytes, a prepared image handed to asr_open_memory or translate_open_memory starts on.")]
+def image_alignment() : int => int(prepared_image_alignment())
+
+//! refuses bytes no *_memory call can take; the engine itself panics on an image off its boundary
+def private image_ok(image : void?; bytes : int64) : bool {
+    if (image == null || bytes <= 0l) {
+        return refuse("no image bytes")
+    }
+    if (intptr(image) % uint64(prepared_image_alignment()) != 0ul) {
+        return refuse("a prepared image starts on a {prepared_image_alignment()}-byte boundary")
+    }
+    return true
 }
 
 [export_c]
@@ -187,6 +207,21 @@ def asr_open(model_path : string) : bool {
     }
     queue_acquire()
     g_asr <- load_asr_model(model_path)   // nolint:PERF030 - asr_open refuses while loaded, asr_close deletes it
+    return start_asr_session()
+}
+
+[export_c(comment = "asr_open for a prepared image - a .dlim's bytes - the host holds in memory, `bytes` long, on an\nimage_alignment boundary. The bytes are borrowed, never copied: keep them until asr_close.")]
+def asr_open_memory(image : void?; bytes : int64) : bool {
+    if (g_asr_loaded) {
+        return refuse("an ASR model is already open - call asr_close first")
+    }
+    return false if (!image_ok(image, bytes))
+    queue_acquire()
+    g_asr <- load_asr_model(image, uint64(bytes))   // nolint:PERF030 - asr_open_memory refuses while loaded, asr_close deletes it
+    return start_asr_session()
+}
+
+def private start_asr_session() : bool {
     // fresh, or finalized by asr_close
     g_asr_session <- create_session(g_asr, "")   // nolint:PERF030
     g_asr_loaded = true
@@ -226,6 +261,25 @@ def asr_listen(vad_path : string) : bool {
         g_vad <- load_vad_model(vad_path)   // nolint:PERF030 - loaded once, deleted by asr_close
         g_vad_loaded = true
     }
+    return start_listening()
+}
+
+[export_c(comment = "asr_listen for a Silero VAD file's bytes the host holds in memory. The bytes are copied: they are\nfree again when the call returns.")]
+def asr_listen_memory(vad : void?; bytes : int64) : bool {
+    if (!g_asr_loaded) {
+        return refuse("no ASR model is open")
+    }
+    if (!g_vad_loaded) {
+        if (vad == null || bytes <= 0l) {
+            return refuse("no VAD bytes")
+        }
+        g_vad <- load_vad_model(vad, uint64(bytes))   // nolint:PERF030 - loaded once, deleted by asr_close
+        g_vad_loaded = true
+    }
+    return start_listening()
+}
+
+def private start_listening() : bool {
     var opts = default_vad_opts()
     opts.min_silence_ms = 500   // an utterance ends at a half-second pause, not at every breath in a sentence
     opts.speech_pad_ms = 200    // keep the quiet ends of words: ASR reads a cut-off syllable badly
@@ -314,6 +368,63 @@ def asr_listen_end() : string {
     let text = g_listening && g_utterance_start >= 0l ? close_utterance(g_take_base + long_length(g_take)) : ""
     g_listening = false
     return text
+}
+
+// ===== translation =====
+
+[export_c(comment = "Load the translation model at `model_path`: a Bergamot student - model.<pair>.intgemm.alphas.bin with\nits vocab.<pair>.spm beside it, or its prepared .dlim - or a translation LLM's GGUF.")]
+def translate_open(model_path : string) : bool {
+    if (g_translator_loaded) {
+        return refuse("a translation model is already open - call translate_close first")
+    }
+    if (!stat(model_path).is_valid) {
+        return refuse("no such file: {model_path}")
+    }
+    queue_acquire()
+    g_translator <- load_translator(model_path)   // nolint:PERF030 - translate_open refuses while loaded, translate_close deletes it
+    return start_translating()
+}
+
+[export_c(comment = "translate_open for a Bergamot student's prepared image the host holds in memory, on an\nimage_alignment boundary. The bytes are borrowed, never copied: keep them until translate_close.")]
+def translate_open_memory(image : void?; bytes : int64) : bool {
+    if (g_translator_loaded) {
+        return refuse("a translation model is already open - call translate_close first")
+    }
+    return false if (!image_ok(image, bytes))
+    queue_acquire()
+    g_translator <- load_translator(image, uint64(bytes))   // nolint:PERF030 - translate_open_memory refuses while loaded, translate_close deletes it
+    return start_translating()
+}
+
+def private start_translating() : bool {
+    g_translator_loaded = true
+    g_reason = ""
+    return true
+}
+
+[export_c(comment = "The open model's direction as language codes, \"ru-en\"; \"\" while no model is open.")]
+def translate_direction() : string {
+    return "" if (!g_translator_loaded)
+    let dir = translator_langs(g_translator)
+    return "{dir.src}-{dir.trg}"
+}
+
+[export_c(comment = "Translate `text`; \"\" with `reason` set while no model is open.")]
+def translate_text(text : string) : string {
+    if (!g_translator_loaded) {
+        refuse("no translation model is open")
+        return ""
+    }
+    g_reason = ""
+    return translate(g_translator, text)
+}
+
+[export_c(comment = "Drop the translation model.")]
+def translate_close() {
+    return if (!g_translator_loaded)
+    delete g_translator
+    g_translator_loaded = false
+    queue_release()
 }
 
 // ===== speech synthesis =====

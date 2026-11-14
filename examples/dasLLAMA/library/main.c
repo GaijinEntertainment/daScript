@@ -4,6 +4,11 @@
 //   dasllama_host_c_ctx <model.gguf> ["prompt"] [tokens]      the -ctx backend
 //   dasllama_host_c_ctx --asr <asr-model> <vad.bin> <pcm16.wav>   live speech to text, either backend
 //   dasllama_host_c_ctx --tts <tts-model> "text" <out.wav>    speech synthesis, either backend
+//   dasllama_host_c_jit --interpret <asr-model> <vad.bin> <translation-model> <tts-model> <in.wav> <out.wav> [--from-memory]
+//       speech in one language to speech in another, either backend: the transcript and its
+//       translation go to stdout, the spoken translation to <out.wav>. --from-memory reads the VAD
+//       and every model given as a prepared image (.dlim) into memory first, as an engine with its
+//       own file system would, and opens them from the bytes.
 
 #if defined(DASLLAMA_LIB_STANDALONE_CTX)
 #include "dasllama_lib.das.h"
@@ -11,6 +16,8 @@
 #include "dasllama_lib.h"
 #endif
 
+#include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -121,12 +128,151 @@ static int say_to_wav ( dasllama_lib_ctx * ctx, const char * model, const char *
     return 0;
 }
 
+// a file's bytes in memory, starting on an `align` boundary
+static void * read_file_aligned ( const char * path, size_t align, long long * bytes, void ** to_free ) {
+    FILE * f = fopen(path, "rb");
+    long long size = 0;
+    char * at = NULL;
+    *to_free = NULL;
+    if ( !f ) return NULL;
+#if defined(_WIN32)
+    _fseeki64(f, 0, SEEK_END); size = _ftelli64(f); _fseeki64(f, 0, SEEK_SET);
+#else
+    fseek(f, 0, SEEK_END); size = ftell(f); fseek(f, 0, SEEK_SET);
+#endif
+    if ( size > 0 ) *to_free = malloc((size_t)size + align);
+    if ( *to_free ) {
+        at = (char *)(((uintptr_t)*to_free + align - 1) / align * align);
+        if ( fread(at, 1, (size_t)size, f) != (size_t)size ) {
+            free(*to_free);
+            *to_free = NULL;
+            at = NULL;
+        }
+    }
+    fclose(f);
+    *bytes = size;
+    return at;
+}
+
+static int is_image ( const char * path ) {
+    const size_t n = strlen(path);
+    return n > 5 && strcmp(path + n - 5, ".dlim") == 0;
+}
+
+// `more` appended to the heap string `*all`, a space between
+static void append_text ( char ** all, const char * more ) {
+    const size_t have = *all ? strlen(*all) : 0, add = strlen(more);
+    *all = (char *) realloc(*all, have + add + 2);
+    if ( have ) (*all)[have] = ' ';
+    memcpy(*all + have + (have ? 1 : 0), more, add + 1);
+}
+
+static void interpret_utterance ( dasllama_lib_ctx * ctx, const char * heard, char ** spoken ) {
+    if ( !heard || !*heard ) return;
+    char * said = NULL;
+    append_text(&said, heard);   // a copy: the library's string lives until its next call
+    printf("heard: %s\n", said);
+    const char * translated = dasllama_lib_translate_text(ctx, said);
+    if ( translated && *translated ) {
+        printf("means: %s\n", translated);
+        append_text(spoken, translated);
+    }
+    fflush(stdout);
+    free(said);
+}
+
+typedef bool (* open_path_fn) ( dasllama_lib_ctx *, const char * );
+typedef bool (* open_memory_fn) ( dasllama_lib_ctx *, void *, int64_t );
+
+// opens `path` through `from_path`, or - a prepared image with `in_memory` set - reads it into
+// `*to_free` and opens the bytes through `from_memory`: the host keeps them until the model closes
+static int open_model ( dasllama_lib_ctx * ctx, const char * what, const char * path, int in_memory,
+                        open_path_fn from_path, open_memory_fn from_memory, void ** to_free ) {
+    long long bytes = 0;
+    if ( !in_memory || !is_image(path) ) return from_path(ctx, path);
+    void * image = read_file_aligned(path, (size_t) dasllama_lib_image_alignment(ctx), &bytes, to_free);
+    if ( !image || !from_memory(ctx, image, bytes) ) return 0;
+    printf("%s: %lld MB borrowed from memory\n", what, bytes >> 20);
+    return 1;
+}
+
+static int interpret ( dasllama_lib_ctx * ctx, char * argv [], int from_memory ) {
+    const char * asr = argv[2], * vad = argv[3], * nmt = argv[4], * tts = argv[5];
+    const char * in_wav = argv[6], * out_wav = argv[7];
+    void * asr_bytes = NULL, * vad_bytes = NULL, * nmt_bytes = NULL;
+    long long vad_size = 0;
+    int rate = 0, frames = 0, ok = 1, rc = 1;
+    char * spoken = NULL;
+    float * mono = read_wav_mono(in_wav, &rate, &frames);
+    if ( !mono ) {
+        printf("%s is not a PCM16 WAV\n", in_wav);
+        return 1;
+    }
+    printf("kernels: %s\n", dasllama_lib_kernels(ctx));
+    ok = open_model(ctx, "speech to text", asr, from_memory,
+                    dasllama_lib_asr_open, dasllama_lib_asr_open_memory, &asr_bytes);
+    if ( ok && from_memory ) {
+        void * bin = read_file_aligned(vad, 1, &vad_size, &vad_bytes);
+        ok = bin && dasllama_lib_asr_listen_memory(ctx, bin, vad_size);
+        free(vad_bytes);   // the voice detector copied what it needs
+        vad_bytes = NULL;
+    } else if ( ok ) {
+        ok = dasllama_lib_asr_listen(ctx, vad);
+    }
+    ok = ok && open_model(ctx, "translation", nmt, from_memory,
+                          dasllama_lib_translate_open, dasllama_lib_translate_open_memory, &nmt_bytes);
+    ok = ok && dasllama_lib_tts_open(ctx, tts);
+    if ( !ok ) {
+        printf("interpret failed: %s\n", why(ctx));
+    } else {
+        printf("translating %s\n", dasllama_lib_translate_direction(ctx));
+        for ( int at = 0; at < frames; at += rate / 100 ) {
+            const int n = frames - at < rate / 100 ? frames - at : rate / 100;
+            interpret_utterance(ctx, dasllama_lib_asr_feed(ctx, mono + at, n, rate), &spoken);
+        }
+        interpret_utterance(ctx, dasllama_lib_asr_listen_end(ctx), &spoken);
+        const int count = spoken ? dasllama_lib_tts_speak(ctx, spoken) : 0;
+        const int out_rate = dasllama_lib_tts_pcm_rate(ctx);
+        if ( count > 0 && write_wav_pcm16(out_wav, dasllama_lib_tts_pcm(ctx), count, out_rate) ) {
+            printf("%s: %.2f s as %s\n", out_wav, (double)count / out_rate, dasllama_lib_tts_voice(ctx));
+            rc = 0;
+        } else {
+            printf("nothing spoken: %s\n", spoken ? why(ctx) : "no speech was heard");
+        }
+    }
+    dasllama_lib_tts_close(ctx);
+    dasllama_lib_translate_close(ctx);
+    dasllama_lib_asr_close(ctx);
+    // the borrowed images outlive their models: freed only now
+    free(nmt_bytes);
+    free(asr_bytes);
+    free(spoken);
+    free(mono);
+    return rc;
+}
+
 int main ( int argc, char * argv [] ) {
     if ( argc < 2 ) {
         printf("usage: %s <model.gguf> [\"prompt\"] [tokens]\n", argv[0]);
         printf("       %s --asr <asr-model> <vad.bin> <pcm16.wav>\n", argv[0]);
         printf("       %s --tts <tts-model> \"text\" <out.wav>\n", argv[0]);
+        printf("       %s --interpret <asr-model> <vad.bin> <translation-model> <tts-model> <in.wav> <out.wav> [--from-memory]\n", argv[0]);
         return 2;
+    }
+    if ( strcmp(argv[1], "--interpret") == 0 ) {
+        if ( argc < 8 ) {
+            printf("usage: %s --interpret <asr-model> <vad.bin> <translation-model> <tts-model> <in.wav> <out.wav> [--from-memory]\n", argv[0]);
+            return 2;
+        }
+        dasllama_lib_ctx * ctx = dasllama_lib_create();
+        if ( !ctx ) {
+            printf("create failed: %s\n", dasllama_lib_last_error(NULL));
+            return 1;
+        }
+        const int rc = interpret(ctx, argv, argc > 8 && strcmp(argv[8], "--from-memory") == 0);
+        dasllama_lib_destroy(ctx);
+        dasllama_lib_shutdown_runtime();
+        return rc;
     }
     const int asr = strcmp(argv[1], "--asr") == 0;
     const int tts = strcmp(argv[1], "--tts") == 0;

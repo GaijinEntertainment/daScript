@@ -9,6 +9,7 @@ require ../harness/vk_spv_diff.das
 require dasllama/dasllama_parity
 require dasllama/dasllama_image
 require dasllama/dasllama_tune
+require dasllama/dasllama_core   // kernel_report, prepared_image_alignment: a host's two questions
 require dasllama/dasllama_vad   // load_vad_model, vad_probs_cpu: the load from bytes
 require dasllama/dasllama_math   // with_dasllama_jobque_
 require _image_memory   // read_page_aligned, zero_bytes: a host's own copy of the bin
@@ -253,4 +254,13 @@ def test_vad_from_memory(t : T?) {
             delete raw
         }
     }
+}
+
+[test(description = "`kernel_report` names the kernels this run stamped - a count of kernel families under the JIT, the reference kernels in a build with no tune framework - and `prepared_image_alignment` is the image page")]
+def test_kernel_report(t : T?) {
+    let report = kernel_report()
+    to_log(LOG_INFO, "kernel report: {report}\n")
+    t |> success(find(report, "kernel families - ") >= 0 || find(report, "reference kernels") >= 0,
+        "the report names the stamped families or the reference kernels: '{report}'")
+    t |> equal(prepared_image_alignment(), IMAGE_PAGE, "an image in memory starts on the image page")
 }
