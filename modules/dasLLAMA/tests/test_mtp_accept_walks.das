@@ -7,6 +7,9 @@ require dastest/testing_boost public
 require dasllama/dasllama_common
 require dasllama/dasllama_sampling
 require dasllama/dasllama_dflash   // dflash_soft_pick, dflash_record_q: the block drafter's sampled drafts and their q
+require dasllama/dasllama_kqformat   // KqFmt, kq_qsb: the selector walk's NVFP4 codebook planes
+require dasllama/dasllama_convert   // dequant_kq_plane_sb: the codebook rows the walk reads, unscaled
+require dasllama/dasllama_gpu_kernels_common   // GK_DFLASH_HS, GK_DFLASH_ATTN_KEYS: the discrete arms' row-kernel stage the shape check reads
 require daslib/random
 require math
 require _mtp_walk_fixture   // bare_session, same_rng
@@ -684,4 +687,131 @@ def test_verify_scratch_sized_on_a_headless_trunk(t : T?) {
     t |> equal(long_length(s.mtp_logits), c.vocab_size, "row 0's logits are sized to the vocabulary")
     t |> equal(length(s.mtp_h), 0, "control: the NextN handoff stays unsized without a head")
     delete s
+}
+
+//! byte `i` of a fixture plane: a multiplicative hash's top byte
+def private plane_byte(i : int64; salt : uint) : uint8 => uint8(((uint(i) + salt) * 2654435761u) >> 24u)
+
+[test(description = "The block drafter's selector walk reads an NVFP4 codebook's rows under the tensor's `.scale`: over two candidates whose logits favour the first by half of what a scale of 2 on both codebooks adds to the second, the walk picks the first with no scale and with a scale of 1, and the second with the scale of 2")]
+def test_dflash_walk_codebook_scale(t : T?) {
+    let rank = KQ_SB_ELEMS
+    let ntok = 3l
+    let nv4 = int(KqFmt.nv4)
+    var dr <- DflashDrafter(rank = rank, topk = 2l, vocab = ntok)
+    dr.kq[nv4].q |> resize(2l * ntok * kq_qsb(KqFmt.nv4))
+    dr.kq[nv4].s |> resize(2l * ntok * kq_ssb(KqFmt.nv4))
+    for (i in range64(long_length(dr.kq[nv4].q))) {
+        dr.kq[nv4].q[i] = plane_byte(i, 17u)
+    }
+    for (i in range64(long_length(dr.kq[nv4].s))) {
+        dr.kq[nv4].s[i] = uint8((uint(plane_byte(i, 91u)) & 0x0Fu) | 0x30u)   // a narrow band of UE4M3 exponents: the rows stay comparable
+    }
+    // the unscaled bilinear term of the anchor's predecessor row against each candidate's successor row, the selector row all ones
+    var prev, next : array<float>
+    prev |> resize(rank)
+    next |> resize(rank)
+    dequant_kq_plane_sb(KqFmt.nv4, dr.kq[nv4].q, dr.kq[nv4].s, 0l, false, prev, 0l)
+    var term : float[2]
+    for (j in range(2)) {
+        dequant_kq_plane_sb(KqFmt.nv4, dr.kq[nv4].q, dr.kq[nv4].s, ntok + 1l + int64(j), false, next, 0l)
+        for (i in range64(rank)) {
+            term[j] += prev[i] * next[i]
+        }
+    }
+    let hi = term[1] > term[0] ? 1 : 0   // the candidate the bilinear term favours sits second among the scores
+    let delta = abs(term[1] - term[0])
+    t |> success(delta > 1.0e-3, "the fixture's two candidates differ in their bilinear term ({term[0]} and {term[1]})")
+    var cids <- [int64(2 - hi), int64(1 + hi)]
+    var cvals <- [0.0, -2.0 * delta]   // the first leads by delta unscaled, trails by 2 delta where the term counts four times
+    var hsel <- [for (_i in range64(rank)); 1.0]
+    var picks : array<int64>
+    picks |> resize(2)
+    for (c in fixed_array((scale = 0.0, want = 0), (scale = 1.0, want = 0), (scale = 2.0, want = 1))) {
+        dr.sel_prev = DflashW(fmt = KqFmt.nv4, off = 0l, scale = c.scale)
+        dr.sel_next = DflashW(fmt = KqFmt.nv4, off = ntok * rank, scale = c.scale)
+        dflash_walk(dr, 0l, 1l, cids, cvals, hsel, picks)
+        t |> equal(picks[1], cids[c.want], "codebooks under a scale of {c.scale}: the walk picks candidate {c.want}")
+    }
+    delete dr
+    delete prev
+    delete next
+    delete cids
+    delete cvals
+    delete hsel
+    delete picks
+}
+
+//! a drafter header the discrete arms' row kernels take: two heads of 128 over one K/V head, 256 wide, a 512-wide FFN, a
+//! block of 16 under a window of 2048, no bias rows
+def private shape_drafter() : DflashDrafter =>
+    DflashDrafter(dim = 256l, hidden = 512l, n_heads = 2l, n_kv = 1l, hs = 128l, nblock = 16l, window = 2048l)
+
+[test(description = "`dflash_device_shape_why` takes a drafter the row kernels stage - a head of 256, a window and block filling the staged keys exactly - and names, by its own clause, bias rows, a head past 256 or odd, a window and block past the staged keys, a block past the planes' rows, and each row width off the Q8_0 block")]
+def test_dflash_device_shape_why(t : T?) {
+    let hs_max = int64(GK_DFLASH_HS)
+    let keys = int64(GK_DFLASH_ATTN_KEYS)
+    let rows = DFLASH_DEVICE_ROWS
+    var dr <- shape_drafter()
+    t |> equal(dflash_device_shape_why(dr, hs_max, keys, rows), "", "the fixture's shape is taken")
+    dr.hs = hs_max
+    t |> equal(dflash_device_shape_why(dr, hs_max, keys, rows), "", "a head of {hs_max} - the stage's width - is taken")
+    dr.hs = 128l
+    dr.window = keys - dr.nblock
+    t |> equal(dflash_device_shape_why(dr, hs_max, keys, rows), "", "a window and block filling the {keys} staged keys exactly are taken")
+    dr.window = 2048l
+    dr.biased = true
+    t |> equal(dflash_device_shape_why(dr, hs_max, keys, rows), "the drafter's attention planes carry bias rows", "bias rows are refused")
+    dr.biased = false
+    for (hs in fixed_array(hs_max + 2l, 127l)) {
+        dr.hs = hs
+        t |> equal(dflash_device_shape_why(dr, hs_max, keys, rows), "a head of {hs} is past the row kernels' {hs_max}", "a head of {hs} is refused")
+    }
+    dr.hs = 128l
+    dr.window = keys - dr.nblock + 1l
+    t |> equal(dflash_device_shape_why(dr, hs_max, keys, rows),
+        "a window of {dr.window} and a block of 16 pass the attention's {keys} staged keys", "one key past the stage is refused")
+    dr.window = 2048l
+    dr.nblock = rows + 1l
+    t |> equal(dflash_device_shape_why(dr, hs_max, keys, rows), "a block of {rows + 1l} rows passes the planes' {rows}", "a block one row past the planes is refused")
+    dr.nblock = 16l
+    //! (dim, hidden, n_heads, n_kv, hs): the model width, the FFN width, the query width (3 x 48) and the K/V width (1 x 48) each
+    //! off the 32-element block with every other width on it
+    for (c in fixed_array((264l, 512l, 2l, 1l, 128l), (256l, 528l, 2l, 1l, 128l), (256l, 512l, 3l, 2l, 48l), (256l, 512l, 2l, 1l, 48l))) {
+        dr.dim = c._0
+        dr.hidden = c._1
+        dr.n_heads = c._2
+        dr.n_kv = c._3
+        dr.hs = c._4
+        t |> equal(dflash_device_shape_why(dr, hs_max, keys, rows), "a row width off the Q8_0 block",
+            "dim {c._0}, hidden {c._1}, {c._2} x {c._4} queries, {c._3} x {c._4} keys: a width off the block is refused")
+    }
+    delete dr
+}
+
+//! a per-layer site list of two layers: the second carries `one` where `site` is this list's `own`, every other plane `none` - a
+//! walk reading only layer 0 misses the scale
+def private layer_sites(site, own : int; one, none : DflashW) : array<DflashW> => <- [for (l in range(2)); site == own && l == 1 ? one : none]
+
+[test(description = "`dflash_scaled` is false on a drafter whose planes carry no `.scale` and true when any one site carries one - fc, the selector's three codebooks, or one layer's plane of each of the nine per-layer site lists")]
+def test_dflash_scaled_sites(t : T?) {
+    let none = DflashW(fmt = KqFmt.nv4)
+    let one = DflashW(fmt = KqFmt.nv4, scale = 2.0)
+    for (site in range(14)) {
+        var dr <- shape_drafter()
+        dr.wq <- layer_sites(site, 4, one, none)
+        dr.wk <- layer_sites(site, 5, one, none)
+        dr.wv <- layer_sites(site, 6, one, none)
+        dr.wo <- layer_sites(site, 7, one, none)
+        dr.w1 <- layer_sites(site, 8, one, none)
+        dr.w3 <- layer_sites(site, 9, one, none)
+        dr.w2 <- layer_sites(site, 10, one, none)
+        dr.aconv_proj <- layer_sites(site, 11, one, none)
+        dr.fconv_proj <- layer_sites(site, 12, one, none)
+        dr.fc = site == 0 ? one : none
+        dr.sel_h = site == 1 ? one : none
+        dr.sel_prev = site == 2 ? one : none
+        dr.sel_next = site == 3 ? one : none
+        t |> equal(dflash_scaled(dr), site != 13, site == 13 ? "control: no plane carries a scale" : "site {site} alone carries a scale")
+        delete dr
+    }
 }

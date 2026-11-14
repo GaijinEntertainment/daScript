@@ -4,7 +4,7 @@ Companion to `ARCHITECTURE_GPU.md`; a section is cited by its anchor. This docum
 batch GEMM tiles and of the decode GEMV family that `dasllama_gpu_kernels_discrete.das` holds for the Vulkan and CUDA
 homes: how a cm2 tile's decode callbacks read their quant bytes, the mx4 decode, the device scale row the decodes read, the
 tile body's k step, fast path and loop bounds, the KHR arm's hand-staged tile, the GEMV family's lane split and region walk,
-and the routed gate-up fusion. How the Vulkan driver picks a tile, a k split and a GEMM mode is
+the N-column forms' load waves and row groups (`#ncol-load-waves`), and the routed gate-up fusion. How the Vulkan driver picks a tile, a k split and a GEMM mode is
 `ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default`; the window GEMMs over a file's f32 rows that ride the KHR tile
 are `ARCHITECTURE_GPU_VULKAN_KHR.md#f32-rows-staged-tile`.
 
@@ -194,8 +194,8 @@ a wave64 device the tier cannot pin at 32 (four subgroups per 256-thread workgro
 the fold.** A leaf decodes a block once (`blk_decode`: the packed int8 quads and four fold terms,
 the block sums skipped where `fold_reads_bsum` is false) and one shared `blk_fold` dots it per
 activation block, so the N-column form pays a block's codebook gathers, grid lookups and bit
-deposits once for all columns; both forms compile one `blk_fold` text and add its plain product, so
-both sum bit for bit. A lane takes one 32-block per step (`gemv_shell`), four steps straight-line
+deposits once for all columns; the N-column shell sums `blk_fold`'s expression term for term and
+adds its plain product, so both forms sum bit for bit. A lane takes one 32-block per step (`gemv_shell`), four steps straight-line
 so four blocks' loads are in flight before a sum waits on one, the guarded single step as the tail;
 a row of nb blocks over 32 lanes has nb / 32 blocks per lane: four at K 4096, under one at a MoE's
 expert rows (K 512 to 1408), where most of the subgroup idled and the DRAM rate fell to a third of
@@ -214,6 +214,24 @@ k6 386 / 414 / 407; K 1408 iq2s 198 / 299 / 368, k6 386 / 399 / 373, k4 394 / 39
 311 / 384 / 388, k6 417 / 416 / 369; K 4096 iq2s 376 / 408 / 344, k6 403 / 387 / 326, k4 400 / 404 /
 406; K 5632 k4 411 / 399 / 386, k6 396 / 384 / 287, iq2s 377 / 393 / 296. Upstream's mat-vec splits
 K over 16 threads and blocks two to four rows per thread (`rm_kq`, `NUM_ROWS` in `mul_mat_vec_*.comp`): the same bytes in flight by the other axis.
+
+
+### The N-column forms issue a step's loads together and share them across weight rows {#ncol-load-waves}
+
+**Past one column the decode GEMV is bound by the loads a step waits on and by the groups in flight,
+not by its dots.** A warp stalls at the first instruction that reads a pending load, so a column's
+activation words loaded behind the previous column's sum turn a step into a wait a column. The
+N-column shells load a step's words ahead of the dots that read them: the K-quant shell
+(`gemv_shell_n`) two columns' block - both halves - and scale a wave, the Q8_0 form
+(`Q8GemvNT`) every column's half-block and scale, and its next step's weight words a step ahead. A
+lane group takes `RR` weight rows of one region - a region's rows in groups of RR, the last one
+short; the Q8_0 form's `R2` pairs - so one activation load serves RR rows, and the dispatch's grid
+counts groups, not rows. A stamp's column count sets its registers, and so the groups an SM runs at
+once: both discrete homes stamp the K-quant shell at RR 2 (`KQ_N_RR`) in a four-column form
+(`NCMAX` 4) beside the eight-column one, and a dispatch of four columns or fewer takes the narrow
+stamp (`cud_gemv_cls_enc_n`, `gemv_cls_enc_n`). `REVIEW.das`'s `check_ncol_rr_literal` holds every
+stamp's `override RR` literal on either home to `KQ_N_RR`, the count both dispatches size the grid by.
+Each column's sum stays the one-column form's, term for term (`test_cud_gemv_n_cols`, `test_vkd_gemv_ncol`).
 
 ### The one-column leaves walk their regions a row at a time {#gemv-region-walk}
 

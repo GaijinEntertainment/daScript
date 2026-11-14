@@ -1142,13 +1142,13 @@ class MetalCopyRow {
     }
 }
 
+//! a row's argmax over its whole vocab in one threadgroup: a thread's first maximum over its stride, then the common fold
+//! (`GkWgArgmax`: the maximum, the lowest id among equals)
 [ |> template_struct_instance]
-class template MetalArgmaxT {
+class template MetalArgmaxT : GkWgArgmax {
     @ssbo @binding = 0 lg : array<float>    // [nrows x n]
     @ssbo @binding = 1 tok : array<uint>    // [nrows] winner indices out
     @uniform @binding = 2 n : uint
-    @workgroup redv : float[32]
-    @workgroup redi : uint[32]
     @template_constant PER_ROW : bool = false
 
     [arch(at="../ARCHITECTURE_GPU_MTP_DECODE_PICK.md#greedy-chain")]
@@ -1173,32 +1173,10 @@ class template MetalArgmaxT {
             }
             j += nt
         }
-        var m = 16u
-        while (m >= 1u) {
-            let ov = simd_shuffle_xor(bv, m)
-            let oi = simd_shuffle_xor(bi, m)
-            if (ov > bv || (ov == bv && oi < bi)) {
-                bv = ov
-                bi = oi
-            }
-            m /= 2u
-        }
-        if (gl_SubgroupInvocationID == 0u) {
-            redv[gl_SubgroupID] = bv
-            redi[gl_SubgroupID] = bi
-        }
-        barrier()
+        var wv = 0.0
+        var wi = 0u
+        wg_argmax_into(bv, bi, wv, wi)
         if (lid == 0u) {
-            var wv = redv[0]
-            var wi = redi[0]
-            var sgi = 1u
-            while (sgi < gl_NumSubgroups) {
-                if (redv[sgi] > wv || (redv[sgi] == wv && redi[sgi] < wi)) {
-                    wv = redv[sgi]
-                    wi = redi[sgi]
-                }
-                sgi++
-            }
             tok[slot] = wi
         }
     }
@@ -2149,8 +2127,8 @@ class MetalRopeStoreQ8 : MetalRopeStoreQ8Base {
 // Shared tq4-mirror rope+store stages, spliced by the single and batched kernels below: the
 // buf-resident FWHT butterfly, the per-32-block signed-max quantize scalars, and the packed
 // nibble store. Base byte offsets parameterize the single (0) vs batched (arena row) layouts.
-class template MetalRopeStoreTq4Base : GkBlkSignedMax {
-    @workgroup buf : float[512]     // <= max head_size (gemma4 global heads are 512)
+class template MetalRopeStoreTq4Base : GkTq4Wht {
+    override WHT_TWO = false   // a thread an element: the threadgroup is the head
 
     def tq4_rope_elem(qk, tc, ts, bs : array<float>; base, bbase, tb, lid, hs, neox, has_bias, rot : uint; var v : float&) {
         let half = hs / 2u
@@ -2171,32 +2149,19 @@ class template MetalRopeStoreTq4Base : GkBlkSignedMax {
         }
     }
 
-    //! the caller seeds buf[lid] and scales what it reads back - the 1/sqrt(n) and the signs are its own
-    def fwht_butterfly(lid, hs : uint) {
-        barrier()
-        var h = 1u
-        while (h < hs) {
-            let a = buf[lid]
-            let b = buf[lid ^ h]
-            barrier()
-            buf[lid] = (lid & h) == 0u ? a + b : b - a
-            barrier()
-            h *= 2u
-        }
-    }
-
     def tq4_fwht_signs_row(var v : float&; sg : array<float>; lid, hs : uint) {
         buf[lid] = v * sg[lid]
-        fwht_butterfly(lid, hs)
+        barrier()
+        wht(hs)
         v = buf[lid] * (1.0 / sqrt(float(hs)))
     }
 
     def tq4_quant(v : float; var d : float&; var qv : int&; var qother : int&; sl : uint) {
         var mv = v
         blk_signed_max(sl, mv)   // per-32-block quantize: block == simdgroup, the FIRST max-abs element sets the scale
-        d = mv / -8.0
+        d = tq4_scale(mv)
         let id = d != 0.0 ? 1.0 / d : 0.0
-        qv = min(15, int(v * id + 8.5))
+        qv = tq4_code(v, id)
         qother = simd_shuffle_xor(qv, 1u)
     }
 
@@ -2295,7 +2260,8 @@ class MetalFwhtUnsign : MetalRopeStoreTq4Base {
         let hs = head_size
         let base = gl_WorkGroupID.y * qstride + gl_WorkGroupID.x * hs
         buf[lid] = yo[base + lid]
-        fwht_butterfly(lid, hs)
+        barrier()
+        wht(hs)
         let o = buf[lid] * (1.0 / sqrt(float(hs))) * signs[lid]
         yo[base + lid] = sq_gated(o, qg, gl_WorkGroupID.y * gstride + gl_WorkGroupID.x * 2u * hs + lid, hs, gstride)
     }
@@ -16205,7 +16171,7 @@ class MetalClsSelect : GkClsSelect {
     }
 }
 
-struct GkSelDrawArgs {
+struct MetalSelDrawArgs {
     row : uint      //! the landing row the draw reads
     top_k : uint    //! the host sampler's top-k (1 .. the landing's K): the k-th largest survivor's logit is the cut, its ties kept
     temp : float    //! the temperature (above zero: a draw at zero is the host's argmax, never this kernel's)
@@ -16217,7 +16183,7 @@ struct GkSelDrawArgs {
 //! float order, element by element, so the drawn id is the host's bit for bit; a row the host cannot serve from the landing
 //! lands the row's largest id, a draw the host's redraw refutes (`ARCHITECTURE_GPU_MTP_DECODE_PICK.md#sampled-chain`)
 [ |> template_struct_instance]
-class template GkSelDraw : GkWgReduce {
+class template MetalSelDrawT : GkWgReduce {
     @template_constant WG : uint = 1024u
     @template_constant CAP : uint = 2048u    //!< SEL_CAP: the landing's slots a row
     @template_constant HDR : uint = 4u       //!< SEL_HDR
@@ -16226,7 +16192,7 @@ class template GkSelDraw : GkWgReduce {
     @ssbo @binding = 2 @role = "read" sel_val : array<float>   //! ... and their logits
     @ssbo @binding = 3 @role = "readwrite" rng : array<int>    //! the session's LCG state, four ints; the first steps
     @ssbo @binding = 4 @role = "write" tok : array<uint>       //! the drawn id
-    @kargs pa : GkSelDrawArgs
+    @kargs pa : MetalSelDrawArgs
     @workgroup sv : float[2048]   //! the survivors' logits: sorted largest first, then the kept ones by id, then their probabilities
     @workgroup si : uint[2048]    //! ... and their ids
     @workgroup dv : float[1024]   //! the kept survivors' softmax numerators largest first (the nucleus walk's order)
@@ -16400,9 +16366,9 @@ class template GkSelDraw : GkWgReduce {
     }
 }
 
-//! the draw over a landed row on `GkSelDraw`, one threadgroup of 1024 threads
+//! the draw over a landed row on `MetalSelDrawT`, one threadgroup of 1024 threads
 [metal_dispatch(name = "enc_sel_draw", pso = "g_pso_sel_draw", tgmem = "metal_sel_draw_msl_tgmem", tg = 1024, grid = "1")]
-class MetalSelDraw : GkSelDraw {
+class MetalSelDraw : MetalSelDrawT {
     [metal_kernel(name="metal_sel_draw_msl")]
     def metal_sel_draw {
         draw_row()

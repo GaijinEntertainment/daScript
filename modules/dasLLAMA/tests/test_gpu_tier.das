@@ -890,6 +890,53 @@ def test_vulkan_trim_default(t : T?) {
     }
 }
 
+[test(description = "`rdec_caps_slots` maps each captured layer to its place in the list and every other layer to -1, refusing a layer off the trunk with the slots left unset; `rdec_caps_layer` reads that map; `rdec_caps_unpack` lays the drivers' slot-major captured rows out row-major from `row0`")]
+def test_rdec_caps_helpers(t : T?) {
+    t |> run("the slots map the captured layers, and a layer off the trunk refuses") @(t : T?) {
+        var slots : array<int64>
+        t |> success(rdec_caps_slots([5l, 2l], 8l, slots), "two layers on an eight-layer trunk")
+        t |> equal(slots, [-1l, -1l, 1l, -1l, -1l, 0l, -1l, -1l], "each captured layer holds its place in the list, the rest -1")
+        t |> success(rdec_caps_layer(slots, 5l) && rdec_caps_layer(slots, 2l), "both captured layers read as captured")
+        t |> success(!rdec_caps_layer(slots, 0l) && !rdec_caps_layer(slots, 7l), "an uncaptured layer does not")
+        let none : array<int64>
+        t |> success(!rdec_caps_layer(none, 0l), "no slots: no layer is captured")
+        for (bad in fixed_array(8l, -1l)) {
+            var off : array<int64>
+            t |> success(!rdec_caps_slots([3l, bad], 8l, off), "layer {bad} is off an eight-layer trunk: refused")
+            t |> equal(length(off), 0, "... with no slots laid out")
+            delete off
+        }
+        var last : array<int64>
+        t |> success(rdec_caps_slots([7l], 8l, last) && last[7] == 0l, "control: the trunk's last layer is on it")
+        delete last
+        delete slots
+    }
+    t |> run("the unpack lays [slot][stride][dim] rows out as [row][slot][dim] from row0") @(t : T?) {
+        let nslot = 2l
+        let stride = 5l
+        let dim = 3l
+        let row0 = 1l
+        let n = 3l
+        var host <- [for (j in range64(nslot * stride * dim)); float(j / (stride * dim)) * 1000.0 + float((j / dim) % stride) * 10.0 + float(j % dim)]
+        var img : array<float>
+        img |> resize(n * nslot * dim)
+        rdec_caps_unpack(unsafe(addr<void?>(host[0])), stride, nslot, dim, row0, n, img)
+        var off = 0
+        for (row in range64(n)) {
+            for (slot in range64(nslot)) {
+                for (i in range64(dim)) {
+                    off += img[(row * nslot + slot) * dim + i] != float(slot) * 1000.0 + float(row0 + row) * 10.0 + float(i) ? 1 : 0
+                }
+            }
+        }
+        t |> equal(off, 0, "every element is its slot's row row0 + row")
+        let flat = length([for (j in range64(n * nslot * dim)); j; where img[j] != host[row0 * dim + j]])
+        t |> success(flat > 0, "control: the rows are not the host's slot-major span copied as it lies ({flat} elements differ)")
+        delete host
+        delete img
+    }
+}
+
 [test(description = "The home's entry installers run again over the test doubles so later files see the home's seats, and the tier stays unarmed afterward")]
 def test_gpu_tier_seats_put_back(t : T?) {
     t |> success(reinstall_gpu_home_seats(), "the home's entry installers run again over the doubles")

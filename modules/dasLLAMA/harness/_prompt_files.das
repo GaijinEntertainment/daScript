@@ -9,12 +9,13 @@ require daslib/fio
 require daslib/strings_convert   // try_to_int64: a part that is not a number is dropped, never a 0
 require ../../../utils/common/text_lines.das   // split_trimmed, non_empty_lines
 
-//! the numbers of a comma list, each part stripped; an empty part or one that is not a number is dropped
-def id_list(s : string) : array<int64> {
+//! the numbers of a comma list, each part stripped; an empty part, one that is not a number, or one outside `lo` .. `hi`
+//! is dropped
+def id_list(s : string; lo : int64 = -9223372036854775807l - 1l; hi : int64 = 9223372036854775807l) : array<int64> {
     var out : array<int64>
     for (t in split_trimmed(s, ",")) {
         let n = try_to_int64(t)
-        if (is_ok(n)) {
+        if (is_ok(n) && unwrap(n) >= lo && unwrap(n) <= hi) {
             out |> push(unwrap(n))
         }
     }

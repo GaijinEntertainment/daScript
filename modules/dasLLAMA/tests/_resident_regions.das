@@ -2107,7 +2107,9 @@ def cell_regions_batched_widen(t : T?; file : string; bar : LogitsBar = LogitsBa
 
 //! `rows` sessions over `rows` regions - more than the N-column leaves' eight-column tile, or more than the N-row command
 //! steps at once - through STEPS batched steps: the two-row cell's body over `rows` rows, each step the fewest commands of
-//! at most the rows the command steps at once (`vk_rdec_token_n_rows`), its GEMVs in tiles of eight columns, never a row at a time
+//! at most the rows the command steps at once (`vk_rdec_token_n_rows`), its GEMVs in tiles of eight columns, never a row at a time.
+//! The CUDA home's rows tensor leaf is off for the steps (`with_rows_leaf`), so the column tiles serve every site there too,
+//! and no leaf stamp launches - the leaf cell's control
 def cell_regions_batched_groups(t : T?; file : string; rows : int64; bar : LogitsBar = LogitsBar.split_bar) {
     t |> run("{rows} sessions, a region each: a batched step over all of them runs in groups of the command's rows, its GEMVs in column tiles, and every row reads what its session reads alone") @(t : T?) {
         with_regions_rig(t, file, RegionsLoad(regions = rows)) $(tr) {
@@ -2116,9 +2118,39 @@ def cell_regions_batched_groups(t : T?; file : string; rows : int64; bar : Logit
                 "the command steps {at_once} rows at once against the {rows} rows: the cell measures the groups or the column tiles past {GEMV_COL_TILE}")
             var prompts <- [for (i in range64(rows)); ramp_ids(40l + i, i, 1000l + 100l * i, 37l + 2l * i, 5000l)]
             var feeds <- [for (i in range64(rows)); ramp_ids(STEPS, i, 2000l, 53l, 4000l)]
-            batched_steps_body(t, tr, prompts, feeds, bar)
+            let leaf0 = home_rows_leaf_launches()
+            with_rows_leaf(false) {
+                batched_steps_body(t, tr, prompts, feeds, bar)
+            }
+            t |> equal(home_rows_leaf_launches() - leaf0, 0l, "the steps launched no rows tensor leaf: the column tiles served every site")
             delete prompts
             delete feeds
+        }
+    }
+}
+
+//! `rows` sessions' batched steps on the CUDA home's rows tensor leaf: a leaf stamp launched, and every row nearer its session
+//! alone than its previous step (`ctrl_bar`). The leaf's sites round apart from the one-row command's GEMVs, and a routed
+//! carrier's router parts the two at a near-tie: the Qwen3.6-35B IQ4_XS rows read to 1.16 of a 9.9 peak on the RTX PRO 4500,
+//! 0.27 of the row one off's distance at the most, where a row one off sits as near as 0.2 of the peak - no share of the peak
+//! holds both. Skips on a home with no rows leaf
+def cell_regions_batched_leaf(t : T?; file : string; rows : int64) {
+    t |> run("{rows} sessions, a region each, on the rows tensor leaf: a leaf stamp launches and every row reads nearer its session alone than its previous step") @(t : T?) {
+        with_regions_rig(t, file, RegionsLoad(regions = rows)) $(tr) {
+            let leaf0 = home_rows_leaf_launches()
+            if (leaf0 >= 0l) {
+                var prompts <- [for (i in range64(rows)); ramp_ids(40l + i, i, 1000l + 100l * i, 37l + 2l * i, 5000l)]
+                var feeds <- [for (i in range64(rows)); ramp_ids(STEPS, i, 2000l, 53l, 4000l)]
+                with_rows_leaf(true) {
+                    batched_steps_body(t, tr, prompts, feeds, LogitsBar.ctrl_bar)
+                }
+                let launched = home_rows_leaf_launches() - leaf0
+                t |> success(launched > 0l, "the batched steps launched the rows tensor leaf ({launched} launches)")
+                delete prompts
+                delete feeds
+            } else {
+                t |> skip("the armed home has no rows tensor leaf")
+            }
         }
     }
 }

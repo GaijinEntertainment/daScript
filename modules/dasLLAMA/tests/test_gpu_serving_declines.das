@@ -15,7 +15,8 @@ require dasllama/dasllama_gpu_tier   // install_moe_gpu_resident_bias - the bias
 require dasllama/dasllama_env   // set_pf_window_rows_pin - the ring cells' 512-row window
 require ?vulkan dasllama/dasllama_vulkan_decode   // rd_routed_slots_fit - the N-row command's slot cap, where the module exists
 require ?vulkan dasllama/dasllama_vulkan_prefill  // ple_proj_gemv_why - the window projection's tile gate, where the module exists
-require dasllama/dasllama_gpu_kernels_common  // gk_bf16_pairs - the bf16 projection's stamp pick on both homes
+require dasllama/dasllama_gpu_kernels_common  // gk_bf16_pairs - the bf16 projection's stamp pick on both homes; the DFlash2 top-k's slice arithmetic
+require dasllama/dasllama_gpu_rail   // kernel_skip_parse, kernel_skip_hit: the pricing rail's skip list
 require ?vulkan dasllama/dasllama_vulkan_classes   // ple_proj_bf16_hw - the resident projection's halfword pick, where the module exists
 require ?vulkan dasllama/dasllama_vulkan_common   // GpuState / g_gpu - the device shell ple_proj_gemv_why reads, where the module exists
 require ?vulkan vulkan/vulkan_boost   // subgroup_properties / compute_subgroup_size_pinnable - the pin cell's own reading of the device
@@ -1997,5 +1998,37 @@ def test_vulkan_tower_route_before_a_device(t : T?) {
         } else {
             t |> skip("a build without dasVulkan has no Vulkan tower")
         }
+    }
+}
+
+[test(description = "The pricing rail's kernel-skip list parses a comma list into its non-empty fragments in order - none from an empty list or bare commas - and `kernel_skip_hit` matches a kernel name holding any fragment as a substring, an empty list or a fragment the name lacks matching none")]
+def test_kernel_skip_list(t : T?) {
+    t |> equal(length(kernel_skip_parse("")), 0, "an empty list carries no fragment")
+    t |> equal(length(kernel_skip_parse(",,")), 0, "bare commas carry none")
+    var one <- kernel_skip_parse("gemv_n")
+    t |> equal(join(one, "|"), "gemv_n", "one fragment")
+    var several <- kernel_skip_parse("attn,,rope_kv,")
+    t |> equal(join(several, "|"), "attn|rope_kv", "several fragments in order, the empty ones dropped")
+    let nothing : array<string>
+    t |> success(!kernel_skip_hit(nothing, "cud_gemv_n4_k4"), "an empty list skips nothing")
+    t |> success(kernel_skip_hit(one, "cud_gemv_n4_k4"), "a name holding the fragment inside it is skipped")
+    t |> success(!kernel_skip_hit(one, "cud_gemv_k4"), "a name without the fragment is not")
+    t |> success(kernel_skip_hit(several, "dflash_attn_rows"), "a name holding the first of several fragments is skipped")
+    t |> success(kernel_skip_hit(several, "rope_kv_store_b"), "... and one holding the last")
+    t |> success(!kernel_skip_hit(several, "rms_rows"), "a name holding no fragment is not skipped (the miss)")
+    delete one
+    delete several
+}
+
+[test(description = "`gk_dflash_topk_slices` splits a row into whole GK_DFLASH_SEL_SPAN slices rounded up - none at 0 logits, one at 1 and at 4096, two at 4097, 61 at the 27B drafter's 248320 - and `gk_dflash_topk_args` hands the slice stage the row's vocabulary and the merge stage the slices' lists, slices x k entries, both at the call's k")]
+def test_dflash_topk_slices(t : T?) {
+    t |> equal(GK_DFLASH_SEL_SPAN, 4096, "a slice workgroup reads 4096 logits")
+    for (c in fixed_array((vocab = 0l, slices = 0l), (vocab = 1l, slices = 1l), (vocab = 4096l, slices = 1l), (vocab = 4097l, slices = 2l),
+                          (vocab = 248320l, slices = 61l))) {
+        t |> equal(gk_dflash_topk_slices(c.vocab), c.slices, "{c.vocab} logits split into {c.slices} slices")
+        let ka = gk_dflash_topk_args(c.vocab, 7l)
+        t |> equal(ka.slices.vocab, uint(c.vocab), "{c.vocab} logits: the slice stage reads the row whole")
+        t |> equal(ka.merge.vocab, uint(c.slices * 7l), "{c.vocab} logits: the merge stage reads {c.slices} lists of 7")
+        t |> success(ka.slices.k == 7u && ka.merge.k == 7u, "{c.vocab} logits: both stages keep the call's k")
     }
 }

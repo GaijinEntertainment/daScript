@@ -12,6 +12,12 @@ require dasllama/dasllama_chat   // create_chat_renderer_, set_tools_, render_tu
 require ?das_metal dasllama/dasllama_metal_kernels   // nolint:STYLE030,LINT019 - the Metal decode driver, inside the das_metal half
 require ?das_metal dasllama/dasllama_metal_dflash   // nolint:STYLE030,LINT019 - the drafter's device pass registers at init
 require ?das_metal dasllama/dasllama_metal_common   // nolint:STYLE030,LINT019 - set_metal_decode_speculate, inside the das_metal half
+require ?cuda dasllama/dasllama_cuda_dflash   // nolint:STYLE030,LINT019 - the CUDA drafter's stats, inside the CUDA half
+require ?vulkan dasllama/dasllama_vulkan_dflash   // nolint:STYLE030,LINT019 - the drafter's Vulkan arm registers at init
+require ?cuda dasllama/dasllama_cuda_decode   // nolint:STYLE030,LINT019 - the CUDA verify's wall, inside the CUDA half
+require ?cuda dasllama/dasllama_cuda_mtp_gemma   // nolint:STYLE030,LINT019 - the assistant drafter's CUDA arm registers at init
+require ?cuda _cuda_time   // nolint:STYLE030,LINT019 - the profile rail's report, inside the CUDA half
+require ?das_metal dasllama/dasllama_metal_mtp_gemma   // nolint:STYLE030,LINT019 - the assistant drafter's Metal arm registers at init
 require ../performance/profile_common.das   // nolint:STYLE029,LINT019 - tune_gate, inside the das_metal half
 require _prompt_files   // read_ids, read_lines
 require daslib/clargs
@@ -47,6 +53,10 @@ struct Args {
     metal : bool
     @clarg_doc = "print every round's drafts and accepted count"
     trace : bool
+    @clarg_doc = "CUDA home: every launch of the speculative walks waited and timed, a kernel a line (the walks' own times then read slower)"
+    times : bool
+    @clarg_doc = "cap the sessions' context at this many positions (default: the model's; a host-cached session sizes its K/V to it)"
+    ctx : int = 0
     @clarg_doc = "run the drafter's pass on the CPU reference arm even where the device serves it"
     cpu_draft : bool
     @clarg_doc = "drafts a round (1 .. 7; default: the engine's depth)"
@@ -206,7 +216,13 @@ def private walk_pair(a : Args; m : Model; prompt : array<int64>; var stops : ar
     if (a.trace && a.mode == "greedy" && empty(stops)) {
         p.spec <- walk_traced(m, s2, prompt, steps)
     } else {
+        static_if (typeinfo module_exists(dasllama_cuda_dflash)) {
+            cud_launch_timing(a.times)
+        }
         p.spec <- generate_mtp_sampled(m, s2, prompt, params, steps, stops)
+        static_if (typeinfo module_exists(dasllama_cuda_dflash)) {
+            cud_launch_timing(false)
+        }
     }
     if (a.prof) {
         print("--- forward_profile: the speculative walk ---\n")
@@ -325,6 +341,24 @@ def private walk_pool(a : Args; m : Model; ctx : array<int64>) : int {
     print("POOLED tokens a round {fmt(":.3f", tokens_a_round(accepted, rounds))} over {rounds} rounds; drafts accepted {accepted} of {drafted} ({fmt(":.1f", pct)}%)\n")
     print("POOLED speculative {spec_ids} ids, {fmt(":.1f", double(spec_us) / 1000.0lf / n)} ms a request, {fmt(":.2f", tok_per_s(spec_ids, spec_us))} tok/s; plain {plain_ids} ids, {fmt(":.1f", double(plain_us) / 1000.0lf / n)} ms a request, {fmt(":.2f", tok_per_s(plain_ids, plain_us))} tok/s\n")
     print("POOLED walks whose ids part: {parted} of {length(questions)}\n")
+    static_if (typeinfo module_exists(dasllama_cuda_dflash)) {
+        if (a.times && rounds > 0l) {
+            cuda_times_report("a round", rounds, 0.4lf, "ms in the timed launches of the speculative walks")
+        }
+    }
+    let ds = dflash_device_stats()
+    if (ds.passes > 0l && rounds > 0l) {
+        let rms = double(spec_us) / 1000.0lf / double(rounds)
+        let pms = double(ds.pass_us) / 1000.0lf / double(rounds)
+        let cms = double(ds.commit_us) / 1000.0lf / double(rounds)
+        print("ROUND {fmt(":.2f", rms)} ms: the drafter's pass {fmt(":.2f", pms)}, its commits {fmt(":.2f", cms)}, the rest {fmt(":.2f", rms - pms - cms)} (the verify, the captures' landing, the host's accept); {ds.selected} of {ds.passes} passes selected and {ds.walked} walked on the device\n")
+        static_if (typeinfo module_exists(dasllama_cuda_dflash)) {
+            if (cud_rdec_verify_us() > 0l) {
+                let vs = cud_rdec_verify_split()
+                print("VERIFY {fmt(":.2f", double(cud_rdec_verify_us()) / 1000.0lf / double(rounds))} ms a round: the settle ahead of it {fmt(":.2f", double(vs.settle_us) / 1000.0lf / double(rounds))}, the command {fmt(":.2f", double(vs.cmd_us) / 1000.0lf / double(rounds))}; {cud_rdec_verify_logits()} of {rounds} verifies landed their logits\n")
+            }
+        }
+    }
     return parted > 0 && a.mode == "greedy" ? 2 : 0
 }
 
@@ -368,15 +402,25 @@ def private run(a : Args) : int {
     }
     var rc = 0
     with_dasllama_jobque() {
+        if (a.depth > 0) {   // ahead of the load too: a device home sizes its verify's rows to the depth it finds then
+            set_mtp_depth(int64(a.depth))
+        }
         var m <- load_model(a.model, QuantMode.q8)
+        if (a.ctx > 0) {
+            m.config.seq_len = min(m.config.seq_len, int64(a.ctx))
+        }
         set_dflash_device(!a.cpu_draft)
         if (a.depth > 0) {
             set_mtp_depth(int64(a.depth))
         }
         if (empty(a.drafter)) {
-            if (m.config.n_layer_nextn <= 0) {
-                print("{base_name(a.model)} carries no NextN head and no -r drafter is named\n")
+            let side = m.config.n_layer_nextn <= 0 ? attach_mtp_sidecar_(m, a.model) : ""
+            if (m.config.n_layer_nextn <= 0 && empty(side)) {
+                print("{base_name(a.model)} carries no NextN head, no assistant drafter sits beside it and no -r drafter is named\n")
                 rc = 1
+            } elif (!empty(side)) {
+                print("the assistant drafter {base_name(side)} drafts\n")
+                rc = walk_both(a, m)
             } else {
                 print("the NextN head drafts\n")
                 rc = walk_both(a, m)

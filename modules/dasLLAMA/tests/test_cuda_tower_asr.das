@@ -7,7 +7,9 @@ options _dasllama_internal = true
 // The CUDA home's ASR decoder and VAD stamps (`dasllama_cuda_classes_asr.das`, the oracle-only combine in `_cuda_cell.das`) on
 // the case bodies the Vulkan cells of `test_vulkan_tower_kernels.das` run (`_discrete_cells.das`): the whisper decoder's K/V
 // store, chunked attention and fused Q8_0 row passes with the clamped Q8_0 feed beside them, the transducer's gates,
-// projection, joint and pick, the CTC head's pick and the silero VAD's encoder and recurrence. Model-free; every cell but the
+// projection, joint and pick, the CTC head's pick and the silero VAD's encoder and recurrence; and the DFlash2 block drafter's
+// pass stamps (`dasllama_cuda_classes_dflash.das`: the conv, the head norm and rope, the block attention, the two-stage top-k
+// and the selector walk) on the case bodies the Vulkan drafter cells run. Model-free; every cell but the
 // closing leak gate skips without a CUDA device and NVRTC, and a stamp NVRTC refuses on a box with a device reds its cell. The
 // leak gate never skips.
 
@@ -15,6 +17,7 @@ require dastest/testing_boost public
 require dasllama/dasllama_lint public
 require dasllama/dasllama_cuda_classes
 require dasllama/dasllama_cuda_classes_asr
+require dasllama/dasllama_cuda_classes_dflash
 require _cuda_cell
 require _discrete_cells
 
@@ -57,6 +60,38 @@ def test_cud_tower_vad(t0 : T?) {
         return if (!cuda_up(t) || !stamps_built(t, ensure_tower_vad_enc_cls() && ensure_tower_vad_lstm_cls(), "the VAD stamps"))
         with_cu_planes() $(var cp) {
             vad_case(t, cp)
+        }
+    }
+}
+
+[test(description = "The block drafter's dynamic two-tap convolution, head norm and rope, and block attention over its ring on the CUDA home match their in-test CPU forms, with a block-boundary, a position-shift and an unwindowed control")]
+def test_cud_dflash_pass_kernels(t0 : T?) {
+    t0 |> run("the block drafter's conv, head norm + rope and block attention on the CUDA home == the in-test CPU forms") <| @(t : T?) {
+        return if (!cuda_up(t) || !stamps_built(t, ensure_dflash_conv_cls() && ensure_dflash_qkn_cls() && ensure_dflash_attn_cls(), "the block drafter's pass stamps"))
+        with_cu_planes() $(var cp) {
+            df_conv_case(t, cp)
+            df_qkn_case(t, cp)
+            df_attn_case(t, cp)
+        }
+    }
+}
+
+[test(description = "The block drafter's two-stage top-k on the CUDA home lands the oracle's slice lists and rows bit for bit, the slots past every run at their sentinel, the ids-descending tie rule missing as the control (the Metal gate's legs)")]
+def test_cud_dflash_topk(t0 : T?) {
+    t0 |> run("the block drafter's two-stage top-k on the CUDA home == the oracle's lists and rows") <| @(t : T?) {
+        return if (!cuda_up(t) || !stamps_built(t, ensure_dflash_topk_slices_cls() && ensure_dflash_topk_merge_cls(), "the block drafter's top-k stamps"))
+        with_cu_planes() $(var cp) {
+            df_topk_case(t, cp)
+        }
+    }
+}
+
+[test(description = "The block drafter's selector walk on the CUDA home picks the oracle's and the host walk's ids over Q8_0, Q4_K, Q5_K, Q6_K and NVFP4 codebooks, the last-best rule and the logit-alone walk missing as controls")]
+def test_cud_dflash_walk(t0 : T?) {
+    t0 |> run("the block drafter's selector walk on the CUDA home == the oracle's and the host's walk") <| @(t : T?) {
+        return if (!cuda_up(t) || !stamps_built(t, ensure_dflash_walk_cls(), "the block drafter's walk stamp"))
+        with_cu_planes() $(var cp) {
+            df_walk_case(t, cp)
         }
     }
 }

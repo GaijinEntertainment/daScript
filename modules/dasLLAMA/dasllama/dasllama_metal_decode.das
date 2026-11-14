@@ -155,7 +155,7 @@ struct private StepRes {
     sel_slot : int64         //! the landing row a single-row tail wrote: the slots alternate, so the host reads a step's row while the chained step's tail lands the next
     spec_draw : bool         //! the chain opened on the device's draw over the previous step's landing (a sampled session), not on its argmax
     brng : MetalBuffer?      //! the session's LCG state the draw steps, poked at the pre-encode
-    draw_args : GkSelDrawArgs
+    draw_args : MetalSelDrawArgs
     koff : uint64         // mirror arena offsets captured at encode time; arena_epoch pins the
     voff : uint64         // BUFFER those offsets index (a grow-rebuild frees it — stale pre-steps discard)
     arena_epoch : int64
@@ -3042,6 +3042,9 @@ def public set_metal_replay_tape(on : bool) {
     g_v_replay_tape = on
 }
 
+//! the knob `set_metal_replay_tape` last wrote
+def public get_metal_replay_tape : bool => g_v_replay_tape
+
 //! the recurrent replays whose stages read the tape in place, since the process began
 def public metal_verify_replays_in_place : int64 => g_v_replays_tape
 
@@ -3053,6 +3056,9 @@ def public set_metal_replay_unwaited(on : bool) {
     }
     g_v_replay_unwaited = on
 }
+
+//! the knob `set_metal_replay_unwaited` last wrote
+def public get_metal_replay_unwaited : bool => g_v_replay_unwaited
 
 //! the recurrent replays the rollback seat encoded, and of them those committed unwaited, since the process began
 def public metal_verify_replays : tuple<total : int64; unwaited : int64> => (total = g_v_replays, unwaited = g_v_replays_unwaited)
@@ -4277,7 +4283,7 @@ def private pre_encode_next(t : Model; s : Session; npos : int64; var prev_blog 
         if (s.sampled) {   //! the sampled chain: the device draws over the step in flight's landing with the session's LCG state as it stands before the host's own draw
             let p = deref(s.spec_params)
             r.spec_draw = true
-            r.draw_args = GkSelDrawArgs(row = uint(prev_sel), top_k = uint(p.top_k), temp = p.temp, top_p = p.top_p, min_p = p.min_p)
+            r.draw_args = MetalSelDrawArgs(row = uint(prev_sel), top_k = uint(p.top_k), temp = p.temp, top_p = p.top_p, min_p = p.min_p)
             r.brng = pool_acquire(g_pool, g_dev, 64ul)
             unsafe {
                 var rp = reinterpret<int4?>(metal_buffer_contents(r.brng))

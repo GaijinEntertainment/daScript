@@ -10,6 +10,214 @@ and coverage; this ledger is the backlog for the perf pass that follows them. Ev
 what it costs today and what the fix would change.
 
 ## Entries
+- **MEASURED (2026-11-14, `direction-grade`) - the final tree's token rows on both discrete homes against llama.cpp
+  5676dfb: pp512, tg128, batched streams, the NextN head, the assistant drafter and the block drafter (RunPod RTX PRO 4500
+  Blackwell 32 GB).** Box: the RunPod RTX PRO 4500 Blackwell 32 GB (`nvidia-smi`: NVIDIA RTX PRO 4500 Blackwell, driver
+  595.91.07, 32623 MiB). Exe: the daslang binary built from origin/master 8697c54c98's C++, running the .das sources of
+  branch `bbatkin/discrete-batch-streams` at ebd1e2134b and its working tree - this change's sources. Flags: `-jit`
+  (every das figure here is a `-jit` script reading), `DASLLAMA_GPU=1 DASLLAMA_ALLOW_UNTUNED=1`, and
+  `DASLLAMA_CUDA=1` on the CUDA home; `DAS_TUNE_POLICY`, `DASLLAMA_COOPMAT`, `DASLLAMA_CUDA_MMQ` and `DASLLAMA_CUDA_PDL`
+  unset; the CPU backend `x64-gen` (batch `x64-gen`, the config line), its kernels unminted on this box - every run's
+  `tune gate:` line warns (`tune_status is EMPTY` on the CUDA home, `47/47 kernels stamp non-manifest winners (profile)`
+  on the Vulkan home), so no figure here is a board row. The rows of the first two tables are `benchmarks/lcpp_bench.das`'s,
+  one process a row, the models' `.dlim` caches cleared between models: `bin/daslang -jit
+  modules/dasLLAMA/benchmarks/lcpp_bench.das -- -m <gguf> --for-debug-purposes -p 512 -n 128 -r 5 --npl 2` for pp512,
+  tg128 and tg128@2, `-p 0 -n 128 -r 5 --npl <4|8|16>` for the wider rows, `-p 0 -n 128 -r 5 --mtp-ab --mtp-depth 3` for
+  the speculative A/B (tg-real128: eight prompts, greedy), under the loader's
+  `GLIBC_TUNABLES=glibc.rtld.optional_static_tls=16384`;
+  each figure is the mean +- the standard deviation of five reps. Every run printed `sanity: frozen fixture - 8/8 opening
+  tokens match` but the two NVFP4 files' (`no frozen fixture ... - the finiteness gate alone stands`). A `tg128@N` row is
+  N streams through the scheduler, each on its own 512-token prompt, 128 tokens timed.
+  The block drafter's rows are `harness/dflash_probe.das`'s (`lcpp_bench` has no flag for the block drafter): `bin/daslang
+  -jit modules/dasLLAMA/harness/dflash_probe.das -- -m <trunk> -r <drafter> [--depth 3|7] --prompts <the four prompts of
+  ARCHITECTURE_MEASUREMENT_REFERENCE_ROWS.md#cuda-reference-rows> --ctx 8192 --steps 128` under `DASLLAMA_GPU_CTX_MAX=8192`,
+  greedy, the plain walk and the speculative walk of each prompt in one process, each rate pooled over the four prompts.
+  Every row ran on this change's engine sources. The two entries below on the Vulkan and
+  the CUDA home's kernel walls (2026-11-14 and 2026-11-13) keep the walls, the priced ticks and the forms raced; their
+  homes' rates are this entry's.
+
+    | model | home | pp512 | tg128 | tg128@2 | tg128@4 | tg128@8 | tg128@16 |
+    | :--- | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
+    | gemma-4-E2B-it Q8_0 | CUDA | 19850.58 +- 121.73 | 222.14 +- 0.58 | 420.88 +- 0.09 | 765.61 +- 0.21 | 1260.15 +- 0.75 | 2001.74 +- 7.93 |
+    | gemma-4-E2B-it Q8_0 | Vulkan | 16998.12 +- 97.08 | 211.38 +- 0.08 | 385.21 +- 0.34 | 727.24 +- 0.90 | 1239.27 +- 2.66 | 1487.03 +- 4.42 |
+    | gpt-oss-20b MXFP4 | CUDA | 11205.92 +- 102.77 | 244.73 +- 0.16 | 360.29 +- 16.77 | 467.99 +- 7.51 | 649.55 +- 40.47 | 995.95 +- 87.78 |
+    | gpt-oss-20b MXFP4 | Vulkan | 6345.25 +- 135.34 | 233.72 +- 0.48 | 364.22 +- 17.31 | 499.64 +- 9.83 | 579.24 +- 6.38 | 601.87 +- 3.84 |
+    | gemma-4-26B-A4B-it Q4_K_M | CUDA | 6299.13 +- 123.42 | 164.61 +- 0.29 | 271.55 +- 3.34 | 423.37 +- 2.95 | 595.84 +- 7.41 | 753.86 +- 5.25 |
+    | gemma-4-26B-A4B-it Q4_K_M | Vulkan | 6298.16 +- 368.01 | 154.98 +- 0.08 | 262.12 +- 2.69 | 424.33 +- 2.52 | 585.29 +- 3.81 | 664.08 +- 2.56 |
+    | Qwen3.6-35B-A3B-MTP UD-Q4_K_M | CUDA | 5840.47 +- 65.82 | 184.46 +- 0.21 | 298.40 +- 1.44 | 462.47 +- 10.79 | 672.15 +- 6.31 | 908.12 +- 6.05 |
+    | Qwen3.6-35B-A3B-MTP UD-Q4_K_M | Vulkan | 5256.95 +- 38.74 | 166.09 +- 0.22 | 284.76 +- 1.30 | 448.70 +- 11.63 | 623.09 +- 6.90 | 738.51 +- 7.82 |
+    | Qwen3.6-35B-A3B NVFP4 | CUDA | 7737.83 +- 167.89 | 195.23 +- 1.08 | 308.64 +- 1.69 | 484.32 +- 7.00 | 694.98 +- 5.77 | 938.02 +- 11.25 |
+    | Qwen3.6-35B-A3B NVFP4 | Vulkan | 4953.42 +- 64.15 | 169.94 +- 0.58 | 289.17 +- 3.28 | 463.21 +- 4.88 | 643.05 +- 2.69 | 705.69 +- 2.80 |
+    | Qwen3.8-27B Q4_K_M | CUDA | 2112.23 +- 3.08 | 39.12 +- 0.01 | 74.30 +- 0.20 | 139.73 +- 0.17 | 245.58 +- 0.30 | 431.81 +- 1.11 |
+    | Qwen3.8-27B Q4_K_M | Vulkan | 1756.91 +- 3.59 | 38.30 +- 0.03 | 74.87 +- 0.28 | 140.57 +- 0.13 | 229.94 +- 0.31 | 255.93 +- 0.80 (pinned) |
+    | Qwen3.8-27B iMatrix NVFP4 MTP | CUDA | 2464.48 +- 12.97 | 43.04 +- 0.06 | 79.88 +- 0.03 | 145.76 +- 0.07 | 251.10 +- 0.26 | 440.99 +- 0.64 |
+    | Qwen3.8-27B iMatrix NVFP4 MTP | Vulkan | 1617.20 +- 2.98 | 41.82 +- 0.04 | 80.25 +- 0.03 | 147.00 +- 0.11 | 233.29 +- 0.24 | 254.49 +- 0.66 |
+
+  The `pinned` cell: the Vulkan home's 27B Q4_K_M tg128@16 ran under `DASLLAMA_GPU_VRAM_MB=32060`. Unpinned, the Vulkan
+  residency plan does not fit the 27B at sixteen regions on this card - `resident driver declined - needs 29635 MB of
+  28527 MB (weights alone 18090 MB)`, the driver reporting no budget so 2048 MB stand as headroom - and the row falls to
+  the per-op rails with that warning. gpt-oss's batched rows carry a wide spread (649.55 +- 40.47 at eight streams):
+  each rep feeds the streams other prompts, and the experts a step routes to follow the content. Its CUDA rows' means held
+  within 1% over three whole passes, two of them on earlier CUDA sources of this branch that no commit holds (`external`:
+  two streams 359.6 and 360.35, eight 646.2 and 643.8, sixteen 991.9 and 990.3), the third the table's.
+
+  The speculative A/B, `lcpp_bench --mtp-ab --mtp-depth 3`, tok/s off -> on, and drafts accepted over drafted, summed over
+  the five reps and eight prompts; the Qwen files draft with their NextN head, gemma-4-26B with the assistant drafter:
+
+    | model | home | off | on | accepted |
+    | :--- | :--- | ---: | ---: | ---: |
+    | gemma-4-26B-A4B-it Q4_K_M, assistant drafter | CUDA | 156.60 +- 0.07 | 318.80 +- 0.05 | 3715 / 4290 |
+    | gemma-4-26B-A4B-it Q4_K_M, assistant drafter | Vulkan | 148.37 +- 0.04 | 296.78 +- 0.09 | 3685 / 4515 |
+    | Qwen3.6-35B-A3B-MTP UD-Q4_K_M, NextN | CUDA | 185.66 +- 0.18 | 266.81 +- 0.27 | 3305 / 5670 |
+    | Qwen3.6-35B-A3B-MTP UD-Q4_K_M, NextN | Vulkan | 167.50 +- 0.13 | 226.84 +- 0.16 | 3295 / 5565 |
+    | Qwen3.8-27B Q4_K_M, NextN | CUDA | 39.16 +- 0.01 | 85.49 +- 0.04 | 3415 / 5250 |
+    | Qwen3.8-27B Q4_K_M, NextN | Vulkan | 38.44 +- 0.01 | 77.82 +- 0.03 | 3370 / 5385 |
+    | Qwen3.8-27B iMatrix NVFP4 MTP, NextN | CUDA | 43.12 +- 0.01 | 85.89 +- 0.04 | 3390 / 5385 |
+    | Qwen3.8-27B iMatrix NVFP4 MTP, NextN | Vulkan | 41.94 +- 0.03 | 74.95 +- 0.04 | 3250 / 5760 |
+
+  The block drafter, `harness/dflash_probe.das`, tok/s pooled over the four prompts with the per-prompt min..max beside it;
+  a round is the probe's `ROUND` line, ms: the whole round, the drafter's pass, its commits, the rest (the verify, the
+  captures' landing, the host's accept). Drafters: DFlash2 `gemma-4-E2B-it-dflash2-Q8_0.gguf` (its block: seven drafts;
+  `--depth 3` for three), DFlash `gemma-4-26B-A4B-it-DFlash-Q8_0.gguf` (its block: three), DFlash2
+  `Qwen3.6-35B-A3B-DFlash2-<Q8_0|Q4_K_M>.gguf`, `Qwen3.8-27B-DFlash2-<Q8_0|Q4_K_M>.gguf` and
+  `Qwen3.8-27B-DFlash2-NVFP4.gguf` at `--depth 7`:
+
+    | trunk, drafter, drafts | home | speculative | plain | tokens a round, rounds | accepted | walks parted | round: pass / commits / rest |
+    | :--- | :--- | ---: | ---: | ---: | ---: | ---: | :--- |
+    | E2B Q8_0, DFlash2 Q8_0, 7 | CUDA | 353.61 (264.4..634.6) | 209.11 (208.5..209.5) | 2.542, 201 | 310 / 1379 | 1 of 4 | 7.20: 1.50 / 0.26 / 5.44 |
+    | E2B Q8_0, DFlash2 Q8_0, 7 | Vulkan | 291.02 (214.2..540.8) | 192.67 (184.7..198.6) | 2.522, 203 | 309 / 1391 | 0 of 4 | 8.67: 1.86 / 0.61 / 6.19 |
+    | E2B Q8_0, DFlash2 Q8_0, 3 | CUDA | 350.81 (292.9..486.5) | 207.77 (206.6..209.0) | 2.281, 224 | 287 / 667 | 1 of 4 | 6.52: 1.39 / 0.26 / 4.87 |
+    | E2B Q8_0, DFlash2 Q8_0, 3 | Vulkan | 303.77 (249.0..411.7) | 182.39 (156.9..194.5) | 2.261, 226 | 285 / 673 | 0 of 4 | 7.46: 1.68 / 0.55 / 5.23 |
+    | 26B-A4B Q4_K_M, DFlash Q8_0, 3 | CUDA | 241.52 (174.6..321.6) | 157.98 (157.4..158.5) | 2.697, 185 | 314 / 551 | 0 of 4 | 11.21: 2.26 / 0.28 / 8.67 |
+    | 26B-A4B Q4_K_M, DFlash Q8_0, 3 | Vulkan | 217.96 (156.1..292.6) | 146.36 (146.0..146.6) | 2.674, 187 | 313 / 557 | 0 of 4 | 12.29: 2.98 / 0.91 / 8.41 |
+    | 35B-A3B UD-Q4_K_M, DFlash2 Q8_0, 7 | CUDA | 289.84 (202.7..458.6) | 175.15 (174.5..176.3) | 3.297, 155 | 356 / 762 | 2 of 4 | 11.40: 1.98 / 0.37 / 9.05 |
+    | 35B-A3B UD-Q4_K_M, DFlash2 Q8_0, 7 | Vulkan | 213.65 (143.4..347.1) | 156.36 (155.5..157.6) | 3.400, 150 | 360 / 740 | 0 of 4 | 15.98: 2.17 / 1.11 / 12.69 |
+    | 35B-A3B UD-Q4_K_M, DFlash2 Q4_K_M, 7 | CUDA | 298.67 (213.9..468.7) | 177.97 (177.0..178.3) | 3.333, 153 | 357 / 753 | 2 of 4 | 11.20: 1.78 / 0.39 / 9.04 |
+    | 35B-A3B UD-Q4_K_M, DFlash2 Q4_K_M, 7 | Vulkan | 217.96 (146.1..349.8) | 157.92 (152.8..160.2) | 3.423, 149 | 361 / 735 | 0 of 4 | 15.77: 2.10 / 1.07 / 12.60 |
+    | 27B Q4_K_M, DFlash2 Q8_0, 7 | CUDA | 110.35 (68.1..198.8) | 38.95 (38.8..39.0) | 3.919, 123 | 359 / 853 | 3 of 4 | 35.59: 4.94 / 0.54 / 30.11 |
+    | 27B Q4_K_M, DFlash2 Q8_0, 7 | Vulkan | 85.51 (53.1..170.2) | 37.99 (37.9..38.1) | 3.864, 125 | 358 / 862 | 0 of 4 | 45.19: 4.71 / 2.09 / 38.39 |
+    | 27B Q4_K_M, DFlash2 Q4_K_M, 7 | CUDA | 112.68 (70.2..201.7) | 39.17 (39.1..39.2) | 3.887, 124 | 358 / 848 | 3 of 4 | 34.57: 3.97 / 0.59 / 30.01 |
+    | 27B Q4_K_M, DFlash2 Q4_K_M, 7 | Vulkan | 85.58 (53.1..160.0) | 38.33 (38.3..38.4) | 3.803, 127 | 356 / 876 | 0 of 4 | 44.44: 4.13 / 1.62 / 38.68 |
+    | 27B Q4_K_M, DFlash2 NVFP4, 7 | CUDA | 110.10 (67.6..201.5) | 39.18 (39.1..39.2) | 3.803, 127 | 356 / 874 | 3 of 4 | 34.54: 4.11 / 0.54 / 29.90 |
+    | 27B Q4_K_M, DFlash2 NVFP4, 7 | Vulkan | 86.30 (53.3..160.2) | 38.39 (38.3..38.5) | 3.833, 126 | 357 / 867 | 0 of 4 | 44.42: 4.16 / 1.64 / 38.61 |
+    | 27B NVFP4, DFlash2 NVFP4, 7 | CUDA | 109.35 (74.6..201.9) | 42.92 (42.8..43.0) | 3.773, 128 | 355 / 871 | 2 of 4 | 34.51: 4.41 / 0.51 / 29.59 |
+    | 27B NVFP4, DFlash2 NVFP4, 7 | Vulkan | 81.50 (51.7..160.0) | 41.75 (41.7..41.8) | 3.604, 134 | 349 / 915 | 0 of 4 | 44.23: 4.37 / 1.52 / 38.35 |
+
+  Every round ran its drafter's pass on the device (the probe's `passes selected` count equals its rounds on every row). On
+  the CUDA home a speculative walk's ids part from the plain walk's on some prompts (the probe exits 2 when one does): a
+  near tie flips under the verify's row forms - the rows tensor leaf where the plain step takes the one-row GEMV - and a
+  flip moves the accepted count, so the two homes' speculative rates differ by acceptance as well as by round time. On
+  the Vulkan home no walk parts: the verify's rows read what the one-row step reads. The Vulkan round is the CUDA round's but for the verify: on the hybrids the Vulkan verify steps its
+  recurrent rows a dispatch a row with a rollback copy between them (`followup_vulkan.md` row 169).
+
+  Behind llama.cpp, against the tables below: on the CUDA home, pp512 on every model (gpt-oss inside both spreads), tg128
+  on E2B and the NVFP4 27B, tg128@2 on gpt-oss and the 35B Q4_K_M, tg128@4 on gpt-oss and both 27B files (the Q4_K_M one
+  inside its spread), tg128@8 on E2B, gpt-oss, gemma-26B and the Q4_K_M 27B, tg128@16 on E2B, gpt-oss, gemma-26B and the
+  35B Q4_K_M; the block drafter on the Q4_K_M 27B with the Q8_0 and Q4_K_M drafters, the NVFP4 27B's plain walk, and
+  the 35B's plain walk in the Q8_0 drafter's run (a tie). On the
+  Vulkan home: pp512 on E2B, and nothing else. A `tg128@N` row gives each of our streams its own prompt and
+  generates through the scheduler; `llama-batched-bench` force-feeds each stream its own random token a step
+  (`get_token_rand`, `is_pp_shared` off) and samples nothing, so both sides' streams are distinct and a routed model's
+  streams share no picks on either. The speculative A/B ran on
+  `lcpp_bench`'s eight prompts, the server's speculative rows on the probe's four: the server's rows read against the
+  block-drafter table's, and against the A/B rows only for direction.
+
+  llama.cpp, every figure `external`: master 5676dfb, the CUDA build (`-DGGML_CUDA=ON`) and the Vulkan build
+  (`-DGGML_VULKAN=ON -DGGML_CUDA=OFF`) on the same box, the recipe - builds, `llama-bench`, `llama-batched-bench` and the
+  `llama-server` speculative turns - `ARCHITECTURE_MEASUREMENT_REFERENCE_ROWS.md#cuda-reference-rows`; pp512 and tg128
+  are `llama-bench`'s mean +- standard deviation over three reps, and `tg128@N` the `S_TG` column of `llama-batched-bench
+  -npp 512 -ntg 128 -npl N`, the median of three runs with their [min..max].
+
+    | model | build | pp512 | tg128 | tg128@2 | tg128@4 | tg128@8 | tg128@16 |
+    | :--- | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
+    | gemma-4-E2B-it Q8_0 | CUDA | 30365.84 +- 4116.48 | 225.04 +- 1.24 | 404.3 [403.8..405.1] | 753.0 [739.5..762.9] | 1308.0 [1298.8..1345.1] | 2130.2 [2120.4..2140.6] |
+    | gemma-4-E2B-it Q8_0 | Vulkan | 20820.95 +- 613.28 | 177.82 +- 12.21 | 305.7 [290.7..310.6] | 484.1 [480.5..495.4] | 597.8 [592.8..600.7] | 654.6 [637.6..660.0] |
+    | gpt-oss-20b MXFP4 | CUDA | 11233.80 +- 577.70 | 229.58 +- 0.45 | 368.5 [364.5..369.4] | 526.9 [524.9..529.5] | 675.4 [669.7..678.9] | 1356.2 [1352.9..1360.5] |
+    | gpt-oss-20b MXFP4 | Vulkan | 4019.48 +- 35.81 | 203.53 +- 2.13 | 269.5 [267.8..269.6] | 321.8 [317.9..323.9] | 345.6 [344.7..349.8] | 445.3 [443.2..447.1] |
+    | gemma-4-26B-A4B-it Q4_K_M | CUDA | 7707.13 +- 219.48 | 156.32 +- 1.63 | 265.6 [264.9..266.3] | 418.8 [416.5..422.1] | 609.0 [608.3..610.0] | 937.1 [933.6..948.6] |
+    | gemma-4-26B-A4B-it Q4_K_M | Vulkan | 4010.95 +- 29.60 | 126.00 +- 5.30 | 202.1 [197.5..207.8] | 281.7 [270.2..283.8] | 319.8 [312.9..323.2] | 441.4 [440.4..444.0] |
+    | Qwen3.6-35B-A3B-MTP UD-Q4_K_M | CUDA | 7726.21 +- 184.55 | 181.44 +- 1.06 | 301.8 [301.1..304.2] | 434.6 [424.9..436.1] | 634.0 [633.7..636.0] | 930.0 [916.0..932.2] |
+    | Qwen3.6-35B-A3B-MTP UD-Q4_K_M | Vulkan | 4068.75 +- 65.82 | 144.26 +- 9.32 | 243.7 [243.1..244.3] | 328.3 [324.5..329.8] | 366.9 [359.2..369.9] | 356.7 [354.0..357.1] |
+    | Qwen3.6-35B-A3B NVFP4 | CUDA | 10317.21 +- 159.16 | 140.54 +- 0.34 | 239.8 [239.3..240.4] | 388.5 [385.8..389.7] | 602.5 [600.7..606.2] | 902.7 [901.6..903.4] |
+    | Qwen3.6-35B-A3B NVFP4 | Vulkan | 2828.42 +- 35.45 | 102.40 +- 1.38 | 164.0 [163.7..165.8] | 240.8 [239.2..244.6] | 304.4 [302.6..304.4] | 283.2 [282.5..283.6] |
+    | Qwen3.8-27B Q4_K_M | CUDA | 2146.68 +- 13.21 | 38.84 +- 0.11 | 63.0 [63.0..63.1] | 139.9 [139.8..140.2] | 258.9 [257.6..259.5] | 390.2 [389.0..390.2] |
+    | Qwen3.8-27B Q4_K_M | Vulkan | 1466.72 +- 3.57 | 36.90 +- 0.24 | 65.3 [64.9..65.4] | 84.5 [84.5..84.8] | 89.4 [89.0..89.5] | 126.4 [125.8..126.7] |
+    | Qwen3.8-27B iMatrix NVFP4 MTP | CUDA | 3395.03 +- 21.01 | 44.18 +- 0.02 | 78.0 [78.0..78.0] | 152.8 [152.6..152.8] | 235.2 [235.1..235.4] | 394.7 [393.9..395.9] |
+    | Qwen3.8-27B iMatrix NVFP4 MTP | Vulkan | 1420.21 +- 4.87 | 29.13 +- 0.04 | 51.9 [51.7..52.0] | 79.4 [79.3..79.5] | 98.0 [98.0..98.4] | 105.3 [105.1..105.5] |
+
+  The `llama-server` rows, every figure `external`: plain -> speculative, tok/s, greedy over the probe's four prompts, the
+  server's own `timings` of each prompt's second turn pooled over the four (`predicted_n` over `predicted_ms`), no client
+  clock reading them; the recipe keeps no per-prompt rate, so these rows carry no spread (`followup_general.md` row 301).
+
+    | trunk, drafter, drafts | CUDA build | Vulkan build |
+    | :--- | ---: | ---: |
+    | E2B Q8_0, DFlash2 Q8_0, 7 | 207.2 -> 266.8 | 172.5 -> 134.1 |
+    | E2B Q8_0, DFlash2 Q8_0, 3 | 207.2 -> 279.4 | 172.5 -> 179.8 |
+    | 26B-A4B Q4_K_M, DFlash Q8_0, 3 | 143.2 -> 205.0 | 130.5 -> 139.3 |
+    | 26B-A4B Q4_K_M, assistant drafter, 3 | 143.2 -> 238.5 | 130.5 -> 164.1 |
+    | 35B-A3B UD-Q4_K_M, NextN, 3 | 174.2 -> 240.0 | 149.8 -> 177.9 |
+    | 35B-A3B UD-Q4_K_M, DFlash2 Q8_0, 7 | 175.2 -> 240.2 | 150.3 -> 135.3 |
+    | 35B-A3B UD-Q4_K_M, DFlash2 Q4_K_M, 7 | 175.2 -> 247.6 | 150.3 -> 137.4 |
+    | 27B Q4_K_M, DFlash2 Q8_0, 7 | 38.8 -> 113.0 | 37.3 -> 38.2 |
+    | 27B Q4_K_M, DFlash2 Q4_K_M, 7 | 38.8 -> 113.5 | 37.3 -> 38.7 |
+    | 27B Q4_K_M, DFlash2 NVFP4, 7 | 38.8 -> 109.9 | - |
+    | 27B NVFP4, DFlash2 NVFP4, 7 | 43.8 -> 102.6 | 29.3 -> 42.3 |
+    | gpt-oss-20b MXFP4, plain | 228.5 | 195.3 |
+
+  The 35B's DFlash2 rows and their plain row ran in one sweep, its NextN row and the 174.2 plain row in another.
+- **MEASURED (2026-11-14, `direction-grade`, `external`) - where the Vulkan home's verify and batched step spend their
+  time on Qwen3.8-27B Q4_K_M, and the forms that would read sixteen rows in one weight pass (RunPod RTX PRO 4500 Blackwell
+  32 GB).** Every figure here ran on an earlier state of this branch's .das sources that no commit holds - so `external`
+  throughout; the final tree's rates are the entry above - with the daslang binary built from origin/master 8697c54c98's
+  C++, `-jit`, `DASLLAMA_GPU=1 DASLLAMA_ALLOW_UNTUNED=1`, the Vulkan home, `DAS_TUNE_POLICY` and `DASLLAMA_COOPMAT` unset,
+  the CPU backend `x64-gen` untuned on this box.
+  The verify of eight rows under the profile rail (`DASLLAMA_GPU_PROF=1`, `harness/dflash_probe.das -- -m
+  Qwen3.8-27B-Q4_K_M.gguf -r <DFlash2 drafter> --depth 7 --prompts <the four prompts> --ctx 8192 --steps 128`), 40.8 ms a
+  verify: the dense layers' q 1.5, gate 1.4, up 1.4, down 1.2, wo 0.9 and the classifier 1.3; the 48 recurrent layers'
+  qkv 3.9, z 2.5, gate 4.4, up 4.4, down 3.7, out 2.4, their row steps 5.7 and rollback copies 2.8 (`followup_vulkan.md`
+  row 169).
+  The eight-stream tick priced by dropping a kernel class from the recorded command (`harness/batch_streams_sweep.das --
+  -m Qwen3.8-27B-Q4_K_M.gguf --streams 8 --same [--skip <kernel-name fragment>]` under `DASLLAMA_GPU_CTX_MAX=1024`, the
+  `--skip` reaching `set_vulkan_kernel_skip`), 33.4 ms a tick with nothing dropped: the Q4_K N-column GEMV 15.7, Q8_0 10.8,
+  Q6_K 2.2, the recurrent step 3.0, the residual steps 2.5, the attention, rope, requants, gather and argmax inside the
+  noise. Past eight rows the step takes two weight passes (the N-column GEMV tiles by eight).
+  The second pass priced on one 5120 x 17408 plane a dispatch: Q8_0 - the N-column GEMV (`harness/vk_gemv_probe.das --
+  5120 17408 cols`) 220 us at one column and 229 at eight (828 GB/s, the card's bandwidth), so 457 for sixteen rows as two
+  passes, against the int8 KHR tile `q8_batch_cmi8_cls` (a product a 32-k block spilled to shared memory for its scales;
+  `harness/vk_gemm_probe.das -- q8i8`) at 1000 us a 32-row tile and 500 a sixteen-row half; Q4_K - the window's cm2 s tile
+  (`harness/vk_gemm_probe.das -- cm2v:k4`) 115 us at 8, 16 and 32 token rows alike, bound by the weight decode to f16
+  rather than by the columns, against about 50 us for the one-column GEMV, 59 at eight columns and 118 for sixteen rows as
+  two passes (`vk_gemv_probe.das -- 5120 17408 cols`) - no tile form takes sixteen rows for less than two passes
+  (`followup_vulkan.md` row 168). Raced and dropped: a sixteen-column stamp of the N-column shell, which took no less time
+  than the two passes on the Q4_K or the Q6_K plane. llama.cpp's Vulkan backend (its 5676dfb source) runs a multi-column
+  mat-vec to eight columns and a cooperative-matrix f16 tile past them, with no int8 cooperative matrix on NVIDIA.
+- **MEASURED (2026-11-13, `direction-grade`, `external`) - where the CUDA home's eight-stream tick goes on Qwen3.8-27B
+  Q4_K_M, and the forms raced on its token-row kernels (RunPod RTX PRO 4500 Blackwell 32 GB, 82 SMs).** Every figure here
+  ran on an earlier state of this branch's .das sources that no commit holds - so `external` throughout; the final tree's
+  rates are the 2026-11-14 entry on the final tree's token rows - with the daslang binary built from origin/master
+  8697c54c98's C++, `-jit`, `DASLLAMA_GPU=1 DASLLAMA_CUDA=1 DASLLAMA_ALLOW_UNTUNED=1`, `DAS_TUNE_POLICY`,
+  `DASLLAMA_CUDA_MMQ` and `DASLLAMA_CUDA_PDL` unset, the CPU backend `x64-gen` untuned on this box.
+  The 27B's eight-stream tick priced by dropping a kernel class from the captured command (`harness/batch_streams_sweep.das
+  -- -m Qwen3.8-27B-Q4_K_M.gguf --streams 8 --same [--skip <kernel-name fragment>]` under `DASLLAMA_GPU_CTX_MAX=1024`, the
+  `--skip` reaching `set_cuda_kernel_skip`), 32.2 ms a tick with nothing dropped: the Q4_K rows leaf 14.3 (its planes'
+  bytes at the one-row GEMV's rate), Q8_0 11.3 (1.5 over that rate), Q6_K 2.0, the streams' recurrent step 3.4 - eight
+  streams' state read and written, 48 layers of 3.1 MB - the residual steps 0.95, the feed relays and requants inside the
+  noise. What costs the tick: the streams' recurrent state traffic, and the Q8_0 leaf's walk.
+  The forms the tip carries (`ARCHITECTURE_GPU_SHARED_GEMM.md#ncol-load-waves`,
+  `ARCHITECTURE_GPU_ASYMMETRIES_CUDA.md#cuda-rows-leaf`): the N-column GEMVs issue a step's activation loads ahead of its
+  dots and, on Q8_0, the next step's weight words a step ahead; a lane group takes two weight rows; the K-quant shell has
+  a four-column stamp beside the eight-column one; the rows tensor leaf loads a pair's plane words once, and Q8_0 has a
+  big-plane stamp; the residual step runs a row on 1024 lanes. Their rates are the final tree's rows above; the readings that
+  set each against the form it replaced ran on sources no commit holds, so this entry states no figure for them.
+  Raced and dropped, each slower than the form kept on the probe's planes (`harness/cuda_rows_mma_probe.das -- --n 5120
+  --d 17408 --fmt <fmt> --cols 1,2,4,8,16`, a ring of twelve plane copies) or on the batched rows: block sums off the leaf's
+  feed in the N-column GEMV; four weight rows a lane group; a K-quant block's words loaded a step ahead of their decode; a
+  leaf block of four warps; the leaf's pair words through lane shuffles on the superblock formats, and the Q8_0 turn's
+  scales that way on gemma-4 E2B's planes; the Q8_0 leaf's quants as one 64-bit load a lane; the recurrent commit's 96
+  launches replayed as one graph; Q4_0's leaf on signed bytes. Dropped for a mixed result: the recurrent state's write
+  deferred (a step's rank-one update appended to pending pairs, the state written every fourth or eighth step) - its
+  deferred steps ran faster and its folding step slower, the batched rows ahead at sixteen streams and behind at two and
+  four, while the low-register state read (`REREAD`) reaches the same eight-stream row with one state form.
 - **MEASURED (2026-11-12, `direction-grade`) - the block drafter under the scheduler and the plain batched step past
   eight rows (the M5 Max under High Power, each run gated on the fans at idle; an M1 Max for the row-forms box).**
   `harness/dflash_sched_probe.das -- -m <trunk> -r <drafter> --prompts <four chat questions> --streams N --steps 256`

@@ -217,10 +217,10 @@ layer stores nothing and still rotates q. The scores are then dots of rotated qu
 rotated keys, the same dots. The V accumulate sums rotated rows, so the pass's output is the
 attention row in the rotated basis, and `KvTq4Unrot` takes each head back: the inverse transform,
 then the signs (the CPU's `fwht_unsign_row`), a workgroup a (row, head). The signs are the CPU's (`tq4_fill_signs`: one row of
-`KV_TQ4_SIGNS` floats, a head reading its prefix). The butterfly passes (`KvTq4WhtBase`, the base
-shell both kernels derive) run barrier-ordered over a
-workgroup's shared slab under the `precise` kernel option, so each sum rounds as the CPU's does and
-the stored bytes are the CPU's.
+`KV_TQ4_SIGNS` floats, a head reading its prefix). The butterfly passes (the common `GkTq4Wht`,
+the shell every home's tq4 store and un-rotation derive: under `WHT_TWO` a thread carries a second element, a head of 512
+on 256 threads, and Metal's stamp, whose threadgroup is the head, turns it off) run barrier-ordered over a workgroup's
+shared slab under the `precise` kernel option, so each sum rounds as the CPU's does and the stored bytes are the CPU's.
 
 **What acts on the attention row acts after the un-rotation.** A gated-q model's gate (`q_gated`)
 and the requant folded into the pass's store (`rqk`) both read the row in the model's basis. Under
@@ -241,9 +241,10 @@ rows do, and layer 0's stored bytes are the CPU cache's but for a quant on a rou
 
 ### The batched rope store reads k and v through a stride and a base {#rope-kv-merged-reads}
 
-`RopeKvStoreBT` addresses a window row's k head at `row * kstride + h * hs` and its v rows at
-`voff` inside the same buffer, so one body serves a split k/v projection (`kstride = kvd`,
-`voff = npos * kvd`) and a merged one (`kstride = 2 * kvd`, `voff = kvd`). Each home decides
+`RopeKvStoreBT` - `GkRopeKvStore`'s window stamp (`WIN_ROWS`), the body Metal's window and every home's token step
+run - addresses a window row's k head at `row * kvrow + h * hs` and its v rows at `voff` inside the same buffer, so one
+body serves a split k/v projection (`kvrow = kvd`, `voff = npos * kvd`) and a merged one (`kvrow = 2 * kvd`,
+`voff = kvd`). Each home decides
 when it merges - the Vulkan home under its arena rule
 (`ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain`), the CUDA home on the planes' formats
 alone - and the kernel reads only the two fields.

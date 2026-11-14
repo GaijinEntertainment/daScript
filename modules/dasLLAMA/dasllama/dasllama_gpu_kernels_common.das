@@ -1,10 +1,12 @@
 options gen2
+options _dasllama_internal = true
 //! The kernels both GPU homes run, written once: a `class template` here carries a kernel's buffers, its
 //! argument struct and its body, and each home stamps it under its own dispatch name.
 module dasllama_gpu_kernels_common shared public
 require dasllama/dasllama_lint public
 require daslib/typemacro_boost
 require math
+require dasllama/dasllama_gpu_math   // ue4m3_half_f32: an NVFP4 codebook's sub-block scale in the selector's walk
 require daslib/math_bits   // uint_bits_to_float: the bf16 word form widens each half by its bit shift
 require daslib/ast_boost   // [tag_function(spirv_inline)]: the helpers the SPIR-V emitter visits at their call sites, with no dasSpirv require
 
@@ -644,6 +646,74 @@ class template GkBlkSignedMax {
                 midx = oi
             }
             mask /= 2u
+        }
+    }
+}
+
+//! the tq4 rotation's butterfly passes over a workgroup's head: the shell every home's tq4 store and un-rotation share
+class template GkTq4Wht : GkBlkSignedMax {
+    @workgroup buf : float[512]                 //! the head: hs <= 512
+    @template_constant WHT_TWO : bool = true    //!< a thread carries a second element at tid + 256: a head of 512 on 256 threads
+
+    //! a block's tq4 scale off its signed largest-magnitude value, as `quantize_tq4kv_row` takes it
+    def tq4_scale(mv : float) : float => mv / -8.0
+
+    //! ... and a value's code under the scale's inverse
+    def tq4_code(v, id : float) : int => min(15, int(v * id + 8.5))
+
+    //! the unscaled Walsh-Hadamard transform of `buf[0 .. hs)` in place, `hs` a power of two: the five passes inside a
+    //! 32-lane group fold by xor shuffles (a lane's partner is its lane xor the pass's stride), the passes across groups
+    //! through the buffer, barrier-ordered; a subgroup narrower than 32 lanes takes every pass through the buffer
+    def wht(hs : uint) {
+        let tid = gl_LocalInvocationID.x
+        let t1 = tid + 256u
+        var h = 1u
+        if (gl_SubgroupSize >= 32u) {
+            var v0 = tid < hs ? buf[tid] : 0.0
+            var v1 = 0.0
+            static_if (WHT_TWO) {
+                v1 = t1 < hs ? buf[t1] : 0.0
+            }
+            for [unroll] (sh in range(5)) {
+                let hh = 1u << uint(sh)
+                let o0 = gk_subgroup_xor(v0, hh)
+                v0 = (tid & hh) == 0u ? v0 + o0 : o0 - v0
+                static_if (WHT_TWO) {
+                    let o1 = gk_subgroup_xor(v1, hh)
+                    v1 = (tid & hh) == 0u ? v1 + o1 : o1 - v1
+                }
+            }
+            if (tid < hs) {
+                buf[tid] = v0
+            }
+            static_if (WHT_TWO) {
+                if (t1 < hs) {
+                    buf[t1] = v1
+                }
+            }
+            barrier()
+            h = 32u
+        }
+        while (h < hs) {
+            let a0 = buf[tid & ~h]
+            let b0 = buf[(tid & ~h) | h]
+            var a1 = 0.0
+            var b1 = 0.0
+            static_if (WHT_TWO) {
+                a1 = buf[t1 & ~h]
+                b1 = buf[(t1 & ~h) | h]
+            }
+            barrier()
+            if (tid < hs) {
+                buf[tid] = (tid & h) == 0u ? a0 + b0 : a0 - b0
+            }
+            static_if (WHT_TWO) {
+                if (t1 < hs) {
+                    buf[t1] = (t1 & h) == 0u ? a1 + b1 : a1 - b1
+                }
+            }
+            barrier()
+            h *= 2u
         }
     }
 }
@@ -1570,6 +1640,12 @@ class template GkWdecAttnPart : GkWgReduce {
 class template GkQ8BlockStore : GkWgReduce {
     @template_constant OUT_Q8 : bool = false   //!< the stamp quantizes its rows into Q8_0 blocks: `outq` and the block scales `outs`
     @template_constant OUT_SUM : bool = false  //!< beside the scales, each block's scale x the sum of its quants (`outsum`): the int8 GEMM's min-term feed
+    @template_constant OUT_FEED : bool = false //!< beside the rows, the rows tensor leaf's feed of them (`fq`, `fs`, `fm`): up to sixteen token rows' quants in the product's lane order, their scales a (block, token slot) and, on superblocks, each 32-block's scale x quant sum - the stamp binds the three and answers `feed_units`
+
+    def feed_units : uint => 0u   //! the blocks (Q8_0) or superblocks (Q8_K) a token row spans: a block's token row is its index over them
+
+    //! where token row `c` of sixteen sits among a lane's four accumulator columns in the feed's float4 planes
+    def feed_slot(c : uint) : uint => gk_feed_slot(c)
 
     [arch(at="../ARCHITECTURE_GPU_SHARED_ROWS.md#q8-requant-byte-store")]
     def blk_store(b, lane8 : uint; v : float4) {
@@ -1589,6 +1665,20 @@ class template GkQ8BlockStore : GkWgReduce {
             outq[qb + 1u] = q1
             outq[qb + 2u] = q2
             outq[qb + 3u] = q3
+            static_if (OUT_FEED) {   // the lane's four bytes are a 4-byte group of the product's fragment: token c's k 4t.. or its k 16 + 4t..
+                let c = b / max(1u, feed_units())
+                let blk = b % max(1u, feed_units())
+                if (c < 16u) {
+                    let fw = gk_feed_byte(blk, c, lane8 * 4u)
+                    fq[fw] = q0
+                    fq[fw + 1u] = q1
+                    fq[fw + 2u] = q2
+                    fq[fw + 3u] = q3
+                    if (lane8 == 0u) {
+                        fs[blk * 16u + feed_slot(c)] = d
+                    }
+                }
+            }
             static_if (OUT_SUM) {
                 var sf = float(int(q0) + int(q1) + int(q2) + int(q3))   // the eight lanes' sums fold like the amax: exact in f32
                 sf += gk_subgroup_xor(sf, 1u)
@@ -1619,13 +1709,35 @@ class template GkQ8BlockStore : GkWgReduce {
                 outs[b] = d
             }
             let id = d != 0.0 ? 1.0 / d : 0.0
-            for [unroll] (r in range(8)) {
-                outq[e0 + uint(r) * 32u] = q8_quant1(vals[r], id)
+            static_if (OUT_FEED) {
+                let c = b / max(1u, feed_units())
+                let sb = b % max(1u, feed_units())
+                let slot = feed_slot(c)
+                if (c < 16u && lane == 0u) {
+                    fs[sb * 16u + slot] = d
+                }
+                for [unroll] (r in range(8)) {
+                    let q = q8_quant1(vals[r], id)
+                    outq[e0 + uint(r) * 32u] = q
+                    if (c < 16u) {   // one superblock a subgroup, so the lanes agree on c: the block's sum folds over them
+                        fq[gk_feed_byte(sb * 8u + uint(r), c, lane)] = q
+                        let bs = gk_subgroup_add(float(int(q)))
+                        if (lane == 0u) {
+                            fm[(sb * 8u + uint(r)) * 16u + slot] = d * bs
+                        }
+                    }
+                }
+            } else {
+                for [unroll] (r in range(8)) {
+                    outq[e0 + uint(r) * 32u] = q8_quant1(vals[r], id)
+                }
             }
         }
     }
 
-    //! the row's `nblk` blocks from plane element `base` quantized from `normed_at` into the blocks from `qb0` (32 blocks a pass over 256 lanes)
+    def blk_pass_blocks : uint => 32u   //! the blocks a pass of `blk_pass` covers: eight lanes a block, so a workgroup's lanes over eight
+
+    //! the row's `nblk` blocks from plane element `base` quantized from `normed_at` into the blocks from `qb0`, `blk_pass_blocks` a pass
     def blk_pass(base, nblk, qb0 : uint; mean, inv : float) {
         static_if (OUT_Q8) {
             let tid = gl_LocalInvocationID.x
@@ -1635,7 +1747,7 @@ class template GkQ8BlockStore : GkWgReduce {
                 let e = base + b * KQ_B32_ELEMS_U + (lane % 8u) * 4u
                 let v = float4(normed_at(e, mean, inv), normed_at(e + 1u, mean, inv), normed_at(e + 2u, mean, inv), normed_at(e + 3u, mean, inv))
                 blk_store(qb0 + b, lane % 8u, v)
-                b += 32u
+                b += blk_pass_blocks()
             }
         }
     }
@@ -1707,6 +1819,8 @@ struct GkAddRmsArgs {
 [ |> template_struct_instance]
 class template GkResidualRow : GkQ8BlockStore {
     @template_constant LANES : uint = 256u          //!< the workgroup's lanes, the row loops' stride; 0 = the threadgroup's own size
+
+    def override blk_pass_blocks : uint => LANES == 0u ? 32u : LANES / 8u
     @template_constant NORM_SWITCH : bool = false   //!< the runtime `no_norm` arm of `pa`
     @template_constant PRE : bool = true            //!< the sandwich arm
     @template_constant PRE_SWITCH : bool = true     //!< `pa.pre_on` switches the sandwich arm at run time; off, a PRE stamp always norms the partner
@@ -2519,6 +2633,10 @@ struct GkRopeKvArgs {
                        //! layer index where a row table carries the per-layer stride (Metal's window form)
     ring : uint        //! a sliding layer's ring rows: a row lands at `kv_ring_row` of its position; 0 = the flat slab
     layr : uint        //! the row-table form: the rings' rows ahead of the layer in a stream's slice, past `mirbase` layers of its stride
+    qhs : uint         //! a head's stride in a q row (0 reads as `hs`): 2 x hs on a gated [q | gate] row
+    voff : uint        //! the window form: the v rows' element base in vsrc, a row's v at `voff` plus its `kvrow`
+    pos0 : uint        //! the window form: the first row's position, its mirror row
+    row0 : uint        //! the window form: the first row in the q, k/v and table planes (a segment's rows inside its window)
 }
 
 //! the rope-and-store args a home builds: the one-row defaults (one row, every stride 0, the bias row, the cos row and the mirror
@@ -2548,6 +2666,7 @@ class template GkRopeKvStore {
     @template_constant CLAMP16 : bool = true
     @template_constant BOUND_VIEWS : bool = false   //!< the stamp binds the v projection, the bias row and the table rows at their offsets, so their element bases are zero
     @template_constant SPLIT_TABLES : bool = false  //!< the sin rows are their own plane (bound at `tsin`), not a half head past the cos rows
+    @template_constant WIN_ROWS : bool = false      //!< the window's planes: a k row at its row's start and the v rows `voff` on, the sin row a rotated half past the cos row
 
     //! one mirror K element, clamped into the half range on the f16 stamp
     def st_k(i : uint; v : float) {
@@ -2576,12 +2695,35 @@ class template GkRopeKvStore {
         }
     }
 
-    //! the sin row's element base: a half head past the cos row in the one plane, or zero in a plane of its own
+    //! the sin row's element base: a half head past the cos row in the one plane (the window's a rotated half past it), or zero
+    //! in a plane of its own
     def sin_base(half : uint) : uint {
         static_if (BOUND_VIEWS || SPLIT_TABLES) {
             return 0u
         } else {
-            return pa.ccos + half
+            static_if (WIN_ROWS) {
+                return pa.ccos + pa.rot / 2u
+            } else {
+                return pa.ccos + half
+            }
+        }
+    }
+
+    //! the k projection's element base in row `row` of ksrc: past the q projection, or the row's start in the window's planes
+    def k_row_base(row : uint) : uint {
+        static_if (WIN_ROWS) {
+            return row * pa.kvrow
+        } else {
+            return row * pa.kvrow + pa.qd
+        }
+    }
+
+    //! ... and the v projection's in vsrc
+    def v_row_base(row : uint) : uint {
+        static_if (WIN_ROWS) {
+            return pa.voff + row * pa.kvrow
+        } else {
+            return row * pa.kvrow + base_in_plane(pa.qd + pa.kvd)
         }
     }
 
@@ -2601,14 +2743,23 @@ class template GkRopeKvStore {
         }
     }
 
-    //! pair `lp` of row `row`: a q pair in place, a k pair into the mirror row at element `mirk` of kd and its v pair at `mirv` of vd
+    //! the window form a kernel over (`npairs` x `rows`) invocations takes: pair `gid` of row `p`, the window's row `row0 + p`
+    //! at position `pos0 + p` of the layer's mirror (`mirbase`)
+    def rope_kv_window(gid, p : uint) {
+        let mir = pa.mirbase + kv_ring_row(pa.pos0 + p, pa.ring) * pa.kvd
+        rope_kv_pair(pa.row0 + p, gid, mir, mir)
+    }
+
+    //! pair `lp` of row `row`: a q pair in place, a k pair into the mirror row at element `mirk` of kd and its v pair at `mirv` of vd;
+    //! a q pair that neither rotates nor takes a bias stays as it is
     def rope_kv_pair(row, lp, mirk, mirv : uint) {
         let isk = lp >= pa.npairs_q
         let lgid = isk ? lp - pa.npairs_q : lp
         let half = max(1u, pa.hs / 2u)
         let halfr = pa.rot / 2u
         let j = lgid % half
-        let hbase = (lgid / half) * pa.hs
+        let head = lgid / half
+        let hbase = head * pa.hs
         let pair_rotates = j < halfr
         let i = pa.neox != 0u ? (pair_rotates ? hbase + j : hbase + pa.rot + (j - halfr)) : hbase + 2u * j
         let i2 = pa.neox != 0u ? (pair_rotates ? i + halfr : i + (half - halfr)) : i + 1u
@@ -2617,22 +2768,25 @@ class template GkRopeKvStore {
         let fci = pair_rotates ? tsin[sin_base(half) + cb + j] : 0.0
         let boff = base_in_plane(pa.boff)
         if (isk) {
-            let kb = row * pa.kvrow + pa.qd
+            let kb = k_row_base(row)
             let bk = boff + pa.qd
             let v0 = ksrc[kb + i] + (pa.has_bias != 0u ? bias[bk + i] : 0.0)
             let v1 = ksrc[kb + i2] + (pa.has_bias != 0u ? bias[bk + i2] : 0.0)
             st_k(mirk + i, v0 * fcr - v1 * fci)
             st_k(mirk + i2, v0 * fci + v1 * fcr)
-            let vb = row * pa.kvrow + base_in_plane(pa.qd + pa.kvd)
+            let vb = v_row_base(row)
             let bv = boff + pa.qd + pa.kvd
             st_v(mirv + i, vsrc[vb + i] + (pa.has_bias != 0u ? bias[bv + i] : 0.0))
             st_v(mirv + i2, vsrc[vb + i2] + (pa.has_bias != 0u ? bias[bv + i2] : 0.0))
-        } else {
-            let qb = row * pa.qrow
-            let v0 = qsrc[qb + i] + (pa.has_bias != 0u ? bias[boff + i] : 0.0)
-            let v1 = qsrc[qb + i2] + (pa.has_bias != 0u ? bias[boff + i2] : 0.0)
-            qsrc[qb + i] = v0 * fcr - v1 * fci
-            qsrc[qb + i2] = v0 * fci + v1 * fcr
+        } elif (pair_rotates || pa.has_bias != 0u) {
+            let qhs = pa.qhs == 0u ? pa.hs : pa.qhs
+            let qb = row * pa.qrow + head * qhs
+            let w = i - hbase
+            let w2 = i2 - hbase
+            let v0 = qsrc[qb + w] + (pa.has_bias != 0u ? bias[boff + i] : 0.0)
+            let v1 = qsrc[qb + w2] + (pa.has_bias != 0u ? bias[boff + i2] : 0.0)
+            qsrc[qb + w] = v0 * fcr - v1 * fci
+            qsrc[qb + w2] = v0 * fci + v1 * fcr
         }
     }
 }
@@ -6050,6 +6204,500 @@ class template GkNmtPick : GkBiasedArgmax {
                     st[2u] = 1u
                 }
             }
+        }
+    }
+}
+
+// ===== the block drafter's pass (DFlash, DFlash2): the kernels every home stamps =====
+
+//! the dynamic two-tap grouped convolution's arguments; `side` 0 is the sublayer's input, 1 its output
+struct GkDflashConvArgs {
+    dim : uint
+    g : uint       //! channels a dynamic coefficient
+    side : uint
+    convk : uint   //! taps
+    rows : uint
+    blk : uint     //! rows a block where the panel holds several blocks (0 = one): a block's first row has no predecessor
+    boff : uint    //! the layer's base coefficients in `base`, [side][tap][dim]
+}
+
+//! row t of `y` = (base[side][0] + dyn[t][side][0]) * x[t] + (base[side][1] + dyn[t][side][1]) * x[t - 1], a dynamic coefficient a
+//! group of `g` channels, a row of `dyn` [2 sides][convk taps][dim / g]; out of place, since row t reads row t - 1 as it was.
+//! A thread an element, 256 a workgroup
+[ |> template_struct_instance]
+class template GkDflashConv {
+    @ssbo @binding = 0 @role = "read" x : array<float>
+    @ssbo @binding = 1 @role = "write" y : array<float>
+    @ssbo @binding = 2 @role = "read" dyn : array<float>
+    @ssbo @binding = 3 @role = "weight" base : array<float>
+    @kargs pa : GkDflashConvArgs
+
+    def dflash_conv_body {
+        let gid = gl_GlobalInvocationID.x
+        if (gid < pa.rows * pa.dim) {
+            let t = gid / max(1u, pa.dim)
+            let c = gid % max(1u, pa.dim)
+            let gi = c / max(1u, pa.g)
+            let ng = pa.dim / max(1u, pa.g)
+            let projw = 2u * pa.convk * ng
+            let tap0 = pa.side * pa.convk
+            var o = (base[pa.boff + tap0 * pa.dim + c] + dyn[t * projw + tap0 * ng + gi]) * x[gid]
+            if ((pa.blk == 0u ? t : t % max(1u, pa.blk)) > 0u) {
+                o += (base[pa.boff + (tap0 + 1u) * pa.dim + c] + dyn[t * projw + (tap0 + 1u) * ng + gi]) * x[gid - pa.dim]
+            }
+            y[gid] = o
+        }
+    }
+}
+
+let GK_DFLASH_HS = 256u   //! the widest head the drafter's row kernels stage (`sh` and `qs`'s literal)
+
+//! the head norm and rope's arguments: rows `xs` floats apart in from `xoff`, `ys` apart out from `yoff`, row 0 at position `pos0`
+struct GkDflashQknArgs {
+    hs : uint
+    nheads : uint
+    xs : uint
+    ys : uint
+    pos0 : uint
+    xoff : uint
+    woff : uint    //! the head's norm weights in `w`, [hs]
+    yoff : uint
+    eps : float
+}
+
+//! a head of every row rms-normed under `w` and rotated (the NEOX pairs i, i + hs/2) at the row's position: a workgroup of 256
+//! a (head, row), the workgroup's id the head past `nheads` times the row; `y` is a plane of its own or the ring where a
+//! commit's K rows land, never `x`
+[ |> template_struct_instance]
+class template GkDflashQkn : GkWgReduce {
+    @ssbo @binding = 0 @role = "read" x : array<float>
+    @ssbo @binding = 1 @role = "weight" w : array<float>
+    @ssbo @binding = 2 @role = "weight" invf : array<float>   //! [hs/2] the rope's inverse frequencies
+    @ssbo @binding = 3 @role = "write" y : array<float>
+    @kargs pa : GkDflashQknArgs
+    @workgroup sh : float[256]   //! == GK_DFLASH_HS, the array's literal
+
+    def dflash_qkn_body {
+        let wg = gl_WorkGroupID.x
+        let h = wg % max(1u, pa.nheads)
+        let t = wg / max(1u, pa.nheads)
+        let i = gl_LocalInvocationID.x
+        let hs = pa.hs
+        var v = 0.0
+        if (i < hs) {
+            v = x[pa.xoff + t * pa.xs + h * hs + i]
+        }
+        var inv = 0.0
+        wg_rms_inv_into(v * v, hs, pa.eps, 0u, inv)
+        if (i < hs) {
+            sh[i] = v * inv * w[pa.woff + i]
+        }
+        barrier()
+        let half = hs / 2u
+        if (i < half) {
+            let a = sh[i]
+            let b = sh[i + half]
+            let ang = float(pa.pos0 + t) * invf[i]
+            let c = cos(ang)
+            let s = sin(ang)
+            let d = pa.yoff + t * pa.ys + h * hs
+            y[d + i] = a * c - b * s
+            y[d + half + i] = a * s + b * c
+        }
+    }
+}
+
+let GK_DFLASH_ATTN_KEYS = 2304u   //! the scores a workgroup stages (`sc`'s literal): a window of 2048 and the block's rows
+
+//! the block attention's arguments: the ring's positions `lo .. lo + nctx - 1` then the block's `rows` at `pos0 ..`
+struct GkDflashAttnArgs {
+    rows : uint
+    pos0 : uint
+    lo : uint
+    nctx : uint
+    w : uint       //! the window: a key |q - k| >= w is masked
+    hs : uint
+    nheads : uint
+    grp : uint     //! q heads a kv head
+    scale : float
+    rbase : uint   //! the block's first row of the q, K, V and output panels (several blocks a panel)
+    koff : uint    //! the layer's ring K in `rk`, [w][nheads / grp][hs]
+    voff : uint    //! ... and its ring V in `rv`
+}
+
+//! the block's attention, a workgroup of 256 a (head, row): the scores over the ring's positions in view then the block's own
+//! rows (both ways, as the block is bidirectional), the softmax, the weighted V sum - a lane a key stripe, then a channel
+[ |> template_struct_instance]
+class template GkDflashAttn : GkWgReduce {
+    @ssbo @binding = 0 @role = "read" q : array<float>    //! [rows][nheads][hs]
+    @ssbo @binding = 1 @role = "read" kb : array<float>   //! the block's K, [rows][nheads / grp][hs]
+    @ssbo @binding = 2 @role = "read" vb : array<float>
+    @ssbo @binding = 3 @role = "read" rk : array<float>   //! the rings' K, a layer's at `koff`
+    @ssbo @binding = 4 @role = "read" rv : array<float>
+    @ssbo @binding = 5 @role = "write" o : array<float>   //! [rows][nheads][hs]
+    @kargs pa : GkDflashAttnArgs
+    @workgroup qs : float[256]    //! == GK_DFLASH_HS, the array's literal
+    @workgroup sc : float[2304]   //! == GK_DFLASH_ATTN_KEYS, the array's literal
+
+    def dflash_attn_body {
+        let wg = gl_WorkGroupID.x
+        let h = wg % max(1u, pa.nheads)
+        let t = wg / max(1u, pa.nheads)
+        let i = gl_LocalInvocationID.x
+        let hs = pa.hs
+        let qd = pa.nheads * hs
+        let kvd = (pa.nheads / max(1u, pa.grp)) * hs
+        let kh = (h / max(1u, pa.grp)) * hs
+        let qpos = int(pa.pos0 + t)
+        if (i < hs) {
+            qs[i] = q[(pa.rbase + t) * qd + h * hs + i]
+        }
+        barrier()
+        let nkeys = pa.nctx + pa.rows
+        var mx = -3.0e38
+        var j = i
+        while (j < nkeys) {
+            var s = -3.0e38
+            var dot = 0.0
+            if (j < pa.nctx) {
+                let kpos = int(pa.lo + j)
+                if (qpos - kpos < int(pa.w) && kpos - qpos < int(pa.w)) {
+                    let kb0 = pa.koff + (uint(kpos) % max(1u, pa.w)) * kvd + kh
+                    var e = 0u
+                    while (e < hs) {
+                        dot += qs[e] * rk[kb0 + e]
+                        e++
+                    }
+                    s = dot * pa.scale
+                }
+            } else {
+                let kpos = int(pa.pos0 + (j - pa.nctx))
+                if (qpos - kpos < int(pa.w) && kpos - qpos < int(pa.w)) {
+                    let kb0 = (pa.rbase + j - pa.nctx) * kvd + kh
+                    var e = 0u
+                    while (e < hs) {
+                        dot += qs[e] * kb[kb0 + e]
+                        e++
+                    }
+                    s = dot * pa.scale
+                }
+            }
+            sc[j] = s
+            mx = max(mx, s)
+            j += 256u
+        }
+        var mall = 0.0
+        wg_max_into(mx, 0u, mall)
+        var sum = 0.0
+        j = i
+        while (j < nkeys) {
+            let p = sc[j] <= -1.0e38 ? 0.0 : exp(sc[j] - mall)
+            sc[j] = p
+            sum += p
+            j += 256u
+        }
+        var tot = 0.0
+        wg_sum_into(sum, 1u, tot)   // its barrier also lands every lane's weights before the value loop reads them across lanes
+        if (i < hs) {
+            var acc = 0.0
+            j = 0u
+            while (j < pa.nctx) {
+                let p = sc[j]
+                if (p != 0.0) {
+                    acc += p * rv[pa.voff + ((pa.lo + j) % max(1u, pa.w)) * kvd + kh + i]
+                }
+                j++
+            }
+            while (j < nkeys) {
+                let p = sc[j]
+                if (p != 0.0) {
+                    acc += p * vb[(pa.rbase + j - pa.nctx) * kvd + kh + i]
+                }
+                j++
+            }
+            o[(pa.rbase + t) * qd + h * hs + i] = acc / tot
+        }
+    }
+}
+
+let public GK_DFLASH_SEL_K = 32        //! the candidates a position the device selector keeps at most
+let public GK_DFLASH_SEL_SPAN = 4096   //! the logits a slice workgroup of the top-k reads
+
+//! the top-k's arguments: rows `vocab` entries wide, `k` candidates a list
+struct GkDflashTopkArgs {
+    vocab : uint
+    k : uint
+}
+
+//! the slices a row of `vocab` logits splits into
+def public gk_dflash_topk_slices(vocab : int64) : int64 => (vocab + int64(GK_DFLASH_SEL_SPAN) - 1l) / int64(GK_DFLASH_SEL_SPAN)
+
+//! the two stages' arguments over rows of `vocab` logits at `k` a list: the slices', then the merge's over the slices' lists
+def public gk_dflash_topk_args(vocab, k : int64) : tuple<slices : GkDflashTopkArgs; merge : GkDflashTopkArgs>
+    => (slices = GkDflashTopkArgs(vocab = uint(vocab), k = uint(k)), merge = GkDflashTopkArgs(vocab = uint(gk_dflash_topk_slices(vocab) * k), k = uint(k)))
+
+//! The `k` best entries of a run under (value desc, id asc), best first, the host's `dflash_top_k_row` id for id: NaN never
+//! enters, an unfilled slot holds the all-ones id under -3.4e38. The slice stage reads a row's logits, a workgroup a
+//! (row, slice); the merge stage the slices' lists (the id beside the value), a workgroup a row
+[ |> template_struct_instance]
+class template GkDflashTopk : GkWgArgmax {
+    @ssbo @binding = 0 @role = "read" lg : array<float>     //! the values
+    @ssbo @binding = 1 @role = "read" sid : array<uint>     //! the merge's ids beside them
+    @ssbo @binding = 2 @role = "write" oid : array<uint>    //! the lists' ids
+    @ssbo @binding = 3 @role = "write" oval : array<float>  //! ... and values
+    @kargs pa : GkDflashTopkArgs
+
+    //! the best `k` of entries `lo .. hi` past `base` into the list at `obase`; `ids` reads each entry's id from `sid`
+    def top_k_list(base, lo, hi, obase : uint; ids : bool) {
+        let lid = gl_LocalInvocationID.x
+        let last = pa.k - 1u
+        var lv : float[32]
+        var li : uint[32]
+        var q = 0u
+        while (q < pa.k) {
+            lv[q] = -3.4e38
+            li[q] = 0xFFFFFFFFu
+            q++
+        }
+        var j = lo + lid
+        while (j < hi) {
+            let v = lg[base + j]
+            let id = ids ? sid[base + j] : j
+            if (v > lv[last] || (v == lv[last] && id < li[last])) {
+                var p = last
+                while (p > 0u && (v > lv[p - 1u] || (v == lv[p - 1u] && id < li[p - 1u]))) {
+                    lv[p] = lv[p - 1u]
+                    li[p] = li[p - 1u]
+                    p--
+                }
+                lv[p] = v
+                li[p] = id
+            }
+            j += 256u
+        }
+        var h = 0u
+        var r = 0u
+        while (r < pa.k) {
+            var bv = -3.4e38
+            var bi = 0xFFFFFFFFu
+            if (h < pa.k) {
+                bv = lv[h]
+                bi = li[h]
+            }
+            var wv = 0.0
+            var wi = 0u
+            wg_argmax_into(bv, bi, wv, wi)
+            if (lid == 0u) {
+                oid[obase + r] = wi
+                oval[obase + r] = wv
+            }
+            barrier()
+            if (h < pa.k && li[h] == wi) {
+                h++
+            }
+            r++
+        }
+    }
+
+    //! the first stage, a workgroup a slice of 4096 (GK_DFLASH_SEL_SPAN) of a row's logits: the slice's list, at slot
+    //! `gk_dflash_topk_slices(vocab)` * row + slice
+    def topk_slices_body {
+        let nsl = max(1u, (pa.vocab + 4095u) / 4096u)
+        let row = gl_WorkGroupID.x / nsl
+        let sl = gl_WorkGroupID.x % nsl
+        let lo = sl * 4096u
+        top_k_list(row * pa.vocab, lo, min(lo + 4096u, pa.vocab), (row * nsl + sl) * pa.k, false)
+    }
+
+    //! the second stage, a workgroup a row: its slices' lists (`vocab` = slices x k entries) merged into the row's list
+    def topk_merge_body {
+        let row = gl_WorkGroupID.x
+        top_k_list(row * pa.vocab, 0u, pa.vocab, row * pa.k, true)
+    }
+}
+
+//! the walk's arguments: a codebook's format is 0 (Q8_0 rows), 4, 5, 6 or 9 (Q4_K, Q5_K, Q6_K, NVFP4 superblocks); its rows start `pq0` /
+//! `nq0` bytes into its quant binding (an even byte: a Q8_0 block's scale reads as a half), a superblock codebook's scale rows at
+//! its scale binding's start in the CPU form
+struct GkDflashWalkArgs {
+    rank : uint
+    k : uint
+    nd : uint
+    pfmt : uint
+    nfmt : uint
+    pq0 : uint
+    nq0 : uint
+    temp : float   //! the sampled stamp's drafter temperature (above 0)
+    tbase : uint   //! the anchor's index in `tok` (a stream's block in a joint pass)
+    rbase : uint   //! the walk's first row of `hsel` / `cid` / `cval`: stream b's b nd, its anchor at b (nd + 1) of `ids`, the picks past it
+}
+
+//! The selector's walk in one workgroup of 256, the kernel every home stamps: A[pred] staged, every (A[pred][i] * h_r[i]) * B[cand][i] staged, a lane a candidate
+//! summing logit + its products in ascending i over codebooks in the host's dequant arithmetic; the pick the first best slot
+//! (`dflash_walk`'s), or under `SOFT` one LCG draw from the candidates' softmax at `temp`, q landed (`dflash_soft_pick`'s)
+[ |> template_struct_instance]
+class template GkDflashWalk {
+    @template_constant SOFT : bool = false
+    @ssbo @binding = 0 @role = "read" tok : array<uint>       //! the anchor at 0
+    @ssbo @binding = 1 @role = "read" hsel : array<float>     //! [nd][rank]
+    @ssbo @binding = 2 @role = "read" cid : array<uint>       //! [nd][k]
+    @ssbo @binding = 3 @role = "read" cval : array<float>
+    @ssbo @binding = 4 @role = "weight" pq : array<int8>      //! the predecessor codebook's quant bytes
+    @ssbo @binding = 5 @role = "weight" pqh : array<float16>  //! ... the same bytes as halves (a Q8_0 block's scale)
+    @ssbo @binding = 6 @role = "weight" ps : array<int8>      //! ... its scale rows (a superblock codebook)
+    @ssbo @binding = 7 @role = "weight" psh : array<float16>
+    @ssbo @binding = 8 @role = "weight" nq : array<int8>      //! the successor codebook's
+    @ssbo @binding = 9 @role = "weight" nqh : array<float16>
+    @ssbo @binding = 10 @role = "weight" ns : array<int8>
+    @ssbo @binding = 11 @role = "weight" nsh : array<float16>
+    @ssbo @binding = 12 @role = "write" ids : array<uint>     //! [nd + 1] the anchor, then the picks
+    @kargs ka : GkDflashWalkArgs
+    @ssbo @binding = 13 @role = "readwrite" @template_gate = SOFT qo : array<float>   //! [nd][k] each position's q, an empty slot at 0
+    @ssbo @binding = 14 @role = "readwrite" @template_gate = SOFT rng : array<int>   //! the stream's LCG state; a draw steps the first
+    @workgroup arow : float[1024]
+    @workgroup prod : float[4096]
+    @workgroup scs : float[32]
+    @workgroup pick : uint[1]
+
+    //! position `r`'s q over its scored slots - their softmax at `temp` off the first best `best`, or a point mass on it where
+    //! every slot is empty - and its draw: one LCG step, the cdf walked to the slot it crosses (the last live slot past the end)
+    def soft_pick(r, best : uint; var pk : uint&) {
+        pk = best
+        static_if (SOFT) {
+            let qb = r * ka.k
+            var j = 0u
+            while (j < ka.k) {
+                qo[qb + j] = 0.0
+                j++
+            }
+            if (cid[qb + best] == 0xFFFFFFFFu) {
+                qo[qb + best] = 1.0
+            } else {
+                let inv = 1.0 / ka.temp
+                var sum = 0.0
+                j = 0u
+                while (j < ka.k) {
+                    if (cid[qb + j] != 0xFFFFFFFFu) {
+                        let e = exp(max((scs[j] - scs[best]) * inv, -80.0))
+                        qo[qb + j] = e
+                        sum += e
+                    }
+                    j++
+                }
+                let inv_sum = 1.0 / sum
+                j = 0u
+                while (j < ka.k) {
+                    qo[qb + j] = qo[qb + j] * inv_sum
+                    j++
+                }
+                var x = rng[0]
+                x = int(uint(x) * 214013u + 2531011u)
+                rng[0] = x
+                let u = float((x >> 16) & 32767) * (1.0 / 32767.0)
+                var cdf = 0.0
+                var hit = false
+                j = 0u
+                while (j < ka.k && !hit) {
+                    let qj = qo[qb + j]
+                    if (qj > 0.0) {
+                        pk = j
+                        cdf += qj
+                        hit = u < cdf
+                    }
+                    j++
+                }
+            }
+        }
+    }
+
+    //! the predecessor codebook's planes at an address: a quant byte, a scale-row byte (unsigned), the quant bytes' half, a scale-row half
+    def prev_q(i : uint) : uint => uint(int(pq[i])) & 255u
+
+    def prev_s(i : uint) : uint => uint(int(ps[i])) & 255u
+
+    def prev_qh(i : uint) : float => float(pqh[i])
+
+    def prev_sh(i : uint) : float => float(psh[i])
+
+    //! ... and the successor codebook's
+    def next_q(i : uint) : uint => uint(int(nq[i])) & 255u
+
+    def next_s(i : uint) : uint => uint(int(ns[i])) & 255u
+
+    def next_qh(i : uint) : float => float(nqh[i])
+
+    def next_sh(i : uint) : float => float(nsh[i])
+
+    def walk_body {
+        let lid = gl_LocalInvocationID.x
+        let nt = 256u   // the workgroup's lanes on every home
+        if (lid == 0u) {
+            pick[0] = tok[ka.tbase]
+            ids[ka.rbase + ka.rbase / max(1u, ka.nd)] = tok[ka.tbase]
+        }
+        barrier()
+        var r = 0u
+        while (r < ka.nd) {
+            let pred = pick[0]
+            var i = lid
+            while (i < ka.rank) {
+                let pa = gk_dflash_cb_at(ka.pfmt, ka.rank, ka.pq0, pred, i)
+                let ph = gk_dflash_cb_at_h(ka.pfmt, ka.rank, ka.pq0, pred, i)
+                arow[i] = gk_dflash_cb_val(ka.pfmt, ka.rank, pred, i, uint4(prev_q(pa.x), prev_q(pa.y), prev_s(pa.z), prev_s(pa.w)), prev_s(ph.x),
+                    float4(0.0, prev_qh(ph.y), prev_sh(ph.z), prev_sh(ph.w)))
+                i += nt
+            }
+            barrier()
+            var x = lid
+            while (x < ka.k * ka.rank) {
+                let j = x / max(1u, ka.rank)
+                let e = x % max(1u, ka.rank)
+                let cand = cid[(ka.rbase + r) * ka.k + j]
+                if (cand != 0xFFFFFFFFu) {
+                    let na = gk_dflash_cb_at(ka.nfmt, ka.rank, ka.nq0, cand, e)
+                    let nh = gk_dflash_cb_at_h(ka.nfmt, ka.rank, ka.nq0, cand, e)
+                    let b = gk_dflash_cb_val(ka.nfmt, ka.rank, cand, e, uint4(next_q(na.x), next_q(na.y), next_s(na.z), next_s(na.w)), next_s(nh.x),
+                        float4(0.0, next_qh(nh.y), next_sh(nh.z), next_sh(nh.w)))
+                    let ah = arow[e] * hsel[(ka.rbase + r) * ka.rank + e]
+                    prod[x] = ah * b
+                }
+                x += nt
+            }
+            barrier()
+            if (lid < ka.k) {
+                var s = -3.4e38
+                if (cid[(ka.rbase + r) * ka.k + lid] != 0xFFFFFFFFu) {
+                    s = cval[(ka.rbase + r) * ka.k + lid]
+                    var e = 0u
+                    while (e < ka.rank) {
+                        s = s + prod[lid * ka.rank + e]
+                        e++
+                    }
+                }
+                scs[lid] = s
+            }
+            barrier()
+            if (lid == 0u) {
+                var best = 0u
+                var bests = -3.0e38
+                var j = 0u
+                while (j < ka.k) {
+                    if (cid[(ka.rbase + r) * ka.k + j] != 0xFFFFFFFFu && scs[j] > bests) {
+                        bests = scs[j]
+                        best = j
+                    }
+                    j++
+                }
+                var pk = best
+                static_if (SOFT) {
+                    soft_pick(r, best, pk)
+                }
+                let w = cid[(ka.rbase + r) * ka.k + pk]
+                pick[0] = w
+                ids[ka.rbase + ka.rbase / max(1u, ka.nd) + r + 1u] = w
+            }
+            barrier()
+            r++
         }
     }
 }

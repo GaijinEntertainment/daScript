@@ -147,7 +147,7 @@ def private vk_ladder(prefix, tail : string; stamped : bool; skip : string = "")
 def private discrete_kernels_text(red : bool) : string {
     var parts <- [
         ("options gen2\n\nrequire spirv/spirv_markers\n\n" +
-            "let SCHED_S_ROWS = 32u\nlet SCHED_M_ROWS = 128u\n\n" +
+            "let SCHED_S_ROWS = 32u\nlet SCHED_M_ROWS = 128u\nlet KQ_N_RR = 2\n\n" +
             "class template ArBase : ResidualT \{\n    @workgroup row : float[8192]\n\}\n\n"),
         "class template KqCm2BatchT : MoeCmBase \{\n    @template_constant BN : uint = 256u\n    @template_constant BK : uint = 64u\n    @template_constant UNR : uint = 4u\n",
         red ? "    def khr_stage16(blk, e0, sbase : uint) : void \{\n    \}\n\}\n\n" : "    def abstract khr_stage16(blk, e0, sbase : uint) : void\n\}\n\n",
@@ -162,7 +162,7 @@ def private discrete_kernels_text(red : bool) : string {
 //! shared-template homes check sees both discrete homes stamp each
 let CUDA_CLASSES_TEXT = ("options gen2\n\nrequire spirv/spirv_markers\n\n" +
     "class CuArRows : ArBase \{\n\}\n\nclass CuK4Khr : K4Cm2T \{\n\}\n\n" +
-    "class CuQ8Khr : Q8Cm2T \{\n\}\n\nclass CuK4Gemv : K4GemvT \{\n\}\n")
+    "class CuQ8Khr : Q8Cm2T \{\n\}\n\nclass CuK4Gemv : K4GemvT \{\n    override RR = 2\n\}\n")
 
 //! the Vulkan home's class surface over `discrete_kernels_text`'s
 //! templates (the schedule widths, the e-column alias roster is the
@@ -176,7 +176,8 @@ let CUDA_CLASSES_TEXT = ("options gen2\n\nrequire spirv/spirv_markers\n\n" +
 //! hand-written, the engine's ladder skipping k5's e tile
 def private vk_classes_text(red : bool) : string {
     var parts <- [("options gen2\n\n" +
-        "class VkArRows : ArBase \{\n\}\n\nclass VkK4Gemv : K4GemvT \{\n\}\n\n")]
+        "class VkArRows : ArBase \{\n\}\n\n" +
+        "class VkK4Gemv : K4GemvT \{\n    override RR = 2\n\}\n\n")]
     parts |> reserve(24)
     for (fmt in fixed_array((stem = "kq_batch_k4", pfx = "K4"), (stem = "q8_batch", pfx = "Q8"))) {
         parts |> push(vk_stamp("{fmt.stem}_khr_cls", "{fmt.pfx}KhrBatch", "{fmt.pfx}Cm2T", 128, 64))

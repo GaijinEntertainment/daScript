@@ -60,6 +60,15 @@ def test_gpu_resident_cuda_llama_greedy_chain(t : T?) {
     }
 }
 
+[test(description = "On the CUDA driver with Llama-3.2-1B Q8_0, `set_cuda_kernel_skip` drops the captured graphs: under a skip naming the decode attention the next step launches none of it and the q8 GEMV anew, and cleared the attention launches again, the unskipped replay counting both alike")]
+def test_gpu_resident_cuda_llama_kernel_skip(t : T?) {
+    t |> run("{FILE_1B}: the kernel skip re-captures the step without the skipped kernel, and clears") @(t : T?) {
+        let path = cuda_model_path(t, FILE_1B)
+        if (empty(path)) return
+        kernel_skip_cell(t, path, "da_attn_f16_cls", "q8_gemv_cls")
+    }
+}
+
 //! a model the whole-model driver does not take under the CUDA ask runs on the CPU rails: this home has no per-op tier, so the
 //! route lever off leaves every plane on the host and the decline line names the CPU rails - the load, the window and eight steps
 //! run with no per-op stub reached
@@ -175,6 +184,47 @@ def private cuda_peel(t : T?; file : string) {
     }
     delete tr
     restore_resident_levers(levers)
+}
+
+//! the last row's logits of an eight-row tail (the N-row command, the rows leaf's feed) after a 40-row opening on a fresh load of
+//! `path`, the driver dropped with the model after it
+def private tail_after_load(path : string; tail : array<int64>) : array<float> {
+    var tr <- load_resident(path, 1l)
+    var s <- create_session(tr)
+    var prompt <- resident_prompt(40l)
+    eval_(tr, s, prompt)
+    eval_(tr, s, tail)
+    var row <- logits_of(s, tr.config.vocab_size)
+    delete prompt
+    delete s
+    delete tr
+    return <- row
+}
+
+[test(description = "On the CUDA driver a Llama-3.2-1B Q8_0 load after a dropped one reads an eight-row tail's logits bit for bit as the first load did, the rows leaf's feed record cleared by the drop; a tail one token off is the control")]
+def test_gpu_resident_cuda_llama_drop_reload(t : T?) {
+    t |> run("{FILE_1B}: load, tail, drop; load again, the same tail") @(t : T?) {
+        let path = cuda_model_path(t, FILE_1B)
+        if (empty(path)) return
+        let levers = resident_levers()
+        cuda_feed_window()
+        with_dasllama_jobque_() {
+            var tail <- resident_feed(8l)
+            let c0 = cuda_positions_served()
+            var first <- tail_after_load(path, tail)
+            cuda_served_since(t, c0, 1l, "the first load's tail")
+            var again <- tail_after_load(path, tail)
+            t |> equal(logits_maxdiff(again, first), 0.0, "the reload's tail logits are the first load's bit for bit")
+            tail[7]++
+            var off <- tail_after_load(path, tail)
+            t |> success(logits_maxdiff(off, first) > 0.0, "control: a tail one token off reads other logits ({logits_maxdiff(off, first)})")
+            delete off
+            delete again
+            delete first
+            delete tail
+        }
+        restore_resident_levers(levers)
+    }
 }
 
 [test(description = "On the CUDA driver, short tails of 1, 2, 5 and 8 rows after a 40-row opening peel through the N-row command within the 6 percent split bar of the one-row steps on Q8_0, Q4_K_M and Q5_1 Llama-3.2-1B")]

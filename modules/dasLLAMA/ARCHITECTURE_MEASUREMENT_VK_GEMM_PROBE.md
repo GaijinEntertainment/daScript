@@ -89,6 +89,15 @@ sweep: the l stamp over one 256-token column (K 4096) at half-wave steps of the 
 from one wave to four, so the cost of a second wave says how many of the stamp's workgroups an SM
 runs at once; its alternate is the one-wave row (the RTX 5080 runs one: k5 at 84 workgroups
 0.170 ms, 126 0.333, 168 0.379, 252 0.562, 336 0.746 - a partial wave costs a whole one).
+`cm2v:<fmt>` runs the `cm2:` stamps at a verify's and a batched step's row counts (8, 16 and 32 token
+rows) over the 27B's gate (17408 over K 5120) and down (5120 over K 17408) planes; the l and m stamps
+sit out a count under their column, and the s stamp takes the partial column - its 32 rows loaded
+whole, the planes sized for them - as a short window's site does. Its alternate is the token
+command's N-column GEMV over the same plane (the `cols` ruler of `harness/vk_gemv_probe.das` below),
+the form the window tile would replace. `q8i8` times the int8 KHR tile `q8_batch_cmi8_cls` alone over
+a Q8_0 plane at the same two shapes, at 16 and 32 token rows (the rows padded to its 32-token tiles),
+two rounds - what an int8 rows leaf would cost the plane; it needs KHR cooperative matrices at
+subgroup 32, and its alternate is the same `cols` ruler's two N-column passes at sixteen rows.
 `dec` times the decode head's two small kernels in isolation, each as a chain of dispatches
 over its own buffers under one hazard set (the serial form the token command runs them in): the
 beta/alpha GEMV the decode reads an F32 `[beta ; alpha]` plane through - the router GEMV's f32

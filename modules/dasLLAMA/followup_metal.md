@@ -1240,3 +1240,14 @@ defaults to q8 on every GPU home. The q8 lanes of whisper, qwen3a, the chat towe
 have no timing against their f16 lanes. Done = the Metal q8 GEMM path of the tower chain brought level with or ahead of
 the half tensor GEMM on GigaAM's shapes and GigaAM's un-pinned lane moved to q8, with the q8 and f16 lanes of every other
 audio family timed on a Metal box and the rows in `PERF_LEDGER.md`.
+
+## 75. A block drafter whose planes carry a per-tensor scale drafts on the CPU on Metal
+
+A DFlash2 drafter plane may carry a per-tensor factor past its rows (`DflashW.scale`, an NVFP4 tensor's `.scale`). The
+discrete homes' drafter arms serve such a drafter on the device: the repack hands each scaled site's factor to the gather
+(`site_scale`, `dasllama/dasllama_cuda_dflash.das`, `dasllama/dasllama_vulkan_dflash.das`), which writes it into the
+plane's device scale rows. Metal's arm declines it whole (`df_ready`'s `dflash_scaled`,
+`dasllama/dasllama_metal_dflash.das`), so the pass runs on the CPU arm (`ARCHITECTURE_GPU_ASYMMETRIES.md`, the block
+drafter's entry). Done = Metal's drafter sites applying each plane's factor, as the discrete homes' `site_scale` does, a
+cell holding a scaled drafter's device pass to the CPU arm, `dflash_scaled` dropped from `df_ready`, and the asymmetry
+entry's scale clause removed.

@@ -420,7 +420,8 @@ let MODULE_AREAS <- {
     "dasllama_arch_qwen3moe" => "llm", "dasllama_attn_prefill" => "llm", "dasllama_batch" => "llm",
     "dasllama_bpe" => "llm", "dasllama_safetensors" => "llm", "dasllama_gpu_resident" => "llm,audio,vision", "dasllama_gpu_tier" => "llm",
     "dasllama_kv_dtype" => "llm", "dasllama_metal_decode" => "llm", "dasllama_metal_mtp_gemma" => "llm",
-    "dasllama_dflash" => "llm", "dasllama_metal_dflash" => "llm",
+    "dasllama_dflash" => "llm", "dasllama_metal_dflash" => "llm", "dasllama_vulkan_dflash" => "llm", "dasllama_cuda_dflash" => "llm",
+    "dasllama_vulkan_classes_dflash" => "llm", "dasllama_cuda_classes_dflash" => "llm",
     "dasllama_kv_codec" => "llm,audio",   // its f16 dot and axpy serve the parakeet decode
     "dasllama_metal_prefill" => "llm,tts,audio,vision,translate",   // its rope serves the Pocket codec transformer, its attention pair and FastConformer kernels the audio towers, its half convert the vision tower, its q8 GEMM the Bergamot chain
     "dasllama_moe" => "llm", "dasllama_mtp_gemma" => "llm", "dasllama_vulkan_mtp_gemma" => "llm", "dasllama_cuda_mtp_gemma" => "llm",
@@ -436,7 +437,7 @@ let MODULE_AREAS <- {
     "dasllama_unicode" => "llm,tts",   // cpt_count serves the TTS front end and its chunker
     "dasllama_vulkan_decode" => "llm", "dasllama_vulkan_prefill" => "llm", "dasllama_vulkan_seams" => "llm",
     "dasllama_cuda_common" => "llm,audio,vision", "dasllama_cuda_dispatch" => "llm,audio,vision", "dasllama_cuda_classes" => "llm,audio,vision",
-    "dasllama_cuda_decode" => "llm", "dasllama_cuda_stream" => "llm", "dasllama_math_cuda" => "llm"
+    "dasllama_cuda_decode" => "llm", "dasllama_cuda_stream" => "llm", "dasllama_math_cuda" => "llm", "dasllama_cuda_classes_rows" => "llm"
 }
 
 //! the stocked llm files a change to the engine core reaches - a witness a family and home, the codec rig, the regions
@@ -463,6 +464,7 @@ let METAL_WITNESSES = "test_metal_batched_row.das,test_metal_format_census.das,t
 let MODULE_WITNESSES <- {
     "dasllama_cuda_common" => CUDA_WITNESSES, "dasllama_cuda_dispatch" => CUDA_WITNESSES, "dasllama_cuda_classes" => CUDA_WITNESSES,
     "dasllama_cuda_decode" => CUDA_WITNESSES, "dasllama_cuda_stream" => CUDA_WITNESSES, "dasllama_math_cuda" => CUDA_WITNESSES,
+    "dasllama_cuda_classes_rows" => CUDA_WITNESSES,
     "dasllama_arch_llama" => "test_gpu_resident_llama.das,test_gpu_resident_cuda_llama.das,test_gpu_resident_regions_kquant.das,test_gpu_resident_codec_llama.das,test_forward.das,test_prefill.das",
     "dasllama_arch_qwen2" => "test_gpu_resident_qwen2.das,test_gpu_resident_cuda_dense.das,test_gpu_perop_kv_codec.das,test_gpu_resident_regions.das",
     "dasllama_arch_qwen3" => "test_gpu_resident_cuda_dense.das,test_gpu_resident_regions_qwen3.das,test_gpu_perop_kv_codec.das",
@@ -479,7 +481,9 @@ let MODULE_WITNESSES <- {
     "dasllama_moe" => "test_gpu_resident_moe.das,test_gpu_resident_moe_formats.das,test_gpu_resident_cuda_moe.das,test_gpu_resident_gptoss.das,test_gpu_resident_gemma4_moe.das,test_vulkan_dec_tail.das,test_vulkan_moe_cm2.das,test_vulkan_host_twin.das",
     "dasllama_mtp_gemma" => "test_mtp_gemma_drafter.das", "dasllama_vulkan_mtp_gemma" => "test_mtp_gemma_drafter.das",
     "dasllama_cuda_mtp_gemma" => "test_mtp_gemma_drafter.das",
-    "dasllama_dflash" => "test_dflash_drafter.das,test_mtp_accept_walks.das", "dasllama_metal_dflash" => "test_dflash_drafter.das",
+    "dasllama_dflash" => "test_dflash_drafter.das,test_mtp_accept_walks.das,test_cuda_tower_asr.das,test_vulkan_tower_kernels.das", "dasllama_metal_dflash" => "test_dflash_drafter.das",
+    "dasllama_vulkan_dflash" => "test_dflash_drafter.das", "dasllama_cuda_dflash" => "test_dflash_drafter.das",
+    "dasllama_vulkan_classes_dflash" => "test_vulkan_tower_kernels.das,test_dflash_drafter.das", "dasllama_cuda_classes_dflash" => "test_cuda_tower_asr.das,test_dflash_drafter.das",
     "dasllama_metal_decode" => METAL_WITNESSES, "dasllama_metal_prefill" => METAL_WITNESSES, "dasllama_metal_mtp_gemma" => METAL_WITNESSES,
     "dasllama_scheduler" => "test_scheduler.das",
     "dasllama_sampling" => "test_sampling.das,test_mtp_sampled_walk.das,test_mtp_accept_walks.das,test_scheduler.das,test_dflash_drafter.das",

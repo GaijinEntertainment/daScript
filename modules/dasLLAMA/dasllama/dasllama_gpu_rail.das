@@ -12,6 +12,8 @@ module dasllama_gpu_rail shared public
 
 require dasllama/dasllama_lint public
 require math
+require strings
+require daslib/strings_boost   // split: the pricing rail's fragments
 require daslib/enum_trait
 require dasllama/dasllama_kqformat
 
@@ -408,4 +410,15 @@ def rail_cm2_tile_said : bool => g_rail_cm2_tile_said
 def rail_cm2_tile_say(forced : int64) {
     g_rail_cm2_tile_said = true
     to_log(LOG_INFO, "dasLLAMA tower rail: DASLLAMA_CM2_TILE={forced} reaches the tower GEMMs on the discrete homes - the q8 tiles take that column; the f16 tile takes s at 32 and m at 128, and keeps its own pick at 256 (unset the knob for every pick's own column)\n")
+}
+
+//! the pricing rails' list: the comma-separated kernel-name fragments of `frags`
+def kernel_skip_parse(frags : string) : array<string> => <- [for (f in split(frags, ",")); f; where !empty(f)]
+
+//! a kernel `name` holds one of the pricing rail's `frags`
+def kernel_skip_hit(frags : array<string>; name : string) : bool {
+    for (f in frags) {
+        return true if (find(name, f) >= 0)
+    }
+    return false
 }

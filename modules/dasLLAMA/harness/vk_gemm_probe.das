@@ -4,6 +4,8 @@ options _dasllama_internal = true
 
 // ATTRIBUTION SWEEP - isolated per-shape rates of the prefill GEMM tiles (cm2:, cm2d:, k4|k6, the shape pins).
 // ATTRIBUTION SWEEP cm2w: - the l stamp's rate by wave count, the workgroups the device fills.
+// ATTRIBUTION SWEEP cm2v:<fmt> - a verify's and a batched step's row counts (8, 16, 32) over the 27B's gate and down planes: the
+// window tiles' time where the token command's N-column GEMV is the other form.
 // ATTRIBUTION SWEEP ts:|cold: - the stamp overheads: a timestamp or a barrier between two m stamps, a cold cache.
 // ATTRIBUTION SWEEP dec - the decode head's small kernels (the f16 GEMV, the deltanet step) in isolation.
 // ATTRIBUTION SWEEP moe:|moesk:|moefn: - the expert schedule's s and e stamps by schedule form.
@@ -12,6 +14,7 @@ options _dasllama_internal = true
 // ATTRIBUTION SWEEP plef32 - the per-layer-embedding gate and projection over f32 rows: the scalar f32 tile against the staged KHR tile.
 // ATTRIBUTION SWEEP narrow:<fmt> - the tile pick's narrow-GEMM s rule: a format's l, m and s stamps at the widths the rule decides.
 // ATTRIBUTION SWEEP kqst:<fmt> - the K-quant window's two forms: the cm2 l/m/s stamps on the device's decode arm against the staged KHR tile.
+// ATTRIBUTION SWEEP q8i8 - the int8 KHR tile over a Q8_0 plane at 16 and 32 token rows (the 27B's gate and down): what an int8 rows leaf would cost.
 // ATTRIBUTION SWEEP khrsk - the KHR arm's q8 race (DASLLAMA_COOPMAT=mm): the q8 mul_mm tile against the KHR kq tile whole and split, one process.
 // ATTRIBUTION SWEEP small|barform - the token command's one-workgroup row kernels alone, chained, and by barrier form.
 // ATTRIBUTION SWEEP wh - the whisper large-v3-turbo encoder's role shapes at the chunk's 1500 rows and at 1536 (whole l columns):
@@ -581,14 +584,14 @@ def private cm2_shape_dev(fmt : int; d, n, cnt : int; h : Cm2ShapeHost; slab_blo
 [arch(at="../ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md#vk-gemm-probe")]
 //! `serial`: one hazard rail and one output plane across the dispatches, so a barrier separates them and the row reads a single dispatch's latency - the chain's cost - instead of the throughput of sixteen overlapping ones
 def private run_cm2_fmt_shape(fmt : int; name : string; d, n, cnt : int; l_stamp_only : bool = false; serial : bool = false) {
-    let dv = cm2_shape_upload(fmt, d, n, cnt)
+    let dv = cm2_shape_upload(fmt, d, n, cnt, 0, max(cnt, 32))   // a partial s column loads its whole 32 rows: the planes hold them
     let flop = 2.0lf * double(cnt) * double(d) * double(n)
     //! the l/m/s stamps, the s stamp's other-depth twin where the format has one, and the kq batch tile
     let vnames = fixed_array("cm2l", "cm2m", "cm2s", "s{probe_stwin_depth(fmt)} ", "kq  ")
     for (v in range(5)) {
         if ((l_stamp_only && v != 0) || (v == 3 && !probe_stwin_has(fmt))) continue
         let ttile = v == 0 ? 256 : (v == 1 ? 128 : 32)
-        if (cnt < ttile) continue   //! a column wider than the region: the pick never takes it, and the m stamp's unclamped load would read past the plane
+        if (cnt < ttile && v != 2) continue   //! a column wider than the region: the pick never takes it, and the m stamp's unclamped load would read past the plane; the s stamp takes a partial column (a short window's)
         let wtile = v == 4 ? 32 : 128
         let wgs = ((cnt + ttile - 1) / ttile) * ((d + wtile - 1) / wtile)
         let sc = one_region_sched(cnt, wgs)
@@ -2652,13 +2655,16 @@ def private timed_chain(dispatches : int; rec : block<(raw : VkCommandBuffer; va
 def private timed_chain(rec : block<(raw : VkCommandBuffer; var hz : VkHaz) : void>) : double => time_chain(SUBMITS, DISPATCHES, 2, rec)
 
 //! `with_sdot4_mm` off skips the sdot4 mm tile (the row a shape's cm2 question does not need)
-def private run_shape(name : string; d, n, cnt : int; with_sdot4_mm : bool = true) {   // nolint:STYLE038 — one linear measurement sweep
+//! `i8` times the int8 KHR tile alone (`q8_batch_cmi8_cls`: a subgroup a 16 x 16 tile over unstaged s8 loads, 32 k a product, the
+//! rows padded to its 32-token tiles) - what an int8 rows leaf would cost the plane
+def private run_shape(name : string; d, n, cnt : int; with_sdot4_mm : bool = true; i8 : bool = false) {   // nolint:STYLE038 — one linear measurement sweep
     let nbb = n / 32
-    let rows = cnt
+    let rows = i8 ? ((cnt + 31) / 32) * 32 : cnt
     let wtiles = (d + MM_TILE - 1) / MM_TILE
-    let wgs = ((cnt + MM_TILE - 1) / MM_TILE) * wtiles
+    let wgs = i8 ? (rows / 32) * ((d + 31) / 32) : ((cnt + MM_TILE - 1) / MM_TILE) * wtiles
     let totblk = d * nbb
     var b : ShapeBufs
+    b.wq |> reserve(totblk * 8)   // the 27B's planes pass the unreserved growth cap
     fill_fixture(b, totblk, rows, nbb)
     let wq_bytes = int64(totblk) * 32l
     let ws_bytes = int64(totblk) * 2l
@@ -2684,14 +2690,21 @@ def private run_shape(name : string; d, n, cnt : int; with_sdot4_mm : bool = tru
         upload_region_at(xqd, 0l, addr<uint8 const?>(b.xq[0]), xq_bytes)
         upload_region_at(xsd, 0l, addr<uint8 const?>(b.xs[0]), xs_bytes)
         upload_region_at(xfd, 0l, addr<uint8 const?>(b.xf[0]), xf_bytes)
-        let sched = one_region_sched(cnt, wgs)
+        let sched = one_region_sched(rows, wgs)
         let scd = sched.buf
         let sc_bytes = sched.bytes
         let bufs = fixed_array(wqd, wsd, scd, xqd, xsd, yd)
         let sizes = fixed_array(wq_bytes, ws_bytes, sc_bytes, xq_bytes, xs_bytes, y_bytes)
         let gbits = fixed_array(1u, 2u, 0u, 4u, 8u, 16u)
         var pc = BatchArgs(n = uint(n), d = uint(d), map_off = 4u)
-        if (with_sdot4_mm) {
+        if (i8) {
+            var sci = set_q8_batch_cmi8_cls(bufs, sizes, gbits)
+            per_us = timed_chain() $(raw; var hz) {
+                for (_k in range(DISPATCHES)) {
+                    enc_q8_batch_cmi8_cls(raw, hz, sci, pc, int64(wgs))
+                }
+            }
+        } elif (with_sdot4_mm) {
             var sc = set_q8_batch_mm_a_cls(bufs, sizes, gbits)
             per_us = timed_chain() $(raw; var hz) {
                 for (_k in range(DISPATCHES)) {
@@ -2699,7 +2712,7 @@ def private run_shape(name : string; d, n, cnt : int; with_sdot4_mm : bool = tru
                 }
             }
         }
-        if (g_gpu.coopmat_mode == COOPMAT_CM2) {
+        if (!i8 && g_gpu.coopmat_mode == COOPMAT_CM2) {
             // the cm2 tiles at the serving no-split config (f16-fed, decode-in-load); off cm2 mode the device enabled no cm2 extension
             let cbufs = fixed_array(wqd, wsd, scd, xfd, yd)
             let csizes = fixed_array(wq_bytes, ws_bytes, sc_bytes, xf_dev_bytes, y_bytes)
@@ -2725,7 +2738,9 @@ def private run_shape(name : string; d, n, cnt : int; with_sdot4_mm : bool = tru
         }
     }
     let flop = 2.0lf * double(rows) * double(d) * double(n)
-    if (with_sdot4_mm) {
+    if (i8) {
+        print("{name}: d={d} K={n} cnt={cnt} (tiles of {rows}) wgs={wgs}  {per_us} us/dispatch  the int8 KHR tile  timing-only\n")
+    } elif (with_sdot4_mm) {
         let tflops = flop / (per_us * 1000000.0lf)
         let ms = per_us / 1000.0lf
         print("{name}: d={d} K={n} cnt={cnt} wgs={wgs}  {ms} ms/dispatch  {tflops} TFLOP/s  timing-only\n")
@@ -3575,7 +3590,7 @@ def private twin_rounds(body : block<(round, arm, arms : int; tag : string) : vo
 
 //! the per-format arm `a` names - its `<arm>:` prefix, the format name past it - or "" where it names none
 def private fmt_arm_of(a : string) : string {
-    for (pre in fixed_array("cm2:", "cm2d:", "cm2w:", "moe:", "cm2g:", "moesk:", "moefn:", "ts:", "cold:", "kqst:", "narrow:")) {
+    for (pre in fixed_array("cm2:", "cm2d:", "cm2w:", "cm2v:", "moe:", "cm2g:", "moesk:", "moefn:", "ts:", "cold:", "kqst:", "narrow:")) {
         return pre if (a |> starts_with(pre))
     }
     return ""
@@ -3605,7 +3620,7 @@ def private run_probe {   // nolint:STYLE037,STYLE038 — the flat per-arg shape
     var only = ""
     var cm2_fmt = -1
     for (a in get_command_line_arguments()) {
-        if (a == "plef32" || a == "gate" || a == "down" || a == "q" || a == "kv" || a == "kvm" || a == "qkv" || a == "cm2x" || a == "ref" || a == "tl" || a == "g3" || a == "gemma" || a == "wh" || a == "splitk" || a == "khrsk" || a == "small" || a == "lastwg" || a == "barform" || a == "k4" || a == "k6" || a == "k6x" || a == "khrx" || a == "khrprof" || a == "mmqx" || a == "dec") {
+        if (a == "plef32" || a == "gate" || a == "down" || a == "q" || a == "kv" || a == "kvm" || a == "qkv" || a == "cm2x" || a == "ref" || a == "tl" || a == "g3" || a == "gemma" || a == "wh" || a == "splitk" || a == "khrsk" || a == "q8i8" || a == "small" || a == "lastwg" || a == "barform" || a == "k4" || a == "k6" || a == "k6x" || a == "khrx" || a == "khrprof" || a == "mmqx" || a == "dec") {
             only = a
         } elif (fmt_arm_of(a) != "") {
             only = fmt_arm_of(a)
@@ -3632,7 +3647,7 @@ def private run_probe {   // nolint:STYLE037,STYLE038 — the flat per-arg shape
         run_dec_small_kernels()
         return
     }
-    if (only == "cm2:" || only == "cm2d:" || only == "cm2w:" || only == "cm2g:") {
+    if (only == "cm2:" || only == "cm2d:" || only == "cm2w:" || only == "cm2v:" || only == "cm2g:") {
         if (!g_gpu.has_coopmat2) {
             print("no coopmat2 on this device\n")
             return
@@ -3690,6 +3705,13 @@ def private run_probe {   // nolint:STYLE037,STYLE038 — the flat per-arg shape
                 if (round == 1 && arm == arms - 1) {
                     run_shape("q8 sh_gate", 2112, 2816, 512)
                     run_shape("q8 q      ", 4096, 2816, 512)
+                }
+                return
+            }
+            if (only == "cm2v:") {
+                for (rows in [8, 16, 32]) {
+                    run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} gate@{rows}", 17408, 5120, rows)
+                    run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} down@{rows}", 5120, 17408, rows)
                 }
                 return
             }
@@ -3974,6 +3996,21 @@ def private run_probe {   // nolint:STYLE037,STYLE038 — the flat per-arg shape
             run_shape_split("e2b wo     ", 1536, 2048, 512, sk)
             run_shape_split("g2 down    ", 2304, 9216, 512, sk)
             run_shape_split("e4b down8k ", 2560, 8192, 512, sk)
+        }
+        return
+    }
+    if (only == "q8i8") {
+        if (!g_gpu.has_coopmat || !ensure_q8_batch_cmi8_cls()) {
+            print("q8i8 reads the int8 KHR tile: it needs KHR cooperative matrices at subgroup 32\n")
+            g_probe_exit = 1
+            return
+        }
+        print("ATTRIBUTION SWEEP q8i8: the int8 KHR tile over a Q8_0 plane at a verify's rows, the 27B's gate and down, timing-only rows\n")
+        for (round in range(2)) {
+            for (rows in [16, 32]) {
+                run_shape("r{round} gate@{rows}", 17408, 5120, rows, false, true)
+                run_shape("r{round} down@{rows}", 5120, 17408, rows, false, true)
+            }
         }
         return
     }

@@ -127,7 +127,8 @@ def vk_rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidde
     g_rdq_prev_last = 0ul   // the device clock's last sampled stamp is this file's: a new model starts with none
     r.nb = RD_NB_MAX
     let nb = r.nb
-    r.verify_rows = min(nb, head ? verify_rows : 0l)
+    r.verify_rows = min(nb, verify_rows)
+    r.head_planned = head
     let wide = max(max(max(qd, hidden), dim), head ? 2l * dim : 0l)
     r.log_xfer = g_gpu.xfer_fam >= 0
     r.carry = carry
@@ -265,7 +266,7 @@ def vk_rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidde
     r.tok_recorded |> resize(regions)
     r.tok_wide_recorded |> resize(regions)
     r.head_draft_recorded |> resize(head ? regions : 0l)
-    if (head) {
+    if (r.verify_rows > 0l) {
         let vsets = (hybrid ? regions : 1l) * (nb + 1l)
         r.v_recorded |> resize(vsets)
         alloc_cmds(r.v_cmd, vsets, true)
@@ -1236,6 +1237,7 @@ def vk_rdec_set_cls(cls_block : int64; cls_fmt : int; cap : float; supp : array<
         let pc = arena_planes(cls_fmt, cls_block)
         g_rd.cls_set = gemv_planes_set(cls_fmt, pc, g_rd.cls_regions_dev, CLS_META_BYTES, 0u, g_rd.xq_dev, g_rd.xs_dev, dim * nb, (dim / 32l) * 4l * nb, VHZ_XQ, g_rd.logits_dev, vocab * 4l * nb, VHZ_LOG)
         g_rd.cls_fmt_marker = cls_fmt
+        g_rd.cls_blk = cls_block
         rd_invalidate_token()   // the recorded chain references the replaced cls/prologue sets
         g_rd.ready = true
     }
@@ -2907,6 +2909,91 @@ def rd_ar_comb_args(L : RLayer; woff : int64) : GkAddRmsArgs {
         dbias_on = g_rd.exps_bias ? 1u : 0u, dboff = uint(L.router_slot * g_rd.ne * g_rd.dim))
 }
 
+//! layer `l`'s output rows - `nrows` rows of the residual plane - into the capture block ([slot][nb][dim]) where the block
+//! drafter captures the layer: a copy inside the recorded command, read off the mapped block once the command lands
+def private rd_cap(raw : VkCommandBuffer; var h : VkHaz; l, nrows : int64) {
+    return if (!rdec_caps_layer(g_rd.cap_slots, l))
+    vhz_dep(raw, h, VHZ_X, 0u, true)
+    cmd_copy_range(raw, g_rd.x_dev, 0l, g_rd.cap_host.buf, g_rd.cap_slots[l] * g_rd.nb * g_rd.dim * 4l, nrows * g_rd.dim * 4l)
+}
+
+//! a prefill call's `npos` rows fit the window chain's capture block, grown to them where the block drafter captures layers
+def rd_cap_win_room(npos : int64) {
+    return if (g_rd.cap_n <= 0l || npos <= g_rd.cap_win_rows)
+    if (g_rd.cap_win_host.buf != 0ul) {
+        destroy_host_buf(g_rd.cap_win_host)
+    }
+    g_rd.cap_win_host = make_host_buf(g_rd.cap_n * npos * g_rd.dim * 4l, false, [cached = true])
+    g_rd.cap_win_rows = npos
+}
+
+//! the window chain's rows of layer `l` - `wlen` rows of `pf_x` from the call's row `w0` - into the window capture block
+def rd_cap_window(raw : VkCommandBuffer; var h : VkHaz; l, w0, wlen : int64) {
+    return if (!rdec_caps_layer(g_rd.cap_slots, l))
+    vhz_dep(raw, h, VHZ_X, 0u, true)
+    cmd_copy_range(raw, g_rd.pf_x, 0l, g_rd.cap_win_host.buf, (g_rd.cap_slots[l] * g_rd.cap_win_rows + w0) * g_rd.dim * 4l, wlen * g_rd.dim * 4l)
+}
+
+//! every recorded token, row, verify, head and chain command forgotten: the next use re-records it
+def private rd_recorded_forget {
+    rd_invalidate_token()
+    fill(g_rd.sel_recorded, false)
+    fill(g_rd.ch_pro_recorded, false)
+    fill(g_rd.ch_xlog_recorded, false)
+    fill(g_rd.v_seg_recorded, false)
+    for (a in g_rd.xlog_recorded) {
+        fill(a, false)
+    }
+}
+
+def private rd_caps_free {
+    if (g_rd.cap_host.buf != 0ul) {
+        destroy_host_buf(g_rd.cap_host)
+        g_rd.cap_host = HostBuf()
+    }
+    if (g_rd.cap_win_host.buf != 0ul) {
+        destroy_host_buf(g_rd.cap_win_host)
+        g_rd.cap_win_host = HostBuf()
+    }
+    g_rd.cap_win_rows = 0l
+    g_rd.cap_n = 0l
+    g_rd.cap_slots |> clear()
+}
+
+//! `layers`: the trunk layers whose output rows every token, verify and prefill command captures from here on (empty = none);
+//! false where the driver cannot capture a layer - a host cut or a hyper-connection chain closes its residual elsewhere
+//! (`RdecBlockCapsArmFn`)
+[cold_path]
+def vk_rdec_block_caps_arm(layers : array<int64>) : bool {
+    rd_chain_settle()
+    return false if (g_rd == null || !g_rd.ready)
+    rd_caps_free()
+    rd_recorded_forget()
+    return true if (empty(layers))
+    let why = (g_rd.experts_host ? "the routed experts run on the host, which cuts a layer's residual off the device"
+        : (g_rd.hc ? "a hyper-connection chain closes the residual off the layer's rows"
+        : (rdec_caps_slots(layers, g_rd.n_layers, g_rd.cap_slots) ? "" : "a capture layer is off the trunk")))
+    if (!empty(why)) {
+        rdec_caps_decline_say("vulkan", long_length(layers), why)
+        return false
+    }
+    g_rd.cap_host = make_host_buf(long_length(layers) * g_rd.nb * g_rd.dim * 4l, false, [cached = true])
+    g_rd.cap_n = long_length(layers)
+    return true
+}
+
+//! The capture rows `row0 .. row0 + n - 1` of the last token or verify command (`window` false: its rows) or prefill call
+//! (`window` true: the call's rows, the segments back to back) into `img`, [row][slot][dim] (`RdecBlockCapsRowsFn`)
+def vk_rdec_block_caps_rows(window : bool; row0, n : int64; var img : array<float>) {
+    rd_chain_settle()
+    assert(g_rd != null && g_rd.cap_n > 0l, "vk_rdec_block_caps_rows on a driver with no capture armed")
+    let stride = window ? g_rd.cap_win_rows : g_rd.nb
+    let host = window ? g_rd.cap_win_host.mapped : g_rd.cap_host.mapped
+    let dim = g_rd.dim
+    assert(row0 >= 0l && row0 + n <= stride && long_length(img) >= n * g_rd.cap_n * dim, "vk_rdec_block_caps_rows: the rows are past the captured rows, or the image is short of them")
+    rdec_caps_unpack(host, stride, g_rd.cap_n, dim, row0, n, img)
+}
+
 //! every form stamps its dispatches into the recorder's working list; the caller moves it into the form's own slot
 [cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command"), arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-verify-command"), arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-token-command")]   // recording leg (also the rerecord A/B probe) — not the steady-state token path
 def private rd_encode_token(var first_seg_raw : VkCommandBuffer; nrows, nsplit : int64; verify : bool = false; split_seg_base : int64 = -1l; seq : bool = false) {
@@ -2929,7 +3016,7 @@ def private rd_encode_token(var first_seg_raw : VkCommandBuffer; nrows, nsplit :
         }
         vhz_dep(raw, h, 0u, VHZ_COS, true)
         cmd_copy_whole(raw, g_rd.cos_host.buf, g_rd.cos_dev, g_rd.cos_elems * 4l * nrows)
-        if (g_rd.ple > 0l && !verify && !seq && g_rd.ple_tok_on) {   //! each row's side row off the table at its token id (the cos plane's hazard bit, as the copy's)
+        if (g_rd.ple > 0l && (!verify || rd_emb_on()) && !seq && g_rd.ple_tok_on) {   //! each row's side row off the table at its token id (the cos plane's hazard bit, as the copy's)
             emb_cls_enc(g_rd.ple_tbl_fmt, raw, h, g_rd.s_tok_ple, nrows, g_rd.n_layers * g_rd.ple, arena_local_blk(g_rd.ple_tbl_blk), sqrt(float(g_rd.ple)))
         } elif (g_rd.ple > 0l) {   //! the side-input rows ride the cos plane's hazard bit: written here, read by the act step
             cmd_copy_whole(raw, g_rd.ple_host.buf, g_rd.ple_dev, g_rd.n_layers * g_rd.ple * 4l * nrows)
@@ -3016,6 +3103,7 @@ def private rd_encode_token(var first_seg_raw : VkCommandBuffer; nrows, nsplit :
                     enc_cls_ar_comb(raw, h, L.s_addr_next, pc14h, nrows)
                 }
                 rd_ts(raw, "m:ar2")
+                rd_cap(raw, h, l, nrows)
                 xq_ready = false
                 continue
             }
@@ -3052,6 +3140,7 @@ def private rd_encode_token(var first_seg_raw : VkCommandBuffer; nrows, nsplit :
                     enc_cls_ar_comb_g4(raw, h, L.s_addr_next, pcg, nrows)
                 }
                 rd_ts(raw, "m:ar2")
+                rd_cap(raw, h, l, nrows)
                 xq_ready = L.comb_rq
                 continue
             }
@@ -3063,6 +3152,7 @@ def private rd_encode_token(var first_seg_raw : VkCommandBuffer; nrows, nsplit :
                     enc_cls_ar_comb(raw, h, L.s_addr_next, pc14c, nrows)
                 }
                 rd_ts(raw, "m:ar2")
+                rd_cap(raw, h, l, nrows)
                 xq_ready = L.comb_rq
                 continue
             }
@@ -3080,6 +3170,7 @@ def private rd_encode_token(var first_seg_raw : VkCommandBuffer; nrows, nsplit :
                 enc_cls_ar(raw, h, L.s_addr_next, pc14, nrows)
                 rd_ts(raw, "{tpfx}ar2")
             }
+            rd_cap(raw, h, l, nrows)
             xq_ready = nxt_fused
         }
         rd_encode_tail(raw, h, nrows, ncols, verify, xq_ready)
@@ -3105,7 +3196,7 @@ def private rd_encode_tail(raw : VkCommandBuffer; var h : VkHaz; nrows : int64; 
     enc_cls_argmax_part(raw, h, g_rd.s_pick_part, pcp, nrows * RD_PICK_CHUNKS)
     enc_cls_argmax_fin(raw, h, g_rd.s_pick_fin, pcp, nrows)
     rd_ts(raw, "t:pick")
-    if (verify) {
+    if (verify && !g_rd.v_plain) {   //! a block drafter's round steps the trunk rows alone
         rd_encode_verify_warm(raw, h, nrows)
     }
     if (!g_rd.log_xfer) {   //! the transfer queue carries the logits down (`rd_xlog`); without one the command copies them itself
@@ -3342,10 +3433,40 @@ def vk_rdec_sel_landing() : SelLanding {
 //! The late landing of rows `row0 .. row0 + nrows` of the last command's logits plane into `dst`, intact until the next command
 def vk_rdec_sel_land_rows(row0, nrows : int64; var dst : array<float>) {
     verify(g_rd != null && g_rd_sel_landed > 0l && row0 + nrows <= g_rd_sel_landed, "vk_rdec_sel_land_rows: no selection landed these rows")
-    if (g_rd.log_xfer) {
-        xfer_wait(xfer_submit_after(rd_xlog(RdXlog.rows, g_rd_sel_landed), g_gpu.cmp_value), true)
+    if (g_rd.log_xfer) {   //! the rows stayed on the device: the late landing brings the asked ones alone
+        vk_rdec_logits_rows(row0, nrows, dst)
+        return
     }
     host_buf_read(g_rd.logits_host, unsafe(addr<void?>(dst[0])), g_rd.vocab * 4l * nrows, g_rd.vocab * 4l * row0)
+}
+
+//! RdecLogitsRowsFn: rows `row0 .. row0 + nrows` of the last command's logits off the device plane, where a command that landed
+//! the rows' picks alone left them
+def vk_rdec_logits_rows(row0, nrows : int64; var dst : array<float>) {
+    verify(g_rd != null && g_rd.ready && row0 >= 0l && row0 + nrows <= g_rd.nb && long_length(dst) >= g_rd.vocab * nrows,
+        "vk_rdec_logits_rows: no driver, rows past the command's, or a destination short of them")
+    let row_bytes = g_rd.vocab * 4l
+    if (g_rd.log_xfer && empty(g_rd.late_cmd)) {
+        alloc_cmds(g_rd.late_cmd, g_rd.nb, true, true)
+        g_rd.late_recorded |> resize(g_rd.nb)
+    }
+    for (i in range64(nrows)) {
+        let row = row0 + i
+        if (g_rd.log_xfer) {
+            if (!g_rd.late_recorded[row]) {
+                record_cmd(g_rd.late_cmd[row], false) $(raw : VkCommandBuffer; var _h : VkHaz) {
+                    cmd_copy_range(raw, g_rd.logits_dev, row * row_bytes, g_rd.logits_host.buf, 0l, row_bytes)
+                }
+                g_rd.late_recorded[row] = true
+            }
+            xfer_wait(xfer_submit_after(g_rd.late_cmd[row], g_gpu.cmp_value), true)
+        } else {
+            batch_cmd_one_shot() $(raw : VkCommandBuffer) {
+                cmd_copy_range(raw, g_rd.logits_dev, row * row_bytes, g_rd.logits_host.buf, 0l, row_bytes)
+            }
+        }
+        host_buf_read(g_rd.logits_host, unsafe(addr<void?>(dst[i * g_rd.vocab])), row_bytes)
+    }
 }
 
 var private g_rd_xlog_wait = 0ul   //! the transfer timeline value the step's landing (logits or picks) completes at (0 = the command carried its own copy, the fence is the wait)
@@ -3643,6 +3764,17 @@ def rd_chain_settle {
     if (g_rd != null) {
         g_rd.ch.ask = false
         rd_chain_drop(false)
+    }
+}
+
+//! The pricing rail, the CUDA home's `set_cuda_kernel_skip` on this one: a class dispatch of a kernel whose registered name
+//! holds one of the comma-separated `frags` is dropped, so a run with and without a kernel class prices it; the output is
+//! garbage, and empty restores every dispatch. The decode driver's recorded commands are forgotten, so its next step re-records
+def set_vulkan_kernel_skip(frags : string) {
+    vk_kernel_skip_set(frags)
+    if (g_rd != null && g_rd.ready) {
+        rd_chain_settle()
+        rd_recorded_forget()
     }
 }
 
@@ -4111,7 +4243,9 @@ def private rd_land_draft(pick_only : bool; var logits : array<float>) : int64 {
 
 [cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-verify-command")]   //! once per armed model, behind the rail's latch
 def private rd_ensure_v_rail : bool {
-    if (!g_rd.head_on || !g_rd.carry) return rdec_v_decline("the NextN head is off the device (the load log names why)")
+    let plain = !g_rd.head_planned   //! a trunk with no head: the rows step with no head row, on the N-row rail alone
+    if (!plain && (!g_rd.head_on || !g_rd.carry)) return rdec_v_decline("the NextN head is off the device (the load log names why)")
+    if (plain && g_rd.ple > 0l && !(g_rd.ple_tok_on && rd_emb_on())) return rdec_v_decline("the rows' side input is the host's to gather, and a verify with no head stages none")
     if (g_rd.experts_host) {
         if (g_rd.n_rail == NRail.unasked) {
             g_rd.n_rail = rd_ensure_n_rail() ? NRail.built : NRail.declined
@@ -4121,6 +4255,12 @@ def private rd_ensure_v_rail : bool {
         return rdec_v_decline("the N-row token command declined on this model (its line above)")
     }
     if (g_rd.verify_rows < 2l) return rdec_v_decline("the driver was prepared for {g_rd.verify_rows} verify rows (the tier's verify seat was not installed at the load)")
+    if (plain) {
+        if (g_rd.hybrid && g_rd.roll_dev == 0ul) {
+            rd_roll_alloc()
+        }
+        return true
+    }
     let nb = g_rd.nb
     let L & = unsafe(g_rd.head)
     let leaves = (gemv_cls_ensure_n(g_rd.head_eh_fmt, nb) && gemv_cls_ensure_n(L.fq, nb) && gemv_cls_ensure_n(L.fk, nb) && (L.vfk || gemv_cls_ensure_n(L.fv, nb)))
@@ -4194,7 +4334,9 @@ def private rd_encode_verify_warm(raw : VkCommandBuffer; var h : VkHaz; nrows : 
 [cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-verify-command"), arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-verify-rows")]
 def private rd_record_verify(n : int64; seg0 : int64 = -1l) {
     rd_fill_gemv_regions_all()
-    rd_fill_head_regions()
+    if (!g_rd.v_plain) {
+        rd_fill_head_regions()
+    }
     rd_ensure_n_sets()
     if (long_length(g_rdq_verify) <= n) {
         g_rdq_verify |> resize(n + 1l)
@@ -4277,7 +4419,7 @@ def private rd_v_rows_mismatch(n : int64) : bool {
 }
 
 //! the verify's rows up: the host's rows, or - `ids` not empty - every row's token id, the trunk row and the head's embed half gathered off it
-def private rd_verify_stage(x, cossin, hcos : array<float>; ids : array<int64>; pos, n : int64) {
+def private rd_verify_stage(x, cossin, hcos : array<float>; ids : array<int64>; pos, n : int64; plain : bool = false) {
     let r = g_rd.region
     let par = g_rd.hybrid ? g_rd.dn_parity[r] : 0
     unsafe {
@@ -4289,25 +4431,31 @@ def private rd_verify_stage(x, cossin, hcos : array<float>; ids : array<int64>; 
                 idp[i] = uint(ids[i])
             }
             g_rdec_nrow_emb_gathered += n
-            g_rdec_head_emb_gathered += n
+            g_rdec_head_emb_gathered += plain ? 0l : n
         }
         memcpy(g_rd.cos_host.mapped, addr<void?>(cossin[0]), g_rd.cos_elems * 4l * n)
-        memcpy(g_rd.head_cos_host.mapped, addr<void?>(hcos[0]), g_rd.cos_elems * 4l * n)
         var tm = reinterpret<TokMeta?>(g_rd.tok_meta.mapped)
-        var hm = reinterpret<TokMeta?>(g_rd.head_tok.mapped)
         for (i in range64(n)) {
             tm[i] = TokMeta(pos = uint(pos + i), cnt = uint(pos + i + 1l), parity = g_rd.hybrid ? uint(par ^ int(i & 1l)) : 0u,
                 mirbase = uint(r * g_rd.mir_units), dnslot = uint(r))
-            hm[i] = TokMeta(pos = uint(pos - 1l + i), cnt = uint(pos + i), parity = 0u, mirbase = uint(r * g_rd.mir_units), dnslot = uint(r))
+        }
+        if (!plain) {
+            memcpy(g_rd.head_cos_host.mapped, addr<void?>(hcos[0]), g_rd.cos_elems * 4l * n)
+            var hm = reinterpret<TokMeta?>(g_rd.head_tok.mapped)
+            for (i in range64(n)) {
+                hm[i] = TokMeta(pos = uint(pos - 1l + i), cnt = uint(pos + i), parity = 0u, mirbase = uint(r * g_rd.mir_units), dnslot = uint(r))
+            }
         }
     }
 }
 
-def private rd_verify_land(n, width : int64; picks_only : bool; var logits : array<float>; var picks : array<int64>; var hid : array<float>) {
+def private rd_verify_land(n, width : int64; picks_only : bool; var logits : array<float>; var picks : array<int64>; var hid : array<float>; plain : bool = false) {
     if (!picks_only && g_rd_sel_landed == 0l) {
         host_buf_read(g_rd.logits_host, unsafe(addr<void?>(logits[0])), g_rd.vocab * 4l * n)
     }
-    host_buf_read(g_rd.hid_host, unsafe(addr<void?>(hid[0])), width * 4l * n)
+    if (!plain || g_rd.carry_live) {   //! a trunk with no head lands no carry row
+        host_buf_read(g_rd.hid_host, unsafe(addr<void?>(hid[0])), width * 4l * n)
+    }
     for (i in range64(n)) {
         picks[i] = rd_landed_pick(i)
     }
@@ -4369,6 +4517,7 @@ def private rd_hc_verify(x, cossin, hemb, hcos, h0, side : array<float>; pos, n 
     }
     return false if (g_rd.v_rail != NRail.built)
     return rd_v_rows_mismatch(n) if (n < 2l || n > g_rd.verify_rows)
+    verify(!empty(hcos), "vk_rdec_verify: the hyper-connection chain steps no verify without its head rows (a block drafter's round) - engine bug")
     rd_carry_sync()
     let dim = g_rd.dim
     let hcd = g_rd.hc_n * dim
@@ -4423,9 +4572,16 @@ def vk_rdec_verify(x, cossin, hemb, hcos, h0, side : array<float>; ids : array<i
         return rd_hc_verify(x, cossin, hemb, hcos, h0, side, pos, n, pick_only, logits, picks, hid, experts)
     }
     return rd_v_rows_mismatch(n) if (n < 2l || n > vk_rdec_verify_rows())
+    let plain = empty(hcos)   //! no head rope rows: a block drafter's round steps the trunk rows alone
+    return false if (!plain && !g_rd.head_on)
+    if (plain != g_rd.v_plain) {   //! the recorded commands are the other form's
+        g_rd.v_plain = plain
+        fill(g_rd.v_recorded, false)
+        fill(g_rd.v_seg_recorded, false)
+    }
     rd_carry_sync()
     let dim = g_rd.dim
-    verify(pos >= 1l && long_length(logits) >= n * g_rd.vocab && long_length(picks) >= n && long_length(hid) >= n * dim,
+    verify((plain || pos >= 1l) && long_length(logits) >= n * g_rd.vocab && long_length(picks) >= n && (plain || long_length(hid) >= n * dim),
         "vk_rdec_verify: a verify below row 1 (the head's first row is pos - 1), or a landing short of its rows")
     let vi = rd_v_idx(n)
     let segmented = g_rd.experts_host
@@ -4447,15 +4603,17 @@ def vk_rdec_verify(x, cossin, hemb, hcos, h0, side : array<float>; ids : array<i
     let gather = rd_emb_on()   //! the recorded command gathers the trunk rows and the head's embed halves off the rows' ids
     verify(!gather || long_length(ids) >= n, "vk_rdec_verify: the device gathers the rows, and the call brings no id a row")
     let noids : array<int64>
-    rd_verify_stage(x, cossin, hcos, gather ? ids : noids, pos, n)
-    unsafe {
-        let cat = reinterpret<uint8?>(g_rd.head_cat_host.mapped)
-        if (!gather) {
-            for (i in range64(n)) {
-                memcpy(reinterpret<void?>(cat + 2l * i * dim * 4l), addr<void?>(hemb[i * dim]), dim * 4l)
+    rd_verify_stage(x, cossin, hcos, gather ? ids : noids, pos, n, plain)
+    if (!plain) {
+        unsafe {
+            let cat = reinterpret<uint8?>(g_rd.head_cat_host.mapped)
+            if (!gather) {
+                for (i in range64(n)) {
+                    memcpy(reinterpret<void?>(cat + 2l * i * dim * 4l), addr<void?>(hemb[i * dim]), dim * 4l)
+                }
             }
+            memcpy(reinterpret<void?>(cat + dim * 4l), addr<void?>(h0[0]), dim * 4l)
         }
-        memcpy(reinterpret<void?>(cat + dim * 4l), addr<void?>(h0[0]), dim * 4l)
     }
     var host_us = 0l
     var cmd : VkCommandBuffer
@@ -4472,7 +4630,7 @@ def vk_rdec_verify(x, cossin, hemb, hcos, h0, side : array<float>; ids : array<i
     }
     let t_seg = ref_time_ticks()
     let t = rd_submit_wait(cmd, n, picks_only, prof)
-    rd_verify_land(n, dim, picks_only, logits, picks, hid)
+    rd_verify_land(n, dim, picks_only, logits, picks, hid, plain)
     if (prof) {
         rdq_host_add(g_rdq_verify_ledger, ts0, t.t1, t.t2, t.t3, ref_time_ticks())
         if (segmented) {

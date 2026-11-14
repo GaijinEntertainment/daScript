@@ -1657,12 +1657,12 @@ def private pf_head_kv_store(raw : VkCommandBuffer; var h : VkHaz; L : RLayer; n
     let pairs = qd / 2 + int(kvd / 2l)
     let kvq = rd_kv_block_codec()
     let mirb = uint(rd_mir_base(L))
-    var pcr = RopeKvBArgs(qd = uint(qd), kvd = uint(kvd), hs = uint(hs), half = uint(L.rot / 2l),
-        neox = g_rd.neox ? 1u : 0u, kpair0 = uint(qd / 2), ppp = uint(pairs),
-        layerbase = kvq ? 0u : mirb, npos = uint(nh), pos0 = kvq ? 0u : uint(pos0),
-        voff = voff, kstride = uint(kvd), qhs = uint(qhs),
-        boff = uint(L.boff), hasb = g_rd.has_bias ? 1u : 0u,
-        cstride = uint(g_rd.cos_elems), cbase = uint(L.cbase))
+    var pcr = GkRopeKvArgs(qd = uint(qd), kvd = uint(kvd), hs = uint(hs), rot = uint(L.rot),
+        neox = g_rd.neox ? 1u : 0u, npairs_q = uint(qd / 2), npairs = uint(pairs),
+        mirbase = kvq ? 0u : mirb, rows = uint(nh), pos0 = kvq ? 0u : uint(pos0),
+        voff = voff, kvrow = uint(kvd), qhs = uint(qhs), qrow = uint(g_rd.q_gated ? 2 * qd : qd),
+        boff = uint(L.boff), has_bias = g_rd.has_bias ? 1u : 0u,
+        cstride = uint(g_rd.cos_elems), ccos = uint(L.cbase))
     let ropewg = (nh * int64(pairs) + int64(WG_X) - 1l) / int64(WG_X)
     rope_kv_b_stamp_enc(rd_kv16(), raw, h, g_rd.pf_sets[hb + 4], pcr, ropewg)
     if (kvq) {   // a block codec's store pass; the rope stamp stored the f16 rows itself, and an f16 mirror builds no store set. The warm attends nothing: no q head to rotate under tq4
@@ -1733,9 +1733,12 @@ def private pf_rope_kv_set(cos : uint64; L : RLayer) : VkDescriptorSet {
     let storebytes = kvq ? np * kvd * 4l : rd_mir_bytes()
     let storebit = kvq ? VHZ_VST : VHZ_MIR
     let slab = rd_slab(L)
-    let rbufs = fixed_array(g_rd.pf_q, g_rd.pf_kv, kvq ? g_rd.pf_kst : slab.k, kvq ? g_rd.pf_vst : slab.v, cos, g_rd.has_bias ? g_rd.bias_dev : g_rd.norms_dev)
-    let rsizes = fixed_array(np * qrow * 4l, np * 2l * kvd * 4l, storebytes, storebytes, np * g_rd.cos_elems * 4l, g_rd.has_bias ? g_rd.bias_bytes : g_rd.norms_bytes)
-    let rgbits = fixed_array(VHZ_Q, VHZ_KVK | VHZ_KVV, storebit, storebit, VHZ_COS, 0u)
+    let kvb = np * 2l * kvd * 4l
+    let cosb = np * g_rd.cos_elems * 4l
+    let rbufs = fixed_array(g_rd.pf_q, g_rd.pf_kv, g_rd.pf_kv, kvq ? g_rd.pf_kst : slab.k, kvq ? g_rd.pf_vst : slab.v,
+        g_rd.has_bias ? g_rd.bias_dev : g_rd.norms_dev, cos, cos)
+    let rsizes = fixed_array(np * qrow * 4l, kvb, kvb, storebytes, storebytes, g_rd.has_bias ? g_rd.bias_bytes : g_rd.norms_bytes, cosb, cosb)
+    let rgbits = fixed_array(VHZ_Q, VHZ_KVK | VHZ_KVV, VHZ_KVK | VHZ_KVV, storebit, storebit, 0u, VHZ_COS, VHZ_COS)
     return rope_kv_b_stamp_set(rd_kv16(), rbufs, rsizes, rgbits)
 }
 
@@ -2419,12 +2422,12 @@ def private pf_attn_block(raw : VkCommandBuffer; var h : VkHaz; l : int64; b : i
         assert(!kvq || long_length(g_pf_wsegs) == 1l, "vk prefill: a block codec's window holds one segment")
         for (sg in g_pf_wsegs) {
             let ropewg = (sg.npos * int64(pairs) + int64(WG_X) - 1l) / int64(WG_X)
-            var pcr = RopeKvBArgs(qd = uint(qd), kvd = uint(kvd), hs = uint(hs), half = uint(g_rd.layers[l].rot / 2l),
-                neox = g_rd.neox ? 1u : 0u, kpair0 = uint(qd / 2l), ppp = uint(pairs),
-                layerbase = kvq ? 0u : uint(pf_seg_mir_base(g_rd.layers[l], sg)), npos = uint(sg.npos), pos0 = uint(kvq ? sg.row0 : sg.pos0),
-                voff = voff, kstride = uint(kv_merged ? 2l * kvd : kvd), qhs = uint(qhs),
-                boff = uint(g_rd.layers[l].boff), hasb = g_rd.has_bias ? 1u : 0u,
-                cstride = uint(cos_elems), cbase = uint(g_rd.layers[l].cbase), row0 = uint(sg.row0), ring = kvq ? 0u : uint(g_rd.layers[l].ring))
+            var pcr = GkRopeKvArgs(qd = uint(qd), kvd = uint(kvd), hs = uint(hs), rot = uint(g_rd.layers[l].rot),
+                neox = g_rd.neox ? 1u : 0u, npairs_q = uint(qd / 2l), npairs = uint(pairs),
+                mirbase = kvq ? 0u : uint(pf_seg_mir_base(g_rd.layers[l], sg)), rows = uint(sg.npos), pos0 = uint(kvq ? sg.row0 : sg.pos0),
+                voff = voff, kvrow = uint(kv_merged ? 2l * kvd : kvd), qhs = uint(qhs), qrow = uint(qrow),
+                boff = uint(g_rd.layers[l].boff), has_bias = g_rd.has_bias ? 1u : 0u,
+                cstride = uint(cos_elems), ccos = uint(g_rd.layers[l].cbase), row0 = uint(sg.row0), ring = kvq ? 0u : uint(g_rd.layers[l].ring))
             rope_kv_b_stamp_enc(rd_kv16(), raw, h, g_rd.pf_sets[b + 4], pcr, ropewg)
         }
     }
@@ -2527,6 +2530,9 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
     assert(g_rd.ple == 0l || ple_tbl || long_length(ple_rows) >= npos * g_rd.n_layers * g_rd.ple, "vk prefill: the per-layer-embedding rows are short of the prompt")
     pf_setup()
     rd_carry_sync()
+    if (!hidden) {
+        rd_cap_win_room(npos)
+    }
     if (g_rd.hybrid) {
         pf_dn_begin()
     }
@@ -2669,7 +2675,8 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                     }
                 }
                 pfq_ts(raw)
-                let ffn_row0 = warm || nwseg > 1l || hidden ? 0l : pf_ffn_slice_row0(l, g_rd.n_layers, wlen, gu6 && !moe, dn6)
+                // a captured layer's every row carries its FFN: the block drafter reads the whole window's residual
+                let ffn_row0 = warm || nwseg > 1l || hidden || rdec_caps_layer(g_rd.cap_slots, l) ? 0l : pf_ffn_slice_row0(l, g_rd.n_layers, wlen, gu6 && !moe, dn6)
                 let ffn_rows = wlen - ffn_row0
                 if (has_dense_triple(g_rd.layers[l])) {
                     pf_ffn_block(raw, h, l, b, wlen, ffn_row0, gu6, dn6, dnk)
@@ -2705,6 +2712,9 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                     }
                 } else {
                     enc_cls_ar(raw, h, g_rd.pf_sets[b + 14], pc14, ffn_rows)
+                }
+                if (!hidden) {   //! an embedding's call captures none: its capture block is not grown
+                    rd_cap_window(raw, h, l, w0, wlen)
                 }
                 pfq_ts(raw)
             }

@@ -81,6 +81,15 @@ def test_gpu_resident_llama_greedy_chain(t : T?) {
     }
 }
 
+[test(description = "On Llama-3.2-1B Q8_0 `set_vulkan_kernel_skip` drops the recorded step: under a skip naming the decode attention the next step dispatches none of it and the q8 GEMV anew, and cleared the attention dispatches again, the unskipped step counting both alike")]
+def test_gpu_resident_llama_kernel_skip(t : T?) {
+    t |> run("Llama-3.2-1B Q8_0: the kernel skip re-records the step without the skipped kernel, and clears") @(t : T?) {
+        let path = llama_model_path(t, "Llama-3.2-1B-Instruct-Q8_0.gguf")
+        if (empty(path)) return
+        kernel_skip_cell(t, path, "da_attn_f16_cls", "q8_gemv_cls")
+    }
+}
+
 //! the batched bench row on the 1B, the driver homing two streams: a refusal names the streams the device homes against
 //! the row's ask and reads 0, and a rep the device can home serves - a rate, no refusal, every stream parked after it
 //! (a one-stream row is no batch: the step census counts it a row at a time and the row refuses by name)

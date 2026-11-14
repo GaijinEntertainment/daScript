@@ -40,7 +40,6 @@ class private HostKqGemvNv4 : Nv4GemvT {}
 
 class private HostQ51Gemv : Blk32GemvRunT {
     typedef FMT = KqTag_q51
-    override Q51 = true
 }
 
 class private HostIq4nl32Gemv : Blk32GemvRunT {
@@ -57,7 +56,6 @@ class private HostQ5032Gemv : Blk32GemvRunT {
 
 class private HostMx4Gemv : Blk32GemvRunT {
     typedef FMT = KqTag_mx4
-    override MX4 = true
 }
 
 //! a grid format's superblock class with its staged codebook filled from the main-context table, since no kernel head runs

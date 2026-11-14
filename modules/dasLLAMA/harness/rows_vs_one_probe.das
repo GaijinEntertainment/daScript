@@ -15,6 +15,7 @@ require ?das_metal dasllama/dasllama_metal_decode   // nolint:STYLE030,LINT019 -
 require ../performance/profile_common.das   // nolint:STYLE029,LINT019 - tune_gate, inside the das_metal half
 require _parity_dump   // ParityDump: an arm's rows to a file and back
 require _prompt_files   // read_ids
+require _forced_drafter   // the forced drafter in the real one's place
 require ../tests/_compares.das   // logits_maxdiff, logits_of, top2_margin
 require ../tests/_model_tier.das   // live_maxabs: a row's scale without the suppressed ids
 require daslib/clargs
@@ -74,42 +75,7 @@ struct Args {
 
 let VERIFY_ROWS = 8l   //! the DFlash2 round's verify: the anchor and seven drafts
 
-var private g_seq : array<int64>   //! the forced sequence: the prompt, then the continuation
-var private g_last_drafted = 0l   //! the drafts the forced drafter handed the round in flight
 var private g_one_unencoded = false   //! the one-row arm retires the step the driver encoded ahead before each step: every step encodes on its own token
-
-[unused_argument(t)]
-def private forced_attached(t : Model) : bool => true
-
-[unused_argument(s, l, rows, pos0, window)]
-def private forced_captured(var s : Session; l, rows, pos0 : int64; window : bool) {}
-
-[unused_argument(s, img, rows, pos0)]
-def private forced_captured_rows(var s : Session; img : array<float>; rows, pos0 : int64) {}
-
-//! the round's drafts are the forced sequence's next `k` ids after the anchor at `pos`
-[unused_argument(t, tok)]
-def private forced_draft(t : Model; var s : Session; tok, pos, k : int64) : int64 {
-    let n = clamp(long_length(g_seq) - 1l - pos, 0l, k)
-    for (j in range64(1l, n + 1l)) {
-        s.mtp_vbatch[j] = g_seq[pos + j]
-    }
-    g_last_drafted = n
-    return n
-}
-
-[unused_argument(s)]
-def private forced_land(var s : Session) {}
-
-[unused_argument(s, pos0, rows)]
-def private forced_commit(var s : Session; pos0, rows : int64) {}
-
-//! the forced drafter in the real one's place, capturing the same trunk layers
-def private attach_forced(layers : array<int64>) {
-    var ls := layers
-    register_mtp_block_drafter(MtpBlockSeams(attached = @@forced_attached, captured = @@forced_captured, captured_rows = @@forced_captured_rows,
-        draft = @@forced_draft, land = @@forced_land, commit = @@forced_commit, layers <- ls, drafts = VERIFY_ROWS - 1l))
-}
 
 //! the trunk layers the attached drafter captures
 def private drafter_layers(c : Config) : array<int64> => <- [for (l in range64(c.n_layers + 1l)); l; where mtp_block_layer_slot(l) >= 0l]
@@ -169,7 +135,7 @@ def private rows_arm(m : Model; name : string; np, npos : int64) : ArmRun {
     var run = ArmRun(name = name)
     run.rows |> resize(npos)
     run.src |> resize(npos)
-    var inscope prompt <- [for (i in range64(np)); g_seq[i]]
+    var inscope prompt <- [for (i in range64(np)); g_forced_seq[i]]
     var s <- prefilled(m, prompt, true)
     run.rows[0] <- logits_of(s, vocab)
     run.src[0] = -1l
@@ -180,17 +146,17 @@ def private rows_arm(m : Model; name : string; np, npos : int64) : ArmRun {
     var rejects = 0
     while (covered < npos) {
         let pos = s.n_past
-        if (pos + VERIFY_ROWS > long_length(g_seq)) {
+        if (pos + VERIFY_ROWS > long_length(g_forced_seq)) {
             to_log(LOG_WARNING, "rows_vs_one: the continuation ends before row {covered} - pass more ids\n")
             break
         }
         s.mtp_picks |> clear()
-        let a = mtp_spec_round(m, s, g_seq[pos])
-        let n = g_last_drafted + 1l
+        let a = mtp_spec_round(m, s, g_forced_seq[pos])
+        let n = g_forced_drafted + 1l
         rounds++
         served += long_length(s.mtp_picks) == n ? 1 : 0
         short += n < VERIFY_ROWS ? 1 : 0
-        rejects += a < g_last_drafted ? 1 : 0
+        rejects += a < g_forced_drafted ? 1 : 0
         for (i in range64(n)) {
             let j = pos + i - np + 1l
             if (j >= covered && j < npos) {
@@ -214,12 +180,12 @@ def private one_arm(m : Model; name : string; np, npos : int64) : ArmRun {
     let vocab = m.config.vocab_size
     var run = ArmRun(name = name)
     run.rows |> reserve(npos)
-    var inscope prompt <- [for (i in range64(np)); g_seq[i]]
+    var inscope prompt <- [for (i in range64(np)); g_forced_seq[i]]
     var s <- prefilled(m, prompt, false)
     run.rows |> emplace <| logits_of(s, vocab)
     var one <- [0l]
     for (j in range64(1l, npos)) {
-        one[0] = g_seq[np + j - 1l]
+        one[0] = g_forced_seq[np + j - 1l]
         static_if (typeinfo builtin_module_exists(das_metal)) {
             if (g_one_unencoded) {
                 mirror_quiesce()
@@ -253,7 +219,7 @@ def private cmp_row(a, b : array<float>; vocab : int64) : PosCmp {
 //! the first row whose top-1 is not the forced id, -1 where every row's is
 def private first_off_forced(m : Model; r : ArmRun; np : int64) : int64 {
     for (j in range64(long_length(r.rows))) {
-        return j if (parallel_argmax(r.rows[j], m.config.vocab_size) != g_seq[np + j])
+        return j if (parallel_argmax(r.rows[j], m.config.vocab_size) != g_forced_seq[np + j])
     }
     return -1l
 }
@@ -288,7 +254,7 @@ def private report_pair(m : Model; a, b : ArmRun; np : int64; detail : bool) {
             let ma = fmt(":.3f", p.margin_a)
             let mb = fmt(":.3f", p.margin_b)
             let tail = split ? " | SPLIT margin {a.name} {ma} {b.name} {mb}" : ""
-            print("row {j} (pos {np + j - 1l}, src {src}): forced {g_seq[np + j]} | {b.name} {p.top_b} '{shown_piece(m,p.top_b)}' gap {fmt(":.3f", p.gap_b)} | {a.name} {p.top_a} '{shown_piece(m,p.top_a)}' | rel {fmt(":.2e", p.rel)}{tail}\n")
+            print("row {j} (pos {np + j - 1l}, src {src}): forced {g_forced_seq[np + j]} | {b.name} {p.top_b} '{shown_piece(m,p.top_b)}' gap {fmt(":.3f", p.gap_b)} | {a.name} {p.top_a} '{shown_piece(m,p.top_a)}' | rel {fmt(":.2e", p.rel)}{tail}\n")
         } elif (split) {
             print("split at row {j}: {b.name} {p.top_b} '{shown_piece(m,p.top_b)}' | {a.name} {p.top_a} '{shown_piece(m,p.top_a)}' | margin {a.name} {fmt(":.3f", p.margin_a)} {b.name} {fmt(":.3f", p.margin_b)} | rel {fmt(":.2e", p.rel)}\n")
         }
@@ -374,8 +340,8 @@ def private save_arm(a : Args; m : Model; r : ArmRun; np : int64) {
     return if (empty(a.save))
     let route = a.cpu ? "cpu" : "metal"
     var d = ParityDump(model = a.model, arm = "{route}-{r.name}", vocab = m.config.vocab_size)
-    d.prompt <- [for (i in range64(np)); g_seq[i]]
-    d.feed <- [for (j in range64(long_length(r.rows) - 1l)); g_seq[np + j]]
+    d.prompt <- [for (i in range64(np)); g_forced_seq[i]]
+    d.feed <- [for (j in range64(long_length(r.rows) - 1l)); g_forced_seq[np + j]]
     d.rows := r.rows
     let path = "{a.save}.{r.name}.dump"
     parity_dump_write(path, d)
@@ -407,10 +373,10 @@ def private load_refs(a : Args; np : int64) : array<ArmRun> {
         var inscope d <- parity_dump_read(p)
         var same = long_length(d.prompt) == np
         for (i in range64(min(np, long_length(d.prompt)))) {
-            same = same && d.prompt[i] == g_seq[i]
+            same = same && d.prompt[i] == g_forced_seq[i]
         }
         for (j in range64(long_length(d.feed))) {
-            same = same && np + j < long_length(g_seq) && d.feed[j] == g_seq[np + j]
+            same = same && np + j < long_length(g_forced_seq) && d.feed[j] == g_forced_seq[np + j]
         }
         if (!same) {
             print("ref refused: {p} holds another prompt or feed\n")
@@ -513,9 +479,9 @@ def private run(a : Args) : int {
             var inscope cont <- empty(a.ids) ? spec_walk(m, prompt, need) : read_ids(a.ids)
             save_ids(a, cont)
             detach_dflash_drafter()
-            attach_forced(layers)
-            g_seq |> clear()
-            g_seq |> push_from(prompt, cont)
+            attach_forced_drafter(layers, VERIFY_ROWS - 1l)
+            g_forced_seq |> clear()
+            g_forced_seq |> push_from(prompt, cont)
             print("continuation {length(cont)} ids: {replace(decode(m, cont), "\n", "\\n")}\n")
             rc = run_arms(a, m, np)
             unregister_mtp_block_drafter()

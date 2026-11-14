@@ -292,12 +292,13 @@ var private GPU_ROLES_METAL <- {
 
 var private GPU_ROLES_VULKAN <- {
     "tts",
-    "classes", "common", "decode", "prefill", "seams", "dispatch", "tower", "asr_dec", "nmt", "mtp_gemma", "rail"
+    "classes", "classes_dflash", "common", "decode", "prefill", "seams", "dispatch", "tower", "asr_dec", "nmt", "mtp_gemma", "dflash", "rail"
 }
 
 var private GPU_ROLES_CUDA <- {
     "classes", "classes_front", "classes_blocks", "classes_asr", "common", "dispatch", "decode", "stream", "rail",
-    "tower", "tower_seat", "tower_audio", "tower_whisper", "tower_fc", "tower_g4a", "asr_dec", "asr_dec_fc", "mtp_gemma"
+    "tower", "tower_seat", "tower_audio", "tower_whisper", "tower_fc", "tower_g4a", "asr_dec", "asr_dec_fc", "mtp_gemma",
+    "classes_rows", "classes_dflash", "dflash"
 }
 
 // the fastmath default, mechanically: a [metal_kernel] declaring fastmath=false reds unless
@@ -889,6 +890,11 @@ def private class_header(line : string) : tuple<name : string; base : string; ha
     let is_tpl = rest |> starts_with("template ")
     if (is_tpl) {
         rest = slice(rest, length("template "))
+    }
+    if (rest |> starts_with("public ")) {   // `class public X`: the visibility is not the name
+        rest = slice(rest, length("public "))
+    } elif (rest |> starts_with("private ")) {
+        rest = slice(rest, length("private "))
     }
     let colon = find(rest, " : ")
     return (name = ident_prefix(rest), base = colon >= 0 ? ident_prefix(slice(rest, colon + 3)) : "", has_base = colon >= 0, is_template = is_tpl)
@@ -2050,6 +2056,32 @@ def private check_kq_gemv_grid_literals {
     }
 }
 
+//! a K-quant N-column stamp of either discrete home names the weight rows its lane group takes as a literal
+//! (`override RR`): each held to `let KQ_N_RR` of the discrete kernel file, the count both homes' dispatches size the
+//! stamp's grid by (`cud_gemv_cls_enc_n`, `gemv_cls_enc_n`); `kernels` the file declaring the count, `homes` the stamp files
+def private check_ncol_rr_literal(kernels : string; homes : array<string>) {
+    var inscope shared_lines <- split(strip_line_comments(fread(kernels)), "\n")
+    let want = literal_after(shared_lines, "let KQ_N_RR = ")
+    if (want < 0) {
+        gate_finding(kernels, "no `let KQ_N_RR` found - the row-group literal rule has nothing to hold the stamps to; keep the spelling or move this check with it (ARCHITECTURE_GPU_SHARED_GEMM.md#ncol-load-waves)")
+    }
+    for (path in homes) {
+        var inscope lines <- split(strip_line_comments(fread(path)), "\n")
+        var stamps = 0
+        for (line, i in lines, count()) {
+            continue if (!(strip(line) |> starts_with("override RR = ")))
+            stamps++
+            let got = literal_after([line], "override RR = ")
+            if (got != want) {
+                gate_finding(path, i + 1, "`override RR = {got}` against KQ_N_RR = {want} - a template constant is a literal, and the dispatch sizes the stamp's grid by KQ_N_RR row groups: a stamp of another RR skips rows or runs dead groups (ARCHITECTURE_GPU_SHARED_GEMM.md#ncol-load-waves)")
+            }
+        }
+        if (stamps == 0) {
+            gate_finding(path, "no `override RR` stamp found - the row-group literal rule has nothing to walk here; keep the spelling or move this check with it (ARCHITECTURE_GPU_SHARED_GEMM.md#ncol-load-waves)")
+        }
+    }
+}
+
 let private METAL_PREFILL = "modules/dasLLAMA/dasllama/dasllama_metal_prefill.das"
 
 //! a rows8 format's strides: k4's superblock and its 144 bytes, k6's 210 bytes and 48 quant words, q8's 34-byte block and its 17 halves
@@ -2736,9 +2768,8 @@ let private SHARED_KERNEL_FILES <- ["modules/dasLLAMA/dasllama/dasllama_gpu_kern
 let private CUDA_CLASSES_FILE = "modules/dasLLAMA/dasllama/dasllama_cuda_classes.das"
 let private METAL_KERNELS_FILE = "modules/dasLLAMA/dasllama/dasllama_metal_kernels.das"
 
-//! the discrete templates one home stamps - the row of
-//! followup_general.md naming the stamps that wait on their families
-var private DISCRETE_ONE_HOME_STAMPS : table<string; void>   //! empty: every discrete template is stamped by both homes; a one-home stamp lands here with its followup_general.md row
+//! the discrete templates one home stamps - each named in followup_general.md's row of stamps that wait on their families
+var private DISCRETE_ONE_HOME_STAMPS : table<string>
 
 //! `class [template] X : Y` lines of `path`: X's base, whether X is a
 //! template, and the home or shared file X lives in
@@ -2788,7 +2819,14 @@ def private check_shared_template_homes {
     }
     let discrete = base_name(SHARED_KERNEL_FILES[0])
     for (t, file in keys(templates), values(templates)) {
-        continue if (!(file |> ends_with(".das")))
+        if (!(file |> ends_with(".das"))) {
+            if (t |> starts_with("Gk")) {
+                gate_finding(ENGINE_DIR, ("`{t}` is a class template of the {file} home under the common file's " +
+                    "`Gk` prefix - a template every home may stamp lives in dasllama_gpu_kernels_common.das " +
+                    "(ARCHITECTURE_GPU_SHARED_KERNELS.md#gpu-shared-kernels); a body one home runs takes that home's name"))
+            }
+            continue
+        }
         let path = "{ENGINE_DIR}/{file}"
         if (file == discrete) {
             let vk = key_exists(stamped, "{t}|vulkan")
@@ -3723,7 +3761,8 @@ def private check_howto_docs {
 }
 
 //! the arguments after `flag` on the command line: `-- --howto <doc>...` reads only the named documents as HOW_TO
-//! documents, `-- --queue-calls <file>...` scans only the named sources for unlocked queue calls - the checks' fixture rails
+//! documents, `-- --queue-calls <file>...` scans only the named sources for unlocked queue calls, `-- --ncol-rr <kernels>
+//! <home>...` holds the named stamp files' `override RR` literals to the named kernel file's `KQ_N_RR` - the checks' fixture rails
 def private fixture_args(flag : string) : array<string> {
     var docs : array<string>
     var on = false
@@ -3737,8 +3776,8 @@ def private fixture_args(flag : string) : array<string> {
     return <- docs
 }
 
-[export]
-def main() : int {
+//! the fixture rails' run: a rail's verdict, or -1 where the command line names none
+def private fixture_rail_verdict : int {
     let fixtures <- fixture_args("--howto")
     if (!empty(fixtures)) {
         for (doc in fixtures) {
@@ -3751,6 +3790,18 @@ def main() : int {
         check_locked_queue_calls(queue_fixtures)
         return gate_verdict("dasllama --queue-calls")
     }
+    let rr_fixtures <- fixture_args("--ncol-rr")
+    if (length(rr_fixtures) >= 2) {
+        check_ncol_rr_literal(rr_fixtures[0], [for (f, i in rr_fixtures, count()); f; where i > 0])
+        return gate_verdict("dasllama --ncol-rr")
+    }
+    return -1
+}
+
+[export]
+def main() : int {
+    let rail = fixture_rail_verdict()
+    return rail if (rail >= 0)
     if (!fexist("modules/dasLLAMA/REVIEW.das") || !fexist(FACADE)) {
         to_log(LOG_ERROR, "modules/dasLLAMA/REVIEW.das: run from the repo root\n")
         return 2
@@ -3772,6 +3823,7 @@ def main() : int {
     check_cm2_ladder_sets()
     check_cm2_stamp_tiles()
     check_kq_gemv_grid_literals()
+    check_ncol_rr_literal(DISCRETE_KERNELS, [CUDA_CLASSES_FILE, VK_CLASSES])
     check_rows8_kernel_strides()
     check_kq_form_matrix()
     check_vk_extension_roster()

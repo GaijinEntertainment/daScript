@@ -16,14 +16,17 @@ require _moe_resident   // MOE_LOGIT_BAR_REL: the routed chain's bar
 // Qwen3.6-35B-A3B-MTP-IQ4_XS-pure (large tier, DASLLAMA_PARITY_FULL=1) on the whole-model driver: the deltanet hybrid MoE
 // with a routed NextN head through the forms the rig holds on the small hybrids - a prefill from a position past zero on
 // the window chain over the region's live recurrent state (the prefill counter, every call served), ten sessions a
-// region each through batched steps the N-row command takes in groups past eight rows (the N-row counter), the greedy
+// region each through batched steps the N-row command takes in groups past eight rows (the N-row counter) - on the
+// N-column GEMVs within the wide bar, then on the CUDA home's rows tensor leaf nearer the session alone than the row one
+// off (a weight arena past 2^32 words: the leaf's plane reads reach past a 32-bit word index) - the greedy
 // chain forced on and adaptive against the plain walk bit for bit
 // (the chain's hits and misses), and a short tail peeled through the
 // token commands (the peel counter) with speculation off. The routed
 // rows hold the routed chain's bar: the window's expert
 // tiles schedule other row counts than the one-call form's, and the router's near-ties part the two. Skips off the JIT,
 // without DASLLAMA_GPU=1 on a device the driver serves, or without the file under models_dir().
-// Under DASLLAMA_DEVICE_POOL=0 the pool cell holds the off rail.
+// Under DASLLAMA_DEVICE_POOL=0 the pool cell holds the off rail. The leaf cell skips on a home with no rows tensor leaf (every
+// home but CUDA).
 let private REGIONS_FILE = "Qwen3.6-35B-A3B-MTP-IQ4_XS-pure.gguf"
 let private WIDE_ROWS = 10l   //! past the N-row command's eight rows and its GEMVs' eight-column tile
 
@@ -32,9 +35,14 @@ def test_prefill_continues_qwen35moe(t : T?) {
     cell_prefill_continues_on_the_device(t, REGIONS_FILE, MOE_LOGIT_BAR_REL)
 }
 
-[test(description = "Ten Qwen3.6-35B hybrid MoE sessions, past the N-row command's eight rows, step in command groups with column-tiled GEMVs, every row within the wide bar of its session alone")]
+[test(description = "Ten Qwen3.6-35B hybrid MoE sessions, past the N-row command's eight rows, step in command groups with column-tiled GEMVs (the CUDA home's rows leaf off), every row within the wide bar of its session alone")]
 def test_regions_batched_groups_qwen35moe(t : T?) {
     cell_regions_batched_groups(t, REGIONS_FILE, WIDE_ROWS, LogitsBar.wide_bar)
+}
+
+[test(description = "Ten Qwen3.6-35B hybrid MoE sessions step on the CUDA home's rows tensor leaf, a leaf stamp launched, every row nearer its session alone than its previous step")]
+def test_regions_batched_leaf_qwen35moe(t : T?) {
+    cell_regions_batched_leaf(t, REGIONS_FILE, WIDE_ROWS)
 }
 
 [test(description = "On the Qwen3.6-35B hybrid MoE a device-home scheduler's openings and checkpoints outlive their regions in the host pool, later requests take them up as the host prefix cache does")]

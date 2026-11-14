@@ -18,6 +18,7 @@ require dastest/testing_boost public
 require math
 require dasllama/dasllama_lint public
 require dasllama/dasllama_cuda_classes
+require dasllama/dasllama_cuda_classes_rows   // the rows tensor leaf's family
 require dasllama/dasllama_cuda_decode
 require daslib/shader_lingua_franca
 require _kernel_oracles
@@ -860,6 +861,452 @@ def test_cud_kq_gemv_family(t0 : T?) {
 
 let private BAR_APPROX_CTRL = Bar(rel = APPROX_REL, poison_of_max = true, poison_abs = 0.5)   //! the Vulkan cells' approximate bar with its poison control
 
+//! the words of two device planes that differ, and the first such word (-1 where none)
+def private words_differ(a, b : array<uint>) : tuple<n : int; at : int> {
+    var n = 0
+    var at = -1
+    for (i in range(min(length(a), length(b)))) {
+        if (a[i] != b[i]) {
+            at = at < 0 ? i : at
+            n++
+        }
+    }
+    return (n = n + abs(length(a) - length(b)), at = at)
+}
+
+//! the words of `a` equal to `w`, and the first such word (-1 where none)
+def private words_at(a : array<uint>; w : uint) : tuple<n : int; at : int> {
+    var n = 0
+    var at = -1
+    for (v, i in a, count()) {
+        if (v == w) {
+            at = at < 0 ? i : at
+            n++
+        }
+    }
+    return (n = n, at = at)
+}
+
+//! the words of `got` still holding the sentinel `init` set there - every nonzero word of `init` is one the run writes - and the
+//! first such word (-1 where none)
+def private sentinels_left(got, init : array<uint>) : tuple<n : int; at : int> {
+    var n = 0
+    var at = -1
+    for (i in range(min(length(got), length(init)))) {
+        if (init[i] != 0u && got[i] == init[i]) {
+            at = at < 0 ? i : at
+            n++
+        }
+    }
+    return (n = n, at = at)
+}
+
+//! the rows of `y` still at `Y_SENTINEL`, and the first such row (-1 where none)
+def private sentinel_rows(y : array<float>) : tuple<n : int; at : int> {
+    var n = 0
+    var at = -1
+    for (v, i in y, count()) {
+        if (v == Y_SENTINEL) {
+            at = at < 0 ? i : at
+            n++
+        }
+    }
+    return (n = n, at = at)
+}
+
+//! the rows tensor leaf's three feed planes for `nc` token rows of `n` - Q8_0 blocks under `q8`, else Q8_K superblocks: every
+//! word a feed-writing requant writes at its sentinel (-128 quant bytes, NaN scales and block sums), the token slots past `nc`
+//! zero; a Q8_0 feed's block sums all zero, since it writes none
+def private feed_planes_filled(n, nc : int; q8 : bool) : tuple<fq : array<uint>; fs : array<uint>; fm : array<uint>> {
+    let nb = n / 32
+    let units = q8 ? nb : n / 256
+    var fq <- [for (_i in range(n * 4)); 0u]
+    var fs <- [for (_i in range(units * 16)); 0u]
+    var fm <- [for (_i in range(nb * 16)); 0u]
+    for (c in range(min(nc, 16))) {
+        let slot = int(gk_feed_slot(uint(c)))
+        for (blk in range(nb)) {
+            for (w in range(8)) {   // a word holds four consecutive quants of one block and token row
+                fq[int(gk_feed_byte(uint(blk), uint(c), uint(w * 4))) / 4] = I8_SENTINEL_BITS
+            }
+            if (!q8) {
+                fm[blk * 16 + slot] = NAN_SENTINEL_BITS
+            }
+        }
+        for (u in range(units)) {
+            fs[u * 16 + slot] = NAN_SENTINEL_BITS
+        }
+    }
+    return (fq <- fq, fs <- fs, fm <- fm)
+}
+
+//! the CPU oracle of the N-column GEMV over `nreg` regions of `d` weight rows (`wregs`: the regions' weight bases at its even
+//! words) at `nc` token rows of `n`, the requant's rows `xq` / `xs`: element c x rows + r the dot of weight row r with token row c
+def private gemv_n_oracle(fmt : KqFmt; wq, ws, xq : array<uint>; xs : array<float>; wregs : array<uint>; n, d, nreg, nc : int) : array<float> {
+    var y : array<float>
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        let rows = nreg * d
+        if (fmt == KqFmt.q8) {   // the regions' weight rows lie end to end: one record, every token row
+            y |> resize(nc * rows)
+            var inscope rec <- [0u, 0u, uint(nc), 0u]
+            q8_gemm_oracle(wq, ws, xq, xs, rec, 1, n, rows, y)
+            return <- y
+        }
+        y |> reserve(nc * rows)
+        for (c in range(nc)) {
+            var inscope regs <- [for (i in range(nreg * 2)); (i & 1) == 0 ? wregs[i] : uint(c * (n / 256))]
+            var inscope yc <- kq_gemv_oracle(int(fmt), wq, ws, xq, xs, regs, n, d, nreg)
+            y |> push_from(yc)
+        }
+    }
+    return <- y
+}
+
+//! the bar a GEMV leaf holds to its CPU oracle: the q8 GEMV cells' for Q8_0, the kq family cell's for the superblock formats
+def private oracle_bar(fmt : KqFmt) : Bar => fmt == KqFmt.q8 ? Q8_GEMV_BAR : BAR_APPROX_CTRL
+
+//! the N-column GEMV against its one-column form, two NVRTC modules under fast math: either may contract a term's `acc += xs * f`
+//! into an FMA, which moves that step by half an ulp of the product and each later partial by its re-rounding - per term at most
+//! 2^-23 of the row's largest partial; over a row's n / 32 terms, with a factor of four for a partial past the plane's largest row
+def private gemv_fma_bar(n : int) : Bar
+    => Bar(kind = BarKind.rel_of_max, rel = float(n / 32) * 4.0 * 1.1920929e-7, poison_of_max = true, poison = 2.0, poison_abs = 1.0)
+
+//! one leaf format's weight planes over `rows` weight rows `n` wide: hashed quant words, and the scale plane - an f16 scale a
+//! Q8_0 block (two a word), a superblock format's device scale rows
+def private leaf_weight_planes(fmt : KqFmt; n, rows : int; salt : uint) : tuple<wq : array<uint>; ws : array<uint>> {
+    let q8 = fmt == KqFmt.q8
+    let nb = n / 32
+    let nsb = n / 256
+    let wq_words = q8 ? 8 : int(kq_qsb(fmt) / 4l)
+    var wq <- hashed_words(rows * (q8 ? nb : nsb) * wq_words, 1u, uint(fmt) * salt + 3u)
+    var ws <- (q8 ? [for (i in range((rows * nb + 1) / 2)); 0x10001u * (0x2C00u + (uint(i) * 37u) % 0x3FFu)]
+        : kq_ws_plane(int(fmt), rows * nsb * int(kq_dev_ssb_i(int(fmt)) / 4l), 1u, uint(fmt) * 13u))
+    return (wq <- wq, ws <- ws)
+}
+
+//! the routed step's sharing count (`MoeShareT`) over the pick slots' experts `ids`, `nslots` of them asked: the distinct
+//! experts and the slots it lands
+def private moe_share_count(var s : void?; ids : array<uint>; nslots : int) : tuple<distinct : uint; slots : uint> {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        let de = buf_upload(ids, s)
+        let ds = buf_fill(2, 0xFFFFFFFFu, s)
+        var pc = MoeShareArgs(nslots = uint(nslots))
+        enc_moe_share_cls(s, fixed_array(de, ds), pc, 1l)
+        cud_sync()
+        var inscope w <- buf_download(ds, 2, type<uint>)
+        cuda_mem_free(de)
+        cuda_mem_free(ds)
+        return (distinct = w[0], slots = w[1])
+    } else {
+        return (distinct = 0u, slots = 0u)
+    }
+}
+
+[test(description = "The routed step's sharing count lands the distinct experts among a step's pick slots and the slot count: one slot, 64 slots over 13 experts, 256 slots of one expert, 200 slots all distinct, and 300 slots asked counted over the workgroup's 256; one slot moved to a fresh expert counts one more (the control).")]
+def test_cud_moe_share(t0 : T?) {
+    t0 |> run("CUDA sharing count == the distinct experts among the step's slots") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!ensure_moe_share_cls()) {
+                t |> skip("no CUDA device with NVRTC")
+                return
+            }
+            var s = g_cud.stream
+            for (c in fixed_array((n = 1, m = 1), (n = 64, m = 13), (n = 256, m = 1), (n = 200, m = 1000), (n = 300, m = 1000))) {
+                var inscope ids <- [for (i in range(c.n)); uint(i % c.m) * 3u + 5u]
+                let got = moe_share_count(s, ids, c.n)
+                let counted = min(c.n, int(MOE_SHARE_SLOTS))
+                t |> equal(got.distinct, uint(min(c.m, counted)), "{c.n} slots over {c.m} experts: the distinct experts among the {counted} slots counted")
+                t |> equal(got.slots, uint(c.n), "{c.n} slots over {c.m} experts: the slots asked land beside the count")
+            }
+            var inscope ids <- [for (i in range(64)); uint(i % 13) * 3u + 5u]
+            ids[63] = 9999u
+            t |> equal(moe_share_count(s, ids, 64).distinct, 14u, "the control: one slot on a fresh expert counts one more")
+        } else {
+            t |> skip("dasVulkan not present: the cell's fixtures are the Vulkan cells'")
+        }
+    }
+}
+
+//! One format's rows tensor leaf at `nc` token rows over `nreg` regions of `d` weight rows, `n` wide (a Q8_0 row whole 32-blocks,
+//! its last superblock short where `n` is off 256): the rows requantized on the device by the stamp that writes the leaf's feed
+//! beside them (`OUT_FEED`) and held to the CPU oracle, that feed the re-lay's over the same rows word for word, the leaf's rows
+//! the N-column GEMV's over the same planes within the approx bar, a row one column off outside it
+def private rows_mma_case(t : T?; var s : void?; fmt : KqFmt; n, d, nc : int; nreg : int = 2) {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        let q8 = fmt == KqFmt.q8
+        let leaf_ok = cud_rows_mma_ensure(int(fmt))
+        let feed_ok = q8 ? ensure_cls_dn_rq_feed() : ensure_cls_q8k_rq_feed()
+        verify(leaf_ok && feed_ok && cud_gemv_ensure(int(fmt)), "a leaf format's stamps must compile on a device that compiled the Q8_0 leaf")
+        let nsb = n / 256
+        let nb = n / 32
+        let xunit = q8 ? 32 : 256
+        let wunits = q8 ? nb : nsb                   // the plane units a weight row spans
+        var inscope wp <- leaf_weight_planes(fmt, n, nreg * d, 77777u)
+        var inscope regs <- [for (i in range(nreg * 2)); (i & 1) == 0 ? uint((i / 2) * d * wunits) : 0u]
+        var inscope xf <- row_fill(nc * n, 29, 0, 0.004, 1.9, 977)
+        let tag = "the rows leaf, {fmt} at {nc} rows of {n} over {nreg} x {d} weight rows"
+        let dwq = buf_upload(wp.wq, s)
+        let dws = buf_upload(wp.ws, s)
+        let dregs = buf_upload(regs, s)
+        let dxf = buf_upload(xf, s)
+        let fq_words = n * 4
+        let fs_n = (q8 ? nb : nsb) * 16
+        let fm_n = nb * 16
+        // the producer's feed and the re-lay's, each under the sentinel where the run writes it: a token row past `nc` is zero in both
+        var inscope fill <- feed_planes_filled(n, nc, q8)
+        var feeds : uint64[2][3]
+        for (k in range(2)) {
+            feeds[k][0] = buf_upload(fill.fq, s)
+            feeds[k][1] = buf_upload(fill.fs, s)
+            feeds[k][2] = buf_upload(fill.fm, s)
+        }
+        let dxq = buf_fill(nc * n / 4, I8_SENTINEL_BITS, s)
+        let dxs = buf_fill(nc * n / xunit, NAN_SENTINEL, s)
+        var pcq = RqArgs(inbase = 0u, nblk = uint(nc * n / xunit), lo = 0.0, hi = 0.0, feed_units = uint(n / xunit))
+        if (q8) {
+            enc_cls_dn_rq_feed(s, fixed_array(dxf, dxq, dxs, feeds[0][0], feeds[0][1], feeds[0][2]), pcq, rq_wgs(false, int64(nc * n)))
+        } else {
+            enc_cls_q8k_rq_feed(s, fixed_array(dxf, dxq, dxs, feeds[0][0], feeds[0][1], feeds[0][2]), pcq, rq_wgs(true, int64(nc * n)))
+        }
+        cud_rows_mma_relay_enc(int(fmt), s, fixed_array(dxq, dxs, feeds[1][0], feeds[1][1], feeds[1][2]), int64(n), uint(nc))
+        let rows = nreg * d
+        let y_gemv = buf_fill(nc * rows, Y_SENTINEL, s)
+        let y_leaf = buf_fill(nc * rows, Y_SENTINEL, s)
+        var pc = GemvArgs(n = uint(n), d = uint(d), nreg = uint(nreg), ybase = 0u, ncols = uint(nc), ystride = uint(rows))
+        cud_gemv_enc(int(fmt), s, fixed_array(dwq, dws, dregs, dxq, dxs, y_gemv), pc, int64(rows))
+        cud_rows_mma_enc(int(fmt), s, fixed_array(dwq, dws, dregs, feeds[0][0], feeds[0][1], y_leaf, feeds[0][2]), pc, rows_mma_wgs(int64(rows)))
+        t |> success(cud_sync(), "{tag}: the launches complete ({cuda_last_error()})")
+        let planes = fixed_array("quants", "scales", "block sums")
+        let words = fixed_array(fq_words, fs_n, fm_n)
+        for (k in range(q8 ? 2 : 3)) {   // a Q8_0 feed carries no sums
+            var inscope fa <- buf_download(feeds[0][k], words[k], type<uint>)
+            var inscope fb <- buf_download(feeds[1][k], words[k], type<uint>)
+            let df = words_differ(fa, fb)
+            t |> success(df.n == 0, "{tag}: the feed's {planes[k]} the requant wrote are the re-lay's word for word ({df.n} of {words[k]} differ, the first at {df.at})")
+            let left = sentinels_left(fa, k == 0 ? fill.fq : (k == 1 ? fill.fs : fill.fm))
+            t |> equal(left.n, 0, "{tag}: every word of the feed's {planes[k]} the requant writes moved off the sentinel ({left.n} left, the first at {left.at})")
+            var set = 0
+            for (w in fa) {
+                set += w != 0u ? 1 : 0
+            }
+            t |> success(set > 0, "{tag}: the feed's {planes[k]} are written (a plane of zeros would pass the compare)")
+        }
+        var inscope yg <- buf_download(y_gemv, nc * rows, type<float>)
+        var inscope yl <- buf_download(y_leaf, nc * rows, type<float>)
+        var inscope xq_h <- buf_download(dxq, nc * n / 4, type<uint>)
+        var inscope xs_h <- buf_download(dxs, nc * n / xunit, type<float>)
+        float_requant_held(t, "{tag}: the requant's rows", xf, xq_h, xs_h, !q8)
+        var inscope y_ref <- gemv_n_oracle(fmt, wp.wq, wp.ws, xq_h, xs_h, regs, n, d, nreg, nc)
+        check_rows(t, "{tag}: the N-column GEMV's rows against the CPU oracle", yg, y_ref, oracle_bar(fmt), rows)
+        check_rows(t, "{tag}: every row against the N-column GEMV's over the same planes", yl, yg, BAR_APPROX_CTRL, rows)
+        if (nc > 1) {   // a leaf that stored its columns one off would land outside the bar
+            var inscope shifted <- [for (i in range(nc * rows)); yg[(i + rows) % (nc * rows)]]
+            check_exceeds(t, "{tag}: the rows against the GEMV's one token row off (the control)", yl, shifted, BAR_APPROX)
+        }
+        for (b in [dwq, dws, dregs, dxf, dxq, dxs, y_gemv, y_leaf]) {
+            cuda_mem_free(b)
+        }
+        for (k in range(2)) {
+            cuda_mem_free(feeds[k])
+        }
+    }
+}
+
+//! the gate / up act's feed-writing requant at `nc` token rows of `n` - into Q8_K superblocks, or under `q8` into Q8_0 blocks:
+//! its rows the plain act requant's word for word and the CPU oracle's, its feed the re-lay's over those rows word for word
+def private act_feed_case(t : T?; var s : void?; n, nc : int; q8 : bool = false) {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        verify(ensure_q8k_actrq_feed_cls() && ensure_q8k_actrq_cls() && ensure_rows_mma_relay() && ensure_q8_actrq_feed_cls() && ensure_q8_actrq_cls()
+            && ensure_rows_mma_relay_q8(), "the act requants' stamps must compile on a device that compiled the leaf")
+        let nsb = q8 ? n / 32 : n / 256   // the scale units a row holds: a Q8_0 feed's blocks, a Q8_K feed's superblocks
+        var inscope gh <- row_fill(nc * n, 31, 0, 0.004, 1.7, 911)
+        var inscope uh <- row_fill(nc * n, 17, 0, 0.003, 1.1, 733)
+        let dg = buf_upload(gh, s)
+        let du = buf_upload(uh, s)
+        let fq_words = n * 4
+        let words = fixed_array(fq_words, nsb * 16, (n / 32) * 16)
+        var inscope fill <- feed_planes_filled(n, nc, q8)
+        var feeds : uint64[2][3]
+        var xq, xs : uint64[2]
+        for (k in range(2)) {
+            feeds[k][0] = buf_upload(fill.fq, s)
+            feeds[k][1] = buf_upload(fill.fs, s)
+            feeds[k][2] = buf_upload(fill.fm, s)
+            xq[k] = buf_fill(nc * n / 4, I8_SENTINEL_BITS, s)
+            xs[k] = buf_fill(nc * nsb, NAN_SENTINEL, s)
+        }
+        var pca = ActArgs(nelem = uint(nc * n), act = ACT_SILU, nblk = uint(nc * nsb), elem0 = 0u, ubase = 0u, feed_units = uint(nsb))
+        var pcr = RowsMmaRelayArgs(n = uint(n), ncols = uint(nc))
+        if (q8) {
+            enc_q8_actrq_feed_cls(s, fixed_array(dg, du, xq[0], xs[0], feeds[0][0], feeds[0][1], feeds[0][2]), pca, rq_wgs(false, int64(nc * n)))
+            enc_q8_actrq_cls(s, fixed_array(dg, du, xq[1], xs[1]), pca, rq_wgs(false, int64(nc * n)))
+            enc_rows_mma_relay_q8(s, fixed_array(xq[1], xs[1], feeds[1][0], feeds[1][1], feeds[1][2]), pcr, rows_mma_feed_wgs(int64(n)))
+        } else {
+            enc_q8k_actrq_feed_cls(s, fixed_array(dg, du, xq[0], xs[0], feeds[0][0], feeds[0][1], feeds[0][2]), pca, rq_wgs(true, int64(nc * n)))
+            enc_q8k_actrq_cls(s, fixed_array(dg, du, xq[1], xs[1]), pca, rq_wgs(true, int64(nc * n)))
+            enc_rows_mma_relay(s, fixed_array(xq[1], xs[1], feeds[1][0], feeds[1][1], feeds[1][2]), pcr, rows_mma_feed_wgs(int64(n)))
+        }
+        let tag = "the act's feed-writing requant into {q8 ? "Q8_0" : "Q8_K"} at {nc} rows of {n}"
+        t |> success(cud_sync(), "{tag}: the launches complete ({cuda_last_error()})")
+        var inscope qa <- buf_download(xq[0], nc * n / 4, type<uint>)
+        var inscope qb <- buf_download(xq[1], nc * n / 4, type<uint>)
+        var inscope sa <- buf_download(xs[0], nc * nsb, type<uint>)
+        var inscope sb <- buf_download(xs[1], nc * nsb, type<uint>)
+        let dq = words_differ(qa, qb)
+        let ds = words_differ(sa, sb)
+        t |> success(dq.n == 0 && ds.n == 0,
+            "{tag}: its rows and scales are the plain act requant's word for word ({dq.n} quant words differ, the first at {dq.at}; {ds.n} scales, the first at {ds.at})")
+        let lq = words_at(qa, I8_SENTINEL_BITS)
+        let ls = words_at(sa, NAN_SENTINEL_BITS)
+        t |> success(lq.n == 0 && ls.n == 0, "{tag}: every quant and scale word moved off the sentinel ({lq.n} quant words left, the first at {lq.at}; {ls.n} scales, the first at {ls.at})")
+        var inscope sf <- buf_download(xs[0], nc * nsb, type<float>)
+        var inscope q_ref : array<uint>
+        var inscope s_ref : array<float>
+        actrq_oracle(gh, uh, nc * n, !q8, ACT_SILU, q_ref, s_ref)
+        requant_rows_held(t, "{tag}: its rows", qa, sf, q_ref, s_ref, q8 ? 32 : 256, false)
+        let planes = fixed_array("quants", "scales", "block sums")
+        for (k in range(q8 ? 2 : 3)) {   // a Q8_0 feed carries no sums
+            var inscope fa <- buf_download(feeds[0][k], words[k], type<uint>)
+            var inscope fb <- buf_download(feeds[1][k], words[k], type<uint>)
+            let df = words_differ(fa, fb)
+            t |> success(df.n == 0, "{tag}: the feed's {planes[k]} are the re-lay's word for word ({df.n} of {words[k]} differ, the first at {df.at})")
+            let left = sentinels_left(fa, k == 0 ? fill.fq : (k == 1 ? fill.fs : fill.fm))
+            t |> equal(left.n, 0, "{tag}: every word of the feed's {planes[k]} the requant writes moved off the sentinel ({left.n} left, the first at {left.at})")
+            var set = 0
+            for (w in fa) {
+                set += w != 0u ? 1 : 0
+            }
+            t |> success(set > 0, "{tag}: the feed's {planes[k]} are written")
+        }
+        for (b in [dg, du]) {
+            cuda_mem_free(b)
+        }
+        for (k in range(2)) {
+            cuda_mem_free(feeds[k])
+            cuda_mem_free(xq[k])
+            cuda_mem_free(xs[k])
+        }
+    }
+}
+
+//! One format's N-column GEMV at `nc` token rows over `nreg` regions of `d` weight rows, `n` wide, against its one-column form a
+//! token row at a time over the same planes: every row within `gemv_fma_bar` (a column's sum is the one-column form's term for
+//! term, each side free to contract a term into an FMA), the one-column rows against the CPU oracle, the rows of the next token
+//! row outside the bar as the control. `d` odd leaves a region's last row group short, `nc` past eight a
+//! second column tile
+def private gemv_n_case(t : T?; var s : void?; fmt : KqFmt; n, d, nc, nreg : int) {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        verify(cud_gemv_ensure(int(fmt)), "a format's GEMV stamps must compile on a device that compiled the home's")
+        let q8 = fmt == KqFmt.q8
+        let nsb = n / 256
+        let nb = n / 32
+        let xunit = q8 ? 32 : 256
+        let wunits = q8 ? nb : nsb
+        var inscope wp <- leaf_weight_planes(fmt, n, nreg * d, 55001u)
+        let rows = nreg * d
+        let tag = "the N-column GEMV, {fmt} at {nc} rows of {n} over {nreg} x {d} weight rows"
+        var inscope xf <- row_fill(nc * n, 23, 0, 0.004, 1.9, 977)
+        let dwq = buf_upload(wp.wq, s)
+        let dws = buf_upload(wp.ws, s)
+        let dxf = buf_upload(xf, s)
+        let dxq = buf_fill(nc * n / 4, I8_SENTINEL_BITS, s)
+        let dxs = buf_fill(nc * n / xunit, NAN_SENTINEL, s)
+        var pcq = RqArgs(inbase = 0u, nblk = uint(nc * n / xunit), lo = 0.0, hi = 0.0)
+        if (q8) {
+            enc_cls_dn_rq(s, fixed_array(dxf, dxq, dxs), pcq, rq_wgs(false, int64(nc * n)))
+        } else {
+            enc_cls_q8k_rq(s, fixed_array(dxf, dxq, dxs), pcq, rq_wgs(true, int64(nc * n)))
+        }
+        let y_n = buf_fill(nc * rows, Y_SENTINEL, s)
+        let y_1 = buf_fill(nc * rows, Y_SENTINEL, s)
+        // the N-column form's regions, then a set a token row: that row's activation units as the regions' x base
+        var inscope regs <- [for (i in range((nc + 1) * nreg * 2));
+            uint((i & 1) == 0 ? ((i / 2) % nreg) * d * wunits : max(i / (nreg * 2) - 1, 0) * (n / xunit))]
+        let dregs = buf_upload(regs, s)
+        var pc = GemvArgs(n = uint(n), d = uint(d), nreg = uint(nreg), ybase = 0u, ncols = uint(nc), ystride = uint(rows))
+        cud_gemv_enc(int(fmt), s, fixed_array(dwq, dws, dregs, dxq, dxs, y_n), pc, int64(rows))
+        for (c in range(nc)) {
+            var pc1 = GemvArgs(n = uint(n), d = uint(d), nreg = uint(nreg), ybase = uint(c * rows), ncols = 1u, ystride = 0u)
+            cud_gemv_enc(int(fmt), s, fixed_array(dwq, dws, dregs + uint64((c + 1) * nreg * 8), dxq, dxs, y_1), pc1, int64(rows))
+        }
+        t |> success(cud_sync(), "{tag}: the launches complete ({cuda_last_error()})")
+        var inscope yn <- buf_download(y_n, nc * rows, type<float>)
+        var inscope y1 <- buf_download(y_1, nc * rows, type<float>)
+        let left = sentinel_rows(yn)
+        t |> equal(left.n, 0, "{tag}: every row of every token row is written ({left.n} left at the sentinel, the first at {left.at})")
+        var inscope xq_h <- buf_download(dxq, nc * n / 4, type<uint>)
+        var inscope xs_h <- buf_download(dxs, nc * n / xunit, type<float>)
+        var inscope y_ref <- gemv_n_oracle(fmt, wp.wq, wp.ws, xq_h, xs_h, regs, n, d, nreg, nc)
+        check_rows(t, "{tag}: the one-column form's rows against the CPU oracle", y1, y_ref, oracle_bar(fmt), rows)
+        check_rows(t, "{tag}: every row against the one-column form's", yn, y1, gemv_fma_bar(n), rows)
+        var inscope shifted <- [for (i in range(nc * rows)); y1[(i + rows) % (nc * rows)]]
+        check_exceeds(t, "{tag}: the rows against the next token row's (the control)", yn, shifted, gemv_fma_bar(n))
+        for (b in [dwq, dws, dregs, dxf, dxq, dxs, y_n, y_1]) {
+            cuda_mem_free(b)
+        }
+    }
+}
+
+[test(description = "The N-column decode GEMV of Q8_0, Q4_K, Q5_K, Q6_K, NVFP4 and IQ4_XS planes reads the one-column GEMV's rows within one FMA contraction a term (two NVRTC modules under fast math) at 2, 3, 4, 5, 8 and 11 token rows - the four-column stamps, the eight-column ones and a second column tile - over three regions of 21 weight rows (a short last row group) at widths of 512, 2048 and 5120, the one-column rows the CPU oracle's within its bar, the next token row's rows outside the bar as the control.")]
+def test_cud_gemv_n_cols(t0 : T?) {
+    t0 |> run("CUDA N-column GEMV == the one-column GEMV a token row at a time, within an FMA contraction a term") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!cud_gemv_ensure(int(KqFmt.q8))) {
+                t |> skip("no CUDA device with NVRTC")
+                return
+            }
+            var failed <- cud_ensure_all()   // the N-column GEMV stamps have no ensure of their own
+            t |> success(empty(failed), "every stamp of the home compiles ({failed})")
+            delete failed
+            var s = g_cud.stream
+            for (fmt in fixed_array(KqFmt.q8, KqFmt.k4, KqFmt.k5, KqFmt.k6, KqFmt.nv4, KqFmt.iq4xs)) {
+                for (nc in fixed_array(2, 3, 4, 5, 8, 11)) {
+                    gemv_n_case(t, s, fmt, 2048, 21, nc, 3)
+                }
+                gemv_n_case(t, s, fmt, 512, 21, 4, 3)    // sixteen blocks a row: eight lanes a row group
+                gemv_n_case(t, s, fmt, 5120, 7, 8, 2)    // the 27B's width, a whole subgroup a row group
+                gemv_n_case(t, s, fmt, 5120, 1, 3, 5)    // one row a region: every group short
+            }
+        } else {
+            t |> skip("dasVulkan not present: the cell's fixtures are the Vulkan cells'")
+        }
+    }
+}
+
+[test(description = "The rows tensor leaf of every format it stamps (nine: Q8_0, Q4_K, Q5_K, Q6_K, NVFP4, Q4_0, IQ4_NL, IQ4_XS, IQ3_S4) reads the N-column GEMV's rows within 2e-3 at 1, 5, 8 and 16 token rows over two regions whose rows a tile straddles - the Q8_0 member also at rows of 2880 over ten regions, of 1056, whose last superblock is short, and of 5120 over 1664 weight rows on its big-plane stamp - the token rows one off outside the bar, the N-column GEMV's rows the CPU oracle's, the rows a feed-writing requant writes (the float rows', the gate / up act's into Q8_K and into Q8_0) the CPU oracle's at each case's shape - the float rows' Q8_K requant exactly, the others a quant within one step - and the feed it writes beside them is the re-lay's word for word, every word it writes moved off its sentinel.")]
+def test_cud_rows_mma(t0 : T?) {
+    t0 |> run("CUDA rows tensor leaf == the N-column GEMV, its feed the re-lay's") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!ensure_q8_rows_mma()) {
+                t |> skip("no CUDA device with the tensor rung's NVRTC stamps")
+                return
+            }
+            var failed <- cud_ensure_all()   // the N-column GEMV stamps the cell compares against have no ensure of their own
+            t |> success(empty(failed), "every stamp of the home compiles ({failed})")
+            delete failed
+            var s = g_cud.stream
+            var leaves = 0
+            for (slot in range(KQ_FMT_COUNT)) {
+                continue if (!cud_rows_mma_stamped(slot))
+                leaves++
+                for (nc in fixed_array(1, 5, 8, 16)) {
+                    rows_mma_case(t, s, kq_fmt_of_slot(slot), 2048, 20, nc)   // twenty rows a region: a sixteen-row tile straddles the two, the last is partial
+                }
+            }
+            t |> equal(leaves, 9, "the leaf's formats: Q8_0, Q4_K, Q5_K, Q6_K, NVFP4, Q4_0, IQ4_NL, IQ4_XS and IQ3_S4")
+            rows_mma_case(t, s, KqFmt.k4, 5120, 24, 8)   // the 27B's width: twenty superblocks, a warp's blocks past one turn
+            rows_mma_case(t, s, KqFmt.q8, 5120, 1664, 8)   // the Q8_0 leaf's big-plane stamp (one scale load a turn): two regions past 16 MB
+            rows_mma_case(t, s, KqFmt.q8, 2880, 22, 16, 10)   // gpt-oss's merged q/k/v: ninety blocks - a last superblock of two - over ten regions
+            rows_mma_case(t, s, KqFmt.q8, 1056, 20, 8)   // the Q8_0 floor's neighbour: thirty-three blocks, a last superblock of one
+            act_feed_case(t, s, 2048, 8)
+            act_feed_case(t, s, 2048, 13)
+            act_feed_case(t, s, 2112, 13, true)   // gemma-4-26B's dense hidden: sixty-six Q8_0 blocks a row
+        } else {
+            t |> skip("dasVulkan not present: the cell's fixtures are the Vulkan cells'")
+        }
+    }
+}
+
 //! a per-32 GEMV cell's shape: the Vulkan cell's two widths, quant words a block, the plane seeds
 struct private B32Cell {
     f : KqFmt
@@ -1235,6 +1682,22 @@ let private QBYTE_BAR = Bar(abs_floor = 1.0, poison = 3.0)   //! a requant byte 
 //! the quant words' signed bytes as floats: the requant compares hold them byte by byte
 def private qbyte_values(words : array<uint>) : array<float> => <- [for (i in range(length(words) * 4)); float(int8((words[i / 4] >> uint((i % 4) * 8)) & 0xFFu))]
 
+//! a requant's quants `q` and scales `sc` against the CPU oracle's, `blk` quants a scale: bit-exact (`exact`), else a quant
+//! within one step and the scales within the approx bar
+def private requant_rows_held(t : T?; tag : string; q : array<uint>; sc : array<float>; q_ref : array<uint>; s_ref : array<float>; blk : int; exact : bool) {
+    check_rows(t, "{tag}: the quants vs the CPU oracle (a row a block)", qbyte_values(q), qbyte_values(q_ref), exact ? BAR_EXACT : QBYTE_BAR, blk)
+    check_rows(t, "{tag}: the scales vs the CPU oracle (a row a block)", sc, s_ref, exact ? BAR_EXACT : BAR_APPROX_CTRL, 1)
+}
+
+//! the requant `q` / `sc` of the f32 rows `src` against `requant_oracle`'s: a Q8_K requant (`q8k`) bit-exact, a Q8_0 one within
+//! a quant step
+def private float_requant_held(t : T?; tag : string; src : array<float>; q : array<uint>; sc : array<float>; q8k : bool) {
+    var inscope q_ref : array<uint>
+    var inscope s_ref : array<float>
+    requant_oracle(src, 0, length(src), q8k, q_ref, s_ref)
+    requant_rows_held(t, tag, q, sc, q_ref, s_ref, q8k ? 256 : 32, q8k)
+}
+
 //! the Q8_K requant of f32 rows: amax is order-free, the pack deterministic - exact
 def private cud_feed_rq(t : T?; var s : void?; sent : float) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -1247,17 +1710,11 @@ def private cud_feed_rq(t : T?; var s : void?; sent : float) {
         t |> success(cud_sync(), "q8k requant: the launch completes ({cuda_last_error()})")
         var q <- buf_download(bufs[1], nelem / 4, type<uint>)
         var sc <- buf_download(bufs[2], nsb, type<float>)
-        var q_ref : array<uint>
-        var s_ref : array<float>
-        requant_oracle(src, 0, nelem, true, q_ref, s_ref)
-        check_rows(t, "q8k requant's quants vs the CPU oracle, bit-exact (a row a superblock)", qbyte_values(q), qbyte_values(q_ref), BAR_EXACT, 256)
-        check_rows(t, "q8k requant's scales vs the CPU oracle, bit-exact (a row a superblock)", sc, s_ref, BAR_EXACT, 1)
+        float_requant_held(t, "q8k requant", src, q, sc, true)
         cuda_mem_free(bufs)
         delete src
         delete q
         delete sc
-        delete q_ref
-        delete s_ref
     }
 }
 
@@ -1282,9 +1739,7 @@ def private cud_feed_actrq(t : T?; var s : void?; sent : float; q8k : bool) {
         var q_ref : array<uint>
         var s_ref : array<float>
         actrq_oracle(gh, uh, nelem, q8k, ACT_SILU, q_ref, s_ref)
-        let blk = nelem / nblk
-        check_rows(t, "{tag}'s quants vs the CPU oracle, a byte within one step (a row a block)", qbyte_values(q), qbyte_values(q_ref), QBYTE_BAR, blk)
-        check_rows(t, "{tag}'s scales vs the CPU oracle (a row a block)", sc, s_ref, BAR_APPROX_CTRL, 1)
+        requant_rows_held(t, tag, q, sc, q_ref, s_ref, nelem / nblk, false)
         cuda_mem_free(bufs)
         delete gh
         delete uh
@@ -1342,9 +1797,7 @@ def private cud_act_biased_arm(t : T?; var s : void?; act : uint; q8k : bool; f1
             var s_ref, s_ctrl : array<float>
             actrq_oracle(gb_in, ub_in, nelem, q8k, act, q_ref, s_ref)
             actrq_oracle(gh, uh, nelem, q8k, act, q_ctrl, s_ctrl)
-            let blk = nelem / nblk
-            check_rows(t, "{tag}'s quants vs the CPU oracle over the host-biased rows, a byte within one step (a row a block)", qbyte_values(q), qbyte_values(q_ref), QBYTE_BAR, blk)
-            check_rows(t, "{tag}'s scales vs the CPU oracle (a row a block)", sc, s_ref, BAR_APPROX_CTRL, 1)
+            requant_rows_held(t, "{tag} over the host-biased rows", q, sc, q_ref, s_ref, nelem / nblk, false)
             check_exceeds(t, "{tag} control: the unbiased oracle's scales", sc, s_ctrl, BAR_APPROX_CTRL)
             cuda_mem_free(bufs)
             delete q
@@ -1416,8 +1869,7 @@ def private cud_feed_ar(t : T?; var s : void?; sent : float; q8k : bool) {
         var q_ref : array<uint>
         var s_ref : array<float>
         requant_oracle(y_ref, 0, dim, q8k, q_ref, s_ref)
-        check_rows(t, "{tag}'s quants vs the CPU oracle, a byte within one step (a row a block)", qbyte_values(q), qbyte_values(q_ref), QBYTE_BAR, dim / nblk)
-        check_rows(t, "{tag}'s scales vs the CPU oracle (a row a block)", sc, s_ref, BAR_APPROX_CTRL, 1)
+        requant_rows_held(t, tag, q, sc, q_ref, s_ref, dim / nblk, false)
         check_rows(t, "{tag}'s residual row, updated in place, vs the CPU oracle", xg, x_ref, BAR_APPROX_CTRL, FLAT_ROWS)
         t |> success(moved_off(xg, x, 0, BAR_APPROX), "{tag}: the residual row moved off its input")
         cuda_mem_free(bufs)
@@ -2644,6 +3096,28 @@ def test_cud_dn_family(t0 : T?) {   // nolint:STYLE038 — the family's four cel
                             var inscope poison := o   // the bar's control: one normed o value pushed past both bars must red
                             poison[0] += 1.0 + 2.0 * logits_maxabs(o_ref)
                             check_exceeds(t, "{name} + out-norm at ds {ds}: the bar against a poisoned value", poison, o_ref, Bar(rel = 1e-2, abs_floor = floor))
+                        }
+                        if (!sig) {   // the same scan under `no_state` (a verify's rows): the raw o rows the writing scan's, the state as it found it
+                            var inscope o_w <- buf_download(bufs[3], npos * di, type<float>)   // gated in place above: the raw rows are scanned again below
+                            let nb = fixed_array(buf_upload(convh, s), buf_upload(sth, s), buf_upload(smh, s), buf_fill(npos * di, Y_SENTINEL, s), buf_upload(nocap, s), buf_fill(16, 0.0, s))
+                            let wb = fixed_array(buf_upload(convh, s), buf_upload(sth, s), buf_upload(smh, s), buf_fill(npos * di, Y_SENTINEL, s), buf_upload(nocap, s), buf_fill(16, 0.0, s))
+                            var pcn = pcs
+                            pcn.no_state = 1u
+                            if (chunk) {
+                                enc_dn_scan_chunk_cls(s, nb, pcn, dn_scan_chunk_wgs(int64(nvh), int64(ds), DNC_V))
+                                enc_dn_scan_chunk_cls(s, wb, pcs, dn_scan_chunk_wgs(int64(nvh), int64(ds), DNC_V))
+                            } else {
+                                enc_dn_scan_cls(s, nb, pcn, dn_scan_wgs(int64(nvh), int64(ds)))
+                                enc_dn_scan_cls(s, wb, pcs, dn_scan_wgs(int64(nvh), int64(ds)))
+                            }
+                            t |> success(cud_sync(), "{name} under no_state at ds {ds}: the launches complete ({cuda_last_error()})")
+                            var inscope st_kept <- buf_download(nb[1], nvh * ds * ds, type<float>)
+                            var inscope o_n <- buf_download(nb[3], npos * di, type<float>)
+                            var inscope o_raw_w <- buf_download(wb[3], npos * di, type<float>)
+                            check_rows(t, "{name} under no_state at ds {ds}: the state, left as found", st_kept, sth, BAR_EXACT, ds)
+                            check_rows(t, "{name} under no_state at ds {ds}: the raw o rows the writing scan's", o_n, o_raw_w, BAR_EXACT, ds)
+                            cuda_mem_free(nb)
+                            cuda_mem_free(wb)
                         }
                         cuda_mem_free(bufs)
                     }

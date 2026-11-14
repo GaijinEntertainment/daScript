@@ -6,6 +6,9 @@ require dasllama/dasllama_lint public
 require math
 require daslib/math_bits
 
+//! the bindings a Vulkan class set's hazard record tracks (`SetBits`): the `[vk_dispatch]` lens holds a class's binding numbers under it
+let VKD_SET_BINDINGS = 16
+
 //! ksigns_iq2xs without the table: bit 7 of the sign byte is the EVEN PARITY of the 7-bit index - five ALU ops, nothing staged.
 def ksign7(v : uint) : uint {
     var t = v ^ (v >> 4u)
@@ -638,3 +641,96 @@ def dn_conv_wgs(cd, npos : int64) : int64 => ((cd + 255l) / 256l) * ((npos + int
 //! The prefill's beta/alpha tile GEMM's workgroups: 16-position tiles x 16-output groups over the 2 x nvh rows.
 def dn_ba_wgs(npos, nvh : int64) : int64 => ((npos + 15l) / 16l) * ((2l * nvh + 15l) / 16l)
 
+//! token column `c`'s slot in the rows tensor leaf's feed, a (block, slot) a scale or a block sum: accumulator lane t holds
+//! columns 2t, 2t + 1, 8 + 2t and 9 + 2t
+def gk_feed_slot(c : uint) : uint => (c < 8u ? c / 2u : (c - 8u) / 2u) * 4u + (c < 8u ? c % 2u : 2u + (c - 8u) % 2u)
+
+//! the feed byte of token column `c`'s quant `k` (0 .. 31) of 32-block `blk`: the block's lane 4 (c % 8) + (k % 16) / 4 of the
+//! product's sixteen-byte fragment, the word of the column's half and the quant's, the byte k % 4
+def gk_feed_byte(blk, c, k : uint) : uint => (((blk * 32u + (c % 8u) * 4u + (k % 16u) / 4u) * 4u + (c / 8u) * 2u + k / 16u) * 4u) + k % 4u
+
+//! a signed byte as a float
+def gk_dflash_sbyte(b : uint) : float => float(int(b) - (b >= 128u ? 256 : 0))
+
+//! Where element `i` of a selector codebook's row `row` (`rank` wide) reads, by `fmt` - Q8_0 (0), Q4_K / Q5_K (4, 5), Q6_K (6),
+//! NVFP4 (9), the quant bytes from `q0`, a superblock codebook's scale rows in the CPU form: the quant bytes' two indices and
+//! the scale rows' first two (the rest are `gk_dflash_cb_at_h`'s). An address the format reads nothing at is 0, its read unused
+def gk_dflash_cb_at(fmt, rank, q0, row, i : uint) : uint4 {
+    let e = row * rank + i
+    let sb = e / 256u
+    let w = e % 256u
+    if (fmt == 0u) {
+        return uint4(q0 + row * (rank / 32u) * 34u + (i / 32u) * 34u + 2u + i % 32u, 0u, 0u, 0u)
+    } elif (fmt == 6u) {
+        let hf = w / 128u
+        let qd = (w % 128u) / 32u
+        let l = w % 32u
+        return uint4(q0 + sb * 192u + hf * 64u + (qd & 1u) * 32u + l, q0 + sb * 192u + 128u + hf * 32u + l,
+            sb * 18u + hf * 8u + l / 16u + qd * 2u, 0u)
+    } elif (fmt == 9u) {
+        let g = w / 32u
+        return uint4(q0 + sb * 128u + g * 16u + w % 16u, 0u, sb * 16u + g * 2u + (w % 32u) / 16u, 0u)
+    }
+    let js = w / 64u
+    let l = w % 32u
+    let so = sb * 20u
+    let j = js * 2u + (w % 64u) / 32u
+    return uint4(q0 + sb * (fmt == 5u ? 160u : 128u) + js * 32u + l, fmt == 5u ? q0 + sb * 160u + 128u + l : 0u,
+        j < 4u ? so + 4u + j : so + 8u + j, j < 4u ? so + 8u + j : so + j)
+}
+
+//! ... the element's other addresses: the scale rows' third byte (x), the quant bytes' half - a Q8_0 block's scale - (y) and
+//! the scale rows' two halves (z, w)
+def gk_dflash_cb_at_h(fmt, rank, q0, row, i : uint) : uint4 {
+    let e = row * rank + i
+    let sb = e / 256u
+    let w = e % 256u
+    if (fmt == 0u) {
+        return uint4(0u, (q0 + row * (rank / 32u) * 34u + (i / 32u) * 34u) >> 1u, 0u, 0u)
+    } elif (fmt == 6u) {
+        return uint4(0u, 0u, (sb * 18u + 16u) >> 1u, 0u)
+    } elif (fmt == 9u) {
+        return uint4(0u)
+    }
+    let so = sb * 20u
+    let j = (w / 64u) * 2u + (w % 64u) / 32u
+    return uint4(j < 4u ? 0u : so + 4u + j, 0u, so >> 1u, (so + 2u) >> 1u)
+}
+
+//! element `i` of a selector codebook's row `row` in the host's dequant arithmetic, off what the planes hold at
+//! `gk_dflash_cb_at`'s addresses (`b`: the two quant bytes and the first two scale bytes, unsigned) and `gk_dflash_cb_at_h`'s
+//! (`s2` the third scale byte, `h` the quant bytes' half and the scale rows' two)
+def gk_dflash_cb_val(fmt, rank, row, i : uint; b : uint4; s2 : uint; h : float4) : float {
+    let w = (row * rank + i) % 256u
+    if (fmt == 0u) {
+        return gk_dflash_sbyte(b.x) * h.y
+    } elif (fmt == 6u) {
+        let qd = (w % 128u) / 32u
+        let lo = qd >= 2u ? (b.x >> 4u) : (b.x & 15u)
+        let qv = int(lo | (((b.y >> (qd * 2u)) & 3u) << 4u)) - 32
+        let dsc = h.z * gk_dflash_sbyte(b.z)
+        return dsc * float(qv)
+    } elif (fmt == 9u) {
+        let nib = (w % 32u) / 16u == 1u ? (b.x >> 4u) : (b.x & 15u)
+        let m = nib & 7u
+        let mag = m < 4u ? m : ((2u + (m & 1u)) << ((m >> 1u) - 1u))   // E2M1 doubled: 0 1 2 3 4 6 8 12 (`mx4_lut`)
+        let sc = ue4m3_half_f32(b.z)
+        return (nib >= 8u ? -float(mag) : float(mag)) * sc
+    }
+    let js = w / 64u
+    let hi = (w % 64u) / 32u
+    var qv = hi == 1u ? (b.x >> 4u) : (b.x & 15u)
+    if (fmt == 5u && (b.y & ((hi == 1u ? 2u : 1u) << (js * 2u))) != 0u) {
+        qv += 16u
+    }
+    var sc = b.z & 63u
+    var mn = b.w & 63u
+    if (js * 2u + hi >= 4u) {
+        sc = (b.z & 15u) | ((b.w >> 6u) << 4u)
+        mn = (b.z >> 4u) | ((s2 >> 6u) << 4u)
+    }
+    let dj = h.z * float(sc)
+    let mj = h.w * float(mn)
+    let dq = dj * float(qv)
+    return dq - mj
+}

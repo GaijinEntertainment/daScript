@@ -33,12 +33,6 @@ struct private GemmaCudGemv {
     d : int64
 }
 
-//! a mapped host block: the host's pointer and the device's address of the same bytes
-struct private CudMapped {
-    host : void?
-    dev : uint64
-}
-
 //! The attached drafter on the CUDA driver: its planes, activation planes, the captured draft graphs
 struct private GemmaDrafterCud {
     ready : bool
@@ -83,43 +77,6 @@ var private g_cud_g : GemmaDrafterCud
 var private g_cud_attached = false
 var private @scratch g_cud_round : DiscreteRoundState   //! the tick's round: the gather, the verify's tokens, the cold streams, the stats since the attach
 
-//! `bytes` of device memory, zeroed (0 and `oom` where the card has no room)
-def private dev_soft(var oom : bool&; bytes : int64) : uint64 {
-    let d = cuda_mem_alloc(uint64(max(bytes, 16l)))
-    if (d == 0ul) {
-        oom = true
-        return 0ul
-    }
-    cuda_memset_d8(d, 0u8, uint64(max(bytes, 16l)), g_cud.stream)
-    return d
-}
-
-//! `bytes` of `src` into a fresh device buffer (0 and `oom` where the card has no room)
-def private dev_from(var oom : bool&; src : void?; bytes : int64) : uint64 {
-    let d = cuda_mem_alloc(uint64(bytes))
-    if (d == 0ul) {
-        oom = true
-        return 0ul
-    }
-    cuda_memcpy_htod(d, src, uint64(bytes), g_cud.stream)
-    return d
-}
-
-def private mapped_make(var oom : bool&; bytes : int64) : CudMapped {
-    let m = cuda_mem_alloc_host_mapped(uint64(bytes))
-    if (m.host == null) {
-        oom = true
-    }
-    return CudMapped(host = m.host, dev = m.dev)
-}
-
-def private mapped_free(var m : CudMapped) {
-    if (m.host != null) {
-        cuda_mem_free_host(m.host)
-    }
-    m = CudMapped()
-}
-
 //! every handle the drafter held dropped, nothing destroyed: the model drop already swept the device
 def private cud_forget(var g : GemmaDrafterCud) {
     g.gemvs |> clear()
@@ -145,11 +102,11 @@ def private cud_buffers_release(var g : GemmaDrafterCud) {
     for (gv in g.gemvs) {
         cuda_mem_free(gv.regs)
     }
-    mapped_free(g.tok)
-    mapped_free(g.cos)
-    mapped_free(g.inp)
-    mapped_free(g.picks)
-    mapped_free(g.lout)
+    cud_mapped_free(g.tok)
+    cud_mapped_free(g.cos)
+    cud_mapped_free(g.inp)
+    cud_mapped_free(g.picks)
+    cud_mapped_free(g.lout)
     cud_forget(g)
 }
 
@@ -225,39 +182,39 @@ def private cud_drafter_init(dr : GemmaDrafter; var g : GemmaDrafterCud) : bool 
 def private cud_buffers_make(dr : GemmaDrafter; var g : GemmaDrafterCud; quants : array<uint8>; scales : array<uint16>) : bool {
     g.fmt = dr.fmt
     var oom = false
-    g.wq = dev_from(oom, unsafe(addr<void?>(quants[0])), long_length(quants))
-    g.ws = dev_from(oom, unsafe(addr<void?>(scales[0])), long_length(scales) * 2l)
-    g.fblob = dev_from(oom, unsafe(addr<void?>(dr.fblob[0])), long_length(dr.fblob) * 4l)
+    g.wq = cud_dev_from(oom, unsafe(addr<void?>(quants[0])), long_length(quants))
+    g.ws = cud_dev_from(oom, unsafe(addr<void?>(scales[0])), long_length(scales) * 2l)
+    g.fblob = cud_dev_from(oom, unsafe(addr<void?>(dr.fblob[0])), long_length(dr.fblob) * 4l)
     let qdm = dr.n_heads * g.hs_mx
     let cat_n = 2l * dr.tdim
-    g.cat = dev_soft(oom, cat_n * 4l)
-    g.catq = dev_soft(oom, cat_n)
-    g.cats = dev_soft(oom, (cat_n / Q8_BLOCK_ELEMS) * 4l)
-    g.xin = dev_soft(oom, dr.dim * 4l)
-    g.xq = dev_soft(oom, dr.dim)
-    g.xs = dev_soft(oom, (dr.dim / Q8_BLOCK_ELEMS) * 4l)
-    g.q = dev_soft(oom, qdm * 4l)
-    g.attn = dev_soft(oom, qdm * 4l)
+    g.cat = cud_dev_zero(oom, cat_n * 4l)
+    g.catq = cud_dev_zero(oom, cat_n)
+    g.cats = cud_dev_zero(oom, (cat_n / Q8_BLOCK_ELEMS) * 4l)
+    g.xin = cud_dev_zero(oom, dr.dim * 4l)
+    g.xq = cud_dev_zero(oom, dr.dim)
+    g.xs = cud_dev_zero(oom, (dr.dim / Q8_BLOCK_ELEMS) * 4l)
+    g.q = cud_dev_zero(oom, qdm * 4l)
+    g.attn = cud_dev_zero(oom, qdm * 4l)
     g.cntoff = dr.n_heads * (g.hs_mx + 2l)   // one key split: the counters past one piece a head
-    g.part = dev_soft(oom, (g.cntoff + dr.n_heads) * 4l)
-    g.aq = dev_soft(oom, qdm)
-    g.aqs = dev_soft(oom, (qdm / Q8_BLOCK_ELEMS) * 4l)
-    g.o = dev_soft(oom, dr.dim * 4l)
-    g.gate = dev_soft(oom, dr.hidden * 4l)
-    g.up = dev_soft(oom, dr.hidden * 4l)
-    g.hq = dev_soft(oom, dr.hidden)
-    g.hqs = dev_soft(oom, (dr.hidden / Q8_BLOCK_ELEMS) * 4l)
-    g.logits = dev_soft(oom, dr.vocab * 4l)
-    g.hnext = dev_soft(oom, dr.tdim * 4l)
-    g.ids = dev_soft(oom, 16l)
+    g.part = cud_dev_zero(oom, (g.cntoff + dr.n_heads) * 4l)
+    g.aq = cud_dev_zero(oom, qdm)
+    g.aqs = cud_dev_zero(oom, (qdm / Q8_BLOCK_ELEMS) * 4l)
+    g.o = cud_dev_zero(oom, dr.dim * 4l)
+    g.gate = cud_dev_zero(oom, dr.hidden * 4l)
+    g.up = cud_dev_zero(oom, dr.hidden * 4l)
+    g.hq = cud_dev_zero(oom, dr.hidden)
+    g.hqs = cud_dev_zero(oom, (dr.hidden / Q8_BLOCK_ELEMS) * 4l)
+    g.logits = cud_dev_zero(oom, dr.vocab * 4l)
+    g.hnext = cud_dev_zero(oom, dr.tdim * 4l)
+    g.ids = cud_dev_zero(oom, 16l)
     let pbytes = int64(CLS_ARGMAX_CHUNKS) * 4l
-    g.pmax = dev_soft(oom, pbytes)
-    g.pid = dev_soft(oom, pbytes)
-    g.tok = mapped_make(oom, TOK_META_BYTES)
-    g.cos = mapped_make(oom, g_crd.cos_elems * 4l)
-    g.inp = mapped_make(oom, 16l + dr.tdim * 4l)
-    g.picks = mapped_make(oom, MTP_MAX_ROWS * 4l)
-    g.lout = mapped_make(oom, (dr.vocab + dr.tdim) * 4l)
+    g.pmax = cud_dev_zero(oom, pbytes)
+    g.pid = cud_dev_zero(oom, pbytes)
+    g.tok = cud_mapped_make(oom, TOK_META_BYTES)
+    g.cos = cud_mapped_make(oom, g_crd.cos_elems * 4l)
+    g.inp = cud_mapped_make(oom, 16l + dr.tdim * 4l)
+    g.picks = cud_mapped_make(oom, MTP_MAX_ROWS * 4l)
+    g.lout = cud_mapped_make(oom, (dr.vocab + dr.tdim) * 4l)
     return !oom
 }
 

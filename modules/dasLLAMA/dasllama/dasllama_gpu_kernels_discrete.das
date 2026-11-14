@@ -103,18 +103,22 @@ def q8_lane_scale(v : float) : float2 {
 //! hb's four low bits to bit 4 of each byte lane: the multiply's shifted copies never overlap, so no carry crosses a lane
 def k5_dep(hb : uint) : uint => ((hb & 0xFu) * 0x02040810u) & 0x10101010u
 
+//! the four nibble lanes of word `w` at `sh` (0: the low nibbles, 4: the high), a byte each
+def nib_word(w, sh : uint) : uint => (w >> sh) & KQC_NIBBLE_MASK
+
+//! Q5_K / Q5_1 - word `w`'s nibble lanes at `sh` with the 5th bits deposited from `hb`'s low four
+def k5_word(w, hb, sh : uint) : uint => nib_word(w, sh) | k5_dep(hb)
+
+//! Q6_K - four nibble lanes with the 2-bit high lanes of `qh` at `shift` composed above them
+def k6_word(nib, qh, shift : uint) : uint => nib | (((qh >> shift) & 0x03030303u) << 4u)
+
 //! Q5_K - the nibble half at `sh` (0 or 4) of four packed words with the 5th bits deposited from the block's qh byte lanes
-def k5_quad(r : uint4; qh, sh : uint) : uint4 {
-    return uint4(((r.x >> sh) & KQC_NIBBLE_MASK) | k5_dep(qh >> sh), ((r.y >> sh) & KQC_NIBBLE_MASK) | k5_dep(qh >> (8u + sh)),
-                 ((r.z >> sh) & KQC_NIBBLE_MASK) | k5_dep(qh >> (16u + sh)), ((r.w >> sh) & KQC_NIBBLE_MASK) | k5_dep(qh >> (24u + sh)))
-}
+def k5_quad(r : uint4; qh, sh : uint) : uint4 =>
+    uint4(k5_word(r.x, qh >> sh, sh), k5_word(r.y, qh >> (8u + sh), sh), k5_word(r.z, qh >> (16u + sh), sh), k5_word(r.w, qh >> (24u + sh), sh))
 
 //! Q6_K - the nibble lanes with the 2-bit high lanes of `qh` at `shift` composed above them
-def k6_quad(nib, qh : uint4; shift : uint) : uint4 {
-    let m2 = 0x03030303u
-    return uint4(nib.x | (((qh.x >> shift) & m2) << 4u), nib.y | (((qh.y >> shift) & m2) << 4u),
-                 nib.z | (((qh.z >> shift) & m2) << 4u), nib.w | (((qh.w >> shift) & m2) << 4u))
-}
+def k6_quad(nib, qh : uint4; shift : uint) : uint4 =>
+    uint4(k6_word(nib.x, qh.x, shift), k6_word(nib.y, qh.y, shift), k6_word(nib.z, qh.z, shift), k6_word(nib.w, qh.w, shift))
 
 //! Q3_K - the 2-bit qs lanes at `sh` with the hmask bit `bit` of each lane above them
 def k3_quad(q, h : uint4; sh, bit : uint) : uint4 {
@@ -216,6 +220,10 @@ def iq3s4_word(n : uint) : uint {
     let v = (n & 0x0F0F0F0Fu) * 2u + 0x01010101u
     return (v & 0x0F0F0F0Fu) | ((0x01010101u - ((v >> 4u) & 0x01010101u)) * 0xF0u)
 }
+
+//! IQ3_S4 - the odd codebook's bytes of four packed words' nibble lanes at `sh`
+def iq3s4_quad(w : uint4; sh : uint) : uint4 =>
+    uint4(iq3s4_word(nib_word(w.x, sh)), iq3s4_word(nib_word(w.y, sh)), iq3s4_word(nib_word(w.z, sh)), iq3s4_word(nib_word(w.w, sh)))
 
 [arch(at="../ARCHITECTURE_GPU_SHARED_GEMM.md#kq-dev-scale-row")]
 def iq4xs_sc(w0, w1, blk : uint) : int {
@@ -337,9 +345,11 @@ class template Q8GemvT {
 }
 
 //! the Q8_0 GEMV's N-column forms: `NC` activation rows (column c's blocks c x nb past the region's, `pa.ncols` of
-//! them live) against a lane pair's weight word and scale read once, each row's half-block one 16-byte load, the y
-//! rows `pa.ystride` apart; the `R2` stamps take two output rows a subgroup, so every activation load feeds two
-//! weight rows and a long row's re-reads halve - the rows a region holds must then be even
+//! them live) against a lane's weight words and its block's scale read once, each row's half-block one 16-byte load, the y
+//! rows `pa.ystride` apart. A step's activation words and scales load together ahead of its dots and the next step's weight
+//! words a step ahead, so a step waits on its loads once; each column's sum is the one-column form's, term for term. The
+//! `R2` stamps take two output rows a subgroup - a region's rows in pairs, an odd region's last pair one row - so
+//! every activation load feeds two weight rows
 [ |> template_struct_instance]
 class template Q8GemvNT {
     @ssbo @binding = 0 @role = "weight" wq4 : array<uint4>      //! weight quant words, vec4 view (16B loads)
@@ -352,15 +362,17 @@ class template Q8GemvNT {
     @template_constant NC : int = 4       //!< the columns a lane dots per weight word
     @template_constant R2 : bool = false  //!< two output rows a subgroup
 
-    [spirv_inline]
-    def gemv_n_body {
+    [spirv_inline, arch(at="../ARCHITECTURE_GPU_SHARED_GEMM.md#ncol-load-waves")]
+    def gemv_n_body {   // nolint:STYLE038 — a step's load wave and its dots are one register set, the R2 arms static
         let sg = gl_WorkGroupID.x * gl_NumSubgroups + gl_SubgroupID
-        let sg_per_region = R2 ? pa.d / 2u : pa.d
+        let sg_per_region = R2 ? (pa.d + 1u) / 2u : pa.d
         if (sg < pa.nreg * sg_per_region) {
             let r = sg / sg_per_region
             let row = R2 ? (sg % sg_per_region) * 2u : sg % sg_per_region
             let nb = pa.n / 32u
             let wb0 = regions[r * 2u] + row * nb
+            let pair = row + 1u < pa.d   // an odd region's last pair redots its one row, the second sum never stored
+            let wb1 = pair ? wb0 + nb : wb0
             let xb0 = regions[r * 2u + 1u]
             let lane = gl_SubgroupInvocationID
             let bpp = gl_SubgroupSize / 2u
@@ -371,25 +383,51 @@ class template Q8GemvNT {
             }
             let clast = max(pa.ncols, 1u) - 1u   // a dead column redots row clast: its loads ride along, never stored
             var bi0 = 0u
+            var wn0 = uint4(0u)
+            var wn1 = uint4(0u)
+            var sn0 = 0.0
+            var sn1 = 0.0
+            if (lane / 2u < nb) {
+                wn0 = wq4[wb0 * 2u + lane]
+                sn0 = float(wsh[wb0 + lane / 2u])
+                static_if (R2) {
+                    wn1 = wq4[wb1 * 2u + lane]
+                    sn1 = float(wsh[wb1 + lane / 2u])
+                }
+            }
             while (bi0 < nb) {
                 let b = bi0 + lane / 2u
+                let wv0 = wn0
+                let wv1 = wn1
+                let ws0 = sn0
+                let ws1 = sn1
+                if (b + bpp < nb) {
+                    wn0 = wq4[(wb0 + bi0 + bpp) * 2u + lane]
+                    sn0 = float(wsh[wb0 + b + bpp])
+                    static_if (R2) {
+                        wn1 = wq4[(wb1 + bi0 + bpp) * 2u + lane]
+                        sn1 = float(wsh[wb1 + b + bpp])
+                    }
+                }
                 if (b < nb) {
-                    let wv0 = wq4[(wb0 + bi0) * 2u + lane]
-                    let ws0 = float(wsh[wb0 + b])
+                    var xv : uint4[8]
+                    var xs : float[8]
                     for [unroll] (c in range(NC)) {
                         let xb = xb0 + (pa.col0 + min(uint(c), clast)) * nb
-                        let xv = xq4[(xb + bi0) * 2u + lane]
-                        let i0 = q8_pair_dot(wv0, xv)
+                        xv[c] = xq4[(xb + bi0) * 2u + lane]
+                        xs[c] = axs[xb + b]
+                    }
+                    for [unroll] (c in range(NC)) {   // the one-column form's sum, term for term: the pair's dot, the even lane's product
+                        let i0 = q8_pair_dot(wv0, xv[c])
                         static_if (R2) {
-                            let i1 = q8_pair_dot(wq4[(wb0 + nb + bi0) * 2u + lane], xv)
+                            let i1 = q8_pair_dot(wv1, xv[c])
                             if (lane % 2u == 0u) {
-                                let xs = axs[xb + b]
-                                acc0[c] = mad(float(i0) * ws0, xs, acc0[c])
-                                acc1[c] = mad(float(i1) * float(wsh[wb0 + nb + b]), xs, acc1[c])
+                                acc0[c] = mad(float(i0) * ws0, xs[c], acc0[c])
+                                acc1[c] = mad(float(i1) * ws1, xs[c], acc1[c])
                             }
                         } else {
                             if (lane % 2u == 0u) {
-                                acc0[c] = mad(float(i0) * ws0, axs[xb + b], acc0[c])
+                                acc0[c] = mad(float(i0) * ws0, xs[c], acc0[c])
                             }
                         }
                     }
@@ -399,16 +437,18 @@ class template Q8GemvNT {
             for [unroll] (c in range(NC)) {
                 if (uint(c) < pa.ncols) {
                     let t0 = subgroupAdd(acc0[c])
+                    let yb = pa.ybase + (pa.col0 + uint(c)) * pa.ystride + r * pa.d + row
                     static_if (R2) {
                         let t1 = subgroupAdd(acc1[c])
                         if (subgroupElect()) {
-                            let yb = pa.ybase + (pa.col0 + uint(c)) * pa.ystride + r * pa.d + row
                             y[yb] = t0
-                            y[yb + 1u] = t1
+                            if (pair) {
+                                y[yb + 1u] = t1
+                            }
                         }
                     } else {
                         if (subgroupElect()) {
-                            y[pa.ybase + (pa.col0 + uint(c)) * pa.ystride + sg] = t0
+                            y[yb] = t0
                         }
                     }
                 }
@@ -753,16 +793,13 @@ class template Q8GemvPleActT {
 [spirv_inline]
 def blk32_q51_quad(w : uint4; qh, sh : uint) : uint4 {
     let hb = qh >> (sh * 4u)
-    return uint4(((w.x >> sh) & KQC_NIBBLE_MASK) | k5_dep(hb), ((w.y >> sh) & KQC_NIBBLE_MASK) | k5_dep(hb >> 4u),
-        ((w.z >> sh) & KQC_NIBBLE_MASK) | k5_dep(hb >> 8u), ((w.w >> sh) & KQC_NIBBLE_MASK) | k5_dep(hb >> 12u))
+    return uint4(k5_word(w.x, hb, sh), k5_word(w.y, hb >> 4u, sh), k5_word(w.z, hb >> 8u, sh), k5_word(w.w, hb >> 12u, sh))
 }
 
 //! ... IQ4_NL's codebook bytes
 [spirv_inline]
-def blk32_iq4_quad(w : uint4; sh : uint) : uint4 {
-    return uint4(iq4_word((w.x >> sh) & KQC_NIBBLE_MASK), iq4_word((w.y >> sh) & KQC_NIBBLE_MASK), iq4_word((w.z >> sh) & KQC_NIBBLE_MASK),
-        iq4_word((w.w >> sh) & KQC_NIBBLE_MASK))
-}
+def blk32_iq4_quad(w : uint4; sh : uint) : uint4 =>
+    uint4(iq4_word(nib_word(w.x, sh)), iq4_word(nib_word(w.y, sh)), iq4_word(nib_word(w.z, sh)), iq4_word(nib_word(w.w, sh)))
 
 //! four Q4_0 nibble bytes `n` as signed int8 lanes `n - 8`: `n ^ 8` is the low bits, and a lane under 8 sets its top nibble
 [spirv_inline]
@@ -773,10 +810,8 @@ def q40_signed_word(n : uint) : uint {
 
 //! ... Q4_0's linear codes (q - 8)
 [spirv_inline]
-def blk32_q40_quad(w : uint4; sh : uint) : uint4 {
-    return uint4(q40_signed_word((w.x >> sh) & KQC_NIBBLE_MASK), q40_signed_word((w.y >> sh) & KQC_NIBBLE_MASK), q40_signed_word((w.z >> sh) & KQC_NIBBLE_MASK),
-        q40_signed_word((w.w >> sh) & KQC_NIBBLE_MASK))
-}
+def blk32_q40_quad(w : uint4; sh : uint) : uint4 =>
+    uint4(q40_signed_word(nib_word(w.x, sh)), q40_signed_word(nib_word(w.y, sh)), q40_signed_word(nib_word(w.z, sh)), q40_signed_word(nib_word(w.w, sh)))
 
 //! four Q5_0 codes `q` (0..31 a byte) as signed int8 lanes `q - 16`: `q ^ 16` is the low bits, and a lane under 16 sets its top three
 [spirv_inline]
@@ -794,7 +829,7 @@ def blk32_q50_quad(w : uint4; qh, sh : uint) : uint4 {
 
 //! ... the raw nibble codes (MXFP4's: `mx4_sdot` decodes them against x)
 [spirv_inline]
-def blk32_nib_quad(w : uint4; sh : uint) : uint4 => uint4((w.x >> sh) & KQC_NIBBLE_MASK, (w.y >> sh) & KQC_NIBBLE_MASK, (w.z >> sh) & KQC_NIBBLE_MASK, (w.w >> sh) & KQC_NIBBLE_MASK)
+def blk32_nib_quad(w : uint4; sh : uint) : uint4 => uint4(nib_word(w.x, sh), nib_word(w.y, sh), nib_word(w.z, sh), nib_word(w.w, sh))
 
 //! the per-32 decode `Blk32GemvT` and `Blk32BatchT` share, dispatched at compile time on the format's tag (`type<KqTag_<fmt>>`,
 //! stripped by `[template]`): a block's quant words in the quant plane
@@ -866,8 +901,6 @@ def blk32_scale(fmt : KqTag_mx4; sw, wb : uint) : float2 {
 //! d * isum * xs, MXFP4's doubled magnitudes under the halved E8M0 scale - each format's scalar dot's float order, reassociated by lane
 [ |> template_struct_instance]
 class template Blk32GemvT {
-    @template_constant Q51 : bool = false      //!< a Q5_1 plane
-    @template_constant MX4 : bool = false      //!< an MXFP4 plane; neither constant: an IQ4_NL per-32 plane
     @template_constant SUM : bool = false      //!< the routed down GEMV summed under the routing weights (`sum_shell`)
     @ssbo @binding = 6 @template_gate = SUM sw : array<float>   //! the k routing weights (the per-expert down scale folded in)
     @ssbo @binding = 0 wq : array<uint>        //! weight quant words, five a block on q51, four elsewhere
@@ -912,14 +945,14 @@ class template Blk32GemvT {
         let xbase = xb * 8u
         let x0 = uint4(xqw[xbase], xqw[xbase + 1u], xqw[xbase + 2u], xqw[xbase + 3u])
         let x1 = uint4(xqw[xbase + 4u], xqw[xbase + 5u], xqw[xbase + 6u], xqw[xbase + 7u])
-        static_if (MX4) {
+        static_if (typeinfo typename(type<FMT>) == typeinfo typename(type<KqTag_mx4>)) {   // the raw e2m1 nibbles decode against x
             let idot = (mx4_sdot(wl.x, x0.x) + mx4_sdot(wh.x, x1.x) + mx4_sdot(wl.y, x0.y) + mx4_sdot(wh.y, x1.y)
                 + mx4_sdot(wl.z, x0.z) + mx4_sdot(wh.z, x1.z) + mx4_sdot(wl.w, x0.w) + mx4_sdot(wh.w, x1.w))
             return mad(float(idot) * sc.x, axs[xb], acc)
         } else {
             let idot = (sdot4(wl.x, x0.x) + sdot4(wh.x, x1.x) + sdot4(wl.y, x0.y) + sdot4(wh.y, x1.y)
                 + sdot4(wl.z, x0.z) + sdot4(wh.z, x1.z) + sdot4(wl.w, x0.w) + sdot4(wh.w, x1.w))
-            static_if (Q51) {
+            static_if (typeinfo typename(type<FMT>) == typeinfo typename(type<KqTag_q51>)) {   // the format's m term against the block's activation sum
                 let asum = (sdot4(x0.x, 0x01010101u) + sdot4(x0.y, 0x01010101u) + sdot4(x0.z, 0x01010101u) + sdot4(x0.w, 0x01010101u)
                     + sdot4(x1.x, 0x01010101u) + sdot4(x1.y, 0x01010101u) + sdot4(x1.z, 0x01010101u) + sdot4(x1.w, 0x01010101u))
                 return mad(mad(sc.x, float(idot), sc.y * float(asum)), axs[xb], acc)
@@ -1087,11 +1120,9 @@ def mx4_sdot(nib, x : uint) : int {
     return sdot4(mag2, x) - 2 * sdot4(neg, x)
 }
 
-//! bindings 10 and 11 sit at the hazard rail's cap (`SetBits` holds twelve): a thirteenth plane here is a rail change, not a line
 [ |> template_struct_instance]
 class template Mx4GemvGuT : Blk32GemvT {
     typedef FMT = KqTag_mx4
-    override MX4 = true
     @ssbo @binding = 6 regions3 : array<uint>   //! the up stack's (rel_wblock, xblock) pairs per slot
     @ssbo @binding = 7 @role = "weight" gb : array<float>   //! the gate-bias plane ([ne x d] rows a layer), read under `bias_on`
     @ssbo @binding = 8 @role = "weight" ub : array<float>   //! ... and the up-bias plane
@@ -1222,8 +1253,16 @@ class KqGemvBase {
     def abstract blk_contrib(wsb, blk, xsb : uint) : float
 }
 
+//! the weight rows a lane group of the K-quant N-column leaves takes on both discrete homes (`KqGemvShellT`'s `RR`, a
+//! literal on every N stamp): a block's activation loads serve them all, and the dispatch's grid is a region's rows in
+//! groups of it
+let KQ_N_RR = 2
+
 [ |> template_struct_instance]
 class template KqGemvShellT : KqGemvBase {
+    @template_constant RR : int = 1   //!< the weight rows a lane group of the N-column shell takes (1, 2 or 4): a block's activation loads serve them all
+    @template_constant NCMAX : int = 8   //!< the columns the N-column shell's stamp carries (4 or 8): a narrower stamp holds fewer accumulators, so more of its groups run at once
+
     //! fills wl / wh with the lo / hi int8 quads (x's lo / hi words), returns (A_lo, B_lo, A_hi, B_hi): the block adds axs x (A_lo dot_lo + B_lo bsum_lo + A_hi dot_hi + B_hi bsum_hi)
     def override blk_decode(wsb, blk : uint; var wl : uint4&; var wh : uint4&) : float4 => float4(0.0)
 
@@ -1231,8 +1270,8 @@ class template KqGemvShellT : KqGemvBase {
     def override fold_reads_bsum : bool => false
 
     def nib_split(wv : uint4; var wl : uint4&; var wh : uint4&) {
-        wl = uint4(wv.x & KQC_NIBBLE_MASK, wv.y & KQC_NIBBLE_MASK, wv.z & KQC_NIBBLE_MASK, wv.w & KQC_NIBBLE_MASK)
-        wh = uint4((wv.x >> 4u) & KQC_NIBBLE_MASK, (wv.y >> 4u) & KQC_NIBBLE_MASK, (wv.z >> 4u) & KQC_NIBBLE_MASK, (wv.w >> 4u) & KQC_NIBBLE_MASK)
+        wl = blk32_nib_quad(wv, 0u)
+        wh = blk32_nib_quad(wv, 4u)
     }
 
     def iq4_word_of(n : uint) : uint {
@@ -1240,9 +1279,12 @@ class template KqGemvShellT : KqGemvBase {
         return iq4_word(n)
     }
 
+    def iq4_quad_of(wv : uint4; sh : uint) : uint4 =>
+        uint4(iq4_word_of(nib_word(wv.x, sh)), iq4_word_of(nib_word(wv.y, sh)), iq4_word_of(nib_word(wv.z, sh)), iq4_word_of(nib_word(wv.w, sh)))
+
     def iq4_split(wv : uint4; var wl : uint4&; var wh : uint4&) {
-        wl = uint4(iq4_word_of(wv.x & KQC_NIBBLE_MASK), iq4_word_of(wv.y & KQC_NIBBLE_MASK), iq4_word_of(wv.z & KQC_NIBBLE_MASK), iq4_word_of(wv.w & KQC_NIBBLE_MASK))
-        wh = uint4(iq4_word_of((wv.x >> 4u) & KQC_NIBBLE_MASK), iq4_word_of((wv.y >> 4u) & KQC_NIBBLE_MASK), iq4_word_of((wv.z >> 4u) & KQC_NIBBLE_MASK), iq4_word_of((wv.w >> 4u) & KQC_NIBBLE_MASK))
+        wl = iq4_quad_of(wv, 0u)
+        wh = iq4_quad_of(wv, 4u)
     }
 
     def dm_terms(wsb, blk : uint) : float4 {
@@ -1366,46 +1408,90 @@ class template KqGemvShellT : KqGemvBase {
         }
     }
 
-    //! the N-column form: a lane's blocks decode once and dot against every column's activation row (column c's
-    //! superblocks sit c x nsb past the region's), `pa.ncols` columns to 8, their y rows `pa.ystride` apart
-    def gemv_shell_n {
+    //! the N-column form: a lane group's blocks decode once and dot against every column's activation row (column c's
+    //! superblocks sit c x nsb past the region's), `pa.ncols` columns to 8, their y rows `pa.ystride` apart. A group takes
+    //! `RR` weight rows of one region - a region's rows in groups of RR, the last one short - so a block's activation loads
+    //! serve RR rows: the loads a step issues bound the leaf, not its dots. A step loads two columns' block (both halves) and
+    //! scale together ahead of their dots, a wave the step waits on once
+    [arch(at="../ARCHITECTURE_GPU_SHARED_GEMM.md#ncol-load-waves")]
+    def gemv_shell_n {   // nolint:STYLE037,STYLE038 — a step's waves and the RR rows' dots are one register set
         let lanes_per_row = pa.lanes_per_row == 0u ? gl_SubgroupSize : pa.lanes_per_row
         let lane = gl_SubgroupInvocationID
         let row_lane = lane % lanes_per_row
-        let rg = gemv_lane_row(gl_WorkGroupID.x, gl_SubgroupID, lane, lanes_per_row, gl_SubgroupSize, gl_NumSubgroups)
-        let live = rg < pa.nreg * pa.d
-        var acc : float[8]
-        for [unroll] (c in range(8)) {
-            acc[c] = 0.0
+        let grp = gemv_lane_row(gl_WorkGroupID.x, gl_SubgroupID, lane, lanes_per_row, gl_SubgroupSize, gl_NumSubgroups)
+        let rr = uint(RR)
+        let gpr = max(1u, (pa.d + rr - 1u) / rr)   // the groups a region's rows make
+        let live = grp < pa.nreg * gpr
+        let r = live ? grp / gpr : 0u
+        let row0 = live ? (grp % gpr) * rr : 0u
+        let nsb = pa.n / 256u
+        let nb = nsb * 8u
+        let wsb0 = regions[r * 2u] + row0 * nsb
+        let xsb0 = regions[r * 2u + 1u]
+        var acc : float[32]
+        for [unroll] (i in range(RR * NCMAX)) {
+            acc[i] = 0.0
         }
         if (live) {
-            let r = rg / pa.d
-            let row = rg % pa.d
-            let nsb = pa.n / 256u
-            let wsb0 = regions[r * 2u] + row * nsb
-            let xsb0 = regions[r * 2u + 1u]
-            let nb = nsb * 8u
+            let bsum = fold_reads_bsum()
             var b0 = row_lane
             while (b0 < nb) {
-                let wsb = wsb0 + b0 / 8u
                 let blk = b0 % 8u
                 let xsb = xsb0 + b0 / 8u
-                var wl = uint4(0u)
-                var wh = uint4(0u)
-                let terms = blk_decode(wsb, blk, wl, wh)
-                for [unroll] (c in range(8)) {
-                    if (uint(c) < pa.ncols) {   // uniform on the push constant; the clamp form folds every dead column against a live row and costs 1.6x at four columns
-                        acc[c] += blk_fold(wl, wh, terms, xsb + (pa.col0 + uint(c)) * nsb, blk)
+                var wl, wh : uint4[4]
+                var terms : float4[4]
+                for [unroll] (k in range(RR)) {
+                    let rowk = min(row0 + uint(k), pa.d - 1u)   // a row past the region redecodes its last: never stored
+                    var dl = uint4(0u)
+                    var dh = uint4(0u)
+                    terms[k] = blk_decode(wsb0 + (rowk - row0) * nsb + b0 / 8u, blk, dl, dh)
+                    wl[k] = dl
+                    wh[k] = dh
+                }
+                for [unroll] (g in range(NCMAX / 2)) {
+                    if (uint(g) * 2u < pa.ncols) {   // uniform on the push constant; the clamp form folds every dead column against a live row
+                        var xs : float[2]
+                        var xl, xh : uint4[2]
+                        for [unroll] (j in range(2)) {
+                            let c = uint(g * 2 + j)
+                            if (c < pa.ncols) {
+                                let xb = xsb + (pa.col0 + c) * nsb
+                                xs[j] = axs[xb]
+                                xl[j] = xq4[xb * 16u + blk * 2u]
+                                xh[j] = xq4[xb * 16u + blk * 2u + 1u]
+                            }
+                        }
+                        for [unroll] (j in range(2)) {
+                            if (uint(g * 2 + j) < pa.ncols) {
+                                var blo = 0
+                                var bhi = 0
+                                if (bsum) {
+                                    blo = sdot4(xl[j].x, KQC_ONES) + sdot4(xl[j].y, KQC_ONES) + sdot4(xl[j].z, KQC_ONES) + sdot4(xl[j].w, KQC_ONES)
+                                    bhi = sdot4(xh[j].x, KQC_ONES) + sdot4(xh[j].y, KQC_ONES) + sdot4(xh[j].z, KQC_ONES) + sdot4(xh[j].w, KQC_ONES)
+                                }
+                                for [unroll] (k in range(RR)) {   // `blk_fold`'s sum, term for term
+                                    let dlo = sdot4(wl[k].x, xl[j].x) + sdot4(wl[k].y, xl[j].y) + sdot4(wl[k].z, xl[j].z) + sdot4(wl[k].w, xl[j].w)
+                                    let dhi = sdot4(wh[k].x, xh[j].x) + sdot4(wh[k].y, xh[j].y) + sdot4(wh[k].z, xh[j].z) + sdot4(wh[k].w, xh[j].w)
+                                    var f = mad(terms[k].z, float(dhi), terms[k].x * float(dlo))
+                                    if (bsum) {
+                                        f = mad(terms[k].w, float(bhi), mad(terms[k].y, float(blo), f))
+                                    }
+                                    acc[k * NCMAX + g * 2 + j] += xs[j] * f
+                                }
+                            }
+                        }
                     }
                 }
                 b0 += lanes_per_row
             }
         }
-        for [unroll] (c in range(8)) {
-            if (uint(c) < pa.ncols) {
-                let total = fold_lanes(acc[c], lanes_per_row)
-                if (live && row_lane == 0u) {
-                    y[pa.ybase + (pa.col0 + uint(c)) * pa.ystride + rg] = total
+        for [unroll] (k in range(RR)) {
+            for [unroll] (c in range(NCMAX)) {
+                if (uint(c) < pa.ncols) {
+                    let total = fold_lanes(acc[k * NCMAX + c], lanes_per_row)
+                    if (live && row_lane == 0u && row0 + uint(k) < pa.d) {
+                        y[pa.ybase + (pa.col0 + uint(c)) * pa.ystride + r * pa.d + row0 + uint(k)] = total
+                    }
                 }
             }
         }
@@ -1606,8 +1692,8 @@ class template Iq4xsGemvT : KqGemvLeafT {
     def override blk_decode(wsb, blk : uint; var wl : uint4&; var wh : uint4&) : float4 {
         let wv = wq4[wsb * 8u + blk]
         static_if (IQODD) {
-            wl = uint4(iq3s4_word(wv.x & KQC_NIBBLE_MASK), iq3s4_word(wv.y & KQC_NIBBLE_MASK), iq3s4_word(wv.z & KQC_NIBBLE_MASK), iq3s4_word(wv.w & KQC_NIBBLE_MASK))
-            wh = uint4(iq3s4_word((wv.x >> 4u) & KQC_NIBBLE_MASK), iq3s4_word((wv.y >> 4u) & KQC_NIBBLE_MASK), iq3s4_word((wv.z >> 4u) & KQC_NIBBLE_MASK), iq3s4_word((wv.w >> 4u) & KQC_NIBBLE_MASK))
+            wl = iq3s4_quad(wv, 0u)
+            wh = iq3s4_quad(wv, 4u)
             return grid_terms(wsb, blk)
         } else {
             let w0 = wsu[wsb * 2u]
@@ -1912,54 +1998,6 @@ class template KvQ8StoreT {
     }
 }
 
-//! the tq4 rotation's butterfly passes over a workgroup's head: a base shell the store and the un-rotation share
-class template KvTq4WhtBase : GkBlkSignedMax {
-    @workgroup buf : float[512]                 //! the head: hs <= 512, a thread's second element at tid + 256
-
-    //! the unscaled Walsh-Hadamard transform of `buf[0 .. hs)` in place, `hs` a power of two: the five passes inside a
-    //! 32-lane group fold by xor shuffles (a lane's partner is its lane xor the pass's stride), the passes across groups
-    //! through the buffer, barrier-ordered; a subgroup narrower than 32 lanes takes every pass through the buffer
-    def wht(hs : uint) {
-        let tid = gl_LocalInvocationID.x
-        let t1 = tid + 256u
-        var h = 1u
-        if (gl_SubgroupSize >= 32u) {
-            var v0 = tid < hs ? buf[tid] : 0.0
-            var v1 = t1 < hs ? buf[t1] : 0.0
-            for [unroll] (sh in range(5)) {
-                let hh = 1u << uint(sh)
-                let o0 = subgroupShuffleXor(v0, hh)
-                let o1 = subgroupShuffleXor(v1, hh)
-                v0 = (tid & hh) == 0u ? v0 + o0 : o0 - v0
-                v1 = (tid & hh) == 0u ? v1 + o1 : o1 - v1
-            }
-            if (tid < hs) {
-                buf[tid] = v0
-            }
-            if (t1 < hs) {
-                buf[t1] = v1
-            }
-            barrier()
-            h = 32u
-        }
-        while (h < hs) {
-            let a0 = buf[tid & ~h]
-            let b0 = buf[(tid & ~h) | h]
-            let a1 = buf[t1 & ~h]
-            let b1 = buf[(t1 & ~h) | h]
-            barrier()
-            if (tid < hs) {
-                buf[tid] = (tid & h) == 0u ? a0 + b0 : a0 - b0
-            }
-            if (t1 < hs) {
-                buf[t1] = (t1 & h) == 0u ? a1 + b1 : a1 - b1
-            }
-            barrier()
-            h *= 2u
-        }
-    }
-}
-
 struct KvTqStoreArgs {
     kvd : uint        //! a K/V row's elements
     hs : uint         //! the head: a power of two, 32 or more
@@ -1977,7 +2015,7 @@ struct KvTqStoreArgs {
 //! -8 (the block's lanes fold it by shuffles) and each quant truncates value / scale + 8.5, capped at 15, as
 //! `quantize_tq4kv_row` does. A home's leaf runs it under its precise option: the butterflies and the quant sums round as the CPU's.
 [ |> template_struct_instance]
-class template KvTq4StoreT : KvTq4WhtBase {
+class template KvTq4StoreT : GkTq4Wht {
     @ssbo @binding = 0 q : array<float>
     @ssbo @binding = 1 kst : array<float>       //! the staged K rows [rows x kvd]
     @ssbo @binding = 2 vst : array<float>
@@ -2037,7 +2075,7 @@ class template KvTq4StoreT : KvTq4WhtBase {
                 // a tie keeps the lower index, as the CPU's compare
                 var mval = inside ? buf[e] * pa.inv_sqrt_hs : 0.0
                 blk_signed_max(e % KQ_B32_ELEMS_U, mval)
-                let d = mval / -8.0
+                let d = tq4_scale(mval)
                 let id = d != 0.0 ? 1.0 / d : 0.0
                 let sc = (mir_blk + blk) * KV_TQ4_BLOCK_HALVES
                 let lane = e % KQ_B32_ELEMS_U
@@ -2049,8 +2087,8 @@ class template KvTq4StoreT : KvTq4WhtBase {
                     }
                 }
                 if (inside && (lane & 1u) == 0u) {
-                    let q0 = min(15, int(buf[e] * pa.inv_sqrt_hs * id + 8.5))
-                    let q1 = min(15, int(buf[e + 1u] * pa.inv_sqrt_hs * id + 8.5))
+                    let q0 = tq4_code(buf[e] * pa.inv_sqrt_hs, id)
+                    let q1 = tq4_code(buf[e + 1u] * pa.inv_sqrt_hs, id)
                     let at = sc * 2u + 2u + lane / 2u
                     if (is_v) {
                         vq[at] = int8(q0 | (q1 << 4))
@@ -2076,7 +2114,7 @@ struct KvTqUnrotArgs {
 //! tq4's un-rotation of the attention rows, a workgroup a (row, head): the inverse transform, then the signs, then a gated
 //! model's gate - what acts on the attention row acts in the model's basis
 [ |> template_struct_instance]
-class template KvTq4UnrotT : KvTq4WhtBase {
+class template KvTq4UnrotT : GkTq4Wht {
     @ssbo @binding = 0 y : array<float>         //! the attention out rows, in place
     @ssbo @binding = 1 q : array<float>         //! the q plane, read for its gate halves
     @ssbo @binding = 2 @role = "weight" signs : array<float>
@@ -2180,7 +2218,8 @@ class template KvShadowT {
     }
 }
 
-//! the residual step on the template every home stamps (`GkAddRmsRows`), the discrete homes' form: 256 lanes, the row stash a slab
+//! the residual step on the template every home stamps (`GkAddRmsRows`), the discrete homes' form: the row stash a slab, a row on
+//! the stamp's `LANES` - 256 on the Vulkan home, 1024 on the CUDA home
 [ |> template_struct_instance]
 class template ArBase : GkAddRmsRows {
     @workgroup row : float[8192]
@@ -2237,7 +2276,7 @@ class template ArRqT : ArRqBase {
         var b = gl_LocalInvocationID.x >> 5u
         while (b < nblk) {
             sblk_store(b, lane, b * 256u + lane, inv)
-            b += 8u   // the 256-thread workgroup's eight blocks
+            b += LANES / 32u   // a subgroup a superblock: the workgroup's subgroups a pass
         }
     }
 
@@ -2251,7 +2290,7 @@ class template ArRqT : ArRqBase {
             var k = gl_LocalInvocationID.x
             while (k < pa.dim) {
                 ystore[k] = normed_at(k, 0.0, inv)
-                k += 256u
+                k += LANES
             }
         }
         static_if (KBLK) {
@@ -2306,9 +2345,9 @@ class template ArCombBase : ArBase {
         ss = 0.0
         var k = gl_LocalInvocationID.x
         while (k < pa.dim) {
-            let k1 = min(k + 256u, last)   // the clamped columns past the row read a live column and store nothing
-            let k2 = min(k + 512u, last)
-            let k3 = min(k + 768u, last)
+            let k1 = min(k + LANES, last)   // the clamped columns past the row read a live column and store nothing
+            let k2 = min(k + 2u * LANES, last)
+            let k3 = min(k + 3u * LANES, last)
             var f0 = 0.0
             var f1 = 0.0
             var f2 = 0.0
@@ -2341,16 +2380,16 @@ class template ArCombBase : ArBase {
             let v2 = (xs[base + k2] + f2) * pa.ascale
             let v3 = (xs[base + k3] + f3) * pa.ascale
             keep(base, k, v0, ss)
-            if (k + 256u < pa.dim) {
+            if (k + LANES < pa.dim) {
                 keep(base, k1, v1, ss)
             }
-            if (k + 512u < pa.dim) {
+            if (k + 2u * LANES < pa.dim) {
                 keep(base, k2, v2, ss)
             }
-            if (k + 768u < pa.dim) {
+            if (k + 3u * LANES < pa.dim) {
                 keep(base, k3, v3, ss)
             }
-            k += 1024u
+            k += 4u * LANES
         }
     }
 }
@@ -2378,6 +2417,7 @@ struct RqArgs {
     nblk : uint     //! block / superblock count
     lo : float      //! with `hi`, the range a `CLAMP` stamp clamps each source element to
     hi : float
+    feed_units : uint   //! an `OUT_FEED` stamp: the blocks / superblocks a token row spans
 }
 
 //! the Q8 requant of a plane's elements - Q8_0 32-blocks, or Q8_K superblocks under `KBLK` - over the stamp's element load (`load4` / `load1`)
@@ -2416,8 +2456,13 @@ class template RqPlainT : RqT {
     @ssbo @binding = 1 outq : array<int8>
     @ssbo @binding = 2 outs : array<float>
     @ssbo @binding = 3 @template_gate = OUT_SUM outsum : array<float>   //! the blocks' scale x quant sum
+    @ssbo @binding = 4 @template_gate = OUT_FEED fq : array<int8>       //! the rows tensor leaf's feed: the quants in lane order
+    @ssbo @binding = 5 @template_gate = OUT_FEED fs : array<float>      //! ... the scales
+    @ssbo @binding = 6 @template_gate = OUT_FEED fm : array<float>      //! ... the block sums (superblock rows)
     @push_constant pa : RqArgs
     @template_constant CLAMP : bool = false
+
+    def override feed_units : uint => pa.feed_units
 
     def override load1(e : uint) : float {
         static_if (CLAMP) {
@@ -2442,6 +2487,7 @@ struct ActArgs {
     bias_on : uint   //! the biased twins: gate and up take their expert's bias rows before the activation (gpt-oss)
     gboff : uint     //! ... this layer's row base in the gate-bias plane and the up-bias plane ([ne x brow] rows a layer each)
     brow : uint      //! ... the row width: element e sits in row e / brow, whose expert `rex` names
+    feed_units : uint   //! an `OUT_FEED` requant stamp: the blocks / superblocks a token row spans
 }
 
 //! the act + requant of a gate / up pair on `RqT`: the element load is the activation
@@ -2452,7 +2498,12 @@ class template ActRqT : RqT {
     @ssbo @binding = 2 outq : array<int8>      //! quantized bytes out
     @ssbo @binding = 3 outs : array<float>     //! per-block scales out
     @ssbo @binding = 4 @template_gate = OUT_SUM outsum : array<float>   //! the blocks' scale x quant sum
+    @ssbo @binding = 5 @template_gate = OUT_FEED fq : array<int8>       //! the rows tensor leaf's feed: the quants in lane order
+    @ssbo @binding = 6 @template_gate = OUT_FEED fs : array<float>      //! ... the scales
+    @ssbo @binding = 7 @template_gate = OUT_FEED fm : array<float>      //! ... the block sums (superblock rows)
     @push_constant pa : ActArgs
+
+    def override feed_units : uint => pa.feed_units
 
     def act_mul(v, u : float) : float => gk_act_mul(v, u, pa.act)
 
@@ -3349,33 +3400,6 @@ class template DaAttnT {
     }
 }
 
-//! the K/V mirror stores the window's rope-store stamps share: the K plane at binding 2, the V plane at 3, KT the mirror element type;
-//! the f16 stamps clamp +-65504 (the metal CLAMP16 contract - an inf in the mirror poisons attention)
-[ |> template_struct_instance]
-class template KvMirStoreT {
-    @ssbo @binding = 2 kmir : array<KT>        //! the K mirror plane
-    @ssbo @binding = 3 vmir : array<KT>        //! the V mirror plane
-    @template_constant CLAMP16 : bool = true
-
-    //! one K mirror element, clamped into f16 on the f16 stamp
-    def st_k(i : uint; v : float) {
-        static_if (CLAMP16) {
-            kmir[i] = half_sat(v)
-        } else {
-            kmir[i] = v
-        }
-    }
-
-    //! ... and one V mirror element
-    def st_v(i : uint; v : float) {
-        static_if (CLAMP16) {
-            vmir[i] = half_sat(v)
-        } else {
-            vmir[i] = v
-        }
-    }
-}
-
 //! the fused rope and K/V store of the token command (one or N rows), on the template both homes stamp (`GkRopeKvStore`): the q
 //! rows in `qsrc`, the [q | k | v] projection rows in `ksrc` and `vsrc` (one buffer), the cos and sin rows one plane; a row's
 //! mirror element base is the layer's plus its token block's
@@ -3395,80 +3419,18 @@ class template RopeKvStoreT : GkRopeKvStore {
     }
 }
 
-struct RopeKvBArgs {
-    qd : uint
-    kvd : uint
-    hs : uint
-    half : uint      //! rotated pairs a head; the rest pass through, k and v unrotated
-    neox : uint
-    kpair0 : uint    //! first k pair's per-position index
-    ppp : uint       //! pairs per position (hs / 2 per head, rotated or not)
-    layerbase : uint //! this layer's K/V mirror base
-    npos : uint
-    pos0 : uint      //! the segment's first position (window row base under a codec)
-    voff : uint
-    kstride : uint
-    qhs : uint       //! per-head q stride: hs, or 2 * hs on a gated [q | gate] model
-    boff : uint      //! this layer's row base in the [q | k | v] bias rows
-    hasb : uint
-    cstride : uint   //! a position's cos/sin plane width (every rope class's row); 0 = hs, the one-class plane
-    cbase : uint     //! this layer's rope class's row base inside the plane
-    row0 : uint      //! the segment's first row in the q, k/v and cos planes: a segmented window dispatches a segment at its rows
-    ring : uint      //! a sliding layer's ring rows: a row lands at `kv_ring_row` of its position; 0 = the flat slab
-}
-
-//! batched rope + K/V store: q roped in place, k/v into the mirrors
+//! the window's rope and K/V store on the template every home stamps (`GkRopeKvStore`, its window planes): q roped in place, k and
+//! v into the layer's mirror rows at the rows' positions
 [ |> template_struct_instance]
-class template RopeKvStoreBT : KvMirStoreT {
-    @ssbo @binding = 0 qrows : array<float>    //! q rows, roped in place
-    @ssbo @binding = 1 kvrows : array<float>   //! k rows at 0, v rows at voff
-    @ssbo @binding = 4 cossin : array<float>   //! per-position cos row then sin row (hs floats each)
-    @ssbo @binding = 5 @role = "weight" bias : array<float>   //! per-layer [q | k | v] projection biases (hasb), else a placeholder
-    @push_constant pa : RopeKvBArgs
+class template RopeKvStoreBT : GkRopeKvStore {
+    override WIN_ROWS = true
 
     [spirv_inline, arch(at="../ARCHITECTURE_GPU_SHARED_ATTN.md#rope-kv-merged-reads")]
     def rope_kv_b_body {
         let gid = gl_GlobalInvocationID.x
-        if (gid < pa.npos * pa.ppp) {
-            let p = gid / pa.ppp
-            let lp = gid % pa.ppp
-            let is_k = lp >= pa.kpair0
-            let pr = is_k ? lp - pa.kpair0 : lp
-            let hpairs = pa.hs / 2u
-            let h = pr / hpairs
-            let j = pr % hpairs
-            let rot = j < pa.half
-            let window_row = pa.row0 + p
-            let cb = window_row * (pa.cstride == 0u ? pa.hs : pa.cstride) + pa.cbase
-            let cj = min(j, pa.half - 1u)   // pass-through pairs read a clamped entry the select then drops
-            let tcr = cossin[cb + cj]
-            let tci = cossin[cb + pa.half + cj]
-            let fcr = rot ? tcr : 1.0
-            let fci = rot ? tci : 0.0
-            let e0 = rot ? (pa.neox != 0u ? j : j * 2u) : 2u * pa.half + 2u * (j - pa.half)
-            let e1 = rot ? (pa.neox != 0u ? j + pa.half : j * 2u + 1u) : e0 + 1u
-            let apos = pa.pos0 + p
-            let bhead = h * pa.hs
-            if (is_k) {
-                let kb = window_row * pa.kstride + h * pa.hs
-                let a0 = kvrows[kb + e0] + (pa.hasb != 0u ? bias[pa.boff + pa.qd + bhead + e0] : 0.0)
-                let a1 = kvrows[kb + e1] + (pa.hasb != 0u ? bias[pa.boff + pa.qd + bhead + e1] : 0.0)
-                let mo = pa.layerbase + kv_ring_row(apos, pa.ring) * pa.kvd + h * pa.hs
-                let vb = pa.voff + window_row * pa.kstride + h * pa.hs
-                let v0 = kvrows[vb + e0] + (pa.hasb != 0u ? bias[pa.boff + pa.qd + pa.kvd + bhead + e0] : 0.0)
-                let v1 = kvrows[vb + e1] + (pa.hasb != 0u ? bias[pa.boff + pa.qd + pa.kvd + bhead + e1] : 0.0)
-                st_k(mo + e0, a0 * fcr - a1 * fci)
-                st_k(mo + e1, a0 * fci + a1 * fcr)
-                st_v(mo + e0, v0)
-                st_v(mo + e1, v1)
-            } elif (rot || pa.hasb != 0u) {   // a pass-through q pair is rewritten only under a bias
-                let qhs = pa.qhs == 0u ? pa.hs : pa.qhs
-                let qb = window_row * (pa.qd / pa.hs) * qhs + h * qhs
-                let a0 = qrows[qb + e0] + (pa.hasb != 0u ? bias[pa.boff + bhead + e0] : 0.0)
-                let a1 = qrows[qb + e1] + (pa.hasb != 0u ? bias[pa.boff + bhead + e1] : 0.0)
-                qrows[qb + e0] = a0 * fcr - a1 * fci
-                qrows[qb + e1] = a0 * fci + a1 * fcr
-            }
+        let np = max(1u, pa.npairs)
+        if (gid < pa.rows * np) {
+            rope_kv_window(gid % np, gid / np)
         }
     }
 }
@@ -6751,6 +6713,7 @@ struct DnStepArgs {
 [ |> template_struct_instance]
 class template DnStepFusedT : WgReduceBase {
     @template_constant ZSIG : bool = false   //!< the out-gate is sigmoid(z) (qwen4exp's `Config.dn_z_sigmoid`) instead of silu(z)
+    @template_constant REREAD : bool = false   //!< the state read twice, sixteen rows a wave - for the dots, then for the write - where the default holds a part's 64 rows in registers across both: a thread's registers bound the groups in flight
     @ssbo @binding = 0 proj : array<float>     // the fresh projection row (+ z rows at cd)
     @ssbo @binding = 1 state : array<float>    // the persistent per-head f32 state (in place)
     @ssbo @binding = 2 smalls : array<float>   // beta/g/taps/wnorm/a/dt + the conv HISTORY ring (rw)
@@ -6871,14 +6834,29 @@ class template DnStepFusedT : WgReduceBase {
         var ksp = 0.0
         var qsp = 0.0
         if (active) {
-            // the loads first, straight-line (a short part re-reads its last row), so all 64 issue before a sum waits on one
-            for [unroll] (j in range(64)) {
-                sreg[j] = state[sbase + (r0 + min(uint(j), rows_per_part - 1u)) * ds + c]
-            }
-            for [unroll] (j in range(64)) {
-                if (uint(j) < rows_per_part) {
-                    ksp += dk[r0 + uint(j)] * sreg[j]
-                    qsp += dq[r0 + uint(j)] * sreg[j]
+            static_if (REREAD) {   // sixteen loads a wave, summed and let go
+                for [unroll] (w in range(4)) {
+                    var s16 : float[16]
+                    for [unroll] (j in range(16)) {
+                        s16[j] = state[sbase + (r0 + min(uint(w * 16 + j), rows_per_part - 1u)) * ds + c]
+                    }
+                    for [unroll] (j in range(16)) {
+                        if (uint(w * 16 + j) < rows_per_part) {
+                            ksp += dk[r0 + uint(w * 16 + j)] * s16[j]
+                            qsp += dq[r0 + uint(w * 16 + j)] * s16[j]
+                        }
+                    }
+                }
+            } else {
+                // the loads first, straight-line (a short part re-reads its last row), so all 64 issue before a sum waits on one
+                for [unroll] (j in range(64)) {
+                    sreg[j] = state[sbase + (r0 + min(uint(j), rows_per_part - 1u)) * ds + c]
+                }
+                for [unroll] (j in range(64)) {
+                    if (uint(j) < rows_per_part) {
+                        ksp += dk[r0 + uint(j)] * sreg[j]
+                        qsp += dq[r0 + uint(j)] * sreg[j]
+                    }
                 }
             }
         }
@@ -6903,9 +6881,23 @@ class template DnStepFusedT : WgReduceBase {
         barrier()
         if (active) {
             let vnc = dvn[c]
-            for [unroll] (j in range(64)) {
-                if (uint(j) < rows_per_part) {
-                    state[sbase + (r0 + uint(j)) * ds + c] = sreg[j] * eg + (sk * dk[r0 + uint(j)]) * vnc
+            static_if (REREAD) {   // the state read again, off the cache the first pass filled
+                for [unroll] (w in range(4)) {
+                    var s16 : float[16]
+                    for [unroll] (j in range(16)) {
+                        s16[j] = state[sbase + (r0 + min(uint(w * 16 + j), rows_per_part - 1u)) * ds + c]
+                    }
+                    for [unroll] (j in range(16)) {
+                        if (uint(w * 16 + j) < rows_per_part) {
+                            state[sbase + (r0 + uint(w * 16 + j)) * ds + c] = s16[j] * eg + (sk * dk[r0 + uint(w * 16 + j)]) * vnc
+                        }
+                    }
+                }
+            } else {
+                for [unroll] (j in range(64)) {
+                    if (uint(j) < rows_per_part) {
+                        state[sbase + (r0 + uint(j)) * ds + c] = sreg[j] * eg + (sk * dk[r0 + uint(j)]) * vnc
+                    }
                 }
             }
         }
@@ -6970,6 +6962,7 @@ struct DnScanArgs {
     cap_n : uint      //! the part's captures: records of two words (the row the state stands after, the checkpoint row's float base) at `cap_rec` of `caps`
     cap_rec : uint
     cap_state_off : uint   //! the layer's state floats into a checkpoint row (`RLayer.snap_off / 4`)
+    no_state : uint   //! the scan leaves the slot's state as it found it: a same-slab verify's rows, whose kept run a second scan writes
 }
 
 //! the plain per-token delta rule over the window's conv rows: one column of a head's state per lane cluster, 16 state rows a lane in
@@ -7093,7 +7086,7 @@ class template DnScanT {
             }
             t++
         }
-        if (live) {
+        if (live && pa.no_state == 0u) {
             for [unroll_full] (i in range(16)) {
                 state[sb + uint(i) * row_stride] = s[i]
             }

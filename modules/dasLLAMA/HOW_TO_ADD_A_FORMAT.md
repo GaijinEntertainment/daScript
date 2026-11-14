@@ -490,13 +490,24 @@ decoded scale row needs no upload work - only the id bridge and the kernels. The
    block-sum trick of q40/k4 does not apply: `fold_reads_bsum` stays false) and the fold's terms
    `(d * sc, 0, d * sc, 0)` with `sc` decoded by `iq4xs_sc` off the two-word device row (`scales_h`
    above d in word 0, the `scales_l` nibbles in word 1); the family's `blk_fold` dots the decoded
-   block against each column. The two stamps are `KqGemvIq4xs : Iq4xsGemvT {}` and `KqGemvIq4xsN`
-   with `override NCOL = true` - the template's `run` picks the shell; a grid format's template adds
+   block against each column. The three stamps are `KqGemvIq4xs : Iq4xsGemvT {}`, the N-column leaf
+   `KqGemvIq4xsN` (`override NCOL = true`, `override RR = 2`: two weight rows a lane group, the shared `KQ_N_RR` that
+   `REVIEW.das`'s `check_ncol_rr_literal` holds every N stamp's literal to) and the four-column leaf `KqGemvIq4xsN4`
+   (the same two plus `override NCMAX = 4`, half the accumulators, which the ladder takes at four columns or fewer,
+   `ARCHITECTURE_GPU_SHARED_GEMM.md#ncol-load-waves`); the CUDA home stamps the same three in `dasllama_cuda_classes.das`
+   (`CuKqGemvIq4xs`, `CuKqGemvIq4xsN`, `CuKqGemvIq4xsN4`) - the template's `run` picks the shell; a grid format's template adds
    `override GRID = true` with its literal `GRID_WORDS` / `GRID_OFF` (REVIEW.das holds them to the
    `KQ_GRID_<FMT>` chain). The family's roster `kq_gemv_fmts` (q8 and every `kq_sb` member) admits
-   every superblock format, so the N leaf is not optional: `gemv_cls_ensure_n` / `gemv_cls_enc_n`
-   are `kq_tile_stamp` stamps over every `KqFmt` member, so a format with no N stamp fails the
-   compile; the format joins `KQ_LEAF_FMTS` in `tests/test_vulkan_kernels.das`, which the ncol cell
+   every superblock format, so the N leaves are not optional: `gemv_cls_ensure_n` / `gemv_cls_enc_n`
+   (CUDA's `cud_gemv_cls_enc_n`) are `kq_tile_stamp` stamps over every `KqFmt` member, so a superblock format with no
+   N or N4 stamp (`kq_gemv_<fmt>_n_cls`, `kq_gemv_<fmt>_n4_cls`) fails the compile. The ladders' skip lists name who
+   stamps another template: a superblock format stays out of `GEMV_N_KQ` (Vulkan) / `CUD_SKIP_KQ` (CUDA), the
+   superblock ladders' skips, and joins `GEMV_N_B32`, the Vulkan per-32 ladder's (CUDA's `CUD_SKIP_B32` is `!b32`,
+   every format outside the per-32 set); a per-32 format joins the two superblock skip lists instead. The CUDA
+   N-row command's rows tensor leaf is a ladder too (`dasllama_cuda_classes_rows.das`,
+   `ARCHITECTURE_GPU_ASYMMETRIES_CUDA.md#cuda-rows-leaf`): a superblock format of sixteen nibble bytes a 32-block takes
+   a `<Fmt>RowsMmaT` over `Sb16RowsMmaT` and its stamp `CuKqRowsMma<Fmt>` (`kq_rows_<fmt>_mma`), any other format joins
+   `CUD_ROWS_MMA_SKIP`, and a format in neither fails the compile; the format joins `KQ_LEAF_FMTS` in `tests/test_vulkan_kernels.das`, which the ncol cell
    holds against `kq_gemv_fmts`, and its N stamp joins the census's blind list (its declared list of
    kernels no census row dispatches) in `tests/test_kernel_coverage.das` naming the regions file
    that carries it (the census's one-region loads never engage the N-row command). A codebook is

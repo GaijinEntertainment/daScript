@@ -182,9 +182,10 @@ def private all_streams_decoding(sch : Scheduler; npl : int64) : bool {
 //! fewer streams than `npl` (the region count is asked before the load), the streams never all reached decode
 //! within `npl x 8` steps, a stream that ended inside the timed steps, a timed step that ran its rows one at a
 //! time, a timed step a device-served model ran on the CPU batched stack, or a call the driver handed to the CPU
-//! chain. Every path past `submit` parks the streams' regions for the next rep, a refusal included
+//! chain. Every path past `submit` parks the streams' regions for the next rep, a refusal included. `same`: every stream
+//! takes one prompt, so a routed model's streams all pick the same experts (the reference exe feeds each stream its own tokens)
 [cold_path, arch(at="../ARCHITECTURE_MEASUREMENT.md#one-benchmark-rig")]
-def public bench_tg_batched_rep(t : Model; npl, plen, ngen, seed : int64; mtp : bool = false; kv_dtype : KVDtype = KVDtype.f16) : tuple<tps : double; why : string> {
+def public bench_tg_batched_rep(t : Model; npl, plen, ngen, seed : int64; mtp : bool = false; kv_dtype : KVDtype = KVDtype.f16; same : bool = false) : tuple<tps : double; why : string> {
     let homes = gpu_device_sessions()
     if (homes > 0l && homes < npl) {
         return (tps = 0.0lf, why = "the device homes {homes} stream(s), the row asks {npl}")
@@ -199,7 +200,7 @@ def public bench_tg_batched_rep(t : Model; npl, plen, ngen, seed : int64; mtp : 
     var events : array<SchedEvent>
     for (i in range64(npl)) {
         //! a self-speculative stream may emit depth + 1 tokens a tick, so its budget covers the timed ticks that many times over
-        var req <- PendingReq(id = i + 1l, prompt <- bench_prompt(plen, seed * 64l + i + 1l), max_new = bench_stream_rows(ngen, npl, mtp ? get_mtp_depth() + 1l : 1l))
+        var req <- PendingReq(id = i + 1l, prompt <- bench_prompt(plen, seed * 64l + (same ? 0l : i) + 1l), max_new = bench_stream_rows(ngen, npl, mtp ? get_mtp_depth() + 1l : 1l))
         verify(submit(t, sch, req), "bench_tg_batched_rep: the queue holds the row's streams")
     }
     var why = ""
