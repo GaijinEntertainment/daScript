@@ -4410,7 +4410,7 @@ def private crd_window_warm_on(var r : CudRdec; wsegs : array<RdecPfSeg>) : bool
     if (r.pf_hemb == 0ul) {
         crd_pf_head_setup(r)
     }
-    return true
+    return !r.pf_head_declined
 }
 
 //! the head warm's planes, once a residency (the caller holds it to the first head window): the window's embed rows, the shifted
@@ -4442,6 +4442,10 @@ def private crd_pf_head_setup(var r : CudRdec) {
     }
     for (i in range(3)) {
         r.pf_hsch[i] = cud_sched_make(r.pf_sched_words)
+    }
+    if (r.pf_hemb == 0ul || r.pf_hsrc == 0ul || r.pf_hna == 0ul || r.pf_hnb == 0ul || r.pf_hcat == 0ul || r.pf_hcos == 0ul || r.pf_hcatf == 0ul) {
+        r.pf_head_declined = true
+        to_log(LOG_WARNING, "dasLLAMA cuda resident: the NextN head's prompt warm found no room on the device for its planes; the head's prompt rows stay as the host holds them\n")
     }
 }
 
@@ -4724,7 +4728,7 @@ def private crd_prefill_windows(var r : CudRdec; cos_batch : array<float>; segs 
             }
             let carry = w0 > 0l ? 1l : 0l
             let nh = wlen - 1l + carry
-            if (nh > 0l) {
+            if (nh > 0l && !r.pf_head_declined) {
                 cuda_memcpy_htod(r.pf_hcos, unsafe(addr<void?>(cos_batch[(w0 - carry) * r.cos_elems])), uint64(nh * r.cos_elems * 4l), g_cud.stream)
             }
         }
