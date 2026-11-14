@@ -2123,7 +2123,7 @@ struct private MtpVerifyGroup {
     ple_base : uint64   // the n-gram conv ring inside the mirror (qwen4exp)
     tape_base : uint64
 }
-var private @scratch g_v_groups : array<MtpVerifyGroup>   //! the verify being encoded: the layer encoders read the rows' groups here
+var private @pool g_v_groups : array<MtpVerifyGroup>   //! the verify being encoded: the layer encoders read the rows' groups here
 var private g_chain_rounds = 0l   //! rounds whose draft and verify ran as one command buffer since load: the depth-1 NextN round's and the assistant drafter's
 
 [arch(at="../ARCHITECTURE_GPU_MTP.md#mtp-nextn-chain")]

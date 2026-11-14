@@ -178,7 +178,7 @@ def public cache_drain(var pc : MetalPipelineCache) {
 //! bucket — deterministic for fixed-shape drivers). Acquired buffers stay owned by the caller
 //! until released back; drain frees the free lists only.
 struct public MetalBufferPool {
-    @scratch free_bufs : table<uint64; array<MetalBuffer?>>   // size-bucketed free lists; recycle is the design
+    @pool free_bufs : table<uint64; array<MetalBuffer?>>   // size-bucketed free lists; recycle is the design
 }
 
 //! The buffer size a pool acquire of `bytes` allocates: the next
