@@ -75,9 +75,12 @@ A `[cuda_kernel]` class method lowers to one self-contained CUDA C++ text:
   `__float_as_uint` and kin; `sdot4` is `__dp4a`; `packHalf2x16` / `unpackHalf2x16` are the
   PTX `cvt` pair over a `uint` (lane x in the low half), `unpack8` / `pack32` byte-shift
   helpers per type; a lane of a vector by index (`v[i]`, which CUDA's vector types lack) goes
-  through two helpers picked by the expression's role, not the operand's constness: a read is
-  `__das_at_T`, a nested ternary over the lanes (three selects, which keep a register vector in
-  registers); an assignment's or compound assignment's target is `__das_atw_T`, pointer arithmetic
+  through three helpers picked by the expression's role and, for a read, by where the vector
+  lives - not by the operand's constness: a read is `__das_at_T`, a nested ternary over the lanes
+  (three selects, which keep a register vector in registers); a read off a buffer's element
+  (`member[i][lane]`) is `__das_atm_T`, the lane alone loaded at the element's address (the
+  selects would load the whole element first, and the address is the element's - a word past
+  2^32 words of a buffer stays in reach of a 32-bit element index); an assignment's or compound assignment's target is `__das_atw_T`, pointer arithmetic
   over the contiguous lanes (an indexed store on a shared or global vector; a reference picked by
   a ternary chain compiles to a jump table on the index, a four-way divergent branch around every
   lane store - and a register vector written by a runtime lane goes to local memory, so a hot body

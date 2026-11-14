@@ -1459,6 +1459,7 @@ def public declared_cuda_census : table<string> {   // nolint:STYLE038 - one fla
         "decl.elem_struct",
         "expr.field.struct",
         "expr.index.vector",
+        "expr.index.vector.mem",
         "expr.index.vector.store",
         "param.buffer_alias",
         "param.buffer_alias_const",
