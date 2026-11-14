@@ -90,8 +90,28 @@ A sizing call whose destination reaches a `@scratch` declaration is not descende
 field, a by-ref helper parameter, or a module global (`var @scratch g : array<T>`; the annotation
 goes AFTER `var`, before it is a syntax error). The mark covers the sizing set
 (`resize`/`reserve`/`push*`/`emplace`/`insert`/`erase`/`pop`/`clear`) and **table indexing**
-(`t[k]` on a `@scratch` table is the pool / residency-cache shape), and it follows local reference
-bindings (`var lst & = pool.free_bufs[b]` carries the mark).
+(`t[k]` inserts on a miss), and it follows local reference bindings (`var lst & = s.bufs[b]`
+carries the mark).
+
+### `@pool` - declaring a container that owns what it holds
+
+`@scratch` promises the contents are dead when the filling function returns. A free list of
+device buffers, a residency cache keyed by address, a pre-encoded step's command buffers keep
+their contents across calls on purpose - mark those `@pool`:
+
+```das
+struct BufferPool {
+    @pool free : table<uint64; array<Buffer?>>   // size-bucketed free lists
+}
+```
+
+`@pool` carries the `@scratch` sizing exemption unchanged (same placements, table indexing,
+reference bindings) and LINT034 ignores it. Its one duty, LINT035: a `@pool` field or global that
+can hold raw pointers has a drain in the module that declares it - `clear`, `resize(.., 0)` or
+`delete` on the container itself, or a `delete` of the value holding it - the shutdown or drop
+path. Emptying one bucket is not a drain, and a class's generated finalizer does not count.
+Parameters and locals carry no duty. Which mark: if the next call may read what this call left,
+it is `@pool`; if not, `@scratch`.
 
 The name is the property, not the lint: a reuse promise is exactly the precondition a compiler
 would need to keep capacity across a shrink, skip the zero-fill, or hoist a loop-invariant
@@ -128,7 +148,7 @@ into, so the example's `reserve_resize` called on such a buffer reports PERF026 
 
 1. `[cold_path]` on the callee - the honest fix when the leg genuinely runs once (lazy init, PSO
    compile, opt-in bookkeeping, a check behind a debug flag).
-2. `@scratch` on the destination when it is a reused buffer.
+2. `@scratch` on the destination when it is a reused buffer, `@pool` when it owns what it holds.
 3. `// nolint:PERF026` **with a reason**, honored anywhere along the chain - anchor line, sink
    line, or any call site between. The sink often bottoms out in `daslib/builtin.das`, whose lines
    are nobody's to annotate, so the call site that owns the decision is the honest place.

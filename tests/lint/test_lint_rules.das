@@ -156,29 +156,43 @@ def test_lint031_callee_memo_is_per_program(t : T?) {
     }
 }
 
+def check_marked_sites(t : T?; fixture, code : string; min_marks : int) {
+    //! each line of `fixture` marked `// <code>` gets one `code`
+    //! finding, and no other line gets any
+    let path = lint031_fixture_path(fixture)
+    compile_and_collect(t, path) $(issues; count) {
+        t |> success(count > 0, "the fixture reports")
+        var found <- [for (issue in issues); issue; where find(issue, code) >= 0]
+        var marked = 0
+        var lines <- split(fread(path), "\n")
+        for (text, i in lines, count(1)) {
+            let here_mark = ".das:{i}:"
+            var inscope at_line <- [for (issue in found); issue;
+                where find(issue, here_mark) >= 0]
+            let here = length(at_line)
+            let wants = find(text, "// {code}") >= 0 ? 1 : 0
+            marked += wants
+            t |> equal(here, wants, "line {i}: {text}")
+        }
+        t |> success(marked >= min_marks, "the fixture carries its marks ({marked})")
+        t |> equal(length(found), marked, "one finding per marked line: {join(found, "; ")}")
+        delete lines
+        delete found
+    }
+}
+
 [test(description = "every LINT034 shape is reported on its own marked line, and no unmarked line is")]
 def test_lint034_sites(t : T?) {
     t |> run("each line marked LINT034 gets one finding, the rest get none") @@(t : T?) {
-        let path = lint031_fixture_path("_fixture_lint034_scratch_borrowed_pointer.das")
-        compile_and_collect(t, path) $(issues; count) {
-            t |> success(count > 0, "the fixture reports")
-            var found <- [for (issue in issues); issue; where find(issue, "LINT034") >= 0]
-            var marked = 0
-            var lines <- split(fread(path), "\n")
-            for (text, i in lines, count(1)) {
-                let here_mark = ".das:{i}:"
-                var inscope at_line <- [for (issue in found); issue;
-                    where find(issue, here_mark) >= 0]
-                let here = length(at_line)
-                let wants = find(text, "// LINT034") >= 0 ? 1 : 0
-                marked += wants
-                t |> equal(here, wants, "line {i}: {text}")
-            }
-            t |> success(marked > 30, "the fixture carries its marks ({marked})")
-            t |> equal(length(found), marked, "one finding per marked line: {join(found, "; ")}")
-            delete lines
-            delete found
-        }
+        check_marked_sites(t, "_fixture_lint034_scratch_borrowed_pointer.das", "LINT034", 31)
+    }
+}
+
+[test(description = "a pointer-holding @pool declaration with no emptying call in its module is reported at the declaration, and a drained one is not")]
+def test_lint035_sites(t : T?) {
+    t |> run("each line marked LINT035 gets one finding, the rest get none") @@(t : T?) {
+        check_marked_sites(t, "_fixture_lint035_pool_drain.das", "LINT035", 4)
+        check_marked_sites(t, "_fixture_lint035_pool_drain.das", "LINT034", 0)
     }
 }
 
