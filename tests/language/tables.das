@@ -950,3 +950,109 @@ def test_ternary_table_lookups(t : T?) {
     let either = k == "a" ? ctx.members["a"].root : ctx.members["b"].root
     t |> equal(either, "r", "both arms")
 }
+
+def make_name_set(n : int) : table<string> {
+    return <- {for (i in range(n)); "name{i}"}
+}
+
+def make_squares(n : int) : table<int; int> {
+    return <- {for (i in range(n)); i => i * i}
+}
+
+def make_const_squares(n : int) : table<int; int> const {
+    return <- {for (i in range(n)); i => i * i}
+}
+
+def same_table(var tab : table<int; int>) : table<int; int>& {
+    unsafe {
+        return tab
+    }
+}
+
+[test(description = "a table made in the loop header - by a call, by a literal - stays alive for the whole loop over its keys, values or pairs while the body declares locals of its own")]
+def test_loop_over_a_temporary_table(t : T?) {
+    t |> run("keys of a returned table, the body allocates") @(t : T?) {
+        var total = 0
+        for (_ in range(20)) {
+            for (k in keys(make_name_set(50))) {
+                var inscope other : table<string>
+                other |> insert(k + "x")
+                total += length(k)
+            }
+        }
+        t |> equal(total, 5800)
+    }
+    t |> run("values of a returned table, the body holds a local array") @(t : T?) {
+        var total = 0
+        for (v in values(make_squares(10))) {
+            var pad : int[16]
+            pad[0] = v
+            total += pad[0]
+        }
+        t |> equal(total, 285)
+    }
+    t |> run("pairs of a returned table") @(t : T?) {
+        var total = 0
+        for (kv in each_kv(make_squares(10))) {
+            var pad : int[16]
+            pad[0] = kv.key
+            total += kv.value - pad[0]
+        }
+        t |> equal(total, 240)
+    }
+    t |> run("two sources, each over its own returned table") @(t : T?) {
+        var total = 0
+        for (k, v in keys(make_squares(10)), values(make_squares(10))) {
+            var pad : int[16]
+            pad[0] = k
+            total += v - pad[0]
+        }
+        t |> equal(total, 240)
+    }
+    t |> run("keys of a table literal") @(t : T?) {
+        var total = 0
+        for (k in keys({ "a" => 1, "bb" => 2, "ccc" => 3 })) {
+            var pad : int[16]
+            pad[0] = length(k)
+            total += pad[0]
+        }
+        t |> equal(total, 6)
+    }
+}
+
+[test(description = "a loop over a table the header receives by reference, as a const value or inside a generator sees every entry, and the table's owner keeps its contents")]
+def test_loop_over_a_table_the_header_does_not_own(t : T?) {
+    t |> run("a table returned by reference is not moved out of its owner") @(t : T?) {
+        var held <- make_squares(10)
+        var total = 0
+        for (v in values(same_table(held))) {
+            total += v
+        }
+        t |> equal(total, 285)
+        t |> equal(length(held), 10)
+    }
+    t |> run("a const table returned by value is still a loop source") @(t : T?) {
+        var count = 0
+        for (_ in values(make_const_squares(10))) {
+            count++
+        }
+        t |> equal(count, 10)
+    }
+    t |> run("inside a generator, in a loop that does not yield") @(t : T?) {
+        var gen <- generator<int>() <| $() { // nolint:STYLE002 only the piped form parses here
+            var inner = 0
+            for (v in values(make_squares(4))) {
+                var pad : int[16]
+                pad[0] = v
+                inner += pad[0]
+            }
+            yield inner
+            return false
+        }
+        var total = 0
+        for (v in gen) {
+            total += v
+        }
+        t |> equal(total, 14)
+    }
+}

@@ -265,3 +265,20 @@ own, or any use of the field other than a read or a method call.
 Both proofs hold in every program that links the module, so `devirtualize` rewrites the invoke into
 a typed direct call in the module's AST, in optimized builds, after lint and before inline
 splicing: auto-inline splices it like a free function, and AOT and the JIT see a plain call.
+
+## A temporary under a loop source (`ast_allocate_stack.cpp`) {#for-source-temporary}
+
+`keys(tab)`, `values(tab)` and every other function marked `[unsafe_outside_of_for]` return an
+iterator that points into their argument. When the argument is a value made on the spot - a
+call that returns by value, a literal, an `invoke` - its stack slot belongs to the source
+call's own scope, and a scope that ends gives its slots to whatever is allocated next: here the
+loop body's locals, while the iterator still reads the slot. Only the interpreter's stack layout
+does this: the AOT emitter declares such a value at function scope.
+
+So the stack allocator releases no slot allocated under a loop-source call of such a function
+(`holdsLoopSourceTemporaries`); the slots stay taken until the scope around the loop ends. The
+source stays in the loop header as written, a const value and a value under a nested call
+included.
+
+A generator loop that yields is outside this. `replaceGeneratorFor` rewrites it into plain
+statements, and a stack slot does not survive a `yield` in any tier.
