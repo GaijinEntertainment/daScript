@@ -14,8 +14,6 @@ var private g_findings : array<string>
 
 var private KEBAB <- %regex~^[a-z0-9]+(-[a-z0-9]+)*$%%
 
-let FNV1A_SEED = 0xcbf29ce484222325ul //! the offset basis every [[fnv1a]] hash starts from
-
 //! Record one finding against a file.
 def gate_finding(path : string; msg : string) {
     g_findings |> push("{path}: {msg}")
@@ -83,20 +81,6 @@ def find_line(text : string; needle : string) : int {
         }
     }
     return line
-}
-
-def fnv1a(text : string; seed : uint64) : uint64 {
-    //! 64-bit FNV-1a of the bytes of `text`, continued from `seed`:
-    //! `FNV1A_SEED` starts a hash and an earlier result chains the
-    //! next piece onto it.
-    var h = seed
-    peek_data(text) $(d) {
-        for (b in d) {
-            h ^= uint64(b)
-            h *= 0x100000001b3ul
-        }
-    }
-    return h
 }
 
 //! Module paths from a file's line-level `require` statements (`require a/b public` → "a/b";

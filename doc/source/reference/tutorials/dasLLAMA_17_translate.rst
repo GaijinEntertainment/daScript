@@ -93,6 +93,23 @@ text is a loop of short calls, and a sentence takes a few milliseconds on a
 laptop CPU. Where a GPU driver serves the model, ``translate`` runs the whole
 sentence on the device; elsewhere it runs on the CPU, with the same result.
 
+A model in memory
+=================
+
+A game engine keeps its files in its own packs, so it hands a model over as
+bytes. The first load of a Firefox model bakes a prepared image, a ``.dlim``
+file, beside it. ``load_translator(base, bytes)`` takes that image's bytes and
+borrows them in place: it copies nothing, and the bytes stay yours until you
+delete the translator. They start on a ``prepared_image_alignment()``
+boundary. Run the tutorial with the ``.dlim`` as the model path to see it:
+
+.. das-doc: given let image_base : void? = null
+.. das-doc: given let image_bytes = 0ul
+.. code-block:: das
+
+   var inscope held <- load_translator(image_base, image_bytes)
+   print("{translate(held, "Where is the nearest pharmacy?")}\n")
+
 .. seealso::
 
    Full source: :download:`tutorials/dasLLAMA/17_translate.das <../../../../tutorials/dasLLAMA/17_translate.das>`

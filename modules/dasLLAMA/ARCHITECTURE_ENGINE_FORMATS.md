@@ -281,8 +281,10 @@ repack walks that plane's region alone (`shexp_plane_q8`).
   POLICY lives here; tuned VALUES live in the box's sidecar, never in source. The framework is
   OPTIONAL: `llvm_tune` comes through the `tune_framework` group, empty in a build that did not
   configure dasLLVM, and every use of it sits behind `static_if (typeinfo module_exists(llvm_tune))`, so a build without dasLLVM opens no
-  sidecar, reads no policy env and reports nothing - `[tuned]` stamps the declared `fallback=`
-  (or `DEFAULT_PERM`) and the AST rewrite is unchanged. `box_profile_verdict_at` answers the
+  sidecar and reads no policy env - `[tuned]` stamps the declared `fallback=`
+  (or `DEFAULT_PERM`) and the AST rewrite is unchanged. Two answers a host asks of a build live
+  here too: `box_profile_in_library` (a built library reads no sidecar) and `kernel_report_` (the
+  kernels the build runs, in one line - the reference kernels in a build without dasLLVM). `box_profile_verdict_at` answers the
   reason NAME rather than llvm_tune's enum for the same reason: a signature cannot be gated.
 - **`dasllama_tune_scope.das`** - the one `[tune_scope]` declaration (tuner, covered modules,
   version pin, shipped defaults), in a module every kernel module requires: a kernel reads its

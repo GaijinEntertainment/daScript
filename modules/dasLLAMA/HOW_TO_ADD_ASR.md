@@ -109,7 +109,10 @@ home, never another family file. In landing order:
   `stage_<family>_model`, `mint_<family>_model` (the in-memory rail suites use) and
   `load_<family>_model(path, q8)`, which maps a `.dlim` named directly (a wrong identity panics),
   else maps or builds the cached image, else builds it in memory - a served model is always
-  image-backed (`ARCHITECTURE_IMAGE.md#there-is-one-way-to-load-a`).
+  image-backed (`ARCHITECTURE_IMAGE.md#there-is-one-way-to-load-a`). Beside it,
+  `load_<family>_model(base, bytes)` is one `load_through_memory` call under the family's lane
+  prefix, for a host that holds the image in memory, and `load_asr_model(base, bytes)` in
+  `dasllama_asr.das` takes the family's branch - it panics on a family it does not list.
 - **The image tags.** Register both lanes at `[init]`: `register_image_family_tag("<family>-q8")`
   and the exact lane's tag with `config_free = true`, since its planes are the file's own
   (`ARCHITECTURE_IMAGE.md#image-lane-name`).

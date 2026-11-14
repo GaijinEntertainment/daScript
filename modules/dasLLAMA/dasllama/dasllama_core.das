@@ -42,6 +42,7 @@ require dasllama/dasllama_translate public     // the translation surface (Berga
 require dasllama/dasllama_config public        // the explicit .dlim bake configuration — the --config / identity contract
 require dasllama/dasllama_dflash               // the DFlash block drafter's attach (wrapped below, not re-exported)
 require dasllama/dasllama_math                 // engine-level knobs (wrapped below, not re-exported)
+require dasllama/dasllama_tune                 // the kernel report (wrapped below, not re-exported)
 require dasllama/dasllama_par                  // the single-thread gate of the dispatch macros (wrapped below, not re-exported)
 require dasllama/dasllama_gpu_tier             // GPU tier status + marks (wrapped below, not re-exported)
 require dasllama/dasllama_gpu_resident         // resident slot-switch/pin surface (wrapped below, not re-exported)
@@ -1087,6 +1088,17 @@ def prefix_insert_snapshot(var cache : PrefixCache; var pool : KVPool; session :
     //! (moved in) taken elsewhere - a device's slots, or a window's capture at ``upto`` (0 = the tokens' end).
     //! ``opening`` kinds it as shared, else as a conversation's tail.
     prefix_insert_snapshot_(cache, pool, session, tokens, snap, opening, upto)
+}
+
+def kernel_report() : string {
+    //! One line naming the CPU kernels this build runs: a fat build's classes and the ones this box picks, else the
+    //! stamped kernel families by source (a forced or adopted tune file is named). For a host's log at start.
+    return kernel_report_()
+}
+
+def prepared_image_alignment() : int64 {
+    //! The boundary, in bytes, a prepared image its host holds in memory starts on; a load from another address panics.
+    return IMAGE_PAGE
 }
 
 def gpu_device_session_ctx() : int64 {

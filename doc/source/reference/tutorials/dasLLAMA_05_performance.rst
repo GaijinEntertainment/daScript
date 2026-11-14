@@ -193,6 +193,19 @@ flavor. ``dlim_clean`` is the garbage collector: ``apply = false`` only reports,
    let r = dlim_clean(path, false)   // report only
    print("{r.stale} of {r.total} stale\n")
 
+A host program prints two more facts at start. ``kernel_report()`` names the
+CPU kernels this build runs: under ``-jit`` they are stamped for this box, from
+its tune file or from its CPU class profile, and a library built for one known
+target names the file it was built from. ``prepared_image_alignment()`` is for
+a host that keeps a ``.dlim``'s bytes in its own memory. ``load_asr_model(base,
+bytes)`` and its siblings borrow those bytes in place, with no copy, and the
+bytes start on this boundary:
+
+.. code-block:: das
+
+   print("kernels: {kernel_report()}\n")
+   print("an image in memory starts on a {prepared_image_alignment()}-byte boundary\n")
+
 Where to go deeper: ``modules/dasLLAMA/tune_for_this_box.md`` covers kernel
 tuning (token-block size, unrolls, the ``[dasllama_grid]`` tuner) when you
 want to squeeze a specific machine.

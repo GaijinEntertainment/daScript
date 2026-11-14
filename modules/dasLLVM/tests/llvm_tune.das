@@ -151,11 +151,11 @@ def test_llvm_tune_grid_mode(t : T?) {
 // written. Profiles are written for the ladder's lowest class (the baseline, k0) and its top
 // class (k2); which clone RESULT reports depends on whether this box is in the top class.
 
-def private tune_env_prefix(mode, baseline, pin : string) : string {
-    return (get_platform_name() == "windows" ?
-        "set DAS_TUNE_MODE={mode}&& set DAS_JIT_BASELINE={baseline}&& set DAS_TUNE_FAT_CLASS={pin}&& set DAS_TUNE_MANIFEST=&& set DAS_TUNE_VERBOSITY=verbose&& set DAS_TUNE_POLICY=&& set DAS_LOG_LEVEL=info&& " :
-        "DAS_TUNE_MODE={mode} DAS_JIT_BASELINE={baseline} DAS_TUNE_FAT_CLASS={pin} DAS_TUNE_MANIFEST= DAS_TUNE_VERBOSITY=verbose DAS_TUNE_POLICY= DAS_LOG_LEVEL=info ")
-}
+def private tune_env_prefix(mode, baseline, pin : string;
+                            forced : string = ""; manifest : string = "") : string =>
+    child_env([("DAS_TUNE_MODE", mode), ("DAS_JIT_BASELINE", baseline), ("DAS_TUNE_FAT_CLASS", pin),
+        ("DAS_TUNE_FORCE", forced), ("DAS_TUNE_MANIFEST", manifest),
+        ("DAS_TUNE_VERBOSITY", "verbose"), ("DAS_TUNE_POLICY", ""), ("DAS_LOG_LEVEL", "info")])
 
 def private has(lines : array<string>; needle : string) : bool {
     for (ln in lines) {
@@ -218,7 +218,7 @@ def private copy_scope_fixture(t : T?; dstdir : string) {
     t |> success(fwrite(path_join(dstdir, SCOPE_FIXTURE), text), "could not copy {SCOPE_FIXTURE} into {dstdir}")
 }
 
-[test(description = "a fat -exe stamps one clone per profiled CPU class and dispatches by cpuid at startup, DAS_TUNE_FAT_CLASS pins or refuses the pick, and fat mode refuses a non-exe build and a build with no baseline", timeout = 1200)]
+[test(description = "a fat -exe stamps one clone per profiled CPU class and dispatches by cpuid at startup, DAS_TUNE_FAT_CLASS pins or refuses the pick, fat mode refuses a -jit run and a build with no baseline, and a fat -lib picks its classes when a host creates it", timeout = 1200)]
 def test_llvm_tune_fat(t : T?) { // nolint:STYLE038 - one flat spawn-and-assert rail per scenario; a split would hide the sequence the scenarios build on
     if (!jit_enabled()) {
         t |> success(true)
@@ -323,10 +323,13 @@ def test_llvm_tune_fat(t : T?) { // nolint:STYLE038 - one flat spawn-and-assert 
     }
     delete lref
 
-    // 5. fat is an exe mode: a -jit run refuses by name
+    // 5. fat is a standalone mode: a -jit run refuses by name
     var lj : array<string>
-    t |> success(spawn_child("{tune_env_prefix("fat", low, "")}\"{bin}\" -no-module-cache -jit -jit-no-cache \"{client}\"", lj) != 0, "case 5: fat outside -exe refuses")
-    t |> success(lj |> has("standalone-exe mode"), "case 5: the refusal names the mode\n{join(lj, "\n")}")
+    let jit_fat_rc = spawn_child("{tune_env_prefix("fat", low, "")}\"{bin}\" -no-module-cache "
+        + "-jit -jit-no-cache \"{client}\"", lj)
+    t |> success(jit_fat_rc != 0, "case 5: fat under -jit refuses")
+    t |> success(lj |> has("is a standalone mode"),
+        "case 5: the refusal names the mode\n{join(lj, "\n")}")
 
     // 6. fat needs the baseline class
     var ln : array<string>
@@ -335,7 +338,135 @@ def test_llvm_tune_fat(t : T?) { // nolint:STYLE038 - one flat spawn-and-assert 
     t |> success(fat_rc != 0, "case 6: fat without a baseline refuses")
     t |> success(ln |> has("needs DAS_JIT_BASELINE"), "case 6: the refusal names the knob\n{join(ln, "\n")}")
 
+    // 8. a fat -lib has no main: the library's own [init] picks
+    //    the classes when a host creates it
+    if (das_is_dll_build()) {
+        copy_fixture(t, "_llvm_tune_fat_clib.das", work)
+        copy_fixture(t, "_llvm_tune_fat_clib_host.das", work)
+        write_profile(defdir, low, "k0")
+        var ll : array<string>
+        let lib_rc = build_clib(bin, work, "fatclib", tune_env_prefix("fat", low, ""), ll)
+        t |> equal(lib_rc, 0, "case 8: the fat library builds\n{join(ll, "\n")}")
+        t |> success(ll |> has("fat clones {top}=k2/profile, {low}=k0/profile"),
+            "case 8: the library carries one clone per profiled class\n{join(ll, "\n")}")
+        var box_mask = 0
+        for (c in ladder) {
+            if (tune_fat_box_in_class(c)) {
+                box_mask |= tune_fat_class_bit(c)
+            }
+        }
+        let host = path_join(work, "_llvm_tune_fat_clib_host.das")
+        var lh : array<string>
+        let run_host = "\"{bin}\" -no-module-cache \"{host}\""
+        let host_rc = spawn_child("{tune_env_prefix("", "", "")}{run_host}", lh)
+        t |> equal(host_rc, 0, "case 8: a host loads the fat library\n{join(lh, "\n")}")
+        t |> success(lh |> has("LIBRESULT {13 + (boxInTop ? 2 : 0)} MASK {box_mask} LIBRARY true"),
+            "case 8: the library picked this box's classes at create\n{join(lh, "\n")}")
+        // a pin to a class of another architecture: the create fails
+        // and says why, the host goes on
+        let foreign_class = get_architecture_name() == "x86_64" ? "arm-neon" : "x86-avx2"
+        var lp : array<string>
+        let pinned_rc = spawn_child("{tune_env_prefix("", "", foreign_class)}{run_host}", lp)
+        t |> equal(pinned_rc, 1,
+            "case 8: a pin this box is not in fails the create\n{join(lp, "\n")}")
+        t |> success(lp |> has("create failed") && lp |> has("DAS_TUNE_FAT_CLASS={foreign_class}"),
+            "case 8: the failed create names the pin\n{join(lp, "\n")}")
+        delete ll
+        delete lh
+        delete lp
+    }
+
     delete ladder
+    rmdir_rec(work)
+}
+
+//! The fat-mode C library fixture built with `-lib` under `env`, its
+//! bindings beside it.
+def private build_clib(bin, work, stem, env : string; var lines : array<string>) : int {
+    let source = path_join(work, "_llvm_tune_fat_clib.das")
+    let output = path_join(work, stem)
+    let bindings = path_join(work, "_{stem}_c.das")
+    return spawn_child("{env}\"{bin}\" -no-module-cache -lib \"{source}\" -output \"{output}\""
+        + " -- --jit-lib-bindings \"{bindings}\"", lines)
+}
+
+[test(description = "DAS_TUNE_FORCE stamps a library and a -jit program from a sidecar another box minted before this binary and says so by name, no saver writes that file, and the same file named as an ordinary sidecar is refused", timeout = 1200)]
+def test_llvm_tune_forced_file(t : T?) {
+    if (!jit_enabled() || !das_is_dll_build()) {
+        t |> success(true)
+        return
+    }
+    // aliases a process-global Array header - do not delete
+    let args <- get_command_line_arguments()
+    let bin = args[0]
+    let dirRes = create_temp_directory_result("llvm_tune_forced_")
+    if (dirRes is error) {
+        t |> failure("could not create a temp dir: {dirRes as error}")
+        return
+    }
+    let work = dirRes as value
+    copy_scope_fixture(t, work)
+    copy_fixture(t, "_llvm_tune_fat_clib.das", work)
+    copy_fixture(t, "_llvm_tune_fat_clib_host.das", work)
+    let ladder_text = jit_cpu_class_ladder(get_architecture_name())
+    var ladder <- [for (c in split(ladder_text, ";")); c; where !empty(c)]
+    let low = ladder[length(ladder) - 1] == "x86-base" ? "x86-avx2" : ladder[length(ladder) - 1]
+    write_profile(path_join(work, WORK_DEFAULTS), low, "k0")
+    let foreign = path_join(work, "foreign.tune.json")
+    fwrite(foreign, "\{ \"kernels\" : \{ \"fat_add\" : \"k2\" \}, "
+        + "\"provenance\" : \{ \"box\" : \"elsewhere|none|another-box|0|no such cpu\" \} \}")
+    t |> success(!(set_mtime_result(foreign, mktime(2020, 1, 1, 0, 0, 0)) is error),
+        "the forced file is dated before this binary")
+    let host = path_join(work, "_llvm_tune_fat_clib_host.das")
+
+    var lf : array<string>
+    let forced_rc = build_clib(bin, work, "fatclib", tune_env_prefix("", low, "", foreign), lf)
+    t |> equal(forced_rc, 0, "the forced library builds\n{join(lf, "\n")}")
+    t |> success(lf |> has("DAS_TUNE_FORCE={foreign} - kernels stamp from this file"),
+        "the build names the knob where it takes effect\n{join(lf, "\n")}")
+    t |> success(!(lf |> has("was minted on")),
+        "a forced file is not judged by its box\n{join(lf, "\n")}")
+    let run_host = "{tune_env_prefix("", "", "")}\"{bin}\" -no-module-cache \"{host}\""
+    var lh : array<string>
+    let forced_host_rc = spawn_child(run_host, lh)
+    t |> equal(forced_host_rc, 0, "a host loads it\n{join(lh, "\n")}")
+    t |> success(lh |> has("LIBRESULT 15 MASK 0 LIBRARY true"),
+        "the library runs the forced file's winner (10+3+2)\n{join(lh, "\n")}")
+
+    var lm : array<string>
+    copy_fixture(t, "_llvm_tune_fat_client.das", work)
+    var lj : array<string>
+    let jit_rc = spawn_child("{tune_env_prefix("", low, "", foreign)}\"{bin}\" -no-module-cache "
+        + "-jit -jit-no-cache \"{path_join(work, "_llvm_tune_fat_client.das")}\"", lj)
+    t |> equal(jit_rc, 0, "a -jit program runs under the force\n{join(lj, "\n")}")
+    t |> success(lj |> has("fat_add <- k2") && lj |> has(" KV 2 "),
+        "and stamps and runs the forced file's winner\n{join(lj, "\n")}")
+
+    let before_save = fread(foreign)
+    copy_fixture(t, "_llvm_tune_force_save.das", work)
+    var ls : array<string>
+    let save_rc = spawn_child("{tune_env_prefix("", low, "", foreign)}\"{bin}\" -no-module-cache "
+        + "\"{path_join(work, "_llvm_tune_force_save.das")}\"", ls)
+    t |> equal(save_rc, 0, "a saver runs under the force\n{join(ls, "\n")}")
+    t |> success(ls |> has("SAVED false") && ls |> has("nothing writes it"),
+        "the saver is refused by name\n{join(ls, "\n")}")
+    t |> equal(fread(foreign), before_save, "and the forced file keeps its bytes")
+
+    let named_rc = build_clib(bin, work, "fatclib", tune_env_prefix("", low, "", "", foreign), lm)
+    t |> equal(named_rc, 0, "the same file as an ordinary sidecar still builds\n{join(lm, "\n")}")
+    t |> success(lm |> has("was minted on"),
+        "an ordinary sidecar from another box is refused by name\n{join(lm, "\n")}")
+    var lr : array<string>
+    let named_host_rc = spawn_child(run_host, lr)
+    t |> equal(named_host_rc, 0, "a host loads it\n{join(lr, "\n")}")
+    t |> success(lr |> has("LIBRESULT 13 MASK 0 LIBRARY true"),
+        "refused, the class profile's winner stamps (10+3+0)\n{join(lr, "\n")}")
+
+    delete ladder
+    delete lf
+    delete lh
+    delete lm
+    delete lr
     rmdir_rec(work)
 }
 

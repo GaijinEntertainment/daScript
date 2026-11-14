@@ -466,7 +466,7 @@ The BUILTIN module contains core runtime functions available in all daslang prog
 
 ### Memory manipulation
 
-- `hash` - Computes a 64-bit FNV-1a hash of the given `int8` value and returns it as `uint64`.
+- `hash` - Returns a 64-bit hash of the given value as `uint64`, for hash tables inside one process; the results 0 and 1 are never returned.
 - `hash_combine64` - Folds `value` into the running `hash` and returns the new accumulator, i.e.
 - `intptr` - Converts a function or lambda value `f` to the `uint64` integer representation of the address it carries.
 - `lock_data` - Locks a constant array and invokes `blk` with a read-only pointer `p` to the array's contiguous data and its size `s`, allowing direct memory-level read access.
@@ -3329,6 +3329,8 @@ CPU large-language-model inference in pure daslang: load a GGUF model, tokenize,
 - `get_jobque_spin_us` - The CPU spin window — `set_jobque_spin_us`'s read half.
 - `get_single_thread` - Whether every kernel runs on the calling thread — `set_single_thread`'s read half.
 - `kernel_backend_available` - True when kernel backend `name` is registered AND its availability witness passes on this box — the detection probe behind defaults-first backend selection (the vulkan witness enumerates devices once and caches its verdict).
+- `kernel_report` - One line naming the CPU kernels this build runs: a fat build's classes and the ones this box picks, else the stamped kernel families by source (a forced or adopted tune file is named).
+- `prepared_image_alignment` - The boundary, in bytes, a prepared image its host holds in memory starts on; a load from another address panics.
 - `select_matmul_backend_for_load` - Select the best matmul backend for the NEXT model load (honors a pin).
 - `set_dispatch_worker_limit` - Cap the kernel-dispatch worker count (0 = no limit, all job-que workers).
 - `set_jobque_spin_gpu_us` - The workers' spin-before-park window while the whole-model GPU driver serves the loaded model (default 500 us; a worker still spinning at the step's submit starves the driver).
@@ -6809,6 +6811,10 @@ The lint_fixups module holds the helpers the lint passes build their `--fix` edi
 - `lint_token_fix`
 - `lint_unwritten_arg`
 
+### Annotations
+
+- `lint_has_annotation` - true when the annotation list of a variable, a field or an argument carries `name`
+
 ## toml
 
 The TOML module parses `TOML 1.0`_ into the same `JsonValue?` tree shape produced by `daslib/json`, so existing `json_boost` accessors (`v ?? def`, `from_JV`, etc.) work on TOML inputs as-is. Date-time tokens are preserved as raw RFC-3339 strings since JSON has no native date type.
@@ -7731,6 +7737,10 @@ The STRINGIFY module provides the `%stringify~` reader macro for embedding multi
 The STRINGS_BOOST module extends string handling with splitting (`split`, `split_by_chars`), joining (`join`), padding (`wide`), multi-substring replacement (`replace_multiple`), and edit distance (`levenshtein_distance`). It re-exports `strings`, so the built-in string surface is available too.
 
 
+### Constants
+
+- `FNV1A_SEED` - The offset basis a 64-bit FNV-1a hash starts from - the default seed of `fnv1a`.
+
 ### Split and join
 
 - `join` - Joins the elements of an iterable into a single string using the specified separator.
@@ -7771,6 +7781,10 @@ The STRINGS_BOOST module extends string handling with splitting (`split`, `split
 - `jaccard` - Jaccard similarity over two string-sets, returning `|intersection| / |union|` in 0..1.
 - `levenshtein_distance` - Computes the Levenshtein edit distance between two strings.
 - `levenshtein_distance_fast` - Computes the Levenshtein edit distance between two strings using an optimized algorithm.
+
+### Hashing
+
+- `fnv1a` - Computes the 64-bit FNV-1a hash of the bytes of `text`, continued from `seed`.
 
 ## strings_convert
 

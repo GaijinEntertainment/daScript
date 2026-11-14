@@ -135,6 +135,8 @@ def set_vad_model_path_probe_(path : string) : string {
     return was
 }
 
+let private SV_HEADER_BYTES = 44l   //!< a bin's magic and its ten i32 header fields
+
 //! Load a converted Silero-VAD bin (harness/convert_silero_vad.py output, fp32).
 def load_vad_model(path : string) : VadModel {
     var m = VadModel()
@@ -143,63 +145,81 @@ def load_vad_model(path : string) : VadModel {
         panic("dasLLAMA vad: cannot open model '{path}'")
     }
     let n_bytes = int64(stat(path).size)
-    if (n_bytes < 8l) {
+    if (n_bytes < SV_HEADER_BYTES) {
         panic("dasLLAMA vad: '{path}' is too small to be a model")
     }
     fmap(f) $(var bytes : array<uint8>#) {
-        var o = 0l
-        if (rd_u32(bytes, o) != 0x67676d6cu) {
-            panic("dasLLAMA vad: bad magic in '{path}' (not a silero_vad.bin)")
-        }
-        o += 4l
-        // 10 i32 header: version, sr, n_fft, hop, context, win, pad_right, stft_ch, n_mag, hidden
-        let version = rd_i32(bytes, o); o += 4l
-        let sr      = rd_i32(bytes, o); o += 4l
-        o += 8l * 4l   // remaining 8 header fields are fixed and validated by the tensor shapes
-        if (version != 1) {
-            panic("dasLLAMA vad: unsupported bin version {version}")
-        }
-        if (sr != 16000) {
-            panic("dasLLAMA vad: model sample rate {sr}, only 16000 supported")
-        }
-        // tensor records
-        var recs : table<string; SvRec>
-        while (o + 12l <= n_bytes) {
-            let n_dims = int64(rd_i32(bytes, o)); o += 4l
-            let name_len = int64(rd_i32(bytes, o)); o += 4l
-            let ttype = rd_i32(bytes, o); o += 4l
-            if (n_dims < 0l || n_dims > 8l || name_len < 0l || o + n_dims * 4l + name_len > n_bytes) {
-                panic("dasLLAMA vad: corrupt tensor record in '{path}'")
-            }
-            var n_elem = 1l
-            for (_d in range64(n_dims)) {
-                n_elem *= int64(rd_i32(bytes, o)); o += 4l
-            }
-            let name = sv_str(bytes, o, name_len)
-            o += name_len
-            recs[name] = SvRec(ttype = ttype, n_elem = n_elem, off = o)
-            o += n_elem * (ttype == GGML_TYPE_F32 ? 4l : 2l)
-        }
-        sv_read(recs, bytes, "stft_conv", m.stft, SV_STFT_CH * SV_NFFT)
-        sv_read_conv(recs, bytes, "conv1.w", m.conv1_w, SV_C1_OUT, SV_C1_IN)
-        sv_read(recs, bytes, "conv1.b", m.conv1_b, SV_C1_OUT)
-        sv_read_conv(recs, bytes, "conv2.w", m.conv2_w, SV_C2_OUT, SV_C2_IN)
-        sv_read(recs, bytes, "conv2.b", m.conv2_b, SV_C2_OUT)
-        sv_read_conv(recs, bytes, "conv3.w", m.conv3_w, SV_C3_OUT, SV_C3_IN)
-        sv_read(recs, bytes, "conv3.b", m.conv3_b, SV_C3_OUT)
-        sv_read_conv(recs, bytes, "conv4.w", m.conv4_w, SV_C4_OUT, SV_C4_IN)
-        sv_read(recs, bytes, "conv4.b", m.conv4_b, SV_C4_OUT)
-        sv_read(recs, bytes, "lstm.w_ih", m.lstm_ih, 4l * SV_HIDDEN * SV_HIDDEN)
-        sv_read(recs, bytes, "lstm.w_hh", m.lstm_hh, 4l * SV_HIDDEN * SV_HIDDEN)
-        sv_read(recs, bytes, "lstm.b", m.lstm_b, 4l * SV_HIDDEN)
-        sv_read(recs, bytes, "final.w", m.final_w, SV_HIDDEN)
-        var fb : array<float>
-        sv_read(recs, bytes, "final.b", fb, 1l)
-        m.final_b = fb[0]
+        vad_read_bin(m, bytes, n_bytes, "'{path}'")
     }
     fclose(f)
     vad_build_slab(m, SV_STFT_CH, SV_NFFT, SV_HIDDEN)
     return <- m
+}
+
+//! `load_vad_model` for a Silero-VAD bin its host holds in memory. Every tensor is copied out, so the bytes are free once this returns.
+def load_vad_model(base : void?; bytes : uint64) : VadModel {
+    var m = VadModel()
+    if (base == null || bytes < uint64(SV_HEADER_BYTES) || bytes > uint64(INT_MAX)) {
+        panic("dasLLAMA vad: {bytes} bytes in memory is not a model")
+    }
+    unsafe(map_to_ro_array(base, int(bytes), $(view : array<uint8>#) {
+        vad_read_bin(m, view, int64(bytes), "the bin in memory")
+    }))
+    vad_build_slab(m, SV_STFT_CH, SV_NFFT, SV_HIDDEN)
+    return <- m
+}
+
+//! Read a Silero-VAD bin's header and tensors out of `bytes` into `m`.
+def private vad_read_bin(var m : VadModel; bytes : array<uint8> | #; n_bytes : int64; source_name : string) {
+    var o = 0l
+    if (rd_u32(bytes, o) != 0x67676d6cu) {
+        panic("dasLLAMA vad: bad magic in {source_name} (not a silero_vad.bin)")
+    }
+    o += 4l
+    // 10 i32 header: version, sr, n_fft, hop, context, win, pad_right, stft_ch, n_mag, hidden
+    let version = rd_i32(bytes, o); o += 4l
+    let sr      = rd_i32(bytes, o); o += 4l
+    o += 8l * 4l   // remaining 8 header fields are fixed and validated by the tensor shapes
+    if (version != 1) {
+        panic("dasLLAMA vad: unsupported bin version {version}")
+    }
+    if (sr != 16000) {
+        panic("dasLLAMA vad: model sample rate {sr}, only 16000 supported")
+    }
+    // tensor records
+    var recs : table<string; SvRec>
+    while (o + 12l <= n_bytes) {
+        let n_dims = int64(rd_i32(bytes, o)); o += 4l
+        let name_len = int64(rd_i32(bytes, o)); o += 4l
+        let ttype = rd_i32(bytes, o); o += 4l
+        if (n_dims < 0l || n_dims > 8l || name_len < 0l || o + n_dims * 4l + name_len > n_bytes) {
+            panic("dasLLAMA vad: corrupt tensor record in {source_name}")
+        }
+        var n_elem = 1l
+        for (_d in range64(n_dims)) {
+            n_elem *= int64(rd_i32(bytes, o)); o += 4l
+        }
+        let name = sv_str(bytes, o, name_len)
+        o += name_len
+        recs[name] = SvRec(ttype = ttype, n_elem = n_elem, off = o)
+        o += n_elem * (ttype == GGML_TYPE_F32 ? 4l : 2l)
+    }
+    sv_read(recs, bytes, "stft_conv", m.stft, SV_STFT_CH * SV_NFFT)
+    sv_read_conv(recs, bytes, "conv1.w", m.conv1_w, SV_C1_OUT, SV_C1_IN)
+    sv_read(recs, bytes, "conv1.b", m.conv1_b, SV_C1_OUT)
+    sv_read_conv(recs, bytes, "conv2.w", m.conv2_w, SV_C2_OUT, SV_C2_IN)
+    sv_read(recs, bytes, "conv2.b", m.conv2_b, SV_C2_OUT)
+    sv_read_conv(recs, bytes, "conv3.w", m.conv3_w, SV_C3_OUT, SV_C3_IN)
+    sv_read(recs, bytes, "conv3.b", m.conv3_b, SV_C3_OUT)
+    sv_read_conv(recs, bytes, "conv4.w", m.conv4_w, SV_C4_OUT, SV_C4_IN)
+    sv_read(recs, bytes, "conv4.b", m.conv4_b, SV_C4_OUT)
+    sv_read(recs, bytes, "lstm.w_ih", m.lstm_ih, 4l * SV_HIDDEN * SV_HIDDEN)
+    sv_read(recs, bytes, "lstm.w_hh", m.lstm_hh, 4l * SV_HIDDEN * SV_HIDDEN)
+    sv_read(recs, bytes, "lstm.b", m.lstm_b, 4l * SV_HIDDEN)
+    sv_read(recs, bytes, "final.w", m.final_w, SV_HIDDEN)
+    var fb : array<float>
+    sv_read(recs, bytes, "final.b", fb, 1l)
+    m.final_b = fb[0]
 }
 
 // ===== forward =====

@@ -2134,10 +2134,32 @@ def image_chunk_free(base : void?) : bool {
     return true
 }
 
-//! Let go of a carrier's image backing, chunk or mapping — the ONE release. Every weight
-//! carrier's finalizer routes here; nothing else may call ``fmap_close`` on an image.
+var private g_image_borrowed : table<uint64; int>   //! a host's image by its base: the carriers that borrow it now
+
+//! Record one more carrier over `base`, an image its host holds (`ARCHITECTURE_IMAGE.md#image-borrowed-memory`): each
+//! carrier's release drops one, and none of them frees anything.
+[arch(at = "../ARCHITECTURE_IMAGE.md#image-borrowed-memory")]
+def image_backing_borrow(base : void?) {
+    g_image_borrowed[ptr_key(base)]++
+}
+
+//! The carriers that borrow the host image at `base` now; 0 for a pointer no carrier borrows.
+def image_backing_borrowers(base : void?) : int => g_image_borrowed?[ptr_key(base)] ?? 0
+
+//! Let go of a carrier's image backing - a chunk, a mapping, or memory its host holds — the ONE
+//! release. Every weight carrier's finalizer routes here; nothing else may call ``fmap_close`` on an image.
 def image_backing_release(map : void?; bytes : uint64) {
     if (map == null || image_chunk_free(map)) {
+        return
+    }
+    let key = ptr_key(map)
+    let borrowers = g_image_borrowed?[key] ?? 0
+    if (borrowers > 1) {
+        g_image_borrowed[key] = borrowers - 1
+        return
+    }
+    if (borrowers == 1) {
+        g_image_borrowed |> erase(key)
         return
     }
     unsafe(fmap_close(map, bytes))
@@ -2585,6 +2607,14 @@ def public box_profile_runtime_declined() : string => g_box_profile_runtime_decl
 //! The default (no path) route checks the sidecar's standing; an explicit path applies as given.
 def apply_box_profile_runtime(path : string = "") {
     if (path == "") {
+        if (box_profile_in_library()) {
+            if (g_box_profile_runtime_declined != "library") {
+                to_log(LOG_INFO, "dasLLAMA: a library build reads no tune sidecar - the runtime knobs stay at their defaults\n")
+            }
+            g_box_profile_runtime_applied = false
+            g_box_profile_runtime_declined = "library"
+            return
+        }
         if (g_sidecar_place_hook != null) {
             invoke(g_sidecar_place_hook)
         }

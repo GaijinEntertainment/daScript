@@ -77,14 +77,6 @@ def test_quoted_segments(t : T?) {
     t |> equal(0, length(none))
 }
 
-[test(description = "fnv1a matches the published FNV-1a 64 vectors, leaves the seed for empty text, and chains piece by piece")]
-def test_fnv1a(t : T?) {
-    t |> equal(FNV1A_SEED, fnv1a("", FNV1A_SEED))
-    t |> equal(0xaf63dc4c8601ec8cul, fnv1a("a", FNV1A_SEED))
-    t |> equal(0x85944171f73967e8ul, fnv1a("foobar", FNV1A_SEED))
-    t |> equal(fnv1a("foobar", FNV1A_SEED), fnv1a("bar", fnv1a("foo", FNV1A_SEED)))
-}
-
 [test(description = "das_requires lists the required module paths, skipping comments, indentation noise and ?guard tokens")]
 def test_das_requires(t : T?) {
     let fixture_r = create_temp_file_result("review_gate_req", ".das")

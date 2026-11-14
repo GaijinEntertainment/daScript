@@ -72,10 +72,25 @@ def load_translator(path : string; exact : bool = false) : Translator {
     }
     var tr = Translator(kind = TranslatorKind.marian)
     tr.m <- load_nmt_model(path, !exact)
+    take_student_direction(tr)
+    return <- tr
+}
+
+//! `load_translator` for a Bergamot student's prepared image its host holds in memory
+//! (`ARCHITECTURE_IMAGE.md#image-borrowed-memory`): the lane the image was baked on serves.
+[arch(at = "../ARCHITECTURE_IMAGE.md#image-borrowed-memory")]
+def load_translator(base : void?; bytes : uint64) : Translator {
+    var tr = Translator(kind = TranslatorKind.marian)
+    tr.m <- load_nmt_model(base, bytes)
+    take_student_direction(tr)
+    return <- tr
+}
+
+//! the one direction of the student in `tr.m`, from the pair its vocabulary's file name carried
+def private take_student_direction(var tr : Translator) {
     let p = tr.m.pair
     tr.src = length(p) == 4 ? slice(p, 0, 2) : p
     tr.trg = length(p) == 4 ? slice(p, 2, 4) : ""
-    return <- tr
 }
 
 //! The direction the next `translate` takes, as language codes; a translation LLM's source is "" until it is set.

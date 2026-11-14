@@ -11,6 +11,7 @@ require daslib/rtti
 require daslib/ast_boost
 require daslib/templates_boost
 require daslib/json_boost  // read_json / read_json_field (re-exports daslib/json)
+require daslib/fio  // base_name: the kernel report names a tune file, not its folder
 require daslib/strings_boost  // nolint:STYLE030,LINT019 - split/find, reached only by the no-framework fallback-chain scan
 require [tune_framework]  // OPTIONAL: the per-app tune sidecar (path, staleness, kernels read)
 
@@ -286,6 +287,48 @@ def box_profile_path() : string {
         return tune_manifest_path()
     } else {
         return ""
+    }
+}
+
+//! True inside a standalone library: its host owns the process and its files, so a load reads no sidecar.
+[arch(at = "../ARCHITECTURE_MEASUREMENT_FAT_START.md#fat-first-start")]
+def box_profile_in_library() : bool {
+    static_if (typeinfo module_exists(llvm_tune)) {
+        return tune_library_built()
+    } else {
+        return false
+    }
+}
+
+//! `kernel_report`'s engine half (`dasllama_core`).
+def kernel_report_() : string {
+    static_if (typeinfo module_exists(llvm_tune)) {
+        var inscope rows <- tune_status()
+        var inscope families : table<string>
+        var inscope classes : array<string>
+        var inscope sources : table<string; int>
+        var manifest_file = ""
+        for (r in rows) {
+            families |> insert(r.fname)
+            sources[r.source]++
+            if (!empty(r.klass) && find_index(classes, r.klass) < 0) {
+                classes |> push(r.klass)
+            }
+            if (r.source == "manifest") {
+                manifest_file = r.manifestPath
+            }
+        }
+        if (tune_fat_built()) {
+            let mask = tune_fat_mask()
+            var inscope picked <- [for (c in classes); c; where 0 != (tune_fat_class_bit(c) & mask)]
+            return "fat build - kernels for {join(classes, ", ")}; this box runs {join(picked, ", ")}"
+        }
+        var inscope parts <- [for (k, n in keys(sources), values(sources)); "{n} {k}"]
+        sort(parts)
+        let from = empty(manifest_file) ? "" : " ({base_name(manifest_file)})"
+        return "{length(families)} kernel families - {join(parts, ", ")}{from}"
+    } else {
+        return "reference kernels - this build carries no tune framework"
     }
 }
 

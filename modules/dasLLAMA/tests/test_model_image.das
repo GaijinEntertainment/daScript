@@ -2598,12 +2598,6 @@ def test_gigaam_kq_image_roundtrip(t : T?) {
     }
 }
 
-//! Every line of `lines` through `m`, one translation a line.
-def private nmt_lines(m : NmtModel; lines : array<string>) : array<string> {
-    var inscope st = NmtState()
-    return <- [for (ln in lines); nmt_translate(m, st, ln)]
-}
-
 //! The in-memory mint, the cold-built image and the mapped image translate through one entry point (`nmt_translate`) on one
 //! lane - the CPU chain, the device seat pinned off and put back - so the three sides' logits are bit-identical and the lines
 //! compare exactly.

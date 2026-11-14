@@ -123,8 +123,10 @@ is read from cpuid, never from an environment a build left behind.
 ## 11. The fat mode - one clone per class, picked from cpuid {#fat-mode}
 
 `DAS_TUNE_MODE=fat` is the third `[tune]` mode (the other two: `skills/tune.md`). It is a
-standalone-exe mode under a baseline: `stamp_fat` (`daslib/llvm_tune.das`) refuses a build that is
-not `-exe` and one with no `DAS_JIT_BASELINE`. The ship set is every class of the baseline's
+standalone-artifact mode under a baseline: `stamp_fat` (`daslib/llvm_tune.das`) refuses a build that
+is neither `-exe` nor `-lib` and one with no `DAS_JIT_BASELINE`. The command line sets one compile
+policy for both (`jit_exe_mode`), which is what the macros read (`tune_exe_gate`): the option that
+tells the JIT to emit a library is set after the compile, too late for a macro. The ship set is every class of the baseline's
 ladder that some `[tune_scope(defaults=)]` ships a profile for, at or above the baseline, plus
 the baseline itself - most capable first, the baseline last; adding a profile file grows the
 exe. For each `[tune]` function and each class of the ship set the apply adds a generated clone
@@ -181,6 +183,13 @@ the box is not in. `tune_status()` lists one row per clone with its class (`klas
 no tuner: the exe carries no grid beyond the reference rows, and a re-tune is a new profile and
 a rebuild.
 
+The status `[init]` hangs on the default-policy pass, which finds a program root by its `main`. A
+library has none, so a standalone root with no `main` gets the `[init]` from `library_status_init`,
+once, with one call ahead of the rows: `tune_library_init`, which sets a third LLVM-side word,
+`das.tune.library_built`. The pick then runs when the host creates the library's context, and
+`tune_library_built()` tells code that would write a per-user file for an exe that its host owns
+the process.
+
 ## 12. The wasm target's feature string {#wasm-feature-string}
 
 A wasm cross-compile gets `+simd128,+nontrapping-fptoint`, with `+atomics,+bulk-memory` appended
@@ -194,3 +203,21 @@ real-time factor as the fused one, so nothing is paid for the reach. The feature
 more than the multiply-add: with it on, the backend lowers an `nnan` float min/max on a vector
 to `f32x4.relaxed_min` / `_max`, whose NaN and signed-zero answers are the engine's choice, and
 the relaxed dot stays ruled out for the idot family by sec.9 above whatever the string says.
+
+## A forced build stamps from one named file {#tune-forced-file}
+
+`DAS_TUNE_FORCE=<file>` builds against one tune file whatever box minted it - a box sidecar or a
+class profile, which carry the same `kernels` map. The file takes the sidecar's place:
+`tune_manifest_path` answers it ahead of `DAS_TUNE_MANIFEST` and of the default beside the app.
+The two checks that judge a sidecar by where and when it was written - another box's identity, a
+date before the binary's - do not apply to it (`tune_sidecar_stale`, `tune_sidecar_verdict`),
+and the compile prints one line that names the knob and the file. No saver writes the file:
+`save_sidecar_doc` refuses it, so a tuner run under the force cannot write over a profile.
+Everything else is the sidecar rail unchanged: a kernel the file has no entry for falls to its
+class profile and then to its `fallback=`, a scope the file leaves incomplete prints the warning
+naming the kernels it misses, and the policy rail is off, as under any named sidecar.
+
+Those checks exist because a measurement belongs to the box and the binary that made it. A forced
+build is for hardware the build machine is not - a console, the lowest class of a fleet - where
+the file is a decision and there is no box to measure. The file sets no baseline:
+`DAS_JIT_BASELINE` still names the class the code is lowered for, and a forced build sets both.

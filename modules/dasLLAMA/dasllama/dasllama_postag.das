@@ -7,6 +7,7 @@ module dasllama_postag shared public
 require dasllama/dasllama_lint public
 require math
 require strings
+require daslib/strings_boost   // fnv1a: the feature hash
 require daslib/fio
 require daslib/utf8_utils
 require dasllama/dasllama_unicode
@@ -170,26 +171,14 @@ def load_pos_tagger(path : string) : PosTagger {
 
 // ---------------------------------------------------------------- features
 
-let private FNV_OFFSET = 0xcbf29ce484222325ul
 let private FNV_PRIME = 0x100000001b3ul
-
-def private fnv_str(h0 : uint64; s : string) : uint64 {
-    var h = h0
-    peek_data(s) $(d : array<uint8> const#) {
-        for (b in d) {
-            h ^= uint64(b)
-            h *= FNV_PRIME
-        }
-    }
-    return h
-}
 
 //! the field separator between a feature's name and its arguments
 def private fnv_sep(h : uint64) : uint64 => (h ^ 31ul) * FNV_PRIME
 
-def private feat0(name : string) : uint64 => fnv_sep(fnv_str(FNV_OFFSET, name))
-def private feat1(name, a : string) : uint64 => fnv_str(fnv_sep(fnv_str(FNV_OFFSET, name)), a)
-def private feat2(name, a, b : string) : uint64 => fnv_str(fnv_sep(fnv_str(fnv_sep(fnv_str(FNV_OFFSET, name)), a)), b)
+def private feat0(name : string) : uint64 => fnv_sep(fnv1a(name))
+def private feat1(name, a : string) : uint64 => fnv1a(a, fnv_sep(fnv1a(name)))
+def private feat2(name, a, b : string) : uint64 => fnv1a(b, fnv_sep(fnv1a(a, fnv_sep(fnv1a(name)))))
 
 def private is_letter(cp : int) : bool => cp >= 0 && cpt_is_letter(cp)
 def private is_lower(cp : int) : bool => is_letter(cp) && int(utf32_to_lower(uint(cp))) == cp

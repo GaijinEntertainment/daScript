@@ -49,13 +49,18 @@ let public g_env_jit = env_config(type<JitEnv>)
 [EnvConfig(env_prefix = "DAS")]
 struct public TuneEnv {
     @clarg_default_doc = "normal"
-    @clarg_doc = "Compile-time tune mode: normal, tune, or test."
+    @clarg_doc = "Compile-time tune mode: normal, tune, test, or fat (a standalone exe or library with one kernel clone per CPU class)."
     tune_mode : string = ""
 
     @clarg_path
     @clarg_default_doc = "<app>.tune.json beside the app"
     @clarg_doc = "The tune sidecar to read and write - how you tune when the application directory is read-only. Setting it also gates the tune policy off (a redirect means manual)."
     tune_manifest : string = ""
+
+    @clarg_path
+    @clarg_default_doc = "unset"
+    @clarg_doc = "Build against this tune sidecar or class profile, whichever box minted it and whenever: its kernels stamp with no box or age check. For an artifact built for other hardware; set DAS_JIT_BASELINE to the class it was minted for."
+    tune_force : string = ""
 
     @clarg_path
     @clarg_default_doc = "<home>/.tune-history/<box>/"

@@ -21,6 +21,18 @@ def spawn_child(cmd : string; var lines : array<string>) : int {
     return rc
 }
 
+//! A shell prefix that sets each (name, value) pair for the one child
+//! command after it: `set K=V&& ` a pair on Windows, `K=V `
+//! elsewhere. An empty value clears the variable for the child.
+def child_env(vars : array<tuple<string; string>>) : string {
+    let windows = get_platform_name() == "windows"
+    return build_string() $(var w) {
+        for (v in vars) {
+            w |> write(windows ? "set {v._0}={v._1}&& " : "{v._0}={v._1} ")
+        }
+    }
+}
+
 //! runs `blk` with DAS_LOG_LEVEL=info for the children it spawns - their `LLVM JIT` lines and `--jit-dump` log at info - and puts the caller's level back after
 def with_child_log_info(blk : block<() : void>) {
     let saved = env_value_of("DAS_LOG_LEVEL")

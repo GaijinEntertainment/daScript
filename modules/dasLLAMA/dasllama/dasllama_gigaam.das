@@ -1130,6 +1130,13 @@ def load_gigaam_model(path : string; q8 : bool = false; facade_fp32_pin : bool =
     return <- m
 }
 
+//! `load_gigaam_model` for a prepared image its host holds in memory (`ARCHITECTURE_IMAGE.md#image-borrowed-memory`): the lane
+//! the image was baked on serves, and the bytes stay the host's for as long as the model lives.
+[arch(at = "../ARCHITECTURE_IMAGE.md#image-borrowed-memory")]
+def load_gigaam_model(base : void?; bytes : uint64) : GigaamModel =>
+    <- load_through_memory(base, bytes, "gigaam-", GIGAAM_ARCH, type<GigaamModel>,
+                           $(m : GigaamModel) => gigaam_exec_fmt(m))
+
 //! The loaded lane's name: the facade's exec-format arm - the kq lane's one K-quant member (`k4`), `kq` where its seats mix.
 def gigaam_exec_fmt(m : GigaamModel) : string {
     if (m.kq_lane) {

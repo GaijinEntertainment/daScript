@@ -33,6 +33,8 @@ require dasllama/dasllama_asr   // load_asr_model, asr_needs_mmproj: the facade'
 require dasllama/dasllama_gigaam
 require dasllama/dasllama_audio_io
 require _tower_twin
+require _image_memory   // read_page_aligned: a host's own copy of an image
+require dasllama/dasllama_image   // with_image_destination: the cold mint's scratch path
 require ?cuda dasllama/dasllama_cuda_tower_fc   // cuda_gigaam_mel: gigaam's standalone device mel on the CUDA home
 require ?cuda dasllama/dasllama_cuda_common   // cud_kernel_census_of: the kq lane's tile census on the CUDA home
 
@@ -908,6 +910,63 @@ def private pk_cpu_rows(m : ParakeetModel; samples : array<float>) : array<float
     }
     delete st
     return <- out
+}
+
+//! the encoder rows of `samples` through the image file `dlim`, mapped for the call alone; inside a job queue
+[cold_path]
+def private pk_image_file_rows(dlim : string; samples : array<float>) : array<float> {
+    var inscope m <- load_parakeet_model(dlim, true)
+    return <- pk_cpu_rows(m, samples)
+}
+
+[test(description = "A Parakeet image its host holds in memory loads from the bytes on the lane it was baked on and encodes jfk to the rows the image's file gives, with the file gone, and `load_asr_model` routes the bytes to parakeet; with its planes zeroed the load encodes other rows")]
+def test_parakeet_from_memory(tst : T?) {
+    tst |> run("parakeet-TDT 0.6B v3 Q4_K_M: the CPU image's bytes, borrowed in place") @(t : T?) {
+        let gguf = pk_gguf("Q4_K_M")
+        return if (!model_available(t, gguf))
+        let samples <- load_audio_16k_mono(asr_clip("jfk.wav"))
+        if (empty(samples)) {
+            t |> skip("jfk.wav not present")
+            return
+        }
+        with_dasllama_jobque_() {
+            with_gpu_knobs() {
+                set_serving_gpu_tower(false, TowerFamily.parakeet)   // the CPU image: the one an image in memory serves
+                reset_parakeet_q8()   // the un-pinned load: the kq lane for this quantized carrier
+                let dlim = path_join(test_temp_dir(), "pk_memory.dlim")
+                var minted_kq = false
+                with_image_destination(dlim) {   // the cold mint lands in scratch, not beside the carrier
+                    var inscope minted <- load_parakeet_model(gguf, true)
+                    minted_kq = minted.kq_lane
+                }
+                var inscope from_file <- pk_image_file_rows(dlim, samples)
+                t |> success(!empty(from_file), "the image's file encodes the clip")
+                var raw : array<uint8>
+                var size = 0ul
+                let base = read_page_aligned(dlim, raw, size)
+                remove(dlim)
+                t |> success(base != null, "the image reads into memory")
+                if (base != null) {
+                    {
+                        var inscope m <- load_parakeet_model(base, size)
+                        t |> equal(m.kq_lane, minted_kq, "the bytes load on the lane the image was baked on")
+                        var inscope from_memory <- pk_cpu_rows(m, samples)
+                        t |> equal(length(from_memory), length(from_file), "the same row count")
+                        t |> success(sequence_equal(from_memory, from_file), "and encode the clip to the same rows")
+                    }
+                    {
+                        var inscope routed <- load_asr_model(base, size)
+                        t |> success(routed.kind == AsrKind.parakeet, "the ASR loader routes the bytes to parakeet")
+                    }
+                    zero_planes(base, size)
+                    var inscope poisoned <- load_parakeet_model(base, size)
+                    var inscope other <- pk_cpu_rows(poisoned, samples)
+                    t |> success(!sequence_equal(other, from_file), "its planes zeroed, the load encodes other rows (the control)")
+                }
+                delete raw
+            }
+        }
+    }
 }
 
 [test(description = "The F32 Parakeet GGUF stages the f32 ggml bin's planes and encodes jfk to the same rows, and the Q4_K_M file's kq lane, named k4, holds its CPU rows within 2.5x the q8 lane's distance from the dequantized chain with a zeroed half outside it"), arch(at = "../ARCHITECTURE_MEDIA_ASR.md#parakeet-gguf")]

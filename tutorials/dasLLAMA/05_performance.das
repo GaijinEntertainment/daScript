@@ -20,6 +20,8 @@ require math
 //   - Reading stats(): prefill vs generation, time to first token
 //   - The load's two caches: select_matmul_backend_for_load and the .dlim
 //     prepared images (dlim_inventory / dlim_clean)
+//   - kernel_report and prepared_image_alignment — what a host
+//     program asks at start
 //
 // Prerequisites: tutorial 01.
 //
@@ -229,6 +231,16 @@ def main() {
     }
     let r = dlim_clean(path, false)
     print("dlim_clean (report only): {r.total} image(s), {r.stale} stale\n")
+
+    // Two facts a host program prints at start. kernel_report()
+    // names the CPU kernels this build runs: under -jit they are
+    // stamped for this box, from its tune file or from its CPU
+    // class profile. prepared_image_alignment() is for a host that
+    // keeps a .dlim's bytes in its own memory and loads from them -
+    // load_asr_model(base, bytes) and its siblings borrow the bytes
+    // in place, and the bytes start on this boundary.
+    print("kernels: {kernel_report()}\n")
+    print("a prepared image in memory starts on a {prepared_image_alignment()}-byte boundary\n")
 
     // Where to go deeper: modules/dasLLAMA/tune_for_this_box.md covers kernel tuning
     // (token-block size, unrolls, the [dasllama_grid] tuner) when you want to squeeze

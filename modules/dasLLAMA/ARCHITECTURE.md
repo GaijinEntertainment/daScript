@@ -95,7 +95,7 @@ Each companion's sections are anchored by topic; a citation spells `<doc>.md#<an
   per-format plane table both halves of the rail skip around, the
   layout stamp `REVIEW.das` keeps over the byte-placing code, the meta-field tripwire every
   struct serializer opens with, the planar-vs-blob flavor rebake, the per-format slots the
-  interleave identity prints, and a mint to a user-named destination.
+  interleave identity prints, a mint to a user-named destination, and a host-held image.
 - `ARCHITECTURE_GPU_RACE_SHAPES.md` - the tensor-GEMM and fused-attention shapes that measured
   out, the retained reference arms beside them, and the sanctioned float-A stamps.
 - `ARCHITECTURE_GPU_TOWER.md` - the Metal tower attention routes, the Metal tower driver's
