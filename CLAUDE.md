@@ -249,6 +249,10 @@ diagnostic in any tier.
   the environment goes through `try_to_int` / `try_to_float` - they live in
   `daslib/strings_convert` (`require` it; the `strings` module has no `try_*` form) and return
   `Result<T; ConversionError>`, so an out-of-range parse is distinguishable from a valid `0`.
+- **An array literal MOVES its array and table elements out of their variables.** `for (a in [s.xs, s.ys])` leaves
+  `s.xs` and `s.ys` empty after the loop, and `length([t.xs])` empties `t.xs`: the literal takes each non-copyable
+  element by move, whatever it was read from. Walk such fields through a helper called once a field, or build the
+  literal of pointers (`unsafe(addr(s.xs))`), never of the containers.
 - **`<-` into a table slot ZEROES the source.** Registering one value under two keys takes a
   fresh clone per registration, not the same variable passed twice.
 - **`new WithCtor(field = v)` skips the user constructor** - it is plain field-init, so
