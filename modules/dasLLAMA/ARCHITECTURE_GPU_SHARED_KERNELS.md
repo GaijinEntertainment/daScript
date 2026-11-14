@@ -25,16 +25,18 @@ key it has on that home.
 - **A body that reads a buffer at an offset takes it as an element offset in its arguments.** Vulkan caches
   a descriptor set by its binding tuple, so an offset bound per dispatch would be a set per offset; an offset
   in the arguments is one set. A kernel every site reads from element zero carries none.
-- **The two emitters place the body differently.** The MSL emitter splices a called method flat into the
-  kernel; the SPIR-V emitter keeps it a function the entry point calls. A kernel moved here therefore
-  reads, on Vulkan, as its old words plus one call. Because the MSL emitter splices, a template method of
-  more than one statement cannot sit in value position: a helper that returns a value - a workgroup
-  reduction, a partial sum - is written as a statement method that lands its result in a `var` reference
-  (`wg_max_into`, `wg_sum_into`, `value_sum_into` in `GkPkAttn`). The same splice names a parameter as
-  many times as the body does, so an argument that is a computed expression is refused where the body
-  names the parameter twice: the caller hoists it to a local first. A fixed-array local in a body hoists
-  to a program-scope constant table only when every element is a scalar integer or float literal; a
-  vector literal does not hoist, so a `float4` table is spelled as four scalars a word.
+- **The two emitters place the body differently.** The MSL emitter splices a called method flat into the kernel; the SPIR-V
+  emitter keeps it a function the entry point calls. A kernel moved here therefore reads, on Vulkan, as its old words plus
+  one call. Because the MSL emitter splices, a template method of more than one statement cannot sit in value position: a
+  helper that returns a value - a workgroup reduction, a partial sum - is written as a statement method that lands its
+  result in a `var` reference (`wg_max_into`, `wg_sum_into`, `value_sum_into` in `GkPkAttn`). The same splice names a
+  parameter as many times as the body does, so an argument that is a computed expression is refused where the body names the
+  parameter twice: the caller hoists it to a local first. A fixed-array local in a body hoists to a program-scope constant
+  table only when every element is a scalar integer or float literal; a vector literal does not hoist, so a `float4` table
+  is spelled as four scalars a word. A helper outside the class takes no buffer and hands back no struct: the SPIR-V emitter
+  lowers no `@ssbo` array parameter and the MSL lens no field of a local struct, so a helper over a plane splits into
+  address words, one-line template methods that read the plane at them, and arithmetic over what was read (`gk_dflash_cb_at`
+  / `gk_dflash_cb_val` under `GkDflashWalk`).
 - **A home's lane primitive is reached by one name.** A template method resolves in the module that
   stamps it, so a shared reduction calls `gk_subgroup_add` / `gk_subgroup_max` (a histogram's
   subgroup aggregation `gk_subgroup_bcast0_u`), and the stamping module reaches a definition over its own
@@ -59,8 +61,8 @@ key it has on that home.
   over the common templates (the residual step's `ArBase` -> `ArRqBase` ->
   `ArRqT` and `ArCombBase`, `ArCombG4T`, the requants `RqT` -> `RqPlainT` / `ActRqT`, `ActF16T`,
   `EmbGatherT`, the classifier pick's `ClsArgmaxBase` -> `ClsArgmaxPartT` / `ClsArgmaxFinT`, the
-  decode attention `DaAttnT` over the token block `TokMeta`, the mirror stores `KvMirStoreT` ->
-  `RopeKvStoreBT`, `RopeKvStoreT`, `QknRopeKvT`) with their args structs and the K/V block
+  decode attention `DaAttnT` over the token block `TokMeta`, the rope and mirror stores on the
+  common `GkRopeKvStore` (`RopeKvStoreT`, the window's `RopeKvStoreBT` under `WIN_ROWS`; `GkRopeKvArgs`), `QknRopeKvT`) with their args structs and the K/V block
   readers (`kv_blk_scale`, `kv_skew_word`, the quant unpackers); the prefill's batch GEMM tiles
   over the region rail `MoeCmBase` (`BatchArgs`, `SCHED_NONE`: `KqCm2BatchT` -> the twenty
   `<Fmt>Cm2T` block decodes, `MmBatchT`, `Blk32BatchT`, the KHR f16 shell
@@ -244,29 +246,27 @@ staged through workgroup memory in 256-slot chunks - cost 163 us per layer on th
 
 ### The deltanet kernels both discrete homes stamp {#dn-discrete-kernels}
 
-**A recurrent layer's device kernels are one body a kernel in the discrete file, stamped by the Vulkan and the CUDA
-homes alike, and the two homes' drivers read one smalls layout.** The bodies: the fused decode step `DnStepFusedT` (one
-workgroup a value head of a row - the conv preamble over the head's channels off the row's ring image, the q and k norms and
-the raw q.k by subgroup adds, the delta rule with each of the 256 threads owning one state column's row part held in
-registers through the update, the out-norm's sum by the shared fold, the o row as Q8_0 blocks or as floats under
-`out_f32`; the row's region slot and ring parity off its token block, `TokMeta.dnslot` / `parity`), the window's scan
-`DnScanT` (the plain per-token delta rule, a column of a head's state a lane cluster, 16 state rows a lane in registers, the
-next token's k and q read ahead of the recurrence, a capture record writing the state after its row into the checkpoint
-rows) and its chunked form `DnScanChunkT` (the CPU chain's chunked WY rule on the 16 x 16 f16 tiles, hi/lo pairs throughout: a
-workgroup one head's sixteen state columns, sixteen tokens a chunk - Q S, K S, the decayed Grams, T = (I + beta A)^-1, solved =
-T delta, o = decay Q S + P solved, S <- decay S + K^T (solved decay-to-end), a capture row ending its chunk; picked under
-`DASLLAMA_DN_CHUNK` where the home has the tiles - the Vulkan classes file holds this body, stamped under KHR cooperative matrices
-at subgroup 32, the CUDA one its own `DnScanChunkCuT`, `ARCHITECTURE_GPU_ASYMMETRIES_CUDA.md#cuda-asymmetries` - the per-token scan otherwise), the
-conv front's bindings `DnConvT` over the common `GkDnConv` (the taps and the history out of the layer's smalls, the history per
-channel under `hist_mode` 1), the gate shell `DnScanP3T` over the common `GkDnGate` (a workgroup a row, its
-subgroups walking the value heads), the ring hand-off `DnTailRingT` over `DnTailT` (the window's last `taps` projected rows
-into the other ring image, a part shorter than the taps taking its leading rows off the entry image), the f32 beta/alpha
-tile `DnBaGemmT` (a workgroup 16 positions by 16 of the `2 nvh` output rows, the x rows in the stamp's element type `XT`:
-the Vulkan window's f32 normed rows, the CUDA window's f16 feed), and the router GEMV `RouterGemvT` over the common
-`GkRouterGemv` (the f32 arm's beta and alpha rows in one dispatch: `ne` 2 nvh split at nvh between the beta base and the g
-base). A home's leaf calls the body under its own kernel annotation and dispatch line (`dn_step_body`, `dn_scan_body`,
-`dn_scan_chunk_body`, `dn_conv_body`, `dn_gate_body`, `tail_ring_body`, `dn_ba_body`, `router_body`); the Vulkan home's capture tail
-`DnCapTail` stays its own leaf over `DnTailT`, since the CUDA home installs no snapshot seats.
+**A recurrent layer's device kernels are one body a kernel in the discrete file, stamped by the Vulkan and the CUDA homes alike, and the two homes'
+drivers read one smalls layout.** The bodies: the fused decode step `DnStepFusedT` (one workgroup a value head of a row - the conv preamble over the
+head's channels off the row's ring image, the q and k norms and the raw q.k by subgroup adds, the delta rule with each of the 256 threads owning one
+state column's row part - read sixteen rows a wave for the dots and again, off the cache, for the update (`REREAD`, both homes' stamps: a part held in
+registers across both is 128 registers a thread against 48, and a third of the groups in flight) - the out-norm's sum by the shared fold, the o row as
+Q8_0 blocks or as floats under `out_f32`; the row's region slot and ring parity off its token block, `TokMeta.dnslot` / `parity`), the window's scan
+`DnScanT` (the plain per-token delta rule, a column of a head's state a lane cluster, 16 state rows a lane in registers, the next token's k and q read
+ahead of the recurrence, a capture record writing the state after its row into the checkpoint rows) and its chunked form `DnScanChunkT` (the CPU
+chain's chunked WY rule on the 16 x 16 f16 tiles, hi/lo pairs throughout: a workgroup one head's sixteen state columns, sixteen tokens a chunk - Q S,
+K S, the decayed Grams, T = (I + beta A)^-1, solved = T delta, o = decay Q S + P solved, S <- decay S + K^T (solved decay-to-end), a capture row
+ending its chunk; picked under `DASLLAMA_DN_CHUNK` where the home has the tiles - the Vulkan classes file holds this body, stamped under KHR
+cooperative matrices at subgroup 32, the CUDA one its own `DnScanChunkCuT`, `ARCHITECTURE_GPU_ASYMMETRIES_CUDA.md#cuda-asymmetries` - the per-token
+scan otherwise), the conv front's bindings `DnConvT` over the common `GkDnConv` (the taps and the history out of the layer's smalls, the history per
+channel under `hist_mode` 1), the gate shell `DnScanP3T` over the common `GkDnGate` (a workgroup a row, its subgroups walking the value heads), the
+ring hand-off `DnTailRingT` over `DnTailT` (the window's last `taps` projected rows into the other ring image, a part shorter than the taps taking its
+leading rows off the entry image), the f32 beta/alpha tile `DnBaGemmT` (a workgroup 16 positions by 16 of the `2 nvh` output rows, the x rows in the
+stamp's element type `XT`: the Vulkan window's f32 normed rows, the CUDA window's f16 feed), and the router GEMV `RouterGemvT` over the common
+`GkRouterGemv` (the f32 arm's beta and alpha rows in one dispatch: `ne` 2 nvh split at nvh between the beta base and the g base). A home's leaf calls
+the body under its own kernel annotation and dispatch line (`dn_step_body`, `dn_scan_body`, `dn_scan_chunk_body`, `dn_conv_body`, `dn_gate_body`,
+`tail_ring_body`, `dn_ba_body`, `router_body`); the Vulkan home's capture tail `DnCapTail` stays its own leaf over `DnTailT`, since the CUDA home
+installs no snapshot seats.
 
 **The smalls plane is one layout on both homes** (`DN_SM_*`, `DN_WINDOW`, `DN_MAX_*`, the per-step scratch sizes
 `DND_*`): the beta and g rows a window deep at `DN_SM_BETA` / `DN_SM_G`, the conv taps at `DN_SM_TAPS`, the out-norm

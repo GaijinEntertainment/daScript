@@ -383,6 +383,62 @@ def test_vkd_lens_readonly_gate(t0 : T?) {
     }
 }
 
+//! spawns a compile of a one-class [vk_dispatch] program whose kernel writes binding `bind`, its input at binding 0 - past
+//! the hazard rail's last binding the lens refuses
+def private spawn_binding_cap_fixture(bind : int; tag : string) : tuple<rc : int; out : string> {
+    let src = join([
+        "options gen2",
+        "options _dasllama_internal = true",
+        "",
+        "require dasllama/dasllama_lint public",
+        "require spirv/spirv_shader",
+        "require vulkan",
+        "require vulkan/vulkan_boost",
+        "require dasllama/dasllama_vulkan_common",
+        "require dasllama/dasllama_vulkan_dispatch",
+        "",
+        "struct BcArgs \{",
+        "    n : uint",
+        "\}",
+        "",
+        "[vk_dispatch(name = \"bc_fixture\", grid = \"n/64\", params = \"n : int64\")]",
+        "class BcFixture \{",
+        "    @ssbo @binding = 0 xs : array<float>",
+        "    @ssbo @binding = {bind} ys : array<float>",
+        "    @push_constant pa : BcArgs",
+        "",
+        "    [spirv_kernel(local_size_x = 64, name = \"bc_fixture_spv\")]",
+        "    def run \{",
+        "        let i = gl_GlobalInvocationID.x",
+        "        if (i < pa.n) \{",
+        "            ys[i] = xs[i] * 2.0",
+        "        \}",
+        "    \}",
+        "\}",
+        "",
+        "[export]",
+        "def main() \{",
+        "    print(\"ok\\n\")",
+        "\}"], "\n")
+    return spawn_compile_only(src, "vk_bind_cap_{tag}", 180.0)
+}
+
+[test(description = "A compile-only child whose vk_dispatch class binds a buffer at VKD_SET_BINDINGS fails naming the dispatch, the binding and the rail's last binding, while the twin at the last binding compiles")]
+def test_vkd_lens_binding_cap(t0 : T?) {
+    t0 |> run("[vk_dispatch] refuses a binding past the hazard rail's set bits and compiles one at the last") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            let bad = spawn_binding_cap_fixture(VKD_SET_BINDINGS, "past")
+            t |> success(bad.rc != 0, "a binding at {VKD_SET_BINDINGS} must not compile")
+            t |> success(find(bad.out, "[vk_dispatch] bc_fixture: binding {VKD_SET_BINDINGS} - the hazard rail's SetBits caps at binding {VKD_SET_BINDINGS - 1}") >= 0,
+                "the refusal names the dispatch, the binding and the cap: {bad.out}")
+            let good = spawn_binding_cap_fixture(VKD_SET_BINDINGS - 1, "last")
+            t |> equal(0, good.rc, "the twin at binding {VKD_SET_BINDINGS - 1} compiles: {good.out}")
+        } else {
+            t |> skip("dasVulkan not present")
+        }
+    }
+}
+
 //! a two-kernel class whose `[vk_dispatch]` names its kernel by `kern`: a `*` prefix picks exactly one method or the lens refuses
 def private spawn_kernel_prefix_fixture(kern, tag : string) : tuple<rc : int; out : string> {
     let src = join([
@@ -3663,12 +3719,12 @@ def private rope_kv_b_arm(t : T?; f16, biased : bool) {
                 let pvm = mirror_plane(cp, mirn, f16)
                 let pcs = cp |> in_(csh)
                 let pb = biased ? in_(cp, bh) : pcs
-                let planes = fixed_array(pq, pkv, pkm, pvm, pcs, pb)
+                let planes = fixed_array(pq, pkv, pkv, pkm, pvm, pb, pcs, pcs)
                 var sc = f16 ? cls_set(cp, planes, @@set_rope_kv_b_f16_cls) : cls_set(cp, planes, @@set_rope_kv_b_cls)
-                var pc = RopeKvBArgs(qd = uint(qd), kvd = uint(kvd), hs = uint(hs),
-                    half = uint(half), neox = 1u, kpair0 = uint(kpair0),
-                    ppp = uint(ppp), layerbase = uint(layerbase), npos = uint(npos),
-                    pos0 = uint(pos0), voff = uint(merged ? kvd : voff), kstride = uint(merged ? 2 * kvd : kvd), boff = uint(bpad), hasb = biased ? 1u : 0u)
+                var pc = GkRopeKvArgs(qd = uint(qd), kvd = uint(kvd), hs = uint(hs),
+                    rot = uint(2 * half), neox = 1u, npairs_q = uint(kpair0),
+                    npairs = uint(ppp), mirbase = uint(layerbase), rows = uint(npos), qrow = uint(qd), cstride = uint(hs),
+                    pos0 = uint(pos0), voff = uint(merged ? kvd : voff), kvrow = uint(merged ? 2 * kvd : kvd), boff = uint(bpad), has_bias = biased ? 1u : 0u)
                 cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
                     if (f16) {
                         enc_rope_kv_b_f16_cls(raw, h, sc, pc, int64(wgs))
@@ -3845,7 +3901,7 @@ def private qkn_rope_n_rows(t : T?; q0h, kvh, csh, wnh, bh : array<float>; pc) {
     delete cs2h
 }
 
-//! the batched rope + K/V store at a row base past zero (`RopeKvBArgs.row0`, a segment's window row base): the positions' rows
+//! the batched rope + K/V store at a row base past zero (`GkRopeKvArgs.row0`, a segment's window row base): the positions' rows
 //! sit two rows into the q, the merged [k | v] and the cos/sin planes behind poison rows, the q rows ahead untouched and the
 //! mirrors as the one-segment arm lands them
 def private rope_kv_b_row0_arm(t : T?) {
@@ -3886,11 +3942,11 @@ def private rope_kv_b_row0_arm(t : T?) {
             let pkm = mirror_plane(cp, mirn, false)
             let pvm = mirror_plane(cp, mirn, false)
             let pcs = cp |> in_(cs_lead)
-            let planes = fixed_array(pq, pkv, pkm, pvm, pcs, pcs)
+            let planes = fixed_array(pq, pkv, pkv, pkm, pvm, pcs, pcs, pcs)
             var sc = cls_set(cp, planes, @@set_rope_kv_b_cls)
-            var pc = RopeKvBArgs(qd = uint(qd), kvd = uint(kvd), hs = uint(hs), half = uint(half), neox = 1u, kpair0 = uint(kpair0),
-                ppp = uint(ppp), layerbase = uint(layerbase), npos = uint(npos), pos0 = uint(pos0), voff = uint(kvd), kstride = uint(2 * kvd),
-                boff = 0u, hasb = 0u, row0 = uint(lead))
+            var pc = GkRopeKvArgs(qd = uint(qd), kvd = uint(kvd), hs = uint(hs), rot = uint(2 * half), neox = 1u, npairs_q = uint(kpair0),
+                npairs = uint(ppp), mirbase = uint(layerbase), rows = uint(npos), pos0 = uint(pos0), voff = uint(kvd), kvrow = uint(2 * kvd),
+                qrow = uint(qd), cstride = uint(hs), boff = 0u, has_bias = 0u, row0 = uint(lead))
             cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
                 enc_rope_kv_b_cls(raw, h, sc, pc, int64(wgs))
             }

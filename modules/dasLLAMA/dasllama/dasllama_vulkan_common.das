@@ -820,6 +820,15 @@ def try_device_buf(bytes : int64) : uint64 => make_device_buf(bytes, false, true
 [cold_path]
 def soft_device_buf(var oom : bool&; bytes : int64) : uint64 => mark_oom(oom, try_device_buf(bytes))
 
+//! `bytes` of `src` into a fresh soft device buffer (0 and `oom` where the card has no room)
+def vk_dev_from(var oom : bool&; src : uint8 const?; bytes : int64) : uint64 {
+    let h = soft_device_buf(oom, bytes)
+    if (h != 0ul) {
+        upload_region_at(h, 0l, src, bytes)
+    }
+    return h
+}
+
 //! a per-call buffer: one the host refills on a later call after a device command read it - never the mapped ReBAR type
 [cold_path, arch(at = "../ARCHITECTURE_GPU_VULKAN_ROOM.md#vk-per-call-buffers")]
 def make_call_buf(bytes : int64; xfer_shared : bool = false) : uint64 => make_device_buf(bytes, xfer_shared, false, true)
@@ -1295,7 +1304,7 @@ def public vk_ext_roster(phys : VkPhysicalDevice) : array<VkExtEntry> {
             knob = "DASLLAMA_VK_XFERQ", off = !g_env_vulkan.vk_xferq,
             rides = "the transfer queue that overlaps streamed weight copies with compute and lands the resident commands' rows behind a compute-timeline wait - the token command's logits and picks (or, for a sampled stream, the selection's four planes), the NextN draft's and the same-slab verify's, and the carry row every one of them lands beside; the per-expert chain's copies into the ring and the hot pool's DMA fill of a decode step's misses (DASLLAMA_GPU_HOT_DMA) ride it too; without it the compute timeline stands alone, the copies ride the compute queue, each command copies its own landing under its fence, and the pool's misses take the host fill"),
         VkExtEntry(name = "maxComputeWorkGroupInvocations of 1024 or more", present = props.limits.maxComputeWorkGroupInvocations >= 1024u,
-            rides = "the classifier tail's selection kernel, a 1024-thread workgroup a row ({int(props.limits.maxComputeWorkGroupInvocations)} here): a sampled stream's step lands its rows' survivors instead of the rows; and the silero VAD's recurrence (`TowerVadLstm`, one 1024-thread workgroup walks every chunk); without it every step lands its rows and the VAD declines `device` to the CPU"),
+            rides = "the classifier tail's selection kernel, a 1024-thread workgroup a row ({int(props.limits.maxComputeWorkGroupInvocations)} here): a sampled stream's step lands its rows' survivors instead of the rows; and the silero VAD's recurrence (`TowerVadLstm`, one 1024-thread workgroup walks every chunk); and the decode rows' residual step, a row on 1024 lanes (`cls_ar_w`); without it every step lands its rows, the VAD declines `device` to the CPU and the residual step keeps its 256-lane stamp"),
         VkExtEntry(name = "computeFullSubgroups (subgroupSizeControl, Vulkan 1.3)", present = compute_full_subgroups_supported(phys),
             knob = "DASLLAMA_VK_FULLSG", off = !g_env_vulkan.vk_fullsg,
             rides = "full subgroups on the one-dimensional workgroups, an A/B arm off by default"),
@@ -2820,6 +2829,8 @@ struct RDec {
     x_host, logits_host : HostBuf
     log_xfer : bool               //! the logits leave the device on the transfer queue (a device with the transfer family armed); off, the token command copies them itself
     xlog_cmd : array<VkCommandBuffer>[3]   //! ... the copy commands by landing kind (`RdXlog`) and row count (index 0 unused; the one-row command lands at 1), recorded on first use
+    late_cmd : array<VkCommandBuffer>      //! ... one row of the logits plane down late, a command a row (`vk_rdec_logits_rows`), recorded on first use
+    late_recorded : array<bool>
     xlog_recorded : array<bool>[3]
     pick_dev : uint64             //! the rows' argmax ids (`ClsArgmaxPart` then `ClsArgmaxFin`, after the epilogue), and their host landing
     pick_host : HostBuf
@@ -2844,8 +2855,15 @@ struct RDec {
     carry_live : bool             //! the carry as this step wants it - `carry` and the speculative round on; a flip re-records the commands whose last site stores or lands the row (`rd_carry_sync`)
     carry_assist : bool           //! an attached assistant drafter reads the carry every step, the speculative knob notwithstanding (`vk_rdec_carry_arm`)
     hid_host : HostBuf            //! the landed carry rows: the token command's, or the window chain's last row at row 0
+    cap_slots : array<int64>      //! a trunk layer's slot among the layers the block drafter captures, -1 = not captured; empty = no capture
+    cap_n : int64                 //! the captured layers
+    cap_host : HostBuf            //! the token and verify commands' captured rows, [slot][nb][dim]
+    cap_win_host : HostBuf        //! the window chain's, [slot][cap_win_rows][dim]
+    cap_win_rows : int64
     head_norm_base : int64        //! the NextN draft head's norm block in the norms plane (`rdec_head_norm_base`); 0 = prepared without the head
     head_on : bool                //! the head is set (`vk_rdec_set_head`): the draft command serves
+    head_planned : bool           //! the load plans a head: false = a trunk whose verify steps its rows with no head row (a block drafter's round)
+    v_plain : bool                //! the recorded verify commands step the rows with no head row (a block drafter's round); a call of the other form re-records them
     head : RLayer = RLayer()      //! the head's layer (index n_layers), kept out of `layers` and the token command's trunk walk
     head_eh_blk : int64           //! the head's eh_proj plane's arena block and format
     head_eh_fmt : int
@@ -2904,6 +2922,7 @@ struct RDec {
     s_quant_final : VkDescriptorSet
     dummy : uint64                // filler for unused bindings
     cls_fmt_marker : int
+    cls_blk : int64 = -1l         //! the classifier plane's arena block (`vk_rdec_set_cls`): a second GEMV set over it binds another feed (the block drafter's draft rows)
     layers : array<RLayer>
     cmd : array<VkCommandBuffer>    //! one recorded token command per mirror region: the mirror base is a push constant, baked as the command records
     cmd_unsplit : array<VkCommandBuffer>   //! the unsplit twin: the same chain with the attention at one split, submitted under RD_UNSPLIT_POS
@@ -3545,7 +3564,7 @@ var @scratch g_pipe_names : table<uint64; string>   // VkPipeline -> kernel name
 var @scratch g_vk_kcov : table<uint64; int64>       // VkPipeline -> dispatches (REVIEW: "A new GPU kernel ships with a small model in the kernel coverage suite")
 
 struct SetBits {
-    b : uint[12]   // per-binding region bits (up to 12 declared bindings per class)
+    b : uint[VKD_SET_BINDINGS]   // per-binding region bits
 }
 
 //! Census seed: every [vk_dispatch] kernel joins the coverage universe at program start (the
@@ -3735,7 +3754,7 @@ def vkd_set(c : VkdClass; set_ : VkDescriptorSet; bufs : uint64 const[]; sizes :
     update_descriptor_sets(g_gpu.device, writes, no_copies)
     var sb : SetBits
     for (i in range(length(gbits))) {
-        if (c.bindings[i] < 12) {
+        if (c.bindings[i] < VKD_SET_BINDINGS) {
             sb.b[c.bindings[i]] = gbits[i]
         }
     }
@@ -3835,6 +3854,16 @@ def private vkd_unbuilt_panic(c : VkdClass; ord : int) {
     panic("dasLLAMA vulkan lens: dispatch through a kernel slot the class never built - slot {ord} of a class with {length(c.pipes)} built slot(s) reading [{join(built, ", ")}] ({length(c.bindings)} bindings, a {c.push_bytes}-byte push): its ensure_* ran for fewer stamps than the dispatch asks (an N-column or row-count stamp past the ensured count)")
 }
 
+var private g_vk_skip : array<string>   //! kernel-name fragments whose dispatches are dropped (`set_vulkan_kernel_skip`)
+
+//! the pricing rail's list (`set_vulkan_kernel_skip`): a class dispatch of a kernel whose registered name holds one of the
+//! comma-separated `frags` is dropped from here on - a command recorded before the call keeps the dispatches it was recorded with
+def vk_kernel_skip_set(frags : string) {
+    delete g_vk_skip
+    g_vk_skip <- kernel_skip_parse(frags)
+    to_log(LOG_WARNING, "dasLLAMA vulkan tier: set_vulkan_kernel_skip(\"{frags}\") - the dispatches of {length(g_vk_skip)} kernel name fragment(s) are dropped: timings only, the output is garbage\n")
+}
+
 // the class twin of hz_dispatch: same masks/coverage/barrier rail, the CLASS pipeline layout;
 // ord picks the kernel's pipe slot
 def vkd_dispatch(raw : VkCommandBuffer; var h : VkHaz; c : VkdClass; var set_ : VkDescriptorSet; ord : int; groups : uint) {
@@ -3844,6 +3873,7 @@ def vkd_dispatch(raw : VkCommandBuffer; var h : VkHaz; c : VkdClass; var set_ : 
     if (!key_exists(g_pipe_access, intptr(boost_value_to_vk(c.pipes[ord])))) {
         vkd_unregistered_panic(c, ord)
     }
+    return if (!empty(g_vk_skip) && kernel_skip_hit(g_vk_skip, g_pipe_names?[intptr(boost_value_to_vk(c.pipes[ord]))] ?? ""))
     let m = hz_masks(c.pipes[ord], set_)
     g_vk_kcov[intptr(boost_value_to_vk(c.pipes[ord]))]++
     vhz_dep(raw, h, m.r, m.w)
@@ -3935,7 +3965,7 @@ def hz_masks(pipe : Pipeline; var set_ : VkDescriptorSet) : tuple<r : uint; w : 
     let sb = g_set_bits[sk]
     var r = 0u
     var w = 0u
-    for (i in range(12)) {
+    for (i in range(VKD_SET_BINDINGS)) {
         let bit = 1u << uint(i)
         if ((acc.x & bit) != 0u) {
             r |= sb.b[i]

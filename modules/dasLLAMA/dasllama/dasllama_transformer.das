@@ -49,6 +49,8 @@ require ?vulkan dasllama/dasllama_vulkan_tts  // [init]-only: registers the Styl
 require ?vulkan dasllama/dasllama_vulkan_tower  // [init]-only: registers the vision and audio tower encodes (the ?das_metal dasllama_metal_tower line's twin on a build without das_metal); after the tier for the same cache-layout reason
 require ?cuda dasllama/dasllama_math_cuda  // [init]-only: registers "cuda" under DASLLAMA_CUDA - the CUDA home's dense-slice driver in the Vulkan home's seats; the driver API loads at run time, and the guard is the `cuda` witness module dasCUDA compiles in exactly when the build is configured with it
 require ?vulkan dasllama/dasllama_vulkan_mtp_gemma  // [init]-only: registers the gemma assistant drafter's "vulkan" seams on the resident driver (the ?das_metal dasllama_metal_mtp_gemma line's twin); after the tier for the same cache-layout reason
+require ?vulkan dasllama/dasllama_vulkan_dflash  // [init]-only: the block drafter's device arm on the Vulkan resident driver; before the CUDA home's, which takes the seat under its ask
 require ?cuda dasllama/dasllama_cuda_mtp_gemma  // [init]-only: the same seams under "cuda" on the CUDA home's resident driver, armed under DASLLAMA_CUDA alone
+require ?cuda dasllama/dasllama_cuda_dflash  // [init]-only: the block drafter's device arm on the CUDA home's resident driver
 require ?cuda dasllama/dasllama_cuda_tower  // [init]-only: the CUDA home's vision tower seats
 require ?cuda dasllama/dasllama_cuda_tower_audio  // [init]-only: the CUDA home's audio seats, each family from the home its row names

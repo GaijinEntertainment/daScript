@@ -19,6 +19,7 @@ require dasllama/dasllama_kv_dtype   // kv_row_bytes / kv_layer_kbase: the head'
 require ?vulkan dasllama/dasllama_vulkan_common   // the resolved coopmat mode, where the module exists
 require ?vulkan dasllama/dasllama_vulkan_decode   // the greedy chain's mode pin and its hits and misses
 require ?cuda dasllama/dasllama_cuda_decode   // ... the CUDA home's
+require ?cuda dasllama/dasllama_kqformat   // KQ_FMT_COUNT: the rows leaf's knee a format
 require strings   // ends_with, slice: a Vulkan stamp name respelled as the CUDA home's census name
 require dasllama/dasllama_math   // with_dasllama_jobque_
 require dasllama/dasllama_sampling   // sample_, set_seed_: the sampled speculative stream
@@ -599,6 +600,45 @@ def control_past(t : T?; what : string; got, control : array<float>; bar : float
     let finite = is_finite(off) && off < 1e30
     t |> success(finite && off > bars * bar, "{what} control: the row one off misses by {bars} bars (maxdiff {off}, bar {bar})")
     return off
+}
+
+//! the launches of the CUDA home's rows tensor leaf stamps so far; -1 where the armed home has no rows leaf
+def home_rows_leaf_launches : int64 {
+    static_if (typeinfo builtin_module_exists(cuda)) {
+        if (gpu_want_cuda()) {
+            var names <- cud_kernel_names()
+            var n = 0l
+            for (name in names) {
+                if (find(name, "_rows_") >= 0 && find(name, "mma") >= 0) {
+                    n += int64(cud_kernel_coverage_of(name))
+                }
+            }
+            delete names
+            return n
+        }
+    }
+    return -1l
+}
+
+//! `body` with the CUDA home's rows tensor leaf pinned - on: every format's knee written back as its getter read it; off:
+//! every knee at 0, the N-column GEMVs at every row count - each knee put back as found; `body` alone on a home with no
+//! rows leaf
+def with_rows_leaf(on : bool; body : block<() : void>) {
+    static_if (typeinfo builtin_module_exists(cuda)) {
+        if (gpu_want_cuda()) {
+            var found <- [for (f in range(KQ_FMT_COUNT)); cuda_rows_mma_min(f)]
+            for (f in range(KQ_FMT_COUNT)) {
+                set_cuda_rows_mma_min(on ? found[f] : 0l, f)
+            }
+            invoke(body)
+            for (f in range(KQ_FMT_COUNT)) {
+                set_cuda_rows_mma_min(found[f], f)
+            }
+            delete found
+            return
+        }
+    }
+    invoke(body)
 }
 
 //! `got` nearer to `want` than to `control`, the row one off: no share of the peak holds a tq4 mirror, and no share of the
@@ -1240,4 +1280,63 @@ def peel_cell(t : T?; var tr : Model; rel : float; tag : string; lever_off : boo
 //! `peel_cell` on a recurrent carrier: the five tails, no lever-off leg
 def recurrent_peel_cell(t : T?; var tr : Model; rel : float) {
     peel_cell(t, tr, rel, "", false)
+}
+
+//! the armed home's kernel-skip setter (`set_cuda_kernel_skip` under the CUDA ask, else `set_vulkan_kernel_skip`)
+def private home_kernel_skip(frags : string) {
+    static_if (typeinfo builtin_module_exists(cuda)) {
+        if (gpu_want_cuda()) {
+            set_cuda_kernel_skip(frags)
+            return
+        }
+    }
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        set_vulkan_kernel_skip(frags)
+    }
+}
+
+//! the kernel-skip setter drops the commands the home already recorded: on the resident trunk at `path`, a prompt and a step
+//! record the step's commands; a step with no skip is the control (`skip_stem`'s census moves exactly where `other`'s does - both
+//! rise on a home that records each step, neither where it replays); a step under a skip naming `skip_stem` counts no dispatch
+//! of it and dispatches `other` again (the commands recorded anew, never the old ones replayed); the skip cleared, a step
+//! dispatches `skip_stem` again. `skip_stem` and `other` are census stems (`<stem>_spv`, the CUDA home's `<stem>_cuda`)
+def kernel_skip_cell(t : T?; path : string; skip_stem, other : string) {
+    var tr <- resident_trunk(t, path, 512l, "") $() : Model {
+        return <- load_resident(path)
+    }
+    if (tr.config.n_layers == 0l) {
+        delete tr
+        return
+    }
+    let ks = "{skip_stem}_spv"
+    let ko = "{other}_spv"
+    t |> success(census(ks) >= 0l && census(ko) >= 0l, "the home stamps both census kernels ({ks}: {census(ks)}, {ko}: {census(ko)})")
+    with_dasllama_jobque_() {
+        var s <- create_session(tr)
+        var prompt <- resident_prompt(40l)
+        eval_(tr, s, prompt)
+        var one <- [3000l]
+        eval_(tr, s, one)
+        let c0k = census(ks)
+        let c0o = census(ko)
+        eval_(tr, s, one)
+        let ctl_k = census(ks) - c0k
+        let ctl_o = census(ko) - c0o
+        to_log(LOG_INFO, "{path} kernel skip: the unskipped step dispatched {ks} {ctl_k} and {ko} {ctl_o} time(s)\n")
+        t |> equal(ctl_k > 0l, ctl_o > 0l, "control: with no skip {ks} dispatches ({ctl_k}) exactly where {ko} does ({ctl_o})")
+        home_kernel_skip(skip_stem)
+        let k0 = census(ks)
+        let o0 = census(ko)
+        eval_(tr, s, one)
+        t |> equal(census(ks) - k0, 0l, "under the skip {ks} is not dispatched")
+        t |> success(census(ko) > o0, "the recorded commands were dropped: the skipped step dispatched {ko} anew ({census(ko) - o0})")
+        home_kernel_skip("")
+        let k1 = census(ks)
+        eval_(tr, s, one)
+        t |> success(census(ks) > k1, "the skip cleared: the next step dispatches {ks} again ({census(ks) - k1})")
+        delete one
+        delete prompt
+        delete s
+    }
+    delete tr
 }

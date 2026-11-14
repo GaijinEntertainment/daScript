@@ -2196,19 +2196,11 @@
 
 230. **The per-32 and nibble-superblock cm2 decode templates fold.** `Q51Cm2T`, `Q4032Cm2T`, `Mx4Cm2T` (and their
     constant-only children) share every nibble line and differ in the scale read and the per-element law; `K4Cm2T` and
-    `Q40Cm2T` differ in the sub-block scale source and the linear law; the `Q51` and `MX4` bool constants of
-    `Blk32GemvT` / `Blk32BatchT` restate the `FMT` tag, and a stamp that sets `FMT` q51 without `Q51` silently drops the
-    min term; the per-32 cm2 scale reads are spelled inline at thirteen sites where `blk32_scale` exists. Done = one
-    `Blk32Cm2T` over the format tag with the law as a `[template(fmt)]` overload, a `sub_scale` hook on the nibble
-    superblock template, `blk_xdot` / `wdot` dispatched on the tag, the inline scale reads through `blk32_scale`; the
-    146 cm2 column leaves (89 Vulkan, 57 CUDA) then stamp from one macro over `KqFmt`, as `kq_tile_stamp` already
-    generates their ladders.
-
-231. **The window rope-and-store body is written twice.** `RopeKvStoreBT` (the discrete homes' window form) carries its
-    own pair math beside `GkRopeKvStore`'s, which Metal already serves the window through (`MetalRopeStoreBF16`); the
-    window form adds the gated q stride, the k rows at a plane of their own and the cos-then-sin table row. Done =
-    `RopeKvStoreBT` a stamp of `GkRopeKvStore` with `qstride` and a k-row base in `GkRopeKvArgs`, the Vulkan and CUDA
-    window dispatches rebinding to its eight slots, the rope-store cells on both homes bit for bit the old body.
+    `Q40Cm2T` differ in the sub-block scale source and the linear law; the per-32 cm2 scale reads are spelled inline at
+    thirteen sites where `blk32_scale` exists. Done = one `Blk32Cm2T` over the format tag with the law as a
+    `[template(fmt)]` overload, a `sub_scale` hook on the nibble superblock template, the inline scale reads through
+    `blk32_scale`; the 146 cm2 column leaves (89 Vulkan, 57 CUDA) then stamp from one macro over `KqFmt`, as
+    `kq_tile_stamp` already generates their ladders.
 
 232. **Dead constants and fields the stamps all set alike.** `GkQknRopeKv.LANES` / `EPT` (every stamp 256 and 1; the
     `EPT` loops collapse to one pair a thread), `GkPostAddLnArgs.rows` (31 writers, no kernel reads it),
@@ -2800,3 +2792,91 @@
     home and the CUDA home over a dense trunk, a recurrent hybrid and a MoE, every count's total at or
     above the count below it up to the card's compute bound, each cap found fixed or ledgered with its
     measurement, and the rows in `PERF_LEDGER.md`.
+297. **The block drafter's discrete arms wait on their first device run in the suites.** `test_dflash_drafter.das`'s
+    `dflash-e2b-discrete` and `dflash-27b-discrete` arms and the discrete homes' top-k and pass-kernel cells
+    (`df_topk_case`, `test_vkt_dflash_pass_kernels`) hold the Vulkan and CUDA device arms. Done = both arms and the
+    cells green on a CUDA pass and a Vulkan pass, their `REPORT` lines cited.
+298. **The discrete homes join a tick's speculative rounds for the assistant drafter alone.** With several streams
+    speculating, Metal runs one joint round a tick for every drafter kind: the streams draft, and one verify carries
+    every warm stream's rows (`register_dflash_joint`, `register_mtp_block_rounds`, the batch driver's same-slab groups
+    for a NextN head). On the M5 Max that beats the plain batched step at two to four streams - Qwen3.8-27B with DFlash2
+    94 / 109 / 116 tok/s against 49 / 70 / 82, Qwen3.8-Flash-Next 154 / 162 / 161 against 103 / 136 / 150 (`debug-jit`;
+    `PERF_LEDGER.md`, the 2026-11-12 entry on the block drafter under the scheduler; the committed M5 board row of the 27B,
+    Metal `tg128@4` in `performance/records/m5.json`, reads 79.5). The CUDA and Vulkan homes register the joint round for the gemma-4
+    assistant drafter (`MtpAssistantSeams.rounds`) and for nothing else: under a block drafter or a NextN head
+    `mtp_spec_eval_batch` steps each stream through its own round in turn, one verify command a stream, and no
+    measurement of that against the plain batched step exists on either home. Done = the CUDA home's block-drafter
+    joint round (`MtpBlockRoundSeams`: every stream's pass, then one N-row verify over the streams' rows - the rows
+    tensor leaf holds sixteen) and the NextN head's, each stream token for token its plain walk, measured at 2, 3 and 4
+    streams against the plain batched step and against `llama-server -np N` with the same drafter, the Vulkan home
+    after its drafter arm (row 297), and the rows in `PERF_LEDGER.md`; or the measurement that says the joint round
+    loses on a discrete card, ledgered in its place.
+299. **A format's GEMV stamp set is spelled out a format at a time on each discrete home.** Every superblock format
+    declares its one-row, N-column, four-column and gather stamps by hand on both homes (`KqGemv<Fmt>`, `KqGemv<Fmt>N`,
+    `KqGemv<Fmt>N4`, `KqEmb<Fmt>` in `dasllama/dasllama_vulkan_classes.das`; the `CuKqGemv<Fmt>` / `CuKqEmb<Fmt>` twins in
+    `dasllama/dasllama_cuda_classes.das`), each differing from its neighbours in the format alone, while `kq_tile_stamp`
+    already generates the ladders that pick them. Done = the stamp sets generated from one macro over `KqFmt` on both
+    homes, as row 230's cm2 column leaves, the kernel cells unchanged.
+300. **The residual round on the CUDA home is slower than its acceptance explains.** `residual` is the acceptance a
+    sampled stream keeps its distribution under, and the one whose rate can rise furthest: it accepts a draft with
+    min(1, p / q) where `sample` accepts only an equal draw, so it accepts the most drafts of the three modes. Yet its
+    round is the longest - the growth sits outside the drafter's pass, in the verify, the landing and the host's accept -
+    and the NextN head under it on the 35B-A3B reads under the plain sampled stream. `harness/dflash_probe.das --mode
+    greedy|sample|residual` (with `-r <drafter> --depth 7`, and with no drafter at `--depth 3` for the head) prints the
+    round's split a mode. The accept reads p / q at the drafted id alone - a verify row's logit there and the row's
+    denominator, and the drafter's q at that id - so a round needs two scalars a row; a row's distribution is read at one
+    position a round at the most, the first rejected row's residual max(0, p - q), or the last row's p where every draft
+    was accepted, and a point-mass draft's residual is p with the drafted id removed. Done = the residual round's added
+    time attributed by stage on the 27B and the 35B-A3B (what its verify lands against a greedy one - picks, the
+    selection planes, whole rows, the drafter's q a draft - and whether the selection landing serves the stream), the
+    round landing the ratio's scalars and one row's draw where it lands rows, and the rows in `PERF_LEDGER.md`: a
+    residual round at the greedy round's wall, its rate the highest of the three modes as its acceptance is, or the
+    measurement that says why it cannot be; `sample` follows the same landing.
+301. **The llama.cpp speculative reference rows keep no per-prompt rate.** The `llama-server` rows the discrete homes'
+    block-drafter and speculative rows read against
+    (`ARCHITECTURE_MEASUREMENT_REFERENCE_ROWS.md#cuda-reference-rows`) are the four prompts' second turns pooled into
+    one rate, so a row carries no spread where `harness/dflash_probe.das` prints each prompt's. Done = the recipe
+    keeping each prompt's `predicted_per_second` beside the pooled rate, and the next ledger entry's server rows with
+    their min..max.
+302. **The CUDA home's routed step falls behind llama.cpp as distinct streams grow.** Sixteen streams on their own
+    prompts touch nearly every expert of a layer a step, and the step's rate stops scaling where the reference's holds:
+    on the pod's RTX PRO 4500, `lcpp_bench --npl` against `llama-batched-bench` at 4 / 8 / 16 streams, tok/s
+    (`debug-jit`, the reference's rows `external`; `PERF_LEDGER.md`, the 2026-11-14 entry on the final tree's token
+    rows on both discrete homes): gpt-oss 468.0 / 649.6 / 996.0 against 526.9 / 675.4 / 1356.2, gemma-4-26B 423.4 /
+    595.8 / 753.9 against 418.8 / 609.0 / 937.1. The reference force-feeds each stream a random token a step and samples
+    nothing; our row generates through the scheduler. Done = the routed step at sixteen distinct streams priced a kernel
+    (`harness/batch_streams_sweep.das --streams 16 --walls`), the form that takes the cost named, and the gpt-oss and
+    gemma-4-26B rows at eight and sixteen streams against the reference's before and after; or the pricing here with
+    the form kept.
+303. **A dense carrier's batched step loses more than llama.cpp's as the prompts lengthen.** gemma-4 E2B Q8_0 on the
+    CUDA home, sixteen streams, `lcpp_bench --npl 16` at 512-token prompts 2001.7 tok/s against `llama-batched-bench`'s
+    2130.2, eight streams 1260.2 against 1308.0 (`debug-jit`, the reference's rows `external`; the same entry). Not
+    split yet: the batched attention over the longer key runs, or the scheduler's fixed cost a tick, which shows most
+    on the model whose sixteen-stream tick is shortest. Done = the row at 32-token and 512-token prompts through
+    `lcpp_bench --npl-plen` and through `harness/batch_streams_sweep.das --plen`, the two instruments' difference and
+    the two lengths' difference each named with its cost, and the form fixed with the eight- and sixteen-stream rows
+    before and after; or the split here with the forms kept.
+304. **A session's host K/V cache is the model's full context, and a load keeps its host planes beside a device's copy.**
+    `make_run_state(m.config, ...)` allocates the cache for every position the model allows - 262144 on the Qwen3.8-27B,
+    18.4 GB a session at f16 - whether or not a GPU home holds the session's rows, and `load_model_` keeps the planar
+    planes (19.7 GB for the 16.5 GB Q4_K_M file) after a home has uploaded its own. A 27B CPU-arm cell of
+    `tests/test_dflash_drafter.das` makes two sessions for a walk of some sixty tokens: planes, a 2 GB drafter and two
+    caches are 58.6 GB, which is the cell's 57 GB resident peak (all but 0.6 GB anonymous) on a pod whose container
+    holds 62 GB - the child sits at the cap through every such cell and is killed (`exit=137`) in
+    `test_dflash_27b_sampled_cpu` on most runs, its batch with it, and takes 58 minutes where it survives. The readings
+    are the same with no home armed and with the Vulkan home armed (the card then holding 31 GB). Done = for every
+    model the fleet runs, on each home, the host bytes after the load by kind, the host bytes a session adds and the
+    device bytes, each held to a stated need - a host cache only for a session whose rows no device holds, sized to
+    the rows it has; host planes only for what the CPU serves (a declined call, host layers or experts, the embed
+    table) - the cells that ask more capped or moved to the paged or cache-less session, and the drafter file - alone
+    and in a batch - under the 62 GB cap.
+305. **A fleet run does not finish clean: one cell passes the pods' memory, and the image arms fill the shared volume.**
+    Every `exit=137` of a `--changed` run, a CUDA pass or the stocked suite on the 62 GB pods falls in row 304's cell,
+    and takes its batch of ten files with it - the runner then reruns the ten one child each. The image suite's arms,
+    run on one box with the rail on, leave every `.dlim` they mint under the shared models directory (31 GB over the
+    plan's arms), and a later mint's save then fails on the volume's quota, which reds the cell that asked it. A cell
+    whose drafter or model file the volume lacks skips, so a run reads green over cells that never ran. Done = the
+    `--changed` run, the CUDA pass, the stocked suite and the image arms each finishing on the fleet with no killed
+    child and no failed save: row 304 closed, an image cell deleting the images it mints (or the runner clearing a
+    cell's mints and a killed mint's `.tmp` before the next file), and `harness/pod_fleet.das` naming up front every
+    file the plan's cells ask that the volume does not hold.

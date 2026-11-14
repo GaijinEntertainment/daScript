@@ -111,7 +111,7 @@ override, `vulkan_resident_prefill_segments`, which `rdec_prefill_segs` hands to
 row-independent stages - the prologue norm, every GEMM, the feeds, the activation, the residual steps - run
 once over the window as the one-session chain runs them. What a session owns runs a segment at a time inside
 the layer: the rope-and-store writes the segment's K/V rows at its positions of its region
-(`RopeKvBArgs.pos0`, `layerbase`, the window row base `row0`), and the attention binds the segment's query
+(`GkRopeKvArgs.pos0`, `mirbase`, the window row base `row0`), and the attention binds the segment's query
 rows and its output rows at `row0` of the window's planes (`FaArgs.row0`, `DaAttnBArgs.row0`: the flash tiles'
 tensor layouts end at the segment's last row, so a padded load past it reads zero rows; the chunked pair reads
 its q tile from `row0` and keeps its causal arithmetic segment-local) and its keys at its region's base

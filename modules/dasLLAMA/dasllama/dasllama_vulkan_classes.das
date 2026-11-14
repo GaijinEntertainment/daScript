@@ -51,7 +51,6 @@ class ClsArAddRms : ArBase {
     }
 }
 
-
 [vk_dispatch(name = "cls_ar_rq_b", grid = "nrows", params = "nrows : int64")]
 class ClsArAddRmsRqB : ArRqBase {
     [spirv_kernel(local_size_x = 256, name = "cls_ar_rq_b_spv")]
@@ -922,6 +921,8 @@ class DnTail : DnTailRingT {
 //! the fused deltanet decode step (`DnStepFusedT`, the template both discrete homes stamp), the silu out-gate
 [vk_dispatch(name = "dn_step_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class DnStepFused : DnStepFusedT {
+    override REREAD = true
+
     [spirv_kernel(local_size_x = 256), arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#hybrid-token-command")]
     def run {
         dn_step_body()
@@ -932,6 +933,7 @@ class DnStepFused : DnStepFusedT {
 [vk_dispatch(name = "dn_step_sig_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class DnStepFusedSig : DnStepFusedT {
     override ZSIG = true
+    override REREAD = true
 
     [spirv_kernel(local_size_x = 256)]
     def run {
@@ -6298,12 +6300,13 @@ class RopeKvStoreBF16 : RopeKvStoreBT {
 //! The window rope-and-store's stamp: the f16-mirror twin under `kv16`, else the f32 one
 def rope_kv_b_stamp_ensure(kv16 : bool) : bool => kv16 ? ensure_rope_kv_b_f16_cls() : ensure_rope_kv_b_cls()
 
-//! ... its set
-def rope_kv_b_stamp_set(kv16 : bool; bufs : uint64 const[6]; sizes : int64 const[6]; gbits : uint const[6]) : VkDescriptorSet
+//! ... its set: the q rows, the k/v rows as the k and the v source, the two mirror planes, the bias rows, the table plane as the
+//! cos and the sin rows
+def rope_kv_b_stamp_set(kv16 : bool; bufs : uint64 const[8]; sizes : int64 const[8]; gbits : uint const[8]) : VkDescriptorSet
     => kv16 ? set_rope_kv_b_f16_cls(bufs, sizes, gbits) : set_rope_kv_b_cls(bufs, sizes, gbits)
 
 //! ... and its dispatch
-def rope_kv_b_stamp_enc(kv16 : bool; raw : VkCommandBuffer; var h : VkHaz; var s : VkDescriptorSet; var pc : RopeKvBArgs; wgs : int64) {
+def rope_kv_b_stamp_enc(kv16 : bool; raw : VkCommandBuffer; var h : VkHaz; var s : VkDescriptorSet; var pc : GkRopeKvArgs; wgs : int64) {
     if (kv16) {
         enc_rope_kv_b_f16_cls(raw, h, s, pc, wgs)
     } else {
@@ -6585,7 +6588,6 @@ def pleact_enc_cols(raw : VkCommandBuffer; var h : VkHaz; var set_ : VkDescripto
 [vk_dispatch(name = "q51_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class Q51Gemv : Blk32GemvRunT {
     typedef FMT = KqTag_q51
-    override Q51 = true
 
     [spirv_kernel(local_size_x = 64, local_size_x_id = 0)]
     def run {
@@ -6597,7 +6599,6 @@ class Q51Gemv : Blk32GemvRunT {
  arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-block32-leaf")]
 class Q51GemvN : Blk32GemvRunT {
     typedef FMT = KqTag_q51
-    override Q51 = true
     override NCOL = true
 
     [spirv_kernel(local_size_x = 64, local_size_x_id = 0)]
@@ -6610,7 +6611,6 @@ class Q51GemvN : Blk32GemvRunT {
 [vk_dispatch(name = "q51_gemv_sum_cls", grid = "wgs", params = "wgs : int64")]
 class Q51GemvSum : Blk32GemvT {
     typedef FMT = KqTag_q51
-    override Q51 = true
     override SUM = true
 
     [spirv_kernel(local_size_x = 64, local_size_x_id = 0, name = "q51_gemv_sum_cls_spv")]
@@ -6655,7 +6655,6 @@ class Q5032GemvSum : Blk32GemvT {
 [vk_dispatch(name = "mx4_gemv_sum_cls", kernel = "run", family = "q51_gemv_sum_cls", grid = "wgs", params = "wgs : int64")]
 class Mx4GemvSum : Blk32GemvT {
     typedef FMT = KqTag_mx4
-    override MX4 = true
     override SUM = true
 
     [spirv_kernel(local_size_x = 64, local_size_x_id = 0, name = "mx4_gemv_sum_cls_spv")]
@@ -6699,7 +6698,6 @@ class Q4032Gemv : Blk32GemvRunT {
 [vk_dispatch(name = "q51_emb_cls", kernel = "run", family = "b32_emb_cls", grid = "wgs", params = "wgs : int64")]
 class Q51Emb : Blk32GemvRunT {
     typedef FMT = KqTag_q51
-    override Q51 = true
     override EMB = true
 
     [spirv_kernel(local_size_x = 64, local_size_x_id = 0)]
@@ -6777,7 +6775,6 @@ class Q5032GemvN : Blk32GemvRunT {
 [vk_dispatch(name = "mx4_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class Mx4Gemv : Blk32GemvRunT {
     typedef FMT = KqTag_mx4
-    override MX4 = true
 
     [spirv_kernel(local_size_x = 64, local_size_x_id = 0)]
     def run {
@@ -6788,7 +6785,6 @@ class Mx4Gemv : Blk32GemvRunT {
 [vk_dispatch(name = "mx4_gemv_n_cls", kernel = "run", family = "mx4_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class Mx4GemvN : Blk32GemvRunT {
     typedef FMT = KqTag_mx4
-    override MX4 = true
     override NCOL = true
 
     [spirv_kernel(local_size_x = 64, local_size_x_id = 0)]
@@ -6800,8 +6796,6 @@ class Mx4GemvN : Blk32GemvRunT {
 
 [ |> template_struct_instance, arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-b32-window-gemm")]
 class template Blk32BatchT : MoeCmBase {
-    @template_constant Q51 : bool = false
-    @template_constant MX4 : bool = false
     @ssbo @binding = 0 wq : array<uint>        //! weight quant words, `Blk32GemvT`'s layout
     @ssbo @binding = 1 wsu : array<uint>       //! per-block scales, `Blk32GemvT`'s layout
     @ssbo @binding = 3 xqw : array<uint>       //! Q8_0 activation words
@@ -6822,7 +6816,7 @@ class template Blk32BatchT : MoeCmBase {
     def blk_scale(wb : uint) : float2 => blk32_scale(type<FMT>, wsu[blk32_sword(type<FMT>, wb)], wb)
 
     def wdot(w, x : uint) : int {
-        static_if (MX4) {
+        static_if (typeinfo typename(type<FMT>) == typeinfo typename(type<KqTag_mx4>)) {
             return mx4_sdot(w, x)
         } else {
             return sdot4(w, x)
@@ -6901,12 +6895,12 @@ class template Blk32BatchT : MoeCmBase {
                     i1 += wdot(wv1.x, xw.x) + wdot(wv1.y, xw.y) + wdot(wv1.z, xw.z) + wdot(wv1.w, xw.w)
                     i2 += wdot(wv2.x, xw.x) + wdot(wv2.y, xw.y) + wdot(wv2.z, xw.z) + wdot(wv2.w, xw.w)
                     i3 += wdot(wv3.x, xw.x) + wdot(wv3.y, xw.y) + wdot(wv3.z, xw.z) + wdot(wv3.w, xw.w)
-                    static_if (Q51) {
+                    static_if (typeinfo typename(type<FMT>) == typeinfo typename(type<KqTag_q51>)) {
                         asum += sdot4(xw.x, 0x01010101u) + sdot4(xw.y, 0x01010101u) + sdot4(xw.z, 0x01010101u) + sdot4(xw.w, 0x01010101u)
                     }
                 }
                 let xscl = xsw[bu * 32u + grp]
-                static_if (Q51) {
+                static_if (typeinfo typename(type<FMT>) == typeinfo typename(type<KqTag_q51>)) {
                     let fa = float(asum)
                     f0 += mad(wsw[bu * 32u + word], float(i0), wmw[bu * 32u + word] * fa) * xscl
                     f1 += mad(wsw[bu * 32u + word + 8u], float(i1), wmw[bu * 32u + word + 8u] * fa) * xscl
@@ -6929,7 +6923,6 @@ class template Blk32BatchT : MoeCmBase {
 [vk_dispatch(name = "q51_batch_cls", kernel = "run", family = "blk32_batch_cls", grid = "wgs", params = "wgs : int64")]
 class Q51Batch : Blk32BatchT {
     typedef FMT = KqTag_q51
-    override Q51 = true
 
     [spirv_kernel(local_size_x = 256)]
     def run {
@@ -6970,7 +6963,6 @@ class Q5032Batch : Blk32BatchT {
 [vk_dispatch(name = "mx4_batch_cls", kernel = "run", family = "blk32_batch_cls", grid = "wgs", params = "wgs : int64")]
 class Mx4Batch : Blk32BatchT {
     typedef FMT = KqTag_mx4
-    override MX4 = true
 
     [spirv_kernel(local_size_x = 256)]
     def run {
@@ -7196,8 +7188,10 @@ def gemv_enc(fmt : int; raw : VkCommandBuffer; var h : VkHaz; var set_ : VkDescr
 
 // ===== the N-column GEMV leaves: one weight pass over `pa.ncols` activation rows =====
 
-//! the format the N-column ladder skips: q8, its own stamps picked by row count
-let private GEMV_NO_N_LEAF = "q8"
+//! the N-column ladders' skips: the superblock formats' ladder (q8 picks its own stamps by row count, the per-32 formats
+//! and mx4 stamp another template), and the per-32 and mx4 one
+let private GEMV_N_KQ = "q8 q51 mx4 iq4nl32 q4032 q5032"
+let private GEMV_N_B32 = "q8 k4 q40 iq4xs iq3s4 iq3s iq3xxs iq4nl nv4 k3 k2 k5 k6 iq2s iq2xs iq2xxs"
 
 //! the superblock decode GEMV family's roster - q8 and every kq leaf, in enum order: what the probe's ruler walks (the
 //! per-32 expert GEMVs carry another plane shape, so the kernel cells walk every member themselves)
@@ -7223,7 +7217,13 @@ def gemv_cls_ensure_n(fmt : int; nb : int64 = 8l) : bool {   // nolint:STYLE037 
         return ok
     }
     var r = false
-    kq_tile_stamp(fmt, GEMV_NO_N_LEAF, "gemv") <| $() {
+    if (kq_sb(fmt)) {
+        kq_tile_stamp(fmt, GEMV_N_KQ, "gemv") <| $() {
+            r = tile_ensure_n_cls() && tile_ensure_n4_cls()
+        }
+        return r
+    }
+    kq_tile_stamp(fmt, GEMV_N_B32, "gemv") <| $() {
         r = tile_ensure_n_cls()
     }
     return r
@@ -7269,7 +7269,20 @@ def gemv_cls_enc_n(fmt : int; raw : VkCommandBuffer; var h : VkHaz; var set_ : V
         q8_gemv_n_enc(raw, h, set_, pc, wgs)
         return
     }
-    kq_tile_stamp(fmt, GEMV_NO_N_LEAF, "gemv") <| $() {
+    if (kq_sb(fmt)) {   // a region's rows in groups of KQ_N_RR; the four-column stamps hold half the accumulators
+        let gwgs = gemv_wgs(int64(pc.nreg) * ((int64(pc.d) + int64(KQ_N_RR) - 1l) / int64(KQ_N_RR)), pc.lanes_per_row)
+        if (pc.ncols <= 4u) {
+            kq_tile_stamp(fmt, GEMV_N_KQ, "gemv") <| $() {
+                tile_enc_n4_cls(raw, h, set_, pc, gwgs)
+            }
+        } else {
+            kq_tile_stamp(fmt, GEMV_N_KQ, "gemv") <| $() {
+                tile_enc_n_cls(raw, h, set_, pc, gwgs)
+            }
+        }
+        return
+    }
+    kq_tile_stamp(fmt, GEMV_N_B32, "gemv") <| $() {
         tile_enc_n_cls(raw, h, set_, pc, wgs)
     }
 }
@@ -7286,6 +7299,20 @@ class KqGemvK4 : K4GemvT {
 [vk_dispatch(name = "kq_gemv_k4_n_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class KqGemvK4N : K4GemvT {
     override NCOL = true
+    override RR = 2
+
+    [spirv_kernel(local_size_x = 64)]
+    def run {
+        leaf_body()
+    }
+}
+
+//! `K4GemvT`'s N leaf at four activation columns a dispatch (`NCMAX`)
+[vk_dispatch(name = "kq_gemv_k4_n4_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class KqGemvK4N4 : K4GemvT {
+    override NCOL = true
+    override RR = 2
+    override NCMAX = 4
 
     [spirv_kernel(local_size_x = 64)]
     def run {
@@ -7316,6 +7343,20 @@ class KqGemvQ40 : Q40GemvT {
 [vk_dispatch(name = "kq_gemv_q40_n_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class KqGemvQ40N : Q40GemvT {
     override NCOL = true
+    override RR = 2
+
+    [spirv_kernel(local_size_x = 64)]
+    def run {
+        leaf_body()
+    }
+}
+
+//! `Q40GemvT`'s N leaf at four activation columns a dispatch (`NCMAX`)
+[vk_dispatch(name = "kq_gemv_q40_n4_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class KqGemvQ40N4 : Q40GemvT {
+    override NCOL = true
+    override RR = 2
+    override NCMAX = 4
 
     [spirv_kernel(local_size_x = 64)]
     def run {
@@ -7335,6 +7376,20 @@ class KqGemvIq4xs : Iq4xsGemvT {
 [vk_dispatch(name = "kq_gemv_iq4xs_n_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class KqGemvIq4xsN : Iq4xsGemvT {
     override NCOL = true
+    override RR = 2
+
+    [spirv_kernel(local_size_x = 64)]
+    def run {
+        leaf_body()
+    }
+}
+
+//! `Iq4xsGemvT`'s N leaf at four activation columns a dispatch (`NCMAX`)
+[vk_dispatch(name = "kq_gemv_iq4xs_n4_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class KqGemvIq4xsN4 : Iq4xsGemvT {
+    override NCOL = true
+    override RR = 2
+    override NCMAX = 4
 
     [spirv_kernel(local_size_x = 64)]
     def run {
@@ -7356,6 +7411,21 @@ class KqGemvIq3s4 : Iq4xsGemvT {
 class KqGemvIq3s4N : Iq4xsGemvT {
     override IQODD = true
     override NCOL = true
+    override RR = 2
+
+    [spirv_kernel(local_size_x = 64)]
+    def run {
+        leaf_body()
+    }
+}
+
+//! `Iq4xsGemvT`'s N leaf at four activation columns a dispatch (`NCMAX`)
+[vk_dispatch(name = "kq_gemv_iq3s4_n4_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class KqGemvIq3s4N4 : Iq4xsGemvT {
+    override IQODD = true
+    override NCOL = true
+    override RR = 2
+    override NCMAX = 4
 
     [spirv_kernel(local_size_x = 64)]
     def run {
@@ -7396,6 +7466,20 @@ class KqGemvIq3s : Iq3sGemvT {
 [vk_dispatch(name = "kq_gemv_iq3s_n_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class KqGemvIq3sN : Iq3sGemvT {
     override NCOL = true
+    override RR = 2
+
+    [spirv_kernel(local_size_x = 64)]
+    def run {
+        leaf_body()
+    }
+}
+
+//! `Iq3sGemvT`'s N leaf at four activation columns a dispatch (`NCMAX`)
+[vk_dispatch(name = "kq_gemv_iq3s_n4_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class KqGemvIq3sN4 : Iq3sGemvT {
+    override NCOL = true
+    override RR = 2
+    override NCMAX = 4
 
     [spirv_kernel(local_size_x = 64)]
     def run {
@@ -7415,6 +7499,20 @@ class KqGemvIq3xxs : Iq3xxsGemvT {
 [vk_dispatch(name = "kq_gemv_iq3xxs_n_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class KqGemvIq3xxsN : Iq3xxsGemvT {
     override NCOL = true
+    override RR = 2
+
+    [spirv_kernel(local_size_x = 64)]
+    def run {
+        leaf_body()
+    }
+}
+
+//! `Iq3xxsGemvT`'s N leaf at four activation columns a dispatch (`NCMAX`)
+[vk_dispatch(name = "kq_gemv_iq3xxs_n4_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class KqGemvIq3xxsN4 : Iq3xxsGemvT {
+    override NCOL = true
+    override RR = 2
+    override NCMAX = 4
 
     [spirv_kernel(local_size_x = 64)]
     def run {
@@ -7434,6 +7532,20 @@ class KqGemvIq4nl : Iq4nlGemvT {
 [vk_dispatch(name = "kq_gemv_iq4nl_n_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class KqGemvIq4nlN : Iq4nlGemvT {
     override NCOL = true
+    override RR = 2
+
+    [spirv_kernel(local_size_x = 64)]
+    def run {
+        leaf_body()
+    }
+}
+
+//! `Iq4nlGemvT`'s N leaf at four activation columns a dispatch (`NCMAX`)
+[vk_dispatch(name = "kq_gemv_iq4nl_n4_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class KqGemvIq4nlN4 : Iq4nlGemvT {
+    override NCOL = true
+    override RR = 2
+    override NCMAX = 4
 
     [spirv_kernel(local_size_x = 64)]
     def run {
@@ -7455,6 +7567,20 @@ class KqGemvNv4 : Nv4GemvT {
 [vk_dispatch(name = "kq_gemv_nv4_n_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class KqGemvNv4N : Nv4GemvT {
     override NCOL = true
+    override RR = 2
+
+    [spirv_kernel(local_size_x = 64)]
+    def run {
+        leaf_body()
+    }
+}
+
+//! `Nv4GemvT`'s N leaf at four activation columns a dispatch (`NCMAX`)
+[vk_dispatch(name = "kq_gemv_nv4_n4_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class KqGemvNv4N4 : Nv4GemvT {
+    override NCOL = true
+    override RR = 2
+    override NCMAX = 4
 
     [spirv_kernel(local_size_x = 64)]
     def run {
@@ -7474,6 +7600,20 @@ class KqGemvK3 : K3GemvT {
 [vk_dispatch(name = "kq_gemv_k3_n_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class KqGemvK3N : K3GemvT {
     override NCOL = true
+    override RR = 2
+
+    [spirv_kernel(local_size_x = 64)]
+    def run {
+        leaf_body()
+    }
+}
+
+//! `K3GemvT`'s N leaf at four activation columns a dispatch (`NCMAX`)
+[vk_dispatch(name = "kq_gemv_k3_n4_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class KqGemvK3N4 : K3GemvT {
+    override NCOL = true
+    override RR = 2
+    override NCMAX = 4
 
     [spirv_kernel(local_size_x = 64)]
     def run {
@@ -7493,6 +7633,20 @@ class KqGemvK2 : K2GemvT {
 [vk_dispatch(name = "kq_gemv_k2_n_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class KqGemvK2N : K2GemvT {
     override NCOL = true
+    override RR = 2
+
+    [spirv_kernel(local_size_x = 64)]
+    def run {
+        leaf_body()
+    }
+}
+
+//! `K2GemvT`'s N leaf at four activation columns a dispatch (`NCMAX`)
+[vk_dispatch(name = "kq_gemv_k2_n4_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class KqGemvK2N4 : K2GemvT {
+    override NCOL = true
+    override RR = 2
+    override NCMAX = 4
 
     [spirv_kernel(local_size_x = 64)]
     def run {
@@ -7512,6 +7666,20 @@ class KqGemvK5 : K5GemvT {
 [vk_dispatch(name = "kq_gemv_k5_n_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class KqGemvK5N : K5GemvT {
     override NCOL = true
+    override RR = 2
+
+    [spirv_kernel(local_size_x = 64)]
+    def run {
+        leaf_body()
+    }
+}
+
+//! `K5GemvT`'s N leaf at four activation columns a dispatch (`NCMAX`)
+[vk_dispatch(name = "kq_gemv_k5_n4_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class KqGemvK5N4 : K5GemvT {
+    override NCOL = true
+    override RR = 2
+    override NCMAX = 4
 
     [spirv_kernel(local_size_x = 64)]
     def run {
@@ -7531,6 +7699,20 @@ class KqGemvK6 : K6GemvT {
 [vk_dispatch(name = "kq_gemv_k6_n_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class KqGemvK6N : K6GemvT {
     override NCOL = true
+    override RR = 2
+
+    [spirv_kernel(local_size_x = 64)]
+    def run {
+        leaf_body()
+    }
+}
+
+//! `K6GemvT`'s N leaf at four activation columns a dispatch (`NCMAX`)
+[vk_dispatch(name = "kq_gemv_k6_n4_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class KqGemvK6N4 : K6GemvT {
+    override NCOL = true
+    override RR = 2
+    override NCMAX = 4
 
     [spirv_kernel(local_size_x = 64)]
     def run {
@@ -7550,6 +7732,20 @@ class KqGemvIq2s : Iq2sGemvT {
 [vk_dispatch(name = "kq_gemv_iq2s_n_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class KqGemvIq2sN : Iq2sGemvT {
     override NCOL = true
+    override RR = 2
+
+    [spirv_kernel(local_size_x = 64)]
+    def run {
+        leaf_body()
+    }
+}
+
+//! `Iq2sGemvT`'s N leaf at four activation columns a dispatch (`NCMAX`)
+[vk_dispatch(name = "kq_gemv_iq2s_n4_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class KqGemvIq2sN4 : Iq2sGemvT {
+    override NCOL = true
+    override RR = 2
+    override NCMAX = 4
 
     [spirv_kernel(local_size_x = 64)]
     def run {
@@ -7579,6 +7775,20 @@ class KqGemvIq2xs : Iq2xsGemvT {
 [vk_dispatch(name = "kq_gemv_iq2xs_n_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class KqGemvIq2xsN : Iq2xsGemvT {
     override NCOL = true
+    override RR = 2
+
+    [spirv_kernel(local_size_x = 64)]
+    def run {
+        leaf_body()
+    }
+}
+
+//! `Iq2xsGemvT`'s N leaf at four activation columns a dispatch (`NCMAX`)
+[vk_dispatch(name = "kq_gemv_iq2xs_n4_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class KqGemvIq2xsN4 : Iq2xsGemvT {
+    override NCOL = true
+    override RR = 2
+    override NCMAX = 4
 
     [spirv_kernel(local_size_x = 64)]
     def run {
@@ -7598,6 +7808,20 @@ class KqGemvIq2xxs : Iq2xxsGemvT {
 [vk_dispatch(name = "kq_gemv_iq2xxs_n_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class KqGemvIq2xxsN : Iq2xxsGemvT {
     override NCOL = true
+    override RR = 2
+
+    [spirv_kernel(local_size_x = 64)]
+    def run {
+        leaf_body()
+    }
+}
+
+//! `Iq2xxsGemvT`'s N leaf at four activation columns a dispatch (`NCMAX`)
+[vk_dispatch(name = "kq_gemv_iq2xxs_n4_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class KqGemvIq2xxsN4 : Iq2xxsGemvT {
+    override NCOL = true
+    override RR = 2
+    override NCMAX = 4
 
     [spirv_kernel(local_size_x = 64)]
     def run {

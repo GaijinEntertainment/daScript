@@ -13,6 +13,7 @@ require strings
 require daslib/strings_boost   // split / strip — the grid & params micro-format tokenizers
 require dasllama_kernel_access   // the shared body-walk classifier (field mode) — access is DERIVED
 require dasllama_dispatch_scan
+require dasllama_gpu_math   // VKD_SET_BINDINGS: the hazard record's binding cap
 
 // The dasLLAMA Vulkan kernel-dispatch lens ([metal_dispatch]'s sibling). [vk_dispatch] reads a
 // [spirv_kernel] class's member annotations and generates the class's dispatch surface over the
@@ -105,8 +106,8 @@ class VkDispatch : AstStructureAnnotation {
         // backticked "{Class}`run`spirv" makes the SPV-override filename unusable
         let disp_name = "{scan.base}_spv"
         let nb = length(scan.blist)   // the set builder's arity: one buffer/size/bits entry per declared binding
-        if (scan.blist[nb - 1] > 11) {
-            errors := "[vk_dispatch] {scan.base}: binding {scan.blist[nb - 1]} - the hazard rail's SetBits caps at binding 11"
+        if (scan.blist[nb - 1] >= VKD_SET_BINDINGS) {
+            errors := "[vk_dispatch] {scan.base}: binding {scan.blist[nb - 1]} - the hazard rail's SetBits caps at binding {VKD_SET_BINDINGS - 1}"
             return false
         }
 

@@ -204,6 +204,11 @@ over the N-row command's sets; `vk_rdec_verify_rows` answers the depth plus one 
 prepared for (`RDec.verify_rows`), 0 where the head, the N-row command or an N-column leaf of the
 head's planes is off the device, each reason logged once.
 
+**A block drafter's round takes the plain form** (`RDec.v_plain`): the same command with no head warm and no head row
+staged, on a trunk with no head (`RDec.head_planned` false, the rows the round's widest) and on one that carries a head
+alike; the recorded commands re-record when a call's form differs from theirs. Under the seat's accept the rows' picks
+land alone and `vk_rdec_logits_rows` lands one row of the logits plane afterwards.
+
 **The recurrent heads step the rows one at a time.** The N-row command's fused step runs every row
 at once, each against its own slot; the rows of one slot would all read the pre-step state. So the
 verify's GEMVs still take the rows as the columns of one dispatch, and the fused step (`dn_step_cls`)

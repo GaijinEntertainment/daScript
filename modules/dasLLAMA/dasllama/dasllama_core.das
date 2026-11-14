@@ -1098,7 +1098,7 @@ def kernel_report() : string {
 
 def prepared_image_alignment() : int64 {
     //! The boundary, in bytes, a prepared image its host holds in memory starts on; a load from another address panics.
-    return IMAGE_PAGE
+    return prepared_image_alignment_()
 }
 
 def gpu_device_session_ctx() : int64 {

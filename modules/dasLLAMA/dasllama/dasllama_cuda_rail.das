@@ -72,7 +72,7 @@ def rail_q8_gemv_n(var rl : CutRail; roles : TowerBuf const[6]; var pc : GemvArg
     } elif (pc.ncols <= 4u) {
         enc_q8_gemv_n4_cls(rl, roles, pc, wgs)
     } else {
-        enc_q8_gemv_n8_cls(rl, roles, pc, wgs)
+        enc_q8_gemv_n8_cls(rl, roles, pc, cud_q8_gemv_n8_wgs(pc))
     }
 }
 

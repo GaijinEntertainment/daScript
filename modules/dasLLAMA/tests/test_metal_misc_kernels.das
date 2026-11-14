@@ -23,6 +23,7 @@ require ?das_metal dasllama/dasllama_kqformat   // kq_fmt_of_id - the token-tabl
 require dasllama/dasllama_convert    // dequant_b32_plane_block - the per-32 gather gate's rows; dequant_kq_plane_sb - the drafter's codebook rows
 require ?das_metal dasllama/dasllama_metal_prefill  // metal_moe_kq_twin_pick + its knee knob - the K-quant MoE twins' pick cell
 require dasllama/dasllama_dflash   // DflashDrafter, dflash_top_k_row, dflash_walk: the device selector's host twins
+require _dflash_oracle   // the selector cells' fixture and oracles, the discrete homes' walk cell's own
 require ?das_metal dasllama/dasllama_metal_dflash   // the device selector's top-k and walk stamps
 require ?das_metal metal/das_metal_boost  // device/pipeline/buffer plumbing + the leak gate
 require ?das_metal _metal_kernel_common   // the MetalCell record, check_buf, the device shell
@@ -156,203 +157,6 @@ def private cls_select_gate(t : T?; var dev, queue; vocab : int) {
     sel_gate_compare(t, tag, got, want, int64(vocab))
 }
 
-let private DF_NONE = 0xFFFFFFFFu   //! the top-k's empty slot
-let private DF_OUT_SENTINEL = 0xFFFFFFFEu   //! an id no run writes
-
-def private df_hash(i : int) : int => ((i * 1103515245 + 12345) >> 8) & 0x7fffffff
-
-//! `rows` logits rows of `vocab`: values on a 0.25 grid, so ties fill the k-th boundary, the ids `top_a` < `top_b` tied at the
-//! row's maximum
-def private df_logits(rows, vocab, top_a, top_b : int) : array<float> {
-    var lg <- [for (i in range(rows * vocab)); float(df_hash(i) % 64) * 0.25 - 8.0]
-    for (r in range(rows)) {
-        if (top_b < vocab) {
-            lg[r * vocab + top_a] = 9.0
-            lg[r * vocab + top_b] = 9.0
-        }
-    }
-    return <- lg
-}
-
-//! the oracle's list of the run lg[base + lo .. base + hi): its ids sorted by (logit desc, id asc), the first `k` appended,
-//! the empty slot (DF_NONE / -3.4e38) past the run's ids
-def private df_topk_append(lg : array<float>; base, lo, hi, k : int; ids_desc : bool; var ids : array<uint>; var vals : array<float>) {
-    var order <- [for (i in range(lo, hi)); i]
-    sort(order) $(a, b) {
-        let va = lg[base + a]
-        let vb = lg[base + b]
-        return va > vb || (va == vb && (ids_desc ? a > b : a < b))
-    }
-    ids |> reserve(length(ids) + k)
-    vals |> reserve(length(vals) + k)
-    for (j in range(k)) {
-        ids |> push(j < length(order) ? uint(order[j]) : DF_NONE)
-        vals |> push(j < length(order) ? lg[base + order[j]] : -3.4e38)
-    }
-    delete order
-}
-
-//! the oracle's top-k of every row: a list a row
-def private df_topk_oracle(lg : array<float>; rows, vocab, k : int; ids_desc : bool) : tuple<ids : array<uint>; vals : array<float>> {
-    var ids : array<uint>
-    ids |> reserve(rows * k)
-    var vals : array<float>
-    vals |> reserve(rows * k)
-    for (r in range(rows)) {
-        df_topk_append(lg, r * vocab, 0, vocab, k, ids_desc, ids, vals)
-    }
-    return (ids <- ids, vals <- vals)
-}
-
-//! `got` against `want` as lists of `k`, list i's first `live[i]` slots through the exact compare - its poisoned-expectation
-//! control landing on a slot a run fills - and its empty slots compared apart
-def private df_check_lists(t : T?; tag : string; got, want : array<auto(TT)>; live : array<int>; k : int) {
-    var inscope g_live, w_live : array<TT -const>
-    g_live |> reserve(length(got))
-    w_live |> reserve(length(got))
-    var empty_bad = 0
-    for (l, i in live, count()) {
-        for (j in range(k)) {
-            let x = i * k + j
-            if (j < l) {
-                g_live |> push(got[x])
-                w_live |> push(want[x])
-            } elif (got[x] != want[x]) {
-                empty_bad++
-            }
-        }
-    }
-    check_exact(t, tag, g_live, w_live)
-    t |> equal(empty_bad, 0, "{tag}: every empty slot past a list's ids holds the empty slot")
-}
-
-//! one selector codebook of `vocab` rows `rank` wide appended to `dr` in format `f`, behind a lead of foreign bytes (two, so a Q8_0
-//! codebook sits two bytes off a word) or two foreign superblocks; quants hashed off `salt`, every half scale a sane magnitude
-def private df_codebook(var dr : DflashDrafter; f : KqFmt; vocab, rank, salt : int) : DflashW {
-    if (f == KqFmt.q8) {
-        let lead = length(dr.blob)
-        let off = lead + 2
-        let nb = vocab * rank / 32
-        dr.blob |> resize(off + nb * 34)
-        dr.blob[lead] = uint8(0x5a)
-        dr.blob[lead + 1] = uint8(0xa5)
-        for (b in range(nb)) {
-            let h = f32_to_f16(0.01 + 0.0003 * float(df_hash(b + salt) % 100) * ((b & 1) == 0 ? 1.0 : -1.0))
-            let bo = off + b * 34
-            dr.blob[bo] = uint8(h & 0xffu)
-            dr.blob[bo + 1] = uint8(h >> 8u)
-            for (k in range(32)) {
-                dr.blob[bo + 2 + k] = uint8(df_hash(b * 32 + k + salt * 7) & 0xff)
-            }
-        }
-        return DflashW(fmt = f, off = int64(off))
-    }
-    let fi = int(f)
-    let qsb = int(kq_qsb(f))
-    let ssb = int(kq_ssb(f))
-    let sb_lead = length(dr.kq[fi].q) / qsb
-    let sb0 = sb_lead + 2
-    let nsb = vocab * rank / 256
-    dr.kq[fi].q |> resize((sb0 + nsb) * qsb)
-    dr.kq[fi].s |> resize((sb0 + nsb) * ssb)
-    for (i in range(sb_lead * qsb, (sb0 + nsb) * qsb)) {
-        dr.kq[fi].q[i] = uint8(df_hash(i + salt * 13) & 0xff)
-    }
-    for (i in range(sb_lead * ssb, (sb0 + nsb) * ssb)) {
-        dr.kq[fi].s[i] = uint8(df_hash(i + salt * 29) & 0xff)
-    }
-    for (sb in range(sb_lead, sb0 + nsb)) {
-        let d = f32_to_f16(0.002 + 0.00005 * float(df_hash(sb + salt) % 100))
-        let dmin = f32_to_f16(0.001 + 0.00003 * float(df_hash(sb * 3 + salt) % 100))
-        let at = f == KqFmt.k6 ? sb * ssb + 16 : sb * ssb
-        dr.kq[fi].s[at] = uint8(d & 0xffu)
-        dr.kq[fi].s[at + 1] = uint8(d >> 8u)
-        if (f != KqFmt.k6) {
-            dr.kq[fi].s[at + 2] = uint8(dmin & 0xffu)
-            dr.kq[fi].s[at + 3] = uint8(dmin >> 8u)
-        }
-    }
-    return DflashW(fmt = f, off = int64(sb0 * 256))
-}
-
-//! codebook row `src`'s bytes copied over row `dst`'s: two candidates whose successor rows, and so whose scores, tie exactly
-def private df_copy_row(var dr : DflashDrafter; w : DflashW; rank, src, dst : int) {
-    if (w.fmt == KqFmt.q8) {
-        let rowb = rank / 32 * 34
-        for (i in range(rowb)) {
-            dr.blob[int(w.off) + dst * rowb + i] = dr.blob[int(w.off) + src * rowb + i]
-        }
-        return
-    }
-    let fi = int(w.fmt)
-    let qsb = int(kq_qsb(w.fmt))
-    let ssb = int(kq_ssb(w.fmt))
-    let sb0 = int(w.off) / 256
-    let per = rank / 256
-    for (i in range(per * qsb)) {
-        dr.kq[fi].q[(sb0 + dst * per) * qsb + i] = dr.kq[fi].q[(sb0 + src * per) * qsb + i]
-    }
-    for (i in range(per * ssb)) {
-        dr.kq[fi].s[(sb0 + dst * per) * ssb + i] = dr.kq[fi].s[(sb0 + src * per) * ssb + i]
-    }
-}
-
-//! codebook row `row` of `w` read as the oracle reads it: a Q8_0 block's q * d, a K-quant superblock through the engine's dequant
-def private df_book_row(dr : DflashDrafter; w : DflashW; rank, row : int) : array<float> {
-    var out : array<float>
-    out |> resize(rank)
-    if (w.fmt == KqFmt.q8) {
-        let rowb = rank / 32 * 34
-        for (b in range(rank / 32)) {
-            let bo = int(w.off) + row * rowb + b * 34
-            let d = f16_to_f32(uint(dr.blob[bo]) | (uint(dr.blob[bo + 1]) << 8u))
-            for (k in range(32)) {
-                let q = int(dr.blob[bo + 2 + k])
-                out[b * 32 + k] = float(q >= 128 ? q - 256 : q) * d
-            }
-        }
-        return <- out
-    }
-    let sb0 = (w.off + int64(row * rank)) / 256l
-    for (b in range64(int64(rank / 256))) {
-        dequant_kq_plane_sb(w.fmt, dr.kq[int(w.fmt)].q, dr.kq[int(w.fmt)].s, sb0 + b, false, out, b * 256l)
-    }
-    return <- out
-}
-
-//! the oracle's walk: position r's candidates scored logit + sum_i (A[pred][i] * h_r[i]) * B[cand][i] in ascending i, the first
-//! best slot the pick (`last_best` the last one, `unary` the logit alone - the controls); the anchor at 0, then the picks
-def private df_walk_oracle(dr : DflashDrafter; tok, nd, k, rank : int; cid : array<uint>; cval, hsel : array<float>; last_best, unary : bool) : array<uint> {
-    var ids : array<uint>
-    ids |> reserve(nd + 1)
-    ids |> push(uint(tok))
-    var pred = tok
-    for (r in range(nd)) {
-        var inscope arow <- df_book_row(dr, dr.sel_prev, rank, pred)
-        var best = 0
-        var bests = -3.0e38
-        for (j in range(k)) {
-            let cand = cid[r * k + j]
-            continue if (cand == DF_NONE)
-            var sc = cval[r * k + j]
-            if (!unary) {
-                var inscope brow <- df_book_row(dr, dr.sel_next, rank, int(cand))
-                for (i in range(rank)) {
-                    let ah = arow[i] * hsel[r * rank + i]
-                    sc += ah * brow[i]
-                }
-            }
-            if (sc > bests || (last_best && sc == bests)) {
-                bests = sc
-                best = j
-            }
-        }
-        pred = int(cid[r * k + best])
-        ids |> push(uint(pred))
-    }
-    return <- ids
-}
-
 //! `n` written elements of plane `p` read back, and the count of the 8 past them that left the sentinel (`sentinel`, or NaN)
 def private df_plane_and_past(mc : MetalCell; p, n : int; sentinel : auto(TT)) : tuple<run : array<TT -const>; moved : int> {
     var inscope whole <- mc |> plane_as(p, sentinel, n + 8)
@@ -365,29 +169,24 @@ def private df_plane_and_past(mc : MetalCell; p, n : int; sentinel : auto(TT)) :
     return (run <- [for (i in range(n)); whole[i]], moved = moved)
 }
 
-//! the two-stage top-k over `rows` rows of `vocab` at `k`, `span` logits a slice: the slice stamp's lists against the oracle's
+//! the two-stage top-k over `rows` rows of `vocab` at `k`, `DF_TOPK_SPAN` logits a slice: the slice stamp's lists against the oracle's
 //! list of each slice, the merge stamp's rows against the oracle's and the engine's host top-k, ids and logits bit for bit, the
 //! slots past every run at their sentinel; the ids-descending tie rule the control the merged ids must miss where the fixture ties
 //! at the k-th
-def private df_topk_gate(t : T?; var dev, queue; rows, vocab, k, span : int) {
-    let tag = "dflash topk rows={rows} vocab={vocab} k={k} span={span}"
-    let nsl = (vocab + span - 1) / span
-    var inscope lg <- df_logits(rows, vocab, 3, 5)
-    var inscope want <- df_topk_oracle(lg, rows, vocab, k, false)
-    var inscope flipped <- df_topk_oracle(lg, rows, vocab, k, true)
-    var inscope row_live <- [for (_r in range(rows)); min(k, vocab)]
-    var inscope part_ids : array<uint>
-    var inscope part_vals : array<float>
-    var inscope part_live : array<int>
-    part_live |> reserve(rows * nsl)
-    for (r in range(rows)) {
-        for (s in range(nsl)) {
-            let lo = s * span
-            let hi = min(lo + span, vocab)
-            df_topk_append(lg, r * vocab, lo, hi, k, false, part_ids, part_vals)
-            part_live |> push(min(k, hi - lo))
-        }
-    }
+def private df_topk_gate(t : T?; var dev, queue; leg : DfTopkLeg) {
+    let rows = leg.rows
+    let vocab = leg.vocab
+    let k = leg.k
+    let tag = "dflash topk rows={rows} vocab={vocab} k={k}"
+    var inscope fx <- df_topk_fixture(leg)
+    let nsl = fx.nsl
+    let lg & = unsafe(fx.lg)
+    let want & = unsafe(fx.want)
+    let flipped & = unsafe(fx.flipped)
+    let row_live & = unsafe(fx.row_live)
+    let part_ids & = unsafe(fx.part_ids)
+    let part_vals & = unsafe(fx.part_vals)
+    let part_live & = unsafe(fx.part_live)
     var inscope host_ids : array<int64>
     host_ids |> resize(rows * k)
     var inscope host_vals : array<float>
@@ -412,10 +211,10 @@ def private df_topk_gate(t : T?; var dev, queue; rows, vocab, k, span : int) {
         let ppv = mc |> out_(np, 0, 8)
         let pid = mc |> out_words(rows * k + 8, DF_OUT_SENTINEL)
         let pv = mc |> out_(rows * k, 0, 8)
-        var ska = DflashTopkArgs(vocab = uint(vocab), k = uint(k), span = uint(span), nsl = uint(nsl))
-        var mka = DflashTopkArgs(vocab = uint(nsl * k), k = uint(k), span = 0u, nsl = 1u)
+        var ska = GkDflashTopkArgs(vocab = uint(vocab), k = uint(k))
+        var mka = GkDflashTopkArgs(vocab = uint(nsl * k), k = uint(k))
         let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
-            invoke(ks.enc, enc, pso_s, mc.buf[plg], mc.buf[plg], mc.buf[ppid], mc.buf[ppv], ska, int64(nsl), int64(rows))
+            invoke(ks.enc, enc, pso_s, mc.buf[plg], mc.buf[plg], mc.buf[ppid], mc.buf[ppv], ska, int64(nsl * rows))
             invoke(km.enc, enc, pso_m, mc.buf[ppv], mc.buf[ppid], mc.buf[pid], mc.buf[pv], mka, int64(rows))
         }
         return if (!ran)
@@ -435,33 +234,23 @@ def private df_topk_gate(t : T?; var dev, queue; rows, vocab, k, span : int) {
 }
 
 //! a walk stamp's input planes in a cell: the anchor, the selector rows, the candidates and their logits, and the codebooks' -
-//! the predecessor's quant and scale planes, then the successor's, each side's quant offset and in-word byte offset
+//! the predecessor's quant and scale planes, then the successor's (`df_book_planes`), each side's in-word byte offset
 struct private DfWalkBinds {
     tok : int
     hsel : int
     cid : int
     cval : int
     books : array<int>
-    qoff : uint64[2]
     q0 : uint[2]
 }
 
 def private df_walk_binds(var mc; dr : DflashDrafter; tok : int; hsel : array<float>; cid : array<uint>; cval : array<float>) : DfWalkBinds {
     var b = DfWalkBinds(tok = mc |> in_plain([uint(tok), uint(1), uint(2)]), hsel = mc |> in_(hsel), cid = mc |> in_plain(cid), cval = mc |> in_(cval))
     for (side in range(2)) {
-        let w = side == 0 ? dr.sel_prev : dr.sel_next
-        if (w.fmt == KqFmt.q8) {
-            let pb = mc |> in_plain(dr.blob)
-            b.books |> push_from([pb, pb])
-            b.qoff[side] = uint64(w.off & ~3l)
-            b.q0[side] = uint(w.off & 3l)
-        } else {
-            let sb0 = w.off / 256l
-            b.books |> push(mc |> in_plain(dr.kq[int(w.fmt)].q))
-            var inscope srows <- [for (i in range64(sb0 * kq_ssb(w.fmt), long_length(dr.kq[int(w.fmt)].s))); dr.kq[int(w.fmt)].s[i]]
-            b.books |> push(mc |> in_plain(srows))
-            b.qoff[side] = uint64(sb0 * kq_qsb(w.fmt))
-        }
+        var inscope bk <- df_book_planes(dr, side == 0 ? dr.sel_prev : dr.sel_next)
+        let pq = mc |> in_plain(bk.q)
+        b.books |> push_from([pq, empty(bk.s) ? pq : mc |> in_plain(bk.s)])
+        b.q0[side] = bk.q0
     }
     return <- b
 }
@@ -470,35 +259,6 @@ def private df_walk_binds(var mc; dr : DflashDrafter; tok : int; hsel : array<fl
 //! `vocab` ids: the picks the oracle's and the engine's host walk's, id for id, the slots past them at their sentinel; position 0's
 //! selector row is zero, so its two top candidates tie on the score and the first slot's wins - the last-best rule the control
 //! that must miss, the logit-alone walk another
-let private DF_WALK_ND = 7    //! the walk gates' positions
-let private DF_WALK_TOK = 4   //! ... and anchor
-
-//! the walk gates' fixture: a drafter holding the two codebooks (successor rows 3 and 5 equal, so they tie), DF_WALK_ND rows of
-//! logits and their top-k, the selector rows (position 0's zero)
-struct private DfWalkFixture {
-    dr : DflashDrafter
-    top : tuple<ids : array<uint>; vals : array<float>>
-    hsel : array<float>
-    cids : array<int64>   //! the top-k's ids as the host walk reads them, an empty slot -1
-}
-
-def private df_walk_fixture(pf, nf : KqFmt; rank, vocab, k : int) : DfWalkFixture {
-    var fx : DfWalkFixture
-    fx.dr.rank = int64(rank)
-    fx.dr.topk = int64(k)
-    fx.dr.vocab = int64(vocab)
-    fx.dr.sel_prev = df_codebook(fx.dr, pf, vocab, rank, 11)
-    fx.dr.sel_next = df_codebook(fx.dr, nf, vocab, rank, 23)
-    if (vocab > 5) {
-        df_copy_row(fx.dr, fx.dr.sel_next, rank, 3, 5)
-    }
-    var inscope lg <- df_logits(DF_WALK_ND, vocab, 3, 5)
-    fx.top <- df_topk_oracle(lg, DF_WALK_ND, vocab, k, false)
-    fx.hsel <- [for (i in range(DF_WALK_ND * rank)); i < rank ? 0.0 : float(df_hash(i + 77) % 400) * 0.01 - 2.0]
-    fx.cids <- [for (v in fx.top.ids); v == DF_NONE ? -1l : int64(v)]
-    return <- fx
-}
-
 def private df_walk_gate(t : T?; var dev, queue; pf, nf : KqFmt; rank, vocab, k : int) {
     let tag = "dflash walk {pf}/{nf} rank={rank} vocab={vocab} k={k}"
     let nd = DF_WALK_ND
@@ -523,11 +283,11 @@ def private df_walk_gate(t : T?; var dev, queue; pf, nf : KqFmt; rank, vocab, k 
         var inscope b <- df_walk_binds(mc, dr, tok, hsel, top.ids, top.vals)
         t |> success(pf != KqFmt.q8 || b.q0[0] == 2u, "{tag}: a Q8_0 predecessor codebook sits two bytes off its four-aligned bind")
         let pid = mc |> out_words(nd + 1 + 4, DF_OUT_SENTINEL)
-        var ka = DflashWalkArgs(rank = uint(rank), k = uint(k), nd = uint(nd), pfmt = uint(df_fmt_code(pf)), nfmt = uint(df_fmt_code(nf)),
+        var ka = GkDflashWalkArgs(rank = uint(rank), k = uint(k), nd = uint(nd), pfmt = uint(dflash_walk_fmt_code(pf)), nfmt = uint(dflash_walk_fmt_code(nf)),
             pq0 = b.q0[0], nq0 = b.q0[1])
         let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
-            invoke(kw.enc, enc, pso, mc.buf[b.tok], mc.buf[b.hsel], mc.buf[b.cid], mc.buf[b.cval], mc.buf[b.books[0]], b.qoff[0], mc.buf[b.books[0]],
-                mc.buf[b.books[1]], mc.buf[b.books[1]], mc.buf[b.books[2]], b.qoff[1], mc.buf[b.books[2]], mc.buf[b.books[3]], mc.buf[b.books[3]],
+            invoke(kw.enc, enc, pso, mc.buf[b.tok], mc.buf[b.hsel], mc.buf[b.cid], mc.buf[b.cval], mc.buf[b.books[0]], mc.buf[b.books[0]],
+                mc.buf[b.books[1]], mc.buf[b.books[1]], mc.buf[b.books[2]], mc.buf[b.books[2]], mc.buf[b.books[3]], mc.buf[b.books[3]],
                 mc.buf[pid], ka)
         }
         return if (!ran)
@@ -572,7 +332,7 @@ def private df_walk_soft_gate(t : T?; var dev, queue; pf, nf : KqFmt; rank, voca
         let pid = mc |> out_words(nd + 1, DF_OUT_SENTINEL)
         let pq = mc |> out_(nd * k)
         let prng = mc |> in_plain([0u, 0u, 0u, 0u])
-        var ka = DflashWalkArgs(rank = uint(rank), k = uint(k), nd = uint(nd), pfmt = uint(df_fmt_code(pf)), nfmt = uint(df_fmt_code(nf)),
+        var ka = GkDflashWalkArgs(rank = uint(rank), k = uint(k), nd = uint(nd), pfmt = uint(dflash_walk_fmt_code(pf)), nfmt = uint(dflash_walk_fmt_code(nf)),
             pq0 = b.q0[0], nq0 = b.q0[1], temp = temp)
         var picks_off = 0
         var q_err = 0.0
@@ -591,9 +351,9 @@ def private df_walk_soft_gate(t : T?; var dev, queue; pf, nf : KqFmt; rank, voca
             let st = draw_state(si * 7919 + 13)
             mc |> plane_upload(prng, [uint(st.x), uint(st.y), uint(st.z), uint(st.w)])
             let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
-                invoke(kw.enc, enc, pso, mc.buf[b.tok], mc.buf[b.hsel], mc.buf[b.cid], mc.buf[b.cval], mc.buf[b.books[0]], b.qoff[0], mc.buf[b.books[0]],
-                    mc.buf[b.books[1]], mc.buf[b.books[1]], mc.buf[b.books[2]], b.qoff[1], mc.buf[b.books[2]], mc.buf[b.books[3]], mc.buf[b.books[3]],
-                    mc.buf[pid], ka, mc.buf[pq], mc.buf[prng])
+                invoke(kw.enc, enc, pso, mc.buf[b.tok], mc.buf[b.hsel], mc.buf[b.cid], mc.buf[b.cval], mc.buf[b.books[0]], mc.buf[b.books[0]],
+                    mc.buf[b.books[1]], mc.buf[b.books[1]], mc.buf[b.books[2]], mc.buf[b.books[2]], mc.buf[b.books[3]], mc.buf[b.books[3]],
+                    mc.buf[pid], mc.buf[pq], mc.buf[prng], ka)
             }
             return if (!ran)
             var hrng = st
@@ -722,9 +482,6 @@ def private df_accept_gate(t : T?; var dev, queue; nr, vocab, m : int; none : bo
     }
 }
 
-//! the walk's code for a codebook format (`MetalDflashWalkArgs.pfmt`)
-def private df_fmt_code(f : KqFmt) : int => f == KqFmt.q8 ? 0 : f == KqFmt.k4 ? 4 : f == KqFmt.k5 ? 5 : 6
-
 //! a logits row the draw gate samples: a slow wave over the ids with a hashed ripple, a few sharp peaks, one exact tie
 def private draw_row_fixture(vocab, salt : int) : array<float> {
     var row <- [for (i in range(vocab)); 3.0 * sin(float(i + salt) * 0.0173) + 0.004 * float((i * 7919 + salt * 131) % 1000) - 2.0]
@@ -762,7 +519,7 @@ def private sel_draw_run(t : T?; var dev, queue; row : array<float>; params : Sa
         let prng = mc |> in_plain([uint(st.x), uint(st.y), uint(st.z), uint(st.w)])
         let ptok = mc |> out_words(1, 0xFFFFFFFFu)
         var ka = GkClsSelArgs(vocab = uint(vocab))
-        var kd = GkSelDrawArgs(row = 0u, top_k = uint(params.top_k), temp = params.temp, top_p = params.top_p, min_p = params.min_p)
+        var kd = MetalSelDrawArgs(row = 0u, top_k = uint(params.top_k), temp = params.temp, top_p = params.top_p, min_p = params.min_p)
         let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
             stamp_run(ssel, pso_sel) {
                 invoke(ssel.enc, enc, mc.buf[py], mc.buf[ps], mc.buf[ph], mc.buf[pi], mc.buf[pv], mc.buf[pr], ka, 1l)
@@ -3367,9 +3124,27 @@ def private dispatch_align_gate(t : T?; var dev, queue) {
                 want |> want_trips(gathers, "ka.dim % 32")
             }
         }
+        //! the selector walks' codebook offsets (halves: a Q8_0 block's scale reads at pq0 / 2): the aligned control, then an odd
+        //! predecessor offset and an odd successor offset
+        var err : string
+        let kw = kernel_of(@@enc_dflash_walk)
+        let kws = kernel_of(@@enc_dflash_walk_soft)
+        var wpso = mc |> keep_stamp(kw, err)
+        var spso = mc |> keep_stamp(kws, err)
+        if (pso_ok(t, "dispatch_align: the selector walks", wpso, err) && pso_ok(t, "dispatch_align: the sampled walk", spso, err)) {
+            for (q0 in fixed_array((2u, 0u), (1u, 2u), (2u, 3u))) {
+                var wa = GkDflashWalkArgs(pq0 = q0._0, nq0 = q0._1, temp = 1.0)
+                invoke(kw.enc, null, wpso, b, b, b, b, b, b, b, b, b, b, b, b, b, wa)
+                invoke(kws.enc, null, spso, b, b, b, b, b, b, b, b, b, b, b, b, b, b, b, wa)
+                for (n in ["enc_dflash_walk", "enc_dflash_walk_soft"]) {
+                    want |> want_trips(q0._0 % 2u != 0u ? [n] : array<string>(), "ka.pq0 % 2")
+                    want |> want_trips(q0._1 % 2u != 0u ? [n] : array<string>(), "ka.nq0 % 2")
+                }
+            }
+        }
         gr_arm(false)
         restore_metal_requires_hook(saved_hook)
-        t |> equal(length(want), 50, "dispatch_align: the misaligned rings, router shapes and gather widths owe fifty trips")
+        t |> equal(length(want), 54, "dispatch_align: the misaligned rings, router shapes, gather widths and walk offsets owe fifty-four trips")
         t |> equal(join(g_align_trips, "\n"), join(want, "\n"), "dispatch_align: each builder trips on exactly the items its value breaks")
         delete g_align_trips
     }
@@ -3451,16 +3226,16 @@ def test_metal_misc_kernels(t : T?) {
                 cls_select_gate(t, dev, queue, 262144)
                 cls_select_gate(t, dev, queue, 1000)
                 cls_select_gate(t, dev, queue, 248320)   //! the served vocab: a tail stride under a whole subgroup's worth
-                df_topk_gate(t, dev, queue, 7, 248320, 16, 4096)   //! the 27B drafter's shape: seven rows, the served vocab, top-16, a tail slice
-                df_topk_gate(t, dev, queue, 3, 3000, 7, 1000)      //! whole slices
-                df_topk_gate(t, dev, queue, 2, 50000, 32, 4096)    //! the deepest list a lane keeps
-                df_topk_gate(t, dev, queue, 2, 10, 16, 4096)       //! a row narrower than the list: lanes with no id, empty slots
-                df_topk_gate(t, dev, queue, 2, 4100, 16, 4096)     //! a tail slice of four, narrower than the list
+                for (leg in df_topk_legs()) {
+                    df_topk_gate(t, dev, queue, leg)
+                }
                 df_walk_gate(t, dev, queue, KqFmt.q8, KqFmt.q8, 64, 300, 16)
                 df_walk_gate(t, dev, queue, KqFmt.k4, KqFmt.k6, 256, 300, 16)
                 df_walk_gate(t, dev, queue, KqFmt.k5, KqFmt.k4, 512, 200, 7)    //! two superblocks a row, the products under the 4096 a position stages
                 df_walk_gate(t, dev, queue, KqFmt.k6, KqFmt.k5, 256, 200, 16)
                 df_walk_gate(t, dev, queue, KqFmt.q8, KqFmt.k4, 256, 10, 16)   //! a candidate list past the row's ids: empty slots skipped
+                df_walk_gate(t, dev, queue, KqFmt.nv4, KqFmt.nv4, 256, 300, 16)
+                df_walk_gate(t, dev, queue, KqFmt.k4, KqFmt.nv4, 512, 200, 7)
                 df_walk_soft_gate(t, dev, queue, KqFmt.q8, KqFmt.q8, 64, 300, 16, 1.0)
                 df_walk_soft_gate(t, dev, queue, KqFmt.k4, KqFmt.k6, 256, 300, 16, 0.7)   //! the drafter's planes, the stream's temperature
                 df_walk_soft_gate(t, dev, queue, KqFmt.q8, KqFmt.k4, 256, 10, 16, 1.0)    //! empty slots: no mass, never drawn

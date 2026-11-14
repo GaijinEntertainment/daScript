@@ -95,7 +95,7 @@ back-to-back unless a slab boundary intervenes, so the merged form asks only tho
 questions and dispatches at `d = 2 * kvd`: one dispatch instead of two plus a copy, which
 doubles the otherwise starved k/v grid and deletes the v copy. Consumers read the merged output
 through a `kstride` field - the projection-row stride, `2 * kvd` merged against the split
-path's `kvd` - on `RopeKvBArgs` and on `GkQkRmsArgs`, and through `RopeKvBArgs.voff`, the v
+path's `kvd` - on `GkRopeKvArgs` and on `GkQkRmsArgs`, and through `GkRopeKvArgs.voff`, the v
 rows' base inside that buffer - `kvd` merged against the split path's `npos * kvd`
 (`ARCHITECTURE_GPU_SHARED_ATTN.md#rope-kv-merged-reads`). It is a record-cost win, not a GPU one.
 

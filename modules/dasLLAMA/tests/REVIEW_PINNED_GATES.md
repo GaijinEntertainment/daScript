@@ -197,8 +197,9 @@ it was measured on. The pinned set, one entry a line, each with what it must kee
   `test_vkt_tower_win_rows`, `test_vkt_tower_tail_rows`, `test_vkt_tower_front_movers`,
   `test_vkt_tower_front_mel`, `test_vkt_tower_ga_mel`, `test_vkt_tower_cn_attn_rel_plane`,
   `test_vkt_tower_conformer`, `test_vkt_tower_fastconformer`, `test_vkt_tower_ga_dwh`, `test_vkt_tower_dw2d`,
-  `test_vkt_wdec_classes`, `test_vkt_wdec_fused_rq`, `test_vkt_rnnt`, `test_vkt_ctc_pick`, `test_vkt_nmt` and
-  `test_vkt_nmt_attn` cells - the census's evidence for the tower, transducer-decode, CTC-pick and translation classes -
+  `test_vkt_wdec_classes`, `test_vkt_wdec_fused_rq`, `test_vkt_rnnt`, `test_vkt_ctc_pick`, `test_vkt_nmt`,
+  `test_vkt_nmt_attn`, `test_vkt_dflash_pass_kernels`, `test_vkt_dflash_topk` and `test_vkt_dflash_walk` cells - the
+  census's evidence for the tower, transducer-decode, CTC-pick, translation and block-drafter classes -
   must hold each class against its CPU oracle at the bar the cell sets, with the cell's poisoned-element control.
 - `test_vulkan_kv_codec_kernels.das`'s `test_vkc_q8_da_attn` and `test_vkc_tq4_da_attn` cells must
   hold the codec attention arms (`codec_attn_arms`) against the CPU attention over the codec's

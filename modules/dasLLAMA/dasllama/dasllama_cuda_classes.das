@@ -62,6 +62,7 @@ class CuQ8GemvN4 : Q8GemvNT {
 [cuda_dispatch(name = "q8_gemv_n8_cls", grid = "wgs", params = "wgs : int64")]
 class CuQ8GemvN8 : Q8GemvNT {
     override NC = 8
+    override R2 = true
 
     [cuda_kernel(local_size_x = 64, name = "q8_gemv_n8_cls_cuda")]
     def run {
@@ -122,8 +123,9 @@ class CuQ8GemvGuN8 : Q8GemvGuNT {
 [cuda_dispatch(name = "cls_ar", kernel = "run", grid = "nrows", params = "nrows : int64")]
 class CuClsArAddRms : ArBase {
     override OUT_F32 = true
+    override LANES = 1024u
 
-    [cuda_kernel(local_size_x = 256, name = "cls_ar_cuda")]
+    [cuda_kernel(local_size_x = 1024, name = "cls_ar_cuda")]
     def run {
         ar_body()
     }
@@ -143,7 +145,9 @@ class CuClsArAddRmsF16B : ArBase {
 //! the residual step on `GkAddRmsRows` with the Q8_0 requant in one dispatch, a workgroup a row
 [cuda_dispatch(name = "cls_ar_rq_b", grid = "nrows", params = "nrows : int64")]
 class CuClsArAddRmsRqB : ArRqBase {
-    [cuda_kernel(local_size_x = 256, name = "cls_ar_rq_b_cuda")]
+    override LANES = 1024u
+
+    [cuda_kernel(local_size_x = 1024, name = "cls_ar_rq_b_cuda")]
     def run {
         rq_b_body()
     }
@@ -153,8 +157,9 @@ class CuClsArAddRmsRqB : ArRqBase {
 [cuda_dispatch(name = "cls_ar_rq_sum_b", grid = "nrows", params = "nrows : int64")]
 class CuClsArAddRmsRqSumB : ArRqBase {
     override OUT_SUM = true
+    override LANES = 1024u
 
-    [cuda_kernel(local_size_x = 256, name = "cls_ar_rq_sum_b_cuda")]
+    [cuda_kernel(local_size_x = 1024, name = "cls_ar_rq_sum_b_cuda")]
     def run {
         rq_b_body()
     }
@@ -164,8 +169,9 @@ class CuClsArAddRmsRqSumB : ArRqBase {
 [cuda_dispatch(name = "cls_ar_rqk", grid = "wgs", params = "wgs : int64")]
 class CuArAddRmsRqK : ArRqT {
     override KBLK = true
+    override LANES = 1024u
 
-    [cuda_kernel(local_size_x = 256, name = "cls_ar_rqk_cuda")]
+    [cuda_kernel(local_size_x = 1024, name = "cls_ar_rqk_cuda")]
     def run {
         ar_rq_body()
     }
@@ -230,6 +236,15 @@ class CuQ8kActRq : ActRqT {
     [cuda_kernel(local_size_x = 256, name = "q8k_actrq_cls_cuda")]
     def run {
         rq_body()
+    }
+}
+
+//! the act and requant in the class its consumer reads - Q8_K under `kq`, else Q8_0 - over `elems` elements
+def cud_actrq_enc(var s : void?; bufs : uint64 const[4]; kq : bool; var pca : ActArgs; elems : int64) {
+    if (kq) {
+        enc_q8k_actrq_cls(s, bufs, pca, rq_wgs(true, elems))
+    } else {
+        enc_q8_actrq_cls(s, bufs, pca, rq_wgs(false, elems))
     }
 }
 
@@ -799,8 +814,22 @@ class CuKqGemvIq2xxs : Iq2xxsGemvT {
 [cuda_dispatch(name = "kq_gemv_k4_n_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class CuKqGemvK4N : K4GemvT {
     override NCOL = true
+    override RR = 2
 
     [cuda_kernel(local_size_x = 64, name = "kq_gemv_k4_n_cls_cuda")]
+    def run {
+        leaf_body()
+    }
+}
+
+//! `K4GemvT`'s N leaf at four activation columns a dispatch (`NCMAX`)
+[cuda_dispatch(name = "kq_gemv_k4_n4_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class CuKqGemvK4N4 : K4GemvT {
+    override NCOL = true
+    override RR = 2
+    override NCMAX = 4
+
+    [cuda_kernel(local_size_x = 64, name = "kq_gemv_k4_n4_cls_cuda")]
     def run {
         leaf_body()
     }
@@ -809,8 +838,22 @@ class CuKqGemvK4N : K4GemvT {
 [cuda_dispatch(name = "kq_gemv_q40_n_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class CuKqGemvQ40N : Q40GemvT {
     override NCOL = true
+    override RR = 2
 
     [cuda_kernel(local_size_x = 64, name = "kq_gemv_q40_n_cls_cuda")]
+    def run {
+        leaf_body()
+    }
+}
+
+//! `Q40GemvT`'s N leaf at four activation columns a dispatch (`NCMAX`)
+[cuda_dispatch(name = "kq_gemv_q40_n4_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class CuKqGemvQ40N4 : Q40GemvT {
+    override NCOL = true
+    override RR = 2
+    override NCMAX = 4
+
+    [cuda_kernel(local_size_x = 64, name = "kq_gemv_q40_n4_cls_cuda")]
     def run {
         leaf_body()
     }
@@ -819,8 +862,22 @@ class CuKqGemvQ40N : Q40GemvT {
 [cuda_dispatch(name = "kq_gemv_iq4xs_n_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class CuKqGemvIq4xsN : Iq4xsGemvCudT {
     override NCOL = true
+    override RR = 2
 
     [cuda_kernel(local_size_x = 64, name = "kq_gemv_iq4xs_n_cls_cuda")]
+    def run {
+        leaf_body()
+    }
+}
+
+//! `Iq4xsGemvT`'s N leaf at four activation columns a dispatch (`NCMAX`)
+[cuda_dispatch(name = "kq_gemv_iq4xs_n4_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class CuKqGemvIq4xsN4 : Iq4xsGemvCudT {
+    override NCOL = true
+    override RR = 2
+    override NCMAX = 4
+
+    [cuda_kernel(local_size_x = 64, name = "kq_gemv_iq4xs_n4_cls_cuda")]
     def run {
         leaf_body()
     }
@@ -830,8 +887,23 @@ class CuKqGemvIq4xsN : Iq4xsGemvCudT {
 class CuKqGemvIq3s4N : Iq4xsGemvT {
     override IQODD = true
     override NCOL = true
+    override RR = 2
 
     [cuda_kernel(local_size_x = 64, name = "kq_gemv_iq3s4_n_cls_cuda")]
+    def run {
+        leaf_body()
+    }
+}
+
+//! `Iq4xsGemvT`'s N leaf at four activation columns a dispatch (`NCMAX`)
+[cuda_dispatch(name = "kq_gemv_iq3s4_n4_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class CuKqGemvIq3s4N4 : Iq4xsGemvT {
+    override IQODD = true
+    override NCOL = true
+    override RR = 2
+    override NCMAX = 4
+
+    [cuda_kernel(local_size_x = 64, name = "kq_gemv_iq3s4_n4_cls_cuda")]
     def run {
         leaf_body()
     }
@@ -840,8 +912,22 @@ class CuKqGemvIq3s4N : Iq4xsGemvT {
 [cuda_dispatch(name = "kq_gemv_iq3s_n_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class CuKqGemvIq3sN : Iq3sGemvT {
     override NCOL = true
+    override RR = 2
 
     [cuda_kernel(local_size_x = 64, name = "kq_gemv_iq3s_n_cls_cuda")]
+    def run {
+        leaf_body()
+    }
+}
+
+//! `Iq3sGemvT`'s N leaf at four activation columns a dispatch (`NCMAX`)
+[cuda_dispatch(name = "kq_gemv_iq3s_n4_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class CuKqGemvIq3sN4 : Iq3sGemvT {
+    override NCOL = true
+    override RR = 2
+    override NCMAX = 4
+
+    [cuda_kernel(local_size_x = 64, name = "kq_gemv_iq3s_n4_cls_cuda")]
     def run {
         leaf_body()
     }
@@ -850,8 +936,22 @@ class CuKqGemvIq3sN : Iq3sGemvT {
 [cuda_dispatch(name = "kq_gemv_iq3xxs_n_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class CuKqGemvIq3xxsN : Iq3xxsGemvT {
     override NCOL = true
+    override RR = 2
 
     [cuda_kernel(local_size_x = 64, name = "kq_gemv_iq3xxs_n_cls_cuda")]
+    def run {
+        leaf_body()
+    }
+}
+
+//! `Iq3xxsGemvT`'s N leaf at four activation columns a dispatch (`NCMAX`)
+[cuda_dispatch(name = "kq_gemv_iq3xxs_n4_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class CuKqGemvIq3xxsN4 : Iq3xxsGemvT {
+    override NCOL = true
+    override RR = 2
+    override NCMAX = 4
+
+    [cuda_kernel(local_size_x = 64, name = "kq_gemv_iq3xxs_n4_cls_cuda")]
     def run {
         leaf_body()
     }
@@ -860,8 +960,22 @@ class CuKqGemvIq3xxsN : Iq3xxsGemvT {
 [cuda_dispatch(name = "kq_gemv_iq4nl_n_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class CuKqGemvIq4nlN : Iq4nlGemvCudT {
     override NCOL = true
+    override RR = 2
 
     [cuda_kernel(local_size_x = 64, name = "kq_gemv_iq4nl_n_cls_cuda")]
+    def run {
+        leaf_body()
+    }
+}
+
+//! `Iq4nlGemvT`'s N leaf at four activation columns a dispatch (`NCMAX`)
+[cuda_dispatch(name = "kq_gemv_iq4nl_n4_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class CuKqGemvIq4nlN4 : Iq4nlGemvCudT {
+    override NCOL = true
+    override RR = 2
+    override NCMAX = 4
+
+    [cuda_kernel(local_size_x = 64, name = "kq_gemv_iq4nl_n4_cls_cuda")]
     def run {
         leaf_body()
     }
@@ -871,8 +985,22 @@ class CuKqGemvIq4nlN : Iq4nlGemvCudT {
 [cuda_dispatch(name = "kq_gemv_nv4_n_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class CuKqGemvNv4N : Nv4GemvPrmtT {
     override NCOL = true
+    override RR = 2
 
     [cuda_kernel(local_size_x = 64, name = "kq_gemv_nv4_n_cls_cuda")]
+    def run {
+        leaf_body()
+    }
+}
+
+//! `Nv4GemvT`'s N leaf at four activation columns a dispatch (`NCMAX`)
+[cuda_dispatch(name = "kq_gemv_nv4_n4_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class CuKqGemvNv4N4 : Nv4GemvPrmtT {
+    override NCOL = true
+    override RR = 2
+    override NCMAX = 4
+
+    [cuda_kernel(local_size_x = 64, name = "kq_gemv_nv4_n4_cls_cuda")]
     def run {
         leaf_body()
     }
@@ -881,8 +1009,22 @@ class CuKqGemvNv4N : Nv4GemvPrmtT {
 [cuda_dispatch(name = "kq_gemv_k3_n_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class CuKqGemvK3N : K3GemvT {
     override NCOL = true
+    override RR = 2
 
     [cuda_kernel(local_size_x = 64, name = "kq_gemv_k3_n_cls_cuda")]
+    def run {
+        leaf_body()
+    }
+}
+
+//! `K3GemvT`'s N leaf at four activation columns a dispatch (`NCMAX`)
+[cuda_dispatch(name = "kq_gemv_k3_n4_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class CuKqGemvK3N4 : K3GemvT {
+    override NCOL = true
+    override RR = 2
+    override NCMAX = 4
+
+    [cuda_kernel(local_size_x = 64, name = "kq_gemv_k3_n4_cls_cuda")]
     def run {
         leaf_body()
     }
@@ -891,8 +1033,22 @@ class CuKqGemvK3N : K3GemvT {
 [cuda_dispatch(name = "kq_gemv_k2_n_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class CuKqGemvK2N : K2GemvT {
     override NCOL = true
+    override RR = 2
 
     [cuda_kernel(local_size_x = 64, name = "kq_gemv_k2_n_cls_cuda")]
+    def run {
+        leaf_body()
+    }
+}
+
+//! `K2GemvT`'s N leaf at four activation columns a dispatch (`NCMAX`)
+[cuda_dispatch(name = "kq_gemv_k2_n4_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class CuKqGemvK2N4 : K2GemvT {
+    override NCOL = true
+    override RR = 2
+    override NCMAX = 4
+
+    [cuda_kernel(local_size_x = 64, name = "kq_gemv_k2_n4_cls_cuda")]
     def run {
         leaf_body()
     }
@@ -901,8 +1057,22 @@ class CuKqGemvK2N : K2GemvT {
 [cuda_dispatch(name = "kq_gemv_k5_n_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class CuKqGemvK5N : K5GemvT {
     override NCOL = true
+    override RR = 2
 
     [cuda_kernel(local_size_x = 64, name = "kq_gemv_k5_n_cls_cuda")]
+    def run {
+        leaf_body()
+    }
+}
+
+//! `K5GemvT`'s N leaf at four activation columns a dispatch (`NCMAX`)
+[cuda_dispatch(name = "kq_gemv_k5_n4_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class CuKqGemvK5N4 : K5GemvT {
+    override NCOL = true
+    override RR = 2
+    override NCMAX = 4
+
+    [cuda_kernel(local_size_x = 64, name = "kq_gemv_k5_n4_cls_cuda")]
     def run {
         leaf_body()
     }
@@ -911,8 +1081,22 @@ class CuKqGemvK5N : K5GemvT {
 [cuda_dispatch(name = "kq_gemv_k6_n_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class CuKqGemvK6N : K6GemvT {
     override NCOL = true
+    override RR = 2
 
     [cuda_kernel(local_size_x = 64, name = "kq_gemv_k6_n_cls_cuda")]
+    def run {
+        leaf_body()
+    }
+}
+
+//! `K6GemvT`'s N leaf at four activation columns a dispatch (`NCMAX`)
+[cuda_dispatch(name = "kq_gemv_k6_n4_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class CuKqGemvK6N4 : K6GemvT {
+    override NCOL = true
+    override RR = 2
+    override NCMAX = 4
+
+    [cuda_kernel(local_size_x = 64, name = "kq_gemv_k6_n4_cls_cuda")]
     def run {
         leaf_body()
     }
@@ -921,8 +1105,22 @@ class CuKqGemvK6N : K6GemvT {
 [cuda_dispatch(name = "kq_gemv_iq2s_n_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class CuKqGemvIq2sN : Iq2sGemvT {
     override NCOL = true
+    override RR = 2
 
     [cuda_kernel(local_size_x = 64, name = "kq_gemv_iq2s_n_cls_cuda")]
+    def run {
+        leaf_body()
+    }
+}
+
+//! `Iq2sGemvT`'s N leaf at four activation columns a dispatch (`NCMAX`)
+[cuda_dispatch(name = "kq_gemv_iq2s_n4_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class CuKqGemvIq2sN4 : Iq2sGemvT {
+    override NCOL = true
+    override RR = 2
+    override NCMAX = 4
+
+    [cuda_kernel(local_size_x = 64, name = "kq_gemv_iq2s_n4_cls_cuda")]
     def run {
         leaf_body()
     }
@@ -931,8 +1129,22 @@ class CuKqGemvIq2sN : Iq2sGemvT {
 [cuda_dispatch(name = "kq_gemv_iq2xs_n_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class CuKqGemvIq2xsN : Iq2xsGemvT {
     override NCOL = true
+    override RR = 2
 
     [cuda_kernel(local_size_x = 64, name = "kq_gemv_iq2xs_n_cls_cuda")]
+    def run {
+        leaf_body()
+    }
+}
+
+//! `Iq2xsGemvT`'s N leaf at four activation columns a dispatch (`NCMAX`)
+[cuda_dispatch(name = "kq_gemv_iq2xs_n4_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class CuKqGemvIq2xsN4 : Iq2xsGemvT {
+    override NCOL = true
+    override RR = 2
+    override NCMAX = 4
+
+    [cuda_kernel(local_size_x = 64, name = "kq_gemv_iq2xs_n4_cls_cuda")]
     def run {
         leaf_body()
     }
@@ -941,8 +1153,22 @@ class CuKqGemvIq2xsN : Iq2xsGemvT {
 [cuda_dispatch(name = "kq_gemv_iq2xxs_n_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class CuKqGemvIq2xxsN : Iq2xxsGemvT {
     override NCOL = true
+    override RR = 2
 
     [cuda_kernel(local_size_x = 64, name = "kq_gemv_iq2xxs_n_cls_cuda")]
+    def run {
+        leaf_body()
+    }
+}
+
+//! `Iq2xxsGemvT`'s N leaf at four activation columns a dispatch (`NCMAX`)
+[cuda_dispatch(name = "kq_gemv_iq2xxs_n4_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class CuKqGemvIq2xxsN4 : Iq2xxsGemvT {
+    override NCOL = true
+    override RR = 2
+    override NCMAX = 4
+
+    [cuda_kernel(local_size_x = 64, name = "kq_gemv_iq2xxs_n4_cls_cuda")]
     def run {
         leaf_body()
     }
@@ -951,7 +1177,6 @@ class CuKqGemvIq2xxsN : Iq2xxsGemvT {
 [cuda_dispatch(name = "q51_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class CuQ51Gemv : Blk32GemvRunT {
     typedef FMT = KqTag_q51
-    override Q51 = true
 
     [cuda_kernel(local_size_x = 64, name = "q51_gemv_cls_cuda")]
     def run {
@@ -962,7 +1187,6 @@ class CuQ51Gemv : Blk32GemvRunT {
 [cuda_dispatch(name = "q51_gemv_n_cls", grid = "wgs", params = "wgs : int64")]
 class CuQ51GemvN : Blk32GemvRunT {
     typedef FMT = KqTag_q51
-    override Q51 = true
     override NCOL = true
 
     [cuda_kernel(local_size_x = 64, name = "q51_gemv_n_cls_cuda")]
@@ -971,12 +1195,11 @@ class CuQ51GemvN : Blk32GemvRunT {
     }
 }
 
-//! the native-MXFP4 expert rail's decode GEMVs (`Blk32GemvRunT` under `MX4`): gpt-oss's routed stacks over Q8_0 activations, a
+//! the native-MXFP4 expert rail's decode GEMVs (`Blk32GemvRunT` on the mx4 tag): gpt-oss's routed stacks over Q8_0 activations, a
 //! lane a block - the one per-32 form with no dense plane, so the ladders take it by name ahead of the per-32 arm
 [cuda_dispatch(name = "mx4_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class CuMx4Gemv : Blk32GemvRunT {
     typedef FMT = KqTag_mx4
-    override MX4 = true
 
     [cuda_kernel(local_size_x = 64, name = "mx4_gemv_cls_cuda")]
     def run {
@@ -988,7 +1211,6 @@ class CuMx4Gemv : Blk32GemvRunT {
 [cuda_dispatch(name = "mx4_gemv_n_cls", grid = "wgs", params = "wgs : int64")]
 class CuMx4GemvN : Blk32GemvRunT {
     typedef FMT = KqTag_mx4
-    override MX4 = true
     override NCOL = true
 
     [cuda_kernel(local_size_x = 64, name = "mx4_gemv_n_cls_cuda")]
@@ -1222,7 +1444,6 @@ class CuKqEmbIq2xxs : Iq2xxsGemvT {
 [cuda_dispatch(name = "q51_emb_cls", kernel = "run", family = "b32_emb_cls", grid = "wgs", params = "wgs : int64")]
 class CuQ51Emb : Blk32GemvRunT {
     typedef FMT = KqTag_q51
-    override Q51 = true
     override EMB = true
 
     [cuda_kernel(local_size_x = 64, name = "q51_emb_cls_cuda")]
@@ -1295,7 +1516,7 @@ def cud_gemv_ensure(fmt : int) : bool {   // nolint:STYLE037 - the stamp's ladde
     return r
 }
 
-//! the int8 MMQ leaf of `fmt` compiled, Q8_0's for a format with no leaf of its own
+//! the int8 MMQ leaf of `fmt` compiled; a format with no int8 leaf panics by name
 def cud_mmq_ensure(fmt : int) : bool {
     if (fmt == int(KqFmt.k4)) {
         return ensure_k4_mmq()
@@ -1313,8 +1534,11 @@ def cud_mmq_ensure(fmt : int) : bool {
         return ensure_q5032_mmq()
     } elif (fmt == int(KqFmt.iq4nl32)) {
         return ensure_iq4nl32_mmq()
+    } elif (fmt == int(KqFmt.q8)) {
+        return ensure_q8_mmq()
     }
-    return ensure_q8_mmq()
+    panic("cud_mmq_ensure: format slot {fmt} has no int8 MMQ leaf")
+    return false
 }
 
 //! one dispatch of the int8 MMQ leaf of `fmt`; `bufs` is [wq, ws, xq, xs, y, xsum] - a leaf without a min term binds the first five
@@ -1336,8 +1560,10 @@ def cud_mmq_enc(fmt : int; var s : void?; bufs : uint64 const[6]; var pc : MmqAr
         enc_q5032_mmq(s, b5, pc, wgs)
     } elif (fmt == int(KqFmt.iq4nl32)) {
         enc_iq4nl32_mmq(s, b5, pc, wgs)
-    } else {
+    } elif (fmt == int(KqFmt.q8)) {
         enc_q8_mmq(s, b5, pc, wgs)
+    } else {
+        panic("cud_mmq_enc: format slot {fmt} has no int8 MMQ leaf")
     }
 }
 
@@ -1391,6 +1617,9 @@ def cud_emb_enc(fmt : int; var s : void?; wq, ws, ids, xh, y : uint64; npos, dim
     }
 }
 
+//! the eight-column Q8_0 leaf's grid: a subgroup a pair of a region's rows (the stamp's `R2`), an odd region's last pair one row
+def cud_q8_gemv_n8_wgs(pc : GemvArgs) : int64 => cud_gemv_wgs(int64(pc.nreg) * ((int64(pc.d) + 1l) / 2l), 0u)
+
 //! the N-column leaf of format `fmt` over `pc.ncols` activation rows (1 to GEMV_COL_TILE): q8's stamp by the count, a kq leaf
 //! with the grid codebooks as its seventh plane, a per-32 leaf over the family's six
 def private cud_gemv_cls_enc_n(fmt : int; var s : void?; bufs : uint64 const[6]; var pc : GemvArgs; wgs : int64) {   // nolint:STYLE037 — kq_tile_stamp's generated arms, one a format
@@ -1400,14 +1629,21 @@ def private cud_gemv_cls_enc_n(fmt : int; var s : void?; bufs : uint64 const[6];
         } elif (pc.ncols <= 4u) {
             enc_q8_gemv_n4_cls(s, bufs, pc, wgs)
         } else {
-            enc_q8_gemv_n8_cls(s, bufs, pc, wgs)
+            enc_q8_gemv_n8_cls(s, bufs, pc, cud_q8_gemv_n8_wgs(pc))
         }
     } elif (fmt == int(KqFmt.mx4)) {
         enc_mx4_gemv_n_cls(s, bufs, pc, wgs)
     } elif (kq_sb(fmt)) {
         var kb = fixed_array(bufs[0], bufs[1], bufs[2], bufs[3], bufs[4], bufs[5], cud_kq_grid())
-        kq_tile_stamp(fmt, CUD_SKIP_KQ, "gemv") <| $() {
-            tile_enc_n_cls(s, kb, pc, wgs)
+        let gwgs = cud_gemv_wgs(int64(pc.nreg) * ((int64(pc.d) + int64(KQ_N_RR) - 1l) / int64(KQ_N_RR)), pc.lanes_per_row)   // a region's rows in groups of KQ_N_RR
+        if (pc.ncols <= 4u) {   // the four-column stamps hold half the accumulators: more of their groups run at once
+            kq_tile_stamp(fmt, CUD_SKIP_KQ, "gemv") <| $() {
+                tile_enc_n4_cls(s, kb, pc, gwgs)
+            }
+        } else {
+            kq_tile_stamp(fmt, CUD_SKIP_KQ, "gemv") <| $() {
+                tile_enc_n_cls(s, kb, pc, gwgs)
+            }
         }
     } else {
         kq_tile_stamp(fmt, CUD_SKIP_B32, "gemv") <| $() {
@@ -4225,8 +4461,9 @@ class CuDaAttnBWF16 : DaAttnBWT {
 [cuda_dispatch(name = "cls_ar_rqx", grid = "wgs", params = "wgs : int64")]
 class CuArAddRmsRqX : ArRqT {
     override STOREX = true
+    override LANES = 1024u
 
-    [cuda_kernel(local_size_x = 256, name = "cls_ar_rqx_cuda")]
+    [cuda_kernel(local_size_x = 1024, name = "cls_ar_rqx_cuda")]
     def run {
         ar_rq_body()
     }
@@ -4237,8 +4474,9 @@ class CuArAddRmsRqX : ArRqT {
 class CuArAddRmsRqKX : ArRqT {
     override KBLK = true
     override STOREX = true
+    override LANES = 1024u
 
-    [cuda_kernel(local_size_x = 256, name = "cls_ar_rqkx_cuda")]
+    [cuda_kernel(local_size_x = 1024, name = "cls_ar_rqkx_cuda")]
     def run {
         ar_rq_body()
     }
@@ -4742,10 +4980,10 @@ class template DnScanChunkCuT {
         for [unroll] (e in range(8)) {
             let v = vh * 16u + mma_acc_row(lane, e)
             let d = db0 * 16u + mma_acc_col(lane, e)
-            if (has0) {
+            if (has0 && pa.no_state == 0u) {
                 state[sbase + d * ds + v] = mma_acc_get(st0, e)
             }
-            if (has1) {
+            if (has1 && pa.no_state == 0u) {
                 state[sbase + (d + DNC_DB1 * 16u) * ds + v] = mma_acc_get(st1, e)
             }
         }
@@ -4845,6 +5083,8 @@ class CuDnBaGemm : DnBaGemmT {
 //! the fused deltanet decode step (`DnStepFusedT`), silu and sigmoid out-gates
 [cuda_dispatch(name = "dn_step_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class CuDnStep : DnStepFusedT {
+    override REREAD = true
+
     [cuda_kernel(local_size_x = 256, name = "dn_step_cls_cuda")]
     def run {
         dn_step_body()
@@ -4855,6 +5095,7 @@ class CuDnStep : DnStepFusedT {
 [cuda_dispatch(name = "dn_step_sig_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class CuDnStepSig : DnStepFusedT {
     override ZSIG = true
+    override REREAD = true
 
     [cuda_kernel(local_size_x = 256, name = "dn_step_sig_cls_cuda")]
     def run {
@@ -4868,6 +5109,65 @@ class CuRouterGemm : RouterGemmT {
     [cuda_kernel(local_size_x = 256, name = "router_gemm_cls_cuda")]
     def run {
         router_gemm_body()
+    }
+}
+
+struct MoeShareArgs {
+    nslots : uint    //! the step's picks: its rows' k slots each
+}
+
+let MOE_SHARE_SLOTS = 256u   //! the slots the count's one workgroup holds, a lane a slot
+
+//! How far a step's rows share experts: the distinct experts among the picks' slots and the slots themselves, landed where
+//! the host reads them - the count its next step of that width picks the routed sites' form by (a GEMV a pick, or an
+//! expert's rows as one bucket on the tensor cores, which pays only for rows that share). One workgroup, a lane a slot
+[ |> template_struct_instance]
+class template MoeShareT {
+    @ssbo @binding = 0 eidx : array<uint>    //! the picks' experts, a slot each
+    @ssbo @binding = 1 share : array<uint>   //! [0] the distinct experts, [1] the slots counted
+    @push_constant pa : MoeShareArgs
+    @workgroup ex : uint[int(MOE_SHARE_SLOTS)]
+    @workgroup lead : uint[int(MOE_SHARE_SLOTS)]   //! 1 where no earlier slot picked the slot's expert
+
+    def share_body {
+        let s = gl_LocalInvocationID.x
+        let n = min(pa.nslots, MOE_SHARE_SLOTS)
+        if (s < n) {
+            ex[s] = eidx[s]
+        }
+        barrier()
+        var f = 0u
+        if (s < n) {
+            f = 1u
+            var t = 0u
+            while (t < s) {
+                if (ex[t] == ex[s]) {
+                    f = 0u
+                }
+                t++
+            }
+        }
+        lead[s] = f
+        barrier()
+        if (s == 0u) {
+            var d = 0u
+            var t = 0u
+            while (t < n) {
+                d += lead[t]
+                t++
+            }
+            share[0] = d
+            share[1] = pa.nslots
+        }
+    }
+}
+
+//! the distinct experts a step's picks touched (`MoeShareT`), one workgroup
+[cuda_dispatch(name = "moe_share_cls", grid = "wgs", params = "wgs : int64")]
+class CuMoeShare : MoeShareT {
+    [cuda_kernel(local_size_x = 256, name = "moe_share_cls_cuda")]
+    def run {
+        share_body()
     }
 }
 
@@ -4963,8 +5263,9 @@ class CuMoeGatherF16Row : MoeGatherT {
 [cuda_dispatch(name = "cls_ar_comb", kernel = "run", grid = "nrows", params = "nrows : int64")]
 class CuClsArComb : ArCombBase {
     override OUT_F32 = true
+    override LANES = 1024u
 
-    [cuda_kernel(local_size_x = 256, name = "cls_ar_comb_cuda")]
+    [cuda_kernel(local_size_x = 1024, name = "cls_ar_comb_cuda")]
     def run {
         ar_body()
     }
@@ -4975,8 +5276,9 @@ class CuClsArComb : ArCombBase {
 [cuda_dispatch(name = "cls_ar_comb_g4", kernel = "run", grid = "nrows", params = "nrows : int64")]
 class CuClsArCombG4 : ArCombG4T {
     override OUT_F32 = true
+    override TG = 1024u
 
-    [cuda_kernel(local_size_x = 256, name = "cls_ar_comb_g4_cuda")]
+    [cuda_kernel(local_size_x = 1024, name = "cls_ar_comb_g4_cuda")]
     def run {
         comb_g4_body()
     }

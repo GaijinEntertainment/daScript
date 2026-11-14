@@ -976,6 +976,70 @@ def private rdec_unset_land_carry(row : int64; var dst : array<float>) {
 var g_rdec_land_carry = @@rdec_unset_land_carry
 var g_rdec_carry_installed = false
 
+//! the block drafter's capture rows: `arm` names the trunk layers whose output rows the commands copy out (empty = off; false =
+//! the driver cannot capture one of them), `rows` lands rows `row0 .. row0 + n - 1` of the last token or verify command
+//! (`window` false) or prefill call (`window` true, the segments back to back) into `img`, [row][slot][dim]
+typedef RdecBlockCapsArmFn = function<(layers : array<int64>) : bool>
+typedef RdecBlockCapsRowsFn = function<(window : bool; row0, n : int64; var img : array<float>) : void>
+[unused_argument(layers)]
+def private rdec_unset_block_caps_arm(layers : array<int64>) : bool => false
+[unused_argument(window, row0, n, img)]
+def private rdec_unset_block_caps_rows(window : bool; row0, n : int64; var img : array<float>) {
+    panic("dasLLAMA: resident block-drafter capture rows hit without an installed GPU driver")
+}
+var g_rdec_block_caps_arm = @@rdec_unset_block_caps_arm
+var g_rdec_block_caps_rows = @@rdec_unset_block_caps_rows
+var g_rdec_block_caps_installed = false
+
+[arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-block-caps")]
+def public install_rdec_block_caps(arm : RdecBlockCapsArmFn; rows : RdecBlockCapsRowsFn) {
+    g_rdec_block_caps_arm = arm
+    g_rdec_block_caps_rows = rows
+    g_rdec_block_caps_installed = true
+}
+
+def public rdec_block_caps_installed() : bool => g_rdec_block_caps_installed
+
+//! a driver's capture arm declined: its home, the layers asked and why, said at the arm
+[cold_path]
+def public rdec_caps_decline_say(home : string; nlayers : int64; why : string) {
+    to_log(LOG_WARNING, "dasLLAMA {home} tier: the block drafter's {nlayers} capture layer(s) are not armed - {why}\n")
+}
+
+//! trunk layer `l` is one a driver's capture `slots` hold
+def public rdec_caps_layer(slots : array<int64>; l : int64) : bool => !empty(slots) && slots[l] >= 0l
+
+//! a driver's capture slots for `layers` of a trunk of `n_layers`: `slots[l]` the layer's slot (its place in `layers`), -1 where
+//! the layer is not captured; false where a layer is off the trunk
+def public rdec_caps_slots(layers : array<int64>; n_layers : int64; var slots : array<int64>) : bool {
+    for (l in layers) {
+        return false if (l < 0l || l >= n_layers)
+    }
+    slots |> reserve(n_layers)
+    slots |> resize(n_layers)
+    fill(slots, -1l)
+    for (l, i in layers, count()) {
+        slots[l] = int64(i)
+    }
+    return true
+}
+
+//! a driver's captured rows at `host`, [slot][stride][dim], rows `row0 .. row0 + n - 1` of them into `img` as [row][slot][dim]
+def public rdec_caps_unpack(host : void?; stride, slots, dim, row0, n : int64; var img : array<float>) {
+    unsafe {
+        var w = reinterpret<float?>(host)
+        for (row in range64(n)) {
+            for (slot in range64(slots)) {
+                memcpy(addr<void?>(img[(row * slots + slot) * dim]), addr<void?>(w[(slot * stride + row0 + row) * dim]), dim * 4l)
+            }
+        }
+    }
+}
+def public rdec_block_caps_arm(layers : array<int64>) : bool => invoke(g_rdec_block_caps_arm, layers)
+def public rdec_block_caps_rows(window : bool; row0, n : int64; var img : array<float>) {
+    invoke(g_rdec_block_caps_rows, window, row0, n, img)
+}
+
 [arch(at="../ARCHITECTURE_GPU_VULKAN_LANDING.md#logits-transfer-queue")]
 def public install_rdec_carry(land : RdecLandCarryFn) {
     g_rdec_land_carry = land
@@ -1053,6 +1117,35 @@ def public install_rdec_verify(verify : RdecVerifyFn; rows : function<() : int64
 }
 
 def public rdec_verify_installed() : bool => g_rdec_verify_installed
+
+//! the same-slab verify's plain form: the driver steps the rows with no head row - a block drafter's round, whose drafts are not
+//! the head's - when the verify is handed no head rope rows (`RdecVerifyFn`'s `hcos` empty)
+var g_rdec_verify_plain = false
+
+[arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-block-caps")]
+def public install_rdec_verify_plain() {
+    g_rdec_verify_plain = true
+}
+
+def public rdec_verify_plain() : bool => g_rdec_verify_plain
+
+//! the late logits landing: rows `row0 .. row0 + nrows` of the last command's logits, still on the device, into `dst` - what a
+//! verify that landed its rows' picks alone hands the round once the accepted count names the one row whose logits it needs
+typedef RdecLogitsRowsFn = function<(row0, nrows : int64; var dst : array<float>) : void>
+var g_rdec_logits_rows : RdecLogitsRowsFn
+var g_rdec_logits_rows_installed = false
+
+[arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-block-caps")]
+def public install_rdec_logits_rows(f : RdecLogitsRowsFn) {
+    g_rdec_logits_rows = f
+    g_rdec_logits_rows_installed = true
+}
+
+def public rdec_logits_rows_installed() : bool => g_rdec_logits_rows_installed
+
+def public rdec_logits_rows(row0, nrows : int64; var dst : array<float>) {
+    invoke(g_rdec_logits_rows, row0, nrows, dst)
+}
 
 //! The selection landing a device driver leaves a sampled stream's step in place of the rows' logits: each row's survivors (the ids
 //! at or above the row's SEL_K-th largest logit, ties kept), its max and softmax denominator at the stream's temperature, and the
@@ -1308,6 +1401,19 @@ def public install_rdec_segs_packed(fits : RdecSegsPackedFn) {
 }
 
 def public rdec_segs_packed() : bool => invoke(g_rdec_segs_packed)
+
+//! the logits slots the armed driver's segmented window lands, 0 = a slot a region: a call of more segments that want
+//! their logits is the one-session form's
+typedef RdecSegSlotsFn = function<() : int64>
+def private rdec_unset_seg_slots : int64 => 0l
+var g_rdec_seg_slots = @@rdec_unset_seg_slots
+
+[arch(at="../ARCHITECTURE_GPU_VULKAN_WINDOW.md#vk-prefill-segments")]
+def public install_rdec_seg_slots(slots : RdecSegSlotsFn) {
+    g_rdec_seg_slots = slots
+}
+
+def public rdec_seg_slots() : int64 => invoke(g_rdec_seg_slots)
 
 //! the window chain's final residual rows: `ask` names whether the next chains land every row's final residual (an embedding
 //! pools them), `rows` copies `nrows` of the last chain's rows from window row `src_row` into `dst` at element `dst_off`
@@ -3407,8 +3513,11 @@ def private gpu_home_reset_flags {
     g_rdec_prefill_ids_installed = false
     g_rdec_prefill_segs_installed = false
     g_rdec_carry_installed = false
+    g_rdec_block_caps_installed = false
     g_rdec_draft_installed = false
     g_rdec_verify_installed = false
+    g_rdec_verify_plain = false
+    g_rdec_logits_rows_installed = false
     g_rdec_rollback_installed = false
     g_rdec_token_seq_installed = false
     g_rdec_chain_charged = false

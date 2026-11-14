@@ -28,13 +28,14 @@ let DFLASH_RING = 2048l       //! the context ring of a file that names no slidi
 let DFLASH_PLAIN_DRAFTS = 3l   //! a drafter with no selector drafts this many a round by default: its fourth draft on lands too seldom for its verify row
 let DFLASH_ROUTED_DRAFTS = 5l   //! ... and any drafter over a trunk of routed experts this many: each verify row pays its own experts
 let DFLASH_MAX_BLOCK = 32l   //! the widest block a pass runs; a round verifies the first MTP_MAX_ROWS - 1 of its drafts
-let private DFLASH_FMTS = fixed_array(KqFmt.q8, KqFmt.k4, KqFmt.k5, KqFmt.k6)   //! the plane formats both arms of the pass serve
+let private DFLASH_FMTS = fixed_array(KqFmt.q8, KqFmt.k4, KqFmt.k5, KqFmt.k6, KqFmt.nv4)   //! the plane formats the CPU arm serves
 
-//! a weight plane in its own format: a Q8_0 plane at a byte offset into `blob`, a K-quant plane at an element offset into
-//! its format's `kq` planes
+//! a weight plane in its own format: a Q8_0 plane at a byte offset into `blob`, a superblock plane at an element offset into
+//! its format's `kq` planes; `scale` the factor its rows carry past the plane (an NVFP4 tensor's `.scale`), 0 = none
 struct DflashW {
     fmt : KqFmt
     off : int64
+    scale : float
 }
 
 //! The drafter as the `dflash` GGUF holds it: its Q8_0 planes verbatim in `blob`, its K-quant planes in their formats'
@@ -131,6 +132,18 @@ struct DflashDeviceSeams {
     land : function<(var drafts : array<int64>; nd : int64; var rng : int4&; var cids : array<int64>; var qs : array<float>) : double>
     drop : function<(uid : uint64) : void>
     detach : function<() : void>
+    stats : function<() : DflashDeviceStats>              //! the arm's counters since the attach (unset: the home keeps none here)
+}
+
+//! a device arm's counters since the drafter attached: its passes and context commits with their wall, the passes whose top-k
+//! ran on the device and whose selector walk did
+struct DflashDeviceStats {
+    passes : int64
+    commits : int64
+    pass_us : int64
+    commit_us : int64
+    selected : int64
+    walked : int64
 }
 
 //! how a device pass with the selector on the device ended
@@ -220,7 +233,143 @@ def set_dflash_device(on : bool) {
     g_dflash_dev_knob = on
 }
 
+//! the arm `set_dflash_device` last asked: the device (default) or the CPU reference arm
+def dflash_device_knob() : bool => g_dflash_dev_knob
+
 def dflash_on_device() : bool => g_dflash_dev_on
+
+//! the attached device arm's counters (zeros with the pass on the CPU, or on a home that keeps none behind the seam)
+def dflash_device_stats() : DflashDeviceStats {
+    return DflashDeviceStats() if (!g_dflash_dev_on || dev_seams().stats == null)
+    return invoke(dev_seams().stats)
+}
+
+var private g_dflash_dev_topk = true
+var private g_dflash_dev_walk = true
+
+//! Test A/B seat of the discrete homes' arms: the selector's top-k on the device (`topk`, the default) or the pass's logits
+//! landed whole for the host's; its walk on the device where the codebooks let it (`walk`, the default) or on the host over
+//! the landed lists
+def set_dflash_device_selector(topk, walk : bool) {
+    g_dflash_dev_topk = topk
+    g_dflash_dev_walk = walk
+}
+
+//! a discrete arm selects a greedy round's drafts where its selector is `ready`; a round that draws them takes the landed logits
+def dflash_device_selects(soft, ready : bool) : bool => !soft && g_dflash_dev_topk && ready
+
+//! a discrete arm's selector walk runs on the device
+def dflash_device_walk_on : bool => g_dflash_dev_walk
+
+//! the two knobs `set_dflash_device_selector` last wrote
+def dflash_device_selector() : tuple<topk : bool; walk : bool> => (topk = g_dflash_dev_topk, walk = g_dflash_dev_walk)
+
+//! the `land` seam of an arm whose select pass never holds: nothing to land
+[unused_argument(drafts, nd, rng, cids, qs)]
+def dflash_land_none(var drafts : array<int64>; nd : int64; var rng : int4&; var cids : array<int64>; var qs : array<float>) : double => -1.0lf
+
+//! a discrete arm has no room for a session's context ring of `bytes` a plane: said at an attach's first such session
+[cold_path]
+def dflash_ring_room_say(home : string; bytes : int64) {
+    to_log(LOG_WARNING, "dasLLAMA {home} dflash: the card has no room for a session's context ring ({bytes >> 20l} MiB a plane, K and V) - that session's rounds step plain\n")
+}
+
+let DFLASH_DEVICE_ROWS = 16l    //! the rows a discrete arm's activation planes hold: a block's rows, a commit's chunk
+
+let DFLASH_SITE_FC = 0          //! a device arm's GEMV sites in order: the capture projection, the selector's projection,
+let DFLASH_SITE_SELH = 1        //! then a layer's nine from `DFLASH_SITE_L0`
+let DFLASH_SITE_L0 = 2
+let DFLASH_SITES_LAYER = 9      //! a layer's sites: aconv_proj, wq, wk, wv, wo, fconv_proj, w1, w3, w2
+
+//! layer `l`'s site `k` of a device arm's GEMV sites
+def dflash_site(l : int64; k : int) : int => DFLASH_SITE_L0 + int(l) * DFLASH_SITES_LAYER + k
+
+//! a device arm's GEMV site: the plane as the drafter holds it and its shape; `on` false = the file has no such tensor (a
+//! DFlash file has no convs and no selector)
+struct DflashSitePlane {
+    w : DflashW
+    n : int64
+    d : int64
+    on : bool
+}
+
+//! the dynamic conv's projection width (0 on a file with no convs)
+def dflash_projw(dr : DflashDrafter) : int64 => dr.v2 ? 2l * dr.conv_k * (dr.dim / dr.conv_g) : 0l
+
+//! the drafter's planes in site order (`DFLASH_SITE_*`)
+def dflash_device_sites(dr : DflashDrafter; var sites : array<DflashSitePlane>) {
+    let d = dr.dim
+    let qd = dr.n_heads * dr.hs
+    let kvd = dr.n_kv * dr.hs
+    let ncap = long_length(dr.target_layers)
+    let projw = dflash_projw(dr)
+    sites |> reserve(long_length(sites) + 2l + dr.n_layers * int64(DFLASH_SITES_LAYER))
+    sites |> push(DflashSitePlane(w = dr.fc, n = ncap * d, d = d, on = true))
+    sites |> push(DflashSitePlane(w = dr.sel_h, n = d, d = dr.rank, on = dr.v2))
+    for (l in range64(dr.n_layers)) {
+        sites |> push(dr.v2 ? DflashSitePlane(w = dr.aconv_proj[l], n = d, d = projw, on = true) : DflashSitePlane())
+        sites |> push(DflashSitePlane(w = dr.wq[l], n = d, d = qd, on = true))
+        sites |> push(DflashSitePlane(w = dr.wk[l], n = d, d = kvd, on = true))
+        sites |> push(DflashSitePlane(w = dr.wv[l], n = d, d = kvd, on = true))
+        sites |> push(DflashSitePlane(w = dr.wo[l], n = qd, d = d, on = true))
+        sites |> push(dr.v2 ? DflashSitePlane(w = dr.fconv_proj[l], n = d, d = projw, on = true) : DflashSitePlane())
+        sites |> push(DflashSitePlane(w = dr.w1[l], n = d, d = dr.hidden, on = true))
+        sites |> push(DflashSitePlane(w = dr.w3[l], n = d, d = dr.hidden, on = true))
+        sites |> push(DflashSitePlane(w = dr.w2[l], n = dr.hidden, d = d, on = true))
+    }
+}
+
+//! why a discrete device arm cannot take the drafter's shape ("" = it can): its row kernels stage a head of `hs_max` and
+//! `keys_max` keys, its planes hold `rows` rows
+def dflash_device_shape_why(dr : DflashDrafter; hs_max, keys_max, rows : int64) : string {
+    return "the drafter's attention planes carry bias rows" if (dr.biased)
+    return "a head of {dr.hs} is past the row kernels' {hs_max}" if (dr.hs > hs_max || dr.hs % 2l != 0l)
+    return "a window of {dr.window} and a block of {dr.nblock} pass the attention's {keys_max} staged keys" if (dr.window + dr.nblock > keys_max)
+    return "a block of {dr.nblock} rows passes the planes' {rows}" if (dr.nblock > rows)
+    let qd = dr.n_heads * dr.hs
+    let kvd = dr.n_kv * dr.hs
+    if (dr.dim % Q8_BLOCK_ELEMS != 0l || qd % Q8_BLOCK_ELEMS != 0l || dr.hidden % Q8_BLOCK_ELEMS != 0l || kvd % Q8_BLOCK_ELEMS != 0l) {
+        return "a row width off the Q8_0 block"
+    }
+    return ""
+}
+
+//! a landed id word as the host reads it: a slot no id filled (all ones) is -1
+def dflash_slot_id(w : uint) : int64 => w == 0xFFFFFFFFu ? -1l : int64(w)
+
+//! a pass's candidate lists as the round's drafts in drafts[1 ..]: the selector's walk over them, or - a file with no
+//! selector - each position's first candidate
+def dflash_drafts_of_lists(dr : DflashDrafter; tok, nd : int64; cids : array<int64>; cvals, hsel : array<float>; var drafts : array<int64>) {
+    if (dr.v2) {
+        dflash_walk(dr, tok, nd, cids, cvals, hsel, drafts)
+    } else {
+        for (r in range64(nd)) {
+            drafts[r + 1l] = cids[r * dr.topk]
+        }
+    }
+}
+
+//! ... off a device landing: `nd` lists of `topk` id words (an empty slot all ones), their logits, and the selector rows
+//! ([nd][rank]; unread on a file with no selector)
+def dflash_drafts_of_landing(dr : DflashDrafter; tok, nd : int64; idw : uint const?; vals, hrows : float const?; var drafts : array<int64>) {
+    let k = dr.topk
+    let rank = dr.v2 ? dr.rank : 0l
+    var inscope ids64 : array<int64>
+    var inscope cvals, hsel : array<float>
+    ids64 |> reserve_resize(nd * k)
+    cvals |> reserve_resize(nd * k)
+    hsel |> reserve_resize(max(nd * rank, 1l))
+    unsafe {
+        for (i in range64(nd * k)) {
+            ids64[i] = dflash_slot_id(idw[i])
+        }
+        memcpy(addr<void?>(cvals[0]), reinterpret<void const?>(vals), nd * k * 4l)
+        if (rank > 0l) {
+            memcpy(addr<void?>(hsel[0]), reinterpret<void const?>(hrows), nd * rank * 4l)
+        }
+    }
+    dflash_drafts_of_lists(dr, tok, nd, ids64, cvals, hsel, drafts)
+}
 
 var private g_dflash_home = ""   //! the home whose seams the attach found ready; the override may move after it
 var private g_dflash_release_listening = false
@@ -244,6 +393,9 @@ def set_dflash_record(on : bool) {
     g_dflash_record = on
     g_dflash_recorded |> clear()
 }
+
+//! the knob `set_dflash_record` last wrote
+def dflash_record_on() : bool => g_dflash_record
 
 //! the drafts every round drafted since `set_dflash_record(true)`, in order
 def dflash_recorded_drafts : array<int64> => clone_to_move(g_dflash_recorded)
@@ -345,8 +497,20 @@ def private plan_w(var dr : DflashDrafter; m : GGUFMeta; bytes : array<uint8> | 
         refuse(dr, "'{name}' rows of {k} are off the {ggml_type_name(gt)} ({fmt}) block")
         return DflashW(off = -1l)
     }
+    var scale = 0.0
+    if (gguf_find_tensor(m, gguf_scale_name(name)) >= 0) {
+        if (fmt != KqFmt.nv4) {
+            refuse(dr, "'{name}' carries a per-tensor scale and is {ggml_type_name(gt)} ({fmt}): the scale rides the NVFP4 planes alone")
+            return DflashW(off = -1l)
+        }
+        var v : array<float>
+        v |> resize(1)
+        gguf_read_tensor_f32(m, bytes, gguf_scale_name(name), v, 0l, 1l, 0l)
+        scale = v[0]
+        delete v
+    }
     if (fmt != KqFmt.q8) {
-        return DflashW(fmt = fmt, off = append_kq(dr.kq[int(fmt)], m, bytes, name, fmt, k * rows))
+        return DflashW(fmt = fmt, off = append_kq(dr.kq[int(fmt)], m, bytes, name, fmt, k * rows), scale = scale)
     }
     let off = long_length(dr.blob)
     var raw : array<uint8>
@@ -355,6 +519,29 @@ def private plan_w(var dr : DflashDrafter; m : GGUFMeta; bytes : array<uint8> | 
     delete raw
     return DflashW(fmt = fmt, off = off)
 }
+
+//! the selector walk kernel's code for a codebook of format `f` (the formats `GkDflashWalk` dequantizes), -1 = none
+def dflash_walk_fmt_code(f : KqFmt) : int {
+    return 0 if (f == KqFmt.q8)
+    return 4 if (f == KqFmt.k4)
+    return 5 if (f == KqFmt.k5)
+    return 6 if (f == KqFmt.k6)
+    return 9 if (f == KqFmt.nv4)
+    return -1
+}
+
+def private planes_scaled(ws : array<DflashW>) : bool {
+    for (w in ws) {
+        return true if (w.scale != 0.0)
+    }
+    return false
+}
+
+//! a plane of the drafter carries a per-tensor scale: a device arm whose stamps apply none leaves the pass to an arm that does
+def dflash_scaled(dr : DflashDrafter) : bool
+    => (dr.fc.scale != 0.0 || dr.sel_h.scale != 0.0 || dr.sel_prev.scale != 0.0 || dr.sel_next.scale != 0.0
+        || planes_scaled(dr.wq) || planes_scaled(dr.wk) || planes_scaled(dr.wv) || planes_scaled(dr.wo) || planes_scaled(dr.w1)
+        || planes_scaled(dr.w3) || planes_scaled(dr.w2) || planes_scaled(dr.aconv_proj) || planes_scaled(dr.fconv_proj))
 
 //! append tensor `name`'s f32 values to fblob; its offset back (-1 = refused)
 def private plan_f32(var dr : DflashDrafter; m : GGUFMeta; bytes : array<uint8> | #; name : string; n : int64) : int64 {
@@ -608,6 +795,12 @@ def attach_dflash_drafter(t : Model; path : string) : string {
     let home = active_decode_override()
     g_dflash_dev_on = g_dflash_dev_knob && key_exists(g_dflash_dev, home) && invoke(g_dflash_dev[home].ready, t, g_dflash)
     g_dflash_home = g_dflash_dev_on ? home : ""
+    if (!g_dflash_dev_on && t.planes_trimmed) {   // the CPU pass reads the trunk's classifier rows, which a trimmed lane does not hold
+        let trimmed_why = "the drafter's pass has no device arm on this home and the trunk's image is planes-trimmed: the CPU pass reads classifier planes the image does not hold"
+        to_log(LOG_WARNING, "dasLLAMA: DFlash2 drafter {path} refused for this trunk - {trimmed_why}\n")
+        detach_dflash_drafter()
+        return trimmed_why
+    }
     var layers := g_dflash.target_layers
     register_mtp_block_drafter(MtpBlockSeams(attached = @@dflash_attached, captured = @@dflash_capture, captured_rows = @@dflash_capture_rows,
         draft = @@dflash_block_draft, land = @@dflash_land, commit = @@dflash_commit, layers <- layers, drafts = dflash_default_drafts(t, g_dflash)))
@@ -677,6 +870,11 @@ def private mm_kq(var y : array<float>; yoff : int64; p : KqPlanes; w : DflashW;
             quantize_q8_k_into_ptr(addr<float const?>(x[xoff + t * n]), n, addr(xq[0]), addr(xs[0]), addr(xbs[0]), 0l, 0l, 0l)
         }
         matmul_kq(kq_schema_id(w.fmt), y, p.q, p.s, w.off, xq, xs, xbs, n, d, yoff + t * d)
+    }
+    if (w.scale != 0.0) {
+        for (i in range64(rows * d)) {
+            y[yoff + i] *= w.scale
+        }
     }
     delete xq
     delete xs
@@ -1100,6 +1298,11 @@ def private codebook_row(dr : DflashDrafter; w : DflashW; tok : int64; var out :
         for (b in range64(dr.rank / e)) {
             dequant_kq_plane_sb(w.fmt, dr.kq[int(w.fmt)].q, dr.kq[int(w.fmt)].s, sb0 + b, false, out, ooff + b * e)
         }
+        if (w.scale != 0.0) {
+            for (i in range64(dr.rank)) {
+                out[ooff + i] *= w.scale
+            }
+        }
         return
     }
     let nb = dr.rank / Q8_BLOCK_ELEMS
@@ -1346,12 +1549,8 @@ def private dflash_block_draft(t : Model; var s : Session; tok, pos, k : int64) 
             dflash_record_q(s, r, cids, r * topk, qs, r * topk, topk)
         }
         delete qs
-    } elif (dr.v2) {
-        dflash_walk(dr, tok, nd, cids, cvals, hsel, s.mtp_vbatch)
     } else {
-        for (r in range64(nd)) {
-            s.mtp_vbatch[r + 1l] = cids[r]
-        }
+        dflash_drafts_of_lists(dr, tok, nd, cids, cvals, hsel, s.mtp_vbatch)
     }
     if (g_dflash_trace) {
         print("  draft pass {rows} rows, {nd} drafts: pass {t_pass / 1000} ms, select {(get_time_usec(t0) - t_pass) / 1000} ms\n")

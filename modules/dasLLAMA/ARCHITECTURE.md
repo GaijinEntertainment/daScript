@@ -53,10 +53,10 @@ any sibling companion that sends a reader to it.
   code and decline reasons (`ARCHITECTURE_GPU_METAL_LIFECYCLE.md#metal-family-lifecycle`).
 - `ARCHITECTURE_GPU_ASYMMETRIES.md` - the closed list of the allowed asymmetries between the
   GPU backends - Metal, Vulkan and CUDA (`ARCHITECTURE_GPU_ASYMMETRIES.md#gpu-asymmetries`).
-- `ARCHITECTURE_GPU_ASYMMETRIES_CUDA.md` - the entries of that list that are the CUDA home's alone: the
-  int8 MMQ prefill, the FP4 expert rung, the nv4 nibble decode, the MMQ pin
-  (`ARCHITECTURE_GPU_ASYMMETRIES_CUDA.md#cuda-asymmetries`); the home's cm2 column pick (`#cuda-cm2-column`), its
-  tower chains' graphs (`#cuda-chain-graphs`), its shared-memory carveout (`#cuda-carveout`).
+- `ARCHITECTURE_GPU_ASYMMETRIES_CUDA.md` - the entries of that list that are the CUDA home's alone: the int8 MMQ prefill,
+  the FP4 expert rung, the nv4 nibble decode, the MMQ pin and the N-row form knees (`ARCHITECTURE_GPU_ASYMMETRIES_CUDA.md#cuda-asymmetries`);
+  the home's cm2 column pick (`#cuda-cm2-column`), its tower chains' graphs (`#cuda-chain-graphs`), its shared-memory carveout
+  (`#cuda-carveout`), rows tensor leaf (`#cuda-rows-leaf`), block drafter's round (`#cuda-dflash-pass`) and context binding (`#cuda-thread-binding`).
 - `ARCHITECTURE_GPU_SHARED_KERNELS.md` - the kernels more than one GPU home stamps: the shared templates' mechanism
   (`ARCHITECTURE_GPU_SHARED_KERNELS.md#gpu-shared-kernels`), the kernel pairs, their stamps and the pairs that stay
   per home (`ARCHITECTURE_GPU_SHARED_KERNELS.md#gpu-kernel-pairs`), the routed block's routing kernels both discrete
@@ -146,8 +146,8 @@ Each companion's sections are anchored by topic; a citation spells `<doc>.md#<an
   tq4's rotated basis, the batched rope store's strided k and v reads, and the FastConformer rel-position attention.
 - `ARCHITECTURE_GPU_SHARED_GEMM.md` - the GEMM tiles and GEMVs both discrete homes stamp: the cm2 decode callbacks'
   16-bit lanes, the mx4 decode, the device scale row, the cm2 tile body's k step, fast path and loop bounds, the KHR
-  arm's hand-staged kq tile, the decode GEMV family's lane split by row length and region walk, and the routed gate-up
-  fusion.
+  arm's hand-staged kq tile, the decode GEMV family's lane split by row length and region walk, the N-column forms'
+  load waves (`ARCHITECTURE_GPU_SHARED_GEMM.md#ncol-load-waves`), and the routed gate-up fusion.
 - `ARCHITECTURE_GPU_SHARED_ROWS.md` - the row kernels of the token step and the routed block more than one home
   stamps: the Q8 requant byte store, the residual step's two forms, the batched step's rows through the token block,
   the token-table gather, the routed combine and its gemma-4 form, the select's depth, the routed weights' scales and
@@ -185,7 +185,7 @@ Each companion's sections are anchored by topic; a citation spells `<doc>.md#<an
   rollback a rejected device verify takes from the verify command's own copies, the verify
   window a declined verify seat runs the CPU verify in, and the speculative knob's per-step
   gate on the carry; the assistant drafter beside a head-less trunk
-  (`ARCHITECTURE_GPU_VULKAN_MTP.md#resident-assistant-drafter`).
+  (`ARCHITECTURE_GPU_VULKAN_MTP.md#resident-assistant-drafter`), and the seams a block drafter rides it through (`#resident-block-caps`).
 
 - `ARCHITECTURE_GPU_VULKAN_NROW.md` - the N-row token command a batched step's rows go through,
   the N-column leaf every format has, the column tiles a dispatch past eight columns runs in,

@@ -36,7 +36,8 @@ let ENGINE_FILES = [
     "modules/dasLLAMA/dasllama/dasllama_audio_embedder.das",   // encode_audio_ (encode_image_'s audio twin)
     "modules/dasLLAMA/dasllama/dasllama_math.das",   // setup_dasllama_jobque_ + the dispatch knobs
     "modules/dasLLAMA/dasllama/dasllama_par.das",    // set_single_thread_ / get_single_thread_ (the dispatch macros' gate)
-    "modules/dasLLAMA/dasllama/dasllama_image.das",  // dlim_inventory_ / dlim_clean_ (the image management surface)
+    "modules/dasLLAMA/dasllama/dasllama_image.das",  // dlim_inventory_ / dlim_clean_ / prepared_image_alignment_ (the image surface)
+    "modules/dasLLAMA/dasllama/dasllama_tune.das",   // kernel_report_
     "modules/dasLLAMA/dasllama/dasllama_gpu_tier.das",     // gpu_tier_status_ / set_gpu_tier_want_ / moe_gpu_tier_arm_ / moe_gpu_weight_budget_
     "modules/dasLLAMA/dasllama/dasllama_gpu_resident.das"  // the slot ops + marks / hydrate / drop / prefill pin
 ]
@@ -335,5 +336,46 @@ def test_locked_queue_gate(t : T?) {
     }
     t |> run("a raw vkDeviceWaitIdle is a finding") @(t : T?) {
         red_on(t, "devwait.das", "{QUEUE_CLEAN}vkDeviceWaitIdle{OPEN}d)\n", "without the shared device's queue lock", "--queue-calls")
+    }
+}
+
+//! the gate over several named files on one rail
+def private run_gate_files(rail : string; files : array<string>) : GateRun {
+    let args <- get_command_line_arguments()
+    let exe = empty(args) ? "" : args[0]
+    var output = ""
+    var argv <- [exe, "-dasroot", get_das_root(), "{get_das_root()}/modules/dasLLAMA/REVIEW.das", "--", rail]
+    argv |> push_from(files)
+    let rc = run_and_capture(argv, output)
+    delete argv
+    return GateRun(rc = rc, output = output)
+}
+
+let private RR_KERNELS = "let KQ_N_RR = 2   // the row groups a lane group takes\n"
+let private RR_STAMP = "class FxN4 : FxNCol \{\n    override RR = 2\n\}\n"
+
+[test(description = "The REVIEW.das N-column row-group gate passes stamps whose `override RR` is the kernel file's KQ_N_RR and fails, with one named finding, a stamp of another RR and a stamp file with no `override RR`; a kernel file without KQ_N_RR is a finding of its own", timeout = 1200)]
+def test_ncol_rr_gate(t : T?) {
+    let kernels = fixture("rr_kernels.das", RR_KERNELS)
+    t |> run("two stamp files at KQ_N_RR pass") @(t : T?) {
+        let run = run_gate_files("--ncol-rr", [kernels, fixture("rr_a.das", RR_STAMP), fixture("rr_b.das", "{RR_STAMP}{RR_STAMP}")])
+        t |> equal(run.rc, 0, "the gate's exit code\n{run.output}")
+    }
+    t |> run("a stamp of another RR is a finding") @(t : T?) {
+        let run = run_gate_files("--ncol-rr", [kernels, fixture("rr_off.das", "{RR_STAMP}class FxN8 : FxNCol \{\n    override RR = 4\n\}\n")])
+        t |> equal(run.rc, 1, "the gate's exit code\n{run.output}")
+        t |> success(find(run.output, "`override RR = 4` against KQ_N_RR = 2") >= 0, "the finding names the stamp's RR and the count\n{run.output}")
+        t |> success(find(run.output, "1 finding(s)") >= 0, "the one defect is the one finding\n{run.output}")
+    }
+    t |> run("a stamp file with no `override RR` is a finding") @(t : T?) {
+        let run = run_gate_files("--ncol-rr", [kernels, fixture("rr_none.das", "class FxN4 : FxNCol \{\n\}\n")])
+        t |> equal(run.rc, 1, "the gate's exit code\n{run.output}")
+        t |> success(find(run.output, "no `override RR` stamp found") >= 0, "the finding says the rule walked nothing\n{run.output}")
+        t |> success(find(run.output, "1 finding(s)") >= 0, "the one defect is the one finding\n{run.output}")
+    }
+    t |> run("a kernel file without KQ_N_RR is a finding") @(t : T?) {
+        let run = run_gate_files("--ncol-rr", [fixture("rr_nocount.das", "let KQ_N_ROWS = 2\n"), fixture("rr_c.das", RR_STAMP)])
+        t |> equal(run.rc, 1, "the gate's exit code\n{run.output}")
+        t |> success(find(run.output, "no `let KQ_N_RR` found") >= 0, "the finding says the count is gone\n{run.output}")
     }
 }

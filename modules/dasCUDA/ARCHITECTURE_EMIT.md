@@ -75,9 +75,12 @@ A `[cuda_kernel]` class method lowers to one self-contained CUDA C++ text:
   `__float_as_uint` and kin; `sdot4` is `__dp4a`; `packHalf2x16` / `unpackHalf2x16` are the
   PTX `cvt` pair over a `uint` (lane x in the low half), `unpack8` / `pack32` byte-shift
   helpers per type; a lane of a vector by index (`v[i]`, which CUDA's vector types lack) goes
-  through two helpers picked by the expression's role, not the operand's constness: a read is
-  `__das_at_T`, a nested ternary over the lanes (three selects, which keep a register vector in
-  registers); an assignment's or compound assignment's target is `__das_atw_T`, pointer arithmetic
+  through three helpers picked by the expression's role and, for a read, by where the vector
+  lives - not by the operand's constness: a read is `__das_at_T`, a nested ternary over the lanes
+  (three selects, which keep a register vector in registers); a read off a buffer's element
+  (`member[i][lane]`) is `__das_atm_T`, the lane alone loaded at the element's address (the
+  selects would load the whole element first, and the address is the element's - a word past
+  2^32 words of a buffer stays in reach of a 32-bit element index); an assignment's or compound assignment's target is `__das_atw_T`, pointer arithmetic
   over the contiguous lanes (an indexed store on a shared or global vector; a reference picked by
   a ternary chain compiles to a jump table on the index, a four-way divergent branch around every
   lane store - and a register vector written by a runtime lane goes to local memory, so a hot body
@@ -187,6 +190,7 @@ are PTX's and CUDA's, and a body that calls one is a CUDA-only kernel by constru
 | `cp_async_commit()` / `cp_async_wait(n)` | `cp.async.commit_group` / `cp.async.wait_group n` (`n` a constant) | no-op |
 | `ldmatrix(frag, p)` | `ldmatrix.sync.aligned.m8n8.x4.shared.b16` into a KHR A or B fragment: each lane hands the address of one 16-byte row, lanes 8i..8i+7 the rows of the i-th 8x8 matrix, and matrix i lands in fragment register i. The mma reads an A fragment's registers as (rows 0-7, k lo), (rows 8-15, k lo), (rows 0-7, k hi), (rows 8-15, k hi), and a B fragment over a k-contiguous [n][k] tile as (n 0-7, k lo), (n 0-7, k hi), (n 8-15, k lo), (n 8-15, k hi), k lo and k hi the two 8-column (f16) or 16-byte (s8) halves; the transposing form is `ldmatrix_trans` below | no-op |
 | `ldmatrix_trans(frag, p)` | `ldmatrix.sync.aligned.m8n8.x4.trans.shared.b16` into an f16 A or B fragment, each 8x8 matrix transposed on the way: an A fragment off a [k][m] tile (lanes 8i..8i+7 hand the k rows (k lo, m 0-7), (k lo, m 8-15), (k hi, m 0-7), (k hi, m 8-15)), a B fragment off a [k][n] tile ((k lo, n 0-7), (k hi, n 0-7), (k lo, n 8-15), (k hi, n 8-15)) - the layout a product's output lands in when the next product reads it as an operand, spared the element transpose | no-op |
+| `mma_frag_set(frag, i, w)` | `(frag).r[i] = w`: word i (0..3) of the lane's s8 A or B fragment set from a register, the word `ldmatrix` would have loaded there - with g = lane / 4 and t = lane % 4 an A fragment's words are (row g, k lo), (row g + 8, k lo), (row g, k hi), (row g + 8, k hi) and a B fragment's (column g, k lo), (column g, k hi), (column g + 8, k lo), (column g + 8, k hi), each word the k bytes 4t..4t+3 of its 16-byte half. It feeds the mma from registers, the shared-memory round trip skipped. SPIR-V has no form of it: a KHR cooperative matrix's lane layout is implementation-defined, so no store names a lane's word | no-op |
 | `mma_acc_get(f, k)` / `mma_acc_set(f, k, v)` | `f.r[k]`: the lane's element k (0..7) of an f32 accumulator, at row `mma_acc_row(lane, k)` (g and g + 8 for k & 2 clear and set, g = lane / 4) and column `mma_acc_col(lane, k)` (2t + (k & 1) in n-half k / 4, t = lane % 4), elements k and k + 1 (k even) a row's column pair - an epilogue that reads the product where it lands, the tile never stored | `0` / no-op (the row and column helpers are plain functions) |
 | `mma_scale_acc(f, s, rs, cs)` | `f.r[k] += float(s.r[k]) * rs[row half of k] * cs[column of k]` over the lane's eight elements: the block-scaled int8 product's fixup. With g = lane / 4 and t = lane % 4, `rs` holds the scales of the lane's rows g and g + 8, `cs` those of its columns 2t, 2t + 1, 2t + 8, 2t + 9 | no-op |
 | `bar_sync(id, count)` | `bar.sync id, count` | no-op |

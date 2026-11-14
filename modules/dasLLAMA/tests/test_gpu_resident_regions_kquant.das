@@ -12,7 +12,8 @@ require _resident_regions
 // the one-token-off control, not bit for bit: the N-row command's Q8_K sites round apart from the one-row
 // command's (`../followup_vulkan.md` item 75). Skips off the JIT, without DASLLAMA_GPU=1 on a device the driver
 // serves, without the file under models_dir(), or on a card whose room the plan does not fit at the regions a cell asks
-// (twelve and twenty for the groups cells).
+// (twelve and twenty for the groups cells). The groups cells run with the CUDA home's rows tensor leaf off - the column
+// tiles on every home - and the leaf cell holds the same twelve rows on the leaf, skipping on a home with none.
 let private LLAMA_K_REGIONS_FILE = "Llama-3.2-1B-Instruct-Q4_K_M.gguf"
 
 [test(description = "On Llama-3.2-1B Q4_K_M the N-row command's K-quant GEMV leaves and split Q8_K sites batch two sessions within the split bar of each alone, the one-token-off control past it")]
@@ -29,6 +30,11 @@ def test_regions_batched_steps_split_k(t : T?) {
 [test(description = "Twelve Llama-3.2-1B Q4_K_M sessions batched in one N-row command run its GEMVs in eight- and four-column tiles, and every row holds the split bar of its session alone")]
 def test_regions_batched_groups_k(t : T?) {
     cell_regions_batched_groups(t, LLAMA_K_REGIONS_FILE, 12l)
+}
+
+[test(description = "Twelve Llama-3.2-1B Q4_K_M sessions step on the CUDA home's rows tensor leaf over its Q4_K and Q6_K planes, a leaf stamp launched, every row nearer its session alone than its previous step")]
+def test_regions_batched_leaf_k(t : T?) {
+    cell_regions_batched_leaf(t, LLAMA_K_REGIONS_FILE, 12l)
 }
 
 //! twenty rows over twenty regions: past the N-row command's sixteen the step runs two commands of ten, never a row at a time

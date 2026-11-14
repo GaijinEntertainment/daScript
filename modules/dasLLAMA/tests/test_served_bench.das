@@ -12,6 +12,7 @@ require math
 require daslib/strings_boost   // count
 require ../harness/_row_stats.das
 require ../harness/served_bench.das
+require ../harness/_prompt_files.das   // id_list, read_ids: the harness's comma lists of numbers
 require ../../../tests/dasHV/_dashv_test_common.das   // with_test_server: a server on its own thread and port
 
 // The served-turn instrument (harness/served_bench.das), with no model behind it: the stream reader's two clock marks
@@ -416,4 +417,13 @@ def test_turns_against_a_fake_server(t : T?) {
     t |> run("no server at the address is a refused turn, not a hang") @(t : T?) {
         t |> equal(run_turn(Plan(url = "http://127.0.0.1:9"), "sys", "ask", 8).why, "HTTP 0")
     }
+}
+
+[test(description = "`id_list` keeps a comma list's numbers in order, dropping an empty part and one that is not a number, and under bounds drops a number below `lo` or past `hi` while keeping both bounds themselves; an absent file's ids are none")]
+def test_prompt_files_id_list(t : T?) {
+    t |> equal(id_list(" 4, 2,,x, 7 "), [4l, 2l, 7l], "the numbers in order, an empty part and a word dropped")
+    t |> equal(id_list("-3,0,9223372036854775807"), [-3l, 0l, 9223372036854775807l], "control: unbounded, every number stays")
+    t |> equal(id_list("0,1,2,3", 2l), [2l, 3l], "under lo = 2 the numbers below it are dropped, 2 kept")
+    t |> equal(id_list("0,1,4,5,-3", 1l, 4l), [1l, 4l], "in 1 .. 4 both bounds stay and every number outside goes")
+    t |> equal(length(read_ids(path_join(test_temp_dir(), "no_such_ids.txt"))), 0, "an absent file holds no ids")
 }

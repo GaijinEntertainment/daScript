@@ -8,7 +8,7 @@ asymmetries a stamp family ledgers - stays in `ARCHITECTURE_GPU.md#gpu-backends`
 ### The allowed asymmetries between the backends {#gpu-asymmetries}
 
 **This list is closed; a new asymmetry lands with its entry here** - one of the CUDA home alone (the int8 MMQ
-prefill, the FP4 expert rung, the nv4 nibble decode, the MMQ pin) in `ARCHITECTURE_GPU_ASYMMETRIES_CUDA.md#cuda-asymmetries`:
+prefill, the FP4 expert rung, the nv4 nibble decode, the MMQ pin and the N-row form knees) in `ARCHITECTURE_GPU_ASYMMETRIES_CUDA.md#cuda-asymmetries`:
 
 - **The chunked deltanet scan is the discrete homes' alone** (`dn_scan_chunk_cls`, `DASLLAMA_DN_CHUNK`: the window's recurrent state advanced once a sixteen-token chunk on the cooperative tiles). Metal's window walks a token at a time over half rows (`#prefill-dn-scan` in `ARCHITECTURE_GPU_PREFILL_WINDOW.md`): a chunked body on the 8 x 8 simdgroup matrices - correct to 1e-7 of the sequential rule - raced 1.64 ms a layer against the walk's 0.97 at the 35B's 2048-row window and read pp512 4% and pp2048 5% under it on Qwen3.5-35B-A3B; a chunk's fixed cost (seven barriers, the gates, the o rows) alone is 0.4 ms.
 - **`metal_tower_mel_encodes` is Metal's mel counter, a function of its own**: it rises once a mel the device mel seat served (`register_whisper_mel_gpu`), the qwen3a mel and the chat towers' chunked mel alike. Vulkan counts the same seat as the `mels` field of `vulkan_tower_stats()`, where Metal's `metal_tower_stats()` carries no mel field. The caller outside the backend is `test_log_mel_chunks_gpu` (`tests/test_audio.das`).
@@ -284,14 +284,13 @@ prefill, the FP4 expert rung, the nv4 nibble decode, the MMQ pin) in `ARCHITECTU
   step's rows take the eight-row tensor stamps, the matrix-unit form with exact-half codes and an fp32 scale, the four-dispatch
   mixer, or - bit for bit the fused pair - the rows' expert union, each over the row forms it would replace; past eight rows,
   to 32, a batched step's and a joint verify's sites take the matrix-unit form over row tiles of eight. The discrete homes'
-  N-row commands carry one form a site: no twin to pick. `DASLLAMA_METAL_KERNEL_SKIP` (a kernel's dispatches dropped by name, its rows garbage by design) is Metal's alone too.
-- **The block drafter's device arm, its joint rounds and its levers are Metal-only** (`set_dflash_device`,
-  `register_dflash_device`'s, `register_dflash_joint`'s and `register_mtp_block_rounds`' one registrant; `DASLLAMA_METAL_DFLASH_SELECT` / `set_metal_dflash_select`, `DASLLAMA_METAL_DFLASH_SOFT_PICK` /
-  `set_metal_dflash_soft_pick`, `DASLLAMA_METAL_DFLASH_ACCEPT` / `set_metal_dflash_accept`, `DASLLAMA_METAL_VERIFY_AHEAD` /
-  `set_metal_verify_ahead`; `ARCHITECTURE_GPU_MTP_ACCEPT.md#dflash-sampled-drafts`, `ARCHITECTURE_GPU_MTP_ROUND.md#verify-ahead`):
-  the pass, its top-k selector, a sampled round's draw off the stream's rng and the greedy accept run on the device, and the verify
-  is encoded behind the pass, and a tick's streams draft and verify jointly (`ARCHITECTURE_GPU_MTP_ACCEPT.md#dflash-tick-rounds`);
-  the discrete homes register neither, so their drafter's pass, selection and accept run on the CPU, a stream a round.
+  N-row commands carry one form a site at a row count: no twin to pick (the CUDA rows leaf's knee is
+  `ARCHITECTURE_GPU_ASYMMETRIES_CUDA.md#cuda-asymmetries`'s).
+- **The block drafter's joint rounds and its levers are Metal-only; its selector and verify A/B seats and its scaled planes are the discrete homes'.** Every home registers the device arm (`register_dflash_device`); Metal alone registers `register_dflash_joint` and `register_mtp_block_rounds` and carries the levers (`DASLLAMA_METAL_DFLASH_SELECT` / `set_metal_dflash_select`, `DASLLAMA_METAL_DFLASH_SOFT_PICK` / `set_metal_dflash_soft_pick`, `DASLLAMA_METAL_DFLASH_ACCEPT` / `set_metal_dflash_accept`, `DASLLAMA_METAL_VERIFY_AHEAD` / `set_metal_verify_ahead`; `ARCHITECTURE_GPU_MTP_ACCEPT.md#dflash-sampled-drafts`, `ARCHITECTURE_GPU_MTP_ROUND.md#verify-ahead`): a sampled round's draw off the stream's rng and the greedy accept run on the device, the verify is encoded behind the pass, and a tick's streams draft and verify jointly (`ARCHITECTURE_GPU_MTP_ACCEPT.md#dflash-tick-rounds`); a discrete home's round is a stream's, its accept walked on the host (`ARCHITECTURE_GPU_ASYMMETRIES_CUDA.md#cuda-dflash-pass`). The discrete homes' A/B seats - `set_dflash_device_selector` (the selector's top-k and walk on the device, or its logits or lists landed for the host's) and `set_gpu_resident_seat_accept` (the verify seat's greedy accept, or every row's logits for the round's walk) - have nothing to flip on Metal, whose arm registers no `selector` and whose verify is no resident seat. A drafter whose planes carry a per-tensor scale (`DflashW.scale`, an NVFP4 tensor's `.scale`) drafts on the device on the discrete homes, whose repack hands the factor to the gather (`site_scale`), and Metal's arm declines it to the CPU arm (`df_ready`'s `dflash_scaled`; `followup_metal.md` row 75 is the Metal gap).
+- **The pricing rail's in-process setters are the discrete homes'** (`set_cuda_kernel_skip`, `set_vulkan_kernel_skip`): a
+  launch of a kernel whose name holds a listed fragment is dropped, the output garbage by design, and each setter drops its
+  decode driver's recorded commands, so the next step re-records under the list (on CUDA a drafter's or a tower's captured
+  command keeps the list it was captured under). Metal's rail is `DASLLAMA_METAL_KERNEL_SKIP`, read once at the driver's init.
 - **The speculative rollback's buffer levers are Metal-only** (`DASLLAMA_METAL_REPLAY_UNWAITED` / `set_metal_replay_unwaited`,
   `DASLLAMA_METAL_REPLAY_TAPE` / `set_metal_replay_tape`, `DASLLAMA_METAL_COMMIT_ONE` / `set_metal_commit_one`;
   `ARCHITECTURE_GPU_MTP_DECODE.md#mtp-replay-form`, `ARCHITECTURE_GPU_MTP_ROUND.md#commit-one`): a rejected Metal round replays

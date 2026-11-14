@@ -8,6 +8,7 @@ options _function_length = 0   // the token chain's encode is one walk over the 
 require dasllama/dasllama_lint public
 require dasllama/dasllama_cuda_common public
 require dasllama/dasllama_cuda_classes public
+require dasllama/dasllama_cuda_classes_rows   // the rows tensor leaf's family
 require dasllama/dasllama_cuda_stream public   // the streamed prompt: the pool planes seat, the model drop's stream state
 require dasllama/dasllama_gpu_tier
 require dasllama/dasllama_env
@@ -355,6 +356,9 @@ struct CudRdec {
     router, moe_rb, moe_gb, moe_ub, moe_db, moe_ds : uint64   //! [n_moe x ner x dim] f32 rows; the router bias [n_moe x ne]; the expert gate / up [n_moe x ne x nfe] and down [n_moe x ne x dim] bias rows (a biasless model binds a zero down row); the gemma-4 down scales
     moe_ident : uint64       //! the ramp 0 .. RDEC_ROUTED_SLOTS: the token step's slot map (slot s's down row is row s)
     moe_meta1, moe_meta3, moe_meta2 : uint64   //! the picks' GEMV region records a slot: (wblock, xblock) pairs the expert GEMVs read
+    share_host : void?         //! the last wide step's expert sharing as the device counted it (`MoeShareT`): [0] the distinct experts of the probe layer's picks, [1] their slots
+    share_dev : uint64
+    wide_fp4, wide_tile : bool   //! the form the command being recorded or replayed gives its routed sites: an FP4 layer's / a tile layer's expert chain in place of a GEMV a pick
     moe_w, moe_eidx, moe_dlog : uint64         //! the routing weights and experts a slot; the logits rows [nb x ner]
     moe_xq, moe_xs : uint64                    //! the experts' own feed where their class differs from the shared expert's
     egate, eup, ehq, ehs, edown : uint64        //! the k slot rows: the gate and up GEMVs' outputs, the act's requant, the down GEMV's rows
@@ -389,8 +393,11 @@ struct CudRdec {
     hn_a, hn_b : uint64      //! the two halves normed: enorm(hemb), hnorm(hsrc)
     head_cat : uint64        //! the cat rows [nb x 2 dim]: eh_proj's input
     out_hid_word : int64     //! the out block's post-norm rows (`dim` floats a row) past the logits
-    roll_dev : uint64        //! the verify's rollback rows (one a verify row but the last), every recurrent layer's state and ring pair at its `roll_off`
-    roll_row_bytes, roll_rows, roll_region, roll_vrows : int64
+    roll_dev : uint64        //! the verify's projected q / k / v rows, [recurrent layer][verify rows][cd]: a layer's at its `roll_off` - what the commit's ring tail reads
+    roll_conv : uint64       //! ... and the same rows convolved, what the commit's scan reads
+    dnv_z, dnv_o : uint64    //! the verify's z rows and o rows of the layer in flight, [CRD_NB][di] each
+    roll_rows, roll_region, roll_vrows : int64
+    dn_pend : int64          //! the last verify's leading rows whose records the region's slots have yet to take (`crd_dn_commit`); 0 = none
     snap_dev : uint64        //! the checkpoint rows, `RDEC_DN_SNAPS` a region, each a whole recurrent state
     snap_row_bytes : int64
     snap_par : array<int>    //! a checkpoint row's ring parity
@@ -404,6 +411,14 @@ struct CudRdec {
     pf_hcatf, pf_hcatq, pf_hcats, pf_hcatsum, pf_hcat4q, pf_hcat4s, pf_hcatrs : uint64
     pf_hsch : CudSched[3]    //! the head's eh_proj, k and v schedules
     pf_cap_dev : uint64      //! the window's checkpoint capture records (`PF_CAP_WORDS`)
+    //! the block drafter's capture rows (`cud_rdec_block_caps_arm`): a captured trunk layer's output rows copied to a pinned host block as the layer closes
+    mmf_q, mmf_s, mmf_m : uint64 //! the rows tensor leaf's feed: sixteen rows' quants in lane order, their scales (a superblock's, or a 32-block's on a Q8_0 feed), their block sums
+    mmf_n : int64                //! the widest row the feed holds
+    cap_slots : array<int64>     //! a trunk layer's slot among the layers captured, -1 = not captured; empty = no capture
+    cap_n : int64                //! the layers captured
+    cap_host : void?             //! the token and verify commands' rows, [slot][CRD_NB][dim]
+    cap_win_host : void?         //! the window chain's rows, [slot][cap_win_rows][dim], regrown by a prefill of more rows
+    cap_win_rows : int64
     //! the host-experts form (`cud_rdec_set_host_experts`): the command splits into `nseg` segments at the layers whose experts the host
     //! sums - a segment ends by landing the FFN-mixed rows and the router logits in the mapped blocks, the next opens on the host's sums
     //! (`ARCHITECTURE_GPU_VULKAN_HC.md#hc-token-command`, the plain cut) - and the hot expert pool beside it (`ARCHITECTURE_GPU_VULKAN_POOL.md#hc-hot-pool`)
@@ -438,6 +453,9 @@ def private crd_served(var r : CudRdec; n : int64) {
 def cud_rdec_served_total : int64 => g_crd_served_total
 
 def private crd_free_buffers(var r : CudRdec) {
+    for (b in [r.mmf_q, r.mmf_s, r.mmf_m]) {
+        cuda_mem_free(b)
+    }
     for (b in [r.x, r.xq, r.xs, r.proj, r.attn, r.attn_part, r.ar_cnt, r.aq, r.as_, r.hq, r.hs_, r.xb2, r.norms, r.cos, r.logits, r.pick_part_max, r.pick_part_id, r.tok, r.dummy, r.supp, r.cls_regs,
                 r.gate, r.up, r.ffnout, r.xb, r.kst, r.vst, r.stage_tok, r.ksh, r.vsh, r.tq4_signs]) {
         cuda_mem_free(b)
@@ -451,7 +469,7 @@ def private crd_free_buffers(var r : CudRdec) {
                 r.moe_xq, r.moe_xs, r.egate, r.eup, r.ehq, r.ehs, r.edown,
                 r.pf_xb, r.pf_mlog, r.pf_midx, r.pf_mw, r.pf_minv, r.pf_bex, r.pf_msch1, r.pf_msch3, r.pf_msch2, r.pf_mxg, r.pf_mhf, r.pf_my1, r.pf_my2, r.pf_mdn, r.bias, r.sinks,
                 r.pf_mxf, r.pf_mx4q, r.pf_mx4s, r.pf_mxrs, r.pf_mh4q, r.pf_mh4s, r.pf_mhrs, r.pf_mmy1, r.pf_mmy2, r.pf_mmdn,
-                r.head_eh_regs, r.head_tok, r.hemb, r.hsrc, r.hn_a, r.hn_b, r.head_cat, r.roll_dev, r.snap_dev,
+                r.head_eh_regs, r.head_tok, r.hemb, r.hsrc, r.hn_a, r.hn_b, r.head_cat, r.roll_dev, r.roll_conv, r.dnv_z, r.dnv_o, r.snap_dev,
                 r.pf_hemb, r.pf_hsrc, r.pf_hna, r.pf_hnb, r.pf_hcat, r.pf_hcos, r.pf_hcatf, r.pf_hcatq, r.pf_hcats, r.pf_hcatsum,
                 r.pf_hcat4q, r.pf_hcat4s, r.pf_hcatrs, r.pf_cap_dev, r.ones, r.hot_ident1, r.pf_ones, r.pf_ident, r.emb_f32,
                 r.ple_dev, r.pleg, r.pleact, r.ple_gf32, r.ple_pf32, r.pf_ple, r.pf_pleg, r.ple_wp, r.ple_pnorm, r.ple_w16, r.tok_plep, r.pf_plep]) {
@@ -481,6 +499,10 @@ def private crd_free_buffers(var r : CudRdec) {
     }
     cuda_mem_free_host(r.in_host)
     cuda_mem_free_host(r.out_host)
+    if (r.share_host != null) {
+        cuda_mem_free_host(r.share_host)
+    }
+    crd_caps_free(r)
     for (hb in r.ch_stage_host) {
         cuda_mem_free_host(hb)
     }
@@ -514,6 +536,37 @@ def private crd_layer_free(L : CudLayer) {
 //! a step replayed as a graph in any mode
 def private crd_graph_captured(r : CudRdec) : bool => !empty(r.graphs)
 
+def private crd_caps_free(var r : CudRdec) {
+    if (r.cap_host != null) {
+        cuda_mem_free_host(r.cap_host)
+        r.cap_host = null
+    }
+    if (r.cap_win_host != null) {
+        cuda_mem_free_host(r.cap_win_host)
+        r.cap_win_host = null
+    }
+    r.cap_win_rows = 0l
+    r.cap_n = 0l
+    r.cap_slots |> clear()
+}
+
+//! layer `l`'s output rows - `nrows` rows of `x` - into the capture block `host` ([slot][stride][dim]) from its row `row0`,
+//! where the block drafter captures the layer
+def private crd_cap(r : CudRdec; var s : void?; l : int64; x : uint64; host : void?; stride, row0, nrows : int64) {
+    return if (!rdec_caps_layer(r.cap_slots, l))
+    unsafe {
+        let dst = reinterpret<void?>(reinterpret<uint8?>(host) + (r.cap_slots[l] * stride + row0) * r.dim * 4l)
+        cuda_memcpy_dtoh(dst, x, uint64(nrows * r.dim * 4l), s)
+    }
+}
+
+//! the window chain's rows of layer `l` into the window capture block; an embedding's call (`hidden`) captures none, its
+//! block not grown (`crd_cap_win_room`)
+def private crd_cap_win(r : CudRdec; var s : void?; l, w0, wlen : int64; hidden : bool) {
+    return if (hidden)
+    crd_cap(r, s, l, r.pf_x, r.cap_win_host, r.cap_win_rows, w0, wlen)
+}
+
 def private crd_graphs_drop(var r : CudRdec) {
     for (g in values(r.graphs)) {
         cuda_graph_destroy(g)
@@ -526,6 +579,7 @@ def private crd_graphs_drop(var r : CudRdec) {
 }
 
 let private CRD_NB = RDEC_NROW_MAX                      //! the rows the N-row command steps at once: the per-row planes' height
+let private CRD_MMF_MIN_N = 32768l                      //! the rows tensor leaf's feed holds a row this wide at the least: the recurrent sites' widths ride no plane of the driver's `wide`
 let private CRD_TOK_WORDS = int(TOK_META_BYTES / 4l)   //! a TokMeta block in words
 let private CRD_IN_ID_WORD = CRD_TOK_WORDS * int(CRD_NB)   //! the in block: CRD_NB TokMeta blocks, the rows' token ids from this word, the head rows' token blocks, the rope rows from the header's end, then the x rows
 let private CRD_IN_HTOK_WORD = CRD_IN_ID_WORD + int(CRD_NB)   //! the head rows' TokMeta blocks (a position below the trunk rows')
@@ -541,8 +595,9 @@ def private crd_in_words(r : CudRdec) : int64 => crd_in_hemb_word(r) + r.dim * r
 //! the driver's state dropped: its buffers, the mirror slabs, the graph; the arenas stay (the reserve seat precedes prepare)
 def private crd_drop {
     return if (g_crd == null)
-    crd_chain_settle()
+    crd_state_settle()
     cud_sync()
+    g_crd_relay.serial = -1l   //! the feed's record names the dropped driver's buffers
     crd_free_buffers(*g_crd)
     unsafe {
         delete g_crd
@@ -659,7 +714,7 @@ def cud_rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidd
     crd_drop()
     g_crd = new CudRdec(n_layers = n_layers, dim = dim, qd = qd, kv_dim = kv_dim, n_heads = n_heads, hidden = hidden, vocab = vocab,
         neox = neox, qk_norm = qk_norm, q_gated = q_gated, head_size = head_size, eps = eps, scale = scale, kv_dt = dt, regions = regions, cos_elems = cos_elems,
-        head_planned = head, carry = carry, verify_rows = head ? verify_rows : 0l, roll_region = -1l)
+        head_planned = head, carry = carry, verify_rows = verify_rows, roll_region = -1l)
     var r & = unsafe(*g_crd)
     r.unit_bytes = kv_unit_bytes(dt)
     r.mir_units = mir_units + kv_row_units(dt, RDEC_MIR_SLACK)
@@ -672,6 +727,10 @@ def cud_rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidd
     r.x = cud_dev_zeroed(dim * 4l * nb)
     r.xq = cud_dev_zeroed(wide * nb)
     r.xs = cud_dev_zeroed((wide / Q8_BLOCK_ELEMS) * 4l * nb)
+    r.mmf_n = max(wide, CRD_MMF_MIN_N)   // the rows tensor leaf's feed at the widest site it serves
+    r.mmf_q = cud_dev_zeroed(r.mmf_n * 16l)
+    r.mmf_s = cud_dev_zeroed((r.mmf_n / Q8_BLOCK_ELEMS) * 16l * 4l)   // a scale a 32-block at the most: the Q8_0 feed's
+    r.mmf_m = cud_dev_zeroed((r.mmf_n / KQ_B32_ELEMS) * 16l * 4l)   // a block sum a 32-block of a superblock row
     r.proj = cud_dev_zeroed((qd + 2l * kv_dim) * 4l * nb)
     if (q_gated) {
         r.q = cud_dev_zeroed(2l * qd * 4l * nb)
@@ -948,22 +1007,31 @@ def private crd_head_planes(var r : CudRdec) {
     r.head_cat = cud_dev_zeroed(2l * dim * 4l * nb)
 }
 
-//! the rollback rows: `verify_rows - 1` rows, each every recurrent layer's state slot and ring pair at the layer's `roll_off`
+//! the verify's recurrent planes: every recurrent layer's projected rows and their convolved rows for `verify_rows` rows, at the
+//! layer's `roll_off`. A verify leaves the slots as it found them, and the rows a round keeps are what `crd_dn_commit` scans again
 [arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-verify-rollback")]
 def private crd_roll_alloc(var r : CudRdec) {
+    r.roll_rows = r.verify_rows > 1l ? r.verify_rows : 0l
     var off = 0l
     for (L in r.layers) {
         continue if (!L.recurrent)
         L.roll_off = off
-        off += L.dn[0].slot_state_bytes + 2l * L.dn[0].ring_image_bytes
+        off += r.roll_rows * r.dn_cd * 4l
     }
-    r.roll_row_bytes = off
-    r.roll_rows = max(r.verify_rows - 1l, 0l)
     r.roll_region = -1l
-    cuda_mem_free(r.roll_dev)
+    r.dn_pend = 0l
+    for (b in [r.roll_dev, r.roll_conv, r.dnv_z, r.dnv_o]) {
+        cuda_mem_free(b)
+    }
     r.roll_dev = 0ul
-    if (r.roll_rows > 0l && off > 0l) {
-        r.roll_dev = cud_dev_zeroed(off * r.roll_rows)
+    r.roll_conv = 0ul
+    r.dnv_z = 0ul
+    r.dnv_o = 0ul
+    if (off > 0l) {
+        r.roll_dev = cud_dev_zeroed(off)
+        r.roll_conv = cud_dev_zeroed(off)
+        r.dnv_z = cud_dev_zeroed(CRD_NB * r.dn_di * 4l)
+        r.dnv_o = cud_dev_zeroed(CRD_NB * r.dn_di * 4l)
     }
 }
 
@@ -1039,6 +1107,17 @@ def cud_rdec_prepare_moe(ne, k, nfe, nsh, n_moe : int64; sh_gated, norm_topk, is
     r.moe_meta1 = cud_dev_zeroed(RDEC_ROUTED_SLOTS * 8l)
     r.moe_meta3 = cud_dev_zeroed(RDEC_ROUTED_SLOTS * 8l)
     r.moe_meta2 = cud_dev_zeroed(RDEC_ROUTED_SLOTS * 8l)
+    let sh = cuda_mem_alloc_host_mapped(16ul)
+    if (sh.host != null) {
+        r.share_host = sh.host
+        r.share_dev = sh.dev
+        unsafe {
+            var w = reinterpret<uint?>(sh.host)
+            for (i in range(4)) {
+                w[i] = 0u
+            }
+        }
+    }
     r.moe_w = cud_dev_zeroed(RDEC_ROUTED_SLOTS * 4l)
     r.moe_eidx = cud_dev_zeroed(RDEC_ROUTED_SLOTS * 4l)
     r.moe_dlog = cud_dev_zeroed(ner * 4l * nb)
@@ -1174,6 +1253,9 @@ def cud_rdec_set_cls(cls_block : int64; cls_fmt : int; cap : float; supp : array
         r.supp = buf_upload(words, g_cud.stream)
     }
     r.cls_regs = cud_regions([uint(cls_block), 0u])
+    if (r.hybrid && r.verify_rows > 1l && r.roll_dev == 0ul) {   // a trunk with no head set: the verify's recurrent planes over the layers now known
+        crd_roll_alloc(r)
+    }
     crd_graphs_drop(r)
     r.ready = true
 }
@@ -1449,11 +1531,7 @@ def private crd_ple_block(r : CudRdec; var s : void?; l : int64; L : CudLayer; n
         let kqp = kq_sb(L.fpp)
         var pca = gk_ple_act_args(ple, l, r.ple_all, nr)
         pca.nblk = uint(ple * nrows / kq_unit(kqp))
-        if (kqp) {
-            enc_q8k_actrq_cls(s, fixed_array(r.pleg, r.ple_dev, r.hq, r.hs_), pca, rq_wgs(true, ple * nrows))
-        } else {
-            enc_q8_actrq_cls(s, fixed_array(r.pleg, r.ple_dev, r.hq, r.hs_), pca, rq_wgs(false, ple * nrows))
-        }
+        cud_actrq_enc(s, fixed_array(r.pleg, r.ple_dev, r.hq, r.hs_), kqp, pca, ple * nrows)
         crd_gemv(s, L.fpp, L.regs_pp, r.hq, r.hs_, r.ffnout, ple, dim, 0u, 1l, nr, uint(dim))
     }
     var pcn = GkAddRmsArgs(dim = uint(dim), add_on = 1u, woff = uint(L.n_next), eps = r.eps, ascale = L.out_scale, pre_on = 1u, pwoff = uint(L.n_ple_post))
@@ -1613,7 +1691,7 @@ def cud_rdec_dn_own(l : int64; stp : float?; histp : float?) {
     let slot = g_crd.region
     var st & = unsafe(L.dn[slot])
     return if (dn_slot_holds(st.own, stp))
-    crd_chain_settle()   // another session's state takes the slot: a chained step on the old owner's is discarded first
+    crd_state_settle()   // another session's state takes the slot: a chained step on the old owner's is discarded first
     if (st.own.valid && st.own.dirty) {
         crd_dn_flush_down(st)
     }
@@ -1623,7 +1701,7 @@ def cud_rdec_dn_own(l : int64; stp : float?; histp : float?) {
 //! After a resident prefill, hand recurrent layer `l`'s device slot to the session `stp` / `histp` name (valid, dirty, bound)
 [arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#hybrid-token-command")]
 def cud_rdec_prefill_dn_own(l : int64; stp : float?; histp : float?) {
-    crd_chain_settle()
+    crd_state_settle()
     var L & = unsafe(g_crd.layers[l])
     var st & = unsafe(L.dn[g_crd.region])
     dn_slot_bind(st.own, stp, histp, g_crd.dn_parity[g_crd.region], true)
@@ -1634,6 +1712,7 @@ def cud_rdec_prefill_dn_own(l : int64; stp : float?; histp : float?) {
 def cud_dn_step_flush(l : int64; var stp : float?; var histp : float?) {
     cud_bind()
     return if (g_crd == null || !g_crd.hybrid || l >= long_length(g_crd.layers) || !g_crd.layers[l].recurrent)
+    crd_dn_commit(*g_crd)
     var L & = unsafe(g_crd.layers[l])
     for (st in L.dn) {
         if (dn_slot_holds(st.own, stp)) {
@@ -1659,6 +1738,9 @@ def private crd_dn_drop_slots(drop : block<(st : CudDnSlot) : bool>) {
 [cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#dn-step-owner")]
 def cud_dn_step_invalidate {
     cud_bind()
+    if (g_crd != null) {   // the slots drop: the last verify's records have no state to reach
+        g_crd.dn_pend = 0l
+    }
     crd_dn_drop_slots() $(_st : CudDnSlot) : bool {
         return true
     }
@@ -1667,6 +1749,10 @@ def cud_dn_step_invalidate {
 //! the copies one session's state owns dropped, unwritten: the session reset that state, or it is dying
 [hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#dn-step-owner")]
 def cud_dn_step_release(state_lo : uint64; state_hi : uint64) {
+    if (g_crd != null && (g_crd.dn_pend > 0l || g_crd_commit_busy)) {   // the records land before a slot of theirs can go: a dropped slot's state is the host's
+        cud_bind()
+        crd_dn_commit(*g_crd)
+    }
     crd_dn_drop_slots() $(st : CudDnSlot) : bool {
         return dn_slot_in(st.own, state_lo, state_hi)
     }
@@ -1739,13 +1825,96 @@ def private crd_land(var s : void?; r : CudRdec; src : uint64; word, words : int
     cuda_memcpy_dtoh(crd_out_host(r, word), src, uint64(words * 4l), s)
 }
 
+let private CRD_ROWS_MMA_MIN = 5l   //! the token rows from which a leaf format's site takes the rows tensor leaf: a leaf's time holds from one row to sixteen, and the N-column GEMV is ahead to four
+
+var private g_crd_rows_mma_min : table<int; int64>   //! a format's pinned knee (`set_cuda_rows_mma_min`); a format with none takes `CRD_ROWS_MMA_MIN`
+
+def private crd_rows_mma_min(fmt : int) : int64 => g_crd_rows_mma_min?[fmt] ?? CRD_ROWS_MMA_MIN
+
+//! the knee `set_cuda_rows_mma_min` holds for format `fmt`: the token rows its sites take the rows tensor leaf from
+def cuda_rows_mma_min(fmt : int) : int64 => crd_rows_mma_min(fmt)
+
+//! The token rows from which a site of the token, batched and verify commands takes the rows tensor leaf (0 = never, the
+//! N-column GEMV at every count) - every format's sites, or under `fmt` that format's alone; the captured graphs go, so the
+//! next step re-records
+def set_cuda_rows_mma_min(rows : int64; fmt : int = -1) {
+    for (f in range(KQ_FMT_COUNT)) {
+        if (fmt < 0 || fmt == f) {
+            g_crd_rows_mma_min |> insert(f, rows)
+        }
+    }
+    if (g_crd != null && g_crd.ready) {
+        crd_chain_settle()
+        crd_graphs_drop(*g_crd)
+    }
+}
+
+//! The pricing rail: a launch of a kernel whose census name holds one of the comma-separated `frags` is dropped, so a run
+//! with and without a kernel class prices it; the output is garbage, and empty restores every launch. The decode driver's
+//! captured graphs go, so its next step re-records; a drafter's or a tower's captured command keeps the list it has
+def set_cuda_kernel_skip(frags : string) {
+    cud_kernel_skip_set(frags)
+    if (g_crd != null && g_crd.ready) {
+        crd_chain_settle()
+        crd_graphs_drop(*g_crd)
+    }
+}
+
+//! a site takes the rows tensor leaf: a plane of a format the leaf stamps, wide enough for the block's eight warps (eight
+//! superblocks), its rows one feed's (the dense sites, a merged site's regions among them), the row count in the leaf's
+//! sixteen and at the format's knee
+let private CRD_ROWS_MMA_REGIONS = 16l   //! the regions a leaf site holds: a merged q/k/v plane's (ten on gpt-oss); every region reads the dispatch's one feed
+
+[arch(at="../ARCHITECTURE_GPU_ASYMMETRIES_CUDA.md#cuda-rows-leaf")]
+def private crd_rows_mma_takes(fmt : int; n, nreg : int64; ncols : uint) : bool {
+    let knee = crd_rows_mma_min(fmt)
+    return false if (!cud_rows_mma_stamped(fmt) || knee <= 0l || int64(ncols) < knee || ncols > 16u || nreg > CRD_ROWS_MMA_REGIONS)
+    let q8 = cud_rows_mma_q8_feed(fmt)
+    let unit = q8 ? Q8_BLOCK_ELEMS : KQ_SB_ELEMS   // a Q8_0 row is whole 32-blocks, a superblock format's whole superblocks
+    let floor = q8 ? 1024l : 2048l   // the Q8_0 member passes its N-column leaf from five rows at 1024 wide
+    return false if (n % unit != 0l || n < floor || g_crd == null || g_crd.mmf_q == 0ul || n > g_crd.mmf_n)
+    return cud_rows_mma_ensure(fmt)
+}
+
+var private g_crd_relay : tuple<xq : uint64; xs : uint64; n : int64; ncols : uint; q8 : bool; serial : int64>   //! the rows the leaf's feed holds, and the launch serial right after the launch that last wrote or read it
+
+//! the launch just taken wrote the leaf's feed of the rows (xq, xs): it stands for the leaf sites that follow with no launch between
+def private crd_feed_stands(xq, xs : uint64; n : int64; ncols : uint; q8 : bool) {
+    g_crd_relay = (xq = xq, xs = xs, n = n, ncols = ncols, q8 = q8, serial = cud_launch_serial())
+}
+
 //! a decode GEMV over the plane at the region records `regs` in format `fmt`: `nreg` regions of `d` rows against the
 //! `n`-wide feed (xq, xs) into y from `ybase`; `ncols` activation rows past one through the N-column leaf, their y rows
 //! `ystride` apart
 def private crd_gemv(var s : void?; fmt : int; regs, xq, xs, y : uint64; n, d : int64; ybase : uint; nreg : int64 = 1l; ncols : uint = 1u; ystride : uint = 0u) {
     let a = g_cud_arenas[fmt]
     var pc = GemvArgs(n = uint(n), d = uint(d), nreg = uint(nreg), ybase = ybase, ncols = ncols, ystride = ystride)
-    cud_gemv_enc(fmt, s, fixed_array(a.wq, a.ws, regs, xq, xs, y), pc, nreg * d)
+    cud_rows_gemv(s, fmt, a.wq, a.ws, regs, xq, xs, y, pc)
+}
+
+//! a decode GEMV of format `fmt` over the planes (wq, ws) at the region records `regs`: the rows tensor leaf where the site
+//! takes it (`crd_rows_mma_takes`) - the feed re-laid in the product's lane order, one weight pass - else the format's GEMV,
+//! its N-column leaf past one row. The token chain's sites and the block drafter's pass both encode through here
+def cud_rows_gemv(var s : void?; fmt : int; wq, ws, regs, xq, xs, y : uint64; var pc : GemvArgs) {
+    let n = int64(pc.n)
+    let ncols = pc.ncols
+    let rows = int64(pc.nreg) * int64(pc.d)
+    if (crd_rows_mma_takes(fmt, n, int64(pc.nreg), ncols)) {
+        let r & = unsafe(*g_crd)
+        let q8 = cud_rows_mma_q8_feed(fmt)
+        let lbufs = fixed_array(wq, ws, regs, r.mmf_q, r.mmf_s, y, r.mmf_m)
+        // the leaf's feed stands where the last launch was a leaf over these same rows: sites that share a feed (a head's
+        // planes, gate and up) re-lay it once - any other kernel between two sites may have rewritten the rows
+        let stands = (g_crd_relay.serial == cud_launch_serial() && g_crd_relay.xq == xq && g_crd_relay.xs == xs && g_crd_relay.n == n
+            && g_crd_relay.ncols == ncols && g_crd_relay.q8 == q8)
+        if (!stands) {
+            cud_rows_mma_relay_enc(fmt, s, fixed_array(xq, xs, r.mmf_q, r.mmf_s, r.mmf_m), n, ncols)
+        }
+        cud_rows_mma_enc(fmt, s, lbufs, pc, rows_mma_wgs(rows))
+        crd_feed_stands(xq, xs, n, ncols, q8)
+        return
+    }
+    cud_gemv_enc(fmt, s, fixed_array(wq, ws, regs, xq, xs, y), pc, rows)
 }
 
 //! the residual step x += add under the next norm into the feed of a plane in format `fmt`, a row a workgroup over `rows`
@@ -1761,9 +1930,14 @@ def private crd_ar_rq(r : CudRdec; var s : void?; fmt : int; add : uint64; var p
         }
     } elif (storex || (kq_sb(fmt) && rows > 1l)) {   // the rows' normed floats, then their requant: the fused forms quantize one row
         enc_cls_ar(s, fixed_array(r.x, add, r.norms, r.xb), pc, rows)
-        crd_rq_rows(s, fmt, r.xb, r.xq, r.xs, r.dim * rows)
+        crd_rq_rows(s, fmt, r.xb, r.xq, r.xs, r.dim * rows, rows)
     } elif (!kq_sb(fmt)) {
-        enc_cls_ar_rq_b(s, bufs, pc, rows)
+        if (rows > 1l && crd_rows_mma_takes(fmt, r.dim, 1l, uint(rows)) && ensure_cls_ar_rq_feed_b()) {   // the fused step writes the next site's feed beside its Q8_0 rows
+            enc_cls_ar_rq_feed_b(s, fixed_array(r.x, add, r.norms, r.xq, r.mmf_q, r.mmf_s, r.mmf_m, r.xs), pc, rows)
+            crd_feed_stands(r.xq, r.xs, r.dim, uint(rows), true)
+        } else {
+            enc_cls_ar_rq_b(s, bufs, pc, rows)
+        }
     } else {
         enc_cls_ar_rqk(s, bufs, pc, rows)
     }
@@ -1807,10 +1981,8 @@ def private crd_moe_act(r : CudRdec; var s : void?; L : CudLayer; gate, up, outq
         } else {
             enc_q8_actrq_b_cls(s, fixed_array(gate, up, outq, outs, r.moe_gb, r.moe_ub, r.moe_eidx), pca, rq_wgs(false, slot_elems))
         }
-    } elif (dkq) {
-        enc_q8k_actrq_cls(s, fixed_array(gate, up, outq, outs), pca, rq_wgs(true, slot_elems))
     } else {
-        enc_q8_actrq_cls(s, fixed_array(gate, up, outq, outs), pca, rq_wgs(false, slot_elems))
+        cud_actrq_enc(s, fixed_array(gate, up, outq, outs), dkq, pca, slot_elems)
     }
 }
 
@@ -1886,6 +2058,157 @@ def private crd_host_resume(r : CudRdec; var s : void?; L : CudLayer; l, nrows :
     crd_rq_rows(s, L.fnext, r.xb, r.xq, r.xs, dim * nrows)
 }
 
+//! -1: the driver's rule (`crd_moe_form`), which reads the experts the last step of the width touched
+var private g_crd_moe_fp4_rows = -1l
+
+//! The rows from which the N-row step's routed sites take the window's FP4 expert chain on a layer whose stacks ride it
+//! (0 = never, -1 = the driver's rule); the captured commands go, the next step records the asked form
+def set_cuda_moe_fp4_rows(rows : int64) {
+    return if (g_crd_moe_fp4_rows == rows)
+    crd_chain_settle()
+    g_crd_moe_fp4_rows = rows
+    if (g_crd != null) {
+        crd_graphs_drop(*g_crd)
+    }
+}
+
+var private g_crd_moe_tile_rows = -1l
+
+//! The rows from which the N-row step's routed sites take the window's f16-fed expert tiles on a layer whose stacks ride
+//! no FP4 chain (0 = never, -1 = the driver's rule); the captured commands go, the next step records the asked form
+def set_cuda_moe_tile_rows(rows : int64) {
+    return if (g_crd_moe_tile_rows == rows)
+    crd_chain_settle()
+    g_crd_moe_tile_rows = rows
+    if (g_crd != null) {
+        crd_graphs_drop(*g_crd)
+    }
+}
+
+//! A chain's break-even against a GEMV a pick, in the step's slots: the chain wins where slots >= a + b x d, `d` the distinct
+//! experts the picks touch, `b` a bucket's work in a pick's GEMVs, `a` the chain's fixed work a layer (the schedule, the gather,
+//! the feed) in the same unit - which grows as the stacks shrink (a pick's GEMV is cheaper, the fixed launches are not): `a`
+//! at a stack of `w` elements, scaled by (w / stack) ^ g under it. Measured on an RTX PRO 4500 (tok/s, chain against picks):
+//! the FP4 chain on gpt-oss-20b (2880 x 2880) - 4 experts over 16 slots 583 / 521 and over 8 slots 300 / 405, 14 over 32
+//! 521 / 533, 20 over 48 731 / 602 - and on the 35B NVFP4 (512 x 2048) - 8 over 64 790 / 873, 8 over 96 1082 / 1003, 69 over
+//! 128 824 / 978; the f16 tiles on gemma-4-26B (704 x 2816) - 8 over 64 660 / 725, 8 over 96 954 / 859, 27 over 128 740 / 881
+//! - and on the 35B Q4_K_M (512 x 2048) - 8 over 96 920 / 1000, 8 over 128 1142 / 1151
+struct private CrdWideCost {
+    a : float
+    b : float
+    w : float
+    g : float
+}
+
+let private CRD_WIDE_FP4 = CrdWideCost(a = 4.0, b = 2.0, w = 8294400.0, g = 1.34)
+let private CRD_WIDE_TILE = CrdWideCost(a = 20.0, b = 6.0, w = 1982464.0, g = 2.2)
+
+//! a knob's answer for `nrows` rows of a chain whose break-even is `cost`: its row count where a caller named one, else the
+//! rule over the experts `d` the last step of this width touched (every slot its own expert where none was counted)
+def private crd_wide_ask(knee, nrows, slots, d, stack : int64; cost : CrdWideCost) : bool {
+    return knee > 0l && nrows >= knee if (knee >= 0l)
+    let a = cost.a * pow(max(1.0, cost.w / float(max(stack, 1l))), cost.g)
+    return nrows > 1l && float(slots) >= a + cost.b * float(d)
+}
+
+//! the routed sites' form for the command of `nrows` rows about to run: the count the last wide step landed speaks for a
+//! step of the same slots, and with none every slot counts as its own expert (capped at the experts there are)
+def private crd_moe_form(var r : CudRdec; nrows : int64) {
+    r.wide_fp4 = false
+    r.wide_tile = false
+    return if (r.ne <= 0l || nrows <= 1l || r.share_host == null)
+    let slots = nrows * r.k
+    var d = min(slots, r.ne)
+    unsafe {
+        let w = reinterpret<uint?>(r.share_host)
+        if (int64(w[1]) == slots) {
+            d = int64(w[0])
+        }
+    }
+    r.wide_fp4 = crd_wide_ask(g_crd_moe_fp4_rows, nrows, slots, d, r.nfe * r.dim, CRD_WIDE_FP4)
+    r.wide_tile = crd_wide_ask(g_crd_moe_tile_rows, nrows, slots, d, r.nfe * r.dim, CRD_WIDE_TILE)
+}
+
+//! a routed layer's `nrows` rows take the window's expert chain - the FP4 one where its stacks ride it, else the f16-fed
+//! tiles - where the command's form asks it (`crd_moe_form`) and the window's planes hold its slots
+def private crd_moe_wide(r : CudRdec; L : CudLayer; nrows : int64) : bool
+    => nrows > 1l && (L.moe_mmq ? r.wide_fp4 : r.wide_tile) && (L.moe_mmq ? r.pf_mmq_rows : r.pf_nk) >= nrows * r.k
+
+//! the last counted step's expert sharing and the routed geometry it reads against: the distinct experts of the probe layer's
+//! picks, their slots, the form the last command took, and the experts, picks a row, expert width and row width
+def cud_rdec_moe_share : tuple<distinct : int64; slots : int64; wide : bool; ne : int64; k : int64; nfe : int64; dim : int64> {
+    return (distinct = 0l, slots = 0l, wide = false, ne = 0l, k = 0l, nfe = 0l, dim = 0l) if (g_crd == null || g_crd.share_host == null)
+    let r & = unsafe(*g_crd)
+    unsafe {
+        let w = reinterpret<uint?>(r.share_host)
+        return (distinct = int64(w[0]), slots = int64(w[1]), wide = r.wide_fp4 || r.wide_tile, ne = r.ne, k = r.k, nfe = r.nfe, dim = r.dim)
+    }
+}
+
+//! the routed tail's expert sites on the window's expert chain (`crd_window_moe`'s pieces over the step's own rows): the
+//! picks scheduled into expert buckets, the normed rows gathered a bucket row - re-fed as the stacks' FP4 rows, or as the
+//! f16 tiles' halves - the gate and up tiles, the activation, the down tiles, then the step's combine reading a slot's
+//! bucket row through the schedule's inverse map - an expert's rows leave memory once for every row that picked it, on the
+//! tensor cores
+def private crd_moe_tail_sched(r : CudRdec; var s : void?; L : CudLayer; nrows : int64) {
+    let dim = r.dim
+    let nfe = r.nfe
+    let k = r.k
+    let nk = nrows * k
+    let bounds = crd_moe_bounds(r, nk)
+    let map_m_gu = MOE_SCHED_MAP_OFF + bounds.gu
+    let map_m_dn = MOE_SCHED_MAP_OFF + bounds.dn
+    var pcs = gk_sched_args(nk, r.ne, nfe, dim, 128u, false, bounds, L.be1, L.be3, L.be2, L.fe1, L.fe3, L.fe2)
+    cud_moe_sched_enc(r.ne, s, fixed_array(r.moe_eidx, r.pf_minv, r.pf_msch1, r.pf_msch3, r.pf_msch2, r.pf_bex), pcs)
+    var mdn = r.pf_mmdn
+    if (L.moe_mmq) {
+        var pcgp = GatherArgs(n = uint(dim), k = uint(k), r0 = 0u, r1 = uint(nk))
+        enc_moe_gather_f32_cls(s, fixed_array(r.xb, r.pf_minv, r.pf_mxf), pcgp, nk)
+        let nv4 = L.fe1 == int(KqFmt.nv4)
+        var pcx = Fp4RowsArgs(k = uint(dim), inbase = 0u)
+        var xin = fixed_array(r.pf_mxf, r.pf_mx4q, r.pf_mx4s, r.pf_mxrs)
+        if (nv4) {
+            enc_fp4_rows(s, xin, pcx, nk + TILE_READ_SLACK)
+        } else {
+            enc_mx4_rows(s, xin, pcx, nk + TILE_READ_SLACK)
+        }
+        crd_moe_mmq(s, L.fe1, r.pf_msch1, MOE_SCHED_MAP_OFF, map_m_gu, bounds.gu, bounds.mgu, r.pf_mx4q, r.pf_mx4s, r.pf_mxrs, r.pf_mmy1, dim, nfe)
+        crd_moe_mmq(s, L.fe3, r.pf_msch3, MOE_SCHED_MAP_OFF, map_m_gu, bounds.gu, bounds.mgu, r.pf_mx4q, r.pf_mx4s, r.pf_mxrs, r.pf_mmy2, dim, nfe)
+        var pch = Fp4RowsArgs(k = uint(nfe), inbase = 0u, act = act_code(r.act_oai, r.is_gelu), gboff = uint(L.router_slot * r.ne * nfe))
+        var hin = fixed_array(r.pf_mmy1, r.pf_mmy2, r.pf_mh4q, r.pf_mh4s, r.pf_mhrs)
+        if (nv4) {
+            enc_fp4_actrows(s, hin, pch, nk)
+        } elif (r.exps_bias) {
+            enc_mx4_actrows_b(s, fixed_array(r.pf_mmy1, r.pf_mmy2, r.pf_mh4q, r.pf_mh4s, r.pf_mhrs, r.moe_gb, r.moe_ub, r.pf_bex), pch, nk)
+        } else {
+            enc_mx4_actrows(s, hin, pch, nk)
+        }
+        crd_moe_mmq(s, L.fe2, r.pf_msch2, MOE_SCHED_MAP_OFF, map_m_dn, bounds.dn, bounds.mdn, r.pf_mh4q, r.pf_mh4s, r.pf_mhrs, r.pf_mmdn, nfe, dim)
+    } else {   // the f16-fed tiles: the bucket rows as halves, each stack's m and s pieces, the activation into the down feed
+        var pcgt = GatherArgs(n = uint(dim), k = uint(k), r0 = 0u, r1 = uint(nk))
+        enc_moe_gather_f16_cls(s, fixed_array(r.xb, r.pf_minv, r.pf_mxg), pcgt, nk)
+        crd_moe_tiles(s, L.fe1, r.pf_msch1, r.pf_mxg, r.pf_my1, dim, nfe, MOE_SCHED_MAP_OFF, map_m_gu, bounds.gu, bounds.mgu)
+        crd_moe_tiles(s, L.fe3, r.pf_msch3, r.pf_mxg, r.pf_my2, dim, nfe, MOE_SCHED_MAP_OFF, map_m_gu, bounds.gu, bounds.mgu)
+        var pca = ActArgs(nelem = uint(nk * nfe), act = act_code(r.act_oai, r.is_gelu), nblk = uint(nk * nfe / kq_unit(false)), elem0 = 0u,
+            bias_on = r.exps_bias ? 1u : 0u, gboff = uint(L.router_slot * r.ne * nfe), brow = uint(nfe))
+        if (r.exps_bias) {
+            enc_actf16_b_cls(s, fixed_array(r.pf_my1, r.pf_my2, r.pf_mhf, r.moe_gb, r.moe_ub, r.pf_bex), pca, rq_wgs(false, nk * nfe))
+        } else {
+            enc_actf16_cls(s, fixed_array(r.pf_my1, r.pf_my2, r.pf_mhf), pca, rq_wgs(false, nk * nfe))
+        }
+        crd_moe_tiles(s, L.fe2, r.pf_msch2, r.pf_mhf, r.pf_mdn, nfe, dim, MOE_SCHED_MAP_OFF, map_m_dn, bounds.dn, bounds.mdn)
+        mdn = r.pf_mdn
+    }
+    if (L.moe_g4) {
+        var pcg = crd_g4_comb_args(r, L)
+        enc_cls_ar_comb_g4(s, fixed_array(r.x, r.pf_minv, r.moe_w, mdn, r.ffnout, r.norms, r.xb), pcg, nrows)
+    } else {
+        var pc14 = crd_comb_args(r, L)
+        enc_cls_ar_comb(s, fixed_array(r.x, r.ffnout, r.norms, r.xb, r.pf_minv, r.moe_w, mdn, r.moe_dlog, r.moe_db, r.moe_eidx), pc14, nrows)
+    }
+    crd_rq_rows(s, L.fnext, r.xb, r.xq, r.xs, dim * nrows)
+}
+
 [arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#resident-moe-token")]
 def private crd_moe_tail(r : CudRdec; var s : void?; L : CudLayer; nrows : int64) {
     let dim = r.dim
@@ -1909,6 +2232,14 @@ def private crd_moe_tail(r : CudRdec; var s : void?; L : CudLayer; nrows : int64
     crd_router_rows(r, s, L, nrows)
     var pct = crd_topk_args(r, L)
     cud_topk_n_enc(r.ne, s, fixed_array(r.moe_dlog, r.moe_meta1, r.moe_meta3, r.moe_meta2, r.moe_w, r.moe_ds, r.moe_rb, r.moe_eidx), pct, nrows)
+    if (nrows > 1l && L.router_slot == r.n_moe / 2l && r.share_dev != 0ul && k * nrows <= int64(MOE_SHARE_SLOTS) && ensure_moe_share_cls()) {
+        var pcsh = MoeShareArgs(nslots = uint(k * nrows))   // the middle routed layer speaks for the step: how far its rows share experts
+        enc_moe_share_cls(s, fixed_array(r.moe_eidx, r.share_dev), pcsh, 1l)
+    }
+    if (crd_moe_wide(r, L, nrows)) {
+        crd_moe_tail_sched(r, s, L, nrows)
+        return
+    }
     if (nrows == 1l && L.egu) {   // the one-row step: the gate and up dots, the act and its requant in one dispatch, a workgroup an activated Q8_0 block
         let a = g_cud_arenas[L.fe1]
         var pcg = GemvArgs(n = uint(dim), d = uint(nfe), nreg = uint(k), ybase = 0u, act = act_code(r.act_oai, r.is_gelu),
@@ -1935,7 +2266,7 @@ def private crd_ffn_hidden(r : CudRdec; var s : void?; L : CudLayer; nrows : int
     let dim = r.dim
     let act = L.gelu ? ACT_GELU : ACT_SILU
     let nr = uint(nrows)
-    if (L.gate_up_fused) {
+    if (L.gate_up_fused && !crd_rows_mma_takes(L.f1, dim, 1l, nr)) {   // the fused pair below the leaf's rows: at them the gate and the up each take the leaf over one feed
         let a1 = g_cud_arenas[L.f1]
         var pcgu = GuNArgs(n = uint(dim), d = uint(L.hid), gblk = uint(L.b1), ublk = uint(L.b3), act = act, ncols = nr)
         cud_gu_n_enc(s, fixed_array(a1.wq, a1.ws, a1.wq, a1.ws, r.xq, r.xs, r.hq, r.hs_), pcgu, L.hid / 32l)
@@ -1954,10 +2285,16 @@ def private crd_ffn_hidden(r : CudRdec; var s : void?; L : CudLayer; nrows : int
         }
         let kq2 = kq_sb(L.f2)
         var pca2 = ActArgs(nelem = uint(L.hid * nrows), act = act, nblk = uint(L.hid * nrows / kq_unit(kq2)), elem0 = 0u, ubase = merged ? uint(L.hid) : 0u)
-        if (kq2) {
-            enc_q8k_actrq_cls(s, fixed_array(r.gate, up, r.hq, r.hs_), pca2, rq_wgs(true, L.hid * nrows))
+        if (!merged && crd_rows_mma_takes(L.f2, L.hid, 1l, nr) && (kq2 ? ensure_q8k_actrq_feed_cls() : ensure_q8_actrq_feed_cls())) {   // the act's launch writes the down site's feed
+            pca2.feed_units = uint(L.hid / kq_unit(kq2))
+            if (kq2) {
+                enc_q8k_actrq_feed_cls(s, fixed_array(r.gate, up, r.hq, r.hs_, r.mmf_q, r.mmf_s, r.mmf_m), pca2, rq_wgs(true, L.hid * nrows))
+            } else {
+                enc_q8_actrq_feed_cls(s, fixed_array(r.gate, up, r.hq, r.hs_, r.mmf_q, r.mmf_s, r.mmf_m), pca2, rq_wgs(false, L.hid * nrows))
+            }
+            crd_feed_stands(r.hq, r.hs_, L.hid, nr, !kq2)
         } else {
-            enc_q8_actrq_cls(s, fixed_array(r.gate, up, r.hq, r.hs_), pca2, rq_wgs(false, L.hid * nrows))
+            cud_actrq_enc(s, fixed_array(r.gate, up, r.hq, r.hs_), kq2, pca2, L.hid * nrows)
         }
     }
 }
@@ -2116,10 +2453,33 @@ def private crd_tq4_unrot(r : CudRdec; var s : void?; y, q : uint64; hs, rows, o
     enc_kv_tq4_unrot_cls(s, fixed_array(y, q, r.tq4_signs), pcu, r.n_heads * rows)
 }
 
-//! a recurrent layer's head over `nrows` rows; under `seq` the fused step runs a row at a time (the same-slab verify's rows share one
-//! slot), and under `roll` each row's step but the last is followed by the slot's copy into the rollback row
-[arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#hybrid-token-command"), arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-verify-command")]
-def private crd_dn_head(r : CudRdec; var s : void?; L : CudLayer; nrows : int64; seq : bool = false; roll : bool = false) {
+//! a recurrent layer's beta and alpha rows over `nrows` rows into the layer's smalls: the f32 planes' router over the stored
+//! normed rows, or the plane GEMVs, a site of the other feed class requanting the stored rows first (`feed_fmt` the class in the feed)
+def private crd_dn_ba(r : CudRdec; var s : void?; L : CudLayer; nrows : int64; feed_fmt : int) {
+    let dim = r.dim
+    let nvh = r.dn_nvh
+    let nr = uint(nrows)
+    let st0 & = unsafe(L.dn[0])
+    if (r.dn_ba_f32) {
+        var pcb = GkRouterArgs(ne = uint(2l * nvh), dim = uint(dim), woff = uint(L.ba_off), obase = uint(DN_SM_BETA),
+            ne_split = uint(nvh), obase_split = uint(DN_SM_G), ncols = nr)
+        cud_router_enc_cols(false, s, fixed_array(r.dn_ba, r.xb, st0.smalls_dev, r.norms), pcb, 2l * nvh)
+        return
+    }
+    if (kq_sb(L.fbeta) != kq_sb(feed_fmt)) {
+        crd_rq_rows(s, L.fbeta, r.xb, r.xq, r.xs, dim * nrows)
+    }
+    crd_gemv(s, L.fbeta, L.regs_dnbeta, r.xq, r.xs, st0.smalls_dev, dim, nvh, uint(DN_SM_BETA), 1l, nr, uint(nvh))
+    if (kq_sb(L.falpha) != kq_sb(L.fbeta)) {
+        crd_rq_rows(s, L.falpha, r.xb, r.xq, r.xs, dim * nrows)
+    }
+    crd_gemv(s, L.falpha, L.regs_dnalpha, r.xq, r.xs, st0.smalls_dev, dim, nvh, uint(DN_SM_G), 1l, nr, uint(nvh))
+}
+
+//! a recurrent layer's head over `nrows` rows, a row a slot: the qkv and z GEMVs into one projection row a row, the beta and
+//! alpha rows, the fused step a row a workgroup set, the out GEMV
+[arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#hybrid-token-command")]
+def private crd_dn_head(r : CudRdec; var s : void?; L : CudLayer; nrows : int64) {
     let dim = r.dim
     let cd = r.dn_cd
     let di = r.dn_di
@@ -2137,54 +2497,92 @@ def private crd_dn_head(r : CudRdec; var s : void?; L : CudLayer; nrows : int64;
         }
         crd_gemv(s, L.fz, L.regs_dnz, r.xq, r.xs, r.dn_proj, dim, di, uint(cd), 1l, nr, uint(cd + di))
     }
-    if (r.dn_ba_f32) {
-        var pcb = GkRouterArgs(ne = uint(2l * nvh), dim = uint(dim), woff = uint(L.ba_off), obase = uint(DN_SM_BETA),
-            ne_split = uint(nvh), obase_split = uint(DN_SM_G), ncols = nr)
-        cud_router_enc_cols(false, s, fixed_array(r.dn_ba, r.xb, st0.smalls_dev, r.norms), pcb, 2l * nvh)
-    } else {
-        if (kq_sb(L.fbeta) != kq_sb(feed_fmt)) {
-            crd_rq_rows(s, L.fbeta, r.xb, r.xq, r.xs, dim * nrows)
-        }
-        crd_gemv(s, L.fbeta, L.regs_dnbeta, r.xq, r.xs, st0.smalls_dev, dim, nvh, uint(DN_SM_BETA), 1l, nr, uint(nvh))
-        if (kq_sb(L.falpha) != kq_sb(L.fbeta)) {
-            crd_rq_rows(s, L.falpha, r.xb, r.xq, r.xs, dim * nrows)
-        }
-        crd_gemv(s, L.falpha, L.regs_dnalpha, r.xq, r.xs, st0.smalls_dev, dim, nvh, uint(DN_SM_G), 1l, nr, uint(nvh))
-    }
+    crd_dn_ba(r, s, L, nrows, feed_fmt)
     var pcd = DnStepArgs(cd = uint(cd), kd = uint(r.dn_kd), nkh = uint(r.dn_nkh), ds = uint(r.dn_ds), dconv = uint(r.dn_dconv),
         beta_off = uint(DN_SM_BETA), g_off = uint(DN_SM_G), taps_off = uint(DN_SM_TAPS), wnorm_off = uint(DN_SM_WNORM),
         a_off = uint(DN_SM_A), dt_off = uint(DN_SM_DT), hist_off = uint(DN_SM_HIST), eps = r.eps, qscale = 1.0 / sqrt(float(r.dn_ds)),
         out_f32 = kq_sb(L.fout) ? 1u : 0u, beta_row_stride = uint(nvh), row0 = 0u)
     var step_bufs = fixed_array(r.dn_proj, st0.state_dev, st0.smalls_dev, r.dn_os, r.dn_oq, r.tok, r.dn_of)
-    if (seq) {
-        let st & = unsafe(L.dn[r.region])
-        for (i in range64(nrows)) {
-            pcd.row0 = uint(i)
-            if (r.dn_zsig) {
-                enc_dn_step_sig_cls(s, step_bufs, pcd, nvh)
-            } else {
-                enc_dn_step_cls(s, step_bufs, pcd, nvh)
-            }
-            if (roll && i + 1l < nrows) {   // scratch row i holds the state the region would hold had the round stepped rows 0 .. i alone
-                let dst = r.roll_dev + uint64(i * r.roll_row_bytes + L.roll_off)
-                cuda_memcpy_dtod(dst, st.state_dev + uint64(st.state_byte_off), uint64(st.slot_state_bytes), s)
-                cuda_memcpy_dtod(dst + uint64(st.slot_state_bytes), st.smalls_dev + uint64(st.hist_float_off * 4l), uint64(2l * st.ring_image_bytes), s)
-            }
-        }
-    } elif (r.dn_zsig) {
+    if (r.dn_zsig) {
         enc_dn_step_sig_cls(s, step_bufs, pcd, nvh * nrows)
     } else {
         enc_dn_step_cls(s, step_bufs, pcd, nvh * nrows)
     }
     if (kq_sb(L.fout)) {
-        crd_rq_rows(s, L.fout, r.dn_of, r.dn_oq, r.dn_os, di * nrows)
+        crd_rq_rows(s, L.fout, r.dn_of, r.dn_oq, r.dn_os, di * nrows, nrows)   // the rows' requant writes the out site's feed where it takes the leaf
     }
     crd_gemv(s, L.fout, L.regs_dnout, r.dn_oq, r.dn_os, r.xb2, di, dim, 0u, 1l, nr, uint(dim))
 }
 
-def private crd_rq_rows(var s : void?; consumer_fmt : int; src, outq, outs : uint64; elems : int64) {
+//! the scan over `nrows` conv rows at `conv` against the region's slot `st` of layer `L`, the raw o rows into `dnv_o`: the
+//! chunked form where it serves; under `no_state` the slot's state stays as found
+def private crd_dn_scan_rows(r : CudRdec; var s : void?; L : CudLayer; st : CudDnSlot; conv : uint64; nrows : int64; no_state : bool) {
+    var pcs = DnScanArgs(npos = uint(nrows), cd = uint(r.dn_cd), kd = uint(r.dn_kd), nvh = uint(r.dn_nvh), nkh = uint(r.dn_nkh), ds = uint(r.dn_ds),
+        beta_off = uint(DN_SM_BETA), g_off = uint(DN_SM_G), a_off = uint(DN_SM_A), dt_off = uint(DN_SM_DT),
+        o_off = uint(DN_O_OFF), di = uint(r.dn_di), region_state_base = uint(st.state_byte_off / 4l), row0 = 0u, no_state = no_state ? 1u : 0u)
+    var bufs = fixed_array(conv, st.state_dev, L.dn[0].smalls_dev, r.dnv_o, r.dummy, r.dummy)
+    if (crd_dn_chunk_on()) {
+        enc_dn_scan_chunk_cls(s, bufs, pcs, dn_scan_chunk_wgs(r.dn_nvh, r.dn_ds, DNC_V))
+    } else {
+        enc_dn_scan_cls(s, bufs, pcs, dn_scan_wgs(r.dn_nvh, r.dn_ds))
+    }
+}
+
+//! a recurrent layer's head over `nrows` rows of ONE slot (the same-slab verify), on the window's recurrent kernels: the qkv
+//! rows and the z rows projected, the beta and alpha rows, then the conv off the slot's ring image, the scan with the slot's
+//! state left as found, the gated out-norm, and the out GEMV over the o rows' feed. The layer's projected and convolved rows
+//! stay in its rows of the verify's planes: the rows the round keeps are scanned again into the slot (`crd_dn_commit`)
+[arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-verify-command")]
+def private crd_dn_head_rows(r : CudRdec; var s : void?; L : CudLayer; nrows : int64) {
+    let dim = r.dim
+    let cd = r.dn_cd
+    let di = r.dn_di
+    let nr = uint(nrows)
+    let st & = unsafe(L.dn[r.region])
+    let smalls = L.dn[0].smalls_dev
+    let raw = r.roll_dev + uint64(L.roll_off)
+    let conv = r.roll_conv + uint64(L.roll_off)
+    var feed_fmt = L.fqkv
+    crd_gemv(s, L.fqkv, L.regs_dnqkv, r.xq, r.xs, raw, dim, cd, 0u, 1l, nr, uint(cd))
+    if (kq_sb(L.fz) != kq_sb(feed_fmt)) {
+        crd_rq_rows(s, L.fz, r.xb, r.xq, r.xs, dim * nrows)
+        feed_fmt = L.fz
+    }
+    crd_gemv(s, L.fz, L.regs_dnz, r.xq, r.xs, r.dnv_z, dim, di, 0u, 1l, nr, uint(di))
+    crd_dn_ba(r, s, L, nrows, feed_fmt)
+    let img = uint(st.ring_image_bytes / 4l)
+    var pcc = GkDnConvArgs(npos = nr, cd = uint(cd), kd = uint(r.dn_kd), ds = uint(r.dn_ds), dconv = uint(r.dn_dconv),
+        hist_mode = 1u, taps_off = uint(DN_SM_TAPS), hist_off = uint(st.hist_float_off) + uint(r.dn_parity[r.region]) * img,
+        eps = r.eps, qscale = 1.0 / sqrt(float(r.dn_ds)), row0 = 0u)
+    enc_dn_conv_cls(s, fixed_array(raw, conv, smalls), pcc, dn_conv_wgs(cd, nrows))
+    crd_dn_scan_rows(r, s, L, st, conv, nrows, true)
+    var pc3 = GkDnGateArgs(nvh = uint(r.dn_nvh), di = uint(di), ds = uint(r.dn_ds), o_off = uint(DN_O_OFF), wnorm_off = uint(DN_SM_WNORM), eps = r.eps)
+    if (r.dn_zsig) {
+        enc_dn_scan_p3_sig_cls(s, fixed_array(r.dnv_z, r.dnv_o, smalls), pc3, nrows)
+    } else {
+        enc_dn_scan_p3_cls(s, fixed_array(r.dnv_z, r.dnv_o, smalls), pc3, nrows)
+    }
+    crd_rq_rows(s, L.fout, r.dnv_o, r.dn_oq, r.dn_os, di * nrows, nrows)
+    crd_gemv(s, L.fout, L.regs_dnout, r.dn_oq, r.dn_os, r.xb2, di, dim, 0u, 1l, nr, uint(dim))
+}
+
+//! `elems` floats of `src` requantized for a site of `consumer_fmt`; where the caller names the token rows (`rows`) and that
+//! site takes the rows tensor leaf, the same launch writes the leaf's feed and it stands for the sites that follow
+def private crd_rq_rows(var s : void?; consumer_fmt : int; src, outq, outs : uint64; elems : int64; rows : int64 = 0l) {
     let kq = kq_sb(consumer_fmt)
     var pcq = RqArgs(inbase = 0u, nblk = uint(elems / kq_unit(kq)), lo = 0.0, hi = 0.0)
+    let n = rows > 0l ? elems / rows : 0l
+    if (rows > 0l && crd_rows_mma_takes(consumer_fmt, n, 1l, uint(rows)) && (kq ? ensure_cls_q8k_rq_feed() : ensure_cls_dn_rq_feed())) {
+        let r & = unsafe(*g_crd)
+        pcq.feed_units = uint(n / kq_unit(kq))
+        if (kq) {
+            enc_cls_q8k_rq_feed(s, fixed_array(src, outq, outs, r.mmf_q, r.mmf_s, r.mmf_m), pcq, rq_wgs(true, elems))
+        } else {
+            enc_cls_dn_rq_feed(s, fixed_array(src, outq, outs, r.mmf_q, r.mmf_s, r.mmf_m), pcq, rq_wgs(false, elems))
+        }
+        crd_feed_stands(outq, outs, n, uint(rows), !kq)
+        return
+    }
     if (kq) {
         enc_cls_q8k_rq(s, fixed_array(src, outq, outs), pcq, rq_wgs(true, elems))
     } else {
@@ -2321,7 +2719,7 @@ def private crd_land_hid(r : CudRdec; var s : void?; nrows : int64) {
 //! attention's one-piece form; under `verify` the rows are one stream's same-slab rows - a recurrent layer steps them one at a
 //! time with the rollback copies between, the head re-warms its rows after the picks, the post-norm rows land beside the logits
 [arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command"), arch(at="../ARCHITECTURE_GPU_SHARED_ATTN.md#vk-decode-attn-split"), arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-verify-command")]
-def private crd_chain(var r : CudRdec; seg, nrows : int64; logits_on, gathered, unsplit, verify : bool) {
+def private crd_chain(var r : CudRdec; seg, nrows : int64; logits_on, gathered, unsplit, verify, vhead : bool) {
     var s = g_cud.stream
     let dim = r.dim
     let l0 = seg == 0l ? 0l : r.seg_layer[seg - 1l] + 1l
@@ -2334,12 +2732,12 @@ def private crd_chain(var r : CudRdec; seg, nrows : int64; logits_on, gathered, 
         } else {
             cud_words(s, r.in_dev + uint64((int64(CRD_IN_HDR_WORDS) + r.cos_elems * nrows) * 4l), r.x, dim * nrows)
         }
-        if (verify) {
+        if (vhead) {
             crd_head_embeds(r, s, nrows, gathered)   // the head's halves before layer 0 overwrites nothing of theirs: hemb is the head's own plane
             cud_words(s, r.in_dev + uint64(crd_in_hrow_word(r) * 4l), r.hsrc, dim)   // row 0: the pre-draft carry the host uploads
         }
         if (r.ple > 0l) {
-            if (gathered && !verify && crd_side_gather_on(r)) {   // each row's side row off the per-layer table at its token id
+            if (gathered && crd_side_gather_on(r)) {   // each row's side row off the per-layer table at its token id (a verify's rows too: its ids sit in the same words)
                 crd_side_gather(r, s, r.tok + uint64(CRD_IN_ID_WORD * 4), r.ple_in_dev, r.ple_dev, nrows)
             } else {
                 cud_words(s, r.ple_in_dev, r.ple_dev, r.ple_all * nrows)
@@ -2353,25 +2751,30 @@ def private crd_chain(var r : CudRdec; seg, nrows : int64; logits_on, gathered, 
     } else {
         crd_host_resume(r, s, r.layers[l0 - 1l], l0 - 1l, nrows)
     }
-    let roll = verify && r.roll_dev != 0ul
     for (l in range64(l0, seg_host_layer < 0l ? r.n_layers : seg_host_layer + 1l)) {
         let L & = unsafe(r.layers[l])
         if (L.recurrent) {
-            crd_dn_head(r, s, L, nrows, verify, roll)
+            if (verify) {
+                crd_dn_head_rows(r, s, L, nrows)
+            } else {
+                crd_dn_head(r, s, L, nrows)
+            }
             var pcr = GkAddRmsArgs(dim = uint(dim), add_on = 1u, woff = uint(L.n_ffn), eps = r.eps, ascale = 1.0)
             crd_ar_rq(r, s, crd_ffn_feed_fmt(L), r.xb2, pcr, nrows, crd_ffn_storex(L))
             crd_layer_tail(r, s, L, nrows)
+            crd_cap(r, s, l, r.x, r.cap_host, CRD_NB, 0l, nrows)
             continue
         }
         crd_attn_layer(r, s, l, L, nrows, unsplit, r.tok)
         if (L.ple) {
             crd_ple_block(r, s, l, L, nrows)
         }
+        crd_cap(r, s, l, r.x, r.cap_host, CRD_NB, 0l, nrows)
     }
     return if (seg_host_layer >= 0l)
     crd_cls_tail(r, s, nrows, logits_on)
     crd_land_hid(r, s, nrows)
-    if (verify) {
+    if (vhead) {
         if (nrows > 1l) {   // head row i's carry half is the trunk's post-norm row i - 1
             cuda_memcpy_dtod(r.hsrc + uint64(dim * 4l), r.xb, uint64((nrows - 1l) * dim * 4l), s)
         }
@@ -2403,6 +2806,7 @@ enum private CrdCmd {
     verify
     draft
     hot      //! the hot expert pool's hit chain, a graph a (layer, region count, rows)
+    verify_plain   //! the same-slab verify with no head rows: a block drafter's round
 }
 
 //! a captured graph's key: the command, its segment, its row count, the region (a hybrid's verify bakes the region's slot into its
@@ -2412,18 +2816,23 @@ def private crd_graph_key(cmd : CrdCmd; seg, nrows, region : int64; logits_on, g
     return (int(cmd) << 26) | (int(seg) << 18) | (int(region) << 12) | (int(nrows) << 4) | (logits_on ? 1 : 0) | (gathered ? 2 : 0) | (unsplit ? 4 : 0)
 }
 
+let private CRD_KEY_WIDE_FP4 = 1 << 29
+let private CRD_KEY_WIDE_TILE = 1 << 30
+
 def private crd_run_cmd(var r : CudRdec; cmd : CrdCmd; seg, nrows : int64; logits_on, gathered, unsplit : bool) {
+    g_crd_relay.serial = -1l   // a command records its own feeds: no feed stands across two commands
     if (cmd == CrdCmd.draft) {
         crd_draft_chain(r, logits_on, gathered, unsplit)
     } else {
-        crd_chain(r, seg, nrows, logits_on, gathered, unsplit, cmd == CrdCmd.verify)
+        crd_chain(r, seg, nrows, logits_on, gathered, unsplit, cmd == CrdCmd.verify || cmd == CrdCmd.verify_plain, cmd == CrdCmd.verify)
     }
 }
 
 //! the command's segment as a graph, captured on its key's first replay
 def private crd_ensure_graph(var r : CudRdec; cmd : CrdCmd; seg, nrows : int64; logits_on, gathered, unsplit : bool) : int {
-    let region = (cmd == CrdCmd.verify && r.hybrid) ? r.region : 0l
-    let key = crd_graph_key(cmd, seg, nrows, region, logits_on, gathered, unsplit)
+    let slab = (cmd == CrdCmd.verify || cmd == CrdCmd.verify_plain) && r.hybrid   //! a hybrid's verify bakes its region's slot and the ring image its conv reads
+    let key = (crd_graph_key(cmd, seg, nrows, slab ? r.region : 0l, logits_on, gathered, unsplit) | (slab ? r.dn_parity[r.region] << 3 : 0)
+        | (r.wide_fp4 ? CRD_KEY_WIDE_FP4 : 0) | (r.wide_tile ? CRD_KEY_WIDE_TILE : 0))   //! the routed sites' form is the command's text
     return key if (key_exists(r.graphs, key))
     let g = cuda_graph_capture(g_cud.stream) {
         crd_run_cmd(r, cmd, seg, nrows, logits_on, gathered, unsplit)
@@ -2450,7 +2859,7 @@ def private crd_segments_setup(var r : CudRdec) {
 //! one segment launched as its graph (or run plainly on the driver's first run, so every kernel loads before a capture) and waited -
 //! or, under the greedy chain (`wait` off), left running for the chained step to queue behind
 def private crd_launch_seg(var r : CudRdec; cmd : CrdCmd; seg, nrows : int64; logits_on, gathered, unsplit : bool; wait : bool = true) {
-    if (r.token_steps == 0l) {
+    if (r.token_steps == 0l || cud_launch_timing_on()) {
         crd_run_cmd(r, cmd, seg, nrows, logits_on, gathered, unsplit)
     } else {
         let key = crd_ensure_graph(r, cmd, seg, nrows, logits_on, gathered, unsplit)
@@ -2474,6 +2883,7 @@ def private crd_launch(var r : CudRdec; cmd : CrdCmd; nrows : int64; logits_on, 
         crd_segments_setup(r)
     }
     let nseg = cmd == CrdCmd.draft ? 1l : r.nseg
+    crd_moe_form(r, cmd == CrdCmd.draft ? 1l : nrows)
     let selected = r.sel_ask && r.sel_ask_rows == nrows   // the selection stands in for the rows' logits: the command lands the picks alone
     r.ch.landed = 0
     for (seg in range64(nseg)) {
@@ -2543,7 +2953,7 @@ def cud_rdec_sel_land_rows(row0, nrows : int64; var dst : array<float>) {
 //! the one-row step, each row's ring image the one the row before it wrote, the last row's logits landed
 [arch(at="../ARCHITECTURE_GPU_VULKAN_WINDOW.md#vk-prefill-peel")]
 def cud_rdec_token_seq(x : array<float>; cossin : array<float>; pos, nrows : int64; var logits : array<float>) {
-    crd_chain_settle()
+    crd_state_settle()
     assert(g_crd != null && g_crd.ready, "cud_rdec_token_seq before prepare/set_cls")
     var r & = unsafe(*g_crd)
     verify(nrows >= 2l && nrows <= r.nb && long_length(x) >= r.dim * nrows && long_length(cossin) >= r.cos_elems * nrows && long_length(logits) >= r.vocab,
@@ -2629,6 +3039,62 @@ def cud_rdec_land_carry(row : int64; var dst : array<float>) {
     }
 }
 
+//! The trunk classifier over `nrows` rows of a feed in its plane's requant (`cud_rdec_rq_rows` under `cud_rdec_cls_fmt`) into `y`,
+//! [nrows][vocab], on the caller's stream: a dependant's launch - the block drafter's draft rows
+def cud_rdec_cls_rows(var s : void?; xq, xs, y : uint64; nrows : int64) {
+    let r & = unsafe(*g_crd)
+    crd_gemv(s, r.cls_fmt, r.cls_regs, xq, xs, y, r.dim, r.vocab, 0u, 1l, uint(nrows), uint(r.vocab))
+}
+
+//! the trunk classifier plane's format
+def cud_rdec_cls_fmt : int => g_crd.cls_fmt
+
+//! `elems` floats of `src` requantized into the feed a plane of format `fmt` reads, on the caller's stream
+def cud_rdec_rq_rows(var s : void?; fmt : int; src, outq, outs : uint64; elems : int64; rows : int64 = 0l) {
+    crd_rq_rows(s, fmt, src, outq, outs, elems, rows)
+}
+
+//! The block drafter's capture rows armed for the trunk layers `layers` (empty = off): the commands copy each one's output rows to
+//! a pinned host block as the layer closes, and the captured graphs go so the next step re-captures with the copies. False where
+//! the driver cannot capture a layer - a host cut or a hyper-connection chain closes its residual elsewhere
+//! (`RdecBlockCapsArmFn`); a per-layer-embedding layer's rows are captured past its branch's step
+[cold_path]
+def cud_rdec_block_caps_arm(layers : array<int64>) : bool {
+    crd_chain_settle()
+    return false if (g_crd == null || !g_crd.ready)
+    var r & = unsafe(*g_crd)
+    crd_caps_free(r)
+    crd_graphs_drop(r)
+    return true if (empty(layers))
+    let why = (r.experts_host ? "the routed experts run on the host, which cuts a layer's residual off the device"
+        : (rdec_caps_slots(layers, r.n_layers, r.cap_slots) ? "" : "a capture layer is off the trunk"))
+    if (!empty(why)) {
+        rdec_caps_decline_say("cuda", long_length(layers), why)
+        return false
+    }
+    let cb = cuda_mem_alloc_host_mapped(uint64(long_length(layers) * CRD_NB * r.dim * 4l))
+    if (cb.host == null) {
+        r.cap_slots |> clear()
+        rdec_caps_decline_say("cuda", long_length(layers), "the pinned host block for the rows did not allocate ({cuda_last_error()})")
+        return false
+    }
+    r.cap_host = cb.host
+    r.cap_n = long_length(layers)
+    return true
+}
+
+//! The capture rows `row0 .. row0 + n - 1` of the last token or verify command (`window` false: its rows) or prefill call
+//! (`window` true: the call's rows, the segments back to back) into `img`, [row][slot][dim] (`RdecBlockCapsRowsFn`)
+def cud_rdec_block_caps_rows(window : bool; row0, n : int64; var img : array<float>) {
+    crd_chain_settle()
+    assert(g_crd != null && g_crd.cap_n > 0l, "cud_rdec_block_caps_rows on a driver with no capture armed")
+    let r & = unsafe(*g_crd)
+    let stride = window ? r.cap_win_rows : CRD_NB
+    let host = window ? r.cap_win_host : r.cap_host
+    assert(row0 >= 0l && row0 + n <= stride && long_length(img) >= n * r.cap_n * r.dim, "cud_rdec_block_caps_rows: the rows are past the captured rows, or the image is short of them")
+    rdec_caps_unpack(host, stride, r.cap_n, r.dim, row0, n, img)
+}
+
 //! the head rows' token blocks and rope rows into the in block's head slots: head row i at position `pos0 + i` of the selected region
 def private crd_stage_head_rows(r : CudRdec; hcos : array<float>; pos0, nrows : int64) {
     unsafe {
@@ -2685,6 +3151,9 @@ def cud_rdec_verifies : int64 => g_crd != null ? g_crd.verifies : 0l
 def cud_rdec_verify_rows : int64 {
     return 0l if (g_crd == null || !g_crd.ready || g_crd.verify_rows < 2l)
     var r & = unsafe(*g_crd)
+    //! a per-layer-embedding trunk's verify gathers its rows' side rows on the device: the seat hands it none
+    return 0l if (r.ple > 0l && !(crd_emb_on(r) && r.ple_gpu && crd_side_gather_on(r)))
+    return r.verify_rows if (!r.head_planned)   // a trunk with no head: the rows a block drafter's round steps with no head row
     if (!r.head_on || !r.carry) {
         if (!r.v_said) {
             r.v_said = true
@@ -2703,14 +3172,18 @@ def cud_rdec_verify_landed_logits : bool => g_crd != null && g_crd.verify_landed
 //! then every row's pick, hidden and - unless `pick_only` - logits off the out block; a hybrid's region moves on `n` rows
 [unused_argument(side), arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-verify-command"), arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-verify-rows")]   //! per speculative round, reached through the tier's registered seat
 def cud_rdec_verify(x, cossin, hemb, hcos, h0, side : array<float>; ids : array<int64>; pos, n : int64; pick_only : bool; var logits : array<float>; var picks : array<int64>; var hid : array<float>; experts : RdecHostExpertsRowsFn) : bool {
-    crd_chain_settle()
+    let vt0 = ref_time_ticks()   // clock: control - the verify's wall for the stats seat, never a decision
+    crd_state_settle()
+    g_crd_verify_settle_us += int64(get_time_usec(vt0))
     return false if (n < 2l || n > cud_rdec_verify_rows())
     var r & = unsafe(*g_crd)
     let dim = r.dim
-    verify(pos >= 1l && long_length(logits) >= n * r.vocab && long_length(picks) >= n && long_length(hid) >= n * dim,
+    let plain = empty(hcos)   // no head rope rows: a block drafter's round steps the trunk rows alone
+    return false if (!plain && (!r.head_on || !r.carry))
+    verify((plain || pos >= 1l) && long_length(logits) >= n * r.vocab && long_length(picks) >= n && long_length(hid) >= n * dim,
         "cud_rdec_verify: a verify below row 1 (the head's first row is pos - 1), or a landing short of its rows")
     let gathered = r.emb_blk >= 0l && long_length(ids) >= n
-    verify(gathered || (long_length(x) >= dim * n && long_length(hemb) >= dim * n), "cud_rdec_verify: the rows are short, and the device gathers no row")
+    verify(gathered || (long_length(x) >= dim * n && (plain || long_length(hemb) >= dim * n)), "cud_rdec_verify: the rows are short, and the device gathers no row")
     let reg = r.region
     let par = r.hybrid ? r.dn_parity[reg] : 0
     unsafe {
@@ -2718,23 +3191,31 @@ def cud_rdec_verify(x, cossin, hemb, hcos, h0, side : array<float>; ids : array<
         var tm = reinterpret<TokMeta?>(r.in_host)
         for (i in range64(n)) {
             tm[i] = TokMeta(pos = uint(pos + i), cnt = uint(pos + i + 1l), mirbase = uint(reg * r.mir_units),
-                parity = r.hybrid ? uint(par ^ int(i & 1l)) : 0u, dnslot = uint(reg))
+                parity = uint(par), dnslot = uint(reg))   //! one ring image the verify: the recurrent step's `SEQ` stamp reads the first row's
             w[int64(CRD_IN_ID_WORD) + i] = gathered ? uint(ids[i]) : 0u
         }
         memcpy(addr<void?>(w[CRD_IN_HDR_WORDS]), addr<void?>(cossin[0]), r.cos_elems * 4l * n)
         if (!gathered) {
             memcpy(addr<void?>(w[int64(CRD_IN_HDR_WORDS) + r.cos_elems * n]), addr<void?>(x[0]), dim * 4l * n)
-            memcpy(addr<void?>(w[crd_in_hemb_word(r)]), addr<void?>(hemb[0]), dim * 4l * n)
+            if (!plain) {
+                memcpy(addr<void?>(w[crd_in_hemb_word(r)]), addr<void?>(hemb[0]), dim * 4l * n)
+            }
         }
-        memcpy(addr<void?>(w[crd_in_hrow_word(r)]), addr<void?>(h0[0]), dim * 4l)
+        if (!plain) {
+            memcpy(addr<void?>(w[crd_in_hrow_word(r)]), addr<void?>(h0[0]), dim * 4l)
+        }
     }
-    crd_stage_head_rows(r, hcos, pos - 1l, n)
+    if (!plain) {
+        crd_stage_head_rows(r, hcos, pos - 1l, n)
+    }
     r.verify_landed_logits = !pick_only
-    crd_launch(r, CrdCmd.verify, n, !pick_only, gathered, pos + n, true) $(l : int64) {
+    let lt0 = ref_time_ticks()   // clock: control - the command's wall for the stats seat
+    crd_launch(r, plain ? CrdCmd.verify_plain : CrdCmd.verify, n, !pick_only, gathered, pos + n, true) $(l : int64) {
         unsafe {
             invoke(experts, l, reinterpret<float const?>(r.hx_host), reinterpret<float const?>(r.hlog_host), reinterpret<float?>(r.hacc_host), 0l, n)
         }
     }
+    g_crd_verify_cmd_us += int64(get_time_usec(lt0))
     unsafe {
         let pk = reinterpret<uint?>(r.out_host)
         let lw = reinterpret<float?>(r.out_host)
@@ -2750,45 +3231,114 @@ def cud_rdec_verify(x, cossin, hemb, hcos, h0, side : array<float>; ids : array<
         memcpy(addr<void?>(hid[0]), addr<void?>(lw[r.out_hid_word]), dim * 4l * n)
     }
     if (r.hybrid) {
-        for (_i in range64(n)) {
-            crd_dn_advance(r, reg)
+        if (r.roll_dev != 0ul) {   //! the slots stand as the verify found them: its rows are records until the next seat's commit
+            r.roll_region = reg
+            r.dn_pend = n
+        } else {
+            crd_dn_advance(r, reg)   //! one flip a verify: its rows' ring advances all land in the image the first row did not read
+            r.roll_region = -1l
         }
-        r.roll_region = r.roll_dev != 0ul ? reg : -1l
         r.roll_vrows = n
     }
     crd_served(r, n)
     r.verifies++
+    g_crd_verify_us += int64(get_time_usec(vt0))
+    g_crd_verify_logits += pick_only ? 0l : 1l
     return true
 }
 
-//! the same-slab verify's reject (`RdecRollbackFn`): every recurrent slot and ring pair of the selected region back to the copy the
-//! verify command took after its row `a`, the region's ring parity back to row `a`'s
+//! RdecLogitsRowsFn: rows of the last command's logits off the device plane, where a command that landed picks alone left them
+def cud_rdec_logits_rows(row0, nrows : int64; var dst : array<float>) {
+    cud_bind()
+    verify(g_crd != null && g_crd.ready && row0 >= 0l && row0 + nrows <= CRD_NB && long_length(dst) >= g_crd.vocab * nrows,
+        "cud_rdec_logits_rows: no driver, rows past the command's, or a destination short of them")
+    let r & = unsafe(*g_crd)
+    cuda_memcpy_dtoh(unsafe(addr<void?>(dst[0])), r.logits + uint64(row0 * r.vocab * 4l), uint64(nrows * r.vocab * 4l), g_cud.stream)
+    verify(cud_sync(), "cud decode: the late logits rows did not land")
+}
+
+var private g_crd_verify_us = 0l
+var private g_crd_verify_settle_us = 0l
+var private g_crd_verify_cmd_us = 0l
+
+//! the verifies' wall split: the settle ahead of the command (the last verify's recurrent commit), and the command itself
+def cud_rdec_verify_split : tuple<settle_us : int64; cmd_us : int64> => (settle_us = g_crd_verify_settle_us, cmd_us = g_crd_verify_cmd_us)
+var private g_crd_verify_logits = 0l
+
+//! the same-slab verifies that landed their rows' logits (the rest landed the rows' picks alone)
+def cud_rdec_verify_logits : int64 => g_crd_verify_logits
+
+//! the wall time the same-slab verifies took since the process began, their waits and landings included
+def cud_rdec_verify_us : int64 => g_crd_verify_us
+
+//! the same-slab verify's reject (`RdecRollbackFn`): the selected region keeps the verify's rows 0 .. `a` alone - the commit the
+//! next seat runs applies that many records, no copy and no wait here
 [arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-verify-rollback")]   //! per rejected round, reached through the tier's registered seat
 def cud_rdec_rollback(a : int64) : bool {
-    crd_chain_settle()
+    cud_bind()
     return false if (g_crd == null || !g_crd.ready || !g_crd.hybrid || g_crd.roll_dev == 0ul)
     var r & = unsafe(*g_crd)
-    let reg = r.region
-    return false if (reg != r.roll_region || a < 0l || a >= r.roll_rows || a + 1l >= r.roll_vrows)
-    let src = r.roll_dev + uint64(a * r.roll_row_bytes)
+    return false if (r.region != r.roll_region || r.dn_pend <= 0l || a < 0l || a + 1l >= r.roll_vrows)
+    r.dn_pend = a + 1l
+    cud_rdec_commit_kick()
+    return true
+}
+
+var private g_crd_commit_busy = false     //! an early commit's launches may still run on the device's commit stream
+
+//! the early commit caught up: every seat that reads or steps the recurrent slots waits here first
+def private crd_commit_join {
+    if (g_crd_commit_busy) {
+        g_crd_commit_busy = false
+        if (!cuda_stream_synchronize(g_cud.commit)) {
+            panic("dasLLAMA cuda resident: the early recurrent commit did not land: {cuda_last_error()}")
+        }
+    }
+}
+
+//! the last verify's kept rows applied to its region's slots: every recurrent layer's scan again over that many of its convolved
+//! rows, this time writing the slot's state, and the ring's tail off its projected rows into the image the verify did not read;
+//! the region's parity flips once. Unwaited - the stream orders the next command behind it; `early` launches it on the side
+//! stream instead, where it runs beside whatever the main stream takes next (`cud_rdec_commit_kick`)
+[arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-verify-rollback")]
+def private crd_dn_commit(var r : CudRdec; early : bool = false) {
+    crd_commit_join()
+    return if (r.dn_pend <= 0l)
+    let reg = r.roll_region
+    let rows = r.dn_pend
+    r.dn_pend = 0l
+    r.roll_region = -1l
+    return if (reg < 0l || !r.ready)
+    var s = early ? g_cud.commit : g_cud.stream
+    g_crd_commit_busy = early
+    let cd = r.dn_cd
+    let taps = r.dn_dconv - 1l
+    let cur = uint(r.dn_parity[reg])
     for (L in r.layers) {
         continue if (!L.recurrent)
         let st & = unsafe(L.dn[reg])
-        cuda_memcpy_dtod(st.state_dev + uint64(st.state_byte_off), src + uint64(L.roll_off), uint64(st.slot_state_bytes), g_cud.stream)
-        cuda_memcpy_dtod(st.smalls_dev + uint64(st.hist_float_off * 4l), src + uint64(L.roll_off + st.slot_state_bytes), uint64(2l * st.ring_image_bytes), g_cud.stream)
+        let img = uint(st.ring_image_bytes / 4l)
+        crd_dn_scan_rows(r, s, L, st, r.roll_conv + uint64(L.roll_off), rows, false)
+        var pct = DnTailArgs(cd = uint(cd), taps = uint(taps), row0 = uint(max(rows - taps, 0l)), hist_off = uint(st.hist_float_off) + (1u - cur) * img,
+            old_rows = uint(max(taps - rows, 0l)), old_off = uint(st.hist_float_off) + cur * img)
+        enc_dn_tail_cls(s, fixed_array(r.roll_dev + uint64(L.roll_off), L.dn[0].smalls_dev), pct, (cd * taps + 255l) / 256l)
     }
-    verify(cud_sync(), "cud decode: the rollback's copies did not land")
-    for (_i in range64(r.roll_vrows - a - 1l)) {
-        crd_dn_advance(r, reg)
-    }
-    r.roll_region = -1l
-    return true
+    crd_dn_advance(r, reg)
+}
+
+//! The last verify's kept rows applied now, on a side stream: a round's next launches that touch no recurrent slot - the block
+//! drafter's pass - run beside the commit's ninety-odd small launches, where the next verify would have queued behind them.
+//! The verify it follows was waited, so its rows stand; any seat that reads or steps the slots joins the side stream first
+def cud_rdec_commit_kick {
+    return if (g_crd == null || !g_crd.ready || !g_crd.hybrid || g_crd.dn_pend <= 0l || g_crd.roll_region < 0l || cud_launch_timing_on())
+    crd_chain_settle()
+    crd_dn_commit(*g_crd, true)
 }
 
 //! the selected region's recurrent state - every slot and ring pair - into its checkpoint row `slot`, the region's parity beside it
 [cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#device-home-checkpoints")]   //! once per checkpoint stop, reached through the tier's registered seat
 def cud_rdec_dn_snap_save(slot : int64) : bool {
-    crd_chain_settle()
+    crd_state_settle()
     return false if (g_crd == null || !g_crd.ready || !g_crd.hybrid || slot < 0l || slot >= int64(RDEC_DN_SNAPS))
     var r & = unsafe(*g_crd)
     crd_snap_alloc(r)
@@ -2809,7 +3359,7 @@ def cud_rdec_dn_snap_save(slot : int64) : bool {
 //! checkpoint row `slot` back into the selected region's slots and ring pairs, the region's parity the row's
 [cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#device-home-checkpoints")]   //! once per adoption, reached through the tier's registered seat
 def cud_rdec_dn_snap_load(slot : int64) : bool {
-    crd_chain_settle()
+    crd_state_settle()
     return false if (g_crd == null || !g_crd.ready || !g_crd.hybrid || g_crd.snap_dev == 0ul || slot < 0l || slot >= int64(RDEC_DN_SNAPS))
     var r & = unsafe(*g_crd)
     let reg = r.region
@@ -2832,7 +3382,7 @@ def cud_rdec_dn_snap_load(slot : int64) : bool {
 //! region left as it stands - the host pool's copy of a device-home stream's state
 [cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#device-home-checkpoints")]
 def cud_rdec_dn_peek(slot : int64; dsts : array<RdecDnDst>) : bool {
-    crd_chain_settle()
+    crd_state_settle()
     return false if (g_crd == null || !g_crd.ready || !g_crd.hybrid || empty(dsts) || slot >= int64(RDEC_DN_SNAPS) || (slot >= 0l && g_crd.snap_dev == 0ul))
     let r & = unsafe(*g_crd)
     let reg = r.region
@@ -3088,6 +3638,16 @@ def private crd_chain_settle {
     }
 }
 
+//! a seat that reads or steps the recurrent slots opens here: the chain settled, then the last verify's kept rows applied. A seat
+//! that only lands rows (the captures, the carry, the K/V rows) settles the chain alone, since a round's reject follows its landings
+def private crd_state_settle {
+    crd_chain_settle()
+    crd_commit_join()
+    if (g_crd != null) {
+        crd_dn_commit(*g_crd)
+    }
+}
+
 //! the chained step taken as this step: the next chain queued behind it before its landing is waited where asked, its pick and
 //! logits read off the landing slot (the out block where no further chain copied them aside)
 [arch(at="../ARCHITECTURE_GPU_VULKAN_LANDING.md#vk-greedy-chain")]
@@ -3162,6 +3722,7 @@ def cud_rdec_token(x : array<float>; cossin : array<float>; ple_row : array<floa
         }
         crd_chain_drop(r, same_step)
     }
+    crd_dn_commit(r)
     crd_ple_stage(r, ple_row, 1l, token >= 0l)
     verify(token >= 0l || long_length(x) >= r.dim, "cud decode: neither a token id nor a row")
     verify(token < 0l || crd_emb_on(r), "cud decode: a token id with no table on the device - the engine asks the gather only past set_emb or the f32 upload")
@@ -3182,7 +3743,7 @@ def cud_rdec_token(x : array<float>; cossin : array<float>; ple_row : array<floa
 //! sum between them; `side` (the n-gram side input) is the hyper-connection chain's, which this home declines at its planes
 [unused_argument(side), arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-token-command")]
 def cud_rdec_token_split(x : array<float>; cossin : array<float>; side : array<float>; pos, cnt : int64; pick_only : bool; var logits : array<float>; experts : RdecHostExpertsFn) : int64 {
-    crd_chain_settle()
+    crd_state_settle()
     assert(g_crd != null && g_crd.ready && g_crd.experts_host, "cud_rdec_token_split on a model with no host layers")
     var r & = unsafe(*g_crd)
     verify(long_length(x) >= r.dim, "cud decode: the split step brings no row")
@@ -3317,11 +3878,7 @@ def private crd_hot_chain(r : CudRdec; var s : void?; H : CudHot; nreg, nrows : 
     cud_gemv_enc(H.f3, s, fixed_array(H.wq3, H.ws3, r.hot_meta3_dev, r.moe_xq, r.moe_xs, r.eup), pcg, nreg * nfe)
     let dkq = kq_sb(H.f2)
     var pca = ActArgs(nelem = uint(nreg * nfe), act = act_code(r.act_oai, r.is_gelu), nblk = uint(nreg * nfe / kq_unit(dkq)))
-    if (dkq) {
-        enc_q8k_actrq_cls(s, fixed_array(r.egate, r.eup, r.ehq, r.ehs), pca, rq_wgs(true, nreg * nfe))
-    } else {
-        enc_q8_actrq_cls(s, fixed_array(r.egate, r.eup, r.ehq, r.ehs), pca, rq_wgs(false, nreg * nfe))
-    }
+    cud_actrq_enc(s, fixed_array(r.egate, r.eup, r.ehq, r.ehs), dkq, pca, nreg * nfe)
     var pcd = GemvArgs(n = uint(nfe), d = uint(dim), nreg = uint(nreg), ybase = 0u)
     cud_gemv_enc(H.f2, s, fixed_array(H.wq2, H.ws2, r.hot_meta2_dev, r.ehq, r.ehs, r.edown), pcd, nreg * dim)
 }
@@ -3421,7 +3978,7 @@ def cud_rdec_prefill_hc(x_batch : array<float>; cos_batch : array<float>; side :
 //! landed at its own pointer, or - where the pointer is null - its argmax alone into `picks` (`RdecTokenNFn`)
 [arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command")]
 def cud_rdec_token_n(x : array<float>; cossin : array<float>; ple : array<float>; ple_raw : bool; ids : array<int64>; poss : array<int64>; cnts : array<int64>; regs : array<int64>; nrows : int64; lrows : array<float?>; var picks : array<int64>) {
-    crd_chain_settle()
+    crd_state_settle()
     assert(g_crd != null && g_crd.ready, "cud_rdec_token_n before prepare/set_cls")
     var r & = unsafe(*g_crd)
     verify(nrows >= 2l && nrows <= r.nb, "cud_rdec_token_n: the row count is outside the per-row planes (a one-row step is the one-row command's)")
@@ -3512,6 +4069,10 @@ def private crd_seg_mir_base(r : CudRdec; L : CudLayer; sg : RdecPfSeg) : int64 
     assert(sg.koff == 0l || L.ring == 0l, "cud prefill: a packed segment on a sliding layer's ring")
     return crd_region_base(r, L, sg.region) + sg.koff * kv_row_units(r.kv_dt, L.kvd)
 }
+
+//! The logits slots a segmented window lands: the out block's (`RdecSegSlotsFn`)
+[arch(at="../ARCHITECTURE_GPU_VULKAN_WINDOW.md#vk-prefill-segments")]
+def cud_rdec_seg_slots : int64 => CRD_NB
 
 //! The armed driver seats several segments in one region: no sliding layer's ring, no block-codec store (`RdecSegsPackedFn`)
 [arch(at="../ARCHITECTURE_GPU_VULKAN_WINDOW.md#vk-prefill-scratch")]
@@ -3978,12 +4539,12 @@ def private crd_window_kv(r : CudRdec; l : int64; L : CudLayer; kmir, vmir : uin
     }
     let qpairs = kv_only ? 0l : qd / 2l   // the warm's store-only pass ropes the k pairs alone: nothing reads its q rows
     let pairs = qpairs + kvd / 2l
-    var rbufs = fixed_array(r.pf_q, r.pf_kv, kvq ? r.pf_kst : kmir, kvq ? r.pf_vst : vmir, cos, crd_bias_plane(r))
+    var rbufs = fixed_array(r.pf_q, r.pf_kv, r.pf_kv, kvq ? r.pf_kst : kmir, kvq ? r.pf_vst : vmir, crd_bias_plane(r), cos, cos)
     for (sg in wsegs) {
-        var pcr = RopeKvBArgs(qd = uint(qd), kvd = uint(kvd), hs = hs, half = uint(L.rot / 2l), neox = r.neox ? 1u : 0u,
-            kpair0 = uint(qpairs), ppp = uint(pairs), layerbase = kvq ? 0u : uint(crd_seg_mir_base(r, L, sg)), npos = uint(sg.npos),
-            pos0 = uint(kvq ? sg.row0 : sg.pos0), voff = uint(voff), kstride = uint(kstride), qhs = hs, boff = uint(L.boff), hasb = crd_hasb(r),
-            cstride = uint(r.cos_elems), cbase = uint(L.cbase), row0 = uint(sg.row0), ring = kvq ? 0u : uint(L.ring))
+        var pcr = GkRopeKvArgs(qd = uint(qd), kvd = uint(kvd), hs = hs, rot = uint(L.rot), neox = r.neox ? 1u : 0u,
+            npairs_q = uint(qpairs), npairs = uint(pairs), mirbase = kvq ? 0u : uint(crd_seg_mir_base(r, L, sg)), rows = uint(sg.npos),
+            pos0 = uint(kvq ? sg.row0 : sg.pos0), voff = uint(voff), kvrow = uint(kstride), qhs = hs, qrow = uint(qd), boff = uint(L.boff),
+            has_bias = crd_hasb(r), cstride = uint(r.cos_elems), ccos = uint(L.cbase), row0 = uint(sg.row0), ring = kvq ? 0u : uint(L.ring))
         let rwgs = (sg.npos * pairs + 255l) / 256l
         if (r.kv_dt == KVDtype.f16) {
             enc_rope_kv_b_f16_cls(s, rbufs, pcr, rwgs)
@@ -4352,6 +4913,7 @@ def private crd_window(var r : CudRdec; w0, wlen : int64; segs, wsegs : array<Rd
         }
         if (L.moe) {
             crd_window_moe(r, s, l, L, w0, wlen, segs, wsegs, experts)
+            crd_cap_win(r, s, l, w0, wlen, hidden)   // the combine left the layer's rows in pf_x
             continue
         }
         let pc8 = crd_wo_ar_args(r, L)
@@ -4370,12 +4932,14 @@ def private crd_window(var r : CudRdec; w0, wlen : int64; segs, wsegs : array<Rd
         }
         if (!last_layer) {
             crd_x_norm(r, s, r.pf_ffnout, pc14, wlen, crd_head_feeds(r, r.layers[l + 1l]))
+            crd_cap_win(r, s, l, w0, wlen, hidden)
         } elif (hidden) {   // every row's final residual into pf_x, the normed rows unread: the host pools the residual under the final norm
             enc_cls_ar(s, fixed_array(r.pf_x, r.pf_ffnout, r.norms, r.pf_xb2), pc14, wlen)
-        } elif (warm || r.carry) {   // the final norm over every row as floats (the head reads them all, the carry lands the ending rows'), the ending rows' classifier feed off the normed rows
+        } elif (warm || r.carry || rdec_caps_layer(r.cap_slots, l)) {   // the final norm over every row as floats (the head reads them all, the carry lands the ending rows', a captured last layer needs every row's residual), the ending rows' classifier feed off the normed rows
             enc_cls_ar(s, fixed_array(r.pf_x, r.pf_ffnout, r.norms, r.pf_xb2), pc14, wlen)
             hrows = r.pf_xb2
             crd_window_cls_feed(r, s, hrows, w0, segs, wsegs)
+            crd_cap_win(r, s, l, w0, wlen, hidden)
         } else {
             for (ws in wsegs) {
                 let lr = ws.row0 + ws.npos - 1l
@@ -4410,7 +4974,7 @@ def private crd_window_warm_on(var r : CudRdec; wsegs : array<RdecPfSeg>) : bool
     if (r.pf_hemb == 0ul) {
         crd_pf_head_setup(r)
     }
-    return true
+    return !r.pf_head_declined
 }
 
 //! the head warm's planes, once a residency (the caller holds it to the first head window): the window's embed rows, the shifted
@@ -4442,6 +5006,10 @@ def private crd_pf_head_setup(var r : CudRdec) {
     }
     for (i in range(3)) {
         r.pf_hsch[i] = cud_sched_make(r.pf_sched_words)
+    }
+    if (r.pf_hemb == 0ul || r.pf_hsrc == 0ul || r.pf_hna == 0ul || r.pf_hnb == 0ul || r.pf_hcat == 0ul || r.pf_hcos == 0ul || r.pf_hcatf == 0ul) {
+        r.pf_head_declined = true
+        to_log(LOG_WARNING, "dasLLAMA cuda resident: the NextN head's prompt warm found no room on the device for its planes; the head's prompt rows stay as the host holds them\n")
     }
 }
 
@@ -4683,6 +5251,19 @@ def private crd_window_cls(r : CudRdec; w0 : int64; segs, wsegs : array<RdecPfSe
 
 var private @scratch g_crd_wsegs : array<RdecPfSeg>   //! the parts of the call's segments inside the window being run
 
+//! a prefill call's capture rows where the block drafter's layers are armed: the mapped block regrown to the call's `npos` rows
+//! (an embedding's call, `hidden`, captures none)
+def private crd_cap_win_room(var r : CudRdec; npos : int64; hidden : bool) {
+    return if (hidden || r.cap_n <= 0l || npos <= r.cap_win_rows)
+    if (r.cap_win_host != null) {
+        cuda_mem_free_host(r.cap_win_host)
+    }
+    let cw = cuda_mem_alloc_host_mapped(uint64(r.cap_n * npos * r.dim * 4l))
+    r.cap_win_host = cw.host
+    r.cap_win_rows = cw.host != null ? npos : 0l
+    panic("cud prefill: the block drafter's capture rows did not allocate ({cuda_last_error()})") if (cw.host == null)
+}
+
 //! the call's segments as the window chain: windows of the engine's prompt-window rows over the segments' rows back to back,
 //! `feed(w0, wlen)` putting a window's rows into pf_x, its rope rows up, the chain, and each segment's logits off its slot of the
 //! out block
@@ -4704,6 +5285,7 @@ def private crd_prefill_windows(var r : CudRdec; cos_batch : array<float>; segs 
         crd_dn_begin(r, segs)
     }
     r.pf_head_rows = 0l
+    crd_cap_win_room(r, npos, hidden)
     var w0 = 0l
     while (w0 < npos) {
         let wlen = min(r.pf_np, npos - w0)
@@ -4724,7 +5306,7 @@ def private crd_prefill_windows(var r : CudRdec; cos_batch : array<float>; segs 
             }
             let carry = w0 > 0l ? 1l : 0l
             let nh = wlen - 1l + carry
-            if (nh > 0l) {
+            if (nh > 0l && !r.pf_head_declined) {
                 cuda_memcpy_htod(r.pf_hcos, unsafe(addr<void?>(cos_batch[(w0 - carry) * r.cos_elems])), uint64(nh * r.cos_elems * 4l), g_cud.stream)
             }
         }
@@ -4803,7 +5385,7 @@ def private crd_one_seg(r : CudRdec; npos, pos0 : int64) : array<RdecPfSeg> => <
 
 //! the prefill over the host's rows (and, on a per-layer-embedding model, the host's finished side rows)
 def cud_rdec_prefill(x_batch : array<float>; cos_batch : array<float>; ple_rows : array<float>; ple_raw : bool; npos : int64; pos0 : int64; var logits : array<float>; experts : RdecHostExpertsRowsFn) {
-    crd_chain_settle()
+    crd_state_settle()
     assert(g_crd != null && g_crd.ready, "cud_rdec_prefill before prepare/set_cls")
     var r & = unsafe(*g_crd)
     verify(r.ple <= 0l || ple_raw == r.ple_gpu, "cud prefill: raw per-layer-embedding rows without the projection on device, or finished rows with it")
@@ -4813,7 +5395,7 @@ def cud_rdec_prefill(x_batch : array<float>; cos_batch : array<float>; ple_rows 
 
 //! the prefill over token ids: every window's rows gathered off the placed table on the device
 def cud_rdec_prefill_ids(tokens : array<int64>; emb_scale : float; cos_batch : array<float>; npos, pos0 : int64; var logits : array<float>; experts : RdecHostExpertsRowsFn) {
-    crd_chain_settle()
+    crd_state_settle()
     assert(g_crd != null && g_crd.ready, "cud_rdec_prefill_ids before prepare/set_cls")
     var r & = unsafe(*g_crd)
     var inscope segs <- crd_one_seg(r, npos, pos0)
@@ -4825,7 +5407,7 @@ def cud_rdec_prefill_ids(tokens : array<int64>; emb_scale : float; cos_batch : a
 //! admission keeps a codec load off this form
 [arch(at="../ARCHITECTURE_GPU_VULKAN_WINDOW.md#vk-prefill-segments")]
 def cud_rdec_prefill_segs(x_batch : array<float>; tokens : array<int64>; use_ids : bool; emb_scale : float; cos_batch : array<float>; segs : array<RdecPfSeg>; var logits : array<float>; experts : RdecHostExpertsRowsFn) {
-    crd_chain_settle()
+    crd_state_settle()
     assert(g_crd != null && g_crd.ready && !empty(segs), "cud_rdec_prefill_segs before prepare/set_cls, or no segment")
     var r & = unsafe(*g_crd)
     verify(!kv_block_codec(r.kv_dt), "cud_rdec_prefill_segs: the window holds one session under a block-codec mirror")

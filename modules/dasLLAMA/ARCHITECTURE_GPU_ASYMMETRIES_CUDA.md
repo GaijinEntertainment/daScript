@@ -2,9 +2,9 @@
 
 Companion to `ARCHITECTURE_GPU_ASYMMETRIES.md`; a section is cited by its anchor. This document
 carries the entries of the closed asymmetry list that are the CUDA home's alone - the int8 MMQ
-prefill, the MXFP4 expert pieces on the FP4 tensor rung, the nv4 nibble decode and the MMQ pin
+prefill, the MXFP4 expert pieces on the FP4 tensor rung, the nv4 nibble decode, the MMQ pin and the N-row form knees
 (`#cuda-asymmetries`) - and the home's own cm2 column pick (`#cuda-cm2-column`), its tower chains' graphs
-(`#cuda-chain-graphs`) and its shared-memory carveout (`#cuda-carveout`). The list's rule and the Metal and Vulkan entries stay in
+(`#cuda-chain-graphs`), its shared-memory carveout (`#cuda-carveout`), the rows tensor leaf (`#cuda-rows-leaf`) and its block drafter's round (`#cuda-dflash-pass`). The list's rule and the Metal and Vulkan entries stay in
 `ARCHITECTURE_GPU_ASYMMETRIES.md#gpu-asymmetries`.
 
 ### The CUDA home's asymmetries {#cuda-asymmetries}
@@ -95,34 +95,35 @@ prefill, the MXFP4 expert pieces on the FP4 tensor rung, the nv4 nibble decode a
   against the formula's 29, the same int8 lanes, so the sums agree bit for bit - and the decode reads at the Q4_0 leaf's
   rate at the 8B shapes where the formula read 4 to 5% behind (`PERF_LEDGER.md`, the dasCUDA arc's nv4 decode GEMV entry).
   Vulkan has no byte permute, so it keeps the formula. Metal does not stamp the shared leaf at all: nv4 rides the iq4
-  family's templates under `NV4`, the doubled e2m1 table staged in threadgroup memory as iq4nl's codebook is and the
-  UE4M3 byte pair read off the compact 16-byte row (`ARCHITECTURE_GPU_QUANT_PLANES.md#metal-kq-split-scale-plane`);
-  the per-tensor `.scale` the Vulkan and CUDA rows carry in their pad word has no Metal carrier, so a plane under one
-  declines there.
+  family's templates under `NV4`, the doubled e2m1 table staged in threadgroup memory as iq4nl's codebook is and the UE4M3
+  byte pair read off the compact 16-byte row (`ARCHITECTURE_GPU_QUANT_PLANES.md#metal-kq-split-scale-plane`); the per-tensor
+  `.scale` the Vulkan and CUDA rows carry in their pad word has no Metal carrier, so a plane under one declines there.
 - **The CUDA window's chunked deltanet scan is its own class on the intrinsics tier** (`DnScanChunkCuT` /
   `dn_scan_chunk_cu_body` in `dasllama_cuda_classes`; the Vulkan home stamps the shared `DnScanChunkT`,
-  `ARCHITECTURE_GPU_SHARED_KERNELS.md#dn-discrete-kernels`). The algorithm is the shared body's; what the shared surface cannot
-  express is where a chunk's time went: a 16 x 16 cooperative tile has no element access and loads A and B from one layout each,
-  so the shared body lands every product as f32 in shared memory, re-splits it into the next product's pairs and re-lays the
-  operands a product needs transposed - ten barriers a chunk and a chunk-long chain of staged tiles. The CUDA class runs eight
-  subgroups over 32 of a head's value columns (`dn_scan_chunk_wgs` at `DNC_V`: half the shared body's grid, so the 35B's 128 workgroups
-  fit one wave at two a multiprocessor - `min_blocks = 2` holds the register allocation to 128 a lane, where the unbounded
-  kernel took 226 and ran one workgroup a multiprocessor - and a head's q and k rows are staged half as often), holds the state slice in
-  accumulator fragments across chunks - a subgroup one 16-column half and two d-blocks - and writes each product's epilogue
-  straight off the lane elements
-  (`mma_acc_get` / `mma_acc_set`: delta, P, the lower matrix and the o rows read where they land, the decayed Q S held in the
-  registers of the warp that lands the o rows), reads the operands a product lands transposed through the transposing `ldmatrix`
-  (delta and solved as [t][v] serve the solve and the o product as B, solved x decay-to-end serves the update as A, the k rows
-  serve the update as B - no transpose pass), folds the chunk's decay into the state by the column scale, fetches the next
-  chunk's q, k, v rows and gates into registers a chunk ahead (the gates' prefix a shuffle scan over sixteen lanes, where the
-  shared body's one lane walks sixteen dependent loads), and runs a chunk on five barriers - ahead of the per-token scan at
-  every length measured, where the shared body on this home is not (`PERF_LEDGER.md`, the 35B NVFP4 prefill entry's scan
-  cuts). The cells hold it to the per-token scan and the
-  CPU oracle on the CUDA kernel file's dn family, and the intrinsics' lane map and transposing loads to a CPU reference in
-  `tests/cuda/test_cuda_oracle.das`.
-- **`set_cuda_mmq_pin` is a CUDA-only setter.** It pins the MMQ knob's answer ahead of a load, so one process can hold a
-  carrier to the leaves and then to the tiles (the resident cells' knob-off control, the W4A4 instrument). The Vulkan
-  window's form follows the device's coopmat mode and Metal has one window form, so neither home has a pin to set.
+  `ARCHITECTURE_GPU_SHARED_KERNELS.md#dn-discrete-kernels`). The algorithm is the shared body's; what the shared surface
+  cannot express is where a chunk's time went: a 16 x 16 cooperative tile has no element access and loads A and B from one
+  layout each, so the shared body lands every product as f32 in shared memory, re-splits it into the next product's pairs
+  and re-lays the operands a product needs transposed - ten barriers a chunk and a chunk-long chain of staged tiles. The
+  CUDA class runs eight subgroups over 32 of a head's value columns (`dn_scan_chunk_wgs` at `DNC_V`: half the shared body's
+  grid, so the 35B's 128 workgroups fit one wave at two a multiprocessor - `min_blocks = 2` holds the register allocation to
+  128 a lane, where the unbounded kernel took 226 and ran one workgroup a multiprocessor - and a head's q and k rows are
+  staged half as often), holds the state slice in accumulator fragments across chunks - a subgroup one 16-column half and
+  two d-blocks - and writes each product's epilogue straight off the lane elements (`mma_acc_get` / `mma_acc_set`: delta, P,
+  the lower matrix and the o rows read where they land, the decayed Q S held in the registers of the warp that lands the o
+  rows), reads the operands a product lands transposed through the transposing `ldmatrix` (delta and solved as [t][v] serve
+  the solve and the o product as B, solved x decay-to-end serves the update as A, the k rows serve the update as B - no
+  transpose pass), folds the chunk's decay into the state by the column scale, fetches the next chunk's q, k, v rows and
+  gates into registers a chunk ahead (the gates' prefix a shuffle scan over sixteen lanes, where the shared body's one lane
+  walks sixteen dependent loads), and runs a chunk on five barriers - ahead of the per-token scan at every length measured,
+  where the shared body on this home is not (`PERF_LEDGER.md`, the 35B NVFP4 prefill entry's scan cuts). The cells hold it
+  to the per-token scan and the CPU oracle on the CUDA kernel file's dn family, and the intrinsics' lane map and transposing
+  loads to a CPU reference in `tests/cuda/test_cuda_oracle.das`.
+- **`set_cuda_mmq_pin` and the N-row step's form knees are CUDA-only setters.** The pin holds the MMQ knob's answer ahead
+  of a load, so one process can hold a carrier to the leaves and then to the tiles (the resident cells' knob-off control,
+  the W4A4 instrument); `set_cuda_rows_mma_min` sets the rows from which a site takes the rows leaf (`#cuda-rows-leaf`),
+  `set_cuda_moe_fp4_rows` / `set_cuda_moe_tile_rows` those from which an N-row routed site takes the FP4 expert chain or the f16
+  tiles, each dropping the captured graphs. The Vulkan window's form follows its coopmat mode and its N-row command has no
+  rows leaf or routed tile form; Metal has one window form and its row levers (`ARCHITECTURE_GPU_ASYMMETRIES.md#gpu-asymmetries`).
 - **The CUDA tower's in-process A/B seams are CUDA-only setters.** Each answers the value it replaced, has a getter beside
   it, and logs once when it moves its policy off the default, so a race flips a pick between rounds with no reload:
   `set_cuda_tower_carveout_full` / `cuda_tower_carveout_full` (`#cuda-carveout`, default off), `set_cuda_tower_fork` /
@@ -146,6 +147,9 @@ prefill, the MXFP4 expert pieces on the FP4 tensor rung, the nv4 nibble decode a
   f16 x f16 GEMM through `CuF16GemmCm2W` and its s column `CuF16GemmCm2WS` - the `F16GemmCm2T` stamps with the weight
   offset (`#cuda-cm2-column`), beside the E-series seat's `CuF16GemmCm2`, which pins the offset off - where the Vulkan
   tower's `F16GemmCm2` stamps serve both sites.
+- **The residual step runs a row on 1024 lanes** (`LANES` on the `GkAddRmsRows` stamps, `TG` on gemma's combine): a
+  256-thread block walks a 5120-wide row twenty columns a lane, and a token step launches the step some 130 times, each a
+  block's whole latency; 1024 lanes walk the row five columns a lane.
 
 ### The CUDA home picks its cm2 column by its own wave model {#cuda-cm2-column}
 
@@ -209,12 +213,49 @@ card runs an f32-accumulate tensor product well under the f16-accumulate rate (t
 TFLOP/s against 55 with an f16 accumulator), so at whisper's 1500 rows the f16 lane's GEMMs trail the q8 lane's by that rate
 rather than by a tile.
 
+### Five to sixteen token rows take the rows tensor leaf {#cuda-rows-leaf}
+
+**A dense site at five to sixteen token rows runs one weight pass on the tensor cores, its time flat in the row count.** The leaf (`RowsMmaT`,
+`dasllama_cuda_classes_rows`) gives a block of eight warps sixteen weight rows, the warps splitting the rows' K; a 32-block is the int8
+product m16n8k32 twice - sixteen rows by sixteen token rows - its weight fragment filled from the lane's own plane words and its activation
+fragment one 16-byte load off the feed. The quant plane binds as 16-byte words, a lane loading its one word at the element's address: an arena
+past 2^32 words stays in reach. The feed holds the sixteen rows' quants in the product's lane order with their scales and block sums: the
+requant that made the rows writes it in the same launch (`GkQ8BlockStore`'s `OUT_FEED` stamps), and a site whose rows another launch followed
+re-lays them (`RowsMmaRelayT`; `crd_feed_stands` tracks which rows the feed holds). `crd_rows_mma_takes` admits a plane of a leaf format -
+Q8_0 and the superblock formats of sixteen nibble bytes a 32-block: Q4_K, Q5_K, Q6_K, NVFP4, Q4_0, IQ4_NL, IQ4_XS, IQ3_S4
+(`cud_rows_mma_stamped`, `kq_tile_stamp`'s `rows` family) - at the knee's rows and up, whole units wide past the floor (1024 for Q8_0, 2048
+for a superblock format), sixteen regions at the most, inside the feed's width; every other site takes the N-column GEMV
+(`ARCHITECTURE_GPU_SHARED_GEMM.md#ncol-load-waves`), which is the faster form to four rows. A format is its hooks alone: the lane's two words
+of a block through the word decode its GEMV reads (`nib_word`, `k5_word`, `k6_word`, a codebook's word map), and the block's scales. Q3_K,
+Q2_K, the grid formats (a codebook plane the leaf does not bind) and the per-32 formats have no leaf. The walk loads a plane word once: a
+turn's four blocks are two pairs of neighbours, and the words a pair shares - a K format's d | dmin, sc and mn, Q6_K's sub-scale word, d and
+qh words, NVFP4's scale word and factor, an f16-d format's d word, IQ4_XS's two scale words, the pair's feed scale - load once a pair
+(`w_pair_raw`), a second load of one being a second wait on its plane's stream. An offset format keeps its nibbles unsigned and takes the
+offset as a min term against the feed's block sums (Q4_0's 8 d). The
+Q8_0 member has a second stamp for a plane of wide rows that waits on memory (`enc_q8_rows_mma`: 4096 wide and 16 MB at the least): a turn's
+four block scales in one load, a row's lane t taking block t's and shuffles handing them around the row. That form loses on the superblock
+formats and on a 2B model's Q8_0 planes, narrow or small, whose turn is not waiting on memory (`debug-jit`, the RTX PRO 4500;
+`PERF_LEDGER.md`, the 2026-11-13 entry on where the CUDA home's eight-stream tick goes).
+
+### The block drafter's round on the CUDA home keeps its accept on the host {#cuda-dflash-pass}
+
+**The round is the drafter's pass and the verify command on one stream, the recurrent commit beside the pass on a second.**
+The pass (`dasllama_cuda_dflash`) stamps the templates Metal stamps (`GkDflashConv`, `GkDflashQkn`, `GkDflashAttn`,
+`GkDflashTopk`, `GkDflashWalk`), runs its weight sites through the token chain's GEMV leaves in each plane's own format
+(`cud_rows_gemv`), and ends in the device selector - the top-k, then the walk over the two codebooks uploaded in the CPU
+form, the picks alone landing (`dflash_device_stats().walked`; `set_dflash_device_selector` lands the lists for the
+host's walk, the reference the device walk is held to). The verify lands every row's pick and no logits, and the host
+walks the picks for the count (`mtp_seat_accept_walk`): that walk cuts at a stop id, and the commit and the next pass
+take the count as launch arguments, so a device accept (Metal's `MetalDflashAccept`, that home's own kernel) would add a
+launch and save no wait here. The recurrent rows a round keeps are scanned into the slot on a side stream as the next
+pass starts (`cud_rdec_commit_kick`), joined before a command reads the state.
+
 ### The tower chains replay from captured graphs {#cuda-chain-graphs}
 
-A tower chain on this home is hundreds of launches - a FastConformer block chain 608 a span (gigaam v3 e2e-rnnt on the q8
-lane, ru_long), a transducer round four or five - and on the reference box (RTX 5060 Ti) the driver's launch call costs
-about 13 us of host time (`cuLaunchKernelEx` under `nsys`), near the
-device time of the small kernels between the GEMMs, so a chain launched kernel by kernel leaves the GPU waiting on the host.
+A tower chain on this home is hundreds of launches - a FastConformer block chain 608 a span (gigaam v3 e2e-rnnt on the
+q8 lane, ru_long), a transducer round four or five - and on the reference box (RTX 5060 Ti) the driver's launch call
+costs about 13 us of host time (`cuLaunchKernelEx` under `nsys`), near the device time of the small kernels between the
+GEMMs, so a chain launched kernel by kernel leaves the GPU waiting on the host.
 Vulkan records the same chain into one command buffer and pays no call a dispatch. A seat runs its chain body through
 `cut_chain`, naming it by a tag and its shape: the first time the rail's state - every seat's plane, offset and bytes, every
 site's pick and bind, the lane, the schedule maps - is seen under that tag and shape, the body launches kernel by kernel;
@@ -251,8 +292,8 @@ carveout too and re-applies the policy to every kernel already loaded, so a race
 The CUDA driver's current context is a property of the OS thread, not of the process (the dasCUDA module's
 `ARCHITECTURE.md`, its per-thread context section): a context made on one thread is unbound on every other. A Vulkan
 device has no such binding - any thread submits on it under the queue lock - so the Vulkan home's entry gate checks the
-device once. The CUDA home's entry gate, `cud_init`, binds `g_cud.cc` to the calling thread on every call once the device
-is ready (`cuda_bind_context`), because a context's `[init]` runs on the thread that made it and a server's worker thread,
-or a job on the team, reaches its first device call on another: without the rebind the query answers an invalid-context
-error and the worker falls to the CPU with no decline named. The bind is one driver call, cheaper than any device work
-behind it.
+device once. The CUDA home's entry gate, `cud_init`, binds `g_cud.cc` to the calling thread on every call once the
+device is ready (`cuda_bind_context`), because a context's `[init]` runs on the thread that made it and a server's
+worker thread, or a job on the team, reaches its first device call on another: without the rebind the query answers an
+invalid-context error and the worker falls to the CPU with no decline named. The bind is one driver call, cheaper than
+any device work behind it.

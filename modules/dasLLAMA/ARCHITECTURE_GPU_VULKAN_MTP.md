@@ -5,7 +5,7 @@ document carries the NextN draft head the resident driver homes beside the trunk
 command that steps it, the prompt warm the window chain gives its slab, the rollback a
 rejected device verify takes from the copies the verify command made, the verify window a
 declined verify seat runs the CPU verify in, and the speculative knob's per-step gate on the
-carry - and the gemma-4 assistant drafter the driver runs beside a head-less trunk. A head that rides the hyper-connection chain - its routed experts on the host beside the
+carry - the gemma-4 assistant drafter the driver runs beside a head-less trunk, and the seams a block drafter rides the driver through (`#resident-block-caps`). A head that rides the hyper-connection chain - its routed experts on the host beside the
 trunk's - is `ARCHITECTURE_GPU_VULKAN_HC.md#hc-draft-head`, its verify `#hc-verify-rows`. The model's residency
 the head rides is in `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`, the logits landing in
 `ARCHITECTURE_GPU_VULKAN_LANDING.md`; the same-slab verify that re-warms the head's rows a
@@ -287,3 +287,14 @@ where every stream asked a bare argmax, their picks alone - and their post-final
 shared walk (`mtp_accept_walk`) and host commit run per stream, and the region holds the stream's
 rows to its new `n_past`, the rejected drafts' rows dead above it. The model drop sweeps every
 device object the drafter held, so its drop hook forgets them and the drafter stands detached.
+
+### A block drafter rides the resident driver through three seams {#resident-block-caps}
+
+**A block drafter beside a resident trunk needs the trunk's layer rows, a verify with no head row and, for a host-judged
+round, the rows' logits; the driver installs a seam for each.** `install_rdec_block_caps` hands the tier the capture pair:
+`arm` names the trunk layers whose output rows the token, verify and prefill commands copy out (false where the driver
+cannot capture one), `rows` lands the last command's rows as [row][slot][dim]. `rdec_block_caps_sync` arms them at the
+drafter's attach and drops them at its detach; a driver with no pair leaves the drafter's context behind the device's rows,
+so its rounds step plain. `install_rdec_verify_plain` declares the same-slab verify's plain form - the rows stepped with no
+head row, taken where the verify is handed no head rope rows - and `install_rdec_logits_rows` the copy of a verify's row
+logits a host-judged round reads.

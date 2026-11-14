@@ -4,6 +4,9 @@ options _dasllama_internal = true
 
 module dasllama_cuda_common shared public
 
+require daslib/cmp
+require math   // max: the zeroed buffer's 16-byte floor
+require strings
 require dasllama/dasllama_lint public
 require cuda/das_cuda_boost public
 require dasllama/dasllama_gpu_rail public   // the tower rail's roles and profile roles; `CutRail` below is this home's rail
@@ -22,6 +25,7 @@ struct CudGpu {
     stream : void?
     copy : CudCopy           //! the copy stream: every pinned stack's DMA rides it, apart from the launches on `stream`
     side : CudSide           //! the rail's side streams, a fork's branches (`rail_fork`)
+    commit : void?           //! the recurrent commit's stream: a hybrid round's kept rows scan into their slots beside the drafter's pass
     dry : bool              //! the lane mint's walk: every seat runs its accept / refuse arithmetic and allocates and uploads nothing (`cud_mint_dry`)
 }
 
@@ -82,6 +86,7 @@ def private cud_init_first() : bool {
     g_cud.rows_per_wg = int64(CUD_WG_X / 32u)
     g_cud.stream = cuda_stream_create()
     g_cud.copy.stream = cuda_stream_create()
+    g_cud.commit = cuda_stream_create()
     for (i in range(CUD_SIDE_STREAMS)) {
         g_cud.side.streams[i] = cuda_stream_create()
         g_cud.side.joins[i] = cuda_event_create_untimed()
@@ -130,6 +135,8 @@ def cud_shutdown() {
     g_cud.stream = null
     cuda_stream_destroy(g_cud.copy.stream)
     g_cud.copy.stream = null
+    cuda_stream_destroy(g_cud.commit)
+    g_cud.commit = null
     for (i in range(CUD_SIDE_STREAMS)) {
         cuda_stream_destroy(g_cud.side.streams[i])
         cuda_event_destroy(g_cud.side.joins[i])
@@ -165,15 +172,57 @@ def cud_class_init(var c : CudClass) {
 def cud_fn_made(c : CudClass; ord : int) : bool =>
     c.ready && c.epoch == g_cud_epoch && ord < length(c.fns) && c.fns[ord] != null
 
+//! a mapped host block: the host's pointer and the device's address of the same bytes
+struct CudMapped {
+    host : void?
+    dev : uint64
+}
+
+//! `bytes` of device memory, zeroed (0 and `oom` where the card has no room)
+def cud_dev_zero(var oom : bool&; bytes : int64) : uint64 {
+    let d = cuda_mem_alloc(uint64(max(bytes, 16l)))
+    if (d == 0ul) {
+        oom = true
+        return 0ul
+    }
+    cuda_memset_d8(d, 0u8, uint64(max(bytes, 16l)), g_cud.stream)
+    return d
+}
+
+//! `bytes` of `src` into a fresh device buffer (0 and `oom` where the card has no room)
+def cud_dev_from(var oom : bool&; src : void?; bytes : int64) : uint64 {
+    let d = cuda_mem_alloc(uint64(bytes))
+    if (d == 0ul) {
+        oom = true
+        return 0ul
+    }
+    cuda_memcpy_htod(d, src, uint64(bytes), g_cud.stream)
+    return d
+}
+
+//! `bytes` of mapped host memory (a null host and `oom` where the host has no room)
+def cud_mapped_make(var oom : bool&; bytes : int64) : CudMapped {
+    let m = cuda_mem_alloc_host_mapped(uint64(bytes))
+    if (m.host == null) {
+        oom = true
+    }
+    return CudMapped(host = m.host, dev = m.dev)
+}
+
+//! the block's host memory freed, the record emptied
+def cud_mapped_free(var m : CudMapped) {
+    if (m.host != null) {
+        cuda_mem_free_host(m.host)
+    }
+    m = CudMapped()
+}
+
 //! the class modules whose kernels with no shared memory leave the carveout to the driver: the tower families' own
 let private CUD_L1_CLASS_MODULES = fixed_array("dasllama_cuda_classes_front", "dasllama_cuda_classes_blocks", "dasllama_cuda_classes_asr")
 
-def private cud_l1_class_module(class_module : string) : bool {
-    for (m in CUD_L1_CLASS_MODULES) {
-        return true if (m == class_module)
-    }
-    return false
-}
+//! the class modules whose every kernel leaves the carveout to the driver, shared memory or none: a family whose kernels all
+//! re-read one small plane (the rows tensor leaf's feed, read by every tile)
+let private CUD_L1_FAMILY_MODULES = fixed_array("dasllama_cuda_classes_rows")
 
 var private g_cud_l1_full = false   //! the tower class modules' no-smem kernels take the full carveout too (`set_cuda_tower_carveout_full`)
 var private g_cud_l1_fns : array<void?>   //! the loaded kernels the scoped policy leaves to the driver, this epoch's
@@ -232,7 +281,7 @@ def cud_class_fn(var c : CudClass; ord : int; text, entry : string; smem : uint6
     c.smem[ord] = uint(smem)
     c.blocks[ord] = blk
     let threads = int(blk.x * blk.y * blk.z)
-    let scoped = smem == 0ul && cud_l1_class_module(class_module)
+    let scoped = has_value(CUD_L1_FAMILY_MODULES, class_module) || (smem == 0ul && has_value(CUD_L1_CLASS_MODULES, class_module))
     if (scoped) {
         if (g_cud_l1_epoch != g_cud_epoch) {
             g_cud_l1_fns |> clear()
@@ -289,11 +338,22 @@ def cud_walk_mark(word : uint64) : bool {
     return true
 }
 
+var private g_cud_skip : array<string>   //! census-name fragments whose launches are dropped (`set_cuda_kernel_skip`)
+
+//! the pricing rail's list (`set_cuda_kernel_skip`): a launch of a kernel whose census name holds one of the comma-separated
+//! `frags` is dropped from here on - a command captured before the call keeps the launches it was captured with
+def cud_kernel_skip_set(frags : string) {
+    delete g_cud_skip
+    g_cud_skip <- kernel_skip_parse(frags)
+    to_log(LOG_WARNING, "dasLLAMA cuda tier: set_cuda_kernel_skip(\"{frags}\") - the launches of {length(g_cud_skip)} kernel name fragment(s) are dropped: timings only, the output is garbage\n")
+}
+
 //! one launch of the class's kernel `ord`: `bufs` the device addresses in binding order, `pc` the args struct, `groups` blocks
 def cud_launch(c : CudClass; ord : int; stream : void?; bufs : uint64 const[]; var pc : auto(PT)&; groups : uint) {
     if (!cud_fn_made(c, ord)) {
         panic("dasLLAMA cuda tier: kernel slot {ord} launched before its ensure")
     }
+    return if (!empty(g_cud_skip) && kernel_skip_hit(g_cud_skip, c.names[ord]))
     let nb = length(bufs)
     let pbytes = typeinfo sizeof(type<PT>)
     let len = (nb * 8 + pbytes + 7) / 8 * 8
@@ -305,6 +365,8 @@ def cud_launch(c : CudClass; ord : int; stream : void?; bufs : uint64 const[]; v
     for (i in range(nb * 8 + pbytes, len)) {
         g_cud_blob[i] = 0u8
     }
+    let t0 = g_cud_timing ? ref_time_ticks() : 0l
+    g_cud_launch_serial++
     if (g_cud_walk == CudWalk.dry) {
         var h = hash_combine64(hash_combine64(g_cud_walk_hash, intptr(c.fns[ord])), uint64(groups))
         unsafe {
@@ -317,8 +379,43 @@ def cud_launch(c : CudClass; ord : int; stream : void?; bufs : uint64 const[]; v
     } elif (!cuda_launch(c.fns[ord], uint3(groups, 1u, 1u), c.blocks[ord], c.smem[ord], stream, unsafe(addr<void?>(g_cud_blob[0])), uint64(len))) {
         panic("dasLLAMA cuda tier: {c.names[ord]} launch failed: {cuda_last_error()}")
     }
+    if (g_cud_timing && g_cud_walk != CudWalk.dry) {
+        cuda_stream_synchronize(stream)
+        g_cud_times[c.names[ord]] = (g_cud_times?[c.names[ord]] ?? 0l) + get_time_nsec(t0)   // nolint:PERF026 — the profile rail's key inserts at its first timed launch
+        g_cud_time_n[c.names[ord]] = (g_cud_time_n?[c.names[ord]] ?? 0l) + 1l   // nolint:PERF026 — the same
+    }
     return if (g_cud_walk == CudWalk.quiet)
     g_cud_census[c.names[ord]] = (g_cud_census?[c.names[ord]] ?? 0) + 1   // nolint:PERF026 — a kernel's key inserts at its first launch, a count after
+}
+
+var private g_cud_launch_serial = 0l
+
+//! the launches the rail has taken, a dry walk's among them: two reads that agree saw no kernel launch between them
+def cud_launch_serial : int64 => g_cud_launch_serial
+
+var private g_cud_timing = false
+var private g_cud_times : table<string; int64>
+
+//! the profile rail: every launch waited on its stream and its wall time summed under its kernel's name; a driver that replays
+//! captured graphs runs its commands plainly while the rail is on (`cud_launch_timing_on`), since a capture launches nothing
+def cud_launch_timing(on : bool) {
+    g_cud_timing = on
+}
+
+def cud_launch_timing_on : bool => g_cud_timing
+
+var private g_cud_time_n : table<string; int64>
+
+//! the wall time `kernel`'s timed launches took this process, in nanoseconds
+def cud_kernel_time_ns(kernel : string) : int64 => g_cud_times?[kernel] ?? 0l
+
+//! every kernel the profile rail timed since the last call: its milliseconds and launches, the widest first; the rail's sums start over
+def cud_kernel_times_take : array<tuple<ms : double; n : int64; name : string>> {
+    var rows <- [for (name, ns in keys(g_cud_times), values(g_cud_times)); (ms = double(ns) / 1.0e6lf, n = g_cud_time_n?[name] ?? 0l, name = name)]
+    sort(rows) <| cmp_by(-_.ms)
+    g_cud_times |> clear()
+    g_cud_time_n |> clear()
+    return <- rows
 }
 
 //! one GEMM site's cm2 pick for an encode: the tile column, its class slot, the k split and the workgroups its schedule map carries

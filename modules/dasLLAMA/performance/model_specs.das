@@ -673,7 +673,11 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
             companions <- [
                 ProvEntry(name = "mmproj-gemma-4-E2B-it-bf16.gguf", root = "llm",
                     url = "{HF}/ggml-org/gemma-4-E2B-it-GGUF/resolve/b4243c156154b6dca9324415f8c7ccc098b4aed1/mmproj-gemma-4-E2B-it-BF16.gguf",
-                    bytes = 986833664l, sha256 = "711e1e8f43fa0664adbac493129be1e6c25b81af4b4cdea97c7d798b25c0a3a4")],
+                    bytes = 986833664l, sha256 = "711e1e8f43fa0664adbac493129be1e6c25b81af4b4cdea97c7d798b25c0a3a4"),
+                // the DFlash2 block drafter the drafter test's E2B arms attach: no GGUF is published, the file is a local conversion
+                ProvEntry(name = "drafters/gemma-4-E2B-it-dflash2-GGUF/gemma-4-E2B-it-dflash2-Q8_0.gguf", root = "llm",
+                    recipe = "convert_hf_to_gguf.py <rasyosef/gemma-4-E2B-it-dflash2 snapshot> --target-model-dir <google/gemma-4-E2B-it snapshot> --outtype q8_0 (llama.cpp)",
+                    bytes = 359252960l, sha256 = "e90b2224a233be4de4374edde1737a53582048d9845600a1edf7bd03cb0112aa")],
             // PLE + cross-layer KV sharing as the E4B, plus per-layer FFN width (the elastic
             // MatFormer sub-model); dense, so the full 40 hold
             parity <- ev_gemma4_dense()),
@@ -882,11 +886,21 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
             url = "{HF}/ggml-org/Qwen3.8-27B-GGUF/resolve/0669b98607d47046c7c2b3f801011d54a08cfccf/Qwen3.8-27B-Q4_K_M.gguf",
             bytes = 18973870432l, sha256 = "31629f53165ab6a7dad8c9847dcfd1fdf55829dac1e6e748f4a68581b0033d34",
             serve_drafter = "mtp-Qwen3.8-27B-Q8_0.gguf",
-            // the split NextN head rides as a companion: the mtp suite's 3.8-27b fixture and the ruler load it as the trunk's last shard
+            // the split NextN head rides as a companion: the mtp suite's 3.8-27b fixture and the ruler load it as the trunk's last shard;
+            // the DFlash2 block drafter's Q8_0, Q4_K_M and NVFP4 files ride beside it for the drafter test's 27B arms
             companions <- [
                 ProvEntry(name = "mtp-Qwen3.8-27B-Q8_0.gguf", root = "llm",
                     url = "{HF}/ggml-org/Qwen3.8-27B-GGUF/resolve/0669b98607d47046c7c2b3f801011d54a08cfccf/mtp-Qwen3.8-27B-Q8_0.gguf",
-                    bytes = 3164006688l, sha256 = "cbf60a0c48b431bb61f1d49b8948dc88ac29c398d6dbdbbb2e6e89ef77eacc9a")],
+                    bytes = 3164006688l, sha256 = "cbf60a0c48b431bb61f1d49b8948dc88ac29c398d6dbdbbb2e6e89ef77eacc9a"),
+                ProvEntry(name = "drafters/Qwen3.8-27B-DFlash2-GGUF/Qwen3.8-27B-DFlash2-Q8_0.gguf", root = "llm",
+                    url = "{HF}/incoai/Qwen3.8-27B-DFlash2-GGUF/resolve/main/Qwen3.8-27B-DFlash2-Q8_0.gguf",
+                    bytes = 2056414816l, sha256 = "651a1b2930c9825080480f79cf38057e681c9b175d580a357c14f67cf77ccf49"),
+                ProvEntry(name = "drafters/Qwen3.8-27B-DFlash2-GGUF/Qwen3.8-27B-DFlash2-Q4_K_M.gguf", root = "llm",
+                    url = "{HF}/incoai/Qwen3.8-27B-DFlash2-GGUF/resolve/main/Qwen3.8-27B-DFlash2-Q4_K_M.gguf",
+                    bytes = 1143006816l, sha256 = "d169ad335929adc0d77e10e2523f968f3e75f547637ad739b0a137ccde111b5f"),
+                ProvEntry(name = "drafters/Qwen3.8-27B-DFlash2-NVFP4-GGUF/Qwen3.8-27B-DFlash2-NVFP4.gguf", root = "llm",
+                    url = "{HF}/costanzopadovano/Qwen3.8-27B-DFlash2-NVFP4-GGUF/resolve/main/Qwen3.8-27B-DFlash2-NVFP4.gguf",
+                    bytes = 1094346016l, sha256 = "9bd8926d7d5701cee1f673dbab9e6359a739cbbfc348cb78966e8a01df8e9863")],
             // the qwen35 hybrid dense at scale, native K-quant planes
             parity <- ev_qwen_count([dn_chunked = true])),
         // the same UD-Q4_K_M weights under two local names: the MTP-stem file carries the MTP

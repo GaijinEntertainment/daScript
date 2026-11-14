@@ -31,6 +31,14 @@ def public ldmatrix(var m : coopmatA_s8_16x32; p : uint4?) : void {}
 [unused_argument(m, p), sideeffects, arch(at = "../ARCHITECTURE_EMIT.md#cuda-kernel-vocabulary-tiers")]
 def public ldmatrix(var m : coopmatB_s8_32x16; p : uint4?) : void {}
 
+//! word `i` (0..3) of the lane's s8 fragment set from a register - the word `ldmatrix` loads there. Lane (g = lane >> 2,
+//! t = lane & 3) of an A fragment holds rows g and g + 8 at k 4t..4t+3 and 16+4t..: words (g, k lo), (g + 8, k lo), (g, k hi),
+//! (g + 8, k hi); of a B fragment columns g and g + 8: words (g, k lo), (g, k hi), (g + 8, k lo), (g + 8, k hi)
+[unused_argument(m, i, w), sideeffects, arch(at = "../ARCHITECTURE_EMIT.md#cuda-kernel-vocabulary-tiers")]
+def public mma_frag_set(var m : coopmatA_s8_16x32; i : int; w : uint) : void {}
+[unused_argument(m, i, w), sideeffects, arch(at = "../ARCHITECTURE_EMIT.md#cuda-kernel-vocabulary-tiers")]
+def public mma_frag_set(var m : coopmatB_s8_32x16; i : int; w : uint) : void {}
+
 [unused_argument(f, s, rs, cs), sideeffects, arch(at = "../ARCHITECTURE_EMIT.md#cuda-kernel-vocabulary-tiers")]
 def public mma_scale_acc(var f : coopmatAcc_f32_16x16; s : coopmatAcc_s32_16x16; rs : float2; cs : float4) : void {}
 

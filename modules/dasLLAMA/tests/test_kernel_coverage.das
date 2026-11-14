@@ -1412,6 +1412,14 @@ let private VK_CENSUS_NEVER_DISPATCHED <- [
     "kq_gemv_k4_n_cls_spv", "kq_gemv_k5_n_cls_spv", "kq_gemv_k6_n_cls_spv", "kq_gemv_q40_n_cls_spv", "kq_gemv_iq4xs_n_cls_spv", "kq_gemv_iq3s4_n_cls_spv",
     "kq_gemv_k3_n_cls_spv", "kq_gemv_k2_n_cls_spv", "kq_gemv_iq3s_n_cls_spv", "kq_gemv_iq3xxs_n_cls_spv", "kq_gemv_iq4nl_n_cls_spv", "kq_gemv_nv4_n_cls_spv",
     "kq_gemv_iq2s_n_cls_spv", "kq_gemv_iq2xs_n_cls_spv", "kq_gemv_iq2xxs_n_cls_spv",
+    "kq_gemv_k4_n4_cls_spv", "kq_gemv_k5_n4_cls_spv", "kq_gemv_k6_n4_cls_spv", "kq_gemv_q40_n4_cls_spv", "kq_gemv_iq4xs_n4_cls_spv",
+    "kq_gemv_iq3s4_n4_cls_spv", "kq_gemv_k3_n4_cls_spv", "kq_gemv_k2_n4_cls_spv", "kq_gemv_iq3s_n4_cls_spv", "kq_gemv_iq3xxs_n4_cls_spv",
+    "kq_gemv_iq4nl_n4_cls_spv", "kq_gemv_nv4_n4_cls_spv", "kq_gemv_iq2s_n4_cls_spv", "kq_gemv_iq2xs_n4_cls_spv", "kq_gemv_iq2xxs_n4_cls_spv",
+    // the DFlash2 block drafter's pass, top-k and selector walk serve only a drafter attached beside a target, and no census
+    // row loads one; their coverage is test_vkt_dflash_pass_kernels, test_vkt_dflash_topk and test_vkt_dflash_walk in
+    // test_vulkan_tower_kernels.das, the stocked carriers the dflash-e2b-discrete and dflash-27b-discrete arms of test_dflash_drafter.das
+    "dflash_conv_cls_spv", "dflash_qkn_cls_spv", "dflash_attn_cls_spv", "dflash_topk_slices_cls_spv", "dflash_topk_merge_cls_spv",
+    "dflash_walk_cls_spv",
     // the fused gate-up GEMV's N stamps serve only the N-row token command, which the zoo's one-region load never engages
     // (the batched rows need a region a row; the stocked regions files - test_gpu_resident_regions_qwen3.das and the
     // gemma files - reach them at two regions); their coverage is test_vkd_q8_gemv_gu_n in test_vulkan_kernels.das

@@ -918,6 +918,10 @@ def private kq_transcode_check(m : GGUFMeta; name : string; want_type : int; typ
     return ti
 }
 
+//! the name of weight tensor `name`'s per-tensor scale companion (an NVFP4 plane's one f32 the whole tensor shares)
+def gguf_scale_name(name : string) : string => "{trim_suffix(name, ".weight")}.scale"
+
+
 //! Transcode tensor `name`'s [src_off, +expect_n) slice - a whole number of `fmt`'s stride units
 //! (256-weight superblocks; q51's 32-blocks) - into the format's planes at plane-local element
 //! offset `eloff`: kq_transcode_p per unit, threaded over units (~1MB of disk bytes per job).

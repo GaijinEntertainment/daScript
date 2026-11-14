@@ -331,16 +331,22 @@ Every served walk logs both streams decoded. On the Metal home every served arm 
 `load_model_cached`, so the file mints a `.dlim` for it - ledgered at `../ARCHITECTURE_IMAGE_LEDGER.md#suite-image-mints`.
 
 The `mtp` suite also carries `test_dflash_drafter.das` (the DFlash2 block drafter, also in the stocked suite; every trunk
-loads off the image rail - `load_model_`, the Metal arms' blob form converted in RAM - and every `dflash-27b-*` arm carries
-the family tag `qwen35`), its arms:
+loads off the image rail - `load_model_`, the Metal arms' blob form converted in RAM - every `dflash-27b-*` arm carries
+the family tag `qwen35`, every lossless walk's control is its speculative ids against the plain walk's one step on, which
+must miss, every pair of recorded drafts it compares is logged decoded, a side a record, and every cell sets each knob its
+asserts read - `set_dflash_device`, `set_dflash_record`, `set_dflash_device_selector` and the Metal select, accept and replay
+knobs - before its first walk and puts each back at the value its getter read before it), its arms:
 - `dflash-refuse` - the loader's no-panic refusal contract (a missing path, a file with no GGUF magic), and a synthesized
   one-layer `dflash` header whose fc.weight is IQ4_XS refused naming the tensor, the disk type and the `KqFmt` member - the
-  same header with a Q4_K fc.weight, tagged k4, refusing on the next, absent tensor the control;
+  same header with a Q4_K fc.weight, tagged k4, refusing on the next, absent tensor the control; and, with the pass off the
+  device (`set_dflash_device(false)`, put back), the E2B Q8_0 trunk (family `gemma4e`) flagged planes-trimmed in memory
+  refusing the attach by name with nothing attached, the same trunk unflagged attaching on the CPU arm (the control);
 - `dflash-27b-cpu` - the lossless gate on the CPU arm: the planar Qwen3.8-27B Q4_K_M (large tier, PARITY_FULL-gated) with
   its DFlash2 Q8_0 drafter under `drafters/`, a 24-token greedy speculative walk equal to the plain walk token for token with
   drafts accepted, both walks decoded in the log;
-- `dflash-27b-metal` - the same gate on the Metal home's device arm over the served trunk (the box profile applied), the
-  pass's q8 sites counted (`metal_dflash_sites`) and, where the box runs the rows8 form (the file's own layout probe,
+- `dflash-27b-metal` - the same gate on the Metal home's device arm over the served trunk (the box profile applied), each
+  walk's trunk calls counted rising on the Metal drivers (`metal_prefill_stats`' `prefills`, `metal_decode_stats`' `decodes`,
+  `metal_batch_decode_stats`' `steps`), the pass's q8 sites counted (`metal_dflash_sites`) and, where the box runs the rows8 form (the file's own layout probe,
   `rows8_probe_ok`, passes and `DASLLAMA_METAL_ROWS_MT` is on - the engine's `metal_rows8_on` asserted to that same
   answer), its sites on it, each counted
   format among them (`metal_dflash_rows8_sites`, `metal_dflash_rows8_sites_of`), every pass's selector on the device and
@@ -357,6 +363,11 @@ the family tag `qwen35`), its arms:
 - `dflash-27b-k4-cpu` / `dflash-27b-k4-metal` - the two arms again with the drafter's Q4_K_M file (Q4_K planes, Q6_K at some
   layers' v and down), every one of its weight planes first asserted tagged with its disk type's format; the device arm
   counts both the k4 and the k6 sites, and where the box runs the rows8 form, both formats' sites on it;
+- `dflash-27b-nv4-cpu` / `dflash-27b-nv4-metal` - the two arms again with the drafter's NVFP4 file
+  (`drafters/Qwen3.8-27B-DFlash2-NVFP4-GGUF`, every weight plane NVFP4, no `.scale` beside any), its planes first asserted
+  tagged nv4; the device arm counts the nv4 sites, its selector walks the NVFP4 codebooks on the device, and it asserts no
+  rows8 site of the drafter's (nv4 has no rows8 member); the Metal arm is a driver-against-itself compare, the speculative
+  walk against the plain walk on the same device;
 - `dflash-27b-sampled-cpu` / `dflash-27b-sampled-metal` - the three acceptances at temperature 0.7, seeded, 64 tokens
   (`generate_mtp_sampled` against `generate_`): the exact walk equal to the plain sampled walk token for token with drafts
   accepted, and again with the plain stream's 33rd id as a stop id, ending on that id's first occurrence (the stopless
@@ -377,6 +388,23 @@ the family tag `qwen35`), its arms:
   ride joint rounds (the scheduler's `mtp_joined_max` 2, a stream alone 1 - the control), each the plain scheduler's
   token for token, the two together accepting what each accepts alone within a fifth; the detach reported; a stream given a stop id emits exactly the ids before that id's first
   occurrence, the stopless stream running past it (the control); skips without das_metal;
+- `dflash-e2b-discrete` (family `gemma4e`) / `dflash-27b-discrete` (large tier; the Q8_0, Q4_K_M and NVFP4 drafters over
+  one trunk load) - the device arm on the serving discrete home (the CUDA home under its ask, else Vulkan) over the
+  resident trunk (`resident_trunk`, an f16 mirror): a counting walk - one with no near tie, the home's rows and its one-row
+  step rounding apart - the plain walk's token for token with drafts accepted (a driver-against-itself compare, the
+  speculative walk against the plain walk on the same device), the pass counted on the device (the commits logged: a plain
+  walk with the drafter attached commits its rows' context too) and every pass ending on the device's top-k and selector
+  walk, a plain walk with the drafter attached counting no pass (the control); every walk, the control's included, passes no
+  call to the CPU rails (`served_every_call`), on the CUDA home serves its decode positions on the driver
+  (`cuda_served_since`), and a speculative walk's verifies count on the resident driver of either home
+  (`moe_gpu_resident_verifies`); the walk knob off, the lists land and the host's
+  walk drafts the same ids round for round with the same count accepted and no walk on the device; the selector knob off,
+  no pass ends on the device's top-k and the host's selector drafts them too; on the E2B alone, a greedy completion drafted
+  through the facade with the plain stream's middle id as a stop ends on that id's first occurrence, the stopless drafted
+  stream the plain stream's (the control), and an embedding call over the counting prompt 24 times with the drafter attached
+  commits no drafter context (a plain prefill with it attached committing - the control), its vector finite, and the
+  counting walk after it lossless again; skips with no discrete home in the build,
+  no armed tier, a residency plan the card cannot fit, without the trunk or a leg's drafter file, or when interpreted;
 - `dflash-27b-joint` (large tier) - the same two-stream leg on the 27B hybrid: the joint verifies ride the verify seat's
   groups (`metal_mtp_group_verifies`), each stream the plain scheduler's token for token, the acceptance within a fifth of
   the streams alone; skips without das_metal;
@@ -391,7 +419,9 @@ scores' softmax and its pick against the closed form's draw at 200 seeds (one dr
 seed, the empty slot never picked, temperature 0 a point mass with no draw); `dflash_record_q` id ascending with the empty
 slot dropped; and the rejection walk over a recorded q on an 8-token vocabulary, every one of 400 seeds' verdict and token
 the closed form's (accept where u < p / q, else the residual max(0, p - q)'s draw), the rate at min(1, p / q) within 0.08,
-the point-mass closed form misreading some seed (the control). The NextN head's drafts have theirs beside them: a sampled
+the point-mass closed form misreading some seed (the control); and the selector walk over NVFP4 codebooks under the tensor's
+`.scale` (`test_dflash_walk_codebook_scale`): two candidates whose logits favour the first by half of what a scale of 2 adds
+to the second, the walk picking the first with no scale and with a scale of 1 (the controls), and the second at 2. The NextN head's drafts have theirs beside them: a sampled
 stream drafting through the draw seam under rejection alone, at every head temperature (`set_mtp_draft_temp`), and under
 neither exact nor a greedy stream; the head's temperature 0 a point mass on the argmax with no draw, 0.5 the head row's
 softmax at 0.5 with the draft the closed form's draw at 50 seeds, below 0 the stream's own softmax (the control); and the
@@ -864,13 +894,17 @@ the float4 router stamps on the lattice, with and without the bias row, the elem
 walk past whole strides) - NaN past both row ends, exact against the dot in double, the poisoned lead element the control; `geglu_side_gate`, `ple_finish_gate` - the finish's `XSCALE` stamp (`GkPleFinish`), the finish without the
 prescale its control); the side rows' gather rides the token-table family, the misc file's embed gates. The misc file's `cls_select_gate` runs the selection kernel on the template both homes stamp (`GkClsSelect`) over the Vulkan cell's
 six rows at a 262144 and a 1000 vocab against `_sel_oracle.das`'s reading. Its `df_topk_gate` and `df_walk_gate` hold the
-DFlash2 device selector to an in-test oracle and to the engine's host twins (`dflash_top_k_row`, `dflash_walk`) id for id:
+DFlash2 device selector to `_dflash_oracle.das`'s oracle (the fixture the CUDA home's walk cell, `test_cud_dflash_walk` in
+`test_cuda_tower_asr.das`, runs the same legs over through `_discrete_cells.das`'s `df_walk_case`; the Vulkan home's, `test_vkt_dflash_walk` in `test_vulkan_tower_kernels.das`, the same case; the discrete homes' top-k cells, `test_cud_dflash_topk` and `test_vkt_dflash_topk`, run this gate's five shapes through `df_topk_case`, and their pass-kernel cells, `test_cud_dflash_pass_kernels` and `test_vkt_dflash_pass_kernels`, the conv, norm-and-rope and block-attention cases) and to the engine's host twins (`dflash_top_k_row`, `dflash_walk`) id for id:
 the two-stage top-k (`MetalDflashTopkSlices`'s lists a slice against the oracle's list of each slice, `MetalDflashTopkMerge`'s rows
 against the oracle's and the host's) at the 27B drafter's seven rows of 248320, at top-7 over whole slices, top-32, a row and a
 tail slice narrower than the list, logits on a 0.25 grid so ties fill the k-th, every compare's poison on a filled slot and the
 empty slots compared apart, the ids-descending tie rule the control; the walk (`MetalDflashWalk`) over
-Q8_0 (two bytes off its bind), Q4_K, Q5_K and Q6_K codebooks synthesized in the CPU form, position 0's zero selector row
-tying two candidates whose successor rows are copies, the last-best rule and the logit-alone walk the controls. Its
+Q8_0 (two bytes off its bind), Q4_K, Q5_K, Q6_K and NVFP4 codebooks synthesized in the CPU form, position 0's zero selector row
+tying two candidates whose successor rows are copies, the last-best rule and the logit-alone walk the controls. The misc file's
+`requires=` tripwire cell (`dispatch_align_gate`) holds both walk stamps' codebook offsets (`ka.pq0 % 2`, `ka.nq0 % 2`): an even
+pair tripping nothing, an odd predecessor and an odd successor offset each tripping both stamps by name, under a recording hook
+over a discarded graph capture. Its
 `df_accept_gate` runs the rows' argmax stamp then the device accept (`MetalDflashAccept`) in one command buffer over eight rows
 of the served vocab (none, three and every draft accepted), five rows with an empty draft slot and two rows, each row's maximum
 tied at a higher id: the landing words (the count, the next anchor, every row's pick) and the committed row bit for bit an
@@ -1406,8 +1440,8 @@ the identity slot map at unit weight.
 `test_vulkan_kernels.das`, `test_vulkan_kernels_gemm.das` (the batch and cm2 / KHR tile cells,
 the f16 GEMM cells and the tile-pick cell) and `test_vulkan_kernels_attn.das` (the decode, prefill
 and flash attention cells and `test_vkd_kv16_readers`) - one census over three files, every other
-cell in the first: model-free (a Vulkan device, else skips; the two lens cells,
-`test_vkd_readonly_stamp` and `test_vkd_lens_readonly_gate`, and the flash ladders' refusal cell
+cell in the first: model-free (a Vulkan device, else skips; the three lens cells,
+`test_vkd_readonly_stamp`, `test_vkd_lens_readonly_gate` and `test_vkd_lens_binding_cap`, and the flash ladders' refusal cell
 `test_vkd_fa_stamp_refusals` need only the dasVulkan module): the
 per-class CPU-oracle units of the Vulkan kernel census (`_vkd_oracles.das` runs the class methods on the CPU as the
 oracle; `_vkd_toy.das` is the `[vk_dispatch]` bring-up fixture; `_vk_kq_fixtures.das` holds the
@@ -1496,7 +1530,9 @@ formats against the k-lattice ones and q8 at the whole subgroup. `test_vkd_reado
 the toy kernel's SPIR-V words and holds the lens's derived NonWritable to the binding the kernel
 never writes and off the one it writes; `test_vkd_lens_readonly_gate` spawns two `-compile-only`
 children (up to 180 s each) proving the lens refuses a `@readonly` binding a kernel writes, the
-plain twin as the must-compile control. `test_vkd_f16_gemm` holds the small f16 GEMM class (the
+plain twin as the must-compile control; `test_vkd_lens_binding_cap` spawns the same way, a class binding a buffer at
+`VKD_SET_BINDINGS` refused naming the dispatch, the binding and the hazard rail's last binding, the twin at that last binding
+compiling (the control). `test_vkd_f16_gemm` holds the small f16 GEMM class (the
 router logits) to the f32 dot of the same f16 values at two padded
 shapes and one off every 4-multiple (the reduce's element-guarded tail), the direct store at a
 base and the eight-chunk split with the reduce at the same base, the header under the base kept
@@ -1790,6 +1826,12 @@ of 400 seeds (at p = q every seed accepts: the control), and the residual over a
 `test_walk_cuts_at_a_stop`: with the caller's stop ids set (`Session.spec_stops`), a run of matching drafts ends on the stop
 draft - its row the last accepted, the drafts past it cut, no token parked - on the exact walk and on the typical walk, whose
 parked draw is dropped; the same runs with no stop ids accept every draft (the control).
+`test_dflash_device_shape_why`: the discrete arms' shape check (`dflash_device_shape_why` at `GK_DFLASH_HS`,
+`GK_DFLASH_ATTN_KEYS` and `DFLASH_DEVICE_ROWS`) takes a drafter of two heads of 128, a head of 256 and a window and block
+filling the staged keys exactly, and names by its own clause bias rows, a head of 258 and of 127, one key past the stage,
+a block one row past the planes, and the model, FFN, query and K/V widths each off the 32-element block.
+`test_dflash_scaled_sites`: `dflash_scaled` false with no plane scaled (the control), true with a `.scale` on any one of
+fc, the selector's three codebooks or the second layer's plane of each of the nine per-layer site lists.
 `test_sampling.das` - stocked suite; the greedy oracle and the seeded-determinism cell on
 gemma-2-2b (skip without it, `-jit` only), and model-free: the sampler units (cutoffs, penalties,
 seeded draws on a bare session) plus the candidate-list fast path against the vocab-wide
@@ -1994,6 +2036,10 @@ ask, the CPU rails' words under the CUDA ask on a dasCUDA build - and each home'
 the other home (`vulkan_dry_bake_arm` a `cuda` home, `moe_gpu_dry_bake_arm` a `vulkan` home under the ask), the arm false and
 the refusal line naming the foreign home read off the child's log; the CUDA arm refuses the home before it asks for a device, so
 the cell holds on a dasCUDA build with no card); and the
+block drafter's capture helpers (`test_rdec_caps_helpers`: `rdec_caps_slots` mapping two captured layers of eight to
+their places in the list and the rest to -1, a layer at 8 or -1 refused with no slots laid out, the trunk's last layer on it
+the control; `rdec_caps_layer` reading that map, no slots capturing none; `rdec_caps_unpack` laying two slots' rows of a
+five-row stride out row-major from row 1, the slot-major span copied as it lies differing - the control); and the
 overrides' announces (`test_override_announces`: two children on
 `_override_announce_root.das` through `_child_run.das`, unset and under `DASLLAMA_METAL_FUSE=0`, each case's lines read between
 its `CASE` records - the sliding layers' rings ringed, flat and silent on a model with none, on Metal once a layout; the pinned
@@ -2028,7 +2074,7 @@ past it continues, one under it panics, a start at 0 clears it and the same call
 `test_vulkan_tower_route_before_a_device` holds the audio fronts' route (`vulkan_tower_front_route`)
 answering off before a device is up, where the scratch sizing asks it ahead of the arm (skips with
 a device up in the process, and without dasVulkan). The Metal serving gates ride the
-same synthetic shells: `test_kq_fmt_one_row_gemv` holds the Metal prefill's one-row GEMV predicate (q8 at any width, a served superblock format - the lut-form IQ3_S among them - at whole superblocks and not at a partial one, a per-32 format at whole 32-blocks and not at a partial one, an mx4 plane at none; Q4_0 repacks to superblocks and has it); `test_peel_shape_arms` holds the token command's peel off the NextN-headed, hyper-connection and recurrent shapes one at a time on dense shells, a per-layer-embedding shell fitting it (`rdec_peel_shape_why`), and the device-home tick's segmented-window predicate (`gpu_device_prefill_segments_`) false with no driver armed; `test_moe_metal_expert_formats` sweeps `moe_metal_ok` over the seventeen
+same synthetic shells: `test_kq_fmt_one_row_gemv` holds the Metal prefill's one-row GEMV predicate (q8 at any width, a served superblock format - the lut-form IQ3_S among them - at whole superblocks and not at a partial one, a per-32 format at whole 32-blocks and not at a partial one, an mx4 plane at none; Q4_0 repacks to superblocks and has it); `test_peel_shape_arms` holds the token command's peel off the NextN-headed, hyper-connection and recurrent shapes one at a time on dense shells, a per-layer-embedding shell fitting it (`rdec_peel_shape_why`), and the device-home tick's segmented-window predicate (`gpu_device_prefill_segments_`) false with no driver armed; `test_kernel_skip_list` holds the pricing rail's skip list (`kernel_skip_parse`: none from an empty list or bare commas, the non-empty fragments in order) and its match (`kernel_skip_hit`: a fragment anywhere in the name, an empty list and a missing fragment matching none); `test_dflash_topk_slices` the DFlash2 top-k's slices (`gk_dflash_topk_slices`: 0, 1, 1, 2 and 61 at 0, 1, 4096, 4097 and 248320 logits) and the stage arguments (`gk_dflash_topk_args`: the slice stage the row's vocabulary, the merge stage slices x k entries, both at k); `test_moe_metal_expert_formats` sweeps `moe_metal_ok` over the seventeen
 expert plane formats the routed block serves and the one tag it declines (mx4), one
 mixed-format model (an mx4-tagged down plane declining it, a lut-form IQ3_S one served), the native-MXFP4 stacks under the plain routed gate (served; the repacked planes
 and gpt-oss's gate over q8 stacks declining), and the drift guard walking every `KqFmt` member - the kernel roster
@@ -2436,7 +2482,12 @@ after a 40-row opening a tail of 1, 2, 5 and 8 rows as one call peels through th
 split bar of the same tail stepped a row at a time on a second session, the row one step off the
 control, both sides' argmax rows decoded; a tail one row past the N-row command's rows takes the
 chain, no peel counted, on the same bar, as does the eight-row tail with the peel's lever off
-(`set_vulkan_prefill_peel`, put back as found) - the peel counter's control; the plan (`resident_plan_pick`) charges the per-row planes at `RDEC_NROW_MAX` rows. The forced-feed helpers it shares with the
+(`set_vulkan_prefill_peel`, put back as found) - the peel counter's control; the plan (`resident_plan_pick`) charges the per-row planes at `RDEC_NROW_MAX` rows; the
+1B Q8_0 also runs the kernel-skip cell (`kernel_skip_cell` of `_resident_feed.das`, `test_gpu_resident_llama_kernel_skip`): after
+a prompt and a recorded step, an unskipped step dispatching the decode attention (`da_attn_f16_cls`) exactly where it
+dispatches the q8 GEMV (`q8_gemv_cls`) - the control -, a step under `set_vulkan_kernel_skip` naming the attention
+dispatching none of it and the GEMV anew (the recorded commands dropped), and, the skip cleared, a step dispatching the
+attention again, each by the coverage census. The forced-feed helpers it shares with the
 other resident files live in `_resident_feed.das`. Skips without the model or the armed tier.
 `test_gpu_resident_cuda_llama.das` - stocked suite, `-jit` only; the CUDA home's whole-model driver
 (`DASLLAMA_GPU=1 DASLLAMA_CUDA=1`, the dense form: one Q8_0 arena, the f16 mirror, the token step as a
@@ -2457,7 +2508,11 @@ and two; the NVFP4 mint on the FP4 tensor leaf at one window and two, held by th
 chain than four times the CPU chain's own summed distance, the one-step-off rows past that bound - e2m1 activations
 carry one mantissa bit, so single logits scatter past any bar of the step's max |logit| a one-step-off control still
 clears), the same mint on the cm2 tiles over f16 activations (`CUDA_MMQ_OFF`) at the dense bar as the leaf's control;
-and the short window's peel through the N-row command on the CUDA driver
+the kernel-skip cell on the Q8_0 carrier (`kernel_skip_cell`, the Vulkan llama file's, through `set_cuda_kernel_skip`:
+the captured graphs dropped, so the step under the skip launches none of the decode attention and the q8 GEMV anew, by the
+CUDA census); a reload after a drop (`test_gpu_resident_cuda_llama_drop_reload`: Q8_0 loaded, an eight-row tail after a
+40-row opening, the model and its driver dropped, the same load and tail reading the first load's last-row logits bit for
+bit, a tail one token off reading other logits as the control); and the short window's peel through the N-row command on the CUDA driver
 (`peel_cell` of `_resident_feed.das`, the Vulkan llama file's and the hybrid file's cell): on the Q8_0, Q4_K_M and Q5_1
 carriers, after a 40-row opening, tails of 1, 2, 5 and 8 rows as one prefill call peel (a peel and a prefill counted)
 within the split bar of the same tail stepped a row at a time, the row one step off the control; one row past the
@@ -2477,9 +2532,12 @@ the one-row command: every row's logits a step within the split bar of the sessi
 bit; the K-quant rows round apart, as on Vulkan), every row the compare and its control read asserted finite, the row
 one step off the control, both sides' argmax pieces decoded a row, the N-row counter up by every step and unmoved by
 the sessions alone, its row counter (`rdec_nrow_rows`) up by every row of every step, every call served - two rows at
-two regions on the 1B Q8_0 (the q8 two-column stamp launched) and Q4_K_M, twelve rows at twelve regions on the Q8_0
-(one command of twelve rows a step, a tile of eight columns and one of four: the q8 eight- and four-column stamps
-launched); the same skips, and where the driver declines the model at the cell's region count.
+two regions on the 1B Q8_0 (the q8 two-column stamp launched) and Q4_K_M, both with the rows leaf's knees at 0
+(`with_rows_leaf(false)`), twelve rows at twelve regions on the Q8_0 (one command of twelve rows a step: its sites on the
+rows tensor leaf under the knees written back as found - a leaf stamp launched, the eight- and four-column stamps none -
+then, the knees at 0, a tile of eight columns and one of four, the q8 eight- and four-column stamps launched and no leaf
+stamp; every knee back as its getter read it); the same skips, and where the driver declines the model at the cell's
+region count.
 `test_gpu_resident_cuda_dense.das` - stocked suite, `-jit` only: the CUDA llama file's driver on the other dense families -
 qwen3, phi-3, gemma-2 and gemma-3, qwen2 - every load under the MMQ route the file's `[init]` pins (`CUDA_MMQ_WINNERS`),
 with the CUDA llama file's skips.
@@ -2620,6 +2678,8 @@ uncapped one the control) and 512 on the KHR arm (`test_cud_fa_h512`, gemma-4's 
 of 32, 64 and 128: the conv, the fused step on its Q8_0, f32 and sigmoid-gated o rows - the state and the ring advanced in place
 and asserted moved off their inputs, the sigmoid stamp off the silu oracle as its control -, the chunked scan
 (`dn_scan_chunk_cls`: 70 rows = four whole chunks and a six-row tail, under the silu out-norm against the same oracle and bar),
+each silu-out scan - the chunked and the two-phase - also under `no_state` (a verify's rows: the raw o rows the writing scan's
+bit for bit, the state left as found),
 the two-phase scan with the
 silu and sigmoid out-norm (`dn_gate_ref` of `_kernel_oracles.das`, the Vulkan cell's oracle) and its state moved off its
 input, and the ring tail at 5 and 2 rows bit for bit the per-channel CPU form), the fused q/k norm + rope + K/V store on the f32 and the f16 mirror stamps against the
@@ -2675,7 +2735,17 @@ block codecs - the q8_0 store at token rows and window rows against the CPU cach
 rotation and the cache's bytes bit for bit, the q8_0 and tq4 shadows against the CPU dequant as halves bit for bit,
 the tq4 un-rotation bit for bit and under the head gate, the decode attention's q8_0 and tq4 stamps on both slabs
 against the CPU attention over the dequantized rows (the oracles and staged fixtures the Vulkan codec cells share
-through `_kv_codec_oracles.das`).
+through `_kv_codec_oracles.das`). The token rows' forms: `test_cud_gemv_n_cols` holds the N-column GEMV of Q8_0, Q4_K, Q5_K,
+Q6_K, NVFP4 and IQ4_XS planes to the one-column GEMV a token row at a time at 2 to 11 token rows (the
+four-column stamps, the eight-column ones, a second column tile) over regions of 21, 7 and 1 weight rows - short row
+groups - at widths of 512, 2048 and 5120, within one FMA contraction a term (`gemv_fma_bar`: NVRTC compiles the two forms
+as separate modules under fast math, and either may fuse a term's multiply-add; the Vulkan twin `test_vkd_gemv_ncol` stays
+bit for bit), the one-column rows against the CPU oracle (`q8_gemm_oracle`, `kq_gemv_oracle`) and the next token row's rows
+outside the bar as the control; `test_cud_rows_mma` the rows tensor leaf to that N-column GEMV, the GEMV's rows against the
+same oracle, the feed-writing requants' rows against the CPU oracle at each case's shape (`requant_oracle`, `actrq_oracle`:
+the float rows' Q8_K quants exact, the others a quant within one step), their rows and feed planes under their sentinels
+where they write; `test_cud_moe_share` the routed step's sharing count to the distinct experts among its
+slots, one slot on a fresh expert counting one more.
 `test_cuda_tower_front.das`, `test_cuda_tower_blocks.das`, `test_cuda_tower_asr.das` - model-free (a CUDA device with
 NVRTC, else every cell but the closing leak gate and the blocks file's two device-free cells skips; a stamp NVRTC refuses on a box with a device reds its cell): the CUDA
 home's tower stamps (`dasllama_cuda_classes_front`, `_blocks`, `_asr`, and the clamped Q8_0 feed and the `rsqrt` norm stamps of `dasllama_cuda_classes`)
@@ -2987,7 +3057,13 @@ cells, by the names the file entries use:
   the batched rows bit for bit on the split pair (skips under the CUDA ask: the lever is the Vulkan driver's);
 - the groups cell (`cell_regions_batched_groups`): more sessions than the N-column leaves' eight-column tile, or than the
   N-row command steps at once, a region each - every batched step the fewest commands of the command's rows, its GEMVs in
-  column tiles, never a row at a time, each row against its session alone;
+  column tiles, never a row at a time, each row against its session alone; the CUDA home's rows tensor leaf is off for
+  the steps (`_resident_feed.das`'s `with_rows_leaf(false)`: every format's knee at 0, each put back as its getter read
+  it), so the column tiles serve there too and no leaf stamp launches (`home_rows_leaf_launches`) - the leaf cell's
+  control;
+- the leaf cell (`cell_regions_batched_leaf`): the same sessions on the CUDA home's rows tensor leaf, every format's knee
+  written back as found - a leaf stamp launched, every row nearer its session alone than its previous step
+  (`ctrl_bar`); skips on a home with no rows leaf;
 - the side-rows cell (`cell_regions_batched_side_rows`): a batched row carries its own per-layer-embedding side input,
   gathered on the device off the row's id - no table row gathered on the host (`ple_host_gather_rows`), every batched row
   counted by `vk_rdec_nrow_side_gathered`;
@@ -3106,7 +3182,9 @@ the two batched-step cells on a K-quant carrier, held to the split bar with the 
 bit. Its llama cells, `test_regions_batched_steps_k`, `test_regions_batched_steps_split_k`, `test_regions_batched_groups_k`
 and `test_regions_batched_groups_wide_k`, load Llama-3.2-1B Q4_K_M: the two batched-step cells on a K-quant
 carrier - the N-row command's K-quant GEMV leaves and its split Q8_K sites - held to the split bar with the one-token-off
-control rather than bit for bit, since those sites round apart from the one-row command's; and the groups cell twice -
+control rather than bit for bit, since those sites round apart from the one-row command's; the leaf cell
+(`test_regions_batched_leaf_k`) - twelve sessions on the CUDA home's rows tensor leaf over the file's Q4_K and Q6_K planes,
+skipping on a home with no rows leaf; and the groups cell twice -
 twelve sessions over twelve regions, past the N-column leaves' eight-column tile, every batched step one command whose
 GEMVs run a tile of eight columns and one of four, and twenty over twenty, more rows than the N-row command's sixteen, every
 batched step two commands of ten (`rdec_nrow_steps` up by the group count a step, never a row at a time; the sessions
@@ -3167,7 +3245,9 @@ K-quant projection leaves round apart from the one-row command's, and a MoE's ex
 every layer - the bar's reading is `_resident_regions.das`'s).
 `test_gpu_resident_regions_qwen35moe.das` - Qwen3.6-35B-A3B-MTP-IQ4_XS-pure, large tier, the routed deltanet hybrid with its
 NextN head: the tolerance cells' continuation form at the routed chain's 20% bar (the prefill counter up by every call), the
-groups cell over ten sessions on the wide bar, the greedy chain forced on bit for bit the plain walk (`greedy_chain_cell`:
+groups cell over ten sessions on the wide bar with the CUDA home's rows leaf off, the leaf cell over the same ten (the
+file's weight arena runs past 2^32 words, so the leaf's plane reads hold only through its 16-byte view), the greedy chain
+forced on bit for bit the plain walk (`greedy_chain_cell`:
 every on-pick step a chain hit), short tails peeled through the token commands (`recurrent_peel_cell`, the peel counter,
 speculation off), and the pool cell.
 `test_gpu_resident_regions_gptoss.das` - gpt-oss-20b mxfp4, large tier: the two batched-step cells, the batched-first cell
@@ -3507,7 +3587,9 @@ built by `daslang -lib` / `-ctx` - carries `[export_c]` entry points instead; bo
 two declarations.
 `test_howto_gate` and `test_locked_queue_gate`: the HOW_TO check and the unlocked-queue-call check of `../REVIEW.das`
 run as a child over fixture files written under the test's temp dir (its `--howto` and `--queue-calls` rails) - one file a
-defect, each red on its own finding, and a clean one green.
+defect, each red on its own finding, and a clean one green. `test_ncol_rr_gate`: the N-column row-group check over its
+`--ncol-rr <kernels> <home>...` rail - two stamp files whose `override RR` is the kernel file's `KQ_N_RR` green, a stamp of
+another RR and a stamp file with no `override RR` each one finding, a kernel file with no `KQ_N_RR` a finding.
 `test_dasllama_core_requires_no_decoder`: walks the module dependencies in-process; no module
 `dasllama_core` depends on is `audio` or `stbimage`, while `dasllama/dasllama` depends on both.
 `test_stream_calls_refuse_without_a_model`: the library example's stream and memory calls refuse
@@ -3892,7 +3974,10 @@ has not heard (a WAV's four reps read `new` four times; a clip that is no WAV go
 fake hears it twice and the row is refused), a row answers the text its reps read and refuses
 reps that read different texts or a text other than the one asked, and the loaded row stands while
 the fake chat turn outlasts two fast reps and is refused when the reps outlive the turn, when the
-turn carries no reply text, and when the loaded text differs from the idle one. The synthesis and
+turn carries no reply text, and when the loaded text differs from the idle one. `test_prompt_files_id_list`:
+`../harness/_prompt_files.das`'s `id_list` keeping a comma list's numbers in order (an empty part and a word dropped, every
+number kept unbounded - the control), dropping numbers below `lo` and past `hi` with both bounds kept, and an absent file's
+`read_ids` none. The synthesis and
 scene cells: a WAV's seconds off its header (a header with no sample and text bytes reading 0), a
 synthesis against the fake's one-second WAV (its seconds, a failed and a JSON answer saying why), a
 scene round against both fakes (one decode rate, every lane answering inside the turn), a paced

@@ -14,26 +14,10 @@ require daslib/strings_boost
 require dasllama/dasllama_vulkan_common
 require dasllama/dasllama_cuda_common
 require _vk_probe_fixture
+require _cuda_time public   // cuda_time_chain: a CUDA arm's round
 
 let VK_CLASS_REFUSED = "the Vulkan class did not arm (no Vulkan device, or its build failed)"
 let CU_CLASS_REFUSED = "the CUDA class did not arm (no CUDA device with NVRTC, or its build failed)"
-
-//! one round of a CUDA arm in microseconds a launch: `dispatches` launches closed by a sync on the host wall, then as many
-//! between a CUDA event pair; `launch` takes its index within the round
-def cuda_time_chain(dispatches : int; launch : block<(i : int) : void>) : tuple<wall : double; event : double> {
-    let t0 = ref_time_ticks()
-    for (i in range(dispatches)) {
-        invoke(launch, i)
-    }
-    cud_sync()
-    let wall = double(get_time_usec(t0)) / double(dispatches)
-    let ms = cud_time_ms() {
-        for (i in range(dispatches)) {
-            invoke(launch, i)
-        }
-    }
-    return (wall = wall, event = double(ms) * 1000.0lf / double(dispatches))
-}
 
 //! a Vulkan arm's command, recorded once; each of the arm's rounds is one submit of it
 def record_arm(rec : block<(raw : VkCommandBuffer; var hz : VkHaz) : void>) : VkCommandBuffer {

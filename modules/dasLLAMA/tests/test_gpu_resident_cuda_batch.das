@@ -4,7 +4,7 @@ options persistent_heap
 options _dasllama_internal = true
 
 require dastest/testing_boost public
-require dasllama/dasllama_transformer   // nolint:STYLE029 — the umbrella's [init] registrations arm the llama arch and the CUDA home
+require dasllama/dasllama_transformer   // nolint:STYLE029,LINT019 — the umbrella's [init] registrations arm the llama arch and the CUDA home
 require dasllama/dasllama
 require daslib/jobque_boost
 require dasllama/dasllama_math
@@ -22,8 +22,10 @@ require _compares
 // kernels where the one-row command takes the GEMV epilogues), the row one step off the control, the N-row counter up by
 // every step (the row-at-a-time loop moves it by nothing) and its row counter up by every row of every step, every call
 // served. Two rows at two regions on the Q8_0 file (the q8 two-column stamp launched) and on the Q4_K_M file (the
-// K-quant N-column leaves and the Q8_K feeds), and twelve rows at twelve regions on the Q8_0 file: one command of twelve
-// rows a step, its GEMVs in a tile of eight columns and one of four (the q8 eight- and four-column stamps launched).
+// K-quant N-column leaves and the Q8_K feeds), the rows leaf's knees at 0, and twelve rows at twelve regions on the Q8_0
+// file: one command of twelve rows a step, its sites on the rows tensor leaf (a leaf stamp launched, the eight- and
+// four-column stamps none), and with the leaf's knees at 0 its GEMVs in a tile of eight columns and one of four (the q8
+// eight- and four-column stamps launched). Every cell pins the knees through `with_rows_leaf` and puts them back.
 // Every cell skips off the JIT, without DASLLAMA_CUDA=1, without DASLLAMA_GPU=1 on a device the driver serves, without
 // the file under models_dir(), or where the driver declines the model at the cell's region count.
 
@@ -39,9 +41,39 @@ let private PROMPT_A = 40l
 let private PROMPT_B = 57l
 let private RIG_CTX = 2048l   //! the mirror's context a region: twelve regions of the 1B's f16 rows fit the card beside the planes
 
+//! the launch counts of three stamp lists, one after another
+def private stamp_counts(col_stamps, any_stamps, no_stamps : array<string>) : array<int> {
+    var n : array<int>
+    n |> reserve(length(col_stamps) + length(any_stamps) + length(no_stamps))
+    for (list in [unsafe(addr(col_stamps)), unsafe(addr(any_stamps)), unsafe(addr(no_stamps))]) {
+        for (name in *list) {
+            n |> push(cud_kernel_coverage_of(name))
+        }
+    }
+    return <- n
+}
+
+//! since `before` (`stamp_counts`): every stamp of `col_stamps` launched, one of `any_stamps` at the least (empty = none
+//! asked), none of `no_stamps`
+def private stamps_launched(t : T?; col_stamps, any_stamps, no_stamps : array<string>; before : array<int>) {
+    for (name, i in col_stamps, count()) {
+        let n = cud_kernel_coverage_of(name) - before[i]
+        t |> success(n > 0, "the batched steps launched the stamp {name} ({n} launches)")
+    }
+    var any_launched = 0
+    for (name, i in any_stamps, count(length(col_stamps))) {
+        any_launched += cud_kernel_coverage_of(name) - before[i]
+    }
+    t |> success(empty(any_stamps) || any_launched > 0, "the batched steps launched one of the stamps {any_stamps} ({any_launched} launches)")
+    for (name, i in no_stamps, count(length(col_stamps) + length(any_stamps))) {
+        t |> equal(cud_kernel_coverage_of(name) - before[i], 0, "the batched steps launched no {name}: another form serves its sites")
+    }
+}
+
 //! `rows` sessions over prompts of their own lengths (every prompt distinct), batched `STEPS` steps through the N-row command
-//! against each alone, on `file` loaded at `rows` regions; every N-column stamp of `col_stamps` launched by the batched steps
-def private batched_rows_cell(t : T?; file : string; rows : int64; col_stamps : array<string>) {
+//! against each alone, on `file` loaded at `rows` regions; every stamp of `col_stamps` launched by the batched steps, one of
+//! `any_stamps` at the least (empty = none asked), and none of `no_stamps`
+def private batched_rows_cell(t : T?; file : string; rows : int64; col_stamps, any_stamps, no_stamps : array<string>) {
     let path = cuda_model_path(t, file)
     if (empty(path)) return
     let levers = resident_levers()
@@ -73,13 +105,11 @@ def private batched_rows_cell(t : T?; file : string; rows : int64; col_stamps : 
         t |> success(logits_maxdiff(alone[0][0], alone[1][0]) > 0.0, "the prompts read different logits, so a crossed region cannot pass")
         let rows0 = rdec_nrow_rows()
         let steps0 = rdec_nrow_steps()
-        var stamps0 <- [for (name in col_stamps); cud_kernel_coverage_of(name)]
+        var before <- stamp_counts(col_stamps, any_stamps, no_stamps)
         var got <- batched_logits_rows(t, tr, prompts, feeds, mirror_kv_dtype(), STEPS) <| $ => rdec_nrow_steps()
         let commands = rdec_nrow_steps() - steps0
         t |> equal(rdec_nrow_rows() - rows0, rows * commands, "every N-row command carried all {rows} rows ({rdec_nrow_rows() - rows0} rows over {commands} commands)")
-        for (name, n0 in col_stamps, stamps0) {
-            t |> success(cud_kernel_coverage_of(name) > n0, "the batched steps launched the N-column stamp {name} ({cud_kernel_coverage_of(name) - n0} launches)")
-        }
+        stamps_launched(t, col_stamps, any_stamps, no_stamps, before)
         var worst = 0.0
         var tight = 1.0e30
         for (st in range64(STEPS)) {
@@ -106,7 +136,7 @@ def private batched_rows_cell(t : T?; file : string; rows : int64; col_stamps : 
             log_argmax_rows(tr, "{file} batched row {i}: the session alone, then the batched rows", got_i, want_i)
         }
         to_log(LOG_INFO, "{file} at {rows} rows: the widest miss {worst} of the bar, the tightest control {tight} bars\n")
-        delete stamps0
+        delete before
         served_every_call(t)
         delete got
         delete alone
@@ -119,21 +149,35 @@ def private batched_rows_cell(t : T?; file : string; rows : int64; col_stamps : 
 [test(description = "On the CUDA home with Llama-3.2-1B Q8_0, two sessions batched six steps through the N-row command land every row within the split bar of each session stepped alone, the previous step outside it, with the q8 two-column stamp launched")]
 def test_gpu_resident_cuda_batch_two_rows(t : T?) {
     t |> run("{FILE_1B}: two sessions at two regions, six batched steps through the N-row command against each alone") @(t : T?) {
-        batched_rows_cell(t, FILE_1B, 2l, ["q8_gemv_n2_cls_cuda"])
+        var inscope none : array<string>
+        with_rows_leaf(false) {
+            batched_rows_cell(t, FILE_1B, 2l, ["q8_gemv_n2_cls_cuda"], none, none)
+        }
     }
 }
 
 [test(description = "On the CUDA home with Llama-3.2-1B Q4_K_M, two sessions batched through the N-row command over the K-quant N-column leaves land every row within the split bar of each session alone, the previous step outside it")]
 def test_gpu_resident_cuda_batch_two_rows_k(t : T?) {
     t |> run("{FILE_1B_K}: the same on the K-quant planes (the kq N-column leaves, the Q8_K feeds)") @(t : T?) {
-        var inscope no_stamps : array<string>
-        batched_rows_cell(t, FILE_1B_K, 2l, no_stamps)
+        var inscope none : array<string>
+        with_rows_leaf(false) {
+            batched_rows_cell(t, FILE_1B_K, 2l, none, none, none)
+        }
     }
 }
 
-[test(description = "On the CUDA home with Llama-3.2-1B Q8_0, twelve sessions in one N-row command a step land every row within the split bar of each session alone, launching the q8 eight- and four-column stamps, every command carrying all twelve rows")]
+[test(description = "On the CUDA home with Llama-3.2-1B Q8_0, twelve sessions in one N-row command a step land every row within the split bar of each session alone, every command carrying all twelve rows: on the rows tensor leaf by default, launching no N-column stamp, and with the leaf's knee pinned off on the q8 eight- and four-column stamps")]
 def test_gpu_resident_cuda_batch_twelve_rows(t : T?) {
-    t |> run("{FILE_1B}: twelve sessions at twelve regions, one command of twelve rows a step (a tile of eight columns and one of four)") @(t : T?) {
-        batched_rows_cell(t, FILE_1B, 12l, ["q8_gemv_n8_cls_cuda", "q8_gemv_n4_cls_cuda"])
+    t |> run("{FILE_1B}: twelve sessions at twelve regions, one command of twelve rows a step on the rows tensor leaf") @(t : T?) {
+        var inscope none : array<string>
+        with_rows_leaf(true) {
+            batched_rows_cell(t, FILE_1B, 12l, none, ["q8_rows_mma_n_cuda", "q8_rows_mma_w_cuda"], ["q8_gemv_n8_cls_cuda", "q8_gemv_n4_cls_cuda"])
+        }
+    }
+    t |> run("{FILE_1B}: the same with the leaf's knee pinned off (a tile of eight columns and one of four)") @(t : T?) {
+        var inscope none : array<string>
+        with_rows_leaf(false) {
+            batched_rows_cell(t, FILE_1B, 12l, ["q8_gemv_n8_cls_cuda", "q8_gemv_n4_cls_cuda"], none, ["q8_rows_mma_n_cuda", "q8_rows_mma_w_cuda"])
+        }
     }
 }

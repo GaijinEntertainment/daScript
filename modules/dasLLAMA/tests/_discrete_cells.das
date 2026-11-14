@@ -30,11 +30,13 @@ require dasllama/dasllama_gemma4a   // gemma4a_attn_scales, gemma4a_attn_past, g
 require dasllama/dasllama_qwen3a   // QWEN3A_TOK_PER_CHUNK
 require dasllama/dasllama_audio   // build_dft_twiddles
 require ?vulkan dasllama/dasllama_vulkan_classes
+require ?vulkan dasllama/dasllama_vulkan_classes_dflash
 require ?vulkan _vkd_oracles
 require ?cuda dasllama/dasllama_cuda_classes
 require ?cuda dasllama/dasllama_cuda_classes_front
 require ?cuda dasllama/dasllama_cuda_classes_blocks
 require ?cuda dasllama/dasllama_cuda_classes_asr
+require ?cuda dasllama/dasllama_cuda_classes_dflash
 require ?cuda _cuda_cell
 require _compares
 require _kernel_oracles
@@ -42,6 +44,7 @@ require _attn_oracle
 require _vad_oracle
 require _rnnt_oracle
 require _ctc_oracle
+require _dflash_oracle
 
 let F16_SENTINEL_BITS = 0x7e007e00u   //! a half plane's fill: a NaN in both halves, where the f32 word's low half would read as a legitimate zero pad
 let F16_SENTINEL = 0x7e00u            //! ... one half of it
@@ -1751,5 +1754,324 @@ def f16_gemm_s_case(t : T?; var cp : auto(C)) {
         var inscope ys2 <- cp |> plane_as(ysp, type<float>, ylen)
         var inscope poisoned <- [for (i in range(sh.rows * sh.d)); ys2[(i / sh.d) * sh.ystride + i % sh.d]]
         check_exceeds(t, "{tag}: the control - a poisoned weight half moves the rows", poisoned, ref, bar)
+    }
+}
+
+//! the block drafter's dynamic two-tap convolution (`GkDflashConv`) against the in-test loop: the input side at `boff` 0 over
+//! one block, the output side at a `boff` past a foreign layer over two blocks of four rows (a block's first row takes no
+//! predecessor); the one-block form over the two-block panel the control
+def df_conv_case(t : T?; var cp : auto(C)) {
+    let tag = "dflash_conv"
+    let dim = 96
+    let g = 8
+    let ng = dim / g
+    let convk = 2
+    let projw = 2 * convk * ng
+    let rows = 8
+    for (arm in range(2)) {
+        cp |> cell_clear()
+        let side = arm
+        let blk = arm == 0 ? 0 : 4
+        let boff = arm == 0 ? 0 : 2 * convk * dim + 11
+        var inscope x <- row_fill(rows * dim, 37, 5, 0.03, -1.4)
+        var inscope dyn <- row_fill(rows * projw, 13, 9, 0.02, -0.9)
+        var inscope base <- row_fill(boff + 2 * convk * dim, 29, 3, 0.01, -0.5)
+        let xp = cp |> in_(x)
+        let yp = cp |> out_(rows * dim, 0, lanes_past(rows * dim, WG))
+        let dp = cp |> in_(dyn)
+        let bp = cp |> in_(base)
+        var pa = GkDflashConvArgs(dim = uint(dim), g = uint(g), side = uint(side), convk = uint(convk), rows = uint(rows), blk = uint(blk),
+            boff = uint(boff))
+        cp |> cell_launch(t, tag) $(var rl) {
+            enc_dflash_conv_cls(rl, seats(fixed_array(xp, yp, dp, bp)), pa, int64((rows * dim + WG - 1) / WG))
+        }
+        var inscope y_dev <- cp |> plane_run(yp)
+        var inscope y_ref <- plane_of(rows * dim, 0.0)
+        var inscope y_one <- plane_of(rows * dim, 0.0)   // the control: every row but the panel's first takes its predecessor
+        let tap0 = side * convk
+        for (r in range(rows)) {
+            for (c in range(dim)) {
+                let k0 = (base[boff + tap0 * dim + c] + dyn[r * projw + tap0 * ng + c / g]) * x[r * dim + c]
+                let k1 = r > 0 ? (base[boff + (tap0 + 1) * dim + c] + dyn[r * projw + (tap0 + 1) * ng + c / g]) * x[(r - 1) * dim + c] : 0.0
+                y_ref[r * dim + c] = k0 + ((blk == 0 ? r : r % blk) > 0 ? k1 : 0.0)
+                y_one[r * dim + c] = k0 + k1
+            }
+        }
+        check_rows(t, "{tag} side {side} blk {blk} vs the two-tap loop", y_dev, y_ref, BAR_APPROX, dim)
+        slack_kept(t, tag, cp, yp, type<uint>, rows * dim, lanes_past(rows * dim, WG), NAN_SENTINEL_BITS)
+        if (blk != 0) {
+            check_exceeds(t, "{tag} control: one block over the panel reads a predecessor at a block's first row", y_dev, y_one, BAR_APPROX)
+        }
+    }
+}
+
+//! the block drafter's selector walk (`GkDflashWalk`) over `_dflash_oracle.das`'s fixture, the Metal gate's legs: every codebook
+//! format the walk dequantizes on either side, the picks the oracle's and the engine's host walk's id for id, the slots past
+//! them at their sentinel; the last-best rule and the logit-alone walk the controls that must miss
+def df_walk_case(t : T?; var cp : auto(C)) {
+    let legs = fixed_array((pf = KqFmt.q8, nf = KqFmt.q8, rank = 64, vocab = 300, k = 16),
+        (pf = KqFmt.k4, nf = KqFmt.k6, rank = 256, vocab = 300, k = 16), (pf = KqFmt.k5, nf = KqFmt.k4, rank = 512, vocab = 200, k = 7),
+        (pf = KqFmt.k6, nf = KqFmt.k5, rank = 256, vocab = 200, k = 16), (pf = KqFmt.q8, nf = KqFmt.k4, rank = 256, vocab = 10, k = 16),
+        (pf = KqFmt.nv4, nf = KqFmt.nv4, rank = 256, vocab = 300, k = 16), (pf = KqFmt.k4, nf = KqFmt.nv4, rank = 512, vocab = 200, k = 7))
+    for (lg in legs) {
+        cp |> cell_clear()
+        let tag = "dflash walk {lg.pf}/{lg.nf} rank={lg.rank} vocab={lg.vocab} k={lg.k}"
+        let nd = DF_WALK_ND
+        var inscope fx <- df_walk_fixture(lg.pf, lg.nf, lg.rank, lg.vocab, lg.k)
+        var inscope want <- df_walk_oracle(fx.dr, DF_WALK_TOK, nd, lg.k, lg.rank, fx.top.ids, fx.top.vals, fx.hsel, false, false)
+        var inscope picks : array<int64>
+        picks |> resize(nd + 1)
+        picks[0] = int64(DF_WALK_TOK)
+        dflash_walk(fx.dr, int64(DF_WALK_TOK), int64(nd), fx.cids, fx.top.vals, fx.hsel, picks)
+        var inscope host <- [for (v in picks); v < 0l ? DF_NONE : uint(v)]
+        check_exact(t, "{tag}: the engine's host walk", host, want)
+        var inscope pb <- df_book_planes(fx.dr, fx.dr.sel_prev)
+        var inscope nb <- df_book_planes(fx.dr, fx.dr.sel_next)
+        t |> success(lg.pf != KqFmt.q8 || pb.q0 == 2u, "{tag}: a Q8_0 predecessor codebook sits two bytes off its four-aligned plane")
+        let tokp = cp |> in_plain([uint(DF_WALK_TOK), 1u, 2u])
+        let hp = cp |> in_(fx.hsel)
+        let cidp = cp |> in_plain(fx.top.ids)
+        let cvp = cp |> in_(fx.top.vals)
+        let pqp = cp |> in_plain(pb.q)
+        let psp = empty(pb.s) ? pqp : cp |> in_plain(pb.s)
+        let nqp = cp |> in_plain(nb.q)
+        let nsp = empty(nb.s) ? nqp : cp |> in_plain(nb.s)
+        let idp = cp |> out_words(int64((nd + 1 + 4) * 4), DF_OUT_SENTINEL)
+        var ka = GkDflashWalkArgs(rank = uint(lg.rank), k = uint(lg.k), nd = uint(nd), pfmt = uint(dflash_walk_fmt_code(lg.pf)),
+            nfmt = uint(dflash_walk_fmt_code(lg.nf)), pq0 = pb.q0, nq0 = nb.q0)
+        cp |> cell_launch(t, tag) $(var rl) {
+            enc_dflash_walk_cls(rl, seats(fixed_array(tokp, hp, cidp, cvp, pqp, pqp, psp, psp, nqp, nqp, nsp, nsp, idp)), ka, 1l)
+        }
+        var inscope ids <- cp |> plane_as(idp, type<uint>, nd + 1 + 4)
+        var inscope got <- [for (i in range(nd + 1)); ids[i]]
+        check_exact(t, "{tag}: picks", got, want)
+        var inscope past <- [for (i in range(nd + 1, nd + 5)); i; where ids[i] != DF_OUT_SENTINEL]
+        t |> equal(length(past), 0, "{tag}: the slots past the {nd} picks keep their sentinel ({length(past)} moved, the first at {empty(past) ? -1 : past[0]})")
+        if (lg.vocab > 5) {
+            var inscope last <- df_walk_oracle(fx.dr, DF_WALK_TOK, nd, lg.k, lg.rank, fx.top.ids, fx.top.vals, fx.hsel, true, false)
+            t |> success(mismatch_exact(got, last) > 0, "{tag}: the control - the last-best rule picks another id at the tied position")
+            var inscope unary <- df_walk_oracle(fx.dr, DF_WALK_TOK, nd, lg.k, lg.rank, fx.top.ids, fx.top.vals, fx.hsel, false, true)
+            t |> success(mismatch_exact(got, unary) > 0, "{tag}: the control - the logit alone picks other ids, so the codebook term moves the walk")
+        }
+    }
+}
+
+//! the slots `n .. n + 8` of `whole` that left `sentinel`
+def private df_past_moved(whole : array<uint>; n : int; sentinel : uint) : array<int> => <- [for (i in range(n, n + 8)); i; where whole[i] != sentinel]
+
+//! the slots `n .. n + 8` of the NaN-filled `whole` that left the NaN
+def private df_past_moved(whole : array<float>; n : int) : array<int> => <- [for (i in range(n, n + 8)); i; where !is_nan(whole[i])]
+
+//! the slots past every run that left their sentinel: the count and the first one's plane and slot
+def private df_past_report(planes : array<tuple<string; array<int>>>) : tuple<n : int; first : string> {
+    var n = 0
+    var first = "none"
+    for (p in planes) {
+        if (n == 0 && !empty(p._1)) {
+            first = "{p._0}[{p._1[0]}]"
+        }
+        n += length(p._1)
+    }
+    return (n = n, first = first)
+}
+
+//! the block drafter's two-stage top-k (`GkDflashTopk`) on the Metal gate's legs: the slices' lists and the merged rows the
+//! oracle's bit for bit, the id slots past every run at their sentinel; the ids-descending tie rule the control that must
+//! miss where the fixture ties at the k-th
+def df_topk_case(t : T?; var cp : auto(C)) {
+    for (lg in df_topk_legs()) {
+        cp |> cell_clear()
+        let tag = "dflash topk rows={lg.rows} vocab={lg.vocab} k={lg.k}"
+        let rows = lg.rows
+        let k = lg.k
+        var inscope fx <- df_topk_fixture(lg)
+        let nsl = fx.nsl
+        let np = rows * nsl * k
+        let plg = cp |> in_(fx.lg)
+        let ppid = cp |> out_words(int64((np + 8) * 4), DF_OUT_SENTINEL)
+        let ppv = cp |> out_(np + 8)
+        let pid = cp |> out_words(int64((rows * k + 8) * 4), DF_OUT_SENTINEL)
+        let pv = cp |> out_(rows * k + 8)
+        var ska = GkDflashTopkArgs(vocab = uint(lg.vocab), k = uint(k))
+        var mka = GkDflashTopkArgs(vocab = uint(nsl * k), k = uint(k))
+        cp |> cell_launch(t, tag) $(var rl) {
+            enc_dflash_topk_slices_cls(rl, seats(fixed_array(plg, plg, ppid, ppv)), ska, int64(nsl * rows))
+            enc_dflash_topk_merge_cls(rl, seats(fixed_array(ppv, ppid, pid, pv)), mka, int64(rows))
+        }
+        var inscope pids <- cp |> plane_as(ppid, type<uint>, np + 8)
+        var inscope pvals <- cp |> plane_run(ppv)
+        var inscope ids <- cp |> plane_as(pid, type<uint>, rows * k + 8)
+        var inscope vals <- cp |> plane_run(pv)
+        var inscope pids_run <- [for (i in range(np)); pids[i]]
+        var inscope pvals_run <- [for (i in range(np)); pvals[i]]
+        var inscope ids_run <- [for (i in range(rows * k)); ids[i]]
+        var inscope vals_run <- [for (i in range(rows * k)); vals[i]]
+        df_check_lists(t, "{tag}: the {nsl} slices' ids", pids_run, fx.part_ids, fx.part_live, k)
+        df_check_lists(t, "{tag}: the {nsl} slices' logits", pvals_run, fx.part_vals, fx.part_live, k)
+        df_check_lists(t, "{tag}: ids", ids_run, fx.want.ids, fx.row_live, k)
+        df_check_lists(t, "{tag}: logits", vals_run, fx.want.vals, fx.row_live, k)
+        var inscope past <- [("slice ids", df_past_moved(pids, np, DF_OUT_SENTINEL)), ("slice logits", df_past_moved(pvals, np)),
+                             ("ids", df_past_moved(ids, rows * k, DF_OUT_SENTINEL)), ("logits", df_past_moved(vals, rows * k))]
+        let moved = df_past_report(past)
+        t |> equal(moved.n, 0, "{tag}: the id and logit slots past every run keep their sentinel ({moved.n} moved, the first at {moved.first})")
+        if (lg.vocab > k) {
+            t |> success(mismatch_exact(ids_run, fx.flipped.ids) > 0, "{tag}: the control - the ids-descending tie rule picks other ids, so the fixture ties at the k-th")
+        }
+    }
+}
+
+//! the block drafter's head norm and rope (`GkDflashQkn`) against the in-test form: three heads of 64 over four rows, the
+//! rows a stride past their width in, every buffer at an offset, the rotation at positions 37 ..; the rows roped one position
+//! on the control
+def df_qkn_case(t : T?; var cp : auto(C)) {
+    cp |> cell_clear()
+    let tag = "dflash_qkn"
+    let hs = 64
+    let nheads = 3
+    let rows = 4
+    let xs = nheads * hs + 5
+    let ys = nheads * hs
+    let xoff = 3
+    let woff = 7
+    let yoff = 16
+    let pos0 = 37
+    let eps = 1.0e-6
+    var inscope x <- row_fill(xoff + rows * xs, 41, 7, 0.05, -2.1)
+    var inscope w <- row_fill(woff + hs, 7, 1, 0.01, 0.6)
+    var inscope invf <- [for (i in range(hs / 2)); pow(10000.0, -float(2 * i) / float(hs))]
+    let xp = cp |> in_(x)
+    let wp = cp |> in_(w)
+    let fp = cp |> in_(invf)
+    let yp = cp |> out_(yoff + rows * ys)
+    var pa = GkDflashQknArgs(hs = uint(hs), nheads = uint(nheads), xs = uint(xs), ys = uint(ys), pos0 = uint(pos0), xoff = uint(xoff),
+        woff = uint(woff), yoff = uint(yoff), eps = eps)
+    cp |> cell_launch(t, tag) $(var rl) {
+        enc_dflash_qkn_cls(rl, seats(fixed_array(xp, wp, fp, yp)), pa, int64(nheads * rows))
+    }
+    var inscope y_all <- cp |> plane_run(yp)
+    var inscope y_dev <- [for (i in range(rows * ys)); y_all[yoff + i]]
+    var inscope y_ref <- plane_of(rows * ys, 0.0)
+    var inscope y_next <- plane_of(rows * ys, 0.0)
+    let half = hs / 2
+    for (r in range(rows)) {
+        for (h in range(nheads)) {
+            var ss = 0.0lf
+            for (i in range(hs)) {
+                let v = x[xoff + r * xs + h * hs + i]
+                ss += double(v) * double(v)
+            }
+            let inv = 1.0 / sqrt(float(ss / double(hs)) + eps)
+            for (i in range(half)) {
+                let a = x[xoff + r * xs + h * hs + i] * inv * w[woff + i]
+                let b = x[xoff + r * xs + h * hs + half + i] * inv * w[woff + half + i]
+                for (shift in range(2)) {
+                    let ang = float(pos0 + r + shift) * invf[i]
+                    let c = cos(ang)
+                    let sn = sin(ang)
+                    if (shift == 0) {
+                        y_ref[r * ys + h * hs + i] = a * c - b * sn
+                        y_ref[r * ys + h * hs + half + i] = a * sn + b * c
+                    } else {
+                        y_next[r * ys + h * hs + i] = a * c - b * sn
+                        y_next[r * ys + h * hs + half + i] = a * sn + b * c
+                    }
+                }
+            }
+        }
+    }
+    check_rows(t, "{tag} normed and roped heads vs the in-test form", y_dev, y_ref, NORM_BAR, ys, hs)
+    slack_kept(t, tag, cp, yp, type<uint>, 0, yoff, NAN_SENTINEL_BITS)
+    check_exceeds(t, "{tag} control: the rows roped one position on land off the stamp's", y_dev, y_next, NORM_BAR)
+}
+
+//! the block drafter's attention (`GkDflashAttn`) against the in-test softmax: four query heads of 64 over two key-value
+//! heads, a block of eight rows at positions 100 .. over a layer's ring at an offset, its 44-position window masking the
+//! furthest of positions 60 .. 99 - at the panel's first block and its second; the unwindowed softmax the control
+def df_attn_case(t : T?; var cp : auto(C)) {   // nolint:STYLE038 — one fixture, its two block legs and their control
+    let tag = "dflash_attn"
+    let hs = 64
+    let nheads = 4
+    let grp = 2
+    let kvd = (nheads / grp) * hs
+    let qd = nheads * hs
+    let rows = 8
+    let w = 44
+    let pos0 = 100
+    let lo = 60
+    let nctx = 40
+    let scale = 1.0 / sqrt(float(hs))
+    let ringoff = w * kvd + 9
+    for (arm in range(2)) {
+        cp |> cell_clear()
+        let rbase = arm * rows
+        let prow = rbase + rows
+        var inscope q <- row_fill(prow * qd, 31, 11, 0.02, -1.0)
+        var inscope kb <- row_fill(prow * kvd, 17, 5, 0.02, -0.9)
+        var inscope vb <- row_fill(prow * kvd, 23, 3, 0.03, -1.3)
+        var inscope rk <- row_fill(ringoff + w * kvd, 43, 7, 0.02, -1.1)
+        var inscope rv <- row_fill(ringoff + w * kvd, 19, 13, 0.03, -1.2)
+        let qp = cp |> in_(q)
+        let kbp = cp |> in_(kb)
+        let vbp = cp |> in_(vb)
+        let rkp = cp |> in_(rk)
+        let rvp = cp |> in_(rv)
+        let op = cp |> out_(prow * qd)
+        var pa = GkDflashAttnArgs(rows = uint(rows), pos0 = uint(pos0), lo = uint(lo), nctx = uint(nctx), w = uint(w), hs = uint(hs),
+            nheads = uint(nheads), grp = uint(grp), scale = scale, rbase = uint(rbase), koff = uint(ringoff), voff = uint(ringoff))
+        cp |> cell_launch(t, tag) $(var rl) {
+            enc_dflash_attn_cls(rl, seats(fixed_array(qp, kbp, vbp, rkp, rvp, op)), pa, int64(nheads * rows))
+        }
+        var inscope o_all <- cp |> plane_run(op)
+        var inscope o_dev <- [for (i in range(rows * qd)); o_all[rbase * qd + i]]
+        var inscope o_ref <- plane_of(rows * qd, 0.0)
+        var inscope o_open <- plane_of(rows * qd, 0.0)
+        let nkeys = nctx + rows
+        var sc : array<float>
+        sc |> resize(nkeys)
+        for (windowed in range(2)) {
+            for (r in range(rows)) {
+                for (h in range(nheads)) {
+                    let kh = (h / grp) * hs
+                    var mx = -3.0e38
+                    for (j in range(nkeys)) {
+                        let kpos = j < nctx ? lo + j : pos0 + (j - nctx)
+                        let dist = abs(pos0 + r - kpos)
+                        sc[j] = -3.0e38
+                        if (windowed == 0 || dist < w) {
+                            var dot = 0.0
+                            for (e in range(hs)) {
+                                let kv = j < nctx ? rk[ringoff + (kpos % w) * kvd + kh + e] : kb[(rbase + j - nctx) * kvd + kh + e]
+                                dot += q[(rbase + r) * qd + h * hs + e] * kv
+                            }
+                            sc[j] = dot * scale
+                            mx = max(mx, sc[j])
+                        }
+                    }
+                    var tot = 0.0
+                    for (j in range(nkeys)) {
+                        sc[j] = sc[j] <= -1.0e38 ? 0.0 : exp(sc[j] - mx)
+                        tot += sc[j]
+                    }
+                    for (i in range(hs)) {
+                        var acc = 0.0
+                        for (j in range(nkeys)) {
+                            let kpos = j < nctx ? lo + j : pos0 + (j - nctx)
+                            acc += sc[j] * (j < nctx ? rv[ringoff + (kpos % w) * kvd + kh + i] : vb[(rbase + j - nctx) * kvd + kh + i])
+                        }
+                        if (windowed == 1) {
+                            o_ref[r * qd + h * hs + i] = acc / tot
+                        } else {
+                            o_open[r * qd + h * hs + i] = acc / tot
+                        }
+                    }
+                }
+            }
+        }
+        delete sc
+        check_rows(t, "{tag} block {arm} vs the windowed softmax over the ring and the block", o_dev, o_ref, BAR_APPROX, qd, hs)
+        check_exceeds(t, "{tag} block {arm} control: the softmax with no window lands off the stamp's", o_dev, o_open, BAR_APPROX)
+        if (rbase > 0) {
+            slack_kept(t, tag, cp, op, type<uint>, 0, rbase * qd, NAN_SENTINEL_BITS)
+        }
     }
 }

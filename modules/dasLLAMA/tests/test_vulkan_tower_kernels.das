@@ -16,6 +16,7 @@ require dasllama/dasllama_qwen3a   // nolint:STYLE030,LINT019 — QWEN3A_TOK_PER
 require ?vulkan vulkan
 require ?vulkan dasllama/dasllama_vulkan_common
 require ?vulkan dasllama/dasllama_vulkan_classes
+require ?vulkan dasllama/dasllama_vulkan_classes_dflash
 require ?vulkan _vkd_oracles
 require _compares   // nolint:STYLE030,LINT019 — the compares, inside the vulkan arms alone
 require _attn_oracle   // nolint:STYLE030,LINT019 — attn_row_scored: the softmax row the attention oracles share, inside the vulkan arms alone
@@ -1206,6 +1207,68 @@ def test_vkt_rnnt(t0 : T?) {
             }
             with_cell_planes() $(var cp : CellPlanes) {
                 rnnt_case(t, cp)
+            }
+        } else {
+            t |> skip("dasVulkan not present")
+        }
+    }
+}
+
+[test(description = "The block drafter's dynamic two-tap convolution, head norm and rope, and block attention over its ring on the Vulkan home match their in-test CPU forms, with a block-boundary, a position-shift and an unwindowed control (the CUDA cell's cases).")]
+def test_vkt_dflash_pass_kernels(t0 : T?) {
+    t0 |> run("the block drafter's conv, head norm + rope and block attention on the Vulkan home == the in-test CPU forms") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!vk_moe_init()) {
+                t |> skip("no Vulkan device")
+                return
+            }
+            let built = ensure_dflash_conv_cls() && ensure_dflash_qkn_cls() && ensure_dflash_attn_cls()
+            t |> success(built, "the block drafter's pass stamps build on a device with Vulkan")
+            return if (!built)
+            with_cell_planes() $(var cp : CellPlanes) {
+                df_conv_case(t, cp)
+                df_qkn_case(t, cp)
+                df_attn_case(t, cp)
+            }
+        } else {
+            t |> skip("dasVulkan not present")
+        }
+    }
+}
+
+[test(description = "The block drafter's two-stage top-k on the Vulkan home lands the oracle's slice lists and rows bit for bit, the slots past every run at their sentinel, the ids-descending tie rule missing as the control (the Metal gate's legs).")]
+def test_vkt_dflash_topk(t0 : T?) {
+    t0 |> run("the block drafter's two-stage top-k on the Vulkan home == the oracle's lists and rows") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!vk_moe_init()) {
+                t |> skip("no Vulkan device")
+                return
+            }
+            let built = ensure_dflash_topk_slices_cls() && ensure_dflash_topk_merge_cls()
+            t |> success(built, "the block drafter's top-k stamps build on a device with Vulkan")
+            return if (!built)
+            with_cell_planes() $(var cp : CellPlanes) {
+                df_topk_case(t, cp)
+            }
+        } else {
+            t |> skip("dasVulkan not present")
+        }
+    }
+}
+
+[test(description = "The block drafter's selector walk on the Vulkan home picks the oracle's and the host walk's ids over Q8_0, Q4_K, Q5_K, Q6_K and NVFP4 codebooks, the last-best rule and the logit-alone walk the controls (the CUDA and Metal cells' legs).")]
+def test_vkt_dflash_walk(t0 : T?) {
+    t0 |> run("the block drafter's selector walk on the Vulkan home == the oracle's and the host's walk") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!vk_moe_init()) {
+                t |> skip("no Vulkan device")
+                return
+            }
+            let built = ensure_dflash_walk_cls()
+            t |> success(built, "the block drafter's walk stamp build on a device with Vulkan")
+            return if (!built)
+            with_cell_planes() $(var cp : CellPlanes) {
+                df_walk_case(t, cp)
             }
         } else {
             t |> skip("dasVulkan not present")

@@ -2217,3 +2217,57 @@ module) is independent and can land any time - it is pure structure.
     three-column form raced on the Vulkan home's tower sites and windows on the 5060 Ti and on the pod's
     82-SM card, adopted where it wins on both, and `ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default`
     restated to the measured pick.
+168. **Past eight token rows the Vulkan step takes a second weight pass, and no tile form yet beats it.** The N-column
+    GEMV tiles by eight, so nine to sixteen rows read every plane twice; the CUDA home's rows leaf reads it once.
+    Measured on the pod's RTX PRO 4500 over a 5120 x 17408 plane (`debug-jit`, `harness/vk_gemv_probe.das -- 5120
+    17408 cols` and `harness/vk_gemm_probe.das -- q8i8` / `-- cm2v:k4`; `PERF_LEDGER.md`, the 2026-11-14 entry on where
+    the Vulkan home's verify and batched step spend their time): Q8_0 - the N-column GEMV 229 us at eight columns (828
+    GB/s, the plane at the card's bandwidth), so 457 for sixteen rows, against the int8 KHR tile `q8_batch_cmi8_cls` at
+    about 500 a sixteen-row half (it spills every 32-k product to shared memory for its scales, two barriers a block);
+    Q4_K - 118 us as two passes against the cm2 s tile's 115, bound by its decode. The driver exposes the int8 products the leaf needs (KHR cooperative
+    matrices SINT8 x SINT8 -> SINT32 at 16 x 16 x 32 and 16 x 8 x 32, subgroup scope) and no way to fill a fragment from
+    registers, so a K-quant plane's nibbles reach a tile only through a staged decode. Done = an int8 leaf over Q8_0
+    planes whose accumulators stay in registers - the s32 tile converted and scaled componentwise by scale tiles loaded
+    off the plane's and the feed's scale rows (the emitter's `coopmatConvert` on an s32 tile and a stride-0 load, or
+    `coopmatScaleAcc` at subgroup scope over storage buffers) - raced against two N-column passes at sixteen rows on
+    this plane and adopted where it wins, the K-quant planes' staged form raced beside it; or the race's readings here
+    with the forms dropped.
+169. **The Vulkan hybrid's verify steps its recurrent rows a dispatch a row, with a rollback copy between them.** The
+    same-slab verify runs the fused recurrent step once a row a layer and copies the slot's state to the rollback plane
+    after each (`rd_encode_dn_head` under `seq`, `rd_encode_roll_copy`); the CUDA home scans the rows in one launch,
+    leaves the slot as it found it and scans the kept rows again at the commit
+    (`ARCHITECTURE_GPU_ASYMMETRIES_CUDA.md#cuda-dflash-pass`). Measured on the 27B at eight verify rows under the
+    profile rail (`debug-jit`, `DASLLAMA_GPU_PROF=1`, `harness/dflash_probe.das`, the pod's RTX PRO 4500;
+    `PERF_LEDGER.md`, the 2026-11-14 entry on where the Vulkan home's verify and batched step spend their time): of 40.8
+    ms a verify the 48 recurrent layers' row steps 5.7 and their rollback copies 2.8, where the batched step's all-rows
+    dispatch reads 3.0 of an eight-stream tick (`harness/batch_streams_sweep.das --skip`, the same entry). A row loop inside the fused step is open too: a head's state is its workgroup's alone, and a
+    row's conv reads the rows before it off the verify's own projection plane (the ring image only for the rows ahead of
+    the verify), so a head needs no other workgroup's write between rows. Done = the verify's recurrent rows on the
+    window's conv and scan over the slot's state with no write to it, the kept rows scanned into the slot at the commit
+    seat, the rollback plane and its copies gone, the block drafter's and the NextN round's rows in `PERF_LEDGER.md`
+    before and after; or the scan form's reading here with the row steps kept.
+170. **A routed pick is a GEMV of its own on the Vulkan step: rows that share an expert read its planes once each.** The
+    token step's routed sites dispatch a pick a slot, so sixteen rows of four picks read sixty-four expert planes
+    whatever the picks share; the CUDA home counts a step's distinct experts (`MoeShareT`) and takes an expert's rows as
+    one bucket where they share (`ARCHITECTURE_GPU_ASYMMETRIES_CUDA.md#cuda-asymmetries`). Measured on the pod's RTX PRO
+    4500, `lcpp_bench --npl` rows at 2 / 4 / 8 / 16 streams, each stream on its own prompt, tok/s (`debug-jit`;
+    `PERF_LEDGER.md`, the 2026-11-14 entry on the final tree's token rows on both discrete homes): gpt-oss 364.2 / 499.6
+    / 579.2 / 601.9 against the CUDA home's 360.3 / 468.0 / 649.6 / 996.0, gemma-26B 262.1 / 424.3 / 585.3 / 664.1
+    against 271.6 / 423.4 / 595.8 / 753.9, the 35B 284.8 / 448.7 / 623.1 / 738.5 against 298.4 / 462.5 / 672.2 / 908.1.
+    The committed Vulkan board rows at four streams (`performance/records/rtxpro4500.json`, `tg128@4`, the 0.6.5 exe on
+    the box's tuned profile): gpt-oss 500.1, the 35B 421.5. Same-prompt streams share every pick; distinct prompts share
+    fewer, the fewer the more experts a layer holds, so the distinct-prompt rows are the ones to read. Done = the
+    Vulkan step's routed sites on a form that reads a shared expert's planes once a step (the N-column GEMV with a shared expert's rows as its columns,
+    or the window's expert bucket), picked by the step's sharing as the CUDA home picks it, with same-prompt and
+    distinct-prompt rows on gpt-oss, gemma-26B and the 35B before and after; or the form's reading here with the
+    pick-a-slot dispatch kept.
+171. **The Vulkan residual step stays on 256 lanes: a wide stamp covers the whole family or none of it.** The CUDA home
+    stamps every residual form - `GkAddRmsRows`' plain step, its fused requant forms and gemma's combine - at 1024 lanes
+    (`ARCHITECTURE_GPU_ASYMMETRIES_CUDA.md#cuda-asymmetries`); the Vulkan home stamps them at 256. One Vulkan stamp alone
+    at 1024 lanes sums its norm in another order than the 256-lane forms, so a site the one-row token command serves on
+    a fused form and the N-row command on the plain step rounds the two apart, and a routed carrier's batched rows leave
+    their sessions alone (`test_regions_batched_groups_qwen35moe` reads them bit for bit on the Qwen3.6-35B IQ4_XS).
+    Done = every residual stamp of the Vulkan home (`cls_ar`, `cls_ar_rq_b`, `cls_ar_rqx`, `cls_ar_rqk`, `cls_ar_rqkx`,
+    the gemma combine) at 1024 lanes on a device whose workgroups take them, the one-row and N-row commands still bit
+    for bit on the regions cells, with `lcpp_bench` tg128 and `--npl` rows before and after; or the reading here with
+    the 256-lane stamps kept.

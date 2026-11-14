@@ -500,6 +500,9 @@ def dlim_gc_stale(source_path : string; tag : string = ""; quant : string = "q8"
     }
 }
 
+//! `prepared_image_alignment`'s engine half (`dasllama_core`): the boundary a prepared image held in memory starts on
+def prepared_image_alignment_() : int64 => IMAGE_PAGE
+
 //! The dlim GC beside `gguf_path`: BROKEN, version-stale and hash-named legacy images of another identity go;
 //! a lane-named image of another identity is a lane someone switched away from and stays, like a FOREIGN one
 //! (``keep_other = true`` spares the legacy others too - a bake deliberately carried from another box)

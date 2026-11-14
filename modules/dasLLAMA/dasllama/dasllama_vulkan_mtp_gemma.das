@@ -109,15 +109,6 @@ var private g_vk_g : GemmaDrafterVk
 var private g_vk_attached = false
 var private @scratch g_vk_round : DiscreteRoundState   //! the tick's round: the gather, the verify's tokens, the cold streams, the stats since the attach
 
-//! `bytes` of `src` into a fresh soft device buffer (0 and `oom` where the card has no room)
-def private dev_from(var oom : bool&; src : uint8 const?; bytes : int64) : uint64 {
-    let h = soft_device_buf(oom, bytes)
-    if (h != 0ul) {
-        upload_region_at(h, 0l, src, bytes)
-    }
-    return h
-}
-
 //! every handle the drafter held dropped, nothing destroyed: the model drop already swept them
 def private vk_forget(var g : GemmaDrafterVk) {
     g.gemvs |> clear()
@@ -262,9 +253,9 @@ def private vk_buffers_make(dr : GemmaDrafter; var g : GemmaDrafterVk; quants : 
         to_log(LOG_WARNING, "dasLLAMA gemma drafter: a plane (quants {g.wqb} bytes, scales {g.wsb}, f32 rows {g.fblob_bytes}, logits {dr.vocab * 4l}) passes the device's storage range {vk_max_storage_range()}\n")
         return false
     }
-    g.wq = dev_from(oom, unsafe(addr<uint8 const?>(quants[0])), g.wqb)
-    g.ws = dev_from(oom, unsafe(addr<uint8 const?>(scales[0])), g.wsb)
-    g.fblob = dev_from(oom, unsafe(addr<uint8 const?>(dr.fblob[0])), g.fblob_bytes)
+    g.wq = vk_dev_from(oom, unsafe(addr<uint8 const?>(quants[0])), g.wqb)
+    g.ws = vk_dev_from(oom, unsafe(addr<uint8 const?>(scales[0])), g.wsb)
+    g.fblob = vk_dev_from(oom, unsafe(addr<uint8 const?>(dr.fblob[0])), g.fblob_bytes)
     let qdm = dr.n_heads * g.hs_mx
     let cat_n = 2l * dr.tdim
     g.cat = soft_device_buf(oom, cat_n * 4l)

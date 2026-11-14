@@ -2935,6 +2935,22 @@ def private need_clamp(var ctx : CudaCtx; ctype : string) : string {
 
 let private USDOT4_PRELUDE = "__device__ __forceinline__ int __das_usdot4(unsigned a, unsigned b) \{ int r = 0; for (int k = 0; k < 4; ++k) \{ r += int((a >> (8 * k)) & 0xffu) * int((signed char)((b >> (8 * k)) & 0xffu)); \} return r; \}"
 
+//! the address text of the `member[expr]` a vector `e` is read from - an element of a kernel-class buffer, named as the
+//! member itself; "" for a register vector, a struct's field, a shared array's element, a pointer local's or the @kargs member's
+def private mem_element_addr(var ctx : CudaCtx; e : Expression?) : string {
+    return mem_element_addr(ctx, (e as ExprRef2Value).subexpr) if (e is ExprRef2Value)
+    return "" if (!(e is ExprAt))
+    let ea = e as ExprAt
+    return "" if (!(ea.subexpr is ExprField))
+    let pmem = member_lookup(ctx, ea.subexpr)
+    return "" if (empty(pmem))
+    let pm = ctx.members[pmem]
+    return "" if (pm.kargs || pm.workgroup)
+    let base = emit_value(ctx, ea.subexpr)
+    let at = emit_value(ctx, ea.index)
+    return "{base} + ({at})"
+}
+
 //! the kernel-class member an `addr(member[expr])` reaches; "" after err for a pointer over anything else or over the @kargs member
 def private addr_member(var ctx : CudaCtx; pat : ExprAt?; at : LineInfo) : string {
     let pmem = pat != null ? member_lookup(ctx, pat.subexpr) : ""
@@ -3072,10 +3088,24 @@ def private emit_value(var ctx : CudaCtx; e : Expression?) : string {
         return "({pm.name} + ({emit_value(ctx, pat.index)}))"
     } elif (e is ExprAt) {
         let ea = e as ExprAt
+        let st = ea.subexpr._type
+        let lanes = st != null && scalar_class(st.baseType) >= 0 && component_count(st.baseType) > 1
+        let mem_addr = lanes ? mem_element_addr(ctx, ea.subexpr) : ""
+        if (!empty(mem_addr)) {
+            let vt = shader_type_name(st)
+            let key = "atm.{vt}"
+            if (!key_exists(ctx.helpers, key)) {
+                let sc0 = shader_scalar_name(st)
+                let sc = sc0 == "char" ? "signed char" : sc0
+                ctx.helpers[key] = "__device__ __forceinline__ const {sc}& __das_atm_{vt}(const {vt}* p, int i) \{ return reinterpret_cast<const {sc}*>(p)[i]; \}"
+            }
+            let lane = emit_value(ctx, ea.index)
+            census_kind(ctx, "expr.index.vector.mem")
+            return "__das_atm_{vt}({mem_addr}, {lane})"
+        }
         let sub = emit_value(ctx, ea.subexpr)
         let idx = emit_value(ctx, ea.index)
-        let st = ea.subexpr._type
-        if (st != null && scalar_class(st.baseType) >= 0 && component_count(st.baseType) > 1) {
+        if (lanes) {
             let vt = shader_type_name(st)
             let key = "at.{vt}"
             if (!key_exists(ctx.helpers, key)) {
@@ -3340,7 +3370,7 @@ def private atomic_call(var ctx : CudaCtx; ec : ExprCall?; cname : string) : str
 }
 
 //! the CUDA-only intrinsics a body calls as statements
-let private INTRINSIC_STATEMENTS : table<string> <- { "cp_async_16", "cp_async_commit", "cp_async_wait", "ldmatrix", "ldmatrix_trans", "mma_scale_acc", "mma_acc_set", "mma_block_scaled", "mma_block_scaled_mx", "mma_scale_cols", "bar_sync", "cuda_asm" }
+let private INTRINSIC_STATEMENTS : table<string> <- { "cp_async_16", "cp_async_commit", "cp_async_wait", "ldmatrix", "ldmatrix_trans", "mma_scale_acc", "mma_acc_set", "mma_frag_set", "mma_block_scaled", "mma_block_scaled_mx", "mma_scale_cols", "bar_sync", "cuda_asm" }
 
 [arch(at="../ARCHITECTURE_EMIT.md#cuda-kernel-vocabulary-tiers")]
 def private need_arch_a(var ctx : CudaCtx) {
@@ -3430,6 +3460,16 @@ def private cuda_intrinsic_call(var ctx : CudaCtx; ec : ExprCall?; cname : strin
             return "__das_cmC_set_f32({emit_value(ctx, ec.arguments[0])}, {emit_value(ctx, ec.arguments[1])}, {emit_value(ctx, ec.arguments[2])})"
         }
         return "__das_cmC_get_f32({emit_value(ctx, ec.arguments[0])}, {emit_value(ctx, ec.arguments[1])})"
+    }
+    if (cname == "mma_frag_set") {   //! a lane's fragment word off a register: the word ldmatrix would have loaded there
+        let fi = na == 3 ? coop_type_of(ec.arguments[0]._type) : CoopInfo(ok = false)
+        if (!(fi.ok && fi.comp == "s8" && fi.use != "C")) {
+            shader_error(ctx, ec.at, "mma_frag_set(s8 A or B fragment, word 0..3, value): the lane's fragment word")
+            return "/*mma_frag_set*/"
+        }
+        need_coopmat(ctx)
+        census_kind(ctx, "call.mma_frag_set.{fi.use}")
+        return "({emit_value(ctx, ec.arguments[0])}).r[{emit_value(ctx, ec.arguments[1])}] = {emit_value(ctx, ec.arguments[2])}"
     }
     if (cname == "mma_acc_row" || cname == "mma_acc_col") {   //! the cm2 prelude's fragment (row, column) at fragment index 0: the lane's g and t off its lane id
         if (na != 2) {
@@ -3834,7 +3874,8 @@ def private emit_self_call_value(var ctx : CudaCtx; ei : ExprLooksLikeCall?; sc 
 
 //! an assignment's target: a vector lane by pointer arithmetic over the contiguous lanes (`__das_atw_T`) - a reference picked by a
 //! ternary chain compiles to a jump table on the index, a four-way divergent branch around every lane store; a read keeps the
-//! selects (`__das_at_T`, `emit_value`), which hold a register vector in registers
+//! selects (`__das_at_T`, `emit_value`), which hold a register vector in registers, and a read off a buffer's element loads
+//! its lane alone (`__das_atm_T`)
 def private emit_store_target(var ctx : CudaCtx; e : Expression?) : string {
     if (e is ExprAt) {
         let ea = e as ExprAt

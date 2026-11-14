@@ -612,17 +612,26 @@ struct MtpBlockSeams {
 }
 var private g_mtp_block : MtpBlockSeams
 var private g_mtp_block_set = false
+var private g_mtp_block_gen = 0l   //! moves at every attach and detach: a device home re-arms its capture rows when it does
 
 def register_mtp_block_drafter(var seams : MtpBlockSeams) {
     delete g_mtp_block
     g_mtp_block <- seams
     g_mtp_block_set = true
+    g_mtp_block_gen++
 }
 
 def unregister_mtp_block_drafter() {
     g_mtp_block_set = false
     delete g_mtp_block
+    g_mtp_block_gen++
 }
+
+//! the block drafter's registration count: a device home compares it to the one its capture rows were armed for
+def mtp_block_gen() : int64 => g_mtp_block_gen
+
+//! the `i`-th trunk layer the block drafter captures, in its slot order
+def mtp_block_layer_at(i : int64) : int64 => g_mtp_block.layers[i]
 
 //! a block drafter is attached and drafts for `t`
 def mtp_block_attached(t : Model) : bool => g_mtp_block_set && invoke(g_mtp_block.attached, t)
@@ -806,6 +815,22 @@ def mtp_seat_accept_asked() : bool => g_mtp_accept_asked
 //! the round asked picks alone, no row in `s.mtp_logits_b`
 def mtp_seat_accept_landed(a : int64) {
     g_mtp_accept_landed = a
+}
+
+var private g_mtp_accept_walk_asked = false   //! the round in flight walks greedy over a block drafter's drafts with no forced reject, stop ids or none
+
+//! the verify seat may land the round's greedy accept by walking its own landed picks on the host (`mtp_seat_accept_walk`):
+//! the ask `mtp_seat_accept_asked` makes of a device accept, without its no-stop-ids clause - the host's walk cuts at a stop
+def mtp_seat_accept_walk_asked() : bool => g_mtp_accept_walk_asked
+
+//! the round's greedy walk over the `k` drafts against the picks the seat landed in `s.mtp_picks`: the count
+//! `mtp_accept_walk` reaches over the same picks, its cut at a stop id included
+def mtp_seat_accept_walk(var s : Session; k : int64) : int64 {
+    var a = 0l
+    while (a < k && s.mtp_picks[a] == s.mtp_vbatch[a + 1l]) {
+        a++
+    }
+    return mtp_accept_cut_at_stop(s, a)
 }
 
 //! the verify seat took the round's `n` rows `toks` at `pos` (the caller asked `mtp_seated(t, g_mtp_verify_overrides)` first)
@@ -7228,9 +7253,11 @@ def mtp_spec_round_k(t : Model; var s : Session; tok : int64; k_req : int64) : i
     s.mtp_drafted += drafted
     prof_add("mtp.draft", ts_draft)
     g_mtp_accept_asked = blockd && !sampled && !mtp_reject_forced(s) && (s.spec_stops == null || empty(*s.spec_stops))
+    g_mtp_accept_walk_asked = blockd && !sampled && !mtp_reject_forced(s)
     g_mtp_accept_landed = -1l
     let served = mtp_verify_rows(t, s, seated, drafted + 1l, pos, asked)
     g_mtp_accept_asked = false
+    g_mtp_accept_walk_asked = false
     if (blockd) {
         mtp_block_land(s)
     }
