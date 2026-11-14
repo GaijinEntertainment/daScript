@@ -466,7 +466,7 @@ The BUILTIN module contains core runtime functions available in all daslang prog
 
 ### Memory manipulation
 
-- `hash` - Computes a 64-bit FNV-1a hash of the given `int8` value and returns it as `uint64`.
+- `hash` - Returns a 64-bit hash of the given value as `uint64`, for hash tables inside one process; the results 0 and 1 are never returned.
 - `hash_combine64` - Folds `value` into the running `hash` and returns the new accumulator, i.e.
 - `intptr` - Converts a function or lambda value `f` to the `uint64` integer representation of the address it carries.
 - `lock_data` - Locks a constant array and invokes `blk` with a read-only pointer `p` to the array's contiguous data and its size `s`, allowing direct memory-level read access.

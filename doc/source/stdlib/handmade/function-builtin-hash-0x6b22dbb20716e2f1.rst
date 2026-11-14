@@ -1,1 +1,1 @@
-Computes a 64-bit FNV-1a hash of the given `int8` value and returns it as `uint64`.
+Returns a 64-bit hash of the given value as `uint64`, for hash tables inside one process; the results 0 and 1 are never returned. Numbers, pointers and structured values go through wyhash with a fixed seed, and a string folds two bytes at a time in an FNV-style loop - not the published byte-wise FNV-1a, which is `fnv1a` in `daslib/strings_boost`.
