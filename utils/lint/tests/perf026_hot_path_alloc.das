@@ -226,3 +226,25 @@ def bad_renamed_dispatch(var a : array<int>) {
     let h = unsafe(g_hooks?[0])
     invoke(h.run, a)
 }
+
+// 17. @pool (a free list, a residency cache) carries the
+//     @scratch sizing exemption: a field, a table indexed on a
+//     miss, and a by-ref helper parameter
+struct FreeList {
+    @pool free : array<int>
+}
+
+var @pool g_resident : table<int; int>
+
+def pool_put(@pool var lst : array<int>; v : int) {
+    lst |> push(v)
+}
+
+[no_alloc]
+def good_pool_shapes(var fl : FreeList; k : int) : int {
+    fl.free |> push(k)
+    pool_put(fl.free, k)
+    unsafe {
+        return g_resident[k]
+    }
+}

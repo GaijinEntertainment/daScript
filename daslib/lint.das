@@ -701,13 +701,14 @@ def private lint022_fix(at : LineInfo; keyword : string; close : int) : LintFix 
                    last_column = 0, replacement = "")
 }
 
-//! a `@scratch` container that outlives the call: `root` is the
-//! variable it hangs off, `field` the annotated field's `.name`
-//! when the annotation sits on a field
+//! a marked container that outlives the call: `root` is the
+//! variable it hangs off; on a field annotation, `field` is the
+//! field's `.name` and `owner` the structure that declares it
 struct private Lint034Container {
     key : string
     field : string
     @do_not_delete root : Variable const?
+    @do_not_delete owner : Structure const?
 }
 
 //! one store into a container (`fills`) or one emptying of it;
@@ -755,7 +756,9 @@ def private lint034_holds_pointer(t : TypeDecl const?; depth : int) : bool {
     return false if (t == null || depth > 8)
     let bt = t.baseType
     return !t.flags.smartPtr if (bt == Type.tPointer)
-    return lint034_holds_pointer(t.firstType, depth + 1) if (bt == Type.tArray)
+    if (bt == Type.tArray || bt == Type.tFixedArray) {
+        return lint034_holds_pointer(t.firstType, depth + 1)
+    }
     if (bt == Type.tTable) {
         return (lint034_holds_pointer(t.firstType, depth + 1)
             || lint034_holds_pointer(t.secondType, depth + 1))
@@ -777,7 +780,7 @@ def private lint034_type_reaches_scratch(t : TypeDecl const?; depth : int) : boo
     //! that can hold a raw pointer
     return false if (t == null || depth > 8)
     let bt = t.baseType
-    if (bt == Type.tPointer || bt == Type.tArray) {
+    if (bt == Type.tPointer || bt == Type.tArray || bt == Type.tFixedArray) {
         return lint034_type_reaches_scratch(t.firstType, depth + 1)
     }
     return lint034_type_reaches_scratch(t.secondType, depth + 1) if (bt == Type.tTable)
@@ -807,30 +810,56 @@ def private lint034_names_scratch_global(expr : ExprVar const?) : bool {
         && lint034_reaches_scratch(expr.variable))
 }
 
-def private lint034_container(expr : Expression const?; annotated_only : bool) : Lint034Container {
+def private lint034_declaring(st : Structure const?; name : string) : Structure const? {
+    //! the structure up `st`'s parent chain that declares field `name`
+    var at = st
+    while (at != null && at.parent != null) {
+        var inherited = false
+        for (fld in at.parent.fields) {
+            inherited ||= fld.name == name
+        }
+        break if (!inherited)
+        at = at.parent
+    }
+    return at
+}
+
+def private lint034_field_owner(f : ExprField const?) : Structure const? {
+    //! the structure that declares the field `f` reads, through a pointer
+    let vt = f.value._type
+    return null if (vt == null)
+    let pointee = vt.baseType == Type.tPointer && vt.firstType != null
+    let st = pointee ? vt.firstType.structType : vt.structType
+    return lint034_declaring(st, "{f.name}")
+}
+
+def private lint034_container(expr : Expression const?; annotated_only : bool;
+                              mark : string) : Lint034Container {
     //! the container `expr` writes into; `root` stays null when
     //! the container dies with the call or, under `annotated_only`,
-    //! when nothing on the way to it is `@scratch`
+    //! when nothing on the way to it carries `@mark`
     var dest : Lint034Container
     var e = expr
     var annotated = false
     while (e != null) {
         if (e is ExprField) {
             let f = e as ExprField
-            let scratch = f.field != null && lint_has_annotation(f.field.annotation, "scratch")
-            if (!annotated && scratch) {
+            let marked = f.field != null && lint_has_annotation(f.field.annotation, mark)
+            if (!annotated && marked) {
                 annotated = true
                 dest.field = ".{f.name}"
+                dest.owner = lint034_field_owner(f)
             }
             e = f.value
         } elif (e is ExprVar) {
             let ev = e as ExprVar
             let v = ev.variable
             return dest if (v == null || ev.varFlags._block || ev.varFlags.thisBlock)
-            annotated ||= lint_has_annotation(v.annotation, "scratch")
+            annotated ||= lint_has_annotation(v.annotation, mark)
             if (ev.varFlags.local) {
-                return dest if (v._type == null || !v._type.flags.ref || v.init == null)
-                e = v.init
+                let source = v.init != null ? v.init : v.loop_source
+                return dest if (v._type == null || !v._type.flags.ref || source == null)
+                e = source
             } else {
                 return dest if (annotated_only && !annotated)
                 dest.root = v
@@ -904,7 +933,7 @@ class private Lint034Events : AstVisitor {
         events |> push(Lint034Event(container = container, fills = false, slot = slot, site = site))
     }
     def note_store(var left, right, site : Expression?) : void {
-        let dest = lint034_container(left, true)
+        let dest = lint034_container(left, true, "scratch")
         return if (dest.root == null || !lint034_holds_pointer(left._type, 0))
         if (right is ExprConstPtr) {
             note_empty(dest, describe(left), site)
@@ -920,7 +949,7 @@ class private Lint034Events : AstVisitor {
         return theirs if (arg < 0)
         var mine : Lint034Container
         return mine if (arg >= length(expr.arguments))
-        mine = lint034_container(expr.arguments[arg], empty(theirs.field))
+        mine = lint034_container(expr.arguments[arg], empty(theirs.field), "scratch")
         if (mine.root != null && !empty(theirs.field)) {
             mine.field = theirs.field
             mine.key = "{mine.root.name}{theirs.field}"
@@ -951,7 +980,7 @@ class private Lint034Events : AstVisitor {
             note_call_summary(expr) if (!expr.func.flags.builtIn && expr.func.body != null)
             return
         }
-        let dest = lint034_container(expr.arguments[0], true)
+        let dest = lint034_container(expr.arguments[0], true, "scratch")
         return if (dest.root == null)
         if (empties) {
             note_empty(dest, "", expr)
@@ -1210,6 +1239,105 @@ def private lint034_touches(fn : Function const?) : bool {
     }
     lint034_touches_memo[key] = found
     return found
+}
+
+def private lint035_field_key(st : Structure const?; name : string) : string =>
+    "{intptr(st)}.{name}"
+
+def private lint035_each_pool(mod : Module?;
+                              blk : block<(what, key : string; at : LineInfo) : void>) {
+    //! every pointer-holding `@pool` declaration of `mod`; `key` is
+    //! what `Lint035DrainScan` records when a drain reaches it
+    for_each_structure(mod) $(st) {
+        for (fld in st.fields) {
+            continue if (!lint_has_annotation(fld.annotation, "pool")
+                || !lint034_holds_pointer(fld._type, 0)
+                || intptr(lint034_declaring(st, "{fld.name}")) != intptr(st))
+            invoke(blk, "{st.name}.{fld.name}", lint035_field_key(st, "{fld.name}"), fld.at)
+        }
+    }
+    for_each_global(mod) $(v) {
+        return if (!lint_has_annotation(v.annotation, "pool") || !lint034_holds_pointer(v._type, 0))
+        invoke(blk, "{v.name}", "{intptr(v)}", v.at)
+    }
+}
+
+def private lint035_is_field(st : Structure const?; name : string; t : TypeDecl?) : bool {
+    //! true when `t` is the type of `st`'s field `name`: the
+    //! field itself, not a value inside it
+    for (fld in st.fields) {
+        return is_same_type(fld._type, t, false, false, false, false) if (fld.name == name)
+    }
+    return false
+}
+
+//! the `@pool` declarations the emptying calls of one module drain:
+//! a field by `lint035_field_key` of its declaring structure, a
+//! global by its address
+class private Lint035DrainScan : AstVisitor {
+    drained : table<string>
+    def note_deleted(t : TypeDecl const?; depth : int) : void {
+        //! a `delete` of a value of type `t` drains every pool field
+        //! that value holds
+        return if (t == null || depth > 8)
+        let bt = t.baseType
+        if (bt == Type.tPointer || bt == Type.tArray || bt == Type.tFixedArray) {
+            note_deleted(t.firstType, depth + 1)
+        } elif (bt == Type.tTable) {
+            note_deleted(t.secondType, depth + 1)
+        } elif (bt == Type.tTuple || bt == Type.tVariant) {
+            for (arg in t.argTypes) {
+                note_deleted(arg, depth + 1)
+            }
+        } elif (bt == Type.tStructure) {
+            var st = t.structType
+            while (st != null) {
+                for (fld in st.fields) {
+                    if (lint_has_annotation(fld.annotation, "pool")) {
+                        drained |> insert(lint035_field_key(st, "{fld.name}"))
+                    }
+                    note_deleted(fld._type, depth + 1)
+                }
+                st = st.parent
+            }
+        }
+    }
+    def override preVisitExprCall(var expr : ExprCall?) : void {
+        return if (expr.func == null || empty(expr.arguments))
+        let origin = string(root_generic(expr.func).name)
+        return if (!lint034_is_empty(expr, origin))
+        let arg = expr.arguments[0]
+        if (origin == "finalize" && lint034_container(arg, false, "pool").root != null) {
+            note_deleted(arg._type, 0)
+        }
+        let dest = lint034_container(arg, true, "pool")
+        return if (dest.root == null)
+        if (dest.owner != null) {
+            let name = slice(dest.field, 1)
+            if (lint035_is_field(dest.owner, name, arg._type)) {
+                drained |> insert(lint035_field_key(dest.owner, name))
+            }
+        } elif (lint_has_annotation(dest.root.annotation, "pool")
+                && is_same_type(dest.root._type, arg._type, false, false, false, false)) {
+            drained |> insert("{intptr(dest.root)}")
+        }
+    }
+}
+
+def private lint035_drained(mod : Module?) : table<string> {
+    //! every `@pool` declaration an emptying call in `mod` drains; a
+    //! generated finalizer empties every field it owns and drains nothing
+    var scan = new Lint035DrainScan()
+    make_visitor(*scan) $(adapter) {
+        for_each_function(mod, "") $(fn) {
+            visit(fn, adapter) if (fn.body != null && is_user_authored_body(fn))
+        }
+    }
+    var drained <- scan.drained
+    unsafe {
+        delete scan
+    }
+    return <- drained
 }
 
 class LintVisitor : AstVisitor {
@@ -1476,7 +1604,9 @@ class LintVisitor : AstVisitor {
             lint_error("LINT034: @scratch `{key}` still holds a pointer that `{fun.name}` " +
                 "received from its caller{through} when `{fun.name}` returns. The caller may " +
                 "free that object, and the next reader or garbage collection then reads " +
-                "freed memory. Empty `{key}` on every exit; one `finally` block covers them all.",
+                "freed memory. Empty `{key}` on every exit; one `finally` block covers them all. " +
+                "A container that owns what it holds across calls - a free list, a cache - is " +
+                "marked @pool instead.",
                 stale.site.at)
         }
     }
@@ -2410,7 +2540,7 @@ class LintVisitor : AstVisitor {
                 let close = fn.body != null && empty(strip(slice(lint_source_line(fn.at,
                     int(fn.body.at.last_line)),
                     int(fn.body.at.last_column)))) ? int(fn.body.at.last_line) : 0
-                lint022_report_at_decl("LINT022: private function '{fn.name}' is never used; " +
+                lint_report_at_decl("LINT022: private function '{fn.name}' is never used; " +
                     "remove it, or make it public if another module needs it", fn.at,
                     lint022_fix(fn.at, "def", close))
             }
@@ -2418,7 +2548,7 @@ class LintVisitor : AstVisitor {
         for_each_structure(mod) $(st) {
             return if (!lint022_struct_unreferenced(st, mod))
             let kind = st.flags.isClass ? "class" : "structure"
-            lint022_report_at_decl("LINT022: private {kind} '{st.name}' is never used; remove " +
+            lint_report_at_decl("LINT022: private {kind} '{st.name}' is never used; remove " +
                 "it, or make it public if another module needs it", st.at,
                 lint022_fix(st.at, kind == "class" ? "class" : "struct",
                             lint022_struct_close(st.at,
@@ -2427,14 +2557,40 @@ class LintVisitor : AstVisitor {
         }
         for_each_enumeration(mod) $(en) {
             return if (!lint022_enum_unreferenced(en, mod))
-            lint022_report_at_decl("LINT022: private enumeration '{en.name}' is never used; " +
+            lint_report_at_decl("LINT022: private enumeration '{en.name}' is never used; " +
                 "remove it, or make it public if another module needs it", en.at,
                 lint022_fix(en.at, "enum",
                             lint022_struct_close(en.at, [for (e in en.list); int(e.at.last_line)])))
         }
     }
 
-    def lint022_report_at_decl(msg : string; at : LineInfo; fix : LintFix) : void {
+    def lint035_report(what : string; at : LineInfo) : void {
+        lint_report_at_decl("LINT035: @pool `{what}` can hold raw pointers, and nothing in " +
+            "this module empties it. A pool owns what it holds, so its module carries the " +
+            "drain the shutdown or drop path runs: `clear`, `resize(.., 0)` or `delete` on " +
+            "the container, or a `delete` of the value that holds it. Add that drain, or mark " +
+            "the container @scratch if its contents are dead when the function that fills it " +
+            "returns.", at, LintFix())
+    }
+
+    def lint035_check_pool_drains(prog : ProgramPtr) : void {
+        return if (key_exists(disabled_codes, "LINT035")
+                    || (!empty(enabled_codes) && !key_exists(enabled_codes, "LINT035")))
+        let mod = prog.getThisModule
+        return if (mod == null)
+        var any = false
+        lint035_each_pool(mod) $(_what, _key; _at) {
+            any = true
+        }
+        return if (!any)
+        var drained <- lint035_drained(mod)
+        lint035_each_pool(mod) $(what, key; at) {
+            lint035_report(what, at) if (!key_exists(drained, key))
+        }
+        delete drained
+    }
+
+    def lint_report_at_decl(msg : string; at : LineInfo; fix : LintFix) : void {
         //! Reports at a declaration no function walk visited: retargets ``funcFile`` so ``lint_error``'s own-file gate admits a symbol from any file of the module.
         funcFile = at.fileInfo != null ? "{at.fileInfo.name}" : ""
         lint_error(msg, at, fix)
@@ -2766,6 +2922,7 @@ def public paranoid(prog : ProgramPtr; compile_time_errors : bool; disabled_code
         visit(prog, adapter)
     }
     astVisitor->lint022_check_unused_private(prog)
+    astVisitor->lint035_check_pool_drains(prog)
     unsafe {
         delete astVisitor
     }
@@ -2793,6 +2950,7 @@ def public paranoid_collect(prog : ProgramPtr; var errors : array<string>;
         visit(prog, adapter)
     }
     astVisitor->lint022_check_unused_private(prog)
+    astVisitor->lint035_check_pool_drains(prog)
     let count = length(astVisitor.errors)
     errors |> push_from(astVisitor.errors)
     unsafe {
@@ -2816,6 +2974,7 @@ def public paranoid_collect_issues(prog : ProgramPtr; var issues : array<LintIss
         visit(prog, adapter)
     }
     astVisitor->lint022_check_unused_private(prog)
+    astVisitor->lint035_check_pool_drains(prog)
     let count = length(astVisitor.issues)
     issues |> push_from(astVisitor.issues)
     unsafe {

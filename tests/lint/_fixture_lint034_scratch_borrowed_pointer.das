@@ -16,6 +16,10 @@ struct Runner {
     @scratch owned : array<Session?>
 }
 
+struct Shelf {
+    @pool kept : array<Session?>
+}
+
 struct Node {
     next : Node?
     @scratch held : array<Session?>
@@ -29,8 +33,11 @@ var private @scratch g_pairs : array<tuple<Session?; int>>
 var private g_registry : array<Session?>
 var private g_runner : Runner
 var private g_runners : array<Runner>
+var private g_runner_pair : Runner[2]
 var private g_runner_ptr : Runner?
 var private g_head : Node
+var private @pool g_kept : array<Session?>
+var private g_shelf : Shelf
 
 def consume(segs : array<Seg>) : int {
     var total = 0
@@ -195,6 +202,16 @@ def bad_push_clone(var sp : Session?) : void {
 
 def bad_runner_array(var sp : Session?) : void {
     g_runners[0].segs |> push(Seg(s = sp, npos = 1))    // LINT034
+}
+
+def bad_fixed_array(var sp : Session?) : void {
+    g_runner_pair[1].segs |> push(Seg(s = sp, npos = 1))    // LINT034
+}
+
+def bad_loop_variable(var sp : Session?) : void {
+    for (r in g_runners) {
+        r.segs |> push(Seg(s = sp, npos = 1))       // LINT034
+    }
 }
 
 def bad_ptr_field(var sp : Session?) : void {
@@ -384,6 +401,15 @@ def good_not_scratch(var sp : Session?) : void {
     g_registry |> push(sp)
 }
 
+// a @pool container owns what it holds: LINT034 does not apply
+def good_pool_keeps(var sp : Session?) : void {
+    g_kept |> push(sp)
+}
+
+def good_pool_field_keeps(var sp : Session?) : void {
+    g_shelf.kept |> push(sp)
+}
+
 def good_local_scratch(var sp : Session?) : int {
     g_ptrs |> clear()
     var @scratch mine : array<Session?>
@@ -424,6 +450,8 @@ def main {
     bad_push_from(sessions)
     bad_push_clone(null)
     bad_runner_array(null)
+    bad_fixed_array(null)
+    bad_loop_variable(null)
     bad_ptr_field(null)
     bad_self_referential_type(null)
     bad_ref_alias(null)
@@ -450,6 +478,8 @@ def main {
     good_global_pointer(0)
     good_no_pointers(null)
     good_not_scratch(null)
+    good_pool_keeps(null)
+    good_pool_field_keeps(null)
     good_local_scratch(null)
     good_block_arg_dest(null)
     g_segs |> clear()
@@ -458,5 +488,8 @@ def main {
     g_pairs |> clear()
     g_runner.segs |> clear()
     g_runners |> clear()
+    g_runner_pair[1].segs |> clear()
     g_head.held |> clear()
+    g_kept |> clear()
+    g_shelf.kept |> clear()
 }

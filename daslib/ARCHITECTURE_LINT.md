@@ -38,8 +38,8 @@ style_lint is `ARCHITECTURE_STYLE_LINT.md`.
   call sites must report twice, so a function is re-walked once per distinct anchor -
   a cost taken for per-call-site diagnostics. Generated/generic frames re-anchor to the
   caller side because their own `at` points into the template. A call to any function
-  with a `@scratch` parameter prunes that callee's whole subtree from the walk - the prune
-  is deliberately TRANSITIVE, removing the callee's whole subtree and not just the sink,
+  with a `@scratch` or `@pool` parameter prunes that callee's whole subtree from the walk - the
+  prune is deliberately TRANSITIVE, removing the callee's whole subtree and not just the sink,
   because narrowing the prune to the sink buries scratch-heavy callers in deep-resize
   findings on buffers the helper family sizes correctly.
 - **PERF030 release credits are consume-once**: a `delete x` licenses exactly one
@@ -180,7 +180,24 @@ style_lint is `ARCHITECTURE_STYLE_LINT.md`.
   array or a table (`push`, `push_clone`, `emplace`, `push_from`, `push_clone_from`,
   `emplace_from`, `insert`, `insert_clone`), and `lint034_is_empty` the ones that drop every
   element (`clear`, `resize` to zero, `finalize` - the call `delete` lowers to). A new
-  element-storing builtin joins the list.
+  element-storing builtin joins the list. The emptying set is a second pair: `lint035_report`'s
+  message, `doc/source/reference/language/lint.rst` and `skills/perf_lint.md` (repo root) spell it.
+- **LINT035 judges a module, not a function.** After the walk, `lint035_check_pool_drains`
+  collects the pointer-holding `@pool` declarations of `prog.getThisModule` - a field keyed by
+  the structure that declares it, so a drain through a derived type counts, and a global by its
+  address - and scans every user-authored function of the module once (`Lint035DrainScan`) for
+  an emptying call whose argument is the container itself (`lint034_container` with the `pool`
+  mark, then a type match, so one bucket's `clear` is not a drain) or a `delete` whose type
+  holds it - either reached from a parameter, `self` or a global (through reference locals and
+  iteration variables, which `lint034_container` follows to their source), never from a local
+  instance, whose emptying says nothing of the instances that outlive the call. Generated
+  functions are skipped: a class's generated finalizer deletes every field and would drain every
+  pool. Holding
+  the drain to the declaring module keeps the verdict independent of which modules a program
+  happens to load. The rule checks that a drain exists, not that a shutdown path calls it; a
+  drain routed through a helper that empties a bare `@pool` container parameter is not credited,
+  since that parameter names no declaration; and a `delete` of a holding value credits every pool
+  its type reaches, a field behind `@do_not_delete` or a hand-written `finalize` included.
 - **LINT031 follows the write target to its root instead of reading the compiler's marks.**
   The compiler marks a parameter written on `addr` and on a reassigned local pointer copy
   alike (the `access_ref` the JIT's readonly guard trusts, over-approximate by design), so

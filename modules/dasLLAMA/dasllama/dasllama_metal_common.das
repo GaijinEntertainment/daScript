@@ -58,9 +58,9 @@ struct private CatRegionEntry {
     pieces : uint64[8]
 }
 
-var @scratch g_regions : table<uint64; RegionEntry>  // base address -> resident PLAIN region; upload-once, steady-state [] is a hit
-var @scratch g_regions_cat3 : table<uint64; CatRegionEntry>  //! the pieces' hash -> resident CONCAT region
-var @scratch g_region_retire : array<MetalBuffer?>  // grown-out buffers: unretained cbs may still bind them — released only at the quiesce boundaries
+var @pool g_regions : table<uint64; RegionEntry>  // base address -> resident PLAIN region; upload-once, steady-state [] is a hit
+var @pool g_regions_cat3 : table<uint64; CatRegionEntry>  //! the pieces' hash -> resident CONCAT region
+var @pool g_region_retire : array<MetalBuffer?>  // grown-out buffers: unretained cbs may still bind them — released only at the quiesce boundaries
 var g_pool : MetalBufferPool
 var g_upool : MetalBufferPool                // UNTRACKED pool: uniforms + rope rows (GPU-read-only)
 var g_decodes = 0l
@@ -1386,7 +1386,7 @@ def mx4_of(dev : MetalDevice?; t : Model; off : int64) : tuple<qbuf : MetalBuffe
 // ===== zero-copy logits: bytesNoCopy wrappers over session-owned storage =====
 // Writes land straight into s.logits (no landing memcpy); borrowed, no deallocator. Gated on
 // 16KB page alignment + page-rounded capacity; the pointer is revalidated on every lookup.
-var @scratch g_nc_logits : table<uint64; tuple<buf : MetalBuffer?; ptr : uint64>>
+var @pool g_nc_logits : table<uint64; tuple<buf : MetalBuffer?; ptr : uint64>>
 
 def nc_logits_for(dev : MetalDevice?; s : Session) : MetalBuffer? {
     let p : uint64 = intptr(unsafe(addr(s.logits[0])))
@@ -2607,10 +2607,10 @@ struct KBind {
 }
 
 var g_gr_on = false
-var @scratch g_gr_nodes : array<KNode>      // capture-rail arrays: grown once, clear()-recycled per capture
-var @scratch g_gr_binds : array<KBind>
-var @scratch g_gr_bytes : array<uint8>      // inline-kargs pool; KBind.off indexes it when nbytes > 0
-var @scratch g_gr_ranges : array<MemRange>
+var @pool g_gr_nodes : array<KNode>      // capture-rail arrays: filled across the kn_* calls from gr_arm, read by graph_flush
+var @pool g_gr_binds : array<KBind>
+var @pool g_gr_bytes : array<uint8>      // inline-kargs pool; KBind.off indexes it when nbytes > 0
+var @pool g_gr_ranges : array<MemRange>
 var g_gr_open = false            // a node is being built (kn_pipeline .. kn_dispatch)
 
 // ===== the kernel coverage census (REVIEW: "A new GPU kernel ships with a small model in the kernel coverage suite") =====
@@ -3008,9 +3008,9 @@ def public set_metal_decode_hazard(paranoid, strict : bool) {
 struct BatchLanding {
     active : bool                 //!< committed and in flight
     pre_valid : bool              //!< encoded, every command buffer ended, none committed
-    @scratch cbs : array<MetalCommandBuffer?>
-    @scratch pooled : array<tuple<buf : MetalBuffer?; size : uint64>>
-    @scratch upooled : array<tuple<buf : MetalBuffer?; size : uint64>>
+    @pool cbs : array<MetalCommandBuffer?>
+    @pool pooled : array<tuple<buf : MetalBuffer?; size : uint64>>
+    @pool upooled : array<tuple<buf : MetalBuffer?; size : uint64>>
     blog : MetalBuffer?
     sameslab : bool
     @scratch grp_nr : array<int64>   //!< the same-slab step's groups: a group's rows each, one session's consecutive positions

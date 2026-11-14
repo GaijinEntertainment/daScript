@@ -85,7 +85,7 @@ Task-specific instructions are in skill files under `skills/`. Read the relevant
 | `skills/tune.md` | The `[tune]` kernel-tuning framework - `[tune_perm]`/`[tune_scope]`/`[tune_policy]`/`--tune`, sidecars, kernel families |
 | `skills/profiler.md` | Runtime profiling and `--das-profiler-leaks` |
 | `skills/linq_fold_patterns.md` | Which chain shapes `_fold(...)` recognizes |
-| `skills/perf_lint.md` | Running the lint suite or suppressing a finding - **and before declaring any hot path off-limits to allocation**: `[hot_path]`/`[no_alloc]`/`[no_env]`/`[no_io]`, `[cold_path]`, `@scratch` |
+| `skills/perf_lint.md` | Running the lint suite or suppressing a finding - **and before declaring any hot path off-limits to allocation**: `[hot_path]`/`[no_alloc]`/`[no_env]`/`[no_io]`, `[cold_path]`, `@scratch`, `@pool` |
 | `skills/style_lint.md` | Suppressing a `STYLE*` finding (the per-module `options` knobs) or applying the STYLE037/038 suppress-vs-split policy |
 
 Multiple skill files may apply to one task: embedding daslang and calling its standard library needs both `skills/cpp_integration.md` and `skills/daslib_modules.md`.

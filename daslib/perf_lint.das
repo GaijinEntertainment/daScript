@@ -44,8 +44,9 @@ module perf_lint shared private
 //!   PERF028 — console / file I/O on a hot path ([hot_path] / [no_io])
 //!
 //! PERF026-028 are annotation-gated: nothing is checked until a function declares a contract.
-//! [cold_path] prunes the walk; @scratch on a field (or on a by-ref helper parameter) declares a
-//! reused buffer whose sizing is intentional. See skills/perf_lint.md.
+//! [cold_path] prunes the walk; @scratch or @pool on a field (or
+//! on a by-ref helper parameter) declares a reused buffer whose
+//! sizing is intentional. See skills/perf_lint.md.
 //!
 //! The five markers are registered compiler-side (src/builtin/module_builtin_runtime.cpp, beside
 //! [clone]), so code under contract requires NOTHING and pays no build time. This module is the
@@ -311,12 +312,16 @@ def private is_annotated_dest(var expr : Expression?; name : string) : bool {
     return false
 }
 
-def private is_scratch_dest(var expr : Expression?) : bool => is_annotated_dest(expr, "scratch")
+//! `@scratch` and `@pool` both declare intentional sizing
+def private is_reused_dest(var expr : Expression?) : bool =>
+    is_annotated_dest(expr, "scratch") || is_annotated_dest(expr, "pool")
 
-def private takes_scratch_arg(fn : Function?) : bool {
+def private takes_reused_arg(fn : Function?) : bool {
     return false if (fn == null)
     for (arg in fn.arguments) {
-        if (lint_has_annotation(arg.annotation, "scratch")) return true
+        let marked = (lint_has_annotation(arg.annotation, "scratch")
+            || lint_has_annotation(arg.annotation, "pool"))
+        return true if (marked)
     }
     return false
 }
@@ -377,8 +382,8 @@ class HotBodyScan : AstVisitor {
         return if (panic_depth > 0)
         let origin = string(expr.func.fromGeneric != null ? expr.func.fromGeneric.name : expr.func.name)
         if (!empty(expr.arguments)
-            && ((is_container_sizing(origin) && is_scratch_dest(expr.arguments[0]))
-                || takes_scratch_arg(expr.func))) {
+            && ((is_container_sizing(origin) && is_reused_dest(expr.arguments[0]))
+                || takes_reused_arg(expr.func))) {
             return
         }
         if (is_env_builtin(n)) {
@@ -419,7 +424,7 @@ class HotBodyScan : AstVisitor {
 
     def override preVisitExprAt(var expr : ExprAt?) : void {
         if (expr.subexpr == null || expr.subexpr._type == null) return
-        if (expr.subexpr._type.baseType == Type.tTable && !is_scratch_dest(expr.subexpr)) {
+        if (expr.subexpr._type.baseType == Type.tTable && !is_reused_dest(expr.subexpr)) {
             add_sink(HotBits.perf026_alloc, "table index (inserts a default entry when the key is missing)", expr)
         }
     }
@@ -2817,7 +2822,8 @@ class PerfLintVisitor : AstVisitor {
         }
         delete parts
         let esc = "[cold_path] on the callee, // nolint on the line, or DAS_LINT_DISABLE for a whole run"
-        let esc_alloc = "@scratch on the destination field if it is a reused buffer, {esc}"
+        let esc_alloc = ("@scratch on the destination field if it is a reused buffer " +
+            "(@pool if it owns what it holds across calls), {esc}")
         if (sink.bit.perf026_alloc) {
             perf_warning("PERF026: {sink.what} allocates or frees on a hot path, via {chain}{sink_pos}; hoist it out of the hot path. To allow it: {esc_alloc}", at)
         } elif (sink.bit.perf027_env) {

@@ -1357,6 +1357,8 @@ private function that fills a global hands the duty to its callers the same
 way, and a call to a function that empties the container on every path counts
 as the clear — so a queue function and a flush function pair up without a
 suppression. A ``@scratch`` local dies with the call and is never reported.
+A container that keeps what it holds across calls on purpose — a free list, a
+residency cache — is marked ``@pool`` instead, and LINT035 holds it to a drain.
 
 .. das-doc: alt
 .. code-block:: das
@@ -1380,6 +1382,43 @@ suppression. A ``@scratch`` local dies with the call and is never reported.
         return consume(g_segs)
     } finally {
         g_segs |> clear()
+    }
+
+LINT035 — a ``@pool`` container has no drain
+============================================
+
+A ``@pool`` container owns what it holds: capacity and contents both live
+across calls — device buffers on a free list, a residency cache keyed by
+address. LINT034 does not apply to it. Its one duty is a drain: when the
+container can hold raw pointers, the module that declares it must empty it
+somewhere — ``clear``, ``resize(c, 0)`` or ``delete`` on the container itself,
+or a ``delete`` of the variable or structure value that holds it. That is the
+shutdown or drop path; without one, everything the pool holds outlives every
+user and is never released.
+
+The rule reports at the declaration — a field of a structure the module
+declares, or a module global. Emptying one element of the container (a
+bucket of a table of lists) does not count, and neither does the finalizer the
+compiler generates for a class. A ``@pool`` local or parameter has no duty: a
+parameter's container is the caller's, a local's dies with the call.
+
+.. das-doc: alt
+.. code-block:: das
+
+    struct BufferPool {
+        @pool free : array<Buffer?>     // LINT035 until something empties it
+    }
+
+    def pool_release(var pool : BufferPool; var b : Buffer?) {
+        pool.free |> push(b)
+    }
+
+    // the drain: shutdown releases every buffer and empties the list
+    def pool_drain(var pool : BufferPool) {
+        for (b in pool.free) {
+            release(b)
+        }
+        pool.free |> clear()
     }
 
 .. _perf_lint:
@@ -2362,6 +2401,10 @@ every call site:
     // a clear()-recycled module global is declared the same way (annotation after `var`)
     var @scratch g_stage : array<MemRange>
 
+    // a container that owns what it holds across calls - a free list, a residency
+    // cache - is @pool: the same sizing exemption, and LINT035 asks for its drain
+    var @pool g_resident : table<uint64; Region>
+
 **What the scan deliberately ignores.** Arguments to ``panic(...)`` — a panic is
 fatal in daslang, not an exception, so its interpolated message is on the abort
 path. Macro-generated subtrees, since a rewritten stub stamps the caller's line
@@ -2370,9 +2413,10 @@ expands into. And indirect calls through a function pointer or lambda, which
 cannot be resolved statically — annotate the implementations they reach.
 
 Escape hatches, in order of preference: ``[cold_path]`` on the callee when the
-leg genuinely runs once; ``@scratch`` on a reused destination (field, by-ref
-parameter, or module global — sizing calls, table indexing, and reference
-bindings to it all count); ``// nolint``
+leg genuinely runs once; ``@scratch`` on a reused destination, or ``@pool``
+on one that owns what it holds (field, by-ref parameter, or module global —
+sizing calls, table indexing, and reference bindings to it all count);
+``// nolint``
 with a reason (honored at either end of a chain, so a suppression written where
 the code lives works even when the report anchors elsewhere); and
 ``DAS_LINT_DISABLE=PERF028`` for a whole run, which needs no source edit and is

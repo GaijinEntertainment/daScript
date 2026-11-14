@@ -133,7 +133,7 @@ Task-specific instructions are split into skill files under `skills/`. You MUST 
 | `skills/internal/imgui_recording.md` | Recording tutorial videos - `record_*.das` drivers, prepare -> record -> convert, `docs-assets` upload |
 | `skills/internal/vulkan_recording.md` | Recording dasVulkan tutorial videos (`modules/dasVulkan/tutorials/*/recording/`) |
 | `skills/internal/environment_variables.md` | Reading or ADDING any environment variable |
-| `skills/perf_lint.md` | Running the lint suite or suppressing a finding - **and before declaring any hot path off-limits to allocation**: `[hot_path]`/`[no_alloc]`/`[no_env]`/`[no_io]`, `[cold_path]`, `@scratch` |
+| `skills/perf_lint.md` | Running the lint suite or suppressing a finding - **and before declaring any hot path off-limits to allocation**: `[hot_path]`/`[no_alloc]`/`[no_env]`/`[no_io]`, `[cold_path]`, `@scratch`, `@pool` |
 | `skills/style_lint.md` | Suppressing a `STYLE*` finding (the per-module `options` knobs) or applying the STYLE037/038 suppress-vs-split policy |
 | `skills/internal/perf_lint_authoring.md` | Adding or changing a rule in `daslib/perf_lint.das` |
 | `skills/internal/style_lint_authoring.md` | Adding or changing a rule in `daslib/style_lint.das` |
