@@ -8001,9 +8001,9 @@ def private get_llvm_function_type(func : FunctionPtr; types : PrimitiveTypes?) 
     return LLVMFunctionType(res_type, arg_types)
 }
 
-[macro_function]
+[macro_function, arch(at="../ARCHITECTURE_EXE.md#wasm-module-constructors")]
 def private add_ctor_dtor_function(ctor_dtor : array<tuple<LLVMOpaqueValue?, LLVMOpaqueValue?>>; types : PrimitiveTypes?; skip_dtors : bool) {
-    let priority = 0 |> uint64()
+    let priority = g_target_is_wasm ? 65535ul : 0ul
     let dataPointerType = LLVMPointerType(types.t_int8, 0u)
     let funcType = LLVMPointerType(LLVMFunctionType(types.t_void, null, 0u, 0), 0u)
     var ctorTypes = fixed_array(types.t_int32, funcType, dataPointerType)
