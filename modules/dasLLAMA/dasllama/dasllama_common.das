@@ -2585,6 +2585,14 @@ def public box_profile_runtime_declined() : string => g_box_profile_runtime_decl
 //! The default (no path) route checks the sidecar's standing; an explicit path applies as given.
 def apply_box_profile_runtime(path : string = "") {
     if (path == "") {
+        if (box_profile_in_library()) {
+            if (g_box_profile_runtime_declined != "library") {
+                to_log(LOG_INFO, "dasLLAMA: a library build reads no tune sidecar - the runtime knobs stay at their defaults\n")
+            }
+            g_box_profile_runtime_applied = false
+            g_box_profile_runtime_declined = "library"
+            return
+        }
         if (g_sidecar_place_hook != null) {
             invoke(g_sidecar_place_hook)
         }

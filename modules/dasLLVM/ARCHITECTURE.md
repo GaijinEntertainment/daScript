@@ -102,8 +102,10 @@ ABI) and sec.2.1 (the split obj cache's positional invalidation).
 The backend's override knobs - the escapes that change what a run compiles, tunes, or emits
 beyond its defaults - are: `DAS_TUNE_POLICY` (replaces the declared/injected tune policy),
 `DAS_TUNE_MODE` (grid/tuner compile modes, and `fat` - one clone per shipped CPU class in a
-standalone exe; `ARCHITECTURE_TARGET_FEATURES.md` sec.11), `DAS_TUNE_FAT_CLASS` (pins the class a
-fat exe runs at startup), `DAS_TUNE_MANIFEST` (pins the sidecar),
+standalone exe or library; `ARCHITECTURE_TARGET_FEATURES.md` sec.11), `DAS_TUNE_FAT_CLASS` (pins
+the class a fat exe runs at startup, or a fat library when its host creates it),
+`DAS_TUNE_MANIFEST` (pins the sidecar), `DAS_TUNE_FORCE` (stamps from one named file with no box
+or age check, and no saver writes that file; `ARCHITECTURE_TARGET_FEATURES.md#tune-forced-file`),
 `DAS_TUNE_NOISE_CV` (recalibrates the tuner noise gate), `DAS_TUNE_NOISE_OVERRIDE` (mints
 through a failing gate), `--tune` (forced re-mint), `--tune-only` / `DAS_TUNE_ONLY` (re-mints
 only the named families; the policy guard arms it itself for a profile's residue),

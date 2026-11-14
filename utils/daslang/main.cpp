@@ -506,6 +506,7 @@ int compile_and_run ( const string & fn, const string & mainFnName, bool outputP
         switch (jitEnabled) {
             case JitMode::Executable: policies.jit_exe_mode = true; break;
             case JitMode::Library:
+                policies.jit_exe_mode = true;
                 policies.export_public_functions = libExportAll;
                 break;
             case JitMode::Dll: policies.jit_dll_mode = true; break;

@@ -60,7 +60,7 @@ require llvm/daslib/llvm_code_shell   // the [llvm_code] spelling for the fat wo
 // ===== manifest + mode =====
 
 //! Compile-time tune mode from the `DAS_TUNE_MODE` env var: "normal" (default), "tune", "test",
-//! "fat" (one clone per shipped CPU class, `-exe` only).
+//! "fat" (one clone per shipped CPU class, `-exe` or `-lib` only).
 def tune_mode() : string {
     let m = g_env_tune.tune_mode
     return empty(m) ? "normal" : m
@@ -94,9 +94,9 @@ def tune_aot_gate() : bool {
 //! stamp per-box tune state.
 def tune_stamp_free_gate() : bool => tune_aot_gate() || is_building_documentation()
 
-    //! True when this compile produces a standalone exe (`llvm-jit -exe`). Stamping still runs:
-    //! with a sidecar the exe ships those winners, without one the generic `fallback=` stamps.
-    //! Only the policy rail (`[tune_policy]`, `--tune`) is dead.
+    //! True for a standalone exe or library (`-exe`, `-lib`). Stamping
+    //! still runs - the sidecar's winners, else the `fallback=` stamps;
+    //! only the policy rail (`[tune_policy]`, `--tune`) is dead.
 def tune_exe_gate() : bool => compiling_program().policies.jit_exe_mode
 
 // ===== the per-app sidecar =====
@@ -150,16 +150,27 @@ def set_tune_manifest_runtime_path(p : string) {
     g_runtime_manifest = p
 }
 
-//! Whether the sidecar location was chosen (`set_tune_manifest_runtime_path` or `DAS_TUNE_MANIFEST`)
-//! rather than defaulted beside the app.
-def tune_manifest_explicit() : bool =>
-    !empty(g_runtime_manifest) || !empty(g_env_tune.tune_manifest)
+//! The file a forced build stamps from (`DAS_TUNE_FORCE`), "" when
+//! the build is not forced.
+[arch(at = "../ARCHITECTURE_TARGET_FEATURES.md#tune-forced-file")]
+def tune_force_path() : string => strip(g_env_tune.tune_force)
 
-    //! The tune sidecar location: the in-process override (`set_tune_manifest_runtime_path` names
-    //! a file of the process's own choosing, so it outranks the ambient env), else `DAS_TUNE_MANIFEST`,
-    //! else `<app>.tune.json` beside the app (root script, or the binary). Never "".
+//! `path` is the forced file: no box or age check judges it
+def private is_forced(path : string) : bool => !empty(path) && path == tune_force_path()
+
+//! Whether the sidecar location was chosen
+//! (`set_tune_manifest_runtime_path`, `DAS_TUNE_FORCE` or
+//! `DAS_TUNE_MANIFEST`) rather than defaulted beside the app.
+def tune_manifest_explicit() : bool =>
+    !empty(g_runtime_manifest) || !empty(tune_force_path()) || !empty(g_env_tune.tune_manifest)
+
+    //! The sidecar location: `set_tune_manifest_runtime_path`'s file,
+    //! else the `DAS_TUNE_FORCE` file, else `DAS_TUNE_MANIFEST`, else
+    //! `<app>.tune.json` beside the root script or the binary. Never "".
 def tune_manifest_path() : string {
     if (!empty(g_runtime_manifest)) return g_runtime_manifest
+    let forced = tune_force_path()
+    if (!empty(forced)) return forced
     let env = g_env_tune.tune_manifest
     if (!empty(env)) return env
     let app = tune_app_script()
@@ -351,7 +362,8 @@ def private sidecar_prov_value(path : string; key : string) : string {
     //! (`load_sidecar_doc`); a `provenance.applied_box` naming this box overrides the identity check (resolver adoption)
 def tune_sidecar_stale(path : string) : bool {
     var sfs : FStat
-    return false if (!stat(path, sfs))   // absent is "missing", not "stale"
+    // absent is "missing", not "stale"; a forced file is never judged
+    return false if (!stat(path, sfs) || is_forced(path))
     return sidecar_predates_binary(sfs) || !tune_sidecar_same_box(path, "{sfs.mtime}")
 }
 
@@ -578,6 +590,11 @@ def private load_sidecar_doc(path : string) : JsonValue? {
 // processes' note entries — a save rebuilt from its own notes alone drops every other scope's
 // version stamp, and two pinned scopes then invalidate each other (the auto policy loops)
 def private save_sidecar_doc(path : string; var doc : JsonValue?) : bool {
+    if (is_forced(path)) {
+        print("llvm_tune: DAS_TUNE_FORCE names {path} as a file to build from"
+            + " - nothing writes it\n")
+        return false
+    }
     var prov = JV((binary = tilde_home(running_binary()), platform = get_platform_name(),
         arch = get_architecture_name(), box = tune_box_identity(), written = iso8601_now(),
         features = tune_feature_fingerprint()))
@@ -949,6 +966,7 @@ def tune_status_add(fname, scope, suffix, source, manifestPath : string; klass :
 // process shares - a pooled fork whose init script never ran has these das globals at zero
 var private g_tune_fat_mask = 0
 var private g_tune_fat_built = 0
+var private g_tune_library_built = 0
 
 //! The classes this box runs a fat exe's clones for, one bit per class (`tune_fat_class_bit`);
 //! 0 until the exe's `[init]` ran, which every dispatch reads as the baseline clone.
@@ -971,6 +989,26 @@ def private tune_fat_built_set(built : int) {
 //! True inside a fat exe once its `[init]` ran - what a library asks before it races the
 //! runtime section at first start (a plain build has a policy rail and a tuner for that).
 def tune_fat_built() : bool => tune_fat_built_word() != 0
+
+[llvm_code(name = "llvm_tune_fat_word::load", global = "das.tune.library_built")]
+def private tune_library_built_word() : int => g_tune_library_built
+
+[llvm_code(name = "llvm_tune_fat_word::store", global = "das.tune.library_built")]
+def private tune_library_built_set(built : int) {
+    g_tune_library_built = built
+}
+
+//! True inside a standalone library (`-lib`) once its `[init]` ran.
+//! A library's host owns the process, so code that would write a
+//! per-user file for an exe asks this first.
+def tune_library_built() : bool => tune_library_built_word() != 0
+
+//! A standalone library's `[init]` call: marks the artifact as a
+//! library.
+[arch(at = "../ARCHITECTURE_TARGET_FEATURES.md#fat-mode")]
+def tune_library_init() {
+    tune_library_built_set(1)
+}
 
 //! A class's bit in the fat mask: its position on its arch's ladder, most capable class first.
 def tune_fat_class_bit(klass : string) : int {
@@ -1383,17 +1421,17 @@ def tune_sidecar_verdict(path : string; fnames : string) : TuneSidecarVerdict {
     if (empty(path) || !stat(path, sfs)) {
         return TuneSidecarVerdict(reason = TuneSidecarReason.absent, detail = "no sidecar at '{path}'")
     }
-    let theirs = sidecar_box(path, "{sfs.mtime}")
-    if (empty(theirs)) {
+    let theirs = is_forced(path) ? "" : sidecar_box(path, "{sfs.mtime}")
+    if (empty(theirs) && !is_forced(path)) {
         // unparsable json and provenance-less files land here — not a tune sidecar at all
         return TuneSidecarVerdict(reason = TuneSidecarReason.unreadable,
             detail = "sidecar does not read as a tune sidecar (no readable provenance)")
     }
-    if (box_match_key(theirs) != box_match_key(tune_box_identity())) {
+    if (!is_forced(path) && box_match_key(theirs) != box_match_key(tune_box_identity())) {
         return TuneSidecarVerdict(reason = TuneSidecarReason.foreign_box,
             detail = "sidecar was minted on '{theirs}', this box is '{tune_box_identity()}'")
     }
-    if (sidecar_predates_binary(sfs)) {
+    if (!is_forced(path) && sidecar_predates_binary(sfs)) {
         return TuneSidecarVerdict(reason = TuneSidecarReason.stale_binary,
             detail = "sidecar predates the running binary ({sfs.mtime}); a rebuild invalidates measured winners")
     }
@@ -1907,12 +1945,13 @@ def private fat_arm(fn : FunctionPtr; cloneName : string; bit : int) : Expressio
 
     //! `DAS_TUNE_MODE=fat`: one `<name>__fat_<class>` clone per ship-set class, each stamped from its
     //! class's profile (else the fallback chain under the class's set), and the function's own body
-    //! becomes the dispatch chain over `tune_fat_mask()`, baseline clone last. `-exe` only.
+    //! is the dispatch over `tune_fat_mask()`, baseline last: -exe, -lib.
 [arch(at = "../ARCHITECTURE_TARGET_FEATURES.md#fat-mode")]
 def private stamp_fat(var func : FunctionPtr; genKey : string; perms : array<TunePerm>; var comps : array<TuneCompanion>;   // nolint:STYLE037 - one flat pass per class: pick, clone, companions, dispatch arm
                       args : AnnotationArgumentList; var errors : das_string) : bool {
     if (!tune_exe_gate()) {
-        errors := "[tune] on {func.name}: DAS_TUNE_MODE=fat is a standalone-exe mode - build with llvm-jit -exe"
+        errors := ("[tune] on {func.name}: DAS_TUNE_MODE=fat is a standalone mode"
+            + " - build with -exe or -lib")
         return false
     }
     let baseline = jit_baseline_class()
@@ -3025,11 +3064,24 @@ def private collect_status(prog : Program?) : array<TuneStatus> {
 // state persists across compiles in one process
 var private g_manifest_warned : table<string>
 
-// DAS_TUNE_MANIFEST disables the policy rail (explicit manifest = manual) — but a pointed-at
-// file that reads untuned means every kernel silently stamps its fallback while the operator
-// believes the winners are live: the one measurement hazard worth a loud line
+var private g_force_announced = false
+
+//! One line a process naming the forced file: its box and its age are
+//! not judged, so a file another rule would refuse stamps here.
+def private announce_forced_file() {
+    let forced = tune_force_path()
+    return if (empty(forced) || g_force_announced || tune_stamp_free_gate())
+    g_force_announced = true
+    print("llvm_tune: DAS_TUNE_FORCE={forced} - kernels stamp from this file,"
+        + " box and age unchecked\n")
+}
+
+// A named file (DAS_TUNE_MANIFEST, DAS_TUNE_FORCE) turns the policy
+// rail off, so one that reads untuned would stamp every fallback in
+// silence: the one measurement hazard worth a loud line
 def private warn_manifest_untuned() {
-    return if (empty(g_env_tune.tune_manifest) || tune_stamp_free_gate() || tune_mode() != "normal")
+    let named = empty(tune_force_path()) ? g_env_tune.tune_manifest : tune_force_path()
+    return if (empty(named) || tune_stamp_free_gate() || tune_mode() != "normal")
     for (scope in values(g_scopes)) {
         let key = "{scope.scopeName}|{scope.manifestPath}"
         continue if (g_manifest_warned |> key_exists(key))
@@ -3037,19 +3089,22 @@ def private warn_manifest_untuned() {
         let v = tune_sidecar_verdict(scope.manifestPath, scope_fnames_joined(scope))
         continue if (v.complete)
         g_manifest_warned |> insert(key)
-        print("llvm_tune: WARNING DAS_TUNE_MANIFEST={g_env_tune.tune_manifest}: scope '{scope.scopeName}' reads untuned ({v.detail}); kernels run fallback stamps\n")
+        let knob = empty(tune_force_path()) ? "DAS_TUNE_MANIFEST" : "DAS_TUNE_FORCE"
+        print("llvm_tune: WARNING {knob}={named}: scope '{scope.scopeName}' reads untuned"
+            + " ({v.detail}); kernels run fallback stamps\n")
     }
 }
 
-    // AOT runs no policy; grid-mode children manage their own manifest (also the recursion guard);
-    // a DAS_TUNE_MANIFEST override means manual. -exe is NOT here — it runs no policy either but
-    // still owes the status [init], so its call sites re-admit it via exe_status_report().
+    // AOT runs no policy; grid children manage their own manifest; a
+    // named file (DAS_TUNE_MANIFEST, DAS_TUNE_FORCE) means manual. -exe
+    // is not here: its call sites re-admit it via exe_status_report().
 def private tune_policy_gated() : bool {
     return (tune_stamp_free_gate() || tune_mode() != "normal"
-        || !empty(g_env_tune.tune_manifest))
+        || !empty(g_env_tune.tune_manifest) || !empty(tune_force_path()))
 }
 
-    // -exe owes the status [init] even under a DAS_TUNE_MANIFEST redirect (report ≠ policy —
+    // -exe and -lib owe the status [init] even under a
+    // DAS_TUNE_MANIFEST or DAS_TUNE_FORCE file (report ≠ policy —
     // else a redirect-built exe ships stamp-less rows); stamp-free/grid still win
 def private exe_status_report() : bool =>
     tune_exe_gate() && !tune_stamp_free_gate() && (tune_mode() == "normal" || tune_mode() == "fat")
@@ -3057,11 +3112,18 @@ def private exe_status_report() : bool =>
 // the runtime status table: one tune_status_add per [tune] function, off the stamped AST
 // truth — emitted by policy runs AND by -exe builds (an artifact must be able to report
 // which perms it carries: log_tune_status / tune_status work inside a standalone exe)
-def private emit_status_init(var errors : string&) {
+let private STATUS_INIT_NAME = "`tune`status`init"
+
+def private emit_status_init(var errors : string&; library : bool = false) {
     var rows <- collect_status(get_ptr(compiling_program()))
     if (!empty(rows)) {
         var body : array<ExpressionPtr>
-        body |> reserve(length(rows) + 1)
+        body |> reserve(length(rows) + 2)
+        if (library) {
+            body |> push <| qmacro_expr() {
+                tune_library_init()
+            }
+        }
         for (row in rows) {
             body |> push <| qmacro_expr() {
                 tune_status_add($v(row.fname), $v(row.scope), $v(row.suffix),
@@ -3075,7 +3137,7 @@ def private emit_status_init(var errors : string&) {
                 tune_fat_init($v(baseline))
             }
         }
-        var fn = qmacro_function("`tune`status`init") $() : void {
+        var fn = qmacro_function(STATUS_INIT_NAME) $() : void {
             $b(body)
         }
         fn |> append_annotation("$", "init")
@@ -3259,15 +3321,32 @@ class private TunePolicyDefaultMarker : AstFunctionAnnotation {
                        var args : AnnotationArgumentList; var errors : das_string) : bool => true
 }
 
-    //! The "untuned does not start" default: a program root with a `main`, some `[tune_scope]` in
-    //! play and no declared `[tune_policy]` behaves as `missing = "auto"`. Escapes and the
-    //! once-only marker: `skills/tune.md`. A root without `main` never tunes (dastest files).
+    //! a standalone root with no `main` is a library: it gets the
+    //! status `[init]` an exe's `main` anchors, once
+[arch(at = "../ARCHITECTURE_TARGET_FEATURES.md#fat-mode")]
+def private library_status_init() : bool {
+    return false if (!exe_status_report()
+        || (compiling_module() |> find_unique_function(STATUS_INIT_NAME, false)) != null)
+    var errs = ""
+    emit_status_init(errs, true)
+    if (!empty(errs)) {
+        print("llvm_tune: {errs}\n")
+        panic("llvm_tune library status: {errs}")
+    }
+    return (compiling_module() |> find_unique_function(STATUS_INIT_NAME, false)) != null
+}
+
+    //! The "untuned does not start" default: a root with a `main`, a
+    //! `[tune_scope]` and no `[tune_policy]` acts as `missing = "auto"`
+    //! (`skills/tune.md`). A root with no `main` never tunes.
 def tune_default_policy_apply(_prog : ProgramPtr; _mod : Module?) : bool {
     return false if (is_in_completion() || !empty("{compiling_module().name}") || empty(g_scopes))
-    warn_manifest_untuned()   // self-gates on DAS_TUNE_MANIFEST; covers exe and declared-policy roots too
+    announce_forced_file()
+    // self-gates on a named file; covers exe and declared-policy roots
+    warn_manifest_untuned()
     return false if (tune_policy_gated() && !exe_status_report())
     var main_fn = compiling_module() |> find_unique_function("main", false)
-    return false if (main_fn == null)
+    return library_status_init() if (main_fn == null)
     for (ann in main_fn.annotations) {
         // declared policy wins; the marker means this pass already ran
         return false if (ann.annotation.name == "tune_policy"

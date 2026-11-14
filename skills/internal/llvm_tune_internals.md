@@ -69,10 +69,16 @@ context - which is why the infer pass moved to `daslib/tune` with the annotation
 
 ## The gates
 
-`tune_aot_gate()` and `tune_exe_gate()` are deliberately separate: cross-box artifacts are
-fully tune-free - except a `--jit-compile-only` dump under a cross triple, which keeps the grid so
-the x64 emission rail can inspect it off-box - while `-exe` still stamps and still emits the
-status `[init]`. **`aot_module`
+`tune_aot_gate()` and `tune_exe_gate()` are deliberately separate. `tune_aot_gate()` makes a
+cross-box artifact fully tune-free, but keeps the grid for a `--jit-compile-only` dump under a
+cross triple, so the x64 emission rail can inspect it off-box. `tune_exe_gate()` is true for both
+`-exe` and `-lib`: the command line sets one compile policy for both, `jit_exe_mode`, and the
+option that makes the JIT emit a library is set after the compile, too late for a macro. Both
+artifacts still stamp and still emit the status `[init]`. A macro that must tell a library from
+an exe asks whether the root has a `main`. The default-policy pass adds the status `[init]` (the
+generated function `` `tune`status`init ``) when the root has a `main`. For a root without one,
+`library_status_init` adds the same function, with a `tune_library_init()` call ahead of the
+rows. **`aot_module`
 is not a tune signal** - it means "module-shaped compile", which dastest sets on every test
 compile and the AST serializer needs.
 
@@ -85,7 +91,7 @@ plus the `llvm_code_selftest::host_features` probe in `modules/dasLLVM/tests/llv
 
 ## The fat mode
 
-Mechanism: `modules/dasLLVM/ARCHITECTURE_TARGET_FEATURES.md` sec.11. Maintenance notes:
+Mechanism: `modules/dasLLVM/ARCHITECTURE_TARGET_FEATURES.md#fat-mode`. Maintenance notes:
 
 - `stamp_fat` runs INSTEAD of the normal-mode pick, so a rule that changes how a winner is
   resolved (eligibility, companions' own entries, the fallback chain) has two homes: `tune_apply`
@@ -98,11 +104,13 @@ Mechanism: `modules/dasLLVM/ARCHITECTURE_TARGET_FEATURES.md` sec.11. Maintenance
 - The clone's `noinline` is load-bearing on AArch64 (the inliner admits a callee with more
   features when its body carries no target intrinsic); x86 refuses on features alone.
 - `tune_fat_box_in_class` is cpuid only on purpose - the exe's runtime must never read the
-  build's `DAS_JIT_BASELINE` or a force env for the pick.
+  `DAS_JIT_BASELINE` of the build or a `DAS_JIT_*_FORCE_FEATURES` override for the pick.
 - Every `pin_profile_chain` under fat pins the WHOLE ladder, because the ship set reads classes
   above the baseline.
-- The runtime words (`tune_fat_mask`, `tune_fat_built` and their setters) are `[llvm_code]`
-  stubs over LLVM-side globals (`llvm_tune_fat_word.das`), never plain das globals: an engine's
+- Every runtime word `llvm_tune` sets at `[init]` and reads later (`tune_fat_mask`,
+  `tune_fat_built`, `tune_library_built`, and their setters) is an `[llvm_code]` stub over an
+  LLVM-side global (`llvm_tune_fat_word.das`), never a plain das global - a new word takes the
+  same shape: an engine's
   pooled job contexts are forked with the init script skipped, and a das global there is zero,
   which dispatches every worker to the baseline clone. The fixture's `FORK` value is that cell.
   The stubs' `[llvm_code]` spelling is `llvm_code_shell.das` - `llvm_tune` cannot require
@@ -113,6 +121,23 @@ Mechanism: `modules/dasLLVM/ARCHITECTURE_TARGET_FEATURES.md` sec.11. Maintenance
   bindings' `[extern]` stubs land in the `dasbind` builtin in a per-process set and order, which
   the module cache reads as a builtin hash drift (`test_tuned.das`'s cache cell reds first).
   Generators live in modules `llvm_user_modules` requires; the annotation shell is its own module.
+
+## The forced file
+
+Mechanism: `modules/dasLLVM/ARCHITECTURE_TARGET_FEATURES.md#tune-forced-file`. Maintenance notes:
+
+- `tune_force_path()` is the only reader of the forced-file knob, `DAS_TUNE_FORCE`. `tune_manifest_path` answers the in-process
+  override first, then the forced file, then `DAS_TUNE_MANIFEST`, then the default beside the app.
+- `is_forced(path)` is the one test that turns off the box and age checks. Those checks live in
+  two places, `tune_sidecar_stale` and `tune_sidecar_verdict`, so a new check that judges a sidecar
+  by who wrote it or when consults `is_forced` in both.
+- Every sidecar write goes through `save_sidecar_doc`, which refuses the forced file. A writer
+  that bypasses it writes over the file the build is pinned to.
+- A forced file counts as a named file everywhere `DAS_TUNE_MANIFEST` does -
+  `tune_manifest_explicit`, `tune_policy_gated`, `warn_manifest_untuned` read both knobs - so a new
+  "was a file named" test reads both.
+- `announce_forced_file` prints its one line once a process, from the default-policy pass of a
+  root with a `[tune_scope]`, and prints nothing in a stamp-free compile.
 
 ## The dasLLAMA tuner - the worked consumer
 
@@ -150,7 +175,12 @@ reds a test that does. The fat rail is `llvm_tune.das` (+ `_llvm_tune_fat_client
 the client as a fat exe with `--jit-dump`, asserts each clone's attribute group and the
 LLVM-side mask word in the IR, then runs the exe unpinned, pinned, and pinned outside the box
 or outside the carried clones; the client's `FORK` value dispatches from a pooled skip-init
-job context. The baseline rail is `llvm_jit_baseline.das`: the announce, the tier bits the
+job context. Its last leg builds `_llvm_tune_fat_clib.das` as a fat `-lib` and loads it from
+`_llvm_tune_fat_clib_host.das`: the class pick runs when the host creates the library,
+`tune_library_built()` reads true there, and a pin to a class of another architecture fails the
+create. `test_llvm_tune_forced_file` is the forced-file rail: a library and a `-jit` program
+stamping from a file another box wrote, and the refused save (`_llvm_tune_force_save.das`). The
+baseline rail is `llvm_jit_baseline.das`: the announce, the tier bits the
 class bakes, the foreign and unknown class refusals, and the cross-target arm
 (`--jit-target` + `--jit-compile-only`). Both build into a per-process temp directory. A
 change to the fat emitter also gets the served-model rail: a `daspkg release --fat` of

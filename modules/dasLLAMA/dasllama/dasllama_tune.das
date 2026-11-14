@@ -289,6 +289,16 @@ def box_profile_path() : string {
     }
 }
 
+//! True inside a standalone library: its host owns the process and its files, so a load reads no sidecar.
+[arch(at = "../ARCHITECTURE_MEASUREMENT_FAT_START.md#fat-first-start")]
+def box_profile_in_library() : bool {
+    static_if (typeinfo module_exists(llvm_tune)) {
+        return tune_library_built()
+    } else {
+        return false
+    }
+}
+
 //! The sidecar is older than the running binary — its measurements are dead (the runtime
 //! apply skips it; the compile-time reads already treat it as absent).
 def box_profile_stale() : bool {

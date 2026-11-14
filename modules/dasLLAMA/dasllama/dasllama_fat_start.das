@@ -185,7 +185,7 @@ var private g_fat_start_ran = false
 //! rail and a tuner for its runtime section and does nothing here.
 def public dasllama_fat_first_start() : bool {
     static_if (typeinfo module_exists(llvm_tune)) {
-        return false if (!tune_fat_built() || g_fat_start_ran)
+        return false if (!tune_fat_built() || tune_library_built() || g_fat_start_ran)
         g_fat_start_ran = true
         return dasllama_race_runtime_section()
     } else {
@@ -215,7 +215,7 @@ def public dasllama_adopt_sidecar(beside, home_path : string) {
 [arch(at = "../ARCHITECTURE_MEASUREMENT_FAT_START.md#fat-first-start")]
 def public dasllama_place_fat_sidecar {
     static_if (typeinfo module_exists(llvm_tune)) {
-        return if (!tune_fat_built() || tune_manifest_explicit())
+        return if (!tune_fat_built() || tune_library_built() || tune_manifest_explicit())
         let beside = tune_manifest_path()
         let home_path = dasllama_fat_sidecar_path(dasllama_home_dir(), beside)
         dasllama_adopt_sidecar(beside, home_path)

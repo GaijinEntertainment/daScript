@@ -20,7 +20,10 @@ uncrowned forever. The section needs no rebuild, so the exe mints it itself:
 requires the module so every engine program carries the registration - the shipped bench
 requires the umbrella, never the facade; `apply_box_profile_runtime_checked` fires the hook when
 the sidecar is absent, another box's, or carries no runtime section, then reads the file the
-hook wrote. The hook answers false outside a fat exe (`tune_fat_built()`); inside one it runs
+hook wrote. The hook answers false outside a fat exe (`tune_fat_built()`) and inside a library
+(`tune_library_built()`): a library's host owns the process and its files, and a CPU-only library
+has nothing to race, so it runs the default knobs and writes nothing; the default apply answers
+`library` there before it looks for any file (`box_profile_in_library`). Inside a fat exe it runs
 `dasllama_race_runtime_section`: the Metal twin races (`dasllama_metal_crown_race` - both halves,
 synthetic, no model) under the tune progress display, then `dasllama_runtime_snapshot` - the same
 writer the mint's kernel half ends with - merged into the app sidecar with the kernels section

@@ -368,11 +368,10 @@ def test_llvm_tune_scope_policy(t : T?) {   // nolint:STYLE038 - flat numbered p
 // box).
 
 //! the env a spawned child sees: tune knobs cleared, tune verbose, info logging; relaunch: "" for the child the test spawns, "1" for a re-exec'd one
-def private tune_env_prefix(relaunch : string) : string {
-    return (get_platform_name() == "windows" ?
-        "set DAS_TUNE_MODE=&& set DAS_TUNE_MANIFEST=&& set DAS_TUNE_VERBOSITY=verbose&& set DAS_TUNE_POLICY=&& set DAS_TUNE_ONLY=&& set DAS_LOG_LEVEL=info&& set DAS_TUNE_RELAUNCH={relaunch}&& " :
-        "DAS_TUNE_MODE= DAS_TUNE_MANIFEST= DAS_TUNE_VERBOSITY=verbose DAS_TUNE_POLICY= DAS_TUNE_ONLY= DAS_LOG_LEVEL=info DAS_TUNE_RELAUNCH={relaunch} ")
-}
+def private tune_env_prefix(relaunch : string) : string =>
+    child_env([("DAS_TUNE_MODE", ""), ("DAS_TUNE_MANIFEST", ""), ("DAS_TUNE_VERBOSITY", "verbose"),
+        ("DAS_TUNE_POLICY", ""), ("DAS_TUNE_ONLY", ""), ("DAS_LOG_LEVEL", "info"),
+        ("DAS_TUNE_RELAUNCH", relaunch)])
 
 def private write_profile(dir, klass, winner, features : string) {
     mkdir(dir)

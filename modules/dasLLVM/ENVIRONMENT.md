@@ -30,8 +30,9 @@ Loaded once at context init into `g_env_tune`; tuner children inherit the enviro
 
 | Variable | Type | Default | Effect |
 |---|---|---|---|
-| `DAS_TUNE_MODE` | text | normal | Compile-time tune mode: normal, tune, or test. |
+| `DAS_TUNE_MODE` | text | normal | Compile-time tune mode: normal, tune, test, or fat (a standalone exe or library with one kernel clone per CPU class). |
 | `DAS_TUNE_MANIFEST` | path | <app>.tune.json beside the app | The tune sidecar to read and write - how you tune when the application directory is read-only. Setting it also gates the tune policy off (a redirect means manual). |
+| `DAS_TUNE_FORCE` | path | unset | Build against this tune sidecar or class profile, whichever box minted it and whenever: its kernels stamp with no box or age check. For an artifact built for other hardware; set DAS_JIT_BASELINE to the class it was minted for. |
 | `DAS_TUNE_HISTORY` | path | <home>/.tune-history/<box>/ | Where mint archives land. Every mint archives (failures kept, marked .FAILED.json); the history is never deleted. |
 | `DAS_TUNE_NOISE_CV` | number | 2 | The noise probe's note threshold in percent (a louder probe stamps the mint noisy; refusal sits at max(10, this)) - a calibration lever. Garbage or <= 0 reads as unset. |
 | `DAS_TUNE_NOISE_OVERRIDE` | flag | off | Mint through the busy-box refusal (a probe cv past the hard ceiling). The sidecar is stamped noise overridden, so the escape always leaves a mark. Validation never refuses - a winner that does not hold is demoted per kernel. |
