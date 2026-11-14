@@ -161,6 +161,37 @@ def vulkan_mint_end {
     moe_gpu_mint_dry(false)
 }
 
+[unused_argument(p, nbytes)]
+def private vk_mint_count_sink(p : void?; nbytes : uint64) {}
+
+[unused_argument(woff, slice_rows, mr, kgroup, wbias, disk)]
+def private vk_mint_measure_gather(fmt : int; woff, n, rows, slice_rows, mr, kgroup, wbias : int64; var wq : array<uint8>;
+                                   var ws : array<uint8>; disk : bool) : bool {
+    let b = dev_rows_bytes(kq_fmt_of_slot(fmt), n, rows)
+    wq |> reserve(b.q)
+    ws |> reserve(b.s)
+    wq |> resize_no_init(b.q)
+    ws |> resize_no_init(b.s)
+    return true
+}
+
+struct VkMintSize {
+    bytes : int64
+    entries : int64
+}
+
+[arch(at="../ARCHITECTURE_IMAGE_VULKAN.md#image-vulkan-mint")]
+def vulkan_mint_measure(walk : block<() : void>) : VkMintSize {
+    vulkan_mint_begin(@@vk_mint_measure_gather, @@vk_mint_count_sink)
+    invoke(walk)
+    let got = VkMintSize(bytes = g_vk_mint_sink_off, entries = long_length(g_vk_bake_plan))
+    vulkan_mint_end()
+    vulkan_bake_disarm()
+    g_vk_bake_blob |> clear()
+    g_vk_bake_plan |> clear()
+    return got
+}
+
 //! the alignment every collected entry starts at in the twin - the slice walk's import windows
 let VK_ENTRY_ALIGN = 4096l
 
@@ -395,14 +426,20 @@ def trim_emb_region(t : Model) : tuple<off : int64; n : int64; f : KqFmt> {
 
 //! the bytes the packed emb region takes in a trimmed lane; 0 where an fp32 table rides fblob and nothing packs
 def trim_emb_bytes(t : Model) : int64 {
+    let b = trim_emb_plane_bytes(t)
+    return b.q + b.s
+}
+
+def trim_emb_plane_bytes(t : Model) : tuple<q : int64; s : int64> {
     let r = trim_emb_region(t)
     if (t.emb_q8) {
-        return (r.n / Q8_BLOCK_ELEMS) * (Q8_QPB + Q8_SPB)
+        return (q = (r.n / Q8_BLOCK_ELEMS) * (Q8_QPB + Q8_SPB), s = 0l)
     }
     if (emb_kq(t) && (kq_sb(r.f) || kq_dense_b32(r.f))) {
-        return (r.n / kq_elems(r.f)) * (kq_qsb(r.f) + kq_ssb(r.f))
+        let nsb = r.n / kq_elems(r.f)
+        return (q = nsb * kq_qsb(r.f), s = nsb * kq_ssb(r.f))
     }
-    return 0l
+    return (q = 0l, s = 0l)
 }
 
 //! The trim (generate-then-free): pack the emb/cls region into embq/embs, mark the model trimmed, and FREE the big CPU weight
