@@ -292,7 +292,7 @@ namespace das {
                 if (!TypeDecl::inferGenericType(argType, passType, true, true, options)) {
                     return false;
                 }
-                return !(argType->isRef() && !argType->constant && passType->constant);
+                return !(!argType->constant && passType->constant && (argType->isRef() || passType->isPointer()));
             }
         }
         // match inferable block

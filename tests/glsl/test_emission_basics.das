@@ -70,11 +70,12 @@ def mrt_fragment {
 // Nested inlining must never mint a `__` identifier: GLSL ES reserves any
 // identifier containing two consecutive underscores and WebGL enforces it,
 // while desktop drivers do not — so a bad name compiles on the desktop and dies
-// only in the browser. The shape below is the mandelbrot tutorial's: a mutable
-// local passed twice into const parameters makes the inliner manufacture
-// _inl<N>_arg_* temps, and when that host function is itself inlined, those
-// temps are renamed into the outer _inl<N>_l_ namespace — a join that used to
-// spell `_inl1_l__inl0_arg_a`.
+// only in the browser. The shape below follows the mandelbrot
+// tutorial: an expression passed to a parameter the body reads twice
+// makes the inliner manufacture _inl<N>_arg_* temps, and when that
+// host function is itself inlined, those temps are renamed into the
+// outer _inl<N>_l_ namespace — a join that spells
+// `_inl1_l__inl0_arg_a` without the escape.
 def private cmul_nested(a, b : float2) : float2 =>
     float2(a.x * b.x - a.y * b.y, a.x * b.y + a.y * b.x)
 
@@ -82,7 +83,7 @@ def private iterate_nested(c : float2) : float2 {
     var z = float2(0.0, 0.0)
     var n = 0
     while (n < 8) {
-        z = cmul_nested(z, z) + c
+        z = cmul_nested(z + c, z)
         n++
     }
     return float2(float(n), z.x)
@@ -115,7 +116,7 @@ def private iterate_underscore(c : float2) : float2 {
     var z = float2(0.1, 0.1)
     var n = 0
     while (n < 8) {
-        z = mul_underscore(z, z) + c
+        z = mul_underscore(z + c, z)
         n++
     }
     return float2(float(n), z.x)
@@ -147,10 +148,10 @@ def private mixmul(_a, u_a : float2) : float2 =>
 
 def private iterate_mixed(c : float2) : float2 {
     var _z = float2(0.1, 0.1) // nolint:LINT004 the underscore spelling is the subject under test
-    var u_z = c // nolint:LINT003 must stay mutable — a const arg substitutes instead of minting the _arg_ temp
+    let u_z = c
     var n = 0
     while (n < 8) {
-        _z = mixmul(_z, u_z) + c
+        _z = mixmul(_z + c, u_z + c)
         n++
     }
     return float2(float(n), _z.x + u_z.x)

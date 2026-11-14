@@ -599,6 +599,10 @@ namespace das {
             }
         }
     // ExprCall
+        // src/ast/ARCHITECTURE.md#for-source-temporary
+        static bool holdsLoopSourceTemporaries ( const ExprCall * expr ) {
+            return expr->isForLoopSource && expr->func->unsafeOutsideOfFor;
+        }
         virtual void preVisit ( ExprCall * expr ) override {
             Visitor::preVisit(expr);
             // temp-string marking (builders and [temp_string_result] calls) lives in
@@ -618,6 +622,7 @@ namespace das {
             }
             // order of evaluation for interop functions is not specified
             onPreExprCallFunc(expr);
+            doNotOptimize += holdsLoopSourceTemporaries(expr);
             pushSp();
         }
 
@@ -626,6 +631,7 @@ namespace das {
             if (!inStruct && efun != nullptr) {
                 onExprCallFunc(expr);
                 popSp();
+                doNotOptimize -= holdsLoopSourceTemporaries(expr);
             }
             return Visitor::visit(expr);
         }
