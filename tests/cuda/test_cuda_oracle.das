@@ -1160,6 +1160,29 @@ def test_cm2i8_gpu(t : T?) {
     }
 }
 
+//! the block-scaled int8 products of the intrin kernel - the ldmatrix one from `go[0]`, the mma_frag_set one from `go[256]` -
+//! against the CPU sums under the row and column scales
+def private intrin_int8_products(t : T?; go : array<float>; a8, b8 : array<uint8>; rs, cs : array<float>) {
+    var bad = 0
+    var badf = 0
+    var missc = 0
+    for (r in range(16)) {
+        for (n in range(16)) {
+            var s = 0
+            for (k in range(32)) {
+                s += int(int8(a8[r * 32 + k])) * int(int8(b8[n * 32 + k]))
+            }
+            let want = float(s) * rs[r] * cs[n]
+            bad += go[r * 16 + n] == want ? 0 : 1
+            badf += go[256 + r * 16 + n] == want ? 0 : 1
+            missc += go[256 + r * 16 + n] == float(s) * (r == 3 ? rs[r] + 1.0 : rs[r]) * cs[n] ? 0 : 1
+        }
+    }
+    t |> equal(bad, 0, "the int8 product through cp.async + ldmatrix, scaled by row and column, matches")
+    t |> equal(badf, 0, "the int8 product off fragments set word by word through mma_frag_set matches")
+    t |> success(missc > 0, "control: the mma_frag_set product misses the reference with row 3's scale changed")
+}
+
 [test(description = "The CUDA-only tier (cp.async, ldmatrix, block-scaled int8 product, byte_perm, named barrier under clock32, inline PTX) on the GPU equals the CPU reference.")]
 def test_intrin_gpu(t : T?) {
     t |> run("the CUDA-only tier: cp.async into shared, ldmatrix fragments, the block-scaled int8 product, byte_perm, a named barrier under clock32, inline PTX == the CPU reference") <| @(t : T?) {
@@ -1185,23 +1208,13 @@ def test_intrin_gpu(t : T?) {
                 b16[i] = float16(float((i * 13 + 5) % 15 - 7) * 0.5)
             }
             var err : string
-            var p = IntrinParams(a8 = buf_upload(a8), b8 = buf_upload(b8), row_scales = buf_upload(rs), col_scales = buf_upload(cs), o = buf_fill(256, 0.0), misc = buf_fill(128, 0.0),
+            var p = IntrinParams(a8 = buf_upload(a8), b8 = buf_upload(b8), row_scales = buf_upload(rs), col_scales = buf_upload(cs), o = buf_fill(512, 0.0), misc = buf_fill(128, 0.0),
                 a16 = buf_upload(a16), b16 = buf_upload(b16), o16 = buf_fill(1024, 0.0))
             t |> success(launch(cc, intrin_cuda, "intrin", intrin_cuda_entry, p, 32u, err, intrin_cuda_smem, 32u), "intrin launch: {err}")
-            let go <- buf_download(p.o, 256, type<float>)
+            let go <- buf_download(p.o, 512, type<float>)
             let gm <- buf_download(p.misc, 128, type<uint>)
             let g16 <- buf_download(p.o16, 1024, type<float>)
-            var bad = 0
-            for (r in range(16)) {
-                for (n in range(16)) {
-                    var s = 0
-                    for (k in range(32)) {
-                        s += int(int8(a8[r * 32 + k])) * int(int8(b8[n * 32 + k]))
-                    }
-                    bad += go[r * 16 + n] == float(s) * rs[r] * cs[n] ? 0 : 1
-                }
-            }
-            t |> equal(bad, 0, "the int8 product through cp.async + ldmatrix, scaled by row and column, matches")
+            intrin_int8_products(t, go, a8, b8, rs, cs)
             var badm = 0
             for (l in range(32)) {
                 badm += gm[l] == byte_perm(0x03020100u + uint(l), 0x8f0e0d0cu, 0x7654u + uint(l) + uint(l & 1) * 0x8000u) ? 0 : 1

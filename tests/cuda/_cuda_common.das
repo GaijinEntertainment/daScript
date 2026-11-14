@@ -1177,14 +1177,15 @@ class Cm2I8 {
 
 //! the CUDA-only tier over one warp: a 16x32 s8 A tile and a [n][k] 16x32 s8 B tile copied into shared memory by
 //! cp.async (one through a pointer local over the shared array), their fragments through ldmatrix, the int8 product
-//! scaled by the row and column scales into an f32 accumulator, byte_perm, a named barrier under clock32, the
+//! scaled by the row and column scales into an f32 accumulator, the same product off fragments set word by word
+//! through mma_frag_set, byte_perm, a named barrier under clock32, the
 //! inline-PTX floor both ways, the f16 product through each transposing fragment load, and the accumulator's lane elements
 class Intrin {
     @ssbo @binding = 0 a8 : array<uint4>     //! A 16x32 s8 row-major: row r at uint4 2r, 2r + 1
     @ssbo @binding = 1 b8 : array<uint4>     //! B as [n][k]: column n at uint4 2n, 2n + 1
     @ssbo @binding = 2 row_scales : array<float>
     @ssbo @binding = 3 col_scales : array<float>
-    @ssbo @binding = 4 o : array<float>
+    @ssbo @binding = 4 o : array<float>      //! two 16x16 landings: the scaled s8 product through ldmatrix, then through mma_frag_set
     @ssbo @binding = 5 misc : array<uint>    //! 32 byte_perm results, 32 clock monotonic flags, 32 asm results, 32 register-vector lane reads
     @ssbo @binding = 6 a16 : array<uint4>    //! a 16x16 f16 tile, row r at uint4 2r, 2r + 1: A as [m][k], or A^T read as [k][m]
     @ssbo @binding = 7 b16 : array<uint4>    //! a 16x16 f16 tile: B as [k][n], or read as [n][k]
@@ -1213,10 +1214,35 @@ class Intrin {
         s = coopmatMulAdd(fa, fb, s)   // nolint:STYLE011 - MulAdd seeds from its own zero-filled tile
         let g = lane >> 2u
         let t = lane & 3u
+        let rsc = float2(row_scales[g], row_scales[g + 8u])
+        let csc = float4(col_scales[2u * t], col_scales[2u * t + 1u], col_scales[2u * t + 8u], col_scales[2u * t + 9u])
         var f : coopmatAcc_f32_16x16
-        mma_scale_acc(f, s, float2(row_scales[g], row_scales[g + 8u]),
-            float4(col_scales[2u * t], col_scales[2u * t + 1u], col_scales[2u * t + 8u], col_scales[2u * t + 9u]))
+        mma_scale_acc(f, s, rsc, csc)
         coopmatStore(f, o, 0, 16, 0)
+        let ti = int(t)
+        let rlo = sa[2u * g]          // A row g at k lo; its word t holds k 4t..4t+3
+        let rlo_hi = sa[2u * g + 1u]
+        let rhi = sa[2u * g + 16u]    // A row g + 8
+        let rhi_hi = sa[2u * g + 17u]
+        let clo = sb[2u * g]          // B column g at k lo, [n][k] as A's rows
+        let clo_hi = sb[2u * g + 1u]
+        let chi = sb[2u * g + 16u]
+        let chi_hi = sb[2u * g + 17u]
+        var ga : coopmatA_s8_16x32
+        mma_frag_set(ga, 0, rlo[ti])      // (rows g, k lo), (rows g + 8, k lo), (rows g, k hi), (rows g + 8, k hi)
+        mma_frag_set(ga, 1, rhi[ti])
+        mma_frag_set(ga, 2, rlo_hi[ti])
+        mma_frag_set(ga, 3, rhi_hi[ti])
+        var gb : coopmatB_s8_32x16
+        mma_frag_set(gb, 0, clo[ti])      // (cols g, k lo), (cols g, k hi), (cols g + 8, k lo), (cols g + 8, k hi)
+        mma_frag_set(gb, 1, clo_hi[ti])
+        mma_frag_set(gb, 2, chi[ti])
+        mma_frag_set(gb, 3, chi_hi[ti])
+        var gs : coopmatAcc_s32_16x16
+        gs = coopmatMulAdd(ga, gb, gs)   // nolint:STYLE011 - MulAdd seeds from its own zero-filled tile
+        var gf : coopmatAcc_f32_16x16
+        mma_scale_acc(gf, gs, rsc, csc)
+        coopmatStore(gf, o, 256, 16, 0)
         misc[lane] = byte_perm(0x03020100u + lane, 0x8f0e0d0cu, 0x7654u + lane + (lane & 1u) * 0x8000u)
         let t0 = clock32()
         bar_sync(1u, 32u)
@@ -1460,6 +1486,8 @@ def public declared_cuda_census : table<string> {   // nolint:STYLE038 - one fla
         "call.cuda_asm_value.2",
         "call.ldmatrix.A.s8",
         "call.ldmatrix.B.s8",
+        "call.mma_frag_set.A",
+        "call.mma_frag_set.B",
         "call.ldmatrix.A.f16",
         "call.ldmatrix.B.f16",
         "call.ldmatrix_trans.A.f16",

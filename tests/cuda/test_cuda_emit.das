@@ -286,6 +286,8 @@ def test_cuda_intrinsics(t : T?) {
         has(t, intrin_cuda, "asm volatile(\"cp.async.wait_group 0;\" ::: \"memory\");", "wait group with its constant")
         has(t, intrin_cuda, "ldmatrix.sync.aligned.m8n8.x4.shared.b16 \{%0,%1,%2,%3\}, [%4];", "ldmatrix x4")
         has(t, intrin_cuda, "__das_ldm___das_cmA_s8(fa, (sa + (", "the A fragment off the lane's row address")
+        has(t, intrin_cuda, "(ga).r[0] = ", "the A fragment's word set off a register")
+        has(t, intrin_cuda, "(gb).r[3] = ", "the B fragment's word set off a register")
         has(t, intrin_cuda, "f.r[k] += float(s.r[k]) * r[(k >> 1) & 1] * c[((k >> 2) << 1) | (k & 1)];", "the scaled accumulate's element map")
         has(t, intrin_cuda, "asm volatile(\"bar.sync %0, %1;\" :: \"r\"(id), \"r\"(count) : \"memory\");", "named barrier")
         has(t, intrin_cuda, "__byte_perm(", "byte_perm")

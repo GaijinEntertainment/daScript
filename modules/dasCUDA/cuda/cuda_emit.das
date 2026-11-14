@@ -3340,7 +3340,7 @@ def private atomic_call(var ctx : CudaCtx; ec : ExprCall?; cname : string) : str
 }
 
 //! the CUDA-only intrinsics a body calls as statements
-let private INTRINSIC_STATEMENTS : table<string> <- { "cp_async_16", "cp_async_commit", "cp_async_wait", "ldmatrix", "ldmatrix_trans", "mma_scale_acc", "mma_acc_set", "mma_block_scaled", "mma_block_scaled_mx", "mma_scale_cols", "bar_sync", "cuda_asm" }
+let private INTRINSIC_STATEMENTS : table<string> <- { "cp_async_16", "cp_async_commit", "cp_async_wait", "ldmatrix", "ldmatrix_trans", "mma_scale_acc", "mma_acc_set", "mma_frag_set", "mma_block_scaled", "mma_block_scaled_mx", "mma_scale_cols", "bar_sync", "cuda_asm" }
 
 [arch(at="../ARCHITECTURE_EMIT.md#cuda-kernel-vocabulary-tiers")]
 def private need_arch_a(var ctx : CudaCtx) {
@@ -3430,6 +3430,16 @@ def private cuda_intrinsic_call(var ctx : CudaCtx; ec : ExprCall?; cname : strin
             return "__das_cmC_set_f32({emit_value(ctx, ec.arguments[0])}, {emit_value(ctx, ec.arguments[1])}, {emit_value(ctx, ec.arguments[2])})"
         }
         return "__das_cmC_get_f32({emit_value(ctx, ec.arguments[0])}, {emit_value(ctx, ec.arguments[1])})"
+    }
+    if (cname == "mma_frag_set") {   //! a lane's fragment word off a register: the word ldmatrix would have loaded there
+        let fi = na == 3 ? coop_type_of(ec.arguments[0]._type) : CoopInfo(ok = false)
+        if (!(fi.ok && fi.comp == "s8" && fi.use != "C")) {
+            shader_error(ctx, ec.at, "mma_frag_set(s8 A or B fragment, word 0..3, value): the lane's fragment word")
+            return "/*mma_frag_set*/"
+        }
+        need_coopmat(ctx)
+        census_kind(ctx, "call.mma_frag_set.{fi.use}")
+        return "({emit_value(ctx, ec.arguments[0])}).r[{emit_value(ctx, ec.arguments[1])}] = {emit_value(ctx, ec.arguments[2])}"
     }
     if (cname == "mma_acc_row" || cname == "mma_acc_col") {   //! the cm2 prelude's fragment (row, column) at fragment index 0: the lane's g and t off its lane id
         if (na != 2) {
