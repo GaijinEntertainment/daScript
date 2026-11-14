@@ -53,7 +53,7 @@ networkx==3.6.1
 num2words==0.5.14
 numpy==2.4.6
 onnxruntime==1.29.0
-opentelemetry-api==1.45.1
+opentelemetry-api==1.45.2
 packaging==26.3
 phonemizer==3.4.0
 phonemizer-fork==3.3.2
