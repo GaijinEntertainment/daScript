@@ -1402,6 +1402,8 @@ bucket of a table of lists) does not count, and neither does the finalizer the
 compiler generates for a class. A ``@pool`` local or parameter has no duty: a
 parameter's container is the caller's, a local's dies with the call.
 
+.. das-doc: given struct Buffer { bytes : int }
+.. das-doc: given def release(b : Buffer?) { }
 .. das-doc: alt
 .. code-block:: das
 

@@ -286,3 +286,14 @@ correctness required it, and the alternative that was rejected.
   which still runs the block during the unwind; and an emitter that writes `finally` as explicit
   calls at every exit instead of a guard, a rewrite of every `return`, `break` and `continue` path
   in `daslib/aot_cpp.das` for the same behavior.
+
+## Exception type identity {#exception-type-identity}
+
+`dasException` exports its type information through `DAS_API`; its existing virtual
+destructor is defined in the runtime as the key function. Native
+`DAS_CPP_EXCEPTIONS` builds enable RTTI because Darwin's `-fno-rtti` emits private
+exception type information even for an exported class. The runtime raises the
+exception and the compiler library's interpreter catches it; separate hidden type
+identities prevent matching across that boundary. No class member, vtable slot or
+evaluation work changes. Language try/recover tests and the native-host half of
+`web/test/fileinfo_constructor.cjs` (repo root) exercise C++-exception recovery.

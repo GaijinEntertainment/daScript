@@ -227,8 +227,10 @@ namespace das
         goto loopend; \
     } }
 
-    class dasException final : public std::exception {
+    // include/daScript/simulate/ARCHITECTURE.md#exception-type-identity
+    class DAS_API dasException final : public std::exception {
     public:
+        ~dasException() noexcept override;
         dasException ( const char * why, const LineInfo & at )
             : exceptionAt(at), exceptionWhat(why ? why : "") {}
         virtual char const* what() const noexcept override {

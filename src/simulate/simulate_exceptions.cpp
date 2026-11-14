@@ -14,6 +14,9 @@
 */
 
 namespace das {
+    // include/daScript/simulate/ARCHITECTURE.md#exception-type-identity
+    dasException::~dasException() noexcept = default;
+
     static void stackWalkToErr(Context & ctx, const LineInfo & at, bool showArguments, bool showLocalVariables) {
         const das::string stack = ctx.getStackWalk(&at, showArguments, showLocalVariables);
         ctx.to_err(&at, stack.c_str());

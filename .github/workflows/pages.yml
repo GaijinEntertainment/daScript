@@ -165,8 +165,8 @@ jobs:
         cmake --no-warn-unused-cli -B./build \
           -DCMAKE_BUILD_TYPE:STRING=Release \
           -DCMAKE_C_COMPILER=/usr/bin/clang -DCMAKE_CXX_COMPILER=/usr/bin/clang++ \
-          -DCMAKE_C_FLAGS="-DDAS_ENABLE_EXCEPTIONS=1" \
-          -DCMAKE_CXX_FLAGS="-stdlib=libc++ -DDAS_ENABLE_EXCEPTIONS=1 -D_LIBCPP_DISABLE_DEPRECATION_WARNINGS" \
+          -DDAS_CPP_EXCEPTIONS=ON \
+          -DCMAKE_CXX_FLAGS="-stdlib=libc++ -D_LIBCPP_DISABLE_DEPRECATION_WARNINGS" \
           -DCMAKE_EXE_LINKER_FLAGS="-stdlib=libc++" \
           -DCMAKE_SHARED_LINKER_FLAGS="-stdlib=libc++" \
           -DDAS_HV_DISABLED=OFF \

@@ -25,6 +25,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # tools (utils/mcp/tools/cpp_compile_check.das).
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+option(DAS_CPP_EXCEPTIONS "Use C++ runtime exceptions (native builds enable RTTI for shared exception identity)" OFF)
 option(DAS_FLEX_BISON_DISABLED "Disable FLEX/BISON stage" OFF)
 option(DAS_STRICT_ALIASING "Keep gcc strict aliasing on (exposes type-pun bugs)" OFF)
 option(DAS_CLANG_BIND_DISABLED "Disable dasClangBind (libclang bindings, C/C++ parsing)" ON)
@@ -172,6 +173,17 @@ endif()
 ENDIF()
 
 SETUP_COMPILER()
+if(DAS_CPP_EXCEPTIONS)
+    add_compile_definitions(DAS_ENABLE_EXCEPTIONS=1)
+    if(NOT EMSCRIPTEN)
+        if(MSVC)
+            add_compile_options($<$<COMPILE_LANGUAGE:CXX>:/GR>)
+        else()
+            add_compile_options($<$<COMPILE_LANGUAGE:CXX,OBJCXX>:-frtti>)
+        endif()
+    endif()
+endif()
+
 
 IF(UNIX AND DAS_ENABLE_PIC)
     # On windows PIC is noop.

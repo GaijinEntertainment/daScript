@@ -4,6 +4,17 @@ Companion of `ARCHITECTURE.md` (sec.10 routes here). Contract: `ARCHITECTURE_COM
 root). This document carries what `inject_main` (`daslib/llvm_exe.das`) decides for a standalone
 exe at build time and what the exe does at startup before its init script runs.
 
+## Wasm module constructors {#wasm-module-constructors}
+
+Wasm module constructors and their matching destructors use the normal user
+priority 65535. Emscripten reserves priorities 0-100 for its stack, allocator,
+main-thread state and filesystem. FileInfo initialization assigns filenames to
+owning strings, so a filename that exceeds inline storage allocates. It runs after
+those runtime constructors, when the threaded allocator can read the main thread's
+identity. Native module priorities remain 0. `web/test/fileinfo_constructor.cjs`
+(repo root) exercises optimized threaded wasm64 startup and exception recovery
+with a long source filename.
+
 ## 1. The require-resolver rows
 
 `inject_main` decides the exe's link - the runtime-only library, or the whole compiler library
