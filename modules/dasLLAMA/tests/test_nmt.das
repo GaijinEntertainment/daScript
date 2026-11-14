@@ -7,6 +7,7 @@ require dastest/testing_boost public
 require dasllama/dasllama_nmt
 require dasllama/dasllama_spm   // load_spm_model_file: the vocabulary reader's refusals
 require dasllama/dasllama_translate   // the facade's two translator kinds
+require dasllama/dasllama_asr   // load_asr_model: the loader that refuses a translation image
 require dasllama/dasllama_common   // encode_: the completion's raw continuation
 require dasllama/dasllama_sampling   // generate_, SamplingParams: the same
 require dasllama/dasllama_tokenizer   // eos_id: the completion's end token
@@ -23,6 +24,7 @@ require _json_file
 require _npy   // read_npy: the oracle's per-stage dumps
 require _compares   // check_rows / check_exact / check_exceeds / ids_equal
 require _nmt_oracle   // the build's device translation seat, nmt_log_side
+require _image_memory   // read_page_aligned: a host's own copy of an image
 
 // The Bergamot students against marian's own f32 graph (`../benchmarks/nmt/bergamot_oracle.py`, this repository's oracle rig,
 // writes the model root's `nmt_oracle/<pair>-<tier>/<src>_<variant>/`): the tokenizer id for id against Python sentencepiece
@@ -102,6 +104,13 @@ def private dumps_present(t : T?; c : NmtCase; lines : array<OracleTokens>) : bo
         return false
     }
     return true
+}
+
+//! `lines` translated through the image file `dlim`, mapped for the call alone
+[cold_path]
+def private file_lines(dlim : string; q8 : bool; lines : array<string>) : array<string> {
+    var inscope m <- load_nmt_model(dlim, q8)
+    return <- nmt_lines(m, lines)
 }
 
 def private mint(path : string; q8 : bool) : NmtModel {
@@ -263,6 +272,76 @@ def private mint_cls_zeroed(path : string) : NmtModel {
     }
     mint_nmt_model(st, m)
     return <- m
+}
+
+[test(description = "A Bergamot image its host holds in memory loads from the bytes on each lane and translates three Russian lines as the image's file does, with the file gone; two carriers borrow the same bytes and each release drops one borrow; another family's lane read and the ASR loader refuse the image by name; with its planes zeroed the load translates otherwise")]
+def test_nmt_from_memory(t : T?) {
+    t |> run("bergamot ru-en tiny: each lane's image bytes, borrowed in place") @(t : T?) {
+        let path = path_join(models_dir(), "bergamot/ru-en-tiny/model.ruen.intgemm.alphas.bin")
+        return if (!jit_model_available(t, path))
+        let lines <- ["Лечи меня, у меня мало здоровья!", "Где ближайшая аптека?", "Сегодня мы идём в горы."]   // nolint:STYLE039 - the source language's own text
+        let seat = nmt_seat_pin(false)
+        with_dasllama_jobque_() {
+            for (q8 in [false, true]) {
+                let dlim = path_join(test_temp_dir(), "nmt_memory_{q8}.dlim")
+                with_image_destination(dlim) {   // the cold mint lands in scratch, not beside the carrier
+                    var inscope cold <- load_nmt_model(path, q8)
+                }
+                var inscope want <- file_lines(dlim, q8, lines)
+                var raw : array<uint8>
+                var size = 0ul
+                let base = read_page_aligned(dlim, raw, size)
+                remove(dlim)
+                t |> success(base != null, "q8={q8}: the image reads into memory")
+                if (base != null) {
+                    {
+                        var inscope m <- load_nmt_model(base, size)
+                        t |> equal(m.q8, q8, "q8={q8}: the bytes load on the lane the image was baked on")
+                        var inscope got <- nmt_lines(m, lines)
+                        for (w, g in want, got) {
+                            to_log(LOG_INFO, "nmt from memory q8={q8} file: {w}\n")
+                            to_log(LOG_INFO, "nmt from memory q8={q8} bytes: {g}\n")
+                            t |> success(!empty(w), "q8={q8}: the image's file translates")
+                            t |> equal(g, w, "q8={q8}: the bytes translate as the file does")
+                        }
+                    }
+                    {
+                        var inscope tr <- load_translator(base, size)   // a second carrier over the same bytes, held past the first
+                        let dir = translator_langs(tr)
+                        t |> equal("{dir.src}-{dir.trg}", "ru-en", "q8={q8}: the facade reads the student's direction off the image")
+                        {
+                            var inscope twin <- load_nmt_model(base, size)
+                            t |> equal(image_backing_borrowers(base), 2, "q8={q8}: two carriers borrow the bytes")
+                        }
+                        t |> equal(image_backing_borrowers(base), 1, "q8={q8}: one release leaves the other carrier's borrow")
+                        // the facade runs `nmt_translate` over the same image on the same lane, the seat pinned off: one chain
+                        t |> equal(tr.m.q8, q8, "q8={q8}: the facade's student serves the image's lane")
+                        let through_facade = translate(tr, lines[0])
+                        to_log(LOG_INFO, "nmt from memory q8={q8} facade: {through_facade}\n")
+                        t |> equal(through_facade, want[0], "q8={q8}: the facade translates with a sibling carrier already released")
+                    }
+                    t |> equal(image_backing_borrowers(base), 0, "q8={q8}: the last release forgets the bytes")
+                    let foreign = panic_text() {
+                        image_memory_lane(base, size, "whisper-", "whisper")
+                    }
+                    t |> success(find(foreign, "not a whisper image") >= 0, "q8={q8}: another family's lane read refuses the image by name: '{foreign}'")
+                    let not_speech = panic_text() {
+                        var inscope asr <- load_asr_model(base, size)
+                    }
+                    t |> success(find(not_speech, "loads from memory") >= 0, "q8={q8}: the ASR loader refuses a translation image by name: '{not_speech}'")
+                    zero_planes(base, size)
+                    {
+                        var inscope poisoned <- load_nmt_model(base, size)
+                        var inscope other <- nmt_lines(poisoned, lines)
+                        to_log(LOG_INFO, "nmt from memory q8={q8} zeroed: {other[0]}\n")
+                        t |> success(other[0] != want[0], "q8={q8}: its planes zeroed, the load translates otherwise (the control)")
+                    }
+                }
+                delete raw
+            }
+        }
+        nmt_seat_pin(seat)
+    }
 }
 
 [test(description = "The ru/en Bergamot q8 lane serves its GEMMs and classifier off the Q8_0 plane and translates at least 25 fixture lines as the f32 oracle does, while zeroing the Q8_0 classifier moves every line and falls under the floor")]

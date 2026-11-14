@@ -3656,10 +3656,14 @@ named `q8`; the F32 GGUF's jfk transcript the f32 bin's and the kq lane's at jfk
 durations), `test_parakeet_gguf_facade` (`load_asr_model` on the Q4_K_M file alone: the kq lane's CPU image, the lane named `k4`,
 jfk's word floor, the lane's image loaded back by path to the same transcript),
 `test_parakeet_kq_discrete_twin` (the Q4_K_M file's kq image on the serving discrete home three ways on jfk - the front and
-every block on the device, a k4 tile counted, the image holding no CPU planes, the poisoned image past the bar) and
+every block on the device, a k4 tile counted, the image holding no CPU planes, the poisoned image past the bar),
 `test_parakeet_kq_metal_twin` (Apple builds: the kq image on the Metal chain through `metal_q8_twin` - the front and every
-block on the device, a K-quant mul_mm stamp counted, the poisoned image past the bar); these six skip without the
-Q4_K_M GGUF (the F32 cells without the F32 GGUF or the v3 f32 bin), the encode cells without jfk.wav, the two twins as
+block on the device, a K-quant mul_mm stamp counted, the poisoned image past the bar) and
+`test_parakeet_from_memory` (the CPU image of the Q4_K_M file read into the host memory and loaded from the bytes with the
+file gone: the lane the mint took, the encoder rows of jfk those of the image file, `load_asr_model` routing the bytes to
+parakeet, the middle three quarters of the bytes zeroed (`zero_planes`) encoding other rows); every Parakeet GGUF
+carrier cell skips without the
+Q4_K_M GGUF (the F32 cells without the F32 GGUF or the v3 f32 bin), the encode cells without jfk.wav, and the two kq twins as
 their homes' twins do;
 `test_vulkan_short_clips` (gemma4a E2B, canary and parakeet v2, each lane's CPU image and
 its Vulkan-flavored image minted in memory: clips of 320 to 1600 samples - a few mel frames, under the device fronts' old
@@ -3992,7 +3996,10 @@ the grown tail zeroed, `overwrite_resize` grow-only no-init) fed directly, inclu
 the `max_unreserved_size` guard that must not panic.
 `uncategorized__dasllama_internal_persistent_heap_stack_524288.das` - model-free: the SPIR-V dump differ, the parity
 reference cache's load (`test_parity_cache_roundtrip`, `test_parity_cache_rejects_corruption`), the `.dlim` wipe
-(`test_dlim_wipe`) and the `[from_template]` stamp.
+(`test_dlim_wipe`), the `[from_template]` stamp, and the Silero VAD's load from bytes its host holds
+(`test_vad_from_memory`: the checked-in bin read one byte past a page boundary, its CPU probabilities those of the file
+load bit for bit after the host bytes are zeroed, a copy with 4096 bytes zeroed giving a different probability in some
+chunk, a 40-byte buffer - shorter than the 44-byte header - refused with a panic saying it is not a model).
 `test_vk_spv_diff_bins` and `test_vk_spv_diff_reads_a_directory`: the SPIR-V dump differ (`../harness/vk_spv_diff.das`, the
 identity gate a kernel fold's "byte-identical" claim rests on) - its four bins over two in-memory
 dumps (a changed byte and a changed length both read as moved, name order), the verdict's refusal

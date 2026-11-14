@@ -827,6 +827,13 @@ def load_parakeet_model(path : string; q8 : bool = false) : ParakeetModel {
     }
 }
 
+//! `load_parakeet_model` for a prepared image its host holds in memory (`ARCHITECTURE_IMAGE.md#image-borrowed-memory`): the lane
+//! the image was baked on serves, and the bytes stay the host's for as long as the model lives.
+[arch(at = "../ARCHITECTURE_IMAGE.md#image-borrowed-memory")]
+def load_parakeet_model(base : void?; bytes : uint64) : ParakeetModel =>
+    <- load_through_memory(base, bytes, "parakeet-", "parakeet", type<ParakeetModel>,
+                           $(m : ParakeetModel) => parakeet_exec_fmt(m))
+
 //! The image tag a CPU load of `path` on `q8` takes: the kq lane's for a quantized GGUF asked for q8 with no lane pinned, else the q8 or f32 lane's
 def parakeet_load_tag(path : string; q8 : bool) : string
     => q8 && g_pk_pin == GemmLane.unset && pk_is_kq_carrier(path) ? PARAKEET_KQ_TAG : parakeet_lane_tag(q8, false)

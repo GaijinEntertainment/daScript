@@ -33,6 +33,7 @@ require dasllama/dasllama_common   // QuantMode
 require ?das_metal dasllama/dasllama_metal_tower   // set_metal_tower: the Metal CTC cell's pin
 require _ctc_oracle   // ctc_seat_heads: the build's device CTC seat's count
 require _example_rail   // example_daslang: the corpus harness's child runs on this binary
+require _image_memory   // read_page_aligned: a host's own copy of an image
 
 // GigaAM v3 against the upstream package's per-stage dumps (benchmarks/asr/gigaam_oracle.py into the model root's
 // `asr_oracle/gigaam/<clip>_<variant>/`, minted by the `mint_gigaam.sh` stocked beside them over the corpus clips the
@@ -517,6 +518,96 @@ def test_gigaam_fp32_pin_load(tst : T?) {
                 t |> success(!empty(transcript_of(m, load_audio_16k_mono(clip))), "the widened lane transcribes")
             }
             remove(dlim)
+        }
+    }
+}
+
+//! the GPU flavor a load of `path` under the serving tower mints, read into memory: its bytes are refused by name
+def private gpu_flavor_refused(t : T?; path : string) {
+    if (!serving_tower_device_up(TowerFamily.gigaam)) {
+        t |> skip("no GPU device stands up for the serving tower - no GPU flavor to mint")
+        return
+    }
+    with_gpu_knobs() {
+        set_serving_gpu_tower(true, TowerFamily.gigaam)
+        let dlim = path_join(test_temp_dir(), "ga_memory_dev.dlim")
+        var flavored = false
+        with_image_destination(dlim) {
+            var inscope m <- load_gigaam_model(path)
+            flavored = m.dev_backend != TowerDev.none
+        }
+        t |> success(flavored, "the load under the serving tower mints the GPU flavor")
+        var raw : array<uint8>
+        var size = 0ul
+        let base = read_page_aligned(dlim, raw, size)
+        remove(dlim)
+        t |> success(base != null, "the flavor's image reads into memory")
+        if (flavored && base != null) {
+            let refused = panic_text() {
+                var inscope bad <- load_gigaam_model(base, size)
+            }
+            t |> success(find(refused, "serves on the CPU alone") >= 0, "the flavor is refused by name: '{refused}'")
+        }
+        delete raw
+    }
+}
+
+[test(description = "A GigaAM CPU image its host holds in memory loads from the bytes on the lane it was baked on and transcribes the clip as the image's file does, `load_asr_model` routes the bytes to gigaam, a base off the 16 KiB boundary is refused by name and so is a GPU flavor's bytes, and with its planes zeroed the load transcribes otherwise")]
+def test_gigaam_from_memory(tst : T?) {
+    with_dasllama_jobque_() {
+        let path = kq_carrier()
+        return if (!jit_model_available(tst, path))
+        tst |> run("e2e_rnnt q4_k: the CPU image's bytes, borrowed in place, serve the transcript its file serves") @(t : T?) {
+            let clip = asr_clip("ru_short.wav")
+            if (!stat(clip).is_valid) {
+                t |> skip("ru_short.wav not present - the transcript leg")
+                return
+            }
+            with_gpu_knobs() {
+                set_serving_gpu_tower(false, TowerFamily.gigaam)   // the CPU image: the one an image in memory serves
+                let dlim = path_join(test_temp_dir(), "ga_memory.dlim")
+                var from_file = ""
+                var lane = ""
+                with_image_destination(dlim) {   // the cold mint lands in scratch, not beside the carrier
+                    var inscope m <- load_gigaam_model(path)
+                    from_file = transcript_of(m, load_audio_16k_mono(clip))
+                    lane = gigaam_exec_fmt(m)
+                }
+                t |> success(!empty(from_file), "the image's file transcribes the clip")
+                var raw : array<uint8>
+                var size = 0ul
+                let base = read_page_aligned(dlim, raw, size)
+                remove(dlim)
+                t |> success(base != null, "the image reads into memory")
+                if (base != null) {
+                    {
+                        var inscope m <- load_gigaam_model(base, size)
+                        t |> equal(gigaam_exec_fmt(m), lane, "the bytes load on the lane the image was baked on")
+                        let from_memory = transcript_of(m, load_audio_16k_mono(clip))
+                        to_log(LOG_INFO, "gigaam from memory file: {from_file}\n")
+                        to_log(LOG_INFO, "gigaam from memory bytes: {from_memory}\n")
+                        t |> equal(from_memory, from_file, "and transcribe as the file does, with the file gone")
+                    }
+                    let off_page = unsafe(reinterpret<void?>(intptr(base) + 64ul))
+                    let refused = panic_text() {
+                        var inscope bad <- load_gigaam_model(off_page, size)
+                    }
+                    t |> success(find(refused, "starts on a {IMAGE_PAGE}-byte boundary") >= 0, "a base off the page is refused by name: '{refused}'")
+                    {
+                        var inscope routed <- load_asr_model(base, size)
+                        t |> success(routed.kind == AsrKind.gigaam, "the ASR loader routes the bytes to gigaam")
+                    }
+                    zero_planes(base, size)
+                    var inscope poisoned <- load_gigaam_model(base, size)
+                    let other = transcript_of(poisoned, load_audio_16k_mono(clip))
+                    to_log(LOG_INFO, "gigaam from memory zeroed: {other}\n")
+                    t |> success(other != from_file, "its planes zeroed, the load transcribes otherwise (the control)")
+                }
+                delete raw
+            }
+        }
+        tst |> run("e2e_rnnt q4_k: a GPU flavor's bytes are refused by name") @(t : T?) {
+            gpu_flavor_refused(t, path)
         }
     }
 }

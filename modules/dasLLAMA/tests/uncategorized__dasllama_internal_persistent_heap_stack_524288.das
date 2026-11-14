@@ -9,6 +9,11 @@ require ../harness/vk_spv_diff.das
 require dasllama/dasllama_parity
 require dasllama/dasllama_image
 require dasllama/dasllama_tune
+require dasllama/dasllama_vad   // load_vad_model, vad_probs_cpu: the load from bytes
+require dasllama/dasllama_math   // with_dasllama_jobque_
+require _image_memory   // read_page_aligned, zero_bytes: a host's own copy of the bin
+require strings   // find: a refusal's words
+require math
 
 // The SPIR-V dump differ (harness/vk_spv_diff.das) - the identity gate every kernel fold's
 // "byte-identical" claim rests on: its four bins over two in-memory dumps, and the verdict's refusal
@@ -205,6 +210,47 @@ def test_from_template(t : T?) {
         unsafe {
             t |> equal(5.0, scaled(addr(f[0]), 1l), "the float plane reads its scale")
             t |> equal(4.0, scaled(addr(h[0]), 1l), "the halfword plane widens through its own reader")
+        }
+    }
+}
+
+[test(description = "A Silero VAD bin its host holds in memory, at an odd address, loads from the bytes and keeps none of them: its CPU probabilities on a fixed signal are the file load's bit for bit after the bytes are overwritten; a copy with 4096 bytes zeroed answers other probabilities; a buffer shorter than the header is refused by name")]
+def test_vad_from_memory(t : T?) {
+    t |> run("the shipped bin's bytes, one byte past a page boundary") @(t : T?) {
+        let signal <- [for (i in range(10 * 512)); sin(float(i) * 0.37) * 0.1]
+        with_dasllama_jobque_() {
+            var inscope from_file_model <- load_vad_model(vad_model_path())
+            var inscope from_file <- vad_probs_cpu(from_file_model, signal)
+            t |> equal(length(from_file), 10, "ten chunks, ten probabilities")
+            var raw : array<uint8>
+            var size = 0ul
+            let base = read_page_aligned(vad_model_path(), raw, size, 1l)
+            t |> success(base != null, "the bin reads into memory")
+            if (base != null) {
+                let short = panic_text() {
+                    var inscope cut <- load_vad_model(base, 40ul)
+                }
+                t |> success(find(short, "is not a model") >= 0, "forty bytes are refused by name: '{short}'")
+                var inscope poisoned_raw : array<uint8>
+                var poisoned_size = 0ul
+                let poisoned_base = read_page_aligned(vad_model_path(), poisoned_raw, poisoned_size)
+                zero_bytes(poisoned_base, poisoned_size / 2ul, 4096ul)
+                var inscope poisoned <- load_vad_model(poisoned_base, poisoned_size)
+                var inscope other <- vad_probs_cpu(poisoned, signal)
+                var inscope from_memory_model <- load_vad_model(base, size)
+                zero_bytes(base, 0ul, size)   // the load copied every tensor: the host's bytes are free
+                var inscope from_memory <- vad_probs_cpu(from_memory_model, signal)
+                t |> equal(length(from_memory), length(from_file), "the same chunk count")
+                var same = length(from_memory) == length(from_file)
+                var moved = false
+                for (m, f, o in from_memory, from_file, other) {
+                    same &&= m == f
+                    moved ||= o != f
+                }
+                t |> success(same, "every chunk's probability is the file load's, bit for bit")
+                t |> success(moved, "4096 bytes zeroed, the load answers other probabilities (the control)")
+            }
+            delete raw
         }
     }
 }

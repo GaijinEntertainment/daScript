@@ -201,29 +201,36 @@ def private read_meta_head(bp : uint8 const?; meta_off, meta_bytes : uint64; rea
     return ok
 }
 
-[arch(at = "../ARCHITECTURE_IMAGE.md#dlim-meta-head")]
 def image_peek(path : string) : DlimPeek {
-    var p = DlimPeek()
     var msize = 0ul
     var base : void?
     unsafe {
         base = fmap_open(path, addr(msize))
     }
-    if (base == null || int64(msize) < IMAGE_HEADER_BYTES) {
-        if (base != null) {
-            unsafe(fmap_close(base, msize))
-        }
-        return p
+    let p = image_peek_memory(base, msize)
+    if (base != null) {
+        unsafe(fmap_close(base, msize))
     }
+    return p
+}
+
+//! how a log line and a panic name an image that has no file
+let IMAGE_IN_MEMORY = "<memory>"
+
+//! `image_peek` of an image held in memory: `bytes` at `base`, neither kept nor released.
+[arch(at = "../ARCHITECTURE_IMAGE.md#dlim-meta-head")]
+def image_peek_memory(base : void?; bytes : uint64) : DlimPeek {
+    var p = DlimPeek()
+    return p if (base == null || int64(bytes) < IMAGE_HEADER_BYTES)
     let bp = unsafe(reinterpret<uint8 const?>(base))
-    p.bytes = int64(msize)
+    p.bytes = int64(bytes)
     p.version = int(read_u32(bp, 4l))
     p.layout = read_u64(bp, 48l)
     let meta_off = read_u64(bp, 16l)
     let meta_bytes = read_u64(bp, 24l)
     p.valid = (read_u32(bp, 0l) == IMAGE_MAGIC && read_u32(bp, 8l) == uint(IMAGE_PAGE)
-        && read_u64(bp, 32l) == msize && meta_bytes != 0ul && meta_bytes <= msize
-        && meta_off <= msize - meta_bytes && meta_bytes <= uint64(INT_MAX))
+        && read_u64(bp, 32l) == bytes && meta_bytes != 0ul && meta_bytes <= bytes
+        && meta_off <= bytes - meta_bytes && meta_bytes <= uint64(INT_MAX))
     if (p.valid && p.version >= 7) {
         let read = read_meta_head(bp, meta_off, meta_bytes) $(var harch : Archive) {
             harch |> serialize(p.identity)
@@ -234,22 +241,53 @@ def image_peek(path : string) : DlimPeek {
             p.config_json = ""
         }
     }
-    unsafe(fmap_close(base, msize))
     return p
 }
 
-//! A prepared image's family, from the baked identity's trailing tag ("" = no family tag — a
-//! decoder image, which routes on its gguf instead). Panics on an unreadable image.
-def image_family_tag(path : string) : string {
-    let p = image_peek(path)
+def private peeked_family_tag(p : DlimPeek; source_name : string) : string {
     if (!p.valid || empty(p.identity)) {
-        panic("dasLLAMA: '{path}' is not a readable prepared image (see the log above)")
+        panic("dasLLAMA: {source_name} is not a readable prepared image (see the log above)")
     }
     var parts <- split(p.identity, "|")
     let tag = parts[length(parts) - 1]
     delete parts
     return tag
 }
+
+//! Panics unless `base` sits on the image page: a prepared image's planes are aligned from its first byte.
+def private require_image_on_page(base : void?) {
+    if ((intptr(base) & uint64(IMAGE_PAGE - 1l)) != 0ul) {
+        panic("dasLLAMA: a prepared image in memory starts on a {IMAGE_PAGE}-byte boundary - this one starts at {intptr(base)}")
+    }
+}
+
+//! The lane the baked tag `baked` of an image in memory serves, for the family whose lanes start with `prefix`. Another
+//! family's image panics by name - its meta would be read as the wrong carrier - and so does a GPU flavor of the lane.
+def private memory_lane_of(baked, prefix, who : string) : string {
+    let lane = image_tag_lane(baked)
+    if (!(lane |> starts_with(prefix))) {
+        panic("dasLLAMA: {IMAGE_IN_MEMORY} is baked as '{baked}' - not a {who} image")
+    }
+    if (baked != lane) {
+        panic("dasLLAMA: {IMAGE_IN_MEMORY} is the '{baked}' image, a GPU flavor of the lane '{lane}' - an image in memory serves on the CPU alone; hand over the lane's CPU image")
+    }
+    return lane
+}
+
+//! A prepared image's family, from the baked identity's trailing tag ("" = no family tag — a
+//! decoder image, which routes on its gguf instead). Panics on an unreadable image.
+def image_family_tag(path : string) : string => peeked_family_tag(image_peek(path), "'{path}'")
+
+//! `image_family_tag` of an image held in memory.
+def image_family_tag_memory(base : void?; bytes : uint64) : string {
+    require_image_on_page(base)
+    return peeked_family_tag(image_peek_memory(base, bytes), IMAGE_IN_MEMORY)
+}
+
+//! The lane an image held in memory serves, for the family whose lanes start with `prefix`; another family's image and a
+//! GPU flavor panic by name.
+def image_memory_lane(base : void?; bytes : uint64; prefix, who : string) : string =>
+    memory_lane_of(image_family_tag_memory(base, bytes), prefix, who)
 
 //! One .dlim sibling of a GGUF, as list/GC tooling sees it (converter --list, the server page).
 struct DlimImageInfo {
@@ -302,8 +340,7 @@ def image_tag_lane(tag : string) : string => g_flavor_lane?[tag] ?? tag
 //! one of `lane`'s GPU flavors, else `lane` - whose identity check then names the mismatch
 def named_image_tag(path, lane : string) : string {
     let baked = image_family_tag(path)
-    return baked if (image_tag_lane(baked) == lane)
-    return lane
+    return image_tag_lane(baked) == lane ? baked : lane
 }
 
 //! every image family tag the loaded modules registered (`register_image_family_tag`), in registration order
@@ -2062,6 +2099,43 @@ def cache_via_image_staged_hooked(var st; var out; img : string; extra : uint64;
         panic("dasLLAMA: could not build the prepared image in memory - there is no other form to serve")
     }
     return false
+}
+
+//! Parse a prepared image its host holds in memory (`ARCHITECTURE_IMAGE.md#image-borrowed-memory`): the carrier's planes
+//! borrow `base` in place and its finalizer releases nothing. false = wrong identity or version, as `load_image`.
+[arch(at = "../ARCHITECTURE_IMAGE.md#image-borrowed-memory")]
+def load_image_memory(base : void?; bytes : uint64; var t; tag : string = ""; quant : string = "q8") : bool {
+    if (base == null || int64(bytes) < IMAGE_HEADER_BYTES) {
+        to_log(LOG_WARNING, "dasLLAMA image: {IMAGE_IN_MEMORY} declined - {bytes} bytes at {intptr(base)}\n")
+        return false
+    }
+    require_image_on_page(base)
+    return borrow_parsed_image(base, bytes, t, tag, quant)
+}
+
+//! `t` parsed over the bytes at `base`, which is then one more borrower of them; false where the parse declines
+def private borrow_parsed_image(base : void?; bytes : uint64; var t; tag, quant : string) : bool {
+    return false if (!parse_image(base, bytes, IMAGE_IN_MEMORY, t, tag, quant))
+    image_backing_borrow(base)
+    return true
+}
+
+//! `load_through_image` for an image its host holds in memory, of the family whose lanes start with `prefix`: it parses on
+//! the lane the image was baked on or panics, and nothing is minted, written or collected. `describe` words the loaded
+//! carrier for the log line.
+[unused_argument(carrier)]
+def load_through_memory(base : void?; bytes : uint64; prefix, who : string; carrier : auto(T);
+                        describe : block<(t : T) : string>) : T -const {
+    apply_box_profile_runtime()
+    let ts_img = ref_time_ticks()
+    let lane = image_memory_lane(base, bytes, prefix, who)
+    var t = T()
+    if (!borrow_parsed_image(base, bytes, t, lane, "q8")) {
+        panic("dasLLAMA: {IMAGE_IN_MEMORY} is not a prepared {who} image for this box/knobs (identity {image_identity(lane)})")
+    }
+    let ms = get_time_usec(ts_img) / 1000
+    to_log(LOG_INFO, "dasLLAMA {who}: lane {lane} ({invoke(describe, t)}) - the image its host holds in memory, {int64(bytes >> 20ul)} MB, parsed in {ms} ms\n")
+    return <- t
 }
 
 //! The one carrier load (`carrier` = `type<T>`): a named `.dlim` maps or panics; else the lane's image maps when `accept`

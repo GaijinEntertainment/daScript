@@ -618,6 +618,13 @@ def load_nmt_model(path : string; q8 : bool = false) : NmtModel {
     return <- m
 }
 
+//! `load_nmt_model` for a prepared image its host holds in memory (`ARCHITECTURE_IMAGE.md#image-borrowed-memory`): the lane
+//! the image was baked on serves, its vocabulary rides the image, and the bytes stay the host's for as long as the model lives.
+[arch(at = "../ARCHITECTURE_IMAGE.md#image-borrowed-memory")]
+def load_nmt_model(base : void?; bytes : uint64) : NmtModel =>
+    <- load_through_memory(base, bytes, "bergamot-", NMT_ARCH, type<NmtModel>,
+                           $(m : NmtModel) => "{m.pair} d {m.d} ff {m.ff} layers {m.n_enc}+{m.n_dec}")
+
 //! Every buffer an encode and a decode reuse, so a translation allocates nothing past its first call.
 struct NmtState {
     @scratch @exact_size x : array<float>       //!< [rows][d] the stream

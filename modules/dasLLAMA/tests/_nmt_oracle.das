@@ -140,6 +140,13 @@ def nmt_log_side(m : NmtModel; tag, side : string; ids : array<int64>) {
     to_log(LOG_INFO, "{tag} {side}: {replace(spm_decode_ids(m.spm.tk, ids), "\n", "\\n")}\n")
 }
 
+//! Every line of `lines` through `m`, one translation a line.
+[cold_path]
+def nmt_lines(m : NmtModel; lines : array<string>) : array<string> {
+    var inscope st = NmtState()
+    return <- [for (ln in lines); nmt_translate(m, st, ln)]
+}
+
 let NMT_FIX_D = 100   //! the row width: off the 64-thread grid and the 256-thread stride
 let NMT_FIX_V = 5     //! the embedding table's rows
 let NMT_FIX_LEAD = 7  //! the floats ahead of the table in the plane - a kernel reading the table from 0 misses

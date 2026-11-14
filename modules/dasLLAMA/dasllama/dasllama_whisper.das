@@ -459,6 +459,13 @@ def load_whisper_model(path : string; enc_q8, dec_q8 : bool) : WhisperModel {
     }, $ [unused_argument(t)] (t : WhisperModel) => true, $ [unused_argument(t, src)] (t : WhisperModel; src : string) {})
 }
 
+//! `load_whisper_model` for a prepared image its host holds in memory (`ARCHITECTURE_IMAGE.md#image-borrowed-memory`): the
+//! lane the image was baked on serves, and the bytes stay the host's for as long as the model lives.
+[arch(at = "../ARCHITECTURE_IMAGE.md#image-borrowed-memory")]
+def load_whisper_model(base : void?; bytes : uint64) : WhisperModel =>
+    <- load_through_memory(base, bytes, "whisper-", "whisper", type<WhisperModel>,
+                           $(m : WhisperModel) => "{m.enc.n_layer} encoder layers, vocab {m.n_vocab}")
+
 [init]
 def private register_whisper_image_tags {
     register_image_family_tag("whisper-q8")

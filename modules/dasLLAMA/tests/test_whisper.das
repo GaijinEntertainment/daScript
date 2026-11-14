@@ -31,6 +31,8 @@ require ?cuda dasllama/dasllama_cuda_decode   // cud_drop_model - the same drop 
 require dasllama/dasllama_audio_io
 require dasllama/dasllama_load   // load_model_ - the canary decoder built in memory, off the image rail
 require _tower_twin
+require _image_memory   // read_page_aligned: a host's own copy of an image
+require dasllama/dasllama_image   // with_image_destination: the cold mint's scratch path
 require _child_run   // DASLLAMA_AUDIO_LANE loads once at context init: a value a process
 
 // Whisper-proper tests. The f16/gelu/mel/id tests are self-contained; the loader and
@@ -253,6 +255,62 @@ def test_asr_surface(t : T?) {
         let s <- create_session(m, "auto")
         t |> equal(s.w.lang_id, -1, "auto defers detection")
         delete m   // whole-model delete: image-backed planes are locked views, only the finalizer may release them
+    }
+}
+
+//! `samples` transcribed in English through the ASR image file `dlim`, mapped for the call alone; inside a job queue
+[cold_path]
+def private image_file_transcript(dlim : string; samples : array<float>) : string {
+    var inscope m <- load_asr_model(dlim)
+    var inscope s <- create_session(m, "en")
+    return strip(transcribe(m, s, samples))
+}
+
+[test(description = "A Whisper image its host holds in memory loads through `load_asr_model` from the bytes as whisper and transcribes jfk as the image's file does, at jfk's word floor and with the file gone; with its planes zeroed the load transcribes otherwise")]
+def test_whisper_from_memory(t : T?) {
+    t |> run("whisper tiny: the CPU image's bytes, borrowed in place") @(t : T?) {
+        let model_path = path_join(whisper_dir(), "ggml-tiny.bin")
+        return if (!jit_model_available(t, model_path))
+        let samples <- load_audio_16k_mono(asr_clip("jfk.wav"))
+        if (empty(samples)) {
+            t |> skip("jfk.wav not present")
+            return
+        }
+        with_gpu_knobs() {
+            set_every_gpu_tower(false)   // the CPU image: the one an image in memory serves
+            set_every_gpu_wdec(false)
+            with_dasllama_jobque_() {
+                let dlim = path_join(test_temp_dir(), "whisper_memory.dlim")
+                with_image_destination(dlim) {   // the cold mint lands in scratch, not beside the carrier
+                    var inscope cold <- load_asr_model(model_path)
+                }
+                let from_file = image_file_transcript(dlim, samples)
+                jfk_words_floor(t, "whisper image file", from_file)
+                var raw : array<uint8>
+                var size = 0ul
+                let base = read_page_aligned(dlim, raw, size)
+                remove(dlim)
+                t |> success(base != null, "the image reads into memory")
+                if (base != null) {
+                    {
+                        var inscope m <- load_asr_model(base, size)
+                        t |> success(m.kind == AsrKind.whisper, "the bytes route to whisper on the image's baked lane")
+                        var inscope s <- create_session(m, "en")
+                        let from_memory = strip(transcribe(m, s, samples))
+                        to_log(LOG_INFO, "whisper from memory file: {from_file}\n")
+                        to_log(LOG_INFO, "whisper from memory bytes: {from_memory}\n")
+                        t |> equal(from_memory, from_file, "and transcribe as the file does, with the file gone")
+                    }
+                    zero_planes(base, size)
+                    var inscope poisoned <- load_asr_model(base, size)
+                    var inscope ps <- create_session(poisoned, "en")
+                    let other = strip(transcribe(poisoned, ps, samples))
+                    to_log(LOG_INFO, "whisper from memory zeroed: {other}\n")
+                    t |> success(other != from_file, "its planes zeroed, the load transcribes otherwise (the control)")
+                }
+                delete raw
+            }
+        }
     }
 }
 

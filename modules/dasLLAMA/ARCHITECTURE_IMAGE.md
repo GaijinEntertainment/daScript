@@ -82,6 +82,22 @@ image's total length is a page multiple. The alignment is what lets a mapped pla
 the GPU with no copy - Metal's `bytesNoCopy` requires it - and what lets a load borrow a plane in
 place instead of reading it.
 
+### An image its host holds in memory is borrowed, never copied {#image-borrowed-memory}
+
+A host that owns an image's bytes - an engine's own file system, a resource pack - hands them over
+as a base and a length (`load_image_memory`, `load_through_memory`, and each family's
+`load_<family>_model(base, bytes)`). The parse is the mapped file's own: the planes point into the
+host's bytes, so the load copies nothing and the bytes stay the host's for as long as the model
+lives. The backing is recorded as borrowed, counted per model, and a model's finalizer drops its
+own borrow and releases nothing - no unmap, no free - so several models may read one image. The
+base sits on the image page, as a mapping's does, and a base off it is a panic that names the
+boundary: the planes' own alignment, which the kernels and a GPU wrap rely on, is counted from the
+first byte. The image's lane and family are read from its baked identity, since no file name
+carries them, and a loader handed another family's image refuses it by name. Nothing is minted on
+this route: bytes of another identity or version are refused, with no file to rebake them from.
+The route serves on the CPU alone, so a lane's GPU flavor is refused by name - its device block
+has no driver to hand it to here.
+
 ### The meta blob leads with two strings {#dlim-meta-head}
 
 The meta blob sits at the image tail and leads with two strings - the identity the image was baked

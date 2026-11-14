@@ -160,6 +160,31 @@ def asr_image_route(tag : string) : string {
     return ""
 }
 
+//! `load_asr_model` for a prepared image its host holds in memory (`ARCHITECTURE_IMAGE.md#image-borrowed-memory`): it routes
+//! on the image's baked family tag, as a `.dlim` path does.
+[arch(at = "../ARCHITECTURE_IMAGE.md#image-borrowed-memory")]
+def load_asr_model(base : void?; bytes : uint64) : AsrModel {
+    let tag = image_tag_lane(image_family_tag_memory(base, bytes))
+    let route = asr_image_route(tag)
+    if (route == "parakeet") {
+        var pm = AsrModel(kind = AsrKind.parakeet)
+        pm.pk <- load_parakeet_model(base, bytes)
+        return <- pm
+    }
+    if (route == "gigaam") {
+        var gm = AsrModel(kind = AsrKind.gigaam)
+        gm.ga <- load_gigaam_model(base, bytes)
+        return <- gm
+    }
+    if (route == "whisper") {
+        var wm = AsrModel(kind = AsrKind.whisper)
+        wm.whisper <- load_whisper_model(base, bytes)
+        return <- wm
+    }
+    panic("dasLLAMA asr: the image in memory is baked as '{tag}' - a whisper, parakeet or gigaam image loads from memory")
+    return <- AsrModel()
+}
+
 //! Load an ASR model, sniffing the format: a ggml bin is whisper (vocab >= 51864) or parakeet (1k/8k); a GGUF of arch
 //! ``gigaam`` is the one-file GigaAM carrier, any other GGUF needs its mmproj too (the two-argument overload). A ``.dlim``
 //! routes on its baked family tag. One loader, no family names.
