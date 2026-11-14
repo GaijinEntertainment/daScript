@@ -588,6 +588,7 @@ def document_module_strings_boost(_root : string) {
         group_by_regex("Replace", mod, %regex~(replace_multiple)$%%),
         group_by_regex("Prefix and suffix", mod, %regex~(trim_prefix|trim_suffix)$%%),
         group_by_regex("String similarity", mod, %regex~(levenshtein_distance|levenshtein_distance_fast|jaccard)$%%),
+        group_by_regex("Hashing", mod, %regex~(fnv1a)$%%),
         group_by_regex("Character traits", mod, %regex~(is_hex|is_tab_or_space)$%%))
     document("Boost package for string manipulation library", mod, "strings_boost.rst", groups)
 }

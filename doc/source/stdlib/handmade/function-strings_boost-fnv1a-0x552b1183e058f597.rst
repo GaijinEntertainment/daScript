@@ -1,0 +1,1 @@
+Computes the 64-bit FNV-1a hash of the bytes of `text`, continued from `seed`. The default seed starts a hash; passing an earlier result chains the next piece onto it. The value is the published algorithm's, stable across builds and platforms.

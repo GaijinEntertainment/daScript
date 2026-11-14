@@ -4,7 +4,6 @@ require dastest/testing_boost public
 require strings
 require daslib/strings_boost
 require daslib/fio
-require dastest/review_gate
 require gate
 
 // End-to-end walker coverage against planted fixture repos, spawned exactly as CI runs

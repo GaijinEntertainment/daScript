@@ -422,3 +422,17 @@ def public glob_match(pattern, text : string) : bool {
     }
 }
 
+let public FNV1A_SEED = 0xcbf29ce484222325ul //! The offset basis a 64-bit FNV-1a hash starts from.
+
+def public fnv1a(text : string; seed : uint64 = FNV1A_SEED) : uint64 {
+    //! 64-bit FNV-1a of ``text``'s bytes, continued from ``seed``:
+    //! an earlier result as the seed chains the next piece. It is
+    //! the published algorithm, stable across builds; ``hash`` is not.
+    var h = seed
+    peek_data(text) $(d) {
+        for (b in d) {
+            h = (h ^ uint64(b)) * 0x100000001b3ul
+        }
+    }
+    return h
+}

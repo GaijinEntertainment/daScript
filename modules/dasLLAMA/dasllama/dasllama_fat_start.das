@@ -223,17 +223,6 @@ def public dasllama_place_fat_sidecar {
     }
 }
 
-// fnv-1a over a string's bytes, as a hex word: the kernel digest and the box key are names, never compared as numbers
-def private fnv_hex(s : string) : string {
-    var h = 0xcbf29ce484222325ul
-    peek_data(s) $(d) {
-        for (b in d) {
-            h = (h ^ uint64(b)) * 0x100000001b3ul
-        }
-    }
-    return "{h}"
-}
-
 // the files of `dir` whose names `keep` admits, sorted, each as name:size:mtime
 def private digest_files(dir : string; keep : block<(fname : string) : bool>; var w : StringBuilderWriter) : int {
     var names : array<string>
@@ -263,7 +252,7 @@ def public dasllama_kernel_sources_digest() : string {
             || fname == "dasllama_gpu_math.das", w)
         digest_files(path_join(path_join(path_join(dir, ".."), ".."), path_join("dasMetal", "metal")), $(_fname) => true, w)
     }
-    return seen > 0 ? fnv_hex(acc) : ""
+    return seen > 0 ? "{fnv1a(acc)}" : ""
 }
 
 //! Where every run on this box keeps the runtime section it raced: `<dasllama home>/tune/box-<box key>.tune.json`, the
@@ -271,7 +260,7 @@ def public dasllama_kernel_sources_digest() : string {
 def public dasllama_box_runtime_path_from(dasllama_home : string) : string {
     var key : string
     static_if (typeinfo module_exists(llvm_tune)) {
-        key = fnv_hex(box_match_key(tune_box_identity()))
+        key = "{fnv1a(box_match_key(tune_box_identity()))}"
     } else {
         key = "nobox"
     }

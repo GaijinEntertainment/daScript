@@ -3,6 +3,7 @@ require dastest/testing_boost
 require daslib/faker
 require daslib/fuzzer
 require strings
+require daslib/strings_boost
 
 [test(description = "hashing a das_string equals hashing the same text as a string")]
 def test_hash_das_string(t : T?) {
@@ -80,4 +81,13 @@ def test_hash_builder4(t : T?) {
             t |> equal(strHash, hashBuilder)
         }
     }
+}
+
+[test(description = "fnv1a matches the published FNV-1a 64 vectors, leaves the seed for empty text, starts from the seed by default, and chains piece by piece")]
+def test_fnv1a(t : T?) {
+    t |> equal(FNV1A_SEED, fnv1a(""))
+    t |> equal(0xaf63dc4c8601ec8cul, fnv1a("a"))
+    t |> equal(0x85944171f73967e8ul, fnv1a("foobar", FNV1A_SEED))
+    t |> equal(fnv1a("foobar"), fnv1a("bar", fnv1a("foo")))
+    t |> success(fnv1a("bar", fnv1a("foo")) != fnv1a("bar"), "the seed carries the earlier piece")
 }

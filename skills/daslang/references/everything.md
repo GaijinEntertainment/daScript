@@ -6809,6 +6809,10 @@ The lint_fixups module holds the helpers the lint passes build their `--fix` edi
 - `lint_token_fix`
 - `lint_unwritten_arg`
 
+### Annotations
+
+- `lint_has_annotation` - true when the annotation list of a variable, a field or an argument carries `name`
+
 ## toml
 
 The TOML module parses `TOML 1.0`_ into the same `JsonValue?` tree shape produced by `daslib/json`, so existing `json_boost` accessors (`v ?? def`, `from_JV`, etc.) work on TOML inputs as-is. Date-time tokens are preserved as raw RFC-3339 strings since JSON has no native date type.
@@ -7731,6 +7735,10 @@ The STRINGIFY module provides the `%stringify~` reader macro for embedding multi
 The STRINGS_BOOST module extends string handling with splitting (`split`, `split_by_chars`), joining (`join`), padding (`wide`), multi-substring replacement (`replace_multiple`), and edit distance (`levenshtein_distance`). It re-exports `strings`, so the built-in string surface is available too.
 
 
+### Constants
+
+- `FNV1A_SEED` - The offset basis a 64-bit FNV-1a hash starts from - the default seed of `fnv1a`.
+
 ### Split and join
 
 - `join` - Joins the elements of an iterable into a single string using the specified separator.
@@ -7771,6 +7779,10 @@ The STRINGS_BOOST module extends string handling with splitting (`split`, `split
 - `jaccard` - Jaccard similarity over two string-sets, returning `|intersection| / |union|` in 0..1.
 - `levenshtein_distance` - Computes the Levenshtein edit distance between two strings.
 - `levenshtein_distance_fast` - Computes the Levenshtein edit distance between two strings using an optimized algorithm.
+
+### Hashing
+
+- `fnv1a` - Computes the 64-bit FNV-1a hash of the bytes of `text`, continued from `seed`.
 
 ## strings_convert
 

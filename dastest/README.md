@@ -153,8 +153,8 @@ helpers: `das_requires`, `strip_line_comments`, `cmake_command_blocks`,
 `cmake_command_targets`, `cmake_words`, `cmake_args`, `cmake_list_entries`,
 `cmake_test_labels`, `cmake_test_commands`, `cmake_copy_sources`, `shell_cp_sources`,
 `prefixed_tokens`, `markdown_table_rows`, `is_cmake_keyword`, `is_kebab_case`, `find_line`,
-`is_ident_byte`, `contains_word`, `quoted_segments`, and the content-stamp hash `fnv1a`
-(seeded with `FNV1A_SEED`). The CMake helpers match command names case-insensitively, as CMake itself
+`is_ident_byte`, `contains_word` and `quoted_segments`; a gate's content stamp hashes with
+`fnv1a` from `daslib/strings_boost`. The CMake helpers match command names case-insensitively, as CMake itself
 does. It lives under
 `dastest/` so an installed SDK carries it the same way it carries the test framework -
 dastest itself ships in the SDK as `bin/dastest.exe`, a copy of daslang that runs `dastest.das` by
