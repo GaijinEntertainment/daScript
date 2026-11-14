@@ -1388,7 +1388,7 @@ def private enc_commit_ple_rows(t : Model; r : StepRes; enc : MetalComputeEncode
 //! group a ring's width of the save
 def private enc_ple_ring_copy(enc : MetalComputeEncoder?; save : bool; gi : int64 = 0l) {
     let g = g_v_groups[gi]
-    let n = long_length(g.s.ple_conv_hist)
+    let n = g.ple_hist
     let so = uint64(gi * n * 4l)
     if (save) {
         enc_copy_row(enc, dn_pool_buffer(), g.ple_base, g_v_ring_save, so, g_v_ring_u, n)
@@ -2102,10 +2102,12 @@ def metal_mtp_seam_row(t : Model; var s : Session; token, pos : int64) : bool =>
 
 var private @scratch g_vrt : array<uint>   // per-layer 2-row route entries: uint4(koff_el+lbase, voff_el+lbase, cap, cnt_i)
 
-//! the verify seat's rows: the session, its k+1 rows at `row0`, its slab and its recurrent mirror
+//! the verify seat's rows: the session's uid (a session pointer is not identity, and a parked group
+//! outlives the call that held its session), its k+1 rows at `row0`, its slab and its recurrent mirror
 //! (mirror-owned), and its tape slots
 struct private MtpVerifyGroup {
-    s : Session?
+    uid : uint64
+    ple_hist : int64   // the session's n-gram conv ring width, as the verify saved it
     tok : int64
     pos : int64
     trunk : int64   // the stream's trunk position through the draft rows steps (a draft row sits at trunk + i - 1)
@@ -2714,44 +2716,43 @@ def private enc_cls_tail_rows(t : Model; var r : StepRes; enc : MetalComputeEnco
     }
 }
 
-//! lands every group's KV rows into its stream and its rows' logits into its stream's verify rows;
-//! accept/reject bookkeeping is the caller's
-def private finish_verify_step(t : Model; r : StepRes; land_logits, head : bool) : bool {
+//! waits the verify `r`; false = it failed, logged and declined. Each group's rows then land through
+//! `verify_group_writeback`, by the caller that holds the group's session
+def private finish_verify_step(r : StepRes) : bool {
     let ts_wait = prof_ticks()
     metal_wait_until_completed(r.cb)
     prof_add("mtp.verify.wait", ts_wait)
-    let ts_land = prof_ticks()
     let ok = !metal_command_buffer_failed(r.cb)
     g_msel_landed = ok ? r.sel_rows : 0l
     g_msel_landed_slot = r.sel_slot
-    if (ok) {
-        let c = t.config
-        unsafe {
-            let ab = reinterpret<uint8?>(metal_buffer_contents(g_arena))
-            var lg = reinterpret<uint8?>(metal_buffer_contents(r.blog))
-            let vb = c.vocab_size * 4l
-            for (g in g_v_groups) {
-                var s & = unsafe(*g.s)
-                for (l in range64(c.n_layers + (head ? c.n_layer_nextn : 0l))) {   // + the warmed draft-slab rows
-                    let rowb = kv_row_bytes(s.kv_dtype_k, layer_kv_dim(c, l))
-                    let lb = mirror_lbase(t, s.kv_dtype_k, g.cap, l)
-                    for (i in range64(g.nr)) {
-                        mirror_row_writeback(s, c.seq_len, l, kv_ring_row(g.pos + i, mirror_ring(t, l)), kv_phys_row(s, g.pos + i), rowb, lb, ab, g.koff, g.voff)
-                    }
-                }
-                s.mtp_logits_b |> ensure_length(g.nr * c.vocab_size)
-                if (land_logits) {
-                    memcpy(addr < void? >(s.mtp_logits_b[0]), reinterpret<void?>(lg + g.row0 * vb), uint64(g.nr * vb))
-                    memcpy(addr < void? >(s.mtp_logits[0]), reinterpret<void?>(lg + g.row0 * vb), uint64(vb))
-                }
-            }
-        }
-    } else {
+    if (!ok) {
         to_log(LOG_ERROR, "dasLLAMA metal MTP verify: dispatch failed ({cb_error_text(r.cb)})\n")   // nolint:PERF028,PERF026 — error path, and the CPU fallback dwarfs the log
         decline(MetalDecodeDecline.gpu_error)
     }
-    prof_add("mtp.verify.land", ts_land)
     return ok
+}
+
+//! lands group `g`'s KV rows into its stream `s` and its rows' logits into the stream's verify rows;
+//! accept/reject bookkeeping is the caller's
+def private verify_group_writeback(t : Model; var s : Session; r : StepRes; g : MtpVerifyGroup; land_logits, head : bool) {
+    let c = t.config
+    unsafe {
+        let ab = reinterpret<uint8?>(metal_buffer_contents(g_arena))
+        var lg = reinterpret<uint8?>(metal_buffer_contents(r.blog))
+        let vb = c.vocab_size * 4l
+        for (l in range64(c.n_layers + (head ? c.n_layer_nextn : 0l))) {   // + the warmed draft-slab rows
+            let rowb = kv_row_bytes(s.kv_dtype_k, layer_kv_dim(c, l))
+            let lb = mirror_lbase(t, s.kv_dtype_k, g.cap, l)
+            for (i in range64(g.nr)) {
+                mirror_row_writeback(s, c.seq_len, l, kv_ring_row(g.pos + i, mirror_ring(t, l)), kv_phys_row(s, g.pos + i), rowb, lb, ab, g.koff, g.voff)
+            }
+        }
+        s.mtp_logits_b |> ensure_length(g.nr * c.vocab_size)
+        if (land_logits) {
+            memcpy(addr < void? >(s.mtp_logits_b[0]), reinterpret<void?>(lg + g.row0 * vb), uint64(g.nr * vb))
+            memcpy(addr < void? >(s.mtp_logits[0]), reinterpret<void?>(lg + g.row0 * vb), uint64(vb))
+        }
+    }
 }
 
 [arch(at="../ARCHITECTURE_GPU_MTP.md#mtp-dn-shadow-replay"), arch(at="../ARCHITECTURE_GPU_MTP_DECODE.md#mtp-replay-form")]
@@ -2759,7 +2760,7 @@ def private encode_dn_replay(t : Model; var r : StepRes; gi : int64; nrun : int6
     let c = t.config
     let cd = dn_conv_dim(c)
     let nvh = c.ssm_dt_rank
-    var g & = unsafe(g_v_groups[gi])
+    let g = g_v_groups[gi]
     var cb = metal_new_command_buffer_unretained(g_queue)
     var enc = metal_new_compute_encoder(cb)
     //! the group's taped rows come back at row 0 of the planes: one group replays at a time
@@ -3089,6 +3090,24 @@ def private mtp_verify_unpark() {
     g_v_groups |> clear()
 }
 
+//! A released session's parked groups leave: no rollback names its uid again. The park goes with its
+//! last live group
+[cold_path]   // a session's release
+def private mtp_verify_released(uid : uint64) {
+    return if (!g_v_parked)
+    var live = 0
+    for (g in g_v_groups) {
+        g.uid = g.uid == uid ? 0ul : g.uid
+        live += g.uid != 0ul ? 1 : 0
+    }
+    mtp_verify_unpark() if (live == 0)
+}
+
+[init]
+def private mtp_verify_release_register {
+    register_session_release_listener(@@mtp_verify_released)
+}
+
 [arch(at="../ARCHITECTURE_GPU_MTP.md#mtp-round-one-join")]
 def private metal_mtp_cold_why(t : Model; s : Session; pos, k : int64) : string {
     let c = t.config
@@ -3324,7 +3343,7 @@ def private metal_mtp_verify_seat(t : Model; var s : Session; toks : array<int64
     }
     let mr = g_mirrors[s.uid]
     g_v_groups |> clear()
-    g_v_groups |> push(MtpVerifyGroup(s = unsafe(addr(s)), tok = toks[0], pos = pos, trunk = pos, nr = n, row0 = 0l,
+    g_v_groups |> push(MtpVerifyGroup(uid = s.uid, ple_hist = long_length(s.ple_conv_hist), tok = toks[0], pos = pos, trunk = pos, nr = n, row0 = 0l,
         koff = mr.koff, voff = mr.voff, cap = mr.cap_rows))
     var r = acquire_step(t, s, pos + 1l, mr.koff, mr.voff, mr.cap_rows, [nrows = n, deepest = pos + 1l])
     var refused = !r.gpu_logits   //! the verify has no CPU classifier fallback: blog and bxf live under gpu_logits
@@ -3381,7 +3400,12 @@ def private metal_mtp_verify_seat(t : Model; var s : Session; toks : array<int64
     prof_add("mtp.verify.enc", ts_enc)
     g_v_split.enc_us = int64(get_time_usec(ts_enc_us))
     let ts_wait_us = ref_time_ticks()
-    let finished = finish_verify_step(t, r, !pick_only && !dev_accept, head)
+    let finished = finish_verify_step(r)
+    if (finished) {
+        let ts_land = prof_ticks()
+        verify_group_writeback(t, s, r, g_v_groups[0], !pick_only && !dev_accept, head)
+        prof_add("mtp.verify.land", ts_land)
+    }
     g_v_split.wait_us = int64(get_time_usec(ts_wait_us))
     g_v_split.kernel_start = metal_command_buffer_kernel_start_time(r.cb)
     g_v_split.kernel_end = metal_command_buffer_kernel_end_time(r.cb)
@@ -3504,7 +3528,7 @@ def public metal_mtp_verify_groups(t : Model; var sessions : array<Session?>; po
         var s & = unsafe(*sessions[i])
         kv_ensure(s, pos[i] + n)
         let mr = g_mirrors[s.uid]
-        g_v_groups |> push(MtpVerifyGroup(s = sessions[i], tok = s.mtp_vbatch[0], pos = pos[i], trunk = pos[i], nr = n, row0 = i * n,
+        g_v_groups |> push(MtpVerifyGroup(uid = s.uid, ple_hist = long_length(s.ple_conv_hist), tok = s.mtp_vbatch[0], pos = pos[i], trunk = pos[i], nr = n, row0 = i * n,
             koff = mr.koff, voff = mr.voff, cap = mr.cap_rows))
         deepest = max(deepest, pos[i])
     }
@@ -3553,16 +3577,21 @@ def public metal_mtp_verify_groups(t : Model; var sessions : array<Session?>; po
         }
     }
     encode_verify_step(t, r, null, false, false)
-    if (!finish_verify_step(t, r, true, false)) {
+    if (!finish_verify_step(r)) {
         release_step(r)
         if (c.recr_mask != 0ul) {
             for (g in g_v_groups) {
-                dn_mirror_drop(g.s.uid)
+                dn_mirror_drop(g.uid)
             }
         }
         g_v_groups |> clear()
         return false
     }
+    let ts_land = prof_ticks()
+    for (i in range64(ng)) {
+        verify_group_writeback(t, *sessions[i], r, g_v_groups[i], true, false)
+    }
+    prof_add("mtp.verify.land", ts_land)
     if (r.png) {
         ple_ring_acquire(*sessions[0], ng)
     }
@@ -3591,7 +3620,7 @@ def public metal_mtp_rollback_group(t : Model; var s : Session; pos, a : int64) 
     return false if (!g_v_parked || !g_v_park_multi)
     for (gi in range64(long_length(g_v_groups))) {
         let g = g_v_groups[gi]
-        continue if (g.s.uid != s.uid || g.pos != pos)
+        continue if (g.uid != s.uid || g.pos != pos)
         if (g_v_rd.dn) {
             encode_dn_replay(t, g_v_rd, gi, a + 1l, false)
             dn_mirror_set_pos(s.uid, pos + a + 1l)
