@@ -62,9 +62,10 @@ or a branch name.** The deploy fetches by that location and refuses a file whose
 body that the entry's sha256 is the hash of the file its location now resolves to - the
 published file for a Hugging Face entry, the committed file for a `tree` entry.**
 
-**A diff that changes `library/`'s `-ctx` emission command keeps `--disable-module dasLLVM` on
-it.** With dasLLVM present the emission stops on the tune framework and writes nothing
-(`ARCHITECTURE.md#library-two-backends`).
+**A diff that changes `library/`'s `-ctx` emission command keeps a `--disable-module <folder>` on
+it for every dynamic module whose `.das` files the library reaches include one marked
+`options no_aot` (a file with no C++ form).** A standalone context has no interpreter, so while such a module is loaded the
+emission writes nothing (`ARCHITECTURE.md#library-two-backends` names the modules).
 
 **Weakening `REVIEW.das`'s stream-producer check is a defect.**
 

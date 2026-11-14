@@ -123,13 +123,15 @@ count their own microseconds.
 
 ## Why the backends drop modules
 
-Both emissions pass `--disable-module dasVulkan`, and the `-ctx` one drops `dasLLVM` as well:
+Both emissions pass `--disable-module dasVulkan`, and the `-ctx` one drops `dasLLVM` and `dasCUDA`
+as well:
 
 - the GPU tier would pull tens of megabytes of kernel C++ into a translation unit that is
   already large;
-- the tune framework (`llvm_tune`) is a macro module with no AOT form. A standalone context has
-  no interpreter to fall back on, so every function it reaches must have a C++ body - a module
-  marked no-AOT as a whole has none, and the emission stops with that module named.
+- the tune framework (`llvm_tune`) is a macro module with no AOT form, and so is the CUDA
+  module on a build that carries it. A standalone context has no interpreter to fall back on, so
+  every function it reaches must have a C++ body - a module marked no-AOT as a whole has none,
+  and the emission stops with that module named.
 
 A build that wants the GPU tier in the jitted library drops the `dasVulkan` line from the
-`-lib` command; the `-ctx` command cannot drop the `dasLLVM` one.
+`-lib` command; the `-ctx` command cannot drop the `dasLLVM` or `dasCUDA` one.

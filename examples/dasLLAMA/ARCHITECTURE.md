@@ -281,11 +281,11 @@ library with a C ABI; `-ctx` emits a C++ header plus one translation unit the ho
 C surface is identical - one describer writes both headers - while the C++ surface exists only on
 the `-ctx` side, because a jitted library has no C++ source to put a real class on top of.
 
-Both emissions leave dasVulkan out, and the `-ctx` one leaves dasLLVM out as well. The GPU tier
-would pull tens of megabytes of kernel C++ into a translation unit that is already about 33 MB,
-and the tune framework is a macro module with no AOT form: a standalone context links no
-interpreter, so every function it reaches must have a C++ body, and a module marked no-AOT as a
-whole has none.
+Both emissions leave dasVulkan out, and the `-ctx` one leaves dasLLVM and dasCUDA out as well. The
+GPU tier would pull tens of megabytes of kernel C++ into a translation unit that is already
+large, and the tune framework and the CUDA module are no-AOT modules: a standalone context links
+no interpreter, so every function it reaches must have a C++ body, and a module marked no-AOT as
+a whole has none.
 
 A library is entered and left once per call, which is what separates this program from the
 scripts beside it. `with_job_que()` is a scope no C caller can hold open, so the library opens

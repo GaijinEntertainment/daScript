@@ -23,8 +23,10 @@ set(DASLLAMA_LIB_DEPS daslang "${DASLLAMA_LIB_SRC}" ${DASLLAMA_LIB_ENGINE}
 ### -ctx: a standalone context - one header plus one translation unit
 add_custom_command(
     OUTPUT "${DASLLAMA_CTX_GEN}/dasllama_lib.das.cpp" "${DASLLAMA_CTX_GEN}/dasllama_lib.das.h"
-    # both emissions drop dasVulkan, this one dasLLVM too - ARCHITECTURE.md#library-two-backends
+    # both emissions drop dasVulkan; this one drops dasLLVM and dasCUDA too, which have no
+    # AOT form - ARCHITECTURE.md#library-two-backends
     COMMAND $<TARGET_FILE:daslang> --disable-module dasLLVM --disable-module dasVulkan
+        --disable-module dasCUDA
         "${PROJECT_SOURCE_DIR}/utils/aot/main.das" -- -ctx "${DASLLAMA_LIB_SRC}" "${DASLLAMA_CTX_GEN}/"
     DEPENDS ${DASLLAMA_LIB_DEPS} "${PROJECT_SOURCE_DIR}/utils/aot/main.das"
         "${PROJECT_SOURCE_DIR}/daslib/aot_standalone.das" "${PROJECT_SOURCE_DIR}/daslib/aot_cpp.das"
@@ -44,6 +46,10 @@ foreach(_host cpp c)
     target_link_libraries(${_t} PRIVATE libDaScript ${SRC_LIBRARIES} libDasModuleAudio)
     SETUP_CPP11(${_t})
     set_target_properties(${_t} PROPERTIES FOLDER "examples/dasLLAMA")
+    if(MSVC)
+        # the emitted engine runs on the host's own stack, and outgrows the 1 MB a Windows exe gets
+        target_link_options(${_t} PRIVATE "/STACK:16777216")
+    endif()
 endforeach()
 target_compile_definitions(dasllama_host_c_ctx PRIVATE DASLLAMA_LIB_STANDALONE_CTX)
 set_target_properties(dasllama_host_c_ctx PROPERTIES
