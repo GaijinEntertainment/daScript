@@ -48,6 +48,11 @@ def test_walk_collects_governing_checklists(t : T?) {
     var inscope none <- affected_review_md(fixture, no_files)
     t |> equal(0, length(none))
 
+    // no tests/cuda/REVIEW.md in this tree: the cuda route adds nothing
+    let cuda_test = "require cuda/cuda_driver\n[test]\ndef test_c(t : T?) \{\n\}\n"
+    t |> success(fwrite("{fixture}/c/test_cuda.das", cuda_test))
+    t |> equal(affected_review_md(fixture, ["c/test_cuda.das"]), ["REVIEW.md"])
+
     t |> success(rmdir_rec_result(fixture) is value, "fixture removed")
 }
 
@@ -97,6 +102,54 @@ def test_walk_follows_the_root_routing(t : T?) {
     }
     t |> run("a deleted file routes by its path alone") @(t : T?) {
         t |> equal(affected_review_md(fixture, ["c/gone.cpp", "include/daScript/misc/gone.h"]), ["REVIEW.md", "src/misc/REVIEW.md"])
+    }
+    t |> success(rmdir_rec_result(fixture) is value, "fixture removed")
+}
+
+[test(description = "the root routing sends a [test] file that requires a cuda/ module, plain, guarded or public, to tests/cuda/REVIEW.md alone, lists that checklist once, and routes nothing for a file with no [test], a non-das file or a lookalike require")]
+def test_walk_routes_cuda_tests(t : T?) {
+    let fixture_r = create_temp_directory_result("review_md_cuda")
+    t |> success(fixture_r is value, "temp fixture dir created")
+    if (!(fixture_r is value)) return
+    let fixture = unsafe(fixture_r.value)
+    for (d in ["tests/cuda", "utils/x", "modules/m"]) {
+        t |> success(mkdir_rec("{fixture}/{d}"))
+    }
+    for (md in ["REVIEW.md", "tests/REVIEW.md", "tests/cuda/REVIEW.md"]) {
+        write_marker("{fixture}/{md}")
+    }
+    let test_body = "[test]\ndef test_c(t : T?) \{\n\}\n"
+    for (file in [
+            ("utils/x/test_cuda.das", "require cuda/cuda_driver\n{test_body}"),
+            ("modules/m/test_cuda.das", "require ?cuda cuda/das_cuda_boost\n{test_body}"),
+            ("utils/x/test_cuda_public.das", "require cuda/cuda_driver public\n{test_body}"),
+            ("tests/cuda/test_here.das", "require cuda/cuda_driver\n{test_body}"),
+            ("utils/x/cuda_tool.das", "options gen2\nrequire cuda/cuda_driver\n"),
+            ("utils/x/cuda_notes.md", "require cuda/cuda_driver\n{test_body}"),
+            ("utils/x/test_cuda_lookalike.das",
+                "// require cuda/x\nrequire daslib/cuda_like // cuda/x\n{test_body}")]) {
+        t |> success(fwrite("{fixture}/{file._0}", file._1), "wrote {file._0}")
+    }
+    t |> run("a [test] file requiring a cuda/ module answers to tests/cuda/REVIEW.md") @(t : T?) {
+        t |> equal(affected_review_md(fixture, ["utils/x/test_cuda.das"]),
+            ["REVIEW.md", "tests/REVIEW.md", "tests/cuda/REVIEW.md"])
+        t |> equal(affected_review_md(fixture, ["utils/x/test_cuda_public.das"]),
+            ["REVIEW.md", "tests/REVIEW.md", "tests/cuda/REVIEW.md"])
+        t |> equal(affected_review_md(fixture, ["modules/m/test_cuda.das"]),
+            ["REVIEW.md", "tests/cuda/REVIEW.md"])
+    }
+    t |> run("a cuda/ require with no [test], or a lookalike of one, routes nowhere") @(t : T?) {
+        t |> equal(affected_review_md(fixture, ["utils/x/cuda_tool.das"]), ["REVIEW.md"])
+        t |> equal(affected_review_md(fixture, ["utils/x/cuda_notes.md"]), ["REVIEW.md"])
+        t |> equal(affected_review_md(fixture, ["utils/x/test_cuda_lookalike.das"]),
+            ["REVIEW.md", "tests/REVIEW.md"])
+    }
+    t |> run("the cuda checklist is listed once, whatever routes reach it") @(t : T?) {
+        t |> equal(affected_review_md(fixture, ["tests/cuda/test_here.das"]),
+            ["REVIEW.md", "tests/REVIEW.md", "tests/cuda/REVIEW.md"])
+        let two_cuda_tests = ["modules/m/test_cuda.das", "utils/x/test_cuda.das"]
+        t |> equal(affected_review_md(fixture, two_cuda_tests),
+            ["REVIEW.md", "tests/REVIEW.md", "tests/cuda/REVIEW.md"])
     }
     t |> success(rmdir_rec_result(fixture) is value, "fixture removed")
 }

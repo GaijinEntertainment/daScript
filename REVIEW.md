@@ -9,8 +9,7 @@ doc: `CLAUDE.md`.
 **A file also answers, by kind, to the checklists the folder walk finds starting from a second
 folder: a `.h` or `.inc` header under `include/daScript/<dir>/` from `src/<dir>/`; a `[test]`
 file outside `modules/`, wherever the diff puts it, from `tests/`; a `.cpp` that includes doctest
-from `tests-cpp/small/`.** A diff that changes this list changes `routed_paths` in
-`utils/internal/review-md/scan.das` to match, in the same change.
+from `tests-cpp/small/`.**
 
 **A `.das` outside `modules/` whose own `require` lines name modules under exactly one
 `modules/<M>/` folder, or a `.cpp` outside `modules/` whose own includes name headers under
@@ -19,6 +18,12 @@ exactly one `modules/<M>/` folder, answers to `modules/<M>/REVIEW.md` too, when 
 **A `[test]` file with a `require` line of its own naming a `cuda/` module - `require cuda/<m>` or
 the guarded `require ?cuda cuda/<m>` - wherever the diff puts it, answers to `tests/cuda/REVIEW.md`
 too.**
+
+**A diff that adds or changes a routing rule of this checklist that a file's path or the text of
+its own lines decides changes `utils/internal/review-md/scan.das` to match, in the same change -
+`routed_paths` for a routing that starts a folder walk, `routed_checklists` for one that names a
+single checklist.** Routing by `require` to `modules/<M>/REVIEW.md` stays the reviewer's: only the
+compiler resolves a `require` to a folder.
 
 **A guard on the `dasCUDA` package in a file outside `modules/dasCUDA/` tests for the `cuda`
 builtin module through `require ?cuda <target>`, `has_module("cuda")` or
