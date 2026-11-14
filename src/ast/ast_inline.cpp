@@ -189,12 +189,21 @@ namespace das {
                 ConstVisitor::preVisit(expr);
                 if ( expr->subexpr->rtti_isVar() ) underR2V.insert(expr->subexpr);
             }
+            // src/ast/ARCHITECTURE_INLINE.md#inline-read-only-var-parameter
+            das_hash_set<const Expression *> derefBase;
+            void noteDeref ( const Expression * base ) {
+                if ( base && base->rtti_isVar() && base->type && base->type->isPointer() ) derefBase.insert(base);
+            }
+            virtual void preVisit ( const ExprField * expr ) override { ConstVisitor::preVisit(expr); noteDeref(expr->value); }
+            virtual void preVisit ( const ExprSafeField * expr ) override { ConstVisitor::preVisit(expr); noteDeref(expr->value); }
+            virtual void preVisit ( const ExprAt * expr ) override { ConstVisitor::preVisit(expr); noteDeref(expr->subexpr); }
+            virtual void preVisit ( const ExprPtr2Ref * expr ) override { ConstVisitor::preVisit(expr); noteDeref(expr->subexpr); }
             virtual void preVisit ( const ExprVar * expr ) override {
                 ConstVisitor::preVisit(expr);
                 if ( expr->variable && params.find(expr->variable)!=params.end() ) {
                     stats.readCount[expr->variable] ++;
                     if ( loopDepth ) stats.readUnderLoop.insert(expr->variable);
-                    if ( expr->r2v || underR2V.find(expr)!=underR2V.end() ) {
+                    if ( expr->r2v || underR2V.find(expr)!=underR2V.end() || derefBase.find(expr)!=derefBase.end() ) {
                         stats.readAsValue.insert(expr->variable);
                     } else if ( !expr->type || !expr->type->isRefType() ) {
                         stats.readAsPlace.insert(expr->variable);
@@ -1206,6 +1215,29 @@ namespace das {
                 if ( !next ) return holder;
                 holder = next;
             }
+        }
+
+        // src/ast/ARCHITECTURE_INLINE.md#inline-unsafe-expression-graft
+        ExprReturn * soleReturn ( ExprBlock * body ) {
+            for ( ;; ) {
+                if ( body->list.size()!=1 || !body->finalList.empty() ) return nullptr;
+                Expression * only = body->list.back();
+                if ( only->rtti_isReturn() ) return static_cast<ExprReturn *>(only);
+                if ( only->rtti_isUnsafe() ) only = static_cast<ExprUnsafe *>(only)->body;
+                if ( !only || !only->rtti_isBlock() ) return nullptr;
+                body = static_cast<ExprBlock *>(only);
+                if ( body->isClosure ) return nullptr;
+            }
+        }
+
+        // src/ast/ARCHITECTURE_INLINE.md#inline-unsafe-expression-graft
+        Expression * underCalleeUnsafe ( Function * callee, Expression * grafted, const LineInfo & at ) {
+            if ( !callee || !callee->hasUnsafe || !grafted ) return grafted;
+            auto wrap = new ExprUnsafe(at);
+            wrap->body = grafted;
+            wrap->generated = true;
+            if ( grafted->type ) wrap->type = new TypeDecl(*grafted->type);
+            return wrap;
         }
 
         enum class SitePosition { Eager, Conditional, NotFound, Unsupported };
@@ -2319,12 +2351,23 @@ namespace das {
             auto & paramSub = plan.paramSub;
             auto & stats = paramStats(in.body, *sa.params);
             bool writeFree = subj.fn ? calleeWriteFree(subj.fn) : false;   // a block body is judged unknown
+            // src/ast/ARCHITECTURE_INLINE.md#inline-argument-after-sibling
+            vector<bool> effectsAfter(sa.count(), false);
+            bool effectSeen = false;
+            for ( size_t ai=sa.count(); ai-- > 0; ) {
+                effectsAfter[ai] = effectSeen;
+                effectSeen = effectSeen || !isReorderSafe(sa.arg(ai));
+            }
             for ( size_t ai=0, ais=sa.count(); ai!=ais; ++ai ) {
                 Expression * arg = sa.arg(ai);
                 auto & param = sa.param(ai);
                 ArgSub sub;
                 bool byRefParam = param->type->ref || param->type->isRefType();
                 bool varParam = !param->type->constant;
+                // src/ast/ARCHITECTURE_INLINE.md#inline-read-only-var-parameter
+                bool usedAsPlace = stats.readAsPlace.find(param)!=stats.readAsPlace.end()
+                    || stats.readAsRefArg.find(param)!=stats.readAsRefArg.end();
+                bool argNonCopyable = arg->type && !arg->type->canCopy();
                 Expression * argLeaf = arg;
                 if ( argLeaf->rtti_isR2V() ) argLeaf = static_cast<ExprRef2Value *>(argLeaf)->subexpr;
                 bool leafConst = argLeaf->rtti_isConstant();
@@ -2403,15 +2446,13 @@ namespace das {
                     } else {
                         // rvalue into a ref param: materialize. a block holder must be var -
                         // const would propagate into the invoke, rejecting the block's own var params
-                        bool nonCopyable = arg->type && !arg->type->canCopy();
                         bool blockValue = arg->type && arg->type->baseType==Type::tBlock;
-                        if ( !makeArgTemp(cloneTyped(arg), !varParam && !blockValue, false, nonCopyable) ) return false;
+                        if ( !makeArgTemp(cloneTyped(arg), !varParam && !blockValue, false, argNonCopyable) ) return false;
                     }
-                } else if ( varParam ) {                    // a mutable by-value param IS the local copy
-                    if ( !makeArgTemp(cloneTyped(arg), false, false, arg->type && !arg->type->canCopy()) ) return false;
+                } else if ( varParam && usedAsPlace ) {
+                    if ( !makeArgTemp(cloneTyped(arg), false, false, argNonCopyable) ) return false;
                 } else if ( leafConst ) {
-                    if ( stats.readAsRefArg.find(param)!=stats.readAsRefArg.end()
-                        || stats.readAsPlace.find(param)!=stats.readAsPlace.end() ) {
+                    if ( usedAsPlace ) {
                         if ( !makeArgTemp(cloneTyped(arg), true, false, false) ) return false;
                     } else {
                         sub.substitute = argLeaf;
@@ -2434,12 +2475,12 @@ namespace das {
                             }
                         }
                         if ( !hazard && (av->isGlobalVariable() || av->variable->access_ref) ) {
-                            hazard = !writeFree;
+                            hazard = !writeFree || effectsAfter[ai];
                         }
                     }
-                    bool constWidened = param->type->constant && !(argLeaf->type && argLeaf->type->constant);
-                    if ( hazard || constWidened ) {
-                        if ( !makeArgTemp(cloneTyped(arg), true, false, false) ) return false;
+                    bool constForVarParam = varParam && argLeaf->type && argLeaf->type->constant;
+                    if ( hazard || constForVarParam ) {
+                        if ( !makeArgTemp(cloneTyped(arg), !varParam, false, varParam && argNonCopyable) ) return false;
                     } else {
                         sub.substitute = argLeaf;
                     }
@@ -2449,13 +2490,13 @@ namespace das {
                     auto rit = stats.readCount.find(param);
                     if ( rit != stats.readCount.end() ) reads = rit->second;
                     bool underLoop = stats.readUnderLoop.find(param)!=stats.readUnderLoop.end();
-                    bool canCalleeInvalidate = !writeFree && !argReadsOnlyPrivateLocals(arg, sa);
+                    bool canCalleeInvalidate = (!writeFree || effectsAfter[ai]) && !argReadsOnlyPrivateLocals(arg, sa);
                     bool needsStorage = (stats.readAsRefArg.find(param)!=stats.readAsRefArg.end() && !(arg->type && arg->type->ref))
                         || (stats.readAsPlace.find(param)!=stats.readAsPlace.end() && !(arg->type && arg->type->isRef()));
                     if ( reads<=1 && !underLoop && isReorderSafe(arg) && !canCalleeInvalidate && !needScope && !needsStorage ) {
                         sub.substitute = arg;
                     } else {
-                        if ( !makeArgTemp(cloneTyped(arg), true, false, arg->type && !arg->type->canCopy()) ) return false;
+                        if ( !makeArgTemp(cloneTyped(arg), !varParam, false, argNonCopyable) ) return false;
                     }
                 }
                 paramSub[param] = sub;
@@ -2489,7 +2530,7 @@ namespace das {
                 }
             }
             InlineBodyRewriter rewriter(plan.paramSub, rename, callLike->at, subj.fn != nullptr);
-            auto ret = static_cast<ExprReturn *>(in.body->list.back());
+            auto ret = soleReturn(in.body);
             ExpressionPtr callReplacement = nullptr;
             if ( ret->subexpr ) {
                 ExpressionPtr cloned = cloneTyped(ret->subexpr, &plan.boundParams);
@@ -2497,7 +2538,7 @@ namespace das {
                     SpliceAtStamp stamp(callLike->at);
                     cloned = cloned->visit(stamp);
                 }
-                callReplacement = cloned->visit(rewriter);
+                callReplacement = underCalleeUnsafe(subj.fn, cloned->visit(rewriter), callLike->at);
             }
             if ( site.stmt==callLike ) {
                 auto & list = site.anchor.block->list;
@@ -2832,11 +2873,11 @@ namespace das {
                 stamp.markGenerated = true;
             }
             if ( exprBody ) {
-                auto ret = static_cast<ExprReturn *>(in.body->list.back());
+                auto ret = soleReturn(in.body);
                 if ( ret->subexpr ) {
                     ExpressionPtr cloned = cloneTyped(ret->subexpr, &plan.boundParams);
                     if ( calleeFn ) cloned = cloned->visit(stamp);
-                    callReplacement = cloned->visit(rewriter);
+                    callReplacement = underCalleeUnsafe(calleeFn, cloned->visit(rewriter), callLike->at);
                 }
                 for ( auto & t : temps ) splice.push_back(t);
             } else {
@@ -2869,13 +2910,7 @@ namespace das {
                     callReplacement = makeValue(makeLocalRead(callLike->at, resVar));
                 }
                 ExpressionPtr spliced = bodyClone->visit(rewriter);
-                if ( calleeFn && calleeFn->hasUnsafe ) {    // spliced => unsafe { spliced } - foldUnsafe ate the callee's own wrappers
-                    auto wrap = new ExprUnsafe(callLike->at);
-                    wrap->body = spliced;
-                    wrap->generated = true;
-                    if ( spliced->type ) wrap->type = new TypeDecl(*spliced->type);
-                    spliced = wrap;
-                }
+                spliced = underCalleeUnsafe(calleeFn, spliced, callLike->at);   // spliced => unsafe { spliced } - foldUnsafe ate the callee's own wrappers
                 if ( in.needScope ) {                       // spliced => with (module <origin>) { spliced }
                     // arg and prefix temps stay OUTSIDE (caller code resolves at the caller); the
                     // unsafe wrapper stays INSIDE so later splices anchor within its authorization
@@ -2969,11 +3004,11 @@ namespace das {
                 storesInPlace = (store->op=="=" || store->op=="<-" || store->op==":=")
                     && peelCasts(store->right)==callLike;
             }
+            auto onlyReturn = soleReturn(in.body);
             bool exprBody = !storesInPlace
-                && in.body->list.size()==1 && in.body->list.back()->rtti_isReturn()
-                && !static_cast<ExprReturn *>(in.body->list.back())->moveSemantics    // a substituted read would COPY where the callee moved
-                && !(calleeFn && calleeFn->hasUnsafe)   // the generated unsafe wrapper must be a statement
-                && !in.needScope;                       // so must the with (module) wrapper
+                && onlyReturn
+                && !onlyReturn->moveSemantics           // a substituted read would COPY where the callee moved
+                && !in.needScope;                       // the with (module) wrapper must be a statement
             bool needStatements = !plan.temps.empty() || !exprBody;
             if ( !needStatements ) {
                 graftExpressionBody(caller, site, subj, in, plan, state, anchorIndex);

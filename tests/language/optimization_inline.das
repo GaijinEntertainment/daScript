@@ -960,3 +960,301 @@ def test_inline_behavior_under_every_host(t : T?) {
     t |> equal(target_in_variant_literal(p), 2)
     t |> equal(target_under_safe_as(p), 2)
 }
+
+struct Tagged {
+    value : double
+    tag : uint8
+}
+
+struct Slot {
+    val : Tagged
+}
+
+var g_slots : Slot[4]
+
+//! the `var` pointer parameters of the helpers below are only read,
+//! on purpose: a read-only `var` parameter is the shape under test
+[inline]
+def private raw_tag(var o : Tagged?) => o.tag // nolint:LINT014 see above
+
+[inline]
+def private tag_is(var o : Tagged?; tag : int) => int(raw_tag(o)) == tag // nolint:LINT014 see above
+
+[inline]
+def private is_float_tag(var o : Tagged?) => tag_is(o, 19) // nolint:LINT014 see above
+
+[inline]
+def private next_slot(var o : Slot?) : Slot? {
+    o = unsafe(o + 1)
+    return o
+}
+
+[inline]
+def private slot_holder(var o : Slot?) : Slot ?? => unsafe(addr(o))
+
+[inline]
+def private plus_one(var x : int) : int => x + 1
+
+[inline]
+def private squared(var x : int) : int => x * x
+
+[inline]
+def private peek_block(p : int?; i : int) : int {
+    unsafe {
+        return p[i]
+    }
+}
+
+[inline]
+def private peek_expr(p : int?; i : int) : int => unsafe(p[i])
+
+[inline]
+def private peek_twice(p : int?; i : int) : int {
+    unsafe {
+        return p[i] + p[i]
+    }
+}
+
+[inline]
+def private tag_or_zero(var o : Tagged?) => o?.tag ?? 0u8 // nolint:LINT014 see above
+
+[inline]
+def private tag_at(var o : Tagged?; i : int) => unsafe(o[i]).tag // nolint:LINT014 see above
+
+[inline]
+def private tag_behind(var o : Tagged?) => (*o).tag // nolint:LINT014 see above
+
+var g_finally_runs = 0
+
+[inline]
+def private plus_one_under_finally(x : int) : int {
+    {
+        return x + 1
+    } finally {
+        g_finally_runs++
+    }
+}
+
+[export]
+def target_var_chain(var v : Tagged?) : bool => is_float_tag(v)
+
+[export]
+def target_var_safe_field(var v : Tagged?) : uint8 => tag_or_zero(v)
+
+[export]
+def target_var_index(var v : Tagged?) : uint8 => tag_at(v, 0)
+
+[export]
+def target_var_deref(var v : Tagged?) : uint8 => tag_behind(v)
+
+[export]
+def target_return_under_finally(seed : int) : int => plus_one_under_finally(seed) * 2
+
+[export]
+def target_var_reassigned(var base : Slot?) : Slot? {
+    return next_slot(base)
+}
+
+[export]
+def target_var_addressed(var base : Slot?) : bool {
+    return slot_holder(base) != null
+}
+
+[export]
+def target_var_from_var(seed : int) : int {
+    var n = seed
+    n += 3
+    return plus_one(n)
+}
+
+[export]
+def target_var_from_let(seed : int) : int {
+    let n = seed + 3
+    return plus_one(n)
+}
+
+[export]
+def target_var_expression_once(seed : int) : int => plus_one(seed * 2)
+
+[export]
+def target_var_expression_twice(seed : int) : int {
+    return squared(seed * 2)
+}
+
+[export]
+def target_unsafe_block_graft(p : int?; i : int) : int => peek_block(p, i) + 1
+
+[export]
+def target_unsafe_expr_graft(p : int?; i : int) : int => peek_expr(p, i) + 1
+
+[export]
+def target_unsafe_graft_with_temp(p : int?; i : int) : int {
+    return peek_twice(p, i + 1) + 1
+}
+
+[test(description = "a by-value var parameter the body only reads binds no copy - through a chain of three callees, through ?., an index or a dereference, from a var local, from an expression read once - and keeps its copy when the body reassigns it, takes its address, reads the argument twice, or the argument is a const local")]
+def test_inline_read_only_var_parameter(t : T?) {
+    ast_gc_guard() {
+        t |> run("a pointer read through three levels is one expression") @(t : T?) {
+            let b = body_of(t, "target_var_chain")
+            t |> success(!has(b, "_inl"), "no temp at any level: {b}")
+            t |> success(!has(b, "raw_tag(") && !has(b, "tag_is(") && !has(b, "is_float_tag("),
+                "no call left: {b}")
+        }
+        t |> run("a pointer read through ?., an index or a dereference binds no copy") @(t : T?) {
+            let targets = fixed_array("target_var_safe_field", "target_var_index",
+                "target_var_deref")
+            for (target in targets) {
+                let b = body_of(t, target)
+                t |> success(!has(b, "_arg_o"), "{target} reads the pointer as a value: {b}")
+            }
+        }
+        t |> run("a reassigned parameter keeps its own copy") @(t : T?) {
+            let b = body_of(t, "target_var_reassigned")
+            t |> success(has(b, "_arg_o"), "the body writes the parameter: {b}")
+        }
+        t |> run("a parameter whose address is taken keeps its own copy") @(t : T?) {
+            let b = body_of(t, "target_var_addressed")
+            t |> success(has(b, "_arg_o"), "the body addresses the parameter: {b}")
+        }
+        t |> run("a var local substitutes") @(t : T?) {
+            let b = body_of(t, "target_var_from_var")
+            t |> success(!has(b, "_inl"), "no temp: {b}")
+        }
+        t |> run("a const local binds a copy, the parameter is not const") @(t : T?) {
+            let b = body_of(t, "target_var_from_let")
+            t |> success(has(b, "_arg_x"), "the constness differs: {b}")
+        }
+        t |> run("an expression read once substitutes") @(t : T?) {
+            let b = body_of(t, "target_var_expression_once")
+            t |> success(!has(b, "_inl"), "no temp: {b}")
+        }
+        t |> run("an expression read twice binds one mutable local") @(t : T?) {
+            let b = body_of(t, "target_var_expression_twice")
+            t |> equal(count_of(b, "var _inl"), 1, "evaluated once: {b}")
+        }
+    }
+}
+
+[test(description = "a callee whose unsafe body is one return grafts as an expression, in block form and in expression form, with no result local, and an argument it reads twice binds its temp in front of the statement")]
+def test_inline_unsafe_body_grafts(t : T?) {
+    ast_gc_guard() {
+        t |> run("block form") @(t : T?) {
+            let b = body_of(t, "target_unsafe_block_graft")
+            t |> success(!has(b, "peek_block(") && !has(b, "_res"), "one expression: {b}")
+        }
+        t |> run("expression form") @(t : T?) {
+            let b = body_of(t, "target_unsafe_expr_graft")
+            t |> success(!has(b, "peek_expr(") && !has(b, "_res"), "one expression: {b}")
+        }
+        t |> run("with an argument temp") @(t : T?) {
+            let b = body_of(t, "target_unsafe_graft_with_temp")
+            t |> success(!has(b, "peek_twice(") && !has(b, "_res"), "no result local: {b}")
+            t |> equal(count_of(b, "let _inl"), 1, "the index is evaluated once: {b}")
+        }
+    }
+}
+
+[test(description = "calls spliced without a parameter copy, and unsafe bodies grafted as expressions, compute what the calls computed, and a one-return body under finally still runs its finally")]
+def test_inline_var_parameter_and_unsafe_graft_behavior(t : T?) {
+    g_slots[0].val.tag = 19u8
+    g_slots[1].val.tag = 3u8
+    var numbers = fixed_array(10, 20, 30)
+    unsafe {
+        var base = addr(g_slots[0])
+        t |> success(target_var_chain(addr(g_slots[0].val)))
+        t |> success(!target_var_chain(addr(g_slots[1].val)))
+        t |> success(target_var_reassigned(base) == addr(g_slots[1]), "the next slot")
+        t |> success(base == addr(g_slots[0]), "the caller's pointer did not move")
+        t |> success(target_var_addressed(base))
+        t |> equal(target_var_from_var(1), 5)
+        t |> equal(target_var_from_let(1), 5)
+        t |> equal(target_var_expression_once(4), 9)
+        t |> equal(target_var_expression_twice(3), 36)
+        t |> equal(target_unsafe_block_graft(addr(numbers[0]), 1), 21)
+        t |> equal(target_unsafe_expr_graft(addr(numbers[0]), 2), 31)
+        t |> equal(target_unsafe_graft_with_temp(addr(numbers[0]), 1), 61)
+        t |> equal(target_var_safe_field(addr(g_slots[0].val)), 19u8)
+        t |> equal(target_var_index(addr(g_slots[1].val)), 3u8)
+        t |> equal(target_var_deref(addr(g_slots[0].val)), 19u8)
+    }
+    g_finally_runs = 0
+    t |> equal(target_return_under_finally(3), 8)
+    t |> equal(g_finally_runs, 1, "a one-return body under finally keeps its finally")
+}
+
+def bump_by_reference(var x : int&) : int {
+    x += 100
+    return x
+}
+
+var g_bumped = 0
+
+[inline]
+def private sum_of_var(var a : int; b : int) : int => a + b
+
+[inline]
+def private sum_of_const(a : int; b : int) : int => a + b
+
+[export]
+def target_var_then_writer(seed : int) : int {
+    var n = seed
+    return sum_of_var(n, bump_by_reference(n))
+}
+
+[export]
+def target_expression_then_writer(seed : int) : int {
+    var n = seed
+    return sum_of_const(-n, bump_by_reference(n))
+}
+
+[export]
+def target_writer_then_expression(seed : int) : int {
+    var n = seed
+    return sum_of_const(bump_by_reference(n), -n)
+}
+
+[export]
+def target_const_parameter_from_var(seed : int) : int {
+    var n = seed
+    n += 3
+    return sum_of_const(n, 1)
+}
+
+[export]
+def target_const_parameter_then_effect(seed : int) : int {
+    var n = seed
+    n += 3
+    return sum_of_const(n, bump_by_reference(g_bumped))
+}
+
+[export]
+def target_const_parameter_then_writer(seed : int) : int {
+    var n = seed
+    return sum_of_const(n, bump_by_reference(n))
+}
+
+[test(description = "an argument that reads a variable keeps the value it had at its place in the call when a later argument writes that variable, and sees the write of an earlier one")]
+def test_inline_argument_before_a_writing_sibling(t : T?) {
+    t |> equal(target_var_then_writer(1), 102, "the variable was read before the write")
+    t |> equal(target_expression_then_writer(1), 100, "the expression was read before the write")
+    t |> equal(target_writer_then_expression(1), 0, "the write came first")
+    t |> equal(target_const_parameter_then_writer(1), 102, "the variable was read before the write")
+}
+
+[test(description = "a var local given to a non-var parameter binds no copy, and binds one when a later argument has effects")]
+def test_inline_var_argument_for_a_const_parameter(t : T?) {
+    ast_gc_guard() {
+        t |> run("no later effect: the variable substitutes") @(t : T?) {
+            let b = body_of(t, "target_const_parameter_from_var")
+            t |> success(!has(b, "_inl"), "no temp: {b}")
+        }
+        t |> run("a later argument with effects: the variable binds a local") @(t : T?) {
+            let b = body_of(t, "target_const_parameter_then_effect")
+            t |> success(has(b, "_arg_a"), "read at its place in call order: {b}")
+        }
+    }
+    g_bumped = 0
+    t |> equal(target_const_parameter_from_var(1), 5)
+    t |> equal(target_const_parameter_then_effect(1), 104)
+}
