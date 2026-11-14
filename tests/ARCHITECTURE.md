@@ -137,13 +137,23 @@ fill are the subject.
 
 ## What `test_aot` compiles and runs {#test-aot}
 
-`test_aot` compiles every file not marked `options no_aot` that an `AOT_*_FILES` variable of
-`aot/CMakeLists.txt` holds after its filters; a folder `tests/<name>/` that `DAS_AOT_SUITES` lists
+`test_aot` compiles every file, neither marked `options no_aot` nor named `failed_*`, `cant_*`
+or `invalid_*`, that an `AOT_*_FILES` variable of `aot/CMakeLists.txt` holds after its filters; a folder `tests/<name>/` that `DAS_AOT_SUITES` lists
 is globbed for its top-level `*.das` files, only where no variable already covers it, and a
 subfolder's files are compiled only when a variable lists them. It runs every file it compiles unless
 `.das_test` skips the file's folder under `--use-aot`. Per-PR CI builds only the subset binary
-(`test_aot_subset`, `tests/language` alone); the full `test_aot` runs nightly and under
-`preflight --full`.
+(`test_aot_subset`: `tests/language` alone, against the few `daslib` modules those tests
+require); the full `test_aot` runs nightly and under `preflight --full`.
+
+The `DAS_AOT_EXT` macro (`CMakeLists.txt`, repo root) drops every compile-fail fixture - a name
+starting `failed_`, `cant_` or `invalid_` - from the files it is given, so no fixture is compiled
+whatever a variable holds.
+
+So a file stays out of the compile through `options no_aot` in the file, a name starting
+`failed_`, `cant_` or `invalid_`, a filter on an `AOT_*_FILES` variable, its place in a subfolder
+of a `DAS_AOT_SUITES` folder, or a `tests/<name>/` folder that neither `DAS_AOT_SUITES` nor any
+variable covers. A file is compiled
+and not run through a `--use-aot` skip of its folder in `.das_test`.
 
 ## What the web lane can read {#web-lane}
 

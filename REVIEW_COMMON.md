@@ -27,12 +27,13 @@ reachable branch ships a test that fails without it; a diff that adds a branch n
 distinguishes is a defect. The audit procedure - including how to settle "would this test fail
 without the change?" - is `skills/tdd_audit.md`.
 
-**A diff that changes a function carrying `[arch(at="<doc>.md#<anchor>")]`, or C++ under a
-`// <doc>.md#<anchor>` pointer - beyond comments - audits the anchor's other citing functions
-and the cited section: read the section, check it still describes the code and each citer
-still conforms, and records a verdict per function in the PR description.** The citers of one
-anchor share one mechanism; MCP `arch_sites` lists them, both spellings. An edit made during that
-audit does not start another audit of the same anchor.
+**A diff that changes a function carrying `[arch(at="<doc>.md#<anchor>")]`, or the C or C++
+declaration a `// <doc>.md#<anchor>` pointer sits directly above (comment lines between do not
+count; a type's member functions count wherever they are defined) - beyond comments - audits the
+anchor's other citers and the cited section: read the section, check it still describes the code
+and each citer still conforms, and records a verdict per citer in the PR description.** The
+citers of one anchor share one mechanism; MCP `arch_sites` lists them, both spellings. An edit
+made during that audit does not start another audit of the same anchor.
 
 **A diff that adds, removes, or retargets an `[arch(at=...)]` citation or a
 `// <doc>.md#<anchor>` pointer audits the cited section against the code - both sections on a
