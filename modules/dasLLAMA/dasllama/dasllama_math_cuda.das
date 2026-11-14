@@ -157,7 +157,7 @@ def private cud_dlim_source(var v : DlimVulkanConfig) : bool {
     v.home = "cuda"
     v.coopmat_mode = 0
     v.subgroup_size = int(g_cud.subgroup_size)
-    v.max_storage_range = cud_binding_cap(1l)
+    v.max_storage_range = 1l << 62l   // no storage range on the driver API: the lane's identity word
     v.vram_mb = cud_identity_cap() / 1_000_000l
     return true
 }
@@ -195,9 +195,9 @@ def private cud_dry_bake_arm(v : DlimVulkanConfig) : bool {
 [unused_argument(rows)]
 def private cud_moe_would_accept(n : int64; rows : int64; fmt : int; stream : bool) : bool => kq_rows_ok(n, fmt) && (stream || cud_serves_fmt(fmt))
 
-//! no binding range on the driver API: a mirror side is one allocation of any size the device holds
-[unused_argument(regions)]
-def private cud_binding_cap(regions : int64) : int64 => 1l << 62l
+//! the driver API has no binding range, and the kernels reach a mirror slab through 32-bit offsets: a slab side stays under
+//! 4 GiB with every region's slack, so a mirror past it splits into slabs
+def private cud_binding_cap(regions : int64) : int64 => (1l << 32l) - RDEC_MIR_SLACK * 4l * regions
 
 def private cud_mirror_slack : int64 => RDEC_MIR_SLACK
 
