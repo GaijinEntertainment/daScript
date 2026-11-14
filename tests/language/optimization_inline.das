@@ -775,3 +775,121 @@ def test_inline_unsafe_behavior(t : T?) {
         t |> equal(target_devirt_unsafe_literal(41), 42)
     }
 }
+
+struct HostPair {
+    a : int
+    b : int
+}
+
+variant HostTag {
+    i : int
+    f : float
+}
+
+struct HostNode {
+    arr : int[4]
+    n : int
+    v : float3
+}
+
+var g_host = HostNode(n = 2, v = float3(5.0, 6.0, 7.0))
+
+[inline]
+def private same_node(var o : HostNode?) : HostNode? => o
+
+[inline]
+def private n_of(o : HostNode?) : int => o.n
+
+[inline]
+def private tag_of(o : HostNode?) : HostTag => HostTag(i = o.n)
+
+[export]
+def target_under_addr(var p : HostNode?) : int? => unsafe(addr(same_node(p).n))
+
+[export]
+def target_under_deref(var p : HostNode?) : int => (*same_node(p)).n
+
+[export]
+def target_under_swizzle(var p : HostNode?) : float => same_node(p).v.x
+
+[export]
+def target_under_as(var p : HostNode?) : int => tag_of(p) as i
+
+[export]
+def target_under_is(var p : HostNode?) : bool => tag_of(p) is i
+
+[export]
+def target_under_safe_as(var p : HostNode?) : int => (tag_of(p) ?as i) ?? -1
+
+[export]
+def target_in_variant_literal(var p : HostNode?) : int {
+    let q = HostTag(i = n_of(p))
+    return q as i
+}
+
+[export]
+def target_in_struct_literal(var p : HostNode?) : int {
+    let q = HostPair(a = n_of(p), b = 1)
+    return q.a + q.b
+}
+
+[export]
+def target_in_fixed_array(var p : HostNode?) : int {
+    let q = fixed_array(n_of(p), 1)
+    return q[0] + q[1]
+}
+
+[export]
+def target_in_array_literal(var p : HostNode?) : int {
+    let q <- [n_of(p), 1]
+    return q[0] + q[1]
+}
+
+[export]
+def target_in_tuple(var p : HostNode?) : int {
+    let q = (n_of(p), 1)
+    return q._0 + q._1
+}
+
+[export]
+def target_in_new(var p : HostNode?) : HostPair? => new HostPair(a = n_of(p))
+
+[export]
+def target_in_verify(var p : HostNode?) : int {
+    verify(n_of(p) == 2)
+    return 1
+}
+
+[test(description = "an [inline] call splices when it sits under addr, a dereference, a swizzle, as, ?as or is, inside a struct, variant, array or tuple literal, under new, or in a verify")]
+def test_inline_fired_under_every_host(t : T?) {
+    ast_gc_guard() {
+        let hosts = fixed_array("target_under_addr", "target_under_deref", "target_under_swizzle",
+            "target_under_as", "target_under_safe_as", "target_under_is",
+            "target_in_struct_literal", "target_in_variant_literal", "target_in_fixed_array",
+            "target_in_array_literal", "target_in_tuple", "target_in_new", "target_in_verify")
+        for (host in hosts) {
+            let b = body_of(t, host)
+            t |> success(!has(b, "same_node(") && !has(b, "n_of(") && !has(b, "tag_of("),
+                "{host} keeps no call: {b}")
+        }
+    }
+}
+
+[test(description = "an [inline] call spliced under addr, a dereference, a swizzle, as, ?as, is, a literal, new or verify computes what the call computed")]
+def test_inline_behavior_under_every_host(t : T?) {
+    var p = unsafe(addr(g_host))
+    t |> equal(*target_under_addr(p), 2)
+    t |> equal(target_under_deref(p), 2)
+    t |> equal(target_under_swizzle(p), 5.0)
+    t |> equal(target_under_as(p), 2)
+    t |> success(target_under_is(p))
+    t |> equal(target_in_struct_literal(p), 3)
+    t |> equal(target_in_fixed_array(p), 3)
+    t |> equal(target_in_array_literal(p), 3)
+    t |> equal(target_in_tuple(p), 3)
+    let made = target_in_new(p)
+    t |> equal(made.a, 2)
+    t |> equal(target_in_verify(p), 1)
+    t |> equal(target_in_variant_literal(p), 2)
+    t |> equal(target_under_safe_as(p), 2)
+}

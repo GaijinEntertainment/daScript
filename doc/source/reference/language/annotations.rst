@@ -336,7 +336,8 @@ Optimization and AOT
     shape the inliner can't splice (by-reference or temporary ``#`` result, generators,
     lambdas, class methods, block/lambda literals or ``assume`` expressions in the body,
     recursion through other ``[inline]`` functions) is a compile-time error, as is taking
-    the function's address with ``@@`` or calling it from a global or field initializer:
+    the function's address with ``@@``, calling it from a global or field initializer, or
+    calling it where the inliner cannot host a splice (the target of a computed ``goto``):
 
     .. code-block:: das
 

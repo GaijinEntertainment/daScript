@@ -975,8 +975,9 @@ namespace das {
                 auto nc = static_cast<ExprNullCoalescing *>(e);
                 out.emplace_back(nc->subexpr, EvalKind::Eager);
                 out.emplace_back(nc->defaultValue, EvalKind::Unlowerable);
-            } else if ( e->rtti_isSafeField() ) {
-                out.emplace_back(static_cast<ExprSafeField *>(e)->value, EvalKind::Eager);
+            } else if ( e->rtti_isField() || e->rtti_isSafeField() || e->rtti_isAsVariant()
+                    || e->rtti_isIsVariant() || e->rtti_isSafeAsVariant() ) {
+                out.emplace_back(static_cast<ExprField *>(e)->value, EvalKind::Eager);
             } else if ( e->rtti_isSafeAt() ) {
                 auto sa = static_cast<ExprSafeAt *>(e);
                 out.emplace_back(sa->subexpr, EvalKind::Eager);
@@ -985,12 +986,6 @@ namespace das {
                 out.emplace_back(static_cast<ExprOp1 *>(e)->subexpr, EvalKind::Eager);
             } else if ( e->rtti_isR2V() ) {
                 out.emplace_back(static_cast<ExprRef2Value *>(e)->subexpr, EvalKind::Eager);
-            } else if ( e->rtti_isCall() ) {
-                auto c = static_cast<ExprCall *>(e);
-                for ( auto & a : c->arguments ) out.emplace_back(a, EvalKind::Eager);
-            } else if ( e->rtti_isInvoke() ) {
-                auto inv = static_cast<ExprInvoke *>(e);
-                for ( auto & a : inv->arguments ) out.emplace_back(a, EvalKind::Eager);
             } else if ( e->rtti_isStringBuilder() ) {
                 auto sb = static_cast<ExprStringBuilder *>(e);
                 for ( auto & a : sb->elements ) out.emplace_back(a, EvalKind::Eager);
@@ -1010,8 +1005,6 @@ namespace das {
             } else if ( e->rtti_isWith() ) {
                 auto wi = static_cast<ExprWith *>(e);
                 if ( wi->with ) out.emplace_back(wi->with, EvalKind::Eager);
-            } else if ( e->rtti_isField() ) {
-                out.emplace_back(static_cast<ExprField *>(e)->value, EvalKind::Eager);
             } else if ( e->rtti_isAt() ) {
                 auto at = static_cast<ExprAt *>(e);
                 out.emplace_back(at->subexpr, EvalKind::Eager);
@@ -1020,6 +1013,24 @@ namespace das {
                 out.emplace_back(static_cast<ExprCast *>(e)->subexpr, EvalKind::Eager);
             } else if ( e->rtti_isUnsafe() ) {
                 out.emplace_back(static_cast<ExprUnsafe *>(e)->body, EvalKind::Eager);
+            } else if ( e->rtti_isRef2Ptr() ) {
+                out.emplace_back(static_cast<ExprRef2Ptr *>(e)->subexpr, EvalKind::Eager);
+            } else if ( e->rtti_isPtr2Ref() ) {
+                out.emplace_back(static_cast<ExprPtr2Ref *>(e)->subexpr, EvalKind::Eager);
+            } else if ( e->rtti_isSwizzle() ) {
+                out.emplace_back(static_cast<ExprSwizzle *>(e)->value, EvalKind::Eager);
+            } else if ( e->rtti_isAscend() ) {
+                out.emplace_back(static_cast<ExprAscend *>(e)->subexpr, EvalKind::Eager);
+            } else if ( e->rtti_isMakeStruct() ) {
+                for ( auto & fields : static_cast<ExprMakeStruct *>(e)->structs ) {
+                    for ( auto & field : *fields ) out.emplace_back(field->value, EvalKind::Eager);
+                }
+            } else if ( e->rtti_isMakeVariant() ) {
+                for ( auto & field : static_cast<ExprMakeVariant *>(e)->variants ) out.emplace_back(field->value, EvalKind::Eager);
+            } else if ( e->rtti_isMakeArray() ) {
+                for ( auto & v : static_cast<ExprMakeArray *>(e)->values ) out.emplace_back(v, EvalKind::Eager);
+            } else if ( e->rtti_isCallLikeExpr() ) {
+                for ( auto & a : static_cast<ExprLooksLikeCall *>(e)->arguments ) out.emplace_back(a, EvalKind::Eager);
             }
         }
 
@@ -1177,6 +1188,24 @@ namespace das {
                 if ( k.first && exprContains(k.first, what) ) return true;
             }
             return false;
+        }
+
+        // src/ast/ARCHITECTURE_INLINE.md#inline-unlisted-position
+        Expression * unlistedHolderOf ( Expression * stmt, Expression * call ) {
+            bool present = false;
+            lookupExpressions(stmt, [&](const Expression * e) { present |= e==call; });
+            if ( !present ) return nullptr;
+            Expression * holder = stmt;
+            vector<pair<Expression *,EvalKind>> kids;
+            for ( ;; ) {
+                childrenInEvalOrder(holder, kids);
+                Expression * next = nullptr;
+                for ( auto & k : kids ) {
+                    if ( k.first && exprContains(k.first, call) ) { next = k.first; break; }
+                }
+                if ( !next ) return holder;
+                holder = next;
+            }
         }
 
         enum class SitePosition { Eager, Conditional, NotFound, Unsupported };
@@ -2039,7 +2068,7 @@ namespace das {
 
             AutoInlineCfg callerAutoCfg ( Function * caller );
             bool resolveSubject ( const PlannedSite & site, CallerSpliceState & state, SpliceSubject & subj );
-            int liveAnchorIndex ( const PlannedSite & site, CallerSpliceState & state );
+            int liveAnchorIndex ( const PlannedSite & site, const string & subjName, CallerSpliceState & state );
             bool canInlineSubjectAtSite ( const PlannedSite & site, const SpliceSubject & subj, SpliceInputs & in );
             // how every argument reaches the spliced body
 
@@ -2061,6 +2090,7 @@ namespace das {
             bool classifyArguments ( Function * caller, const PlannedSite & site, const SpliceSubject & subj, const SpliceInputs & in, ArgPlan & plan );
             void processSite ( Function * caller, const PlannedSite & site, CallerSpliceState & state );
             void processFunction ( Function * caller );
+            void reportUnsplicedCalls ( Function * caller );
         };
 
         AutoInlineCfg InlinePatch::callerAutoCfg ( Function * caller ) {
@@ -2111,6 +2141,21 @@ namespace das {
             changed |= changedBefore;
         }
 
+        // src/ast/ARCHITECTURE_INLINE.md#inline-unspliced-call
+        void InlinePatch::reportUnsplicedCalls ( Function * caller ) {
+            if ( moduleNeverInlines(caller) ) return;
+            AutoInlineCfg callerCfg = callerAutoCfg(caller);
+            InlineCollect collect(callerCfg);
+            caller->body->visit(collect);
+            for ( auto & site : collect.sites ) {
+                if ( site.kind!=SiteKind::MustCall ) continue;
+                string name = "the callee";
+                if ( auto callee = callLikeFunc(site.callLike) ) name = callee->name;
+                error("can't inline " + name + ": the call was left in place and no reason was reported"
+                    " - bind the call's result to a local first", site.callLike->at);
+            }
+        }
+
         // false = skip silently: an invoke whose arg0 does not trace to a spliceable literal
         bool InlinePatch::resolveSubject ( const PlannedSite & site, CallerSpliceState & state, SpliceSubject & subj ) {
             auto callLike = site.callLike;
@@ -2143,7 +2188,7 @@ namespace das {
         }
 
         // the site's statement index in its anchor block, or -1 to skip (next round re-collects)
-        int InlinePatch::liveAnchorIndex ( const PlannedSite & site, CallerSpliceState & state ) {
+        int InlinePatch::liveAnchorIndex ( const PlannedSite & site, const string & subjName, CallerSpliceState & state ) {
             auto callLike = site.callLike;
             int anchorIndex = site.anchor.index + state.indexShift[site.anchor.block];     // if the block shifted, adjust the index
             if ( anchorIndex < 0 || anchorIndex >= int(site.anchor.block->list.size())
@@ -2162,7 +2207,13 @@ namespace das {
                     lite = inner;
                 }
             }
-            return siteLive ? anchorIndex : -1;
+            if ( siteLive ) return anchorIndex;
+            if ( auto holder = unlistedHolderOf(site.stmt, callLike) ) {
+                string where = holder->rtti_isGoto() ? "is the target of a computed goto" : "sits under " + string(holder->__rtti);
+                siteFail(site, "can't inline " + subjName + ": the call " + where
+                    + ", a position the inliner can't host - bind the call's result to a local first", callLike->at);
+            }
+            return -1;
         }
 
         // false = this site does not splice: declined, failed (reported), or a defensive skip
@@ -2893,7 +2944,7 @@ namespace das {
                 siteFail(site, "can't inline " + subjName + ": the call has no anchoring statement in a function body - hoist the call into its own statement", callLike->at);
                 return;
             }
-            int anchorIndex = liveAnchorIndex(site, state);
+            int anchorIndex = liveAnchorIndex(site, subj.name, state);
             if ( anchorIndex < 0 ) return;
             if ( site.kind==SiteKind::AutoCall && calleeFn ) {
                 int64_t calleeBytes = bodyCost(calleeFn->body).stackBytes;
@@ -3295,6 +3346,9 @@ namespace das {
             if ( failed() ) break;
         }
         for ( auto fn : patch.splicedCallers ) InferFlagRefresh(fn, forceInscopePod).run();
+        if ( !patch.changed && mustEnabled && anyInline && !failed() ) {
+            for ( auto fn : order ) patch.reportUnsplicedCalls(fn);
+        }
         if ( patch.changed ) astChanged();
         if ( patch.logOpt && patch.logs
             && (patch.inlined || patch.inlinedAuto || patch.invokeBlocks || patch.declined) ) {
