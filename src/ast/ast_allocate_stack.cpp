@@ -599,7 +599,7 @@ namespace das {
             }
         }
     // ExprCall
-        // src/ast/ARCHITECTURE.md#for-source-temporary
+        // src/ast/ARCHITECTURE_LOOP_SOURCE.md#for-source-temporary
         static bool holdsLoopSourceTemporaries ( const ExprCall * expr ) {
             return expr->isForLoopSource && expr->func->unsafeOutsideOfFor;
         }
