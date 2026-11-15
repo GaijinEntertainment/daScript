@@ -7,10 +7,11 @@
 # a top-level peer of `main.das` was omitted from CMake's install(FILES …)
 # list.
 #
-# Usage:  bash ci/smoke_test_bundle.sh <bundle-root>
+# Usage:  bash ci/smoke_test_bundle.sh <bundle-root> [<c++ compiler>]
 #
 # <bundle-root> is the directory produced by `cmake --install … --prefix <dir>`
-# (contains bin/, daslib/, utils/, modules/, …).
+# (contains bin/, daslib/, utils/, modules/, …). <c++ compiler> compiles the shipped-header
+# row; the check_bundle_smoke target passes the compiler that built the tree.
 #
 # Exit 0 if every check passes; non-zero with a per-check failure log otherwise.
 
@@ -243,7 +244,7 @@ echo "Shipped headers compile:"
 # The scan above sees only daScript/ includes; one translation unit compiled against the bundle's
 # include/ alone reaches every header simulate.h pulls in, wherever it lives. No POSIX c++ on a
 # Windows bundle or a bare box skips the row, as the python3 row does.
-HEADER_CXX="${CXX:-c++}"
+HEADER_CXX="${2:-${CXX:-c++}}"
 if [[ -n "$CPP_SUFFIX" ]] || ! "$HEADER_CXX" --version > /dev/null 2>&1; then
     printf '  %-30s SKIP (no POSIX c++)\n' "simulate.h"
 else

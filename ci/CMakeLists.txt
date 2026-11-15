@@ -24,7 +24,7 @@ das_lane_python(check_tree_sitter_parse_sources "Testing the tree-sitter source 
 add_custom_target(check_bundle_smoke
 COMMAND ${CMAKE_COMMAND} -E rm -rf ${CMAKE_BINARY_DIR}/daslang_bundle
 COMMAND ${CMAKE_COMMAND} --install ${CMAKE_BINARY_DIR} --prefix ${CMAKE_BINARY_DIR}/daslang_bundle --config $<CONFIG> --strip
-COMMAND bash ${PROJECT_SOURCE_DIR}/ci/smoke_test_bundle.sh ${CMAKE_BINARY_DIR}/daslang_bundle
+COMMAND bash ${PROJECT_SOURCE_DIR}/ci/smoke_test_bundle.sh ${CMAKE_BINARY_DIR}/daslang_bundle ${CMAKE_CXX_COMPILER}
 WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
 COMMENT "Installing the release bundle and smoke-testing it"
 DEPENDS daslang libDaScript libDaScript_runtime libDaScriptDyn libDaScriptDyn_runtime libUriParser libUriParserDyn
