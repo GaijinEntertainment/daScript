@@ -5,6 +5,7 @@
 #include "daScript/simulate/aot.h"
 #include "daScript/simulate/simulate.h"
 #include <inttypes.h>
+#include <system_error>
 
 namespace das {
 
