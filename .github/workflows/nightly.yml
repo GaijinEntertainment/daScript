@@ -50,6 +50,11 @@ jobs:
                            then "armed" else empty end' | grep -q .
               then
                 nightly=true
+              elif gh api --paginate \
+                     'repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files' \
+                     --jq '.[].filename' | grep -qE '^(include|src)/'
+              then
+                nightly=true
               fi
               ;;
           esac
