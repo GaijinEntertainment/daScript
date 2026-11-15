@@ -1628,7 +1628,8 @@ def private emit_create(ctx : LLVMContextRef; program_context : Context?; prog :
                         var types : PrimitiveTypes?; var uids : UidNodes?; prefix : string;
                         var sf : StandaloneFunctions; runtime_init : LLVMOpaqueValue?;
                         runtime_builder : LLVMBuilderRef; register_all_modules : bool; ships_dynamic : bool;
-                        dynamic_modules : table<string; bool>) : tuple<fn : LLVMOpaqueValue?; link_whole_lib : bool> {
+                        dynamic_modules : table<string; bool>;
+                        frame_size : uint) : tuple<fn : LLVMOpaqueValue?; link_whole_lib : bool> {
     let void_ptr = types.LLVMVoidPtrType()
     var guard_global = LLVMGetNamedGlobal(g_mod, LIB_GUARD_GLOBAL)
     var env_global = LLVMGetNamedGlobal(g_mod, LIB_ENV_GLOBAL)
@@ -1655,10 +1656,11 @@ def private emit_create(ctx : LLVMContextRef; program_context : Context?; prog :
     LLVMBuildRet(b, LLVMConstNull(void_ptr))
     LLVMPositionBuilderAtEnd(b, ready_bb)
     var global_context = emit_create_standalone_ctx(b, program_context, prog, types, sf.any_pinvoke)
-    let guard_type = jit_fn_type($(ctx, tramp, frame : void?) : int {})
+    let guard_type = jit_fn_type($(ctx, tramp, frame : void?; frame_size : int) : int {})
     var guard = declare_extern_fn("jit_lib_invoke_guarded", guard_type)
     var ok = LLVMBuildCall2(b, guard_type, guard,
-        array(global_context, LLVMBuildPointerCast(b, ctx_init.fn, void_ptr, ""), LLVMConstNull(void_ptr)), "ok")
+        array(global_context, LLVMBuildPointerCast(b, ctx_init.fn, void_ptr, ""),
+            LLVMConstNull(void_ptr), types.ConstI32(uint64(frame_size))), "ok")
     let finish_type = jit_fn_type($(ctx : void?; ok : int; err : void?) : void? {})
     var finish = declare_extern_fn("jit_lib_create_finish", finish_type)
     LLVMBuildRet(b, LLVMBuildCall2(b, finish_type, finish,
@@ -1706,16 +1708,17 @@ def public inject_lib(program_context : Context?; ctx : LLVMContextRef; prog : P
         return (fn = null, link_whole_lib = false)
     }
     var dynamic_modules : table<string; bool>
+    let frame_size = lib_entry_frame_size(prog, sf.funcs)
     let rt = emit_runtime_init(ctx, prog, types, register_all_modules, sf.used_modules, dynamic_modules)
     let created = emit_create(ctx, program_context, prog, mod, types, uids, prefix, sf, rt.fn,
-        rt.builder, register_all_modules, rt.ships_dynamic, dynamic_modules)
+        rt.builder, register_all_modules, rt.ships_dynamic, dynamic_modules, frame_size)
     LLVMBuildRetVoid(rt.builder)
     LLVMDisposeBuilder(rt.builder)
-    emit_fixed_entries(ctx, types, uids, sf.funcs, prefix,
+    emit_fixed_entries(ctx, types, uids, sf.funcs, prefix, frame_size,
         LLVMGetNamedGlobal(g_mod, LIB_GUARD_GLOBAL), LLVMGetNamedGlobal(g_mod, LIB_ERROR_GLOBAL))
     var emitted : array<CExport>
     for (e in exports) {
-        let thunk = emit_thunk(ctx, e, uids, types, export_all)
+        let thunk = emit_thunk(ctx, e, uids, types, export_all, frame_size)
         if (thunk |> is_none()) {
             return (fn = null, link_whole_lib = false)
         }
