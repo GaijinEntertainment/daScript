@@ -68,7 +68,7 @@ namespace das {
         return ctx.code->makeNode<SimNode_Jit>(LineInfo(), (JitFunction)publ);
     }
 
-    extern "C" void * das_aot_get_func_by_mnh ( uint64_t mnh, Context * ctx ) {
+    extern "C" DAS_API void * das_aot_get_func_by_mnh ( uint64_t mnh, Context * ctx ) {
         return builtin_getFunctionByMnh(mnh, ctx).PTR;
     }
 
@@ -118,16 +118,16 @@ namespace das {
     }
     static AotListBase g_llvmAotList(registerLlvmAotFunctions);
 
-    extern "C" void das_aot_register ( uint64_t aotHash, void * publ ) {
+    extern "C" DAS_API void das_aot_register ( uint64_t aotHash, void * publ ) {
         llvmAotEntries().emplace_back(aotHash, AotFactory(publ));
         llvmAotPendingPubl().push_back(publ);
     }
 
-    extern "C" void das_aot_register_declined ( uint64_t aotHash, const char * reason ) {
+    extern "C" DAS_API void das_aot_register_declined ( uint64_t aotHash, const char * reason ) {
         llvmAotEntries().emplace_back(aotHash, AotFactory::declined(reason));
     }
 
-    extern "C" void das_aot_register_globinit ( void (*fn)(Context*) ) {
+    extern "C" DAS_API void das_aot_register_globinit ( void (*fn)(Context*) ) {
         uint32_t index = uint32_t(llvmAotGlobInits().size());
         llvmAotGlobInits().push_back(fn);
         for ( auto publ : llvmAotPendingPubl() ) {
