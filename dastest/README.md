@@ -148,7 +148,8 @@ overloads), the cookie-and-host gate for a served web tree (`gate_web_third_part
 `gate_web_third_party_files` over a file list the caller chose, both built
 on `html_resource_urls`, `script_urls`, `css_urls` and `url_host`), the tracked-file listing
 (`tracked_files`, and `tracked_files_in` for a repository elsewhere), the directory test for a
-path (`path_under_dirs`), the home-directory gate
+path (`path_under_dirs`), the first error line of a compiler's output (`first_error_line`), the
+home-directory gate
 for a published record (`gate_home_paths`), the prefix census (`gate_prefixed_names_defined`,
 built on `prefixed_tokens`, `css_selector_tokens` and `html_ids`), the page-source extractors
 (`html_code_blocks`, `markdown_fences`), plus tree-analysis

@@ -319,6 +319,72 @@ def test_index_sweep_skips_other_platforms(t : T?) {
     }
 }
 
+def private sweep_fixture_descriptor(package : string; modules : array<string>) : string {
+    let rows = [for (name in modules);
+        "    register_native_path(\"{package}\", \"{name}\", \"\{project_path\}/{name}.das\")"]
+    let head = "options gen2\nrequire daslib/fio\n\n[export]\n"
+    return "{head}def initialize(project_path : string) \{\n{join(rows, "\n")}\n\}\n"
+}
+
+struct private SweepCompileRun {
+    rc : int
+    output : string
+}
+
+def private run_index_compile(root : string; args : array<string>) : SweepCompileRun {
+    let tool = "{get_das_root()}/utils/daspkg/index_compile.das"
+    var inscope cmd <- [get_command_line_arguments()[0], "-no-module-cache",
+        "-project_root", root, tool, "--"]
+    cmd |> push_from(args)
+    var run : SweepCompileRun
+    run.rc = run_and_capture(cmd, run.output, 600.0)
+    return run
+}
+
+[test(description = "the sweep's compile step compiles the modules the named package registers and no other package's: a broken one fails it by name, a package registering none passes, and no package name is an error", timeout = 1200)]
+def test_index_compile_registered_modules(t : T?) {
+    let dir_r = create_temp_directory_result("daspkg_index_compile")
+    t |> success(dir_r is value, "temp fixture directory created")
+    if (!(dir_r is value)) {
+        return
+    }
+    let root = replace(unsafe(dir_r.value), "\\", "/")
+    let pkg = "{root}/modules/sweepfix"
+    let other = "{root}/modules/otherfix"
+    let nothing = "{root}/modules/emptyfix"
+    t |> success(mkdir_rec(pkg) && mkdir_rec(other) && mkdir_rec(nothing))
+    let gen2 = "options gen2\n\n"
+    t |> success(fwrite("{pkg}/base.das", "{gen2}def public base_answer() : int => 41\n"))
+    t |> success(fwrite("{pkg}/good.das",
+        "{gen2}require sweepfix/base\n\ndef public good_answer() : int => base_answer() + 1\n"))
+    t |> success(fwrite("{pkg}/bad.das", "{gen2}def public bad_answer() : int => no_such_name\n"))
+    t |> success(fwrite("{other}/broken.das", "{gen2}def public broken() : int => no_such_name\n"))
+    t |> success(fwrite("{other}/.das_module", sweep_fixture_descriptor("otherfix", ["broken"])))
+    let no_modules : array<string>
+    t |> success(fwrite("{nothing}/.das_module", sweep_fixture_descriptor("emptyfix", no_modules)))
+    let sweepfix <- ["--package", "sweepfix", "--project-root", root]
+    t |> success(fwrite("{pkg}/.das_module",
+        sweep_fixture_descriptor("sweepfix", ["base", "good", "bad"])))
+    let broken = run_index_compile(root, sweepfix)
+    t |> equal(1, broken.rc, broken.output)
+    t |> success(find(broken.output, "bad.das does not compile (exit") >= 0, broken.output)
+    t |> success(find(broken.output, "error[") >= 0, "the compiler's error line is quoted")
+    t |> success(find(broken.output, "good.das does not compile") < 0, broken.output)
+    t |> success(find(broken.output, "3 registered module(s), 1 failed") >= 0, broken.output)
+    t |> success(fwrite("{pkg}/.das_module",
+        sweep_fixture_descriptor("sweepfix", ["base", "good"])))
+    let clean = run_index_compile(root, sweepfix)
+    t |> equal(0, clean.rc, "good.das resolves its package's base under the project root, " +
+        "and otherfix's broken module is not this package's: {clean.output}")
+    let empty_run = run_index_compile(root, ["--package", "emptyfix", "--project-root", root])
+    t |> equal(0, empty_run.rc, empty_run.output)
+    let no_package : array<string>
+    let unnamed = run_index_compile(root, no_package)
+    t |> equal(1, unnamed.rc, unnamed.output)
+    t |> success(find(unnamed.output, "--package is required") >= 0, unnamed.output)
+    t |> success(rmdir_rec(root))
+}
+
 [test(description = "index entries parse, serialize, render and refresh their platforms, and an entry without platforms stays without them")]
 def test_index_platforms(t : T?) {
     t |> run("parses, serializes and renders platforms") @(t : T?) {

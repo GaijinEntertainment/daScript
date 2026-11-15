@@ -77,6 +77,7 @@ COMPILE_TESTS=(
     "dasllama-cli|utils/dasllama-server/cli.das"
     "dasllama-server-bench|utils/dasllama-server/server_bench.das"
     "daspkg|utils/daspkg/main.das"
+    "daspkg-index-compile|utils/daspkg/index_compile.das"
     "detect-dupe|utils/detect-dupe/main.das"
     "fix-lint-errors|utils/fix-lint-errors/main.das"
     "gen1-to-gen2|utils/gen1-to-gen2/main.das"
@@ -250,6 +251,24 @@ else
     printf '#include "daScript/simulate/simulate.h"\n' > "$HEADER_TU/tu.cpp"
     run_check "simulate.h" "$HEADER_CXX" -std=c++17 -fsyntax-only -I "$BUNDLE/include" "$HEADER_TU/tu.cpp"
     rm -rf "$HEADER_TU"
+fi
+
+echo
+echo "dasImgui's C++ payload:"
+# A package that binds against dasImgui (dasImguiImplot, dasImguiNodeEditor) includes the
+# module's headers, its generated .inc files and the Dear ImGui headers from the bundle.
+if [[ -d "$BUNDLE/modules/dasImgui" ]]; then
+    for rel in src/cb_dasIMGUI.h src/need_dasIMGUI.h src/dasIMGUI.enum.decl.inc imgui/imgui.h; do
+        if [[ -f "$BUNDLE/modules/dasImgui/$rel" ]]; then
+            printf '  %-52s OK\n' "modules/dasImgui/$rel"
+            PASS=$((PASS + 1))
+        else
+            printf '  %-52s MISSING\n' "modules/dasImgui/$rel"
+            FAIL=$((FAIL + 1))
+        fi
+    done
+else
+    printf '  %-52s SKIP (no dasImgui in the bundle)\n' "modules/dasImgui"
 fi
 
 echo

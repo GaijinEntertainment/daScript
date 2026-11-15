@@ -289,6 +289,24 @@ IF(COMMAND ADD_MODULE_CPP)
         DESTINATION ${DAS_INSTALL_MODULESDIR}/dasImgui/examples/features/text_input/fonts)
     INSTALL(FILES ${DAS_IMGUI_DIR}/examples/features/text_input/.das_package
         DESTINATION ${DAS_INSTALL_MODULESDIR}/dasImgui/examples/features/text_input)
+    # a package that binds against this module (dasImguiImplot, dasImguiNodeEditor) compiles
+    # against these, beside the import library the shared-twin macro installs here. The binding
+    # headers are named one by one: the platform input headers cite architecture sections an
+    # SDK does not carry, and no package includes them.
+    INSTALL(FILES
+        ${DAS_IMGUI_DIR}/src/cb_dasIMGUI.h
+        ${DAS_IMGUI_DIR}/src/need_dasIMGUI.h
+        ${DAS_IMGUI_DIR}/src/dasIMGUI.h
+        ${DAS_IMGUI_DIR}/src/aot_dasIMGUI.h
+        ${DAS_IMGUI_DIR}/src/imgui_stub.h
+        ${DAS_IMGUI_DIR}/src/imgui_backend_state.h
+        DESTINATION ${DAS_INSTALL_MODULESDIR}/dasImgui/src)
+    INSTALL(DIRECTORY ${DAS_IMGUI_DIR}/src/
+        DESTINATION ${DAS_INSTALL_MODULESDIR}/dasImgui/src
+        FILES_MATCHING PATTERN "*.inc")
+    INSTALL(DIRECTORY ${imgui_INCLUDE_DIR}/
+        DESTINATION ${DAS_INSTALL_MODULESDIR}/dasImgui/imgui
+        FILES_MATCHING PATTERN "*.h")
 
     # Static halves only — no ADD_MODULE_LIB shared twins. In a superbuild the DLL
     # flavor comes from this module's own standalone build (daspkg); the twins would
