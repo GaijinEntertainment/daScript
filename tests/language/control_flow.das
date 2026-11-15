@@ -1554,14 +1554,16 @@ def recovered_message(text : string) : string {
 
 [test(description = "a recover arm reads the panic it caught from the context's last_exception, a long message after a short one too")]
 def test_recover_reads_last_exception(t : T?) {
-    t |> success(find(recovered_message("short panic"), "short panic") >= 0, "a short panic's message")
-    // Longer than the last: the context's message is stored anew, so a stale view of the last one would show.
+    let short = recovered_message("short panic")
+    t |> success(find(short, "short panic") >= 0, "a short panic's message")
+    // Longer than the last message, so a stale view of it shows.
     let long = build_string() $(var writer) {
         for (_ in range(20)) {
             writer |> write("a much longer panic message ")
         }
     }
-    t |> success(find(recovered_message(long), long) >= 0, "the long panic's message after the short one")
+    t |> success(find(recovered_message(long), long) >= 0,
+                 "the long panic's message after the short one")
 }
 
 struct WithPoint {
