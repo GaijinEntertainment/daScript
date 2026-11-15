@@ -305,8 +305,10 @@ class public CollectExternVisitor : AstVisitor {
     def ensure_module(m : Module?) {
         if (g_emit_aot_object_globals || m == null) return  // host already has every module registered
         let mod_name = string(m.name)
-        // Dynamic modules register via the runtime load path (skipped here) — except wasm cross-compile, where they're statically linked and must register like any module.
-        let dynamic = key_exists(dynamic_modules, mod_name) && jit_target.arch != JitTargetArch.wasm
+        // Dynamic modules register via the runtime load path (skipped
+        // here) - except on a cross link, where they are static and
+        // register like any module.
+        let dynamic = key_exists(dynamic_modules, mod_name) && !jit_target.cross
         if (key_exists(registered_modules, mod_name) || dynamic) return
         registered_modules[mod_name] = true
         // First ensure all dependencies of this module are registered
@@ -689,7 +691,7 @@ def collect_external_functions(standalone_context : LLVMOpaqueValue?; ctx : LLVM
             LLVMBuildCall2(ib, reg_dyn_mod_type, jit_reg_dyn_mod, fixed_array(rel_str, abs_str, name_str), "")
         }
     }
-    if (target.arch != JitTargetArch.wasm && !register_all_modules
+    if (!target.cross && !register_all_modules
             && program_uses_dynamic_module(prog, dynamic_modules)) {
         let finish_type = LLVMFunctionType(t.t_void, array<LLVMTypeRef>())
         let finish_name = LLVMGetNamedGlobal(g_mod, LIB_GUARD_GLOBAL) == null ? "jit_finalize_dynamic_modules" : "jit_lib_finalize_dynamic_modules"
@@ -1170,7 +1172,7 @@ def public emit_standalone_runtime_init(builder : LLVMBuilderRef; prog : Program
     )
     var jit_reg_dyn_mod = LLVMAddFunctionWithType(g_mod, "jit_register_dynamic_module_resolve", reg_dyn_mod_type)
     // a compiler driver loads every module daslang would, by the same modules/*/.das_module scan
-    let scan_all = register_all_modules && target.arch != JitTargetArch.wasm
+    let scan_all = register_all_modules && !target.cross
     if (scan_all) {
         LLVMBuildCall2(builder, das_ensure_env_type, LLVMAddFunctionWithType(g_mod, "das_require_dynamic_modules", das_ensure_env_type), array<LLVMValueRef>(), "")
     }
@@ -1303,7 +1305,7 @@ def public emit_standalone_context_init(builder : LLVMBuilderRef; fusion_builder
 
     // the rows feed the compile-time require resolver, which only a whole-lib exe links (ARCHITECTURE_EXE.md sec.1);
     // a register-all exe's module scan registers them itself
-    if (needs_whole_lib && !(register_all_modules && target.arch != JitTargetArch.wasm)) {
+    if (needs_whole_lib && !(register_all_modules && !target.cross)) {
         let reg_native_path_type = LLVMFunctionType(types.t_void,
             fixed_array<LLVMTypeRef>(
                 types.LLVMVoidPtrType(), // const char * mod_name
@@ -1322,9 +1324,10 @@ def public emit_standalone_context_init(builder : LLVMBuilderRef; fusion_builder
         }
     }
 
-    // Whole-compiler-lib link: register the fusion engine (needed by simulate). Skip on wasm —
-    // cross-link only sees libDaScript_runtime.a (no jit_register_fusion), and exes never read it (#2805).
-    if (needs_whole_lib && target.arch != JitTargetArch.wasm) {
+    // Whole-compiler-lib link: register the fusion engine (simulate
+    // needs it). Skip on a cross link - it sees only the runtime
+    // archive (no jit_register_fusion), and exes never read it (#2805).
+    if (needs_whole_lib && !target.cross) {
         let reg_fusion_type = jit_fn_type($() : void {})
         var reg_fusion_fn = declare_extern_fn("jit_register_fusion", reg_fusion_type)
         LLVMBuildCall2(fusion_builder, reg_fusion_type, reg_fusion_fn, array<LLVMValueRef>(), "")

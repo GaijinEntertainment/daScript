@@ -448,6 +448,9 @@ bitfield public JitFeatures {
 //! generic builds only DAS_JIT_{X64,ARM64}_FORCE_FEATURES (emit-only)
 struct public JitTarget {
     arch : JitTargetArch
+    //! a cross triple: the link brings only that target's runtime
+    //! archive - every module is static, none loads dynamically
+    cross : bool
     //! the tier gates came from the running box's cpuid (false: the
     //! generic or forced-only rail)
     host_features : bool
@@ -716,6 +719,7 @@ def public make_jit_target(target_triple : string = ""; host_features_asked : bo
     let host_features = host_features_asked && empty(jit_baseline_class())
     t.host_features = host_features
     t.arch = jit_target_arch(target_triple)
+    t.cross = !empty(target_triple)
     t.wasm_threads = wasm_threads
     // host targets take the running box's cpuid truth; explicit x64
     // cross triples - and generic-CPU exe builds - take
