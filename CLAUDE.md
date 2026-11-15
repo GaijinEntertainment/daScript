@@ -202,7 +202,7 @@ the defect, however true each clause is.
 
 Read `skills/internal/writing_skills.md` first - it carries the full checklist. The three that matter most:
 
-1. **The folder IS the audience decision.** `skills/*.md` ships with the SDK - where `src/`, `tests/`, `benchmarks/`, `doc/source/` and `modules/*/src` **do not exist**; `skills/internal/` never ships; `skills/daslang/` is the standalone language skill. Decide before writing (`skills/internal/skill_taxonomy.md`); a file mixing SDK-usable content with repo plumbing serves neither audience.
+1. **The folder IS the audience decision.** `skills/*.md` ships with the SDK - where `src/`, `tests/`, `benchmarks/`, `doc/source/` and the `modules/*/src` sources **do not exist**; `skills/internal/` never ships; `skills/daslang/` is the standalone language skill. Decide before writing (`skills/internal/skill_taxonomy.md`); a file mixing SDK-usable content with repo plumbing serves neither audience.
 2. **Never fix an audience mismatch by shipping `src/` or `tests/`** - mark the line (or its heading, covering a whole section) `repo-only` instead. `python3 ci/check_shipped_skills.py <bundle>` enforces this per-PR via `ci/smoke_test_bundle.sh`, along with `bin/Release/...` paths, `daslang.exe` invocations, machine-local paths, dead relative links, references to skills the bundle doesn't carry, and `skills/daslang/` purity (no marker escape there).
 3. **Register it.** Every skill gets a row in the top-level `CLAUDE.md` table; a shipped skill additionally gets one in `install/CLAUDE.md` (the gate fails the bundle without it). A skill with no trigger row is a skill nobody opens.
 

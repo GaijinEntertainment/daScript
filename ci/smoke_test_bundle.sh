@@ -254,6 +254,24 @@ else
 fi
 
 echo
+echo "dasImgui's C++ payload:"
+# A package that binds against dasImgui (dasImguiImplot, dasImguiNodeEditor) includes the
+# module's headers, its generated .inc files and the Dear ImGui headers from the bundle.
+if [[ -d "$BUNDLE/modules/dasImgui" ]]; then
+    for rel in src/cb_dasIMGUI.h src/need_dasIMGUI.h src/dasIMGUI.enum.decl.inc imgui/imgui.h; do
+        if [[ -f "$BUNDLE/modules/dasImgui/$rel" ]]; then
+            printf '  %-52s OK\n' "modules/dasImgui/$rel"
+            PASS=$((PASS + 1))
+        else
+            printf '  %-52s MISSING\n' "modules/dasImgui/$rel"
+            FAIL=$((FAIL + 1))
+        fi
+    done
+else
+    printf '  %-52s SKIP (no dasImgui in the bundle)\n' "modules/dasImgui"
+fi
+
+echo
 echo "Runtime launch:"
 # A stdio JSON-RPC server (the MCP server and the DAP bridge run from source, the watchdog's
 # LSP front in the static exe) is started on empty stdin: a clean exit is the only safe
