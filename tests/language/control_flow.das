@@ -4,6 +4,8 @@ require dastest/testing_boost public
 require daslib/random
 require daslib/if_not_null
 require daslib/defer
+require daslib/rtti
+require strings
 
 // --- helpers for postfix if ---
 
@@ -1537,6 +1539,31 @@ def test_try_recover_return(t : T?) {
     g_try_fin = 0
     t |> equal(return_through_finally_from_try(1), 52, "a return out of a loop inside the arm")
     t |> equal(g_try_fin, 100, "... runs the arm's finally on its way out")
+}
+
+[sideeffects]
+def recovered_message(text : string) : string {
+    var seen = ""
+    try {
+        panic(text)
+    } recover {
+        seen = clone_string(this_context().last_exception)
+    }
+    return seen
+}
+
+[test(description = "a recover arm reads the panic it caught from the context's last_exception, a long message after a short one too")]
+def test_recover_reads_last_exception(t : T?) {
+    let short = recovered_message("short panic")
+    t |> success(find(short, "short panic") >= 0, "a short panic's message")
+    // Longer than the last message, so a stale view of it shows.
+    let long = build_string() $(var writer) {
+        for (_ in range(20)) {
+            writer |> write("a much longer panic message ")
+        }
+    }
+    t |> success(find(recovered_message(long), long) >= 0,
+                 "the long panic's message after the short one")
 }
 
 struct WithPoint {

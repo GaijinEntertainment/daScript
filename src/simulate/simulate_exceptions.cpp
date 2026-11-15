@@ -236,13 +236,13 @@ namespace das {
             try_block();
         } catch ( const dasException & ) {
             __context__->fastCallDepth = fcd; __context__->framedCallDepth = fcd2; //-V1048
+            __context__->last_exception = __context__->exception;
+            __context__->exception = nullptr;
             catch_block();
             __context__->abiArg = aa;
             __context__->abiCMRES = acm;
             __context__->stack.pop(EP,SP);
             __context__->stopFlags = 0;
-            __context__->last_exception = __context__->exception;
-            __context__->exception = nullptr;
         }
 #else
         jmp_buf ev;
@@ -252,14 +252,14 @@ namespace das {
             try_block();
         } else {
             __context__->fastCallDepth = fcd; __context__->framedCallDepth = fcd2;
+            __context__->last_exception = __context__->exception;
+            __context__->exception = nullptr;
             catch_block();
             __context__->throwBuf = JB;
             __context__->abiArg = aa;
             __context__->abiCMRES = acm;
             __context__->stack.pop(EP,SP);
             __context__->stopFlags = 0;
-            __context__->last_exception = __context__->exception;
-            __context__->exception = nullptr;
         }
         __context__->throwBuf = JB;
 #endif
