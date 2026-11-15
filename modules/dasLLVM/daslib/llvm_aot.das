@@ -80,7 +80,8 @@ def private emit_aot_register_ctor_dtor(types : PrimitiveTypes?; funcs : array<F
 // Build a load ctor that re-resolves this AOT object's builtin-accessor globals to the HOST's real
 // helpers (offline objects leave them null+internal since codegen-process addresses are meaningless
 // there) and points ExprAddr globals at their publ symbols. No module/function registration.
-def public emit_aot_object_globinit(ctx : LLVMContextRef; mod : LLVMOpaqueModule?;
+def public emit_aot_object_globinit(target : JitTarget; ctx : LLVMContextRef;
+                                    mod : LLVMOpaqueModule?;
                                     var types : PrimitiveTypes?; var funcs : array<FunctionPtr>;
                                     var uids : UidNodes?; prog : Program?) : LLVMOpaqueValue? {
     // void das_aot_object_globinit_constructor(Context* ctx): ctx is used to
@@ -92,7 +93,8 @@ def public emit_aot_object_globinit(ctx : LLVMContextRef; mod : LLVMOpaqueModule
     LLVMPositionBuilderAtEnd(b, LLVMAppendBasicBlockInContext(ctx, ctor, "entry"))
     // Aliases the caller's uids; do NOT delete it (deletion cascades into that shared uid, which the
     // caller still uses). It's a gc_node, reclaimed by the surrounding ast_gc_guard / process teardown.
-    var extern_resolver = new CollectExternVisitor(null, ctx, b, mod, types, uids, false, LlvmJitMode.LLVM_AOT)
+    var extern_resolver = new CollectExternVisitor(null, ctx, b, mod, types, uids, false,
+                                                   LlvmJitMode.LLVM_AOT, target)
     extern_resolver.prog = prog     // the selection a constructor is checked against is the program's
     extern_resolver.aot_ctx_arg = LLVMGetParam(ctor, 0u)
     make_visitor(*extern_resolver) $(adapter_resolve) {
@@ -110,11 +112,11 @@ def public emit_aot_object_globinit(ctx : LLVMContextRef; mod : LLVMOpaqueModule
 
 //! Build both offline-AOT-object ctors (the extern-resolver globinit + the das_aot_register ctor) and
 //! return the (ctor, dtor) pair to append to llvm.global_ctors/dtors. Called by run_jit in emit_aot_object mode.
-def public build_llvm_aot_ctors(ctx : LLVMContextRef; mod : LLVMOpaqueModule?;
+def public build_llvm_aot_ctors(target : JitTarget; ctx : LLVMContextRef; mod : LLVMOpaqueModule?;
                                 var types : PrimitiveTypes?; var funcs : array<FunctionPtr>;
                                 declined : array<tuple<FunctionPtr; string>>;
                                 var uids : UidNodes?; prog : Program?) : AotCtorDtor {
-    let glob_ctor = emit_aot_object_globinit(ctx, mod, types, funcs, uids, prog)
+    let glob_ctor = emit_aot_object_globinit(target, ctx, mod, types, funcs, uids, prog)
     return emit_aot_register_ctor_dtor(types, funcs, declined, uids, prog, glob_ctor)
 }
 

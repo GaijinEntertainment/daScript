@@ -22,7 +22,7 @@ require daslib/defer
 require math
 
 
-def public lib_link_note(kind : JitArtifact; link_whole_lib : bool) : string {
+def public lib_link_note(target : JitTarget; kind : JitArtifact; link_whole_lib : bool) : string {
     let windows = get_platform_name() == "windows"
     match (kind) {
         JitArtifact.static_lib => $ {
@@ -33,7 +33,7 @@ def public lib_link_note(kind : JitArtifact; link_whole_lib : bool) : string {
             return "Link this archive plus <das_root>/lib/{rt_static}.{whole}{sys}"
         }
         JitArtifact.object => $ {
-            let threads = g_target_wasm_threads ? " -pthread" : ""
+            let threads = target.wasm_threads ? " -pthread" : ""
             let whole = (link_whole_lib
                 ? ("\nThis library registers a module that lives in the compiler library, " +
                     "and the wasm runtime\narchive does not carry the compiler library.")

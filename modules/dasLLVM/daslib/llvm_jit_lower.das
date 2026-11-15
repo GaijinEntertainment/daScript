@@ -93,12 +93,14 @@ def public has_interop_lowering(expr : ExprCallFunc?) : bool {
     return result
 }
 
-def public lookup_interop_lowering(var g_ctx : LLVMContextRef; var g_builder : LLVMOpaqueBuilder?;
+def public lookup_interop_lowering(target : JitTarget; var g_ctx : LLVMContextRef;
+                                   var g_builder : LLVMOpaqueBuilder?;
                                    var types : PrimitiveTypes?; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>;
                                    slow : block<() : LLVMOpaqueValue?>) : LLVMOpaqueValue? {
     var result : LLVMOpaqueValue?
     g_lower_lookup |> get(lowering_name(expr)) $(pfun) {
-        result = pfun |> invoke(JitCtx(ctx = g_ctx, types = types, builder = g_builder), expr, arguments) {
+        var jit = JitCtx(ctx = g_ctx, types = types, builder = g_builder, target = target)
+        result = pfun |> invoke(jit, expr, arguments) {
             return invoke(slow)
         }
     }

@@ -200,12 +200,13 @@ def private soft_fp_lane(b : LLVMBuilderRef; val : LLVMOpaqueValue?; dstType : L
 //! fpext / fptrunc between half, float and double, scalar or vector. Without hardware half converts
 //! (x86-64 without F16C) LLVM would lower a half convert to a compiler-rt call the JIT does not link,
 //! so there each half lane converts through jit_half_to_float / jit_float_to_half.
-def public build_fp_convert(b : LLVMBuilderRef; val : LLVMOpaqueValue?; dstType : LLVMOpaqueType?; name : string) : LLVMOpaqueValue? {
+def public build_fp_convert(target : JitTarget; b : LLVMBuilderRef; val : LLVMOpaqueValue?;
+                            dstType : LLVMOpaqueType?; name : string) : LLVMOpaqueValue? {
     let srcType = LLVMTypeOf(val)
     let srcBits = fp_lane_bits(srcType)
     let dstBits = fp_lane_bits(dstType)
     if (srcBits == dstBits) return val
-    if (target_has_half_converts() || (srcBits != 16 && dstBits != 16)) {
+    if (target_has_half_converts(target) || (srcBits != 16 && dstBits != 16)) {
         return srcBits < dstBits ? LLVMBuildFPExt(b, val, dstType, name) : LLVMBuildFPTrunc(b, val, dstType, name)
     }
     if (LLVMGetTypeKind(srcType) != LLVMTypeKind.LLVMVectorTypeKind) return soft_fp_lane(b, val, dstType)

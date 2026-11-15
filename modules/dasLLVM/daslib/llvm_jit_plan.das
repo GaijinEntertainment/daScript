@@ -515,9 +515,9 @@ def public fold_function_hints(funcs : array<FunctionPtr>; seed : uint64) : uint
     return h
 }
 
-// True when the program jits any [llvm_code] kernel — those emit host-specific IR (e.g. AVX2) a
-// generic x86-64 exe can't legalize, so a -exe carrying them must target the current box. Scanned
-// BEFORE target flags: the generators' decline predicates consult g_target_*, so order matters.
+// True when the program jits an [llvm_code] kernel: host IR (AVX2) a
+// generic x86-64 exe can't legalize, so its -exe targets this box.
+// Scanned BEFORE the JitTarget the decline predicates consult exists.
 def private has_generated_kernel(prog : Program?; jit_all_functions : bool) : bool {
     var found = false
     prog |> for_each_module() $(mod) {
