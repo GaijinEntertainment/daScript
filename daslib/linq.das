@@ -3329,8 +3329,6 @@ def element_at(var src : iterator<auto(TT)>; index : int) : TT -const -& {
         i ++
     }
     panic("element index out of range")
-    var t : TT -const -&
-    return <- t
 }
 
 def element_at_or_default(src : array<auto(TT)>; index : int) : TT -const -& {
@@ -3387,8 +3385,6 @@ def first(var src : iterator<auto(TT)>) : TT -const -& {
         }
     }
     panic("sequence contains no elements")
-    var t : TT -const -&
-    return <- t
 }
 
 def first_or_default(src : array<auto(TT)>; defaultValue : TT -&) : TT -const -& {

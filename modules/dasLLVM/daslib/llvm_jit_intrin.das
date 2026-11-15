@@ -543,7 +543,6 @@ def any2int(var ctx : JitCtx; val : LLVMOpaqueValue?; argType : Type; _outType :
             }
         } else {
             panic("unsupported any2int base type {argType}")
-            return null
         }
     }
 }
@@ -599,7 +598,6 @@ def any2float(var ctx : JitCtx; val : LLVMOpaqueValue?; argType : Type; _outType
     return LLVMBuildSIToFP(ctx.builder, val, outType, "") if (argType == Type.tInt8 || argType == Type.tInt16 || argType == Type.tInt || argType == Type.tInt64)
     return LLVMBuildUIToFP(ctx.builder, val, outType, "") if (argType == Type.tUInt8 || argType == Type.tUInt16 || argType == Type.tUInt || argType == Type.tUInt64)
     panic("unsupported any2float base type {argType}")
-    return null
 }
 
 def intrinsic_builtin_float_vec(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {

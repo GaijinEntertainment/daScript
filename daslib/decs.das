@@ -805,9 +805,6 @@ def public get(arch : Archetype; name : string; value : auto(TT)) {
         }
     }
     panic("decs: component array {name} not found")
-    unsafe {
-        return <- array<TT -const -& -#>()
-    }
 }
 
 [expect_dim(value), unsafe_outside_of_for]
@@ -1279,7 +1276,6 @@ def public find_component_index(arch : Archetype; name : string) : int {
         if (arch.components[i].name == name) return i
     }
     panic("decs: find_component_index - component '{name}' not found in archetype")
-    return -1
 }
 
 def public set_direct_at(var arch : Archetype; comp_idx : int; eidx : int;

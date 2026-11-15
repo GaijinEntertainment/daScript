@@ -800,37 +800,30 @@ def dot_kq(kqrow : uint8 const?; ksrow : uint8 const?; xqp : int8 const?; xsp : 
 
 def dot_kq(_kqrow : uint8 const?; _ksrow : uint8 const?; _xqp : int8 const?; _xsp : float const?; _xbsp : int const?; _n : int64; _f : KqTag_q8) : float {
     panic("q8 has no kq plane dot")
-    return 0.0
 }
 
 def dot_kq(_kqrow : uint8 const?; _ksrow : uint8 const?; _xqp : int8 const?; _xsp : float const?; _xbsp : int const?; _n : int64; _f : KqTag_q51) : float {
     panic("q51 rides the per-32 planes, not the kq lattice dot")
-    return 0.0
 }
 
 def dot_kq(_kqrow : uint8 const?; _ksrow : uint8 const?; _xqp : int8 const?; _xsp : float const?; _xbsp : int const?; _n : int64; _f : KqTag_mx4) : float {
     panic("mx4 rides the expert nibble planes, not the kq lattice dot")
-    return 0.0
 }
 
 def dot_kq(_kqrow : uint8 const?; _ksrow : uint8 const?; _xqp : int8 const?; _xsp : float const?; _xbsp : int const?; _n : int64; _f : KqTag_iq4nl32) : float {
     panic("iq4nl32 rides the per-32 planes, not the kq lattice dot")
-    return 0.0
 }
 
 def dot_kq(_kqrow : uint8 const?; _ksrow : uint8 const?; _xqp : int8 const?; _xsp : float const?; _xbsp : int const?; _n : int64; _f : KqTag_q4032) : float {
     panic("q4032 rides the per-32 planes, not the kq lattice dot")
-    return 0.0
 }
 
 def dot_kq(_kqrow : uint8 const?; _ksrow : uint8 const?; _xqp : int8 const?; _xsp : float const?; _xbsp : int const?; _n : int64; _f : KqTag_q5032) : float {
     panic("q5032 rides the per-32 planes, not the kq lattice dot")
-    return 0.0
 }
 
 def dot_kq(_kqrow : uint8 const?; _ksrow : uint8 const?; _xqp : int8 const?; _xsp : float const?; _xbsp : int const?; _n : int64; _f : KqTag_mlx4 | KqTag_mlx8 | KqTag_mlx4b | KqTag_mlx8b | KqTag_mlx6b) : float {
     panic("an affine member rides the per-32 planes, not the kq lattice dot")
-    return 0.0
 }
 
 //! Rows [rb, re) of a kq region off the DISK-ORDER planes through the format's dot against one Q8_K activation row: y[i] =
@@ -1889,7 +1882,6 @@ def mlx_half(lo, hi : uint8; _f : KqTag_mlx4 | KqTag_mlx8) : float => f16_to_f32
 def mlx_half(lo, hi : uint8; _f : KqTag_mlx4b | KqTag_mlx8b | KqTag_mlx6b) : float => unsafe(reinterpret<float>((uint(lo) | (uint(hi) << 8u)) << 16u))
 def mlx_half(_lo, _hi : uint8; _f : auto(TT)) : float {
     panic("mlx_half: {typeinfo stripped_typename(type<TT>)} is no affine member")
-    return 0.0
 }
 
 //! an affine member's code width
@@ -1898,7 +1890,6 @@ def mlx_bits(_f : KqTag_mlx8 | KqTag_mlx8b) : int => 8
 def mlx_bits(_f : KqTag_mlx6b) : int => 6
 def mlx_bits(_f : auto(TT)) : int {
     panic("mlx_bits: {typeinfo stripped_typename(type<TT>)} is no affine member")
-    return 0
 }
 
 //! code `k` of an affine block at `q`: 4-bit codes at bits 4k..4k+3 of the little-endian words (byte k/2, low nibble first),

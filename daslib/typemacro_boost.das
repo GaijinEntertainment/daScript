@@ -240,7 +240,6 @@ def public is_typemacro_template_instance(passArgument, templateType : TypeDeclP
     if (passArgument == null || passArgument.baseType != Type.tStructure || passArgument.structType == null) return false
     if (!templateType.isStructure) {
         panic("macro implementation error. templateType {describe(templateType)} is not a structure")
-        return false
     }
     for (ann in passArgument.structType.annotations) {
         if (ann.annotation.name == "typemacro_template") {

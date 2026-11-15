@@ -3730,7 +3730,6 @@ without a ``return`` after it, so the statement is dead code::
 
 Only the first dead statement of a block is reported; ``--fix`` deletes it and every statement
 after it in the block. Silent when the next statement is a label, which a ``goto`` can reach.
-Off by default.
 
 -----
 Tests

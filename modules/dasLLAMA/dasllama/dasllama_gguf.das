@@ -680,7 +680,6 @@ def gguf_int(m : GGUFMeta; bytes : array<uint8> | #; key : string) : int64 {
         return rd_i64(bytes, o)
     }
     panic("gguf: key '{key}' is not an integer (type {t})")
-    return 0l
 }
 
 //! Read a float32 value (also accepts the rare f64-typed key, narrowed).
@@ -693,7 +692,6 @@ def gguf_f32(m : GGUFMeta; bytes : array<uint8> | #; key : string) : float {
         return float(unsafe(reinterpret<double>(rd_u64(bytes, loc.data_off))))
     }
     panic("gguf: key '{key}' is not a float (type {loc.gtype})")
-    return 0.0
 }
 
 //! Read a string value.

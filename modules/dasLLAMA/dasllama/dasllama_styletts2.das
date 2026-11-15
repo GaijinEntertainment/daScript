@@ -1456,7 +1456,6 @@ def styletts2_gpu_seat_present(stage : string) : bool {
         return g_st2_drv.gen != null
     }
     panic("dasLLAMA styletts2: no seat named '{stage}'")
-    return false
 }
 
 //! The iSTFTNet generator on token-major rows x [t][c]: two upsampling stages, each adding the

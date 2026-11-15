@@ -165,7 +165,6 @@ def private at(expr : string; offset : int) : int {
         } else {
             stackwalk()
             panic("out of range {offset} of {len}")
-            return 0
         }
     } else {
         unsafe {
@@ -274,7 +273,6 @@ def private from_hex(ch : int) {
     if (ch >= 'a' && ch <= 'f') return ch - 'a' + 10
     if (ch >= 'A' && ch <= 'F') return ch - 'A' + 10
     panic("from_hex")
-    return 0
 }
 
 def private from_hex(ch1, ch2) => from_hex(ch1) * 16 + from_hex(ch2)
@@ -1464,7 +1462,6 @@ def private re_early_out(var cset : CharSet; node : ReNode?) : bool {
         return node.min_rep == 0
     } else {
         panic("unsupported operation")
-        return false
     }
 }
 

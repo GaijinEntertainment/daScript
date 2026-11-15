@@ -61,7 +61,6 @@ def kv_dtype_of(ordinal : int) : KVDtype {
         return dt if (int(dt) == ordinal)
     }
     panic("no KVDtype has ordinal {ordinal}")
-    return KVDtype.f32
 }
 
 //! The codec a user's spelling names - `f32`, `f16`, `q8_0`, `tq4`, any case; `known` false (and f16) for any other text.

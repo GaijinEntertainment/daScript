@@ -337,9 +337,6 @@ struct template TCuckooHashTable {
             }
         }
         panic("key not found")
-        unsafe {
-            return khv[0].value
-        }
     }
 
     [explicit_const_class_method, hint(unsafe_range_check, noalias=self)]

@@ -1,7 +1,6 @@
-//! STYLE049 (armed by _enable_default_off_rules) is reported for: a
-//! statement after a call that never returns, such as panic.
+//! STYLE049 is reported for: a statement after a call that never
+//! returns, such as panic.
 options gen2
-options _enable_default_off_rules = true
 options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; splices rewrite them
 
 expect 31209:3

@@ -89,7 +89,6 @@ def load_audio_embedder(path : string) : AudioEmbedder {
         return <- e
     }
     panic("dasLLAMA audio: '{path}' carries no audio tower any family serves (gemma4a, or a whisper-class tower: qwen2a, qwen2.5o, ultravox, voxtral)")
-    return <- AudioEmbedder()
 }
 
 //! The whole audio path for the carried family: 16 kHz mono samples → the family's encode into
@@ -98,5 +97,4 @@ def encode_audio_(e : AudioEmbedder; var s : AudioState; samples : array<float> 
     if (e.kind == AudioKind.gemma4a) return gemma4a_encode_all(e.gemma4a, s.gemma4a, samples, out)
     if (e.kind == AudioKind.audio_tower) return audio_tower_encode_all(e.audio_tower, s.audio_tower, samples, out)
     panic("dasLLAMA audio: encode_audio_ on an embedder with no audio arm")
-    return 0l
 }

@@ -11005,7 +11005,6 @@ def private pf_moe_kq_row(fmt : KqFmt) : MoeKqRow {
         enc_t = @@pf_enc_moe_mm_iq2xxs_t_c, enc_th = @@pf_enc_moe_mm_iq2xxs_th_c, enc_th128 = @@pf_enc_moe_mm_iq2xxs_th128_c, enc_thr = @@pf_enc_moe_mm_iq2xxs_thr_c)
     return pf_moe_b32_row(fmt) if (kq_dense_b32(fmt))
     panic("metal moe prefill: expert plane format {fmt} has no routed row - moe_fmt_metal_served admitted it")
-    return MoeKqRow()
 }
 
 //! the per-32 rows of `pf_moe_kq_row`, one a `B32_STAMP_FMTS` member
@@ -11035,7 +11034,6 @@ def private pf_moe_b32_row(fmt : KqFmt) : MoeKqRow {
         pso_t = g_pf_pso_moe_mm_mlx8b_t, pso_th = g_pf_pso_moe_mm_mlx8b_th, pso_th128 = g_pf_pso_moe_mm_mlx8b_th128, pso_thr = g_pf_pso_moe_mm_mlx8b_thr,
         enc_t = @@pf_enc_moe_mm_mlx8b_t_c, enc_th = @@pf_enc_moe_mm_mlx8b_th_c, enc_th128 = @@pf_enc_moe_mm_mlx8b_th128_c, enc_thr = @@pf_enc_moe_mm_mlx8b_thr_c)
     panic("metal moe prefill: per-32 expert plane format {fmt} has no routed row")
-    return MoeKqRow()
 }
 
 //! some routed twin a contiguous gather panel can feed compiled on this box

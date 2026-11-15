@@ -100,7 +100,6 @@ def tts_seat_index(s : TtsGpuSeats; stage, who : string) : int {
         return i if (s.names[i] == stage)
     }
     panic("dasLLAMA {who}: no GPU seat named '{stage}'")
-    return -1
 }
 
 def tts_seat_call(var s : TtsGpuSeats; i : int) {

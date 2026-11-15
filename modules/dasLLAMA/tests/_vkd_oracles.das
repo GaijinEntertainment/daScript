@@ -580,8 +580,6 @@ def kq_gemv_float_oracle(fmt : int; wq, ws, xq : array<uint>; xs : array<float>;
         return <- iq2xxs_gemv_float_oracle(wq, ws, xq, xs, regions, n, d, nreg)
     }
     panic("format {fmt} carries no float witness (kq_has_float_oracle)")
-    var none : array<float>
-    return <- none
 }
 
 //! a two-word-row sub-block scale off the device row: iq4xs's signed ls - 32, or the iq3 row's 1 + 2s (`grid`: iq3s4's)

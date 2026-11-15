@@ -261,7 +261,6 @@ def policy_of(word : string) : Policy {
         return Policy.lfu
     }
     panic("hot_pool_sim: --policy {word} is not heat, lru or lfu")
-    return Policy.heat
 }
 
 [export]

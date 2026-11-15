@@ -56,7 +56,6 @@ def public select_graphics_queue_family(phys : VkPhysicalDevice) : uint {
         }
     }
     panic("no graphics queue family")
-    return 0u
 }
 
 //! the first memory type among `type_bits` carrying every flag of `want`, or -1 when the device has none: the form a caller with a fallback asks

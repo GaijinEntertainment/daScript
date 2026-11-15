@@ -422,7 +422,6 @@ def private convert_quote_expr(mod : Module?; var data : uint8 const?; info : Ty
         return convert_quote_structure(mod, data, tstr, info, field_loc);
     }
     panic("Unexpected type {tstr}!");
-    return null;
 }
 
 def convert_quote_to_expression(var arg_expr : Expression?; at : LineInfo) : Expression? {

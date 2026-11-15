@@ -528,7 +528,6 @@ def private flow_of(name : string) : PocketFlow {
     return PocketFlow.drifting if (name == "drifting")
     return PocketFlow.pointwise if (name == "pointwise")
     panic("dasLLAMA pocket: the flow head's type '{name}' is not one the engine samples (lsd, drifting, pointwise)")
-    return PocketFlow.lsd
 }
 
 [arch(at="../ARCHITECTURE_POCKET.md#pocket-one-step-head")]

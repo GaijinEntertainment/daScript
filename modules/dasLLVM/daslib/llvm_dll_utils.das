@@ -134,7 +134,6 @@ class public UidNodes {
             let who = thisFunc != null ? "{describe(thisFunc.at)}: {thisFunc.name}" : "a global initializer"
             panic("LLVM: {who} is outside the JIT function set - it fell back to the interpreter, " +
                 "so its `{hint}` has no id and cannot be emitted")
-            return DllName()
         }
         let id = unsafe(id_map[ptr])
         // nolint:STYLE014 — the sentinel contract below is load-bearing

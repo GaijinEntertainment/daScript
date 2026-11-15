@@ -252,7 +252,6 @@ def private rdec_unset_set_cls(cls_block : int64; cls_fmt : int; cap : float; su
 [unused_argument(x, cossin, ple_row, token, pos, cnt, pick_only, logits)]
 def private rdec_unset_token(x : array<float>; cossin : array<float>; ple_row : array<float>; token, pos, cnt : int64; pick_only : bool; var logits : array<float>) : int64 {
     panic("dasLLAMA: resident decode token hit without an installed GPU driver")
-    return -1l
 }
 [unused_argument(x_batch, cos_batch, ple_rows, ple_raw, npos, pos0, logits, experts)]
 def private rdec_unset_prefill(x_batch : array<float>; cos_batch : array<float>; ple_rows : array<float>; ple_raw : bool; npos : int64; pos0 : int64; var logits : array<float>; experts : RdecHostExpertsRowsFn) {
@@ -436,7 +435,6 @@ def private rdec_unset_set_host_experts(on : bool) {}
 [unused_argument(x, cossin, side, pos, cnt, pick_only, logits, experts)]
 def private rdec_unset_token_split(x : array<float>; cossin : array<float>; side : array<float>; pos, cnt : int64; pick_only : bool; var logits : array<float>; experts : RdecHostExpertsFn) : int64 {
     panic("dasLLAMA: resident split token hit without an installed GPU driver")
-    return -1l
 }
 
 var g_rdec_set_hc = @@rdec_unset_set_hc
@@ -1977,13 +1975,11 @@ def private moe_gpu_unset_ffn_xf_open(offs1 : int64 const?; offs3 : int64 const?
 [unused_argument(r_lo, r_hi, wait)]
 def private moe_gpu_unset_ffn_xf_push(r_lo, r_hi : int64; wait : bool) : bool {
     panic("dasLLAMA: f16-fed GPU FFN push hit without an installed chain")
-    return false
 }
 
 [unused_argument(r_lo, r_max)]
 def private moe_gpu_unset_ffn_xf_bundle(r_lo, r_max : int64) : int64 {
     panic("dasLLAMA: f16-fed GPU FFN bundle hit without an installed chain")
-    return 0l
 }
 
 def private moe_gpu_unset_ffn_xf_close {

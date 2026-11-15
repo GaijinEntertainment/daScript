@@ -65,7 +65,6 @@ def public to_enum(ent : auto(EnumT), name : string) : EnumT {
         if ("{e}" == name) return e
     }
     panic("to_enum: enum value '{name}' not found in enum '{typeinfo typename(type<EnumT>)}'")
-    return default<EnumT>
 }
 
 [template(ent), unused_argument(ent)]

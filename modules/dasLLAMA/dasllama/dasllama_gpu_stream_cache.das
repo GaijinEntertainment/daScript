@@ -42,7 +42,6 @@ typedef StreamPinnedFreeFn = function<(b : PinnedBuf) : void>
 [unused_argument(bytes, soft)]
 def private stream_pinned_alloc_unset(bytes : int64; soft : bool) : PinnedBuf {
     panic("dasLLAMA expert cache: a streamed stack asked for pinned memory before its home installed an allocator - require dasllama/dasllama_math_vulkan or dasllama/dasllama_math_cuda, whose init calls set_stream_pinned_fns")
-    return PinnedBuf()
 }
 
 [unused_argument(b)]

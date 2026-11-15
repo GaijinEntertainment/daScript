@@ -509,7 +509,6 @@ def private roster_on(roster; prefix : string) : bool {
         }
     }
     panic("no device-init roster entry starts with '{prefix}'")
-    return false
 }
 
 [test(description = "Every device-init roster entry is named once, says what rides on it and names only a Vulkan-tier knob, and each arming field (coopmat, cm2, decvec, ReBAR, subgroup pin) reads as its entry says"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-extension-roster")]

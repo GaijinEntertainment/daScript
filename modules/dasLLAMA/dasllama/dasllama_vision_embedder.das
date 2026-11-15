@@ -166,7 +166,6 @@ def load_vision_embedder(path : string) : VisionEmbedder {
         return <- e
     }
     panic("dasLLAMA vision: '{path}' is projector '{proj}' - no vision family serves it (gemma4uv, gemma4v, gemma3, qwen3vl_merger, qwen2.5o)")
-    return <- VisionEmbedder()
 }
 
 //! The MERGED image grid of the last encode when the carried family ropes the decoder with
@@ -192,5 +191,4 @@ def encode_image_(e : VisionEmbedder; var s : VisionState; img : VisionImage; ta
     if (e.kind == VisionKind.qwen3v) return encode_image_(e.qwen3v, s.qwen3v, img, tag, out)
     if (e.kind == VisionKind.qwen25v) return encode_image_(e.qwen25v, s.qwen25v, img, tag, out)
     panic("dasLLAMA vision: encode_image_ on an embedder with no vision arm")
-    return 0l
 }

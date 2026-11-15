@@ -268,9 +268,8 @@ def operator as CmdMove(var cmd : Cmd ==const) : CmdMove& {
     }
 }
 
-def operator as CmdMove(anything) {
+def operator as CmdMove(anything) : CmdMove {
     panic("Cannot cast to CmdMove")
-    return CmdMove()
 }
 
 [sideeffects]

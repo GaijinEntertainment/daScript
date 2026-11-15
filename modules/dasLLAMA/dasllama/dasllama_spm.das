@@ -486,7 +486,6 @@ def private pb_varint(d : array<uint8> const#; var at : int&) : uint64 {
         sh += 7ul
     }
     panic("dasLLAMA spm: a protobuf varint runs past the end of the model file")
-    return v
 }
 
 //! one protobuf field's span: its number, its wire type, and for a length-delimited or fixed field its payload bytes

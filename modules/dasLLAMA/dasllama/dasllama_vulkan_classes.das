@@ -7025,7 +7025,6 @@ def q8_batch_cls_ensure(v : int) : bool {
         return ensure_q8_batch_cls()
     }
     panic("dasLLAMA vulkan tier: no q8 batch class for variant {v}")
-    return false
 }
 
 def q8_batch_cls_set(v : int; bufs : uint64 const[6]; sizes : int64 const[6]; gbits : uint const[6]) : VkDescriptorSet {
@@ -7043,7 +7042,6 @@ def q8_batch_cls_set(v : int; bufs : uint64 const[6]; sizes : int64 const[6]; gb
         return set_q8_batch_cls(bufs, sizes, gbits)
     }
     panic("dasLLAMA vulkan tier: no q8 batch class for variant {v}")
-    return VkDescriptorSet()
 }
 
 def q8_batch_cls_enc(v : int; raw : VkCommandBuffer; var h : VkHaz; var set_ : VkDescriptorSet; var pc : BatchArgs; wgs : int64) {
@@ -7152,7 +7150,6 @@ def gemv_cls_set(fmt : int; bufs : uint64 const[6]; sizes : int64 const[6]; gbit
             fixed_array(gbits[0], gbits[1], gbits[2], gbits[3], gbits[4], gbits[5], 0u))
     }
     panic("dasLLAMA vulkan tier: no GEMV class for format {fmt}")
-    return VkDescriptorSet()
 }
 
 //! a decode GEMV set over a plane pair `p` (an arena's `arena_planes`, a stack's or a driver's own weights): the quant and

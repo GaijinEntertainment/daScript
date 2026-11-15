@@ -1714,7 +1714,6 @@ def emit_early_exit_lane(
             }
             tailStmts |> push_from <| qmacro_block_to_array() {
                 panic("sequence contains no elements")
-                return default<$t(retType)>
             }
         } else {
             let foundName = qn("found", at)
@@ -2066,11 +2065,8 @@ def emit_early_exit_lane(
                 $i(cntName) ++
             }
             if (opName == "element_at") {
-                let tName = qn("emptyT", at)
                 tailStmts |> push_from <| qmacro_block_to_array() {
                     panic("element index out of range")
-                    var $i(tName) : $t(retType)
-                    return <- $i(tName)
                 }
             } else {
                 let tName = qn("emptyT", at)
