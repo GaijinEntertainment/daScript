@@ -20,6 +20,10 @@
 #include <sstream>
 #include <chrono>
 
+#if defined(__APPLE__)
+#include <TargetConditionals.h>
+#endif
+
 #ifndef _WIN32
 extern char ** environ;
 #endif
@@ -2390,7 +2394,12 @@ namespace das {
             context->throw_error_at(at, "system of null");
             return -1;
         }
+#if defined(__APPLE__) && TARGET_OS_IPHONE
+        context->throw_error_at(at, "system is not available on iOS");
+        return -1;
+#else
         return system(cmd);
+#endif
     }
 
     char * get_full_file_name ( const char * path, Context * context, LineInfoArg * at ) {
