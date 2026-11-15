@@ -31,9 +31,9 @@ let private ALLOWED_HOSTS <- {
     "github.com"
 }
 
-// tests/ is the Playwright harness and doc/ is generated Sphinx output - neither is a page
-// this folder authors, and neither ships from this tree
-let private SKIP_DIRS <- { "tests", "doc", "node_modules" }
+// tests/ is the Playwright harness - not a page this folder authors
+let private SKIP_DIRS <- { "tests" }
+let private RUNTIME_SKIP_DIRS <- { "tests", "wasm" }
 
 //! one top-level selector -> its normalized body. An at-rule (`@media ...`) block is skipped
 //! whole: its nested rules are responsive OVERRIDES of the same selectors by design
@@ -278,20 +278,16 @@ def private check_dl_names_are_defined {
 let private SAMPLE_COMPILE_TIMEOUT_S = 300.0   //! under the gate runner's cap
 let private SAMPLE_SLOW_S = 10.0lf
 
-def private check_embedded_samples {
+def private is_sample_page(path : string) : bool {
+    let folder = dir_name(path)
+    return ((folder == "site" && path |> ends_with(".html")) ||
+        (folder == "site/_news" && path |> ends_with(".md")))
+}
+
+def private check_embedded_samples(tracked : array<string>) {
     let argv <- get_command_line_arguments()
     let self_binary = argv[0]
-    var pages : array<string>
-    dir("site") $(name) {
-        if (name |> ends_with(".html")) {
-            pages |> push("site/{name}")
-        }
-    }
-    dir("site/_news") $(name) {
-        if (name |> ends_with(".md")) {
-            pages |> push("site/_news/{name}")
-        }
-    }
+    var inscope pages <- [for (path in tracked); path; where is_sample_page(path)]
     for (page in pages) {
         let text = fread(page)
         if (empty(text) && stat(page).size > 0ul) {
@@ -360,26 +356,16 @@ def private find_first_error_line(output : string) : string {
     return "(no error line captured)"
 }
 
-def private site_scripts_under(root : string; var out : array<string>) {
-    dir(root) $(name) {
-        let skipped = name == "node_modules" || name == "tests" || name == "wasm"
-        return if (skipped || name |> starts_with("."))
-        let path = "{root}/{name}"
-        let st = stat(path)
-        if (st.is_valid && st.is_dir) {
-            site_scripts_under(path, out)
-        } elif (name |> ends_with(".html") || name |> ends_with(".js")) {
-            out |> push(path)
-        }
-    }
+def private is_site_script(path : string) : bool {
+    return false if (path_under_dirs(path, RUNTIME_SKIP_DIRS))
+    return path |> ends_with(".html") || path |> ends_with(".js")
 }
 
-def private check_runtime_starts_past_the_gate {
+def private check_runtime_starts_past_the_gate(tracked : array<string>) {
     let readme = fread("site/README.md")
     let section = find(readme, "\{#runtime-gate\}")
     let ledger = section < 0 ? "" : slice(readme, section, find(readme, "\n## ", section))
-    var files : array<string>
-    site_scripts_under("site", files)
+    var inscope files <- [for (path in tracked); path; where is_site_script(path)]
     files |> sort
     for (path in files) {
         continue if (path == "site/files/wasm-gate.js")
@@ -402,14 +388,15 @@ def main() : int {
         to_log(LOG_ERROR, "site/REVIEW.das: run from the repo root\n")
         return 2
     }
+    var inscope tracked <- tracked_files(["site"], "the site's pages and scripts")
     check_dl_selector_parity()
     check_dl_names_are_defined()
-    check_embedded_samples()
-    check_runtime_starts_past_the_gate()
+    check_embedded_samples(tracked)
+    check_runtime_starts_past_the_gate(tracked)
     check_published_records_no_home_paths(RECORDS_DIR)
     check_record_receipts()
     check_bench_cell_parity("site/files/performance_bench.json", "benchmarks/sql/results.md")
     check_bench_cell_parity("site/files/performance_engines.json", "examples/benchmarks/sql/results.md")
-    gate_web_third_party(["site"], SKIP_DIRS, ALLOWED_HOSTS)
+    gate_web_third_party_files(tracked, SKIP_DIRS, ALLOWED_HOSTS)
     return gate_verdict("site")
 }

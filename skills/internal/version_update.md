@@ -7,6 +7,7 @@ How to update the daslang version number across the codebase.
 | File | What to change | Example |
 |---|---|---|
 | `include/daScript/misc/platform.h` | `DAS_VERSION_MAJOR`, `DAS_VERSION_MINOR`, `DAS_VERSION_PATCH` macros | `#define DAS_VERSION_PATCH 1` |
+| `include/daScript/ast/ast_serializer.h` | `AstSerializer::getVersion()` one higher, with its trailing comment replaced by this bump's reason - `get_das_version()` is folded to a string constant at compile time, and the module cache's stream header checks this number, never the daslang version, so without the bump a rebuilt binary serves the old version string from cached modules | `return N + 1;   // N+1: get_das_version() folds X.Y.Z into the AST as a constant` |
 | `CMakeLists.txt` | `project (DAS VERSION X.Y.Z)` | `project (DAS VERSION 0.6.1)` |
 | `doc/source/conf.py` | `version` and `release` - both carry the full X.Y.Z | `version = u'0.6.4'`, `release = u'0.6.4'` |
 
@@ -20,7 +21,7 @@ How to update the daslang version number across the codebase.
 | `install/README.md` | `- **Version:** X.Y.Z` line |
 | Every `site/*.html` page with a `forge-nav__version` span, and `site/blog/template.html` | `forge-nav__version` chip |
 | `site/README.md` | Documented navigation-chip version |
-| Every file carrying the `hand-maintained version chip` comment (`site-dasllama/*.html`, `site-dasllama/_stories/template.html`, `examples/dasLLAMA/storyteller/web_shell.html`) | The `vX.Y.Z` span beside the comment; `site-dasllama/stories/*.html` are generated from the template by `site-dasllama/build_news.py` - rerun it, never hand-edit them |
+| Every file `git grep -l "hand-maintained version chip"` lists, except this skill and the pages `site-dasllama/build_news.py` generates into `site-dasllama/stories/` and `site-dasllama/articles/` | The `vX.Y.Z` span beside the comment; the generated pages come from `_stories/template.html` and `_articles/template.html` - rerun the script, never hand-edit them |
 | `site-dasllama/sidecars.html` | The `engine <b>X.Y.Z</b>` fallback text in `dio-sc-stats` (it must match what the live script renders) |
 
 ## Derived (auto-computed, no manual change needed)
@@ -29,7 +30,7 @@ These are computed from the macros in `platform.h` - no manual update required:
 
 - `DAS_VERSION` composite macro: `MAJOR*10000 + MINOR*100 + PATCH`
 - `DAS_BUILD_ID`: `DAS_VERSION * 100 + sizeof(void*) [+ 10 if assertions]`
-- `get_das_version()` runtime function in `src/builtin/module_builtin_runtime.cpp` - formats from the macros
+- `get_das_version()` runtime function in `src/builtin/module_builtin_runtime.cpp` - formats from the macros; a cached module keeps the string it was compiled with until `getVersion()` moves (the canonical table)
 - CMake `PROJECT_VERSION` - derived from the `project()` call
 
 ## Full version (X.Y.Z)
@@ -40,13 +41,14 @@ These are computed from the macros in `platform.h` - no manual update required:
 ## Checklist
 
 1. Edit `platform.h` macros
-2. Edit `CMakeLists.txt` project version
-3. Edit both `version` and `release` in `doc/source/conf.py`
-4. Edit `doc/source/reference/index.rst` title
-5. Edit `doc/source/stdlib/index.rst` title
-6. Edit the `get_das_version()` example string in `doc/source/stdlib/handmade/function-builtin-get_das_version-0x47c28931e7e7291e.rst`, then regenerate the stdlib RST with das2rst (`skills/internal/documentation_rst.md`)
-7. Edit `install/README.md` version line
-8. Edit the `forge-nav__version` chips, their `site/README.md` description, every `hand-maintained version chip` span and the sidecars fallback, then rerun `python3 site-dasllama/build_news.py --root site-dasllama`
-9. Leave untouched every string that names a published release: historical news and release notes, benchmark provenance, the `sudo apt install ./daslang_X.Y.Z_amd64.deb` commands in `site/index.html` and `site/downloads.html`, and the latest-release news entry in `site/downloads.html` - they point at an artifact that exists, and the new one does not until the release is published
-10. Build and verify `get_das_version()` returns the new version
-11. After the release is published, update those `.deb` commands and the latest-release entry to X.Y.Z
+2. Bump `AstSerializer::getVersion()` in `ast_serializer.h` and replace its trailing comment with this bump's reason
+3. Edit `CMakeLists.txt` project version
+4. Edit both `version` and `release` in `doc/source/conf.py`
+5. Edit `doc/source/reference/index.rst` title
+6. Edit `doc/source/stdlib/index.rst` title
+7. Edit the `get_das_version()` example string in `doc/source/stdlib/handmade/function-builtin-get_das_version-0x47c28931e7e7291e.rst`, then regenerate the stdlib RST with das2rst (`skills/internal/documentation_rst.md`)
+8. Edit `install/README.md` version line
+9. Edit the `forge-nav__version` chips, their `site/README.md` description, every `hand-maintained version chip` span and the sidecars fallback, then rerun `python3 site-dasllama/build_news.py --root site-dasllama`
+10. Leave untouched every string that names a published release: historical news and release notes, benchmark provenance, the `sudo apt install ./daslang_X.Y.Z_amd64.deb` commands in `site/index.html` and `site/downloads.html`, and the latest-release news entry in `site/downloads.html` - they point at an artifact that exists, and the new one does not until the release is published
+11. Build and verify `get_das_version()` returns the new version - from the program, and from a module the previous binary cached
+12. After the release is published, update those `.deb` commands and the latest-release entry to X.Y.Z

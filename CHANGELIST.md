@@ -1,5 +1,177 @@
 # daslang Changelog
 
+## 0.6.6 (November 2026)
+
+### New Features
+
+#### Sealed and Private Class Methods Compile to Direct Calls (#4500, #4559)
+
+- **A call to a method a sealed class declares is a direct call** - `p->method()` through a `class sealed`, for a method no ancestor declares, compiles to a call of that function instead of a load from the instance's method field, so the JIT and AOT can inline it; a `def sealed` override and an inherited method stay virtual, since their base field can still be assigned
+- **A call to a private class's method nothing replaces is a direct call** - when a method's declaring class and every class deriving from it are private to the module, and nothing in the module overrides the method below the call's static class or assigns it, `p->method()` compiles to a direct call with no `sealed` needed
+- **A sealed method can't be assigned through its sealed type** - a method of a `class sealed`, or a `def sealed` method, can no longer be assigned (`obj.method = @@f`, `<-`) or named in an initializer (`new C(method = @@f)`) through that type; each is `error[30952]`. A method a sealed class declares is then fixed for every instance
+
+#### Typed Aliasing in the JIT (#4488, #4491)
+
+- **The JIT separates `float` and `double` accesses from integer and pointer accesses** - every load and store of a jitted function carries a TBAA tag for its class (`float`, `double`, one class for every wider integer, pointer and `half`; bytes, bools, vectors and aggregates alias everything), so a loop that reads its bound through an `int?` beside `float` stores hoists the read and vectorizes: lookibed's loop goes from 16.9 to 3.5 us per pass, the by-value figure. A function whose body reinterprets memory under another type is left out automatically, and so is every function the punned view reaches through a call, a return, an out argument, a lambda, a callback or a shared global; `[hint(strict_aliasing)]` and `[hint(no_strict_aliasing)]` override per function, `options strict_aliasing = false` per program. `LLVM_JIT_CODEGEN_VERSION` 0xA8: cached JIT DLLs re-emit once
+- **A `[hint]` naming a parameter that does not exist is a compile error, and the pointer model is written down** (#4446) - `noalias = p`, `nocapture = p` and `align16 = p` on a name that is not a parameter did nothing, silently; the error now names the function and its parameters. The JIT attaches no type-based alias information by design - a pointer is an address, so a `float?` store may change what an `int?` points at - and `[hint(noalias = p)]` is the promise under which a loop hoists the reads it makes through its other pointers; dasLLVM's README, its architecture doc and the language skill say so
+
+#### `daslang` Is a Native Loader Stub; the pip Wheel Ships It as Itself, With the Headers (#4445, #4486)
+
+- **`bin/daslang` and `bin/daslang-live` are loader stubs that find their root** (#4445) - the stubs load `lib/libdaslang_main` and `lib/libdaslang_live_main` (`bin/` on Windows), so `pip install daslang` runs the binary itself with no Python console script in front of every command (that shim cost 15 ms a run on macOS, 100 ms on Windows). A tree that copies `daslang` somewhere else carries those libraries or points a `daslang.root` sidecar at a tree that has them
+- **The daslang wheel carries `include/`** (#4486) - `daspkg install` of a package with a C++ half builds against a pip-installed SDK; daspkg names a headerless SDK instead of failing inside the package's CMake
+
+#### The Interpreter Leaves the Runtime Library; Compiler Headers Leave `include/` (#4436, #4490, #4563)
+
+- **The runtime library holds no compiler code** (#4436) - the AST to SimNode walk, the interpreter's node bodies, the AST serializer and module cache, and the front end's file classes move to the compiler library; a JIT exe, a standalone context and a `-lib` library link a runtime that never calls into the compiler
+- **30 headers and 2 `.inc` files move from `include/` to `src/`** (#4490) - compiler-internal headers only `src/` uses; four dead headers are deleted, `VisitorAdapter` is a forward declaration only, and generated AOT code includes less. An embedder that included one of them must stop
+- **The interpreter's fusion patterns are constant data** (#4563) - each `simulate_fusion_*.cpp` lists its patterns in a `constexpr` array and the lookup index is built by the C++ compiler; nothing creates, frees or orphans a fusion table at run time
+
+#### Tests Merge by Topic: `[test(description=, timeout=)]`, `dastest --together` (#4439, #4489, #4495, #4509, #4511, #4537, #4564)
+
+- **`tests/` holds 1068 files instead of 1929** (#4489) - a dastest run pays per file and 48% of the suite files held one `[test]`. A new `[test]` goes into an existing topic file or the folder's `uncategorized.das`, never a new file; `[test(description = "...")]` states the claim and dastest prints it under FAIL, `[test(timeout = N)]` marks a slow test
+- **Every other test root takes the same shape** (#4495, #4509, #4511, #4537) - `utils/`, `dastest/tests`, dasLLVM, dasVulkan, dasImgui, the small module folders, the games and dasLLAMA; the shape rules live in `dastest/test_shape.das` and every root's `REVIEW.das` calls them
+- **`dastest --together <file>`** (#4439) - runs several test files as one program, each in a fresh context; the dasLLAMA runner hands ten files to a child by default (`--batch N`)
+- **The tree keeps no generated index of its tests** (#4564) - the ten index files, their generator and the CI target that verified them are gone; every branch that touched a test conflicted there on rebase
+
+#### dasVulkan: `VK_EXT_descriptor_heap` (#4417)
+
+- **The extension is bound end to end, with a boost layer** - `vkWriteResourceDescriptorsEXT`, `vkCmdBindResourceHeapEXT` and `vkCmdBindSamplerHeapEXT` are bound (the generator resolves a vk.xml alias of an emitted struct), with an example and an integration test. Generated boost wrappers and views with two required arrays on one count now assert equal lengths and count from the first required array
+
+#### dasLLAMA: Russian Text-to-Speech (#4497, #4539, #4566, #4568, #4573, #4579)
+
+- **The Kokoro engine speaks Russian** (#4497) - a kokoro-ru GGUF beside `tts_g2p_ru.bin` serves the `sveta`, `masha` and `dima` voices through a Russian front end: a normalizer, a stress pack and a grapheme-to-phoneme stage
+- **The normalizer reads what the sentence asks for** (#4539) - numbers in case and as ordinals, clock times, fractions, money, phones, Roman numerals, ranges and compounds
+- **Stress from a rule pack and a context model** (#4566, #4573, #4579) - a word with two readings, a name or a word outside the dictionary takes its stress from rules and a small context model; `POST /v1/audio/phonemes` answers a `marked` field beside `phonemes`
+- **Text written without yo gets it back** (#4568, #4573) - by rule where both spellings are words, and by the context model where the rule cannot decide
+
+#### dasLLAMA: the Towers on the CUDA Home, an Image per Backend (#4421, #4426, #4473)
+
+- **Each GPU family mints its own tower `.dlim`** (#4421) - a GPU box's tower load mints a `<lane>-<backend>.dlim` beside the CPU one holding what the device reads, and a GPU image never runs on the CPU
+- **The vision and audio towers serve on the CUDA home** (#4426, #4473) - the five vision families and every audio tower family under `DASLLAMA_GPU=1 DASLLAMA_CUDA=1`; every GPU home's un-pinned audio lane is q8 (an exact ask is f16 on a GPU home, f32 on the CPU)
+
+#### dasLLAMA: Block Drafters, MLX Snapshots, Parakeet in 4 Bits, the Engine as a Library (#4435, #4581, #4586, #4604, #4613)
+
+- **The MLX snapshot loader and the DFlash drafters** (#4435, #4581) - the Metal home loads an MLX snapshot directory, DFlash and DFlash2 block drafters draft several tokens a round, a joint round serves several streams, and a batched step keeps its one-weight-pass form past eight rows
+- **The block drafter and batched streams on the discrete homes** (#4613) - the drafter's round runs on the CUDA and Vulkan homes from kernels all three homes stamp; a CUDA K/V mirror past 4 GiB no longer reads wrapped rows
+- **Parakeet loads a GGUF and takes a 4-bit kq lane on every home** (#4586) - the transducer decoder is baked into the image instead of riding as f32 weights the decode never ran on
+- **dasLLAMA as a library** (#4604) - a `-lib` build takes fat kernels and picks its CPU class when the host creates it, `DAS_TUNE_FORCE=<file>` stamps kernels from one tune file, and a model loads from memory the host already holds
+
+### Improvements
+
+#### Language and Compiler
+
+- **`[]`, `{}` and untyped block literals compile at every destination** (#4502) - a class or struct method argument, a lambda or function pointer argument, `return []`, `a <- []`, `Foo(arr = [])` and a tuple element take the destination's type; before, only a free-function argument did
+- **Character and string literals take the C escape set** (#4465) - `'\0'`, `'\a'`, `'\v'`, `'\"'`, `'\?'`, hex `'\xHH'` and octal `'\NNN'` lex in both the gen1 and the gen2 lexer, a string literal takes the same escapes and an embedded `\0` ends it; the tree-sitter scanner reads the same set
+- **An explicit type argument takes no `void?` stand-in** (#4452) - a generic instance's arguments are explicit, so `tuple<void?>` instantiates its own instance instead of reusing a `tuple<int?>` one or reporting two instances
+- **`options max_framed_call_depth` caps framed recursion the way `max_fast_call_depth` caps frameless** (#4110) - `options stack` bounds the simulated stack only, so a recursion with a large `stack` ran into the native stack's end and died with SIGSEGV; the new cap (also `CodeOfPolicies::max_framed_call_depth`, interpreter only, `0` = unchecked and free) panics with `stack overflow, max_framed_call_depth <cap> exceeded while calling <function>`, which `recover` catches. A body the optimizer folds to a single `return` is a fastcall and answers to `max_fast_call_depth`
+- **A function whose only return sits in a loop that can end is a compile error** (#4535) - the return-path check took any loop whose body returns as returning, so a `for` over an empty source, a `while` with a false condition and a `while (true)` left by a `break` returned garbage; such code adds a `return` after the loop (error 30310)
+- **A runaway generic instance and a too-deep written type are compile errors** (#4546, #4548) - a generic instanced with argument types of more than 4096 type nodes is error 30516 and a type written more than 64 levels deep is error 20301; both used to hang or crash the compiler
+- **An `[inline]` call the inliner cannot splice is an error** (#4612) - error 30100 where the call silently stayed a plain call; the inliner reaches a call under `addr`, `as` and more expression forms, and a splice copies less
+- **An `assert` over a field of an effectful call, or over an inserting table index, is a compile error** (#4480) - the error names the side effect; write it as `verify`
+- **A call waits for a candidate whose signature is unresolved** (#4594) - overload lookup read a same-module candidate with an unresolved argument type (`int[N]`, a later typedef, `typedecl`) as a mismatch, so a fallback overload won for good; two overloads that resolve to one signature report 30702
+- **Generator loops that yield** (#4615) - `keys` and `values` of a plain table need no `unsafe`, values made in the loop header survive the yield, and an array a call returned by reference stays with its owner; a yielding loop over a const table returned by value is error 30941
+- **A typedef of a struct constructs** (#4533, #4558) - a struct and a typedef naming it, visible from two modules, no longer make every constructor call ambiguous, and `Alias()` constructs a struct from a module the file does not require
+- **`[template]` binds the alias of an erased argument** (#4545) - the body can name `TT` of an `auto(TT)` argument the macro erases
+- **A computed `goto` checks its target, and a labelled block resolves only its own labels** (#4475) - a target no label of the function declares throws `invalid label index` on every tier; a `goto` to a label in an enclosing block, or to a label that ends a block, reaches it in the interpreter
+- **`options no_aliasing` no longer turns off auto-inline** (#4513) - aliasing is reported once, on the calls as written, before the first splice, so a host under `no_aliasing` and an AOT tool under the default policy compute the same semantic hashes
+- **Inline splices keep the AST typed, and an annotated block is never spliced** (#4437, #4521) - no infer pass follows a splice, and a block literal carrying an annotation keeps its call-site semantics
+- **A finished module is never written by a later compile** (#4427, #4434) - the overload cache lives on the program and is cleared after a mid-inference collect, an `[extern]` proxy goes into the module that declares it, and visitor reads stop storing into shared AST
+- **`[extern(..., lib=name)]` names an `@extern_library` global** (#4577) - one `let @extern_library llvm = "LLVM.dll"` replaces the path repeated on every generated `[extern]`, and `DAS_EXTERN_LIB_<ALIAS>` overrides it when the library loads
+
+#### JIT, AOT, and dasLLVM
+
+- **The JIT inlines `ptr_diff`, speculates lookups and reports remarks** (#4472) - `p - q` is inline arithmetic where it was a slot call with a run-time stride, a global read under a branch in a loop hoists, and `--jit-remarks` prints the optimizer's remarks
+- **`solid_context` array loops match the non-solid build** (#4541, #4571) - the JIT hides a solid global array's base from loop strength reduction (a sieve over a global array ran 20 to 27 percent slower under the option), also when the block reaches the function as an argument or the array is the block's first global; a loop count hint takes a named constant
+- **A precompiled header for the generated AOT units** (#4503) - every generated unit opened the same fifteen headers, most of a typical unit's compile; `test_aot` and `test_aot_bench` always use the PCH, `libDaScriptAot` and `test_aot_subset` whenever no compiler launcher is configured
+- **AOT C++ compiles faster** (#4561) - RTTI tables are constant-initialized through constexpr constructors and the string-builder helpers are out of line; with clang 20 at -O3, `aot_cpp` 11.7 s -> 6.3 s
+- **`-exe` builds a program whose global initializer holds a block** (#4543)
+- **Half values ride LLVM interop slots** (#4498) - the LLVM-AOT emitter registers the half-value `sprint_json` / `sscan_json` helpers it used to decline
+- **The shader emitters lower a direct self-method call** (#4584) - a kernel class in a private family calls its own helper method under the MSL, SPIR-V and CUDA emitters, and a kernel hands a tracked buffer to a helper a required module declares
+- **`flatten`: no chain on a constant select; fuse re-runs the preshader pass** (#4589) - flattened shader output changes for two shapes, so a backend that keeps goldens of the flattened source refreshes them
+
+#### Runtime, Tooling, and Hosting
+
+- **An uncaught runtime exception in `main` exits -2, and a panic that strands a job ends the process** (#4512, #4496) - `-2` (254 on POSIX) where a panic and a compile error both exited 1; a program or standalone exe whose main panics while a job or thread still runs exits after three seconds instead of hanging. The watchdog terminates and restarts a served child that fails health polls for 120 seconds (`--unhealthy-timeout 0` turns it off)
+- **A shared module with a missing or different ABI stamp is refused; `DAS_ABI_VERSION` is 2** (#4512, #4558) - the loader reads the stamp before it constructs the module, and a member change in a core class bumps the version. Every shared module is rebuilt against these headers
+- **`compileDaScript` takes the module-cache stream as its last argument** (#4419) - `daScriptEnvironment::serializer_read` / `serializer_write` are removed; an embedder passes `ModuleCacheStream { reader, writer }`. The same batch fixes crashes and build breaks an engine update surfaced (embedder compiles under an armed module cache, ARM64EC, a relative `-dasroot`)
+- **Module caches invalidate on included-source edits** (#4430) - a textual include is stamped in the dependency header, so an edit that keeps a file's size and mtime no longer replays old code
+- **The das root and other process globals are safe under threads** (#4595) - `getDasRoot` / `setDasRoot` take one mutex and `with_argv` replaces the command line for the calling thread only; `das::g_dasRoot` and `das::g_CommandLineArguments` are file-local, a host calls `getDasRoot()` / `getCommandLineArguments()`
+- **Exception recovery across library boundaries, threaded Wasm startup** (#4611) - one exception identity is exported through the runtime, and Wasm constructors run at application priority; native C++-exception hosts rebuild with `-DDAS_CPP_EXCEPTIONS=ON`
+- **`sscan_json` rejects trailing input, and non-finite reals round-trip** (#4444) - `{"a": 123}aaaaa` no longer scans as valid; `sprint_json` writes `NaN`, `Infinity` and `-Infinity` and `sscan_json` reads them. `write_json` gains an opt-in `sort_keys` argument (#4414)
+- **`mkdir_rec` is a `fio_core` builtin, and the shipped module digest regains 124 descriptions** (#4505) - the `//!` comment reader requires nothing it documents
+- **On Linux the default job pool counts the CPUs the cgroup quota and the affinity mask grant** (#4418) - a container sees smaller pools
+- **`daspkg release wasm` links with `-O2` and a 1GB memory maximum** (#4431, #4432, #4438) - an app that needs more heap adds `release_emcc_arg("-sMAXIMUM_MEMORY=2GB")`; the page shell stays unminified, and one browser gate (`site/files/wasm-gate.js`) answers a browser that cannot run the page instead of the engine's raw error
+- **dasAudio: `play_sound_from_pcm` takes `ignore_global_pause`** (#4411, #4547, #4578) - an exempt PCM sound plays through a global pause; channel fades clamp, a channel stopped while paused ends, a streaming sound seeks, and SF2 and reverb inputs are guarded
+- **NaN and inf survive a fast-math host** (#4391) - printing and C++ code generation test the IEEE bits where `-ffinite-math-only` folded `isnan()` to false
+- **`ast-verify --changed` runs the batch path** (#4550) - shared modules compile once instead of once a changed file
+- **dasHerd leaves the tree** (#4498) - it lives in its own repository
+
+#### dasLLAMA
+
+- **NVFP4 CPU kernels and the FP4 rung on CUDA** (#4414, #4418) - the row-major rail and the grp tier replace the reference bodies on the CPU; on CUDA the routed NVFP4 experts run on the FP4 rung and the deltanet scan runs in chunks
+- **An integrated GPU's room is every memory heap** (#4416) - the Vulkan resident plan sizes against all heaps, so a model that split its experts onto the CPU loads whole
+- **One home for the box probes** (#4413) - WMI through `wmic`, then CIM
+- **A GPU home switch keeps the loader's provider seats** (#4415)
+- **The ASR decoders, the translator and the Metal tower shut down with their context** (#4441, #4442)
+- **`eval_segments` drops its borrowed sessions** (#4580) - the server's validated collection no longer walks a freed session; `DASLLAMA_GC_STRESS` runs that collection on every tick
+- **Folds and test fixes** (#4443, #4553, #4560, #4576) - one Q8_0 walk and one writer where the dupe audit found copies, four standing test reds and five RTX 4090 failures fixed, and the common kernel file compiles without dasSpirv
+
+#### Lint
+
+- **LINT034: a `@scratch` container keeps a borrowed pointer** (#4587) - on by default; a store of a borrowed pointer into a `@scratch` container that outlives the call is reported when any exit leaves the store in place
+- **`@pool` marks a container that owns what it holds; LINT035** (#4607) - `@scratch` carried two promises, a buffer whose contents die with the call and a free list or cache that lives across calls on purpose; the second has its own mark
+- **STYLE030 counts a module used through one of its typedefs** (#4558) - it no longer tells the author to drop a `require` the file does not compile without
+- **`utils/lint --project FILE`** (#4433) - every compile resolves through a `.das_project` module map, workers and fixes included; in `[CommandLineArgs]` parsers a flag's value no longer also sets another flag
+
+### Bug Fixes
+
+- **A `return`, `break` or `continue` out of a `try` or `recover` arm works on every tier** (#4472, #4534) - the JIT left the arm and answered wrong, or panicked the emitter on a cold cache
+- **JIT: `void?` puns, pointer alignment, a solid global's self-address store** (#4534) - a typed view taken through a `void?` parameter is not strict-aliasing-tagged, an odd pointer value does not fold on an alignment the language never promised, and a solid-context global assigned its own address keeps the store; `reinterpret<uint8>(true)` reads 1, `a = default<int[4]>` zeroes every element and `reinterpret<uint>(p)` no longer emits `trunc ptr` (#4472)
+- **The JIT no longer marks a const container parameter `readonly`** - `for` over a const `array` or `table` parameter, or over one inside a const struct, writes the lock through the parameter, which the `readonly` attribute denied; LLVM had nothing to exploit until a `noalias` joined it, and then the unlock read the magic the lock had not yet written. A parameter whose type cannot be copied carries no `readonly` now; a const pointer to a scalar keeps it. `LLVM_JIT_CODEGEN_VERSION` 0xA7: cached JIT DLLs re-emit once
+- **The JIT emitter keeps a nested literal's offset to itself** (#4441) - it wrote the AST node's `extraOffset`, so the next interpreted simulate of the same program laid those fields out at the emitter's offsets
+- **A static `goto` inside a block literal reaches the literal's own label** (#4476) - the block's body never received a label table, so the jump left the block with `end of block without return`; a literal holding labels now takes a jump to a label it owns in place and hands any other outward, as a labelled block does
+- **AOT defines a struct held by value before the struct holding it, whatever points back** (#4109) - the struct sort's dependency walk followed a pointer field into its pointee, so `Inner` holding `owner : Outer?` read as depending on `Outer` and the sort kept declaration order, emitting the holder first with an incomplete member type; the walk stops at pointers, which ride the forward declaration
+- **An unused call keeps the side effects its field and index operands carry** (#4458) - a call dropped as unused no longer takes an `addr(arr[i++])`, an index a call computes, or a field of a call result with it; an `assert` over a field of an effectful call, or over an inserting table index, now reports its side effect the way the plain forms do, so such a check is written `verify`
+- **A const argument to a generic `var` reference reports no matching function** - `def f(var x : auto(TT)&)` called with a `let` value matched, made an instance that could never be called, and looped until inference stopped with error 30507; it is error 30341 naming the const argument
+- **Captured return locals keep stable stack storage** (#4412) - a returned local referenced inside a block aliased the active result buffer, so a callback invoked by a function returning another aggregate could lose writes
+- **A stranded `lpipe()` reports instead of crashing the compiler** (#4521)
+- **A global `fixed_array` of struct literals that name a property initializes** (#4535) - it crashed before `main`
+- **One module file reached under two path spellings is one module** (#4543) - it failed with error 20605
+- **`keys` / `values` over a temporary, and a const pointer into a generic `var`** (#4612) - the stack allocator keeps the slots under a `keys` / `values` loop source for the whole loop, and a const pointer no longer matches a generic `var` parameter
+- **Eight bugs from the policy x tier test grid** (#4557) - among them a local declared in an `unsafe { }` block of a generator lived on the stack across a `yield`; `decs` `set`, `set_direct` and `set_direct_at` move a value that can't be copied, and a constant array or table passed to them is a compile error
+- **`decs` releases the values it drops** (#4570, #4572) - `set_direct` and `set_direct_at` release the value a slot held before writing over it, `delete_entity` releases the deleted entity's component values, and `update_entity` releases a value its block replaced or removed
+- **Fuzzer crashes** (#4593) - das-fmt keeps the space between a unary sign and a token that starts with the same sign (the formatter changed what a program does), three compiler crashes, and AOT picks the no-payload `TVariant` form when every case has size zero
+- **`fmap` and the block form of `fopen` release on a panic** (#4477, #4481) - a longjmp unwind skipped the unmap and the `fclose`, leaving the file unwritable or its last bytes in the buffer; the constant folder's asserts no longer print to stderr
+- **A regex quantifier backtracks into its subexpression's alternatives** (#4459) - `*`, `+`, `?` and `{n,m}` matched their subexpression once and kept the first alternative that matched, so `x(aba|ab|b)*c` missed `xabac`; each quantifier now searches every place a pass can end, and a repeated group captures its last pass. Two results change: alternatives keep their written order, so `(aba|ab|b)` on `aba` matches 3 characters instead of 2, and a pass that matches empty ends the repetition, so `(a*)*b` on `aac` returns -1 where it looped forever; a zero-width body under `+` matches at the end of the input, so `a\b+` on `a` matches where it failed
+- **A module cache record the serializer refuses no longer fails the program, and a module that registers at compile is cached as a skippable record** (#4448, #4447) - a failed write warns and the compiled program runs uncached, and a module whose compile registers a call macro or an extern writes a header with a one-byte payload the reader skips, reparsing the module in place, where its write failed on every run
+- **A child killed by signal N reports `128 + N`, as the shell's `$?` does** (#4468) - `popen`, `popen_timeout`, `popen_argv`, `popen_argv_pipe`, `process_poll` and `process_wait` returned the raw signal number, indistinguishable from a normal exit with that code; `is_death_exit_code` and `is_spawn_failure` in `daslib/fio` name a signal death and a child that never ran (`-1`, `126`, `127`)
+- **A deleted `Server` delivers its last message, and a socket closes before Winsock shuts down** (#4538, #4540) - a server that answers and exits delivers the answer on Windows; a `-exe` program frees the fusion table at exit under a leak audit
+- **The DAP server's `terminate` reply reaches the client on Windows** (#4506) - a module cache write that loses a rename race is not a reported failure, and the quiet cache never prints into a program's stdout
+- **A `GC COMPILE LEAK` report exits 1 even when `main` runs** (#4533)
+- **dastest keeps failure diagnostics in the runner heap** (#4410) - failed-test messages survive collection of the test heap
+- **dasVulkan: a destroyed device's function table is forgotten** (#4554) - a device made after another was destroyed could keep the old table and crash at address 0 on the first call into an extension the old device lacked
+- **A `.das_project` resolver keeps its `FileAccess`** (#4498) - it could read freed `FileInfo` storage after `get_file_access` returned
+- **The audio channel initializes in place** (#4590) - an initialized `ma_resampler` points into itself and the constructor built it in a local that `new` copied; `recip_const` no longer folds a reciprocal a fast-math host gets wrong
+
+### Site / Blog / Docs
+
+- **daslang.io carries the 0.6.5 release** (#4409)
+- **Sphinx HTML builds run `-j auto`** (#4501) - the Pages step, the two CMake doc targets, preflight's docs gate and the local scripts
+- **doc-verify compiles in process** (#4548)
+- **Checklists: rules a reviewer could not apply as written** (#4616) - fifteen findings from the checklist audits fixed, and the discovery walk routes a `[test]` file that requires a `cuda/` module to `tests/cuda/REVIEW.md`
+
+### Build / CI
+
+- **The bundle smoke compiles `simulate.h` against the installed `include/` alone** (#4456) - one `-fsyntax-only` translation unit catches a header the install rules forget when only `daScript/` paths appear in includes; a Windows bundle or a box without a C++ compiler skips the row
+- **The site gate reads tracked files** - `site/REVIEW.das` walked the disk, so a box with a local preview went red on generated blog pages and a vendored playground runtime that git ignores; `dastest/review_gate.das` gains `gate_web_third_party_files`, `tracked_files_in` and `path_under_dirs`
+- **Bounded sccache slots; the extended checks run on linux** (#4567) - every sccache slot of the build matrix is bounded and a sanitizer cell's `slow` job keeps a slot of its own; the nightly's windows 64 Debug cell compiles and runs no test (#4507, #4538)
+- **The dasllama-server lane compiles its files together** (#4555) - 21 `dastest` processes each compiled the engine module graph; `dastest --isolated-mode --compile-only` no longer runs the tests
+- **Lint tree chunks skip when nothing they read changed** (#4499) - a stamp plus a depfile of every source the lint compiles read
+- **The half-speed nightly cells configure raised dastest watchdogs** (#4408)
+- **The `build_eastl` lane builds again** (#4485) - the tree's `dag_config.h` shim defines `DAG_MEMCPY_NONNULL`
+- **`pr-babysit`: a green tip whose review never came exits 6** (#4588)
+- **Smaller lane fixes** (#4440, #4474, #4479, #4483, #4487, #4575) - `caddy.snippet` checks out LF everywhere, typed inlining across hidden dependencies is covered, the loop-lookup count starts at the loop header, the AOT subset links `daslib/command_line`, and the tree-sitter sync runs every six hours
+
 ## 0.6.5 (October 2026)
 
 ### New Features
@@ -138,12 +310,6 @@
 
 #### Language and Compiler
 
-- **`options max_framed_call_depth` caps framed recursion the way `max_fast_call_depth` caps frameless** (#4110) - `options stack` bounds the simulated stack only, so a recursion with a large `stack` ran into the native stack's end and died with SIGSEGV; the new cap (also `CodeOfPolicies::max_framed_call_depth`, interpreter only, `0` = unchecked and free) panics with `stack overflow, max_framed_call_depth <cap> exceeded while calling <function>`, which `recover` catches. A body the optimizer folds to a single `return` is a fastcall and answers to `max_fast_call_depth`
-- **Character and string literals take the C escape set** (#4465) - `'\0'`, `'\a'`, `'\v'`, `'\"'`, `'\?'`, hex `'\xHH'` and octal `'\NNN'` lex in both the gen1 and the gen2 lexer, a string literal takes the same escapes and an embedded `\0` ends it; the tree-sitter scanner reads the same set
-- **An explicit type argument takes no `void?` stand-in** (#4452) - a generic instance's arguments are explicit, so `tuple<void?>` instantiates its own instance instead of reusing a `tuple<int?>` one or reporting two instances
-- **A sealed method can't be assigned through its sealed type** - a method of a `class sealed`, or a `def sealed` method, can no longer be assigned (`obj.method = @@f`, `<-`) or named in an initializer (`new C(method = @@f)`) through that type; each is `error[30952]`. A method a sealed class declares is then fixed for every instance
-- **A call to a method a sealed class declares is a direct call** - `p->method()` through a `class sealed`, for a method no ancestor declares, compiles to a call of that function instead of a load from the instance's method field, so the JIT and AOT can inline it; a `def sealed` override and an inherited method stay virtual, since their base field can still be assigned
-- **A call to a private class's method nothing replaces is a direct call** - when a method's declaring class and every class deriving from it are private to the module, and nothing in the module overrides the method below the call's static class or assigns it, `p->method()` compiles to a direct call with no `sealed` needed
 - **`=` and `<-` overload like `:=`** (#4099) - `def operator =` / `def operator <-` are grammar, every init site (local, global, field default, make-struct, `new`) dispatches to the pair's operator, and `!==` / `!<-` / `!:=` are the raw built-in forms; every copy the compiler manufactures is raw by construction, so the operator runs once, where the user wrote it. A distinct `SoundHandle` can now take `handle = 0`. `ExprClone` grew a flags word (serializer 217) - external modules rebuild. The AOT link-failure report (error 50101) now says whether the file was never in the AOT build or its artifact is stale
 - **A distinct type keys a table, and `operator ==` on a distinct type is the one called** (#4070) - `table<Foo; int>` over `typedef distinct Foo = int` compiles and runs in every tier (the nominal wall stays: an `OtherId` key is refused), and a user `operator ==` / `!=` is looked up before the borrowed compare; the same operator from two modules is error 30341, not a silent borrow; a 16/8-bit lattice vector as a table key is a compile error, not a runtime throw
 - **`=>` continues on the next line, plus two early-out fixes the sweeps found** (#4217) - a `=>` at the end of a line now continues on the next (a newline there was always a syntax error, so no program changes meaning; a blank line or comment still ends the statement); `break` / `continue` before a `var inscope` declaration no longer leaves the slot uninitialized for the finalizer ("can't delete locked array"); a `while` body owning a finalizer stops on `return` before re-evaluating its condition (`read_toml` spun forever on bad input in the interpreter). The STYLE042 / STYLE043 / PERF033 tree sweeps ride along: 936, 257 and 223 files
@@ -175,8 +341,6 @@
 
 #### JIT, AOT, and dasLLVM
 
-- **The JIT separates `float` and `double` accesses from integer and pointer accesses** - every load and store of a jitted function carries a TBAA tag for its class (`float`, `double`, one class for every wider integer, pointer and `half`; bytes, bools, vectors and aggregates alias everything), so a loop that reads its bound through an `int?` beside `float` stores hoists the read and vectorizes: lookibed's loop goes from 16.9 to 3.5 us per pass, the by-value figure. A function whose body reinterprets memory under another type is left out automatically, and so is every function the punned view reaches through a call, a return, an out argument, a lambda, a callback or a shared global; `[hint(strict_aliasing)]` and `[hint(no_strict_aliasing)]` override per function, `options strict_aliasing = false` per program. `LLVM_JIT_CODEGEN_VERSION` 0xA8: cached JIT DLLs re-emit once
-- **A `[hint]` naming a parameter that does not exist is a compile error, and the pointer model is written down** (#4446) - `noalias = p`, `nocapture = p` and `align16 = p` on a name that is not a parameter did nothing, silently; the error now names the function and its parameters. The JIT attaches no type-based alias information by design - a pointer is an address, so a `float?` store may change what an `int?` points at - and `[hint(noalias = p)]` is the promise under which a loop hoists the reads it makes through its other pointers; dasLLVM's README, its architecture doc and the language skill say so
 - **A standalone exe builds split and links with LTO on request** (#4080) - `--jit-split-modules` on `-exe` partitions codegen one das module at a time and `--jit-lto` links the partitions as bitcode under regular LTO (both off by default); a make-array literal of numeric or vector constants lowers to a private constant array and one `memcpy` instead of a store per element. The facade exe's codegen: 813-890 s -> 115 s one-unit with the literal lowering, 24 s split, 91 s split + LTO. `daslib/fio` gains `executable_on_path`
 - **Runtime entry points that are plain field access become LLVM IR** (#4131) - `jit_str_cmp`, the array and table lock/unlock, `jit_prologue` / `jit_epilogue` are defined in IR by the new `llvm_jit_runtime.das` (bodies written in the new `ir_dsl.das`), so they inline and fold with their callers: `array_loop_entry` 4.5 -> 2.2 ns, `table_keys_loop_entry` 8.2 -> 5.5 ns, long-prefix string compare 2.7 -> 1.8 ns, `string_equ_*` / `string_less` -27% to -31%, `array_setup/8` -25%, `class_method_mono` -22% (`-jit`, best of 3). Dead entry points go (`jit_init_function_addr`, `jit_initialize_modules`, `jit_trap`, the `-exe` `jit_register_native_path` shim) - `-exe` binaries that link the runtime dynamically must be rebuilt; `benchmarks/micro/per_call_overhead.das` is new
 - **ASan sees the das heap and stack, and `--jit-sanitize` instruments jitted code** (#4140) - under ASan the das heaps and context stack poison what they have not handed out and array buffers annotate their spare capacity, so a read past a das object, a use after delete or a GC sweep of a live object is reported in C++, interpreter, AOT and JIT code; `--jit-sanitize=address|undefined` runs LLVM's asan or bounds-checking pass on the emitted IR; sanitizer builds link `-exe` / `-lib` artifacts with `-fsanitize=`; six bugs the poisoning found are fixed, and a string heap's `reset` forgets its interned strings
@@ -294,14 +458,6 @@
 
 ### Bug Fixes
 
-- **A static `goto` inside a block literal reaches the literal's own label** (#4476) - the block's body never received a label table, so the jump left the block with `end of block without return`; a literal holding labels now takes a jump to a label it owns in place and hands any other outward, as a labelled block does
-- **AOT defines a struct held by value before the struct holding it, whatever points back** (#4109) - the struct sort's dependency walk followed a pointer field into its pointee, so `Inner` holding `owner : Outer?` read as depending on `Outer` and the sort kept declaration order, emitting the holder first with an incomplete member type; the walk stops at pointers, which ride the forward declaration
-- **The JIT no longer marks a const container parameter `readonly`** - `for` over a const `array` or `table` parameter, or over one inside a const struct, writes the lock through the parameter, which the `readonly` attribute denied; LLVM had nothing to exploit until a `noalias` joined it, and then the unlock read the magic the lock had not yet written. A parameter whose type cannot be copied carries no `readonly` now; a const pointer to a scalar keeps it. `LLVM_JIT_CODEGEN_VERSION` 0xA7: cached JIT DLLs re-emit once
-- **A module cache record the serializer refuses no longer fails the program, and a module that registers at compile is cached as a skippable record** (#4448, #4447) - a failed write warns and the compiled program runs uncached, and a module whose compile registers a call macro or an extern writes a header with a one-byte payload the reader skips, reparsing the module in place, where its write failed on every run
-- **A child killed by signal N reports `128 + N`, as the shell's `$?` does** (#4468) - `popen`, `popen_timeout`, `popen_argv`, `popen_argv_pipe`, `process_poll` and `process_wait` returned the raw signal number, indistinguishable from a normal exit with that code; `is_death_exit_code` and `is_spawn_failure` in `daslib/fio` name a signal death and a child that never ran (`-1`, `126`, `127`)
-- **An unused call keeps the side effects its field and index operands carry** (#4458) - a call dropped as unused no longer takes an `addr(arr[i++])`, an index a call computes, or a field of a call result with it; an `assert` over a field of an effectful call, or over an inserting table index, now reports its side effect the way the plain forms do, so such a check is written `verify`
-- **A regex quantifier backtracks into its subexpression's alternatives** (#4459) - `*`, `+`, `?` and `{n,m}` matched their subexpression once and kept the first alternative that matched, so `x(aba|ab|b)*c` missed `xabac`; each quantifier now searches every place a pass can end, and a repeated group captures its last pass. Two results change: alternatives keep their written order, so `(aba|ab|b)` on `aba` matches 3 characters instead of 2, and a pass that matches empty ends the repetition, so `(a*)*b` on `aac` returns -1 where it looped forever; a zero-width body under `+` matches at the end of the input, so `a\b+` on `a` matches where it failed
-- **A const argument to a generic `var` reference reports no matching function** - `def f(var x : auto(TT)&)` called with a `let` value matched, made an instance that could never be called, and looped until inference stopped with error 30507; it is error 30341 naming the const argument
 - **A returned local shares the result slot only when every return returns it** (#4296) - `VarCMRes` let `return a` place `a` in the caller's result slot and skipped every other return, so `if (c) return S(p = a.q, q = a.p); return a` built into the slot while reading `a` (7 7 for 7 5); the same rule as GCC and Clang NRVO, inherited by the interpreter, JIT and AOT. PERF030 keyed on that flag, so two dasLLAMA moves it now reports carry `nolint:PERF030`
 - **Fixes for lookibed's reports #4231-#4238** (#4260) - a store-only call through a computed pointer index is kept (the function is marked `modifyExternal`), CondFolding never moves a `goto` label into a new `else` (garbage past an early return in the interpreter), nested `[inline]` keeps the safe mark on a substituted reference (error 31019 on a `var` struct), the `add_new_*` helpers register into `compiling_module()` so they work from `apply`, the defer-pipe lint reads the declaration as written, `x = K` folds a const global; serializer version 227
 - **Two compiler aborts the grammar fuzzer found** (#4242) - `typedef A = int|float` tripped a serializer verify (the `option` case wrote no alias; version 223), and a result type whose nested element exceeds INT_MAX (`new array<int[2000000000]>()`) asserted in the debug-info walk instead of clamping
@@ -360,7 +516,6 @@
 
 ### Build / CI
 
-- **The bundle smoke compiles `simulate.h` against the installed `include/` alone** (#4456) - one `-fsyntax-only` translation unit catches a header the install rules forget when only `daScript/` paths appear in includes; a Windows bundle or a box without a C++ compiler skips the row
 - **dastest serves unchanged files from a result cache, and the JIT DLLs ride the sccache slot** (#4276, #4294, #4302) - a file whose last pass still holds (same module sources, same dastest sources, same non-report arguments) is reported from `--cache-dir` instead of run, `dastest_cache_guard` empties the cache when a hashed binary changes and says which; binaries are reproducible so the guard keeps the cache across a rebuild (libhv's `__DATE__` under `HV_REPRODUCIBLE_BUILD`, `/Brepro` on MSVC, `ZERO_AR_DATE` on macOS Debug); the `.cache/daslang/_anon_*` DLLs ride the sccache entry (a chunk 8.1 s cold -> 0.84 s warm), and the build lane runs the AOT subset on every PR through the same cache. Every merge to master runs build and extended checks again so the shared slots save
 - **Every workflow job has a time limit** (#4272) - 25 jobs had none, so the limit was six hours; each is about twice its slowest recent run, and `.github/workflows/REVIEW.das` reports a job with `runs-on` and no `timeout-minutes`. The bundle smoke job's budget holds a cold-cache build (45 -> 75 minutes, #4305)
 - **Every `[test]` file under `modules/dasLLVM/tests` runs in a lane** (#4280, #4284) - 21 files (152 tests) were in none; `gate_lane_census` in `dastest/review_gate.das` lets a module's `REVIEW.das` report a test file no lane names

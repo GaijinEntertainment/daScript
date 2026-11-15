@@ -16,10 +16,10 @@ file shows `dasWasmGate.refusal(answer)`, and when no `dasWasmGate` exists it sa
 not load and starts nothing.** The gate (`files/wasm-gate.js`) names why a browser cannot run
 the runtime; a runtime started without it fails with the engine's raw error text.
 
-**Weakening `REVIEW.das`'s runtime-gate check - the gate that reports an `.html` or `.js` under
-this folder, outside `tests/` and `wasm/`, that spells `daslang_static.js` or
-`daslang_static.wasm` but never `dasWasmGate`, and one calling `engineReason()` that no bullet
-of `README.md#runtime-gate` names - is a defect.**
+**Weakening `REVIEW.das`'s runtime-gate check - the gate that reports a tracked `.html` or `.js`
+under this folder whose path has no folder named `tests` or `wasm`, that spells
+`daslang_static.js` or `daslang_static.wasm` but never `dasWasmGate`, and one calling
+`engineReason()` that no bullet of `README.md#runtime-gate` names - is a defect.**
 
 **Never show on a page a hand-written shell command, flag, or output line invented for
 illustration - show only a command the run actually executed.** A rendered `cmd` identifies the
@@ -69,21 +69,22 @@ GitHub blob URL otherwise - or drop the claim.**
 dasProfile record.** Provenance - the `das_capture` and `ext_capture` stamps - travels in the
 dasProfile files themselves.
 
-**Weakening `REVIEW.das`'s embedded-sample check - the gate that compiles every daslang
-sample of a page outside `blog/` with the running binary (a `language-daslang` block on an
-`.html` page, a ```` ```daslang ```` fence in a `_news/` post), requires an exported `main` in
-each, and requires a playground link beside it (in its `<section>` on a page, anywhere in a
+**Weakening `REVIEW.das`'s embedded-sample check - the gate that compiles with the running
+binary every `language-daslang` block of a tracked `.html` directly in this folder and every
+```` ```daslang ```` fence of a tracked `.md` directly in `_news/`, requires an exported `main`
+in each, and requires a playground link beside it (in its `<section>` on a page, anywhere in a
 post) - is a defect.**
 
 **A diff that marks a sample `data-playground="none"` also ledgers the block in `README.md`,
 in the same change.** The gate still compiles such a block; it owes no link.
 
 **A PR whose diff changes, beyond comments, a file under `playground/` (this folder),
-`files/wasm-gate.js`, or any other file under this folder that loads `daslang_static.js` or
-fetches or compiles `daslang_static.wasm`, states in the PR body a run of the Playwright suite
-(`tests/playground/`, this folder) against the branch tip, naming the passes and any failures;
-a later edit to any of those files restates the run.** The no-WASM lane cannot see a broken runtime path, and a run
-recorded mid-branch describes a tree that no longer ships.
+`files/wasm-gate.js`, or any other file under this folder whose own text spells
+`daslang_static.js` or `daslang_static.wasm`, states in the PR body a run of the Playwright
+suite (`tests/playground/`, this folder) against the branch tip, naming the passes and any
+failures; a later edit to any of those files restates the run.** A page that reaches the
+runtime only through a script it loads owes no run - the script does. The no-WASM lane cannot
+see a broken runtime path, and a run recorded mid-branch describes a tree that no longer ships.
 
 **A stated Playwright run names every playground sample the diff changed - a `.das` under
 `web/examples/ui/samples/` (repo root), or a `.das` under `examples/graphics/` (repo root) that
@@ -102,10 +103,11 @@ comment is a defect.**
 **A placeholder number a page reader could take for a fact is a defect - mark it as a
 placeholder on the page itself.**
 
-**A diff that makes `REVIEW.das`'s cookie-and-host check read fewer files, or report less
-than it did before the change with the same `ALLOWED_HOSTS`, is a defect** - the gate bans
-`document.cookie` and reports any resource a page loads from a host the list does not
-name.
+**A diff that makes `REVIEW.das`'s cookie-and-host check read fewer files, or report less,
+than it did before the change with the same `ALLOWED_HOSTS` is a defect** - the gate reads
+every tracked (`git ls-files site`) markup, `.js`, `.css` and asset-manifest file whose path
+has no folder named `tests`, bans `document.cookie`, and reports any resource a page loads
+from a host the list does not name.
 
 **A diff that adds a host to `REVIEW.das`'s `ALLOWED_HOSTS` states, in the PR body, what a
 visitor sends that host and whether the host sets cookies.**

@@ -361,7 +361,7 @@ namespace das {
         AstSerializer & serializeModule ( Module & module, bool already_exists );
 
         static constexpr uint32_t getVersion () {
-            return 277;   // 277: a yielding generator loop holds the values made in its header in generator variables
+            return 278;   // 278: get_das_version() folds 0.6.6 into the AST as a constant
         }
 
         void serializeProgram ( ProgramPtr program, ModuleGroup & libGroup ) noexcept;

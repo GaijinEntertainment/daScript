@@ -322,6 +322,80 @@ def test_gate_web_third_party(t : T?) {
     t |> success(rmdir_rec("{root}"))
 }
 
+[test(description = "the web third-party gate over a file list reads only the listed files, and drops a listed file of another kind or under a skipped directory")]
+def test_gate_web_third_party_files(t : T?) {
+    let dir_r = create_temp_directory_result("review_gate_web_files")
+    t |> success(dir_r is value, "temp fixture directory created")
+    if (!(dir_r is value)) {
+        return
+    }
+    let root = replace(unsafe(dir_r.value), "\\", "/")
+    t |> success(mkdir("{root}/skipped"))
+    let tracker = "<x>\n<script src=\"https://tracker.example/t.js\"></script>\n"
+    t |> success(fwrite("{root}/listed.html", tracker))
+    t |> success(fwrite("{root}/unlisted.html", tracker))
+    t |> success(fwrite("{root}/skipped/listed.html", tracker))
+    t |> success(fwrite("{root}/notes.txt", "var u = 'https://tracker.example/t.js';\n"))
+    gate_reset()
+    gate_web_third_party_files(
+        ["{root}/listed.html", "{root}/skipped/listed.html", "{root}/notes.txt"],
+        {"skipped"}, {"allowed.example"})
+    var inscope fs <- gate_findings()
+    gate_reset()
+    let joined = join(fs, "\n")
+    t |> equal(1, length(fs), joined)
+    t |> success(find(joined, "{root}/listed.html:2: reaches tracker.example") >= 0, joined)
+    t |> success(rmdir_rec("{root}"))
+}
+
+[test(description = "a path is under a named directory only when one of its directory parts carries the name, never its file name or a longer part")]
+def test_path_under_dirs(t : T?) {
+    let dirs <- { "tests", "wasm" }
+    t |> success(path_under_dirs("site/tests/a.js", dirs))
+    t |> success(path_under_dirs("site/files/wasm/deep/a.js", dirs))
+    t |> success(!path_under_dirs("site/files/a.js", dirs))
+    t |> success(!path_under_dirs("site/tests", dirs), "the last part is the file name")
+    t |> success(!path_under_dirs("site/tests2/a.js", dirs), "a longer part is another directory")
+    t |> success(!path_under_dirs("a.js", dirs))
+}
+
+[test(description = "the tracked-file listing of a repository leaves out a file git ignores, so the web gate over it reports the tracked page alone", timeout = 1200)]
+def test_tracked_files_leave_out_ignored(t : T?) {
+    let dir_r = create_temp_directory_result("review_gate_tracked")
+    t |> success(dir_r is value, "temp fixture directory created")
+    if (!(dir_r is value)) {
+        return
+    }
+    let root = replace(unsafe(dir_r.value), "\\", "/")
+    var git_out = ""
+    if (run_and_capture(["git", "-C", root, "init", "-q"], git_out, 60.0) != 0) {
+        t |> success(rmdir_rec("{root}"))
+        t |> skip("git cannot make a repository here: {git_out}")
+        return
+    }
+    let tracker = "<x>\n<script src=\"https://tracker.example/t.js\"></script>\n"
+    t |> success(fwrite("{root}/.gitignore", "preview.html\n"))
+    t |> success(fwrite("{root}/page.html", tracker))
+    t |> success(fwrite("{root}/preview.html", tracker))
+    let add_rc = run_and_capture(["git", "-C", root, "add", "-A"], git_out, 60.0)
+    t |> equal(0, add_rc, git_out)
+    gate_reset()
+    var inscope tracked <- tracked_files_in(root, ["."], "fixture")
+    tracked |> sort
+    t |> equal(2, length(tracked), join(tracked, " "))
+    t |> equal(".gitignore", tracked[0])
+    t |> equal("page.html", tracked[1])
+    var inscope paths <- [for (name in tracked); "{root}/{name}"]
+    let no_skipped_dirs : table<string>
+    gate_web_third_party_files(paths, no_skipped_dirs, {"allowed.example"})
+    var inscope fs <- gate_findings()
+    gate_reset()
+    let joined = join(fs, "\n")
+    t |> equal(1, length(fs), joined)
+    t |> success(find(joined, "{root}/page.html:2: reaches tracker.example") >= 0, joined)
+    t |> success(rmdir_rec("{root}"))
+}
+
 [test(description = "the lane census reports a test file that no CMake lane names, ignoring commented lanes, fixtures and files without tests, and reports a missing lane file")]
 def test_gate_lane_census(t : T?) {
     let dir_r = create_temp_directory_result("review_gate_lanes")

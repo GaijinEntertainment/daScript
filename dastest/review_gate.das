@@ -135,9 +135,15 @@ def word_index(text : string; word : string; start : int = 0) : int {
 
 //! every tracked file matching one of `globs` - what git ignores
 //! stays out; a git that fails is a finding, never an empty tree
-def tracked_files(globs : array<string>; check_name : string) : array<string> {
+def tracked_files(globs : array<string>; check_name : string) : array<string> =>
+    <- tracked_files_in(".", globs, check_name)
+
+def tracked_files_in(repo : string; globs : array<string>;
+                     check_name : string) : array<string> {
+    //! `tracked_files` of the git repository at `repo`,
+    //! as paths relative to `repo`.
     var out : string
-    var inscope cmd <- ["git", "ls-files", "--"]
+    var inscope cmd <- ["git", "-C", repo, "ls-files", "--"]
     cmd |> push_from(globs)
     let rc = run_and_capture(cmd, out, 60.0)
     var inscope files <- [for (ln in split(out, "\n")); strip(ln); where !empty(strip(ln))]
@@ -1281,17 +1287,7 @@ def private resource_urls_of(path : string; text : string) : array<string> {
     return <- path |> ends_with(".css") ? css_urls(text) : script_urls(text)
 }
 
-//! Cookie-and-host gate for a served web tree: every markup (`.html`, `.rst`, `.md`),
-//! `.js`, `.css` and `.assets.json` file under `roots`, never descending into a directory
-//! named in `skip_dirs`, is read for `document.cookie` and for a resource host
-//! `allowed_hosts` does not name. Markup contributes its resource tags and inline script
-//! bodies, script text and an asset manifest their URL literals, a stylesheet its
-//! `@import` and `url(...)` addresses.
-def gate_web_third_party(roots : array<string>; skip_dirs : table<string>; allowed_hosts : table<string>) {
-    var files : array<string>
-    for (root in roots) {
-        walk_web_files(root, skip_dirs, files)
-    }
+def private gate_web_files(files : array<string>; allowed_hosts : table<string>) {
     for (path in files) {
         let text = fread(path)
         if (empty(text) && stat(path).size > 0ul) {
@@ -1313,4 +1309,39 @@ def gate_web_third_party(roots : array<string>; skip_dirs : table<string>; allow
                 "reaches {host}, which the gate's allowed-host list does not name - add the host only once its data handling is reviewed")
         }
     }
+}
+
+//! Cookie-and-host gate for a served web tree: every markup (`.html`, `.rst`, `.md`),
+//! `.js`, `.css` and `.assets.json` file under `roots`, never descending into a directory
+//! named in `skip_dirs`, is read for `document.cookie` and for a resource host
+//! `allowed_hosts` does not name. Markup contributes its resource tags and inline script
+//! bodies, script text and an asset manifest their URL literals, a stylesheet its
+//! `@import` and `url(...)` addresses.
+def gate_web_third_party(roots : array<string>; skip_dirs : table<string>; allowed_hosts : table<string>) {
+    var files : array<string>
+    for (root in roots) {
+        walk_web_files(root, skip_dirs, files)
+    }
+    gate_web_files(files, allowed_hosts)
+}
+
+def path_under_dirs(path : string; dirs : table<string>) : bool {
+    //! True when a directory on the `/`-separated
+    //! `path` is named in `dirs`.
+    for (part in split(dir_name(path), "/")) {
+        return true if (key_exists(dirs, part))
+    }
+    return false
+}
+
+def gate_web_third_party_files(paths : array<string>; skip_dirs : table<string>;
+                               allowed_hosts : table<string>) {
+    //! `gate_web_third_party` over `/`-separated paths the
+    //! caller chose: a markup, `.js`, `.css` or
+    //! `.assets.json` path is read, unless a directory on
+    //! it is named in `skip_dirs`. Handed `tracked_files`,
+    //! it leaves out what git ignores.
+    var inscope files <- [for (path in paths); path;
+        where is_scanned_file(base_name(path)) && !path_under_dirs(path, skip_dirs)]
+    gate_web_files(files, allowed_hosts)
 }
