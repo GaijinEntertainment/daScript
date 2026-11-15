@@ -28,12 +28,9 @@ scales ride into the view under its rebased keys, one a slice, so a stack's expe
 plan disarmed has no jobs and its planes whole in RAM, and the walk gathers them as the eager rail would; an entry no run
 of recorded jobs holds is a shape the mint does not know: the hook feeds the walk a zero stand-in of the entry's size so
 the walk runs to its end without a gather over a plane the stream never filled, records the entry, and the mint declines
-after the walk - a panic there would take a server down at boot, where its loads run under no catch. The twin is the one
-plane the sizing pass cannot know, since the walk sizes its entries as it places
-them: `vk_mint_extra_bytes` reserves the quant planes' bytes, both halves - a device scale row is its disk row's f16 half
-or narrower, so the twin never outgrows its planar source - an eighth over for the entry pads, the packed emb region
-where the lane is trimmed, and a window for the plan; the file sink truncates the surplus at close, and a twin past the
-bound is the chunk rail's panic, never a truncated image - the sink stops the walk at the first entry past it. The plan
+after the walk - a panic there would take a server down at boot, where its loads run under no catch. The entries the
+walk places depend on the device, so `vulkan_mint_measure` sizes the twin by running the same walk first, its gathers
+answering sizes only (`dev_rows_bytes`). The plan
 lands in `t.vkplan` for its own turn, which follows `vkblob` in field order. An armed tier that places nothing writes no
 twin: the lane carries the planar families alone, as a CPU-mode load's lane does. A CPU-mode load of the same file mints
 the CPU lane on its own first load: each lane is its mode's (`#image-lane-name`). The mapped lane arms the device

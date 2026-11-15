@@ -58,6 +58,15 @@ on the box that emitted it - while a shipped artifact takes the caller's `use_ho
 and redistributable by default, host-specific only when the build carries `[llvm_code]` kernels,
 whose tuner-generated IR a generic target refuses to legalize.
 
+A library for a wasm triple is the one exception: `write_wasm_lib` writes a single wasm object,
+`<out>.o`, and links nothing. The consumer's emcc link brings the wasm runtime archive anyway, and
+a host archiver need not index a wasm object, so an archive would add a tool dependency and no
+content. Only wasm64 is accepted: the host bakes its 8-byte pointer layouts into the object, and a
+wasm32 runtime would read them as 4. `--jit-static` and `--jit-lib-bindings` have no meaning there
+and are ignored with a warning. The header's link note (`lib_link_note`) names the emcc flags
+the wasm64 runtime archive is built with - wasm exceptions, simd128, memory64, `-pthread` under
+`--jit-threads` - because an object linked with different ones fails at link or traps at run time.
+
 `--jit-opt-level` (CLI, over `policies.jit_opt_level`, default 3) drives both the optimize
 pipeline and the DLL path's codegen-side target machine. A shipped artifact and AOT-object
 emission (`emit_object_only`) deliberately stay at codegen level 3: shipped artifacts are not

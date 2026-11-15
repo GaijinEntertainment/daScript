@@ -566,6 +566,7 @@ def w_page(var w : ImgWriter) : uint64 {
 
 let private DWRITE_STAGING_BAND = 16l * 1024l * 1024l
 let private SECTION_TABLE_SLACK = 65536ul
+let private IMAGE_RESERVE_SLACK = SECTION_TABLE_SLACK + uint64(IMAGE_PAGE)
 
 //! The mint sink: append-only and strictly ascending (what keeps NTFS from charging
 //! valid-data-length zero-fill on the preallocated file), one walk over two backings (memory
@@ -1207,6 +1208,7 @@ def private build_image(var t; dst : string; in_mem : bool; extra : uint64;
         delete hdr
     }
     w.cur = fend   // the image's true extent, for whoever maps or adopts it
+    assert(!w.ok || total - fend <= IMAGE_RESERVE_SLACK, "dasLLAMA image: the reserve exceeds what the image wrote")
     return w
 }
 
@@ -1333,17 +1335,19 @@ def private streamed_q_planes() : array<string> {
     return <- names
 }
 
-// streamed planes size as empty, so their bytes plus a page each are added here; over-reserve is free (dwrite_close truncates)
+[arch(at = "../ARCHITECTURE_IMAGE.md#image-sizing-exactness")]
+def private section_bytes(n : int64) : uint64 => n > 0l ? pad_to_page(uint64(n)) : 0ul
+
+def private scales_convert_at_save(t : Model; jobs : array<FillJob>) : bool
+    => t.wscale_f16 && empty(t.qscales16) && !empty(t.qscales) && stream_plane_bytes(t, jobs, "qblob") > 0l
+
 def private stream_extra_bytes(t : Model; jobs : array<FillJob>) : uint64 {
     var extra = 0ul
     for (fname in streamed_q_planes()) {
-        let sb = stream_plane_bytes(t, jobs, fname)
-        if (sb > 0l) {
-            extra += uint64(sb) + uint64(IMAGE_PAGE)
-        }
+        extra += section_bytes(stream_plane_bytes(t, jobs, fname))
     }
-    if (t.wscale_f16 && empty(t.qscales16) && !empty(t.qscales)) {
-        extra += uint64(long_length(t.qscales) * 2l) + uint64(IMAGE_PAGE)
+    if (scales_convert_at_save(t, jobs)) {
+        extra += section_bytes(long_length(t.qscales) * 2l)
     }
     return extra
 }
@@ -1467,28 +1471,17 @@ def private vk_mint_zero_view(f : KqFmt; woff, n : int64) {
     }
 }
 
-//! the bound a streamed GPU lane reserves for its twin, its plan and the packed emb region, since the walk sizes the twin
-//! only as it runs: the quant planes' bytes, both halves - a device scale row is its disk row's f16 half or narrower, so the
-//! twin never outgrows its planar source - an eighth over for the entry pads, and a window for the plan
 [arch(at = "../ARCHITECTURE_IMAGE_VULKAN.md#image-vulkan-mint")]
-def private vk_mint_extra_bytes(t : Model; jobs : array<FillJob>) : uint64 {
-    var planar = 0l
-    if (empty(jobs)) {   // no streaming plan: the quant halves are whole in RAM
-        planar += long_length(t.qblob) + long_length(t.q51q) + long_length(t.iq4nl32q) + long_length(t.q4032q) + long_length(t.q5032q) + long_length(t.mxq) + mlx_plane_bytes(t).q
-        for (p in t.kq) {
-            planar += long_length(p.q)
-        }
-    } else {
-        for (fname in streamed_q_planes()) {
-            planar += max(stream_plane_bytes(t, jobs, fname), 0l)
-        }
+def private vk_mint_planned_bytes(var t : Model) : uint64 {
+    let twin = vulkan_mint_measure() $ {
+        moe_gpu_upload_resident(t)
     }
-    planar += long_length(t.qscales) * 4l + long_length(t.qscales16) * 2l + long_length(t.q51s) + long_length(t.iq4nl32s) + long_length(t.q4032s) + long_length(t.q5032s) + long_length(t.mxs) + mlx_plane_bytes(t).s
-    for (p in t.kq) {
-        planar += long_length(p.s)
+    var bytes = section_bytes(twin.bytes) + section_bytes(twin.entries * int64(typeinfo sizeof(type<VkPlanEntry>)))
+    if (t.planes_trimmed) {
+        let emb = trim_emb_plane_bytes(t)
+        bytes += section_bytes(emb.q) + section_bytes(emb.s)
     }
-    let emb = t.planes_trimmed ? trim_emb_bytes(t) : 0l
-    return uint64(planar + planar / 8l + emb) + 64ul * 1024ul * 1024ul
+    return bytes
 }
 
 def private vk_mint_plane(m : GGUFMeta; bytes : array<uint8> | #; var t : Model; name : string; var w : ImgWriter;
@@ -1600,12 +1593,52 @@ struct private StreamSave {
 def private stream_save_prologue(var t : Model; jobs : array<FillJob>; tag : string) : StreamSave {
     let devw_bytes = t.metal_blob && metal_devw_panels() ? devw_bake_tables(t, jobs) : 0l
     let vk_mint = vk_mint_arm_walk(tag)
-    let vk_extra = vk_mint ? vk_mint_extra_bytes(t, jobs) : 0ul
+    let vk_extra = vk_mint ? vk_mint_planned_bytes(t) : 0ul
     let planar_extra = vk_mint && t.planes_trimmed ? 0ul : stream_extra_bytes(t, jobs)   // a trimmed lane writes no streamed family
+    let trimmed = vk_mint && t.planes_trimmed
     let ngram = ngram_stream_source().bytes   //! the n-gram table left on the mapping is sized here, the field being empty
-    return StreamSave(devw_bytes = devw_bytes, vk_mint = vk_mint,
-        extra = planar_extra + uint64(devw_bytes) + (devw_bytes > 0l ? uint64(IMAGE_PAGE) : 0ul) + vk_extra
-            + (ngram > 0l ? uint64(ngram) + uint64(IMAGE_PAGE) : 0ul))
+    let added = planar_extra + section_bytes(devw_bytes) + vk_extra + section_bytes(ngram)
+    let skipped = stream_skipped_bytes(t, trimmed, !trimmed && scales_convert_at_save(t, jobs))
+    assert(added >= skipped, "dasLLAMA image: the sections a save skips outweigh the ones it adds")
+    return StreamSave(devw_bytes = devw_bytes, vk_mint = vk_mint, extra = added - skipped)
+}
+
+def private plane_bytes(field) : int64 {
+    static_if (typeinfo is_array(field)) {
+        static_if (!typeinfo is_string(field[0])) {
+            return long_length(field) * int64(typeinfo sizeof(field[0]))
+        }
+    }
+    return 0l
+}
+
+def private kq_trim_dropped_bytes(field) : uint64 {
+    var bytes = 0ul
+    static_if (typeinfo is_dim(field)) {
+        for (el, i in field, count()) {
+            let fmt = kq_fmt_of_slot(i)
+            apply(el) $(iname : string; var ifield) {
+                if (kq_sb(fmt) && trim_plane_dropped(kq_plane_name(fmt, iname))) {
+                    bytes += section_bytes(plane_bytes(ifield))
+                }
+            }
+        }
+    }
+    return bytes
+}
+
+[arch(at = "../ARCHITECTURE_IMAGE.md#image-sizing-exactness")]
+def private stream_skipped_bytes(var t : Model; trimmed, scales_convert : bool) : uint64 {
+    var skipped = 0ul
+    apply(t) $(name : string; var field) {
+        if (trimmed ? trim_plane_dropped(name) : (scales_convert && name == "qscales")) {
+            skipped += section_bytes(plane_bytes(field))
+        }
+        if (trimmed) {
+            skipped += kq_trim_dropped_bytes(field)
+        }
+    }
+    return skipped
 }
 
 //! One plane's turn in either streaming sink: the GPU lane's planes, the dev-W panel plane and a streamed
