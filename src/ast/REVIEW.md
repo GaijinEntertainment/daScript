@@ -1,7 +1,7 @@
 # AST Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-docs: the `ARCHITECTURE*.md` files of this folder. A diff touching
+docs: `ARCHITECTURE.md`, `ARCHITECTURE_INFER.md`. A diff touching
 `promoteInitToAssign` (`ast_infer_type_function.cpp`) or `isPromotedInitCall`
 (`ast_generate.cpp`) applies `daslib/REVIEW.md` (repo root) too - the `daslib/builtin.das`
 (repo root) helpers they name change with them.
@@ -39,17 +39,6 @@ docs: the `ARCHITECTURE*.md` files of this folder. A diff touching
   replay loop in `init_dyn_modules` (`dyn_modules.cpp`) a branch for it in the same change.** The
   loop dispatches on `row.dynamic` and then on whether the row carries a das-visible name, so a
   kind it does not know replays as a native path or waits under a name nothing requires.
-
-- **A diff that gives `require` a new spelling - a guard form, a group form, a path prefix, the
-  whitespace a form allows - or changes when a guarded require or a guarded group member is
-  skipped, teaches every site that decides it the same spelling and the same skip-or-take
-  decision, in the same change: the text collector `getAllRequireReq` (`ast_parse.cpp`), the
-  parser's `ast_requireGuardAvailable` (`src/parser/parser_impl.cpp`), and the member walk
-  `moduleGroupMemberAvailable` (`src/builtin/module_builtin_rtti.cpp`).** The prerequisite walk
-  collects requires from the source text before any parse, so a spelling only the parser reads
-  is a module the walk never compiles, a decision the collector and the parser make differently
-  is a require the parse takes with no module behind it, and a member the walk takes but the
-  require did not is a call into a module that is not there.
 
 - **A diff that makes a compile entry point in `ast_parse.cpp` rebind a `daScriptEnvironment`
   field has that entry point hold a `CompileEnvScope` for the whole compile and puts that field in
@@ -102,14 +91,14 @@ docs: the `ARCHITECTURE*.md` files of this folder. A diff touching
 
 - **A diff that adds or changes, in `InferTypes`, an early return taken when `pendingSince` is
   true, at a lookup that does not go through `inferFunctionCall`, calls `reportPendingSignature`
-  before it returns.** The error
-  keeps the pass from being the last one. Without it, inference ends with the node never
-  resolved.
+  before it returns.** Without the error the pass can be the last one, and inference ends with
+  the node never resolved.
 
 - **A diff that builds an `ExprCopy`, `ExprMove` or `ExprClone` standing in for no `=`, `<-`
   or `:=` the user wrote passes `true` as the constructor's `no_promo` argument, or sets
-  `no_promotion` from the node it rewrites (`ARCHITECTURE_INFER.md#assign-operator-lookup`).** A
-  store that performs a user-written `:=` one field at a time, as a generated clone does, is the
-  user's store and passes no flag. A compiler-made store that reaches the user's `operator =`
-  runs it at a site the user never wrote, and only in the build configuration that builds the
-  store.
+  `no_promotion` from the node it rewrites; a store that performs a user-written `:=` one field
+  at a time, as a generated clone does, stands in for that `:=`, passes `false` as `no_promo`
+  and leaves `no_promotion` clear (`ARCHITECTURE_INFER.md#assign-operator-lookup`).** A
+  compiler-made store that reaches the
+  user's `operator =` runs it at a site the user never wrote, and only in the build
+  configuration that builds the store.

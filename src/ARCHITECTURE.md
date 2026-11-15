@@ -35,3 +35,24 @@ Ruled exceptions:
 - `g_pending_dynamic_modules`, `g_registered_dynamic_modules` and `g_registered_native_paths`
   (`builtin/module_builtin_fio.cpp`) and `g_nameless_manifests` (`ast/dyn_modules.cpp`) belong
   to the process, and the one module scan a process runs writes them.
+
+## The sites that read a `require` {#require-sites}
+
+Two things have to agree across the sites that read a `require`.
+
+The text. The grammar - the `require_module`, `require_module_name` and `optional_require_guard`
+productions of `parser/ds2_parser.ypp` - and the source-text collector `getAllRequireReq`
+(`ast/ast_parse.cpp`) each decide what a `require` line names.
+
+The guard. The collector, the parser's `ast_requireGuardAvailable` (`parser/parser_impl.cpp`) and
+the member walk `moduleGroupMemberAvailable` (`builtin/module_builtin_rtti.cpp`) each decide
+whether a guarded require, or a guarded member of a `require [group]`, is taken.
+
+The prerequisite walk collects requires from the source text before any parse, so a
+disagreement is a module that is missing at run time:
+
+- a spelling only the parser reads is a module the walk never compiles;
+- a guard the collector and the parser decide differently is a require the parse takes with no
+  module behind it;
+- a group member the member walk takes but the require did not is a call into a module that is
+  not there.

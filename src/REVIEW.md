@@ -21,14 +21,26 @@ runtime or OS call that takes a `char *` file path - it reported before in each 
 `REVIEW.das` leaves without a `NARROW_PATH_FILES` row, each finding naming the call and the API
 to use.**
 
-**A diff that adds or tightens a compile error so the compile rejects source it accepted
-before, or changes a node, name, type or flag `AstSerializer` streams for unchanged source,
+**A diff after which the compile rejects source it accepted before, or leaves a different AST
+for unchanged source - a node, name, type or flag any compile pass adds, removes or changes -
 bumps `AstSerializer::getVersion()` (`include/daScript/ast/ast_serializer.h`, repo root) in the
 same change.** A cached module skips the compile, so without the bump a rebuilt
 `daslang` serves what the old compile accepted or produced.
 
-**A diff under this folder that adds an object with static storage duration, or adds or changes
-code that reads or writes one, makes that object - when code writes it outside its initializer
-or a global constructor - a `thread_local`, a field reached through `daScriptEnvironment`, a
+**A diff under this folder that adds an object with static storage duration that code writes
+outside its initializer or a global constructor, or adds or changes code that reads or writes
+such an object, makes it a `thread_local`, a field reached through `daScriptEnvironment`, a
 lock, an atomic, or an object read and written only under one named lock
 (`ARCHITECTURE.md#static-storage-homes`).**
+
+**A diff that changes which text the grammar's `require_module`, `require_module_name` or
+`optional_require_guard` productions (`parser/ds2_parser.ypp`) accept as a `require`, or which
+text the source-text collector `getAllRequireReq` (`ast/ast_parse.cpp`) reads as one, makes both
+accept the same text, in the same change (`ARCHITECTURE.md#require-sites`).**
+
+**A diff that changes how a require guard is evaluated - the `?m` in `require ?m x`, or the guard
+a member of a `require [group]` carries - makes the same change in all three evaluators, in the
+same change: the collector `getAllRequireReq` (`ast/ast_parse.cpp`), the parser's
+`ast_requireGuardAvailable` (`parser/parser_impl.cpp`), and the member walk
+`moduleGroupMemberAvailable` (`builtin/module_builtin_rtti.cpp`)
+(`ARCHITECTURE.md#require-sites`).**

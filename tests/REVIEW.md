@@ -93,20 +93,19 @@ in - the JIT never takes that path - so losing that coverage fails no CI job.
 
 **A diff that changes a `.das` file under `tests/` (repo root) that `test_aot` compiles - one an
 `AOT_*_FILES` variable of `tests/aot/CMakeLists.txt` holds after its filters, or a top-level
-file of a `DAS_AOT_SUITES` folder no variable covers, not marked `options no_aot` - names in
-the PR body the run that showed `test_aot` pass: a local
-`daslang utils/internal/preflight/main.das -- --full` (repo root), a `--target run_tests_aot`
-build, or a link to a `nightly` workflow run (scheduled, dispatched, or triggered by the PR's
-`#nightly` tag) whose Nightly Tests step passed (`ARCHITECTURE.md#test-aot`).** Per-PR CI
-builds only the AOT subset binary (the test_aot_subset target), so the PR's own checks do not
-prove `test_aot`.
+file of a `DAS_AOT_SUITES` folder no variable covers, neither marked `options no_aot` nor named
+`failed_*`, `cant_*` or `invalid_*` - names in the PR body the run that showed `test_aot` pass:
+a local `daslang utils/internal/preflight/main.das -- --full` (repo root), a
+`--target run_tests_aot` build, or a link to a `nightly` workflow run whose Nightly Tests step
+passed (`ARCHITECTURE.md#test-aot`).** Per-PR CI builds only the AOT subset binary (the
+test_aot_subset target), which compiles `tests/language` alone against a smaller set of `daslib`
+modules, so the PR's own checks do not prove `test_aot`.
 
-**A diff that adds or changes a `.das` file under `tests/` (repo root) that `test_aot` does not
-compile, or compiles and does not run - through `options no_aot` in the file, a filter on an
-`AOT_*_FILES` variable of `tests/aot/CMakeLists.txt`, a `--use-aot` skip of its folder in
-`tests/.das_test`, its place in a subfolder of a `DAS_AOT_SUITES` folder, or a `tests/<name>/`
-folder whose files neither `DAS_AOT_SUITES` nor any `AOT_*_FILES` variable compiles - states
-beside that mechanism (for a folder or a subfolder, beside the `DAS_AOT_SUITES` list) what
-stops `test_aot` compiling or running the file and why an AOT build of it tests
-nothing.** Without a stated reason no later diff can tell
-whether the opt-out is still needed.
+**A diff that adds or changes a `.das` file under `tests/` (repo root) whose name starts with
+none of `_`, `failed_`, `cant_`, `invalid_`, that `test_aot` does not compile, or compiles and
+does not run, states what stops `test_aot` compiling or running the file and why an AOT build of
+it tests nothing: in the file for `options no_aot`; beside the `DAS_AOT_SUITES` list for a file
+whose folder that list leaves out or that sits in a subfolder; beside the `AOT_*_FILES` filter in
+`aot/CMakeLists.txt` or the `--use-aot` skip in `.das_test` otherwise
+(`ARCHITECTURE.md#test-aot`).** Without a stated reason no later diff can tell whether the
+opt-out is still needed.

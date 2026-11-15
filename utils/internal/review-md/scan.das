@@ -3,6 +3,8 @@ options gen2
 require strings
 require daslib/strings_boost
 require daslib/fio
+require dastest/file_census
+require dastest/review_gate
 
 def file_has_line(path : string; pred : block<(ln : string) : bool>) : bool {
     for (ln in split(fread(path), "\n")) {
@@ -10,6 +12,9 @@ def file_has_line(path : string; pred : block<(ln : string) : bool>) : bool {
     }
     return false
 }
+
+def declares_a_test(root : string; f : string) : bool =>
+    !empty(census_file(root, f).tests)
 
 //! the extra paths a changed file answers to under the root REVIEW.md's by-kind routing
 def routed_paths(root : string; f : string) : array<string> {
@@ -19,7 +24,7 @@ def routed_paths(root : string; f : string) : array<string> {
     }
     let path = path_join(root, f)
     if (ends_with(f, ".das") && !starts_with(f, "modules/") && fexist(path)) {
-        if (file_has_line(path, $(ln) => starts_with(ln, "[test]") || starts_with(ln, "[test(") || starts_with(ln, "[test,"))) {
+        if (declares_a_test(root, f)) {
             out |> push("tests/{base_name(f)}")
         }
     }
@@ -31,16 +36,33 @@ def routed_paths(root : string; f : string) : array<string> {
     return <- out
 }
 
+//! checklists the root REVIEW.md's routing adds for a changed file
+//! as they are - their folders are not walked up
+def routed_checklists(root : string; f : string) : array<string> {
+    var out : array<string>
+    let path = path_join(root, f)
+    if (ends_with(f, ".das") && fexist(path) && declares_a_test(root, f)) {
+        for (required in das_requires(path)) {
+            if (starts_with(required, "cuda/")) {
+                out |> push("tests/cuda/REVIEW.md")
+                break
+            }
+        }
+    }
+    return <- out
+}
+
 //! Every REVIEW.md that governs one of the changed paths, deduped and sorted - the folder walk
 //! plus the root REVIEW.md's routing. Paths are repo-relative; `root` prefixes the filesystem
 //! checks only.
 def affected_review_md(root : string; changed : array<string>) : array<string> {
     var inscope seen : table<string>
-    var found, walked : array<string>
+    var found, walked, unwalked : array<string>
     for (f in changed) {
         continue if (empty(f))
         walked |> push(f)
         walked |> push_from(routed_paths(root, f))
+        unwalked |> push_from(routed_checklists(root, f))
     }
     for (f in walked) {
         var d = dir_name(f)
@@ -57,6 +79,10 @@ def affected_review_md(root : string; changed : array<string>) : array<string> {
             let up = dir_name(d)
             d = empty(up) ? "." : up
         }
+    }
+    for (md in unwalked) {
+        continue if (has_value(found, md) || !fexist(path_join(root, md)))
+        found |> push(md)
     }
     found |> sort
     return <- found
