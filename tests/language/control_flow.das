@@ -1556,9 +1556,10 @@ def recovered_message(text : string) : string {
 def test_recover_reads_last_exception(t : T?) {
     t |> success(find(recovered_message("short panic"), "short panic") >= 0, "a short panic's message")
     // Longer than the last: the context's message is stored anew, so a stale view of the last one would show.
-    var long = ""
-    for (_ in range(20)) {
-        long += "a much longer panic message "
+    let long = build_string() $(var writer) {
+        for (_ in range(20)) {
+            writer |> write("a much longer panic message ")
+        }
     }
     t |> success(find(recovered_message(long), long) >= 0, "the long panic's message after the short one")
 }
