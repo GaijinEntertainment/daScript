@@ -58,14 +58,19 @@ on the box that emitted it - while a shipped artifact takes the caller's `use_ho
 and redistributable by default, host-specific only when the build carries `[llvm_code]` kernels,
 whose tuner-generated IR a generic target refuses to legalize.
 
-A library for a wasm triple is the one exception: `write_wasm_lib` writes a single wasm object,
-`<out>.o`, and links nothing. The consumer's emcc link brings the wasm runtime archive anyway, and
-a host archiver need not index a wasm object, so an archive would add a tool dependency and no
-content. Only wasm64 is accepted: the host bakes its 8-byte pointer layouts into the object, and a
-wasm32 runtime would read them as 4. `--jit-static` and `--jit-lib-bindings` have no meaning there
-and are ignored with a warning. The header's link note (`lib_link_note`) names the emcc flags
-the wasm64 runtime archive is built with - wasm exceptions, simd128, memory64, `-pthread` under
-`--jit-threads` - because an object linked with different ones fails at link or traps at run time.
+A library for a cross triple (`--jit-target`) is the one exception: `write_cross_lib` writes a
+single object for that triple, `<out>.o`, and links nothing. The consumer's link - emcc for wasm,
+the target's clang (the Android NDK's, say) otherwise - brings the runtime archive built for that
+target anyway, and a host archiver need not index a foreign object, so an archive would add a tool
+dependency and no content. The object's target machine carries the features the intrinsic tables
+were gated on: the wasm runtime archive's set, or the arch's forced features. Only 64-bit triples
+are accepted (wasm64, aarch64, x86_64): the host bakes its 8-byte pointer layouts into the object,
+and a 32-bit runtime would read them as 4. `--jit-static` and `--jit-lib-bindings` have no meaning
+there and are ignored with a warning. The header's link note (`lib_link_note`) names the link: for
+every cross triple, a runtime built for the same target with the same C++ standard library, whose
+layouts the host baked in; for wasm also the emcc flags the wasm64 runtime archive is built with -
+wasm exceptions, simd128, memory64, `-pthread` under `--jit-threads` - because an object linked
+with different ones fails at link or traps at run time.
 
 `--jit-opt-level` (CLI, over `policies.jit_opt_level`, default 3) drives both the optimize
 pipeline and the DLL path's codegen-side target machine. A shipped artifact and AOT-object

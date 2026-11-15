@@ -37,7 +37,7 @@ var LINK_WHOLE_LIB = false // when true, standalone exe links against the whole 
 
 // Read by tests-cpp/small/test_jit_emitter_pin.cpp: FNV-1a64 of the emitter sources
 // (normalized to LF; file list in the test)
-let LLVM_JIT_EMITTER_HASH : uint64 = 0x6ae451b38bb5fe2ful
+let LLVM_JIT_EMITTER_HASH : uint64 = 0x35fcf134be22afa8ul
 
 [arch(at = "../ARCHITECTURE_FAST_MATH.md#never-fast-math")]
 def private apply_fast_math_to_module(m : LLVMOpaqueModule?) {
@@ -993,10 +993,10 @@ def public run_jit(prog : Program?; var ctx : Context?; cli_opts : JitCliOptions
                 emit_failed ||= !emit_object_only(jit_target, g_mod, output_path, use_host_cpu)
             } elif (gen_lib) {
                 mkdir_rec(dir_name(output_path))
-                let lib_kind = (gen_wasm ? JitArtifact.object
+                let lib_kind = (!empty(target_triple) ? JitArtifact.object
                     : (lib_static ? JitArtifact.static_lib : JitArtifact.shared_lib))
                 let written = (lib_kind == JitArtifact.object
-                    ? write_wasm_lib(jit_target, g_mod, output_path, target_triple, LINK_WHOLE_LIB)
+                    ? write_cross_lib(jit_target, g_mod, output_path, target_triple, LINK_WHOLE_LIB)
                     : write_artifact(jit_target, g_mod, output_path, lib_kind, path_to_shared_lib,
                         path_to_linker, linker_string, LINK_WHOLE_LIB, exe_host_cpu, debug_info,
                         log_jit_time))

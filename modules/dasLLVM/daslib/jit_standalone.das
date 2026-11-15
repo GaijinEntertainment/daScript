@@ -33,13 +33,15 @@ def public lib_link_note(target : JitTarget; kind : JitArtifact; link_whole_lib 
             return "Link this archive plus <das_root>/lib/{rt_static}.{whole}{sys}"
         }
         JitArtifact.object => $ {
+            let generic = ("Link this {get_target_triple()} object with libDaScript_runtime " +
+                "built for the same target\nwith the same C++ standard library.")
+            return generic if (target.arch != JitTargetArch.wasm)
             let threads = target.wasm_threads ? " -pthread" : ""
             let whole = (link_whole_lib
                 ? ("\nThis library registers a module that lives in the compiler library, " +
                     "and the wasm runtime\narchive does not carry the compiler library.")
                 : "")
-            return ("Link this wasm object into an emscripten program together with the wasm64 " +
-                "runtime archive\n" +
+            return ("{generic}\nFor wasm that runtime is the wasm64 archive " +
                 "<das_root>/web/output64/lib/liblibDaScript_runtime.a:\n" +
                 "  emcc <sources> <this>.o <runtime> -fwasm-exceptions " +
                 "-sWASM_LEGACY_EXCEPTIONS=0 -msimd128 -sMEMORY64=2{threads}\n" +

@@ -1285,18 +1285,15 @@ def private find_runtime_lib(override_path : string) : Option<string> {
 def private wasm_triple_or_default(triple : string) : string =>
     !(triple |> empty()) ? triple : "wasm64-unknown-emscripten"
 
-//! writes `mod` as one wasm object at `obj`, verbatim; false when
-//! no object is on disk after
-def public emit_wasm_object(target : JitTarget; mod : LLVMOpaqueModule?; obj : string;
-                            triple : string) : bool {
+//! writes `mod` as one object for the cross triple at `obj`,
+//! verbatim; false when no object is on disk after
+def public emit_target_object(target : JitTarget; mod : LLVMOpaqueModule?; obj : string;
+                              triple : string) : bool {
     var emitted = false
-    LLVMInitializeWasmTarget()
     let real_triple = wasm_triple_or_default(triple)
-    // Match the feature set web/CMakeLists.txt compiles the runtime archive with (-msimd128
-    // -mnontrapping-fptoint): without +simd128 the host lowers vec4f returns via sret while emcc
-    // returns native v128 — wasm-ld signature mismatches and `unreachable` traps on any vec4f helper.
-    let features = wasm_target_features(target)
-    with_target_machine(real_triple, "", features, 2u) $(targetMachine : LLVMTargetMachineRef) {
+    LLVMInitializeWasmTarget()
+    with_target_machine(real_triple, "", target_plus_features(target),
+                        3u) $(targetMachine : LLVMTargetMachineRef) {
         // Pin the module's data layout + triple to the TARGET's so codegen sizes
         // pointers correctly (wasm64 → 8-byte). Without this the module inherits
         // host layout and produces wrong-sized loads/stores.
@@ -1311,24 +1308,25 @@ def public emit_wasm_object(target : JitTarget; mod : LLVMOpaqueModule?; obj : s
         emitted = failed == 0 && stat(obj).is_valid
     }
     if (!emitted) {
-        to_log(LOG_ERROR, "wasm: failed to emit object {obj} (LLVMTargetMachineEmitToFile error)\n")
+        to_log(LOG_ERROR,
+            "{real_triple}: failed to emit object {obj} (LLVMTargetMachineEmitToFile error)\n")
     }
     return emitted
 }
 
-//! a wasm library is one wasm object at `<out_path>.o`: the emcc
-//! link that consumes it brings the runtime archive, and a host
-//! archiver need not index a wasm object
-def public write_wasm_lib(target : JitTarget; mod : LLVMOpaqueModule?; out_path : string;
-                          triple : string; link_whole_lib : bool) : bool {
+//! a cross-target library is one object at `<out_path>.o`: the
+//! target toolchain's link brings the runtime archive built for that
+//! target, and a host archiver need not index a foreign object
+def public write_cross_lib(target : JitTarget; mod : LLVMOpaqueModule?; out_path : string;
+                           triple : string; link_whole_lib : bool) : bool {
     let obj = artifact_path(out_path, JitArtifact.object)
-    return false if (!emit_wasm_object(target, mod, obj, triple))
+    return false if (!emit_target_object(target, mod, obj, triple))
     if (link_whole_lib) {
         to_log(LOG_WARNING, "LLVM LIB: {obj} registers a module from the compiler library, " +
-            "which the wasm runtime archive does not carry\n")
+            "which a cross-target runtime archive does not carry\n")
     }
-    to_log(LOG_INFO, "LLVM LIB: wasm object {obj} written - link it with emcc and the wasm " +
-        "runtime archive ({out_path}.h names the flags)\n")
+    to_log(LOG_INFO, "LLVM LIB: {triple} object {obj} written - link it with that target's " +
+        "toolchain and runtime archive ({out_path}.h names the link)\n")
     return true
 }
 
@@ -1339,7 +1337,7 @@ def public write_wasm(target : JitTarget; mod : LLVMOpaqueModule?; out_path : st
     //! an emitted-only object lands at `out_path` verbatim, no `.o.o`:
     //! daspkg links that path
     let obj = emit_object_only ? out_path : artifact_path(out_path, JitArtifact.object)
-    return false if (!emit_wasm_object(target, mod, obj, triple))
+    return false if (!emit_target_object(target, mod, obj, triple))
     if (emit_object_only) {
         to_log(LOG_INFO, "wasm: emitted object {obj} (link skipped; --jit-emit-object)\n")
         return true

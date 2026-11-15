@@ -633,7 +633,7 @@ def private is_wasm_object(path : string) : bool {
 }
 
 
-def private build_wasm_lib(stem, triple : string; var lines : array<string>) : int {
+def private build_cross_lib(stem, triple : string; var lines : array<string>) : int {
     mkdir_rec(OUTPUT_DIR)
     let bin = get_host_binary()
     return spawn("cd \"{get_das_root()}\" && \"{bin}\" -lib \"{FIXTURE_DIR}/_jit_lib_probe.das\" " +
@@ -651,7 +651,7 @@ def test_jit_lib_wasm(tt : T?) {
     tt |> run("a wasm64 library is one wasm object and its header") @(t : T?) {
         let stem = path_join(OUTPUT_DIR, "jit_lib_wasm64")
         var lines : array<string>
-        let rc = build_wasm_lib(stem, "wasm64-unknown-emscripten", lines)
+        let rc = build_cross_lib(stem, "wasm64-unknown-emscripten", lines)
         let output = join(lines, "\n")
         t |> equal(rc, 0, output)
         t |> success(is_wasm_object("{stem}.o"), "{stem}.o is a wasm object:\n{output}")
@@ -667,10 +667,57 @@ def test_jit_lib_wasm(tt : T?) {
     tt |> run("a wasm32 library is refused") @(t : T?) {
         let stem = path_join(OUTPUT_DIR, "jit_lib_wasm32")
         var lines : array<string>
-        let rc = build_wasm_lib(stem, "wasm32-unknown-emscripten", lines)
+        let rc = build_cross_lib(stem, "wasm32-unknown-emscripten", lines)
         let output = join(lines, "\n")
         t |> success(rc != 0, output)
-        t |> success(find(output, "wasm64 only") >= 0, output)
+        t |> success(find(output, "64-bit only") >= 0, output)
+        t |> success(!fexist("{stem}.o"), "no object is written")
+    }
+}
+
+
+def private elf_machine(path : string) : int {
+    var head : array<uint8>
+    head |> resize(20)
+    var read = 0
+    fopen(path, "rb") $(f) {
+        if (f != null) {
+            read = fread(f, head)
+        }
+    }
+    let elf = (head[0] == 0x7Fu8 && head[1] == uint8('E') && head[2] == uint8('L')
+        && head[3] == uint8('F'))
+    return -1 if (read != 20 || !elf)
+    return int(head[18]) | (int(head[19]) << 8)
+}
+
+
+let ELF_AARCH64 = int(0xB7)
+
+
+[test(description = "an aarch64 Android -lib build writes one aarch64 ELF object and its header, and a 32-bit arm library is refused", timeout = 1200)]
+def test_jit_lib_android(tt : T?) {
+    if (!jit_enabled()) {
+        tt |> success(true, "-lib needs the LLVM backend")
+        return
+    }
+    tt |> run("an aarch64 library is one aarch64 object and its header") @(t : T?) {
+        let stem = path_join(OUTPUT_DIR, "jit_lib_aarch64")
+        var lines : array<string>
+        let rc = build_cross_lib(stem, "aarch64-linux-android", lines)
+        let output = join(lines, "\n")
+        t |> equal(rc, 0, output)
+        t |> equal(elf_machine("{stem}.o"), ELF_AARCH64, output)
+        t |> success(fexist("{stem}.h"), "the C header is written")
+        t |> success(!fexist(static_artifact(stem)) && !fexist(shared_artifact(stem)),
+            "no host archive or shared library is written")
+        t |> success(!fexist("{stem}_c.das"), "no dasbind bindings are written")
+    }
+    tt |> run("a 32-bit arm library is refused") @(t : T?) {
+        let stem = path_join(OUTPUT_DIR, "jit_lib_armv7")
+        var lines : array<string>
+        let rc = build_cross_lib(stem, "armv7-linux-androideabi", lines)
+        t |> success(rc != 0, join(lines, "\n"))
         t |> success(!fexist("{stem}.o"), "no object is written")
     }
 }
