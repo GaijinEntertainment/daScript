@@ -163,6 +163,7 @@
 ### Build / CI
 
 - **The bundle smoke compiles `simulate.h` against the installed `include/` alone** (#4456) - one `-fsyntax-only` translation unit catches a header the install rules forget when only `daScript/` paths appear in includes; a Windows bundle or a box without a C++ compiler skips the row
+- **The daspkg-index sweep compiles what each package registers** - after an install, `utils/daspkg/index_compile.das` compiles every module the package's `.das_module` registers, so a package whose C++ half builds and whose daslang half does not is a red row; the install alone had let two such packages pass since 0.6.5
 - **The site gate reads tracked files** - `site/REVIEW.das` walked the disk, so a box with a local preview went red on generated blog pages and a vendored playground runtime that git ignores; `dastest/review_gate.das` gains `gate_web_third_party_files`, `tracked_files_in` and `path_under_dirs`
 - **Bounded sccache slots; the extended checks run on linux** (#4567) - every sccache slot of the build matrix is bounded and a sanitizer cell's `slow` job keeps a slot of its own; the nightly's windows 64 Debug cell compiles and runs no test (#4507, #4538)
 - **The dasllama-server lane compiles its files together** (#4555) - 21 `dastest` processes each compiled the engine module graph; `dastest --isolated-mode --compile-only` no longer runs the tests

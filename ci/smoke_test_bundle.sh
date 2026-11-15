@@ -77,6 +77,7 @@ COMPILE_TESTS=(
     "dasllama-cli|utils/dasllama-server/cli.das"
     "dasllama-server-bench|utils/dasllama-server/server_bench.das"
     "daspkg|utils/daspkg/main.das"
+    "daspkg-index-compile|utils/daspkg/index_compile.das"
     "detect-dupe|utils/detect-dupe/main.das"
     "fix-lint-errors|utils/fix-lint-errors/main.das"
     "gen1-to-gen2|utils/gen1-to-gen2/main.das"

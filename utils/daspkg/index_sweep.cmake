@@ -59,7 +59,16 @@ foreach(_i RANGE ${_last})
     execute_process(COMMAND "${DASLANG}" utils/daspkg/main.das -- install ${_name} --branch ${_def}
         WORKING_DIRECTORY "${ROOT}" RESULT_VARIABLE _rc)
     if(_rc EQUAL 0)
-        string(APPEND _summary "| ${_name} | :white_check_mark: ${_def} |\n")
+        # an install proves the C++ half builds; the daslang half is only proven by compiling
+        # what the package registers for a consumer to require
+        execute_process(COMMAND "${DASLANG}" utils/daspkg/index_compile.das -- --package ${_name}
+            WORKING_DIRECTORY "${ROOT}" RESULT_VARIABLE _compile_rc)
+        if(_compile_rc EQUAL 0)
+            string(APPEND _summary "| ${_name} | :white_check_mark: ${_def} |\n")
+        else()
+            list(APPEND _failed ${_name})
+            string(APPEND _summary "| ${_name} | :x: a registered module does not compile (${_def}) |\n")
+        endif()
     elseif(_rc EQUAL 3)
         # the manifest refused this host (daspkg exit 3) while the index entry did not say so:
         # the entry is stale until the next update-index, and the sweep does not fail on it

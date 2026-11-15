@@ -324,7 +324,7 @@ def private check_embedded_samples(tracked : array<string>) {
                 gate_finding(page, line,
                     "sample {k} did not compile in {cap} s - a compiler hang, or a slow machine")
             } elif (rc != 0) {
-                let first_error = find_first_error_line(output)
+                let first_error = first_error_line(output)
                 gate_finding(page, line, "sample {k} does not compile with the current toolchain: {first_error}")
             }
             // the link belongs beside the sample: in the page section that holds the block, or
@@ -347,13 +347,6 @@ def private check_embedded_samples(tracked : array<string>) {
             }
         }
     }
-}
-
-def private find_first_error_line(output : string) : string {
-    for (raw in split(output, "\n")) {
-        return strip(raw) if (find(raw, "error") >= 0)
-    }
-    return "(no error line captured)"
 }
 
 def private is_site_script(path : string) : bool {

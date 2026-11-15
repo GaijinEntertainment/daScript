@@ -154,6 +154,15 @@ def tracked_files_in(repo : string; globs : array<string>;
     return <- files
 }
 
+def first_error_line(output : string) : string {
+    //! The first line of a compiler's output that says `error`,
+    //! stripped; a fixed note when no line does.
+    for (raw in split(output, "\n")) {
+        return strip(raw) if (find(raw, "error") >= 0)
+    }
+    return "(no error line captured)"
+}
+
 //! True when `word` appears in `text` as a whole identifier - no identifier byte on either side.
 def contains_word(text : string; word : string) : bool {
     var hit = false

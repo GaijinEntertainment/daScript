@@ -348,6 +348,14 @@ def test_gate_web_third_party_files(t : T?) {
     t |> success(rmdir_rec("{root}"))
 }
 
+[test(description = "the first error line of a compiler's output is its first line saying error, stripped, and a fixed note when no line does")]
+def test_first_error_line(t : T?) {
+    let output = "compiling x.das\n  error[30151]: syntax error\nerror: second\n"
+    t |> equal("error[30151]: syntax error", first_error_line(output))
+    t |> equal("(no error line captured)", first_error_line("compiling x.das\nok\n"))
+    t |> equal("(no error line captured)", first_error_line(""))
+}
+
 [test(description = "a path is under a named directory only when one of its directory parts carries the name, never its file name or a longer part")]
 def test_path_under_dirs(t : T?) {
     let dirs <- { "tests", "wasm" }
