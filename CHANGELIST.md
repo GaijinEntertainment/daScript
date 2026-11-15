@@ -86,6 +86,8 @@
 - **AOT C++ compiles faster** (#4561) - RTTI tables are constant-initialized through constexpr constructors and the string-builder helpers are out of line; with clang 20 at -O3, `aot_cpp` 11.7 s -> 6.3 s
 - **`-exe` builds a program whose global initializer holds a block** (#4543)
 - **Half values ride LLVM interop slots** (#4498) - the LLVM-AOT emitter registers the half-value `sprint_json` / `sscan_json` helpers it used to decline
+- **The shared runtime exports the AOT registration functions** (#4619) - `das_aot_register`, `das_aot_register_declined`, `das_aot_register_globinit` and `das_aot_get_func_by_mnh` are `DAS_API` like the other JIT entry points, so an LLVM AOT object links against `libDaScriptDyn_runtime`
+- **A wasm64 `-lib` build writes one wasm object and its header** (#4626) - `-lib` with `--jit-target=wasm64-*` handed the wasm object to the host archiver or linker, which cannot index or link it; the library is now one `<out>.o`, the header's link note names the emcc flags the wasm64 runtime archive is built with, and a wasm32 library is refused
 - **The shader emitters lower a direct self-method call** (#4584) - a kernel class in a private family calls its own helper method under the MSL, SPIR-V and CUDA emitters, and a kernel hands a tracked buffer to a helper a required module declares
 - **`flatten`: no chain on a constant select; fuse re-runs the preshader pass** (#4589) - flattened shader output changes for two shapes, so a backend that keeps goldens of the flattened source refreshes them
 
@@ -110,6 +112,7 @@
 
 - **NVFP4 CPU kernels and the FP4 rung on CUDA** (#4414, #4418) - the row-major rail and the grp tier replace the reference bodies on the CPU; on CUDA the routed NVFP4 experts run on the FP4 rung and the deltanet scan runs in chunks
 - **An integrated GPU's room is every memory heap** (#4416) - the Vulkan resident plan sizes against all heaps, so a model that split its experts onto the CPU loads whole
+- **An image reserves exactly the bytes it writes** (#4626) - the Vulkan twin was reserved by a bound and the q8 scale plane was counted in f32; the mint's walk now runs once before allocation, so the twin and its plan are sized exactly
 - **One home for the box probes** (#4413) - WMI through `wmic`, then CIM
 - **A GPU home switch keeps the loader's provider seats** (#4415)
 - **The ASR decoders, the translator and the Metal tower shut down with their context** (#4441, #4442)
@@ -134,6 +137,7 @@
 - **An unused call keeps the side effects its field and index operands carry** (#4458) - a call dropped as unused no longer takes an `addr(arr[i++])`, an index a call computes, or a field of a call result with it; an `assert` over a field of an effectful call, or over an inserting table index, now reports its side effect the way the plain forms do, so such a check is written `verify`
 - **A const argument to a generic `var` reference reports no matching function** - `def f(var x : auto(TT)&)` called with a `let` value matched, made an instance that could never be called, and looped until inference stopped with error 30507; it is error 30341 naming the const argument
 - **Captured return locals keep stable stack storage** (#4412) - a returned local referenced inside a block aliased the active result buffer, so a callback invoked by a function returning another aggregate could lose writes
+- **A recover block reads the panic it caught under AOT** (#4621) - `das_try_recover` set `last_exception` after the recover block ran, so a block reading `this_context().last_exception` (as `daslib/sql_migrate` does) got the previous panic's value: null on a context's first panic, stale storage once a longer message replaced it; the interpreter and the JIT already set it first
 - **A stranded `lpipe()` reports instead of crashing the compiler** (#4521)
 - **A global `fixed_array` of struct literals that name a property initializes** (#4535) - it crashed before `main`
 - **One module file reached under two path spellings is one module** (#4543) - it failed with error 20605
@@ -163,14 +167,17 @@
 ### Build / CI
 
 - **The bundle smoke compiles `simulate.h` against the installed `include/` alone** (#4456) - one `-fsyntax-only` translation unit catches a header the install rules forget when only `daScript/` paths appear in includes; a Windows bundle or a box without a C++ compiler skips the row
-- **The SDK ships dasImgui's C++ headers** - the module's binding headers, its generated `.inc` files and the Dear ImGui headers install beside `dasModuleImgui.lib`, so `daspkg install dasImguiImplot` and `dasImguiNodeEditor` build against an installed SDK; before, the import library shipped without the headers those packages include
-- **The daspkg-index sweep compiles what each package registers** - after an install, `utils/daspkg/index_compile.das` compiles every module the package's `.das_module` registers, so a package whose C++ half builds and whose daslang half does not is a red row; the install alone had let two such packages pass since 0.6.5
-- **The site gate reads tracked files** - `site/REVIEW.das` walked the disk, so a box with a local preview went red on generated blog pages and a vendored playground runtime that git ignores; `dastest/review_gate.das` gains `gate_web_third_party_files`, `tracked_files_in` and `path_under_dirs`
+- **The SDK ships dasImgui's C++ headers** (#4622) - the module's binding headers, its generated `.inc` files and the Dear ImGui headers install beside `dasModuleImgui.lib`, so `daspkg install dasImguiImplot` and `dasImguiNodeEditor` build against an installed SDK; before, the import library shipped without the headers those packages include
+- **The daspkg-index sweep compiles what each package registers** (#4622) - after an install, `utils/daspkg/index_compile.das` compiles every module the package's `.das_module` registers, so a package whose C++ half builds and whose daslang half does not is a red row; the install alone had let two such packages pass since 0.6.5
+- **The site gate reads tracked files** (#4617) - `site/REVIEW.das` walked the disk, so a box with a local preview went red on generated blog pages and a vendored playground runtime that git ignores; `dastest/review_gate.das` gains `gate_web_third_party_files`, `tracked_files_in` and `path_under_dirs`
 - **Bounded sccache slots; the extended checks run on linux** (#4567) - every sccache slot of the build matrix is bounded and a sanitizer cell's `slow` job keeps a slot of its own; the nightly's windows 64 Debug cell compiles and runs no test (#4507, #4538)
 - **The dasllama-server lane compiles its files together** (#4555) - 21 `dastest` processes each compiled the engine module graph; `dastest --isolated-mode --compile-only` no longer runs the tests
 - **Lint tree chunks skip when nothing they read changed** (#4499) - a stamp plus a depfile of every source the lint compiles read
 - **The half-speed nightly cells configure raised dastest watchdogs** (#4408)
 - **The `build_eastl` lane builds again** (#4485) - the tree's `dag_config.h` shim defines `DAG_MEMCPY_NONNULL`
+- **`aot_builtin_string.h` includes `<system_error>`** (#4620) - `ConversionResult` uses `std::errc`, and libc++ 23 no longer brings the header in through `<vector>`, `<map>` or `<functional>`
+- **A missing system dependency disables its module with a warning** (#4626) - the configure no longer fails: dasGlfw (X11 headers or Git missing; OpenGL is linked only when found), dasHV (no OpenSSL), dasCrypto (Emscripten, no OpenSSL, or OpenSSL older than 3.0) and dasImgui (no OpenGL on a desktop build) are disabled with a `MESSAGE(WARNING ...)` naming what is missing
+- **The bundle smoke's header row uses the compiler that built the tree** (#4627) - the row that compiles `simulate.h` against the shipped `include/` ran the system `c++`; on linux arm that is GCC, which rejects the implicit NEON vector conversions in vecmath's header, and the release workflow's arm cell failed its smoke
 - **`pr-babysit`: a green tip whose review never came exits 6** (#4588)
 - **Smaller lane fixes** (#4440, #4474, #4479, #4483, #4487, #4575) - `caddy.snippet` checks out LF everywhere, typed inlining across hidden dependencies is covered, the loop-lookup count starts at the loop header, the AOT subset links `daslib/command_line`, and the tree-sitter sync runs every six hours
 
