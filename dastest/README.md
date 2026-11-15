@@ -144,8 +144,11 @@ Not part of the test runner: `dastest/review_gate.das` is the support library fo
 contract lives in `REVIEW_COMMON.md` at the repo root, vendored by repos that adopt it). It
 provides finding accumulation and the exit verdict (`gate_finding`, `gate_findings`,
 `gate_reset`, `gate_verdict`), the descriptor census (`gate_descriptor_census`, two
-overloads), the cookie-and-host gate for a served web tree (`gate_web_third_party`, built
-on `html_resource_urls`, `script_urls`, `css_urls` and `url_host`), the home-directory gate
+overloads), the cookie-and-host gate for a served web tree (`gate_web_third_party`, and
+`gate_web_third_party_files` over a file list the caller chose, both built
+on `html_resource_urls`, `script_urls`, `css_urls` and `url_host`), the tracked-file listing
+(`tracked_files`, and `tracked_files_in` for a repository elsewhere), the directory test for a
+path (`path_under_dirs`), the home-directory gate
 for a published record (`gate_home_paths`), the prefix census (`gate_prefixed_names_defined`,
 built on `prefixed_tokens`, `css_selector_tokens` and `html_ids`), the page-source extractors
 (`html_code_blocks`, `markdown_fences`), plus tree-analysis
@@ -166,3 +169,8 @@ its name, the `DAS_UTILS_SHIPPED_EXES` entry in `utils/CMakeLists.txt` (repo roo
 `.assets.json` sidecar) lists what the playground fetches, so every entry in it is a load.
 Any other JSON can spell an address as a `link` - a click, not a load - so scanning it would
 report hosts no page ever reaches.
+
+`gate_web_third_party` walks the disk under its roots. `site/REVIEW.das` (repo root) hands
+`gate_web_third_party_files` the output of `tracked_files` instead: a local preview stages
+generated blog pages and a vendored playground runtime under `site/`, git ignores all of it, and
+none of it is a page the tree authors.
