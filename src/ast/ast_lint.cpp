@@ -121,6 +121,9 @@ namespace das {
         } else if ( expr->rtti_isUnsafe() ) {
             auto us = static_cast<ExprUnsafe*>(expr);
             return exprReturns(us->body);
+        } else if ( expr->rtti_isCall() ) {
+            auto call = static_cast<ExprCall*>(expr);
+            return call->func && call->func->noReturn;
         }
         return false;
     }

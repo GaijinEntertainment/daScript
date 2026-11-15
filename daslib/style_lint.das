@@ -3040,6 +3040,34 @@ class StyleLintVisitor : AstVisitor {
         return va.flags.inScope == vb.flags.inScope && describe(va._type) == describe(vb._type)
     }
 
+    def check_style049_dead_after_no_return(blk : ExprBlock?) : void {
+        for (i in range(length(blk.list) - 1)) {
+            let cur = blk.list[i]
+            continue if (!(cur is ExprCall) || cur.genFlags.generated)
+            let call = cur as ExprCall
+            continue if (call.func == null || !call.func.moreFlags2.noReturn)
+            let nxt = blk.list[i + 1]
+            return if (nxt is ExprLabel || nxt.genFlags.generated)
+            style_warning("STYLE049: this statement never runs - `{call.func.name}` before it " +
+                "does not return; delete it", nxt.at, style049_fix(blk, i))
+            return
+        }
+    }
+    def style049_fix(blk : ExprBlock?; call_index : int) : LintFix {
+        //! deletes every statement after the call, through the block's `}`
+        let call = blk.list[call_index]
+        let first = blk.list[call_index + 1]
+        let a = int(first.at.line)
+        let b = int(blk.list[length(blk.list) - 1].at.last_line)
+        return LintFix() if (first.at.fileInfo == null || b < a || int(call.at.last_line) >= a
+            || !starts_with(strip(lint_source_line(first.at, b + 1)), "}"))
+        for (ln in range(a, b + 1)) {
+            let text = lint_source_line(first.at, ln)
+            return LintFix() if (code_find(text, "//") >= 0 || code_find(text, "/*") >= 0)
+        }
+        let blank_before = a > 1 && empty(strip(lint_source_line(first.at, a - 1)))
+        return LintFix(line = blank_before ? a - 1 : a, last_line = b + 1)
+    }
     def check_style043_declaration_runs(blk : ExprBlock?) : void {
         if (current_function == null || foreign_module_code()) return
         let n = length(blk.list)
@@ -3084,6 +3112,7 @@ class StyleLintVisitor : AstVisitor {
         check_style033_existing_runs(blk)
         check_style033_existing_chain_runs(blk)
         check_style043_declaration_runs(blk)
+        check_style049_dead_after_no_return(blk)
         let n = length(blk.list)
         for (i in range(n - 1)) {
             let cur = blk.list[i]

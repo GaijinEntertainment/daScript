@@ -3714,6 +3714,24 @@ are locals, arguments and field paths; floats, ``__rtti`` strings and expression
 not matched on. Reported only in a module that requires ``daslib/match`` itself - the rule
 does not suggest a new dependency. Off by default.
 
+STYLE049 — a statement after a call that never returns
+======================================================
+
+A statement after ``panic`` in the same block never runs. A function may end in ``panic``
+without a ``return`` after it, so the statement is dead code::
+
+    def sign(x : int) : int {
+        if (x > 0) {
+            return 1
+        }
+        panic("sign: {x} is not positive")
+        return 0                                // STYLE049 - delete it
+    }
+
+Only the first dead statement of a block is reported; ``--fix`` deletes it and every statement
+after it in the block. Silent when the next statement is a label, which a ``goto`` can reach.
+Off by default.
+
 -----
 Tests
 -----

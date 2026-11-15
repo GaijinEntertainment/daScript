@@ -847,6 +847,7 @@ namespace das
         FunctionPtr setTempResult();
         FunctionPtr setCaptureString();
         FunctionPtr setTempStringResult();
+        FunctionPtr setNoReturn();
         FunctionPtr setNoDiscard();
         FunctionPtr setDeprecated(const string & message);
         FunctionPtr arg_init ( int argIndex, ExpressionPtr initValue ) {
@@ -980,6 +981,7 @@ namespace das
                 bool    needCallerStackFrame : 1;    // may reach a collect point - its caller must keep a real stack frame, so carriers are denied fastcall (closure: ast_unused.cpp)
                 bool    nttp : 1;                    // extern bound via addExternInline - per-function NTTP interpreter node, callee eligible to inline into the call site
                 bool    unsafeGenerator : 1;         // src/ast/ARCHITECTURE_INFER.md#generator-unsafe-block
+                bool    noReturn : 1;
             };
             uint32_t moreFlags2 = 0;
         };
@@ -1838,6 +1840,7 @@ namespace das
     // non-conforming callees) and the annotation lint hook (reports them as errors)
     bool canFunctionInline ( Function * fn, string & err );
     bool isInlineRecursionFree ( Function * fn, string & err );
+    bool exprReturns ( ExpressionPtr expr );
 
     // compile an embedded builtin module's source into `module` (compiler lib)
     DAS_CC_API bool compileBuiltinModule ( Module * module, const string & name, const unsigned char * const str, unsigned int str_len );

@@ -114,7 +114,7 @@ def public load_lint_config_from_path(path : string; var disabled_codes : table<
 //! ``load_lint_config``, so a ``STYLE005 = true`` in ``.lint_config``
 //! can re-enable one.
 def public seed_default_disabled(var disabled_codes : table<string>) : void {
-    for (code in ["STYLE005", "STYLE048", "LINT029", "LINT030", "SMT002"]) {
+    for (code in ["STYLE005", "STYLE048", "STYLE049", "LINT029", "LINT030", "SMT002"]) {
         if (!key_exists(disabled_codes, code)) {
             disabled_codes |> insert(code)
         }

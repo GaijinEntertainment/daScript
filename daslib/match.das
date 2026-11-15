@@ -1519,14 +1519,16 @@ class MatchMacro : AstCallMacro {
         return new_iff
     }
     def report_coverage(prog : ProgramPtr; expr : ExprCallMacro?; eblk : ExprBlock?; var types : array<TypeDeclPtr>; var arm_patterns : array<Expression?>;
-                        as_value, catch_all : bool) : bool {
-        //! Reports unreachable arms and alternatives - not for ``static_match``, whose arms may apply to other instances of a generic - and values an exhaustive match misses; false when it reported any.
+                        as_value, catch_all : bool) : Option<bool> {
+        //! Reports unreachable arms (not for ``static_match``) and values
+        //! an exhaustive match misses; none when it reported any, else
+        //! whether the arms cover every value.
         var solved <- match_coverage(types, arm_patterns)
         if (solved is err) {
             let arm = (solved as err).arm
             let built = "the match coverage translation built guard fact of arm {arm}"
             macro_error(prog, expr.at, "internal error: {built} that the solver can not decide")
-            return false
+            return none(type<bool>)
         }
         var cov <- solved as ok
         if (report_match_errors) {
@@ -1536,7 +1538,7 @@ class MatchMacro : AstCallMacro {
             for (da in cov.dead_alternatives) {
                 macro_error(prog, eblk.list[da.arm].at, "unreachable alternative `{da.what}`: an earlier arm already matches it")
             }
-            return false if (!all_reachable(cov))
+            return none(type<bool>) if (!all_reachable(cov))
         }
         if (!catch_all && !is_exhaustive(cov)
                 && (as_value || (report_match_errors && cov.all_finite))) {
@@ -1547,9 +1549,9 @@ class MatchMacro : AstCallMacro {
             macro_error(prog, expr.at, (cov.missing is unnamed
                 ? "match is not exhaustive: values no arm names are not matched; add a `_ => ...` arm{guard_note}"
                 : "match is not exhaustive: no arm matches {(cov.missing as named).text}; {fix}"))
-            return false
+            return none(type<bool>)
         }
-        return true
+        return some(is_exhaustive(cov))
     }
     def assemble(var prefix : array<Expression?>; var iff : Expression?; as_value : bool; var parent : MatchParent; at : LineInfo) : Expression? {
         //! The match's code: the prefix, then the if-chain of the arms - inside an invoke when the match is a value.
@@ -1626,8 +1628,15 @@ class MatchMacro : AstCallMacro {
                 }
             }
         }
-        return null if (any_errors || (arrows > 0 && !report_coverage(prog, expr, eblk, types, arm_patterns, as_value, catch_all)))
-        iff = as_value && !catch_all ? drop_last_condition(iff) : iff
+        return null if (any_errors)
+        var exhaustive = false
+        if (arrows > 0) {
+            let covered = report_coverage(prog, expr, eblk, types, arm_patterns, as_value,
+                catch_all)
+            return null if (is_none(covered))
+            exhaustive = unwrap(covered)
+        }
+        iff = exhaustive && !catch_all ? drop_last_condition(iff) : iff
         return assemble(prefix, iff, as_value, parent, expr.at)
     }
 }
