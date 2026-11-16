@@ -2856,27 +2856,75 @@
     `lcpp_bench --npl-plen` and through `harness/batch_streams_sweep.das --plen`, the two instruments' difference and
     the two lengths' difference each named with its cost, and the form fixed with the eight- and sixteen-stream rows
     before and after; or the split here with the forms kept.
-304. **A session's host K/V cache is the model's full context, and a load keeps its host planes beside a device's copy.**
-    `make_run_state(m.config, ...)` allocates the cache for every position the model allows - 262144 on the Qwen3.8-27B,
-    18.4 GB a session at f16 - whether or not a GPU home holds the session's rows, and `load_model_` keeps the planar
-    planes (19.7 GB for the 16.5 GB Q4_K_M file) after a home has uploaded its own. A 27B CPU-arm cell of
-    `tests/test_dflash_drafter.das` makes two sessions for a walk of some sixty tokens: planes, a 2 GB drafter and two
-    caches are 58.6 GB, which is the cell's 57 GB resident peak (all but 0.6 GB anonymous) on a pod whose container
-    holds 62 GB - the child sits at the cap through every such cell and is killed (`exit=137`) in
-    `test_dflash_27b_sampled_cpu` on most runs, its batch with it, and takes 58 minutes where it survives. The readings
-    are the same with no home armed and with the Vulkan home armed (the card then holding 31 GB). Done = for every
-    model the fleet runs, on each home, the host bytes after the load by kind, the host bytes a session adds and the
-    device bytes, each held to a stated need - a host cache only for a session whose rows no device holds, sized to
-    the rows it has; host planes only for what the CPU serves (a declined call, host layers or experts, the embed
-    table) - the cells that ask more capped or moved to the paged or cache-less session, and the drafter file - alone
-    and in a batch - under the 62 GB cap.
-305. **A fleet run does not finish clean: one cell passes the pods' memory, and the image arms fill the shared volume.**
-    Every `exit=137` of a `--changed` run, a CUDA pass or the stocked suite on the 62 GB pods falls in row 304's cell,
-    and takes its batch of ten files with it - the runner then reruns the ten one child each. The image suite's arms,
-    run on one box with the rail on, leave every `.dlim` they mint under the shared models directory (31 GB over the
-    plan's arms), and a later mint's save then fails on the volume's quota, which reds the cell that asked it. A cell
-    whose drafter or model file the volume lacks skips, so a run reads green over cells that never ran. Done = the
-    `--changed` run, the CUDA pass, the stocked suite and the image arms each finishing on the fleet with no killed
-    child and no failed save: row 304 closed, an image cell deleting the images it mints (or the runner clearing a
-    cell's mints and a killed mint's `.tmp` before the next file), and `harness/pod_fleet.das` naming up front every
-    file the plan's cells ask that the volume does not hold.
+304. **A session's host K/V buffers are sized for the model's whole context whoever serves its rows.**
+    `make_run_state` sizes the flat slabs for every position the model allows and writes none of them, so a session's
+    resident memory follows the rows it stored - a device-served session on the Qwen3.8-27B adds 0.15 GB resident and
+    reserves 17.4 GB of address space, one on the gemma-4-26B reserves 59 GB (`PERF_LEDGER.md`, the load-memory entry).
+    The reservation is untouched on a home that serves the rows, and it is still made: a box that charges a reservation
+    against its commit limit (Windows) pays it a session, and a tool that reads the das heap reads it as held. Done = the
+    commit a device-served session costs on Windows measured on the reference box, and - where it is charged - the host
+    slabs made when a row first comes to the host (a hydrate, a pass to the CPU rails) and not at the session's start;
+    with the host bytes after the load, a session's and the device bytes in the ledger for every model the fleet runs
+    beside the five the entry holds.
+305. **A fleet run reads green over cells that never ran, and a long-lived pod's caches grow without bound.** The
+    runner names the model files a run's cells ask that the models directory lacks (`MISSING`), and the volume lacks
+    them: the `-local` mints of the format files, the K-quant twin of the mint file, SmolLM2 - twelve names on a run of
+    eight files - so their cells skip on every fleet run. A name under a subfolder (`drafters/...`) is not looked for at
+    all (`model_names` keeps bare names). A pod's own tree keeps every JIT object and module record each synced source
+    state compiled, never evicting one: 31 GB of a 60 GB disk after two days of syncs, where the stocked suite and the
+    CUDA pass from clean add about 5 GB. Done = the volume holding every file the stocked set names, or `pod_fleet.das -- up` running the mint
+    recipes that make the local ones; `MISSING` naming a subfolder's file too; and `sync` dropping the compile records
+    no source state it copies can reach.
+306. **A model served wholly by the device still panics where it could decline, and keeps a few host copies only a
+    re-arm reads.** A load on a discrete home keeps no planar plane (`ARCHITECTURE_ENGINE_MEMORY.md#gguf-live-load`,
+    the trimmed lane), and a call the driver passes to the CPU rails on such a model is a panic by name
+    (`blob_only_panic`): a media span, a rewind, a prompt past the mirror, a host-cached paged scheduler that drafts on
+    the CPU. A re-arm whose walk declines leaves a model that serves nothing. On the host stay `bf16blob`, the
+    per-layer embedding's projection - read by the CPU pre-step where the device takes none, by the re-arm's upload
+    alone where it does - and `embq` / `embs`, the packed token rows the CPU embed reads and an untied table's device
+    plane is placed from at every arm; a load the live walk declines (an n-gram table that rides the mapping, a plane
+    the plan-load does not stream) keeps every plane beside the device's copy; a device-home session's recurrent state
+    and prefill scratch are host buffers; and the facade's sessions are flat. Done = every call that would pass to the
+    CPU on a model with no planar plane declined by name to its caller, the server failing the request and not the
+    process; a declined re-arm restoring the model to a served state or failing the slot's bind; the host copies a
+    re-arm alone reads read again from the file at the re-arm; and the live walk taking the models it declines today.
+307. **A tower's device seat leaves its host planes, and CPU scratch a GPU call never reads, in place.** On the Vulkan and
+    CUDA homes a vision or audio tower's image stays mapped whole after the upload touched every byte of it, read again
+    only for a re-upload after a model drop and for the upload key's sample of host words; nothing releases the pages.
+    Scratch is sized for the CPU chain whatever serves: a vision tower's block scratch grows on the GPU path
+    (`ChatSession.embedder_scratch`: qwen3v to its token cap, gemma3v fixed at 4096 patches), an audio encoder state
+    allocates the whole CPU set where a GPU seat touches `x`, `xb` and `out` (`make_encoder_state`), and an ASR
+    decoder's sessions are flat at 8192 positions. Some weights sit in two forms at once: gemma3v's and qwen3v's exact
+    lanes as f32 and a full f16 twin, qwen25v uploading both, whisper's tied embedding as f32 and q8 on its CPU q8
+    image. With the image rail off a tower's image is built in anonymous memory. Done = for each tower family on each
+    home, the host bytes after the load, after the first device-served call and a session's, each held to a stated
+    need; the scratch sized where a call stays on the CPU; the uploaded pages released or the image read as the live
+    load reads its gguf (`ARCHITECTURE_ENGINE_MEMORY.md#gguf-live-load`); and the two-form cases either one form or the reason for both in the family's architecture section.
+308. **A plane the residency plan charges is taken past the arm on three paths.** The CUDA home takes its window
+    chain's planes when the driver arms (`ARCHITECTURE_ENGINE_MEMORY.md#cuda-window-planes-at-arm`); the Vulkan home
+    takes its own inside the first prefill (`pf_setup`), and the CUDA home's NextN head warm planes
+    (`crd_pf_head_setup`) and its prompt cap word are taken at the first window that needs them, none checked where it
+    is made. A card filled between the arm and that window hands back a failed allocation the kernels then run over.
+    Done = every plane the plan charges taken at the arm on both homes, or checked where it is made and refused by
+    name, each with a cell that holds the refusal through a fault seat as
+    `test_gpu_resident_cuda_window_planes_at_arm` does; the asymmetry entry removed with it.
+309. **An in-process lever over an environment knob is four hand-written functions, seven times.** `source_release`,
+    `lane_read`, `image_save`, `host_planes` and `vulkan_trim` each carry a setter, a getter, a "lever set" read and a
+    restore, the bodies identical but for the knob's field; `kv_init` and `gpu_kv_dtype` carry the same four over an
+    enum; and every test that pins one writes the save, set and restore by hand. Done = one declaration a lever that
+    generates its four functions, and one fixture that pins a lever for a block and puts it back, the seven families
+    and their tests moved onto them, held by the levers' own cells.
+310. **Four Vulkan-home test files fail under the CUDA ask where their headers say they skip.**
+    `test_gpu_resident_gptoss.das`, `test_gpu_resident_gemma4_e2b.das`, `test_gpu_resident_format_census.das` and
+    `test_gpu_resident_regions_gemma4_e2b_ctx128k.das` hold cells that place layers on the per-op tier the CUDA home
+    lacks, read the Vulkan driver's witnesses with the CUDA driver armed, or hold a bar measured on the Vulkan home;
+    the documented CUDA pass names none of the first three and excludes the 128k files, on the ground that their long
+    prompts fall to the CPU rails - where the 128k cell now runs on the CUDA driver throughout. Done = each cell
+    skipping by name under the ask or reading the armed home's witness and bar, a run of the four under
+    `DASLLAMA_GPU=1 DASLLAMA_CUDA=1` green, and the CUDA pass either taking the 128k files or stating the reason it
+    leaves them out.
+311. **A batched step the whole-model driver declines reads host K/V the host never held.** `rdec_batch_rows_served`
+    passes a batch to the CPU on a row past the mirror's cap or a recurrent row off its position without hydrating the
+    batch's sessions, where the one-row step's declines hydrate first (`rdec_pass_hydrated`); `attention_batch_decode`
+    then reads rows the device alone wrote. Done = a declined batch hydrating every session whose host cache is
+    behind, held by a cell that walks a batch across the cap under `tests/run.das -- --poison-kv`.

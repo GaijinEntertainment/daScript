@@ -9468,3 +9468,96 @@ blocks 36, tails 2`; qwen3a 1.7B `encodes 2, declines 0, rows 156, blocks 48, ta
   at its 4096 rows the fc2 GEMM (1152 wide) runs 144 l tiles whole, two waves, and no rule splits it, so the gate does not
   change its pick. The chat towers' whisper-large encoders run turbo's 1280-wide, 1500-row shape (no split under any
   rule). The Qwen3-Omni audio tower (the qwen3a family's other carrier here) was neither loaded nor printed.
+
+### From the host memory of a load on the discrete homes (2026-11-16, two RunPod pods: RTX PRO 4500 Blackwell 32 GB, driver 595.91.07, Linux, 62 GB of container memory each - the Vulkan rows on an EPYC 7443P pod, 48 vCPU, the CUDA rows on an EPYC 7663 pod, 112 vCPU; `direction-grade`)
+
+- **The instrument:** `bin/daslang -jit modules/dasLLAMA/harness/load_probe.das -- <model.gguf> 32` at 69c0f20283, one
+  process a row, under `DASLLAMA_GPU=1 DASLLAMA_GPU_CTX_MAX=8192 DASLLAMA_ALLOW_UNTUNED=1` (the box untuned: the
+  `x86-avx2` defaults profile), `DAS_TUNE_POLICY` unset, a CUDA row adding `DASLLAMA_CUDA=1`, every other override in
+  its row. The probe loads the model through the cached load, makes one flat session, walks 32 greedy tokens over a
+  50-token prompt (4000 where the row says so) and deletes both; at each stage it prints the process's resident memory
+  (`VmRSS`), its peak (`VmHWM`) and the das heap, in GB of 1e9 bytes. The card figure is `nvidia-smi`'s `memory.used`,
+  sampled once a second, its largest reading. Every walk was served on the device with no call passed to the CPU. The
+  lane rows read a `.dlim` on the pod's own disk: the row that mints it, then the row that maps it. A row's resident
+  figure carries the in-process compile of whatever kernels it is the first to run - the 27B's no-lever load reads
+  5.18 GB on the Vulkan pod's first row and 2.93 on its second, the same load under the 4000-token walk, and 5.44 then
+  4.48 on the CUDA pod - so a row is read against the rows of its own pod, in the order the table lists them.
+- **Qwen3.8-27B Q4_K_M with every lever off (`DASLLAMA_HOST_PLANES=1 DASLLAMA_SOURCE_RELEASE=0 DASLLAMA_KV_INIT=zero`:
+  the load as it was) against the load with none set.** Vulkan: resident after the load 22.12 against 5.18 GB, the
+  peak 42.12 against 9.99, resident with a session 39.47 against 5.33. CUDA: 22.12 against 5.44, 42.10 against 10.18,
+  39.48 against 5.60. The lane mapped: 2.88 resident and a 3.93 peak on Vulkan, 2.82 and 3.86 on CUDA.
+- **One lever at a time on the 27B (resident after the load / peak, Vulkan then CUDA).** The host planes kept
+  (`DASLLAMA_HOST_PLANES=1`): 22.12 / 23.88, 22.13 / 23.85. The source mapping never released
+  (`DASLLAMA_SOURCE_RELEASE=0`): 3.57 / 26.30, 3.46 / 26.13 - the peak is the file's pages, which the release hands
+  back a tensor at a time. The K/V cache zero-filled (`DASLLAMA_KV_INIT=zero`): the load unchanged at 3.58 / 8.39 and
+  3.46 / 8.25, the session then resident at 20.91 and 20.79 where the unfilled cache reads 5.33 and 5.60 over a das
+  heap of 18.18 GB either way. The lane mapped with its read off the file refused (`DASLLAMA_LANE_READ=0`): 22.11 /
+  23.16, 22.00 / 23.05 against the lane's 2.88 / 3.93 and 2.82 / 3.86.
+- **A 4000-token walk on the 27B, no lever:** resident 2.93 after the load, 3.08 with the session and 3.43 after the
+  walk on Vulkan, 4.48, 4.63 and 4.66 on CUDA: the host cache of a device-served session takes no pages as the walk
+  grows.
+- **The other four models, every lever off against none (resident after the load / peak / resident with a session;
+  Vulkan, then CUDA).** Qwen3.6-35B-A3B-MTP UD-Q4_K_M: 25.28 / 48.30 / 31.27 against 2.78 / 6.71 / 2.84; 25.32 / 48.32
+  / 31.31 against 2.77 / 6.67 / 2.84. gpt-oss-20b mxfp4: 14.17 / 26.81 / 20.64 against 2.81 / 4.86 / 2.84; 14.30 /
+  26.87 / 20.77 against 2.76 / 4.78 / 2.76. gemma-4-E2B Q8_0: 7.54 / 12.99 / 9.96 against 2.52 / 7.13 / 2.52; 7.77 /
+  13.19 / 10.19 against 2.56 / 7.14 / 2.56. gemma-4-26B-A4B Q4_K_M: 20.07 / 37.68 after the load on Vulkan, where the
+  kernel killed the process as the session zero-filled its cache (exit 137), and 20.20 / 37.75 on CUDA, where the load
+  took 573 s under page reclaim at the pod's cap and the process, eleven minutes in with no session made, was stopped
+  by hand - the zero-filled cache of its 262144-position context is 59.99 GB, past the pod's 62 GB beside the planes -
+  against 3.03 / 7.13 / 3.03 and 3.01 / 7.07 / 3.01, where the same 59.99 GB is reserved and never written.
+- **Not measured:** the Metal home, whose device memory is the host's; a box that charges a reservation against its
+  commit limit (`followup_general.md`'s row on the session's host K/V buffers); the tower families.
+- **Every row:**
+
+| model | home | load | overrides | resident after the load | peak | resident with a session | das heap with it | resident after the walk | card MiB | load ms |
+|---|---|---|---|---|---|---|---|---|---|---|
+| Qwen3.8-27B-Q4_K_M | Vulkan | the gguf, no image | `DASLLAMA_IMAGE=0` | 5.18 | 9.99 | 5.33 | 18.18 | 5.68 | 21726 | 117550 |
+| Qwen3.8-27B-Q4_K_M | Vulkan | the gguf, no image; 4000 tokens | `DASLLAMA_IMAGE=0` | 2.93 | 7.75 | 3.08 | 18.18 | 3.43 | 21726 | 34412 |
+| Qwen3.8-27B-Q4_K_M | Vulkan | the gguf | `DASLLAMA_IMAGE=0 DASLLAMA_HOST_PLANES=1` | 22.12 | 23.88 | 22.29 | 36.68 | 22.65 | 21719 | 20456 |
+| Qwen3.8-27B-Q4_K_M | Vulkan | the gguf | `DASLLAMA_IMAGE=0 DASLLAMA_HOST_PLANES=1 DASLLAMA_SOURCE_RELEASE=0 DASLLAMA_KV_INIT=zero` | 22.12 | 42.12 | 39.47 | 36.68 | 39.83 | 21719 | 18551 |
+| Qwen3.8-27B-Q4_K_M | Vulkan | the gguf | `DASLLAMA_IMAGE=0 DASLLAMA_SOURCE_RELEASE=0` | 3.57 | 26.30 | 3.72 | 18.18 | 4.07 | 21719 | 34764 |
+| Qwen3.8-27B-Q4_K_M | Vulkan | the gguf | `DASLLAMA_IMAGE=0 DASLLAMA_KV_INIT=zero` | 3.58 | 8.39 | 20.91 | 18.18 | 21.26 | 21254 | 34970 |
+| Qwen3.8-27B-Q4_K_M | Vulkan | the load mints the trimmed lane | - | 3.65 | 8.34 | 3.80 | 17.44 | 4.14 | 21726 | 35912 |
+| Qwen3.8-27B-Q4_K_M | Vulkan | the lane mapped | - | 2.88 | 3.93 | 3.03 | 17.43 | 3.39 | 21720 | 7592 |
+| Qwen3.8-27B-Q4_K_M | Vulkan | the lane mapped | `DASLLAMA_LANE_READ=0` | 22.11 | 23.16 | 22.27 | 17.43 | 22.61 | 21726 | 6437 |
+| Qwen3.6-35B-A3B-MTP-UD-Q4_K_M | Vulkan | the gguf, no image | `DASLLAMA_IMAGE=0` | 2.78 | 6.71 | 2.84 | 6.71 | 3.08 | 23910 | 137083 |
+| Qwen3.6-35B-A3B-MTP-UD-Q4_K_M | Vulkan | the gguf | `DASLLAMA_IMAGE=0 DASLLAMA_HOST_PLANES=1 DASLLAMA_SOURCE_RELEASE=0 DASLLAMA_KV_INIT=zero` | 25.28 | 48.30 | 31.27 | 29.21 | 31.52 | 24823 | 18200 |
+| Qwen3.6-35B-A3B-MTP-UD-Q4_K_M | Vulkan | the load mints the trimmed lane | - | 2.83 | 6.62 | 2.89 | 6.07 | 3.13 | 24819 | 51066 |
+| Qwen3.6-35B-A3B-MTP-UD-Q4_K_M | Vulkan | the lane mapped | - | 2.75 | 3.17 | 2.81 | 6.04 | 3.06 | 23910 | 8892 |
+| gpt-oss-20b-mxfp4 | Vulkan | the gguf, no image | `DASLLAMA_IMAGE=0` | 2.81 | 4.86 | 2.84 | 7.20 | 3.05 | 12085 | 56941 |
+| gpt-oss-20b-mxfp4 | Vulkan | the gguf | `DASLLAMA_IMAGE=0 DASLLAMA_HOST_PLANES=1 DASLLAMA_SOURCE_RELEASE=0 DASLLAMA_KV_INIT=zero` | 14.17 | 26.81 | 20.64 | 18.64 | 20.85 | 12809 | 20533 |
+| gpt-oss-20b-mxfp4 | Vulkan | the load mints the trimmed lane | - | 2.81 | 4.77 | 2.84 | 6.56 | 3.05 | 12993 | 32702 |
+| gpt-oss-20b-mxfp4 | Vulkan | the lane mapped | - | 2.73 | 3.34 | 2.77 | 6.55 | 2.98 | 12085 | 5345 |
+| gemma-4-26B-A4B-it-Q4_K_M | Vulkan | the gguf, no image | `DASLLAMA_IMAGE=0` | 3.03 | 7.13 | 3.03 | 59.99 | 3.26 | 19785 | 168809 |
+| gemma-4-26B-A4B-it-Q4_K_M | Vulkan | the gguf | `DASLLAMA_IMAGE=0 DASLLAMA_HOST_PLANES=1 DASLLAMA_SOURCE_RELEASE=0 DASLLAMA_KV_INIT=zero` | 20.07 | 37.68 | killed | killed | killed | 18063 | 17453 |
+| gemma-4-26B-A4B-it-Q4_K_M | Vulkan | the load mints the trimmed lane | - | 2.28 | 7.10 | 2.28 | 59.17 | 2.52 | 18063 | 170512 |
+| gemma-4-26B-A4B-it-Q4_K_M | Vulkan | the lane mapped | - | 2.13 | 2.91 | 2.13 | 59.15 | 2.36 | 18063 | 6305 |
+| gemma-4-E2B-it-Q8_0 | Vulkan | the gguf, no image | `DASLLAMA_IMAGE=0` | 2.52 | 7.13 | 2.52 | 2.95 | 2.78 | 4896 | 29219 |
+| gemma-4-E2B-it-Q8_0 | Vulkan | the gguf | `DASLLAMA_IMAGE=0 DASLLAMA_HOST_PLANES=1 DASLLAMA_SOURCE_RELEASE=0 DASLLAMA_KV_INIT=zero` | 7.54 | 12.99 | 9.96 | 7.85 | 10.22 | 6642 | 7320 |
+| gemma-4-E2B-it-Q8_0 | Vulkan | the load mints the trimmed lane | - | 2.20 | 7.13 | 2.20 | 2.51 | 2.46 | 4843 | 11689 |
+| gemma-4-E2B-it-Q8_0 | Vulkan | the lane mapped | - | 2.10 | 2.69 | 2.10 | 2.49 | 2.36 | 4843 | 2365 |
+| Qwen3.8-27B-Q4_K_M | CUDA | the gguf, no image | `DASLLAMA_IMAGE=0` | 5.44 | 10.18 | 5.60 | 18.29 | 5.60 | 21890 | 146713 |
+| Qwen3.8-27B-Q4_K_M | CUDA | the gguf, no image; 4000 tokens | `DASLLAMA_IMAGE=0` | 4.48 | 9.23 | 4.63 | 18.29 | 4.66 | 21892 | 67514 |
+| Qwen3.8-27B-Q4_K_M | CUDA | the gguf | `DASLLAMA_IMAGE=0 DASLLAMA_HOST_PLANES=1` | 22.13 | 23.85 | 22.30 | 36.80 | 22.32 | 21890 | 71777 |
+| Qwen3.8-27B-Q4_K_M | CUDA | the gguf | `DASLLAMA_IMAGE=0 DASLLAMA_HOST_PLANES=1 DASLLAMA_SOURCE_RELEASE=0 DASLLAMA_KV_INIT=zero` | 22.12 | 42.10 | 39.48 | 36.80 | 39.49 | 21890 | 82902 |
+| Qwen3.8-27B-Q4_K_M | CUDA | the gguf | `DASLLAMA_IMAGE=0 DASLLAMA_SOURCE_RELEASE=0` | 3.46 | 26.13 | 3.61 | 18.29 | 3.61 | 21890 | 57848 |
+| Qwen3.8-27B-Q4_K_M | CUDA | the gguf | `DASLLAMA_IMAGE=0 DASLLAMA_KV_INIT=zero` | 3.46 | 8.25 | 20.79 | 18.29 | 20.79 | 21890 | 28615 |
+| Qwen3.8-27B-Q4_K_M | CUDA | the load mints the trimmed lane | - | 3.50 | 8.23 | 3.65 | 17.55 | 3.65 | 21890 | 34264 |
+| Qwen3.8-27B-Q4_K_M | CUDA | the lane mapped | - | 2.82 | 3.86 | 2.97 | 17.54 | 3.00 | 21890 | 4710 |
+| Qwen3.8-27B-Q4_K_M | CUDA | the lane mapped | `DASLLAMA_LANE_READ=0` | 22.00 | 23.05 | 22.16 | 17.54 | 22.16 | 21890 | 4112 |
+| Qwen3.6-35B-A3B-MTP-UD-Q4_K_M | CUDA | the gguf, no image | `DASLLAMA_IMAGE=0` | 2.77 | 6.67 | 2.84 | 6.83 | 2.84 | 24290 | 137783 |
+| Qwen3.6-35B-A3B-MTP-UD-Q4_K_M | CUDA | the gguf | `DASLLAMA_IMAGE=0 DASLLAMA_HOST_PLANES=1 DASLLAMA_SOURCE_RELEASE=0 DASLLAMA_KV_INIT=zero` | 25.32 | 48.32 | 31.31 | 29.33 | 31.33 | 24288 | 19999 |
+| Qwen3.6-35B-A3B-MTP-UD-Q4_K_M | CUDA | the load mints the trimmed lane | - | 2.79 | 6.50 | 2.86 | 6.18 | 2.88 | 22774 | 61441 |
+| Qwen3.6-35B-A3B-MTP-UD-Q4_K_M | CUDA | the lane mapped | - | 2.70 | 3.12 | 2.76 | 6.16 | 2.79 | 24290 | 6186 |
+| gpt-oss-20b-mxfp4 | CUDA | the gguf, no image | `DASLLAMA_IMAGE=0` | 2.76 | 4.78 | 2.76 | 7.32 | 2.76 | 14258 | 57580 |
+| gpt-oss-20b-mxfp4 | CUDA | the gguf | `DASLLAMA_IMAGE=0 DASLLAMA_HOST_PLANES=1 DASLLAMA_SOURCE_RELEASE=0 DASLLAMA_KV_INIT=zero` | 14.30 | 26.87 | 20.77 | 18.76 | 20.78 | 14256 | 21199 |
+| gpt-oss-20b-mxfp4 | CUDA | the load mints the trimmed lane | - | 2.84 | 4.64 | 2.84 | 6.67 | 2.85 | 12164 | 31746 |
+| gpt-oss-20b-mxfp4 | CUDA | the lane mapped | - | 2.75 | 3.36 | 2.79 | 6.67 | 2.79 | 12164 | 3889 |
+| gemma-4-26B-A4B-it-Q4_K_M | CUDA | the gguf, no image | `DASLLAMA_IMAGE=0` | 3.01 | 7.07 | 3.01 | 60.10 | 3.02 | 19456 | 334727 |
+| gemma-4-26B-A4B-it-Q4_K_M | CUDA | the gguf | `DASLLAMA_IMAGE=0 DASLLAMA_HOST_PLANES=1 DASLLAMA_SOURCE_RELEASE=0 DASLLAMA_KV_INIT=zero` | 20.20 | 37.75 | stopped | stopped | stopped | 19456 | 573483 |
+| gemma-4-26B-A4B-it-Q4_K_M | CUDA | the load mints the trimmed lane | - | 2.28 | 6.95 | 2.28 | 59.27 | 2.30 | 17874 | 29947 |
+| gemma-4-26B-A4B-it-Q4_K_M | CUDA | the lane mapped | - | 2.15 | 2.93 | 2.15 | 59.27 | 2.16 | 17874 | 4400 |
+| gemma-4-E2B-it-Q8_0 | CUDA | the gguf, no image | `DASLLAMA_IMAGE=0` | 2.56 | 7.14 | 2.56 | 3.07 | 2.56 | 5170 | 114552 |
+| gemma-4-E2B-it-Q8_0 | CUDA | the gguf | `DASLLAMA_IMAGE=0 DASLLAMA_HOST_PLANES=1 DASLLAMA_SOURCE_RELEASE=0 DASLLAMA_KV_INIT=zero` | 7.77 | 13.19 | 10.19 | 7.97 | 10.19 | 6372 | 7104 |
+| gemma-4-E2B-it-Q8_0 | CUDA | the load mints the trimmed lane | - | 2.21 | 7.01 | 2.21 | 2.61 | 2.21 | 5114 | 11247 |
+| gemma-4-E2B-it-Q8_0 | CUDA | the lane mapped | - | 2.13 | 2.70 | 2.13 | 2.61 | 2.14 | 5114 | 1654 |
