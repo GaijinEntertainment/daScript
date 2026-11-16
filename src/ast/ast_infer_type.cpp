@@ -2073,6 +2073,7 @@ namespace das {
                       expr->at, CompilationError::invalid_invoke_argument_type);
                 return Visitor::visit(expr);
             }
+            verifyVoidPointerArgument(expr->arguments[i + 1], argType, false, safeExpression(expr), expr->at);
             // TODO: invoke with TEMP types
             if (!argType->isRef())
                 expr->arguments[i + 1] = Expression::autoDereference(expr->arguments[i + 1]);
@@ -6472,6 +6473,13 @@ namespace das {
                 expr->at, CompilationError::function_not_found);
         }
         */
+        if (expr->func) {
+            size_t nArgs = min(expr->arguments.size(), expr->func->arguments.size());
+            for (size_t ai = 0; ai != nArgs; ++ai) {
+                verifyVoidPointerArgument(expr->arguments[ai], expr->func->arguments[ai]->type,
+                                          expr->func->builtIn, safeExpression(expr), expr->at);
+            }
+        }
         if (expr->func && expr->func->unsafeOperation && !safeExpression(expr)) {
             error("unsafe call '" + expr->name + "' must be inside the 'unsafe' block", "", "",
                   expr->at, CompilationError::unsafe_function_call);

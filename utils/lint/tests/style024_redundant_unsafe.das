@@ -219,3 +219,16 @@ def good_block_declares_smart_holder_local() : void {
         g_holder <- local
     }
 }
+
+// --- Regression: a typed pointer bound to `var p : void?&` ---
+// the callee can store a pointer of any type into the variable, so
+// infer refuses the call outside `unsafe`: neither STYLE024 nor
+// STYLE025 may fire.
+
+def private clear_through_void_ref(var p : void?&) : void {
+    p = null
+}
+
+def good_wrap_binds_typed_pointer_to_void_ref(var p : int?&) : void {
+    unsafe(clear_through_void_ref(p))
+}

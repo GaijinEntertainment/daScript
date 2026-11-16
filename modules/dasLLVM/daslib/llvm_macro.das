@@ -33,7 +33,8 @@ def private shutdown_llvm {
 [export]
 def public free_jit_engine(ee : void?; ctx : void?) {
     assert(ee != null && ctx != null)
-    ee |> LLVMRunStaticDestructors()
-    LLVMDisposeExecutionEngine(unsafe(reinterpret<LLVMExecutionEngineRef>(ee)))
+    let engine = unsafe(reinterpret<LLVMExecutionEngineRef>(ee))
+    engine |> LLVMRunStaticDestructors()
+    LLVMDisposeExecutionEngine(engine)
     LLVMContextDispose(unsafe(reinterpret<LLVMContextRef>(ctx)))
 }

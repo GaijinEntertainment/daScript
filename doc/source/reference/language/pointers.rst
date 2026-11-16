@@ -317,10 +317,57 @@ to a typed pointer before dereferencing:
     unsafe {
         var raw = 123
         var praw = addr(raw)
-        var vraw : void? = reinterpret<void?>(praw)   // erase type
+        var vraw : void? = praw                       // erase type
         var praw2 = reinterpret<int?>(vraw)           // restore type
         print("{*praw2}\n")                           // 123
     }
+
+A typed pointer converts to ``void?`` without a cast.  The reverse needs
+``reinterpret``: a ``void?`` value cannot be assigned to a typed pointer
+variable and cannot be passed to a typed pointer parameter.
+
+``null`` takes the type of what it meets — the variable it is assigned to, the
+parameter it is passed to, the other branch of a ternary, the other ``return``
+of a function whose result is inferred — and is ``void?`` only when nothing
+else names a type:
+
+.. das-doc: alt
+.. code-block:: das
+
+    struct Node {
+        value : int
+    }
+
+    def first_or_null(arr : array<Node?>) {
+        if (empty(arr)) {
+            return null             // the result type is Node?, from the return below
+        }
+        return arr[0]
+    }
+
+    def read_value(p : Node?) : int => p != null ? p.value : 0
+
+    var arr : array<Node?>
+    var n = new Node(value = 1)
+    var v : void? = n                        // typed to void?: fine
+    read_value(null)                         // null to Node?: fine
+    read_value(empty(arr) ? null : n)        // the ternary is Node?
+    read_value(first_or_null(arr))
+
+.. das-doc: expect error[30107]
+.. code-block:: das
+
+    struct Leaf {
+        value : int
+    }
+
+    def read_leaf(p : Leaf?) : int => p != null ? p.value : 0
+
+    var untyped : void? = null
+    read_leaf(untyped)                       // error: a void? value needs reinterpret
+
+A typed pointer variable binds to a ``var p : void?&`` parameter only inside
+``unsafe``, because the callee can store a pointer of any type into it.
 
 .. _pointer_intptr:
 

@@ -731,7 +731,8 @@ def private walk_and_convert_array(data : uint8 const?; info : TypeDeclPtr; at :
         let stride = info.firstType.sizeOf
         var mkArr = new ExprMakeArray(at = at, makeType = clone_type(info.firstType))
         any_array_foreach(data, stride) $(value) {
-            emplace_new(mkArr.values) <| walk_and_convert(value, info.firstType, at)
+            let element = unsafe(reinterpret<uint8 const?>(value))
+            emplace_new(mkArr.values) <| walk_and_convert(element, info.firstType, at)
         }
         mkArr.makeType = make_fixed_array_type(total, mkArr.makeType)
         var mkToArrayMove = new ExprCall(at = at, name := "to_array_move")
@@ -821,8 +822,10 @@ def private walk_and_convert_table(data : uint8 const?; info : TypeDeclPtr; at :
         let key_stride = info.firstType.sizeOf
         let value_stride = info.secondType.sizeOf
         any_table_foreach(data, key_stride, value_stride) $(pkey, pvalue) {
-            var key = walk_and_convert(pkey, info.firstType, at)
-            var value = walk_and_convert(pvalue, info.secondType, at)
+            let key_data = unsafe(reinterpret<uint8 const?>(pkey))
+            let value_data = unsafe(reinterpret<uint8 const?>(pvalue))
+            var key = walk_and_convert(key_data, info.firstType, at)
+            var value = walk_and_convert(value_data, info.secondType, at)
             var mkTup = new ExprMakeTuple(at = at, recordType = clone_type(tupT), isKeyValue = true)
             emplace(mkTup.values, key)
             emplace(mkTup.values, value)

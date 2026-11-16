@@ -2199,7 +2199,8 @@ class StyleLintVisitor : AstVisitor {
             return
         }
         if (expr.genFlags.generated) return
-        if (call_func_needs_unsafe(expr.func, expr.flags.isForLoopSource)) {
+        if (call_func_needs_unsafe(expr.func, expr.flags.isForLoopSource)
+                || call_binds_typed_pointer_to_void_ref(expr)) {
             mark_unsafe_in_stack()
             return
         }
@@ -4912,6 +4913,19 @@ class StyleLintVisitor : AstVisitor {
             || func.flags.unsafeOperation
             || func.moreFlags.unsafeWhenNotCloneArray
             || (func.moreFlags.unsafeOutsideOfFor && !is_for_loop_src))
+    }
+
+    //! infer wants `unsafe` at a call binding a typed pointer to a non-builtin `var p : void?&`
+    def call_binds_typed_pointer_to_void_ref(expr : ExprCall?) : bool {
+        return false if (expr.func == null || expr.func.flags.builtIn)
+        for (arg, param in expr.arguments, expr.func.arguments) {
+            let passed = arg._type
+            let wanted = param._type
+            if (passed == null || wanted == null) continue
+            return true if (wanted.flags.ref && !wanted.flags.constant
+                && wanted.isVoidPointer && passed.isPointer && !passed.isVoidPointer)
+        }
+        return false
     }
 
     def override preVisitExprDelete(expr : ExprDelete?) : void {
