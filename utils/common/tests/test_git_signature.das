@@ -139,3 +139,54 @@ def test_compute_signature_no_git_falls_back(t : T?) {
     }
     cleanup_root(root)
 }
+
+// a git call that does not answer in time
+
+//! a fresh git repository holding one .md file; "" when git cannot
+//! make one here
+def make_git_root(t : T?) : string {
+    let root = make_temp_root(t)
+    if (empty(root)) return ""
+    var out : string
+    if (run_and_capture(["git", "-C", root, "init", "-q"], out, 60.0) != 0) {
+        cleanup_root(root)
+        return ""
+    }
+    t |> success(fwrite("{root}/a.md", "alpha"))
+    return root
+}
+
+//! every `git status` this process starts waits in a fsmonitor hook
+//! kept under `hook_dir`; git asks the hook twice, so one status
+//! takes two waits
+def slow_git_status(t : T?; hook_dir : string; wait_sec : int) {
+    let hook = "{to_generic_path(hook_dir)}/slow_fsmonitor.sh"
+    t |> success(fwrite(hook, "#!/bin/sh\nsleep {wait_sec}\nexit 1\n"))
+    set_env_variable("GIT_CONFIG_COUNT", "1")
+    set_env_variable("GIT_CONFIG_KEY_0", "core.fsmonitor")
+    set_env_variable("GIT_CONFIG_VALUE_0", "sh {hook}")
+}
+
+def restore_git_status() {
+    set_env_variable("GIT_CONFIG_COUNT", "0")
+}
+
+[test(description = "a git status that answers in neither try gives an unknown signature, and one that answers in the retry gives the same signature as an unhurried call", timeout = 1200)]
+def test_compute_signature_slow_git(t : T?) {
+    let root = make_git_root(t)
+    if (empty(root)) {
+        t |> skip("git cannot make a repository here")
+        return
+    }
+    let hook_dir = make_temp_root(t)
+    let unhurried = compute_signature(root, @(p : string) => md_predicate(p), [root])
+    slow_git_status(t, hook_dir, 2)
+    let unknown = compute_signature(root, @(p : string) => md_predicate(p), [root], 0.3, 0.3)
+    let retried = compute_signature(root, @(p : string) => md_predicate(p), [root], 0.3, 60.0)
+    restore_git_status()
+    t |> success(starts_with(unhurried, "git:"), "expected a git: signature, got: {unhurried}")
+    t |> equal(unknown, "")
+    t |> equal(retried, unhurried)
+    cleanup_root(hook_dir)
+    cleanup_root(root)
+}

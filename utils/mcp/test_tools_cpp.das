@@ -302,7 +302,19 @@ def test_cpp_index_signature(t : T?) {
         let sig2 = cpp_index_signature
         t |> success(!empty(sig1), "first signature should not be empty after ensure_cpp_index()")
         t |> success(sig1 == sig2, "signature should be stable across consecutive ensure_cpp_index() calls (no fs changes)")
+        if (sig1 != sig2) {
+            t |> failure("first signature {sig1}, second {sig2}")
+        }
     }
+}
+
+[test(description = "a built C++ index is kept when the new signature is the same or unknown, and rebuilt when it differs or nothing is built yet")]
+def test_cpp_index_is_current(t : T?) {
+    t |> success(cpp_index_is_current("cfg:1:git:a", "cfg:1:git:a"), "the same signature")
+    t |> success(cpp_index_is_current("", "cfg:1:git:a"), "unknown keeps the built index")
+    t |> success(!cpp_index_is_current("cfg:1:fs:b", "cfg:1:git:a"), "a different signature")
+    t |> success(!cpp_index_is_current("", ""), "unknown, and nothing built yet")
+    t |> success(!cpp_index_is_current("cfg:1:git:a", ""), "nothing built yet")
 }
 
 [test(description = "The daspkg cache checkout is excluded from the C++ index automatically when present.")]
