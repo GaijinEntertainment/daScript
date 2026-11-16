@@ -286,3 +286,15 @@ tier, not the backend serving it. The roles:
   decode with the host helper that computes `wgs`. Threadgroup constant: Metal's `tg=` spec or Vulkan's `[spirv_kernel(local_size_x=)]`. Uniform: the single writer that fills its buffer. A kernel class's compile-time constants - its `@template_constant`s, its literals and the module `let`s its body reads - are stamps: a module `let` is a stamp; a module `var` is not, because its value at stamp time is whatever the host last wrote.
 
 Vulkan is the deliberately-designed model of this shape; Metal converges as it is touched.
+
+### A CUDA context gives its device state back at its end {#cuda-context-release}
+
+The CUDA home's device is the card's primary context, retained once by each daslang context that brings the tier up
+(`cud_init_first`) and shared by every context of the process, so the driver frees nothing when a daslang context ends:
+memory a context allocated stays on the card until that context frees it. `cud_context_release`, a `[finalize]` in the
+context that brought the device up, runs `cud_shutdown`: the hooks the home's modules registered (`cud_on_shutdown`) -
+the decode driver's model drop (`cud_drop_model`), the stream chain's and the towers' - free their buffers, then the
+process buffers, the kernel modules, the streams and the context's retain go. It is the Vulkan home's
+`vk_context_release` and the Metal family's `metal_context_shutdown` on this home. State a context left would outlive it
+in the process - dastest's `--together` runs a file a context - and the next context's residency plan would read those
+bytes as another process's and decline the model.

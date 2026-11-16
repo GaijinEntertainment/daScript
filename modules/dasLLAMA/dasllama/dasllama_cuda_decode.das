@@ -623,6 +623,11 @@ def cud_drop_model {
     cud_arena_free()
 }
 
+[init]
+def dasllama_cuda_decode_register {
+    cud_on_shutdown(@@cud_drop_model)   //! the installed model's device state goes ahead of the device
+}
+
 //! the carry armed past prepare (the assistant drafter's attach): the last layer's residual step keeps its post-norm row and the
 //! commands land it in the out block, which holds the rows from prepare; the captured graphs go, the next step re-captures with the landing
 def cud_rdec_carry_arm(on : bool) : bool {
@@ -5401,7 +5406,8 @@ def private crd_prefill_x(var r : CudRdec; x_batch, cos_batch, ple_rows : array<
 def private crd_prefill_ids(var r : CudRdec; tokens : array<int64>; emb_scale : float; cos_batch : array<float>; segs : array<RdecPfSeg>; var logits : array<float>; experts : RdecHostExpertsRowsFn) {
     assert(crd_emb_on(r), "cud prefill over ids without a token table on the device")
     assert(r.ple <= 0l || crd_side_gather_on(r), "cud prefill over ids on a per-layer-embedding model without its table and projection on the device")
-    var words <- [for (tk in tokens); uint(tk)]
+    crd_pf_ready(r)   //! the refusal by name comes ahead of the ids' upload: a panic past it would leave that buffer on the card
+    var inscope words <- [for (tk in tokens); uint(tk)]
     let ids = buf_upload(words, g_cud.stream)
     crd_prefill_windows(r, cos_batch, segs, logits, experts) $(w0, wlen) {
         crd_emb_gather(r, g_cud.stream, ids + uint64(w0 * 4l), r.pf_x, r.pf_x, wlen, emb_scale)

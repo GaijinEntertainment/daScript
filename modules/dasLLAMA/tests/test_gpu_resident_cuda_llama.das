@@ -11,6 +11,7 @@ require dasllama/dasllama_math
 require dasllama/dasllama_gpu_tier
 require dasllama/dasllama_gpu_resident
 require dasllama/dasllama_cuda_decode   // set_cuda_mmq_pin - the FP4 arm's knob-off control
+require dasllama/dasllama_cuda_common   // cud_shutdown: the leak cell takes the device down
 require _model_tier
 require _resident_feed
 require _cuda_feed
@@ -340,5 +341,29 @@ def test_gpu_resident_cuda_window_planes_at_arm(t : T?) {
             delete prompt
             delete toks
         }
+    }
+}
+
+//! the last cell of the file: it takes the device down, and the next file's context brings its own up
+[test(description = "With Llama-3.2-1B Q8_0 served on the CUDA driver and its Model deleted with no drop, the tier's shutdown frees the driver's device state too: no CUDA object or allocation is left live")]
+def test_gpu_resident_cuda_shutdown_drops_the_model(t : T?) {
+    t |> run("{FILE_1B}: load, tail, delete the model; the shutdown leaves nothing live") @(t : T?) {
+        let path = cuda_model_path(t, FILE_1B)
+        if (empty(path)) return
+        let levers = resident_levers()
+        cuda_feed_window()
+        with_dasllama_jobque_() {
+            var tail <- resident_feed(8l)
+            let c0 = cuda_positions_served()
+            var row <- tail_after_load(path, tail)
+            cuda_served_since(t, c0, 1l, "the load's tail")
+            t |> success(cuda_live_object_count() > 0l, "the served model's device state is live after its Model is deleted ({cuda_live_object_count()} objects)")
+            cud_shutdown()
+            let held = cuda_device_bytes_allocated()
+            t |> equal(cuda_log_leaks_if_any(), 0l, "the shutdown dropped the installed model's device state with the device ({held} bytes of device memory still allocated)")
+            delete row
+            delete tail
+        }
+        restore_resident_levers(levers)
     }
 }

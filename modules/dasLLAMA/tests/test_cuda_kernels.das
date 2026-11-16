@@ -30,6 +30,7 @@ require ?vulkan _vkd_oracles   // the kq oracle runs the Vulkan leaves' decodes 
 require dasllama/dasllama_math
 require daslib/math_bits   // nolint:STYLE030,LINT019 — the word hashes of the CUDA cells, inside the vulkan arm alone
 require daslib/jobque_boost   // the worker-thread cell: a context of its own on another thread
+require daslib/fio   // sleep: the wait for a worker context's end to land
 require dasllama/dasllama_kqformat
 require dasllama/dasllama_gpu_math   // ue4m3_half_f32 - the nv4 MMQ cell's reference scales
 require dasllama/dasllama_gpu_knee   // cud_split_k_tgs: the short-window pick cell pins the knee
@@ -3591,6 +3592,54 @@ def test_cud_shutdown_leaks(t0 : T?) {
         cud_shutdown()
         t |> equal(g_shutdown_hook_ran, up ? 1 : 0, "the shutdown ran the registered hook exactly once (device up: {up})")
         t |> equal(cuda_log_leaks_if_any(), 0l, "no CUDA object or allocation outlives the tier")
+    }
+}
+
+let private HELD_BYTES = 256l << 20l   //! the worker context's buffer: far past what a device's bring-up takes
+
+struct WorkerFree {
+    free_ : int64   //! the card's free bytes the worker read with its buffer held; -1 = its device did not come up
+}
+let private HELD_SLACK = 32l << 20l    //! what the card's free count may move by beside it
+
+//! the card's free bytes once they are back within `HELD_SLACK` of `want`, else the last reading: a context's end lands a moment
+//! after its thread answers
+def private free_settled(want : int64) : int64 {
+    for (_ in range(500)) {
+        let f = int64(cuda_device_free_memory())
+        return f if (want - f <= HELD_SLACK)
+        sleep(10u)
+    }
+    return int64(cuda_device_free_memory())
+}
+
+[test(description = "A worker thread's context that brings the CUDA device up and holds a 256 MiB buffer takes those bytes off the card while it lives, and its end returns them with no shutdown call of its own")]
+def test_cud_context_release(t0 : T?) {
+    t0 |> run("a context's end gives its device state back to the card") <| @(t : T?) {
+        if (!cud_init()) {
+            t |> skip("no CUDA device with NVRTC")
+            return
+        }
+        let free0 = int64(cuda_device_free_memory())
+        var seen = -1l
+        with_channel(1) $(ch) {
+            new_thread() <| @capture(= ch) {
+                var w = WorkerFree(free_ = -1l)
+                if (cud_init()) {
+                    cud_proc_buf(cuda_mem_alloc(uint64(HELD_BYTES)))
+                    w.free_ = int64(cuda_device_free_memory())
+                }
+                ch |> push_clone(w)
+                ch |> notify_and_release
+            }
+            ch |> join()
+            ch |> for_each_clone() $(w : WorkerFree#) {
+                seen = w.free_
+            }
+        }
+        t |> success(seen >= 0l && free0 - seen >= HELD_BYTES - HELD_SLACK, "while the worker lived its buffer was off the card ({free0 - seen} bytes fewer free)")
+        let back = free_settled(free0)
+        t |> success(free0 - back <= HELD_SLACK, "the worker's end gave its bytes back ({free0 - back} bytes still held of {free0 - seen})")
     }
 }
 
