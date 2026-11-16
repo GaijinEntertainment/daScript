@@ -333,6 +333,24 @@ def test_ptr_arithmetic(t : T?) {
     }
 }
 
+def pa_test_minus_on_a_temporary(t : T?; dummy : auto(TT)) {
+    var one = TT(1); one--; one++
+    var three = TT(3); three--; three++
+    var a <- fixed_array<int>(0, 1, 2, 3)
+    unsafe {
+        t |> equal(*(addr(a[3]) - three), 0)
+        t |> equal(*((addr(a[0]) + three) - one), 2)
+    }
+}
+
+[test(description = "ptr - n takes a pointer that is not a variable - an addr() result or a ptr + n sum - for int, int64, uint and uint64 offsets, as ptr + n does")]
+def test_ptr_minus_on_a_temporary(t : T?) {
+    pa_test_minus_on_a_temporary(t, type<int>)
+    pa_test_minus_on_a_temporary(t, type<int64>)
+    pa_test_minus_on_a_temporary(t, type<uint>)
+    pa_test_minus_on_a_temporary(t, type<uint64>)
+}
+
 def pi_fn_with_default_null_ptr(var a : int? implicit = default<int?>) {
     var b : int
     a ?? b = 2
