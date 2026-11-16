@@ -268,6 +268,121 @@ def test_registered_modules_safe(t : T?) {
     t |> success(modCount > 0, "should iterate registered modules")
 }
 
+[test(description = "names cloned out of a module_for_each_function and a module_for_each_global walk are still those names after the walks return")]
+def test_walk_names_cloned_during_the_walk_outlive_it(t : T?) {
+    var functions : array<string>
+    module_for_each_function(get_module("$")) $(info) {
+        functions |> push(clone_string(info.name))
+    }
+    var globals : array<string>
+    module_for_each_global(get_module("math")) $(info) {
+        globals |> push(clone_string(info.name))
+    }
+    t |> success(functions |> has_value("clone_string"), "the $ module declares clone_string")
+    t |> success(globals |> has_value("PI"), "the math module declares PI")
+}
+
+[test(description = "each module walk and basic_struct_for_each_field hands its block a temporary info, so the info cannot outlive the block")]
+def test_module_walks_hand_out_a_temporary_info(t : T?) {
+    var functions, generics, globals, structures, enumerations, fields = 0
+    var function_info, generic_info, global_info, structure_info, enumeration_info, field_info = ""
+    module_for_each_function(get_module("math")) $(_info) {
+        functions++
+        function_info = typeinfo typename(_info)
+    }
+    module_for_each_generic(get_module("rtti")) $(_info) {
+        generics++
+        generic_info = typeinfo typename(_info)
+    }
+    module_for_each_global(get_module("math")) $(_info) {
+        globals++
+        global_info = typeinfo typename(_info)
+    }
+    module_for_each_structure(get_module("ast")) $(_info) {
+        structures++
+        structure_info = typeinfo typename(_info)
+    }
+    module_for_each_enumeration(get_module("rtti_core")) $(_info) {
+        enumerations++
+        enumeration_info = typeinfo typename(_info)
+    }
+    module_for_each_annotation(get_module("rtti_core")) $(ann) {
+        if (ann.isBasicStructureAnnotation) {
+            unsafe {
+                let sann & = reinterpret<BasicStructureAnnotation&>(ann)
+                basic_struct_for_each_field(sann) $(_name, _cppName, _xtype, _offset) {
+                    fields++
+                    field_info = typeinfo typename(_xtype)
+                }
+            }
+        }
+    }
+    t |> success(functions > 0 && generics > 0 && globals > 0, "each walk visits something")
+    t |> success(structures > 0 && enumerations > 0 && fields > 0, "each walk visits something")
+    t |> equal(function_info, "rtti_core::FuncInfo const#")
+    t |> equal(generic_info, "rtti_core::FuncInfo const#")
+    t |> equal(global_info, "rtti_core::VarInfo const#")
+    t |> equal(structure_info, "rtti_core::StructInfo const#")
+    t |> equal(enumeration_info, "rtti_core::EnumInfo const#")
+    t |> equal(field_info, "rtti_core::TypeInfo const#")
+}
+
+[test(description = "the daslib/rtti helpers accept the temporary info a module walk hands out: each_annotation, each_annotation_argument, is_same_type, is_compatible_cast and type_info")]
+def test_rtti_helpers_accept_a_walk_info(t : T?) {
+    var annotations = 0
+    var checked = 0
+    module_for_each_function(get_module("math")) $(info) {
+        for (ann in each_annotation(info)) {
+            annotations += int(ann.count)
+        }
+        checked++
+    }
+    module_for_each_enumeration(get_module("rtti_core")) $(info) {
+        for (ann in each_annotation(info)) {
+            annotations += int(ann.count)
+        }
+        checked++
+    }
+    var casts = 0
+    module_for_each_structure(get_module("ast")) $(info) {
+        for (ann in each_annotation(info)) {
+            annotations += int(ann.count)
+        }
+        if (is_compatible_cast(info, info)) {
+            casts++
+        }
+        checked++
+    }
+    var typed_globals = 0
+    module_for_each_global(get_module("math")) $(info) {
+        for (_arg in each_annotation_argument(info)) {
+            annotations++
+        }
+        if (type_info(info) != null) {
+            typed_globals++
+        }
+        checked++
+    }
+    var same_fields, all_fields = 0
+    module_for_each_annotation(get_module("math")) $(ann) {
+        if (ann.isBasicStructureAnnotation) {
+            unsafe {
+                let sann & = reinterpret<BasicStructureAnnotation&>(ann)
+                basic_struct_for_each_field(sann) $(_name, _cppName, xtype, _offset) {
+                    all_fields++
+                    if (is_same_type(xtype, xtype)) {
+                        same_fields++
+                    }
+                }
+            }
+        }
+    }
+    t |> success(checked > 0, "the walks visit something")
+    t |> success(casts > 0, "a structure info casts to itself")
+    t |> success(typed_globals > 0, "a global's info has a type info")
+    t |> success(all_fields > 0 && same_fields == all_fields, "a field's type equals itself")
+}
+
 [comment(i=1, f=2.0, s="three", b=false)]
 struct TiEvent {
     i : int

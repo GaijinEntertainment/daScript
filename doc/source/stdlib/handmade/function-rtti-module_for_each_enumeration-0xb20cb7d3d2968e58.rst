@@ -1,0 +1,1 @@
+Iterates through each enumeration declared in the given ``Module``, passing a temporary ``EnumInfo`` for each enum. The info is temporary: it is valid only inside the block, so clone any string kept past it (``clone_string(info.name)``).
