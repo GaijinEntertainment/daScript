@@ -302,6 +302,7 @@ class StandaloneContextGen : CppAot {
         emittedForeignHashes <- {for (fn in foreign); fn.getMangledNameHash}
         prologue = program._options |> find_arg("aot_prologue") ?as tBool ?? false;
         solidContext = program.policies.solid_context || (program._options |> find_arg("solid_context") ?as tBool ?? false);
+        fixedGlobalOffsets = solidContext;
         helper.cross_platform = cp;
     }
 
