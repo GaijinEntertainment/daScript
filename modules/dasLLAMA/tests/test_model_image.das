@@ -5,6 +5,7 @@ options _function_length = 0   // test bodies enumerate the fixture arms
 options _dasllama_internal = true
 
 require dastest/testing_boost public
+require _compares   // nan_wide_diff: a difference a NaN on either side reads as infinite
 require dasllama/dasllama            // the facade: load_model's image cache is the surface under test
 require dasllama/dasllama_whisper
 require dasllama/dasllama_tower     // TowerDev/with_tower_dev_staging - the Metal arms mint each side's flavor (`#tower-dev-block`)
@@ -27,6 +28,8 @@ require _nmt_oracle                // nmt_seat_pin — the bergamot arm pins the
 require dasllama/dasllama_config     // DlimConfiguration — the peek/round-trip mechanics arms
 require dasllama/dasllama_styletts2  // stage_styletts2/load_styletts2/mint_styletts2 + the two lane tags — the kitten arm's carrier, its family data riding the image meta
 require dasllama/dasllama_tts        // load_tts_model/caps/synthesize — the kitten arm's facade leg
+require dasllama/dasllama_pocket     // stage_pocket/load_pocket/mint_pocket + the three lane tags - the pocket arm's carrier
+require dasllama/dasllama_kqformat   // kq_schema_id: the recipe lane's formats as the leaves record them
 require dasllama/dasllama_tts_blocks // TtsSpan — the staged blob's span table
 require daslib/defer
 require daslib/rtti   // this_context().last_exception: the facade's decline is read as text
@@ -68,6 +71,7 @@ require _child_run   // run_child / das_exe - the mx4-stream arm's mint child
 // mlx-metal-35b) skip on a build without das_metal, the mlx-metal pair also on a box with no Metal
 // device, and mx4-stream's footprint leg off macOS. The f16 by-path cells (`*_f16_image_by_path`)
 // also skip where no GPU home serving the family's f16 lane stands up (`f16_home_up`: every GPU home).
+// The pocket arm's voice-clear cell skips on a file that carries one voice.
 
 // element-exact plane compare: -1 = length mismatch, else the number of differing elements
 // the staged (owned array) side against the served (borrowed plane) side — the only comparison
@@ -1485,32 +1489,20 @@ def test_mx4_streamed_mint(t : T?) {
     }
 }
 
-// elements of the served view that differ from the staging blob's span (the off-rail truth)
-def private tts_span_mismatch(blob : array<float>; span : TtsSpan; view : array<float>) : int {
-    if (long_length(view) != span.n) {
-        return 1000000
-    }
-    var bad = 0
-    for (i in range64(span.n)) {
-        if (view[i] != blob[span.off + i]) {
-            bad++
-        }
-    }
-    return bad
+// elements of the served view that differ from the staging blob's span (the off-rail truth): a float plane or a q8
+// lane's int8 quants
+def private tts_span_mismatch(blob : array<auto(TT)>; span : TtsSpan; view : array<TT>) : int {
+    return 1000000 if (long_length(view) != span.n)
+    return mismatch_exact(view, blob, 0, int(span.off), int(span.n))
 }
 
-// the same, for a weight the q8 lane carries as int8 quants
-def private tts_span_mismatch_q8(qblob : array<int8>; span : TtsSpan; view : array<int8>) : int {
-    if (long_length(view) != span.n) {
-        return 1000000
+// the recipe ask back as a cell found it: the spec in force again, or none
+def private recipe_restore(asked : bool; spec : string) {
+    if (asked) {
+        set_styletts2_recipe(spec)
+    } else {
+        reset_styletts2_recipe()
     }
-    var bad = 0
-    for (i in range64(span.n)) {
-        if (view[i] != qblob[span.off + i]) {
-            bad++
-        }
-    }
-    return bad
 }
 
 struct KittenRoundtrip {
@@ -1539,7 +1531,7 @@ def private kitten_image_roundtrip(path : string; q8 : bool) : KittenRoundtrip {
     if (q8) {
         // the rows GEMMs' weights ride the int8 plane, their Q8_0 scales the float one
         r.quantized = !empty(m.albert.q.wq)
-        r.mismatches += tts_span_mismatch_q8(st.qblob, m.albert.q.wq_span, m.albert.q.wq)
+        r.mismatches += tts_span_mismatch(st.qblob, m.albert.q.wq_span, m.albert.q.wq)
         r.mismatches += tts_span_mismatch(st.blob, m.albert.q.wqs_span, m.albert.q.wqs)
     } else {
         r.mismatches += tts_span_mismatch(st.blob, m.albert.q.wt_span, m.albert.q.wt)
@@ -1548,9 +1540,18 @@ def private kitten_image_roundtrip(path : string; q8 : bool) : KittenRoundtrip {
     r.mismatches += tts_span_mismatch(st.blob, m.decoder.ups[0].wtr_span, m.decoder.ups[0].wtr)
     r.mismatches += tts_span_mismatch(st.blob, m.decoder.window.span, m.decoder.window.a)
     r.mismatches += tts_span_mismatch(st.blob, m.text_encoder.cnn[0].w_span, m.text_encoder.cnn[0].w)
-    for (name in m.voice_names) {
-        r.mismatches += tts_span_mismatch(st.blob, m.voice_spans?[name] ?? TtsSpan(), m.voices[name])
-        r.voices++
+    for (name in m.voice_names) {   // a voice pack is f32 on the f32 lane, Q8_0 quants and scales on the q8 one
+        m.voices |> get(name) $(pack) {
+            r.mismatches += tts_span_mismatch(st.blob, m.voice_spans?[name] ?? TtsSpan(), pack)
+            r.voices += q8 ? 0 : 1
+        }
+        m.voices_q |> get(name) $(quants) {
+            r.mismatches += tts_span_mismatch(st.qblob, m.voice_q_spans?[name] ?? TtsSpan(), quants)
+            r.voices += q8 ? 1 : 0
+        }
+        m.voices_qs |> get(name) $(scales) {
+            r.mismatches += tts_span_mismatch(st.blob, m.voice_qs_spans?[name] ?? TtsSpan(), scales)
+        }
     }
     var inscope warm <- load_styletts2(path)
     r.warm_backed = warm.image_map != null
@@ -1584,6 +1585,94 @@ def test_kitten_image(t : T?) {
             t |> success(r8.quantized, "q8: the rows GEMMs' weights are Q8_0 quants")
         }
     }
+    t |> run("kitten-nano: the recipe lane mints each weight group in its format, and the mapped image serves the staged planes whole") @(t : T?) {
+        return if (!family_on(t, "kitten") || !arm_on(t, "kitten") || !jit_model_available(t, path))
+        with_dasllama_jobque_() {
+            var inscope st <- stage_styletts2(path, true, true)
+            var inscope st8 <- stage_styletts2(path, true)
+            let asked = styletts2_serves_recipe()
+            let spec = styletts2_recipe()
+            defer() {
+                recipe_restore(asked, spec)
+            }
+            reset_styletts2_q8()
+            set_styletts2_recipe("")
+            let serves_recipe = styletts2_serves_recipe()
+            let serves_q8 = styletts2_serves_q8()
+            var inscope m <- load_styletts2(path)
+            t |> success(serves_recipe && serves_q8, "set_styletts2_recipe asks the recipe lane, a q8 lane")
+            t |> success(m.kq == serves_recipe && m.q8 == serves_q8 && m.image_map != null, "the load serves the lane asked, from an image")
+            t |> success(m.decoder.decode[0].norm2.fc.q8 && empty(m.decoder.decode[0].norm2.fc.w), "a style projection takes Q8_0 in place of its f32 matrix")
+            t |> equal(plane_mismatches(st.blob, m.blob) + plane_mismatches(st.qblob, m.qblob), 0l, "served elements differing from the staged planes")
+            t |> success(m.albert.q.q8 && m.albert.q.kq_fmt == 0, "the front stays Q8_0")
+            t |> equal(m.decoder.resblocks[0].convs1[0].kq_fmt, kq_schema_id(KqFmt.k4), "a generator res conv takes the decoder group's format")
+            t |> equal(m.decoder.decode[0].conv2.kq_fmt, kq_schema_id(KqFmt.k4), "a decoder block's conv takes it too")
+            t |> equal(m.text_encoder.cnn[0].kq_fmt, kq_schema_id(KqFmt.k4), "a text encoder conv, channel-major, takes its group's: Q4_K")
+            t |> success(m.text_encoder.lstm.fwd.q8 && empty(m.text_encoder.lstm.fwd.w_hh), "an LSTM takes Q8_0 in place of its f32 matrices")
+            t |> equal(m.decoder.ups[0].kq_fmt, kq_schema_id(KqFmt.k6), "an upsampler takes its group's: Q6_K over the lift matrix")
+            t |> equal(m.decoder.ups[0].kq_k % 256l, 0l, "its row whole superblocks of the input width ({m.decoder.ups[0].kq_k} for {m.decoder.ups[0].cin})")
+            t |> success(m.decoder.noise_convs[0].kq_fmt == 0 && !m.decoder.noise_convs[0].q8, "a noise conv stays f32")
+            t |> success(m.decoder.conv_post.kq_fmt == 0 && !m.decoder.conv_post.q8, "conv_post stays f32")
+            let recipe_bytes = 4l * long_length(st.blob) + long_length(st.qblob)
+            let q8_bytes = 4l * long_length(st8.blob) + long_length(st8.qblob)
+            t |> success(recipe_bytes < q8_bytes, "the recipe lane's planes are the smaller: {recipe_bytes >> 20l} MB against the q8 lane's {q8_bytes >> 20l} MB")
+            let lanes <- [image_path_for(path, ST2_IMAGE_TAG_KQ), image_path_for(path, ST2_IMAGE_TAG_Q8), image_path_for(path, ST2_IMAGE_TAG)]
+            t |> success(lanes[0] != lanes[1] && lanes[0] != lanes[2], "the recipe lane is its own prepared image: {lanes[0]}")
+        }
+    }
+    t |> run("kitten-nano: a recipe pin moves the groups it names and no other, mints in memory, and refuses a name it does not know") @(t : T?) {
+        return if (!family_on(t, "kitten") || !arm_on(t, "kitten") || !jit_model_available(t, path))
+        with_dasllama_jobque_() {
+            let asked = styletts2_serves_recipe()
+            let spec = styletts2_recipe()
+            defer() {
+                recipe_restore(asked, spec)
+            }
+            reset_styletts2_q8()
+            let pins = "decoder= q8, generator=k5,fc=f32,voice=f32"
+            set_styletts2_recipe(pins)
+            t |> equal(styletts2_recipe(), pins, "the getter answers the pin in force")
+            let img = image_path_for(path, ST2_IMAGE_TAG_KQ)
+            let stamp = stat(img).mtime
+            var inscope m <- load_styletts2(path)
+            t |> success(m.kq, "the pinned load is the recipe lane's")
+            t |> equal(stat(img).mtime, stamp, "and writes no image")
+            t |> success(m.decoder.decode[0].conv2.q8 && m.decoder.decode[0].conv2.kq_fmt == 0, "the decoder group took its pin: Q8_0")
+            t |> equal(m.decoder.resblocks[0].convs1[0].kq_fmt, kq_schema_id(KqFmt.k5), "the generator group took its pin: Q5_K")
+            t |> success(!m.decoder.decode[0].norm2.fc.q8 && !empty(m.decoder.decode[0].norm2.fc.w), "the style projections took theirs: f32")
+            t |> success(m.albert.q.q8, "an unnamed group keeps the recipe's format")
+            t |> success(length(m.voices) == 8 && empty(m.voices_q), "the voice packs took theirs: all eight f32, none as quants")
+            for (bad in ["vocoder=q8", "decoder=q3", "decoder", "decoder=k4,", "generator=k5,decoder=q3"]) {
+                var refused = false
+                try {
+                    set_styletts2_recipe(bad)
+                } recover {
+                    refused = true
+                }
+                t |> success(refused, "the pin '{bad}' is refused")
+                t |> equal(styletts2_recipe(), pins, "and leaves the pin in force as it was")
+            }
+            set_styletts2_recipe("")
+            var inscope back <- load_styletts2(path)
+            t |> equal(back.decoder.decode[0].conv2.kq_fmt, kq_schema_id(KqFmt.k4), "with no group pinned the decoder group is the recipe's again")
+            t |> success(length(back.voices_q) == 8 && empty(back.voices), "and the voice packs are Q8_0 quants again")
+            reset_styletts2_recipe()
+            let policy_recipe = styletts2_serves_recipe()
+            var inscope policy <- load_styletts2(path)
+            t |> success(!policy_recipe && policy.kq == policy_recipe && policy.q8 == styletts2_serves_q8(), "with the ask dropped a load serves the policy lane, Q8_0")
+            t |> equal(policy.decoder.decode[0].conv2.kq_fmt, 0, "whose decoder convs carry no K-quant planes")
+            var inscope row_q, row_f, row_other : array<float>
+            styletts2_style(back, m.voice_names[0], 3, row_q)
+            styletts2_style(m, m.voice_names[0], 3, row_f)
+            styletts2_style(m, m.voice_names[0], 40, row_other)
+            let peak = logits_maxabs(row_f)
+            let off = logits_maxdiff(row_q, row_f)
+            let control = logits_maxdiff(row_other, row_f)
+            to_log(LOG_INFO, "kitten-nano voice {m.voice_names[0]} row 3: Q8_0 pack against the f32 pack off {off}, peak {peak}, row 40 against it {control}\n")
+            t |> success(off > 0.0 && off < 0.01 * peak, "a Q8_0 pack's style row reads within a hundredth of the f32 row's peak, and is not the f32 row: off {off}, peak {peak}")
+            t |> success(all_finite(row_other) && all_finite(row_f) && control > 0.01 * peak, "another row of the f32 pack lands outside that bound (the compare's control): {control}")
+        }
+    }
     t |> run("kitten-nano: the two lanes are two files") @(t : T?) {
         if (!family_on(t, "kitten") || !arm_on(t, "kitten")) return
         let f32_img = image_path_for(path, ST2_IMAGE_TAG)
@@ -1593,15 +1682,20 @@ def test_kitten_image(t : T?) {
     t |> run("kitten-nano: the image loads by its own path, the family data riding its meta") @(t : T?) {
         return if (!family_on(t, "kitten") || !arm_on(t, "kitten") || !jit_model_available(t, path))
         with_dasllama_jobque_() {
+            let asked = styletts2_serves_recipe()
+            let spec = styletts2_recipe()
+            defer() {
+                recipe_restore(asked, spec)
+                reset_styletts2_q8()
+            }
+            reset_styletts2_recipe()
+            set_styletts2_q8(true)
             var inscope from_gguf <- load_styletts2(path)   // bakes the q8 sibling when it is not there yet
             let img = image_path_for(path, ST2_IMAGE_TAG_Q8)
             t |> success(stat(img).is_valid, "the q8 lane's image is on disk: {img}")
-            set_styletts2_q8(false)
-            defer() {
-                reset_styletts2_q8()
-            }
+            set_styletts2_q8(false)   // the file's lane wins over the pin
             var inscope m <- load_styletts2(img)
-            t |> success(m.q8, "the file's lane is the served lane")
+            t |> equal(m.q8, from_gguf.q8, "the file's lane is the served lane")
             t |> equal(length(m.voice_names), 8)
             t |> equal(length(m.kitten.aliases), length(from_gguf.kitten.aliases), "the aliases rode the image ({length(m.kitten.aliases)})")
             t |> equal(length(m.kitten.speed_priors), length(from_gguf.kitten.speed_priors), "the speed priors rode the image ({length(m.kitten.speed_priors)})")
@@ -1615,6 +1709,170 @@ def test_kitten_image(t : T?) {
                 var inscope a <- synthesize(tm, "The image spoke.", c.voices[length(c.voices) - 1], 1.0)
                 t |> success(long_length(a.pcm) > 8000l, "the facade synthesized {long_length(a.pcm)} samples from the image")
             }
+        }
+    }
+}
+
+struct PocketRoundtrip {
+    cold_backed : bool
+    warm_backed : bool
+    minted_backed : bool
+    lane_q8 : bool
+    asked_q8 : bool       // what the lane accessors answered before the load
+    asked_native : bool
+    kq_planes : bool
+    mismatches : int64
+    voices : int
+    table_halfwords : int64   // the text table's halfwords the warm map serves, bound from the image's int8 plane
+}
+
+// a served plane against the staged array it was written from: every element, the alignment gaps included
+def private plane_mismatches(staged : array<auto(ET)>; served) : int64 {
+    return 1000000l if (long_length(staged) != served.n)
+    var bad = 0l
+    for (i in range64(served.n)) {
+        if (staged[i] != unsafe(served.p[i])) {
+            bad++
+        }
+    }
+    return bad
+}
+
+// the image rail on a Pocket GGUF, once per lane: a fresh staged read on that lane is the off-rail truth, and the cold
+// load (a bake or a map), the warm map and the in-memory mint each serve its two planes whole
+def private pocket_image_roundtrip(path : string; q8, native : bool) : PocketRoundtrip {
+    defer() {
+        reset_pocket_q8()
+    }
+    reset_pocket_q8()
+    if (!native) {
+        set_pocket_q8(q8)
+    }
+    var r = PocketRoundtrip(asked_q8 = pocket_serves_q8(), asked_native = pocket_serves_native())
+    var inscope st <- stage_pocket(path, q8, native)
+    var inscope m <- load_pocket(path)
+    r.cold_backed = m.image_map != null
+    r.lane_q8 = m.q8
+    r.kq_planes = m.backbone.layers[0].in_proj.kq_fmt != 0
+    r.mismatches = plane_mismatches(st.blob, m.blob) + plane_mismatches(st.qblob, m.qblob)
+    r.mismatches += int64(tts_span_mismatch(st.blob, m.text_emb.span, m.text_emb.a))
+    r.mismatches += int64(tts_span_mismatch(st.blob, m.mimi.dec_out.wk_span, m.mimi.dec_out.wk))
+    for (name in m.voice_names) {
+        m.voice_latents |> get(name) $(lat) {
+            r.mismatches += int64(tts_span_mismatch(st.blob, m.voice_latent_spans?[name] ?? TtsSpan(), lat))
+            r.voices++
+        }
+    }
+    var inscope warm <- load_pocket(path)
+    r.warm_backed = warm.image_map != null
+    r.mismatches += plane_mismatches(st.blob, warm.blob) + plane_mismatches(st.qblob, warm.qblob)
+    r.table_halfwords = long_length(warm.text_h) / 2l
+    for (i in range64(long_length(warm.text_h))) {
+        r.mismatches += int8(warm.text_h[i]) != st.qblob[warm.text_h_span.off + i] ? 1l : 0l
+    }
+    var inscope st2 <- stage_pocket(path, q8, native)
+    var inscope minted = PocketModel()
+    mint_pocket(st2, minted)
+    r.minted_backed = minted.image_map != null
+    r.mismatches += plane_mismatches(st.blob, minted.blob) + plane_mismatches(st.qblob, minted.qblob)
+    return r
+}
+
+[test(description = "On its native, q8 and f32 lanes the pocket 18m-kq image (cold, warm and in-memory mint) serves both planes element-exact against the staged read; the image copied away from its GGUF loads by its own path on the lane it was baked on and speaks the GGUF load's samples; a roster voice cleared on an image-served model leaves the rest speaking"), arch(at = "../ARCHITECTURE_POCKET.md#pocket-image")]
+def test_pocket_image(t : T?) {
+    let path = path_join(models_dir(), "pocket-tts-en-18m-kq.gguf")
+    t |> run("pocket 18m-kq: the staged read, the mapped image and the in-memory mint agree on all three lanes") @(t : T?) {
+        return if (!family_on(t, "pocket") || !arm_on(t, "pocket") || !jit_model_available(t, path))
+        with_dasllama_jobque_() {
+            for (lane in [(q8 = true, native = true, name = "native"), (q8 = true, native = false, name = "q8"), (q8 = false, native = false, name = "f32")]) {
+                let r = pocket_image_roundtrip(path, lane.q8, lane.native)
+                t |> success(r.cold_backed, "{lane.name}: the cold load serves from an image")
+                t |> success(r.warm_backed, "{lane.name}: the warm load maps the image")
+                t |> success(r.minted_backed, "{lane.name}: the in-memory mint serves from a chunk")
+                if (!lane.native) {
+                    t |> success(r.asked_q8 == lane.q8 && !r.asked_native, "{lane.name}: the pin asks the lane")
+                }
+                t |> equal(r.lane_q8, r.asked_q8, "{lane.name}: the served model carries the lane the accessors named")
+                t |> equal(r.kq_planes, r.asked_native, "{lane.name}: the K-quant backbone serves its own planes on the native lane alone")
+                t |> success(r.voices > 0, "{lane.name}: the roster's frames rode the image ({r.voices} voices)")
+                t |> equal(r.mismatches, 0l, "{lane.name}: served elements differing from the staged planes")
+            }
+        }
+    }
+    t |> run("pocket 18m-q8: the native lane's image carries the F16 text table as the file's halfwords") @(t : T?) {
+        let f16_path = path_join(models_dir(), "pocket-tts-en-18m-q8.gguf")   // the published q8 form stores the table F16
+        return if (!family_on(t, "pocket") || !arm_on(t, "pocket") || !jit_model_available(t, f16_path))
+        with_dasllama_jobque_() {
+            let r = pocket_image_roundtrip(f16_path, true, true)
+            t |> success(r.cold_backed && r.warm_backed && r.minted_backed, "the cold load, the warm map and the in-memory mint each serve from an image")
+            t |> success(r.table_halfwords > 0l && r.table_halfwords % 4001l == 0l, "the warm map binds the table's halfwords from the int8 plane ({r.table_halfwords})")
+            t |> equal(r.mismatches, 0l, "served elements differing from the staged planes")
+            let f = pocket_image_roundtrip(f16_path, false, false)
+            t |> equal(f.table_halfwords, 0l, "pinned f32, the table rides the float plane")
+            t |> equal(f.mismatches, 0l, "f32: served elements differing from the staged planes")
+        }
+    }
+    t |> run("pocket 18m-kq: the three lanes are three files") @(t : T?) {
+        if (!family_on(t, "pocket") || !arm_on(t, "pocket")) return
+        let native_img = image_path_for(path, POCKET_IMAGE_TAG)
+        let q8_img = image_path_for(path, POCKET_IMAGE_TAG_Q8)
+        let f32_img = image_path_for(path, POCKET_IMAGE_TAG_F32)
+        t |> success(native_img != q8_img && q8_img != f32_img && native_img != f32_img, "each lane is its own prepared image:\n  {native_img}\n  {q8_img}\n  {f32_img}")
+    }
+    t |> run("pocket 18m-kq: the image loads by its own path with no GGUF beside it, and speaks the GGUF load's samples") @(t : T?) {
+        return if (!family_on(t, "pocket") || !arm_on(t, "pocket") || !jit_model_available(t, path) || !g_env_engine.image)
+        with_dasllama_jobque_() {
+            reset_tts_q8()
+            let serves_q8 = pocket_serves_q8()
+            let serves_native = pocket_serves_native()
+            var inscope from_gguf <- load_tts_model(path)   // bakes the native sibling when it is not there yet
+            var inscope c <- caps(from_gguf)
+            var inscope want <- synthesize(from_gguf, "The image spoke.", c.voices[0], 1.0)
+            let dir = path_join(test_temp_dir(), "pocket_image_alone")
+            mkdir_rec(dir)
+            let img = path_join(dir, "voice.dlim")
+            var why = ""
+            t |> success(copy_file(image_path_for(path, POCKET_IMAGE_TAG), img, true, why), "the native lane's image copied away from its GGUF: {why}")
+            t |> success(pocket_serves_file(img), "the image's head names the family")
+            t |> success(!tts_needs_packs(img), "a Pocket image needs no packs")
+            var inscope packs <- tts_pack_names(img)
+            t |> equal(length(packs), 0, "and names none")
+            set_pocket_q8(false)   // the file's lane wins over the pin
+            defer() {
+                reset_pocket_q8()
+            }
+            var inscope m <- load_tts_model(img)
+            t |> success(m.pocket.q8 == serves_q8 && (m.pocket.backbone.layers[0].in_proj.kq_fmt != 0) == serves_native, "the file's lane - the unpinned policy's - is the served lane, over the f32 pin")
+            var inscope ci <- caps(m)
+            t |> equal(length(ci.voices), length(c.voices), "the roster rode the image ({length(ci.voices)} voices)")
+            var inscope words <- pocket_chunks(m.pocket, "Three sentences. Ride the meta. As the tokenizer does.")
+            var inscope words_gguf <- pocket_chunks(from_gguf.pocket, "Three sentences. Ride the meta. As the tokenizer does.")
+            t |> equal(join(words, "|"), join(words_gguf, "|"), "the tokenizer rode the image")
+            var inscope got <- synthesize(m, "The image spoke.", c.voices[0], 1.0)
+            t |> success(long_length(got.pcm) > 8000l, "the image synthesized {long_length(got.pcm)} samples")
+            t |> equal(long_length(got.pcm), long_length(want.pcm))
+            t |> equal(mismatch_exact(got.pcm, want.pcm), 0, "samples differing from the GGUF load's")
+            to_log(LOG_INFO, "pocket 18m-kq by path: 'The image spoke.' in {c.voices[0]}, {long_length(got.pcm)} samples, {mismatch_exact(got.pcm, want.pcm)} differing from the GGUF load's\n")
+            remove(img)
+        }
+    }
+    t |> run("pocket 18m-kq: a roster voice cleared on an image-served model frees no mapped plane") @(t : T?) {
+        return if (!family_on(t, "pocket") || !arm_on(t, "pocket") || !jit_model_available(t, path))
+        with_dasllama_jobque_() {
+            var inscope m <- load_tts_model(path)
+            var inscope c <- caps(m)
+            if (length(c.voices) < 2) {
+                t |> skip("the file carries one voice")
+                return
+            }
+            let gone = clone_string(c.voices[0])
+            let spanned = key_exists(m.pocket.voice_spans, gone) || key_exists(m.pocket.voice_latent_spans, gone)
+            pocket_voice_clear(m.pocket, gone)
+            t |> success(!pocket_has_voice(m.pocket, gone), "the cleared voice left both tables")
+            t |> success(spanned && !key_exists(m.pocket.voice_spans, gone) && !key_exists(m.pocket.voice_latent_spans, gone),
+                "and its span in the image with them, which the image served it from")
+            var inscope a <- synthesize(m, "Still here.", c.voices[1], 1.0)
+            t |> success(long_length(a.pcm) > 4000l, "another voice still speaks ({long_length(a.pcm)} samples)")
         }
     }
 }

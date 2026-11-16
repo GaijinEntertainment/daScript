@@ -3332,6 +3332,7 @@ CPU large-language-model inference in pure daslang: load a GGUF model, tokenize,
 - `kernel_backend_available` - True when kernel backend `name` is registered AND its availability witness passes on this box — the detection probe behind defaults-first backend selection (the vulkan witness enumerates devices once and caches its verdict).
 - `kernel_report` - One line naming the CPU kernels this build runs: a fat build's classes and the ones this box picks, else the stamped kernel families by source (a forced or adopted tune file is named).
 - `prepared_image_alignment` - The boundary, in bytes, a prepared image its host holds in memory starts on; a load from another address panics.
+- `read_prepared_image` - A prepared image file read into `raw` on the `prepared_image_alignment` boundary, as a host whose files live in its own packs would hand it over: the base and size a from-memory load takes, a null base where the file does not open.
 - `select_matmul_backend_for_load` - Select the best matmul backend for the NEXT model load (honors a pin).
 - `set_dispatch_worker_limit` - Cap the kernel-dispatch worker count (0 = no limit, all job-que workers).
 - `set_jobque_spin_gpu_us` - The workers' spin-before-park window while the whole-model GPU driver serves the loaded model (default 500 us; a worker still spinning at the step's submit starves the driver).
@@ -3413,11 +3414,12 @@ Text to speech in pure daslang: load a converted StyleTTS2-lineage GGUF (KittenT
 - `caps` - What the loaded model offers: the canonical voice names the front end can drive, each with its language (a voice whose language it does not phonemize is left out; aliases resolve at synthesis), the PCM rate, the languages, whether it clones a voice, whether a speed applies.
 - `finalize` - Free the model's planes, the carrier and both packs; `delete m` runs it.
 - `g2p_pack_path`
-- `load_tts_model` - Load a TTS model: a converted GGUF (KittenTTS, Kokoro or Pocket TTS, picked from its architecture) or its prepared `.dlim` image, on the lane `tts_serves_q8` names (an image: the lane it was baked on); a phoneme family reads the packs its voices' languages ask for from the same directory (`tts_pack_names`; Pocket needs none).
+- `load_tts_model` - Load a TTS model from a prepared image its host holds in memory, on an image-page boundary, where `load_tts_model(path)` loads a GGUF or an image file: the bytes are borrowed and stay the host's for as long as the model lives.
 - `tts_finish_styletts2` - A StyleTTS2 carrier in `m.model`, loaded or minted from `path`, made a facade: its family's kind, the packs its voices' languages ask for from the same directory (the English pair also where it merely sits there, for the Latin words inside another language's text), the voices it cannot speak said once.
 - `tts_front_end_only` - Whether `m` is a front end loaded from a directory: it normalizes, marks stress and phonemizes in the languages `caps().langs` lists, and has no voice - `caps().voices` is empty and a synthesis panics.
 - `tts_has_phonemes` - Whether `tts_phonemize` has an answer for this model: the phoneme families yes, in the languages `caps().langs` lists (the two-argument form's English needs the English packs beside the model), a Pocket model no - it reads text.
-- `tts_needs_packs` - Whether the model at `path` reads any front-end pack from its directory: the phoneme families do (`tts_pack_names` says which), a Pocket TTS GGUF reads text and needs none - decided before any load, by the architecture test `load_tts_model` makes (a `.dlim` is a phoneme family).
+- `tts_loads_from_memory` - Whether `load_tts_model(base, bytes)` takes these bytes: a Pocket TTS prepared image on an image-page boundary.
+- `tts_needs_packs` - Whether the model at `path` reads any front-end pack from its directory: the phoneme families do (`tts_pack_names` says which), a Pocket TTS GGUF reads text and needs none - decided before any load, by the family test `load_tts_model` makes (a GGUF by its architecture, a `.dlim` by the lane it was baked on).
 - `tts_pack_names` - The front-end packs the model at `path` reads from its directory, decided from the file's own metadata before any load: the phoneme pack tier the directory holds and `tts_postag.bin` where a voice speaks English, `tts_g2p_ru.bin` where one speaks Russian, none for a Pocket GGUF; a `.dlim` answers for the GGUF beside it, and names the English pair where none is; a directory - a front end with no voice - names the packs it holds.
 - `tts_ru_stress_model_path` - The Russian stress-context model a voice in `dir` reads - `tts_ctx_ru.gguf` there - or "" where the directory has none: the file is optional, and without it the pack alone decides the stress.
 - `tts_voice_lang` - The language the front end reads `voice` in - a canonical name from `caps` or a family alias, resolved the way `synthesize` resolves it.
@@ -3446,7 +3448,7 @@ Text to speech in pure daslang: load a converted StyleTTS2-lineage GGUF (KittenT
 ### The served lane
 
 - `reset_tts_q8` - Drop the `set_tts_q8` pin: the next load follows the policy default again.
-- `set_tts_q8` - Pin the GEMM weights' format for subsequent TTS loads of every family: Q8_0 quants (their own prepared image beside the GGUF) or the file's f32 planes; `reset_tts_q8` returns to the policy default.
+- `set_tts_q8` - Pin the GEMM weights' format for subsequent TTS loads of every family, per context: Q8_0 quants (their own prepared image) or the file's f32 planes; `reset_tts_q8` returns to the policy default - a phoneme family's recipe lane (K-quant groups beside Q8_0 ones), a Pocket file's own quants.
 - `tts_serves_q8` - Would the next TTS load serve its rows GEMMs as q8 - the pin when set, the policy otherwise.
 
 ### GPU seats

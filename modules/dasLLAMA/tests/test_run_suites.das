@@ -200,7 +200,7 @@ def test_areas_for_path(t : T?) {
 def test_area_plan(t : T?) {
     let tts <- area_plan(["tts"])
     t |> equal(length(tts.files), 22, "tts plans its twenty-one files and the image file its kitten arm rides")
-    t |> equal(tts.image_arms, "kitten", "tts owns the kitten image arm")
+    t |> equal(tts.image_arms, "kitten,pocket", "tts owns the kitten and pocket image arms")
     t |> equal(tts.files[length(tts.files) - 1], "{TESTS_DIR}/test_model_image.das", "the image file rides last")
     for (i in range(1, length(tts.files) - 1)) {
         t |> success(tts.files[i - 1] < tts.files[i], "the plan is sorted: {tts.files[i - 1]} < {tts.files[i]}")
