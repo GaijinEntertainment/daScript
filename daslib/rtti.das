@@ -13,7 +13,9 @@ typedef FileAccessPtr = smart_ptr<FileAccess>
 //! Deprecated: resolves each AnnotationInfo back to the live Annotation object and
 //! reconstructs an AST-shaped argument list per invoke. Use `each_annotation` instead.
 [generic, deprecated]
-def structure_for_each_annotation(st : StructInfo; subexpr : block<(ann : Annotation; args : AnnotationArguments) : void>) {
+def structure_for_each_annotation(st : StructInfo implicit;
+                                  subexpr : block<(ann : Annotation;
+                                    args : AnnotationArguments) : void>) {
     rtti_builtin_structure_for_each_annotation(st, subexpr)
 }
 
@@ -30,7 +32,7 @@ def private each_annotation_range(pinfo; annotation_count : uint) {
 
 //! Iterates annotations (`[name(args)]`) of a structure, function, or enumeration.
 [generic]
-def each_annotation(info : StructInfo) {
+def each_annotation(info : StructInfo implicit) {
     unsafe {
         let pinfo = addr(info)
         return <- each_annotation_range(pinfo, info.annotation_count)
@@ -38,7 +40,7 @@ def each_annotation(info : StructInfo) {
 }
 
 [generic]
-def each_annotation(info : FuncInfo) {
+def each_annotation(info : FuncInfo implicit) {
     unsafe {
         let pinfo = addr(info)
         return <- each_annotation_range(pinfo, info.annotation_count)
@@ -46,7 +48,7 @@ def each_annotation(info : FuncInfo) {
 }
 
 [generic]
-def each_annotation(info : EnumInfo) {
+def each_annotation(info : EnumInfo implicit) {
     unsafe {
         let pinfo = addr(info)
         return <- each_annotation_range(pinfo, info.annotation_count)
@@ -75,7 +77,7 @@ def each_annotation_argument(info : AnnotationInfo) {
 
 //! Iterates field/global annotation arguments (`@name = value` on a field).
 [generic]
-def each_annotation_argument(info : VarInfo) {
+def each_annotation_argument(info : VarInfo implicit) {
     unsafe {
         let pinfo = addr(info)
         return <- each_annotation_argument_range(pinfo, info.annotation_argument_count)
@@ -83,7 +85,7 @@ def each_annotation_argument(info : VarInfo) {
 }
 
 [generic]
-def is_same_type(a, b : TypeInfo;
+def is_same_type(a, b : TypeInfo implicit;
                  refMatters : RefMatters = RefMatters.yes;
                  constMatters : ConstMatters = ConstMatters.yes;
                  temporaryMatters : TemporaryMatters = TemporaryMatters.yes;
@@ -94,7 +96,7 @@ def is_same_type(a, b : TypeInfo;
 }
 
 [generic]
-def is_compatible_cast(a, b : StructInfo) {
+def is_compatible_cast(a, b : StructInfo implicit) {
     unsafe {
         return is_compatible_cast(reinterpret<StructInfo const?>(a), reinterpret<StructInfo const?>(b))
     }
@@ -122,10 +124,10 @@ def private each_dim_any(info) {
 }
 
 [generic]
-def each_dim(info : TypeInfo) => <- each_dim_any(info)
+def each_dim(info : TypeInfo implicit) => <- each_dim_any(info)
 
 [generic]
-def each_dim(info : VarInfo) => <- each_dim_any(info)
+def each_dim(info : VarInfo implicit) => <- each_dim_any(info)
 
 def private arg_types_any(info) {
     unsafe {
@@ -144,10 +146,10 @@ def private arg_types_any(info) {
 }
 
 [generic]
-def arg_types(info : TypeInfo) => <- arg_types_any(info)
+def arg_types(info : TypeInfo implicit) => <- arg_types_any(info)
 
 [generic]
-def arg_types(info : VarInfo) => <- arg_types_any(info)
+def arg_types(info : VarInfo implicit) => <- arg_types_any(info)
 
 def private arg_names_any(info) {
     unsafe {
@@ -166,10 +168,10 @@ def private arg_names_any(info) {
 }
 
 [generic]
-def arg_names(info : TypeInfo) => <- arg_names_any(info)
+def arg_names(info : TypeInfo implicit) => <- arg_names_any(info)
 
 [generic]
-def arg_names(info : VarInfo) => <- arg_names_any(info)
+def arg_names(info : VarInfo implicit) => <- arg_names_any(info)
 
 def public class_info(cl) : StructInfo const? {
     static_if (typeinfo is_pointer(cl)) {
@@ -234,7 +236,7 @@ def type_info(vinfo : LocalVariableInfo) : TypeInfo const? {
 }
 
 [generic]
-def type_info(vinfo : VarInfo) : TypeInfo const? {
+def type_info(vinfo : VarInfo implicit) : TypeInfo const? {
     unsafe {
         return addr<TypeInfo const?>(vinfo)
     }

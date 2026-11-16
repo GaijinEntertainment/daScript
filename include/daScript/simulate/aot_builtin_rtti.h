@@ -164,11 +164,11 @@ namespace das {
     DAS_API Module * rtti_get_this_module(smart_ptr_raw<Program> prog);
     DAS_API Module * rtti_get_builtin_module(const char * name);
 
-    DAS_API void rtti_builtin_module_for_each_enumeration(Module * module, const TBlock<void, const EnumInfo> & block, Context * context, LineInfoArg * lineinfo);
-    DAS_API void rtti_builtin_module_for_each_structure(Module * module, const TBlock<void, const StructInfo> & block, Context * context, LineInfoArg * lineinfo);
-    DAS_API void rtti_builtin_module_for_each_function(Module * module, const TBlock<void, const FuncInfo> & block, Context * context, LineInfoArg * lineinfo);
-    DAS_API void rtti_builtin_module_for_each_generic(Module * module, const TBlock<void, const FuncInfo> & block, Context * context, LineInfoArg * lineinfo);
-    DAS_API void rtti_builtin_module_for_each_global(Module * module, const TBlock<void, const VarInfo> & block, Context * context, LineInfoArg * lineinfo);
+    DAS_API void rtti_builtin_module_for_each_enumeration(Module * module, const TBlock<void, TTemporary<const EnumInfo>> & block, Context * context, LineInfoArg * lineinfo);
+    DAS_API void rtti_builtin_module_for_each_structure(Module * module, const TBlock<void, TTemporary<const StructInfo>> & block, Context * context, LineInfoArg * lineinfo);
+    DAS_API void rtti_builtin_module_for_each_function(Module * module, const TBlock<void, TTemporary<const FuncInfo>> & block, Context * context, LineInfoArg * lineinfo);
+    DAS_API void rtti_builtin_module_for_each_generic(Module * module, const TBlock<void, TTemporary<const FuncInfo>> & block, Context * context, LineInfoArg * lineinfo);
+    DAS_API void rtti_builtin_module_for_each_global(Module * module, const TBlock<void, TTemporary<const VarInfo>> & block, Context * context, LineInfoArg * lineinfo);
     DAS_API void rtti_builtin_module_for_each_annotation(Module * module, const TBlock<void, const Annotation> & block, Context * context, LineInfoArg * lineinfo);
 
     // note: this one is not TBlock, so that we don't have to include ast.h
@@ -179,7 +179,7 @@ namespace das {
 
     struct BasicStructureAnnotation;
     DAS_API void rtti_builtin_basic_struct_for_each_field(const BasicStructureAnnotation & ann,
-        const TBlock<void, char *, char*, const TypeInfo, uint32_t> & block, Context * context, LineInfoArg * lineinfo);
+        const TBlock<void, char *, char*, TTemporary<const TypeInfo>, uint32_t> & block, Context * context, LineInfoArg * lineinfo);
     DAS_API void rtti_builtin_basic_struct_for_each_parent ( const BasicStructureAnnotation & ann,
         const TBlock<void,Annotation *> & block, Context * context, LineInfoArg * at );
 

@@ -235,7 +235,7 @@ namespace das {
             if (!expr->func->arguments[0]->type->isRef())
                 expr->subexpr = Expression::autoDereference(expr->subexpr);
             // lets try to fold it
-            if (expr->func && expr->func->unsafeOperation && safeExpression(expr)) {
+            if (expr->func && expr->func->unsafeOperation && !safeExpression(expr)) {
                 error("unsafe operator '" + expr->name + "' must be inside the 'unsafe' block", "", "",
                       expr->at, CompilationError::unsafe_operator);
             } else if (enableInferTimeFolding && isConstExprFunc(expr->func)) {
@@ -533,6 +533,10 @@ namespace das {
                 expr->left = Expression::autoDereference(expr->left);
             if (!expr->func->arguments[1]->type->isRef())
                 expr->right = Expression::autoDereference(expr->right);
+            if (!expr->func->builtIn) {
+                verifyVoidPointerArgument(expr->left, expr->func->arguments[0]->type, expr->func->builtIn, safeExpression(expr), expr->at);
+                verifyVoidPointerArgument(expr->right, expr->func->arguments[1]->type, expr->func->builtIn, safeExpression(expr), expr->at);
+            }
             // lets try to fold it
             if (expr->func && expr->func->unsafeOperation && !safeExpression(expr)) {
                 error("unsafe operator '" + expr->name + "' must be inside the 'unsafe' block", "", "",
@@ -570,12 +574,16 @@ namespace das {
             error("cond operator must return a value, not void", "", "",
                   expr->at, CompilationError::invalid_type);
         } else {
-            if (expr->left->type->ref ^ expr->right->type->ref) { // if either one is not ref
+            bool voidnessDiffers = expr->left->type->baseType == Type::tPointer
+                && TypeDecl::pointerVoidnessDiffers(*expr->left->type, *expr->right->type);
+            bool refnessDiffers = expr->left->type->ref ^ expr->right->type->ref;
+            if (voidnessDiffers || refnessDiffers) {
                 expr->left = Expression::autoDereference(expr->left);
                 expr->right = Expression::autoDereference(expr->right);
             }
-            TypeDecl::clone(expr->type, expr->left->type);
-            expr->type->constant |= expr->right->type->constant;
+            bool typeFromRight = voidnessDiffers && expr->left->rtti_isNullPtr();
+            TypeDecl::clone(expr->type, typeFromRight ? expr->right->type : expr->left->type);
+            expr->type->constant |= (typeFromRight ? expr->left : expr->right)->type->constant;
             // lets try to fold it
             if (enableInferTimeFolding) {
                 auto ccc = getConstExpr(expr->subexpr);

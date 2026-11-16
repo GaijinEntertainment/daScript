@@ -1294,7 +1294,7 @@ namespace das {
         }
     }
 
-    void rtti_builtin_module_for_each_enumeration ( Module * module, const TBlock<void,const EnumInfo> & block, Context * context, LineInfoArg * at ) {
+    void rtti_builtin_module_for_each_enumeration ( Module * module, const TBlock<void,TTemporary<const EnumInfo>> & block, Context * context, LineInfoArg * at ) {
         DebugInfoHelper helper;
         module->enumerations.foreach([&](auto penum){
             EnumInfo * info = helper.makeEnumDebugInfo(*penum);
@@ -1390,7 +1390,7 @@ namespace das {
         return def;
     }
 
-    void rtti_builtin_module_for_each_structure ( Module * module, const TBlock<void,const StructInfo> & block, Context * context, LineInfoArg * at ) {
+    void rtti_builtin_module_for_each_structure ( Module * module, const TBlock<void,TTemporary<const StructInfo>> & block, Context * context, LineInfoArg * at ) {
         DebugInfoHelper helper;
         module->structures.foreach([&](auto structPtr){
             if ( structPtr->isTemplate ) return;
@@ -1457,7 +1457,7 @@ namespace das {
         return Module::resolveAnnotation(&info);
     }
 
-    void rtti_builtin_module_for_each_function ( Module * module, const TBlock<void,const FuncInfo> & block, Context * context, LineInfoArg * at ) {
+    void rtti_builtin_module_for_each_function ( Module * module, const TBlock<void,TTemporary<const FuncInfo>> & block, Context * context, LineInfoArg * at ) {
         DebugInfoHelper helper;
         module->functions.foreach([&](auto funcPtr){
             if ( funcPtr->isTemplate ) return;
@@ -1469,7 +1469,7 @@ namespace das {
         });
     }
 
-    void rtti_builtin_module_for_each_generic ( Module * module, const TBlock<void,const FuncInfo> & block, Context * context, LineInfoArg * at ) {
+    void rtti_builtin_module_for_each_generic ( Module * module, const TBlock<void,TTemporary<const FuncInfo>> & block, Context * context, LineInfoArg * at ) {
         DebugInfoHelper helper;
         module->generics.foreach([&](auto funcPtr){
             FuncInfo * info = helper.makeFunctionDebugInfo(*funcPtr);
@@ -1480,7 +1480,7 @@ namespace das {
         });
     }
 
-    void rtti_builtin_module_for_each_global ( Module * module, const TBlock<void,const VarInfo> & block, Context * context, LineInfoArg * at ) {
+    void rtti_builtin_module_for_each_global ( Module * module, const TBlock<void,TTemporary<const VarInfo>> & block, Context * context, LineInfoArg * at ) {
         DebugInfoHelper helper;
         module->globals.foreach([&](auto var){
             VarInfo * info = helper.makeVariableDebugInfo(*var);
@@ -1508,7 +1508,7 @@ namespace das {
     }
 
     void rtti_builtin_basic_struct_for_each_field ( const BasicStructureAnnotation & ann,
-        const TBlock<void,char *,char*,const TypeInfo,uint32_t> & block, Context * context, LineInfoArg * at ) {
+        const TBlock<void,char *,char*,TTemporary<const TypeInfo>,uint32_t> & block, Context * context, LineInfoArg * at ) {
         DebugInfoHelper helper;
         for ( auto & it : ann.fields ) {
             const auto & fld = it.second;

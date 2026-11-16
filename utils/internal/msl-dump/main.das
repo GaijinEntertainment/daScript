@@ -49,7 +49,7 @@ def dump_file(file : string; out_dir : string) : int {
                         return
                     }
                     program_for_each_module(program) $(var mod : Module?) {
-                        module_for_each_global(mod) $(vinfo : VarInfo) {
+                        module_for_each_global(mod) $(vinfo) {
                             let name = "{vinfo.name}"
                             return if (!(name |> ends_with("_msl")))
                             let p = unsafe(get_context_global_variable(*get_ptr(pctx), name))

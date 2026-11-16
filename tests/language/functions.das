@@ -597,3 +597,77 @@ def piped_late_pick(_a : int; _b : float = 1.0; _blk : PipedLateBlock) : int => 
 def piped_late_pick(_a : int; _b : float = 1.0; _blk : auto) : int => 2
 
 typedef PipedLateBlock = block<(v : int) : int>
+
+struct TypedOverVoidTarget {
+    x : int
+}
+
+def typed_or_void_pointer(_p : TypedOverVoidTarget?) : string => "typed"
+
+def typed_or_void_pointer(_p : void?) : string => "void"
+
+[test(description = "between an overload on a typed pointer and one on void?, a typed pointer argument picks the typed one and a void? or null argument the void? one")]
+def test_typed_pointer_overload_beats_void_pointer(t : T?) {
+    var q = new TypedOverVoidTarget(x = 1)
+    t |> equal(typed_or_void_pointer(q), "typed")
+    var v : void? = q
+    t |> equal(typed_or_void_pointer(v), "void")
+    t |> equal(typed_or_void_pointer(null), "void")
+    unsafe {
+        delete q
+    }
+}
+
+def typed_or_void_generic(_p : TypedOverVoidTarget?; _tag : auto) : string => "typed"
+
+def typed_or_void_generic(_p : void?; _tag : auto) : string => "void"
+
+[test(description = "between two generics that differ on a typed pointer and void?, a typed pointer argument picks the typed one and a void? or null argument the void? one")]
+def test_typed_pointer_generic_beats_void_pointer(t : T?) {
+    var q = new TypedOverVoidTarget(x = 1)
+    t |> equal(typed_or_void_generic(q, 1), "typed")
+    var v : void? = q
+    t |> equal(typed_or_void_generic(v, 1), "void")
+    t |> equal(typed_or_void_generic(null, 1), "void")
+    unsafe {
+        delete q
+    }
+}
+
+def only_null_result() => null
+
+var nested_typed_returns_seen = 0
+
+def null_result_beside_a_nested_typed_return(q : TypedOverVoidTarget?) {
+    let inner = $ {
+        return q
+    }
+    if (invoke(inner) != null) {
+        nested_typed_returns_seen++
+    }
+    return null
+}
+
+[test(description = "a ternary with a void? value first and a typed pointer second stays void?, and with null first it takes the typed pointer's type")]
+def test_ternary_type_follows_its_first_branch_unless_it_is_null(t : T?) {
+    var q = new TypedOverVoidTarget(x = 1)
+    let v : void? = q
+    let yes = q != null
+    t |> equal(typed_or_void_pointer(yes ? v : q), "void")
+    t |> equal(typed_or_void_pointer(yes ? null : q), "typed")
+    t |> equal(typed_or_void_pointer(yes ? q : v), "typed")
+    unsafe {
+        delete q
+    }
+}
+
+[test(description = "a function whose only returns are null has a void? result, and a typed return inside a nested block does not change that")]
+def test_null_only_returns_stay_void(t : T?) {
+    var q = new TypedOverVoidTarget(x = 1)
+    t |> equal(typed_or_void_pointer(only_null_result()), "void")
+    t |> equal(typed_or_void_pointer(null_result_beside_a_nested_typed_return(q)), "void")
+    t |> equal(nested_typed_returns_seen, 1)
+    unsafe {
+        delete q
+    }
+}

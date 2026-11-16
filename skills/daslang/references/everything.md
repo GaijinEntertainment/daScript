@@ -3718,11 +3718,11 @@ The RTTI module exposes runtime type information and program introspection facil
 
 - `module_for_each_annotation` - Iterates through each annotation (handled type) in the given `Module`, yielding an `Annotation` pointer for each registered annotation.
 - `module_for_each_dependency` - Iterates through each module dependency of the given `Module`, yielding the dependent `Module` pointer for each required module.
-- `module_for_each_enumeration` - Iterates through each enumeration declared in the given `Module`, yielding an `EnumInfo` pointer for each enum.
-- `module_for_each_function` - Iterates through each function declared in the given `Module`, yielding a `FuncInfo` pointer for each function.
-- `module_for_each_generic` - Iterates through each generic (template) function declared in the given `Module`, yielding a `FuncInfo` pointer for each generic.
-- `module_for_each_global` - Iterates through each global variable declared in the given `Module`, yielding a `VarInfo` pointer for each variable.
-- `module_for_each_structure` - Iterates through each structure declaration in the given `Module`, yielding a `StructInfo` pointer for each struct.
+- `module_for_each_enumeration` - Iterates through each enumeration declared in the given `Module`, passing a temporary `EnumInfo` for each enum.
+- `module_for_each_function` - Iterates through each function declared in the given `Module`, passing a temporary `FuncInfo` for each function.
+- `module_for_each_generic` - Iterates through each generic (template) function declared in the given `Module`, passing a temporary `FuncInfo` for each generic.
+- `module_for_each_global` - Iterates through each global variable declared in the given `Module`, passing a temporary `VarInfo` for each variable.
+- `module_for_each_structure` - Iterates through each structure declaration in the given `Module`, passing a temporary `StructInfo` for each struct.
 
 ### Annotation access
 
@@ -3746,7 +3746,7 @@ The RTTI module exposes runtime type information and program introspection facil
 
 ### Structure access
 
-- `basic_struct_for_each_field` - Iterates through each field of a `BasicStructureAnnotation`, yielding the field name, C++ name, `TypeInfo`, and byte offset for each field.
+- `basic_struct_for_each_field` - Iterates through each field of a `BasicStructureAnnotation`, passing the field name, C++ name, a temporary `TypeInfo`, and byte offset for each field.
 - `basic_struct_for_each_parent` - Iterates through each parent (base class) of a `BasicStructureAnnotation`, yielding the parent `TypeInfo` for each ancestor.
 - `rtti_builtin_structure_for_each_annotation` - Iterates through each annotation attached to a `StructInfo`, yielding the annotation name and its `AnnotationArgumentList` for each.
 - `structure_for_each_annotation` - Iterates through each annotation attached to a `StructInfo`, yielding the annotation name and `AnnotationArgumentList` — an alias of `rtti_builtin_structure_for_each_annotation`.

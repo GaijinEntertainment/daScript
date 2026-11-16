@@ -71,6 +71,7 @@ namespace das {
         bool isSameType ( const TypeDecl & decl, RefMatters refMatters, ConstMatters constMatters,
             TemporaryMatters temporaryMatters, AllowSubstitute allowSubstitute = AllowSubstitute::no, bool topLevel = true, bool isPassType = false ) const;
         bool isSameExactType ( const TypeDecl & decl ) const;
+        static bool pointerVoidnessDiffers ( const TypeDecl & a, const TypeDecl & b );
         void sanitize();
         bool isExprType() const;
         bool isExprTypeAnywhere() const;

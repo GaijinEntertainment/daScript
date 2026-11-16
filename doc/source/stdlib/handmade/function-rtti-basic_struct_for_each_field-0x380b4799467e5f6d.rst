@@ -1,0 +1,1 @@
+Iterates through each field of a ``BasicStructureAnnotation``, passing the field name, C++ name, a temporary ``TypeInfo``, and byte offset for each field. The ``TypeInfo`` is valid only inside the block.

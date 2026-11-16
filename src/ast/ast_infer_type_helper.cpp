@@ -891,6 +891,26 @@ namespace das {
             return true;
         return false;
     }
+    void InferTypes::verifyVoidPointerArgument(Expression *arg, const TypeDeclPtr &paramType, bool builtinCallee, bool insideUnsafe, const LineInfo &at) {
+        if (!arg->type || !paramType || arg->type->baseType != Type::tPointer || paramType->baseType != Type::tPointer) {
+            return;
+        }
+        bool argVoid = arg->type->isVoidPointer();
+        if (argVoid == paramType->isVoidPointer()) {
+            return;
+        }
+        if (argVoid) {
+            if (!arg->rtti_isNullPtr()) {
+                error("can't pass " + describeType(arg->type) + " to a parameter of type " + describeType(paramType),
+                      "a void? value becomes a typed pointer only through reinterpret", "",
+                      at, CompilationError::invalid_argument_type);
+            }
+        } else if (paramType->ref && !paramType->constant && !builtinCallee && !insideUnsafe) {
+            error("passing " + describeType(arg->type) + " to a parameter of type " + describeType(paramType) + " must be inside the 'unsafe' block",
+                  "the callee can store a pointer of any type into it", "",
+                  at, CompilationError::unsafe_function_call);
+        }
+    }
     TypeDeclPtr InferTypes::castStruct(const LineInfo &at, const TypeDeclPtr &subexprType, const TypeDeclPtr &castType, bool upcast) const {
         auto seT = subexprType;
         auto cT = castType;
@@ -1133,7 +1153,36 @@ namespace das {
         }
         return callee->hasReturn;
     }
+    struct TypedReturnFinder : Visitor {
+        bool found = false;
+        virtual bool canVisitMakeBlockBody(ExprMakeBlock *) override { return false; }
+        virtual void preVisit(ExprReturn *expr) override {
+            Visitor::preVisit(expr);
+            if (expr->subexpr && !expr->subexpr->rtti_isNullPtr()) {
+                found = true;
+            }
+        }
+    };
+    bool InferTypes::nullReturnWaitsForTypedReturn(const TypeDeclPtr &resType, ExprReturn *expr) {
+        if (resType->baseType != Type::autoinfer || !expr->subexpr || !expr->subexpr->rtti_isNullPtr()) {
+            return false;
+        }
+        TypedReturnFinder finder;
+        if (blocks.size()) {
+            for (auto &stmt : blocks.back()->list) {
+                stmt = stmt->visit(finder);
+            }
+        } else if (func && func->body) {
+            func->body = func->body->visit(finder);
+        }
+        return finder.found;
+    }
     bool InferTypes::inferReturnType(TypeDeclPtr &resType, ExprReturn *expr) {
+        if (nullReturnWaitsForTypedReturn(resType, expr)) {
+            error("'return null' waits for another return to give the result its type", "", "",
+                  expr->at, CompilationError::not_resolved_yet_expression_type);
+            return false;
+        }
         if (expr->subexpr && expr->subexpr->type && expr->subexpr->type->isVoid()) {
             // 'return void_expr' is legal when the result is void, or a bare auto which the
             // generic machinery below resolves to void (structured autos like auto? reject

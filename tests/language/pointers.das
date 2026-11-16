@@ -333,6 +333,24 @@ def test_ptr_arithmetic(t : T?) {
     }
 }
 
+def pa_test_minus_on_a_temporary(t : T?; dummy : auto(TT)) {
+    var one = TT(1); one--; one++
+    var three = TT(3); three--; three++
+    var a <- fixed_array<int>(0, 1, 2, 3)
+    unsafe {
+        t |> equal(*(addr(a[3]) - three), 0)
+        t |> equal(*((addr(a[0]) + three) - one), 2)
+    }
+}
+
+[test(description = "ptr - n takes a pointer that is not a variable - an addr() result or a ptr + n sum - for int, int64, uint and uint64 offsets, as ptr + n does")]
+def test_ptr_minus_on_a_temporary(t : T?) {
+    pa_test_minus_on_a_temporary(t, type<int>)
+    pa_test_minus_on_a_temporary(t, type<int64>)
+    pa_test_minus_on_a_temporary(t, type<uint>)
+    pa_test_minus_on_a_temporary(t, type<uint64>)
+}
+
 def pi_fn_with_default_null_ptr(var a : int? implicit = default<int?>) {
     var b : int
     a ?? b = 2
@@ -964,4 +982,65 @@ def test_const_strip_write_through_passthrough(t : T?) {
         writer_via_copy(unsafe(addr(h[0])), 4)
         t |> equal(h[0], 7.0)
     }
+}
+
+struct TypedPointee {
+    x : int
+}
+
+def typed_pointer_field(p : TypedPointee?) : int => p != null ? p.x : -1
+
+def null_or_typed_result(want_null : bool; p : TypedPointee?) {
+    if (want_null) {
+        return null
+    }
+    return p
+}
+
+var void_pointer_retarget_site : int = 7
+
+def retarget_through_void_ref(var p : void?&) {
+    p = unsafe(addr<void?>(void_pointer_retarget_site))
+}
+
+def is_set_through_const_void_ref(p : void?&) : bool => p != null
+
+[test(description = "a ternary with null on either side of a typed pointer, or with the typed pointer first and a void? value second, has the typed pointer's type")]
+def test_ternary_of_null_and_typed_pointer_is_typed(t : T?) {
+    var q = new TypedPointee(x = 5)
+    let v : void? = q
+    let yes = q != null
+    t |> equal(typed_pointer_field(yes ? null : q), -1)
+    t |> equal(typed_pointer_field(yes ? q : null), 5)
+    t |> equal(typed_pointer_field(yes ? q : v), 5)
+    unsafe {
+        delete q
+    }
+}
+
+[test(description = "a function or a block that returns null on one path and a typed pointer on another infers the typed pointer as its result")]
+def test_null_return_takes_the_typed_return_type(t : T?) {
+    var q = new TypedPointee(x = 5)
+    t |> equal(typed_pointer_field(null_or_typed_result(false, q)), 5)
+    t |> equal(typed_pointer_field(null_or_typed_result(true, q)), -1)
+    let from_block = $(want_null : bool) {
+        if (want_null) {
+            return null
+        }
+        return q
+    }
+    t |> equal(typed_pointer_field(invoke(from_block, false)), 5)
+    t |> equal(typed_pointer_field(invoke(from_block, true)), -1)
+    unsafe {
+        delete q
+    }
+}
+
+[test(description = "a typed pointer variable binds to a var void?& parameter inside unsafe, where the callee's write reaches it, and to a const void?& parameter anywhere")]
+def test_typed_pointer_binds_to_void_ref(t : T?) {
+    var q : int?
+    t |> success(!is_set_through_const_void_ref(q))
+    unsafe(retarget_through_void_ref(q))
+    t |> equal(*q, 7)
+    t |> success(is_set_through_const_void_ref(q))
 }

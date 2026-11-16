@@ -770,6 +770,11 @@ def private is_pruned(path : string; prune_dirs : array<string>) : bool {
     return false
 }
 
+//! a built index stays when its signature is unchanged, and when the
+//! new signature is unknown
+def cpp_index_is_current(sig, built_sig : string) : bool =>
+    !empty(built_sig) && (empty(sig) || sig == built_sig)
+
 // Compute the staleness signature for the cpp index. Wraps the shared
 // git_signature.compute_signature with cpp's predicate (extension globs
 // + vendored-tree pruning) and folds in the cpp_search_config.das mtime
@@ -783,7 +788,7 @@ def ensure_cpp_index() {
                                  unsafe(@ capture(& prune_dirs) (p : string) => ends_with_any(p, CPP_SEARCH_INCLUDE_GLOBS) && !is_pruned(p, prune_dirs)),
                                  cpp_default_search_dirs())
     let sig = empty(core) ? "" : "{cfg_sig}:{core}"
-    if (!empty(sig) && sig == cpp_index_signature) return  // cache hit
+    if (cpp_index_is_current(sig, cpp_index_signature)) return
     // rebuild from scratch
     cpp_index |> clear()
     cpp_index_entries |> clear()

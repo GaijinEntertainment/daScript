@@ -88,6 +88,14 @@ def public compute_filesystem_signature(
     return "fs:{hash(combined)}"
 }
 
+//! one git call of the signature; a call that timed out is tried
+//! once more with `retry_sec`
+def private run_git(args : array<string>; var output : string&;
+                    timeout_sec, retry_sec : float) : int {
+    let rc = run_and_capture(args, output, timeout_sec)
+    return rc != popen_timed_out ? rc : run_and_capture(args, output, retry_sec)
+}
+
 // Compute a git-aware staleness signature for the index covering
 // `search_dirs_abs`, considering only paths matching `predicate`.
 //
@@ -111,18 +119,28 @@ def public compute_filesystem_signature(
 //   3. `git status --porcelain --untracked-files=normal`. Per line:
 //      extract path; reject if not under any search_dir; reject if
 //      predicate is false; otherwise fold "<line>:<mtime>" into hash.
-//   4. Return "git:HASH". Any git step error → fall back to fs.
+//   4. Return "git:HASH". A git step that answers with an error →
+//      fall back to fs. A git step that does not answer in time is
+//      tried once more; a second timeout returns "", never another
+//      scheme.
 //
-// Returns "" only if both git and the filesystem walk fail (caller
-// should treat empty as "do not invalidate blindly").
+// Returns "" when the state is unknown - git did not answer, or both
+// git and the filesystem walk fail (caller should treat empty as "do
+// not invalidate blindly").
 def public compute_signature(
                              root : string;
                              predicate : lambda<(repo_rel_path : string) : bool>;
-                             search_dirs_abs : array<string>
+                             search_dirs_abs : array<string>;
+                             git_timeout_sec : float = 5.0;
+                             git_retry_sec : float = 30.0
                              ) : string {
     var top_buf : string
-    if (run_and_capture(["git", "-C", root, "rev-parse", "--show-toplevel"], top_buf, 5.0) != 0
-        || empty(strip(top_buf))) return compute_filesystem_signature(root, predicate, search_dirs_abs)
+    let top_rc = run_git(["git", "-C", root, "rev-parse", "--show-toplevel"], top_buf,
+        git_timeout_sec, git_retry_sec)
+    if (top_rc == popen_timed_out) return ""
+    if (top_rc != 0 || empty(strip(top_buf))) {
+        return compute_filesystem_signature(root, predicate, search_dirs_abs)
+    }
     let toplevel = strip(top_buf)
 
     var dirs_rel : array<string>
@@ -144,8 +162,10 @@ def public compute_signature(
         // Empty rel means search_dir == toplevel; rev-parse HEAD: errors,
         // so use bare HEAD in that case.
         let spec = empty(rel) ? "HEAD" : "HEAD:{rel}"
-        if (run_and_capture(["git", "-C", toplevel, "rev-parse", spec], tb, 5.0) == 0
-            && !empty(strip(tb))) {
+        let tree_rc = run_git(["git", "-C", toplevel, "rev-parse", spec], tb,
+            git_timeout_sec, git_retry_sec)
+        if (tree_rc == popen_timed_out) return ""
+        if (tree_rc == 0 && !empty(strip(tb))) {
             tree_parts |> push("{rel}={strip(tb)}")
         } else {
             tree_parts |> push("{rel}=untracked")
@@ -153,8 +173,10 @@ def public compute_signature(
     }
 
     var status_buf : string
-    if (run_and_capture(["git", "-C", toplevel, "status", "--porcelain", "--untracked-files=normal"],
-                        status_buf, 5.0) != 0) return compute_filesystem_signature(root, predicate, search_dirs_abs)
+    let status_args <- ["git", "-C", toplevel, "status", "--porcelain", "--untracked-files=normal"]
+    let status_rc = run_git(status_args, status_buf, git_timeout_sec, git_retry_sec)
+    if (status_rc == popen_timed_out) return ""
+    if (status_rc != 0) return compute_filesystem_signature(root, predicate, search_dirs_abs)
     let lines <- split(status_buf, "\n")
     let combined = build_string() $(var w) {
         for (t in tree_parts) {

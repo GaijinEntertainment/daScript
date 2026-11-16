@@ -227,6 +227,13 @@ Safe without `unsafe`: `new`, `*p` / `deref(p)`, `p.field`, `p?.field`, `p ?? de
 `reinterpret<uint64>(f)` reads past a 4-byte slot on a 32-bit host). Needs `unsafe`: `addr(x)`,
 `delete p`, `p[i]`, `++p` / `p += n`, `reinterpret<T>(x)`.
 
+**A typed pointer becomes `void?` without a cast; the reverse needs `reinterpret`.** A `void?`
+value does not assign to a typed pointer variable or pass to a typed pointer parameter
+(`error[30107]` at a call). `null` has no pointer type of its own: it takes the type of the
+variable, parameter, other ternary branch (`c ? null : p` is `p`'s type) or other `return` it
+meets, and is `void?` only when nothing else names a type. A typed pointer variable binds to a
+`var p : void?&` parameter only inside `unsafe` (`error[31013]`).
+
 **A `void?` carries no stride, so arithmetic on one is refused outright** - `error[30950]
 operations on 'void' pointers are prohibited`, even inside `unsafe`. Do byte math on `intptr(p)`,
 or reinterpret to `uint8?` first.

@@ -361,7 +361,7 @@ namespace das {
         AstSerializer & serializeModule ( Module & module, bool already_exists );
 
         static constexpr uint32_t getVersion () {
-            return 278;   // 278: get_das_version() folds 0.6.6 into the AST as a constant
+            return 279;   // 279: a ternary whose first branch is null has the type of its second
         }
 
         void serializeProgram ( ProgramPtr program, ModuleGroup & libGroup ) noexcept;

@@ -145,6 +145,7 @@ namespace das {
         void malformedTypeError(const TypeDeclPtr &decl) const;
         void templateStructureError(const TypeDeclPtr &decl) const;
         void verifyType(const TypeDeclPtr &decl, bool allowExplicit = false, bool classMethod = false, bool allowTemplate = false) const;
+        void verifyVoidPointerArgument(Expression *arg, const TypeDeclPtr &paramType, bool builtinCallee, bool insideUnsafe, const LineInfo &at);
 
         bool jitEnabled() const;
 
@@ -589,6 +590,7 @@ namespace das {
         void preVisit(ExprTryCatch *expr) override;
         // ExprReturn
         bool inferReturnType(TypeDeclPtr &resType, ExprReturn *expr);
+        bool nullReturnWaitsForTypedReturn(const TypeDeclPtr &resType, ExprReturn *expr);
         bool isVoidReturnValueSettled(Expression *subexpr) const;
         void reportUnresolvedReturnValue(ExprReturn *expr);
         virtual void preVisit(ExprReturn *expr) override;

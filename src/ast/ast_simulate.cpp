@@ -2201,6 +2201,10 @@ namespace das
                     SimNode * memZ = context.code->makeNode<SimNode_MemZero>(at, fakeVar, svr.second );
                     simlist.insert( simlist.begin(), memZ );
                 }
+                uint32_t prependedMemZeros = uint32_t(expr->stackCleanVars.size());
+                for ( auto & label : ofsmap ) {
+                    label.second += prependedMemZeros;
+                }
             }
         }
         // TODO: what if list size is 0?

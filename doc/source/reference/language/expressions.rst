@@ -300,6 +300,10 @@ The ternary operator conditionally evaluates one of two expressions:
 
 Only the selected branch is evaluated.
 
+The result has the type of the first branch.  When the first branch is ``null``
+and the second is a typed pointer, the result has the type of the second:
+``cond ? null : p`` is a pointer of ``p``'s type (see :ref:`pointer_void`).
+
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 Null-Safe Navigation (?. and ?[)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

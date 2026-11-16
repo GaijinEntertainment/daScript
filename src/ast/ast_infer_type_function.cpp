@@ -1474,13 +1474,16 @@ namespace das {
     string InferTypes::callCloneName(const string &name) {
         return "__::" + name;
     }
+    static bool passesWithoutCast(const TypeDecl &passType, const TypeDecl &paramType) {
+        return passType.isSameType(paramType, RefMatters::no, ConstMatters::no, TemporaryMatters::no, AllowSubstitute::no)
+            && !TypeDecl::pointerVoidnessDiffers(passType, paramType);
+    }
     int InferTypes::computeSubstituteDistance(const vector<TypeDeclPtr> &arguments, const FunctionPtr &fn) {
         int distance = 0;
         for (size_t i = 0, is = arguments.size(); i != is; ++i) {
             const auto &argType = arguments[i];
             const auto &funType = fn->arguments[i]->type;
-            if (!argType->isSameType(*funType, RefMatters::no, ConstMatters::no,
-                                     TemporaryMatters::no, AllowSubstitute::no)) {
+            if (!passesWithoutCast(*argType, *funType)) {
                 distance += 100;
             }
             // tiebreaker: a candidate that exactly matches caller's constness
@@ -1537,8 +1540,8 @@ namespace das {
         }
         // 2. if both non-auto, the one without cast is more specialized
         if (!a1 && !a2) { // if both solid types
-            bool s1 = passType->isSameType(*t1, RefMatters::no, ConstMatters::no, TemporaryMatters::no, AllowSubstitute::no);
-            bool s2 = passType->isSameType(*t2, RefMatters::no, ConstMatters::no, TemporaryMatters::no, AllowSubstitute::no);
+            bool s1 = passesWithoutCast(*passType, *t1);
+            bool s2 = passesWithoutCast(*passType, *t2);
             if (s1 != s2) {
                 return s1 ? 1 : -1;
             } else {
