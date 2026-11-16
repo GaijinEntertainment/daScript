@@ -25,21 +25,6 @@
    parity oracle - the "NOT bit-exact" caveat on the fast forms is the known constraint; decide
    per call site which side of the contract it sits on).
 
-3. **The pipelined batch-decode landing holds borrowed Session pointers across the caller's
-   deletes.** `finish_pending_step` (dasllama_metal_common) lands the in-flight batch step by
-   memcpy-ing KV rows and logits through `BatchLanding.sessions[i]` - raw borrowed pointers - and
-   the batch driver's pre-encoded step parks the same pointers, uncommitted, in the other slot
-   (`ARCHITECTURE_GPU_MTP_DECODE.md#batch-pre-encode`). Nothing
-   quiesces on session death, `metal_decode_flush` (the public landing call) has zero callers,
-   and every test helper deletes its sessions right after `eval_batch_` with a step potentially
-   pending - a landing after those deletes writes into freed heap. Empirically quiet today
-   (probed 2026-07-30: batch-only prelude showed no corruption), but it is a lifetime landmine,
-   and the server would inherit it if a chat session ever dies mid-pipeline. Done = a session
-   retirement seam the drivers hook (land or abandon pending steps that reference the dying
-   session, and retire a pre-encoded step whose rows include it), or the landing rail stops
-   holding raw session pointers; plus `metal_decode_flush` calls at the test helpers' teardown as
-   the interim belt.
-
 5. **The metal kernel zoo carries four different rope addressing schemes.** Factoring the
    sq_attn family showed the rope-store family does NOT share one skeleton the way attention
    did - its eleven kernels split four ways: pair-per-thread WITH partial rotation

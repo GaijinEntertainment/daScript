@@ -3021,7 +3021,7 @@ struct BatchLanding {
     xb : MetalBuffer?             //!< production sync + CPU-classifier path: x_b writeback
     xb_dst : void?                //!< ... into the caller's workspace (borrowed, sync-only)
     xb_bytes : int64
-    @scratch sessions : array<Session?>
+    @pool sessions : array<Session?>     //!< read by the call that lands the step; a session's release empties it (`landing_session_released`)
     @scratch positions : array<int64>
     @scratch dn_uids : array<uint64>   //!< the recurrent rows: each session's DnMirror advances when the step commits
     @scratch dn_pos : array<int64>
@@ -3135,11 +3135,10 @@ def discard_batch_pre {
 //! written back) CPU cache; the landing calls it again, never regressing the mark.
 [arch(at="../ARCHITECTURE_GPU_MTP_DECODE.md#batch-pre-encode")]
 def mark_rows_committed(L : BatchLanding) {
-    for (i in range64(L.nrows)) {
-        let sp = L.sessions[i]
-        if (key_exists(g_mirrors, sp.uid)) {
-            let wm0 = g_mirrors[sp.uid].watermark
-            g_mirrors[sp.uid].watermark = max(wm0, L.positions[i] + 1l)
+    for (uid, pos in L.uids, L.positions) {
+        if (key_exists(g_mirrors, uid)) {
+            let wm0 = g_mirrors[uid].watermark
+            g_mirrors[uid].watermark = max(wm0, pos + 1l)
         }
     }
     for (u, p in L.dn_uids, L.dn_pos) {   //! the recurrent mirrors move with the K/V watermark: queue order writes the state first
@@ -3293,10 +3292,9 @@ def finish_pending_step {   // nolint:STYLE038 — the pipeline join: wait/error
         to_log(LOG_ERROR, "dasLLAMA metal batch decode: dispatch failed ({err}) - pipelined step lost\n")   // nolint:PERF028,PERF026,LINT019 — error path; the re-upload it triggers dwarfs the log
         // the optimistic commit-time watermark now overstates the mirror (its rows are garbage at
         // and above this step's positions) — force a full re-upload from the CPU truth
-        for (i in range64(L.nrows)) {
-            let sp = L.sessions[i]
-            if (key_exists(g_mirrors, sp.uid)) {
-                g_mirrors[sp.uid].watermark = 0l
+        for (uid in L.uids) {
+            if (key_exists(g_mirrors, uid)) {
+                g_mirrors[uid].watermark = 0l
             }
         }
         for (u in L.dn_uids) {   //! a failed step leaves the recurrent state neither live nor re-derivable
@@ -3313,6 +3311,20 @@ def finish_pending_step {   // nolint:STYLE038 — the pipeline join: wait/error
 def public metal_decode_flush {
     discard_batch_pre()   // both rails: the parked pre-encoded step holds the same borrowed sessions
     finish_pending_step()
+}
+
+//! Whether a batched step is in flight or encoded ahead - the landing state that names sessions
+def public metal_batch_landing_parked() : bool => g_land[0].active || g_land[0].pre_valid || g_land[1].active || g_land[1].pre_valid
+
+//! A session's release lands the step in flight and retires the step encoded ahead while every session they name still stands
+[cold_path, unused_argument(uid), arch(at="../ARCHITECTURE_GPU_MTP_DECODE.md#batch-pre-encode")]
+def private landing_session_released(uid : uint64) {
+    metal_decode_flush() if (metal_batch_landing_parked())
+}
+
+[init]
+def private landing_session_release_register {
+    register_session_release_listener(@@landing_session_released)
 }
 
 

@@ -5081,6 +5081,24 @@ def public set_metal_batch_pre(on : bool) {
     }
 }
 
+//! Test lever over `DASLLAMA_METAL_BATCH_PIPE`: off lands the step in flight.
+def public set_metal_batch_pipe(on : bool) {
+    if (g_bgemm_min < 0l) {
+        load_batch_knobs()   // the lazy env load would overwrite the lever on the first step
+    }
+    g_b_pipe = on
+    if (!on) {
+        finish_pending_step()
+    }
+}
+
+def public metal_batch_pipe_enabled() : bool {
+    if (g_bgemm_min < 0l) {
+        load_batch_knobs()
+    }
+    return g_b_pipe
+}
+
 def public metal_batch_pre_enabled() : bool {
     if (g_bgemm_min < 0l) {
         load_batch_knobs()   // the shipped default is the env's, not the initializer's
@@ -5146,6 +5164,9 @@ def private batch_take_pre(t : Model; ws : BatchWorkspace; var sessions : array<
         metal_commit(c_i)
     }
     P.pre_valid = false
+    for (i in range64(nrows)) {   //! the rows matched by uid: the landing writes through the addresses the caller's sessions hold now
+        P.sessions[i] = sessions[i]
+    }
     mark_rows_committed(P)
     g_batch_pre_taken++
     g_us_bsetup += int64(get_time_usec(ts_all))

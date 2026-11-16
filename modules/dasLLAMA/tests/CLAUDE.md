@@ -2945,7 +2945,13 @@ retire under a parked step and the drivers' shutdown against the Metal live-obje
 declines (the probe seam `set_metal_mirror_device_max_probe_` at one and a half sessions' mirrors), every tick a per-row step
 by `batch_step_census` and every row's selection landed, each stream token for token what it emits sampling right after its
 own forward - the landing is one a process, so each row's lands into its own logits before the next row's forward - with
-the device's own bound (no per-row tick) and the landing off (no selection) as the controls; the
+the device's own bound (no per-row tick) and the landing off (no selection) as the controls, and the landing
+release cell (`test_metal_batched_row_landing_release`): two greedy streams held by value in an array through
+`eval_batch_` - a step over both, a second after the array moved them, the first deleted and erased, three steps
+of the second alone - with every step built at its call (the reference), with the pre-encode rail on (the
+second step commits the step encoded ahead of the move, each session's carry mark moved where it stands now)
+and with the pipelined landing on (`set_metal_batch_pipe`; the release lands the step in flight), token for
+token, a session's release leaving no landing that names a session (`metal_batch_landing_parked`); the
 deltanet carrier also runs the greedy chain cell (`test_metal_deltanet_greedy_chain`): 24 steps with the single-row
 chain off and forced on, fed the greedy pick and then fed off the pick every third step - the chain's hits counted
 on both feeds and its misses on the off-pick one, every step a device decode, the tokens and every step's logits
