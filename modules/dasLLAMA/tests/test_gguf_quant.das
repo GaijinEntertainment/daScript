@@ -189,6 +189,78 @@ def private sub_rel(x, y : array<float>; off : int64) : float {
     return sx == 0.0 ? 0.0 : sqrt(se / 32.0) / sqrt(sx / 32.0)
 }
 
+// one format's encode -> plane dequant round trip over `nsb` scale-laddered superblocks: the worst sub-block's relative rmse
+def private kq_roundtrip_worst(fmt : KqFmt; nsb : int64; zero : bool) : float {
+    let n = nsb * KQ_SB_ELEMS
+    var inscope x, y : array<float>
+    x |> resize(n)
+    y |> resize(n)
+    if (!zero) {
+        for (sb in range64(nsb)) {
+            for (i in range64(KQ_SB_ELEMS)) {
+                x[sb * KQ_SB_ELEMS + i] = k5_src(sb, i)
+            }
+        }
+    }
+    let desc = kq_desc(fmt)
+    var inscope kq, ks : array<uint8>
+    kq |> resize(nsb * desc.qsb)
+    ks |> resize(nsb * desc.ssb)
+    quantize_kq_plane(fmt, x, n, kq, ks, 0l)
+    var worst = 0.0   // a NaN sub-block reads as the worst there is, never as no reading
+    for (sb in range64(nsb)) {
+        dequant_kq_plane_sb(fmt, kq, ks, sb, false, y, sb * KQ_SB_ELEMS)
+        for (j in range64(KQ_SB_ELEMS / KQ_B32_ELEMS)) {
+            worst = max(worst, nan_wide_diff(sub_rel(x, y, sb * KQ_SB_ELEMS + j * KQ_B32_ELEMS), 0.0))
+        }
+    }
+    if (zero) {
+        for (v in y) {
+            worst = max(worst, nan_wide_diff(v, 0.0))
+        }
+    }
+    return worst
+}
+
+[test(description = "The Q4_K and Q6_K encoders round-trip a scale-laddered input through the plane dequant with every 32-element sub-block's relative rmse under the format's budget, the 4-bit format reading further off than the 5- and 6-bit ones, and encode an all-zero superblock to exact zeros")]
+def test_kq_encoders(t : T?) {
+    t |> run("each format's round trip sits inside its bit budget, the 4-bit one the widest") @(t : T?) {
+        let k4 = kq_roundtrip_worst(KqFmt.k4, 8l, false)
+        let k5 = kq_roundtrip_worst(KqFmt.k5, 8l, false)
+        let k6 = kq_roundtrip_worst(KqFmt.k6, 8l, false)
+        to_log(LOG_INFO, "kq encode round trip, worst sub-block rel-rmse: k4 {k4}, k5 {k5}, k6 {k6}\n")
+        t |> success(k4 < 0.12, "Q4_K worst sub-block rel-rmse {k4} must stay under 0.12")
+        t |> success(k5 < 0.15, "Q5_K worst sub-block rel-rmse {k5} must stay under 0.15")
+        // a scale-only 6-bit step over a uniform block reads 1 / (32 sqrt 12) of its peak, 0.0156 of its rms
+        t |> success(k6 < 0.03, "Q6_K worst sub-block rel-rmse {k6} must stay under 0.03")
+        t |> success(k4 > 2.0 * k5 && k4 > 2.0 * k6, "four bits read at least twice as far off: k4 {k4} against k5 {k5} and k6 {k6}")
+    }
+    t |> run("an all-zero superblock encodes to exact zeros in every format") @(t : T?) {
+        for (fmt in [KqFmt.k4, KqFmt.k5, KqFmt.k6]) {
+            t |> equal(kq_roundtrip_worst(fmt, 1l, true), 0.0, "{fmt}")
+        }
+    }
+    t |> run("a format the engine does not mint is refused by name, with planes that would take it") @(t : T?) {
+        var inscope x : array<float>
+        x |> resize(KQ_SB_ELEMS)
+        let desc = kq_desc(KqFmt.iq4xs)
+        var inscope kq, ks : array<uint8>
+        kq |> resize(desc.qsb)
+        ks |> resize(desc.ssb)
+        let why = panic_text() {
+            quantize_kq_plane(KqFmt.iq4xs, x, KQ_SB_ELEMS, kq, ks, 0l)
+        }
+        t |> success(find(why, "Q4_K, Q5_K and Q6_K are the formats the engine mints") >= 0, "an IQ4_XS encode is refused before a plane is touched, naming the formats that mint: '{why}'")
+        let ragged = panic_text() {
+            quantize_kq_plane(KqFmt.k4, x, KQ_SB_ELEMS - 1l, kq, ks, 0l)
+        }
+        t |> success(find(ragged, "is not a multiple of") >= 0, "a count off the superblock is refused by name: '{ragged}'")
+    }
+    t |> run("a NaN weight reads as the worst round trip there is") @(t : T?) {
+        t |> success(nan_wide_diff(sqrt(-1.0), 0.0) > 1.0e30, "the gate's reading of a NaN sub-block is past every bar")
+    }
+}
+
 [test(description = "The Q5_K encoder round-trips a scale-laddered input with every 32-element sub-block under 0.15 relative rmse and the 4-byte scale tail zeroed, and encodes an all-zero superblock to exact zeros")]
 def test_q5k_encoder(t : T?) {
     let nsb = 8l
@@ -207,7 +279,7 @@ def test_q5k_encoder(t : T?) {
         var kq, ks : array<uint8>
         kq |> resize(nsb * 160l)
         ks |> resize(nsb * 20l)
-        quantize_k5_plane(x, n, kq, ks, 0l)
+        quantize_kq_plane(KqFmt.k5, x, n, kq, ks, 0l)
         for (sb in range64(nsb)) {
             dequant_k5_plane_superblock(kq, sb * 160l, ks, sb * 20l, y, sb * 256l)
         }
@@ -234,7 +306,7 @@ def test_q5k_encoder(t : T?) {
         var kq, ks : array<uint8>
         kq |> resize(160l)
         ks |> resize(20l)
-        quantize_k5_plane(x, 256l, kq, ks, 0l)
+        quantize_kq_plane(KqFmt.k5, x, 256l, kq, ks, 0l)
         dequant_k5_plane_superblock(kq, 0l, ks, 0l, y, 0l)
         for (i in range64(256l)) {
             t |> equal(y[i], 0.0)

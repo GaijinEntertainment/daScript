@@ -255,9 +255,12 @@ def private peeked_family_tag(p : DlimPeek; source_name : string) : string {
     return tag
 }
 
-//! Panics unless `base` sits on the image page: a prepared image's planes are aligned from its first byte.
+//! Whether `base` sits on the image page: a prepared image's planes are aligned from its first byte.
+def private on_image_page(base : void?) : bool => (intptr(base) & uint64(IMAGE_PAGE - 1l)) == 0ul
+
+//! Panics unless `base` sits on the image page.
 def private require_image_on_page(base : void?) {
-    if ((intptr(base) & uint64(IMAGE_PAGE - 1l)) != 0ul) {
+    if (!on_image_page(base)) {
         panic("dasLLAMA: a prepared image in memory starts on a {IMAGE_PAGE}-byte boundary - this one starts at {intptr(base)}")
     }
 }
@@ -279,16 +282,45 @@ def private memory_lane_of(baked, prefix, who : string) : string {
 //! decoder image, which routes on its gguf instead). Panics on an unreadable image.
 def image_family_tag(path : string) : string => peeked_family_tag(image_peek(path), "'{path}'")
 
+//! `image_family_tag` of a file that may not be a readable image: "" where it is not one, and no panic - the question a
+//! caller asks before it knows a load will follow.
+def image_family_tag_if_readable(path : string) : string {
+    let p = image_peek(path)
+    return (p.valid && !empty(p.identity)) ? peeked_family_tag(p, "'{path}'") : ""
+}
+
+//! The lane a load of `path` serves, for the family whose lanes start with `prefix`: a prepared image's own baked lane - a
+//! `.dlim` names its lane, whatever the load asks - else `asked`. Another family's image answers `asked`, whose identity
+//! then names the refusal.
+def image_path_lane(path, asked, prefix : string) : string {
+    return asked if (!(path |> ends_with(".dlim")))
+    let lane = image_tag_lane(image_family_tag(path))
+    return lane |> starts_with(prefix) ? lane : asked
+}
+
 //! `image_family_tag` of an image held in memory.
 def image_family_tag_memory(base : void?; bytes : uint64) : string {
     require_image_on_page(base)
     return peeked_family_tag(image_peek_memory(base, bytes), IMAGE_IN_MEMORY)
 }
 
+
 //! The lane an image held in memory serves, for the family whose lanes start with `prefix`; another family's image and a
 //! GPU flavor panic by name.
 def image_memory_lane(base : void?; bytes : uint64; prefix, who : string) : string =>
     memory_lane_of(image_family_tag_memory(base, bytes), prefix, who)
+
+//! `image_memory_lane` of bytes that may not be such an image: "" where they are no readable image on the image page,
+//! another family's, or a GPU flavor of the lane, and no panic - the question a caller asks before it knows a load
+//! will follow.
+def image_memory_lane_if_readable(base : void?; bytes : uint64; prefix : string) : string {
+    return "" if (base == null || !on_image_page(base))
+    let p = image_peek_memory(base, bytes)
+    return "" if (!p.valid || empty(p.identity))
+    let baked = peeked_family_tag(p, IMAGE_IN_MEMORY)
+    let lane = image_tag_lane(baked)
+    return (baked == lane && lane |> starts_with(prefix)) ? lane : ""
+}
 
 //! One .dlim sibling of a GGUF, as list/GC tooling sees it (converter --list, the server page).
 struct DlimImageInfo {
@@ -503,6 +535,31 @@ def dlim_gc_stale(source_path : string; tag : string = ""; quant : string = "q8"
 
 //! `prepared_image_alignment`'s engine half (`dasllama_core`): the boundary a prepared image held in memory starts on
 def prepared_image_alignment_() : int64 => IMAGE_PAGE
+
+//! `read_prepared_image`'s engine half (`dasllama_core`): the file at `path` copied into `raw`, `skew` bytes past an
+//! `IMAGE_PAGE` boundary - 0 for an image as a load takes it. Answers the copy's base and size, a null base where the
+//! file does not open. `raw` owns the bytes: it outlives every model that borrows them.
+def read_file_on_image_page_(path : string; var raw : array<uint8>; skew : int64 = 0l) : tuple<base : void?; size : uint64> {
+    let size = stat(path).size
+    raw |> reserve(int64(size) + IMAGE_PAGE + skew)
+    raw |> resize(int64(size) + IMAGE_PAGE + skew)
+    var base : void?
+    unsafe {
+        let first = reinterpret<uint64>(addr(raw[0]))
+        let page = uint64(IMAGE_PAGE)
+        base = reinterpret<void?>((first + page - 1ul) / page * page + uint64(skew))
+    }
+    let f = fopen(path, "rb")
+    if (f == null) {
+        base = null
+        return (base = base, size = size)
+    }
+    fmap(f) $(var mapped : array<uint8>#) {
+        unsafe(memcpy(base, addr(mapped[0]), size))
+    }
+    fclose(f)
+    return (base = base, size = size)
+}
 
 //! The dlim GC beside `gguf_path`: BROKEN, version-stale and hash-named legacy images of another identity go;
 //! a lane-named image of another identity is a lane someone switched away from and stays, like a FOREIGN one
@@ -814,19 +871,30 @@ def serialize_strings(var arch : Archive; var a : array<string>) {
     delete blob
 }
 
+//! A SentencePiece vocabulary's stored half, both directions; a read rebuilds the piece lookup and the derived tables.
+def serialize_spm(var arch : Archive; var spm : SpmTokenizer) {
+    verify(count_meta_fields(spm) == SPM_META_FIELDS)   // grew SpmTokenizer? extend this list
+    serialize_strings(arch, spm.vocab)
+    serialize_pod_array(arch, spm.scores)
+    arch |> serialize_raw(spm.max_token_length)
+    arch |> serialize_raw(spm.add_space_prefix)
+    arch |> serialize_raw(spm.bos_id)
+    arch |> serialize_raw(spm.eos_id)
+    arch |> serialize_raw(spm.add_eos)
+    if (arch.reading) {
+        for (i, v in count(), spm.vocab) {
+            spm.lookup[v] = int64(i)
+        }
+        build_spm_derived(spm)
+    }
+}
+
 // derived state (piece -> index, merge -> rank) is never stored: it rebuilds in milliseconds at load
 def private serialize_tokenizer(var arch : Archive; var tk : Tokenizer) {
     verify(count_meta_fields(tk) == TOKENIZER_META_FIELDS)   // grew Tokenizer? extend this list
-    verify(count_meta_fields(tk.spm) == SPM_META_FIELDS)   // grew SpmTokenizer? extend this list
     verify(count_meta_fields(tk.bpe) == BPE_META_FIELDS)   // grew BpeTokenizer? extend this list
     arch |> serialize_raw(tk.kind)
-    serialize_strings(arch, tk.spm.vocab)
-    serialize_pod_array(arch, tk.spm.scores)
-    arch |> serialize_raw(tk.spm.max_token_length)
-    arch |> serialize_raw(tk.spm.add_space_prefix)
-    arch |> serialize_raw(tk.spm.bos_id)
-    arch |> serialize_raw(tk.spm.eos_id)
-    arch |> serialize_raw(tk.spm.add_eos)
+    serialize_spm(arch, tk.spm)
     serialize_strings(arch, tk.bpe.vocab)
     serialize_pod_array(arch, tk.bpe.token_type)
     arch |> serialize(tk.bpe.pre)
@@ -844,16 +912,12 @@ def private serialize_tokenizer(var arch : Archive; var tk : Tokenizer) {
     }
     serialize_strings(arch, merges)
     if (arch.reading) {
-        for (i, v in count(), tk.spm.vocab) {
-            tk.spm.lookup[v] = int64(i)
-        }
         for (i, v in count(), tk.bpe.vocab) {
             tk.bpe.lookup[v] = int64(i)
         }
         for (i, v in count(), merges) {
             tk.bpe.merge_rank[v] = int64(i)
         }
-        build_spm_derived(tk.spm)
         build_bpe_derived(tk.bpe)
     }
     delete merges

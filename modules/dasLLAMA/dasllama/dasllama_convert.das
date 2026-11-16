@@ -7,7 +7,7 @@ module dasllama_convert shared public
 require dasllama/dasllama_lint public
 require math
 require daslib/f16_cvt // f16<->f32 halfword codecs — the Q5_K encoder + every f16 scale read
-require daslib/jobque_boost public   // quantize_k5_plane threads its superblock loop
+require daslib/jobque_boost public   // quantize_kq_plane threads its superblock loop
 require dasllama/dasllama_par        // maybe_parallel_for (+ its emitted dispatch counters)
 require dasllama/dasllama_math       // get_dispatch_lanes — the requant wrappers shape their fan-out
 require dasllama/dasllama_math_default   // dequant_kq_row_grp - the repacked plane's group gather behind kq_plane_row_f32
@@ -463,10 +463,13 @@ def private nearest_int(fval : float) : int {
     return (i & int(0x007fffff)) - int(0x00400000)
 }
 
-// Weighted joint scale/min fit for one 32-weight sub-block (nmax=31,
-// rmin=-0.5, rdelta=0.1, 16 steps): sweeps iscale around the naive max/min fit and keeps the
-// weighted-least-squares (scale, min) with the lowest weighted square error. Returns (scale, -min).
-def private k5_fit_sub(x : float const?; wt : float const?; var lout : int?) : float2 {
+// Weighted joint scale/min fit for one 32-weight sub-block of an `nmax`-level format (Q5_K: 31, base 30.5, 16 steps; Q4_K: 15,
+// base 14, 21 steps): sweeps `nsteps` iscale values from `base` / range in steps of 0.1 / range around the naive max/min fit and
+// keeps the weighted-least-squares (scale, min) with the lowest weighted square error. Returns (scale, -min).
+def private kq_fit_sub(x : float const?; wt : float const?; var lout : int?; fit : KqFit) : float2 {
+    let nmax = fit.nmax
+    let base = fit.base
+    let nsteps = fit.steps
     unsafe {
         var vmin = x[0]
         var vmax = x[0]
@@ -487,23 +490,23 @@ def private k5_fit_sub(x : float const?; wt : float const?; var lout : int?) : f
             }
             return float2(0.0, -vmin)
         }
-        let iscale0 = 31.0 / (vmax - vmin)
+        let iscale0 = float(nmax) / (vmax - vmin)
         var scale = 1.0 / iscale0
         var best_mad = 0.0
         for (i in range64(32l)) {
-            let l = clamp(nearest_int(iscale0 * (x[i] - vmin)), 0, 31)
+            let l = clamp(nearest_int(iscale0 * (x[i] - vmin)), 0, nmax)
             lout[i] = l
             let diff = scale * float(l) + vmin - x[i]
             best_mad += wt[i] * diff * diff
         }
         var laux : int[32]
-        for (istep in range64(16l)) {
-            let isc = (30.5 + 0.1 * float(istep)) / (vmax - vmin)
+        for (istep in range64(nsteps)) {
+            let isc = (base + 0.1 * float(istep)) / (vmax - vmin)
             var sum_l = 0.0
             var sum_l2 = 0.0
             var sum_xl = 0.0
             for (i in range64(32l)) {
-                let l = clamp(nearest_int(isc * (x[i] - vmin)), 0, 31)
+                let l = clamp(nearest_int(isc * (x[i] - vmin)), 0, nmax)
                 laux[i] = l
                 let fl = float(l)
                 sum_l += wt[i] * fl
@@ -538,9 +541,10 @@ def private k5_fit_sub(x : float const?; wt : float const?; var lout : int?) : f
     }
 }
 
-// Encode one 256-weight superblock into the k5 planes — the exact inverse of
-// dequant_k5_plane_superblock, bit-exact with the Q5_K reference encoder.
-def private quantize_k5_superblock_p(x : float const?; var kq : uint8?; kqo : int64; var ks : uint8?; kso : int64) {  // nolint:STYLE038 — one oracle-matched superblock encoder; splitting it invites drift
+// Encode one 256-weight superblock into the k4 (`nmax` 15) or k5 (`nmax` 31) planes - the exact inverse of
+// dequant_k4_plane_superblock / dequant_k5_plane_superblock; the k5 form is bit-exact with the Q5_K reference encoder.
+def private quantize_k45_superblock_p(x : float const?; var kq : uint8?; kqo : int64; var ks : uint8?; kso : int64; fit : KqFit; high_bits : bool) {
+    let nmax = fit.nmax
     unsafe {
         var lq : int[256]
         var lsub : int[32]
@@ -557,7 +561,7 @@ def private quantize_k5_superblock_p(x : float const?; var kq : uint8?; kqo : in
             for (l in range64(32l)) {
                 wt[l] = av_x + abs(x[j * 32l + l])
             }
-            let sm = k5_fit_sub(x + j * 32l, addr(wt[0]), addr(lsub[0]))
+            let sm = kq_fit_sub(x + j * 32l, addr(wt[0]), addr(lsub[0]), fit)
             scales[j] = sm.x
             mins[j] = sm.y
             max_scale = max(max_scale, sm.x)
@@ -600,13 +604,21 @@ def private quantize_k5_superblock_p(x : float const?; var kq : uint8?; kqo : in
             }
             let mj = dmf * float(sm.y)
             for (l in range64(32l)) {
-                lq[j * 32l + l] = clamp(nearest_int((x[j * 32l + l] + mj) / dj), 0, 31)
+                lq[j * 32l + l] = clamp(nearest_int((x[j * 32l + l] + mj) / dj), 0, nmax)
             }
         }
-        for (l in range64(32l)) {
+        kq45_pack(addr(lq[0]), kq, kqo, high_bits)
+    }
+}
+
+// the 256 quants of a k4 / k5 superblock into its quant plane: sub-blocks 2js and 2js + 1 share 32 nibble bytes, and k5's
+// fifth bits ride the 32 qh bytes after them, bit 2js / 2js + 1
+def private kq45_pack(lq : int const?; var kq : uint8?; kqo : int64; high_bits : bool) {
+    unsafe {
+        for (l in range64(high_bits ? 32l : 0l)) {
             kq[kqo + 128l + l] = uint8(0)
         }
-        for (js in range64(4l)) {   // sub-blocks 2js/2js+1 share 32 nibble bytes; qh bit 2js / 2js+1
+        for (js in range64(4l)) {
             for (l in range64(32l)) {
                 var l1 = lq[js * 64l + l]
                 var l2 = lq[js * 64l + l + 32l]
@@ -619,41 +631,190 @@ def private quantize_k5_superblock_p(x : float const?; var kq : uint8?; kqo : in
                     l2 -= 16
                     h |= 2 << int(2l * js)
                 }
-                kq[kqo + 128l + l] = uint8(int(kq[kqo + 128l + l]) | h)
+                if (high_bits) {
+                    kq[kqo + 128l + l] = uint8(int(kq[kqo + 128l + l]) | h)
+                }
                 kq[kqo + js * 32l + l] = uint8(l1 | (l2 << 4))
             }
         }
     }
 }
 
-//! Encode n fp32 weights (n % 256 == 0) into the k5 planes at plane-local element offset `eloff` —
-//! the encode counterpart of the k5 transcode, for disk types that are not already Q5_K.
-def quantize_k5_plane(src : array<float> | #; n : int64; var kq : array<uint8>; var ks : array<uint8>; eloff : int64) {
-    if (n % 256l != 0l) {
-        panic("quantize_k5_plane: n={n} is not a multiple of 256")
+// Scale-only fit for one 16-weight sub-block of Q6_K (levels -32..31, weights x^2): the naive fit at the largest
+// magnitude, then 18 iscale values around it, keeping the least-squares scale with the largest explained energy.
+def private k6_fit_sub(x : float const?; var lout : int?) : float {
+    unsafe {
+        var vmax = 0.0
+        var amax = 0.0
+        for (i in range64(16l)) {
+            if (abs(x[i]) > amax) {
+                amax = abs(x[i])
+                vmax = x[i]
+            }
+        }
+        for (i in range64(16l)) {
+            lout[i] = 32
+        }
+        return 0.0 if (amax < 1e-8)
+        var scale = 0.0
+        var best = 0.0
+        for (trial in range(19)) {   // the naive fit first (step 0), then the steps around it
+            let istep = trial == 0 ? 0 : (trial <= 9 ? trial - 10 : trial - 9)
+            let isc = -(32.0 + 0.1 * float(istep)) / vmax
+            var sumlx = 0.0
+            var suml2 = 0.0
+            for (i in range64(16l)) {
+                let fl = float(clamp(nearest_int(isc * x[i]), -32, 31))
+                let w = x[i] * x[i]
+                sumlx += w * x[i] * fl
+                suml2 += w * fl * fl
+            }
+            if (suml2 > 0.0 && (trial == 0 || sumlx * sumlx > best * suml2)) {
+                for (i in range64(16l)) {
+                    lout[i] = 32 + clamp(nearest_int(isc * x[i]), -32, 31)
+                }
+                scale = sumlx / suml2
+                best = scale * sumlx
+            }
+        }
+        return scale
+    }
+}
+
+// Encode one 256-weight superblock into the k6 planes - the exact inverse of dequant_k6_plane_superblock: sixteen
+// signed 8-bit sub-block scales under one f16 step, the 6-bit quants re-derived against the rounded scales.
+def private quantize_k6_superblock_p(x : float const?; var kq : uint8?; kqo : int64; var ks : uint8?; kso : int64) {
+    unsafe {
+        var lq : int[256]
+        var scales : float[16]
+        var max_scale = 0.0
+        var max_abs = 0.0
+        for (ib in range64(16l)) {
+            scales[ib] = k6_fit_sub(x + ib * 16l, addr(lq[ib * 16l]))
+            if (abs(scales[ib]) > max_abs) {
+                max_abs = abs(scales[ib])
+                max_scale = scales[ib]
+            }
+        }
+        for (b in range64(K6_QSB)) {
+            kq[kqo + b] = uint8(0)
+        }
+        for (b in range64(K6_SSB)) {
+            ks[kso + b] = uint8(0)
+        }
+        return if (max_abs < 1e-15)
+        let iscale = -128.0 / max_scale
+        let d = f32_to_f16(1.0 / iscale)
+        ks[kso + 16l] = uint8(d & 0xFFu)
+        ks[kso + 17l] = uint8((d >> 8u) & 0xFFu)
+        let df = f16_to_f32(d)
+        for (ib in range64(16l)) {
+            let sc = min(127, nearest_int(iscale * scales[ib]))
+            ks[kso + ib] = uint8(sc & 0xFF)
+            let dj = df * float(sc)
+            if (dj == 0.0) {
+                continue
+            }
+            for (l in range64(16l)) {
+                lq[ib * 16l + l] = 32 + clamp(nearest_int(x[ib * 16l + l] / dj), -32, 31)
+            }
+        }
+        for (half in range64(2l)) {
+            let base = half * 128l
+            let qlo = kqo + half * 64l
+            let qho = kqo + 128l + half * 32l
+            for (l in range64(32l)) {
+                let q1 = lq[base + l]
+                let q2 = lq[base + 32l + l]
+                let q3 = lq[base + 64l + l]
+                let q4 = lq[base + 96l + l]
+                kq[qlo + l] = uint8((q1 & 15) | ((q3 & 15) << 4))
+                kq[qlo + 32l + l] = uint8((q2 & 15) | ((q4 & 15) << 4))
+                kq[qho + l] = uint8((q1 >> 4) | ((q2 >> 4) << 2) | ((q3 >> 4) << 4) | ((q4 >> 4) << 6))
+            }
+        }
+    }
+}
+
+//! one sub-block fit's sweep: `steps` iscale values from `base` / range, 0.1 / range apart, over the levels 0..nmax
+struct private KqFit {
+    nmax : int
+    base : float
+    steps : int64
+}
+
+//! the members with no encoder: one list for the predicate and the refusal
+typedef KqTagNoEncoder = KqTag_q8 | KqTag_q40 | KqTag_q51 | KqTag_iq4xs | KqTag_k3 | KqTag_iq3s | KqTag_iq3xxs | KqTag_iq4nl | KqTag_k2 | KqTag_iq2s | KqTag_iq2xs | KqTag_iq2xxs | KqTag_mx4 | KqTag_iq4nl32 | KqTag_iq3s4 | KqTag_q4032 | KqTag_q5032 | KqTag_nv4 | KqTag_mlx4 | KqTag_mlx8 | KqTag_mlx4b | KqTag_mlx8b | KqTag_mlx6b
+
+// the encoder of a member, behind its tag: Q4_K and Q5_K share the scale-and-min superblock, Q6_K is scale-only; a member with
+// no overload here has no encoder, and `kq_has_encoder` says so before a plane is touched
+def private kq_has_encoder(_f : KqTag_k4 | KqTag_k5 | KqTag_k6) : bool => true
+def private kq_has_encoder(_f : KqTagNoEncoder) : bool => false
+
+def private quantize_kq_superblock_p(x : float const?; var kq : uint8?; kqo : int64; var ks : uint8?; kso : int64; _f : KqTag_k4) {
+    quantize_k45_superblock_p(x, kq, kqo, ks, kso, KqFit(nmax = K4_LEVEL_MAX, base = 14.0, steps = 21l), false)
+}
+
+def private quantize_kq_superblock_p(x : float const?; var kq : uint8?; kqo : int64; var ks : uint8?; kso : int64; _f : KqTag_k5) {
+    quantize_k45_superblock_p(x, kq, kqo, ks, kso, KqFit(nmax = K5_LEVEL_MAX, base = 30.5, steps = 16l), true)
+}
+
+def private quantize_kq_superblock_p(x : float const?; var kq : uint8?; kqo : int64; var ks : uint8?; kso : int64; _f : KqTag_k6) {
+    quantize_k6_superblock_p(x, kq, kqo, ks, kso)
+}
+
+[unused_argument(x, kq, kqo, ks, kso)]
+def private quantize_kq_superblock_p(x : float const?; var kq : uint8?; kqo : int64; var ks : uint8?; kso : int64; _f : KqTagNoEncoder) {
+    panic("quantize_kq_plane: no encoder for this format")
+}
+
+def private kq_encodes(fmt : KqFmt) : bool {   // nolint:STYLE037 - the stamp's ladder, one arm per KqFmt member
+    var has = false
+    kq_fmt_stamp(fmt) $(F) {
+        has = kq_has_encoder(F)
+    }
+    return has
+}
+
+// superblocks [b0, b1) of `srcp` through the format's encoder, stamped here so the per-superblock call inlines
+def private kq_encode_units(fmt : KqFmt; srcp : float const?; var kqp : uint8?; var ksp : uint8?; b0, b1, qsb, ssb : int64) {   // nolint:STYLE037 - the stamp's ladder, one arm per KqFmt member
+    kq_fmt_stamp(fmt) $(F) {
+        for (blk in range64(b0, b1)) {
+            quantize_kq_superblock_p(unsafe(srcp + blk * KQ_SB_ELEMS), kqp, blk * qsb, ksp, blk * ssb, F)
+        }
+    }
+}
+
+//! Encode n fp32 weights (whole superblocks) into the planes of `fmt` - a member with an encoder: Q4_K, Q5_K or Q6_K - at
+//! plane-local element offset `eloff`: the encode counterpart of the K-quant transcode, for weights a file does not already store in that format.
+def quantize_kq_plane(fmt : KqFmt; src : array<float> | #; n : int64; var kq : array<uint8>; var ks : array<uint8>; eloff : int64) {
+    if (!kq_encodes(fmt)) {
+        panic("quantize_kq_plane: no encoder for {fmt} - Q4_K, Q5_K and Q6_K are the formats the engine mints")
+    }
+    if (n % KQ_SB_ELEMS != 0l) {
+        panic("quantize_kq_plane: n={n} is not a multiple of {KQ_SB_ELEMS}")
     }
     // O(1) source guard — the loop below reads n weights through a raw pointer, bypassing bounds checks
     if (n > long_length(src)) {
-        panic("quantize_k5_plane: n={n} exceeds src length {long_length(src)}")
+        panic("quantize_kq_plane: n={n} exceeds src length {long_length(src)}")
     }
-    let nb = n / 256l
+    let nb = n / KQ_SB_ELEMS
     if (nb <= 0l) {
         return
     }
-    guard_dst("<k5 encode>", "k5 quant plane", (eloff / 256l) * K5_QSB, nb * K5_QSB, long_length(kq))
-    guard_dst("<k5 encode>", "k5 scale plane", (eloff / 256l) * K5_SSB, nb * K5_SSB, long_length(ks))
+    let qsb = kq_qsb(fmt)
+    let ssb = kq_ssb(fmt)
+    let sb0 = eloff / KQ_SB_ELEMS
+    guard_dst("<kq encode>", "{fmt} quant plane", sb0 * qsb, nb * qsb, long_length(kq))
+    guard_dst("<kq encode>", "{fmt} scale plane", sb0 * ssb, nb * ssb, long_length(ks))
     unsafe {
         let srcp = addr<float const?>(src[0])
-        var kqp = addr(kq[(eloff / 256l) * K5_QSB])
-        var ksp = addr(ks[(eloff / 256l) * K5_SSB])
-        // the qkx2 sweep is ~100x a byte copy per superblock, so thread far earlier than transcode_jobs
+        var kqp = addr(kq[sb0 * qsb])
+        var ksp = addr(ks[sb0 * ssb])
+        // the fit sweep is ~100x a byte copy per superblock, so thread far earlier than transcode_jobs
         let njobs = is_job_que_available() ? int(clamp(nb / 64l, 1l, 64l)) : 1
         maybe_parallel_for(0, int(nb), njobs) $(rb, re) {
-            unsafe {
-                for (blk in range64(int64(rb), int64(re))) {
-                    quantize_k5_superblock_p(srcp + blk * 256l, kqp, blk * K5_QSB, ksp, blk * K5_SSB)
-                }
-            }
+            kq_encode_units(fmt, srcp, kqp, ksp, int64(rb), int64(re), qsb, ssb)
         }
     }
 }

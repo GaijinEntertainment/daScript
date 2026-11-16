@@ -576,14 +576,10 @@ def private q3v_bake_half_twin(var st : Qwen3vStaging; bf16 : bool) {
 //! Load the qwen3v tower, image-backed (`dasllama_gemma4v`'s load shape: a prepared `.dlim`
 //! maps and every plane borrows; missing or stale, one is minted from the source mmproj).
 def load_qwen3v_tower(path : string) : Qwen3vTower {
-    var tag = q3v_tag()
     // a .dlim named directly: no mmproj to regenerate from, so a wrong identity panics; the lane is
     // the file's (its baked tag), not the pin's - a served tower reads its q8 flag from the meta
+    let tag = image_path_lane(path, q3v_tag(), QWEN3V_TAG)
     if (path |> ends_with(".dlim")) {
-        let baked = image_tag_lane(image_family_tag(path))
-        if (baked == QWEN3V_TAG || baked == QWEN3V_TAG_Q8) {
-            tag = baked
-        }
         // a named image serves the lane it was BAKED with, so the policy has no say here
         to_log(LOG_INFO, "dasLLAMA qwen3v: block GEMM lane {tag == QWEN3V_TAG_Q8 ? "q8" : "f32 planes"} - the named image's baked tag\n")
     } else {

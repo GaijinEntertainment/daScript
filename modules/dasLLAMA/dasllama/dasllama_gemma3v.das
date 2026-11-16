@@ -505,14 +505,10 @@ def stage_gemma3v_tower(path : string) : Gemma3vStaging {
 //! there is no allocation and no processing at load; missing or stale, one is minted from the
 //! source mmproj first. Panics on any other projector.
 def load_gemma3v_tower(path : string) : Gemma3vTower {
-    var tag = g3v_tag()
     // a .dlim named directly: no mmproj to regenerate from, so a wrong identity panics; the lane is
     // the file's (its baked tag), not the pin's - a served tower reads its q8 flag from the meta
+    let tag = image_path_lane(path, g3v_tag(), GEMMA3V_TAG)
     if (path |> ends_with(".dlim")) {
-        let baked = image_tag_lane(image_family_tag(path))
-        if (baked == GEMMA3V_TAG || baked == GEMMA3V_TAG_Q8) {
-            tag = baked
-        }
         // a named image serves the lane it was BAKED with, so the policy has no say here
         to_log(LOG_INFO, "dasLLAMA gemma3v: block GEMM lane {tag == GEMMA3V_TAG_Q8 ? "q8" : "exact planes"} - the named image's baked tag\n")
     } else {

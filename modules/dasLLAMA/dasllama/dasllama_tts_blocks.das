@@ -6,6 +6,8 @@ module dasllama_tts_blocks shared public
 
 require dasllama/dasllama_lint public
 require math
+require strings
+require daslib/strings_boost
 require daslib/archive
 require dasllama/dasllama_math
 require dasllama/dasllama_math_default   // matmul_kq: the portable K-quant GEMV over disk-order planes
@@ -94,6 +96,15 @@ def weight_slot(var io : TtsBlobIo; var a : array<auto(ET)>; var span : TtsSpan)
     }
 }
 
+//! One named weight of a table through the walk, its span in the table beside it: a staging walk moves the entry `rows`
+//! holds, a serving walk binds the entry `spans` names - and neither mints a key the other table does not carry.
+def table_slot(var io : TtsBlobIo; var rows : table<string; array<auto(ET)>>; var spans : table<string; TtsSpan>; name : string) {
+    return if (io.staging ? !key_exists(rows, name) : !key_exists(spans, name))
+    var span = spans?[name] ?? TtsSpan()
+    weight_slot(io, rows[name], span)
+    spans[name] = span
+}
+
 //! A bare weight vector (an embedding table, a Snake alpha, the ISTFT window) with its span.
 struct TtsWeight {
     a : array<float>
@@ -103,10 +114,10 @@ struct TtsWeight {
 // Every field a TTS leaf struct carries into the image meta is hand-listed in its serialize
 // overload; the counts below are the tripwires that catch a field added without a line.
 let private TTS_WEIGHT_META_FIELDS = 1
-let private TTS_CONV1D_META_FIELDS = 21
+let private TTS_CONV1D_META_FIELDS = 26
 let private TTS_LINEAR_META_FIELDS = 12
 let private TTS_NORM_META_FIELDS = 2
-let private TTS_LSTM_META_FIELDS = 5
+let private TTS_LSTM_META_FIELDS = 10
 
 def serialize(var arch : Archive; var w : TtsWeight) {
     verify(count_meta_fields(w) == TTS_WEIGHT_META_FIELDS)   // grew TtsWeight? extend this list
@@ -131,6 +142,8 @@ struct TtsConv1d {
     wtr : array<float>   // [cin][k*cout] - the rows form's transposed-conv B operand
     wq : array<int8>     // [cout][k*cin] Q8_0 quants, the taps stacked along K, repacked for the backend - the q8 rows form's W
     wqs : array<float>   // the Q8_0 scales of wq, one per 32
+    @exact_size kq : array<uint8>    //! [cout][kq_k] as a K-quant plane pair, the taps stacked along K and K zero-padded to the format's 256, repacked for a backend that carries kq
+    @exact_size ks : array<uint8>
     b : array<float>
     w_span : TtsSpan = TtsSpan()
     wt_span : TtsSpan = TtsSpan()
@@ -138,6 +151,8 @@ struct TtsConv1d {
     wtr_span : TtsSpan = TtsSpan()
     wq_span : TtsSpan = TtsSpan()
     wqs_span : TtsSpan = TtsSpan()
+    kq_span : TtsSpan = TtsSpan()
+    ks_span : TtsSpan = TtsSpan()
     b_span : TtsSpan = TtsSpan()
     cout : int64
     cout_s : int64
@@ -153,6 +168,9 @@ struct TtsConv1d {
     served_rows : bool
     q8 : bool
     q8_k : int64         // k*cin
+    kq_fmt : int         //! the kernel-layer format id of the kq planes (4 = Q4_K), 0 = the conv has none
+    kq_repacked : bool   //! the planes are in the active backend's layout, else disk order
+    kq_k : int64         //! k*cin rounded up to 256: the K-quant row's width
 }
 
 def serialize(var arch : Archive; var c : TtsConv1d) {
@@ -163,6 +181,8 @@ def serialize(var arch : Archive; var c : TtsConv1d) {
     arch |> serialize(c.wtr_span)
     arch |> serialize(c.wq_span)
     arch |> serialize(c.wqs_span)
+    arch |> serialize(c.kq_span)
+    arch |> serialize(c.ks_span)
     arch |> serialize(c.b_span)
     arch |> serialize_raw(c.cout)
     arch |> serialize_raw(c.cout_s)
@@ -178,6 +198,9 @@ def serialize(var arch : Archive; var c : TtsConv1d) {
     arch |> serialize_raw(c.served_rows)
     arch |> serialize_raw(c.q8)
     arch |> serialize_raw(c.q8_k)
+    arch |> serialize_raw(c.kq_fmt)
+    arch |> serialize_raw(c.kq_repacked)
+    arch |> serialize_raw(c.kq_k)
 }
 
 def finalize(var c : TtsConv1d) {
@@ -187,6 +210,8 @@ def finalize(var c : TtsConv1d) {
     release_plane(c.wtr)
     release_plane(c.wq)
     release_plane(c.wqs)
+    release_plane(c.kq)
+    release_plane(c.ks)
     release_plane(c.b)
 }
 
@@ -197,6 +222,8 @@ def weights_walk(var io : TtsBlobIo; var c : TtsConv1d) {
     weight_slot(io, c.wtr, c.wtr_span)
     weight_slot(io, c.wq, c.wq_span)
     weight_slot(io, c.wqs, c.wqs_span)
+    weight_slot(io, c.kq, c.kq_span)
+    weight_slot(io, c.ks, c.ks_span)
     weight_slot(io, c.b, c.b_span)
 }
 
@@ -289,33 +316,77 @@ def weights_walk(var io : TtsBlobIo; var n : TtsNorm) {
 struct TtsLstm {
     w_ih : array<float>
     w_hh : array<float>
+    @exact_size wq_ih : array<int8>     //! [4 hidden][nin] Q8_0 quants, repacked for the backend - the q8 form's input matrix, in place of `w_ih`
+    @exact_size wqs_ih : array<float>
+    @exact_size wq_hh : array<int8>     //! [4 hidden][hidden] the same for the recurrence, in place of `w_hh`
+    @exact_size wqs_hh : array<float>
     b : array<float>
     w_ih_span : TtsSpan = TtsSpan()
     w_hh_span : TtsSpan = TtsSpan()
+    wq_ih_span : TtsSpan = TtsSpan()
+    wqs_ih_span : TtsSpan = TtsSpan()
+    wq_hh_span : TtsSpan = TtsSpan()
+    wqs_hh_span : TtsSpan = TtsSpan()
     b_span : TtsSpan = TtsSpan()
     nin : int64
     hidden : int64
+    q8 : bool
 }
 
 def serialize(var arch : Archive; var l : TtsLstm) {
     verify(count_meta_fields(l) == TTS_LSTM_META_FIELDS)   // grew TtsLstm? extend this list
     arch |> serialize(l.w_ih_span)
     arch |> serialize(l.w_hh_span)
+    arch |> serialize(l.wq_ih_span)
+    arch |> serialize(l.wqs_ih_span)
+    arch |> serialize(l.wq_hh_span)
+    arch |> serialize(l.wqs_hh_span)
     arch |> serialize(l.b_span)
     arch |> serialize_raw(l.nin)
     arch |> serialize_raw(l.hidden)
+    arch |> serialize_raw(l.q8)
 }
 
 def finalize(var l : TtsLstm) {
     release_plane(l.w_ih)
     release_plane(l.w_hh)
+    release_plane(l.wq_ih)
+    release_plane(l.wqs_ih)
+    release_plane(l.wq_hh)
+    release_plane(l.wqs_hh)
     release_plane(l.b)
 }
 
 def weights_walk(var io : TtsBlobIo; var l : TtsLstm) {
     weight_slot(io, l.w_ih, l.w_ih_span)
     weight_slot(io, l.w_hh, l.w_hh_span)
+    weight_slot(io, l.wq_ih, l.wq_ih_span)
+    weight_slot(io, l.wqs_ih, l.wqs_ih_span)
+    weight_slot(io, l.wq_hh, l.wq_hh_span)
+    weight_slot(io, l.wqs_hh, l.wqs_hh_span)
     weight_slot(io, l.b, l.b_span)
+}
+
+//! A matrix [nout][nin] of floats as Q8_0 quants and scales, repacked for the backend where `repack` says so; `w` is
+//! dropped. The one Q8_0 mint of the TTS leaves: a conv's quant matrix, a linear's, an LSTM's two, a voice pack.
+def q8_matrix_mint(var w : array<float>; nin, nout : int64; @exact_size var wq : array<int8>; @exact_size var wqs : array<float>; repack : bool) {
+    wq |> reserve_resize(nout * nin)
+    wqs |> reserve_resize(nout * nin / 32l)
+    quantize_q8_0_into(w, nout * nin, wq, wqs, 0l, 0l)
+    if (repack) {
+        repack_q8q8_weight(wq, wqs, 0l, nin, nout)
+    }
+    release_plane(w)
+}
+
+//! Mint an LSTM direction's Q8_0 form - both matrices, each step's input row and state requantized ahead of a q8 GEMV -
+//! where its input and hidden widths quantize per 32; false = the direction keeps its f32 matrices.
+def lstm_prepare_q8(var l : TtsLstm; repack : bool) : bool {
+    return false if (l.nin % 32l != 0l || l.hidden % 32l != 0l || empty(l.w_ih))
+    q8_matrix_mint(l.w_ih, l.nin, 4l * l.hidden, l.wq_ih, l.wqs_ih, repack)
+    q8_matrix_mint(l.w_hh, l.hidden, 4l * l.hidden, l.wq_hh, l.wqs_hh, repack)
+    l.q8 = true
+    return true
 }
 
 struct TtsBiLstm {
@@ -446,8 +517,51 @@ def adain_pad(var a : TtsAdaIn; c, cs : int64) {
     }
 }
 
-//! row `co` of a dense conv's f32 weight tap-major at dst[doff + tap * cin + ci], from `wtr` / `wt` (transposed), else `wk` / `w`
+//! row `r` of a Q8_0 matrix [rows][cols] - `repacked` whether it sits in the layout the load repacks to or in disk
+//! order - read back as floats at dst[doff ..]
+def q8_matrix_row(wq : array<int8>; wqs : array<float>; repacked : bool; cols, rows, r : int64; var dst : array<float>; doff : int64) {
+    let layout = active_q8_repack_layout(repacked && g_active_needs_repack)
+    unsafe {
+        q8_plane_row_f32(addr<int8 const?>(wq[0]), addr<float const?>(wqs[0]), cols, rows, layout, r, addr(dst[doff]))
+    }
+}
+
+//! row `r` of a K-quant matrix [rows][cols] - `kq_fmt` the planes' kernel-layer format id, `repacked` whether they sit in
+//! the active backend's layout or disk order - read back as floats at dst[doff ..]; `who` names the site in a refusal
+def kq_matrix_row(kq, ks : array<uint8>; kq_fmt : int; repacked : bool; cols, rows, r : int64; var dst : array<float>; doff : int64; who : string) {
+    kq_plane_row_f32(kq_fmt_of_id(kq_fmt, who), kq, ks, cols, rows, repacked ? active_kq_layout_mr(kq_fmt) : 1l, r, dst, doff)
+}
+
+// row `r` of a dense conv's quant matrix, Q8_0 or K-quant, its first `n` columns as floats at dst[doff ..]
+def private conv1d_quant_matrix_row(c : TtsConv1d; r, n : int64; var dst : array<float>; doff : int64) {
+    let rows = conv1d_quant_rows(c)
+    if (c.q8) {
+        q8_matrix_row(c.wq, c.wqs, true, c.q8_k, rows, r, dst, doff)
+        return
+    }
+    var row & = g_quant_row
+    row |> reserve_resize(c.kq_k)
+    kq_matrix_row(c.kq, c.ks, c.kq_fmt, c.kq_repacked, c.kq_k, rows, r, row, 0l, "a tts conv")
+    for (i in range64(n)) {
+        dst[doff + i] = row[i]
+    }
+}
+
+var @scratch @exact_size g_quant_row : array<float>   //! one row of a quant matrix read back as floats
+
+//! row `co` of a dense conv's weight as floats, tap-major at dst[doff + tap * cin + ci], from whichever form the conv holds: `wtr` / `wt`
+//! (transposed), `wk` / `w`, or its quant matrix - a forward conv's row `co`, a transposed conv's k lift rows tap * cout + co
 def conv1d_weight_row(c : TtsConv1d; co : int64; var dst : array<float>; doff : int64) {
+    if ((c.q8 || c.kq_fmt != 0) && !c.transposed) {
+        conv1d_quant_matrix_row(c, co, c.k * c.cin, dst, doff)
+        return
+    }
+    if (c.q8 || c.kq_fmt != 0) {
+        for (tap in range64(c.k)) {
+            conv1d_quant_matrix_row(c, tap * c.cout + co, c.cin, dst, doff + tap * c.cin)
+        }
+        return
+    }
     for (ci in range64(c.cin)) {
         for (tap in range64(c.k)) {
             dst[doff + tap * c.cin + ci] = (c.transposed ? (!empty(c.wtr) ? c.wtr[(ci * c.k + tap) * c.cout + co] : c.wt[(co * c.k + tap) * c.cin + ci])
@@ -463,36 +577,83 @@ def linear_weight_row(l : TtsLinear; o : int64; var dst : array<float>; doff : i
     }
 }
 
-//! Can this conv serve the q8 rows form: a dense forward conv whose widths quantize per 32.
-def conv1d_q8_eligible(c : TtsConv1d) : bool =>
-    c.groups == 1l && !c.transposed && c.stride == 1l && c.cin % 32l == 0l && c.cout % 32l == 0l
+//! Can this conv serve the q8 rows form: a dense stride-1 forward conv, or a dense transposed one, whose widths quantize per 32.
+def conv1d_q8_eligible(c : TtsConv1d) : bool {
+    return false if (c.groups != 1l || c.cin % 32l != 0l)
+    return c.transposed ? (c.k * c.cout) % 32l == 0l : (c.stride == 1l && c.cout % 32l == 0l)
+}
+
+// A dense conv's quant matrix, the Q8_0 and K-quant forms' one layout. A forward conv's is [cout][k*cin], a row an output
+// channel's taps stacked along K; a transposed conv's is its lift [k*cout][cin], row tap * cout + co over the inputs.
+def private conv1d_quant_rows(c : TtsConv1d) : int64 => c.transposed ? c.k * c.cout : c.cout
+
+def private conv1d_quant_k(c : TtsConv1d) : int64 => c.transposed ? c.cin : c.k * c.cin
+
+def private conv1d_quant_row(c : TtsConv1d; j : int64; var dst : array<float>; doff : int64) {
+    if (!c.transposed) {
+        conv1d_weight_row(c, j, dst, doff)
+        return
+    }
+    let tap = j / c.cout
+    let co = j % c.cout
+    for (ci in range64(c.cin)) {
+        dst[doff + ci] = c.w[(ci * c.cout + co) * c.k + tap]
+    }
+}
 
 [arch(at = "../ARCHITECTURE_TTS.md#tts-tap-stacking")]
 def private conv1d_prepare_q8(var c : TtsConv1d; repack : bool) {
-    let kc = c.k * c.cin
+    let kc = conv1d_quant_k(c)
+    let rows = conv1d_quant_rows(c)
     var inscope slab : array<float>
-    slab |> reserve_resize(c.cout * kc)
-    for (co in range64(c.cout)) {
-        conv1d_weight_row(c, co, slab, co * kc)
+    slab |> reserve_resize(rows * kc)
+    for (j in range64(rows)) {
+        conv1d_quant_row(c, j, slab, j * kc)
     }
-    c.wq |> reserve_resize(c.cout * kc)
-    c.wqs |> reserve_resize(c.cout * kc / 32l)
-    quantize_q8_0_into(slab, c.cout * kc, c.wq, c.wqs, 0l, 0l)
-    if (repack) {
-        repack_q8q8_weight(c.wq, c.wqs, 0l, kc, c.cout)
-    }
+    q8_matrix_mint(slab, kc, rows, c.wq, c.wqs, repack)
     c.q8_k = kc
     c.q8 = true
     delete c.w
 }
 
+//! Can this conv serve the K-quant rows form: any dense conv, its quant matrix's row zero-padded to the format's 256.
+def conv1d_kq_eligible(c : TtsConv1d) : bool => c.groups == 1l
+
+//! Mint a dense conv's K-quant rows form in `fmt` (Q4_K, Q5_K or Q6_K) and drop `w`: its quant matrix with K zero-padded
+//! to a whole number of 256-superblocks (`kq_k`), repacked where the backend carries kq kernels.
+[arch(at = "../ARCHITECTURE_TTS.md#tts-tap-stacking")]
+def conv1d_prepare_kq(var c : TtsConv1d; fmt : KqFmt; repack : bool) {
+    if (!conv1d_kq_eligible(c)) {
+        panic("dasLLAMA tts: the K-quant form takes a dense conv; got groups={c.groups}")
+    }
+    let rows = conv1d_quant_rows(c)
+    c.cout_s = c.cout
+    c.kq_k = round_up(conv1d_quant_k(c), KQ_SB_ELEMS)
+    var inscope slab : array<float>
+    slab |> reserve_resize(rows * c.kq_k)
+    for (j in range64(rows)) {
+        conv1d_quant_row(c, j, slab, j * c.kq_k)
+    }
+    let nsb = rows * c.kq_k / KQ_SB_ELEMS
+    c.kq |> reserve_resize(nsb * kq_qsb(fmt))
+    c.ks |> reserve_resize(nsb * kq_ssb(fmt))
+    quantize_kq_plane(fmt, slab, rows * c.kq_k, c.kq, c.ks, 0l)
+    c.kq_fmt = kq_schema_id(fmt)
+    c.kq_repacked = false
+    if (repack && kernel_backend_has_kq()) {
+        repack_kq_weight(c.kq_fmt, c.kq, c.ks, 0l, c.kq_k, rows)
+        c.kq_repacked = true
+    }
+    delete c.w
+}
+
 //! Mint the one served layout of a dense conv and drop what the consumer never reads: the rows
-//! form takes `wk` (forward) or `wtr` (transposed) - or, with `q8`, the quantized stacked form -
-//! and loses `w`; the channel-major form keeps `w`, a transposed one minting `wt` in its place.
-def conv1d_prepare(var c : TtsConv1d; q8 : bool = false; repack : bool = false) {
+//! form takes `wk` (forward) or `wtr` (transposed) - or, with `q8`, the quant matrix - and loses `w`;
+//! the channel-major form keeps `w`, a transposed one minting `wt` in its place, and takes the quant matrix under `q8_channel_major`.
+def conv1d_prepare(var c : TtsConv1d; q8 : bool = false; repack : bool = false; q8_channel_major : bool = false) {
     c.cout_s = c.cout
     return if (c.groups != 1l)
-    if (q8 && c.served_rows && conv1d_q8_eligible(c)) {
+    if (q8 && (c.served_rows || q8_channel_major) && conv1d_q8_eligible(c)) {
         conv1d_prepare_q8(c, repack)
         return
     }
@@ -574,6 +735,10 @@ var @scratch g_lstm_c : array<float>
 var @scratch g_lstm_xin : array<float>
 var @scratch g_lstm_gates : array<float>
 var @scratch g_lstm_gates2 : array<float>
+var @scratch @exact_size g_lstm_xq : array<int8>     //! a q8 LSTM step's input row as Q8_0 quants and scales
+var @scratch @exact_size g_lstm_xqs : array<float>
+var @scratch @exact_size g_lstm_hq : array<int8>     //! ... and its state
+var @scratch @exact_size g_lstm_hqs : array<float>
 var @scratch g_snake_inv : array<float>
 var @scratch @exact_size g_sine_rad : array<float>
 var @scratch @exact_size g_sine_low : array<float>
@@ -684,11 +849,34 @@ def private conv1d_transposed_depthwise(c : TtsConv1d; x : array<float>; t_in : 
     }
 }
 
+var @scratch @exact_size g_conv_xr : array<float>   //! a quantized channel-major conv's input as rows
+var @scratch @exact_size g_conv_yr : array<float>   //! ... and its output
+
+// a dense channel-major conv that holds a quant matrix: the matrix has one layout, so the conv runs as rows between two transposes
+def private conv1d_dense_quant(c : TtsConv1d; x : array<float>; t_in, t_out : int64; var y : array<float>) {
+    var xr & = g_conv_xr
+    var yr & = g_conv_yr
+    xr |> overwrite_resize(t_in * c.cin)
+    for (ci in range64(c.cin)) {
+        for (t in range64(t_in)) {
+            xr[t * c.cin + ci] = x[ci * t_in + t]
+        }
+    }
+    conv1d_rows(c, xr, t_in, yr)
+    for (co in range64(c.cout)) {
+        for (t in range64(t_out)) {
+            y[co * t_out + t] = yr[t * c.cout_s + co]
+        }
+    }
+}
+
 //! y [cout][t_out] = conv(x [cin][t_in]); grouped convs are the depthwise case only.
 def conv1d(c : TtsConv1d; x : array<float>; t_in : int64; @scratch @exact_size var y : array<float>) {
     let t_out = conv1d_out_len(c, t_in)
     y |> reserve_resize(c.cout * t_out)
-    if (c.groups == 1l) {
+    if (c.groups == 1l && (c.q8 || c.kq_fmt != 0)) {
+        conv1d_dense_quant(c, x, t_in, t_out, y)
+    } elif (c.groups == 1l) {
         if (c.transposed) {
             conv1d_transposed_dense(c, x, t_in, y)
         } else {
@@ -768,6 +956,39 @@ def private conv1d_rows_dense(c : TtsConv1d; x : array<float>; t_in : int64; var
     }
 }
 
+// A transposed conv's lift over a quant matrix: input rows [q0, q0 + rows) requantized where they sit - to Q8_0, or zero-padded
+// to `kq_k` and to Q8_K - then one batched GEMM into v [rows][k*cout]
+def private transposed_lift_quant(c : TtsConv1d; xp : float const?; q0, rows : int64; var vp : float?) {
+    let cin = c.cin
+    let d = c.k * c.cout
+    var xq & = c.q8 ? g_q8_xq : g_kq_xq
+    if (c.q8) {
+        var xs & = g_q8_xs
+        xq |> reserve_resize(rows * cin)
+        xs |> reserve_resize(rows * cin / 32l)
+        unsafe {
+            quantize_q8_0_into_ptr(xp + q0 * cin, rows * cin, addr(xq[0]), addr(xs[0]), 0l, 0l)
+            invoke(g_mm_q8q8_batch, vp, addr<int8 const?>(c.wq[0]), addr<float const?>(c.wqs[0]), addr<int8 const?>(xq[0]),
+                   addr<float const?>(xs[0]), cin, d, rows)
+        }
+        return
+    }
+    let kk = c.kq_k
+    var xst & = g_kq_xst
+    var xs & = g_kq_xs
+    var xbs & = g_kq_xbs
+    xst |> overwrite_resize(rows * kk)
+    xq |> overwrite_resize(rows * kk)
+    xs |> overwrite_resize(rows * kk / KQ_SB_ELEMS)
+    xbs |> overwrite_resize(rows * kk / Q8K_SUM_ELEMS)
+    stack_tap_rows(unsafe(addr(xst[0])), xp, 0l, rows, q0, 1l, cin, kk, 1l, 1l, 0l, q0 + rows)
+    requant_rows_q8k_bs(xst, kk, rows, xq, xs, xbs, rows * kk >= g_requant_par_threshold)
+    unsafe {
+        matmul_kq_rows_at(c.kq_fmt, c.kq_repacked, vp, addr<uint8 const?>(c.kq[0]), addr<uint8 const?>(c.ks[0]),
+                          addr<int8 const?>(xq[0]), addr<float const?>(xs[0]), addr<int const?>(xbs[0]), kk, d, rows)
+    }
+}
+
 // Transposed dense conv: one GEMM lifts every input row to its k taps [t_in][k*cout], then
 // each output row gathers the taps that land on it - disjoint rows, so both halves split
 // across lanes.
@@ -781,13 +1002,14 @@ def private conv1d_rows_transposed(c : TtsConv1d; x : array<float>; t_in : int64
     let stride = c.stride
     let d = k * cout
     let has_bias = !empty(c.b)
+    let quant = c.q8 || c.kq_fmt != 0
     // blocks of input rows from the last down: an output row still takes its taps in kk order
-    let lift_rows = clamp(ROWS_STACK_BYTES / (d * 4l) / 4l * 4l, 64l, t_in)
+    let lift_rows = clamp(ROWS_STACK_BYTES / (d * 4l) / 4l * 4l, 64l, max(t_in, 64l))
     var v & = g_rows_v
     v |> reserve_resize(lift_rows * d)
     var vp = unsafe(addr(v[0]))
     let xp = unsafe(addr<float const?>(x[0]))
-    let wp = unsafe(addr<float const?>(c.wtr[0]))
+    let wp = quant ? null : unsafe(addr<float const?>(c.wtr[0]))
     var yp = unsafe(addr(y[0]))
     let vcp = unsafe(addr<float const?>(v[0]))
     let b4p = has_bias ? unsafe(addr<float4 const?>(c.b[0])) : null
@@ -806,16 +1028,20 @@ def private conv1d_rows_transposed(c : TtsConv1d; x : array<float>; t_in : int64
     while (q1 > 0l) {
         let q0 = max(0l, q1 - lift_rows)
         let rows = q1 - q0
-        let chunks_in = matmul_chunks(int(rows), ROWS_OVERSPLIT, rows * cin * d)
-        maybe_parallel_for(0, int(rows), chunks_in) $(rb, re) {
-            unsafe {
-                let rb4 = tile_edge(int64(rb), rows)
-                let re4 = tile_edge(int64(re), rows)
-                for (i in range64(rb4 * d, re4 * d)) {
-                    vp[i] = 0.0
-                }
-                if (re4 > rb4) {
-                    gemm_f32_jo(vp + rb4 * d, xp + (q0 + rb4) * cin, wp, re4 - rb4, cin, d)
+        if (quant) {
+            transposed_lift_quant(c, xp, q0, rows, vp)
+        } else {
+            let chunks_in = matmul_chunks(int(rows), ROWS_OVERSPLIT, rows * cin * d)
+            maybe_parallel_for(0, int(rows), chunks_in) $(rb, re) {
+                unsafe {
+                    let rb4 = tile_edge(int64(rb), rows)
+                    let re4 = tile_edge(int64(re), rows)
+                    for (i in range64(rb4 * d, re4 * d)) {
+                        vp[i] = 0.0
+                    }
+                    if (re4 > rb4) {
+                        gemm_f32_jo(vp + rb4 * d, xp + (q0 + rb4) * cin, wp, re4 - rb4, cin, d)
+                    }
                 }
             }
         }
@@ -848,13 +1074,17 @@ def private conv1d_rows_transposed(c : TtsConv1d; x : array<float>; t_in : int64
 
 let private ROWS_STACK_BYTES = 4l * 1024l * 1024l   // a stacked chunk stays cache-resident while the GEMM reads it
 
-//! chunk rows [rb, re) from output row r0: tap j reads input row (r0 + r) * stride + j * dil - pad, `width` wide, at dst [row][j * width]
+//! chunk rows [rb, re) from output row r0: tap j reads input row (r0 + r) * stride + j * dil - pad, `width` wide, at dst [row][j * width],
+//! a dst row `row` wide - the k taps, then zeros
 [arch(at = "../ARCHITECTURE_TTS.md#tts-tap-stacking")]
-def private stack_tap_rows(var dst : auto(TT)?; src : TT const?; rb, re, r0, k, width, stride, dil, pad, t_in : int64) {
+def private stack_tap_rows(var dst : auto(TT)?; src : TT const?; rb, re, r0, k, width, row, stride, dil, pad, t_in : int64) {
     for (r in range64(rb, re)) {
+        for (j in range64(k * width, row)) {
+            unsafe(dst[r * row + j]) = TT(0)
+        }
         for (kk in range64(k)) {
             let s = (r0 + r) * stride + kk * dil - pad
-            var drow = unsafe(dst + (r * k + kk) * width)
+            var drow = unsafe(dst + (r * row + kk * width))
             if (s >= 0l && s < t_in) {
                 unsafe {
                     memcpy(drow, src + s * width, width * int64(typeinfo sizeof(type<TT>)))
@@ -891,7 +1121,7 @@ def private conv1d_rows_dense_strided(c : TtsConv1d; x : array<float>; t_in : in
     while (r0 < t_out) {
         let rows = min(chunk, t_out - r0)
         maybe_parallel_for(0, int(rows), lanes_for_work(rows * kc, 0)) $(rb, re) {
-            stack_tap_rows(xstp, xp, int64(rb), int64(re), r0, k, cin, stride, dil, pad, t_in)
+            stack_tap_rows(xstp, xp, int64(rb), int64(re), r0, k, cin, kc, stride, dil, pad, t_in)
         }
         let chunks = matmul_chunks(int(rows), ROWS_OVERSPLIT, rows * kc * cout)
         maybe_parallel_for(0, int(rows), chunks) $(rb, re) {
@@ -942,10 +1172,54 @@ def private conv1d_rows_dense_q8(c : TtsConv1d; x : array<float>; t_in : int64; 
     while (r0 < t_out) {
         let rows = min(chunk, t_out - r0)
         maybe_parallel_for(0, int(rows), lanes_for_work(rows * kc, 0)) $(rb, re) {
-            stack_tap_rows(xstp, xqp, int64(rb), int64(re), r0, k, cin, 1l, dil, pad, t_in)
-            stack_tap_rows(xssp, xsp, int64(rb), int64(re), r0, k, nb, 1l, dil, pad, t_in)
+            stack_tap_rows(xstp, xqp, int64(rb), int64(re), r0, k, cin, kc, 1l, dil, pad, t_in)
+            stack_tap_rows(xssp, xsp, int64(rb), int64(re), r0, k, nb, knb, 1l, dil, pad, t_in)
         }
         invoke(g_mm_q8q8_batch, unsafe(yp + r0 * cout), wqp, wsp, xstp, xssp, kc, cout, rows)
+        if (nbias > 0l) {
+            add_bias_rows_at(y, bp, cout, rows, r0)
+        }
+        r0 += rows
+    }
+}
+
+// The K-quant lane of the rows conv: per chunk of output rows the k shifted input rows stacked side by side as floats, zeros
+// past them to `kq_k`, requantized to the Q8_K form at once, then one batched kq GEMM over the repacked or the disk-order planes.
+[arch(at = "../ARCHITECTURE_TTS.md#tts-tap-stacking")]
+def private conv1d_rows_dense_kq(c : TtsConv1d; x : array<float>; t_in : int64; var y : array<float>) {
+    let t_out = conv1d_out_len(c, t_in)
+    let cin = c.cin
+    let cout = c.cout
+    let kk = c.kq_k
+    let nbias = empty(c.b) ? 0l : c.cout
+    var xst & = g_kq_xst
+    var xq & = g_kq_xq
+    var xs & = g_kq_xs
+    var xbs & = g_kq_xbs
+    let chunk = clamp(ROWS_STACK_BYTES / (4l * kk) / 4l * 4l, 64l, max(t_out, 64l))
+    xst |> overwrite_resize(chunk * kk)
+    xq |> overwrite_resize(chunk * kk)
+    xs |> overwrite_resize(chunk * kk / KQ_SB_ELEMS)
+    xbs |> overwrite_resize(chunk * kk / Q8K_SUM_ELEMS)
+    var yp = unsafe(addr(y[0]))
+    let bp = nbias > 0l ? unsafe(addr<float const?>(c.b[0])) : null
+    let xp = unsafe(addr<float const?>(x[0]))
+    var xstp = unsafe(addr(xst[0]))
+    let k = c.k
+    let stride = c.stride
+    let dil = c.dilation
+    let pad = c.pad_l
+    var r0 = 0l
+    while (r0 < t_out) {
+        let rows = min(chunk, t_out - r0)
+        maybe_parallel_for(0, int(rows), lanes_for_work(rows * kk, 0)) $(rb, re) {
+            stack_tap_rows(xstp, xp, int64(rb), int64(re), r0, k, cin, kk, stride, dil, pad, t_in)
+        }
+        requant_rows_q8k_bs(xst, kk, rows, xq, xs, xbs, rows * kk >= g_requant_par_threshold)
+        unsafe {
+            matmul_kq_rows_at(c.kq_fmt, c.kq_repacked, yp + r0 * cout, addr<uint8 const?>(c.kq[0]), addr<uint8 const?>(c.ks[0]),
+                              addr<int8 const?>(xq[0]), addr<float const?>(xs[0]), addr<int const?>(xbs[0]), kk, cout, rows)
+        }
         if (nbias > 0l) {
             add_bias_rows_at(y, bp, cout, rows, r0)
         }
@@ -960,19 +1234,21 @@ def conv1d_rows(c : TtsConv1d; x : array<float>; t_in : int64; @scratch @exact_s
     if (c.groups != 1l) {
         panic("dasLLAMA tts: the rows conv takes a dense conv; got groups={c.groups}")
     }
-    if (c.q8 && (c.stride != 1l || c.transposed)) {
-        panic("dasLLAMA tts: the q8 rows conv takes a stride-1 forward conv; got stride={c.stride} transposed={c.transposed}")
+    if (c.q8 && !c.transposed && c.stride != 1l) {
+        panic("dasLLAMA tts: the q8 rows form of a forward conv is stride 1; got stride={c.stride}")
     }
-    if (!c.q8 && empty(c.transposed ? c.wtr : c.wk)) {
+    if (!c.q8 && c.kq_fmt == 0 && empty(c.transposed ? c.wtr : c.wk)) {
         panic("dasLLAMA tts: a rows conv with no rows layout - a prepared image older than this build's served layouts; delete the .dlim beside the GGUF")
     }
     let t_out = conv1d_out_len(c, t_in)
     y |> reserve_resize(t_out * c.cout_s)
-    if (c.q8) {
-        conv1d_rows_dense_q8(c, x, t_in, y)
-    } elif (c.transposed) {
+    if (c.transposed) {
         rows_width_check(c.cout, "conv1d_rows (transposed)")
         conv1d_rows_transposed(c, x, t_in, y)
+    } elif (c.kq_fmt != 0) {
+        conv1d_rows_dense_kq(c, x, t_in, y)
+    } elif (c.q8) {
+        conv1d_rows_dense_q8(c, x, t_in, y)
     } elif (c.stride != 1l) {
         conv1d_rows_dense_strided(c, x, t_in, y)
     } else {
@@ -1021,21 +1297,27 @@ def conv1d_rows_transposed_depthwise(c : TtsConv1d; x : array<float>; t_in : int
 
 // ===== dense =====
 
+// a layer's [nout][nin] weight as its Q8_0 form
+def private linear_mint_q8(var l : TtsLinear; repack : bool) {
+    q8_matrix_mint(l.w, l.nin, l.nout, l.wq, l.wqs, repack)
+    l.q8 = true
+}
+
+//! Mint a vector layer's Q8_0 form - `linear_vec`'s GEMV arm - where both its widths quantize per 32; false = the layer keeps `w`.
+def linear_vec_prepare_q8(var l : TtsLinear; repack : bool) : bool {
+    return false if (l.nin % 32l != 0l || l.nout % 32l != 0l || empty(l.w))
+    linear_mint_q8(l, repack)
+    return true
+}
+
 //! Mint the tiled GEMM's B operand `wt` [nin][nout] when the width sits on the 16-column tile;
 //! a layer only `linear_rows` reads (`rows_only`) drops `w`, one with `q8` and per-32 widths takes
-//! the Q8_0 form (`repack` for the backend), and `vec_only` mints none (`linear_vec` reads `w`, or the quant planes a reader handed the layer instead).
+//! the Q8_0 form (`repack` for the backend), and `vec_only` mints none (`linear_vec` reads `w`, or the quant planes a reader or `linear_vec_prepare_q8` gave it).
 def linear_prepare(var l : TtsLinear; rows_only : bool = false; q8 : bool = false; repack : bool = false;
                    vec_only : bool = false) {
     return if (vec_only)
     if (q8 && rows_only && l.nin % 32l == 0l && l.nout % 32l == 0l) {
-        l.wq |> reserve_resize(l.nout * l.nin)
-        l.wqs |> reserve_resize(l.nout * l.nin / 32l)
-        quantize_q8_0_into(l.w, l.nout * l.nin, l.wq, l.wqs, 0l, 0l)
-        if (repack) {
-            repack_q8q8_weight(l.wq, l.wqs, 0l, l.nin, l.nout)
-        }
-        l.q8 = true
-        release_plane(l.w)
+        linear_mint_q8(l, repack)
         return
     }
     return if (l.nout % 16l != 0l)
@@ -1074,6 +1356,7 @@ def private linear_rows_add_bias(l : TtsLinear; t : int64; var y : array<float>)
 
 // ===== the K-quant lane: a layer whose weights are the file's own K-quant planes =====
 
+var @scratch @exact_size g_kq_xst : array<float>   //! the K-quant rows conv's stacked tap rows, one chunk
 var @scratch g_kq_xq : array<int8>
 var @scratch g_kq_xs : array<float>
 var @scratch g_kq_xbs : array<int>
@@ -1083,6 +1366,9 @@ def tts_blocks_release_scratch() {
     //! rows and the rest; every kernel grows its own back on the next call. For a platform where
     //! idle memory matters more than the allocation a run then pays (`tts_release_scratch`).
     delete g_conv_col
+    delete g_quant_row
+    delete g_conv_xr
+    delete g_conv_yr
     delete g_conv_ytm
     delete g_convt_xtm
     delete g_convt_v
@@ -1103,10 +1389,15 @@ def tts_blocks_release_scratch() {
     delete g_lstm_xin
     delete g_lstm_gates
     delete g_lstm_gates2
+    delete g_lstm_xq
+    delete g_lstm_xqs
+    delete g_lstm_hq
+    delete g_lstm_hqs
     delete g_snake_inv
     delete g_sine_rad
     delete g_sine_low
     delete g_sine_phase
+    delete g_kq_xst
     delete g_kq_xq
     delete g_kq_xs
     delete g_kq_xbs
@@ -2013,6 +2304,16 @@ def private lstm_direction(l : TtsLstm; x : array<float>; t : int64; reverse : b
     xin |> reserve_resize(l.nin)
     gates |> reserve_resize(4l * hd)
     gates2 |> reserve_resize(4l * hd)
+    var xq & = g_lstm_xq
+    var xqs & = g_lstm_xqs
+    var hq & = g_lstm_hq
+    var hqs & = g_lstm_hqs
+    if (l.q8) {
+        xq |> overwrite_resize(l.nin)
+        xqs |> overwrite_resize(l.nin / 32l)
+        hq |> overwrite_resize(hd)
+        hqs |> overwrite_resize(hd / 32l)
+    }
     for (j in range64(hd)) {
         h[j] = 0.0
         cst[j] = 0.0
@@ -2022,8 +2323,15 @@ def private lstm_direction(l : TtsLstm; x : array<float>; t : int64; reverse : b
         for (i in range64(l.nin)) {
             xin[i] = x[ti * l.nin + i]
         }
-        matmul(gates, l.w_ih, xin, l.nin, 4l * hd)
-        matmul(gates2, l.w_hh, h, hd, 4l * hd)
+        if (l.q8) {
+            quantize_q8_0_into(xin, l.nin, xq, xqs, 0l, 0l)
+            matmul_q8q8(gates, l.wq_ih, l.wqs_ih, xq, xqs, l.nin, 4l * hd)
+            quantize_q8_0_into(h, hd, hq, hqs, 0l, 0l)
+            matmul_q8q8(gates2, l.wq_hh, l.wqs_hh, hq, hqs, hd, 4l * hd)
+        } else {
+            matmul(gates, l.w_ih, xin, l.nin, 4l * hd)
+            matmul(gates2, l.w_hh, h, hd, 4l * hd)
+        }
         for (j in range64(hd)) {
             let gi = sigmoid_f32(gates[j] + gates2[j] + l.b[j])
             let gf = sigmoid_f32(gates[hd + j] + gates2[hd + j] + l.b[hd + j])
