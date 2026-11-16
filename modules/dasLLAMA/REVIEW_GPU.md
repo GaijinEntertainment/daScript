@@ -74,7 +74,7 @@ to the CPU path; lands a model family, backend arm or session shape with a batch
 function or an `install_moe_gpu_resident_*` declaration in `dasllama/dasllama_core.das`, `dasllama/dasllama_env.das`
 or a GPU driver file (a `dasllama/dasllama_{gpu,metal}*.das` or `dasllama/dasllama_*{vulkan,cuda}*.das` file, or
 any other `dasllama/` file whose code serves only GPU backends); adds an `RdecPass` value; changes
-`trim_model_planes`; stores into, gathers from or releases a device buffer holding K or V rows; adds or changes
+`trim_model_planes` or `resident_trim_decline`; adds a model family, weight format or model feature a discrete home serves; allocates device memory after the residency plan has sized it; stores into, gathers from or releases a device buffer holding K or V rows; adds or changes
 a resident override (a decode/prefill hook the resident driver registers) or a byte copy of mirror rows (the
 device copy of the K/V cache); or adds or changes a GPU path running a recurrent (deltanet) forward, applies
 `REVIEW_GPU_RESIDENT.md` too.**

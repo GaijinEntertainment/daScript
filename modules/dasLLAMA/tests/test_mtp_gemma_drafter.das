@@ -347,7 +347,7 @@ def test_gemma_drafter_ple_refusal(t : T?) {
         let side = path_join(models_dir(), "mtp-gemma-4-26B-A4B-it-Q8_0.gguf")
         return if (!model_available(t, trunk) || !model_available(t, side))
         with_dasllama_jobque_() {   //! the load's transcode runs on the engine's pool
-            var tr <- load_model_(trunk, QuantMode.q8)
+            var tr <- load_model_uncached(trunk, QuantMode.q8)
             var dr <- load_gemma_drafter(side)
             t |> success(dr.ok, "the drafter loads (why='{dr.why}')")
             let why = gemma_drafter_target_why(tr, dr)
@@ -406,6 +406,7 @@ def test_gemma_drafter_cpu_step(t : T?) {
             var h : array<float>
             gemma_target_hidden(tr, s, true, h)
             t |> success(all_finite(h) && long_length(h) == tr.config.dim, "the target hidden is {long_length(h)} finite floats")
+            moe_gpu_hydrate_session(tr, s)   //! the oracle reads the host cache: a resident driver's device-only rows come down first
             var out : GemmaDraftOut
             gemma_draft_step_cpu(tr, s, dr, tgt_next, h, anchor, out)
             t |> success(all_finite(out.logits) && long_length(out.logits) == dr.vocab,
@@ -436,7 +437,7 @@ def test_gemma_drafter_cpu_step(t : T?) {
 //! The served twin of `file` on this build's GPU home - the metal-blob image under the Metal mode required, else the
 //! whole-model resident driver under `DASLLAMA_GPU=1` at `regions` mirror regions in codec `kv` (a Metal session picks its own
 //! codec) - with its context cut to `ctx`; an empty Model (`n_layers` 0) after the skip that says why
-def private gdraft_target(t : T?; file : string; ctx, regions : int64; kv : KVDtype) : Model {
+def private gdraft_target(t : T?; file : string; ctx, regions : int64; kv : KVDtype; host : bool) : Model {
     let target = path_join(models_dir(), file)
     static_if (typeinfo builtin_module_exists(das_metal)) {
         return <- Model() if (!jit_model_available(t, target))
@@ -454,7 +455,7 @@ def private gdraft_target(t : T?; file : string; ctx, regions : int64; kv : KVDt
     } else {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             var trg <- resident_trunk(t, target, ctx, "") $() : Model {
-                return <- load_resident_at(target, kv, regions)
+                return <- load_resident_at(target, kv, regions, 0l, host)
             }
             return <- trg
         } else {
@@ -577,7 +578,7 @@ def private same_streams(t : T?; trg : Model; tag : string; plain, spec : SchedR
 
 //! `body` with the drafter beside `file` attached to its served twin on the GPU home, the overrides pinned, the drafter
 //! detached and the drivers down after; skips on a box without the twin or the sidecar (the sidecar through `model_available`)
-def private with_served_drafter(t : T?; file : string; regions : int64; kv : KVDtype; body : block<(trg : Model) : void>; ctx : int64 = 512l) {
+def private with_served_drafter(t : T?; file : string; regions : int64; kv : KVDtype; body : block<(trg : Model) : void>; ctx : int64 = 512l; host : bool = false) {
     let side = mtp_drafter_sidecar(path_join(models_dir(), file))
     if (empty(side)) {
         t |> skip("no mtp-* drafter sidecar beside {file}")
@@ -585,7 +586,7 @@ def private with_served_drafter(t : T?; file : string; regions : int64; kv : KVD
     }
     return if (!model_available(t, side))
     with_dasllama_jobque_() {
-        var trg <- gdraft_target(t, file, ctx, regions, kv)
+        var trg <- gdraft_target(t, file, ctx, regions, kv, host)
         if (trg.config.n_layers == 0l) {
             delete trg
             return
@@ -821,7 +822,7 @@ def test_gemma_drafter_gpu_step(t : T?) {
             delete long
             delete short
             delete dr
-        }, 2048l)
+        }, 2048l, true)
     }
 }
 

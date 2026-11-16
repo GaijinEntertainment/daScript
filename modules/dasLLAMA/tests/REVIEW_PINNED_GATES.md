@@ -19,7 +19,9 @@ it was measured on. The pinned set, one entry a line, each with what it must kee
   one `--test` child a file), the reach plan behind `--changed` -
   which test files each kind of changed path runs, every `MODULE_WITNESSES` row and
   `LLM_CORE_WITNESSES` naming only census files, and every witness row's module existing with a
-  `MODULE_AREAS` row that holds `llm` -, the children's module-cache folder, and the
+  `MODULE_AREAS` row that holds `llm` -, the children's module-cache folder, the model files a
+  run names that its models directory lacks (the `MISSING` lines), the image reap behind
+  `--reap-images` and its gate, the K/V start `--poison-kv` hands the children, and the
   `options persistent_heap` line in every test file `run.das`'s `stocked` suite lists.
 - `test_facade_docs.das`'s `test_program_roots` cell must hold the `ROOT_DIRS` sweep,
   `options stack = 524288` and the prefill intent.

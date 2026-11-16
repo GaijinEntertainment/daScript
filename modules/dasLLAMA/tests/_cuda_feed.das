@@ -131,7 +131,7 @@ def private cuda_feed_rig(t : T?; file, arch : string; host_layers : int64; host
     }
     cuda_feed_window()
     if (!assert_pf_window(t)) return
-    var tr <- load_resident(path, 1l, 0l, host_layers)
+    var tr <- load_resident_host(path, 1l, 0l, host_layers)
     t |> equal(tr.arch, arch, "the file is a {arch}-family model")
     return if (!resident_admitted(t, "the whole-model driver armed on the model (the load log names any decline)", ""))
     if (host_layers > 0l && host_more) {

@@ -18,6 +18,7 @@ require math
 require _server_rig
 require dasllama/dasllama_gpu_resident
 require dasllama/dasllama_scheduler
+require dasllama/dasllama_image   // load_model_uncached: the product's load with no image
 
 // Model-free unit coverage for the flag-presence test behind the config surface's provenance:
 // a flag the process was given reads present, in both spellings, and an absent one reads absent;
@@ -470,7 +471,7 @@ def private slot_mtp_device_home(t : T?; file : string) {
     }
     with_dasllama_jobque() {
         var s = ModelSlot()
-        s.model <- load_model_(path, QuantMode.q8)
+        s.model <- load_model_uncached(path, QuantMode.q8)
         s.model.config.seq_len = min(s.model.config.seq_len, 512l)
         t |> success(moe_gpu_resident_active(), "the whole-model driver armed on the NextN-headed model (the load log names any decline)")
         s.experts_host = gpu_resident_experts_host()

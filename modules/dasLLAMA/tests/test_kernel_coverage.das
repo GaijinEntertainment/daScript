@@ -22,6 +22,7 @@ require ?vulkan dasllama/dasllama_vulkan_common  // the vulkan census rail (spec
 require ?vulkan dasllama/dasllama_vulkan_tower   // set_vulkan_tower - the serving census pins the TTS rows' knob ON
 require daslib/defer
 require dasllama/dasllama_gpu_resident  // moe_gpu_drop_model_ — the census's model-switch drops
+require dasllama/dasllama_image   // nolint:STYLE030,LINT019 — load_model_uncached: the codec census's load, inside the vulkan static_if
 require dasllama/dasllama_whisper   // the cov_tower whisper row
 require dasllama/dasllama_tower     // nolint:STYLE030,LINT019 - TowerDev, tower_dev_staged: the cov_tower rows mint the Metal flavor, inside the das_metal half
 require dasllama/dasllama_audio     // load_audio_tower — the cov_tower erf-GELU carrier
@@ -1452,7 +1453,7 @@ def private vk_cov_codec_model(t : T?; path, family : string; kv : KVDtype) {
         }
         let pin = gpu_kv_dtype_pin_()
         set_gpu_kv_dtype_(kv)
-        var tr <- load_model_(path, QuantMode.q8)
+        var tr <- load_model_uncached(path, QuantMode.q8)
         restore_gpu_kv_dtype(pin)
         tr.config.seq_len = min(tr.config.seq_len, 512l)
         with_dasllama_jobque() {

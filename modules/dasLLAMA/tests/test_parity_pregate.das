@@ -10,6 +10,7 @@ require dasllama/dasllama_common       // get_kquant_native — the mode the kq 
 require dasllama/dasllama_load          // load_model_ — the slice cell loads its own carrier
 require dasllama/dasllama_math          // with_dasllama_jobque_ — the slice cell's queue (engine-level, not re-exported)
 require dasllama/dasllama_gpu_resident  // moe_gpu_resident_active — the slice cell needs the driver armed
+require dasllama/dasllama_image   // load_model_uncached: the product's load with no image
 require ?vulkan dasllama/dasllama_vulkan_prefill   // g_pf_ffn_slice — the slice's A/B arm
 require ?vulkan dasllama/dasllama_vulkan_common    // g_cm2_splitk — both arms under one k order
 require daslib/jobque_boost             // with_job_que — a 512-token prefill dispatches its CPU stages as jobs
@@ -51,7 +52,7 @@ def test_fixture_gate(t : T?) {
         let path = path_join(models_dir(), spec.file)
         if (!model_available(t, path)) return
         allow_cpu_prefill()
-        var m <- load_model_(path, spec.parity.quant)
+        var m <- load_model_uncached(path, spec.parity.quant)
         with_dasllama_jobque_() {
             t |> success(fixture_gate_check(m, spec), "the table's own fixture reproduces on the served model")
             var inscope wrong <- spec_by_file("Qwen3-0.6B-Q8_0.gguf")
@@ -136,7 +137,7 @@ def test_parity_last_layer_slice(t : T?) {
             var inscope spec <- spec_by_file("Llama-3.2-1B-Instruct-Q8_0.gguf")
             let path = path_join(models_dir(), spec.file)
             if (!model_available(t, path)) return
-            var t8 <- load_model_(path, QuantMode.q8)
+            var t8 <- load_model_uncached(path, QuantMode.q8)
             if (!moe_gpu_resident_active()) {
                 t |> skip("the resident Vulkan driver is not armed (DASLLAMA_GPU=1 on a coopmat2 device)")
                 delete t8

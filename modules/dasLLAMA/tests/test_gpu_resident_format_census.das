@@ -11,6 +11,7 @@ require dasllama/dasllama_gpu_tier   // moe_gpu_dn_on_gpu, set_gpu_resident_rout
 require dasllama/dasllama_gpu_resident   // resident_layer_decline, perop_dn_decline, perop_shexp_native
 require dasllama/dasllama_blocks   // shexp_gpu_prefill_layers, span_tokens: the per-op shared expert's device witnesses
 require dasllama/dasllama_moe   // shexp_gpu_decode_rows
+require dasllama/dasllama_image   // load_model_uncached: the product's load with no image
 require _moe_resident   // MoeFixture, moe_fixture_admitted, MOE_LOGIT_BAR_REL
 require _format_census
 require ?vulkan dasllama/dasllama_vulkan_decode   // vk_rdec_token_gathered: the token command's rows gathered off their ids, where the module exists
@@ -37,11 +38,11 @@ let private HOST_CTX = 16384l   //! the context a 16 GB card holds beside the de
 //! `fx`'s file on the whole-model driver at `regions`: whole where the card holds the experts (the pod's shape), else again at
 //! `HOST_CTX` asked whole with the first routed layers' experts on the host (this card's shape, the 35B's served form), `fx`
 //! then expecting them so the admission reads the shape the load took
-def private load_census(path : string; regions : int64; var fx : MoeFixture) : Model {
-    var tr <- load_resident(path, regions)
+def private load_census(path : string; regions : int64; var fx : MoeFixture; host : bool = false) : Model {
+    var tr <- load_resident_as(host, path, regions)
     if (!moe_gpu_resident_active() && moe_gpu_resident_memory_decline()) {
         delete tr
-        tr <- load_resident(path, regions, HOST_CTX)
+        tr <- load_resident_as(host, path, regions, HOST_CTX)
         fx.strict_ctx = HOST_CTX
     }
     fx.expect_host_layers = moe_gpu_resident_active() && gpu_resident_host_layers() > 0l
@@ -158,7 +159,7 @@ def test_gpu_resident_format_census_iq4xs(t : T?) {
         let path = path_join(models_dir(), CENSUS.file)
         if (!resident_ready(t, path)) return
         var fx = CENSUS
-        var tr <- load_census(path, 1l, fx)
+        var tr <- load_census(path, 1l, fx, true)
         census_cell(t, tr, path, "vulkan load", census_sites_all())
         for (l in range64(tr.config.n_layers)) {
             t |> equal(resident_layer_decline(tr, l), "", "layer {l} draws no decline from the whole-model driver")
@@ -362,7 +363,7 @@ def test_gpu_resident_format_census_ba_f32(t : T?) {
         let path = path_join(models_dir(), BA_F32.file)
         if (!resident_ready(t, path)) return
         var fx = BA_F32
-        var tr <- load_census(path, 1l, fx)
+        var tr <- load_census(path, 1l, fx, true)
         t |> success(tr.dn_ba_f32, "the file ships its beta/alpha rows F32")
         if (moe_fixture_admitted(t, tr, fx) >= 0l) {
             let nrec = recurrent_layer_count(tr.config)
@@ -494,7 +495,7 @@ def test_gpu_resident_format_census_nextn(t : T?) {
         let spec0 = get_mtp_spec()
         set_mtp_spec(true)
         var fx = CENSUS
-        var tr <- load_census(path, 2l, fx)
+        var tr <- load_census(path, 2l, fx, true)
         if (moe_fixture_admitted(t, tr, fx) >= 0l) {
             t |> equal(tr.config.n_layer_nextn, 1l, "the -MTP- file carries its NextN head")
             t |> success(layer_is_moe(tr, tr.config.n_layers), "the head's FFN is routed")
@@ -560,7 +561,7 @@ def test_gpu_resident_format_census_nextn(t : T?) {
 def private emb_gather_cell(t : T?; file : string; bar_rel : float) {
     let path = path_join(models_dir(), file)
     if (!resident_ready(t, path)) return
-    var tr <- load_resident(path, 1l)
+    var tr <- load_resident_host(path, 1l)
     t |> success(moe_gpu_resident_active(), "{file}: the whole-model driver armed (the load log names any decline)")
     if (moe_gpu_resident_active()) {
         t |> success(tr.config.shared_weights && emb_kq(tr), "{file}: the table is tied and kept as the classifier's {tr.emb_fmt} plane")
@@ -618,7 +619,7 @@ def private per32_table_cell(t : T?; file : string; bar_rel : float) {
     let path = path_join(models_dir(), file)
     if (!resident_ready(t, path)) return
     {
-        var tr <- load_model_(path, QuantMode.q8)
+        var tr <- load_model_uncached(path, QuantMode.q8)
         t |> success(kq_block32(cls_fmt_of(tr)) && emb_kq(tr), "{file}: the tied table loads in its per-32 form ({tr.emb_fmt})")
         census_cell(t, tr, path, "vulkan load", ["attention q/k/v/o", "token table", "classifier"])
         delete tr
@@ -640,7 +641,7 @@ def test_gpu_resident_per32_tables(t : T?) {
         if (!family_on(t, "qwen35") || !arm_on(t, "vk-per32-q51")) return
         let path = path_join(models_dir(), "Qwen3.5-0.8B-MTP-Q5_1-local.gguf")
         if (!resident_ready(t, path)) return
-        var tr <- load_model_(path, QuantMode.q8)
+        var tr <- load_model_uncached(path, QuantMode.q8)
         census_cell(t, tr, path, "vulkan load", ["deltanet qkv/gate/out", "deltanet beta/alpha", "token table", "classifier", "NextN eh_proj"])
         t |> success(moe_gpu_resident_active(), "the whole-model driver armed on the per-32 hybrid (the load log names any decline)")
         t |> success(rdec_verify_rows() >= 2l, "the NextN head - its q51 eh_proj among its planes - rides the driver (the load log names any decline)")

@@ -1692,10 +1692,12 @@ def private requant_rows_held(t : T?; tag : string; q : array<uint>; sc : array<
 //! the requant `q` / `sc` of the f32 rows `src` against `requant_oracle`'s: a Q8_K requant (`q8k`) bit-exact, a Q8_0 one within
 //! a quant step
 def private float_requant_held(t : T?; tag : string; src : array<float>; q : array<uint>; sc : array<float>; q8k : bool) {
-    var inscope q_ref : array<uint>
-    var inscope s_ref : array<float>
-    requant_oracle(src, 0, length(src), q8k, q_ref, s_ref)
-    requant_rows_held(t, tag, q, sc, q_ref, s_ref, q8k ? 256 : 32, q8k)
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        var inscope q_ref : array<uint>
+        var inscope s_ref : array<float>
+        requant_oracle(src, 0, length(src), q8k, q_ref, s_ref)
+        requant_rows_held(t, tag, q, sc, q_ref, s_ref, q8k ? 256 : 32, q8k)
+    }
 }
 
 //! the Q8_K requant of f32 rows: amax is order-free, the pack deterministic - exact
@@ -3589,5 +3591,23 @@ def test_cud_shutdown_leaks(t0 : T?) {
         cud_shutdown()
         t |> equal(g_shutdown_hook_ran, up ? 1 : 0, "the shutdown ran the registered hook exactly once (device up: {up})")
         t |> equal(cuda_log_leaks_if_any(), 0l, "no CUDA object or allocation outlives the tier")
+    }
+}
+
+[test(description = "A zeroed device allocation past any card's memory returns no plane and counts one failure, and an allocation the card holds returns a plane and counts none")]
+def test_cud_dev_zeroed_counts_a_failure(t0 : T?) {
+    t0 |> run("cud_dev_zeroed: an allocation the card has no room for is counted") <| @(t : T?) {
+        if (!ensure_q8_gemv_cls()) {
+            t |> skip("no CUDA device with NVRTC")
+            return
+        }
+        let before = cud_dev_failures()
+        let none = cud_dev_zeroed(1l << 46l)
+        t |> equal(none, 0ul, "64 TiB of device memory is no plane")
+        t |> equal(cud_dev_failures(), before + 1l, "the failed allocation is counted")
+        let held = cud_dev_zeroed(4096l)
+        t |> success(held != 0ul, "a page of device memory is a plane ({cuda_last_error()})")
+        t |> equal(cud_dev_failures(), before + 1l, "an allocation the card holds counts no failure")
+        cuda_mem_free(held)
     }
 }

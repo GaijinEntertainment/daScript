@@ -402,7 +402,7 @@ def private decline_arms_cell(t : T?; tr : Model) {
 def private segments_cells(t : T?; file : string) {
     let path = path_join(models_dir(), file)
     return if (!resident_ready(t, path))
-    var tr <- load_resident(path, 2l)
+    var tr <- load_resident_host(path, 2l)
     return if (!resident_admitted(t, "the whole-model driver armed on {file} (the load log names any decline)", ""))
     t |> equal(tr.arch, "llama", "the file is a llama-family model")
     let allowed = resident_prefill_allowed()
@@ -559,7 +559,7 @@ def test_gpu_resident_segments_gemma4_e2b(t : T?) {
     let path = path_join(models_dir(), file)
     return if (!family_on(t, "gemma4e") || !resident_ready(t, path))
     with_gpu_resident_embed(1) {   //! the segmented window reads the side rows' ids: the load gathers the token table on the device
-        var tr <- load_resident(path, 2l)
+        var tr <- load_resident_host(path, 2l)
         if (resident_admitted(t, "the whole-model driver armed on {file} (the load log names any decline)", "")) {
             t |> success(has_ple(tr.config), "the file carries per-layer embeddings")
             t |> success(gpu_device_prefill_segments_(tr), "the driver's segmented window takes the per-layer-embedding model")

@@ -15,6 +15,7 @@ require daslib/fio
 require daslib/rtti   // this_context().last_exception - the refused loads' text
 require dasllama/dasllama_math  // with_dasllama_jobque_ (the engine-standard jobque config)
 require dasllama/dasllama_gpu_tier   // the deltanet chain and decode-step route pins
+require dasllama/dasllama_image   // load_model_uncached: the product's load with no image
 require _model_tier   // models_dir() + model_available() presence/size-tier gate
 
 // Chunked-vs-recurrent deltanet prefill equivalence on Qwen3.5-0.8B. The 20-token parity fixture
@@ -125,7 +126,7 @@ def private load_outcome(path : string; o : RopeScalingOverride) : string {
     set_rope_scaling_override(o)
     var why = ""
     try {
-        var m <- load_model_(path, QuantMode.q8)
+        var m <- load_model_uncached(path, QuantMode.q8)
         why = "loaded: freq_scale {m.config.rope_freq_scale} factors {long_length(m.rope_freqs)} mscale {m.config.rope_mscale}"
         delete m
     } recover {

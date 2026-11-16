@@ -1666,7 +1666,7 @@ def blob_only_panic(t : Model; what : string) {
     }
     if (t.planes_trimmed) {
         // the resident overrides serve only sessions in the ARMED mirror codec (f16 default)
-        panic("dasLLAMA: CPU {what} on a planes-trimmed vulkan-flavor image - the resident driver must serve it (create the session in the armed mirror codec, KVDtype.f16 by default, keep the tier armed) or rebake without --trim")
+        panic("dasLLAMA: CPU {what} on a planes-trimmed model (a trimmed GPU lane, or a gguf streamed onto the device: no weight plane is on the host) - the resident driver must serve it (create the session in the armed mirror codec, KVDtype.f16 by default, keep the tier armed), or load with the planes kept (DASLLAMA_TRIM=0 for a lane, DASLLAMA_HOST_PLANES=1 for a gguf with no image)")
     }
 }
 
@@ -3435,8 +3435,8 @@ struct Session {
     tail_next1 : int64          // 1 + the layer whose resident FFN may take the decode tail this token (0 = none)
     tail_taken : bool           // the tail took this layer's FFN: the residual add is the device's
     kv_signs : array<float>   // tq4 rotation signs (±1, max head_size; smaller heads use a prefix)
-    key_cache : array<uint8>
-    value_cache : array<uint8>
+    @exact_size key_cache : array<uint8>
+    @exact_size value_cache : array<uint8>
     kv_bprefix_k : array<int64>  // per-layer row-BYTE prefix (seq_len-independent)
     kv_bprefix_v : array<int64>
     kv_runs : array<KVRun>       // per-layer physical-run scratch (kv_runs fills it; flat = 1 entry)
@@ -3721,6 +3721,94 @@ def private kv_validate_q8(c : Config; kdt, vdt : KVDtype) {
 // main context only, which is the only place sessions meet them.
 var private g_session_uid : uint64
 
+//! How a session's K/V buffers start (`set_kv_init`, `DASLLAMA_KV_INIT`; the knob's spellings are these names). A row is
+//! written before it is read, so they need no fill: `unfilled` leaves every page untouched until a row lands on it.
+enum KvInit {
+    unfilled
+    zero     //!< every byte zero
+    poison   //!< every byte 0xFF: a NaN in the f32 and f16 codecs and in a block codec's scale, so a read of an unwritten row shows
+}
+
+var private g_kv_init = KvInit.unfilled
+var private g_kv_init_pinned = false
+
+//! The start a flat session's K/V slabs take from here on, over `DASLLAMA_KV_INIT`
+def set_kv_init(how : KvInit) {
+    g_kv_init = how
+    g_kv_init_pinned = true
+}
+
+//! Lift `set_kv_init`'s pin: `DASLLAMA_KV_INIT` decides again
+def reset_kv_init {
+    g_kv_init = KvInit.unfilled
+    g_kv_init_pinned = false
+}
+
+//! The pin as `set_kv_init` left it: `pinned` false where no caller asked
+def kv_init_pin : tuple<pinned : bool; how : KvInit> => (pinned = g_kv_init_pinned, how = g_kv_init)
+
+//! A fixture's put-back of the start `kv_init_pin` read
+def restore_kv_init(pin : tuple<pinned : bool; how : KvInit>) {
+    if (pin.pinned) {
+        set_kv_init(pin.how)
+    } else {
+        reset_kv_init()
+    }
+}
+
+var private g_kv_init_said = false   //! the latch on the start's announce and on an unread spelling's warning
+
+//! The start `DASLLAMA_KV_INIT`'s spelling names: a `KvInit` name, anything else `unfilled`
+def kv_init_of(spelling : string) : KvInit => to_enum(type<KvInit>, spelling, KvInit.unfilled)
+
+//! The start a session's K/V buffers take now: the pin, else the knob's spelling, one that names no start said once
+def kv_init : KvInit {
+    return g_kv_init if (g_kv_init_pinned)
+    let how = kv_init_of(g_env_engine.kv_init)
+    if (!g_kv_init_said && !empty(g_env_engine.kv_init) && "{how}" != g_env_engine.kv_init) {
+        g_kv_init_said = true
+        to_log(LOG_WARNING, "dasLLAMA: DASLLAMA_KV_INIT='{g_env_engine.kv_init}' names no K/V start (unfilled | zero | poison) - the caches start unfilled\n")
+    }
+    return how
+}
+
+let TABLE_PIECE_ROWS = 65_536l   //! a token table's piece - a streamed job, a device placement: 65536 rows of the E4B's 10752 stay under a host gather's 2 GB array
+
+let KV_FILL_CHUNK = 1l << 30l   //! `memset8` counts in 32 bits: a buffer past it fills a chunk at a time
+
+var private g_kv_bytes_started = 0l   //! the bytes `kv_bytes_start` wrote since the process began
+
+//! the K/V bytes a start filled since the process began: none under the unfilled start
+def kv_bytes_started() : int64 => g_kv_bytes_started
+
+//! Bytes [from, to) of a K/V buffer sized with no write, started as `kv_init` asks - left as they are, zeroed, or poisoned
+//! - `chunk` bytes a fill. Non-private: the slab-start cell fills past a chunk it names
+[arch(at="../ARCHITECTURE_ENGINE_SERVING.md#kv-slab-start")]
+def kv_bytes_start(@exact_size var buf : array<uint8>; from, to : int64; chunk : int64 = KV_FILL_CHUNK) {
+    let how = kv_init()
+    return if (how == KvInit.unfilled || to <= from)
+    if (!g_kv_init_said) {
+        g_kv_init_said = true
+        to_log(LOG_INFO, "dasLLAMA: K/V caches start {how}, every byte written at the session's start (DASLLAMA_KV_INIT={how}, or set_kv_init in process; unset starts them unfilled)\n")
+    }
+    var at = from
+    while (at < to) {
+        let m = min(chunk, to - at)
+        unsafe {
+            memset8(addr(buf[at]), how == KvInit.poison ? 0xFFu8 : 0u8, int(m))
+        }
+        at += m
+    }
+    g_kv_bytes_started += to - from
+}
+
+//! A flat cache slab of `n` bytes, started as `kv_init` asks
+def private kv_slab_start(@exact_size var slab : array<uint8>; n : int64) {
+    slab |> reserve(n)
+    slab |> resize_no_init(n)
+    kv_bytes_start(slab, 0l, n)
+}
+
 //! Allocate the run state sized to a model. `kdt`/`vdt` pick the KV-cache codec for THIS session
 //! (no process-global state — sessions with different codecs coexist, models run in parallel).
 //! `alloc_cache = false` skips the flat cache slabs (paged sessions and cache-less scratch).
@@ -3890,8 +3978,8 @@ def make_run_state(c : Config; kdt : KVDtype = KVDtype.f32; vdt : KVDtype = KVDt
         }
     }
     if (alloc_cache) {
-        s.key_cache |> reserve_resize(c.seq_len * krow)
-        s.value_cache |> reserve_resize(c.seq_len * vrow)
+        kv_slab_start(s.key_cache, c.seq_len * krow)
+        kv_slab_start(s.value_cache, c.seq_len * vrow)
     }
     s.sample_scratch |> resize(c.vocab_size)
     s.cand |> reserve(64)
@@ -4655,12 +4743,15 @@ def kv_pool_reserve(var p : KVPool; positions : int64) {
     }
 }
 
-//! A group is written before it is read - a recycled one already hands out stale rows - so the new rows stay unfilled.
-def private kv_blob_grow(var blob : array<uint8>; need : int64) {
+//! A group is written before it is read - a recycled one already hands out stale rows - so the new rows start as a flat
+//! slab's do: unfilled unless `kv_init` asks a fill.
+def private kv_blob_grow(@exact_size var blob : array<uint8>; need : int64) {
+    let had = long_length(blob)
     if (long_capacity(blob) < need) {
         blob |> reserve(need)
     }
     blob |> resize_no_init(need)
+    kv_bytes_start(blob, had, need)
 }
 
 // Double the pool's group capacity. Every blob resizes IN PLACE — a hoisted cache pointer would

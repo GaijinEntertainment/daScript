@@ -1417,15 +1417,16 @@ let private TTS_BLOCKS_FILE = "modules/dasLLAMA/dasllama/dasllama_tts_blocks.das
 // the TTS block file's *_prepare mints, the layout helpers and the layout constants' declaration
 // lines, hashed in file order. A closure change with IMAGE_VERSION unmoved is red; the finding prints the
 // value to re-stamp with.
-let private IMAGE_LAYOUT_STAMP_VERSION = 62
-let private IMAGE_LAYOUT_STAMP_HASH = 0xc560d5548922c35aul
+let private IMAGE_LAYOUT_STAMP_VERSION = 63
+let private IMAGE_LAYOUT_STAMP_HASH = 0x3239dfe27d81856ul
 
 // The helpers that decide WHERE bytes land: the page pad, the plane and total sizing, the
 // writer's append / zero-fill / header patch, the header's scalar stores, the lattice
 // plane's section name, and the TTS blob's aligned append, its per-weight walk slot and the
 // conv's stacked-row gather the q8 mint quantizes, and the device gathers, region and record lists, kq plan, piece writer
-// and halfword slab stagers a GPU flavor's bakes lay their pieces by. Changing one moves every plane offset (or renames
-// every lattice section) while every serializer body reads the same.
+// and halfword slab stagers a GPU flavor's bakes lay their pieces by, and the trim's pick of the planes a trimmed lane
+// carries. Changing one moves every plane offset (or renames every lattice section, or adds or drops a plane) while every
+// serializer body reads the same.
 var private LAYOUT_HELPERS <- {
     "pad_to_page", "w_page", "plane_end", "image_total_bytes",
     "w_append", "w_zeros", "w_header", "store_at", "kq_plane_name",
@@ -1438,7 +1439,8 @@ var private LAYOUT_HELPERS <- {
     "fc_q8_regions", "fc_gemm_records", "fc_front_records", "tower_fc_kq_plan", "tower_aud_regions", "ln_block_regions",
     "tower_ct_regions", "tower_q3a_regions", "gemma4a_all_regions", "gemma4a_block_regions",
     "tower_aud_stem16", "tower_aud_stem_kdp", "tower_g4a_front16", "tower_q3a_front16", "tower_q3a_stages", "tower_conv_stage",
-    "tower_stage_conv0_panel", "tower_stage_f32_pad_row_stride"
+    "tower_stage_conv0_panel", "tower_stage_f32_pad_row_stride",
+    "trim_plane_dropped", "trim_drop_planes"
 }
 
 // The constants those helpers place bytes by, and the bands the two streaming writers stage

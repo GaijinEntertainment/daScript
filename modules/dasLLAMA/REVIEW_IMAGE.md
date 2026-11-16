@@ -32,8 +32,8 @@ an LLM decoder model, not of a tower or embedder carrier. A mint that is slower 
 a lower peak is correct.
 
 **A decoder mint never holds two copies of the carrier: the planar model it streamed from is
-released before the written image is mapped, and a declined save serves the streamed build
-from memory instead of reloading.**
+released before the written image is mapped, and a save declined before it consumed a plane
+serves the streamed build from memory instead of reloading.**
 
 **A diff that adds or changes a plane hook - a block passed to `cache_via_image_staged_hooked`,
 `save_image_to_file` or `chunk_rail` - passes as `extra` the `section_bytes` of each section the

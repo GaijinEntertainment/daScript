@@ -9,6 +9,7 @@ require dasllama/dasllama_common   // POOLING_* and the Model the cells read
 require dasllama/dasllama_blocks   // embed_batch_ and EMBED_WINDOW_ROWS: the batch cells' window split
 require dasllama/dasllama_gpu_tier   // moe_gpu_bake_tag: the device cell's armed-tier gate
 require dasllama/dasllama_gpu_resident   // moe_gpu_resident_active / gpu_resident_prefills_: the device cell's served witness
+require dasllama/dasllama_image   // load_model_uncached: the product's load with no image
 require daslib/fio   // nolint:STYLE030,LINT019 - path_join, inside the model-gated cells
 require ?das_metal dasllama/dasllama_metal_prefill   // metal_prefill_window_forms: the hidden-only window's witness
 require _metal_blob_twin   // blob_twin: the Metal cell's blob-flavor model, minted in memory
@@ -173,7 +174,7 @@ def test_embeddings_qwen3_embedding(t : T?) {
     t |> run("Qwen3-Embedding reads its pooling and its EOS off the file, and lands the model card's cosine matrix (0.6B Q8_0)") <| @(tt : T?) {
         let path = path_join(models_dir(), "Qwen3-Embedding-0.6B-Q8_0.gguf")
         return if (!jit_model_available(tt, path))
-        var m <- load_model_(path, QuantMode.q8)
+        var m <- load_model_uncached(path, QuantMode.q8)
         tt |> equal(POOLING_LAST, m.config.pooling, "the file's pooling_type reads last-token")
         tt |> success(m.tok.bpe.add_eos, "the file asks for an appended EOS")
         var ids <- encode(m, EMB_DOCS[0], true, false)
@@ -198,7 +199,7 @@ def test_embeddings_past_the_context(t : T?) {
     t |> run("a text past the model's context embeds its leading seq_len tokens: a unit vector, no panic (tinyllama Q8)") <| @(tt : T?) {
         let path = path_join(models_dir(), "tinyllama-1.1b-chat-v1.0.Q8_0.gguf")
         return if (!jit_model_available(tt, path))
-        var m <- load_model_(path, QuantMode.q8)
+        var m <- load_model_uncached(path, QuantMode.q8)
         // one token a word: a text of exactly the context's token count, then the same text with a thousand other words past it
         let cut_text = strip(build_string() $(var w) {
             for (_i in range64(m.config.seq_len - 1l)) {   // BOS takes the first slot; the trailing space is stripped below
@@ -255,7 +256,7 @@ def test_embeddings_chat_model_default_mean(t : T?) {
     t |> run("a chat model's file names no pooling: the mean is the default, the last row an override (tinyllama Q8)") <| @(tt : T?) {
         let path = path_join(models_dir(), "tinyllama-1.1b-chat-v1.0.Q8_0.gguf")
         return if (!jit_model_available(tt, path))
-        var m <- load_model_(path, QuantMode.q8)
+        var m <- load_model_uncached(path, QuantMode.q8)
         tt |> equal(POOLING_MEAN, m.config.pooling, "no pooling_type in the file: the mean")
         tt |> success(!m.tok.bpe.add_eos && !m.tok.spm.add_eos, "a chat model appends no EOS (tinyllama is SentencePiece, the other backend)")
         var dflt <- embed(m, EMB_DOCS[0])
@@ -313,7 +314,7 @@ def test_embeddings_batch_matches_single(t : T?) {
     t |> run("embed_batch gives each text the vector embed gives it alone, in input order - one window, split windows, the Matryoshka cut (0.6B Q8_0)") <| @(tt : T?) {
         let path = path_join(models_dir(), "Qwen3-Embedding-0.6B-Q8_0.gguf")
         return if (!jit_model_available(tt, path))
-        var m <- load_model_(path, QuantMode.q8)
+        var m <- load_model_uncached(path, QuantMode.q8)
         var texts <- batch_texts()
         let one_window = batch_vs_single(m, texts, -1l, 0l, EMBED_WINDOW_ROWS)
         tt |> success(one_window > 0.9999, "one window: the least cosine to the single vectors is {one_window}")
@@ -667,7 +668,7 @@ def test_embeddings_batch_fresh_sessions(t : T?) {
         var emb <- load_model_(emb_path, QuantMode.q8)
         moe_gpu_drop_model()   //! a device tier arms the next load: the embedding model reads on the CPU both times, so the two reads compare
         var inscope before <- embed(emb, EMB_DOCS[0])
-        var m <- load_model_(path, QuantMode.q8)
+        var m <- load_model_uncached(path, QuantMode.q8)
         tt |> success(!session_keeps_rows_only(m.config), "the carrier keeps recurrent state past its rows - the fresh-session arm")
         var texts <- batch_texts()
         let fresh_builds = embed_pool_builds()
@@ -676,7 +677,7 @@ def test_embeddings_batch_fresh_sessions(t : T?) {
         tt |> success(worst > 0.9999, "the recurrent model's batch against its singles: least cosine {worst}")
         let shifted = batch_vs_single(m, texts, POOLING_MEAN, 0l, EMBED_WINDOW_ROWS, 1)
         tt |> success(shifted < 0.9999, "the control: against another text's single the bar misses ({shifted})")
-        var other <- load_model_(other_path, QuantMode.q8)
+        var other <- load_model_uncached(other_path, QuantMode.q8)
         let builds = embed_pool_builds()
         var inscope other_v <- embed(other, EMB_DOCS[0])
         tt |> equal(builds + 1, embed_pool_builds(), "another pooled model's geometry rebuilds the pool")

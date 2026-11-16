@@ -18,6 +18,8 @@ require dasllama/dasllama_gpu_resident   // moe_gpu_resident_active
 require dasllama/dasllama_env   // g_env_engine.image: the rail's switch
 require dasllama/dasllama_kv_dtype
 require daslib/fio   // stat, remove
+require daslib/rtti   // this_context().last_exception: a refused call's text
+require strings   // find: the refusal names the model's form
 require _model_tier   // models_dir, model_available, family_on, mirror_kv_dtype
 require _compares   // jit_only
 require _resident_feed   // load_resident_at
@@ -44,7 +46,6 @@ def mint_witness(tr : Model; var ids : array<int64>; var row : array<float>; kv 
 typedef MintRun = tuple<ids : array<int64>; row : array<float>>
 
 //! `mint_witness` over `tr` with its token count asserted: `what` generated the asked steps past the prompt
-[cold_path]
 def witness_steps(t : T?; tr : Model; what : string) : MintRun {
     var w : MintRun
     mint_witness(tr, w.ids, w.row)
@@ -144,11 +145,161 @@ def restore_lane_levers(l : LaneLevers) {
     restore_vulkan_trim(l.trim_set, l.trim)
 }
 
+//! the text a forward on `tr` through an f32 session panics with, "" where it served: the armed mirror is f16, so the driver
+//! passes the call to the CPU rails
+def private cpu_call_refusal(tr : Model) : string {
+    var why = ""
+    try {
+        var ids : array<int64>
+        var row : array<float>
+        mint_witness(tr, ids, row, KVDtype.f32)
+        delete ids
+        delete row
+    } recover {
+        why = this_context().last_exception
+    }
+    return why
+}
+
+//! whether `tr` holds a planar weight plane on the host
+def private holds_planes(tr : Model) : bool {
+    let f = footprint(tr)
+    return (f.weight_fp32_bytes + f.q8_bytes + f.q8_scale_bytes + f.q4_bytes + f.q4_scale_bytes + f.mx4_bytes + f.mx4_scale_bytes
+        + f.kq_bytes + f.kq_scale_bytes) > 0l
+}
+
+//! `m` dropped and re-armed as a slot switch does it - its marks captured, the device emptied, the marks put back: the
+//! re-arm's answer
+def private rearm_dropped(var m : Model) : string {
+    var slot = gpu_model_marks_init()
+    gpu_slot_capture(slot)
+    moe_gpu_drop_model()
+    moe_gpu_model_marks_restore(slot)
+    return gpu_slot_rearm(g_gpu_want, m)
+}
+
+//! the live-load cell both homes run over `path`: the lane's tokens as the reference, then - the image save off, so there is no
+//! lane to write - the gguf streamed onto the device (`gguf_live_loads` up by one, no planar plane and no image on the host, no
+//! lane on disk) serving the lane's tokens and embed row, re-armed off the gguf to the same tokens, a call the driver passes to
+//! the CPU refused by name; and under the host-planes ask the same load keeping its planes, counting no live load, the same tokens.
+//! Every load here places one transcode of the gguf's planes on the device - baked into the lane, gathered live, or uploaded
+//! off the host's planes - so the driver's logits are bit-identical and the greedy tokens compare exactly
+[cold_path]
+def live_cell(t : T?; path : string) {
+    with_cold_lane(t, path, "the model") $(var lane; img_v) {
+        var a <- witness_steps(t, lane, "the lane")
+        let lane_gathers = gpu_resident_embed_gathers()
+        delete lane
+        moe_gpu_drop_model()
+        remove(img_v)
+        let save_set = image_save_lever_set()
+        let save_was = image_save_enabled()
+        let planes_set = host_planes_lever_set()
+        let planes_was = host_planes()
+        set_image_save(false)
+        set_host_planes(false)
+        let live0 = gguf_live_loads()
+        var live <- load_cached_q8(path)
+        t |> equal(gguf_live_loads(), live0 + 1l, "with no lane to write the gguf streams onto the device")
+        t |> success(moe_gpu_resident_active(), "the live load is served by the whole-model driver")
+        t |> success(live.planes_trimmed && live.image_map == null && !holds_planes(live), "the live load holds no planar plane and no image on the host")
+        t |> equal(gpu_resident_embed_gathers(), lane_gathers, "the live load's token rows gather on the device where the lane's do ({lane_gathers})")
+        t |> success(!stat(img_v).is_valid, "the live load wrote no lane")
+        var b <- witness_steps(t, live, "the live load")
+        log_gen_texts(live, "lane / live load", a.ids, b.ids)
+        t |> equal(mismatch_exact(a.ids, b.ids), 0, "the live load's greedy tokens are the lane's, token for token (both streams decoded above)")
+        t |> equal(mismatch_exact(a.row, b.row), 0, "its CPU embed row off the packed emb region is the lane's, bit for bit")
+        t |> equal(rearm_dropped(live), "gpu:resident", "the dropped live load re-arms by streaming its gguf again")
+        var r <- witness_steps(t, live, "the re-armed live load")
+        log_gen_texts(live, "live load / re-armed live load", b.ids, r.ids)
+        t |> equal(mismatch_exact(a.ids, r.ids), 0, "... and serves the same tokens (both streams decoded above)")
+        let why = cpu_call_refusal(live)
+        t |> success(find(why, "planes-trimmed") >= 0, "a call the driver passes to the CPU is refused by name: '{why}'")
+        delete live
+        moe_gpu_drop_model()
+        set_host_planes(true)
+        var kept <- load_cached_q8(path)
+        t |> equal(gguf_live_loads(), live0 + 1l, "under the host-planes ask the load streams nothing live")
+        t |> success(!kept.planes_trimmed && holds_planes(kept), "... and keeps its planes on the host")
+        var c <- witness_steps(t, kept, "the load with its planes kept")
+        log_gen_texts(kept, "live load / planes kept", b.ids, c.ids)
+        t |> equal(mismatch_exact(b.ids, c.ids), 0, "... serving the live load's tokens (both streams decoded above)")
+        delete kept
+        moe_gpu_drop_model()
+        restore_image_save(save_set, save_was)
+        restore_host_planes(planes_set, planes_was)
+        delete a
+        delete b
+        delete c
+        delete r
+    }
+}
+
+//! the trimmed-lane cell both homes run over `path`: a staged load with its planes on the host says whether the model's token
+//! rows gather on the device; the gguf streamed live (the image save off) is the reference - the same gather, its tokens;
+//! then, the trim on, the lane minted cold with no planar family and served by the whole-model driver to the reference's
+//! tokens, the token rows gathered where the staged load's are, mapped warm and re-armed the same. The live load and the lane
+//! place one transcode of the gguf's planes through one gather, so the driver's logits are bit-identical and the greedy
+//! tokens compare exactly; the staged load uploads its repacked planes, and its tokens are logged, not held
+[cold_path]
+def family_lane_cell(t : T?; path : string) {
+    var staged <- load_resident_host(path, 1l)
+    if (!moe_gpu_resident_active()) {
+        delete staged
+        moe_gpu_drop_model()
+        t |> skip("the whole-model driver did not take the model on this box (the decline line above)")
+        return
+    }
+    let gathers = gpu_resident_embed_gathers()
+    var p <- witness_steps(t, staged, "the staged load")
+    delete staged
+    moe_gpu_drop_model()
+    set_vulkan_trim(true)
+    let img_t = image_path_for(path, moe_gpu_bake_tag())
+    remove(img_t)
+    let save_set = image_save_lever_set()
+    let save_was = image_save_enabled()
+    set_image_save(false)
+    let live0 = gguf_live_loads()
+    var live <- load_cached_q8(path)
+    restore_image_save(save_set, save_was)
+    t |> success(gguf_live_loads() == live0 + 1l && moe_gpu_resident_active(), "with no lane to write the gguf streams onto the device and the whole-model driver serves it")
+    t |> equal(gpu_resident_embed_gathers(), gathers, "live: the token rows gather on the device exactly where the staged load's do ({gathers})")
+    var a <- witness_steps(t, live, "the live load")
+    log_gen_texts(live, "staged load / live load", p.ids, a.ids)
+    delete live
+    moe_gpu_drop_model()
+    for (leg in ["cold", "warm"]) {
+        var lane <- load_cached_q8(path)
+        t |> success(moe_gpu_resident_active(), "{leg}: the trimmed lane is served by the whole-model driver (the load log names any decline)")
+        t |> success(lane.image_map != null && lane.planes_trimmed && !holds_planes(lane) && stat(img_t).is_valid, "{leg}: the lane maps with no planar family on the host")
+        t |> equal(gpu_resident_embed_gathers(), gathers, "{leg}: the token rows gather on the device exactly where the staged load's do ({gathers})")
+        var b <- witness_steps(t, lane, "the {leg} trimmed lane")
+        log_gen_texts(lane, "live load / {leg} trimmed lane", a.ids, b.ids)
+        t |> equal(mismatch_exact(a.ids, b.ids), 0, "{leg}: the trimmed lane's greedy tokens are the live load's, token for token (both streams decoded above)")
+        delete b
+        if (leg == "warm") {
+            t |> equal(rearm_dropped(lane), "gpu:resident", "the dropped lane re-arms onto the whole-model driver")
+            t |> equal(gpu_resident_embed_gathers(), gathers, "re-armed: the token rows gather on the device where the staged load's do")
+            var r <- witness_steps(t, lane, "the re-armed lane")
+            log_gen_texts(lane, "live load / re-armed lane", a.ids, r.ids)
+            t |> equal(mismatch_exact(a.ids, r.ids), 0, "re-armed: the same tokens (both streams decoded above)")
+            delete r
+        }
+        delete lane
+        moe_gpu_drop_model()
+    }
+    remove(img_t)
+    delete a
+    delete p
+}
+
 //! the lanes cell both homes run over a cold load of `path` (`with_cold_lane`): `lane_check` over the lane's path first (the CUDA
 //! home names the lane; the Vulkan home checks nothing), the served image the home's lane with the planar families kept, the
 //! untrimmed lane's witness, the trimmed lane cold - served by the whole-model driver without the planar families off the packed
 //! emb region, the smaller file, the untrimmed lane's tokens token for token and its CPU embed row bit for bit - and warm, the
 //! same tokens again
+[cold_path]
 def lanes_cell(t : T?; path : string; lane_check : block<(img : string) : void>) {
     with_cold_lane(t, path, "the model") $(var plain; img_v) {
         invoke(lane_check, img_v)
@@ -170,14 +321,38 @@ def lanes_cell(t : T?; path : string; lane_check : block<(img : string) : void>)
         t |> equal(mismatch_exact(a.row, b.row), 0, "the CPU embed row off the packed emb region is the planar plane's, bit for bit")
         delete trimmed
         moe_gpu_drop_model()
+        let read_set = lane_read_lever_set()
+        let read_was = lane_read()
+        set_lane_read(true)
+        let reads0 = vk_slice_file_reads()
         var warm <- load_cached_q8(path)
+        let reads1 = vk_slice_file_reads()
         t |> success(moe_gpu_resident_active(), "the warm trimmed lane is served by the whole-model driver")
         t |> success(warm.image_map != null && warm.planes_trimmed, "the trimmed lane maps back warm")
+        t |> success(reads1 > reads0, "the warm load's planes are read off the lane file ({reads1 - reads0} reads)")
         var c <- witness_steps(t, warm, "the warm lane")
         log_gen_texts(warm, "untrimmed lane / warm trimmed lane", a.ids, c.ids)
         t |> equal(mismatch_exact(a.ids, c.ids), 0, "... and serves the same tokens (both streams decoded above)")
+        let reads2 = vk_slice_file_reads()
+        t |> equal(rearm_dropped(warm), "gpu:resident", "the dropped lane re-arms onto the whole-model driver")
+        t |> equal(vk_slice_file_reads() - reads2, reads1 - reads0, "the re-arm reads the planes the load read, off the lane file again")
+        var r <- witness_steps(t, warm, "the re-armed lane")
+        log_gen_texts(warm, "warm lane / re-armed lane", c.ids, r.ids)
+        t |> equal(mismatch_exact(c.ids, r.ids), 0, "... and serves the same tokens (both streams decoded above)")
+        delete r
         delete warm
         moe_gpu_drop_model()
+        set_lane_read(false)
+        let reads3 = vk_slice_file_reads()
+        var mapped <- load_cached_q8(path)
+        t |> equal(vk_slice_file_reads(), reads3, "with the lane read off the planes are copied out of the mapping: no file read")
+        var d <- witness_steps(t, mapped, "the warm lane copied out of the mapping")
+        log_gen_texts(mapped, "warm lane read / warm lane copied", c.ids, d.ids)
+        t |> equal(mismatch_exact(c.ids, d.ids), 0, "... and serves the tokens the read lane serves (both streams decoded above)")
+        delete mapped
+        moe_gpu_drop_model()
+        restore_lane_read(read_set, read_was)
+        delete d
         delete a
         delete b
         delete c

@@ -8,6 +8,7 @@ require dasllama/dasllama   // nolint:STYLE030,LINT019 - the public facade — p
 require dasllama/dasllama_common
 require dasllama/dasllama_sampling
 require dasllama/dasllama_scheduler
+require dasllama/dasllama_image   // load_model_uncached: the product's load with no image
 require daslib/jobque_boost
 require daslib/fio   // nolint:STYLE030,LINT019 - path_join, inside the model-gated cells
 require daslib/random
@@ -382,7 +383,7 @@ def test_sampling_deterministic(t : T?) {
             t |> skip("{path} not present")
             return
         }
-        var m <- load_model_(path, QuantMode.q8)
+        var m <- load_model_uncached(path, QuantMode.q8)
         let params = SamplingParams(temp = 0.8, top_k = 40l)
         let n = 16l
         var a, b : array<int64>
@@ -456,7 +457,7 @@ def test_constrained_sampler(t : T?) {
 
 [cold_path]   // a test cell: it drives the hot sampler
 def private constrained_sampler_cell(tt : T?; path : string) {
-    var m <- load_model_(path, QuantMode.q8)
+    var m <- load_model_uncached(path, QuantMode.q8)
     var s <- create_session_(m)
     let vocab = long_length(s.logits)
     tt |> success(vocab > 2000l, "a vocab-wide logits row")

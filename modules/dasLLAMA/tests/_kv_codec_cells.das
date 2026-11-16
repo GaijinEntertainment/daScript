@@ -46,7 +46,7 @@ def codec_env_arms(t : T?; kv : KVDtype) : bool {
 def with_codec_model(t : T?; file : string; kv : KVDtype; blk : block<(tr : Model) : void>) {
     let path = path_join(models_dir(), file)
     return if (!resident_ready(t, path))
-    var tr <- load_resident_at(path, kv)
+    var tr <- load_resident_at(path, kv, 0l, 0l, true)
     if (mirror_kv_dtype() == KVDtype.f32 && kv != KVDtype.f32) {
         t |> skip("DASLLAMA_VK_KV32=1 arms the f32 mirror over the {kv} asked - a codec cell needs it unset")
     } else {

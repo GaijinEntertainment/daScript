@@ -47,6 +47,37 @@ def test_cuda_mint_lanes(tst : T?) {
     }
 }
 
+[test(description = "With no lane to write, a CUDA-armed load of Qwen3.5-0.8B-MTP streams the gguf onto the device and keeps no planar plane on the host; it serves the lane tokens, re-arms off the gguf, refuses a CPU call by name, and keeps its planes under the host-planes ask")]
+def test_cuda_live_load(tst : T?) {
+    tst |> run("Qwen3.5-0.8B-MTP: the gguf streamed onto the CUDA home with no host planes serves the lane's tokens, re-arms, and refuses the CPU by name; the host-planes ask keeps the planes") @(t : T?) {
+        return if (!cuda_home_asked(t))
+        with_mint_file(t, "qwen35", MINT_FILE) $(path) {
+            with_gpu_kv_dtype(t, KVDtype.f16) {
+                live_cell(t, path)
+            }
+        }
+    }
+}
+
+//! the families whose trimmed lane the whole-model driver serves beside the dense q8 one: biased routed experts over an untied
+//! q8 token table, per-layer embeddings, and the gemma-4 routed block with its dense shared expert
+let private FAMILY_LANES <- [(family = "gptoss", file = "gpt-oss-20b-mxfp4.gguf"), (family = "gemma4e", file = "gemma-4-E2B-it-Q8_0.gguf"),
+    (family = "gemma4moe", file = "gemma-4-26B-A4B-it-Q4_K_M.gguf")]
+
+[test(description = "gpt-oss-20b, gemma-4-E2B and gemma-4-26B each mint a trimmed cuda lane with no planar family on the host, and the lane - cold, warm and re-armed - serves the live load's greedy tokens exactly with the token rows gathered on the device wherever a load with its planes on the host gathers them")]
+def test_cuda_mint_family_lanes(tst : T?) {
+    for (fam in FAMILY_LANES) {
+        tst |> run("{fam.file}: the trimmed cuda lane serves the live load's tokens cold, warm and re-armed, the token rows gathered where the staged load's are") @(t : T?) {
+            return if (!cuda_home_asked(t))
+            with_mint_file(t, fam.family, fam.file) $(path) {
+                with_gpu_kv_dtype(t, KVDtype.f16) {
+                    family_lane_cell(t, path)
+                }
+            }
+        }
+    }
+}
+
 [test(description = "The Qwen3.5-0.8B Q4_K_M twin mints its cuda lane off its native K-quant planes, named for the armed backend, and maps back warm to the same greedy tokens")]
 def test_cuda_mint_kquant(tst : T?) {
     tst |> run("Qwen3.5-0.8B-Q4_K_M: the K-quant twin's cuda lane mints off its native planes and maps back warm to the same tokens") @(t : T?) {

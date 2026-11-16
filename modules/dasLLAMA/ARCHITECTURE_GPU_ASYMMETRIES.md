@@ -16,7 +16,7 @@ prefill, the FP4 expert rung, the nv4 nibble decode, the MMQ pin and the N-row f
   `set_vulkan_trim` / `vulkan_trim` with its `restore_vulkan_trim` form): the Vulkan lane carries a device twin the GPU
   walk collects, so its mint streams the walk's entries into the save and a trim can drop the planar families the arena
   holds whole; the Metal flavor bakes device-form blobs the CPU planes convert into, with no walk to collect from and no
-  family to drop.
+  family to drop. The lane's other host-side verbs are the discrete homes' with it: the live walk with no sink (`vulkan_live_begin` / `vulkan_live_end`), the trim's plane drop and its stream check (`trim_drop_planes`, `trim_stream_decline`), the lane-file read's lever (`set_lane_read` / `lane_read` with its `restore_lane_read` form) and the re-arm source's forget at a parse (`vk_image_source_forget`).
 - **The per-op tier's hook seats are the Vulkan family's; the whole-model driver's seats both discrete families fill.** The
   per-op hooks of `install_moe_gpu_tier` and the `set_moe_gpu_*_hooks` setters (ffn, cls, dense, dn, attn, attn_dec, ffn_tail,
   span_dec, ffn_bias, heat, qkv) are the Vulkan family's - the CUDA home installs the tier with stubs that decline or panic by

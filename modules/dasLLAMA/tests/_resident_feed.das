@@ -292,11 +292,19 @@ def census(kernel : string) : int64 {
     return NO_CENSUS
 }
 
+//! how a resident cell's model loads: `served` is the product's load with no image (on a discrete home the gguf streams onto
+//! the card and no weight plane stays on the host), `host` keeps the planes beside the device's copy, `image` takes the rail
+enum ResidentLoad {
+    served
+    host
+    image
+}
+
 //! `path` loaded at q8 with the whole-model route pinned on - at `regions` mirror regions where it is past 0, the context
 //! pinned and asked whole at `strict_ctx` positions where it is past 0, else at the caller's own context pins (its strict
 //! ask included) - and `host_layers` routed layers' experts asked onto the host (0: the plan's own count, pinned so the
 //! environment's ask does not reach the load) whatever an earlier cell left; every lever put back after
-def load_resident(path : string; regions : int64 = 0l; strict_ctx : int64 = 0l; host_layers : int64 = 0l; image : bool = false) : Model {
+def private load_resident_by(path : string; regions, strict_ctx, host_layers : int64; how : ResidentLoad) : Model {
     let levers = resident_levers()
     if (pf_window_rows_pin() <= 0l) {
         set_pf_window_rows_pin(PF_WINDOW_ROWS)
@@ -311,20 +319,35 @@ def load_resident(path : string; regions : int64 = 0l; strict_ctx : int64 = 0l; 
     set_gpu_host_layers(host_layers)
     set_gpu_resident_route(true)
     var tr <- Model()
-    if (image) {
+    if (how == ResidentLoad.image) {
         tr <- load_model_cached(path, QuantMode.q8)
-    } else {
+    } elif (how == ResidentLoad.host) {
         tr <- load_model_(path, QuantMode.q8)
+    } else {
+        tr <- load_model_uncached(path, QuantMode.q8)
     }
     restore_resident_levers(levers)
     return <- tr
 }
 
-//! `load_resident` with the K/V mirror asked at `kv` for the load, the ask put back as it was found
-def load_resident_at(path : string; kv : KVDtype; regions : int64 = 0l; strict_ctx : int64 = 0l) : Model {
+//! the resident load of a cell whose every compare is the device's: the model as the product loads it with no image
+def load_resident(path : string; regions : int64 = 0l; strict_ctx : int64 = 0l; host_layers : int64 = 0l) : Model =>
+    <- load_resident_by(path, regions, strict_ctx, host_layers, ResidentLoad.served)
+
+//! the resident load of a cell that runs the CPU chain on the same model, or reads its planes: the weight planes stay on the
+//! host beside the device's copy (`image`: through the image rail instead, as the run's levers leave the lane)
+def load_resident_host(path : string; regions : int64 = 0l; strict_ctx : int64 = 0l; host_layers : int64 = 0l; image : bool = false) : Model =>
+    <- load_resident_by(path, regions, strict_ctx, host_layers, image ? ResidentLoad.image : ResidentLoad.host)
+
+//! `load_resident_host` where `host`, else `load_resident`: a rig whose cells split on whether they read the host's copy
+def load_resident_as(host : bool; path : string; regions : int64 = 0l; strict_ctx : int64 = 0l) : Model =>
+    <- load_resident_by(path, regions, strict_ctx, 0l, host ? ResidentLoad.host : ResidentLoad.served)
+
+//! `load_resident`, or `load_resident_host` under `host`, with the K/V mirror asked at `kv` for the load, the ask put back
+def load_resident_at(path : string; kv : KVDtype; regions : int64 = 0l; strict_ctx : int64 = 0l; host : bool = false) : Model {
     let pin = gpu_kv_dtype_pin()
     set_gpu_kv_dtype(kv)
-    var tr <- load_resident(path, regions, strict_ctx)
+    var tr <- load_resident_by(path, regions, strict_ctx, 0l, host ? ResidentLoad.host : ResidentLoad.served)
     restore_gpu_kv_dtype(pin)
     return <- tr
 }
@@ -572,6 +595,18 @@ def head_k_row_bytes(tr : Model; var s : Session; row : int64) : array<uint8> {
     let rowb = kv_row_bytes(s.kv_dtype_k, layer_kv_dim(c, c.n_layers))
     let kp = kv_layer_kbase(s, c.n_layers, c.seq_len)
     return <- [for (i in range64(rowb)); unsafe(kp[row * rowb + i])]
+}
+
+//! the head's K row `row` of the session's cache overwritten with one byte value, and that row as bytes: the baseline of a
+//! cell that proves a later store wrote the row - a row no store wrote holds whatever its memory held before
+def head_k_row_marked(tr : Model; var s : Session; row : int64) : array<uint8> {
+    let c = tr.config
+    let rowb = kv_row_bytes(s.kv_dtype_k, layer_kv_dim(c, c.n_layers))
+    var kp = kv_layer_kbase(s, c.n_layers, c.seq_len)
+    for (i in range64(rowb)) {
+        unsafe(kp[row * rowb + i]) = 0xA5u8
+    }
+    return <- head_k_row_bytes(tr, s, row)
 }
 
 //! the bar a CPU row `cpu` holds a device row to: `rel` of its largest live |logit| - a suppressed id and a NaN scale no bar, so a
@@ -1143,6 +1178,7 @@ def chain_walk(tr : Model; prompt : array<int64>; steps, off_every : int64; mode
 //! step a miss (its state put back) and every other step a hit
 //! The adaptive mode (-1) runs both walks too: the same tokens and
 //! logits, each miss but the last backing off the next step's chain.
+[cold_path]
 def greedy_chain_cell(t : T?; path : string) {
     if (!resident_ready(t, path)) return
     var tr <- load_resident(path, 1l)

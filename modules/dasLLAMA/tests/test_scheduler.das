@@ -1688,7 +1688,7 @@ def test_scheduler_mtp_resident_picks(t : T?) {
             return
         }
         with_dasllama_jobque() {
-            var m <- load_model_(MTP_MODEL_PATH, QuantMode.q8)
+            var m <- load_model_uncached(MTP_MODEL_PATH, QuantMode.q8)
             m.config.seq_len = min(m.config.seq_len, 512l)
             t |> success(moe_gpu_resident_active(), "the whole-model driver armed on the NextN-headed hybrid (the load log names any decline)")
             var prompt <- encode(m, "Count from one to twenty: one, two, three,", true, false)
@@ -1735,7 +1735,7 @@ def test_scheduler_mtp_device_home(t : T?) {
             return
         }
         with_dasllama_jobque() {
-            var m <- load_model_(MTP_MODEL_PATH, QuantMode.q8)
+            var m <- load_model_uncached(MTP_MODEL_PATH, QuantMode.q8)
             m.config.seq_len = min(m.config.seq_len, 512l)
             t |> success(moe_gpu_resident_active(), "the whole-model driver armed on the NextN-headed hybrid (the load log names any decline)")
             t |> success(gpu_resident_mtp_device_home(m), "the draft head, its verify and its rollback run on the device: a speculating scheduler may home its streams there")

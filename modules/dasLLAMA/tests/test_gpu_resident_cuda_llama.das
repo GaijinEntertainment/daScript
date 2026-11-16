@@ -15,6 +15,7 @@ require _model_tier
 require _resident_feed
 require _cuda_feed
 require daslib/fio   // path_join
+require daslib/rtti   // this_context().last_exception: the refused window's text
 require dasllama/dasllama   // load_model_: the declined-route cell's own load
 require dasllama/dasllama_kv_dtype
 require _kv_codec_cells
@@ -287,5 +288,57 @@ def test_gpu_resident_cuda_tq4kv(t : T?) {
     t |> run("{FILE_1B_K}: a tq4 mirror, the distance form over 40 tokens and eight steps on the CUDA driver") @(t : T?) {
         return if (!cuda_home_asked(t))
         cell_codec_distance(t, FILE_1B_K, 40l, KVDtype.tq4, false, TQ4_DIST_REL, TQ4_PAIR_REL)
+    }
+}
+
+//! the window chain's planes are the arm's: held before any prompt, and where they found no room the window refuses by name
+[test(description = "Under the window-fault seat a CUDA-armed Llama-3.2-1B arms without its window chain's planes and a prompt window refuses by name, and the next load, the seat lifted, holds the planes before any prompt and serves the window and its steps on the device")]
+def test_gpu_resident_cuda_window_planes_at_arm(t : T?) {
+    t |> run("{FILE_1B}: the window planes are taken at the arm, and a window whose planes found no room refuses by name") @(t : T?) {
+        return if (!cuda_home_asked(t))
+        let path = path_join(models_dir(), FILE_1B)
+        return if (!resident_ready(t, path))
+        with_dasllama_jobque_() {
+            var prompt <- resident_prompt(40l)
+            var toks <- resident_feed(2l)
+            {
+                let was = set_cuda_window_fault_(true)
+                var tr = Model()
+                try {
+                    delete tr
+                    tr <- load_resident(path, 1l)
+                } recover {
+                    t |> success(false, "the load under the seat panicked: {this_context().last_exception}")
+                }
+                set_cuda_window_fault_(was)   //! put back whatever the load did: a seat left pinned fails every later arm of the run
+                t |> success(moe_gpu_resident_active(), "under the seat the whole-model driver still arms (the load log names any decline)")
+                t |> success(!cuda_window_planes_held(), "... without its window chain's planes")
+                var s <- create_session(tr, mirror_kv_dtype())
+                var why = ""
+                try {
+                    var rows <- feed_logits(tr, s, prompt, toks)
+                    delete rows
+                } recover {
+                    why = this_context().last_exception
+                }
+                t |> success(find(why, "found no room on the device when the driver armed") >= 0, "a prompt window refuses by name: '{why}'")
+                delete s
+                moe_gpu_drop_model()
+                delete tr
+            }
+            var tr <- load_resident(path, 1l)
+            t |> success(moe_gpu_resident_active(), "the seat lifted, the driver arms again")
+            t |> success(cuda_window_planes_held(), "... holding its window chain's planes before any prompt")
+            let c0 = cuda_positions_served()
+            var got <- feed_alone(tr, mirror_kv_dtype(), prompt, toks)
+            t |> success(long_length(got) >= 2l, "the window and its steps are served ({long_length(got)} rows)")
+            cuda_served_since(t, c0, 40l, "the window over the planes the arm took")
+            served_every_call(t)
+            delete got
+            moe_gpu_drop_model()
+            delete tr
+            delete prompt
+            delete toks
+        }
     }
 }

@@ -38,12 +38,13 @@ def test_gpu_resident_cuda_mtp_carry(t : T?) {
     mtp_carry_gate_cell(t)
 }
 
-[test(description = "On the CUDA driver a NextN draft through the resident head matches the CPU forward_mtp on the same inputs, uploads host rows when it runs past the device's, pins away a suppressed pick, and is bit-identical despite NaN-poisoned host residual rows")]
+[test(description = "On the CUDA driver a NextN draft through the resident head matches the CPU forward_mtp on the same inputs, uploads host rows when it runs past the device's, pins away a suppressed pick, and is bit-identical despite NaN-poisoned host residual rows, and a draft over a prompt prefilled with the round off reads head rows stored as zeros - finite under the poison K/V start")]
 def test_gpu_resident_cuda_mtp_draft(t : T?) {
     cuda_mtp_intent()
     return if (!cuda_home_asked(t))
     mtp_draft_cell(t)
     mtp_draft_upload_cell(t)
+    mtp_draft_unwarmed_cell(t)
     mtp_draft_suppressed_cell(t)
     mtp_xb_poison_cell(t)
 }

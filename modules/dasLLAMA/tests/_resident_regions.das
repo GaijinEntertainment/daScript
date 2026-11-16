@@ -103,10 +103,10 @@ def private hold_within(t : T?; tr : Model; got, want, control : array<float>; w
 
 //! `file` loaded at `regions` regions. A card whose room the plan does not fit registers a skip naming it, any other decline
 //! is a red; either way the driver is left unarmed, which the caller reads off `moe_gpu_resident_active()` before it runs rows.
-def private load_regions(t : T?; file : string; regions : int64; host_ctx : int64 = REGIONS_RIG_CTX; ctx : int64 = REGIONS_RIG_CTX) : Model {
+def private load_regions(t : T?; file : string; regions : int64; host_ctx : int64 = REGIONS_RIG_CTX; ctx : int64 = REGIONS_RIG_CTX; host : bool = false) : Model {
     let levers = resident_levers()
     set_gpu_ctx_max(ctx)   //! the mirror context, read as the driver arms; the levers go back after the load
-    var tr <- load_resident(path_join(models_dir(), file), regions)   //! the rig measures the resident driver: its route is pinned on for the load whatever the environment says
+    var tr <- load_resident_as(host, path_join(models_dir(), file), regions)   //! the rig measures the resident driver: its route is pinned on for the load whatever the environment says
     restore_resident_levers(levers)
     tr.config.seq_len = min(tr.config.seq_len, host_ctx)
     resident_admitted(t, "the whole-model driver armed at {regions} regions (the load log names any decline)", " at {regions} regions")
@@ -135,6 +135,7 @@ struct private RegionsLoad {
     host_ctx : int64 = REGIONS_RIG_CTX   //! every host-cached session's K/V cache: the rig's cap, or the mirror's context for a cell whose prompts run past it
     split_forms : bool
     ring : int = -1   //! the sliding layers' ring pin for the load (`set_gpu_kv_ring`): -1 the environment's, 0 every row kept
+    host : bool   //! the weight planes kept on the host (`load_resident_host`): the load of a cell that runs the CPU chain on the model
 }
 
 //! the two-region cell's rig: the gate, `file` loaded at two regions, `body` inside the engine's job queue, the model deleted after
@@ -150,7 +151,7 @@ def private with_regions_rig(t : T?; file : string; load : RegionsLoad; body : b
     var tr <- Model()
     with_gpu_kv_ring(load.ring) {
         delete tr
-        tr <- load_regions(t, file, load.regions, load.host_ctx, load.ctx)
+        tr <- load_regions(t, file, load.regions, load.host_ctx, load.ctx, load.host)
     }
     restore_resident_levers(levers)
     if (moe_gpu_resident_active()) {
@@ -689,7 +690,7 @@ def cell_regions_batched_embed_gather(t : T?; file : string) {
                 }
             }
             with_gpu_resident_embed(0) {
-                with_regions_rig(t, file) $(tr) {
+                with_regions_rig(t, file, RegionsLoad(host = true)) $(tr) {
                     let g0 = home_nrow_embed_gathered()
                     let h0 = batch_rows_host_embedded()
                     let side0 = home_nrow_side_gathered()
@@ -776,7 +777,7 @@ struct LongCtx {
     streams_rel : float = 0.0   //! > 0: the streams cell's bar, as a share of the max logit, in place of `streams_bar`'s - a carrier whose reading the file states
 }
 
-def private long_load(lc : LongCtx; ring : int = -1) : RegionsLoad => RegionsLoad(regions = lc.regions, ctx = lc.ctx, host_ctx = lc.ctx, ring = ring)
+def private long_load(lc : LongCtx; ring : int = -1; host : bool = false) : RegionsLoad => RegionsLoad(regions = lc.regions, ctx = lc.ctx, host_ctx = lc.ctx, ring = ring, host = host)
 
 //! a long cell's mirror on a sliding model rings its sliding layers: the plan charges the rings, not the whole context, on every layer
 def private rings_armed(t : T?; tr : Model) {
@@ -837,7 +838,7 @@ def cell_regions_slabbed_mirror(t : T?; file : string; lc : LongCtx) {
 [cold_path]
 def cell_long_prompt_against_cpu(t : T?; file : string; lc : LongCtx) {
     t |> run("a {lc.cpu_n}-token prompt on a {lc.regions} x {lc.ctx} mirror: the resident rows against the CPU chain at every step") @(t : T?) {
-        with_regions_rig(t, file, long_load(lc)) $(tr) {
+        with_regions_rig(t, file, long_load(lc, -1, true)) $(tr) {
             t |> equal(gpu_device_session_ctx(), lc.ctx, "a region holds the whole context asked")
             rings_armed(t, tr)
             forced_feed_over(t, tr, "long prompt: ", lc.cpu_n, STEPS, lc.cpu_bar_rel, 3l) $ {
@@ -869,7 +870,7 @@ def cell_long_continuation(t : T?; file : string; lc : LongCtx) {
 def cell_long_rows_through_host(t : T?; file : string; lc : LongCtx) {
     let rows_n = lc.cpu_n / 3l
     t |> run("{rows_n} tokens prefilled on the device, the rows brought down: the CPU chain's steps over them against the CPU chain alone") @(t : T?) {
-        with_regions_rig(t, file, long_load(lc)) $(tr) {
+        with_regions_rig(t, file, long_load(lc, -1, true)) $(tr) {
             long_mirror_held(t, tr)
             var prompt <- prose_ids(rows_n, 5l)
             var toks <- feed_a()
@@ -896,7 +897,7 @@ def cell_long_rows_through_host(t : T?; file : string; lc : LongCtx) {
         }
     }
     t |> run("{rows_n} tokens prefilled on the CPU rails under the prefill pin, the rows uploaded: the resident steps over them against the CPU chain alone") @(t : T?) {
-        with_regions_rig(t, file, long_load(lc)) $(tr) {
+        with_regions_rig(t, file, long_load(lc, -1, true)) $(tr) {
             long_mirror_held(t, tr)
             var prompt <- prose_ids(rows_n, 5l)
             var toks <- feed_a()
@@ -1167,7 +1168,7 @@ def cell_device_home_sessions(t : T?; file : string) {
 
 def private cell_device_home_pin(t : T?; file : string) {
     t |> run("a live device-home session's region is never handed to another session: the outsider passes, the owners step on") @(t : T?) {
-        with_regions_rig(t, file) $(tr) {
+        with_regions_rig(t, file, RegionsLoad(host = true)) $(tr) {
             var pa <- prompt_a()
             var pb <- prompt_b()
             var al <- alone_runs(tr, pa, pb)
@@ -1600,7 +1601,7 @@ def cell_device_pool(t : T?; file : string) {
 [cold_path]
 def cell_device_pool_mtp(t : T?; file : string) {
     t |> run("a speculating device-home scheduler keeps its openings in the host pool: the draft head's rows ride the moves, and a later request drafts off them as the host-cached speculating scheduler does") @(t : T?) {
-        with_regions_rig(t, file) $(tr) {
+        with_regions_rig(t, file, RegionsLoad(host = true)) $(tr) {   //! the host-cached paged scheduler it compares against drafts on the CPU
             if (!gpu_device_kv_pool_armed()) {
                 t |> skip("DASLLAMA_DEVICE_POOL=0: the pool is off")
                 return
@@ -1916,7 +1917,7 @@ def cell_driver_reports(t : T?; file : string) {
 
 def cell_passes_with_their_rows(t : T?; file : string) {
     t |> run("a prefill that skips positions passes as a gap, its device rows brought down first") @(t : T?) {
-        with_regions_rig(t, file) $(tr) {
+        with_regions_rig(t, file, RegionsLoad(host = true)) $(tr) {
             var head <- prose_ids(40l, 0l)
             var tail <- prose_ids(10l, 9l)
             var s <- create_session(tr, mirror_kv_dtype())
@@ -1931,7 +1932,7 @@ def cell_passes_with_their_rows(t : T?; file : string) {
         }
     }
     t |> run("a prefill past the region's context passes as cap, its device rows brought down first") @(t : T?) {
-        with_regions_rig(t, file, RegionsLoad(ctx = CAPPED_RIG_CTX)) $(tr) {
+        with_regions_rig(t, file, RegionsLoad(ctx = CAPPED_RIG_CTX, host = true)) $(tr) {
             t |> equal(gpu_device_session_ctx(), CAPPED_RIG_CTX, "the regions armed at the capped context")
             var head <- prose_ids(CAPPED_RIG_CTX - 96l, 0l)
             var tail <- prose_ids(200l, 9l)

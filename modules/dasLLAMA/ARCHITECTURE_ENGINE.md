@@ -6,6 +6,7 @@ Companion to `ARCHITECTURE.md`; a section is cited by its anchor.
 `ARCHITECTURE_ENGINE_SERVING.md` holds the serving charter and the prefix cache's mechanisms.
 `ARCHITECTURE_ENGINE_MECHANISMS.md` holds the RoPE scaling fold and the decode pick tape.
 `ARCHITECTURE_ENGINE_SUPPORT.md` holds the instrumentation and support charters.
+`ARCHITECTURE_ENGINE_MEMORY.md` holds what a load and a session keep on the host under a device home.
 
 `REVIEW.das`'s `check_exe_fn_global_restore` walks every `dasllama/` file and licenses no
 names: each `var g_x = @@fn` declaration carries an `if (g_x == null)` boot-restore guard in

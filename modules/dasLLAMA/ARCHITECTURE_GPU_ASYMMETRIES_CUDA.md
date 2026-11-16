@@ -135,6 +135,7 @@ prefill, the MXFP4 expert pieces on the FP4 tensor rung, the nv4 nibble decode, 
   `set_cuda_tower_graphs` / `cuda_tower_graphs_on` (`#cuda-chain-graphs`; default on). The Vulkan tower has none of the first three to flip:
   its driver sizes the shared-memory split, its hazard rail overlaps independent dispatches with no marks, and its front
   hands its rows to the blocks through the host.
+- **The CUDA home takes its window chain's planes when the driver arms; the Vulkan home takes its own at the first window** (`crd_pf_setup` from `cud_rdec_upload_norms`, `ARCHITECTURE_ENGINE_MEMORY.md#cuda-window-planes-at-arm`): a CUDA drafter attached later checks its own room against a card already holding the window's planes, and a window whose planes found no room refuses by name (`crd_pf_ready`), where Vulkan's `pf_setup` allocates inside the first prefill. `set_cuda_window_fault_` is the CUDA-only test seat that reads the planes as missing at every arm until pinned back, answering the value it replaced; `cuda_window_planes_held` is its witness.
 - **The CUDA tower serves the vision and the audio families; the translation and TTS seats stay the Vulkan tower's**
   (`dasllama_cuda_tower`: gemma3v, gemma4v, gemma4uv, qwen3v, qwen25v - `ARCHITECTURE_GPU_TOWER_VULKAN_VISION.md#vk-vision-chains`;
   the audio and ASR-decoder seats from the home each family's row of `CUDA_AUDIO_HOMES` names, every row the CUDA home's -

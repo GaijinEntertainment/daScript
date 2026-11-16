@@ -16,6 +16,7 @@ DASLLAMA_GPU=1 DASLLAMA_CUDA=1 ./bin/daslang -jit modules/dasLLAMA/tests/run.das
 DASLLAMA_GPU=1 DASLLAMA_CUDA=1 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --area vision --only gemma4uv,gemma4v,gemma3v,qwen3v,qwen25v   # the CUDA home's vision run: the five vision family files, whose discrete-home cells the first run's --only tokens do not reach
 DASLLAMA_GPU=1 DASLLAMA_CUDA=1 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --area audio --only audio,whisper,gigaam,rnnt,vad   # the CUDA home's audio run: the files holding the audio families' discrete-home cells (each family on the CUDA home by its `CUDA_AUDIO_FAMILIES` row)
 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --changed --shard 1/3             # one of three boxes: every third file of the same run, from the first
+./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --changed --poison-kv             # every child's K/V caches start as NaN (DASLLAMA_KV_INIT=poison): a read of a row no store wrote reds its cell; each session touches its whole cache, so the run's memory is not the product's
 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --area audio            # one area: audio | vision | tts | translate | llm | infra (comma list)
 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --suite model-free --batch 1    # one child a file (the default is ten a child, compiled as one program: the engine parsed and JIT'd once a batch)
 ```
@@ -40,11 +41,17 @@ the core. Each path prints as a `CHANGED path -> ...` line, the `PLAN` line coun
 says when the core changed, and a changed model-suite file prints a hint instead, because its arms
 are the caller's to scope. A core change is the per-edit gate only: the whole stocked set
 (`--suite stocked`, sharded over the fleet, `../harness/pod_fleet.das`) is owed before the PR, and
-the `NEXT` line says so. The fleet's pods share one models directory, so its runs keep the image
-rail off (`DASLLAMA_IMAGE=0`, the tool's default environment) and the image suite's arms the plan
-owns run on one box with the rail on, through dastest's `--test` with `DASLLAMA_TEST_ARMS` set to
-them; the PR cites that run beside the shards. The run ends with `REPORT` (files, failures, cells skipped - a filtered
-arm, an absent device, or a missing model - and files excluded) and `NEXT` (what is still owed). `pod_fleet.das -- times`
+the `NEXT` line says so. A fleet pod reads the models through its own folder of links to the volume's
+(`/root/models`), so an image a cell mints lands on that pod's disk, and the runner removes it after the file
+(`--reap-images`, which the tool passes where its environment names that folder: every `.dlim` and save `.tmp` under
+the models directory, at any depth, that was not there when the run started; a run pointed at the volume's own
+directory reaps nothing, the images there being every pod's). The tool's default environment keeps the image rail off (`DASLLAMA_IMAGE=0`); the image suite's
+arms the plan owns run on one box with the rail on, through dastest's `--test` with `DASLLAMA_TEST_ARMS` set to
+them, and the PR cites that run beside the shards. The run starts with a `MISSING` line a model file its files - and
+the fixtures they require - name that the models directory does not hold, and ends with `REPORT` (files, failures,
+cells skipped - a filtered arm, an absent device, or a missing model - and files excluded) and `NEXT` (what is still
+owed). `pod_fleet.das -- status` reads every shard's lines and each pod's memory peak (the largest child's resident
+kB and its file, `harness/pod_mem_track.sh`); `pod_fleet.das -- times`
 reads a run's child logs into where its test time went: every file's seconds and the longest cells. The fleet's pods
 carry 62 GB of container memory with their card: a child that crosses it is killed (`exit=137`, no verdict), the runner
 then reruns its verdict-less files one child each, and a file whose one cell needs more - the 30B carriers with their
@@ -740,7 +747,10 @@ skips when interpreted, with the image rail off, without the model, without a li
 and when the whole-model driver declines the model on the first load. On Qwen3.5-0.8B-MTP the
 cold load mints the vulkan lane and no planar lane; the trimmed lane, loaded cold, generates the
 same `MINT_STEPS` greedy tokens as the untrimmed lane and reads the same CPU embed row bit for
-bit; mapped back warm, it generates the same tokens again. Each generation's token count is
+bit; mapped back warm, it generates the same tokens again, its planes read off the lane file
+(`vk_slice_file_reads` rising); dropped and re-armed (`gpu_slot_rearm`) it reads as many planes off the file again and
+serves the same tokens; mapped once more with the lane read off (`set_lane_read(false)`, put back) it reads none and
+serves the tokens the read lane serves (the control). Each generation's token count is
 asserted, both streams are decoded in the log, and the whole-model driver is asserted on both
 trimmed loads. `test_vulkan_mint_moe_streamed` (family `qwen2moe`, large tier) is the MoE lane: Qwen1.5-MoE Q4_K_M with
 twenty routed layers asked onto the host and the prompt stream pinned on, the untrimmed lane's tokens against the trimmed
@@ -767,12 +777,14 @@ segment both read the armed home's name, `cuda_lane_named` comparing `image_lane
 `dlim_file_lane` against `moe_gpu_backend_name()`), the untrimmed lane keeps the planar families, the trimmed lane
 (`set_vulkan_trim`) serves on the whole-model driver without them off the packed emb region as the smaller file, its
 greedy tokens the untrimmed lane's token for token and its CPU embed row bit for bit, and the warm map serves the same
-tokens again; `test_cuda_mint_kquant` - the Q4_K_M twin's lane mints off its native K-quant planes (`kq_repacked`) with its
+tokens again, with the Vulkan cell's lane-read, re-arm and copy-arm legs (one shared cell, `lanes_cell`); `test_cuda_mint_kquant` - the Q4_K_M twin's lane mints off its native K-quant planes (`kq_repacked`) with its
 plan and maps back warm to the same tokens and embed row; `test_cuda_mint_kv_codecs` - the trimmed lane minted under a
 q8_0 mirror maps under tq4 and f16 with no re-mint (the file's size and time as the mint left them), each load armed at
 the asked codec and serving the staged load's tokens at that codec; `test_cuda_mint_identity_cap` - the lane identity's
 budget word (` b<mb>`) reads the card's total memory within a GiB unpinned and the pinned figure (4096) under
-`set_gpu_tier_want_`'s `vram_mb`, skipping where `DASLLAMA_GPU_VRAM_MB` shadows the pin. Every cell skips when interpreted,
+`set_gpu_tier_want_`'s `vram_mb`, skipping where `DASLLAMA_GPU_VRAM_MB` shadows the pin; `test_cuda_live_load` - the
+load that writes no lane on this home, the Vulkan file's `live_cell` (below); `test_cuda_mint_family_lanes` - the
+families' trimmed lanes on this home, the Vulkan file's `family_lane_cell` (below). Every cell skips when interpreted,
 without `DASLLAMA_CUDA=1`, without the model, with the image rail off (`DASLLAMA_IMAGE=0`), without the armed home
 (`cuda_home_asked`), and where the whole-model driver declines the model on the box. `test_vulkan_mint_trim_follows_the_driver`
 holds the trim's admission to the driver's answer: the model the driver serves is admitted
@@ -785,9 +797,25 @@ cold trim ask writes the untrimmed lane at the lane's path (the next load under 
 serves it, the driver off); with the override put back to what `active_prefill_override` read
 before, the next load mints the trimmed lane over it and the driver serves it.
 `test_vulkan_mint_failed_write_leaves_nothing` fails the mint's write through the
-`set_image_write_fault` seam (the seam's hit count moves): no lane, no temp file of the mint's own,
-the load serves the streamed build from memory with neither lane's file on disk, and with the seam
-at 0 the next load mints the lane and the driver serves it. `test_vulkan_mint_trim_refused_unarmed` mints the trimmed
+`set_image_write_fault` seam twice - a megabyte in, and half way through a lane that carries its planar families (the
+seam's hit count moves both times): no lane, no temp file of the mint's own, and the load starts again off the gguf,
+streamed onto the device (`gguf_live_loads` up by one, no image in hand, neither lane's file on disk) and serving the
+lane's tokens; with the seam at 0 the next load mints the lane and the driver serves it. `test_vulkan_live_load` (and
+`test_cuda_live_load` in `test_cuda_mint.das`, one shared cell, `live_cell`) holds the load that writes no lane: with
+the image save off (`set_image_save(false)`, put back) the cached load streams the gguf onto the device - one live load
+counted, the whole-model driver serving, no planar plane and no image on the host (`holds_planes`), no lane on disk -
+its greedy tokens the lane's token for token and its CPU embed row bit for bit; dropped and re-armed
+(`gpu_slot_rearm`) it streams the gguf again and serves the same tokens, both streams decoded to the log; a call through an f32 session, which the f16
+mirror passes to the CPU rails, is refused by name; and under the host-planes ask (`set_host_planes(true)`, put back)
+the same load counts no live load, keeps its planes and serves the same tokens (the control); the live load's token
+rows gather on the device where the lane's do. `test_vulkan_mint_family_lanes` (and `test_cuda_mint_family_lanes`, one
+shared cell, `family_lane_cell`) holds the trimmed lane of the families the driver serves beside the dense q8 one -
+gpt-oss-20b (biased routed experts over an untied q8 token table), gemma-4-E2B (per-layer embeddings) and gemma-4-26B
+(the routed block with its dense shared expert), large tier: a staged load with its planes on the host says whether the
+token rows gather on the device, the gguf streamed live gives the reference tokens through the lane's own gather, and
+the trimmed lane - minted cold, mapped warm, dropped and re-armed - holds no planar family on the host, serves those
+tokens token for token and gathers its token rows wherever the staged load does (an untied table placed off the lane's
+packed emb region); the staged load's tokens are logged beside the live load's, not held. `test_vulkan_mint_trim_refused_unarmed` mints the trimmed
 lane, then loads it under the `set_resident_upload_fault` seam - the whole-model upload declining after the trim admitted
 the model: the load is refused, its text naming the lane, the seam's decline and the trim; the lane stays on disk at its
 minted size, and the same load with the seam off serves on the driver (the control).
@@ -2135,6 +2163,10 @@ rollback seat takes the CPU snapshot before the seat (its conv and state buffers
 shell's history), a non-recurrent one skips it and its reject never reaches a rollback seat, and a
 rollback seat that serves takes none - the reject rolling back through it, committing the token
 alone and re-seeding the carry from row 0's hidden at the token's row.
+`test_ple_trimmed_host_reads`: on a planes-trimmed shell with per-layer embeddings the table's go-live check passes
+with no host plane and a host gather of a row panics, the untrimmed shell failing the check for its missing plane (the
+control); `test_trim_decline_kind` holds a per-layer table this run left off the device (`TRIM_PLE_DECLINE`) to the
+run's declines and a table format the device does not gather to the model's.
 
 `test_gpu_resident_hybrid.das` - stocked suite, `-jit` only; the whole-model resident driver on a
 deltanet hybrid under `DASLLAMA_GPU=1`. Each fixture is a row in `../performance/model_specs.das`:
@@ -2218,7 +2250,11 @@ unset seat (the device's row count stays below them, the host's reaches past), d
 two rows past the device's (the host's two go up with the draft: the device's count reaches past
 the drafted row, the host's stops below it), brings the drafted row down on the next pass (the
 host's count past it, the host K row moved) and holds the device pick tie-aware against the CPU
-draft's logits over the same rows. `test_gpu_resident_hybrid_mtp_draft_suppressed` drafts once on
+draft's logits over the same rows; its second cell (`mtp_draft_unwarmed_cell`, the CUDA file's draft test running it
+too) prefills a prompt with the round off on a session whose cache started as poison - the head's row poison before
+the prompt (the control), no head row warmed on the device, the prompt's head rows stored as zeros on the host - and
+drafts over it on the device: finite logits, the draft having read no row nothing wrote.
+`test_gpu_resident_hybrid_mtp_draft_suppressed` drafts once on
 the device, then re-arms the driver (`gpu_slot_capture`, `moe_gpu_drop_model`,
 `gpu_slot_rearm`) with that pick among the model's suppressed ids and drafts again over the same
 prompt: the draft's logit for the id sits at the suppression floor (`SUPPRESSED_LOGIT`), the pick is
@@ -2494,7 +2530,9 @@ other resident files live in `_resident_feed.das`. Skips without the model or th
 captured graph, the prefill as the window chain over the cm2 tiles - one session's rows, or several sessions' chunks as
 the segmented window, which `test_gpu_resident_segments.das` holds on this home too) on Llama-3.2-1B Q8_0 in the llama file's
 forced-feed form at 40 tokens (one window) and at a prompt of two windows (the file pins `PF_WINDOW_ROWS` as the
-other resident files do, every load through `load_resident` at one region with the resident route pinned), with the
+other resident files do, every load through the resident rig at one region with the resident route pinned -
+`load_resident`, the product's load with no image, where the cell's compares are all the device's, and
+`load_resident_host`, the planes kept on the host, where the cell runs the CPU chain on the same model), with the
 witnesses that the CUDA driver served every position, ran the windows the
 prompt takes, replayed the captured graph past the first step and took the attention's unsplit form for every fed step
 under the unsplit position and for none past it (the one-window cells' steps under `RD_UNSPLIT_POS`, the two-window
@@ -2526,6 +2564,10 @@ driver under the block-codec mirrors: the codec rig's forced-feed form (`_kv_cod
 one window and two and on the Q4_K_M at one, at the Vulkan codec carriers' 10% bar, and the distance form under tq4 on
 the Q4_K_M at the Vulkan llama codec file's bars; the same skips, and under `DASLLAMA_VK_KV32=1` (the f32 mirror armed
 over the asked codec).
+`test_gpu_resident_cuda_window_planes_at_arm`: the window chain's planes are the arm's - under the window-fault seat
+(`set_cuda_window_fault_`) the driver arms without them (`cuda_window_planes_held` false) and a prompt window refuses
+by name, the seat put back whatever the load did; the seat lifted, the next load holds them before any prompt and
+serves the window and its steps on the CUDA driver (`cuda_served_since`: the window's positions counted).
 `test_gpu_resident_cuda_batch.das` - stocked suite, `-jit` only: the same driver's N-row token command (`ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command` on the CUDA
 home) - sessions a mirror region each, six batched steps through one command against each session stepped alone on
 the one-row command: every row's logits a step within the split bar of the session alone (the Q8_0 rows read bit for
@@ -2657,7 +2699,8 @@ beside them, `test_cuda_kernels.das` (model-free; a CUDA device with NVRTC, else
 the per-format cells - the kq cm2 tiles, the kq and per-32 GEMVs, the token-table gathers, the Q8_K feeds -, the biased
 act twins, the deltanet family and the mx4 and nv4 FP4 leaves over the expert schedule also skip without dasVulkan, and the
 routing cell's bucket-schedule arms register a skip of their own there; the FP4 leaves also skip on a card below the FP4 rung,
-and the deltanet family's chunked form where its stamp does not compile, which the compile gate reds): the q8 GEMV and its rate, the MMQ int8 GEMM's leaves against their references - the Q8_0 one and
+and the deltanet family's chunked form where its stamp does not compile, which the compile gate reds): a zeroed device
+allocation past any card's memory returning no plane and counting one failure (`test_cud_dev_zeroed_counts_a_failure`), the q8 GEMV and its rate, the MMQ int8 GEMM's leaves against their references - the Q8_0 one and
 the superblock ones without a min term (IQ4_XS and IQ4_NL through the codebook, Q4_0's nibbles less eight) per element
 against the block-scaled fold, the Q4_K one (its min terms f16-staged and folded sixteen blocks at a time over four
 superblocks) at the f16 tiles' bar, the NVFP4 one on the FP4 tensor rung (`test_cud_nv4_mmq`: the k4-tiled nv4 plane
@@ -3946,8 +3989,12 @@ bench rows' files; every witness row and the core set census files, every row's 
 that reaches llm), the `--exclude` filter's semantics, the `--shard` partition (the shards of one list disjoint
 and whole, every refused form), the children's module-cache folder (keyed by the binary, the
 other binaries' folders removed on the runner's own binary alone, no folder for a binary that
-cannot be stat'd, the child command carrying it), and a dry run of the runner with a no-op
-child binary.
+cannot be stat'd, the child command carrying it), the model files a run names that a directory lacks
+(`test_missing_models`: whole quoted names, a fixture's among them, none once the directory holds them), the reap
+(`test_reap_images`: the images and temp files a directory gained go, the kept ones and every other file stay; through
+`reap_after` a run without `--reap-images` removes nothing and one with it removes a subfolder's image too), the K/V
+start a `--poison-kv` run hands its children (`test_poison_kv_envs`: `DASLLAMA_KV_INIT=poison` on both shells' forms,
+no start named without the flag), and a dry run of the runner with a no-op child binary.
 Requires `run` by bare same-dir name.
 `uncategorized_persistent_heap_stack_524288.das` - model-free: the pod fleet's planners, the tune interrupt gate in a
 spawned child (`test_interrupt_aborts_without_minting`) and the Metal lens's FLOAT A refusal (`test_float_a_gate`).
@@ -3955,9 +4002,13 @@ spawned child (`test_interrupt_aborts_without_minting`) and the Metal lens's FLO
 the `runpodctl pod create` argument list (the models volume and its data center, the GPU, the
 disk, the ssh port, the key in the boot's environment, the boot installing sshd, rsync, git and
 the Vulkan loader, `--wait` and JSON out), the ssh argument list (the pod's address and port,
-never prompting), the tree copy that leaves the caches out, the shard command (`--shard i/n`
-appended, `TMPDIR` and the runner's log under the run's folder on the volume, `RUN-EXIT` closing
-the log, detached so the ssh call returns), the status read over every shard, and the `~` path.
+never prompting), the tree copy that leaves the caches out and the pod's own models directory (the volume's folders
+made again, a link a file at any depth, no image linked), the shard command (`--shard i/n` appended, and
+`--reap-images` where the environment names the pod's own models directory - the tool's default does, an environment
+naming the volume's does not - the memory tracker started beside the runner
+and stopped after it, `TMPDIR` and the runner's log under the run's folder on the volume, `RUN-EXIT` closing
+the log, detached so the ssh call returns), the status read over every shard with its `MISSING` lines and the pods'
+peaks, and the `~` path.
 `test_served_bench.das` - model-free: the served-turn instrument (`../harness/served_bench.das`, required
 by relative path; it loads no engine module - its wire is `dasOPENAI`'s `chat_stream`, whose
 reader cells are `modules/dasOPENAI/tests/test_chat_stream_mock.das`'s: the reasoning delta, the
@@ -4171,7 +4222,12 @@ unpinned depth; `unregister_decode_override` drops an override and its batched s
 its batched step registered again arming one (the control) - deselecting it where it is active and leaving another selection as
 found; on a das_metal build `get_metal_decode_fuse`, `get_metal_prefill_lastrow`, `gemma_trace` and
 `gemma_carry_pre_norm` read back every value their setters write and the value found once it is put back, the h reading set with no
-drafter attached leaving the decode's carry alone (skips without das_metal).
+drafter attached leaving the decode's carry alone (skips without das_metal). `test_kv_start`: a session's K/V
+buffers start as `set_kv_init` asks - the unfilled start sizes a flat session's slabs and writes no byte
+(`kv_bytes_started` unmoved), zero and poison write every byte (0xFF reading NaN through the f32 and the q8_0 codec), a
+paged pool's groups start the same way as the pool grows and growing rewrites none it had, a fill past its chunk
+(`kv_bytes_start` at a 7-byte chunk) covers its range and no byte beside it, `kv_init_of` reads each start's spelling
+and anything else as unfilled, and the pin restores as found.
 `test_kernel_backend.das` - model-free: the kernel-backend registry - the portable backend
 registered at `[init]` with a row-major default active (`test_portable_backend_always_registered`),
 select / pin / for-load pick a registered backend and an unknown name changes nothing

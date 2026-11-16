@@ -372,22 +372,142 @@ def parse_gguf_meta(bytes : array<uint8> | #) : GGUFMeta {
 
 // ===== multi-part (split) GGUF support =====
 
+//! a tensor's bytes in a mapping: `at` its offset, `bytes` its size
+struct private GgufSpan {
+    at : int64
+    bytes : int64
+}
+
+//! a source FILE mapping whose pages a tensor's reads let go: its base, the tensors of the read in flight - one, or the
+//! several a nested read holds open together - whose pages stay until a read of a tensor outside them begins, and the views
+//! open on it
+struct private GgufRelease {
+    base : uint64
+    held : array<GgufSpan>
+    depth : int
+}
+
+var private g_gguf_release : array<GgufRelease>
+
+var private g_source_release_set = false
+var private g_source_release = false
+var private g_gguf_tensors_released = 0l   //! the tensors whose pages left the process, since it began
+
+//! the source release in process (`DASLLAMA_SOURCE_RELEASE`'s twin): whether a tensor read off an armed mapping lets the last tensor's pages go
+def set_source_release(on : bool) {
+    g_source_release_set = true
+    g_source_release = on
+}
+
+//! whether a tensor read off an armed mapping lets the last tensor's pages go: the in-process lever where one was set, else the knob
+def source_release() : bool => g_source_release_set ? g_source_release : g_env_engine.source_release
+
+//! whether an in-process lever shadows `DASLLAMA_SOURCE_RELEASE`: a fixture reads it beside `source_release()` and puts both back
+def source_release_lever_set() : bool => g_source_release_set
+
+//! the source release lever put back as a fixture found it
+def restore_source_release(was_set : bool; on : bool) {
+    g_source_release_set = was_set
+    g_source_release = on
+}
+
+//! the tensors whose pages a later tensor's read let go, since the process began
+def gguf_tensors_released() : int64 => g_gguf_tensors_released
+
+//! The mapping at `base` is a file's, held by the caller for a load: a tensor read off it lets the pages of the tensor read
+//! before it go (`DASLLAMA_SOURCE_RELEASE`). A gguf held in heap memory never arms - the OS call discards such pages.
+def gguf_release_arm(base : void?) {
+    gguf_release_disarm(base)   //! a row a load left at this base without disarming it is another mapping's
+    var row = GgufRelease(base = intptr(base))
+    g_gguf_release |> emplace(row)
+}
+
+//! a load's file mapping opens: armed for the tensor-by-tensor release or, the release off, read ahead whole. Returns the
+//! base `gguf_release_disarm` takes; an empty file arms nothing and the parse names it
+def gguf_source_begin(bytes : array<uint8> | #) : void? {
+    return null if (empty(bytes))
+    let base = unsafe(addr<void?>(bytes[0]))
+    gguf_release_arm(base)
+    if (!source_release()) {
+        to_log(LOG_INFO, "dasLLAMA: the gguf's pages stay resident until its mapping closes (DASLLAMA_SOURCE_RELEASE=0, or set_source_release(false) in process; unset lets each tensor's go as the next is read)\n")
+    }
+    if (g_env_engine.prefetch && !source_release() && unsafe(prefetch_map(base, uint64(long_length(bytes))))) {
+        to_log(LOG_INFO, "dasLLAMA: source prefetch armed ({long_length(bytes) >> 20l} MB)\n")
+    }
+    return base
+}
+
+//! the mapping at `base` is about to close: its reads release nothing more
+def gguf_release_disarm(base : void?) {
+    let at = gguf_release_slot(base)
+    if (at >= 0) {
+        delete g_gguf_release[at].held
+        g_gguf_release |> erase(at)
+    }
+}
+
+def private gguf_release_slot(base : void?) : int => g_gguf_release |> find_index_if($(r) => r.base == intptr(base))
+
+//! a read of tensor `ti` begins in the armed mapping at `base`: a tensor outside those the last read held lets theirs go
+//! where no view is open, is read ahead and joins the held. Returns the mapping's row for `gguf_tensor_leave`, -1 unarmed
+[arch(at="../ARCHITECTURE_ENGINE_MEMORY.md#gguf-source-release")]
+def private gguf_tensor_enter(m : GGUFMeta; base : void?; tbase : int64; ti : int) : int {
+    let slot = source_release() ? gguf_release_slot(base) : -1
+    return -1 if (slot < 0)
+    let outermost = g_gguf_release[slot].depth == 0
+    g_gguf_release[slot].depth++
+    return slot if (g_gguf_release[slot].held |> find_index_if($(h) => h.at == tbase) >= 0)
+    if (outermost) {
+        for (h in g_gguf_release[slot].held) {
+            unsafe {
+                if (h.bytes > 0l && release_map(reinterpret<void?>(reinterpret<uint8?>(base) + h.at), uint64(h.bytes))) {
+                    g_gguf_tensors_released++
+                }
+            }
+        }
+        g_gguf_release[slot].held |> clear()
+    }
+    let nbytes = ggml_type_bytes(m.tensors[ti].ggml_type, m.tensors[ti].n_elem)
+    g_gguf_release[slot].held |> push(GgufSpan(at = tbase, bytes = nbytes))
+    if (g_env_engine.prefetch && nbytes > 0l) {
+        unsafe {
+            prefetch_map(reinterpret<void?>(reinterpret<uint8?>(base) + tbase), uint64(nbytes))
+        }
+    }
+    return slot
+}
+
+//! the view `gguf_tensor_enter` opened on the mapping at `base` closes: the row is looked up again, a read inside the view
+//! having armed or disarmed another mapping
+def private gguf_tensor_leave(base : void?; entered : int) {
+    return if (entered < 0)
+    let slot = gguf_release_slot(base)
+    if (slot >= 0 && g_gguf_release[slot].depth > 0) {
+        g_gguf_release[slot].depth--
+    }
+}
+
 // Invoke blk with the byte view holding tensor ti plus the tensor's data base offset within that
 // view. Single-file metas resolve within the caller's bytes; sharded metas resolve the tensor's
 // own mapped shard. The one choke point every tensor-data reader goes through.
 def private with_tensor_view(m : GGUFMeta; srcbytes : array<uint8> | #; ti : int; blk : block<(bytes : array<uint8>; tbase : int64) : void>) {
     if (empty(m.shard_base)) {
+        let tbase = m.data_offset + m.tensors[ti].offset
         unsafe {
-            invoke(blk, temp_array(addr<uint8?>(srcbytes[0]), long_length(srcbytes), type<uint8>),
-                m.data_offset + m.tensors[ti].offset)
+            let base = addr<void?>(srcbytes[0])
+            let entered = gguf_tensor_enter(m, base, tbase, ti)
+            invoke(blk, temp_array(addr<uint8?>(srcbytes[0]), long_length(srcbytes), type<uint8>), tbase)
+            gguf_tensor_leave(base, entered)
         }
         return
     }
     let sh = m.tensors[ti].shard
+    let tbase = m.shard_data_off[sh] + m.tensors[ti].offset
+    let entered = gguf_tensor_enter(m, m.shard_base[sh], tbase, ti)
     unsafe {
-        invoke(blk, temp_array(reinterpret<uint8?>(m.shard_base[sh]), m.shard_size[sh], type<uint8>),
-            m.shard_data_off[sh] + m.tensors[ti].offset)
+        invoke(blk, temp_array(reinterpret<uint8?>(m.shard_base[sh]), m.shard_size[sh], type<uint8>), tbase)
     }
+    gguf_tensor_leave(m.shard_base[sh], entered)
 }
 
 //! the in-process override of DASLLAMA_MTP_HEAD - for a trunk/head pair the adjacency rule cannot name
@@ -580,9 +700,12 @@ def gguf_map_shards(paths : array<string>; idx : int; var bases : array<void?>; 
             panic("gguf: cannot open shard '{paths[idx]}'")
         }
         fmap(f) $(var bytes : array<uint8>#) {
-            bases |> push(unsafe(addr<void?>(bytes[0])))
+            let base = unsafe(addr<void?>(bytes[0]))
+            bases |> push(base)
             sizes |> push(long_length(bytes))
+            gguf_release_arm(base)
             gguf_map_shards(paths, idx + 1, bases, sizes, blk)
+            gguf_release_disarm(base)
         }
     }
 }

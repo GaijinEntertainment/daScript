@@ -28,6 +28,7 @@ require ?das_metal dasllama/dasllama_metal_prefill   // the metal prefill overri
 require dasllama/dasllama_math   // kernel_backend_seat / restore_kernel_backend - the backend pin the metal mode sets, put back
 require dasllama/dasllama_image   // save_model_image / load_model_image / image_identity - the trimmed lane's map under the ring pin
 require dasllama/dasllama_arch_llama   // the arch the trimmed lane's shell names, registered for its map
+require dasllama/dasllama_ple   // ple_check_table, ple_gather_row: the per-layer embedding table's host reads on a trimmed lane
 require daslib/fio
 require strings
 require daslib/strings_boost
@@ -989,7 +990,8 @@ def test_trim_decline_kind(t : T?) {
         t |> success(resident_trim_decline_is_run_mode("the tier installed no resident-driver seams"), "the tier's seams are the run's")
         t |> success(resident_trim_decline_is_run_mode("routed experts (64) - the tier installed no MoE seats; the per-op tier's expert rails serve"), "the MoE seats are the run's")
         t |> success(resident_trim_decline_is_run_mode("{TRIM_SPLIT_DECLINE} (18 routed layers' experts on the host in the lane, 20 in this run's plan)"), "a lane minted under another host-layer split is this run's decline: the mint holds")
-        t |> success(!resident_trim_decline_is_run_mode("the trim serves dense models without a hyper-connection residual or per-layer embeddings"), "the model's shape is the model's")
+        t |> success(resident_trim_decline_is_run_mode(TRIM_PLE_DECLINE), "a per-layer embedding table this run left off the device is the run's: the lane stays for a run that places it")
+        t |> success(!resident_trim_decline_is_run_mode("the device gathers no per-layer embedding table of format f32, and the host's gather reads a plane the lane does not carry"), "the model's shape is the model's")
         t |> success(!resident_trim_decline_is_run_mode("no arm for: sinks"), "a feature is the model's")
         t |> success(!resident_trim_decline_is_run_mode(""), "an empty decline is no decline")
     }
@@ -2031,4 +2033,38 @@ def test_dflash_topk_slices(t : T?) {
         t |> equal(ka.merge.vocab, uint(c.slices * 7l), "{c.vocab} logits: the merge stage reads {c.slices} lists of 7")
         t |> success(ka.slices.k == 7u && ka.merge.k == 7u, "{c.vocab} logits: both stages keep the call's k")
     }
+}
+
+[test(description = "On a planes-trimmed model with per-layer embeddings the table's go-live check passes with no host plane - the device holds the table - and a host gather of one of its rows panics, while the same shell untrimmed fails the check for its missing plane")]
+def test_ple_trimmed_host_reads(t : T?) {
+    var m = Model()
+    m.config.n_layers = 2l
+    m.config.n_embd_per_layer = 256l
+    m.config.vocab_size = 8l
+    m.ple_emb_fmt = KqFmt.q8
+    var short_plane = false
+    try {
+        ple_check_table(m, "the cell's shell")
+    } recover {
+        short_plane = true
+    }
+    t |> success(short_plane, "control: untrimmed, a shell with no plane fails the table's go-live check")
+    m.planes_trimmed = true
+    var checked = true
+    try {
+        ple_check_table(m, "the cell's shell")
+    } recover {
+        checked = false
+    }
+    t |> success(checked, "trimmed, the check passes: the lane holds the table on the device alone")
+    var dst <- [for (_i in range(512)); 0.0]
+    var refused = false
+    try {
+        ple_gather_row(m, 3l, dst, 0l)
+    } recover {
+        refused = true
+    }
+    t |> success(refused, "a host gather of a row panics: the lane carries no plane to read it from")
+    delete dst
+    delete m
 }

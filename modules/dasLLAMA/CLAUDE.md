@@ -24,7 +24,10 @@ whole `stocked` suite too, sharded over a pod fleet (`harness/pod_fleet.das`); a
 no `--exclude` - `--exclude test_ple_modes` is the between-PR iteration form. `--shard i/n`
 splits one run over n boxes (the same command on each, its own `i`), and the PR cites every
 shard's `REPORT`. `--no-tune` runs any suite but the image suites on the reference kernel bodies
-(`DAS_TUNE_POLICY=reference`, the image rail off) - the portable tier's arm. The runner's `REPORT`
+(`DAS_TUNE_POLICY=reference`, the image rail off) - the portable tier's arm. `--poison-kv` starts every
+child's K/V caches as NaN, so a read of a row no store wrote reds its cell - the run a change to a K/V
+store or reader cites; `--reap-images` deletes the images a run's children mint, for a box whose run alone
+writes its models directory (a fleet pod's own folder, where `harness/pod_fleet.das` passes it). The runner's `REPORT`
 and `NEXT` lines say what ran, what the run skipped (a filtered arm, an absent device, or a
 missing model), and what is still owed. The rest: `tests/CLAUDE.md`.
 
