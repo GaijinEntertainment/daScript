@@ -235,7 +235,7 @@ namespace das {
             if (!expr->func->arguments[0]->type->isRef())
                 expr->subexpr = Expression::autoDereference(expr->subexpr);
             // lets try to fold it
-            if (expr->func && expr->func->unsafeOperation && safeExpression(expr)) {
+            if (expr->func && expr->func->unsafeOperation && !safeExpression(expr)) {
                 error("unsafe operator '" + expr->name + "' must be inside the 'unsafe' block", "", "",
                       expr->at, CompilationError::unsafe_operator);
             } else if (enableInferTimeFolding && isConstExprFunc(expr->func)) {

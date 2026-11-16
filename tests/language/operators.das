@@ -1027,3 +1027,17 @@ def operator ?.(_f : LateByNameFoo?; _name : string) : int? => unsafe(addr(g_lat
 typedef LateByNameFooValue = LateByNameFoo
 
 typedef LateByNameFooPtr = LateByNameFoo?
+
+struct UnsafeUnaryOperand {
+    x : int
+}
+
+[unsafe_operation]
+def operator -(a : UnsafeUnaryOperand) : UnsafeUnaryOperand => UnsafeUnaryOperand(x = -a.x)
+
+[test(description = "a unary operator marked [unsafe_operation] is callable inside an unsafe block")]
+def test_unsafe_unary_operator_inside_unsafe(t : T?) {
+    let f = UnsafeUnaryOperand(x = 3)
+    let g = unsafe(-f)
+    t |> equal(g.x, -3)
+}
