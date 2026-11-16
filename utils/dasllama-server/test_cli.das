@@ -233,7 +233,7 @@ def test_speak(t : T?) {
         t |> success(find(plain.out, "dasllama-cli: played ") < 0, "without --play nothing plays")
         remove(out)
     }
-    t |> run("speak: an unknown lane spelling still speaks (warned, served q8)") @(t : T?) {
+    t |> run("speak: an unknown lane spelling still speaks (warned, served with no pin)") @(t : T?) {
         return if (model_missing(t, model(KITTEN)))
         let out = scratch("lane.wav")
         let r = run_cli(["speak", "--tts", model(KITTEN), "--tts-lane", "q3", "-o", out, "Lane."])

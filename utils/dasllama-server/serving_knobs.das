@@ -89,19 +89,29 @@ def resolved_metal_mode(legacy : MetalMode; gpu : string) : MetalMode {
     return empty(gpu) ? legacy : MetalMode.off
 }
 
-let TTS_LANE_DEFAULT = "q8"
+let TTS_LANE_DEFAULT = "default"
 
-//! The TTS weight lane a spelling selects: ``q8`` | ``f32``, anything else warned about and
-//! served as ``q8``.
+//! The TTS weight lane a spelling selects: ``default`` (no pin - the model serves the formats its file stores, an f32
+//! KittenTTS or Kokoro file as Q8_0) | ``q8`` | ``f32`` (pins), anything else warned about and served as ``default``.
 def pick_tts_lane(s : string; tool : string = "dasllama-server") : string {
     let l = to_lower(s)
-    if (l == "f32" || l == "q8") {
+    if (l == "f32" || l == "q8" || l == TTS_LANE_DEFAULT) {
         return l
     }
     if (!empty(l)) {
-        to_log(LOG_WARNING, "{tool}: unknown --tts-lane '{s}', using {TTS_LANE_DEFAULT} (valid: q8 | f32)\n")
+        to_log(LOG_WARNING, "{tool}: unknown --tts-lane '{s}', using {TTS_LANE_DEFAULT} (valid: {TTS_LANE_DEFAULT} | q8 | f32)\n")
     }
     return TTS_LANE_DEFAULT
+}
+
+//! Pin the next TTS loads of this context to the lane `pick_tts_lane` answered: ``q8`` and ``f32`` pin, ``default`` drops
+//! any pin so the file's own formats serve.
+def pin_tts_lane(lane : string) {
+    if (lane == TTS_LANE_DEFAULT) {
+        reset_tts_q8()
+    } else {
+        set_tts_q8(lane == "q8")
+    }
 }
 
 //! The first file of a TTS model's set that is absent — the GGUF at `path`, then each front-end pack

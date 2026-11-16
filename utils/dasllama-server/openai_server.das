@@ -5752,7 +5752,7 @@ def private tts_worker_main(slot : int; model_path : string; lane : string; voic
     var inscope model = TtsModel()
     // the lane pins HERE, in the context that loads: this thread started every dasLLAMA module
     // global at its declared default, so a pin set by the spawning context never arrived
-    set_tts_q8(lane == "q8")
+    pin_tts_lane(lane)
     defer() {
         reset_tts_q8()
     }

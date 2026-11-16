@@ -976,9 +976,7 @@ def private run_speak(plan : CliPlan; cfg : CliConfig) : int {
     defer() {   // the lane pin must not outlive this run, on any path out
         reset_tts_q8()
     }
-    if (!empty(lane_spelling)) {
-        set_tts_q8(pick_tts_lane(lane_spelling, TOOL) == "q8")
-    }
+    pin_tts_lane(pick_tts_lane(lane_spelling, TOOL))
     let t_load = ref_time_ticks()
     var why = ""
     var sp <- load_speech(rig, !empty(plan.speak.tts) ? plan.speak.tts : cfg.tts, plan.speak.voice, plan.speak.speed, plan.playback.play, why)

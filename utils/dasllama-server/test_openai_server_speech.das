@@ -15,6 +15,8 @@ require strings
 require dasllama/dasllama                               // load_model: the LLM whose handler holds the engine
 require dasllama/dasllama_tts                           // tts_normalize / tts_chunks — the /v1/audio/phonemes answer is compared against the facade itself
 require dasllama/dasllama_image   // load_model_uncached: the product's load with no image
+require dasllama/dasllama_pocket  // pocket_serves_native: what a lane pin leaves a Pocket file serving
+require daslib/defer              // defer: a lane pin never outlives its cell
 
 // The last cell boots an LLM beside the TTS model (tinyllama-1.1b-chat-v1.0.Q8_0.gguf, skips without it) and
 // holds its engine with an embeddings forward while syntheses are asked. Every other cell:
@@ -250,11 +252,11 @@ def test_catalog_tts_download_arm(t : T?) {
     }
 }
 
-[test(description = "the TTS lane defaults to q8, f32 is the other served lane and an unknown lane is refused")]
+[test(description = "the TTS lane defaults to no pin, q8 and f32 are the pinned lanes, an unknown lane is refused, and the default lane drops a pin where q8 and f32 set one")]
 def test_tts_lane_normalizes_at_config_time(t : T?) {
-    t |> run("q8 is the default and f32 is the other served lane") @(t : T?) {
+    t |> run("no pin is the default, q8 and f32 are the pinned lanes") @(t : T?) {
         configure_tts(BOGUS_TTS_PATH)
-        t |> equal(server_tts_lane(), "q8", "an unspecified lane serves q8")
+        t |> equal(server_tts_lane(), "default", "an unspecified lane pins nothing")
         configure_tts(BOGUS_TTS_PATH, "f32")
         t |> equal(server_tts_lane(), "f32", "f32 is taken as asked")
         configure_tts(BOGUS_TTS_PATH, "Q8")
@@ -262,8 +264,21 @@ def test_tts_lane_normalizes_at_config_time(t : T?) {
     }
     t |> run("an unknown lane is refused and the default stands") @(t : T?) {
         configure_tts(BOGUS_TTS_PATH, "int4")
-        t |> equal(server_tts_lane(), "q8", "an unserved lane must not reach the worker")
+        t |> equal(server_tts_lane(), "default", "an unserved lane must not reach the worker")
         configure_tts("")
+    }
+    t |> run("the default lane leaves a Pocket file's own quants serving, where q8 and f32 pin them away") @(t : T?) {
+        {
+            defer() {
+                reset_tts_q8()
+            }
+            pin_tts_lane("q8")
+            t |> success(tts_serves_q8() && !pocket_serves_native(), "q8 pins: a K-quant tensor is requantized")
+            pin_tts_lane("f32")
+            t |> success(!tts_serves_q8() && !pocket_serves_native(), "f32 pins the reference lane")
+            pin_tts_lane("default")
+            t |> success(tts_serves_q8() && pocket_serves_native(), "default drops the pin: an f32 phoneme file mints Q8_0, a Pocket file serves its own planes")
+        }
     }
 }
 

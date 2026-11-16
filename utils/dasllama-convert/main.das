@@ -31,6 +31,7 @@ require dasllama/dasllama_gguf          // GGUFMeta — bake-side, deliberately 
 require dasllama/dasllama_math          // pin_backend_for_bake — bake-side, deliberately not facade
 require dasllama/dasllama_gpu_tier      // moe_gpu_bake_tag — bake-side, deliberately not facade
 require dasllama/dasllama_styletts2     // bake_styletts2_image — the TTS arm, bake-side, deliberately not facade
+require dasllama/dasllama_pocket        // bake_pocket_image - the Pocket TTS arm, bake-side the same way
 require dasllama/dasllama_nmt           // load_nmt_model — the translation arm, bake-side
 require dasllama/dasllama_tower_image   // with_cpu_flavor — the planar bake's CPU image, bake-side
 require dasllama/dasllama_qwen3a        // set_qwen3a_q8 — the lane --quant names, bake-side
@@ -93,6 +94,8 @@ struct ConvertArgs {
     @clarg_doc = "With --clean: actually delete (the default is a dry-run listing)"
     apply : bool
 
+    @clarg_doc = "With a KittenTTS or Kokoro source at -q q8: bake the recipe lane - the small form, Q4_K and Q6_K weight groups beside the Q8_0 ones - in place of the Q8_0 lane"
+    recipe : bool
     @clarg_doc = "Convert even if a valid image is already there (default: report it and exit 0)"
     force : bool
 
@@ -278,8 +281,8 @@ def private convert_asr(cfg : ConvertArgs; kind : AsrCarrierKind; qm : QuantMode
     return 0
 }
 
-// "" = not a TTS carrier; else the StyleTTS2-lineage family the GGUF's architecture names
-// (kitten-tts | kokoro) - a `styletts2.sample_rate` key is what makes it one
+// "" = not a TTS carrier; else the family the GGUF's architecture names: a StyleTTS2-lineage one
+// (kitten-tts | kokoro) - a `styletts2.sample_rate` key is what makes it one - or pocket-tts
 def private sniff_tts_family(path : string) : string {
     var st : FStat
     if (!stat(path, st) || st.is_dir || int64(st.size) < 8l) {
@@ -293,8 +296,9 @@ def private sniff_tts_family(path : string) : string {
     fmap(f) $(var bytes : array<uint8>#) {
         if (rd_u32(bytes, 0l) == 0x46554747u) {
             var inscope m <- parse_gguf_meta(bytes)
-            if (gguf_has(m, "styletts2.sample_rate")) {
-                family = gguf_str(m, bytes, "general.architecture")
+            let arch = gguf_str_or(m, bytes, "general.architecture", "")
+            if (gguf_has(m, "styletts2.sample_rate") || arch == POCKET_ARCH) {
+                family = arch
             }
         }
     }
@@ -303,11 +307,14 @@ def private sniff_tts_family(path : string) : string {
 }
 
 // TTS carriers bake through the family's own staging on the lane -q names (q8 = the served
-// default, fp32 = the reference lane); -o lands the image anywhere - a serving directory holds
-// two .dlim files and the two front-end packs, no gguf.
+// default - a phoneme family's Q8_0 lane, a Pocket file's own quants, K-quant planes included -
+// fp32 = the reference lane; --recipe at q8 = a phoneme family's recipe lane, the small form);
+// -o lands the image anywhere - a serving directory holds two .dlim files and the two front-end
+// packs, no gguf; a Pocket image needs no pack.
 def private convert_tts(cfg : ConvertArgs; family : string; qm : QuantMode) : int {
-    if (family != "kitten-tts" && family != "kokoro") {   // a StyleTTS2-lineage file of a family the assembly has no data reader for would bake empty tables
-        to_log(LOG_ERROR, "dasllama-convert: '{cfg.model}' declares TTS architecture '{family}', which dasLLAMA does not serve (kitten-tts | kokoro)\n")
+    let pocket = family == POCKET_ARCH
+    if (!pocket && family != "kitten-tts" && family != "kokoro") {   // a StyleTTS2-lineage file of a family the assembly has no data reader for would bake empty tables
+        to_log(LOG_ERROR, "dasllama-convert: '{cfg.model}' declares TTS architecture '{family}', which dasLLAMA does not serve (kitten-tts | kokoro | pocket-tts)\n")
         return 2
     }
     if (cfg.flavor != Flavor.planar) {
@@ -323,7 +330,11 @@ def private convert_tts(cfg : ConvertArgs; family : string; qm : QuantMode) : in
         to_log(LOG_ERROR, "dasllama-convert: TTS sources bake q8 or fp32\n")
         return 2
     }
-    let tag = q8 ? ST2_IMAGE_TAG_Q8 : ST2_IMAGE_TAG
+    if (cfg.recipe && (pocket || !q8)) {
+        to_log(LOG_ERROR, "dasllama-convert: --recipe bakes a KittenTTS or Kokoro source's recipe lane at -q q8; a Pocket file serves the formats it stores\n")
+        return 2
+    }
+    let tag = pocket ? (q8 ? POCKET_IMAGE_TAG : POCKET_IMAGE_TAG_F32) : (cfg.recipe ? ST2_IMAGE_TAG_KQ : (q8 ? ST2_IMAGE_TAG_Q8 : ST2_IMAGE_TAG))
     let out = cfg.out != "" ? cfg.out : image_path_for(cfg.model, tag)
     return 2 if (out_is_source(cfg, out))
     to_log(LOG_INFO, "dasllama-convert: {cfg.model} ({family})\n")
@@ -346,7 +357,7 @@ def private convert_tts(cfg : ConvertArgs; family : string; qm : QuantMode) : in
     var baked = false
     with_job_que() {
         setup_dasllama_jobque()
-        baked = bake_styletts2_image(cfg.model, out, q8)
+        baked = pocket ? bake_pocket_image(cfg.model, out, q8, q8) : bake_styletts2_image(cfg.model, out, q8, cfg.recipe)
     }
     var st : FStat
     if (!baked || !stat(out, st)) {

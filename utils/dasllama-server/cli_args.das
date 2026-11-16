@@ -314,7 +314,7 @@ struct SpeakArgs {
     @clarg_doc = "Speech speed multiplier (default 1.0)"
     speed : float
 
-    @clarg_doc = "TTS weight lane: q8 (default; the prepared quant image beside the GGUF) | f32 (the file's own planes)"
+    @clarg_doc = "TTS weight lane: default (no pin: the formats the model's file stores, an f32 KittenTTS or Kokoro file as Q8_0) | q8 (every quantized layer as Q8_0) | f32 (the reference lane)"
     tts_lane : string
 
     @clarg_doc = "Print the generator's per-op profile"
