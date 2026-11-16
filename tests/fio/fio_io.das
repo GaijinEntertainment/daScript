@@ -524,6 +524,75 @@ def test_prefetch_map(t : T?) {
     }
 }
 
+// release_map lets a read-only mapping's whole pages leave the
+// resident set: the OS takes the call over many pages, the bytes
+// read back intact, and a small range or a bad argument declines.
+
+[test(description = "release_map over a file mapping is accepted, the mapping reads back intact after it, a range with no whole page and a null base with no bytes decline, and a null base with bytes panics")]
+def test_release_map(t : T?) {
+    t |> run("release over a real mapping is accepted and reads stay intact") @(t : T?) {
+        let fname = path_join(test_temp_dir(), "fio_release_map.bin")
+        let n = 1048576
+        var payload : array<uint8>
+        payload |> resize(n)
+        for (i in range(n)) {
+            payload[i] = uint8(i % 251)
+        }
+        var wrote = false
+        fopen(fname, "wb") $(f) {
+            if (f != null) {
+                fwrite(f, payload)
+                wrote = true
+            }
+        }
+        t |> success(wrote, "wrote the probe file")
+        var mapped = false
+        fopen(fname, "rb") $(f) {
+            if (f == null) {
+                return
+            }
+            fmap(f) $(var bytes : array<uint8>#) {
+                mapped = true
+                var sum = 0
+                for (i in range(n)) {
+                    sum += int(bytes[i])
+                }
+                var released = false
+                var small = true
+                unsafe {
+                    released = release_map(addr<void?>(bytes[0]), uint64(long_length(bytes)))
+                    small = release_map(addr<void?>(bytes[1]), 64ul)
+                }
+                t |> success(released, "the OS took the release of a mapping of many pages")
+                t |> success(!small, "a range holding no whole page declines")
+                var intact = length(bytes) == n
+                var again = 0
+                for (i in range(n)) {
+                    again += int(bytes[i])
+                    if (bytes[i] != uint8(i % 251)) {
+                        intact = false
+                        break
+                    }
+                }
+                t |> success(intact && again == sum, "mapped content intact after the release")
+            }
+        }
+        t |> success(mapped, "mapped the probe file")
+        delete payload
+        remove(fname)
+    }
+    t |> run("degenerate arguments decline or refuse instead of crashing") @(t : T?) {
+        t |> success(!unsafe(release_map(null, 0ul)), "null base + zero bytes declines")
+        var refused = false
+        try {
+            unsafe(release_map(null, 4096ul))
+        } recover {
+            refused = true
+        }
+        t |> success(refused, "a null base with bytes to release panics: no range starts at null")
+    }
+}
+
 // fmap_open_rw is the writable SHARED twin of fmap_open (PAGE_READWRITE / PROT_WRITE): writes
 // through the mapping go back to the file via the page cache. Contract tests — write-through
 // persistence, read parity with the read-only twin, decline shapes.
