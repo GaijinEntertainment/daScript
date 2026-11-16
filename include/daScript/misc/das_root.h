@@ -27,6 +27,18 @@ namespace das {
         return np==String::npos ? path : path.substr(np + 1);
     }
 
+    template <typename String>
+    inline bool dasPathIsInside ( const String & path, const String & folder ) {
+        if ( path.compare(0, folder.size(), folder)!=0 ) return false;
+        if ( path.size()==folder.size() ) return true;
+        const char sep = path[folder.size()];
+#if defined(_WIN32)
+        return sep=='/' || sep=='\\';
+#else
+        return sep=='/';
+#endif
+    }
+
     //! the binary's name without its folder or `.exe`, lowercased on Windows, where names are case-blind
     template <typename String>
     inline String dasBinaryStem ( const String & path ) {

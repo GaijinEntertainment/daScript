@@ -2543,6 +2543,39 @@ if(_arch_specs AND NOT ${DAS_TOOLS_DISABLED} AND NOT CMAKE_CROSSCOMPILING)
     endforeach()
 endif()
 
+# The installed tree carries the module scan's manifests
+# (src/ast/ARCHITECTURE_MODULE_SCAN.md#manifest-relocation). This rule sits after every rule
+# that installs a module.
+if(TARGET daslang AND NOT CMAKE_CROSSCOMPILING)
+    file(WRITE "${PROJECT_BINARY_DIR}/manifest_warmup/main.das" "options gen2\n[export]\ndef main {\n}\n")
+    install(CODE "set(_das_warm_exe \"${DAS_INSTALL_BINDIR}/$<TARGET_FILE_NAME:daslang>\")")
+    install(CODE "set(_das_warm_dir \"${PROJECT_BINARY_DIR}/manifest_warmup\")")
+    install(CODE [[
+        set(_das_warm_root "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}")
+        if(IS_ABSOLUTE "${_das_warm_exe}")
+            set(_das_warm_exe "$ENV{DESTDIR}${_das_warm_exe}")
+        else()
+            set(_das_warm_exe "${_das_warm_root}/${_das_warm_exe}")
+        endif()
+        execute_process(
+            COMMAND "${_das_warm_exe}" -no-module-cache main.das
+            WORKING_DIRECTORY "${_das_warm_dir}"
+            RESULT_VARIABLE _das_warm_rc
+            OUTPUT_VARIABLE _das_warm_out
+            ERROR_VARIABLE _das_warm_out)
+        file(GLOB_RECURSE _das_warm_manifests "${_das_warm_root}/modules/.das_module*.manifest")
+        list(LENGTH _das_warm_manifests _das_warm_count)
+        if(_das_warm_rc EQUAL 0)
+            message(STATUS "Module manifests under ${_das_warm_root}/modules: ${_das_warm_count}")
+            list(APPEND CMAKE_INSTALL_MANIFEST_FILES ${_das_warm_manifests})
+        else()
+            message(WARNING "${_das_warm_exe} did not run (${_das_warm_rc}); the "
+                "tree carries ${_das_warm_count} module manifest(s), and a descriptor without "
+                "one compiles on every start of a read-only install:\n${_das_warm_out}")
+        endif()
+    ]])
+endif()
+
 # Repo-internal rule-and-record documents never install: REVIEW.md / REVIEW.das,
 # ARCHITECTURE.md, MASTERPLAN logs, followup/perf/profile ledgers. The
 # exceptions are REVIEW_COMMON.md and ARCHITECTURE_COMMON.md at the install root

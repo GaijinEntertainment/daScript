@@ -145,7 +145,7 @@ if [[ -z "$CPP_SUFFIX" && -d "$BUILD_LIB" ]]; then
     mv "$BUILD_LIB" "$HIDDEN_LIB"
 fi
 restore_and_clean() {
-    rm -f "$LOG" "$LOG.suite" "$LOG.lint"
+    rm -f "$LOG" "$LOG.suite" "$LOG.lint" "$LOG.warm.das"
     if [[ -n "$HIDDEN_LIB" && -d "$HIDDEN_LIB" ]]; then
         # A concurrent build may have recreated lib/ meanwhile; mv into an existing
         # dir would NEST the hidden copy instead of restoring it - merge then.
@@ -177,6 +177,40 @@ echo "daslang bundle smoke test"
 echo "  bundle : $BUNDLE"
 echo "  daslang: $DASLANG"
 echo "==================================================================="
+
+# The bundle carries the module scan's manifests, keyed by the das root mark and not by a
+# place on disk. This row runs before any other row starts a binary: a start writes the
+# manifests that are missing.
+check_shipped_manifests() {
+    local bad=0 descriptor manifest trace
+    while IFS= read -r descriptor; do
+        manifest="$descriptor.manifest"
+        if [[ ! -f "$manifest" ]]; then
+            echo "no manifest beside $descriptor"
+            bad=$((bad + 1))
+        elif ! grep -qx $'dasroot\t\$DASROOT' "$manifest"; then
+            echo "$manifest names a place on disk:"
+            grep -m2 -E $'^(root|dasroot)\t' "$manifest"
+            bad=$((bad + 1))
+        fi
+    done < <(find modules -name .das_module)
+    [[ $bad -eq 0 ]] || return 1
+    printf 'options gen2\n[export]\ndef main {\n}\n' > "$LOG.warm.das"
+    trace="$(DAS_TRACE_MODULE_LOAD=1 "$DASLANG" -no-module-cache "$LOG.warm.das" 2>&1)"
+    if echo "$trace" | grep '\.das_module: compiled' | grep -v 'compiled (no_manifest)'; then
+        echo "the descriptors above compiled on a start of the fresh bundle"
+        return 1
+    fi
+    if ! echo "$trace" | grep -q '\.das_module: replayed'; then
+        echo "the scan trace names no replayed descriptor:"
+        echo "$trace" | head -20
+        return 1
+    fi
+}
+
+echo
+echo "Module manifests:"
+run_check "shipped and relocatable" check_shipped_manifests
 
 echo
 echo "Source compile (-compile-only):"

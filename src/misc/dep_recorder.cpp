@@ -10,6 +10,7 @@
 #include "daScript/misc/dep_recorder.h"
 #include "daScript/misc/env_cfg.h"
 #include "daScript/misc/sysos.h"
+#include "daScript/misc/das_root.h"
 
 #if !DAS_NO_FILEIO
 #include <stdio.h>
@@ -91,8 +92,7 @@ namespace das {
 
         bool depExcluded ( const string & key ) {
             for ( const auto & one : g_excludes ) {
-                if ( key.compare(0, one.length(), one)==0
-                    && (key.length()==one.length() || key[one.length()]=='/') ) return true;
+                if ( dasPathIsInside(key, one) ) return true;
             }
             return false;
         }

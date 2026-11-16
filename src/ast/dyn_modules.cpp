@@ -5,11 +5,13 @@
 #include <daScript/simulate/aot_builtin_fio.h> // dirent, DIR, readdir
 #include <daScript/simulate/aot_builtin.h>     // das_get_cross_platform_name, das_is_dll_build
 #include <daScript/misc/sysos.h>
+#include <daScript/misc/das_root.h>
 #include <daScript/misc/string_writer.h>       // TextWriter, LOG (the env-gated scan trace)
 #include <daScript/misc/anyhash.h>             // hash_block64
 #include <daScript/misc/env_cfg.h>             // get_dasenv_trace_module_load
 #include <daScript/misc/performance_time.h>
 #include <cctype>                              // tolower (case-insensitive basename normalize)
+#include <cstring>
 #include <mutex>
 #include <cstdio>                              // fprintf(stderr) for the shadow-shadows-global diagnostic
 
@@ -99,7 +101,8 @@ static string manifest_file_name() {
     if ( !target.empty() ) name += "." + target;
     return name + ".manifest";
 }
-static constexpr const char *MANIFEST_HEADER = "das_module_manifest\t4";
+static constexpr const char *MANIFEST_HEADER = "das_module_manifest\t5";
+static constexpr const char *DAS_ROOT_MARK = "$DASROOT";
 
 static bool g_ignore_manifests = false;
 
@@ -193,6 +196,44 @@ struct ManifestKey {
     string root, dasRoot, target;
 };
 
+// src/ast/ARCHITECTURE_MODULE_SCAN.md#manifest-relocation
+static string to_portable(const string & s, const string & dasRoot) {
+    return dasPathIsInside(s, dasRoot) ? DAS_ROOT_MARK + s.substr(dasRoot.size()) : s;
+}
+
+#if !DAS_NO_FILEIO
+static string from_portable(const string & s, const string & dasRoot) {
+    return starts_with(s, DAS_ROOT_MARK) ? dasRoot + s.substr(strlen(DAS_ROOT_MARK)) : s;
+}
+#endif
+
+static bool portable_row_path(const string & recorded, const string & dasRoot, string & portable, string & why) {
+    if ( starts_with(recorded, DAS_ROOT_MARK) ) {
+        why = "the recorded path " + recorded + " starts with " + DAS_ROOT_MARK;
+        return false;
+    }
+    portable = to_portable(recorded, dasRoot);
+    return true;
+}
+
+static das::string force_lower(const das::string &name) {
+    das::string out = name;
+    for (auto &c : out) {
+        c = (char)tolower((unsigned char)c);
+    }
+    return out;
+}
+
+static string path_spelling(const string & path) {
+    string s = force_lower(path);
+    for ( auto & c : s ) if ( c == '\\' ) c = '/';
+    return s;
+}
+
+static bool names_das_root(const string & text, const string & dasRoot) {
+    return path_spelling(text).find(path_spelling(dasRoot)) != string::npos;
+}
+
 static ManifestKey manifest_key(const string & path) {
     ManifestKey key;
     key.root = path;
@@ -250,10 +291,11 @@ static ManifestRead read_manifest(const string & file, uint32_t descSize, uint64
     if ( dll[1] != (das_is_dll_build() ? "1" : "0") ) return stale("binary kind");
     auto rootLine = split_tabs(lines[3]);
     if ( rootLine.size() != 2 || rootLine[0] != "root" ) return damaged("root line");
-    if ( rootLine[1] != key.root ) return stale("module folder moved");
+    if ( rootLine[1] != to_portable(key.root, key.dasRoot) ) return stale("module folder moved");
     auto dasRootLine = split_tabs(lines[4]);
     if ( dasRootLine.size() != 2 || dasRootLine[0] != "dasroot" ) return damaged("dasroot line");
-    if ( dasRootLine[1] != key.dasRoot ) return stale("das root moved");
+    const bool markedDasRoot = dasRootLine[1] == DAS_ROOT_MARK && dasPathIsInside(key.root, key.dasRoot);
+    if ( !markedDasRoot && dasRootLine[1] != key.dasRoot ) return stale("das root moved");
     auto targetLine = split_tabs(lines[5]);
     if ( targetLine.size() != 2 || targetLine[0] != "target" ) return damaged("target line");
     if ( targetLine[1] != key.target ) return stale("compile target");
@@ -268,20 +310,21 @@ static ManifestRead read_manifest(const string & file, uint32_t descSize, uint64
             if ( fields.size() != 4 ) return damaged("dep field count");
             uint32_t size = 0;
             uint64_t hash = 0;
-            if ( !dep_stamp(fa, fields[1], size, hash) ) return stale("dependency missing");
+            const string depPath = from_portable(fields[1], key.dasRoot);
+            if ( !dep_stamp(fa, depPath, size, hash) ) return stale("dependency missing");
             if ( fields[2] != to_string(size) || fields[3] != hex64(hash) ) return stale("dependency changed");
-            res.deps.push_back(DepStamp{fields[1], size, hash});
+            res.deps.push_back(DepStamp{depPath, size, hash});
         } else if ( kind == "np" ) {
             if ( fields.size() != 4 ) return damaged("np field count");
             DynModuleManifestRow row;
-            row.a = fields[1]; row.b = fields[2]; row.c = fields[3];
+            row.a = fields[1]; row.b = fields[2]; row.c = from_portable(fields[3], key.dasRoot);
             res.rows.push_back(das::move(row));
         } else if ( kind == "dm" ) {
             if ( fields.size() != 5 ) return damaged("dm field count");
             DynModuleManifestRow row;
             row.dynamic = true;
             if ( !parse_on_error(fields[3], row.on_error) ) return damaged("dm on_error field");
-            row.a = fields[1]; row.b = fields[2]; row.c = fields[4];
+            row.a = from_portable(fields[1], key.dasRoot); row.b = fields[2]; row.c = fields[4];
             if ( !row.c.empty() && !dynamic_module_artifact_exists(row.a.c_str()) ) return stale("artifact missing");
             res.rows.push_back(das::move(row));
         } else if ( kind == "grp" ) {
@@ -317,15 +360,14 @@ static bool write_manifest(const string & file, uint32_t descSize, uint64_t desc
                            const das::vector<DepStamp> & deps, const das::vector<DynModuleManifestRow> & rows,
                            bool optOut, string & why) {
     if ( !field_ok(key.root) || !field_ok(key.dasRoot) || !field_ok(key.target) ) { why = "a key path contains a tab or newline"; return false; }
-    string text = string(MANIFEST_HEADER) + "\n";
-    text += "stamp\t" + to_string(descSize) + "\t" + hex64(descHash) + "\n";
-    text += string("dll\t") + (das_is_dll_build() ? "1" : "0") + "\n";
-    text += "root\t" + key.root + "\n";
-    text += "dasroot\t" + key.dasRoot + "\n";
-    text += "target\t" + key.target + "\n";
+    string head = string(MANIFEST_HEADER) + "\n";
+    head += "stamp\t" + to_string(descSize) + "\t" + hex64(descHash) + "\n";
+    head += string("dll\t") + (das_is_dll_build() ? "1" : "0") + "\n";
+    head += "root\t" + to_portable(key.root, key.dasRoot) + "\n";
+    string text = "target\t" + key.target + "\n";
     for ( auto & dep : deps ) {
         if ( !field_ok(dep.path) ) { why = "a dependency path contains a tab or newline"; return false; }
-        text += "dep\t" + dep.path + "\t" + to_string(dep.size) + "\t" + hex64(dep.hash) + "\n";
+        text += "dep\t" + to_portable(dep.path, key.dasRoot) + "\t" + to_string(dep.size) + "\t" + hex64(dep.hash) + "\n";
     }
     if ( optOut ) {
         text += "no_manifest\n";
@@ -336,16 +378,21 @@ static bool write_manifest(const string & file, uint32_t descSize, uint64_t desc
                 why = "a recorded argument contains a tab or newline";
                 return false;
             }
+            string path;
             if ( row.dynamic ) {
-                text += "dm\t" + row.a + "\t" + row.b + "\t" + to_string(row.on_error) + "\t" + row.c + "\n";
+                if ( !portable_row_path(row.a, key.dasRoot, path, why) ) return false;
+                text += "dm\t" + path + "\t" + row.b + "\t" + to_string(row.on_error) + "\t" + row.c + "\n";
             } else if ( row.group ) {
                 text += "grp\t" + row.a + "\t" + row.b + "\t" + row.c + "\n";
             } else {
-                text += "np\t" + row.a + "\t" + row.b + "\t" + row.c + "\n";
+                if ( !portable_row_path(row.c, key.dasRoot, path, why) ) return false;
+                text += "np\t" + row.a + "\t" + row.b + "\t" + path + "\n";
             }
         }
         text += "end\t" + to_string(rows.size()) + "\n";
     }
+    const bool placed = !dasPathIsInside(key.root, key.dasRoot) || names_das_root(text, key.dasRoot);
+    text = head + "dasroot\t" + (placed ? key.dasRoot : string(DAS_ROOT_MARK)) + "\n" + text;
 #if DAS_NO_FILEIO
     (void)file;
     why = "no file io";
@@ -512,14 +559,6 @@ static das::string normalize_module_name(const das::string &name) {
 // identity on case-sensitive Linux). The explicit `--disable-module` list is
 // user intent, not a filesystem-shadow concern, so `--disable-module dashv`
 // must match the on-disk folder `dasHV` everywhere, including CI's Linux.
-static das::string force_lower(const das::string &name) {
-    das::string out = name;
-    for (auto &c : out) {
-        c = (char)tolower((unsigned char)c);
-    }
-    return out;
-}
-
 // Collect directory names under path/modules/ without loading anything
 static das_hash_set<das::string> collect_module_names(const das::string &path) {
     das_hash_set<das::string> result;

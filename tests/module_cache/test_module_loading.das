@@ -1014,6 +1014,45 @@ let DESCRIPTOR_DEP = "options gen2\nrequire daslib/fio\nrequire ./helper\n\n[exp
 let HELPER = "options gen2\nmodule helper\ndef helper_name() : string \{\n    return \"hello\"\n\}\n"
 let DESCRIPTOR_BROKEN = "options gen2\n\n[export]\ndef initialize(project_path : string) \{\n    this_is_not_a_function()\n\}\n"
 
+def np_call(mod, name, pathExpr : string) : string =>
+    "register_native_path(\"{mod}\", \"{name}\", {pathExpr})"
+
+def descriptor_of(calls : array<string>) : string {
+    let head = "options gen2\nrequire daslib/fio\nrequire strings\n\n[export]\n"
+    let open = "def initialize(project_path : string) \{\n    "
+    return "{head}{open}{join(calls, "\n    ")}\n\}\n"
+}
+
+let CALL_HELLO = np_call("manifest_probe", "hello", "\"\{project_path\}/hello.das\"")
+//! a recorded path the reader would take for one the writer marked
+let DESCRIPTOR_MARKED = descriptor_of([CALL_HELLO,
+    np_call("manifest_probe", "marked", "\"$DASROOT/marked.das\"")])
+//! one path under the das root and one that is the das root itself
+let DESCRIPTOR_ROOTED = descriptor_of([CALL_HELLO,
+    np_call("manifest_probe", "root_itself", "get_das_root()")])
+let DESCRIPTOR_SIBLING = descriptor_of([
+    np_call("sibling_probe", "other", "\"\{project_path\}/other.das\"")])
+//! the das root inside a longer string, and in another spelling:
+//! paths the writer leaves as the descriptor recorded them
+let DESCRIPTOR_PLACED = descriptor_of([
+    np_call("placed_probe", "include", "\"-I\{get_das_root()\}/include\"")])
+let DESCRIPTOR_SHOUTED = descriptor_of([
+    np_call("shouted_probe", "loud", "\"\{to_upper(get_das_root())\}/loud.das\"")])
+let DESCRIPTOR_SLASHED = descriptor_of([
+    np_call("slashed_probe", "back", "replace(get_das_root(), \"/\", \"\\\\\")")])
+//! the das root, a backslash, a file: inside the root on Windows only
+let DESCRIPTOR_BACKSLASH = descriptor_of([
+    np_call("backslash_probe", "win", "\"\{get_das_root()\}\\\\w.das\"")])
+//! the artifact path of a C++ module row starts with the mark
+let MARKED_ARTIFACT = "$DASROOT/absent.shared_module"
+let DESCRIPTOR_MARKED_DM = descriptor_of([CALL_HELLO,
+    "register_dynamic_module(\"{MARKED_ARTIFACT}\", \"Module_Marked\")"])
+let PLACED_PROBES = fixed_array("placed_probe", "shouted_probe", "slashed_probe")
+let PLACED_DESCRIPTORS = fixed_array(DESCRIPTOR_PLACED, DESCRIPTOR_SHOUTED, DESCRIPTOR_SLASHED)
+let HELLO = "options gen2\nmodule hello\ndef hello_value() : int \{\n    return 42\n\}\n"
+let DRIVER = ("options gen2\nrequire manifest_probe/hello\n[export]\n" +
+    "def main \{\n    print(\"PROBE \{hello_value()\}\\n\")\n\}\n")
+
 //! the scan trace line for a module's descriptor: `[module]
 //! descriptor <path>/.das_module: <verdict>`; a replay verdict keeps
 //! its deferred count and drops the two timings
@@ -1089,11 +1128,13 @@ def with_line_inserted(lines : array<string>; idx : int; text : string) : string
 //! writes `text` as the manifest, runs the child, and expects the
 //! scan to reject it for `why` and rewrite it; the require resolves
 //! either way
-def expect_rewrite(t : T?; cmd : string; manifest : string; text : string; why : string) {
+def expect_rewrite(t : T?; cmd : string; manifest : string; text : string; why : string;
+                   rows : int = 1) {
     fwrite(manifest, text)
     var out : string
     t |> success(run_child_reported(t, why, cmd, out, "PROBE 42"), "'{why}': the require resolves without the manifest")
-    t |> equal("compiled ({why}), manifest written (1 row(s))", probe_line(out), "'{why}' recompiles and rewrites:\n{out}")
+    t |> equal("compiled ({why}), manifest written ({rows} row(s))", probe_line(out),
+        "'{why}' recompiles and rewrites:\n{out}")
 }
 
 //! the project root the arms share: the probe module's paths and the
@@ -1141,10 +1182,10 @@ def make_manifest_fixture(tmp : string) : ManifestFixture {
         cmd = fixture_cmd(tmp, das_exe(), get_das_root())
     )
     fwrite(fx.descriptor, DESCRIPTOR)
-    fwrite(path_join(fx.modDir, "hello.das"), "options gen2\nmodule hello\ndef hello_value() : int \{\n    return 42\n\}\n")
+    fwrite(path_join(fx.modDir, "hello.das"), HELLO)
     fwrite(path_join(fx.dmDir, ".das_module"), DESCRIPTOR_DM)
     fwrite(path_join(fx.brokenDir, ".das_module"), DESCRIPTOR_BROKEN)
-    fwrite(path_join(tmp, "use.das"), "options gen2\nrequire manifest_probe/hello\n[export]\ndef main \{\n    print(\"PROBE \{hello_value()\}\\n\")\n\}\n")
+    fwrite(path_join(tmp, "use.das"), DRIVER)
     return fx
 }
 
@@ -1157,8 +1198,12 @@ def arms_record_and_replay(t : T?; fx : ManifestFixture) {
         t |> equal("compiled (no manifest), manifest written (1 row(s))", probe_line(out), "the trace says compiled and written:\n{out}")
         t |> success(stat(manifest).is_valid, "the manifest sits beside the descriptor")
         let text = fread(manifest)
-        t |> success(text |> starts_with("das_module_manifest\t4\n"), "the manifest opens with its format version: {text}")
-        t |> success(find(text, "\ndep\t") >= 0 && find(text, "/daslib/fio.das\t") >= 0, "the manifest stamps the files the descriptor's compile read: {text}")
+        t |> success(text |> starts_with("das_module_manifest\t5\n"),
+            "the manifest opens with its format version: {text}")
+        t |> success(contains(text, "\ndep\t$DASROOT/daslib/fio.das\t"),
+            "the files the descriptor's compile read are stamped, by the mark: {text}")
+        t |> success(!contains(text, "\nroot\t$DASROOT") && !contains(text, "\ndasroot\t$DASROOT"),
+            "a module folder outside the das root keeps both key paths absolute: {text}")
         t |> success(find(text, "\nnp\tmanifest_probe\thello\t") >= 0, "the manifest carries the recorded row: {text}")
         t |> success(find(text, "\nend\t1\n") >= 0, "the manifest closes with its row count: {text}")
     }
@@ -1272,6 +1317,15 @@ def arms_root_spellings(t : T?; fx : ManifestFixture) {
     }
 }
 
+//! `root` and `dasRoot`: key paths the manifest must not replay under
+def expect_key_lines_refused(t : T?; cmd, manifest : string; lines : array<string>;
+                             root, dasRoot : string; rows : int = 1) {
+    expect_rewrite(t, cmd, manifest, with_line(lines, LINE_ROOT, "root\t{root}"),
+        "module folder moved", rows)
+    expect_rewrite(t, cmd, manifest, with_line(lines, LINE_DASROOT, "dasroot\t{dasRoot}"),
+        "das root moved", rows)
+}
+
 def arms_rejections(t : T?; fx : ManifestFixture) {
     let cmd = fx.cmd
     let manifest = fx.manifest
@@ -1299,6 +1353,8 @@ def arms_rejections(t : T?; fx : ManifestFixture) {
         expect_rewrite(t, cmd, manifest, with_line(lines, LINE_ROOT, "root\t{fx.modDir}/elsewhere"), "module folder moved")
         expect_rewrite(t, cmd, manifest, with_line(lines, LINE_DASROOT, "dasroot"), "dasroot line")
         expect_rewrite(t, cmd, manifest, with_line(lines, LINE_DASROOT, "dasroot\t{fx.tmp}"), "das root moved")
+        expect_key_lines_refused(t, cmd, manifest, lines,
+            "$DASROOT/modules/manifest_probe", "$DASROOT")
         expect_rewrite(t, cmd, manifest, with_line(lines, LINE_TARGET, "target"), "target line")
         expect_rewrite(t, cmd, manifest, with_line_inserted(lines, np, ""), "empty line")
         expect_rewrite(t, cmd, manifest, with_line(lines, dep, "dep\t{fx.modDir}/nope.das\t1"), "dep field count")
@@ -1373,6 +1429,20 @@ def arms_opt_out_and_write_failures(t : T?; fx : ManifestFixture) {
         t |> equal("compiled (descriptor changed), manifest not written: a recorded argument contains a tab or newline", probe_line(out), "the trace names the field:\n{out}")
         t |> equal(before, fread(manifest), "the stale manifest is left as it was")
     }
+    t |> run("a recorded path that starts with the das root mark is not written") @(t : T?) {
+        let before = fread(manifest)
+        for (descriptor, marked in fixed_array(DESCRIPTOR_MARKED, DESCRIPTOR_MARKED_DM),
+                fixed_array("$DASROOT/marked.das", MARKED_ARTIFACT)) {
+            fwrite(fx.descriptor, descriptor)
+            var out : string
+            t |> success(run_child_reported(t, "marked", cmd, out, "PROBE 42"),
+                "the descriptor still resolves the require")
+            let verdict = "manifest not written: the recorded path {marked} starts with $DASROOT"
+            t |> equal("compiled (descriptor changed), {verdict}", probe_line(out),
+                "the trace names the path:\n{out}")
+            t |> equal(before, fread(manifest), "the stale manifest is left as it was")
+        }
+    }
     t |> run("a tree the scan cannot write to just compiles, every start") @(t : T?) {
         fwrite(fx.descriptor, DESCRIPTOR)
         remove_result(manifest)
@@ -1392,8 +1462,174 @@ def arms_opt_out_and_write_failures(t : T?; fx : ManifestFixture) {
     }
 }
 
+def write_probe(root, mod, descriptor : string) : string {
+    let modDir = path_join(path_join(root, "modules"), mod)
+    var err : string
+    mkdir_rec(modDir, err)
+    fwrite(path_join(modDir, ".das_module"), descriptor)
+    return modDir
+}
+
+//! a das root the test owns: the tree's top-level daslib and the
+//! probe modules under `modules/`, their folders inside the root
+def make_das_root(root : string) {
+    let daslib = path_join(root, "daslib")
+    var err : string
+    mkdir_rec(daslib, err)
+    let treeDaslib = path_join(get_das_root(), "daslib")
+    dir(treeDaslib) $(name) {
+        if (extension(name) == ".das") {
+            copy_file(path_join(treeDaslib, name), path_join(daslib, name), true, err)
+        }
+    }
+    let modDir = write_probe(root, "manifest_probe", DESCRIPTOR_ROOTED)
+    fwrite(path_join(modDir, "hello.das"), HELLO)
+    for (mod, descriptor in PLACED_PROBES, PLACED_DESCRIPTORS) {
+        write_probe(root, mod, descriptor)
+    }
+    write_probe(root, "dm_probe", DESCRIPTOR_DM)
+    write_probe(root, "backslash_probe", DESCRIPTOR_BACKSLASH)
+}
+
+def probe_manifest(root : string; mod : string = "manifest_probe") : string =>
+    path_join(path_join(path_join(root, "modules"), mod), manifest_file_name())
+
+def arms_relocation_refusals(t : T?; project, writtenRoot, movedRoot : string) {
+    t |> run("a manifest inside the das root is refused when a key line names a place") @(t : T?) {
+        let manifest = probe_manifest(movedRoot)
+        let cmd = fixture_cmd(project, das_exe(), movedRoot)
+        let lines <- manifest_lines(manifest)
+        t |> success(length(lines) > LINE_TARGET,
+            "the manifest holds its key lines: {join(lines, " | ")}")
+        return if (length(lines) <= LINE_TARGET)
+        expect_key_lines_refused(t, cmd, manifest, lines,
+            "{writtenRoot}/modules/manifest_probe", writtenRoot, 2)
+        t |> equal(join(lines, "\n") + "\n", fread(manifest),
+            "the last rewrite restored the marked manifest")
+    }
+    t |> run("a folder that only continues the das root's characters is outside it") @(t : T?) {
+        let sibling = "{movedRoot}2"
+        write_probe(sibling, "sibling_probe", DESCRIPTOR_SIBLING)
+        fwrite(path_join(sibling, "use.das"), DRIVER)
+        let cmd = fixture_cmd(sibling, das_exe(), movedRoot)
+        var out : string
+        t |> success(run_child_reported(t, "sibling cold", cmd, out, "PROBE 42"),
+            "the require resolves through the das root's module")
+        t |> equal("compiled (no manifest), manifest written (1 row(s))",
+            probe_line(out, "sibling_probe"), "the sibling's descriptor compiles:\n{out}")
+        let text = fread(probe_manifest(sibling, "sibling_probe"))
+        t |> success(!contains(text, "\nroot\t$DASROOT") && !contains(text, "\ndasroot\t$DASROOT"),
+            "both key paths stay absolute: {text}")
+        t |> success(contains(text, "root_moved2/modules/sibling_probe/other.das\n"),
+            "the recorded path names the sibling folder: {text}")
+        t |> success(!contains(text, "\tother\t$DASROOT"), "and is not marked: {text}")
+        t |> success(contains(text, "\ndep\t$DASROOT/daslib/fio.das\t"),
+            "its daslib dependency is marked all the same: {text}")
+        var warm : string
+        t |> success(run_child_reported(t, "sibling warm", cmd, warm, "PROBE 42"),
+            "the require resolves again")
+        t |> equal("replayed 1 row(s) (deferred 0)", probe_line(warm, "sibling_probe"),
+            "the sibling's manifest replays:\n{warm}")
+    }
+}
+
+def arms_placed_manifests(t : T?; project, writtenRoot : string) {
+    t |> run("a manifest that still names the das root keeps the root as its key") @(t : T?) {
+        for (mod in PLACED_PROBES) {
+            let text = fread(probe_manifest(writtenRoot, mod))
+            t |> success(contains(text, "\nroot\t$DASROOT/modules/{mod}\n"),
+                "{mod}: the module folder is marked: {text}")
+            t |> success(!contains(text, "\ndasroot\t$DASROOT\n") && contains(text, "\ndasroot\t"),
+                "{mod}: the das root line names the place: {text}")
+        }
+        var out : string
+        let cmd = fixture_cmd(project, das_exe(), writtenRoot)
+        t |> success(run_child_reported(t, "inside warm", cmd, out, "PROBE 42"),
+            "the require resolves again")
+        for (mod in PLACED_PROBES) {
+            t |> equal("replayed 1 row(s) (deferred 0)", probe_line(out, mod),
+                "{mod} replays while the das root stays:\n{out}")
+        }
+    }
+}
+
+//! the probes whose rows the first module does not carry: a C++
+//! module row, and a path continuing the root with a backslash
+def expect_dm_and_backslash_probes(t : T?; root, out : string; moved : bool) {
+    let dm = fread(probe_manifest(root, "dm_probe"))
+    let artifact = "modules/dm_probe/absent.shared_module"
+    t |> success(contains(dm, "\ndm\t$DASROOT/{artifact}\tModule_Absent\t0\t\n"),
+        "the artifact of a C++ module row is marked: {dm}")
+    let back = fread(probe_manifest(root, "backslash_probe"))
+    let marked = contains(back, "\nnp\tbackslash_probe\twin\t$DASROOT\\w.das\n")
+    t |> equal(get_platform_name() == "windows", marked,
+        "a backslash continues the das root on Windows only: {back}")
+    return if (!moved)
+    t |> equal("replayed 1 row(s) (deferred 0)", probe_line(out, "dm_probe"),
+        "the C++ module row replays under the moved root:\n{out}")
+    let retried = "root_moved/modules/dm_probe/absent"   //! a Debug build loads `absent_debug`
+    t |> success(contains(out, "Module_Absent <- ") && contains(out, retried),
+        "and retries its artifact at the new place:\n{out}")
+    let verdict = (marked ? "replayed 1 row(s) (deferred 0)"
+        : "compiled (das root moved), manifest written (1 row(s))")
+    t |> equal(verdict, probe_line(out, "backslash_probe"),
+        "the backslash probe follows its mark:\n{out}")
+}
+
+def arms_relocation(t : T?; fx : ManifestFixture) {
+    let written = path_join(fx.tmp, "root_written")
+    let moved = path_join(fx.tmp, "root_moved")
+    let project = path_join(fx.tmp, "relocation_project")
+    make_das_root(written)
+    var err : string
+    mkdir_rec(project, err)
+    fwrite(path_join(project, "use.das"), DRIVER)
+    t |> run("a module inside the das root writes a manifest naming no place on disk") @(t : T?) {
+        let cmd = fixture_cmd(project, das_exe(), written)
+        var out : string
+        t |> success(run_child_reported(t, "inside cold", cmd, out, "PROBE 42"),
+            "the require resolves under the test's das root")
+        t |> equal("compiled (no manifest), manifest written (2 row(s))", probe_line(out),
+            "the trace says compiled and written:\n{out}")
+        let text = fread(probe_manifest(written))
+        let inRoot = "$DASROOT/modules/manifest_probe"
+        t |> success(contains(text, "\nroot\t{inRoot}\n"),
+            "the module folder is the mark and its place under the root: {text}")
+        t |> success(contains(text, "\ndasroot\t$DASROOT\n"),
+            "the das root line is the mark alone: {text}")
+        t |> success(contains(text, "\ndep\t$DASROOT/daslib/fio.das\t"),
+            "a dependency is marked: {text}")
+        t |> success(contains(text, "\nnp\tmanifest_probe\thello\t{inRoot}/hello.das\n"),
+            "a recorded path under the root is marked: {text}")
+        t |> success(contains(text, "\nnp\tmanifest_probe\troot_itself\t$DASROOT\n"),
+            "a recorded path that is the root is the mark alone: {text}")
+        t |> success(!contains(text, "root_written"),
+            "nothing names the folder the root sits in: {text}")
+        expect_dm_and_backslash_probes(t, written, out, false)
+    }
+    arms_placed_manifests(t, project, written)
+    t |> run("a das root that moved replays the manifests that name no place") @(t : T?) {
+        let text = fread(probe_manifest(written))
+        let renamed = rename_result(written, moved)
+        t |> success(renamed is value && (renamed as value), "the das root is renamed: {renamed}")
+        let cmd = fixture_cmd(project, das_exe(), moved)
+        var out : string
+        t |> success(run_child_reported(t, "moved", cmd, out, "PROBE 42"),
+            "the replayed row resolves the require at the new place")
+        t |> equal("replayed 2 row(s) (deferred 0)", probe_line(out),
+            "the trace says replayed, no das-root recompile:\n{out}")
+        t |> equal(text, fread(probe_manifest(moved)), "the manifest is untouched")
+        for (mod in PLACED_PROBES) {
+            t |> equal("compiled (das root moved), manifest written (1 row(s))",
+                probe_line(out, mod), "{mod} named the old place and recompiles:\n{out}")
+        }
+        expect_dm_and_backslash_probes(t, moved, out, true)
+    }
+    arms_relocation_refusals(t, project, written, moved)
+}
+
 //! the arms share one root and run in this order
-[test(description = "The manifest beside each .das_module records and replays descriptors, keeps binary kinds and targets apart, rejects bad manifests and survives opt-out and write failures", timeout = 1200)]
+[test(description = "The manifest beside each .das_module records and replays descriptors, keeps binary kinds and targets apart, rejects bad manifests, survives opt-out and write failures, and replays under a das root that moved", timeout = 1200)]
 def test_descriptor_manifest(t : T?) {
     var terr : string
     let tmp = create_temp_directory("das_dm_manifest", terr)
@@ -1408,6 +1644,7 @@ def test_descriptor_manifest(t : T?) {
     arms_root_spellings(t, fx)
     arms_rejections(t, fx)
     arms_opt_out_and_write_failures(t, fx)
+    arms_relocation(t, fx)
     var err : string
     rmdir_rec(tmp, err)
 }
