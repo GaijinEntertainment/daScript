@@ -338,7 +338,6 @@ def private parse_atom(var p : Parser) : Pattern {
         return <- cat(alts)
     }
     panic("mini-notation parse error at {tok.pos}: unexpected '{tok.text}'")
-    return <- silence()
 }
 
 // ─── Note Name Parsing ───

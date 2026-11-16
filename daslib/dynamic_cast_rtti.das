@@ -70,10 +70,8 @@ def public force_dynamic_type_cast(instance; otherclass : auto(TT)) : TT -const?
             clsinfo = clsinfo.firstType
         }
         panic("not an instance of {typeinfo typename(type<TT-const>)}")
-        return null
     } else {
         panic("not an instance of {typeinfo typename(type<TT-const>)}")
-        return null
     }
 }
 

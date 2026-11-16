@@ -623,9 +623,8 @@ def test_shifts(t : T?) {
     t |> run("custom operator shifts") @(t : T?) { test_all_A_shifts(t); }
 }
 
-def sab_panic_time(msg : string) {
+def sab_panic_time(msg : string) : bool {
     panic(msg)
-    return false
 }
 
 [test(description = "||= and &&= short-circuit like || and && and never evaluate the right side once the result is decided")]

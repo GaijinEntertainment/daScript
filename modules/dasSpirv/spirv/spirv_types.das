@@ -46,7 +46,6 @@ def public emit_type(var m : SpirvModule; t : TypeDecl?) : uint {
         return type_array(m, emit_type(m, t.firstType), t.fixedDim)
     }
     panic("emit_type: unsupported baseType {bt}")
-    return 0u
 }
 
 // Scalar component type-id for a vector/scalar TypeDecl — used when emitting a per-lane
@@ -65,5 +64,4 @@ def public emit_component_type(var m : SpirvModule; t : TypeDecl?) : uint {
     if (bt == Type.tInt8 || bt == Type.tByte2 || bt == Type.tByte3 || bt == Type.tByte4) return type_int(m, 8u, 1u)
     if (bt == Type.tUInt8 || bt == Type.tUByte2 || bt == Type.tUByte3 || bt == Type.tUByte4) return type_int(m, 8u, 0u)
     panic("emit_component_type: unsupported baseType {bt}")
-    return 0u
 }

@@ -86,7 +86,6 @@ def fmt_of_name(name : string) : KqFmt {
         return f
     }
     panic("unknown kq format '{name}'")
-    return KqFmt.q8
 }
 
 //! a non-q8 format's gemv, tile and layout registries: a kq family's through kq_registries, the per-32

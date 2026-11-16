@@ -100,7 +100,6 @@ def private gpu_text_ready(cc : CudaContext?; name : string) : bool {
         return gpu_cc_ready(cc, k.min_cc, "the {name} text") if (k.name == name)
     }
     panic("no all_cuda_texts entry named {name}")
-    return false
 }
 
 [test(description = "uint, int and float arithmetic run on the GPU equal the CPU reference.")]

@@ -33,7 +33,7 @@ namespace das {
     DAS_API char * builtin_get_tool_script ( const char * name, const char * root, Context * context, LineInfoArg * at );
     DAS_API char * builtin_executable_path ( Context * context, LineInfoArg * at );
     DAS_API char * builtin_get_das_version ( Context * context, LineInfoArg * at );
-    DAS_API void builtin_throw ( char * text, Context * context, LineInfoArg * at );
+    [[noreturn]] DAS_API void builtin_throw ( char * text, Context * context, LineInfoArg * at );
     DAS_API void builtin_print ( char * text, Context * context, LineInfoArg * at );
     DAS_API void builtin_error ( char * text, Context * context, LineInfoArg * at );
     DAS_API void builtin_print ( char * text, Context * context, LineInfoArg * at );

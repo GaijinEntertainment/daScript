@@ -1290,7 +1290,6 @@ class SqlTableMacro : AstStructureAnnotation {
             let msg = "[sql_table] {st_name}: update(row) / delete_(row) / delete_by_id are unavailable - no @sql_primary_key field. Use the macro forms `_sql_update(type<{st_name}>, where, set)` / `_sql_delete(type<{st_name}>, where)` instead."
             var fn = qmacro_function("_sql_update_by_pk_sql") $(typ : $t(st); name : string) : string {
                 panic($v(msg))
-                return ""
             }
             fn.flags.generated = true
             fn.body |> force_at(st.at)
@@ -1314,7 +1313,6 @@ class SqlTableMacro : AstStructureAnnotation {
             let msg = "[sql_table] {st_name}: update(row) has nothing to SET - every non-PK column is missing or @sql_computed. Add at least one writable non-PK column, or use raw `exec`."
             var fn = qmacro_function("_sql_update_by_pk_sql") $(typ : $t(st); name : string) : string {
                 panic($v(msg))
-                return ""
             }
             fn.flags.generated = true
             fn.body |> force_at(st.at)
@@ -1346,7 +1344,6 @@ class SqlTableMacro : AstStructureAnnotation {
             let msg = "[sql_table] {st_name}: delete_(row) / delete_by_id require a @sql_primary_key field. Use `_sql_delete(type<{st_name}>, where)` instead."
             var fn = qmacro_function("_sql_delete_by_pk_sql") $(typ : $t(st); name : string) : string {
                 panic($v(msg))
-                return ""
             }
             fn.flags.generated = true
             fn.body |> force_at(st.at)
@@ -1708,7 +1705,6 @@ def make_pk_is_unset_returns_false_fn(var st : StructurePtr) : FunctionPtr {
 def make_string_panic_stub_helper_fn(var st : StructurePtr; helper_name, msg : string) : FunctionPtr {
     var fn = qmacro_function(helper_name) $(typ : $t(st)) : string {
         panic($v(msg))
-        return ""
     }
     fn.flags.generated = true
     fn.body |> force_at(st.at)

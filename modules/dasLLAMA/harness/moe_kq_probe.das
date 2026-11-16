@@ -84,7 +84,6 @@ def main {   // nolint:STYLE038 — one flat cell ladder A->G; the cells share p
         pin_kernel_backend("arm64-gen")
         if (!kernel_backend_has_kq_batch() || !kernel_backend_has_kq_batch_groupn()) {
             panic("moe_kq_probe: no kq batch slots on this backend - zero result rows")
-            return
         }
         if (!tune_gate()) {
             panic("moe_kq_probe: tune_gate refused - tune first (or point DAS_TUNE_MANIFEST at a complete sidecar)")

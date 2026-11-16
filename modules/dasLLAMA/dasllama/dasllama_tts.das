@@ -229,7 +229,6 @@ def g2p_pack_path(dir : string) : string {
         return p if (stat(p).is_valid)
     }
     panic("dasLLAMA tts: no phoneme pack beside the model - neither {tiers[0]} nor {tiers[1]}")
-    return ""
 }
 
 def tts_pack_names(path : string) : array<string> {

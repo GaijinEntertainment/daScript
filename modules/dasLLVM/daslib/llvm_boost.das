@@ -192,7 +192,6 @@ def LLVMGetEnumAttribute(ctx : LLVMContextRef; attr_name : string) : LLVMOpaqueA
         }
     }
     panic("{attr_name} attribute not found")
-    return null
 }
 
 def LLVMAddAttributeToFunction(ffunc : LLVMOpaqueValue?; attr : LLVMOpaqueAttributeRef?) {

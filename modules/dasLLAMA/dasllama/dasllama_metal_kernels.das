@@ -4830,7 +4830,6 @@ def b32_stamp_index(fmt : KqFmt) : int {
         return i if (f == fmt)
     }
     panic("dasLLAMA metal: {fmt} is no dense per-32 member")
-    return -1
 }
 
 //! the GEMV stamps by `enc_b32_gemv`'s key: the format (`B32_STAMP_FMTS`) major, then the form (two-row, K split, wide)

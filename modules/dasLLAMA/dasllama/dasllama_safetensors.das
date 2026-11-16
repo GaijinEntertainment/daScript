@@ -155,7 +155,6 @@ def private cfg_num(c : JsonValue?; key : string) : double {
         return v as _number
     }
     panic("dasLLAMA: config.json carries no number '{key}'")
-    return 0.0lf
 }
 
 def private cfg_int(c : JsonValue?; key : string) : int64 => int64(cfg_num(c, key))
@@ -202,7 +201,6 @@ def private hf_family(model_type : string) : HfFamily {
         return HfFamily(arch = "qwen4exp", prefix = "language_model.", text_cfg = "text_config", mtp_prefix = "mtp.")
     }
     panic("dasLLAMA: config.json model_type '{model_type}' has no safetensors loader family (llama, qwen3_5, qwen3_5_moe, qwen4_exp)")
-    return HfFamily()
 }
 
 //! a layer parameter's GGUF stem, by the checkpoint's module path after `layers.<n>.`
@@ -300,7 +298,6 @@ def private ggml_type_of_dtype(dtype, name : string) : int {
     return GGML_TYPE_BF16 if (dtype == "BF16")
     return GGML_TYPE_F32 if (dtype == "F32")
     panic("dasLLAMA safetensors: tensor '{name}' is {dtype} - the loader reads F16, BF16, F32 and the U32 affine triplets")
-    return -1
 }
 
 def private reversed_dims(shape : array<int64>) : array<int64> => <- [for (i in range(length(shape))); shape[length(shape) - 1 - i]]

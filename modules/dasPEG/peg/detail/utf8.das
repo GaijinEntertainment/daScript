@@ -46,5 +46,4 @@ def public get_utf8_byte_count(code_point : int) : int {
     } elif (code_point <= 0x10FFFF |> int()) return 4
 
     panic("Not a unicode symbol")
-    return 0
 }

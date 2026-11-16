@@ -24,13 +24,11 @@ let public WEBGL_BUILD = get_platform_name() == "emscripten" || get_cross_platfo
 [tag_function(compile_shader_tag), unused_argument(vs_main), unused_argument(ps_main)]
 def public create_shader_program(vs_main, ps_main : function<void>) : uint {
     panic("somehow we are in this is temporary stub for the resolved create_shader_program")
-    return 0u
 }
 
 [tag_function(compile_compute_shader_tag), unused_argument(cs_main)]
 def public create_compute_shader_program(cs_main : function<void>) : uint {
     panic("somehow we are in this is temporary stub for the resolved create_compute_shader_program")
-    return 0u
 }
 
 [macro_function]

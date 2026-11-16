@@ -182,7 +182,6 @@ def load_asr_model(base : void?; bytes : uint64) : AsrModel {
         return <- wm
     }
     panic("dasLLAMA asr: the image in memory is baked as '{tag}' - a whisper, parakeet or gigaam image loads from memory")
-    return <- AsrModel()
 }
 
 //! Load an ASR model, sniffing the format: a ggml bin is whisper (vocab >= 51864) or parakeet (1k/8k); a GGUF of arch

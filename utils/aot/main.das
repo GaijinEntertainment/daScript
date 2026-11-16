@@ -45,7 +45,6 @@ def find_argument(args : array<string>; key : string) {
         if (args[i] == key) return args[i + 1]
     }
     panic("expected {key} argument!")
-    return ""
 }
 
 def get_list_of_files(args : array<string>, key : string) {

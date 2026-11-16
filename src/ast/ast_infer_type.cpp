@@ -863,7 +863,7 @@ namespace das {
             if (func->result->isAuto()) {
                 func->result = new TypeDecl(Type::tVoid, func->at);
                 reportAstChanged();
-            } else if (!func->result->isVoid()) {
+            } else if (!func->result->isVoid() && !exprReturns(func->body)) {
                 error("function does not return a value", "", "",
                       func->at, CompilationError::missing_function_result);
             }

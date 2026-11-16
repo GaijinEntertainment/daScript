@@ -39,5 +39,4 @@ def main : int {
     }
     sleep(100u)
     panic("boom")
-    return 0
 }

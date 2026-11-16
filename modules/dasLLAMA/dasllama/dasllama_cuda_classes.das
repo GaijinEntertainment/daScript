@@ -1538,7 +1538,6 @@ def cud_mmq_ensure(fmt : int) : bool {
         return ensure_q8_mmq()
     }
     panic("cud_mmq_ensure: format slot {fmt} has no int8 MMQ leaf")
-    return false
 }
 
 //! one dispatch of the int8 MMQ leaf of `fmt`; `bufs` is [wq, ws, xq, xs, y, xsum] - a leaf without a min term binds the first five

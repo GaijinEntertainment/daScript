@@ -1629,3 +1629,24 @@ def test_loop_without_trailing_return(t : T?) {
     t |> equal(return_before_unreachable_break(1), 1)
     t |> equal(return_before_unreachable_break(0), 2)
 }
+
+def return_or_panic(x : int) : int {
+    if (x > 0) {
+        return 1
+    }
+    panic("return_or_panic: {x} is not positive")
+}
+
+def only_panic(x : int) : int {
+    panic("only_panic: {x}")
+}
+
+var private reach_panic = false
+
+[test(description = "a panic ends its path: a function whose other paths return, or whose body only panics, needs no return after it")]
+def test_panic_ends_path(t : T?) {
+    t |> equal(return_or_panic(3), 1)
+    if (reach_panic) {
+        t |> equal(only_panic(1), 0)
+    }
+}

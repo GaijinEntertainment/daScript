@@ -578,7 +578,6 @@ class TagFunctionMacro : SetupAnyAnnotation {
 def public panic_expr_as : void? {
     //! Panics with an error when an `as` variant expression fails or encounters a null pointer.
     panic("invalid 'as' expression or null pointer dereference")
-    return null
 }
 
 def private makeAsOrSafeAs(expr; var enull : Expression?) {
@@ -881,7 +880,6 @@ def private walk_and_convert_basic(data : uint8 const?; info : TypeDeclPtr; at :
             return new ExprConstBitfield(at = at, value = *reinterpret<bitfield?>(data), bitfieldType = clone_type(info))
         } else {
             panic("unsupported {info.baseType}")
-            return null
         }
     }
 }

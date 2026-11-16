@@ -26,10 +26,6 @@ class TemplateMacro : AstFunctionAnnotation {
         }
         var qblk = qmacro_block() {
             panic("stub function called")
-            unsafe {
-                var dummy : $t(resType)
-                return <- dummy
-            }
         }
         qblk |> force_at(func.body.at)
         qblk |> force_generated(true)

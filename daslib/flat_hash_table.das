@@ -291,9 +291,6 @@ struct template TFlatHashTable {
             index = (index + 1) & mask
         }
         panic("unreachable")
-        unsafe {
-            return value_data[0]
-        }
     }
 
     [explicit_const_class_method, hint(unsafe_range_check, noalias=self)]
@@ -305,9 +302,6 @@ struct template TFlatHashTable {
             }
         }
         panic("key not found")
-        unsafe {
-            return value_data[0]
-        }
     }
 
     [explicit_const_class_method, hint(unsafe_range_check, noalias=self)]

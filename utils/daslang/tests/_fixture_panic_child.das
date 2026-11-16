@@ -5,5 +5,4 @@ options gen2
 [export]
 def main() : int {
     panic("a fixture panic")
-    return 0
 }

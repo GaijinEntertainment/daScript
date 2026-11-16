@@ -1026,6 +1026,11 @@ namespace das {
         return this;
     }
 
+    FunctionPtr Function::setNoReturn() {
+        noReturn = true;
+        return this;
+    }
+
     FunctionPtr Function::setNoDiscard() {
         nodiscard = true;
         return this;

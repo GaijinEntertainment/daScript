@@ -365,6 +365,31 @@ def test_exhaustive_value_match_needs_no_catch_all(t : T?) {
     t |> equal(tuple_columns((true, Dir.east)), "t")
 }
 
+def private dir_letter(d : Dir) : string {
+    match (d) {
+        Dir.north => $ { return "n" }
+        Dir.east => $ { return "e" }
+        Dir.south => $ { return "s" }
+        Dir.west => $ { return "w" }
+    }
+}
+
+def private dir_vertical(d : Dir) : bool {
+    match (d) {
+        Dir.north | Dir.south => $ { return true }
+        Dir.east => $ { return false }
+        Dir.west => panic("dir_vertical: west is not asked")
+    }
+}
+
+[test(description = "A statement match that covers every case, each arm returning or panicking, needs no return after it")]
+def test_exhaustive_statement_match_needs_no_return(t : T?) {
+    t |> equal(dir_letter(Dir.north), "n")
+    t |> equal(dir_letter(Dir.west), "w")
+    t |> equal(dir_vertical(Dir.south), true)
+    t |> equal(dir_vertical(Dir.east), false)
+}
+
 var private guard_limit = 2
 
 def private compare_pair(a, b : int) : string {

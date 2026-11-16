@@ -11,7 +11,6 @@ require llvm/daslib/llvm_targets
 [sideeffects, no_jit, unused_argument(a, b)]
 def add_two_ints(a, b : int) : int {
     panic("not implemented")
-    return 0
 }
 
 [export]

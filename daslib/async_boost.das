@@ -23,8 +23,6 @@ def public await_next_frame() {
 def public await(var a : iterator<variant<res : auto(T); wait : bool>>) : T {
     //! This function is used to wait for the result of the async function.
     panic("await( ) should not be called directly, add [async] annotation to the function in that you want to use it")
-    var res : T
-    return <- res
 }
 
 [tag_function_macro(tag="await_tag")]
@@ -41,7 +39,6 @@ class AwaitMacro : AstFunctionAnnotation {
 def public await(var a : iterator<bool>) : bool {
     //! This function is used to wait for the result of the async function.
     panic("await() should not be called directly, add [async] annotation to the function in that you want to use it")
-    return false
 }
 
 [tag_function_macro(tag="await_coroutine_tag")]

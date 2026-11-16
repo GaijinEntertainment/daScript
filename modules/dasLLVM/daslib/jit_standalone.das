@@ -52,7 +52,6 @@ def public lib_link_note(kind : JitArtifact; link_whole_lib : bool) : string {
         }
         JitArtifact.exe || JitArtifact.jit_dll => panic("lib_link_note: {kind} is not a library")
     }
-    return ""
 }
 
 
