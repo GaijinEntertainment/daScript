@@ -124,6 +124,7 @@ struct TtsAudio {
     pcm : array<float>     //! mono samples in [-1, 1]
     sample_rate : int      //! samples per second
     timings : TtsTimings   //! where the synthesis spent its time
+    generation_complete : bool = true   //! false when a backend exhausts its generation budget without EOS; PCM is retained for inspection
 }
 
 struct TtsNoise {

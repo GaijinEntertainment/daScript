@@ -236,6 +236,7 @@ def finalize(var m : PocketModel) {
 //! The activation carrier one synthesis reuses (`ARCHITECTURE_TTS_MEMORY.md#tts-scratch-carrier`'s discipline): every stage buffer a
 //! `@scratch` field grown once, the waveform the output.
 struct PocketScratch {
+    generation_complete : bool   //! completion of the latest synthesis, not of allocated scratch storage
     @scratch @exact_size rows : array<float>     // the transformer's residual rows
     @scratch @exact_size xb : array<float>
     @scratch @exact_size qkv : array<float>
@@ -1724,6 +1725,7 @@ def pocket_prompt_rows(m : PocketModel; ids : array<int64>; var vs : PocketVoice
 [hot_path]
 def pocket_synthesize(m : PocketModel; ids : array<int64>; var vs : PocketVoiceState; temp : float; frames_after_eos : int;
                       captured, forced : array<float>; var tm : TtsTimings; var sc : PocketScratch) : int64 {
+    sc.generation_complete = false
     let cd = m.cond_dim
     let ld = m.latent_dim
     let n_txt = long_length(ids)
@@ -1785,6 +1787,7 @@ def pocket_synthesize(m : PocketModel; ids : array<int64>; var vs : PocketVoiceS
         head_us += int64(get_time_usec(th))
         frames++
     }
+    sc.generation_complete = eos_at >= 0l
     if (eos_at < 0l) {
         warn_no_eos(frames, n_txt)
     }

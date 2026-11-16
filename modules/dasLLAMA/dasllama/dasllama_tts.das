@@ -706,6 +706,7 @@ def private synthesize_chunk_pocket(var m : TtsModel; chunk : string; vname : st
     var inscope out = TtsAudio()
     out.sample_rate = m.pocket.sample_rate
     pocket_speak(m.pocket, chunk, vname, m.pocket.default_temperature, NOISE_SEED + uint64(chunk_index), out.timings, m.pocket_scratch)
+    out.generation_complete = m.pocket_scratch.generation_complete
     out.pcm := m.pocket_scratch.wave
     return <- out
 }
@@ -783,6 +784,7 @@ def synthesize(var m : TtsModel; text : string; voice : string; speed : float = 
     synthesize_stream(m, text, voice, speed) $(chunk) {
         out.pcm |> push_from(chunk.pcm)
         add_timings(out.timings, chunk.timings)
+        out.generation_complete = out.generation_complete && chunk.generation_complete
     }
     return <- out
 }
