@@ -529,3 +529,72 @@ def test_child_chunks(t : T?) {
     t |> equal(length(tier), 3, "a tier contract file cuts the batch: the files before it, itself, the files after")
     t |> equal(join(tier[1], ","), "{TESTS_DIR}/test_gpu_tier.das", "it runs alone, where no batch-mate's entry arms the tier at [init]")
 }
+
+[test(description = "`model_names` reads every whole quoted .gguf name out of a file's text once and skips interpolated names, paths and patterns, and `missing_models` lists the names a run's files and the fixtures they require ask that the directory lacks, each with its askers, while a directory holding them lists none")]
+def test_missing_models(t : T?) {
+    let names <- model_names("let a = \"B-model.gguf\"\nlet b = \"\{stem\}.gguf\"\nlet c = \"dir/C.gguf\"\nlet d = \"*.gguf\"\nrun(\"A-model.gguf\", \"B-model.gguf\", \"note.txt\")\n")
+    t |> equal(join(names, ","), "A-model.gguf,B-model.gguf", "whole quoted names once each, in order; an interpolated name, a path and a pattern are not names")
+    let dir = path_join(test_temp_dir(), "dasllama_missing_models")
+    mkdir_rec(dir)
+    let run <- ["{TESTS_DIR}/test_kv_paged.das"]
+    let missing <- missing_models(run, dir)
+    t |> success(!empty(missing), "an empty directory misses what the file names")
+    let smol = find_index_if(missing) $(m) => m.name == "SmolLM2-135M-Instruct-Q8_0.gguf"
+    t |> success(smol >= 0, "the file's own model is named: {missing}")
+    t |> success(smol >= 0 && find(missing[smol].asked, "test_kv_paged.das") >= 0, "with the file that names it")
+    let via <- missing_models(["{TESTS_DIR}/test_gpu_resident_hybrid.das"], dir)
+    let fixture = find_index_if(via) $(m) => find(m.asked, "_mtp_resident_cells.das") >= 0
+    t |> success(fixture >= 0, "a fixture the file requires is read too: {via}")
+    for (m in missing) {
+        fopen(path_join(dir, m.name), "wb") $(f) {
+            f |> fwrite("x")
+        }
+    }
+    t |> equal(length(missing_models(run, dir)), 0, "a directory that holds every named file misses none")
+    var why : string
+    rmdir_rec(dir, why)
+}
+
+[test(description = "`reap_images` removes the .dlim and .tmp files a directory gained since the kept set was taken, counts them and their bytes, and leaves the kept images and every other file; a second reap removes nothing")]
+def test_reap_images(t : T?) {
+    let dir = path_join(test_temp_dir(), "dasllama_reap_images")
+    mkdir_rec(dir)
+    let put = @(name : string; text : string) {
+        fopen(path_join(dir, name), "wb") $(f) {
+            f |> fwrite(text)
+        }
+    }
+    put("old.gguf.q8.dlim", "kept")
+    put("model.gguf", "model")
+    let kept <- image_set(dir)
+    t |> equal(length(kept), 1, "the kept set is the images there at the start")
+    put("new.gguf.q8.dlim", "12345")
+    put("killed.dlim.77.tmp", "123")
+    put("notes.txt", "n")
+    let reaped = reap_images(dir, kept)
+    t |> equal(reaped.count, 2, "the new image and the temp file go")
+    t |> equal(reaped.bytes, 8l, "their bytes are counted")
+    t |> success(stat(path_join(dir, "old.gguf.q8.dlim")).is_valid && stat(path_join(dir, "model.gguf")).is_valid && stat(path_join(dir, "notes.txt")).is_valid, "the kept image, the model and every other file stay")
+    t |> success(!stat(path_join(dir, "new.gguf.q8.dlim")).is_valid && !stat(path_join(dir, "killed.dlim.77.tmp")).is_valid, "the reaped files are gone")
+    t |> equal(reap_images(dir, kept).count, 0, "a second reap finds nothing")
+    mkdir_rec(path_join(dir, "drafters"))
+    put("drafters/sub.gguf.q8.dlim", "1234")
+    put("drafters/sub.gguf", "model")
+    var cfg = RunArgs()
+    t |> equal(reap_after(cfg, dir, kept, "a child"), 0, "a run without --reap-images removes nothing")
+    t |> success(stat(path_join(dir, "drafters/sub.gguf.q8.dlim")).is_valid, "... the image a subfolder gained still there")
+    cfg.reap_images = true
+    t |> equal(reap_after(cfg, dir, kept, "a child"), 1, "with the flag the image a subfolder gained goes")
+    t |> success(!stat(path_join(dir, "drafters/sub.gguf.q8.dlim")).is_valid && stat(path_join(dir, "drafters/sub.gguf")).is_valid, "... and the model beside it stays")
+    var why : string
+    rmdir_rec(dir, why)
+}
+
+[test(description = "A `--poison-kv` run hands every child DASLLAMA_KV_INIT=poison on both shells' forms, and a run without the flag names no K/V start")]
+def test_poison_kv_envs(t : T?) {
+    var cfg = RunArgs()
+    t |> success(find(child_envs(cfg, false, ""), "DASLLAMA_KV_INIT") < 0 && find(child_envs(cfg, true, ""), "DASLLAMA_KV_INIT") < 0, "no flag, no K/V start named: the children take the product's")
+    cfg.poison_kv = true
+    t |> success(find(child_envs(cfg, false, ""), "DASLLAMA_KV_INIT=poison ") >= 0, "the posix prefix: {child_envs(cfg, false, "")}")
+    t |> success(find(child_envs(cfg, true, ""), "set \"DASLLAMA_KV_INIT=poison\"&& ") >= 0, "the cmd.exe form: {child_envs(cfg, true, "")}")
+}

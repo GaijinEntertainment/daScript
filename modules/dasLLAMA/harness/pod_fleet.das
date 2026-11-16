@@ -2,7 +2,8 @@ options gen2
 options _dasllama_internal = true
 
 // A pod fleet for the test runner: n RunPod pods on the models volume, each holding its own copy of the
-// volume's tree, each running one shard of the same run.das command. The shards' logs land on the volume
+// volume's tree and its own folder of links to the volume's models (an image a cell mints lands on the pod's
+// disk, and the runner reaps it after the file), each running one shard of the same run.das command. The shards' logs land on the volume
 // (/workspace/logs/fleet/<run>/), so any pod of the fleet reads them all. The fleet file holds the pods this
 // tool made and nothing else: `down` deletes those alone.
 //
@@ -40,8 +41,8 @@ struct FleetArgs {
     disk : int = 60
     @clarg_doc = "the ssh private key the pods admit; its .pub is handed to every pod"
     key : string = "~/.ssh/runpod"
-    @clarg_doc = "run: the children's environment - KEY=VALUE tokens separated by spaces; the image rail stays off (DASLLAMA_IMAGE=0) because the pods share one models directory, so the image suite runs on one box"
-    env : string = "DASLLAMA_MODELS_DIR=/workspace/models DASLLAMA_GPU=1 DASLLAMA_IMAGE=0 DASLLAMA_ALLOW_UNTUNED=1 DASLLAMA_PARITY_FULL=1"
+    @clarg_doc = "run: the children's environment - KEY=VALUE tokens separated by spaces; the models directory is the pod's own folder of links to the volume's models and the image rail is off (DASLLAMA_IMAGE=0); an image suite's run passes its own --env with the rail on"
+    env : string = "DASLLAMA_MODELS_DIR=/root/models DASLLAMA_GPU=1 DASLLAMA_IMAGE=0 DASLLAMA_ALLOW_UNTUNED=1 DASLLAMA_PARITY_FULL=1"
     @clarg_doc = "run: the run.das arguments; the tool appends each pod's --shard i/n"
     args : string = "--changed --base origin/master"
     @clarg_doc = "status, times: the run to read (default: the fleet file's last run)"
@@ -98,6 +99,8 @@ struct PodRecord {
 let POD_TREE = "/root/daScript"
 let VOLUME_TREE = "/workspace/daScript"
 let FLEET_LOGS = "/workspace/logs/fleet"
+let VOLUME_MODELS = "/workspace/models"
+let POD_MODELS = "/root/models"   //! the pod's own models directory: a link a model file of the volume, so what a run writes beside a model stays on the pod's disk
 
 //! a leading `~` as the user's home - USERPROFILE on Windows, else HOME, off the environment registry
 def home_path(path : string) : string {
@@ -129,31 +132,45 @@ def ssh_argv(cfg : FleetArgs; pod : FleetPod; command : string) : array<string> 
 }
 
 //! the remote command that copies the volume's tree onto the pod's own disk - the JIT and AST caches under
-//! `.cache/` are per tree, so two pods never share one - and makes the fleet's log root
+//! `.cache/` are per tree, so two pods never share one - makes the fleet's log root, and makes the pod's models
+//! directory afresh: the volume's folders made again and a link to every file of the volume's but its prepared images
+//! and save temp files, so a pod reads and writes no image another pod does, in a subfolder as at the top
 def prep_command() : string =>
-    "mkdir -p {FLEET_LOGS} && rsync -a --delete --exclude .cache --exclude build {VOLUME_TREE}/ {POD_TREE}/ && echo PREP-OK"
+    ("mkdir -p {FLEET_LOGS} && rsync -a --delete --exclude .cache --exclude build {VOLUME_TREE}/ {POD_TREE}/"
+        + " && rm -rf {POD_MODELS} && mkdir -p {POD_MODELS} && cd {VOLUME_MODELS}"
+        + " && find . -type d -exec mkdir -p {POD_MODELS}/\{\} \\;"
+        + " && find . ! -type d ! -name \"*.dlim\" ! -name \"*.tmp\" -exec ln -s {VOLUME_MODELS}/\{\} {POD_MODELS}/\{\} \\;"
+        + " && echo PREP-OK")
 
 //! the remote command that starts shard `index`/`n` of the run: the children's logs under the run's folder on
-//! the volume (TMPDIR), the runner's own log beside them, RUN-EXIT=<rc> as its last line. LD_LIBRARY_PATH puts the
+//! the volume (TMPDIR), the runner's own log beside them, RUN-EXIT=<rc> as its last line; the runner reaps the images
+//! its children mint where the environment names the pod's own models directory (`--reap-images`: under any other
+//! directory the mints are another pod's too, and stay), and the memory tracker beside it keeps
+//! the largest child's peak in the folder's `mem_peak.txt`. LD_LIBRARY_PATH puts the
 //! pod's copy of the runtime libraries ahead of the binary's RUNPATH, which names the volume tree's - a rebuild
 //! there mid-run would otherwise kill every child started after it. Non-private:
 //! the pod-fleet tests (tests/uncategorized_persistent_heap_stack_524288.das) read it
 def run_command(cfg : FleetArgs; run : string; index, n : int) : string {
     let log = "{FLEET_LOGS}/{run}/shard_{index}.log"
     let tmp = "{FLEET_LOGS}/{run}/pod_{index}"
-    let inner = ("cd {POD_TREE} && export LD_LIBRARY_PATH={POD_TREE}/lib TMPDIR={tmp} {cfg.env} && ./bin/daslang -jit -module-cache"
-        + " .cache/daslang/module_cache/dastest.dascache modules/dasLLAMA/tests/run.das -- {cfg.args} --shard {index}/{n};"
-        + " echo RUN-EXIT=$?")
+    let reap = find(" {cfg.env} ", " DASLLAMA_MODELS_DIR={POD_MODELS} ") >= 0 ? " --reap-images" : ""
+    let inner = ("cd {POD_TREE} && export LD_LIBRARY_PATH={POD_TREE}/lib TMPDIR={tmp} {cfg.env}"
+        + " && (sh modules/dasLLAMA/harness/pod_mem_track.sh {tmp}/mem_peak.txt & echo $! > {tmp}/mem_track.pid)"
+        + " && ./bin/daslang -jit -module-cache .cache/daslang/module_cache/dastest.dascache modules/dasLLAMA/tests/run.das --"
+        + " {cfg.args} --shard {index}/{n}{reap};"
+        + " rc=$?; kill $(cat {tmp}/mem_track.pid); echo RUN-EXIT=$rc")
     //! `;` not `&&` ahead of the detached command: `a && b &` backgrounds a subshell that keeps the ssh session's
     //! output open, and the ssh call then lasts as long as the run
     return "mkdir -p {tmp}; setsid nohup sh -c '{inner}' > {log} 2>&1 < /dev/null & echo STARTED {index}/{n}"
 }
 
 //! the remote command that reads every shard of `run` off the volume: its DONE count, its SHARD, REPORT and NEXT
-//! lines, its RUN-EXIT line, and every red DONE line
+//! lines, its MISSING lines (a model file the shard's cells ask that the volume lacks), its RUN-EXIT line and every
+//! red DONE line; then every pod's peak - the largest child's resident kB and the file it ran
 def status_command(run : string) : string =>
     ("for f in {FLEET_LOGS}/{run}/shard_*.log; do echo \"== $f: $(grep -cE 'DONE' $f) done\";"
-        + " grep -E '^\\[I\\] (SHARD|REPORT|NEXT)|RUN-EXIT' $f; grep -E 'DONE' $f | grep -vE ' 0 failed, 0 errors'; done; true")
+        + " grep -E '^\\[I\\] (SHARD|REPORT|NEXT)|^\\[W\\] MISSING|RUN-EXIT' $f; grep -E 'DONE' $f | grep -vE ' 0 failed, 0 errors'; done;"
+        + " for p in {FLEET_LOGS}/{run}/pod_*/mem_peak.txt; do echo \"PEAK-KB $p: $(cat $p)\"; done; true")
 
 //! the remote command that reads every child log of `run` off the volume into one line a verdict: `F <seconds> <file>` for a
 //! test file's PASS / FAIL line and `T <seconds> <cell>` for a `[test]` function's, the colour codes stripped first

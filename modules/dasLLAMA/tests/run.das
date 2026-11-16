@@ -10,6 +10,7 @@ options _dasllama_internal = true
 // output through a grep at capture time.
 
 require daslib/clargs
+require daslib/cmp
 require daslib/fio
 require daslib/strings_boost
 require dastest/fs
@@ -69,6 +70,13 @@ struct RunArgs {
     @clarg_name = "no-tune"
     @clarg_doc = "Short-circuit the [tune] framework in every child (DAS_TUNE_POLICY=reference): the reference bodies run — the portable tier's arm"
     no_tune : bool
+
+    @clarg_name = "reap-images"
+    @clarg_doc = "After every child, delete the prepared images (.dlim) and save temp files (.tmp) under the models directory that were not there when the run started - for a box whose run alone writes that directory (a fleet pod's own folder of links), so a suite's mints never fill its disk"
+    reap_images : bool
+    @clarg_name = "poison-kv"
+    @clarg_doc = "Start every child's K/V slabs as NaN (DASLLAMA_KV_INIT=poison): a read of a row no store wrote reaches the logits as NaN and reds its cell - the run a change to a K/V store or reader cites. Every session then touches its whole slab, so the run's memory is not the product's"
+    poison_kv : bool
 
     @clarg_doc = "daslang binary (default: the binary running this script — a hardcoded ./bin/daslang picked up a STALE top-level exe on the MSVC layout)"
     das : string = ""
@@ -452,7 +460,7 @@ let LLM_CORE_WITNESSES <- [
     "test_gpu_resident_regions.das", "test_gpu_resident_regions_kquant.das", "test_gpu_resident_regions_qwen3.das",
     "test_gpu_resident_segments.das", "test_kv_codec.das", "test_mtp.das", "test_prefill.das", "test_scheduler.das" ]
 
-let CUDA_WITNESSES = "test_cuda_kernels.das,test_gpu_resident_cuda_llama.das,test_gpu_resident_cuda_batch.das,test_gpu_resident_cuda_dense.das,test_gpu_resident_cuda_qwen35.das,test_gpu_resident_cuda_mtp.das,test_gpu_resident_cuda_moe.das,test_gpu_resident_cuda_moe_host.das,test_gpu_resident_cuda_gemma4.das,test_gpu_resident_segments.das"
+let CUDA_WITNESSES = "test_cuda_kernels.das,test_gpu_resident_cuda_llama.das,test_gpu_resident_cuda_batch.das,test_gpu_resident_cuda_dense.das,test_gpu_resident_cuda_qwen35.das,test_gpu_resident_cuda_mtp.das,test_gpu_resident_cuda_moe.das,test_gpu_resident_cuda_moe_host.das,test_gpu_resident_cuda_gemma4.das,test_gpu_resident_segments.das,test_cuda_mint.das"
 let KV_CODEC_WITNESSES = "test_kv_codec.das,test_vulkan_kv_codec_kernels.das,test_gpu_resident_codec_llama.das,test_gpu_perop_kv_codec.das,test_gpu_resident_cuda_llama.das,test_gpu_resident_regions_q8kv.das,test_gpu_resident_regions_tq4kv.das"
 let TOKENIZER_WITNESSES = "test_tokenizer.das,test_tts_textnorm.das,test_chat.das,test_tok_seed.das"
 let METAL_WITNESSES = "test_metal_batched_row.das,test_metal_format_census.das,test_matmul_batch.das,uncategorized_no_aot_persistent_heap.das,uncategorized_persistent_heap_stack_524288.das"
@@ -588,10 +596,9 @@ def private any_reached(stems : array<string>; reached : table<string>) : bool {
     return false
 }
 
-//! the test files of the folder whose `require _<stem>` reaches `stem`, through the fixtures between: a fixture's
-//! change runs the tests that read it. Non-private: test_run_suites.das pins it
-def tests_requiring(stem : string) : array<string> {
-    var requires : table<string; array<string>>   // a file's base name -> the fixture stems it requires
+//! every test file and fixture of the folder by base name, each with the fixture stems its `require _<stem>` lines name
+def private folder_requires() : table<string; array<string>> {
+    var requires : table<string; array<string>>
     fio::dir(TESTS_DIR) $(name) {
         if (name |> ends_with(".das") && (name |> starts_with("test_") || name |> starts_with("failed_") || name |> starts_with("uncategorized") || name |> starts_with("_"))) {
             var stems : array<string>
@@ -607,6 +614,13 @@ def tests_requiring(stem : string) : array<string> {
             requires[name] <- stems
         }
     }
+    return <- requires
+}
+
+//! the test files of the folder whose `require _<stem>` reaches `stem`, through the fixtures between: a fixture's
+//! change runs the tests that read it. Non-private: test_run_suites.das pins it
+def tests_requiring(stem : string) : array<string> {
+    var requires <- folder_requires()
     var reached <- { stem }
     var grew = true
     while (grew) {
@@ -780,7 +794,8 @@ def log_verdicts(log_path : string) : tuple<passed : array<string>; failed : arr
 // HAZARD_STRICT: the scheduling-unification ratchet's runtime half — an undeclared dispatch
 // on an armed hazard oracle PANICS here, so declaration gaps can never ship quietly.
 // cmd.exe has no VAR=val prefix — `set "VAR=val"&&` is the safe form (llvm_tune's tuner_cmd)
-def private child_envs(cfg : RunArgs; win : bool; arm : string) : string {
+// Non-private: test_run_suites.das pins the K/V start a `--poison-kv` run hands its children
+def child_envs(cfg : RunArgs; win : bool; arm : string) : string {
     var envs = ""
     if (win) {
         envs = ((cfg.full ? "set \"DASLLAMA_PARITY_FULL=1\"&& " : "set \"DASLLAMA_TEST_ARMS={arm}\"&& ")
@@ -799,6 +814,9 @@ def private child_envs(cfg : RunArgs; win : bool; arm : string) : string {
             // libraries overrun it together, and vkCreateInstance then fails for good
             envs = "GLIBC_TUNABLES=glibc.rtld.optional_static_tls=16384 {envs}"
         }
+    }
+    if (cfg.poison_kv) {
+        envs = win ? "{envs}set \"DASLLAMA_KV_INIT=poison\"&& " : "DASLLAMA_KV_INIT=poison {envs}"
     }
     if (cfg.no_tune) {
         envs = (win ? "{envs}set \"DAS_TUNE_POLICY=reference\"&& set \"DASLLAMA_IMAGE=0\"&& "
@@ -1044,6 +1062,112 @@ def child_cache_dir(das_exe : string; own_binary : bool) : string {
     return dir
 }
 
+//! the model files `text` names: every quoted name ending `.gguf` that is one file name (a name built by interpolation, a
+//! path and a pattern are not). Non-private: test_run_suites.das pins it
+def model_names(text : string) : array<string> {
+    var names : table<string>
+    for (part in split(text, "\"")) {
+        if (part |> ends_with(".gguf") && find(part, "\{") < 0 && find(part, "/") < 0 && find(part, " ") < 0 && find(part, "*") < 0) {
+            names |> insert(part)
+        }
+    }
+    var out <- [for (n in keys(names)); n]
+    sort(out)
+    return <- out
+}
+
+//! the model files the run's `files`, and the fixtures they reach, name that `dir` does not hold, each with the files that
+//! name it: the cells that would skip, said before the run. Non-private: test_run_suites.das pins it
+def missing_models(files : array<string>; dir : string) : array<tuple<name : string; asked : string>> {
+    var requires <- folder_requires()
+    var reached : table<string>
+    var queue <- [for (f in files); base_name(f)]
+    while (!empty(queue)) {
+        let name = queue[length(queue) - 1]
+        queue |> pop()
+        continue if (key_exists(reached, name))
+        reached |> insert(name)
+        requires |> get(name) $(stems) {
+            for (stem in stems) {
+                queue |> push("{stem}.das")
+            }
+        }
+    }
+    var asked : table<string; array<string>>
+    for (name in keys(reached)) {
+        var text = ""
+        fopen("{TESTS_DIR}/{name}", "rb") $(f) {
+            if (f != null) {
+                text = fread(f)
+            }
+        }
+        for (model in model_names(text)) {
+            if (!stat(path_join(dir, model)).is_valid) {
+                asked[model] |> push(name)
+            }
+        }
+    }
+    var out : array<tuple<name : string; asked : string>>
+    for (model, by in keys(asked), values(asked)) {
+        sort(by)
+        out |> push((name = model, asked = join(by, ", ")))
+    }
+    sort(out) <| cmp_by(_.name)
+    return <- out
+}
+
+//! the prepared images and save temp files under `dir` at any depth, by their path under it
+def image_files(dir : string) : array<string> {
+    var names : array<string>
+    dir_rec(dir) $(name, is_dir) {
+        if (!is_dir && (name |> ends_with(".dlim") || name |> ends_with(".tmp"))) {
+            names |> push(to_generic_path(name))
+        }
+    }
+    return <- names
+}
+
+//! `image_files` as a set: the names a run's reap leaves alone
+def image_set(dir : string) : table<string> {
+    return <- {for (name in image_files(dir)); name}
+}
+
+//! every image and save temp file under `dir` that `kept` - the names there when the run started - does not hold, removed:
+//! how many, and their bytes. Non-private: test_run_suites.das pins it
+def reap_images(dir : string; kept : table<string>) : tuple<count : int; bytes : int64> {
+    var count = 0
+    var bytes = 0l
+    for (name in image_files(dir)) {
+        continue if (key_exists(kept, name))
+        let path = path_join(dir, name)
+        let size = int64(stat(path).size)
+        if (remove(path)) {
+            count++
+            bytes += size
+        }
+    }
+    return (count = count, bytes = bytes)
+}
+
+//! `--reap-images` after the child `tag`: what it left under `models` goes, with a REAPED line where anything did; a run
+//! without the flag removes nothing. Returns the files removed. Non-private: test_run_suites.das pins it
+def reap_after(cfg : RunArgs; models : string; kept : table<string>; tag : string) : int {
+    return 0 if (!cfg.reap_images)
+    let reaped = reap_images(models, kept)
+    if (reaped.count > 0) {
+        to_log(LOG_INFO, "REAPED {reaped.count} image file(s) {tag} left under {models} ({reaped.bytes >> 20l} MB)\n")
+    }
+    return reaped.count
+}
+
+//! a MISSING line a model file the run's `files` name that the models directory does not hold
+def private log_missing_models(files : array<string>) {
+    let dir = models_dir_resolved()
+    for (m in missing_models(files, dir)) {
+        to_log(LOG_WARNING, "MISSING {m.name}: {dir} does not hold it, and its cells skip (named by {m.asked})\n")
+    }
+}
+
 //! one dastest child per file, `--nreps` times. On an area run the image suite's child gets the
 //! areas' arms and every other child none; a suite run passes --arm through to every child
 def private run_files(cfg : RunArgs; files : array<string>; image_arms : string; area_run : bool) : RunTally {
@@ -1058,6 +1182,8 @@ def private run_files(cfg : RunArgs; files : array<string>; image_arms : string;
     let cache_dir = child_cache_dir(das_exe, empty(cfg.das))
     let cache_flag = empty(cache_dir) ? "" : " --module-cache-dir {cache_dir}"
     to_log(LOG_INFO, empty(cache_dir) ? "CACHE none - the binary could not be stat'd, every child parses the engine\n" : "CACHE {cache_dir}\n")
+    let models = models_dir_resolved()
+    let kept_images <- image_set(models)
     var tally : RunTally
     for (rep in range(reps)) {
         let rep_tag = reps > 1 ? " rep {rep + 1}/{reps}" : ""
@@ -1079,6 +1205,7 @@ def private run_files(cfg : RunArgs; files : array<string>; image_arms : string;
             let verdict = !empty(summary) ? summary : "no dastest summary - the run died early (read the log)"
             to_log(rc == 0 ? LOG_INFO : LOG_ERROR, "DONE {tag}: exit={rc} {verdict} elapsed={secs}s log={log_path}\n")
             tally.skipped += skipped_cells(summary)
+            reap_after(cfg, models, kept_images, tag)
             continue if (rc == 0)
             if (n == 1) {
                 tally.failures++
@@ -1254,6 +1381,7 @@ def main() : int {
         to_log(LOG_ERROR, "--shard {cfg.shard} holds no file of this run's {length(only)}\n")
         return 2
     }
+    log_missing_models(shard.kept)
     let tally <- run_files(cfg, shard.kept, plan.image_arms, !empty(areas) || cfg.changed)
     print_report(cfg, areas, length(shard.kept), length(split.dropped), tally, core)
     return tally.failures

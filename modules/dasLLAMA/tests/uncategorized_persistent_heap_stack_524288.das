@@ -24,7 +24,7 @@ def private fleet_args() : FleetArgs {
     cfg.image = "nvidia/cuda:12.8.1-devel-ubuntu24.04"
     cfg.disk = 60
     cfg.key = "~/.ssh/runpod"
-    cfg.env = "DASLLAMA_MODELS_DIR=/workspace/models DASLLAMA_GPU=1"
+    cfg.env = "DASLLAMA_MODELS_DIR=/root/models DASLLAMA_GPU=1"
     cfg.args = "--changed --base origin/master"
     cfg.runpodctl = "runpodctl"
     return <- cfg
@@ -55,13 +55,25 @@ def test_fleet_commands(t : T?) {
     t |> success(find_index(ssh, "BatchMode=yes") >= 0, "never prompting")
     let prep = prep_command()
     t |> success(find(prep, "rsync -a --delete --exclude .cache --exclude build /workspace/daScript/ /root/daScript/") >= 0, "the pod's own copy of the volume's tree, its caches left out")
+    t |> success(find(prep, "rm -rf /root/models && mkdir -p /root/models && cd /workspace/models") >= 0, "the pod's own models directory, made afresh: {prep}")
+    t |> success(find(prep, "find . -type d -exec mkdir -p /root/models/\{\} \\;") >= 0, "the volume's folders are made again, never linked: a write under one stays on the pod")
+    t |> success(find(prep, "find . ! -type d ! -name \"*.dlim\" ! -name \"*.tmp\" -exec ln -s /workspace/models/\{\} /root/models/\{\} \\;") >= 0, "a link a file of the volume's, at any depth, its images and save temp files left out")
     let run = run_command(cfg, "20261027-000000", 2, 3)
-    t |> success(find(run, "--changed --base origin/master --shard 2/3") >= 0, "the command with the pod's shard")
+    t |> success(find(run, "--changed --base origin/master --shard 2/3 --reap-images;") >= 0, "the command with the pod's shard, the runner reaping the images its children mint")
+    t |> success(find(run, "sh modules/dasLLAMA/harness/pod_mem_track.sh /workspace/logs/fleet/20261027-000000/pod_2/mem_peak.txt &") >= 0, "the memory tracker starts beside the runner, its peak under the pod's folder")
+    t |> success(find(run, "rc=$?; kill $(cat /workspace/logs/fleet/20261027-000000/pod_2/mem_track.pid); echo RUN-EXIT=$rc") >= 0, "the tracker stops when the runner ends, and RUN-EXIT carries the runner's code")
+    t |> success(find(run, "'") == rfind(run, "sh -c '") + 6 && find(run, "'", find(run, "'") + 1) == rfind(run, "'"), "the detached command sits between one pair of single quotes: {run}")
     t |> success(find(run, "TMPDIR=/workspace/logs/fleet/20261027-000000/pod_2") >= 0, "the children's logs under the run on the volume")
     t |> success(find(run, "LD_LIBRARY_PATH=/root/daScript/lib ") >= 0, "the children load the pod's own runtime libraries, not the volume tree's")
-    t |> success(find(run, "DASLLAMA_MODELS_DIR=/workspace/models DASLLAMA_GPU=1") >= 0, "the children's environment")
+    t |> success(find(run, "DASLLAMA_MODELS_DIR=/root/models DASLLAMA_GPU=1") >= 0, "the children's environment, the models read through the pod's own directory")
+    let own = FleetArgs()
+    t |> success(find(own.env, "DASLLAMA_MODELS_DIR=/root/models ") >= 0 && find(own.env, "DASLLAMA_IMAGE=0") >= 0, "the tool's own environment names the pod's models directory, the image rail off: {own.env}")
+    t |> success(find(run_command(own, "20261027-000000", 2, 3), "--reap-images;") >= 0, "... and under it the runner reaps")
+    var on_volume <- fleet_args()
+    on_volume.env = "DASLLAMA_MODELS_DIR=/workspace/models DASLLAMA_GPU=1"
+    let volume_run = run_command(on_volume, "20261027-000000", 2, 3)
+    t |> success(find(volume_run, "--shard 2/3;") >= 0 && find(volume_run, "--reap-images") < 0, "an environment naming the volume's models directory reaps nothing: the images there are every pod's")
     t |> success(find(run, "> /workspace/logs/fleet/20261027-000000/shard_2.log") >= 0, "the runner's log beside them")
-    t |> success(find(run, "echo RUN-EXIT=$?") >= 0, "RUN-EXIT closes the log")
     t |> success(find(run, "setsid nohup") >= 0 && find(run, "; setsid") >= 0, "detached, so the ssh call returns at once")
     let times = times_command("20261027-000000")
     t |> success(find(times, "/workspace/logs/fleet/20261027-000000/pod_*/dasllama_run_*.log") >= 0, "the times read every child log of the run")
@@ -72,6 +84,7 @@ def test_fleet_commands(t : T?) {
     t |> success(find(report, "  11 s  cell_x") >= 0 && find(report, "cell_y") < 0, "a cell keeps its longest reading, the top list cuts at `top`")
     let status = status_command("20261027-000000")
     t |> success(find(status, "/workspace/logs/fleet/20261027-000000/shard_*.log") >= 0 && find(status, "REPORT") >= 0 && find(status, "RUN-EXIT") >= 0, "the status reads every shard's REPORT and RUN-EXIT")
+    t |> success(find(status, "MISSING") >= 0 && find(status, "/workspace/logs/fleet/20261027-000000/pod_*/mem_peak.txt") >= 0, "and its MISSING lines and every pod's memory peak")
     //! a partial `down` keeps a sparse index set: the shards still number 1..n over the live pods, and `up` numbers past the largest
     let sparse <- Fleet(pods <- [FleetPod(id = "b", index = 2), FleetPod(id = "e", index = 5)])
     let plan <- shard_plan(sparse)
