@@ -179,6 +179,7 @@ the module declares every such buffer `@exact_size` and sizes it through a reser
   empty `[init]` function it writes the boot-restore guard of every global the module initializes
   `= @@fn`, so the restore list cannot miss a seat; `dasllama_gpu_tier.das` restores its seats
   through it.
+- **`dasllama_lever.das`** - the `[lever]` function annotation (`ARCHITECTURE_ENGINE.md#levers`).
 
 RoPE scaling folded at the load: `ARCHITECTURE_ENGINE_MECHANISMS.md#rope-scaling-bake`.
 
@@ -209,6 +210,25 @@ the disk, 1.5 ms a token on the M5 Max against 5 us resident) and adds a gated v
 with the deltanet's. The deltanet out-gate is `sigmoid(z)` (`Config.dn_z_sigmoid`). The QSA
 indexer's projections load (`Model.idx_*_offs`) and attention runs dense - bit-identical to the
 reference below the indexer's `indexer_top_k` budget.
+
+### An in-process lever over a knob is one declaration {#levers}
+
+A knob a program also sets in process is its getter under `[lever]` (`dasllama_lever.das`): a function of no
+arguments and a declared result `T` whose body reads the knob. The annotation adds two private globals - whether a
+pin stands, and its value - and a first statement that answers the pin where one stands, so the body runs only
+unpinned. For a lever named `X` (the getter's name, or `[lever(name = X)]` where the getter is spelled otherwise) the
+module gains five functions, each as visible as the getter:
+
+- `set_X(v : T)` pins `v`; `reset_X()` lifts the pin and leaves `T`'s default behind it.
+- `X_pin() : tuple<pinned : bool; value : T>` reads the pin; `restore_X(pin)` puts one back, pinned or not.
+- `with_X(v : T) { ... }` pins `v` for its block and puts back the pin it found.
+
+The engine's levers: `source_release` (`dasllama_gguf.das`), `image_save` and `host_planes`
+(`dasllama_image.das`), `vulkan_trim` (`dasllama_gpu_tier.das`), `lane_read` and `gpu_kv_want`
+(`dasllama_gpu_resident.das`), `kv_init` (`dasllama_common.das`). `gpu_kv_want`'s body is a constant: the codec's knob
+has spellings that name none, so `resident_mirror_ask` reads the pin and, unpinned, the knob itself; the facade's
+`set_gpu_kv_dtype`, `reset_gpu_kv_dtype` and `gpu_kv_dtype_pin` wrap it. A generated function has no `def` line of
+its own: a search for `set_X` finds its callers, and the declaration is the `[lever]` getter.
 
 ### The test folder's documents track its files {#test-folder-gates}
 

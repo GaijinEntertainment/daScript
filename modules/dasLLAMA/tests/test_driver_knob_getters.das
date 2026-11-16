@@ -6,6 +6,11 @@ options persistent_heap   // a dastest root frees what it deletes only on this h
 
 require dastest/testing_boost public
 require dasllama/dasllama_common   // mtp_depth_pin / restore_mtp_depth, the decode-override registry
+require dasllama/dasllama_lever   // [lever]: the probe levers below
+require dasllama/dasllama_gguf   // the source_release lever
+require dasllama/dasllama_image   // the image_save and host_planes levers
+require dasllama/dasllama_gpu_tier   // the vulkan_trim lever
+require dasllama/dasllama_gpu_resident   // the lane_read and gpu_kv_want levers
 require _override_probes   // decode_declines: the fake override's step
 require dasllama/dasllama_kv_codec   // cvt_q8kv_to_f32: a poisoned q8_0 row read back
 require daslib/linq   // all
@@ -191,6 +196,121 @@ def test_kv_start(t : T?) {
         t |> success(kv_init_of("") == KvInit.unfilled && kv_init_of("zeros") == KvInit.unfilled, "unset, and a spelling that names no start, read as unfilled")
         restore_kv_init(pin)
         let back = kv_init_pin()
-        t |> success(back.pinned == pin.pinned && back.how == pin.how, "the pin is back as found")
+        t |> success(back.pinned == pin.pinned && back.value == pin.value, "the pin is back as found")
+    }
+}
+
+enum private ProbeStart {
+    cold
+    warm
+    hot
+}
+
+var private g_probe_knob = true
+var private g_probe_reads = 0   //! the times `probe_start_now`'s own body ran: a pinned lever answers without it
+
+[lever]
+def private probe_flag() : bool => g_probe_knob
+
+[lever(name = probe_start)]
+def private probe_start_now() : ProbeStart {
+    g_probe_reads++
+    return ProbeStart.warm
+}
+
+[test(description = "A `[lever]` getter answers its own body until `set_X` pins a value, `reset_X` lifts the pin, `X_pin` / `restore_X` carry a pinned and an unpinned state back exactly, `with_X` pins for its block alone and nests, and `name =` names the generated functions apart from the getter")]
+def test_lever_macro(t : T?) {
+    t |> run("an unpinned lever reads its knob, a pinned one the pin; reset, restore and with put the state back") @(t : T?) {
+        t |> success(probe_flag() && !probe_flag_pin().pinned, "unpinned: the getter's own body answers")
+        g_probe_knob = false
+        t |> success(!probe_flag(), "... and follows the knob")
+        set_probe_flag(true)
+        t |> success(probe_flag() && probe_flag_pin().pinned && probe_flag_pin().value, "set pins the value over the knob")
+        let pinned = probe_flag_pin()
+        reset_probe_flag()
+        t |> success(!probe_flag() && !probe_flag_pin().pinned, "reset lifts the pin: the knob decides again")
+        let lifted = probe_flag_pin()
+        restore_probe_flag(pinned)
+        t |> success(probe_flag() && probe_flag_pin().pinned, "restore brings a pinned state back")
+        restore_probe_flag(lifted)
+        t |> success(!probe_flag() && !probe_flag_pin().pinned, "... and an unpinned one")
+        var seen = 0
+        with_probe_flag(true) {
+            seen += probe_flag() ? 1 : 0
+            with_probe_flag(false) {
+                seen += probe_flag() ? 0 : 10
+            }
+            seen += probe_flag() && probe_flag_pin().pinned ? 100 : 0
+        }
+        t |> equal(seen, 111, "with pins for its block, a nested with for its own, the outer pin back between them")
+        t |> success(!probe_flag() && !probe_flag_pin().pinned, "... and the state it found after it")
+        g_probe_knob = true
+    }
+    t |> run("a lever over an enum, named apart from its getter") @(t : T?) {
+        let r0 = g_probe_reads
+        t |> equal(probe_start_now(), ProbeStart.warm, "unpinned: the body's value")
+        t |> equal(g_probe_reads, r0 + 1, "... read through the body")
+        set_probe_start(ProbeStart.hot)
+        t |> equal(probe_start_now(), ProbeStart.hot, "pinned: the pin's value")
+        t |> equal(g_probe_reads, r0 + 1, "... with the body not run")
+        with_probe_start(ProbeStart.cold) {
+            t |> equal(probe_start_now(), ProbeStart.cold, "with pins its own value")
+        }
+        t |> success(probe_start_pin().pinned && probe_start_pin().value == ProbeStart.hot, "... and puts the pin it found back")
+        reset_probe_start()
+        t |> success(!probe_start_pin().pinned && probe_start_pin().value == ProbeStart.cold, "reset leaves the type's default behind an unpinned lever")
+    }
+}
+
+typedef BoolPin = tuple<pinned : bool; value : bool>
+
+//! a bool lever of the engine through its five functions: the value against the knob pinned and read, the reset, `with` for a block,
+//! and the pin found put back
+def private bool_lever_walk(t : T?; name : string; get : function<() : bool>; set : function<(v : bool) : void>;
+                            reset : function<() : void>; pin : function<() : BoolPin>; restore : function<(p : BoolPin) : void>;
+                            wth : function<(v : bool; blk : block) : void>) {
+    let found = invoke(pin)
+    invoke(reset)
+    let knob = invoke(get)
+    t |> success(!invoke(pin).pinned, "{name}: reset leaves no pin, and the getter reads the knob ({knob})")
+    invoke(set, !knob)
+    t |> success(invoke(get) == !knob && invoke(pin).pinned, "{name}: set pins the value against the knob")
+    var inside = false
+    invoke(wth, knob) {
+        inside = invoke(get) == knob
+    }
+    t |> success(inside && invoke(get) == !knob, "{name}: with pins for its block and puts the pin back")
+    invoke(restore, found)
+    let back = invoke(pin)
+    t |> success(back.pinned == found.pinned && (!found.pinned || back.value == found.value), "{name}: the pin is back as found")
+}
+
+[test(description = "Each of the engine's levers - source_release, image_save, host_planes, vulkan_trim, lane_read, and the enum levers kv_init and gpu_kv_want - reads its knob unpinned, the pinned value once set, `with_`'s value inside its block alone, and comes back as found through `_pin` / `restore_`")]
+def test_engine_levers(t : T?) {
+    t |> run("the five bool levers") @(t : T?) {
+        bool_lever_walk(t, "source_release", @@source_release, @@set_source_release, @@reset_source_release, @@source_release_pin, @@restore_source_release, @@with_source_release)
+        bool_lever_walk(t, "image_save", @@image_save_enabled, @@set_image_save, @@reset_image_save, @@image_save_pin, @@restore_image_save, @@with_image_save)
+        bool_lever_walk(t, "host_planes", @@host_planes, @@set_host_planes, @@reset_host_planes, @@host_planes_pin, @@restore_host_planes, @@with_host_planes)
+        bool_lever_walk(t, "vulkan_trim", @@vulkan_trim, @@set_vulkan_trim, @@reset_vulkan_trim, @@vulkan_trim_pin, @@restore_vulkan_trim, @@with_vulkan_trim)
+        bool_lever_walk(t, "lane_read", @@lane_read, @@set_lane_read, @@reset_lane_read, @@lane_read_pin, @@restore_lane_read, @@with_lane_read)
+    }
+    t |> run("the two enum levers") @(t : T?) {
+        let start = kv_init_pin()
+        with_kv_init(KvInit.zero) {
+            t |> equal(kv_init(), KvInit.zero, "kv_init: with pins the start for its block")
+        }
+        let start_back = kv_init_pin()
+        t |> success(start_back.pinned == start.pinned && start_back.value == start.value, "kv_init: ... and puts the pin back")
+        let want = gpu_kv_want_pin()
+        set_gpu_kv_want(KVDtype.tq4)
+        t |> success(gpu_kv_want_pin().pinned && gpu_kv_want() == KVDtype.tq4, "gpu_kv_want: set pins the codec")
+        with_gpu_kv_want(KVDtype.q8_0) {
+            t |> equal(gpu_kv_want(), KVDtype.q8_0, "gpu_kv_want: with pins the codec for its block")
+        }
+        t |> equal(gpu_kv_want(), KVDtype.tq4, "gpu_kv_want: ... and puts the pin back")
+        reset_gpu_kv_want()
+        t |> success(!gpu_kv_want_pin().pinned && gpu_kv_want() == KVDtype.f16, "gpu_kv_want: unpinned, the getter's own f16")
+        restore_gpu_kv_want(want)
+        t |> equal(gpu_kv_want_pin().pinned, want.pinned, "gpu_kv_want: the pin is back as found")
     }
 }

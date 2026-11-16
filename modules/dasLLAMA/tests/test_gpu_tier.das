@@ -885,7 +885,7 @@ def test_ple_window_seed(t : T?) {
 [test(description = "The vulkan lane's trim knob defaults to trimmed, and with no `set_vulkan_trim` lever set `vulkan_trim` follows the knob")]
 def test_vulkan_trim_default(t : T?) {
     t |> success(VulkanEnv().trim, "the knob's default is the trimmed lane")
-    if (!vulkan_trim_lever_set()) {
+    if (!vulkan_trim_pin().pinned) {
         t |> equal(vulkan_trim(), g_env_vulkan.trim, "with no lever set the lane follows the knob")
     }
 }

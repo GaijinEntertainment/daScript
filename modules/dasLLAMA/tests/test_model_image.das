@@ -872,11 +872,10 @@ def private config_diff_field(a, b : Config) : string {
 def private text_image_roundtrip(t : T?; path : string; n_gen : int) {
     // the trim off: the round trip's sessions run the CPU rails, which a trimmed lane refuses - and an earlier cell's GPU
     // flavor leaves the tier armed, where the default trim would admit this model
-    let trim_set = vulkan_trim_lever_set()
-    let trim_on = vulkan_trim()
+    let trim_pin = vulkan_trim_pin()
     set_vulkan_trim(false)
     defer() {
-        restore_vulkan_trim(trim_set, trim_on)
+        restore_vulkan_trim(trim_pin)
     }
     let img = image_path_for(path, moe_gpu_bake_tag())   // each lane is its mode's: an armed tier's cold load mints the vulkan lane
     remove(img)   // cold start: the first facade load must build + save

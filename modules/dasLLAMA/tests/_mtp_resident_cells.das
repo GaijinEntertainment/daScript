@@ -1369,11 +1369,11 @@ def mtp_head_off_cell(t : T?) {
 
 [cold_path]
 def mtp_block_codec_cell(t : T?) {
-    let pin = gpu_kv_dtype_pin()
+    let pin = gpu_kv_want_pin()
     set_gpu_kv_dtype(KVDtype.q8_0)
     if (resident_mirror_dtype() != KVDtype.q8_0) {
         t |> skip("DASLLAMA_VK_KV32=1 arms the f32 mirror over a codec asked - the block-codec cells need it unset")
-        restore_gpu_kv_dtype(pin)
+        restore_gpu_kv_want(pin)
         return
     }
     t |> run("the NextN head over a q8_0 mirror: the draft, the verify, the warmed head rows, six rounds") @(t : T?) {
@@ -1387,5 +1387,5 @@ def mtp_block_codec_cell(t : T?) {
         mtp_verify_cell(t)
         mtp_verify_reject_cell(t)
     }
-    restore_gpu_kv_dtype(pin)
+    restore_gpu_kv_want(pin)
 }

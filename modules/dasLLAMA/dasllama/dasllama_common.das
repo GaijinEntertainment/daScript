@@ -5,6 +5,7 @@ options _dasllama_internal = true
 module dasllama_common shared public
 
 require dasllama/dasllama_lint public
+require dasllama/dasllama_lever
 require daslib/fio
 require dasllama/dasllama_version public  // DASLLAMA_RELEASE — re-exported so the facade chain carries the module's release counter
 require dasllama/dasllama_env  // the g_env_* knob globals ([EnvConfig] declarations; ENVIRONMENT.md is generated from them)
@@ -3729,41 +3730,14 @@ enum KvInit {
     poison   //!< every byte 0xFF: a NaN in the f32 and f16 codecs and in a block codec's scale, so a read of an unwritten row shows
 }
 
-var private g_kv_init = KvInit.unfilled
-var private g_kv_init_pinned = false
-
-//! The start a flat session's K/V slabs take from here on, over `DASLLAMA_KV_INIT`
-def set_kv_init(how : KvInit) {
-    g_kv_init = how
-    g_kv_init_pinned = true
-}
-
-//! Lift `set_kv_init`'s pin: `DASLLAMA_KV_INIT` decides again
-def reset_kv_init {
-    g_kv_init = KvInit.unfilled
-    g_kv_init_pinned = false
-}
-
-//! The pin as `set_kv_init` left it: `pinned` false where no caller asked
-def kv_init_pin : tuple<pinned : bool; how : KvInit> => (pinned = g_kv_init_pinned, how = g_kv_init)
-
-//! A fixture's put-back of the start `kv_init_pin` read
-def restore_kv_init(pin : tuple<pinned : bool; how : KvInit>) {
-    if (pin.pinned) {
-        set_kv_init(pin.how)
-    } else {
-        reset_kv_init()
-    }
-}
-
 var private g_kv_init_said = false   //! the latch on the start's announce and on an unread spelling's warning
 
 //! The start `DASLLAMA_KV_INIT`'s spelling names: a `KvInit` name, anything else `unfilled`
 def kv_init_of(spelling : string) : KvInit => to_enum(type<KvInit>, spelling, KvInit.unfilled)
 
-//! The start a session's K/V buffers take now: the pin, else the knob's spelling, one that names no start said once
+//! The start a session's K/V buffers take now: the lever (`set_kv_init`), else `DASLLAMA_KV_INIT`'s spelling, one that names no start said once
+[lever]
 def kv_init : KvInit {
-    return g_kv_init if (g_kv_init_pinned)
     let how = kv_init_of(g_env_engine.kv_init)
     if (!g_kv_init_said && !empty(g_env_engine.kv_init) && "{how}" != g_env_engine.kv_init) {
         g_kv_init_said = true

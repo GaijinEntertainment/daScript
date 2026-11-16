@@ -91,6 +91,16 @@ was built for or moves the slices under it. The rail ships off - `DASLLAMA_METAL
 it: on the E4B four-row step it times the same as building at the call, and it holds a second
 step's pooled buffers (`PERF_LEDGER.md`, the server-MTP section).
 
+**A landing writes through its rows' session pointers, so no step outlives a session it could
+name.** A `BatchLanding` keeps each row's `Session?` beside its uid, and the landing copies the K/V
+rows and logits into the session. Any session's release (`landing_session_released`) lands the step
+in flight and retires the step encoded ahead - a scheduler's erase of one stream moves the sessions
+stored after it - while the released session still stands: the owner field that fires the listeners
+is the first a `Session` finalizes. A pre-encoded step the next call commits takes that call's
+pointers (`batch_take_pre`): the match is by uid, and a session the caller's array moved sits at a
+new address. A step in flight has no such call, so the pipelined rail's caller keeps its sessions
+in place until the step lands. The watermark marks read the uids alone.
+
 **The mirror watermark moves at commit, not at landing.** `batch_mark_committed` marks every
 row's mirror at its position plus one the moment the step's command buffers are committed. The
 queue is in order, so the step writes each row before any later-committed work reads the mirror,

@@ -376,8 +376,7 @@ def test_moe_formats_expert_cache(t : T?) {
         let cache_was = expert_cache_mb_pin()
         set_expert_cache_mb(3500l)
         remove("{path_join(models_dir(), fx.file)}.vulkan.dlim.heat")   //! an earlier run's profile would seat the first feed's hottest experts already
-        let trim_set = vulkan_trim_lever_set()   //! the lane mints untrimmed: the cell's reference pass is the all-CPU chain, which reads the planar planes
-        let trim = vulkan_trim()
+        let trim_pin = vulkan_trim_pin()   //! the lane mints untrimmed: the cell's reference pass is the all-CPU chain, which reads the planar planes
         set_vulkan_trim(false)
         with_gpu_kv_dtype(ct, KVDtype.f16) {
             let f0 = moe_gpu_stream_cache_stats().fetches
@@ -395,7 +394,7 @@ def test_moe_formats_expert_cache(t : T?) {
                 ct |> success(reads2 < reads1, "the profile-ordered cache read {reads2} planes on demand against {reads1} with the first ids resident")
             }
         }
-        restore_vulkan_trim(trim_set, trim)
+        restore_vulkan_trim(trim_pin)
         set_expert_cache_mb(cache_was)
         restore_stream_pins(pins)
     }

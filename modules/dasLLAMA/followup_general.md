@@ -25,21 +25,6 @@
    parity oracle - the "NOT bit-exact" caveat on the fast forms is the known constraint; decide
    per call site which side of the contract it sits on).
 
-3. **The pipelined batch-decode landing holds borrowed Session pointers across the caller's
-   deletes.** `finish_pending_step` (dasllama_metal_common) lands the in-flight batch step by
-   memcpy-ing KV rows and logits through `BatchLanding.sessions[i]` - raw borrowed pointers - and
-   the batch driver's pre-encoded step parks the same pointers, uncommitted, in the other slot
-   (`ARCHITECTURE_GPU_MTP_DECODE.md#batch-pre-encode`). Nothing
-   quiesces on session death, `metal_decode_flush` (the public landing call) has zero callers,
-   and every test helper deletes its sessions right after `eval_batch_` with a step potentially
-   pending - a landing after those deletes writes into freed heap. Empirically quiet today
-   (probed 2026-07-30: batch-only prelude showed no corruption), but it is a lifetime landmine,
-   and the server would inherit it if a chat session ever dies mid-pipeline. Done = a session
-   retirement seam the drivers hook (land or abandon pending steps that reference the dying
-   session, and retire a pre-encoded step whose rows include it), or the landing rail stops
-   holding raw session pointers; plus `metal_decode_flush` calls at the test helpers' teardown as
-   the interim belt.
-
 5. **The metal kernel zoo carries four different rope addressing schemes.** Factoring the
    sq_attn family showed the rope-store family does NOT share one skeleton the way attention
    did - its eleven kernels split four ways: pair-per-thread WITH partial rotation
@@ -2908,12 +2893,6 @@
     Done = every plane the plan charges taken at the arm on both homes, or checked where it is made and refused by
     name, each with a cell that holds the refusal through a fault seat as
     `test_gpu_resident_cuda_window_planes_at_arm` does; the asymmetry entry removed with it.
-309. **An in-process lever over an environment knob is four hand-written functions, seven times.** `source_release`,
-    `lane_read`, `image_save`, `host_planes` and `vulkan_trim` each carry a setter, a getter, a "lever set" read and a
-    restore, the bodies identical but for the knob's field; `kv_init` and `gpu_kv_dtype` carry the same four over an
-    enum; and every test that pins one writes the save, set and restore by hand. Done = one declaration a lever that
-    generates its four functions, and one fixture that pins a lever for a block and puts it back, the seven families
-    and their tests moved onto them, held by the levers' own cells.
 310. **Four Vulkan-home test files fail under the CUDA ask where their headers say they skip.**
     `test_gpu_resident_gptoss.das`, `test_gpu_resident_gemma4_e2b.das`, `test_gpu_resident_format_census.das` and
     `test_gpu_resident_regions_gemma4_e2b_ctx128k.das` hold cells that place layers on the per-op tier the CUDA home

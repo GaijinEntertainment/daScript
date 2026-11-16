@@ -5,6 +5,7 @@ options _dasllama_internal = true
 module dasllama_gguf shared public
 
 require dasllama/dasllama_lint public
+require dasllama/dasllama_lever
 require daslib/array_boost
 require strings
 require math                        // sqrt/abs/clamp — the Q5_K encoder's per-sub-block fit
@@ -389,27 +390,11 @@ struct private GgufRelease {
 
 var private g_gguf_release : array<GgufRelease>
 
-var private g_source_release_set = false
-var private g_source_release = false
 var private g_gguf_tensors_released = 0l   //! the tensors whose pages left the process, since it began
 
-//! the source release in process (`DASLLAMA_SOURCE_RELEASE`'s twin): whether a tensor read off an armed mapping lets the last tensor's pages go
-def set_source_release(on : bool) {
-    g_source_release_set = true
-    g_source_release = on
-}
-
-//! whether a tensor read off an armed mapping lets the last tensor's pages go: the in-process lever where one was set, else the knob
-def source_release() : bool => g_source_release_set ? g_source_release : g_env_engine.source_release
-
-//! whether an in-process lever shadows `DASLLAMA_SOURCE_RELEASE`: a fixture reads it beside `source_release()` and puts both back
-def source_release_lever_set() : bool => g_source_release_set
-
-//! the source release lever put back as a fixture found it
-def restore_source_release(was_set : bool; on : bool) {
-    g_source_release_set = was_set
-    g_source_release = on
-}
+//! whether a tensor read off an armed mapping lets the last tensor's pages go: the lever (`set_source_release`), else `DASLLAMA_SOURCE_RELEASE`
+[lever]
+def source_release() : bool => g_env_engine.source_release
 
 //! the tensors whose pages a later tensor's read let go, since the process began
 def gguf_tensors_released() : int64 => g_gguf_tensors_released

@@ -348,8 +348,7 @@ def test_gguf_source_release(t : T?) {
         fopen(path, "wb") $(f) {
             fwrite(f, gg)
         }
-        let lever_set = source_release_lever_set()
-        let lever_was = source_release()
+        let lever = source_release_pin()
         set_source_release(true)
         let f = fopen(path, "rb")
         t |> success(f != null, "the synthetic gguf opens")
@@ -396,7 +395,7 @@ def test_gguf_source_release(t : T?) {
             delete got
         }
         fclose(f)
-        restore_source_release(lever_set, lever_was)
+        restore_source_release(lever)
         delete data
     }
 }

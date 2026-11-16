@@ -1473,6 +1473,125 @@ def test_metal_batched_row_pre_encode_deltanet(t : T?) {
     }
 }
 
+//! two greedy streams held by value in an array, as a scheduler holds its streams, through `eval_batch_`: a step over both, a
+//! second after the array moved them, the first stream deleted and erased, then steps over the second alone. `pre` arms the
+//! pre-encode rail and `pipe` the pipelined landing; the tokens of every step come back, the second stream's last
+def private landing_walk(t : T?; tr : Model; prompts : array<array<int64>>; pre, pipe : bool) : array<int64> {   // nolint:LINT012,LINT019 — the body is the das_metal half
+    var got : array<int64>
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        let greedy = SamplingParams()
+        let tag = "pre {pre}, pipe {pipe}"
+        set_metal_batch_pre(pre)
+        set_metal_batch_pipe(pipe)
+        var pool : array<Session>
+        pool |> reserve(length(prompts))
+        got |> reserve(8)
+        for (pr in prompts) {
+            var s <- create_session(tr)
+            eval_(tr, s, pr)
+            pool |> emplace(s)
+        }
+        var ws <- create_batch_workspace_(tr)
+        var rows <- [unsafe(addr(pool[0])), unsafe(addr(pool[1]))]
+        var toks <- [sample(pool[0], greedy), sample(pool[1], greedy)]
+        got |> push_from(toks)
+        let taken0 = metal_batch_pre_taken()
+        eval_batch_(tr, ws, rows, toks)
+        t |> equal(metal_batch_landing_parked(), pre || pipe, "{tag}: after the step a landing {pre || pipe ? "names" : "names no"} session")
+        metal_decode_flush() if (pipe)   //! the pipelined rail's sampling contract: the step in flight lands before its logits are read
+        //! the array moves its sessions with no release: the slots a step encoded ahead was built over hold moved-out sessions
+        var moved : array<Session>
+        moved |> reserve(2)
+        for (i in range(2)) {
+            moved |> emplace(pool[i])
+        }
+        rows[0] = unsafe(addr(moved[0]))
+        rows[1] = unsafe(addr(moved[1]))
+        for (i in range(2)) {
+            toks[i] = sample(moved[i], greedy)
+        }
+        got |> push_from(toks)
+        eval_batch_(tr, ws, rows, toks)
+        if (pre && !pipe) {
+            t |> equal(metal_batch_pre_taken() - taken0, 1l, "{tag}: the second step committed the step encoded ahead of the move")
+            for (s in moved) {
+                t |> equal(s.mtp_h_pos1, s.n_past, "{tag}: the landing moved the carry mark of the session where it stands now")
+            }
+        }
+        //! the scheduler's reap: the session finalized in place, then the erase that moves the one after it
+        let landed0 = metal_batch_decode_stats().steps
+        delete moved[0]
+        t |> success(!metal_batch_landing_parked(), "{tag}: a session's release leaves no landing that names a session")
+        if (pipe) {
+            t |> equal(metal_batch_decode_stats().steps - landed0, 1l, "{tag}: the release landed the step in flight")
+        }
+        moved |> erase(0)
+        rows |> resize(1)
+        rows[0] = unsafe(addr(moved[0]))
+        toks |> resize(1)
+        for (_ in range(3)) {
+            toks[0] = sample(moved[0], greedy)
+            got |> push(toks[0])
+            eval_batch_(tr, ws, rows, toks)
+            metal_decode_flush()
+        }
+        got |> push(sample(moved[0], greedy))
+        rows |> clear()   //! borrowed pointers
+        delete toks
+        delete ws
+        delete moved
+        delete pool
+    }
+    return <- got
+}
+
+//! a landing never outlives the sessions it names: the walk with every step built at its call is the reference, and the
+//! pre-encode rail and the pipelined landing each emit its tokens across a move of the sessions and a release of one
+def private landing_release_cell(t : T?; file : string) {   // nolint:LINT012,LINT019 — the body is the das_metal half
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        let path = path_join(models_dir(), file)
+        return if (!jit_model_available(t, path))
+        let prior_mode = get_metal_mode()
+        set_metal_mode(MetalMode.when_available)
+        var tr <- blob_twin(t, path, 256l)
+        with_dasllama_jobque_() {
+            let prior_pre = metal_batch_pre_enabled()
+            let prior_pipe = metal_batch_pipe_enabled()
+            set_metal_mtp_carry_hidden(true)   //! every landed row moves its session's carry mark: the write a stale pointer loses
+            var prompts <- [ <- encode(tr, "Count from one to twenty: one, two, three,", true, false),
+                             <- encode(tr, "The letters of the alphabet in order: a, b, c, d,", true, false)]
+            var want <- landing_walk(t, tr, prompts, false, false)
+            var pre <- landing_walk(t, tr, prompts, true, false)
+            t |> success(ids_equal(pre, want), "the pre-encode rail emits the reference tokens across the move and the release: {pre} against {want}")
+            var pipe <- landing_walk(t, tr, prompts, false, true)
+            t |> success(ids_equal(pipe, want), "the pipelined landing emits the reference tokens across the move and the release: {pipe} against {want}")
+            set_metal_mtp_carry_hidden(false)
+            set_metal_batch_pipe(prior_pipe)
+            set_metal_batch_pre(false)
+            metal_decode_shutdown()
+            metal_prefill_shutdown()
+            t |> equal(metal_live_object_count(), 0l, "no leaked Metal objects after the walks and the drivers' shutdown")
+            set_metal_batch_pre(prior_pre)
+            delete pipe
+            delete pre
+            delete want
+            delete prompts
+        }
+        set_metal_mode(prior_mode)
+        delete tr
+    } else {
+        t |> skip("dasMetal not built")
+    }
+}
+
+[test(description = "On Llama-3.2-1B Q8, two streams stepped through the Metal batched driver emit the same tokens with the pre-encode rail on and with the pipelined landing on as with each step built at its call, across a move of both sessions (the step encoded ahead commits through the sessions' new addresses) and the release of one (which leaves no landing naming a session, and lands the step in flight)")]
+def test_metal_batched_row_landing_release(t : T?) {
+    t |> run("a batched step's landing follows its sessions through a move and never outlives a released one (Llama-3.2-1B Q8)") <| @(t : T?) {
+        if (!family_on(t, "llama")) return
+        landing_release_cell(t, "Llama-3.2-1B-Instruct-Q8_0.gguf")
+    }
+}
+
 let private PAIR_STEPS = 12l
 
 //! one f16 session's K/V mirror on `tr`: both planes of every layer that keeps rows of its own, a row each of its context

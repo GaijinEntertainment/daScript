@@ -49,9 +49,9 @@ def private regions_rig_init() {
 //! `body` with the K/V mirror asked at `dt` for every load it makes, the codec ask put back as `body` found it, however
 //! `body` leaves - a test's pin, never a file's `[init]`, which reaches every batch-mate compiled into the same program
 def with_kv_dtype(dt : KVDtype; body : block<() : void>) {
-    let found = gpu_kv_dtype_pin()
+    let found = gpu_kv_want_pin()
     defer() {
-        restore_gpu_kv_dtype(found)
+        restore_gpu_kv_want(found)
     }
     set_gpu_kv_dtype(dt)
     invoke(body)
@@ -119,9 +119,9 @@ def private load_two_regions(t : T?; file : string) : Model => <- load_regions(t
 //! environment arms another over it: DASLLAMA_VK_KV32=1's f32 mirror
 def private regions_ready(t : T?; file : string) : bool {
     return false if (!resident_ready(t, path_join(models_dir(), file)))
-    let asked = gpu_kv_dtype_pin()
-    if (asked.pinned && resident_mirror_dtype() != asked.dt) {
-        t |> skip("the environment arms a {resident_mirror_dtype()} mirror over the {asked.dt} this file asks (DASLLAMA_VK_KV32=1) - its cells need that unset")
+    let asked = gpu_kv_want_pin()
+    if (asked.pinned && resident_mirror_dtype() != asked.value) {
+        t |> skip("the environment arms a {resident_mirror_dtype()} mirror over the {asked.value} this file asks (DASLLAMA_VK_KV32=1) - its cells need that unset")
         return false
     }
     return true
