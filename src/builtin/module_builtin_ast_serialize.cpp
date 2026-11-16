@@ -6,6 +6,7 @@
 
 #include "daScript/ast/ast_serialize_macro.h"
 #include "daScript/ast/ast_serializer.h"
+#include "daScript/ast/dyn_modules.h"
 #include "daScript/ast/ast_handle.h"
 #include "daScript/ast/ast.h"
 #include "daScript/ast/ast_visitor.h"
@@ -3570,26 +3571,41 @@ namespace das {
     }
 #endif
 
+    static string fileStamp ( const string & file ) {
+        uint64_t size; int64_t mtime; bool isDir;
+        if ( !das_file_stat_utf8(file.c_str(), size, mtime, isDir) ) return "";
+        return to_string(mtime) + ":" + to_string(size);
+    }
+
+    // src/builtin/ARCHITECTURE.md#default-module-cache-path
+    static string binaryStamps ( const string & hostBinary ) {
+        static const char insideCompiler = 0;
+        string host = fileStamp(hostBinary);
+        string stamps = "\n" + host;
+        for ( auto & library : { getModuleFileNameOf(&insideCompiler), getRuntimeLibraryFileName() } ) {
+            string stamp = fileStamp(library);
+            if ( !stamp.empty() && stamp != host ) stamps += "\n" + stamp;
+        }
+        auto artifacts = dynamic_module_artifacts();
+        sort(artifacts.begin(), artifacts.end());
+        for ( auto & artifact : artifacts ) stamps += "\n" + fileStamp(artifact);
+        return stamps;
+    }
+
     string ModuleFileCache::defaultPath ( const string & scriptPath, const string & hostBinary, const string & hostOptions ) {
         string norm = normalizeFileName(scriptPath.c_str());
         size_t slash = norm.find_last_of("/\\");
         string stem = slash == string::npos ? norm : norm.substr(slash + 1);
         size_t dot = stem.rfind('.');
         if ( dot != string::npos && dot != 0 ) stem = stem.substr(0, dot);
-        char host[64];
-        uint64_t hostSize; int64_t hostMtime; bool hostIsDir;
-        if ( !hostBinary.empty() && das_file_stat_utf8(hostBinary.c_str(), hostSize, hostMtime, hostIsDir) ) {
-            snprintf(host, sizeof(host), "\n%lld:%lld", (long long) hostMtime, (long long) hostSize);
-        } else {
-            host[0] = 0;
-        }
+        string binaries = binaryStamps(hostBinary);
         vector<string> envs;
         for ( char * const * e = das_environ(); e && *e; ++e ) {
             if ( strncmp(*e, "DAS", 3) == 0 && strncmp(*e, "DAS_MODULE_CACHE_LIMIT=", 23) != 0
                 && !das_dep_is_env_entry(*e) ) envs.push_back(*e);
         }
         sort(envs.begin(), envs.end());
-        string key = norm + host + "\n" + hostOptions;
+        string key = norm + binaries + "\n" + hostOptions;
         for ( auto & e : envs ) {
             key += "\n";
             key += e;

@@ -364,8 +364,8 @@ def late_driver() : string {
 }
 
 def child_cmd(tmp, flags, script : string) : string {
-    let enter = get_platform_name() == "windows" ? "cd /d {tmp} &&" : "cd {tmp} &&"
-    return "{enter} {get_full_file_name(das_exe())} -dasroot {get_das_root()} {flags} \"{script}\""
+    let host = "{enter_dir(tmp)} {get_full_file_name(das_exe())}"
+    return "{host} -dasroot {get_das_root()} {flags} \"{script}\""
 }
 
 //! the wrapper called from a running script
@@ -627,33 +627,6 @@ def make_deferred_fixture(tmp : string; artifact : string) : DeferredFixture {
     return fx
 }
 
-//! a copy of one of the tree's module folders - descriptor and the
-//! artifacts that exist, in either configuration's name - under the
-//! fixture's modules, where it shadows the tree's
-def copy_module(fx : DeferredFixture; folder : string; artifacts : array<string>) : string {
-    let src = path_join(path_join(get_das_root(), "modules"), folder)
-    let dst = path_join(path_join(fx.tmp, "modules"), folder)
-    var merr : string
-    mkdir_rec(dst, merr)
-    var cerr : string
-    copy_file(path_join(src, ".das_module"), path_join(dst, ".das_module"), true, cerr)
-    for (name in artifacts) {
-        for (suffix in [".shared_module", "_debug.shared_module"]) {
-            let f = path_join(src, "{name}{suffix}")
-            if (stat(f).is_valid) {
-                copy_file(f, path_join(dst, "{name}{suffix}"), true, cerr)
-            }
-        }
-    }
-    dir(src) $(name) {                          // a library an artifact loads from beside itself
-        let ext = extension(name)
-        if (ext == ".dylib" || ext == ".so" || ext == ".dll") {
-            copy_file(path_join(src, name), path_join(dst, name), true, cerr)
-        }
-    }
-    return dst
-}
-
 //! whether the cold run loaded the copied artifact - a build whose
 //! artifacts find their libraries relative to the tree cannot load a
 //! copy, and the arms on copies say so and return
@@ -902,8 +875,9 @@ def arm_fallback(t : T?; fx : DeferredFixture) {
         t |> success(find(out, "[module] loading every deferred module (") >= 0, "its initDependencies asks for glfw and imgui, so the rest loads:\n{out}")
     }
     t |> run("a half-warm tree - a descriptor compiled cold beside replayed ones - initializes by bringing every deferred module in") @(t : T?) {
-        let imguiDir = copy_module(fx, "dasImgui", ["dasModuleImgui", "imguiApp", "imguiAppHeadless"])
-        copy_module(fx, "dasGlfw", ["dasModuleGlfw"])
+        let imguiDir = copy_module(fx.tmp, "dasImgui",
+            ["dasModuleImgui", "imguiApp", "imguiAppHeadless"])
+        copy_module(fx.tmp, "dasGlfw", ["dasModuleGlfw"])
         var cold : string
         t |> success(run_child_reported(t, "half-warm cold", child_cmd(fx, fx.plain), cold, "PLAIN"), "the copies record their manifests")
         if (!copy_loaded(cold, imguiDir, "imguiApp")) {
@@ -1473,15 +1447,7 @@ def write_probe(root, mod, descriptor : string) : string {
 //! a das root the test owns: the tree's top-level daslib and the
 //! probe modules under `modules/`, their folders inside the root
 def make_das_root(root : string) {
-    let daslib = path_join(root, "daslib")
-    var err : string
-    mkdir_rec(daslib, err)
-    let treeDaslib = path_join(get_das_root(), "daslib")
-    dir(treeDaslib) $(name) {
-        if (extension(name) == ".das") {
-            copy_file(path_join(treeDaslib, name), path_join(daslib, name), true, err)
-        }
-    }
+    copy_tree_daslib(root)
     let modDir = write_probe(root, "manifest_probe", DESCRIPTOR_ROOTED)
     fwrite(path_join(modDir, "hello.das"), HELLO)
     for (mod, descriptor in PLACED_PROBES, PLACED_DESCRIPTORS) {

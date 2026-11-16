@@ -71,3 +71,50 @@ def run_child_reported(t : T?; phase : string; cmd : string; var out : string&; 
     let rc = run_child(cmd, out)
     return report_child(t, phase, rc, out, marker)
 }
+
+//! the command prefix that runs a child inside `folder`, so the
+//! default cache it keys lands there
+def enter_dir(folder : string) : string =>
+    get_platform_name() == "windows" ? "cd /d {folder} &&" : "cd {folder} &&"
+
+//! copies the files of `from` that `keep` accepts into `to`
+def copy_files(from, to : string; keep : block<(name : string) : bool>) {
+    var err : string
+    mkdir_rec(to, err)
+    dir(from) $(name) {
+        if (invoke(keep, name)) {
+            copy_file(path_join(from, name), path_join(to, name), true, err)
+        }
+    }
+}
+
+//! copies only daslib's top-level .das files: enough for a
+//! descriptor's requires
+def copy_tree_daslib(root : string) {
+    let daslib = path_join(get_das_root(), "daslib")
+    copy_files(daslib, path_join(root, "daslib")) $(name) => extension(name) == ".das"
+}
+
+//! a copy of one of the tree's module folders - descriptor and the
+//! artifacts that exist, in either configuration's name - under
+//! `root`'s modules, where it shadows the tree's
+def copy_module(root, folder : string; artifacts : array<string>) : string {
+    let src = path_join(path_join(get_das_root(), "modules"), folder)
+    let dst = path_join(path_join(root, "modules"), folder)
+    var err : string
+    mkdir_rec(dst, err)
+    copy_file(path_join(src, ".das_module"), path_join(dst, ".das_module"), true, err)
+    for (name in artifacts) {
+        for (suffix in [".shared_module", "_debug.shared_module"]) {
+            let f = path_join(src, "{name}{suffix}")
+            if (stat(f).is_valid) {
+                copy_file(f, path_join(dst, "{name}{suffix}"), true, err)
+            }
+        }
+    }
+    copy_files(src, dst) $(name) {              // a library an artifact loads from beside itself
+        let ext = extension(name)
+        return ext == ".dylib" || ext == ".so" || ext == ".dll"
+    }
+    return dst
+}

@@ -42,28 +42,49 @@ The gate scans the module registry of its own program, so only modules its
 `.cache/daslang/module_cache/<stem>-<hash>.dascache` - relative, so the cache follows the
 current directory, and it sits beside the JIT DLL cache. `<stem>` is the script's file name
 without its extension. `<hash>` is the first 8 hex digits of a 64-bit hash over the normalized
-script path, the running executable's mtime and size (the host resolves its own path through the
-OS, so a launch by bare name through `PATH` keys the same file as a launch by path; when the
-host is the shared library a stub loads, the key stats that library, not the stub -
-`src/misc/ARCHITECTURE_DAS_ROOT.md#root-sidecar`), the host's
+script path, the mtime and size of every binary the compile runs through, the host's
 own command line - every argument up to the first `--`, plus a `--jit-target` after it (the one
 script argument that changes what the host compiles: the target's folds); the other arguments after
 `--` belong to the script - and every `NAME=VALUE` environment pair whose name starts with `DAS`,
 sorted.
 
-The binary, the command line and the environment are in the key because each changes the
-compile without changing a source file: macros read the tune and JIT environment at compile
-time and stamp what they read into the AST the cache stores, and a host flag such as
+The binaries are stamped by `binaryStamps`, in this order:
+
+- The host: the running executable, which resolves its own path through the OS, so a launch by
+  bare name through `PATH` keys the same file as a launch by path. When the host is the shared
+  library a stub loads, it is that library and never the stub, which holds no daslang code
+  (`src/misc/ARCHITECTURE_DAS_ROOT.md#root-sidecar`). The host's line is always there, and it
+  is empty when the host cannot be stamped.
+- The library that holds the compiler and the library that holds the runtime, each found from
+  an address inside it (`getModuleFileNameOf`, `getRuntimeLibraryFileName`). A library adds
+  nothing when its stamp equals the host's, or when the platform cannot name its file or
+  stat it: a statically linked host is all three at once, and the name the platform gives for
+  its executable can differ between a launch by path and a launch through `PATH`.
+- The artifact of every row the module scan registered - loaded, deferred or still pending
+  (`dynamic_module_artifacts`), one per row, each under the name this build loads (a Debug
+  build's `_debug` name), sorted by path. An absent artifact stamps as an empty line, so one that
+  appears is a new key. The set is every registered artifact rather than the ones the script
+  requires: a module the manifest replay deferred loads on its first `require`, and the path is
+  computed before the compile knows what the script requires.
+
+The binaries, the command line and the environment are in the key because each changes the
+compile without changing a source file. A library relinks alone when only its own sources
+changed, so the compiler's stamp moves while the host's stays. A shared module's C++ decides
+what its handled types and builtins compile to. Macros read the tune and JIT environment at
+compile time and stamp what they read into the AST the cache stores. A host flag such as
 `-v1syntax`, `-jit` or `-project` selects a different grammar, policy set or module graph. A
-rebuild, a changed flag set or a changed `DAS*` variable is a different compile, so it gets its
-own file instead of a stale hit, and two same-named scripts in different directories never
-share one. `-no-module-cache` disables the cache outright, over an explicit `-module-cache
+rebuild of any of those binaries, a changed flag set or a changed `DAS*` variable is a different
+compile, so it gets its own file instead of a stale hit, and two same-named scripts in
+different directories never share one. `-no-module-cache` disables the cache outright, over an
+explicit `-module-cache
 <path>` on the same command line as well as over the default, so a spawner can append it as an
 override; beside `-ser` / `-deser` - the explicit round-trip halves, whose verdict is the point
 of the run - the host rejects the command line instead of silently disabling them.
 
 A script's own `compile_file` (`rtti_builtin_compile_file`, `module_builtin_ast.cpp`) installs
 the same default cache when its `CodeOfPolicies.module_cache` is set, with
+the running executable standing in for the host binary - the stub itself under one, which
+stamps nothing a compile depends on beside the two libraries - and
 `ModuleFileCache::embeddedHostOptions` standing in for the host's command line: this process's
 arguments up to `--`, a `--jit-target` after it, and a hash of the policies streamed as a record
 stamps them, so two tools compiling one file under different policies keep separate records

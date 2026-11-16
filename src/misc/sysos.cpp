@@ -709,6 +709,11 @@ namespace das {
     }
 #endif
 
+    string getRuntimeLibraryFileName ( void ) {
+        static const char insideRuntime = 0;
+        return getModuleFileNameOf(&insideRuntime);
+    }
+
     string get_prefix ( const string & req ) {
         return dasPathPrefix(req);
     }

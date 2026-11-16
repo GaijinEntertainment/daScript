@@ -145,7 +145,7 @@ def test_compile_file_module_cache(t : T?) {
     let leafFile = path_join(tmp, "mc_cf_leaf.das")
     fwrite(leafFile, "options gen2\nmodule mc_cf_leaf\ndef leaf() : int \{\n    return 2\n\}\n")
     fwrite(rootFile, "options gen2\nrequire mc_cf_leaf\n[export]\ndef main \{\n    print(\"\{leaf()\}\\n\")\n\}\n")
-    let enter = get_platform_name() == "windows" ? "cd /d {tmp} &&" : "cd {tmp} &&"
+    let enter = enter_dir(tmp)
     let drv = "{enter} {get_full_file_name(das_exe())} -dasroot {root} {root}/tests/module_cache/_fixtures/mc_cf_drv.das -- {rootFile}"
     let cacheDir = path_join(tmp, ".cache/daslang/module_cache")
     var cold : string
@@ -215,7 +215,7 @@ def test_typedef_use_survives_the_cache(t : T?) {
         copied = fwrite(path_join(tmp, "{name}.das"), fread(fixture(name))) && copied
     }
     t |> success(copied, "the fixtures are copied")
-    let enter = get_platform_name() == "windows" ? "cd /d {tmp} &&" : "cd {tmp} &&"
+    let enter = enter_dir(tmp)
     let host = "{enter} {get_full_file_name(das_exe())} -dasroot {root}"
     let drv = "{host} {fixture("mc_typedef_used_drv")} -- {rootFile} mc_tu_facade"
     let marker = "MC_TYPEDEF_USED mc_tu_facade=true"
@@ -408,7 +408,7 @@ def test_type_backref_stays_in_module_record(t : T?) {
     let root = get_das_root()
     let fixtures = "{root}/tests/module_cache/_fixtures"
     let second = "{fixtures}/mc_backref_second.das"
-    let enter = get_platform_name() == "windows" ? "cd /d {tmp} &&" : "cd {tmp} &&"
+    let enter = enter_dir(tmp)
     let cmd = "{enter} {get_full_file_name(das_exe())} -dasroot {root} -log-compile-time {fixtures}/mc_backref_first.das {second}"
     var cold : string
     let coldOk = run_child_reported(t, "cold", cmd, cold, "MC_BACKREF_SECOND ( 1)")

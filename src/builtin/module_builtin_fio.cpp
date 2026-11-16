@@ -403,6 +403,7 @@ namespace das {
     DAS_API bool dynamic_module_artifact_exists ( const char * ) GENERATE_IO_STUB_RET
     DAS_API bool pending_dynamic_module_artifact_present () GENERATE_IO_STUB_RET
     DAS_API string registered_dynamic_module_name ( const char *, const char * ) GENERATE_IO_STUB_RET
+    DAS_API vector<string> dynamic_module_artifacts () GENERATE_IO_STUB_RET
     DAS_API void clear_deferred_dynamic_modules () GENERATE_IO_STUB
 
 #undef GENERATE_IO_STUB
@@ -2830,6 +2831,16 @@ namespace das {
     DAS_API void clear_deferred_dynamic_modules () {
         lock_guard<std::recursive_mutex> guard(g_deferred_dynamic_modules_mutex);
         g_deferred_dynamic_modules.clear();
+    }
+
+    // src/builtin/ARCHITECTURE.md#default-module-cache-path
+    DAS_API vector<string> dynamic_module_artifacts () {
+        lock_guard<std::recursive_mutex> guard(g_deferred_dynamic_modules_mutex);
+        vector<string> artifacts;
+        for ( auto & dm : g_registered_dynamic_modules ) artifacts.push_back(dynamic_module_actual_path(get<0>(dm).c_str()));
+        for ( auto & dm : g_pending_dynamic_modules ) artifacts.push_back(dynamic_module_actual_path(get<0>(dm).c_str()));
+        for ( auto & dm : g_deferred_dynamic_modules ) artifacts.push_back(dynamic_module_actual_path(dm.path.c_str()));
+        return artifacts;
     }
 
     // Re-attempt modules whose dlopen was deferred (Quiet failure during the

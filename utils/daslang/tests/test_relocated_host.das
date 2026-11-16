@@ -203,3 +203,55 @@ def test_missing_host_library(t : T?) {
         t |> equal(r.rc, 1, "own library never pairs with the sidecar's daslib: {r.out}")
     }
 }
+
+def cache_records(cwd : string) : int {
+    var n = 0
+    dir(path_join(cwd, ".cache/daslang/module_cache")) $(name) {
+        if (ends_with(name, ".dascache")) {
+            n++
+        }
+    }
+    return n
+}
+
+//! runs the probe inside `own` and expects `totalAfter` records there
+def expect_cache_records(t : T?; daslang, own : string; totalAfter : int; why : string) {
+    let p = run_daslang([daslang, probe()], own)
+    t |> equal(p.rc, 0, p.out)
+    t |> equal(cache_records(own), totalAfter, why)
+}
+
+[test(description = "the default module cache keys on each library a relocated daslang loads and not on its stub: a library whose mtime changed compiles the script into a record of its own", timeout = 1200)]
+def test_cache_keys_on_host_libraries(t : T?) {
+    if (!das_is_dll_build()) {
+        t |> skip("a static daslang loads no library")
+        return
+    }
+    let own = make_sdk_with_libraries(t, "reloc_key")
+    let daslang = path_join(own, "bin/{exe_name("daslang")}")
+    copy_into(t, get_host_binary(), daslang)
+    let libDir = path_join(own, get_platform_name() == "windows" ? "bin" : "lib")
+    var libraries : array<string>
+    dir(libDir) $(f) {
+        if (is_daslang_library(f)) {
+            libraries |> push(path_join(libDir, f))
+        }
+    }
+    t |> success(length(libraries) >= 3,
+        "the main, compiler and runtime libraries: {join(libraries, " ")}")
+    expect_cache_records(t, daslang, own, 1, "the first run writes one record")
+    expect_cache_records(t, daslang, own, 1, "an unchanged host keys the same record")
+    var total = 1
+    var err : string
+    for (i, library in count(), libraries) {
+        let set = set_mtime(library, mktime(2020 + i, 1, 1, 0, 0, 0), err)
+        t |> success(set, "set_mtime {library}: {err}")
+        total++
+        expect_cache_records(t, daslang, own, total,
+            "{base_name(library)} with another mtime keys a record of its own")
+    }
+    let set = set_mtime(daslang, mktime(2019, 1, 1, 0, 0, 0), err)
+    t |> success(set, "set_mtime {daslang}: {err}")
+    expect_cache_records(t, daslang, own, total,
+        "the stub holds no compiler code, so its mtime keys nothing")
+}
