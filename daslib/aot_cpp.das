@@ -3905,7 +3905,14 @@ class public CppAot : AstVisitor {
             }
         }
         if (!call.func.flags.noPointerCast && needPtrCast(funArgType, arg._type, arg)) {
-            write(*ss, "das_auto_cast<{describeCppType(funArgType,DescribeConfig(cross_platform=cross_platform))}>::cast(");
+            let by_ref = funArgType.flags.ref && funArgType.isPointer;
+            let target = describeCppType(funArgType,
+                DescribeConfig(skip_ref = by_ref, cross_platform = cross_platform));
+            if (by_ref && !(arg is ExprConstPtr)) {
+                write(*ss, "das_reinterpret<{target}>::pass(");
+            } else {
+                write(*ss, "das_auto_cast<{target}>::cast(");
+            }
         }
         if (!call.func.flags.anyTemplate && (call.func.flags.interopFn || funArgType.baseType == Type.anyArgument)) {
             let maybe_ref = argType.isRefType && !argType.flags.ref ? " &" : "";
