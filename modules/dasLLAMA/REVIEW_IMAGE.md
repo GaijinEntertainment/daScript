@@ -35,6 +35,13 @@ a lower peak is correct.
 released before the written image is mapped, and a declined save serves the streamed build
 from memory instead of reloading.**
 
+**A diff that adds or changes a plane hook - a block passed to `cache_via_image_staged_hooked`,
+`save_image_to_file` or `chunk_rail` - passes as `extra` the `section_bytes` of each section the
+hook writes for a field the carrier holds empty, minus the `section_bytes` of each carrier plane
+the hook declines to write, each count computed by the function that decides what the writer
+appends; an estimate or a bound there is a defect.** The memory sink allocates the reserve, and
+`build_image` asserts it against what the walk wrote.
+
 **A staged carrier mint (`cache_via_image_staged`) meeting a source file at or past 1 GiB
 either refuses it or streams it the way a decoder mint does.** A refusal names that file. The
 staged form holds source and image at once, and this rule caps that doubled peak.

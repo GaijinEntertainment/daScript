@@ -642,6 +642,30 @@ def private wq_total(jobs : array<WFillJob>) : int64 {
     return n
 }
 
+//! the bytes job `j` appends to a streamed plane of `kind` (0 = fp32, 1 = q8 quants, 2 = q8 scales), 0 where the plane skips it:
+//! under `q8` the fp32 plane keeps the non-GEMM jobs and the dual one, and the q kinds take the quantizable GEMM jobs alone
+def private wjob_emits(j : WFillJob; kind : int; q8 : bool) : int64 {
+    let qz = q8 && wjob_quantizable(j)
+    return (qz && !wjob_dual(j)) ? 0l : j.n * 4l if (kind == 0)
+    return 0l if (!qz)
+    return kind == 1 ? j.n : (j.n / 32l) * 4l
+}
+
+//! the bytes `wstream_plane` writes for `kind` over `jobs`: every job's own bytes and, on the fp32 plane, the layout holes it zero-fills
+[arch(at = "../ARCHITECTURE_IMAGE.md#image-sizing-exactness")]
+def private wstream_plane_bytes(jobs : array<WFillJob>; kind : int; q8 : bool) : int64 {
+    var cur = 0l
+    var bytes = 0l
+    for (j in jobs) {
+        if (kind == 0) {
+            bytes += max(j.off - cur, 0l) * 4l
+            cur = j.off + j.n
+        }
+        bytes += wjob_emits(j, kind, q8)
+    }
+    return bytes
+}
+
 // stream one job list as a plane: per tensor, read+convert (+permute) into scratch, append.
 // COMPACT split: fp32 keeps the non-GEMM jobs (+ the dual te) with the old layout's vector
 // holes zero-filled; the q kinds walk only the quantizable GEMM jobs, densely.
@@ -658,24 +682,22 @@ def private wstream_plane(recs : table<string; WTensorRec>; b : array<uint8> | #
     var qss : array<float>
     var cur = 0l
     for (j in jobs) {
-        let qz = q8 && wjob_quantizable(j)
         if (kind == 0) {
             if (j.off > cur) {
                 // a layout hole no tensor fills (whisper's biasless k slots) — kept as zeros
                 w_zeros(w, uint64((j.off - cur) * 4l))
             }
             cur = j.off + j.n   // a skipped GEMM advances the old-layout cursor without emitting
-            continue if (qz && !wjob_dual(j))
-        } else {
-            continue if (!qz)
         }
+        let emits = wjob_emits(j, kind, q8)
+        continue if (emits == 0l)
         if (long_length(scratch) < j.n) {
             scratch |> grow_resize(int(j.n))
         }
         wjob_read(recs, b, j, scratch, -j.off)   // land the tensor at scratch[0]
         if (kind == 0) {
             unsafe {
-                w_append(w, addr<void?>(scratch[0]), uint64(j.n * 4l))
+                w_append(w, addr<void?>(scratch[0]), uint64(emits))
             }
             continue
         }
@@ -689,9 +711,9 @@ def private wstream_plane(recs : table<string; WTensorRec>; b : array<uint8> | #
         }
         unsafe {
             if (kind == 1) {
-                w_append(w, addr<void?>(q8s[0]), uint64(j.n))
+                w_append(w, addr<void?>(q8s[0]), uint64(emits))
             } else {
-                w_append(w, addr<void?>(qss[0]), uint64((j.n / 32l) * 4l))
+                w_append(w, addr<void?>(qss[0]), uint64(emits))
             }
         }
     }
@@ -735,7 +757,7 @@ def private stream_whisper_model(path : string; enc_q8, dec_q8 : bool; img, tag 
         var st = WhisperStaging()
         var recs : table<string; WTensorRec>
         var encJobs, decJobs : array<WFillJob>
-        let sz = whisper_index(bytes, int64(stat(path).size), st, recs, encJobs, decJobs)
+        whisper_index(bytes, int64(stat(path).size), st, recs, encJobs, decJobs)
         // the streamed meta must carry the compact offsets the eager quantizers write
         if (enc_q8) {
             tower_compact_offsets(st.e.enc)
@@ -747,12 +769,12 @@ def private stream_whisper_model(path : string; enc_q8, dec_q8 : bool; img, tag 
         let bk = tower_repack_backend()
         let rep_enc = enc_q8 && bk
         let rep_dec = dec_q8 && bk
-        var extra = uint64(sz.enc_len * 4l) + uint64(sz.dec_len * 4l) + 2ul * uint64(IMAGE_PAGE)
-        if (enc_q8) {   // quant plane (over-estimate: compact is smaller) + scales + pages
-            extra += uint64(sz.enc_len) + uint64((sz.enc_len / 32l) * 4l) + 2ul * uint64(IMAGE_PAGE)
+        var extra = section_bytes(wstream_plane_bytes(encJobs, 0, enc_q8)) + section_bytes(wstream_plane_bytes(decJobs, 0, dec_q8))
+        if (enc_q8) {
+            extra += section_bytes(wstream_plane_bytes(encJobs, 1, true)) + section_bytes(wstream_plane_bytes(encJobs, 2, true))
         }
         if (dec_q8) {
-            extra += uint64(sz.dec_len) + uint64((sz.dec_len / 32l) * 4l) + 2ul * uint64(IMAGE_PAGE)
+            extra += section_bytes(wstream_plane_bytes(decJobs, 1, true)) + section_bytes(wstream_plane_bytes(decJobs, 2, true))
         }
         wrote = cache_via_image_staged_hooked(st, out, img, extra, tag, "q8") $(name : string;
                                                                                 var w : ImgWriter; var sections : array<ImgSection>) {

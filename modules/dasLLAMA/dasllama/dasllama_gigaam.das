@@ -1014,12 +1014,11 @@ def private gg_mint(var st : GigaamStaging; var out : GigaamModel; img : string)
     let s_wblob = empty(st.wblob) && plan.wblob_n > 0l
     let s_q8 = empty(st.qblob) && plan.q8_n > 0l
     let s_kq = empty(st.kq) && plan.kq_n > 0l
-    let page = uint64(IMAGE_PAGE)
     var extra = 0ul
-    extra += s_blob ? uint64(gg_plane_total(plan, GigaamPlane.blob, false)) + page : 0ul
-    extra += s_wblob ? uint64(gg_plane_total(plan, GigaamPlane.wblob, false)) + page : 0ul
-    extra += s_q8 ? uint64(gg_plane_total(plan, GigaamPlane.q8, false) + gg_plane_total(plan, GigaamPlane.q8, true)) + 2ul * page : 0ul
-    extra += s_kq ? uint64(plan.kq_n + plan.ks_n) + 2ul * page : 0ul
+    extra += s_blob ? section_bytes(gg_plane_total(plan, GigaamPlane.blob, false)) : 0ul
+    extra += s_wblob ? section_bytes(gg_plane_total(plan, GigaamPlane.wblob, false)) : 0ul
+    extra += s_q8 ? section_bytes(gg_plane_total(plan, GigaamPlane.q8, false)) + section_bytes(gg_plane_total(plan, GigaamPlane.q8, true)) : 0ul
+    extra += s_kq ? section_bytes(plan.kq_n) + section_bytes(plan.ks_n) : 0ul
     let f = fopen(st.src, "rb")
     if (f == null) {
         panic("{GG_WHO}: cannot open model '{st.src}'")

@@ -1335,8 +1335,9 @@ def private streamed_q_planes() : array<string> {
     return <- names
 }
 
+//! what a section of `n` bytes a plane hook streams adds to the image's reserve: the bytes up to a whole page, nothing when empty
 [arch(at = "../ARCHITECTURE_IMAGE.md#image-sizing-exactness")]
-def private section_bytes(n : int64) : uint64 => n > 0l ? pad_to_page(uint64(n)) : 0ul
+def section_bytes(n : int64) : uint64 => n > 0l ? pad_to_page(uint64(n)) : 0ul
 
 def private scales_convert_at_save(t : Model; jobs : array<FillJob>) : bool
     => t.wscale_f16 && empty(t.qscales16) && !empty(t.qscales) && stream_plane_bytes(t, jobs, "qblob") > 0l
