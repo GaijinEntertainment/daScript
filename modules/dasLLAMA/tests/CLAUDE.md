@@ -1780,7 +1780,9 @@ spawn, since each costs the windows nightly runner two minutes; an internal requ
 synthetic `sampleRate=1` WAV bomb is refused before decode, an uncapped call still works), and
 `gemma4a_probe_proj_dim`'s 0-not-panic contract on `.dlim` / missing / non-GGUF inputs.
 `test_lint_escape`: `options _dasllama_internal = true` admits a
-direct engine require (the lint's escape hatch).
+direct engine require (the lint's escape hatch). `test_lever_getter_gate`: a spawned compile each -
+`[lever]` refuses a getter that takes an argument and one with no declared result, naming the getter,
+and compiles the declared form.
 `test_mtp.das` - stocked suite, `-jit` only: the NextN loader on the Qwen3.5-0.8B-MTP Q8_0 file
 (the extras load; spec off continues the plain file's fixture), the self-speculative greedy decode
 token-for-token against plain decode on the counting and prose fixtures - and on the counting
@@ -4227,7 +4229,12 @@ buffers start as `set_kv_init` asks - the unfilled start sizes a flat session's 
 (`kv_bytes_started` unmoved), zero and poison write every byte (0xFF reading NaN through the f32 and the q8_0 codec), a
 paged pool's groups start the same way as the pool grows and growing rewrites none it had, a fill past its chunk
 (`kv_bytes_start` at a 7-byte chunk) covers its range and no byte beside it, `kv_init_of` reads each start's spelling
-and anything else as unfilled, and the pin restores as found.
+and anything else as unfilled, and the pin restores as found. `test_lever_macro`: two file-local `[lever]`
+getters - a bool lever follows its knob unpinned and its pin once set, `reset_` lifts the pin, `_pin` /
+`restore_` carry a pinned and an unpinned state back, `with_` pins for its block and nests; an enum lever
+named apart from its getter answers a pin without running the getter's body.
+`test_engine_levers`: each of the engine's seven levers through its generated functions - the knob unpinned, the
+pin once set, `with_`'s value inside its block alone, the pin back as found.
 `test_kernel_backend.das` - model-free: the kernel-backend registry - the portable backend
 registered at `[init]` with a row-major default active (`test_portable_backend_always_registered`),
 select / pin / for-load pick a registered backend and an unknown name changes nothing

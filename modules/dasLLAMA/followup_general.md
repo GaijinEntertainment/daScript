@@ -2908,12 +2908,6 @@
     Done = every plane the plan charges taken at the arm on both homes, or checked where it is made and refused by
     name, each with a cell that holds the refusal through a fault seat as
     `test_gpu_resident_cuda_window_planes_at_arm` does; the asymmetry entry removed with it.
-309. **An in-process lever over an environment knob is four hand-written functions, seven times.** `source_release`,
-    `lane_read`, `image_save`, `host_planes` and `vulkan_trim` each carry a setter, a getter, a "lever set" read and a
-    restore, the bodies identical but for the knob's field; `kv_init` and `gpu_kv_dtype` carry the same four over an
-    enum; and every test that pins one writes the save, set and restore by hand. Done = one declaration a lever that
-    generates its four functions, and one fixture that pins a lever for a block and puts it back, the seven families
-    and their tests moved onto them, held by the levers' own cells.
 310. **Four Vulkan-home test files fail under the CUDA ask where their headers say they skip.**
     `test_gpu_resident_gptoss.das`, `test_gpu_resident_gemma4_e2b.das`, `test_gpu_resident_format_census.das` and
     `test_gpu_resident_regions_gemma4_e2b_ctx128k.das` hold cells that place layers on the per-op tier the CUDA home

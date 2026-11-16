@@ -63,6 +63,39 @@ def test_boot_restore_order_gate(t : T?) {
     }
 }
 
+//! a module holding one `[lever]` getter spelled `decl`, compiled alone
+def private spawn_lever_fixture(decl : string; tag : string) : tuple<rc : int; out : string> {
+    let lines = [
+        "options gen2",
+        "options _dasllama_internal = true",
+        "",
+        "require dasllama/dasllama_lint public",
+        "require dasllama/dasllama_lever",
+        "",
+        "[lever]",
+        decl,
+        "",
+        "[export]",
+        "def main() \{",
+        "    print(\"ok\\n\")",
+        "\}"]
+    return spawn_compile_only(join(lines, "\n"), "lever_{tag}", 120.0)
+}
+
+[test(description = "A spawned compile proves `[lever]` refuses a getter that takes an argument and a getter with no declared result type, each naming the getter, and compiles a getter of no arguments and a declared result")]
+def test_lever_getter_gate(t : T?) {
+    t |> run("[lever] refuses a getter with an argument or an undeclared result, and compiles the declared form") @(t : T?) {
+        let arg = spawn_lever_fixture("def probe(n : int) : bool => n > 0", "arg")
+        t |> success(arg.rc != 0, "a getter with an argument must not compile")
+        t |> success(find(arg.out, "the getter `probe` takes no arguments") >= 0, "the refusal names the getter and the argument: {arg.out}")
+        let untyped = spawn_lever_fixture("def probe => true", "untyped")
+        t |> success(untyped.rc != 0, "a getter with no declared result must not compile")
+        t |> success(find(untyped.out, "the getter `probe` declares its result type") >= 0, "the refusal names the getter and the result: {untyped.out}")
+        let good = spawn_lever_fixture("def probe() : bool => true", "good")
+        t |> equal(0, good.rc, "a getter of no arguments and a declared result compiles: {good.out}")
+    }
+}
+
 [test(description = "With `options _dasllama_internal` set, a file requiring the engine module `dasllama_version` directly compiles and reads `DASLLAMA_RELEASE`")]
 def test_lint_escape(t : T?) {
     t |> run("options _dasllama_internal admits a direct engine require") @(t : T?) {

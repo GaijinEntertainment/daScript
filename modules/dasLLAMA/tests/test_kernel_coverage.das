@@ -1451,10 +1451,10 @@ def private vk_cov_codec_model(t : T?; path, family : string; kv : KVDtype) {
         if (!family_on(t, family) || !arm_on(t, "coverage-vk") || !model_available(t, path)) {
             return
         }
-        let pin = gpu_kv_dtype_pin_()
-        set_gpu_kv_dtype_(kv)
+        let pin = gpu_kv_want_pin()
+        set_gpu_kv_want(kv)
         var tr <- load_model_uncached(path, QuantMode.q8)
-        restore_gpu_kv_dtype(pin)
+        restore_gpu_kv_want(pin)
         tr.config.seq_len = min(tr.config.seq_len, 512l)
         with_dasllama_jobque() {
             var s = make_run_state(tr.config, kv, kv)

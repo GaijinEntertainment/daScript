@@ -205,21 +205,21 @@ def want_heat(slots : int64) {
 //! `body` with the K/V mirror asked at `kv`, the ask put back as it was found - the pin for a rig that loads its own model
 //! and makes its sessions on the armed codec; a skip where the environment arms another codec over the ask
 def with_gpu_kv_dtype(t : T?; kv : KVDtype; body : block<void>) {
-    let kv_pin = gpu_kv_dtype_pin()
+    let kv_pin = gpu_kv_want_pin()
     set_gpu_kv_dtype(kv)
     if (resident_mirror_dtype() == kv) {
         invoke(body)
     } else {
         t |> skip("the environment arms a {resident_mirror_dtype()} mirror over the {kv} asked (DASLLAMA_VK_KV32=1) - the cell needs that unset")
     }
-    restore_gpu_kv_dtype(kv_pin)
+    restore_gpu_kv_want(kv_pin)
 }
 
 //! where a cell pinned a mirror codec, the armed mirror holds it
 def mirror_codec_held(t : T?) {
-    let asked = gpu_kv_dtype_pin()
+    let asked = gpu_kv_want_pin()
     if (asked.pinned) {
-        t |> equal(mirror_kv_dtype(), asked.dt, "the mirror armed at the codec the cell asks")
+        t |> equal(mirror_kv_dtype(), asked.value, "the mirror armed at the codec the cell asks")
     }
 }
 
@@ -345,10 +345,10 @@ def load_resident_as(host : bool; path : string; regions : int64 = 0l; strict_ct
 
 //! `load_resident`, or `load_resident_host` under `host`, with the K/V mirror asked at `kv` for the load, the ask put back
 def load_resident_at(path : string; kv : KVDtype; regions : int64 = 0l; strict_ctx : int64 = 0l; host : bool = false) : Model {
-    let pin = gpu_kv_dtype_pin()
+    let pin = gpu_kv_want_pin()
     set_gpu_kv_dtype(kv)
     var tr <- load_resident_by(path, regions, strict_ctx, 0l, host ? ResidentLoad.host : ResidentLoad.served)
-    restore_gpu_kv_dtype(pin)
+    restore_gpu_kv_want(pin)
     return <- tr
 }
 

@@ -127,13 +127,12 @@ def load_cached_q8(path : string) : Model {
 //! the levers a lane cell pins for its loads, as it found them
 struct LaneLevers {
     route : bool
-    trim_set : bool
-    trim : bool
+    trim : tuple<pinned : bool; value : bool>
 }
 
 //! the levers captured, then the resident route pinned on (the trimmed lane's admission reads it) and the trim off
 def pin_lane_levers() : LaneLevers {
-    let l = LaneLevers(route = gpu_resident_route_lever(), trim_set = vulkan_trim_lever_set(), trim = vulkan_trim())
+    let l = LaneLevers(route = gpu_resident_route_lever(), trim = vulkan_trim_pin())
     set_gpu_resident_route(true)
     set_vulkan_trim(false)
     return l
@@ -142,7 +141,7 @@ def pin_lane_levers() : LaneLevers {
 //! the route and the trim put back as `pin_lane_levers` found them
 def restore_lane_levers(l : LaneLevers) {
     set_gpu_resident_route(l.route)
-    restore_vulkan_trim(l.trim_set, l.trim)
+    restore_vulkan_trim(l.trim)
 }
 
 //! the text a forward on `tr` through an f32 session panics with, "" where it served: the armed mirror is f16, so the driver
@@ -192,10 +191,8 @@ def live_cell(t : T?; path : string) {
         delete lane
         moe_gpu_drop_model()
         remove(img_v)
-        let save_set = image_save_lever_set()
-        let save_was = image_save_enabled()
-        let planes_set = host_planes_lever_set()
-        let planes_was = host_planes()
+        let save_pin = image_save_pin()
+        let planes_pin = host_planes_pin()
         set_image_save(false)
         set_host_planes(false)
         let live0 = gguf_live_loads()
@@ -226,8 +223,8 @@ def live_cell(t : T?; path : string) {
         t |> equal(mismatch_exact(b.ids, c.ids), 0, "... serving the live load's tokens (both streams decoded above)")
         delete kept
         moe_gpu_drop_model()
-        restore_image_save(save_set, save_was)
-        restore_host_planes(planes_set, planes_was)
+        restore_image_save(save_pin)
+        restore_host_planes(planes_pin)
         delete a
         delete b
         delete c
@@ -257,12 +254,11 @@ def family_lane_cell(t : T?; path : string) {
     set_vulkan_trim(true)
     let img_t = image_path_for(path, moe_gpu_bake_tag())
     remove(img_t)
-    let save_set = image_save_lever_set()
-    let save_was = image_save_enabled()
+    let save_pin = image_save_pin()
     set_image_save(false)
     let live0 = gguf_live_loads()
     var live <- load_cached_q8(path)
-    restore_image_save(save_set, save_was)
+    restore_image_save(save_pin)
     t |> success(gguf_live_loads() == live0 + 1l && moe_gpu_resident_active(), "with no lane to write the gguf streams onto the device and the whole-model driver serves it")
     t |> equal(gpu_resident_embed_gathers(), gathers, "live: the token rows gather on the device exactly where the staged load's do ({gathers})")
     var a <- witness_steps(t, live, "the live load")
@@ -321,8 +317,7 @@ def lanes_cell(t : T?; path : string; lane_check : block<(img : string) : void>)
         t |> equal(mismatch_exact(a.row, b.row), 0, "the CPU embed row off the packed emb region is the planar plane's, bit for bit")
         delete trimmed
         moe_gpu_drop_model()
-        let read_set = lane_read_lever_set()
-        let read_was = lane_read()
+        let read_pin = lane_read_pin()
         set_lane_read(true)
         let reads0 = vk_slice_file_reads()
         var warm <- load_cached_q8(path)
@@ -351,7 +346,7 @@ def lanes_cell(t : T?; path : string; lane_check : block<(img : string) : void>)
         t |> equal(mismatch_exact(c.ids, d.ids), 0, "... and serves the tokens the read lane serves (both streams decoded above)")
         delete mapped
         moe_gpu_drop_model()
-        restore_lane_read(read_set, read_was)
+        restore_lane_read(read_pin)
         delete d
         delete a
         delete b

@@ -1021,8 +1021,8 @@ def test_resident_mirror_codec_ask(t : T?) {
         delete m
     }
     t |> run("the mirror codec the plan arms: the ask where the model holds it, the served codec where it does not, f16 for an f32 ask") @(t : T?) {
-        let pin0 = gpu_kv_dtype_pin_()
-        set_gpu_kv_dtype_(KVDtype.tq4)
+        let pin0 = gpu_kv_want_pin()
+        set_gpu_kv_want(KVDtype.tq4)
         if (resident_mirror_dtype() != KVDtype.tq4) {
             t |> skip("the environment arms a {resident_mirror_dtype()} mirror over the ask (DASLLAMA_VK_KV32=1) - the cell needs that unset")
         } else {
@@ -1037,29 +1037,29 @@ def test_resident_mirror_codec_ask(t : T?) {
             m.config.head_size = 48l
             t |> equal(resident_mirror_dtype_of(m), KVDtype.f16, "tq4 asked of a 48-wide head arms f16: no block codec holds it")
             m.config.head_size = 96l
-            set_gpu_kv_dtype_(KVDtype.q8_0)
+            set_gpu_kv_want(KVDtype.q8_0)
             t |> equal(resident_mirror_dtype_of(m), KVDtype.q8_0, "control: q8_0 holds the same head")
-            set_gpu_kv_dtype_(KVDtype.f32)
+            set_gpu_kv_want(KVDtype.f32)
             t |> equal(resident_mirror_dtype(), KVDtype.f16, "an f32 ask arms f16: the f32 mirror is DASLLAMA_VK_KV32=1's alone")
-            reset_gpu_kv_dtype_()
-            t |> success(!gpu_kv_dtype_pin_().pinned, "the reset lifts the ask")
+            reset_gpu_kv_want()
+            t |> success(!gpu_kv_want_pin().pinned, "the reset lifts the ask")
             delete m
         }
-        restore_gpu_kv_dtype(pin0)
+        restore_gpu_kv_want(pin0)
     }
     t |> run("the fixtures' put-back of the codec ask: the pin again where one stood, the reset where none did") @(t : T?) {
-        let found = gpu_kv_dtype_pin_()
-        set_gpu_kv_dtype_(KVDtype.q8_0)
-        let pinned = gpu_kv_dtype_pin_()
-        set_gpu_kv_dtype_(KVDtype.tq4)
-        restore_gpu_kv_dtype(pinned)
-        t |> success(gpu_kv_dtype_pin_().pinned && gpu_kv_dtype_pin_().dt == KVDtype.q8_0, "a pinned ask comes back as the pin it was, not the one set after it")
-        reset_gpu_kv_dtype_()
-        let lifted = gpu_kv_dtype_pin_()
-        set_gpu_kv_dtype_(KVDtype.tq4)
-        restore_gpu_kv_dtype(lifted)
-        t |> success(!gpu_kv_dtype_pin_().pinned, "an unpinned ask comes back lifted")
-        restore_gpu_kv_dtype(found)
+        let found = gpu_kv_want_pin()
+        set_gpu_kv_want(KVDtype.q8_0)
+        let pinned = gpu_kv_want_pin()
+        set_gpu_kv_want(KVDtype.tq4)
+        restore_gpu_kv_want(pinned)
+        t |> success(gpu_kv_want_pin().pinned && gpu_kv_want_pin().value == KVDtype.q8_0, "a pinned ask comes back as the pin it was, not the one set after it")
+        reset_gpu_kv_want()
+        let lifted = gpu_kv_want_pin()
+        set_gpu_kv_want(KVDtype.tq4)
+        restore_gpu_kv_want(lifted)
+        t |> success(!gpu_kv_want_pin().pinned, "an unpinned ask comes back lifted")
+        restore_gpu_kv_want(found)
     }
     t |> run("a codec's spelling, in any case, and its ordinal across the tier's seam") @(t : T?) {
         let upper = kv_dtype_named("Q8_0")

@@ -11,6 +11,7 @@ module dasllama_gpu_resident shared public
 // on every box. "vulkan" is the tier string it registers under, not a dependency.
 
 require dasllama/dasllama_lint public
+require dasllama/dasllama_lever
 require dasllama/dasllama_common
 require dasllama/dasllama_gpu_tier
 require dasllama/dasllama_kqformat
@@ -362,26 +363,9 @@ var private g_vk_slice_file_reads = 0l      //! the baked planes read off the la
 //! the baked planes the slice walks read off the lane file, the mapping untouched
 def vk_slice_file_reads() : int64 => g_vk_slice_file_reads
 
-var private g_lane_read_set = false
-var private g_lane_read = false
-
-//! the lane read in process (`DASLLAMA_LANE_READ`'s twin): the next slice walk reads its planes off the lane file, or copies them out of the mapping
-def set_lane_read(on : bool) {
-    g_lane_read_set = true
-    g_lane_read = on
-}
-
-//! whether a slice walk reads its planes off the lane file: the in-process lever where one was set, else the knob
-def lane_read() : bool => g_lane_read_set ? g_lane_read : g_env_vulkan.lane_read
-
-//! whether an in-process lever shadows `DASLLAMA_LANE_READ`: a fixture reads it beside `lane_read()` and puts both back through `restore_lane_read`
-def lane_read_lever_set() : bool => g_lane_read_set
-
-//! the lane read lever put back as a fixture found it
-def restore_lane_read(was_set : bool; on : bool) {
-    g_lane_read_set = was_set
-    g_lane_read = on
-}
+//! whether a slice walk reads its planes off the lane file, or copies them out of the mapping: the lever (`set_lane_read`), else `DASLLAMA_LANE_READ`
+[lever]
+def lane_read() : bool => g_env_vulkan.lane_read
 
 def private vk_slice_file_close {
     if (g_vk_slice_file != null) {
@@ -1549,9 +1533,10 @@ def private resident_plan_trace(p : ResidentPlan; seq_cap : int64) {
 //! the mirror codec asked, the knob that asked it by the spelling a user sets, and why an ask the mirror cannot arm became f16
 def private resident_mirror_ask() : tuple<dt : KVDtype; knob : string; fold_why : string> {
     return (dt = KVDtype.f32, knob = "DASLLAMA_VK_KV32", fold_why = "") if (g_env_vulkan.vk_kv32 != 0l)
-    let knob = g_rdec_kv_pinned ? "set_gpu_kv_dtype in process" : "DASLLAMA_GPU_KV"
-    var named = (dt = g_rdec_kv_want, known = true)
-    if (!g_rdec_kv_pinned) {
+    let want = gpu_kv_want_pin()
+    let knob = want.pinned ? "set_gpu_kv_dtype in process" : "DASLLAMA_GPU_KV"
+    var named = (dt = want.value, known = true)
+    if (!want.pinned) {
         return (dt = KVDtype.f16, knob = "", fold_why = "") if (empty(g_env_gpu.gpu_kv))
         named = kv_dtype_named(g_env_gpu.gpu_kv)
     }
@@ -2221,8 +2206,6 @@ let private RDEC_ATTN_SPLIT_CAP = 16l   //! the key splits the plan budgets the 
 
 var private g_rdec_ctx_max = 0l   //! the in-process cap on the mirror's positions (0 = none): the test rigs pin 32768, a server keeps the model's context
 var private g_rdec_ctx_strict = false
-var private g_rdec_kv_want = KVDtype.f16   //! the mirror codec the caller asked for the models loaded next: its sessions' codec
-var private g_rdec_kv_pinned = false          //! ... once a caller asked; before that DASLLAMA_GPU_KV decides
 let HOST_LAYERS_UNPINNED = -1l   //! no host-layers pin in process: DASLLAMA_GPU_HOST_LAYERS decides
 var private g_rdec_host_layers_pin = HOST_LAYERS_UNPINNED   //! routed layers' experts asked onto the host for the models loaded next
 
@@ -2250,26 +2233,22 @@ def set_gpu_ctx_strict_(on : bool) {
     g_rdec_ctx_strict = on
 }
 
-//! The K/V codec the whole-model driver's mirror arms at for the models loaded next - the codec of the sessions the caller makes.
+//! The K/V codec a caller asked the whole-model driver's mirror to arm at for the models loaded next - the codec of the sessions the
+//! caller makes: the lever (`set_gpu_kv_want`); where none stands `DASLLAMA_GPU_KV`'s spelling decides (`resident_mirror_ask`)
+[lever]
+def gpu_kv_want() : KVDtype => KVDtype.f16
+
 def set_gpu_kv_dtype_(dt : KVDtype) {
-    g_rdec_kv_want = dt
-    g_rdec_kv_pinned = true
+    set_gpu_kv_want(dt)
 }
 
 def reset_gpu_kv_dtype_() {
-    g_rdec_kv_want = KVDtype.f16
-    g_rdec_kv_pinned = false
+    reset_gpu_kv_want()
 }
 
-def gpu_kv_dtype_pin_() : tuple<pinned : bool; dt : KVDtype> => (pinned = g_rdec_kv_pinned, dt = g_rdec_kv_want)
-
-//! the fixtures' put-back of the codec ask `gpu_kv_dtype_pin_` read: the pin again where one stood, the reset where none did
-def restore_gpu_kv_dtype(pin : tuple<pinned : bool; dt : KVDtype>) {
-    if (pin.pinned) {
-        set_gpu_kv_dtype_(pin.dt)
-    } else {
-        reset_gpu_kv_dtype_()
-    }
+def gpu_kv_dtype_pin_() : tuple<pinned : bool; dt : KVDtype> {
+    let pin = gpu_kv_want_pin()
+    return (pinned = pin.pinned, dt = pin.value)
 }
 
 def private rdec_ctx_pin() : int64 => g_rdec_ctx_max > 0l ? g_rdec_ctx_max : g_env_gpu.gpu_ctx_max

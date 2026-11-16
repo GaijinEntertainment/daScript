@@ -7,6 +7,7 @@ options _cyclomatic_complexity = 0   // image walk/GC bodies mirror the archive 
 options _function_length = 0   // same
 
 require dasllama/dasllama_lint public
+require dasllama/dasllama_lever
 require dasllama/dasllama_ple
 require daslib/fio
 require dasllama/dasllama_env
@@ -2012,11 +2013,10 @@ def image_from_model_streaming(var t : Model; var out : Model; m : GGUFMeta; byt
 
 //! the lane tag with the trim off: the untrimmed lane a run-mode trim decline writes, and the one a trimmed load falls back to
 def private untrimmed_lane_tag() : string {
-    let lever = vulkan_trim_lever_set()
-    let was = vulkan_trim()
-    set_vulkan_trim(false)
-    let tag = moe_gpu_bake_tag()
-    restore_vulkan_trim(lever, was)
+    var tag = ""
+    with_vulkan_trim(false) {
+        tag = moe_gpu_bake_tag()
+    }
     return tag
 }
 
@@ -2060,26 +2060,9 @@ def private vulkan_bake_flavor(var t : Model; path : string; vk_tag : string; ke
 }
 
 //! Whether a cold build persists its image. Off = build it in memory and serve that, leaving no
-//! .dlim behind; the run pays a second copy of the model for it, so on by default.
-def image_save_enabled : bool => g_image_save_set ? g_image_save : g_env_engine.image_save
-
-var private g_image_save_set = false
-var private g_image_save = false
-
-//! the image save in process (`DASLLAMA_IMAGE_SAVE`'s twin): off, a load writes no `.dlim` beside its source
-def set_image_save(on : bool) {
-    g_image_save_set = true
-    g_image_save = on
-}
-
-//! whether an in-process lever shadows `DASLLAMA_IMAGE_SAVE`: a fixture reads it beside `image_save_enabled()` and puts both back
-def image_save_lever_set() : bool => g_image_save_set
-
-//! the image save lever put back as a fixture found it
-def restore_image_save(was_set : bool; on : bool) {
-    g_image_save_set = was_set
-    g_image_save = on
-}
+//! .dlim behind; the run pays a second copy of the model for it, so on by default. The lever (`set_image_save`), else `DASLLAMA_IMAGE_SAVE`.
+[lever(name = image_save)]
+def image_save_enabled : bool => g_env_engine.image_save
 
 // ~36 MB per band: the interleave amortizes and appends stay bulk, with a staging cost that never registers
 let private METAL_BAND_BLOCKS = 1048576l
@@ -2364,27 +2347,10 @@ def load_model_image(path : string; var t : Model; tag : string = ""; quant : st
     return true
 }
 
-var private g_host_planes_set = false
-var private g_host_planes = false
-
-//! the host planes in process (`DASLLAMA_HOST_PLANES`'s twin): a gguf loaded with no image on a discrete home keeps its
-//! weight planes on the host beside the device copy - a test's device-against-CPU compare
-def set_host_planes(on : bool) {
-    g_host_planes_set = true
-    g_host_planes = on
-}
-
-//! whether a gguf loaded with no image keeps its planes on the host: the in-process lever where one was set, else the knob
-def host_planes() : bool => g_host_planes_set ? g_host_planes : g_env_engine.host_planes
-
-//! whether an in-process lever shadows `DASLLAMA_HOST_PLANES`: a fixture reads it beside `host_planes()` and puts both back
-def host_planes_lever_set() : bool => g_host_planes_set
-
-//! the host planes lever put back as a fixture found it
-def restore_host_planes(was_set : bool; on : bool) {
-    g_host_planes_set = was_set
-    g_host_planes = on
-}
+//! whether a gguf loaded with no image on a discrete home keeps its weight planes on the host beside the device copy - a test's
+//! device-against-CPU compare: the lever (`set_host_planes`), else `DASLLAMA_HOST_PLANES`
+[lever]
+def host_planes() : bool => g_env_engine.host_planes
 
 var private g_gguf_live_loads = 0l   //! the ggufs loaded live onto a discrete home since the process began
 
