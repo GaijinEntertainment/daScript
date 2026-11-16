@@ -33,10 +33,15 @@ if(WIN32)
             "${DASLANG_DIR}/lib/libDaScriptDyn_runtime.lib"
         )
     endif()
+elseif(APPLE)
+    target_link_libraries(dasModuleCounter PRIVATE
+        "${DASLANG_DIR}/lib/liblibDaScriptDyn.dylib"
+        "${DASLANG_DIR}/lib/liblibDaScriptDyn_runtime.dylib"
+    )
 else()
     target_link_libraries(dasModuleCounter PRIVATE
-        "${DASLANG_DIR}/lib/libDaScriptDyn.so"
-        "${DASLANG_DIR}/lib/libDaScriptDyn_runtime.so"
+        "${DASLANG_DIR}/lib/liblibDaScriptDyn.so"
+        "${DASLANG_DIR}/lib/liblibDaScriptDyn_runtime.so"
     )
 endif()
 
