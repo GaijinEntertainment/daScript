@@ -20,8 +20,9 @@ The manifest is a property of the module tree, not of the script or the cwd: the
 the descriptor's bytes and on four process-wide inputs a descriptor can read - its folder
 (`project_path`), the das root (`get_das_root()`), the binary kind (`das_is_dll_build()`) and the
 cross-compile target (`get_cross_platform_name()`, which `dasOpenGL`'s descriptor consults to
-register its module for the web target only) - so the file sits next to the descriptor, and a
-read-only tree simply compiles on every start. The binary kind and the compile target pick the
+register its module for the web target only) - so the file sits next to the descriptor. A
+read-only tree replays the manifests it holds and compiles a descriptor that has none on every
+start. The binary kind and the compile target pick the
 file's name - `.das_module.manifest`, `.das_module.static.manifest` for `daslang_static`, the
 platform name before `.manifest` for a `--jit-target` run (`.das_module.emscripten.manifest`) -
 so the kinds and targets sharing one tree (both suites at once, a sweep mixing native and wasm
@@ -139,6 +140,36 @@ fallback `[module] loading every deferred module (K)`, and the scan's own fallba
 itself first with `[module] a pending module's artifact exists - loading every deferred module`.
 A replayed descriptor's time is its manifest read plus its rows, and the second number is the
 share the `.shared_module` dlopen and module constructor took.
+
+## Manifest relocation {#manifest-relocation}
+
+The writer replaces a leading das root with the mark `$DASROOT` (`to_portable`) in the `root`
+line, in every `dep` path, in a `dm` row's artifact and in an `np` row's file, and the reader
+puts the running process's das root back (`from_portable`) before it stamps a dependency, checks
+an artifact or replays a row. A path is inside the das root when it equals it or continues it
+with a separator (`dasPathIsInside`; a backslash separates on Windows only): `/opt/daslang2` is
+not inside `/opt/daslang`.
+
+The `dasroot` line is the mark itself when the module folder is inside the das root and nothing
+the manifest holds still spells the root. The key of such a manifest is the module's place under
+the root, not where the root sits on disk: a tree that is copied, moved, or installed under
+another prefix replays the manifests it came with, and the content stamps - the descriptor's,
+each `dep`'s, a `dm` row's artifact - still catch a real change. Every other manifest keeps the
+absolute das root on that line, so a move of the das root recompiles its descriptor:
+
+- A module folder outside the das root (a project root, a `-load_module` folder). Its `root`
+  line is absolute too, and its `dep` lines on daslib files carry the mark all the same.
+- A manifest in which a recorded string carries the das root where the writer does not mark it -
+  inside a longer string, or in another spelling of case or separators (`names_das_root`). A
+  replay under another root would hand back the old place, so the old root stays the key.
+
+The writer refuses a manifest in which a row's recorded path already starts with the mark, since
+the reader would expand it into a path the descriptor never registered.
+
+An installed SDK ships its manifests. The install step runs the installed `daslang` once on an
+empty program, so every descriptor under the install prefix writes its manifest into the tree
+the packages are cut from, and a package extracted into a folder its user cannot write replays
+from the first start.
 
 ## The shared-module vintage stamp {#shared-module-vintage}
 

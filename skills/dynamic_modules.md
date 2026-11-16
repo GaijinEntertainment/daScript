@@ -136,12 +136,27 @@ the rest of a small program's startup. So after a descriptor runs, the scan writ
 registered to `.das_module.manifest` next to it (`.das_module.static.manifest` from a static
 build, `.das_module.emscripten.manifest` from a wasm `--jit-target` run, so the binary kinds and
 the targets sharing a tree keep their own), and later starts replay those rows
-without compiling the descriptor. The file is keyed by the descriptor's content, the content of every
-module its compile read (`require ./helper` beside it, the daslib it uses) and the four inputs a
-descriptor can read - its folder, the das root, the binary kind and the `--jit-target`
-cross-compile name: edit the descriptor or a module it requires, move the module or the tree,
-switch binaries or targets and the next start recompiles it and rewrites the manifest. It is generated - gitignore it (this repo does) - and
-a read-only tree just compiles on every start.
+without compiling the descriptor. The file is keyed by the descriptor's content, the content of
+every module its compile read (`require ./helper` beside it, the daslib it uses), the binary kind,
+the `--jit-target` cross-compile name and where the module sits: edit the descriptor or a module
+it requires, switch binaries or targets and the next start recompiles it and rewrites the
+manifest. It is generated - gitignore it (the daslang repo does).
+
+For a module inside the das root, where it sits is its place under the root. A path under the das
+root is written as `$DASROOT/...`, so such a manifest names no place on disk: a tree that is
+copied, moved or installed elsewhere replays the manifests it came with. The installed SDK ships
+them, which is why an SDK in a folder you cannot write starts as fast as one you can. Two kinds of
+manifest keep the absolute das root instead, and a move of the das root recompiles their
+descriptors:
+
+- A module outside the das root - under a project root, or a `-load_module` folder. Its own
+  folder stays absolute too, so moving that folder recompiles it as well.
+- A descriptor that registers a path naming the das root in another spelling (a different letter
+  case, or the other slash) or inside a longer string. Register plain paths built from `project_path` or
+  `get_das_root()` to stay relocatable.
+
+A read-only folder with no up-to-date manifest in it compiles its descriptor on every start: run
+`daslang` once as a user who can write there.
 
 A descriptor whose registrations depend on something the file's content cannot see - a probe
 of the machine, a variant picked by hardware - opts out by calling `no_manifest()` inside

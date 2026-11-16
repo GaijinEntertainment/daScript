@@ -65,8 +65,18 @@ this document states what the folder is and why its tests take the shape they do
   (`daslang_static` beside `daslang`, or back) writes its own manifest file and each kind replays
   its own after the other ran, a das root spelled another way (`..`, a trailing slash, relative
   to the cwd) replays the manifest the full path wrote, a `no_manifest()` descriptor compiles on every start, a recorded argument with a
-  tab leaves the manifest unwritten, and a directory sitting where the `.tmp` or the manifest
-  goes fails the create or the rename so the start just compiles; each verdict is read from
+  tab or a recorded path that already starts with the das root mark leaves the manifest
+  unwritten, and a directory sitting where the `.tmp` or the manifest
+  goes fails the create or the rename so the start just compiles. The last arms run under a
+  das root the test writes - the tree's top-level daslib and six probe modules under its
+  `modules/` (`src/ast/ARCHITECTURE_MODULE_SCAN.md#manifest-relocation`): the first module's
+  manifest names no place on disk, the root renamed to another folder replays it, a key line
+  that names a place is refused, and a project root whose path only continues the das root's
+  characters keeps its key paths absolute; three more record the das root inside a longer
+  string, upper-cased and with backslashes, keep the absolute das root as their key, replay
+  while the root stays and recompile once it moved; one registers a C++ artifact, whose marked
+  row replays and retries the artifact at the new place; and one continues the das root with a
+  backslash, which is inside the root on Windows only. Each verdict is read from
   the `DAS_TRACE_MODULE_LOAD=1` line the child prints.
 - `test_deferred_modules` in `test_module_loading.das` - a replayed `dm` row is not loaded by the scan. The project root
   holds a copy of the tree's `dasUnitTest` (descriptor and artifact), which shadows the tree's,
