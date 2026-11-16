@@ -89,6 +89,33 @@ def public cc_is_compile_switch(a : string) : bool {
 }
 
 
+// The flags a syntax-only sweep inherits from one compile
+// command: all but the compiler, the file, the per-file output
+// switches and a precompiled header's binary. Only the compiler
+// build that wrote a .pch reads it, and the gate's compiler need
+// not be the build's; the header it stands for stays on the line
+// (`-Xclang -include -Xclang <hdr>`).
+def public cc_sweep_flags(argv : array<string>; file, file_abs : string) : array<string> {
+    var flags : array<string>
+    flags |> reserve(length(argv))
+    var i = 1
+    while (i < length(argv)) {
+        let a = argv[i]
+        if (a == "-o" || a == "-MT" || a == "-MF") {
+            i += 2
+        } elif (a == "-Xclang" && i + 3 < length(argv) && argv[i + 1] == "-include-pch") {
+            i += 4
+        } elif (a == file || a == file_abs || cc_is_compile_switch(a)) {
+            i++
+        } else {
+            flags |> push(a)
+            i++
+        }
+    }
+    return <- flags
+}
+
+
 // The exact flags CMake compiles each TU with, keyed by `cc_key` of the absolute source path
 // - the caller looks up through the same key. The gate's own
 // include list is a hand-rolled approximation: it models neither build-generated headers
@@ -113,21 +140,7 @@ def public load_compile_commands(build_dir : string; want_cl : bool) : table<str
         // spelling is wrong for it
         let entry_is_cl = argv[0] |> ends_with("cl") || argv[0] |> ends_with("cl.exe")
         continue if (entry_is_cl != want_cl)
-        var inscope flags : array<string>
-        flags |> reserve(length(argv))
-        var i = 1
-        while (i < length(argv)) {
-            let a = argv[i]
-            if (a == "-o" || a == "-MT" || a == "-MF") {
-                i += 2
-            } elif (a == e.file || a == file_abs || cc_is_compile_switch(a)) {
-                i++
-            } else {
-                flags |> push(a)
-                i++
-            }
-        }
-        out[cc_key(file_abs)] <- flags
+        out[cc_key(file_abs)] <- cc_sweep_flags(argv, e.file, file_abs)
     }
     return <- out
 }
