@@ -24,6 +24,7 @@ namespace das {
     DAS_API string getExecutablePathUtf8 ( void );
     //! the file the code at `address` was loaded from - the executable or a shared library; "" when the platform cannot say
     DAS_API string getModuleFileNameOf ( const void * address );
+    DAS_API string getRuntimeLibraryFileName ( void );
     DAS_API string getDasRoot ( void );
     //! runs `entry` with the process arguments as UTF-8: on Windows they are taken again from the
     //! wide command line (the narrow argv main receives is the ANSI codepage's rendering)

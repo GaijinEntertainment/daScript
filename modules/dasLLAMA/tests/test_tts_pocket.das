@@ -1976,3 +1976,42 @@ def test_pocket_shape_admission(t : T?) {
     t |> success(!tts_pk_tf_ok(tf_shell(256l, 2l, 1l, 128l, 256l, 64l), 64l, 32l), "a head past hs is refused")
     t |> success(!tts_pk_tf_ok(tf_shell(64l, 2l, 1l, 32l, 64l, 66l), 64l, 32l), "an ffn width off the 4 lattice is refused")
 }
+
+[test(description = "A Pocket result says whether EOS ended generation: complete with the EOS threshold forced low, incomplete with its partial PCM kept once the threshold is forced high, in the one-shot and the streamed result alike, and a run that spent its frame budget leaves the next result complete and bit-identical")]
+def test_pocket_reports_generation_complete(t : T?) {
+    let path = path_join(models_dir(), "pocket-tts-en-stuart-kq.gguf")
+    if (!stat(path).is_valid) {
+        t |> skip("no pocket-tts-en-stuart-kq.gguf under {models_dir()}")
+        return
+    }
+    with_dasllama_jobque_() {
+        var inscope model <- load_tts_model(path)
+        let eosAtOnce = -1.0e30
+        let eosNever = 1.0e30
+        model.pocket.eos_threshold = eosAtOnce
+        var inscope good <- synthesize(model, "Hello there.", "stuart_bell")
+        t |> success(good.generation_complete)
+        t |> success(!empty(good.pcm))
+        let original = hash(good.pcm)
+        let text = build_string() $(var w) {
+            for (_ in range(8)) {
+                w |> write("This is a simple sentence for a completion test. ")
+            }
+        }
+        var chunks = 0
+        synthesize_stream(model, text, "stuart_bell", 1.0) $(chunk) {
+            chunks++
+            t |> equal(chunk.generation_complete, chunks == 1)
+            t |> success(!empty(chunk.pcm), "partial audio remains inspectable")
+            model.pocket.eos_threshold = eosNever
+        }
+        t |> success(chunks >= 2, "exercise a successful prefix and failed later chunk")
+        var inscope failed <- synthesize(model, text, "stuart_bell")
+        t |> success(!failed.generation_complete)
+        t |> success(!empty(failed.pcm))
+        model.pocket.eos_threshold = eosAtOnce
+        var inscope again <- synthesize(model, "Hello there.", "stuart_bell")
+        t |> success(again.generation_complete, "a prior failure must not taint the next result")
+        t |> equal(hash(again.pcm), original, "completion metadata does not change the waveform")
+    }
+}

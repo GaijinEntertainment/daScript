@@ -50,6 +50,7 @@ DAS_API bool is_dynamic_module_deferred(const char * das_name);
 DAS_API bool dynamic_module_artifact_exists(const char * path);     //! the row's file, under the _debug rewrite a debug build applies
 DAS_API bool pending_dynamic_module_artifact_present();             // a dlopen-failed row whose file exists: an import the deferred set holds
 DAS_API string registered_dynamic_module_name(const char * path, const char * cpp_class);   // empty while that row's module is not registered
+DAS_API vector<string> dynamic_module_artifacts();
 DAS_API void clear_deferred_dynamic_modules();                      // the rows are the scan's: cleared at scan start and at shutdown
 DAS_CC_API void ignore_dynamic_module_manifests(bool ignore);
 }

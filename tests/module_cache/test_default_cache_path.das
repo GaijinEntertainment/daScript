@@ -439,7 +439,8 @@ def test_default_cache_evicts_to_the_limit(t : T?) {
     }
     let win = get_platform_name() == "windows"
     //! the children run inside the temp directory, so the default cache they prune is their own
-    let enter = win ? "cd /d {tmp} && set \"DAS_MODULE_CACHE_LIMIT=1\"&&" : "cd {tmp} && DAS_MODULE_CACHE_LIMIT=1"
+    let limit = win ? "set \"DAS_MODULE_CACHE_LIMIT=1\"&&" : "DAS_MODULE_CACHE_LIMIT=1"
+    let enter = "{enter_dir(tmp)} {limit}"
     let base = "{enter} {get_full_file_name(das_exe())} -dasroot {get_das_root()}"
     let cacheDir = path_join(tmp, ".cache/daslang/module_cache")
     let sizeBallast = "require daslib/strings_boost\nrequire daslib/fio\nrequire daslib/ast\n"
@@ -477,6 +478,148 @@ def test_default_cache_evicts_to_the_limit(t : T?) {
         }
     }
     t |> equal(explicitFiles, 3, "an explicit -module-cache directory is never pruned")
+    var err : string
+    rmdir_rec(tmp, err)
+}
+
+let KEY_PROBE_DESCRIPTOR = "options gen2
+require daslib/fio
+[export]
+def initialize(project_path : string) \{
+    let artifact = \"\{project_path\}/key_probe.shared_module\"
+    register_dynamic_module(artifact, \"Module_KeyProbe\")
+\}
+"
+
+def set_mtime_year(t : T?; path : string; year : int) {
+    var err : string
+    let set = set_mtime(path, mktime(year, 1, 1, 0, 0, 0), err)
+    t |> success(set, "set_mtime {base_name(path)}: {err}")
+}
+
+struct ChildRun {
+    cmd : string
+    cacheDir : string
+}
+
+def expect_key_records(t : T?; child : ChildRun; totalAfter : int; why : string) {
+    var out : string
+    let ran = run_reported(t, why, child.cmd, out, "MARK_key_bin")
+    t |> success(ran, "the run executes: {why}")
+    t |> equal(records_in(child.cacheDir, "key_bin"), totalAfter, why)
+}
+
+//! `artifact` is no shared module, so its row never loads and stays
+//! pending
+def check_pending_module_keys(t : T?; child : ChildRun; artifact : string) {
+    expect_key_records(t, child, 1, "the first run writes one record")
+    expect_key_records(t, child, 1, "an unchanged tree keys the same record")
+    fwrite(artifact, "one")
+    set_mtime_year(t, artifact, 2020)
+    expect_key_records(t, child, 2, "an artifact that appeared keys a second record")
+    fwrite(artifact, "three")
+    set_mtime_year(t, artifact, 2020)
+    expect_key_records(t, child, 3, "another size at the same mtime keys a third")
+    set_mtime_year(t, artifact, 2021)
+    expect_key_records(t, child, 4, "the same size at another mtime keys a fourth")
+    expect_key_records(t, child, 4, "an unchanged artifact keys the record it wrote")
+}
+
+//! `-ignore-manifest` compiles the descriptor on every run, so the
+//! run registers the module; without it the second run replays the
+//! manifest and defers the module. No pending row may have its file
+//! on disk here: the scan would load every deferred module
+def check_loaded_module_keys(t : T?; enter, exe, root, script, cacheDir : string) {
+    let modDir = copy_module(root, "dasPUGIXML", ["dasModulePUGIXML"])
+    let artifactName = "dasModulePUGIXML{shared_module_extension()}"
+    let artifact = path_join(modDir, artifactName)
+    if (!stat(artifact).is_valid) {
+        to_log(LOG_INFO, "no pugixml shared module here: the loaded-module arm did not run\n")
+        return
+    }
+    let host = "{enter} {exe}"
+    let args = "-ignore-manifest -dasroot {root} {script}"
+    var traced : string
+    let tracedRan = run_child_reported(t, "traced load",
+        "{enter} {trace_prefix()}{exe} {args}", traced, "MARK_key_bin")
+    let loaded = tracedRan && find(traced, "{artifactName} : loaded") >= 0
+    t |> success(loaded, "the copied pugixml module loads:\n{traced}")
+    return if (!loaded)
+    let registered = ChildRun(cmd = "{host} {args}", cacheDir = cacheDir)
+    var total = records_in(cacheDir, "key_bin") + 1
+    expect_key_records(t, registered, total, "a module this run registered keys a record")
+    set_mtime_year(t, artifact, 2030)
+    total++
+    expect_key_records(t, registered, total, "a registered module with another mtime keys its own")
+    let replayed = ChildRun(cmd = "{host} -dasroot {root} {script}", cacheDir = cacheDir)
+    total++
+    expect_key_records(t, replayed, total, "the run that writes the manifest keys a record")
+    expect_key_records(t, replayed, total, "a module the replay deferred keys the same record")
+    var replay : string
+    let replayRan = run_child_reported(t, "traced replay",
+        "{enter} {trace_prefix()}{exe} -dasroot {root} {script}", replay, "MARK_key_bin")
+    let deferred = replayRan && find(replay, ", deferred 1)") >= 0
+    t |> success(deferred, "the replay defers the pugixml module:\n{replay}")
+    total++
+    set_mtime_year(t, artifact, 2031)
+    total++
+    expect_key_records(t, replayed, total, "a deferred module with another mtime keys its own")
+}
+
+[test(description = "The default cache keys on every shared module the scan registered: an artifact that appears, or whose size or mtime changed, compiles into a record of its own, whether its module is pending, registered or deferred", timeout = 1200)]
+def test_default_cache_keys_on_shared_modules(t : T?) {
+    if (aot_host_skips(t)) return
+    var terr : string
+    let tmp = create_temp_directory("das_mc_binaries", terr)
+    if (empty(tmp)) {
+        t |> failure("create_temp_directory: {terr}")
+        return
+    }
+    let root = path_join(tmp, "root")
+    copy_tree_daslib(root)
+    let modDir = path_join(root, "modules/key_probe")
+    mkdir_rec(modDir, terr)
+    fwrite(path_join(modDir, ".das_module"), KEY_PROBE_DESCRIPTOR)
+    let script = path_join(tmp, "key_bin.das")
+    fwrite(script, "options gen2\n[export]\ndef main \{\n    print(\"MARK_key_bin\\n\")\n\}\n")
+    let cacheDir = path_join(tmp, ".cache/daslang/module_cache")
+    let enter = enter_dir(tmp)
+    let exe = get_full_file_name(das_exe())
+    let pending = ChildRun(cmd = "{enter} {exe} -dasroot {root} {script}", cacheDir = cacheDir)
+    let pendingArtifact = path_join(modDir, "key_probe{shared_module_extension()}")
+    check_pending_module_keys(t, pending, pendingArtifact)
+    remove(pendingArtifact)
+    if (das_is_dll_build()) {
+        check_loaded_module_keys(t, enter, exe, root, script, cacheDir)
+    }
+    var err : string
+    rmdir_rec(tmp, err)
+}
+
+[test(description = "The default cache keys on a statically linked daslang's own file: a copy of it whose mtime changed compiles the script into a record of its own", timeout = 1200)]
+def test_default_cache_keys_on_static_host(t : T?) {
+    if (aot_host_skips(t)) return
+    if (das_is_dll_build()) {
+        t |> skip("a daslang built as a DLL keys on its libraries: utils/daslang/tests")
+        return
+    }
+    var terr : string
+    let tmp = create_temp_directory("das_mc_static_host", terr)
+    if (empty(tmp)) {
+        t |> failure("create_temp_directory: {terr}")
+        return
+    }
+    let exe = path_join(tmp, base_name(das_exe()))
+    let copied = copy_file(get_full_file_name(das_exe()), exe, true, terr)
+    t |> success(copied, "copied the host: {terr}")
+    let script = path_join(tmp, "key_bin.das")
+    fwrite(script, "options gen2\n[export]\ndef main \{\n    print(\"MARK_key_bin\\n\")\n\}\n")
+    let child = ChildRun(cmd = "{enter_dir(tmp)} {exe} -dasroot {get_das_root()} {script}",
+        cacheDir = path_join(tmp, ".cache/daslang/module_cache"))
+    expect_key_records(t, child, 1, "the first run writes one record")
+    expect_key_records(t, child, 1, "an unchanged host keys the same record")
+    set_mtime_year(t, exe, 2020)
+    expect_key_records(t, child, 2, "the host with another mtime keys a record of its own")
     var err : string
     rmdir_rec(tmp, err)
 }

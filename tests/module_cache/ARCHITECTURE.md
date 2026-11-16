@@ -14,6 +14,22 @@ this document states what the folder is and why its tests take the shape they do
   the module's source, stamped by content so a byte-identical rewrite serves and a same-size
   edit cuts off; and the directory's size cap - children run inside a temp directory, so the
   default cache they fill and prune is their own, never the tree's.
+- `test_default_cache_keys_on_shared_modules` in `test_default_cache_path.das` - the shared
+  modules in the default cache's key (`src/builtin/ARCHITECTURE.md#default-module-cache-path`),
+  under a das root the test writes, the children inside the temp directory. A probe module
+  registers an artifact that is no shared module, so its row stays pending: the artifact that
+  appears, changes size or changes mtime keys a record of its own each time. On a host built as
+  a DLL, a copy of the tree's pugixml module, which a traced run shows loading, keys a record
+  per mtime twice over: when the run registered it (`-ignore-manifest` compiles the descriptor
+  on every run) and when the manifest replay deferred it, which a traced replay shows, and the
+  deferred module keys the record the registered one wrote. The probe's artifact is removed
+  first, since a pending row whose file is on disk makes the scan load every deferred module.
+  A build with no pugixml module logs that and leaves this part out.
+- `test_default_cache_keys_on_static_host` in `test_default_cache_path.das` - a statically
+  linked daslang is the one binary in its own key: a copy of the executable, run inside the temp
+  directory, keys one more record once its mtime changed. A host built as a DLL skips it; its
+  libraries in the key are tested beside the relocated-host fixture, in
+  `utils/daslang/tests/test_relocated_host.das`.
 - `test_compile_file_cache` in `uncategorized.das` - a script's `compile_file` under `CodeOfPolicies.module_cache`
   reads and refreshes the default cache as the host does for its own script: the cold compile
   parses and writes one record for the compiled file, the warm one serves the leaf and the root
@@ -163,7 +179,11 @@ this document states what the folder is and why its tests take the shape they do
   the failure report that echoes the child's output (`report_child`), and the two joined
   (`run_child_reported`): the order a call's arguments are evaluated in is not defined
   (LINT030), and a `run_child(cmd, out)` nested beside `out` in one argument list reads that
-  output before the child wrote it on some tiers and after on others.
+  output before the child wrote it on some tiers and after on others. It also holds what a test
+  builds a tree of its own from: the command prefix that runs a child inside a folder
+  (`enter_dir`), the tree's top-level daslib copied under a das root (`copy_tree_daslib`), and
+  one of the tree's module folders copied under a root's modules (`copy_module`), both over
+  `copy_files`.
 
 ## Why every case is a spawned process {#process-startup}
 
