@@ -1850,7 +1850,7 @@ namespace das
         return true;
     }
 
-    static bool pointerVoidnessDiffers ( const TypeDecl & a, const TypeDecl & b ) {
+    bool TypeDecl::pointerVoidnessDiffers ( const TypeDecl & a, const TypeDecl & b ) {
         if ( a.baseType != b.baseType ) return false;
         if ( a.baseType==Type::tPointer || a.baseType==Type::tIterator ) {
             bool aIsVoid = !a.firstType || a.firstType->isVoid();

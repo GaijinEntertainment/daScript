@@ -597,3 +597,39 @@ def piped_late_pick(_a : int; _b : float = 1.0; _blk : PipedLateBlock) : int => 
 def piped_late_pick(_a : int; _b : float = 1.0; _blk : auto) : int => 2
 
 typedef PipedLateBlock = block<(v : int) : int>
+
+struct TypedOverVoidTarget {
+    x : int
+}
+
+def typed_or_void_pointer(_p : TypedOverVoidTarget?) : string => "typed"
+
+def typed_or_void_pointer(_p : void?) : string => "void"
+
+[test(description = "between an overload on a typed pointer and one on void?, a typed pointer argument picks the typed one and a void? or null argument the void? one")]
+def test_typed_pointer_overload_beats_void_pointer(t : T?) {
+    var q = new TypedOverVoidTarget(x = 1)
+    t |> equal(typed_or_void_pointer(q), "typed")
+    var v : void? = q
+    t |> equal(typed_or_void_pointer(v), "void")
+    t |> equal(typed_or_void_pointer(null), "void")
+    unsafe {
+        delete q
+    }
+}
+
+def typed_or_void_generic(_p : TypedOverVoidTarget?; _tag : auto) : string => "typed"
+
+def typed_or_void_generic(_p : void?; _tag : auto) : string => "void"
+
+[test(description = "between two generics that differ on a typed pointer and void?, a typed pointer argument picks the typed one and a void? or null argument the void? one")]
+def test_typed_pointer_generic_beats_void_pointer(t : T?) {
+    var q = new TypedOverVoidTarget(x = 1)
+    t |> equal(typed_or_void_generic(q, 1), "typed")
+    var v : void? = q
+    t |> equal(typed_or_void_generic(v, 1), "void")
+    t |> equal(typed_or_void_generic(null, 1), "void")
+    unsafe {
+        delete q
+    }
+}
