@@ -710,6 +710,78 @@ def test_a_goto_from_a_loop_body_to_an_outer_label_numbered_below_the_bodys_labe
     t |> equal(bw(2), 103)
 }
 
+def goto_forward_in_a_block_with_finally_and_a_local(n : int) : int {
+    var r = 0
+    var d = n
+    while (d > 0) {
+        {
+            let c = d * 2
+            r += c
+            if (d == 8) {
+                goto label 1
+            }
+            r += 100
+            label 1:
+            r += 10
+        } finally {
+            d -= 4
+        }
+    }
+    return r
+}
+
+def goto_forward_in_a_block_with_finally_and_two_locals(n : int) : int {
+    var r = 0
+    var d = n
+    while (d > 0) {
+        {
+            let c = d * 2
+            let e = c + 1
+            r += e
+            if (d == 8) {
+                goto label 1
+            }
+            r += 100
+            label 1:
+            r += 10
+        } finally {
+            d -= 4
+        }
+    }
+    return r
+}
+
+[no_jit]
+def computed_goto_in_a_block_with_finally_and_a_local(n : int) : int {
+    var r = 0
+    var d = n
+    while (d > 0) {
+        {
+            let c = d >> 2
+            r += c
+            goto c + 1
+            label 1:
+            r += 10
+            label 2:
+            r += 20
+            label 3:
+            r += 30
+        } finally {
+            d -= 4
+        }
+    }
+    return r
+}
+
+var goto_finally_start = 8
+
+[test(description = "a goto to a label inside a block that has a finally section and declares one or two locals lands on the labelled statement, not on one before it")]
+def test_goto_label_in_a_block_with_finally_and_locals(t : T?) {
+    t |> equal(goto_forward_in_a_block_with_finally_and_a_local(goto_finally_start), 144)
+    t |> equal(goto_forward_in_a_block_with_finally_and_two_locals(goto_finally_start), 146)
+    t |> equal(computed_goto_in_a_block_with_finally_and_a_local(goto_finally_start), 83)
+}
+
 [export]
 def skip_init(n : int) : int {
     if (n > 1) {
