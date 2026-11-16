@@ -14,9 +14,9 @@ def private allow_cpu_prefill_intent() {
 require dasllama/dasllama_tokenizer
 require dasllama/dasllama_blocks   // embed_text_rows: the media body cell builds rows from the prompt's own tokens
 require dasllama/dasllama_bpe
+require dasllama/dasllama_image   // load_model_uncached: the product's load with no image
 require daslib/jobque_boost
 require daslib/fio
-require daslib/linq   // sequence_equal: the KV byte blobs
 require math
 require _model_tier   // model_available: presence + the >6 GiB PARITY_FULL tier gate
 
@@ -29,9 +29,10 @@ let SYS = "You are a helpful, friendly assistant. Keep answers concise."
 let USR = "Once upon a time"
 
 // Load capped to a tiny context: these cases only render prompts, and the session's KV cache is sized
-// to config.seq_len — Phi/Llama-3's native 131072 would allocate ~64GB.
-def private load_capped(path : string) : Model {
-    var m <- load_model_(path, QuantMode.q8)
+// to config.seq_len — Phi/Llama-3's native 131072 would allocate ~64GB. `host` keeps the weight planes
+// on the host beside a discrete home's copy: the load of a case that runs the CPU on the model.
+def private load_capped(path : string; host : bool = false) : Model {
+    var m <- host ? load_model_(path, QuantMode.q8) : load_model_uncached(path, QuantMode.q8)
     m.config.seq_len = min(m.config.seq_len, 512l)
     return <- m
 }
@@ -207,7 +208,7 @@ def test_chat_end_to_end(t : T?) {
         if (!model_available(t, path)) {
             return
         }
-        var m <- load_model_(path, QuantMode.q8)
+        var m <- load_model_uncached(path, QuantMode.q8)
         m.config.seq_len = min(m.config.seq_len, 512l)
         var reply = ""
         var ntok = 0l
@@ -615,7 +616,7 @@ def test_chat_gemma4_instruct_text_turn(t : T?) {
         if (!model_available(t, path)) {
             return
         }
-        var m <- load_capped(path)
+        var m <- load_capped(path, true)
         allow_cpu_prefill()
         with_dasllama_jobque() {
             var c = create_chat(m, "", 64l)
@@ -682,7 +683,7 @@ def test_gemma4_e_media_body(t : T?) {
         if (!model_available(t, path)) {
             return
         }
-        var m <- load_capped(path)
+        var m <- load_capped(path, true)
         allow_cpu_prefill()
         with_dasllama_jobque() {
             var toks <- encode(m, "The quick brown fox jumps over the lazy dog while the little robot watches from a small hill near the old village bakery", true, false)
@@ -1289,7 +1290,7 @@ def test_chat_render_seam(t : T?) {
             return
         }
         with_dasllama_jobque() {
-            var m <- load_capped(path)
+            var m <- load_capped(path, true)
             moe_gpu_drop_model()   // one lane: under DASLLAMA_GPU=1 the two paths would split between the device prefill and the CPU continuation
             // classic prefill is bit-exact under ANY chunking (test_prefill's contract), so a
             // byte-equal cache proves the render and eval paths agree token for token
@@ -1316,8 +1317,10 @@ def test_chat_render_seam(t : T?) {
             var s <- create_session(m)
             eval(m, s, toks)
             //! the KV caches are codec-encoded byte blobs: byte equality IS bit-exactness for a same-dtype pair
-            t |> success(sequence_equal(a.session.key_cache, s.key_cache), "key cache byte-equal: rendered == evaled")
-            t |> success(sequence_equal(a.session.value_cache, s.value_cache), "value cache byte-equal: rendered == evaled")
+            t |> success(a.session.n_past > 0l, "the rendered stream wrote rows to compare ({a.session.n_past})")
+            let kv = kv_rows_differ(a.session, s, m.config, a.session.n_past)
+            t |> equal(kv.k, 0l, "key cache byte-equal over the rows written: rendered == evaled")
+            t |> equal(kv.v, 0l, "value cache byte-equal over the rows written: rendered == evaled")
             set_prefill_attn_mode(saved_mode)
             delete s
             delete b

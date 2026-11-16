@@ -31,17 +31,23 @@ require strings
 
 [EnvConfig(env_prefix = "DASLLAMA")]
 struct public EngineEnv {
-    @clarg_doc = "Use the prepared-image file beside a source model for millisecond reloads. 0 skips the file: LLM ggufs take the full parse; audio carriers mint the image in memory and serve that (they are always image-backed)."
+    @clarg_doc = "Use the prepared-image file beside a source model for millisecond reloads. 0 skips the file: LLM ggufs take the full parse - on an armed Vulkan or CUDA home a q8 load streams the gguf onto the card and keeps no weight plane on the host (DASLLAMA_HOST_PLANES=1 keeps them); audio carriers mint the image in memory and serve that (they are always image-backed)."
     image : bool = true
 
-    @clarg_doc = "Persist the prepared image beside the source; 0 builds it in memory and serves that, leaving no .dlim behind."
+    @clarg_doc = "Persist the prepared image beside the source; 0 leaves no .dlim behind: the image is built in memory and served, and where an armed Vulkan or CUDA home would take the lane the gguf streams onto the card with no lane built and no weight plane kept on the host."
     image_save : bool = true
 
     @clarg_doc = "A development lever: also accept a prepared image of this older image version where its meta layout fingerprint is this build's, in place of re-minting it (0 = the build's version alone). The caller vouches that nothing the image's lane holds changed between the two versions - a version that moved another lane's bytes; an image whose planes did change reads wrong with no diagnostic."
     image_accept_version : int = 0
 
+    @clarg_doc = "Keep the weight planes on the host beside a discrete home's device copy when a gguf loads with no image: the CPU chain's planes, for a test's device-against-CPU compare. Off, the load streams each plane off the gguf to the card and keeps none (a call that needs the CPU chain then panics by name)."
+    host_planes : bool = false
+
     @clarg_doc = "Allow the CPU prefill path even when a GPU prefill override is registered."
     cpu_prefill : bool = false
+
+    @clarg_doc = "How a session's K/V cache starts where no caller pinned it in process (set_kv_init): unset or `unfilled` sizes the slabs and writes no byte - a row is written before it is read, and a page no row landed on is never resident; `zero` fills them with zeros; `poison` with 0xFF bytes, a NaN in every codec, so a read of an unwritten row shows in the logits; a paged session's pages start the same way as they grow. Any other spelling reads as unfilled, and the load says so."
+    kv_init : string = ""
 
     @clarg_doc = "Pin prefill to one registered override by name (e.g. metal, vulkan); anything else declines before upload."
     pin_prefill : string = ""
@@ -116,6 +122,9 @@ struct public EngineEnv {
 
     @clarg_doc = "Advisory source-mapping readahead at gguf load (cold-conversion fix); =0 restores on-demand faulting."
     prefetch : bool = true
+
+    @clarg_doc = "A gguf's mapped pages leave the process's resident memory tensor by tensor, each as the next tensor's read begins, so a load, a mint or a convert holds the tensor in flight and not the file; =0 keeps every page read until the mapping closes (the A/B arm)."
+    source_release : bool = true
 
     @clarg_doc = "Readahead of the prepared image at its map (madvise WILLNEED, synchronous on macOS): a purged page cache then reads the whole image at the SSD's rate before the first token - 103 GB in 15 s on the M5 - instead of paying 2.5x on the routed expert stacks over the first 128 tokens, and a WARM map pays ~2.5 s for the page walk in place of 65 ms. A serving process that runs for hours wants it; a bench, a test or a short session does not. An n-gram model's hash table is read ahead either way: its rows are random pages of the whole table, so an unread table hard-faults every token."
     prefetch_image : bool = false
@@ -549,6 +558,9 @@ struct public VulkanEnv {
     @clarg_doc = "A streamed stack's planes are read off the .dlim file straight into its pinned memory, the mapping's expert pages never faulted; =0 copies them out of the mapping (the A/B arm)."
     vk_stream_file_read : bool = true
 
+    @clarg_doc = "A resident plane's bytes are read off the .dlim lane file into the upload's staging, the mapping's device-twin pages never faulted; =0 copies them out of the mapping (the A/B arm)."
+    lane_read : bool = true
+
     @clarg_doc = "The expert cache's pinned budget in MiB for the streamed layers' expert stacks: the resident slots of every streamed layer and the transient ring together; 0 holds every streamed expert resident (the whole stacks in pinned memory, as a box with the RAM does). Under it each streamed layer keeps a quota of its experts resident and the rest are read off the lane file on demand into the ring, through the format's row-major kernels on the host and the DMA on the device alike; needs a mapped lane (a chunk-built image has no file to read from)."
     expert_cache_mb : int64 = 0l
 
@@ -561,7 +573,7 @@ struct public VulkanEnv {
     @clarg_doc = "The experts one bundle of the streamed expert chain takes at most (0 = a sixteenth of the layer's experts, 1 to 32). A bundle is the unit the device claims at the meet, at most two in flight, so the cap sets the device's pace against the host's share; the A/B lever."
     vk_xf_bundle : int64 = 0l
 
-    @clarg_doc = "Mint the TRIMMED GPU lane - the armed home's, vulkan or cuda (the default; =0 mints the lane with its planar families): the device twin plus the packed emb region the CPU embed reads, the planar weight families dropped - a MoE's expert stacks too, the device holding them or the host reading its streamed layers' pinned mirrors through the rare rail (so the prompt stream and the rail's arena arm must be on where routed layers serve on the host). A model the whole-model driver would not take whole keeps its families, and the load says so, as does one with per-layer embeddings, biased expert stacks or the gemma-4 MoE form (the host reads their planar planes); a call the driver passes to the CPU rails panics by name. Folded into the lane's identity, so a flip re-bakes the lane; `set_vulkan_trim` is the in-process lever."
+    @clarg_doc = "Mint the TRIMMED GPU lane - the armed home's, vulkan or cuda (the default; =0 mints the lane with its planar families): the device twin plus the packed emb region the CPU embed reads, the planar weight families dropped - a MoE's expert stacks too, the device holding them or the host reading its streamed layers' pinned mirrors through the rare rail (so the prompt stream and the rail's arena arm must be on where routed layers serve on the host). A model the whole-model driver would not take whole keeps its families, and the load says so, as does a per-layer-embedding model whose table is not on the device (the host would gather its rows off a plane the lane does not carry); a call the driver passes to the CPU rails panics by name. Folded into the lane's identity, so a flip re-bakes the lane; `set_vulkan_trim` is the in-process lever."
     trim : bool = true
 
     @clarg_doc = "Tag every device allocation priority 1.0 (VK_EXT_memory_priority). Off by default: on the NVIDIA WDDM driver the tag makes the tagged weights the pageable set, and a resident model then decodes at PCIe speed once anything is demoted."

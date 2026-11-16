@@ -7,6 +7,7 @@ require dastest/testing_boost public
 require dasllama/dasllama
 require dasllama/dasllama_vision_io
 require dasllama/dasllama_math   // with_dasllama_jobque_
+require dasllama/dasllama_image   // load_model_uncached: the product's load with no image
 require daslib/jobque_boost
 require daslib/fio
 require daslib/strings_boost
@@ -632,7 +633,7 @@ def test_render_image_span_qwen25o(t : T?) {
         if (!model_available(tt, dec)) {
             return
         }
-        var m <- load_model_(dec, QuantMode.q8)
+        var m <- load_model_uncached(dec, QuantMode.q8)
         var chat <- create_chat_(m, "", 8l)
         add_user_(chat, "describe this image")
         var head, tail : array<int64>

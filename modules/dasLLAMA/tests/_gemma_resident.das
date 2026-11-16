@@ -96,7 +96,7 @@ def private gemma_model(t : T?; gf : GemmaFile) : Model {
     let levers = resident_levers()
     set_gpu_ctx_max(GEMMA_RIG_CTX)   //! the rig's mirror context, read as the driver arms; the levers go back after the load
     var tr <- resident_trunk(t, path, GEMMA_RIG_CTX, " - DASLLAMA_GPU_MIN_CTX=1024 arms the 12B Q8_0 file on a 16 GB card") $() : Model {
-        var m <- load_resident(path, 0l, gf.host_experts ? GEMMA_RIG_CTX : 0l, gf.host_experts ? 1l : 0l)
+        var m <- load_resident_host(path, 0l, gf.host_experts ? GEMMA_RIG_CTX : 0l, gf.host_experts ? 1l : 0l)
         if (gf.host_experts) {   //! the pinned cap and the one routed layer asked onto the host decide the plan whatever the card (a card past the rig's holds the stacks beside the cap): a memory decline is the form missing, never a skip
             t |> success(moe_gpu_resident_active(), "the whole-model driver armed with host experts ({gpu_resident_decline_()})")
         }

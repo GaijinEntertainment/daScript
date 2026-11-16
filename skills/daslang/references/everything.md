@@ -821,6 +821,7 @@ The FIO module implements file input/output and filesystem operations. It provid
 - `dwrite_open` - Open `path` for cache-bypassing sequential append (`FILE_FLAG_NO_BUFFERING` on Windows, `F_NOCACHE` on macOS, `posix_fallocate` plus `fadvise` elsewhere).
 - `dwrite_stat` - Where the writer spent its time so far: `which` 0 = staging nanoseconds (memcpy into the bounce band), 1 = syscall nanoseconds, 2 = bytes written directly from caller memory, 3 = bytes that went through the bounce band.
 - `prefetch_map` - Advisory readahead over a mapped range: asks the OS to fault `bytes` starting at `base` into the page cache ahead of use (`PrefetchVirtualMemory` on Windows, `madvise(MADV_WILLNEED)` on POSIX).
+- `release_map` - Lets the pages of a mapped range leave the process: `bytes` starting at `base`, rounded inward to whole pages, drop out of the resident set and are read from the file again on the next touch (`madvise(MADV_DONTNEED)` on Linux, `msync(MS_INVALIDATE)` on macOS, `VirtualUnlock` on Windows).
 
 ### File manipulation
 

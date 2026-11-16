@@ -179,6 +179,36 @@ def eval_chunked(t : Model; var s : Session; ids : array<int64>; n, chunk : int6
     }
 }
 
+//! the bytes two sessions' K and V caches differ in over their first `npos` positions, trunk layer by layer (a paged session
+//! read through its block table): a flat slab past the rows a store wrote holds whatever its pages held, so a cache compare
+//! reads the written rows and no others - a NextN head's slab among those left out, its rows a draft round's
+def kv_rows_differ(var sa : Session; var sb : Session; c : Config; npos : int64) : tuple<k : int64; v : int64> {
+    var dk = 0l
+    var dv = 0l
+    unsafe {
+        for (l in range64(c.n_layers)) {
+            let kvd = layer_kv_dim(c, l)
+            let krb = kv_row_bytes(sa.kv_dtype_k, kvd)
+            let vrb = kv_row_bytes(sa.kv_dtype_v, kvd)
+            let ak = kv_layer_kbase(sa, l, c.seq_len)
+            let bk = kv_layer_kbase(sb, l, c.seq_len)
+            let av = kv_layer_vbase(sa, l, c.seq_len)
+            let bv = kv_layer_vbase(sb, l, c.seq_len)
+            for (pos in range64(npos)) {
+                let ar = kv_phys_row(sa, pos)
+                let br = kv_phys_row(sb, pos)
+                for (b in range64(krb)) {
+                    dk += ak[ar * krb + b] != bk[br * krb + b] ? 1l : 0l
+                }
+                for (b in range64(vrb)) {
+                    dv += av[ar * vrb + b] != bv[br * vrb + b] ? 1l : 0l
+                }
+            }
+        }
+    }
+    return (k = dk, v = dv)
+}
+
 //! `prompt` greedily continued `n_gen` ids through `generate` on a fresh session: the prompt's echo past its first id, then the
 //! continuation
 def greedy_gen(tr : Model; prompt : array<int64>; n_gen : int) : array<int64> {

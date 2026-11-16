@@ -266,7 +266,7 @@ def stream_group_at(w0 : int64; fmt : int) : int {
 //! `len` bytes at `off` of the lane read through the buffered handle `f` into `dst`; true where every byte came (0 bytes trivially).
 //! Buffered, not direct: the lane stays mapped for the planes the host reads, and the kernel serializes unbuffered reads of a
 //! mapped file behind its coherency flush (eight readers at one reader's rate) where buffered reads keep their parallelism
-def private stream_read_span(f : file; off : int64; dst : void?; len : int64) : bool {
+def stream_read_span(f : file; off : int64; dst : void?; len : int64) : bool {
     return true if (len <= 0l)
     return false if (fseek(f, off, seek_set) != 0l)
     return _builtin_read64(f, dst, len) == len

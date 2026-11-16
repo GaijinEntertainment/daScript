@@ -103,15 +103,15 @@ rows below `start_pos` the device never saw - the seam row the CPU seam wrote, a
 stretch under it - and counts the region's head rows to `start_pos + npos - 1`
 (`rdec_prefill_head_rows`), so the next draft hydrates nothing and the host copy the CPU round
 reads stays the device's. A chain that cannot warm - the head off the device, a scaled embed, a
-feed plane the chain does not carry - says so once and leaves the head's prompt rows as the host
-holds them: the round drafts off stale history until its verifies' re-warm rewrites the rows and
-acceptance dips, and the first draft uploads the host rows below its row as the host holds them.
-Whether the warm ran or not, the override's readback (`rdec_prefill_head_rows`) hydrates the
-device-only rows below `start_pos` first (`rdec_head_hydrate`, before the sync), so a
-continuation whose seam did not run - a rewind, a foreign handoff - raises the host's count only
-over rows the host holds current, never over a stale copy of a row the device wrote. The warm's cost is eh_proj and the
-head's k and v projections over the prompt plus the last layer's FFN over the whole window
-(`PERF_LEDGER.md`'s entry, which the pod measures).
+feed plane the chain does not carry, the round off at the prompt - says so once and zeroes the
+prompt's head rows on the host (`rdec_head_rows_zero`): the round drafts off an empty history until
+its verifies' re-warm rewrites the rows and acceptance dips, and the first draft uploads zeros, never
+an unfilled page. Whether the warm ran or not, the override's readback (`rdec_prefill_head_rows`)
+hydrates the device-only rows below `start_pos` first (`rdec_head_hydrate`, before the sync), so a
+continuation whose seam did not run - a rewind, a foreign handoff - raises the host's count only over
+rows the host holds current, never over a stale copy of a row the device wrote. The warm's cost is
+eh_proj and the head's k and v projections over the prompt plus the last layer's FFN over the whole
+window (`PERF_LEDGER.md`'s entry, which the pod measures).
 
 ### A rejected device verify rolls the region back on the device {#resident-verify-rollback}
 

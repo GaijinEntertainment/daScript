@@ -62,7 +62,7 @@ let private IQ4NL32_BAR_REL = 0.08
 def private qwen2_forced_feed(t : T?; n : int64; file : string = CARRIER; dense : KqFmt = KqFmt.q8; bar : float = LOGIT_BAR_REL) {
     let path = path_join(models_dir(), file)
     if (!resident_ready(t, path)) return
-    var tr <- load_resident(path)   //! the window pinned for the load: unpinned, the driver's own pick outlives the cell and sizes every later plan
+    var tr <- load_resident_host(path)   //! the window pinned for the load: unpinned, the driver's own pick outlives the cell and sizes every later plan
     t |> success(tr.config.attn_qkv_bias, "the qwen2 carries the q/k/v projection bias the arm exists for")
     t |> success(moe_gpu_resident_active(), "the whole-model driver armed on the biased model (the load log names any decline)")
     if (dense != KqFmt.q8) {
@@ -132,7 +132,7 @@ def test_gpu_resident_qwen2_tq4_steps_down(t : T?) {
     t |> run("Qwen2.5-0.5B: a tq4 ask serves at q8_0") @(t : T?) {
         let path = path_join(models_dir(), CARRIER)
         return if (!resident_ready(t, path))
-        var tr <- load_resident_at(path, KVDtype.tq4)
+        var tr <- load_resident_at(path, KVDtype.tq4, 0l, 0l, true)
         if (mirror_kv_dtype() == KVDtype.f32) {
             t |> skip("DASLLAMA_VK_KV32=1 arms the f32 mirror over the codec asked - the cell needs it unset")
         } else {

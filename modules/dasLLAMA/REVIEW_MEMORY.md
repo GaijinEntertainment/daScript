@@ -1,7 +1,8 @@
 # dasLLAMA Memory and Lane Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-docs: `ARCHITECTURE_ENGINE.md`, `ARCHITECTURE_INVARIANTS.md`. Planned work: `followup_general.md`.
+docs: `ARCHITECTURE_ENGINE.md`, `ARCHITECTURE_ENGINE_MEMORY.md`, `ARCHITECTURE_INVARIANTS.md`. Planned work:
+`followup_general.md`.
 
 An allocation is one buffer, or one sub-range of a buffer shared by several uses; a buffer that
 replaces buffers the diff removes counts as added. An allocation that a path, a model class or a
@@ -20,6 +21,13 @@ how many rows one media encode feeds (an image's patches, a clip's frames), or h
 buffer is split into (the K/V cache's device copy, one region per request served at once; an MoE
 dispatch's expert regions). A shape is one setting of the scaling counts. Peak footprint is the
 process's largest resident memory over a run.
+
+A discrete home is a GPU backend serving on a device whose memory is not the host's: a discrete card under Vulkan or
+CUDA, or any backend added for one. Metal, and Vulkan on a device that shares the host's memory (an integrated GPU), are
+not discrete homes. A host copy is the bytes of a weight plane, a K/V row or a token table in process memory - heap, or
+the resident pages of a file mapping - while a discrete home holds the same data in any layout. A lever is an
+environment variable or a setter that changes what a run loads, keeps or computes; a run with no lever set is the
+default run. A re-arm is the load placing a loaded model's planes on the device again.
 
 A team-lane body is anything reachable from a `team_parallel_for` / `team_parallel_for_indexed` /
 `team_parallel_stages` body (`daslib/jobque_boost.das`, repo root) or from a `maybe_parallel_for*`
@@ -58,13 +66,38 @@ The lint never compares the two counts, and a resize past the heap's limit on un
 
 **Weakening PERF032 is a defect.**
 
+**A diff that adds, on a path a run with no lever set takes, a fill - zero or any other value - of a buffer whose size
+grows with a scaling count, every byte of which a later write covers before any read, is a defect - size the buffer
+with no fill (`resize_no_init`, `overwrite_resize`).** A fill makes every page of the buffer resident, whatever the run
+then writes.
+
+**A diff that adds a lasting allocation whose size grows with a scaling count names, in the PR description, the code
+that reads its bytes on each backend the allocation reaches (CPU, Metal, Vulkan, CUDA); an allocation a backend reaches
+with no reader there is a defect - make it only on the backends that read it.**
+
+**On a discrete home, a host copy that outlives its upload, with no host code reading it on a prompt or a step the home
+serves, is a defect - drop it once the upload ends.** A read made only by a test, or by a re-arm uploading again, does
+not keep a copy.
+
+**A diff that turns on, in code outside `tests/`, `harness/` and `benchmarks/`, a lever that keeps a host copy for a
+test's compare (`set_host_planes`, `set_vulkan_trim(false)`) is a defect.**
+
+**A diff that maps a source file for a load, a mint or a convert releases the pages each tensor read touched before the
+next tensor read begins (a read nested inside another is part of it) - open a gguf through `gguf_source_begin`, which
+does this; a mapping that holds its pages until it closes is a defect.** Every page a read touches stays resident until something releases it.
+
+**A diff that changes what a load or a session holds on the host records in a `PERF_LEDGER.md` row the peak footprint
+and the resident memory after the load, each before and after the diff, on each backend it touches, measured with no
+lever set.** A figure taken under a lever shows a path the product does not take.
+
 **A load, mint or convert arm that holds a whole model, a whole plane family or a whole image in
 RAM, for an artifact the streaming rail (`load_gguf_streaming` + `save_model_image_streaming`, the
 vulkan mint off the gguf included) serves, is a defect, and so is a refusal that routes a flavor or
 a carrier the rail serves around it to an eager arm.**
 
-**A plane of an artifact the streaming rail serves, whose byte count scales with the model, that
-the load reads whole off the gguf without a `FillJob`, is a defect.**
+**When the streaming rail serves an artifact, a load that reads whole off the gguf, without a
+`FillJob`, a plane whose byte count grows with a model-file count and which the host drops after the
+load is a defect.**
 
 **A diff that adds a whole-RAM arm for a flavor or a carrier the streaming rail does not cover adds
 a `followup_general.md` row to extend the rail to it, in the same change.**

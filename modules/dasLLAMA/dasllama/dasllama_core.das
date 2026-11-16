@@ -844,6 +844,7 @@ def gpu_slot_rearm(want : dasllama_gpu_tier::GpuTierWant; t : Model) : string {
     //! Re-arm the INSTALLED model onto the GPU tier — want, arm, resident upload (bake-slice
     //! path for a mapped vulkan-flavor ``t``). Its marks are installed and the device holds no other
     //! model (``moe_gpu_drop_model`` first). Returns "gpu:resident" | "gpu:rails" | "cpu".
+    return gguf_live_rearm(want, t) if (gguf_live_loaded(t))
     return gpu_slot_rearm_(want, t)
 }
 

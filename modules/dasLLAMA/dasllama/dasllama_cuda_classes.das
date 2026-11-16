@@ -3991,12 +3991,20 @@ def public cud_words(var s : void?; src, dst : uint64; words : int64) {
     enc_words_copy(s, fixed_array(src, dst), pc, words_copy_wgs(words))
 }
 
-//! `bytes` of device memory, zeroed on the compute stream; 0 where the card has no room
+var private g_cud_dev_failures = 0l   //! the `cud_dev_zeroed` calls the card had no room for, since the process began
+
+//! the `cud_dev_zeroed` calls that came back 0: a setup that allocates several planes reads it before and after, and one that
+//! moved declines by name in place of launching a kernel over a null plane
+def public cud_dev_failures() : int64 => g_cud_dev_failures
+
+//! `bytes` of device memory, zeroed on the compute stream; 0 where the card has no room (`cud_dev_failures` counts it)
 [arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]
 def public cud_dev_zeroed(bytes : int64) : uint64 {
     let d = cuda_mem_alloc(uint64(bytes))
     if (d != 0ul) {
         cuda_memset_d8(d, 0u8, uint64(bytes), g_cud.stream)
+    } else {
+        g_cud_dev_failures++
     }
     return d
 }

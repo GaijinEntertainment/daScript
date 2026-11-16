@@ -73,7 +73,7 @@ def private ple_pre_finish(t : Model; var s : Session; embd_scaled : array<float
 //! Go-live tripwire, called at every carrier seam: panics unless the PLE token table's plane
 //! really holds the table (a short plane would otherwise die mid-forward inside the gather).
 def ple_check_table(t : Model; origin : string) {
-    if (!has_ple(t.config)) {
+    if (!has_ple(t.config) || t.planes_trimmed) {   //! a lane with no planar planes holds the table on the device alone
         return
     }
     let need = t.ple_emb_off + t.config.vocab_size * t.config.n_layers * t.config.n_embd_per_layer
@@ -96,6 +96,9 @@ def ple_check_table(t : Model; origin : string) {
 //! disk-order K-quant or per-32 planes (the table is excluded from the grp repack) or the q8 linear region on fallback loads -
 //! the CPU gather the device gathers are held to
 def ple_gather_row(t : Model; row : int64; var dst : array<float>; doff : int64) {
+    if (t.planes_trimmed) {
+        panic("dasLLAMA: planes_trimmed GPU lane - a host gather of the per-layer embedding table's row {row} would read a plane the lane does not carry: the device gathers a row by its token id, and this call brought none (a media span, a window the embed gate declined, or the projection seat off)")
+    }
     let all = t.config.n_layers * t.config.n_embd_per_layer
     let eloff = t.ple_emb_off + row * all
     if (t.ple_emb_fmt == KqFmt.q8) {

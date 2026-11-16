@@ -159,8 +159,13 @@ exact. The walk advances the writer by exactly the bytes it accepted, so the sec
 never drift from the file. An append past the chunk is therefore a disagreement between the sizing
 pass and the walk - a bug, not a disk condition - and the chunk rail panics rather than limping on.
 The one decline it survives is failing to get the chunk at all: that happens before the walk
-starts, so the carrier is still whole and its caller keeps serving it. The one plane the sizing
-pass bounds instead of knowing is the vulkan lane's twin (`ARCHITECTURE_IMAGE_VULKAN.md`).
+starts, so the carrier is still whole and its caller keeps serving it. A section a plane hook
+streams sizes as empty in the carrier, so its mint hands the sizing pass the section's bytes up to
+a whole page (`section_bytes`), counted by the same per-tensor decision its writer takes
+(`wjob_emits` for whisper, `gg_plane_total` for GigaAM, `vulkan_mint_measure` for a GPU lane's
+twin). The walk ends on an assert that the reserve exceeds what it wrote by no more than the
+section table's slack: a bound in place of a count is a bug the same as an undercount, because
+the memory chunk is allocated at the reserve.
 
 ### Identity names the backend, so the backend is selected first {#image-identity-backend-order}
 

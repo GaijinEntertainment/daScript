@@ -715,6 +715,7 @@ struct FillJob {
     src_off : int64
     fmt : KqFmt
     kdim : int64   // the source tensor's row width (dims[0]), so n / kdim is the panel's row count; 0 = the plan resolved no tensor
+    piece : bool   //!< one of the jobs a token table is cut into: a run of its rows, never a dev-W panel of its own
 }
 
 //! One repack region over a plane (element offset + 2D shape). fmt is the format's stream code
@@ -916,13 +917,13 @@ def private stream_zero_fill(gap : int64; var zeros : array<uint8>;
 //! the per-job temps one streamed fill reuses across its jobs: the q half in `q` (the kq and per-32 formats) or `q8` (the q8
 //! family, int8), the scale half in `s` or `sf` (f32 scales), the blob flavor's 34B blocks in `m` with its halfword scales
 struct StreamTemps {
-    q : array<uint8>
-    q8 : array<int8>
-    s : array<uint8>
-    sf : array<float>
-    m : array<uint8>
-    s16 : array<uint16>
-    scratch : array<float>
+    @exact_size q : array<uint8>
+    @exact_size q8 : array<int8>
+    @exact_size s : array<uint8>
+    @exact_size sf : array<float>
+    @exact_size m : array<uint8>
+    @exact_size s16 : array<uint16>
+    @exact_size scratch : array<float>
 }
 
 //! `j` transcoded: the q half into `tmp` at offset 0, the scale half into `dst`'s plane at `j.woff - rebase` (`rebase`: the element
@@ -931,20 +932,20 @@ struct StreamTemps {
 def private stream_job_transcode(m : GGUFMeta; bytes : array<uint8> | #; var dst : Model; j : FillJob; regs : array<StreamReg>;
                                  rebase : int64; var tmp : StreamTemps; account : bool) {
     let sh = stream_job_shape(dst, j)
-    tmp.q |> grow_resize(int(sh.qb))
+    tmp.q |> grow_resize(sh.qb)
     let t0 = g_conv_prof ? ref_time_ticks() : 0l
     var kind = ""
     var served = ConvServed.q8
     if (j.fmt == KqFmt.mx4) {   // the file's own nibble and E8M0 bytes, no conversion to account
-        tmp.s |> grow_resize(int(sh.sb))
+        tmp.s |> grow_resize(sh.sb)
         gguf_transcode_mx4(m, bytes, j.name, tmp.q, tmp.s, 0l, 0l, j.n, j.src_off)
     } elif (stream_strided(j.fmt)) {
-        tmp.s |> grow_resize(int(sh.sb))
+        tmp.s |> grow_resize(sh.sb)
         kind = transcode_kq_tensor(m, bytes, j.name, j.fmt, tmp.q, tmp.s, 0l, j.n, j.src_off)
         served = ConvServed.kq
     } else {
-        tmp.q8 |> grow_resize(int(j.n))
-        tmp.sf |> grow_resize(int(j.n / Q8_BLOCK_ELEMS))
+        tmp.q8 |> grow_resize(j.n)
+        tmp.sf |> grow_resize(j.n / Q8_BLOCK_ELEMS)
         kind = transcode_q8_tensor(m, bytes, j.name, tmp.q8, tmp.sf, 0l, 0l, j.n, j.src_off, tmp.scratch)
     }
     if (account && !empty(kind)) {
@@ -964,8 +965,10 @@ def private stream_job_transcode(m : GGUFMeta; bytes : array<uint8> | #; var dst
     }
     unsafe {
         for (r in regs) {
-            if (r.fmt != sh.rfmt || r.off < j.woff || r.off >= j.woff + j.n) {
-                continue
+            let held = r.fmt == sh.rfmt ? stream_region_in_job(r.off, r.n * r.d, j.woff, j.n) : StreamRegionFit.outside
+            continue if (held == StreamRegionFit.outside)
+            if (held == StreamRegionFit.crosses) {
+                panic("dasLLAMA: a repack region of {r.d} rows of {r.n} at element {r.off} crosses the edge of its streamed job '{j.name}' ({j.n} elements at {j.woff}) - a job holds whole regions")
             }
             let roff = r.off - rebase
             if (r.fmt == Q8_STREAM_TAG) {
@@ -1143,7 +1146,7 @@ let DEVW_BAKE_PANEL_MAX = 48ul * 1024ul * 1024ul
 
 //! ascending woff — the ONE order both the table build and the plane fill walk
 def private devw_bake_jobs(t : Model; jobs : array<FillJob>) : array<FillJob> {
-    var mine <- [for (j in jobs); j; where devw_bake_covers(t, j) && uint64(j.n * 2l) <= DEVW_BAKE_PANEL_MAX]
+    var mine <- [for (j in jobs); j; where !j.piece && devw_bake_covers(t, j) && uint64(j.n * 2l) <= DEVW_BAKE_PANEL_MAX]
     mine |> sort() <| cmp_by(_.woff)
     return <- mine
 }
@@ -1212,22 +1215,22 @@ def fill_devwf16_plane(m : GGUFMeta; bytes : array<uint8> | #; var t : Model;
     var panel : array<float16>
     var ok = true
     for (j in mine) {
-        panel |> grow_resize(int(j.n))
+        panel |> grow_resize(j.n)
         if (j.fmt == KqFmt.q8) {
-            temp_q8 |> grow_resize(int(j.n))
-            temp_sf |> grow_resize(int(j.n / 32l))
+            temp_q8 |> grow_resize(j.n)
+            temp_sf |> grow_resize(j.n / Q8_BLOCK_ELEMS)
             let kind = transcode_q8_tensor(m, bytes, j.name, temp_q8, temp_sf, 0l, 0l, j.n, j.src_off, scratch)
             if (empty(kind)) {
                 ok = false
                 break
             }
             unsafe {
-                devw_dequant_q8_core(addr(temp_q8[0]), addr(temp_sf[0]), j.n / 32l, addr(panel[0]))
+                devw_dequant_q8_core(addr(temp_q8[0]), addr(temp_sf[0]), j.n / Q8_BLOCK_ELEMS, addr(panel[0]))
             }
         } else {
             let nsb = j.n / 256l
-            temp_kq |> grow_resize(int(nsb * kq_qsb(j.fmt)))
-            temp_ks |> grow_resize(int(nsb * kq_ssb(j.fmt)))
+            temp_kq |> grow_resize(nsb * kq_qsb(j.fmt))
+            temp_ks |> grow_resize(nsb * kq_ssb(j.fmt))
             let kind = transcode_kq_tensor(m, bytes, j.name, j.fmt, temp_kq, temp_ks, 0l, j.n, j.src_off)
             if (empty(kind)) {
                 ok = false
@@ -1347,16 +1350,56 @@ def private transcode_q8_tensor(m : GGUFMeta; bytes : array<uint8> | #; name : s
     return "q8 REQUANT (dequant+quant)"
 }
 
+
 //! the row width a fill job records; 0 where the name resolves to no tensor of this meta
 def private fill_job_kdim(m : GGUFMeta; name : string) : int64 {
     let ti = gguf_find_tensor(m, name)
     return ti >= 0 ? m.tensors[ti].dims[0] : 0l
 }
 
+//! where a repack region of `elems` elements at `off` sits against a streamed job's [woff, woff + n)
+enum StreamRegionFit {
+    outside   //!< no element in common: another job's
+    inside    //!< wholly the job's: repacked in its staging
+    crosses   //!< an edge of the job cuts it: no staging holds it whole
+}
+
+//! Non-private: the job-shape cell reads it
+def stream_region_in_job(off, elems, woff, n : int64) : StreamRegionFit {
+    return StreamRegionFit.outside if (off + elems <= woff || off >= woff + n)
+    return off >= woff && off + elems <= woff + n ? StreamRegionFit.inside : StreamRegionFit.crosses
+}
+
+//! the elements a job of a token table of `n` elements in rows of `kdim` holds: `TABLE_PIECE_ROWS` rows where the table is
+//! past a dev-W panel's size, the whole table where a panel holds it or the plan resolved no row width. Non-private: the
+//! job-shape cell reads it
+def table_job_elems(n, kdim : int64) : int64 {
+    let cut = kdim > 0l && n > TABLE_PIECE_ROWS * kdim && uint64(n * 2l) > DEVW_BAKE_PANEL_MAX
+    return cut ? TABLE_PIECE_ROWS * kdim : n
+}
+
+//! a token table's load: the plan-load records a job a piece of rows where the table is past a dev-W panel's size - one a
+//! panel holds stays one job, the panel's site - and any other load reads the table whole
+[arch(at="../ARCHITECTURE_ENGINE_MEMORY.md#table-piece-jobs")]
+def private load_table(m : GGUFMeta; bytes : array<uint8> | #; name : string; var t : Model; woff, n : int64; var scratch : array<float>; fmt : KqFmt) {
+    if (!g_fill_plan_mode) {
+        load_big(m, bytes, name, t, woff, n, scratch, 0l, fmt)
+        return
+    }
+    let kdim = fill_job_kdim(m, name)
+    let piece = table_job_elems(n, kdim)
+    let cut = piece < n
+    var at = 0l
+    while (at < n) {
+        let pn = min(piece, n - at)
+        g_fill_plan |> push(FillJob(name = name, woff = woff + at, n = pn, src_off = at, fmt = fmt, kdim = kdim, piece = cut))
+        at += pn
+    }
+}
+
 def private load_big(m : GGUFMeta; bytes : array<uint8> | #; name : string; var t : Model; woff, n : int64; var scratch : array<float>; src_off : int64 = 0l; fmt : KqFmt = KqFmt.q8) {
     if (g_fill_plan_mode) {
-        g_fill_plan |> push(FillJob(name = name, woff = woff, n = n, src_off = src_off, fmt = fmt,
-            kdim = fill_job_kdim(m, name)))
+        g_fill_plan |> push(FillJob(name = name, woff = woff, n = n, src_off = src_off, fmt = fmt, kdim = fill_job_kdim(m, name)))
         return
     }
     let t0 = g_conv_prof ? ref_time_ticks() : 0l
@@ -1961,7 +2004,7 @@ def load_gguf_streaming(path : string; mode : QuantMode; var t : Model; var jobs
         var bases : array<void?>
         var sizes : array<int64>
         gguf_map_shards(shards, 0, bases, sizes) {
-            if (g_env_engine.prefetch) {
+            if (g_env_engine.prefetch && !source_release()) {
                 var pf_mb = 0l
                 for (bi in range(length(bases))) {
                     if (unsafe(prefetch_map(bases[bi], uint64(sizes[bi])))) {
@@ -1999,15 +2042,7 @@ def load_gguf_streaming(path : string; mode : QuantMode; var t : Model; var jobs
     var ok = false
     let lmode = mode
     fmap(f) $(var bytes : array<uint8>#) {
-        if (g_env_engine.prefetch) {
-            var armed = false
-            unsafe {
-                armed = prefetch_map(addr<void?>(bytes[0]), uint64(long_length(bytes)))
-            }
-            if (armed) {
-                to_log(LOG_INFO, "dasLLAMA: source prefetch armed ({long_length(bytes) >> 20l} MB)\n")
-            }
-        }
+        let base = gguf_source_begin(bytes)
         var inscope m <- parse_gguf_meta(bytes)
         fill_plan_begin()
         load_gguf_parsed(t, m, bytes, lmode, ts_load)
@@ -2016,6 +2051,7 @@ def load_gguf_streaming(path : string; mode : QuantMode; var t : Model; var jobs
         unsafe {
             ok = invoke(blk, m, temp_array(addr<uint8?>(bytes[0]), long_length(bytes), type<uint8>))
         }
+        gguf_release_disarm(base)
     }
     fclose(f)
     g_stream_want_blob = false
@@ -2044,7 +2080,7 @@ def private load_gguf_impl(path : string; var mode : QuantMode) : Model {
         var sizes : array<int64>
         gguf_map_shards(shards, 0, bases, sizes) {
             // fault the source in AHEAD of the parallel transcode (in-loop faults serialize lanes)
-            if (g_env_engine.prefetch) {
+            if (g_env_engine.prefetch && !source_release()) {
                 var pf_mb = 0l
                 for (bi in range(length(bases))) {
                     if (unsafe(prefetch_map(bases[bi], uint64(sizes[bi])))) {
@@ -2071,17 +2107,10 @@ def private load_gguf_impl(path : string; var mode : QuantMode) : Model {
         panic("dasLLAMA: cannot open gguf '{path}'")
     }
     fmap(f) $(var bytes : array<uint8>#) {
-        if (g_env_engine.prefetch) {
-            var armed = false
-            unsafe {
-                armed = prefetch_map(addr<void?>(bytes[0]), uint64(long_length(bytes)))
-            }
-            if (armed) {
-                to_log(LOG_INFO, "dasLLAMA: source prefetch armed ({long_length(bytes) >> 20l} MB)\n")
-            }
-        }
+        let base = gguf_source_begin(bytes)
         var inscope m <- parse_gguf_meta(bytes)
         load_gguf_parsed(t, m, bytes, mode, ts_load)
+        gguf_release_disarm(base)
     }
     fclose(f)
     return <- t
@@ -2741,10 +2770,10 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
         let kv = t.config.kv_dim
         let qd = t.config.n_heads * t.config.head_size   // query width (== dim except Gemma2)
         // streaming covers the q8-mode load_big rails and the native-MXFP4 expert stacks; models with direct-write
-        // loaders (grouped deltanet, bf16 PLE) disarm HERE — before sizing — so the eager path proceeds with fully
+        // loaders (grouped deltanet) disarm HERE — before sizing — so the eager path proceeds with fully
         // materialized planes and an empty job list
-        if (g_fill_plan_mode && (mode != QuantMode.q8 || t.dn_grouped || t.ple_model_bf16 || m.hf_snapshot)) {
-            to_log(LOG_INFO, "dasLLAMA: streaming plan disarmed - unstreamed rail (mode {mode}, dn-grouped {t.dn_grouped}, bf16-ple {t.ple_model_bf16}, snapshot {m.hf_snapshot}); converting eagerly\n")
+        if (g_fill_plan_mode && (mode != QuantMode.q8 || t.dn_grouped || m.hf_snapshot)) {
+            to_log(LOG_INFO, "dasLLAMA: streaming plan disarmed - unstreamed rail (mode {mode}, dn-grouped {t.dn_grouped}, snapshot {m.hf_snapshot}); converting eagerly\n")
             g_fill_plan_mode = false
         }
         let sz = layout_offsets(t)
@@ -3186,29 +3215,29 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
                 let kind = transcode_q8_tensor(m, bytes, "per_layer_token_embd.weight", t.qblob, t.qscales, t.ple_emb_off, t.ple_emb_off / 32l, pn, 0l, scratch)
                 conv_note(kind, t0, pn)
             } else {
-                load_big(m, bytes, "per_layer_token_embd.weight", t, t.ple_emb_off, pn, scratch, 0l, t.ple_emb_fmt)
+                load_table(m, bytes, "per_layer_token_embd.weight", t, t.ple_emb_off, pn, scratch, t.ple_emb_fmt)
             }
         }
         if (!t.config.shared_weights) {
-            load_big(m, bytes, "output.weight", t, t.wcls_off, vocab * dim, scratch, 0l, t.wcls_fmt)
+            load_table(m, bytes, "output.weight", t, t.wcls_off, vocab * dim, scratch, t.wcls_fmt)
             if (emb_kq(t)) {
-                load_big(m, bytes, "token_embd.weight", t, t.emb_kq_off, vocab * dim, scratch, 0l, t.emb_fmt)
+                load_table(m, bytes, "token_embd.weight", t, t.emb_kq_off, vocab * dim, scratch, t.emb_fmt)
             }
             if (t.emb_q8) {
                 // untied Q8: the embedding's linear copy the row reads dequant from (never repacked)
-                load_big(m, bytes, "token_embd.weight", t, t.emb_q8_off, vocab * dim, scratch, 0l, KqFmt.q8)
+                load_table(m, bytes, "token_embd.weight", t, t.emb_q8_off, vocab * dim, scratch, KqFmt.q8)
             }
         } elif (t.cls_q8) {
             // tied Q8: classifier copy (repacked below) + the linear copy embedding rows read.
             // Through load_big (its q8 arm is the same transcode) so the streaming plan records both.
-            load_big(m, bytes, "token_embd.weight", t, t.wcls_off, vocab * dim, scratch, 0l, KqFmt.q8)
-            load_big(m, bytes, "token_embd.weight", t, t.emb_q8_off, vocab * dim, scratch, 0l, KqFmt.q8)
+            load_table(m, bytes, "token_embd.weight", t, t.wcls_off, vocab * dim, scratch, KqFmt.q8)
+            load_table(m, bytes, "token_embd.weight", t, t.emb_q8_off, vocab * dim, scratch, KqFmt.q8)
         } elif (cls_kq(t)) {
             // tied K-quant: ONE plane copy serves the classifier matmul and embedding row reads
             // (the kq planes stay in disk order — no repack, so no second linear copy)
-            load_big(m, bytes, "token_embd.weight", t, t.wcls_off, vocab * dim, scratch, 0l, t.emb_fmt)
+            load_table(m, bytes, "token_embd.weight", t, t.wcls_off, vocab * dim, scratch, t.emb_fmt)
         } elif (t.cls_q8_copy) {
-            load_big(m, bytes, "token_embd.weight", t, t.wcls_off, vocab * dim, scratch, 0l, KqFmt.q8)
+            load_table(m, bytes, "token_embd.weight", t, t.wcls_off, vocab * dim, scratch, KqFmt.q8)
         }
         // Qwen2 Q/K/V projection biases — small fp32 tensors, kept dense
         if (t.config.attn_qkv_bias) {
@@ -3319,14 +3348,20 @@ def quantize_weights_q4(var t : Model) {
 
 
 
+//! A load's tier arm: a want set after [init] (a worker's, the server's) arms here - the env path armed at [init], the image
+//! rail's identity probe arms on its own, and a load with neither must not fall to the CPU
+def load_arm_tier {
+    if (!moe_gpu_tier_installed() && gpu_want_arms_tier()) {
+        moe_gpu_tier_arm_()
+    }
+}
+
 //! Load a model AND its tokenizer from a GGUF — the full user-facing entry point. Arch and
 //! tokenizer backend are both auto-selected from GGUF metadata; `mode` picks the weight quant.
 //! Applies the tune sidecar's "runtime" knobs first (see apply_box_profile_runtime).
 def load_model_(path : string; mode : QuantMode = QuantMode.fp32) : Model {
     apply_box_profile_runtime()   // before load: a backend pin must precede the backend-for-load select
-    if (!moe_gpu_tier_installed() && gpu_want_arms_tier()) {
-        moe_gpu_tier_arm_()   // a want set after [init] (a worker's, the server's) arms here: the env path armed at [init], the image rail's identity probe arms on its own, and a load with neither must not fall to the CPU
-    }
+    load_arm_tier()
     // same guard rail as load_model_cached: a GPU-armed env whose backend never registered
     // (tier module not required, shared_module load swallowed) says so instead of resolving CPU
     if (get_metal_mode() == MetalMode.off) {

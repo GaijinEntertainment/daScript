@@ -14,6 +14,7 @@ require math                                            // max: the child's capt
 require strings
 require dasllama/dasllama                               // load_model: the LLM whose handler holds the engine
 require dasllama/dasllama_tts                           // tts_normalize / tts_chunks — the /v1/audio/phonemes answer is compared against the facade itself
+require dasllama/dasllama_image   // load_model_uncached: the product's load with no image
 
 // The last cell boots an LLM beside the TTS model (tinyllama-1.1b-chat-v1.0.Q8_0.gguf, skips without it) and
 // holds its engine with an embeddings forward while syntheses are asked. Every other cell:
@@ -966,7 +967,7 @@ def private with_llm_and_speech_server(port : int; blk : block<(base_url : strin
     with_job_status(1) $(finished) {
         new_thread() @() {
             allow_cpu_prefill()
-            var m <- load_model_(LLM_PATH, QuantMode.q8)
+            var m <- load_model_uncached(LLM_PATH, QuantMode.q8)
             set_model(m, "test-llm")
             configure_tts(TTS_PATH)
             run_server(port)   // blocks until POST /shutdown

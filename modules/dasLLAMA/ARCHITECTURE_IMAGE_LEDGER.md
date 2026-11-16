@@ -1,7 +1,7 @@
 # dasLLAMA Architecture - the prepared-image rail, the exception ledger
 
-Companion to `ARCHITECTURE_IMAGE.md`; this document carries the rail's ledgered cases - a lane that mints no image, and the
-suite cells that mint one by design - each section cited by its anchor.
+Companion to `ARCHITECTURE_IMAGE.md`; this document carries the rail's ledgered cases - a lane that mints no image, a
+load that serves with none, and the suite cells that mint one by design - each section cited by its anchor.
 
 ### The assistant drafter is a ledgered non-image lane {#drafter-non-image-lane}
 
@@ -10,6 +10,14 @@ its own blob and never mints a `.dlim`.** The sidecar is 440 MiB, its Q8_0 block
 34-byte form the Metal encoder uploads unrepacked, and the copy takes a fraction of a second - an
 image would shorten nothing. The lane is optional (no sidecar, no drafter) and invisible to
 `dasllama-convert`'s list and GC by design.
+
+### A gguf streamed onto a discrete home is a ledgered non-image load {#live-load-non-image}
+
+**A q8 gguf loaded on an armed discrete home with no lane to write - the image rail off, the image save off, a save
+that lost a write - is served with no image: the mint's walk places its planes on the device live** (`load_gguf_live`;
+`ARCHITECTURE_ENGINE_MEMORY.md#gguf-live-load`, `#failed-save-restarts`). An image built in memory to be served and
+thrown away would hold every plane on the host for a model whose device already holds them. The load is no second mint
+path: the walk and its gather hook are the lane mint's, run with no sink.
 
 ### Suite cells that mint a model image by design {#suite-image-mints}
 

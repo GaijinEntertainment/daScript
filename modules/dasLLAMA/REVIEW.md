@@ -48,9 +48,9 @@ function carrying `[hot_path]`, `[no_alloc]`, `[no_env]` or `[no_io]`.**
 drops a `resize` or an `@exact_size` on a buffer; that adds or changes a module global (an
 `[EnvConfig]` field is a declared environment variable, not a global), a call to a function-typed
 one, or the `[init]` that sets one; that adds or changes code a job runs in a forked context or code
-reachable from a `team_parallel_*` or `maybe_parallel_for*` body; or that changes which load, mint
-or convert function a `utils/dasllama-convert/` file calls, wherever the diff puts it, applies
-`REVIEW_MEMORY.md` (beside this file) too.**
+reachable from a `team_parallel_*` or `maybe_parallel_for*` body; that adds or changes a load arm, a file mapping,
+or what a load or a session keeps on the host; or that changes which load, mint or convert function a
+`utils/dasllama-convert/` file calls, wherever the diff puts it, applies `REVIEW_MEMORY.md` (beside this file) too.**
 
 **A change to what enters `performance/records/`, to a model file's provenance - its source url,
 byte size, sha256 or conversion recipe, wherever it is declared - or to WHICH model file a recorded

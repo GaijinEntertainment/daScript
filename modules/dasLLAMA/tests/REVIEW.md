@@ -176,9 +176,9 @@ image when it checks the image's mint, map or identity, including how a lane pin
 identity (a lane pin picks the weight form, the Metal tensor crowns - the pin that compiles a
 family's half-precision GEMM twins - or the CPU kernel backend a load serves on). A baking loader is
 any load call that writes a `.dlim` beside the model when `DASLLAMA_IMAGE` is unset, itself or
-through a loader it calls. Such a cell loads a GGUF through `load_model_`, and a media carrier in
-memory through the family's `stage_*` paired with its `mint_*`, or `cache_via_image_staged` with an
-empty image path; the cells that break this by design are ledgered at `../ARCHITECTURE_IMAGE_LEDGER.md#suite-image-mints`.
+through a loader it calls. Such a cell loads a GGUF through a load that bakes nothing (`load_model_`
+is one), and a media carrier in memory through the family's `stage_*` paired with its `mint_*`, or
+`cache_via_image_staged` with an empty image path; the cells that break this by design are ledgered at `../ARCHITECTURE_IMAGE_LEDGER.md#suite-image-mints`.
 
 **A predicate whose value the BOX decides (a device capability, a policy default) and that
 therefore cannot differ between two runs on one machine is never tested through its own
@@ -216,8 +216,8 @@ against a paged one) or batch shape that alone differs leaves the logits bit-ide
 such statement covers - different lanes, backends or kernel forms among them - is a defect, and
 takes the forced-feed logits-tolerance form: the same fixed tokens fed to both sides, the logits
 compared within a bar.** A continuation can tie unless every next token is dictated by the prompt's
-own sequence (a count, an arithmetic series, a fixed enumeration); prose always can. An ASR
-transcript compare answers to `REVIEW_MEDIA_CELLS.md`.
+own text (a count, an arithmetic series, a fixed enumeration spelled out in it); prose always can.
+An ASR transcript compare answers to `REVIEW_MEDIA_CELLS.md`.
 
 **A test in this folder that loads a stocked artifact whose producer none of the following names
 is a defect.** Any one of these names the producer: a row in `../performance/model_specs.das`; a

@@ -94,3 +94,10 @@ CPU stages on a PLANAR model (the non-blob form, the only one CPU inference read
 override's stages on that model's blob twin (`blob_twin(t, path, seq_cap)`,
 `_metal_blob_twin.das`), both over one `Session`.** The planar model and its blob twin share one
 shape, so one `Session` serves both.
+
+**A diff that adds a cell loading a model on the Vulkan or CUDA home, or changes the load such a
+cell takes, loads through `load_resident`, or `load_resident_as` / `load_resident_at` with `host`
+false (`_resident_feed.das`), which keep no host copy of the weight planes; only a cell that runs
+CPU inference on that same model, or reads its weight planes, in its own code or a helper it calls,
+loads through `load_resident_host`, or those two with `host` true, or calls `set_host_planes(true)`
+/ `set_vulkan_trim(false)`.** A host copy beside the device's is a load the product never makes.

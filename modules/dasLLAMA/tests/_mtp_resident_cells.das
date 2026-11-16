@@ -105,7 +105,7 @@ def load_mtp_carrier(t : T?; regions : int64; head_off : bool = false) : Model {
     if (head_off) {
         seat = unset_rdec_draft()
     }
-    var tr <- load_resident(path_join(models_dir(), MTP_CARRY_FILE), regions)
+    var tr <- load_resident_host(path_join(models_dir(), MTP_CARRY_FILE), regions)
     if (head_off) {
         reinstall_rdec_draft(seat)
     }
@@ -438,7 +438,7 @@ def mtp_draft_upload_cell(t : T?) {
             declined_draft(tr, s, DRAFT_TOKEN, pos)
             t |> equal(moe_gpu_resident_head_rows(s), pos - 1l, "the device's rows stop below the CPU's two")
             t |> equal(moe_gpu_resident_head_host_rows(s), pos + 1l, "the host holds every row through the CPU's second")
-            var stale_row <- head_k_row_bytes(tr, s, pos + 1l)
+            var stale_row <- head_k_row_marked(tr, s, pos + 1l)
             let drafts0 = moe_gpu_resident_drafts()
             var gpu <- draft_from(tr, s, DRAFT_TOKEN, pos + 1l, h0)
             t |> equal(moe_gpu_resident_drafts(), drafts0 + 1l, "the device drafted row {pos + 1l}")
@@ -458,6 +458,44 @@ def mtp_draft_upload_cell(t : T?) {
             delete gpu
             delete landed_row
             delete stale_row
+            delete h0
+        }
+    }
+}
+
+//! a prompt prefilled with the round off warms no head row, and the draft over it reads rows the prefill stored as zeros: under
+//! the poison start, where a row nothing wrote is NaN, the head's host rows read zero and the device draft lands finite logits
+[cold_path]
+def mtp_draft_unwarmed_cell(t : T?) {
+    t |> run("Qwen3.5-0.8B-MTP: a prompt prefilled with the round off stores its head rows as zeros, and a device draft over them lands finite logits under the poison K/V start") @(t : T?) {
+        with_warm_carrier(t) $(var tr; prompt; var warm) {
+            var h0 <- [for (x in warm.mtp_h); x]
+            let pin = kv_init_pin()
+            set_kv_init(KvInit.poison)
+            var s <- create_session(tr, mirror_kv_dtype())
+            restore_kv_init(pin)
+            var poisoned <- head_k_row_bytes(tr, s, 0l)
+            t |> success(mismatch_exact(poisoned, [for (_b in poisoned); 0xFFu8]) == 0, "control: the fresh session's head row is poison before the prompt")
+            let spec0 = get_mtp_spec()
+            set_mtp_spec(false)
+            forward_prefill(tr, s, prompt, DRAFT_PROMPT, 0l)
+            set_mtp_spec(spec0)
+            s.n_past = DRAFT_PROMPT
+            t |> equal(moe_gpu_resident_head_rows(s), 0l, "the round off, the prompt warmed no head row on the device")
+            for (row in [0l, DRAFT_PROMPT - 2l]) {
+                var stored <- head_k_row_bytes(tr, s, row)
+                t |> success(mismatch_exact(stored, [for (_b in stored); 0u8]) == 0, "the prompt's head row {row} is stored as zeros on the host")
+                delete stored
+            }
+            let drafts0 = moe_gpu_resident_drafts()
+            var d <- draft_from(tr, s, DRAFT_TOKEN, DRAFT_PROMPT - 1l, h0)
+            t |> equal(moe_gpu_resident_drafts(), drafts0 + 1l, "the device drafted over the uploaded rows")
+            let bad = length([for (x in d.logits); x; where !is_finite(x)])
+            t |> equal(bad, 0, "the draft's logits are finite: it read no row nothing wrote")
+            served_every_call(t)
+            delete d
+            delete poisoned
+            delete s
             delete h0
         }
     }
@@ -679,7 +717,7 @@ def mtp_verify_cell(t : T?) {
             prefill_warm(tr, s, prompt)
             let pos = DRAFT_PROMPT
             t |> equal(moe_gpu_resident_head_host_rows(s), pos - 1l, "the prompt warm's rows came down with the chain: the host holds the head's rows below the prompt's last")
-            var head_row0 <- head_k_row_bytes(tr, s, pos - 1l)
+            var head_row0 <- head_k_row_marked(tr, s, pos - 1l)
             var h0 <- [for (x in s.mtp_h); x]
             let drafts0 = moe_gpu_resident_drafts()
             forward_mtp(tr, s, DRAFT_TOKEN, pos - 1l)

@@ -53,7 +53,10 @@ moves it is bytes an expert and which experts the host takes; `rare_hist` under
 `DASLLAMA_GPU_PROF=1` logs the lanes' time per run by row count, the instrument the whole-window
 rate is too noisy to replace. `DASLLAMA_RARE_ONEPASS=0` keeps the three region-list GEMV passes
 with the act and requant between them, `DASLLAMA_RARE_BATCHED=0` the rows core a row inside the
-one-pass structure - the two A/B arms.
+one-pass structure - the two A/B arms. A biased stack's rows (gpt-oss) take their expert's bias rows off `fblob`
+where the three-pass form's GEMVs add them - the gate and the up bias before the act, the down bias before the row is
+parked or reduced - since the rail's kernels carry none (`rail_add_bias` on the one-row rail, the lane's own adds in
+the window's pass).
 
 **The GPU head runs an expert at a time, each expert a transfer submit and a compute submit
 that waits its own copy** (`vk_moe_ffn_xf_begin_experts`). In the regions' order - the LPT

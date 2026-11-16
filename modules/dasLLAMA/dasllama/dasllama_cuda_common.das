@@ -11,6 +11,7 @@ require dasllama/dasllama_lint public
 require cuda/das_cuda_boost public
 require dasllama/dasllama_gpu_rail public   // the tower rail's roles and profile roles; `CutRail` below is this home's rail
 require dasllama/dasllama_env
+require daslib/rtti   // this_context: the context that brought the device up is the one whose end releases it
 
 //! the device state the CUDA home's dispatch rail reads: the primary context, one stream, the warp as the subgroup
 struct CudGpu {
@@ -27,6 +28,7 @@ struct CudGpu {
     side : CudSide           //! the rail's side streams, a fork's branches (`rail_fork`)
     commit : void?           //! the recurrent commit's stream: a hybrid round's kept rows scan into their slots beside the drafter's pass
     dry : bool              //! the lane mint's walk: every seat runs its accept / refuse arithmetic and allocates and uploads nothing (`cud_mint_dry`)
+    owner_ctx : uint64       //! the context that brought this state up - the only one whose end releases it
 }
 
 struct CudCopy {
@@ -93,6 +95,7 @@ def private cud_init_first() : bool {
     }
     g_cud.side.fork = cuda_event_create_untimed()
     g_cud.ready = true
+    g_cud.owner_ctx = intptr(unsafe(addr(this_context())))
     cuda_set_launch_pdl(g_cud.sm >= 90 && g_env_vulkan.cuda_pdl != 0l)   // every kernel of the home comes through the emitter, which puts the entry wait in each
     to_log(LOG_INFO, "dasLLAMA cuda tier: device ready ({g_cud.name}, {g_cud.sm_count} SMs, sm_{g_cud.sm}, driver {cuda_driver_version()}, nvrtc {cuda_nvrtc_version()}, programmatic dependent launch {cuda_launch_pdl() ? "on" : "off"})\n")
     return true
@@ -147,6 +150,13 @@ def cud_shutdown() {
     g_cud.cc = null
     g_cud.ready = false
     g_cud.tried = false
+}
+
+//! this context's device state given back at its end: `cud_shutdown` where the device came up and the ending thread binds it
+[finalize, arch(at="../ARCHITECTURE_GPU.md#cuda-context-release")]
+def cud_context_release {
+    return if (!g_cud.ready || g_cud.owner_ctx != intptr(unsafe(addr(this_context()))) || !cuda_bind_context(g_cud.cc))
+    cud_shutdown()
 }
 
 def cud_sync() : bool => g_cud.ready && cuda_stream_synchronize(g_cud.stream)

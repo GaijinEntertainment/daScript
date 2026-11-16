@@ -70,6 +70,7 @@ void * das_dread_open ( const char * path, uint64_t band_bytes );
 int64_t das_dread_at ( void * h, uint64_t off, void * dst, uint64_t bytes );
 bool das_dread_close ( void * h );
 bool das_prefetch_map ( void * base, uint64_t bytes );
+bool das_release_map ( void * base, uint64_t bytes );
 
 namespace das {
 
@@ -276,6 +277,7 @@ namespace das {
     int64_t builtin_dread_at ( void * h, uint64_t off, void * dst, uint64_t bytes, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
     bool builtin_dread_close ( void * h, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
     bool builtin_prefetch_map ( void * base, uint64_t bytes, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
+    bool builtin_release_map ( void * base, uint64_t bytes, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
     int64_t builtin_ftell ( const FILE * f, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
     int64_t builtin_fseek ( const FILE * f, int64_t offset, int32_t mode, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
     char * builtin_fread ( const FILE * f, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
@@ -911,6 +913,14 @@ namespace das {
     bool builtin_prefetch_map ( void * base, uint64_t bytes, Context * context, LineInfoArg * at ) {
         if ( !base && bytes ) context->throw_error_at(at, "prefetch_map: null base");
         return das_prefetch_map(base, bytes);
+    }
+
+    // let the whole pages of a read-only FILE mapping's range leave the resident set; they fault back
+    // from the file. false = no whole page in the range, or the OS declined. Never for memory that is
+    // not a file mapping: Linux zero-fills private anonymous pages on the same call.
+    bool builtin_release_map ( void * base, uint64_t bytes, Context * context, LineInfoArg * at ) {
+        if ( !base && bytes ) context->throw_error_at(at, "release_map: null base");
+        return das_release_map(base, bytes);
     }
 
     // plain ftell/fseek take `long`, which is 32-bit on Windows (LLP64) — use the explicit
@@ -3430,6 +3440,9 @@ namespace das {
             addExtern<DAS_BIND_FUN(builtin_prefetch_map)>(*this, lib, "prefetch_map",
                 SideEffects::modifyExternal, "builtin_prefetch_map")
                     ->args({"base","bytes","context","line"})->unsafeOperation = true;
+            addExtern<DAS_BIND_FUN(builtin_release_map)>(*this, lib, "release_map",
+                SideEffects::modifyExternal, "builtin_release_map")
+                    ->args({"base","bytes","context","line"})->unsafeOperation = true;
             addExtern<DAS_BIND_FUN(builtin_fgets)>(*this, lib, "fgets",
                 SideEffects::modifyExternal, "builtin_fgets")
                     ->args({"file","context","line"})->setTempStringResult();
@@ -3754,6 +3767,7 @@ int munmap ( void* start, size_t ) {
 #if DAS_NO_FILEIO
 
 bool das_prefetch_map ( void *, uint64_t ) { return false; }
+bool das_release_map ( void *, uint64_t ) { return false; }
 
 #else
 
@@ -3779,6 +3793,33 @@ bool das_prefetch_map ( void * base, uint64_t bytes ) {
 #endif
 #else
     return madvise(base, (size_t)bytes, MADV_WILLNEED)==0;
+#endif
+}
+
+// The whole pages inside [base, base+bytes) of a read-only file mapping leave the resident set.
+// No one call does it everywhere: Linux drops them on MADV_DONTNEED; Darwin only deactivates
+// there and drops them on msync(MS_INVALIDATE); Windows has no call for a mapped view, and
+// VirtualUnlock of a range that is not locked removes it from the working set (it fails with
+// ERROR_NOT_LOCKED, which is the success here).
+bool das_release_map ( void * base, uint64_t bytes ) {
+    if ( !base || bytes==0 ) return false;
+#if defined(_WIN32)
+    SYSTEM_INFO si;
+    GetSystemInfo(&si);
+    const uintptr_t page = (uintptr_t) si.dwPageSize;
+#else
+    const uintptr_t page = (uintptr_t) sysconf(_SC_PAGESIZE);
+#endif
+    const uintptr_t lo = ((uintptr_t) base + page - 1) & ~(page - 1);
+    const uintptr_t hi = ((uintptr_t) base + (uintptr_t) bytes) & ~(page - 1);
+    if ( hi<=lo ) return false;
+#if defined(_WIN32)
+    if ( VirtualUnlock((void *) lo, (SIZE_T)(hi - lo)) ) return true;
+    return GetLastError()==ERROR_NOT_LOCKED;
+#elif defined(__APPLE__)
+    return msync((void *) lo, (size_t)(hi - lo), MS_INVALIDATE)==0;
+#else
+    return madvise((void *) lo, (size_t)(hi - lo), MADV_DONTNEED)==0;
 #endif
 }
 

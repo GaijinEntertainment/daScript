@@ -65,6 +65,31 @@ def test_vulkan_mint_lanes(tst : T?) {
     }
 }
 
+[test(description = "With no lane to write, a Vulkan-armed load of Qwen3.5-0.8B-MTP streams the gguf onto the device and keeps no planar plane on the host; it serves the lane tokens, re-arms off the gguf, refuses a CPU call by name, and keeps its planes under the host-planes ask")]
+def test_vulkan_live_load(tst : T?) {
+    tst |> run("Qwen3.5-0.8B-MTP: the gguf streamed onto the device with no host planes serves the lane's tokens, re-arms, and refuses the CPU by name; the host-planes ask keeps the planes") @(t : T?) {
+        with_mint_file(t, "qwen35", MINT_FILE) $(path) {
+            live_cell(t, path)
+        }
+    }
+}
+
+//! the families whose trimmed lane the whole-model driver serves beside the dense q8 one: biased routed experts over an untied
+//! q8 token table, per-layer embeddings, and the gemma-4 routed block with its dense shared expert
+let private FAMILY_LANES <- [(family = "gptoss", file = "gpt-oss-20b-mxfp4.gguf"), (family = "gemma4e", file = "gemma-4-E2B-it-Q8_0.gguf"),
+    (family = "gemma4moe", file = "gemma-4-26B-A4B-it-Q4_K_M.gguf")]
+
+[test(description = "gpt-oss-20b, gemma-4-E2B and gemma-4-26B each mint a trimmed Vulkan lane with no planar family on the host, and the lane - cold, warm and re-armed - serves the live load's greedy tokens exactly with the token rows gathered on the device wherever a load with its planes on the host gathers them")]
+def test_vulkan_mint_family_lanes(tst : T?) {
+    for (fam in FAMILY_LANES) {
+        tst |> run("{fam.file}: the trimmed lane serves the live load's tokens cold, warm and re-armed, the token rows gathered where the staged load's are") @(t : T?) {
+            with_mint_file(t, fam.family, fam.file) $(path) {
+                family_lane_cell(t, path)
+            }
+        }
+    }
+}
+
 let private MOE_FILE = "Qwen1.5-MoE-A2.7B-Chat-Q4_K_M-local.gguf"
 let private MOE_HOST_LAYERS = 20l   //! routed layers asked onto the host: their stacks stream, the plan's room arms the unasked pool beside the mirror
 
@@ -256,33 +281,44 @@ def test_vulkan_mint_trim_refused_unarmed(tst : T?) {
     }
 }
 
-[test(description = "A lane mint whose write the fault seam fails publishes no lane and leaves no temp file, yet the load serves from memory; with the seam off the next load mints the lane the driver serves")]
+[test(description = "A lane mint whose write the fault seam fails - a megabyte in, and half way through a lane that carries its planar families - publishes no lane, leaves no temp file, and the load streams the gguf onto the device and serves the lane tokens; with the seam off the next load mints the lane")]
 def test_vulkan_mint_failed_write_leaves_nothing(tst : T?) {
-    tst |> run("Qwen3.5-0.8B-MTP: a mint whose write fails writes no lane, leaves no temp file and still serves; the next load mints") @(t : T?) {
+    tst |> run("Qwen3.5-0.8B-MTP: a mint whose write fails early or late writes no lane, leaves no temp file and serves live off the gguf; the next load mints") @(t : T?) {
         with_mint_file(t, "qwen35", MINT_FILE) $(path) {
             with_cold_lane(t, path, "the model") $(var plain; img_v) {
+                let lane_bytes = stat(img_v).size
+                var a <- witness_steps(t, plain, "the lane")
                 delete plain
                 moe_gpu_drop_model()
-                remove(img_v)
                 let fault_found = get_image_write_fault()
-                let hits_found = image_write_fault_hits()
-                let tmps_found = image_tmp_count(img_v)
-                set_image_write_fault(1ul << 20ul)
-                var held <- load_cached_q8(path)
-                set_image_write_fault(0ul)
-                t |> success(image_write_fault_hits() != hits_found, "the seam failed a write of this load's mint")
-                t |> success(!stat(img_v).is_valid, "the mint whose write failed published no lane")
-                t |> equal(image_tmp_count(img_v), tmps_found, "and left no temp file of its own beside it")
-                t |> success(held.image_map != null && !stat(image_path_for(path, "", "q8")).is_valid,
-                    "the load serves the streamed build from memory - an image is in hand and neither lane's file is on disk")
-                delete held
-                moe_gpu_drop_model()
+                for (after, when in [1ul << 20ul, lane_bytes / 2ul], ["a megabyte in", "half way through the lane"]) {
+                    remove(img_v)
+                    let hits_found = image_write_fault_hits()
+                    let tmps_found = image_tmp_count(img_v)
+                    let live_found = gguf_live_loads()
+                    set_image_write_fault(after)
+                    var held <- load_cached_q8(path)
+                    set_image_write_fault(0ul)
+                    t |> success(image_write_fault_hits() != hits_found, "{when}: the seam failed a write of this load's mint")
+                    t |> success(!stat(img_v).is_valid, "{when}: the mint whose write failed published no lane")
+                    t |> equal(image_tmp_count(img_v), tmps_found, "{when}: ... and left no temp file of its own beside it")
+                    t |> success(gguf_live_loads() == live_found + 1l && held.image_map == null && moe_gpu_resident_active()
+                        && !stat(image_path_for(path, "", "q8")).is_valid,
+                        "{when}: the load streams the gguf onto the device - no image in hand, neither lane's file on disk")
+                    var b <- witness_steps(t, held, "the load after the failed write")
+                    log_gen_texts(held, "lane / after the failed write, {when}", a.ids, b.ids)
+                    t |> equal(mismatch_exact(a.ids, b.ids), 0, "{when}: ... and serves the lane's tokens (both streams decoded above)")
+                    delete b
+                    delete held
+                    moe_gpu_drop_model()
+                }
                 remove(image_path_for(path, "", "q8"))
                 var again <- load_cached_q8(path)
                 t |> success(stat(img_v).is_valid && moe_gpu_resident_active(), "control: with the seam off the next load mints the lane and the driver serves it")
                 delete again
                 moe_gpu_drop_model()
                 set_image_write_fault(fault_found)
+                delete a
             }
         }
     }

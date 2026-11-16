@@ -1,7 +1,8 @@
 # dasLLAMA GPU Resident-Session Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-docs: `ARCHITECTURE_GPU.md`, `ARCHITECTURE_GPU_MTP.md`, `ARCHITECTURE_GPU_VULKAN_NROW.md`. Planned work:
+docs: `ARCHITECTURE_GPU.md`, `ARCHITECTURE_GPU_MTP.md`, `ARCHITECTURE_GPU_VULKAN_NROW.md`,
+`ARCHITECTURE_ENGINE_MEMORY.md`. Planned work:
 `followup_metal.md`, `followup_vulkan.md`, `followup_general.md` (the CUDA rows).
 
 **A diff never hands a whole GPU call that the device served before the diff - a resident decode
@@ -37,8 +38,9 @@ host-cached sessions when none is.** The driver panics on a device-home session 
 **A diff that calls a listed setter calls it before the load it governs - the `set_gpu_*` and
 `reset_gpu_*` functions of `dasllama/dasllama_core.das`, `set_pf_window_rows_pin`,
 `set_expert_cache_mb`, `set_gpu_want_pf_stream`, `set_cuda_mmq_pin`, `set_resident_upload_fault`,
-`set_moe_gpu_streams`, `vk_rdec_chain_mode_set`, `cud_rdec_chain_mode_set`,
-`install_moe_gpu_resident_site_feeds`, `install_moe_gpu_resident_kv_ring`,
+`set_cuda_window_fault_`, `set_moe_gpu_streams`, `vk_rdec_chain_mode_set`,
+`cud_rdec_chain_mode_set`, `install_moe_gpu_resident_site_feeds`,
+`install_moe_gpu_resident_kv_ring`,
 `install_moe_gpu_resident_kv_share`, and the home's seat switchers `set_gpu_home_`,
 `reset_gpu_home_seats` and `reinstall_gpu_home_seats`; this list is the trigger.** The load reads these values once,
 to decide what the whole-model GPU driver holds on the device; a value set after the load never
@@ -63,6 +65,20 @@ status page prints those words to a reader who never saw the engine.
 scheduler's device mode off (`set_device_kv(sch, false)`) before its next step, in the same
 change.** The drop releases the regions, and a scheduler left in device mode admits the next
 stream as device-home onto none.
+
+**A diff that adds a model family, a weight format, or a model feature - a layer kind, a table, a
+bias - that a discrete home serves ships it served from that home's trimmed lane, with a test that
+loads the lane and serves from it - never a new `resident_trim_decline` answer, or a wider one,
+for which `resident_trim_decline_is_run_mode` is false (a refusal of the model for every run of the
+file).** A discrete home is a backend serving on a device whose memory is not the host's, its
+trimmed lane the `.dlim` holding the device's planes and no host copy of them; a model with no
+trimmed lane loads every plane twice.
+
+**A device allocation a diff adds that runs after the residency plan (`resident_plan_carved`) has
+sized device memory - during the driver's load-time uploads or later - checks its result where it
+is made, and a failed one refuses by name before any kernel launches over it: a decline during the
+uploads, or a panic naming the call that needs it.** The plan sizes memory but does not reserve
+it, so an allocation the plan counted can still come back null.
 
 **A change to the bake-trim path in `dasllama/dasllama_gpu_resident.das` (`trim_model_planes`)
 names in the PR body a `dasllama-convert --trim` bake plus a serve of the trimmed image, on one q8

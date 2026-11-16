@@ -8,6 +8,7 @@ require _server_rig                 // models_dir (sibling)
 require constraints                 // the constraint fields' reader and the grammar constraint (sibling)
 require dasllama/dasllama
 require dasllama/dasllama_common    // load_model_: the plain loader, which mints no image
+require dasllama/dasllama_image   // load_model_uncached: the product's load with no image
 require lr1/lr1
 require lr1/gbnf
 require daslib/json
@@ -201,7 +202,7 @@ def test_grammar_constraint_walk(t : T?) {
 }
 
 def private grammar_walk_cell(t : T?) {
-    var m <- load_model_(MODEL_PATH, QuantMode.q8)   // the plain loader: a test never mints an image beside the model
+    var m <- load_model_uncached(MODEL_PATH, QuantMode.q8)   // the plain loader: a test never mints an image beside the model
     let vocab = int(m.config.vocab_size)
     token_pieces(m, 0)
     // the piece table: a mid-sentence SentencePiece token keeps its leading space, the first token the same

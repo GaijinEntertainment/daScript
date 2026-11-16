@@ -406,6 +406,7 @@ struct CudRdec {
     v_said : bool            //! the verify's decline said once a residency
     //! the window chain's head warm (`crd_window_head_warm`): the window's embed rows kept, the shifted carry rows, the cat rows and their feed, the head's own rope rows and schedules
     pf_head_ask, pf_head_declined : bool
+    pf_failed : bool   //! the window chain's planes found no room on the device: a window panics by name, no kernel launches over them
     pf_head_rows : int64
     pf_hemb, pf_hsrc, pf_hna, pf_hnb, pf_hcat, pf_hcos : uint64
     pf_hcatf, pf_hcatq, pf_hcats, pf_hcatsum, pf_hcat4q, pf_hcat4s, pf_hcatrs : uint64
@@ -622,6 +623,11 @@ def cud_drop_model {
     cud_arena_free()
 }
 
+[init]
+def dasllama_cuda_decode_register {
+    cud_on_shutdown(@@cud_drop_model)   //! the installed model's device state goes ahead of the device
+}
+
 //! the carry armed past prepare (the assistant drafter's attach): the last layer's residual step keeps its post-norm row and the
 //! commands land it in the out block, which holds the rows from prepare; the captured graphs go, the next step re-captures with the landing
 def cud_rdec_carry_arm(on : bool) : bool {
@@ -835,6 +841,7 @@ def cud_rdec_upload_norms(norms : array<float>; obias : bool) {
         pair[1] = 1.0
         cuda_memcpy_htod(g_crd.norms + uint64(g_crd.ar_scal_off * 4l), addr<void?>(pair[0]), 8ul, g_cud.stream)
     }
+    crd_pf_setup(*g_crd)   //! the last upload of the arm: the plan charged the window chain's planes, so they are taken now, before a later attach can take their room
 }
 
 //! the [q | k | v] projection bias rows, a layer's at its `boff` (`install_moe_gpu_resident_bias`'s seat), which the rope passes add
@@ -4347,10 +4354,43 @@ def private crd_gemm(var sc : CudSched; fmt : int; wblk : int64; a : CudArena; x
     }
 }
 
+var private g_crd_pf_fault = false   //! the test seat's pin: the next arm's window planes read as having found no room
+
+//! Test seat: the window chain's planes read as having found no room at every arm until pinned back; answers the pin it replaced.
+def set_cuda_window_fault_(on : bool) : bool {
+    let was = g_crd_pf_fault
+    g_crd_pf_fault = on
+    return was
+}
+
+//! whether the armed driver holds its window chain's planes: they are taken at the arm, before any prompt
+def cuda_window_planes_held : bool => g_crd != null && g_crd.pf_np > 0l && !g_crd.pf_failed
+
 //! the window chain's planes, once a residency: np rows a plane at the model's widest layer, the f16 feeds carrying the tiles'
 //! read slack, a schedule buffer a role a layer
+[arch(at="../ARCHITECTURE_ENGINE_MEMORY.md#cuda-window-planes-at-arm")]
 def private crd_pf_setup(var r : CudRdec) {
     return if (r.pf_np > 0l)
+    let failures = cud_dev_failures()
+    crd_pf_planes(r)
+    let host_cut_null = r.experts_host && (r.pf_ones == 0ul || r.pf_ident == 0ul)   //! the two planes `buf_upload` takes, which no failure count sees
+    r.pf_failed = g_crd_pf_fault || cud_dev_failures() != failures || host_cut_null
+    if (r.pf_failed) {
+        to_log(LOG_ERROR, "dasLLAMA cuda resident: the window chain's planes ({r.pf_np} rows) found no room on the device ({cuda_last_error()}) - a prompt window will refuse by name\n")
+    }
+}
+
+//! the window chain's planes for a window about to run: set up where the arm did not, and a refusal by name where the card
+//! had no room for them
+def private crd_pf_ready(var r : CudRdec) {
+    crd_pf_setup(r)
+    if (r.pf_failed) {
+        panic("dasLLAMA cuda resident: the window chain's planes found no room on the device when the driver armed - the card was full before the residency plan's scratch was taken; lower the context (DASLLAMA_GPU_CTX_MAX) or free the card")
+    }
+}
+
+//! `crd_pf_setup`'s allocations
+def private crd_pf_planes(var r : CudRdec) {
     let np = pf_window_rows()
     r.pf_wlen = np
     if (r.hybrid && np > DN_WINDOW) {
@@ -5268,7 +5308,7 @@ def private crd_cap_win_room(var r : CudRdec; npos : int64; hidden : bool) {
 //! `feed(w0, wlen)` putting a window's rows into pf_x, its rope rows up, the chain, and each segment's logits off its slot of the
 //! out block
 def private crd_prefill_windows(var r : CudRdec; cos_batch : array<float>; segs : array<RdecPfSeg>; var logits : array<float>; experts : RdecHostExpertsRowsFn; feed : block<(w0 : int64; wlen : int64) : void>) {
-    crd_pf_setup(r)
+    crd_pf_ready(r)
     let hidden = g_crd_hidden_ask   // an embedding's call: every row's final residual lands, no classifier runs, no segment needs a logits slot
     if (empty(segs) || (!hidden && long_length(segs) > CRD_NB)) {
         panic("cud prefill: {long_length(segs)} segments - the out block holds {CRD_NB} logits slots")
@@ -5366,7 +5406,8 @@ def private crd_prefill_x(var r : CudRdec; x_batch, cos_batch, ple_rows : array<
 def private crd_prefill_ids(var r : CudRdec; tokens : array<int64>; emb_scale : float; cos_batch : array<float>; segs : array<RdecPfSeg>; var logits : array<float>; experts : RdecHostExpertsRowsFn) {
     assert(crd_emb_on(r), "cud prefill over ids without a token table on the device")
     assert(r.ple <= 0l || crd_side_gather_on(r), "cud prefill over ids on a per-layer-embedding model without its table and projection on the device")
-    var words <- [for (tk in tokens); uint(tk)]
+    crd_pf_ready(r)   //! the refusal by name comes ahead of the ids' upload: a panic past it would leave that buffer on the card
+    var inscope words <- [for (tk in tokens); uint(tk)]
     let ids = buf_upload(words, g_cud.stream)
     crd_prefill_windows(r, cos_batch, segs, logits, experts) $(w0, wlen) {
         crd_emb_gather(r, g_cud.stream, ids + uint64(w0 * 4l), r.pf_x, r.pf_x, wlen, emb_scale)

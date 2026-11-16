@@ -22,6 +22,7 @@ require daslib/f16_cvt   // f32_to_f16 — the trim pass re-packs the emb scale 
 require daslib/enum_trait
 require dasllama/dasllama_par
 require dasllama/dasllama_env
+require dasllama/dasllama_gpu_stream_cache   // stream_read_span: a span of the lane file
 require daslib/fio
 require strings
 require dasllama/dasllama_moe   // moe_select + moe_routed_sum: the host's routed sum between a split token command's segments
@@ -74,15 +75,51 @@ var private g_vk_image_vkblob_off = 0l
 var private g_vk_image_vkblob_bytes = 0l
 var private g_vk_stream_sources : table<int64; MoeGpuStreamSource>
 
-//! the loader names the image file whose vkblob section the slice walk reads, before the walk; a chunk-built image clears it
-def vk_image_source_set(path : string; vkblob_off, vkblob_bytes : int64) {
+//! the file a loaded model's device content comes from again at a re-arm: a lane's file with its device twin's place in it,
+//! or - `bytes` 0 - the gguf a live load streamed
+struct RearmSource {
+    path : string
+    off : int64
+    bytes : int64
+}
+
+//! a loaded model's re-arm source by `model_planes_key`, kept past the model's drop - a re-arm follows one - and replaced
+//! by the next load at the key
+var private g_rearm_sources : table<uint64; RearmSource>
+
+def rearm_source_set(key : uint64; path : string; off, bytes : int64) {
+    g_rearm_sources |> insert(key, RearmSource(path = path, off = off, bytes = bytes))
+}
+
+//! the source the model at `key` named; an empty path where it named none
+def rearm_source(key : uint64) : RearmSource => g_rearm_sources?[key] ?? RearmSource()
+
+//! the loader names the image file whose vkblob section the slice walk reads, before the walk; a chunk-built image clears it.
+//! `base`, the image's base where the file backs it, keeps the name for the model's re-arm (`vk_image_source_recall`)
+def vk_image_source_set(path : string; vkblob_off, vkblob_bytes : int64; base : void? = null) {
     g_vk_image_path = path
     g_vk_image_vkblob_off = vkblob_off
     g_vk_image_vkblob_bytes = vkblob_bytes
+    if (base != null && !empty(path)) {
+        rearm_source_set(intptr(base), path, vkblob_off, vkblob_bytes)
+    }
 }
 
 def vk_image_source_clear() {
     vk_image_source_set("", 0l, 0l)
+}
+
+//! every parse over `base` forgets the file an earlier image at that address named
+def vk_image_source_forget(base : void?) {
+    g_rearm_sources |> erase(intptr(base))
+}
+
+//! the file the image at `base` was loaded from named again as the slice walk's source; false where it named none
+def vk_image_source_recall(base : void?) : bool {
+    let src = rearm_source(intptr(base))
+    return false if (base == null || src.bytes == 0l)
+    vk_image_source_set(src.path, src.off, src.bytes)
+    return true
 }
 
 def private vk_stream_source_provider(woff : int64; fmt : int) : MoeGpuStreamSource {
@@ -161,6 +198,19 @@ def vulkan_mint_end {
     moe_gpu_mint_dry(false)
 }
 
+//! Arm the live streamed load for the next GPU walk: each entry gathers through `gather` and goes to the device as the walk
+//! places it - no plan collected, no sink, the device not dry
+def vulkan_live_begin(gather : VkMintGatherFn) {
+    g_vk_bake = VkBakeMode.off
+    g_vk_bake_role = VkBakeRole.none
+    g_vk_mint_on = true
+    g_vk_mint_gather = gather
+}
+
+def vulkan_live_end {
+    g_vk_mint_on = false
+}
+
 [unused_argument(p, nbytes)]
 def private vk_mint_count_sink(p : void?; nbytes : uint64) {}
 
@@ -220,6 +270,8 @@ def vulkan_bake_slice_begin {
     g_vk_bake_cursor = 0l
     g_vk_slice_windows |> clear()
     g_vk_stream_sources |> clear()
+    g_vk_slice_copies = 0l
+    vk_slice_file_close()
 }
 
 //! Disarm after a successful flavor load; a partially-consumed plan means the walk diverged
@@ -228,13 +280,19 @@ def vulkan_bake_slice_end(t : Model) {
     if (g_vk_bake != VkBakeMode.off && g_vk_bake_cursor != long_length(t.vkplan)) {
         to_log(LOG_WARNING, "dasLLAMA vulkan image: the GPU walk consumed {g_vk_bake_cursor} of {length(t.vkplan)} baked gathers - the image is stale for this run's shape, consider rebaking\n")
     }
+    if (g_vk_slice_copies > 0l) {
+        to_log(LOG_INFO, "dasLLAMA vulkan image: the GPU walk copied {g_vk_slice_copies} baked plane(s) out of the mapping, faulting the lane's pages in, where a lane read leaves them out ({g_vk_slice_copy_why})\n")
+        g_vk_slice_copies = 0l
+    }
     g_vk_bake = VkBakeMode.off
+    vk_slice_file_close()
 }
 
 //! Disarm without verification (a flavor-load attempt that never ran the walk).
 def vulkan_bake_disarm {
     g_vk_bake = VkBakeMode.off
     g_vk_mint_on = false
+    vk_slice_file_close()
 }
 
 //! the RAM blob as the bake's sink: `nbytes` from `p` appended (long_ forms - the blob crosses the int32 array rail)
@@ -298,6 +356,76 @@ def private vk_bake_slice_off(n, rows : int64; fmt : int; var wq : array<uint8>;
     return false
 }
 
+var private g_vk_slice_file : file          //! the lane file a slice walk reads its planes off: open from the walk's first read to its end
+var private g_vk_slice_file_reads = 0l      //! the baked planes read off the lane file since the process began
+
+//! the baked planes the slice walks read off the lane file, the mapping untouched
+def vk_slice_file_reads() : int64 => g_vk_slice_file_reads
+
+var private g_lane_read_set = false
+var private g_lane_read = false
+
+//! the lane read in process (`DASLLAMA_LANE_READ`'s twin): the next slice walk reads its planes off the lane file, or copies them out of the mapping
+def set_lane_read(on : bool) {
+    g_lane_read_set = true
+    g_lane_read = on
+}
+
+//! whether a slice walk reads its planes off the lane file: the in-process lever where one was set, else the knob
+def lane_read() : bool => g_lane_read_set ? g_lane_read : g_env_vulkan.lane_read
+
+//! whether an in-process lever shadows `DASLLAMA_LANE_READ`: a fixture reads it beside `lane_read()` and puts both back through `restore_lane_read`
+def lane_read_lever_set() : bool => g_lane_read_set
+
+//! the lane read lever put back as a fixture found it
+def restore_lane_read(was_set : bool; on : bool) {
+    g_lane_read_set = was_set
+    g_lane_read = on
+}
+
+def private vk_slice_file_close {
+    if (g_vk_slice_file != null) {
+        fclose(g_vk_slice_file)
+        g_vk_slice_file = null
+    }
+}
+
+def private vk_slice_read_span(off : int64; var dst : array<uint8>; bytes : int64) {
+    if (!stream_read_span(g_vk_slice_file, off, bytes > 0l ? unsafe(addr<void?>(dst[0])) : null, bytes)) {
+        panic("dasLLAMA image: '{g_vk_image_path}' came up short reading {bytes} bytes at {off} - the lane is corrupt, delete it to re-mint")
+    }
+}
+
+var private g_vk_slice_copies = 0l      //! the baked planes this slice walk copied out of the mapping
+var private g_vk_slice_copy_why = ""    //! why the first of them did not come off the lane file
+
+//! a baked plane the slice walk copies out of the mapping: counted for the walk's closing line, the first one's reason kept
+def private vk_slice_copy_note(why : string) : bool {
+    if (g_vk_slice_copies == 0l) {
+        g_vk_slice_copy_why = why
+    }
+    g_vk_slice_copies++
+    return false
+}
+
+//! the baked plane `e` read off the lane file into `wq` / `ws`, both sized by the caller; false where the walk has no lane file
+//! (a chunk-built image, a re-arm past the model's drop) or the knob keeps the copy out of the mapping
+[arch(at="../ARCHITECTURE_IMAGE_VULKAN.md#lane-file-read")]
+def private vk_slice_from_file(e : VkPlanEntry; var wq : array<uint8>; var ws : array<uint8>) : bool {
+    let in_lane = e.wq_off + e.wq_bytes <= g_vk_image_vkblob_bytes && e.ws_off + e.ws_bytes <= g_vk_image_vkblob_bytes
+    if (!lane_read()) return vk_slice_copy_note("the lane read is off - DASLLAMA_LANE_READ=0, or set_lane_read(false) in process; unset reads the file")
+    if (empty(g_vk_image_path)) return vk_slice_copy_note("the walk has no lane file")
+    if (!in_lane) return vk_slice_copy_note("a plane lies outside the lane's device twin")
+    if (g_vk_slice_file == null) {
+        g_vk_slice_file = fopen(g_vk_image_path, "rb")
+        if (g_vk_slice_file == null) return vk_slice_copy_note("'{g_vk_image_path}' did not open")
+    }
+    vk_slice_read_span(g_vk_image_vkblob_off + e.wq_off, wq, e.wq_bytes)
+    vk_slice_read_span(g_vk_image_vkblob_off + e.ws_off, ws, e.ws_bytes)
+    g_vk_slice_file_reads++
+    return true
+}
+
 def private vk_bake_slice(t : Model; fmt : int; woff, n, rows : int64;
                           var wq : array<uint8>; var ws : array<uint8>) : bool {
     if (g_vk_bake != VkBakeMode.slice) {
@@ -340,6 +468,7 @@ def private vk_bake_slice(t : Model; fmt : int; woff, n, rows : int64;
         "vulkan image: a baked plane exceeds the int-indexed array cap")
     wq |> grow_resize(e.wq_bytes)
     ws |> grow_resize(e.ws_bytes)
+    return true if (vk_slice_from_file(e, wq, ws))
     unsafe {
         // int64 blob indexing — wq_off crosses INT32_MAX on multi-GB bakes
         if (e.wq_bytes > 0l) {
@@ -457,12 +586,19 @@ def trim_model_planes(var t : Model) : bool {
     if (!trim_pack_emb(t, t, 0l)) {
         return false
     }
+    trim_drop_planes(t)
+    return true
+}
+
+//! `t` left with no planar weight family - the planes `trim_plane_dropped` names - and flagged so: what a trimmed lane and
+//! a gguf streamed live onto the device both hold on the host is the rest
+[arch(at="../ARCHITECTURE_ENGINE_MEMORY.md#host-holds-what-it-reads")]
+def trim_drop_planes(var t : Model) {
     t.planes_trimmed = true
     delete t.qblob
     delete t.qscales
     delete t.qscales16
     delete t.wblob
-    delete t.bf16blob
     delete t.q4blob
     delete t.q4scales
     for (f in type<KqFmt>) {
@@ -471,7 +607,6 @@ def trim_model_planes(var t : Model) : bool {
             delete s
         }
     }
-    return true
 }
 
 //! the section names of `f`'s plane pair (`kq_plane_pair`); "" for a format that keeps none
@@ -652,11 +787,11 @@ def private resident_emb_fmt_ok(f : KqFmt) : bool => f == KqFmt.q8 || kq_sb(f) |
 
 //! an untied token table's own plane the gather places: its q8 copy or its K-quant plane, in its format at its offset; `on` false
 //! where the table is tied (the classifier's plane serves the gather), has no such plane (an fp32 table: the host embeds), its
-//! format has no gather, or the image trimmed it
+//! format has no gather, or the walk is a trimmed lane's mint, which bakes no entry for it
 [arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#vk-token-gather")]
 def private resident_emb_plane(t : Model) : tuple<on : bool; f : KqFmt; off : int64> {
     let none = (on = false, f = KqFmt.q8, off = -1l)
-    return none if (t.config.shared_weights || t.planes_trimmed)
+    return none if (t.config.shared_weights || (t.planes_trimmed && g_vk_bake == VkBakeMode.collect))
     if (t.emb_q8) return (on = true, f = KqFmt.q8, off = t.emb_q8_off)
     return (emb_kq(t) && resident_emb_fmt_ok(t.emb_fmt)) ? (on = true, f = t.emb_fmt, off = t.emb_kq_off) : none
 }
@@ -1664,6 +1799,8 @@ def resident_run_mode_decline : string {
 let private TRIM_ROUTE_DECLINE = "the whole-model driver is not asked for (DASLLAMA_GPU_RESIDENT, set_gpu_resident_route)"
 let private TRIM_PLAN_DECLINE = "the residency plan does not fit the card"
 let private TRIM_STREAM_DECLINE = "the plan serves routed layers on the host and the prompt stream is off (DASLLAMA_GPU_PF_STREAM, set_gpu_want_pf_stream) - a trimmed MoE lane reads its host layers' experts off their stream mirrors"
+//! Non-private: the decline-kind cell reads it
+let TRIM_PLE_DECLINE = "the per-layer embedding table is not on the device (DASLLAMA_VK_GPU_EMBED off, no seat for it on this home, or no room past the weights and the K/V) - the host would gather its rows off a plane the lane does not carry"
 let private TRIM_RAIL_DECLINE = "the rare rail's arena arm or its one-pass form is off (DASLLAMA_RARE_ARENA / set_rare_arena, DASLLAMA_RARE_ONEPASS) - a trimmed MoE lane reads its streamed experts through them"
 
 //! Why a trimmed GPU lane of `t` cannot serve under this run's knobs, "" where it can; a device refusal is the walk's to report
@@ -1671,9 +1808,7 @@ let private TRIM_RAIL_DECLINE = "the rare rail's arena arm or its one-pass form 
 def resident_trim_decline(t : Model) : string {
     let c = t.config
     if (!(gpu_resident_requested() && gpu_want_resident())) return TRIM_ROUTE_DECLINE
-    if (has_ple(c)) return "the trim serves no model with per-layer embeddings (the host gathers the table's rows off the planar planes)"
-    if (c.moe_exps_bias) return "the trim serves no biased expert stacks (the host sums them off the planar planes)"
-    if (c.moe_dense_shexp) return "the trim serves no gemma-4 MoE (its window chain sums the experts off the planar planes)"
+    if (has_ple(c) && !resident_emb_fmt_ok(t.ple_emb_fmt)) return "the device gathers no per-layer embedding table of format {t.ple_emb_fmt}, and the host's gather reads a plane the lane does not carry"
     let why = resident_decline_reason(t)
     if (!empty(why)) return why
     if (c.n_layer_nextn > 0l) {
@@ -1684,6 +1819,7 @@ def resident_trim_decline(t : Model) : string {
     let plan = resident_plan_carved(t, resident_mirror_dtype_of(t), seq_cap, true, false).plan   //! the plan the live load makes: behind the slot's carve where the model streams
     set_moe_gpu_stream_need(0l)
     if (!plan.fits) return TRIM_PLAN_DECLINE
+    if (has_ple(c) && plan.ple_tbl_bytes == 0l) return TRIM_PLE_DECLINE
     if (plan.host_layers > 0l) {
         if (!gpu_want_pf_stream()) return TRIM_STREAM_DECLINE
         if (!rare_arena_on() || !rare_onepass_on()) return TRIM_RAIL_DECLINE
@@ -1706,6 +1842,7 @@ let TRIM_SPLIT_DECLINE = "the lane's host-layer split is not this run's plan's"
 def resident_trim_decline_is_run_mode(why : string) : bool {
     return false if (empty(why))
     return true if (why == TRIM_ROUTE_DECLINE || why == TRIM_PLAN_DECLINE || why == TRIM_STREAM_DECLINE || why == TRIM_RAIL_DECLINE
+        || why == TRIM_PLE_DECLINE
         || why == resident_run_mode_decline() || why == "the tier installed no resident-driver seams" || why |> starts_with(TRIM_SPLIT_DECLINE))
     return (why |> starts_with("routed experts (")) && (why |> ends_with("expert rails serve"))
 }
@@ -1726,6 +1863,11 @@ def resident_would_serve(t : Model) : bool => empty(resident_trim_decline(t))
 def trim_plan_decline(t : Model; armed : bool) : string {
     if (!armed) return "the trimmed lane needs the whole-model driver, and the walk armed the per-op rails"
     if (!vk_plan_trim_served(t)) return "the baked plan carries a role the trimmed lane cannot serve - the driver's arena and the expert stacks it holds or streams trim, nothing else"
+    return trim_stream_decline(t)
+}
+
+//! why a model served with no planar planes cannot read its host layers' experts, "" where every one streams
+def trim_stream_decline(t : Model) : string {
     var left = gpu_resident_host_layers()
     for (l in range64(t.config.n_layers)) {
         continue if (!layer_is_moe(t, l))
@@ -1738,8 +1880,7 @@ def trim_plan_decline(t : Model; armed : bool) : string {
 
 [arch(at="../ARCHITECTURE_IMAGE_VULKAN.md#image-vulkan-mint")]
 def trim_plane_dropped(name : string) : bool {
-    return true if (name == "qblob" || name == "qscales" || name == "qscales16" || name == "wblob" || name == "bf16blob"
-        || name == "q4blob" || name == "q4scales")
+    return true if (name == "qblob" || name == "qscales" || name == "qscales16" || name == "wblob" || name == "q4blob" || name == "q4scales")
     for (f in type<KqFmt>) {
         let pn = kq_plane_pair_names(f)
         return true if (!empty(pn.q) && (name == pn.q || name == pn.s))
@@ -2243,16 +2384,66 @@ def private resident_upload_hc(t : Model; planes : array<ResidentPlane>; var cur
     return ""
 }
 
-let private RDEC_TBL_PIECE_ROWS = 65_536l   //! a token-table piece: 65536 rows of the E4B's 10752 stay under the host gather's 2 GB array
+
+//! `rows` rows of `n` of the untied token table at element `woff`, gathered into device layout off a trimmed model's packed
+//! emb region: the piece's blocks copied out of `embq` / `embs` into a view whose element 0 is the piece's first - a q8
+//! table's interleaved blocks split back into the quant plane and its f32 scales, a K-quant table's pair as it sits
+[arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#vk-token-gather")]
+def private trim_emb_gather(t : Model; f : KqFmt; woff, n, rows, mr, kgroup, wbias : int64; var wq : array<uint8>; var ws : array<uint8>) {
+    let r = trim_emb_region(t)
+    let elems = n * rows
+    var view = Model()
+    view.quant = t.quant
+    if (f == KqFmt.q8) {
+        let blk = Q8_QPB + Q8_SPB
+        let b0 = (woff - r.off) / Q8_BLOCK_ELEMS
+        let nb = elems / Q8_BLOCK_ELEMS
+        view.qblob |> reserve_resize(elems)
+        view.qscales |> reserve_resize(nb)
+        unsafe {
+            for (b in range64(nb)) {
+                let bp = addr<uint8 const?>(t.embq[(b0 + b) * blk])
+                view.qscales[b] = f16_to_f32(uint(bp[0]) | (uint(bp[1]) << 8u))
+                memcpy(addr<void?>(view.qblob[b * Q8_BLOCK_ELEMS]), addr<void?>(t.embq[(b0 + b) * blk + Q8_SPB]), Q8_QPB)
+            }
+        }
+    } else {
+        let u0 = (woff - r.off) / kq_elems(f)
+        let units = elems / kq_elems(f)
+        let qsb = kq_qsb(f)
+        let ssb = kq_ssb(f)
+        kq_plane_pair(view, f) $(var q : array<uint8>; var sc : array<uint8>) {
+            q |> reserve_resize(units * qsb)
+            sc |> reserve_resize(units * ssb)
+            unsafe {
+                memcpy(addr<void?>(q[0]), addr<void?>(t.embq[u0 * qsb]), units * qsb)
+                memcpy(addr<void?>(sc[0]), addr<void?>(t.embs[u0 * ssb]), units * ssb)
+            }
+        }
+    }
+    layout_gather_dispatch(view, f, 0l, n, rows, rows, mr, kgroup, wbias, wq, ws)
+    delete view
+}
+
+//! `resident_place` for a piece of a trimmed lane's untied token table: gathered off the packed emb region, in no baked plan
+def private resident_place_packed(t : Model; f : KqFmt; woff, n, rows, mr, kgroup, wbias : int64) : int64 {
+    var wq, ws : array<uint8>
+    trim_emb_gather(t, f, woff, n, rows, mr, kgroup, wbias, wq, ws)
+    let blk = rdec_place(wq, ws, n, rows, int(f))
+    delete wq
+    delete ws
+    return blk
+}
 
 //! a token table placed whole in its format's arena a piece at a time (the host gather's temporaries stay bounded), each piece
 //! behind the one before - the gather reads the table as one run of blocks; its first block, -1 where a piece did not land so
-def private resident_place_table(t : Model; tbl : ResidentPlane; mr, kg, wb : int64; disk : bool = false) : int64 {
+def private resident_place_table(t : Model; tbl : ResidentPlane; mr, kg, wb : int64; disk : bool = false; packed : bool = false) : int64 {
     var b0 = -1l
     var row = 0l
     while (row < tbl.rows) {
-        let prows = min(RDEC_TBL_PIECE_ROWS, tbl.rows - row)
-        let b = resident_place(t, tbl.f, tbl.off + row * tbl.n, tbl.n, prows, mr, kg, wb, -1l, disk)
+        let prows = min(TABLE_PIECE_ROWS, tbl.rows - row)
+        let b = (packed ? resident_place_packed(t, tbl.f, tbl.off + row * tbl.n, tbl.n, prows, mr, kg, wb)
+            : resident_place(t, tbl.f, tbl.off + row * tbl.n, tbl.n, prows, mr, kg, wb, -1l, disk))
         if (row == 0l) {
             b0 = b
         }
@@ -2332,7 +2523,7 @@ def private resident_arm_emb(t : Model; plan : ResidentPlan; ple_tbl_placed : bo
             return true
         }
     } elif (!tied && !emb.on) {
-        why = (t.planes_trimmed ? "the image trimmed the table's plane"
+        why = (t.planes_trimmed && g_vk_bake == VkBakeMode.collect ? "a lane's mint bakes no entry for the table: its map places it off the packed emb region"
             : "the table's fp32 rows carry no exact mark (`emb_f32_exact`: a prepared image does not carry the mark)")
     } elif (!tied && plan.emb_bytes == 0l) {
         why = "the table's own plane does not fit the room left past the weights and the K/V at this context"
@@ -2795,7 +2986,8 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
     if (plan.emb_bytes > 0l) {
         let tbl = take_plane(planes, cur, ResidentRole.emb_table)
         let q8 = tbl.f == KqFmt.q8   //! a q8 table sits linear, outside the weights' repack (the gather's block walk); a superblock table in the leaves' own layout
-        bemb = resident_place_table(t, tbl, q8 ? 1l : mr, q8 ? 4l : kg, q8 ? 0l : wb)
+        let packed = t.planes_trimmed && g_vk_bake == VkBakeMode.slice   //! a mapped lane bakes no entry for the table: it goes up off the packed emb region
+        bemb = resident_place_table(t, tbl, q8 ? 1l : mr, q8 ? 4l : kg, q8 ? 0l : wb, false, packed)
         if (bemb < 0l) {
             to_log(LOG_WARNING, "dasLLAMA: resident driver - the token table ({tbl.f}) found no contiguous arena run; the host embeds every row\n")
         }
@@ -3746,6 +3938,20 @@ def private rdec_head_warm_want(t : Model) : bool {
     return true
 }
 
+//! the host's head rows [lo, hi) of `s` written as zeros: the rows of a prompt no warm wrote, which a later draft reads or
+//! uploads as its history - a store, so the draft reads no row nothing wrote
+def private rdec_head_rows_zero(var s : Session; c : Config; lo, hi : int64) {
+    let l = c.n_layers
+    let kb = kv_row_bytes(s.kv_dtype_k, layer_kv_dim(c, l))
+    let vb = kv_row_bytes(s.kv_dtype_v, layer_kv_dim(c, l))
+    rdec_host_runs(s, c, l, lo, hi) $(row0, nrows : int64; var kp, vp : uint8?) {
+        unsafe {
+            memset8(kp + row0 * kb, 0u8, int(nrows * kb))
+            memset8(vp + row0 * vb, 0u8, int(nrows * vb))
+        }
+    }
+}
+
 [arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-head-prompt-warm")]
 def private rdec_prefill_head_rows(t : Model; var s : Session; r, npos, start_pos : int64) {
     let c = t.config
@@ -3762,6 +3968,7 @@ def private rdec_prefill_head_rows(t : Model; var s : Session; r, npos, start_po
         if (!g_rdec_head_warm_decline_said && rdec_head_warm_want(t)) {
             rdec_head_warm_decline_say("the head is off the device, so the chain wrote no head row")
         }
+        rdec_head_rows_zero(s, c, start_pos, start_pos + npos - 1l)
         return
     }
     if (rows != npos - 1l) {
@@ -7137,13 +7344,18 @@ def gpu_slot_capture_(var st : GpuModelMarks) : string {
     return was_resident ? "gpu:resident" : (moe_gpu_marks_armed(st.marks) ? "gpu:rails" : "cpu")
 }
 
+//! a re-arm's tier arm: the want recorded, then the backend's hooks installed for it
+def gpu_tier_arm_at(want : GpuTierWant) {
+    set_gpu_tier_want_(want)
+    moe_gpu_tier_arm_()
+}
+
 //! Re-arm the INSTALLED model onto the GPU tier (marks already restored): want, arm, resident
 //! upload — through the bake-slice path when `t` is a mapped vulkan-flavor image (a live
 //! re-gather on a planes-trimmed image panics). Returns "gpu:resident" | "gpu:rails" | "cpu".
 [arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#gpu-slot-marks")]
 def gpu_slot_rearm_(want : GpuTierWant; t : Model) : string {
-    set_gpu_tier_want_(want)
-    moe_gpu_tier_arm_()
+    gpu_tier_arm_at(want)
     if (!empty(t.vkplan)) {
         vulkan_bake_slice_begin()
         moe_gpu_upload_resident(t)
@@ -7348,6 +7560,7 @@ def moe_gpu_upload_resident(t : Model) {
 def moe_gpu_upload_lane(t : Model; lane : string) {   // nolint:STYLE037,STYLE038 — seven sequential rail walks over one gather scratch, each reading the marks the walks before it set
     moe_gpu_stream_cache_layer(t.config.n_expert, 0l)   //! every streamed stack of this walk holds the model's experts whole; the driver's arm sets its own quotas
     moe_gpu_drop_installed_before_load(t.config.n_layers)
+    vk_image_source_recall(t.image_map)   //! the drop forgot the walk's lane file, and a re-arm never named one: the file this image was loaded from
     reset_gpu_cpu_passes()
     reset_moe_gpu_marks(t.config.n_layers, t.config.n_layers)   // nothing resident until an upload lands
     // -1 = auto: ask for every layer and let the walk's own budget stops place the split (the

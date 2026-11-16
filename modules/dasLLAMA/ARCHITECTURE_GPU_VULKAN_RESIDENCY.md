@@ -172,9 +172,12 @@ command brings a row across the bus: the window gathers its rows off the token i
 off its one token id, the N-row command, the verify and the draft off their rows' ids.** Which gather
 a table takes is its disk type's (`ARCHITECTURE_GPU_SHARED_ROWS.md#token-table-gather`).
 `resident_arm_emb` hands the plane to the tier (`rdec_set_emb` for a quantized plane in the arena,
-`rdec_upload_emb_f32` for the f32 rows) and logs why the host embeds where it does: a prepared image (it does not carry `emb_f32_exact`), a plane past the room or the cap, a trimmed
-image, a per-layer-embedding model whose side table stays on the host, a hyper-connection model (its
-window reads the pre-step's rows). The window binds its ids plane (`pf_ids`); every token command but the in-order rows
+`rdec_upload_emb_f32` for the f32 rows) and logs why the host embeds where it does: a prepared image (it does not carry `emb_f32_exact`), a plane past the room or the cap,
+a per-layer-embedding model whose side table stays on the host, a hyper-connection model (its
+window reads the pre-step's rows). A model with no planar plane still places an untied table's plane: a gguf streamed live
+gathers it off the mapping like every other plane, and a trimmed lane - which bakes no entry for it, the plan charging
+it only where it fits - places it at the map off the packed emb region the lane keeps for the CPU embed
+(`trim_emb_gather`), so a table that does not fit one run's card leaves the lane and its baked plan as they are. The window binds its ids plane (`pf_ids`); every token command but the in-order rows
 command (the recurrent peel) records the gather in place of the x upload, each row's id read from `tok_ids_host` and, for a row
 with none (`EMB_ID_HOST`: a non-text row, the split command's caller), the host's row staged in `tok_xh_host` (`nb` of each).
 A step that brings no id writes `EMB_ID_HOST` into the id word itself, the split command's entry (`vk_rdec_token_split`)

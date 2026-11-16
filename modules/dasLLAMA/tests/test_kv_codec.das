@@ -10,6 +10,7 @@ require dasllama/dasllama_math   // with_dasllama_jobque_ + target_chunk_work + 
 require dasllama/dasllama_kv_codec   // the codec kernel families under unit test
 require dasllama/dasllama_core   // load_model_ / create_session / create_kv_pool: the codec a carrier's session and pool serve
 require dasllama/dasllama_convert    // cvt_f32_to_f16/cvt_f16_to_f32 — the generic f16 rows
+require dasllama/dasllama_image   // load_model_uncached: the product's load with no image
 require daslib/f16_cvt
 require daslib/jobque_boost
 require daslib/fio
@@ -713,18 +714,8 @@ def test_kv_f16_prefill_vs_decode(t : T?) {
                 }
             }
             t |> equal(0, lg_bad)
-            var kv_bad = 0
-            for (i in range(length(sd.key_cache))) {
-                if (sp.key_cache[i] != sd.key_cache[i]) {
-                    kv_bad++
-                }
-            }
-            for (i in range(length(sd.value_cache))) {
-                if (sp.value_cache[i] != sd.value_cache[i]) {
-                    kv_bad++
-                }
-            }
-            t |> equal(0, kv_bad)
+            let kv_bad = kv_rows_differ(sp, sd, c, n)
+            t |> equal(kv_bad.k + kv_bad.v, 0l, "both cache planes bit-exact over the {n} rows written")
             delete sp
             delete sd
             delete prompt
@@ -846,18 +837,8 @@ def test_kv_q8_prefill_vs_decode(t : T?) {
                 }
             }
             t |> equal(0, lg_bad)
-            var kv_bad = 0
-            for (i in range(length(sd.key_cache))) {
-                if (sp.key_cache[i] != sd.key_cache[i]) {
-                    kv_bad++
-                }
-            }
-            for (i in range(length(sd.value_cache))) {
-                if (sp.value_cache[i] != sd.value_cache[i]) {
-                    kv_bad++
-                }
-            }
-            t |> equal(0, kv_bad)
+            let kv_bad = kv_rows_differ(sp, sd, c, n)
+            t |> equal(kv_bad.k + kv_bad.v, 0l, "both cache planes bit-exact over the {n} rows written")
             delete sp
             delete sd
             delete prompt
@@ -994,7 +975,7 @@ def test_kv_codec_side_stamp(t : T?) {
 def test_kv_codec_step_down(t : T?) {
     let path = path_join(models_dir(), "Qwen2.5-0.5B-Instruct-Q8_0.gguf")
     return if (!model_available(t, path))
-    var m <- load_model_(path, QuantMode.q8)
+    var m <- load_model_uncached(path, QuantMode.q8)
     t |> success(m.config.attn_qkv_bias, "Qwen2.5 carries the Q/K/V bias the rule reads")
     var s <- create_session(m, KVDtype.tq4)
     t |> equal(s.kv_dtype_k, KVDtype.q8_0, "a tq4 session on Qwen2.5 serves at q8_0")
@@ -1012,7 +993,7 @@ def test_kv_codec_step_down(t : T?) {
     delete m
     let path3 = path_join(models_dir(), "Qwen3-0.6B-Q8_0.gguf")
     return if (!model_available(t, path3))
-    var m3 <- load_model_(path3, QuantMode.q8)
+    var m3 <- load_model_uncached(path3, QuantMode.q8)
     var s3 <- create_session(m3, KVDtype.tq4)
     t |> equal(s3.kv_dtype_k, KVDtype.tq4, "control: Qwen3, no bias, keeps tq4")
     delete s3

@@ -186,7 +186,7 @@ def private long_prompt_cell(t : T?; window : int64) {
     t |> equal(pf_window_rows(), window, "the pin reached the driver's window")
     let levers = resident_levers()
     set_gpu_ctx_max(REGIONS_RIG_CTX)   //! the rig's mirror context for the load; the levers (the window pin among them) go back after it
-    var tr <- load_resident(path)
+    var tr <- load_resident_host(path)
     restore_resident_levers(levers)
     t |> success(tr.config.recr_mask != 0ul, "the carrier is the hybrid whose recurrent window the cap bounds")
     t |> success(moe_gpu_resident_active(), "the whole-model driver armed on it (the load log names any decline)")

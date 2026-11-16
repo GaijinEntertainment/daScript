@@ -2,6 +2,7 @@ options gen2
 options indenting = 4
 
 require dastest/testing_boost public
+require daslib/strings_boost
 
 require ../compile_db.das
 
@@ -49,6 +50,19 @@ def test_cc_is_compile_switch(t : T?) {
         t |> success(!cc_is_compile_switch("/std:c++17"), "std")
         t |> success(!cc_is_compile_switch("-fno-rtti"), "codegen flag")
     }
+}
+
+
+[test(description = "a sweep inherits a compile command's flags without the compiler, the file, its output switches or a precompiled header's binary, and keeps the header the binary stands for")]
+def test_cc_sweep_flags(t : T?) {
+    let argv <- ["/usr/bin/clang++", "-DFOO=1", "-Xclang", "-include-pch", "-Xclang",
+        "/b/cmake_pch.hxx.pch", "-Xclang", "-include", "-Xclang", "/b/cmake_pch.hxx", "-MD",
+        "-MT", "x.o", "-MF", "x.o.d", "-o", "x.o", "-c", "/src/x.cpp", "-fno-rtti"]
+    let flags <- cc_sweep_flags(argv, "x.cpp", "/src/x.cpp")
+    let kept = "-DFOO=1 -Xclang -include -Xclang /b/cmake_pch.hxx -fno-rtti"
+    t |> equal(join(flags, " "), kept, "the inherited flags")
+    let cut <- cc_sweep_flags(["cc", "-Xclang", "-include-pch", "-Xclang"], "x.cpp", "/src/x.cpp")
+    t |> equal(join(cut, " "), "-Xclang -include-pch -Xclang", "a switch with no path stays")
 }
 
 

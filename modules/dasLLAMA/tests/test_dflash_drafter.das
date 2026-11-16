@@ -53,6 +53,7 @@ let private DRAFTER_K4_FILE = "drafters/Qwen3.8-27B-DFlash2-GGUF/Qwen3.8-27B-DFl
 let private DRAFTER_NV4_FILE = "drafters/Qwen3.8-27B-DFlash2-NVFP4-GGUF/Qwen3.8-27B-DFlash2-NVFP4.gguf"   //! every weight plane NVFP4, no `.scale` beside any
 let private PROMPT = "Write a complete, well-commented Python module that implements a token-bucket rate limiter with per-key buckets, a sliding-window variant, a thread-safe wrapper, and a pytest test suite. Write at least 600 lines. Do not stop early."
 let private STEPS = 24l
+let private HOST_CTX = 4096l   //! the context a trunk off the image rail is held to: a flat session's host K/V is the model's whole context (18 GB a session at the 27B's 262144), and the walks here run under two hundred positions
 
 let private GGUF_I32 = 5ul   //! the GGUF value types the synthesized header writes beside `_gguf_writer.das`'s
 let private GGUF_ARRAY = 9ul
@@ -301,6 +302,7 @@ def private metal_lossless_walk(t : T?; m : Model; drafter : string; device : bo
 //! home (`metal`), turned into the blob form the drivers serve, as the engine's own load does with the rail off
 def private load_trunk(t : T?; path : string; metal : bool) : Model {
     var m <- load_model_(path, QuantMode.q8)
+    m.config.seq_len = min(m.config.seq_len, HOST_CTX)
     if (metal) {
         t |> success(convert_model_to_metal_blob(m), "the trunk takes the metal-blob form")
     }

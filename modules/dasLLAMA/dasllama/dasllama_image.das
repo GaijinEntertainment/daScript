@@ -40,7 +40,7 @@ require dasllama/dasllama_gemm_schema   // the q8 block geometry the mint's zero
 // WhisperModel.enc) contribute their planes under dotted names ("enc.fblob"); string-array
 // fields ride the meta blob via serialize_strings — raw string pointers can't be planes.
 
-let IMAGE_VERSION = 62   // the transducer decoder in its baked form: the halves and one f32 slab, no f32 predictor or joint weights
+let IMAGE_VERSION = 63   // a trimmed lane keeps the bf16 projection plane and serves the per-layer-embedding and biased-expert models
 
 //! The metal (blob-only) flavor's identity tag: q8 planes ride the 34B block_q8_0 blob and the
 //! kq scale planes their GPU forms (convert_model_to_metal_blob) — flavors are per-config and
@@ -693,7 +693,8 @@ def private image_total_bytes(var t; meta_bytes : uint64) : uint64 {
                 cur = plane_end(cur, field)
             }
         } static_elif (typeinfo is_dim(field)) {
-            for (el in field) {
+            for (el, i in field, count()) {
+                continue if (!kq_sb(kq_fmt_of_slot(i)))   //! the writer's skip: a format with a top-level pair writes no section from its table slot
                 apply(el) $ [unused_argument(iname)] (iname : string; var ifield) {
                     static_if (typeinfo is_array(ifield)) {
                         cur = plane_end(cur, ifield)
@@ -1335,8 +1336,9 @@ def private streamed_q_planes() : array<string> {
     return <- names
 }
 
+//! what a section of `n` bytes a plane hook streams adds to the image's reserve: the bytes up to a whole page, nothing when empty
 [arch(at = "../ARCHITECTURE_IMAGE.md#image-sizing-exactness")]
-def private section_bytes(n : int64) : uint64 => n > 0l ? pad_to_page(uint64(n)) : 0ul
+def section_bytes(n : int64) : uint64 => n > 0l ? pad_to_page(uint64(n)) : 0ul
 
 def private scales_convert_at_save(t : Model; jobs : array<FillJob>) : bool
     => t.wscale_f16 && empty(t.qscales16) && !empty(t.qscales) && stream_plane_bytes(t, jobs, "qblob") > 0l
@@ -1500,6 +1502,11 @@ def private vk_mint_trim_decline(var t : Model; jobs : array<FillJob>) : string 
     if (!empty(why)) {
         return why
     }
+    return vk_mint_emb_decline(t, jobs)
+}
+
+//! the emb region the CPU embed reads packed into `t` off the streamed jobs' view; "" where it packed or nothing packs
+def private vk_mint_emb_decline(var t : Model; jobs : array<FillJob>) : string {
     if (!(t.emb_q8 || emb_kq(t))) {
         return ""   // an fp32 token table rides fblob, kept: nothing to pack
     }
@@ -1513,13 +1520,10 @@ def private vk_mint_trim_decline(var t : Model; jobs : array<FillJob>) : string 
     return trim_pack_emb(g_vk_mint_job_view, t, g_vk_mint_view_rebase) ? "" : "the emb region would not pack"
 }
 
-[arch(at="../ARCHITECTURE_IMAGE_VULKAN.md#image-vulkan-mint")]
-def private vk_mint_walk(m : GGUFMeta; bytes : array<uint8> | #; var t : Model; var w : ImgWriter;
-                         var sections : array<ImgSection>; jobs : array<FillJob>; regs : array<StreamReg>) {
-    let at = w_page(w)
-    let ts = ref_time_ticks()
+//! the gather hook's source for a walk over `t`: the gguf mapping, the plan-load's jobs and their regions, no view staged
+//! and no decline said
+def private vk_mint_source_set(m : GGUFMeta; bytes : array<uint8> | #; t : Model; jobs : array<FillJob>; regs : array<StreamReg>) {
     unsafe {
-        g_vk_mint_walk_writer = addr(w)
         g_vk_mint_meta = addr(m)
         g_vk_mint_bytes = addr(bytes[0])
         g_vk_mint_nbytes = long_length(bytes)
@@ -1529,6 +1533,15 @@ def private vk_mint_walk(m : GGUFMeta; bytes : array<uint8> | #; var t : Model; 
     g_vk_mint_regs := regs
     g_vk_mint_view_run |> clear()
     g_vk_mint_decline_reason = ""
+}
+
+[arch(at="../ARCHITECTURE_IMAGE_VULKAN.md#image-vulkan-mint")]
+def private vk_mint_walk(m : GGUFMeta; bytes : array<uint8> | #; var t : Model; var w : ImgWriter;
+                         var sections : array<ImgSection>; jobs : array<FillJob>; regs : array<StreamReg>) {
+    let at = w_page(w)
+    let ts = ref_time_ticks()
+    g_vk_mint_walk_writer = unsafe(addr(w))
+    vk_mint_source_set(m, bytes, t, jobs, regs)
     vulkan_mint_begin(@@vk_mint_gather_hook, @@vk_mint_sink)
     moe_gpu_upload_resident(t)
     vulkan_mint_end()
@@ -1877,6 +1890,7 @@ def private parse_image(base : void?; msize : uint64; path : string; var t; tag 
         delete t
         return false
     }
+    vk_image_source_forget(base)
     t.image_map = base
     t.image_bytes = msize
     bump_weights_epoch()
@@ -1910,7 +1924,7 @@ def load_image(path : string; var t; tag : string = ""; quant : string = "q8") :
         }
     }
     if (parse_image(base, msize, path, t, tag, quant)) {
-        vk_image_source_set(path, int64(g_parsed_vkblob.off), int64(g_parsed_vkblob.bytes))
+        vk_image_source_set(path, int64(g_parsed_vkblob.off), int64(g_parsed_vkblob.bytes), base)
         static_if (typeinfo safe_has_field < ngram_tab > (t)) {
             if (!g_env_engine.prefetch_image && long_length(t.ngram_tab) > 0l) {   //! the n-gram rows are random pages of the table: unread, each hard-faults
                 let ts_ng = ref_time_ticks()
@@ -1966,7 +1980,7 @@ def private chunk_rail(var t; var out; save_to : string; extra : uint64; tag : s
         panic("dasLLAMA: the image this process just built would not parse back - see the decline above")
     }
     if (written && g_parsed_vkblob.bytes > 0ul) {   //! the lane just written lays out as the chunk does: the expert cache reads its misses off it at once
-        vk_image_source_set(save_to, int64(g_parsed_vkblob.off), int64(g_parsed_vkblob.bytes))
+        vk_image_source_set(save_to, int64(g_parsed_vkblob.off), int64(g_parsed_vkblob.bytes), w.chunk_base)
     }
     return true
 }
@@ -2047,7 +2061,25 @@ def private vulkan_bake_flavor(var t : Model; path : string; vk_tag : string; ke
 
 //! Whether a cold build persists its image. Off = build it in memory and serve that, leaving no
 //! .dlim behind; the run pays a second copy of the model for it, so on by default.
-def image_save_enabled : bool => g_env_engine.image_save
+def image_save_enabled : bool => g_image_save_set ? g_image_save : g_env_engine.image_save
+
+var private g_image_save_set = false
+var private g_image_save = false
+
+//! the image save in process (`DASLLAMA_IMAGE_SAVE`'s twin): off, a load writes no `.dlim` beside its source
+def set_image_save(on : bool) {
+    g_image_save_set = true
+    g_image_save = on
+}
+
+//! whether an in-process lever shadows `DASLLAMA_IMAGE_SAVE`: a fixture reads it beside `image_save_enabled()` and puts both back
+def image_save_lever_set() : bool => g_image_save_set
+
+//! the image save lever put back as a fixture found it
+def restore_image_save(was_set : bool; on : bool) {
+    g_image_save_set = was_set
+    g_image_save = on
+}
 
 // ~36 MB per band: the interleave amortizes and appends stay bulk, with a staging cost that never registers
 let private METAL_BAND_BLOCKS = 1048576l
@@ -2332,6 +2364,156 @@ def load_model_image(path : string; var t : Model; tag : string = ""; quant : st
     return true
 }
 
+var private g_host_planes_set = false
+var private g_host_planes = false
+
+//! the host planes in process (`DASLLAMA_HOST_PLANES`'s twin): a gguf loaded with no image on a discrete home keeps its
+//! weight planes on the host beside the device copy - a test's device-against-CPU compare
+def set_host_planes(on : bool) {
+    g_host_planes_set = true
+    g_host_planes = on
+}
+
+//! whether a gguf loaded with no image keeps its planes on the host: the in-process lever where one was set, else the knob
+def host_planes() : bool => g_host_planes_set ? g_host_planes : g_env_engine.host_planes
+
+//! whether an in-process lever shadows `DASLLAMA_HOST_PLANES`: a fixture reads it beside `host_planes()` and puts both back
+def host_planes_lever_set() : bool => g_host_planes_set
+
+//! the host planes lever put back as a fixture found it
+def restore_host_planes(was_set : bool; on : bool) {
+    g_host_planes_set = was_set
+    g_host_planes = on
+}
+
+var private g_gguf_live_loads = 0l   //! the ggufs loaded live onto a discrete home since the process began
+
+//! the ggufs the live streamed load served since the process began
+def gguf_live_loads() : int64 => g_gguf_live_loads
+
+//! whether `t` was loaded live off a gguf - no planar plane, no image, no baked plan - so its re-arm streams the file again
+def gguf_live_loaded(t : Model) : bool
+    => t.planes_trimmed && t.image_map == null && empty(t.vkplan) && !empty(rearm_source(model_planes_key(t)).path)
+
+//! the GPU walk over `t` with every region gathered off the gguf mapping (`gm`, `gbytes`) through the mint's hook and placed on
+//! the device as the walk goes: no plan collected, no sink. "" where the whole-model driver armed and every host layer streams
+def private gguf_live_walk(t : Model; gm : GGUFMeta; gbytes : array<uint8>; jobs : array<FillJob>) : string {
+    var regs : array<StreamReg>
+    stream_collect_regions(t, regs)
+    vk_mint_source_set(gm, gbytes, t, jobs, regs)
+    vulkan_live_begin(@@vk_mint_gather_hook)
+    moe_gpu_upload_resident(t)
+    vulkan_live_end()
+    var why = g_vk_mint_decline_reason
+    if (empty(why) && !moe_gpu_resident_active()) {
+        why = "the whole-model driver did not arm (the decline line above)"
+    }
+    if (empty(why)) {
+        why = trim_stream_decline(t)
+    }
+    delete regs
+    return why
+}
+
+//! `path` loaded onto the armed discrete home with no weight plane built on the host: the plan-load records every plane's
+//! jobs, the GPU walk gathers each region off the gguf mapping through the mint's hook and places it on the device, and `out`
+//! keeps what a trimmed lane keeps. False where the home cannot serve the model so - `out` untouched, the reason logged
+[arch(at="../ARCHITECTURE_ENGINE_MEMORY.md#gguf-live-load")]
+def private load_gguf_live(path : string; mode : QuantMode; var out : Model; via : string) : bool {
+    var mt = Model()
+    var jobs : array<FillJob>
+    var why = ""
+    let ts = ref_time_ticks()
+    vk_mint_reset()
+    let ran = load_gguf_streaming(path, mode, mt, jobs, false) $(gm : GGUFMeta; gbytes : array<uint8>) {
+        if (empty(jobs)) {
+            why = "the load streams no plane of this model"
+            return false
+        }
+        if (ngram_stream_source().bytes > 0l) {
+            why = "its n-gram table rides the gguf mapping"
+            return false
+        }
+        why = resident_trim_decline(mt)
+        return false if (!empty(why))
+        mt.planes_trimmed = true
+        why = gguf_live_walk(mt, gm, gbytes, jobs)
+        if (empty(why)) {
+            why = vk_mint_emb_decline(mt, jobs)
+        }
+        vk_mint_release()
+        return empty(why)
+    }
+    delete jobs
+    if (ran) {
+        trim_drop_planes(mt)   //! the scale halves the plan-load read: the device holds them now
+        g_gguf_live_loads++
+        rearm_source_set(model_planes_key(mt), path, 0l, 0l)
+        to_log(LOG_INFO, "dasLLAMA: gguf streamed onto the {moe_gpu_backend_name()} home in {get_time_usec(ts) / 1000} ms, no plane kept on the host - {via}; DASLLAMA_HOST_PLANES=1, or set_host_planes(true) in process, keeps the CPU chain's planes - {path}\n")
+        delete out
+        out <- mt
+        return true
+    }
+    moe_gpu_drop_model_()
+    delete mt
+    to_log(LOG_WARNING, "dasLLAMA: '{path}' does not stream onto the {moe_gpu_backend_name()} home ({why}) - loading it with its planes on the host\n")
+    return false
+}
+
+//! `load_gguf_live` from inside the cached load, where the lane's bake is armed for the walk: true with `out` served live, or
+//! false with the bake armed again for the arm that follows. The host-planes ask keeps the planes, so it never goes live
+[arch(at="../ARCHITECTURE_ENGINE_MEMORY.md#failed-save-restarts")]
+def private gguf_live_else_bake_armed(path : string; mode : QuantMode; var out : Model; via : string) : bool {
+    return false if (host_planes())
+    return true if (load_gguf_live(path, mode, out, via))
+    vulkan_bake_begin()
+    return false
+}
+
+//! `gpu_slot_rearm` for a model `load_gguf_live` loaded: the tier armed at `want`, then the gguf streamed onto the device
+//! again over `t`, which keeps its host half as it was. Returns "gpu:resident", or "cpu" with the reason logged
+[arch(at="../ARCHITECTURE_ENGINE_MEMORY.md#gguf-live-load")]
+def gguf_live_rearm(want : GpuTierWant; t : Model) : string {
+    let path = rearm_source(model_planes_key(t)).path
+    gpu_tier_arm_at(want)
+    var scratch = Model()
+    var jobs : array<FillJob>
+    var why = ""
+    vk_mint_reset()
+    let ran = load_gguf_streaming(path, QuantMode.q8, scratch, jobs, false) $(gm : GGUFMeta; gbytes : array<uint8>) {
+        why = gguf_live_walk(t, gm, gbytes, jobs)
+        vk_mint_release()
+        return empty(why)
+    }
+    delete jobs
+    delete scratch
+    return "gpu:resident" if (ran)
+    moe_gpu_drop_model_()   //! a walk that declined placed zeros for what it could not gather: nothing of it serves
+    to_log(LOG_ERROR, "dasLLAMA: '{path}' did not stream onto the {moe_gpu_backend_name()} home again ({empty(why) ? "the gguf would not open" : why}) - the model has no planes to serve from\n")
+    return "cpu"
+}
+
+//! A gguf loaded with no image read or written. On an armed discrete home a q8 load streams the gguf onto the card and no
+//! weight plane stays on the host (`load_gguf_live`); the host-planes ask (`set_host_planes`), every other home and a model
+//! the stream declines get `load_model_`'s planes. Call inside ``with_job_que()``.
+[arch(at="../ARCHITECTURE_ENGINE_MEMORY.md#gguf-live-load"), arch(at="../ARCHITECTURE_IMAGE_LEDGER.md#live-load-non-image")]
+def load_model_uncached(path : string; mode : QuantMode = QuantMode.fp32) : Model {
+    apply_box_profile_runtime()
+    load_arm_tier()
+    let home = mode == QuantMode.q8 && moe_gpu_bake_tag() != ""
+    if (home && host_planes()) {
+        to_log(LOG_INFO, "dasLLAMA: the weight planes stay on the host beside the {moe_gpu_backend_name()} home's copy (DASLLAMA_HOST_PLANES=1, or set_host_planes(true) in process; unset streams the gguf onto the card and keeps none) - {path}\n")
+    }
+    if (home && !host_planes()) {
+        var live = Model()
+        if (load_gguf_live(path, mode, live, "the load reads and writes no image (DASLLAMA_IMAGE=0, or a load_model_uncached call)")) {
+            return <- live
+        }
+        delete live
+    }
+    return <- load_model_(path, mode)
+}
+
 //! The image-cached model load — ``load_model``'s engine half, public for callers bypassing the facade. ``.dlim`` maps directly (wrong identity panics); q8-mode gguf maps/saves a prepared image (``DASLLAMA_IMAGE=0`` disables); an fp32-mode gguf joins the rail only with ``image_fp32`` (planar flavor — the parity-pinned decoders, e.g. canary's).
 //! Under an active Metal mode the image is the BLOB-ONLY metal flavor (CPU inference against it panics) when servable, the planar CPU flavor otherwise; ``planar_only`` pins the planar CPU flavor regardless of armed GPU tiers (the ASR surface — its decode path reads CPU planes).
 //! Call inside ``with_job_que()``.
@@ -2466,6 +2648,11 @@ def load_model_cached(path : string; mode : QuantMode = QuantMode.fp32;
             panic("dasLLAMA: no prepared image for '{path}' ({want}) and artifacts are frozen - pre-mint it")
         }
         guard_interp_gguf_load(path)
+        if (vk_tag != "" && !image_save_enabled()
+                && gguf_live_else_bake_armed(path, mode, t, "the image save is off, so no lane is written (DASLLAMA_IMAGE_SAVE=0, or set_image_save(false) in process)")) {   //! no lane to write: the gguf streams to the card, no lane built in memory
+            return <- t
+        }
+        var save_lost = false   //! a save that lost a write part way: `mt` is part consumed, so nothing builds off it again
         {
             var s_tag = want_metal ? METAL_IMAGE_TAG : vk_tag
             let s_quant = (want_metal || vk_tag != "") ? "q8" : qs
@@ -2508,6 +2695,11 @@ def load_model_cached(path : string; mode : QuantMode = QuantMode.fp32;
                 }
                 if (save && !mint_held) {
                     saved = save_model_image_streaming(mt, gm, gbytes, jobs, s_img, s_tag, s_quant)
+                    save_lost = !saved && !g_vk_mint_declined
+                    if (save_lost) {
+                        to_log(LOG_WARNING, "dasLLAMA: the image save for '{path}' lost a write part way - no lane is written, and the load starts again off the gguf\n")
+                        return false
+                    }
                     if (!saved) {
                         to_log(LOG_WARNING, "dasLLAMA: the image save for '{path}' declined - serving the streamed build from memory\n")
                     }
@@ -2552,6 +2744,13 @@ def load_model_cached(path : string; mode : QuantMode = QuantMode.fp32;
                 to_log(LOG_WARNING, "dasLLAMA: the streamed cold build declined for '{path}' - taking the eager rail\n")
             }
         }
+        if (save_lost && vk_tag != "") {   //! nothing was written: the gguf streams to the card where the home serves it so, else the eager rail below builds the planes
+            var again = Model()
+            if (gguf_live_else_bake_armed(path, mode, again, "the lane's save lost a write")) {
+                return <- again
+            }
+            delete again
+        }
         var m <- load_model_(path, mode)
         let metal_flavor = want_metal && metal_model_servable(m) && metal_blob_commit(m)
         if (!metal_flavor) {
@@ -2580,7 +2779,7 @@ def load_model_cached(path : string; mode : QuantMode = QuantMode.fp32;
         panic("dasLLAMA: the image rail is off/ineligible for '{path}' (mode {qs}) and artifacts are frozen - the oracle contract needs a prepared image")
     }
     guard_interp_gguf_load(path)
-    var m <- load_model_(path, mode)
+    var m <- (planar_only || want_metal) ? load_model_(path, mode) : load_model_uncached(path, mode)
     // no image cache: the metal drivers are blob-only, so metal mode still takes the in-RAM form
     if (want_metal && metal_model_servable(m)) {
         convert_model_to_metal_blob(m)

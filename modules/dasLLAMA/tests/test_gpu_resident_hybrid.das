@@ -401,10 +401,11 @@ def test_gpu_resident_hybrid_mtp_draft(t : T?) {
     mtp_draft_cell(t)
 }
 
-[test(description = "A device draft past the head rows the device holds uploads the host's rows, a later CPU pass brings the drafted K row down, and the CPU draft over the same rows agrees with the device pick")]
+[test(description = "A device draft past the head rows the device holds uploads the host's rows, a later CPU pass brings the drafted K row down, and the CPU draft over the same rows agrees with the device pick; a prompt prefilled with the round off stores its head rows as zeros and a draft over them lands finite logits under the poison K/V start")]
 def test_gpu_resident_hybrid_mtp_draft_upload(t : T?) {
     pin_window_rows()
     mtp_draft_upload_cell(t)
+    mtp_draft_unwarmed_cell(t)
 }
 
 [test(description = "Re-armed with the free draft's pick among the suppressed ids, the device draft pins that id's logit and picks another token, still the argmax of what it landed")]

@@ -90,10 +90,13 @@ panics by name with the decline and the knobs the identity leaves out (`load_mod
 like a dense one: every expert stack the device holds (`VkBakeRole.expert`) or streams (`VkBakeRole.expert_stream`) has its
 twin in `vkblob`, and the host reads a streamed stack off its pinned mirror - the decode picks, the window sums and the
 hot-pool fills (`ARCHITECTURE_GPU_VULKAN_STREAM.md#streamed-layer-arena`) - so the trim's admission (`trim_plan_decline`)
-takes a plan of arena and expert roles with every host layer's stream mirror made, and declines by name a model whose
-host still reads the planar planes: one with per-layer embeddings, biased expert stacks or the gemma-4 MoE form
-(`resident_trim_decline`), and, as this run's knobs, the stream arm or the rare rail's arena or one-pass form off
-(`TRIM_STREAM_DECLINE`, `TRIM_RAIL_DECLINE`: run-mode). A run-mode decline with no trimmed lane on disk writes the
+takes a plan of arena and expert roles with every host layer's stream mirror made, and declines by name where the
+host would still read a planar plane (`resident_trim_decline`): as the model's shape, a per-layer embedding table in a
+format the device gathers no row of; as this run's, that table not on the device - the GPU embed off, no seat for it,
+or no room past the weights and the K/V (`TRIM_PLE_DECLINE`) - and the stream arm or the rare rail's arena or one-pass
+form off (`TRIM_STREAM_DECLINE`, `TRIM_RAIL_DECLINE`). A lane with per-layer embeddings keeps the model projection's
+bf16 rows (`bf16blob`, which the upload reads) and holds its table on the device alone: a call that brings no token id
+- a media span, a window the embed gate declines - is refused by name at the host's gather (`ple_gather_row`). A run-mode decline with no trimmed lane on disk writes the
 untrimmed lane at the lane's path under the untrimmed identity (`untrimmed_lane_tag`), and a trimmed load falls back to it
 while the decline holds; a run that can serve the trim mints the trimmed lane over it. A run-mode decline while a trimmed
 lane sits on disk writes nothing: the lane stays for the next run and this run serves planar from memory. On the mapped trimmed lane a planar read of
@@ -103,3 +106,17 @@ the first routed layer the counts disagree on, and the walk regathers its expert
 there, the load warning (`vk_bake_slice_off`) - on an untrimmed lane; a trimmed one panics there. The eager rail (a gguf that would not open for streaming, a
 chunk that would not allocate) and a planar image already mapped bake the lane from RAM or the mapping with the families
 kept, the eager rail writing the CPU lane beside it and serving that.
+
+### The slice walk reads the device twin off the lane file {#lane-file-read}
+
+The slice walk reads each baked plane off the lane file into the upload's staging (`vk_slice_from_file`), not out of the
+mapping, so the twin's mapped pages are never faulted: after a load the process holds the sections the host reads - the
+f32 rows, the packed emb region, the plan, the offset tables - and nothing of the twin. The mapping stays for those
+sections and as the walk's other arm: a chunk-built image, a lane no file names and `DASLLAMA_LANE_READ=0`
+(`set_lane_read`) copy the planes out of it, and the walk's closing line counts the planes it copied and says why. A
+lane's file is named by its image's base (`vk_image_source_set`) and named again at every upload
+(`vk_image_source_recall` in `moe_gpu_upload_lane`), since the upload's first step drops the installed model and the
+walk's file name with it; a re-arm (`gpu_slot_rearm`) reads the file the load read. The name lives in the re-arm sources
+(`rearm_source`), one row a loaded model by `model_planes_key` - a lane's file and its twin's place in it, or the gguf a
+live load streamed - which a model drop leaves in place, the re-arm following one: a row goes when a parse or a live
+load lands at its key, and until then holds a path and two numbers for a model that is gone.

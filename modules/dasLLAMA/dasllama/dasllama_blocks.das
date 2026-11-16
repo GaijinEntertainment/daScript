@@ -2023,7 +2023,16 @@ def private rare_onepass_serves(t : Model; l : int64) : bool {
     for (f, off in ep.fmts, ep.offs) {
         return false if (!rare_plane(t, f, 256l, off).on)
     }
-    return !t.config.moe_exps_bias
+    return true
+}
+
+//! `k` rows of `width` in `y`, row j plus expert `idx[j]`'s bias row of layer `l` (`bias_off`: the gate, up or down bias
+//! plane in fblob, `width` floats an expert): the rail's GEMVs carry no bias, so a biased stack's rows take theirs here
+def private rail_add_bias(t : Model; l : int64; var y : array<float>; idx : array<int64>; k, width, bias_off : int64) {
+    let base = bias_off + l * t.config.n_expert * width
+    for (j in range64(k)) {
+        add_bias(y, j * width, t.fblob, base + idx[j] * width, width)
+    }
 }
 
 //! whether layer l's routed triple is the tier's pinned device-layout stack, so a token's host picks read it through the rail
@@ -2089,6 +2098,29 @@ def private rm_rail_pass(p : RarePlane; var y : float?; woffs, xoffs : int64 con
     }
 }
 
+//! the one-row rail's down leg: pick j's requantized row (s.moe_dq, `dsb` its Q8_K form) through its expert's down plane into
+//! s.moe_dn's row j, plus that expert's down bias where the stack carries one
+def private rail_down_pass(t : Model; var s : Session; l, k : int64; p2 : RarePlane; dsb : bool) {
+    let c = t.config
+    let dim = c.dim
+    let nfe = c.n_ff_exp
+    let ege = expert_elems(c)
+    var woffs, xoffs : int64[RDEC_RAIL_PICKS]
+    let ts_down = prof_ticks()
+    unsafe {
+        for (j in range64(k)) {
+            woffs[j] = t.we2_offs[l] + s.moe_idx[j] * ege
+            xoffs[j] = j * nfe   //! each down reads its own requantized row
+        }
+        rm_rail_pass(p2, addr(s.moe_dn[0]), addr<int64 const?>(woffs[0]), addr<int64 const?>(xoffs[0]), k, addr<int8 const?>(s.moe_dq[0]),
+            addr<float const?>(s.moe_ds[0]), dsb ? addr<int const?>(s.moe_dbs[0]) : null, kq_unit(dsb), nfe, dim)
+    }
+    if (c.moe_exps_bias) {
+        rail_add_bias(t, l, s.moe_dn, s.moe_idx, k, dim, t.web2_off)
+    }
+    prof_add("mm_moe_dn", ts_down)
+}
+
 //! the first `k` picks of s.moe_idx / s.moe_w summed into s.moe_acc through the rail's row-major kernels; false where a plane of the triple is not device-served, and `moe_routed_sum_k` serves
 [arch(at="../ARCHITECTURE_GPU_VULKAN_STREAM.md#streamed-layer-arena")]
 def moe_routed_rail_k(t : Model; var s : Session; l, k : int64) : bool {
@@ -2144,22 +2176,16 @@ def moe_routed_rail_k(t : Model; var s : Session; l, k : int64) : bool {
             rm_rail_pass(p3, addr(s.moe_gu2[0]), addr<int64 const?>(woffs[0]), addr<int64 const?>(xoffs[0]), k, xq8, xs8, null, 32l, dim, nfe)
         }
     }
+    if (c.moe_exps_bias) {
+        rail_add_bias(t, l, s.moe_gu, s.moe_idx, k, nfe, t.web1_off)
+        rail_add_bias(t, l, s.moe_gu2, s.moe_idx, k, nfe, t.web3_off)
+    }
     prof_add("mm_moe", ts_gu)
     let ts_act = prof_ticks()
     gate_batch(s.moe_gu, s.moe_gu2, c.ffn_act, nfe, k)
     prof_add("act", ts_act)
     requant_rows_f(f2, s.moe_gu, nfe, k, s.moe_dq, s.moe_ds, s.moe_dbs)
-    let ts_down = prof_ticks()
-    unsafe {
-        for (j in range64(k)) {
-            woffs[j] = t.we2_offs[l] + s.moe_idx[j] * ege
-            xoffs[j] = j * nfe   //! each down reads its own requantized row
-        }
-        let dsb = kq_sb(f2)
-        rm_rail_pass(p2, addr(s.moe_dn[0]), addr<int64 const?>(woffs[0]), addr<int64 const?>(xoffs[0]), k, addr<int8 const?>(s.moe_dq[0]),
-            addr<float const?>(s.moe_ds[0]), dsb ? addr<int const?>(s.moe_dbs[0]) : null, dsb ? 256l : 32l, nfe, dim)
-    }
-    prof_add("mm_moe_dn", ts_down)
+    rail_down_pass(t, s, l, k, p2, kq_sb(f2))
     moe_gpu_stream_ring_release()
     moe_routed_reduce(s, k, dim)
     moe_trace_row(s, l, k, dim)
@@ -2343,7 +2369,12 @@ def private moe_prefill_rare_rows_onepass(t : Model; var s : Session; l, lo, hi 
     let xbs_stride = kform ? dim / 16l : 0l
     let batched = rare_batched_on()
     var lanes = rare_lanes_size(np, dim, xs_stride, xbs_stride, p1, p3, p2)
+    let biased = c.moe_exps_bias   //! each row takes its expert's gate and up bias before the activation, its down bias after the down GEMV
+    let bias_l = l * c.n_expert
     unsafe {
+        let b1 = biased ? addr<float const?>(t.fblob[t.web1_off + bias_l * nfe]) : null
+        let b3 = biased ? addr<float const?>(t.fblob[t.web3_off + bias_l * nfe]) : null
+        let b2 = biased ? addr<float const?>(t.fblob[t.web2_off + bias_l * dim]) : null
         let xq0 = kform ? addr<int8 const?>(s.kxqb[0]) : addr<int8 const?>(s.xqb[0])
         let xs0 = kform ? addr<float const?>(s.kxsb[0]) : addr<float const?>(s.xsb[0])
         let xbs0 = kform ? addr<int const?>(s.kxbsb[0]) : null
@@ -2395,7 +2426,11 @@ def private moe_prefill_rare_rows_onepass(t : Model; var s : Session; l, lo, hi 
                     }
                     for (ti in range64(ntok)) {
                         var g = gu + (j + ti) * nfe
-                        let u = gu2 + (j + ti) * nfe
+                        var u = gu2 + (j + ti) * nfe
+                        if (biased) {
+                            axpy(g, b1 + e * nfe, 1.0, nfe)
+                            axpy(u, b3 + e * nfe, 1.0, nfe)
+                        }
                         if (vec) {
                             if (is_gelu) {
                                 geglu4(g, u, nfe)
@@ -2425,6 +2460,9 @@ def private moe_prefill_rare_rows_onepass(t : Model; var s : Session; l, lo, hi 
                         }
                     }
                     for (ti in range64(ntok)) {
+                        if (biased) {
+                            axpy(dn + (j + ti) * dim, b2 + e * dim, 1.0, dim)
+                        }
                         copy_floats(eout + bkt[pb[j + ti]] * dim, dn + (j + ti) * dim, dim)
                     }
                     let hb = rare_hist_bin(ntok) * 2l

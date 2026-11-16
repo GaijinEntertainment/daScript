@@ -222,7 +222,7 @@ def moe_forced_feed(t : T?; n : int64; fx : MoeFixture) {
 def private moe_forced_feed_pinned(t : T?; n : int64; fx : MoeFixture) {
     let path = path_join(models_dir(), fx.file)
     if (!resident_ready(t, path)) return
-    var tr <- load_resident(path, 1l, fx.strict_ctx, fx.host_layers_ask, fx.image)   //! one region: the context asked whole is the region's
+    var tr <- load_resident_host(path, 1l, fx.strict_ctx, fx.host_layers_ask, fx.image)   //! one region: the context asked whole is the region's
     let host_layers = moe_fixture_admitted(t, tr, fx)
     if (host_layers < 0l) {
         delete tr
@@ -353,7 +353,7 @@ def moe_perop_heat_cell(t : T?; fx : MoeFixture; resident, slots : int64) {
 def moe_codec_distance(t : T?; n : int64; fx : MoeFixture; kv : KVDtype; dist_rel, pair_rel : float) {
     let path = path_join(models_dir(), fx.file)
     if (!resident_ready(t, path)) return
-    var tr <- load_resident(path, 1l, fx.strict_ctx, fx.host_layers_ask)
+    var tr <- load_resident_host(path, 1l, fx.strict_ctx, fx.host_layers_ask)
     if (moe_fixture_admitted(t, tr, fx) >= 0l) {
         with_dasllama_jobque_() {
             codec_distance_over(t, tr, n, kv, false, dist_rel, pair_rel)

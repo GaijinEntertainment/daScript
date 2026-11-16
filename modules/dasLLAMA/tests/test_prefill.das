@@ -67,8 +67,18 @@ def check_prefill(t : T?; tr : Model; prompt : array<int64>; mode : AttnPrefillM
         var sp <- make_run_state(c)
         forward_batch(tr, sp, prompt, n, 0l)
         t |> success(sequence_equal(sr.logits, sp.logits), "{mode} last-position logits bit-exact")
-        t |> success(sequence_equal(sr.key_cache, sp.key_cache), "{mode} key cache bit-exact")
-        t |> success(sequence_equal(sr.value_cache, sp.value_cache), "{mode} value cache bit-exact")
+        let kv = kv_rows_differ(sr, sp, c, n)
+        t |> equal(kv.k, 0l, "{mode} key cache bit-exact over the {n} rows written")
+        t |> equal(kv.v, 0l, "{mode} value cache bit-exact over the {n} rows written")
+        unsafe {   //! the control: one bit of the last written row's last key byte, flipped and put back
+            var kb = kv_layer_kbase(sp, c.n_layers - 1l, c.seq_len)
+            let at = n * kv_row_bytes(sp.kv_dtype_k, layer_kv_dim(c, c.n_layers - 1l)) - 1l
+            let was = kb[at]
+            kb[at] = uint8(uint(was) ^ 1u)
+            t |> equal(kv_rows_differ(sr, sp, c, n).k, 1l, "{mode} control: one flipped bit in the last written key row reads as one byte apart")
+            t |> equal(kv_rows_differ(sr, sp, c, n - 1l).k, 0l, "{mode} control: ... and a compare a row short does not reach it")
+            kb[at] = was
+        }
         delete sr
         delete sp
     }
@@ -92,8 +102,9 @@ def check_continuation(t : T?; tr : Model; prompt : array<int64>; split : int64;
         let tail <- [for (p in range64(split, n)); prompt[p]]
         forward_prefill(tr, sp, tail, n - split, split)
         t |> success(sequence_equal(sr.logits, sp.logits), "{mode} continuation last-position logits bit-exact")
-        t |> success(sequence_equal(sr.key_cache, sp.key_cache), "{mode} continuation key cache bit-exact")
-        t |> success(sequence_equal(sr.value_cache, sp.value_cache), "{mode} continuation value cache bit-exact")
+        let kv = kv_rows_differ(sr, sp, c, n)
+        t |> equal(kv.k, 0l, "{mode} continuation key cache bit-exact over the {n} rows written")
+        t |> equal(kv.v, 0l, "{mode} continuation value cache bit-exact over the {n} rows written")
         delete sr
         delete sp
     }

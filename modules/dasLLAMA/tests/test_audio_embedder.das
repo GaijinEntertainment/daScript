@@ -342,7 +342,7 @@ def test_audio_rows_need_an_audio_arm(t : T?) {
             return
         }
         allow_cpu_prefill()
-        let m <- load_model_(smol, QuantMode.q8)   // the planar rail: no .dlim beside the model
+        let m <- load_model_uncached(smol, QuantMode.q8)   // the planar rail: no .dlim beside the model
         with_dasllama_jobque() {
             var chat <- create_chat(m, "", 8l)
             var rows : array<float>

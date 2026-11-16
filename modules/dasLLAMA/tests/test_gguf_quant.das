@@ -13,6 +13,7 @@ require math
 require strings
 require daslib/enum_trait
 require _gguf_writer   // gguf_header, gguf_tensor_info, gguf_pad_data: the synthetic file's bytes
+require _compares   // mismatch_exact: the exact byte compare
 
 // Byte-level GGUF quant-format gates on a synthetic in-memory file: the dequant arm must match an
 // independently hand-rolled reference, and the exact-transcode rails must be bit-exact against
@@ -302,4 +303,117 @@ def test_gguf_f32_reader_superblock_types(t : T?) {
             ti++
         }
     }
+}
+
+//! byte `i` of the release cell's tensors: a pattern, so a tensor read back from the file is told from zeros
+def private pattern_byte(i : int64) : uint8 => uint8((i * 7l + 3l) & 255l)
+
+//! a gguf of `names`' tensors in order - each a `gtypes` tensor of `cols` x `rows` elements - every tensor's data the bytes
+//! `pattern_byte` gives from 0
+def private synth_gguf_patterned(names : array<string>; gtypes : array<int>; cols, rows : array<int64>) : array<uint8> {
+    var b : array<uint8>
+    gguf_header(b, uint64(long_length(names)), 0ul)
+    var off = 0l
+    for (name, gtype, c, r in names, gtypes, cols, rows) {
+        gguf_tensor_info(b, name, [uint64(c), uint64(r)], gtype, uint64(off))
+        off += ggml_type_bytes(gtype, c * r)
+    }
+    gguf_pad_data(b)
+    for (gtype, c, r in gtypes, cols, rows) {
+        let n = ggml_type_bytes(gtype, c * r)
+        let at = long_length(b)
+        b |> resize(at + n)
+        for (i in range64(n)) {
+            b[at + i] = pattern_byte(i)
+        }
+    }
+    return <- b
+}
+
+let private RELEASE_ROWS = 65536l   //! rows of the cell's tensors: every tensor whole pages at a 64 KiB page and a whole 32-byte tensor alignment
+let private RELEASE_COLS = MLX_GROUP   //! a row an affine group: the triplet's scale and bias tensors hold one pair a row
+
+[test(description = "On an armed gguf file mapping a tensor's pages go when a read of a tensor outside the last read's begins and read back the same bytes; a second read of one tensor, the three nested views of an affine triplet, an unarmed mapping, the source-release lever off and a disarmed mapping release nothing")]
+def test_gguf_source_release(t : T?) {
+    t |> run("a tensor's pages leave an armed file mapping as the next tensor's read begins, and read back from the file") @(t : T?) {
+        let n = RELEASE_COLS * RELEASE_ROWS
+        let gg <- synth_gguf_patterned(["t", "u", "w.weight", "w.scales", "w.biases"],
+            [GGML_TYPE_Q8_0, GGML_TYPE_Q8_0, GGML_TYPE_MLX8, GGML_TYPE_F16, GGML_TYPE_F16],
+            [RELEASE_COLS, RELEASE_COLS, RELEASE_COLS, 1l, 1l], [RELEASE_ROWS, RELEASE_ROWS, RELEASE_ROWS, RELEASE_ROWS, RELEASE_ROWS])
+        var data <- [for (i in range64(ggml_type_bytes(GGML_TYPE_Q8_0, n))); pattern_byte(i)]
+        for (bytes in [long_length(data), ggml_type_bytes(GGML_TYPE_MLX8, n), ggml_type_bytes(GGML_TYPE_F16, RELEASE_ROWS)]) {
+            t |> equal(bytes % 65536l, 0l, "a tensor of {bytes} bytes is whole pages at any page size in use")
+        }
+        let path = path_join(test_temp_dir(), "source_release.gguf")
+        fopen(path, "wb") $(f) {
+            fwrite(f, gg)
+        }
+        let lever_set = source_release_lever_set()
+        let lever_was = source_release()
+        set_source_release(true)
+        let f = fopen(path, "rb")
+        t |> success(f != null, "the synthetic gguf opens")
+        fmap(f) $(var bytes : array<uint8>#) {
+            var inscope m <- parse_gguf_meta(bytes)
+            var got : array<uint8>
+            let r0 = gguf_tensors_released()
+            gguf_read_tensor_raw(m, bytes, "t", got)
+            gguf_read_tensor_raw(m, bytes, "u", got)
+            t |> equal(gguf_tensors_released(), r0, "a mapping nobody armed releases nothing")
+            t |> equal(mismatch_exact(got, data), 0, "... and reads the tensor's bytes")
+            let base = unsafe(addr<void?>(bytes[0]))
+            gguf_release_arm(base)
+            gguf_read_tensor_raw(m, bytes, "t", got)
+            gguf_read_tensor_raw(m, bytes, "t", got)
+            t |> equal(gguf_tensors_released(), r0, "two reads of one tensor release nothing: its pages stay while the load reads it")
+            gguf_read_tensor_raw(m, bytes, "u", got)
+            t |> equal(gguf_tensors_released(), r0 + 1l, "the next tensor's read lets the last tensor's pages go")
+            gguf_read_tensor_raw(m, bytes, "t", got)
+            t |> equal(mismatch_exact(got, data), 0, "the released pages read back from the file, byte for byte")
+            t |> equal(gguf_tensors_released(), r0 + 2l, "... and that read lets the other tensor's go")
+            var q, s : array<uint8>
+            let slice_rows = 64l   //! the rows the cell transcodes: the views hold their whole tensors whatever the slice
+            q |> resize(slice_rows * RELEASE_COLS)
+            s |> resize(slice_rows * MLX_PAIR_BYTES)
+            gguf_transcode_mlx(m, bytes, "w.weight", KqFmt.mlx8, q, s, 0l, slice_rows * RELEASE_COLS, 0l)
+            t |> equal(gguf_tensors_released(), r0 + 3l, "the triplet's read lets the tensor before it go, and its nested scale and bias views release none of the three")
+            t |> equal(int(q[5]), int(pattern_byte(5l)), "the codes read are the file's: the view nested inside did not release them unread")
+            gguf_transcode_mlx(m, bytes, "w.weight", KqFmt.mlx8, q, s, 0l, slice_rows * RELEASE_COLS, slice_rows * RELEASE_COLS)
+            t |> equal(gguf_tensors_released(), r0 + 3l, "a second slice of the triplet releases nothing")
+            gguf_read_tensor_raw(m, bytes, "u", got)
+            t |> equal(gguf_tensors_released(), r0 + 6l, "the next tensor's read lets the triplet's three tensors go together")
+            delete q
+            delete s
+            set_source_release(false)
+            gguf_read_tensor_raw(m, bytes, "t", got)
+            t |> equal(gguf_tensors_released(), r0 + 6l, "with the lever off an armed mapping releases nothing")
+            set_source_release(true)
+            gguf_release_disarm(base)
+            gguf_read_tensor_raw(m, bytes, "u", got)
+            gguf_read_tensor_raw(m, bytes, "t", got)
+            t |> equal(gguf_tensors_released(), r0 + 6l, "a disarmed mapping releases nothing")
+            t |> equal(mismatch_exact(got, data), 0, "... and still reads the tensor's bytes")
+            delete got
+        }
+        fclose(f)
+        restore_source_release(lever_set, lever_was)
+        delete data
+    }
+}
+
+[test(description = "A streamed token table past a dev-W panel's size is cut into jobs of TABLE_PIECE_ROWS rows and one a panel holds, one of a piece's rows or fewer, or one with no row width stays whole; a repack region reads inside its job, outside it, or crossing an edge on either side")]
+def test_stream_job_shapes(t : T?) {
+    let panel = int64(DEVW_BAKE_PANEL_MAX) / 2l
+    t |> equal(table_job_elems(262144l * 2560l, 2560l), TABLE_PIECE_ROWS * 2560l, "a 262144-row table of 2560-wide rows: a job is a piece of rows")
+    t |> equal(table_job_elems(262144l * 64l, 64l), 262144l * 64l, "a table a dev-W panel holds stays one job, past a piece's rows or not")
+    t |> success(262144l * 64l <= panel && 262144l * 2560l > panel, "control: the two tables sit either side of the panel's size ({panel} elements)")
+    t |> equal(table_job_elems(TABLE_PIECE_ROWS * 4096l, 4096l), TABLE_PIECE_ROWS * 4096l, "a table of exactly a piece's rows is one job")
+    t |> equal(table_job_elems(262144l * 2560l, 0l), 262144l * 2560l, "no row width resolved: the table whole")
+    t |> equal(stream_region_in_job(100l, 50l, 100l, 200l), StreamRegionFit.inside, "a region from the job's first element")
+    t |> equal(stream_region_in_job(250l, 50l, 100l, 200l), StreamRegionFit.inside, "... and one ending on its last")
+    t |> equal(stream_region_in_job(50l, 50l, 100l, 200l), StreamRegionFit.outside, "a region ending where the job starts is another job's")
+    t |> equal(stream_region_in_job(300l, 50l, 100l, 200l), StreamRegionFit.outside, "... as is one starting where it ends")
+    t |> equal(stream_region_in_job(280l, 50l, 100l, 200l), StreamRegionFit.crosses, "a region running past the job's end crosses it")
+    t |> equal(stream_region_in_job(80l, 50l, 100l, 200l), StreamRegionFit.crosses, "... and so does one starting before the job")
+    t |> equal(stream_region_in_job(50l, 400l, 100l, 200l), StreamRegionFit.crosses, "... and one holding the whole job")
 }

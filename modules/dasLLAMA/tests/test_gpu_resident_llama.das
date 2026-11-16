@@ -14,6 +14,7 @@ require dasllama/dasllama_gpu_resident   // moe_gpu_resident_active: did the who
 require _model_tier   // models_dir() + model_available() presence/size-tier gate
 require _resident_feed   // resident_ready, the levers, the ramps, resident_then_cpu_feed, feed_steps_within, tile_arm_tag
 require dasllama/dasllama_bench   // bench_tg_batched_rep: the batched row's refusal and its served rep
+require dasllama/dasllama_image   // load_model_uncached: the product's load with no image
 
 // The whole-model resident driver on the llama family (`DASLLAMA_GPU=1`): the NORM rope (adjacent pairs),
 // no q/k/v bias, no q/k norm, GQA, the tied classifier of the 3.2 files. The forced-feed logits-tolerance
@@ -100,7 +101,7 @@ def test_gpu_resident_llama_batched_row(t : T?) {
         if (empty(path)) return
         let levers = resident_levers()
         set_gpu_resident_regions_(2l)
-        var tr <- load_model_(path, QuantMode.q8)
+        var tr <- load_model_uncached(path, QuantMode.q8)
         restore_resident_levers(levers)
         t |> success(moe_gpu_resident_active(), "the whole-model driver armed on the model (the load log names any decline)")
         with_dasllama_jobque_() {
@@ -137,7 +138,7 @@ def test_gpu_resident_llama_1b_q51(t : T?) {
     t |> run("{file}: every dense plane keeps the q51 tag") @(t : T?) {
         let path = llama_model_path(t, file)
         if (empty(path)) return
-        var tr <- load_model_(path, QuantMode.q8)
+        var tr <- load_model_uncached(path, QuantMode.q8)
         dense_planes_tagged(t, tr, path, KqFmt.q51)
         delete tr
     }
