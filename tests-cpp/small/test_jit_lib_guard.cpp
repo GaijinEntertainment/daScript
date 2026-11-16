@@ -16,7 +16,8 @@ extern "C" {
                                                        uint64_t stackSize );
     DAS_API int32_t jit_lib_invoke_guarded ( das::Context * ctx,
                                              void (*tramp)(das::Context *, void *),
-                                             void * frame );
+                                             void * frame,
+                                             int32_t frameSize );
     DAS_API das::Context * jit_lib_create_finish ( das::Context * ctx, int32_t ok, char ** err );
     DAS_API const char * jit_lib_last_error ( das::Context * ctx );
     DAS_API void jit_destroy_standalone_ctx ( das::Context * ctx );
@@ -51,7 +52,7 @@ TEST_CASE("jit_lib_invoke_guarded runs a body and reports success") {
     REQUIRE(ctx != nullptr);
     g_ran = 0;
     int slot = 0;
-    CHECK(jit_lib_invoke_guarded(ctx, &tramp_quiet, &slot) == 1);
+    CHECK(jit_lib_invoke_guarded(ctx, &tramp_quiet, &slot, 256) == 1);
     CHECK(g_ran == 1);
     CHECK(slot == 7);
     CHECK(jit_lib_last_error(ctx) == nullptr);
@@ -61,13 +62,13 @@ TEST_CASE("jit_lib_invoke_guarded runs a body and reports success") {
 TEST_CASE("jit_lib_invoke_guarded turns a das panic into a return code plus a message") {
     das::Context * ctx = make_ctx();
     REQUIRE(ctx != nullptr);
-    CHECK(jit_lib_invoke_guarded(ctx, &tramp_raises, nullptr) == 0);
+    CHECK(jit_lib_invoke_guarded(ctx, &tramp_raises, nullptr, 256) == 0);
     const char * err = jit_lib_last_error(ctx);
     REQUIRE(err != nullptr);
     CHECK(std::strstr(err, "boom in the body") != nullptr);
 
     int slot = 0;
-    CHECK(jit_lib_invoke_guarded(ctx, &tramp_quiet, &slot) == 1);
+    CHECK(jit_lib_invoke_guarded(ctx, &tramp_quiet, &slot, 256) == 1);
     CHECK(slot == 7);
     CHECK(jit_lib_last_error(ctx) == nullptr);
     jit_destroy_standalone_ctx(ctx);
@@ -76,7 +77,7 @@ TEST_CASE("jit_lib_invoke_guarded turns a das panic into a return code plus a me
 TEST_CASE("jit_lib_create_finish drops a context whose init raised, and keeps the message") {
     das::Context * ctx = make_ctx();
     REQUIRE(ctx != nullptr);
-    jit_lib_invoke_guarded(ctx, &tramp_raises, nullptr);
+    jit_lib_invoke_guarded(ctx, &tramp_raises, nullptr, 256);
     char * slot = nullptr;
     CHECK(jit_lib_create_finish(ctx, 0, &slot) == nullptr);
     REQUIRE(slot != nullptr);

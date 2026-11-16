@@ -5,7 +5,6 @@ module llvm_code_selftest shared private
 
 require llvm/daslib/llvm_boost
 require llvm/daslib/llvm_jit_code
-require llvm/daslib/llvm_jit_common
 require daslib/ast_boost
 
 //! Worked example of an `[llvm_code]` generator, and the self-test vehicle for the rail
@@ -62,14 +61,14 @@ def private k_value_gen(var gc : LlvmCodeCtx) : bool {
     return true
 }
 
-// bakes the resolved host_features truth (g_target_host_features) into a `() : int` stub as
-// a constant 1/0 — the artifact-side witness of which feature rail built it. The reference
-// body should return -1 so all three outcomes (host / generic / not-generated) are distinct.
+// bakes JitTarget.host_features into a `() : int` stub as 1/0: the
+// artifact-side witness of the feature rail; the reference body
+// returns -1, so host / generic / not-generated stay distinct
 def private host_features_gen(var gc : LlvmCodeCtx) : bool {
     if (!empty(gc.fn.arguments) || gc.fn.result.baseType != Type.tInt) return false
     var entry = LLVMAppendBasicBlockInContext(gc.jit.ctx, gc.impl, "entry")
     LLVMPositionBuilderAtEnd(gc.jit.builder, entry)
-    LLVMBuildRet(gc.jit.builder, gc.jit.types->ConstI32(g_target_host_features ? 1ul : 0ul))
+    LLVMBuildRet(gc.jit.builder, gc.jit.types->ConstI32(gc.jit.target.host_features ? 1ul : 0ul))
     return true
 }
 
@@ -79,17 +78,17 @@ def private host_features_gen(var gc : LlvmCodeCtx) : bool {
 def private tier_bits_gen(var gc : LlvmCodeCtx) : bool {
     if (!empty(gc.fn.arguments) || gc.fn.result.baseType != Type.tInt) return false
     var bits = 0ul
-    bits |= g_target_x64_avx2 ? 1ul : 0ul
-    bits |= g_target_x64_f16c ? 2ul : 0ul
-    bits |= g_target_x64_vnni256 ? 4ul : 0ul
-    bits |= g_target_x64_avx512bw ? 8ul : 0ul
-    bits |= g_target_x64_avx512vnni ? 16ul : 0ul
-    bits |= g_target_x64_avx512vbmi ? 32ul : 0ul
-    bits |= g_target_x64_vnniint8 ? 64ul : 0ul
-    bits |= g_target_x64_amx ? 128ul : 0ul
-    bits |= g_target_arm64_dotprod ? 256ul : 0ul
-    bits |= g_target_arm64_i8mm ? 512ul : 0ul
-    bits |= g_target_arm64_fullfp16 ? 1024ul : 0ul
+    bits |= gc.jit.target.features.x64_avx2 ? 1ul : 0ul
+    bits |= gc.jit.target.features.x64_f16c ? 2ul : 0ul
+    bits |= gc.jit.target.features.x64_vnni256 ? 4ul : 0ul
+    bits |= gc.jit.target.features.x64_avx512bw ? 8ul : 0ul
+    bits |= gc.jit.target.features.x64_avx512vnni ? 16ul : 0ul
+    bits |= gc.jit.target.features.x64_avx512vbmi ? 32ul : 0ul
+    bits |= gc.jit.target.features.x64_vnniint8 ? 64ul : 0ul
+    bits |= gc.jit.target.features.x64_amx ? 128ul : 0ul
+    bits |= gc.jit.target.features.arm64_dotprod ? 256ul : 0ul
+    bits |= gc.jit.target.features.arm64_i8mm ? 512ul : 0ul
+    bits |= gc.jit.target.features.arm64_fullfp16 ? 1024ul : 0ul
     var entry = LLVMAppendBasicBlockInContext(gc.jit.ctx, gc.impl, "entry")
     LLVMPositionBuilderAtEnd(gc.jit.builder, entry)
     LLVMBuildRet(gc.jit.builder, gc.jit.types->ConstI32(bits))

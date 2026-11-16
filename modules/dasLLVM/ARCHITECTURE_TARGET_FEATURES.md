@@ -12,7 +12,7 @@ An aarch64 host target reads its CPU features from two sources, because neither 
 the features - and a part this LLVM cannot name maps to the generic CPU, where SDOT and SMMLA
 have no instruction to select and codegen aborts. `cpu_supports` reads the operating system
 instead (sysctl / `AT_HWCAP` / `IsProcessorFeaturePresent`), so it answers for silicon LLVM has
-never heard of. The tier gates (`init_jit_target_flags` - `g_target_arm64_dotprod`, `_i8mm`,
+never heard of. The tier gates (`make_jit_target` - `JitTarget.features.arm64_dotprod`, `_i8mm`,
 `_fullfp16`) and the target machine's feature string (`create_default_target_machine`) therefore
 take the union of the two: an LLVM host-string hit OR a `cpu_supports` hit (fullfp16 additionally
 reads darwin-arm64 as always-on - every Apple Silicon part has it). One asymmetry: the host rail's
@@ -21,7 +21,7 @@ DotProd GATE probes like its siblings - on an ARMv8.0 host the gate declines and
 compiles its fallback, whatever the string says. A cross-compile triple takes neither - only the force env - and so
 does a generic-CPU standalone exe (one carrying no `[llvm_code]` kernel): its machine is the
 ARMv8.0 baseline, which cannot select SDOT or SMMLA, so the DotProd and i8mm gates
-(`g_target_arm64_dotprod`, `g_target_arm64_i8mm`) stay off there and every `aarch64_neon` call
+(`arm64_dotprod`, `arm64_i8mm`) stay off there and every `aarch64_neon` call
 that needs either compiles its daslang fallback body. The gates and the machine string are one
 truth on both rails: a force-env feature raises the gate AND is appended to the generic machine.
 The string reaches the code on three routes, one per engine: the DLL and exe rails build their
@@ -41,14 +41,14 @@ have, so the artifact is for another machine and executing it here traps.
 
 ## 6. The x64 kernel-matrix tier gates {#x64-tier-gates}
 
-An x64 host target publishes eight boolean gates (`g_target_x64_*`), one per instruction tier the
+An x64 host target publishes eight boolean gates (`JitTarget.x64_*`), one per instruction tier the
 kernel matrix and the tune grids select on: `avx2`, `f16c`, `vnni256` (256-bit VPDPBUSD by either
 VEX AVX-VNNI or EVEX AVX512-VNNI+VL), `avx512bw` (zmm byte ops - BW, not merely F), `avx512vnni`
 (zmm VPDPBUSD; implies bw, the sign trick around it is BW), `avx512vbmi` (VPERMI2B / VPERMB /
 VPMULTISHIFTQB - the grid formats' symbol lattice), `vnniint8` (VEX VPDPBSSD, native s8 x s8),
 `amx` (both amx-tile and amx-int8; the per-process XTILEDATA grant is a separate runtime step
 the family's own witness performs) and `amx_bf16` (amx-tile, amx-bf16 and avx512bf16 -
-TDPBF16PS and the panel's VCVTNEPS2BF16, the bf16 tile family; `amx-fp16` is probed for the Granite Rapids fp16 tiles but gates nothing yet). `init_jit_target_flags` decides each from cpuid truth OR'd with
+TDPBF16PS and the panel's VCVTNEPS2BF16, the bf16 tile family; `amx-fp16` is probed for the Granite Rapids fp16 tiles but gates nothing yet). `make_jit_target` decides each from cpuid truth OR'd with
 the `DAS_JIT_X64_FORCE_FEATURES` emission-only override; a cross triple or a generic target
 (`host_features = false`) drops to forced-only truth - cpuid is not consulted, the force env is
 the only tier source there.
@@ -57,14 +57,14 @@ The cpuid truth is `das_cpu_supports` (`src/builtin/module_builtin_runtime.cpp`)
 keyed by the LLVM target-feature spelling - so the force env and `llc -mattr` take the same names.
 A tier feature usually lands as three parts: its cpuid line there, its name in
 `TUNE_KNOWN_FEATURES` (`daslib/llvm_tune.das`, the profile fingerprint the `requires=` gates are
-checked against), and - when the emitters branch on it - a `g_target_x64_*` gate. The cpuid line
+checked against), and - when the emitters branch on it - a `JitTarget.x64_*` gate. The cpuid line
 is the load-bearing one: a name missing from the table answers false on every box, so the perm
 that requires it declines everywhere and no error names the cause.
 
 ## 9. The idot family's target lowerings {#idot-lowerings}
 
 The exact integer dots on the 8-bit lattice have three lowerings, picked by target: one
-`@llvm.aarch64.neon.sdot` where the target has DotProd (`g_target_arm64_dotprod` - the host rail's
+`@llvm.aarch64.neon.sdot` where the target has DotProd (`JitTarget.features.arm64_dotprod` - the host rail's
 `+dotprod` append, or the force env on the generic rail), the SIMD128 form on a wasm target
 (`idot_wasm_simd128`), generic widen-multiply IR everywhere else. The native arms exist because
 neither backend produces them from the generic form: AArch64 expands it to zip/uzp/smull instead
@@ -107,7 +107,7 @@ runs as `x86-avx2`, because the set is the contract and a subset of it is not.
 every rail - the DLL, the standalone exe, the AOT object: the class's set reads as forced
 (`x64_forced_feature` / `arm64_forced_feature` answer it before the force env), so the tier
 gates, the machine's feature string and the `requires=` eligibility of every `[tune_perm]` follow
-the class; `init_jit_target_flags` drops to the generic rail whatever the caller asked;
+the class; `make_jit_target` drops to the generic rail whatever the caller asked;
 `create_default_target_machine` names the class's cpu; `tune_cpu_class()` answers the class, so the
 profile ladder starts at it; and `jit_env_salt` folds the class, so the artifact never serves a
 host run. A kernel-carrying exe stops targeting the box (`exe_host_cpu` is false under a
@@ -167,9 +167,9 @@ process, and the module cache reads that as a builtin hash drift and reparses.
 The emitter (`try_llvm_code_function`, `daslib/llvm_jit.das`) reads `tune_class` off the
 annotation and gives the clone's impl three things: the `target-cpu` and `target-features`
 attributes of the class row, so the backend lowers this one function for the class inside a
-module that targets the baseline; the tier gates swapped to the class's set for the span of the
-generator call (`with_class_target_gates`, `daslib/llvm_jit_common.das`), so a generator that
-branches on `g_target_x64_*` emits the class's form; and `noinline`. The last one is
+module that targets the baseline; the generator's `JitTarget` (`gc.jit.target`) as the class's
+copy (`class_target`, `daslib/llvm_jit_common.das`), so a generator that branches on the
+`x64_*` gates emits the class's form; and `noinline`. The last one is
 load-bearing: x86's inliner refuses a callee whose features exceed the caller's, but AArch64's
 admits one whose body carries no target intrinsic, and the inlined copy would then lower for
 the baseline and the clone would be dead code.

@@ -19,9 +19,10 @@ require daslib/option
 require daslib/c_api_header
 require daslib/safe_addr
 require daslib/defer
+require math
 
 
-def public lib_link_note(kind : JitArtifact; link_whole_lib : bool) : string {
+def public lib_link_note(target : JitTarget; kind : JitArtifact; link_whole_lib : bool) : string {
     let windows = get_platform_name() == "windows"
     match (kind) {
         JitArtifact.static_lib => $ {
@@ -32,13 +33,15 @@ def public lib_link_note(kind : JitArtifact; link_whole_lib : bool) : string {
             return "Link this archive plus <das_root>/lib/{rt_static}.{whole}{sys}"
         }
         JitArtifact.object => $ {
-            let threads = g_target_wasm_threads ? " -pthread" : ""
+            let generic = ("Link this {get_target_triple()} object with libDaScript_runtime " +
+                "built for the same target\nwith the same C++ standard library.")
+            return generic if (target.arch != JitTargetArch.wasm)
+            let threads = target.wasm_threads ? " -pthread" : ""
             let whole = (link_whole_lib
                 ? ("\nThis library registers a module that lives in the compiler library, " +
                     "and the wasm runtime\narchive does not carry the compiler library.")
                 : "")
-            return ("Link this wasm object into an emscripten program together with the wasm64 " +
-                "runtime archive\n" +
+            return ("{generic}\nFor wasm that runtime is the wasm64 archive " +
                 "<das_root>/web/output64/lib/liblibDaScript_runtime.a:\n" +
                 "  emcc <sources> <this>.o <runtime> -fwasm-exceptions " +
                 "-sWASM_LEGACY_EXCEPTIONS=0 -msimd128 -sMEMORY64=2{threads}\n" +
@@ -190,8 +193,19 @@ def private store_thunk_args(b : LLVMBuilderRef; var e : CExport; var abi : Thun
 }
 
 
+//! the stack frame a library entry pushes before jitted code, as an
+//! interpreter call does: jitted calls push none, so it is the
+//! library's largest frame and holds each jit_make_block arg slot
+def public lib_entry_frame_size(prog : Program?; funcs : array<FunctionPtr>) : uint {
+    var size = prog.globalInitStackSize
+    for (fn in funcs) {
+        size = max(size, fn.totalStackSize)
+    }
+    return size
+}
+
 def public emit_thunk(ctx : LLVMContextRef; var e : CExport; var uids : UidNodes?; var types : PrimitiveTypes?;
-                      export_all : bool) : Option<bool> {
+                      export_all : bool; frame_size : uint) : Option<bool> {
     var abi <- thunk_abi(e, types)
     let ft = frame_type(abi, ctx)
     let tramp = emit_trampoline(ctx, e, uids, types, abi, ft)
@@ -221,11 +235,12 @@ def public emit_thunk(ctx : LLVMContextRef; var e : CExport; var uids : UidNodes
             LLVMBuildStructGEP2(b, ft, frame, uint(length(abi.arg_types)), "res_ptr"))
     }
     store_thunk_args(b, e, abi, made.fn, ft, types, frame)
-    let guard_type = jit_fn_type($(ctx, tramp, frame : void?) : int {})
+    let guard_type = jit_fn_type($(ctx, tramp, frame : void?; frame_size : int) : int {})
     var guard = declare_extern_fn("jit_lib_invoke_guarded", guard_type)
     var guard_args = array(LLVMGetParam(made.fn, 0u),
         LLVMBuildPointerCast(b, tramp, types.LLVMVoidPtrType(), ""),
-        LLVMBuildPointerCast(b, frame, types.LLVMVoidPtrType(), ""))
+        LLVMBuildPointerCast(b, frame, types.LLVMVoidPtrType(), ""),
+        types.ConstI32(uint64(frame_size)))
     var ok = LLVMBuildCall2(b, guard_type, guard, guard_args, "ok")
     if (!abi.has_slot) {
         LLVMBuildRetVoid(b)
@@ -281,7 +296,7 @@ def private emit_shutdown_trampoline(ctx : LLVMContextRef; uids : UidNodes?;
 
 
 def private emit_destroy(ctx : LLVMContextRef; types : PrimitiveTypes?; prefix : string;
-                         shutdown_tramp : LLVMOpaqueValue?) {
+                         frame_size : uint; shutdown_tramp : LLVMOpaqueValue?) {
     let void_ptr = types.LLVMVoidPtrType()
     let made = new_function(ctx, "{prefix}_destroy", jit_fn_type($(ctx : void?) : void {}), true)
     let b = made.builder
@@ -290,9 +305,11 @@ def private emit_destroy(ctx : LLVMContextRef; types : PrimitiveTypes?; prefix :
     }
     var ctx_arg = LLVMGetParam(made.fn, 0u)
     if (shutdown_tramp != null) {
-        var guard = declare_extern_fn("jit_lib_invoke_guarded", jit_fn_type($(ctx, tramp, frame : void?) : int {}))
-        LLVMBuildCall2(b, jit_fn_type($(ctx, tramp, frame : void?) : int {}), guard,
-            array(ctx_arg, LLVMBuildPointerCast(b, shutdown_tramp, void_ptr, ""), LLVMConstNull(void_ptr)), "")
+        let guard_type = jit_fn_type($(ctx, tramp, frame : void?; frame_size : int) : int {})
+        var guard = declare_extern_fn("jit_lib_invoke_guarded", guard_type)
+        let tramp = LLVMBuildPointerCast(b, shutdown_tramp, void_ptr, "")
+        LLVMBuildCall2(b, guard_type, guard,
+            array(ctx_arg, tramp, LLVMConstNull(void_ptr), types.ConstI32(uint64(frame_size))), "")
     }
     let destroy_type = jit_fn_type($(ctx : void?) : void {})
     var destroy = declare_extern_fn("jit_destroy_standalone_ctx", destroy_type)
@@ -337,9 +354,9 @@ def private emit_shutdown_runtime(ctx : LLVMContextRef; var types : PrimitiveTyp
 
 
 def public emit_fixed_entries(ctx : LLVMContextRef; var types : PrimitiveTypes?; var uids : UidNodes?;
-                              var funcs : array<FunctionPtr>; prefix : string;
+                              var funcs : array<FunctionPtr>; prefix : string; frame_size : uint;
                               guard_global, error_global : LLVMOpaqueValue?) {
-    emit_destroy(ctx, types, prefix, emit_shutdown_trampoline(ctx, uids, funcs))
+    emit_destroy(ctx, types, prefix, frame_size, emit_shutdown_trampoline(ctx, uids, funcs))
     emit_last_error(ctx, types, prefix, error_global)
     emit_shutdown_runtime(ctx, types, prefix, guard_global)
 }

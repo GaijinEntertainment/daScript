@@ -6,8 +6,10 @@ module x64_avx shared public
 // the x64 mirror of aarch64_neon.das (read that header for the recognition contract).
 //
 // - Every body computes the correct result on ANY target; interp, AOT and non-x64 JIT run it verbatim.
-// - On x86-64 the JIT recognizes the call BY NAME (g_x64_intrin_lookup in llvm_jit_intrin.das, gated
-//   on the g_target_x64_* cpuid flags) and emits hardware instead. Nothing to annotate or require.
+// - On x86-64 the JIT recognizes the call BY NAME
+//   (g_x64_intrin_lookup in llvm_jit_intrin.das, gated on the
+//   JitTarget x64_* cpuid gates) and emits hardware instead.
+//   Nothing to annotate or require.
 // - Pre-VNNI x86 has no s8xs8 dot, so those paths lower via the exact sign trick
 //   dot(w, x) == dot(|w| as u8, sign(w) applied to x): PABSB/PSIGNB + PMADDUBSW + PMADDWD.
 // - EXACTNESS PRECONDITION of every sign-trick path: `x` values in [-127, 127], since PSIGNB of -128

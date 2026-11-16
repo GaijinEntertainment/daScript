@@ -164,9 +164,9 @@ def private perm_declines(var gc : LlvmCodeCtx; p : TilePerm) : bool { // nolint
             || (p.mr != 16) || (p.width != 512)
             || (p.bias != 0) || (p.pipe != 0) || (p.latch != 0)
             || (p.grid != "") || (p.pf != 0)
-            || (!g_target_is_x64) || (!g_target_x64_amx_bf16)
-            || (!g_target_x64_avx512vnni)
-            || (!g_target_os_linux)) return true
+            || (gc.jit.target.arch != JitTargetArch.x64) || (!gc.jit.target.features.x64_amx_bf16)
+            || (!gc.jit.target.features.x64_avx512vnni)
+            || (!gc.jit.target.os_linux)) return true
         let rt = q8q8_repack_type(p.mr, p.bias, kgroup_of(p))
         if (rt.interleave != p.mr || !rt.f32_scales) return true
         let mod = LLVMGetGlobalParent(gc.impl)
@@ -192,9 +192,9 @@ def private perm_declines(var gc : LlvmCodeCtx; p : TilePerm) : bool { // nolint
             || (p.pipe != 0 && p.pipe != 1)
             || (p.latch != 0 && p.latch != 1)
             || (p.grid != "") || (p.pf != 0)
-            || (!g_target_is_x64) || (!g_target_x64_amx)
-            || (!g_target_x64_avx512vnni)     // the companions' busd512 lattice + zmm fold
-            || (!g_target_os_linux)) return true
+            || (gc.jit.target.arch != JitTargetArch.x64) || (!gc.jit.target.features.x64_amx)
+            || (!gc.jit.target.features.x64_avx512vnni)     // the companions' busd512 lattice + zmm fold
+            || (!gc.jit.target.os_linux)) return true
         let rt = q8q8_repack_type(p.mr, p.bias, kgroup_of(p))
         if (rt.interleave != p.mr || !rt.f32_scales) return true
         // tile + companion machinery availability (belt — shared, so the family stays lockstep)
@@ -234,7 +234,7 @@ def private perm_declines(var gc : LlvmCodeCtx; p : TilePerm) : bool { // nolint
     if (rt.interleave != p.mr || !rt.f32_scales) return true
     if (p.dotPrim == "smmla") {
         // the i8mm MMA leg: NEON widths, row-quad geometry, same q-reg budget as sdot, and the i8mm tier flag (M1 is dotprod-only)
-        if ((!g_target_is_aarch64) || (!g_target_arm64_i8mm) || (p.width != 128) || (p.grid != "") || (p.pf != 0)
+        if ((gc.jit.target.arch != JitTargetArch.aarch64) || (!gc.jit.target.features.arm64_i8mm) || (p.width != 128) || (p.grid != "") || (p.pf != 0)
             || (p.mr % 4 != 0)
             || (2 * p.mr + p.nrsplit * p.mr / 4 + 2 * p.nrsplit + 2 > 32)) return true
         let mod = LLVMGetGlobalParent(gc.impl)
@@ -252,7 +252,7 @@ def private perm_declines(var gc : LlvmCodeCtx; p : TilePerm) : bool { // nolint
     }
     if (p.dotPrim == "sdot") {
         // the NEON leg (M2 shape): 128-bit q-regs, 4-row sdot lanes; mr>=8 budgets the FUSED-acc shape (kq shares one lo+hi acc there — half the mr4 formula's int-acc bank)
-        if ((!g_target_is_aarch64) || (p.width != 128) || (p.grid != "") || (p.pf != 0)
+        if ((gc.jit.target.arch != JitTargetArch.aarch64) || (p.width != 128) || (p.grid != "") || (p.pf != 0)
             || (p.mr % 4 != 0)
             || (p.mr >= 8 ? (p.mr + p.nrsplit * p.mr / 4 + 2 * p.nrsplit + 2 > 32)
                           : (2 * p.mr + p.nrsplit * p.mr / 4 + 2 * p.nrsplit + 2 > 32))) return true
@@ -268,17 +268,17 @@ def private perm_declines(var gc : LlvmCodeCtx; p : TilePerm) : bool { // nolint
     }
     // the x64 legs — the mx4 companion's pshufb dequant is implied by the tiers below, so no separate rail
     if ((p.dotPrim != "maddubs" && p.dotPrim != "vpdpbusd" && p.dotPrim != "vpdpbssd")
-        || (!g_target_is_x64)
+        || (gc.jit.target.arch != JitTargetArch.x64)
         || (p.width != 256 && p.width != 512)
-        || (p.grid == "vbmi" && (p.width != 512 || p.dotPrim == "vpdpbssd" || !g_target_x64_avx512vbmi))   // the lattice is zmm VBMI
+        || (p.grid == "vbmi" && (p.width != 512 || p.dotPrim == "vpdpbssd" || !gc.jit.target.features.x64_avx512vbmi))   // the lattice is zmm VBMI
         || (p.dotPrim == "vpdpbssd" && p.width != 256)) return true    // 512-bit bssd is AVX10 — unproven
     if (p.width == 256) {
-        if ((p.dotPrim == "maddubs" && !g_target_x64_avx2)
-            || (p.dotPrim == "vpdpbusd" && !g_target_x64_vnni256)
-            || (p.dotPrim == "vpdpbssd" && !g_target_x64_vnniint8)) return true
+        if ((p.dotPrim == "maddubs" && !gc.jit.target.features.x64_avx2)
+            || (p.dotPrim == "vpdpbusd" && !gc.jit.target.features.x64_vnni256)
+            || (p.dotPrim == "vpdpbssd" && !gc.jit.target.features.x64_vnniint8)) return true
     } else {
-        if ((p.dotPrim == "maddubs" && !g_target_x64_avx512bw)
-            || (p.dotPrim == "vpdpbusd" && !g_target_x64_avx512vnni)) return true
+        if ((p.dotPrim == "maddubs" && !gc.jit.target.features.x64_avx512bw)
+            || (p.dotPrim == "vpdpbusd" && !gc.jit.target.features.x64_avx512vnni)) return true
     }
     let rv = p.width / 32                         // rows per vector = i32 acc lanes
     if (p.mr % rv != 0) return true
@@ -286,7 +286,7 @@ def private perm_declines(var gc : LlvmCodeCtx; p : TilePerm) : bool { // nolint
     if ((vq > 2)                                  // the weight bank is 8 dword-groups x vq
         || (p.nrsplit * vq > 8)) return true      // accumulator bank (emit_slice phi arrays)
     // vreg budget: float + int acc tiles + x splat/sign scratch + weight/|weight| in flight; EVEX targets have 32 ymm too
-    return 2 * p.nrsplit * vq + 6 > (p.width == 512 || g_target_x64_avx512bw ? 32 : 16)
+    return 2 * p.nrsplit * vq + 6 > (p.width == 512 || gc.jit.target.features.x64_avx512bw ? 32 : 16)
 }
 
 // emission context threaded through the helpers: builder/types + the per-function value handles

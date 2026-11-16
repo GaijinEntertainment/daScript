@@ -21,6 +21,7 @@ struct public JitCtx {
     ctx : LLVMContextRef
     types : PrimitiveTypes -const? -const
     builder : LLVMOpaqueBuilder -const? -const
+    target : JitTarget
 }
 
 let g_intrin_lookup <- {
@@ -199,10 +200,13 @@ let g_aarch64_i8mm_intrin_lookup <- {   // ARMv8.6 i8mm
     "aarch64_neon::smmla" => @@intrinsic_smmla
 }
 
-// x86-64 intrinsics (the llvm/x64_avx header) — same fallback contract, gated on g_target_x64_avx2:
-// NOT just the arch, because AVX2 is not universal on x86-64 and emitting llvm.x86.avx2.* against a
-// target without +avx2 is a fatal "Cannot select" at codegen. Exactness precondition of the dot
-// family (x in [-127,127], the Q8 quantizer's range) is documented at the x64_avx.das declarations.
+// x86-64 intrinsics (the llvm/x64_avx header) — same fallback
+// contract, gated on JitTarget.features.x64_avx2: NOT just the arch,
+// because AVX2 is not universal on x86-64 and emitting
+// llvm.x86.avx2.* against a target without +avx2 is a fatal "Cannot
+// select" at codegen. Exactness precondition of the dot family (x in
+// [-127,127], the Q8 quantizer's range) is documented at the
+// x64_avx.das declarations.
 let g_x64_intrin_lookup <- {
     "x64_avx::dot4" => @@intrinsic_dot4_x64,
     "x64_avx::dot32" => @@intrinsic_dot32_x64,
@@ -212,10 +216,11 @@ let g_x64_intrin_lookup <- {
     "x64_avx::mx4_dequant32" => @@intrinsic_mx4_dequant32_x64
 }
 
-// AVX kernel-matrix tiers — same contract, finer gates (see the g_target_x64_* declarations in
-// llvm_jit_common). A name whose gate is false compiles its daslang body, which delegates to the
-// tier below (dot32 / dot32_acc8 / mx4_dequant32), so the call degrades to the proven ymm path
-// rather than to scalar code.
+// AVX kernel-matrix tiers — same contract, finer gates (see the
+// JitTarget x64_* fields in llvm_jit_common). A name whose gate is
+// false compiles its daslang body, which delegates to the tier below
+// (dot32 / dot32_acc8 / mx4_dequant32), so the call degrades to the
+// proven ymm path rather than to scalar code.
 let g_x64_vnni256_intrin_lookup <- {   // 256-bit VPDPBUSD (VEX AVX-VNNI, or EVEX AVX512-VNNI+VL)
     "x64_avx::dot32_vnni" => @@intrinsic_dot32_vnni_x64,
     "x64_avx::dot32_acc8_vnni" => @@intrinsic_dot32_acc8_vnni_x64,
@@ -229,12 +234,14 @@ let g_x64_avx512vnni_intrin_lookup <- {   // zmm VPDPBUSD (the bw gate is a prer
     "x64_avx::dot64_acc16_vnni" => @@intrinsic_dot64_acc16_vnni_x64
 }
 
-// Half<->float converts (the daslib/f16_cvt module) — one TARGET-INDEPENDENT table, consulted
-// when the target lowers fpext/fptrunc through half in hardware: any aarch64 (scalar fcvt is
-// ARMv8.0 baseline, no finer gate) or x86-64 with F16C (g_target_x64_f16c). Elsewhere the calls
-// compile their exact bit-twiddle daslang bodies — a half convert without hardware support would
-// lower to a compiler-rt libcall the JIT doesn't link, so the gate is emission-correctness, not
-// just speed.
+// Half<->float converts (the daslib/f16_cvt module) — one
+// TARGET-INDEPENDENT table, consulted when the target lowers
+// fpext/fptrunc through half in hardware: any aarch64 (scalar fcvt is
+// ARMv8.0 baseline, no finer gate) or x86-64 with F16C
+// (JitTarget.features.x64_f16c). Elsewhere the calls compile their
+// exact bit-twiddle daslang bodies — a half convert without hardware
+// support would lower to a compiler-rt libcall the JIT doesn't link,
+// so the gate is emission-correctness, not just speed.
 let g_f16_cvt_intrin_lookup <- {
     "f16_cvt::f16_to_f32" => @@intrinsic_f16_to_f32,
     "f16_cvt::f32_to_f16" => @@intrinsic_f32_to_f16
@@ -253,7 +260,7 @@ let g_f16_lattice_intrin_lookup <- {
 typedef IntrinsicFn = function<(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue?>
 
 //! the intrinsic `name` lowers to on this target: the generic table, then the tables of its features
-def private get_intrinsic(name : string) : IntrinsicFn {
+def private get_intrinsic(target : JitTarget; name : string) : IntrinsicFn {
     var fn : IntrinsicFn
     let find_in = $(tab : table<string; IntrinsicFn>) {
         if (fn == null) {
@@ -263,35 +270,35 @@ def private get_intrinsic(name : string) : IntrinsicFn {
         }
     }
     invoke(find_in, g_intrin_lookup)
-    if (g_target_is_aarch64) {
+    if (target.arch == JitTargetArch.aarch64) {
         invoke(find_in, g_aarch64_intrin_lookup)
     }
-    if (g_target_arm64_dotprod) {
+    if (target.features.arm64_dotprod) {
         invoke(find_in, g_aarch64_dotprod_intrin_lookup)
     }
-    if (g_target_arm64_i8mm) {
+    if (target.features.arm64_i8mm) {
         invoke(find_in, g_aarch64_i8mm_intrin_lookup)
     }
-    if (g_target_x64_avx2) {
+    if (target.features.x64_avx2) {
         invoke(find_in, g_x64_intrin_lookup)
     }
-    if (g_target_x64_vnni256) {
+    if (target.features.x64_vnni256) {
         invoke(find_in, g_x64_vnni256_intrin_lookup)
     }
-    if (g_target_x64_avx512bw) {
+    if (target.features.x64_avx512bw) {
         invoke(find_in, g_x64_avx512bw_intrin_lookup)
     }
-    if (g_target_x64_avx512vnni) {
+    if (target.features.x64_avx512vnni) {
         invoke(find_in, g_x64_avx512vnni_intrin_lookup)
     }
-    if (target_has_half_converts()) {
+    if (target_has_half_converts(target)) {
         invoke(find_in, g_f16_cvt_intrin_lookup)
     }
     invoke(find_in, g_f16_lattice_intrin_lookup)
     return fn
 }
 
-def public has_intrinsic(expr : ExprCallFunc?) {
+def public has_intrinsic(target : JitTarget; expr : ExprCallFunc?) {
     assume argType = expr.arguments[0]._type
     let call_name = "{expr.func._module.name}::{expr.func.name}"
 
@@ -303,17 +310,21 @@ def public has_intrinsic(expr : ExprCallFunc?) {
         || (call_name == "$::empty" && !(argType.isGoodArrayType || argType.isGoodTableType))
         || (call_name == "$::hash" && argType.baseType != Type.tString)
         || (!expr.arguments |> empty() && argType.isHandle)) return false
-    return get_intrinsic(call_name) != null
+    return get_intrinsic(target, call_name) != null
 }
 
-def public lookup_intinsic(g_ctx : LLVMContextRef; g_builder : LLVMOpaqueBuilder?; var types : PrimitiveTypes?; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
+def public lookup_intinsic(target : JitTarget; g_ctx : LLVMContextRef;
+                           g_builder : LLVMOpaqueBuilder?; var types : PrimitiveTypes?;
+                           expr : ExprCallFunc?;
+                           arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
     var result : LLVMOpaqueValue?
-    let fn = get_intrinsic("{expr.func._module.name}::{expr.func.name}")
+    let fn = get_intrinsic(target, "{expr.func._module.name}::{expr.func.name}")
     if (fn != null) {
-        result = fn |> invoke(JitCtx(ctx = g_ctx, builder = g_builder, types = types), expr, arguments)
+        var jit = JitCtx(ctx = g_ctx, builder = g_builder, types = types, target = target)
+        result = fn |> invoke(jit, expr, arguments)
     }
     // Check initrinsic consistency
-    verify(result != null == has_intrinsic(expr))
+    verify(result != null == has_intrinsic(target, expr))
     return result
 }
 
@@ -593,7 +604,7 @@ def intrinsic_builtin_int_vec(var ctx : JitCtx; expr : ExprCallFunc?; arguments 
 def any2float(var ctx : JitCtx; val : LLVMOpaqueValue?; argType : Type; _outType : LLVMOpaqueType? = null) {
     let outType = _outType != null ? _outType : ctx.types.t_float
     return val                                              if (argType == Type.tFloat)
-    return build_fp_convert(ctx.builder, val, outType, "") if (argType == Type.tFloat16)
+    return build_fp_convert(ctx.target, ctx.builder, val, outType, "") if (argType == Type.tFloat16)
     return LLVMBuildFPTrunc(ctx.builder, val, outType, "") if (argType == Type.tDouble)
     return LLVMBuildSIToFP(ctx.builder, val, outType, "") if (argType == Type.tInt8 || argType == Type.tInt16 || argType == Type.tInt || argType == Type.tInt64)
     return LLVMBuildUIToFP(ctx.builder, val, outType, "") if (argType == Type.tUInt8 || argType == Type.tUInt16 || argType == Type.tUInt || argType == Type.tUInt64)
@@ -649,7 +660,7 @@ def intrinsic_builtin_float(var ctx : JitCtx; expr : ExprCallFunc?; arguments : 
             return LLVMBuildFPExt(ctx.builder, arguments[0], floatType, string(expr.name))
         }
     } elif (argType.baseType == Type.tFloat16) {
-        return build_fp_convert(ctx.builder, arguments[0], floatType, string(expr.name))
+        return build_fp_convert(ctx.target, ctx.builder, arguments[0], floatType, string(expr.name))
     } else {
         return null
     }
@@ -672,7 +683,7 @@ def lattice_scalar_to_elem(var ctx : JitCtx; val : LLVMOpaqueValue?; srcBt : Typ
         } elif (srcBt == Type.tUInt) {
             f = LLVMBuildUIToFP(ctx.builder, val, ctx.types.t_float, "")
         }
-        return build_fp_convert(ctx.builder, f, ctx.types.t_half, "")
+        return build_fp_convert(ctx.target, ctx.builder, f, ctx.types.t_half, "")
     }
     let dstT = base_type_to_llvm_type(dstBt)
     if (srcBt == Type.tFloat || srcBt == Type.tDouble) {
@@ -701,7 +712,8 @@ def intrinsic_builtin_lattice_vec(var ctx : JitCtx; expr : ExprCallFunc?; argume
             // lane-matched converts (the das_sv_cvt externs share the ctor name)
             assume srcBt = argType.vectorBaseType
             if (dstBt == Type.tFloat16 && srcBt == Type.tFloat) {
-                return build_fp_convert(ctx.builder, arguments[0], dstVecT, string(expr.name))
+                return build_fp_convert(ctx.target, ctx.builder, arguments[0], dstVecT,
+                                        string(expr.name))
             }
             if ((srcBt == Type.tInt || srcBt == Type.tUInt) ||
                     (srcBt == Type.tInt16 && dstBt == Type.tInt8) ||
@@ -723,8 +735,8 @@ def intrinsic_builtin_lattice_vec(var ctx : JitCtx; expr : ExprCallFunc?; argume
     if (resType.baseType == Type.tHalf8 && length(arguments) == 2 && argType.baseType == Type.tFloat4) {
         // half8(float4 lo, float4 hi) pack
         let half4T = LLVMVectorType(ctx.types.t_half, 4u)
-        var lo = build_fp_convert(ctx.builder, arguments[0], half4T, "half8_pack_lo")
-        var hi = build_fp_convert(ctx.builder, arguments[1], half4T, "half8_pack_hi")
+        var lo = build_fp_convert(ctx.target, ctx.builder, arguments[0], half4T, "half8_pack_lo")
+        var hi = build_fp_convert(ctx.target, ctx.builder, arguments[1], half4T, "half8_pack_hi")
         return LLVMBuildShuffleVector(ctx.builder, ctx.types, lo, hi, [0, 1, 2, 3, 4, 5, 6, 7], "half8_pack")
     }
     // per-lane ctor (registrations are scalar-args-only for the lattice families)
@@ -778,14 +790,16 @@ def intrinsic_builtin_lattice_sat(var ctx : JitCtx; expr : ExprCallFunc?; argume
 
 def intrinsic_builtin_float16(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
     // scalar float16(float) — the only registered scalar fp16 ctor
-    return build_fp_convert(ctx.builder, arguments[0], ctx.types.t_half, string(expr.name))
+    return build_fp_convert(ctx.target, ctx.builder, arguments[0], ctx.types.t_half,
+                            string(expr.name))
 }
 
 def intrinsic_half8_lo_hi(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
     let base = expr.func.name == "half8_lo" ? 0 : 4
     let mask <- [for (i in range(4)); base + i]
     var quad = LLVMBuildShuffleVector(ctx.builder, ctx.types, arguments[0], arguments[0], mask, string(expr.name))
-    return build_fp_convert(ctx.builder, quad, LLVMVectorType(ctx.types.t_float, 4u), "")
+    return build_fp_convert(ctx.target, ctx.builder, quad,
+                            LLVMVectorType(ctx.types.t_float, 4u), "")
 }
 
 def intrinsic_builtin_range(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
@@ -1137,8 +1151,8 @@ def private vmath_fsplat(ctx : JitCtx; opType : TypeDeclPtr; v : double) : LLVMO
 
 // ===== the inline-polynomial rail =====
 [arch(at = "../ARCHITECTURE_VECTOR_MATH.md#vector-poly-rail")]
-def private vmath_aarch64_poly_gate(opType : TypeDeclPtr) : bool =>
-    g_target_is_aarch64 && vmath_vector_float(opType)
+def private vmath_aarch64_poly_gate(target : JitTarget; opType : TypeDeclPtr) : bool =>
+    target.arch == JitTargetArch.aarch64 && vmath_vector_float(opType)
 
 def private vmath_vector_float(opType : TypeDeclPtr) : bool =>
     opType.isVectorType && opType.vectorBaseType == Type.tFloat
@@ -1229,7 +1243,7 @@ def private build_vector_expf(ctx : JitCtx; opType : TypeDeclPtr; x : LLVMOpaque
 // libm is correctly rounded and a single scalar call carries no scalarization penalty.
 def intrinsic_math_exp(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
     assume opType = expr.arguments[0]._type
-    if (vmath_aarch64_poly_gate(opType)) {
+    if (vmath_aarch64_poly_gate(ctx.target, opType)) {
         return build_vector_expf(ctx, opType, arguments[0])
     }
     return intrinsic_math_any_float_op1("exp", ctx.builder, expr, arguments)
@@ -1284,7 +1298,7 @@ def private build_vector_sincos(ctx : JitCtx; opType : TypeDeclPtr; x : LLVMOpaq
 def intrinsic_math_sincos(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
     assume opType = expr.arguments[0]._type
     let func_name = string(expr.func.name)
-    if (vmath_aarch64_poly_gate(opType)) {
+    if (vmath_aarch64_poly_gate(ctx.target, opType)) {
         return build_vector_sincos(ctx, opType, arguments[0], func_name == "cos")
     }
     return intrinsic_math_any_float_op1(func_name, ctx.builder, expr, arguments)
@@ -1330,7 +1344,7 @@ def private build_vector_tan(ctx : JitCtx; opType : TypeDeclPtr; ang : LLVMOpaqu
 
 def intrinsic_math_tan(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
     assume opType = expr.arguments[0]._type
-    if (vmath_aarch64_poly_gate(opType)) {
+    if (vmath_aarch64_poly_gate(ctx.target, opType)) {
         return build_vector_tan(ctx, opType, arguments[0])
     }
     var sin_a = intrinsic_math_any_float_op1("sin", ctx.builder, expr, arguments)
@@ -1365,7 +1379,7 @@ def private build_vector_exp2(ctx : JitCtx; opType : TypeDeclPtr; x0 : LLVMOpaqu
 
 def intrinsic_math_exp2(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
     assume opType = expr.arguments[0]._type
-    if (vmath_aarch64_poly_gate(opType)) {
+    if (vmath_aarch64_poly_gate(ctx.target, opType)) {
         return build_vector_exp2(ctx, opType, arguments[0])
     }
     return intrinsic_math_any_float_op1("exp2", ctx.builder, expr, arguments)
@@ -1480,7 +1494,7 @@ def private build_vector_hyper(ctx : JitCtx; opType : TypeDeclPtr; x : LLVMOpaqu
 def intrinsic_math_sinh_cosh_tanh(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
     assume opType = expr.arguments[0]._type
     let func_name = string(expr.func.name)
-    if (vmath_aarch64_poly_gate(opType)) {
+    if (vmath_aarch64_poly_gate(ctx.target, opType)) {
         return build_vector_hyper(ctx, opType, arguments[0], func_name)
     }
     return intrinsic_math_any_float_op1(func_name, ctx.builder, expr, arguments)
@@ -1548,7 +1562,7 @@ def private idot_wasm_simd128(var ctx : JitCtx; acc, a, b : LLVMOpaqueValue?; aU
 [arch(at = "../ARCHITECTURE_TARGET_FEATURES.md#idot-lowerings")]
 def intrinsic_lattice_idot(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
     let aUnsigned = expr.arguments[0]._type.vectorBaseType == Type.tUInt8
-    if (g_target_is_wasm) {
+    if (ctx.target.arch == JitTargetArch.wasm) {
         let v4i32 = ctx.types.LLVMInt4Type()
         var s = idot_wasm_simd128(ctx, null, arguments[0], arguments[1], aUnsigned)
         if (s != null) {
@@ -1562,7 +1576,7 @@ def intrinsic_lattice_idot(var ctx : JitCtx; expr : ExprCallFunc?; arguments : a
             }
         }
     }
-    if (g_target_arm64_dotprod && !aUnsigned) {
+    if (ctx.target.features.arm64_dotprod && !aUnsigned) {
         let v4i32 = ctx.types.LLVMInt4Type()
         var s = idot_sdot_aarch64(ctx, LLVMConstNull(v4i32), arguments[0], arguments[1])
         if (s != null) {
@@ -1594,13 +1608,13 @@ def intrinsic_lattice_idot4(var ctx : JitCtx; expr : ExprCallFunc?; arguments : 
     let hasAcc = length(arguments) == 3
     let aIdx = hasAcc ? 1 : 0
     let aUnsigned = expr.arguments[aIdx]._type.vectorBaseType == Type.tUInt8
-    if (g_target_is_wasm) {
+    if (ctx.target.arch == JitTargetArch.wasm) {
         var s = idot_wasm_simd128(ctx, hasAcc ? arguments[0] : null, arguments[aIdx], arguments[aIdx + 1], aUnsigned)
         if (s != null) {
             return s
         }
     }
-    if (g_target_arm64_dotprod && !aUnsigned) {
+    if (ctx.target.features.arm64_dotprod && !aUnsigned) {
         let v4i32 = ctx.types.LLVMInt4Type()
         var acc = hasAcc ? arguments[0] : LLVMConstNull(v4i32)
         var s = idot_sdot_aarch64(ctx, acc, arguments[aIdx], arguments[aIdx + 1])
@@ -1628,7 +1642,7 @@ def intrinsic_lattice_idot4(var ctx : JitCtx; expr : ExprCallFunc?; arguments : 
 def intrinsic_lattice_shuffle(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
     let v16i8 = LLVMVectorType(ctx.types.t_int8, 16u)
     var idx = LLVMBuildAnd(ctx.builder, arguments[1], splat_v16i8(ctx, 15), "shuffle_idx")
-    if (g_target_is_aarch64) {
+    if (ctx.target.arch == JitTargetArch.aarch64) {
         let id = LLVMLookupIntrinsicID("llvm.aarch64.neon.tbl1")
         var declTypes <- [v16i8]
         var decl = id != 0u ? LLVMGetIntrinsicDeclaration(g_mod, id, declTypes) : null

@@ -37,7 +37,7 @@ var LINK_WHOLE_LIB = false // when true, standalone exe links against the whole 
 
 // Read by tests-cpp/small/test_jit_emitter_pin.cpp: FNV-1a64 of the emitter sources
 // (normalized to LF; file list in the test)
-let LLVM_JIT_EMITTER_HASH : uint64 = 0xb2be556bded4d946ul
+let LLVM_JIT_EMITTER_HASH : uint64 = 0x35fcf134be22afa8ul
 
 [arch(at = "../ARCHITECTURE_FAST_MATH.md#never-fast-math")]
 def private apply_fast_math_to_module(m : LLVMOpaqueModule?) {
@@ -248,12 +248,15 @@ def private add_debug_module_flags(debug_info : bool; target_triple : string) {
 
 // irgen one function set into the current g_mod, with the per-function verifier panics
 [macro_function]
-def private irgen_functions(ctx : Context?; var uids : UidNodes?; attrs : Attributes?;
-                            part : array<FunctionPtr>; jit_flags : LlvmJitFlags; jit_mode : LlvmJitMode;
+def private irgen_functions(jit_target : JitTarget; ctx : Context?; var uids : UidNodes?;
+                            attrs : Attributes?; part : array<FunctionPtr>;
+                            jit_flags : LlvmJitFlags; jit_mode : LlvmJitMode;
                             prog : Program?) : bool {
     var has_externals = false
     for (fun in part) {
-        has_externals = generate_llvm(prog, ctx, g_prim_t, uids, attrs, fun, jit_flags, jit_mode) || has_externals
+        has_externals = (generate_llvm(jit_target, prog, ctx, g_prim_t, uids, attrs, fun, jit_flags,
+                                       jit_mode)
+                         || has_externals)
         let fnmna = uids.get_dll_fn_name(fun)
         var fn_impl = LLVMGetNamedFunction(g_mod, fnmna.impl())
         var fn = LLVMGetNamedFunction(g_mod, fnmna.publ())
@@ -309,9 +312,11 @@ def private dump_module_ir(dump_to : string; mod : LLVMOpaqueModule?) {
 
 // post-irgen tail: optimize, optional IR dump, whole-module verify
 [macro_function]
-def private optimize_and_verify_module(opt_level, size_level : int; use_host_cpu, dump_ir : bool;
-                                       dump_to : string; funcs : array<FunctionPtr>; sanitize : JitSanitize) {
-    optimize_llvm_module(opt_level |> uint(), size_level |> uint(), LLVM_INLINE_THRESHOLD, use_host_cpu, sanitize)
+def private optimize_and_verify_module(jit_target : JitTarget; opt_level, size_level : int;
+                                       use_host_cpu, dump_ir : bool; dump_to : string;
+                                       funcs : array<FunctionPtr>; sanitize : JitSanitize) {
+    optimize_llvm_module(jit_target, opt_level |> uint(), size_level |> uint(),
+                         LLVM_INLINE_THRESHOLD, use_host_cpu, sanitize)
     if (dump_ir) {
         dump_module_ir(dump_to, g_mod)
     }
@@ -419,7 +424,8 @@ def private remove_split_link_files(objs : array<string>; output_path : string) 
 // (serial das): post-optimize verify per partition, then dispose everything but the ambient state.
 [macro_function, arch(at="../ARCHITECTURE_EXE.md#split-exe-lto")]
 def private run_split_codegen(prog : Program?; ctx : Context?; funcs : array<FunctionPtr>;  // nolint:STYLE037,STYLE038 - the split orchestration is one linear pipeline (the cache probe adds its branches); the phases share the re-pointed g_* state
-                              var uids : UidNodes?; jit_flags : LlvmJitFlags;
+                              jit_target : JitTarget; var uids : UidNodes?;
+                              jit_flags : LlvmJitFlags;
                               opt_level, size_level, split_threads : int; use_host_cpu : bool;
                               debug_info, dump_ir, obj_cache : bool; dump_to : string; target_triple : string;
                               output_path : string; log_jit_time : bool; sanitize : JitSanitize;
@@ -484,7 +490,7 @@ def private run_split_codegen(prog : Program?; ctx : Context?; funcs : array<Fun
         }
         if (!first_miss) {
             // the FIRST miss consumes the ambient init_jit state (a re-init would leak it); earlier misses' state lives on in g_split_parts until phase C
-            init_jit_state(opt_level |> uint, target_triple, use_host_cpu, "llvm_jit_{ptag}")
+            init_jit_state(jit_target, opt_level |> uint, target_triple, "llvm_jit_{ptag}")
             add_debug_module_flags(debug_info, target_triple)
         } else {
             // ambient module identifier must match a later-miss emission - same key, same bytes
@@ -494,7 +500,8 @@ def private run_split_codegen(prog : Program?; ctx : Context?; funcs : array<Fun
         first_miss = false
         let attrs = new Attributes(g_ctx)
         // eager declare covers OWN pairs only; out-of-partition callees declare-on-reference
-        var fake_visitor = new LlvmJitVisitor(prog, ctx, g_prim_t, uids, jit_flags, LlvmJitMode.JIT, null, attrs)
+        var fake_visitor = new LlvmJitVisitor(prog, ctx, g_prim_t, uids, jit_flags, LlvmJitMode.JIT,
+                                              null, attrs, jit_target)
         ast_gc_guard() {
             for (fun in buckets[pname]) {
                 fake_visitor->add_llvm_functions(fun)
@@ -504,29 +511,31 @@ def private run_split_codegen(prog : Program?; ctx : Context?; funcs : array<Fun
             delete fake_visitor
         }
         // the has_externals return is meaningful only on the wasm path, unreachable under split - discard
-        irgen_functions(ctx, uids, attrs, buckets[pname], jit_flags, LlvmJitMode.JIT, prog)
+        irgen_functions(jit_target, ctx, uids, attrs, buckets[pname], jit_flags, LlvmJitMode.JIT,
+                        prog)
         di_finalize()
         verify_module_or_panic(buckets[pname])
         // fileinfo ctors ride llvm.global_ctors (private; the link appends all, LoadLibrary runs every one)
-        generate_global_ctors_dtors(g_prim_t, false)
+        generate_global_ctors_dtors(jit_target, g_prim_t, false)
         if (g_jit_fast_math) {
             apply_fast_math_to_module(g_mod)
         }
         apply_strict_aliasing_to_module(g_mod)
         g_split_parts |> push(JitSplitPart(ctx = g_ctx, mod = g_mod, engine = g_engine, prim_t = g_prim_t,
-            tm = create_default_target_machine(codegen_level, use_host_cpu),
+            tm = create_default_target_machine(jit_target, codegen_level, use_host_cpu),
             pbo = create_jit_pass_builder_options(LLVM_INLINE_THRESHOLD),
             obj = obj, obj_final = obj_final, tag = ptag, solid = take_solid_globals()))
     }
     if (target.gen_exe) {
         let ptag = "exe_main"
         if (!first_miss) {
-            init_jit_state(opt_level |> uint, target_triple, use_host_cpu, "llvm_jit_{ptag}")
+            init_jit_state(jit_target, opt_level |> uint, target_triple, "llvm_jit_{ptag}")
             add_debug_module_flags(debug_info, target_triple)
         }
         first_miss = false
         let attrs = new Attributes(g_ctx)
-        var fake_visitor = new LlvmJitVisitor(prog, ctx, g_prim_t, uids, jit_flags, LlvmJitMode.JIT, null, attrs)
+        var fake_visitor = new LlvmJitVisitor(prog, ctx, g_prim_t, uids, jit_flags, LlvmJitMode.JIT,
+                                              null, attrs, jit_target)
         ast_gc_guard() {
             for (fun in funcs) {   // every pair declared: the entry looks its functions up by name, and the link resolves each to its partition
                 fake_visitor->add_llvm_functions(fun)
@@ -539,7 +548,7 @@ def private run_split_codegen(prog : Program?; ctx : Context?; funcs : array<Fun
             let decl = LLVMAddGlobal(g_mod, g_prim_t.LLVMVoidPtrType(), glob)
             LLVMSetLinkage(decl, LLVMLinkage.LLVMExternalLinkage)
         }
-        let res = inject_main(ctx, g_ctx, prog, target.exe_main, g_mod, g_prim_t, uids,
+        let res = inject_main(ctx, g_ctx, jit_target, prog, target.exe_main, g_mod, g_prim_t, uids,
             target.exe_strict, target.register_all_modules, target.lib_static)
         link_whole_lib = res.link_whole_lib
         main_ok = res.fn != null
@@ -547,7 +556,7 @@ def private run_split_codegen(prog : Program?; ctx : Context?; funcs : array<Fun
         if (main_ok) {
             let no_funcs : array<FunctionPtr>
             verify_module_or_panic(no_funcs)
-            generate_global_ctors_dtors(g_prim_t, false)
+            generate_global_ctors_dtors(jit_target, g_prim_t, false)
             if (g_jit_fast_math) {
                 apply_fast_math_to_module(g_mod)
             }
@@ -556,7 +565,7 @@ def private run_split_codegen(prog : Program?; ctx : Context?; funcs : array<Fun
             let obj = "{obj_final}.{publish_token}.tmp"
             objs |> push(obj_final)
             g_split_parts |> push(JitSplitPart(ctx = g_ctx, mod = g_mod, engine = g_engine, prim_t = g_prim_t,
-                tm = create_default_target_machine(codegen_level, use_host_cpu),
+                tm = create_default_target_machine(jit_target, codegen_level, use_host_cpu),
                 pbo = create_jit_pass_builder_options(LLVM_INLINE_THRESHOLD),
                 obj = obj, obj_final = obj_final, tag = ptag, solid = take_solid_globals()))
         }
@@ -652,7 +661,7 @@ def private run_split_codegen(prog : Program?; ctx : Context?; funcs : array<Fun
         let host_triple = host_jit_triple()   //! the daslang host's own triple where it differs from LLVM's default (mingw), the source create_default_target_machine reads
         let triple_owned = empty(target_triple) && empty(host_triple)
         let lto_triple = triple_owned ? LLVMGetDefaultTargetTriple() : (empty(target_triple) ? host_triple : target_triple)
-        let machine = default_target_cpu_features(use_host_cpu)
+        let machine = default_target_cpu_features(jit_target, use_host_cpu)
         for (p, i in g_split_parts, count()) {
             LLVMSetTarget(p.mod, lto_triple)   // lld's LTO backend reads the MODULE triple (normal emission gets it from the TargetMachine)
             stamp_target_attrs(p.mod, machine.cpu, machine.features)
@@ -757,20 +766,19 @@ def public run_jit(prog : Program?; var ctx : Context?; cli_opts : JitCliOptions
         g_jit_split_exe = false
         g_split_glob_names |> clear()
     }
-    // --jit-threads: set the codegen global before any IR is built so both the data-layout machine
-    // and write_wasm's emission machine pick up the threaded feature set.
-    g_target_wasm_threads = plan.wasm_threads
     // --jit-check-abi: set before codegen so llvm_exe's sweep sees the flag.
     g_jit_check_handled_abi = plan.check_abi
-    // the disable pass consults target-gated intrinsic tables (has_intrinsic) — the
-    // g_target_* truth must be set BEFORE it runs, not first at init_jit time below.
-    init_jit_target_flags(target_triple, use_host_cpu)
+    // one target for the whole run: the disable pass's intrinsic
+    // tables, codegen, and every emission machine (--jit-threads
+    // gives the wasm ones the threaded feature set)
+    let jit_target = make_jit_target(target_triple, use_host_cpu, plan.wasm_threads)
     var funcs : array<FunctionPtr>
     var declined : array<tuple<FunctionPtr; string>>
     var visitorDisabled = 0
     var emit_failed = false
     defer() { reset_codegen_accumulators(); }
     var disableJitVisitor = new DisableJitVisitor()
+    disableJitVisitor.jit_target = jit_target
     make_visitor(*disableJitVisitor) $(disableJitVisitorAdapter) {
         for (fun in plan.candidates) {
             disableJitVisitor.disable = false
@@ -807,7 +815,7 @@ def public run_jit(prog : Program?; var ctx : Context?; cli_opts : JitCliOptions
         // Pass target_triple so init_jit can pin the module data layout
         // BEFORE IR construction (wasm32 cross-compile needs 4-byte pointer
         // sizes baked into GEP folding from the very first IR instruction).
-        init_jit(opt_level |> uint, target_triple, use_host_cpu)
+        init_jit(jit_target, opt_level |> uint, target_triple)
         let t_init = get_time_usec(phase_tm)
 
         add_debug_module_flags(debug_info, target_triple)
@@ -822,7 +830,8 @@ def public run_jit(prog : Program?; var ctx : Context?; cli_opts : JitCliOptions
         // split mode declares per partition inside run_split_codegen (eager-declaring all
         // functions into every partition module would be O(funcs x partitions) dead work)
         if (!jit_split) {
-            var fake_visitor = new LlvmJitVisitor(prog, ctx, g_prim_t, uids, jit_flags, jit_mode, null, attrs)
+            var fake_visitor = new LlvmJitVisitor(prog, ctx, g_prim_t, uids, jit_flags, jit_mode,
+                                                  null, attrs, jit_target)
             ast_gc_guard() {
                 for (fun in funcs) {
                     fake_visitor->add_llvm_functions(fun)
@@ -854,8 +863,9 @@ def public run_jit(prog : Program?; var ctx : Context?; cli_opts : JitCliOptions
         var jit_has_externals = false
         var split_parts = 0
         if (recompile_prog && jit_split) {
-            let sres <- run_split_codegen(prog, ctx, funcs, uids, jit_flags, opt_level, size_level,
-                split_modules, use_host_cpu, debug_info, dump_ir, obj_cache, plan.dump_ir_path, target_triple, output_path, log_jit_time, plan.sanitize,
+            let sres <- run_split_codegen(prog, ctx, funcs, jit_target, uids, jit_flags, opt_level,
+                size_level, split_modules, use_host_cpu, debug_info, dump_ir, obj_cache,
+                plan.dump_ir_path, target_triple, output_path, log_jit_time, plan.sanitize,
                 SplitTarget(gen_exe = gen_exe, exe_main = exe_main, exe_strict = exe_strict,
                     register_all_modules = register_all_modules, lib_static = lib_static,
                     lto = jit_lto))
@@ -907,12 +917,13 @@ def public run_jit(prog : Program?; var ctx : Context?; cli_opts : JitCliOptions
                                   lto_probe ? "" : dll_hash_basename, sres.objs, g_published_names)
             }
         } elif (recompile_prog) {
-            jit_has_externals = irgen_functions(ctx, uids, attrs, funcs, jit_flags, jit_mode, prog)
+            jit_has_externals = irgen_functions(jit_target, ctx, uids, attrs, funcs, jit_flags,
+                                                jit_mode, prog)
             if (gen_lib) {
                 let export_marked = plan.lib_export_marked
-                let res = inject_lib(ctx, g_ctx, prog, g_mod, g_prim_t, uids, exe_strict,
-                    prog.policies.export_public_functions || export_marked, output_path,
-                    plan.register_all_modules)
+                let res = inject_lib(jit_target, ctx, g_ctx, prog, g_mod, g_prim_t, uids,
+                    exe_strict, prog.policies.export_public_functions || export_marked,
+                    output_path, plan.register_all_modules)
                 LINK_WHOLE_LIB = res.link_whole_lib
                 if (res.fn == null) {
                     finalize_jit(use_dll, gen_exe, g_dynamic_lib_handle)
@@ -921,8 +932,8 @@ def public run_jit(prog : Program?; var ctx : Context?; cli_opts : JitCliOptions
                     return run
                 }
             } elif (gen_exe) {
-                let res = inject_main(ctx, g_ctx, prog, exe_main, g_mod, g_prim_t, uids, exe_strict,
-                    plan.register_all_modules, lib_static)
+                let res = inject_main(ctx, g_ctx, jit_target, prog, exe_main, g_mod, g_prim_t,
+                    uids, exe_strict, plan.register_all_modules, lib_static)
                 LINK_WHOLE_LIB = res.link_whole_lib
                 if (res.fn == null) {
                     // before finalize_jit, which disposes the engine that owns g_mod
@@ -940,12 +951,15 @@ def public run_jit(prog : Program?; var ctx : Context?; cli_opts : JitCliOptions
             var aot_ctor : LLVMOpaqueValue? = null
             var aot_dtor : LLVMOpaqueValue? = null
             if (emit_aot_object) {
-                var pair = build_llvm_aot_ctors(g_ctx, g_mod, g_prim_t, funcs, declined, uids, prog)
+                var pair = build_llvm_aot_ctors(jit_target, g_ctx, g_mod, g_prim_t, funcs, declined,
+                                                uids, prog)
                 aot_ctor = pair._0
                 aot_dtor = pair._1
                 emit_aot_pull_anchor(g_mod, g_prim_t, base_name(output_path))
             }
-            generate_global_ctors_dtors(g_prim_t, emit_aot_object ? false : !(use_dll || gen_exe), aot_ctor, aot_dtor)
+            generate_global_ctors_dtors(jit_target, g_prim_t,
+                                        emit_aot_object ? false : !(use_dll || gen_exe),
+                                        aot_ctor, aot_dtor)
             if (emit_aot_object) {
                 let plat = get_platform_name()
                 if (plat == "linux" || plat == "android") {
@@ -963,32 +977,34 @@ def public run_jit(prog : Program?; var ctx : Context?; cli_opts : JitCliOptions
             }
             apply_strict_aliasing_to_module(g_mod)
             if (use_host_cpu && !(compile_only || emit_aot_object || gen_lib || gen_wasm || gen_exe || use_dll)) {
-                stamp_host_target_attrs(g_mod)   // the module runs on the in-memory engine, which carries no cpu or features of its own
+                // the in-memory engine carries no cpu or features of its own
+                stamp_host_target_attrs(jit_target, g_mod)
             }
             t_irgen = get_time_usec(phase_tm)
             phase_tm = ref_time_ticks()
-            optimize_and_verify_module(opt_level, size_level, use_host_cpu, dump_ir, plan.dump_ir_path, funcs, plan.sanitize)
+            optimize_and_verify_module(jit_target, opt_level, size_level, use_host_cpu, dump_ir,
+                                       plan.dump_ir_path, funcs, plan.sanitize)
             // optimize covers the passes plus the opt-in IR dump and the post-opt verify
             t_opt = get_time_usec(phase_tm)
             phase_tm = ref_time_ticks()
             if (compile_only) {
                 to_log(LOG_INFO, "LLVM JIT: compile-only - module built, optimized and verified; no artifact written, nothing installed\n")
             } elif (emit_aot_object) {
-                emit_failed ||= !emit_object_only(g_mod, output_path, use_host_cpu)
+                emit_failed ||= !emit_object_only(jit_target, g_mod, output_path, use_host_cpu)
             } elif (gen_lib) {
                 mkdir_rec(dir_name(output_path))
-                let lib_kind = (gen_wasm ? JitArtifact.object
+                let lib_kind = (!empty(target_triple) ? JitArtifact.object
                     : (lib_static ? JitArtifact.static_lib : JitArtifact.shared_lib))
                 let written = (lib_kind == JitArtifact.object
-                    ? write_wasm_lib(g_mod, output_path, target_triple, LINK_WHOLE_LIB)
-                    : write_artifact(g_mod, output_path, lib_kind, path_to_shared_lib,
+                    ? write_cross_lib(jit_target, g_mod, output_path, target_triple, LINK_WHOLE_LIB)
+                    : write_artifact(jit_target, g_mod, output_path, lib_kind, path_to_shared_lib,
                         path_to_linker, linker_string, LINK_WHOLE_LIB, exe_host_cpu, debug_info,
                         log_jit_time))
                 emit_failed ||= !written
                 let lib_names = CNames(prefix = lib_prefix_from_path(output_path), this_module = prog.getThisModule)
                 let src_name = string(prog.getThisModule.fileName)
                 let header_ok = written && emit_c_header(g_lib_exports, lib_names, src_name,
-                    output_path, lib_link_note(lib_kind, LINK_WHOLE_LIB))
+                    output_path, lib_link_note(jit_target, lib_kind, LINK_WHOLE_LIB))
                 if (written && !header_ok) {
                     to_log(LOG_ERROR, "LLVM LIB: the library is written but its C header is " +
                         "not - {output_path}.h\n")
@@ -1003,15 +1019,19 @@ def public run_jit(prog : Program?; var ctx : Context?; cli_opts : JitCliOptions
                 // path_to_linker is reused as the optional emcc override
                 // for the wasm link (mirrors how it's used for the host
                 // linker, lld-link/clang/c++, on the host path).
-                emit_failed ||= !write_wasm(g_mod, output_path, target_triple, path_to_linker, jit_has_externals, runtime_lib_override, emit_object)
+                emit_failed ||= !write_wasm(jit_target, g_mod, output_path, target_triple,
+                                            path_to_linker, jit_has_externals, runtime_lib_override,
+                                            emit_object)
             } elif (gen_exe) {
                 mkdir_rec(dir_name(output_path))
-                emit_failed ||= !write_artifact(g_mod, output_path, JitArtifact.exe, path_to_shared_lib, path_to_linker,
-                    linker_string, LINK_WHOLE_LIB, exe_host_cpu, debug_info, false, 3u, lib_static)
+                emit_failed ||= !write_artifact(jit_target, g_mod, output_path, JitArtifact.exe,
+                    path_to_shared_lib, path_to_linker, linker_string, LINK_WHOLE_LIB, exe_host_cpu,
+                    debug_info, false, 3u, lib_static)
             } elif (use_dll) {
                 mkdir_rec(dir_name(output_path))
-                emit_failed ||= !write_artifact(g_mod, output_path, JitArtifact.jit_dll, path_to_shared_lib, path_to_linker,
-                    linker_string, LINK_WHOLE_LIB, true, debug_info, log_jit_time, opt_level |> uint)
+                emit_failed ||= !write_artifact(jit_target, g_mod, output_path, JitArtifact.jit_dll,
+                    path_to_shared_lib, path_to_linker, linker_string, LINK_WHOLE_LIB, true,
+                    debug_info, log_jit_time, opt_level |> uint)
                 let no_keep_objs : array<string>   // monolith artifacts all carry the dll-hash prefix
                 reopen_and_gc_dll(prog, g_dynamic_lib_handle, output_path, funcs, disabled, uids,
                                   dll_hash_basename, no_keep_objs, g_published_names)

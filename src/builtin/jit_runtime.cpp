@@ -1240,14 +1240,25 @@ DAS_API int32_t jit_lib_run_once ( int32_t * guard, void ** env, void (*fn)() ) 
     return 1;
 }
 
-DAS_API int32_t jit_lib_invoke_guarded ( das::Context * ctx, void (*tramp)(das::Context *, void *), void * frame ) {
+static int32_t jit_lib_run_in_frame ( das::Context * ctx, void (*tramp)(das::Context *, void *), void * frame, uint32_t frameSize ) {
+    char * EP = nullptr, * SP = nullptr;
+    const bool pushed = frameSize && ctx->stack.size();
+    if ( pushed && !ctx->stack.push(frameSize, EP, SP) ) {
+        return ctx->runWithCatch([&]() { ctx->throw_error("stack overflow: the library's frame does not fit the context stack"); }) ? 1 : 0;
+    }
+    const int32_t ok = ctx->runWithCatch([&]() { tramp(ctx, frame); }) ? 1 : 0;
+    if ( pushed ) ctx->stack.pop(EP, SP);
+    return ok;
+}
+
+DAS_API int32_t jit_lib_invoke_guarded ( das::Context * ctx, void (*tramp)(das::Context *, void *), void * frame, int32_t frameSize ) {
     if ( !ctx ) return 0;
     ctx->clearException();
     if ( ctx->contextMutex ) {
         das::lock_guard<das::recursive_mutex> guard(*ctx->contextMutex);
-        return ctx->runWithCatch([&]() { tramp(ctx, frame); }) ? 1 : 0;
+        return jit_lib_run_in_frame(ctx, tramp, frame, uint32_t(frameSize));
     }
-    return ctx->runWithCatch([&]() { tramp(ctx, frame); }) ? 1 : 0;
+    return jit_lib_run_in_frame(ctx, tramp, frame, uint32_t(frameSize));
 }
 
 DAS_API das::Context * jit_lib_create_finish ( das::Context * ctx, int32_t ok, char ** err ) {

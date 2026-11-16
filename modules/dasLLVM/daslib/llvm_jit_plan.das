@@ -515,9 +515,9 @@ def public fold_function_hints(funcs : array<FunctionPtr>; seed : uint64) : uint
     return h
 }
 
-// True when the program jits any [llvm_code] kernel — those emit host-specific IR (e.g. AVX2) a
-// generic x86-64 exe can't legalize, so a -exe carrying them must target the current box. Scanned
-// BEFORE target flags: the generators' decline predicates consult g_target_*, so order matters.
+// True when the program jits an [llvm_code] kernel: host IR (AVX2) a
+// generic x86-64 exe can't legalize, so its -exe targets this box.
+// Scanned BEFORE the JitTarget the decline predicates consult exists.
 def private has_generated_kernel(prog : Program?; jit_all_functions : bool) : bool {
     var found = false
     prog |> for_each_module() $(mod) {
@@ -1354,17 +1354,21 @@ def private resolve_static_option(var plan : JitPlan; cli_opts : JitCliOptions; 
     }
 }
 
-//! a wasm library is wasm64 only - the host bakes 8-byte pointer
-//! layouts into the object - and has no shared library for dasbind
-def private resolve_wasm_lib_options(var plan : JitPlan; announce : bool) {
-    return if (!plan.gen_lib || !plan.gen_wasm)
-    if (!(plan.target_triple |> starts_with("wasm64"))) {
-        plan.refusal = ("a wasm library cross-compiles to wasm64 only - the 64-bit host bakes " +
-            "8-byte pointer layouts that a wasm32 runtime reads as 4")
+//! a cross-target library is 64-bit only - the host bakes 8-byte
+//! pointer layouts into the object - and has no shared library for
+//! dasbind
+def private resolve_cross_lib_options(var plan : JitPlan; announce : bool) {
+    return if (!plan.gen_lib || empty(plan.target_triple))
+    let triple = plan.target_triple
+    let wide = (triple |> starts_with("wasm64") || triple |> starts_with("aarch64")
+        || triple |> starts_with("arm64") || triple |> starts_with("x86_64"))
+    if (!wide) {
+        plan.refusal = ("a cross-target library is 64-bit only (wasm64, aarch64, x86_64) - " +
+            "the 64-bit host bakes 8-byte pointer layouts that a 32-bit runtime reads as 4")
     }
     if (plan.lib_static) {
         if (announce) {
-            to_log(LOG_WARNING, "LLVM JIT: a wasm library is always one wasm object - " +
+            to_log(LOG_WARNING, "LLVM JIT: a cross-target library is always one object - " +
                 "--jit-static ignored\n")
         }
         plan.lib_static = false
@@ -1372,7 +1376,7 @@ def private resolve_wasm_lib_options(var plan : JitPlan; announce : bool) {
     if (!empty(plan.lib_bindings)) {
         if (announce) {
             to_log(LOG_WARNING, "LLVM JIT: --jit-lib-bindings names a shared library for dasbind " +
-                "to load - a wasm library has none, ignored\n")
+                "to load - a cross-target library has none, ignored\n")
         }
         plan.lib_bindings = ""
     }
@@ -1479,7 +1483,7 @@ def public make_jit_plan(prog : Program?; var ctx : Context?; announce : bool; c
     g_jit_fast_math = (prog._options |> find_arg("fast_math") ?as tBool ?? (prog.policies.fast_math || HOST_FAST_MATH)) || (prog._options |> find_arg("_jit_fast_math") ?as tBool ?? false)
     g_jit_strict_aliasing = prog._options |> find_arg("strict_aliasing") ?as tBool ?? true
     resolve_static_option(plan, cli_opts, announce)
-    resolve_wasm_lib_options(plan, announce)
+    resolve_cross_lib_options(plan, announce)
     resolve_sanitize_option(plan, cli_opts, prog, announce)
 
     // nolint:STYLE014

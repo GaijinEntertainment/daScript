@@ -74,6 +74,7 @@ class public CollectExternVisitor : AstVisitor {
     extern_modules : table<string; bool>
     registered_modules : table<string; bool>
     dynamic_modules : table<string; bool>
+    jit_target : JitTarget
     register_mod_type : LLVMOpaqueType?
     init_builder : LLVMBuilderRef
 
@@ -148,7 +149,9 @@ class public CollectExternVisitor : AstVisitor {
     def CollectExternVisitor(standalone_context : LLVMOpaqueValue?; _ctx : LLVMContextRef; // nolint:STYLE038 — LLVM type-table setup: one cached type/fn-type per line
                              _builder : LLVMBuilderRef,
                              _mod : LLVMOpaqueModule?; var _types : PrimitiveTypes?,
-                             uids : UidNodes?; register_all : bool; _jit_mod : LlvmJitMode) {
+                             uids : UidNodes?; register_all : bool; _jit_mod : LlvmJitMode;
+                             target : JitTarget) {
+        jit_target = target
         needs_whole_lib = false
         uid := uids
         ctx = _ctx
@@ -302,8 +305,11 @@ class public CollectExternVisitor : AstVisitor {
     def ensure_module(m : Module?) {
         if (g_emit_aot_object_globals || m == null) return  // host already has every module registered
         let mod_name = string(m.name)
-        // Dynamic modules register via the runtime load path (skipped here) — except wasm cross-compile, where they're statically linked and must register like any module.
-        if (key_exists(registered_modules, mod_name) || (key_exists(dynamic_modules, mod_name) && !g_target_is_wasm)) return
+        // Dynamic modules register via the runtime load path (skipped
+        // here) - except on a cross link, where they are static and
+        // register like any module.
+        let dynamic = key_exists(dynamic_modules, mod_name) && !jit_target.cross
+        if (key_exists(registered_modules, mod_name) || dynamic) return
         registered_modules[mod_name] = true
         // First ensure all dependencies of this module are registered
         module_for_each_dependency(m) $(var dep : Module?; var _pub : bool) {
@@ -337,7 +343,7 @@ class public CollectExternVisitor : AstVisitor {
     }
 
     def make_call(expr : ExprCallFunc?) {
-        if (expr.func == null || has_intrinsic(expr)) return
+        if (expr.func == null || has_intrinsic(jit_target, expr)) return
         if (expr.func.flags.builtIn) {
             let FUNC_PTR = get_builtin_function_address(expr.func)
             if (FUNC_PTR == null) return
@@ -626,12 +632,15 @@ def private program_uses_dynamic_module(prog : Program?; dynamic_modules : table
 
 [arch(at="../ARCHITECTURE_EXE.md#dynamic-module-startup")]
 def collect_external_functions(standalone_context : LLVMOpaqueValue?; ctx : LLVMContextRef; builder : LLVMBuilderRef, // nolint:STYLE038 — flat emission walk: one registration form per function class
-                               mod : LLVMOpaqueModule ?; var types : PrimitiveTypes?;
+                               target : JitTarget;
+                               mod : LLVMOpaqueModule?; var types : PrimitiveTypes?;
                                var funcs : array<FunctionPtr>; var uids : UidNodes?;
                                var used_modules : table<string; bool>&;
                                dynamic_modules : table<string; bool>;
                                prog : Program?; register_all_modules : bool = false) : tuple<needs_whole_lib : bool; registered : array<tuple<index : int; mnh : uint64; name : string>>> {
-    var extern_resolver = new CollectExternVisitor(standalone_context, ctx, builder, mod, types, uids, register_all_modules, LlvmJitMode.EXE)
+    var extern_resolver = new CollectExternVisitor(standalone_context, ctx, builder, mod, types,
+                                                   uids, register_all_modules, LlvmJitMode.EXE,
+                                                   target)
     extern_resolver.prog = prog
     extern_resolver.dynamic_modules := dynamic_modules
     make_visitor(*extern_resolver) $(adapter_resolve) {
@@ -682,7 +691,8 @@ def collect_external_functions(standalone_context : LLVMOpaqueValue?; ctx : LLVM
             LLVMBuildCall2(ib, reg_dyn_mod_type, jit_reg_dyn_mod, fixed_array(rel_str, abs_str, name_str), "")
         }
     }
-    if (!g_target_is_wasm && !register_all_modules && program_uses_dynamic_module(prog, dynamic_modules)) {
+    if (!target.cross && !register_all_modules
+            && program_uses_dynamic_module(prog, dynamic_modules)) {
         let finish_type = LLVMFunctionType(t.t_void, array<LLVMTypeRef>())
         let finish_name = LLVMGetNamedGlobal(g_mod, LIB_GUARD_GLOBAL) == null ? "jit_finalize_dynamic_modules" : "jit_lib_finalize_dynamic_modules"
         var finish = LLVMGetNamedFunction(g_mod, finish_name)
@@ -1086,6 +1096,7 @@ def private find_exe_entry(var funcs : array<FunctionPtr>; uids : UidNodes?; ent
 
 
 def public emit_standalone_runtime_init(builder : LLVMBuilderRef; prog : Program?; var types : PrimitiveTypes?;   // nolint:STYLE038 - one linear registration sequence, in startup order; a split would hide which step runs when
+                                        target : JitTarget;
                                         register_all_modules : bool; force_dynamic_modules : table<string; bool>;
                                         var used_modules : table<string; bool>&;
                                         var dynamic_modules : table<string; bool>&;
@@ -1161,7 +1172,7 @@ def public emit_standalone_runtime_init(builder : LLVMBuilderRef; prog : Program
     )
     var jit_reg_dyn_mod = LLVMAddFunctionWithType(g_mod, "jit_register_dynamic_module_resolve", reg_dyn_mod_type)
     // a compiler driver loads every module daslang would, by the same modules/*/.das_module scan
-    let scan_all = register_all_modules && !g_target_is_wasm
+    let scan_all = register_all_modules && !target.cross
     if (scan_all) {
         LLVMBuildCall2(builder, das_ensure_env_type, LLVMAddFunctionWithType(g_mod, "das_require_dynamic_modules", das_ensure_env_type), array<LLVMValueRef>(), "")
     }
@@ -1233,7 +1244,9 @@ def public emit_create_standalone_ctx(builder : LLVMBuilderRef; program_context 
 
 
 def public emit_standalone_context_init(builder : LLVMBuilderRef; fusion_builder : LLVMBuilderRef;   // nolint:STYLE038 - one linear startup sequence sharing the context value; a split would hide which step runs when
-                                        program_context : Context ?; ctx : LLVMContextRef; prog : Program?;
+                                        target : JitTarget;
+                                        program_context : Context?; ctx : LLVMContextRef;
+                                        prog : Program?;
                                         mod : LLVMOpaqueModule?; var types : PrimitiveTypes?; var uids : UidNodes?;
                                         var funcs : array<FunctionPtr>; global_context : LLVMOpaqueValue?;
                                         register_all_modules : bool; ships_dynamic : bool;
@@ -1249,19 +1262,24 @@ def public emit_standalone_context_init(builder : LLVMBuilderRef; fusion_builder
         var jit_flags : LlvmJitFlags
         jit_flags.emit_prologue = true
         jit_flags.need_di = false
-        let pair = generate_globals_initialization_fn(program_context, prog, types, uids, jit_flags, LlvmJitMode.EXE)
+        let pair = generate_globals_initialization_fn(target, program_context, prog, types, uids,
+                                                      jit_flags, LlvmJitMode.EXE)
         init_glob = pair._0
         init_glob_type = pair._1
         // Clone variant: inits non-shared globals only (a clone is not the shared owner;
         // re-initializing shared globals would corrupt the parent's shared buffer). Used by
         // the clone init script below so a jobque/thread/audio clone matches the interpreter.
         uids.block_name_salt = "clone`"
-        let cpair = generate_globals_initialization_fn(program_context, prog, types, uids, jit_flags, LlvmJitMode.EXE, "init_globals_clone", true)
+        let cpair = generate_globals_initialization_fn(target, program_context, prog, types, uids,
+                                                       jit_flags, LlvmJitMode.EXE,
+                                                       "init_globals_clone", true)
         uids.block_name_salt = ""
         clone_init_glob = cpair._0
     }
 
-    let collected <- collect_external_functions(global_context, ctx, builder, mod, types, funcs, uids, used_modules, dynamic_modules, prog, register_all_modules)
+    let collected <- collect_external_functions(global_context, ctx, builder, target, mod, types,
+                                                funcs, uids, used_modules, dynamic_modules, prog,
+                                                register_all_modules)
     // Determine if exe needs the whole compiler lib (rtti, ast, debugger, jit, sort-with-cblock)
     var needs_whole_lib = collected.needs_whole_lib
     // ast_core / network_core live in the compiler lib, so registering them pulls compiler-only
@@ -1287,7 +1305,7 @@ def public emit_standalone_context_init(builder : LLVMBuilderRef; fusion_builder
 
     // the rows feed the compile-time require resolver, which only a whole-lib exe links (ARCHITECTURE_EXE.md sec.1);
     // a register-all exe's module scan registers them itself
-    if (needs_whole_lib && !(register_all_modules && !g_target_is_wasm)) {
+    if (needs_whole_lib && !(register_all_modules && !target.cross)) {
         let reg_native_path_type = LLVMFunctionType(types.t_void,
             fixed_array<LLVMTypeRef>(
                 types.LLVMVoidPtrType(), // const char * mod_name
@@ -1306,9 +1324,10 @@ def public emit_standalone_context_init(builder : LLVMBuilderRef; fusion_builder
         }
     }
 
-    // Whole-compiler-lib link: register the fusion engine (needed by simulate). Skip on wasm —
-    // cross-link only sees libDaScript_runtime.a (no jit_register_fusion), and exes never read it (#2805).
-    if (needs_whole_lib && !g_target_is_wasm) {
+    // Whole-compiler-lib link: register the fusion engine (simulate
+    // needs it). Skip on a cross link - it sees only the runtime
+    // archive (no jit_register_fusion), and exes never read it (#2805).
+    if (needs_whole_lib && !target.cross) {
         let reg_fusion_type = jit_fn_type($() : void {})
         var reg_fusion_fn = declare_extern_fn("jit_register_fusion", reg_fusion_type)
         LLVMBuildCall2(fusion_builder, reg_fusion_type, reg_fusion_fn, array<LLVMValueRef>(), "")
@@ -1414,7 +1433,8 @@ def public emit_standalone_context_init(builder : LLVMBuilderRef; fusion_builder
 }
 [arch(at="../ARCHITECTURE_EXE.md#browser-lifecycle-entry")]
 def public inject_main(program_context : Context?; ctx : LLVMContextRef; // nolint:STYLE037,STYLE038 — the standalone-exe entry emitter: one emission block per runtime feature, in startup order
-                       prog : Program ?; entry_point : string; mod : LLVMOpaqueModule?;
+                       target : JitTarget;
+                       prog : Program?; entry_point : string; mod : LLVMOpaqueModule?;
                        var types : PrimitiveTypes?, var uids : UidNodes?; strict : bool;
                        register_all_modules : bool = false;
                        static_runtime : bool = false
@@ -1447,14 +1467,14 @@ def public inject_main(program_context : Context?; ctx : LLVMContextRef; // noli
             types.LLVMVoidPtrType() // argv
         )
     )
-    let main_sym = g_target_is_wasm ? "__main_argc_argv" : "main"
+    let main_sym = target.arch == JitTargetArch.wasm ? "__main_argc_argv" : "main"
     let main_fn = LLVMAddFunctionWithType(mod, main_sym, main_fn_type)
     let entry = LLVMAppendBasicBlockInContext(ctx, main_fn, "entry")
     LLVMPositionBuilderAtEnd(builder, entry)
 
     var dynamic_modules : table<string; bool>
-    let ships_dynamic = emit_standalone_runtime_init(builder, prog, types, register_all_modules,
-        force_dynamic_modules, used_modules, dynamic_modules)
+    let ships_dynamic = emit_standalone_runtime_init(builder, prog, types, target,
+        register_all_modules, force_dynamic_modules, used_modules, dynamic_modules)
     if (ships_dynamic && static_runtime) {
         var names : array<string>
         prog |> for_each_module() $(m) {
@@ -1484,13 +1504,14 @@ def public inject_main(program_context : Context?; ctx : LLVMContextRef; // noli
 
     let global_context = emit_create_standalone_ctx(builder, program_context, prog, types, any_pinvoke)
 
-    let needs_whole_lib = emit_standalone_context_init(builder, builder, program_context, ctx, prog, mod,
-        types, uids, funcs, global_context, register_all_modules, ships_dynamic, used_modules, dynamic_modules)
+    let needs_whole_lib = emit_standalone_context_init(builder, builder, target, program_context,
+        ctx, prog, mod, types, uids, funcs, global_context, register_all_modules, ships_dynamic,
+        used_modules, dynamic_modules)
     var main_params = fixed_array<LLVMOpaqueValue?>(global_context)
     // Match the interpreter's WebLoop: on wasm a program exporting `update` runs as init() once +
     // update() per browser frame + shutdown() (the browser can't block in main's while-loop). `main`
     // stays the desktop driver, bypassed here — so the same .das cross-compiles unchanged for web.
-    if (g_target_is_wasm) {
+    if (target.arch == JitTargetArch.wasm) {
         var update_impl = ""
         var update_returns_value = false
         var update_count = 0
@@ -1603,7 +1624,8 @@ def private emit_lib_globals(var types : PrimitiveTypes?) {
 }
 
 
-def private emit_runtime_init(ctx : LLVMContextRef; prog : Program?; var types : PrimitiveTypes?;
+def private emit_runtime_init(target : JitTarget; ctx : LLVMContextRef; prog : Program?;
+                              var types : PrimitiveTypes?;
                               register_all_modules : bool; var used_modules : table<string; bool>&;
                               var dynamic_modules : table<string; bool>&) : tuple<fn : LLVMOpaqueValue?; builder : LLVMBuilderRef; ships_dynamic : bool> {
     emit_lib_globals(types)
@@ -1618,17 +1640,19 @@ def private emit_runtime_init(ctx : LLVMContextRef; prog : Program?; var types :
     if (register_all_modules) {
         force_dynamic_modules["UnitTest"] = true
     }
-    let ships = emit_standalone_runtime_init(made.builder, prog, types, register_all_modules,
-        force_dynamic_modules, used_modules, dynamic_modules, true)
+    let ships = emit_standalone_runtime_init(made.builder, prog, types, target,
+        register_all_modules, force_dynamic_modules, used_modules, dynamic_modules, true)
     return (fn = made.fn, builder = made.builder, ships_dynamic = ships)
 }
 
 
-def private emit_create(ctx : LLVMContextRef; program_context : Context?; prog : Program?; mod : LLVMOpaqueModule?;
-                        var types : PrimitiveTypes?; var uids : UidNodes?; prefix : string;
+def private emit_create(target : JitTarget; ctx : LLVMContextRef; program_context : Context?;
+                        prog : Program?; mod : LLVMOpaqueModule?; var types : PrimitiveTypes?;
+                        var uids : UidNodes?; prefix : string;
                         var sf : StandaloneFunctions; runtime_init : LLVMOpaqueValue?;
                         runtime_builder : LLVMBuilderRef; register_all_modules : bool; ships_dynamic : bool;
-                        dynamic_modules : table<string; bool>) : tuple<fn : LLVMOpaqueValue?; link_whole_lib : bool> {
+                        dynamic_modules : table<string; bool>;
+                        frame_size : uint) : tuple<fn : LLVMOpaqueValue?; link_whole_lib : bool> {
     let void_ptr = types.LLVMVoidPtrType()
     var guard_global = LLVMGetNamedGlobal(g_mod, LIB_GUARD_GLOBAL)
     var env_global = LLVMGetNamedGlobal(g_mod, LIB_ENV_GLOBAL)
@@ -1655,27 +1679,29 @@ def private emit_create(ctx : LLVMContextRef; program_context : Context?; prog :
     LLVMBuildRet(b, LLVMConstNull(void_ptr))
     LLVMPositionBuilderAtEnd(b, ready_bb)
     var global_context = emit_create_standalone_ctx(b, program_context, prog, types, sf.any_pinvoke)
-    let guard_type = jit_fn_type($(ctx, tramp, frame : void?) : int {})
+    let guard_type = jit_fn_type($(ctx, tramp, frame : void?; frame_size : int) : int {})
     var guard = declare_extern_fn("jit_lib_invoke_guarded", guard_type)
     var ok = LLVMBuildCall2(b, guard_type, guard,
-        array(global_context, LLVMBuildPointerCast(b, ctx_init.fn, void_ptr, ""), LLVMConstNull(void_ptr)), "ok")
+        array(global_context, LLVMBuildPointerCast(b, ctx_init.fn, void_ptr, ""),
+            LLVMConstNull(void_ptr), types.ConstI32(uint64(frame_size))), "ok")
     let finish_type = jit_fn_type($(ctx : void?; ok : int; err : void?) : void? {})
     var finish = declare_extern_fn("jit_lib_create_finish", finish_type)
     LLVMBuildRet(b, LLVMBuildCall2(b, finish_type, finish,
         array(global_context, ok, LLVMBuildPointerCast(b, error_global, void_ptr, "")), ""))
 
     var ctx_param = LLVMGetParam(ctx_init.fn, 0u)
-    let whole = emit_standalone_context_init(ctx_init.builder, runtime_builder, program_context, ctx,
-        prog, mod, types, uids, sf.funcs, ctx_param, register_all_modules, ships_dynamic,
-        sf.used_modules, dynamic_modules)
+    let whole = emit_standalone_context_init(ctx_init.builder, runtime_builder, target,
+        program_context, ctx, prog, mod, types, uids, sf.funcs, ctx_param, register_all_modules,
+        ships_dynamic, sf.used_modules, dynamic_modules)
     LLVMBuildRetVoid(ctx_init.builder)
     return (fn = made.fn, link_whole_lib = whole)
 }
 
 
 [arch(at="../ARCHITECTURE_LIB.md#lib-runtime-scope")]
-def public inject_lib(program_context : Context?; ctx : LLVMContextRef; prog : Program?;
-                      mod : LLVMOpaqueModule?; var types : PrimitiveTypes?; var uids : UidNodes?;
+def public inject_lib(target : JitTarget; program_context : Context?; ctx : LLVMContextRef;
+                      prog : Program?; mod : LLVMOpaqueModule?; var types : PrimitiveTypes?;
+                      var uids : UidNodes?;
                       strict : bool; export_all : bool; output_path : string;
                       register_all_modules : bool = false) : tuple<fn : LLVMOpaqueValue?; link_whole_lib : bool> {
     g_lib_registration_once = true
@@ -1706,16 +1732,18 @@ def public inject_lib(program_context : Context?; ctx : LLVMContextRef; prog : P
         return (fn = null, link_whole_lib = false)
     }
     var dynamic_modules : table<string; bool>
-    let rt = emit_runtime_init(ctx, prog, types, register_all_modules, sf.used_modules, dynamic_modules)
-    let created = emit_create(ctx, program_context, prog, mod, types, uids, prefix, sf, rt.fn,
-        rt.builder, register_all_modules, rt.ships_dynamic, dynamic_modules)
+    let frame_size = lib_entry_frame_size(prog, sf.funcs)
+    let rt = emit_runtime_init(target, ctx, prog, types, register_all_modules, sf.used_modules,
+                               dynamic_modules)
+    let created = emit_create(target, ctx, program_context, prog, mod, types, uids, prefix, sf,
+        rt.fn, rt.builder, register_all_modules, rt.ships_dynamic, dynamic_modules, frame_size)
     LLVMBuildRetVoid(rt.builder)
     LLVMDisposeBuilder(rt.builder)
-    emit_fixed_entries(ctx, types, uids, sf.funcs, prefix,
+    emit_fixed_entries(ctx, types, uids, sf.funcs, prefix, frame_size,
         LLVMGetNamedGlobal(g_mod, LIB_GUARD_GLOBAL), LLVMGetNamedGlobal(g_mod, LIB_ERROR_GLOBAL))
     var emitted : array<CExport>
     for (e in exports) {
-        let thunk = emit_thunk(ctx, e, uids, types, export_all)
+        let thunk = emit_thunk(ctx, e, uids, types, export_all, frame_size)
         if (thunk |> is_none()) {
             return (fn = null, link_whole_lib = false)
         }

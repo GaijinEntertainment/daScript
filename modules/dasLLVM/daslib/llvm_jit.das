@@ -329,9 +329,13 @@ class public LlvmJitVisitor : AstVisitor {
     mode : LlvmJitMode
     ldu_hint : bool
     attributes : Attributes?
+    jit_target : JitTarget
 
-    def LlvmJitVisitor(prog_ : Program?; ctx : Context?; types_ : PrimitiveTypes?; uids : UidNodes?; flags_ : LlvmJitFlags; mode_ : LlvmJitMode; dib : LLVMOpaqueDIBuilder?; attrs : Attributes?) {
+    def LlvmJitVisitor(prog_ : Program?; ctx : Context?; types_ : PrimitiveTypes?; uids : UidNodes?;
+                       flags_ : LlvmJitFlags; mode_ : LlvmJitMode; dib : LLVMOpaqueDIBuilder?;
+                       attrs : Attributes?; target : JitTarget) {
         prog = prog_
+        jit_target = target
         jit_context = ctx
         types = types_
         g_builder = LLVMCreateBuilderInContext(g_ctx)
@@ -507,7 +511,8 @@ class public LlvmJitVisitor : AstVisitor {
         var noalias, nocapture : table<string>
         // Skip user hints entirely on wasm32 — host-LLVM wasm codegen has had
         // miscompiles around them. Tracked alongside the alwaysinline gotcha.
-        if (g_target_is_wasm) return <- (noalias <- noalias, nocapture <- nocapture)
+        let wasm = jit_target.arch == JitTargetArch.wasm
+        if (wasm) return <- (noalias <- noalias, nocapture <- nocapture)
         for_each_parameter_hint(annotations) $(kind, param_name) {
             if (kind == "noalias") {
                 noalias |> insert(param_name)
@@ -550,8 +555,8 @@ class public LlvmJitVisitor : AstVisitor {
         option_no_capture = false
         // Bypass user hints on wasm — keeps option_no_* flags false (= safe
         // defaults: bounds checks on, no alias/capture assumption) and skips
-        // every LLVMAddAttributeToFunction call below. See g_target_is_wasm.
-        if (g_target_is_wasm) return
+        // every LLVMAddAttributeToFunction call below. See JitTargetArch.
+        if (jit_target.arch == JitTargetArch.wasm) return
         for (ann in annotations) {
             if (ann.annotation.name == "hint") {
                 for (arg in ann.arguments) {
@@ -850,7 +855,8 @@ class public LlvmJitVisitor : AstVisitor {
         let fnmna = uid.get_dll_fn_name(fun)
         ffunc = LLVMGetNamedFunction(g_mod, fnmna.impl())
         wfunc = LLVMGetNamedFunction(g_mod, fnmna.publ())
-        var gc = LlvmCodeCtx(jit = JitCtx(ctx = g_ctx, builder = g_builder, types = types),
+        let jit = JitCtx(ctx = g_ctx, builder = g_builder, types = types, target = jit_target)
+        var gc = LlvmCodeCtx(jit = jit,
                              fn = fun, impl = ffunc, impl_type = g_fn_types[fnmna.impl()], ann = ann)
         var generated = false
         let klass = llvm_code_class_name(ann)
@@ -863,9 +869,8 @@ class public LlvmJitVisitor : AstVisitor {
             LLVMAddTargetDependentFunctionAttr(ffunc, "target-cpu", jit_cpu_class_row(klass).cpu)
             LLVMAddTargetDependentFunctionAttr(ffunc, "target-features", jit_class_plus_features(klass))
             LLVMAddAttributeToFunction(ffunc, attributes.noinline)
-            with_class_target_gates(klass) $ {
-                generated = invoke_llvm_code_generator(gen_name, gc)
-            }
+            gc.jit.target = class_target(jit_target, klass)
+            generated = invoke_llvm_code_generator(gen_name, gc)
         }
         if (generated) {
             build_wrapper_function(fnmna, "{fun.name}", fun.arguments, clone_type(fun.result), isCMRES(fun), null, fun.at)
@@ -1799,7 +1804,10 @@ class public LlvmJitVisitor : AstVisitor {
             LLVMPositionBuilderAtEnd(g_builder, guard_end)
         }
         // lookup intrinsics first
-        var intrin_call = has_intrinsic(expr) ? lookup_intinsic(g_ctx, g_builder, types, expr, [for (x in expr.arguments); getE(x)]) : null
+        var intrin_call = (has_intrinsic(jit_target, expr)
+            ? lookup_intinsic(jit_target, g_ctx, g_builder, types, expr,
+                              [for (x in expr.arguments); getE(x)])
+            : null)
         if (intrin_call != null) {
             setE(expr, intrin_call)
             return
@@ -1893,7 +1901,7 @@ class public LlvmJitVisitor : AstVisitor {
                     let ccall = build_interop_call(expr.func, typ, func, expr.arguments, params, true, "")
                     setE(expr, cmresEval)
                 } elif (!JIT_HOST_ASAN && has_interop_lowering(expr)) {   //! an interop lowering skips the C++ call, which keeps the asan bookkeeping
-                    var ccall = lookup_interop_lowering(g_ctx, g_builder, types, expr,
+                    var ccall = lookup_interop_lowering(jit_target, g_ctx, g_builder, types, expr,
                         [for (x in expr.arguments); getE(x)]) {
                         return build_interop_call(expr.func, typ, func, expr.arguments, params, false, "")
                     }
@@ -2188,7 +2196,8 @@ class public LlvmJitVisitor : AstVisitor {
     // collision is treated as impossible); large/empty -> inline open-addressed probe over the
     // 32-bit hashKey array (build_string_table_find_large).
     def build_string_table_find_with_hash(tab : LLVMOpaqueValue?; key : LLVMOpaqueValue?; valueTypeSize : int) : LLVMOpaqueValue? {
-        var h = build_string_hash(JitCtx(ctx = g_ctx, builder = g_builder, types = types), key)
+        var h = build_string_hash(
+            JitCtx(ctx = g_ctx, builder = g_builder, types = types, target = jit_target), key)
         var hdr = load_table_header(tab)
         var cap = LLVMBuildExtractValue(g_builder, hdr, uint(JIT_TABLE.CAPACITY), "cap")
         var hashesV = LLVMBuildExtractValue(g_builder, hdr, uint(JIT_TABLE.HASHES), "hashes.v")
@@ -2217,7 +2226,8 @@ class public LlvmJitVisitor : AstVisitor {
     }
 
     def build_string_table_at_with_hash(tab : LLVMOpaqueValue?; key : LLVMOpaqueValue?; valueTypeSize : int, at : LineInfo) : LLVMOpaqueValue? {
-        var h = build_string_hash(JitCtx(ctx = g_ctx, builder = g_builder, types = types), key)
+        var h = build_string_hash(
+            JitCtx(ctx = g_ctx, builder = g_builder, types = types, target = jit_target), key)
         return build_string_table_at_with_hash_h(tab, key, h, valueTypeSize, at)
     }
 
@@ -2277,7 +2287,8 @@ class public LlvmJitVisitor : AstVisitor {
     // large/empty -> inline open-addressed probe + in-place insert (build_string_table_at_large),
     // which falls to the C++ at only when it must grow/rehash or the table is locked.
     def build_string_table_at_fast(tab : LLVMOpaqueValue?; key : LLVMOpaqueValue?; valueTypeSize : int, at : LineInfo) : LLVMOpaqueValue? {
-        var h = build_string_hash(JitCtx(ctx = g_ctx, builder = g_builder, types = types), key)
+        var h = build_string_hash(
+            JitCtx(ctx = g_ctx, builder = g_builder, types = types, target = jit_target), key)
         var hdr = load_table_header(tab)
         var cap = LLVMBuildExtractValue(g_builder, hdr, uint(JIT_TABLE.CAPACITY), "cap")
         var hashesV = LLVMBuildExtractValue(g_builder, hdr, uint(JIT_TABLE.HASHES), "hashes.v")
@@ -3208,7 +3219,7 @@ class public LlvmJitVisitor : AstVisitor {
             // With native fullfp16 (arm64) the ops run directly on half — bit-identical for
             // single ops, since f32 carries 2p+2 precision bits of f16 (the double-rounding
             // safety bound for + - * /). Compares are exact either way.
-            let native = g_target_arm64_fullfp16
+            let native = jit_target.features.arm64_fullfp16
             let halfT = (opType.isVectorType
                 ? LLVMVectorType(types.t_half, uint(opType.vectorDim))
                 : types.t_half)
@@ -3219,8 +3230,8 @@ class public LlvmJitVisitor : AstVisitor {
             var lf = rmw ? r2v_left : left
             var rf = right
             if (!native) {
-                lf = build_fp_convert(g_builder, lf, promoteT, "")
-                rf = build_fp_convert(g_builder, rf, promoteT, "")
+                lf = build_fp_convert(jit_target, g_builder, lf, promoteT, "")
+                rf = build_fp_convert(jit_target, g_builder, rf, promoteT, "")
             }
             if (isCompareOp2(expr.op)) {
                 var opR = LLVMBuildFCmp(g_builder, get_float_compare_op(expr, string(expr.op)), lf, rf, "")
@@ -3232,7 +3243,7 @@ class public LlvmJitVisitor : AstVisitor {
             }
             var res = LLVMBuildBinOp(g_builder, get_float_arith_op(expr, string(expr.op)), lf, rf, "")
             if (!native) {
-                res = build_fp_convert(g_builder, res, halfT, "")
+                res = build_fp_convert(jit_target, g_builder, res, halfT, "")
             }
             if (rmw) {
                 setE(expr, LLVMBuildStoreAligned(g_builder, res, left, uint(expr.left._type.alignOf)))
@@ -4723,7 +4734,7 @@ class public LlvmJitVisitor : AstVisitor {
     // jit_get_handled_field_offset against the TARGET annotation, and return a load of it.
     def handled_field_offset_value(ann : TypeAnnotation?; fieldName : string) : LLVMOpaqueValue? {
         let host_offset = int(get_handled_type_field_offset(ann, fieldName))
-        if (!g_target_is_wasm) {
+        if (jit_target.arch != JitTargetArch.wasm) {
             return types.ConstI32(uint64(host_offset))
         }
         let modName = string(ann._module.name)
@@ -6964,7 +6975,8 @@ class public LlvmJitVisitor : AstVisitor {
     def make_block_function(blockExpr : ExpressionPtr; captured : array<CapturedVariable>;
                             first_field_index : int; captureType : LLVMOpaqueType?;
                             exit_field_index : int = -1) : BlockFunctionPair {
-        var astVisitor = new LlvmJitVisitor(prog, jit_context, types, uid, flags, mode, g_di_builder, attributes)
+        var astVisitor = new LlvmJitVisitor(prog, jit_context, types, uid, flags, mode,
+                                            g_di_builder, attributes, jit_target)
         var result, impl : LLVMOpaqueValue?
         make_visitor(*astVisitor) $(mv_adapter) {
             astVisitor.adapter = mv_adapter
@@ -7853,8 +7865,8 @@ class public LlvmJitVisitor : AstVisitor {
         // Skip user-supplied loop hints on wasm — host LLVM's wasm32 backend
         // has had miscompiles around llvm.loop.* metadata in combination with
         // certain bodies. mustprogress alone is preserved (safe, required for
-        // some opt passes). See g_target_is_wasm.
-        if (!g_target_is_wasm) {
+        // some opt passes). See JitTargetArch.
+        if (jit_target.arch != JitTargetArch.wasm) {
             for (a in args) {
                 append_loop_hint_operand(operands, a)
             }
@@ -8002,8 +8014,10 @@ def private get_llvm_function_type(func : FunctionPtr; types : PrimitiveTypes?) 
 }
 
 [macro_function, arch(at="../ARCHITECTURE_EXE.md#wasm-module-constructors")]
-def private add_ctor_dtor_function(ctor_dtor : array<tuple<LLVMOpaqueValue?, LLVMOpaqueValue?>>; types : PrimitiveTypes?; skip_dtors : bool) {
-    let priority = g_target_is_wasm ? 65535ul : 0ul
+def private add_ctor_dtor_function(target : JitTarget;
+                                   ctor_dtor : array<tuple<LLVMOpaqueValue?, LLVMOpaqueValue?>>;
+                                   types : PrimitiveTypes?; skip_dtors : bool) {
+    let priority = target.arch == JitTargetArch.wasm ? 65535ul : 0ul
     let dataPointerType = LLVMPointerType(types.t_int8, 0u)
     let funcType = LLVMPointerType(LLVMFunctionType(types.t_void, null, 0u, 0), 0u)
     var ctorTypes = fixed_array(types.t_int32, funcType, dataPointerType)
@@ -8064,8 +8078,9 @@ def private add_ctor_dtor_function(ctor_dtor : array<tuple<LLVMOpaqueValue?, LLV
 // It's best to just avoid all such dependencies
 // Main function. Generates LLVM IR for `FunctionPtr`.
 [macro_function]
-def public generate_llvm(prog : Program?; ctx : Context?; types : PrimitiveTypes?; uids : UidNodes?;
-                         attrs : Attributes?; fn : FunctionPtr; flags : LlvmJitFlags; mode : LlvmJitMode) : bool {
+def public generate_llvm(target : JitTarget; prog : Program?; ctx : Context?;
+                         types : PrimitiveTypes?; uids : UidNodes?; attrs : Attributes?;
+                         fn : FunctionPtr; flags : LlvmJitFlags; mode : LlvmJitMode) : bool {
     verify(!(is_in_completion() || is_compiling_macros() || is_folding()))
 
     let dll_name = uids.get_dll_fn_name(fn)
@@ -8077,7 +8092,7 @@ def public generate_llvm(prog : Program?; ctx : Context?; types : PrimitiveTypes
         // debug("initializer hash for {dll_name.publ()}: {aot_hash}")
         globalVar |> LLVMSetInitializer(types.ConstI64(aot_hash))
     }
-    var astVisitor = new LlvmJitVisitor(prog, ctx, types, uids, flags, mode, null, attrs)
+    var astVisitor = new LlvmJitVisitor(prog, ctx, types, uids, flags, mode, null, attrs, target)
     var handled_by_generator = false
     if (find_llvm_code_annotation(fn) != null) {
         ast_gc_guard() {
@@ -8107,7 +8122,7 @@ def public generate_llvm(prog : Program?; ctx : Context?; types : PrimitiveTypes
 }
 
 // Generates function to initialize all global variables.
-def public generate_globals_initialization_fn(ctx : Context?; prog : Program?;
+def public generate_globals_initialization_fn(target : JitTarget; ctx : Context?; prog : Program?;
                                               var types : PrimitiveTypes?;
                                               uids : UidNodes?;
                                               flags : LlvmJitFlags;
@@ -8118,7 +8133,7 @@ def public generate_globals_initialization_fn(ctx : Context?; prog : Program?;
     // globals — they belong to the owner, and writing them corrupts the parent's shared buffer. Matches
     // the interpreter's `if (sharedOwner || !pv.shared)` gate (context.cpp Context::runInitScript).
     let attrs = new Attributes(g_ctx)
-    var visitor = new LlvmJitVisitor(prog, ctx, types, uids, flags, mode, null, attrs)
+    var visitor = new LlvmJitVisitor(prog, ctx, types, uids, flags, mode, null, attrs, target)
     var globals_fn : LLVMOpaqueValue?
     var globals_fn_type : LLVMOpaqueType?
     make_visitor(*visitor) $(adapter) {
@@ -8284,7 +8299,9 @@ def public generate_llvm_code(var dll : DLLHandle?; fmna : DllName; dll_enabled 
 // Emit the module's load/unload ctors into llvm.global_ctors/dtors: the FileInfo ctor/dtor, plus an
 // optional pre-built pair (the LLVM-AOT self-registration ctor, built by llvm_aot). aot_ctor==null skips it.
 [macro_function]
-def public generate_global_ctors_dtors(types : PrimitiveTypes?; jit_mode : bool; aot_ctor : LLVMOpaqueValue? = null; aot_dtor : LLVMOpaqueValue? = null) {
+def public generate_global_ctors_dtors(target : JitTarget; types : PrimitiveTypes?; jit_mode : bool;
+                                       aot_ctor : LLVMOpaqueValue? = null;
+                                       aot_dtor : LLVMOpaqueValue? = null) {
     // nolint:STYLE014 - the failure is silent at both ends; both halves of the WHY must survive
     // Mach-O codegen lowers llvm.global_dtors into __cxa_atexit(.., extern_weak @__dso_handle)
     // registrations, and an in-memory image can satisfy neither end: RuntimeDyld's failed
@@ -8302,7 +8319,7 @@ def public generate_global_ctors_dtors(types : PrimitiveTypes?; jit_mode : bool;
     if (aot_ctor != null) {
         ctor_dtor |> push((aot_ctor, aot_dtor))
     }
-    ctor_dtor |> add_ctor_dtor_function(types, in_memory_darwin)
+    add_ctor_dtor_function(target, ctor_dtor, types, in_memory_darwin)
     reset_codegen_accumulators()
 }
 
@@ -8478,10 +8495,12 @@ def public hide_solid_array_bases(mod : LLVMOpaqueModule?; ctx : LLVMOpaqueConte
 }
 
 [macro_function]
-def public optimize_llvm_module(opt_level : uint; size_level : uint; inline_threshold : uint; use_host_cpu : bool; sanitize : JitSanitize) {
+def public optimize_llvm_module(target : JitTarget; opt_level : uint; size_level : uint;
+                                inline_threshold : uint; use_host_cpu : bool;
+                                sanitize : JitSanitize) {
     return if (is_in_completion() || is_compiling_macros() || is_folding() || g_failed)
     if (LLVM_ENABLE_OPT_PASS) {
-        run_pass_pipeline(opt_level, size_level, inline_threshold, use_host_cpu, sanitize)
+        run_pass_pipeline(target, opt_level, size_level, inline_threshold, use_host_cpu, sanitize)
     }
     if (take_solid_globals()) {
         hide_solid_array_bases(g_mod, g_ctx)
@@ -8489,8 +8508,8 @@ def public optimize_llvm_module(opt_level : uint; size_level : uint; inline_thre
 }
 
 [macro_function]
-def public run_pass_pipeline(opt_level : uint; size_level : uint; inline_threshold : uint;
-                             use_host_cpu : bool; sanitize : JitSanitize) {
+def public run_pass_pipeline(target : JitTarget; opt_level : uint; size_level : uint;
+                             inline_threshold : uint; use_host_cpu : bool; sanitize : JitSanitize) {
     var pbopts = create_jit_pass_builder_options(inline_threshold)
     // Ensure pbopts is released even if the pass run fails and we panic.
     defer() {
@@ -8500,7 +8519,8 @@ def public run_pass_pipeline(opt_level : uint; size_level : uint; inline_thresho
     // use_host_cpu=true for JIT (artifact runs on this host); false for exe emission so the IR
     // pipeline's TTI cost model stays generic and produces redistributable shapes (host-tuned loop
     // unroll / vectorize would otherwise get baked into the emitted object).
-    with_default_target_machine(opt_level, use_host_cpu) $(targetMachine : LLVMTargetMachineRef) {
+    with_default_target_machine(target, opt_level,
+                                use_host_cpu) $(targetMachine : LLVMTargetMachineRef) {
         stamp_module_target(g_mod, targetMachine)
         if (sanitize.address) {
             mark_sanitize_address(g_mod)
@@ -8518,6 +8538,7 @@ def public run_pass_pipeline(opt_level : uint; size_level : uint; inline_thresho
 }
 
 class public DisableJitVisitor : AstVisitor {
+    jit_target : JitTarget
     disable : bool
     reason : string
     uids : table<uint64, uint64>
@@ -8601,13 +8622,13 @@ class public DisableJitVisitor : AstVisitor {
             return
         }
         if (expr.func.flags.builtIn && !expr.func.flags.interopFn && get_builtin_function_address(expr.func) == null) {
-            if (!has_intrinsic(expr) && !is_dasbind_late(expr.func)) {
+            if (!has_intrinsic(jit_target, expr) && !is_dasbind_late(expr.func)) {
                 decline("unsupported builtin `{expr.func._module.name}::{expr.func.name}` " +
                     "at {describe(expr.at)}")
             }
         }
         if (!disable && expr.func.flags.builtIn && !expr.func.flags.interopFn
-                && !has_intrinsic(expr)) {
+                && !has_intrinsic(jit_target, expr)) {
             // lattice values cross a builtin call as intrinsics or in interop
             // vec4f slots; the direct-extern ABI has no half / packed-vector
             // form, so those calls still fall back. A ref crosses nothing.
