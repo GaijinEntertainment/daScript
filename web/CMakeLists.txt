@@ -364,8 +364,13 @@ else()
                          # time. This auto-built sub-build is tooling-only (drives
                          # .das→wasm codegen via dasLLVM — no graphics needed).
                          -DDAS_GLFW_DISABLED:BOOL=ON
+                         -DDAS_HV_DISABLED:BOOL=ON
         BUILD_COMMAND    ${CMAKE_COMMAND} --build <BINARY_DIR> --target daslang --parallel)
     set(DAS_HOST_DASLANG ${_repo}/bin/daslang)
+    # The host build runs its own job pool, so no em++ compile runs beside it: the two pools would add up.
+    if(DAS_WASM_MEMORY64)
+        add_dependencies(libDaScript_runtime host_daslang)
+    endif()
 endif()
 
 # Cross-compile web playground example scripts to wasm via the host daslang.

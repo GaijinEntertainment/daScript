@@ -1206,7 +1206,11 @@ def cmd_build_wasm(_root : string; lib_dir_override : string) : int {
     // -pthread to match, and must be served cross-origin-isolated (COOP/COEP) to instantiate.
     if (!fexist("{build_dir}/CMakeCache.txt")) {
         log("build --wasm: configuring {build_dir} (memory64 + threads)...\n")
-        let cfg = "emcmake cmake -S \"{das_root}/web\" -B \"{build_dir}\" -G Ninja -DCMAKE_BUILD_TYPE=Release -DDAS_WEB_OUTPUT_DIR=\"{out_dir}\" -DDAS_WASM_MEMORY64=ON -DDAS_WASM_PTHREADS=ON -DCMAKE_CXX_FLAGS=-sMEMORY64=1 -DCMAKE_C_FLAGS=-sMEMORY64=1"
+        let cfg = ("emcmake cmake -S \"{das_root}/web\" -B \"{build_dir}\" -G Ninja "
+            + "-DCMAKE_BUILD_TYPE=Release -DDAS_WEB_OUTPUT_DIR=\"{out_dir}\" "
+            + "-DDAS_WASM_MEMORY64=ON -DDAS_WASM_PTHREADS=ON "
+            + "-DCMAKE_CXX_FLAGS=-sMEMORY64=1 -DCMAKE_C_FLAGS=-sMEMORY64=1 "
+            + "-DDAS_HOST_DASLANG_OVERRIDE=\"{get_daslang_path()}\"")
         var cfg_out : string
         let cfg_rc = run_cmd(cfg, cfg_out)
         if (cfg_rc != 0) {
