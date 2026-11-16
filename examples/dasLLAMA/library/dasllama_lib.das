@@ -15,7 +15,7 @@ require daslib/strings_boost
 [export_c(comment = "One line naming the CPU kernels this build runs - a fat build's classes and the ones this\nbox picks, or the stamped set and the tune file it came from. For the host's log at start.")]
 def kernels() : string => kernel_report()
 
-[export_c(comment = "The boundary, in bytes, a prepared image handed to asr_open_memory or translate_open_memory starts on.")]
+[export_c(comment = "The boundary, in bytes, a prepared image handed to asr_open_memory, tts_open_memory or translate_open_memory starts on.")]
 def image_alignment() : int => int(prepared_image_alignment())
 
 // the job queue every surface shares, and this program's prefill intent: a host with no GPU still prefills
@@ -289,6 +289,20 @@ def tts_open(model_path : string) : bool {
     engine_acquire()
     g_lib.tts.model <- load_tts_model(model_path)
     return start_tts(model_path)
+}
+
+[export_c(comment = "tts_open for a Pocket TTS prepared image - a .dlim's bytes - the host holds in memory, `bytes` long, on an\nimage_alignment boundary. The bytes are borrowed, never copied: keep them until tts_close. Another family's\nimage answers false with `reason` set, and nothing is borrowed: open that model with tts_open.")]
+def tts_open_memory(image : void?; bytes : int64) : bool {
+    if (g_lib.tts.loaded) {
+        return refuse("a TTS model is already open - call tts_close first")
+    }
+    return false if (!image_ok(image, bytes))
+    if (!tts_loads_from_memory(image, uint64(bytes))) {
+        return refuse("the bytes are not a Pocket TTS image - a KittenTTS or Kokoro model reads its packs from its directory, so open it with tts_open")
+    }
+    engine_acquire()
+    g_lib.tts.model <- load_tts_model(image, uint64(bytes))
+    return start_tts("the image in memory")
 }
 
 [export_c(comment = "Drop the synthesis model.")]

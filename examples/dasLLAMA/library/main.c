@@ -196,10 +196,22 @@ static int open_model ( dasllama_lib_ctx * ctx, const char * what, const char * 
     return 1;
 }
 
+// the speech model from memory where it is a Pocket TTS image, else from its path: a KittenTTS or
+// Kokoro image reads its front-end packs from its own directory, so tts_open_memory refuses it
+static int open_speech ( dasllama_lib_ctx * ctx, const char * path, int in_memory, void ** to_free ) {
+    if ( open_model(ctx, "speech synthesis", path, in_memory,
+                    dasllama_lib_tts_open, dasllama_lib_tts_open_memory, to_free) ) return 1;
+    if ( !*to_free ) return 0;      // the path route already ran and failed
+    free(*to_free);
+    *to_free = NULL;
+    printf("speech synthesis: %s - opening it from its path\n", why(ctx));
+    return dasllama_lib_tts_open(ctx, path);
+}
+
 static int interpret ( dasllama_lib_ctx * ctx, char * argv [], int from_memory ) {
     const char * asr = argv[2], * vad = argv[3], * nmt = argv[4], * tts = argv[5];
     const char * in_wav = argv[6], * out_wav = argv[7];
-    void * asr_bytes = NULL, * vad_bytes = NULL, * nmt_bytes = NULL;
+    void * asr_bytes = NULL, * vad_bytes = NULL, * nmt_bytes = NULL, * tts_bytes = NULL;
     long long vad_size = 0;
     int rate = 0, frames = 0, ok = 1, rc = 1;
     char * spoken = NULL;
@@ -221,7 +233,7 @@ static int interpret ( dasllama_lib_ctx * ctx, char * argv [], int from_memory )
     }
     ok = ok && open_model(ctx, "translation", nmt, from_memory,
                           dasllama_lib_translate_open, dasllama_lib_translate_open_memory, &nmt_bytes);
-    ok = ok && dasllama_lib_tts_open(ctx, tts);
+    ok = ok && open_speech(ctx, tts, from_memory, &tts_bytes);
     if ( !ok ) {
         printf("interpret failed: %s\n", why(ctx));
     } else {
@@ -244,6 +256,7 @@ static int interpret ( dasllama_lib_ctx * ctx, char * argv [], int from_memory )
     dasllama_lib_translate_close(ctx);
     dasllama_lib_asr_close(ctx);
     // the borrowed images outlive their models: freed only now
+    free(tts_bytes);
     free(nmt_bytes);
     free(asr_bytes);
     free(spoken);

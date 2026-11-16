@@ -26,6 +26,8 @@ require strings
 //   - tts_register_voice — a voice cloned from a few seconds of audio, on a model that can
 //   - tts_release_scratch — the activation rows given back while nothing is queued
 //   - tts_set_chunk_chars — the chunk cap lowered where memory is tight: more, shorter pieces
+//   - tts_loads_from_memory / load_tts_model(base, bytes) —
+//     a Pocket model's prepared image, held as bytes
 //
 // Three families run through these verbs, and load_tts_model tells them apart from the GGUF's
 // own architecture metadata:
@@ -44,10 +46,44 @@ require strings
 // file stands alone.
 //
 // Run: daslang.exe -jit tutorials/dasLLAMA/16_text_to_speech.das -- <tts-model.gguf> [out.wav] [--voice <name>] [--f32] [--clone <clip.wav>]
+//      [--image <pocket.dlim>]
 
 let TEXT = "daslang speaks. The text becomes phonemes, the phonemes become durations, and the durations become a waveform."
 
 let PARAGRAPH = "Dr. Smith read the report on Feb. 3. It ran to 3.5 pages, which is short. Every sentence becomes its own chunk, and a sentence past the cap splits on a word boundary."
+
+// ------------------------------------------------------------------
+// A model the program holds in memory
+// ------------------------------------------------------------------
+//
+// A game engine keeps its files in its own packs, so it hands a
+// model over as bytes. The first load of a Pocket file bakes a
+// prepared image, a .dlim file, beside it. Pass that file with
+// --image to see it: load_tts_model(base, bytes) borrows the image
+// in place, with no copy, so the bytes stay ours until the model is
+// deleted. They start on a prepared_image_alignment() boundary, and
+// read_prepared_image reads a file onto one.
+// tts_loads_from_memory answers first whether the bytes are an image
+// this call takes. It takes a Pocket image, because a Pocket model
+// is one file. A KittenTTS or Kokoro model reads its front-end packs
+// from its own directory, so it loads from a path.
+def speak_from_memory(image_path, text : string) {
+    return if (empty(image_path))
+    var raw : array<uint8>
+    let image = read_prepared_image(image_path, raw)
+    if (tts_loads_from_memory(image.base, image.size)) {
+        var inscope held <- load_tts_model(image.base, image.size)
+        let c <- caps(held)
+        let speech <- synthesize(held, text, c.voices[0])
+        let mb = int64(image.size >> 20ul)
+        let secs = seconds(speech.pcm, speech.sample_rate)
+        print("\nfrom memory ({base_name(image_path)}, {mb} MB): ")
+        print("{secs} s of speech in {c.voices[0]}\n")
+    } else {
+        print("\n--image: {image_path} is not a Pocket TTS prepared image\n")
+    }
+    delete raw   // after the model: it read the image in place
+}
 
 def seconds(pcm : array<float>; sample_rate : int) : float =>
     float(length(pcm)) / float(sample_rate)
@@ -63,12 +99,13 @@ def show_russian_front_end(m : TtsModel; c : TtsCaps) {
 }
 
 [export]
-def main {  // nolint:STYLE038 - one linear tutorial walkthrough
+def main {  // nolint:STYLE037,STYLE038 - one linear tutorial walkthrough
     let cmd <- get_command_line_arguments()
     var model_path = ""
     var out_path = "speech.wav"
     var voice = ""
     var clip_path = ""
+    var image_path = ""
     var want_f32 = false
     var i = 0
     while (i < length(cmd)) {
@@ -81,6 +118,9 @@ def main {  // nolint:STYLE038 - one linear tutorial walkthrough
         } elif (a == "--clone" && i + 1 < length(cmd)) {
             clip_path = cmd[i + 1]
             i++
+        } elif (a == "--image" && i + 1 < length(cmd)) {
+            image_path = cmd[i + 1]
+            i++
         } elif (ends_with(a, ".gguf") || stat(a).is_dir) {
             // a directory: its packs alone, a front end with no voice
             model_path = a
@@ -92,7 +132,7 @@ def main {  // nolint:STYLE038 - one linear tutorial walkthrough
     if (empty(model_path)) {
         print("usage: daslang.exe -jit tutorials/dasLLAMA/16_text_to_speech.das -- ")
         print("<tts-model.gguf | directory of front-end packs> [out.wav] ")
-        print("[--voice <name>] [--f32] [--clone <clip.wav>]\n")
+        print("[--voice <name>] [--f32] [--clone <clip.wav>] [--image <pocket.dlim>]\n")
         return
     }
 
@@ -355,5 +395,6 @@ def main {  // nolint:STYLE038 - one linear tutorial walkthrough
             print("tts_set_chunk_chars(60): the same text in {short_pieces} pieces, at the peak of the longest\n")
             tts_set_chunk_chars(m, TTS_CHUNK_CHARS)
         }
+        speak_from_memory(image_path, TEXT)   // the --image run; with no image it says nothing
     }
 }

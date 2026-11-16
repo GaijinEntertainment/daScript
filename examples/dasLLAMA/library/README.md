@@ -104,12 +104,14 @@ kernels.
 **From a path.** `open`, `asr_open`, `translate_open`, `tts_open` take a file the engine reads
 itself - a GGUF, or a prepared image (`.dlim`) baked from one.
 
-**From memory.** `asr_open_memory`, `translate_open_memory` and `asr_listen_memory` take bytes the
+**From memory.** `asr_open_memory`, `translate_open_memory`, `tts_open_memory` and `asr_listen_memory` take bytes the
 host already holds - an engine with its own file system or resource packs. A model's bytes are a
 prepared image, and the library borrows them in place: nothing is copied, and the host keeps them
 until the matching `close`. They start on a `dasllama_lib_image_alignment()` boundary (16 KiB); a
 pointer off it is refused. `asr_listen_memory` takes the voice detector's own file, not an image,
-and copies what it needs, so those bytes are free when the call returns.
+and copies what it needs, so those bytes are free when the call returns. `tts_open_memory` takes a
+Pocket TTS image: a KittenTTS or Kokoro model reads its phoneme packs from its own directory, so
+`tts_open_memory` refuses its image and the host opens it with `tts_open`.
 
 A prepared image is baked for one CPU class. Bake it with the same force the library was built
 with, on any box that can run that class:
@@ -125,11 +127,12 @@ printed with its translation, and the translation is spoken into a second WAV.
 
 ```sh
 bin/dasllama_host_c_jit --interpret <asr-model> <silero_vad.bin> <translation-model> <pocket-tts.gguf> <in.wav> <out.wav>
-bin/dasllama_host_c_jit --interpret <asr.dlim> <silero_vad.bin> <translation.dlim> <pocket-tts.gguf> <in.wav> <out.wav> --from-memory
+bin/dasllama_host_c_jit --interpret <asr.dlim> <silero_vad.bin> <translation.dlim> <pocket-tts.dlim> <in.wav> <out.wav> --from-memory
 ```
 
 With `--from-memory` the host reads the voice detector and every model given as a `.dlim` into
-its own memory first and opens them from the bytes. The speech model still opens from its path.
+its own memory first and opens them from the bytes; a model given as a GGUF, and a KittenTTS or
+Kokoro speech image, opens from its path.
 
 ## What crosses, and what does not
 
@@ -148,7 +151,7 @@ struct - so the library exposes a flat surface over it instead of re-exporting i
   in at any rate and chunk size, the text of each utterance the Silero VAD closes out
 - `translate_open` / `translate_close` / `translate_direction` / `translate_text` - load and drop
   a translation model, read its direction, translate a line
-- `asr_open_memory` / `asr_listen_memory` / `translate_open_memory` / `image_alignment` - the same
+- `asr_open_memory` / `asr_listen_memory` / `translate_open_memory` / `tts_open_memory` / `image_alignment` - the same
   loads from bytes the host holds in memory
 - `kernels` - one line naming the CPU kernels this build runs
 - `tts_open` / `tts_close` / `tts_voice` / `tts_set_voice` / `tts_speed` - load and drop a
