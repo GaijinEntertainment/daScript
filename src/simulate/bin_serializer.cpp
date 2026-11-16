@@ -33,7 +33,7 @@ namespace das {
             DEBUG_BIN_DATA("reading %i bytes\n", bytesAllocated);
         }
         __forceinline void read ( void * data, uint32_t size ) {
-            if ( bytesWritten + size <= bytesAllocated ) {
+            if ( size <= bytesAllocated && bytesWritten <= bytesAllocated - size ) {
                 DEBUG_BIN_DATA("reading %i bytes at %i\n", size, bytesWritten );
                 memcpy ( data, bytesAt + bytesWritten, size );
                 bytesWritten += size;
@@ -99,9 +99,28 @@ namespace das {
             if ( !reading && bytesAt ) {
                 DEBUG_BIN_DATA("close at %i bytes\n\n", bytesWritten);
                 bytesAt = context->reallocate(bytesAt, bytesAllocated, bytesWritten, debugInfo);
+                bytesAllocated = bytesWritten;
             }
         }
     // data structures
+        static bool isByteArray ( TypeInfo * ti ) {
+            auto element = ti->firstType;
+            return element->type == Type::tUInt8 && element->dimSize == 0
+                && !(element->flags & TypeInfo::flag_ref);
+        }
+        virtual bool canVisitArray ( Array * pa, TypeInfo * ti ) override {
+            if ( !isByteArray(ti) ) return true;
+            beforeArray(pa, ti);
+            if ( pa->size ) {
+                if ( pa->size > UINT32_MAX - bytesWritten ) {
+                    error("binary byte array is too large");
+                    return false;
+                }
+                if ( reading ) read(pa->data, uint32_t(pa->size));
+                else write(pa->data, uint32_t(pa->size));
+            }
+            return false;
+        }
         virtual void beforeStructure ( char *, StructInfo * si ) override {
             verify_hash(si->hash);
         }
@@ -114,6 +133,10 @@ namespace das {
             if ( reading ) {
                 uint64_t newSize = 0;
                 load(newSize);
+                if ( isByteArray(ti) && newSize > bytesAllocated - bytesWritten ) {
+                    error("binary data too short");
+                    return;
+                }
                 array_clear(*context, *pa, /*at*/nullptr);
                 // exact reserve first: the final size is known, so the resize never grows -
                 // no pow2 slack on big payloads, and no max_unreserved_size panic
@@ -310,18 +333,17 @@ namespace das {
         bool ok = false;
         {
             BinDataSerialize writer(context, &call->debugInfo);
-            // args
             Block * block = cast<Block *>::to(args[1]);
             auto info = call->types[0];
-            writer.walk(args[0], info);
-            writer.close();
-            Array borrowedBytesView;
-            array_mark_locked(borrowedBytesView, writer.bytesAt, writer.bytesWritten);
-            vec4f borrowedBytesArgument = cast<char *>::from((char *)&borrowedBytesView);
             ok = context.runWithCatch([&]() {
+                writer.walk(args[0], info);
+                writer.close();
+                Array borrowedBytesView;
+                array_mark_locked(borrowedBytesView, writer.bytesAt, writer.bytesWritten);
+                vec4f borrowedBytesArgument = cast<char *>::from((char *)&borrowedBytesView);
                 context.invoke(*block, &borrowedBytesArgument, nullptr, &call->debugInfo);
             });
-            context.free(writer.bytesAt, writer.bytesWritten, &call->debugInfo);
+            context.free(writer.bytesAt, writer.bytesAllocated, &call->debugInfo);
         }
         if (!ok) context.rethrow();
         return v_zero();
@@ -331,8 +353,14 @@ namespace das {
     void _builtin_binary_load ( Context & context, LineInfo * at, TypeInfo* info, const char *data, uint64_t len, char *to) {
         if ( !(info->flags&(TypeInfo::flag_refType | TypeInfo::flag_ref)) )
             return;
-        BinDataSerialize reader(context, at, const_cast<char*>(data), len);
-        reader.walk(to, info);
+        bool ok = false;
+        {
+            BinDataSerialize reader(context, at, const_cast<char*>(data), len);
+            ok = context.runWithCatch([&]() {
+                reader.walk(to, info);
+            });
+        }
+        if (!ok) context.rethrow();
     }
 
     vec4f _builtin_binary_load ( Context & context, SimNode_CallBase * call, vec4f * args ) {
