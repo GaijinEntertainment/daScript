@@ -37,7 +37,7 @@ def initialize(project_path : string) {
         "dasllama_arch_qwen2moe", "dasllama_arch_qwen3moe", "dasllama_arch_qwen35",
         "dasllama_arch_qwen4exp", "dasllama_arch_gptoss", "dasllama_arch_mistral3",
         "dasllama_arch_glm4moe", "dasllama_image", "dasllama_transformer", "dasllama_tools",
-        "dasllama_chat", "dasllama_core", "dasllama", "dasllama_scheduler", "dasllama_lint",
+        "dasllama_chat", "dasllama_core", "dasllama_host", "dasllama", "dasllama_scheduler", "dasllama_lint",
         "dasllama_exchange", "dasllama_exchange_schema", "dasllama_fat_start", "dasllama_bench"
     ]
     for (path in dasllama_paths) {

@@ -7,7 +7,7 @@ module dasllama_lint shared private
 //! dasLLAMA facade lint - default-on, required by every dasllama engine module.
 //! DASLLAMA001 (macro_error, code 50503): a consumer requires a dasLLAMA internal
 //! directly - by name, or by a path that resolves into the module tree. The public entry
-//! points are ``dasllama/dasllama`` (the facade) and ``dasllama/dasllama_core`` (the facade without file decoders), ``dasllama/dasllama_scheduler`` (serving),
+//! points are ``dasllama/dasllama`` (the facade) and ``dasllama/dasllama_core`` (the facade without file decoders), ``dasllama/dasllama_host`` (a C host surface's state), ``dasllama/dasllama_scheduler`` (serving),
 //! ``dasllama/dasllama_exchange`` (the tune-sidecar exchange), ``dasllama/dasllama_bench``
 //! (the benchmark rows) and, by path, ``performance/box_ident.das`` (the engine-free box probes:
 //! the box tag, the CPU brand, the RAM, the WMI query). Engine files, in-module tests and harnesses
@@ -17,7 +17,7 @@ require daslib/ast_boost
 require strings
 
 let private ALLOWED_DASLLAMA : table<string> <- {
-    "dasllama", "dasllama_core", "dasllama_scheduler", "dasllama_exchange", "dasllama_exchange_schema", "dasllama_bench", "dasllama_lint", "box_ident"
+    "dasllama", "dasllama_core", "dasllama_host", "dasllama_scheduler", "dasllama_exchange", "dasllama_exchange_schema", "dasllama_bench", "dasllama_lint", "box_ident"
 }
 
 [lint_macro]
