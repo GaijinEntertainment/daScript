@@ -7,6 +7,8 @@ module dasllama_styletts2 shared public
 require dasllama/dasllama_lint public
 require math
 require strings
+require daslib/strings_boost   // split: a recipe pin's pairs
+require daslib/enum_trait      // enum_to_table: a recipe pin's format names
 require daslib/defer
 require daslib/fio
 require daslib/archive
@@ -244,12 +246,17 @@ struct StyleTts2Model {
     voice_names : array<string>
     voices : table<string; array<float>>
     voice_spans : table<string; TtsSpan>
+    voices_q : table<string; array<int8>>    //! a voice pack minted Q8_0: its quants, in place of its `voices` entry
+    voices_qs : table<string; array<float>>  //! ... and their scales, one per 32
+    voice_q_spans : table<string; TtsSpan>
+    voice_qs_spans : table<string; TtsSpan>
     albert : St2Albert = St2Albert()
     text_encoder : St2TextEncoder = St2TextEncoder()
     predictor : St2Predictor = St2Predictor()
     decoder : St2Decoder = St2Decoder()
     source : SineSourceCfg = SineSourceCfg()
     q8 : bool               // the lane this image was minted on: the rows GEMMs serve Q8_0 quants
+    kq : bool               //! ... on the recipe lane: each weight group in the format `st2_recipe_default` names
     kitten : KittenFamily
     kokoro : KokoroFamily
     blob : PlaneF = PlaneF()
@@ -264,17 +271,60 @@ def weights_walk(var io : TtsBlobIo; var m : StyleTts2Model) {
     weights_walk(io, m.predictor)
     weights_walk(io, m.decoder)
     for (name in m.voice_names) {
-        var span = m.voice_spans?[name] ?? TtsSpan()
-        weight_slot(io, m.voices[name], span)
-        m.voice_spans[name] = span
+        table_slot(io, m.voices, m.voice_spans, name)
+        table_slot(io, m.voices_q, m.voice_q_spans, name)
+        table_slot(io, m.voices_qs, m.voice_qs_spans, name)
     }
 }
 
-// serialize_image_meta covers 16 fields; voices (views bound from voice_spans), image_map and
+// serialize_image_meta covers 19 fields; the three voice tables (views bound from their spans), image_map and
 // image_bytes are the deliberate skips
-let private ST2_META_FIELDS = 16 + 3
+let private ST2_META_FIELDS = 19 + 5
+let ST2_IMAGE_PREFIX = "tts-"   //!< every lane tag of the family starts with it
 let ST2_IMAGE_TAG = "tts-f32"
 let ST2_IMAGE_TAG_Q8 = "tts-q8"
+let ST2_IMAGE_TAG_KQ = "tts-kq"   //!< the recipe lane, served where a load asks for it
+
+//! A weight group's format on the recipe lane.
+enum St2Fmt {
+    f32
+    q8
+    k4
+    k5
+    k6
+}
+
+//! The weight groups a recipe names, each a set of tensors by name (`st2_group`).
+let ST2_GROUPS = fixed_array<string>("bert", "predictor", "fc", "lstm", "text_encoder", "decoder", "generator", "ups", "noise", "post", "voice")
+
+//! The recipe lane's format a weight group, each one the rig's pick: the decoder stack, the generator's res blocks and the
+//! text encoder's convs take four bits, the upsamplers six; the noise convs and conv_post read and write the audio itself
+//! and stay f32; every other group is Q8_0 where its kernel has the form.
+[arch(at = "../ARCHITECTURE_TTS.md#tts-recipe")]
+def st2_recipe_default(group : string) : St2Fmt {
+    return St2Fmt.k4 if (group == "decoder" || group == "generator" || group == "text_encoder")
+    return St2Fmt.k6 if (group == "ups")
+    return St2Fmt.f32 if (group == "noise" || group == "post")
+    return St2Fmt.q8
+}
+
+//! the weight group tensor `name` (or its prefix) belongs to
+def st2_group(name : string) : string {
+    return "fc" if (name |> ends_with(".fc") || name |> ends_with(".fc.weight"))
+    return "voice" if (name |> starts_with("voice."))
+    return "lstm" if (name == "lstm")
+    return "bert" if (name |> starts_with("bert"))
+    return "predictor" if (name |> starts_with("predictor."))
+    return "text_encoder" if (name |> starts_with("text_encoder."))
+    return "ups" if (name |> starts_with("decoder.generator.ups."))
+    return "noise" if (name |> starts_with("decoder.generator.noise_convs."))
+    return "post" if (name |> starts_with("decoder.generator.conv_post"))
+    return "generator" if (name |> starts_with("decoder.generator."))
+    return "decoder"
+}
+
+def private st2_kq(f : St2Fmt) : KqFmt => f == St2Fmt.k4 ? KqFmt.k4 : (f == St2Fmt.k5 ? KqFmt.k5 : KqFmt.k6)
+def private st2_is_kq(f : St2Fmt) : bool => f == St2Fmt.k4 || f == St2Fmt.k5 || f == St2Fmt.k6
 
 def private serialize_image_meta(var arch : Archive; var m : StyleTts2Model) {
     verify(count_meta_fields(m) == ST2_META_FIELDS)   // grew StyleTts2Model? extend this list
@@ -286,12 +336,15 @@ def private serialize_image_meta(var arch : Archive; var m : StyleTts2Model) {
     arch |> serialize_raw(m.style_rows)
     serialize_strings(arch, m.voice_names)
     arch |> serialize(m.voice_spans)
+    arch |> serialize(m.voice_q_spans)
+    arch |> serialize(m.voice_qs_spans)
     arch |> serialize(m.albert)
     arch |> serialize(m.text_encoder)
     arch |> serialize(m.predictor)
     arch |> serialize(m.decoder)
     arch |> serialize(m.source)
     arch |> serialize_raw(m.q8)
+    arch |> serialize_raw(m.kq)
     // the family records are hand-listed too, so each pins its count - an unwritten field reads back zero
     verify(count_meta_fields(m.kitten) == 2)   // grew KittenFamily? extend this list
     verify(count_meta_fields(m.kokoro) == 2)   // grew KokoroFamily? extend this list
@@ -315,11 +368,15 @@ def private st2_bind(var m : StyleTts2Model) {
 // tag is config-bound while the f32 tag is config-free =====
 
 var private g_st2_q8_pin = GemmLane.unset
+var private g_st2_recipe_asked = false   // set_styletts2_recipe is in force: the next load serves the recipe lane
+var private g_st2_recipe_spec = ""       // the group pins it took, as given
+var private g_st2_recipe_pin : table<string; St2Fmt>
 
-def private st2_serve_q8() : bool => lane_serves_q8(g_st2_q8_pin, true)   // the rig held q8 at f32 quality, so f32 is the reference lane, not the served one
+def private st2_serve_kq() : bool => g_st2_recipe_asked
+def private st2_serve_q8() : bool => g_st2_recipe_asked || lane_serves_q8(g_st2_q8_pin, true)   // the rig held q8 at f32 quality, so f32 is the reference lane, not the served one
 
 //! Pin the rows GEMMs' format for subsequent loads: q8 quants vs the file's own f32 planes.
-//! Each lane is its own prepared image. ``reset_styletts2_q8`` returns to the policy default.
+//! Each lane is its own prepared image. ``reset_styletts2_q8`` returns to the policy default, the q8 lane.
 //! The facade spells these ``set_tts_q8`` / ``reset_tts_q8`` / ``tts_serves_q8``.
 def set_styletts2_q8(on : bool) {
     g_st2_q8_pin = lane_pin(on)
@@ -332,11 +389,32 @@ def reset_styletts2_q8() {
 //! Would the next load serve the rows GEMMs as q8 - the pin when set, the policy otherwise.
 def styletts2_serves_q8() : bool => st2_serve_q8()
 
-def private st2_tag() : string => st2_serve_q8() ? ST2_IMAGE_TAG_Q8 : ST2_IMAGE_TAG
+//! Would the next load serve the recipe lane - true while ``set_styletts2_recipe`` is in force.
+def styletts2_serves_recipe() : bool => st2_serve_kq()
 
-// the lane changes what a load mints and serves, so the load says which and why
-def private st2_announce_lane() {
-    let why = g_st2_q8_pin != GemmLane.unset ? "pinned via set_tts_q8" : "the policy default"
+//! The group pins ``set_styletts2_recipe`` took, as given: "" with no group pinned, and with the recipe lane not asked.
+def styletts2_recipe() : string => g_st2_recipe_spec
+
+def private st2_tag_of(q8, kq : bool) : string => kq ? ST2_IMAGE_TAG_KQ : (q8 ? ST2_IMAGE_TAG_Q8 : ST2_IMAGE_TAG)
+
+// the lane changes what a load mints and serves, so the load says which and why - and names a pin it does not apply:
+// a prepared image serves the lane it was baked on, and the recipe ask overrides the q8 pin
+def private st2_announce_lane(dlim : bool) {
+    let pinned = g_st2_q8_pin != GemmLane.unset
+    if (dlim) {
+        if (pinned || g_st2_recipe_asked) {
+            let which = g_st2_recipe_asked ? "set_styletts2_recipe" : "set_tts_q8"
+            to_log(LOG_WARNING, "dasLLAMA styletts2: a prepared image serves the lane it was baked on - the {which} pin is not applied to this load\n")
+        }
+        return
+    }
+    if (g_st2_recipe_asked) {
+        let groups = empty(g_st2_recipe_spec) ? "" : " with {g_st2_recipe_spec}, minted in process"
+        let over = pinned ? ", over the set_tts_q8 pin" : ""
+        to_log(LOG_INFO, "dasLLAMA styletts2: rows GEMM lane the recipe{groups} - asked via set_styletts2_recipe{over}\n")
+        return
+    }
+    let why = pinned ? "pinned via set_tts_q8" : "the policy default"
     to_log(LOG_INFO, "dasLLAMA styletts2: rows GEMM lane {st2_serve_q8() ? "q8" : "f32 planes"} - {why}\n")
 }
 
@@ -344,14 +422,92 @@ def private st2_announce_lane() {
 // backend wants the quants repacked
 var private g_stage_q8 = false
 var private g_stage_repack = false
+var private g_stage_kq = false
 
-def finalize(var m : StyleTts2Model) {
-    for (name in m.voice_names) {
-        if (key_exists(m.voices, name)) {
-            release_plane(m.voices[name])
+//! Ask the recipe lane for subsequent loads, in process, over any ``set_styletts2_q8`` pin: `spec` "" is the recipe as it
+//! is, `group=format` pairs (comma-separated; `ST2_GROUPS`, `St2Fmt`) pin those groups and mint in memory. A spec that does
+//! not parse panics and leaves the pin as it was; ``reset_styletts2_recipe`` returns to the policy lane.
+def set_styletts2_recipe(spec : string) {
+    var inscope pin : table<string; St2Fmt>
+    var inscope formats <- enum_to_table(type<St2Fmt>)
+    var inscope pairs <- empty(strip(spec)) ? array<string>() : split(spec, ",")
+    for (pair in pairs) {
+        var inscope kv <- split(strip(pair), "=")
+        let group = length(kv) == 2 ? strip(kv[0]) : ""
+        if (!has_value(ST2_GROUPS, group)) {
+            panic("dasLLAMA styletts2: recipe pin '{pair}' is not group=format over the groups {ST2_GROUPS}")
+        }
+        let fmt = strip(kv[1])
+        if (!key_exists(formats, fmt)) {
+            panic("dasLLAMA styletts2: recipe pin '{pair}' names no format of {join(typeinfo enum_names(type<St2Fmt>), ", ")}")
+        }
+        pin[group] = formats?[fmt] ?? St2Fmt.f32
+    }
+    delete g_st2_recipe_pin
+    g_st2_recipe_pin <- pin
+    g_st2_recipe_spec = clone_string(spec)
+    g_st2_recipe_asked = true
+}
+
+def reset_styletts2_recipe() {
+    delete g_st2_recipe_pin
+    g_st2_recipe_spec = ""
+    g_st2_recipe_asked = false
+}
+
+// the format the staged tensor `name` mints in: its group's on the recipe lane - the pin's, else the recipe's; the q8 lane is the
+// recipe with every K-quant group at Q8_0
+def private stage_fmt(name : string) : St2Fmt {
+    let group = st2_group(name)
+    if (!g_stage_kq) {
+        let fmt = st2_recipe_default(group)
+        return st2_is_kq(fmt) ? St2Fmt.q8 : fmt
+    }
+    return g_st2_recipe_pin?[group] ?? st2_recipe_default(group)
+}
+
+// what a stage minted against what its recipe asked, a group: the mint's own report
+struct private St2Minted {
+    asked : St2Fmt
+    leaves : int
+    as_asked : int
+}
+
+var private g_stage_minted : table<string; St2Minted>
+
+def private stage_note(name : string; asked : St2Fmt; honored : bool) {
+    return if (!g_stage_kq)
+    let group = st2_group(name)
+    var note = g_stage_minted?[group] ?? St2Minted(asked = asked)
+    note.leaves++
+    note.as_asked += honored ? 1 : 0
+    g_stage_minted[group] = note
+}
+
+def private stage_report() {
+    for (group in ST2_GROUPS) {
+        g_stage_minted |> get(group) $(note) {
+            to_log(LOG_INFO, "dasLLAMA styletts2: recipe group {group} asked {note.asked}: {note.as_asked} of {note.leaves} weights minted in it\n")
         }
     }
+    delete g_stage_minted
+}
+
+def finalize(var m : StyleTts2Model) {
+    for (pack in values(m.voices)) {
+        release_plane(pack)
+    }
+    for (pack in values(m.voices_q)) {
+        release_plane(pack)
+    }
+    for (pack in values(m.voices_qs)) {
+        release_plane(pack)
+    }
     delete m.voices
+    delete m.voices_q
+    delete m.voices_qs
+    delete m.voice_q_spans
+    delete m.voice_qs_spans
     delete m.voice_spans
     delete m.voice_names
     delete m.albert
@@ -399,6 +555,7 @@ def private styletts2_layout_fingerprint() : uint64 {
 def private register_styletts2_image_tags {
     register_image_family_tag(ST2_IMAGE_TAG, true, @@styletts2_layout_fingerprint)   // no box property shapes the f32 blob
     register_image_family_tag(ST2_IMAGE_TAG_Q8, false, @@styletts2_layout_fingerprint)   // the q8 quants follow the backend's repack
+    register_image_family_tag(ST2_IMAGE_TAG_KQ, false, @@styletts2_layout_fingerprint)   // and so do the K-quant planes
 }
 
 let ST2_ADAIN_EPS = 1e-5   //!< the instance norms' eps, the generator driver's twin reads it
@@ -439,7 +596,14 @@ def private read_conv(m : GGUFMeta; bytes : array<uint8> | #; wname, bname : str
         conv1d_pad_cin(c, cin_s)
     }
     c.served_rows = rows
-    conv1d_prepare(c, g_stage_q8, g_stage_repack)
+    let fmt = stage_fmt(wname)
+    let quant_cm = st2_group(wname) == "text_encoder"   //! the one group whose channel-major convs take a quant matrix: the others' read a curve or the signal
+    if (st2_is_kq(fmt) && (rows || quant_cm) && conv1d_kq_eligible(c)) {
+        conv1d_prepare_kq(c, st2_kq(fmt), g_stage_repack)
+    } else {
+        conv1d_prepare(c, g_stage_q8 && fmt != St2Fmt.f32, g_stage_repack, quant_cm)
+    }
+    stage_note(wname, fmt, st2_is_kq(fmt) ? c.kq_fmt != 0 : (c.q8 == (fmt == St2Fmt.q8)))
     return <- c
 }
 
@@ -463,7 +627,11 @@ def private read_linear(m : GGUFMeta; bytes : array<uint8> | #; prefix : string;
     if (gguf_find_tensor(m, "{prefix}.bias") >= 0) {
         l.b <- read_arr(m, bytes, "{prefix}.bias")
     }
-    linear_prepare(l, rows_only, g_stage_q8, g_stage_repack, vec_only)
+    let fmt = stage_fmt("{prefix}.weight")
+    linear_prepare(l, rows_only, g_stage_q8 && fmt != St2Fmt.f32, g_stage_repack, vec_only)
+    if (!vec_only) {
+        stage_note("{prefix}.weight", fmt, l.q8 == (fmt == St2Fmt.q8))
+    }
     return <- l
 }
 
@@ -488,6 +656,11 @@ def private read_lstm_dir(m : GGUFMeta; bytes : array<uint8> | #; prefix : strin
     gguf_read_tensor_f32(m, bytes, "{prefix}.weight_ih", l.w_ih, 0l, g4 * l.nin, dir * g4 * l.nin)
     gguf_read_tensor_f32(m, bytes, "{prefix}.weight_hh", l.w_hh, 0l, g4 * l.hidden, dir * g4 * l.hidden)
     gguf_read_tensor_f32(m, bytes, "{prefix}.bias", l.b, 0l, g4, dir * g4)
+    let fmt = stage_fmt("lstm")
+    if (g_stage_q8 && fmt == St2Fmt.q8) {
+        lstm_prepare_q8(l, g_stage_repack)
+    }
+    stage_note("lstm", fmt, l.q8 == (fmt == St2Fmt.q8))
     return <- l
 }
 
@@ -498,16 +671,29 @@ def private read_bilstm(m : GGUFMeta; bytes : array<uint8> | #; prefix : string)
     return <- l
 }
 
-def private read_adain(m : GGUFMeta; bytes : array<uint8> | #; prefix : string) : TtsAdaIn {
+// a style projection on a quantized lane: Q8_0 where its widths allow and its group asks no f32, after any re-lay of its rows
+def private stage_style_fc(var l : TtsLinear) {
+    let fmt = stage_fmt(".fc")
+    if (g_stage_q8 && fmt != St2Fmt.f32) {
+        linear_vec_prepare_q8(l, g_stage_repack)
+    }
+    stage_note(".fc", fmt, l.q8 == (fmt != St2Fmt.f32))
+}
+
+//! an AdaIN with its style projection; `cs` past `c` re-lays the affine's two halves at the padded width first
+def private read_adain(m : GGUFMeta; bytes : array<uint8> | #; prefix : string; c : int64 = 0l; cs : int64 = 0l) : TtsAdaIn {
     var a = TtsAdaIn()
     a.fc <- read_linear(m, bytes, "{prefix}.fc", vec_only = true)
     a.norm <- read_norm(m, bytes, "{prefix}.norm.weight", "{prefix}.norm.bias")
+    adain_pad(a, c, cs)
+    stage_style_fc(a.fc)
     return <- a
 }
 
 def private read_adaln(m : GGUFMeta; bytes : array<uint8> | #; prefix : string) : TtsAdaLayerNorm {
     var a = TtsAdaLayerNorm()
     a.fc <- read_linear(m, bytes, "{prefix}.fc", vec_only = true)
+    stage_style_fc(a.fc)
     return <- a
 }
 
@@ -522,10 +708,7 @@ def private read_adain_res_blk(m : GGUFMeta; bytes : array<uint8> | #; prefix : 
     let pad = pad_in && b.learned_sc && b.dim_in % 32l != 0l
     b.dim_in_s = pad ? round_up(b.dim_in, 32l) : b.dim_in
     let cin_s = pad ? b.dim_in_s : 0l
-    b.norm1 <- read_adain(m, bytes, "{prefix}.norm1")
-    if (pad) {
-        adain_pad(b.norm1, b.dim_in, b.dim_in_s)
-    }
+    b.norm1 <- read_adain(m, bytes, "{prefix}.norm1", b.dim_in, b.dim_in_s)
     b.norm2 <- read_adain(m, bytes, "{prefix}.norm2")
     b.conv1 <- read_conv_p(m, bytes, "{prefix}.conv1", true, cin_s)
     b.conv2 <- read_conv_p(m, bytes, "{prefix}.conv2", true)
@@ -664,10 +847,16 @@ def private read_weight(m : GGUFMeta; bytes : array<uint8> | #; name : string) :
 //! into the mint-side carrier: served layouts minted, voices, STFT convention and the family's
 //! driver keys read, every weight moved into the staging blob.
 [arch(at = "../ARCHITECTURE_TTS.md#tts-image-rail")]
-def stage_styletts2(path : string; q8 : bool = false) : St2Staging {
+def stage_styletts2(path : string; q8 : bool = false; kq : bool = false) : St2Staging {
+    if (kq && !q8) {
+        panic("dasLLAMA styletts2: the recipe lane mints Q8_0 beside its K-quant groups; it is not an f32 lane")
+    }
     var inscope st = St2Staging()
     st.e.q8 = q8
+    st.e.kq = kq
+    delete g_stage_minted   // a stage a panic cut short left its counts behind
     g_stage_q8 = q8
+    g_stage_kq = kq
     g_stage_repack = q8 && select_matmul_backend_for_load_()
     let f = fopen(path, "rb")
     if (f == null) {
@@ -692,7 +881,15 @@ def stage_styletts2(path : string; q8 : bool = false) : St2Staging {
         st.e.source.torch_math = gguf_has(m, "styletts2.resample") && gguf_str(m, bytes, "styletts2.resample") == "torch"
         st.e.voice_names <- gguf_str_array(m, bytes, "styletts2.voices")
         for (v in st.e.voice_names) {
-            st.e.voices[v] <- read_arr(m, bytes, "voice.{v}")
+            var inscope pack <- read_arr(m, bytes, "voice.{v}")
+            let fmt = stage_fmt("voice.{v}")
+            let quant = g_stage_q8 && fmt == St2Fmt.q8 && st.e.style_dim % 32l == 0l
+            if (quant) {   // a style row is whole blocks of 32, so a row's scales are its own
+                q8_matrix_mint(pack, st.e.style_dim, long_length(pack) / st.e.style_dim, st.e.voices_q[v], st.e.voices_qs[v], false)
+            } else {
+                st.e.voices[v] <- pack
+            }
+            stage_note("voice.{v}", fmt, quant == (fmt == St2Fmt.q8))
         }
         stage_family_data(m, bytes, st.e)
         read_albert(m, bytes, st.e.albert)
@@ -701,6 +898,8 @@ def stage_styletts2(path : string; q8 : bool = false) : St2Staging {
         read_decoder(m, bytes, st.e.decoder)
     }
     fclose(f)
+    stage_report()
+    g_stage_kq = false
     var io = TtsBlobIo(staging = true, blob = unsafe(addr(st.blob)), qblob = unsafe(addr(st.qblob)))
     weights_walk(io, st.e)
     return <- st
@@ -741,17 +940,16 @@ def private stage_family_data(m : GGUFMeta; bytes : array<uint8>#; var e : Style
 //! Mint a served model from a staged read without touching disk - the in-memory image rail,
 //! the off-rail control for suites. The staged read's lane picks the tag.
 def mint_styletts2(var st : St2Staging; var out : StyleTts2Model) {
-    let tag = st.e.q8 ? ST2_IMAGE_TAG_Q8 : ST2_IMAGE_TAG
-    cache_via_image_staged(st, out, "", tag)
+    cache_via_image_staged(st, out, "", st2_tag_of(st.e.q8, st.e.kq))
     st2_bind(out)
 }
 
-//! Bake a GGUF's prepared image to `out` on the lane `q8` names - the converter's TTS arm. The
-//! box's backend pin (the converter's ``--config``) decides the q8 plane's repack. false = not written.
-def bake_styletts2_image(path, out : string; q8 : bool) : bool {
-    var inscope st <- stage_styletts2(path, q8)
+//! Bake a GGUF's prepared image to `out` on the lane `q8` and `kq` name - the converter's TTS arm. The
+//! box's backend pin (the converter's ``--config``) decides the quant planes' repack. false = not written.
+def bake_styletts2_image(path, out : string; q8 : bool; kq : bool = false) : bool {
+    var inscope st <- stage_styletts2(path, q8, kq)
     var inscope m = StyleTts2Model()
-    return cache_via_image_staged(st, m, out, q8 ? ST2_IMAGE_TAG_Q8 : ST2_IMAGE_TAG)
+    return cache_via_image_staged(st, m, out, st2_tag_of(q8, kq))
 }
 
 //! Load a converted StyleTTS2-lineage GGUF through its prepared image on the current lane (the sibling `.dlim` maps when it
@@ -760,48 +958,26 @@ def bake_styletts2_image(path, out : string; q8 : bool) : bool {
 [arch(at = "../ARCHITECTURE_TTS.md#tts-image-rail"), arch(at = "../ARCHITECTURE_IMAGE.md#image-identity-backend-order")]
 def load_styletts2(path : string) : StyleTts2Model {
     bump_weights_epoch()   //! the previous model's GPU slabs drop before this one's weights can land at their addresses
-    var inscope m = StyleTts2Model()
     let q8 = st2_serve_q8()
-    if (path |> ends_with(".dlim")) {
-        apply_box_profile_runtime()
-        let ts = ref_time_ticks()
-        let preferred_tag = q8 ? ST2_IMAGE_TAG_Q8 : ST2_IMAGE_TAG
-        let other_tag = q8 ? ST2_IMAGE_TAG : ST2_IMAGE_TAG_Q8
-        if (!stat(path).is_valid) {
-            panic("dasLLAMA styletts2: '{path}' does not exist")
-        }
-        if (!load_image(path, m, preferred_tag) && !load_image(path, m, other_tag)) {
-            panic("dasLLAMA styletts2: '{path}' is not a prepared TTS image for this box (identity {image_identity(ST2_IMAGE_TAG_Q8)} / {image_identity(ST2_IMAGE_TAG)}) - bake it from the source gguf with dasllama-convert")
-        }
-        st2_bind(m)
-        to_log(LOG_INFO, "dasLLAMA styletts2: prepared image mapped in {get_time_usec(ts) / 1000} ms on its {m.q8 ? "q8" : "f32"} lane - {path}\n")
-        return <- m
+    let kq = st2_serve_kq()
+    let dlim = path |> ends_with(".dlim")
+    st2_announce_lane(dlim)
+    if (kq && !empty(g_st2_recipe_pin) && !dlim) {   // pinned groups: minted in memory, no image read or written
+        var inscope pinned = StyleTts2Model()
+        var inscope st <- stage_styletts2(path, q8, kq)
+        mint_styletts2(st, pinned)
+        return <- pinned
     }
-    let tag = st2_tag()
-    st2_announce_lane()
-    if (g_env_engine.image) {
-        apply_box_profile_runtime()
-        let img = image_path_for(path, tag)
-        let ts = ref_time_ticks()
-        if (load_image(img, m, tag)) {
-            st2_bind(m)
-            to_log(LOG_INFO, "dasLLAMA styletts2: prepared image mapped in {get_time_usec(ts) / 1000} ms - {img}\n")
-            return <- m
-        }
-        var inscope st <- stage_styletts2(path, q8)
-        if (cache_via_image_staged(st, m, img, tag)) {
-            dlim_gc_stale(path, tag)   // the fresh bake ON DISK proves its lane's siblings dead
-        }
-        st2_bind(m)
-        return <- m
+    let tag = image_path_lane(path, st2_tag_of(q8, kq), ST2_IMAGE_PREFIX)
+    var inscope m <- load_staged_image(path, tag, "styletts2", "source gguf", type<StyleTts2Model>) {
+        return <- stage_styletts2(path, q8, kq)
     }
-    var inscope st <- stage_styletts2(path, q8)
-    mint_styletts2(st, m)
+    st2_bind(m)
     return <- m
 }
 
 //! True when `name` is one of the model's voices.
-def styletts2_has_voice(m : StyleTts2Model; name : string) : bool => key_exists(m.voices, name)
+def styletts2_has_voice(m : StyleTts2Model; name : string) : bool => key_exists(m.voices, name) || key_exists(m.voices_q, name)
 
 //! The style row `row` of voice `name` (a canonical name), `style_dim` floats.
 def styletts2_style(m : StyleTts2Model; name : string; row : int; @exact_size var style : array<float>) {
@@ -811,6 +987,11 @@ def styletts2_style(m : StyleTts2Model; name : string; row : int; @exact_size va
     m.voices |> get(name) $(pack) {
         for (i in range(sd)) {
             style[i] = pack[r * sd + i]
+        }
+    }
+    m.voices_q |> get(name) $(quants) {   // a pack minted Q8_0, in disk order: the row read back off its own blocks
+        m.voices_qs |> get(name) $(scales) {
+            q8_matrix_row(quants, scales, false, m.style_dim, int64(m.style_rows), int64(r), style, 0l)
         }
     }
 }

@@ -171,7 +171,7 @@ def test_kokoro_facade(t : T?) {
     }
 }
 
-[test(description = "Kokoro phonemizes a line to exact en-us and en-gb strings whose symbols all survive tokenization, and bf_emma's synthesis has exactly the British string's sample count, which differs from the American one")]
+[test(description = "Kokoro phonemizes a line to exact en-us and en-gb strings whose symbols all survive tokenization, and bf_emma's synthesis of three lines has exactly the British string's sample count each, which differs from the American one on at least one")]
 def test_kokoro_dialects(t : T?) {
     t |> run("a British voice speaks the British inventory, and the vocabulary carries it") @(t : T?) {
         if (tts_data_missing(t, gguf_path())) {
@@ -200,13 +200,18 @@ def test_kokoro_dialects(t : T?) {
             let lv = speech_level(audio.pcm)
             t |> success(lv.finite, "every sample finite")
             t |> success(lv.peak > 0.05 && length(audio.pcm) > 24000, "bf_emma spoke {length(audio.pcm)} samples, peak {lv.peak}")
-            // and the dialect the VOICE pins is the one the synthesis read: the two inventories
-            // predict different durations, so the sample count says which string reached the model
-            let spoken = strip(tts_normalize(line))
-            let n_gb = samples_for(m, tts_phonemize(m, spoken, "en-gb"), "bf_emma")
-            let n_us = samples_for(m, tts_phonemize(m, spoken, "en-us"), "bf_emma")
-            t |> success(n_gb != n_us, "the discriminator: the dialects speak {n_gb} and {n_us} samples")
-            t |> equal(long_length(audio.pcm), n_gb, "bf_emma read the British inventory ({n_us} would be the American one)")
+            // and the dialect the VOICE pins is the one the synthesis read: the two inventories predict their own durations, so
+            // the sample count says which string reached the model - over three lines, since two strings' totals can tie on one
+            var told_apart = 0
+            for (probe in [line, "Her car was parked far from the corner of the harbour.", "Water ran under the northern bridge near the border."]) {
+                var inscope spoke <- synthesize(m, probe, "bf_emma")
+                let spoken = strip(tts_normalize(probe))
+                let n_gb = samples_for(m, tts_phonemize(m, spoken, "en-gb"), "bf_emma")
+                let n_us = samples_for(m, tts_phonemize(m, spoken, "en-us"), "bf_emma")
+                t |> equal(long_length(spoke.pcm), n_gb, "bf_emma read the British inventory of '{probe}' ({n_us} would be the American one)")
+                told_apart += n_gb != n_us ? 1 : 0
+            }
+            t |> success(told_apart > 0, "the discriminator: the dialects speak different sample counts on {told_apart} of the three lines")
         }
     }
 }

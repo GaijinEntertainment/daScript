@@ -46,6 +46,7 @@ let GPU_TEXT_BAR = 1e-5
 let GPU_PRED_BAR = 2e-5
 let GPU_DECODE_BAR = 5e-2
 let GPU_DECODE_Q8_BAR = 1e-1   //! the served lane: the CPU q8 chain quantizes its activations, the tower reads the dequantized weights at f32
+let GPU_DECODE_KQ_BAR = 1.5e-1   //! the recipe lane, the same way: the CPU chain requantizes its rows to Q8_K, one scale a 256 block, against the tower's dequantized K-quant weights - reads 0.053 to 0.115 on kitten nano and mini and 0.034 to 0.048 on kokoro (M5 Max, Metal), the poisoned input 0.37 and up
 
 def private within_twentieth(n, m : int64) : bool => abs(n - m) * 20l < m
 
@@ -109,12 +110,29 @@ def private seat_present(t : T?; tag, stage : string) : bool {
     return false
 }
 
-//! The facade minted in memory from the GGUF's staging on the lane `q8` names - no `.dlim` baked, no pin taken.
-def private mint_tts_model(path : string; q8 : bool) : TtsModel {
+//! The facade minted in memory from the GGUF's staging on the lane `q8` and `recipe` name - no `.dlim` baked, no pin taken.
+def private mint_tts_model(path : string; q8 : bool; recipe : bool = false) : TtsModel {
     var inscope m = TtsModel()
-    var inscope stg <- stage_styletts2(path, q8)
+    var inscope stg <- stage_styletts2(path, q8, recipe)
     mint_styletts2(stg, m.model)
     tts_finish_styletts2(m, path)
+    return <- m
+}
+
+//! A Pocket model minted in memory from the GGUF's staging on the lane the pins name - what `load_pocket` serves, with no
+//! `.dlim` baked beside the stocked file.
+def pocket_minted(path : string) : PocketModel {
+    var inscope st <- stage_pocket(path, pocket_serves_q8(), pocket_serves_native())
+    var inscope m = PocketModel()
+    mint_pocket(st, m)
+    return <- m
+}
+
+//! `pocket_minted` as the facade holds it.
+def pocket_tts_minted(path : string) : TtsModel {
+    var inscope m = TtsModel()
+    m.kind = TtsKind.pocket
+    m.pocket <- pocket_minted(path)
     return <- m
 }
 
@@ -201,7 +219,7 @@ def case_noise(dump : table<string; TtsDumpTensor>) : TtsNoise
 
 // the generator fed the oracle's own F0 curve, source signal and decoder output: block
 // correctness at the seams, with the phase drift the predictor's rounding noise induces taken out
-def private seam_check(t : T?; m, m8 : StyleTts2Model; tag : string; dump : table<string; TtsDumpTensor>) {
+def private seam_check(t : T?; m, m8, mkq : StyleTts2Model; tag : string; dump : table<string; TtsDumpTensor>) {
     var inscope f0 <- dump_tensor(dump, type<float>, "f0")
     var inscope gen_in <- dump_tensor(dump, type<float>, "gen_in")
     var inscope style <- dump_tensor(dump, type<float>, "style")
@@ -229,7 +247,7 @@ def private seam_check(t : T?; m, m8 : StyleTts2Model; tag : string; dump : tabl
     styletts2_generator(m.decoder, gen_in, cw, f2, style_dec, spec, frames, tr, wave, sc)
     with_gpu_knobs() {
         gpu_seam_check(t, m, tag, gen_in, cw, f2, style_dec, spec, frames, wave, sc)
-        gpu_stage_checks(t, m, m8, tag, dump, noise, sc)
+        gpu_stage_checks(t, m, m8, mkq, tag, dump, noise, sc)
     }
     stage_diff(t, "{tag} SEAM", "stft_re", tr.stft_re, dump)
     stage_diff(t, "{tag} SEAM", "ups0", tr.ups0, dump)
@@ -383,8 +401,8 @@ def seat_leg(t : T?; family : TtsFamily; tag, stage : string; bar : float; var c
 //! Every front, predictor and decoder stage on the tower fed the CPU stage's own inputs (the
 //! oracle's ids, style and captured noise): each within its bar, each served once, a scaled or
 //! reversed input as each compare's control; the durations token for token.
-[unused_argument(t, m, m8, tag, dump, noise, sc)]   // off-Apple the gated body is empty
-def private gpu_stage_checks(t : T?; m, m8 : StyleTts2Model; tag : string; dump : table<string; TtsDumpTensor>; var noise : TtsNoise; var sc : St2Scratch) {
+[unused_argument(t, m, m8, mkq, tag, dump, noise, sc)]   // off-Apple the gated body is empty
+def private gpu_stage_checks(t : T?; m, m8, mkq : StyleTts2Model; tag : string; dump : table<string; TtsDumpTensor>; var noise : TtsNoise; var sc : St2Scratch) {
     static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)) {
         var inscope ids <- dump_tensor(dump, type<int>, "input_ids")
         var inscope style <- dump_tensor(dump, type<float>, "style")
@@ -430,6 +448,9 @@ def private gpu_stage_checks(t : T?; m, m8 : StyleTts2Model; tag : string; dump 
         // activations against the tower's dequantized weights - the q8 slab writes' only numeric gate
         var inscope sc8 = St2Scratch()
         gpu_decode_check(t, m8, "{tag} q8 lane", ten_c, n_tok, dur_c, frames, f0_c, n_c, f2, style_dec, noise, sc8, GPU_DECODE_Q8_BAR)
+        // the recipe lane: the K-quant convs and the Q6_K upsamplers through the slab's row reads - their only numeric gate
+        var inscope sckq = St2Scratch()
+        gpu_decode_check(t, mkq, "{tag} recipe lane", ten_c, n_tok, dur_c, frames, f0_c, n_c, f2, style_dec, noise, sckq, GPU_DECODE_KQ_BAR)
     }
 }
 
@@ -514,7 +535,8 @@ def tts_gpu_synthesis(t : T?; path, text, voice : string) {
     static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)) {
         return if (tts_data_missing(t, path))
         with_gpu_cell() {
-            return if (!gpu_served_lane(t, path, text, voice))
+            return if (!gpu_served_lane(t, path, text, voice, false))
+            gpu_served_lane(t, path, text, voice, true)
             gpu_reference_lane(t, path, text, voice)
         }
     } else {
@@ -522,12 +544,13 @@ def tts_gpu_synthesis(t : T?; path, text, voice : string) {
     }
 }
 
-//! The served lane's leg of `tts_gpu_synthesis`: false where the tower did not serve.
-def private gpu_served_lane(t : T?; path, text, voice : string) : bool {
+//! A quantized lane's leg of `tts_gpu_synthesis` - the lane an unpinned load serves, or the recipe lane: false where the
+//! tower did not serve.
+def private gpu_served_lane(t : T?; path, text, voice : string; recipe : bool) : bool {
     static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)) {
         reset_tts_q8()   // the served lane is the unpinned default, whatever an earlier cell left
-        var inscope m <- mint_tts_model(path, tts_serves_q8())
-        let msg = "{base_name(path)} served lane"
+        var inscope m <- mint_tts_model(path, recipe || tts_serves_q8(), recipe)
+        let msg = "{base_name(path)} {recipe ? "recipe" : "served"} lane"
         return served_lane_counters(t, m, text, voice, msg, "generator") $(a, b : TtsAudio; chunks : int; encodes : int64) {
             t |> equal(encodes, int64(chunks) * served_seat_count(), "{msg}: one tower encode per seat per chunk")
             let peak = logits_maxabs(b.pcm)
@@ -663,6 +686,9 @@ def tts_parity(t : T?; rig : TtsParityRig) {
             var inscope stg8 <- stage_styletts2(rig.gguf, true)
             var inscope m8 = StyleTts2Model()   // the served lane's planes, for the q8 decode cell
             mint_styletts2(stg8, m8)
+            var inscope stgkq <- stage_styletts2(rig.gguf, true, true)
+            var inscope mkq = StyleTts2Model()   // the recipe lane's planes, for its decode cell
+            mint_styletts2(stgkq, mkq)
             t |> equal(m.family, rig.family)
             t |> equal(m.sample_rate, 24000)
             var ids_ok = 0
@@ -699,7 +725,7 @@ def tts_parity(t : T?; rig : TtsParityRig) {
                     }
                 }
                 if (c.stages) {
-                    seam_check(t, m, m8, tag, dump)
+                    seam_check(t, m, m8, mkq, tag, dump)
                     stage_checks(t, tag, tr, dump)
                 }
                 unsafe {
