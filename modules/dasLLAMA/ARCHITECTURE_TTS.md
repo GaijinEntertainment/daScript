@@ -201,6 +201,15 @@ while the chunk is still in cache. The strided f32 convs (the generator's noise 
 weight as [k*cin][cout_s]. The chunk stays inside a 4 MB budget, so the stacked rows live in
 cache while the kernel reads them.
 
+A conv minted in a K-quant format (`conv1d_prepare_kq`: Q4_K, Q5_K or Q6_K, encoded at the mint by
+`quantize_kq_plane`) is the same one matrix as a plane pair, its row zero-padded to a whole number of
+256-superblocks so any dense conv takes the form. A forward conv stacks the k shifted input rows as
+floats, zeros past them, requantizes the stacked rows to the Q8_K form and makes one batched K-quant
+GEMM call a chunk - the engine's own kq entry, the format its argument. A pad column's weight is read
+against a stacked zero, so what it dequantizes to is nothing. A transposed conv's quant matrix, Q8_0
+or K-quant, is its lift [k*cout][cin]: the input rows requantize where they sit, one batched GEMM
+lifts a block of them to their taps, and the output rows gather the taps as the f32 form does.
+
 The per-tap alternative - one short-K GEMM per tap, then a pass adding it into the accumulator -
 costs three sweeps of the output plane per tap and, on a bias128 stamp, a token block-sum pass per
 call. Stacking touches no kernel backend: the TTS convs consume the LLM's Q8*Q8 batch entry.
@@ -225,24 +234,46 @@ what a block without the padding runs on.
 `stage_styletts2` reads the GGUF into `St2Staging` with the served layouts minted - one form per
 weight, the consumer named by the reader - and every weight moved into one staging blob with its
 `TtsSpan` recorded; `load_styletts2` maps the sibling `.dlim` under the lane's tag or bakes it
-from that staging (`DASLLAMA_IMAGE=0` mints in memory; `mint_styletts2` is the suites' off-rail
-control). Two lanes, each its own image: `tts-q8`, the served default - the rows GEMMs'
-weights as Q8_0 quants in an int8 plane repacked for the box's backend, the tag config-bound -
-and `tts-f32`, the file's planes under a config-free tag, the reference lane the parity rail
-and the block test hold against, which carries no optimization duty: the rig held q8 at f32
-quality, and f32 costs memory for nothing. The meta blob carries the scalars, the spans, the
-voice roster and the family's driver data (Kitten's per-voice speed priors and alias names,
-Kokoro's symbol table - staged from the GGUF's `kitten.*` / `kokoro.*` keys with the weights)
-through the leaf structs' own `serialize` overloads, so an image serves without its GGUF: a
-`.dlim` path maps the lane the file was baked on, whatever the policy asks (`load_styletts2`
-tries the policy's tag first, then the other), and `dasllama-convert` bakes one offline
-(`bake_styletts2_image`, `-o` anywhere) under a supplied `--config` for another box's identity.
-The loader binds every weight
+from that staging through the engine's one carrier loader (`load_staged_image`, the staged form
+of `ARCHITECTURE_IMAGE.md#image-destination`'s `load_through_image`; `DASLLAMA_IMAGE=0` mints in memory, and
+`mint_styletts2` is the suites' off-rail control), as the Pocket family's image does
+(`ARCHITECTURE_POCKET.md#pocket-image`). Three lanes, each its own image. `tts-q8` is what an f32
+file serves with no pin: the rows GEMMs' weights as Q8_0 quants in an int8 plane. `tts-kq` is the
+recipe lane (`ARCHITECTURE_TTS.md#tts-recipe`), served where a load asks for it
+(`set_styletts2_recipe`, `dasllama-convert --recipe`): each weight group mints in the recipe's
+format through `stage_fmt`, a K-quant group's dense convs - forward rows, transposed and
+channel-major - taking the K-quant form (`ARCHITECTURE_TTS.md#tts-tap-stacking`) and everything
+else the q8 lane's. Both quantized lanes repack for the box's backend, so their tags are
+config-bound. `tts-f32` is the file's planes under a config-free tag, the reference lane the parity
+rail and the block test hold against, which carries no optimization duty. The meta blob carries the
+scalars, the spans, the voice roster and the family's driver data (Kitten's per-voice speed priors
+and alias names, Kokoro's symbol table - staged from the GGUF's `kitten.*` / `kokoro.*` keys with
+the weights) through the leaf structs' own `serialize` overloads, so an image serves without its
+GGUF: a `.dlim` path maps the lane the file was baked on (`image_path_lane`), a pin it does not
+apply named in a warning, and `dasllama-convert` bakes one offline (`bake_styletts2_image`, `-o`
+anywhere) under a supplied `--config` for another box's identity. The loader binds every weight
 array as a borrowed view over the mapped plane after the parse (post-load runs before the
 planes bind), so the carrier and every struct holding it take an explicit `finalize`. The
 layout fingerprint refuses a struct-shape change by name; a served-layout change that keeps the
 shape is invisible to it, which is why such a change bumps `IMAGE_VERSION` and why a rows conv
 served from an image older than its layout panics by name rather than indexing an empty array.
+
+### The recipe is what the rig picked, group by group {#tts-recipe}
+
+`st2_recipe_default` names a format for each weight group (`ST2_GROUPS`, a tensor's group read off
+its name by `st2_group`), and each entry is a measurement: `set_styletts2_recipe` asks the lane and
+pins groups in process (`harness/tts_synth.das --small` / `--recipe`, the rig's flags of the same
+names), a load under group pins mints in memory and writes no image, and the stage logs what each
+group asked and how many of its weights minted in it. The decoder stack, the generator's res blocks
+and the text encoder's convs take Q4_K, the transposed upsamplers Q6_K, the noise convs and
+`conv_post` f32 - the first reads the harmonic source and the second writes the spectrum, so a
+block scale over their activations is a noise floor under the audio, as it is in the Pocket codec
+(`ARCHITECTURE_POCKET.md#pocket-q8-file`) - and every other group Q8_0 wherever its widths quantize
+per 32: the voice packs, a style row read back off its own blocks (`styletts2_style`), and the
+LSTMs, a step's input row and state requantized ahead of a q8 GEMV. The lane is the small form, not
+the default: it is a quarter smaller than the q8 lane on Kokoro and a tenth to a seventh slower on
+the CPU chain. The scores each pick rests on, the sizes and the speeds are `PERF_LEDGER.md`'s
+"TTS weight formats" entry.
 
 ### The sine source keeps the reference's operation order {#tts-phase-law}
 

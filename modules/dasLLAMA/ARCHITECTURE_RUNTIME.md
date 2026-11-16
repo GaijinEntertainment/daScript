@@ -174,7 +174,10 @@ The batched step's `eval_batch_` (reached through `scheduler_step` and the publi
 `eval_embd_` are uncovered the same way: each grows its workspace and its row set a call by design, and their perf gates are
 the batched-row cells and the served-turn instrument. The qwen3a log-mel (`log_mel_qwen3a`) is uncovered the same
 way: it builds its window, twiddles, filterbank and image a clip by design, one call a transcription, and its perf gate
-is the ASR cells' encode wall. The GPU seats' decline helpers (`rd_decline`, `rv_decline`, `tw_decline`) are
+is the ASR cells' encode wall. The TTS facade's per-chunk preparation (`synthesize_chunk`: a StyleTTS2 voice's style row,
+`styletts2_style`; a Pocket voice's state stamped, or rebuilt where the model freed it, `pocket_speak`) is uncovered the
+same way: it runs once a chunk ahead of the `[hot_path]` synthesis, a rebuilt state allocates its caches by design, and
+its perf gate is the rig's real-time factor. The GPU seats' decline helpers (`rd_decline`, `rv_decline`, `tw_decline`) are
 `[cold_path]` whole, with no unmarked key check split off ahead of them: each runs only on the call the seat hands back to
 the CPU, and none holds a check a serving call passes through.
 

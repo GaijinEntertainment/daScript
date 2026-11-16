@@ -24,9 +24,9 @@ path: the walk and its gather hook are the lane mint's, run with no sink.
 The loader rule of `tests/REVIEW.md` keeps a test whose subject is not the `.dlim` image rail off the rail. The cells below
 fire it and are ruled acceptable, each with its reason.
 
-- **The TTS facade smoke cells** - `facade_smoke` in `tests/_tts_parity.das`, called from `tests/test_tts_kitten.das` and
-  `tests/test_tts_kokoro.das`, and `test_kokoro_ru_facade` in `tests/test_tts_kokoro.das`. They load through the facade's
-  `load_tts_model`, which bakes the StyleTTS2 `.dlim` beside the model when `DASLLAMA_IMAGE` is unset, so each mints an
+- **The TTS facade smoke cells** - `facade_smoke` in `tests/_tts_parity.das`, called from `tests/test_tts_kitten.das`,
+  `tests/test_tts_kokoro.das` and `tests/test_tts_pocket.das`, and `test_kokoro_ru_facade` in `tests/test_tts_kokoro.das`. They
+  load through the facade's `load_tts_model`, which bakes the family's `.dlim` beside the model when `DASLLAMA_IMAGE` is unset, so each mints an
   image per carrier. The reason: the facade's own load path is the cells' subject - for the Russian cell the packs it
   picks by the voices' declared languages - and they run under the suite child's identity - on the tuned arm the box's
   own, with no policy override - so the image they mint is the one the image suite's `kitten` arm and the serving rig read.

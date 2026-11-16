@@ -23,8 +23,8 @@ The TTS block home, facade and phoneme families are `ARCHITECTURE_TTS.md`.
   causal backbone - `PocketTransformer` carries `heads` query heads over `kv_heads` key-value
   heads of `dh = attn_dim / heads`, one each on the 100M models, eight over two (7m) or three over
   one (2m) on the 2026-10 small ones, which also project the queries wider than the residual; a
-  low-rank text table (`flow_lm.conditioner.proj`) is multiplied out at load so the prompt stays
-  a gather; a `z_proj` bottleneck, where the file has one, narrows `out_norm`'s row to the
+  low-rank text table stays low-rank, its projection (`flow_lm.conditioner.proj`) applied to the
+  rows a prompt gathers; a `z_proj` bottleneck, where the file has one, narrows `out_norm`'s row to the
   `cond_dim` the head and the EOS logit read - the one-step flow head, the Mimi-derived codec
   with or without its encoder - the decoder side its own SEANet and transformer where the config
   names them (the small models' 128-wide, 12-layer decoder behind the 100M models' encoder) -
@@ -103,6 +103,12 @@ frames at 12.5 Hz, through `speaker_proj` into the backbone's width, and - with 
 front - through the backbone at positions 0.., filling every layer's key-value cache. That cache
 (`PocketVoiceState`, `len` positions) is the voice. A synthesis appends its text and frames after
 `len` and a later one forgets them by resetting each cache's fill to `len`; nothing is copied.
+A model keeps the `POCKET_VOICE_STATES` (2) states used last and frees the least recently used
+past them: a voice's stored form is its frames, 15 KB against the state's megabytes, and a freed
+voice rebuilds from them on its next use - one backbone pass over the clip's frames
+(`PERF_LEDGER.md`'s "TTS weight formats" entry times it) - where a voice of the older file form,
+stored as its clip, runs the codec encoder again. One synthesis runs on a model at a time, so the
+state a chunk continues from is the one stamped last.
 The caches are sized for the clip plus the rows a chunk of the reference's budget can take -
 `POCKET_MAX_TOKENS` text rows and every frame its cap allows, about 285 - and grow by a small
 slack, the voice's rows kept, when a chunk needs more - one unsplittable run of two hundred
@@ -114,7 +120,8 @@ own prompt path - the trim, then its codec encoder - over the clip at conversion
 state is built from them on first
 use - the second half of the clip path, no encoder needed; a file of the older form carries the
 clips themselves (`voice.<name>`) and encodes them on first use. A cloned voice is the whole clip
-path over a caller's clip (`tts_register_voice`), so it needs the encoder: a file converted
+path over a caller's clip (`tts_register_voice`), and it keeps the clip's frames as a roster voice
+does - 15 KB for a ten-second clip against the clip's megabyte - so it needs the encoder: a file converted
 `--no-cloning` leaves the encoder out, says so in `pocket.cloning`, reports `cloning = false` in
 `caps()` and refuses a clip by name. A prepared prompt (`TtsVoicePrompt`, the frames of one
 clip path) is portable across files that read the same latent space, and that space is named
@@ -178,6 +185,32 @@ become words) - the reference does not, which is where its numeric WER comes fro
 another language takes the text as it is, which is what its reference does in every language
 (the facade's Russian normalizer serves the Kokoro voices, not a Pocket file).
 
+### A Pocket file serves from its prepared image {#pocket-image}
+
+`stage_pocket` reads the GGUF into `PocketStaging` on the lane it is asked, every load-time form
+minted there - the kernels' layouts and repacks, the head's baked
+timestep constant, the roster's frames - and `weights_walk` moves each weight into the staging
+planes with its `TtsSpan` recorded: floats into `blob`, Q8_0 quants, K-quant plane pairs and an F16
+table's halfwords into `qblob`. `load_pocket` maps the sibling `.dlim` under the lane's tag or bakes it from that staging,
+through the engine's one carrier loader, as the StyleTTS2 carrier does
+(`ARCHITECTURE_TTS.md#tts-image-rail`): `DASLLAMA_IMAGE=0` mints in memory, `mint_pocket` is the
+suites' off-rail control, `bake_pocket_image` the converter's arm. A staged read is q8 and native
+both on (the unpinned lane), q8 alone, or neither: native without q8 is no lane and is refused. Three lanes, each its own image:
+`pocket-native`, the unpinned default - a file's own quants, K-quant planes included, repacked
+for the box's backend, so the tag is config-bound; `pocket-q8`, the q8 pin, config-bound the same
+way; `pocket-f32`, the reference lane, under a config-free tag. The meta carries the scalars, the
+driver rules, the spans, the roster's names and the tokenizer's vocabulary (`serialize_spm`), so an
+image serves without its GGUF, and a `.dlim` path maps the lane it was baked on whatever the pin
+asks. `pocket_serves_file` reads a file's family from its head - a GGUF's architecture, an image's
+lane tag - and the facade routes a path by it. A host that holds an image's bytes hands them over
+instead (`load_pocket(base, bytes)`, the facade's `load_tts_model(base, bytes)`;
+`ARCHITECTURE_IMAGE.md#image-borrowed-memory`): the family needs no pack, so the bytes are the
+whole model, where a phoneme family's image reads its packs from its directory and opens from a
+path. A roster voice is a borrowed view over the mapped
+plane, in the same table as the voices a run registers, which the model owns: both free through
+`release_plane`, and the walk binds a roster voice in the one table its span names, since the
+latents' key is what says a voice is stored as frames.
+
 ### The published file carries the served quants {#pocket-q8-file}
 
 A file has three lanes and its formats decide which it can take. A K-quant dense layer
@@ -187,13 +220,18 @@ pinned - `TtsLinear` holds the plane pair the GGUF transcoder wrote, repacked wh
 the load selected carries kq kernels (the load line says which arm), and the frame loop's GEMV
 and the prompt's GEMM take the engine's own K-quant entries (`linear_rows_decode`,
 `linear_rows_kq`), the rows requantized to the Q8_K form the way the engine's own decode does.
-The text embedding table is Q4_K on disk only: it is a lookup, and dequantizes at load on every
-lane. Pinned q8 or f32, a K-quant tensor dequantizes into that lane, so one file serves every
+The text embedding table is a lookup, so a table stored Q4_K, F16 or low-rank serves in that form: a
+Q4_K table as its own planes, a token's row read off them at the prompt (`pocket_prompt_embed`), an
+F16 table as its halfwords in the int8 plane, a row widened at the prompt, a low-rank one as its
+rows and its projection. An F32 table is floats; a table stored any other way is refused by name
+on the unpinned lane, and a table of fewer rows than the tokenizer's vocabulary at every load. Pinned q8 or f32, a K-quant tensor - the table among them - dequantizes into that lane
+and an F16 table widens to floats, so one file serves every
 lane and the rig compares them on the same sentences. A vector layer the file stores Q8_0 (the
 head) runs its GEMV on the q8 lane. The formats follow the widths: the 18m model (512 wide)
 takes both the q8 and the kq form, the 7m (224 wide, off the 256 lattice) the q8 form alone,
-and the 2m (112 wide, off the 32 lattice) is published f16 and serves its f32 planes on every
-lane; the `z_proj` bottleneck, like the EOS logit, stays f16.
+and the 2m (112 wide, off the 32 lattice) is published f16: its backbone serves f32 planes on
+every lane, and its codec transformers' matrices, 128 and 512 wide, take the q8 lane's Q8_0 at
+the load like any f16 linear on the lattice; the `z_proj` bottleneck, like the EOS logit, stays f16.
 
 The two lanes every Pocket file has, as the StyleTTS2 families have them: f32, the parity
 rail's reference, and q8, the served default - the transformer layers' four matrices and the

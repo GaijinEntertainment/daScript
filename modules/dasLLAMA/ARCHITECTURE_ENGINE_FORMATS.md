@@ -193,6 +193,10 @@ halfwords are its carrier's own F16, a served form; on Parakeet's kq lane the K-
 The Russian stress-context model's f32 layer GEMMs follow the TTS lane (`tts_serves_q8`): on the q8 lane they are a Q8_0
 requant minted at load and held in RAM, with no image; its K-quant layers serve the file's own planes on either lane
 (`ARCHITECTURE_TTS_FRONT_END.md#tts-stress-lanes`).
+A StyleTTS2 carrier's quantized lanes are minted from its f32 file at the image bake, a converted copy each lane's image
+carries: Q8_0 at default levers, the recipe's Q4_K and Q6_K groups beside Q8_0 where a load asks the recipe lane
+(`ARCHITECTURE_TTS.md#tts-recipe`); a Pocket file's own Q4_K, Q8_0 and F16-table tensors are served forms
+(`ARCHITECTURE_POCKET.md#pocket-q8-file`), and the TTS GPU seats read every one of them widened into an f32 slab.
 Every `load_big` call names the form it
 fills - the plane's tag, or the `KqFmt` member a conversion serves - so the conversion reads at the call;
 `REVIEW.das`'s `check_load_big_format` reds a call with no format, and licenses no names.

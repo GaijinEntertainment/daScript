@@ -632,7 +632,7 @@ bakes, a 384-wide one and a 32-row one do not - and expert exclusion - an `*_exp
 slice bakes nothing, a shared-expert site and a mis-spelt suffix still bake - are pure taxonomy
 over a job list, plus the split-scale transform's idempotence over one carrier) `smol untied metal metal-untied gemma tower whisper voxtral
 parakeet gigaam qwen3a canary canary-dec gemma4a gemma4uv gemma4uv-metal gemma4v gemma3v gemma4e
-mtower kitten bergamot mx4-stream b32-stream mlx mlx-metal mlx-metal-35b`; `mlx` (family `llama`: the Llama-3.2-1B 8-bit
+mtower kitten pocket bergamot mx4-stream b32-stream mlx mlx-metal mlx-metal-35b`; `mlx` (family `llama`: the Llama-3.2-1B 8-bit
 safetensors snapshot) is the snapshot's planar lane minted beside the directory, the mapped affine planes and logits the eager
 load's; `mlx-metal` (the same snapshot) is its metal lane - a cold Metal-mode load mints `<snapshot>.metal.dlim` beside it and
 serves the device steps, the mint, the warm map and the CPU rails picking the same sixteen greedy ids and the teacher-forced
@@ -645,8 +645,17 @@ loudly), then the mapped planes are the eager load's byte for byte; `b32-stream`
 Q4_0, Q5_0 and IQ4_NL `-local` mints) is the per-32 streamed planar mint - every served plane of the mapped image (the q8 pair,
 the fp32 rows, the lattice table, every top-level pair) the eager load's byte for byte, and the image's last-row logits on a
 counting prompt the eager load's bit for bit; `kitten` is the TTS area's arm - the StyleTTS2 carrier (kitten-nano) through
-`load_styletts2` on both lanes, and the image loaded by its own path with the family data
-riding its meta; `gemma4e` is the E2B metal-blob
+`load_styletts2` on its f32 and q8 lanes, the recipe lane asked through `set_styletts2_recipe("")` (each weight group in its
+format, a style projection Q8_0, the mapped planes the staged read's whole, the planes smaller than the q8 lane's), a recipe
+pin (the named groups move and no other, the load mints in memory with the lane's image untouched, a spec that does not
+parse is refused and leaves the pin in force, no group pinned restores the recipe, the ask dropped serves the policy
+lane, Q8_0, and a Q8_0 voice pack's style row within a hundredth of the f32 pack's with another row as the control), and
+the image loaded by its own path under the other lane's pin with the family data riding its meta; `pocket` is the TTS
+area's other arm - the 18m K-quant Pocket file through `load_pocket` on its native, q8 and f32 lanes (both planes of the
+cold load, the warm map and the in-memory mint whole against the staged read, the lane read off the accessors), the
+published 18m q8 file's native image carrying the F16 text table as the file's halfwords and its f32 image as floats,
+the three lanes three files, the native image copied away from its GGUF and loaded by its own path under another lane's
+pin speaking the GGUF load's samples, and a roster voice cleared on an image-served model (skipped on a one-voice file); `gemma4e` is the E2B metal-blob
 mint+map arm - the PLE go-live tripwire (`ple_check_table`, which panics when the per-layer
 embedding table's plane is short) runs after the blob plane borrows, so a fresh mint and a warm
 map must both clear it; `gemma4uv-metal` is the GPU tower
@@ -4846,8 +4855,9 @@ model-gated (`kokoro-82m.gguf` +
 against the PyTorch reference, a facade smoke cell through the front end's own inventory (the 28
 English packs, two declared languages, 8 of them British), the British voice cell - one line
 phonemized in both dialects, every British symbol proven to be in the model's own vocabulary by
-the token count, `bf_emma` speaking, and the sample count of that synthesis held against the model
-driven straight from each dialect's string, which is what proves the VOICE's dialect reached the
+the token count, `bf_emma` speaking, and - over three lines, since one line's two dialects can tie
+in length - each line's sample count held against the model driven straight from the British string
+and at least one line differing from the American string's, which is what proves the VOICE's dialect reached the
 synthesis - and the voice refusals (a pack whose language the front end lacks names that language;
 a voice the model has never heard of refuses first, with no language to name); the GPU cells of
 `_tts_parity.das` - the seam check, the per-stage cells with the q8 decode cell, and the served
@@ -4937,7 +4947,8 @@ small English models (`test_pocket_small_models`: the f32 references `pocket-tts
 `_tts_fixtures/pocket_tokens_english_2026-10.json`; each model skips where its reference or
 oracle is absent): the shape the file declares (key-value heads, the queries' width, 64-wide
 heads, the head's sampling rule with no timestep constant, the 64-wide `z_proj` bottleneck the
-head and the EOS logit read, the text table multiplied out, the 128-wide decoder behind the
+head and the EOS logit read, the text table held low-rank with its projection (a prompt's rows
+through the projection the multiplied-out table's, the next tokens' rows the control), the 128-wide decoder behind the
 100M encoder) and the 4.0.1 driver rules (the EOS threshold, six guarded frames, the 5 ms
 fade-in, the prompt trim, four replacements); the parity rail on the f32 lane - the prompt
 trim against the oracle's trimmed clip within `TRIM_BAR`, the encoder and the voice state's
@@ -4956,7 +4967,23 @@ prompt seats run teacher-forced against the CPU chain through `frames_seat_leg` 
 Max - grouped keys, the bottleneck row, the time-free tail) and the codec seat over the oracle's
 latents within `GPU_CODEC_BAR` through `codec_served_leg` (reads 1.3e-6 on the M5 Max), the
 32-wide heads on the attention row; and the reward-tuned twins (`test_pocket_small_refl`:
-`pocket-tts-en-{18m-refl-q8,7m-refl-q8,2m-refl}.gguf`, one sentence each through the facade).
+`pocket-tts-en-{18m-refl-q8,7m-refl-q8,2m-refl}.gguf`, one sentence each through the facade). The
+text table's forms: the kq file's Q4_K planes and a small file's low-rank rows each read a prompt's
+rows equal to the dequantized or multiplied-out table's, and `test_pocket_f16_table` holds the f16
+file's table as the file's halfwords unpinned, with no f32 copy - a prompt's rows the pinned f32
+lane's bit for bit, the next token ids' rows differing as the control. `test_pocket_voice_state_cap`
+speaks three roster voices of `pocket-tts-en-18m-q8.gguf` in turn (it skips on a roster of fewer
+than three): the model holds two built states, the third voice frees the least recently used and
+keeps the one a repeat touched, and the freed voice rebuilt from its stored frames speaks its first
+samples bit for bit, another voice's samples differing as the control. `test_pocket_from_memory`
+bakes that file's native-lane image into scratch, reads it page-aligned (`_image_memory`), deletes
+the file and loads the bytes through `load_tts_model(base, bytes)`: `tts_loads_from_memory` true
+for them and false off the page, too short or absent, the same samples as the image's file, one
+borrow while the model lives and none after, the ASR loader, a whisper lane read and a base off
+the page each refusing by name, a native stage without q8 refused by name, and zeroed planes
+speaking otherwise as the control. Every cell that loads a Pocket GGUF mints it in memory
+(`pocket_minted`, `pocket_tts_minted` in `_tts_parity.das`), so the file writes no image beside a
+stocked model; `test_pocket_facade` loads through the facade and is the one that bakes.
 `test_tts_facade.das` - stocked suite; model-free cells: the sentence chunker (the reference
 driver's boundary rule, the cap counted in codepoints, the hard split of a whitespace-free run,
 the appended comma as Kitten's driver rule and the bare text Kokoro's sends), the normalizer the
@@ -5039,7 +5066,17 @@ explains). The whole rail runs under `with_reference_f32_tile` (`_f32_tile_pin.d
 GEMM on `f32_batch_tile`'s declared fallback through the engine's f32 tile pin (`set_f32_tile_pin`), a
 seat of its own ahead of the float-batch override, so a sidecar crowning another permutation moves no bar
 and the rail holds under `DASLLAMA_ACCEL=1` - only the f32 tile is pinned, every other kernel keeps its
-stamp, and the pin is put back however the block leaves, a panic included.
+stamp, and the pin is put back however the block leaves, a panic included. The quant matrices:
+`test_quant_mints` runs a conv minted in the K-quant form (Q4_K, Q5_K, Q6_K; forward, transposed and
+channel-major; stride 1 to 10; a stacked row padded to 256 and one on it; disk-order and repacked
+planes) against the f32 conv over the weights its own planes dequantize to at the q8 dot-envelope
+bar, and holds that conv to the f32 conv over the source weights at `KQ_SOURCE_REL`, so a mint that
+leaves rows unwritten reds; a vector layer minted Q8_0 holds its f32 GEMV at the envelope bar, one
+with a width off 32 keeps its f32 weight. `test_lstm_q8` holds a BiLSTM minted Q8_0 within 0.05 of
+its f32 run over 96 steps in both directions, the two runs not equal, and a direction whose input
+width is off 32 on its f32 matrices bit for bit. `test_gguf_quant.das`'s `test_kq_encoders` holds
+`quantize_kq_plane`'s round trip through the plane dequant under each format's relative-rmse budget
+a 32-element sub-block, the 4-bit format the furthest off, an all-zero superblock exact zeros.
 `test_f32_batch_tile_perms.das` - model-free: every permutation of `f32_batch_tile`'s grid
 (`_f32_tile_pin.das`'s `[dasllama_grid]` clones) over the 4x4 lattice of the inverse STFT's GEMM
 kitten mini ends on (n 11, d 20, 45480 frames) and of a 301-wide dot (d 20, 2048 tokens: past every
@@ -5397,8 +5434,9 @@ Every `[test]` file requiring a `dasllama/*` module outside this folder, each wi
 - `utils/dasllama-convert/test_convert.das` - requires the converter's `convert_sniff` module by bare
   same-dir name (the hyphenated directory is unreachable by path require): the carrier sniff over
   the GigaAM carriers, a decoder and a Qwen3-ASR mmproj, gated through `_model_tier.das`'s
-  `model_available` (path-required), and the absent-file cell; run `-jit`
-  (`run_tests_dasllama_convert`).
+  `model_available` (path-required), and the absent-file cell; `test_bake_pocket_lanes` and
+  `test_bake_kitten_lanes` bake a TTS source to `-o` at `-q q8` and `-q fp32` and hold the image's
+  lane tag (`image_family_tag`); run `-jit` (`run_tests_dasllama_convert`).
 
 The ladder tests (`utils/internal/dasllama-ladder/test_*.das`) answer to that folder's own
 `REVIEW.md` - not dasLLAMA tests, not ledger entries. That holds even though two of them,
