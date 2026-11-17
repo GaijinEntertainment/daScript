@@ -147,6 +147,7 @@ struct - so the library exposes a flat surface over it instead of re-exporting i
 - `next_piece` - one token's text, advancing the session
 - `prefill_tps`, `gen_tps`, `reason` - the numbers, and why a call said no
 - `asr_open` / `asr_close` / `asr_speed` - load and drop a speech-to-text model
+- `asr_transcribe` - the text of one finished utterance: mono samples in at any rate, no VAD
 - `asr_listen` / `asr_feed` / `asr_listen_end` - speech to text from a live stream: mono samples
   in at any rate and chunk size, the text of each utterance the Silero VAD closes out
 - `translate_open` / `translate_close` / `translate_direction` / `translate_text` - load and drop
