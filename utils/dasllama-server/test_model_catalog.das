@@ -33,6 +33,8 @@ def test_catalog_drafters(t : T?) {
 
 //! every file the published text-to-speech set carries - the catalog test holds the set to this list
 let private TTS_SET_FILES <- ["kitten-nano.gguf", "kitten-mini.gguf", "kokoro-82m.gguf", "kokoro-ru.gguf", "tts_g2p.bin", "tts_g2p_en_us.bin", "tts_postag.bin", "tts_g2p_ru.bin",
+                              "kitten-nano-q8.gguf", "kitten-nano-kq.gguf", "kitten-mini-q8.gguf", "kitten-mini-kq.gguf", "kokoro-82m-q8.gguf", "kokoro-82m-kq.gguf", "kokoro-ru-q8.gguf", "kokoro-ru-kq.gguf",
+                              "pocket-tts-de-kq.gguf", "pocket-tts-es-kq.gguf", "pocket-tts-it-kq.gguf", "pocket-tts-pt-kq.gguf", "pocket-tts-fr-kq.gguf",
                               "pocket-tts-en-q8.gguf", "pocket-tts-de-q8.gguf", "pocket-tts-es-q8.gguf", "pocket-tts-it-q8.gguf", "pocket-tts-pt-q8.gguf", "pocket-tts-fr-q8.gguf", "pocket-tts-en-kq.gguf", "pocket-tts-en-stuart-kq.gguf",
                               "pocket-tts-en-18m-q8.gguf", "pocket-tts-en-18m-kq.gguf", "pocket-tts-en-18m-stuart-kq.gguf", "pocket-tts-en-7m-q8.gguf", "pocket-tts-en-2m.gguf",
                               "pocket-tts-en-18m-refl-q8.gguf", "pocket-tts-en-7m-refl-q8.gguf", "pocket-tts-en-2m-refl.gguf"]
@@ -94,7 +96,7 @@ def test_catalog_table(t : T?) {
         t |> success(tower.url |> starts_with("https://"), "asr tower url must be https")
         t |> success(find(tower.url, "/resolve/main/") < 0, "asr tower url is not commit-pinned")
     }
-    t |> run("the text-to-speech set is pinned like any carrier: twenty models, four packs") @(t : T?) {
+    t |> run("the text-to-speech set is pinned like any carrier: thirty-three models, four packs") @(t : T?) {
         var inscope set <- serve_tts_set()
         var packs = 0
         var names : table<string>
@@ -109,7 +111,7 @@ def test_catalog_table(t : T?) {
                 packs++
             }
         }
-        t |> equal(length(set), 24, "the set is twenty models (three phoneme families and the Russian fine-tune, six Pocket languages, the two small forms of the 100M English model, the eight 2026-10 small English files) and four packs")
+        t |> equal(length(set), 37, "the set is thirty-three models (three phoneme families and the Russian fine-tune, each again as the file that stores its Q8_0 lane and its recipe lane; six Pocket languages, the small form of each, the one-voice small form of the 100M English model, the eight 2026-10 small English files) and four packs")
         t |> equal(packs, 4, "four front-end packs: the full phoneme pack, its American-only twin, the tagger, the Russian stress pack")
         for (want in TTS_SET_FILES) {
             t |> success(key_exists(names, want), "the set carries {want}")

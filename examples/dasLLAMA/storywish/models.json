@@ -3,6 +3,6 @@
     { "file": "tinystories-instruct-27M-Q8_0.gguf", "repo": "borisbat/dasllama-stories", "sha256": "92c2b775070b76ee31b9921f7f339ec9fc0e08b54be0616418414d4eec65d282", "dlim": "tinystories-instruct-27M.dlim" }
   ],
   "files": [
-    { "file": "pocket-tts-en-stuart-kq.gguf", "repo": "borisbat/dasllama-tts", "sha256": "c0e086a080a0a41d5121870f560f0e79d47be3e61ddd5032d49e556363e78277" }
+    { "file": "pocket-tts-en-stuart-kq.gguf", "repo": "borisbat/dasllama-tts", "rev": "a62130a44d6f8fef8a5113825c5f15b01e1c8f80", "sha256": "e9e69e52254f48e544509a0dff3b594779f737eac5b372d61adda8b696a5af46" }
   ]
 }

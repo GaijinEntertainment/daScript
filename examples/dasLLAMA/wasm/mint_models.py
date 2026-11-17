@@ -11,7 +11,9 @@ image carries the version the deploy expects).
                    --daslang bin/daslang --out _site/examples/storywish/models \
                    [--cache ~/.cache/dasllama-web-models] [--expect-image-version 35] [--stamp-page page.html]
 
-The GGUFs are cached by sha256 (a download is verified before it is used, and never trusted from
+An entry's `rev` pins the repo commit its file is fetched at, so a file replaced on the repo's main
+does not reach a deploy before its models.json does; an entry without one reads main. The GGUFs are
+cached by sha256 (a download is verified before it is used, and never trusted from
 the cache without its hash in the name); the images are minted on every run - it takes
 milliseconds, and a mint for THIS build is the whole point. --expect-image-version is the deploy
 gate: the version read from each minted image's header must be the tree's, or the run exits 3 (any
@@ -35,12 +37,17 @@ def sha256_of(path):
     return h.hexdigest()
 
 
+def entry_url(entry):
+    """where an entry's file is fetched from: its repo at the commit `rev` pins, at main where it pins none"""
+    return f"{HF}/{entry['repo']}/resolve/{entry.get('rev', 'main')}/{entry['file']}"
+
+
 def fetch(entry, cache):
     """the file at cache/<sha256>-<name>, downloaded from its repo when absent, verified either way"""
     os.makedirs(cache, exist_ok=True)
     target = os.path.join(cache, f"{entry['sha256']}-{entry['file']}")
     if not os.path.exists(target):
-        url = f"{HF}/{entry['repo']}/resolve/main/{entry['file']}"
+        url = entry_url(entry)
         print(f"fetching {url}")
         tmp = target + ".part"
         with urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "dasllama-web-models"})) as r, open(tmp, "wb") as f:
@@ -49,7 +56,7 @@ def fetch(entry, cache):
     got = sha256_of(target)
     if got != entry["sha256"]:
         os.remove(target)
-        raise SystemExit(f"{entry['file']}: sha256 {got}, models.json says {entry['sha256']} - the repo file changed; update models.json or pin the old one")
+        raise SystemExit(f"{entry['file']}: sha256 {got}, models.json says {entry['sha256']} - the repo file changed; update models.json, or pin the commit that holds the old one with `rev`")
     return target
 
 

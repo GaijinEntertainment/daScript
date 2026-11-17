@@ -9645,3 +9645,40 @@ the Metal rows below read 3.27 / 3.983, 2.86 / 4.332, 2.73 / 4.500 and 3.86 / 4.
   than the facade's line too - kitten-nano 241.9 ms for 5.32 s of speech where the probe's line reads 105.6 to 110.3
   ms for 7.14 s - so the recipe lane's gap is wider in the server's speech worker than in the rig
   (`followup_general.md` row 314).
+
+### From the TTS stored files leg (2026-11-16, Apple M5 Max; `-jit`, the JIT tier; `direction-grade`)
+
+Quality and memory rows alone: every run of this entry read untuned kernels (`DASLLAMA_ALLOW_UNTUNED=1`, the box
+profile stale on a rebuilt binary; `DAS_TUNE_POLICY` unset), so no rate is recorded. The instrument is
+`harness/tts_rig.py` on its 200 sentences (`python3 modules/dasLLAMA/harness/tts_rig.py --models <file stem>:<voice>
+...`, `--lang ru` for the Russian set), WER % / UTMOS; the CPU rows ran under `DASLLAMA_METAL_TOWER=0`, the Metal
+rows with no override. The rows a file is held against are the in-memory lanes of the "TTS weight formats" entry
+above, measured at commit 74a7060033 with tuned kernels.
+
+- **A file that stores a lane's weights scores as the lane, CPU chain.** The `-q8` file then the `-kq` file, each
+  written by `dasllama-convert --gguf` from the f32 file: kokoro-ru `sveta` 0.70 / 3.835 and 0.70 / 3.838 (the lanes
+  0.74 / 3.844 and 0.65 / 3.846), `masha` 0.65 / 3.715 and 0.65 / 3.714 (0.65 / 3.716 on both), kokoro-ru-dima `dima`
+  0.70 / 3.739 and 0.74 / 3.743 (0.74 / 3.740 and 0.78 / 3.743), kokoro-82m `af_heart` 2.82 / 4.500 on both (2.68 /
+  4.500 on both), kitten-nano `Bella` 3.13 / 3.986 and 3.41 / 3.956 (3.41 / 3.966 and 2.91 / 3.941), kitten-mini
+  `Bella` 2.86 / 4.341 and 3.13 / 4.323 (2.86 / 4.339 and 3.00 / 4.325). A word of either set is 0.04 points: the
+  files sit inside the half point the lanes sit within of one another, and UTMOS holds within 0.015.
+- **The same on the Metal seat.** kokoro-ru `sveta` 0.70 / 3.838 and 0.65 / 3.841, `masha` 0.65 / 3.720 and 0.61 /
+  3.717, kokoro-ru-dima 0.74 / 3.739 and 0.74 / 3.743, kokoro-82m 2.77 / 4.501 and 2.73 / 4.501, kitten-nano 3.23 /
+  3.974 and 3.18 / 3.970, kitten-mini 2.95 / 4.332 and 3.04 / 4.319.
+- **File sizes, MB of 1e6 bytes: the f32 file, `-q8`, `-kq`.** kokoro-ru 325.8, 88.6, 64.2; kokoro-ru-dima 325.3,
+  88.4, 64.0; kokoro-82m 353.0, 95.8, 71.4; kitten-mini 296.0, 80.5, 59.7; kitten-nano 59.3, 16.6, 14.8. A stored
+  file's staged planes are its lane's: the quant bytes equal, each Q8_0 scale the half its block holds
+  (`tests/test_tts_kitten.das`, `test_kitten_stored_file`).
+- **The 100M English Pocket files re-minted under pocket-tts 4.0.1's driver rules, Metal seats.**
+  `pocket-tts-en-q8.gguf` `alba` 3.36 / 4.395, `pocket-tts-en-kq.gguf` `alba` 3.45 / 4.384 (the file it replaces read
+  3.86 / 4.323 in the entry above), `pocket-tts-en-stuart-kq.gguf` `stuart_bell` 3.36 / 4.106.
+- **The heap a load holds, MB of 1e6 bytes over 15.5 before the load: loaded / after one line / after five voices**
+  (`bin/daslang -jit modules/dasLLAMA/harness/tts_load_probe.das -- <file>`, one process a row, the image mapped).
+  On the CPU chain: `kokoro-82m.gguf` on its q8 lane 40.3 / 187.6 / 196.0, `kokoro-82m-q8.gguf` 40.3 / 188.1 / 196.0,
+  `kokoro-82m-kq.gguf` 40.3 / 185.8 / 193.4, `kitten-nano.gguf` 40.2 / 144.8 / 167.4, `kitten-nano-q8.gguf` 40.2 /
+  144.8 / 167.6. On the Metal seat the three Kokoro files read 40.3 / 44.4 / 44.5 and the two Kitten files 40.2 /
+  42.5 / 43.0. A file that stores a lane holds what the f32 file holds on that lane.
+- **What the writer holds while it writes** (`write_styletts2_gguf`): every minted weight as its disk blocks, the
+  bytes of the written file's quantized tensors - 93,878,080 for `kokoro-82m-q8.gguf`, 69,477,184 for
+  `kokoro-82m-kq.gguf`, 15,719,424 for `kitten-nano-q8.gguf`, 13,859,328 for `kitten-nano-kq.gguf` - beside the
+  staging carrier and the source's mapping (`followup_general.md` row 312).

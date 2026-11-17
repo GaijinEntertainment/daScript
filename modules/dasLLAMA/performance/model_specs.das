@@ -429,23 +429,25 @@ let PARAKEET_GGUF_AT = "{HF}/handy-computer/parakeet-tdt-0.6b-v3-gguf/resolve/d8
 let PARAKEET_GGUF_RECIPE = "fetched: handy-computer/parakeet-tdt-0.6b-v3-gguf, the transcribe.cpp project's conversion of nvidia/parakeet-tdt-0.6b-v3 (the attention and FF GEMMs K-quant in the Q4_K_M file, the attention outputs Q8_0, the conv pointwise GEMMs f16); the quantized file serves on the kq lane - its K-quant and Q8_0 tensors as its own planes, its f16 GEMMs quantized to Q8_0; THIRD_PARTY_NOTICES.md (module root) carries the attribution"
 let CANARY_ENC_RECIPE = "convert: modules/dasLLAMA/harness/convert_canary_to_ggml.py over nvidia/canary-qwen-2.5b (nemo venv; encoder is a repack - sha canonical everywhere)"
 let CANARY_DEC_RECIPE = "convert: modules/dasLLAMA/harness/convert_canary_to_ggml.py over nvidia/canary-qwen-2.5b (nemo venv), then llama-quantize Q8_0 (a Q8_0 disk embedding lets the tied classifier serve cls_q8 on the Metal rail); bytes are per-arch (fp16 LoRA merge) - gate via asr_bench --text over jfk/jfk3/gb1 vs benchmarks/asr/canary_transcripts.expected"
-let TTS_HF = "{HF}/borisbat/dasllama-tts/resolve/0fd9f116865dee7c42dfae4e99d6f1444ea80016"   //! the published set, commit-pinned
+let TTS_HF = "{HF}/borisbat/dasllama-tts/resolve/a62130a44d6f8fef8a5113825c5f15b01e1c8f80"   //! the published set, commit-pinned
 let TTS_KITTEN_RECIPE = "convert: modules/dasLLAMA/performance/build_tts_data.das -- --root <g2p experiment root> --out <models dir> runs harness/convert_kitten.py over KittenML/kitten-tts-nano-0.8 @ 7a1db645b1f3ab9420761d87428e042b9cec3f26 and kitten-tts-mini-0.8 @ c02725660cea441db4c383af69f1f26f5cd00947 (the ONNX weights into GGUF, f32); THIRD_PARTY_NOTICES.md (repo root) carries the attribution"
 let TTS_KOKORO_RECIPE = "convert: modules/dasLLAMA/performance/build_tts_data.das -- --root <g2p experiment root> --out <models dir> runs harness/convert_kokoro.py at 807f0164c3 (a later converter also writes kokoro.voice_langs; the pinned file carries none, its voices named in the pipeline's shape) over hexgrad/Kokoro-82M @ f3ff3571791e39611d31c381e3a41a3af07b4987 (kokoro-v1_0.pth + the voice packs into GGUF, f32); THIRD_PARTY_NOTICES.md (repo root) carries the attribution"
 let TTS_KOKORO_RU_RECIPE = "convert: harness/convert_kokoro.py --checkpoint <pth> --config config.json --voices <dir of .bin packs> --name <stem> --lang ru --source 'zaakirio/kokoro-ru @ d649c57b239b18c4c384378127cbf01dba039bc1' (kokoro-ru-v2-base.pth with sveta and masha into kokoro-ru.gguf, kokoro-ru-v2-dima.pth with dima into kokoro-ru-dima.gguf, f32); THIRD_PARTY_NOTICES.md carries the attribution"
+//! a phoneme family's file again as the file that stores a lane's weights (`ARCHITECTURE_TTS_FORMATS.md#tts-stored-file`): the encoders round by kernel backend, so a re-mint on another box scores alike and hashes apart
+let TTS_STORED_RECIPE = "convert: utils/dasllama-convert/main.das -- --model <name>.gguf --gguf <name>-q8.gguf (the Q8_0 lane's weights), and with --recipe --gguf <name>-kq.gguf (the recipe lane's), over this catalog's f32 file of the same name on an Apple M5 Max (the arm64 kernel backend): every weight the lane mints stored as minted, the rest and every key as the source holds them; the source file's licence applies"
 let TTS_RU_STRESS_SEEDED_RECIPE = "convert: harness/ru_stress_oracle.py --seed-head <ruBert-base dir> (a Linear(768, 8) stress head under seed 290 as stress_head.pt), then harness/convert_ru_stress.py --checkpoint <ruBert-base dir> --out <models dir> --catalog <the forms whose stress depends on context> --source ai-forever/ruBert-base over ai-forever/ruBert-base @ 05f37a2ca9e333fd18f30cd0c96c68d274793c69 (pytorch_model.bin, vocab.txt; f32): the pretrained encoder under a seeded head, the parity rail's carrier"
 let TTS_RU_STRESS_ORACLE_RECIPE = "mint: harness/ru_stress_oracle.py --checkpoint <ruBert-base dir with its seeded head> --corpus <a text corpus the caller supplies> --catalog <the forms whose stress depends on context> --tokens modules/dasLLAMA/tests/_tts_fixtures/ru_stress_tokens.json --dumps <models dir>/tts_oracle/ru_stress: PyTorch's last hidden state, the head's logits and the masked pick over 20 sentences, one TTSO dump a sentence"
 let TTS_RU_STRESS_Q4_RECIPE = "convert: harness/convert_ru_stress.py --checkpoint <the fine-tuned checkpoint (not distributed)> --out <models dir> --name <the file's stem: ru-stress-rubert-base-q4 or ru-stress-ruelectra-small-q4> --source <its base model: ai-forever/ruBert-base or ai-forever/ruElectra-small> --catalog <the forms whose stress or yo spelling depends on context> --quant Q4_K --imatrix-corpus <a text corpus the caller supplies> --emb-quant Q8_0 --vocab-keep 0 --vocab-corpus <the same corpus> --llama-cpp <a checkout with a built ggml-base library>, run under OMP_NUM_THREADS=16 (the Q4_K bytes follow the thread count of the importance pass); ru-stress-rubert-base-q4.gguf fine-tuned from ai-forever/ruBert-base, ru-stress-ruelectra-small-q4.gguf from ai-forever/ruElectra-small; tts_ctx_ru.gguf beside a Russian voice is a copy of either"
 let TTS_RU_STRESS_F32_RECIPE = "convert: harness/convert_ru_stress.py --checkpoint <the checkpoint ru-stress-rubert-base-q4.gguf was converted from (not distributed)> --out <models dir> --name ru-stress-rubert-base-f32 --source ai-forever/ruBert-base --catalog <the forms whose stress or yo spelling depends on context> --llama-cpp <the same checkout>, no other flag: the same model on f32 planes and the whole vocabulary, the reference the quantized lane's cells hold"
 let TTS_PACKS_RU_RECIPE = "mint: harness/build_g2p_ru_data.py --openrussian <dir of the OpenRussian csv files> --frequency <a table the caller supplies: word, ordinal, count> --extra <the Wiktionary forms, then the words Wikipedia leads mark> --amend <the dictionary rows the Wiktionary editions correct> --endings 2:8:2:0.4 --rules <a rules file> --out tts_g2p_ru.bin (every inflected form's stressed vowel, the \xD1\x91 spellings, the ending table and the rule tier into tts_g2p_ru.bin; harness/README.md names each argument's columns)"
-let TTS_POCKET_RECIPE = "convert: modules/dasLLAMA/harness/convert_pocket.py at 3fe41ff187 --language english_2026-04 --q8 --name pocket-tts-en-q8 over kyutai/pocket-tts languages/english_2026-04/model.safetensors @ 19f95fe2df36e79fbd9f10008595cc4c977a0fcc, the tokenizer of kyutai/pocket-tts-without-voice-cloning @ d29db7978e464fb90cb3359ee0c69a273b9142cc and the voice clips of kyutai/tts-voices @ 323332d33f997de8394f24a193e1a76df720e01a (the served linears as Q8_0, every codec conv and the rest f16); THIRD_PARTY_NOTICES.md (repo root) carries the attribution"
-let TTS_POCKET_LANG_RECIPE = "convert: modules/dasLLAMA/harness/convert_pocket.py at 3fe41ff187 --language <config> --q8 --name pocket-tts-<code>-q8 over kyutai/pocket-tts languages/<config>/model.safetensors @ 39592ff23c9ef80098bb74895d104c26275fe2c9 (german, italian, spanish, portuguese, french_24l), the tokenizer of kyutai/pocket-tts-without-voice-cloning @ d29db7978e464fb90cb3359ee0c69a273b9142cc and the language's default clip (kyutai/pocket-tts @ 64ab7d24c479d736a83b8cc666c4a776fca30fda; estelle from kyutai/tts-voices @ 1fc7395b7e012e2bbebfca14b942a4ef62ccc899); THIRD_PARTY_NOTICES.md (repo root) carries the attribution"
+let TTS_POCKET_RECIPE = "convert: modules/dasLLAMA/harness/convert_pocket.py --language english_2026-04 --q8 --name pocket-tts-en-q8 under pocket-tts 4.0.1 over the files its config pins: kyutai/pocket-tts languages/english_2026-04/model.safetensors @ 19f95fe2df36e79fbd9f10008595cc4c977a0fcc, kyutai/pocket-tts-without-voice-cloning languages/english_2026-04/tokenizer.json @ 00eac05ed3d16bdc3f6b5d598874019c34a89214 and the voice clips of kyutai/tts-voices @ 323332d33f997de8394f24a193e1a76df720e01a, each trimmed to end on a pause before the encoder (the served linears as Q8_0, every codec conv and the rest f16); THIRD_PARTY_NOTICES.md (repo root) carries the attribution"
+let TTS_POCKET_LANG_RECIPE = "convert: modules/dasLLAMA/harness/convert_pocket.py --language <config> [--q8 | --kq] --name pocket-tts-<code>[-q8 | -kq] under pocket-tts 4.0.1 over the files each config pins (german, italian, spanish, portuguese, french_24l): kyutai/pocket-tts languages/<config>/model.safetensors @ 3e82814a68665eec246ff649b14c71331f955c06, kyutai/pocket-tts-without-voice-cloning languages/<config>/tokenizer.json @ 4e1e0a3e611c51c0b4ed8174fc10f32a54644303 (french_24l @ 8843db76457a91db32077edf8dfcd1c0e3e755fd) and the language's default clip (kyutai/pocket-tts @ 64ab7d24c479d736a83b8cc666c4a776fca30fda; estelle from kyutai/tts-voices @ 1fc7395b7e012e2bbebfca14b942a4ef62ccc899), trimmed to end on a pause before the encoder; THIRD_PARTY_NOTICES.md (repo root) carries the attribution"
 //! the small form the browser examples fetch: K-quant planes where the ladder held (backbone and codec transformers Q4_K, the embedding table Q4_K), Q8_0 where it did not (the flow head), the codec convolutions f16, the roster as latent frames
-let TTS_POCKET_KQ_RECIPE = "convert: modules/dasLLAMA/harness/convert_pocket.py at 3fe41ff187 --language english_2026-04 --kq --name pocket-tts-en-kq over the sources of pocket-tts-en-q8.gguf's recipe (the backbone and the codec transformers as Q4_K through ggml's own quantizer, the flow head as Q8_0, the codec convolutions f16, the embedding table Q4_K, the codec encoder inside, the 19 voices as the latent frames of their clips); THIRD_PARTY_NOTICES.md (repo root) carries the attribution"
-let TTS_POCKET_STUART_RECIPE = "convert: modules/dasLLAMA/harness/convert_pocket.py at 3fe41ff187 --language english_2026-04 --kq --voices stuart_bell --no-cloning --name pocket-tts-en-stuart-kq over the sources of pocket-tts-en-q8.gguf's recipe (the small form of pocket-tts-en-kq.gguf with one voice as latent frames and no codec encoder: reads text in stuart_bell, cannot clone); THIRD_PARTY_NOTICES.md (repo root) carries the attribution"
+let TTS_POCKET_KQ_RECIPE = "convert: modules/dasLLAMA/harness/convert_pocket.py --language english_2026-04 --kq --name pocket-tts-en-kq under pocket-tts 4.0.1 over the sources of pocket-tts-en-q8.gguf's recipe (the backbone and the codec transformers as Q4_K through ggml's own quantizer, the flow head as Q8_0, the codec convolutions f16, the embedding table Q4_K, the codec encoder inside, the 19 voices as the latent frames of their clips); THIRD_PARTY_NOTICES.md (repo root) carries the attribution"
+let TTS_POCKET_STUART_RECIPE = "convert: modules/dasLLAMA/harness/convert_pocket.py --language english_2026-04 --kq --voices stuart_bell --no-cloning --name pocket-tts-en-stuart-kq under pocket-tts 4.0.1 over the sources of pocket-tts-en-q8.gguf's recipe (the small form of pocket-tts-en-kq.gguf with one voice as latent frames and no codec encoder: reads text in stuart_bell, cannot clone); THIRD_PARTY_NOTICES.md (repo root) carries the attribution"
 // the f16 twin the parity rail loads on its f32 lane: the same sources, no --q8; never published
-let TTS_POCKET_F16_RECIPE = "convert: modules/dasLLAMA/harness/convert_pocket.py at 3fe41ff187 --language english_2026-04 --name pocket-tts-en over the sources of pocket-tts-en-q8.gguf's recipe (every tensor f16; the parity rail's reference under tests/test_tts_pocket.das, local only)"
-let TTS_POCKET_SMALL_RECIPE = "convert: modules/dasLLAMA/harness/convert_pocket.py --language <config> [--q8 | --kq] [--voices stuart_bell --no-cloning] --name pocket-tts-en-<size>[-refl][-q8 | -kq | -stuart-kq] under pocket-tts 4.0.1 over kyutai/pocket-tts languages/<config>/model.safetensors @ db04f0e653473e5c7333c69686ac92b7460b0c1d (english_18m_2026-10, english_7m_2026-10, english_2m_2026-10 and the _refl_ twins), the tokenizer of kyutai/pocket-tts-without-voice-cloning @ a7056f505a4a8ca72d8b5fb1440071d6f1a35739 and the voice clips of kyutai/tts-voices @ 323332d33f997de8394f24a193e1a76df720e01a, each trimmed to end on a pause before the encoder (the 2m's widths sit off the quant lattices, so its file is f16); THIRD_PARTY_NOTICES.md (repo root) carries the attribution"
+let TTS_POCKET_F16_RECIPE = "convert: modules/dasLLAMA/harness/convert_pocket.py --language english_2026-04 --name pocket-tts-en under pocket-tts 4.0.1 over the sources of pocket-tts-en-q8.gguf's recipe (every tensor f16; the parity rail's reference under tests/test_tts_pocket.das, local only)"
+let TTS_POCKET_SMALL_RECIPE = "convert: modules/dasLLAMA/harness/convert_pocket.py --language <config> [--q8 | --kq] [--voices stuart_bell --no-cloning] --name pocket-tts-en-<size>[-refl][-q8 | -kq | -stuart-kq] under pocket-tts 4.0.1 over kyutai/pocket-tts languages/<config>/model.safetensors @ db04f0e653473e5c7333c69686ac92b7460b0c1d (english_18m_2026-10, english_7m_2026-10, english_2m_2026-10 and the _refl_ twins), the tokenizer of kyutai/pocket-tts-without-voice-cloning languages/<config>/tokenizer.model @ 08ffc58775e62aad9409511b9591c9af626270f3 and the voice clips of kyutai/tts-voices @ 323332d33f997de8394f24a193e1a76df720e01a, each trimmed to end on a pause before the encoder (the 2m's widths sit off the quant lattices, so its file is f16); THIRD_PARTY_NOTICES.md (repo root) carries the attribution"
 let TTS_POCKET_SMALL_F32_RECIPE = "convert: modules/dasLLAMA/harness/convert_pocket.py --language <config> --keep-f32 --name pocket-tts-en-<size>[-f32] over the sources of the small files' recipe (every tensor as the f32 bundle stores it; the parity rail's reference under tests/test_tts_pocket.das, local only)"
 let TTS_PACKS_RECIPE = "mint: modules/dasLLAMA/performance/build_tts_data.das -- --root <g2p experiment root> --out <models dir> runs harness/build_g2p_data.py (misaki 0.9.4 gold/silver + CMUdict 0.7a + the g2p_en 2.1.0 GRU + harness/g2p_local_additions.json into tts_g2p.bin) and harness/train_postag.py (UD English-EWT + spaCy-labelled silver prose into tts_postag.bin)"
 let TTS_ORACLE_RECIPE = "mint: modules/dasLLAMA/performance/build_tts_data.das -- --root <g2p experiment root> --out <models dir> runs the PyTorch / ONNX reference per model over the bring-up sentences and dumps every stage the parity rail (tests/_tts_parity.das) compares"
@@ -1138,6 +1140,44 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
         ModelSpec(file = "kokoro-ru-dima.gguf", recipe = TTS_KOKORO_RU_RECIPE,
             url = "{TTS_HF}/kokoro-ru-dima.gguf", bytes = 325282688l,
             sha256 = "7720e1087c0c9720577e7e0b383dd31f75b7f6ab45bcd88df1f28df3c08c56a6"),
+        // the five files above as the files that store a lane's weights: -q8 the Q8_0 lane's, -kq the recipe lane's; each reads the
+        // packs its f32 row names
+        ModelSpec(file = "kitten-nano-q8.gguf", recipe = TTS_STORED_RECIPE, serve_tts = true,
+            url = "{TTS_HF}/kitten-nano-q8.gguf", bytes = 16646016l,
+            sha256 = "ed1b412ccc10499d2f4bc4fe4f4c78c7308dfb772c311782989f41ed8aee9dbe",
+            companions <- [
+                ProvEntry(name = "tts_g2p.bin", root = "llm", recipe = TTS_PACKS_RECIPE),
+                ProvEntry(name = "tts_postag.bin", root = "llm", recipe = TTS_PACKS_RECIPE)]),
+        ModelSpec(file = "kitten-nano-kq.gguf", recipe = TTS_STORED_RECIPE, serve_tts = true,
+            url = "{TTS_HF}/kitten-nano-kq.gguf", bytes = 14785920l,
+            sha256 = "d92014bdfa7cc7bafb3093f3e755c0fdc76a974e03c363b1b6c42b610860326e",
+            companions <- [
+                ProvEntry(name = "tts_g2p.bin", root = "llm", recipe = TTS_PACKS_RECIPE),
+                ProvEntry(name = "tts_postag.bin", root = "llm", recipe = TTS_PACKS_RECIPE)]),
+        ModelSpec(file = "kitten-mini-q8.gguf", recipe = TTS_STORED_RECIPE, serve_tts = true,
+            url = "{TTS_HF}/kitten-mini-q8.gguf", bytes = 80495296l,
+            sha256 = "1e1d094ee91aaf28a33ec4a1617a1acdd7d3a35fba7a681d2d99e022532701ed"),
+        ModelSpec(file = "kitten-mini-kq.gguf", recipe = TTS_STORED_RECIPE, serve_tts = true,
+            url = "{TTS_HF}/kitten-mini-kq.gguf", bytes = 59725504l,
+            sha256 = "f90e4f5aaac96cbd887fce4b9eeb3d05bd39a34a9f80c188a32a8902e6475d46"),
+        ModelSpec(file = "kokoro-82m-q8.gguf", recipe = TTS_STORED_RECIPE, serve_tts = true,
+            url = "{TTS_HF}/kokoro-82m-q8.gguf", bytes = 95792544l,
+            sha256 = "cb1ade7573957ed00bffe4968f1cc0ddec4222dd28d654636b93b5ea406a6d20"),
+        ModelSpec(file = "kokoro-82m-kq.gguf", recipe = TTS_STORED_RECIPE, serve_tts = true,
+            url = "{TTS_HF}/kokoro-82m-kq.gguf", bytes = 71391648l,
+            sha256 = "4b5102ab80b568ed6d9dc23417d7864fb23435b6f744729146a8fd1977b5bc4f"),
+        ModelSpec(file = "kokoro-ru-q8.gguf", recipe = TTS_STORED_RECIPE, serve_tts = true,
+            url = "{TTS_HF}/kokoro-ru-q8.gguf", bytes = 88575552l,
+            sha256 = "1961e4ca0cfde51c6e57244e19c45163c3c7e67808d94387cee942849789e5ff"),
+        ModelSpec(file = "kokoro-ru-kq.gguf", recipe = TTS_STORED_RECIPE, serve_tts = true,
+            url = "{TTS_HF}/kokoro-ru-kq.gguf", bytes = 64174656l,
+            sha256 = "b3a238b377514b11fa778ba7b8003f83c460f3a427a5fea54525c2064d725bdb"),
+        ModelSpec(file = "kokoro-ru-dima-q8.gguf", recipe = TTS_STORED_RECIPE,
+            url = "{TTS_HF}/kokoro-ru-dima-q8.gguf", bytes = 88436768l,
+            sha256 = "17ae7fb6698d66011facffc7e9a3e4b7db84d17542d4b9523967417545fa5d2a"),
+        ModelSpec(file = "kokoro-ru-dima-kq.gguf", recipe = TTS_STORED_RECIPE,
+            url = "{TTS_HF}/kokoro-ru-dima-kq.gguf", bytes = 64035872l,
+            sha256 = "b396a6c2dfe4461b7127eb89aade5007654f39606e31cb56a31fa489870d978c"),
         ModelSpec(file = "ru-stress-rubert-base.gguf", recipe = TTS_RU_STRESS_SEEDED_RECIPE, bytes = 714155040l,
             sha256 = "dd74321523a6e331ead017f891f3ee258e43fcf61af5d4c2fa05bffe5948bd2b",
             companions <- [
@@ -1155,46 +1195,62 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
         // the f16 twin (pocket-tts-en.gguf, the parity rail's reference) stays local
         ModelSpec(file = "pocket-tts-en-q8.gguf", recipe = TTS_POCKET_RECIPE, serve_tts = true,
             tts = TtsBoard(display = "Pocket TTS en q8", voice = "alba", ref = "pocket-en", package = "pocket-tts"),
-            url = "{TTS_HF}/pocket-tts-en-q8.gguf", bytes = 136819008l,
-            sha256 = "5bebd1b8ae89029257e2fcba08435c578c5cec9cada70b55c3ba176a21bc043c",
+            url = "{TTS_HF}/pocket-tts-en-q8.gguf", bytes = 136812032l,
+            sha256 = "ff41c88d0099375e096c1a0bb9db43c10e8b53b8bc9d3874b03f658f94a5487e",
             companions <- [
                 ProvEntry(name = "pocket-tts-en.gguf", root = "llm", recipe = TTS_POCKET_F16_RECIPE),
                 ProvEntry(name = "tts_oracle/pocket_english_2026-04", root = "llm", recipe = TTS_ORACLE_RECIPE)]),
         ModelSpec(file = "pocket-tts-de-q8.gguf", recipe = TTS_POCKET_LANG_RECIPE, serve_tts = true,
-            url = "{TTS_HF}/pocket-tts-de-q8.gguf", bytes = 136518016l,
-            sha256 = "b956f49c40600c20c1a7fdbd498b661a818b5f377b77aa3db4b88b509b24deff",
+            url = "{TTS_HF}/pocket-tts-de-q8.gguf", bytes = 136519648l,
+            sha256 = "1762eb997ab113247a5083d55dfd22bf5ee83d8256016fce13a67ba4f3fb6fd9",
             companions <- [
                 ProvEntry(name = "tts_oracle/pocket_german", root = "llm", recipe = TTS_ORACLE_RECIPE)]),
         ModelSpec(file = "pocket-tts-es-q8.gguf", recipe = TTS_POCKET_LANG_RECIPE, serve_tts = true,
-            url = "{TTS_HF}/pocket-tts-es-q8.gguf", bytes = 136518304l,
-            sha256 = "8cde7394dc56b12bf86ab05388a2875d2e4c992bc50e549166f8ae29c0739307",
+            url = "{TTS_HF}/pocket-tts-es-q8.gguf", bytes = 136518688l,
+            sha256 = "65ab208f0ecc976e752889bd3a1c1f61b51a95515e1159fde8468177ba083128",
             companions <- [
                 ProvEntry(name = "tts_oracle/pocket_spanish", root = "llm", recipe = TTS_ORACLE_RECIPE)]),
         ModelSpec(file = "pocket-tts-it-q8.gguf", recipe = TTS_POCKET_LANG_RECIPE, serve_tts = true,
-            url = "{TTS_HF}/pocket-tts-it-q8.gguf", bytes = 136514048l,
-            sha256 = "c8082959b5078c809656d31bc610295333b392d0e15aa188032ecdcbad5233e9",
+            url = "{TTS_HF}/pocket-tts-it-q8.gguf", bytes = 136515072l,
+            sha256 = "65507c2ff6c87836bca5ea50e66e55a12ecec78390556efae75eb35b4c44f754",
             companions <- [
                 ProvEntry(name = "tts_oracle/pocket_italian", root = "llm", recipe = TTS_ORACLE_RECIPE)]),
         ModelSpec(file = "pocket-tts-pt-q8.gguf", recipe = TTS_POCKET_LANG_RECIPE, serve_tts = true,
-            url = "{TTS_HF}/pocket-tts-pt-q8.gguf", bytes = 136519072l,
-            sha256 = "fda96257ada104c0691094516f0ef9da38de2e963c1b066691be574c292a8b96",
+            url = "{TTS_HF}/pocket-tts-pt-q8.gguf", bytes = 136521024l,
+            sha256 = "80ae1a859658149843de6701fc4b86868c34925b55490c21429c497d333201b6",
             companions <- [
                 ProvEntry(name = "tts_oracle/pocket_portuguese", root = "llm", recipe = TTS_ORACLE_RECIPE)]),
         ModelSpec(file = "pocket-tts-fr-q8.gguf", recipe = TTS_POCKET_LANG_RECIPE, serve_tts = true,
-            url = "{TTS_HF}/pocket-tts-fr-q8.gguf", bytes = 377328320l,
-            sha256 = "490b404e533d2e2f8610657078f3a83c3c0fc0d03a1af7ab8b979745fdbb8738",
+            url = "{TTS_HF}/pocket-tts-fr-q8.gguf", bytes = 377328544l,
+            sha256 = "edb510a0c441f50817b8aed8cfec961b77bd9ee12691c9db9f91427a966cb738",
             companions <- [
                 ProvEntry(name = "tts_oracle/pocket_french_24l", root = "llm", recipe = TTS_ORACLE_RECIPE)]),
+        // the five languages' small forms: the K-quant twin of each file above, its oracle the q8 row's
+        ModelSpec(file = "pocket-tts-de-kq.gguf", recipe = TTS_POCKET_LANG_RECIPE, serve_tts = true,
+            url = "{TTS_HF}/pocket-tts-de-kq.gguf", bytes = 77466176l,
+            sha256 = "29d3088f3db5aa9958b589e60da023b6c89a80a341986eb43cbe7aa29bbd7432"),
+        ModelSpec(file = "pocket-tts-es-kq.gguf", recipe = TTS_POCKET_LANG_RECIPE, serve_tts = true,
+            url = "{TTS_HF}/pocket-tts-es-kq.gguf", bytes = 77465216l,
+            sha256 = "23b3a52cc77d4efaf291f46507a5e0412896f87e1f71fd0d4afa3c4d2e9d0008"),
+        ModelSpec(file = "pocket-tts-it-kq.gguf", recipe = TTS_POCKET_LANG_RECIPE, serve_tts = true,
+            url = "{TTS_HF}/pocket-tts-it-kq.gguf", bytes = 77461600l,
+            sha256 = "dfe62eccdf774c660a8c11dc7da1778a3e1f986c245f4d37b3bedd4c7f21c309"),
+        ModelSpec(file = "pocket-tts-pt-kq.gguf", recipe = TTS_POCKET_LANG_RECIPE, serve_tts = true,
+            url = "{TTS_HF}/pocket-tts-pt-kq.gguf", bytes = 77467552l,
+            sha256 = "0c25e851662d09fb782f1eac11caf38e7b00f1f19f307577700c0b8c2014decd"),
+        ModelSpec(file = "pocket-tts-fr-kq.gguf", recipe = TTS_POCKET_LANG_RECIPE, serve_tts = true,
+            url = "{TTS_HF}/pocket-tts-fr-kq.gguf", bytes = 205028864l,
+            sha256 = "f56ac84a47687d517a0a4e1776532096503567d09250b090c50c9a74d0c55cb8"),
         // the small English forms behind the browser examples: the parrot page fetches the cloning one,
         // the storywish page the one-voice one (tests/test_tts_pocket.das's kq cells hold both against the q8 file);
         // their 18m twins below are published for the asking - the pages keep the 100M model's pace
         ModelSpec(file = "pocket-tts-en-kq.gguf", recipe = TTS_POCKET_KQ_RECIPE, serve_tts = true,
             tts = TtsBoard(display = "Pocket TTS en kq", voice = "alba", ref = "pocket-en", package = "pocket-tts"),
-            url = "{TTS_HF}/pocket-tts-en-kq.gguf", bytes = 77765536l,
-            sha256 = "2bd5ef27bfbc88769c5339ff5e8b74349fb015b77a0015a03514a21e4a95ac64"),
+            url = "{TTS_HF}/pocket-tts-en-kq.gguf", bytes = 77758560l,
+            sha256 = "9b549549e44601435ec5df3f48b5ef977cf1449bcf92e6ae49db4b07da20e757"),
         ModelSpec(file = "pocket-tts-en-stuart-kq.gguf", recipe = TTS_POCKET_STUART_RECIPE, serve_tts = true,
-            url = "{TTS_HF}/pocket-tts-en-stuart-kq.gguf", bytes = 67004480l,
-            sha256 = "c0e086a080a0a41d5121870f560f0e79d47be3e61ddd5032d49e556363e78277"),
+            url = "{TTS_HF}/pocket-tts-en-stuart-kq.gguf", bytes = 67005056l,
+            sha256 = "e9e69e52254f48e544509a0dff3b594779f737eac5b372d61adda8b696a5af46"),
         // the 2026-10 small English models: one q8 (or f16) file each and the 18m's kq form; the f32 references stay local, as companions
         ModelSpec(file = "pocket-tts-en-18m-q8.gguf", recipe = TTS_POCKET_SMALL_RECIPE, serve_tts = true,
             tts = TtsBoard(display = "Pocket TTS en 18m q8", voice = "alba", ref = "pocket-en-18m", package = "pocket-tts"),

@@ -90,9 +90,10 @@ if(NOT DAS_TOOLS_DISABLED)
     add_custom_target(check_model_mint
         COMMAND ${CMAKE_COMMAND} -E env PYTHONDONTWRITEBYTECODE=1 ${DAS_PYTHON} examples/dasLLAMA/wasm/test_mint_models.py
         COMMAND ${CMAKE_COMMAND} -E env PYTHONDONTWRITEBYTECODE=1 ${DAS_PYTHON} modules/dasLLAMA/harness/test_convert_pocket.py
+        COMMAND ${CMAKE_COMMAND} -E env PYTHONDONTWRITEBYTECODE=1 ${DAS_PYTHON} modules/dasLLAMA/harness/test_publish_tts_hf.py
         COMMAND ${CMAKE_COMMAND} -E env PYTHONDONTWRITEBYTECODE=1 ${DAS_PYTHON} modules/dasLLAMA/harness/test_tts_ref_bench.py
         WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
-        COMMENT "Testing the browser model-set mint, the Pocket converter predicates and the TTS reference bench's voice rules"
+        COMMENT "Testing the browser model-set mint, the Pocket converter predicates, the TTS publish's upload step and the TTS reference bench's voice rules"
     )
 endif()
 
