@@ -148,6 +148,27 @@ def sum_generator(n : int) : int {
     return s
 }
 
+var private g_bye_target : int?
+
+[export]
+def watch_finalizers(var target : int?) {
+    g_bye_target = target
+}
+
+[finalize]
+def bye {
+    if (g_bye_target != null) {
+        *g_bye_target = *g_bye_target * 10 + 1
+    }
+}
+
+[finalize(late = true)]
+def bye_late {
+    if (g_bye_target != null) {
+        *g_bye_target = *g_bye_target * 10 + 2
+    }
+}
+
 [export_c(name = "renamed_sum")]
 def sum_under_another_name(a, b : int) : int {
     return a + b

@@ -251,10 +251,19 @@ namespace das {
                 gVar->useFunctions.insert(fn);
             }
         }
+        void noteRtti ( Function * fn ) {
+            if ( !fn->needRtti ) return;
+            if ( func ) {
+                func->needRtti = true;
+            } else if ( gVar ) {
+                gVar->useFunctions.insert(fn);
+            }
+        }
         // function address
         virtual void preVisit(ExprAddr * addr) override {
             Visitor::preVisit(addr);
             if ( !addr->func ) return;
+            noteRtti(addr->func);
             if (builtInDependencies || !addr->func->builtIn) {
                 useFunction(addr->func);
             }
@@ -279,6 +288,7 @@ namespace das {
         virtual void preVisit(ExprCall * call) override {
             Visitor::preVisit(call);
             if ( !call->func ) return;
+            noteRtti(call->func);
             if ( func && call->func->captureString ) {
                 func->callCaptureString = true;
             }
@@ -309,6 +319,7 @@ namespace das {
         virtual void preVisit(ExprOp1 * expr) override {
             Visitor::preVisit(expr);
             if ( !expr->func ) return;
+            noteRtti(expr->func);
             if (builtInDependencies || !expr->func->builtIn) {
                 useFunction(expr->func);
             }
@@ -317,6 +328,7 @@ namespace das {
         virtual void preVisit(ExprOp2 * expr) override {
             Visitor::preVisit(expr);
             if ( !expr->func ) return;
+            noteRtti(expr->func);
             if (builtInDependencies || !expr->func->builtIn) {
                 useFunction(expr->func);
             }
@@ -325,6 +337,7 @@ namespace das {
         virtual void preVisit(ExprOp3 * expr) override {
             Visitor::preVisit(expr);
             if ( !expr->func ) return;
+            noteRtti(expr->func);
             if (builtInDependencies || !expr->func->builtIn) {
                 useFunction(expr->func);
             }

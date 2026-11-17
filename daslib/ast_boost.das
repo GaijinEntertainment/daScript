@@ -1595,3 +1595,26 @@ def public collect_carrier_violation(var fn : Function?) : string {
     }
     return why
 }
+
+def public need_rtti(program : Program?) : bool {
+    //! True when a standalone AOT context or JIT ``-exe`` built from ``program`` must carry its RTTI tables:
+    //! ``options rtti``, a used ``needRtti`` function or global initializer reaching one, or a used
+    //! ``[pinvoke]`` function or shared global, whose infos the runtime always reads.
+    if (program._options |> find_arg("rtti") ?as tBool ?? program.policies.rtti) return true
+    var need = false
+    program |> for_each_module_no_order() $(mod) {
+        mod |> for_each_function("") $(fn) {
+            if (is_used(program, fn) && (fn.moreFlags2.needRtti || fn.moreFlags.pinvoke)) {
+                need = true
+            }
+        }
+        mod |> for_each_global() $(pvar) {
+            return if (!is_used(program, pvar))
+            need ||= pvar.flags.global_shared
+            get_use_functions(pvar) $(fn) {
+                need ||= fn.moreFlags2.needRtti
+            }
+        }
+    }
+    return need
+}

@@ -1035,7 +1035,7 @@ namespace das
         }
         for ( int i=0, is=totalVariables; i!=is; ++i ) {
             auto & pv = globalVariables[i];
-            if ( pv.shared ) continue;
+            if ( pv.shared || !pv.debugInfo ) continue;
             walker.prepare();
             walker.walk(globals + pv.offset, pv.debugInfo);
         }

@@ -849,6 +849,7 @@ namespace das
         FunctionPtr setTempStringResult();
         FunctionPtr setNoReturn();
         FunctionPtr setNoDiscard();
+        FunctionPtr setNeedRtti();
         FunctionPtr setDeprecated(const string & message);
         FunctionPtr arg_init ( int argIndex, ExpressionPtr initValue ) {
             arguments[argIndex]->init = initValue;
@@ -982,6 +983,7 @@ namespace das
                 bool    nttp : 1;                    // extern bound via addExternInline - per-function NTTP interpreter node, callee eligible to inline into the call site
                 bool    unsafeGenerator : 1;         // src/ast/ARCHITECTURE_INFER.md#generator-unsafe-block
                 bool    noReturn : 1;
+                bool    needRtti : 1;
             };
             uint32_t moreFlags2 = 0;
         };

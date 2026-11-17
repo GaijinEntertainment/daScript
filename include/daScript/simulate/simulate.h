@@ -919,12 +919,14 @@ namespace das
         GlobalVariable * globalVariables = nullptr;
         SimFunction * functions = nullptr;
         SimFunction ** initFunctions = nullptr;
+        SimFunction ** shutdownFunctions = nullptr;
         uint64_t sharedSize = 0;
         uint64_t globalsSize = 0;
         uint32_t globalInitStackSize = 0;
         int totalVariables = 0;
         int totalFunctions = 0;
         int totalInitFunctions = 0;
+        int totalShutdownFunctions = 0;
         bool    globalsOwner = true;
         bool    sharedOwner = true;
     public:

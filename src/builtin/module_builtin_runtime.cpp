@@ -2437,12 +2437,12 @@ namespace das
         // stackwalk
         auto fnsw = addExternInline<DAS_BIND_FUN(builtin_stackwalk)>(*this, lib, "stackwalk",
             SideEffects::modifyExternal, "builtin_stackwalk")
-                ->args({"args","vars","context","lineinfo"});
+                ->args({"args","vars","context","lineinfo"})->setNeedRtti();
         fnsw->arguments[0]->init = new ExprConstBool(true);
         fnsw->arguments[1]->init = new ExprConstBool(true);
         auto fngsw = addExternInline<DAS_BIND_FUN(builtin_get_stackwalk)>(*this, lib, "get_stackwalk",
             SideEffects::accessExternal, "builtin_get_stackwalk")
-                ->args({"args","vars","out_of_scope","top_only","context","lineinfo"})->setTempStringResult();
+                ->args({"args","vars","out_of_scope","top_only","context","lineinfo"})->setTempStringResult()->setNeedRtti();
         fngsw->arguments[0]->init = new ExprConstBool(true);
         fngsw->arguments[1]->init = new ExprConstBool(true);
         fngsw->arguments[2]->init = new ExprConstBool(false);
@@ -2541,13 +2541,13 @@ namespace das
                 ->args({"context","at"});
         addExternInline<DAS_BIND_FUN(string_heap_report)>(*this, lib, "string_heap_report",
             SideEffects::modifyExternal, "string_heap_report")
-                ->args({"context","line"});
+                ->args({"context","line"})->setNeedRtti();
         addExternInline<DAS_BIND_FUN(heap_report)>(*this, lib, "heap_report",
             SideEffects::modifyExternal, "heap_report")
-                ->args({"context","line"});
+                ->args({"context","line"})->setNeedRtti();
         addExternInline<DAS_BIND_FUN(memory_report)>(*this, lib, "memory_report",
             SideEffects::modifyExternal, "memory_report")
-                ->args({"errorsOnly","context","lineinfo"});
+                ->args({"errorsOnly","context","lineinfo"})->setNeedRtti();
         addExternInline<DAS_BIND_FUN(is_intern_strings)>(*this, lib, "is_intern_strings",
             SideEffects::modifyExternal, "is_intern_strings")
                 ->arg("context");
