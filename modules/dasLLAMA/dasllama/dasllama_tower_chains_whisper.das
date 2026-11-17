@@ -21,8 +21,6 @@ require dasllama/dasllama_gpu_kernels_discrete
 require dasllama/dasllama_audio
 require dasllama/dasllama_tower_rail
 require dasllama/dasllama_tower_chains
-require ?cuda dasllama/dasllama_cuda_classes_front   // the stem's im2col stamp on the CUDA rail
-require ?cuda dasllama/dasllama_cuda_classes_blocks   // the chat tail's pool and SwiGLU stamps on the CUDA rail
 
 //! the chat projector tail behind the blocks (`audio_projector_tail`'s steps at its widths): the rows, the GEMM widths and the
 //! model offsets its stamps read; `on` where the seat's classes built for this encode
@@ -129,8 +127,8 @@ def tower_ct_gate(ct : TowerChatTail) : int64 => ct.kind == AudioProjKind.ultrav
 def tower_ct_rec(rl : auto(R); ct : TowerChatTail; i : int64) : TowerSchedRec {
     let second = i > 0l
     let site = second ? RailSite.tail2 : RailSite.tail1
-    return TowerSchedRec(wblk0 = (second ? ct.w2 : ct.w1) / kq_elems(KqFmt.q8), rows = rail_site_rows(rl, site, ct.rows),
-        groups = rail_site_groups(rl, site, second ? ct.out : ct.n1out, ct.rows))
+    return TowerSchedRec(wblk0 = (second ? ct.w2 : ct.w1) / kq_elems(KqFmt.q8), rows = _::rail_site_rows(rl, site, ct.rows),
+        groups = _::rail_site_groups(rl, site, second ? ct.out : ct.n1out, ct.rows))
 }
 
 //! the stem's first conv's padded column width: three taps a mel on the f16 GEMM's 64 lattice
@@ -167,8 +165,8 @@ def tower_aud_stem_rows(t : AudioTower) : int64 => 2l * t.d_model + t.n_ctx * t.
 
 //! the stem's second conv's schedule row, record 0 of the stem's schedule
 def tower_aud_stem_rec(rl : auto(R); t : AudioTower) : TowerSchedRec
-    => TowerSchedRec(wblk0 = t.conv2_w_off / kq_elems(KqFmt.q8), rows = rail_site_rows(rl, RailSite.conv2, t.n_ctx),
-        groups = rail_site_groups(rl, RailSite.conv2, t.d_model, t.n_ctx))
+    => TowerSchedRec(wblk0 = t.conv2_w_off / kq_elems(KqFmt.q8), rows = _::rail_site_rows(rl, RailSite.conv2, t.n_ctx),
+        groups = _::rail_site_groups(rl, RailSite.conv2, t.d_model, t.n_ctx))
 
 //! the conv stem over one `tin`-frame mel chunk in `planes`: conv1 on the `fw16` slab into `stage1`, conv2 at the `conv2` site into `x`, positions added
 [arch(at = "../ARCHITECTURE_GPU_TOWER_RAIL.md#whisper-chains")]
@@ -179,31 +177,31 @@ def tower_aud_stem(var rl : auto(R); t : AudioTower; tin : int64) {
     let act = t.gelu_tanh ? BIAS_ACT_GELU_TANH : BIAS_ACT_GELU_ERF
     var pc_im1 = GkIm2col1dArgs(cin = uint(t.n_mel), tin = uint(tin), tout = uint(tin), k = 3u, stride = 1u, pad_l = 1u, dilation = 1u, kdim = uint(kdp),
         row_major = 0u, r0 = 0u, mp = uint(tin))
-    enc_tts_im2col16_cls(rl, fixed_array(TowerBuf.planes, TowerBuf.col), pc_im1, tin * kdp)
-    rail_pt(rl, RailProfRole.im2col)
-    rail_mm16(rl, TowerBuf.fw16, TowerBuf.col, TowerBuf.stage1, kdp, d, tin, 0l, d)
-    rail_pt(rl, RailProfRole.gemm_pw)
+    _::enc_tts_im2col16_cls(rl, fixed_array(TowerBuf.planes, TowerBuf.col), pc_im1, tin * kdp)
+    _::rail_pt(rl, RailProfRole.im2col)
+    _::rail_mm16(rl, TowerBuf.fw16, TowerBuf.col, TowerBuf.stage1, kdp, d, tin, 0l, d)
+    _::rail_pt(rl, RailProfRole.gemm_pw)
     var pc_b1 = GkBiasActArgs(d = uint(d), nelem = uint(tin * d), boff = 0u, act = act)
-    enc_tower_bias_act_cls(rl, fixed_array(TowerBuf.stage1, TowerBuf.fnorm), pc_b1, rq_wgs(false, tin * d))
-    rail_pt(rl, RailProfRole.bias)
+    _::enc_tower_bias_act_cls(rl, fixed_array(TowerBuf.stage1, TowerBuf.fnorm), pc_b1, rq_wgs(false, tin * d))
+    _::rail_pt(rl, RailProfRole.bias)
     var pc_im2 = GkIm2col1dArgs(cin = uint(d), tin = uint(tin), tout = uint(tt), k = 3u, stride = 2u, pad_l = 1u, dilation = 1u, kdim = uint(3l * d), row_major = 1u,
         r0 = 0u, mp = uint(tt))
-    enc_tts_im2col16_cls(rl, fixed_array(TowerBuf.stage1, TowerBuf.xh), pc_im2, tt * 3l * d)
-    rail_pt(rl, RailProfRole.im2col)
+    _::enc_tts_im2col16_cls(rl, fixed_array(TowerBuf.stage1, TowerBuf.xh), pc_im2, tt * 3l * d)
+    _::rail_pt(rl, RailProfRole.im2col)
     rail_lane_mm(rl, RailSite.conv2, 0l, TowerBuf.xh, TowerBuf.x, 3l * d, d, tt, t.conv2_w_off)
-    rail_pt(rl, RailProfRole.gemm_pw)
+    _::rail_pt(rl, RailProfRole.gemm_pw)
     var pc_b2 = GkBiasActArgs(d = uint(d), nelem = uint(tt * d), boff = uint(d), act = act)
-    enc_tower_bias_act_cls(rl, fixed_array(TowerBuf.x, TowerBuf.fnorm), pc_b2, rq_wgs(false, tt * d))
-    rail_pt(rl, RailProfRole.bias)
+    _::enc_tower_bias_act_cls(rl, fixed_array(TowerBuf.x, TowerBuf.fnorm), pc_b2, rq_wgs(false, tt * d))
+    _::rail_pt(rl, RailProfRole.bias)
     var pc_pos = GkBiasActArgs(d = uint(tt * d), nelem = uint(tt * d), boff = uint(2l * d), act = BIAS_ACT_NONE)
-    enc_tower_bias_act_cls(rl, fixed_array(TowerBuf.x, TowerBuf.fnorm), pc_pos, rq_wgs(false, tt * d))
-    rail_pt(rl, RailProfRole.post_add)
+    _::enc_tower_bias_act_cls(rl, fixed_array(TowerBuf.x, TowerBuf.fnorm), pc_pos, rq_wgs(false, tt * d))
+    _::rail_pt(rl, RailProfRole.post_add)
 }
 
 //! a tail GEMM's feed off the f32 rows in `src` at `site`, unclamped, and its mark
 def private tower_ct_feed(var rl : auto(R); site : RailSite; src : TowerBuf; nelem : int64) {
     rail_site_feed(rl, site, src, nelem, -NO_CLAMP, NO_CLAMP)
-    rail_pt(rl, RailProfRole.rq)
+    _::rail_pt(rl, RailProfRole.rq)
 }
 
 //! the chat projector tail off the `d`-wide rows in `x` into the soft tokens in `tail_proj`, its GEMMs at records `rid1` (`tail1`) and `rid1 + 1` (`tail2`)
@@ -214,28 +212,28 @@ def tower_chat_tail(var rl : auto(R); ct : TowerChatTail; d, rid1 : int64) {
     let n1 = ct.pool_rows * d
     var pc_ln = gk_ln_args(uint(d), uint(ct.pool_rows), ct.eps, uint(ct.lnp_w - nb), uint(ct.lnp_b - nb))
     if (uv) {
-        enc_tower_ln_cls(rl, fixed_array(TowerBuf.x, TowerBuf.xb, TowerBuf.norms), pc_ln, ct.pool_rows)
-        rail_pt(rl, RailProfRole.ln)
+        _::enc_tower_ln_cls(rl, fixed_array(TowerBuf.x, TowerBuf.xb, TowerBuf.norms), pc_ln, ct.pool_rows)
+        _::rail_pt(rl, RailProfRole.ln)
         var pc_rms = gk_rms_args(uint(ct.m1in), uint(ct.rows), ULTRAVOX_NORM_EPS, uint(ct.normpre - nb))
-        enc_tower_rms_cls(rl, fixed_array(TowerBuf.xb, TowerBuf.xb, TowerBuf.norms), pc_rms, ct.rows)
-        rail_pt(rl, RailProfRole.rms)
+        _::enc_tower_rms_cls(rl, fixed_array(TowerBuf.xb, TowerBuf.xb, TowerBuf.norms), pc_rms, ct.rows)
+        _::rail_pt(rl, RailProfRole.rms)
         tower_ct_feed(rl, RailSite.tail1, TowerBuf.xb, n1)
     } else {
         var pc_pool = GkPoolRowsArgs(width = uint(d), total = uint(n1))
-        enc_tower_pool_rows_cls(rl, fixed_array(TowerBuf.x, TowerBuf.yo), pc_pool, (n1 + 255l) / 256l)
-        rail_pt(rl, RailProfRole.pool)
-        if (rail_mulmm(rl)) {
-            enc_tower_ln_cls(rl, fixed_array(TowerBuf.yo, TowerBuf.xb, TowerBuf.norms), pc_ln, ct.pool_rows)
-            rail_pt(rl, RailProfRole.ln)
+        _::enc_tower_pool_rows_cls(rl, fixed_array(TowerBuf.x, TowerBuf.yo), pc_pool, (n1 + 255l) / 256l)
+        _::rail_pt(rl, RailProfRole.pool)
+        if (_::rail_mulmm(rl)) {
+            _::enc_tower_ln_cls(rl, fixed_array(TowerBuf.yo, TowerBuf.xb, TowerBuf.norms), pc_ln, ct.pool_rows)
+            _::rail_pt(rl, RailProfRole.ln)
             tower_ct_feed(rl, RailSite.tail1, TowerBuf.xb, n1)
         } else {
-            enc_tower_ln16_cls(rl, fixed_array(TowerBuf.yo, TowerBuf.norms, TowerBuf.xh), pc_ln, ct.pool_rows)
-            rail_pt(rl, RailProfRole.ln)
+            _::enc_tower_ln16_cls(rl, fixed_array(TowerBuf.yo, TowerBuf.norms, TowerBuf.xh), pc_ln, ct.pool_rows)
+            _::rail_pt(rl, RailProfRole.ln)
         }
     }
     let one = ct.m2in == 0l
     rail_lane_mm(rl, RailSite.tail1, rid1, TowerBuf.xb, one ? TowerBuf.tail_proj : TowerBuf.tail_hid, ct.m1in, ct.n1out, ct.rows, ct.w1)
-    rail_pt(rl, RailProfRole.gemm_o)
+    _::rail_pt(rl, RailProfRole.gemm_o)
     if (one) {
         rail_bias_pass(rl, TowerBuf.tail_proj, ct.n1out, ct.rows, ct.proj_b)
         return
@@ -244,20 +242,20 @@ def tower_chat_tail(var rl : auto(R); ct : TowerChatTail; d, rid1 : int64) {
     let n2 = ct.rows * ct.m2in
     if (uv) {
         var pc_gate = GkGatedRowsArgs(d = uint(ct.m2in), nelem = uint(n2))
-        enc_tower_swiglu_swapped_cls(rl, fixed_array(TowerBuf.tail_hid, TowerBuf.tail_gate), pc_gate, (n2 + 255l) / 256l)
-        rail_pt(rl, RailProfRole.glu)
+        _::enc_tower_swiglu_swapped_cls(rl, fixed_array(TowerBuf.tail_hid, TowerBuf.tail_gate), pc_gate, (n2 + 255l) / 256l)
+        _::rail_pt(rl, RailProfRole.glu)
         var pc_rms = gk_rms_args(uint(ct.m2in), uint(ct.rows), ULTRAVOX_NORM_EPS, uint(ct.normmid - nb))
-        enc_tower_rms_cls(rl, fixed_array(TowerBuf.tail_gate, TowerBuf.tail_gate, TowerBuf.norms), pc_rms, ct.rows)
-        rail_pt(rl, RailProfRole.rms)
+        _::enc_tower_rms_cls(rl, fixed_array(TowerBuf.tail_gate, TowerBuf.tail_gate, TowerBuf.norms), pc_rms, ct.rows)
+        _::rail_pt(rl, RailProfRole.rms)
         tower_ct_feed(rl, RailSite.tail2, TowerBuf.tail_gate, n2)
     } else {
         var pc_act = GkBiasActArgs(d = uint(ct.n1out), nelem = uint(nh), boff = 0u, act = BIAS_ACT_GELU_ERF)
-        enc_tower_act_cls(rl, fixed_array(TowerBuf.tail_hid), pc_act, rq_wgs(false, nh))
-        rail_pt(rl, RailProfRole.bias)
+        _::enc_tower_act_cls(rl, fixed_array(TowerBuf.tail_hid), pc_act, rq_wgs(false, nh))
+        _::rail_pt(rl, RailProfRole.bias)
         tower_ct_feed(rl, RailSite.tail2, TowerBuf.tail_hid, n2)
     }
     rail_lane_mm(rl, RailSite.tail2, rid1 + 1l, uv ? TowerBuf.tail_gate : TowerBuf.tail_hid, TowerBuf.tail_proj, ct.m2in, ct.out, ct.rows, ct.w2)
-    rail_pt(rl, RailProfRole.gemm_o)
+    _::rail_pt(rl, RailProfRole.gemm_o)
 }
 
 //! the whisper-class blocks over `offs` from `x` at `npos` rows: the pre-LN loop, the post-norm into `xb` under `ln_post`, the tail behind under `ct.on`

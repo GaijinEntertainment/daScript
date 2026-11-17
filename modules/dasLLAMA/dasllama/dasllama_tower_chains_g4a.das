@@ -24,9 +24,6 @@ require dasllama/dasllama_gemma4a
 require dasllama/dasllama_qwen3a
 require dasllama/dasllama_tower_rail
 require dasllama/dasllama_tower_chains   // tower_clamp_out
-require ?cuda dasllama/dasllama_cuda_classes_front   // the fronts' stamps on the CUDA rail
-require ?cuda dasllama/dasllama_cuda_classes_blocks   // the Conformer's stamps on the CUDA rail
-require ?cuda dasllama/dasllama_cuda_classes_asr   // the VAD's stamps on the CUDA rail
 
 //! a log filterbank's law over an `n_fft`-tap spectrum into `n_mel` rows: the magnitude or the power (`mag`), the floor `lo`,
 //! the ceiling `hi` (`GK_MEL_LOG_CLAMP` alone), the log's `scale`, the rows' order (`frame_major`: [frame][mel], else
@@ -47,12 +44,12 @@ struct TowerMelSpec {
 def tower_mel(var rl : auto(R); frames : int64; m : TowerMelSpec) {
     let n_bins = m.n_fft / 2l + 1l
     var pc_d = TowerSpecDftArgs(n_fft = uint(m.n_fft), n_frames = uint(frames), mag = m.mag ? TOWER_SPEC_MAGNITUDE : TOWER_SPEC_POWER)
-    enc_tower_spec_dft_cls(rl, fixed_array(TowerBuf.planes, TowerBuf.twiddle, TowerBuf.spec), pc_d, (frames * n_bins + 255l) / 256l)
-    rail_pt(rl, RailProfRole.spectrum)
+    _::enc_tower_spec_dft_cls(rl, fixed_array(TowerBuf.planes, TowerBuf.twiddle, TowerBuf.spec), pc_d, (frames * n_bins + 255l) / 256l)
+    _::rail_pt(rl, RailProfRole.spectrum)
     var pc_m = GkMelLogArgs(n_bins = uint(n_bins), n_mel = uint(m.n_mel), frames = uint(frames), lo = m.lo, hi = m.hi, scale = m.scale,
         frame_major = m.frame_major ? 1u : 0u, form = m.form)
-    enc_tower_mel_log_cls(rl, fixed_array(TowerBuf.spec, TowerBuf.filters, TowerBuf.mel), pc_m, (frames * m.n_mel + 255l) / 256l)
-    rail_pt(rl, RailProfRole.mel)
+    _::enc_tower_mel_log_cls(rl, fixed_array(TowerBuf.spec, TowerBuf.filters, TowerBuf.mel), pc_m, (frames * m.n_mel + 255l) / 256l)
+    _::rail_pt(rl, RailProfRole.mel)
 }
 
 let TOWER_WHISPER_MEL_FLOOR = 5.960464477539063e-08   //! 2^-24, the whisper-class log-mel's floor (the CPU fronts' own)
@@ -143,27 +140,27 @@ def tower_g4a_front(var rl : auto(R); t : Gemma4aEncoder; n_len, rid : int64; y 
     let g = tower_g4a_front_geom(t, n_len)
     tower_mel(rl, n_len, tower_g4a_mel_spec(t))
     var pc_im0 = GkIm2col2dArgs(iw = uint(t.n_mel), ih = uint(n_len), cin = 1u, sstride = 1u, kdp = 64u, rows = uint(g.rows0), soff = 0u)
-    enc_tower_im2col_cls(rl, fixed_array(TowerBuf.mel, TowerBuf.col), pc_im0, (g.rows0 * 64l + 255l) / 256l)
-    rail_pt(rl, RailProfRole.im2col)
-    rail_mm16(rl, TowerBuf.fw16, TowerBuf.col, TowerBuf.stage1, 64l, ch0, g.rows0, 0l)
-    rail_pt(rl, RailProfRole.gemm_pw)
+    _::enc_tower_im2col_cls(rl, fixed_array(TowerBuf.mel, TowerBuf.col), pc_im0, (g.rows0 * 64l + 255l) / 256l)
+    _::rail_pt(rl, RailProfRole.im2col)
+    _::rail_mm16(rl, TowerBuf.fw16, TowerBuf.col, TowerBuf.stage1, 64l, ch0, g.rows0, 0l)
+    _::rail_pt(rl, RailProfRole.gemm_pw)
     var pc_ln0 = GkLnReluRowsArgs(cout = uint(ch0), ldin = uint(ch0), ldout = uint(ch0), rows = uint(g.rows0), woff = uint(t.norm0_w - nb), eps = t.eps)
-    enc_tower_ln_relu_cls(rl, fixed_array(TowerBuf.stage1, TowerBuf.stage1, TowerBuf.norms), pc_ln0, (g.rows0 + 255l) / 256l)
-    rail_pt(rl, RailProfRole.bias)
+    _::enc_tower_ln_relu_cls(rl, fixed_array(TowerBuf.stage1, TowerBuf.stage1, TowerBuf.norms), pc_ln0, (g.rows0 + 255l) / 256l)
+    _::rail_pt(rl, RailProfRole.bias)
     var pc_im1 = GkIm2col2dArgs(iw = uint(g.w1), ih = uint(g.t1), cin = uint(ch0), sstride = uint(ch0), kdp = uint(g.kdp1), rows = uint(g.rows1), soff = 0u)
-    enc_tower_im2col_cls(rl, fixed_array(TowerBuf.stage1, TowerBuf.col), pc_im1, (g.rows1 * g.kdp1 + 255l) / 256l)
-    rail_pt(rl, RailProfRole.im2col)
-    rail_mm16(rl, TowerBuf.fw16, TowerBuf.col, TowerBuf.stage2, g.kdp1, ch1, g.rows1, ch0 * 64l)
-    rail_pt(rl, RailProfRole.gemm_pw)
+    _::enc_tower_im2col_cls(rl, fixed_array(TowerBuf.stage1, TowerBuf.col), pc_im1, (g.rows1 * g.kdp1 + 255l) / 256l)
+    _::rail_pt(rl, RailProfRole.im2col)
+    _::rail_mm16(rl, TowerBuf.fw16, TowerBuf.col, TowerBuf.stage2, g.kdp1, ch1, g.rows1, ch0 * 64l)
+    _::rail_pt(rl, RailProfRole.gemm_pw)
     var pc_ln1 = GkLnReluRowsArgs(cout = uint(ch1), ldin = uint(ch1), ldout = uint(ch1), rows = uint(g.rows1), woff = uint(t.norm1_w - nb), eps = t.eps)
-    enc_tower_ln_relu_cls(rl, fixed_array(TowerBuf.stage2, TowerBuf.stage2, TowerBuf.norms), pc_ln1, (g.rows1 + 255l) / 256l)
-    rail_pt(rl, RailProfRole.bias)
+    _::enc_tower_ln_relu_cls(rl, fixed_array(TowerBuf.stage2, TowerBuf.stage2, TowerBuf.norms), pc_ln1, (g.rows1 + 255l) / 256l)
+    _::rail_pt(rl, RailProfRole.bias)
     let nfeat = g.npos * g.feat
     var pc_cvt = gk_f16_rows_args(uint(nfeat))
-    enc_tower_clamp_cvt_cls(rl, fixed_array(TowerBuf.stage2, TowerBuf.feat16), pc_cvt, rq_wgs(false, nfeat))
-    rail_pt(rl, RailProfRole.hpad)
+    _::enc_tower_clamp_cvt_cls(rl, fixed_array(TowerBuf.stage2, TowerBuf.feat16), pc_cvt, rq_wgs(false, nfeat))
+    _::rail_pt(rl, RailProfRole.hpad)
     rail_lane_mm(rl, RailSite.front1, rid, TowerBuf.stage2, y, g.feat, t.d_model, g.npos, t.inproj_w)
-    rail_pt(rl, RailProfRole.gemm_pw)
+    _::rail_pt(rl, RailProfRole.gemm_pw)
 }
 
 //! the rel-position table's rows: the window's past and the row itself
@@ -184,8 +181,8 @@ def tower_g4a_rec(rl : auto(R); t : Gemma4aEncoder; npos, rid : int64) : TowerSc
     if (rid >= tail) {
         let out = rid == tail
         let site = out ? RailSite.tail1 : RailSite.tail2
-        return TowerSchedRec(wblk0 = (out ? t.outproj_w : t.mmproj_w) / q8e, rows = rail_site_rows(rl, site, npos),
-            groups = rail_site_groups(rl, site, out ? gemma4a_mid_dim(t) : t.proj_dim, npos))
+        return TowerSchedRec(wblk0 = (out ? t.outproj_w : t.mmproj_w) / q8e, rows = _::rail_site_rows(rl, site, npos),
+            groups = _::rail_site_groups(rl, site, out ? gemma4a_mid_dim(t) : t.proj_dim, npos))
     }
     var recs : Q8Region[int(G4A_GEMMS)]
     gemma4a_block_regions(t.layers[rid / G4A_GEMMS], d, t.n_ff, recs)
@@ -193,10 +190,10 @@ def tower_g4a_rec(rl : auto(R); t : Gemma4aEncoder; npos, rid : int64) : TowerSc
     let site = tower_g4a_site(g)
     if (g == G4A_REL) {
         let rows = tower_g4a_rel_rows()
-        return TowerSchedRec(wblk0 = recs[g].woff / q8e, rows = rows, groups = rail_site_groups(rl, site, d, rows))
+        return TowerSchedRec(wblk0 = recs[g].woff / q8e, rows = rows, groups = _::rail_site_groups(rl, site, d, rows))
     }
     let width = site == RailSite.ff ? t.n_ff : (site == RailSite.d2 ? 2l * d : d)
-    return TowerSchedRec(wblk0 = recs[g].woff / q8e, rows = rail_site_rows(rl, site, npos), groups = rail_site_groups(rl, site, width, npos))
+    return TowerSchedRec(wblk0 = recs[g].woff / q8e, rows = _::rail_site_rows(rl, site, npos), groups = _::rail_site_groups(rl, site, width, npos))
 }
 
 //! the GEMM records' schedule map words over `npos` rows: what a seat's schedule plane holds past the records
@@ -222,7 +219,7 @@ def tower_g4a_blocks(var rl : auto(R); t : Gemma4aEncoder; npos : int64) {   // 
     let wg_attn = (npos * t.n_head + 63l) / 64l
     let tail = tower_g4a_block_recs(t) - G4A_TAIL_GEMMS
     rail_site_feed(rl, RailSite.rel, TowerBuf.rel_tab, rel_rows * d, -NO_CLAMP, NO_CLAMP)
-    rail_pt(rl, RailProfRole.rq)
+    _::rail_pt(rl, RailProfRole.rq)
     var pc_glu = GkGatedRowsArgs(d = uint(d), nelem = uint(nd))
     var pc_dw = GkDwConvRowsArgs(c = uint(d), t_in = uint(npos))
     var pc_silu_ff = GkBiasActArgs(d = uint(ff), nelem = uint(nff), boff = 0u, act = BIAS_ACT_SILU)
@@ -235,84 +232,84 @@ def tower_g4a_blocks(var rl : auto(R); t : Gemma4aEncoder; npos : int64) {   // 
         let lo = t.layers[l]
         let rb = l * G4A_GEMMS
         pc_rms.lnoff = uint(lo.ff_norm - nb)
-        enc_tower_rms_cls(rl, fixed_array(TowerBuf.x, TowerBuf.xb, TowerBuf.norms), pc_rms, npos)
-        rail_pt(rl, RailProfRole.rms)
+        _::enc_tower_rms_cls(rl, fixed_array(TowerBuf.x, TowerBuf.xb, TowerBuf.norms), pc_rms, npos)
+        _::rail_pt(rl, RailProfRole.rms)
         tower_g4a_mm(rl, lo.c_ff_up, TowerBuf.xb, nd, RailSite.ff, rb + G4A_FF_UP, d, ff, npos, lo.ff_up, TowerBuf.hg, true)
-        rail_pt(rl, RailProfRole.gemm_fc1)
-        enc_tower_act_cls(rl, fixed_array(TowerBuf.hg), pc_silu_ff, rq_wgs(false, nff))
-        rail_pt(rl, RailProfRole.silu)
+        _::rail_pt(rl, RailProfRole.gemm_fc1)
+        _::enc_tower_act_cls(rl, fixed_array(TowerBuf.hg), pc_silu_ff, rq_wgs(false, nff))
+        _::rail_pt(rl, RailProfRole.silu)
         tower_g4a_mm(rl, lo.c_ff_down, TowerBuf.hg, nff, RailSite.d, rb + G4A_FF_DOWN, ff, d, npos, lo.ff_down, TowerBuf.yd, true)
-        rail_pt(rl, RailProfRole.gemm_fc2)
+        _::rail_pt(rl, RailProfRole.gemm_fc2)
         pc_post.woff = uint(lo.ff_post_norm - nb)
         pc_post.ascale = gemma4a_res_w()
         pc_post.lnoff = uint(lo.attn_pre_norm - nb)
-        enc_tower_post_add_cls(rl, fixed_array(TowerBuf.x, TowerBuf.yd, TowerBuf.xb, TowerBuf.norms), pc_post, npos)
-        rail_pt(rl, RailProfRole.post_add)
+        _::enc_tower_post_add_cls(rl, fixed_array(TowerBuf.x, TowerBuf.yd, TowerBuf.xb, TowerBuf.norms), pc_post, npos)
+        _::rail_pt(rl, RailProfRole.post_add)
         tower_g4a_mm(rl, lo.c_q, TowerBuf.xb, nd, RailSite.d, rb + G4A_Q, d, d, npos, lo.q, TowerBuf.q, true)
-        rail_pt(rl, RailProfRole.gemm_q)
+        _::rail_pt(rl, RailProfRole.gemm_q)
         tower_g4a_mm(rl, lo.c_k, TowerBuf.xb, nd, RailSite.d, rb + G4A_K, d, d, npos, lo.k, TowerBuf.k, true)
-        rail_pt(rl, RailProfRole.gemm_k)
+        _::rail_pt(rl, RailProfRole.gemm_k)
         tower_g4a_mm(rl, lo.c_v, TowerBuf.xb, nd, RailSite.d, rb + G4A_V, d, d, npos, lo.v, TowerBuf.v, true)
-        rail_pt(rl, RailProfRole.gemm_v)
+        _::rail_pt(rl, RailProfRole.gemm_v)
         rail_lane_mm(rl, RailSite.rel, rb + G4A_REL, TowerBuf.rel_tab, TowerBuf.rel_proj, d, d, rel_rows, lo.attn_k_rel)
-        rail_pt(rl, RailProfRole.gemm_rel)
+        _::rail_pt(rl, RailProfRole.gemm_rel)
         pc_attn.pdsoff = uint(lo.per_dim_scale - nb)
         let attn_roles = fixed_array(TowerBuf.q, TowerBuf.k, TowerBuf.v, TowerBuf.att, TowerBuf.rel_proj, TowerBuf.norms)
         if (hs == 64l) {
-            enc_tower_g4a_attn64_cls(rl, attn_roles, pc_attn, wg_attn)
+            _::enc_tower_g4a_attn64_cls(rl, attn_roles, pc_attn, wg_attn)
         } else {
-            enc_tower_g4a_attn_cls(rl, attn_roles, pc_attn, wg_attn)
+            _::enc_tower_g4a_attn_cls(rl, attn_roles, pc_attn, wg_attn)
         }
-        rail_pt(rl, RailProfRole.attn)
+        _::rail_pt(rl, RailProfRole.attn)
         tower_g4a_mm(rl, lo.c_o, TowerBuf.att, nd, RailSite.d, rb + G4A_O, d, d, npos, lo.o, TowerBuf.yo, true)
-        rail_pt(rl, RailProfRole.gemm_o)
+        _::rail_pt(rl, RailProfRole.gemm_o)
         pc_post.woff = uint(lo.attn_post_norm - nb)
         pc_post.ascale = 1.0
         pc_post.lnoff = uint(lo.norm_conv - nb)
-        enc_tower_post_add_cls(rl, fixed_array(TowerBuf.x, TowerBuf.yo, TowerBuf.xb, TowerBuf.norms), pc_post, npos)
-        rail_pt(rl, RailProfRole.post_add)
+        _::enc_tower_post_add_cls(rl, fixed_array(TowerBuf.x, TowerBuf.yo, TowerBuf.xb, TowerBuf.norms), pc_post, npos)
+        _::rail_pt(rl, RailProfRole.post_add)
         tower_g4a_mm(rl, lo.c_pw1, TowerBuf.xb, nd, RailSite.d2, rb + G4A_PW1, d, 2l * d, npos, lo.conv_pw1, TowerBuf.hg, true)
-        rail_pt(rl, RailProfRole.gemm_pw)
-        enc_tower_glu_sig_cls(rl, fixed_array(TowerBuf.hg, TowerBuf.hu), pc_glu, (nd + 255l) / 256l)
-        rail_pt(rl, RailProfRole.glu)
+        _::rail_pt(rl, RailProfRole.gemm_pw)
+        _::enc_tower_glu_sig_cls(rl, fixed_array(TowerBuf.hg, TowerBuf.hu), pc_glu, (nd + 255l) / 256l)
+        _::rail_pt(rl, RailProfRole.glu)
         pc_dw.woff = uint(lo.conv_dw - nb)
-        enc_tower_dw_conv5_cls(rl, fixed_array(TowerBuf.hu, TowerBuf.yd, TowerBuf.norms), pc_dw, (nd + 255l) / 256l)
-        rail_pt(rl, RailProfRole.dwconv)
+        _::enc_tower_dw_conv5_cls(rl, fixed_array(TowerBuf.hu, TowerBuf.yd, TowerBuf.norms), pc_dw, (nd + 255l) / 256l)
+        _::rail_pt(rl, RailProfRole.dwconv)
         pc_rms.lnoff = uint(lo.conv_norm - nb)
-        enc_tower_rms_cls(rl, fixed_array(TowerBuf.yd, TowerBuf.yd, TowerBuf.norms), pc_rms, npos)
-        rail_pt(rl, RailProfRole.rms)
-        enc_tower_act_cls(rl, fixed_array(TowerBuf.yd), pc_silu_d, rq_wgs(false, nd))
-        rail_pt(rl, RailProfRole.silu)
+        _::enc_tower_rms_cls(rl, fixed_array(TowerBuf.yd, TowerBuf.yd, TowerBuf.norms), pc_rms, npos)
+        _::rail_pt(rl, RailProfRole.rms)
+        _::enc_tower_act_cls(rl, fixed_array(TowerBuf.yd), pc_silu_d, rq_wgs(false, nd))
+        _::rail_pt(rl, RailProfRole.silu)
         tower_g4a_mm(rl, lo.c_pw2, TowerBuf.yd, nd, RailSite.d, rb + G4A_PW2, d, d, npos, lo.conv_pw2, TowerBuf.yo, true)
-        rail_pt(rl, RailProfRole.gemm_pw)
+        _::rail_pt(rl, RailProfRole.gemm_pw)
         pc_post.woff = 0u
         pc_post.lnoff = uint(lo.ff_norm_1 - nb)
-        enc_tower_post_add_plain_cls(rl, fixed_array(TowerBuf.x, TowerBuf.yo, TowerBuf.xb, TowerBuf.norms), pc_post, npos)
-        rail_pt(rl, RailProfRole.post_add)
+        _::enc_tower_post_add_plain_cls(rl, fixed_array(TowerBuf.x, TowerBuf.yo, TowerBuf.xb, TowerBuf.norms), pc_post, npos)
+        _::rail_pt(rl, RailProfRole.post_add)
         tower_g4a_mm(rl, lo.c_ff_up_1, TowerBuf.xb, nd, RailSite.ff, rb + G4A_FF_UP_1, d, ff, npos, lo.ff_up_1, TowerBuf.hg, true)
-        rail_pt(rl, RailProfRole.gemm_fc1)
-        enc_tower_act_cls(rl, fixed_array(TowerBuf.hg), pc_silu_ff, rq_wgs(false, nff))
-        rail_pt(rl, RailProfRole.silu)
+        _::rail_pt(rl, RailProfRole.gemm_fc1)
+        _::enc_tower_act_cls(rl, fixed_array(TowerBuf.hg), pc_silu_ff, rq_wgs(false, nff))
+        _::rail_pt(rl, RailProfRole.silu)
         tower_g4a_mm(rl, lo.c_ff_down_1, TowerBuf.hg, nff, RailSite.d, rb + G4A_FF_DOWN_1, ff, d, npos, lo.ff_down_1, TowerBuf.yd, true)
-        rail_pt(rl, RailProfRole.gemm_fc2)
+        _::rail_pt(rl, RailProfRole.gemm_fc2)
         pc_post.woff = uint(lo.ff_post_norm_1 - nb)
         pc_post.ascale = gemma4a_res_w()
         pc_post.ln_on = 0u
-        enc_tower_post_add_cls(rl, fixed_array(TowerBuf.x, TowerBuf.yd, TowerBuf.xb, TowerBuf.norms), pc_post, npos)
-        rail_pt(rl, RailProfRole.post_add)
+        _::enc_tower_post_add_cls(rl, fixed_array(TowerBuf.x, TowerBuf.yd, TowerBuf.xb, TowerBuf.norms), pc_post, npos)
+        _::rail_pt(rl, RailProfRole.post_add)
         pc_post.ln_on = 1u
         pc_rms.lnoff = uint(lo.ln2 - nb)
-        enc_tower_rms_cls(rl, fixed_array(TowerBuf.x, TowerBuf.x, TowerBuf.norms), pc_rms, npos)
-        rail_pt(rl, RailProfRole.rms)
+        _::enc_tower_rms_cls(rl, fixed_array(TowerBuf.x, TowerBuf.x, TowerBuf.norms), pc_rms, npos)
+        _::rail_pt(rl, RailProfRole.rms)
     }
     tower_g4a_mm(rl, Clamp(), TowerBuf.x, nd, RailSite.tail1, tail, d, mid, npos, t.outproj_w, TowerBuf.tail_out, false)
-    rail_pt(rl, RailProfRole.gemm_o)
+    _::rail_pt(rl, RailProfRole.gemm_o)
     rail_bias_pass(rl, TowerBuf.tail_out, mid, npos, t.outproj_b)
     var pc_rms_pt = gk_rms_args(uint(mid), uint(npos), t.eps, uint(rl.ones_off))
-    enc_tower_rms_cls(rl, fixed_array(TowerBuf.tail_out, TowerBuf.tail_out, TowerBuf.norms), pc_rms_pt, npos)
-    rail_pt(rl, RailProfRole.rms)
+    _::enc_tower_rms_cls(rl, fixed_array(TowerBuf.tail_out, TowerBuf.tail_out, TowerBuf.norms), pc_rms_pt, npos)
+    _::rail_pt(rl, RailProfRole.rms)
     tower_g4a_mm(rl, Clamp(), TowerBuf.tail_out, npos * mid, RailSite.tail2, tail + 1l, mid, t.proj_dim, npos, t.mmproj_w, TowerBuf.tail_proj, false)
-    rail_pt(rl, RailProfRole.gemm_o)
+    _::rail_pt(rl, RailProfRole.gemm_o)
 }
 
 //! the shape the gemma4a stamps serve: widths on the 64 lattice, 2d inside ff, 64 or 128 heads, the stamps' window and cap, both tail widths on the lattice
@@ -461,25 +458,25 @@ def tower_q3a_front(var rl : auto(R); t : Qwen3aTower; n_chunks, rid : int64) {
         let rows = n_chunks * st[si].rows
         var pc_im = GkIm2col2dArgs(iw = uint(st[si].iw), ih = uint(st[si].ih), cin = uint(st[si].cin), sstride = uint(st[si].cin), kdp = uint(st[si].kdp),
             rows = uint(rows), soff = 0u)
-        enc_tower_im2col_cls(rl, fixed_array(srcs[si], TowerBuf.col), pc_im, (rows * st[si].kdp + 255l) / 256l)
-        rail_pt(rl, RailProfRole.im2col)
-        rail_mm16(rl, TowerBuf.fw16, TowerBuf.col, ys[si], st[si].kdp, nch, rows, st[si].slab_elem_off)
-        rail_pt(rl, RailProfRole.gemm_pw)
+        _::enc_tower_im2col_cls(rl, fixed_array(srcs[si], TowerBuf.col), pc_im, (rows * st[si].kdp + 255l) / 256l)
+        _::rail_pt(rl, RailProfRole.im2col)
+        _::rail_mm16(rl, TowerBuf.fw16, TowerBuf.col, ys[si], st[si].kdp, nch, rows, st[si].slab_elem_off)
+        _::rail_pt(rl, RailProfRole.gemm_pw)
         var pc_b = GkBiasActArgs(d = uint(nch), nelem = uint(rows * nch), boff = uint(st[si].boff - nb), act = BIAS_ACT_GELU_ERF)
-        enc_tower_bias_act_cls(rl, fixed_array(ys[si], TowerBuf.norms), pc_b, rq_wgs(false, rows * nch))
-        rail_pt(rl, RailProfRole.bias)
+        _::enc_tower_bias_act_cls(rl, fixed_array(ys[si], TowerBuf.norms), pc_b, rq_wgs(false, rows * nch))
+        _::rail_pt(rl, RailProfRole.bias)
     }
     var pc_sh = GkQ3aShuffleArgs(nch = uint(nch), ncp = uint(nch), chunk_stride = uint(16l * QWEN3A_TOK_PER_CHUNK * nch), npos = uint(npos))
-    enc_tower_q3a_shuffle_cls(rl, fixed_array(TowerBuf.stage3, TowerBuf.feat16), pc_sh, (npos * featw + 255l) / 256l)
-    rail_pt(rl, RailProfRole.shuffle)
+    _::enc_tower_q3a_shuffle_cls(rl, fixed_array(TowerBuf.stage3, TowerBuf.feat16), pc_sh, (npos * featw + 255l) / 256l)
+    _::rail_pt(rl, RailProfRole.shuffle)
     rail_lane_mm(rl, RailSite.front1, rid, TowerBuf.feat16, TowerBuf.rows_out, featw, d, npos, t.cout_w_off)
-    rail_pt(rl, RailProfRole.gemm_pw)
+    _::rail_pt(rl, RailProfRole.gemm_pw)
     var pc_fin = GkBiasActArgs(d = uint(d), nelem = uint(npos * d), boff = uint(t.cout_b_off - nb), act = BIAS_ACT_NONE)
-    enc_tower_bias_act_cls(rl, fixed_array(TowerBuf.rows_out, TowerBuf.norms), pc_fin, rq_wgs(false, npos * d))
+    _::enc_tower_bias_act_cls(rl, fixed_array(TowerBuf.rows_out, TowerBuf.norms), pc_fin, rq_wgs(false, npos * d))
     pc_fin.d = uint(QWEN3A_TOK_PER_CHUNK * d)
     pc_fin.boff = uint(t.pos_off - nb)
-    enc_tower_bias_act_cls(rl, fixed_array(TowerBuf.rows_out, TowerBuf.norms), pc_fin, rq_wgs(false, npos * d))
-    rail_pt(rl, RailProfRole.post_add)
+    _::enc_tower_bias_act_cls(rl, fixed_array(TowerBuf.rows_out, TowerBuf.norms), pc_fin, rq_wgs(false, npos * d))
+    _::rail_pt(rl, RailProfRole.post_add)
 }
 
 //! qwen3a's MLP projector over `rows_out` on the chain's lane: mm1 at `tail1` (record `rid`) into `tail_hid`, mm2 at `tail2` (`rid + 1`) into `tail_proj`
@@ -490,21 +487,21 @@ def tower_q3a_proj(var rl : auto(R); t : Qwen3aTower; npos, rid : int64) {
     let nh = npos * d
     rail_site_feed(rl, RailSite.tail1, TowerBuf.rows_out, nh, -NO_CLAMP, NO_CLAMP)
     rail_lane_mm(rl, RailSite.tail1, rid, TowerBuf.rows_out, TowerBuf.tail_hid, d, d, npos, t.mm1_w_off)
-    rail_pt(rl, RailProfRole.gemm_o)
+    _::rail_pt(rl, RailProfRole.gemm_o)
     var pc_b1 = GkBiasActArgs(d = uint(d), nelem = uint(nh), boff = uint(t.mm1_b_off - rl.norms_base), act = BIAS_ACT_GELU_ERF)
-    enc_tower_bias_act_cls(rl, fixed_array(TowerBuf.tail_hid, TowerBuf.norms), pc_b1, rq_wgs(false, nh))
-    rail_pt(rl, RailProfRole.bias)
+    _::enc_tower_bias_act_cls(rl, fixed_array(TowerBuf.tail_hid, TowerBuf.norms), pc_b1, rq_wgs(false, nh))
+    _::rail_pt(rl, RailProfRole.bias)
     rail_site_feed(rl, RailSite.tail2, TowerBuf.tail_hid, nh, -NO_CLAMP, NO_CLAMP)
     rail_lane_mm(rl, RailSite.tail2, rid + 1l, TowerBuf.tail_hid, TowerBuf.tail_proj, d, pdim, npos, t.mm2_w_off)
-    rail_pt(rl, RailProfRole.gemm_o)
+    _::rail_pt(rl, RailProfRole.gemm_o)
     rail_bias_pass(rl, TowerBuf.tail_proj, pdim, npos, t.mm2_b_off)
 }
 
 //! the VAD over `pa.n` chunks: the encoder a workgroup a chunk into `vad_gates`, then one workgroup's recurrence over `vad_state` into `vad_probs`
 [arch(at = "../ARCHITECTURE_GPU_TOWER_RAIL.md#g4a-chains")]
 def tower_vad_chunks(var rl : auto(R); var pa : GkVadArgs) {
-    enc_tower_vad_enc_cls(rl, fixed_array(TowerBuf.planes, TowerBuf.norms, TowerBuf.vad_gates), pa, int64(pa.n))
-    rail_pt(rl, RailProfRole.spectrum)
-    enc_tower_vad_lstm_cls(rl, fixed_array(TowerBuf.vad_gates, TowerBuf.norms, TowerBuf.vad_state, TowerBuf.vad_probs), pa, 1l)
-    rail_pt(rl, RailProfRole.tts_lstm)
+    _::enc_tower_vad_enc_cls(rl, fixed_array(TowerBuf.planes, TowerBuf.norms, TowerBuf.vad_gates), pa, int64(pa.n))
+    _::rail_pt(rl, RailProfRole.spectrum)
+    _::enc_tower_vad_lstm_cls(rl, fixed_array(TowerBuf.vad_gates, TowerBuf.norms, TowerBuf.vad_state, TowerBuf.vad_probs), pa, 1l)
+    _::rail_pt(rl, RailProfRole.tts_lstm)
 }
