@@ -25,6 +25,10 @@
 #include "daScript/simulate/simulate.h"
 #include "daScript/simulate/simulate_visit_op.h"
 
+#if !defined(_WIN32) && !defined(_WIN64) && !defined(__APPLE__) && defined(__GLIBC__)
+#include <gnu/libc-version.h>
+#endif
+
 #include "daScript/misc/fpe.h"
 #include "daScript/misc/sysos.h"
 #include "misc/include_fmt.h"
@@ -316,7 +320,22 @@ namespace das {
     }
 #endif
 
+#if !defined(_WIN32) && !defined(_WIN64) && !defined(__APPLE__) && defined(__GLIBC__)
+    // src/builtin/ARCHITECTURE.md#exe-relr
+    static string link_extra ( const char * extraLinkerArgs ) {
+        int major = 0, minor = 0;
+        const bool relr = sscanf(gnu_get_libc_version(), "%d.%d", &major, &minor) == 2 && (major > 2 || (major == 2 && minor >= 36));
+        const string extra = (extraLinkerArgs && extraLinkerArgs[0]) ? extraLinkerArgs : "";
+        return relr ? extra + " -Wl,-z,pack-relative-relocs" : extra;
+    }
+#else
+    static string link_extra ( const char * extraLinkerArgs ) {
+        return (extraLinkerArgs && extraLinkerArgs[0]) ? extraLinkerArgs : "";
+    }
+#endif
+
     bool create_shared_library ( const char * objFilePath, const char * libraryName, [[maybe_unused]] const char * dasLib, const char * customLinker, const char * extraLinkerArgs, bool isShared, bool linkWholeLib, [[maybe_unused]] bool debugInfo, bool staticRuntime, Context *context ) {
+        const string extraArgs = link_extra(extraLinkerArgs);
         if ( staticRuntime ) {
         #if defined(_WIN32) || defined(_WIN64)
             LOG(LogLevel::error) << "A static-runtime executable is not supported on Windows\n";
@@ -338,7 +357,7 @@ namespace das {
                 }
             }
             const string linker = (customLinker && customLinker[0]) ? customLinker : "c++";
-            const char * extra = (extraLinkerArgs && extraLinkerArgs[0]) ? extraLinkerArgs : "";
+            const char * extra = extraArgs.c_str();
             const auto cmd = static_runtime_link_cmd(linker, objFilePath, libraryName, lib, linkWholeLib, extra);
             return run_link_cmd(cmd.c_str(), libraryName, "Executable", context);
         #endif
@@ -347,7 +366,7 @@ namespace das {
         // than a fixed stack buffer — long paths (deep build roots, spaces,
         // long extraLinkerArgs) can easily exceed a few hundred bytes, and
         // a fixed buffer would silently corrupt the stack on overflow.
-        const char * extra = (extraLinkerArgs && extraLinkerArgs[0]) ? extraLinkerArgs : "";
+        const char * extra = extraArgs.c_str();
         const auto paths = get_real_lib_linker_paths(dasLib, customLinker, isShared, linkWholeLib);
         const auto & linker = paths.linker;
         const auto & runtimeLibrary = paths.runtimeLibrary;
