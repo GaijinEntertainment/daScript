@@ -158,6 +158,7 @@ struct GGUFMeta {
     version : uint
     alignment : int64
     data_offset : int64
+    tensors_off : int64                        //! where the tensor table starts: the byte past the last KV record
     kv : table<string; GGUFKVLoc>
     tensors : array<GGUFTensorInfo>
     @do_not_delete shard_base : array<void?>   // borrowed mapped base per shard (owned by gguf_map_shards)
@@ -199,6 +200,113 @@ def gguf_put_str(var b : array<uint8>; s : string) {
     }
 }
 
+//! the GGUF v3 header - the magic, the version, `n_tensors` and `n_kv` - appended to `b`
+def gguf_header(var b : array<uint8>; n_tensors, n_kv : uint64) {
+    gguf_put_le(b, 0x46554747ul, 4)
+    gguf_put_le(b, 3ul, 4)
+    gguf_put_le(b, n_tensors, 8)
+    gguf_put_le(b, n_kv, 8)
+}
+
+// a key record's head: the key and its value type, and for an array its element type and count
+def private gguf_kv_head(var b : array<uint8>; key : string; gtype : int; arr_type : int = 0; count : int64 = 0l) {
+    gguf_put_str(b, key)
+    gguf_put_le(b, uint64(gtype), 4)
+    if (gtype == GT_ARRAY) {
+        gguf_put_le(b, uint64(arr_type), 4)
+        gguf_put_le(b, uint64(count), 8)
+    }
+}
+
+// the values of a string array, and of an i32 array from any integer elements: what a key record and a synthesized key both hold
+def private gguf_put_strs(var b : array<uint8>; v : array<string>) {
+    for (s in v) {
+        gguf_put_str(b, s)
+    }
+}
+
+def private gguf_put_i32s(var b : array<uint8>; v : array<auto(TT)>) {
+    for (x in v) {
+        gguf_put_le(b, uint64(x) & 0xFFFFFFFFul, 4)
+    }
+}
+
+//! one GGUF key with a u32 value, appended to `b`
+def gguf_kv_u32(var b : array<uint8>; key : string; v : uint64) {
+    gguf_kv_head(b, key, GT_U32)
+    gguf_put_le(b, v, 4)
+}
+
+//! one GGUF key with an f32 value given as its bits, appended to `b`
+def gguf_kv_f32_bits(var b : array<uint8>; key : string; bits : uint64) {
+    gguf_kv_head(b, key, GT_F32)
+    gguf_put_le(b, bits, 4)
+}
+
+//! one GGUF key with a string value, appended to `b`
+def gguf_kv_str(var b : array<uint8>; key, v : string) {
+    gguf_kv_head(b, key, GT_STRING)
+    gguf_put_str(b, v)
+}
+
+//! one GGUF key with a string-array value, appended to `b`
+def gguf_kv_str_array(var b : array<uint8>; key : string; v : array<string>) {
+    gguf_kv_head(b, key, GT_ARRAY, GT_STRING, long_length(v))
+    gguf_put_strs(b, v)
+}
+
+//! one GGUF key with an i32-array value, appended to `b`
+def gguf_kv_i32_array(var b : array<uint8>; key : string; v : array<int>) {
+    gguf_kv_head(b, key, GT_ARRAY, GT_I32, long_length(v))
+    gguf_put_i32s(b, v)
+}
+
+//! one GGUF tensor info appended to `b`: its name, its dims, its type and its offset in the data
+def gguf_tensor_info(var b : array<uint8>; name : string; dims : array<uint64>; gtype : int; off : uint64) {
+    gguf_put_str(b, name)
+    gguf_put_le(b, uint64(long_length(dims)), 4)
+    for (dv in dims) {
+        gguf_put_le(b, dv, 8)
+    }
+    gguf_put_le(b, uint64(gtype), 4)
+    gguf_put_le(b, off, 8)
+}
+
+//! `b` zero-padded to the GGUF data alignment, 32 bytes
+def gguf_pad_data(var b : array<uint8>) {
+    while (long_length(b) % 32l != 0l) {
+        b |> push(uint8(0))
+    }
+}
+
+//! The head of a GGUF rewritten from the one `m` parses over `bytes`, appended to `head` and padded to the alignment: the source's
+//! key records, the `extra_kv` records `extra` holds, and the tensor table with each tensor's type, dims and byte count as `form`
+//! leaves them (it is handed the source's) and every offset recomputed. Answers the data's byte count, each tensor padded.
+def gguf_rewritten_head(m : GGUFMeta; bytes : array<uint8> | #; extra_kv : int; extra : array<uint8>; var head : array<uint8>;
+                        form : block<(ti : GGUFTensorInfo; var gtype : int&; var dims : array<uint64>; var nbytes : int64&) : void>) : int64 {
+    gguf_header(head, uint64(long_length(m.tensors)), uint64(length(m.kv) + extra_kv))
+    let kv_bytes = m.tensors_off - GGUF_FIXED_HEADER_BYTES
+    if (kv_bytes > 0l) {
+        unsafe {
+            head |> push_from(temp_array(addr<uint8?>(bytes[GGUF_FIXED_HEADER_BYTES]), kv_bytes, type<uint8>))
+        }
+    }
+    head |> push_from(extra)
+    var off = 0l
+    for (ti in m.tensors) {
+        var gtype = ti.ggml_type
+        var nbytes = ggml_type_bytes(ti.ggml_type, ti.n_elem)
+        var inscope dims <- [for (d in ti.dims); uint64(d)]
+        invoke(form, ti, gtype, dims, nbytes)
+        gguf_tensor_info(head, ti.name, dims, gtype, uint64(off))
+        off = (off + nbytes + m.alignment - 1l) / m.alignment * m.alignment
+    }
+    while (long_length(head) % m.alignment != 0l) {
+        head |> push(0u8)
+    }
+    return off
+}
+
 //! a KV entry whose value bytes `put` appends to `buf` - the KV table a synthesized meta reads through its getters
 def private gguf_kv_put(var m : GGUFMeta; var buf : array<uint8>; key : string; loc : GGUFKVLoc; put : block<(var b : array<uint8>) : void>) {
     var at = loc
@@ -233,17 +341,13 @@ def gguf_kv_put_str(var m : GGUFMeta; var buf : array<uint8>; key : string; v : 
 
 def gguf_kv_put_str_array(var m : GGUFMeta; var buf : array<uint8>; key : string; v : array<string>) {
     gguf_kv_put(m, buf, key, GGUFKVLoc(gtype = GT_ARRAY, arr_type = GT_STRING, count = long_length(v))) $(var b) {
-        for (s in v) {
-            gguf_put_str(b, s)
-        }
+        gguf_put_strs(b, v)
     }
 }
 
 def gguf_kv_put_i32_array(var m : GGUFMeta; var buf : array<uint8>; key : string; v : array<int64>) {
     gguf_kv_put(m, buf, key, GGUFKVLoc(gtype = GT_ARRAY, arr_type = GT_I32, count = long_length(v))) $(var b) {
-        for (x in v) {
-            gguf_put_le(b, uint64(x) & 0xFFFFFFFFul, 4)
-        }
+        gguf_put_i32s(b, v)
     }
 }
 
@@ -343,6 +447,7 @@ def parse_gguf_meta(bytes : array<uint8> | #) : GGUFMeta {
         m.alignment = rd_i64(bytes, alip.data_off)
     }
     // tensor info table
+    m.tensors_off = off
     m.tensors |> reserve(int(n_tensors))
     for (_i in range64(n_tensors)) {
         var ti : GGUFTensorInfo
@@ -612,23 +717,26 @@ def gguf_header_read(path : string; blk : block<(m : GGUFMeta; bytes : array<uin
     return done
 }
 
-//! `general.architecture` of the GGUF at `path` ("" when ``gguf_header_read`` cannot read it)
-def gguf_file_arch(path : string) : string {
-    var arch = ""
+//! The string key `key` of the GGUF at `path`, read off its header alone: "" where the file carries no such key or
+//! ``gguf_header_read`` cannot read it.
+def gguf_file_str(path, key : string) : string {
+    var v = ""
     let read = gguf_header_read(path) $(m; bytes) {
-        if (gguf_has(m, "general.architecture")) {
-            arch = gguf_str(m, bytes, "general.architecture")
-        }
+        v = gguf_str_or(m, bytes, key, "")
     }
-    return read ? arch : ""
+    return read ? v : ""
 }
+
+//! `general.architecture` of the GGUF at `path` ("" when ``gguf_header_read`` cannot read it)
+def gguf_file_arch(path : string) : string => gguf_file_str(path, "general.architecture")
 
 //! An assistant drafter (arch `<family>-assistant`: gemma4-assistant) is its own tiny model over the
 //! target's K/V, never a shard of the trunk - the shard walk leaves it to the drafter loader.
 def gguf_is_assistant(path : string) : bool => gguf_file_arch(path) |> ends_with("-assistant")
 
-// the GGUF split-name expansion proper ("<prefix>-NNNNN-of-NNNNN.gguf" -> every sibling)
-def private gguf_split_paths(path : string; missing_ok : bool) : array<string> {
+//! The GGUF split-name expansion: "<prefix>-NNNNN-of-NNNNN.gguf" yields every sibling shard, any other path itself;
+//! a missing sibling panics, or yields [] with `missing_ok`. No split head rides the list (`gguf_shard_paths` adds it).
+def gguf_split_paths(path : string; missing_ok : bool) : array<string> {
     var res : array<string>
     let name = base_name(path)
     let stem_part = trim_suffix(name, ".gguf")

@@ -60,7 +60,8 @@ anchor.
   single-sourcing them is generator-rail work, never a hand-merge. Float multiply order in the
   builders is contractual (parity-pinned).
 - **`dasllama_gguf.das`** - the GGUF container: KV/tensor descriptors, the byte-level reader, the
-  mapping. Codecs live in `dasllama_convert`; this file finds bytes, it does not decode them.
+  mapping, and the record writers and rewritten head a file written from another takes. Codecs live
+  in `dasllama_convert`; this file finds bytes, it does not decode them.
 - **`dasllama_layout.das`** - disk-format -> compute-layout transforms at LOAD scope: the blob
   transform, the CPU repack walkers, the GPU tier gathers, the per-region q8->Metal-34B
   un-repack (`q8_region_to_metal_blob`, the ASR-decoder driver's upload form), the GGUF Q8_0 blocks'
@@ -195,7 +196,8 @@ requant minted at load and held in RAM, with no image; its K-quant layers serve 
 (`ARCHITECTURE_TTS_FRONT_END.md#tts-stress-lanes`).
 A StyleTTS2 carrier's quantized lanes are minted from its f32 file at the image bake, a converted copy each lane's image
 carries: Q8_0 at default levers, the recipe's Q4_K and Q6_K groups beside Q8_0 where a load asks the recipe lane
-(`ARCHITECTURE_TTS.md#tts-recipe`); a Pocket file's own Q4_K, Q8_0 and F16-table tensors are served forms
+(`ARCHITECTURE_TTS_FORMATS.md#tts-recipe`) - or they are the tensors of a file that stores the lane's weights, served
+forms a load mints nothing from (`ARCHITECTURE_TTS_FORMATS.md#tts-stored-file`); a Pocket file's own Q4_K, Q8_0 and F16-table tensors are served forms
 (`ARCHITECTURE_POCKET.md#pocket-q8-file`), and the TTS GPU seats read every one of them widened into an f32 slab.
 Every `load_big` call names the form it
 fills - the plane's tag, or the `KqFmt` member a conversion serves - so the conversion reads at the call;
