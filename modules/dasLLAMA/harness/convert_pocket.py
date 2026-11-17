@@ -3,10 +3,10 @@
     ~/Work/tts-ab/pocket/venv-4/bin/python convert_pocket.py --language english_18m_2026-10 \\
         --hub ~/Work/tts-ab/pocket/hub --out ~/Work/llama.cpp/models [--llama-cpp ~/Work/llama.cpp]
 
-Reads one config's pinned bundle (`<hub>/pocket-tts/languages/<language>/model.safetensors`, the
-gated repo with the Mimi encoder populated), its tokenizer
-(`<hub>/pocket-tts-without-voice-cloning/languages/<language>/tokenizer.model`), the config the
-package (pocket-tts 4.0.1) ships under that name, and the bundled voice clips, and writes
+Reads the config the package (pocket-tts 4.0.1) ships under that name, the bundle and the
+tokenizer that config pins (its `weights_path`, the gated repo with the Mimi encoder populated, and
+its `tokenizer_path` - a SentencePiece model or a `tokenizers` file - each at the config's own
+revision, through the package's resolver), and the bundled voice clips under `--hub`, and writes
 `pocket-tts-<language>.gguf` under `general.architecture = "pocket-tts"`:
 
 - every weight as f16 (the 100M bundles are bf16, the 2026-10 small ones f32; f16 keeps 3 more
@@ -321,10 +321,58 @@ def tokenizer_records(path):
     return pieces, scores, ttype, spec
 
 
+def tokenizer_json_records(path):
+    """The same records from a `tokenizers` file - the form the package reads for the 100M configs.
+    The engine tokenizes with its SentencePiece unigram path, so the file must describe exactly
+    that: a Unigram model, a "▁" prepended to the text, the Metaspace split on it, and no piece
+    with a "▁" past its first character (a piece that spans two words is one the per-word split
+    never finds and the whole-text search does). Anything else is refused."""
+    with open(path, encoding="utf8") as f:
+        j = json.load(f)
+    m = j["model"]
+    assert m["type"] == "Unigram", f"{path}: a {m['type']} model, not Unigram"
+    norm = j.get("normalizer") or {}
+    norms = norm.get("normalizers", [norm]) if norm.get("type") == "Sequence" else [norm]
+    assert [n.get("type") for n in norms] == ["Prepend"] and norms[0].get("prepend") == "\u2581", f"{path}: normalizer {norm}"
+    pre = j.get("pre_tokenizer") or {}
+    assert pre.get("type") == "Metaspace" and pre.get("replacement") == "\u2581" and pre.get("prepend_scheme") == "always" \
+        and pre.get("split", True), f"{path}: pre_tokenizer {pre}"
+    assert j.get("post_processor") is None, f"{path}: a post processor the engine does not run"
+    pieces = [v[0] for v in m["vocab"]]
+    scores = [float(v[1]) for v in m["vocab"]]
+    inner = [p for p in pieces if "\u2581" in p[1:]]
+    assert not inner, f"{path}: {len(inner)} pieces span a word boundary, e.g. {inner[:3]}"
+    control = {a["id"] for a in j.get("added_tokens", []) if a.get("special")}
+    unk = int(m["unk_id"])
+    ids = {a["content"]: a["id"] for a in j.get("added_tokens", [])}
+    # gguf token_type: NORMAL 1, UNKNOWN 2, CONTROL 3, BYTE 6
+    ttype = [2 if i == unk else 3 if i in control else 6 if (len(p) == 6 and p.startswith("<0x") and p.endswith(">")) else 1
+             for i, p in enumerate(pieces)]
+    spec = dict(bos=ids.get("<s>", -1), eos=ids.get("</s>", -1), unk=unk, pad=ids.get("<pad>", -1),
+                byte_fallback=bool(m.get("byte_fallback", False)), add_dummy_prefix=True, remove_extra_whitespaces=False)
+    return pieces, scores, ttype, spec
+
+
+def tokenizer_reader(lookup):
+    """The reader of the tokenizer file a config's lookup table names: its `tokenizer` key says
+    which library the package loads the file with, SentencePiece where the key is absent."""
+    kind = lookup.get("tokenizer", "sentencepiece")
+    assert kind in ("sentencepiece", "tokenizers"), f"a {kind} tokenizer: the converter reads sentencepiece and tokenizers files"
+    return tokenizer_json_records if kind == "tokenizers" else tokenizer_records
+
+
+def config_file(uri):
+    """A file a config names (`hf://<repo>/<path>@<revision>`), fetched or found in the cache by the
+    package's own resolver: the converter reads the revision the config pins and no other."""
+    from pocket_tts.utils.utils import download_if_necessary
+    return str(download_if_necessary(uri))
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--language", default="english_2026-04")
-    ap.add_argument("--hub", default=os.path.expanduser("~/Work/tts-ab/pocket/hub"))
+    ap.add_argument("--hub", default=os.path.expanduser("~/Work/tts-ab/pocket/hub"), help="a mirror of the voice clips "
+                    "(tts-voices/, pocket-tts/<clip>); the weights and the tokenizer come from the config's own revisions")
     ap.add_argument("--out", required=True, help="directory for pocket-tts-<language>.gguf")
     ap.add_argument("--llama-cpp", default=os.path.expanduser("~/Work/llama.cpp"), help="for gguf-py")
     ap.add_argument("--name", default=None, help="output file stem (default pocket-tts-<language>)")
@@ -350,13 +398,15 @@ def main():
 
     lang = a.language
     cfg = load_config(lang)
+    lookup = cfg["flow_lm"]["lookup_table"]
     weights_rev = cfg["weights_path"].split("@")[1]
-    tok_rev = cfg["flow_lm"]["lookup_table"]["tokenizer_path"].split("@")[1]
-    st = read_safetensors(os.path.join(a.hub, "pocket-tts", "languages", lang, "model.safetensors"))
+    tok_rev = lookup["tokenizer_path"].split("@")[1]
+    st = read_safetensors(config_file(cfg["weights_path"]))
     enc0 = st["mimi.encoder.model.0.conv.weight"]
     assert np.abs(enc0).max() > 0, "the Mimi encoder is zero: this is the no-cloning bundle, not the gated one"
-    pieces, scores, ttype, spec = tokenizer_records(os.path.join(a.hub, "pocket-tts-without-voice-cloning", "languages", lang, "tokenizer.model"))
-    assert len(pieces) == cfg["flow_lm"]["lookup_table"]["n_bins"], (len(pieces), cfg["flow_lm"]["lookup_table"]["n_bins"])
+    tok_path = config_file(lookup["tokenizer_path"])
+    pieces, scores, ttype, spec = tokenizer_reader(lookup)(tok_path)
+    assert len(pieces) == lookup["n_bins"], (len(pieces), lookup["n_bins"])
 
     # the codec's strided stages carry the ratios as their strides; a transposed conv's name says so
     ratios = [int(r) for r in cfg["mimi"]["seanet"]["ratios"]]

@@ -1,7 +1,10 @@
 {
  "language": "english_2026-04",
  "revision": "19f95fe2df36e79fbd9f10008595cc4c977a0fcc",
- "replace_characters": {},
+ "replace_characters": {
+  "’": "'",
+  "‘": "'"
+ },
  "rows": [
   {
    "id": "lj000",
@@ -818,7 +821,7 @@
   },
   {
    "id": "lj019",
-   "prepared": "And was in fact the kind of letter used in the many splendid missals, psalters, etc., produced by printing in the fifteenth century.",
+   "prepared": "And was in fact the kind of letter used in the many splendid missals, psalters, etc. produced by printing in the fifteenth century.",
    "frames_after_eos": 3,
    "ids": [
     287,
@@ -853,7 +856,6 @@
     597,
     440,
     263,
-    262,
     260,
     1018,
     278,
@@ -5460,15 +5462,14 @@
   {
    "text": "Dr. Smith paid $12.50 at 3.14 p.m.; then he left! Really? Yes... quite so. Dr. Smith paid $12.50 at 3.14 p.m.; then he left! Really? Yes... quite so. Dr. Smith paid $12.50 at 3.14 p.m.; then he left! Really? Yes... quite so. ",
    "chunks": [
-    "Dr. Smith paid $12.50 at 3.14 p. m. ; then he left! Really? Yes... quite so. Dr.",
-    "Smith paid $12.50 at 3.14 p. m. ; then he left! Really? Yes... quite so. Dr. Smith paid $12.50 at 3.14 p.",
-    "m. ; then he left! Really? Yes... quite so."
+    "Dr. Smith paid $12.50 at 3.14 p. m. then he left! Really? Yes... quite so. Dr. Smith paid $12.50 at 3.14 p.",
+    "m. then he left! Really? Yes... quite so. Dr. Smith paid $12.50 at 3.14 p. m. then he left! Really? Yes... quite so."
    ]
   },
   {
    "text": "\"Is it late?\", she asked. He said “no” - I counted to 3. 14 people were there, and it’s fine",
    "chunks": [
-    "\"Is it late?\", she asked. He said “no” - I counted to 3. 14 people were there, and it’s fine."
+    "\"Is it late?\", she asked. He said “no” - I counted to 3. 14 people were there, and it's fine."
    ]
   }
  ],
@@ -5631,7 +5632,7 @@
   },
   {
    "text": "don’t stop",
-   "prepared": "Don’t stop.",
+   "prepared": "Don't stop.",
    "frames_after_eos": 5
   },
   {
