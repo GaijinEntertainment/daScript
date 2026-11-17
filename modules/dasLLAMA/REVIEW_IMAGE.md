@@ -58,11 +58,13 @@ the verdicts prove garbage in any lane - BROKEN, version-stale, or a stale layou
 this process registered.** A lane is the last dot-separated segment of the file name before
 `.dlim`; a hash-named legacy image's lane is its identity's (quant, tag) pair.
 
-**A deletion an image save makes of any other image - a current image of another flavor or
-another family, another lane's image whatever its identity, or one whose family this process
-cannot recompute - is a defect.** The explicit GC (`dlim_clean_`, the converter's `--clean`, the
-server's boot) deletes the same garbage plus a hash-named legacy image of another identity, and
-never a lane-named image of another identity.
+**A deletion an image save makes of any other image - a current image of another flavor or another
+family, another lane's image whatever its identity, or one whose family this process cannot
+recompute - is a defect.** The explicit GC (`dlim_clean_`, the converter's `--clean`, the server's
+boot) deletes the same garbage, a hash-named legacy image of another identity, and every image whose
+source file was replaced beside it (verdict `STALE source`, whatever its lane or identity), and
+never a lane-named image of another identity whose source still matches; a save's GC keeps a `STALE
+source` image because the original file may be restored to that path.
 
 **A diff that adds a segment to `image_lane_name` or a field to the identity records in
 `ARCHITECTURE_IMAGE.md#image-lane-name` whether the knob coexists (a lane segment AND an identity

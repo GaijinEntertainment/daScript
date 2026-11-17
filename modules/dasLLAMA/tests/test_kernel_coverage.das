@@ -51,6 +51,7 @@ require daslib/fio  // the zoo paths
 require math  // nolint:STYLE030,LINT019 — used only inside the das_metal static_if half
 require strings
 require _model_tier
+require _tts_parity   // nolint:STYLE030,LINT019 — styletts2_spoken: the StyleTTS2 census row's one synthesis, inside the GPU half
 require ../performance/model_specs.das   // nolint:STYLE030,LINT019 — counting_prompt, read only inside the das_metal and vulkan static_if halves
 require _gpu_knobs   // nolint:STYLE030,LINT019 — gpu_knobs: the vulkan census's knob record, read inside the vulkan half
 require _gpu_tier_armed   // nolint:STYLE030,LINT019 — gpu_tier_armed: the serving census's armed-tier skip, inside the vulkan half
@@ -873,18 +874,8 @@ def private cov_tower_styletts2(t : T?) {
             var inscope stg <- stage_styletts2(path, false)   // stage+mint: no .dlim written, no sibling-lane GC
             var inscope m = StyleTts2Model()
             mint_styletts2(stg, m)
-            var inscope ids : array<int>
-            ids |> resize(48)
-            for (i in range(48)) {
-                ids[i] = 1 + i % (int(m.n_symbols) - 1)
-            }
-            var inscope style : array<float>
-            styletts2_style(m, m.voice_names[0], 0, style)
-            var inscope noise = TtsNoise()
-            var tm = TtsTimings()
-            var inscope sc = St2Scratch()
             with_dasllama_jobque() {
-                styletts2_synthesize(m, ids, style, 1.0, noise, 0x5eedul, null, tm, sc)
+                styletts2_spoken(m, 48)
             }
         }
     }

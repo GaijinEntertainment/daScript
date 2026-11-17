@@ -62,6 +62,22 @@ per-box coexistence unit, not a portability promise: the class in the CPU lane's
 and a box of another class re-bakes. `image_path_for` adopts a hash-named image at the exact legacy
 path (identity hash, head fold) by renaming it into the lane once, so the switch costs no re-mint.
 
+### An image answers for the source it was minted from {#image-source-stamp}
+
+The header's last word is a stamp of the source the image stands beside (`image_source_stamp`): the file's size and
+sixteen 64 KiB windows of its bytes spread from the first to the last (the whole file where it is no longer than
+those), over every shard of a split GGUF and every file of a directory source in name order. The identity names the
+box and the build, never the weights, so without the stamp a file replaced under its own name would go on serving
+the image of the file it replaced. `parse_image` declines an image whose source no longer stamps the same, and the
+load mints again as it does on any decline; a peek reads the same answer as the `STALE source` verdict. The explicit
+GC removes such an image; a save's GC leaves another lane's alone, because the replaced source may come back under
+its name, and a named image that declines for it says so (`refuse_moved_source`). The source is read off the image's own name
+(`<source>.<lane>.dlim`, `image_source_beside`), so no load site hands it over. Three images carry no answer and
+load unchecked: one with no source beside it (shipped alone, or copied away), one a host holds in memory, and one
+minted to a destination whose name spells no source there - its stamp is 0. The stamp samples the file and does not
+read it whole: a source rewritten at the same size with every sampled window unchanged keeps its image. A split
+head's file is outside the stamp; its fold is the lane's (`#image-identity-head-fold`).
+
 ### A planar image never stands in for the blob flavor {#image-flavor-rebake}
 
 A metal-mode load resolves its flavor in order: the blob image under the metal tag maps first; a

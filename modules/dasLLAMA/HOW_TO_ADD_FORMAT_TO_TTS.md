@@ -19,7 +19,7 @@ takes the format as an argument.
 
 Answer these from the model's assembly and the group's tensors; the answers are the first lines
 of the PR body. The recipe and what each group's pick rests on are
-`ARCHITECTURE_TTS.md#tts-recipe`.
+`ARCHITECTURE_TTS_FORMATS.md#tts-recipe`.
 
 1. **The group and the kernel form that reads it.** A dense forward rows conv, a transposed rows
    conv, a channel-major conv, a rows linear, a vector linear (one GEMV a call), an LSTM
@@ -27,7 +27,7 @@ of the PR body. The recipe and what each group's pick rests on are
    has none yet needs the form before the format.
 2. **Whether the group reads or writes the signal.** A conv whose input or output is the audio
    itself - the generator's noise convs, `conv_post`, the Pocket codec's convs - stays f32
-   (`ARCHITECTURE_TTS.md#tts-recipe`, `ARCHITECTURE_POCKET.md#pocket-q8-file`). Decide this
+   (`ARCHITECTURE_TTS_FORMATS.md#tts-recipe`, `ARCHITECTURE_POCKET.md#pocket-q8-file`). Decide this
    before the measurement, and let the measurement confirm it.
 3. **The lattice.** A Q8_0 matrix needs its reduction width on 32 (a vector linear and an LSTM
    need both widths there); every dense conv takes a K-quant matrix
@@ -92,7 +92,7 @@ Files: `dasllama/dasllama_styletts2.das`, `tests/test_model_image.das`.
 `st2_group` reads a tensor's group off its name, `ST2_GROUPS` lists the groups a pin may name, and
 `stage_fmt` answers the format a staged tensor mints in: the recipe's on the recipe lane, the
 recipe with every K-quant group at Q8_0 on the q8 lane, the pin's where
-`set_styletts2_recipe` names the group (`ARCHITECTURE_TTS.md#tts-recipe`). The group's reader asks
+`set_styletts2_recipe` names the group (`ARCHITECTURE_TTS_FORMATS.md#tts-recipe`). The group's reader asks
 `stage_fmt`, mints the form where the leaf is eligible, and calls `stage_note` so the stage's
 report counts it.
 
@@ -144,7 +144,7 @@ folder carries its lane, so the two never share one:
   real from about 0.02, and Russian voices show a cost English hides.
 
 The pick is the smallest format that scores with the reference on every voice. Set it in
-`st2_recipe_default`, state it in `ARCHITECTURE_TTS.md#tts-recipe`, and record the scores, the
+`st2_recipe_default`, state it in `ARCHITECTURE_TTS_FORMATS.md#tts-recipe`, and record the scores, the
 image's size and the CPU chain's factor in `PERF_LEDGER.md`.
 
 ## 6. Hold the image
@@ -163,7 +163,18 @@ recipe cell, and the pin's to the pin cell.
 ## 7. A file that stores the format
 
 Files: `harness/convert_pocket.py`, `dasllama/dasllama_pocket.das`, `tests/test_tts_pocket.das`,
-`harness/tts_model_card.md`, `performance/model_specs.das`.
+`dasllama/dasllama_styletts2.das`, `dasllama/dasllama_gguf.das`, `dasllama/dasllama_convert.das`,
+`tests/test_tts_kitten.das`, `harness/tts_model_card.md`, `performance/model_specs.das`.
+
+For a StyleTTS2 carrier's file of the lane's weights (`dasllama-convert --gguf`,
+`ARCHITECTURE_TTS_FORMATS.md#tts-stored-file`): add the format's plane-to-block writer beside its
+transcode (`kq_disk_block_p`, read by `kq_planes_to_disk`), admit the format in `stored_quant`,
+take it at the group's site (`conv1d_read_quant`, `q8_matrix_read`), and extend
+`test_kitten_stored_file` to hold the staged file's planes to the lane's byte for byte.
+
+- A layout change - what a stored tensor's dims or keys mean - takes a new `ST2_STORED_LAYOUT`
+  number: a file that carries the old number keeps reading by that number's layout, or is
+  refused by the number.
 
 A Pocket file's formats decide the lanes it takes, and which tensors a format covers is written
 once in the converter and again in the reader (`ARCHITECTURE_POCKET.md#pocket-q8-file`): change

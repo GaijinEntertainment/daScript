@@ -5,6 +5,7 @@ options _dasllama_internal = true
 module dasllama_styletts2 shared public
 
 require dasllama/dasllama_lint public
+require daslib/array_boost   // temp_array: the writer's view over the source's bytes
 require math
 require strings
 require daslib/strings_boost   // split: a recipe pin's pairs
@@ -19,6 +20,9 @@ require dasllama/dasllama_math
 require dasllama/dasllama_par
 require dasllama/dasllama_plane
 require dasllama/dasllama_image
+require dasllama/dasllama_load          // kq_fmt_of: a stored tensor's format, tagged from its disk type
+require dasllama/dasllama_layout        // q8_region_to_metal_blob: the Q8_0 block writer a stored file's capture shares
+require dasllama/dasllama_gemm_schema   // Q8_BLOCK_ELEMS / Q8_BLOCK_BYTES: the Q8_0 block's size
 require dasllama/dasllama_tower   // asr_prof_add: the encode-stage profiling rail; add_inplace_rows: the residual add
 require dasllama/dasllama_gpu_math   // sigmoid_f32
 require dasllama/dasllama_tts_types
@@ -300,7 +304,7 @@ let ST2_GROUPS = fixed_array<string>("bert", "predictor", "fc", "lstm", "text_en
 //! The recipe lane's format a weight group, each one the rig's pick: the decoder stack, the generator's res blocks and the
 //! text encoder's convs take four bits, the upsamplers six; the noise convs and conv_post read and write the audio itself
 //! and stay f32; every other group is Q8_0 where its kernel has the form.
-[arch(at = "../ARCHITECTURE_TTS.md#tts-recipe")]
+[arch(at = "../ARCHITECTURE_TTS_FORMATS.md#tts-recipe")]
 def st2_recipe_default(group : string) : St2Fmt {
     return St2Fmt.k4 if (group == "decoder" || group == "generator" || group == "text_encoder")
     return St2Fmt.k6 if (group == "ups")
@@ -398,13 +402,18 @@ def styletts2_recipe() : string => g_st2_recipe_spec
 def private st2_tag_of(q8, kq : bool) : string => kq ? ST2_IMAGE_TAG_KQ : (q8 ? ST2_IMAGE_TAG_Q8 : ST2_IMAGE_TAG)
 
 // the lane changes what a load mints and serves, so the load says which and why - and names a pin it does not apply:
-// a prepared image serves the lane it was baked on, and the recipe ask overrides the q8 pin
-def private st2_announce_lane(dlim : bool) {
+// a prepared image serves the lane it was baked on, a file that stores its weights the lane it names, and the recipe
+// ask overrides the q8 pin
+def private st2_announce_lane(dlim : bool; stored : string) {
     let pinned = g_st2_q8_pin != GemmLane.unset
-    if (dlim) {
+    if (dlim || !empty(stored)) {
+        if (!empty(stored)) {
+            to_log(LOG_INFO, "dasLLAMA styletts2: rows GEMM lane {stored} - the lane the file stores its weights on\n")
+        }
         if (pinned || g_st2_recipe_asked) {
             let which = g_st2_recipe_asked ? "set_styletts2_recipe" : "set_tts_q8"
-            to_log(LOG_WARNING, "dasLLAMA styletts2: a prepared image serves the lane it was baked on - the {which} pin is not applied to this load\n")
+            let what = dlim ? "a prepared image serves the lane it was baked on" : "a file that stores its weights as minted serves the {stored} lane it names"
+            to_log(LOG_WARNING, "dasLLAMA styletts2: {what} - the {which} pin is not applied to this load\n")
         }
         return
     }
@@ -423,6 +432,81 @@ def private st2_announce_lane(dlim : bool) {
 var private g_stage_q8 = false
 var private g_stage_repack = false
 var private g_stage_kq = false
+var private g_stage_stored = false   // the file declares the stored layout: a quantized tensor is taken, a float one stays f32
+var private g_stage_capture = false  // the writer's stage: every weight a site mints is recorded as its disk blocks
+
+//! The stored layout a file's `styletts2.stored_layout` names: a weight the lane mints is its quant matrix, as minted.
+let ST2_STORED_LAYOUT = 1l
+
+// a weight the writer stores as minted: its tensor's GGUF type and dims, its blocks, and a conv's [cout, cin, source cin]
+struct private St2Stored {
+    name : string
+    gtype : int
+    dims : array<uint64>
+    @exact_size bytes : array<uint8>
+    conv : array<int>
+}
+
+var private g_captured : array<St2Stored>
+var private g_captured_at : table<string; int>
+
+// the capture slot of tensor `name`, made with `gtype` and `dims` at its first call: an LSTM's two directions land in one
+def private captured_slot(name : string; gtype : int; dims : array<int64>) : int {
+    let had = g_captured_at?[name] ?? -1
+    return had if (had >= 0)
+    var slot = St2Stored(name = name, gtype = gtype)
+    slot.dims <- [for (d in dims); uint64(d)]
+    g_captured |> emplace(slot)
+    g_captured_at[name] = length(g_captured) - 1
+    return length(g_captured) - 1
+}
+
+// answers the capture's slot, -1 outside the writer's stage
+def private capture_q8(name : string; wq : array<int8>; wqs : array<float>; n : int64; dims : array<int64>) : int {
+    return -1 if (!g_stage_capture)
+    let at = captured_slot(name, GGML_TYPE_Q8_0, dims)
+    var bytes & = unsafe(g_captured[at].bytes)
+    let from = long_length(bytes)
+    bytes |> reserve(from + n / Q8_BLOCK_ELEMS * Q8_BLOCK_BYTES)
+    bytes |> resize_no_init(from + n / Q8_BLOCK_ELEMS * Q8_BLOCK_BYTES)
+    unsafe {   // disk order is the unrepacked region's: the block writer the Metal blob takes, its scale clamped into a half
+        q8_region_to_metal_blob(addr<int8 const?>(wq[0]), addr<float const?>(wqs[0]), dims[0], n / dims[0], false, 1l, Q8_BLOCK_ELEMS, 0l, addr(bytes[from]))
+    }
+    return at
+}
+
+// a conv's minted quant matrix: [K][rows] in its format, with the channel counts its K-quant width hides and `cin_src`, the
+// input width before the load's pad
+def private capture_conv(wname : string; c : TtsConv1d; cin_src : int64) {
+    return if (!g_stage_capture || (!c.q8 && c.kq_fmt == 0))
+    var at = -1
+    if (c.q8) {
+        at = capture_q8(wname, c.wq, c.wqs, long_length(c.wq), [c.q8_k, long_length(c.wq) / c.q8_k])
+    } else {
+        let fmt = kq_fmt_of_id(c.kq_fmt, "a tts conv")
+        let n = long_length(c.kq) / kq_qsb(fmt) * KQ_SB_ELEMS
+        at = captured_slot(wname, kq_ggml_type(fmt), [c.kq_k, n / c.kq_k])
+        kq_planes_to_disk(fmt, c.kq, c.ks, n, g_captured[at].bytes)
+    }
+    g_captured[at].conv <- [int(c.cout), int(c.cin), int(cin_src)]
+}
+
+// Whether the file stores tensor `name` as a quant matrix, `fmt` its format off the disk type: false where it holds floats.
+// A stored format is Q8_0 or a K-quant the recipe mints, in a file that declares the stored layout; anything else is refused.
+def private stored_quant(m : GGUFMeta; name : string; var fmt : KqFmt&) : bool {
+    let gt = gguf_tensor_type(m, name)
+    return false if (gt < 0 || gt == GGML_TYPE_F32 || gt == GGML_TYPE_F16)
+    fmt = kq_fmt_of(gt)
+    let named = fmt != KqFmt.q8 || gt == GGML_TYPE_Q8_0   // the mapping tags a type it does not know q8
+    if (!named || !(fmt == KqFmt.q8 || fmt == KqFmt.k4 || fmt == KqFmt.k5 || fmt == KqFmt.k6)) {
+        let what = named ? "{fmt}" : "ggml type {gt}"
+        panic("dasLLAMA styletts2: '{name}' is stored as {what}; a StyleTTS2 file stores floats, q8, or the recipe's k4, k5 and k6")
+    }
+    if (!g_stage_stored) {
+        panic("dasLLAMA styletts2: '{name}' is stored quantized in a file that declares no styletts2.stored_layout - the matrix it holds is unknown")
+    }
+    return true
+}
 
 //! Ask the recipe lane for subsequent loads, in process, over any ``set_styletts2_q8`` pin: `spec` "" is the recipe as it
 //! is, `group=format` pairs (comma-separated; `ST2_GROUPS`, `St2Fmt`) pin those groups and mint in memory. A spec that does
@@ -575,7 +659,11 @@ def private read_arr(m : GGUFMeta; bytes : array<uint8> | #; name : string) : ar
 [arch(at = "../ARCHITECTURE_TTS.md#tts-padded-input-width")]
 def private read_conv(m : GGUFMeta; bytes : array<uint8> | #; wname, bname : string; rows : bool = false; cin_s : int64 = 0l) : TtsConv1d {
     var c = TtsConv1d()
-    c.w <- read_arr(m, bytes, wname)
+    var stored_as = KqFmt.q8
+    let stored = stored_quant(m, wname, stored_as)
+    if (!stored) {
+        c.w <- read_arr(m, bytes, wname)
+    }
     if (!empty(bname) && gguf_find_tensor(m, bname) >= 0) {
         c.b <- read_arr(m, bytes, bname)
     }
@@ -588,6 +676,17 @@ def private read_conv(m : GGUFMeta; bytes : array<uint8> | #; wname, bname : str
     c.groups = geo[5]
     c.transposed = geo[6] != 0l
     c.output_padding = geo[7]
+    c.served_rows = rows
+    if (stored) {   // the quant matrix as the file stores it: its width hides the channel counts, so the file names them
+        var inscope chans <- stored_conv_chans(m, bytes, wname)
+        if (cin_s > 0l && chans[1] != cin_s) {
+            panic("dasLLAMA styletts2: '{wname}' is stored with {chans[1]} input channels where its block reads {cin_s}")
+        }
+        c.cout = chans[0]
+        c.cin = chans[1]
+        conv1d_read_quant(c, m, bytes, wname, stored_as, g_stage_repack)
+        return <- c
+    }
     let ti = need_tensor(m, wname)
     let cc = conv1d_dims_of(m.tensors[ti].dims, c.transposed, c.groups)
     c.cin = cc.cin
@@ -595,7 +694,6 @@ def private read_conv(m : GGUFMeta; bytes : array<uint8> | #; wname, bname : str
     if (cin_s > 0l) {
         conv1d_pad_cin(c, cin_s)
     }
-    c.served_rows = rows
     let fmt = stage_fmt(wname)
     let quant_cm = st2_group(wname) == "text_encoder"   //! the one group whose channel-major convs take a quant matrix: the others' read a curve or the signal
     if (st2_is_kq(fmt) && (rows || quant_cm) && conv1d_kq_eligible(c)) {
@@ -604,14 +702,30 @@ def private read_conv(m : GGUFMeta; bytes : array<uint8> | #; wname, bname : str
         conv1d_prepare(c, g_stage_q8 && fmt != St2Fmt.f32, g_stage_repack, quant_cm)
     }
     stage_note(wname, fmt, st2_is_kq(fmt) ? c.kq_fmt != 0 : (c.q8 == (fmt == St2Fmt.q8)))
+    capture_conv(wname, c, cc.cin)
     return <- c
 }
 
 def private read_conv_p(m : GGUFMeta; bytes : array<uint8> | #; prefix : string; rows : bool = false; cin_s : int64 = 0l) : TtsConv1d =>
     <- read_conv(m, bytes, "{prefix}.weight", "{prefix}.bias", rows, cin_s)
 
+// a stored conv's [cout, cin, source cin]: its quant matrix's width hides the channel counts, so the file names them
+def private stored_conv_chans(m : GGUFMeta; bytes : array<uint8> | #; wname : string) : array<int64> {
+    let key = "styletts2.stored_conv.{wname}"
+    var chans <- gguf_has(m, key) ? gguf_int_array(m, bytes, key) : array<int64>()
+    if (length(chans) != 3) {
+        panic("dasLLAMA styletts2: '{wname}' is stored quantized and {key} gives {chans} where it names [cout, cin, source cin]")
+    }
+    return <- chans
+}
+
 // the input width a conv will read, from its tensor dims and geometry - known before the read
 def private conv_cin_of(m : GGUFMeta; bytes : array<uint8> | #; wname : string) : int64 {
+    var stored_as = KqFmt.q8
+    if (stored_quant(m, wname, stored_as)) {   // a stored quant matrix's dims are its own: the file names the source width
+        var inscope chans <- stored_conv_chans(m, bytes, wname)
+        return chans[2]
+    }
     var inscope geo <- gguf_int_array(m, bytes, "styletts2.conv.{wname}")
     let ti = need_tensor(m, wname)
     return conv1d_dims_of(m.tensors[ti].dims, geo[6] != 0l, geo[5]).cin
@@ -620,17 +734,30 @@ def private conv_cin_of(m : GGUFMeta; bytes : array<uint8> | #; wname : string) 
 def private read_linear(m : GGUFMeta; bytes : array<uint8> | #; prefix : string; rows_only : bool = false;
                         vec_only : bool = false) : TtsLinear {
     var l = TtsLinear()
-    l.w <- read_arr(m, bytes, "{prefix}.weight")
-    let ti = need_tensor(m, "{prefix}.weight")
+    let wname = "{prefix}.weight"
+    let ti = need_tensor(m, wname)
     l.nin = m.tensors[ti].dims[0]
     l.nout = m.tensors[ti].dims[1]
     if (gguf_find_tensor(m, "{prefix}.bias") >= 0) {
         l.b <- read_arr(m, bytes, "{prefix}.bias")
     }
-    let fmt = stage_fmt("{prefix}.weight")
+    var stored_as = KqFmt.q8
+    if (stored_quant(m, wname, stored_as)) {
+        if (stored_as != KqFmt.q8) {
+            panic("dasLLAMA styletts2: '{wname}' is stored {stored_as}; a dense layer's stored form is Q8_0")
+        }
+        q8_matrix_read(m, bytes, wname, l.nin, l.nout, l.wq, l.wqs, g_stage_repack)
+        l.q8 = true
+        return <- l
+    }
+    l.w <- read_arr(m, bytes, wname)
+    let fmt = stage_fmt(wname)
     linear_prepare(l, rows_only, g_stage_q8 && fmt != St2Fmt.f32, g_stage_repack, vec_only)
     if (!vec_only) {
-        stage_note("{prefix}.weight", fmt, l.q8 == (fmt == St2Fmt.q8))
+        stage_note(wname, fmt, l.q8 == (fmt == St2Fmt.q8))
+        if (l.q8) {
+            capture_q8(wname, l.wq, l.wqs, l.nin * l.nout, [l.nin, l.nout])
+        }
     }
     return <- l
 }
@@ -646,21 +773,42 @@ def private read_norm(m : GGUFMeta; bytes : array<uint8> | #; wname, bname : str
 
 def private read_lstm_dir(m : GGUFMeta; bytes : array<uint8> | #; prefix : string; dir : int64) : TtsLstm {
     var l = TtsLstm()
-    let ti = need_tensor(m, "{prefix}.weight_ih")
+    let ih = "{prefix}.weight_ih"
+    let hh = "{prefix}.weight_hh"
+    let ti = need_tensor(m, ih)
     l.nin = m.tensors[ti].dims[0]
     l.hidden = m.tensors[ti].dims[1] / 4l
     let g4 = 4l * l.hidden
+    l.b |> reserve_resize(g4)
+    gguf_read_tensor_f32(m, bytes, "{prefix}.bias", l.b, 0l, g4, dir * g4)
+    var ih_as = KqFmt.q8
+    var hh_as = KqFmt.q8
+    let ih_stored = stored_quant(m, ih, ih_as)
+    let hh_stored = stored_quant(m, hh, hh_as)
+    if (ih_stored || hh_stored) {   // both directions' rows ride one tensor, a direction's at dir * 4 hidden
+        if (!(ih_stored && hh_stored) || ih_as != KqFmt.q8 || hh_as != KqFmt.q8) {
+            let ih_what = ih_stored ? "{ih_as}" : "floats"
+            let hh_what = hh_stored ? "{hh_as}" : "floats"
+            panic("dasLLAMA styletts2: '{prefix}' stores {ih_what} and {hh_what}; an LSTM's stored form is both its matrices as Q8_0")
+        }
+        q8_matrix_read(m, bytes, ih, l.nin, g4, l.wq_ih, l.wqs_ih, g_stage_repack, dir * g4 * l.nin)
+        q8_matrix_read(m, bytes, hh, l.hidden, g4, l.wq_hh, l.wqs_hh, g_stage_repack, dir * g4 * l.hidden)
+        l.q8 = true
+        return <- l
+    }
     l.w_ih |> reserve_resize(g4 * l.nin)
     l.w_hh |> reserve_resize(g4 * l.hidden)
-    l.b |> reserve_resize(g4)
-    gguf_read_tensor_f32(m, bytes, "{prefix}.weight_ih", l.w_ih, 0l, g4 * l.nin, dir * g4 * l.nin)
-    gguf_read_tensor_f32(m, bytes, "{prefix}.weight_hh", l.w_hh, 0l, g4 * l.hidden, dir * g4 * l.hidden)
-    gguf_read_tensor_f32(m, bytes, "{prefix}.bias", l.b, 0l, g4, dir * g4)
+    gguf_read_tensor_f32(m, bytes, ih, l.w_ih, 0l, g4 * l.nin, dir * g4 * l.nin)
+    gguf_read_tensor_f32(m, bytes, hh, l.w_hh, 0l, g4 * l.hidden, dir * g4 * l.hidden)
     let fmt = stage_fmt("lstm")
     if (g_stage_q8 && fmt == St2Fmt.q8) {
         lstm_prepare_q8(l, g_stage_repack)
     }
     stage_note("lstm", fmt, l.q8 == (fmt == St2Fmt.q8))
+    if (l.q8) {
+        capture_q8(ih, l.wq_ih, l.wqs_ih, g4 * l.nin, m.tensors[ti].dims)
+        capture_q8(hh, l.wq_hh, l.wqs_hh, g4 * l.hidden, m.tensors[need_tensor(m, hh)].dims)
+    }
     return <- l
 }
 
@@ -672,10 +820,10 @@ def private read_bilstm(m : GGUFMeta; bytes : array<uint8> | #; prefix : string)
 }
 
 // a style projection on a quantized lane: Q8_0 where its widths allow and its group asks no f32, after any re-lay of its rows
-def private stage_style_fc(var l : TtsLinear) {
+def private stage_style_fc(var l : TtsLinear; wname : string) {
     let fmt = stage_fmt(".fc")
-    if (g_stage_q8 && fmt != St2Fmt.f32) {
-        linear_vec_prepare_q8(l, g_stage_repack)
+    if (g_stage_q8 && fmt != St2Fmt.f32 && linear_vec_prepare_q8(l, g_stage_repack)) {
+        capture_q8(wname, l.wq, l.wqs, l.nin * l.nout, [l.nin, l.nout])
     }
     stage_note(".fc", fmt, l.q8 == (fmt != St2Fmt.f32))
 }
@@ -686,14 +834,14 @@ def private read_adain(m : GGUFMeta; bytes : array<uint8> | #; prefix : string; 
     a.fc <- read_linear(m, bytes, "{prefix}.fc", vec_only = true)
     a.norm <- read_norm(m, bytes, "{prefix}.norm.weight", "{prefix}.norm.bias")
     adain_pad(a, c, cs)
-    stage_style_fc(a.fc)
+    stage_style_fc(a.fc, "{prefix}.fc.weight")
     return <- a
 }
 
 def private read_adaln(m : GGUFMeta; bytes : array<uint8> | #; prefix : string) : TtsAdaLayerNorm {
     var a = TtsAdaLayerNorm()
     a.fc <- read_linear(m, bytes, "{prefix}.fc", vec_only = true)
-    stage_style_fc(a.fc)
+    stage_style_fc(a.fc, "{prefix}.fc.weight")
     return <- a
 }
 
@@ -847,7 +995,11 @@ def private read_weight(m : GGUFMeta; bytes : array<uint8> | #; name : string) :
 //! into the mint-side carrier: served layouts minted, voices, STFT convention and the family's
 //! driver keys read, every weight moved into the staging blob.
 [arch(at = "../ARCHITECTURE_TTS.md#tts-image-rail")]
-def stage_styletts2(path : string; q8 : bool = false; kq : bool = false) : St2Staging {
+def stage_styletts2(path : string; q8 : bool = false; kq : bool = false) : St2Staging =>
+    <- stage_styletts2_(path, q8, kq, false)
+
+// `for_writer` is the writer's stage: the planes stay in disk order and every minted weight is recorded as its blocks
+def private stage_styletts2_(path : string; q8, kq, for_writer : bool) : St2Staging {
     if (kq && !q8) {
         panic("dasLLAMA styletts2: the recipe lane mints Q8_0 beside its K-quant groups; it is not an f32 lane")
     }
@@ -855,9 +1007,13 @@ def stage_styletts2(path : string; q8 : bool = false; kq : bool = false) : St2St
     st.e.q8 = q8
     st.e.kq = kq
     delete g_stage_minted   // a stage a panic cut short left its counts behind
+    delete g_captured
+    delete g_captured_at
     g_stage_q8 = q8
     g_stage_kq = kq
-    g_stage_repack = q8 && select_matmul_backend_for_load_()
+    g_stage_stored = false
+    g_stage_capture = for_writer
+    g_stage_repack = q8 && !for_writer && select_matmul_backend_for_load_()
     let f = fopen(path, "rb")
     if (f == null) {
         panic("dasLLAMA styletts2: cannot open model '{path}'")
@@ -867,6 +1023,9 @@ def stage_styletts2(path : string; q8 : bool = false; kq : bool = false) : St2St
         st.e.family = gguf_str(m, bytes, "general.architecture")
         if (!gguf_has(m, "styletts2.sample_rate")) {
             panic("dasLLAMA styletts2: '{path}' ({st.e.family}) carries no styletts2 metadata")
+        }
+        if (gguf_has(m, "styletts2.stored_layout") || gguf_has(m, "styletts2.stored_lane")) {
+            stage_stored_lane(m, bytes, path, st.e)
         }
         st.e.name = gguf_str(m, bytes, "general.name")
         st.e.sample_rate = int(gguf_int(m, bytes, "styletts2.sample_rate"))
@@ -881,15 +1040,27 @@ def stage_styletts2(path : string; q8 : bool = false; kq : bool = false) : St2St
         st.e.source.torch_math = gguf_has(m, "styletts2.resample") && gguf_str(m, bytes, "styletts2.resample") == "torch"
         st.e.voice_names <- gguf_str_array(m, bytes, "styletts2.voices")
         for (v in st.e.voice_names) {
-            var inscope pack <- read_arr(m, bytes, "voice.{v}")
-            let fmt = stage_fmt("voice.{v}")
+            let vname = "voice.{v}"
+            var stored_as = KqFmt.q8
+            if (stored_quant(m, vname, stored_as)) {
+                let rows = m.tensors[need_tensor(m, vname)].n_elem / st.e.style_dim
+                if (stored_as != KqFmt.q8) {
+                    panic("dasLLAMA styletts2: '{vname}' is stored {stored_as}; a voice pack's stored form is Q8_0")
+                }
+                q8_matrix_read(m, bytes, vname, st.e.style_dim, rows, st.e.voices_q[v], st.e.voices_qs[v], false)
+                continue
+            }
+            var inscope pack <- read_arr(m, bytes, vname)
+            let fmt = stage_fmt(vname)
             let quant = g_stage_q8 && fmt == St2Fmt.q8 && st.e.style_dim % 32l == 0l
             if (quant) {   // a style row is whole blocks of 32, so a row's scales are its own
-                q8_matrix_mint(pack, st.e.style_dim, long_length(pack) / st.e.style_dim, st.e.voices_q[v], st.e.voices_qs[v], false)
+                let n = long_length(pack)
+                q8_matrix_mint(pack, st.e.style_dim, n / st.e.style_dim, st.e.voices_q[v], st.e.voices_qs[v], false)
+                capture_q8(vname, st.e.voices_q[v], st.e.voices_qs[v], n, [st.e.style_dim, n / st.e.style_dim])
             } else {
                 st.e.voices[v] <- pack
             }
-            stage_note("voice.{v}", fmt, quant == (fmt == St2Fmt.q8))
+            stage_note(vname, fmt, quant == (fmt == St2Fmt.q8))
         }
         stage_family_data(m, bytes, st.e)
         read_albert(m, bytes, st.e.albert)
@@ -900,10 +1071,40 @@ def stage_styletts2(path : string; q8 : bool = false; kq : bool = false) : St2St
     fclose(f)
     stage_report()
     g_stage_kq = false
+    g_stage_stored = false
     var io = TtsBlobIo(staging = true, blob = unsafe(addr(st.blob)), qblob = unsafe(addr(st.qblob)))
     weights_walk(io, st.e)
     return <- st
 }
+
+// A file that stores its weights as minted decides the lane: `e` takes the lane the file names whatever the stage was asked,
+// the readers take each quantized tensor as it is and mint nothing from a float one. A layout this build does not read,
+// and the writer's stage over such a file, are refused.
+[arch(at = "../ARCHITECTURE_TTS_FORMATS.md#tts-stored-file")]
+def private stage_stored_lane(m : GGUFMeta; bytes : array<uint8>#; path : string; var e : StyleTts2Model) {
+    let layout = gguf_has(m, "styletts2.stored_layout") ? gguf_int(m, bytes, "styletts2.stored_layout") : 0l
+    if (layout != ST2_STORED_LAYOUT) {
+        panic("dasLLAMA styletts2: '{path}' stores its weights in layout {layout}; this build reads layout {ST2_STORED_LAYOUT}")
+    }
+    if (g_stage_capture) {
+        panic("dasLLAMA styletts2: '{path}' already stores its weights as minted; the writer takes a file of floats")
+    }
+    let lane = gguf_str_or(m, bytes, "styletts2.stored_lane", "")
+    if (lane != "q8" && lane != "kq") {
+        panic("dasLLAMA styletts2: '{path}' names the stored lane '{lane}'; a file stores the q8 lane or the kq one")
+    }
+    e.q8 = true
+    e.kq = lane == "kq"
+    g_stage_stored = true
+    g_stage_q8 = false
+    g_stage_kq = false
+    g_stage_repack = select_matmul_backend_for_load_()
+}
+
+//! The lane a StyleTTS2-lineage GGUF stores its weights on - "q8" or "kq" - and "" for a file of floats, which mints at
+//! load, or for a path the header read declines.
+[arch(at = "../ARCHITECTURE_TTS_FORMATS.md#tts-stored-file")]
+def styletts2_stored_lane(path : string) : string => gguf_file_str(path, "styletts2.stored_lane")
 
 def private stage_family_data(m : GGUFMeta; bytes : array<uint8>#; var e : StyleTts2Model) {
     if (e.family == "kitten-tts") {
@@ -949,7 +1150,94 @@ def mint_styletts2(var st : St2Staging; var out : StyleTts2Model) {
 def bake_styletts2_image(path, out : string; q8 : bool; kq : bool = false) : bool {
     var inscope st <- stage_styletts2(path, q8, kq)
     var inscope m = StyleTts2Model()
-    return cache_via_image_staged(st, m, out, st2_tag_of(q8, kq))
+    return cache_via_image_staged(st, m, out, st2_tag_of(st.e.q8, st.e.kq))   // a file that stores its weights names its own lane
+}
+
+// The stored file's head (`gguf_rewritten_head`): the source's keys with the stored layout's own after them, and the
+// tensor table with every minted weight retyped.
+def private stored_file_head(m : GGUFMeta; bytes : array<uint8>#; src : string; kq : bool; var head : array<uint8>) {
+    var inscope extra : array<uint8>
+    gguf_kv_u32(extra, "styletts2.stored_layout", uint64(ST2_STORED_LAYOUT))
+    gguf_kv_str(extra, "styletts2.stored_lane", kq ? "kq" : "q8")
+    var convs = 0
+    for (cap in g_captured) {
+        if (!empty(cap.conv)) {
+            gguf_kv_i32_array(extra, "styletts2.stored_conv.{cap.name}", cap.conv)
+            convs++
+        }
+    }
+    var taken = 0
+    gguf_rewritten_head(m, bytes, 2 + convs, extra, head) $(ti : GGUFTensorInfo; var gtype : int&; var dims : array<uint64>; var nbytes : int64&) {
+        let at = g_captured_at?[ti.name] ?? -1
+        return if (at < 0)
+        taken++
+        gtype = g_captured[at].gtype
+        dims := g_captured[at].dims
+        nbytes = long_length(g_captured[at].bytes)
+        var n_elem = 1l
+        for (d in dims) {
+            n_elem *= int64(d)
+        }
+        if (nbytes != ggml_type_bytes(gtype, n_elem)) {
+            panic("dasLLAMA styletts2: '{ti.name}' minted {nbytes} bytes for {dims} of ggml type {gtype}")
+        }
+    }
+    if (taken != length(g_captured)) {
+        panic("dasLLAMA styletts2: {length(g_captured) - taken} minted weights name no tensor of '{src}'")
+    }
+}
+
+// every tensor's bytes to `w` in the table's order, each padded to the alignment; false where a write came up short
+def private stored_file_data(w : file; m : GGUFMeta; bytes : array<uint8>#) : bool {
+    var inscope pad : array<uint8>
+    for (ti in m.tensors) {
+        let at = g_captured_at?[ti.name] ?? -1
+        let nbytes = at >= 0 ? long_length(g_captured[at].bytes) : ggml_type_bytes(ti.ggml_type, ti.n_elem)
+        var wrote = nbytes == 0l
+        if (at >= 0) {
+            wrote = long_fwrite(w, g_captured[at].bytes) == nbytes
+        } elif (nbytes > 0l) {
+            unsafe {
+                wrote = long_fwrite(w, temp_array(addr<uint8?>(bytes[m.data_offset + ti.offset]), nbytes, type<uint8>)) == nbytes
+            }
+        }
+        pad |> resize(round_up(nbytes, m.alignment) - nbytes)
+        return false if (!wrote || long_fwrite(w, pad) != long_length(pad))
+    }
+    return true
+}
+
+//! Write the GGUF at `src` - a StyleTTS2-lineage file of floats - to `dst` with every weight the q8 lane mints stored as
+//! minted, or with `kq` the recipe lane's: each a quant matrix under its tensor's name, the rest and every key as `src`
+//! holds them, the stored layout and lane named. The file serves as stored, with no mint at load. false = not written.
+[arch(at = "../ARCHITECTURE_TTS_FORMATS.md#tts-stored-file"), cold_path]
+def write_styletts2_gguf(src, dst : string; kq : bool) : bool {
+    {
+        var inscope st <- stage_styletts2_(src, true, kq, true)
+    }
+    g_stage_capture = false
+    var written = false
+    let tmp = "{dst}.tmp"
+    let f = fopen(src, "rb")
+    fmap(f) $(var bytes : array<uint8>#) {
+        var inscope m <- parse_gguf_meta(bytes)
+        var inscope head : array<uint8>
+        stored_file_head(m, bytes, src, kq, head)
+        let w = fopen(tmp, "wb")
+        if (w != null) {
+            written = long_fwrite(w, head) == long_length(head) && stored_file_data(w, m, bytes)
+            fclose(w)
+        }
+    }
+    fclose(f)
+    delete g_captured
+    delete g_captured_at
+    if (!written || !rename(tmp, dst)) {
+        remove(tmp)
+        to_log(LOG_ERROR, "dasLLAMA styletts2: '{dst}' was not written - an unwritable path, or a full disk\n")
+        return false
+    }
+    return true
 }
 
 //! Load a converted StyleTTS2-lineage GGUF through its prepared image on the current lane (the sibling `.dlim` maps when it
@@ -958,11 +1246,12 @@ def bake_styletts2_image(path, out : string; q8 : bool; kq : bool = false) : boo
 [arch(at = "../ARCHITECTURE_TTS.md#tts-image-rail"), arch(at = "../ARCHITECTURE_IMAGE.md#image-identity-backend-order")]
 def load_styletts2(path : string) : StyleTts2Model {
     bump_weights_epoch()   //! the previous model's GPU slabs drop before this one's weights can land at their addresses
-    let q8 = st2_serve_q8()
-    let kq = st2_serve_kq()
     let dlim = path |> ends_with(".dlim")
-    st2_announce_lane(dlim)
-    if (kq && !empty(g_st2_recipe_pin) && !dlim) {   // pinned groups: minted in memory, no image read or written
+    let stored = dlim ? "" : styletts2_stored_lane(path)   // a file that stores its weights as minted serves the lane it names
+    let q8 = !empty(stored) || st2_serve_q8()
+    let kq = empty(stored) ? st2_serve_kq() : stored == "kq"
+    st2_announce_lane(dlim, stored)
+    if (kq && !empty(g_st2_recipe_pin) && !dlim && empty(stored)) {   // pinned groups: minted in memory, no image read or written
         var inscope pinned = StyleTts2Model()
         var inscope st <- stage_styletts2(path, q8, kq)
         mint_styletts2(st, pinned)

@@ -94,8 +94,8 @@ Each companion's sections are anchored by topic; a citation spells `<doc>.md#<an
 - `ARCHITECTURE_IMAGE.md` - the prepared-image rail, the lattice-only
   per-format plane table both halves of the rail skip around, the
   layout stamp `REVIEW.das` keeps over the byte-placing code, the meta-field tripwire every
-  struct serializer opens with, the planar-vs-blob flavor rebake, the per-format slots the
-  interleave identity prints, a mint to a user-named destination, and a host-held image.
+  struct serializer opens with, the planar-vs-blob flavor rebake, the per-format slots the interleave
+  identity prints, a mint to a user-named destination, a host-held image, and the source stamp a load compares.
 - `ARCHITECTURE_GPU_RACE_SHAPES.md` - the tensor-GEMM and fused-attention shapes that measured
   out, the retained reference arms beside them, and the sanctioned float-A stamps.
 - `ARCHITECTURE_GPU_TOWER.md` - the Metal tower attention routes, the Metal tower driver's
@@ -281,10 +281,10 @@ Each companion's sections are anchored by topic; a citation spells `<doc>.md#<an
   (`ARCHITECTURE_CPU_KERNELS.md#q8-activation-forms`).
 
 - `ARCHITECTURE_TTS.md` - the TTS block home's two layouts, tap stacking, the padded concat width, the served carrier
-  on the image rail, the recipe's format a weight group, the sine source's operation order, and the rig's scoring.
-- `ARCHITECTURE_TTS_MEMORY.md` - the per-synthesis carrier, the generator's six buffers, the
-  chunk-sized peak with its cap and the idle release, and the harmonic source streaming in frame
-  windows.
+  on the image rail, the sine source's operation order, and the rig's scoring.
+- `ARCHITECTURE_TTS_FORMATS.md` - the recipe's format a weight group, and the file that stores a lane's weights.
+- `ARCHITECTURE_TTS_MEMORY.md` - the per-synthesis carrier, the generator's six buffers, the chunk-sized peak with
+  its cap and the idle release, and the harmonic source streaming in frame windows.
 - `ARCHITECTURE_DOCS.md` - the HOW_TO document type: its steps, traps and tense, and the gate
   that holds them (`ARCHITECTURE_DOCS.md#howto-documents`).
 - `ARCHITECTURE_POCKET.md` - the Pocket codec's windowed stream, a voice as the backbone's

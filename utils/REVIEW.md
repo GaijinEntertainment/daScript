@@ -49,6 +49,9 @@ answers to `modules/dasLLAMA/REVIEW.md` (repo root) too.**
 **A diff touching a file under this folder that carries `options _dasllama_internal` applies
 `modules/dasLLAMA/REVIEW.md` (repo root) too.**
 
+**A `[test]` file under this folder with a `require dasllama/...` line of its own answers to
+`modules/dasLLAMA/REVIEW.md` (repo root) too.**
+
 **Weakening `REVIEW.das` (beside this file) is a defect: dropping a check, narrowing what a check
 walks, or rewriting a finding text so it no longer names what failed.**
 

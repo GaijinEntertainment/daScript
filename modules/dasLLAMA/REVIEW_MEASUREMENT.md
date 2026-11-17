@@ -65,7 +65,9 @@ no box can mint.
 A board box is a box with a `performance/records/<box>.json`. The release re-mint is a diff that
 runs `performance/gen_bench_records.das` with a release's exe on board boxes and writes their rows.
 A `held` entry is a `performance/records/annotations.json` entry naming a board row and the
-follow-up ledger row that keeps it off the board.
+follow-up ledger row that keeps it off the board. A PR's kind - final or intermediate - and a final
+PR's change are as `tests/REVIEW_RUNS.md` defines them; on a final PR, "a diff" in a rule below is
+its change, and "its PR body" is the body of any PR of its arc.
 
 **A diff that owes a figure from every board box of the author's lists the author's board boxes in
 its PR body.**
@@ -166,12 +168,12 @@ kernel that the same diff neither lands nor names as the Done of a `followup_*.m
 entry - that figure goes in the PR that lands the code.**
 
 **A diff that lets a served turn, or a media encode a turn takes (an image, a video frame or an
-audio chunk), reach code outside the TTS front end that no spawned or manual cell's input reaches
-- a new dispatch arm, a window-size arm inside a path a cell drives at other sizes, or a changed
-default route - adds a spawned cell whose input reaches it, writes that cell's figures from every
-board box of the author's that can mint them into a dated `PERF_LEDGER.md` entry, and names in its
-PR body the `followup_general.md` row under which the release re-mint owes its rows, all in the
-same change.**
+audio chunk), reach code outside the TTS front end that no spawned or manual cell's input reaches -
+a new dispatch arm, a window-size arm inside a path a cell drives at other sizes, or a changed
+default route - adds a spawned cell whose input reaches it and names in its PR body the
+`followup_general.md` row under which the release re-mint owes its rows; an arc's final PR also
+writes that cell's figures from every board box of the author's that can mint them into a dated
+`PERF_LEDGER.md` entry - all in the same change.**
 
 **A change that owes a ledger figure no box of the author's can mint, and that no rule above sends
 to a new spawned cell, names instead, in the same change, an artifact that shows the new code ran end to end - a record, a gate output, an
@@ -179,21 +181,22 @@ instrument's print - or the profile output that shows the change is faster
 (`benchmarks/lcpp_bench.das`'s `forward_profile` rows, or the tier's `DASLLAMA_GPU_PROF=1` token
 ledger), with the flags that run took.**
 
-**A diff that changes `dasllama/dasllama_metal_kernels.das` (the kernel library
+**An arc's final PR whose change alters `dasllama/dasllama_metal_kernels.das` (the kernel library
 `metal_decode_init` compiles), `performance/profile_common.das`, or a `dasllama/` module
 `benchmarks/lcpp_bench.das` requires directly copies into the PR body the `sanity:` lines and the
-`tune gate:` line of an `lcpp_bench` run of the fat exe built from the diff's tree, or says that
-run printed none.** A fat exe is what `daspkg release --fat <class>` builds (`DAS_TUNE_MODE=fat`,
+`tune gate:` line of an `lcpp_bench` run of the fat exe built from the diff's tree, or says that run
+printed none; an intermediate PR whose diff changes one of them says in its body that it ran none.**
+A fat exe is what `daspkg release --fat <class>` builds (`DAS_TUNE_MODE=fat`,
 `ARCHITECTURE_MEASUREMENT_FAT_START.md#fat-first-start`).
 
-**A diff whose PR body, or a line it adds or changes, states that the diff makes an existing
-route - one the tree served before the diff - run faster or do less work, where a rig leg's wall
-includes the changed lines, writes that leg's walls from every board box of the author's that can mint it into
-a dated `PERF_LEDGER.md` entry naming the exe's commit and the command, and names in the PR body
-the `followup_general.md` row under which the release re-mint owes every board box's row.** The
-board is the module's committed record of what a release's exe costs to serve; a kernel win that
-lands in no ledger entry is invisible to the next regression check, and a row minted between
-releases shows a speed no shipped binary gives
+**A diff whose PR body, or a line it adds or changes, states that the diff makes an existing route -
+one the tree served before the diff - run faster or do less work, where a rig leg's wall includes
+the changed lines, names in the PR body the `followup_general.md` row under which the release
+re-mint owes every board box's row; an arc's final PR also writes that leg's walls from every board
+box of the author's that can mint it into a dated `PERF_LEDGER.md` entry naming the exe's commit and
+the command.** The board is the module's committed record of what a release's exe costs to serve; a
+kernel win that lands in no ledger entry is invisible to the next regression check, and a row minted
+between releases shows a speed no shipped binary gives
 (`ARCHITECTURE_MEASUREMENT_RELEASE.md#board-rows-release-boundary`).
 
 **The release re-mint re-mints, on each board box it runs on, every row a `followup_general.md` row
@@ -215,11 +218,13 @@ them, the tokens or rows it divides the wall by, or the reference build it times
 in `benchmarks/setup_lcpp_ref.das`, or anything else deciding which reference binary or environment
 the run measures).
 
-**A cell change deletes each affected row or gives it a `held` entry.**
+**A cell change on an arc's final PR deletes each affected row or gives it a `held` entry.**
 
-**A cell change writes the cell's new figures from every board box of the author's that can mint
-it into a dated `PERF_LEDGER.md` entry beside the old ones, and names in its PR body the
-`followup_general.md` row under which the release re-mint owes the cell's rows.**
+**A cell change names in its PR body the cell and the `followup_general.md` row under which the
+release re-mint owes the cell's rows.**
+
+**A cell change on an arc's final PR writes the cell's new figures from every board box of the
+author's that can mint it into a dated `PERF_LEDGER.md` entry beside the old ones.**
 
 **A `PERF_LEDGER.md` entry that withdraws an earlier entry's figure states the withdrawal's
 reason.**

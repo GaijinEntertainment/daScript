@@ -648,6 +648,20 @@ def private stage_checks(t : T?; tag : string; tr : StyleTts2Trace?; dump : tabl
     stage_diff(t, tag, "gen_in", tr.gen_in, dump)
 }
 
+//! `n_ids` valid token ids through `styletts2_synthesize` in the model's first voice: the ids it fed, the samples it
+//! returns, the samples the timings count, and the wave's level
+[cold_path]
+def styletts2_spoken(m : StyleTts2Model; n_ids : int) : tuple<ids : int; samples : int64; counted : int64; level : tuple<finite : bool; peak : float; rms : float>> {
+    var inscope ids <- [for (i in range(n_ids)); 1 + i % (int(m.n_symbols) - 1)]
+    var inscope style : array<float>
+    styletts2_style(m, m.voice_names[0], 0, style)
+    var inscope noise = TtsNoise()
+    var tm = TtsTimings()
+    var inscope sc = St2Scratch()
+    let samples = styletts2_synthesize(m, ids, style, 1.0, noise, 0x5eedul, null, tm, sc)
+    return (ids = length(ids), samples = samples, counted = tm.samples, level = speech_level(sc.wave))
+}
+
 //! One synthesis's speech read: every sample finite (a NaN compares false, and no speech sample reaches ten), the peak and the rms.
 def speech_level(pcm : array<float>) : tuple<finite : bool; peak : float; rms : float> {
     var finite = true

@@ -370,13 +370,34 @@ def weights_walk(var io : TtsBlobIo; var l : TtsLstm) {
 //! A matrix [nout][nin] of floats as Q8_0 quants and scales, repacked for the backend where `repack` says so; `w` is
 //! dropped. The one Q8_0 mint of the TTS leaves: a conv's quant matrix, a linear's, an LSTM's two, a voice pack.
 def q8_matrix_mint(var w : array<float>; nin, nout : int64; @exact_size var wq : array<int8>; @exact_size var wqs : array<float>; repack : bool) {
+    q8_matrix_seat(nin, nout, wq, wqs, repack) $(var q : array<int8>; var qs : array<float>) {
+        quantize_q8_0_into(w, nout * nin, q, qs, 0l, 0l)
+    }
+    release_plane(w)
+}
+
+// The planes of a Q8_0 matrix [nout][nin] sized, filled by `fill` in disk order, then repacked for the backend where
+// `repack` says so: what a mint from floats and a read of a stored tensor share.
+def private q8_matrix_seat(nin, nout : int64; @exact_size var wq : array<int8>; @exact_size var wqs : array<float>; repack : bool;
+                           fill : block<(var q : array<int8>; var qs : array<float>) : void>) {
     wq |> reserve_resize(nout * nin)
-    wqs |> reserve_resize(nout * nin / 32l)
-    quantize_q8_0_into(w, nout * nin, wq, wqs, 0l, 0l)
+    wqs |> reserve_resize(nout * nin / Q8_BLOCK_ELEMS)
+    invoke(fill, wq, wqs)
     if (repack) {
         repack_q8q8_weight(wq, wqs, 0l, nin, nout)
     }
-    release_plane(w)
+}
+
+//! A matrix [nout][nin] a file stores as Q8_0 - tensor `name`'s blocks from element `src_off` on - taken as quants and
+//! scales, repacked for the backend where `repack` says so: the stored twin of `q8_matrix_mint`, no f32 in between.
+def q8_matrix_read(m : GGUFMeta; bytes : array<uint8> | #; name : string; nin, nout : int64; @exact_size var wq : array<int8>;
+                   @exact_size var wqs : array<float>; repack : bool; src_off : int64 = 0l) {
+    if (nin % Q8_BLOCK_ELEMS != 0l) {
+        panic("dasLLAMA tts: '{name}' is stored Q8_0 with rows of {nin}, which are not whole blocks of {Q8_BLOCK_ELEMS}")
+    }
+    q8_matrix_seat(nin, nout, wq, wqs, repack) $(var q : array<int8>; var qs : array<float>) {
+        gguf_transcode_q8_0(m, bytes, name, q, qs, 0l, 0l, nout * nin, src_off)
+    }
 }
 
 //! Mint an LSTM direction's Q8_0 form - both matrices, each step's input row and state requantized ahead of a q8 GEMV -
@@ -488,17 +509,25 @@ def adain_pad(var a : TtsAdaIn; c, cs : int64) {
     for (v in b) {
         v = 0.0
     }
+    let relay = !empty(a.fc.w)   // a projection a file stores quantized is stored re-laid: its bias and the norm are padded here
+    if (!relay && a.fc.nout != 2l * cs) {
+        panic("dasLLAMA tts: a stored style projection is {a.fc.nout} wide where its block pads {c} channels to {cs}")
+    }
     for (half in range64(2l)) {
         for (ci in range64(c)) {
-            for (i in range64(nin)) {
-                w[(half * cs + ci) * nin + i] = a.fc.w[(half * c + ci) * nin + i]
+            if (relay) {
+                for (i in range64(nin)) {
+                    w[(half * cs + ci) * nin + i] = a.fc.w[(half * c + ci) * nin + i]
+                }
             }
             if (!empty(a.fc.b)) {
                 b[half * cs + ci] = a.fc.b[half * c + ci]
             }
         }
     }
-    a.fc.w <- w
+    if (relay) {
+        a.fc.w <- w
+    }
     if (!empty(a.fc.b)) {
         a.fc.b <- b
     }
@@ -626,25 +655,61 @@ def conv1d_prepare_kq(var c : TtsConv1d; fmt : KqFmt; repack : bool) {
     if (!conv1d_kq_eligible(c)) {
         panic("dasLLAMA tts: the K-quant form takes a dense conv; got groups={c.groups}")
     }
-    let rows = conv1d_quant_rows(c)
-    c.cout_s = c.cout
-    c.kq_k = round_up(conv1d_quant_k(c), KQ_SB_ELEMS)
+    let n = conv1d_size_kq(c, fmt)
     var inscope slab : array<float>
-    slab |> reserve_resize(rows * c.kq_k)
-    for (j in range64(rows)) {
+    slab |> reserve_resize(n)
+    for (j in range64(conv1d_quant_rows(c))) {
         conv1d_quant_row(c, j, slab, j * c.kq_k)
     }
-    let nsb = rows * c.kq_k / KQ_SB_ELEMS
-    c.kq |> reserve_resize(nsb * kq_qsb(fmt))
-    c.ks |> reserve_resize(nsb * kq_ssb(fmt))
-    quantize_kq_plane(fmt, slab, rows * c.kq_k, c.kq, c.ks, 0l)
-    c.kq_fmt = kq_schema_id(fmt)
-    c.kq_repacked = false
-    if (repack && kernel_backend_has_kq()) {
-        repack_kq_weight(c.kq_fmt, c.kq, c.ks, 0l, c.kq_k, rows)
-        c.kq_repacked = true
-    }
+    quantize_kq_plane(fmt, slab, n, c.kq, c.ks, 0l)
+    kq_planes_seat(c, kq_schema_id(fmt), c.kq_k, conv1d_quant_rows(c), repack)
     delete c.w
+}
+
+// A leaf's K-quant planes [rows][k], filled in disk order, named for the format id `fmt_id` and repacked where the
+// backend carries kq kernels: a conv's and a dense layer's one seat.
+def private kq_planes_seat(var leaf; fmt_id : int; k, rows : int64; repack : bool) {
+    leaf.kq_fmt = fmt_id
+    leaf.kq_repacked = false
+    if (repack && kernel_backend_has_kq()) {
+        repack_kq_weight(fmt_id, leaf.kq, leaf.ks, 0l, k, rows)
+        leaf.kq_repacked = true
+    }
+}
+
+// the plane pair of `n` weights in `fmt`, sized
+def private kq_planes_size(fmt : KqFmt; n : int64; @exact_size var kq : array<uint8>; @exact_size var ks : array<uint8>) {
+    kq |> reserve_resize(n / KQ_SB_ELEMS * kq_qsb(fmt))
+    ks |> reserve_resize(n / KQ_SB_ELEMS * kq_ssb(fmt))
+}
+
+// the K-quant row width of the conv's quant matrix set, its planes sized for `fmt`; answers the matrix's element count
+def private conv1d_size_kq(var c : TtsConv1d; fmt : KqFmt) : int64 {
+    c.cout_s = c.cout
+    c.kq_k = round_up(conv1d_quant_k(c), KQ_SB_ELEMS)
+    let n = conv1d_quant_rows(c) * c.kq_k
+    kq_planes_size(fmt, n, c.kq, c.ks)
+    return n
+}
+
+//! Give dense conv `c` - its geometry, `cin` and `cout` set - the quant matrix tensor `name` stores: Q8_0 blocks as the
+//! q8 rows form's planes (`fmt` = `KqFmt.q8`), or the superblocks of a K-quant `fmt` as its planes, repacked for the
+//! backend where `repack` says so. The stored twin of `conv1d_prepare`'s q8 arm and of `conv1d_prepare_kq`.
+[arch(at = "../ARCHITECTURE_TTS.md#tts-tap-stacking")]
+def conv1d_read_quant(var c : TtsConv1d; m : GGUFMeta; bytes : array<uint8> | #; name : string; fmt : KqFmt; repack : bool) {
+    if (!conv1d_kq_eligible(c)) {
+        panic("dasLLAMA tts: '{name}' is stored quantized; the quant matrix is a dense conv's, got groups={c.groups}")
+    }
+    if (fmt == KqFmt.q8) {
+        c.cout_s = c.cout
+        c.q8_k = conv1d_quant_k(c)
+        q8_matrix_read(m, bytes, name, c.q8_k, conv1d_quant_rows(c), c.wq, c.wqs, repack)
+        c.q8 = true
+        return
+    }
+    let n = conv1d_size_kq(c, fmt)
+    gguf_transcode_kq(m, bytes, name, fmt, c.kq, c.ks, 0l, n)
+    kq_planes_seat(c, kq_schema_id(fmt), c.kq_k, conv1d_quant_rows(c), repack)
 }
 
 //! Mint the one served layout of a dense conv and drop what the consumer never reads: the rows
@@ -1414,12 +1479,7 @@ def linear_take_kq(var l : TtsLinear; fmt : int; var kq, ks : array<uint8>; repa
     }
     l.kq <- kq
     l.ks <- ks
-    l.kq_fmt = fmt
-    l.kq_repacked = false
-    if (repack && kernel_backend_has_kq()) {
-        repack_kq_weight(fmt, l.kq, l.ks, 0l, l.nin, l.nout)
-        l.kq_repacked = true
-    }
+    kq_planes_seat(l, fmt, l.nin, l.nout, repack)
     release_plane(l.w)
 }
 
@@ -1429,8 +1489,7 @@ def linear_read_kq(var l : TtsLinear; m : GGUFMeta; bytes : array<uint8> | #; na
     let n = l.nout * l.nin
     var inscope @exact_size kq : array<uint8>
     var inscope @exact_size ks : array<uint8>
-    kq |> reserve_resize(n / KQ_SB_ELEMS * kq_qsb(fmt))
-    ks |> reserve_resize(n / KQ_SB_ELEMS * kq_ssb(fmt))
+    kq_planes_size(fmt, n, kq, ks)
     gguf_transcode_kq(m, bytes, name, fmt, kq, ks, 0l, n)
     linear_take_kq(l, kq_schema_id(fmt), kq, ks, true)
 }

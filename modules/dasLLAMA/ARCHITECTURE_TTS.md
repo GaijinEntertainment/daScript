@@ -4,6 +4,7 @@ The companion `ARCHITECTURE.md` indexes: the TTS file charters (`ARCHITECTURE_TT
 and the mechanisms the TTS files implement. `ARCHITECTURE_COMMON.md` (repo root) is the
 contract. What a synthesis allocates, holds and gives back - the carrier, the generator's
 buffers, the chunk cap and the idle release, the streamed source - is `ARCHITECTURE_TTS_MEMORY.md`.
+The format each weight group serves in, and the file that stores a lane's weights, are `ARCHITECTURE_TTS_FORMATS.md`.
 The text front end - its file charters, the heteronym context, the two-tier phoneme pack, the Russian
 stress-context pass, the stress model's lanes and the WordPiece tables - is
 `ARCHITECTURE_TTS_FRONT_END.md`; the Russian stress pack and the stress tiers that need no model are
@@ -58,7 +59,8 @@ The text front end's charters - `dasllama_textnorm.das`, `dasllama_textnorm_ru.d
   `lstm_transposed`), the two-pass build, every slab key, `tts_style_rows`, the Pocket cache admissions
   (frames, prompt), the voice record and the prompt's residency record, and the decoder shape walks, generic over the driver's record and `tts_note_*`
   hooks. Element offsets only - a driver turns them into its own binding offsets - and no device call.
-- **`dasllama_styletts2.das`** - the StyleTTS2-lineage model both families share: the weight
+- **`dasllama_styletts2.das`** - the StyleTTS2-lineage model both families share, and the writer of the
+  file that stores a lane's weights (`ARCHITECTURE_TTS_FORMATS.md#tts-stored-file`): the weight
   map of the converted GGUF (conv geometry rides as `styletts2.conv.<weight>` metadata, so the
   assembly hardcodes the wiring and reads the shapes; the STFT convention - replicate or reflect
   padding, basis-folded or envelope-normalized inverse, the magnitude epsilon, which
@@ -239,7 +241,7 @@ of `ARCHITECTURE_IMAGE.md#image-destination`'s `load_through_image`; `DASLLAMA_I
 `mint_styletts2` is the suites' off-rail control), as the Pocket family's image does
 (`ARCHITECTURE_POCKET.md#pocket-image`). Three lanes, each its own image. `tts-q8` is what an f32
 file serves with no pin: the rows GEMMs' weights as Q8_0 quants in an int8 plane. `tts-kq` is the
-recipe lane (`ARCHITECTURE_TTS.md#tts-recipe`), served where a load asks for it
+recipe lane (`ARCHITECTURE_TTS_FORMATS.md#tts-recipe`), served where a load asks for it
 (`set_styletts2_recipe`, `dasllama-convert --recipe`): each weight group mints in the recipe's
 format through `stage_fmt`, a K-quant group's dense convs - forward rows, transposed and
 channel-major - taking the K-quant form (`ARCHITECTURE_TTS.md#tts-tap-stacking`) and everything
@@ -257,23 +259,6 @@ planes bind), so the carrier and every struct holding it take an explicit `final
 layout fingerprint refuses a struct-shape change by name; a served-layout change that keeps the
 shape is invisible to it, which is why such a change bumps `IMAGE_VERSION` and why a rows conv
 served from an image older than its layout panics by name rather than indexing an empty array.
-
-### The recipe is what the rig picked, group by group {#tts-recipe}
-
-`st2_recipe_default` names a format for each weight group (`ST2_GROUPS`, a tensor's group read off
-its name by `st2_group`), and each entry is a measurement: `set_styletts2_recipe` asks the lane and
-pins groups in process (`harness/tts_synth.das --small` / `--recipe`, the rig's flags of the same
-names), a load under group pins mints in memory and writes no image, and the stage logs what each
-group asked and how many of its weights minted in it. The decoder stack, the generator's res blocks
-and the text encoder's convs take Q4_K, the transposed upsamplers Q6_K, the noise convs and
-`conv_post` f32 - the first reads the harmonic source and the second writes the spectrum, so a
-block scale over their activations is a noise floor under the audio, as it is in the Pocket codec
-(`ARCHITECTURE_POCKET.md#pocket-q8-file`) - and every other group Q8_0 wherever its widths quantize
-per 32: the voice packs, a style row read back off its own blocks (`styletts2_style`), and the
-LSTMs, a step's input row and state requantized ahead of a q8 GEMV. The lane is the small form, not
-the default: it is a quarter smaller than the q8 lane on Kokoro and a tenth to a seventh slower on
-the CPU chain. The scores each pick rests on, the sizes and the speeds are `PERF_LEDGER.md`'s
-"TTS weight formats" entry.
 
 ### The sine source keeps the reference's operation order {#tts-phase-law}
 

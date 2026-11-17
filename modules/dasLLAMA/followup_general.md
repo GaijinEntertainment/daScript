@@ -2918,7 +2918,11 @@
     so a mint's peak is the source file plus the staged planes: 78 MB of file and 94 MB of image for the 100M Pocket
     K-quant file (`pocket-tts-en-kq.gguf`), 353 MB of file and 101 MB of image for `kokoro-82m.gguf` on its q8 lane
     (`ls -l` on each file and on its prepared image beside it).
-    `refuse_staged_source_past_cap` bounds the source at 1 GiB. Done = the TTS mints writing each plane as its reader
+    `refuse_staged_source_past_cap` bounds the source at 1 GiB. The writer of a file that stores a lane's weights
+    (`write_styletts2_gguf`, `dasllama-convert --gguf`) rides the same staging and holds two things more: every minted
+    weight as its disk blocks until the file is written (93.9 MB for `kokoro-82m-q8.gguf`, 15.7 MB for
+    `kitten-nano-q8.gguf`: the bytes of the written file's quantized tensors), and one mapping of the source its float
+    tensors are copied out of. Done = the TTS mints and that writer writing each plane as its reader
     produces it, through a source opened with `gguf_source_begin`, the staging carrier holding spans and scalars
     alone.
 313. **Pocket's codec convs load as f32 from a file that stores them F16.** Every Pocket file stores the codec's
@@ -2943,3 +2947,9 @@
     (`harness/tts_load_probe.das`, `PERF_LEDGER.md`'s "TTS weight formats" entry). Done = the heap's owners named a
     pack (the stress pack, the stress model, the context model), and each one that is read-only after the load
     served from a mapping, the load's heap figure beside the old one.
+316. **The Pocket English board cells read re-minted files.** `pocket-tts-en-q8.gguf` and `pocket-tts-en-kq.gguf` carry
+    the same weights under new driver keys (the clip trim, the EOS guard, the fade, the character replacements) and a
+    new sha256, so the das rows `records/epyc9r14.json`, `records/gnr.json`, `records/graviton4.json` (cpu/tuned) and
+    `records/m5.json` (metal/tuned, cpu/tuned, cpu/accel) hold for these two files were measured on the files they
+    replace. Done = `gen_bench_records.das -- --workload tts` over the two files on each of the four boxes in the next
+    release re-mint, each row's last board figure beside the new one in that re-mint's `PERF_LEDGER.md` entry.

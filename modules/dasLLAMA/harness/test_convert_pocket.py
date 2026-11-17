@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
 """convert_pocket.py's pure predicates - which tensor lands in which form - with no torch, no
 safetensors and no network: the groups a `--fake` spec names, the `--kq` and head rules, the
-encoder set `--no-cloning` leaves out. The converted files' contents are the das cells' claim
+encoder set `--no-cloning` leaves out, the records of a `tokenizers` file and the files of that
+kind it refuses. The converted files' contents are the das cells' claim
 (tests/test_tts_pocket.das); this file holds the rules that decide them."""
+import json
+import os
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -97,6 +101,78 @@ class PublishedFormTest(unittest.TestCase):
         self.assertFalse(cp.dense_codec_conv(STRIDED, (256, 128, 8), 4, False), "a strided stage")
         self.assertFalse(cp.dense_codec_conv("mimi.decoder.model.5.convtr.convtr.weight", (256, 128, 8), 4, True), "a transposed stage")
         self.assertFalse(cp.dense_codec_conv("mimi.decoder.model.14.conv.weight", (1, 64, 7), 1, False), "the single-channel end")
+
+
+
+def tokenizers_file(**changes):
+    """A `tokenizers` file of the shape the 100M configs pin, with one part swapped per refusal."""
+    j = {"model": {"type": "Unigram", "unk_id": 0, "byte_fallback": True,
+                   "vocab": [["<unk>", 0.0], ["<s>", 0.0], ["</s>", 0.0], ["<0x41>", -9.0], ["\u2581the", -2.5], ["s", -3.25]]},
+         "normalizer": {"type": "Prepend", "prepend": "\u2581"},
+         "pre_tokenizer": {"type": "Metaspace", "replacement": "\u2581", "prepend_scheme": "always", "split": True},
+         "post_processor": None,
+         "added_tokens": [{"id": 0, "content": "<unk>", "special": True}, {"id": 1, "content": "<s>", "special": True},
+                          {"id": 2, "content": "</s>", "special": True}]}
+    for key, value in changes.items():
+        if key == "vocab" or key == "model_type":
+            j["model"]["vocab" if key == "vocab" else "type"] = value
+        else:
+            j[key] = value
+    return j
+
+
+class TokenizerJsonTest(unittest.TestCase):
+    def records(self, **changes):
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "tokenizer.json")
+            with open(path, "w", encoding="utf8") as f:
+                json.dump(tokenizers_file(**changes), f)
+            return cp.tokenizer_json_records(path)
+
+    def test_the_records_are_the_sentencepiece_ones(self):
+        pieces, scores, ttype, spec = self.records()
+        self.assertEqual(pieces, ["<unk>", "<s>", "</s>", "<0x41>", "\u2581the", "s"])
+        self.assertEqual(scores, [0.0, 0.0, 0.0, -9.0, -2.5, -3.25])
+        self.assertEqual(ttype, [2, 3, 3, 6, 1, 1])   # unknown, control, control, byte, normal, normal
+        self.assertEqual(spec, dict(bos=1, eos=2, unk=0, pad=-1, byte_fallback=True, add_dummy_prefix=True, remove_extra_whitespaces=False))
+
+    def test_a_prepend_inside_a_sequence_reads_the_same(self):
+        seq = {"type": "Sequence", "normalizers": [{"type": "Prepend", "prepend": "\u2581"}]}
+        self.assertEqual(self.records(normalizer=seq), self.records())
+
+    def test_a_file_the_unigram_path_cannot_serve_is_refused(self):
+        refused = [dict(model_type="BPE"),
+                   dict(normalizer={"type": "NFKC"}),
+                   dict(normalizer={"type": "Sequence", "normalizers": [{"type": "Prepend", "prepend": "\u2581"}, {"type": "Lowercase"}]}),
+                   dict(pre_tokenizer={"type": "Metaspace", "replacement": "\u2581", "prepend_scheme": "first", "split": True}),
+                   dict(pre_tokenizer={"type": "Metaspace", "replacement": "\u2581", "prepend_scheme": "always", "split": False}),
+                   dict(post_processor={"type": "TemplateProcessing"}),
+                   dict(normalizer={"type": "Prepend", "prepend": "_"}),
+                   dict(pre_tokenizer={"type": "Whitespace"}),
+                   dict(pre_tokenizer={"type": "Metaspace", "replacement": "_", "prepend_scheme": "always", "split": True}),
+                   dict(vocab=[["<unk>", 0.0], ["\u2581of\u2581the", -4.0]])]
+        for change in refused:
+            with self.assertRaises(AssertionError, msg=str(change)):
+                self.records(**change)
+
+    def test_absent_keys_read_as_the_library_defaults(self):
+        split_default = {"type": "Metaspace", "replacement": "\u2581", "prepend_scheme": "always"}
+        self.assertEqual(self.records(pre_tokenizer=split_default), self.records())   # `split` absent is true
+        plain = tokenizers_file()
+        del plain["model"]["byte_fallback"]
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "tokenizer.json")
+            with open(path, "w", encoding="utf8") as f:
+                json.dump(plain, f)
+            self.assertFalse(cp.tokenizer_json_records(path)[3]["byte_fallback"])   # `byte_fallback` absent is false
+        self.assertTrue(self.records()[3]["byte_fallback"])
+
+    def test_the_lookup_table_names_the_reader(self):
+        self.assertIs(cp.tokenizer_reader({"tokenizer": "tokenizers"}), cp.tokenizer_json_records)
+        self.assertIs(cp.tokenizer_reader({"tokenizer": "sentencepiece"}), cp.tokenizer_records)
+        self.assertIs(cp.tokenizer_reader({}), cp.tokenizer_records)
+        with self.assertRaises(AssertionError):
+            cp.tokenizer_reader({"tokenizer": "wordpiece"})
 
 
 if __name__ == "__main__":

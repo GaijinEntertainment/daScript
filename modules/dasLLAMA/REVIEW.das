@@ -1417,8 +1417,8 @@ let private TTS_BLOCKS_FILE = "modules/dasLLAMA/dasllama/dasllama_tts_blocks.das
 // the TTS block file's *_prepare mints, the layout helpers and the layout constants' declaration
 // lines, hashed in file order. A closure change with IMAGE_VERSION unmoved is red; the finding prints the
 // value to re-stamp with.
-let private IMAGE_LAYOUT_STAMP_VERSION = 63
-let private IMAGE_LAYOUT_STAMP_HASH = 0x9b56612074957544ul
+let private IMAGE_LAYOUT_STAMP_VERSION = 64
+let private IMAGE_LAYOUT_STAMP_HASH = 0x7c519daec0fa998aul
 
 // The helpers that decide WHERE bytes land: the page pad, the plane and total sizing, the
 // writer's append / zero-fill / header patch, the header's scalar stores, the lattice
@@ -1431,7 +1431,7 @@ var private LAYOUT_HELPERS <- {
     "pad_to_page", "w_page", "plane_end", "image_total_bytes",
     "w_append", "w_zeros", "w_header", "store_at", "kq_plane_name",
     "blob_push", "weight_slot", "table_slot", "conv1d_weight_row",
-    "conv1d_quant_rows", "conv1d_quant_k", "conv1d_quant_row", "q8_matrix_mint",
+    "conv1d_quant_rows", "conv1d_quant_k", "conv1d_quant_row", "q8_matrix_mint", "q8_matrix_seat", "conv1d_size_kq", "kq_planes_seat", "kq_planes_size",
     "vk_mint_plane", "vk_mint_walk", "vk_mint_sink_append",
     "gg_stream_plane", "gg_job_span", "gg_plane_total", "tower_dev_put", "tower_bake_q8",
     "kq_gather_rows_dev", "pack_iq_dev_row", "wd_gather", "tower_fc_gather_kq_member", "tower_gather_q8_regions",
@@ -1449,7 +1449,7 @@ var private LAYOUT_HELPERS <- {
 // way an edited body does - the closure is deliberately wider than the byte-moving set, and a
 // change that provably moves nothing re-stamps the hash alone.
 var private LAYOUT_CONSTANTS <- {
-    "IMAGE_PAGE", "IMAGE_HEADER_BYTES", "SECTION_TABLE_SLACK",
+    "IMAGE_PAGE", "IMAGE_HEADER_BYTES", "IMAGE_STAMP_AT", "SECTION_TABLE_SLACK",
     "DWRITE_STAGING_BAND", "METAL_BAND_BLOCKS", "BLOB_ALIGN_FLOATS", "TOWER_DEV_ALIGN"
 }
 

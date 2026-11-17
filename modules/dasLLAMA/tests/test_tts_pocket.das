@@ -47,7 +47,9 @@ require _model_tier
 // cell need pocket-tts-en-18m-q8.gguf, and the cap cell skips on a roster of fewer than three
 // voices. The GPU cells skip on a build without a GPU
 // module (das_metal or vulkan) and need a device that serves the tower (they red where a present
-// device declines); the served-lane cells skip unless pocket-tts-en-q8.gguf or pocket-tts-en-kq.gguf is
+// device declines); the language cells run each language's `pocket-tts-<code>-q8.gguf` and its small form
+// `pocket-tts-<code>-kq.gguf`, a form skipping without its file or its `tts_oracle/pocket_<config>/` dumps;
+// the served-lane cells skip unless pocket-tts-en-q8.gguf or pocket-tts-en-kq.gguf is
 // stocked, the served frames cell also unless the oracle carries two voices' stage cases; the
 // cells that hold the CPU chain pin the tower off for their run.
 
@@ -320,8 +322,39 @@ def private pocket_lane_cell(lane : PocketLane; body : block<() : void>) {
 let CODEC_BAR = 2.0e-3    // the codec chain: eleven convs and a transformer of f32 GEMMs in a different order
 let ENCODER_BAR = 2.0e-3
 let FRAME_BAR = 5.0e-3    // one frame teacher-forced: six transformer layers and the head
+let TRIM_BAR = 1.0e-6   //! the prompt trim against the oracle's trimmed clip: the same fade, in float
 
-[test(description = "On the f32 CPU lane the Pocket codec decoder and encoder hold 2e-3 of the oracle's peak, and the voice prompt's frame count and per-layer KV rows hold 5e-3, against the oracle dumps")]
+//! one voice clip of a dump against the oracle's records of it: the prompt trim, the codec encoder over the trimmed clip, the voice state's K/V rows
+def private voice_prompt_cells(t : T?; m : PocketModel; var dump : table<string; TtsDumpTensor>; voice_frames : int; var sc : PocketScratch; tag : string) {
+    var inscope clip : array<float>
+    pocket_prompt_pcm(m, dump["voice_pcm"].f, clip)
+    t |> equal(long_length(clip), long_length(dump["voice_pcm_trimmed"].f), "{tag}: the trimmed clip's length")
+    bar_diff(t, "{tag} prompt trim", clip, dump["voice_pcm_trimmed"].f, TRIM_BAR, BarMetric.absolute)
+    // the input-side control: a clip with one kept sample moved trims to a clip outside the bar
+    var inscope moved := dump["voice_pcm"].f
+    moved[long_length(clip) / 2l] += 0.25
+    var inscope moved_clip : array<float>
+    pocket_prompt_pcm(m, moved, moved_clip)
+    var off = 0
+    for (a, b in moved_clip, dump["voice_pcm_trimmed"].f) {
+        off += abs(a - b) > TRIM_BAR ? 1 : 0
+    }
+    t |> success(off > 0, "{tag} control: the trim of a clip with one sample moved is outside the bar ({off} samples)")
+    var inscope lat : array<float>
+    let frames = int(pocket_encode_latents(m, clip, sc, lat))
+    t |> equal(frames, voice_frames, "{tag}: the trimmed clip's latent frame count")
+    bar_diff(t, "{tag} codec encode", lat, dump["voice_latents"].f, ENCODER_BAR, BarMetric.of_peak)
+    var inscope vs <- pocket_voice_state(m, dump["voice_pcm"].f, sc)
+    t |> equal(int(vs.len), voice_frames + 1, "{tag}: the prompt is the BOS row plus the frames")
+    for (l in range(length(vs.caches))) {
+        let name = "kv_voice_L{l}"
+        continue if (!key_exists(dump, name))
+        var inscope ours <- cache_rows(vs.caches[l], vs.len)
+        bar_diff(t, "{tag} voice kv layer {l}", ours, dump[name].f, FRAME_BAR, BarMetric.of_peak)
+    }
+}
+
+[test(description = "On the f32 CPU lane the Pocket codec decoder and encoder hold 2e-3 of the oracle's peak, the prompt trim 1e-6, and the trimmed prompt's frame count and per-layer KV rows hold 5e-3, against the oracle dumps")]
 def test_pocket_parity(t : T?) {
     let path = gguf_path()
     if (!model_available(t, path)) {
@@ -345,21 +378,9 @@ def test_pocket_parity(t : T?) {
             // the codec decoder over the oracle's own latents, one shot
             var inscope wave : array<float>
             pocket_decode_latents(m, dump["latent"].f, int64(c.n_frames), sc, wave)
-            bar_diff(t, "{tag} codec decode", wave, dump["waveform"].f, CODEC_BAR, BarMetric.of_peak)
-            // the codec encoder and the voice prompt, once per voice
+            bar_diff(t, "{tag} codec decode", wave, dump["waveform_oneshot"].f, CODEC_BAR, BarMetric.of_peak)
             if (voiced < 2) {
-                var inscope lat : array<float>
-                let frames = pocket_encode_latents(m, dump["voice_pcm"].f, sc, lat)
-                t |> equal(int(frames), c.voice_frames, "{tag}: the clip's latent frame count")
-                bar_diff(t, "{tag} codec encode", lat, dump["voice_latents"].f, ENCODER_BAR, BarMetric.of_peak)
-                var inscope vs <- pocket_voice_state(m, dump["voice_pcm"].f, sc)
-                t |> equal(int(vs.len), c.voice_frames + 1, "{tag}: the prompt is the BOS row plus the frames")
-                for (l in range(length(vs.caches))) {
-                    let name = "kv_voice_L{l}"
-                    continue if (!key_exists(dump, name))
-                    var inscope ours <- cache_rows(vs.caches[l], vs.len)
-                    bar_diff(t, "{tag} voice kv layer {l}", ours, dump[name].f, FRAME_BAR, BarMetric.of_peak)
-                }
+                voice_prompt_cells(t, m, dump, c.voice_frames, sc, tag)
                 voiced++
             }
         }
@@ -1240,8 +1261,9 @@ def private kq_lanes_case(t : T?; c : PocketCase; man : PocketManifest; var mk, 
     var inscope x0 := dump["x0"].f
     var inscope hk <- head_over_frames(mk, sc, dump["cond"].f, x0, int64(c.n_frames))
     bar_diff(t, "pocket {c.id} the flow head on Q8_0 blocks vs the oracle's frames", hk, dump["x1"].f, KQ_HEAD_BAR, BarMetric.rel_l2, 2.0)
-    var inscope lat : array<float>
-    let frames = pocket_encode_latents(mf, dump["voice_pcm"].f, sc, lat)   // the f16 file's encoder, f32 weights: the parity rail's own; the kq file's carries Q4_K and Q8_0
+    var inscope lat, clip : array<float>
+    pocket_prompt_pcm(mf, dump["voice_pcm"].f, clip)
+    let frames = pocket_encode_latents(mf, clip, sc, lat)   // the f16 file's encoder, f32 weights: the parity rail's own; the kq file's carries Q4_K and Q8_0
     var inscope stored : array<float>
     mk.voice_latents |> get("alba") $(s) {
         stored := s
@@ -1281,41 +1303,41 @@ let private LANGS <- [PocketLang(code = "de", config = "german", voice = "juerge
                       PocketLang(code = "it", config = "italian", voice = "giovanni"), PocketLang(code = "pt", config = "portuguese", voice = "rafael"),
                       PocketLang(code = "fr", config = "french_24l", voice = "estelle")]
 
-// one language's cells: the tokenizer on its own sentences and the probes, the teacher-forced
-// frames of every stage case on the published file, one sentence through the facade
+// one language's cells on its published file of `form` (q8, or kq - the small form): the tokenizer on its own sentences
+// and the probes, the teacher-forced frames of every stage case, one sentence through the facade
 [cold_path]
-def private language_cells(t : T?; L : PocketLang) {
-    let path = path_join(models_dir(), "pocket-tts-{L.code}-q8.gguf")
+def private language_cells(t : T?; L : PocketLang; form : string) {
+    let path = path_join(models_dir(), "pocket-tts-{L.code}-{form}.gguf")
     let odir = path_join(models_dir(), "tts_oracle/pocket_{L.config}")
     if (!model_available(t, path)) {
         return
     }
     var inscope man <- load_manifest(odir)
     if (empty(man.cases)) {
-        t |> skip("{L.config}: no oracle dumps under {odir}")
+        t |> skip("{L.config} {form}: no oracle dumps under {odir}")
         return
     }
     var inscope fx <- load_tokens_fixture("{get_das_root()}/modules/dasLLAMA/tests/_tts_fixtures/pocket_tokens_{L.config}.json")
     var inscope m <- pocket_minted(path)
-    t |> equal(m.lang, L.code, "{L.config}: the language code")
-    t |> equal(m.default_voice, L.voice, "{L.config}: the default voice")
-    t |> equal(length(m.voice_names), 1, "{L.config}: one bundled voice")
+    t |> equal(m.lang, L.code, "{L.config} {form}: the language code")
+    t |> equal(m.default_voice, L.voice, "{L.config} {form}: the default voice")
+    t |> equal(length(m.voice_names), 1, "{L.config} {form}: one bundled voice")
     var bad = 0
     for (r in fx.rows) {
         var inscope ours <- pocket_text_ids(m, r.prepared)
         if (!ids_equal(ours, r.ids)) {
             bad++
-            to_log(LOG_ERROR, "pocket {L.config} tokens {r.id} '{r.prepared}': ours [{ids_text(ours)}] '{spm_decode_ids(m.tok, ours)}' reference [{ids_text(r.ids)}]\n")
+            to_log(LOG_ERROR, "pocket {L.config} {form} tokens {r.id} '{r.prepared}': ours [{ids_text(ours)}] '{spm_decode_ids(m.tok, ours)}' reference [{ids_text(r.ids)}]\n")
         }
     }
     for (p in fx.probes) {
         var inscope ours <- pocket_text_ids(m, p.text)
         if (!ids_equal(ours, p.ids)) {
             bad++
-            to_log(LOG_ERROR, "pocket {L.config} probe '{p.text}': ours [{ids_text(ours)}] '{spm_decode_ids(m.tok, ours)}' reference [{ids_text(p.ids)}]\n")
+            to_log(LOG_ERROR, "pocket {L.config} {form} probe '{p.text}': ours [{ids_text(ours)}] '{spm_decode_ids(m.tok, ours)}' reference [{ids_text(p.ids)}]\n")
         }
     }
-    t |> equal(bad, 0, "{L.config}: sentences and probes whose ids differ from the reference")
+    t |> equal(bad, 0, "{L.config} {form}: sentences and probes whose ids differ from the reference")
     var inscope sc = PocketScratch()
     var cases = 0
     for (c in man.cases) {
@@ -1326,22 +1348,22 @@ def private language_cells(t : T?; L : PocketLang) {
         // teacher forcing keeps the frames comparable up to the shorter of the two runs
         let ours = long_length(lat) / m.latent_dim
         let theirs = long_length(dump["latent"].f) / m.latent_dim
-        t |> success(abs(ours - theirs) <= 2l, "{L.config} {c.id}: {ours} frames against the oracle's {theirs}")
+        t |> success(abs(ours - theirs) <= 2l, "{L.config} {form} {c.id}: {ours} frames against the oracle's {theirs}")
         let n = min(long_length(lat), long_length(dump["latent"].f))
         var inscope a <- copy_span(lat, 0l, n)
         var inscope b <- copy_span(dump["latent"].f, 0l, n)
-        bar_diff(t, "pocket {L.config} {c.id} latents (teacher-forced)", a, b, Q8_RMS_BAR, BarMetric.rel_l2, rms(b))
-        t |> success(speech_level(sc.wave).rms > 0.01, "{L.config} {c.id}: the decoded frames carry speech")
+        bar_diff(t, "pocket {L.config} {form} {c.id} latents (teacher-forced)", a, b, Q8_RMS_BAR, BarMetric.rel_l2, rms(b))
+        t |> success(speech_level(sc.wave).rms > 0.01, "{L.config} {form} {c.id}: the decoded frames carry speech")
         cases++
     }
-    t |> success(cases > 0, "{L.config}: {cases} oracle cases ran")
+    t |> success(cases > 0, "{L.config} {form}: {cases} oracle cases ran")
     var inscope tm <- pocket_tts_minted(path)
     var inscope c2 <- caps(tm)
-    t |> equal(c2.langs[0], L.code, "{L.config}: the facade reports the language")
+    t |> equal(c2.langs[0], L.code, "{L.config} {form}: the facade reports the language")
     var inscope a <- synthesize(tm, fx.rows[0].prepared, L.voice)
     let st = speech_level(a.pcm)
-    t |> success(st.finite && st.rms > 0.01, "{L.config}: '{fx.rows[0].prepared}' speaks ({length(a.pcm)} samples, rms {st.rms})")
-    to_log(LOG_INFO, "pocket {L.config}: {timings_line(a.timings, a.sample_rate)}\n")
+    t |> success(st.finite && st.rms > 0.01, "{L.config} {form}: '{fx.rows[0].prepared}' speaks ({length(a.pcm)} samples, rms {st.rms})")
+    to_log(LOG_INFO, "pocket {L.config} {form}: {timings_line(a.timings, a.sample_rate)}\n")
 }
 
 [test(description = "The f16 Pocket file's F16 text table serves unpinned as the file's halfwords with no f32 copy, a prompt's rows the pinned f32 lane's bit for bit, and the rows of the next token ids differing as the control")]
@@ -1379,11 +1401,13 @@ def test_pocket_f16_table(t : T?) {
     }
 }
 
-[test(description = "Each of the five other-language Pocket Q8_0 files reports its code and one default voice, tokenizes its corpus and probes id for id with the reference, holds teacher-forced latents at rel-l2 0.5 within 2 frames, and speaks through the facade")]
+[test(description = "Each of the five other-language Pocket files, the Q8_0 one and its K-quant small form, reports its code and one default voice, tokenizes its corpus and probes id for id with the reference, holds teacher-forced latents at rel-l2 0.5 within 2 frames, and speaks through the facade")]
 def test_pocket_languages(t : T?) {
     with_dasllama_jobque_() {
         for (L in LANGS) {
-            language_cells(t, L)
+            for (form in fixed_array("q8", "kq")) {
+                language_cells(t, L, form)
+            }
         }
     }
 }
@@ -1409,7 +1433,6 @@ let private REWARD_TUNED_TWINS <- ["pocket-tts-en-18m-refl-q8", "pocket-tts-en-7
 
 def private small_fixture_path() : string => "{get_das_root()}/modules/dasLLAMA/tests/_tts_fixtures/pocket_tokens_english_2026-10.json"
 
-let TRIM_BAR = 1.0e-6   //! the prompt trim against the oracle's trimmed clip: the same fade, in float
 
 //! the small model's shape as the file declares it, and the 4.0.1 driver rules the converter wrote
 def private small_shape_cells(t : T?; m : PocketModel; S : PocketSmall) {
@@ -1471,22 +1494,7 @@ def private small_parity_cells(t : T?; m : PocketModel; S : PocketSmall; man : P
         let tag = "{S.config} {c.id} {c.voice}"
         var inscope dump <- load_tts_dump(path_join(odir, c.file))
         if (done == 0) {
-            var inscope clip : array<float>
-            pocket_prompt_pcm(m, dump["voice_pcm"].f, clip)
-            t |> equal(long_length(clip), long_length(dump["voice_pcm_trimmed"].f), "{tag}: the trimmed clip's length")
-            bar_diff(t, "{tag} prompt trim", clip, dump["voice_pcm_trimmed"].f, TRIM_BAR, BarMetric.absolute)
-            var inscope lat : array<float>
-            let frames = int(pocket_encode_latents(m, clip, sc, lat))
-            t |> equal(frames, c.voice_frames, "{tag}: the trimmed clip's latent frame count")
-            bar_diff(t, "{tag} codec encode", lat, dump["voice_latents"].f, ENCODER_BAR, BarMetric.of_peak)
-            var inscope vs <- pocket_voice_state(m, dump["voice_pcm"].f, sc)
-            t |> equal(int(vs.len), c.voice_frames + 1, "{tag}: the prompt is the BOS row plus the frames")
-            for (l in range(length(vs.caches))) {
-                let name = "kv_voice_L{l}"
-                continue if (!key_exists(dump, name))
-                var inscope ours <- cache_rows(vs.caches[l], vs.len)
-                bar_diff(t, "{tag} voice kv layer {l}", ours, dump[name].f, FRAME_BAR, BarMetric.of_peak)
-            }
+            voice_prompt_cells(t, m, dump, c.voice_frames, sc, tag)
         }
         var inscope wave : array<float>
         pocket_decode_latents(m, dump["latent"].f, int64(c.n_frames), sc, wave)
@@ -1734,8 +1742,6 @@ def test_pocket_facade(t : T?) {
         t |> equal(c.langs[0], "en")
         t |> equal(c.voice_langs[0], "en")
         t |> equal(tts_voice_lang(m, "alba"), "en")
-        t |> success(m.pocket.min_frames_before_eos == 0l && m.pocket.fade_in_samples == 0l && !m.pocket.prompt_end_on_pause,
-            "a file minted before the driver keys reads no EOS guard, no fade and no prompt trim - what its oracle ran")
         // the chunker: the reference's own chunk lists over multi-sentence texts
         var inscope fx <- load_tokens_fixture()
         chunk_probes(t, m, fx, "english_2026-04")

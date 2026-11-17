@@ -80,6 +80,12 @@ def run_main(argv):
 
 
 class FetchTest(unittest.TestCase):
+    def test_an_entry_is_fetched_at_the_commit_it_pins_and_at_main_without_one(self):
+        entry = {"file": "m.gguf", "repo": "someone/models", "sha256": sha(b"x")}
+        self.assertEqual(mint_models.entry_url(entry), "https://huggingface.co/someone/models/resolve/main/m.gguf")
+        pinned = dict(entry, rev="0123abcd")
+        self.assertEqual(mint_models.entry_url(pinned), "https://huggingface.co/someone/models/resolve/0123abcd/m.gguf")
+
     def test_a_cached_file_is_verified_before_it_is_trusted(self):
         with tempfile.TemporaryDirectory() as tmp:
             data = b"model bytes"

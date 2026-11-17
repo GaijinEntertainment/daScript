@@ -407,7 +407,11 @@ those planes as they are through the engine's K-quant kernels, a third lane,
 while a pin to q8 or f32 requantizes or dequantizes them at load.
 
 ``tts_serves_q8`` answers which lane the next load takes. ``set_tts_q8`` pins
-it, and ``reset_tts_q8`` returns to the default. The pin is process-wide
+it, and ``reset_tts_q8`` returns to the default. A KittenTTS or Kokoro file
+published already quantized ignores the pin: ``kokoro-82m-q8.gguf`` holds the
+q8 lane's weights and ``kokoro-82m-kq.gguf`` a smaller mix of Q4_K, Q6_K and
+Q8_0, and each serves what it holds. A Pocket file follows the pin. The pin is
+process-wide
 state, so it must not outlive the load it was set for: a stale pin changes the
 lane of the next model this process loads. Pin through ``defer`` and every path
 out resets it, a panic included.

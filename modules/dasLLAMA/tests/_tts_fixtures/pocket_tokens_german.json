@@ -1,34 +1,47 @@
 {
  "language": "german",
- "revision": "39592ff23c9ef80098bb74895d104c26275fe2c9",
+ "revision": "3e82814a68665eec246ff649b14c71331f955c06",
+ "replace_characters": {
+  "\"": "",
+  "“": "",
+  "”": "",
+  "„": "",
+  "«": "",
+  "»": "",
+  "’": "'",
+  "‘": "'",
+  "(": "",
+  ")": "",
+  "[": "",
+  "]": "",
+  "–": ",",
+  "—": ","
+ },
  "rows": [
   {
    "id": "de001",
    "prepared": "Der schnelle braune Fuchs springt über den faulen Hund.",
    "frames_after_eos": 3,
    "ids": [
-    532,
-    373,
-    711,
-    264,
-    260,
-    3042,
-    836,
-    264,
-    447,
-    1112,
-    269,
-    260,
-    2627,
-    276,
-    333,
-    292,
-    260,
-    1602,
-    736,
+    359,
+    327,
+    814,
     263,
-    1335,
-    262
+    260,
+    2694,
+    263,
+    3965,
+    260,
+    2411,
+    273,
+    318,
+    275,
+    260,
+    865,
+    643,
+    262,
+    1704,
+    269
    ]
   },
   {
@@ -36,17 +49,17 @@
    "prepared": "Guten Morgen, wie geht es Ihnen heute?",
    "frames_after_eos": 3,
    "ids": [
-    1342,
-    263,
+    1130,
+    262,
     260,
-    2329,
+    876,
     261,
-    308,
-    404,
-    279,
-    2278,
-    513,
-    324
+    301,
+    1053,
+    293,
+    908,
+    1029,
+    348
    ]
   },
   {
@@ -54,24 +67,25 @@
    "prepared": "Die Bibliothek öffnet um neun Uhr und schließt um sechs.",
    "frames_after_eos": 3,
    "ids": [
-    395,
-    1799,
-    459,
-    620,
-    2959,
-    418,
+    340,
+    1430,
+    910,
+    1762,
+    1135,
+    375,
     260,
-    2916,
-    357,
-    3187,
-    1551,
-    266,
-    373,
-    2622,
-    276,
-    357,
-    1553,
-    262
+    1745,
+    319,
+    1060,
+    270,
+    1712,
+    264,
+    327,
+    773,
+    273,
+    319,
+    1957,
+    269
    ]
   }
  ],
@@ -79,8 +93,7 @@
   {
    "text": "Der schnelle braune Fuchs springt über den faulen Hund. Guten Morgen, wie geht es Ihnen heute? Die Bibliothek öffnet um neun Uhr und schließt um sechs.",
    "chunks": [
-    "Der schnelle braune Fuchs springt über den faulen Hund. Guten Morgen, wie geht es Ihnen heute?",
-    "Die Bibliothek öffnet um neun Uhr und schließt um sechs."
+    "Der schnelle braune Fuchs springt über den faulen Hund. Guten Morgen, wie geht es Ihnen heute? Die Bibliothek öffnet um neun Uhr und schließt um sechs."
    ]
   }
  ],
@@ -88,67 +101,75 @@
   {
    "text": "Hello world, this is a test of 3.14 kg.",
    "ids": [
-    2967,
-    962,
-    363,
-    388,
-    1685,
+    2542,
+    451,
+    422,
+    304,
+    355,
+    328,
     261,
     260,
-    1057,
-    657,
+    273,
+    312,
+    587,
     260,
-    657,
+    587,
     260,
-    475,
+    516,
     260,
-    1351,
-    1931,
+    287,
+    306,
     260,
-    511,
-    262,
-    368,
-    580,
-    1076,
-    450,
-    262
+    451,
+    352,
+    260,
+    55,
+    269,
+    53,
+    56,
+    1073,
+    353,
+    269
    ]
   },
   {
    "text": "The café served crème brûlée 😀 to Москва.",
    "ids": [
-    1469,
+    1191,
+    263,
     260,
-    1400,
-    412,
+    2925,
+    352,
     199,
     173,
     260,
-    269,
-    274,
-    1468,
-    399,
+    265,
+    268,
+    753,
+    263,
+    328,
     260,
-    542,
-    388,
+    743,
+    304,
     199,
     172,
-    642,
+    824,
     260,
-    1580,
+    331,
+    304,
     199,
     191,
-    413,
+    355,
     199,
     173,
-    264,
+    263,
     260,
     244,
     163,
     156,
     132,
     260,
-    866,
+    1323,
     260,
     212,
     160,
@@ -162,14 +183,14 @@
     182,
     212,
     180,
-    262
+    269
    ]
   },
   {
    "text": "a",
    "ids": [
     260,
-    475
+    516
    ]
   },
   {
@@ -178,18 +199,19 @@
     260,
     260,
     260,
-    683,
-    2036,
-    335,
+    265,
+    1048,
+    743,
+    295,
     260,
     260,
     260,
-    264,
-    478,
-    405,
-    488,
-    749,
-    264,
+    263,
+    568,
+    444,
+    425,
+    600,
+    263,
     260,
     260
    ]
@@ -197,38 +219,101 @@
   {
    "text": "ALL CAPS SHOUTING",
    "ids": [
-    434,
-    1033,
-    1033,
-    674,
-    681,
-    696,
-    577,
-    346,
-    1341,
-    1431,
-    2031,
-    858,
-    1201,
-    1383,
-    973
+    437,
+    2645,
+    2645,
+    891,
+    1823,
+    3993,
+    2311,
+    376,
+    3304,
+    2119,
+    1828,
+    2455,
+    1680,
+    1657,
+    3443
    ]
   },
   {
    "text": "tabs\tand\nnewlines",
    "ids": [
     260,
-    276,
-    677,
-    269,
+    273,
+    751,
+    265,
     13,
-    956,
+    1101,
     14,
-    658,
-    488,
-    2629,
-    269
+    270,
+    263,
+    425,
+    1478,
+    295
    ]
+  }
+ ],
+ "prepared": [
+  {
+   "text": "hello world",
+   "prepared": "Hello world.",
+   "frames_after_eos": 5
+  },
+  {
+   "text": "Well,",
+   "prepared": "Well.",
+   "frames_after_eos": 5
+  },
+  {
+   "text": "(he left)",
+   "prepared": "He left.",
+   "frames_after_eos": 5
+  },
+  {
+   "text": "She said \"go\"",
+   "prepared": "She said go.",
+   "frames_after_eos": 5
+  },
+  {
+   "text": "wait —",
+   "prepared": "Wait.",
+   "frames_after_eos": 5
+  },
+  {
+   "text": "10%",
+   "prepared": "10%.",
+   "frames_after_eos": 5
+  },
+  {
+   "text": "Really?!",
+   "prepared": "Really?!",
+   "frames_after_eos": 5
+  },
+  {
+   "text": "“Hi?”, she said; then left",
+   "prepared": "Hi? she said, then left.",
+   "frames_after_eos": 3
+  },
+  {
+   "text": "don’t stop",
+   "prepared": "Don't stop.",
+   "frames_after_eos": 5
+  },
+  {
+   "text": "a–b",
+   "prepared": "A,b.",
+   "frames_after_eos": 5
+  },
+  {
+   "text": "ends on a quote.\"",
+   "prepared": "Ends on a quote.",
+   "frames_after_eos": 5
+  },
+  {
+   "text": "x",
+   "prepared": "X.",
+   "frames_after_eos": 5
   }
  ]
 }

@@ -595,13 +595,7 @@ def private read_linear(m : GGUFMeta; bytes : array<uint8> | #; prefix : string;
     }
     if (g_stage_q8 && is_q8_tensor(m, wname)) {
         // a vector-only layer the file stores Q8_0 (the flow head) takes the blocks too: its GEMV runs on the q8 lane
-        let n = l.nout * l.nin
-        l.wq |> reserve_resize(n)
-        l.wqs |> reserve_resize(n / 32l)
-        gguf_transcode_q8_0(m, bytes, wname, l.wq, l.wqs, 0l, 0l, n)
-        if (g_stage_repack) {
-            repack_q8q8_weight(l.wq, l.wqs, 0l, l.nin, l.nout)
-        }
+        q8_matrix_read(m, bytes, wname, l.nin, l.nout, l.wq, l.wqs, g_stage_repack)
         l.q8 = true
         return <- l
     }

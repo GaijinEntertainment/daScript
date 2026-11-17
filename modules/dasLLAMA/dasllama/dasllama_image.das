@@ -41,14 +41,14 @@ require dasllama/dasllama_gemm_schema   // the q8 block geometry the mint's zero
 // WhisperModel.enc) contribute their planes under dotted names ("enc.fblob"); string-array
 // fields ride the meta blob via serialize_strings — raw string pointers can't be planes.
 
-let IMAGE_VERSION = 63   // a trimmed lane keeps the bf16 projection plane and serves the per-layer-embedding and biased-expert models
+let IMAGE_VERSION = 64   // the header records a stamp of the source the image was minted from
 
 //! The metal (blob-only) flavor's identity tag: q8 planes ride the 34B block_q8_0 blob and the
 //! kq scale planes their GPU forms (convert_model_to_metal_blob) — flavors are per-config and
 //! self-sufficient, so the tag keeps the two flavors' files and identities apart.
 let METAL_IMAGE_TAG = "metal"
 let IMAGE_PAGE = 16384l
-let IMAGE_HEADER_BYTES = 64l     // magic..layout fingerprint, inside page 0
+let IMAGE_HEADER_BYTES = 64l     // magic..source stamp, inside page 0
 let IMAGE_MAGIC = 0x314D4C44u    // 'DLM1'
 
 // public only for the save_image/load_image generics — they instantiate from caller modules
@@ -181,6 +181,115 @@ struct DlimPeek {
     identity : string
     config_json : string
     layout : uint64       //!< the header's meta-layout fingerprint - what parse_image refuses on
+    source_moved : bool   //!< a source stands beside the image and is not the one it was minted from
+}
+
+let private IMAGE_STAMP_AT = 56l      //! the header's source stamp
+let private STAMP_WINDOWS = 16ul
+let private STAMP_WINDOW = 65536ul
+
+//! The file or directory the image named `<source>.<lane>.dlim` stands beside, or "" where the name spells no lane or
+//! nothing is there.
+[arch(at = "../ARCHITECTURE_IMAGE.md#image-source-stamp")]
+def image_source_beside(img : string) : string {
+    return "" if (!(img |> ends_with(".dlim")))
+    let named = stem(base_name(img))
+    return "" if (empty(extension(named)))
+    let source = path_join(dir_name(img), stem(named))
+    return stat(source).is_valid ? source : ""
+}
+
+//! the bytes of `[at, at + n)` folded into `h`, a word at a time and the last few a byte at a time; `at` sits on a word
+def private stamp_span(bp : uint8 const?; at, n : uint64; h : uint64) : uint64 {
+    var acc = h
+    let words = int64(n >> 3ul)
+    unsafe {
+        let wp = reinterpret<uint64 const?>(bp + int64(at))
+        for (i in range64(words)) {
+            acc = hash_combine64(acc, wp[i])
+        }
+        for (i in range64(words << 3l, int64(n))) {
+            acc = hash_combine64(acc, uint64(bp[int64(at) + i]))
+        }
+    }
+    return acc
+}
+
+//! A stamp of the file at `path`: its size, then the whole file where it is no longer than sixteen 64 KiB windows, else
+//! those windows spread from its first byte to its last. 0 where the file does not map.
+def private file_stamp(path : string) : uint64 {
+    var size = 0ul
+    var base : void?
+    unsafe {
+        base = fmap_open(path, addr(size))
+    }
+    return 0ul if (base == null)
+    let bp = unsafe(reinterpret<uint8 const?>(base))
+    var h = hash_combine64(STAMP_WINDOW, size)
+    if (size <= STAMP_WINDOWS * STAMP_WINDOW) {
+        h = stamp_span(bp, 0ul, size, h)
+    } else {
+        let last = size - STAMP_WINDOW
+        for (i in urange64(STAMP_WINDOWS)) {
+            let at = (last * i / (STAMP_WINDOWS - 1ul)) & ~7ul
+            h = stamp_span(bp, at, i + 1ul == STAMP_WINDOWS ? size - at : STAMP_WINDOW, h)
+        }
+    }
+    unsafe(fmap_close(base, size))
+    return h
+}
+
+//! the files a source is read from, in name order: a directory's entries, a split GGUF's shards, else the file itself
+def private source_files(source : string; is_dir : bool) : array<string> {
+    if (!is_dir) {
+        var shards <- gguf_split_paths(source, true)
+        if (empty(shards)) {
+            shards |> push(source)
+        }
+        return <- shards
+    }
+    var files : array<string>
+    dir(source) $(name : string) {
+        if (name != "." && name != "..") {
+            files |> push(path_join(source, name))
+        }
+    }
+    sort(files)
+    return <- files
+}
+
+//! The stamp an image records of its source and a load compares: a split GGUF's shards and a directory's files in name
+//! order, each by its size and sampled bytes; any other file by its own. 0 where nothing is there to read.
+[arch(at = "../ARCHITECTURE_IMAGE.md#image-source-stamp")]
+def image_source_stamp(source : string) : uint64 {
+    let st = stat(source)
+    return 0ul if (!st.is_valid)
+    var files <- source_files(source, st.is_dir)
+    var h = uint64(long_length(files))
+    for (f in files) {
+        h = hash_combine64(h, file_stamp(f))
+    }
+    delete files
+    return h == 0ul ? 1ul : h
+}
+
+//! Whether the image at `img`, its header at `bp`, was minted from another source than the one beside it now. An image
+//! that recorded no stamp, or stands beside no source, answers false.
+[arch(at = "../ARCHITECTURE_IMAGE.md#image-source-stamp")]
+def private image_source_moved(bp : uint8 const?; img : string) : bool {
+    let minted_from = read_u64(bp, IMAGE_STAMP_AT)
+    return false if (minted_from == 0ul)
+    let source = image_source_beside(img)
+    return !empty(source) && image_source_stamp(source) != minted_from
+}
+
+//! Panics where the image named by `path` declines because its source was replaced beside it: the one decline of a named
+//! image that moving a file settles, so it is named apart from the box's identity.
+[arch(at = "../ARCHITECTURE_IMAGE.md#image-source-stamp")]
+def refuse_moved_source(path : string) {
+    if (image_peek(path).source_moved) {
+        panic("dasLLAMA: '{path}' was minted from another file than '{image_source_beside(path)}', which stands beside it now - regenerate the image from that source, or keep it apart from it")
+    }
 }
 
 //! the leading 64 KiB of the meta blob at `meta_off`, read through `read`; answers whether the reads stayed inside it
@@ -208,8 +317,9 @@ def image_peek(path : string) : DlimPeek {
     unsafe {
         base = fmap_open(path, addr(msize))
     }
-    let p = image_peek_memory(base, msize)
+    var p = image_peek_memory(base, msize)
     if (base != null) {
+        p.source_moved = p.valid && image_source_moved(unsafe(reinterpret<uint8 const?>(base)), path)
         unsafe(fmap_close(base, msize))
     }
     return p
@@ -475,6 +585,9 @@ def dlim_image_verdict(p : DlimPeek; current : table<string>) : string {
     if (dlim_layout_stale(p)) {
         return "STALE layout"
     }
+    if (p.source_moved) {
+        return "STALE source"
+    }
     if (key_exists(current, p.identity)) {
         return "CURRENT"
     }
@@ -516,7 +629,8 @@ def dlim_gc_stale(source_path : string; tag : string = ""; quant : string = "q8"
     var removed = 0
     var freed = 0l
     for (im in inv) {
-        let stale_any = im.verdict == "BROKEN" || (im.verdict |> starts_with("STALE"))
+        // a replaced source may come back under its name, so a save leaves another lane's image of it to the explicit GC
+        let stale_any = im.verdict == "BROKEN" || ((im.verdict |> starts_with("STALE")) && im.verdict != "STALE source")
         let other = im.verdict == "OTHER" || im.verdict == "FOREIGN"
         let same_lane = empty(im.lane) ? dlim_identity_lane(im.identity) == legacy_lane : im.lane == lane
         let lane_dead = other && im.path != keep && same_lane
@@ -539,7 +653,7 @@ def prepared_image_alignment_() : int64 => IMAGE_PAGE
 //! `read_prepared_image`'s engine half (`dasllama_core`): the file at `path` copied into `raw`, `skew` bytes past an
 //! `IMAGE_PAGE` boundary - 0 for an image as a load takes it. Answers the copy's base and size, a null base where the
 //! file does not open. `raw` owns the bytes: it outlives every model that borrows them.
-def read_file_on_image_page_(path : string; var raw : array<uint8>; skew : int64 = 0l) : tuple<base : void?; size : uint64> {
+def read_prepared_image_(path : string; var raw : array<uint8>; skew : int64 = 0l) : tuple<base : void?; size : uint64> {
     let size = stat(path).size
     raw |> reserve(int64(size) + IMAGE_PAGE + skew)
     raw |> resize(int64(size) + IMAGE_PAGE + skew)
@@ -1126,14 +1240,14 @@ def private write_section(var w : ImgWriter; var sections : array<ImgSection>; n
     sections |> push(ImgSection(name = name, off = at, bytes = nbytes))
 }
 
-//! THE image build — every prepared image in the process comes out of this walk, whichever sink it
-//! lands in: planes page-aligned raw (borrowed back at load), everything else archived. `plane`
-//! gets first refusal on each plane by name; `consume` frees each owned plane as it lands.
+//! THE image build — every prepared image in the process comes out of this walk, whichever sink it lands in: planes
+//! page-aligned raw (borrowed back at load), everything else archived. `plane` gets first refusal on each plane by name;
+//! `consume` frees each owned plane as it lands; `beside` is the path the image publishes at, whose source the header stamps.
 [arch(at = "../ARCHITECTURE_IMAGE.md#image-page-alignment"), arch(at = "../ARCHITECTURE_IMAGE.md#dlim-meta-head"),
     arch(at = "../ARCHITECTURE_IMAGE.md#image-sizing-exactness"),
     arch(at = "../ARCHITECTURE_IMAGE.md#image-kq-table-sb-only"),
     arch(at = "../ARCHITECTURE_ENGINE_FORMATS.md#model-plane-table-dim")]
-def private build_image(var t; dst : string; in_mem : bool; extra : uint64;
+def private build_image(var t; dst, beside : string; in_mem : bool; extra : uint64;
                         tag : string; quant : string; consume : bool; layout : uint64;
                         plane : block<(name : string; var w : ImgWriter; var sections : array<ImgSection>) : bool>) : ImgWriter {
     // one config snapshot serves the meta embed AND the header hash — they must agree
@@ -1267,6 +1381,7 @@ def private build_image(var t; dst : string; in_mem : bool; extra : uint64;
         store_at(hdr, 32, fend)
         store_at(hdr, 40, hash(ident))
         store_at(hdr, 48, layout)
+        store_at(hdr, int(IMAGE_STAMP_AT), image_source_stamp(image_source_beside(beside)))
         w.ok = w_header(w, dst, hdr)
         if (!w.ok) {
             to_log(LOG_ERROR, "dasLLAMA image: '{dst}' header write failed - image build aborted\n")
@@ -1355,7 +1470,7 @@ def private save_image_to_file(var t; path : string; extra : uint64; tag : strin
                                plane : block<(name : string; var w : ImgWriter; var sections : array<ImgSection>) : bool>) : bool {
     sweep_image_tmps(path, TMP_STALE_S)
     let tmp_path = tmp_name_for(path)
-    let w = build_image(t, tmp_path, false, extra, tag, quant, false, layout, plane)
+    let w = build_image(t, tmp_path, path, false, extra, tag, quant, false, layout, plane)
     return promote_tmp(tmp_path, path, w.ok && !image_write_faulted(w.cur), w.cur)
 }
 
@@ -1860,6 +1975,10 @@ def private parse_image(base : void?; msize : uint64; path : string; var t; tag 
         to_log(LOG_WARNING, "dasLLAMA image: '{path}' declined - baked for '{read ? baked_ident : "(unreadable)"}', this run is '{want_ident}'\n")
         return false
     }
+    if (image_source_moved(bp, path)) {
+        to_log(LOG_WARNING, "dasLLAMA image: '{path}' declined - '{image_source_beside(path)}' is not the source it was minted from; the load mints it again\n")
+        return false
+    }
     var meta_blob : array<uint8>
     meta_blob |> reserve(int(meta_bytes))
     meta_blob |> resize(int(meta_bytes))
@@ -2025,7 +2144,7 @@ def private adopt_image(base : void?; msize : uint64; src : string; var t; tag :
 def private chunk_rail(var t; var out; save_to : string; extra : uint64; tag : string; quant : string;
                        plane : block<(name : string; var w : ImgWriter; var sections : array<ImgSection>) : bool>) : bool {
     let ts = ref_time_ticks()
-    var w = build_image(t, "", true, extra, tag, quant, true, layout_fingerprint(out), plane)
+    var w = build_image(t, "", save_to, true, extra, tag, quant, true, layout_fingerprint(out), plane)
     if (!w.ok) {
         if (w.chunk_base == null) {
             return false
@@ -2266,6 +2385,7 @@ def load_through_image(path, tag, who, source : string; carrier : auto(T);
         var t = T()
         let named = named_image_tag(path, tag)
         if (!load_image(path, t, named)) {
+            refuse_moved_source(path)
             panic("dasLLAMA: '{path}' is not a prepared {who} image for this box/knobs (identity {image_identity(named)}) - regenerate it from the {source}")
         }
         to_log(LOG_INFO, "dasLLAMA: prepared {who} image mapped in {get_time_usec(ts_img) / 1000} ms - {path}\n")
@@ -2585,6 +2705,7 @@ def load_model_cached(path : string; mode : QuantMode = QuantMode.fp32;
             if (pk.valid && pk.version != IMAGE_VERSION) {
                 panic("dasLLAMA: '{path}' was minted at IMAGE_VERSION {pk.version}, this build reads {IMAGE_VERSION} - re-mint it from the source gguf (dasllama-convert --config for the target build)")
             }
+            refuse_moved_source(path)
             let vk_ident = vk_tag != "" ? " / {image_identity(vk_tag)}" : ""
             panic("dasLLAMA: '{path}' is not a prepared image for this box/knobs (identity {image_identity()} / {image_identity(METAL_IMAGE_TAG)}{vk_ident}) - regenerate it from the source gguf")
         }

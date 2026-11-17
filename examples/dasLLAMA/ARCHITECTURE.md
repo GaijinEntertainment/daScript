@@ -145,7 +145,8 @@ that box is the picture - so a shell sizes the canvas element to the letterboxed
 ### The model set is minted for the build that ships it {#model-set-minted}
 
 Each browser example's `models.json` names its source files by Hugging Face repository, file
-and sha256, in three lists: `images` (a GGUF the build bakes into a `.dlim`), `packs` (a
+and sha256 - and by `rev`, the repository commit the file is fetched at, where the entry pins one
+(without it the fetch reads the repository's main) - in three lists: `images` (a GGUF the build bakes into a `.dlim`), `packs` (a
 front-end pack) and `files` (a GGUF that is its own served form - a Pocket TTS file); a fourth
 list, `tree`, names a file the repository itself carries by its repo-relative path and sha256
 (the voice-activity weights). `wasm/mint_models.py`

@@ -1,30 +1,46 @@
 {
  "language": "french_24l",
- "revision": "39592ff23c9ef80098bb74895d104c26275fe2c9",
+ "revision": "3e82814a68665eec246ff649b14c71331f955c06",
+ "replace_characters": {
+  "\"": "",
+  "“": "",
+  "”": "",
+  "„": "",
+  "«": "",
+  "»": "",
+  "’": "'",
+  "‘": "'",
+  ":": ",",
+  "(": "",
+  ")": "",
+  "[": "",
+  "]": "",
+  "–": ","
+ },
  "rows": [
   {
    "id": "fr001",
    "prepared": "Le rapide renard brun saute par-dessus le chien paresseux.",
    "frames_after_eos": 3,
    "ids": [
-    435,
-    1092,
-    269,
-    807,
-    708,
-    1009,
-    363,
-    304,
-    1531,
-    269,
-    309,
-    287,
-    777,
-    271,
-    2459,
-    309,
-    818,
-    700,
+    347,
+    260,
+    3532,
+    322,
+    2906,
+    656,
+    324,
+    310,
+    486,
+    266,
+    299,
+    277,
+    862,
+    268,
+    1708,
+    299,
+    563,
+    611,
     263
    ]
   },
@@ -33,20 +49,20 @@
    "prepared": "Bonjour, comment allez-vous aujourd'hui ?",
    "frames_after_eos": 3,
    "ids": [
-    875,
-    1330,
+    1450,
+    3527,
     261,
-    389,
-    283,
-    788,
-    287,
-    940,
-    274,
-    447,
+    519,
+    304,
+    2064,
+    277,
+    469,
+    301,
+    1143,
     262,
-    437,
+    1040,
     260,
-    348
+    306
    ]
   },
   {
@@ -54,24 +70,22 @@
    "prepared": "La bibliothèque ouvre à neuf heures et ferme à six heures.",
    "frames_after_eos": 3,
    "ids": [
-    480,
-    1682,
-    1525,
-    1702,
-    3769,
+    360,
     260,
-    1665,
-    273,
-    310,
-    1721,
-    260,
-    1467,
-    272,
-    2476,
-    273,
-    1865,
-    260,
-    1467,
+    3697,
+    3483,
+    1286,
+    266,
+    271,
+    2170,
+    457,
+    264,
+    269,
+    1800,
+    271,
+    1104,
+    457,
+    264,
     263
    ]
   }
@@ -80,8 +94,7 @@
   {
    "text": "Le rapide renard brun saute par-dessus le chien paresseux. Bonjour, comment allez-vous aujourd'hui ? La bibliothèque ouvre à neuf heures et ferme à six heures.",
    "chunks": [
-    "Le rapide renard brun saute par-dessus le chien paresseux. Bonjour, comment allez-vous aujourd'hui ?",
-    "La bibliothèque ouvre à neuf heures et ferme à six heures."
+    "Le rapide renard brun saute par-dessus le chien paresseux. Bonjour, comment allez-vous aujourd'hui ? La bibliothèque ouvre à neuf heures et ferme à six heures."
    ]
   }
  ],
@@ -89,54 +102,58 @@
   {
    "text": "Hello world, this is a test of 3.14 kg.",
    "ids": [
-    729,
-    590,
-    789,
+    712,
+    485,
+    754,
     260,
-    787,
-    497,
-    402,
-    551,
+    123,
+    375,
+    382,
+    394,
     261,
     260,
-    867,
-    421,
+    681,
+    384,
     260,
-    421,
-    274,
-    366,
-    268,
-    2005,
+    384,
+    301,
+    386,
+    317,
     260,
-    444,
+    475,
+    458,
+    260,
+    55,
     263,
-    351,
-    488,
+    53,
+    56,
     260,
-    578,
-    561,
+    781,
+    500,
     263
    ]
   },
   {
    "text": "The café served crème brûlée 😀 to Москва.",
    "ids": [
-    2376,
-    2739,
-    2795,
-    1433,
+    1889,
     266,
-    332,
-    1886,
-    3473,
-    405,
+    3016,
+    1579,
+    266,
+    394,
+    286,
+    314,
+    2565,
+    1623,
+    330,
     260,
     244,
     163,
     156,
     132,
     260,
-    947,
+    1521,
     260,
     212,
     160,
@@ -156,7 +173,7 @@
   {
    "text": "a",
    "ids": [
-    274
+    301
    ]
   },
   {
@@ -164,20 +181,19 @@
    "ids": [
     260,
     260,
-    304,
-    1744,
-    380,
-    265,
-    260,
-    260,
-    260,
-    269,
-    952,
-    359,
-    787,
-    407,
     285,
-    269,
+    1795,
+    425,
+    264,
+    260,
+    260,
+    260,
+    266,
+    837,
+    334,
+    123,
+    1617,
+    374,
     260,
     260
    ]
@@ -185,36 +201,99 @@
   {
    "text": "ALL CAPS SHOUTING",
    "ids": [
-    486,
-    1198,
-    1198,
-    313,
-    566,
-    3515,
-    454,
-    1413,
-    790,
-    1353,
-    1056,
-    762,
-    1167,
-    1295
+    408,
+    2562,
+    2562,
+    346,
+    879,
+    2558,
+    2445,
+    396,
+    1597,
+    1844,
+    2071,
+    2665,
+    1107,
+    3279,
+    3995
    ]
   },
   {
    "text": "tabs\tand\nnewlines",
    "ids": [
-    366,
-    713,
-    265,
+    386,
+    622,
+    264,
     13,
-    711,
+    570,
     14,
-    642,
-    787,
-    2589,
-    265
+    553,
+    123,
+    1424,
+    283
    ]
+  }
+ ],
+ "prepared": [
+  {
+   "text": "hello world",
+   "prepared": "Hello world.",
+   "frames_after_eos": 5
+  },
+  {
+   "text": "Well,",
+   "prepared": "Well.",
+   "frames_after_eos": 5
+  },
+  {
+   "text": "(he left)",
+   "prepared": "He left.",
+   "frames_after_eos": 5
+  },
+  {
+   "text": "She said \"go\"",
+   "prepared": "She said go.",
+   "frames_after_eos": 5
+  },
+  {
+   "text": "wait —",
+   "prepared": "Wait.",
+   "frames_after_eos": 5
+  },
+  {
+   "text": "10%",
+   "prepared": "10%.",
+   "frames_after_eos": 5
+  },
+  {
+   "text": "Really?!",
+   "prepared": "Really?!",
+   "frames_after_eos": 5
+  },
+  {
+   "text": "“Hi?”, she said; then left",
+   "prepared": "Hi? she said, then left.",
+   "frames_after_eos": 3
+  },
+  {
+   "text": "don’t stop",
+   "prepared": "Don't stop.",
+   "frames_after_eos": 5
+  },
+  {
+   "text": "a–b",
+   "prepared": "A,b.",
+   "frames_after_eos": 5
+  },
+  {
+   "text": "ends on a quote.\"",
+   "prepared": "Ends on a quote.",
+   "frames_after_eos": 5
+  },
+  {
+   "text": "x",
+   "prepared": "X.",
+   "frames_after_eos": 5
   }
  ]
 }
