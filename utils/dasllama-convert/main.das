@@ -23,7 +23,7 @@ options _dasllama_internal = true   // the engine's own bake tool: its bake-side
 // GGUF and writing the image. Both numbers are reported per stage so a slow box is diagnosable
 // without a profiler.
 
-require dasllama/dasllama               // the facade: arch registry, ASR/audio loaders, config, the runtime knobs
+require dasllama/dasllama_core          // the arch registry, the loaders, the config, the runtime knobs
 require dasllama/dasllama_image         // the .dlim MINT rail itself — bake-side, deliberately not facade
 require dasllama/dasllama_gpu_resident  // the vulkan flavor's bake arm + --trim — bake-side, deliberately not facade
 require dasllama/dasllama_layout        // convert_model_to_metal_blob — bake-side, deliberately not facade

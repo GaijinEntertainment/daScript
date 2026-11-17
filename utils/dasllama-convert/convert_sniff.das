@@ -4,7 +4,7 @@ options _dasllama_internal = true
 
 module convert_sniff shared public
 
-require dasllama/dasllama               // CANARY_MAGIC, rd_u32
+require dasllama/dasllama_core          // CANARY_MAGIC, rd_u32
 require dasllama/dasllama_gguf          // GGUFMeta — bake-side, deliberately not facade
 require dasllama/dasllama_nmt           // is_marian_model: the translation carrier's sniff
 require daslib/fio
