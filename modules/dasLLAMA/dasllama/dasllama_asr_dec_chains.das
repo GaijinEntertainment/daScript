@@ -20,7 +20,6 @@ require dasllama/dasllama_gpu_kernels_common
 require dasllama/dasllama_gpu_kernels_discrete
 require dasllama/dasllama_whisper
 require dasllama/dasllama_tower_rail
-require ?cuda dasllama/dasllama_cuda_classes_asr   // the decoder's stamps on the CUDA rail
 
 let WDEC_ROW_CAP = 8l          //! the rows a decode batch may carry: the N-column GEMV's widest form
 let WDEC_LAYER_SITES = 6l      //! a layer's GEMV records: qkv (three regions), o, cq, co, fc1, fc2
@@ -209,8 +208,8 @@ def wdec_logits_row(g : WdecGeom; n : int64) : uint => uint((n - 1l) * (g.d / kq
 [arch(at = "../ARCHITECTURE_GPU_TOWER_RAIL.md#whisper-decoder")]
 def wdec_meta(var rl : auto(R); w : WhisperModel; g : WdecGeom; var mp : uint?) {
     let q8e = kq_elems(KqFmt.q8)
-    let rows = rail_site_rows(rl, RailSite.cross, g.ta)
-    let groups = rail_site_groups(rl, RailSite.cross, g.d, g.ta)
+    let rows = _::rail_site_rows(rl, RailSite.cross, g.ta)
+    let groups = _::rail_site_groups(rl, RailSite.cross, g.d, g.ta)
     tower_sched_walk(rl.maps, mp, 2l * g.nl) $(rid : int64) : TowerSchedRec {
         let lo = dec_layer_offsets(w, rid / 2l)
         return TowerSchedRec(wblk0 = (rid % 2l == 0l ? lo.ck_w : lo.cv_w) / q8e, rows = rows, groups = groups)
@@ -249,29 +248,29 @@ def asr_dec_whisper_cross_kv(var rl : auto(R); w : WhisperModel; g : WdecGeom; h
     let d = g.d
     let ta = g.ta
     if (handoff) {
-        rail_copy(rl, TowerBuf.xb, 0l, TowerBuf.rows_out, 0l, ta * d * 4l)
-        rail_pt(rl, RailProfRole.copy_out)
+        _::rail_copy(rl, TowerBuf.xb, 0l, TowerBuf.rows_out, 0l, ta * d * 4l)
+        _::rail_pt(rl, RailProfRole.copy_out)
     }
     rail_site_feed(rl, RailSite.cross, TowerBuf.rows_out, ta * d, -NO_CLAMP, NO_CLAMP)
-    rail_pt(rl, RailProfRole.rq)
+    _::rail_pt(rl, RailProfRole.rq)
     let wg_kv = (ta * g.hh * g.hs + 255l) / 256l
     var pc16 = GkWdecKvArgs(rows = uint(ta), sstride = uint(d), soff = 0u, nheads = uint(g.hh), tstride = uint(ta), p0 = 0u, dst_off = 0u, boff = 0u,
         bias_on = 0u, mode = WDEC_KV_F16, hs = uint(g.hs), kscale = wdec_kscale(g.hs))
     for (l in range64(g.nl)) {
         let lo = dec_layer_offsets(w, l)
         pc16.dst_off = uint(l * d * ta)
-        rail_mm_kq(rl, RailSite.cross, 2l * l, TowerBuf.enc_proj, d, d, ta)
-        rail_pt(rl, RailProfRole.gemm_k)
+        _::rail_mm_kq(rl, RailSite.cross, 2l * l, TowerBuf.enc_proj, d, d, ta)
+        _::rail_pt(rl, RailProfRole.gemm_k)
         pc16.boff = 0u
         pc16.bias_on = 0u
-        enc_tower_wdec_kv16_cls(rl, fixed_array(TowerBuf.enc_proj, TowerBuf.kxr, TowerBuf.norms), pc16, wg_kv)
-        rail_pt(rl, RailProfRole.kv_store)
-        rail_mm_kq(rl, RailSite.cross, 2l * l + 1l, TowerBuf.enc_proj, d, d, ta)
-        rail_pt(rl, RailProfRole.gemm_v)
+        _::enc_tower_wdec_kv16_cls(rl, fixed_array(TowerBuf.enc_proj, TowerBuf.kxr, TowerBuf.norms), pc16, wg_kv)
+        _::rail_pt(rl, RailProfRole.kv_store)
+        _::rail_mm_kq(rl, RailSite.cross, 2l * l + 1l, TowerBuf.enc_proj, d, d, ta)
+        _::rail_pt(rl, RailProfRole.gemm_v)
         pc16.boff = uint(lo.cv_b - rl.norms_base)
         pc16.bias_on = 1u
-        enc_tower_wdec_kv16_cls(rl, fixed_array(TowerBuf.enc_proj, TowerBuf.vxr, TowerBuf.norms), pc16, wg_kv)
-        rail_pt(rl, RailProfRole.kv_store)
+        _::enc_tower_wdec_kv16_cls(rl, fixed_array(TowerBuf.enc_proj, TowerBuf.vxr, TowerBuf.norms), pc16, wg_kv)
+        _::rail_pt(rl, RailProfRole.kv_store)
     }
 }
 
@@ -280,20 +279,20 @@ def private wdec_attn(var rl : auto(R); q, kk, vv : TowerBuf; var pc : GkWdecAtt
     pc.koff = uint(kvoff)
     pc.voff = uint(kvoff)
     pc.qboff = uint(qb - rl.norms_base)
-    enc_tower_wdec_attn_part_cls(rl, fixed_array(q, kk, vv, TowerBuf.pms, TowerBuf.py, TowerBuf.norms), pc, wg_part)
-    enc_tower_wdec_attn_comb_rq_cls(rl, fixed_array(TowerBuf.pms, TowerBuf.py, TowerBuf.xq, TowerBuf.xs), pc_comb, wg_comb)
-    rail_pt(rl, RailProfRole.attn)
+    _::enc_tower_wdec_attn_part_cls(rl, fixed_array(q, kk, vv, TowerBuf.pms, TowerBuf.py, TowerBuf.norms), pc, wg_part)
+    _::enc_tower_wdec_attn_comb_rq_cls(rl, fixed_array(TowerBuf.pms, TowerBuf.py, TowerBuf.xq, TowerBuf.xs), pc_comb, wg_comb)
+    _::rail_pt(rl, RailProfRole.attn)
 }
 
 //! a GEMV record's site over `n` rows of `n_in` into `y`, then the seam adding its bias at `b` and norming the next input at `lnoff` / `lnboff`
 def private wdec_gemv_post(var rl : auto(R); g : WdecGeom; rid, n_in, d_out, n : int64; role : RailProfRole; var pc_post : GkPostAddLnArgs; b, lnoff, lnboff : int64) {
     rail_gemv_q8(rl, RailSite.gemv, rid, TowerBuf.yo, n_in, d_out, 1l, n)
-    rail_pt(rl, role)
+    _::rail_pt(rl, role)
     pc_post.boff = uint(b - rl.norms_base)
     pc_post.lnoff = uint(lnoff)
     pc_post.lnboff = uint(lnboff)
-    enc_tower_post_add_ln_rq_cls(rl, fixed_array(TowerBuf.x, TowerBuf.yo, TowerBuf.norms, TowerBuf.xq, TowerBuf.xs), pc_post, n)
-    rail_pt(rl, RailProfRole.post_add)
+    _::enc_tower_post_add_ln_rq_cls(rl, fixed_array(TowerBuf.x, TowerBuf.yo, TowerBuf.norms, TowerBuf.xq, TowerBuf.xs), pc_post, n)
+    _::rail_pt(rl, RailProfRole.post_add)
 }
 
 //! one decode batch of `n` embedded rows in `x` from `p0`: per layer self, cross and FFN on the GEMV sites, then the tied-embedding logits of the last row
@@ -328,36 +327,36 @@ def asr_dec_whisper_step(var rl : auto(R); w : WhisperModel; g : WdecGeom; n, p0
         let lo = dec_layer_offsets(w, l)
         if (l == 0l) {
             var pc = gk_ln_args(uint(d), uint(n), w.eps, uint(lo.ln1_w - nb), uint(lo.ln1_b - nb))
-            enc_tower_ln_rq_cls(rl, fixed_array(TowerBuf.x, TowerBuf.norms, TowerBuf.xq, TowerBuf.xs), pc, n)
-            rail_pt(rl, RailProfRole.ln)
+            _::enc_tower_ln_rq_cls(rl, fixed_array(TowerBuf.x, TowerBuf.norms, TowerBuf.xq, TowerBuf.xs), pc, n)
+            _::rail_pt(rl, RailProfRole.ln)
         }
         rail_gemv_q8(rl, RailSite.gemv, wdec_gemv_rid(g, l, WDEC_S_QKV), TowerBuf.qkv, d, d, 3l, n)
-        rail_pt(rl, RailProfRole.gemm_q)
+        _::rail_pt(rl, RailProfRole.gemm_q)
         pc_kv.soff = uint(d)
         pc_kv.dst_off = uint(l * d * g.tmax)
         pc_kv.bias_on = 0u
-        enc_tower_wdec_kv16_cls(rl, fixed_array(TowerBuf.qkv, TowerBuf.kc, TowerBuf.norms), pc_kv, wg_kv)
+        _::enc_tower_wdec_kv16_cls(rl, fixed_array(TowerBuf.qkv, TowerBuf.kc, TowerBuf.norms), pc_kv, wg_kv)
         pc_kv.soff = uint(2l * d)
         pc_kv.bias_on = 1u
         pc_kv.boff = uint(lo.v_b - nb)
-        enc_tower_wdec_kv16_cls(rl, fixed_array(TowerBuf.qkv, TowerBuf.vc, TowerBuf.norms), pc_kv, wg_kv)
-        rail_pt(rl, RailProfRole.kv_store)
+        _::enc_tower_wdec_kv16_cls(rl, fixed_array(TowerBuf.qkv, TowerBuf.vc, TowerBuf.norms), pc_kv, wg_kv)
+        _::rail_pt(rl, RailProfRole.kv_store)
         wdec_attn(rl, TowerBuf.qkv, TowerBuf.kc, TowerBuf.vc, pc_as, pc_cs, l * d * g.tmax, lo.q_b, wg_attn_s, wg_comb)
         wdec_gemv_post(rl, g, wdec_gemv_rid(g, l, WDEC_S_O), d, d, n, RailProfRole.gemm_o, pc_post, lo.o_b, lo.cln_w - nb, lo.cln_b - nb)
         rail_gemv_q8(rl, RailSite.gemv, wdec_gemv_rid(g, l, WDEC_S_CQ), TowerBuf.cq, d, d, 1l, n)
-        rail_pt(rl, RailProfRole.gemm_q)
+        _::rail_pt(rl, RailProfRole.gemm_q)
         wdec_attn(rl, TowerBuf.cq, TowerBuf.kxr, TowerBuf.vxr, pc_ac, pc_cc, l * d * g.ta, lo.cq_b, wg_attn_c, wg_comb)
         wdec_gemv_post(rl, g, wdec_gemv_rid(g, l, WDEC_S_CO), d, d, n, RailProfRole.gemm_o, pc_post, lo.co_b, lo.ln2_w - nb, lo.ln2_b - nb)
         rail_gemv_q8(rl, RailSite.gemv, wdec_gemv_rid(g, l, WDEC_S_FC1), TowerBuf.hg, d, 4l * d, 1l, n)
-        rail_pt(rl, RailProfRole.gemm_fc1)
+        _::rail_pt(rl, RailProfRole.gemm_fc1)
         pc_gelu.boff = uint(lo.fc1_b - nb)
-        enc_tower_bias_act_rq_cls(rl, fixed_array(TowerBuf.hg, TowerBuf.norms, TowerBuf.xq, TowerBuf.xs), pc_gelu, wg_nff)
-        rail_pt(rl, RailProfRole.bias)
+        _::enc_tower_bias_act_rq_cls(rl, fixed_array(TowerBuf.hg, TowerBuf.norms, TowerBuf.xq, TowerBuf.xs), pc_gelu, wg_nff)
+        _::rail_pt(rl, RailProfRole.bias)
         let last = l + 1l == g.nl
         let nx = last ? lo : dec_layer_offsets(w, l + 1l)
         wdec_gemv_post(rl, g, wdec_gemv_rid(g, l, WDEC_S_FC2), 4l * d, d, n, RailProfRole.gemm_fc2, pc_post, lo.fc2_b, last ? g.lnf_w : nx.ln1_w - nb,
             last ? g.lnf_b : nx.ln1_b - nb)
     }
     rail_gemv_q8(rl, RailSite.gemv, wdec_logits_rid(g), TowerBuf.logits, d, g.nvocab, 1l, 1l)
-    rail_pt(rl, RailProfRole.logits)
+    _::rail_pt(rl, RailProfRole.logits)
 }

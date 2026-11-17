@@ -66,9 +66,9 @@ sites' picks and binds, walks its schedule records through the shared body's rec
 (`tower_sched_walk` over `TowerSchedRec`, `dasllama_gpu_math`), fills every seat from the resident's planes once every
 allocation of the encode is done, and calls the shared body inside one command buffer whose hazard record rides the rail
 (`vt_rail_one_shot`, Vulkan) or straight on the stream (CUDA). The body is the family's dispatch sequence once, generic over
-the rail type, in `dasllama_tower_chains`; a generic resolves calls in its own module's scope, so the shared primitive
-module requires both home rail modules (each optional, since either home may be absent from a build) and re-exports them,
-the chain module requires it alone, and every body instantiates for the rails the build carries.
+the rail type, in `dasllama_tower_chains`. A generic resolves calls in its own module's scope: the shared primitive module
+re-exports the Vulkan home's rail module (optional, the home may be absent), and each call the CUDA home overloads is
+`_::name(rl, ...)`, resolved where the CUDA home instantiates the body for `CutRail`, so no chain module pulls CUDA in.
 
 ### The plane roles and the site table {#rail-sites}
 
