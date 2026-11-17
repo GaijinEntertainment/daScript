@@ -320,3 +320,29 @@ def test_binary_null_and_empty_strings(t : T?) {
     t |> equal(decoded.empty_text, source.empty_text)
     t |> equal(decoded.following_text, source.following_text, "empty payloads preserve the following value")
 }
+
+struct UnsupportedBytePayload {
+    bytes : array<uint8>
+    unsupported : table<int; int>
+}
+
+[test(description = "failed byte-payload saves release temporary storage without invoking the callback")]
+def test_byte_save_failure_cleanup(t : T?) {
+    var source = UnsupportedBytePayload()
+    resize(source.bytes, 65537)
+    try {
+        binary_save(source) $(data) { let _size = length(data) }
+    } recover {}
+    let before = heap_bytes_allocated()
+    var caught = 0
+    var invoked = false
+    for (_repeat in range(8)) {
+        try {
+            binary_save(source) $(data) { invoked = true; let _size = length(data) }
+        } recover { caught++ }
+    }
+    let after = heap_bytes_allocated()
+    t |> equal(caught, 8)
+    t |> equal(invoked, false)
+    t |> equal(after, before, "failed serialization must release its temporary byte buffer")
+}

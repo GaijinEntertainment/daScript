@@ -380,6 +380,7 @@ list(APPEND AOT_LANGUAGE_FILES ${AOT_JIT_BENCH_FILES})
 # NOT the all-daslib coverage lib above — keep it minimal; a new tests/language
 # test requiring another runtime daslib module extends this list. Leaf-first.
 SET(AOT_SUBSET_DASLIB_MODULE_FILES
+    daslib/sha_256.das
     daslib/math_bits.das
     daslib/random.das
     daslib/defer.das
