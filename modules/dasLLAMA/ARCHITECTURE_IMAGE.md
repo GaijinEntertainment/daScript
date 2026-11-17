@@ -210,8 +210,9 @@ The closure, per file in sorted name order: every `Archive` serializer body (a t
 `def serialize*` taking an `Archive`), `build_image`, `parse_image`, every `*_prepare` mint of
 `dasllama_tts_blocks.das` (the TTS blocks' plane packers; a driver's `*_prepare` places no image byte), the
 layout helpers `pad_to_page`, `w_page`, `plane_end`, `image_total_bytes`, `w_append`, `w_zeros`,
-`w_header`, `store_at`, `kq_plane_name`, and the TTS blob's `blob_push`,
-`weight_slot` and `conv1d_weight_row`, the streaming Vulkan mint's `vk_mint_plane`, `vk_mint_walk` and
+`w_header`, `store_at`, `kq_plane_name`, the TTS blob's `blob_push`,
+`weight_slot`, `table_slot` and `conv1d_weight_row`, a TTS quant matrix's shape and mint (`conv1d_quant_rows`,
+`conv1d_quant_k`, `conv1d_quant_row`, `q8_matrix_mint`), the streaming Vulkan mint's `vk_mint_plane`, `vk_mint_walk` and
 `vk_mint_sink_append`, GigaAM's streamed weight-plane writer `gg_stream_plane` and its plan's spans `gg_job_span` and
 `gg_plane_total`, every `*_bake` / `*_bake_into` a GPU flavor's device block (`ARCHITECTURE_IMAGE_GPU_PLANES.md#tower-dev-block`)
 comes from - a CPU repack bake among them - with the block's piece writers `tower_dev_put` and `tower_bake_q8` and the device

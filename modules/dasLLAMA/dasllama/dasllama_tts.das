@@ -123,13 +123,29 @@ def load_tts_model(path : string) : TtsModel {
         }
         return <- m
     }
-    if (!(path |> ends_with(".dlim")) && gguf_file_arch(path) == "pocket-tts") {
+    if (pocket_serves_file(path)) {
         m.kind = TtsKind.pocket
         m.pocket <- load_pocket(path)
         return <- m
     }
     m.model <- load_styletts2(path)
     tts_finish_styletts2(m, path)
+    return <- m
+}
+
+def tts_loads_from_memory(base : void?; bytes : uint64) : bool {
+    //! Whether ``load_tts_model(base, bytes)`` takes these bytes: a Pocket TTS prepared image on an image-page boundary.
+    //! A phoneme family's image, another family's, or bytes that are no image answer false - asked before the load, which panics on them.
+    return pocket_serves_memory(base, bytes)
+}
+
+def load_tts_model(base : void?; bytes : uint64) : TtsModel {
+    //! Load a TTS model from a prepared image its host holds in memory, on an image-page boundary, where ``load_tts_model(path)``
+    //! loads a GGUF or an image file: the bytes are borrowed and stay the host's for as long as the model lives.
+    //! A Pocket TTS image loads this way - it needs no pack, and another family's image is refused by name; a phoneme family's image reads its packs from the model's directory, so it opens from a path.
+    var inscope m = TtsModel()
+    m.kind = TtsKind.pocket
+    m.pocket <- load_pocket(base, bytes)
     return <- m
 }
 
@@ -248,12 +264,13 @@ def tts_pack_names(path : string) : array<string> {
     }
     let dir = dir_name(path)
     if (path |> ends_with(".dlim")) {
+        return <- out if (pocket_serves_file(path))
         let source = image_source_gguf(path)
         return <- tts_pack_names(source) if (!empty(source))
         return <- english_pack_names(dir)
     }
     let arch = gguf_file_arch(path)
-    return <- out if (arch == "pocket-tts")
+    return <- out if (arch == POCKET_ARCH)
     var english = arch != "kokoro"
     var russian = false
     if (arch == "kokoro") {
@@ -294,9 +311,9 @@ def private log_dropped_voices(m : TtsModel) {
 }
 
 def set_tts_q8(on : bool) {
-    //! Pin the GEMM weights' format for subsequent TTS loads of every family: Q8_0 quants (their
-    //! own prepared image beside the GGUF) or the file's f32 planes; ``reset_tts_q8`` returns to
-    //! the policy default. The pin is per context: a worker thread pins for itself.
+    //! Pin the GEMM weights' format for subsequent TTS loads of every family, per context: Q8_0 quants (their own prepared image) or
+    //! the file's f32 planes; ``reset_tts_q8`` returns to the policy default - a phoneme family's recipe lane (K-quant groups beside
+    //! Q8_0 ones), a Pocket file's own quants.
     set_styletts2_q8(on)
     set_pocket_q8(on)
 }
@@ -496,8 +513,8 @@ def private phonemize_for(m : TtsModel; norm : string; lang : string; var sc : R
 def tts_needs_packs(path : string) : bool {
     //! Whether the model at ``path`` reads any front-end pack from its directory: the phoneme families do
     //! (``tts_pack_names`` says which), a Pocket TTS GGUF reads text and needs none - decided before any
-    //! load, by the architecture test ``load_tts_model`` makes (a ``.dlim`` is a phoneme family).
-    return (path |> ends_with(".dlim")) || stat(path).is_dir || gguf_file_arch(path) != "pocket-tts"
+    //! load, by the family test ``load_tts_model`` makes (a GGUF by its architecture, a ``.dlim`` by the lane it was baked on).
+    return stat(path).is_dir || !pocket_serves_file(path)
 }
 
 def tts_has_phonemes(m : TtsModel) : bool {

@@ -160,11 +160,10 @@ def private tsw_put_q8(var w : TtsSlabWriter; q : array<int8>; qs : array<float>
 [arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN_TTS.md#vk-tts-chain")]
 def private tsw_put_kq(var w : TtsSlabWriter; l : TtsLinear; w0, stride : int64) {
     return if (w.measure)
-    let f = kq_fmt_of_id(l.kq_fmt, "the tower slab")
     var inscope @exact_size row : array<float>
     row |> reserve_resize(l.nin)
     for (r in range64(l.nout)) {
-        kq_plane_row_f32(f, l.kq, l.ks, l.nin, l.nout, l.kq_repacked ? active_kq_layout_mr(l.kq_fmt) : 1l, r, row, 0l)
+        kq_matrix_row(l.kq, l.ks, l.kq_fmt, l.kq_repacked, l.nin, l.nout, r, row, 0l, "the tower slab")
         for (i in range64(l.nin)) {
             w.host[w0 + r * stride + i] = row[i]
         }
@@ -184,9 +183,9 @@ def tts_slab_conv(var w : TtsSlabWriter; c : TtsConv1d) : TtsConvSlot {
     let kc = c.k * c.cin
     var s = TtsConvSlot(cout_p = round_up(c.cout, 64l), kdim_p = round_up(kc, 32l), gathers = c.cin % 8l == 0l)
     s.woff = tsw_alloc(w, s.cout_p * s.kdim_p)
-    if (c.q8) {
+    if (c.q8 && !c.transposed) {
         tsw_put_q8(w, c.wq, c.wqs, c.cout, kc, s.woff, s.kdim_p)
-    } elif (!w.measure) {
+    } elif (!w.measure) {   //! any other form the conv holds, a K-quant matrix and a transposed conv's lift among them, a row at a time
         for (co in range64(c.cout)) {
             conv1d_weight_row(c, co, w.host, s.woff + co * s.kdim_p)
         }
@@ -213,20 +212,24 @@ def tts_slab_linear(var w : TtsSlabWriter; l : TtsLinear) : TtsConvSlot {
 
 [arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN_TTS.md#vk-tts-chain")]
 def private tts_slab_lstm_dir(var w : TtsSlabWriter; l : TtsLstm; var xs : TtsConvSlot; var hh : int64&) {
-    var lin = TtsLinear(nin = l.nin, nout = 4l * l.hidden)
+    var inscope lin = TtsLinear(nin = l.nin, nout = 4l * l.hidden, q8 = l.q8)
     lin.w := l.w_ih
+    lin.wq := l.wq_ih
+    lin.wqs := l.wqs_ih
     lin.b := l.b
     xs = tts_slab_linear(w, lin)
     let hd = l.hidden
-    if (!w.lstm_transposed) {
-        hh = tts_slab_raw(w, l.w_hh, 4l * hd * hd)
-        return
-    }
     hh = tsw_alloc(w, 4l * hd * hd)
     return if (w.measure)
-    for (o in range64(4l * hd)) {
+    var inscope @exact_size row : array<float>
+    row |> reserve_resize(hd)
+    for (o in range64(4l * hd)) {   //! the recurrence's row o from its f32 matrix or its Q8_0 one, written as stored or transposed to [H][4H]
+        if (l.q8) {
+            q8_matrix_row(l.wq_hh, l.wqs_hh, true, hd, 4l * hd, o, row, 0l)
+        }
         for (i in range64(hd)) {
-            w.host[hh + i * 4l * hd + o] = l.w_hh[o * hd + i]
+            let v = l.q8 ? row[i] : l.w_hh[o * hd + i]
+            w.host[hh + (w.lstm_transposed ? i * 4l * hd + o : o * hd + i)] = v
         }
     }
 }
@@ -394,6 +397,9 @@ def tts_conv_key(c : TtsConv1d) : uint64 {
         if (c.q8) {
             return intptr(addr(c.wq[0]))
         }
+        if (c.kq_fmt != 0) {   //! the plane's format and the active layout its rows are read through
+            return hash_combine64(hash_combine64(intptr(addr(c.kq[0])), uint64(c.kq_fmt)), uint64(active_kq_layout_mr(c.kq_fmt)))
+        }
         if (!empty(c.w)) {
             return intptr(addr(c.w[0]))
         }
@@ -467,10 +473,10 @@ def tts_dec_key(d : St2Decoder) : uint64 {
 def tts_pred_key(p : St2Predictor) : uint64 {
     var key = hash_combine64(hash_combine64(11ul, tts_lane_key()), tts_lin_key(p.bert_encoder))
     for (l in p.lstms) {
-        key = hash_combine64(key, tts_arr_key(l.fwd.w_hh))
+        key = hash_combine64(key, tts_lstm_key(l.fwd))
     }
-    key = hash_combine64(key, tts_arr_key(p.lstm.fwd.w_hh))
-    key = hash_combine64(key, tts_arr_key(p.shared_lstm.fwd.w_hh))
+    key = hash_combine64(key, tts_lstm_key(p.lstm.fwd))
+    key = hash_combine64(key, tts_lstm_key(p.shared_lstm.fwd))
     for (b in p.f0) {
         tts_key_res(key, b)
     }
@@ -492,12 +498,13 @@ def tts_text_key(te : St2TextEncoder) : uint64 {
     for (c in te.cnn) {
         tts_key_fold(key, c)
     }
-    return hash_combine64(key, tts_arr_key(te.lstm.fwd.w_hh))
+    return hash_combine64(key, tts_lstm_key(te.lstm.fwd))
 }
 
+//! a conv the slab can lay: dense, holding its weight in an f32 layout or a quant matrix (`conv1d_weight_row` reads every form)
 def tts_conv_ok(c : TtsConv1d) : bool {
-    return (c.groups == 1l && c.k >= 1l && c.cin >= 1l && c.cout >= 1l && c.stride >= 1l && c.dilation >= 1l
-        && (c.q8 ? !empty(c.wq) : (!empty(c.w) || !empty(c.wt) || !empty(c.transposed ? c.wtr : c.wk))))
+    let held = c.q8 ? !empty(c.wq) : (c.kq_fmt != 0 ? !empty(c.kq) : (!empty(c.w) || !empty(c.wt) || !empty(c.transposed ? c.wtr : c.wk)))
+    return c.groups == 1l && c.k >= 1l && c.cin >= 1l && c.cout >= 1l && c.stride >= 1l && c.dilation >= 1l && held
 }
 
 def tts_lin_ok(l : TtsLinear) : bool =>
@@ -513,8 +520,22 @@ def tts_lin_ok4(l : TtsLinear) : bool => tts_lin_ok(l) && l.nin % 4l == 0l
 def tts_lstm_ok(l : TtsBiLstm; nin, max_hidden : int64) : bool {
     let hd = l.fwd.hidden
     return (hd >= 4l && hd % 4l == 0l && hd <= max_hidden && l.bwd.hidden == hd && l.fwd.nin == nin && l.bwd.nin == nin && (2l * hd) % 32l == 0l
-        && long_length(l.fwd.w_hh) >= 4l * hd * hd && long_length(l.bwd.w_hh) >= 4l * hd * hd && long_length(l.fwd.b) >= 4l * hd
-        && long_length(l.fwd.w_ih) >= 4l * hd * nin && long_length(l.bwd.w_ih) >= 4l * hd * nin && long_length(l.bwd.b) >= 4l * hd)
+        && tts_lstm_dir_held(l.fwd, nin) && tts_lstm_dir_held(l.bwd, nin))
+}
+
+// a direction holds both matrices whole - f32, or Q8_0 - and its bias
+def private tts_lstm_dir_held(l : TtsLstm; nin : int64) : bool {
+    let hd = l.hidden
+    return false if (long_length(l.b) < 4l * hd)
+    return l.q8 ? (long_length(l.wq_hh) >= 4l * hd * hd && long_length(l.wq_ih) >= 4l * hd * nin) : (long_length(l.w_hh) >= 4l * hd * hd && long_length(l.w_ih) >= 4l * hd * nin)
+}
+
+//! an LSTM direction's identity for a slab key: where its recurrence sits, in whichever form it is held
+def tts_lstm_key(l : TtsLstm) : uint64 {
+    return tts_arr_key(l.w_hh) if (!l.q8)
+    unsafe {
+        return intptr(addr(l.wq_hh[0]))
+    }
 }
 
 def tts_res_ok(b : St2AdainResBlk) : bool {

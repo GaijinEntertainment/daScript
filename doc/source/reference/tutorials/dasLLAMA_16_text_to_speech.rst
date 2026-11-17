@@ -33,6 +33,7 @@ beside the file, a Pocket file stands alone::
    daslang.exe -jit ... -- kokoro-82m.gguf hello.wav --voice af_heart
    daslang.exe -jit ... -- kitten-nano.gguf hello.wav --f32
    daslang.exe -jit ... -- pocket-tts-en-q8.gguf hello.wav --clone me.wav
+   daslang.exe -jit ... -- pocket-tts-en-q8.gguf hello.wav --image pocket.dlim
 
 Use ``-jit``. Speech synthesis runs the same tuned kernels the language models
 run, and the interpreter is far too slow for them.
@@ -364,6 +365,32 @@ speech from the restored prompt:
            let speech <- synthesize(m, "daslang speaks.", "prepared")
            write_wav_pcm16("prepared.wav", speech.pcm, speech.sample_rate)
        }
+   }
+
+A model in memory
+=================
+
+A game engine keeps its files in its own packs, so it hands a model over as
+bytes. The first load of a Pocket file bakes a prepared image, a ``.dlim``
+file, beside it. ``load_tts_model(base, bytes)`` takes that image's bytes and
+borrows them in place: it copies nothing, and the bytes stay yours until you
+delete the model. They start on a ``prepared_image_alignment()`` boundary, and
+``read_prepared_image`` reads a file onto one.
+``tts_loads_from_memory`` answers first whether the bytes are an image this
+call takes. It takes a Pocket image, because a Pocket model is one file. A
+KittenTTS or Kokoro model reads its front-end packs from its own directory, so
+it loads from a path. Run the tutorial with ``--image`` and the ``.dlim`` to
+see it:
+
+.. das-doc: given let image_base : void? = null
+.. das-doc: given let image_bytes = 0ul
+.. code-block:: das
+
+   if (tts_loads_from_memory(image_base, image_bytes)) {
+       var inscope held <- load_tts_model(image_base, image_bytes)
+       let c <- caps(held)
+       let speech <- synthesize(held, "daslang speaks.", c.voices[0])
+       write_wav_pcm16("memory.wav", speech.pcm, speech.sample_rate)
    }
 
 The weight lanes

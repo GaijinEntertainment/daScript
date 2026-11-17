@@ -101,7 +101,8 @@ bytes. The first load of a Firefox model bakes a prepared image, a ``.dlim``
 file, beside it. ``load_translator(base, bytes)`` takes that image's bytes and
 borrows them in place: it copies nothing, and the bytes stay yours until you
 delete the translator. They start on a ``prepared_image_alignment()``
-boundary. Run the tutorial with the ``.dlim`` as the model path to see it:
+boundary, and ``read_prepared_image`` reads a file onto one. Run the tutorial
+with the ``.dlim`` as the model path to see it:
 
 .. das-doc: given let image_base : void? = null
 .. das-doc: given let image_bytes = 0ul

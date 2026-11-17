@@ -254,8 +254,8 @@ Run under ``-jit`` --- the interpreter is refused, it is far too slow for infere
      - TTS model GGUF (kitten-nano, kitten-mini, kokoro-82m, kokoro-ru with the front-end packs beside them --- ``tts_g2p.bin`` + ``tts_postag.bin`` for the English voices, ``tts_g2p_ru.bin`` for the Russian ones; or a ``pocket-tts-<lang>-q8`` file, which reads text, needs no pack and clones a voice) --- enables ``/v1/audio/speech``. A directory serves the front end alone, with no voice: the packs it holds, and ``tts_ctx_ru.gguf`` (the Russian stress-context model) where it sits there, answer ``/v1/audio/phonemes`` and ``/v1/audio/speech`` refuses. Repeatable: each model serves under its file's stem, the first is the default (``--tts-lane`` and ``--tts-voices-dir`` are the first one's); the config's ``[[tts]]`` tables give each model its own ``id``, ``lane`` and ``voices_dir``
    * - ``--tts-lane``
      -
-     - ``q8``
-     - Weight lane the speech worker pins around its load: ``q8`` (the prepared quant image beside the GGUF) or ``f32`` (the file's own planes). An unknown spelling warns and serves ``q8``. With several TTS models, the first one's
+     - ``default``
+     - Weight lane of the speech worker's load: ``default`` pins nothing, so the model serves the formats its file stores (a Pocket file's own quants; an f32 KittenTTS or Kokoro file as Q8_0); ``q8`` pins every quantized layer to Q8_0 and ``f32`` pins the reference lane. An unknown spelling warns and serves ``default``. With several TTS models, the first one's
    * - ``--tts-voices-dir``
      -
      - ---

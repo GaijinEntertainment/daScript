@@ -215,18 +215,18 @@ it was measured on. The pinned set, one entry a line, each with what it must kee
   formats against the f16 file's load-time quants.
 - `test_tts_pocket.das`'s `test_pocket_kq_file` cell must hold the small file's load-time tensor
   formats on each lane (unpinned: the backbone's and the codec transformers' matrices as Q4_K
-  planes, the flow head as Q8_0 blocks, the speaker projection and the embedding table f32; pinned
-  q8: Q8_0 blocks; pinned f32: f32 planes, the head included); the kq lane against the q8 lane of
-  the same file under `Q8_FILE_BAR`; the kq lane against the exact lane under `KQ_EXACT_BAR`; the
-  flow head on its Q8_0 route against the oracle's frames under `KQ_HEAD_BAR`; the stored roster
-  voice against the reference encoder; and a clone over a roster name keeping the roster at 19
-  voices and speaking.
+  planes, the flow head as Q8_0 blocks, the speaker projection f32, the embedding table its own Q4_K
+  planes, a prompt's rows off them the dequantized table's bit for bit; pinned q8: Q8_0 blocks;
+  pinned f32: f32 planes, the head included); the kq lane against the q8 lane of the same file under
+  `Q8_FILE_BAR`; the kq lane against the exact lane under `KQ_EXACT_BAR`; the flow head on its Q8_0
+  route against the oracle's frames under `KQ_HEAD_BAR`; the stored roster voice against the
+  reference encoder; and a clone over a roster name keeping the roster at 19 voices and speaking.
 - `test_tts_pocket.das`'s `test_pocket_quiet_floor` cell must hold the served lane's quiet floor
   against the f32 lane's.
 - `test_tts_pocket.das`'s `test_pocket_small_models` cell must hold, for each `SMALL` row's
   published file, the 19-voice English roster and the four character replacements its config
-  carries, as the reference build's config lists them, and each seat serving, or declining with the
-  `shape` reason, as that row's seat columns say.
+  carries, as the reference build's config lists them, each seat serving, or declining with the
+  `shape` reason, as that row's seat columns say, and a low-rank text table kept low-rank.
 - `test_whisper.das`'s `test_canary_qwen_oracle` cell, an external-reference compare, must hold
   the forced walk over `../harness/canary_qwen_expected.tsv`'s ids within `CN_TIE_BAR` of our
   argmax at every step of its three clips, on the CPU chain and on the GPU tower that serves canary's default lane (the

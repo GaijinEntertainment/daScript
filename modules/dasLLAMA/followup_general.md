@@ -2559,7 +2559,11 @@
     and baked as they are they would quadruple the file. Done = with the CUDA home's TTS seats, the TTS kernels on CUDA,
     Metal and Vulkan read the carrier's q8 and K-quant planes in their device forms (the tower tiles' q8 and kq families),
     the attach keeps only what the image bakes, and each TTS family mints its Metal, Vulkan and CUDA image, bound on load
-    with no conversion like every other tower's.
+    with no conversion like every other tower's. The StyleTTS2 recipe lane's K-quant convs, its Q8_0 LSTMs and its
+    Q8_0 transposed convs ride the same widen (`conv1d_weight_row`, `q8_matrix_row`, `kq_matrix_row`), so the device
+    holds the f32 size of a lane whose image is a fifth of it (`kokoro-82m.gguf`: a 74.5 MB recipe image, a 355 MB
+    f32 one), and on a discrete home the host keeps its quant planes beside the slab for the CPU chain a declined
+    stage falls to.
 
 283. **A split GGUF NextN head does not attach to a safetensors snapshot trunk.** `DASLLAMA_MTP_HEAD` / `set_mtp_head_path`
     ride the GGUF loader path alone: a snapshot load (`ARCHITECTURE_ENGINE_FORMATS_MLX.md`) synthesizes its GGUF meta and
@@ -2707,17 +2711,18 @@
     front-coded or trie form of the key blob behind the same `lex_find`, the English packs moved onto it in the
     same change or left as they are by measurement (the pack loads once; the lookup is per word).
 
-292. **kokoro-ru has no oracle dump and no rig row.** `harness/kokoro_oracle.py` reads the pinned hexgrad
+292. **kokoro-ru has no oracle dump and no board row.** `harness/kokoro_oracle.py` reads the pinned hexgrad
     snapshot alone, so the parity rail of `_tts_parity.das` holds `kokoro-82m.gguf` and not the Russian
     checkpoints, whose conversion is held only by the bring-up's comparison against the PyTorch reference
     on five sentences and the facade cell's sample count; and
-    `harness/tts_rig.py` has no Russian sentence set or `TtsBoard` for them, so no WER or UTMOS figure guards a
+    the rig's Russian arm (`harness/tts_rig.py --lang ru`: the 200-sentence fixture, the three kokoro-ru voices,
+    GigaAM's transcript) has no `TtsBoard` row and no pinned figure, so no WER or UTMOS bar guards a
     change to the Russian front end the way `tests/test_tts_g2p.das`'s corpus cell guards the English one, and no
     spawned cell's input reaches the Russian synthesis path (`lcpp_bench --tts` speaks the English corpus head through
     the board's `TtsBoard` rows, and `harness/tts_ref_bench.py` runs the reference's own hexgrad model, not a
     fine-tune) - the measurement checklist's spawned-cell duty for a new serving path is owed here.
     Done = the oracle takes the checkpoint, config and voices as the converter does and dumps a kokoro-ru case
-    set beside `tts_oracle/kokoro`; a Russian sentence set with a GigaAM or Parakeet transcript arm in the rig,
+    set beside `tts_oracle/kokoro`;
     a `TtsBoard` row for kokoro-ru in `performance/model_specs.das` with the reference instrument taking the
     fine-tune's checkpoint, its figures in `PERF_LEDGER.md`, and the kokoro-ru rows of `harness/tts_model_card.md`
     carrying the rig's figures.
@@ -2907,3 +2912,34 @@
     batch's sessions, where the one-row step's declines hydrate first (`rdec_pass_hydrated`); `attention_batch_decode`
     then reads rows the device alone wrote. Done = a declined batch hydrating every session whose host cache is
     behind, held by a cell that walks a batch across the cap under `tests/run.das -- --poison-kv`.
+312. **The TTS staged mints hold the whole model in RAM.** `stage_pocket` and `stage_styletts2` read every tensor of
+    the GGUF into a staging carrier (`PocketStaging`, `St2Staging`) under one file mapping
+    (`stage_pocket_gguf`'s `fmap` holds its pages until the close), and `cache_via_image_staged` writes the image from it,
+    so a mint's peak is the source file plus the staged planes: 78 MB of file and 94 MB of image for the 100M Pocket
+    K-quant file (`pocket-tts-en-kq.gguf`), 353 MB of file and 101 MB of image for `kokoro-82m.gguf` on its q8 lane
+    (`ls -l` on each file and on its prepared image beside it).
+    `refuse_staged_source_past_cap` bounds the source at 1 GiB. Done = the TTS mints writing each plane as its reader
+    produces it, through a source opened with `gguf_source_begin`, the staging carrier holding spans and scalars
+    alone.
+313. **Pocket's codec convs load as f32 from a file that stores them F16.** Every Pocket file stores the codec's
+    conv weights as halfwords and every lane widens them at load: 29 MB of f32 on the 100M model, 16 MB on the 18M,
+    15 MB on the 2M (`pocket-tts-en-kq.gguf`, `pocket-tts-en-18m-q8.gguf`, `pocket-tts-en-2m.gguf`: the rank-3 F16
+    tensors' element counts times four) - 15, 8 and 7.7 MB more than the file's bytes, 28% of the 2M model's native image. The convs
+    multiply through `gemm_f32_jo`, so serving the halfwords takes a GEMM kernel over F16 weights, stamped a CPU
+    class; a per-call widen into the scratch carrier keeps an f32 copy of the largest conv alive between
+    syntheses and is not that. Done = `TtsConv1d` holding an F16 weight plane on the native lane, the rows convs
+    multiplying it with no f32 copy that outlives the call, the samples bit-equal to the f32 lane's, the GPU
+    seats' slab read taking the form, and the codec's real-time factor on an x86 and an arm64 box beside the f32
+    kernel's.
+314. **The server's speech worker runs the CPU chain at a third of the facade's rate, and the recipe lane further
+    behind.** On the M5 with the seats off (`DASLLAMA_METAL_TOWER=0`) a served kitten-nano request takes 241.9 ms for
+    5.32 s of speech where the facade's line takes 105.6 to 110.3 ms for 7.14 s, and the recipe lane's image serves
+    at 1.45 times the q8 lane's wall (1.49 on kokoro-82m) where the rig reads 1.10 to 1.15 (`PERF_LEDGER.md`'s "TTS
+    weight formats" entry). Done = the stage that loses the time named from the worker's timings line, and a served
+    CPU request within a fifth of the facade's real-time factor on both lanes or the reason it cannot be in
+    `ARCHITECTURE_TTS.md`.
+315. **The Russian front end holds 177 MB of heap.** A `kokoro-ru` load reads 177.5 MB on the das heap before any
+    synthesis where an English StyleTTS2 load reads 40 MB and its q8 image is 93.7 MB mapped
+    (`harness/tts_load_probe.das`, `PERF_LEDGER.md`'s "TTS weight formats" entry). Done = the heap's owners named a
+    pack (the stress pack, the stress model, the context model), and each one that is read-only after the load
+    served from a mapping, the load's heap figure beside the old one.

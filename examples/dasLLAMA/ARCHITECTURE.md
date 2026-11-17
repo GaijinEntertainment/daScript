@@ -39,8 +39,8 @@ checklist is `REVIEW.md` beside this file. The engine these programs drive is do
   `wasm/run_node.js` - runs the wasm64 engine host under node.
 - `library/` - the engine behind a C ABI, for a host that is not daslang: `dasllama_lib.das` is
   the library (flat `[export_c]` entry points over the facade, four surfaces - text completion,
-  speech to text, translation and speech synthesis), and `main.c`, `main.cpp` and `main.das` are the three hosts that drive it. Its
-  `README.md` is the page a reader starts from.
+  speech to text, translation and speech synthesis; their state is the engine's `dasllama/dasllama_host`), and `main.c`,
+  `main.cpp` and `main.das` are the three hosts that drive it. Its `README.md` is the page a reader starts from.
 - `chat.das`, `run.das`, `speak.das`, `speak_server.das`, `transcribe.das`, `dictate.das`,
   `audio_chat.das` - desktop-only programs over the facade; nothing here ships them to a page.
 

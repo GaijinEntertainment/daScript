@@ -281,15 +281,15 @@ Each companion's sections are anchored by topic; a citation spells `<doc>.md#<an
   (`ARCHITECTURE_CPU_KERNELS.md#q8-activation-forms`).
 
 - `ARCHITECTURE_TTS.md` - the TTS block home's two layouts, tap stacking, the padded concat width, the served carrier
-  on the image rail, the sine source's operation order, and the rig's scoring.
+  on the image rail, the recipe's format a weight group, the sine source's operation order, and the rig's scoring.
 - `ARCHITECTURE_TTS_MEMORY.md` - the per-synthesis carrier, the generator's six buffers, the
   chunk-sized peak with its cap and the idle release, and the harmonic source streaming in frame
   windows.
 - `ARCHITECTURE_DOCS.md` - the HOW_TO document type: its steps, traps and tense, and the gate
   that holds them (`ARCHITECTURE_DOCS.md#howto-documents`).
 - `ARCHITECTURE_POCKET.md` - the Pocket codec's windowed stream, a voice as the backbone's
-  key-value memory, the one-step head's baked timestep constants, the released chunker, and the
-  published file's served quants.
+  key-value memory, the one-step head's baked timestep constants, the released chunker, the prepared
+  image, and the published file's served quants.
 - `ARCHITECTURE_TRANSLATE.md` - the Marian source's two served lanes (`ARCHITECTURE_TRANSLATE.md#nmt-lanes`), the
   oracle the family is held to (`ARCHITECTURE_TRANSLATE.md#nmt-oracle`), the device homes' shared admission
   (`ARCHITECTURE_TRANSLATE.md#nmt-device-homes`), and the decode step's narrowed pool

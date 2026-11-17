@@ -104,7 +104,7 @@ struct ServerArgs {
     tts : string
 
     @clarg_name = "tts-lane"
-    @clarg_doc = "TTS weight lane: q8 (default) | f32 — the format the speech worker pins around its load (with several TTS models, the first one's)"
+    @clarg_doc = "TTS weight lane: default (no pin: the formats the model's file stores, an f32 KittenTTS or Kokoro file as Q8_0) | q8 | f32 — the format the speech worker pins around its load (with several TTS models, the first one's)"
     tts_lane : string
 
     @clarg_name = "tts-voices-dir"

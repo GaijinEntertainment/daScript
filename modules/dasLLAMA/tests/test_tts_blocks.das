@@ -5,8 +5,11 @@ options _dasllama_internal = true
 
 require dastest/testing_boost public
 require dasllama/dasllama_tts_blocks
+require dasllama/dasllama_tts_slab   // tts_slab_build, tts_slab_linear: the tower slab's read of a K-quant linear
 require dasllama/dasllama_math   // with_dasllama_jobque_
 require dasllama/dasllama_tower
+require dasllama/dasllama_kqformat   // KqFmt, kq_schema_id: the K-quant conv cells' formats
+require dasllama/dasllama_convert    // dequant_kq_plane_sb: the weights a K-quant conv's planes read back as
 require _kq_fixtures   // the salted k4 planes and the leaf per row: the Q8_K rows and the disk-order dot
 require _compares   // check / check_count at the dot-envelope bar
 require _kernel_oracles   // layernorm_ref, attention_bidir_ref, gelu_form_ref: the BERT cells' double forms
@@ -433,12 +436,141 @@ def private attention_case(tc : T?) {
 }
 
 let Q8_REL = 2.0e-2   // Q8_0 weights and per-32 activations: a few thousandths of the envelope, gated at 2%
+let KQ_SOURCE_REL = 0.1   // a K-quant plane's dequant against its source weights: Q4_K's sub-block error reads 2% of the envelope, gated at 10%
+
+// a conv minted in the K-quant rows form `fmt`, repacked for the backend where `repack` asks and the backend carries kq
+def private prepared_kq(c : TtsConv1d; fmt : KqFmt; repack : bool) : TtsConv1d {
+    var p := c
+    p.served_rows = true
+    conv1d_prepare_kq(p, fmt, repack && select_matmul_backend_for_load_())
+    return <- p
+}
+
+// the f32 conv whose weights are the ones `ck`'s disk-order K-quant planes dequantize to; a column past k*cin is read by
+// nothing - its activation is a stacked zero - so what it dequantizes to (a sub-block's min, where it shares one) is not held
+def private dequantized_conv(c0, ck : TtsConv1d; fmt : KqFmt) : TtsConv1d {
+    var cd := c0
+    var inscope slab : array<float>
+    let rows = ck.transposed ? ck.k * ck.cout : ck.cout   // a transposed conv's matrix is its lift, row tap * cout + co over the inputs
+    slab |> resize(rows * ck.kq_k)
+    for (sb in range64(rows * ck.kq_k / 256l)) {
+        dequant_kq_plane_sb(fmt, ck.kq, ck.ks, sb, false, slab, sb * 256l)
+    }
+    for (co in range64(ck.cout)) {
+        for (kk in range64(ck.k)) {
+            for (ci in range64(ck.cin)) {
+                if (ck.transposed) {
+                    cd.w[(ci * ck.cout + co) * ck.k + kk] = slab[(kk * ck.cout + co) * ck.kq_k + ci]
+                } else {
+                    cd.w[(co * ck.cin + ci) * ck.k + kk] = slab[co * ck.kq_k + kk * ck.cin + ci]
+                }
+            }
+        }
+    }
+    return <- cd
+}
+
+// every row of a quantized conv read back through `conv1d_weight_row` - the GPU slab's read - against the same rows of the
+// f32 conv `ref`, each within `bound` of its own row's largest weight; the next output channel's row is the control
+def private weight_rows_case(t : T?; name : string; cq, cref : TtsConv1d; bound : float) {
+    let n = cq.k * cq.cin
+    var inscope got, want, other : array<float>
+    got |> resize(n)
+    want |> resize(n)
+    other |> resize(n)
+    var worst = 0.0
+    var nearest_other = INFINITE_DIFF
+    for (co in range64(cq.cout)) {
+        conv1d_weight_row(cq, co, got, 0l)
+        conv1d_weight_row(cref, co, want, 0l)
+        conv1d_weight_row(cref, (co + 1l) % cq.cout, other, 0l)
+        let peak = logits_maxabs(want)
+        worst = max(worst, peak > 0.0 ? logits_maxdiff(got, want) / peak : INFINITE_DIFF)
+        nearest_other = min(nearest_other, peak > 0.0 ? logits_maxdiff(got, other) / peak : 0.0)
+    }
+    to_log(LOG_INFO, "tts blocks {name}: {cq.cout} weight rows read back, worst {worst} of a row's peak (bound {bound}); the nearest next row {nearest_other}\n")
+    t |> success(worst <= bound, "{name}: every weight row reads back within {bound} of its peak: worst {worst}")
+    t |> success(nearest_other > bound && nearest_other > worst, "{name}: the next channel's row lands outside that bound (the read's control): {nearest_other}")
+}
+
+// The K-quant rows lane of a conv against the channel-major f32 conv over the weights its own planes dequantize to, at
+// the q8 bar (the rows requantize to Q8_K); the f32 conv over the weights before quantization is the control it sits
+// further from.
+def private conv_case_kq(t : T?; name : string; fmt : KqFmt; cin, cout, k, stride, pad, dil : int64; repack : bool; transposed : bool = false;
+                         channel_major : bool = false; x_scale : float = 2.0) {
+    var r = TtsRng()
+    rng_seed(r, 0x9ee4ul + uint64(k * 100l + dil))
+    var inscope c0 <- make_conv(r, cin, cout, k, stride, pad, dil, transposed, true)
+    var inscope ck <- prepared_kq(c0, fmt, false)
+    var inscope cd <- dequantized_conv(c0, ck, fmt)
+    var inscope e <- envelope_conv(cd)
+    var inscope c <- prepared(cd, false)
+    var inscope cf <- prepared(c0, false)
+    var inscope cs <- prepared_kq(c0, fmt, repack)
+    let t_in = T_ROWS
+    var inscope x_ct : array<float>
+    rand_fill(r, x_ct, cin * t_in, x_scale)
+    var inscope x_abs <- abs_of(x_ct)
+    var inscope want, env, before : array<float>
+    conv1d(c, x_ct, t_in, want)
+    conv1d(e, x_abs, t_in, env)
+    conv1d(cf, x_ct, t_in, before)
+    var inscope got : array<float>
+    if (channel_major) {   // the channel-major entry over the same matrix
+        conv1d(cs, x_ct, t_in, got)
+    } else {
+        var inscope x_rows : array<float>
+        transpose_ct(x_ct, cin, t_in, x_rows)
+        var inscope y_rows : array<float>
+        conv1d_rows(cs, x_rows, t_in, y_rows)
+        transpose_tc_strided(y_rows, conv1d_out_len(cs, t_in), cout, cs.cout_s, got)
+    }
+    check_envelope(t, name, got, want, env, logits_maxabs(c0.b), Q8_REL)
+    t |> equal(cs.kq_fmt, kq_schema_id(fmt), "{name}: the K-quant lane minted")
+    t |> equal(cs.kq_k % 256l, 0l, "{name}: the matrix's row is whole superblocks ({cs.kq_k})")
+    t |> equal(cs.kq_repacked, repack && kernel_backend_has_kq(), "{name}: the planes are repacked exactly where the arm asks and the backend carries kq")
+    // the planes hold the source's weights, every row of them: a row the mint left unwritten reads as zeros here
+    check_envelope(t, "{name}: the planes' own conv against the source's", want, before, env, logits_maxabs(c0.b), KQ_SOURCE_REL)
+    let to_planes = logits_maxdiff(got, want)
+    let to_source = logits_maxdiff(got, before)
+    t |> success(all_finite(got) && all_finite(before) && to_source > 2.0 * to_planes, "{name}: the rows read the quantized weights - {to_planes} from their dequant, {to_source} from the source")
+    weight_rows_case(t, "{name}: the planes' rows", cs, c, 0.0)   // the planes' own dequant, bit for bit, in either layout
+}
+
+// A vector layer minted Q8_0 against its own f32 GEMV at the q8 bar; a width off 32 keeps `w` and the f32 arm.
+def private vec_case_q8(t : T?; nin, nout : int64; mints : bool) {
+    var r = TtsRng()
+    rng_seed(r, 0x7ec8ul + uint64(nin * 7l + nout))
+    var inscope l = TtsLinear()
+    l.nin = nin
+    l.nout = nout
+    rand_fill(r, l.w, nin * nout, 1.0 / sqrt(float(nin)))
+    rand_fill(r, l.b, nout, 0.5)
+    var inscope x : array<float>
+    rand_fill(r, x, nin, 2.0)
+    var inscope want, env : array<float>
+    linear_vec(l, x, want)
+    env |> resize(nout)
+    for (o in range64(nout)) {
+        for (i in range64(nin)) {
+            env[o] += abs(l.w[o * nin + i]) * abs(x[i])
+        }
+    }
+    var inscope lq := l
+    let minted = linear_vec_prepare_q8(lq, select_matmul_backend_for_load_())
+    t |> equal(minted, mints, "vec q8 {nin}x{nout}: the lattice decides the mint")
+    t |> equal(lq.q8, mints)
+    t |> equal(empty(lq.w), mints, "vec q8 {nin}x{nout}: a minted layer drops w, a refused one keeps it")
+    var inscope got : array<float>
+    linear_vec(lq, x, got)
+    check_envelope(t, "vec q8 {nin}x{nout}", got, want, env, logits_maxabs(l.b), mints ? Q8_REL : 0.0)
+}
 
 // The q8 rows lane of a conv against the channel-major f32 reference at the q8 bar.
-def private conv_case_q8(t : T?; name : string; cin, cout, k, pad, dil : int64) {
+def private conv_case_q8(t : T?; name : string; cin, cout, k, pad, dil : int64; transposed : bool = false; stride : int64 = 1l) {
     var r = TtsRng()
     rng_seed(r, 0x9eedul + uint64(k * 100l + dil))
-    var inscope c0 <- make_conv(r, cin, cout, k, 1l, pad, dil, false, true)
+    var inscope c0 <- make_conv(r, cin, cout, k, stride, pad, dil, transposed, true)
     var inscope e <- envelope_conv(c0)
     var inscope c <- prepared(c0, false)
     var inscope cq <- prepared(c0, true, true)
@@ -458,6 +590,19 @@ def private conv_case_q8(t : T?; name : string; cin, cout, k, pad, dil : int64) 
     transpose_tc_strided(y_rows, t_out, cout, cq.cout_s, got)
     check_envelope(t, name, got, want, env, logits_maxabs(c0.b), Q8_REL)
     t |> success(cq.q8, "{name}: the q8 lane minted")
+    weight_rows_case(t, "{name}: the quants' rows", cq, c, 1.0 / 127.0)   // a Q8_0 block's step is its peak over 127
+    // a channel-major conv asked to take the quant matrix mints the same one, and its entry is the rows kernel between two transposes
+    var inscope cm := c0
+    cm.served_rows = false
+    conv1d_prepare(cm, true, select_matmul_backend_for_load_(), true)
+    t |> success(cm.q8, "{name}: the channel-major conv minted the quant matrix")
+    var inscope got_cm : array<float>
+    conv1d(cm, x_ct, t_in, got_cm)
+    check(t, "tts blocks {name}: the channel-major entry against the rows form", got_cm, got, BAR_EXACT, FLAT_SHAPE)
+    var inscope plain := c0
+    plain.served_rows = false
+    conv1d_prepare(plain, true, select_matmul_backend_for_load_())
+    t |> success(!plain.q8 && !empty(plain.transposed ? plain.wt : plain.w), "{name}: a channel-major conv not asked keeps its f32 layout")
 }
 
 // linear_rows on the q8 lane against the dot form at the q8 bar.
@@ -531,6 +676,38 @@ def private linear_case_kq(t : T?; nin, nout : int64; decode, repack : bool) {
     let bar = Bar(kind = BarKind.envelope, rel = KQ_REL, abs_floor = FLOOR, poison = 4.0, poison_at = length(want) / 2)
     check(t, "tts blocks {name}", got, want, bar, Shape(row_width = int(nout)), env)
     t |> success(engaged, "{name}: the kq lane engaged, and the repack followed the backend")
+}
+
+// the tower slab's read of a K-quant linear (`tts_slab_linear`): every row at the slot's stride is the row the planes
+// dequantize to in disk order, bit for bit, whichever layout the layer holds them in; the control reads the rows one down
+def private slab_linear_cases_kq(t : T?) {
+    let nin = 256
+    let nout = 24
+    for (repack in [true, false]) {
+        var l = TtsLinear(nin = int64(nin), nout = int64(nout))
+        var kq, ks : array<uint8>
+        build_kq_region(4, kq, ks, int64(nout), int64(nin), 0x51ED270Bu)
+        var inscope want : array<float>
+        want |> resize(nout * nin)
+        for (r in range(nout)) {
+            kq_matrix_row(kq, ks, 4, false, int64(nin), int64(nout), int64(r), want, int64(r * nin), "the slab cell")
+        }
+        linear_take_kq(l, 4, kq, ks, repack)
+        var slot : TtsConvSlot
+        var inscope host <- tts_slab_build(slot) $(var w : TtsSlabWriter; var s : TtsConvSlot) {
+            s = tts_slab_linear(w, l)
+        }
+        var off = 0
+        var down = 0
+        for (r in range(nout)) {
+            let at = int(slot.woff + int64(r) * slot.kdim_p)
+            off += mismatch_exact(host, want, at, r * nin, nin)
+            down += mismatch_exact(host, want, at, (r + 1) % nout * nin, nin)
+        }
+        let name = "slab linear kq {nin}x{nout}{repack ? "" : " disk-order"}"
+        t |> equal(off, 0, "{name}: the slab holds the planes' own rows")
+        t |> success(all_finite(want) && down > 0, "{name}: the rows one down differ (the compare's control): {down}")
+    }
 }
 
 //! a width the 256-superblock does not divide is refused by name
@@ -990,10 +1167,10 @@ def private split_diff(name : string; a, b : array<float>) : SplitCase {
     return res
 }
 
-def private split_conv_case(name : string; cin, cout, k, stride, pad, dil : int64; q8 : bool; axis : SplitAxis) : SplitCase {
+def private split_conv_case(name : string; cin, cout, k, stride, pad, dil : int64; q8 : bool; axis : SplitAxis; transposed : bool = false) : SplitCase {
     var r = TtsRng()
     rng_seed(r, 0x5b17ul + uint64(k * 100l + dil))
-    var inscope c0 <- make_conv(r, cin, cout, k, stride, pad, dil, false, true)
+    var inscope c0 <- make_conv(r, cin, cout, k, stride, pad, dil, transposed, true)
     var inscope cr <- prepared(c0, true, q8)
     let t_in = T_ROWS
     var inscope x_ct : array<float>
@@ -1012,6 +1189,26 @@ def private split_conv_case(name : string; cin, cout, k, stride, pad, dil : int6
         res.diffs += 1000000   // the q8 lane never minted, so this leg pinned the f32 kernel
     }
     return res
+}
+
+def private split_conv_kq_case(name : string; fmt : KqFmt; cin, cout, k, pad : int64; axis : SplitAxis; stride : int64 = 1l; transposed : bool = false) : SplitCase {
+    var r = TtsRng()
+    rng_seed(r, 0x5b19ul + uint64(k))
+    var inscope c0 <- make_conv(r, cin, cout, k, stride, pad, 1l, transposed, true)
+    var inscope cr <- prepared_kq(c0, fmt, true)
+    let t_in = T_ROWS
+    var inscope x_ct : array<float>
+    rand_fill(r, x_ct, cin * t_in, 2.0)
+    var inscope x_rows : array<float>
+    transpose_ct(x_ct, cin, t_in, x_rows)
+    var inscope one, many : array<float>
+    at_split(axis, true) {
+        conv1d_rows(cr, x_rows, t_in, one)
+    }
+    at_split(axis, false) {
+        conv1d_rows(cr, x_rows, t_in, many)
+    }
+    return split_diff("{name} @ {axis_name(axis)}", one, many)
 }
 
 def private split_adain_case(c : int64; axis : SplitAxis) : SplitCase {
@@ -1120,6 +1317,91 @@ def private report_split(t : T?; r : SplitCase) {
     t |> equal(r.diffs, 0, "{r.name}: elements differing between one dispatch lane and many")
 }
 
+// one direction's random weights at `nin` inputs and `hd` hidden lanes
+def private make_lstm(var r : TtsRng; nin, hd : int64) : TtsLstm {
+    var l = TtsLstm(nin = nin, hidden = hd)
+    rand_fill(r, l.w_ih, 4l * hd * nin, 1.0 / sqrt(float(nin)))
+    rand_fill(r, l.w_hh, 4l * hd * hd, 1.0 / sqrt(float(hd)))
+    rand_fill(r, l.b, 4l * hd, 0.25)
+    return <- l
+}
+
+[test(description = "A BiLSTM minted Q8_0 tracks its own f32 run over 96 steps within 0.05 of a state lane's unit range, in both directions, and is not the f32 run; a direction whose input width is off 32 keeps its f32 matrices and its run bit for bit")]
+def test_lstm_q8(t : T?) {
+    with_dasllama_jobque_() {
+        t |> run("the q8 recurrence against the f32 one, and the width that refuses the mint") @(t : T?) {
+            for (nin in [160l, 66l]) {
+                let hd = 64l
+                let steps = 96l
+                var r = TtsRng()
+                rng_seed(r, 0x157aul + uint64(nin))
+                var inscope l = TtsBiLstm()
+                l.fwd <- make_lstm(r, nin, hd)
+                l.bwd <- make_lstm(r, nin, hd)
+                var inscope x : array<float>
+                rand_fill(r, x, steps * nin, 1.0)
+                var inscope want : array<float>
+                bilstm(l, x, steps, want)
+                var inscope lq := l
+                let repack = select_matmul_backend_for_load_()
+                let minted = lstm_prepare_q8(lq.fwd, repack) && lstm_prepare_q8(lq.bwd, repack)
+                t |> equal(minted, nin % 32l == 0l, "nin {nin}: the lattice decides the mint")
+                t |> equal(empty(lq.fwd.w_hh), minted, "nin {nin}: a minted direction drops its f32 matrices, a refused one keeps them")
+                var inscope got : array<float>
+                bilstm(lq, x, steps, got)
+                let off = logits_maxdiff(got, want)
+                let peak = logits_maxabs(want)
+                var inscope x_other : array<float>
+                rand_fill(r, x_other, steps * nin, 1.0)
+                var inscope other : array<float>
+                bilstm(l, x_other, steps, other)
+                let control = logits_maxdiff(other, want)
+                to_log(LOG_INFO, "tts blocks lstm q8 nin {nin}, {steps} steps of seeded rows: off {off} from the f32 run, the states' peak {peak}; another input's f32 run {control} from it\n")
+                if (minted) {
+                    t |> success(off > 0.0 && off < 0.05, "nin {nin}: the q8 run is within 0.05 of the f32 run and is not it - off {off}, the states' peak {peak}")
+                    t |> success(all_finite(other) && control > 0.05, "nin {nin}: another input's run lands outside that bound (the compare's control): {control}")
+                    t |> success(peak > 0.25, "nin {nin}: the fixture's states leave the origin (peak {peak})")
+                } else {
+                    t |> equal(off, 0.0, "nin {nin}: the refused mint runs the f32 recurrence")
+                }
+            }
+        }
+    }
+}
+
+[test(description = "A conv minted in the K-quant rows form (Q4_K, Q5_K, Q6_K; forward at stride 1 and 2, transposed at stride 2, 6 and 10, and channel-major; a stacked row padded to 256 and one on it; disk-order and repacked planes) matches the channel-major f32 conv over the weights its own planes dequantize to within the q8 dot-envelope bar, and sits at least twice as far from the f32 conv over the weights before quantization; a vector layer minted Q8_0 matches its f32 GEMV at that bar, and one with a width off 32 keeps its f32 weight")]
+def test_quant_mints(t : T?) {
+    with_dasllama_jobque_() {
+        t |> run("a vector layer's Q8_0 form against its f32 GEMV, and a width off 32 keeping w") @(t : T?) {
+            vec_case_q8(t, 128l, 1024l, true)    // a style projection: 128 style lanes onto two halves of 512
+            vec_case_q8(t, 256l, 1088l, true)    // the padded decoder width, 544 a half
+            vec_case_q8(t, 128l, 132l, false)    // 66 a half, off the 32: the layer keeps w
+        }
+        t |> run("the K-quant conv lane against the f32 conv over its own dequantized planes") @(t : T?) {
+            for (repack in [false, true]) {
+                let arm = repack ? "repacked" : "disk order"
+                conv_case_kq(t, "conv k4 k3 d1 pad to 512 ({arm})", KqFmt.k4, 128l, 128l, 3l, 1l, 1l, 1l, repack)
+                conv_case_kq(t, "conv k4 k7 d3 pad to 1024 ({arm})", KqFmt.k4, 128l, 96l, 7l, 1l, 9l, 3l, repack)
+                conv_case_kq(t, "conv k6 k1 on 256 ({arm})", KqFmt.k6, 256l, 64l, 1l, 1l, 0l, 1l, repack)
+                conv_case_kq(t, "conv k5 k4 stride 2 ({arm})", KqFmt.k5, 66l, 22l, 4l, 2l, 1l, 1l, repack)
+                conv_case_kq(t, "convT k4 k4 stride 2 pad to 256 ({arm})", KqFmt.k4, 128l, 64l, 4l, 2l, 1l, 1l, repack, true)
+                conv_case_kq(t, "convT k6 k12 stride 6 on 256 ({arm})", KqFmt.k6, 256l, 32l, 12l, 6l, 3l, 1l, repack, true)
+                conv_case_kq(t, "conv k4 k5 channel-major ({arm})", KqFmt.k4, 128l, 128l, 5l, 1l, 2l, 1l, repack, false, true)
+                conv_case_kq(t, "convT k4 k20 stride 10, the kokoro upsampler's shape ({arm})", KqFmt.k4, 512l, 256l, 20l, 10l, 5l, 1l, repack, true)
+            }
+        }
+        t |> run("a padded row stacked after a full one of the same width reads zeros in its pad columns") @(t : T?) {
+            // k4 over 128 inputs fills all 512 stacked columns, with rows ten thousand times the next conv's; k4 over 66 after
+            // it stacks 264 and pads to the same 512, in the same scratch. A pad column left holding the full conv's value
+            // sets the scale of the Q8_K block it shares with real columns, and the real rows quantize to nothing
+            conv_case_kq(t, "conv k4 k4 on 512, filling the stack", KqFmt.k4, 128l, 128l, 4l, 1l, 2l, 1l, true, false, false, 2.0e4)
+            conv_case_kq(t, "conv k4 k4 over 66 inputs pad to 512, after it", KqFmt.k4, 66l, 128l, 4l, 1l, 2l, 1l, true)
+            conv_case_kq(t, "convT k4 k4 on 256, filling the lift's stack", KqFmt.k4, 256l, 64l, 4l, 2l, 1l, 1l, true, true, false, 2.0e4)
+            conv_case_kq(t, "convT k4 k4 over 66 inputs pad to 256, after it", KqFmt.k4, 66l, 64l, 4l, 2l, 1l, 1l, true, true)
+        }
+    }
+}
+
 [test(description = "Every rows-layout TTS kernel (forward, strided and transposed convs, linear, attention, snake, AdaIN, norms, pool, padding) matches its channel-major twin or reference within a dot-envelope bar or exactly, q8 and K-quant lanes at their own bars, each with a must-red control")]
 def test_rows_convs(t : T?) {
     with_dasllama_jobque_() {
@@ -1153,6 +1435,7 @@ def test_rows_convs(t : T?) {
             conv_case_q8(t, "conv q8 k3 d1", 128l, 128l, 3l, 1l, 1l)
             conv_case_q8(t, "conv q8 k7 d3", 128l, 128l, 7l, 9l, 3l)
             conv_case_q8(t, "conv q8 k11 d5", 256l, 256l, 11l, 25l, 5l)
+            conv_case_q8(t, "convT q8 k4 stride 2", 128l, 64l, 4l, 1l, 1l, true, 2l)
             linear_case_q8(t, 768l, 768l)
         }
         t |> run("the K-quant lane against the leaf per row - both arms, and a width off the float4 bias") @(t : T?) {
@@ -1162,6 +1445,7 @@ def test_rows_convs(t : T?) {
             linear_case_kq(t, 768l, 64l, true, false)
             linear_case_kq(t, 256l, 6l, true, true)   // nout off 4: the bias tail past the last float4
             kq_width_refusal(t)
+            slab_linear_cases_kq(t)
         }
         t |> run("snake, adain, pad, polar") @(t : T?) {
             snake_case(t)
@@ -1218,6 +1502,10 @@ def private split_arms(t : T?; axis : SplitAxis) {
         report_split(t, split_conv_case("conv k7 pad9 d3", 64l, 64l, 7l, 1l, 9l, 3l, false, axis))
         report_split(t, split_conv_case("conv k4 pad4", 64l, 64l, 4l, 1l, 4l, 1l, false, axis))
         report_split(t, split_conv_case("conv q8 k3 pad1 d1", 128l, 128l, 3l, 1l, 1l, 1l, true, axis))
+        report_split(t, split_conv_kq_case("conv k4 k3 pad1", KqFmt.k4, 128l, 128l, 3l, 1l, axis))
+        report_split(t, split_conv_case("convT q8 k4 stride 2", 128l, 64l, 4l, 2l, 1l, 1l, true, axis, true))
+        report_split(t, split_conv_kq_case("convT k6 k12 stride 6", KqFmt.k6, 256l, 32l, 12l, 3l, axis, 6l, true))
+        report_split(t, split_conv_kq_case("convT k4 k4 stride 2", KqFmt.k4, 128l, 64l, 4l, 1l, axis, 2l, true))
     }
     t |> run("adain, attention and the dense layer land the same bits ({ax})") @(t : T?) {
         report_split(t, split_adain_case(64l, axis))
@@ -1784,7 +2072,7 @@ def private rows_conv_panics(c : TtsConv1d; x : array<float>; t_in : int64) : bo
     return tripped
 }
 
-[test(description = "`conv1d_rows` panics on a grouped conv and on a strided or transposed q8 conv, and `conv1d_pad_cin` panics on a depthwise-grouped conv whose cout differs from its cin")]
+[test(description = "`conv1d_rows` panics on a grouped conv and on a strided forward q8 conv, and `conv1d_pad_cin` panics on a depthwise-grouped conv whose cout differs from its cin")]
 def test_rows_conv_refuses_the_wrong_shape(t : T?) {
     t |> run("a grouped conv is not a rows conv") @(t : T?) {
         var r = TtsRng()
@@ -1797,7 +2085,7 @@ def test_rows_conv_refuses_the_wrong_shape(t : T?) {
         rand_fill(r, x, 8l * 16l, 1.0)
         t |> success(rows_conv_panics(c, x, 16l), "conv1d_rows panics on a grouped conv")
     }
-    t |> run("the q8 rows kernel takes stride 1 forward convs only") @(t : T?) {
+    t |> run("a forward conv's q8 rows form is stride 1") @(t : T?) {
         var r = TtsRng()
         rng_seed(r, 2ul)
         var inscope c0 <- make_conv(r, 32l, 32l, 3l, 1l, 1l, 1l, false, false)
@@ -1808,8 +2096,6 @@ def test_rows_conv_refuses_the_wrong_shape(t : T?) {
         cq.stride = 2l
         t |> success(rows_conv_panics(cq, x, 16l), "conv1d_rows panics on a strided q8 conv")
         cq.stride = 1l
-        cq.transposed = true
-        t |> success(rows_conv_panics(cq, x, 16l), "conv1d_rows panics on a transposed q8 conv")
     }
     t |> run("conv1d_pad_cin takes a depthwise conv whose cout is its cin") @(t : T?) {
         var r = TtsRng()

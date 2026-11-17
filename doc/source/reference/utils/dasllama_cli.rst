@@ -52,7 +52,7 @@ Commands
        model takes one - a model that detects it refuses a hint, and a code the model does
        not speak is refused with the codes it does.
    * - ``speak``
-     - Text to a 16-bit WAV through ``--tts`` (``--voice``, ``--speed``, ``--tts-lane q8 | f32``).
+     - Text to a 16-bit WAV through ``--tts`` (``--voice``, ``--speed``, ``--tts-lane default | q8 | f32``).
        A voice the model does not carry is refused with the voices it does; a speed on a model
        that takes none is refused.
    * - ``talk``
@@ -281,7 +281,7 @@ server's names; the config file fills whatever they leave empty (below).
    * - ``--speed``
      - Speech speed multiplier (default 1.0); a speed on a model that takes none is refused
    * - ``--tts-lane``
-     - TTS weight lane: ``q8`` (default; the prepared quant image beside the GGUF) | ``f32`` (the file's own planes)
+     - TTS weight lane: ``default`` (no pin: the formats the model's file stores, an f32 KittenTTS or Kokoro file as Q8_0) | ``q8`` (every quantized layer as Q8_0) | ``f32`` (the reference lane)
    * - ``--prof``
      - Print the generator's per-op profile
 

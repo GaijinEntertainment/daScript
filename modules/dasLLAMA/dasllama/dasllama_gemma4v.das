@@ -462,15 +462,10 @@ def stage_gemma4v_tower(path : string) : Gemma4vStaging {
 //! there is no allocation and no processing at load; missing or stale, one is minted from the
 //! source mmproj first. Panics on any other projector.
 def load_gemma4v_tower(path : string) : Gemma4vTower {
-    var tag = g4v_tag()
     // a .dlim named directly: no mmproj to regenerate from, so a wrong identity panics; the lane is
     // the file's (its baked tag), not the pin's - a served tower reads its q8 flag from the meta
-    if (path |> ends_with(".dlim")) {
-        let baked = image_tag_lane(image_family_tag(path))
-        if (baked == GEMMA4V_TAG || baked == GEMMA4V_TAG_Q8) {
-            tag = baked
-        }
-    } else {
+    let tag = image_path_lane(path, g4v_tag(), GEMMA4V_TAG)
+    if (!(path |> ends_with(".dlim"))) {
         g4v_announce_lane()
     }
     let dev = path |> ends_with(".dlim") ? TowerDev.none : tower_dev_flavor(g_gemma4v_flavor, tag == GEMMA4V_TAG_Q8)

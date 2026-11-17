@@ -184,3 +184,62 @@ def test_bake_gigaam_lanes(t : T?) {
         remove(copy)
     }
 }
+
+[test(description = "the 18m K-quant Pocket TTS file bakes each lane's image to -o", timeout = 1200)]
+def test_bake_pocket_lanes(t : T?) {
+    let src = path_join(models_dir(), "pocket-tts-en-18m-kq.gguf")
+    return if (!model_available(t, src))
+    for (lane in [("q8", "pocket-native"), ("fp32", "pocket-f32")]) {
+        t |> run("the K-quant Pocket file at -q {lane._0} bakes the {lane._1} image to -o") @(t : T?) {
+            let out = path_join(test_temp_dir(), "pocket-{lane._0}.dlim")
+            remove(out)
+            var log = ""
+            let main = path_join(get_this_module_dir(), "main.das")
+            let argv <- [get_host_binary(), "-jit", "-no-module-cache", "-jit-no-cache", main, "--", "--model", src, "--quant", lane._0, "-o", out]
+            let rc = run_and_capture(argv, log, 600.0)
+            t |> equal(rc, 0, "the bake exits 0: {log}")
+            t |> success(stat(out).is_valid, "{base_name(out)} landed: {log}")
+            t |> equal(image_family_tag(out), lane._1, "the image carries the lane's tag")
+            remove(out)
+        }
+    }
+    t |> run("--recipe on a Pocket file is refused: it serves the formats it stores") @(t : T?) {
+        var log = ""
+        let main = path_join(get_this_module_dir(), "main.das")
+        let out = path_join(test_temp_dir(), "pocket-recipe.dlim")
+        let argv <- [get_host_binary(), "-jit", "-no-module-cache", "-jit-no-cache", main, "--", "--model", src, "--recipe", "-o", out]
+        t |> equal(run_and_capture(argv, log, 600.0), 2, "the bake exits 2: {log}")
+        t |> success(find(log, "--recipe bakes a KittenTTS or Kokoro source") >= 0 && !stat(out).is_valid, "and names the flag, with nothing written: {log}")
+    }
+}
+
+[test(description = "kitten-nano bakes each lane's image to -o: the Q8_0 lane at -q q8, the recipe lane with --recipe, the reference lane at -q fp32; --recipe at -q fp32 is refused by name with nothing written", timeout = 1200)]
+def test_bake_kitten_lanes(t : T?) {
+    let src = path_join(models_dir(), "kitten-nano.gguf")
+    return if (!model_available(t, src))
+    for (lane in [("q8", "", "tts-q8"), ("q8", "--recipe", "tts-kq"), ("fp32", "", "tts-f32")]) {
+        t |> run("kitten-nano at -q {lane._0} {lane._1} bakes the {lane._2} image to -o") @(t : T?) {
+            let out = path_join(test_temp_dir(), "kitten-{lane._2}.dlim")
+            remove(out)
+            var log = ""
+            let main = path_join(get_this_module_dir(), "main.das")
+            var argv <- [get_host_binary(), "-jit", "-no-module-cache", "-jit-no-cache", main, "--", "--model", src, "--quant", lane._0, "-o", out]
+            if (!empty(lane._1)) {
+                argv |> push(lane._1)
+            }
+            let rc = run_and_capture(argv, log, 600.0)
+            t |> equal(rc, 0, "the bake exits 0: {log}")
+            t |> success(stat(out).is_valid, "{base_name(out)} landed: {log}")
+            t |> equal(image_family_tag(out), lane._2, "the image carries the lane's tag")
+            remove(out)
+        }
+    }
+    t |> run("--recipe at -q fp32 is refused: the recipe lane mints at q8") @(t : T?) {
+        var log = ""
+        let main = path_join(get_this_module_dir(), "main.das")
+        let out = path_join(test_temp_dir(), "kitten-recipe-f32.dlim")
+        let argv <- [get_host_binary(), "-jit", "-no-module-cache", "-jit-no-cache", main, "--", "--model", src, "--quant", "fp32", "--recipe", "-o", out]
+        t |> equal(run_and_capture(argv, log, 600.0), 2, "the bake exits 2: {log}")
+        t |> success(find(log, "--recipe bakes a KittenTTS or Kokoro source") >= 0 && !stat(out).is_valid, "and names the flag, with nothing written: {log}")
+    }
+}

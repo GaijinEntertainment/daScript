@@ -196,6 +196,70 @@ def test_kitten_symbol_drop(t : T?) {
     }
 }
 
+[test(description = "`st2_group` files a StyleTTS2 tensor under its recipe group by name - the published files' own tensor names, the staged names an LSTM, a style projection and a voice pack go by - each group's recipe format is the one the architecture states, and every group the recipe lists is reached")]
+def test_recipe_groups(t : T?) {
+    let cases <- [
+        (name = "bert_encoder.weight", group = "bert", fmt = St2Fmt.q8),
+        (name = "bert.encoder.albert_layer_groups.0.albert_layers.0.ffn.weight", group = "bert", fmt = St2Fmt.q8),
+        (name = "predictor.N_proj.weight", group = "predictor", fmt = St2Fmt.q8),
+        (name = "predictor.F0.0.conv1.weight", group = "predictor", fmt = St2Fmt.q8),
+        (name = "predictor.N.0.norm1.fc.weight", group = "fc", fmt = St2Fmt.q8),
+        (name = "decoder.decode.0.norm2.fc.weight", group = "fc", fmt = St2Fmt.q8),
+        (name = ".fc", group = "fc", fmt = St2Fmt.q8),
+        (name = "lstm", group = "lstm", fmt = St2Fmt.q8),
+        (name = "text_encoder.cnn.0.0.weight", group = "text_encoder", fmt = St2Fmt.k4),
+        (name = "decoder.N_conv.weight", group = "decoder", fmt = St2Fmt.k4),
+        (name = "decoder.F0_conv.weight", group = "decoder", fmt = St2Fmt.k4),
+        (name = "decoder.asr_res.0.weight", group = "decoder", fmt = St2Fmt.k4),
+        (name = "decoder.decode.0.conv2.weight", group = "decoder", fmt = St2Fmt.k4),
+        (name = "decoder.generator.resblocks.0.convs1.0.weight", group = "generator", fmt = St2Fmt.k4),
+        (name = "decoder.generator.m_source.l_linear.weight", group = "generator", fmt = St2Fmt.k4),
+        (name = "decoder.generator.ups.0.weight", group = "ups", fmt = St2Fmt.k6),
+        (name = "decoder.generator.noise_convs.0.weight", group = "noise", fmt = St2Fmt.f32),
+        (name = "decoder.generator.conv_post.weight", group = "post", fmt = St2Fmt.f32),
+        (name = "voice.af_sky", group = "voice", fmt = St2Fmt.q8)
+    ]
+    var inscope reached : table<string>
+    for (c in cases) {
+        t |> equal(st2_group(c.name), c.group, "{c.name}")
+        t |> equal(st2_recipe_default(c.group), c.fmt, "the {c.group} group's recipe format")
+        reached |> insert(c.group)
+    }
+    for (group in ST2_GROUPS) {
+        t |> success(key_exists(reached, group), "the cases reach the {group} group")
+    }
+    t |> success(st2_group("predictor.N_proj.weight") != st2_group("decoder.N_conv.weight"), "a predictor tensor is not the decoder's (the prefix test's control)")
+}
+
+[test(description = "A `.dlim` that is no readable image is asked about without a panic: `tts_pack_names` names the English packs for it, as for an image with no GGUF beside it, and `tts_needs_packs` says it reads packs")]
+def test_unreadable_image_asked_first(t : T?) {
+    let junk = path_join(test_temp_dir(), "unreadable.dlim")
+    fopen(junk, "wb") $(f) {
+        f |> fwrite("not an image: text standing where a prepared image's header would be")
+    }
+    defer() {
+        remove(junk)
+    }
+    var inscope names <- tts_pack_names(junk)
+    t |> success(!empty(names), "the pack question answers for an unreadable image ({length(names)} packs named)")
+    t |> success(tts_needs_packs(junk), "and it is no Pocket image, so it reads packs")
+}
+
+[test(description = "A recipe ask serves Q8_0 beside its K-quant groups whatever the q8 pin says: with the f32 lane pinned `set_styletts2_recipe` turns `styletts2_serves_q8` on, and `reset_styletts2_recipe` hands the lane back to the pin")]
+def test_recipe_ask_over_f32_pin(t : T?) {
+    defer() {
+        reset_styletts2_recipe()
+        reset_styletts2_q8()
+    }
+    reset_styletts2_recipe()
+    set_styletts2_q8(false)
+    t |> success(!styletts2_serves_q8() && !styletts2_serves_recipe(), "the f32 pin alone serves neither")
+    set_styletts2_recipe("")
+    t |> success(styletts2_serves_recipe() && styletts2_serves_q8(), "the recipe ask serves the recipe lane and its Q8_0 groups over the f32 pin")
+    reset_styletts2_recipe()
+    t |> success(!styletts2_serves_q8(), "the ask dropped, the f32 pin stands (the control)")
+}
+
 [test(description = "`rtf` returns 0 for zero or negative sample counts instead of dividing, and 0.001 for one second of audio made in one millisecond")]
 def test_timings_guard(t : T?) {
     t |> run("rtf answers zero rather than dividing by no audio") @(t : T?) {

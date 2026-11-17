@@ -6035,11 +6035,10 @@ def private pk_blob_q8(var qb : PkBlobWriter; l : TtsLinear) : uint64 {
             q8_region_to_metal_blob(addr<int8 const?>(l.wq[0]), addr<float const?>(l.wqs[0]), l.nin, l.nout, g_active_needs_repack, lay.mr, lay.kgroup, lay.wbias, addr(qb.host[at]))
         } else {
             let n = l.nout * l.nin
-            let f = kq_fmt_of_id(l.kq_fmt, "the tower blob")
             var inscope @exact_size rows : array<float>
             rows |> reserve_resize(n)
             for (r in range64(l.nout)) {
-                kq_plane_row_f32(f, l.kq, l.ks, l.nin, l.nout, l.kq_repacked ? active_kq_layout_mr(l.kq_fmt) : 1l, r, rows, r * l.nin)
+                kq_matrix_row(l.kq, l.ks, l.kq_fmt, l.kq_repacked, l.nin, l.nout, r, rows, r * l.nin, "the tower blob")
             }
             var inscope @exact_size xq : array<int8>
             var inscope @exact_size xs : array<float>

@@ -754,6 +754,8 @@ def kq_ggml_type(f : KqFmt) : int => kq_desc(f).ggml_type
 // ===== plane stride truth (per 256-weight superblock row unless noted) =====
 
 let K4_QSB = 128l   // Q4_K quant plane: 128 nibble bytes
+let K4_LEVEL_MAX = 15   //! Q4_K's top quant level: four bits a weight
+let K5_LEVEL_MAX = 31   //! Q5_K's: five
 let K4_SSB = 20l    // Q4_K scale plane: 16B disk block + 4B pad, decoded in place at repack
 let K5_QSB = 160l   // Q5_K quant plane: 128 nibble bytes + 32 qh bytes
 let K5_QH_B32 = (K5_QSB - K4_QSB) / (KQ_SB_ELEMS / KQ_B32_ELEMS)   //! a k5 superblock's qh bytes a 32-block (its 32 past the nibbles, over eight blocks)

@@ -4,9 +4,11 @@ options stack = 524288   // every dasLLAMA program root takes this budget (optio
 options _dasllama_internal = true
 
 require dastest/testing_boost public
+require _compares   // nan_wide_diff: a difference a NaN on either side reads as infinite
 require dasllama/dasllama_spm
 require dasllama/dasllama_gguf
 require dasllama/dasllama_pocket
+require dasllama/dasllama_styletts2   // bake_styletts2_image: another speech family's image, which a Pocket load refuses
 require dasllama/dasllama_tts
 require dasllama/dasllama_audio_io
 require dasllama/dasllama_tts_types
@@ -17,6 +19,9 @@ require dasllama/dasllama   // moe_gpu_drop_model: the LLM tier's model drop bet
 require daslib/jobque_boost
 require daslib/defer   // defer() { reset_pocket_q8() } - a lane pin never outlives its cell
 require daslib/fio
+require dasllama/dasllama_image   // image_backing_borrowers, image_memory_lane: a borrowed image's count and its lane read
+require _image_memory   // read_page_aligned: a host's own copy of an image
+require _gguf_writer   // gguf_retyped_copy: a carrier whose header the staging refuses
 require daslib/json_boost
 require daslib/strings_boost   // join: the ids in a log line
 require strings
@@ -38,7 +43,9 @@ require _model_tier
 // cells skip per file without its f32 reference, its `tts_oracle/pocket_english_*_2026-10/` dumps
 // or its published file (the refl cells without the `-refl-` files); the no-encoder cells skip
 // without pocket-tts-en-18m-stuart-kq.gguf and pocket-tts-en-18m-kq.gguf. The
-// quiet-floor cell needs pocket-tts-en-kq.gguf alone. The GPU cells skip on a build without a GPU
+// quiet-floor cell needs pocket-tts-en-kq.gguf alone. The voice-state cap cell and the from-memory
+// cell need pocket-tts-en-18m-q8.gguf, and the cap cell skips on a roster of fewer than three
+// voices. The GPU cells skip on a build without a GPU
 // module (das_metal or vulkan) and need a device that serves the tower (they red where a present
 // device declines); the served-lane cells skip unless pocket-tts-en-q8.gguf or pocket-tts-en-kq.gguf is
 // stocked, the served frames cell also unless the oracle carries two voices' stage cases; the
@@ -184,7 +191,7 @@ def test_prepare_pocket_text(t : T?) {
     if (!model_available(t, path)) {
         return
     }
-    var inscope m <- load_pocket(path)
+    var inscope m <- pocket_minted(path)
     var inscope fx <- load_tokens_fixture()
     var inscope corpus <- load_tts_corpus()
     var inscope by_id <- {for (row in corpus); row.id => row.text}
@@ -324,7 +331,7 @@ def test_pocket_parity(t : T?) {
     return if (empty(man.cases))
     pocket_lane_cell(PocketLane.f32) {
         set_serving_gpu_tower(false, TowerFamily.tts)
-        var inscope m <- load_pocket(path)
+        var inscope m <- pocket_minted(path)
         var inscope sc = PocketScratch()
         t |> success(!m.q8, "the reference lane serves f32")
         t |> equal(m.lang, "en", "the English model reports en")
@@ -409,7 +416,7 @@ def test_pocket_codec_stream(t : T?) {
             set_pocket_codec_window(POCKET_CODEC_WINDOW_DEFAULT)
         }
         set_serving_gpu_tower(false, TowerFamily.tts)
-        var inscope m <- load_pocket(path)
+        var inscope m <- pocket_minted(path)
         var inscope dump <- load_tts_dump(path_join(oracle_dir(), c.file))
         let frames = int64(c.n_frames)
         set_pocket_codec_window(0l)
@@ -460,7 +467,7 @@ def test_pocket_frames(t : T?) {
     return if (empty(man.cases))
     pocket_lane_cell(PocketLane.f32) {
         set_serving_gpu_tower(false, TowerFamily.tts)
-        var inscope m <- load_pocket(path)
+        var inscope m <- pocket_minted(path)
         var inscope sc = PocketScratch()
         var done = 0
         for (c in man.cases) {
@@ -506,7 +513,7 @@ def test_pocket_codec_metal(t : T?) {
     return if (empty(man.cases))
     static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)) {
         pocket_lane_cell(PocketLane.f32) {
-            var inscope m <- load_pocket(path)
+            var inscope m <- pocket_minted(path)
             var inscope sc = PocketScratch()
             var done = 0
             for (c in man.cases) {
@@ -561,7 +568,7 @@ def private pocket_served_files(t : T?; leg : block<(path : string; m : PocketMo
         for (path in [q8_gguf_path(), kq_gguf_path()]) {
             continue if (!model_available(t, path))
             files++
-            var inscope m <- load_pocket(path)
+            var inscope m <- pocket_minted(path)
             var inscope sc = PocketScratch()
             return if (!invoke(leg, path, m, sc))
         }
@@ -825,7 +832,7 @@ def test_pocket_prompt_gpu(t : T?) {
     return if (empty(man.cases))
     static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)) {
         pocket_lane_cell(PocketLane.f32) {
-            var inscope m <- load_pocket(path)
+            var inscope m <- pocket_minted(path)
             var inscope sc = PocketScratch()
             for (c in man.cases) {
                 continue if (!c.stages || c.voice != "alba")
@@ -863,7 +870,7 @@ def test_pocket_frames_metal(t : T?) {
     return if (empty(man.cases))
     static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)) {
         pocket_lane_cell(PocketLane.f32) {
-            var inscope m <- load_pocket(path)
+            var inscope m <- pocket_minted(path)
             var inscope sc = PocketScratch()
             var done = 0
             for (c in man.cases) {
@@ -974,7 +981,7 @@ def test_pocket_frames_after_model_drop(t : T?) {
             reset_pocket_q8()
             let path = q8_gguf_path()
             return if (!model_available(t, path))
-            var inscope m <- load_pocket(path)
+            var inscope m <- pocket_minted(path)
             var inscope sc = PocketScratch()
             for (c in man.cases) {
                 continue if (!c.stages)
@@ -1006,7 +1013,7 @@ def test_pocket_synthesis_metal(t : T?) {
     static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)) {
         with_gpu_cell() {
             reset_pocket_q8()   // the served lane is the unpinned default, whatever an earlier cell left
-            var inscope m <- load_tts_model(path)
+            var inscope m <- pocket_tts_minted(path)
             let text = "The tower serves the codec, and the words still land. Then it slept."
             served_lane_counters(t, m, text, "alba", "pocket served lane", "") $(a, b : TtsAudio; chunks : int; encodes : int64) {
                 t |> success(encodes > int64(chunks), "the tower encoded the frame batches and one codec pass a chunk ({encodes} encodes over {chunks} chunk(s))")
@@ -1034,7 +1041,7 @@ def test_pocket_q8_lane(t : T?) {
     var inscope man <- stocked_manifest(t)
     return if (empty(man.cases))
     pocket_lane_cell(PocketLane.q8) {   // the lane this cell measures, pinned - the sibling cells pin the other
-        var inscope m <- load_pocket(path)
+        var inscope m <- pocket_minted(path)
         t |> success(m.q8, "the pinned q8 lane serves")
         t |> success(pocket_serves_q8(), "the pin is what the policy answers")
         t |> success(m.backbone.layers[0].in_proj.q8 && !m.mimi.dec_in.q8 && !m.mimi.enc_in.q8 && !m.mimi.dec_out.q8,
@@ -1085,8 +1092,8 @@ def test_pocket_q8_file(t : T?) {
     return if (empty(man.cases))
     pocket_lane_cell(PocketLane.q8) {
         var inscope sc = PocketScratch()
-        var inscope mq <- load_pocket(q8path)
-        var inscope mf <- load_pocket(path)
+        var inscope mq <- pocket_minted(q8path)
+        var inscope mf <- pocket_minted(path)
         t |> success(mq.q8 && mf.q8, "both loads serve the q8 lane")
         var from_file = 0
         for (l in mq.backbone.layers) {
@@ -1108,8 +1115,8 @@ def test_pocket_q8_file(t : T?) {
         // the same file on the f32 lane: every Q8_0 tensor dequantized and re-laid, against the f16
         // file's f32 lane - the published file's other lane, the one a --tts-lane f32 boot serves
         set_pocket_q8(false)
-        var inscope mq32 <- load_pocket(q8path)
-        var inscope mf32 <- load_pocket(path)
+        var inscope mq32 <- pocket_minted(q8path)
+        var inscope mf32 <- pocket_minted(path)
         t |> success(!mq32.q8 && !mf32.q8, "both loads serve the f32 lane")
         t |> success(!mq32.backbone.layers[0].in_proj.q8 && !mq32.mimi.dec_in.q8, "the published file's Q8_0 tensors dequantized into f32 planes")
         for (c in man.cases) {
@@ -1153,7 +1160,7 @@ def test_pocket_kq_file(t : T?) {
         }
         reset_pocket_q8()
         t |> success(pocket_serves_native(), "unpinned, a K-quant tensor serves as its own planes")
-        var inscope mk <- load_pocket(kqpath)
+        var inscope mk <- pocket_minted(kqpath)
         var kq_layers = 0
         for (l in mk.backbone.layers) {
             kq_layers += (l.in_proj.kq_fmt == 4 && l.out_proj.kq_fmt == 4 && l.ffn1.kq_fmt == 4 && l.ffn2.kq_fmt == 4) ? 1 : 0
@@ -1162,21 +1169,40 @@ def test_pocket_kq_file(t : T?) {
         t |> success(mk.mimi.dec_tf.layers[0].ffn1.kq_fmt == 4 && mk.mimi.enc_tf.layers[0].in_proj.kq_fmt == 4, "the codec transformers' matrices too")
         t |> success(mk.head.blocks[0].mlp1.q8 && mk.head.final_linear.q8 && mk.head.cond_embed.q8 && mk.head.input_proj.q8, "the flow head's matrices came in as Q8_0 blocks, its 32-wide input projection included")
         t |> success(!mk.speaker_proj.q8 && mk.speaker_proj.kq_fmt == 0, "the speaker projection stays f32")
-        t |> equal(long_length(mk.text_emb.a), 4001l * mk.backbone.d, "the Q4_K embedding table dequantized into its f32 form")
+        t |> success(mk.text_kq.kq_fmt == 4 && mk.text_kq.nout == 4001l && empty(mk.text_emb.a), "the Q4_K embedding table serves as its own planes, with no f32 copy")
         // the same file on the q8 lane: every Q4_K tensor dequantized and requantized to Q8_0 (a
         // re-encode of the same values), so the two lanes differ by that re-encode and their
         // activation quants; the head is the same Q8_0 blocks on both
         set_pocket_q8(true)
-        var inscope mq <- load_pocket(kqpath)
+        var inscope mq <- pocket_minted(kqpath)
         t |> success(mq.backbone.layers[0].in_proj.q8 && mq.backbone.layers[0].in_proj.kq_fmt == 0, "pinned q8, the K-quant tensor is Q8_0 blocks")
         // the exact lane over the K-quant file: dequantized f32 planes, the head dequantized too -
         // the one load whose head is not the Q8_0 route, so it is what pins that route
         set_pocket_q8(false)
-        var inscope m32 <- load_pocket(kqpath)
+        var inscope m32 <- pocket_minted(kqpath)
         t |> success(!m32.q8 && m32.backbone.layers[0].in_proj.kq_fmt == 0 && !m32.backbone.layers[0].in_proj.q8, "pinned f32, the K-quant tensor is an f32 plane")
         t |> success(!m32.head.blocks[0].mlp1.q8, "pinned f32, the head is f32 too")
+        t |> success(m32.text_kq.kq_fmt == 0 && long_length(m32.text_emb.a) == 4001l * m32.backbone.d, "pinned f32, the table is the file's planes dequantized")
+        {   // a prompt's rows off the planes are the dequantized table's rows, bit for bit
+            let ids <- [0l, 1l, 17l, 2048l, 4000l]
+            var inscope sk = PocketScratch()
+            var inscope sf = PocketScratch()
+            pocket_prompt_embed(mk, ids, sk)
+            pocket_prompt_embed(m32, ids, sf)
+            let next <- [1l, 2l, 18l, 2049l, 3999l]
+            var inscope sn = PocketScratch()
+            pocket_prompt_embed(m32, next, sn)
+            let differing = mismatch_exact(sk.rows, sf.rows)
+            let control = mismatch_exact(sk.rows, sn.rows)
+            let peak = logits_maxabs(sf.rows)
+            to_log(LOG_INFO, "pocket kq table, token ids {ids}: {differing} of {length(sk.rows)} elements differ from the dequantized table's rows, peak {peak}; against ids {next}, {control} differ\n")
+            t |> equal(length(sk.rows), length(ids) * int(mk.backbone.d))
+            t |> success(differing == 0 && peak > 0.0, "the planes' rows of five tokens equal the dequantized table's: {differing} elements differ, peak {peak}")
+            t |> success(all_finite(sk.rows) && all_finite(sn.rows) && control > 0, "and the next tokens' rows are other rows ({control} elements differ)")
+            t |> equal(pocket_text_rows(mk), 4001l, "the plane table answers its rows")
+        }
         // the f16 file on its f32 lane: the reference the whole small form is measured against
-        var inscope mf <- load_pocket(path)
+        var inscope mf <- pocket_minted(path)
         t |> success(!mf.q8 && !mf.backbone.layers[0].in_proj.q8, "the f16 reference serves its f32 lane")
         reset_pocket_q8()
         var compared = 0
@@ -1227,7 +1253,7 @@ def private kq_lanes_case(t : T?; c : PocketCase; man : PocketManifest; var mk, 
 // a clone over a roster name: alba re-registered from a clip keeps the roster at 19 and speaks
 [cold_path]
 def private kq_clone_over_roster(t : T?; kqpath : string) {
-    var inscope mkf <- load_tts_model(kqpath)
+    var inscope mkf <- pocket_tts_minted(kqpath)
     var inscope clip : array<float>
     clip |> resize(24000 * 3)
     var r = TtsRng()
@@ -1270,7 +1296,7 @@ def private language_cells(t : T?; L : PocketLang) {
         return
     }
     var inscope fx <- load_tokens_fixture("{get_das_root()}/modules/dasLLAMA/tests/_tts_fixtures/pocket_tokens_{L.config}.json")
-    var inscope m <- load_pocket(path)
+    var inscope m <- pocket_minted(path)
     t |> equal(m.lang, L.code, "{L.config}: the language code")
     t |> equal(m.default_voice, L.voice, "{L.config}: the default voice")
     t |> equal(length(m.voice_names), 1, "{L.config}: one bundled voice")
@@ -1309,13 +1335,48 @@ def private language_cells(t : T?; L : PocketLang) {
         cases++
     }
     t |> success(cases > 0, "{L.config}: {cases} oracle cases ran")
-    var inscope tm <- load_tts_model(path)
+    var inscope tm <- pocket_tts_minted(path)
     var inscope c2 <- caps(tm)
     t |> equal(c2.langs[0], L.code, "{L.config}: the facade reports the language")
     var inscope a <- synthesize(tm, fx.rows[0].prepared, L.voice)
     let st = speech_level(a.pcm)
     t |> success(st.finite && st.rms > 0.01, "{L.config}: '{fx.rows[0].prepared}' speaks ({length(a.pcm)} samples, rms {st.rms})")
     to_log(LOG_INFO, "pocket {L.config}: {timings_line(a.timings, a.sample_rate)}\n")
+}
+
+[test(description = "The f16 Pocket file's F16 text table serves unpinned as the file's halfwords with no f32 copy, a prompt's rows the pinned f32 lane's bit for bit, and the rows of the next token ids differing as the control")]
+def test_pocket_f16_table(t : T?) {
+    let path = gguf_path()
+    if (!model_available(t, path)) { return }
+    with_dasllama_jobque_() {
+        defer() {
+            reset_pocket_q8()
+        }
+        reset_pocket_q8()
+        var inscope mh <- pocket_minted(path)
+        let d = mh.backbone.d
+        t |> success(long_length(mh.text_h) == 2l * 4001l * d && empty(mh.text_emb.a), "unpinned, the F16 table is the file's halfwords ({long_length(mh.text_h)} bytes), with no f32 copy")
+        set_pocket_q8(false)
+        var inscope mf <- pocket_minted(path)
+        t |> success(empty(mf.text_h) && long_length(mf.text_emb.a) == 4001l * d, "pinned f32, the table is floats")
+        let ids <- [0l, 1l, 17l, 2048l, 4000l]
+        let next <- [1l, 2l, 18l, 2049l, 3999l]
+        var inscope sh = PocketScratch()
+        var inscope sf = PocketScratch()
+        var inscope sn = PocketScratch()
+        pocket_prompt_embed(mh, ids, sh)
+        pocket_prompt_embed(mf, ids, sf)
+        pocket_prompt_embed(mf, next, sn)
+        let differing = mismatch_exact(sh.rows, sf.rows)
+        let control = mismatch_exact(sh.rows, sn.rows)
+        let peak = logits_maxabs(sf.rows)
+        to_log(LOG_INFO, "pocket f16 table, token ids {ids}: {differing} of {length(sh.rows)} elements differ from the f32 table's rows, peak {peak}; against ids {next}, {control} differ\n")
+        t |> equal(long_length(sh.rows), long_length(ids) * d)
+        t |> success(differing == 0 && peak > 0.0, "the halfwords' rows of five tokens equal the f32 table's: {differing} elements differ, peak {peak}")
+        t |> success(all_finite(sh.rows) && all_finite(sn.rows) && control > 0, "and the next tokens' rows are other rows ({control} elements differ)")
+        t |> equal(pocket_text_rows(mh), 4001l, "the halfword table answers its rows")
+        t |> equal(pocket_text_rows(mf), 4001l, "and so does the f32 one")
+    }
 }
 
 [test(description = "Each of the five other-language Pocket Q8_0 files reports its code and one default voice, tokenizes its corpus and probes id for id with the reference, holds teacher-forced latents at rel-l2 0.5 within 2 frames, and speaks through the facade")]
@@ -1364,8 +1425,33 @@ def private small_shape_cells(t : T?; m : PocketModel; S : PocketSmall) {
     t |> equal(m.cond_dim, 64l, "{tag}: the conditioning row is the bottleneck's")
     t |> equal(m.head.cond_embed.nin, 64l, "{tag}: the head conditions on it")
     t |> equal(m.out_eos.nin, 64l, "{tag}: so does the EOS logit")
-    t |> equal(long_length(m.text_emb.a), 4001l * m.backbone.d, "{tag}: the text table is multiplied out to the backbone's width")
+    let rank = m.text_proj.nin
+    if (rank == 0l) {   // a file that stores the table whole: floats on a pinned lane, else the file's halfwords or K-quant planes
+        let whole = long_length(m.text_emb.a) + long_length(m.text_h) / 2l + (m.text_kq.kq_fmt != 0 ? m.text_kq.nout * m.text_kq.nin : 0l)
+        t |> equal(whole, 4001l * m.backbone.d, "{tag}: the text table is the file's, the backbone's width, in one form")
+    } else {   // a low-rank table stays low-rank, and a prompt's rows are the multiplied-out table's rows
+        t |> success(empty(m.text_emb.a) && long_length(m.text_low.a) == 4001l * rank && m.text_proj.nout == m.backbone.d,
+            "{tag}: the text table stays low-rank - 4001 rows of {rank} and a projection to the backbone's {m.backbone.d}")
+        let d = m.backbone.d
+        var inscope full : array<float>
+        linear_rows(m.text_proj, m.text_low.a, 4001l, full)
+        let ids <- [0l, 3l, 250l, 4000l]
+        var inscope sp = PocketScratch()
+        pocket_prompt_embed(m, ids, sp)
+        let asked = long_length(ids) * d
+        var inscope want <- [for (i in range64(asked)); full[ids[i / d] * d + i % d]]
+        var inscope next <- [for (i in range64(asked)); full[(ids[i / d] + 1l) % 4001l * d + i % d]]
+        let off = span_maxdiff(sp.rows, want, 0, 0, length(want)).diff
+        let peak = logits_maxabs(want)
+        let shifted = span_maxdiff(sp.rows, next, 0, 0, length(next)).diff
+        to_log(LOG_INFO, "{tag}: low-rank table, token ids {ids}: off {off} against the multiplied-out table, peak {peak}; against the next rows {shifted}\n")
+        t |> success(peak > 0.0 && off <= 1.0e-5 * peak, "{tag}: four tokens' rows through the projection are the whole table's: off {off}, peak {peak}")
+        t |> success(all_finite(sp.rows) && shifted > 1.0e-5 * peak, "{tag}: the next tokens' rows land outside that bound (the compare's control): {shifted}")
+        t |> equal(pocket_text_rows(m), 4001l, "{tag}: the low-rank table answers its rows")
+    }
     t |> equal(m.mimi.dec_tf.d, 128l, "{tag}: the narrow codec decoder transformer")
+    let dec_in & = unsafe(m.mimi.dec_tf.layers[0].in_proj)
+    t |> equal(dec_in.q8 || dec_in.kq_fmt != 0, m.q8, "{tag}: the codec decoder transformer's matrices, on the 32 lattice, take the lane's quants whatever the file stores them as")
     t |> equal(m.mimi.upsample.cin, 128l, "{tag}: the upsampler is depthwise over the decoder's width")
     t |> equal(m.mimi.enc_tf.d, 512l, "{tag}: the encoder is the 100M model's")
     t |> equal(m.eos_threshold, -1.0, "{tag}: the config's EOS threshold")
@@ -1479,7 +1565,7 @@ def private small_published_cells(t : T?; S : PocketSmall; man : PocketManifest;
         reset_pocket_q8()
         set_serving_gpu_tower(false, TowerFamily.tts)
         let q8_lane = pocket_serves_q8()   //! the unpinned default lane, read before the load
-        var inscope m <- load_pocket(path)
+        var inscope m <- pocket_minted(path)
         t |> equal(m.backbone.layers[0].in_proj.q8, q8_lane && S.q8_file, "{S.config}: the published file's backbone GEMMs serve {S.q8_file ? "Q8_0 blocks on the q8 lane" : "f32 planes (its widths are off the 32 lattice)"}")
         var bad = 0
         for (r in fx.rows) {
@@ -1504,7 +1590,7 @@ def private small_published_cells(t : T?; S : PocketSmall; man : PocketManifest;
         }
     }
     with_dasllama_jobque_() {
-        var inscope tm <- load_tts_model(path)
+        var inscope tm <- pocket_tts_minted(path)
         var inscope c2 <- caps(tm)
         t |> success(c2.cloning && length(c2.voices) == 19 && c2.langs[0] == "en", "{S.config}: the facade reports a cloning English model with the roster")
         chunk_probes(t, tm, fx, S.config)
@@ -1604,7 +1690,7 @@ def private small_cells(t : T?; S : PocketSmall) {
     var inscope fx <- load_tokens_fixture(small_fixture_path())
     pocket_lane_cell(PocketLane.f32) {
         set_serving_gpu_tower(false, TowerFamily.tts)
-        var inscope m <- load_pocket(ref_path)
+        var inscope m <- pocket_minted(ref_path)
         t |> success(!m.q8, "{S.config}: the reference lane serves f32")
         small_shape_cells(t, m, S)
         small_admission_cells(t, m, S)
@@ -1629,7 +1715,7 @@ def test_pocket_small_refl(t : T?) {
         for (stem in REWARD_TUNED_TWINS) {
             let path = path_join(models_dir(), "{stem}.gguf")
             continue if (!model_available(t, path))
-            var inscope tm <- load_tts_model(path)
+            var inscope tm <- pocket_tts_minted(path)
             t |> success(tm.pocket.language |> ends_with("_refl_2026-10"), "{stem}: a reward-tuned 2026-10 config")
             t |> equal(tm.pocket.min_frames_before_eos, 6l, "{stem}: the 4.0.1 driver rules")
             var inscope a <- synthesize(tm, "The quick brown fox jumps over the lazy dog.", "alba")
@@ -1668,6 +1754,7 @@ def test_pocket_facade(t : T?) {
         tts_register_voice(m, "cloned", clip, 24000)
         var inscope c2 <- caps(m)
         t |> equal(length(c2.voices), 20, "the cloned voice joined the roster")
+        t |> success(key_exists(m.pocket.voice_latents, "cloned") && !key_exists(m.pocket.voices, "cloned"), "and keeps its clip's latent frames, not the clip")
         var inscope b <- synthesize(m, "Hello from a cloned voice.", "cloned")
         t |> success(speech_level(b.pcm).rms > 0.01, "the cloned voice speaks")
         pocket_refusals(t, m, clip)
@@ -1726,9 +1813,8 @@ def test_pocket_no_encoder(t : T?) {
 
 [cold_path]
 def private speak_stuart(path : string) : array<float> {
-    var inscope m <- load_tts_model(path)
-    var inscope a <- synthesize(m, "Whose woods these are I think I know.", "stuart_bell")
-    return <- clone(a.pcm)
+    var inscope m <- pocket_tts_minted(path)
+    return <- speak_line(m, "stuart_bell")
 }
 
 [cold_path]
@@ -1739,7 +1825,7 @@ def private no_encoder_cells(t : T?; file : string) {
     }
     with_dasllama_jobque_() {
         t |> success(!tts_needs_packs(path), "a Pocket file needs no packs")
-        var inscope m <- load_tts_model(path)
+        var inscope m <- pocket_tts_minted(path)
         var inscope c <- caps(m)
         t |> success(!c.cloning, "a file without the encoder does not clone")
         t |> success(!c.speed, "and has no speed to honour")
@@ -1798,12 +1884,12 @@ def test_pocket_quiet_floor(t : T?) {
         }
         let text = "The quick brown fox jumps over the lazy dog. Then it slept, and all was still."
         set_pocket_q8(true)   // the lane this cell measures, pinned
-        var inscope served <- load_tts_model(path)
+        var inscope served <- pocket_tts_minted(path)
         t |> success(served.pocket.q8, "the pinned q8 lane serves")
         var inscope a <- synthesize(served, text, "alba")
         delete served
         set_pocket_q8(false)
-        var inscope reference <- load_tts_model(path)
+        var inscope reference <- pocket_tts_minted(path)
         t |> success(!reference.pocket.q8, "the pinned f32 lane serves")
         var inscope b <- synthesize(reference, text, "alba")
         t |> success(length(a.pcm) >= 2 * a.sample_rate && length(b.pcm) >= 2 * b.sample_rate,
@@ -1834,7 +1920,7 @@ def test_pocket_long_chunk(t : T?) {
         return
     }
     with_dasllama_jobque_() {
-        var inscope m <- load_tts_model(path)
+        var inscope m <- pocket_tts_minted(path)
         let text = build_string() $(w) {
             for (i in range(230)) {
                 w |> write(i == 0 ? "word" : " word")
@@ -1872,6 +1958,193 @@ def test_pocket_long_chunk(t : T?) {
     }
 }
 
+[cold_path]
+def private speak_line(var m : TtsModel; voice : string = "") : array<float> {
+    var inscope a <- synthesize(m, "Whose woods these are I think I know.", empty(voice) ? m.pocket.default_voice : voice)
+    return <- clone(a.pcm)
+}
+
+[cold_path]
+def private speak_line_of(path : string) : array<float> {
+    var inscope m <- load_tts_model(path)
+    return <- speak_line(m)
+}
+
+[test(description = "A Pocket image its host holds in memory loads on the lane it was baked on with the file gone and speaks the image file's samples, its one borrow dropped at release; the ASR loader, another family's lane read and a base off the page refuse it by name; with its planes zeroed it speaks otherwise")]
+def test_pocket_from_memory(t : T?) {
+    let path = path_join(models_dir(), "pocket-tts-en-18m-q8.gguf")
+    return if (!model_available(t, path))
+    with_dasllama_jobque_() {
+        let dlim = path_join(test_temp_dir(), "pocket_memory.dlim")
+        t |> success(bake_pocket_image(path, dlim, true, true), "the native lane's image bakes")
+        t |> equal(image_family_tag(dlim), POCKET_IMAGE_TAG, "under the native lane's tag")
+        let refused = panic_text() {
+            var inscope st <- stage_pocket(path, false, true)
+        }
+        t |> success(find(refused, "the native lane serves a file's Q8_0 tensors as quants") >= 0, "the native lane without q8 is no lane, refused by name: '{refused}'")
+        var inscope want <- speak_line_of(dlim)
+        t |> success(length(want) >= 24000, "the image's file speaks ({length(want)} samples)")
+        var raw : array<uint8>
+        var size = 0ul
+        let base = read_page_aligned(dlim, raw, size)
+        var raw_skew : array<uint8>
+        var size_skew = 0ul
+        let off_page_copy = read_page_aligned(dlim, raw_skew, size_skew, 8l)
+        remove(dlim)
+        t |> success(base != null, "the image reads into memory")
+        if (base != null) {
+            {
+                t |> success(tts_loads_from_memory(base, size), "the facade says the bytes load")
+                t |> equal(image_memory_lane(base, size, POCKET_IMAGE_PREFIX, "pocket"), POCKET_IMAGE_TAG, "the bytes carry the native lane")
+                var inscope m <- load_tts_model(base, size)
+                t |> success(m.kind == TtsKind.pocket && m.pocket.q8, "the bytes load as a Pocket model on that lane")
+                t |> equal(image_backing_borrowers(base), 1, "the model borrows the bytes")
+                var inscope got <- speak_line(m)
+                let md = logits_maxdiff(got, want)
+                to_log(LOG_INFO, "pocket 18m-q8 from memory, 'Whose woods these are I think I know.' in {m.pocket.default_voice}: {length(got)} samples, max difference {md} from the image file's {length(want)}\n")
+                t |> equal(length(got), length(want), "the bytes speak the file's length")
+                t |> equal(md, 0.0, "and the file's samples")
+            }
+            t |> success(!tts_loads_from_memory(unsafe(reinterpret<void?>(intptr(base) + 8ul)), size - 8ul), "bytes off the image page do not load, asked first")
+            t |> success(off_page_copy != null && !tts_loads_from_memory(off_page_copy, size_skew), "nor does the whole image at an address off the page")
+            t |> success(!tts_loads_from_memory(base, 64ul), "nor do bytes too short to be an image")
+            t |> success(!tts_loads_from_memory(null, 0ul), "nor no bytes at all")
+            t |> equal(image_backing_borrowers(base), 0, "the release forgets the bytes")
+            let foreign = panic_text() {
+                image_memory_lane(base, size, "whisper-", "whisper")
+            }
+            t |> success(find(foreign, "not a whisper image") >= 0, "another family's lane read refuses the image by name: '{foreign}'")
+            let not_speech = panic_text() {
+                var inscope asr <- load_asr_model(base, size)
+            }
+            t |> success(find(not_speech, "loads from memory") >= 0, "the ASR loader refuses a synthesis image by name: '{not_speech}'")
+            let off_page = panic_text() {
+                var inscope skewed <- load_tts_model(unsafe(reinterpret<void?>(intptr(base) + 8ul)), size - 8ul)
+            }
+            t |> success(find(off_page, "boundary") >= 0, "a base off the image page is refused by name: '{off_page}'")
+            zero_planes(base, size)
+            {
+                var inscope poisoned <- load_tts_model(base, size)
+                var inscope other <- speak_line(poisoned)
+                let differs = mismatch_exact(other, want)
+                to_log(LOG_INFO, "pocket 18m-q8 from memory, planes zeroed: {length(other)} samples, {differs} differ from the image file's\n")
+                t |> success(all_finite(want) && differs > 0, "its planes zeroed, the load speaks otherwise (the control)")
+            }
+        }
+        delete raw
+        delete raw_skew
+        let kitten = path_join(models_dir(), "kitten-nano.gguf")
+        if (model_available(t, kitten)) {
+            let other_dlim = path_join(test_temp_dir(), "kitten_memory.dlim")
+            t |> success(bake_styletts2_image(kitten, other_dlim, true), "a KittenTTS image bakes")
+            var raw_other : array<uint8>
+            var size_other = 0ul
+            let other_base = read_page_aligned(other_dlim, raw_other, size_other)
+            t |> success(other_base != null && !tts_loads_from_memory(other_base, size_other), "a phoneme family's image in memory does not load, asked first")
+            let not_pocket = panic_text() {
+                var inscope wrong <- load_pocket(other_dlim)
+            }
+            t |> success(find(not_pocket, "not a prepared pocket image") >= 0, "and a Pocket load of its file refuses it by name: '{not_pocket}'")
+            remove(other_dlim)
+            delete raw_other
+        }
+    }
+}
+
+[test(description = "A Pocket file's staging refuses by name a text table stored in a format the native lane has no form for - a copy of the 18m K-quant file with the table retyped Q8_0, the same copy staging under the q8 pin as the control - and a roster naming a voice twice, a copy with one name's bytes written over another's")]
+def test_pocket_stage_refusals(t : T?) {
+    let path = path_join(models_dir(), "pocket-tts-en-18m-kq.gguf")
+    return if (!model_available(t, path))
+    with_dasllama_jobque_() {
+        var inscope retype <- { "flow_lm.conditioner.embed.weight" => GGML_TYPE_Q8_0 }
+        let stored = gguf_retyped_refusal(path, "pocket_table_q8", retype) $(p) {
+            var inscope st <- stage_pocket(p, true, true)
+        }
+        t |> success(find(stored, "the text table is stored as") >= 0, "unpinned, a Q8_0 text table is refused by name: '{stored}'")
+        let pinned = gguf_retyped_refusal(path, "pocket_table_q8_pinned", retype) $(p) {
+            var inscope st <- stage_pocket(p, true, false)
+        }
+        t |> equal(pinned, "", "the same copy stages under the q8 pin, its table dequantized (the control)")
+        var inscope names : array<string>
+        let f = fopen(path, "rb")
+        fmap(f) $(var bytes : array<uint8>#) {
+            var inscope g <- parse_gguf_meta(bytes)
+            delete names
+            names <- gguf_str_array(g, bytes, "pocket.voices")
+        }
+        fclose(f)
+        var first = -1
+        var second = -1
+        for (j in range(length(names))) {
+            for (i in range(j)) {
+                if (second < 0 && length(names[i]) == length(names[j])) {
+                    first = i
+                    second = j
+                }
+            }
+        }
+        t |> success(second > 0, "the roster holds two names of one length ({length(names)} voices)")
+        if (second > 0) {
+            var at = 8   // each element is its length, eight bytes, then its bytes
+            for (k in range(second)) {
+                at += 8 + length(names[k])
+            }
+            var inscope over : array<tuple<key : string; at : int; v : int>>
+            over |> reserve(length(names[first]))
+            peek_data(names[first]) $(text) {
+                for (c in range(length(text))) {
+                    over |> push((key = "pocket.voices", at = at + c, v = int(text[c])))
+                }
+            }
+            let dst = path_join(test_temp_dir(), "pocket_voice_twice.gguf")
+            var inscope nothing : table<string; int>
+            gguf_retyped_copy(path, dst, nothing, over)
+            let twice = panic_text() {
+                var inscope st <- stage_pocket(dst, true, true)
+            }
+            remove(dst)
+            t |> success(find(twice, "names voice '{names[first]}' twice in pocket.voices") >= 0, "a roster naming '{names[first]}' twice is refused by name: '{twice}'")
+        }
+    }
+}
+
+[test(description = "A Pocket model keeps the two voice states used last: a third voice frees the least recently used and never the one a repeat just touched, and a freed voice rebuilt from its stored frames speaks the same samples, another voice's differing as the control")]
+def test_pocket_voice_state_cap(t : T?) {
+    let path = path_join(models_dir(), "pocket-tts-en-18m-q8.gguf")
+    return if (!model_available(t, path))
+    with_dasllama_jobque_() {
+        var inscope m <- pocket_tts_minted(path)
+        var inscope c <- caps(m)
+        if (length(c.voices) < 3) {
+            t |> skip("{path}: a roster of {length(c.voices)} voices cannot fill the cap")
+            return
+        }
+        t |> equal(POCKET_VOICE_STATES, 2)
+        let va = c.voices[0]
+        let vb = c.voices[1]
+        let vc = c.voices[2]
+        let text = "A short line to say."
+        var inscope a1 <- synthesize(m, text, va)
+        var inscope b1 <- synthesize(m, text, vb)
+        t |> equal(length(m.pocket.voice_states), 2, "two voices, two states")
+        var inscope a2 <- synthesize(m, text, va)
+        var inscope c1 <- synthesize(m, text, vc)
+        t |> success(key_exists(m.pocket.voice_states, va) && key_exists(m.pocket.voice_states, vc) && !key_exists(m.pocket.voice_states, vb),
+            "a third voice frees {vb}, the least recently used, and keeps {va}, spoken again after it")
+        t |> success(key_exists(m.pocket.voice_latents, vb), "the freed voice keeps its stored frames")
+        var inscope b2 <- synthesize(m, text, vb)
+        t |> success(key_exists(m.pocket.voice_states, vb) && key_exists(m.pocket.voice_states, vc) && !key_exists(m.pocket.voice_states, va),
+            "and its return frees {va}")
+        let md = logits_maxdiff(b2.pcm, b1.pcm)
+        let other = mismatch_exact(a1.pcm, b1.pcm)
+        to_log(LOG_INFO, "pocket 18m-q8 voice cap, '{text}': {vb} rebuilt speaks {length(b2.pcm)} samples, max difference {md} from its first {length(b1.pcm)}; {va} differs from {vb} in {other}\n")
+        t |> equal(length(b2.pcm), length(b1.pcm), "the rebuilt voice speaks the same length")
+        t |> equal(md, 0.0, "and the same samples")
+        t |> success(all_finite(a1.pcm) && all_finite(b1.pcm) && other > 0, "{va} and {vb} speak different samples (the compare's control)")
+        t |> success(speech_level(c1.pcm).rms > 0.01 && speech_level(a2.pcm).rms > 0.01, "every voice speaks")
+    }
+}
+
 [test(description = "A voice prompt prepared on a cloning Pocket file survives JSON and registers lazily on an encoder-less file, a flipped latent-space id refuses it, it conditions an 18M model that speaks, and the small model trims a padded clip to end on a pause")]
 def test_pocket_prepared_prompt_transfer(t : T?) {
     let sender_path = path_join(models_dir(), "pocket-tts-en-kq.gguf")
@@ -1880,7 +2153,7 @@ def test_pocket_prepared_prompt_transfer(t : T?) {
     with_dasllama_jobque_() {
         var serialized = ""
         {
-            var inscope sender <- load_tts_model(sender_path)
+            var inscope sender <- pocket_tts_minted(sender_path)
             var inscope clip <- load_audio_mono("{get_das_root()}/modules/dasLLAMA/models/jfk_ask_not.wav", 24000)
             t |> success(length(clip) >= 24000, "reference decoded")
             resize(clip, 24000)
@@ -1889,7 +2162,7 @@ def test_pocket_prepared_prompt_transfer(t : T?) {
             t |> success(!empty(prompt.latents), "encoder produced frames")
             serialized = sprint_json(prompt, false)
         }
-        var inscope receiver <- load_tts_model(receiver_path)
+        var inscope receiver <- pocket_tts_minted(receiver_path)
         t |> success(!receiver.pocket.cloning, "receiving file has no encoder")
         var inscope restored = TtsVoicePrompt()
         t |> success(sscan_json(serialized, restored))
@@ -1905,7 +2178,7 @@ def test_pocket_prepared_prompt_transfer(t : T?) {
         t |> success(key_exists(receiver.pocket.voice_states, "prepared"), "synthesis built conditioning")
         let small_path = path_join(models_dir(), "pocket-tts-en-18m-q8.gguf")
         if (!model_available(t, small_path)) { return }
-        var inscope small <- load_tts_model(small_path)
+        var inscope small <- pocket_tts_minted(small_path)
         t |> success(small.pocket.language != restored.language, "the small model carries another config name")
         t |> success(tts_register_voice_prompt(small, "prepared", restored), "a 2026-04 prompt conditions a 2026-10 model")
         var inscope small_audio <- synthesize(small, "Hello from a prepared voice.", "prepared")

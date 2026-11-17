@@ -44,6 +44,7 @@ turns out wrong.
 |---|---|
 | `HOW_TO_ADD_A_FORMAT.md` | Adding a weight format (a new `KqFmt`), a served form of one, or a backend's (CPU, Vulkan, Metal) kernels for one at a site (a weight plane a backend's serving call reads) that reads it through a converted copy (any other form of its weights that outlives the kernel call or reaches the `.dlim`) |
 | `HOW_TO_ADD_ASR.md` | Adding a speech-recognition family (an encoder plus a CTC, transducer or LLM decoder head) |
+| `HOW_TO_ADD_FORMAT_TO_TTS.md` | Serving a text-to-speech weight group (a StyleTTS2 recipe group, a Pocket tensor) in another weight format - the mint, the kernel form, the GPU seats' read, and the rig run that sets the recipe |
 | `HOW_TO_GET_SIDECAR.md` | Taking an untuned box to a committed CPU-class profile (`performance/defaults/<class>.tune-defaults.json`) |
 
 Read `BRINGUP.md` before bringing a profiling box up from zero (the records rig;

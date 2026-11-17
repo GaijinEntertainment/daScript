@@ -5,6 +5,7 @@ options _dasllama_internal = true
 
 require dasllama/dasllama
 require dasllama/dasllama_math
+require dasllama/dasllama_styletts2   // set_styletts2_recipe: the --recipe pin
 require daslib/jobque_boost
 require daslib/json_boost
 require daslib/clargs
@@ -39,6 +40,10 @@ struct SynthArgs {
     q8 : bool = false
     @clarg_doc = "pin the rows GEMMs to the file's f32 planes (the reference lane)"
     f32 : bool = false
+    @clarg_doc = "serve a phoneme family's recipe lane - the small form: Q4_K and Q6_K weight groups beside the Q8_0 ones"
+    small : bool = false
+    @clarg_doc = "pin weight groups' formats on a phoneme family's recipe lane, group=format pairs comma-separated (dasllama_styletts2's set_styletts2_recipe); mints in memory"
+    recipe : string = ""
     @clarg_doc = "print the generator's per-op profile over the whole run (PROF rows)"
     prof : bool = false
 }
@@ -59,6 +64,15 @@ def main() : int {
         to_log(LOG_ERROR, "tts synth: --q8 and --f32 pin the rows GEMMs to opposite lanes - pass one, not both\n")
         return 2
     }
+    let recipe_lane = args.small || !empty(args.recipe)
+    if (recipe_lane && (args.q8 || args.f32)) {
+        to_log(LOG_ERROR, "tts synth: --small / --recipe ask the recipe lane and --q8 / --f32 pin another - pass one lane\n")
+        return 2
+    }
+    if (recipe_lane && (args.model |> ends_with(".dlim") || !tts_needs_packs(args.model))) {
+        to_log(LOG_ERROR, "tts synth: --small / --recipe mint a phoneme family's GGUF on the recipe lane - a prepared image serves the lane it was baked on, and a Pocket file the formats it stores\n")
+        return 2
+    }
     let fixture = empty(args.fixture) ? tts_corpus_path() : args.fixture
     var inscope rows <- tts_corpus_head(fread(fixture), args.limit > 0 ? args.limit : INT_MAX)
     if (empty(rows)) {
@@ -72,6 +86,10 @@ def main() : int {
     var failed = ""
     defer() {   // the pin must not outlive this run, on any path out
         reset_tts_q8()
+        reset_styletts2_recipe()
+    }
+    if (recipe_lane) {
+        set_styletts2_recipe(args.recipe)
     }
     if (args.q8 || args.f32) {
         set_tts_q8(args.q8)

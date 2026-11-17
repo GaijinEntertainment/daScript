@@ -70,9 +70,9 @@ channel-major default while the forward assembly runs it through a rows kernel i
 pass the consumer (`rows`, `rows_only`) so `conv1d_prepare` / `linear_prepare` drop the
 layout nobody reads.**
 
-**A caller that pins a TTS weight lane (`set_tts_q8` / `set_styletts2_q8` / `set_pocket_q8`)
-for a load pins in the context that runs the load, never in the context that spawned that loading
-context.** A `new_thread` context starts every module global at its declared default, so a pin set
+**A caller that pins a TTS weight lane (`set_tts_q8` / `set_styletts2_q8` / `set_pocket_q8` /
+`set_styletts2_recipe`) for a load pins in the context that runs the load, never in the context
+that spawned that loading context.** A `new_thread` context starts every module global at its declared default, so a pin set
 in another context never arrives.
 
 **A diff that reorders the float operations, or changes the rounding of any step, of the phase
@@ -116,15 +116,17 @@ that synthesized that language before, lists in the PR body what it moved, each 
 every word of that language's g2p corpus fixture (`tests/_tts_fixtures/g2p_corpus_<lang>.json`)
 for which the front end's phonemes change, and every pinned sentence of that language's normalizer
 test file (`tests/test_tts_textnorm_<lang>.das`) the diff adds or whose expected string it changes;
-and names the `followup_general.md` row under which that language's rig arm is owed.** The rig
-measures English alone; for a stage whose file that language lacks, the PR body lists by hand the
-inputs the diff moved there.
+and, for a language `harness/tts_rig.py --lang` does not take, names the `followup_general.md` row
+under which that language's rig arm is owed.** The rig measures the languages its `--lang` takes;
+for a stage whose file that language lacks, the PR body lists by hand the inputs the diff moved
+there.
 
 **A diff that newly serves a model or a language no flag-free run could synthesize before ships,
 in the same change, a facade cell on that model - a synthesis whose sample count is the front
 end's own phoneme string's and not another reading's - and names in the PR body the
-`followup_general.md` row under which its oracle dump and its rig arm are owed.** The rig
-measures English alone, and a model that could not speak before has no hash to match.
+`followup_general.md` row under which its oracle dump is owed and, for a language
+`harness/tts_rig.py --lang` does not take, its rig arm.** A language `--lang` does not take has no
+rig measurement, and a model that could not speak before has no hash to match.
 
 **A diff that changes what a GPU TTS seat's chain computes, on a seat that is not armed by
 default, ships in the PR body the WER and UTMOS of `harness/tts_rig.py` with that seat armed

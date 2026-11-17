@@ -40,6 +40,9 @@ the module declares every such buffer `@exact_size` and sizes it through a reser
 - **`dasllama_core.das`** - the facade without the file decoders (what `dasllama.das` re-exports
   publicly): the documented `set_gpu_*` / `reset_gpu_*` / `gpu_*` setters and readers, each a one-line
   forwarder to the rail's `_`-suffixed form, and the public verbs' doc comments. No engine logic either.
+- **`dasllama_host.das`** - the state and the shared steps of a host's C surface (`examples/dasLLAMA/library`): one
+  struct a surface - text, speech to text, live listening, translation, synthesis - under one `LibHost`, over
+  `dasllama_core`. Not a shared module, so every context a host creates keeps its own state. No engine logic.
 - **`dasllama_version.das`** - `DASLLAMA_RELEASE`, the module's release number, and nothing
   else. Decoupled from the daslang version, `LLVM_JIT_CODEGEN_VERSION` and `IMAGE_VERSION`;
   bumped only on a declared release (REVIEW.md), so tune sidecars and board rows live for a

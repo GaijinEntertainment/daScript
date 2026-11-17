@@ -9561,3 +9561,87 @@ blocks 36, tails 2`; qwen3a 1.7B `encodes 2, declines 0, rows 156, blocks 48, ta
 | gemma-4-E2B-it-Q8_0 | CUDA | the gguf | `DASLLAMA_IMAGE=0 DASLLAMA_HOST_PLANES=1 DASLLAMA_SOURCE_RELEASE=0 DASLLAMA_KV_INIT=zero` | 7.77 | 13.19 | 10.19 | 7.97 | 10.19 | 6372 | 7104 |
 | gemma-4-E2B-it-Q8_0 | CUDA | the load mints the trimmed lane | - | 2.21 | 7.01 | 2.21 | 2.61 | 2.21 | 5114 | 11247 |
 | gemma-4-E2B-it-Q8_0 | CUDA | the lane mapped | - | 2.13 | 2.70 | 2.13 | 2.61 | 2.14 | 5114 | 1654 |
+
+### From the TTS weight formats leg (2026-11-16, Apple M5 Max, the box profile re-minted on the binary; `-jit`, the JIT tier, `DAS_TUNE_POLICY` unset; `direction-grade`)
+
+Every rate here compares across processes, and the master rows across commits: master is 440b4f9118, the other arm
+this entry's diff. No run read an untuned kernel. The instruments:
+
+- **The corpus rows** are `harness/tts_rig.py` on its 200 sentences (`python3 modules/dasLLAMA/harness/tts_rig.py
+  --models <model>:<voice> ...`, `--lang ru` for the Russian set; `--small` asks the recipe lane, `--f32` and `--q8`
+  pin a lane, no flag is the load's own lane): WER %, UTMOS, the seconds of speech and the seconds of synthesis, a
+  sum over the 200 inputs - the rig prints no spread. The voices are `Bella` (Kitten), `af_heart` (Kokoro), `alba`
+  (Pocket). The CPU rows ran under `DASLLAMA_METAL_TOWER=0`, the Metal rows with no override.
+- **The served rows** (`out-of-process`) are `harness/served_bench.das -- --no-chat --tts-url http://127.0.0.1:18473
+  --reps 24` against `bin/daslang -jit utils/dasllama-server/main.das -- --tts <file> --port 18473`, the server
+  alone on the box: three server lives a row, the arms taking turns, the first life discarded, each of the other
+  two a row; a row past cv 3% is void and says so.
+- **The heap rows** are `bin/daslang -jit modules/dasLLAMA/harness/tts_load_probe.das -- <file>`, one process a row:
+  the das heap over its figure before the load (15.5 MB), in MB of 1e6 bytes. A mapped image's pages are not heap,
+  and neither are a Metal seat's device buffers. The master rows ran the same probe file over master's tree.
+- **The image sizes** are `ls -l` on the prepared image beside its file, in MB of 1e6 bytes.
+
+This entry replaces the quality row of the 2026-10-06 entry (the Pocket text prompt on the device): flag-free on the
+M5 it read kitten-nano 3.09 / 3.976, kitten-mini 2.77 / 4.331, kokoro 2.73 / 4.501 and Pocket kq 3.77 / 4.314, and
+the Metal rows below read 3.27 / 3.983, 2.86 / 4.332, 2.73 / 4.500 and 3.86 / 4.323.
+
+- **Quality and speed by lane, StyleTTS2 on the CPU chain.** WER % / UTMOS / seconds of synthesis, over the seconds of
+  speech in the first column (the f32 lane's differ by under 0.4%).
+
+  | model | speech s | f32 | q8 | recipe |
+  |---|---|---|---|---|
+  | kitten-nano | 1445.2 | 3.27 / 3.972 / 24.6 | 3.41 / 3.966 / 20.7 | 2.91 / 3.941 / 23.4 |
+  | kitten-mini | 1227.6 | 3.18 / 4.341 / 57.0 | 2.86 / 4.339 / 33.8 | 3.00 / 4.325 / 37.5 |
+  | kokoro-82m | 834.0 | 2.68 / 4.501 / 55.6 | 2.68 / 4.500 / 31.3 | 2.68 / 4.500 / 35.0 |
+  | kokoro-ru `sveta` | 1068.6 | 0.70 / 3.841 / 73.5 | 0.74 / 3.844 / 41.1 | 0.65 / 3.846 / 45.5 |
+  | kokoro-ru `masha` | 1082.8 | 0.65 / 3.720 / 70.6 | 0.65 / 3.716 / 41.3 | 0.65 / 3.716 / 45.4 |
+  | kokoro-ru-dima `dima` | 1046.3 | 0.70 / 3.735 / 68.2 | 0.74 / 3.740 / 38.9 | 0.78 / 3.743 / 44.6 |
+
+  No lane leads on WER across the models - the lanes sit within 0.5 points of one another, a word of the corpus
+  being 0.045 - and UTMOS holds within 0.04. Against the q8 lane the recipe lane's synthesis takes 1.10 to 1.15 times
+  as long and the f32 lane's 1.19 (kitten-nano) to 1.78 (kokoro-82m).
+- **The same on the Metal seat.** The q8 lane, then the recipe lane: kitten-nano 3.27 / 3.983 / 3.9 and 3.18 / 3.961 /
+  3.8 over 1444.3 s of speech, kitten-mini 2.86 / 4.332 / 11.0 and 2.95 / 4.320 / 11.0 over 1227.5, kokoro-82m 2.73 /
+  4.500 / 10.4 and 2.68 / 4.500 / 10.4 over 834.2, kokoro-ru `sveta` 0.70 / 3.840 / 13.3 and 0.65 / 3.842 / 13.3 over
+  1068.4, `masha` 0.65 / 3.719 / 13.4 on both over 1082.6, kokoro-ru-dima 0.74 / 3.737 / 13.1 and 0.78 / 3.740 / 13.1
+  over 1046.2. The seat computes from one f32 slab whatever the lane holds on the host, so the lanes cost the same
+  there; the CPU chain's q8 lane takes 3.0 (kokoro-82m) to 5.3 (kitten-nano) times the seat's seconds.
+- **Pocket.** The lane a K-quant file serves unpinned (its tensors as stored), then the q8 pin, on the CPU chain:
+  `pocket-tts-en-kq.gguf` 4.04 / 4.328 / 18.4 over 683.4 s and 3.91 / 4.336 / 20.2 over 684.1,
+  `pocket-tts-en-18m-kq.gguf` 3.18 / 4.232 / 13.6 over 645.4 and 3.32 / 4.222 / 13.8 over 648.6. On the Metal seats,
+  unpinned: 3.86 / 4.323 / 5.9 over 681.5 and 2.77 / 4.250 / 3.7 over 648.6.
+- **Image sizes, MB: the f32, q8 and recipe lanes.** kitten-nano 60.1, 17.6, 15.5; kitten-mini 298.4, 85.2, 62.3;
+  kokoro-82m 355.4, 101.4, 74.5; kokoro-ru 328.2, 93.7, 66.8; kokoro-ru-dima 327.7, 93.6, 66.7. Master's q8 image is
+  30.4 for kitten-nano and 190.9 for kokoro-82m: its q8 lane kept the LSTMs, the voice packs and the style
+  projections f32. Pocket's as-stored image is 94.1 for the 100M K-quant file (a 77.8 MB file, its F16 codec convs
+  widened) and 32.4 for the 18M (23.5); the q8 pin's 156.3 and 49.8; master wrote no Pocket image.
+- **The das heap over the load, MB: loaded / after one line / after five voices, master then this diff.** On the CPU
+  chain: kitten-nano 40.2 / 147.2 / 169.8 and 40.2 / 144.8 / 167.4; kokoro-82m 40.3 / 198.7 / 206.5 and 40.3 / 187.6 /
+  196.0; `pocket-tts-en-kq.gguf` 108.6 / 198.8 / 288.2 and 0.9 / 91.1 / 119.8; `pocket-tts-en-18m-kq.gguf` 39.9 / 96.2 /
+  157.8 and 0.9 / 57.1 / 78.3. On the Metal seat: kitten-nano 40.2 / 47.3 / 47.7 and 40.2 / 42.5 / 43.0; kokoro-82m
+  40.3 / 105.2 / 105.4 and 40.3 / 44.4 / 44.5; the 100M Pocket 108.6 / 139.5 / 225.5 and 0.9 / 31.8 / 57.2; the 18M
+  39.9 / 57.8 / 114.0 and 0.9 / 18.8 / 34.6. This diff alone, CPU chain: kitten-mini 40.2 / 190.5 / 233.7, kokoro-ru
+  177.5 / 320.9 with its two voices, kokoro-ru-dima 177.5 / 315.5 with its one; the recipe lane reads 1 to 4 MB under
+  the q8 lane once a line is spoken. A StyleTTS2 load holds 40 MB of heap whatever the model and lane, a Russian one
+  177 MB (`followup_general.md` row 315); a Pocket model's weights left the heap for the mapped image, and its voices
+  past two no longer stay.
+- **A Pocket voice the model dropped costs one rebuild.** The probe's line at a voice the model holds, then at the
+  same voice after two others spoke, three rounds: on the Metal seats the 100M reads 44.5 to 44.7 ms held and 71.5 to
+  71.8 after (27 ms a rebuild), the 18M 25.3 to 25.6 and 35.1 to 35.2 (10 ms); on the CPU chain the 100M 129.2 to
+  129.6 held and 154.4, 156.7 and 183.1 after, the 18M 98.5 to 99.6 and 108.3 to 109.8. Master, which kept every
+  voice, reads the two passes within 3 ms: 44.3 to 45.1 and 46.7 to 47.3 on the 100M's Metal seats.
+- **Served, master against this diff, ms a request (the two kept lives).** On the Metal seats: kitten-nano 19.5,
+  19.5 and 19.5, 19.5 for 5.24 s of speech; kokoro-82m 70.6, 70.7 and 70.6, 70.6 for 5.68 s; `pocket-tts-en-kq.gguf`
+  43.5, 43.6 for 4.64 s and 43.6, 43.6 for 4.80 s; `pocket-tts-en-18m-kq.gguf` 25.5 and 25.5 for 4.40 s, the other
+  life of each arm void at cv 4.5% and 4.6%. On the CPU chain: kitten-nano 253.9, 254.0 and 241.8, 241.9 for 5.32 s;
+  kokoro-82m 1112.9, 1113.2 for 5.68 s and 1018.7, 1018.1 for 5.65 s; `pocket-tts-en-kq.gguf` 407.4, 407.4 and 411.4,
+  410.3 for 4.80 s; `pocket-tts-en-18m-kq.gguf` 148.8, 148.8 for 4.40 s and 142.8, 142.7 for 4.16 s. A Pocket file's
+  speech differs between the arms because master's server pinned the q8 lane and this diff's serves the file's
+  tensors as stored; through the facade, unpinned, the two trees' CPU samples are the same bits.
+- **Served, the recipe lane's image against the q8 lane, this diff, CPU chain.** The image baked by
+  `utils/dasllama-convert/main.das -- -m <gguf> --recipe -o <dlim>` and served by its path: kitten-nano 349.8, 349.7
+  ms against the q8 lane's 241.8, 241.9 (1.45 times the q8 lane), kokoro-82m 1519.2, 1519.0 against 1018.7, 1018.1
+  (1.49); on the Metal seats 19.5, 19.5 and 70.7, 70.6, the q8 lane's figures. The server's CPU request is slower
+  than the facade's line too - kitten-nano 241.9 ms for 5.32 s of speech where the probe's line reads 105.6 to 110.3
+  ms for 7.14 s - so the recipe lane's gap is wider in the server's speech worker than in the rig
+  (`followup_general.md` row 314).

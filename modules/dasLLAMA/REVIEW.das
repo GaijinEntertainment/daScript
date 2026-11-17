@@ -1418,7 +1418,7 @@ let private TTS_BLOCKS_FILE = "modules/dasLLAMA/dasllama/dasllama_tts_blocks.das
 // lines, hashed in file order. A closure change with IMAGE_VERSION unmoved is red; the finding prints the
 // value to re-stamp with.
 let private IMAGE_LAYOUT_STAMP_VERSION = 63
-let private IMAGE_LAYOUT_STAMP_HASH = 0x3239dfe27d81856ul
+let private IMAGE_LAYOUT_STAMP_HASH = 0x9b56612074957544ul
 
 // The helpers that decide WHERE bytes land: the page pad, the plane and total sizing, the
 // writer's append / zero-fill / header patch, the header's scalar stores, the lattice
@@ -1430,7 +1430,8 @@ let private IMAGE_LAYOUT_STAMP_HASH = 0x3239dfe27d81856ul
 var private LAYOUT_HELPERS <- {
     "pad_to_page", "w_page", "plane_end", "image_total_bytes",
     "w_append", "w_zeros", "w_header", "store_at", "kq_plane_name",
-    "blob_push", "weight_slot", "conv1d_weight_row",
+    "blob_push", "weight_slot", "table_slot", "conv1d_weight_row",
+    "conv1d_quant_rows", "conv1d_quant_k", "conv1d_quant_row", "q8_matrix_mint",
     "vk_mint_plane", "vk_mint_walk", "vk_mint_sink_append",
     "gg_stream_plane", "gg_job_span", "gg_plane_total", "tower_dev_put", "tower_bake_q8",
     "kq_gather_rows_dev", "pack_iq_dev_row", "wd_gather", "tower_fc_gather_kq_member", "tower_gather_q8_regions",
