@@ -411,8 +411,10 @@ Multiple Contexts
    * - ``solid_context``
      - bool
      - false
-     - All variable and function lookup is context-dependent (via index). Slightly faster,
-       but prohibits AOT and patches.
+     - All variable and function lookup is context-dependent (via index): a function address
+       is its index and a global is read at its offset, with no name-hash lookup. Slightly
+       faster, but prohibits patches. A standalone AOT context (``-ctx``) reads its globals at
+       the same fixed offsets; a regular AOT unit still looks them up by name.
 
 ------------------------
 Debugging and Profiling

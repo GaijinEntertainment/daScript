@@ -144,6 +144,13 @@ Companion to `ARCHITECTURE.md` in this folder; section numbers are unique across
   `__init_script` signature - a daslib-to-daslib pairing nothing checks.
 - **`__init_shared` is hardcoded `true`** - a fresh standalone context always owns its
   shared globals.
+- **A standalone context under `solid_context` addresses every global by its offset** -
+  `StandaloneContextGen` sets `fixedGlobalOffsets` from `solidContext`, and `visitExprVar` then
+  writes `das_global_solid<T, stackTop>` / `das_shared_solid<T, stackTop>` in function bodies,
+  the spelling `preVisitGlobalLetVariable` already uses for the initializer. The offset is a
+  generation-time constant: the ctor verifies `variableLookup->valueByMnh(mnh) == offset` for
+  every global. A regular AOT unit keeps `das_global<T, mnh>` in its bodies whatever the option
+  says - its functions link by hash into any context, and a global's offset is that context's.
 - **The ctor's base `Context(N)` folds the init headroom in, because there is no separate
   init stack** - init locals are C++ locals in AOT. A script that sets `options stack` to a
   positive value gets `N = options stack + globalInitStackSize`, honored exactly, the

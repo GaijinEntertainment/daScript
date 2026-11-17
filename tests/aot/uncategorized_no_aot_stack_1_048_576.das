@@ -1,5 +1,5 @@
 options gen2
-options no_aot
+options no_aot     // runs the AOT emitter in-process; an AOT build tests nothing
 options stack = 1_048_576
 
 require daslib/aot_standalone
@@ -440,6 +440,28 @@ def test_standalone_emit(t : T?) {   // nolint:STYLE038 - flat list of emit subc
                     "`{ns}` is a namespace the file declares - the das module name is not one")
             }
         }
+    }
+
+    t |> run("under solid_context a body reaches each global at its fixed offset") @(t : T?) {
+        let source = generate_standalone_source(t, "_standalone_solid_globals_fixture", out_dir)
+        let body = emitted_body(source, "fill_cells_")
+        t |> success(!empty(body), "fill_cells was emitted")
+        let probes = find(body, "das_global<") >= 0 || find(body, "das_shared<") >= 0
+        t |> success(!probes, "no body access probes the variable lookup")
+        let count_init = "das_global_solid<int32_t,64>(__context__) = 0;/*g_count*/"
+        t |> success(find(source, count_init) >= 0, "the initializer writes g_count at offset 64")
+        let count_write = "das_copy(das_global_solid<int32_t,64>(__context__) /*g_count*/,16);"
+        t |> success(find(body, count_write) >= 0, "the body writes g_count at offset 64")
+        let cells = "das_global_solid<TDim<int32_t,16>,0>(__context__) /*g_cells*/"
+        t |> success(find(body, cells) >= 0, "the body reaches g_cells at offset 0")
+        let shared_table = "das_shared_solid<TDim<int32_t,4>,0>(__context__) /*g_table*/"
+        t |> success(find(body, shared_table) >= 0, "a shared global is read at its offset")
+        t |> equal(brace_balance(source), 0, "unbalanced braces in the generated C++")
+        let classic_source = generate_aot_source(t, "_standalone_solid_globals_fixture")
+        let classic = emitted_body(classic_source, "fill_cells_")
+        t |> success(!empty(classic), "the regular AOT unit emitted fill_cells")
+        let classic_lookup = find(classic, "das_global<TDim<int32_t,16>,0x") >= 0
+        t |> success(classic_lookup && find(classic, "_solid<") < 0, "classic keeps the lookup")
     }
 
     t |> run("an emitted literal's trigraph is escaped") @(t : T?) {

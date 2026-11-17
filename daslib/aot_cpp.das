@@ -1348,6 +1348,7 @@ class public CppAot : AstVisitor {
     flow : TryFlowState;
     prologue : bool = false;
     solidContext : bool = false;
+    fixedGlobalOffsets : bool = false;
     cross_platform : bool = false;
     fastMath : bool = false;
     aot_filter_function : string;
@@ -2272,7 +2273,13 @@ class public CppAot : AstVisitor {
         } else {
             write(*ss, (variable.variable.flags.global_shared ? "das_shared" : "das_global"));
             let type_str = describeCppType(variable.variable._type, DescribeConfig(skip_ref = true, skip_const = true, cross_platform = cross_platform));
-            write(*ss, "<{type_str},0x{variable.variable.getMangledNameHash:x}>(__context__) /*{variable.name}*/");
+            if (fixedGlobalOffsets) {
+                let offset = variable.variable.stackTop;
+                write(*ss, "_solid<{type_str},{offset:d}>(__context__) /*{variable.name}*/");
+            } else {
+                let mnh = variable.variable.getMangledNameHash;
+                write(*ss, "<{type_str},0x{mnh:x}>(__context__) /*{variable.name}*/");
+            }
         }
         if (variable._type.flags.aotAlias) {
             write(*ss, ")");
