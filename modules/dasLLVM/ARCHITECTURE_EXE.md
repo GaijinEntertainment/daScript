@@ -101,3 +101,12 @@ unregistered. Exe startup uses `jit_finalize_dynamic_modules`; emitted library
 startup uses `jit_lib_finalize_dynamic_modules` so a failed load reaches the host
 without aborting its process. Register-all tools retain the module scanner's Quiet
 optional-load policy; unrelated unavailable descriptors do not become fatal.
+
+## Packed relative relocations {#exe-relr}
+
+Every pointer an exe or a `-lib` library stores in its data takes a load-time relocation, and
+the classic ELF form spends 24 bytes on each (a dasLLAMA library carries over 200k of them). On a
+glibc of 2.36 or newer the POSIX link passes `-Wl,-z,pack-relative-relocs`, which writes them as
+a bitmap of positions. The gate is the glibc daslang runs on, not the target's: an older loader
+ignores the packed table and leaves the pointers unpatched, and a box with an older glibc builds
+artifacts for that older floor, as the release workflow's ubuntu-22.04 build does on purpose.
