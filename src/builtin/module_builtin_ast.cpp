@@ -728,6 +728,13 @@ namespace das {
         }
     }
 
+    void get_variable_use_functions ( Variable * var, const TBlock<void,FunctionPtr> & block, Context * context, LineInfoArg * at ) {
+        if ( !var ) context->throw_error_at(at,"expecting variable");
+        for ( auto & fn : var->useFunctions ) {
+            das_invoke<void>::invoke<FunctionPtr>(context,at,block,fn);
+        }
+    }
+
     class MangledNameParserCtx : public MangledNameParser {
         virtual void error ( const string & err, const char * ch ) override {
             context->throw_error_at(at, "%s, near %s", err.c_str(), ch );
@@ -2238,6 +2245,9 @@ namespace das {
         addExtern<DAS_BIND_FUN(get_use_functions)>(*this, lib,  "get_use_functions",
             SideEffects::invoke, "get_use_functions")
                 ->args({"func","block","context","at"});
+        addExtern<DAS_BIND_FUN(get_variable_use_functions)>(*this, lib,  "get_use_functions",
+            SideEffects::invoke, "get_variable_use_functions")
+                ->args({"var","block","context","at"});
         // typeinfo
         addExtern<DAS_BIND_FUN(das_make_type_info_structure)>(*this, lib,  "make_type_info_structure",
             SideEffects::none, "das_make_type_info_structure")

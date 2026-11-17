@@ -1036,6 +1036,11 @@ namespace das {
         return this;
     }
 
+    FunctionPtr Function::setNeedRtti() {
+        needRtti = true;
+        return this;
+    }
+
     FunctionPtr Function::addToModule ( Module & mod, SideEffects seFlags ) {
         setSideEffects(seFlags);
         if (!mod.addFunction(this)) {

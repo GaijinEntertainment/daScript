@@ -213,7 +213,7 @@ namespace das {
         ft->alias = "MoreFunctionFlags2";
         ft->argNames = {
             "localFunction", "tempStringResult", "mayQueueTempString", "needCallerStackFrame",
-            "nttp", "unsafeGenerator", "noReturn"
+            "nttp", "unsafeGenerator", "noReturn", "needRtti"
         };
         return ft;
     }

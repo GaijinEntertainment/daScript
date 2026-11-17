@@ -1,4 +1,5 @@
 options gen2
+options rtti
 
 struct Pair {
     a : int

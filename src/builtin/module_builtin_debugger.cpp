@@ -1581,10 +1581,10 @@ namespace debugger {
                     ->arg("context");
             addExtern<DAS_BIND_FUN(debuggerStackWalk)>(*this, lib, "stackwalk",
                 SideEffects::modifyExternal, "debuggerStackWalk")
-                    ->args({"context","line"});
+                    ->args({"context","line"})->setNeedRtti();
             auto fngsw = addExtern<DAS_BIND_FUN(debuggerGetStackWalk)>(*this, lib, "get_stackwalk",
                 SideEffects::accessExternal, "debuggerGetStackWalk")
-                    ->args({"context","line","args","vars","out_of_scope","top_only","context","at"})->setTempStringResult();
+                    ->args({"context","line","args","vars","out_of_scope","top_only","context","at"})->setTempStringResult()->setNeedRtti();
             fngsw->arguments[2]->init = new ExprConstBool(true);
             fngsw->arguments[3]->init = new ExprConstBool(true);
             fngsw->arguments[4]->init = new ExprConstBool(false);
@@ -1640,7 +1640,7 @@ namespace debugger {
                     ->args({"class","info","block","context","at"});
             addExtern<DAS_BIND_FUN(dapiStackWalk)>(*this, lib,  "walk_stack",
                 SideEffects::modifyExternal, "dapiStackWalk")
-                    ->args({"walker","context","line"});
+                    ->args({"walker","context","line"})->setNeedRtti();
             addExtern<DAS_BIND_FUN(dapiStackDepth)>(*this, lib,  "stack_depth",
                 SideEffects::modifyExternal, "dapiStackDepth")
                     ->arg("context");

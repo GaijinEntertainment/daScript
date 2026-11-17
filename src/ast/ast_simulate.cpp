@@ -4003,6 +4003,25 @@ namespace das
         } else {
             context.initFunctions = nullptr;
         }
+        vector<SimFunction *> allShutdownFunctions;
+        for ( int fni=0; fni!=context.totalFunctions; fni++ ) {
+            auto & fn = context.functions[fni];
+            if ( fn.debugInfo->flags & FuncInfo::flag_shutdown ) {
+                allShutdownFunctions.push_back(&fn);
+            }
+        }
+        das_stable_sort(allShutdownFunctions.data(), allShutdownFunctions.data() + allShutdownFunctions.size(), [](auto a, auto b) {
+            int lateA = a->debugInfo->flags & FuncInfo::flag_late_shutdown;
+            int lateB = b->debugInfo->flags & FuncInfo::flag_late_shutdown;
+            return lateA < lateB;
+        });
+        context.totalShutdownFunctions = int(allShutdownFunctions.size());
+        if ( context.totalShutdownFunctions!=0 ) {
+            context.shutdownFunctions = (SimFunction **) context.code->allocate(uint32_t(allShutdownFunctions.size()*sizeof(SimFunction *)));
+            memcpy ( context.shutdownFunctions, allShutdownFunctions.data(), allShutdownFunctions.size()*sizeof(SimFunction *) );
+        } else {
+            context.shutdownFunctions = nullptr;
+        }
         // run init script and restart
         if ( !folding ) {
             auto time1 = ref_time_ticks();

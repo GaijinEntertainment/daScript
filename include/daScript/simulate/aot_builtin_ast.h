@@ -279,6 +279,7 @@ namespace das {
     DAS_CC_API Enumeration * module_find_enumeration ( const Module* module, const char * name, Context * context, LineInfoArg * at );
     DAS_CC_API void get_use_global_variables ( Function * func, const TBlock<void,VariablePtr> & block, Context * context, LineInfoArg * at );
     DAS_CC_API void get_use_functions ( Function * func, const TBlock<void,FunctionPtr> & block, Context * context, LineInfoArg * at );
+    DAS_CC_API void get_variable_use_functions ( Variable * var, const TBlock<void,FunctionPtr> & block, Context * context, LineInfoArg * at );
     DAS_CC_API Structure::FieldDeclaration * ast_findStructureField ( const Structure * structType, const char * field );
     DAS_CC_API Function * ast_findMethodFunction ( const Structure * structType, const char * name );
     DAS_CC_API int32_t ast_getTupleFieldOffset ( TypeDecl * ttype, int32_t field, Context * context, LineInfoArg * at );

@@ -6,3 +6,4 @@ Function may reach a heap collect point (transitively over direct calls) - its c
 Extern bound via addExternInline - the interpreter call node is per-function (NTTP) and the callee is eligible to inline into it.
 Generator whose body had a statement-position unsafe block - inference dissolved the block and visits the whole function with unsafe allowed.
 Function never returns to its caller (panic) - a call to it ends every control path, so no return is needed after it.
+Function reads its context's function or global RTTI tables at runtime, or calls one that does - a standalone AOT context or JIT exe that uses it keeps those tables.

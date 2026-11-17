@@ -8242,9 +8242,15 @@ def public generate_globals_initialization_fn(target : JitTarget; ctx : Context?
             if (set_gv_fn == null) {
                 set_gv_fn = LLVMAddFunctionWithType(g_mod, "jit_set_global_var", set_gv_type)
             }
+            // without RTTI the offset and shared flag stand, debugInfo null;
+            // the exe heap is persistent, so a global that can hold heap data
+            // keeps its info for a collect
+            let full_rtti = need_rtti(prog)
             for (gvi in range(ctx.totalVariables)) {
                 let di = get_global_variable_debug_info(ctx, gvi)
-                let tinfo_ptr = visitor.create_type_info_global(unsafe(reinterpret<TypeInfo?>(di)))
+                let ti = unsafe(reinterpret<TypeInfo?>(di))
+                continue if (!full_rtti && !ti.flags.heapGC && !ti.flags.stringHeapGC)
+                let tinfo_ptr = visitor.create_type_info_global(ti)
                 var gv_args = fixed_array(
                     ctx_param,
                     types.ConstI64(uint64(gvi)),
