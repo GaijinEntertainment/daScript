@@ -51,7 +51,8 @@ it the PR's range (`origin/master..HEAD`) and this brief:
 >    case); a branch the hunks do not edit runs nothing.
 > 3. A layer that reaches the change only through a layer whose tests run is covered by
 >    those tests: a server or tool test is in scope only when the diff changes that server
->    or tool, or a fixture it reads.
+>    or tool, or a fixture it reads - and then every reader of the fixture runs, the `.das`
+>    tests and the browser specs (`utils/dasllama-server/tests/*.spec.js`) alike.
 > 4. A refactor that claims no behavior change is proved by comparing outputs before and
 >    after on the files it touches - bytes of a written file, samples of a synthesis, token
 >    ids of a walk - and that compare replaces the suite runs of the refactored paths. Rule
