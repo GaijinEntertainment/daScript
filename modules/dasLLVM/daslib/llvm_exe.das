@@ -356,11 +356,6 @@ class public CollectExternVisitor : AstVisitor {
                 let mod_name = string(expr.func._module.name)
                 extern_modules[mod_name] = true
                 ensure_module(expr.func._module)
-                // Sort functions with cblock use Context/Block infrastructure from the compiler lib
-                let fn_name = string(expr.func.name)
-                if (find(fn_name, "sort") != -1 && find(fn_name, "cblock") != -1) {
-                    needs_whole_lib = true
-                }
                 var call_args = array<LLVMValueRef>(
                     get_string_constant_ptr(builder, mod_name),
                     get_string_constant_ptr(builder, get_mangled_name(expr.func)),
@@ -1286,7 +1281,7 @@ def public emit_standalone_context_init(builder : LLVMBuilderRef; fusion_builder
     let collected <- collect_external_functions(global_context, ctx, builder, target, mod, types,
                                                 funcs, uids, used_modules, dynamic_modules, prog,
                                                 register_all_modules)
-    // Determine if exe needs the whole compiler lib (rtti, ast, debugger, jit, sort-with-cblock)
+    // does the exe need the whole compiler lib (rtti, ast, debugger, jit)
     var needs_whole_lib = collected.needs_whole_lib
     // ast_core / network_core live in the compiler lib, so registering them pulls compiler-only
     // symbols -> whole-lib link. (rtti_core used to be here but its compile builtins moved to ast,
