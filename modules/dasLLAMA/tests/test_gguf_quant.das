@@ -377,6 +377,45 @@ def test_gguf_f32_reader_superblock_types(t : T?) {
     }
 }
 
+[test(description = "For Q4_K, Q5_K and Q6_K over random disk superblocks, `kq_planes_to_disk` over the transcoded planes gives the disk bytes back exactly, a changed plane byte changing them; planes short of whole superblocks and a format the engine does not encode are refused by name")]
+def test_kq_planes_back_to_disk(t : T?) {
+    t |> run("planes back to disk is the transcode's inverse") @(t : T?) {
+        for (fmt in [KqFmt.k4, KqFmt.k5, KqFmt.k6]) {
+            let sbb = kq_desc(fmt).disk_bytes
+            let qsb = kq_qsb(fmt)
+            let ssb = kq_ssb(fmt)
+            var inscope disk <- synth_sb_bytes(sbb, 31 + int(fmt))
+            var inscope kq, ks : array<uint8>
+            kq |> resize(2l * qsb)
+            ks |> resize(2l * ssb)
+            for (blk in range64(2l)) {
+                kq_transcode_superblock(fmt, disk, blk * sbb, kq, blk * qsb, ks, blk * ssb)
+            }
+            var inscope back : array<uint8>
+            kq_planes_to_disk(fmt, kq, ks, 512l, back)
+            t |> equal(long_length(back), 2l * sbb, "{fmt}: two superblocks of disk bytes")
+            t |> equal(mismatch_exact(back, disk), 0, "{fmt}: the planes written back are the disk bytes they came from")
+            kq[qsb + 1l] = uint8(int(kq[qsb + 1l]) ^ 0x40)
+            var inscope moved : array<uint8>
+            kq_planes_to_disk(fmt, kq, ks, 512l, moved)
+            t |> success(mismatch_exact(moved, disk) > 0, "{fmt} control: a changed plane byte changes the disk bytes")
+        }
+    }
+    t |> run("planes that are not whole superblocks, and a format with no encoder, are refused") @(t : T?) {
+        var inscope kq, ks, out : array<uint8>
+        kq |> resize(kq_qsb(KqFmt.q40) + kq_qsb(KqFmt.k4))
+        ks |> resize(kq_ssb(KqFmt.q40) + kq_ssb(KqFmt.k4))
+        var why = panic_text() {
+            kq_planes_to_disk(KqFmt.k4, kq, ks, 300l, out)
+        }
+        t |> success(why |> find("300 weights of k4 are not whole superblocks") >= 0, "300 weights are refused: {why}")
+        why = panic_text() {
+            kq_planes_to_disk(KqFmt.q40, kq, ks, 256l, out)
+        }
+        t |> success(why |> find("the engine writes the formats it encodes") >= 0, "a format with no encoder is refused: {why}")
+    }
+}
+
 //! byte `i` of the release cell's tensors: a pattern, so a tensor read back from the file is told from zeros
 def private pattern_byte(i : int64) : uint8 => uint8((i * 7l + 3l) & 255l)
 

@@ -768,6 +768,58 @@ def private quantize_kq_superblock_p(x : float const?; var kq : uint8?; kqo : in
     panic("quantize_kq_plane: no encoder for this format")
 }
 
+//! One superblock of the k4 planes back as its Q4_K disk block (144 bytes at `dst`): `kq_transcode_p`'s inverse, byte for byte.
+def kq_disk_block_p(var dst : uint8?; kq, ks : uint8 const?; _f : KqTag_k4) {
+    unsafe {
+        memcpy(dst, ks, 16l)
+        memcpy(dst + 16l, kq, 128l)
+    }
+}
+
+//! ... of the k5 planes as its Q5_K block (176 bytes): the scale block, the high bits, the nibbles.
+def kq_disk_block_p(var dst : uint8?; kq, ks : uint8 const?; _f : KqTag_k5) {
+    unsafe {
+        memcpy(dst, ks, 16l)
+        memcpy(dst + 16l, kq + 128l, 32l)
+        memcpy(dst + 48l, kq, 128l)
+    }
+}
+
+//! ... of the k6 planes as its Q6_K block (210 bytes): the quants, then the sub-scales and d.
+def kq_disk_block_p(var dst : uint8?; kq, ks : uint8 const?; _f : KqTag_k6) {
+    unsafe {
+        memcpy(dst, kq, 192l)
+        memcpy(dst + 192l, ks, 18l)
+    }
+}
+
+[unused_argument(dst, kq, ks)]
+def kq_disk_block_p(var dst : uint8?; kq, ks : uint8 const?; _f : KqTagNoEncoder) {
+    panic("kq_disk_block_p: the engine writes the formats it encodes - Q4_K, Q5_K and Q6_K")
+}
+
+//! The planes of `n` weights in `fmt` - Q4_K, Q5_K or Q6_K, in disk order (no backend's repack) - appended to `out` as the
+//! format's GGUF blocks: the K-quant transcode's inverse, byte for byte.
+def kq_planes_to_disk(fmt : KqFmt; kq, ks : array<uint8>; n : int64; @exact_size var out : array<uint8>) {   // nolint:STYLE037 - the stamp's ladder, one arm per KqFmt member
+    let nsb = n / KQ_SB_ELEMS
+    let qsb = kq_qsb(fmt)
+    let ssb = kq_ssb(fmt)
+    if (n % KQ_SB_ELEMS != 0l || long_length(kq) < nsb * qsb || long_length(ks) < nsb * ssb) {
+        panic("kq_planes_to_disk: {n} weights of {fmt} are not whole superblocks of planes {long_length(kq)} + {long_length(ks)} bytes long")
+    }
+    let dsb = kq_desc(fmt).disk_bytes
+    let at = long_length(out)
+    out |> reserve(at + nsb * dsb)
+    out |> resize_no_init(at + nsb * dsb)
+    kq_fmt_stamp(fmt) $(F) {
+        for (b in range64(nsb)) {
+            unsafe {
+                kq_disk_block_p(addr(out[at + b * dsb]), addr<uint8 const?>(kq[b * qsb]), addr<uint8 const?>(ks[b * ssb]), F)
+            }
+        }
+    }
+}
+
 def private kq_encodes(fmt : KqFmt) : bool {   // nolint:STYLE037 - the stamp's ladder, one arm per KqFmt member
     var has = false
     kq_fmt_stamp(fmt) $(F) {

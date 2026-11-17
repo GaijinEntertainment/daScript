@@ -15,6 +15,10 @@ require daslib/fio
 require _tts_corpus
 require _tts_parity
 require _model_tier
+require _gguf_writer   // gguf_retyped_copy / gguf_retyped_refusal: the stored file's refusal carriers
+require dasllama/dasllama_gguf    // the GGML types a carrier is retyped to; f16_to_f32: a stored scale is a half
+require dasllama/dasllama_image   // dlim_wipe, image_path_for, image_family_tag: the images a stored file's load mints beside it
+require dasllama/dasllama_env     // g_env_engine.image: the image rail's switch
 
 // The KittenTTS family. Model-free: the symbol map (the front end's inventory into the
 // espeak-style IPA the models consume) over the 200-sentence corpus, and the reference driver's
@@ -24,7 +28,10 @@ require _model_tier
 // cell that speaks one sentence. The facade and GPU cells also need the front-end packs
 // (`tts_g2p.bin`, `tts_postag.bin`) beside the models; the GPU cells run on Metal or Vulkan, skip
 // where no device serves or the driver registers no seat for the stage, and red where a present
-// seat declines a stage.
+// seat declines a stage. The facade cell also speaks the published files that store a lane
+// (`kitten-nano-q8.gguf`, `kitten-nano-kq.gguf`), each leg skipping without its file; the stored-file
+// cell writes its own files from kitten-nano.gguf, its later legs skip where the first wrote none, and
+// its image-rail leg skips with the rail off (DASLLAMA_IMAGE=0).
 
 [test(description = "`kitten_phonemes_from_misaki` rewrites all 200 corpus sentences to the fixture's espeak IPA exactly plus the calibrated rules, and `kitten_token_ids` emits pad-wrapped ids with punctuation as its own token and a closing ellipsis")]
 def test_symbol_map(t : T?) {
@@ -94,23 +101,25 @@ def private gguf_path(size : string) : string => path_join(models_dir(), "kitten
 def private kitten_ids_of(ps : string) : array<int> => <- kitten_token_ids(ps)
 
 // text in, speech out through the facade: the front end's packs sit beside the GGUF in the store
-[test(description = "Kitten nano through the facade lists 8 voices at 24 kHz and speaks a 51-character sentence as 1 to 10 seconds of finite audio peaking above 0.05, with every stage clock running and the total covering its parts")]
+[test(description = "Kitten nano - its file of floats, and the published files that store its Q8_0 lane and its recipe lane - through the facade lists 8 voices at 24 kHz and speaks a 51-character sentence as 1 to 10 seconds of finite audio peaking above 0.05, with every stage clock running and the total covering its parts")]
 def test_kitten_facade(t : T?) {
-    t |> run("nano: text in, speech out") @(t : T?) {
-        facade_smoke(t, gguf_path("nano"), true, 8) $(var m : TtsModel; c : TtsCaps) {
-            let served0 = styletts2_gpu_stats("decode").served
-            var inscope audio <- synthesize(m, "The quick brown fox jumps over the lazy dog, twice.", "Bella")
-            t |> equal(audio.sample_rate, 24000)
-            // 51 characters of text: well over a second of speech, under ten
-            t |> success(length(audio.pcm) > 24000 && length(audio.pcm) < 240000, "{length(audio.pcm)} samples")
-            let lv = speech_level(audio.pcm)
-            t |> success(lv.finite, "every sample finite")
-            t |> success(lv.peak > 0.05, "peak {lv.peak}: the model spoke")
-            let tm & = audio.timings
-            let gen_on_tower = tm.generator_us == 0l && tm.source_us == 0l && styletts2_gpu_stats("decode").served > served0
-            t |> success(tm.total_us > 0l && (tm.generator_us > 0l || gen_on_tower) && tm.decoder_us > 0l && tm.front_end_us > 0l, "the stage clocks ran")
-            t |> success(tm.total_us >= tm.front_end_us + tm.bert_us + tm.decoder_us + tm.generator_us, "the total covers its parts")
-            to_log(LOG_INFO, "nano facade: {length(audio.pcm)} samples, peak {lv.peak}; {timings_line(tm, audio.sample_rate)}\n")
+    for (stem in fixed_array("nano", "nano-q8", "nano-kq")) {   // the file of floats, then the two published files that store a lane
+        t |> run("{stem}: text in, speech out") @(t : T?) {
+            facade_smoke(t, gguf_path(stem), true, 8) $(var m : TtsModel; c : TtsCaps) {
+                let served0 = styletts2_gpu_stats("decode").served
+                var inscope audio <- synthesize(m, "The quick brown fox jumps over the lazy dog, twice.", "Bella")
+                t |> equal(audio.sample_rate, 24000)
+                // 51 characters of text: well over a second of speech, under ten
+                t |> success(length(audio.pcm) > 24000 && length(audio.pcm) < 240000, "{length(audio.pcm)} samples")
+                let lv = speech_level(audio.pcm)
+                t |> success(lv.finite, "every sample finite")
+                t |> success(lv.peak > 0.05, "peak {lv.peak}: the model spoke")
+                let tm & = audio.timings
+                let gen_on_tower = tm.generator_us == 0l && tm.source_us == 0l && styletts2_gpu_stats("decode").served > served0
+                t |> success(tm.total_us > 0l && (tm.generator_us > 0l || gen_on_tower) && tm.decoder_us > 0l && tm.front_end_us > 0l, "the stage clocks ran")
+                t |> success(tm.total_us >= tm.front_end_us + tm.bert_us + tm.decoder_us + tm.generator_us, "the total covers its parts")
+                to_log(LOG_INFO, "{stem} facade: {length(audio.pcm)} samples, peak {lv.peak}; {timings_line(tm, audio.sample_rate)}\n")
+            }
         }
     }
 }
@@ -220,19 +229,196 @@ def test_kitten_over_long_chunk(t : T?) {
         with_dasllama_jobque_() {
             var inscope m <- load_styletts2(gguf_path("nano"))
             let cap = m.albert.max_pos
-            var inscope ids : array<int>
-            ids |> resize(int(cap) + 64)
-            for (i in range(length(ids))) {
-                ids[i] = 1 + i % (int(m.n_symbols) - 1)
+            let said = styletts2_spoken(m, int(cap) + 64)
+            t |> equal(int64(said.ids), cap + 64l, "the chunk is 64 ids past the encoder's {cap} positions")
+            t |> success(said.samples > 0l, "{said.ids} ids spoke {said.samples} samples")
+            t |> equal(said.counted, said.samples, "the timings count the samples the truncated chunk produced")
+        }
+    }
+}
+
+// a staged read's quant bytes and floats against another's: the bytes that differ, and the floats that are the other's exactly,
+// the other's rounded to a half, or neither
+def private staged_against(a, b : St2Staging) : tuple<qdiff : int64; same : int64; half : int64; other : int64> {
+    var r = (qdiff = 0l, same = 0l, half = 0l, other = 0l)
+    for (x, y in a.qblob, b.qblob) {
+        r.qdiff += x != y ? 1l : 0l
+    }
+    for (x, y in a.blob, b.blob) {
+        if (x == y) {
+            r.same++
+        } elif (x == f16_to_f32(f32_to_f16(y))) {
+            r.half++
+        } else {
+            r.other++
+        }
+    }
+    return r
+}
+
+// a stored file this test writes, under the run's temp folder; the name is built, so the runner's scan of model-file
+// literals does not list it as a model the box lacks
+def private stored_tmp(tag : string) : string => path_join(test_temp_dir(), "kitten-nano-stored-{tag}.gguf")
+
+// a leg of `test_kitten_stored_file` that reads a file its first leg writes skips, loudly, where that leg wrote none
+def private stored_file_absent(t : T?; stored : string) : bool {
+    return false if (stat(stored).is_valid)
+    t |> skip("{base_name(stored)} is absent: the leg that writes it wrote none")
+    return true
+}
+
+// the stored file's refusals, over carriers retyped or poked from the q8 file `test_kitten_stored_file` wrote
+def private stored_file_refusals(t : T?; src : string) {
+        let stored = stored_tmp("q8")
+        return if (stored_file_absent(t, stored))
+        let newer = stored_tmp("layout2")
+        var inscope none : table<string; int>
+        gguf_retyped_copy(stored, newer, none, [(key = "styletts2.stored_layout", at = 0, v = 2)])
+        var why = panic_text() {
+            var inscope st <- stage_styletts2(newer)
+        }
+        t |> success(why |> find("layout 2") >= 0 && why |> find("reads layout 1") >= 0, "a layout this build does not read is refused by its number: {why}")
+        remove(newer)
+        why = gguf_retyped_refusal(src, "kitten-nano-undeclared", {"bert_encoder.weight" => GGML_TYPE_Q8_0}) $(path : string) {
+            var inscope st <- stage_styletts2(path, true)
+        }
+        t |> success(why |> find("bert_encoder.weight") >= 0 && why |> find("declares no styletts2.stored_layout") >= 0,
+            "a quantized tensor in a file that declares no layout is refused by name: {why}")
+        why = gguf_retyped_refusal(stored, "kitten-nano-linear-k4", {"bert_encoder.weight" => GGML_TYPE_Q4_K}) $(path : string) {
+            var inscope st <- stage_styletts2(path)
+        }
+        t |> success(why |> find("bert_encoder.weight") >= 0 && why |> find("a dense layer's stored form is Q8_0") >= 0, "a K-quant dense layer is refused by name: {why}")
+        why = gguf_retyped_refusal(stored, "kitten-nano-q40", {"bert_encoder.weight" => GGML_TYPE_Q4_0}) $(path : string) {
+            var inscope st <- stage_styletts2(path)
+        }
+        t |> success(why |> find("bert_encoder.weight' is stored as q40") >= 0, "a format no site takes is refused by its name: {why}")
+        let again = stored_tmp("again")
+        why = panic_text() {
+            write_styletts2_gguf(stored, again, false)
+        }
+        t |> success(why |> find("the writer takes a file of floats") >= 0 && !stat(again).is_valid, "the writer refuses a file that already stores its weights: {why}")
+        let lane_x = stored_tmp("lane-x")
+        gguf_retyped_copy(stored, lane_x, none, [(key = "styletts2.stored_lane", at = 8, v = 'x')])   // past the string's length word
+        why = panic_text() {
+            var inscope st <- stage_styletts2(lane_x)
+        }
+        t |> success(why |> find("names the stored lane 'x8'") >= 0, "a lane the file cannot store is refused by its name: {why}")
+        remove(lane_x)
+        why = gguf_retyped_refusal(stored, "kitten-nano-conv-unnamed", {"decoder.generator.noise_convs.0.weight" => GGML_TYPE_Q8_0}) $(path : string) {
+            var inscope st <- stage_styletts2(path)
+        }
+        t |> success(why |> find("styletts2.stored_conv.decoder.generator.noise_convs.0.weight gives") >= 0,
+            "a quantized conv whose channel counts the file does not name is refused: {why}")
+        why = gguf_retyped_refusal(stored, "kitten-nano-lstm-half", {"predictor.lstm.weight_hh" => GGML_TYPE_F32}) $(path : string) {
+            var inscope st <- stage_styletts2(path)
+        }
+        t |> success(why |> find("'predictor.lstm' stores q8 and floats") >= 0, "an LSTM with one matrix of floats is refused: {why}")
+        why = gguf_retyped_refusal(stored, "kitten-nano-voice-k4", {"voice.expr-voice-2-f" => GGML_TYPE_Q4_K}) $(path : string) {
+            var inscope st <- stage_styletts2(path)
+        }
+        t |> success(why |> find("'voice.expr-voice-2-f' is stored k4; a voice pack's stored form is Q8_0") >= 0, "a K-quant voice pack is refused: {why}")
+        why = gguf_retyped_refusal(src, "kitten-nano-bias-f16", {"bert_encoder.bias" => GGML_TYPE_F16}) $(path : string) {
+            var inscope st <- stage_styletts2(path, true)
+        }
+        t |> equal(why, "", "control: a tensor of halves in a file of floats is floats, and stages")
+        let nowhere = path_join(test_temp_dir(), "no-such-dir/kitten-nano-q8.gguf")
+        t |> success(!write_styletts2_gguf(src, nowhere, false) && !stat("{nowhere}.tmp").is_valid, "a destination that cannot be written answers false and leaves no temp file")
+}
+
+// the stored file under a recipe pin: what the writer stores, what the bake tags, where the load goes
+def private stored_file_pins(t : T?; src : string) {
+        let stored = stored_tmp("kq")
+        return if (stored_file_absent(t, stored))
+        let k5 = stored_tmp("k5")
+        remove(k5)
+        set_styletts2_recipe("ups=k5")
+        t |> success(write_styletts2_gguf(src, k5, true), "the recipe lane with the upsamplers pinned Q5_K is written")
+        var inscope from_lane <- stage_styletts2(src, true, true)
+        reset_styletts2_recipe()
+        var inscope from_file <- stage_styletts2(k5)
+        var inscope unpinned <- stage_styletts2(src, true, true)
+        let diff = staged_against(from_file, from_lane)
+        t |> success(long_length(from_file.qblob) == long_length(from_lane.qblob) && diff.qdiff == 0l && diff.other == 0l,
+            "read back with no pin set, the file's planes are the pinned lane's ({diff.qdiff} quant bytes off, {diff.other} floats off)")
+        t |> success(long_length(unpinned.qblob) != long_length(from_file.qblob), "control: the recipe as it is mints the upsamplers in another format")
+        remove(k5)
+        // a stored file is no in-memory mint under a pinned recipe: it loads through the image rail, on its own lane
+        let image = path_join(test_temp_dir(), "kitten-nano-stored-kq-baked.dlim")
+        remove(image)
+        t |> success(bake_styletts2_image(stored, image, true, false), "the stored kq file bakes when the q8 lane is asked")
+        t |> equal(image_family_tag(image), ST2_IMAGE_TAG_KQ, "the image carries the file's lane, not the asked one")
+        remove(image)
+        if (!g_env_engine.image) {
+            t |> skip("the image rail is off (DASLLAMA_IMAGE=0): a stored file's load writes no image to read back")
+        } else {
+            dlim_wipe(stored)
+            set_styletts2_recipe("ups=k5")
+            {
+                var inscope m <- load_styletts2(stored)
+                t |> success(m.q8 && m.kq, "under a pinned recipe the stored file serves its own lane")
             }
-            var inscope style : array<float>
-            styletts2_style(m, m.voice_names[0], 0, style)
-            var inscope noise = TtsNoise()
-            var tm = TtsTimings()
-            var inscope sc = St2Scratch()
-            let samples = styletts2_synthesize(m, ids, style, 1.0, noise, 0x5eedul, null, tm, sc)
-            t |> success(samples > 0l, "{long_length(ids)} ids past the encoder's {cap} positions spoke {samples} samples")
-            t |> equal(tm.samples, samples, "the timings count the samples the truncated chunk produced")
+            reset_styletts2_recipe()
+            t |> success(stat(image_path_for(stored, ST2_IMAGE_TAG_KQ)).is_valid, "and its load wrote the lane's image beside it, where a pinned mint of a file of floats writes none")
+            dlim_wipe(stored)
+        }
+}
+
+[test(description = "kitten-nano written as a file that stores the Q8_0 lane's weights, and as one that stores the recipe lane's, stages the lane's own quant bytes with each Q8_0 scale as a half, is smaller than its source, serves the lane it names over an f32 pin and a recipe ask, and speaks; a pinned group is stored in its pin's format and a stored file bakes and loads on its own lane under a pin; a layout this build does not read, an unknown lane, a quantized tensor in a file that declares no layout, a format a site does not take, a conv whose channels the file does not name, a half-quantized LSTM, a rewrite of a stored file and an unwritable destination are refused or declined by name")]
+def test_kitten_stored_file(t : T?) {
+    let src = gguf_path("nano")
+    return if (!model_available(t, src))
+    defer() {
+        reset_styletts2_recipe()
+        reset_styletts2_q8()
+    }
+    reset_styletts2_recipe()   // the writer's stage and the lanes it is held to read the pins: start from none
+    reset_styletts2_q8()
+    with_dasllama_jobque_() {
+        for (kq in fixed_array(false, true)) {
+            let lane = kq ? "kq" : "q8"
+            let stored = stored_tmp(lane)
+            remove(stored)
+            t |> run("the {lane} lane written to a file: the lane's quant bytes, its Q8_0 scales as halves") @(t : T?) {
+                t |> success(write_styletts2_gguf(src, stored, kq), "the file is written")
+                t |> success(stat(stored).size * 2ul < stat(src).size, "at {int64(stat(stored).size)} bytes it is under half its source's {int64(stat(src).size)}")
+                t |> equal(styletts2_stored_lane(stored), lane, "the file names its lane")
+                t |> equal(styletts2_stored_lane(src), "", "control: the source of floats names none")
+                var inscope from_file <- stage_styletts2(stored)   // asked for the f32 lane: the file decides
+                var inscope from_lane <- stage_styletts2(src, true, kq)
+                t |> success(from_file.e.q8 && from_file.e.kq == kq, "the staged read takes the file's lane over the lane it was asked for")
+                t |> equal(long_length(from_file.qblob), long_length(from_lane.qblob), "as many quant bytes as the lane mints")
+                t |> equal(long_length(from_file.blob), long_length(from_lane.blob), "and as many floats")
+                let diff = staged_against(from_file, from_lane)
+                to_log(LOG_INFO, "kitten-nano {lane} file: {diff.qdiff} quant bytes off, {diff.same} floats equal, {diff.half} as halves, {diff.other} other\n")
+                t |> equal(diff.qdiff, 0l, "every quant and K-quant byte is the lane's")
+                t |> equal(diff.other, 0l, "every float is the lane's, or the lane's rounded to a half")
+                t |> success(diff.half > 0l, "the Q8_0 scales are the halves the blocks hold ({diff.half} of them)")
+                var inscope other_lane <- stage_styletts2(src, true, !kq)
+                t |> success(long_length(other_lane.qblob) != long_length(from_file.qblob), "control: the other lane mints another byte count")
+            }
+            t |> run("the {lane} file serves as stored: over an f32 pin, over a recipe ask, and it speaks") @(t : T?) {
+                return if (stored_file_absent(t, stored))
+                set_styletts2_q8(false)
+                if (!kq) {
+                    set_styletts2_recipe("")
+                }
+                var inscope m <- load_styletts2(stored)
+                reset_styletts2_recipe()
+                reset_styletts2_q8()
+                t |> success(m.q8 && m.kq == kq, "the model is on the file's lane, not the pin's or the ask's")
+                let said = styletts2_spoken(m, 40)
+                t |> success(said.samples > 0l && said.level.finite && said.level.peak > 0.05, "it speaks {said.samples} samples at peak {said.level.peak}")
+                dlim_wipe(stored)
+            }
+        }
+        t |> run("refusals: an unread layout, an unknown lane, a quantized tensor with no layout declared, formats a site does not take, a stored file as the writer's source, an unwritable destination") @(t : T?) {
+            stored_file_refusals(t, src)
+        }
+        t |> run("a pinned group is stored in its pin's format, and a stored file loads through the image rail under a pin") @(t : T?) {
+            stored_file_pins(t, src)
+        }
+        for (lane in fixed_array("q8", "kq")) {
+            remove(stored_tmp(lane))
         }
     }
 }

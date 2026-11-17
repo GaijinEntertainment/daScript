@@ -1,9 +1,9 @@
 # dasLLAMA text-to-speech Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-docs: `ARCHITECTURE_TTS.md`, `ARCHITECTURE_TTS_FRONT_END.md`, `ARCHITECTURE_TTS_RU_STRESS.md`,
-`ARCHITECTURE_TTS_TEXTNORM_RU.md`, `ARCHITECTURE_TTS_MEMORY.md`, `ARCHITECTURE_POCKET.md`, `ARCHITECTURE_GPU.md`. Planned work:
-`followup_general.md`.
+docs: `ARCHITECTURE_TTS.md`, `ARCHITECTURE_TTS_FORMATS.md`, `ARCHITECTURE_TTS_FRONT_END.md`,
+`ARCHITECTURE_TTS_RU_STRESS.md`, `ARCHITECTURE_TTS_TEXTNORM_RU.md`, `ARCHITECTURE_TTS_MEMORY.md`,
+`ARCHITECTURE_POCKET.md`, `ARCHITECTURE_GPU.md`. Planned work: `followup_general.md`.
 
 A TTS source file is a file the glob `dasllama/dasllama_tts*.das` matches,
 `dasllama/dasllama_styletts2.das`, a TTS family file - a `dasllama/dasllama_<family>.das` holding
@@ -101,15 +101,19 @@ record on the shared carrier holds it, filled by its reader from the gguf or the
 `verify` beside it (`dasllama/dasllama_styletts2.das`), in the same change** - an unwritten
 field reads back zero from a mapped image.
 
-**A diff that changes what a flag-free run synthesizes from English text on a model it
-synthesized before - a run with no flags and no environment overrides, on the CPU chain or on a GPU
-TTS seat (a stage's device hook a tower driver fills) that serves by default
-(`ARCHITECTURE_GPU.md#gpu-backends`), the English front end included (a moved phoneme of
-`test_corpus_phonemes` in `tests/test_tts_g2p.das`) - ships in the PR body the WER and UTMOS of
-`harness/tts_rig.py`, before and after, at the rig's voice, on every model the change reaches and
-every weight lane that model can take - the unpinned default and each pin - or the PCM hash of one
-flag-free synthesis per model the change reaches, of a text whose synthesis runs the changed code,
-before and after, the two matching.**
+**A diff - on a final PR, its change (`tests/REVIEW_RUNS.md`) - that changes what a flag-free run
+synthesizes from English text on a model it synthesized before - a run with no flags and no
+environment overrides, on the CPU chain or on a GPU TTS seat (a stage's device hook a tower driver
+fills) that serves by default (`ARCHITECTURE_GPU.md#gpu-backends`), the English front end included
+(a moved phoneme of `test_corpus_phonemes` in `tests/test_tts_g2p.das`) - ships in the PR body
+either the PCM hash of one flag-free synthesis per model the change reaches, of a text whose
+synthesis runs the changed code, before and after, the two matching, or the WER and UTMOS of
+`harness/tts_rig.py`, before and after, at the rig's voice, on the runs its PR kind owes.** A final
+PR owes every model its change reaches on every weight lane the model can take, the unpinned default
+and each pin. An intermediate PR owes each model file it mints or re-mints, on the lane it mints,
+and each weight lane whose kernels or mint it changes, on one model of each family that takes that
+lane; where it mints nothing and changes no lane, it owes one model the change reaches, at its
+unpinned default.
 
 **A diff that changes what a flag-free run synthesizes from text in another language, on a model
 that synthesized that language before, lists in the PR body what it moved, each with its reason:
@@ -164,12 +168,21 @@ its taps reach before a window, zero or edge-replicated ahead of the first
 same diff** - which tensors a format covers is written once in the converter and again in the
 reader.
 
-**A diff that changes what a TTS converter under `harness/` writes for a key a published file
-already carries re-mints that file and, in the same change, lands its new bytes and sha256 in
-`harness/tts_model_card.md` and `performance/model_specs.das` and its new sha256 in every
-`examples/dasLLAMA/*/models.json` (repo root) pinning it.** The fetches refuse a file whose
-sha256 moved, and the card is what a reader downloads against.
+**A diff that changes what a TTS converter under `harness/` or `utils/dasllama-convert/` (repo root)
+writes for a key a published file already carries, or after which the StyleTTS2 reader refuses the
+`styletts2.stored_layout` number a published file carries, re-mints that file and, in the same
+change, lands its new bytes and sha256 in `harness/tts_model_card.md` and
+`performance/model_specs.das` and its new sha256 in every `examples/dasLLAMA/*/models.json` (repo
+root) pinning it.** The fetches refuse a file whose sha256 moved, and the card is what a reader
+downloads against.
 
 **A diff that makes a TTS converter under `harness/` write a key a published file does not carry
 leaves that file at its pinned bytes and names, in its `performance/model_specs.das` recipe, the
 converter commit that minted it.** The published voice stays the one its listeners rated.
+
+**A diff that changes the type, the dims or the element order of a tensor `write_styletts2_gguf`
+writes quantized, or what the values of a `styletts2.stored_*` key mean, takes a new
+`ST2_STORED_LAYOUT` number, and leaves the reader either reading, or refusing with an error that
+names it, every layout number a file `performance/model_specs.das` pins carries**
+(`ARCHITECTURE_TTS_FORMATS.md#tts-stored-file`). A published file is read by every build after it,
+and the number is all that tells a build which matrix a tensor holds.

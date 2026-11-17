@@ -196,6 +196,11 @@ Every conversion lives in `dasllama_convert.das`; the GGUF container finds bytes
   and the bulk loader is the shared `gguf_transcode_kq` (`dasllama_gguf.das`: the descriptor
   row sizes the slice, `kq_transcode_check` + `guard_dst` + `with_tensor_view` +
   `maybe_parallel_for` over units, the stamp hoisted outside the loop) - neither needs an edit.
+- `kq_disk_block_p(dst, kq, ks; _f : KqTag_<fmt>)` - for a format the engine encodes, the codec's
+  inverse: one stride unit of the planes back as its disk bytes, what `kq_planes_to_disk` writes
+  a file of minted weights through. Add the overload beside the format's encoder and the format
+  to `test_kq_planes_back_to_disk` (`tests/test_gguf_quant.das`); a format with no encoder
+  takes the refusing overload as it is.
 - `dequant_<fmt>_plane_superblock` - the reference dequant off the planes, in ggml's own float
   order (`dequantize_row_<fmt>` decides the order; match it operation for operation so the
   plane dequant is bit-exact against the file dequant).

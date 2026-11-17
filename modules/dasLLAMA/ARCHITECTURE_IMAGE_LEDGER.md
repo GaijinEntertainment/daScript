@@ -25,7 +25,9 @@ The loader rule of `tests/REVIEW.md` keeps a test whose subject is not the `.dli
 fire it and are ruled acceptable, each with its reason.
 
 - **The TTS facade smoke cells** - `facade_smoke` in `tests/_tts_parity.das`, called from `tests/test_tts_kitten.das`,
-  `tests/test_tts_kokoro.das` and `tests/test_tts_pocket.das`, and `test_kokoro_ru_facade` in `tests/test_tts_kokoro.das`. They
+  `tests/test_tts_kokoro.das` and `tests/test_tts_pocket.das`, `test_kokoro_ru_facade` in `tests/test_tts_kokoro.das`, and
+  the two cells of `test_kitten_stored_file` that load a stored file through `load_styletts2` (its lane choice under a
+  pin is their subject; they wipe the images they mint beside their temp files). They
   load through the facade's `load_tts_model`, which bakes the family's `.dlim` beside the model when `DASLLAMA_IMAGE` is unset, so each mints an
   image per carrier. The reason: the facade's own load path is the cells' subject - for the Russian cell the packs it
   picks by the voices' declared languages - and they run under the suite child's identity - on the tuned arm the box's
