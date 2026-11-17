@@ -612,7 +612,13 @@ carrier, model-free - runs with no model stocked; also the layout fingerprint; t
 the per-tensor table and the nv4 stacks' per-expert vectors - read back through `serialize_image_meta`; the save's temp
 file - a save the `set_image_write_fault` seam fails publishes nothing and leaves no temp file,
 a temp file a killed writer left (its mtime set back) goes at the next save and one written a
-moment ago stays; the lane naming -
+moment ago stays; the source stamp (`test_image_answers_for_its_source`) - an image declines once a sampled byte or the
+size of the source beside it changes and reads `STALE source` in the inventory, maps again with the source restored,
+loads unchecked beside no source or under a name that spells none, a byte between two windows leaving it mapped;
+another lane's save leaves the image of a replaced source, the explicit GC removes it, and `refuse_moved_source`
+names the source for an image asked by its own path (the copy beside no source the control); a split GGUF's every
+shard, a lone shard whose sibling is missing and a directory's every file are the source, and only a lane-named
+`.dlim` answers for one; the lane naming -
 the file name's lane segment read back, a hash-named legacy image adopted into its lane, a save
 reaping only its own lane's legacy other while another lane's OTHER survives, a version-stale
 image going in any lane, and the rope-scaling override as a lane suffix and an identity element
@@ -1084,8 +1090,8 @@ persistent_heap`, and the same gate fails one that does not: dastest compiles a 
 linear heap unless the program says otherwise, and there a `delete` frees nothing until collection - a
 cell's deleted carrier stays, and three carriers in one process held a 256 GB box. A `stocked` cell skips honestly
 when its file is absent, so on a bare box (CI) the suite is a run of skips; on a stocked box a PR
-owes the files its change reaches (`--changed`), and the whole suite only where the engine core
-changed, over the fleet - `test_ple_modes` alone is ~10 min, the suite hours. The runner sets
+owes what its kind owes (`skills/internal/dasllama_testing.md`, repo root) - `test_ple_modes` alone is ~10 min,
+the suite hours. The runner sets
 `DASLLAMA_CPU_PREFILL=1` for every child. That is why the CPU-prefill tripwire cannot ride either
 suite: the runner disarms the guard that tripwire asserts. The map below is partial. `run.das`'s
 two lists together are the census.
@@ -4798,6 +4804,20 @@ the clean rows the control), the model-gated cells (`kitten-<size>.gguf` +
 `tts_oracle/kitten_<size>/` under the models dir, both from `performance/build_tts_data.das`)
 run the parity rail of `_tts_parity.das` per size and a facade smoke cell that speaks one
 sentence and checks the PCM is finite, non-silent, of speech length, and carries its timings;
+`test_kitten_stored_file` (nano) writes the file that stores the Q8_0 lane's weights and the one that stores
+the recipe lane's (`write_styletts2_gguf`): each under half its source, naming its lane, its staged
+quant and K-quant bytes the in-memory lane's byte for byte and every float the lane's or the lane's
+rounded to a half (the Q8_0 scales, counted above zero), the other lane's byte count the control; each
+loads on its own lane over an f32 pin - the q8 file over a recipe ask too - and speaks; written under the pin `ups=k5` the
+file's planes are the pinned lane's with no pin set at the read (the unpinned recipe's byte count the
+control), a stored kq file bakes its own lane's image when the q8 lane is asked and, under a pinned
+recipe, loads through the image rail; a layout number this build does not read, a lane the file cannot
+store, a quantized tensor in a file that declares no layout, a conv whose channel counts the file does
+not name, a K-quant dense layer, a K-quant voice pack, an LSTM with one matrix of floats, a format no
+site takes and the writer over a stored file are each refused by name, a tensor of halves in a file of
+floats stages (the control), and a destination that cannot be written answers false with no temp file;
+the facade cell (`test_kitten_facade`) speaks the f32 file and the two published stored files
+(`kitten-nano-q8.gguf`, `kitten-nano-kq.gguf`, each skipping where absent);
 `test_kitten_synthesis_metal` (nano) is the synthesis across the tower knob through
 `tts_gpu_synthesis` (`_tts_parity.das`; kokoro's twin is `test_kokoro_synthesis_metal`): on the
 served lane every chunk served at every seat but the generator's, one tower encode per seat per
@@ -4866,9 +4886,8 @@ skip included; and, model-free, the seat-name refusal of `styletts2_gpu_stats`.
 `test_tts_pocket.das` - stocked suite (`pocket-tts-en.gguf` + `tts_oracle/pocket_english_2026-04/`
 under the models dir, minted by `../harness/convert_pocket.py` and `../harness/pocket_oracle.py`): the
 unigram tokenizer id for id against the package on the 200-sentence corpus and the byte-fallback
-probes (`_tts_fixtures/pocket_tokens.json`, the oracle script's `--tokens-fixture --no-replace` -
-the file predates the replacement keys, so its fixture carries the package's rules with the table
-off), the preparation rules on the fixture's short texts (the terminal mark after a closer, a
+probes (`_tts_fixtures/pocket_tokens.json`, the oracle script's `--tokens-fixture` - the file
+carries its config's character replacements, so the fixture does too), the preparation rules on the fixture's short texts (the terminal mark after a closer, a
 trailing dash, a sentence end before a comma), the decode
 round trip; the parity rail - the codec decoder over the oracle's latents (one shot), the codec
 encoder and the voice prompt's key-value rows per layer, then teacher-forced frames (the oracle's
@@ -4923,7 +4942,8 @@ as Q8_0 and no codec conv did, the same lane within a few percent; the quiet flo
 (`pocket-tts-en-kq.gguf` alone): the served lane's differenced quiet-window floor within 6 dB of
 the f32 lane's on one two-sentence text, with a hissed copy of the reference as the control
 that lands outside the bar; and the five other
-languages (`pocket-tts-{de,es,it,pt,fr}-q8.gguf`, oracle dirs `tts_oracle/pocket_<config>/`
+languages, each on its Q8_0 file and on its K-quant small form (`pocket-tts-{de,es,it,pt,fr}-{q8,kq}.gguf`,
+a form skipping where its file is absent; oracle dirs `tts_oracle/pocket_<config>/`
 minted over `_tts_fixtures/pocket_sentences.json`, token fixtures `pocket_tokens_<config>.json`):
 the language code and the one default voice, the tokenizer on the language's own sentences
 and the probes, the teacher-forced frames of every oracle case, one sentence through the
@@ -5077,6 +5097,9 @@ its f32 run over 96 steps in both directions, the two runs not equal, and a dire
 width is off 32 on its f32 matrices bit for bit. `test_gguf_quant.das`'s `test_kq_encoders` holds
 `quantize_kq_plane`'s round trip through the plane dequant under each format's relative-rmse budget
 a 32-element sub-block, the 4-bit format the furthest off, an all-zero superblock exact zeros.
+`test_kq_planes_back_to_disk` holds `kq_planes_to_disk` to the transcode's inverse - Q4_K, Q5_K and Q6_K planes
+transcoded from random disk superblocks written back as those bytes exactly, a changed plane byte changing them -
+and its refusals of planes short of whole superblocks and of a format with no encoder.
 `test_f32_batch_tile_perms.das` - model-free: every permutation of `f32_batch_tile`'s grid
 (`_f32_tile_pin.das`'s `[dasllama_grid]` clones) over the 4x4 lattice of the inverse STFT's GEMM
 kitten mini ends on (n 11, d 20, 45480 frames) and of a 301-wide dot (d 20, 2048 tokens: past every
@@ -5436,7 +5459,14 @@ Every `[test]` file requiring a `dasllama/*` module outside this folder, each wi
   the GigaAM carriers, a decoder and a Qwen3-ASR mmproj, gated through `_model_tier.das`'s
   `model_available` (path-required), and the absent-file cell; `test_bake_pocket_lanes` and
   `test_bake_kitten_lanes` bake a TTS source to `-o` at `-q q8` and `-q fp32` and hold the image's
-  lane tag (`image_family_tag`); run `-jit` (`run_tests_dasllama_convert`).
+  lane tag (`image_family_tag`); `test_write_kitten_stored` writes kitten-nano at `--gguf` with and
+  without `--recipe` (each file smaller than its source, naming its lane and carrying the source's licence
+  sidecar under its own name), bakes the stored file's own lane to `-o` with no `--recipe` asked, and holds
+  the refusals of `--gguf` over a stored file, `--recipe` on one, `--gguf` at `-q fp32`, on a Pocket file and
+  naming the source, the exit 0 that leaves a file already there, and the exit 1 of a path that cannot be
+  written; `test_write_kitten_without_sidecar` writes from a source copied away from its sidecar and finds
+  none beside the result; the TTS cells run their children cold through `convert_cold` (no module cache,
+  no JIT cache); run `-jit` (`run_tests_dasllama_convert`).
 
 The ladder tests (`utils/internal/dasllama-ladder/test_*.das`) answer to that folder's own
 `REVIEW.md` - not dasLLAMA tests, not ledger entries. That holds even though two of them,

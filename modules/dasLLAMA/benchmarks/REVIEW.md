@@ -128,12 +128,13 @@ what it times or that report row, also prints both of those times on that report
 plain elapsed-time report row - one clock pair, no attribution across stages - is not a
 difference.
 
-**A diff that adds a GPU kernel emitter in an instrument ships rows in `../PERF_LEDGER.md` for a
-board cell or instrument that times the kernel.**
+**A final PR (a PR's kind and a final PR's change: `../tests/REVIEW_RUNS.md`) whose change adds a
+GPU kernel emitter in an instrument ships rows in `../PERF_LEDGER.md` for a board cell or instrument
+that times the kernel.**
 
-**A diff that changes a GPU kernel emitter in an instrument either ships before/after rows in
-`../PERF_LEDGER.md` for a board cell or instrument that times the kernel, or names in the PR body
-the compare showing the emitted kernel code byte-identical before and after: its emitted source
+**A final PR whose change alters a GPU kernel emitter in an instrument either ships before/after
+rows in `../PERF_LEDGER.md` for a board cell or instrument that times the kernel, or names in the PR
+body the compare showing the emitted kernel code byte-identical before and after: its emitted source
 text, or the binary it builds into (for SPIR-V, the words `DASLLAMA_VK_SPV_DUMP` writes).**
 
 **A diff that adds a result-row mode - one printing report rows carrying a time, a rate, or a

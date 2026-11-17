@@ -79,6 +79,8 @@ states the same boundary.
 - **`held` entry** - a `performance/records/annotations.json` entry carrying a board row's `gguf`,
   `box`, `engine`, `backend`, `flavor` and `workload`, whose `held` field names the follow-up ledger
   row that keeps the row off the board.
+- **A PR's kind** - final or intermediate, by the line its body's Validation section opens with; a final
+  PR's change is its arc's whole diff (`tests/REVIEW_RUNS.md`).
 
 ### Board rows land at a release boundary {#board-rows-release-boundary}
 

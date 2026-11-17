@@ -76,7 +76,8 @@ area or the file to the row in the same change.** A test file that starts loadin
 runs the `dasllama/dasllama_arch_*.das` file registering that GGUF's `general.architecture`.
 
 **A `[test]` file with a `require dasllama/...` line of its own, wherever the diff puts it, and
-every `dasllama/` change answer to this folder's `tests/REVIEW.md`.**
+every `dasllama/` change answer to this folder's `tests/REVIEW.md`; every PR touching this module
+applies `tests/REVIEW_RUNS.md` too.**
 
 **A diff that adds a CPU kernel, or changes the body, parameters or return type of one - a
 function in `dasllama/dasllama_math*.das` that runs on the CPU and writes an output buffer from

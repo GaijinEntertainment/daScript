@@ -6,11 +6,12 @@ checklist is `REVIEW.md` (beside this file); the runner's tables are `run.das`.
 **A diff that adds or moves a `[test]` here applies `tests/REVIEW.md` (repo root) too, with this
 folder's `REVIEW.das` as its gate; a diff that weakens it is a defect.**
 
-**A `[test]` a diff adds or moves into a file that an `--arm` suite lists (every `run.das` suite
-but `model-free` and `stocked`) gates each model-loading cell on `arm_on(t, name)`
-(`_model_tier.das`) with that suite's arm; a test with no arm goes into a `model-free` or
-`stocked` file.** A file an `--arm` suite lists runs only when someone names its suite with
-`--arm`, never in a per-PR run.
+**A `[test]` a diff adds or moves into a file that an `--arm` suite lists (every `run.das` suite but
+`model-free` and `stocked`) gates each model-loading cell on `arm_on(t, name)` (`_model_tier.das`)
+with that suite's arm; a test with no arm goes into a `model-free` or `stocked` file.** A file an
+`--arm` suite lists runs only where a run names its arms - `--arm`, or the `image` suite arms a
+`--changed` or `--area` plan owns (`area_image_arms`, `run.das`) - never in a `model-free` or
+`stocked` run.
 
 **A `[test]` a diff adds or moves that reaches no stocked artifact goes into a `model-free`
 file, never a `stocked` one; a diff that weakens the model-free/stocked check of
@@ -41,6 +42,13 @@ one program and runs every module's `[init]` in every batch-mate's context, so a
 **A model-gated or compute `[test]` here that neither builds, spawns a child nor waits on a
 peer carries no `timeout`.** The runner owns a child's budget, and a per-test cap reds a cell
 that runs long on a cold cache.
+
+**A diff that adds a `[test]`, wherever it puts it, that starts a daslang child on an entry file -
+the `.das` path the child's command line names as its program - another child of the same test file
+also runs starts every child of that file on that entry file in one working directory under
+`test_temp_dir()` (`dastest/testing_boost`, repo root), and passes none of them `-no-module-cache`,
+`-jit-no-cache` or a `-module-cache` path of its own.** Children sharing one working directory share
+its module and JIT caches, so the file compiles that program once instead of once a child.
 
 **A `standalone` reason here that says the test loads a model is a defect - the test goes to
 its topic's file.** A cell frees its model before it returns.

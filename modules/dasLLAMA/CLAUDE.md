@@ -19,9 +19,8 @@ module its `MODULE_WITNESSES` row or - a core module - every model-free `llm` fi
 stocked witness a family and home, and its other areas (`audio | vision | tts | translate | infra`) whole;
 `--area <a,b>` names areas directly. A changed file in a model suite (decode | mtp | prefill |
 matrix | image) reaches nothing - `--changed` names it; run that suite with `--arm` scoped to the
-change. Before a PR: `--changed` on a box with models, and where the engine core changed the
-whole `stocked` suite too, sharded over a pod fleet (`harness/pod_fleet.das`); a PR's run carries
-no `--exclude` - `--exclude test_ple_modes` is the between-PR iteration form. `--shard i/n`
+change. Before a PR: `skills/internal/dasllama_testing.md` (repo root) says what a PR runs by its
+kind. `--exclude test_ple_modes` is the between-PR iteration form. `--shard i/n`
 splits one run over n boxes (the same command on each, its own `i`), and the PR cites every
 shard's `REPORT`. `--no-tune` runs any suite but the image suites on the reference kernel bodies
 (`DAS_TUNE_POLICY=reference`, the image rail off) - the portable tier's arm. `--poison-kv` starts every
@@ -58,4 +57,5 @@ Read `BRINGUP.md` before bringing a profiling box up from zero (the records rig;
 | `skills/internal/llvm_tune_internals.md` | Editing the tune framework itself |
 | `skills/perf_lint.md` / `skills/style_lint.md` | Suppressing any lint finding here |
 | `skills/internal/tests_in_repo.md` | Adding a test (the deep-engine rules: `options stack`, `T?`-free helpers) |
+| `skills/internal/dasllama_testing.md` | Planning a PR's test runs - an intermediate PR of an arc runs its scope report, the arc's final PR runs everything |
 | `skills/writing_benchmarks.md` / `skills/internal/benchmarks_in_repo.md` | Anything under `benchmarks/` or `performance/` |

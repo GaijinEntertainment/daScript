@@ -184,16 +184,15 @@ it was measured on. The pinned set, one entry a line, each with what it must kee
   format's GEMV against its scalar dot, and its summed twin (`per32_sum_rows_cell`) over one,
   two and four token rows - every row its slots' dots under their weights, a poisoned last row
   the control, a wider dispatch's rows bit for bit the narrower one's.
-- `test_vulkan_kernels.das`'s `test_vkd_q51_cm2_batch`, `test_vkd_mx4_cm2_batch`,
-  `test_vkd_iq4nl32_cm2_batch`, `test_vkd_iq3s4_cm2_batch`, `test_vkd_mx4_gemv_gu`,
-  `test_vkd_gemv_ncol`, `test_vkd_q8_gemv_gu_n`, `test_vkd_q8_gemv_pleact`, `test_vkd_act_family`,
-  `test_vkd_moe_routing`, `test_vkd_dn_family`, `test_vkd_hc_seams`, `test_vkd_hc_rows`,
-  `test_vkd_ple_side`, `test_vkd_f16_gemm_khr`, `test_vkd_f16_gemm_s`, `test_vkd_fa_cm2`, `test_vkd_fa_khr`,
-  `test_vkd_fa_khr_h256_softcap`, `test_vkd_fa_khr_h256_gated`, `test_vkd_da_attn`, `test_vkd_da_attn_rqk`, `test_vkd_da_attn_bw`,
-  `test_vkd_moe_gather_row`, `test_vkd_combine_row`, `test_vkd_kq_batch_family`,
-  `test_vkd_emb_gather_family` and `test_vkd_nv4_cm2_batch` cells - the census's evidence for the
-  classes no zoo row dispatches - must hold each class against its CPU oracle at the bar the cell
-  sets, with the cell's poisoned-element control.
+- `test_vulkan_kernels.das`'s `test_vkd_q51_cm2_batch`, `test_vkd_mx4_cm2_batch`, `test_vkd_iq4nl32_cm2_batch`,
+  `test_vkd_iq3s4_cm2_batch`, `test_vkd_mx4_gemv_gu`, `test_vkd_gemv_ncol`, `test_vkd_q8_gemv_gu_n`,
+  `test_vkd_q8_gemv_pleact`, `test_vkd_act_family`, `test_vkd_moe_routing`, `test_vkd_dn_family`, `test_vkd_hc_seams`,
+  `test_vkd_hc_rows`, `test_vkd_ple_side`, `test_vkd_f16_gemm_khr`, `test_vkd_f16_gemm_s`, `test_vkd_fa_cm2`,
+  `test_vkd_fa_khr`, `test_vkd_fa_khr_h256_softcap`, `test_vkd_fa_khr_h256_gated`, `test_vkd_da_attn`,
+  `test_vkd_da_attn_rqk`, `test_vkd_da_attn_bw`, `test_vkd_moe_gather_row`, `test_vkd_combine_row`,
+  `test_vkd_kq_batch_family`, `test_vkd_emb_gather_family` and `test_vkd_nv4_cm2_batch` cells - the census's evidence
+  for the classes no zoo row dispatches - must hold each class against its CPU oracle at the bar the cell sets, with
+  the cell's poisoned-element control.
 - `test_vulkan_tower_kernels.das`'s `test_vkt_fa_bidir`, `test_vkt_tower_rows`,
   `test_vkt_tower_ln_rows`, `test_vkt_tower_f16_feeds`, `test_vkt_tower_vision_rows`,
   `test_vkt_tower_win_rows`, `test_vkt_tower_tail_rows`, `test_vkt_tower_front_movers`,
@@ -203,9 +202,8 @@ it was measured on. The pinned set, one entry a line, each with what it must kee
   `test_vkt_nmt_attn`, `test_vkt_dflash_pass_kernels`, `test_vkt_dflash_topk` and `test_vkt_dflash_walk` cells - the
   census's evidence for the tower, transducer-decode, CTC-pick, translation and block-drafter classes -
   must hold each class against its CPU oracle at the bar the cell sets, with the cell's poisoned-element control.
-- `test_vulkan_kv_codec_kernels.das`'s `test_vkc_q8_da_attn` and `test_vkc_tq4_da_attn` cells must
-  hold the codec attention arms (`codec_attn_arms`) against the CPU attention over the codec's
-  rows, each arm with its controls.
+- `test_vulkan_kv_codec_kernels.das`'s `test_vkc_q8_da_attn` and `test_vkc_tq4_da_attn` cells must hold the codec
+  attention arms (`codec_attn_arms`) against the CPU attention over the codec's rows, each arm with its controls.
 - `test_gpu_tier.das`'s `test_override_announces` cell must hold every override line the GPU
   homes announce - its setter and env spellings - in step with the knob list
   (`../ENVIRONMENT.md`), and no line where the override takes no effect.
@@ -213,20 +211,22 @@ it was measured on. The pinned set, one entry a line, each with what it must kee
   names in dispatch order, and `pocket_gpu_stats` panicking on a name it does not list.
 - `test_tts_pocket.das`'s `test_pocket_q8_file` cell must hold the published file's tensor
   formats against the f16 file's load-time quants.
-- `test_tts_pocket.das`'s `test_pocket_kq_file` cell must hold the small file's load-time tensor
-  formats on each lane (unpinned: the backbone's and the codec transformers' matrices as Q4_K
-  planes, the flow head as Q8_0 blocks, the speaker projection f32, the embedding table its own Q4_K
-  planes, a prompt's rows off them the dequantized table's bit for bit; pinned q8: Q8_0 blocks;
-  pinned f32: f32 planes, the head included); the kq lane against the q8 lane of the same file under
-  `Q8_FILE_BAR`; the kq lane against the exact lane under `KQ_EXACT_BAR`; the flow head on its Q8_0
-  route against the oracle's frames under `KQ_HEAD_BAR`; the stored roster voice against the
-  reference encoder; and a clone over a roster name keeping the roster at 19 voices and speaking.
-- `test_tts_pocket.das`'s `test_pocket_quiet_floor` cell must hold the served lane's quiet floor
-  against the f32 lane's.
-- `test_tts_pocket.das`'s `test_pocket_small_models` cell must hold, for each `SMALL` row's
-  published file, the 19-voice English roster and the four character replacements its config
-  carries, as the reference build's config lists them, each seat serving, or declining with the
-  `shape` reason, as that row's seat columns say, and a low-rank text table kept low-rank.
+- `test_tts_pocket.das`'s `test_pocket_parity` cell must hold, on the f32 CPU lane against the English oracle's dumps
+  (`oracle_dir()`), the codec decoder at `CODEC_BAR`, and on the first two voiced cases the prompt trim at `TRIM_BAR`
+  - a clip with one kept sample moved landing outside it - the codec encoder at `ENCODER_BAR` with the trimmed clip's
+  frame count, and the voice state's K/V rows at `FRAME_BAR` with the prompt the BOS row plus the frames.
+- `test_tts_pocket.das`'s `test_pocket_kq_file` cell must hold the small file's load-time tensor formats on each lane
+  (unpinned: the backbone's and the codec transformers' matrices as Q4_K planes, the flow head as Q8_0 blocks, the
+  speaker projection f32, the embedding table its own Q4_K planes, a prompt's rows off them the dequantized table's
+  bit for bit; pinned q8: Q8_0 blocks; pinned f32: f32 planes, the head included); the kq lane against the q8 lane of
+  the same file under `Q8_FILE_BAR`; the kq lane against the exact lane under `KQ_EXACT_BAR`; the flow head on its
+  Q8_0 route against the oracle's frames under `KQ_HEAD_BAR`; the stored roster voice against the reference encoder;
+  and a clone over a roster name keeping the roster at 19 voices and speaking.
+- `test_tts_pocket.das`'s `test_pocket_quiet_floor` cell must hold the served lane's quiet floor against the f32 lane's.
+- `test_tts_pocket.das`'s `test_pocket_small_models` cell must hold, for each `SMALL` row's published file, the
+  19-voice English roster and the four character replacements its config carries, as the reference build's config
+  lists them, each seat serving, or declining with the `shape` reason, as that row's seat columns say, and a low-rank
+  text table kept low-rank.
 - `test_whisper.das`'s `test_canary_qwen_oracle` cell, an external-reference compare, must hold
   the forced walk over `../harness/canary_qwen_expected.tsv`'s ids within `CN_TIE_BAR` of our
   argmax at every step of its three clips, on the CPU chain and on the GPU tower that serves canary's default lane (the

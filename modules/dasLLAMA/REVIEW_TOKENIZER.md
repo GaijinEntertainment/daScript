@@ -3,7 +3,8 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
 doc: `ARCHITECTURE_ENGINE_FORMATS.md`. Planned work: `followup_general.md`.
 
-**A diff whose hunks change code in `dasllama/dasllama_spm.das`, `dasllama/dasllama_bpe.das` or
+**A final PR (a PR's kind and a final PR's change: `tests/REVIEW_RUNS.md`) whose change's hunks
+change code in `dasllama/dasllama_spm.das`, `dasllama/dasllama_bpe.das` or
 `dasllama/dasllama_pretok.das` that `dasllama_spm.das`'s `encode` or `dasllama_bpe.das`'s
 `bpe_encode` runs, or that fills a lookup table either one reads, names in the PR body before/after
 `--tok` rows (`benchmarks/lcpp_bench.das`) at two or more sizes of its ladder, on a model whose

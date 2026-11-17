@@ -58,39 +58,6 @@ changes each companion's word-for-word copy of it too. A kernel-unit cell, a ker
 oracle are as `REVIEW_KERNEL_CELLS.md` (beside this file) defines them; an encoder is as
 `REVIEW_MEDIA_CELLS.md` defines it.
 
-**Every PR runs `run.das -- --suite model-free`, and `run.das -- --changed` on a box holding the
-stocked artifacts of every file its `PLAN` line counts, never a whole-directory run instead.**
-
-**A test file the change reaches that the `--changed` run does not plan, or whose reached cells it
-skips, runs on its own where those cells do not skip, and the PR body cites that run.**
-
-**A PR whose change reaches a cell that skips on, or picks its tolerance or its code path by, a
-hardware or build capability the box may lack - a device, a module the build may omit, a kernel the
-instruction sets of the box's CPU do not carry - runs that cell on a box that has it, and names that
-box in the PR body.** A reached cell run without the capability did not run what the capability selects.
-
-**A PR that adds a cell loading a model above the large tier (`LARGE_TIER_BYTES`,
-`_model_tier.das`), or whose change reaches such a cell, runs that cell under
-`DASLLAMA_PARITY_FULL=1` on a box with the model stocked - in a `run.das -- --changed` run whose
-`PLAN` holds the cell's file, or in a `run.das --suite` run listing the file, with `--arm` naming
-the cell where that suite takes `--arm` - and names the box in the PR body.** A run without
-`DASLLAMA_PARITY_FULL=1` skips every such cell and passes.
-
-**The `--changed` run a PR cites carries no `--exclude` and no `--only`.** A trimmed run never
-ran the coverage it dropped; an excluding run is the iteration form between PRs.
-
-**Every `--changed --only` run a PR cites runs under `DASLLAMA_GPU=1 DASLLAMA_CUDA=1` beside the
-whole `--changed` run, never in its place, and a PR citing any such run cites among them one whose
-tokens match every file of `run.das`'s `CUDA_WITNESSES`.**
-
-**A PR whose change reaches a test file holding a cell that runs on CUDA under `DASLLAMA_CUDA=1`
-cites a run under `DASLLAMA_GPU=1 DASLLAMA_CUDA=1` whose `ONLY` lines name that file.**
-
-**A PR cites every shard of a sharded run (`--shard i/n`) with its `REPORT` line and its box, and,
-where the `--changed` run's `PLAN` line says the engine core changed, a `--suite stocked` run with
-no `--exclude` or `--only`.** A shard is a fraction of the run's files; a core change's `--changed`
-run holds one stocked test a family and backend, the stocked suite every one.
-
 **A test file in this folder whose cells cannot hold under `DASLLAMA_CPU_PREFILL=1` says so in its
 header (its top comment block) and joins the list of files that sit in no suite (`exempt` in
 `test_run_suites.das`) in the same change.** `DASLLAMA_CPU_PREFILL=1` is what the runner arms for every suite.
@@ -164,11 +131,12 @@ file that the build, a mint or a test run writes (a minted `.dlim`, a generated 
 test wrote).** Once the producer is renamed, moved or removed, a condition on its product skips
 the cell on every box, and the suite still passes.
 
-**A cell that loads or gates on a stocked model file - a `.gguf` carrier, its shards, or an
-mmproj - gates through `model_available` (`_model_tier.das`), one call per file; a test that
-cannot require `_model_tier.das` open-codes the same two checks: the file and every sibling shard
-are present, and their total size is under `LARGE_TIER_BYTES` unless `DASLLAMA_PARITY_FULL=1` is
-set.** `DASLLAMA_PARITY_FULL=1` is a final pre-PR switch, not the iteration loop.
+**A cell that loads or gates on a stocked model file - a `.gguf` carrier, its shards, or an mmproj -
+gates through `model_available` (`_model_tier.das`), one call per file; a test that cannot require
+`_model_tier.das` open-codes the same two checks: the file and every sibling shard are present, and
+their total size is under `MODEL_TIER_CEILING_BYTES` (`../dasllama/dasllama_gguf.das`) unless
+`DASLLAMA_PARITY_FULL=1` is set.** `DASLLAMA_PARITY_FULL=1` belongs to a cited run - an arc's final
+PR's, or one an intermediate PR's scope report names - never to the iteration loop.
 
 **A cell - or a program a cell builds or spawns - that is not about the `.dlim` model image calls
 nothing that reaches a baking loader, in its own code or through a helper.** A cell is about the
@@ -242,7 +210,7 @@ of one architecture; an untagged block runs under every `--family` filter.
 
 **A diff that adds or moves a batched-vs-sequential parity cell - one comparing the batched
 stack against a per-session sequential forward whose sequential side runs on the CPU - onto a
-carrier above `LARGE_TIER_BYTES` (`_model_tier.das`) is a defect.** The batched code paths get
+carrier above `MODEL_TIER_CEILING_BYTES` (`../dasllama/dasllama_gguf.das`) is a defect.** The batched code paths get
 their parity on small models, through pins; a cell whose two sides both run on the device
 streams nothing beside the device's bytes, and the tier does not bind it.
 
