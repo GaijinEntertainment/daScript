@@ -1041,3 +1041,26 @@ def test_unsafe_unary_operator_inside_unsafe(t : T?) {
     let g = unsafe(-f)
     t |> equal(g.x, -3)
 }
+
+def ref_mod(a, b : int) : int => int(int64(a) - (int64(a) / int64(b)) * int64(b))
+def ref_umod(a, b : uint) : uint => uint(uint64(a) - (uint64(a) / uint64(b)) * uint64(b))
+
+[test(description = "int and uint % and %= by a variable match the int64 reference at the edges")]
+def test_integer_modulo_edges(t : T?) {
+    let pairs = [(INT_MIN, -1), (INT_MIN, 1), (INT_MIN, INT_MAX), (INT_MAX, -1), (INT_MAX, INT_MIN),
+        (-7, 3), (7, -3), (-7, -3), (7, 3), (0, -5), (-1, INT_MIN), (6, 3), (INT_MAX, 2)]
+    for (p in pairs) {
+        var a = p._0
+        t |> equal(ref_mod(p._0, p._1), a % p._1)
+        a %= p._1
+        t |> equal(ref_mod(p._0, p._1), a)
+    }
+    let upairs = [(UINT_MAX, 7u), (UINT_MAX, UINT_MAX), (0x80000000, 3u), (5u, 0x80000000),
+        (1u, UINT_MAX), (0u, 9u), (9u, 3u)]
+    for (p in upairs) {
+        var a = p._0
+        t |> equal(ref_umod(p._0, p._1), a % p._1)
+        a %= p._1
+        t |> equal(ref_umod(p._0, p._1), a)
+    }
+}

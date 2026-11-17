@@ -32,7 +32,7 @@ require jit
 // llvm_macro.das, llvm_jit_common.das, runtime helper ABI, default
 // target triple). Cache filenames fold this in, so a bump makes every
 // previously written DLL miss the cache on the next run and get GC'd.
-let public LLVM_JIT_CODEGEN_VERSION : uint64 = 0xB5ul
+let public LLVM_JIT_CODEGEN_VERSION : uint64 = 0xB6ul
 
 let public JIT_FNV_PRIME : uint64 = 1099511628211ul
 
@@ -40,6 +40,9 @@ let public JIT_FNV_PRIME : uint64 = 1099511628211ul
 // NON-bit-exact, default off, +8-10% e2e. nnan|ninf|arcp|afn are deliberately NOT stamped: engine
 // kernels make real infs; the arcp+ninf rcp div yields inf*0=NaN.
 var public g_jit_fast_math = false
+
+//! the host's DAS_FAST_INTEGER_MOD, the jit module's constant
+let public JIT_HOST_FAST_INTEGER_MOD : bool = DAS_FAST_INTEGER_MOD
 
 //! `options strict_aliasing` (on by default): every load and
 //! store carries a TBAA tag of its type; `[hint(strict_aliasing)]`
@@ -601,6 +604,7 @@ def public jit_env_salt(opt_level : int; size_level : int; emit_prologue : bool;
     h = (h ^ (emit_prologue ? 1ul : 0ul)) * JIT_FNV_PRIME
     h = (h ^ (debug_info ? 1ul : 0ul)) * JIT_FNV_PRIME
     h = (h ^ (g_jit_fast_math ? 1ul : 0ul)) * JIT_FNV_PRIME   // fast-math changes codegen → distinct cache
+    h = (h ^ (JIT_HOST_FAST_INTEGER_MOD ? 1ul : 0ul)) * JIT_FNV_PRIME
     h = (h ^ (g_jit_strict_aliasing ? 1ul : 0ul)) * JIT_FNV_PRIME
     h = (h ^ ((sanitize.address ? 1ul : 0ul) | (sanitize.undefined ? 2ul : 0ul) | (JIT_HOST_ASAN ? 4ul : 0ul))) * JIT_FNV_PRIME
     // split-built and monolith DLLs differ in inlining — never share a cache entry (bool only: partition count is data-driven)

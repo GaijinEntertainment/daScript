@@ -688,6 +688,7 @@ namespace das {
             DAS_PROFILE_SECTION("Module_Jit");
             ModuleLibrary lib(this);
             lib.addBuiltInModule();
+            addConstant<bool>(*this, "DAS_FAST_INTEGER_MOD", DAS_FAST_INTEGER_MOD != 0);
             addBuiltinDependency(lib, Module::require("rtti_core"));
             addBuiltinDependency(lib, Module::require("ast_core"));
             addExternInline<DAS_BIND_FUN(das_invoke_code)>(*this, lib, "invoke_code",

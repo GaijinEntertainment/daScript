@@ -3114,6 +3114,34 @@ class public LlvmJitVisitor : AstVisitor {
         LLVMPositionBuilderAtEnd(g_builder, check_end)
     }
 
+    //! int/uint % by a variable: the host's DAS_FAST_INTEGER_MOD form
+    def uses_fast_integer_mod(opType : TypeDeclPtr; divisor : ExpressionPtr) : bool {
+        let scalar32 = opType.baseType == Type.tInt || opType.baseType == Type.tUInt
+        let literal = (divisor is ExprConstInt) || (divisor is ExprConstUInt)
+        return JIT_HOST_FAST_INTEGER_MOD && scalar32 && !literal
+    }
+
+    def to_double(v : LLVMOpaqueValue?; dbl : LLVMOpaqueType?; signed : bool) : LLVMOpaqueValue? =>
+        signed ? LLVMBuildSIToFP(g_builder, v, dbl, "") : LLVMBuildUIToFP(g_builder, v, dbl, "")
+
+    //! SimPolicy_Int::Mod: a double division, then a - q * b
+    def fast_integer_mod(left, right : LLVMOpaqueValue?; signed : bool) : LLVMOpaqueValue? {
+        let dbl = LLVMDoubleTypeInContext(g_ctx)
+        let a = to_double(left, dbl, signed)
+        let b = to_double(right, dbl, signed)
+        let q = LLVMBuildFDiv(g_builder, a, b, "fast_mod_q")
+        if (signed) {
+            let i64t = LLVMInt64TypeInContext(g_ctx)
+            let qi = LLVMBuildFPToSI(g_builder, q, i64t, "")
+            let a64 = LLVMBuildSExt(g_builder, left, i64t, "")
+            let b64 = LLVMBuildSExt(g_builder, right, i64t, "")
+            let r = LLVMBuildSub(g_builder, a64, LLVMBuildMul(g_builder, qi, b64, ""), "")
+            return LLVMBuildTrunc(g_builder, r, LLVMTypeOf(left), "")
+        }
+        let qi = LLVMBuildFPToUI(g_builder, q, LLVMTypeOf(left), "")
+        return LLVMBuildSub(g_builder, left, LLVMBuildMul(g_builder, qi, right, ""), "")
+    }
+
     def isExprIntNZ(expr : ExpressionPtr) {
         return (((expr is ExprConstInt) && (expr as ExprConstInt).value != 0)
             || ((expr is ExprConstUInt) && (expr as ExprConstUInt).value != 0u)
@@ -3340,7 +3368,10 @@ class public LlvmJitVisitor : AstVisitor {
                     failed_E(expr, "unsupported /= type {describe(opType)}")
                 }
             } elif (expr.op == "%") {
-                if (opType.isSignedInteger || (opType.isVectorType && opType.vectorBaseType == Type.tInt)) {
+                if (uses_fast_integer_mod(opType, expr.right)) {
+                    setE(expr, fast_integer_mod(left, right, opType.baseType == Type.tInt))
+                } elif (opType.isSignedInteger
+                        || (opType.isVectorType && opType.vectorBaseType == Type.tInt)) {
                     setE(expr, LLVMBuildSRem(g_builder, left, right, ""))
                 } elif (opType.isUnsignedInteger || (opType.isVectorType && opType.vectorBaseType == Type.tUInt)) {
                     setE(expr, LLVMBuildURem(g_builder, left, right, ""))
@@ -3350,7 +3381,12 @@ class public LlvmJitVisitor : AstVisitor {
                     failed_E(expr, "unsupported % type {describe(opType)}")
                 }
             } elif (expr.op == "%=") {
-                if (opType.isSignedInteger || (opType.isVectorType && opType.vectorBaseType == Type.tInt)) {
+                if (uses_fast_integer_mod(opType, expr.right)) {
+                    let rem = fast_integer_mod(r2v_left, right, opType.baseType == Type.tInt)
+                    let align = uint(expr.left._type.alignOf)
+                    setE(expr, LLVMBuildStoreAligned(g_builder, rem, left, align))
+                } elif (opType.isSignedInteger
+                        || (opType.isVectorType && opType.vectorBaseType == Type.tInt)) {
                     setE(expr, LLVMBuildStoreAligned(g_builder, LLVMBuildSRem(g_builder, r2v_left, right, ""), left, uint(expr.left._type.alignOf)))
                 } elif (opType.isUnsignedInteger || (opType.isVectorType && opType.vectorBaseType == Type.tUInt)) {
                     setE(expr, LLVMBuildStoreAligned(g_builder, LLVMBuildURem(g_builder, r2v_left, right, ""), left, uint(expr.left._type.alignOf)))
