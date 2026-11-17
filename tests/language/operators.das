@@ -1041,3 +1041,85 @@ def test_unsafe_unary_operator_inside_unsafe(t : T?) {
     let g = unsafe(-f)
     t |> equal(g.x, -3)
 }
+
+def ref_mod(a, b : int) : int => int(int64(a) - (int64(a) / int64(b)) * int64(b))
+def ref_umod(a, b : uint) : uint => uint(uint64(a) - (uint64(a) / uint64(b)) * uint64(b))
+
+[test(description = "int and uint % and %= by a variable match the int64 reference at the edges")]
+def test_integer_modulo_edges(t : T?) {
+    let pairs = [(INT_MIN, -1), (INT_MIN, 1), (INT_MIN, INT_MAX), (INT_MAX, -1), (INT_MAX, INT_MIN),
+        (-7, 3), (7, -3), (-7, -3), (7, 3), (0, -5), (-1, INT_MIN), (6, 3), (INT_MAX, 2)]
+    for (p in pairs) {
+        var a = p._0
+        t |> equal(ref_mod(p._0, p._1), a % p._1)
+        a %= p._1
+        t |> equal(ref_mod(p._0, p._1), a)
+    }
+    let upairs = [(UINT_MAX, 7u), (UINT_MAX, UINT_MAX), (0x80000000, 3u), (5u, 0x80000000),
+        (1u, UINT_MAX), (0u, 9u), (9u, 3u)]
+    for (p in upairs) {
+        var a = p._0
+        t |> equal(ref_umod(p._0, p._1), a % p._1)
+        a %= p._1
+        t |> equal(ref_umod(p._0, p._1), a)
+    }
+}
+
+[test(description = "int/uint % by a loop-invariant divisor: edges, multiples and seeded sweeps")]
+def test_integer_modulo_sweep(t : T?) {
+    let divisors = [INT_MIN, INT_MIN + 1, -(1 << 30), -1000003, -65537, -197, -103, -49, -10, -7,
+        -3, -2, -1, 1, 2, 3, 7, 10, 49, 98, 103, 107, 161, 187, 196, 197, 65537, 1000003, 1 << 30,
+        INT_MAX - 1, INT_MAX]
+    let edges = [INT_MIN, INT_MIN + 1, -(1 << 30), -65537, -1, 0, 1, 65537, 1 << 30,
+        INT_MAX - 1, INT_MAX]
+    var bad = 0
+    var x = 0x2545f491u
+    for (b in divisors) {
+        for (a in edges) {
+            if (ref_mod(a, b) != a % b) {
+                bad++
+            }
+        }
+        for (k in range(-1000, 1000)) {
+            let a = k * b
+            for (d in range(-1, 2)) {
+                if (ref_mod(a + d, b) != (a + d) % b) {
+                    bad++
+                }
+            }
+        }
+        for (_i in range(5000)) {
+            x = x * 1664525u + 1013904223u
+            let a = int(x)
+            if (ref_mod(a, b) != a % b) {
+                bad++
+            }
+        }
+    }
+    let udivisors = [1u, 2u, 3u, 7u, 10u, 49u, 98u, 103u, 107u, 161u, 187u, 196u, 197u, 65537u,
+        1000003u, 0x40000000, 0x7fffffff, 0x80000000, 0x80000001, 0xfffffffe, UINT_MAX]
+    let uedges = [0u, 1u, 2u, 65537u, 0x7fffffff, 0x80000000, 0xfffffffe, UINT_MAX]
+    for (b in udivisors) {
+        for (a in uedges) {
+            if (ref_umod(a, b) != a % b) {
+                bad++
+            }
+        }
+        for (k in range(0, 2000)) {
+            let a = uint(k) * b
+            for (d in range(-1, 2)) {
+                let ad = a + uint(d)
+                if (ref_umod(ad, b) != ad % b) {
+                    bad++
+                }
+            }
+        }
+        for (_i in range(5000)) {
+            x = x * 1664525u + 1013904223u
+            if (ref_umod(x, b) != x % b) {
+                bad++
+            }
+        }
+    }
+    t |> equal(0, bad)
+}
