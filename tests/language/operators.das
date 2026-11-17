@@ -1064,3 +1064,62 @@ def test_integer_modulo_edges(t : T?) {
         t |> equal(ref_umod(p._0, p._1), a)
     }
 }
+
+[test(description = "int/uint % by a loop-invariant divisor: edges, multiples and seeded sweeps")]
+def test_integer_modulo_sweep(t : T?) {
+    let divisors = [INT_MIN, INT_MIN + 1, -(1 << 30), -1000003, -65537, -197, -103, -49, -10, -7,
+        -3, -2, -1, 1, 2, 3, 7, 10, 49, 98, 103, 107, 161, 187, 196, 197, 65537, 1000003, 1 << 30,
+        INT_MAX - 1, INT_MAX]
+    let edges = [INT_MIN, INT_MIN + 1, -(1 << 30), -65537, -1, 0, 1, 65537, 1 << 30,
+        INT_MAX - 1, INT_MAX]
+    var bad = 0
+    var x = 0x2545f491u
+    for (b in divisors) {
+        for (a in edges) {
+            if (ref_mod(a, b) != a % b) {
+                bad++
+            }
+        }
+        for (k in range(-1000, 1000)) {
+            let a = k * b
+            for (d in range(-1, 2)) {
+                if (ref_mod(a + d, b) != (a + d) % b) {
+                    bad++
+                }
+            }
+        }
+        for (_i in range(5000)) {
+            x = x * 1664525u + 1013904223u
+            let a = int(x)
+            if (ref_mod(a, b) != a % b) {
+                bad++
+            }
+        }
+    }
+    let udivisors = [1u, 2u, 3u, 7u, 10u, 49u, 98u, 103u, 107u, 161u, 187u, 196u, 197u, 65537u,
+        1000003u, 0x40000000, 0x7fffffff, 0x80000000, 0x80000001, 0xfffffffe, UINT_MAX]
+    let uedges = [0u, 1u, 2u, 65537u, 0x7fffffff, 0x80000000, 0xfffffffe, UINT_MAX]
+    for (b in udivisors) {
+        for (a in uedges) {
+            if (ref_umod(a, b) != a % b) {
+                bad++
+            }
+        }
+        for (k in range(0, 2000)) {
+            let a = uint(k) * b
+            for (d in range(-1, 2)) {
+                let ad = a + uint(d)
+                if (ref_umod(ad, b) != ad % b) {
+                    bad++
+                }
+            }
+        }
+        for (_i in range(5000)) {
+            x = x * 1664525u + 1013904223u
+            if (ref_umod(x, b) != x % b) {
+                bad++
+            }
+        }
+    }
+    t |> equal(0, bad)
+}
