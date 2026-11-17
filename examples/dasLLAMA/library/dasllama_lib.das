@@ -159,6 +159,29 @@ def asr_close() {
 [export_c(comment = "Seconds of audio transcribed per second of wall clock, 0 before a transcript has run.")]
 def asr_speed() : double => g_lib.asr.us > 0l ? g_lib.asr.audio_seconds * 1.0e6lf / double(g_lib.asr.us) : 0.0lf
 
+[export_c(comment = "Transcribe one finished utterance: `count` mono samples at `rate` Hz, on the open ASR model.\nReturns its text, \"\" for none; needs no asr_listen, and runs inside the call, so call it from a worker thread.\nNot for use while a live stream from asr_listen is open.")]
+def asr_transcribe(pcm : float const?; count : int; rate : int) : string {
+    if (!g_lib.asr.loaded) {
+        refuse("no ASR model is open")
+        return ""
+    }
+    if (pcm == null || count <= 0 || rate <= 0) {
+        return ""
+    }
+    g_lib.listen.rs_pos = 0.0lf
+    g_lib.listen.rs_prev = 0.0
+    let utterance <- resample_to_16k(pcm, count, rate)
+    g_lib.reason = ""
+    if (empty(utterance)) {
+        return ""
+    }
+    g_lib.asr.audio_seconds = double(length(utterance)) / double(AUDIO_SAMPLE_RATE)
+    let started = ref_time_ticks()
+    let text = strip(transcribe(g_lib.asr.model, g_lib.asr.session, utterance))
+    g_lib.asr.us = int64(get_time_usec(started))
+    return text
+}
+
 // ===== speech to text from a live stream =====
 
 [export_c(comment = "Start a live stream on the open ASR model; `vad_path` is the Silero VAD that cuts it into\nutterances (modules/dasLLAMA/models/silero_vad.bin). Then pass the audio to asr_feed as it arrives.")]
