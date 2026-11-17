@@ -546,6 +546,189 @@ def test_image_tmp_does_not_outlive_a_save(t : T?) {
     }
 }
 
+//! `n` bytes of a fixed pattern at `path`, the byte at `poke` (when inside the file) flipped
+def private write_source(t : T?; path : string; n : int; poke : int = -1) {
+    var b <- [for (i in range(n)); uint8((i * 131 + (i >> 9)) & 255)]
+    if (poke >= 0 && poke < n) {
+        b[poke] = uint8(int(b[poke]) ^ 0x5A)
+    }
+    let f = fopen(path, "wb")
+    t |> success(f != null && fwrite(f, b) == n, "the source at {base_name(path)} is written")
+    if (f != null) {
+        fclose(f)
+    }
+    delete b
+}
+
+//! whether the image at `img` maps onto a fresh probe carrier
+def private probe_maps(img : string) : bool {
+    var m = ImgProbe()
+    let mapped = load_image(img, m, "img-probe")
+    delete m
+    return mapped
+}
+
+//! the verdict the inventory beside `source` gives the image file named `file`, "" where it lists none
+def private listed_verdict(source, file : string) : string {
+    var inv <- dlim_inventory_(source)
+    var verdict = ""
+    for (im in inv) {
+        if (im.file == file) {
+            verdict = im.verdict
+        }
+    }
+    delete inv
+    return verdict
+}
+
+let STAMP_SOURCE_BYTES = 3145733   //! past the sixteen windows, and off a word boundary: the last window ends on five loose bytes
+
+[test(description = "An image maps while the source beside it is the one it was minted from, declines once a sampled byte or the size changes and reads STALE source, maps again when the source is restored, and loads unchecked with no source beside it; a byte between the windows is not seen; a save's GC leaves another lane's image of a replaced source and the explicit GC removes it; a split's shards, a lone shard and a directory's files are each the source, and only a lane-named image answers for one")]
+def test_image_answers_for_its_source(t : T?) {
+    t |> run("the file source: a change in the first, the last and the loose bytes declines, the restored file maps") @(t : T?) {
+        if (!arm_on(t, "mechanics")) {
+            return
+        }
+        let source = path_join(test_temp_dir(), "dasllama_stamp_src.bin")
+        let img = "{source}.img-probe.dlim"
+        write_source(t, source, STAMP_SOURCE_BYTES)
+        var p <- make_probe()
+        t |> success(save_image(p, img, "img-probe"), "the image is minted beside its source")
+        t |> success(probe_maps(img), "the image maps while its source stands as minted")
+        t |> success(listed_verdict(source, base_name(img)) != "STALE source", "control: the inventory does not call it stale")
+        for (poke in fixed_array(0, 40000, STAMP_SOURCE_BYTES - 30000, STAMP_SOURCE_BYTES - 1)) {
+            write_source(t, source, STAMP_SOURCE_BYTES, poke)
+            t |> success(!probe_maps(img), "a source whose byte {poke} changed declines its image")
+            t |> equal(listed_verdict(source, base_name(img)), "STALE source", "and the inventory names why (byte {poke})")
+        }
+        write_source(t, source, STAMP_SOURCE_BYTES + 1)
+        t |> success(!probe_maps(img), "a source one byte longer declines its image")
+        write_source(t, source, STAMP_SOURCE_BYTES, 100000)
+        t |> success(probe_maps(img), "a byte between two windows is not sampled: the image still maps")
+        write_source(t, source, STAMP_SOURCE_BYTES)
+        t |> success(probe_maps(img), "the source restored, the image maps again")
+        // the image answers for no source: alone under a name that spells none, and beside nothing
+        let alone = path_join(test_temp_dir(), "dasllama_stamp_alone.dlim")
+        var why : string
+        t |> success(copy_file(img, alone, true, why), "the image is copied to a name that spells no source: {why}")
+        write_source(t, source, STAMP_SOURCE_BYTES, 0)
+        t |> success(!probe_maps(img), "control: beside its changed source the image declines")
+        t |> success(probe_maps(alone), "the copy, beside no source, maps")
+        remove(source)
+        t |> success(probe_maps(img), "with the source gone the image maps")
+        // an image minted beside no source records none, and a file that appears there later is not its source
+        remove(img)
+        t |> success(save_image(p, img, "img-probe"), "the image is minted with no source beside it")
+        write_source(t, source, STAMP_SOURCE_BYTES)
+        t |> success(probe_maps(img), "an image that recorded no source maps beside a file that came later")
+        // the cold build's tee to disk stamps as the file save does
+        remove(img)
+        var src <- make_probe()
+        var cold = ImgProbe()
+        t |> success(image_from_carrier(src, cold, img, "img-probe"), "the in-memory build tees its image beside the source")
+        delete cold
+        t |> success(probe_maps(img), "the teed image maps")
+        write_source(t, source, STAMP_SOURCE_BYTES, 0)
+        t |> success(!probe_maps(img), "and declines once its source changes")
+        // the replaced source may come back: a save's GC leaves another lane's image of it, the explicit GC removes it,
+        // and the image named by its own path says why it declines
+        dlim_gc_stale(source, "img-other")
+        t |> success(stat(img).is_valid, "another lane's save leaves the image of the replaced source")
+        let refusal = panic_text() {
+            refuse_moved_source(img)
+        }
+        t |> success(refusal |> find("was minted from another file than") >= 0 && refusal |> find(base_name(source)) >= 0,
+            "the named image's refusal names the source beside it: {refusal}")
+        let apart = panic_text() {
+            refuse_moved_source(alone)
+        }
+        t |> equal(apart, "", "control: the copy beside no source is not refused for it")
+        let cleaned = dlim_clean_(source, true)
+        t |> success(cleaned.removed >= 1 && !stat(img).is_valid, "the explicit GC removes it ({cleaned.removed} removed)")
+        remove(source)
+        remove(alone)
+        delete p
+    }
+    t |> run("a small source is stamped whole; a split GGUF's every shard and a directory's every file are the source") @(t : T?) {
+        if (!arm_on(t, "mechanics")) {
+            return
+        }
+        var p <- make_probe()
+        let small = path_join(test_temp_dir(), "dasllama_stamp_small.bin")
+        let small_img = "{small}.img-probe.dlim"
+        write_source(t, small, 70001)
+        t |> success(save_image(p, small_img, "img-probe"), "the image of a 70001-byte source")
+        write_source(t, small, 70001, 35000)
+        t |> success(!probe_maps(small_img), "any byte of a source no longer than the windows is read")
+        write_source(t, small, 70001)
+        t |> success(probe_maps(small_img), "control: the restored small source maps its image")
+        remove(small)
+        remove(small_img)
+        let shard1 = path_join(test_temp_dir(), "dasllama_stamp-00001-of-00002.gguf")
+        let shard2 = path_join(test_temp_dir(), "dasllama_stamp-00002-of-00002.gguf")
+        let split_img = "{shard1}.img-probe.dlim"
+        write_source(t, shard1, 5000)
+        write_source(t, shard2, 6000)
+        t |> success(save_image(p, split_img, "img-probe"), "the image of a two-shard source, named for the first")
+        t |> success(probe_maps(split_img), "the split source's image maps")
+        write_source(t, shard2, 6000, 17)
+        t |> success(!probe_maps(split_img), "a change in the second shard declines the image")
+        write_source(t, shard2, 6000)
+        t |> success(probe_maps(split_img), "control: the second shard restored, the image maps")
+        remove(shard1)
+        remove(shard2)
+        remove(split_img)
+        // a split whose sibling shard is missing is stamped as the one file it is
+        let lone = path_join(test_temp_dir(), "dasllama_stamp_lone-00001-of-00002.gguf")
+        let lone_img = "{lone}.img-probe.dlim"
+        write_source(t, lone, 5000)
+        t |> success(save_image(p, lone_img, "img-probe") && probe_maps(lone_img), "the image of a shard whose sibling is missing maps")
+        write_source(t, lone, 5000, 17)
+        t |> success(!probe_maps(lone_img), "and declines once that shard changes")
+        remove(lone)
+        remove(lone_img)
+        // a name answers for a source only as an image named for a lane, whatever file its stem points at
+        let plain = path_join(test_temp_dir(), "dasllama_stamp_plain")
+        write_source(t, plain, 100)
+        t |> equal(image_source_beside("{plain}.dlim"), "", "an image named for no lane stands beside no source")
+        t |> equal(image_source_beside("{plain}.lane.txt"), "", "a name that is no image answers for no source")
+        t |> equal(image_source_beside("{plain}.lane.dlim"), plain, "control: the lane-named image answers for the file beside it")
+        remove(plain)
+        let folder = path_join(test_temp_dir(), "dasllama_stamp_dir")
+        let folder_img = "{folder}.img-probe.dlim"
+        mkdir(folder)
+        write_source(t, path_join(folder, "a.bin"), 3000)
+        write_source(t, path_join(folder, "b.bin"), 4000)
+        t |> success(save_image(p, folder_img, "img-probe"), "the image of a directory source")
+        t |> success(probe_maps(folder_img), "the directory's image maps")
+        write_source(t, path_join(folder, "b.bin"), 4000, 9)
+        t |> success(!probe_maps(folder_img), "a change in one of the directory's files declines the image")
+        write_source(t, path_join(folder, "b.bin"), 4000)
+        t |> success(probe_maps(folder_img), "control: the file restored, the image maps")
+        write_source(t, path_join(folder, "c.bin"), 10)
+        t |> success(!probe_maps(folder_img), "a file added to the directory declines the image")
+        for (name in fixed_array("a.bin", "b.bin", "c.bin")) {
+            remove(path_join(folder, name))
+        }
+        rmdir(folder)
+        remove(folder_img)
+        delete p
+    }
+    t |> run("the verdict: a peek whose source moved reads STALE source, after the version and layout verdicts") @(t : T?) {
+        if (!arm_on(t, "mechanics")) {
+            return
+        }
+        var current <- dlim_current_identities()
+        let moved = DlimPeek(valid = true, version = IMAGE_VERSION, identity = image_identity("img-probe"), source_moved = true)
+        t |> equal(dlim_image_verdict(moved, current), "STALE source")
+        let old = DlimPeek(valid = true, version = IMAGE_VERSION - 1, identity = image_identity("img-probe"), source_moved = true)
+        t |> equal(dlim_image_verdict(old, current), "STALE v{IMAGE_VERSION - 1}", "an older version is named first")
+        let stays = DlimPeek(valid = true, version = IMAGE_VERSION, identity = image_identity("img-probe"))
+        t |> success(dlim_image_verdict(stays, current) != "STALE source", "control: a peek whose source stands is not stale")
+        delete current
+    }
+}
+
 [test(description = "On a synthetic carrier the .dlim image round-trips planes and nested fields element-exact, declines wrong tag, version, meta, section-count, size and absent files, tees the cold in-memory build to disk, and spells lanes and rope suffixes")]
 def test_image_mechanics(t : T?) {
     t |> run("synthetic carrier: round trip, nested planes, declines, unmap-remap") @(t : T?) {

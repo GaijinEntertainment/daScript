@@ -23,6 +23,7 @@ require dasllama/dasllama_kitten
 require dasllama/dasllama_kokoro
 require dasllama/dasllama_pocket
 require dasllama/dasllama_gguf   // gguf_file_arch: the family sniff before a load
+require dasllama/dasllama_image  // image_source_beside: the GGUF a prepared image answers for
 require dasllama/dasllama_math   // with_dasllama_jobque_: the stress-context pass of a caller outside any job queue
 require daslib/jobque_boost   // is_job_que_available
 
@@ -106,7 +107,7 @@ def private voice_lang(m : TtsModel; vname : string) : string {
 }
 
 def load_tts_model(path : string) : TtsModel {
-    //! Load a TTS model: a converted GGUF (KittenTTS, Kokoro or Pocket TTS, picked from its architecture) or its prepared ``.dlim`` image, on the lane ``tts_serves_q8`` names (an image: the lane it was baked on);
+    //! Load a TTS model: a converted GGUF (KittenTTS, Kokoro or Pocket TTS, picked from its architecture) or its prepared ``.dlim`` image, on the lane ``tts_serves_q8`` names (an image: the lane it was baked on; a file that stores a lane's weights: that lane);
     //! a phoneme family reads the packs its voices' languages ask for from the same directory (``tts_pack_names``; Pocket needs none).
     //! A DIRECTORY loads the front end alone, with no voice - its packs and the Russian stress-context model where that sits there (``tts_front_end_only``).
     var inscope m = TtsModel()
@@ -226,16 +227,6 @@ def private english_pack_names(dir : string) : array<string> {
     return <- names
 }
 
-//! the GGUF a prepared `.dlim` was minted from, by its name beside it (`<gguf>.<lane>.dlim`); "" where none sits there
-def private image_source_gguf(path : string) : string {
-    let image = base_name(path)
-    let stem = slice(image, 0, length(image) - 5)
-    let lane = rfind(stem, ".")
-    return "" if (lane <= 0)
-    let gguf = path_join(dir_name(path), slice(stem, 0, lane))
-    return stat(gguf).is_valid ? gguf : ""
-}
-
 //! The phoneme pack a model directory serves: the full pack when present, else the American-only
 //! twin; neither is a panic naming the directory.
 [arch(at = "../ARCHITECTURE_TTS_FRONT_END.md#tts-g2p-pack-tiers")]
@@ -265,7 +256,7 @@ def tts_pack_names(path : string) : array<string> {
     let dir = dir_name(path)
     if (path |> ends_with(".dlim")) {
         return <- out if (pocket_serves_file(path))
-        let source = image_source_gguf(path)
+        let source = image_source_beside(path)
         return <- tts_pack_names(source) if (!empty(source))
         return <- english_pack_names(dir)
     }
