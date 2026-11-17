@@ -539,7 +539,7 @@ def prepared_image_alignment_() : int64 => IMAGE_PAGE
 //! `read_prepared_image`'s engine half (`dasllama_core`): the file at `path` copied into `raw`, `skew` bytes past an
 //! `IMAGE_PAGE` boundary - 0 for an image as a load takes it. Answers the copy's base and size, a null base where the
 //! file does not open. `raw` owns the bytes: it outlives every model that borrows them.
-def read_file_on_image_page_(path : string; var raw : array<uint8>; skew : int64 = 0l) : tuple<base : void?; size : uint64> {
+def read_prepared_image_(path : string; var raw : array<uint8>; skew : int64 = 0l) : tuple<base : void?; size : uint64> {
     let size = stat(path).size
     raw |> reserve(int64(size) + IMAGE_PAGE + skew)
     raw |> resize(int64(size) + IMAGE_PAGE + skew)

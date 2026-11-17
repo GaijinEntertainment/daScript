@@ -1106,7 +1106,7 @@ def read_prepared_image(path : string; var raw : array<uint8>) : tuple<base : vo
     //! A prepared image file read into `raw` on the ``prepared_image_alignment`` boundary, as a host whose files live in
     //! its own packs would hand it over: the base and size a from-memory load takes, a null base where the file does not open.
     //! `raw` owns the bytes and outlives every model that borrows them.
-    return read_file_on_image_page_(path, raw)
+    return read_prepared_image_(path, raw)
 }
 
 def gpu_device_session_ctx() : int64 {

@@ -9,7 +9,7 @@ require dasllama/dasllama_image   // IMAGE_PAGE: the boundary a prepared image s
 //! (skew 0), or of a file that keeps no alignment. Answers the copy's base and writes its `size`; null where the file does not
 //! open. `raw` owns the bytes: it outlives every model that borrows them.
 def read_page_aligned(path : string; var raw : array<uint8>; var size : uint64&; skew : int64 = 0l) : void? {
-    let read = read_file_on_image_page_(path, raw, skew)
+    let read = read_prepared_image_(path, raw, skew)
     size = read.size
     return read.base
 }
