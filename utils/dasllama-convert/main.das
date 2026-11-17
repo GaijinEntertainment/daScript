@@ -96,6 +96,10 @@ struct ConvertArgs {
 
     @clarg_doc = "With a KittenTTS or Kokoro source at -q q8: bake the recipe lane - the small form, Q4_K and Q6_K weight groups beside the Q8_0 ones - in place of the Q8_0 lane"
     recipe : bool
+
+    @clarg_doc = "With a KittenTTS or Kokoro source of floats at -q q8: write a GGUF here that stores every weight as the Q8_0 lane mints it (with --recipe, as the recipe lane does) in place of an image - a file that serves as stored, with no mint at load"
+    gguf : string
+
     @clarg_doc = "Convert even if a valid image is already there (default: report it and exit 0)"
     force : bool
 
@@ -119,12 +123,24 @@ def private sweep_stale_tmp(gguf : string) : int {
 
 // q is a REFERENCE — a plain `var q : QuantMode` is a workhorse-type copy and the caller
 // would never see the write (LINT003 caught exactly that)
-//! An `-o` naming the source itself - the source would read as an image already present, and `--force` would delete it
-def private out_is_source(cfg : ConvertArgs; out : string) : bool {
+//! A path `flag` names (`-o`, `--gguf`) that is the source itself - the source would read as a file already present, and
+//! `--force` would delete it; a path no flag named ("") is never the source.
+def private out_is_source(cfg : ConvertArgs; out, flag : string) : bool {
     var err = ""
-    return false if (cfg.out == "" || !stat(out).is_valid || !equivalent(out, cfg.model, err))
-    to_log(LOG_ERROR, "dasllama-convert: -o '{out}' is the source - name another path\n")
+    return false if (out == "" || !stat(out).is_valid || !equivalent(out, cfg.model, err))
+    to_log(LOG_ERROR, "dasllama-convert: {flag} '{out}' is the source - name another path\n")
     return true
+}
+
+//! A write's verdict: 1 with the refusal where `out` did not land, else 0 with its size and the time since `ts`.
+def private landed(out : string; ok : bool; ts : int64; hint : string = "") : int {
+    var st : FStat
+    if (!ok || !stat(out, st)) {
+        to_log(LOG_ERROR, "dasllama-convert: '{out}' did not land — see the log above{hint}\n")
+        return 1
+    }
+    to_log(LOG_INFO, "dasllama-convert: wrote {int64(st.size) >> 20l} MB in {int64(get_time_usec(ts)) / 1000l} ms total\n")
+    return 0
 }
 
 def private quant_from_string(s : string; var q : QuantMode&) : bool {
@@ -222,7 +238,7 @@ def private convert_asr(cfg : ConvertArgs; kind : AsrCarrierKind; qm : QuantMode
         tag = q8 ? "tower-q8" : "tower-f32"
     }
     let out = cfg.out != "" ? cfg.out : image_path_for(cfg.model, tag)
-    return 2 if (out_is_source(cfg, out))
+    return 2 if (out_is_source(cfg, cfg.out, "-o"))
     to_log(LOG_INFO, "dasllama-convert: {cfg.model} ({kind})\n")
     to_log(LOG_INFO, "dasllama-convert:   -> {out}\n")
     to_log(LOG_INFO, "dasllama-convert:   identity {image_identity(tag)}\n")
@@ -270,15 +286,7 @@ def private convert_asr(cfg : ConvertArgs; kind : AsrCarrierKind; qm : QuantMode
         reset_qwen3a_q8()
         reset_gemma4a_q8()
     }
-    var st : FStat
-    if (!stat(out, st)) {
-        let hint = cfg.out == "" ? " (DASLLAMA_IMAGE=0 set?)" : ""
-        to_log(LOG_ERROR, "dasllama-convert: '{out}' did not land — see the log above{hint}\n")
-        return 1
-    }
-    let total_ms = int64(get_time_usec(ts)) / 1000l
-    to_log(LOG_INFO, "dasllama-convert: wrote {int64(st.size) >> 20l} MB in {total_ms} ms total\n")
-    return 0
+    return landed(out, true, ts, cfg.out == "" ? " (DASLLAMA_IMAGE=0 set?)" : "")
 }
 
 // "" = not a TTS carrier; else the family the GGUF's architecture names: a StyleTTS2-lineage one
@@ -304,6 +312,40 @@ def private sniff_tts_family(path : string) : string {
     }
     fclose(f)
     return family
+}
+
+// --gguf: a phoneme family's file of floats written as the file that stores the lane's weights (`write_styletts2_gguf`)
+def private write_stored_gguf(cfg : ConvertArgs; pocket, q8 : bool) : int {
+    if (pocket || !q8) {
+        to_log(LOG_ERROR, "dasllama-convert: --gguf writes a KittenTTS or Kokoro source's Q8_0 or recipe lane at -q q8; a Pocket file is minted by harness/convert_pocket.py\n")
+        return 2
+    }
+    return 2 if (out_is_source(cfg, cfg.gguf, "--gguf"))
+    if (stat(cfg.gguf).is_valid && !cfg.force) {
+        to_log(LOG_INFO, "dasllama-convert: '{cfg.gguf}' is already present — nothing to do (use --force to rewrite)\n")
+        return 0
+    }
+    to_log(LOG_INFO, "dasllama-convert: {cfg.model}\n")
+    to_log(LOG_INFO, "dasllama-convert:   -> {cfg.gguf} (the {cfg.recipe ? "recipe" : "Q8_0"} lane's weights, stored)\n")
+    let ts = ref_time_ticks()
+    var written = false
+    with_job_que() {
+        setup_dasllama_jobque()
+        written = write_styletts2_gguf(cfg.model, cfg.gguf, cfg.recipe)
+    }
+    return 1 if (landed(cfg.gguf, written, ts) != 0)
+    carry_license(cfg.model, cfg.gguf, cfg.recipe)
+    return 0
+}
+
+// The licence sidecar beside the source (`<file>.LICENSE`, "<file> - <terms>"), written beside the stored file under its
+// own name with the lane it stores named: the weights are the source's, so its terms are too. No sidecar, none written.
+def private carry_license(src, dst : string; recipe : bool) {
+    let terms = fread("{src}.LICENSE")
+    let lead = "{base_name(src)} - "
+    return if (!(terms |> starts_with(lead)))
+    let lane = recipe ? "recipe" : "Q8_0"
+    fwrite("{dst}.LICENSE", "{base_name(dst)} - the weights of {base_name(src)} as the {lane} lane mints them, stored by dasllama-convert --gguf: {slice(terms, length(lead))}")
 }
 
 // TTS carriers bake through the family's own staging on the lane -q names (q8 = the served
@@ -334,9 +376,18 @@ def private convert_tts(cfg : ConvertArgs; family : string; qm : QuantMode) : in
         to_log(LOG_ERROR, "dasllama-convert: --recipe bakes a KittenTTS or Kokoro source's recipe lane at -q q8; a Pocket file serves the formats it stores\n")
         return 2
     }
-    let tag = pocket ? (q8 ? POCKET_IMAGE_TAG : POCKET_IMAGE_TAG_F32) : (cfg.recipe ? ST2_IMAGE_TAG_KQ : (q8 ? ST2_IMAGE_TAG_Q8 : ST2_IMAGE_TAG))
+    let stored = pocket ? "" : styletts2_stored_lane(cfg.model)
+    if (!empty(stored) && (cfg.recipe || !q8 || !empty(cfg.gguf))) {
+        to_log(LOG_ERROR, "dasllama-convert: '{cfg.model}' stores its weights as the {stored} lane mints them and bakes that lane's image alone - --recipe, -q fp32 and --gguf take a file of floats\n")
+        return 2
+    }
+    if (!empty(cfg.gguf)) {
+        return write_stored_gguf(cfg, pocket, q8)
+    }
+    let kq_lane = empty(stored) ? cfg.recipe : stored == "kq"
+    let tag = pocket ? (q8 ? POCKET_IMAGE_TAG : POCKET_IMAGE_TAG_F32) : (kq_lane ? ST2_IMAGE_TAG_KQ : (q8 ? ST2_IMAGE_TAG_Q8 : ST2_IMAGE_TAG))
     let out = cfg.out != "" ? cfg.out : image_path_for(cfg.model, tag)
-    return 2 if (out_is_source(cfg, out))
+    return 2 if (out_is_source(cfg, cfg.out, "-o"))
     to_log(LOG_INFO, "dasllama-convert: {cfg.model} ({family})\n")
     to_log(LOG_INFO, "dasllama-convert:   -> {out}\n")
     to_log(LOG_INFO, "dasllama-convert:   identity {image_identity(tag)}\n")
@@ -357,15 +408,9 @@ def private convert_tts(cfg : ConvertArgs; family : string; qm : QuantMode) : in
     var baked = false
     with_job_que() {
         setup_dasllama_jobque()
-        baked = pocket ? bake_pocket_image(cfg.model, out, q8, q8) : bake_styletts2_image(cfg.model, out, q8, cfg.recipe)
+        baked = pocket ? bake_pocket_image(cfg.model, out, q8, q8) : bake_styletts2_image(cfg.model, out, q8, kq_lane)
     }
-    var st : FStat
-    if (!baked || !stat(out, st)) {
-        to_log(LOG_ERROR, "dasllama-convert: '{out}' did not land — see the log above\n")
-        return 1
-    }
-    let total_ms = int64(get_time_usec(ts)) / 1000l
-    to_log(LOG_INFO, "dasllama-convert: wrote {int64(st.size) >> 20l} MB in {total_ms} ms total\n")
+    return 1 if (landed(out, baked, ts) != 0)
     if (cfg.out == "") {
         dlim_gc_stale(cfg.model, tag, q8 ? "q8" : "fp32")   // the fresh bake beside the source proves ITS LANE's siblings dead
     }
@@ -535,7 +580,7 @@ def main() : int {
     let tag = flavor_tag(cfg.flavor)
     let qs = "{qm}"
     let out = cfg.out != "" ? cfg.out : image_path_for(cfg.model, tag, qs)
-    return 2 if (out_is_source(cfg, out))
+    return 2 if (out_is_source(cfg, cfg.out, "-o"))
     to_log(LOG_INFO, "dasllama-convert: {cfg.model}\n")
     to_log(LOG_INFO, "dasllama-convert:   -> {out}\n")
     to_log(LOG_INFO, "dasllama-convert:   identity {image_identity(tag, qs)}\n")

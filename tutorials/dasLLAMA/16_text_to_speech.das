@@ -145,6 +145,10 @@ def main {  // nolint:STYLE037,STYLE038 - one linear tutorial walkthrough
     // load serves by default; the f32 lane holds the file's own planes and is the reference
     // the parity tests compare against. tts_serves_q8() answers which lane the NEXT load
     // takes, set_tts_q8 pins it, and reset_tts_q8 returns to the default.
+    // A KittenTTS or Kokoro file published already quantized ignores the
+    // pin: kokoro-82m-q8.gguf holds the q8 lane's weights and
+    // kokoro-82m-kq.gguf a smaller mix of Q4_K, Q6_K and Q8_0, and each
+    // serves what it holds. A Pocket file follows the pin.
     //
     // The pin is process-wide state, so it must not outlive the load it was set for — a
     // stale pin silently changes the lane of the next model this process loads. defer()
