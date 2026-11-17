@@ -1965,11 +1965,27 @@ class public CppAot : AstVisitor {
         return ((that.op == "||=" || that.op == "&&=" || that.op == "^^=") &&
                 that.right._type.baseType == Type.tBool && that.right._type.isSimpleType);
     }
+    //! int/uint % by a literal (not 0 or -1) stays the C++ operator:
+    //! a magic-number multiply, where the policy would divide
+    def isLiteralIntMod(that : ExprOp2?) : bool {
+        return false if (that.op != "%" && that.op != "%=")
+        if (that.left._type.baseType == Type.tInt && that.right is ExprConstInt) {
+            let v = (that.right as ExprConstInt).value
+            return v != 0 && v != -1
+        }
+        if (that.left._type.baseType == Type.tUInt && that.right is ExprConstUInt) {
+            return (that.right as ExprConstUInt).value != 0u
+        }
+        return false
+    }
     def isOpPolicy2(that : ExprOp2?) {
+        return false if (isLiteralIntMod(that))
         if (is_alpha(first_character(that.op))
                 || that.op == "/" || that.op == "%"
                 || (that.op == "%=" && (that.left._type.baseType == Type.tFloat
-                    || that.left._type.baseType == Type.tDouble))
+                    || that.left._type.baseType == Type.tDouble
+                    || that.left._type.baseType == Type.tInt
+                    || that.left._type.baseType == Type.tUInt))
                 || that.op == "<<<" || that.op == ">>>" || that.op == "<<<=" || that.op == ">>>="
                 || that.op == "<<" || that.op == ">>" || that.op == "<<=" || that.op == ">>=") return true;
         return that._type.isPolicyType || that.left._type.isPolicyType || that.right._type.isPolicyType;

@@ -464,6 +464,26 @@ def test_standalone_emit(t : T?) {   // nolint:STYLE038 - flat list of emit subc
         t |> success(classic_lookup && find(classic, "_solid<") < 0, "classic keeps the lookup")
     }
 
+    t |> run("int/uint %, %= by a variable take the policy, by a literal the operator") @(t : T?) {
+        let source = generate_aot_source(t, "_aot_int_mod_fixture")
+        let iv = emitted_body(source, "mod_var_")
+        t |> success(find(iv, "SimPolicy<int32_t>::Mod(") >= 0, "int % by a variable")
+        let uv = emitted_body(source, "umod_var_")
+        t |> success(find(uv, "SimPolicy<uint32_t>::Mod(") >= 0, "uint % by a variable")
+        let isv = emitted_body(source, "set_var_")
+        t |> success(find(isv, "SimPolicy<int32_t>::SetMod(") >= 0, "int %= by a variable")
+        let usv = emitted_body(source, "uset_var_")
+        t |> success(find(usv, "SimPolicy<uint32_t>::SetMod(") >= 0, "uint %= by a variable")
+        let il = emitted_body(source, "mod_lit_")
+        t |> success(find(il, " % 10)") >= 0 && find(il, "Mod(") < 0, "int % by a literal")
+        let ul = emitted_body(source, "umod_lit_")
+        t |> success(find(ul, " % 0xau)") >= 0 && find(ul, "Mod(") < 0, "uint % by a literal")
+        let isl = emitted_body(source, "set_lit_")
+        t |> success(find(isl, " %= 10;") >= 0 && find(isl, "Mod(") < 0, "int %= by a literal")
+        let usl = emitted_body(source, "uset_lit_")
+        t |> success(find(usl, " %= 0xau;") >= 0 && find(usl, "Mod(") < 0, "uint %= by a literal")
+    }
+
     t |> run("an emitted literal's trigraph is escaped") @(t : T?) {
         let source = generate_standalone_source(t, "_standalone_emit_paths_fixture", out_dir)
         t |> success(find(source, "\"what\\?\\?>\"") >= 0, "a literal's ?? is escaped, so no C compiler reads it as a trigraph")
