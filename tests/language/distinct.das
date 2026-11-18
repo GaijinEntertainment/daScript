@@ -183,6 +183,30 @@ def test_distinct_user_operator_beats_borrow(t : T?) {
     }
 }
 
+typedef distinct Ticket = int
+
+var g_ticket_neq_calls = 0
+
+[never_inline]
+def operator !=(a : Ticket; b : int) : bool {
+    g_ticket_neq_calls++
+    return *a != b
+}
+
+[test(description = "an if that compares a distinct type with zero calls the user operator, not a raw zero test")]
+def test_distinct_user_operator_zero_compare(t : T?) {
+    t |> run("if (x != 0) calls the user !=") @(t : T?) {
+        g_ticket_neq_calls = 0
+        let ticket = Ticket(11)
+        var taken = false
+        if (ticket != 0) {
+            taken = true
+        }
+        t |> success(taken)
+        t |> equal(g_ticket_neq_calls, 1)
+    }
+}
+
 typedef distinct Cid = int
 
 var g_cid_ops : string
