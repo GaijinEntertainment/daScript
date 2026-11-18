@@ -8,7 +8,8 @@ require llvm/daslib/llvm_tune public
 // Library-side fixture for the defaults-profile test of
 // llvm_tune_scope.das: a scope that
 // also ships defaults profiles. The defaults dir is created and
-// filled BY THE TEST (the profile file name carries this box's class, which the
+// filled BY THE TEST (the profile file name carries this box's
+// class, which the
 // test computes in-process). The k3 row's requires= passes on every test box (avx2 on x64,
 // neon on arm) — the "unlocked seat" whose absence from a profile's features forces a race.
 [tune_scope(name = "llvm_tune_profiles_probe", tuner = "./_llvm_tune_profiles_tuner.das",

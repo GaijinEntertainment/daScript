@@ -317,7 +317,7 @@ struct private TileEmit {
     sign_code_pm1_g : LLVMOpaqueValue?   // the row-group grid decode: ksigns code -> eight +-1 bytes, [128 x i64], parity bit folded in
     gridRows : bool                      // set while the row-group grid decode emits: the column dword read (a panel-form win) reverts to byte loads
     vbmi : bool                          // grid = "vbmi": the grid gemv decodes through the VBMI symbol lattice (row form)
-    features : CpuFeatures               // the target's feature tiers
+    target_features : CpuFeatures
     pf : int                             // software prefetch distance along the weight stream (bytes; 0 = none)
     prefetch_decl : LLVMOpaqueValue?     // llvm.prefetch.p0
     prefetch_ty : LLVMOpaqueType?
@@ -1576,7 +1576,7 @@ def private grid_rows_path(te : TileEmit) : bool {
     if (te.vbmi) return true
     if (te.dotKind == DOT_SDOT) return te.rv == 4
     if (te.dotKind != DOT_MADDUBS && te.dotKind != DOT_VPDPBUSD && te.dotKind != DOT_VPDPBSSD) return false
-    let tiers = x64_tiers(te.features)
+    let tiers = x64_tiers(te.target_features)
     return tiers.avx512vnni && (te.kq == 25 || (tiers.amx && te.kq == 34))
 }
 
@@ -2431,7 +2431,7 @@ def private setup_tile_emit(var te : TileEmit; var gc : LlvmCodeCtx; p : TilePer
     let rt = q8q8_repack_type(p.mr, p.bias, kgroup_of(p))
     te.builder = gc.jit.builder
     te.types = gc.jit.types
-    te.features = gc.jit.target.features
+    te.target_features = gc.jit.target.features
     te.interleave = rt.interleave
     te.dotKind = dot_kind(p.dotPrim)
     te.rm_acc_sets = p.accs
@@ -2578,7 +2578,7 @@ def private setup_amx_emit(var te : TileEmit; var gc : LlvmCodeCtx; p : TilePerm
     let raw = p.latch != 0 || bf16
     te.builder = gc.jit.builder
     te.types = gc.jit.types
-    te.features = gc.jit.target.features
+    te.target_features = gc.jit.target.features
     te.dotKind = bf16 ? DOT_AMX_BF16 : DOT_AMX
     te.interleave = 16
     te.rv = 16
@@ -5225,7 +5225,7 @@ def private panel_gen_impl(var gc : LlvmCodeCtx; fmt, q8ScaleBytes : int) : bool
     if (!is_panel_signature(gc.fn)) return false
     let p = parse_perm(gc)
     if (perm_declines(gc, p)) return false
-    var te = TileEmit(builder = gc.jit.builder, types = gc.jit.types, rv = 16, features = gc.jit.target.features)
+    var te = TileEmit(builder = gc.jit.builder, types = gc.jit.types, rv = 16, target_features = gc.jit.target.features)
     let b = gc.jit.builder
     var entry = LLVMAppendBasicBlockInContext(gc.jit.ctx, gc.impl, "entry")
     LLVMPositionBuilderAtEnd(b, entry)

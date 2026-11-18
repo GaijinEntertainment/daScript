@@ -10,6 +10,8 @@ require daslib/json
 require daslib/json_boost
 require llvm/daslib/llvm_tune
 require llvm/daslib/llvm_cpu_class
+require llvm/daslib/llvm_jit_cli
+require daslib/option
 
 // [tune_scope]/[tune_policy]/--tune/tune_status round-trip through child daslang processes
 // (the policy rail is compile-time). Two libraries each ship a scope + tuner; both write the
@@ -365,7 +367,8 @@ def test_llvm_tune_scope_policy(t : T?) {   // nolint:STYLE038 - flat numbered p
 // spawn runs from the copy: [tune_scope(defaults=...)] resolves against the declaring file
 // and the per-app sidecar resolves beside the root script, so the defaults dir, the profile
 // files and the sidecar all land under the copy and the tracked fixtures beside this file
-// are never written or removed. A profile's name carries this box's class, and
+// are never written or removed. A profile's name carries this box's
+// class, and
 // its features field is this box's fingerprint (or empty, to fake a less-capable minting
 // box).
 
@@ -496,7 +499,8 @@ def test_llvm_tune_profiles(t : T?) { // nolint:STYLE038 - one flat spawn-and-as
     // 6. the class chain: only a LOWER class's profile on disk, and the box adopts it (the
     //    residue race then covers whatever its own class unlocks)
     var chain <- tune_class_chain(tune_native_target())
-    t |> equal(chain[0], tune_native_target().klass, "the box's own class heads its ladder - a class outside the chain could never adopt its own profile")
+    t |> equal(chain[0], tune_native_target().klass, ("the box's own class heads its ladder - " +
+        "a class outside the chain could never adopt its own profile"))
     if (length(chain) > 1) {
         let lower = cpu_class_name(chain[length(chain) - 1])
         remove(sidecar)
@@ -549,7 +553,8 @@ def main {
 
 [test(description = "a named class of another arch falls down its own arch's ladder, so a cross build adopts that arch's lower profiles")]
 def test_named_class_ladder(t : T?) {
-    let arch = cpu_arch_of(get_architecture_name()) == CpuClass.x86_generic ? CpuClass.arm_generic : CpuClass.x86_generic
+    let arch = (cpu_arch_of(get_architecture_name()) == CpuClass.x86_generic
+        ? CpuClass.arm_generic : CpuClass.x86_generic)
     let ladder <- jit_cpu_class_ladder(arch)
     var chain <- tune_class_chain(tune_target(ladder[0], CpuFeatures(0u)))
     var same = length(chain) == length(ladder)
@@ -558,4 +563,17 @@ def test_named_class_ladder(t : T?) {
     }
     t |> success(same, "the top {cpu_class_name(arch)} class's chain is the whole ladder")
     delete chain
+}
+
+[test(description = "a triple a class serves is a cross build whether a class is named or not, and the named class wins")]
+def test_cross_build_with_named_class(t : T?) {
+    let triple = "wasm64-unknown-emscripten"
+    let bare = tune_build_target(JitCliOptions(), triple)
+    t |> success(bare.cross && bare.klass == CpuClass.wasm_simd128,
+        "the triple's own class is a cross build")
+    var cli : JitCliOptions
+    cli.target_arch = some("wasm-simd128")
+    let named = tune_build_target(cli, triple)
+    t |> success(named.cross && named.klass == CpuClass.wasm_simd128,
+        "a named class keeps the cross build")
 }

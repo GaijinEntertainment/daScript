@@ -49,8 +49,9 @@ VEX AVX-VNNI or EVEX AVX512-VNNI+VL), `avx512bw` (zmm byte ops - BW, not merely 
 VPMULTISHIFTQB - the grid formats' symbol lattice), `vnniint8` (VEX VPDPBSSD, native s8 x s8),
 `amx` (both amx-tile and amx-int8; the per-process XTILEDATA grant is a separate runtime step
 the family's own witness performs) and `amx_bf16` (amx-tile, amx-bf16 and avx512bf16 -
-TDPBF16PS and the panel's VCVTNEPS2BF16, the bf16 tile family; `amx-fp16` is probed for the Granite Rapids fp16 tiles but gates nothing yet). `make_jit_target` decides each from cpuid truth OR'd with
-the `DAS_JIT_X64_FORCE_FEATURES` emission-only override; a cross triple or a generic target
+TDPBF16PS and the panel's VCVTNEPS2BF16, the bf16 tile family; `amx-fp16` is probed for the Granite Rapids fp16 tiles but gates nothing yet). `make_jit_target` decides `avx2` and `f16c` from cpuid
+alone on a host target, and every other tier from cpuid truth OR'd with the `DAS_JIT_X64_FORCE_FEATURES`
+emission-only override; a cross triple or a generic target
 (`host_features = false`) drops to forced-only truth - cpuid is not consulted, the force env is
 the only tier source there.
 

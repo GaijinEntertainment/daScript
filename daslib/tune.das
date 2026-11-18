@@ -141,8 +141,10 @@ def private tune_status_rows() : array<tuple<fname : string; suffix : string; so
         var inscope st <- tune_status()
         rows |> reserve(length(st))
         for (s in st) {
-            let active = s.klass != CpuClass.none && (tune_fat_mask() & tune_fat_class_bit(s.klass)) != 0
-            rows |> push((fname = s.fname, suffix = s.suffix, source = s.source, klass = cpu_class_name(s.klass), active = active))
+            let active = (s.klass != CpuClass.none &&
+                (tune_fat_mask() & tune_fat_class_bit(s.klass)) != 0)
+            rows |> push((fname = s.fname, suffix = s.suffix, source = s.source,
+                klass = cpu_class_name(s.klass), active = active))
         }
     }
     return <- rows

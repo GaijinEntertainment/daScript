@@ -402,11 +402,12 @@ var public g_fn_types : table<string; LLVMTypeRef>
 var public g_handled_field_offset_globals : table<string; tuple<modName : string; typeName : string; fieldName : string>>
 
 //! what the JIT emits for: arch, OS, and the features the intrinsic
-//! tables and generators may use. Host targets read cpuid; cross and
-//! generic builds only DAS_JIT_{X64,ARM64}_FORCE_FEATURES (emit-only)
+//! tables and generators may use: a named class's set, else cpuid on
+//! a host target, plus DAS_JIT_{X64,ARM64}_FORCE_FEATURES (emit-only)
 struct public JitTarget {
-    //! the class it builds for - a named one, else its arch's generic class; the arch picks the
-    //! platform-intrinsic table, else the daslang fallback body
+    //! the class it builds for - a named one, else its arch's generic
+    //! class; the arch picks the platform-intrinsic table, else the
+    //! daslang fallback body
     klass : CpuClass
     //! a cross triple: the link brings only that target's runtime
     //! archive - every module is static, none loads dynamically
@@ -422,19 +423,22 @@ struct public JitTarget {
     //! a wasm object for a -pthread runtime: +atomics,+bulk-memory,
     //! which must match the archives
     wasm_threads : bool
-    //! the features the intrinsic tables are gated on - the target arch's alone
+    //! the features the intrinsic tables are gated on - the target
+    //! arch's alone
     features : CpuFeatures
 }
 
-def public target_x64(target : JitTarget) : bool => cpu_class_arch(target.klass) == CpuClass.x86_generic
-def public target_aarch64(target : JitTarget) : bool => cpu_class_arch(target.klass) == CpuClass.arm_generic
-def public target_wasm(target : JitTarget) : bool => cpu_class_arch(target.klass) == CpuClass.wasm_generic
+def public target_x64(target : JitTarget) : bool =>
+    cpu_class_arch(target.klass) == CpuClass.x86_generic
+def public target_aarch64(target : JitTarget) : bool =>
+    cpu_class_arch(target.klass) == CpuClass.arm_generic
+def public target_wasm(target : JitTarget) : bool =>
+    cpu_class_arch(target.klass) == CpuClass.wasm_generic
 
 //! the target converts half <-> float in hardware: any aarch64, x86-64 with F16C
 def public target_has_half_converts(target : JitTarget) =>
     target_aarch64(target) || target.features.f16c
 
-// the force env of the target's arch: DAS_JIT_X64_FORCE_FEATURES or DAS_JIT_ARM64_FORCE_FEATURES
 def private force_env(target : JitTarget) : string =>
     (target_x64(target) ? g_env_jit.jit_x64_force_features
         : (target_aarch64(target) ? g_env_jit.jit_arm64_force_features : ""))
@@ -443,8 +447,6 @@ def private force_env(target : JitTarget) : string =>
 def private join_plus_features(base, forced : string) : string =>
     empty(base) ? forced : (empty(forced) ? base : "{base},{forced}")
 
-// the "+name" entries of LLVM's host-features string (comma-separated "+feat"/"-feat" entries;
-// only the enabled spelling counts, so a "-i8mm" entry never reads as support)
 def private host_llvm_features() : CpuFeatures {
     let feats = LLVMGetHostCPUFeatures()
     let on <- [for (part in split(feats, ",")); slice(part, 1); where starts_with(part, "+")]
@@ -452,12 +454,11 @@ def private host_llvm_features() : CpuFeatures {
     return cpu_features_of(join(on, ";"))
 }
 
-// The target's forced names as an LLVM target-feature append ("+avxvnni,+avx512bw"): a named
-// class's set first, the force env's names after it; the tier names are spelled identically in
-// cpuid and LLVM. Empty with no class and no env.
+[arch(at = "../ARCHITECTURE_CPU_CLASSES.md#cpu-classes")]
 def public forced_plus_features(target : JitTarget) : string {
     let plus <- [for (part in split(force_env(target), ",")); "+{part}"; where !empty(part)]
-    return join_plus_features(cpu_features_text(jit_cpu_class_row(target.klass).features, ",", "+"), join(plus, ","))
+    return join_plus_features(cpu_features_text(jit_cpu_class_row(target.klass).features, ",", "+"),
+        join(plus, ","))
 }
 
 // --jit-check-abi: startup sweep comparing every used handled-type's HOST-baked size + field
@@ -623,7 +624,8 @@ def public init_jit_clopts() {
 
 // host_features=false targets a GENERIC CPU: cpuid gates stay off, since leaked F16C emits libcalls.
 [arch(at = "../ARCHITECTURE_TARGET_FEATURES.md#aarch64-feature-truth"), arch(at = "../ARCHITECTURE_TARGET_FEATURES.md#x64-tier-gates")]
-def public make_jit_target(target_triple : string; baseline : CpuClass; host_features_asked : bool = true;
+def public make_jit_target(target_triple : string; baseline : CpuClass;
+                           host_features_asked : bool = true;
                            wasm_threads : bool = false) : JitTarget {
     var t : JitTarget
     // a baseline class replaces the running box: its set is the only
@@ -635,13 +637,10 @@ def public make_jit_target(target_triple : string; baseline : CpuClass; host_fea
     t.cross = !empty(target_triple)
     t.triple = target_triple
     t.wasm_threads = wasm_threads
-    // a host target takes the running box's cpuid truth; a cross triple and a generic-CPU exe
-    // build take the force env as the ONLY tier truth
     let on_box = empty(target_triple) && host_features
     var f = target_features(t.klass, on_box, cpu_features_of(force_env(t)))
     if (on_box) {
         let native = cpu_features_native()
-        // avx2 and f16c answer cpuid alone; every other tier adds the forced names to it
         f.avx2 = target_x64(t) && native.avx2
         f.f16c = target_x64(t) && native.f16c
         if (target_aarch64(t)) {
@@ -651,7 +650,8 @@ def public make_jit_target(target_triple : string; baseline : CpuClass; host_fea
             f.fullfp16 = f.fullfp16 || get_platform_name() == "darwin"
         }
     }
-    t.features = (target_x64(t) || target_aarch64(t)) ? f & cpu_arch_features(t.klass) : CpuFeatures(0u)
+    t.features = ((target_x64(t) || target_aarch64(t)) ? f & cpu_arch_features(t.klass)
+        : CpuFeatures(0u))
     t.os_linux = (empty(target_triple)
         ? get_platform_name() == "linux"
         : find(target_triple, "linux") >= 0)
@@ -666,7 +666,8 @@ def public class_target(target : JitTarget; klass : CpuClass) : JitTarget {
     var t = target
     let sameArch = cpu_class_arch(klass) == cpu_class_arch(t.klass)
     t.klass = sameArch ? klass : t.klass
-    t.features = (sameArch && (target_x64(t) || target_aarch64(t))) ? jit_cpu_class_row(klass).features : CpuFeatures(0u)
+    t.features = ((sameArch && (target_x64(t) || target_aarch64(t)))
+        ? jit_cpu_class_row(klass).features : CpuFeatures(0u))
     return t
 }
 
@@ -932,7 +933,8 @@ def public create_default_target_machine(target : JitTarget; opt_level : uint;
 
     if (target.cross && !target_wasm(target)) {
         let cross_machine = default_target_cpu_features(target, false)
-        return create_target_machine(target.triple, cross_machine.cpu, cross_machine.features, opt_level)
+        return create_target_machine(target.triple, cross_machine.cpu, cross_machine.features,
+            opt_level)
     }
     // host_jit_triple() returns the daslang-host toolchain's triple when it differs from LLVM.dll's
     // default (clang-mingw64: prebuilt MSVC clang-cl LLVM.dll defaults to x86_64-pc-windows-msvc,
@@ -959,10 +961,10 @@ def public default_target_cpu_features(target : JitTarget; use_host_cpu : bool
     }
     let feats = target_plus_features(target)
     let env_forced = force_env(target)
-    // a named class names the machine's cpu; a generic class leaves it to LLVM's default
     let cpu = jit_cpu_class_row(target.klass).cpu
     if (!empty(env_forced)) {
-        let env_name = target_x64(target) ? "DAS_JIT_X64_FORCE_FEATURES" : "DAS_JIT_ARM64_FORCE_FEATURES"
+        let env_name = (target_x64(target) ? "DAS_JIT_X64_FORCE_FEATURES"
+            : "DAS_JIT_ARM64_FORCE_FEATURES")
         to_log(LOG_INFO, "LLVM JIT: {env_name} appends {env_forced} to the machine {cpu}\n")
     }
     return (cpu = cpu, features = feats)

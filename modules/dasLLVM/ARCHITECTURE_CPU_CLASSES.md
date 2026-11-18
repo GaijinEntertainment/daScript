@@ -40,9 +40,10 @@ profile ladder starts at it; and `jit_env_salt` folds the class, so the artifact
 host run. A kernel-carrying exe stops targeting the box (`exe_host_cpu` is false under a
 baseline). The force env still appends after the class's set, as after detection. A baseline
 never crosses architectures - `jit_baseline_error` refuses a class of another arch, and a name no
-row carries, by name, before any IR is built. `jit_baseline_class` is pure - the variable comes
-in as an argument - and the class is read once, where a build starts: the JIT plan
-(`plan.baseline`, then `JitTarget.baseline` for everything the target drives) and each tune macro's
+row carries, by name, before any IR is built. `--jit-target-arch=<class>` is the same choice on
+the command line, and wins over the variable. `jit_baseline_class` is pure - the JIT's flags and
+the variable come in as arguments - and the class is read once, where a build starts: the JIT plan
+(`plan.baseline`, then `JitTarget.klass` for everything the target drives) and each tune macro's
 entry, and passed down from there. The tune side passes content, not the name. A compile stamps kernels from one `TuneView` - its
 `TuneTarget` (the class and the `requires=` set it passes, the class's row or else this box's
 cpuid), the sidecar's picks and the profiles read for that target down the target's own arch's
@@ -136,9 +137,11 @@ for any other triple built under `DAS_JIT_BASELINE`, and nothing for a triple wi
 wasm class's set is the wasm runtime archive's own - `simd128`, the feature string of
 `ARCHITECTURE_TARGET_FEATURES.md#wasm-feature-string` - so every wasm64 artifact is in the class and no box is asked. A baseline under
 a triple is how a target of fixed hardware gets its class: the build names the class the
-platform is, and nothing reads a cpuid. `tune_process_target` takes the named class when one is
-set and the cross triple's otherwise, the cross class with its set alone, and marks the target a
-cross one under any triple a class serves. The `TuneTarget`'s set, the `requires=` test and the
+platform is, and nothing reads a cpuid. `tune_build_target` - which `tune_process_target` calls
+with this process's own flags and triple - takes the named class when one is set and the cross
+triple's otherwise, the cross class with its set alone. A triple a class serves makes a cross
+build whether the class is named or implied, so the sidecar beside the app does not stamp it and
+its tune and test grids keep only the rows the class passes. The `TuneTarget`'s set, the `requires=` test and the
 profile ladder read it, so the build box's cpuid decides nothing about
 a cross artifact; inside the artifact `cpu_supports("simd128")` answers true, because the
 runtime archive is compiled with the feature. Its tune identity asks no box either:

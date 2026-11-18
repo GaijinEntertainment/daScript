@@ -28,7 +28,6 @@ require daslib/rtti
 require llvm/daslib/llvm_jit_cli
 require daslib/option
 require llvm/daslib/llvm_tune   // tune_scopes_status for the release-deps JSON
-require llvm/daslib/llvm_env
 require llvm/daslib/llvm_cpu_class
 require daslib/json_boost
 require jit
@@ -972,8 +971,7 @@ def private write_release_deps(prog : Program?; cross : bool) {
         }
     }
     // Tune scopes + per-key completeness vs the app sidecar: daspkg release runs incomplete scopes' tuners and rebuilds.
-    var inscope view <- tune_view(tune_target(cpu_class_of(jit_baseline_class(g_env_jit.jit_baseline)),
-        cpu_features_of("{g_env_jit.jit_x64_force_features},{g_env_jit.jit_arm64_force_features}")))
+    var inscope view <- tune_view(tune_build_target(cfg, get_target_triple()))
     var tstat <- tune_scopes_status(prog, view)
     deps.tune_scopes |> reserve(length(tstat))
     for (ts in tstat) {

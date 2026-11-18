@@ -72,8 +72,8 @@ def private host_features_gen(var gc : LlvmCodeCtx) : bool {
     return true
 }
 
-// bakes the target's CpuFeatures set into a `() : int` stub - the artifact-side witness of which
-// class a build emitted for.
+// bakes the target's CpuFeatures set into a `() : int` stub - the
+// artifact-side witness of which class a build emitted for.
 def private tier_bits_gen(var gc : LlvmCodeCtx) : bool {
     if (!empty(gc.fn.arguments) || gc.fn.result.baseType != Type.tInt) return false
     let bits = uint64(uint(gc.jit.target.features))

@@ -85,13 +85,15 @@ def test_cache_corruption_selfheal(t : T?) {
 [test(description = "class_target sets a JitTarget copy's class and features to the x86-avx2 class and leaves the target it copies, its arch and its OS unchanged; a class of another arch gives the copy no features")]
 def test_class_target_gates(t : T?) {
     t |> run("the copy takes the class's gates, the original keeps its own") @(t : T?) {
-        let every = jit_cpu_class_row(CpuClass.x86_amx).features | jit_cpu_class_row(CpuClass.arm_sve).features
+        let every = (jit_cpu_class_row(CpuClass.x86_amx).features |
+            jit_cpu_class_row(CpuClass.arm_sve).features)
         let all = JitTarget(klass = CpuClass.x86_generic, os_linux = true, features = every)
         let klass = class_target(all, CpuClass.x86_avx2)
         t |> success(all.features == every, "the original keeps its own set")
         t |> success(target_x64(klass) && klass.os_linux,
             "the copy keeps the arch and the OS")
-        t |> success(klass.klass == CpuClass.x86_avx2 && klass.features.avx2, "the copy is the x86-avx2 class with its avx2 gate")
+        t |> success(klass.klass == CpuClass.x86_avx2 && klass.features.avx2,
+            "the copy is the x86-avx2 class with its avx2 gate")
         let tiers = x64_tiers(klass.features)
         t |> success(!tiers.amx_bf16 && !tiers.amx && !tiers.avx512bw,
             "the x86-avx2 class has no amx and no avx512 gate")
@@ -529,6 +531,24 @@ def test_a_source_location_is_one_line_info_global(t : T?) {
         "the dump carries the fixture's LineInfo globals: {tail(out)}")
     for (contents, n in keys(copies), values(copies)) {
         t |> equal(1, n, "one global for {contents}")
+    }
+}
+
+[test(description = "a target's features keep only its own arch's bits, whatever is forced, and no generic class name names a class")]
+def test_target_features_stay_in_their_arch(t : T?) {
+    let x86 = target_features(CpuClass.x86_avx2, false,
+        CpuFeatures.dotprod | CpuFeatures.avx512bw | CpuFeatures.simd128)
+    t |> success(x86 == (jit_cpu_class_row(CpuClass.x86_avx2).features | CpuFeatures.avx512bw),
+        "an x86 class keeps its forced x86 bit and drops the arm and wasm ones")
+    let arm = target_features(CpuClass.arm_neon, false, CpuFeatures.avx2 | CpuFeatures.i8mm)
+    t |> success(arm == (jit_cpu_class_row(CpuClass.arm_neon).features | CpuFeatures.i8mm),
+        "an arm class keeps its forced arm bit and drops the x86 one")
+    for (generic in fixed_array(CpuClass.x86_generic, CpuClass.arm_generic,
+            CpuClass.wasm_generic)) {
+        t |> equal(CpuClass.none, cpu_class_of(cpu_class_name(generic)),
+            "{cpu_class_name(generic)} names no class")
+        t |> success(!empty(jit_baseline_error(cpu_class_name(generic), generic)),
+            "{cpu_class_name(generic)} is refused as a baseline")
     }
 }
 

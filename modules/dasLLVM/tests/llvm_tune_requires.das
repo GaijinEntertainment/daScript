@@ -22,7 +22,8 @@ def test_unknown_feature_never_passes(t : T?) {
 def test_or_alternatives(t : T?) {
     // `|` is an OR — a real feature on either side carries the term
     t |> success(!tune_requires_ok("no_such_feature_xyz|also_bogus", tune_native_target()))
-    t |> equal(tune_requires_ok("no_such_feature_xyz|neon", tune_native_target()), tune_requires_ok("neon", tune_native_target()))
+    t |> equal(tune_requires_ok("no_such_feature_xyz|neon", tune_native_target()),
+        tune_requires_ok("neon", tune_native_target()))
 }
 
 [test(description = "a , in requires= fails the whole expression when any one term fails")]
@@ -34,12 +35,15 @@ def test_and_conjunction(t : T?) {
 
 [test(description = "a ! ahead of a requires= name passes exactly when the feature is absent")]
 def test_absent_feature(t : T?) {
-    t |> success(tune_requires_ok("!no_such_feature_xyz", tune_native_target()))
-    t |> equal(tune_requires_ok("!neon", tune_native_target()), !tune_requires_ok("neon", tune_native_target()))
-    t |> success(!tune_requires_ok("neon,!neon", tune_native_target()), "a feature and its absence never hold together")
-    t |> success(tune_requires_ok("neon|!neon", tune_native_target()), "one of a feature and its absence always holds")
-    t |> success(!tune_requires_ok("!", tune_native_target()), "a ! with no name never passes")
-    t |> equal(tune_pick_fallback("gated:!no_such_feature_xyz;generic", tune_native_target()), "gated")
+    let box = tune_native_target()
+    t |> success(tune_requires_ok("!no_such_feature_xyz", box))
+    t |> equal(tune_requires_ok("!neon", box), !tune_requires_ok("neon", box))
+    t |> success(!tune_requires_ok("neon,!neon", box),
+        "a feature and its absence never hold together")
+    t |> success(tune_requires_ok("neon|!neon", box),
+        "one of a feature and its absence always holds")
+    t |> success(!tune_requires_ok("!", box), "a ! with no name never passes")
+    t |> equal(tune_pick_fallback("gated:!no_such_feature_xyz;generic", box), "gated")
 }
 
 [test(description = "a fallback chain with no gating picks its first entry")]
@@ -51,8 +55,10 @@ def test_plain_chain_is_the_first_entry(t : T?) {
 
 [test(description = "a fallback chain skips every entry whose requires= cannot pass")]
 def test_gated_entry_is_skipped_when_it_cannot_pass(t : T?) {
-    t |> equal(tune_pick_fallback("vec16:no_such_feature_xyz;vec8_u2", tune_native_target()), "vec8_u2")
-    t |> equal(tune_pick_fallback("a:no_such_feature_xyz;b:also_bogus;c", tune_native_target()), "c")
+    t |> equal(tune_pick_fallback("vec16:no_such_feature_xyz;vec8_u2", tune_native_target()),
+        "vec8_u2")
+    t |> equal(tune_pick_fallback("a:no_such_feature_xyz;b:also_bogus;c", tune_native_target()),
+        "c")
 }
 
 [test(description = "a fallback chain with no eligible entry, and an empty chain, pick nothing")]
@@ -73,5 +79,6 @@ def test_gated_entry_wins_when_its_feature_is_present(t : T?) {
 [test(description = "the earliest eligible entry of a fallback chain wins over every later one")]
 def test_earlier_entry_wins_over_later(t : T?) {
     t |> equal(tune_pick_fallback("first;second", tune_native_target()), "first")
-    t |> equal(tune_pick_fallback("first:no_such_feature_xyz;second;third", tune_native_target()), "second")
+    t |> equal(tune_pick_fallback("first:no_such_feature_xyz;second;third", tune_native_target()),
+        "second")
 }

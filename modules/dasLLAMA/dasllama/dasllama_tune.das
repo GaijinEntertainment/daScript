@@ -380,7 +380,7 @@ def private fallback_perm(args : AnnotationArgumentList; view) : string {   // n
 
 //! every `[tuned]` kernel's shipped fallback as this box resolves it (a `;`-chain picks per ISA), read off the annotations of
 //! the program's functions: a module the front-end cache serves runs no `[tuned]` apply, so nothing filled at apply time holds it
-[arch(at = "../ARCHITECTURE_MEASUREMENT.md#tuned-perm-precedence")]
+[arch(at = "../ARCHITECTURE_MEASUREMENT_TUNED_PERM.md#tuned-perm-precedence")]
 def private tuned_fallbacks_of_program(view) : table<string; string> {
     var bank : table<string; string>
     program_for_each_module(compiling_program()) $(mod) {
@@ -405,7 +405,7 @@ def private report_perm(fname, perm, source : string) : string {   // nolint:LIN
 }
 
 // the annotation arg is spelled `fallback`: `default` is a grammar keyword and would not parse as an arg name
-[arch(at = "../ARCHITECTURE_MEASUREMENT.md#tuned-perm-precedence")]
+[arch(at = "../ARCHITECTURE_MEASUREMENT_TUNED_PERM.md#tuned-perm-precedence")]
 def private resolve_perm(func : FunctionPtr; args : AnnotationArgumentList; view) : string {   // nolint:LINT012,LINT019 - `view` is read only in the framework arm
     let fname = "{func.name}"
     let fb = fallback_perm(args, view)
@@ -445,22 +445,7 @@ def private find_template_function(name : string) : FunctionPtr {
     return found
 }
 
-//! `[tuned]` on an empty-body function clones its source template (`<name>_template`, or
-//! `src="..."`) and stamps the selected permutation's hints onto `[tune=N]` loops. The annotated
-//! function IS the real symbol. Perm precedence: `perm=` pin > sidecar > `fallback=` > vec8_u2.
-[function_macro(name="tuned")]
-class private TunedMacro : AstFunctionAnnotation {
-    def override apply(var func : FunctionPtr; var group : ModuleGroup;
-                       var args : AnnotationArgumentList; var errors : das_string) : bool {
-        static_if (typeinfo module_exists(llvm_tune)) {
-            var inscope view <- tune_view(tune_process_target())
-            return tuned_apply(func, args, view, errors)
-        } else {
-            return tuned_apply(func, args, false, errors)
-        }
-    }
-}
-
+[arch(at = "../ARCHITECTURE_MEASUREMENT_TUNED_PERM.md#tuned-perm-precedence")]
 def private tuned_apply(var func : FunctionPtr; args : AnnotationArgumentList; view; var errors : das_string) : bool {
     let tmpl_name = tuned_template_name(func, args)
     var tmpl = find_template_function(tmpl_name)
@@ -477,13 +462,11 @@ def private tuned_apply(var func : FunctionPtr; args : AnnotationArgumentList; v
             return true
         }
     }
-    //! an explicit `perm=` pin names the row the author wants - a miss is an authoring error
     let av = find_arg(args, "perm")
     if (av is tString) {
         errors := "tuned: unknown perm '{suffix}' (not in grid)"
         return false
     }
-    //! a sidecar perm is measured data, not law - one the grid dropped falls back rather than brick the tuner that would re-race it
     let fname = "{func.name}"
     let fb = fallback_perm(args, view)
     print("dasllama_tune: {fname}: sidecar perm '{suffix}' is not in the grid (stale mint?) - stamping the fallback '{fb}'\n")
@@ -495,6 +478,22 @@ def private tuned_apply(var func : FunctionPtr; args : AnnotationArgumentList; v
     }
     errors := "tuned: fallback perm '{fb}' not in grid"
     return false
+}
+
+//! `[tuned]` on an empty-body function clones its source template (`<name>_template`, or
+//! `src="..."`) and stamps the selected permutation's hints onto `[tune=N]` loops. The annotated
+//! function IS the real symbol. Perm precedence: `perm=` pin > sidecar > `fallback=` > vec8_u2.
+[function_macro(name="tuned")]
+class private TunedMacro : AstFunctionAnnotation {
+    def override apply(var func : FunctionPtr; var group : ModuleGroup;
+                       var args : AnnotationArgumentList; var errors : das_string) : bool {
+        static_if (typeinfo module_exists(llvm_tune)) {
+            var inscope view <- tune_view(tune_process_target())
+            return tuned_apply(func, args, view, errors)
+        } else {
+            return tuned_apply(func, args, false, errors)
+        }
+    }
 }
 
 //! `[from_template(src = "<name>_template", PLACEHOLDER = "target", ...)]` on an empty-body

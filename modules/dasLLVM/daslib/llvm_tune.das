@@ -75,12 +75,14 @@ def jit_cli_opt_level() : int =>
 def jit_cli_compile_only() : bool =>
     jit_compile_only(jit_cli_options_or_default(), get_ptr(compiling_program()))
 
-//! The CPU a build tunes for, resolved once where the build starts and
-//! passed down from there.
+//! The CPU a build tunes for, resolved once where the build starts
+//! and passed down from there.
 struct public TuneTarget {
     klass : CpuClass    //!< the named class, else this box's
-    named : bool        //!< the class was named, so its row - not cpuid - is the set
-    cross : bool        //!< a cross compile's class (wasm64's, or the one a triple is built for): its grid holds the rows it runs
+    named : bool        //!< the class was named, so its row - not cpuid -
+                        //!< is the set
+    cross : bool        //!< a cross compile's class (wasm64's, or the one
+                        //!< a triple is built for): its grid holds the rows it runs
     features : CpuFeatures   //!< the `requires=` features it passes
 }
 
@@ -101,35 +103,41 @@ struct public TuneView {
     classProfiles : table<CpuClass; TuneProfile>  //!< fat builds: each ladder class's own
 }
 
-//! The target `baseline` names, or this box's cpuid when it is none, with
-//! `forced` - what the JIT emits whatever the CPU - added.
+//! The target `baseline` names (this box's cpuid when it names
+//! none), with `forced` added.
 def tune_target(baseline : CpuClass; forced : CpuFeatures) : TuneTarget {
     let named = !cpu_class_generic(baseline)
     let features = target_features(baseline, true, forced)
-    return TuneTarget(klass = named ? baseline : class_of_features(features), named = named, features = features)
+    return TuneTarget(klass = named ? baseline : class_of_features(features), named = named,
+        features = features)
 }
 
-//! This box: what a running program measures on and writes sidecars for.
+//! This box: what a running program measures on and writes sidecars
+//! for.
 def tune_native_target() : TuneTarget => tune_target(CpuClass.none, CpuFeatures(0u))
 
-//! The target this process's environment names - a compile's: the named class, else
-//! the cross triple's own class (its set alone), else this box.
-def tune_process_target() : TuneTarget {
-    let named = cpu_class_of(jit_baseline_class(g_env_jit.jit_baseline))
-    let cross = jit_cross_class(get_target_triple(), named)
-    if (named == CpuClass.none && cross != CpuClass.none) {
-        var t = tune_target(cross, CpuFeatures(0u))
+[arch(at = "../ARCHITECTURE_CPU_CLASSES.md#cross-class")]
+def tune_build_target(cli : JitCliOptions; triple : string) : TuneTarget {
+    let named = cpu_class_of(jit_baseline_class(cli, g_env_jit.jit_baseline))
+    let cross = jit_cross_class(triple, named)
+    if (cross != CpuClass.none) {
+        var t = tune_target(named != CpuClass.none ? named : cross, CpuFeatures(0u))
         t.cross = true
         return t
     }
-    var t = tune_target(named, cpu_features_of("{g_env_jit.jit_x64_force_features},{g_env_jit.jit_arm64_force_features}"))
-    t.cross = cross != CpuClass.none
-    return t
+    return tune_target(named,
+        cpu_features_of("{g_env_jit.jit_x64_force_features},{g_env_jit.jit_arm64_force_features}"))
 }
 
-//! The class this process's cross triple builds for, none for a native compile.
+//! The target this process's own flags and triple name.
+def tune_process_target() : TuneTarget =>
+    tune_build_target(jit_cli_options_or_default(), get_target_triple())
+
+//! The class this process's cross triple builds for, none for a
+//! native compile.
 def private process_cross_class() : CpuClass =>
-    jit_cross_class(get_target_triple(), cpu_class_of(jit_baseline_class(g_env_jit.jit_baseline)))
+    jit_cross_class(get_target_triple(),
+        cpu_class_of(jit_baseline_class(jit_cli_options_or_default(), g_env_jit.jit_baseline)))
 
 //! Everything a kernel pick reads, read once for `target`.
 def tune_view(target : TuneTarget) : TuneView {
@@ -149,8 +157,10 @@ def tune_view(target : TuneTarget) : TuneView {
     return <- v
 }
 
-//! `fname`'s pick in the profile serving `klass` (none = the target's ladder pick), and its file.
-def private profile_pick(view : TuneView; klass : CpuClass; fname : string) : tuple<suffix : string; path : string> {
+//! `fname`'s pick in the profile serving `klass` (none = the
+//! target's ladder pick), and its file.
+def private profile_pick(view : TuneView; klass : CpuClass;
+                         fname : string) : tuple<suffix : string; path : string> {
     if (klass == CpuClass.none) {
         return (suffix = view.profile.kernels?[fname] ?? "", path = view.profile.path)
     }
@@ -360,7 +370,8 @@ def tune_box_identity() : string {
     }
     let cross = process_cross_class()
     if (cross != CpuClass.none) {
-        g_box_identity = "{tune_target_platform()}|{get_target_architecture_name()}|||{cpu_class_name(cross)}"
+        g_box_identity = ("{tune_target_platform()}|{get_target_architecture_name()}|||" +
+            "{cpu_class_name(cross)}")
         return g_box_identity
     }
     var model_id = ""   // nolint:LINT003,LINT019 - only the macOS branch writes it, and a host compile with platform folding drops that branch
@@ -516,7 +527,8 @@ def private pin_profile_chain(defaultsDir : string; target : TuneTarget) {
     // a fat build reads every class of the ladder, not only the chain below this box's class
     var chain <- tune_mode() == "fat" ? fat_ladder(target) : tune_class_chain(target)
     for (c in chain) {
-        pin_module_cache_dependency(path_join(defaultsDir, "{cpu_class_name(c)}.tune-defaults.json"))
+        pin_module_cache_dependency(path_join(defaultsDir,
+            "{cpu_class_name(c)}.tune-defaults.json"))
     }
     delete chain
 }
@@ -574,7 +586,8 @@ def private class_build_note(target : TuneTarget) : string {
     let triple = get_target_triple()
     return "DAS_JIT_BASELINE={klass} builds for that class" if (empty(triple))
     let flag = "--jit-target={triple}"
-    return (jit_cross_class(triple, CpuClass.none) == target.klass ? "{flag} builds for the class {klass}"
+    return (jit_cross_class(triple, CpuClass.none) == target.klass
+        ? "{flag} builds for the class {klass}"
         : "{flag} under DAS_JIT_BASELINE={klass} builds for that class")
 }
 
@@ -584,13 +597,16 @@ def private stamp_manifest_path(target : TuneTarget) : string {
     return mpath if (!target.cross || is_forced(mpath))
     if (!g_cross_sidecar_noted && fexist(mpath)) {
         g_cross_sidecar_noted = true
-        to_log(LOG_INFO, "llvm_tune: {class_build_note(target)} - the sidecar {mpath} does not stamp\n")
+        to_log(LOG_INFO,
+            "llvm_tune: {class_build_note(target)} - the sidecar {mpath} does not stamp\n")
     }
     return ""
 }
 
 // `onlyClass` names one class to read instead of walking the chain - a fat build's per-class pick
-def private locate_profile_doc(defaultsDir, verKey, verVal : string; compileTime : bool; var klass : CpuClass&; var ppath : string&; target : TuneTarget; onlyClass : CpuClass = CpuClass.none) : JsonValue? {
+def private locate_profile_doc(defaultsDir, verKey, verVal : string; compileTime : bool;
+                               var klass : CpuClass&; var ppath : string&; target : TuneTarget;
+                               onlyClass : CpuClass = CpuClass.none) : JsonValue? {
     var chain <- onlyClass == CpuClass.none ? tune_class_chain(target) : [onlyClass]
     var doc : JsonValue?
     for (c in chain) {
@@ -608,7 +624,8 @@ def private locate_profile_doc(defaultsDir, verKey, verVal : string; compileTime
         }
         if (!empty(verKey) && "{d?["provenance"]?[verKey] ?? ""}" != verVal) {
             if (!compileTime) {
-                print("llvm_tune: defaults profile '{cpu_class_name(c)}' predates this build ({verKey} != {verVal}) - skipped\n")
+                print("llvm_tune: defaults profile '{cpu_class_name(c)}' predates this build " +
+                    "({verKey} != {verVal}) - skipped\n")
             }
             delete_json(d)
             continue
@@ -1096,7 +1113,8 @@ struct TuneStatus {
 var private g_tune_status : array<TuneStatus>
 
 //! Hook the `[tune_policy]`-injected [init] calls once per tuned function.
-def tune_status_add(fname, scope, suffix, source, manifestPath : string; klass : CpuClass = CpuClass.none) {
+def tune_status_add(fname, scope, suffix, source, manifestPath : string;
+                    klass : CpuClass = CpuClass.none) {
     g_tune_status |> push(TuneStatus(fname = fname, scope = scope, suffix = suffix,
         source = source, manifestPath = manifestPath, klass = klass))
 }
@@ -1166,7 +1184,8 @@ def tune_fat_class_bit(klass : CpuClass) : int {
 //! baseline or a force env, because the question is what the silicon underneath can run.
 def tune_fat_box_in_class(klass : CpuClass) : bool {
     let row = jit_cpu_class_row(klass)
-    return false if (row.klass == CpuClass.none || cpu_class_arch(klass) != cpu_arch_of(get_architecture_name()))
+    return false if (row.klass == CpuClass.none ||
+        cpu_class_arch(klass) != cpu_arch_of(get_architecture_name()))
     return (cpu_features_native() & row.features) == row.features
 }
 
@@ -1176,12 +1195,15 @@ def tune_fat_box_in_class(klass : CpuClass) : bool {
 def tune_fat_init(baseline : CpuClass) {
     let brow = jit_cpu_class_row(baseline)
     if (!tune_fat_box_in_class(baseline)) {
-        panic("this program was built for the {cpu_class_name(baseline)} CPU class ({cpu_features_text(brow.features, ";")}) and this {get_architecture_name()} box does not carry all of it")
+        panic("this program was built for the {cpu_class_name(baseline)} CPU class " +
+            "({cpu_features_text(brow.features, ";")}) and this {get_architecture_name()} box " +
+            "does not carry all of it")
     }
     let pinName = strip(g_env_tune.tune_fat_class)
     let pin = cpu_class_of(pinName)
     if (!empty(pinName) && !tune_fat_box_in_class(pin)) {
-        panic("DAS_TUNE_FAT_CLASS={pinName} pins a CPU class this box is not in ({cpu_features_text(jit_cpu_class_row(pin).features, ";")})")
+        panic("DAS_TUNE_FAT_CLASS={pinName} pins a CPU class this box is not in " +
+            "({cpu_features_text(jit_cpu_class_row(pin).features, ";")})")
     }
     if (!empty(pinName)) {
         // the status rows precede this call: a pin names a class some clone carries, or it dispatches nothing
@@ -1195,7 +1217,8 @@ def tune_fat_init(baseline : CpuClass) {
             }
         }
         if (!found && !empty(carried)) {
-            panic("DAS_TUNE_FAT_CLASS={pinName} pins a CPU class this exe carries no clone for (it carries: {join(carried, ", ")})")
+            panic("DAS_TUNE_FAT_CLASS={pinName} pins a CPU class this exe carries no clone for " +
+                "(it carries: {join(carried, ", ")})")
         }
         delete carried
     }
@@ -1443,7 +1466,9 @@ def private declared_scopes(prog : Program?) : array<TuneScope> {
 
 // one scope's status row: its demanded kernels, their fallback stamps, and under fat the
 // baseline clones that came from no profile
-def private scope_status_row(prog : Program?; sc : TuneScope; mpath : string; compileStatus : array<TuneStatus>; target : TuneTarget) : TuneScopeStatus {
+def private scope_status_row(prog : Program?; sc : TuneScope; mpath : string;
+                             compileStatus : array<TuneStatus>;
+                             target : TuneTarget) : TuneScopeStatus {
     var wanted : table<string>
     wanted |> insert(sc.modName)
     for (m in split(sc.covers, ";")) {
@@ -1621,9 +1646,8 @@ struct private TunePerm {
     args : array<tuple<argname : string; argvalue : RttiValue>>
 }
 
-//! True when a `requires=` feature expression passes on this box — a `,`-separated AND of
-//! `|`-separated alternatives, matched against host CPU features plus the
-//! `DAS_JIT_*_FORCE_FEATURES` overrides. An empty expression always passes.
+//! True when the `requires=` expression `expr` passes on
+//! `target.features` ("" always passes).
 def tune_requires_ok(expr : string; target : TuneTarget) : bool =>
     cpu_features_pass(target.features, expr)
 
@@ -1642,10 +1666,6 @@ def tune_pick_fallback(chain : string; target : TuneTarget) : string {
     return ""
 }
 
-
-    //! This box's CPU feature class — the name a shipped defaults profile is keyed by. Classes
-    //! follow the seats `requires=` can gate, not box models: two boxes of one class stamp the
-    //! same winners, so one profile serves them all; an arch with no ladder gets its generic class.
 def private class_of_features(f : CpuFeatures) : CpuClass {
     let arch = cpu_arch_of(get_architecture_name())
     if (arch == CpuClass.x86_generic) {
@@ -1688,7 +1708,8 @@ def tune_class_chain(target : TuneTarget) : array<CpuClass> {
     return <- chain
 }
 
-def private perm_requires_ok(p : TunePerm; view : TuneView) : bool => tune_requires_ok(p.requires, view.target)
+def private perm_requires_ok(p : TunePerm; view : TuneView) : bool =>
+    tune_requires_ok(p.requires, view.target)
 
 def private suffix_piece(name : string; v : RttiValue) : string {
     if (v is tBool) return (v as tBool) ? name : "no{name}"
@@ -1803,7 +1824,8 @@ def private take_perms(func : FunctionPtr; var errors : das_string) : array<Tune
     // The appended declaration's own apply does not run for macro-added annotations, so force
     // the side effects here — without userScenario the front end const-folds constant-arg calls
     // before they reach the JIT. tune_suffix/tune_from ride along as the stamped-truth record.
-def private stamp_llvm_code(var fn : FunctionPtr; genKey : string; perm : TunePerm; from, source : string; klass : CpuClass = CpuClass.none) {
+def private stamp_llvm_code(var fn : FunctionPtr; genKey : string; perm : TunePerm;
+                            from, source : string; klass : CpuClass = CpuClass.none) {
     var aargs : array<tuple<argname : string; argvalue : RttiValue>>
     aargs |> reserve(length(perm.args) + 5)
     aargs |> push((argname = "name", argvalue = RttiValue(tString = genKey)))
@@ -1815,7 +1837,8 @@ def private stamp_llvm_code(var fn : FunctionPtr; genKey : string; perm : TunePe
     aargs |> push((argname = "tune_source", argvalue = RttiValue(tString = source)))
     if (klass != CpuClass.none) {
         // the emitter lowers the clone for this class (llvm_jit try_llvm_code_function)
-        aargs |> push((argname = "tune_class", argvalue = RttiValue(tString = cpu_class_name(klass))))
+        aargs |> push((argname = "tune_class",
+            argvalue = RttiValue(tString = cpu_class_name(klass))))
     }
     fn |> append_annotation("tune", "llvm_code", aargs)
     fn.sideEffectFlags.userScenario = true
@@ -1916,7 +1939,8 @@ def private fat_ship_set(view : TuneView) : array<CpuClass> {
 
 // one class's stamp for `fname`: the class profile's winner when the grid carries it and the
 // class's set passes its requires=, else the first fallback the class's set passes, else "" (reference)
-def private fat_pick(fname : string; klass : CpuClass; view : TuneView; perms : array<TunePerm>; args : AnnotationArgumentList;
+def private fat_pick(fname : string; klass : CpuClass; view : TuneView; perms : array<TunePerm>;
+                     args : AnnotationArgumentList;
                      var source, path : string&; var errors : das_string) : string {
     let features = jit_cpu_class_row(klass).features
     let pick = profile_pick(view, klass, fname)
@@ -2050,8 +2074,11 @@ def private grid_has_seat_in(perms : array<TunePerm>; klasses : array<CpuClass>)
     //! class's profile (else the fallback chain under the class's set), and the function's own body
     //! is the dispatch over `tune_fat_mask()`, baseline last: -exe, -lib.
 [arch(at = "../ARCHITECTURE_CPU_CLASSES.md#fat-mode")]
-def private stamp_fat(var func : FunctionPtr; genKey : string; perms : array<TunePerm>; var comps : array<TuneCompanion>;   // nolint:STYLE037 - one flat pass per class: pick, clone, companions, dispatch arm
-                      args : AnnotationArgumentList; view : TuneView; var errors : das_string) : bool {
+def private stamp_fat(var func : FunctionPtr; genKey : string; // nolint:STYLE037 - one flat pass
+                      perms : array<TunePerm>; // per class: pick, clone, companions, dispatch arm
+                      var comps : array<TuneCompanion>;
+                      args : AnnotationArgumentList; view : TuneView;
+                      var errors : das_string) : bool {
     if (!tune_exe_gate()) {
         errors := ("[tune] on {func.name}: DAS_TUNE_MODE=fat is a standalone mode"
             + " - build with -exe or -lib")
@@ -2088,7 +2115,8 @@ def private stamp_fat(var func : FunctionPtr; genKey : string; perms : array<Tun
                 own = profile_pick(view, klass, "{c.fnname}").suffix
                 var ownOk = false
                 for (p in perms) {
-                    ownOk ||= p.suffix == own && cpu_features_pass(jit_cpu_class_row(klass).features, p.requires)
+                    ownOk ||= (p.suffix == own &&
+                        cpu_features_pass(jit_cpu_class_row(klass).features, p.requires))
                 }
                 own = ownOk ? own : ""
             }
@@ -2276,7 +2304,9 @@ def tune_apply(var func : FunctionPtr; var _group : ModuleGroup; // nolint:STYLE
     companionOwnSuffix |> resize(length(comps))
     if (tuneSource == "manifest" || tuneSource == "profile") {
         for (ci, c in count(), comps) {
-            let own = tuneSource == "manifest" ? (view.sidecar?["{c.fnname}"] ?? "") : (view.profile.kernels?["{c.fnname}"] ?? "")
+            let own = (tuneSource == "manifest"
+                ? (view.sidecar?["{c.fnname}"] ?? "")
+                : (view.profile.kernels?["{c.fnname}"] ?? ""))
             for (p in perms) {
                 if (p.suffix == own && perm_requires_ok(p, view)) {
                     companionOwnSuffix[ci] = own
@@ -2827,7 +2857,8 @@ def private profile_try_adopt(defaultsDir, scopeName, manifestPath, fnames, gate
         }
     }
     if (empty(kernels)) {
-        print("llvm_tune: defaults profile '{cpu_class_name(klass)}' has no kernel entries - skipped\n")
+        print("llvm_tune: defaults profile '{cpu_class_name(klass)}' has no kernel entries " +
+            "- skipped\n")
         delete_json(doc)
         return false
     }
@@ -2847,7 +2878,8 @@ def private profile_try_adopt(defaultsDir, scopeName, manifestPath, fnames, gate
         continue if (race |> find_index(fam) >= 0)
         for (expr in split(slice(row, eq + 1), "+")) {
             continue if (empty(expr))
-            if (tune_requires_ok(expr, target) && !cpu_features_pass(cpu_features_of(pfeat), expr)) {
+            if (tune_requires_ok(expr, target) &&
+                    !cpu_features_pass(cpu_features_of(pfeat), expr)) {
                 race |> push(fam)
                 break
             }
@@ -2855,7 +2887,9 @@ def private profile_try_adopt(defaultsDir, scopeName, manifestPath, fnames, gate
     }
     if (empty(race)) {
         if (tune_verbosity() != "silent") {
-            print("llvm_tune: scope '{scopeName}' is covered by the '{cpu_class_name(klass)}' defaults profile ({length(kernels)} kernel entries) - stamped at compile time, no restart\n")
+            print("llvm_tune: scope '{scopeName}' is covered by the '{cpu_class_name(klass)}' " +
+                "defaults profile ({length(kernels)} kernel entries) - stamped at compile time, " +
+                "no restart\n")
         }
         delete kernels
         delete race
@@ -2869,14 +2903,16 @@ def private profile_try_adopt(defaultsDir, scopeName, manifestPath, fnames, gate
     var noRuntime : JsonValue?
     let merged = tune_sidecar_merge(kernels, noRuntime)
     if (!merged) {
-        print("llvm_tune: scope '{scopeName}' could not write adopted profile '{cpu_class_name(klass)}' into {manifestPath}\n")
+        print("llvm_tune: scope '{scopeName}' could not write adopted profile " +
+            "'{cpu_class_name(klass)}' into {manifestPath}\n")
         delete kernels
         delete race
         delete_json(doc)
         return false
     }
     let tail = empty(race) ? "" : " - racing {length(race)} unlocked/new families"
-    print("llvm_tune: scope '{scopeName}' adopted the '{cpu_class_name(klass)}' defaults profile ({length(kernels)} kernel entries){tail}\n")
+    print("llvm_tune: scope '{scopeName}' adopted the '{cpu_class_name(klass)}' defaults " +
+        "profile ({length(kernels)} kernel entries){tail}\n")
     onlyFilter = join(race, ",")
     delete kernels
     delete race
@@ -3111,10 +3147,12 @@ def private collect_status(prog : Program?; view : TuneView) : array<TuneStatus>
             // a fat build's rows are its clones, one per class - the [tune] function itself is the dispatch
             let fatName = "{fn.name}"
             let fatAt = find(fatName, "__fat_")
-            if (fatAt > 0 && fn.flags.generated && (klass != CpuClass.none || tune_mode() == "fat")) {
+            if (fatAt > 0 && fn.flags.generated &&
+                    (klass != CpuClass.none || tune_mode() == "fat")) {
                 let base = slice(fatName, 0, fatAt)
                 if (klass == CpuClass.none) {
-                    klass = cpu_class_of(replace(slice(fatName, fatAt + length("__fat_")), "_", "-"))
+                    klass = cpu_class_of(replace(slice(fatName, fatAt + length("__fat_")),
+                        "_", "-"))
                 }
                 var source = !empty(stampedSource) ? stampedSource : "reference"
                 var mpath = from
@@ -3128,8 +3166,10 @@ def private collect_status(prog : Program?; view : TuneView) : array<TuneStatus>
                 }
                 rows |> push(TuneStatus(fname = base, scope = scopeName,
                     suffix = suffix, source = source, manifestPath = mpath, klass = klass))
-            } elif (isTuned && tune_mode() != "fat" && family_has_seat(fn.annotations, view.target)) {
-                let source = !empty(stampedSource) ? stampedSource : (empty(suffix) ? "reference" : (empty(from) ? "fallback" : "manifest"))
+            } elif (isTuned && tune_mode() != "fat" &&
+                    family_has_seat(fn.annotations, view.target)) {
+                let source = (!empty(stampedSource) ? stampedSource
+                    : (empty(suffix) ? "reference" : (empty(from) ? "fallback" : "manifest")))
                 let mpath = !empty(from) ? from : sidecar
                 rows |> push(TuneStatus(fname = "{fn.name}", scope = scopeName,
                     suffix = suffix, source = source, manifestPath = mpath))
@@ -3231,7 +3271,9 @@ def private emit_status_init(var errors : string&; view : TuneView; library : bo
 // the policy core, shared by the declared annotation and the auto default (the infer pass
 // below): resolve the policy (env > declared), then per incomplete scope warn / error /
 // inject the auto or restart guard into `func` (the app's main)
-def private apply_tune_policy(var func : FunctionPtr; declared : string; view : TuneView; var errors : string&) : bool { // nolint:STYLE037,STYLE038 — the policy dispatch ladder: one arm per flavor and gate
+def private apply_tune_policy(var func : FunctionPtr; declared : string; // nolint:STYLE037,STYLE038
+                              view : TuneView; // — the policy dispatch ladder: one arm per flavor
+                              var errors : string&) : bool { // and gate
     var policy = declared
     {
         let penv = g_env_tune.tune_policy

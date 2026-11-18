@@ -3,6 +3,7 @@ options gen2
 require dastest/testing_boost
 require math
 require llvm/daslib/llvm_cpu_class
+require llvm/daslib/llvm_jit_cli
 require llvm/daslib/llvm_env
 require llvm/daslib/llvm_jit_common
 
@@ -65,15 +66,14 @@ def private on_aarch64 : bool => get_architecture_name() == "arm64"
 
 def private on_x64 : bool => get_architecture_name() == "x86_64"
 
-//! the class this run's JIT builds for, none for the box
-def private pinned_class : CpuClass =>
-    cpu_class_of(jit_baseline_class(g_env_jit.jit_baseline))
+def private named_baseline : CpuClass =>
+    cpu_class_of(jit_baseline_class(jit_cli_options_or_default(), g_env_jit.jit_baseline))
 
 def private jit_fuses : bool {
     return true if (on_aarch64())
     return false if (!on_x64())
-    let pinned = pinned_class()
-    return (pinned == CpuClass.none ? cpu_features_native() : jit_cpu_class_row(pinned).features).fma
+    let named = named_baseline()
+    return (named == CpuClass.none ? cpu_features_native() : jit_cpu_class_row(named).features).fma
 }
 
 //! probed on sin, where an unfused reduction lands 4e-3 off libm
@@ -89,7 +89,7 @@ def private rails_fuse_alike : bool => jit_fuses() == interp_fuses()
 
 //! true where the JIT's exp has the interpreter's shape
 def private jit_exp_mirrors_interp : bool =>
-    on_x64() && !x64_tiers(make_jit_target("", pinned_class()).features).avx512bw
+    on_x64() && !x64_tiers(make_jit_target("", named_baseline()).features).avx512bw
 
 def private op_comparable_to_interp(which : int) : bool {
     if (which == OP_LOG2 || which == OP_LOG || which == OP_POW) return true

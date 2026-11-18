@@ -221,8 +221,8 @@ AMX-TILE over the 512-bit VNNI gate) / `x86-vnni512` / `x86-vnni256` / `x86-avx2
 `x86-avx` (AVX and F16C with no AVX2) / `x86-base`, `arm-sve` / `arm-i8mm` / `arm-neon`, and `wasm-simd128` for a
 wasm64 cross build (*Cross builds* below); any other
 architecture gets no class, so no shipped profile matches and such a box always races (`tune_process_target().klass` is the class this
-compile builds for - this box's, unless `DAS_JIT_BASELINE` or a cross
-triple names one - and `tune_class_chain(target)` its adoption
+compile builds for - this box's, unless `--jit-target-arch`, `DAS_JIT_BASELINE`
+or a cross triple names one - and `tune_class_chain(target)` its adoption
 ladder). The profile is read at **compile time**: with no sidecar entry, a
 `[tune]` or `[tuned]` kernel walks the ladder from that class downward and
 stamps its entry from the first profile

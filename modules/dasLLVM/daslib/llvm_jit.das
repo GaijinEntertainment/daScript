@@ -859,7 +859,8 @@ class public LlvmJitVisitor : AstVisitor {
             // noinline keeps it a function - AArch64's inliner admits a callee with more features
             // when its body carries no target intrinsic, and the inlined copy would lower for the baseline
             LLVMAddTargetDependentFunctionAttr(ffunc, "target-cpu", jit_cpu_class_row(klass).cpu)
-            LLVMAddTargetDependentFunctionAttr(ffunc, "target-features", cpu_features_text(jit_cpu_class_row(klass).features, ",", "+"))
+            LLVMAddTargetDependentFunctionAttr(ffunc, "target-features",
+                cpu_features_text(jit_cpu_class_row(klass).features, ",", "+"))
             LLVMAddAttributeToFunction(ffunc, attributes.noinline)
             gc.jit.target = class_target(jit_target, klass)
             generated = invoke_llvm_code_generator(gen_name, gc)
