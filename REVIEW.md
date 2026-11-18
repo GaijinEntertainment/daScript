@@ -51,6 +51,3 @@ any list it expands - a `.cpp` reached only by the compiler, the interpreter, or
 only macros and other compile-time code call is a defect - move that `.cpp` to
 `LIBDASCRIPT_COMPILER_SRC`.** Every runtime source links into every JIT exe, standalone context
 and `-lib` library, so a misplaced one grows them all.
-
-**A diff never adds history to a `.md` under `skills/`: an incident story, a PR or issue number, a
-dated ruling, an "as of" entry - state the current rule and its timeless reason instead.**

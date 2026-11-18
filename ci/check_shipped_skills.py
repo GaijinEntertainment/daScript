@@ -253,7 +253,7 @@ def check(bundle, repo_root=None):
     repo_skills = os.path.join(repo_root, "skills")
     if os.path.isdir(repo_skills):
         for name in sorted(os.listdir(repo_skills)):
-            if (name.endswith(".md")
+            if (name.endswith(".md") and name != "REVIEW.md"
                     and not os.path.exists(os.path.join(skills_dir, name))):
                 problems.append(("repo skills/" + name, "missing from bundle",
                                  "the install rules did not ship it"))

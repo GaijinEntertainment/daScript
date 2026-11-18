@@ -2053,6 +2053,7 @@ install(DIRECTORY ${PROJECT_SOURCE_DIR}/skills/
     # skills/daslang_live.md (prefix match on the full path)
     REGEX "/skills/internal$" EXCLUDE
     REGEX "/skills/daslang$" EXCLUDE
+    REGEX "/skills/REVIEW\\.md$" EXCLUDE
     PATTERN "*.md"
 )
 # its README is editing rules for this repo's maintainers, meaningless in the SDK

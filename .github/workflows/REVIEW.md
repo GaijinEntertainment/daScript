@@ -13,12 +13,13 @@ trigger and the job-level keys that decide whether, where, and how long it runs 
 prepares the runner and checks nothing - a checkout, a toolchain install, a version pin - and is not
 itself a per-PR check.
 
-**A diff that weakens a per-PR check is a defect: deleting it, or a step it depends on, while
-no per-PR lane still runs its cases, stopping its failure from failing the lane
-(`continue-on-error`, a trailing `|| true`, a swallowed exit code), shrinking what it checks, or, on a
-`pull_request` lane, narrowing its condition to anything but a `matrix.role` condition that
-still runs it on every pull request or the nightly-cron condition (`github.event_name ==
-'schedule' || github.event_name == 'workflow_dispatch'`).**
+**A diff that weakens a per-PR check is a defect: deleting it, a provisioning step it needs, or
+a step whose output its job's `if:` or matrix reads, while no per-PR lane still runs its cases,
+stopping its failure from failing the lane (`continue-on-error`, a trailing `|| true`, a
+swallowed exit code), shrinking what it checks, or, on a `pull_request` lane, narrowing its
+condition to anything but a `matrix.role` condition that still runs it on every pull request or
+the nightly-cron condition (`github.event_name == 'schedule' || github.event_name ==
+'workflow_dispatch'`).**
 
 **A per-PR check the diff adds fails the lane when it finds a defect.**
 
@@ -43,11 +44,11 @@ section of each job the diff changes, and a trigger change corrects every sectio
 trigger.**
 
 **A step the diff adds, renames, or deletes, other than a provisioning step, adds, corrects, or
-deletes its entry, in the same change, in the section of `skills/internal/preflight.md` (repo
-root) for the workflow that runs it - the job's section when the workflow carries one per job, a
-new section when it has none. A job the diff adds is entered once, by its job id, and that entry
-covers its steps; a step added, renamed, or deleted in an existing job is entered by its
-`name:`.**
+deletes its entry, in the same change, in `skills/internal/preflight.md` (repo root): in the
+section headed for the job that runs it when there is one, else in the workflow's own section
+when there is one, else in a new section headed for either. A job the diff adds is entered
+once, by its job id, and that entry covers its steps; a step added, renamed, or deleted in an
+existing job is entered by its `name:`.**
 
 **A step with a local mirror that the diff adds, renames, or deletes adds, corrects, or deletes
 its row in that section's mirror table, in the same change, adding the table when the section
@@ -60,10 +61,11 @@ preflight gate - a check `preflight` runs locally before a push - that keeps it 
 cell has.** A job on a `pull_request` lane fits 35 minutes; what does not fit moves.
 
 **A diff that adds or changes a per-PR check's steps or matrix cells, or adds, changes, or
-removes a step a per-PR check depends on, states in its PR body or commit message a run of that
-check's command on one of the lane's platforms, naming which; an author with none of the lane's
-platforms states that in the PR body instead, with the URL of the lane's green run on the PR's
-head commit.** A check that fails for a non-defect turns a green branch red for everyone.
+removes a provisioning step a per-PR check needs, states in its PR body or commit message a run
+of that check's command on one of the lane's platforms, naming which; an author with none of
+the lane's platforms states that in the PR body instead, with the URL of the lane's green run
+on the PR's head commit.** A check that fails for a non-defect turns a green branch red for
+everyone.
 
 **A diff that changes a per-PR lane's trigger, path filter, `if:`, `needs:`, `runs-on`, or
 `timeout-minutes`, and leaves the lane running on that pull request, states in its PR body the

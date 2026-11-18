@@ -158,6 +158,11 @@ class GateFixture(unittest.TestCase):
         write(self.repo, "skills/dropped.md", "# Dropped\n\nprose\n")
         self.assert_fires("missing from bundle", "dropped.md")
 
+    def test_repo_checklist_is_not_a_skill(self):
+        write(self.repo, "skills/REVIEW.md", "# Skills Code Review Checklist")
+        rc, out = self.run_gate()
+        self.assertEqual(rc, 0, out)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=1)
