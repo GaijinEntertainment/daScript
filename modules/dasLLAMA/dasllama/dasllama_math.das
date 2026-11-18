@@ -2977,25 +2977,26 @@ def swiglu4(var g : float?; u : float const?; size : int64) {
     }
 }
 
+//! the tanh-form GELU of four lanes, by tanh(a) = 1 - 2 / (1 + exp(2a)): ~2 ulp of `gelu`
+def gelu_tanh4(v : float4) : float4 {
+    let one = float4(1.0)
+    let two = float4(2.0)
+    let sqrt2_over_pi = float4(0.7978845608028654)
+    let a = sqrt2_over_pi * (v + float4(0.044715) * v * v * v)
+    let tanh_a = one - two / (one + exp4(clamp(two * a, EXP4_LO, EXP4_HI)))
+    return float4(0.5) * v * (one + tanh_a)
+}
+
 //! Vectorized fused GeGLU gate (default, Gemma2): g[i] = gelu(g[i]) * u[i], float4 with exp4 via the
 //! identity tanh(a) = 1 - 2/(1+exp(2a)); ~4.8x the scalar geglu (which pays a libm tanhf per element —
 //! the slowest transcendental, no vector path). ~2 ulp, NOT bit-exact. Tail runs the scalar form.
 def geglu4(var g : float?; u : float const?; size : int64) {
-    let one = float4(1.0, 1.0, 1.0, 1.0)
-    let two = float4(2.0, 2.0, 2.0, 2.0)
-    let half = float4(0.5, 0.5, 0.5, 0.5)
-    let gk = float4(0.7978845608028654)   // sqrt(2/pi)
-    let cc = float4(0.044715)
     unsafe {
         var g4 = reinterpret<float4?>(g)
         let u4 = reinterpret<float4 const?>(u)
         let n4 = size / 4l
         for (k in range64(n4)) {
-            let v = g4[k]
-            let a = gk * (v + cc * v * v * v)
-            let arg = clamp(two * a, EXP4_LO, EXP4_HI)
-            let th = one - two / (one + exp4(arg))   // tanh(a)
-            g4[k] = (half * v * (one + th)) * u4[k]
+            g4[k] = gelu_tanh4(g4[k]) * u4[k]
         }
         let kk = 0.7978845608028654
         for (i in range64(n4 * 4l, size)) {
@@ -3003,6 +3004,23 @@ def geglu4(var g : float?; u : float const?; size : int64) {
             g[i] = (0.5 * v * (1.0 + tanh(kk * (v + 0.044715 * v * v * v)))) * u[i]
         }
     }
+}
+
+//! tanh-form GELU in place, float4: ~2 ulp of `gelu`, not bit-exact
+def gelu4(var x : float?; size : int64) {
+    unsafe {
+        var x4 = reinterpret<float4?>(x)
+        let n4 = size / 4l
+        for (k in range64(n4)) {
+            x4[k] = gelu_tanh4(x4[k])
+        }
+        gelu(x + n4 * 4l, size - n4 * 4l)
+    }
+}
+
+def gelu4(var x : array<float> | #; size : int64) {
+    if (size <= 0l) return
+    gelu4(unsafe(addr(x[0])), size)
 }
 
 //! Vectorized fused clamped SwiGLU (gpt-oss), float4 with exp4. A very negative gate makes -alpha·x

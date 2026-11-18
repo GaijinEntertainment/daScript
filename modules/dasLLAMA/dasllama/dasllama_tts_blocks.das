@@ -12,6 +12,7 @@ require daslib/archive
 require dasllama/dasllama_math
 require dasllama/dasllama_math_default   // matmul_kq: the portable K-quant GEMV over disk-order planes
 require dasllama/dasllama_par
+require dasllama/dasllama_rope
 require dasllama/dasllama_plane
 require dasllama/dasllama_convert
 require dasllama/dasllama_tower
@@ -805,6 +806,8 @@ var @scratch @exact_size g_lstm_xqs : array<float>
 var @scratch @exact_size g_lstm_hq : array<int8>     //! ... and its state
 var @scratch @exact_size g_lstm_hqs : array<float>
 var @scratch g_snake_inv : array<float>
+var @scratch g_rope_cos : array<float>
+var @scratch g_rope_sin : array<float>
 var @scratch @exact_size g_sine_rad : array<float>
 var @scratch @exact_size g_sine_low : array<float>
 var @scratch @exact_size g_sine_phase : array<float>
@@ -1459,6 +1462,8 @@ def tts_blocks_release_scratch() {
     delete g_lstm_hq
     delete g_lstm_hqs
     delete g_snake_inv
+    delete g_rope_cos
+    delete g_rope_sin
     delete g_sine_rad
     delete g_sine_low
     delete g_sine_phase
@@ -1928,10 +1933,23 @@ def attention_causal_ref(q : array<float>; t, hidden : int64; context : int64; k
 //! position `pos0 + r`, every adjacent pair (2j, 2j+1) of a head rotated by pos / period^(2j/dh)
 //! - the `rope` convention of dasllama_math, at the family's period.
 def rope_rows(var x : array<float>; t, hidden, dh : int64; pos0 : int64; period : float) {
+    rope_rows(x, t, hidden, dh, pos0, period, g_rope_cos, g_rope_sin)
+}
+
+//! `rope_rows` over the caller's scratch tables, [t][dh / 2] each
+[arch(at = "../ARCHITECTURE_ENGINE_FORMATS.md#rope-one-fill")]
+def rope_rows(var x : array<float>; t, hidden, dh : int64; pos0 : int64; period : float;
+              @scratch var cos_tab : array<float>; @scratch var sin_tab : array<float>) {
+    return if (t == 0l)
+    let no_freqs : array<float>
+    build_rope_tabs(cos_tab, sin_tab, period, 1.0, 1.0, no_freqs, false, pos0, t, dh)
+    let half = dh / 2l
     unsafe {
         var xp = addr(x[0])
+        let cosp = addr<float const?>(cos_tab[0])
+        let sinp = addr<float const?>(sin_tab[0])
         for (r in range64(t)) {
-            rope_scaled(xp + r * hidden, pos0 + r, dh, hidden, period, 1.0, false, null)
+            rope_scaled_tab(xp + r * hidden, dh, hidden, cosp + r * half, sinp + r * half)
         }
     }
 }
