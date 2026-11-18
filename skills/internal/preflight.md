@@ -132,6 +132,19 @@ Release-modules build -> `cmake --install --prefix ./daslang_bundle --strip` ->
 install-layout gate - run it when touching CMake `install(...)` rules,
 `ci/release_modules.txt`, or module loading.
 
+## build.yml - build_linux_gcc
+
+gcc with LLVM and GLFW off, two checks, no test run. `Configure: tools disabled` configures the
+embedder shape - `-DDAS_TOOLS_DISABLED=ON -DDAS_AOT_EXAMPLES_DISABLED=ON` - and builds nothing:
+no `daslang` target exists there, so a lane target that names it fails the generate step. Run it
+when touching a `CMakeLists.txt` or `cmake/das_lane.cmake`. `Build: Daslang (gcc -Werror)` is
+the strict-warning compile of the default targets.
+
+| CI step | Local mirror | Notes |
+|---|---|---|
+| Configure: tools disabled | `cmake -B build-tools-off -DDAS_TOOLS_DISABLED=ON -DDAS_AOT_EXAMPLES_DISABLED=ON`, plus the module flags of the tree's own build | any platform and generator, in a build directory of its own. Keep the module flags: a configure removes the `.shared_module` of every in-tree module it leaves off |
+| Build: Daslang (gcc -Werror) | Linux/WSL: `CC=gcc CXX=g++ cmake -B build-gcc -G Ninja -DCMAKE_BUILD_TYPE=Release -DDAS_GLFW_DISABLED=ON -DDAS_HV_DISABLED=OFF -DDAS_SQLITE_DISABLED=OFF -DDAS_LLVM_DISABLED=ON`, then `cmake --build build-gcc --parallel` | the warnings only gcc emits; no MSVC mirror |
+
 ## nightly.yml - build_windows_mingw
 
 msys2 CLANG64 build with dasClangBind + dasLLVM ON, full interp/JIT/AOT sweeps,
