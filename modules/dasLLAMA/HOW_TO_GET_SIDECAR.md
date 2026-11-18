@@ -247,8 +247,8 @@ produce `<class>.tune-defaults.json`, and that one IS committed. Box differences
 
 `modules/dasLLAMA/performance/REVIEW.md` and its `REVIEW.das` gate: a `defaults/` profile carries no
 `engine_sha`, its `provenance.dasllama_version` equals `DASLLAMA_RELEASE`, its `noise` reads `ok`,
-it carries an entry for every `[tune(gen = ...)]` family the scope declares (a fat release ships a
-clone per family, `ARCHITECTURE_MEASUREMENT.md#committed-records-gate`), and it is minted on a
+it carries an entry for every `[tune(gen = ...)]` family of the scope its class has a seat in (a fat
+release ships a clone per such family, `ARCHITECTURE_MEASUREMENT.md#committed-records-gate`), and it is minted on a
 quiet, session-free box - never hand-edited. The shipped profile is the scope's defaults every
 kernel reads at its own compile (`ARCHITECTURE_ENGINE_FORMATS.md#cpu-kernel-tiers`). Run the gate
 before pushing: `bin/daslang utils/internal/preflight/main.das -- --only review-md`. The push
@@ -310,3 +310,50 @@ scp -i ~/.ssh/dasbox_ed25519 ubuntu@<ip>:daScript/modules/dasLLAMA/performance/d
 scp -i ~/.ssh/dasbox_ed25519 ubuntu@<ip>:ladder.tsv ladder_<box>.tsv
 aws ec2 terminate-instances --instance-ids <id>
 ```
+
+## 9. The wasm profile
+
+A wasm64 artifact is its own class, `wasm-simd128`, whatever box built it
+(`../dasLLVM/ARCHITECTURE_TARGET_FEATURES.md#cross-class`), so its profile is minted inside the
+artifact: both tuners and the export are built as wasm releases and run under node. Sections 1
+to 6 do not apply - no reference exe, no kernel ladder, no vehicle model. The files are the three
+packages under `harness/wasm_mint/` - `tuner/` (the generator families, `gen_tune_probe.das`),
+`kernels/` (the loop-hint kernels, `tune_kernels.das`) and `export/` - and
+`harness/wasm_mint/run.cjs`.
+
+The box needs an activated emsdk (the version `.github/workflows/pages.yml` pins), its node on
+`PATH`, the wasm64 archives (`daspkg build --wasm`, `skills/daspkg.md`), and a daslang built as
+the wasm cross-compile host in a worktree of its own: `sh web/build_wasm_host.sh`, whose header
+says why the box's native build cannot stand in for it.
+
+```
+H=modules/dasLLAMA/harness/wasm_mint
+mkdir -p ~/mint_wasm/io
+DAS_TUNE_MODE=tune bin/daslang utils/daspkg/main.das -- release wasm --root $H/tuner --out ~/mint_wasm/tuner
+DAS_TUNE_MODE=tune bin/daslang utils/daspkg/main.das -- release wasm --root $H/kernels --out ~/mint_wasm/kernels
+bin/daslang utils/daspkg/main.das -- release wasm --root $H/export --out ~/mint_wasm/export
+DAS_TUNE_MODE=test node $H/run.cjs ~/mint_wasm/tuner/wasm_tuner/wasm_tuner.js ~/mint_wasm/io
+DAS_TUNE_MODE=tune DAS_JOBQUE_THREADS=8 node $H/run.cjs ~/mint_wasm/tuner/wasm_tuner/wasm_tuner.js ~/mint_wasm/io
+DAS_TUNE_MODE=tune DAS_JOBQUE_THREADS=8 node $H/run.cjs ~/mint_wasm/kernels/wasm_kernels/wasm_kernels.js ~/mint_wasm/io
+node $H/run.cjs ~/mint_wasm/export/wasm_export/wasm_export.js ~/mint_wasm/io --out-dir /out
+cp ~/mint_wasm/io/wasm-simd128.tune-defaults.json modules/dasLLAMA/performance/defaults/
+```
+
+Trap: the export runs in wasm too - a native `export_tune_profile.das` reads this sidecar as another box's and refuses it with "no kernels".
+
+`DAS_TUNE_MODE=tune` at a tuner's build stamps its grid; a cross build's generator grid is the
+rows the class can run (`../dasLLVM/ARCHITECTURE_TARGET_FEATURES.md#cross-grid`), and the
+generator tuner races the families that have one
+(`ARCHITECTURE_MEASUREMENT_KERNEL_RACE.md#seated-families`). `run.cjs` mounts the host directory
+at `/out` and puts the sidecar at `/out/wasm.tune.json`: the two tuners write into the one file,
+the generator tuner first, and the export reads it there. The TEST line ends `GEN TUNE TEST OK`
+and the generator mint `GEN TUNE RUN OK`; the loop-hint tuner holds every hint variant of every
+kernel to its oracle before it times one and ends on its summary. Each mint sits behind four
+quiet noise probes.
+
+The class has one profile and any device runs the artifact, so mint on the box the release is
+measured on and re-mint when a family gains a seat. A release built with no variable set stamps
+from the committed profile: time the model the family serves against a build made before the
+profile landed (`ARCHITECTURE_MEASUREMENT_KERNEL_RACE.md#x16-served-race`).
+
+Section 7's gate binds this profile as it binds every other.

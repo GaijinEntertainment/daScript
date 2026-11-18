@@ -47,6 +47,14 @@ def GEMM_REFERENCE_MR : int => 4
 //! derives from these.
 let Q8_BLOCK_ELEMS = KQ_B32_ELEMS
 let Q8_BLOCK_BYTES = Q8_BLOCK_ELEMS + 2l   //! a block's bytes: its quants and the f16 scale
+
+//! A K-quant 16-bit rows kernel's row scratch: the row's `n` int16 weights, then eight int16 mins a
+//! superblock, then two floats (d, dmin) a superblock.
+let X16_ROW_MINS_SB = 16l     //! bytes of mins a superblock
+let X16_ROW_SCALES_SB = 8l    //! bytes of scales a superblock
+
+def x16_row_scratch_bytes(n : int64) : int64 =>
+    2l * n + (X16_ROW_MINS_SB + X16_ROW_SCALES_SB) * (n / KQ_SB_ELEMS)
 let Q8_QPB = 32l   // quant bytes per block
 let Q8_SPB = 2l    // scale bytes per block (f16 halfword)
 let Q8K_SUM_ELEMS = 16l   //! the Q8_K activation form's sum block: one int sum a 16 quants beside the per-superblock scale

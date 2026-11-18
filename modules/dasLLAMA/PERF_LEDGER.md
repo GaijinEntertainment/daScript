@@ -9682,3 +9682,13 @@ above, measured at commit 74a7060033 with tuned kernels.
   bytes of the written file's quantized tensors - 93,878,080 for `kokoro-82m-q8.gguf`, 69,477,184 for
   `kokoro-82m-kq.gguf`, 15,719,424 for `kitten-nano-q8.gguf`, 13,859,328 for `kitten-nano-kq.gguf` - beside the
   staging carrier and the source's mapping (`followup_general.md` row 312).
+
+### What the 16-bit rows kernels and Pocket's rope hold (the sizes are arithmetic, no run)
+
+- **The widened activation image** (`g_x16_x`, `dasllama_math_gen.das`): `2 x ntok x n` bytes, one image a process, sized
+  by the largest batch call - 1,048,576 bytes at 128 tokens of a 4096-wide row, 262,144 at 128 tokens of 1024.
+- **Its 32-element sums** (`g_x16_xb`): `2 x ntok x n / 32` bytes - 32,768 and 8,192 at the same two shapes.
+- **A dispatch slot's row scratch** (the walk panels' new size term, `x16_row_scratch_bytes`): `2 n + 24 x n / 256` bytes
+  a slot - 8,576 at n 4096, 2,144 at n 1024.
+- **Pocket's rope tables** (`rope_cos`, `rope_sin` of a `PocketScratch`, and the `g_rope_cos` / `g_rope_sin` pair):
+  `t x (dh / 2) x 4` bytes each - 2,048 bytes at one row of a 1024-wide head, 524,288 at 256 rows.

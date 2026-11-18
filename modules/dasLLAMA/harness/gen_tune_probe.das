@@ -29,7 +29,12 @@ options _dasllama_internal = true
 //         to the reference row over it; the report row is each arm's best of ROUNDS, no warmup
 //         round dropped (the gate pass runs every arm once first); the miss line and the report
 //         row both carry the bound.
-//   tune: iso-bench every variant (interleaved best-of) on its own repacked buffers — the
+//   The 16-bit rows families (<fmt>x16_rows_gen, q8x16_rows_gen) race their batch entries at two
+//         served shapes: the baseline is each fixture's own fp oracle (`yref`); the compare region
+//         is the whole output image of both shapes; every emitting seat is held to it within the
+//         fixture's magnitude bar; the report row is each arm's best of ROUNDS, the calibration
+//         windows that size its repeat count dropped, and carries the compare and the bound.
+//   tune: iso-bench every variant (interleaved) on its own repacked buffers — the
 //         tile on a batch shape, the gemv core on a single-token decode shape — print both
 //         tables, and tune_manifest_set the merged winner: the row whose TILE knobs win the
 //         batch bench and whose gkstep wins the decode bench among rows with those tile
@@ -554,9 +559,12 @@ def build_kq_fixture(fmt : int64; n, d, ntok : int64) : KqFixture {
 //! a kq format's [tune] family registries (the engine's kq_registries), for a caller holding the format as a schema id
 def kq_regs(fmt : int64) : KqRegistries => <- kq_registries_of(kq_fmt_of_id(int(fmt), "kq_regs"))
 
-//! the schema ids of the formats that carry a kq [tune] family - those whose tile registry is non-empty - in KqFmt order
+[arch(at = "../ARCHITECTURE_MEASUREMENT_KERNEL_RACE.md#seated-families")]
+def private seated(rows) : bool => length(rows) > 1
+
+//! the schema ids of the formats that carry a seated kq [tune] family, in KqFmt order
 def kq_family_ids() : array<int64> {
-    var fmts <- kq_family_fmts() $(regs : KqRegistries) => !empty(regs.tile)
+    var fmts <- kq_family_fmts() $(regs : KqRegistries) => seated(regs.tile)
     var ids <- [for (kf in fmts); int64(kq_desc(kf).schema_id)]
     delete fmts
     return <- ids
@@ -707,7 +715,8 @@ def run_kq_gemv_team(gemv; fx : KqFixture; kq : array<uint8>; ks : array<uint8>;
 // than fast-math fold-order noise
 def kq_tol(yref : array<float>; count : int) : float => close_tol(max_abs(yref, count))
 
-def close_to_kq_ref(fx : KqFixture; y : array<float>; var maxdiff : float&; form : int64 = 0l) : bool {
+//! the bar is the fixture's magnitude: a kernel that groups a block's lanes its own way sums in its own order
+def close_to_ref_magnitude(fx; y : array<float>; var maxdiff : float&; form : int64 = 0l) : bool {
     let tol = max(kq_tol(fx.yref, length(y)), bf16_envelope(fx.yref, length(y), form))
     return close_within(y, fx.yref, length(y), maxdiff) $(_i : int) => tol
 }
@@ -743,7 +752,7 @@ def kq_gate_variant(suffix : string; tile : KqTileFn; gemv : KqRowsFn; tile4 : K
         } else {
             run_kq_tile(tile, kfx, kqv, ksv, mr, yk)
         }
-        let tok = close_to_kq_ref(kfx, yk, maxdiff, form)
+        let tok = close_to_ref_magnitude(kfx, yk, maxdiff, form)
         if (!tok) {
             let tol = kq_tol(kfx.yref, length(yk))
             dump_mismatch("k{kfx.fmt} tile {suffix} n={kfx.n}", yk, kfx.yref, int(kfx.d)) $(_i : int) => tol
@@ -752,7 +761,7 @@ def kq_gate_variant(suffix : string; tile : KqTileFn; gemv : KqRowsFn; tile4 : K
         var inscope ykg : array<float>
         ykg |> resize(kfx.d)
         run_gemv_sums(gemv, kfx, kqv, ksv, mr, ykg)
-        let gok = close_to_kq_ref(kfx, ykg, maxdiff)
+        let gok = close_to_ref_magnitude(kfx, ykg, maxdiff)
         if (!gok) {
             let tol = kq_tol(kfx.yref, length(ykg))
             dump_mismatch("k{kfx.fmt} gemv {suffix} n={kfx.n}", ykg, kfx.yref, 0) $(_i : int) => tol
@@ -761,7 +770,7 @@ def kq_gate_variant(suffix : string; tile : KqTileFn; gemv : KqRowsFn; tile4 : K
         var inscope yk4 : array<float>
         yk4 |> resize(kfx.ntok * kfx.d)
         run_kq_tile(tile4, kfx, kqv, ksv, mr, yk4)
-        let t4ok = close_to_kq_ref(kfx, yk4, maxdiff)
+        let t4ok = close_to_ref_magnitude(kfx, yk4, maxdiff)
         if (!t4ok) {
             let tol = kq_tol(kfx.yref, length(yk4))
             dump_mismatch("k{kfx.fmt} tile4 {suffix} n={kfx.n}", yk4, kfx.yref, int(kfx.d)) $(_i : int) => tol
@@ -885,6 +894,13 @@ def private b32_layout_mrs(fmt : KqFmt) : table<string; int> {
     }
     delete lvs
     return <- mrs
+}
+
+def private b32_seated(fmt : KqFmt) : bool {
+    var mrs <- b32_layout_mrs(fmt)
+    let has = seated(mrs)
+    delete mrs
+    return has
 }
 
 //! the per-32 family's manifest key - the TILE stamp (the gemv and layout companions follow it)
@@ -1092,6 +1108,13 @@ def private rm_variants(f : KqFmt) : RmVariants {
     rv.emits <- [for (nm in rv.names); emits_of(rv.witness, nm)]
     delete wkeys
     return <- rv
+}
+
+def private rm_seated(f : KqFmt) : bool {
+    var rv <- rm_variants(f)
+    let has = seated(rv.names)
+    delete rv
+    return has
 }
 
 def private rm_run(rv : RmVariants; fx : RmFixture; vi : int; var y : array<float>) {
@@ -1426,6 +1449,244 @@ def bf16w_tune_family(var rows_out : table<string; JsonValue?>) : string {
     return best
 }
 
+let X16_KQ_FMTS = fixed_array(4l, 5l, 6l)   //! the K-quant formats with a 16-bit rows family, by fixture id
+let X16_Q8_ENTRY = "q8x16_rows_gen"
+let X16_FALLBACK = "nt4"
+let X16_WINDOW_US = 40000l    //! one timed window: a seat's batch calls repeated until they fill it
+let X16_SERVED_TOKENS = 128l  //! the token count the race serves: a ten-second clip through a conformer tower
+
+//! the seats of a 16-bit rows family that emit on this target, in the registry's order; the reference row is no seat
+def private x16_emits(names : array<string>; wvs : array<tuple<string; function<() : bool>>>) : array<bool> =>
+    <- [for (nm in names); nm != "reference" && emits_of(wvs, nm)]
+
+def private kqx16_fmt(fmt : int64) : KqFmt => kq_fmt_of_id(int(fmt), "the 16-bit rows family")
+
+//! the sidecar entry of K-quant format `fmt`'s 16-bit rows family
+def kqx16_entry(fmt : int64) : string => "{kqx16_fmt(fmt)}x16_rows_gen"
+
+def private kqx16_rows_variants(fmt : int64) {
+    let kf = kqx16_fmt(fmt)
+    return <- (kf == KqFmt.k4 ? k4x16_rows_gen_variants()
+        : (kf == KqFmt.k5 ? k5x16_rows_gen_variants() : k6x16_rows_gen_variants()))
+}
+
+def private kqx16_witness_variants(fmt : int64) {
+    let kf = kqx16_fmt(fmt)
+    return <- (kf == KqFmt.k4 ? k4x16_witness_gen_variants()
+        : (kf == KqFmt.k5 ? k5x16_witness_gen_variants() : k6x16_witness_gen_variants()))
+}
+
+def private x16_any_emits(vs; wvs) : bool {
+    var inscope names <- [for (v in vs); v._0]
+    var inscope emits <- x16_emits(names, wvs)
+    return has_value(emits, true)
+}
+
+def kqx16_has_emitting_seat(fmt : int64) : bool {
+    var vs <- kqx16_rows_variants(fmt)
+    var wvs <- kqx16_witness_variants(fmt)
+    let live = x16_any_emits(vs, wvs)
+    delete wvs
+    delete vs
+    return live
+}
+
+def q8x16_has_emitting_seat() : bool {
+    var vs <- q8x16_rows_gen_variants()
+    var wvs <- q8x16_witness_gen_variants()
+    let live = x16_any_emits(vs, wvs)
+    delete wvs
+    delete vs
+    return live
+}
+
+//! the best round's us a call, by row; 1e30 for a row that does not emit
+[arch(at = "../ARCHITECTURE_MEASUREMENT_KERNEL_RACE.md#x16-served-race")]
+def private x16_race(emits : array<bool>; call : block<(vi : int) : void>) : array<double> {
+    var best : array<double>
+    var reps : array<int>
+    best |> resize(length(emits))
+    reps |> resize(length(emits))
+    var live = 0
+    for (vi, e in count(), emits) {
+        best[vi] = 1.0e30lf
+        continue if (!e)
+        live++
+        reps[vi] = 1
+        while (true) {
+            let t0 = ref_time_ticks()
+            for (_r in range(reps[vi])) {
+                invoke(call, vi)
+            }
+            break if (int64(get_time_usec(t0)) >= X16_WINDOW_US)
+            reps[vi] *= 2
+        }
+    }
+    for (r in range(ROUNDS)) {
+        tune_progress_kernel_step(r + 1, "best-of", live)
+        for (vi, e in count(), emits) {
+            continue if (!e)
+            let t0 = ref_time_ticks()
+            for (_r in range(reps[vi])) {
+                invoke(call, vi)
+            }
+            best[vi] = min(best[vi], double(get_time_usec(t0)) / double(reps[vi]))
+        }
+    }
+    delete reps
+    return <- best
+}
+
+//! the family's crowned seat: the fastest when it beats the fallback by the win margin, the fallback inside it, and
+//! the incumbent's stickiness over both; "" where no seat raced
+def private x16_crown(entry : string; names : array<string>; times : array<double>) : string {
+    var winner = -1
+    for (i, t in count(), times) {
+        if (t < 1.0e29lf && (winner < 0 || t < times[winner])) {
+            winner = i
+        }
+    }
+    return "" if (winner < 0)
+    let fb = find_index(names, X16_FALLBACK)
+    if (fb >= 0 && fb != winner && times[fb] < 1.0e29lf && times[winner] * gen_margin() > times[fb]) {
+        tune_detail("{entry}: {names[winner]} does not beat the fallback {X16_FALLBACK} by x{gen_margin():0.3f} - the fallback holds\n")
+        winner = fb
+    }
+    return names[gen_sticky(entry, names, times, winner)]
+}
+
+def private x16_run(rows : Kqx16RowsFn; fx : KqFixture; var y : array<float>) {
+    unsafe {
+        kqx16_batch_with(rows, addr(y[0]), addr<uint8 const?>(fx.kq[0]), addr<uint8 const?>(fx.ks[0]), addr<int8 const?>(fx.xq[0]),
+            addr<float const?>(fx.xs[0]), addr<int const?>(fx.xbs[0]), fx.n, fx.d, fx.ntok)
+    }
+}
+
+def private x16_run(rows : Q8x16RowsFn; fx : Fixture; var y : array<float>) {
+    unsafe {
+        q8x16_batch_with(rows, addr(y[0]), addr<int8 const?>(fx.q[0]), addr<float const?>(fx.s[0]), addr<int8 const?>(fx.xq[0]),
+            addr<float const?>(fx.xs[0]), fx.n, fx.d, fx.ntok)
+    }
+}
+
+//! every emitting seat of one 16-bit rows family against its fixture's oracle; true where none emits
+def private x16_test_rows(tag : string; vs; wvs; fx) : bool {
+    var allok = true
+    var y : array<float>
+    y |> resize(fx.ntok * fx.d)
+    for (v in vs) {
+        continue if (v._0 == "reference" || !emits_of(wvs, v._0))
+        var maxdiff = 0.0
+        x16_run(v._1, fx, y)
+        let ok = close_to_ref_magnitude(fx, y, maxdiff)
+        print("{tag} {v._0}: {ok ? "ok" : "MISMATCH"} (maxdiff {maxdiff})\n")
+        allok = allok && ok
+    }
+    delete y
+    return allok
+}
+
+//! every emitting seat of every 16-bit rows family against its fixture's oracle; true where none emits
+def x16_test_family() : bool {
+    var allok = true
+    for (fmt in X16_KQ_FMTS) {
+        var kvs <- kqx16_rows_variants(fmt)
+        var kws <- kqx16_witness_variants(fmt)
+        var kfx <- build_kq_fixture(fmt, 1024l, 24l, 7l)
+        let ok = x16_test_rows("{kqx16_fmt(fmt)}x16", kvs, kws, kfx)
+        allok = allok && ok
+        delete kfx
+        delete kws
+        delete kvs
+    }
+    var qvs <- q8x16_rows_gen_variants()
+    var qws <- q8x16_witness_gen_variants()
+    var qfx <- build_fixture(1024l, 24l, 7l)
+    let qok = x16_test_rows("q8x16", qvs, qws, qfx)
+    delete qfx
+    delete qws
+    delete qvs
+    return allok && qok
+}
+
+//! the crowned seat of one 16-bit rows family over its two served shapes; "" on a gate failure or where no
+//! seat raced
+[arch(at = "../ARCHITECTURE_MEASUREMENT_KERNEL_RACE.md#x16-served-race")]
+def private x16_tune_rows(entry, tag : string; vs; wvs; fa; fb;
+                          var rows_out : table<string; JsonValue?>) : string {
+    var names <- [for (v in vs); v._0]
+    var emits <- x16_emits(names, wvs)
+    var ya, yb : array<float>
+    ya |> resize(fa.ntok * fa.d)
+    yb |> resize(fb.ntok * fb.d)
+    var allok = true
+    var diffs : array<float>
+    diffs |> reserve(length(emits))
+    let bound = max(kq_tol(fa.yref, length(ya)), kq_tol(fb.yref, length(yb)))
+    for (v, e in vs, emits) {
+        var da = 0.0
+        var db = 0.0
+        if (e) {
+            x16_run(v._1, fa, ya)
+            x16_run(v._1, fb, yb)
+            let ok = close_to_ref_magnitude(fa, ya, da) && close_to_ref_magnitude(fb, yb, db)
+            if (!ok) {
+                tune_detail("{tag} {v._0}: MISMATCH (maxdiff {max(da, db)}, bound {bound})\n")
+            }
+            allok = allok && ok
+        }
+        diffs |> push(max(da, db))
+    }
+    var best = ""
+    if (allok) {
+        var times <- x16_race(emits) $(vi : int) {
+            x16_run(vs[vi]._1, fa, ya)
+            x16_run(vs[vi]._1, fb, yb)
+        }
+        let macs = double((fa.n * fa.d + fb.n * fb.d) * X16_SERVED_TOKENS)
+        for (nm, t, e, dv in names, times, emits, diffs) {
+            continue if (!e)
+            rows_out[nm] = JV((batch_us = t))
+            let rate = "{t:0.1f} us ({macs / t / 1000.0lf:0.1f} GMAC/s)"
+            tune_detail("{tag} {nm}: {rate}, max diff {dv} vs the fixture oracle (bound {bound})\n")
+        }
+        best = x16_crown(entry, names, times)
+        delete times
+    }
+    delete diffs
+    delete yb
+    delete ya
+    delete emits
+    delete names
+    return best
+}
+
+def kqx16_tune_family(fmt : int64; var rows_out : table<string; JsonValue?>) : string {
+    var vs <- kqx16_rows_variants(fmt)
+    var wvs <- kqx16_witness_variants(fmt)
+    var wide <- build_kq_fixture(fmt, 4096l, 1024l, X16_SERVED_TOKENS)
+    var tall <- build_kq_fixture(fmt, 1024l, 4096l, X16_SERVED_TOKENS)
+    let best = x16_tune_rows(kqx16_entry(fmt), "{kqx16_fmt(fmt)}x16", vs, wvs, wide, tall, rows_out)
+    delete tall
+    delete wide
+    delete wvs
+    delete vs
+    return best
+}
+
+def q8x16_tune_family(var rows_out : table<string; JsonValue?>) : string {
+    var vs <- q8x16_rows_gen_variants()
+    var wvs <- q8x16_witness_gen_variants()
+    var wide <- build_fixture(1024l, 2048l, X16_SERVED_TOKENS)
+    var square <- build_fixture(1024l, 1024l, X16_SERVED_TOKENS)
+    let best = x16_tune_rows(X16_Q8_ENTRY, "q8x16", vs, wvs, wide, square, rows_out)
+    delete square
+    delete wide
+    delete wvs
+    delete vs
+    return best
+}
+
 def kq_test_family(fmt : int64; kfxs : array<KqFixture>) : bool {
     var regs <- kq_regs(fmt)
     var gtab <- by_suffix(regs.gemv)
@@ -1539,14 +1800,14 @@ def kq_tune_family(fmt : int64; var rows_out : table<string; JsonValue?>; var ge
             run_kq_tile(tvs[vi]._1, kbfx, bbuf[mi].q, bbuf[mi].s, vmr[vi], ky)
         }
         var maxdiff = 0.0
-        if (!close_to_kq_ref(kbfx, ky, maxdiff, vform[vi])) {
+        if (!close_to_ref_magnitude(kbfx, ky, maxdiff, vform[vi])) {
             print("k{fmt} {tvs[vi]._0}: tile MISMATCH (maxdiff {maxdiff}) - aborting tune\n")
             return ""
         }
         held |> push(vform[vi] > 0l ? ", tile maxdiff {maxdiff} within the bf16 envelope {bf16_envelope(kbfx.yref, length(ky), vform[vi])}" : "")
         run_gemv_sums(gtab[tvs[vi]._0], khfx, hbuf[mi].q, hbuf[mi].s, vmr[vi], kyh)
         var gmaxdiff = 0.0
-        if (!close_to_kq_ref(khfx, kyh, gmaxdiff)) {
+        if (!close_to_ref_magnitude(khfx, kyh, gmaxdiff)) {
             print("k{fmt} {tvs[vi]._0}: gemv MISMATCH (maxdiff {gmaxdiff}) - aborting tune\n")
             return ""
         }
@@ -1832,6 +2093,7 @@ def test_mode : bool { // nolint:STYLE037,STYLE038 — flat per-variant correctn
     // the bf16-weight family: every tail in the first shape, the conv front's in the second
     var inscope bfxs <- [ <- build_bf16w_fixture(2560l, 200l, 100l), <- build_bf16w_fixture(1152l, 480l, 300l)]
     allok = bf16w_test_family(bfxs) && allok
+    allok = x16_test_family() && allok
     delete bfxs
     delete wtab
     delete mtab
@@ -2262,17 +2524,31 @@ def tune_mode_run : bool { // nolint:STYLE037,STYLE038 — flat family-by-family
     // upsert - a one-family re-mint after landing a format is seconds, not the full walk
     var kids <- kq_family_ids()
     var kqSel <- [for (fmt in kids); fmt; where tune_family_selected(kq_tile_entry(fmt))]
-    let wantQ8 = tune_family_selected("q8q8_tile_gen")
-    let wantBf16w = tune_family_selected("bf16w_tile_gen")
-    let b32All = fixed_array(KqFmt.q51, KqFmt.iq4nl32, KqFmt.q4032, KqFmt.q5032)
+    var q8vs <- q8q8_tile_gen_variants()
+    var bfvs <- bf16w_tile_gen_variants()
+    let q8Seated = seated(q8vs)
+    let bf16wSeated = seated(bfvs)
+    delete q8vs
+    delete bfvs
+    let wantQ8 = q8Seated && tune_family_selected("q8q8_tile_gen")
+    let wantBf16w = bf16wSeated && tune_family_selected("bf16w_tile_gen")
+    var b32All <- [for (f in fixed_array(KqFmt.q51, KqFmt.iq4nl32, KqFmt.q4032, KqFmt.q5032)); f; where b32_seated(f)]
     var b32Sel <- [for (f in b32All); f; where tune_family_selected(b32_tile_entry(f))]
-    var rmAll <- rm_family_fmts()
+    var rmFmts <- rm_family_fmts()
+    var rmAll <- [for (f in rmFmts); f; where rm_seated(f)]
+    delete rmFmts
     var rmSel <- [for (f in rmAll); f; where tune_family_selected(rm_entry(f))]
-    let standaloneFamilies = 2   //! q8q8_tile_gen and bf16w_tile_gen, the families outside the per-format walks
-    let familyTotal = standaloneFamilies + length(kids) + length(b32All) + length(rmAll)
+    var kqx16All <- [for (f in X16_KQ_FMTS); f; where kqx16_has_emitting_seat(f)]
+    var kqx16Sel <- [for (f in kqx16All); f; where tune_family_selected(kqx16_entry(f))]
+    let q8x16Emits = q8x16_has_emitting_seat()
+    let wantQ8x16 = q8x16Emits && tune_family_selected(X16_Q8_ENTRY)
+    let standaloneFamilies = (q8Seated ? 1 : 0) + (bf16wSeated ? 1 : 0) + (q8x16Emits ? 1 : 0)
+    let familyTotal = standaloneFamilies + length(kids) + length(b32All) + length(rmAll) + length(kqx16All)
     delete kids
+    delete b32All
     delete rmAll
-    let planTotal = (wantQ8 ? 2 : 0) + length(kqSel) + length(b32Sel) + length(rmSel) + (wantBf16w ? 1 : 0)
+    delete kqx16All
+    let planTotal = (wantQ8 ? 2 : 0) + length(kqSel) + length(b32Sel) + length(rmSel) + (wantBf16w ? 1 : 0) + length(kqx16Sel) + (wantQ8x16 ? 1 : 0)
     if (planTotal == 0) {
         print("tune-only '{tune_only_filter()}': no generator family matches - half skipped, sidecar untouched\n")
         delete kqSel
@@ -2349,6 +2625,13 @@ def tune_mode_run : bool { // nolint:STYLE037,STYLE038 — flat family-by-family
         //! the base row is the fallback: its production route is the widen walk
         seat_family("bf16w_tile_gen", "bf16w family", "mr16", pending) $(var rows : table<string; JsonValue?>) => bf16w_tune_family(rows)
     }
+    for (f in kqx16Sel) {
+        seat_family(kqx16_entry(f), "{kqx16_fmt(f)}x16 family", X16_FALLBACK, pending) $(var rows : table<string; JsonValue?>) => kqx16_tune_family(f, rows)
+    }
+    delete kqx16Sel
+    if (wantQ8x16) {
+        seat_family(X16_Q8_ENTRY, "q8x16 family", X16_FALLBACK, pending) $(var rows : table<string; JsonValue?>) => q8x16_tune_family(rows)
+    }
     var ok = true
     if (wantQ8) {
         interrupt_gate("confirm_e2e_prefill")
@@ -2393,7 +2676,7 @@ def tune_mode_run : bool { // nolint:STYLE037,STYLE038 — flat family-by-family
 
 // fallback: the tuner rail drives this via DAS_TUNE_MODE=tune explicitly; the auto policy
 // must not fire when this runs as the compile-only fallback-discovery child (recursion)
-[export, tune_policy(missing = "fallback")]
+[export, cold_path, tune_policy(missing = "fallback")]
 def main : int {
     if (!jit_enabled()) {
         print("run with -jit - the generator only fires under the LLVM JIT\n")

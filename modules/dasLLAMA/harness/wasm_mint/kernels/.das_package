@@ -1,0 +1,16 @@
+options gen2
+
+require daslib/daspkg
+
+[export]
+def package() {
+    package_name("wasm_kernels")
+    package_description("the loop-hint tuner as a wasm64 release - the other half of the wasm-simd128 mint")
+}
+
+[export]
+def release() {
+    release_main("../../tune_kernels.das")
+    release_wasm_disable_host_gpu_modules()
+    release_emcc_arg("-lnodefs.js")
+}

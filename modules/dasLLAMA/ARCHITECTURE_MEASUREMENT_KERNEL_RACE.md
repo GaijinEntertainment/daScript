@@ -4,7 +4,8 @@ Companion to `ARCHITECTURE_MEASUREMENT.md`; a section is cited by its anchor. Th
 document carries the instruments that time a kernel away from the
 served graph and the conditions their verdict holds under: what makes an isolated race predict
 the graph it imitates, how the gemv earns a second tune seat, how the row-major families race
-on their one streamed shape, and the fixture the CPU kernel bench times on. It also carries the
+on their one streamed shape, how the 16-bit rows families race at the served shape, which
+families a tuner races at all, and the fixture the CPU kernel bench times on. It also carries the
 vocabulary of the timing-race checklist. The rig that
 produces recorded numbers, the tune gate, the Vulkan GEMM probe's axes and the instrumentation
 rails stay in `ARCHITECTURE_MEASUREMENT.md`.
@@ -173,6 +174,33 @@ shapes a format and names every perm without a witness row as a desync;
 `tests/test_kernel_backend.das` holds the same lockstep without a model over the formats
 `kq_family_fmts` reports with rm rows - every one but q8 (its rows ride their own registry) -
 each carrying one witness row per perm, keyed alike, the reference row first.
+
+### The 16-bit rows families race at the served shape {#x16-served-race}
+
+The 16-bit rows families (`k4x16_rows_gen` with its Q5_K and Q6_K twins, and `q8x16_rows_gen`)
+race through their batch entries (`kqx16_batch_with`, `q8x16_batch_with`) on the team, at a
+conformer tower's shapes and a ten-second clip's 128 tokens: each K-quant family on the block's
+two FFN GEMMs (4096 wide by 1024 rows, 1024 by 4096), q8 on its pointwise and output GEMMs (1024
+by 2048, 1024 by 1024). A seat's sample is
+that pair of calls, repeated to fill a 40 ms window; the seats take turns for `ROUNDS` rounds and
+the best round decides. The batch entry is in the race because it is in the cost: the image it
+widens, the row scratch of a dispatch slot and the lanes' share of the cache all move with the
+seat, so the bare kernel's order of seats on one thread is not the batch call's.
+
+The fallback keeps the seat inside the win margin, the incumbent after that
+(`x16_crown`). Every emitting seat is held to its fixture's oracle before any is timed: a K-quant
+family within the kq families' bar, q8 within the same bar over the fixture's magnitude, because its lanes
+group a block their own way. On a target where no seat emits - every native one - the families
+race nothing and write nothing.
+
+### A family with no seat races nothing {#seated-families}
+
+The tuner races a family only where its registry holds a row beside the reference (`seated`,
+`harness/gen_tune_probe.das`). A native grid always does. A cross build stamps only the rows its
+class can run - the tune framework filters the grid by the class - so under `wasm-simd128`
+every family gated on NEON or AVX is a one-row registry: the walk leaves it out of the plan, the
+TEST gate and the sidecar. The q8 confirm pass, which spawns child compiles, goes with the q8
+family, so a mint inside a cross artifact starts no process.
 
 ### The CPU kernel bench's fixture conditions {#cpu-kernel-bench-fixture}
 
