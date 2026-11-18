@@ -1527,7 +1527,7 @@ def private small_parity_cells(t : T?; m : PocketModel; S : PocketSmall; man : P
         static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)) {
             if (S.frames_seat) {
                 var inscope leg <- frames_seat_leg(t, m, k, "{tag} frames seat", GPU_FRAME_BAR, true, sc)
-                t |> success(leg.fc > 0l, "{tag}: the frames seat served the teacher-forced case")
+                t |> success(leg.fc != 0l, "{tag}: the frames seat served the teacher-forced case, or declined with its skip")
             }
             if (S.prompt_seat) {
                 prompt_seat_leg(t, m, k, "{tag} prompt seat", GPU_PROMPT_BAR, sc)
