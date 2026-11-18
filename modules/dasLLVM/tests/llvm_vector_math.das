@@ -2,11 +2,13 @@ options gen2
 
 require dastest/testing_boost
 require math
+require llvm/daslib/llvm_cpu_class
+require llvm/daslib/llvm_jit_common
 
 // Accuracy and rail-consistency contract for the inline vector transcendentals the JIT emits
 // instead of @llvm.<op>.vNf32 (which scalarize to N libm calls on every target of ours) - the
-// build_vector_* emitters in daslib/llvm_jit_intrin.das. log2, log and pow take the rail on
-// every target; the rest is aarch64-only (`on_aarch64`).
+// build_vector_* emitters in daslib/llvm_jit_intrin.das. Every one
+// takes the rail on aarch64; on x64 all but exp, sinh and cosh do.
 // Two questions per function, and they are different questions:
 //   - vs libm: how good is the ALGORITHM. Several of these mirror vecmath estimates that are far
 //     from correctly rounded; the bound records what the algorithm actually delivers, it is not
@@ -21,11 +23,19 @@ require math
 //     with a number, which no accuracy bound above can see. Asserted on both rails per emitter.
 // Arguments arrive through runtime arrays on purpose: a compile-time-constant argument is
 // const-folded by the AST and never reaches the intrinsic, so a folded test proves nothing.
-// The tight bounds need a fused a*b+c on whichever rail runs. aarch64 always fuses; a generic
-// x64 build has no FMA and takes the coarse bound, which still catches structural failures.
+// The tight bounds need a fused a*b+c on whichever rail runs. The JIT
+// fuses on aarch64 and on an x64 target with FMA; the interpreter
+// fuses on aarch64 and in an MSVC x64 build with AVX2, and not in a
+// clang or gcc x64 build. A rail that does not fuse takes the coarse
+// bound, which still catches structural failures. The bit-for-bit
+// cells of sin, cos and tan run where the two rails fuse alike, and
+// where they do not, sin and cos are held to the unfused side's
+// error; exp2, log2, log and pow fuse nowhere, so their cells never
+// wait on fusion.
 
 let private COARSE_REL = 1.0e-2         // unfused / non-polynomial rails: catches sign, branch and NaN failures
 let private SINCOS_ABS = 3.0e-7         // measured 1.1920929e-07 (1 ulp) over |x| <= 1e5
+let private UNFUSED_SINCOS_ABS = 5.0e-3 // an unfused reduction, measured 3.9e-3 at |x| ~ 1e5
 
 // which: the op selector shared by the jitted and the interpreted worker
 let private OP_TAN = 0
@@ -36,6 +46,7 @@ let private OP_POW = 4
 let private OP_TANH = 5
 let private OP_SINH = 6
 let private OP_COSH = 7
+let private OP_EXP = 8
 
 struct private ErrReport {
     maxAbs : float
@@ -51,10 +62,41 @@ var private g_offset = 0.0
 
 def private on_aarch64 : bool => get_architecture_name() == "arm64"
 
-def private op_on_poly_rail(which : int) : bool =>
-    on_aarch64() || which == OP_LOG2 || which == OP_LOG || which == OP_POW
+def private on_x64 : bool => get_architecture_name() == "x86_64"
 
-def private bound(tightValue : float) : float => on_aarch64() ? tightValue : COARSE_REL
+def private jit_fuses : bool {
+    return true if (on_aarch64())
+    return false if (!on_x64())
+    let pinned = jit_baseline_class()
+    return empty(pinned) ? cpu_supports("fma") : jit_class_has(pinned, "fma")
+}
+
+//! probed on sin, where an unfused reduction lands 4e-3 off libm
+def private interp_fuses : bool {
+    return true if (on_aarch64())
+    let far = 99557.055
+    let xs <- [float4(far)]
+    let got <- apply_sincos_interp(xs, 4, false)
+    return abs(got[0].x - float(sin(double(far)))) < 1.0e-4
+}
+
+def private rails_fuse_alike : bool => jit_fuses() == interp_fuses()
+
+//! true where the JIT's exp has the interpreter's shape
+def private jit_exp_mirrors_interp : bool =>
+    on_x64() && !make_jit_target().features.x64_avx512bw
+
+def private op_comparable_to_interp(which : int) : bool {
+    if (which == OP_LOG2 || which == OP_LOG || which == OP_POW) return true
+    if (which == OP_SINH || which == OP_COSH) return on_aarch64()
+    if (which == OP_EXP) return on_aarch64() || on_x64()
+    return which == OP_TAN ? rails_fuse_alike() : (on_aarch64() || on_x64())
+}
+
+def private bound(tightValue : float) : float {
+    let fused = jit_enabled() ? jit_fuses() : on_aarch64()
+    return fused ? tightValue : COARSE_REL
+}
 
 def private ramp(lo, hi : float; n : int) : array<float4> {
     var xs : array<float4>
@@ -99,6 +141,7 @@ def private reference_op(x, y : float; which : int) : float {
     if (which == OP_POW) return float(pow(double(x), double(y)))
     if (which == OP_TANH) return float(tanh(double(x)))
     if (which == OP_SINH) return float(sinh(double(x)))
+    if (which == OP_EXP) return float(exp(double(x)))
     return float(cosh(double(x)))
 }
 
@@ -120,6 +163,8 @@ def private apply_op(xs, ys : array<float4>; which : int) : array<float4> {
             r |> push(tanh(v))
         } elif (which == OP_SINH) {
             r |> push(sinh(v))
+        } elif (which == OP_EXP) {
+            r |> push(exp(v))
         } else {
             r |> push(cosh(v))
         }
@@ -148,6 +193,8 @@ def private apply_op_interp(xs, ys : array<float4>; which : int) : array<float4>
             r |> push(tanh(v))
         } elif (which == OP_SINH) {
             r |> push(sinh(v))
+        } elif (which == OP_EXP) {
+            r |> push(exp(v))
         } else {
             r |> push(cosh(v))
         }
@@ -191,7 +238,8 @@ def private report_rel(t : T?; what : string; r : ErrReport; relBound : float; w
 def private rail_applicable(onRail : bool) : bool => jit_enabled() && onRail
 
 def private not_applicable_reason(what : string) : string =>
-    jit_enabled() ? "{what} is not on the polynomial rail on {get_architecture_name()}" : "{what}: not jitted"
+    (jit_enabled() ? "{what}: the rails' arithmetic differs on {get_architecture_name()}"
+        : "{what}: not jitted")
 
 def private report_div(t : T?; what : string; r : ErrReport; relBound : float; wantLanes : int) {
     t |> equal(r.lanes, wantLanes, "{what}: lanes compared")
@@ -199,7 +247,7 @@ def private report_div(t : T?; what : string; r : ErrReport; relBound : float; w
 }
 
 def private report_divergence(t : T?; what : string; xs, ys : array<float4>; which : int; relBound : float; relFloor : float = 1.0e-20) {
-    if (!rail_applicable(op_on_poly_rail(which))) {
+    if (!rail_applicable(op_comparable_to_interp(which))) {
         t |> success(true, "rail consistency not applicable: {not_applicable_reason(what)}")
         return
     }
@@ -312,8 +360,13 @@ def private sincos_divergence(xs : array<float4>; dim : int; wantCos : bool) : E
 }
 
 def private report_sincos_divergence(t : T?; what : string; xs : array<float4>; dim : int; wantCos : bool) {
-    if (!rail_applicable(on_aarch64())) {
+    if (!jit_enabled()) {
         t |> success(true, "rail consistency not applicable: {not_applicable_reason(what)}")
+        return
+    }
+    if (!rails_fuse_alike()) {
+        report_abs(t, "{what} against the unlike-fusing interpreter",
+            sincos_divergence(xs, dim, wantCos), UNFUSED_SINCOS_ABS, length(xs) * dim)
         return
     }
     report_div(t, what, sincos_divergence(xs, dim, wantCos), 0.0, length(xs) * dim)
@@ -421,6 +474,34 @@ def test_vector_exp2(t : T?) {
     let ys <- ramp(-4.0, 4.0, 50000)
     report_rel(t, "exp2(float4)", op_error(xs, ys, OP_EXP2), bound(4.0e-7), length(xs) * 4)
     report_divergence(t, "exp2(float4)", xs, ys, OP_EXP2, 0.0)
+}
+
+[test(description = "float4 exp stays within 8e-6 of libm; off AVX-512 x64 has the interpreter's bits")]
+def test_vector_exp(t : T?) {
+    g_offset = 0.0
+    let xs <- ramp(-86.0, 88.0, 50000)
+    let ys <- ramp(-4.0, 4.0, 50000)
+    report_rel(t, "exp(float4)", op_error(xs, ys, OP_EXP), 8.0e-6, length(xs) * 4)
+    let shapeBound = jit_exp_mirrors_interp() ? 0.0 : 8.0e-6
+    report_divergence(t, "exp(float4)", xs, ys, OP_EXP, shapeBound)
+}
+
+[test(description = "where exp has the interpreter's shape a NaN lane answers inf on both rails")]
+def test_vector_exp_nan_lane(t : T?) {
+    if (!rail_applicable(jit_exp_mirrors_interp())) {
+        t |> success(true, "not applicable: {not_applicable_reason("exp(NaN)")}")
+        return
+    }
+    g_offset = 0.0
+    let xs <- nan_samples()
+    let ys <- ramp(-4.0, 4.0, length(xs))
+    let got <- apply_op(xs, ys, OP_EXP)
+    let ref <- apply_op_interp(xs, ys, OP_EXP)
+    for (g, e, x in got, ref, xs) {
+        for (l in range(4)) {
+            t |> success(g[l] == e[l], "exp({x[l]}): JIT {g[l]}, interpreter {e[l]}")
+        }
+    }
 }
 
 // v_log2_est_p5's error is a function of the MANTISSA, so it repeats identically in every binade
@@ -533,7 +614,7 @@ def test_vector_log_narrow_widths(t : T?) {
     for (which, name in [OP_LOG2, OP_LOG, OP_POW], ["log2", "log", "pow"]) {
         for (dim in [2, 3]) {
             let what = "{name}(float{dim})"
-            if (!rail_applicable(op_on_poly_rail(which))) {
+            if (!rail_applicable(op_comparable_to_interp(which))) {
                 t |> success(true, "rail consistency not applicable: {not_applicable_reason(what)}")
                 continue
             }
@@ -621,8 +702,8 @@ def private nan_lane_cell_sincos(t : T?; what : string; xs : array<float4>; want
 // tanh's [-9,9] clamp answered 1.0 for NaN that way - and the replacement is invisible to every
 // accuracy bound above, because a bound only looks at lanes that produced a number. NaN in, NaN out
 // is asserted on both rails instead, and it holds on every target: off the polynomial rail the JIT
-// takes libm, which propagates NaN too. exp is the one member of the rail that cannot be here -
-// the interpreter answers inf for exp(NaN) while the JIT answers NaN (ARCHITECTURE_VECTOR_MATH.md sec.8.1).
+// takes libm, which propagates NaN too. exp is not here: its NaN
+// answer is its shape's, and test_vector_exp_nan_lane holds it.
 [test(description = "a NaN lane stays NaN through tanh, sinh, cosh, tan, sin and cos on both the JIT and the interpreter")]
 def test_vector_nan_lanes(t : T?) {
     g_offset = 0.0
@@ -666,6 +747,60 @@ def test_vector_sinh_cosh(t : T?) {
     report_rel(t, "sinh(float4) near zero", op_error(near, ys, OP_SINH), bound(8.0e-7), length(near) * 4)
 }
 
+def private unary_of(a : auto(V); which : int) : V {
+    if (which == OP_TAN) return tan(a)
+    if (which == OP_EXP2) return exp2(a)
+    if (which == OP_EXP) return exp(a)
+    return which == OP_TANH ? tanh(a) : sinh(a)
+}
+
+def private apply_unary_narrow(xs : array<float4>; which, dim : int) : array<float4> {
+    var r : array<float4>
+    r |> reserve(length(xs))
+    for (v in xs) {
+        if (dim == 2) {
+            let b = unary_of(float2(v.x, v.y), which)
+            r |> push(float4(b.x, b.y, 0.0, 0.0))
+        } else {
+            let b = unary_of(float3(v.x, v.y, v.z), which)
+            r |> push(float4(b.x, b.y, b.z, 0.0))
+        }
+    }
+    return <- r
+}
+
+def private unary_error_narrow(xs : array<float4>; which, dim : int) : ErrReport {
+    var r : ErrReport
+    let got <- apply_unary_narrow(xs, which, dim)
+    for (g, x in got, xs) {
+        for (l in range(dim)) {
+            track(r, g[l], reference_op(x[l], 0.0, which), x[l], 1.0e-20)
+        }
+    }
+    return r
+}
+
+[test(description = "float2 and float3 tan, exp, exp2, tanh and sinh hold the float4 libm bounds")]
+def test_vector_unary_narrow_widths(t : T?) {
+    g_offset = 0.0
+    let clean <- tan_away_from_poles()
+    let exps <- ramp(-125.0, 128.0, 50000)
+    let hyps <- ramp(-20.0, 20.0, 50000)
+    let wide <- ramp(-86.0, 88.0, 50000)
+    for (dim in [2, 3]) {
+        report_rel(t, "exp(float{dim})", unary_error_narrow(wide, OP_EXP, dim),
+            8.0e-6, length(wide) * dim)
+        report_rel(t, "tan(float{dim})", unary_error_narrow(clean, OP_TAN, dim),
+            bound(5.0e-7), length(clean) * dim)
+        report_rel(t, "exp2(float{dim})", unary_error_narrow(exps, OP_EXP2, dim),
+            bound(4.0e-7), length(exps) * dim)
+        report_rel(t, "tanh(float{dim})", unary_error_narrow(hyps, OP_TANH, dim),
+            bound(8.0e-7), length(hyps) * dim)
+        report_rel(t, "sinh(float{dim})", unary_error_narrow(hyps, OP_SINH, dim),
+            bound(8.0e-7), length(hyps) * dim)
+    }
+}
+
 // The clamp inside the tanh emitter must saturate rather than let exp(2x) overflow to inf and turn
 // the quotient into NaN. The two rails saturate to different floats and that is expected: libm
 // returns the largest float below 1 at x = 9, the emitter's (t-1)/(t+1) rounds to exactly 1. Being
@@ -677,7 +812,7 @@ def test_vector_tanh_saturates(t : T?) {
         float4(88.0, -88.0, 1.0e30, -1.0e30)]           // past where exp(2x) would overflow
     let ys <- ramp(-4.0, 4.0, length(xs))
     let got <- apply_op(xs, ys, OP_TANH)
-    let emitted = rail_applicable(on_aarch64())
+    let emitted = rail_applicable(on_aarch64() || on_x64())
     for (g, x in got, xs) {
         for (l in range(4)) {
             let a = abs(g[l])

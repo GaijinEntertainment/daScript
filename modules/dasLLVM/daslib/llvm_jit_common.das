@@ -402,8 +402,7 @@ var public g_fn_types : table<string; LLVMTypeRef>
 var public g_handled_field_offset_globals : table<string; tuple<modName : string; typeName : string; fieldName : string>>
 
 //! the arch the JIT emits for (host's or cross triple's): picks the
-//! platform-intrinsic table, else the daslang fallback body; on wasm
-//! the visitor skips user hints, which host-LLVM wasm mishandles
+//! platform-intrinsic table, else the daslang fallback body
 enum public JitTargetArch {
     other
     x64

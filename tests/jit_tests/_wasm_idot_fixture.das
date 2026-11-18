@@ -1,7 +1,11 @@
-// The fixture wasm_idot_lowering.das compiles for the wasm64 cross target and for the host, dumping
-// the IR: one signed idot4 over byte16 operands and one UNSIGNED-by-signed idot4, neither foldable
-// by the emitter, since the bytes arrive through the command line's length. The unsigned one is the
-// arm that widens with ZExt - without it that form falls to the 16-lane generic chain.
+// test_wasm_idot_lowering compiles this for the wasm64 cross target
+// and for the host, dumping the IR: one signed idot4 over byte16
+// operands and one UNSIGNED-by-signed idot4, neither foldable by the
+// emitter, since the bytes arrive through the command line's length.
+// The unsigned one is the arm that widens with ZExt - without it
+// that form falls to the 16-lane generic chain.
+// One scalar idot rides along: it sums every lane, so its wasm form
+// carries no quad-lane fold.
 options gen2
 
 def taint(n : int) : byte16 {
@@ -36,4 +40,5 @@ def main() {
     let wu = taint_u(length(args))
     let du = idot4(wu, x)
     print("IDOT4U=[{du.x} {du.y} {du.z} {du.w}]\n")
+    print("IDOT=[{idot(w, x)}]\n")
 }
