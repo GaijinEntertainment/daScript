@@ -269,12 +269,22 @@ def release_embed_file(src, dst : string) {
     _release_spec.embed_paths |> push("{src}@{dst}")
 }
 
-//! Keep a host module (folder name, case-insensitive) out of the `release wasm` cross-compile:
-//! it runs on the host, where a module with no wasm build still satisfies a guarded `require ?name`.
-//! dashv is disabled by the rail; an app reaching vulkan, das_metal or das_accelerate names those.
+//! Keep a host module (folder name, case-insensitive) out of the
+//! `release wasm` cross-compile: its guarded `require ?name` resolves
+//! as absent there. The rail disables dashv itself.
 def release_wasm_disable_module(name : string) {
     _release_spec.wasm_disabled_modules |> push(name)
 }
+
+//! Keep `WASM_HOST_GPU_MODULES` out of the `release wasm` build
+def release_wasm_disable_host_gpu_modules() {
+    for (name in WASM_HOST_GPU_MODULES) {
+        release_wasm_disable_module(name)
+    }
+}
+
+//! the host-only GPU and accelerator modules, none with a wasm build
+let WASM_HOST_GPU_MODULES = fixed_array("dasvulkan", "dascuda", "dasmetal", "dasaccelerate")
 
 //! Choose the emcc `--shell-file` HTML wrapper for `release wasm`. Empty (the
 //! default) ships daslang's minimal canvas-only shell. A site can point this at

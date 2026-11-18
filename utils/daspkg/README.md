@@ -143,6 +143,11 @@ use relative segments made of letters, digits, `_`, `-`, and `.`. The source can
 use `..` to reach a neighboring tree; destination paths reject `..` segments.
 A missing source or failed copy fails the release.
 
+`release_wasm_disable_module(name)` keeps a host module out of the `release wasm` cross-compile,
+so its guarded `require ?name` resolves as absent, as the wasm build sees it.
+`release_wasm_disable_host_gpu_modules()` does that for dasVulkan, dasCUDA, dasMetal and
+dasAccelerate in one call: none has a wasm build.
+
 Use `release_include_if_missing` for editable deployment files. They are copied only when absent,
 excluded from `.daspkg_release.manifest`, and preserved even when upgrading from an older manifest
 that previously treated the same path as release-owned.

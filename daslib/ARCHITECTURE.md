@@ -293,7 +293,7 @@ Companion documents carry separate concerns.
 `utils/daspkg/commands.das` consumes that field: the native release copies Windows
 PDBs, while `cmd_release_wasm` passes it to `release_one_wasm_app` to retain DWARF,
 logical frames and the emcc symbol map. The manifest contract and these release
-implementations describe the same option.
+implementations describe the same option. `daspkg.das:WASM_HOST_GPU_MODULES`, the list `release_wasm_disable_host_gpu_modules` disables, names four folders under `modules/` (`dasVulkan`, `dasCUDA`, `dasMetal`, `dasAccelerate`): `--disable-module` matches a module by its folder name, so a renamed folder leaves its entry disabling nothing (`test_wasm_host_gpu_modules_exist`, `utils/daspkg/test_daspkg_manifest.das`).
 
 ## 41. ast_boost
 

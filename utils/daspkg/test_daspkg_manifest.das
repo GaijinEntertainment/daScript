@@ -67,6 +67,17 @@ let PKG_RICH_FIXTURE = "utils/daspkg/fixtures/test_rich.das_package"
 
 let PKG_RELEASE_FIXTURE = "utils/daspkg/fixtures/test_release.das_package"
 
+[test(description = "every module the wasm GPU disable list names is a folder under modules/")]
+def test_wasm_host_gpu_modules_exist(t : T?) {
+    var inscope folders : array<string>
+    dir(path_join(get_das_root(), "modules")) $(name) {
+        folders |> push(to_lower(name))
+    }
+    for (name in WASM_HOST_GPU_MODULES) {
+        t |> success(has_value(folders, name), "modules/ holds a folder named {name}")
+    }
+}
+
 [test(description = "run_das_package_meta reads the package metadata from a manifest")]
 def test_run_das_package_meta(t : T?) {
     t |> run("reads package metadata") @(t : T?) {
