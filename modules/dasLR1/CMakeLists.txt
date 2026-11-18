@@ -13,11 +13,13 @@ IF(NOT DAS_LR1_INCLUDED)
         DESTINATION ${DAS_INSTALL_MODULESDIR}/dasLR1
     )
 
-    das_lane_dastest_target(run_tests_daslr1 COMMENT "Testing dasLR1"
-        FILES
-            modules/dasLR1/tests/test_lr1.das
-            modules/dasLR1/tests/test_gbnf.das
-            modules/dasLR1/tests/test_json_schema.das
-    )
+    if(NOT DAS_TOOLS_DISABLED)
+        das_lane_dastest_target(run_tests_daslr1 COMMENT "Testing dasLR1"
+            FILES
+                modules/dasLR1/tests/test_lr1.das
+                modules/dasLR1/tests/test_gbnf.das
+                modules/dasLR1/tests/test_json_schema.das
+        )
+    endif()
 
 ENDIF()

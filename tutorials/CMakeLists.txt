@@ -130,6 +130,10 @@ if (NOT ${DAS_TUTORIAL_DISABLED})
     include(integration/cpp/CMakeLists.txt)
 endif()
 
+if(DAS_TOOLS_DISABLED)
+    return()
+endif()
+
 SET(ALL_TUTORIAL_SOURCES
     ${LANGUAGE_TUTORIAL_SOURCES}
     ${MACRO_TUTORIAL_SOURCES}
