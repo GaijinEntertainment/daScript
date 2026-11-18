@@ -1,7 +1,7 @@
 # Repository Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-doc: `CLAUDE.md`.
+doc: `ARCHITECTURE.md`.
 
 **Subfolders of this repository carry their own `REVIEW.md` checklists - a diff applies the
 `REVIEW.md` of every folder between this one and each file it changes.**
