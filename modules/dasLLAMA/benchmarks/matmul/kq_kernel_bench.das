@@ -310,7 +310,15 @@ def median_us(var us : array<int64>) : int64 {
     return r
 }
 
-def emit_row(var rows : int&; name, tier : string; var st : RowStat; n, d, ntok, nsb : int64; plane_bytes : int64) {
+//! the kernel walk a row times
+enum BenchTier {
+    gemv
+    tile
+    rm_gemv
+    rm_tile
+}
+
+def emit_row(var rows : int&; name : string; tier : BenchTier; var st : RowStat; n, d, ntok, nsb : int64; plane_bytes : int64) {
     var best = 999999999l
     for (u in st.us) {
         best = min(best, u)
@@ -412,7 +420,7 @@ def bench_gemv_kq(var rows : int&; cfg : BenchArgs; name : string; f : KqFmt; va
         }
     }
     for (st in stats) {
-        emit_row(rows, name, "gemv", st, n, d, 1l, nsb, plane_bytes)
+        emit_row(rows, name, BenchTier.gemv, st, n, d, 1l, nsb, plane_bytes)
     }
     delete stats
     delete fns
@@ -458,7 +466,7 @@ def bench_tile_kq(var rows : int&; cfg : BenchArgs; name : string; f : KqFmt; va
             addr<uint8 const?>(p.arena[p.ks]), sh, p)
     }
     for (st in stats) {
-        emit_row(rows, name, "tile", st, int64(cfg.n), int64(cfg.d), int64(cfg.ntok), nsb, plane_bytes)
+        emit_row(rows, name, BenchTier.tile, st, int64(cfg.n), int64(cfg.d), int64(cfg.ntok), nsb, plane_bytes)
     }
     delete stats
     delete fns
@@ -623,7 +631,7 @@ def bench_q8_flavor(var rows : int&; cfg : BenchArgs; name : string; var p : Pla
                 }
             }
             for (s in stats) {
-                emit_row(rows, name, "gemv", s, n, d, 1l, nsb, plane_bytes)
+                emit_row(rows, name, BenchTier.gemv, s, n, d, 1l, nsb, plane_bytes)
             }
             delete stats
             delete fns
@@ -635,7 +643,7 @@ def bench_q8_flavor(var rows : int&; cfg : BenchArgs; name : string; var p : Pla
             select_tile_rows(cfg, name, d, tvs, mrs, steps, stats, fns, mrOf, stepOf)
             time_tile_rows(stats, cfg, fns, mrOf, stepOf, kqp, ksp, sh, p, type<WT>, type<ST>)
             for (s in stats) {
-                emit_row(rows, name, "tile", s, n, d, ntok, nsb, plane_bytes)
+                emit_row(rows, name, BenchTier.tile, s, n, d, ntok, nsb, plane_bytes)
             }
             delete stats
             delete fns
@@ -772,7 +780,7 @@ def bench_rm_rows(var rows : int&; cfg : BenchArgs; name : string; f : KqFmt; va
         time_rm_gemv(stats, cfg, fns, p, n, d)
         delete fns
         for (st in stats) {
-            emit_row(rows, name, "rm_gemv", st, n, d, 1l, nsb, plane_bytes)
+            emit_row(rows, name, BenchTier.rm_gemv, st, n, d, 1l, nsb, plane_bytes)
         }
         delete stats
     }
@@ -783,7 +791,7 @@ def bench_rm_rows(var rows : int&; cfg : BenchArgs; name : string; f : KqFmt; va
         time_rm_tile(stats, cfg, fns, p, n, d, nsc)
         delete fns
         for (st in stats) {
-            emit_row(rows, name, "rm_tile", st, n, d, (int64(cfg.ntok) / TILE_TOKENS) * TILE_TOKENS, nsb, plane_bytes)
+            emit_row(rows, name, BenchTier.rm_tile, st, n, d, (int64(cfg.ntok) / TILE_TOKENS) * TILE_TOKENS, nsb, plane_bytes)
         }
         delete stats
     }
