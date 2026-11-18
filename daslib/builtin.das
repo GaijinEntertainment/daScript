@@ -979,7 +979,19 @@ def get_value(var Tab : table<auto(keyT); auto(valT)> ==const; at : keyT | #) : 
         concept_assert(false, "can't get value, which is void")
         return type<valT>
     } static_elif (typeinfo can_copy(type<valT>)) {
-        return unsafe(Tab[at])
+        static_if (typeinfo is_temp(at) && typeinfo is_string(at)) {
+            unsafe {
+                var slot = Tab?[at]
+                if (slot == null) {
+                    slot = reinterpret<valT?>(__builtin_table_insert_temp_string(Tab, at,
+                        typeinfo sizeof(type<valT>)))
+                    *slot = default<valT>
+                }
+                return *slot
+            }
+        } else {
+            return unsafe(Tab[at])
+        }
     } else {
         concept_assert(false, "can't get value, which can't be copied")
         return type<valT>
@@ -988,14 +1000,15 @@ def get_value(var Tab : table<auto(keyT); auto(valT)> ==const; at : keyT | #) : 
 
 def clone_value(var Tab : table<auto(keyT); smart_ptr<auto(valT)>>; at : keyT | #) : smart_ptr<valT> {
     unsafe {
-        var t := Tab[at]
-        return <- t
+        static_if (typeinfo is_temp(at) && typeinfo is_string(at)) {
+            return clone_to_move(*reinterpret<smart_ptr<valT>?>(
+                __builtin_table_insert_temp_string(Tab, at,
+                    typeinfo sizeof(type<smart_ptr<valT>>))))
+        } else {
+            var t := Tab[at]
+            return <- t
+        }
     }
-}
-
-def erase(var Tab : table<auto(keyT); auto(valT)>; at : string#) : bool {
-    let at_nt := at
-    return erase(Tab, at_nt)
 }
 
 def erase(var Tab : table<auto(keyT); auto(valT)>; at : keyT | #) : bool {
@@ -1011,13 +1024,22 @@ def erase(var Tab : table<auto(keyT); auto(valT)>; at : keyT | #) : bool {
 }
 
 def insert(var Tab : table<auto(keyT)>; at : keyT | #) {
-    __builtin_table_set_insert(Tab, at)
+    static_if (typeinfo is_temp(at) && typeinfo is_string(at)) {
+        __builtin_table_set_insert_temp_string(Tab, at)
+    } else {
+        __builtin_table_set_insert(Tab, at)
+    }
 }
 
 [unused_argument(Tab, at)]
 def insert_clone(var Tab : table<auto(keyT); auto(valT)>; at : keyT | #; var val : valT ==const | #) {
     static_if (typeinfo can_clone(val)) {
-        unsafe(Tab[at]) := val
+        static_if (typeinfo is_temp(at) && typeinfo is_string(at)) {
+            *unsafe(reinterpret<valT?>(__builtin_table_insert_temp_string(Tab, at,
+                typeinfo sizeof(type<valT>)))) := val
+        } else {
+            unsafe(Tab[at]) := val
+        }
     } else {
         concept_assert(false, "can't insert value, which can't be cloned")
     }
@@ -1027,7 +1049,12 @@ def insert_clone(var Tab : table<auto(keyT); auto(valT)>; at : keyT | #; var val
 def insert_clone(var Tab : table<auto(keyT); auto(valT)>; at : keyT | #; val : valT ==const | #) {
     static_if (typeinfo can_clone(val)) {
         static_if (typeinfo can_clone_from_const(val)) {
-            unsafe(Tab[at]) := val
+            static_if (typeinfo is_temp(at) && typeinfo is_string(at)) {
+                *unsafe(reinterpret<valT?>(__builtin_table_insert_temp_string(Tab, at,
+                    typeinfo sizeof(type<valT>)))) := val
+            } else {
+                unsafe(Tab[at]) := val
+            }
         } else {
             concept_assert(false, "can't insert value, which can't be cloned from const")
         }
@@ -1039,7 +1066,12 @@ def insert_clone(var Tab : table<auto(keyT); auto(valT)>; at : keyT | #; val : v
 [unused_argument(Tab, at, val)]
 def insert(var Tab : table<auto(keyT); auto(valT)>; at : keyT | #; var val : valT ==const | #) {
     static_if (typeinfo can_copy(type<valT>)) {
-        unsafe(Tab[at]) = val
+        static_if (typeinfo is_temp(at) && typeinfo is_string(at)) {
+            *unsafe(reinterpret<valT?>(__builtin_table_insert_temp_string(Tab, at,
+                typeinfo sizeof(type<valT>)))) = val
+        } else {
+            unsafe(Tab[at]) = val
+        }
     } else {
         concept_assert(false, "can't insert value, which can't be copied")
     }
@@ -1049,7 +1081,12 @@ def insert(var Tab : table<auto(keyT); auto(valT)>; at : keyT | #; var val : val
 def insert(var Tab : table<auto(keyT); auto(valT)>; at : keyT | #; val : valT ==const | #) {
     static_if (typeinfo can_copy(type<valT>)) {
         static_if (typeinfo can_clone_from_const(val)) {
-            unsafe(Tab[at]) = val
+            static_if (typeinfo is_temp(at) && typeinfo is_string(at)) {
+                *unsafe(reinterpret<valT?>(__builtin_table_insert_temp_string(Tab, at,
+                    typeinfo sizeof(type<valT>)))) = val
+            } else {
+                unsafe(Tab[at]) = val
+            }
         } else {
             concept_assert(false, "can't insert value, which can't be cloned from const")
         }
@@ -1061,7 +1098,12 @@ def insert(var Tab : table<auto(keyT); auto(valT)>; at : keyT | #; val : valT ==
 [unused_argument(Tab, at, val)]
 def emplace(var Tab : table<auto(keyT); auto(valT)>; at : keyT | #; var val : valT -#&) {
     static_if (typeinfo can_move(val)) {
-        unsafe(Tab[at]) <- val
+        static_if (typeinfo is_temp(at) && typeinfo is_string(at)) {
+            *unsafe(reinterpret<valT?>(__builtin_table_insert_temp_string(Tab, at,
+                typeinfo sizeof(type<valT>)))) <- val
+        } else {
+            unsafe(Tab[at]) <- val
+        }
     } else {
         concept_assert(false, "can't emplace value, which can't be moved")
     }
@@ -1070,7 +1112,14 @@ def emplace(var Tab : table<auto(keyT); auto(valT)>; at : keyT | #; var val : va
 [unused_argument(Tab, at, val)]
 def emplace(var Tab : table<auto(keyT); smart_ptr<auto(valT)>>; at : keyT | #; var val : smart_ptr<valT>&) {
     static_if (typeinfo can_move(val)) {
-        Tab[at] <- val
+        static_if (typeinfo is_temp(at) && typeinfo is_string(at)) {
+            unsafe {
+                *reinterpret<smart_ptr<valT>?>(__builtin_table_insert_temp_string(Tab, at,
+                    typeinfo sizeof(type<smart_ptr<valT>>))) <- val
+            }
+        } else {
+            Tab[at] <- val
+        }
     } else {
         concept_assert(false, "can't emplace value, which can't be moved")
     }
@@ -1147,7 +1196,12 @@ def get_with_default(var Tab : table<auto(keyT); auto(valT)> ==const; at : keyT 
     unsafe {
         var pval = Tab?[at]
         if (pval == null) {
-            pval = addr(Tab[at])
+            static_if (typeinfo is_temp(at) && typeinfo is_string(at)) {
+                pval = reinterpret<valT?>(__builtin_table_insert_temp_string(Tab, at,
+                    typeinfo sizeof(type<valT>)))
+            } else {
+                pval = addr(Tab[at])
+            }
             static_if (typeinfo is_workhorse(type<valT -const -&>)) {
                 *pval = default<valT -const -&>
             } else {
@@ -1166,7 +1220,12 @@ def modify(var Tab : table<auto(keyT); auto(valT)> ==const; at : keyT | #; blk :
     unsafe {
         var pval = Tab?[at]
         if (pval == null) {
-            pval = addr(Tab[at])
+            static_if (typeinfo is_temp(at) && typeinfo is_string(at)) {
+                pval = reinterpret<valT?>(__builtin_table_insert_temp_string(Tab, at,
+                    typeinfo sizeof(type<valT>)))
+            } else {
+                pval = addr(Tab[at])
+            }
             static_if (typeinfo is_workhorse(type<valT -const -&>)) {
                 *pval = default<valT -const -&>
             } else {
@@ -1177,11 +1236,6 @@ def modify(var Tab : table<auto(keyT); auto(valT)> ==const; at : keyT | #; blk :
         *pval = invoke(blk, *pval)
         __builtin_table_unlock(Tab)
     }
-}
-
-def key_exists(Tab : table<auto(keyT); auto(valT)> | #; at : string#) : bool {
-    let at_nt := at
-    return __builtin_table_key_exists(Tab, at_nt)
 }
 
 def key_exists(Tab : table<auto(keyT); auto(valT)> | #; at : keyT | #) : bool {

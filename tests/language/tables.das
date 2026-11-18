@@ -1056,3 +1056,201 @@ def test_loop_over_a_table_the_header_does_not_own(t : T?) {
         t |> equal(total, 14)
     }
 }
+
+def ta_with_temp_key(text : string; blk : block<(key : string#) : void>) {
+    //! Runs `blk` on a temporary string, then zeroes its bytes.
+    var inscope bytes <- [for (c in text); uint8(c)]
+    bytes |> push(0u8)
+    unsafe {
+        invoke(blk, reinterpret<string#>(addr(bytes[0])))
+    }
+    for (b in bytes) {
+        b = 0u8
+    }
+}
+
+def ta_length_at(tab : table<string; array<int>>; key : string) : int {
+    var found = -1
+    tab |> get(key) $(values) {
+        found = length(values)
+    }
+    return found
+}
+
+[test(description = "a table stores its own copy of a temporary string key through every function that can add one, so each key is whole after the bytes it was read from are zeroed")]
+def test_temp_string_key_is_copied_into_the_table(t : T?) {
+    var ints : table<string; int>
+    ta_with_temp_key("insert") $(key) {
+        ints |> insert(key, 1)
+    }
+    ta_with_temp_key("insert_var") $(key) {
+        var value = 1
+        value++
+        ints |> insert(key, value)
+    }
+    ta_with_temp_key("insert_default_value") $(key) {
+        ints |> insert_default(key, 3)
+    }
+    ta_with_temp_key("insert_default") $(key) {
+        ints |> insert_default(key)
+    }
+    ta_with_temp_key("get_with_default") $(key) {
+        ints |> get_with_default(key) $(var slot) {
+            slot = 5
+        }
+    }
+    ta_with_temp_key("modify") $(key) {
+        ints |> modify(key) $(slot) => slot + 6
+    }
+    ta_with_temp_key("get_value") $(key) {
+        t |> equal(0, ints |> get_value(key))
+    }
+    t |> equal(1, ints?["insert"] ?? -1)
+    t |> equal(2, ints?["insert_var"] ?? -1)
+    t |> equal(3, ints?["insert_default_value"] ?? -1)
+    t |> equal(0, ints?["insert_default"] ?? -1)
+    t |> equal(5, ints?["get_with_default"] ?? -1)
+    t |> equal(6, ints?["modify"] ?? -1)
+    t |> equal(0, ints?["get_value"] ?? -1)
+    t |> equal(7, length(ints))
+
+    var arrays : table<string; array<int>>
+    ta_with_temp_key("insert_clone") $(key) {
+        var source <- [1, 2]
+        arrays |> insert_clone(key, source)
+    }
+    ta_with_temp_key("insert_clone_const") $(key) {
+        let source <- [3, 4, 5]
+        arrays |> insert_clone(key, source)
+    }
+    ta_with_temp_key("emplace") $(key) {
+        var source <- [6]
+        arrays |> emplace(key, source)
+    }
+    ta_with_temp_key("emplace_default") $(key) {
+        arrays |> emplace_default(key)
+    }
+    t |> equal(2, arrays |> ta_length_at("insert_clone"))
+    t |> equal(3, arrays |> ta_length_at("insert_clone_const"))
+    t |> equal(1, arrays |> ta_length_at("emplace"))
+    t |> equal(0, arrays |> ta_length_at("emplace_default"))
+    t |> equal(4, length(arrays))
+
+    var names : table<string>
+    ta_with_temp_key("set") $(key) {
+        names |> insert(key)
+    }
+    t |> success(names |> key_exists("set"))
+    t |> equal(1, length(names))
+}
+
+[test(description = "a table copies a temporary string key when its value is a smart pointer, and when insert_clone clones a temporary string as the value beside it")]
+def test_temp_string_key_beside_a_smart_pointer_or_temp_value(t : T?) {
+    var inscope objects : table<string; smart_ptr<TestObjectSmart>>
+    ta_with_temp_key("emplace_smart") $(key) {
+        var inscope object <- new TestObjectSmart
+        objects |> emplace(key, object)
+    }
+    ta_with_temp_key("clone_value") $(key) {
+        var inscope absent <- objects |> clone_value(key)
+        t |> success(absent == null)
+    }
+    t |> success(objects |> key_exists("emplace_smart"))
+    t |> success(objects |> key_exists("clone_value"))
+    t |> equal(2, length(objects))
+
+    var texts : table<string; string>
+    ta_with_temp_key("key_and_value") $(key) {
+        texts |> insert_clone(key, key)
+    }
+    t |> equal("key_and_value", texts?["key_and_value"] ?? "")
+}
+
+[test(description = "a temporary string key the table already holds is not copied again, a read by a temporary key copies nothing, and a key the table did not hold is copied once")]
+def test_temp_string_key_is_copied_once(t : T?) {
+    var ints : table<string; int>
+    var names : table<string>
+    ints |> insert("held", 1)
+    names |> insert("held")
+    var found, missed, erased = false
+    var looked_up = 0
+    let before = string_heap_bytes_allocated()
+    ta_with_temp_key("held") $(key) {
+        ints |> insert(key, 2)
+        ints |> insert_default(key, 3)
+        ints |> modify(key) $(slot) => slot + 1
+        names |> insert(key)
+        found = key_exists(ints, key)
+        looked_up = ints?[key] ?? -1
+    }
+    ta_with_temp_key("absent") $(key) {
+        missed = !key_exists(ints, key) && !key_exists(names, key)
+        erased = erase(ints, key)
+    }
+    let after_held = string_heap_bytes_allocated()
+    ta_with_temp_key("fresh") $(key) {
+        ints |> insert(key, 9)
+    }
+    let after_fresh = string_heap_bytes_allocated()
+    ta_with_temp_key("fresh") $(key) {
+        ints |> insert(key, 10)
+    }
+    let after_again = string_heap_bytes_allocated()
+    t |> equal(before, after_held, "a held key and a read allocate no string")
+    t |> success(after_fresh > after_held, "a key the table did not hold is copied")
+    t |> equal(after_fresh, after_again, "the key just added is held, so it is not copied twice")
+    t |> success(found && missed && !erased)
+    t |> equal(3, looked_up)
+    t |> equal(10, ints?["fresh"] ?? -1)
+    ta_with_temp_key("held") $(key) {
+        erased = erase(ints, key)
+    }
+    t |> success(erased && !key_exists(ints, "held"))
+}
+
+struct TaSeeded {
+    value : int = 7
+}
+
+[test(description = "get_value on a missing key runs the value type's field initializers for a temporary string key as it does for a permanent one")]
+def test_temp_string_key_get_value_initializes_a_fresh_slot(t : T?) {
+    var seeded : table<string; TaSeeded>
+    let permanent = seeded |> get_value("permanent")
+    var temporary, stored = -1
+    ta_with_temp_key("temporary") $(key) {
+        temporary = (seeded |> get_value(key)).value
+    }
+    seeded |> get("temporary") $(entry) {
+        stored = entry.value
+    }
+    t |> equal(7, permanent.value)
+    t |> equal(7, temporary)
+    t |> equal(7, stored)
+}
+
+[test(description = "a temporary string key cannot be added to a table or a set locked by iteration: the insert panics and nothing is added")]
+def test_temp_string_key_into_a_locked_table(t : T?) {
+    var ints : table<string; int>
+    var names : table<string>
+    ints |> insert("held", 1)
+    names |> insert("held")
+    var map_refused, set_refused = false
+    ta_with_temp_key("late") $(key) {
+        try {
+            for (_value in values(ints)) {
+                ints |> insert(key, 2)
+            }
+        } recover {
+            map_refused = true
+        }
+        try {
+            for (_name in keys(names)) {
+                names |> insert(key)
+            }
+        } recover {
+            set_refused = true
+        }
+    }
+    t |> success(map_refused && set_refused)
+    t |> success(!key_exists(ints, "late") && !key_exists(names, "late"))
+}

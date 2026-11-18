@@ -282,6 +282,20 @@ def test_walk_names_cloned_during_the_walk_outlive_it(t : T?) {
     t |> success(globals |> has_value("PI"), "the math module declares PI")
 }
 
+[test(description = "a walk's temporary name keys a table and a set without a clone_string: the table copies it, and the names are whole after the walk returns")]
+def test_walk_names_keyed_into_tables_outlive_the_walk(t : T?) {
+    var cpp_names : table<string; string>
+    var seen : table<string>
+    module_for_each_function(get_module("$")) $(info) {
+        cpp_names |> insert(info.name, clone_string(info.cppName))
+        seen |> insert(info.name)
+    }
+    t |> success(cpp_names |> key_exists("clone_string"), "the $ module declares clone_string")
+    t |> success(seen |> key_exists("clone_string"))
+    t |> success(length(seen) > 1)
+    t |> equal(length(seen), length(cpp_names))
+}
+
 [test(description = "each module walk and basic_struct_for_each_field hands its block a temporary info, so the info cannot outlive the block")]
 def test_module_walks_hand_out_a_temporary_info(t : T?) {
     var functions, generics, globals, structures, enumerations, fields = 0

@@ -248,6 +248,9 @@ let stop : table<string> <- { "the", "a", "an" }   // ONE type parameter == a se
 | `erase` / `clear` / `length` / `empty` | Remove one, remove all, query. |
 | `keys` / `values` | Iterators, usable together in one `for`. |
 
+- **A table copies a temporary string key (`string#`) when it adds the key**, so the key outlives
+  the temporary; a key the table already holds, and a read (`key_exists`, `get`, `?[]`, `erase`),
+  copy nothing. A temporary *value* is refused by `insert` and cloned by `insert_clone`.
 - **`tab[key]` inserts a default entry when the key is missing** - read with `tab?[key] ?? fallback`.
   Indexing a non-`var` table is a compile error outright. Under `default_init_containers` the
   inserted slot gets `default<V>`, but only for a *reading* index; a direct store (`tab[k] = v`,
