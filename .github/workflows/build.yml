@@ -196,6 +196,18 @@ jobs:
         key: sccache-linux-gcc-Release
         sccache-size: 2000M
 
+    - name: "Configure: tools disabled"
+      run: |
+        set -eux
+        CC=gcc CXX=g++ cmake --no-warn-unused-cli -B./build-tools-off -G Ninja \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DDAS_GLFW_DISABLED=ON \
+          -DDAS_HV_DISABLED=OFF \
+          -DDAS_SQLITE_DISABLED=OFF \
+          -DDAS_LLVM_DISABLED=ON \
+          -DDAS_TOOLS_DISABLED=ON \
+          -DDAS_AOT_EXAMPLES_DISABLED=ON
+
     - name: "Build: Daslang (gcc -Werror)"
       run: |
         set -eux
