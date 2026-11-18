@@ -63,6 +63,8 @@ naming both sides by symbol name.** The second site may be outside this reposito
 every member of a set must hold is not a pair; two named sites that must list the same members
 are.
 
+A second site is code, a generated file or an outside consumer, never a document restating the fact.
+
 **A diff that records a pair puts it in the section that holds its daslib file (for a C++ name, the
 emitter file that writes it), or in a new section of `ARCHITECTURE.md` or a companion when no
 section holds it; a pair whose two sides are spellings of one syntax goes in

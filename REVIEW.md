@@ -19,10 +19,10 @@ exactly one `modules/<M>/` folder, answers to `modules/<M>/REVIEW.md` too, when 
 the guarded `require ?cuda cuda/<m>` - wherever the diff puts it, answers to `tests/cuda/REVIEW.md`
 too.**
 
-**A diff that adds or changes a routing rule of this checklist that a file's path or the text of
-its own lines decides changes `utils/internal/review-md/scan.das` to match, in the same change -
-`routed_paths` for a routing that starts a folder walk, `routed_checklists` for one that names a
-single checklist.** Routing by `require` to `modules/<M>/REVIEW.md` stays the reviewer's: only the
+**A diff that adds or changes a routing rule of this checklist that the path of a file or the
+text of its own lines decides without resolving a `require` to a folder changes
+`utils/internal/review-md/scan.das` to match, in the same change - `routed_paths` for a routing
+that starts a folder walk, `routed_checklists` for one that names a single checklist.** Only the
 compiler resolves a `require` to a folder.
 
 **A guard on the `dasCUDA` package in a file outside `modules/dasCUDA/` tests for the `cuda`
@@ -43,9 +43,14 @@ together share the first's module.
 is a defect - rename the module one of them declares.**
 
 **A diff that adds a `.cpp` to `LIBDASCRIPT_RUNTIME_SRC` in `CMakeLists.txt` - directly or
-through `AST_SRC`, `SIMULATE_SRC`, `BUILTIN_SRC` or `MISC_SRC` - names the runtime caller that
-needs it: a builtin module's runtime half, a standalone context, a JIT or AOT exe. A file only
-the compiler, the interpreter or a compile-time binding reaches goes in
+through any list it expands - names in the PR description the runtime caller that needs it: a
+builtin module's runtime half, a standalone context, a JIT or AOT exe.**
+
+**A diff after which `LIBDASCRIPT_RUNTIME_SRC` in `CMakeLists.txt` holds - directly or through
+any list it expands - a `.cpp` reached only by the compiler, the interpreter, or a binding that
+only macros and other compile-time code call is a defect - move that `.cpp` to
 `LIBDASCRIPT_COMPILER_SRC`.** Every runtime source links into every JIT exe, standalone context
-and `-lib` library, so a misplaced one grows them all; the split is
-`src/ast/ARCHITECTURE_LIBRARIES.md#simulate-compiler-lib`.
+and `-lib` library, so a misplaced one grows them all.
+
+**A diff never adds history to a `.md` under `skills/`: an incident story, a PR or issue number, a
+dated ruling, an "as of" entry - state the current rule and its timeless reason instead.**

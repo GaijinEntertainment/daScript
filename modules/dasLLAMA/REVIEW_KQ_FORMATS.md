@@ -34,7 +34,8 @@ tensor twin, not the two formats' kernels.
 **A diff that writes in host code (any code but a GPU kernel body), on any line it adds, edits or
 re-indents, outside a definition home, a kernel builder's `requires =` string and a test's
 expected-message text, a literal standing for a per-format quantity of a `KqFmt` member, in any
-unit (words, halves, superblocks) - a number derived from several formats' sizes included - is a
+unit (words, halves, superblocks) or as its log2 (a shift) - a number derived from several formats'
+sizes included - is a
 defect: read it through a `KqFmt` accessor
 (`kq_elems`, `kq_disk_bytes`, ...), through `kq_qsb` / `kq_ssb` on a format id, or through a named
 constant a definition home declares, declared there in the same change when none exists.** The

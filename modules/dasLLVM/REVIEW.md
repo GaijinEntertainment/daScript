@@ -4,22 +4,23 @@
 docs: `ARCHITECTURE.md`, `ARCHITECTURE_CODEGEN_IDENTITY.md`, `ARCHITECTURE_DEBUG_INFO.md`,
 `ARCHITECTURE_EXE.md`, `ARCHITECTURE_JIT_ENTRY.md`, `ARCHITECTURE_LIB.md`,
 `ARCHITECTURE_TARGET_FEATURES.md`, `ARCHITECTURE_VECTOR_MATH.md`. Planned work: `LEDGER.md`.
-
-- **A `[test]` file under this module that carries a `require dasllama/...` line of its own
-  answers to `modules/dasLLAMA/REVIEW.md` (repo root) as well.**
+The `tests/` subfolder has its own checklist, `tests/REVIEW.md`: a `[test]` file, or a file that
+exists only for tests to build, run or require (a program root, a client, a fixture module),
+answers to it wherever the diff puts it under this module.
 
 - **A diff that changes how the compile handles a function because it carries `[tune]`,
   `[tune_perm]`, `[tune_companion]`, `[tune_scope]`, `[tune_policy]` or `[llvm_code]` - the body
   it emits for it, which permutation it picks for it - is reviewed with `skills/tune.md`.**
 
-- **A diff that changes what a read or a save of `<app>.tune.json` takes from an
-  `<app>.tune.json` it finds stale (its mtime is older than the running binary) or written by
-  another machine is reviewed with `skills/tune.md`.**
+- **A diff that changes how a read or a save of `<app>.tune.json` treats a file that is stale
+  (its mtime is older than the running binary) or that another machine wrote is reviewed with
+  `skills/tune.md`.**
 
-- **A change to the tune framework - `daslib/llvm_tune.das`, a test under `tests/` here that
-  carries a `require llvm/daslib/llvm_tune` line of its own or spawns a child on a script that
-  carries one, the `registerModuleGroupMember("tune_framework", ...)` row in `src/dasLLVM.cpp`,
-  or the `register_module_group("tune_framework", ...)` row in `.das_module` - is reviewed with
+- **A change to the tune framework - `daslib/llvm_tune.das`, `requires_hold` or `any_row_runs`
+  in `daslib/llvm_cpu_class.das`, a test under `tests/` here that carries a
+  `require llvm/daslib/llvm_tune` line of its own or spawns a child on a script that carries
+  one, the `registerModuleGroupMember("tune_framework", ...)` row in `src/dasLLVM.cpp`, or the
+  `register_module_group("tune_framework", ...)` row in `.das_module` - is reviewed with
   `skills/internal/llvm_tune_internals.md`.**
 
 - **A change to any file under this module but a `.md` runs the module-owned suite (command
@@ -32,32 +33,19 @@ docs: `ARCHITECTURE.md`, `ARCHITECTURE_CODEGEN_IDENTITY.md`, `ARCHITECTURE_DEBUG
 
 - **A diff that adds or changes a branch keyed on what `get_platform_name()`,
   `get_architecture_name()`, `cpu_supports()`, or `host_llvm_feature()` returns, directly or
-  through a value built from it, runs the module-owned suite on a machine that takes the new
-  branch.** A child run under a forced CPU feature (`DAS_JIT_ARM64_FORCE_FEATURES`,
-  `DAS_JIT_X64_FORCE_FEATURES`) that reaches the branch's code counts as that machine. A test's
-  own check that skips the test on other platforms is not a new branch.
-
-- **A test under `tests/` (beside this file) never creates, overwrites, or deletes a
-  git-tracked path.**
-
-- **A test under `tests/` here that writes at all - through its own filesystem calls, not a
-  child process's - writes only to paths it created uniquely for this process (a temp file or a
-  temp directory), and removes them** - a shared path under `build/` is one two concurrent runs
-  collide on.
-
-- **A test under `tests/` here that spawns a daslang child keeps every path the child writes
-  inside a directory the test created uniquely for this process: `-output <dir>/...` for a
-  `-exe` build; `-no-module-cache` or `-module-cache <dir>/...` for a run that compiles through
-  the front-end cache; `-jit-no-cache` or `-output <dir>/...` for a `-jit` run that executes the
-  script; a working directory inside `<dir>` covers the module cache and the JIT cache.** A child
-  writes its caches relative to the cwd otherwise, which is the tree two concurrent runs share.
+  through a value built from it, runs the module-owned suite on a machine that takes that
+  branch, when a build that targets the machine it runs on can take that branch.** A child run
+  under a forced CPU feature (`DAS_JIT_ARM64_FORCE_FEATURES`, `DAS_JIT_X64_FORCE_FEATURES`)
+  that reaches the branch's code counts as such a machine. A test's own check that skips the
+  test on other platforms is not such a branch.
 
 - **A diff that changes which arm a non-host triple selects in a branch keyed on the target
   triple (a key added, changed or removed), or changes code only a cross target's arm reaches,
   records in its PR body the `--jit-target=<triple>` command that reached the changed arm: an
-  `-exe` build, or a `--jit-compile-only` run when the arm sits in `[tune]` grid code, which an
-  `-exe` build replaces with reference bodies.** The suite runs on the host, so another target's
-  arm is checked only by a command built for it.
+  `-exe` build, or a `--jit-compile-only` run when the arm sits in the code-generation
+  permutations a `[tune]` function races, which an `-exe` build replaces with reference
+  bodies.** The suite runs on the host, so another target's arm is checked only by a command
+  built for it.
 
 - **A PR body that records a `--jit-compile-only` cross-target run also records, beside it, a
   run of that code on a box of the target, or the statement that no such box ran it.** A
@@ -93,25 +81,27 @@ docs: `ARCHITECTURE.md`, `ARCHITECTURE_CODEGEN_IDENTITY.md`, `ARCHITECTURE_DEBUG
   to run fails there.
 
 - **A diff that adds an input that can differ between two functions of one compile, that the JIT
-  emitter reads, and that the function's AOT hash does not cover - an input no SimNode carries,
-  so simulation never reads it - folds it into `fold_jit_only_inputs`
-  (`daslib/llvm_jit_plan.das`) in the same change, and the fold's result changes when the input
-  moves from one function to another**
+  emitter reads, and that the function's AOT hash does not cover - an input the interpreter
+  never reads - folds it into `fold_jit_only_inputs` (`daslib/llvm_jit_plan.das`) in the same
+  change, and the fold's result changes when the input moves from one function to another**
   (`ARCHITECTURE_JIT_ENTRY.md#hint-folds`). A `LLVM_JIT_CODEGEN_VERSION` bump re-keys once, so
   adding or removing the input on a function afterwards still serves the old machine code back.
 
 - **A diff that adds a `require` line naming a `[llvm_code]` generator module outside this
   module to `daslib/llvm_user_modules.das` is a defect; that module's package
-  joins the `llvm_code_generator` group from its own descriptor instead.** The wiring module
-  names no package, so a build that does not carry the package registers nothing and compiles
-  unchanged; the generators this module ships stay named.
+  joins the `llvm_code_generator` group from its own descriptor instead.**
+  `daslib/llvm_user_modules.das` names no package, so a build that does not carry the package
+  registers nothing and compiles unchanged.
 
 - **A diff that puts a function on the jit finalizer's path - `free_jit_context`
-  (`daslib/llvm_jit_link.das`) and every function it calls - marks that function `[no_jit]`; a
-  helper from another module (`macro_context_of` and the rest of `daslib/cross_context`, repo
-  root) is never called there - call the externs it wraps directly.** The finalizer is program
-  code, so a function without `[no_jit]` on its path joins every jitted program's DLL (the
-  block-passing helpers cannot be lowered: `ARCHITECTURE_JIT_ENTRY.md#jit-set-exclusions`).
+  (`daslib/llvm_jit_link.das`) and every function it calls - marks that function `[no_jit]`.**
+  The finalizer is program code, so a function without `[no_jit]` on its path joins every
+  jitted program's DLL (`ARCHITECTURE_JIT_ENTRY.md#jit-set-exclusions`).
+
+- **A function on the jit finalizer's path - `free_jit_context` (`daslib/llvm_jit_link.das`)
+  and every function it calls - never calls a function written in das in another module; it
+  calls the C++ externs that function wraps.** A das helper from another module cannot be
+  marked `[no_jit]` from this module.
 
 - **A diff that adds to a JIT cache key an input that is the same for every function of one
   compile folds it inside `jit_env_salt` (`daslib/llvm_jit_plan.das`), never directly into
@@ -135,13 +125,6 @@ docs: `ARCHITECTURE.md`, `ARCHITECTURE_CODEGEN_IDENTITY.md`, `ARCHITECTURE_DEBUG
   exit non-zero instead.** A build rule reads the exit code, and a silent success lets
   it link the previous run's library against this run's header.
 
-- **A test under `tests/` here whose child compiles through the front-end module cache - any
-  child but a `-exe`, `-compile-only`, `-documentation`, debugger or AOT run - and asserts a
-  line a macro prints at compile time, or its absence, spawns that child with
-  `-no-module-cache`; a test whose subject is the cache itself pins its own file with
-  `-module-cache <temp>` instead and never takes the flag.** A cache hit runs no macro, so a
-  macro-time line prints on the first run only (`ARCHITECTURE.md#macro-line-cache-replay`).
-
 - **A diff that adds a top-level section to the tune sidecar (`<app>.tune.json`, written by
   `daslib/llvm_tune.das`) updates `modules/dasLLAMA/dasllama/dasllama_exchange_schema.das` in
   the same change and keeps `modules/dasLLAMA/tests/test_exchange_schema.das` green** - the
@@ -149,26 +132,18 @@ docs: `ARCHITECTURE.md`, `ARCHITECTURE_CODEGEN_IDENTITY.md`, `ARCHITECTURE_DEBUG
   after the diff at submission, and the checked-in corpus the test sweeps cannot show it.
 
 - **A diff that adds an override knob, or gives one a new effect, adds the knob or the effect
-  to the inventory in `ARCHITECTURE.md#override-knobs` in the same change.** An override knob is
-  supplied at run time - an environment variable, a command-line flag, or an exported runtime
-  setter - and changes what a run compiles, tunes, or emits beyond its defaults. Anything
-  written in source - `[tune]`-family and `[hint]` annotation arguments - is a declaration, not
-  an override.
-
-- **A diff that adds an override knob, or gives one a new effect, also logs at least one line
-  naming the knob where it takes effect.** A diff that only exposes the knob puts the line at
-  the consumer instead, in that same diff.
-
-- **Weakening `tests/llvm_env_registry.das` (beside this file) is a defect** - dropping a scan,
-  narrowing its `STRICT_ROOTS`, or widening its `SKIP_FILES` weakens it.
+  to the inventory in `ARCHITECTURE.md#override-knobs` and logs a line naming the knob where it
+  takes effect (where a caller acts on it, when the diff only adds a way to read it) in the
+  same change.** An override knob is an environment variable, a command-line flag, or an
+  exported runtime setter that changes what a build compiles, tunes, or emits beyond the
+  defaults of its output kind (`-jit`, `-exe`, `-lib`). Choosing the output kind is not a knob;
+  choosing the target machine, or making a build write nothing, is. A `[tune]`-family or
+  `[hint]` argument, written in source, is not a knob.
 
 - **A host path a diff writes into the tune sidecar (`<app>.tune.json`, written by
   `daslib/llvm_tune.das`) goes through `tilde_home` (`daslib/fio.das`, repo root); a host path
   it passes to a filesystem call stays raw.** No filesystem call resolves `~`, and a recorded
   path is read by other people, so it must not name the user whose run wrote it.
-
-- **Weakening `tests/llvm_tune_manifest.das` (beside this file) is a defect** - deleting a
-  `[test]`, or dropping or loosening an assertion weakens it.
 
 - **A diff that emits an instruction into the entry block of a function whose body das
   statements emit - the impl half of a generated function pair (the body the wrapper half
@@ -189,8 +164,8 @@ docs: `ARCHITECTURE.md`, `ARCHITECTURE_CODEGEN_IDENTITY.md`, `ARCHITECTURE_DEBUG
   `ConstantExpr`, and the setter's cast writes through the wrong type into it
   (`ARCHITECTURE.md#gep-constant-fold`).
 
-- **A feature name used in a `requires=` list or a `g_target_*` tier gate
-  (`daslib/llvm_jit_common.das`) has its cpuid line in `das_cpu_supports`
+- **A feature name a file under this module uses in a `requires=` list or a `g_target_*` tier
+  gate (`daslib/llvm_jit_common.das`) has its cpuid line in `das_cpu_supports`
   (`src/builtin/module_builtin_runtime.cpp`, repo root) in the same diff**
   (`ARCHITECTURE_TARGET_FEATURES.md#x64-tier-gates`). A name the cpuid table does not know
   answers false on every box, so every perm that requires it silently declines to its fallback
@@ -210,25 +185,17 @@ docs: `ARCHITECTURE.md`, `ARCHITECTURE_CODEGEN_IDENTITY.md`, `ARCHITECTURE_DEBUG
 
 - **A diff that changes the machine code a twinned emitter produces - its body, which of its
   arms a call selects, or the feature set its output is lowered under - leaves it covered by a
-  cell comparing the emitted result with the interpreted result over the operand range that
+  `[test]` comparing the emitted result with the interpreted result over the operand range that
   emitter serves (every vector width for a vector emitter, every operand value for one over
-  8-bit operands, each operand class its arms branch on otherwise), adding the cell in the same
-  change when none covers that range.** A twinned emitter is a `build_vector_*` in
-  `daslib/llvm_jit_intrin.das` or an `[llvm_code]` generator under this module: the interpreter
-  computes the same answer through a das body or a builtin, so the two can drift apart.
+  8-bit operands, each operand class its arms branch on otherwise), adding the comparison in
+  the same change when none covers that range.** A twinned emitter is a `build_vector_*`
+  emitter (`daslib/llvm_jit_intrin.das`) or an `[llvm_code]` generator under this module: the
+  interpreter computes the same answer through a das body or a builtin, so the two can drift
+  apart.
 
-- **A test that searches the text of the LLVM IR the JIT emits matches an instruction by its
-  opcode and flags (`fmul reassoc`), never by a numbered register (`%12`).** The numbering shifts
-  with any unrelated change to the emitted function.
-
-- **A cell comparing a float emitter's emitted and interpreted results also asserts both answer
-  NaN in the same lanes.** A clamp or a conversion written with ordered compares turns a NaN lane
-  into a number, and an accuracy bound reads that as success.
-
-- **A change that makes `REVIEW.das` (beside this file) report fewer inputs is a defect:**
-  dropping a check, shrinking a scanned set or a tracked-fixture directory (a guard over nothing),
-  widening an exemption list without naming the exempted input's reason beside it, or a finding
-  text that no longer names what failed. What the gate enforces is read from the gate itself.
+- **Weakening `REVIEW.das` (beside this file) is a defect** - dropping a check, shrinking a
+  scanned set or the tracked-fixture directory list, widening an exemption list without the
+  reason for the exempted input beside it, or a finding text that no longer names what failed.
 
 - **A walk over the program's modules in this module's `daslib/` that leaves a module out by
   `moduleFlags.builtIn` alone is a defect - a promoted das module (`module X shared`) is

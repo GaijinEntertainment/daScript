@@ -1,7 +1,7 @@
-# dasLLAMA tests - where a test lives
+# dasLLAMA tests - Test Files Code Review Checklist
 
-**Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** The parent
-checklist is `REVIEW.md` (beside this file); the runner's tables are `run.das`.
+**Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
+doc: `../ARCHITECTURE.md`.
 
 **A diff that adds or moves a `[test]` here applies `tests/REVIEW.md` (repo root) too, with this
 folder's `REVIEW.das` as its gate; a diff that weakens it is a defect.**

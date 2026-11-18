@@ -33,7 +33,8 @@ row names; a concern the row names without a backend lands in any file of the ro
 
 **When a charter line's parenthetical names, one by one, the items of one kind its file holds, a
 diff adding another item of that kind lands it in that file and adds its name to the parenthetical
-in the same change.**
+in the same change.** Two items are one kind when they share the list's head noun once its family
+qualifier is dropped: an x16 operand builder joins a list of bf16 operand builders.
 
 **Never add a charter line for a file outside `dasllama/` - state what it holds in its own
 folder's architecture doc or `CLAUDE.md` instead.**

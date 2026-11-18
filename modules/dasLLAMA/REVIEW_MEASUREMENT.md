@@ -1,8 +1,9 @@
 # dasLLAMA Measurement Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-docs: `ARCHITECTURE_MEASUREMENT*.md` (this folder). Planned work: `followup_metal.md`,
-`followup_vulkan.md`, `followup_general.md`.
+docs: `ARCHITECTURE_MEASUREMENT.md`, `ARCHITECTURE_MEASUREMENT_RELEASE.md`,
+`ARCHITECTURE_MEASUREMENT_FAT_START.md`. Planned work: `followup_metal.md`, `followup_vulkan.md`,
+`followup_general.md`.
 
 **A rule here that governs a figure binds only a figure the change writes or changes - in the repo
 outside `site*/` (repo root), in a commit message, or in its PR body - never one a changed line
@@ -65,9 +66,11 @@ no box can mint.
 A board box is a box with a `performance/records/<box>.json`. The release re-mint is a diff that
 runs `performance/gen_bench_records.das` with a release's exe on board boxes and writes their rows.
 A `held` entry is a `performance/records/annotations.json` entry naming a board row and the
-follow-up ledger row that keeps it off the board. A PR's kind - final or intermediate - and a final
-PR's change are as `tests/REVIEW_RUNS.md` defines them; on a final PR, "a diff" in a rule below is
-its change, and "its PR body" is the body of any PR of its arc.
+follow-up ledger row that keeps it off the board. A PR's kind is the line its body's Validation
+section opens with: `Kind: final PR of the <arc> arc.` makes it a final PR, and every other PR -
+another opening, or a body with no Validation section - is an intermediate one. A final PR's change is the union of the diffs of its arc's PRs, its own
+included; on a final PR, "a diff" in a rule of this checklist is its change, and "its PR body" is
+the body of any PR of its arc.
 
 **A diff that owes a figure from every board box of the author's lists the author's board boxes in
 its PR body.**
@@ -167,16 +170,18 @@ whatever tree each ran on.
 kernel that the same diff neither lands nor names as the Done of a `followup_*.md` row citing that
 entry - that figure goes in the PR that lands the code.**
 
-**A diff that lets a served turn, or a media encode a turn takes (an image, a video frame or an
-audio chunk), reach code outside the TTS front end that no spawned or manual cell's input reaches -
-a new dispatch arm, a window-size arm inside a path a cell drives at other sizes, or a changed
-default route - adds a spawned cell whose input reaches it and names in its PR body the
+**A diff that lets a served turn of a build `performance/gen_bench_records.das` can spawn, or a
+media encode such a turn takes (an image, a video frame or an audio chunk), reach code outside the
+TTS front end that no spawned or manual cell's input reaches - a new dispatch arm, a window-size
+arm inside a path a cell drives at other sizes, or a changed default route - adds a spawned cell
+whose input reaches it and names in its PR body the
 `followup_general.md` row under which the release re-mint owes its rows; an arc's final PR also
 writes that cell's figures from every board box of the author's that can mint them into a dated
 `PERF_LEDGER.md` entry - all in the same change.**
 
-**A change that owes a ledger figure no box of the author's can mint, and that no rule above sends
-to a new spawned cell, names instead, in the same change, an artifact that shows the new code ran end to end - a record, a gate output, an
+**A change that owes a ledger figure no box of the author's can mint, and that the rule on code no
+cell's input reaches does not send to a new spawned cell, names instead, in the same change, an
+artifact that shows the new code ran end to end - a record, a gate output, an
 instrument's print - or the profile output that shows the change is faster
 (`benchmarks/lcpp_bench.das`'s `forward_profile` rows, or the tier's `DASLLAMA_GPU_PROF=1` token
 ledger), with the flags that run took.**

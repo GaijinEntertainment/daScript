@@ -82,9 +82,11 @@ model-gated suite's cells skip, and a run of skips is not the coverage the suite
 **A diff that adds a test file here adds its `CLAUDE.md` entry in the same change, every clause
 of it true of the file as added.**
 
-**A diff that adds a cell or a gate function to a file whose `CLAUDE.md` entry names every one of
-that kind or states how many there are adds the new one to each such list and corrects each such
-count in the same change, every clause it adds true of the file as the diff leaves it.**
+**A diff that adds a cell or a gate function to a file, or a function to a `_*.das` fixture module
+in this folder, whose `CLAUDE.md` entry names every one of that kind, states how many there are, or
+states a fact of every one of them ("every", "each", "all"), adds the new one to each such list,
+corrects each such count, and corrects each such clause the new one makes false, in the same
+change, every clause it adds or corrects true of the file as the diff leaves it.**
 
 **A diff that removes, moves or renames a cell or a gate function, or changes a cell's suite, its
 skip condition, or any fact a `CLAUDE.md` entry states about it - the class it dispatches, the

@@ -6,20 +6,24 @@
 between this one and each file it changes.** A `.das` or `.cpp` under this folder but outside
 `modules/<M>/` answers to `modules/<M>/REVIEW.md` as well when it generates the C++ binding of a
 module registered under `modules/<M>/`. So does one that requires at least one module outside
-`daslib/`, each registered under `modules/<M>/`. A `[test]` file under `modules/<M>/` also answers to
-`modules/<M>/tests/REVIEW.md` where that checklist exists.
+`daslib/`, when every such module it requires is registered under that same `modules/<M>/`. A
+`[test]` file under `modules/<M>/` also answers to `modules/<M>/tests/REVIEW.md` where that
+checklist exists.
 
-**A diff that changes a `.das` file declaring a function carrying an annotation whose name ends
-in `_kernel` or `_shader` and that a module under this folder registers - or a `.das` file such
-a file requires, directly or through other requires - applies `REVIEW_SHADER_EMITTERS.md` too.**
+**A diff that changes a `.das` file that declares a kernel, or a `.das` file such a file
+requires - directly or through other requires - applies `REVIEW_SHADER_EMITTERS.md` too.** A
+kernel here is a function that carries an annotation whose name ends in `_kernel` or `_shader`,
+where a module under this folder registers that annotation.
 
-**A diff that changes a `.das` under this folder that the full `test_aot` binary compiles - a
-file `tests/aot/CMakeLists.txt` (repo root) feeds to the `test_aot` target, directly or through
-a module's `*_AOT_FILES` list, or a file such a file requires, directly or through other
-requires - and not marked `options no_aot`, states in the PR body that the full `test_aot` lane
-(`utils/internal/preflight/main.das` (repo root) run with `--full`, or a manual dispatch of
-`.github/workflows/nightly.yml` (repo root) on the branch) ran green on the diff's head commit.**
-Per-PR CI compiles only the `tests/language` AOT subset.
+**A diff that changes a `.das` under this folder that the full `test_aot` binary compiles, and
+that is not marked `options no_aot`, names in the PR body the run that showed that binary pass on
+the diff's head commit: `utils/internal/preflight/main.das` (repo root) run with `--full` in a
+build configured with `DAS_LLVM_DISABLED=OFF`, a `--target run_tests_aot` build so configured, or
+a link to a `.github/workflows/nightly.yml` (repo root) run whose Nightly Tests step passed.** The
+full `test_aot` binary compiles every file `tests/aot/CMakeLists.txt` (repo root) feeds to the
+`test_aot` target with dasLLVM enabled, directly or through a module's `*_AOT_FILES` list, and
+every file such a file requires, directly or through other requires. Per-PR CI compiles only the
+`tests/language` AOT subset.
 
 **A diff that links an in-tree module into the CMake target of a C++ module whose
 `initDependencies` is hand-written calls `Module::require` with the linked module's registered
@@ -39,9 +43,8 @@ override return true for the function, and deletes the function's generated regi
 the module's `src/`, in the same change.** Otherwise the generated registration sits beside the
 hand-bound one and the module registers the name twice.
 
-**A diff that adds a `[test]` under a module's `tests/` folder that carries no `REVIEW.md` of its
-own puts it in the existing category file for its topic or in that folder's `uncategorized.das`,
-never in a new file, with a `description`, and with `timeout = 1200` when the test builds, spawns
-a child or waits on a peer** - the shape rules are `tests/REVIEW.md` (repo root) and
-`tests/ARCHITECTURE.md`; `REVIEW.das` (beside this file) applies them to every such folder it
-names. A module whose tests folder carries its own `REVIEW.md` gates its tests there.
+**A `[test]` file under a module's `tests/` folder that carries no `REVIEW.md` of its own,
+wherever the diff puts it, answers to `tests/REVIEW.md` (repo root) as well.**
+
+**A diff that weakens the test-shape check in `REVIEW.das` (beside this file) - its
+`check_test_shape` call over every folder in `TEST_ROOTS` - is a defect.**

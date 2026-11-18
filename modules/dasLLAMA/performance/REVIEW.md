@@ -12,11 +12,12 @@ changes while the measured values of the artifact stay as they were - is a defec
 artifact on a quiet box with no remote-desktop session instead.**
 
 **A diff that changes a `kernels` entry of a `defaults/<class>.tune-defaults.json` profile
-names, in the PR body, the box of that CPU class that ran the tune, and quotes the line of that
-box's tuner log (`../benchmarks/modules/.daspkg.log`) that names the new value as the entry's
-winner; a changed entry that no quoted line backs is a defect - re-mint the profile on a box of
-that class.** A `kernels` entry names the variant the tuner timed fastest on a box of that
-class; an entry written by hand was never timed there.
+names, in the PR body, the box that ran the tune - a box of that CPU class, or any box for
+`wasm-simd128` - and quotes the tuner line naming the new value as the entry's winner, from that
+box's `../benchmarks/modules/.daspkg.log` or, for `wasm-simd128`, from the output of the
+`DAS_TUNE_MODE=tune` node runs of `../harness/wasm_mint/run.cjs`; a changed entry no quoted line
+backs is a defect - re-mint the profile on such a box.** A `kernels`
+entry names the variant the tuner timed fastest there; an entry written by hand was never timed.
 
 **A diff that writes a `sha` on a `das` row (a run row whose `engine` is `das`) whose
 `dasllama_version` is below `DASLLAMA_RELEASE`, the `engine_sha` of a sidecar archive no

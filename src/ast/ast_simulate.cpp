@@ -3645,6 +3645,7 @@ namespace das
 
     void linkProgram ( Program * program, TextWriter & logs );
 
+    // ARCHITECTURE_LIBRARIES.md#simulate-compiler-lib
     bool Program::simulate ( Context & context, TextWriter & logs, StackAllocator * sharedStack ) {
         CompilationCallbackGuard callbackGuard("", thisModule->fileName, "simulation");
         auto time0 = ref_time_ticks();
