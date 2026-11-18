@@ -7,6 +7,7 @@ require dasllama/dasllama_par
 require dasllama/dasllama_math
 require daslib/fio
 require strings
+require _compares   // no_children_here: the child cell's skip on a wasm target
 
 // maybe_parallel_for_indexed contract across all three arms (team / fifo / inline):
 // exactly-once coverage, slot < get_dispatch_slot_bound(), and per-slot scratch — each
@@ -227,6 +228,7 @@ let ANNOUNCE = "single thread - this context runs every kernel"
 
 [test(description = "A child process started with DASLLAMA_SINGLE_THREAD=1 reads the flag at context init, dispatches none of three rounds and prints the announce once; unset, it dispatches all three and stays silent")]
 def test_single_thread_env(t : T?) {
+    return if (no_children_here(t))
     t |> run("DASLLAMA_SINGLE_THREAD=1 reaches the flag at context init, and the announce prints once") @(t : T?) {
         var out : string
         let rc = spawn_root("1", out)

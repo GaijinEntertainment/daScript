@@ -9,6 +9,7 @@ require dasllama/dasllama_math
 require dasllama/dasllama_math_default
 require dasllama/dasllama_math_aarch64_neon
 require dasllama/dasllama_math_gen
+require dasllama/dasllama_gemm_schema
 require dasllama/dasllama_repack
 require dasllama/dasllama_convert
 require daslib/f16_cvt
@@ -261,7 +262,8 @@ def private q8q8_wrapper_gate(t : T?; n : int64; d : int64 = 64l; ntok_override 
         matmul_q8q8_batch(ybat, q, s, xq, xs, n, d, ntok)
         let bf16_stamp = name == "x64-gen" && q8q8_tileform_gen() > 0
         let bf16 = bf16_stamp && ntok >= ts
-        if (name == "portable" || (bf16_stamp && ntok < ts)) {
+        let x16 = name == "portable" && q8x16_witness_gen()   // a 16-bit rows seat serves the batch call in its own sum order
+        if (!x16 && (name == "portable" || (bf16_stamp && ntok < ts))) {
             identical(t, ybat, ymm, "{name} matmul_q8q8_batch bit-matches ntok x matmul_q8q8, n={n} d={d} ntok={ntok}")
         } elif (bf16) {
             held_bf16(t, ybat, ymm, d, "{name} matmul_q8q8_batch on the bf16 tile vs ntok x matmul_q8q8, n={n} d={d}")
@@ -339,16 +341,24 @@ def private s16_kernel_gate(t : T?; n : int64) {
         let xqp = addr<int8 const?>(xq[0])
         let xsp = addr<float const?>(xs[0])
         let offp = addr<int64 const?>(offs[0])
+        //! the portable rows kernels wrap the lane-pair dot on a wasm target, `dot_q8q8` elsewhere
+        let wasm = wasm_target()
         for (r in range64(d)) {
-            ydot[r] = dot_q8q8(wp + r * n, s32p + r * nb, xqp, xsp, n)
-            ydot16[r] = dot_q8q8_f16s(wp + r * n, s16p + r * nb, xqp, xsp, n)
+            if (wasm) {
+                ydot[r] = dot_q8q8_idot4_ps(wp + r * n, s32p + r * nb, xqp, xsp, n)
+                ydot16[r] = dot_q8q8_idot4_ps_f16s(wp + r * n, s16p + r * nb, xqp, xsp, n)
+            } else {
+                ydot[r] = dot_q8q8(wp + r * n, s32p + r * nb, xqp, xsp, n)
+                ydot16[r] = dot_q8q8_f16s(wp + r * n, s16p + r * nb, xqp, xsp, n)
+            }
         }
         q8q8_rows_kernel(addr(yrows[0]), wp, s32p, xqp, xsp, n, 0l, d)
         q8q8_rows_kernel_s16(addr(yrows16[0]), wp, s16p, xqp, xsp, n, 0l, d)
         q8q8_groupn_kernel(addr(ygn[0]), wp, s32p, offp, 2l, xqp, xsp, null, null, n, dreg)
         q8q8_groupn_kernel_s16(addr(ygn16[0]), wp, s16p, offp, 2l, xqp, xsp, null, null, n, dreg)
     }
-    identical(t, ydot16, ydot, "dot_q8q8_f16s bit-matches dot_q8q8 over the widened plane, n={n}")
+    identical(t, ydot16, ydot, "the f16-scale dot bit-matches its f32 twin over the widened plane, n={n}")
+    identical(t, yrows, ydot, "q8q8_rows_kernel bit-matches the dot it wraps, n={n}")
     identical(t, yrows16, yrows, "q8q8_rows_kernel_s16 bit-matches its f32 twin, n={n}")
     identical(t, yrows16, ydot16, "q8q8_rows_kernel_s16 bit-matches the dot it wraps, n={n}")
     identical(t, ygn16, ygn, "q8q8_groupn_kernel_s16 bit-matches its f32 twin, n={n}")
@@ -462,6 +472,8 @@ def private s16_wrapper_gate(t : T?; n : int64; ntok_override : int64 = 0l) {
         identical(t, ymm16, ymm, "{name} matmul_q8q8 s16 bit-matches the f32 plane, n={n}")
         if (bf16) {
             held_bf16(t, ybat16, ymm16, d, "{name} matmul_q8q8_batch s16 on the bf16 tile vs ntok x matmul_q8q8 s16, n={n}")
+        } elif (name == "portable" && q8x16_witness_gen()) {
+            held(t, ybat16, ymm16, bar, "{name} matmul_q8q8_batch s16 on a 16-bit rows seat vs ntok x matmul_q8q8 s16, n={n}")
         } else {
             identical(t, ybat16, ymm16, "{name} matmul_q8q8_batch s16 bit-matches ntok x matmul_q8q8 s16, n={n} ntok={ntok}")
         }
@@ -476,6 +488,78 @@ def private s16_wrapper_gate(t : T?; n : int64; ntok_override : int64 = 0l) {
         held(t, ygn16, gref, gbar, "{name} matmul_q8q8_groupn s16, n={n}")
     }
     restore_kernel_backend(seat)
+}
+
+//! the 16-bit q8 rows kernel over `ntok` tokens: both scale forms against the fp64 image, the f16-scale form against its f32 twin, the batch entry where the target serves it
+def private q8x16_gate(t : T?; n, ntok : int64) {
+    let d = 33l
+    let nb = n / 32l
+    var wf, xf : array<float>
+    fill_unit(wf, d * n, 0x16A0u)
+    fill_unit(xf, ntok * n, 0x16A1u)
+    let wq0 <- quantize_q8_0(wf, d * n)
+    var ws16 : array<uint16>
+    var ws32 : array<float>
+    s16_planes(wq0.scales, d * nb, ws16, ws32)
+    var xq : array<int8>
+    var xs : array<float>
+    quantize_rows(xf, ntok, n, xq, xs)
+    var ref, bar : array<float>
+    ref_image(wq0.q, ws32, xq, xs, ntok, d, n, ref, bar)
+    var x16 <- [for (q in xq); int16(q)]
+    var y32, y16, ybatch, ybatch16 : array<float>
+    y32 |> resize(ntok * d)
+    y16 |> resize(ntok * d)
+    ybatch |> resize(ntok * d)
+    ybatch16 |> resize(ntok * d)
+    nan_fill(y32)
+    nan_fill(y16)
+    nan_fill(ybatch)
+    nan_fill(ybatch16)
+    var served, served16 : bool
+    unsafe {
+        let wp = addr<int8 const?>(wq0.q[0])
+        let s32p = addr<float const?>(ws32[0])
+        let xsp = addr<float const?>(xs[0])
+        let x16p = addr<int16 const?>(x16[0])
+        q8x16_rows_gen(addr(y32[0]), wp, s32p, x16p, xsp, n, d, ntok, 0l, d)
+        q8x16_rows_s16_gen(addr(y16[0]), wp, addr<uint16 const?>(ws16[0]), x16p, xsp, n, d, ntok, 0l, d)
+        let xqp = addr<int8 const?>(xq[0])
+        served = q8x16_batch(addr(ybatch[0]), wp, s32p, xqp, xsp, n, d, ntok)
+        served16 = q8x16_batch_s16(addr(ybatch16[0]), wp, addr<uint16 const?>(ws16[0]), xqp, xsp,
+            n, d, ntok)
+    }
+    held(t, y32, ref, bar, "q8x16_rows_gen, n={n} ntok={ntok}", d)
+    held(t, y16, ref, bar, "q8x16_rows_s16_gen, n={n} ntok={ntok}", d)
+    identical(t, y16, y32, "q8x16_rows_s16_gen bit-matches its f32 twin over the widened plane, n={n} ntok={ntok}")
+    let seat = q8x16_witness_gen()
+    t |> equal(served, seat, "q8x16_batch serves where a seat emits, n={n} ntok={ntok}")
+    t |> equal(served16, seat, "q8x16_batch_s16 serves where a seat emits, n={n} ntok={ntok}")
+    if (seat) {
+        held(t, ybatch, ref, bar, "q8x16_batch, n={n} ntok={ntok}", d)
+        held(t, ybatch16, ref, bar, "q8x16_batch_s16, n={n} ntok={ntok}", d)
+    }
+}
+
+def private skip_batch_legs_without_a_seat(t : T?; seat : bool) {
+    t |> run("the batch entries' compares, where a seat emits") @(t : T?) {
+        if (!seat) {
+            t |> skip("no 16-bit rows seat emits on this target: the batch compares did not run")
+        }
+    }
+}
+
+[test(description = "The 16-bit q8 rows kernel holds the per-element fp64 bar at six widths over one and seven tokens on both scale forms, its f16-scale form bit-matches the f32 one over the widened plane, and its batch entry holds the bar where the target serves it")]
+def test_q8x16_rows(t : T?) {
+    with_dasllama_jobque_() {
+        for (n in WIDTHS) {
+            t |> run("16-bit rows kernel vs fp64, one token and seven, n={n}") @(t : T?) {
+                q8x16_gate(t, n, 1l)
+                q8x16_gate(t, n, 7l)
+            }
+        }
+        skip_batch_legs_without_a_seat(t, q8x16_witness_gen())
+    }
 }
 
 [test(description = "The wscale_f16 twins of the q8q8 dot, rows, groupN, stamped tile and matmul overloads bit-match their f32-scale counterparts over the widened plane on every backend and stay within the per-element fp64 bar")]
@@ -795,6 +879,92 @@ def test_mx4q8_batch_family(t : T?) {
             t |> run("mx4 batch / batch groupN vs per-token GEMVs, the scalar leaf and fp64, n={n}") @(t : T?) {
                 mx4_batch_gate(t, n)
             }
+        }
+    }
+}
+
+//! the reference body of format `fmt`'s 16-bit rows family over rows [0, d)
+def private kqx16_rows_reference(fmt : KqFmt; var yp : float?; kqp, ksp : uint8 const?; x16 : int16 const?; xsp : float const?; xb16 : int16 const?; var scratch : uint8?; n, d, ntok : int64) {
+    if (fmt == KqFmt.k4) {
+        k4x16_rows_gen(yp, kqp, ksp, x16, xsp, xb16, scratch, n, d, ntok, 0l, d)
+    } elif (fmt == KqFmt.k5) {
+        k5x16_rows_gen(yp, kqp, ksp, x16, xsp, xb16, scratch, n, d, ntok, 0l, d)
+    } else {
+        k6x16_rows_gen(yp, kqp, ksp, x16, xsp, xb16, scratch, n, d, ntok, 0l, d)
+    }
+}
+
+def private kqx16_witness(fmt : KqFmt) : bool {
+    if (fmt == KqFmt.k4) return k4x16_witness_gen()
+    return fmt == KqFmt.k5 ? k5x16_witness_gen() : k6x16_witness_gen()
+}
+
+//! format `fmt`'s 16-bit rows kernel over `ntok` tokens against the scalar row dots, and its batch entry where a seat emits
+def private kqx16_gate(t : T?; fmt : KqFmt; n, d, ntok : int64) {
+    let id = kq_desc(fmt).schema_id
+    var inscope kq, ks : array<uint8>
+    synth_kq_region(id, kq, ks, d, n, 0x16C4u, 0x85EBCA6Bu)
+    var inscope x <- build_q8k_acts(ntok, n, Wave(a = 1.2, fa = 0.27, b = -0.4, fb = 0.061))
+    var inscope x16 <- [for (q in x.xq); int16(q)]
+    var inscope xb16 <- [for (i in range64(ntok * (n / 32l))); int16(x.xbs[i * 2l] + x.xbs[i * 2l + 1l])]
+    let nsb = n / 256l
+    var inscope want : array<float>
+    want |> reserve(ntok * d)
+    for (tk in range64(ntok)) {
+        for (row in range64(d)) {
+            want |> push(kq_row_dot(id, kq, ks, row, nsb, x.xq, x.xs, x.xbs,
+                tk * n, tk * nsb, tk * (n / 16l), n))
+        }
+    }
+    var inscope rows <- nan_plane(int(ntok * d))
+    var inscope batch <- nan_plane(int(ntok * d))
+    let guard = 64l
+    var inscope scratch : array<uint8>
+    scratch |> resize(x16_row_scratch_bytes(n) + guard)
+    for (b in scratch) {
+        b = 0xA5u8
+    }
+    var served : bool
+    unsafe {
+        let kqp = addr<uint8 const?>(kq[0])
+        let ksp = addr<uint8 const?>(ks[0])
+        let xsp = addr<float const?>(x.xs[0])
+        kqx16_rows_reference(fmt, addr(rows[0]), kqp, ksp, addr<int16 const?>(x16[0]), xsp, addr<int16 const?>(xb16[0]),
+            addr(scratch[0]), n, d, ntok)
+        served = kqx16_batch(id, addr(batch[0]), kqp, ksp, addr<int8 const?>(x.xq[0]), xsp,
+            addr<int const?>(x.xbs[0]), n, d, ntok)
+    }
+    let shape = "n={n} d={d} ntok={ntok}"
+    var past = 0
+    for (i in range64(guard)) {
+        past += scratch[x16_row_scratch_bytes(n) + i] != 0xA5u8 ? 1 : 0
+    }
+    t |> equal(past, 0, "{fmt}x16 rows write nothing past the row scratch the schema sizes, {shape}")
+    check(t, "{fmt}x16 rows against the scalar row dots, {shape}", rows, want, BAR_EXACT, Shape(row_width = int(d)))
+    let seat = kqx16_witness(fmt)
+    t |> equal(served, seat, "{fmt}x16 batch entry serves where a seat emits, {shape}")
+    if (seat) {
+        check(t, "{fmt}x16 batch entry against the scalar row dots, {shape}", batch, want, BAR_EXACT, Shape(row_width = int(d)))
+    }
+}
+
+[test(description = "The 16-bit rows kernels of Q4_K, Q5_K and Q6_K bit-match the scalar row dots at four plane shapes of one to nine tokens, and so do their batch entries where the target serves them")]
+def test_kqx16_rows(t : T?) {
+    with_dasllama_jobque_() {
+        for (fmt in fixed_array(KqFmt.k4, KqFmt.k5, KqFmt.k6)) {
+            t |> run("{fmt}: one superblock, one token") @(t : T?) {
+                kqx16_gate(t, fmt, 256l, 5l, 1l)
+            }
+            t |> run("{fmt}: seven tokens, whole steps and a tail") @(t : T?) {
+                kqx16_gate(t, fmt, 1024l, 24l, 7l)
+            }
+            t |> run("{fmt}: a 4096-wide row over nine tokens") @(t : T?) {
+                kqx16_gate(t, fmt, 4096l, 13l, 9l)
+            }
+            t |> run("{fmt}: an odd row count over four tokens") @(t : T?) {
+                kqx16_gate(t, fmt, 1024l, 33l, 4l)
+            }
+            skip_batch_legs_without_a_seat(t, kqx16_witness(fmt))
         }
     }
 }

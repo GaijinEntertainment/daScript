@@ -690,6 +690,56 @@ def test_gate(t : T?) {
     }
 }
 
+//! the tanh-form GELU in fp64, rounded once
+def private gelu_f64(x : float) : float {
+    let v = double(x)
+    return float(0.5lf * v * (1.0lf + tanh(0.7978845608028654lf * (v + 0.044715lf * v * v * v))))
+}
+
+//! the largest |got - want| and where it sits; -1 when a compare is not a number
+def private worst_gelu_diff(got, x : array<float>; dx : float) : tuple<diff : float; at : int> {
+    var worst = (diff = 0.0, at = 0)
+    for (g, v, i in got, x, count()) {
+        let d = abs(g - gelu_f64(v + dx))
+        return (diff = d, at = -1) if (!(d >= 0.0))
+        if (d > worst.diff) {
+            worst = (diff = d, at = i)
+        }
+    }
+    return worst
+}
+
+[test(description = "`gelu4` stays within 1e-6 of an fp64 tanh-GELU over 1030 inputs in [-12, 12], its two-element tail is the scalar form's bit for bit, and size zero is a no-op")]
+def test_gelu4(t : T?) {
+    let n = 1030l
+    var x : array<float>
+    x |> resize(n)
+    for (i in range64(n)) {
+        x[i] = (float(i) - 515.0) * 0.0233
+    }
+    var got := x
+    gelu4(got, n)
+    var changed = 0
+    for (g, v in got, x) {
+        if (g != v) {
+            changed++
+        }
+    }
+    t |> success(changed > int(n) / 2, "gelu4 wrote its output in place ({changed} of {n} elements moved)")
+    let worst = worst_gelu_diff(got, x, 0.0)
+    t |> success(worst.at >= 0 && worst.diff < 1.0e-6,
+        "gelu4 within 1e-6 of the fp64 GELU (max diff {worst.diff} at element {worst.at})")
+    var ref := x
+    gelu(ref, n)
+    t |> success(got[n - 1l] == ref[n - 1l] && got[n - 2l] == ref[n - 2l], "the tail past the last float4 runs the scalar form")
+    let control = worst_gelu_diff(got, x, 0.001)
+    t |> success(control.at >= 0 && control.diff > 1.0e-6 && control.diff < 1.0,
+        "the fp64 GELU of inputs 0.001 further is outside the bar ({control.diff} at {control.at})")
+    var e : array<float>
+    gelu4(e, 0l)
+    t |> success(empty(e), "size zero leaves an empty array alone")
+}
+
 [test(description = "`softmax` yields an order-preserving distribution summing to 1, uniform output on equal scores, equal results for inputs shifted by 1000 (max-subtraction), and a no-op on size zero")]
 def test_softmax(t : T?) {
     // Output is a probability distribution: positive, order-preserving, sums to 1.

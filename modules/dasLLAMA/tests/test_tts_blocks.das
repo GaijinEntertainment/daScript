@@ -2008,7 +2008,7 @@ def test_elementwise_split_invariance(t : T?) {
 
 // rope over rows against the leaf applied per row, and the variance-scaled norm against its
 // double-precision form
-[test(description = "`rope_rows` equals the per-row `rope_scaled` leaf bit for bit at each row's own position, and `var_scale_norm` matches its double-precision form within 1e-6, a poisoned expectation missing the bar")]
+[test(description = "`rope_rows` equals the per-row `rope_scaled` leaf bit for bit at each row's own position and takes zero rows, and `var_scale_norm` matches its double-precision form within 1e-6, a poisoned expectation missing the bar")]
 def test_rope_rows_and_var_scale_norm(t : T?) {
     var r = TtsRng()
     rng_seed(r, 24ul)
@@ -2027,6 +2027,9 @@ def test_rope_rows_and_var_scale_norm(t : T?) {
     }
     t |> equal(rope_diffs, 0, "rope_rows elements that differ from the leaf applied per row")
     t |> success(rx[0] != want_rope[64] || rx[1] != want_rope[65], "the rows are rotated at their own positions, not one")
+    var inscope no_rows : array<float>
+    rope_rows(no_rows, 0l, 64l, 16l, 100l, 10000.0)
+    t |> success(empty(no_rows), "no rows: nothing roped, and the empty plane is not read")
     var inscope vx : array<float>
     rand_fill(r, vx, 256l, 0.01)
     var inscope valpha : array<float>

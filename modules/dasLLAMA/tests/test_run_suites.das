@@ -247,6 +247,8 @@ def test_argument_contracts(t : T?) {
     t |> equal(select_areas(armed).status, 2, "--area beside --arm is refused")
     t |> equal(check_suite_args(RunArgs(suite = "stocked")), 0, "a per-PR suite runs bare")
     t |> equal(check_suite_args(RunArgs(suite = "stocked", arm = "x")), 2, "a per-PR suite refuses --arm")
+    t |> equal(check_suite_args(RunArgs(suite = "wasm")), 0, "the wasm suite runs bare")
+    t |> equal(check_suite_args(RunArgs(suite = "wasm", arm = "x")), 2, "the wasm suite refuses --arm")
     t |> equal(check_suite_args(RunArgs(suite = "decode")), 2, "a model suite with neither --arm nor --full is refused")
     t |> equal(check_suite_args(RunArgs(suite = "decode", arm = "arm12")), 0, "a model suite with --arm runs")
     t |> equal(check_suite_args(RunArgs(suite = "decode", full = true)), 2, "--full is refused while the Metal build-out is in progress")
@@ -342,6 +344,47 @@ def test_runner_retries_a_verdictless_batch(t : T?) {
     var clean : string
     t |> equal(run_runner("--area infra --only test_box --das /usr/bin/true", clean), 0, "a green child with no verdict is no retry:\n{clean}")
     t |> success(find(clean, "RETRY") < 0, "nothing retried:\n{clean}")
+}
+
+[test(description = "`wasm_summary` reads the last summary line of a wasm test release's log and its FAIL names, and returns no line for a log that died before one")]
+def test_wasm_summary(t : T?) {
+    let log = "PASS test_a\nFAIL test_b\n=== 1/2 passed, 1 failed ===\nSKIP test_c\nFAIL test_d\n=== 2/4 passed, 2 failed ===\n"
+    let sum <- wasm_summary(log)
+    t |> equal(sum.line, "=== 2/4 passed, 2 failed ===", "the last summary line is the run's")
+    t |> equal(join(sum.failed, ","), "test_b,test_d", "every FAIL line's test is named, in order")
+    t |> equal(sum.skipped, 1, "every SKIP line is counted")
+    let died <- wasm_summary("PASS test_a\nAborted(OOM)\n")
+    t |> equal(died.line, "", "a log with no summary line reads as none")
+    t |> equal(length(died.failed), 0, "and names no failure of its own")
+    let quoted <- wasm_summary("    === 3 passed, 0 failed === is what a cell printed\n")
+    t |> equal(quoted.line, "", "a line that only holds the words inside it is not the summary")
+}
+
+[test(description = "Every wasm suite file is a model-free suite file, and `wasm_package` writes a manifest, a descriptor naming each file and the wasm testing_boost, and a root that requires each file and returns the last file's exit code")]
+def test_wasm_package(t : T?) {
+    let files <- suite_files("wasm")
+    t |> success(length(files) >= 3, "the wasm suite holds files ({length(files)})")
+    let free <- suite_files("model-free")
+    for (f in files) {
+        t |> success(find_index(free, f) >= 0, "{base_name(f)} is a model-free file: a wasm run has no models")
+    }
+    let two <- ["modules/dasLLAMA/tests/test_a.das", "modules/dasLLAMA/tests/test_b.das"]
+    let package <- wasm_package(two, "/das")
+    t |> equal(length(package), 3, "three files: the manifest, the descriptor, the root")
+    let manifest = package?[".das_package"] ?? ""
+    t |> success(find(manifest, "release_main(\"main.das\")") >= 0, "the manifest releases the root")
+    t |> success(find(manifest, "release_wasm_disable_host_gpu_modules()") >= 0, "and drops the host GPU modules")
+    let descriptor = package?["modules/wasm_tests/.das_module"] ?? ""
+    t |> success(find(descriptor, "register_native_path(\"dastest\", \"testing_boost\", \"/das/dastest_wasm/testing_boost.das\")") >= 0,
+        "the descriptor gives the files the wasm testing_boost")
+    t |> success(find(descriptor, "register_native_path(\"wasm_tests\", \"test_b\", \"/das/modules/dasLLAMA/tests/test_b.das\")") >= 0,
+        "and names each file by its path under the root")
+    let root = package?["main.das"] ?? ""
+    t |> success(find(root, "require wasm_tests/test_a\nrequire wasm_tests/test_b\n") >= 0, "the root requires each file, in order")
+    t |> success(find(root, "    rc = test_a::main()\n    rc = test_b::main()\n    return rc\n") >= 0,
+        "and returns the last file's exit code - the count of failures so far")
+    t |> success(find(root, "options persistent_heap\n") >= 0 && find(root, "options _dasllama_internal = true\n") >= 0,
+        "under the options a dasLLAMA test root takes")
 }
 
 [test(description = "`exclude_files` drops the files whose base name contains any comma-listed token, ignores blank tokens, matches base names not directories, and keeps everything on an empty list")]

@@ -319,6 +319,7 @@ def private fb_row(out, kernel : string) : string {
 
 [test(description = "`dasllama_tuned_fallbacks` in a child names the same `f32_batch_tile` fallback and the same kernel count on a warm compile whose modules the module cache served as on the cold compile")]
 def test_tuned_fallbacks_over_module_cache(t : T?) {
+    return if (no_children_here(t))
     t |> run("dasllama_tuned_fallbacks() names every kernel whether its module compiled or the module cache served it") @(tt : T?) {
         var src = ""
         fopen("{get_das_root()}/modules/dasLLAMA/tests/_tuned_fallbacks_root.das", "rb") $(f) {

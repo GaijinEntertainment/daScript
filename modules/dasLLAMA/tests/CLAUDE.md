@@ -12,6 +12,7 @@ full-suite run turns a one-arm fix into an afternoon.
 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --changed [--base origin/master]   # the per-PR run on a box with models, and after an edit: the files the changed paths reach
 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --suite stocked           # every model-gated file, no --arm; a core-module change reaches every one of them through --changed
 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --suite stocked --exclude test_ple_modes   # the iteration form - drops the PLE file
+./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --suite wasm              # the kernel files with a wasm seat, as one wasm64 release under node; takes emcc, node and the wasm64 archives
 DASLLAMA_GPU=1 DASLLAMA_CUDA=1 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --changed --only cuda,segments,regions,resident_moe,embeddings   # the CUDA home's pass: the run's CUDA files, the segmented window, the regions rig and the resident MoE files
 DASLLAMA_GPU=1 DASLLAMA_CUDA=1 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --area vision --only gemma4uv,gemma4v,gemma3v,qwen3v,qwen25v   # the CUDA home's vision run: the five vision family files, whose discrete-home cells the first run's --only tokens do not reach
 DASLLAMA_GPU=1 DASLLAMA_CUDA=1 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --area audio --only audio,whisper,gigaam,rnnt,vad   # the CUDA home's audio run: the files holding the audio families' discrete-home cells (each family on the CUDA home by its `CUDA_AUDIO_FAMILIES` row)
@@ -66,9 +67,16 @@ files and `test_model_image` - it omits `test_mtp_gemma_drafter.das`, `image-vul
 Beside the `test_*.das` files, the runner takes the `uncategorized*.das` files for test files by their name prefix: the three
 are model-free and sit in the `model-free` suite.
 
-Every suite but `model-free` and `stocked` needs `--arm`. `--full` parses and is then refused, so
-`--arm` is the only way in. `--suite model-free` and `--suite stocked` take neither - each is a
-whole gate; `--exclude <substr,...>` drops the files whose name contains a token and names each
+Every suite but `model-free`, `stocked` and `wasm` needs `--arm`. `--full` parses and is then
+refused, so `--arm` is the only way in. Those three take neither - each is a whole gate. `--suite
+wasm` runs no dastest child: `run.das` writes a package to the temp folder - a root that requires
+each file of the suite, and a descriptor that gives them `dastest_wasm/testing_boost.das`, whose
+`[test]` writes each file's `main` - releases it with `daspkg release wasm`, and runs it under
+node; a kernel the wasm profile stamps emits there, so the cells that skip on a native box for
+want of a seat run. A file joins the suite in `suite_files("wasm")` and is a model-free file; a
+cell a wasm target cannot run - one that starts a child process - records a skip there
+(`no_children_here`, `_compares.das`), and the `REPORT` line counts the run's skips.
+`--exclude <substr,...>` drops the files whose name contains a token and names each
 on an `EXCLUDED` line, so a trimmed run cannot read as full; `--only <substr,...>` keeps the files
 whose name contains a token and drops the rest, each kept file on an `ONLY` line and the tokens on
 the `REPORT` line. The CUDA home's pass runs under `DASLLAMA_GPU=1` and the CUDA ask -
@@ -5193,7 +5201,7 @@ value offset by an added 0.01, which must land outside the bar.
 `test_softmax` and `test_argmax_hlse`: `softmax`, `parallel_argmax` (the FIRST maximum on ties, the
 empty row a no-op) and `hlse`.
 `test_q8q8_family.das` - model-free: the q8q8 kernel family end to end. Six widths with tails
-(64, 96, 512, 1024, 1056, 3072) across six `[test]` functions (twelve cells), each judged by an in-test fp64 dequant
+(64, 96, 512, 1024, 1056, 3072) across eight `[test]` functions, each judged by an in-test fp64 dequant
 reference (int8 products summed exactly, both block scales applied in double) whose bar is the
 per-block envelope times the block count, and each bar carrying a poison leg - 0.25 ADDED to
 one expected element - that must EXCEED it. The stamped family repacks through
