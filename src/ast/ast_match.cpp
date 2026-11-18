@@ -9,6 +9,7 @@ namespace das {
     bool matchEquNequZero ( ExpressionPtr expr, ExpressionPtr & zeroCond, bool & condIfZero ) {
         if ( expr->rtti_isOp2() ) {
             auto op2 = static_cast<ExprOp2*>(expr);
+            if ( !op2->func || !op2->func->builtIn || op2->func->module->name!="$" ) return false;
             if ( op2->op=="==" || op2->op=="!=" ) {
                 condIfZero = op2->op == "==";
                 if ( isZeroConst(op2->left) ) {
