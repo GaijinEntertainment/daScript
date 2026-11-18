@@ -1375,6 +1375,28 @@ namespace das
         }
     }
 
+    // src/builtin/ARCHITECTURE.md#table-owned-string-key
+    static __forceinline int64_t table_insert_temp_string_index ( Table & tab, const char * key, uint32_t valueTypeSize, Context * context, LineInfoArg * at ) {
+        if ( tab.isLocked() ) context->throw_error_at(at, "can't insert to a locked table");
+        TableHash<char *> thh(context, valueTypeSize);
+        auto hfn = hash_function(*context, key);
+        const auto sizeBefore = tab.size;
+        int64_t index = thh.reserve(tab, (char *) key, hfn, at);
+        if ( tab.size != sizeBefore ) {
+            ((char **) tab.keys)[index] = builtin_string_clone(key, context, at);
+        }
+        return index;
+    }
+
+    void * builtin_table_insert_temp_string ( Table & tab, const char * key, int valueTypeSize, Context * context, LineInfoArg * at ) {
+        int64_t index = table_insert_temp_string_index(tab, key, uint32_t(valueTypeSize), context, at);
+        return tab.data + index * valueTypeSize;
+    }
+
+    void builtin_table_set_insert_temp_string ( Table & tab, const char * key, Context * context, LineInfoArg * at ) {
+        table_insert_temp_string_index(tab, key, 0, context, at);
+    }
+
     __forceinline bool smart_ptr_is_valid (const smart_ptr_raw<void> dest ) {
         if (!dest.get()) return true;
         ptr_ref_count * t = (ptr_ref_count *) dest.get();
@@ -2647,6 +2669,12 @@ namespace das
         addExternInline<DAS_BIND_FUN(builtin_table_free)>(*this, lib, "__builtin_table_free",
             SideEffects::modifyArgumentAndExternal, "builtin_table_free")
                 ->args({"table","sizeOfKey","sizeOfValue","context","at"});
+        addExternInline<DAS_BIND_FUN(builtin_table_insert_temp_string)>(*this, lib, "__builtin_table_insert_temp_string",
+            SideEffects::modifyArgumentAndExternal, "builtin_table_insert_temp_string")
+                ->args({"table","key","sizeOfValue","context","at"});
+        addExternInline<DAS_BIND_FUN(builtin_table_set_insert_temp_string)>(*this, lib, "__builtin_table_set_insert_temp_string",
+            SideEffects::modifyArgumentAndExternal, "builtin_table_set_insert_temp_string")
+                ->args({"table","key","context","at"});
         // local collection
         addInterop<builtin_collect_local_and_zero,void,vec4f,uint32_t>(*this, lib, "builtin_collect_local_and_zero",
             SideEffects::modifyArgumentAndExternal, "builtin_collect_local_and_zero")

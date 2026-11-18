@@ -146,6 +146,8 @@ namespace das {
     DAS_API void builtin_forget_temp_array ( Array & arr, Context * context, LineInfoArg * at );
     DAS_API void builtin_array_free ( Array & dim, int szt, Context * __context__, LineInfoArg * at );
     DAS_API void builtin_table_free ( Table & tab, int szk, int szv, Context * __context__, LineInfoArg * at );
+    DAS_API void * builtin_table_insert_temp_string ( Table & tab, const char * key, int valueTypeSize, Context * context, LineInfoArg * at );
+    DAS_API void builtin_table_set_insert_temp_string ( Table & tab, const char * key, Context * context, LineInfoArg * at );
     DAS_API vec4f builtin_collect_local_and_zero ( Context & context, SimNode_CallBase * call, vec4f * args );
     DAS_API vec4f builtin_collect_local ( Context & context, SimNode_CallBase * call, vec4f * args );
     DAS_API vec4f builtin_scope_free ( Context & context, SimNode_CallBase * call, vec4f * args );

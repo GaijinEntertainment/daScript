@@ -2120,6 +2120,12 @@ namespace das {
             if (!containerType->firstType->isSameType(*valueType, RefMatters::no, ConstMatters::no, TemporaryMatters::no))
                 error("key must be of the same type as table<key,...>", "", "",
                       expr->at, CompilationError::invalid_table_key_type);
+            if (valueType->temporary && containerType->firstType->isTempType()) {
+                error("can't insert the temporary key " + describeType(valueType) + " into " + describeType(containerType),
+                      "the table would keep a pointer to it", "",
+                      expr->arguments[1]->at, CompilationError::cant_index_key);
+                return Visitor::visit(expr);
+            }
             expr->type = new TypeDecl(Type::tBool, expr->at);
         } else {
             error("first argument must be fully qualified table", "", "",

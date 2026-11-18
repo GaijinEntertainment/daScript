@@ -132,6 +132,13 @@ Release-modules build -> `cmake --install --prefix ./daslang_bundle --strip` ->
 install-layout gate - run it when touching CMake `install(...)` rules,
 `ci/release_modules.txt`, or module loading.
 
+An `install(DIRECTORY ... PATTERN "<glob>" EXCLUDE)` clause matches without regard to case on
+Windows and with it on Linux, so a glob written for one name can drop another there
+(`REVIEW*.md` also matches `review_md.md`). Exclude one file by an exact-name `REGEX`. A rule
+is checked without a build by copying it into a scratch project (`project(x NONE)`, the tree
+passed as a variable), running `cmake --install --prefix` there, and comparing the installed
+names with the source folder - on Windows and in WSL both.
+
 ## build.yml - build_linux_gcc
 
 gcc with LLVM and GLFW off, two checks, no test run. `Configure: tools disabled` configures the

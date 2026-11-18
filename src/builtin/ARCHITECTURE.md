@@ -281,3 +281,17 @@ glibc of 2.36 or newer the POSIX link passes `-Wl,-z,pack-relative-relocs`, whic
 a bitmap of positions. The gate is the glibc daslang runs on, not the target's: an older loader
 ignores the packed table and leaves the pointers unpatched, and a box with an older glibc builds
 artifacts for that older floor, as the release workflow's ubuntu-22.04 build does on purpose.
+
+## A table owns the string keys it adds {#table-owned-string-key}
+
+A table stores a string key as a pointer, so a key read from a temporary string would dangle
+once the temporary ends. `__builtin_table_insert_temp_string` and its set form take such a key.
+They reserve the slot with the temporary key - one hash and one probe, as an index does - and,
+when the table's size grew, overwrite the stored key with a `clone_string` copy. The stored hash
+stays valid, since the copy has the same bytes, and a key the table already holds allocates
+nothing. `daslib/builtin.das` calls them from every function that can add a key, under a
+`static_if` on a temporary string key, so every other key type keeps the plain index.
+
+The table index and the set insert refuse, at compile time, a temporary key of any type that
+can be temporary. The `static_if` is what keeps a temporary string from reaching them; a
+temporary pointer has no copy to make and is refused.
