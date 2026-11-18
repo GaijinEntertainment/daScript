@@ -194,7 +194,7 @@ python3 -c 'import json;d=json.load(open("modules/dasLLAMA/benchmarks/lcpp_bench
 
 `ok ok <features> <n>` is the pass: `noise` is the tuner's own drift verdict (a busy or thermally
 unstable box says otherwise - re-mint, never edit), `validation` is every winner checked against
-its fallback, `features` is the box's fingerprint of `TUNE_KNOWN_FEATURES` (zen4:
+its fallback, `features` is the box's fingerprint of `CpuFeatures` (zen4:
 `avx2;f16c;fma;sse4.2;avx512f;avx512bw;avx512vl;avx512vnni`), `<n>` the number of kernels the
 tune scope declares, a kq gemv's own `<fmt>q8_gemv_gen` seat included.
 
@@ -231,8 +231,8 @@ Then run a model-level sanity row on the vehicle against the reference build:
 A class with no shipped profile needs the class first, on the branch the box clones:
 its row in `JIT_CPU_CLASSES` and its place in `jit_cpu_class_ladder`
 (`modules/dasLLVM/daslib/llvm_cpu_class.das`), the new class above the one it supersedes, its arm
-in `tune_cpu_class()` and every feature a `requires=` names in `TUNE_KNOWN_FEATURES`
-(`modules/dasLLVM/daslib/llvm_tune.das`). Until its profile ships, a box of the new class adopts the class below
+in `tune_cpu_class()` (`modules/dasLLVM/daslib/llvm_tune.das`) and every feature a `requires=` names
+in `CpuFeatures`. Until its profile ships, a box of the new class adopts the class below
 it (the chain) and races only the seats that class could not answer. Then the same mint and export
 produce `<class>.tune-defaults.json`, and that one IS committed. Box differences the walk carries:
 

@@ -9,6 +9,7 @@ require daslib/debugger
 require strings
 require math
 require llvm/daslib/llvm_jit_common
+require llvm/daslib/llvm_cpu_class
 require llvm/daslib/llvm_jit_cli
 require llvm/daslib/llvm_jit_run
 require _llvm_cache_common
@@ -80,27 +81,25 @@ def test_cache_corruption_selfheal(t : T?) {
     rmdir_rec(tmp, err)
 }
 
-def count_set(g : JitTarget) : int => int(popcnt(uint(g.features)))
-
-[test(description = "class_target sets the twelve tier gates of a JitTarget copy to the x86-avx2 class's set and leaves the target it copies, its arch and its OS unchanged")]
+[test(description = "class_target sets a JitTarget copy's class and features to the x86-avx2 class and leaves the target it copies, its arch and its OS unchanged; a class of another arch gives the copy no features")]
 def test_class_target_gates(t : T?) {
     t |> run("the copy takes the class's gates, the original keeps its own") @(t : T?) {
-        let every = (JitFeatures.x64_avx2 | JitFeatures.x64_f16c | JitFeatures.x64_vnni256
-            | JitFeatures.x64_avx512bw | JitFeatures.x64_avx512vnni | JitFeatures.x64_avx512vbmi
-            | JitFeatures.x64_vnniint8 | JitFeatures.x64_amx | JitFeatures.x64_amx_bf16
-            | JitFeatures.arm64_dotprod | JitFeatures.arm64_i8mm | JitFeatures.arm64_fullfp16)
-        let all = JitTarget(arch = JitTargetArch.x64, os_linux = true, features = every)
-        let klass = class_target(all, "x86-avx2")
-        t |> equal(count_set(all), 12, "the original keeps all twelve gates")
-        t |> success(klass.arch == JitTargetArch.x64 && klass.os_linux,
+        let every = jit_cpu_class_row(CpuClass.x86_amx).features | jit_cpu_class_row(CpuClass.arm_sve).features
+        let all = JitTarget(klass = CpuClass.x86_generic, os_linux = true, features = every)
+        let klass = class_target(all, CpuClass.x86_avx2)
+        t |> success(all.features == every, "the original keeps its own set")
+        t |> success(target_x64(klass) && klass.os_linux,
             "the copy keeps the arch and the OS")
-        t |> success(klass.features.x64_avx2, "the x86-avx2 class has its avx2 gate")
-        t |> success(!klass.features.x64_amx_bf16 && !klass.features.x64_amx
-                     && !klass.features.x64_avx512bw,
+        t |> success(klass.klass == CpuClass.x86_avx2 && klass.features.avx2, "the copy is the x86-avx2 class with its avx2 gate")
+        let tiers = x64_tiers(klass.features)
+        t |> success(!tiers.amx_bf16 && !tiers.amx && !tiers.avx512bw,
             "the x86-avx2 class has no amx and no avx512 gate")
-        t |> success(!klass.features.arm64_dotprod && !klass.features.arm64_i8mm
-                     && !klass.features.arm64_fullfp16,
+        t |> success(!klass.features.dotprod && !klass.features.i8mm
+                     && !klass.features.fullfp16,
             "an x64 target takes no arm64 gate from any class")
+        let foreign = class_target(all, CpuClass.arm_i8mm)
+        t |> success(foreign.klass == CpuClass.x86_generic && uint(foreign.features) == 0u,
+            "a class of another arch keeps the copy's class and gives it no features")
     }
 }
 

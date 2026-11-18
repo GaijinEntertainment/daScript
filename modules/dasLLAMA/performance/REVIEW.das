@@ -296,9 +296,9 @@ def private check_defaults_profiles {
         if (empty(featureList)) {
             gate_finding(full, "no provenance.features - the gate cannot tell which [tune] families the class has a seat in; re-export the profile")
         }
-        var inscope features <- split(featureList, ";")
+        let features = cpu_features_of(featureList)
         for (fam in fams) {
-            let seated = any_row_runs(fam.requires) $(feature) => has_value(features, feature)
+            let seated = any_row_runs(fam.requires, features)
             let runs = empty(fam.requires) || seated
             if (runs && !(kernels.value as _object |> key_exists(fam.name))) {
                 gate_finding(full, "no entry for the [tune] family {fam.name} - a fat release ships a profile clone for every family the class has a seat in (`daspkg release --fat` refuses this class without one); re-mint the class, the generator half races every family the class has a seat in (ARCHITECTURE_MEASUREMENT.md#committed-records-gate)")

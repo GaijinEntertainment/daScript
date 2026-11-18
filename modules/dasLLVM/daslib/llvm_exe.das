@@ -1468,7 +1468,7 @@ def public inject_main(program_context : Context?; ctx : LLVMContextRef; // noli
             types.LLVMVoidPtrType() // argv
         )
     )
-    let main_sym = target.arch == JitTargetArch.wasm ? "__main_argc_argv" : "main"
+    let main_sym = target_wasm(target) ? "__main_argc_argv" : "main"
     let main_fn = LLVMAddFunctionWithType(mod, main_sym, main_fn_type)
     let entry = LLVMAppendBasicBlockInContext(ctx, main_fn, "entry")
     LLVMPositionBuilderAtEnd(builder, entry)
@@ -1512,7 +1512,7 @@ def public inject_main(program_context : Context?; ctx : LLVMContextRef; // noli
     // Match the interpreter's WebLoop: on wasm a program exporting `update` runs as init() once +
     // update() per browser frame + shutdown() (the browser can't block in main's while-loop). `main`
     // stays the desktop driver, bypassed here — so the same .das cross-compiles unchanged for web.
-    if (target.arch == JitTargetArch.wasm) {
+    if (target_wasm(target)) {
         var update_impl = ""
         var update_returns_value = false
         var update_count = 0

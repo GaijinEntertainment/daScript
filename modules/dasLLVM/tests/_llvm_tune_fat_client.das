@@ -42,7 +42,7 @@ def main : int {
     var st <- tune_status()
     for (s in st) {
         let active = (tune_fat_mask() & tune_fat_class_bit(s.klass)) != 0
-        print("STATUS {s.fname}|{s.klass}|{s.suffix}|{s.source}|{active ? "active" : "idle"}\n")
+        print("STATUS {s.fname}|{cpu_class_name(s.klass)}|{s.suffix}|{s.source}|{active ? "active" : "idle"}\n")
     }
     delete st
     log_tune_status("llvm_tune_fat")

@@ -305,13 +305,13 @@ def kernel_report_() : string {
     static_if (typeinfo module_exists(llvm_tune)) {
         var inscope rows <- tune_status()
         var inscope families : table<string>
-        var inscope classes : array<string>
+        var inscope classes : array<CpuClass>
         var inscope sources : table<string; int>
         var manifest_file = ""
         for (r in rows) {
             families |> insert(r.fname)
             sources[r.source]++
-            if (!empty(r.klass) && find_index(classes, r.klass) < 0) {
+            if (r.klass != CpuClass.none && find_index(classes, r.klass) < 0) {
                 classes |> push(r.klass)
             }
             if (r.source == "manifest") {
@@ -320,8 +320,9 @@ def kernel_report_() : string {
         }
         if (tune_fat_built()) {
             let mask = tune_fat_mask()
-            var inscope picked <- [for (c in classes); c; where 0 != (tune_fat_class_bit(c) & mask)]
-            return "fat build - kernels for {join(classes, ", ")}; this box runs {join(picked, ", ")}"
+            var inscope all <- [for (c in classes); cpu_class_name(c)]
+            var inscope picked <- [for (c in classes); cpu_class_name(c); where 0 != (tune_fat_class_bit(c) & mask)]
+            return "fat build - kernels for {join(all, ", ")}; this box runs {join(picked, ", ")}"
         }
         var inscope parts <- [for (k, n in keys(sources), values(sources)); "{n} {k}"]
         sort(parts)

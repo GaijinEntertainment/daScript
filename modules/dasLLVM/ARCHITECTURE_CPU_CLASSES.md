@@ -32,7 +32,7 @@ runs as `x86-avx2`, because the set is the contract and a subset of it is not.
 
 `DAS_JIT_BASELINE=<class>` builds for a class instead of the running box. It is one truth on
 every rail - the DLL, the standalone exe, the AOT object: the class's set reads as forced
-(`x64_forced_feature` / `arm64_forced_feature` answer it before the force env), so the tier
+(`forced_plus_features` puts it before the force env's names), so the tier
 gates, the machine's feature string and the `requires=` eligibility of every `[tune_perm]` follow
 the class; `make_jit_target` drops to the generic rail whatever the caller asked;
 `create_default_target_machine` names the class's cpu; `tune_cpu_class()` answers the class, so the

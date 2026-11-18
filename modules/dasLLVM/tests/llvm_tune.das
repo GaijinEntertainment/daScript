@@ -262,8 +262,8 @@ def private attr_group_of(lines : array<string>; needle : string) : string {
 
 def private write_profile(dir, klass, winner : string) {
     mkdir(dir)
-    let features = jit_cpu_class_row(klass).features
-    let body = "\{ \"kernels\" : \{ \"fat_add\" : \"{winner}\" \}, \"provenance\" : \{ \"features\" : \"{replace(features, ";", ";")}\" \} \}"
+    let features = cpu_features_text(jit_cpu_class_row(cpu_class_of(klass)).features, ";")
+    let body = "\{ \"kernels\" : \{ \"fat_add\" : \"{winner}\" \}, \"provenance\" : \{ \"features\" : \"{features}\" \} \}"
     fwrite(path_join(dir, "{klass}.tune-defaults.json"), body)
 }
 
@@ -312,11 +312,11 @@ def test_llvm_tune_fat(t : T?) { // nolint:STYLE038 - one flat spawn-and-assert 
     let client = path_join(work, "_llvm_tune_fat_client.das")
     let exe = path_join(work, "_llvm_tune_fat_client")
     let defdir = path_join(work, WORK_DEFAULTS)
-    var ladder <- [for (c in split(jit_cpu_class_ladder(get_architecture_name()), ";")); c; where !empty(c)]
+    var ladder <- [for (c in jit_cpu_class_ladder(cpu_arch_of(get_architecture_name()))); cpu_class_name(c)]
     t |> success(length(ladder) >= 2, "this arch has a class ladder to be fat over")
     let top = ladder[0]
     let low = ladder[length(ladder) - 1] == "x86-base" ? "x86-avx2" : ladder[length(ladder) - 1]
-    let boxInTop = tune_fat_box_in_class(top)
+    let boxInTop = tune_fat_box_in_class(cpu_class_of(top))
     write_profile(defdir, low, "k0")
     write_profile(defdir, top, "k2")
 
@@ -331,10 +331,10 @@ def test_llvm_tune_fat(t : T?) { // nolint:STYLE038 - one flat spawn-and-assert 
     t |> success(!(lb |> has("targeting the current box")), "case 1: a fat exe never targets the box")
     let topAttrs = attr_group_of(lb, "fat_add__fat_{replace(top, "-", "_")}")
     let lowAttrs = attr_group_of(lb, "fat_add__fat_{replace(low, "-", "_")}")
-    let topOnly = jit_cpu_class_ladder(get_architecture_name()) |> starts_with("x86") ? "+avx512vnni" : "+i8mm"
-    t |> success(find(topAttrs, "\"target-features\"=\"{jit_class_plus_features(top)}\"") >= 0, "case 1: the {top} clone carries its class's features: {topAttrs}")
+    let topOnly = get_architecture_name() == "x86_64" ? "+avx512vnni" : "+i8mm"
+    t |> success(find(topAttrs, "\"target-features\"=\"{cpu_features_text(jit_cpu_class_row(cpu_class_of(top)).features, ",", "+")}\"") >= 0, "case 1: the {top} clone carries its class's features: {topAttrs}")
     t |> success(find(topAttrs, "noinline") >= 0, "case 1: the {top} clone is a function, never inlined into the baseline: {topAttrs}")
-    t |> success(find(lowAttrs, "\"target-cpu\"=\"{jit_cpu_class_row(low).cpu}\"") >= 0 && find(lowAttrs, topOnly) < 0, "case 1: the {low} clone carries the baseline's cpu and none of the top class's features: {lowAttrs}")
+    t |> success(find(lowAttrs, "\"target-cpu\"=\"{jit_cpu_class_row(cpu_class_of(low)).cpu}\"") >= 0 && find(lowAttrs, topOnly) < 0, "case 1: the {low} clone carries the baseline's cpu and none of the top class's features: {lowAttrs}")
     t |> success(lb |> has("@das.tune.fat_mask = internal unnamed_addr global i32 0"), "case 1: the dispatch mask is an LLVM-side word, not a das global")
     t |> success(!(lb |> has("fat_seatless (DAS_TUNE_MODE=fat)")),
         "case 1: a family no shipped class has a seat in gets no clone: the build names none")
@@ -371,7 +371,7 @@ def test_llvm_tune_fat(t : T?) { // nolint:STYLE038 - one flat spawn-and-assert 
 
         // 4b. a pin to a class the box is in but the exe carries no clone for refuses to start -
         //     only the top and the baseline are profiled, so a middle class of the ladder has none
-        if (length(ladder) > 2 && tune_fat_box_in_class(ladder[1])) {
+        if (length(ladder) > 2 && tune_fat_box_in_class(cpu_class_of(ladder[1]))) {
             var lm : array<string>
             t |> success(spawn_child("{tune_env_prefix("", "", ladder[1])}\"{exe}.exe\"", lm) != 0, "case 4b: a pin the exe carries no clone for refuses")
             t |> success(lm |> has("carries no clone for"), "case 4b: the refusal says the exe carries no such clone\n{join(lm, "\n")}")
@@ -430,8 +430,8 @@ def test_llvm_tune_fat(t : T?) { // nolint:STYLE038 - one flat spawn-and-assert 
             "case 8: the library carries one clone per profiled class\n{join(ll, "\n")}")
         var box_mask = 0
         for (c in ladder) {
-            if (tune_fat_box_in_class(c)) {
-                box_mask |= tune_fat_class_bit(c)
+            if (tune_fat_box_in_class(cpu_class_of(c))) {
+                box_mask |= tune_fat_class_bit(cpu_class_of(c))
             }
         }
         let host = path_join(work, "_llvm_tune_fat_clib_host.das")
@@ -487,8 +487,7 @@ def test_llvm_tune_forced_file(t : T?) {
     copy_scope_fixture(t, work)
     copy_fixture(t, "_llvm_tune_fat_clib.das", work)
     copy_fixture(t, "_llvm_tune_fat_clib_host.das", work)
-    let ladder_text = jit_cpu_class_ladder(get_architecture_name())
-    var ladder <- [for (c in split(ladder_text, ";")); c; where !empty(c)]
+    var ladder <- [for (c in jit_cpu_class_ladder(cpu_arch_of(get_architecture_name()))); cpu_class_name(c)]
     let low = ladder[length(ladder) - 1] == "x86-base" ? "x86-avx2" : ladder[length(ladder) - 1]
     write_profile(path_join(work, WORK_DEFAULTS), low, "k0")
     let foreign = path_join(work, "foreign.tune.json")

@@ -429,7 +429,7 @@ def test_llvm_tune_profiles(t : T?) { // nolint:STYLE038 - one flat spawn-and-as
     let client = path_join(work, "_llvm_tune_profiles_client.das")
     let sidecar = path_join(work, "_llvm_tune_profiles_client.tune.json")
     let defdir = path_join(work, WORK_DEFAULTS)
-    let klass = tune_cpu_class()
+    let klass = cpu_class_name(tune_cpu_class())
     let profile = path_join(defdir, "{klass}.tune-defaults.json")
 
     // 1. no profile file: the plain auto flow - full race (empty filter), the tuner's k2 runs
@@ -497,7 +497,7 @@ def test_llvm_tune_profiles(t : T?) { // nolint:STYLE038 - one flat spawn-and-as
     var chain <- tune_class_chain()
     t |> equal(chain[0], tune_cpu_class(), "the box's own class heads its ladder - a class outside the chain could never adopt its own profile")
     if (length(chain) > 1) {
-        let lower = chain[length(chain) - 1]
+        let lower = cpu_class_name(chain[length(chain) - 1])
         remove(sidecar)
         remove(profile)
         write_profile(defdir, lower, "k0", tune_feature_fingerprint())

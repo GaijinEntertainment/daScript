@@ -15,6 +15,7 @@ require daslib/strings_boost
 require strings
 require _spawn_common
 require _llvm_cache_common
+require llvm/daslib/llvm_cpu_class
 
 let HOST_CPU_LINE = "targeting the current box"
 let BASELINE_LINE = "DAS_JIT_BASELINE="
@@ -23,7 +24,7 @@ let BASELINE_LINE = "DAS_JIT_BASELINE="
 // the class's gates bake: avx2 + f16c on x86, dotprod + fullfp16 on arm
 def private lowest_class() : string => get_architecture_name() == "x86_64" ? "x86-avx2" : "arm-neon"
 
-def private lowest_class_bits() : int => get_architecture_name() == "x86_64" ? 3 : 1280
+def private lowest_class_bits() : int => int(uint(jit_cpu_class_row(cpu_class_of(lowest_class())).features))
 
 def private foreign_class() : string =>
     get_architecture_name() == "x86_64" ? "arm-neon" : "x86-avx2"

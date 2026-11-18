@@ -339,7 +339,7 @@ def emit_row(var rows : int&; name : string; tier : BenchTier; var st : RowStat;
 }
 
 //! the tune profile this run's kernel versions came from: the manifest DAS_TUNE_MANIFEST names, else the box class's defaults
-def tune_profile_stamp() : string => tune_manifest_explicit() ? tune_manifest_path() : "{jit_baseline_class()}.tune-defaults.json"
+def tune_profile_stamp() : string => tune_manifest_explicit() ? tune_manifest_path() : "{cpu_class_name(jit_baseline_class())}.tune-defaults.json"
 
 def perm_wanted(spec, suffix : string) : bool {
     if (empty(spec)) {

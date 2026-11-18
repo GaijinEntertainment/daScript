@@ -335,7 +335,7 @@ def test_llvm_tune_stale_save_keeps_runtime(t : T?) {
 def test_llvm_tune_sidecar_in_memory(t : T?) {
     set_tune_manifest_in_memory()
     t |> equal(tune_manifest_text(), "", "an in-memory sidecar starts empty")
-    t |> equal(tune_profile_text("llvm-tune-test-class"), "", "no kernels, no profile")
+    t |> equal(tune_profile_text(CpuClass.x86_base), "", "no kernels, no profile")
     t |> success(tune_manifest_set("mem_kernel_a", "k1"), "the first set lands")
     t |> success(tune_manifest_set("mem_kernel_b", "k2"), "the second set keeps the first")
     t |> equal(tune_manifest_get("mem_kernel_a"), "k1")
@@ -344,12 +344,12 @@ def test_llvm_tune_sidecar_in_memory(t : T?) {
     t |> success(find(text, "mem_kernel_a") >= 0 && find(text, "provenance") >= 0,
         "the text is the sidecar document: {text}")
     t |> success(!fexist("<memory>"), "nothing was written under the in-memory name")
-    let profile = tune_profile_text("llvm-tune-test-class")
+    let profile = tune_profile_text(CpuClass.x86_base)
     var err = ""
     var doc = read_json(profile, err)
     t |> success(doc != null, "the profile text parses: {err}")
     t |> equal(doc?["kernels"]?["mem_kernel_b"] ?? "", "k2", "the profile carries the winners")
-    t |> equal(doc?["provenance"]?["class"] ?? "", "llvm-tune-test-class",
+    t |> equal(doc?["provenance"]?["class"] ?? "", "x86-base",
         "the profile names the class asked for")
     t |> equal(doc?["provenance"]?["origin"] ?? "", "profile")
     t |> equal(doc?["provenance"]?["box"] ?? "", "", "a profile carries no box identity")
@@ -360,7 +360,7 @@ def test_llvm_tune_sidecar_in_memory(t : T?) {
         return
     }
     let exported = tmpRes as value
-    t |> success(tune_profile_export(exported, "llvm-tune-test-class"),
+    t |> success(tune_profile_export(exported, CpuClass.x86_base),
         "the export writes the profile")
     var ferr = ""
     var fdoc = read_json(fread(exported), ferr)
