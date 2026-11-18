@@ -3,10 +3,11 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture doc:
 `ARCHITECTURE.md`.
 
-**A diff under `lr1/` that adds a `require` of a module other than one under `lr1/`, one under `daslib/`,
-or a builtin module the daslang executable registers itself (such as `strings` or `math`) is a defect** -
-the module is reused by programs that load nothing under `modules/`; a caller-specific need is met at the
-caller.
+**The `lr1/` subfolder carries its own `REVIEW.md`: a `.das` file that declares a `module` and is not a
+test helper (a module only `[test]` files require), wherever the diff puts it, answers to that checklist.**
+
+**Weakening `REVIEW.das` (beside this file) is a defect: dropping a check it runs, narrowing what a check
+walks, or rewording a finding so it no longer names what failed.**
 
 **A diff that lets `build_grammar` return a `Grammar` with an empty `err` for a grammar in which a rule the
 root reaches derives no terminal string is a defect** - the acceptor would then accept a byte after which
@@ -44,10 +45,6 @@ corpora, the sample grammars and the ported converter.
 
 **A diff that makes `gbnf_grammar` accept a token reference - `<[id]>`, `<name>`, `!<...>` - is a defect** -
 the acceptor sees bytes; map a token to its bytes at the caller instead.
-
-**A diff that raises `_cyclomatic_complexity` or `_function_length` in a file under `lr1/`, or adds code that
-is not the ported converter's to `lr1/json_schema.das`, is a defect** - new code meets the default limits or
-the function splits, in a file with no raise (the one ledgered raise: `ARCHITECTURE.md#ported-converter`).
 
 **A diff that adds a construct `gbnf_grammar` reads, a schema keyword `json_schema_to_gbnf` handles, or a
 public `lr_*` function ships, in the same change, a case under `tests/` with inputs the engine admits and
