@@ -345,7 +345,6 @@
     preRun: [function () {
       // the C environment is built from Module.ENV at startup: knobs set later never reach getenv
       Module.ENV.DASLLAMA_IMAGE = '0';          // never mint a sidecar into MEMFS: the images arrive prepared
-      Module.ENV.DASLLAMA_ALLOW_UNTUNED = '1';  // the portable kernels, no tune sidecar
       Module.FS.mkdir('/models');
       Module.addRunDependency('parrot-models');
       fetchManifest()

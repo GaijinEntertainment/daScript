@@ -77,7 +77,7 @@ skips every check, `?force=unsupported` shows the isolation note.
 
 A browser example's `main.das` runs its frame loop through `eval_main_loop`, a blocking loop on
 the desktop and `requestAnimationFrame` in the browser. The `.das_package` disables the GPU tiers
-for the wasm build, so the host needs no Metal or Vulkan, and names the shell that fetches the
+for the wasm build, so the host needs no Metal or Vulkan - the release stamps the engine's kernels from the `wasm-simd128` class profile (`modules/dasLLAMA/performance/defaults/`) when it compiles, so the page sets no tune knob - and names the shell that fetches the
 models and starts the program on a click (audio needs the gesture). The desktop run and the page
 therefore exercise the same code, which is why a browser-only failure is a language-runtime fact
 worth a rule rather than an app bug. A page the browser restores from its back-forward cache
