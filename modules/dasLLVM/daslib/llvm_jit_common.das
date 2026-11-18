@@ -1029,6 +1029,13 @@ def public with_target_machine(triple, cpu, features : string; opt_level : uint;
     LLVMDisposeTargetMachine(targetMachine)
 }
 
+[arch(at = "../ARCHITECTURE_TARGET_FEATURES.md#wasm-feature-string")]
+def private pass_machine_cpu_features(target : JitTarget; use_host_cpu : bool
+                                      ) : tuple<cpu : string; features : string> {
+    if (target.arch == JitTargetArch.wasm) return (cpu = "", features = "")
+    return default_target_cpu_features(target, use_host_cpu)
+}
+
 [macro_function, arch(at = "../ARCHITECTURE_TARGET_FEATURES.md#aarch64-feature-truth")]
 def public create_default_target_machine(target : JitTarget; opt_level : uint;
                                          use_host_cpu : bool) : LLVMTargetMachineRef {
@@ -1043,7 +1050,7 @@ def public create_default_target_machine(target : JitTarget; opt_level : uint;
     let host_triple = host_jit_triple()
     let triple_owned_by_llvm = empty(host_triple)
     let triple_msg = triple_owned_by_llvm ? LLVMGetDefaultTargetTriple() : host_triple
-    let machine = default_target_cpu_features(target, use_host_cpu)
+    let machine = pass_machine_cpu_features(target, use_host_cpu)
     let targetMachine = create_target_machine(triple_msg, machine.cpu, machine.features, opt_level)
 
     if (triple_owned_by_llvm) {
