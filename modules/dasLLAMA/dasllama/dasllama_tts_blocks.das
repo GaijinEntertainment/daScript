@@ -2485,8 +2485,14 @@ def compact_rows(var y : array<float>; t, from, to : int64) {
     if (to > from) {
         panic("dasLLAMA tts: compact_rows from {from} to {to} columns - the target is wider")
     }
-    for (r in range64(1l, t)) {
-        copy_floats(y, r * from, y, r * to, to)
+    if (t * from > long_length(y)) {
+        panic("dasLLAMA tts: compact_rows of {t} rows by {from} columns over {long_length(y)} floats")
+    }
+    unsafe {
+        var rows = addr(y[0])
+        for (r in range64(1l, t)) {
+            memmove(rows + r * to, rows + r * from, to * 4l)   //! a row's target overlaps its source
+        }
     }
 }
 
