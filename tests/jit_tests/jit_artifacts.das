@@ -750,6 +750,8 @@ def private count_with(lines : array<string>; needle : string) : int {
     return n
 }
 
+let NO_CACHE_JIT = "-no-module-cache -jit -jit-no-cache"
+
 [test(description = "the wasm64 cross compile lowers idot4 to the pairwise int8 dot with simd128 and no relaxed-simd, and a host compile emits no wasm intrinsic", timeout = 1200)]
 def test_wasm_idot_lowering(t : T?) {
     if (!jit_enabled()) {
@@ -805,6 +807,25 @@ def test_wasm_idot_lowering(t : T?) {
     }
     remove("{dump}.wasm", terr)
     remove("{dump}.host", terr)
+}
+
+let BASELINE_FMA_FIXTURE = "{get_das_root()}/tests/jit_tests/_baseline_fma_fixture.das"
+
+[test(description = "under x86-avx2 the uncached JIT emits FMA: float4 sin reduces fused", timeout = 1200)]
+def test_baseline_class_reaches_uncached_jit(t : T?) {
+    if (!jit_enabled() || get_architecture_name() != "x86_64" || !cpu_supports("fma")) {
+        t |> skip("the x86-avx2 class runs on an x86_64 host with FMA under the JIT")
+        return
+    }
+    let args <- get_command_line_arguments()
+    let bin = args[0]
+    let windows = get_platform_name() == "windows"
+    let avx2Env = windows ? "set DAS_JIT_BASELINE=x86-avx2&& " : "DAS_JIT_BASELINE=x86-avx2 "
+    var out : array<string>
+    let rc = spawn_child("{avx2Env}\"{bin}\" {NO_CACHE_JIT} \"{BASELINE_FMA_FIXTURE}\"", out)
+    t |> equal(rc, 0, "the fixture runs under x86-avx2: {join(out, " | ")}")
+    t |> success(count_with(out, "fused") >= 1 && count_with(out, "unfused") == 0,
+        "the uncached JIT builds for the class, FMA included: {join(out, " | ")}")
 }
 
 // the object's `target_features` custom section as one text line -
