@@ -29,18 +29,18 @@ The document types split one grammar, each with a repo-root contract:
   code there** - charters say which file owns what, mechanisms say why shapes win, and the
   exception ledger says what is already ruled. Facts formerly carried by comments live here.
 
-An implementation folder - `daslib/`, a module's `daslib/` or engine folder - holds no `.md`
-besides `REVIEW*.md` and `ARCHITECTURE*.md` (lint-enforced: `.lint_config`
-`rule_docs_only`). Ledgers live at the module root, and planned work is a row in one - a rule
-document whose ledger sits outside its own folder names it in its opening (`REVIEW_COMMON.md`).
-A plan-shaped document and a past-tense record do not live in the tree at all: git and the
-author's own out-of-tree notes keep them, and no file in the tree cites them. No `REVIEW*.md`,
-`ARCHITECTURE*.md` or ledger installs - the SDK bundle gate bans them; `REVIEW_COMMON.md` and
-`ARCHITECTURE_COMMON.md` at the install root are the two vendoring exceptions, and a shipped
-tree with `[arch]` citations installs a GENERATED excerpt of each cited document (the cited
-sections and the sections their own text cites, nothing else, banner-marked;
-`utils/internal/arch-extract`, registered on `DAS_ARCH_EXTRACT_SPECS` beside the tree's install
-rules) so LINT026 stays armed in an installed SDK.
+The repo root `ARCHITECTURE.md` states what is true of the tree as a whole. Where each
+document type may live, what never installs, and what LINT026 and LINT027 fail are in
+`ARCHITECTURE.md#document-system` - read it before adding, moving or splitting a `.md`.
+
+**Planned work is a row in the module-root ledger. Never write a plan-shaped document or a
+past-tense record into the tree, and never cite one from a file in the tree** - git and the
+author's own out-of-tree notes keep them. A rule document whose ledger sits outside its own
+folder names it in its opening (`REVIEW_COMMON.md`).
+
+**A shipped tree whose `.das` gains `[arch]` citations registers on `DAS_ARCH_EXTRACT_SPECS`
+beside its install rules, in the same change** - the SDK installs a generated excerpt of each
+cited document only for a registered tree.
 
 The mood test routes misplaced text: must/never binding a diff -> REVIEW.md; present-tense
 fact -> ARCHITECTURE.md; dated or past-tense -> deleted, git keeps it.
@@ -54,11 +54,9 @@ reasons: `skills/mcp_tools.md`.
 
 **An architecture-doc section is named, not numbered: its heading carries a `{#anchor}`, every
 citation - `[arch(at=...)]` in code, `// <doc>.md#<anchor>` in C++, `<doc>.md#<anchor>` in a
-rule document or ledger - names that anchor, and every anchor is cited.** LINT026 fails a
-citation naming no such file or anchor, a `.das` citation that resolves but sits inside a comment
-(it annotates nothing), and - in every folder, no tag arms it - an anchor nothing
-cites. An `[arch]` citation replaces the comment that would have restated the section: the
-mechanism lives in the document, the code names it.
+rule document or ledger - names that anchor, and every anchor is cited.** LINT026 is the gate.
+An `[arch]` citation replaces the comment that would have restated the section: the mechanism
+lives in the document, the code names it.
 
 **A `REVIEW*.md` or `ARCHITECTURE*.md` past 300 lines, wherever it sits, splits into companions** -
 `ARCHITECTURE_<CONCERN>.md` for an architecture doc, a `REVIEW_<KIND>.md` the parent
@@ -341,22 +339,21 @@ everywhere and reports a by-value out-parameter whose write nobody can read.
 
 ## Key Directories
 
-Most layout is obvious from `ls`. The non-obvious ones:
+Most layout is obvious from `ls`; the charters of the folders it does not explain are in `ARCHITECTURE.md#folder-charters` - read them before a first task in the tree. Duties on those folders:
 
-- `skills/daslang/` - the **distributable, SDK-free daslang language skill** for third-party AI agents (`SKILL.md` + `references/`), NOT a repo task skill. Every example is probe-verified; its `README.md` carries the editing rules. Grammar/stdlib/default changes update it in the same arc
+- `skills/daslang/` - grammar/stdlib/default changes update it in the same arc. Every example is probe-verified; its `README.md` carries the editing rules
 - `daslib/aot_cpp.das` - the AOT C++ emitter lives here, NOT in C++
-- `nano/` - `libDaScriptNano`, the runtime with no compiler in it: a shadow include root whose four headers win over `include/`, so thirteen `src/` sources compile against a minimal `Context` unmodified. A source that needs an edit to build there is CARVED upstream, never forked (`nano/ARCHITECTURE.md`); every directory linking it must clear its inherited include dirs, which `nano/REVIEW.das` checks
-- `tests/aot/CMakeLists.txt` - register new test directories here for AOT compilation. Two AOT binaries: `test_aot_subset` (tests/language only, in ALL - built and run, result-cached, by the per-PR build lane) and full `test_aot` (`EXCLUDE_FROM_ALL`, ~1080 AOT TUs - nightly CI + `preflight --full` only, via `--target test_aot`/`run_tests_aot`)
-- `dastest/` - test framework (used by both `tests/` and external repos)
-- `utils/detect-dupe/` (in-repo dupe finder) and `utils/find-dupe/` (Claude judge; needs `daspkg install --root utils/find-dupe` + `ANTHROPIC_API_KEY`) - both also MCP tools
-- `utils/mcp/`, `utils/daslang-live/`, `utils/daspkg/` - in-tree tools (most also have skills)
-- `tutorials/language/` (language tour) vs `tutorials/<area>/` (per-area) - never put tutorials in `modules/<X>/tutorial/`
-- **Array/dim/vector indexing lives across 5 tiers** - bounds checks, neg-index detection and width-aware bounds usually need parallel edits in all: AOT C++ (`include/daScript/simulate/aot.h`), interpreter non-fused (`include/daScript/simulate/runtime_array.h` + `simulate_nodes.h`), interpreter fused (`src/simulate/simulate_fusion_at_array.cpp` + `simulate_fusion_at.cpp`), JIT (`modules/dasLLVM/daslib/llvm_jit.das`), AST const-fold (`src/ast/ast_simulate.cpp`). Debug builds bypass the fused permutations - a fused-path-only fix passes Release CI and trips Debug-ARM. Bump `LLVM_JIT_CODEGEN_VERSION` in `modules/dasLLVM/daslib/llvm_jit_plan.das` after JIT emitter/ABI changes to invalidate cached `.dll`s (the cache hash also folds per-function AOT hashes, so AST-level changes self-invalidate)
+- `nano/` - a `src/` source that needs an edit to build into `libDaScriptNano` is CARVED upstream, never forked (`nano/ARCHITECTURE.md`); every directory linking it must clear its inherited include dirs, which `nano/REVIEW.das` checks
+- `tests/aot/CMakeLists.txt` - register new test directories here for AOT compilation
+- `tutorials/<area>/` - never put tutorials in `modules/<X>/tutorial/`
+- **Array/dim/vector indexing lives across 5 tiers** - bounds checks, neg-index detection and width-aware bounds usually need parallel edits in all; the files are listed in `ARCHITECTURE.md#indexing-tiers`
+- A fix on the fused interpreter path is also run on a Debug build - Debug bypasses the fused permutations, so a fused-path-only fix passes Release CI and trips Debug-ARM
+- Bump `LLVM_JIT_CODEGEN_VERSION` in `modules/dasLLVM/daslib/llvm_jit_plan.das` after JIT emitter/ABI changes to invalidate cached `.dll`s (`ARCHITECTURE.md#jit-cache`)
 
 ## MCP Server (AI Tool Integration)
 
 The daslang MCP server (`utils/mcp/main.das`) exposes compiler diagnostics, program introspection, and live-reload control. **Prefer MCP tools** over manual compilation and grep - `grep_usage` is parse-aware (tree-sitter), `find_references` resolves cross-module symbols, and `live_*` tools talk to `daslang-live` directly instead of curl. Full tool table (including `detect_duplicates`/`judge_duplicates`/`find_dupe`), live-API caveats, and `.mcp.json` configuration: **`skills/mcp_tools.md`**.
 
-**Fresh worktree/clone has zero daslang MCP tools** - `.mcp.json`, `sgconfig.yml`, `bin/`, and the tree-sitter grammar lib are all gitignored. Bootstrap from any existing daslang binary with `daslang utils/mcp/setup.das -- --root <worktree>`, then restart the session in the worktree; mechanics and flags are in `skills/mcp_tools.md`.
+**Fresh worktree/clone has zero daslang MCP tools.** Bootstrap from any existing daslang binary with `daslang utils/mcp/setup.das -- --root <worktree>`, then restart the session in the worktree; mechanics and flags are in `skills/mcp_tools.md`.
 
-**Adding a file under `utils/mcp/` that the server requires? Add it to the `install(FILES ...)` block in `CMakeLists.txt` in the same commit.** The installed SDK's MCP server runs with no `-project`, so it must be self-contained: every `.das` reachable from `main.das` has to be installed, or the SDK's server dies at startup on `error[20605] missing prerequisite '<mod>'` while the in-tree server keeps working. `tools/` and `subtools/` are globbed, but the top-level files are listed one by one - that list is the trap.
+**Adding a file under `utils/mcp/` that the server requires? Add it to the `install(FILES ...)` block in `CMakeLists.txt` in the same commit.** Every `.das` reachable from `main.das` has to be installed, or the SDK's server dies at startup on `error[20605] missing prerequisite '<mod>'` while the in-tree server keeps working. `tools/` and `subtools/` are globbed, but the top-level files are listed one by one - that list is the trap. Why the worktree starts empty and why the SDK's server must be self-contained: `ARCHITECTURE.md#mcp-server`.
