@@ -28,3 +28,8 @@ def fat_add(a, b : int) : int => a + b
 def fat_void(var acc : int&; a : int) : void {
     acc = a + 1
 }
+
+//! no class has a seat here: a fat build clones nothing for it
+[tune_perm(k = 9, requires = "llvm-tune-test-no-such-feature"),
+ tune(gen = "llvm_code_selftest::add_plus_k", fallback = "k9")]
+def fat_seatless(a, b : int) : int => a + b

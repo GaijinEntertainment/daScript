@@ -65,7 +65,7 @@ def test_llvm_tune_scope_documentation(t : T?) {
     delete ldocs
 }
 
-[test(description = "the fallback, error, auto and restart policies, a scope resolver, the injected default, --tune, version pins and an unreadable DAS_TUNE_MANIFEST each stamp, tune or refuse as declared across two library scopes sharing one app sidecar", timeout = 1200)]
+[test(description = "the fallback, error, auto and restart policies, a scope resolver, the injected default, --tune, version pins and an unreadable DAS_TUNE_MANIFEST each stamp, tune or refuse as declared across two library scopes sharing one app sidecar, and a family no class has a seat in demands no sidecar entry", timeout = 1200)]
 def test_llvm_tune_scope_policy(t : T?) {   // nolint:STYLE038 - flat numbered policy-flavor arms over shared child-spawn state; no arm stands alone
     let args <- get_command_line_arguments()  // locked view — do not delete
     let bin = args[0]
@@ -135,7 +135,8 @@ def test_llvm_tune_scope_policy(t : T?) {   // nolint:STYLE038 - flat numbered p
     t |> success(!(l6b |> has("RESULT")))
     var l6c : array<string>
     t |> equal(spawn_child("{tune_env("restart")}\"{bin}\" -no-module-cache \"{client}\"", l6c), 0)
-    t |> success(l6c |> has("RESULT 5"))
+    t |> success(l6c |> has("RESULT 5"),
+        "both scopes read complete on the tuners' two entries: scope_seatless demands none")
 
     // 6b. policy=restart + a registered scope resolver: the guard consults it INSTEAD of
     //     spawning the tuner — the resolver writes the winner (the exchange-client shape),

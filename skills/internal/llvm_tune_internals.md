@@ -69,9 +69,10 @@ context - which is why the infer pass moved to `daslib/tune` with the annotation
 
 ## The gates
 
-`tune_aot_gate()` and `tune_exe_gate()` are deliberately separate. `tune_aot_gate()` makes a
-cross-box artifact fully tune-free, but keeps the grid for a `--jit-compile-only` dump under a
-cross triple, so the x64 emission rail can inspect it off-box. `tune_exe_gate()` is true for both
+`tune_aot_gate()` and `tune_exe_gate()` are deliberately separate. `tune_aot_gate()` makes an
+artifact for a cross triple no CPU class serves fully tune-free, but keeps the grid for a
+`--jit-compile-only` dump under it, so the x64 emission rail can inspect it off-box. A triple a
+class serves (`jit_cross_class()` names the class) stamps for that class. `tune_exe_gate()` is true for both
 `-exe` and `-lib`: the command line sets one compile policy for both, `jit_exe_mode`, and the
 option that makes the JIT emit a library is set after the compile, too late for a macro. Both
 artifacts still stamp and still emit the status `[init]`. A macro that must tell a library from

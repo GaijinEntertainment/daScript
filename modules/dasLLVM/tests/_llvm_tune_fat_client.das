@@ -38,6 +38,7 @@ def main : int {
     var acc = 0
     fat_void(acc, n)
     print("RESULT {fat_add(n, 3)} KV {fat_kv()} VOID {acc} FORK {forked_fat_add(n)}\n")
+    print("SEATLESS {fat_seatless(n, 3) - n}\n")
     var st <- tune_status()
     for (s in st) {
         let active = (tune_fat_mask() & tune_fat_class_bit(s.klass)) != 0

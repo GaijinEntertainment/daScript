@@ -77,16 +77,17 @@ def jit_cli_compile_only() : bool =>
 
 var private g_cross_dump_noted = false
 
-//! A cross triple stamps reference bodies - a foreign-arch artifact cannot tune - unless `--jit-compile-only` dumps the grid
+[arch(at = "../ARCHITECTURE_TARGET_FEATURES.md#cross-class")]
 def tune_aot_gate() : bool {
-    let cross_dump = !empty(get_target_triple()) && jit_cli_compile_only()
+    let classless_cross = !empty(get_target_triple()) && empty(jit_cross_class())
+    let cross_dump = classless_cross && jit_cli_compile_only()
     if (cross_dump && !g_cross_dump_noted) {
         g_cross_dump_noted = true
         to_log(LOG_INFO, "llvm_tune: --jit-compile-only under the cross triple {get_target_triple()} keeps the tune grid - the emission dump, nothing runs\n")
     }
     return (compiling_program().policies.tune_frozen
         || compiling_program().policies.aot
-        || (!empty(get_target_triple()) && !cross_dump))
+        || (classless_cross && !cross_dump))
 }
 
 //! True when this compile must retain reference bodies. Documentation roots
@@ -234,8 +235,14 @@ def private linux_cpu_brand() : string {
     //! This box's tune identity: platform|arch|model_id|os_build|cpu — a sidecar carrying a
     //! different identity reads as stale (the cross-box hazard). Always five fields, non-empty
     //! cpu (the schema requires it); os_build keeps its full value, `box_match_key` folds it.
+[arch(at = "../ARCHITECTURE_TARGET_FEATURES.md#cross-class")]
 def tune_box_identity() : string {
     if (!empty(g_box_identity)) {
+        return g_box_identity
+    }
+    let cross = jit_cross_class()
+    if (!empty(cross)) {
+        g_box_identity = "{get_cross_platform_name()}|{get_target_architecture_name()}|||{cross}"
         return g_box_identity
     }
     var model_id = ""   // nolint:LINT003,LINT019 - only the macOS branch writes it, and a host compile with platform folding drops that branch
@@ -381,6 +388,7 @@ def tune_sidecar_same_box(path, mtime_key : string) : bool => box_match_key(side
     //! runtime shares - a standalone exe binds each extern at startup (the cited section says why).
 [arch(at="../ARCHITECTURE.md#tune-sidecar-cache-pin")]
 def private pin_module_cache_dependency(path : string) {
+    return if (empty(path))
     add_module_cache_dependency(path)
 }
 
@@ -439,6 +447,22 @@ def tune_manifest_get(fname : string) : string {
     let r = tab?[fname] ?? ""
     delete tab
     return r
+}
+
+var private g_cross_sidecar_noted = false
+
+def private cross_class_note() : string =>
+    "--jit-target={get_target_triple()} builds for the class {jit_cross_class()}"
+
+[arch(at = "../ARCHITECTURE_TARGET_FEATURES.md#cross-class")]
+def private stamp_manifest_path() : string {
+    let mpath = tune_manifest_path()
+    return mpath if (empty(jit_cross_class()) || is_forced(mpath))
+    if (!g_cross_sidecar_noted && fexist(mpath)) {
+        g_cross_sidecar_noted = true
+        to_log(LOG_INFO, "llvm_tune: {cross_class_note()} - the sidecar {mpath} does not stamp\n")
+    }
+    return ""
 }
 
 // `onlyClass` names one class to read instead of walking the chain - a fat build's per-class pick
@@ -534,7 +558,7 @@ def private profile_kernels(var klass, ppath : string&; onlyClass : string = "")
 //! declares. `source` is "" (no pick), the sidecar path, or the profile path.
 def tune_kernel_pick(fname : string; var source : string&) : string {
     var found = false
-    let mpath = tune_manifest_path()
+    let mpath = stamp_manifest_path()
     pin_module_cache_dependency(mpath)
     var tab <- read_manifest(mpath, found)
     var r = tab?[fname] ?? ""
@@ -595,8 +619,10 @@ def private save_sidecar_doc(path : string; var doc : JsonValue?) : bool {
             + " - nothing writes it\n")
         return false
     }
-    var prov = JV((binary = tilde_home(running_binary()), platform = get_platform_name(),
-        arch = get_architecture_name(), box = tune_box_identity(), written = iso8601_now(),
+    let cross_platform = get_cross_platform_name()
+    let platform = empty(cross_platform) ? get_platform_name() : cross_platform
+    var prov = JV((binary = tilde_home(running_binary()), platform = platform,
+        arch = get_target_architecture_name(), box = tune_box_identity(), written = iso8601_now(),
         features = tune_feature_fingerprint()))
     let old = doc?["provenance"]
     if (old != null && old is _object) {
@@ -1141,14 +1167,24 @@ def private resolve_version_of(prog : Program?; spec, keyOverride : string;
 // read path itself is scope-independent (every module reads the app sidecar).
 var private g_scopes : table<string; TuneScope>
 
-    // every [tune] function plus every non-perm-pinned [tuned] one, read OFF THE AST: a macro
-    // global would be a per-requiring-context copy and read empty across modules.
+[arch(at = "../ARCHITECTURE_TARGET_FEATURES.md#seatless-families")]
+def private family_has_seat(annotations : AnnotationList) : bool {
+    var inscope rows : array<string>
+    for (ann in annotations) {
+        continue if (ann.annotation.name != "tune_perm")
+        let rv = find_arg(ann.arguments, "requires")
+        rows |> push(rv is tString ? rv as tString : "")
+    }
+    return any_row_runs(rows) $(feature) => fallback_feature_ok(feature)
+}
+
+    //! read off the AST: a macro global reads empty across modules
 def private module_kernel_fnames(mod : Module?; var fnames : array<string>) {
     for_each_function(mod, "") $(fn) {
         var demand = false
         for (ann in fn.annotations) {
             if (ann.annotation.name == "tune") {
-                demand = true
+                demand = family_has_seat(fn.annotations)
             } elif (ann.annotation.name == "tuned") {
                 let pv = find_arg(ann.arguments, "perm")
                 demand = !(pv is tString)
@@ -1474,13 +1510,11 @@ struct private TunePerm {
     args : array<tuple<argname : string; argvalue : RttiValue>>
 }
 
-    // The baseline class's set (DAS_JIT_BASELINE) or else host cpuid, OR'd with the force env —
-    // in lockstep with llvm_jit_common's x64_target_feature. requires= is an ELIGIBILITY hint for
-    // fallback selection only; the generator's own decline predicate stays the emission truth.
 def private fallback_feature_ok(name : string) : bool {
-    let baseline = jit_baseline_class()
-    if (!empty(baseline)) {
-        if (jit_class_has(baseline, name)) return true
+    let klass = jit_target_class()
+    if (!empty(jit_cross_class())) return jit_class_has(klass, name)
+    if (!empty(klass)) {
+        if (jit_class_has(klass, name)) return true
     } elif (cpu_supports(name)) {
         return true
     }
@@ -1493,21 +1527,9 @@ def private fallback_feature_ok(name : string) : bool {
     return false
 }
 
-//! True when a `requires=` feature expression passes on this box — a `,`-separated AND of
-//! `|`-separated alternatives, matched against host CPU features plus the
-//! `DAS_JIT_*_FORCE_FEATURES` overrides. An empty expression always passes.
-def tune_requires_ok(expr : string) : bool {
-    if (empty(expr)) return true
-    for (conj in split(expr, ",")) {
-        continue if (empty(conj))
-        var anyOk = false
-        for (alt in split(conj, "|")) {
-            anyOk ||= !empty(alt) && fallback_feature_ok(alt)
-        }
-        if (!anyOk) return false
-    }
-    return true
-}
+//! True when a `requires=` expression passes for the build target
+def tune_requires_ok(expr : string) : bool =>
+    requires_hold(expr) $(feature) => fallback_feature_ok(feature)
 
 //! Pick from a `;`-chain of `suffix` or `suffix:requires` entries — the first whose requires
 //! passes on this box, so one annotation can ship a different default per ISA. "" when none
@@ -1524,7 +1546,9 @@ def tune_pick_fallback(chain : string) : string {
     return ""
 }
 
-let private TUNE_KNOWN_FEATURES = "avx2;f16c;fma;sse4.2;avxvnni;avxvnniint8;avx512f;avx512bw;avx512vl;avx512vnni;avx512vbmi;avx512bf16;amx-tile;amx-int8;amx-bf16;amx-fp16;neon;dotprod;i8mm;bf16;fullfp16;sve;lse"
+let private TUNE_KNOWN_FEATURES = ("avx2;f16c;fma;sse4.2;avxvnni;avxvnniint8;avx512f;avx512bw;" +
+    "avx512vl;avx512vnni;avx512vbmi;avx512bf16;amx-tile;amx-int8;amx-bf16;amx-fp16;" +
+    "neon;dotprod;i8mm;bf16;fullfp16;sve;lse;simd128")
 
     //! The ';'-joined subset of the known `requires=` feature names this box passes — stamped
     //! into every sidecar's provenance as `features`, which is what lets a shipped profile say
@@ -1541,9 +1565,9 @@ def tune_feature_fingerprint() : string {
     //! follow the seats `requires=` can gate, not box models: two boxes of one class stamp the
     //! same winners, so one profile serves them all; an arch with no ladder gets a key no profile matches.
 def tune_cpu_class() : string {
-    let baseline = jit_baseline_class()
-    if (!empty(baseline)) {
-        return baseline
+    let klass = jit_target_class()
+    if (!empty(klass)) {
+        return klass
     }
     let arch = get_architecture_name()
     if (arch == "x86_64") {
@@ -1567,7 +1591,7 @@ def tune_cpu_class() : string {
     //! Profile candidates for this box, most specific first — a box above the best shipped
     //! profile adopts the nearest lower class and races only what that class could not.
 def tune_class_chain() : array<string> {
-    let ladder = jit_cpu_class_ladder(get_architecture_name())
+    let ladder = jit_cpu_class_ladder(get_target_architecture_name())
     let own = tune_cpu_class()
     var chain : array<string>
     var seen = false
@@ -1585,27 +1609,8 @@ def tune_class_chain() : array<string> {
 
 // "did the PROFILE's minting box pass this gate" is what separates covered from unlocked seats
 def private requires_ok_in_fingerprint(requires : string; fingerprint : string) : bool {
-    return true if (empty(requires))
-    var have : table<string>
-    for (f in split(fingerprint, ";")) {
-        if (!empty(f)) {
-            have |> insert(f)
-        }
-    }
-    var ok = true
-    for (conj in split(requires, ",")) {
-        continue if (empty(conj))
-        var anyOk = false
-        for (alt in split(conj, "|")) {
-            anyOk ||= !empty(alt) && have |> key_exists(alt)
-        }
-        if (!anyOk) {
-            ok = false
-            break
-        }
-    }
-    delete have
-    return ok
+    var inscope have <- split(fingerprint, ";")
+    return requires_hold(requires) $(feature) => has_value(have, feature)
 }
 
 def private perm_requires_ok(p : TunePerm) : bool => tune_requires_ok(p.requires)
@@ -1943,6 +1948,33 @@ def private fat_arm(fn : FunctionPtr; cloneName : string; bit : int) : Expressio
     }
 }
 
+def private emit_reference_registries(func : FunctionPtr; comps : array<TuneCompanion>;
+                                      var errors : das_string) : bool {
+    let noPerms : array<TunePerm>
+    var ok = emit_registry(compiling_module(), func, noPerms, errors)
+    for (c in comps) {
+        break if (!ok)
+        ok = emit_registry(compiling_module(), c.fn, noPerms, errors)
+    }
+    return ok
+}
+
+[arch(at = "../ARCHITECTURE_TARGET_FEATURES.md#cross-grid")]
+def private stamped_rows(perms : array<TunePerm>) : array<TunePerm> {
+    let whole = empty(jit_cross_class())
+    return <- [for (p in perms); clone_to_move(p); where whole || perm_requires_ok(p)]
+}
+
+[arch(at = "../ARCHITECTURE_TARGET_FEATURES.md#seatless-families")]
+def private grid_has_seat_in(perms : array<TunePerm>; klasses : array<string>) : bool {
+    var inscope rows <- [for (p in perms); p.requires]
+    for (klass in klasses) {
+        let seated = any_row_runs(rows) $(feature) => jit_class_has(klass, feature)
+        return true if (seated)
+    }
+    return false
+}
+
     //! `DAS_TUNE_MODE=fat`: one `<name>__fat_<class>` clone per ship-set class, each stamped from its
     //! class's profile (else the fallback chain under the class's set), and the function's own body
     //! is the dispatch over `tune_fat_mask()`, baseline last: -exe, -lib.
@@ -1960,6 +1992,10 @@ def private stamp_fat(var func : FunctionPtr; genKey : string; perms : array<Tun
         return false
     }
     var ship <- fat_ship_set(baseline)
+    if (!grid_has_seat_in(perms, ship)) {
+        delete ship
+        return emit_reference_registries(func, comps, errors)
+    }
     var arms : array<ExpressionPtr>
     var picks : array<string>
     arms |> reserve(length(ship))
@@ -2013,14 +2049,7 @@ def private stamp_fat(var func : FunctionPtr; genKey : string; perms : array<Tun
         if (tune_verbosity() != "silent") {
             print("llvm_tune: [tune] {func.name} (DAS_TUNE_MODE=fat): fat clones {join(picks, ", ")}\n")
         }
-        // reference-row-only registries, so harness code referencing <name>_variants() still compiles
-        let noPerms : array<TunePerm>
-        var rok = emit_registry(compiling_module(), func, noPerms, errors)
-        for (c in comps) {
-            if (rok) {
-                rok = emit_registry(compiling_module(), c.fn, noPerms, errors)
-            }
-        }
+        emit_reference_registries(func, comps, errors)
     }
     delete picks
     delete ship
@@ -2091,13 +2120,7 @@ def tune_apply(var func : FunctionPtr; var _group : ModuleGroup; // nolint:STYLE
     }
     // overrides grid modes too: a stale DAS_TUNE_MODE must not leak stubs into generated C++
     if (tune_stamp_free_gate()) {
-        let noPerms : array<TunePerm>
-        var gok = emit_registry(compiling_module(), func, noPerms, errors)
-        for (c in comps) {
-            if (gok) {
-                gok = emit_registry(compiling_module(), c.fn, noPerms, errors)
-            }
-        }
+        let gok = emit_reference_registries(func, comps, errors)
         delete perms
         delete comps
         return gok
@@ -2105,10 +2128,21 @@ def tune_apply(var func : FunctionPtr; var _group : ModuleGroup; // nolint:STYLE
     let mode = tune_mode()
     if (mode == "tune" || mode == "test") {
         // visible generation cost: a silent permutation stamp reads as a hung compile from outside
-        let ctail = empty(comps) ? "" : " (+{length(comps)} companions each)"
-        print("llvm_tune: [tune] {func.name}: stamping {length(perms)} permutations{ctail}\n")
-        let ok = stamp_grid(func, genKey, perms, comps, errors)
+        var rows <- stamped_rows(perms)
+        if (length(rows) < length(perms)) {
+            let kept = "{length(rows)} of {length(perms)} rows can run"
+            print("llvm_tune: [tune] {func.name}: {cross_class_note()} - {kept}\n")
+        }
         delete perms
+        if (empty(rows)) {
+            let rok = emit_reference_registries(func, comps, errors)
+            delete comps
+            return rok
+        }
+        let ctail = empty(comps) ? "" : " (+{length(comps)} companions each)"
+        print("llvm_tune: [tune] {func.name}: stamping {length(rows)} permutations{ctail}\n")
+        let ok = stamp_grid(func, genKey, rows, comps, errors)
+        delete rows
         delete comps
         return ok
     }
@@ -2125,12 +2159,7 @@ def tune_apply(var func : FunctionPtr; var _group : ModuleGroup; // nolint:STYLE
         return false
     }
     if (g_env_tune.tune_policy == "reference") {
-        let noPerms : array<TunePerm>
-        var rok = emit_registry(compiling_module(), func, noPerms, errors)
-        for (c in comps) {
-            break if (!rok)
-            rok = emit_registry(compiling_module(), c.fn, noPerms, errors)
-        }
+        let rok = emit_reference_registries(func, comps, errors)
         delete perms
         delete comps
         return rok
@@ -2138,7 +2167,7 @@ def tune_apply(var func : FunctionPtr; var _group : ModuleGroup; // nolint:STYLE
     // no entry falls back rather than dropping to reference, so a sidecar written before a kernel family landed cannot untune it
     let fname = "{func.name}"
     var manifestFound = false
-    let mpath = tune_manifest_path()
+    let mpath = stamp_manifest_path()
     pin_module_cache_dependency(mpath)
     var manifest <- read_manifest(mpath, manifestFound)
     var suffix = ""
@@ -2256,15 +2285,8 @@ def tune_apply(var func : FunctionPtr; var _group : ModuleGroup; // nolint:STYLE
             errors := "[tune] on {func.name}: perm '{suffix}' is not in the [tune_perm] grid"
         }
     }
-    // reference-row-only registries, so harness code referencing <name>_variants() still compiles
     if (ok) {
-        let noPerms : array<TunePerm>
-        ok = emit_registry(compiling_module(), func, noPerms, errors)
-        for (c in comps) {
-            if (ok) {
-                ok = emit_registry(compiling_module(), c.fn, noPerms, errors)
-            }
-        }
+        ok = emit_reference_registries(func, comps, errors)
     }
     delete companionOwnSuffix
     delete perms
@@ -3049,7 +3071,7 @@ def private collect_status(prog : Program?) : array<TuneStatus> {
                 }
                 rows |> push(TuneStatus(fname = base, scope = scopeName,
                     suffix = suffix, source = source, manifestPath = mpath, klass = klass))
-            } elif (isTuned && tune_mode() != "fat") {
+            } elif (isTuned && tune_mode() != "fat" && family_has_seat(fn.annotations)) {
                 let source = !empty(stampedSource) ? stampedSource : (empty(suffix) ? "reference" : (empty(from) ? "fallback" : "manifest"))
                 let mpath = !empty(from) ? from : sidecar
                 rows |> push(TuneStatus(fname = "{fn.name}", scope = scopeName,

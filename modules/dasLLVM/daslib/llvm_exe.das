@@ -923,7 +923,8 @@ def private push_shared_unique(entry : SharedModuleEntry; var seen : table<strin
     deps.shared_modules |> push(entry)
 }
 
-def private write_release_deps(prog : Program?) {
+[arch(at = "../ARCHITECTURE_TARGET_FEATURES.md#cross-class")]
+def private write_release_deps(prog : Program?; cross : bool) {
     let cfg <- jit_cli_options_or_default()
     let dst_path = cfg.list_shared_modules |> unwrap_or("")
     if (empty(dst_path)) return
@@ -945,7 +946,12 @@ def private write_release_deps(prog : Program?) {
     prog |> for_each_module() $(m) {
         let mod_name = string(m.name)
         if (key_exists(by_das, mod_name)) {
-            push_shared_unique(by_das[mod_name], shared_seen, deps)
+            if (cross && mod_name == "llvm") {
+                let knob = "--jit-target={get_target_triple()}"
+                to_log(LOG_INFO, "llvm_exe: {knob} - the release ships no `llvm` module\n")
+            } else {
+                push_shared_unique(by_das[mod_name], shared_seen, deps)
+            }
         }
         let file = string(m.fileName)
         if (!empty(file)) {
@@ -1189,7 +1195,7 @@ def public emit_standalone_runtime_init(builder : LLVMBuilderRef; prog : Program
     }
     // -list-shared-modules <path> side-effect: dump the release-deps JSON
     // for `daspkg release` to ship dylibs + traverse dep packages.
-    write_release_deps(prog)
+    write_release_deps(prog, target.cross)
 
     // Call initialize_modules() — built by CollectExternVisitor during collect_external_functions
     let init_modules_type = LLVMFunctionType(types.t_void, array<LLVMTypeRef>())
