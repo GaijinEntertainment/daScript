@@ -471,7 +471,7 @@ namespace das
     ,   cant_get_field_pointer                                      =   30929    // 1 site(s)
     ,   cant_global                                                 =   30930    // 8 site(s)
     ,   cant_index                                                  =   30931    // 1 site(s)
-    ,   cant_index_key                                              =   30932    // 1 site(s)
+    ,   cant_index_key                                              =   30932    // 2 site(s)
     ,   cant_index_pointer                                          =   30933    // 2 site(s)
     ,   cant_index_table                                            =   30934    // 2 site(s)
     ,   cant_initialize_array_element                               =   30935    // 1 site(s)

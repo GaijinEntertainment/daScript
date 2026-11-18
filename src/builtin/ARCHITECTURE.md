@@ -291,3 +291,7 @@ when the table's size grew, overwrite the stored key with a `clone_string` copy.
 stays valid, since the copy has the same bytes, and a key the table already holds allocates
 nothing. `daslib/builtin.das` calls them from every function that can add a key, under a
 `static_if` on a temporary string key, so every other key type keeps the plain index.
+
+The table index and the set insert refuse, at compile time, a temporary key of any type that
+can be temporary. The `static_if` is what keeps a temporary string from reaching them; a
+temporary pointer has no copy to make and is refused.
