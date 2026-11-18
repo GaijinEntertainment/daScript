@@ -1,6 +1,7 @@
 # examples Code Review Checklist
 
-**Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.**
+**Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
+doc: `README.md`.
 
 **A `.das` in this folder tree that a game's `main.das` requires, directly or through another
 required file, answers to `games/REVIEW.md` too - wherever the diff puts it.**

@@ -142,6 +142,33 @@ def test_llvm_tune_grid_mode(t : T?) {
     delete lines
 }
 
+[test(description = "a cross class's tune grid holds only the rows the class can run", timeout = 1200)]
+def test_llvm_tune_cross_grid(t : T?) {
+    if (!jit_enabled()) {
+        t |> success(true)
+        return
+    }
+    let args <- get_command_line_arguments()  // locked view — do not delete
+    let bin = args[0]
+    let client = "{get_this_module_dir()}/_llvm_tune_cross_grid_client.das"
+    let env = child_env([("DAS_TUNE_MODE", "test")])
+    let run = "{env}\"{bin}\" -no-module-cache -jit \"{client}\" --"
+    var native : array<string>
+    let nativeRc = spawn_child("{run} --jit-compile-only", native)
+    t |> equal(nativeRc, 0, join(native, " | "))
+    t |> success(native |> has_value("MIXED reference,k1,k2"),
+        "a native grid holds every row: {join(native, " | ")}")
+    t |> success(native |> has_value("SEATLESS reference,k3"), "a gated family's too")
+    var cross : array<string>
+    let wasm = "--jit-target=wasm64-unknown-emscripten --jit-compile-only"
+    let crossRc = spawn_child("{run} {wasm}", cross)
+    t |> equal(crossRc, 0, join(cross, " | "))
+    t |> success(cross |> has_value("MIXED reference,k1"),
+        "the wasm grid holds the simd128 row alone: {join(cross, " | ")}")
+    t |> success(cross |> has_value("SEATLESS reference"),
+        "a family with no wasm seat keeps its reference row alone")
+}
+
 // The fat mode (DAS_TUNE_MODE=fat under DAS_JIT_BASELINE=<class>, -exe) through child daslang
 // processes: the build stamps one clone per class the scope ships a profile for, the exe picks
 // the clone from cpuid at startup (the companion switching with it), DAS_TUNE_FAT_CLASS pins the
@@ -218,7 +245,7 @@ def private copy_scope_fixture(t : T?; dstdir : string) {
     t |> success(fwrite(path_join(dstdir, SCOPE_FIXTURE), text), "could not copy {SCOPE_FIXTURE} into {dstdir}")
 }
 
-[test(description = "a fat -exe stamps one clone per profiled CPU class and dispatches by cpuid at startup, DAS_TUNE_FAT_CLASS pins or refuses the pick, fat mode refuses a -jit run and a build with no baseline, and a fat -lib picks its classes when a host creates it", timeout = 1200)]
+[test(description = "a fat -exe stamps one clone per profiled CPU class and dispatches by cpuid at startup, DAS_TUNE_FAT_CLASS pins or refuses the pick, fat mode refuses a -jit run and a build with no baseline, a family no shipped class has a seat in gets no clone and no status row, and a fat -lib picks its classes when a host creates it", timeout = 1200)]
 def test_llvm_tune_fat(t : T?) { // nolint:STYLE038 - one flat spawn-and-assert rail per scenario; a split would hide the sequence the scenarios build on
     if (!jit_enabled()) {
         t |> success(true)
@@ -261,6 +288,8 @@ def test_llvm_tune_fat(t : T?) { // nolint:STYLE038 - one flat spawn-and-assert 
     t |> success(find(topAttrs, "noinline") >= 0, "case 1: the {top} clone is a function, never inlined into the baseline: {topAttrs}")
     t |> success(find(lowAttrs, "\"target-cpu\"=\"{jit_cpu_class_row(low).cpu}\"") >= 0 && find(lowAttrs, topOnly) < 0, "case 1: the {low} clone carries the baseline's cpu and none of the top class's features: {lowAttrs}")
     t |> success(lb |> has("@das.tune.fat_mask = internal unnamed_addr global i32 0"), "case 1: the dispatch mask is an LLVM-side word, not a das global")
+    t |> success(!(lb |> has("fat_seatless (DAS_TUNE_MODE=fat)")),
+        "case 1: a family no shipped class has a seat in gets no clone: the build names none")
 
     let can_run = get_platform_name() != "windows" && das_is_dll_build()
     if (can_run && fexist("{exe}.exe")) {
@@ -273,6 +302,8 @@ def test_llvm_tune_fat(t : T?) { // nolint:STYLE038 - one flat spawn-and-assert 
         t |> success(lr |> has("STATUS fat_add|{top}|k2|profile|{boxInTop ? "active" : "idle"}"), "case 2: the top clone's row says whether this box runs it")
         t |> success(lr |> has("fat kernels - this box runs the"), "case 2: the init announces the classes")
         t |> success(lr |> has("fat_add [{low} <- this box]: k0 (profile)"), "case 2: the status log marks the classes this box runs")
+        t |> success(lr |> has("SEATLESS 3") && !(lr |> has("STATUS fat_seatless")),
+            "case 2: a seatless family runs its reference body, no status row\n{join(lr, "\n")}")
         delete lr
 
         // 3. DAS_TUNE_FAT_CLASS pins the pick to the baseline whatever cpuid says

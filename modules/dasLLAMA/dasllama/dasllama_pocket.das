@@ -465,6 +465,8 @@ struct PocketScratch {
     @scratch @exact_size tlow : array<float>     //! a prompt's low-rank text rows, before the projection
     @scratch @exact_size xb : array<float>
     @scratch @exact_size qkv : array<float>
+    @scratch rope_cos : array<float>     //! `rope_rows`'s tables
+    @scratch rope_sin : array<float>
     @scratch @exact_size q : array<float>
     @scratch @exact_size k : array<float>
     @scratch @exact_size v : array<float>
@@ -503,6 +505,8 @@ def finalize(var sc : PocketScratch) {
     delete sc.tlow
     delete sc.xb
     delete sc.qkv
+    delete sc.rope_cos
+    delete sc.rope_sin
     delete sc.q
     delete sc.k
     delete sc.v
@@ -1186,9 +1190,9 @@ def private layer_attention(l : PocketLayer; tf : PocketTransformer; var x : arr
     proj(l.in_proj, sc.xb, t, sc.qkv)
     split_qkv(sc.qkv, t, qd, kvd, sc.q, sc.k, sc.v)
     if (!kv_only) {
-        rope_rows(sc.q, t, qd, dh, pos0, tf.period)
+        rope_rows(sc.q, t, qd, dh, pos0, tf.period, sc.rope_cos, sc.rope_sin)
     }
-    rope_rows(sc.k, t, kvd, dh, pos0, tf.period)
+    rope_rows(sc.k, t, kvd, dh, pos0, tf.period, sc.rope_cos, sc.rope_sin)
     kv_cache_append(kc, sc.k, sc.v, t, kvd)
     return if (kv_only)
     attention_causal_rows(sc.q, t, qd, tf.context, kc, sc.ctx)
@@ -1203,7 +1207,7 @@ def private layer_ffn(l : PocketLayer; tf : PocketTransformer; var x : array<flo
     let d = tf.d
     layernorm_rows_into(x, sc.xb, t, d, l.norm2, tf.eps)
     proj(l.ffn1, sc.xb, t, sc.h)
-    gelu(sc.h, t * tf.ffn)
+    gelu4(sc.h, t * tf.ffn)
     proj(l.ffn2, sc.h, t, sc.xb)
     if (!empty(l.scale2.a)) {
         layer_scale_rows(sc.xb, t, d, l.scale2.a)

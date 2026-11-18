@@ -125,12 +125,12 @@ buffers that the run writes without first reading what the range held before the
 run writes and then reads back is one of them.** A stale value is the previous run's, or garbage
 that happens to sit inside the tolerance bar; an unprefilled output can pass by keeping it.
 
-**A compare of a kernel against a CPU oracle asserts bit-identity only where the cell fixes the
-floating-point operation order on both sides, or builds operands that keep every intermediate
-exact; any other kernel-vs-oracle compare holds a tolerance bar.** With the order fixed on both
-sides, or the operands exact by construction, the oracle's result is the kernel's by
-construction; an exact compare of indices or schedule words against a CPU oracle is not a
-bit-identity assert.
+**A compare of a kernel against a CPU oracle, or of two kernel forms that are not the same
+arithmetic in the same order, asserts bit-identity only where the cell fixes the floating-point
+operation order on both sides, or builds operands that keep every intermediate exact; any other
+such compare holds a tolerance bar.** With the order fixed on both sides, or the operands exact by
+construction, the oracle's result is the kernel's by construction; an exact compare of indices or
+schedule words against a CPU oracle is not a bit-identity assert.
 
 **A kernel-unit cell whose output buffer is its input buffer, and whose compare passes within a
 nonzero tolerance, asserts at one index - a literal, or one the cell's own search finds, the cell

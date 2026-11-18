@@ -164,7 +164,11 @@ regenerates this library's winners; the policy rail and `--tune` run it with
 module: the completeness check requires a sidecar entry for every `[tune]`
 function AND every non-`perm=`-pinned `[tuned]` loop-hint kernel across
 the declaring + covered modules (dasLLAMA covers its math/quant modules, so
-first-start auto-tune sweeps loop hints too). The demand is AST-derived; a
+first-start auto-tune sweeps loop hints too). A `[tune]` family whose every
+`[tune_perm]` row carries a `requires=` the build target fails - the class
+`DAS_JIT_BASELINE` or a cross triple names, else this box's CPU features -
+is not demanded: no row of it can run here, so it stamps its reference body
+and owes no entry. The demand is AST-derived; a
 tuner that misses a demanded kernel re-tunes every start, and the startup
 warning **names the missing kernels**. `version_of=` (optional,
 `"module/CONST"`) pins the scope to a library version: the sidecar's
@@ -210,12 +214,14 @@ them, not of its class.
 
 The class names follow the features `requires=` can gate: `x86-amx` (AMX-INT8 +
 AMX-TILE over the 512-bit VNNI gate) / `x86-vnni512` / `x86-vnni256` / `x86-avx2` /
-`x86-base`, `arm-sve` / `arm-i8mm` / `arm-neon`; any other
+`x86-base`, `arm-sve` / `arm-i8mm` / `arm-neon`, and `wasm-simd128` for a
+wasm64 cross build (*Cross builds* below); any other
 architecture gets `<platform>-<arch>`, a key no shipped profile matches, so
-such a box always races (`tune_cpu_class()` computes this box's,
-`tune_class_chain()` its adoption ladder). The profile is read at **compile
-time**: with no sidecar entry, a `[tune]` or `[tuned]` kernel walks the ladder
-from the box's own class downward and stamps its entry from the first profile
+such a box always races (`tune_cpu_class()` computes the class this compile
+builds for - this box's, unless `DAS_JIT_BASELINE` or a cross triple names
+one - and `tune_class_chain()` its adoption ladder). The profile is read at
+**compile time**: with no sidecar entry, a `[tune]` or `[tuned]` kernel walks
+the ladder from that class downward and stamps its entry from the first profile
 that exists and matches the scope's version pin (`tune_status` reports the
 source as `profile`). The auto/restart guard then walks the same ladder at
 startup and races only what the profile could not answer:
@@ -366,7 +372,7 @@ A frozen artifact must not demand or run tuning:
   off: a stamp changes the function's semantic hash, so a stamped function
   would fail the AOT link. Under `-jit` the JIT supersedes AOT bodies and
   tuned stamps stay live.
-* **Standalone exe or library** (`daslang -exe`, `daslang -lib`) still *stamps* - an exe built beside a
+* **A native standalone exe or library** (`daslang -exe`, `daslang -lib`; a cross build: *Cross builds* below) still *stamps* - an exe built beside a
   sidecar ships those winners (a local-use artifact by definition), and one
   built without ships the class-profile stamps of the build box's class - or
   of the `DAS_JIT_BASELINE` class - or the generic `fallback=` stamps when no
@@ -379,6 +385,18 @@ A frozen artifact must not demand or run tuning:
   declining to their reference bodies on the generic-CPU rail; under
   `DAS_JIT_BASELINE` it targets the class instead, and a kernel-free exe stays
   generic/redistributable.
+
+### Cross builds
+
+A cross build (`--jit-target=<triple>`) is tuned by its target, never by the
+box that builds it. A wasm64 triple builds for the class `wasm-simd128`: the
+`requires=` gates are checked against that class's feature set (`simd128`),
+and each `[tune]` function stamps the class profile's winner, else the first
+`fallback=` entry the class passes, else the reference body. The sidecar
+beside the app is not read - the build box measured it for its own CPU - and
+only `DAS_TUNE_FORCE` names a file that stamps. Every other cross triple has
+no class, and its tune annotations are inert: the artifact carries reference
+bodies, and only a `--jit-compile-only` dump keeps them live, for inspection.
 
 One more compile is inert for a different reason: under the host's
 `-documentation` policy - a documentation or reflection root - every tune
@@ -703,7 +721,8 @@ same protocol; the debugging concession is accepting an existing sidecar.
 
 A tuner is an ordinary `[export] def main` compiled with
 `DAS_TUNE_MODE=tune`, so the `<name>_variants()` registry holds the full
-grid as function pointers. It benches them (see the Measurement section
+grid as function pointers - under a cross build (*Cross builds*), the rows
+its class can run. It benches them (see the Measurement section
 above and `modules/dasLLAMA/tune_for_this_box.md`), then records the winner:
 
 ```das

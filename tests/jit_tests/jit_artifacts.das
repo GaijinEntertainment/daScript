@@ -738,19 +738,23 @@ def test_jit_lib_android(tt : T?) {
 let WASM_IDOT_FIXTURE = "{get_das_root()}/tests/jit_tests/_wasm_idot_fixture.das"
 let PAIRWISE_ADD = "llvm.wasm.extadd.pairwise.signed"
 let RELAXED_DOT = "llvm.wasm.relaxed.dot"
+let QUAD_LANE_FOLD = "<4 x i32> <i32 0, i32 2, i32 4, i32 6>"
 
 
-def private count_with(lines : array<string>; needle : string) : int {
+//! the lines holding `needle`, and `also` when one is named
+def private count_with(lines : array<string>; needle : string; also : string = "") : int {
     var n = 0
     for (ln in lines) {
-        if (find(ln, needle) >= 0) {
+        if (find(ln, needle) >= 0 && (empty(also) || find(ln, also) >= 0)) {
             n++
         }
     }
     return n
 }
 
-[test(description = "the wasm64 cross compile lowers idot4 to the pairwise int8 dot with simd128 and no relaxed-simd, and a host compile emits no wasm intrinsic", timeout = 1200)]
+let NO_CACHE_JIT = "-no-module-cache -jit -jit-no-cache"
+
+[test(description = "the wasm64 cross compile lowers idot4 to the pairwise int8 dot with simd128 and no relaxed-simd, the scalar idot to the same dot with no quad-lane fold, and a host compile emits no wasm intrinsic", timeout = 1200)]
 def test_wasm_idot_lowering(t : T?) {
     if (!jit_enabled()) {
         t |> success(true)
@@ -759,10 +763,11 @@ def test_wasm_idot_lowering(t : T?) {
     let args <- get_command_line_arguments()  // locked view — do not delete
     let bin = args[0]
     var terr : string
-    let dump = path_join(temp_directory(terr), "wasm_idot_{ref_time_ticks()}")
+    mkdir_rec(OUTPUT_DIR)
+    let dump = path_join(OUTPUT_DIR, "wasm_idot_{ref_time_ticks()}")
     t |> run("the wasm64 cross compile lowers idot4 to the exact pairwise int8 dot") @(t : T?) {
         var out : array<string>
-        spawn_child("\"{bin}\" -jit \"{WASM_IDOT_FIXTURE}\" -- " +
+        spawn_child("\"{bin}\" {NO_CACHE_JIT} \"{WASM_IDOT_FIXTURE}\" -- " +
             "--jit-target=wasm64-unknown-emscripten "
             + "--jit-compile-only --jit-dump=\"{dump}.wasm\"", out)
         let ln <- split(fread("{dump}.wasm"), "\n")
@@ -776,10 +781,15 @@ def test_wasm_idot_lowering(t : T?) {
         let zexts = count_with(ln, "zext <8 x i8>")
         t |> success(zexts >= 2,
                      "both halves of the unsigned operand widen with ZExt ({zexts} lines)")
+        let folds = count_with(ln, QUAD_LANE_FOLD)
+        t |> success(folds == 2,
+            "each idot4 call folds its pair sums into quad lanes ({folds} fold shuffles)")
+        t |> success(count_with(ln, " = add <4 x i32> %idot_pairs_lo") == 1,
+            "the scalar idot adds its two pair-sum vectors unfolded")
     }
     t |> run("a host compile emits no wasm intrinsic") @(t : T?) {
         var out : array<string>
-        spawn_child("\"{bin}\" -jit \"{WASM_IDOT_FIXTURE}\" -- --jit-compile-only "
+        spawn_child("\"{bin}\" {NO_CACHE_JIT} \"{WASM_IDOT_FIXTURE}\" -- --jit-compile-only "
             + "--jit-dump=\"{dump}.host\"", out)
         let ln <- split(fread("{dump}.host"), "\n")
         t |> success(length(ln) > 20, "the host dump printed ({length(ln)} lines)")
@@ -794,7 +804,8 @@ def test_wasm_idot_lowering(t : T?) {
         let dir = unsafe(dir_r.value)
         let obj = "{dir}/idot.o"
         var ln : array<string>
-        spawn_child("\"{bin}\" -exe -output \"{obj}\" \"{WASM_IDOT_FIXTURE}\" -- " +
+        spawn_child("\"{bin}\" -no-module-cache -exe -output \"{obj}\" " +
+            "\"{WASM_IDOT_FIXTURE}\" -- " +
             "--jit-target=wasm64-unknown-emscripten --jit-emit-object", ln)
         let features = object_target_features(obj)
         t |> success(find(features, "simd128") >= 0,
@@ -805,6 +816,110 @@ def test_wasm_idot_lowering(t : T?) {
     }
     remove("{dump}.wasm", terr)
     remove("{dump}.host", terr)
+}
+
+let WASM_LOWERING_FIXTURE = "{get_das_root()}/tests/jit_tests/_wasm_lowering_fixture.das"
+
+let TWO_POW_112 = "0x46F0000000000000"
+
+let WASM_INLINED_MATH_CALLS = fixed_array("@llvm.sin.v4f32", "@llvm.cos.v4f32",
+    "@llvm.exp.v4f32", "@llvm.exp2.v4f32", "@llvm.tanh.v4f32")
+
+[test(description = "a wasm64 compile rounds through trunc, widens halves with no half type, both vectorized, takes float4 sin, cos, exp, exp2 and tanh as inline polynomials, and carries the user's hints", timeout = 1200)]
+def test_wasm_lowerings(t : T?) {
+    if (!jit_enabled()) {
+        t |> success(true)
+        return
+    }
+    let args <- get_command_line_arguments()
+    let bin = args[0]
+    var terr : string
+    mkdir_rec(OUTPUT_DIR)
+    let dump = path_join(OUTPUT_DIR, "wasm_lowering_{ref_time_ticks()}")
+    t |> run("the wasm64 cross compile") @(t : T?) {
+        var out : array<string>
+        spawn_child("\"{bin}\" {NO_CACHE_JIT} \"{WASM_LOWERING_FIXTURE}\" -- " +
+            "--jit-target=wasm64-unknown-emscripten "
+            + "--jit-compile-only --jit-dump=\"{dump}.wasm\"", out)
+        let ln <- split(fread("{dump}.wasm"), "\n")
+        t |> success(count_with(ln, "@llvm.round.") == 0,
+            "no llvm.round, which wasm turns into a roundf call ({length(ln)} lines)")
+        let truncs = count_with(ln, "@llvm.trunc.v4f32")
+        t |> success(truncs >= 2,
+            "the rounding loop vectorizes over the truncation ({truncs} lines)")
+        t |> success(count_with(ln, "x half>") == 0 && count_with(ln, "fpext") == 0,
+            "no half type reaches the IR")
+        let scales = count_with(ln, "fmul <4 x float>", TWO_POW_112)
+        t |> success(scales >= 1,
+            "the widening loop vectorizes over the 2^112 scale ({scales} lines)")
+        for (call in WASM_INLINED_MATH_CALLS) {
+            t |> success(count_with(ln, call) == 0,
+                "no {call}, which wasm turns into four scalar calls")
+        }
+        t |> success(count_with(ln, " noinline ") >= 1, "a function hint reaches its attributes")
+        t |> success(count_with(ln, "llvm.loop.vectorize.enable", "i1 false") >= 1,
+            "a loop hint reaches the loop's metadata")
+    }
+    t |> run("a host compile keeps llvm.round and no 2^112 scale") @(t : T?) {
+        var out : array<string>
+        spawn_child("\"{bin}\" {NO_CACHE_JIT} \"{WASM_LOWERING_FIXTURE}\" -- --jit-compile-only "
+            + "--jit-dump=\"{dump}.host\"", out)
+        let ln <- split(fread("{dump}.host"), "\n")
+        t |> success(count_with(ln, "@llvm.round.") >= 1, "the host rounds through llvm.round")
+        t |> success(count_with(ln, "@llvm.sin.v4f32") == 0, "the host takes sin inline too")
+        t |> success(count_with(ln, "@llvm.exp.v4f32") == 0, "the host takes exp inline too")
+    }
+    remove("{dump}.wasm", terr)
+    remove("{dump}.host", terr)
+}
+
+[test(description = "an x86 class with no F16C widens halves through the 2^112 scale, vectorized, and the half tests hold under it", timeout = 1200)]
+def test_half_widen_without_f16c(t : T?) {
+    if (!jit_enabled() || get_architecture_name() != "x86_64") {
+        t |> skip("the x86-base class needs an x86_64 host under the JIT")
+        return
+    }
+    let args <- get_command_line_arguments()
+    let bin = args[0]
+    let windows = get_platform_name() == "windows"
+    let baseEnv = windows ? "set DAS_JIT_BASELINE=x86-base&& " : "DAS_JIT_BASELINE=x86-base "
+    var terr : string
+    mkdir_rec(OUTPUT_DIR)
+    let dump = path_join(OUTPUT_DIR, "half_soft_{ref_time_ticks()}")
+    var out : array<string>
+    spawn_child("{baseEnv}\"{bin}\" {NO_CACHE_JIT} \"{WASM_LOWERING_FIXTURE}\" -- "
+        + "--jit-compile-only "
+        + "--jit-dump=\"{dump}.base\"", out)
+    let ln <- split(fread("{dump}.base"), "\n")
+    let scales = count_with(ln, "fmul <4 x float>", TWO_POW_112)
+    t |> success(scales >= 1, "the widening loop vectorizes over the 2^112 scale ({scales} lines)")
+    t |> success(count_with(ln, "x half>") == 0 && count_with(ln, "fpext") == 0,
+        "no half type reaches the IR")
+    remove("{dump}.base", terr)
+    var run : array<string>
+    let half_tests = "{get_das_root()}/tests/jit_tests/half_convert.das"
+    let rc = spawn_child("{baseEnv}\"{bin}\" {NO_CACHE_JIT} "
+        + "\"{get_das_root()}/dastest/dastest.das\" -- --test \"{half_tests}\"", run)
+    t |> equal(rc, 0, "the half tests pass under x86-base: {join(run, " | ")}")
+}
+
+let BASELINE_FMA_FIXTURE = "{get_das_root()}/tests/jit_tests/_baseline_fma_fixture.das"
+
+[test(description = "under x86-avx2 the uncached JIT emits FMA: float4 sin reduces fused", timeout = 1200)]
+def test_baseline_class_reaches_uncached_jit(t : T?) {
+    if (!jit_enabled() || get_architecture_name() != "x86_64" || !cpu_supports("fma")) {
+        t |> skip("the x86-avx2 class runs on an x86_64 host with FMA under the JIT")
+        return
+    }
+    let args <- get_command_line_arguments()
+    let bin = args[0]
+    let windows = get_platform_name() == "windows"
+    let avx2Env = windows ? "set DAS_JIT_BASELINE=x86-avx2&& " : "DAS_JIT_BASELINE=x86-avx2 "
+    var out : array<string>
+    let rc = spawn_child("{avx2Env}\"{bin}\" {NO_CACHE_JIT} \"{BASELINE_FMA_FIXTURE}\"", out)
+    t |> equal(rc, 0, "the fixture runs under x86-avx2: {join(out, " | ")}")
+    t |> success(count_with(out, "fused") >= 1 && count_with(out, "unfused") == 0,
+        "the uncached JIT builds for the class, FMA included: {join(out, " | ")}")
 }
 
 // the object's `target_features` custom section as one text line -
@@ -833,10 +948,8 @@ def private object_target_features(path : string) : string {
 // The target-side folds: get_target_triple /
 // get_target_architecture_name answer for the artifact a compile
 // EMITS (the --jit-target triple), the host's values with no triple,
-// and a static_if over the triple selects the cross arm (the tune
-// framework's inert gate makes the same test), so a wasm or console
-// artifact built on a tuned box carries reference bodies and no
-// sidecar stamps. Compile-only keeps the cross run on this host: the
+// and a static_if over the triple selects the cross arm. Compile-only
+// keeps the cross run on this host: the
 // folds are decided from argv before the first module parses, and
 // main runs interpreted. The children run with the default module
 // cache on purpose: a --jit-target after the separator keys the
@@ -894,7 +1007,7 @@ def test_cross_target_folds(t : T?) {
         t |> success(ln |> has("LET_WASM=[false]"),
                      "a module-level let over the target folds false natively")
     }
-    t |> run("a wasm64 cross target answers wasm64 and turns the framework inert") @(t : T?) {
+    t |> run("a wasm64 cross target answers wasm64 on any host") @(t : T?) {
         var ln : array<string>
         spawn_child("\"{bin}\" -jit \"{CROSS_TARGET_FIXTURE}\" -- " +
             "--jit-target=wasm64-unknown-emscripten --jit-compile-only", ln)

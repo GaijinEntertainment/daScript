@@ -509,10 +509,6 @@ class public LlvmJitVisitor : AstVisitor {
 // Function
     def build_noalias_list(annotations : AnnotationList) : tuple<noalias : table<string>; nocapture : table<string>> {
         var noalias, nocapture : table<string>
-        // Skip user hints entirely on wasm32 — host-LLVM wasm codegen has had
-        // miscompiles around them. Tracked alongside the alwaysinline gotcha.
-        let wasm = jit_target.arch == JitTargetArch.wasm
-        if (wasm) return <- (noalias <- noalias, nocapture <- nocapture)
         for_each_parameter_hint(annotations) $(kind, param_name) {
             if (kind == "noalias") {
                 noalias |> insert(param_name)
@@ -553,10 +549,6 @@ class public LlvmJitVisitor : AstVisitor {
         option_no_division_check = false
         option_no_alias = false
         option_no_capture = false
-        // Bypass user hints on wasm — keeps option_no_* flags false (= safe
-        // defaults: bounds checks on, no alias/capture assumption) and skips
-        // every LLVMAddAttributeToFunction call below. See JitTargetArch.
-        if (jit_target.arch == JitTargetArch.wasm) return
         for (ann in annotations) {
             if (ann.annotation.name == "hint") {
                 for (arg in ann.arguments) {
@@ -7897,15 +7889,8 @@ class public LlvmJitVisitor : AstVisitor {
         operands |> push(temp)
         var mustprog = make_loop_md_flag("llvm.loop.mustprogress")
         operands |> push(mustprog)
-        // nolint:STYLE014
-        // Skip user-supplied loop hints on wasm — host LLVM's wasm32 backend
-        // has had miscompiles around llvm.loop.* metadata in combination with
-        // certain bodies. mustprogress alone is preserved (safe, required for
-        // some opt passes). See JitTargetArch.
-        if (jit_target.arch != JitTargetArch.wasm) {
-            for (a in args) {
-                append_loop_hint_operand(operands, a)
-            }
+        for (a in args) {
+            append_loop_hint_operand(operands, a)
         }
         let loop_md = LLVMMDNodeInContext2(g_ctx, array_data_ptr(operands), uint64(long_length(operands)))
         LLVMMetadataReplaceAllUsesWith(temp, loop_md)

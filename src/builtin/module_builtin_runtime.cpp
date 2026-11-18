@@ -2234,6 +2234,8 @@ namespace das
         if ( strcmp(feature, "amx-int8")==0 )   return os_amx && (r7[3] & (1<<24)) != 0 && (r7[3] & (1<<25)) != 0;
         if ( strcmp(feature, "amx-bf16")==0 )   return os_amx && (r7[3] & (1<<24)) != 0 && (r7[3] & (1<<22)) != 0;
         if ( strcmp(feature, "amx-fp16")==0 )   return os_amx && (r7[3] & (1<<24)) != 0 && (r71[0] & (1<<21)) != 0;
+#elif defined(__wasm_simd128__)
+        if ( strcmp(feature, "simd128")==0 ) return true;
 #endif
         return false;
     }

@@ -80,8 +80,7 @@ division checks inside the function. Parameters: `noalias = p` and `nocapture = 
 parameter, `align16 = p` promises a 16-byte aligned pointer, `unsafe_alias` and `unsafe_capture`
 stamp every parameter; a name that is not a parameter is a compile error on every target.
 Aliasing: `strict_aliasing` keeps a function under the typed model whatever its body does,
-`no_strict_aliasing` takes it out. A wasm target checks the names and then skips the hints'
-effects.
+`no_strict_aliasing` takes it out.
 
 Typed aliasing is on by default (`options strict_aliasing = false` turns it off for a
 program): a `float` store cannot change what an `int?` points at, so a loop that reads its bound

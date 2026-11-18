@@ -37,7 +37,7 @@ var LINK_WHOLE_LIB = false // when true, standalone exe links against the whole 
 
 // Read by tests-cpp/small/test_jit_emitter_pin.cpp: FNV-1a64 of the emitter sources
 // (normalized to LF; file list in the test)
-let LLVM_JIT_EMITTER_HASH : uint64 = 0xf87fe1e496b3d2f7ul
+let LLVM_JIT_EMITTER_HASH : uint64 = 0x6ff6df1d986d5321ul
 
 [arch(at = "../ARCHITECTURE_FAST_MATH.md#never-fast-math")]
 def private apply_fast_math_to_module(m : LLVMOpaqueModule?) {
@@ -976,9 +976,9 @@ def public run_jit(prog : Program?; var ctx : Context?; cli_opts : JitCliOptions
                 apply_fast_math_to_module(g_mod)   // EXPERIMENT: stamp all FP ops fast (non-bit-exact ceiling)
             }
             apply_strict_aliasing_to_module(g_mod)
-            if (use_host_cpu && !(compile_only || emit_aot_object || gen_lib || gen_wasm || gen_exe || use_dll)) {
+            if (!(compile_only || emit_aot_object || gen_lib || gen_wasm || gen_exe || use_dll)) {
                 // the in-memory engine carries no cpu or features of its own
-                stamp_host_target_attrs(jit_target, g_mod)
+                stamp_default_target_attrs(jit_target, g_mod, use_host_cpu)
             }
             t_irgen = get_time_usec(phase_tm)
             phase_tm = ref_time_ticks()

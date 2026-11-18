@@ -9,11 +9,13 @@ module testing_boost shared
 // run by the dastest meta-compiler (compile_file + rtti), the [test] functions
 // are accumulated at compile time and a `main` is generated that runs them all
 // in-process and returns a non-zero exit code on failure. Swapped in via a
-// project-file module_get() override (see tests_wasm.das_project).
+// project-file module_get() override (see tests_wasm.das_project),
+// or a `.das_module` native path for `dastest/testing_boost`.
 
 require daslib/ast_boost
 require daslib/templates_boost
 require ../dastest/testing.das public
+require ../dastest/testing_support.das public
 
 // ---- compile-time accumulation of [test] functions ----
 struct private TestEntry {
@@ -51,6 +53,7 @@ class TestFunctionAnnotation : AstFunctionAnnotation {
         if (!seen) {
             g_tests |> push(TestEntry(name = nm, hasArg = !empty(func.arguments)))
         }
+        declare_test_main()
         return true
     }
 }
@@ -122,28 +125,48 @@ def get_test_exit_code() : int {
     return g_failures != 0 ? 1 : 0
 }
 
-// ---- generate `main` that runs every accumulated [test] in its module ----
+// ---- `main` runs every accumulated [test] of its module ----
+var private g_main_modules : table<string>
+
+//! `main` exists from the first `[test]` on: a pass that asks for
+//! one (the `[tune]` default policy) sees an exe. A file a root
+//! requires gets its own, which the root calls.
+[macro_function]
+def private declare_test_main() {
+    return if (compiling_module() |> find_unique_function("main", true) != null)
+    var mainFn = qmacro_function("main") $() : int {
+        return _::get_test_exit_code()
+    }
+    mainFn.flags.exports = true
+    if (compiling_module() |> add_function(mainFn)) {
+        g_main_modules |> insert("{compiling_module().name}")
+    }
+}
+
 [infer_macro]
-class GenerateTestMainPass : AstPassMacro {
+class FillTestMainPass : AstPassMacro {
     def override apply(prog : ProgramPtr; mod : Module?) : bool {
-        if (mod == null || mod.name == "testing_boost" || mod.name == "testing" || empty(g_tests) || mod |> find_unique_function("main", true) != null) return false
-        var blkList : array<ExpressionPtr>
+        return false if (mod == null || empty(g_tests) || !key_exists(g_main_modules, "{mod.name}"))
+        var mainFn = mod |> find_unique_function("main", true)
+        return false if (mainFn == null)
+        var body = mainFn.body as ExprBlock
+        return false if (length(body.list) != 1)
+        var calls : array<ExpressionPtr>
         for (te in g_tests) {
-            if (mod |> find_unique_function(te.name, true) == null) continue
+            continue if (mod |> find_unique_function(te.name, true) == null)
             let nm = te.name
             if (te.hasArg) {
-                blkList |> push(qmacro(_::run_one_test($v(nm), @(t : testing::T?) { $c(nm)(t); })))
+                calls |> push(qmacro(_::run_one_test($v(nm), @(t : testing::T?) { $c(nm)(t); })))
             } else {
-                blkList |> push(qmacro(_::run_one_test($v(nm), @(t : testing::T?) { $c(nm)(); })))
+                calls |> push(qmacro(_::run_one_test($v(nm), @(t : testing::T?) { $c(nm)(); })))
             }
         }
-        if (empty(blkList)) return false
-        var mainFn = qmacro_function("main") $() : int {
-            $b(blkList)
-            return _::get_test_exit_code()
+        return false if (empty(calls))
+        calls |> push(body.list[0])
+        body.list |> clear()
+        for (c in calls) {
+            body.list |> emplace(c)
         }
-        mainFn.flags.exports = true
-        compiling_module() |> add_function(mainFn)
         return true
     }
 }

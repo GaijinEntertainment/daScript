@@ -201,8 +201,8 @@ the CPU, and none holds a check a serving call passes through.
   registration stores, after its declaration, for the runtime to call through - where no
   `[hot_path]`, contract or `[cold_path]` function reaches the `invoke`.
 - **Interior function** - a function, not itself a region entry, that has at least one caller under
-  `dasllama/` a serving step reaches, and whose every such caller the runtime re-enters once per
-  serving step.
+  `dasllama/` a serving step reaches through a call or an `invoke`, and whose every such caller
+  the runtime re-enters once per serving step.
 
 ### The post-CPU-burn GPU ramp and the residency heartbeat {#the-post-cpu-burn-gpu-ramp-and}
 

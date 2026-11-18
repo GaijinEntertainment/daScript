@@ -46,10 +46,11 @@ is a defect.** How a rows kernel stays split-invariant is `ARCHITECTURE_TTS.md#t
 rather than copied - an export, a private function an export reaches, or a new exported wrapper
 over an existing function - or adds a weight lane (the number format a model stores and multiplies
 its weights in: f32, q8) to one, ships in the same change a numeric cell in `tests/test_tts_blocks.das`
-(`tests/test_tower_asr_kernels.das` for the resamplers shared with ASR). The cell holds the function,
-bit for bit or within a bar it names, against one of: the single-row reference kernel it calls for
-each row, a double-precision form of its arithmetic, or expected values the test computes from the
-definition of the function without calling into `dasllama/dasllama_tts_blocks.das`.**
+(`tests/test_tower_asr_kernels.das` for the resamplers shared with ASR) that calls the export
+directly. The cell holds the function, bit for bit or within a bar it names, against one of: the
+single-row reference kernel it calls for each row, a double-precision form of its arithmetic, or
+expected values the test computes from the definition of the function without calling into
+`dasllama/dasllama_tts_blocks.das`.**
 
 **A diff that adds a rows form to `dasllama/dasllama_tts_blocks.das` also ships a cell holding it
 against its channel-major form within the dot-envelope bar - each element within a tolerance

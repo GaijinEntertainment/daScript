@@ -63,6 +63,52 @@ carries the per-target knowledge instead of this file. Nothing here competes wit
 the tune grid crowns: that one walks the repacked grp planes (`k4q8_gemv_gen`), a different
 layout, and reaches the k4 arm of `dot_kq` only on the disk-order arm.
 
+### On wasm the disk-order K-quant and q8 batch GEMMs read a 16-bit activation image {#wasm-x16-rows}
+
+Wasm SIMD128 has one cheap widening multiply-add, `i32x4.dot_i16x8_s`: sixteen-bit lanes in, pair
+sums out. The int8 `idot` costs more there - an unsigned nibble against a signed activation has no
+`extmul`, so each half is two extends and an `i16x8.mul`, then a pairwise add. The disk-order
+GEMM of Q4_K, Q5_K and Q6_K on a wasm target therefore leaves `dot_kq` for a generated rows
+kernel over operands already sixteen bits wide: `k4x16_rows_gen`, `k5x16_rows_gen` and
+`k6x16_rows_gen` (`dasllama_gemm_gen::<fmt>_x16rows`, one generator keyed by format).
+
+`kqx16_batch` builds the activation side once a call: the Q8_K quants widened to int16, and the
+sums of each 32-element block (the per-16 sums added in pairs, which fit int16). The kernel
+builds the weight side once a row, into a scratch of its dispatch slot: each quant widened and
+multiplied by its sub-block's scale, and the superblock's scales as floats. A Q4_K or Q5_K row
+stores quant times scale (at most 15 x 63, or 31 x 63), the eight mins as int16, `d` and `dmin`.
+A Q6_K row has no mins: its quant carries an offset of 32, and the weight stored is the quant
+less 32, times the signed scale of its 16-element sub-block (at most 32 x 128) - the offset term
+`dot_kq` takes from the per-16 sums sits inside the dot. Every token then costs one dot for each
+eight weights of that row, `nt` tokens abreast, and for Q4_K and Q5_K one dot of the eight mins
+against the block sums. A lane's pair sums stay far inside int32.
+
+The integer sums are `dot_kq`'s and the float fold is its fold in its order, so each kernel
+agrees with the portable rows kernel bit for bit. The Q6_K sum is `dot_kq`'s scaled dots less 32
+times its scaled sums, as one integer: the per-16 sums are the sums of the quants the image
+widens. The reference body of each family is the same arithmetic over the widened image, and on
+every other target the generator declines: the family's witness (`k4x16_witness_gen` and its
+twins) answers false there, `kqx16_batch` returns false, and the portable walk serves the call.
+The generated tier reaches the portable GEMM through one function slot (`set_kq_gemm_gen`),
+because the portable module sits below it.
+
+The portable q8 batch GEMM has the same twin, `q8x16_rows_gen`, over either scale plane (f32 or
+f16; the stub's scale type picks the load). Its weights need no scratch: eight bytes sign-extend
+into one operand, shared by the `nt` tokens of the walk. A Q8_0 block folds to float every 32
+weights, so the kernel keeps the block's four pair-sum lanes, scales them into four float lanes
+and sums the lanes once, at the row's end. That grouping is its own - lane l holds weight pairs
+l, l + 4, l + 8 and l + 12 of each block - so it agrees with the portable kernel to float
+reassociation, not bit for bit, and its reference body states the grouping. It reaches the
+portable backend through `set_q8_batch_gen`: the backend's batch slots try the generated kernel
+first, and the backend keeps its name, so an image baked for `portable` still loads.
+
+The four kernels are `[tune]` families whose seats differ in `nt` and are gated on `simd128`. Every
+other family's rows are gated on their own instruction set too - the NEON-shaped rows on `neon`,
+the x64 rows on theirs - so on a wasm target those families have no seat: they stamp their
+reference bodies, owe a wasm profile no entry, and gain one when a wasm seat is added to them.
+The one ungated row is the bf16-weight tile's `mr16`: no target emits it, and a profile of a
+class with no bf16 tile names it to say so, which is why it stays a seat on every class.
+
 ### Classic prefill scores through the decode's own dot {#prefill-decode-same-score-dot}
 
 Classic prefill quantizes each query row and runs its scores through `kv_score` - the dot a cached position takes at decode - so a prefix served by one prefill pass and the same prefix served a token at a time agree bit for bit under the block codecs (q8_0, tq4). Flash prefill tiles with online softmax and reorders the sum, so it holds to a tolerance instead.

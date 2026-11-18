@@ -369,6 +369,28 @@ def private q8q8_batch_kernel_s16(var yp : float?; wp : int8 const?; sp : uint16
 [from_template(src = "q8q8_rows_kernel_template", Q8DOT = "dot_q8q8_f16s_p")]
 def q8q8_rows_kernel_s16(var yp : float?; wp : int8 const?; sp : uint16 const?; xqp : int8 const?; xsp : float const?; n, rb, re : int64) {}
 
+//! a generated tier's take on the portable q8 batch GEMM, one a scale plane: true where it served the call, false to leave it to the portable kernel
+typedef Q8BatchGenFn = function<(var yp : float?; wp : int8 const?; sp : float const?; xqp : int8 const?; xsp : float const?; n, d, ntok : int64) : bool>
+typedef Q8BatchGenFnS16 = function<(var yp : float?; wp : int8 const?; sp : uint16 const?; xqp : int8 const?; xsp : float const?; n, d, ntok : int64) : bool>
+
+var private g_q8_batch_gen : Q8BatchGenFn
+var private g_q8_batch_gen_s16 : Q8BatchGenFnS16
+def set_q8_batch_gen(fn : Q8BatchGenFn; fn16 : Q8BatchGenFnS16) {
+    g_q8_batch_gen = fn
+    g_q8_batch_gen_s16 = fn16
+}
+
+//! the portable backend's batch slot: the generated tier's kernel where one serves the call, the portable kernel otherwise
+def private q8q8_batch_served(var yp : float?; wp : int8 const?; sp : float const?; xqp : int8 const?; xsp : float const?; n, d, ntok : int64) {
+    if (g_q8_batch_gen != null && invoke(g_q8_batch_gen, yp, wp, sp, xqp, xsp, n, d, ntok)) return
+    q8q8_batch_kernel(yp, wp, sp, xqp, xsp, n, d, ntok)
+}
+
+def private q8q8_batch_served_s16(var yp : float?; wp : int8 const?; sp : uint16 const?; xqp : int8 const?; xsp : float const?; n, d, ntok : int64) {
+    if (g_q8_batch_gen_s16 != null && invoke(g_q8_batch_gen_s16, yp, wp, sp, xqp, xsp, n, d, ntok)) return
+    q8q8_batch_kernel_s16(yp, wp, sp, xqp, xsp, n, d, ntok)
+}
+
 [from_template(src = "q8q8_group3_kernel_template", Q8DOT = "dot_q8q8_f16s_p", Q8SPLIT = "q8_split_portable")]
 def private q8q8_group3_kernel_s16(var y0p : float?; var y1p : float?; var y2p : float?; wp : int8 const?; sp : uint16 const?;
                                    woff0, woff1, woff2 : int64; xqp : int8 const?; xsp : float const?; n, d0, d1, d2 : int64) {}
@@ -940,8 +962,17 @@ def kq_rows_batch_kernel(f : auto(TT); fmt : KqFmt; var yp : float?; kqp : uint8
     }
 }
 
+//! a generated tier's take on the disk-order kq GEMM: true where it served the call, false to leave it to the portable walk
+typedef KqGemmGenFn = function<(fmt : int; var yp : float?; kqp : uint8 const?; ksp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, d, ntok : int64) : bool>
+
+var private g_kq_gemm_gen : KqGemmGenFn
+def set_kq_gemm_gen(fn : KqGemmGenFn) {
+    g_kq_gemm_gen = fn
+}
+
 //! the disk-order GEMM over `ntok` Q8_K activation rows, the rows split over the pool - the GEMV's chunking at one token
 def private kq_gemm_kernel(fmt : int; var yp : float?; kqp : uint8 const?; ksp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, d, ntok : int64) {   // nolint:STYLE037 - the stamp's ladder, one arm per KqFmt member
+    if (g_kq_gemm_gen != null && invoke(g_kq_gemm_gen, fmt, yp, kqp, ksp, xqp, xsp, xbsp, n, d, ntok)) return
     let kf = kq_fmt_of_id(fmt, "kq_gemm_kernel")
     var myp = yp
     let chunks = ntok == 1l ? matmul_chunks_gemv(int(d), 1, n * d) : matmul_chunks(int(d), 1, n * d * ntok)
@@ -1355,7 +1386,7 @@ def matmul_kq(fmt : int; var y : array<float> | #; kq : array<uint8> | #; ks : a
 
 //! The kq GEMM over `ntok` Q8_K activation rows (`xq` at `n` a row, `xs` at `n / 256`, `xbs` at `n / 16`) off a plane pair
 //! handed as the region's own base pointers, token t's `d` outputs at `y[t * d]`: a repacked plane on the active backend's
-//! batch tile - the one repacking backend carries it -, a disk-order plane on the portable batch kernel.
+//! batch tile - the one repacking backend carries it -, a disk-order plane on the generated tier's rows kernel where one serves the format, else the portable batch kernel.
 def matmul_kq_rows_at(fmt : int; repacked : bool; var y : float?; kq, ks : uint8 const?; xq : int8 const?; xs : float const?; xbs : int const?; n, d, ntok : int64) {
     if (repacked) {
         verify(kernel_backend_has_kq_batch(), "the kq planes are repacked for a backend with no kq batch tile")
@@ -2225,12 +2256,12 @@ def private register_b32_portables {}
 [init]
 def dasllama_math_default_register() {
     register_b32_portables()
-    register_kernel_backend(KernelBackend(name = "portable", mm = @@q8q8_kernel, batch = @@q8q8_batch_kernel,
+    register_kernel_backend(KernelBackend(name = "portable", mm = @@q8q8_kernel, batch = @@q8q8_batch_served,
         group3 = @@q8q8_group3_kernel, repack = @@repack_q8q8_identity, mm_mx4 = @@mx4q8_kernel,
         mx4_batch = @@mx4q8_batch_kernel, mx4_batch_groupn = @@mx4q8_batch_groupn_kernel,
         groupn = @@q8q8_groupn_kernel, groupn_mx4 = @@mx4q8_groupn_kernel,
         mm_rows = @@q8q8_rows_kernel,
-        mm_s16 = @@q8q8_kernel_s16, batch_s16 = @@q8q8_batch_kernel_s16,
+        mm_s16 = @@q8q8_kernel_s16, batch_s16 = @@q8q8_batch_served_s16,
         group3_s16 = @@q8q8_group3_kernel_s16, groupn_s16 = @@q8q8_groupn_kernel_s16,
         mm_rows_s16 = @@q8q8_rows_kernel_s16,
         needs_repack = false, priority = 0))

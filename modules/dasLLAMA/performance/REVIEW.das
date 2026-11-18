@@ -4,7 +4,9 @@ require strings
 require daslib/fio
 require daslib/defer
 require daslib/json_boost
+require daslib/strings_boost
 require dastest/review_gate
+require llvm/daslib/llvm_cpu_class   // any_row_runs - the framework's own `requires=` grammar
 require dasllama/dasllama_exchange_schema   // RETIRED_BOXES - the one list the site projection reads too
 
 // The mechanical half of modules/dasLLAMA/performance/REVIEW.md (contract: REVIEW_COMMON.md
@@ -208,14 +210,24 @@ def private check_das_row(full : string; box : string; what : string; r : JsonVa
 
 let private TUNE_SCOPE_DIR = "{MODULE_ROOT}/dasllama"
 
+//! a [tune] family as the sources spell it: its function, and the `requires=` of each [tune_perm] row ("" for a row with none)
+struct private TuneFamily {
+    name : string
+    requires : array<string>
+}
+
+let private REQUIRES_ARG = "requires = \""
+
 //! a text scan of these sources, never the registries: the gate stays engine-free
-def private tune_gen_families() : array<string> {
-    var fams, files : array<string>
+def private tune_gen_families() : array<TuneFamily> {
+    var fams : array<TuneFamily>
+    var files : array<string>
     walk_das_files(TUNE_SCOPE_DIR, files)
     for (f in files) {
         let text = fread(f)
         continue if (empty(text))
         peek_data(text) $(d) {
+            var blockFrom = 0
             var at = find(text, "tune(gen = \"")
             while (at >= 0) {
                 let defAt = find(text, "\ndef ", at)
@@ -223,7 +235,18 @@ def private tune_gen_families() : array<string> {
                 let nameAt = defAt + 5
                 let paren = find(text, "(", nameAt)
                 break if (paren < 0)
-                fams |> push(slice(d, nameAt, paren))
+                var fam = TuneFamily(name = slice(d, nameAt, paren))
+                var row = find(text, "tune_perm(", blockFrom)
+                while (row >= 0 && row < at) {
+                    let close = find(text, ")", row)
+                    let req = find(text, REQUIRES_ARG, row)
+                    let hasRequires = req >= 0 && req < close
+                    let from = req + length(REQUIRES_ARG)
+                    fam.requires |> push(hasRequires ? slice(d, from, find(text, "\"", from)) : "")
+                    row = find(text, "tune_perm(", close)
+                }
+                fams |> emplace(fam)
+                blockFrom = paren
                 at = find(text, "tune(gen = \"", paren)
             }
         }
@@ -269,9 +292,16 @@ def private check_defaults_profiles {
             gate_finding(full, "no kernels section - not a profile")
             return
         }
+        let featureList = "{doc?["provenance"]?["features"] ?? ""}"
+        if (empty(featureList)) {
+            gate_finding(full, "no provenance.features - the gate cannot tell which [tune] families the class has a seat in; re-export the profile")
+        }
+        var inscope features <- split(featureList, ";")
         for (fam in fams) {
-            if (!(kernels.value as _object |> key_exists(fam))) {
-                gate_finding(full, "no entry for the [tune] family {fam} - a fat release ships a profile clone for every family the scope compiles (`daspkg release --fat` refuses this class without one); re-mint the class, the generator half races every family (ARCHITECTURE_MEASUREMENT.md#committed-records-gate)")
+            let seated = any_row_runs(fam.requires) $(feature) => has_value(features, feature)
+            let runs = empty(fam.requires) || seated
+            if (runs && !(kernels.value as _object |> key_exists(fam.name))) {
+                gate_finding(full, "no entry for the [tune] family {fam.name} - a fat release ships a profile clone for every family the class has a seat in (`daspkg release --fat` refuses this class without one); re-mint the class, the generator half races every family the class has a seat in (ARCHITECTURE_MEASUREMENT.md#committed-records-gate)")
             }
         }
     }

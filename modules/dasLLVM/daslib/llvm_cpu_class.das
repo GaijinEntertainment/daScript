@@ -35,7 +35,8 @@ let public JIT_CPU_CLASSES = [
     JitCpuClass(name = "arm-i8mm", arch = "arm64", cpu = "generic",
         features = "neon;dotprod;i8mm;bf16;fullfp16;lse"),
     JitCpuClass(name = "arm-sve", arch = "arm64", cpu = "generic",
-        features = "neon;dotprod;i8mm;bf16;fullfp16;lse;sve")
+        features = "neon;dotprod;i8mm;bf16;fullfp16;lse;sve"),
+    JitCpuClass(name = "wasm-simd128", arch = "wasm64", cpu = "generic", features = "simd128")
 ]
 
 //! The adoption ladder of an arch, most capable class first; "" for an arch with no classes.
@@ -45,6 +46,9 @@ def public jit_cpu_class_ladder(arch : string) : string {
     }
     if (arch == "arm64" || arch == "aarch64") {
         return "arm-sve;arm-i8mm;arm-neon"
+    }
+    if (arch == "wasm64") {
+        return "wasm-simd128"
     }
     return ""
 }
@@ -64,6 +68,29 @@ def public jit_cpu_class_names() : string {
     let joined = join(names, ", ")
     delete names
     return joined
+}
+
+def public requires_hold(expr : string; has : block<(feature : string) : bool>) : bool {
+    //! A `requires=` expression against a feature test: `,` joins terms
+    //! that must all hold, `|` the alternatives of a term. Empty holds.
+    for (term in split(expr, ",")) {
+        continue if (empty(term))
+        var holds = false
+        for (alt in split(term, "|")) {
+            holds ||= !empty(alt) && invoke(has, alt)
+        }
+        return false if (!holds)
+    }
+    return true
+}
+
+def public any_row_runs(rows : array<string>; has : block<(feature : string) : bool>) : bool {
+    //! True when one row of a `[tune]` family can run under the feature
+    //! test: `rows` holds each row's `requires=`, "" for a row with none.
+    for (row in rows) {
+        return true if (requires_hold(row, has))
+    }
+    return false
 }
 
 //! True when the class carries the feature (LLVM spelling, as `requires=` and cpuid use).
@@ -87,6 +114,16 @@ def public jit_class_plus_features(name : string) : string {
 //! The baseline class this process builds for - `DAS_JIT_BASELINE` - or "" when the build
 //! targets the running box.
 def public jit_baseline_class() : string => strip(g_env_jit.jit_baseline)
+
+[arch(at = "../ARCHITECTURE_TARGET_FEATURES.md#cross-class")]
+def public jit_cross_class() : string =>
+    starts_with(get_target_triple(), "wasm64") ? "wasm-simd128" : ""
+
+//! The class this compile builds for; "" when it builds for the box
+def public jit_target_class() : string {
+    let baseline = jit_baseline_class()
+    return empty(baseline) ? jit_cross_class() : baseline
+}
 
 //! True when a baseline is set and its class carries the feature.
 def public jit_baseline_has(feature : string) : bool {

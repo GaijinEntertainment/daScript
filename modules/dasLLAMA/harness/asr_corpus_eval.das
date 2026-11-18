@@ -122,7 +122,7 @@ def private run_eval(cfg : EvalArgs) : int {
         for (c, i in clips, count()) {
             var inscope samples <- load_audio_16k_mono(path_join(path_join(cfg.corpus, cfg.split), c.wav))
             let audio_s = double(length(samples)) / double(AUDIO_SAMPLE_RATE)
-            var s = create_session(m)
+            var inscope s <- create_session(m)
             let t0 = ref_time_ticks()
             let hyp = one_line(transcribe(m, s, samples))
             let ms = double(get_time_usec(t0)) / 1000.0lf

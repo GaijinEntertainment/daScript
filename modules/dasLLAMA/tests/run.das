@@ -36,7 +36,7 @@ struct RunArgs {
     full : bool
 
     @clarg_short = "s"
-    @clarg_doc = "Suite: decode | mtp | prefill | matrix | kernels | image | image-vulkan | coverage | model-free | stocked | all (default all; all excludes image-vulkan, model-free and stocked)"
+    @clarg_doc = "Suite: decode | mtp | prefill | matrix | kernels | image | image-vulkan | coverage | model-free | stocked | wasm | all (default all; all excludes image-vulkan, model-free, stocked and wasm)"
     suite : string = "all"
 
     @clarg_short = "x"
@@ -297,6 +297,28 @@ def suite_files(name : string) : array<string> {   // nolint:STYLE038 - a flat s
                     "modules/dasLLAMA/tests/test_vulkan_mint.das",
                     "modules/dasLLAMA/tests/test_cuda_mint.das",
                     "modules/dasLLAMA/tests/test_whisper.das" ]
+    } elif (name == "wasm") {
+        //! model-free kernel files a wasm64 release runs under node: the cells of the kernels with a wasm seat
+        return <- [ "modules/dasLLAMA/tests/test_q8q8_family.das",
+                    "modules/dasLLAMA/tests/test_math_activations.das",
+                    "modules/dasLLAMA/tests/test_math_elementwise.das",
+                    "modules/dasLLAMA/tests/test_matmul_batch.das",
+                    "modules/dasLLAMA/tests/test_groupn.das",
+                    "modules/dasLLAMA/tests/test_quant.das",
+                    "modules/dasLLAMA/tests/test_kqformat.das",
+                    "modules/dasLLAMA/tests/test_mxfp4.das",
+                    "modules/dasLLAMA/tests/test_repack.das",
+                    "modules/dasLLAMA/tests/test_rope.das",
+                    "modules/dasLLAMA/tests/test_rope_apply.das",
+                    "modules/dasLLAMA/tests/test_prefill_cpu_kernels.das",
+                    "modules/dasLLAMA/tests/test_f32_batch_tile_perms.das",
+                    "modules/dasLLAMA/tests/test_par_indexed.das",
+                    "modules/dasLLAMA/tests/test_plane.das",
+                    "modules/dasLLAMA/tests/test_tower_asr_kernels.das",
+                    "modules/dasLLAMA/tests/test_tower_helpers.das",
+                    "modules/dasLLAMA/tests/test_gguf_quant.das",
+                    "modules/dasLLAMA/tests/test_rnnt.das",
+                    "modules/dasLLAMA/tests/test_tts_blocks.das" ]
     } elif (name == "all") {
         return <- [ "modules/dasLLAMA/tests/test_metal_decode_parity.das",
                     "modules/dasLLAMA/tests/test_metal_mtp_parity.das",
@@ -994,7 +1016,7 @@ def check_suite_args(cfg : RunArgs) : int {
         to_log(LOG_ERROR, "--no-tune sets DASLLAMA_IMAGE=0 in every child, so it cannot drive the image suites - drop --no-tune or pick another suite\n")
         return 2
     }
-    if (cfg.suite == "model-free" || cfg.suite == "stocked") {
+    if (cfg.suite == "model-free" || cfg.suite == "stocked" || cfg.suite == "wasm") {
         if (cfg.full || !empty(cfg.arm)) {   //! the per-PR gates have no arms to scope: a filter would silently shrink them
             to_log(LOG_ERROR, "--suite {cfg.suite} takes neither --arm nor --full: it is a whole per-PR gate (--exclude names what it drops)\n")
             return 2
@@ -1244,6 +1266,123 @@ def private run_files(cfg : RunArgs; files : array<string>; image_arms : string;
     return <- tally
 }
 
+let private WASM_RUN_JS = "modules/dasLLAMA/harness/wasm_mint/run.cjs"
+let private WASM_PACKAGE = "wasm_tests"
+
+//! the last `=== a/b passed, f failed ===` line of a wasm test release's log, its FAIL lines and its count of
+//! SKIP lines; "" when the release never printed a summary. Non-private: test_run_suites.das gates it
+def wasm_summary(log_text : string) : tuple<line : string; failed : array<string>; skipped : int> {
+    var line = ""
+    var failed : array<string>
+    var skipped = 0
+    for (ln in non_empty_lines(log_text)) {
+        if (starts_with(ln, "=== ") && ends_with(ln, " failed ===")) {
+            line = clone_string(ln)
+        } elif (starts_with(ln, "FAIL ")) {
+            failed |> push(clone_string(slice(ln, 5)))
+        } elif (starts_with(ln, "SKIP ")) {
+            skipped++
+        }
+    }
+    return <- (line = line, failed <- failed, skipped = skipped)
+}
+
+//! the three files of the package a wasm run releases, by path under its folder: the manifest, the
+//! descriptor that names every test file and gives it `dastest_wasm`'s `testing_boost` (whose `[test]`
+//! writes the file's `main`), and the root that runs each file's `main`. Non-private:
+//! test_run_suites.das gates it
+def wasm_package(files : array<string>; das_root : string) : table<string; string> {
+    let stems <- [for (f in files); stem(f)]
+    let manifest = (
+        "options gen2\n\nrequire daslib/daspkg\n\n[export]\ndef package() \{\n"
+        + "    package_name(\"{WASM_PACKAGE}\")\n"
+        + "    package_description(\"dasLLAMA test files as one wasm64 release\")\n\}\n\n"
+        + "[export]\ndef release() \{\n    release_main(\"main.das\")\n"
+        + "    release_wasm_disable_host_gpu_modules()\n    release_emcc_arg(\"-lnodefs.js\")\n\}\n")
+    let descriptor = build_string() $(var w) {
+        w |> write("options gen2\nrequire daslib/fio\n\n[export]\ndef initialize(project_path : string) \{\n")
+        w |> write("    register_native_path(\"dastest\", \"testing_boost\", ")
+        w |> write("\"{das_root}/dastest_wasm/testing_boost.das\")\n")
+        for (f, st in files, stems) {
+            w |> write("    register_native_path(\"{WASM_PACKAGE}\", \"{st}\", \"{das_root}/{f}\")\n")
+        }
+        w |> write("\}\n")
+    }
+    let root = build_string() $(var w) {
+        w |> write("options gen2\noptions stack = 524288\noptions _dasllama_internal = true\n")
+        w |> write("options persistent_heap\n\n")
+        for (st in stems) {
+            w |> write("require {WASM_PACKAGE}/{st}\n")
+        }
+        w |> write("\n[export]\ndef main : int \{\n    var rc = 0\n")
+        for (st in stems) {
+            w |> write("    rc = {st}::main()\n")
+        }
+        w |> write("    return rc\n\}\n")
+    }
+    return <- {
+        ".das_package" => manifest,
+        "modules/{WASM_PACKAGE}/.das_module" => descriptor,
+        "main.das" => root
+    }
+}
+
+//! one logged step of the wasm suite; its exit code
+def private wasm_step(tag, cmd, log_path : string) : int {
+    to_log(LOG_INFO, "START {tag}: {cmd}\n")
+    let t0 = ref_time_ticks()
+    let rc = unsafe(popen("{cmd} > \"{log_path}\" 2>&1") $(f) {
+        let _drain = fread(f)   // output is redirected; drain keeps the pipe contract
+    })
+    let secs = double(get_time_nsec(t0)) / 1000000000.0lf
+    to_log(rc == 0 ? LOG_INFO : LOG_ERROR, "DONE {tag}: exit={rc} elapsed={secs}s log={log_path}\n")
+    return rc
+}
+
+//! --suite wasm: `files` built as one wasm64 release by `daspkg release wasm` and run under node; the
+//! package and the release tree are removed, the two logs stay
+def private run_wasm(cfg : RunArgs; files : array<string>) : RunTally {
+    let das_exe = empty(cfg.das) ? get_command_line_arguments()[0] : cfg.das
+    let stamp = ref_time_ticks()
+    let work = path_join(temp_dir(), "dasllama_wasm_tests_{stamp}")
+    let pkg = path_join(work, "package")
+    let out = path_join(work, "out")
+    let build_log = path_join(temp_dir(), "dasllama_wasm_release_{stamp}.log")
+    let run_log = path_join(temp_dir(), "dasllama_wasm_run_{stamp}.log")
+    mkdir_rec(path_join(pkg, "modules/{WASM_PACKAGE}"))
+    mkdir_rec(path_join(out, "io"))
+    let package <- wasm_package(files, replace(get_das_root(), "\\", "/"))
+    for (name, text in keys(package), values(package)) {
+        fwrite(path_join(pkg, name), text)
+    }
+    var tally : RunTally
+    let build = "\"{das_exe}\" utils/daspkg/main.das -- release wasm --root \"{pkg}\" --out \"{out}\""
+    if (wasm_step("wasm release", build, build_log) != 0) {
+        to_log(LOG_ERROR, "the wasm release did not build: it takes emcc on PATH and the wasm64 archives (`daspkg build --wasm`)\n")
+        tally.failures = 1
+        tally.failed_tags |> push("the wasm release")
+    } else {
+        let app = path_join(out, "{WASM_PACKAGE}/{WASM_PACKAGE}.js")
+        let rc = wasm_step("wasm tests", "node {WASM_RUN_JS} \"{app}\" \"{path_join(out, "io")}\"", run_log)
+        var sum <- wasm_summary(fread(run_log))
+        if (empty(sum.failed) && (rc != 0 || empty(sum.line))) {
+            sum.failed |> push(empty(sum.line) ? "no summary line - the run died early (read the log)" : "exit {rc}")
+        }
+        to_log(empty(sum.failed) ? LOG_INFO : LOG_ERROR, "DONE wasm tests: {sum.line}, {sum.skipped} skipped\n")
+        tally.failures = length(sum.failed)
+        tally.skipped = sum.skipped
+        tally.failed_tags <- sum.failed
+    }
+    rmdir_rec(work)
+    return <- tally
+}
+
+//! the run's executor: the wasm suite's one release, else the dastest children
+def private run_plan(cfg : RunArgs; files : array<string>; image_arms : string; area_run : bool) : RunTally {
+    return <- run_wasm(cfg, files) if (cfg.suite == "wasm" && !area_run)
+    return <- run_files(cfg, files, image_arms, area_run)
+}
+
 def operator +=(var a : RunTally; b : RunTally) {
     a.failures += b.failures
     a.skipped += b.skipped
@@ -1344,7 +1483,7 @@ def main() : int {
         core = changed.core
     }
     if (empty(plan.files)) {
-        to_log(LOG_ERROR, "unknown --suite '{cfg.suite}' (decode | mtp | prefill | matrix | kernels | image | image-vulkan | coverage | model-free | stocked | all)\n")
+        to_log(LOG_ERROR, "unknown --suite '{cfg.suite}' (decode | mtp | prefill | matrix | kernels | image | image-vulkan | coverage | model-free | stocked | wasm | all)\n")
         return 2
     }
     if (cfg.no_tune && !empty(plan.image_arms) && (!empty(areas) || cfg.changed)) {   //! an area's image arms ride the image rail --no-tune turns off
@@ -1382,7 +1521,7 @@ def main() : int {
         return 2
     }
     log_missing_models(shard.kept)
-    let tally <- run_files(cfg, shard.kept, plan.image_arms, !empty(areas) || cfg.changed)
+    let tally <- run_plan(cfg, shard.kept, plan.image_arms, !empty(areas) || cfg.changed)
     print_report(cfg, areas, length(shard.kept), length(split.dropped), tally, core)
     return tally.failures
 }

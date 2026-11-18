@@ -27,8 +27,8 @@ truth on both rails: a force-env feature raises the gate AND is appended to the 
 The string reaches the code on three routes, one per engine: the DLL and exe rails build their
 target machine from it (`create_default_target_machine`); the in-memory MCJIT - the engine every
 run without a DLL cache ends on, a static daslang build always - is created through the C API
-with no cpu and no feature string, so its subtarget is the generic one, and `stamp_host_target_attrs`
-puts the same cpu and string on every defined function as `target-cpu` / `target-features`
+with no cpu and no feature string, so its subtarget is the generic one, and `stamp_default_target_attrs`
+puts the default machine's cpu and string (the host's, or a baseline class's) on every defined function as `target-cpu` / `target-features`
 attributes, which the per-function subtarget lookup honors (the route the fat-mode clones of
 sec.11 already ride). A module the gates emitted SDOT into and the generic subtarget selects
 aborts codegen with `Cannot select`; the attributes are what let the two agree.
@@ -71,7 +71,9 @@ neither backend produces them from the generic form: AArch64 expands it to zip/u
 of folding to SDOT, and the wasm backend runs it a fifth as fast. The wasm form is the ISA's two
 halves of an int8 dot, `i16x8.extmul_{low,high}_i8x16_s` (what LLVM makes of `mul(sext, sext)`) and
 `i32x4.extadd_pairwise_i16x8_s`; the pairwise sums land as byte pairs, and one even/odd shuffle-add
-folds them into the quad lanes the generic form defines - exact for every int8 lane. An unsigned
+folds them into the quad lanes the generic form defines - exact for every int8 lane. The scalar
+`idot` sums every lane, so its wasm form adds the two pair-sum vectors as they are and carries no
+fold: only `idot4`, whose callers read the four lanes, pays for the shuffles. An unsigned
 first operand widens with ZExt rather than SExt, so the unsigned-by-signed form takes this same
 path instead of the 16-lane generic IR; the i16 product still holds every value that pair can make
 (255 * -128 = -32640), so the fold stays exact there too. The relaxed-SIMD dot
@@ -85,7 +87,8 @@ wrong sign there - an operand a caller can bound to 7 bits is a different op, no
 A CPU class is a feature set, never a box model: the set every box of the class carries, spelled
 in LLVM's target-feature names. The classes are the rows of `JIT_CPU_CLASSES`
 (`daslib/llvm_cpu_class.das`): `x86-base`, `x86-avx2`, `x86-vnni256`, `x86-vnni512`, `x86-amx`,
-`arm-neon`, `arm-i8mm`, `arm-sve`. Each row carries the LLVM cpu its target machine schedules for and its
+`arm-neon`, `arm-i8mm`, `arm-sve`, and `wasm-simd128`, the one class a cross triple implies
+(the cross-class section below). Each row carries the LLVM cpu its target machine schedules for and its
 feature set, and the cpu is the arch's bare baseline (`x86-64`, `generic`) on every row: an LLVM
 cpu level such as `x86-64-v3` implies features the row does not name (bmi2, lzcnt, movbe; `v4`
 adds avx512cd/dq), the backend would emit them, and the membership test below would admit a box
@@ -193,7 +196,7 @@ the process.
 ## 12. The wasm target's feature string {#wasm-feature-string}
 
 A wasm cross-compile gets `+simd128,+nontrapping-fptoint`, with `+atomics,+bulk-memory` appended
-on the threaded rail (`wasm_target_features`). The string carries no `+relaxed-simd`, and the
+on the threaded rail (`wasm_target_features`), on the machine that emits the object. The IR pass pipeline of a wasm compile runs under the host architecture's generic machine instead (`create_default_target_machine`): no host cpu, so two build boxes of one architecture optimize alike, and not the wasm machine, whose cost model lowers the q8 speech kernels to slower code. The string carries no `+relaxed-simd`, and the
 reason is reach, not codegen: WebKit implements none of the relaxed opcodes, so one of them
 anywhere in a module makes Safari and every iOS browser refuse the whole module at validation,
 and the browser builds ship to every engine. What the feature would buy is `f32x4.relaxed_madd`,
@@ -203,6 +206,80 @@ real-time factor as the fused one, so nothing is paid for the reach. The feature
 more than the multiply-add: with it on, the backend lowers an `nnan` float min/max on a vector
 to `f32x4.relaxed_min` / `_max`, whose NaN and signed-zero answers are the engine's choice, and
 the relaxed dot stays ruled out for the idot family by sec.9 above whatever the string says.
+
+## Lowerings for a target with no instruction behind the call {#wasm-lowerings}
+
+Two calls have no wasm instruction behind their native lowering, and the vectorizer leaves a
+loop that holds either one scalar. `llvm.round` - round half away from zero - becomes a
+`roundf` library call a lane: wasm's `nearest` rounds half to even. `build_round`
+(`daslib/llvm_jit_intrin.das`) emits `math::round` and `math::roundi` on a wasm target as the
+truncation, moved one away from zero where the dropped fraction reaches a half. The fraction
+`x - trunc(x)` is exact and so is the step, so the value is `llvm.round`'s for every input, a
+negative zero included. Every native class rounds inline, so the form is the wasm target's alone.
+
+`f16_cvt::f16_to_f32` lowers to a hardware convert where the CPU has one: every aarch64 (the
+scalar `fcvt` is ARMv8.0 baseline), and x86 with F16C. `get_intrinsic` picks by
+`target_has_half_converts`, and the choice is emission correctness: a half convert with no
+instruction behind it becomes a compiler-rt call the JIT does not link. A target without - wasm,
+the `x86-base` class - takes `intrinsic_f16_to_f32_soft` (the `g_f16_soft_intrin_lookup` table),
+a form with no half type in the IR: a normal half's bits shifted into a float's fields and
+scaled by 2^112, a subnormal half's mantissa through an exact int-to-float and a 2^-24 scale,
+an all-ones exponent kept all ones, the sign put back. No float subnormal enters it, so it
+holds in a host that flushes them to zero. Its bits are the daslang body's for all 65536 inputs,
+and unlike that three-way-branching body it vectorizes. `f32_to_f16` keeps its daslang body.
+
+User hints reach a wasm function as they reach any other: the `[hint]` attributes, the
+`noalias` and `nocapture` parameter lists and the loop metadata a `[tune = N]` loop carries.
+
+## A cross triple's class {#cross-class}
+
+A cross compile builds for a class when one serves its triple: `jit_cross_class`
+(`daslib/llvm_cpu_class.das`) answers `wasm-simd128` for a wasm64 triple and nothing for any
+other. The class's set is the wasm runtime archive's own - `simd128`, the feature string of the
+section above - so every wasm64 artifact is in the class and no box is asked. `jit_target_class`
+is the baseline's class when one is set and the cross triple's otherwise. `tune_cpu_class`, the
+`requires=` test and the profile ladder read it, so the build box's cpuid decides nothing about
+a cross artifact; inside the artifact `cpu_supports("simd128")` answers true, because the
+runtime archive is compiled with the feature. Its tune identity asks no box either:
+`tune_box_identity` names the target's platform and arch and puts the class in the cpu field,
+so every artifact of one triple and class carries the same identity.
+
+Under a cross class the tune framework stamps as it does for a standalone exe: each `[tune]`
+function takes its class profile's winner, else the first `fallback=` entry the class's set
+passes, else its reference body. The sidecar beside the app does not stamp
+(`stamp_manifest_path`, `daslib/llvm_tune.das`): the build box measured it, for its own silicon.
+`DAS_TUNE_FORCE` still stamps - it is how a sidecar minted on the target reaches a build. A
+cross triple no class serves stamps reference bodies (`tune_aot_gate`), and
+`--jit-compile-only` keeps its grid for an emission dump.
+
+A cross release ships no `llvm` module (`write_release_deps`, `daslib/llvm_exe.das`): the
+artifact cannot host the compiler, so a program's `require llvm` is a build-time witness there
+and names no archive to link. A tuner built for the target requires it for its registries and
+links without it.
+
+## A cross build's grid is the rows its class can run {#cross-grid}
+
+`DAS_TUNE_MODE=tune` and `=test` stamp a family's whole grid on a native build: the box that
+runs the grid is asked at run time, a grid compiled on one box races on another, and a force
+variable widens the set. A cross artifact's set is its class's and nothing widens it, so a tune
+or test build under a cross class stamps only the rows whose `requires=` the class passes
+(`stamped_rows`). A family with no such row keeps its reference body and a one-row
+`<name>_variants()` registry, which a tuner reads as nothing to race: it writes no entry for it -
+the entry the section below leaves off the demand.
+
+## A family with no seat the class can run demands no entry {#seatless-families}
+
+A scope's demand is the list of kernels a sidecar or a profile owes an entry for
+(`module_kernel_fnames`, `daslib/llvm_tune.das`). A `[tune]` family is on it only when the class
+the compile builds for has a seat in the family: a `[tune_perm]` row with no `requires=`, or one
+whose `requires=` the class passes. A family whose every row is gated on features the class
+lacks stamps its reference body there whatever a file says, so an entry for it would decide
+nothing; the demand leaves it out, and with it the completeness check, the startup guard and
+the release's status walk, which all read that one list. This is what lets a library carry
+kernels for one class alone - the wasm rows kernels gate every row on `simd128` - without every
+other class's profile owing them an entry. A fat build asks the same of its ship set
+(`grid_has_seat_in`): a family that no class of the set has a seat in gets no clone and runs its
+reference body.
 
 ## A forced build stamps from one named file {#tune-forced-file}
 

@@ -272,12 +272,16 @@ def check_q8(t : T?; n, d, ntok : int64) {
     var y : array<float>
     y |> resize(ntok * d)
     matmul_q8q8_batch(y, qt.q, qt.scales, xq_all, xs_all, n, d, ntok)
-    for (k in range64(ntok * d)) {
-        t |> equal(y[k], yref[k])
+    let tag = "q8 batch {n}x{d} ntok={ntok}"
+    if (q8x16_witness_gen()) {
+        //! a 16-bit rows seat serves the batch call in its own sum order
+        t |> equal(mismatch_rel(tag, y, yref, F32_TILE_REL), 0, "{tag}: elements past {F32_TILE_REL} relative of the per-token matmul_q8q8")
+    } else {
+        t |> equal(mismatch_exact(y, yref), 0, "{tag}: elements differing from the per-token matmul_q8q8")
     }
 }
 
-[test(description = "The fp32 and bf16 batch GEMMs match a double-dot oracle within 1e-5 relative over tile and tail shapes, a poisoned element missing the bar, and the Q8 batch GEMM equals the per-token `matmul_q8q8` exactly")]
+[test(description = "The fp32 and bf16 batch GEMMs match a double-dot oracle within 1e-5 relative over tile and tail shapes, a poisoned element missing the bar, and the Q8 batch GEMM equals the per-token `matmul_q8q8` exactly, or within 1e-5 relative where a 16-bit rows seat serves it")]
 def test_matmul_batch(t : T?) {
     with_dasllama_jobque_() {
         t |> run("fp32 single 64x5 ntok=4") @(t : T?) {

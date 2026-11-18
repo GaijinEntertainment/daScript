@@ -3,7 +3,8 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture doc:
 `README.md`.
 
-**A change to a `.das` file in this folder without a green unit run is a defect.** The unit
+**A change to a `.das` file in this folder, or to `daslib/daspkg.das` (repo root), without a
+green unit run is a defect.** The unit
 suite is `bin/daslang dastest/dastest.das -- --test utils/daspkg --exclude test_daspkg_git` -
 no network, interpreted.
 

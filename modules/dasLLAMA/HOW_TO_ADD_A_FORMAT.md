@@ -570,7 +570,7 @@ decoded scale row needs no upload work - only the id bridge and the kernels. The
    per-32 family's disk-order dot) and the `rm_gemv` / `rm_witness` rows of the format's `kq_registries`, which
    `gen_tune_probe` reads to gate and race the family
    (`ARCHITECTURE_MEASUREMENT_KERNEL_RACE.md#rm-family-race`; a format with no rows is never raced, and
-   `performance/REVIEW.das` fails every class profile that lacks the family's entry,
+   `performance/REVIEW.das` fails a class profile that lacks the entry of a family the class has a seat in,
    `ARCHITECTURE_MEASUREMENT.md#committed-records-gate`); the stamp in
    every `performance/defaults/*.tune-defaults.json`; the rail's dispatch (`rm_dev_serves`, `rare_rows_core`'s
    device arm, `rm_dev_tile4` in `dasllama_blocks.das`). The host twin (`dasllama_gpu_host_twin.das`, both discrete

@@ -683,6 +683,18 @@ def report_sweep(t : T?; name : string; r : Sweep; cases : int = 0; moved : bool
 
 //! `src` written to `prog_<tag>.das` in the run's temp dir and compiled by a `-compile-only` daslang child within `timeout`
 //! seconds: the child's exit code and output (-1 where the file could not be written)
+def wasm_target() : bool {
+    let arch = get_target_architecture_name()
+    return arch == "wasm64" || arch == "wasm32"
+}
+
+//! true, with a skip recorded, on a wasm target: a cell that starts a child process has none to start
+def no_children_here(t : T?) : bool {
+    return false if (!wasm_target())
+    t |> skip("a wasm target starts no child process: the cell did not run")
+    return true
+}
+
 def spawn_compile_only(src, tag : string; timeout : float) : tuple<rc : int; out : string> {
     let path = path_join(test_temp_dir(), "prog_{tag}.das")
     return (rc = -1, out = "fwrite failed") if (!fwrite(path, src))

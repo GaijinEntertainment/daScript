@@ -1,0 +1,16 @@
+options gen2
+
+require daslib/daspkg
+
+[export]
+def package() {
+    package_name("wasm_tuner")
+    package_description("the generator tuner as a wasm64 release - the mint behind the wasm-simd128 profile")
+}
+
+[export]
+def release() {
+    release_main("../../gen_tune_probe.das")
+    release_wasm_disable_host_gpu_modules()
+    release_emcc_arg("-lnodefs.js")
+}

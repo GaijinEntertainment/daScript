@@ -1,8 +1,7 @@
-# dasLLAMA tests - the runs a PR cites
+# dasLLAMA tests - PR Runs Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture doc:
-`../ARCHITECTURE.md`. Planned work: `../followup_general.md`. The parent checklist is `REVIEW.md`
-(beside this file); the runner's tables are `run.das`.
+`../ARCHITECTURE.md`. Planned work: `../followup_general.md`.
 
 A PR's kind is the line its body's Validation section opens with: `Kind: final PR of the <arc> arc.`
 makes it a final PR; a PR opening `Kind: intermediate PR of the <arc> arc.`, or carrying neither
@@ -25,10 +24,15 @@ reached cells it skips, runs on its own where those cells do not skip, and the P
 run.**
 
 **A final PR whose change reaches a cell that skips on, or picks its tolerance or its code path by,
-a hardware or build capability the box may lack - a device, a module the build may omit, a kernel
-the instruction sets of the box's CPU do not carry - runs that cell on a box that has it, and names
-that box in the PR body.** A reached cell run without the capability did not run what the capability
-selects.
+a hardware or build capability one native box has and another lacks - a device, a module the build
+may omit, a kernel the instruction sets of the box's CPU do not carry - runs that cell on a box that
+has it, and names that box in the PR body.** A reached cell run without the capability did not run
+what the capability selects.
+
+**A final PR whose change reaches a cell that skips on, or picks its tolerance or its code path by,
+a capability no native box has and a wasm build does - a kernel only the wasm64 release seats - runs
+that cell in `run.das -- --suite wasm`, and cites that run's `REPORT` line in the PR body.** A
+native run skips such a cell, or runs its other path, on every box.
 
 **A final PR that adds a cell loading a model above the large tier (`MODEL_TIER_CEILING_BYTES`,
 `../dasllama/dasllama_gguf.das`), or whose change reaches such a cell, runs that cell under

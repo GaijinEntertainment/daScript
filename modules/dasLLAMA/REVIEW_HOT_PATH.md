@@ -19,8 +19,8 @@ A seat is a module-level variable holding a function, filled through a public se
 entry is the outermost function the runtime re-enters once per serving step, or a function a
 serving step runs through a seat or a kernel-backend override where no `[hot_path]`, contract or
 `[cold_path]` function reaches the `invoke`. An interior function is a function, not a region
-entry, with a caller under `dasllama/` a serving step reaches, every such caller re-entered once
-per serving step.
+entry, with a caller under `dasllama/` a serving step reaches through a call or an `invoke`, every
+such caller re-entered once per serving step.
 
 **A diff that adds a kernel dispatch, a loop or a call that the runtime re-enters once per serving
 step makes sure the function that records the dispatch or holds the loop or call is, or runs
@@ -53,14 +53,9 @@ carries a `[cold_path]` only on a rarely-taken branch.**
 serving step reaches through a call or an `invoke` - it is no region entry; it carries
 `[cold_path]` or nothing.**
 
-**A non-`[test]` function a diff adds or changes under this module's `tests/`, `harness/`,
-`benchmarks/` or `performance/` that reaches a `[hot_path]`, `[no_alloc]`, `[no_env]` or `[no_io]`
-function puts one `[cold_path]` on the outermost non-`[test]` function of those four folders on
-each chain that reaches it, from a `[test]` or from a function nothing in those folders calls.**
-
 **A diff that adds or changes a non-`[test]` function under this module's `tests/`, `harness/`,
 `benchmarks/` or `performance/` that reaches a `[hot_path]`, `[no_alloc]`, `[no_env]` or `[no_io]`
-function leaves no `[cold_path]` on a function of those four folders that is the outermost
-non-`[test]` one on no chain reaching that function from a `[test]` or from a function nothing in
-those folders calls - a helper shared by two chains included, whether the diff edits it or not;
-each chain's outermost one carries it.**
+function puts one `[cold_path]` on the outermost non-`[test]` function of those four folders on
+each chain that reaches it, from a `[test]` or from a function nothing in those folders calls, and
+leaves `[cold_path]` on no other function of those folders - a helper two chains share included,
+whether the diff edits it or not.**

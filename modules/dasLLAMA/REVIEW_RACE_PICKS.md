@@ -18,11 +18,12 @@ once per round.** Timings from two commits or processes pick nothing.
 argument - in the code the diff ships, or in a race script in the tree at the diff's tip when the
 shipped code cannot select it.**
 
-**A diff whose pick rests on a race, wherever the race ran, or that adds a race script to the tree
-or changes which candidates one times, puts the race's output lines, one per candidate and each naming it, in the PR body or in a
+**A diff whose pick, other than a `performance/defaults/` profile entry, rests on a race, wherever
+the race ran, or that adds a race script to the tree or changes which candidates one times, puts
+the race's output lines, one per candidate and each naming it, in the PR body or in a
 `PERF_LEDGER.md` row the diff adds.**
 
 **A diff whose race picks a numeric threshold - a cutoff a predicate compares against, or any
 integer compiled into a kernel variant as a constant - between candidates that differ in that
-number alone times the chosen value and, on each side of it where the device admits a value, at
-least one such value, in that race.**
+number alone times the chosen value and, on each side of it where the variant's emitter accepts a
+value, at least one such value, in that race.**

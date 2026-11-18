@@ -3,8 +3,7 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
 doc: `ARCHITECTURE.md`.
 
-Subfolders of this folder carry their own `REVIEW.md` checklists - a diff applies the
-`REVIEW.md` of every folder between this one and each file it changes.
+**Subfolders of this folder carry their own `REVIEW.md` checklists.**
 
 **A diff whose C++ under this folder, in code that compiles on Windows, opens, stats, lists,
 renames or removes a file or directory whose path is not a string literal does it through the
@@ -44,3 +43,9 @@ same change: the collector `getAllRequireReq` (`ast/ast_parse.cpp`), the parser'
 `ast_requireGuardAvailable` (`parser/parser_impl.cpp`), and the member walk
 `moduleGroupMemberAvailable` (`builtin/module_builtin_rtti.cpp`)
 (`ARCHITECTURE.md#require-sites`).**
+
+**A diff that adds or changes an `addExtern*` call under `builtin/`, or the signature of a
+function such a call binds, wherever it is declared, states in the PR description that
+`builtin/REVIEW.das` ran on a binary built from the diff** - the bind-flavor scan in
+`builtin/review_nttp.das` reads the binds compiled into the running binary, so an older binary
+passes binds the diff broke.

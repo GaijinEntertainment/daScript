@@ -402,8 +402,7 @@ var public g_fn_types : table<string; LLVMTypeRef>
 var public g_handled_field_offset_globals : table<string; tuple<modName : string; typeName : string; fieldName : string>>
 
 //! the arch the JIT emits for (host's or cross triple's): picks the
-//! platform-intrinsic table, else the daslang fallback body; on wasm
-//! the visitor skips user hints, which host-LLVM wasm mishandles
+//! platform-intrinsic table, else the daslang fallback body
 enum public JitTargetArch {
     other
     x64
@@ -1029,6 +1028,13 @@ def public with_target_machine(triple, cpu, features : string; opt_level : uint;
     LLVMDisposeTargetMachine(targetMachine)
 }
 
+[arch(at = "../ARCHITECTURE_TARGET_FEATURES.md#wasm-feature-string")]
+def private pass_machine_cpu_features(target : JitTarget; use_host_cpu : bool
+                                      ) : tuple<cpu : string; features : string> {
+    if (target.arch == JitTargetArch.wasm) return (cpu = "", features = "")
+    return default_target_cpu_features(target, use_host_cpu)
+}
+
 [macro_function, arch(at = "../ARCHITECTURE_TARGET_FEATURES.md#aarch64-feature-truth")]
 def public create_default_target_machine(target : JitTarget; opt_level : uint;
                                          use_host_cpu : bool) : LLVMTargetMachineRef {
@@ -1043,7 +1049,7 @@ def public create_default_target_machine(target : JitTarget; opt_level : uint;
     let host_triple = host_jit_triple()
     let triple_owned_by_llvm = empty(host_triple)
     let triple_msg = triple_owned_by_llvm ? LLVMGetDefaultTargetTriple() : host_triple
-    let machine = default_target_cpu_features(target, use_host_cpu)
+    let machine = pass_machine_cpu_features(target, use_host_cpu)
     let targetMachine = create_target_machine(triple_msg, machine.cpu, machine.features, opt_level)
 
     if (triple_owned_by_llvm) {
@@ -1097,12 +1103,13 @@ def public host_machine_cpu_features(target : JitTarget) : tuple<cpu : string; f
     return (cpu = cpu, features = feats)
 }
 
-//! The in-memory MCJIT is built through the C API with no cpu and no feature string, so its
-//! subtarget is the generic one and cannot select a host intrinsic; a defined function carries
-//! the host's as attributes instead, which the subtarget lookup honors per function.
-def public stamp_host_target_attrs(target : JitTarget; m : LLVMOpaqueModule?) {
-    let host = host_machine_cpu_features(target)
-    stamp_target_attrs(m, host.cpu, host.features)
+[arch(at = "../ARCHITECTURE_TARGET_FEATURES.md#aarch64-feature-truth")]
+def public stamp_default_target_attrs(target : JitTarget; m : LLVMOpaqueModule?;
+                                      use_host_cpu : bool) {
+    //! the in-memory engine's functions carry the default machine's cpu
+    //! and features - the host's, or a baseline class's - as attributes
+    let machine = default_target_cpu_features(target, use_host_cpu)
+    stamp_target_attrs(m, machine.cpu, machine.features)
 }
 
 //! every defined function of `m` carries `cpu` and `features` as its target attributes; an empty string stamps nothing

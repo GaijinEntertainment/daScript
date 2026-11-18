@@ -1982,10 +1982,17 @@ def private vt_aud_served(var r : VtResident; var s : EncoderState; ct : TowerCh
     return vt_served(r, s.x, bx, npos, nl)
 }
 
+//! what `vt_aud_blocks` declines on before it builds anything, asked without counting a decline
+def private vt_aud_lane_armed(t : AudioTower) : bool =>
+    g_vt_env_tower && t.dev_backend == TowerDev.vulkan && vulkan_tower_arms() && vulkan_tower_tiles_on()
+
 //! the blocks, with the projector tail behind where `tower_ct_shape_ok` admits it; answers which served, so the CPU tail runs exactly when the device's did not
 [hot_path]
 def private vulkan_audio_tower_blocks_tail(t : AudioTower; var s : EncoderState; npos : int64) : TowerTailServed {
     var ct = TowerChatTail()
+    if (!vt_aud_lane_armed(t)) {
+        return vt_aud_blocks(t, s, npos, false, ct) ? TowerTailServed.blocks : TowerTailServed.declined   // the tail's tiles need the device: the blocks name the decline
+    }
     if (tower_ct_shape_ok(t, npos)) {
         ct = vt_ct_prepare(t, npos, vt_cm2_feed())
     } else {
