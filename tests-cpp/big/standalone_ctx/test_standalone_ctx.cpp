@@ -54,5 +54,11 @@ int main( int, char * [] ) {
     expect("findVariable(g_shared_taps)", sharedTaps >= 0 ? 1 : 0, 1);
     expect("getVariable(g_shared_taps)[0]", sharedTaps >= 0 ? ((int32_t *) ctx.getVariable(sharedTaps))[0] : -1, 1);
     expect("getVariable(g_shared_taps)[2]", sharedTaps >= 0 ? ((int32_t *) ctx.getVariable(sharedTaps))[2] : -1, 3);
+    int32_t finalized = 0;
+    {
+        ctx_standalone_init_fixture::Standalone dying;
+        dying.watch_finalizers(&finalized);
+    }
+    expect("[finalize] then [finalize(late = true)] ran when the context died", finalized, 12);
     return failures ? 1 : 0;
 }

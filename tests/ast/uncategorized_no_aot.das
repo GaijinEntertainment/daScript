@@ -256,3 +256,52 @@ def test_holder_over_uninstantiated_template_compiles(t : T?) {
         }
     }
 }
+
+//! need_rtti of a program compiled from `body` with the symbol
+//! tables kept
+def private need_rtti_of(t : T?; body : string; force : bool = false) : bool {
+    let path = "{get_das_root()}/tests/ast/_need_rtti_probe.das"
+    var inscope access <- make_file_access("")
+    set_file_source(access, path, "options gen2\nrequire daslib/rtti\n{body}")
+    var answer = false
+    using() $(var mg : ModuleGroup) {
+        using() $(var cop : CodeOfPolicies) {
+            cop.keep_symbol_tables = true
+            cop.rtti = force
+            compile_file(path, access, unsafe(addr(mg)), cop) $(ok; program; issues) {
+                t |> success(ok, "the probe compiles: {issues}")
+                return if (!ok)
+                answer = need_rtti(get_ptr(program))
+            }
+        }
+    }
+    return answer
+}
+
+[test(description = "a program needs runtime RTTI exactly when a used function or global initializer reaches a need_rtti builtin, or a policy forces it")]
+def test_need_rtti(t : T?) {
+    let plain = "[export]\ndef main \{\n    print(\"hi\\n\")\n\}\n"
+    t |> equal(need_rtti_of(t, plain), false, "a plain program")
+    t |> equal(need_rtti_of(t, plain, true), true, "CodeOfPolicies.rtti")
+    t |> equal(need_rtti_of(t, "options rtti\n" + plain), true, "options rtti")
+    t |> equal(need_rtti_of(t, "[export]\ndef main \{\n    unsafe(heap_collect())\n\}\n"),
+        false, "heap_collect: the heap kind decides its global infos")
+    t |> equal(need_rtti_of(t, "[export]\ndef main \{\n    stackwalk()\n\}\n"), true, "stackwalk")
+    t |> equal(need_rtti_of(t, "def helper \{\n    print(\"\{get_stackwalk()\}\")\n\}\n"
+            + "[export]\ndef main \{\n    helper()\n\}\n"),
+        true, "get_stackwalk in a callee")
+    t |> equal(need_rtti_of(t, "def unused \{\n    stackwalk()\n\}\n" + plain),
+        false, "stackwalk in an unused function")
+    t |> equal(need_rtti_of(t, "[export]\ndef main \{\n"
+            + "    let info & = get_function_info(this_context(), 0)\n"
+            + "    print(\"\{info.name\}\\n\")\n\}\n"),
+        true, "get_function_info")
+    t |> equal(need_rtti_of(t, "let g = get_stackwalk()\n"
+            + "[export]\ndef main \{\n    print(g)\n\}\n"),
+        true, "a global initializer")
+    t |> equal(need_rtti_of(t, "[finalize]\ndef bye \{\n    print(\"bye\\n\")\n\}\n" + plain),
+        false, "a [finalize] function runs from the context's shutdown list")
+    t |> equal(need_rtti_of(t, "let shared g_s <- [1, 2, 3]\n"
+            + "[export]\ndef main \{\n    print(\"\{g_s\}\\n\")\n\}\n"),
+        true, "a shared global")
+}

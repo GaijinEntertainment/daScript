@@ -495,11 +495,27 @@ def test_standalone_emit(t : T?) {   // nolint:STYLE038 - flat list of emit subc
         let source = generate_standalone_source(t, "_standalone_gc_fixture", out_dir)
         t |> success(find(source, "policies.persistent_heap = true;") >= 0, "the persistent heap policy is on")
         t |> success(find(source, "context.gcEnabled = true;") >= 0, "the collector's own flag is on")
-        t |> success(find(source, "VarInfo __gvar_info_") >= 0, "each global gets a debug info the collector walks")
-        t |> success(find(source, "].debugInfo = &__gvar_info_") >= 0, "and the context's global table points at it")
+        t |> success(find(source, "VarInfo __gvar_info_") >= 0,
+            "a global that can hold heap data gets a debug info the collector walks")
+        t |> equal(length(split(source, "].debugInfo = &__gvar_info_")) - 1, 1,
+            "only that one: the int global carries none")
+        t |> success(find(source, "__func_info__") < 0, "a collect reads no function info")
         let plain = generate_standalone_source(t, "_standalone_gc_free_fixture", out_dir)
-        t |> success(find(plain, "gcEnabled") < 0, "a program without options gc never names the flag - the nano context has none")
-        t |> success(find(plain, "].debugInfo = &__gvar_info_") >= 0, "but its globals still carry their debug info, as under the interpreter")
+        t |> success(find(plain, "gcEnabled") < 0,
+            "a program without options gc never names the flag - the nano context has none")
+        t |> success(find(plain, "__gvar_info_") < 0,
+            "nothing in it reads RTTI, so its globals carry no debug info")
+        t |> success(find(plain, "ShutdownFunctions") < 0,
+            "a program without finalizers never names the shutdown list - "
+            + "the nano context has none")
+        let finalizers = generate_standalone_source(t, "_standalone_finalize_fixture", out_dir)
+        t |> success(find(finalizers, "context.totalShutdownFunctions = 2;") >= 0,
+            "both finalizers, the plain and the late one, are on the shutdown list")
+        t |> success(find(finalizers, "__func_info__") < 0,
+            "and they need no function info to be found")
+        let forced = generate_standalone_source(t, "_standalone_rtti_fixture", out_dir)
+        t |> success(find(forced, "].debugInfo = &__gvar_info_") >= 0,
+            "options rtti keeps the globals' debug info")
     }
 
     t |> run("a module only dead code reaches stays compile-time-only") @(t : T?) {

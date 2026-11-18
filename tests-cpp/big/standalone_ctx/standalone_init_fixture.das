@@ -11,9 +11,7 @@ def next_stamp : int {
     return g_stamp
 }
 
-def read_forward : int {
-    return g_later
-}
+def read_forward : int => g_later
 
 var g_first = next_stamp() + g_dep
 var g_second = next_stamp()
@@ -28,34 +26,22 @@ def record_init {
 }
 
 [export]
-def get_first : int {
-    return g_first
-}
+def get_first : int => g_first
 
 [export]
-def get_second : int {
-    return g_second
-}
+def get_second : int => g_second
 
 [export]
-def get_init_fn_stamp : int {
-    return g_init_fn_stamp
-}
+def get_init_fn_stamp : int => g_init_fn_stamp
 
 [export]
-def get_dep_init_stamp : int {
-    return g_dep_init_stamp
-}
+def get_dep_init_stamp : int => g_dep_init_stamp
 
 [export]
-def get_reads_forward : int {
-    return g_reads_forward
-}
+def get_reads_forward : int => g_reads_forward
 
 [export]
-def get_later : int {
-    return g_later
-}
+def get_later : int => g_later
 
 [export]
 def get_shared_total : int {
@@ -77,19 +63,13 @@ enum Mode {
 }
 
 [export]
-def make_pair(x, y : int) : Pair {
-    return Pair(a = x, b = y)
-}
+def make_pair(x, y : int) : Pair => Pair(a = x, b = y)
 
 [export]
-def pair_sum(p : Pair) : int {
-    return p.a + p.b
-}
+def pair_sum(p : Pair) : int => p.a + p.b
 
 [export]
-def flip(m : Mode) : Mode {
-    return m == Mode.on ? Mode.off : Mode.on
-}
+def flip(m : Mode) : Mode => m == Mode.on ? Mode.off : Mode.on
 
 struct Outer {
     inner : Inner
@@ -101,9 +81,7 @@ struct Inner {
 }
 
 [export]
-def outer_weight(o : Outer) : int {
-    return o.inner.weight + o.tag
-}
+def outer_weight(o : Outer) : int => o.inner.weight + o.tag
 
 struct Node {
     value : int
@@ -113,9 +91,7 @@ struct Node {
 var private g_node : Node?
 
 [export]
-def head_value : int {
-    return g_node?.value ?? 41
-}
+def head_value : int => g_node?.value ?? 41
 
 [export]
 def apply_lambda(x : int) : int {
@@ -123,9 +99,7 @@ def apply_lambda(x : int) : int {
     return invoke(add3, invoke(add3, x))
 }
 
-def local_double(x : int) : int {
-    return x + x
-}
+def local_double(x : int) : int => x + x
 
 [export]
 def call_through_pointer(x : int) : int {
@@ -148,7 +122,26 @@ def sum_generator(n : int) : int {
     return s
 }
 
-[export_c(name = "renamed_sum")]
-def sum_under_another_name(a, b : int) : int {
-    return a + b
+var private g_bye_target : int?
+
+[export]
+def watch_finalizers(var target : int?) {
+    g_bye_target = target
 }
+
+[finalize]
+def bye {
+    if (g_bye_target != null) {
+        *g_bye_target = *g_bye_target * 10 + 1
+    }
+}
+
+[finalize(late = true)]
+def bye_late {
+    if (g_bye_target != null) {
+        *g_bye_target = *g_bye_target * 10 + 2
+    }
+}
+
+[export_c(name = "renamed_sum")]
+def sum_under_another_name(a, b : int) : int => a + b

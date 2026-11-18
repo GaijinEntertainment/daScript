@@ -272,3 +272,12 @@ reads the arguments - `get_command_line_arguments`, the module cache's host opti
 arguments otherwise. A thread or job started inside the block reads the process arguments. One
 shared override cannot be scoped: two blocks open on two threads restore each other's saved
 value, and the process ends up with one block's arguments.
+
+## Packed relative relocations {#exe-relr}
+
+Every pointer a JIT exe or `-lib` library stores in its data takes a load-time relocation, and
+the classic ELF form spends 24 bytes on each (a dasLLAMA library carries over 200k of them). On a
+glibc of 2.36 or newer the POSIX link passes `-Wl,-z,pack-relative-relocs`, which writes them as
+a bitmap of positions. The gate is the glibc daslang runs on, not the target's: an older loader
+ignores the packed table and leaves the pointers unpatched, and a box with an older glibc builds
+artifacts for that older floor, as the release workflow's ubuntu-22.04 build does on purpose.

@@ -1978,10 +1978,10 @@ namespace das {
                     ->args({"ctx","block","context","line"});
             addInterop<rtti_contextFunctionInfo,const FuncInfo &,vec4f,int32_t>(*this, lib, "get_function_info",
                 SideEffects::modifyExternal, "rtti_contextFunctionInfo")
-                    ->args({"context","index"});
+                    ->args({"context","index"})->setNeedRtti();
             addInterop<rtti_contextVariableInfo,const VarInfo &,vec4f,int32_t>(*this, lib, "get_variable_info",
                 SideEffects::modifyExternal, "rtti_contextVariableInfo")
-                    ->args({"context","index"});
+                    ->args({"context","index"})->setNeedRtti();
             addExtern<DAS_BIND_FUN(rtti_get_this_module)>(*this, lib, "get_this_module",
                 SideEffects::modifyExternal, "rtti_get_this_module")
                     ->arg("program");
@@ -2131,7 +2131,7 @@ namespace das {
             // function mnh lookup
             addExtern<DAS_BIND_FUN(builtin_get_function_info_by_mnh)>(*this, lib, "get_function_info",
                 SideEffects::none, "builtin_get_function_info_by_mnh")
-                    ->args({"context","function"});
+                    ->args({"context","function"})->setNeedRtti();
             addExtern<DAS_BIND_FUN(builtin_SimFunction_by_MNH)>(*this, lib, "get_function_by_mnh",
                 SideEffects::none, "builtin_SimFunction_by_MNH")
                     ->args({"context","MNH"});

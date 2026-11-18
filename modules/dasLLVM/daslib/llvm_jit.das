@@ -940,13 +940,14 @@ class public LlvmJitVisitor : AstVisitor {
         )
         let line_info_init = LLVMConstStructInContext(g_ctx, array_data_ptr(init_values), init_values |> length() |> uint(), 0)
         LLVMSetInitializer(line_info_global, line_info_init)
+        LLVMSetGlobalConstant(line_info_global, 1)
         return line_info_global
     }
 
-    def create_line_info_ptr_global(line_info_global : LLVMOpaqueValue?) {
+    def create_line_info_ptr_global(line_info_global : LLVMOpaqueValue?; name : string) {
         let uint8_ptr = LLVMPointerType(LLVMPointerType(types.t_int8, 0u), 0u)
         let line_info_ptr_type = uint8_ptr
-        let line_info_ptr_global = LLVMAddGlobal(g_mod, line_info_ptr_type, "li_ptr" /* no name */)
+        let line_info_ptr_global = LLVMAddGlobal(g_mod, line_info_ptr_type, name)
         set_globalvar_linkage(line_info_ptr_global)
         LLVMSetInitializer(line_info_ptr_global, line_info_global)
         return line_info_ptr_global
@@ -960,10 +961,16 @@ class public LlvmJitVisitor : AstVisitor {
 
     def get_line_info_ptr(at : LineInfo) {
         let void_ptr = types.LLVMVoidPtrType()
-        let fi = get_file_info_global(g_builder, types, at.fileInfo != null ? string(at.fileInfo.name) : "unknown_filename")
-        let line_info_global = create_line_info_global(at, fi)
-        let line_info_ptr_global = create_line_info_ptr_global(line_info_global)
-        instrument_and_map_global(at, line_info_ptr_global)
+        let file_name = at.fileInfo != null ? string(at.fileInfo.name) : "unknown_filename"
+        let name = ("li_ptr_{file_name}_{int(at.line)}_{int(at.column)}"
+            + "_{int(at.last_line)}_{int(at.last_column)}")
+        var line_info_ptr_global = LLVMGetNamedGlobal(g_mod, name)
+        if (line_info_ptr_global == null) {
+            let fi = get_file_info_global(g_builder, types, file_name)
+            let line_info_global = create_line_info_global(at, fi)
+            line_info_ptr_global = create_line_info_ptr_global(line_info_global, name)
+            instrument_and_map_global(at, line_info_ptr_global)
+        }
         var loaded_ptr = LLVMBuildLoad2(g_builder, void_ptr, line_info_ptr_global, "")
         // return g_builder |> LLVMBuildPointerCast(loaded_ptr, void_ptr, "")
         return loaded_ptr
@@ -8242,9 +8249,15 @@ def public generate_globals_initialization_fn(target : JitTarget; ctx : Context?
             if (set_gv_fn == null) {
                 set_gv_fn = LLVMAddFunctionWithType(g_mod, "jit_set_global_var", set_gv_type)
             }
+            // without RTTI the offset and shared flag stand, debugInfo null;
+            // the exe heap is persistent, so a global that can hold heap data
+            // keeps its info for a collect
+            let full_rtti = need_rtti(prog)
             for (gvi in range(ctx.totalVariables)) {
                 let di = get_global_variable_debug_info(ctx, gvi)
-                let tinfo_ptr = visitor.create_type_info_global(unsafe(reinterpret<TypeInfo?>(di)))
+                let ti = unsafe(reinterpret<TypeInfo?>(di))
+                continue if (!full_rtti && !ti.flags.heapGC && !ti.flags.stringHeapGC)
+                let tinfo_ptr = visitor.create_type_info_global(ti)
                 var gv_args = fixed_array(
                     ctx_param,
                     types.ConstI64(uint64(gvi)),

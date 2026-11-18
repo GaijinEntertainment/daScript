@@ -508,3 +508,26 @@ def test_second_context_literals(t : T?) {
         t |> equal(r.second, 0, "holes in the context that installed the cached code")
     }
 }
+
+//! each of pick's three instances bounds-checks `a[i]` at one source
+//! location; the dump's LineInfo globals are keyed by their contents
+[test(description = "a source location the module's code passes to the runtime more than once is one read-only LineInfo global, however many instances or clones reach it", timeout = 1200)]
+def test_a_source_location_is_one_line_info_global(t : T?) {
+    let out = jit_dump(t, "modules/dasLLVM/tests/_line_info_root.das", [])
+    t |> success(find(out, "PICK 3 2.5 x") >= 0, "the fixture printed the three picks: {tail(out)}")
+    var copies : table<string; int>
+    for (ln in split(out, "\n")) {
+        continue if (!starts_with(ln, "@li_"))
+        let at = find(ln, " = ")
+        continue if (at < 0)
+        let contents = slice(ln, at + 3)
+        t |> success(find(contents, " constant ") >= 0,
+            "a LineInfo global is a constant: {ln}")
+        copies[contents] = (copies?[contents] ?? 0) + 1
+    }
+    t |> success(length(copies) >= 3,
+        "the dump carries the fixture's LineInfo globals: {tail(out)}")
+    for (contents, n in keys(copies), values(copies)) {
+        t |> equal(1, n, "one global for {contents}")
+    }
+}

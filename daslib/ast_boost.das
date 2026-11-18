@@ -1595,3 +1595,27 @@ def public collect_carrier_violation(var fn : Function?) : string {
     }
     return why
 }
+
+def public need_rtti(program : Program?) : bool {
+    //! True when a standalone context or JIT ``-exe`` of ``program``
+    //! needs RTTI: ``options rtti``, a used ``needRtti``/``[pinvoke]``
+    //! function, a shared global, or a global init reaching needRtti.
+    let forced = program._options |> find_arg("rtti") ?as tBool ?? program.policies.rtti
+    return true if (forced)
+    var need = false
+    program |> for_each_module_no_order() $(mod) {
+        mod |> for_each_function("") $(fn) {
+            if (is_used(program, fn) && (fn.moreFlags2.needRtti || fn.moreFlags.pinvoke)) {
+                need = true
+            }
+        }
+        mod |> for_each_global() $(pvar) {
+            return if (!is_used(program, pvar))
+            need ||= pvar.flags.global_shared
+            get_use_functions(pvar) $(fn) {
+                need ||= fn.moreFlags2.needRtti
+            }
+        }
+    }
+    return need
+}

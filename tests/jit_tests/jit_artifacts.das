@@ -849,7 +849,7 @@ def test_wasm_lowerings(t : T?) {
             "the rounding loop vectorizes over the truncation ({truncs} lines)")
         t |> success(count_with(ln, "x half>") == 0 && count_with(ln, "fpext") == 0,
             "no half type reaches the IR")
-        let scales = count_with(ln, "fmul <4 x float>", TWO_POW_112)
+        let scales = count_with(ln, "fmul ", "splat (float {TWO_POW_112})")
         t |> success(scales >= 1,
             "the widening loop vectorizes over the 2^112 scale ({scales} lines)")
         for (call in WASM_INLINED_MATH_CALLS) {
@@ -891,7 +891,7 @@ def test_half_widen_without_f16c(t : T?) {
         + "--jit-compile-only "
         + "--jit-dump=\"{dump}.base\"", out)
     let ln <- split(fread("{dump}.base"), "\n")
-    let scales = count_with(ln, "fmul <4 x float>", TWO_POW_112)
+    let scales = count_with(ln, "fmul ", "splat (float {TWO_POW_112})")
     t |> success(scales >= 1, "the widening loop vectorizes over the 2^112 scale ({scales} lines)")
     t |> success(count_with(ln, "x half>") == 0 && count_with(ln, "fpext") == 0,
         "no half type reaches the IR")

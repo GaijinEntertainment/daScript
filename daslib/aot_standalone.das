@@ -117,11 +117,44 @@ def private usedGlobals(var program : ProgramPtr) : array<Variable?> {
 def private standaloneCollects(program : ProgramPtr) : bool =>
     program._options |> find_arg("gc") ?as tBool ?? false
 
+//! [finalize] functions run from this list, plain then late, each
+//! in index order; the nano context has no shutdown script, so a
+//! program without finalizers names neither field
+def private writeShutdownFunctions(usedFunctions : array<Function?>;
+                                   var tw : StringBuilderWriter) {
+    var ids <- [for (i, fn in count(), usedFunctions); i;
+        where fn.flags.shutdown && !fn.moreFlags.lateShutdown]
+    ids |> push_from([for (i, fn in count(), usedFunctions); i;
+        where fn.flags.shutdown && fn.moreFlags.lateShutdown])
+    return if (empty(ids))
+    let n = length(ids)
+    let list = join([for (i in ids); "{i}"], ", ")
+    write(tw, "    static const int __shutdown_functions[] = \{{list}\};\n")
+    write(tw, "    context.totalShutdownFunctions = {n};\n")
+    write(tw, "    context.shutdownFunctions = (SimFunction **) "
+        + "context.code->allocate(uint32_t({n} * sizeof(SimFunction *)));\n")
+    write(tw, "    for ( int i=0; i!={n}; ++i ) "
+        + "context.shutdownFunctions[i] = &context.functions[__shutdown_functions[i]];\n")
+}
+
+def private persistentHeap(program : ProgramPtr) : bool =>
+    program._options |> find_arg("persistent_heap") ?as tBool ?? program.policies.persistent_heap
+
+//! only a persistent heap can be collected, and its collect walks
+//! the globals that can hold heap data
+def private keepGlobalRtti(program : ProgramPtr; pvar : Variable?; fullRtti : bool) : bool =>
+    fullRtti || (persistentHeap(program) && pvar._type.gcFlags != 0)
+
 //! A `VarInfo` per global, made before the helper dumps its tables so every type they name is in
 //! the dump: the collector walks each global through its info, the way the interpreter's
 //! simulate step wires it.
-def private makeGlobalVarInfos(program : ProgramPtr; var helper : AotDebugInfoHelper?; globals : array<Variable?>) : array<tuple<index : int; info : VarInfo?>> =>
-    <- [for (pvar in globals); (index = variable_index(program, pvar), info = helper.helper |> make_variable_debug_info(pvar))]
+def private makeGlobalVarInfos(program : ProgramPtr; var helper : AotDebugInfoHelper?;
+                               globals : array<Variable?>; fullRtti : bool
+                               ) : array<tuple<index : int; info : VarInfo?>> =>
+    <- [for (pvar in globals);
+        (index = variable_index(program, pvar),
+         info = helper.helper |> make_variable_debug_info(pvar));
+        where keepGlobalRtti(program, pvar, fullRtti)]
 
 def private writeGlobalVarInfos(var helper : AotDebugInfoHelper?; infos : array<tuple<index : int; info : VarInfo?>>; var tw : StringBuilderWriter) {
     for (entry in infos) {
@@ -205,11 +238,12 @@ def writeStandaloneCtor(cfg : StandaloneContextCfg; initFunctions : string; var 
     let stack_size = stack_base + int(program.globalInitStackSize)
     let usedFunctions <- collectProgramUsedFunctions(program, true, false)
     let usedFunctionCount = length(usedFunctions)
+    let fullRtti = need_rtti(get_ptr(program))
     write(tw, "{cfg.class_name}::{cfg.class_name}() : Context({stack_size}/*stack*/) \{\n");
     write(tw, "    auto & context = *this;\n");
     write(tw, "    CodeOfPolicies policies;");
     write(tw, "    policies.debugger = {program.policies.debugger} /*policies.debugger*/;\n");
-    write(tw, "    policies.persistent_heap = {program._options |> find_arg("persistent_heap") ?as tBool ?? program.policies.persistent_heap};\n");
+    write(tw, "    policies.persistent_heap = {persistentHeap(program)};\n");
     let heap_hint = uint(program._options |> find_arg("heap_size_hint") ?as tInt ?? int(program.policies.heap_size_hint))
     let string_heap_hint = uint(program._options |> find_arg("string_heap_size_hint") ?as tInt ?? int(program.policies.string_heap_size_hint))
     write(tw, "    policies.heap_size_hint = {heap_hint:d};\n");
@@ -226,7 +260,9 @@ def writeStandaloneCtor(cfg : StandaloneContextCfg; initFunctions : string; var 
         let vindex = variable_index(program, pvar)
         write(tw, "    InitGlobalVar(context, &context.globalVariables[{vindex}/*pvar->index*/], GlobalVarInfo(\"")
         write(tw, "{pvar.name}\", \"{pvar |> get_mangled_name()}\", {pvar._type.sizeOf}, {pvar.flags.global_shared}));\n");
-        write(tw, "    context.globalVariables[{vindex}].debugInfo = &__gvar_info_{vindex};\n");
+        if (keepGlobalRtti(program, pvar, fullRtti)) {
+            write(tw, "    context.globalVariables[{vindex}].debugInfo = &__gvar_info_{vindex};\n");
+        }
     }
     write(tw, "     // end totalVariables\n\n");
     write(tw, "    context.allocateGlobalsAndShared();\n");
@@ -259,6 +295,7 @@ def writeStandaloneCtor(cfg : StandaloneContextCfg; initFunctions : string; var 
         write(tw, "        id_to_funcs.emplace_back(func_info.aotHash, &context.functions[index]);\n");
         write(tw, "        anyPInvoke |= func_info.pinvoke;\n");
         write(tw, "    \}\n");
+        writeShutdownFunctions(usedFunctions, tw)
     }
 
     writeVariableLookup(program, tw, lookupVariableTable)
@@ -403,16 +440,16 @@ def GetFunctionInfo(program : ProgramPtr; pfun : Function?; index : int; info : 
                     "{pfun._module.moduleFlags.promoted}",
                     "{pfun.result.isRefType && !pfun.result.flags.ref}",
                     "{pfun.moreFlags.pinvoke}"]
-        write(tw, "        \{{index}, FunctionInfo({args|>join(", ")}), &{info}\},\n");
+        write(tw, "        \{{index}, FunctionInfo({args|>join(", ")}), {info}\},\n");
     }
 }
 
 def addFunctionInfo(program : ProgramPtr; fnn : array<Function?>;
-                    var helper : AotDebugInfoHelper?) {
+                    var helper : AotDebugInfoHelper?; fullRtti : bool) {
     var lookupFunctionTable : array<tuple<Function?, FuncInfo?>>
     lookupFunctionTable |> reserve(length(fnn))
     for (pfun in fnn) {
-        let info = helper.helper |> make_function_debug_info(pfun);
+        let info = fullRtti ? helper.helper |> make_function_debug_info(pfun) : null
         lookupFunctionTable.push((pfun, info));
     }
 
@@ -421,7 +458,8 @@ def addFunctionInfo(program : ProgramPtr; fnn : array<Function?>;
     return build_string() $(tw) {
         var index = 0
         for ((fun_info, info) in lookupFunctionTable) {
-            write(tw, GetFunctionInfo(program, fun_info, index, funcInfoName(info)));
+            let info_ref = info != null ? "&{funcInfoName(info)}" : "nullptr"
+            write(tw, GetFunctionInfo(program, fun_info, index, info_ref));
             index++
         }
     }
@@ -464,8 +502,9 @@ def genStandaloneSrc(var program : ProgramPtr;
             }
 
             let used = collectProgramUsedFunctions(program, true, false)
-            initFunctions = addFunctionInfo(program, used, gen.helper);
-            let globalInfos <- makeGlobalVarInfos(program, gen.helper, globals)
+            let fullRtti = need_rtti(get_ptr(program))
+            initFunctions = addFunctionInfo(program, used, gen.helper, fullRtti);
+            let globalInfos <- makeGlobalVarInfos(program, gen.helper, globals, fullRtti)
             type_defs += gen.declarations;
             gen.declarations = "";
             write(tw, gen.str());
