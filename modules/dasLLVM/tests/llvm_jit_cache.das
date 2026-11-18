@@ -8,6 +8,7 @@ require daslib/ast_boost
 require daslib/rtti
 require daslib/strings_boost
 require llvm/daslib/llvm_jit_plan
+require llvm/daslib/llvm_cpu_class
 require _llvm_cache_common
 
 [test(description = "the JIT's compile-only escape emits no partition and reads no cached object, and the program still runs interpreted to the right answer")]
@@ -195,7 +196,7 @@ def private named(mod : Module?; name : string) : array<FunctionPtr> {
 }
 
 def private dll_key(prog : Program?; funcs : array<FunctionPtr>) : string =>
-    jit_dll_basename(prog, funcs, 3, 0, false, false, "", false, false, JitSanitize())
+    jit_dll_basename(prog, funcs, 3, 0, false, false, "", CpuClass.none, false, false, JitSanitize())
 
 //! the fixture's keys and folds, read from one compiled and simulated program
 def private fixture_keys() : FixtureKeys {
@@ -261,7 +262,7 @@ def test_slot_names_key(t : T?) {
 }
 
 def private salt(layouts : uint64) : uint64 =>
-    jit_env_salt(3, 0, false, false, "", true, true, JitSanitize(), layouts)
+    jit_env_salt(3, 0, false, false, "", CpuClass.none, true, true, JitSanitize(), layouts)
 
 [test(description = "a handled layout term changes when the field's offset, the field, the type or the module changes, and a type's size is a term apart from a field's offset")]
 def test_layout_term(t : T?) {
@@ -313,7 +314,7 @@ def test_layout_hash(t : T?) {
 def test_salt_folds_layouts(t : T?) {
     let here = handled_layout_hash()
     t |> run("the salt a compile takes is the salt over this binary's layouts") @(t : T?) {
-        t |> equal(jit_env_salt(3, 0, false, false, "", true, true, JitSanitize()), salt(here))
+        t |> equal(jit_env_salt(3, 0, false, false, "", CpuClass.none, true, true, JitSanitize()), salt(here))
     }
     t |> run("other layouts are another salt") @(t : T?) {
         t |> success(salt(here + 1ul) != salt(here))

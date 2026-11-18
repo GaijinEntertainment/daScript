@@ -35,7 +35,7 @@ context - which is why the infer pass moved to `daslib/tune` with the annotation
 - **A shared macro-module global is a per-requiring-module copy.** `llvm_exe` calling an
   `llvm_tune` function reads `llvm_exe`'s own (empty) copy of `g_scopes` - the same trap as
   the `[llvm_code]` generator registry. Anything a second macro module must read travels
-  through the AST, a file, or the environment. Hence `tune_scopes_status(prog)` walks
+  through the AST, a file, or the environment. Hence `tune_scopes_status(prog, view)` walks
   `[tune_scope]` structure annotations plus `[tune]` functions rather than the bank, and
   `collect_status` reads the stamps back off the AST.
 - **`stamp_llvm_code` records `tune_suffix` / `tune_from` / `tune_source`** as extra
@@ -72,7 +72,7 @@ context - which is why the infer pass moved to `daslib/tune` with the annotation
 `tune_aot_gate()` and `tune_exe_gate()` are deliberately separate. `tune_aot_gate()` makes an
 artifact for a cross triple no CPU class serves fully tune-free, but keeps the grid for a
 `--jit-compile-only` dump under it, so the x64 emission rail can inspect it off-box. A triple a
-class serves (`jit_cross_class()` names the class: wasm64's own, or the baseline's under any
+class serves (`jit_cross_class(triple, baseline)` names the class: wasm64's own, or the baseline's under any
 other triple) stamps for that class. `tune_exe_gate()` is true for both
 `-exe` and `-lib`: the command line sets one compile policy for both, `jit_exe_mode`, and the
 option that makes the JIT emit a library is set after the compile, too late for a macro. Both
@@ -169,7 +169,7 @@ rail (back-dating with `set_mtime` + `mktime`). Both run under `-jit` and short-
 pass when `!jit_enabled()`. The defaults-profile rail is `llvm_tune_scope.das` (+ its
 `_client` / `_lib` / `_tuner` fixtures): it copies the fixtures into a per-process temp
 directory, redirects the copied lib's `defaults =` at a `tune_defaults/` beside them, writes its
-profile files there at runtime, named by this box's own `tune_cpu_class()`, and fakes a
+profile files there at runtime, named by this box's own `tune_native_target().klass`, and fakes a
 less-capable minting box with an empty `features` field to force the unlocked-seat race. It
 never writes under the tracked `llvm_tune_profiles_defaults/`; `modules/dasLLVM/REVIEW.das`
 reds a test that does. The fat rail is `llvm_tune.das` (+ `_llvm_tune_fat_client.das` /

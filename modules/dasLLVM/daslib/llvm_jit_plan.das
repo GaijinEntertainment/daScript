@@ -567,7 +567,7 @@ def public handled_layout_hash() : uint64 {
 // ONE helper on purpose: a salt component folded into the DLL key but not the partition key
 // would let a config change reuse stale cached partition objects.
 def public jit_env_salt(opt_level : int; size_level : int; emit_prologue : bool; debug_info : bool;
-                        target_triple : string; split : bool; use_host_cpu : bool; sanitize : JitSanitize;
+                        target_triple : string; baseline : CpuClass; split : bool; use_host_cpu : bool; sanitize : JitSanitize;
                         layouts : uint64 = handled_layout_hash()) : uint64 {
     var h = LLVM_JIT_CODEGEN_VERSION
     // host/binary identity: object format follows the triple (COFF vs ELF on one checkout), and the emitting binary bakes its Context offsets into every global access - neither is in any AST hash
@@ -619,8 +619,7 @@ def public jit_env_salt(opt_level : int; size_level : int; emit_prologue : bool;
         h = (h ^ hash(forced)) * JIT_FNV_PRIME
     }
     // a baseline class (DAS_JIT_BASELINE) picks the machine, the gates and the tune ladder - its artifact never serves a host run
-    let baseline = jit_baseline_class()
-    if (baseline != CpuClass.none) {
+    if (!cpu_class_generic(baseline)) {
         h = (h ^ hash(cpu_class_name(baseline))) * JIT_FNV_PRIME
     }
     // Cross-compile artifacts key on their triple — a --jit-target DLL must not cache-hit a host run (foreign-arch dlopen)
@@ -631,14 +630,14 @@ def public jit_env_salt(opt_level : int; size_level : int; emit_prologue : bool;
 }
 
 def public jit_dll_basename(prog : Program?; funcs : array<FunctionPtr>; opt_level : int; size_level : int;
-                            emit_prologue : bool; debug_info : bool; target_triple : string; split : bool;
+                            emit_prologue : bool; debug_info : bool; target_triple : string; baseline : CpuClass; split : bool;
                             use_host_cpu : bool; sanitize : JitSanitize) : string {
     var h = LLVM_JIT_CODEGEN_VERSION
     for (fn in funcs) {
         h = (h ^ get_function_aot_hash(prog, fn)) * JIT_FNV_PRIME
     }
     h = fold_jit_only_inputs(prog, funcs, h)
-    h = (h ^ jit_env_salt(opt_level, size_level, emit_prologue, debug_info, target_triple, split, use_host_cpu, sanitize)) * JIT_FNV_PRIME
+    h = (h ^ jit_env_salt(opt_level, size_level, emit_prologue, debug_info, target_triple, baseline, split, use_host_cpu, sanitize)) * JIT_FNV_PRIME
     return "{h}"
 }
 
@@ -1465,10 +1464,10 @@ def public make_jit_plan(prog : Program?; var ctx : Context?; announce : bool; c
     // A baseline class (DAS_JIT_BASELINE) replaces the box on every rail - exe, DLL and AOT object
     // alike: the machine, the gates and the tune ladder all read the class, so the artifact runs
     // on every box of that class. It never crosses architectures; that is --jit-target's job.
-    let baselineName = strip(g_env_jit.jit_baseline)
-    plan.baseline = jit_baseline_class()
+    let baselineName = jit_baseline_class(g_env_jit.jit_baseline)
+    plan.baseline = cpu_class_of(baselineName)
     if (!empty(baselineName)) {
-        let berr = jit_baseline_error(cpu_arch_of(empty(plan.target_triple) ? get_architecture_name() : plan.target_triple))
+        let berr = jit_baseline_error(baselineName, cpu_arch_of(empty(plan.target_triple) ? get_architecture_name() : plan.target_triple))
         if (!empty(berr)) {
             panic("LLVM JIT: {berr}")
         }
@@ -1508,7 +1507,7 @@ def public make_jit_plan(prog : Program?; var ctx : Context?; announce : bool; c
     // inputs → same filename → cache hit. Only in dll-mode with the default output path; a pinned
     // jit_output_path or an exe keeps the user's path.
     if (plan.use_dll && plan.config_out_path |> empty()) {
-        plan.dll_hash_basename = jit_dll_basename(prog, plan.candidates, plan.opt_level, plan.size_level, plan.emit_prologue, plan.debug_info, plan.target_triple, plan.jit_split, plan.use_host_cpu, plan.sanitize)
+        plan.dll_hash_basename = jit_dll_basename(prog, plan.candidates, plan.opt_level, plan.size_level, plan.emit_prologue, plan.debug_info, plan.target_triple, plan.baseline, plan.jit_split, plan.use_host_cpu, plan.sanitize)
         plan.output_path = ".cache/daslang/{prog.thisNamespace}/{plan.dll_hash_basename}"
     }
     return <- plan

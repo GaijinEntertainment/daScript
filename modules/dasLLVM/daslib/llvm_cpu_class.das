@@ -3,7 +3,6 @@ options indenting = 4
 
 module llvm_cpu_class shared public
 
-require llvm/daslib/llvm_env
 require daslib/match
 require daslib/strings_boost
 require daslib/bitfield_trait
@@ -263,29 +262,21 @@ def public any_row_runs(rows : array<string>; set : CpuFeatures) : bool {
     return false
 }
 
-//! The baseline class this process builds for - `DAS_JIT_BASELINE` - or none when the build
-//! targets the running box.
-def public jit_baseline_class() : CpuClass => cpu_class_of(strip(g_env_jit.jit_baseline))
-
-//! The class a cross compile builds for: a wasm64 triple is wasm-simd128, another triple the
-//! baseline's class; none when the build is not a cross one.
+//! The class a cross compile to `triple` builds for: a wasm64 triple is wasm-simd128, another
+//! triple the named `baseline`; none for a native compile and a triple with no class named.
 [arch(at = "../ARCHITECTURE_CPU_CLASSES.md#cross-class")]
-def public jit_cross_class() : CpuClass {
-    let triple = get_target_triple()
+def public jit_cross_class(triple : string; baseline : CpuClass) : CpuClass {
     return CpuClass.none if (empty(triple))
-    return starts_with(triple, "wasm64") ? CpuClass.wasm_simd128 : jit_baseline_class()
+    return starts_with(triple, "wasm64") ? CpuClass.wasm_simd128 : baseline
 }
 
-//! The class this compile builds for; none when it builds for the box
-def public jit_target_class() : CpuClass {
-    let baseline = jit_baseline_class()
-    return baseline == CpuClass.none ? jit_cross_class() : baseline
-}
+//! The baseline class `env_baseline` (`DAS_JIT_BASELINE`) names, or ""
+//! when the build targets the running box.
+def public jit_baseline_class(env_baseline : string) : string => strip(env_baseline)
 
 //! "" when the baseline is unset or names a class of `arch` (an arch's generic class); else the refusal text.
 [arch(at = "../ARCHITECTURE_CPU_CLASSES.md#cpu-classes")]
-def public jit_baseline_error(arch : CpuClass) : string {
-    let baseline = strip(g_env_jit.jit_baseline)
+def public jit_baseline_error(baseline : string; arch : CpuClass) : string {
     if (empty(baseline)) {
         return ""
     }

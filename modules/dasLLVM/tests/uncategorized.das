@@ -10,6 +10,7 @@ require strings
 require math
 require llvm/daslib/llvm_jit_common
 require llvm/daslib/llvm_cpu_class
+require llvm/bindings/llvm_func
 require llvm/daslib/llvm_jit_cli
 require llvm/daslib/llvm_jit_run
 require _llvm_cache_common
@@ -529,4 +530,14 @@ def test_a_source_location_is_one_line_info_global(t : T?) {
     for (contents, n in keys(copies), values(copies)) {
         t |> equal(1, n, "one global for {contents}")
     }
+}
+
+[test(description = "a non-wasm cross target's default machine is built for its triple, never the host's")]
+def test_cross_default_machine_is_the_targets(t : T?) {
+    let triple = "aarch64-linux-android"
+    let tm = create_default_target_machine(make_jit_target(triple, CpuClass.none, false), 3u, false)
+    let machine_triple = LLVMGetTargetMachineTriple(tm)
+    t |> equal(triple, "{machine_triple}", "the default machine of {triple}")
+    LLVMDisposeMessage(machine_triple)
+    LLVMDisposeTargetMachine(tm)
 }

@@ -14,7 +14,6 @@ require dasllama/dasllama_gemm_schema
 require llvm   // nolint:STYLE030 - the witness, unguarded on purpose: the `_variants()` registries this bench runs exist only with dasLLVM, so a host without it skips this program as missing its prerequisite
 require llvm/daslib/llvm_env
 require llvm/daslib/llvm_tune
-require llvm/daslib/llvm_cpu_class
 require math
 require strings
 require daslib/strings_boost
@@ -318,7 +317,7 @@ enum BenchTier {
     rm_tile
 }
 
-def emit_row(var rows : int&; name : string; tier : BenchTier; var st : RowStat; n, d, ntok, nsb : int64; plane_bytes : int64) {
+def emit_row(var rows : int&; target : TuneTarget; name : string; tier : BenchTier; var st : RowStat; n, d, ntok, nsb : int64; plane_bytes : int64) {
     var best = 999999999l
     for (u in st.us) {
         best = min(best, u)
@@ -334,12 +333,13 @@ def emit_row(var rows : int&; name : string; tier : BenchTier; var st : RowStat;
     if (g_each_round) {
         each = "\t" + join(st.us, ",")
     }
-    print("{name}\t{tier}\t{perm}\t{n}\t{d}\t{ntok}\t{best}\t{med}\t{ns_per_sb}\t{gbs}\t{gflops}{lanes}{each}\t{tune_profile_stamp()}\ttiming-only\n")
+    print("{name}\t{tier}\t{perm}\t{n}\t{d}\t{ntok}\t{best}\t{med}\t{ns_per_sb}\t{gbs}\t{gflops}{lanes}{each}\t{tune_profile_stamp(target)}\ttiming-only\n")
     rows++
 }
 
 //! the tune profile this run's kernel versions came from: the manifest DAS_TUNE_MANIFEST names, else the box class's defaults
-def tune_profile_stamp() : string => tune_manifest_explicit() ? tune_manifest_path() : "{cpu_class_name(jit_baseline_class())}.tune-defaults.json"
+def tune_profile_stamp(target : TuneTarget) : string =>
+    tune_manifest_explicit() ? tune_manifest_path() : "{cpu_class_name(target.klass)}.tune-defaults.json"
 
 def perm_wanted(spec, suffix : string) : bool {
     if (empty(spec)) {
@@ -384,7 +384,7 @@ def time_rows(var stats : array<RowStat>; rounds : int; blk : block<(row : int) 
     time_rows(stats, rounds, SOLO_BURN, blk, $(_row : int) {}, $(_row : int) {})
 }
 
-def bench_gemv_kq(var rows : int&; cfg : BenchArgs; name : string; f : KqFmt; var p : Planes; nsb : int64; sh : PlaneShape) {
+def bench_gemv_kq(var rows : int&; cfg : BenchArgs; target : TuneTarget; name : string; f : KqFmt; var p : Planes; nsb : int64; sh : PlaneShape) {
     let n = int64(cfg.n)
     let d = int64(cfg.d)
     let plane_bytes = int64(cfg.d) * (sh.gemvW_row + sh.ws_row)
@@ -420,7 +420,7 @@ def bench_gemv_kq(var rows : int&; cfg : BenchArgs; name : string; f : KqFmt; va
         }
     }
     for (st in stats) {
-        emit_row(rows, name, BenchTier.gemv, st, n, d, 1l, nsb, plane_bytes)
+        emit_row(rows, target, name, BenchTier.gemv, st, n, d, 1l, nsb, plane_bytes)
     }
     delete stats
     delete fns
@@ -438,7 +438,7 @@ def companion_row(vs : array<tuple<string; auto(FT)>>; suffix : string) : FT {
     return fn
 }
 
-def bench_tile_kq(var rows : int&; cfg : BenchArgs; name : string; f : KqFmt; var p : Planes; nsb : int64; sh : PlaneShape) {
+def bench_tile_kq(var rows : int&; cfg : BenchArgs; target : TuneTarget; name : string; f : KqFmt; var p : Planes; nsb : int64; sh : PlaneShape) {
     let plane_bytes = int64(cfg.d) * (sh.tileW_row + sh.ws_row)
     var regs <- fmt_registries(f)
     for (w in regs.witness) {   // the family's witness rows: the amx ones take the per-process tile permission their tiles need (SIGILL without it), as the q8 family's do
@@ -466,7 +466,7 @@ def bench_tile_kq(var rows : int&; cfg : BenchArgs; name : string; f : KqFmt; va
             addr<uint8 const?>(p.arena[p.ks]), sh, p)
     }
     for (st in stats) {
-        emit_row(rows, name, BenchTier.tile, st, int64(cfg.n), int64(cfg.d), int64(cfg.ntok), nsb, plane_bytes)
+        emit_row(rows, target, name, BenchTier.tile, st, int64(cfg.n), int64(cfg.d), int64(cfg.ntok), nsb, plane_bytes)
     }
     delete stats
     delete fns
@@ -602,7 +602,7 @@ def time_tile_rows(var stats : array<RowStat>; cfg : BenchArgs; fns : array<auto
 
 //! one q8-family flavor's two arms over the shared planes: the gemv rows, then the tile rows - the tile reads
 //! the gemv plane (one weight form); `wt` / `st` are the flavor's weight and scale plane pointer types
-def bench_q8_flavor(var rows : int&; cfg : BenchArgs; name : string; var p : Planes; nsb : int64; sh : PlaneShape;
+def bench_q8_flavor(var rows : int&; cfg : BenchArgs; target : TuneTarget; name : string; var p : Planes; nsb : int64; sh : PlaneShape;
                     gvs : array<tuple<string; auto(GF)>>; tvs : array<tuple<string; auto(TF)>>; mrs, steps : table<string; int64>;
                     wt : auto(WT); st : auto(ST)) {
     let n = int64(cfg.n)
@@ -631,7 +631,7 @@ def bench_q8_flavor(var rows : int&; cfg : BenchArgs; name : string; var p : Pla
                 }
             }
             for (s in stats) {
-                emit_row(rows, name, BenchTier.gemv, s, n, d, 1l, nsb, plane_bytes)
+                emit_row(rows, target, name, BenchTier.gemv, s, n, d, 1l, nsb, plane_bytes)
             }
             delete stats
             delete fns
@@ -643,7 +643,7 @@ def bench_q8_flavor(var rows : int&; cfg : BenchArgs; name : string; var p : Pla
             select_tile_rows(cfg, name, d, tvs, mrs, steps, stats, fns, mrOf, stepOf)
             time_tile_rows(stats, cfg, fns, mrOf, stepOf, kqp, ksp, sh, p, type<WT>, type<ST>)
             for (s in stats) {
-                emit_row(rows, name, BenchTier.tile, s, n, d, ntok, nsb, plane_bytes)
+                emit_row(rows, target, name, BenchTier.tile, s, n, d, ntok, nsb, plane_bytes)
             }
             delete stats
             delete fns
@@ -654,7 +654,7 @@ def bench_q8_flavor(var rows : int&; cfg : BenchArgs; name : string; var p : Pla
 }
 
 //! q8 (the q8q8 grid) and its mx4 companion: int8 / nibble weight planes with f32 / f16 / e8m0 scales
-def bench_q8_family(var rows : int&; cfg : BenchArgs; mx4 : bool; var p : Planes; nsb : int64; sh : PlaneShape) {
+def bench_q8_family(var rows : int&; cfg : BenchArgs; target : TuneTarget; mx4 : bool; var p : Planes; nsb : int64; sh : PlaneShape) {
     var wvs <- q8q8_family_live_variants()   // the family's witness rows: the amx one takes the per-process tile permission its tiles need (SIGILL without it), as the probe does
     for (w in wvs) {
         invoke(w._1)
@@ -666,19 +666,19 @@ def bench_q8_family(var rows : int&; cfg : BenchArgs; mx4 : bool; var p : Planes
         var gvs <- mx4q8_gemv_gen_variants()
         var tvs <- mx4q8_tile_gen_variants()
         let perCall : table<string; int64>   // the mx4 tile covers TILE_TOKENS a call, whatever the q8 row's tokstep
-        bench_q8_flavor(rows, cfg, MX4_NAME, p, nsb, sh, gvs, tvs, mrs, perCall, type<uint8 const?>, type<uint8 const?>)
+        bench_q8_flavor(rows, cfg, target, MX4_NAME, p, nsb, sh, gvs, tvs, mrs, perCall, type<uint8 const?>, type<uint8 const?>)
         delete gvs
         delete tvs
     } elif (g_s16) {
         var gvs <- q8q8_gemv_s16_gen_variants()
         var tvs <- q8q8_tile_s16_gen_variants()
-        bench_q8_flavor(rows, cfg, S16_NAME, p, nsb, sh, gvs, tvs, mrs, steps, type<int8 const?>, type<uint16 const?>)
+        bench_q8_flavor(rows, cfg, target, S16_NAME, p, nsb, sh, gvs, tvs, mrs, steps, type<int8 const?>, type<uint16 const?>)
         delete gvs
         delete tvs
     } else {
         var gvs <- q8q8_gemv_gen_variants()
         var tvs <- q8q8_tile_gen_variants()
-        bench_q8_flavor(rows, cfg, "q8", p, nsb, sh, gvs, tvs, mrs, steps, type<int8 const?>, type<float const?>)
+        bench_q8_flavor(rows, cfg, target, "q8", p, nsb, sh, gvs, tvs, mrs, steps, type<int8 const?>, type<float const?>)
         delete gvs
         delete tvs
     }
@@ -767,7 +767,7 @@ def time_rm_tile(var stats : array<RowStat>; cfg : BenchArgs; fns : array<RmQ8Ti
 
 //! one format's row-major rows over the device planes: the gemv registry's rows, then the four-token tile's; every row drops
 //! its warm rounds first (SOLO_BURN solo, TEAM_BURN under --team) and reports best and median over the rounds after them
-def bench_rm_rows(var rows : int&; cfg : BenchArgs; name : string; f : KqFmt; var p : Planes; nsb : int64; sh : PlaneShape;
+def bench_rm_rows(var rows : int&; cfg : BenchArgs; target : TuneTarget; name : string; f : KqFmt; var p : Planes; nsb : int64; sh : PlaneShape;
                   gvs : array<tuple<string; auto(GF)>>; tvs : array<tuple<string; auto(TF)>>) {
     let n = int64(cfg.n)
     let d = int64(cfg.d)
@@ -780,7 +780,7 @@ def bench_rm_rows(var rows : int&; cfg : BenchArgs; name : string; f : KqFmt; va
         time_rm_gemv(stats, cfg, fns, p, n, d)
         delete fns
         for (st in stats) {
-            emit_row(rows, name, BenchTier.rm_gemv, st, n, d, 1l, nsb, plane_bytes)
+            emit_row(rows, target, name, BenchTier.rm_gemv, st, n, d, 1l, nsb, plane_bytes)
         }
         delete stats
     }
@@ -791,21 +791,21 @@ def bench_rm_rows(var rows : int&; cfg : BenchArgs; name : string; f : KqFmt; va
         time_rm_tile(stats, cfg, fns, p, n, d, nsc)
         delete fns
         for (st in stats) {
-            emit_row(rows, name, BenchTier.rm_tile, st, n, d, (int64(cfg.ntok) / TILE_TOKENS) * TILE_TOKENS, nsb, plane_bytes)
+            emit_row(rows, target, name, BenchTier.rm_tile, st, n, d, (int64(cfg.ntok) / TILE_TOKENS) * TILE_TOKENS, nsb, plane_bytes)
         }
         delete stats
     }
 }
 
 //! the row-major families by format (q8s16 shares q8's: the device q8 plane IS int8 rows + f16 scales)
-def bench_rm(var rows : int&; cfg : BenchArgs; name : string; f : KqFmt; mx4 : bool; var p : Planes; nsb : int64; sh : PlaneShape) {
+def bench_rm(var rows : int&; cfg : BenchArgs; target : TuneTarget; name : string; f : KqFmt; mx4 : bool; var p : Planes; nsb : int64; sh : PlaneShape) {
     if (f == KqFmt.q8 && !mx4) {
-        bench_rm_rows(rows, cfg, name, f, p, nsb, sh, q8q8_rm_gemv_gen_variants(), q8q8_rm_tile4_gen_variants())
+        bench_rm_rows(rows, cfg, target, name, f, p, nsb, sh, q8q8_rm_gemv_gen_variants(), q8q8_rm_tile4_gen_variants())
         return
     }
     let kf = mx4 ? KqFmt.mx4 : f
     var regs <- kq_registries_of(kf)
-    bench_rm_rows(rows, cfg, name, kf, p, nsb, sh, regs.rm_gemv, regs.rm_tile4)
+    bench_rm_rows(rows, cfg, target, name, kf, p, nsb, sh, regs.rm_gemv, regs.rm_tile4)
     delete regs
 }
 
@@ -865,6 +865,7 @@ def main : int {
         return 2
     }
     var fs <- formats_of(cfg.fmt)
+    let target = tune_native_target()
     if (!cfg.tsv) {
         print("kq_kernel_bench: n={cfg.n} d={cfg.d} ntok={cfg.ntok} rounds={cfg.rounds} team={cfg.team} tune_mode={g_env_tune.tune_mode}\n")
         print("fmt\ttier\tperm\tn\td\tntok\tbest_us\tmedian_us\tns_per_sb\tGB/s\tGFLOP/s{cfg.team ? "\tlane_lo\tlane_hi" : ""}\tprofile\tcompare\n")
@@ -874,10 +875,10 @@ def main : int {
         with_dasllama_jobque_() {
             let chunks = matmul_chunks_gemv(cfg.d, 1, int64(cfg.n) * int64(cfg.d))
             print("# team: {get_total_hw_jobs() + 1} lanes, the engine's splitter gives {chunks} chunks of {cfg.d / chunks} rows\n")
-            rows = run_formats(cfg, fs)
+            rows = run_formats(cfg, target, fs)
         }
     } else {
-        rows = run_formats(cfg, fs)
+        rows = run_formats(cfg, target, fs)
     }
     delete fs
     if (rows == 0) {
@@ -888,7 +889,7 @@ def main : int {
 }
 
 //! every selected format's arms; the row count printed
-def run_formats(cfg : BenchArgs; fs : array<tuple<string; KqFmt; bool>>) : int {
+def run_formats(cfg : BenchArgs; target : TuneTarget; fs : array<tuple<string; KqFmt; bool>>) : int {
     var rows = 0
     let nsb = int64(cfg.n) / 256l
     for (fe in fs) {
@@ -897,17 +898,17 @@ def run_formats(cfg : BenchArgs; fs : array<tuple<string; KqFmt; bool>>) : int {
         var p : Planes
         fill_planes(p, sh, int64(cfg.n), int64(cfg.d), int64(max(cfg.ntok, 1)))
         if (fe._2 || fe._1 == KqFmt.q8) {
-            bench_q8_family(rows, cfg, fe._2, p, nsb, sh)
+            bench_q8_family(rows, cfg, target, fe._2, p, nsb, sh)
         } else {
             if (!cfg.no_gemv) {
-                bench_gemv_kq(rows, cfg, fe._0, fe._1, p, nsb, sh)
+                bench_gemv_kq(rows, cfg, target, fe._0, fe._1, p, nsb, sh)
             }
             if (cfg.ntok > 0) {
-                bench_tile_kq(rows, cfg, fe._0, fe._1, p, nsb, sh)
+                bench_tile_kq(rows, cfg, target, fe._0, fe._1, p, nsb, sh)
             }
         }
         if (cfg.rm) {
-            bench_rm(rows, cfg, fe._0, fe._1, fe._2, p, nsb, sh)
+            bench_rm(rows, cfg, target, fe._0, fe._1, fe._2, p, nsb, sh)
         }
         delete p
     }

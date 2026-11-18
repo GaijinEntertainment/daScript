@@ -411,6 +411,8 @@ struct public JitTarget {
     //! a cross triple: the link brings only that target's runtime
     //! archive - every module is static, none loads dynamically
     cross : bool
+    //! the cross triple, "" on a native run
+    triple : string
     //! the tier gates came from the running box's cpuid (false: the
     //! generic or forced-only rail)
     host_features : bool
@@ -621,17 +623,17 @@ def public init_jit_clopts() {
 
 // host_features=false targets a GENERIC CPU: cpuid gates stay off, since leaked F16C emits libcalls.
 [arch(at = "../ARCHITECTURE_TARGET_FEATURES.md#aarch64-feature-truth"), arch(at = "../ARCHITECTURE_TARGET_FEATURES.md#x64-tier-gates")]
-def public make_jit_target(target_triple : string = ""; host_features_asked : bool = true;
+def public make_jit_target(target_triple : string; baseline : CpuClass; host_features_asked : bool = true;
                            wasm_threads : bool = false) : JitTarget {
     var t : JitTarget
     // a baseline class replaces the running box: its set is the only
     // tier truth, whatever the caller asked
-    let baseline = jit_baseline_class()
     let arch = cpu_arch_of(empty(target_triple) ? get_architecture_name() : target_triple)
     t.klass = baseline == CpuClass.none ? arch : baseline
     let host_features = host_features_asked && baseline == CpuClass.none
     t.host_features = host_features
     t.cross = !empty(target_triple)
+    t.triple = target_triple
     t.wasm_threads = wasm_threads
     // a host target takes the running box's cpuid truth; a cross triple and a generic-CPU exe
     // build take the force env as the ONLY tier truth
@@ -928,6 +930,10 @@ def public create_default_target_machine(target : JitTarget; opt_level : uint;
     LLVMInitializeAllTargetMCs()
     LLVMInitializeAllAsmPrinters()
 
+    if (target.cross && !target_wasm(target)) {
+        let cross_machine = default_target_cpu_features(target, false)
+        return create_target_machine(target.triple, cross_machine.cpu, cross_machine.features, opt_level)
+    }
     // host_jit_triple() returns the daslang-host toolchain's triple when it differs from LLVM.dll's
     // default (clang-mingw64: prebuilt MSVC clang-cl LLVM.dll defaults to x86_64-pc-windows-msvc,
     // emitting MSVC-ABI .o that mingw's linker can't satisfy). Empty = use LLVM default.

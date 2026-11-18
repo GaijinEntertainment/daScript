@@ -43,7 +43,7 @@ def private probe_class(t : T?; forced : string) : string {
     fopen(script, "w") $(f) {
         if (f != null) {
             fprint(f, "options gen2\nrequire llvm/daslib/llvm_tune\n")
-            fprint(f, "[export] def main() \{ print(\"CLASS=[\{cpu_class_name(tune_cpu_class())}]\\n\"); \}\n")
+            fprint(f, "[export] def main() \{ print(\"CLASS=[\{cpu_class_name(tune_native_target().klass)}]\\n\"); \}\n")
         }
     }
     let args <- get_command_line_arguments()  // locked view — do not delete
