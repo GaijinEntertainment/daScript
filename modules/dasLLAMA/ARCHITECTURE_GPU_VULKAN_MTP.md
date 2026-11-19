@@ -236,18 +236,18 @@ sets `RDec.carry`; `xb_dev` is transfer-shared on every model for it), `RDec.car
 ### A device-home session speculates on the device alone {#resident-mtp-device-home}
 
 **A device-home session's round runs every seat on the device - the draft, its verify, a rejected
-round's rollback and a continuation's seam row - because the session has no host cache any seat
-could fall back on.** The head's rows live in the region alone: the prompt warm's rows are counted
-where the chain wrote them with no readback (`rdec_prefill_head_rows`), a draft uploads no host row
-(its hydrate start is its own row, its cache pointers null), and the seam the CPU writes for a
-host-cached session runs the draft command at row `pos - 1` instead (`vulkan_resident_seam`), its
-pick unread and counted as no draft. A seat that declines such a session panics by name
-(`rdec_device_home_guard`), as a declined decode or prefill does. The engine answers whether the
-installed model's round can run so (`gpu_resident_mtp_device_home_`: the head armed, the verify seat
-built for two rows or more, a recurrent model's rollback seat installed), and the server homes a
-speculating slot's streams on the device only then (`slot_wants_device_kv`); elsewhere the slot keeps
-host-cached sessions. The device-home round runs the same commands over the same rows as the
-host-cached round, so the two sessions draft, accept and stand alike round for round
+round's rollback and a continuation's seam row - because the session has no host cache any seat could
+fall back on.** The head's rows live in the region alone: the prompt warm's rows are counted where
+the chain wrote them with no readback (`rdec_prefill_head_rows`), a draft uploads no host row (its
+hydrate start is its own row, its cache pointers null), and the seam the CPU writes for a host-cached
+session runs the draft command at row `pos - 1` instead (`vulkan_resident_seam`), its pick unread and
+counted as no draft. A seat that declines such a session panics by name (`rdec_device_home_guard`),
+as a declined decode or prefill does. The engine answers whether the installed model's round can run
+so (`gpu_resident_mtp_device_home_`: a verify seat of two rows or more, a recurrent model's rollback
+seat, and the draft's own seat - the head armed, or a block drafter whose layer rows the driver
+captures and whose verify steps with no head row), and the server homes a speculating slot's streams
+there only then (`slot_wants_device_kv`). The device-home round runs the same commands over the same
+rows as the host-cached round, so the two sessions draft, accept and stand alike round for round
 (`test_gpu_resident_format_census.das`' NextN cell; `test_scheduler.das`' device-mode cell holds the
 stream token for token the host-cached speculating stream, every drafted round counted by the
 device's draft and verify counters).

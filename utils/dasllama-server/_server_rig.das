@@ -307,3 +307,29 @@ def with_spawned_server(t : T?; what : string; port : int; flags : array<string>
     remove(config)
     t |> success(ready, "{what} listened. {why}")
 }
+
+//! a buffered chat reply's content and `usage` counts: prompt tokens, completion tokens, the prefix-cache hit
+struct ChatUsage {
+    reply : string
+    prompt : int = -1
+    completion : int = -1
+    cached : int = -1
+}
+
+def chat_usage(base_url : string; body : string) : ChatUsage {
+    var u = ChatUsage()
+    POST("{base_url}/v1/chat/completions", body) $(resp) {
+        var err : string
+        var js = read_json(string(resp.body), err)
+        if (js != null) {
+            u.reply = js?["choices"]?[0]?["message"]?["content"] ?? ""
+            u.prompt = int(js?["usage"]?["prompt_tokens"] ?? -1l)
+            u.completion = int(js?["usage"]?["completion_tokens"] ?? -1l)
+            u.cached = int(js?["usage"]?["prompt_tokens_details"]?["cached_tokens"] ?? -1l)
+            unsafe {
+                delete js
+            }
+        }
+    }
+    return u
+}

@@ -8146,12 +8146,14 @@ def private slot_block_drafter(s : ModelSlot) : bool {
 var private g_block_drafter_slot = ""   //! the slot whose model the process's block drafter is attached to
 
 // one scheduler per slot: the init args are the defaults, SlotOpts sentinels override per slot
+[arch(at = "README.md#slot-gpu-marks")]
 def private init_slot_schedulers(max_streams, max_queue, chunk_tokens, idle_chunk_tokens, page_rows, prefix_groups, prefix_states, prefix_state_bytes : int64; kv_dtype : KVDtype; mtp : int) {
     g_sched_defaults = SchedDefaults(max_streams = max_streams, max_queue = max_queue,
                                      chunk_tokens = chunk_tokens, idle_chunk_tokens = idle_chunk_tokens, page_rows = page_rows,
                                      prefix_groups = prefix_groups, prefix_states = prefix_states, prefix_state_bytes = prefix_state_bytes,
                                      kv_dtype = kv_dtype, mtp = mtp)
-    for (s in g_slots) {
+    for (s, si in g_slots, count()) {
+        install_slot_marks(si)
         init_one_scheduler(s)
     }
 }
@@ -8254,6 +8256,9 @@ def private trimmed_slot_refusal : string {
     for (s, si in g_slots, count()) {
         continue if (!s.model.planes_trimmed)
         let holds = si == g_gpu_owner
+        if (holds) {
+            install_slot_marks(si)
+        }
         sync_slot_device_kv(g_slots[si], holds)
         continue if (holds && s.sched.device_kv)
         let why = !holds ? "it does not hold the device tier" : "its {s.sched.max_streams} streams cannot each hold a device region ({s.gpu_regions} regions{s.backend_effective != "gpu:resident" ? ", the driver not armed" : ""})"

@@ -632,6 +632,15 @@ curl http://127.0.0.1:8080/v1/chat/completions -H 'Content-Type: application/jso
 }'
 ```
 
+### A slot's GPU marks {#slot-gpu-marks}
+
+One GPU device tier serves every slot's model, and its per-model state - a slot's marks - holds
+one model's at a time; `install_slot_marks` swaps a slot's marks in before that slot steps. Code
+that reads the installed state reads it under its own model's marks, so the server installs a
+slot's marks before it makes that slot's scheduler: the scheduler's block-drafter attach asks the
+installed model's resident driver whether the drafter's pass runs on the device, and the answer
+is the slot's own only while the slot's marks are the installed ones.
+
 ### Valid UTF-8 replies {#utf8-replies}
 
 A token piece can end in the middle of a character: a multi-byte character can span tokens, and a

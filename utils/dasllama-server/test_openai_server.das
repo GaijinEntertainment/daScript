@@ -928,32 +928,6 @@ def private ascii_only(s : string) : bool {
 let TEST_PORT_PRESERVE = 18190   // 18140-18141 are the bench and catalog cells', 18150-18157 test_openai_server_mtp.das's
 let QWEN3_PATH = path_join(models_dir(), "Qwen3-0.6B-Q8_0.gguf")
 
-//! a buffered chat reply's content and `usage` counts: prompt tokens, completion tokens, the prefix-cache hit
-struct private ChatUsage {
-    reply : string
-    prompt : int = -1
-    completion : int = -1
-    cached : int = -1
-}
-
-def private chat_usage(base_url : string; body : string) : ChatUsage {
-    var u = ChatUsage()
-    POST("{base_url}/v1/chat/completions", body) $(resp) {
-        var err : string
-        var js = read_json(string(resp.body), err)
-        if (js != null) {
-            u.reply = js?["choices"]?[0]?["message"]?["content"] ?? ""
-            u.prompt = int(js?["usage"]?["prompt_tokens"] ?? -1l)
-            u.completion = int(js?["usage"]?["completion_tokens"] ?? -1l)
-            u.cached = int(js?["usage"]?["prompt_tokens_details"]?["cached_tokens"] ?? -1l)
-            unsafe {
-                delete js
-            }
-        }
-    }
-    return u
-}
-
 [test(description = "preserve_thinking replays the think block so the next turn attaches the whole first exchange off the prefix cache", timeout = 1200)]
 def test_openai_server_preserve_thinking(t : T?) {
     t |> run("preserve_thinking replays the think block, so the next turn attaches the whole first exchange off the prefix cache (needs Qwen3-0.6B q8)") @(t : T?) {
