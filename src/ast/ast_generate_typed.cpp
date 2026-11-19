@@ -97,6 +97,11 @@ namespace das {
             res->type = vt;
             return res;
         }
+        if ( vt->isString() ) {
+            auto res = new ExprConstString(at);
+            res->type = vt;
+            return res;
+        }
         if ( vt->isWorkhorseType() ) return makeTypedConst(at, vt, v_zero());
         return nullptr;
     }
