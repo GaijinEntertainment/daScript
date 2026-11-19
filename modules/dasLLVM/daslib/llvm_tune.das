@@ -273,7 +273,7 @@ def tune_box_identity() : string {
     } elif (plat == "osx" || plat == "darwin") {   // get_platform_name says "darwin" on macOS
         var lines : array<string>
         unsafe(popen("sysctl -n hw.model kern.osversion machdep.cpu.brand_string 2>/dev/null") $(f) {
-            while (!feof(f)) {
+            while (f != null && !feof(f)) {
                 let ln = strip(fgets(f))
                 if (!empty(ln)) {
                     lines |> push(ln)
@@ -287,7 +287,9 @@ def tune_box_identity() : string {
         delete lines
     } else {
         unsafe(popen("uname -r 2>/dev/null") $(f) {
-            os_build = strip(fgets(f))
+            if (f != null) {
+                os_build = strip(fgets(f))
+            }
         })
         cpu = linux_cpu_brand()
     }
