@@ -420,3 +420,41 @@ def test_type_backref_stays_in_module_record(t : T?) {
     var err : string
     rmdir_rec(tmp, err)
 }
+
+//! one host process compiles two scripts that require
+//! mc_throwaway_shared, a `shared` module. On the warm run the first
+//! script's compile holds it, so the second script's stream reads its
+//! record into a throwaway copy. The second script's next require
+//! names a module first read in that copy (a tuple element's name),
+//! and the stream's string table keeps that name as a view into the
+//! copy's nodes, so they must live until the record's require list,
+//! read after its modules, is read too. The children run inside the
+//! temp directory, so the default cache they write is under it.
+[test(description = "A require name first read in a throwaway copy of a shared module's record is read again after the copy, and the warm run serves and runs the script", timeout = 1200)]
+def test_require_name_from_throwaway_record(t : T?) {
+    if (aot_host_skips(t)) return
+    var terr : string
+    let tmp = create_temp_directory("das_mc_throwaway", terr)
+    if (empty(tmp)) {
+        t |> failure("create_temp_directory: {terr}")
+        return
+    }
+    let root = get_das_root()
+    let fixtures = "{root}/tests/module_cache/_fixtures"
+    let first = "{fixtures}/mc_throwaway_first.das"
+    let second = "{fixtures}/mc_throwaway_second.das"
+    let exe = get_full_file_name(das_exe())
+    let cmd = "{enter_dir(tmp)} {exe} -dasroot {root} -log-compile-time {first} {second}"
+    let marker = "MC_THROWAWAY_SECOND 3"
+    var cold : string
+    let coldOk = run_child_reported(t, "cold", cmd, cold, marker)
+    t |> success(coldOk, "the cold run compiles and runs both scripts")
+    var warm : string
+    var warmOk = run_child_reported(t, "warm", cmd, warm, marker)
+    warmOk = (warmOk && find(warm, "MC_THROWAWAY_FIRST 1") >= 0
+        && served_main(warm, second))
+    t |> success(warmOk, "the warm run serves the second script beside "
+        + "the held mc_throwaway_shared and runs it:\n{warm}")
+    var err : string
+    rmdir_rec(tmp, err)
+}

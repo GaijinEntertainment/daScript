@@ -66,6 +66,11 @@ this document states what the folder is and why its tests take the shape they do
   copy, and the second script's `JV` call - a main-module type equal to one in that record -
   still serves and runs; the stream's type table restarts at each module's record, so no
   back-reference reaches the copy.
+- `test_require_name_from_throwaway_record` in `uncategorized.das` - the same shape over
+  `mc_throwaway_shared`, whose function takes a tuple with an element named
+  `mc_throwaway_helper`: the second script then requires the module of that name, so on the
+  warm run its require's name is first read in the throwaway copy and read again in the
+  record's require list after the modules, and the copy's nodes must still hold it there.
 - `test_shared_typename` in `uncategorized.das` - compound type-name folding across cold,
   warm and obsolete-version cache reads, retaining the invoking host's
   static or dynamic kind outside AOT-consuming runs.
@@ -166,6 +171,8 @@ this document states what the folder is and why its tests take the shape they do
 - `_fixtures/` - the driver and module scripts the spawned children compile (`mc_dep_*`,
   `mc_generic_origin_*`, `mc_backref_*` - the two scripts one process compiles over `json_boost`, `mc_generic_call_macro` - a script whose `[mc_kind]`
   annotation registers a call macro into it and whose generic body still holds that call,
+  `mc_throwaway_*` - a shared module, a module named for one of its tuple's elements and the
+  two scripts one process compiles over them,
   `mc_gcm_mod` with `mc_gcm_drv` - the same shape as a shared module and the script that requires
   it, `mc_cf_drv` - the `compile_file` driver, the file it compiles and
   whether it caches on its argv; the `mc_late_*` set a late require targets: a shared module with a

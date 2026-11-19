@@ -3234,6 +3234,13 @@ namespace das {
         ser.profEnd();
 #endif
 
+        // throwaway already-exists reads park nodes here. They may be referenced through
+        // the patch maps, and readStrings holds views into their strings, until the record
+        // is fully read (the require and typedef module reads included), then sweep with
+        // the function scope. Declared before the reading block's ActiveRootGuard, so the
+        // guard repoints the active root before this dies.
+        gc_root throwaway_root;
+
         if ( writing ) {
             moduleLibrary = &program->library;  // Module::serialize binds *moduleLibrary (finalizeModule)
             vector<Module *> modules;
@@ -3300,9 +3307,7 @@ namespace das {
             // after this line gc_links through a dangling pointer into freed memory
             auto & activeRoot = gc_root::gc_get_active_root();
             const bool activeWasThisModule = program->thisModule && activeRoot == program->thisModule->module_gc_root.get();
-            // throwaway already-exists reads park nodes here — they may be referenced
-            // through the patch maps until all modules are read, then sweep with scope
-            gc_root throwaway_root;
+            // throwaway already-exists reads park nodes on throwaway_root, declared above
             ActiveRootGuard throwaway_guard { &throwaway_root };
             if ( activeWasThisModule ) activeRoot = &throwaway_root;
 
