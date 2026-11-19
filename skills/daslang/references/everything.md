@@ -1134,6 +1134,7 @@ The DASHV module provides HTTP and WebSocket networking built on top of the `lib
 
 ### WebSocket server lifecycle
 
+- `bound_https_port` - The port the server's HTTPS listener holds: the `https_port` passed to `make_web_socket_server`, or -1 for a server that has no HTTPS listener.
 - `bound_port` - The port the server listens on: the one passed to `make_web_socket_server`, or, when that was 0, the free port the operating system picked.
 - `destroy_web_socket_server` - Releases the server handle.
 - `make_web_socket_server` - Creates a new low-level WebSocket/HTTP server on the given port, optionally with TLS.
@@ -5697,6 +5698,7 @@ The DASHV_BOOST module provides high-level daScript wrapper classes for the low-
 - `HvWebServer.SSE` - Registers an SSE (Server-Sent Events) handler for `uri`.
 - `HvWebServer.WEBSOCKET_UPGRADE` - Registers admission before HTTP 101; the request is borrowed for the callback.
 - `HvWebServer.STREAM` - Registers a streaming (incremental) handler for `uri` (any HTTP method, like `ANY`).
+- `HvWebServer.bound_https_port` - The HTTPS port given to `init_wss`, or -1 for a server initialized without one.
 
 ### HTTP request helpers
 

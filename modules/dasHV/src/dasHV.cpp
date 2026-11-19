@@ -928,6 +928,12 @@ int das_wss_bound_port ( Handle<hv::WebSocketServer> h ) {
     return adapter->port;
 }
 
+int das_wss_bound_https_port ( Handle<hv::WebSocketServer> h ) {
+    auto adapter = lookup_server(h);
+    if ( !adapter ) return -1;
+    return adapter->https_port;
+}
+
 void das_wss_tick ( Handle<hv::WebSocketServer> h ) {
     auto adapter = lookup_server(h);
     if ( !adapter ) return;
@@ -1962,6 +1968,9 @@ public:
                 ->args({"server"});
         addExtern<DAS_BIND_FUN(das_wss_bound_port)> (*this, lib, "bound_port",
             SideEffects::worstDefault, "das_wss_bound_port")
+                ->args({"server"});
+        addExtern<DAS_BIND_FUN(das_wss_bound_https_port)> (*this, lib, "bound_https_port",
+            SideEffects::worstDefault, "das_wss_bound_https_port")
                 ->args({"server"});
         addExtern<DAS_BIND_FUN(das_wss_tick)> (*this, lib, "tick",
             SideEffects::worstDefault, "das_wss_tick")
