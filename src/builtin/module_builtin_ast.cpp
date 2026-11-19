@@ -1194,18 +1194,10 @@ namespace das {
         call_each(ordered(helper->emn2e), block, context, at);
     }
 
-    const char *debug_helper_find_type_cppname(DebugInfoHelper * helper, TypeInfo *info, Context * context, LineInfoArg * at) {
-        DAS_ASSERT(helper->t2cppTypeName.find(info) != helper->t2cppTypeName.end());
-        return context->allocateString(helper->t2cppTypeName.find(info)->second, at);
-    }
-
-    void builtin_ast_set_aot_main_module_name(const char * name) {
-        setAotMainModuleName(name ? name : "");
-    }
-
-    const char *debug_helper_find_struct_cppname(DebugInfoHelper * helper, StructInfo *info, Context * context, LineInfoArg * at) {
-        DAS_ASSERT(helper->s2cppTypeName.find(info) != helper->s2cppTypeName.end());
-        return context->allocateString(helper->s2cppTypeName.find(info)->second, at);
+    TypeDecl * debug_helper_find_type_decl ( DebugInfoHelper * helper, TypeInfo * info, Context * context, LineInfoArg * at ) {
+        auto it = helper->t2typeDecl.find(info);
+        if ( it == helper->t2typeDecl.end() ) context->throw_error_at(at, "type info was not made by this helper");
+        return it->second;
     }
 
     bool macro_aot_infix(TypeInfoMacro *macro, StringBuilderWriter *ss, ExpressionPtr expr) {
@@ -2307,15 +2299,9 @@ namespace das {
         addExtern<DAS_BIND_FUN(debug_helper_iter_enums)>(*this, lib,  "debug_helper_iter_enums",
                                                            SideEffects::modifyExternal, "debug_helper_iter_enums")
             ->args({"helper","blk", "context", "at"});
-        addExtern<DAS_BIND_FUN(debug_helper_find_type_cppname)>(*this, lib,  "debug_helper_find_type_cppname",
-                                                           SideEffects::modifyExternal, "debug_helper_find_type_cppname")
-            ->args({"helper","type_info", "context", "at"})->setTempStringResult();
-        addExtern<DAS_BIND_FUN(debug_helper_find_struct_cppname)>(*this, lib,  "debug_helper_find_struct_cppname",
-                                                           SideEffects::modifyExternal, "debug_helper_find_struct_cppname")
-            ->args({"helper","struct_info", "context", "at"})->setTempStringResult();
-        addExtern<DAS_BIND_FUN(builtin_ast_set_aot_main_module_name)>(*this, lib,  "set_aot_main_module_name_cpp",
-                                                           SideEffects::modifyExternal, "builtin_ast_set_aot_main_module_name")
-            ->args({"name"});
+        addExtern<DAS_BIND_FUN(debug_helper_find_type_decl)>(*this, lib,  "debug_helper_find_type_decl",
+                                                           SideEffects::modifyExternal, "debug_helper_find_type_decl")
+            ->args({"helper","type_info", "context", "at"});
         addExtern<DAS_BIND_FUN(macro_aot_infix)>(*this, lib,  "macro_aot_infix",
                                                            SideEffects::modifyArgument, "macro_aot_infix")
             ->args({"macro","ss", "expr"});

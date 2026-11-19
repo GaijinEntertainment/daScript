@@ -90,14 +90,12 @@ Companion to `ARCHITECTURE.md` in this folder; section numbers are unique across
 - **A struct needs a COMPLETE C++ type more often than field access suggests** - globals
   need `sizeof` even untouched, and by-value field types emit depth-first before their
   owner, or the type degrades to a forward declaration.
-- **`aotModuleName` has a C++ twin that moves in lockstep** -
-  `src/ast/ast_typedecl.cpp`'s `aotModuleName`/`describeCppTypeEx` spell the same type
-  names into the same TU through `DebugInfoHelper`'s cached cpp names
-  (`debug_helper_find_*_cppname`, the cross-platform `TypeSize<...>` sinks). The
-  main-module namespace override is therefore one knob with two ends:
-  `set_aot_main_module_name` writes the daslib global AND forwards to
-  `set_aot_main_module_name_cpp`; a spelling rule changed on one side only produces a TU
-  where the definition and its debug-info references disagree.
+- **A C++ type name has one speller: this emitter.** The definitions it writes and the
+  cross-platform `TypeSize<...>` sizes in the type-info tables both spell through it - a
+  struct info by `structInfoCppName`, any other type info by `describeCppType` over the
+  `TypeDecl` that `debug_helper_find_type_decl` returns - so a definition and its debug-info
+  references agree. `DebugInfoHelper` builds the RTTI data and spells no C++; the main-module
+  namespace (`set_aot_main_module_name`) is emission state of the context running the emitter.
 - **`fromExtraDependency` describes the host process, not the program being emitted.** The
   flag is set when the host first loaded a shared module as an extra dependency (a `-jit`
   host loads `strings`, `fio_core` and `math` that way) and stays on the shared module for

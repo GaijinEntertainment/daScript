@@ -727,7 +727,6 @@ namespace das {
     enum class CpptRedundantConst { no, yes };
     enum class ChooseSmartPtr { no, yes };
 
-    void DAS_API setAotMainModuleName(const string & name);
 
     string DAS_API describeCppType(const TypeDecl * type,
                            CpptSubstitureRef substituteRef = CpptSubstitureRef::no,

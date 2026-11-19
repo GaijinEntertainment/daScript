@@ -4494,8 +4494,7 @@ The AST module provides access to the abstract syntax tree representation of das
 
 ### Debug info helpers
 
-- `debug_helper_find_struct_cppname` - Finds a structure in the DebugInfoHelper and returns its C++ name.
-- `debug_helper_find_type_cppname` - Finds a type in the DebugInfoHelper and returns its C++ name.
+- `debug_helper_find_type_decl` - Finds a type in the DebugInfoHelper and returns the TypeDecl it was made from.
 - `debug_helper_iter_enums` - Iterates through all enumerations in the DebugInfoHelper, invoking the provided block for each one.
 - `debug_helper_iter_funcs` - Iterates through all functions in the DebugInfoHelper, invoking the provided block for each one.
 - `debug_helper_iter_structs` - Iterates through all structures in the DebugInfoHelper, invoking the provided block for each one.
@@ -4512,7 +4511,6 @@ The AST module provides access to the abstract syntax tree representation of das
 - `aot_visit_get_field` - Performs the visit step for field access during AOT code generation.
 - `getInitSemanticHashWithDep` - Returns the initialization semantic hash including dependencies for the entire program.
 - `macro_aot_infix` - Returns true if the macro requires an AOT infix operator for the specified handled type.
-- `set_aot_main_module_name_cpp` - Sets the C++ AOT emitter's namespace for the unnamed (promoted) main module's types; "" restores the anonymous-namespace default.
 - `write_aot_body` - Writes the AOT (ahead-of-time compilation) body section for the given structure annotation, outputting generated C++ code to the string builder writer.
 - `write_aot_macro_prefix` - Writes the AOT macro prefix code for the specified TypeInfoMacro.
 - `write_aot_macro_suffix` - Writes the AOT macro suffix code for the specified TypeInfoMacro.

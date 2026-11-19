@@ -4205,20 +4205,8 @@ namespace das
         {   Type::tVariant,     "Variant"  }
     };
 
-    static thread_local string g_aotMainModuleName;
-
-    void setAotMainModuleName ( const string & name ) {
-        g_aotMainModuleName = name;
-    }
-
-    string aotModuleName ( Module * pm  ) {
-        if ( pm->name.empty() ) {
-            return g_aotMainModuleName;
-        } else if ( pm->name=="$" ) {
-            return "_builtin_";
-        } else {
-            return pm->name;
-        }
+    static string aotModuleName ( Module * pm ) {
+        return pm->name=="$" ? string("_builtin_") : pm->name;
     }
 
     string das_to_cppString ( Type t ) {

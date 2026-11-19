@@ -1560,9 +1560,8 @@ namespace das
         das_hash_map<string,FuncInfo *>          fmn2f;
         das_hash_map<string,EnumInfo *>          emn2e;
 
-        das_hash_map<TypeInfo *,string>          t2cppTypeName;
-        das_hash_map<StructInfo *,string>        s2cppTypeName;
-        bool collectCppNames = true;    // the C++ spellings above are read only through debug_helper_find_*_cppname, by the AOT emitter's own helper; a simulate's helper turns this off
+        das_hash_map<TypeInfo *,TypeDecl *>      t2typeDecl;
+        bool collectTypeDecls = true;   // read only through debug_helper_find_type_decl, by the AOT emitter's own helper; a simulate's helper turns this off
     };
 
     struct CommentReader {
