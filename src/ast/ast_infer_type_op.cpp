@@ -988,6 +988,9 @@ namespace das {
             } else if (expr->left->rtti_isAt()) {
                 ExprAt *eat = (ExprAt *)(expr->left);
                 if ( eat->no_promotion ) return nullptr;    // a![i] = v - the write path bypasses too
+                if ( !eat->subexpr->type || eat->subexpr->type->isExprType() ) return nullptr;
+                if ( !eat->index->type || eat->index->type->isExprType() ) return nullptr;
+                if ( expr->right->type->isExprType() ) return nullptr;
                 // lets find []= operator
                 auto opName = "[]" + expr->name;
                 if (auto opAtEq = inferGenericOperator3(opName, expr->at, eat->subexpr, eat->index, expr->right)) {
