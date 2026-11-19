@@ -26,3 +26,11 @@ def spread_of(var vals : array<float>) : RowSpread {
     return (best = vals[0], median = vals[length(vals) / 2], cv = sqrt(sq / float(length(vals))) / mean * 100.0,
         mean = mean, worst = vals[length(vals) - 1])
 }
+
+//! the median of `vals`, or 0 when one of them is not a reading (a server that reported no clock for a turn)
+def readings_median(var vals : array<float>) : float {
+    for (v in vals) {
+        return 0.0 if (v <= 0.0)
+    }
+    return spread_of(vals).median
+}

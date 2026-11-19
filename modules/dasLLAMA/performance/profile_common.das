@@ -1840,7 +1840,7 @@ def records_run_verdict(nfailed, cells : int) : tuple<rc : int; msg : string> {
 // ===== Reference-engine version capture (B4 — never hand-typed) =====
 
 // 9-hex short commit of the git checkout containing `path`; "" when not a checkout
-def private git_commit_at(path : string) : string {
+def git_commit_at(path : string) : string {
     let out = run_capture("git -C \"{path}\" rev-parse --short=9 HEAD 2>&1", true)
     if (length(out) != 9) {
         return ""

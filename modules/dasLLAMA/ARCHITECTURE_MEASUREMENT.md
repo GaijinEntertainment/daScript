@@ -6,7 +6,7 @@ away from the served graph and the timing-race vocabulary are
 shapes and alternates are `ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md#vk-gemm-probe`; a fat exe's
 first-start race and where it keeps its sidecar are
 `ARCHITECTURE_MEASUREMENT_FAT_START.md#fat-first-start`; the client clock around a live server's
-turns is `ARCHITECTURE_MEASUREMENT_SERVED.md#served-turn-instrument`; the reference build's forced
+turns is `ARCHITECTURE_MEASUREMENT_SERVED.md#served-turn-instrument` and a model's own rates through a server `#model-bench` there; the reference build's forced
 feed beside the gemma feed cells is `ARCHITECTURE_MEASUREMENT_FORCED_FEED.md#reference-forced-feed`;
 the ASR board's GPU row pairs (`ARCHITECTURE_MEASUREMENT_AUDIO.md#asr-gpu-pairs`), the MLX ASR
 reference (`ARCHITECTURE_MEASUREMENT_AUDIO.md#mlx-asr-reference`), the TTS reference instrument

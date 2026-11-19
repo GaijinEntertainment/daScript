@@ -143,7 +143,7 @@ Each companion's sections are anchored by topic; a citation spells `<doc>.md#<an
   half rows, and how a kernel's hot loads are addressed.
 - `ARCHITECTURE_GPU_SHARED_ATTN.md` - the attention bodies both discrete homes (Vulkan and CUDA) stamp: the token
   command's attention key split, the prefill's flash-attention tile, the K/V mirror's block codecs (q8_0, tq4) with
-  tq4's rotated basis, the batched rope store's strided k and v reads, and the FastConformer rel-position attention.
+  tq4's rotated basis, the batched rope store's strided k and v reads, and the FastConformer rel-position attention; `ARCHITECTURE_GPU_SHARED_DRAFTER.md` - the block drafter's tiled attention every home stamps.
 - `ARCHITECTURE_GPU_SHARED_GEMM.md` - the GEMM tiles and GEMVs both discrete homes stamp: the cm2 decode callbacks'
   16-bit lanes, the mx4 decode, the device scale row, the cm2 tile body's k step, fast path and loop bounds, the KHR
   arm's hand-staged kq tile, the decode GEMV family's lane split by row length and region walk, the N-column forms'
@@ -260,7 +260,7 @@ Each companion's sections are anchored by topic; a citation spells `<doc>.md#<an
   file a run with no sidecar of its own races into
   (`ARCHITECTURE_MEASUREMENT_FAT_START.md#box-runtime-file`).
 - `ARCHITECTURE_MEASUREMENT_SERVED.md` - the client clock around a live chat server's turns and
-  what its figures are (`ARCHITECTURE_MEASUREMENT_SERVED.md#served-turn-instrument`).
+  what its figures are (`ARCHITECTURE_MEASUREMENT_SERVED.md#served-turn-instrument`), and the model bench with its runner (`#model-bench`, `#model-bench-runner`).
 - `ARCHITECTURE_MEASUREMENT_FORCED_FEED.md` - the reference build's forced feed on the E2B Q4_K_M:
   its driver, build, command line and readings (`ARCHITECTURE_MEASUREMENT_FORCED_FEED.md#reference-forced-feed`).
 - `ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md` - the Vulkan GEMM probe's arms, the shapes they run

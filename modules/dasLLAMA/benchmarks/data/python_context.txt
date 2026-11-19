@@ -1,0 +1,3134 @@
+# The model bench's context corpus (harness/model_bench.das): Python sources of this repository, frozen, one
+# segment a file. A prompt of N tokens is cut from the segments in order; the task follows the context.
+%%
+File: ci/check_profile_records.py
+
+#!/usr/bin/env python3
+"""Gate the dasProfile records the site deploys: every das lane on every board, or the deploy fails.
+
+A record is profile_results_<platform>.json as borisbat/dasProfile publishes it. The site's
+benchmark boards render whatever lanes the record carries and drop a missing one silently, so a
+capture that lost a das lane (an AOT module that never loaded, a runner started without -jit)
+would ship a board with no das column and nobody would notice. This script fails the deploy
+instead.
+
+Usage: check_profile_records.py <record.json>...   (a missing platform is the fetch step's
+business - only files that exist are checked)
+"""
+import json
+import sys
+
+INTERPRETED = "Interpreted"
+AOT_OR_JIT = "AOT or JIT"
+STARTUP = "Startup"
+STARTUP_ROW = "hello world"
+
+DAS_LANES = {
+    INTERPRETED: ["DAS INTERPRETER"],
+    AOT_OR_JIT: ["DAS AOT", "DAS JIT"],
+}
+DAS_STARTUP_LANES = ["DAS INTERPRETER", "DAS JIT", "DAS EXE"]
+
+
+def lanes_of(rows):
+    return {r.get("language") for r in rows if isinstance(r, dict)}
+
+
+def check_record(path):
+    problems = []
+    try:
+        with open(path, encoding="utf-8") as f:
+            record = json.load(f)
+    except (OSError, ValueError) as e:
+        return [f"{path}: unreadable record: {e}"]
+    if not isinstance(record, dict):
+        return [f"{path}: record root is {type(record).__name__}, not an object"]
+    for board in (INTERPRETED, AOT_OR_JIT, STARTUP):
+        if not isinstance(record.get(board), dict) or not record[board]:
+            problems.append(f"{path}: board '{board}' is missing or empty")
+    if problems:
+        return problems
+    tests = set(record[INTERPRETED]) | set(record[AOT_OR_JIT])
+    if set(record[INTERPRETED]) != set(record[AOT_OR_JIT]):
+        problems.append(
+            f"{path}: the two boards list different tests: "
+            f"{sorted(set(record[INTERPRETED]) ^ set(record[AOT_OR_JIT]))}")
+    for board, lanes in DAS_LANES.items():
+        for test in sorted(tests):
+            present = lanes_of(record[board].get(test, []))
+            for lane in lanes:
+                if lane not in present:
+                    problems.append(f"{path}: '{board}' / '{test}' has no '{lane}' cell")
+    startup = record[STARTUP].get(STARTUP_ROW)
+    if not isinstance(startup, list):
+        problems.append(f"{path}: '{STARTUP}' has no '{STARTUP_ROW}' row")
+    else:
+        present = lanes_of(startup)
+        for lane in DAS_STARTUP_LANES:
+            if lane not in present:
+                problems.append(f"{path}: '{STARTUP}' / '{STARTUP_ROW}' has no '{lane}' cell")
+    return problems
+
+
+def main(argv):
+    if len(argv) < 2:
+        print(__doc__)
+        return 2
+    problems = []
+    for path in argv[1:]:
+        problems += check_record(path)
+    for p in problems:
+        print(f"::error::{p}")
+    if problems:
+        print(f"{len(problems)} problem(s): a das lane is missing from a benchmark record - "
+              "the capture is incomplete, not the site")
+        return 1
+    print(f"profile records ok: {len(argv) - 1} file(s), every das lane present on every board")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))
+%%
+File: ci/check_shipped_skills.py
+
+#!/usr/bin/env python3
+"""Gate the skills shipped into an SDK bundle.
+
+The FOLDER is the shipping decision: everything under skills/ ships except
+skills/internal/, and skills/daslang/ is the standalone language skill. So
+anything a shipped skill says has to be true *from inside the bundle*. A skill
+that points at src/, links a file that is not there, or tells the reader to run
+bin/Release/daslang.exe is a dead end for an SDK user -- and for Claude running
+in an SDK install, which cannot tell a stale path from a real one.
+
+Checks, each deliberately narrow (a gate that cries wolf gets muted, and then it
+is worse than no gate). Two escape hatches, both spelled `repo-only`:
+  * in a HEADING -> exempts that section, resetting at the next heading of any level.
+    (Not "everything after the marker": cpp_integration.md has a repo-internals section
+    in the MIDDLE, and a trailing rule would exempt the rest of the file.)
+  * on any LINE of a paragraph -> exempts that paragraph, because prose wraps.
+Files under skills/daslang/ get NO escape hatch: the bundle is standalone by
+contract (no repo paths, no MCP, no CI, no lint rule IDs -- see its README in
+the repo), so a violation there is fixed, never marked. The one file the purity
+bans skip is the generated module digest (GENERATED_DIGEST, written by
+doc/reflections/das2rst.das): its lines are the stdlib's own symbol descriptions,
+so a banned word there - a lint module naming its rule IDs, the logger naming the
+MCP server - is the stdlib's vocabulary, not the skill's. Every other check still
+applies to it.
+
+Also walks the REPO's skills/internal/ (when run from a checkout) for dead
+relative links -- internal skills rot too, they just rot privately.
+
+Usage:
+    python3 ci/check_shipped_skills.py <bundle-root>
+"""
+import os
+import re
+import sys
+
+# --- what can never be inside a bundle -------------------------------------------------
+REPO_PATH = re.compile(
+    r"(?<![\w./-])("
+    r"src/[A-Za-z0-9_./+-]*[A-Za-z0-9_+-]"
+    r"|tests/[A-Za-z0-9_./+-]*[A-Za-z0-9_+-]"
+    r"|tests-cpp/[A-Za-z0-9_./+-]*[A-Za-z0-9_+-]"
+    r"|doc/source/[A-Za-z0-9_./+*-]*[A-Za-z0-9_+*-]"
+    r"|benchmarks/[A-Za-z0-9_./+-]*[A-Za-z0-9_+-]"
+    r"|utils/daslang/[A-Za-z0-9_./+-]*"
+    r"|utils/internal/[A-Za-z0-9_./+-]*"
+    r"|modules/[A-Za-z0-9_-]+/(?:src|tests|tutorial|harness)[A-Za-z0-9_./+-]*"
+    r")")
+# NOT banned: utils/lint/tests/ -- CMake installs it (the SDK self-checks its linter).
+
+# Windows MSVC build layout. A bundle has bin/daslang -- no config subdir, and no .exe
+# outside Windows. These are checked INSIDE code fences too, because that is exactly
+# where command lines live.
+PLATFORM_BIN = re.compile(r"bin/(?:Release|Debug|RelWithDebInfo|MinSizeRel)/")
+# Only an INVOCATION, not a prose mention. cpp_integration.md says "shared across
+# `daslang.exe` and every module DLL", which is fine; `daslang.exe utils/aot/main.das`
+# is not. The discriminator is the next token: a flag, or a real file with an extension.
+EXE_CMD = re.compile(
+    r"(?<![\w/])(daslang|daslang-live|das-fmt|dastest)\.exe"
+    r"(?=\s+(?:-{1,2}[A-Za-z]|[A-Za-z0-9_./-]+\.(?:das|cpp|py|json|md)\b))")
+
+# SOMEONE'S MACHINE, not a generic example. Deliberately not "any absolute path": the
+# junction workflow in external_module_debugging.md uses illustrative C:/DummyRoot paths
+# on purpose, and flagging those would force noise markers onto correct content.
+# A bare `\\`-UNC branch is also out -- it matched `\\d` / `\\s` in regex prose.
+# AppData needs a leading separator: bare `APPDATA` is the ENV VAR NAME. Only a real
+# path is a leak.
+MACHINE_PATH = re.compile(
+    r"(?:[A-Za-z]:[\\/](?:Users|Work|DASPKG)\b|/home/[A-Za-z0-9_.]+|[\\/]AppData\b)", re.I)
+
+# nested paths too -- a skills/internal/x.md reference must not sit unmarked in
+# a shipped file
+SKILL_REF = re.compile(r"skills/((?:[A-Za-z0-9_-]+/)*[A-Za-z0-9_-]+\.md)")
+MD_LINK = re.compile(r"\[[^\]]*\]\(([^)\s]+)\)")
+FENCE = re.compile(r"^\s*```")
+HEADING = re.compile(r"^#+\s")
+
+# skills/daslang/ standalone-contract bans (its README states the rules; the gate
+# holds them). \bMCP\b is case-sensitive because filenames are lowercase mcp;
+# not \bCI\b: a das typedef named CI is legitimate code (generics.md has one)
+BUNDLE_MCP = re.compile(r"\bMCP\b")
+BUNDLE_CI = re.compile(r"\bCI (?:lane|run|job|pipeline)|\.github/|workflows/|GitHub Actions")
+BUNDLE_LINT_ID = re.compile(r"\b(?:PERF|STYLE|LINT|IMGUI)\d{3}\b")
+
+GENERATED_DIGEST = "daslang/references/everything.md"
+
+
+def scan_file(path, relname, problems, *, standalone_skill, link_bases, shipped_exists,
+              links_only=False):
+    """Run the content checks over one markdown file.
+
+    standalone_skill: True under skills/daslang/ -- no repo-only escape, extra bans.
+    shipped_exists: callable(skill_rel) -> bool for skills/<rel> references;
+                    None disables the check (repo-side internal walk).
+    links_only: dead-link check only -- for skills/internal/, where repo paths,
+                bin/Release and machine examples are the whole point.
+    """
+    with open(path, encoding="utf-8", errors="replace") as fh:
+        lines = fh.readlines()
+
+    # Pass 1: fence state, and which PARAGRAPH each line belongs to. The marker scopes
+    # to the paragraph, not the line: prose wraps, so a marker on the closing line of a
+    # sentence has to cover the path mentioned two lines earlier. Scoping per-line means
+    # authors must reflow sentences to satisfy the gate, which is how a gate gets muted.
+    in_fence = []
+    para_of = []
+    para_marked = {}
+    fence = False
+    para = 0
+    prev_blank = True
+    for raw in lines:
+        if FENCE.match(raw):
+            fence = not fence
+            in_fence.append(True)
+            para_of.append(None)
+            prev_blank = True
+            continue
+        in_fence.append(fence)
+        blank = not raw.strip()
+        if fence:
+            para_of.append(None)
+        elif blank or HEADING.match(raw):
+            para_of.append(None)
+            prev_blank = True
+        else:
+            if prev_blank:
+                para += 1
+            prev_blank = False
+            para_of.append(para)
+            if "repo-only" in raw.lower():
+                para_marked[para] = True
+
+    # Pass 2: the checks.
+    exempt_section = False
+    for idx, raw in enumerate(lines):
+        lineno = idx + 1
+        fence = in_fence[idx]
+        if FENCE.match(raw):
+            continue
+        low = raw.lower()
+
+        if not fence and HEADING.match(raw):
+            exempt_section = "repo-only" in low
+            continue
+
+        exempt = (not standalone_skill
+                  and (exempt_section or ("repo-only" in low)
+                       or para_marked.get(para_of[idx], False)))
+
+        def flag(kind, detail):
+            problems.append(("skills/%s:%d" % (relname, lineno), kind, detail))
+
+        # these are about COMMANDS, so they apply inside fences as well
+        if not exempt and not links_only:
+            m = PLATFORM_BIN.search(raw)
+            if m:
+                flag("windows build layout",
+                     "%s -- a bundle has bin/daslang" % m.group(0))
+            m = EXE_CMD.search(raw)
+            if m:
+                flag("windows-only exe",
+                     "%s.exe -- drop .exe, it is Windows-only" % m.group(1))
+            m = MACHINE_PATH.search(raw)
+            if m:
+                flag("machine-local path", m.group(0))
+
+        if fence or exempt:
+            continue
+
+        if not links_only:
+            for m in REPO_PATH.finditer(raw):
+                flag("not in bundle", m.group(1))
+
+        if standalone_skill and relname != GENERATED_DIGEST:
+            if BUNDLE_MCP.search(raw):
+                flag("bundle purity", "MCP mention -- the language skill is tool-agnostic")
+            if BUNDLE_CI.search(raw):
+                flag("bundle purity", "CI mention -- the language skill is repo-agnostic")
+            m = BUNDLE_LINT_ID.search(raw)
+            if m:
+                flag("bundle purity",
+                     "%s -- lint rule IDs stay out of the language skill" % m.group(0))
+
+        if shipped_exists is not None:
+            for m in SKILL_REF.finditer(raw):
+                if not shipped_exists(m.group(1)):
+                    flag("skill not shipped",
+                         "skills/%s does not exist in the bundle" % m.group(1))
+
+        for m in MD_LINK.finditer(raw):
+            tgt = m.group(1)
+            if re.match(r"^(https?:|mailto:|#|<)", tgt):
+                continue
+            bare = tgt.split("#")[0]
+            # a letterless target is das subscript-call syntax (`arr[0](7)`),
+            # not a markdown link
+            if not bare or not re.search(r"[A-Za-z]", bare):
+                continue
+            # Links are authored relative to the skill's OWN directory first
+            # (sibling `other_skill.md`, `references/x.md`), then the skills/
+            # root, then the tree root -- all three spellings are in use.
+            if not any(os.path.exists(os.path.join(base, bare))
+                       for base in link_bases):
+                flag("dead link", tgt)
+
+
+def check(bundle, repo_root=None):
+    # repo_root is injectable for the fixture test; a real run derives it from
+    # this file's location and skips the repo-side checks when absent.
+    if repo_root is None:
+        repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    skills_dir = os.path.join(bundle, "skills")
+    if not os.path.isdir(skills_dir):
+        print("  no skills/ in bundle: %s" % skills_dir)
+        return 2
+    problems = []
+
+    def shipped_exists(rel):
+        return os.path.exists(os.path.join(skills_dir, rel))
+
+    root_skills = []
+    for dirpath, dirnames, filenames in os.walk(skills_dir):
+        dirnames.sort()
+        rel_dir = os.path.relpath(dirpath, skills_dir)
+        for name in sorted(filenames):
+            if not name.endswith(".md"):
+                continue
+            path = os.path.join(dirpath, name)
+            rel = name if rel_dir == "." else rel_dir.replace(os.sep, "/") + "/" + name
+            if rel_dir == ".":
+                root_skills.append(name)
+            scan_file(path, rel, problems,
+                      standalone_skill=rel.startswith("daslang/"),
+                      link_bases=(dirpath, skills_dir, bundle),
+                      shipped_exists=shipped_exists)
+
+    # Every shipped root skill needs a trigger row in the bundle's CLAUDE.md --
+    # a skill with no row is a skill nobody opens.
+    claude_md = os.path.join(bundle, "CLAUDE.md")
+    if os.path.exists(claude_md):
+        with open(claude_md, encoding="utf-8", errors="replace") as fh:
+            claude_text = fh.read()
+        for name in root_skills:
+            if ("skills/" + name) not in claude_text:
+                problems.append(("bundle CLAUDE.md", "no trigger row",
+                                 "skills/%s ships but has no row" % name))
+    else:
+        problems.append(("bundle", "no trigger row", "CLAUDE.md missing from bundle"))
+
+    # The repo is the authority on what ships: every root skills/*.md must be in
+    # the bundle. An install-rule regex that silently drops one (the unanchored
+    # /skills/daslang prefix-match swallowed daslang_live.md) is invisible to
+    # every content check -- only this set compare sees it.
+    repo_skills = os.path.join(repo_root, "skills")
+    if os.path.isdir(repo_skills):
+        for name in sorted(os.listdir(repo_skills)):
+            if (name.endswith(".md") and name != "REVIEW.md"
+                    and not os.path.exists(os.path.join(skills_dir, name))):
+                problems.append(("repo skills/" + name, "missing from bundle",
+                                 "the install rules did not ship it"))
+
+    # Repo-side: internal skills rot too, they just rot privately. Dead relative
+    # links only -- internal files may reference anything that exists.
+    internal_dir = os.path.join(repo_root, "skills", "internal")
+    if os.path.isdir(internal_dir):
+        for name in sorted(os.listdir(internal_dir)):
+            if not name.endswith(".md"):
+                continue
+            scan_file(os.path.join(internal_dir, name), "internal/" + name, problems,
+                      standalone_skill=False,
+                      link_bases=(internal_dir, os.path.join(repo_root, "skills"),
+                                  repo_root),
+                      shipped_exists=None, links_only=True)
+
+    if not problems:
+        return 0
+
+    by_kind = {}
+    for where, kind, detail in problems:
+        by_kind.setdefault(kind, []).append((where, detail))
+    for kind in sorted(by_kind):
+        rows = by_kind[kind]
+        print("  %s (%d):" % (kind, len(rows)))
+        for where, detail in rows:
+            print("    %s  %s" % (where, detail))
+    print("")
+    print("  Fix the path, or mark it: put 'repo-only' on the line, or on the heading")
+    print("  of a section that is entirely repo internals. Files under skills/daslang/")
+    print("  have no marker escape -- fix the content.")
+    return 1
+
+
+if __name__ == "__main__":
+    if len(sys.argv) != 2:
+        print(__doc__)
+        sys.exit(2)
+    sys.exit(check(sys.argv[1]))
+%%
+File: ci/ci_matrix.py
+
+#!/usr/bin/env python3
+"""The job matrices of build.yml, nightly.yml and extended_checks.yml, one place, as JSON.
+
+    ci_matrix.py build|build_nightly|extended|extended_nightly    -> {"include": [cell, ...]}
+
+A per-PR job fits a 35-minute wall or its cells run on the nightly cron (and on a manual
+dispatch) instead. The workflow's pre_job step evaluates this script and the fan-out job reads
+`fromJSON(needs.pre_job.outputs.<matrix>)`, so the cells are data here rather than an include
+list the runner merges by its own rules. `ci/test_ci_matrix.py` pins both sets.
+"""
+import json
+import sys
+
+CLANG = "-DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++"
+LINUX_ARM_EXTRA = CLANG + " -DDAS_GLFW_DISABLED=ON -DDAS_HV_DISABLED=OFF -DDAS_SQLITE_DISABLED=OFF"
+WINDOWS_EXTRA = ("-DCMAKE_C_COMPILER_LAUNCHER=sccache -DCMAKE_CXX_COMPILER_LAUNCHER=sccache"
+                 " -DCMAKE_TOOLCHAIN_FILE=$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake")
+# dastest's whole-suite watchdogs, raised for the cells whose sweep runs at half speed (the
+# sanitizers) and then rides the hosted runner's ~1.4x swing; every other cell keeps
+# tests/CMakeLists.txt's defaults, so a hang there still fails fast
+SLOW_SWEEP_BUDGETS = " -DDAS_TEST_TIMEOUT=3600 -DDAS_TEST_TIMEOUT_ISOLATED=7200 -DDAS_TEST_TIMEOUT_AOT=3600"
+
+
+SANITIZERS = ("asan", "tsan", "ubsan")
+# one nightly sanitizer job per step: the per-PR sweeps, the full AOT suite, the backend sweeps -
+# in one job they ran 2.5 to 4 hours back to back, and the tsan backend sweep never fit its cap
+SANITIZER_PHASES = ("tests", "slow", "backend")
+
+
+def _cells(target, architecture, presets, **props):
+    props.setdefault("fast_math", "OFF")
+    props.setdefault("phase", "all")
+    return [dict(target=target, architecture=architecture, cmake_preset=preset, sanitizers="none", **props)
+            for preset in presets]
+
+
+def build_cells(nightly):
+    """build.yml: Release + Debug on every platform per PR; the sanitizer cells and windows
+    64 Debug are nightly-only. A sanitizer cell is three jobs, one per test step (`phase`);
+    windows 64 Debug compiles and runs no test (`phase` compile); every other cell runs every
+    step (`phase` all)."""
+    cmake = dict(build_system="cmake", cmake_generator="Ninja")
+    cells = []
+    cells += _cells("linux", 64, ["Debug", "Release"], release_target="linux", release_arch="x86_64",
+                    runner="ubuntu-latest", archive_ext="tar.gz", cmake_extra=CLANG, **cmake)
+    cells += _cells("linux_arm", 64, ["Debug", "Release"], release_target="linux", release_arch="arm64",
+                    runner="ubuntu-24.04-arm", archive_ext="tar.gz", cmake_extra=LINUX_ARM_EXTRA, **cmake)
+    cells += _cells("darwin15", "arm64", ["Debug", "Release"], release_target="darwin15", release_arch="arm64",
+                    runner="macos-15", architecture_string="arm64", archive_ext="tar.gz",
+                    cmake_extra=CLANG + " -DCMAKE_OSX_ARCHITECTURES=arm64", **cmake)
+    cells += _cells("darwin26", "arm64", ["Debug", "Release"], release_target="darwin26", release_arch="arm64",
+                    runner="macos-26", architecture_string="arm64", archive_ext="tar.gz",
+                    cmake_extra=CLANG + " -DCMAKE_OSX_ARCHITECTURES=arm64", **cmake)
+    # win32 Release is the 32-bit compile+test gate; win32 Debug outgrew its test budgets and is gone.
+    cells += _cells("windows", 32, ["Release"], release_target="windows", release_arch="x86",
+                    runner="windows-latest", architecture_string="Win32", archive_ext="zip",
+                    cmake_extra=WINDOWS_EXTRA, **cmake)
+    # The Win64 Release lane is the fast MSVC compile/interpreter gate: LLVM off, JIT off (the
+    # nightly build_windows_release_llvm_nightly job keeps the JIT sweep). Win64 Debug skips JIT too.
+    cells += _cells("windows", 64, ["Release"], release_target="windows", release_arch="x86_64",
+                    runner="windows-latest", architecture_string="x64", archive_ext="zip",
+                    llvm_disabled="ON", jit_disabled="ON", cmake_extra=WINDOWS_EXTRA, **cmake)
+    if nightly:
+        cells += _cells("windows", 64, ["Debug"], release_target="windows", release_arch="x86_64",
+                        runner="windows-latest", architecture_string="x64", archive_ext="zip",
+                        jit_disabled="ON", nightly_only="ON", phase="compile", cmake_extra=WINDOWS_EXTRA,
+                        **cmake)
+        for san in SANITIZERS:
+            for phase in SANITIZER_PHASES:
+                cells.append(dict(target="linux", architecture=64, cmake_preset="Release", sanitizers=san,
+                                  runner="ubuntu-latest", build_name="linux_" + san, nightly_only="ON",
+                                  fast_math="OFF", phase=phase, cmake_extra=CLANG + SLOW_SWEEP_BUDGETS, **cmake))
+        # the tree built -ffast-math, the way an embedder that passes it does (dagor is one)
+        cells.append(dict(target="linux", architecture=64, cmake_preset="Release", sanitizers="none",
+                          fast_math="ON", runner="ubuntu-latest", build_name="linux_fastmath",
+                          nightly_only="ON", phase="all",
+                          cmake_extra="-DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++", **cmake))
+        cells = [c for c in cells if c["cmake_preset"] == "Release" or c.get("nightly_only")]
+    return cells
+
+
+def extended_cells(nightly):
+    """extended_checks.yml: per PR two linux jobs split by role (core: the tree's own gates and
+    utils; modules: the module and service suites); the nightly runs every step on linux and
+    windows in one job each (role all). No macOS cell: the hosted macOS runner is 3 cores and
+    7 GB against linux's 4 and 16, and ran the same steps in about twice the time."""
+    cmake = dict(build_system="cmake", cmake_generator="Ninja")
+    linux = dict(target="linux", architecture=64, runner="ubuntu-latest", **cmake)
+    if nightly:
+        return [
+            dict(role="all", **linux),
+            dict(target="windows", architecture=64, role="all", runner="windows-latest", architecture_string="x64", **cmake),
+        ]
+    return [dict(role="core", **linux), dict(role="modules", **linux)]
+
+
+def main(argv):
+    if len(argv) != 2 or argv[1] not in ("build", "build_nightly", "extended", "extended_nightly"):
+        sys.stderr.write(__doc__)
+        return 2
+    nightly = argv[1].endswith("_nightly")
+    cells = build_cells(nightly) if argv[1].startswith("build") else extended_cells(nightly)
+    print(json.dumps({"include": cells}, separators=(",", ":")))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))
+%%
+File: ci/packaging/packages.py
+
+#!/usr/bin/env python3
+"""The packages the release workflows build - one profile per package, read by every
+builder in this folder (deb_build.sh, rpm_build.sh, wheel_build.py, render_manifests.py).
+`manifests` maps each package-manager repo (under github.com/borisbat) to the files it
+carries for the package and the template each renders from.
+
+Usage: packages.py shell <package> <bundle_dir> <tag>   (bash assignments for the shell builders)
+
+stdlib only: runs on every release runner.
+"""
+import os
+import re
+import shlex
+import sys
+
+DASLANG_TOOLS = ["lint", "daspkg", "dascov", "detect-dupe", "benchctl", "dastest", "das-fmt"]
+DASLANG_COMMANDS = ["daslang", "daslang-live", *DASLANG_TOOLS, "daslang-watchdog"]
+
+# A command maps its user-facing name to the candidate paths of its executable, relative
+# to the directory the builder is handed; the first one present wins. The linux packages
+# link each command into /usr/bin; the wheel puts the executables themselves on PATH, or one
+# console_scripts shim per command for a `launch: "shim"` profile.
+PROFILES = {
+    "daslang": {
+        "summary": "High-performance statically-typed scripting language for games and real-time applications",
+        "description": ("High-performance statically-typed scripting language for games and\n"
+                        "real-time applications: compiler, JIT, standard library, test framework,\n"
+                        "tools, and modules. Installed under /opt/daslang."),
+        "deb_summary": "daslang programming language SDK",
+        "deb_section": "devel",
+        "deb_depends": "",
+        "rpm_requires": [],
+        "prefix": "/opt/daslang",
+        "links": DASLANG_COMMANDS,
+        "commands": {
+            **{t: [f"bin/{t}", f"bin/{t}.exe"] for t in ["daslang", "daslang-live"]},
+            **{t: [f"bin/{t}.exe"] for t in DASLANG_TOOLS},
+            "daslang-watchdog": ["bin/watchdog", "bin/watchdog.exe"],
+        },
+        "main_command": "daslang",
+        # the commands are the bundle's own executables, told their root by a sidecar
+        # (src/misc/ARCHITECTURE_DAS_ROOT.md#root-sidecar)
+        "launch": "native",
+        "license": "bundle",
+        "probe_prefixes": ("bin/", "lib/"),
+        "classifiers": ["Topic :: Software Development :: Compilers",
+                        "Topic :: Software Development :: Interpreters"],
+        "manifests": {
+            "homebrew-daslang": {"Formula/daslang.rb": "homebrew-daslang.rb.template"},
+            "scoop-daslang": {"bucket/daslang.json": "scoop-daslang.json.template"},
+        },
+    },
+    "dasllama": {
+        "summary": "OpenAI-compatible local LLM server, CLI and benchmark over dasLLAMA",
+        "description": ("dasllama-server, an OpenAI-compatible HTTP server for local GGUF models,\n"
+                        "with its supervisor (dasllama-watchdog), the dasllama-cli shell front\n"
+                        "end and dasllama-bench. Installed under /opt/dasllama."),
+        "deb_summary": "OpenAI-compatible local LLM server over dasLLAMA",
+        "deb_section": "net",
+        # Ubuntu 24.04 renamed the OpenSSL 3 runtime to libssl3t64
+        "deb_depends": "libssl3 | libssl3t64, curl",
+        "rpm_requires": ["openssl-libs", "curl"],
+        "prefix": "/opt/dasllama",
+        "links": ["dasllama-server", "dasllama-cli", "dasllama-bench", "dasllama-watchdog"],
+        # daspkg keeps .exe on every flat bundle; the mac .app carries the bare names
+        "commands": {
+            "dasllama-server": ["dasllama-server.exe", "dasllama-server.app/Contents/MacOS/dasllama-server"],
+            "dasllama-cli": ["dasllama-cli.exe", "dasllama-server.app/Contents/MacOS/dasllama-cli"],
+            "dasllama-bench": ["dasllama-bench.exe", "dasllama-server.app/Contents/MacOS/dasllama-bench"],
+            # the Debian `watchdog` package owns /usr/sbin/watchdog
+            "dasllama-watchdog": ["watchdog", "watchdog.exe", "dasllama-server.app/Contents/MacOS/watchdog"],
+        },
+        "main_command": "dasllama-cli",
+        # -exe programs that read their files from beside themselves: console_scripts shims
+        "launch": "shim",
+        "license": "repo",
+        "probe_prefixes": ("",),
+        "classifiers": ["Topic :: Scientific/Engineering :: Artificial Intelligence",
+                        "Environment :: Console"],
+        "manifests": {
+            "homebrew-daslang": {"Formula/dasllama.rb": "homebrew-dasllama.rb.template",
+                                 "Casks/dasllama.rb": "homebrew-dasllama-cask.rb.template"},
+            "scoop-daslang": {"bucket/dasllama.json": "scoop-dasllama.json.template"},
+        },
+    },
+}
+
+
+# --- versions: one release tag, the spelling each package format wants ------------------------
+
+def bare_tag(tag):
+    """The tag's version: the leading v dropped, and before it the package prefix a product with
+    its own tags carries (dasllama-v0.7.0-RC1 -> 0.7.0-RC1, v0.6.5 -> 0.6.5)."""
+    tag = re.sub(r"^[A-Za-z][A-Za-z0-9]*-(?=[vV]\d)", "", tag)
+    return tag[1:] if tag.startswith(("v", "V")) else tag
+
+
+def deb_version(tag):
+    """v0.6.5-RC1 -> 0.6.5~rc1: tilde sorts BEFORE the release, so the RC upgrades cleanly."""
+    return re.sub(r"-[Rr][Cc](\d+)", r"~rc\1", bare_tag(tag))
+
+
+def rpm_version(tag):
+    """deb_version with no hyphen left - rpm rejects one inside Version."""
+    return deb_version(tag).replace("-", "_")
+
+
+def pep440(tag):
+    """v0.6.4-RC1 -> 0.6.4rc1, v0.6.4 -> 0.6.4, 0.0.0-dev -> 0.0.0.dev0 (the release pattern is
+    plain + RC + dev; anything else is an error, not a guess)."""
+    m = re.fullmatch(r"(\d+\.\d+\.\d+)(?:-rc(\d+)|(-dev)\d*)?", bare_tag(tag), re.I)
+    if not m:
+        sys.exit(f"packages: cannot map tag {tag!r} to a PEP 440 version")
+    base, rc, dev = m.groups()
+    if rc:
+        return base + "rc" + rc
+    return base + ".dev0" if dev else base
+
+
+def manifest_version(tag):
+    """v0.6.4-RC4 -> 0.6.4-rc4: the tag without its v, lowercased (the tap's convention)."""
+    return bare_tag(tag).lower()
+
+
+# --- the executable of each command on each platform, from its candidates ---------------------
+
+def mac_exe(p, command):
+    """The command's executable inside the macOS .app, or None."""
+    return next((c for c in p["commands"][command] if ".app/" in c), None)
+
+
+def windows_exe(p, command):
+    """The command's `.exe`, or None."""
+    return next((c for c in p["commands"][command] if c.endswith(".exe")), None)
+
+
+def unix_exe(p, command):
+    """The command's executable in a linux bundle: its first candidate outside the .app."""
+    return next((c for c in p["commands"][command] if ".app/" not in c), None)
+
+
+def profile(name):
+    if name not in PROFILES:
+        sys.exit(f"packages: no package {name!r} (known: {sorted(PROFILES)})")
+    return PROFILES[name]
+
+
+def resolve(p, command, bundle):
+    """The first candidate of `command` present and executable under `bundle`, or None."""
+    for rel in p["commands"][command]:
+        full = os.path.join(bundle, rel)
+        if os.path.isfile(full) and os.access(full, os.X_OK):
+            return rel
+    return None
+
+
+def shell(name, bundle, tag):
+    p = profile(name)
+    q = shlex.quote
+    lines = [
+        f"PKG_NAME={q(name)}",
+        f"PKG_DEB_VERSION={q(deb_version(tag))}",
+        f"PKG_RPM_VERSION={q(rpm_version(tag))}",
+        f"PKG_PREFIX={q(p['prefix'])}",
+        f"PKG_SUMMARY={q(p['deb_summary'])}",
+        f"PKG_DESCRIPTION={q(p['description'])}",
+        f"PKG_DEB_SECTION={q(p['deb_section'])}",
+        f"PKG_DEB_DEPENDS={q(p['deb_depends'])}",
+        "PKG_RPM_REQUIRES=(" + " ".join(q(r) for r in p["rpm_requires"]) + ")",
+    ]
+    # command=path for each linked command the bundle carries; the rest are not linked
+    links = [(c, resolve(p, c, bundle)) for c in p["links"]]
+    lines.append("PKG_LINKS=(" + " ".join(q(f"{c}={rel}") for c, rel in links if rel) + ")")
+    return "\n".join(lines) + "\n"
+
+
+def main():
+    if len(sys.argv) != 5 or sys.argv[1] != "shell":
+        sys.exit("usage: packages.py shell <package> <bundle_dir> <tag>")
+    sys.stdout.write(shell(sys.argv[2], sys.argv[3], sys.argv[4]))
+
+
+if __name__ == "__main__":
+    main()
+%%
+File: ci/packaging/render_manifests.py
+
+#!/usr/bin/env python3
+"""Render a package's Homebrew and scoop manifests for one release tag.
+
+Usage: render_manifests.py <package> <tag> <sha_dir> <out_dir>
+
+- <sha_dir> holds the release's `<asset>.sha256` files (`gh release download <tag> -p '*.sha256'`)
+- writes <out_dir>/<repo>/<path> for every manifest the package's profile names, ready to
+  copy over a checkout of that repo
+- a template names each asset it needs as @SHA:<asset>@; an asset with no .sha256 is fatal,
+  so a manifest never points at a file the release does not carry
+- a .rb template's leading comment block is the template's own header and is dropped
+
+stdlib only: runs on every release runner.
+"""
+import os
+import re
+import sys
+
+from packages import mac_exe, manifest_version, profile, unix_exe, windows_exe
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+SHA_REF = re.compile(r"@SHA:([^@]+)@")
+
+
+def read_sha(sha_dir, asset):
+    path = os.path.join(sha_dir, asset + ".sha256")
+    if not os.path.isfile(path):
+        sys.exit(f"render_manifests: {asset}.sha256 not in {sha_dir} - the release does not carry {asset}")
+    with open(path) as f:
+        words = f.read().split()
+    if not words or not re.fullmatch(r"[0-9a-f]{64}", words[0]):
+        sys.exit(f"render_manifests: {path} does not start with a sha256")
+    return words[0]
+
+
+def stem(path):
+    return os.path.splitext(os.path.basename(path))[0]
+
+
+def command_tables(p):
+    """The per-manager command lists, rendered from the profile: @SCOOP_BIN@ (every command, a
+    renamed one as [exe, alias]), @BREW_EXES_MAC@ / @BREW_EXES_LINUX@ (the linked commands as a
+    Ruby hash body, command => executable) and @CASK_BINARIES@ (one `binary` line per link, for a
+    package that ships a macOS .app)."""
+    scoop = []
+    for c in p["commands"]:
+        rel = windows_exe(p, c)
+        exe = rel.replace("/", "\\\\")
+        scoop.append(f'"{exe}"' if stem(rel) == c else f'["{exe}", "{c}"]')
+    tables = {
+        "@SCOOP_BIN@": ",\n".join("        " + e for e in scoop),
+        "@BREW_EXES_LINUX@": ", ".join(f'"{c}" => "{unix_exe(p, c)}"' for c in p["links"]),
+    }
+    if all(mac_exe(p, c) for c in p["links"]):
+        macs = {c: mac_exe(p, c) for c in p["links"]}
+        tables["@BREW_EXES_MAC@"] = ", ".join(f'"{c}" => "{os.path.basename(e)}"' for c, e in macs.items())
+        cask = []
+        for c, e in macs.items():
+            line = f'  binary "#{{appdir}}/{e}"'
+            cask.append(line if os.path.basename(e) == c else f'{line}, target: "{c}"')
+        tables["@CASK_BINARIES@"] = "\n".join(cask)
+    return tables
+
+
+def render(text, tag, sha_dir, rb=False, p=None):
+    if p is not None:
+        for k, v in command_tables(p).items():
+            text = text.replace(k, v)
+    if rb:
+        lines = text.splitlines(keepends=True)
+        while lines and lines[0].startswith("#"):
+            lines.pop(0)
+        text = "".join(lines)
+    text = text.replace("@TAG@", tag).replace("@VERSION@", manifest_version(tag))
+    text = SHA_REF.sub(lambda m: read_sha(sha_dir, m.group(1)), text)
+    left = re.findall(r"@[A-Z_:]+@", text)
+    if left:
+        sys.exit(f"render_manifests: unfilled placeholders {sorted(set(left))}")
+    return text
+
+
+def render_package(package, tag, sha_dir, out_dir):
+    written = []
+    for repo, files in profile(package)["manifests"].items():
+        for rel, template in files.items():
+            with open(os.path.join(HERE, template)) as f:
+                text = render(f.read(), tag, sha_dir, rb=template.endswith(".rb.template"), p=profile(package))
+            out = os.path.join(out_dir, repo, rel)
+            os.makedirs(os.path.dirname(out), exist_ok=True)
+            with open(out, "w") as f:
+                f.write(text)
+            written.append(out)
+    return written
+
+
+def main():
+    if len(sys.argv) != 5:
+        sys.exit("usage: render_manifests.py <package> <tag> <sha_dir> <out_dir>")
+    for path in render_package(*sys.argv[1:]):
+        print(f"rendered: {path}")
+
+
+if __name__ == "__main__":
+    main()
+%%
+File: ci/test_check_shipped_skills.py
+
+#!/usr/bin/env python3
+"""Fixture tests for ci/check_shipped_skills.py -- the shipped-skills gate.
+
+The gate's rejection branches are green-on-good-input by nature: a regex typo
+mutes one permanently while CI stays green. Each test here builds a tiny bundle
+in a tempdir, injects exactly one violation, and asserts the gate fires -- with
+a clean twin asserting it stays silent.
+
+Run: python3 ci/test_check_shipped_skills.py
+"""
+import contextlib
+import io
+import os
+import shutil
+import sys
+import tempfile
+import unittest
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import check_shipped_skills as gate
+
+
+def write(root, rel, text):
+    path = os.path.join(root, rel)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write(text)
+
+
+class GateFixture(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="skills_gate_")
+        self.bundle = os.path.join(self.tmp, "bundle")
+        self.repo = os.path.join(self.tmp, "repo")
+        # minimal clean bundle: one root skill with a trigger row, the language
+        # skill, and a repo twin that agrees with it
+        write(self.bundle, "CLAUDE.md", "| `skills/good.md` | row |\n")
+        write(self.bundle, "skills/good.md", "# Good\n\nplain prose\n")
+        write(self.bundle, "skills/daslang/SKILL.md", "# daslang\n\nclean\n")
+        write(self.bundle, "skills/daslang/references/ok.md", "# ok\n\nclean\n")
+        write(self.repo, "skills/good.md", "# Good\n\nplain prose\n")
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def run_gate(self):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            rc = gate.check(self.bundle, repo_root=self.repo)
+        return rc, out.getvalue()
+
+    def assert_fires(self, kind, detail_part=None):
+        rc, out = self.run_gate()
+        self.assertEqual(rc, 1, "gate stayed green:\n" + out)
+        self.assertIn(kind, out)
+        if detail_part:
+            self.assertIn(detail_part, out)
+
+    def test_clean_bundle_passes(self):
+        rc, out = self.run_gate()
+        self.assertEqual(rc, 0, out)
+
+    def test_purity_mcp(self):
+        write(self.bundle, "skills/daslang/references/bad.md",
+              "# bad\n\nuse the MCP tool for this\n")
+        self.assert_fires("bundle purity", "MCP")
+
+    def test_purity_ci(self):
+        write(self.bundle, "skills/daslang/references/bad.md",
+              "# bad\n\nthe CI lane runs it nightly\n")
+        self.assert_fires("bundle purity", "CI")
+
+    def test_purity_lint_id(self):
+        write(self.bundle, "skills/daslang/references/bad.md",
+              "# bad\n\nPERF018 fires on this shape\n")
+        self.assert_fires("bundle purity", "PERF018")
+
+    def test_generated_digest_skips_purity_bans(self):
+        write(self.bundle, "skills/" + gate.GENERATED_DIGEST,
+              "# daslang modules\n\nGenerated from the module documentation.\n\n"
+              "- `cold_path` - prunes the PERF026-028 walk\n"
+              "- `logger` - for daslang tools (MCP server, dastest)\n"
+              "- `ci_lane` - the CI lane runs it\n")
+        rc, out = self.run_gate()
+        self.assertEqual(rc, 0, out)
+
+    def test_generated_digest_keeps_every_other_check(self):
+        write(self.bundle, "skills/" + gate.GENERATED_DIGEST,
+              "# daslang modules\n\n- `x` - see src/ast/ast.cpp for the C++ side\n")
+        self.assert_fires("not in bundle", "src/ast/ast.cpp")
+
+    def test_no_marker_escape_under_daslang(self):
+        # the repo-only marker must NOT exempt the language skill
+        write(self.bundle, "skills/daslang/references/bad.md",
+              "# bad\n\nsee src/ast/ast.cpp repo-only\n")
+        self.assert_fires("not in bundle", "src/ast/ast.cpp")
+
+    def test_repo_path_unmarked_fires_marked_passes(self):
+        write(self.bundle, "skills/good.md",
+              "# Good\n\nsee src/ast/ast.cpp for detail\n")
+        self.assert_fires("not in bundle", "src/ast/ast.cpp")
+        write(self.bundle, "skills/good.md",
+              "# Good\n\nsee src/ast/ast.cpp for detail (repo-only)\n")
+        rc, out = self.run_gate()
+        self.assertEqual(rc, 0, out)
+
+    def test_internal_ref_unmarked_fires_marked_passes(self):
+        write(self.bundle, "skills/good.md",
+              "# Good\n\nsee skills/internal/secret.md for the rest\n")
+        self.assert_fires("skill not shipped", "internal/secret.md")
+        write(self.bundle, "skills/good.md",
+              "# Good\n\nsee skills/internal/secret.md (repo-only)\n")
+        rc, out = self.run_gate()
+        self.assertEqual(rc, 0, out)
+
+    def test_utils_internal_path_fires(self):
+        write(self.bundle, "skills/good.md",
+              "# Good\n\nrun `daslang utils/internal/preflight/main.das` first\n")
+        self.assert_fires("not in bundle", "utils/internal/preflight/main.das")
+
+    def test_utils_daslang_path_fires_watchdog_passes(self):
+        write(self.bundle, "skills/good.md",
+              "# Good\n\nsee utils/daslang/main.cpp for the gc hook\n")
+        self.assert_fires("not in bundle", "utils/daslang/main.cpp")
+        write(self.bundle, "skills/good.md",
+              "# Good\n\nrun `daslang utils/watchdog/main.das -- --cwd .`\n")
+        rc, out = self.run_gate()
+        self.assertEqual(rc, 0, out)
+
+    def test_missing_skill_ref(self):
+        write(self.bundle, "skills/good.md", "# Good\n\nsee skills/nope.md\n")
+        self.assert_fires("skill not shipped", "nope.md")
+
+    def test_trigger_row_missing(self):
+        write(self.bundle, "skills/norow.md", "# NoRow\n\nprose\n")
+        write(self.repo, "skills/norow.md", "# NoRow\n\nprose\n")
+        self.assert_fires("no trigger row", "norow.md")
+
+    def test_dead_link_fires_letterless_skipped(self):
+        write(self.bundle, "skills/daslang/references/ok.md",
+              "# ok\n\n[gone](missing.md) but `arr[0](7)` is das syntax\n")
+        rc, out = self.run_gate()
+        self.assertEqual(rc, 1, out)
+        self.assertIn("missing.md", out)
+        self.assertNotIn("dead link (2)", out)
+
+    def test_internal_walk_dead_link_only(self):
+        # a dead link in an internal skill fires; its src/ mention does not
+        write(self.repo, "skills/internal/x.md",
+              "# x\n\nsee src/ast/ast.cpp and [gone](missing.md)\n")
+        rc, out = self.run_gate()
+        self.assertEqual(rc, 1, out)
+        self.assertIn("missing.md", out)
+        self.assertNotIn("not in bundle", out)
+
+    def test_repo_skill_missing_from_bundle(self):
+        # the daslang_live regression class: repo has it, install rules dropped it
+        write(self.repo, "skills/dropped.md", "# Dropped\n\nprose\n")
+        self.assert_fires("missing from bundle", "dropped.md")
+
+    def test_repo_checklist_is_not_a_skill(self):
+        write(self.repo, "skills/REVIEW.md", "# Skills Code Review Checklist")
+        rc, out = self.run_gate()
+        self.assertEqual(rc, 0, out)
+
+
+if __name__ == "__main__":
+    unittest.main(verbosity=1)
+%%
+File: ci/test_ci_matrix.py
+
+#!/usr/bin/env python3
+"""Pins the per-PR and nightly job matrices ci_matrix.py emits, and the workflow shapes that
+consume them."""
+import json
+import os
+import re
+import subprocess
+import sys
+import unittest
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
+import ci_matrix  # noqa: E402
+
+WORKFLOWS = os.path.join(os.path.dirname(HERE), ".github", "workflows")
+
+
+def names(cells):
+    # the fast-math cell is a Release/none cell too, so its flag has to reach the name; a
+    # sanitizer cell is one job per phase, so the phase does too
+    return sorted("%s-%s-%s-%s%s%s" % (c["target"], c["architecture"], c["cmake_preset"], c["sanitizers"],
+                                       "-fastmath" if c.get("fast_math") == "ON" else "",
+                                       "" if c.get("phase", "all") == "all" else "-" + c["phase"])
+                  for c in cells)
+
+
+PR_BUILD = sorted([
+    "linux-64-Debug-none", "linux-64-Release-none",
+    "linux_arm-64-Debug-none", "linux_arm-64-Release-none",
+    "darwin15-arm64-Debug-none", "darwin15-arm64-Release-none",
+    "darwin26-arm64-Debug-none", "darwin26-arm64-Release-none",
+    "windows-32-Release-none", "windows-64-Release-none",
+])
+NIGHTLY_ONLY_BUILD = sorted(
+    ["windows-64-Debug-none-compile", "linux-64-Release-none-fastmath"]
+    + ["linux-64-Release-%s-%s" % (san, phase) for san in ("asan", "tsan", "ubsan")
+       for phase in ("tests", "slow", "backend")])
+
+
+class BuildMatrix(unittest.TestCase):
+    def test_per_pr_cells(self):
+        self.assertEqual(names(ci_matrix.build_cells(False)), PR_BUILD)
+
+    def test_nightly_adds_exactly_the_slow_cells(self):
+        release = [n for n in PR_BUILD if "-Release-" in n]
+        self.assertEqual(names(ci_matrix.build_cells(True)), sorted(release + NIGHTLY_ONLY_BUILD))
+
+    def test_nightly_only_cells_are_marked(self):
+        marked = names(c for c in ci_matrix.build_cells(True) if c.get("nightly_only") == "ON")
+        self.assertEqual(marked, NIGHTLY_ONLY_BUILD)
+        self.assertFalse(any(c.get("nightly_only") for c in ci_matrix.build_cells(False)))
+
+    def test_every_cell_names_a_runner_and_a_generator(self):
+        for cell in ci_matrix.build_cells(True):
+            self.assertTrue(cell.get("runner"), cell)
+            self.assertEqual(cell.get("cmake_generator"), "Ninja", cell)
+            self.assertEqual(cell.get("build_system"), "cmake", cell)
+
+    def test_windows_release_64_is_the_llvm_free_gate(self):
+        cell = [c for c in ci_matrix.build_cells(False)
+                if c["target"] == "windows" and c["architecture"] == 64 and c["cmake_preset"] == "Release"][0]
+        self.assertEqual((cell["llvm_disabled"], cell["jit_disabled"]), ("ON", "ON"))
+
+    def test_release_cells_carry_archive_fields(self):
+        for cell in ci_matrix.build_cells(False):
+            self.assertIn("release_target", cell, cell)
+            self.assertIn("release_arch", cell, cell)
+            self.assertIn("archive_ext", cell, cell)
+
+    def test_sanitizer_cells_carry_no_archive_fields(self):
+        for cell in ci_matrix.build_cells(True):
+            if cell["sanitizers"] != "none":
+                self.assertNotIn("release_target", cell, cell)
+                self.assertEqual(cell["build_name"], "linux_" + cell["sanitizers"])
+
+    def test_only_sanitizer_cells_split_into_phases(self):
+        # build.yml gates its three test steps on the phase; a cell that ran none of them would be
+        # a build with no signal, and a non-sanitizer cell split would multiply the per-PR matrix.
+        # windows 64 Debug is the one cell that runs none of the three: its signal is the compile
+        for cell in ci_matrix.build_cells("schedule"):
+            if cell["sanitizers"] != "none":
+                self.assertIn(cell["phase"], ("tests", "slow", "backend"), cell)
+            elif (cell["target"], cell["cmake_preset"]) == ("windows", "Debug"):
+                self.assertEqual(cell["phase"], "compile", cell)
+            else:
+                self.assertEqual(cell["phase"], "all", cell)
+
+    def test_the_compile_only_cell_has_a_step_that_compiles(self):
+        # a phase no step's condition names is a job that configures and goes green
+        text = open(os.path.join(WORKFLOWS, "build_matrix.yml"), encoding="utf-8").read()
+        block = re.search(r"- name: \"Compile\"\n((?:      .*\n)+)", text)
+        self.assertTrue(block, "build_matrix.yml has no Compile step")
+        self.assertIn("if: matrix.phase == 'compile'", block.group(1))
+        self.assertIn("cmake --build ./build", block.group(1))
+        self.assertLess(text.index('- name: "Compile"'), text.index('- name: "Save sccache objects"'))
+
+    def test_every_sccache_slot_is_bounded(self):
+        # sccache's default bound is 10G a slot; an unbounded slot grows to it and evicts the
+        # slots the nightly cells save once a day
+        for name in ("build_matrix.yml", "extended_checks.yml"):
+            text = open(os.path.join(WORKFLOWS, name), encoding="utf-8").read()
+            self.assertGreaterEqual(text.count('echo "SCCACHE_CACHE_SIZE='), 2, name)
+
+    def test_half_speed_sweeps_carry_raised_watchdogs(self):
+        # the sanitizer cells run their sweeps at half speed and lose the default whole-suite
+        # watchdog to runner variance; every other cell keeps the defaults, so a hang still
+        # fails fast where the sweep is quick
+        for cell in ci_matrix.build_cells(True):
+            slow = cell["sanitizers"] != "none"
+            for flag in ("-DDAS_TEST_TIMEOUT=3600", "-DDAS_TEST_TIMEOUT_ISOLATED=7200",
+                         "-DDAS_TEST_TIMEOUT_AOT=3600"):
+                (self.assertIn if slow else self.assertNotIn)(flag, cell["cmake_extra"], cell)
+        for cell in ci_matrix.build_cells(False):
+            self.assertNotIn("DAS_TEST_TIMEOUT", cell["cmake_extra"], cell)
+
+
+class ExtendedMatrix(unittest.TestCase):
+    def test_per_pr_is_two_linux_roles(self):
+        cells = ci_matrix.extended_cells(False)
+        self.assertEqual([(c["target"], c["role"]) for c in cells], [("linux", "core"), ("linux", "modules")])
+
+    def test_nightly_is_one_full_job_per_platform(self):
+        cells = ci_matrix.extended_cells(True)
+        self.assertEqual([(c["target"], c["role"]) for c in cells], [("linux", "all"), ("windows", "all")])
+
+    def test_the_macos_only_check_rides_the_build_lane(self):
+        # the extended checks have no macOS cell, so the one check cmake gives to APPLE alone has
+        # to run where a macOS job still builds per PR
+        text = open(os.path.join(os.path.dirname(HERE), "ci", "CMakeLists.txt"), encoding="utf-8").read()
+        block = text.split("set(DAS_BUILD_LANE_APPLE", 1)[1].split("das_lane_group(run_build ", 1)
+        self.assertIn("run_tests_llvm_vector_math", block[0])
+        self.assertIn("${DAS_BUILD_LANE_APPLE}", block[1].split(")", 1)[0])
+
+    def test_every_cell_names_a_runner(self):
+        for nightly in (False, True):
+            for cell in ci_matrix.extended_cells(nightly):
+                self.assertTrue(cell.get("runner"), cell)
+                self.assertIn("architecture", cell, cell)
+
+
+class WorkflowShapes(unittest.TestCase):
+    """The workflows consume the matrices through pre_job; the role split must keep the nightly
+    `all` role running every step."""
+
+    def read(self, name):
+        with open(os.path.join(WORKFLOWS, name), encoding="utf-8") as f:
+            return f.read()
+
+    def test_both_workflows_read_their_matrix_from_pre_job(self):
+        for name, job in (("build_matrix.yml", "matrix"), ("extended_checks.yml", "pre_job")):
+            text = self.read(name)
+            self.assertIn("matrix: ${{ fromJSON(needs.%s.outputs.matrix) }}" % job, text, name)
+            self.assertIn("ci/ci_matrix.py ", text, name)
+
+    def test_only_nightly_yml_carries_a_cron(self):
+        # a workflow with a cron of its own is one a #nightly PR never arms
+        for name in sorted(os.listdir(WORKFLOWS)):
+            if not name.endswith(".yml") or name == "nightly.yml":
+                continue
+            text = self.read(name)
+            self.assertFalse(re.search(r"^  schedule:", text, re.M), "%s carries a cron of its own" % name)
+            self.assertFalse("uses: ./.github/workflows/nightly_issue.yml" in text, "%s files its own nightly issue" % name)
+
+    def test_role_conditions_exclude_one_role_only(self):
+        # `matrix.role == 'core'` would drop the step from the nightly `all` job; the only admitted
+        # spelling names the role a step does NOT run in
+        text = self.read("extended_checks.yml")
+        refs = re.findall(r"matrix\.role\s*(==|!=)\s*'([a-z]+)'", text)
+        self.assertTrue(refs, "extended_checks.yml carries no role conditions")
+        for op, role in refs:
+            self.assertEqual(op, "!=", "matrix.role %s '%s'" % (op, role))
+            self.assertIn(role, ("core", "modules"), "matrix.role %s '%s'" % (op, role))
+
+    def test_every_cache_restore_runs_on_the_cron_too(self):
+        # the nightly cells are the slow ones; a restore gated off `schedule` is the old cold-build
+        # policy coming back
+        for name in ("build.yml", "build_matrix.yml", "nightly.yml", "extended_checks.yml"):
+            text = self.read(name)
+            for block in re.findall(r"- name: \"(?:Restore|Cache) [^\"]*\"\n((?:      .*\n)+)", text):
+                self.assertNotIn("github.event_name != 'schedule'", block, name)
+
+    def test_each_sanitizer_slot_has_one_writer(self):
+        # tests and backend share a slot the tests job writes; slow compiles the full test_aot,
+        # which is in no other job's objects, so it keeps a slot of its own
+        text = self.read("build_matrix.yml")
+        self.assertIn("github.ref == 'refs/heads/master' && matrix.phase != 'backend'", text)
+        self.assertEqual(text.count("${{ matrix.phase == 'slow' && '-slow' || '' }}@"), 4)
+        self.assertNotIn("matrix.nightly_only != 'ON'", text)
+
+    def test_the_three_test_steps_gate_on_the_phase(self):
+        text = self.read("build_matrix.yml")
+        self.assertIn("(matrix.phase == 'all' || matrix.phase == 'tests')", text)
+        self.assertIn("inputs.lane == 'build_nightly' && matrix.phase == 'slow'", text)
+        self.assertIn("inputs.lane == 'build_nightly' && matrix.phase == 'backend'", text)
+
+    def test_slots_are_saved_under_a_run_key_and_restored_by_prefix(self):
+        # a delete-then-save refresh left the key empty for the length of a build, and a run
+        # cancelled between the two left it empty for good; a run-unique key with a prefix restore
+        # never has a gap, and the prune after the save keeps one entry per slot
+        for name in ("build.yml", "build_matrix.yml", "nightly.yml", "extended_checks.yml"):
+            text = self.read(name)
+            self.assertNotIn("Refresh sccache slot", text, name)
+            restores = re.findall(r"- name: \"Restore sccache objects\"\n((?:      .*\n)+)", text)
+            saves = re.findall(r"- name: \"Save sccache objects\"\n((?:      .*\n)+)", text)
+            prunes = text.count('- name: "Prune older sccache slots"')
+            self.assertTrue(restores, name)
+            self.assertEqual(len(saves), len(restores), name)
+            self.assertEqual(prunes, len(saves), name)
+            for block in restores:
+                self.assertRegex(block, r"key: sccache-[^\n]+@\$\{\{ github\.run_id \}\}\n", name)
+                self.assertRegex(block, r"restore-keys: sccache-[^\n]+@\n", name)
+            for block in saves:
+                self.assertRegex(block, r"key: sccache-[^\n]+@\$\{\{ github\.run_id \}\}\n", name)
+
+    def test_every_workflow_restores_sccache_by_prefix(self):
+        # a consumer in another workflow that restores a slot by its exact old name would go cold
+        # the moment the writer moved to run keys
+        for name in sorted(os.listdir(WORKFLOWS)):
+            if not name.endswith(".yml"):
+                continue
+            text = self.read(name)
+            for block in re.findall(r"uses: actions/cache/restore@v4\n((?:      .*\n)+)", text):
+                if "key: sccache-" not in block:
+                    continue
+                self.assertRegex(block, r"key: sccache-[^\n]+@\$\{\{ github\.run_id \}\}\n", name)
+                self.assertRegex(block, r"restore-keys: sccache-[^\n]+@\n", name)
+
+    def test_master_push_builds_are_not_cancelled_by_the_next_merge(self):
+        text = self.read("build.yml")
+        self.assertIn("cancel-in-progress: ${{ github.event_name == 'pull_request' }}", text)
+
+    def test_the_slot_is_saved_after_the_lane_compiled(self):
+        # Build only configures; the lane targets compile, so a save placed before them lands
+        # an empty slot
+        text = self.read("build_matrix.yml")
+        self.assertLess(text.index('- name: "Nightly Backend Sweeps"'), text.index('- name: "Save sccache objects"'))
+
+    # the checks that run only on the nightly cron, pinned by name: moving another off the
+    # per-PR path is a deliberate edit here, with its preflight mirror or platform reason stated
+    NIGHTLY_ONLY = {
+        "run_examples",
+        "dry_run_tutorials",
+        "check_doc_verify",
+        "check_nano_arm",
+        "check_ast_verify_tree",
+        "run_coverage",
+        "run_tests_llvm_tune_slow",
+    }
+
+    def test_nightly_only_checks_are_exactly_the_pinned_set(self):
+        """extended_checks.yml runs one group target per role; ci/CMakeLists.txt assigns the
+        checks, so the nightly-only set is read there rather than from step conditions."""
+        text = open(os.path.join(os.path.dirname(HERE), "ci", "CMakeLists.txt"), encoding="utf-8").read()
+        body = text.split("set(DAS_EXTENDED_NIGHTLY", 1)[1].split("das_lane_group", 1)[0]
+        named = set(re.findall(r"\b(?:check|run|dry)_[a-z_0-9]+", body))
+        self.assertEqual(named, self.NIGHTLY_ONLY)
+
+
+class CommandLine(unittest.TestCase):
+    def run_tool(self, *args):
+        tool = os.path.join(HERE, "ci_matrix.py")
+        return subprocess.run([sys.executable, tool, *args], capture_output=True, text=True)
+
+    def test_emits_one_json_line_the_workflow_can_fromjson(self):
+        for kind in ("build", "extended"):
+            out = self.run_tool(kind)
+            self.assertEqual(out.returncode, 0, out.stderr)
+            self.assertEqual(out.stdout.count("\n"), 1)
+            self.assertIn("include", json.loads(out.stdout))
+
+    def test_rejects_an_unknown_matrix(self):
+        self.assertEqual(self.run_tool("release").returncode, 2)
+
+    def test_rejects_a_missing_lane(self):
+        self.assertEqual(self.run_tool().returncode, 2)
+
+    def test_each_kind_emits_its_own_cell_shape(self):
+        build = json.loads(self.run_tool("build").stdout)["include"]
+        extended = json.loads(self.run_tool("extended").stdout)["include"]
+        self.assertTrue(all("sanitizers" in c and "role" not in c for c in build))
+        self.assertTrue(all("role" in c and "sanitizers" not in c for c in extended))
+
+
+if __name__ == "__main__":
+    unittest.main()
+%%
+File: ci/test_deb_build.py
+
+#!/usr/bin/env python3
+"""Fixture tests for ci/packaging/deb_build.sh -- the control file and links it renders.
+
+Each test stages a tiny fake bundle in a tempdir and reads `--control-only`, so no
+dpkg-deb is needed; the payload itself is proven by the release lanes' post-build smoke.
+
+Run: python3 ci/test_deb_build.py
+"""
+import os
+import shutil
+import subprocess
+import tempfile
+import unittest
+
+SCRIPT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "packaging", "deb_build.sh")
+
+
+class DebControlTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp)
+
+    def stage(self, rels):
+        bundle = os.path.join(self.tmp, "bundle")
+        for rel in rels:
+            p = os.path.join(bundle, rel)
+            os.makedirs(os.path.dirname(p), exist_ok=True)
+            with open(p, "wb") as f:
+                f.write(b"\x7fELF")
+            os.chmod(p, 0o755)
+        return bundle
+
+    def control(self, bundle, tag, *pre):
+        return subprocess.run(["bash", SCRIPT, "--control-only", *pre, bundle, tag],
+                              check=True, capture_output=True, text=True).stdout
+
+    def field(self, text, name):
+        return [ln for ln in text.splitlines() if ln.startswith(name + ":")][0].split(":", 1)[1].strip()
+
+    def test_rc_tag_sorts_before_the_release(self):
+        out = self.control(self.stage(["bin/daslang"]), "v0.6.5-RC2")
+        self.assertEqual(self.field(out, "Version"), "0.6.5~rc2")
+
+    def test_daslang_declares_no_dependencies(self):
+        out = self.control(self.stage(["bin/daslang", "bin/daslang-live"]), "v0.6.5")
+        self.assertEqual(self.field(out, "Package"), "daslang")
+        self.assertNotIn("Depends:", out)
+        self.assertIn("link: /usr/bin/daslang -> /opt/daslang/bin/daslang\n", out)
+        self.assertIn("link: /usr/bin/daslang-live -> /opt/daslang/bin/daslang-live\n", out)
+
+    def test_tools_and_watchdog_are_linked_by_their_command_names(self):
+        out = self.control(self.stage(["bin/daslang", "bin/lint.exe", "bin/dastest.exe", "bin/watchdog"]), "v0.6.5")
+        self.assertIn("link: /usr/bin/lint -> /opt/daslang/bin/lint.exe\n", out)
+        self.assertIn("link: /usr/bin/dastest -> /opt/daslang/bin/dastest.exe\n", out)
+        self.assertIn("link: /usr/bin/daslang-watchdog -> /opt/daslang/bin/watchdog\n", out)
+        self.assertNotIn("/usr/bin/watchdog", out, "the Debian watchdog package owns that name")
+
+    def test_description_continuation_lines_are_indented(self):
+        out = self.control(self.stage(["bin/daslang"]), "v0.6.5")
+        after = out.split("Description:", 1)[1].splitlines()[1:]
+        self.assertTrue(after and all(ln.startswith(" ") for ln in after if not ln.startswith("link:")))
+
+    def test_missing_out_dir_is_usage(self):
+        r = subprocess.run(["bash", SCRIPT, self.stage(["bin/daslang"]), "v0.6.5"], capture_output=True, text=True)
+        self.assertEqual(r.returncode, 2)
+        self.assertIn("usage:", r.stderr)
+
+    def test_dasllama_own_tag_bares_to_its_version(self):
+        bundle = self.stage(["dasllama-server.exe", "watchdog"])
+        out = self.control(bundle, "dasllama-v0.7.0-RC1", "--package", "dasllama")
+        self.assertEqual(self.field(out, "Version"), "0.7.0~rc1")
+
+    def test_dasllama_depends_and_links(self):
+        bundle = self.stage(["dasllama-server.exe", "dasllama-cli.exe", "dasllama-bench.exe", "watchdog"])
+        out = self.control(bundle, "v0.6.5", "--package", "dasllama")
+        self.assertEqual(self.field(out, "Package"), "dasllama")
+        self.assertEqual(self.field(out, "Depends"), "libssl3 | libssl3t64, curl")
+        self.assertIn("link: /usr/bin/dasllama-server -> /opt/dasllama/dasllama-server.exe\n", out)
+        self.assertIn("link: /usr/bin/dasllama-watchdog -> /opt/dasllama/watchdog\n", out)
+
+
+if __name__ == "__main__":
+    unittest.main()
+%%
+File: ci/test_render_manifests.py
+
+#!/usr/bin/env python3
+"""Fixture tests for ci/packaging/render_manifests.py -- the Homebrew and scoop manifests.
+
+Each test writes fake `<asset>.sha256` files into a tempdir and renders the real
+templates, so no release or network is needed.
+
+Run: python3 ci/test_render_manifests.py
+"""
+import hashlib
+import json
+import os
+import shutil
+import subprocess
+import sys
+import tempfile
+import unittest
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "packaging"))
+import render_manifests as rm
+from packages import PROFILES
+
+ASSETS = {
+    "daslang": ["daslang-bundle-darwin26-arm64.zip", "daslang-bundle-linux-x86_64.zip",
+                "daslang-bundle-linux-arm64.zip", "daslang-bundle-windows-x86_64.zip"],
+    "dasllama": ["dasllama-darwin-arm64.zip", "dasllama-linux-x86_64.tar.gz",
+                 "dasllama-linux-arm64.tar.gz", "dasllama-windows-x64.zip"],
+}
+
+
+def fake_sha(asset):
+    return hashlib.sha256(asset.encode()).hexdigest()
+
+
+def git_bash():
+    """The bash the release workflows' `shell: bash` runs - Git's on Windows, where a bare
+    `bash` from Python resolves to System32's WSL launcher first."""
+    if os.name != "nt":
+        return shutil.which("bash")
+    git = shutil.which("git")
+    root = os.path.dirname(git) if git else ""
+    while root and os.path.dirname(root) != root:
+        candidate = os.path.join(root, "bin", "bash.exe")
+        if os.path.isfile(candidate):
+            return candidate
+        root = os.path.dirname(root)
+    return None
+
+
+class RenderManifestsTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.sha = os.path.join(self.tmp, "sha")
+        self.out = os.path.join(self.tmp, "out")
+        os.makedirs(self.sha)
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp)
+
+    def stage(self, assets):
+        for a in assets:
+            with open(os.path.join(self.sha, a + ".sha256"), "w") as f:
+                f.write(f"{fake_sha(a)}  {a}\n")
+
+    def read(self, rel):
+        with open(os.path.join(self.out, rel)) as f:
+            return f.read()
+
+    def test_version_is_the_tag_without_v_lowercased(self):
+        self.assertEqual(rm.manifest_version("v0.6.4-RC4"), "0.6.4-rc4")
+        self.assertEqual(rm.manifest_version("v0.6.5"), "0.6.5")
+        self.assertEqual(rm.manifest_version("0.6.5-RC1"), "0.6.5-rc1")
+        self.assertEqual(rm.manifest_version("V0.6.5"), "0.6.5")
+        self.assertEqual(rm.manifest_version("dasllama-v0.7.0-RC1"), "0.7.0-rc1")
+        self.assertEqual(rm.manifest_version("dasllama-v0.7.0"), "0.7.0")
+
+    def test_dasllama_own_tag_keeps_its_prefix_in_every_url(self):
+        self.stage(ASSETS["dasllama"])
+        rm.render_package("dasllama", "dasllama-v0.7.0-RC1", self.sha, self.out)
+        formula = self.read("homebrew-daslang/Formula/dasllama.rb")
+        cask = self.read("homebrew-daslang/Casks/dasllama.rb")
+        bucket = json.loads(self.read("scoop-daslang/bucket/dasllama.json"))
+        self.assertIn('version "0.7.0-rc1"', formula)
+        self.assertIn("/download/dasllama-v0.7.0-RC1/dasllama-linux-x86_64.tar.gz", formula)
+        self.assertIn("/download/dasllama-v0.7.0-RC1/dasllama-darwin-arm64.zip", cask)
+        self.assertEqual(bucket["version"], "0.7.0-rc1")
+        self.assertIn("/download/dasllama-v0.7.0-RC1/dasllama-windows-x64.zip", bucket["url"])
+        self.assertIn("/download/dasllama-v$version/", bucket["autoupdate"]["url"])
+        self.assertIn("dasllama-v", bucket["checkver"]["regex"], "the bucket's version check reads dasllama's tags, not daslang's")
+
+    def test_daslang_bucket_version_check_ignores_dasllama_tags(self):
+        self.stage(ASSETS["daslang"])
+        rm.render_package("daslang", "v0.6.5", self.sha, self.out)
+        bucket = json.loads(self.read("scoop-daslang/bucket/daslang.json"))
+        import re
+        rx = re.compile(bucket["checkver"]["regex"])
+        self.assertEqual(rx.search('href="/GaijinEntertainment/daScript/releases/tag/v0.6.5"').group(1), "0.6.5")
+        self.assertIsNone(rx.search('href="/GaijinEntertainment/daScript/releases/tag/dasllama-v0.7.0"'))
+
+    def test_every_package_renders_every_manifest(self):
+        for package, assets in ASSETS.items():
+            self.stage(assets)
+            written = rm.render_package(package, "v0.6.5-RC1", self.sha, self.out)
+            want = sum(len(files) for files in PROFILES[package]["manifests"].values())
+            self.assertEqual(len(written), want, package)
+
+    def test_dasllama_formula_cask_and_bucket(self):
+        self.stage(ASSETS["dasllama"])
+        rm.render_package("dasllama", "v0.6.5-RC1", self.sha, self.out)
+        formula = self.read("homebrew-daslang/Formula/dasllama.rb")
+        cask = self.read("homebrew-daslang/Casks/dasllama.rb")
+        bucket = json.loads(self.read("scoop-daslang/bucket/dasllama.json"))
+        self.assertTrue(formula.startswith("class Dasllama < Formula"), "the template header is dropped")
+        self.assertIn('version "0.6.5-rc1"', formula)
+        self.assertIn("/download/v0.6.5-RC1/dasllama-linux-arm64.tar.gz", formula)
+        self.assertIn(fake_sha("dasllama-linux-arm64.tar.gz"), formula)
+        self.assertTrue(cask.startswith('cask "dasllama" do'))
+        self.assertIn(f'sha256 "{fake_sha("dasllama-darwin-arm64.zip")}"', cask)
+        self.assertEqual(bucket["hash"], fake_sha("dasllama-windows-x64.zip"))
+        self.assertEqual(bucket["version"], "0.6.5-rc1")
+        self.assertNotIn("@", json.dumps(bucket["url"]))
+        self.assertIn(["watchdog.exe", "dasllama-watchdog"], bucket["bin"], "a renamed command is [exe, alias]")
+        self.assertIn("dasllama-cli.exe", bucket["bin"], "a same-named command is its exe alone")
+        self.assertIn('"dasllama-watchdog" => "watchdog"', formula, "the mac and linux link tables")
+        self.assertIn('"dasllama-cli" => "dasllama-cli.exe"', formula)
+        self.assertIn('Contents/MacOS/watchdog", target: "dasllama-watchdog"', cask)
+        self.assertIn('Contents/MacOS/dasllama-cli"\n', cask, "a same-named binary needs no target")
+
+    def test_daslang_bucket_lists_every_tool_by_path(self):
+        self.stage(ASSETS["daslang"])
+        rm.render_package("daslang", "v0.6.5", self.sha, self.out)
+        bucket = json.loads(self.read("scoop-daslang/bucket/daslang.json"))
+        self.assertEqual(bucket["bin"][0], "bin\\daslang.exe")
+        self.assertEqual(len(bucket["bin"]), 10)
+        self.assertIn(["bin\\watchdog.exe", "daslang-watchdog"], bucket["bin"], "the watchdog under the package's name")
+        formula = self.read("homebrew-daslang/Formula/daslang.rb")
+        self.assertIn('"lint" => "bin/lint.exe"', formula, "a tool links to its exe in the bundle")
+        self.assertIn('"daslang-watchdog" => "bin/watchdog"', formula)
+
+    def test_missing_asset_is_fatal(self):
+        self.stage(ASSETS["dasllama"][:-1])
+        with self.assertRaises(SystemExit) as cm:
+            rm.render_package("dasllama", "v0.6.5", self.sha, self.out)
+        self.assertIn("dasllama-windows-x64.zip", str(cm.exception))
+
+    def test_malformed_sha_is_fatal(self):
+        self.stage(ASSETS["daslang"])
+        with open(os.path.join(self.sha, ASSETS["daslang"][0] + ".sha256"), "w") as f:
+            f.write("not-a-hash  x\n")
+        with self.assertRaises(SystemExit):
+            rm.render_package("daslang", "v0.6.5", self.sha, self.out)
+
+    @unittest.skipUnless(git_bash(), "no bash to run checksum_assets.sh")
+    def test_checksum_script_writes_what_the_render_reads(self):
+        here = os.path.join(os.path.dirname(os.path.abspath(__file__)), "packaging")
+        for a in ASSETS["dasllama"]:
+            with open(os.path.join(self.sha, a), "w") as f:
+                f.write(a)
+        with open(os.path.join(self.sha, "stale.sha256"), "w") as f:
+            f.write("left alone\n")
+        subprocess.run([git_bash(), os.path.join(here, "checksum_assets.sh"), self.sha], check=True, capture_output=True)
+        self.assertFalse(os.path.exists(os.path.join(self.sha, "stale.sha256.sha256")), "a .sha256 is never summed")
+        rm.render_package("dasllama", "v0.6.5", self.sha, self.out)
+        bucket = json.loads(self.read("scoop-daslang/bucket/dasllama.json"))
+        self.assertEqual(bucket["hash"], hashlib.sha256(b"dasllama-windows-x64.zip").hexdigest())
+
+    def test_bad_arguments_are_usage(self):
+        here = os.path.join(os.path.dirname(os.path.abspath(__file__)), "packaging")
+        for script in ("render_manifests.py", "packages.py"):
+            r = subprocess.run([sys.executable, os.path.join(here, script), "only-one"], capture_output=True, text=True)
+            self.assertNotEqual(r.returncode, 0, script)
+            self.assertIn("usage:", r.stderr, script)
+
+    def test_unknown_placeholder_is_fatal(self):
+        with self.assertRaises(SystemExit):
+            rm.render("url @TAG@ @OOPS@", "v1.0.0", self.sha)
+
+
+if __name__ == "__main__":
+    unittest.main()
+%%
+File: ci/test_rpm_build.py
+
+#!/usr/bin/env python3
+"""Fixture tests for ci/packaging/rpm_build.sh -- the spec it renders.
+
+Each test stages a tiny fake bundle in a tempdir and reads the spec from
+`--spec-only`, so no rpmbuild is needed; the payload itself is proven by the
+release lane's post-build smoke.
+
+Run: python3 ci/test_rpm_build.py
+"""
+import os
+import shutil
+import subprocess
+import tempfile
+import unittest
+
+SCRIPT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "packaging", "rpm_build.sh")
+
+
+class RpmSpecTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.bundle = os.path.join(self.tmp, "daslang_bundle")
+        os.makedirs(os.path.join(self.bundle, "bin"))
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp)
+
+    def stage_exe(self, name):
+        p = os.path.join(self.bundle, "bin", name)
+        with open(p, "wb") as f:
+            f.write(b"\x7fELF")
+        os.chmod(p, 0o755)
+
+    def spec(self, tag):
+        return subprocess.run(["bash", SCRIPT, "--spec-only", self.bundle, tag],
+                              check=True, capture_output=True, text=True).stdout
+
+    def field(self, spec, name):
+        return [ln for ln in spec.splitlines() if ln.startswith(name + ":")][0].split(":", 1)[1].strip()
+
+    # --- version mapping ------------------------------------------------------
+
+    def test_release_tag_drops_the_v(self):
+        self.assertEqual(self.field(self.spec("v0.6.5"), "Version"), "0.6.5")
+
+    def test_rc_tag_sorts_before_the_release(self):
+        self.assertEqual(self.field(self.spec("v0.6.5-RC2"), "Version"), "0.6.5~rc2")
+
+    def test_dev_tag_has_no_hyphen(self):
+        # rpm rejects a hyphen inside Version; the workflow's dispatch default is 0.0.0-dev
+        self.assertEqual(self.field(self.spec("0.0.0-dev"), "Version"), "0.0.0_dev")
+
+    def test_missing_tag_defaults_to_dev(self):
+        out = subprocess.run(["bash", SCRIPT, "--spec-only", self.bundle],
+                             check=True, capture_output=True, text=True).stdout
+        self.assertEqual(self.field(out, "Version"), "0.0.0_dev")
+
+    # --- argument handling ----------------------------------------------------
+
+    def test_missing_out_dir_is_usage(self):
+        r = subprocess.run(["bash", SCRIPT, self.bundle, "v0.6.5"], capture_output=True, text=True)
+        self.assertEqual(r.returncode, 2)
+        self.assertIn("usage:", r.stderr)
+
+    def test_missing_bundle_dir_fails(self):
+        r = subprocess.run(["bash", SCRIPT, "--spec-only", os.path.join(self.tmp, "nope"), "v0.6.5"],
+                           capture_output=True, text=True)
+        self.assertNotEqual(r.returncode, 0)
+        self.assertEqual(r.stdout, "")
+
+    # --- payload contract -----------------------------------------------------
+
+    def test_no_dependency_scan_and_no_rewrite_of_the_bundle(self):
+        spec = self.spec("v0.6.5")
+        self.assertEqual(self.field(spec, "AutoReqProv"), "no")
+        self.assertIn("%global __os_install_post %{nil}", spec)
+        self.assertIn("%global debug_package %{nil}", spec)
+        self.assertIn("\n/opt/daslang\n", spec)
+
+    def test_only_present_binaries_are_linked(self):
+        self.stage_exe("daslang")
+        spec = self.spec("v0.6.5")
+        self.assertIn("ln -s /opt/daslang/bin/daslang %{buildroot}/usr/bin/daslang\n", spec)
+        self.assertIn("\n/usr/bin/daslang\n", spec)
+        self.assertNotIn("daslang-live", spec)
+
+    def test_both_binaries_are_linked(self):
+        self.stage_exe("daslang")
+        self.stage_exe("daslang-live")
+        spec = self.spec("v0.6.5")
+        self.assertIn("\n/usr/bin/daslang\n", spec)
+        self.assertIn("\n/usr/bin/daslang-live\n", spec)
+
+    def test_non_executable_binary_is_not_linked(self):
+        p = os.path.join(self.bundle, "bin", "daslang")
+        with open(p, "wb") as f:
+            f.write(b"\x7fELF")
+        os.chmod(p, 0o644)
+        self.assertNotIn("/usr/bin/daslang", self.spec("v0.6.5"))
+
+
+class DasllamaRpmSpecTest(unittest.TestCase):
+    """The dasllama profile: a flat bundle, its own prefix, declared requirements."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.bundle = os.path.join(self.tmp, "dasllama-server")
+        os.makedirs(self.bundle)
+        for name in ("dasllama-server.exe", "dasllama-cli.exe", "dasllama-bench.exe", "watchdog"):
+            p = os.path.join(self.bundle, name)
+            with open(p, "wb") as f:
+                f.write(b"\x7fELF")
+            os.chmod(p, 0o755)
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp)
+
+    def spec(self, tag="v0.6.5"):
+        return subprocess.run(["bash", SCRIPT, "--spec-only", "--package", "dasllama", self.bundle, tag],
+                              check=True, capture_output=True, text=True).stdout
+
+    def test_own_tag_bares_to_its_version(self):
+        spec = self.spec("dasllama-v0.7.0-RC1")
+        self.assertIn("Version: 0.7.0~rc1\n", spec)
+
+    def test_name_prefix_and_requirements(self):
+        spec = self.spec()
+        self.assertIn("Name: dasllama\n", spec)
+        self.assertIn("\n/opt/dasllama\n", spec)
+        self.assertIn("Requires: openssl-libs\n", spec)
+        self.assertIn("Requires: curl\n", spec)
+
+    def test_commands_drop_the_exe_suffix_and_rename_the_watchdog(self):
+        spec = self.spec()
+        self.assertIn("ln -s /opt/dasllama/dasllama-server.exe %{buildroot}/usr/bin/dasllama-server\n", spec)
+        self.assertIn("ln -s /opt/dasllama/watchdog %{buildroot}/usr/bin/dasllama-watchdog\n", spec)
+        self.assertNotIn("/usr/bin/watchdog", spec)
+
+    def test_unknown_package_fails(self):
+        r = subprocess.run(["bash", SCRIPT, "--spec-only", "--package", "nope", self.bundle, "v0.6.5"],
+                           capture_output=True, text=True)
+        self.assertNotEqual(r.returncode, 0)
+
+
+if __name__ == "__main__":
+    unittest.main()
+%%
+File: ci/test_tree_sitter_parse_sources.py
+
+#!/usr/bin/env python3
+"""Fixture tests for ci/tree_sitter_parse_sources.sh -- which files it hands to the parser.
+
+Each test stages a tiny git repository with the script, a rejected-sources list and .das files, and puts a stub
+`tree-sitter` on PATH that records the --paths file it receives and exits with a chosen status, so no grammar build
+is needed; the real parse runs in the tree_sitter_daslang_sources workflow.
+
+Run: python3 ci/test_tree_sitter_parse_sources.py
+"""
+import os
+import shutil
+import stat
+import subprocess
+import tempfile
+import unittest
+
+SCRIPT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "tree_sitter_parse_sources.sh")
+LIST = "ci/tree_sitter_compiler_rejected_sources.txt"
+
+STUB = """#!/usr/bin/env bash
+while (( $# )); do
+  if [[ "$1" == --paths ]]; then cp "$2" "$STUB_OUT"; fi
+  shift
+done
+exit "${STUB_RC:-0}"
+"""
+
+
+class ParseSourcesTest(unittest.TestCase):
+    def setUp(self):
+        self.repo = tempfile.mkdtemp()
+        self.bin = os.path.join(self.repo, "stub-bin")
+        os.makedirs(os.path.join(self.repo, "ci"))
+        os.makedirs(self.bin)
+        shutil.copy(SCRIPT, os.path.join(self.repo, "ci", "tree_sitter_parse_sources.sh"))
+        stub = os.path.join(self.bin, "tree-sitter")
+        with open(stub, "w") as f:
+            f.write(STUB)
+        os.chmod(stub, os.stat(stub).st_mode | stat.S_IEXEC)
+        self.out = os.path.join(self.repo, "stub-bin", "paths.txt")
+        self.git("init", "-q")
+
+    def tearDown(self):
+        shutil.rmtree(self.repo)
+
+    def git(self, *args):
+        subprocess.run(["git", *args], cwd=self.repo, check=True, capture_output=True)
+
+    def write(self, rel, data):
+        path = os.path.join(self.repo, rel)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "wb") as f:
+            f.write(data)
+
+    def run_script(self, rc=0):
+        self.git("add", "-A", "--", ".", ":!stub-bin")
+        env = dict(os.environ, PATH=self.bin + os.pathsep + os.environ["PATH"], STUB_OUT=self.out,
+                   STUB_RC=str(rc))
+        return subprocess.run(["bash", "ci/tree_sitter_parse_sources.sh"], cwd=self.repo, env=env,
+                              capture_output=True, text=True)
+
+    def parsed(self):
+        with open(self.out) as f:
+            return sorted(line.strip() for line in f if line.strip())
+
+    def test_selects_gen2_files_by_their_first_marker(self):
+        self.write("gen2.das", b"options gen2\ndef f() {\n}\n")
+        self.write("no_marker.das", b"def f() {\n}\n")
+        self.write("gen1.das", b"options gen2 = false\n")
+        self.write("gen1_tight.das", b"  options gen2=false\n")
+        self.write("gen1_bom.das", b"\xef\xbb\xbfoptions gen2 = false\n")
+        self.write("first_marker_wins.das", b"options gen2\n//fmt:ignore-file\noptions gen2 = false\n")
+        self.write("other_option.das", b"options gen2_extra = false\n")
+        self.write("rejected.das", b"options gen2\ndef (\n")
+        self.write(LIST, b"# comment\n\nrejected.das\n")
+        result = self.run_script()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.parsed(), ["first_marker_wins.das", "gen2.das", "no_marker.das", "other_option.das"])
+
+    def test_fails_when_the_parse_fails(self):
+        self.write("gen2.das", b"options gen2\n")
+        self.write(LIST, b"")
+        result = self.run_script(rc=1)
+        self.assertNotEqual(result.returncode, 0)
+
+    def test_fails_on_a_list_entry_git_does_not_track(self):
+        self.write("gen2.das", b"options gen2\n")
+        self.write(LIST, b"gone.das\n")
+        result = self.run_script()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("gone.das", result.stderr)
+        self.assertFalse(os.path.exists(self.out), "the parse does not run")
+
+
+if __name__ == "__main__":
+    unittest.main()
+%%
+File: ci/test_wheel_build.py
+
+#!/usr/bin/env python3
+"""Fixture tests for ci/packaging/wheel_build.py -- the pip wheel repack.
+
+Each test stages a tiny fake bundle in a tempdir and checks one contract.
+
+Run: python3 ci/test_wheel_build.py
+"""
+import os
+import shutil
+import struct
+import sys
+import tempfile
+import unittest
+import zipfile
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "packaging"))
+import wheel_build as wb
+
+
+def elf_with(*versions):
+    return b"\x7fELF" + b"\0" * 60 + b"".join(f"GLIBC_{v}\0".encode() for v in versions)
+
+
+def macho_with(minos_major, minos_minor, legacy=False):
+    """One load command: LC_BUILD_VERSION, or LC_VERSION_MIN_MACOSX when legacy."""
+    hdr = struct.pack("<IIIIIIII", wb.MH_MAGIC_64, 0x0100000C, 0, 2, 1, 24 if not legacy else 16, 0, 0)
+    mo = (minos_major << 16) | (minos_minor << 8)
+    if legacy:
+        return hdr + struct.pack("<IIII", wb.LC_VERSION_MIN_MACOSX, 16, mo, mo)
+    return hdr + struct.pack("<IIIIII", wb.LC_BUILD_VERSION, 24, 1, mo, mo, 0)
+
+
+class BundleFixture(unittest.TestCase):
+    """A tempdir with the bundle under BUNDLE_DIR and an out dir; stage() writes files into it."""
+    BUNDLE_DIR = "daslang_bundle"
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.bundle = os.path.join(self.tmp, self.BUNDLE_DIR)
+        self.out = os.path.join(self.tmp, "out")
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp)
+
+    def stage(self, files):
+        for rel, data in files.items():
+            p = os.path.join(self.bundle, rel)
+            os.makedirs(os.path.dirname(p), exist_ok=True)
+            with open(p, "wb") as f:
+                f.write(data)
+
+
+class WheelBuildTest(BundleFixture):
+
+    def windows_exes(self):
+        """Every command's Windows executable - the last candidate of each."""
+        return {wb.profile("daslang")["commands"][t][-1]: b"MZ" for t in wb.TOOLS}
+
+    def stage_minimal(self, extra=None):
+        files = {"LICENSE": b"BSD", "README.md": b"# daslang", "daslib/strings.das": b"// das"}
+        files.update(self.windows_exes())
+        files.update(extra or {})
+        self.stage(files)
+
+    def zip_names(self, whl):
+        with zipfile.ZipFile(whl) as z:
+            return set(z.namelist())
+
+    # --- version mapping ------------------------------------------------------
+
+    def test_pep440_mapping(self):
+        self.assertEqual(wb.pep440("v0.6.4-RC1"), "0.6.4rc1")
+        self.assertEqual(wb.pep440("v0.6.4-rc2"), "0.6.4rc2")
+        self.assertEqual(wb.pep440("v0.6.4"), "0.6.4")
+        self.assertEqual(wb.pep440("0.6.4"), "0.6.4")
+        self.assertEqual(wb.pep440("0.0.0-dev"), "0.0.0.dev0")
+        self.assertEqual(wb.pep440("dasllama-v0.7.0-RC1"), "0.7.0rc1")
+        self.assertEqual(wb.pep440("dasllama-v0.7.0"), "0.7.0")
+
+    def test_pep440_rejects_garbage_and_unhandled_prerelease_shapes(self):
+        for tag in ("nightly-2026-08-18", "v0.6.4-beta1", "v0.6.4-RC", "v0.6"):
+            with self.assertRaises(SystemExit, msg=tag):
+                wb.pep440(tag)
+
+    # --- payload filter -------------------------------------------------------
+
+    def test_filter_drops_static_libs_and_media_keeps_headers_and_import_libs(self):
+        keep = ["bin/daslang", "lib/liblibDaScriptDyn.so", "lib/LLVM.dll",
+                "lib/libDaScriptDyn_runtime.lib", "lib/libDaScriptDyn.lib",
+                "daslib/x.das", "modules/dasHV/x.das", "tutorials/language/01.das",
+                "modules/dasImgui/examples/tutorial/application_lifecycle.das",
+                "skills/daslang/SKILL.md", "utils/mcp/main.das", "sgconfig.yml", "LICENSE",
+                "include/daScript/daScript.h", "include/vecmath/dag_vecMath.h", "nano/CMakeLists.txt"]
+        drop = ["lib/libDaScript.lib", "lib/liblibDaScript.a",
+                "lib/libDasModuleVulkan.lib", "lib/cmake/daslang/config.cmake",
+                "lib/pkgconfig/daslang.pc", "examples/gltf/media/BoomBox.glb",
+                "tutorials/_assets/gltf/BoomBox.glb", "doc/index.html", "logs/x.log",
+                "modules/dasImgui/examples/features/text_input/fonts/noto-cjk/NotoSansCJKsc-Regular.otf",
+                "modules/dasImgui/examples/features/text_input/main.das"]
+        for rel in keep:
+            self.assertTrue(wb.is_shipped(rel), rel)
+        for rel in drop:
+            self.assertFalse(wb.is_shipped(rel), rel)
+
+    # --- platform tag ---------------------------------------------------------
+
+    def test_linux_tag_is_the_highest_glibc_any_binary_needs(self):
+        self.stage({"bin/daslang": elf_with("2.17", "2.34"),
+                    "lib/liblibDaScriptDyn_runtime.so": elf_with("2.38", "2.2.5"),
+                    "bin/README.txt": b"GLIBC_9.9 in a non-ELF file under bin/ must not count",
+                    "daslib/tool.so": elf_with("9.8") + b" an ELF outside bin/ and lib/ must not count"})
+        files = list(wb.bundle_files(self.bundle))
+        self.assertEqual(wb.detect_platform_tag(files, "Linux", "x86_64"), "manylinux_2_38_x86_64")
+        self.assertEqual(wb.detect_platform_tag(files, "Linux", "aarch64"), "manylinux_2_38_aarch64")
+
+    def test_macos_tag_is_the_highest_minos_major_zero(self):
+        self.stage({"bin/daslang": macho_with(26, 0), "lib/LLVM.dll": macho_with(14, 0)})
+        files = list(wb.bundle_files(self.bundle))
+        self.assertEqual(wb.detect_platform_tag(files, "Darwin", "arm64"), "macosx_26_0_arm64")
+
+    def test_macos_tag_pins_minor_to_zero_from_11_and_reads_the_legacy_command(self):
+        self.stage({"bin/daslang": macho_with(14, 5)})
+        self.assertEqual(wb.detect_platform_tag(list(wb.bundle_files(self.bundle)), "Darwin", "arm64"), "macosx_14_0_arm64")
+        self.stage({"bin/daslang": macho_with(10, 15, legacy=True)})
+        self.assertEqual(wb.detect_platform_tag(list(wb.bundle_files(self.bundle)), "Darwin", "x86_64"), "macosx_10_15_x86_64")
+
+    def test_windows_tag(self):
+        self.assertEqual(wb.detect_platform_tag([], "Windows", "AMD64"), "win_amd64")
+        self.assertEqual(wb.detect_platform_tag([], "Windows", "ARM64"), "win_arm64")
+
+    def test_unknown_machine_is_an_error_not_a_traceback(self):
+        with self.assertRaises(SystemExit):
+            wb.detect_platform_tag([], "Windows", "mips")
+        self.stage({"bin/daslang": elf_with("2.34")})
+        with self.assertRaises(SystemExit):
+            wb.detect_platform_tag(list(wb.bundle_files(self.bundle)), "Linux", "riscv64")
+
+    def test_symlinks_stay_inside_the_bundle(self):
+        self.stage({"lib/libglfw.3.4.dylib": b"real", "daslib/x.das": b"//"})
+        outside = os.path.join(self.tmp, "outside.txt")
+        with open(outside, "wb") as f:
+            f.write(b"secret")
+        try:
+            os.symlink(os.path.join(self.bundle, "lib", "libglfw.3.4.dylib"), os.path.join(self.bundle, "lib", "libglfw.dylib"))
+        except (OSError, NotImplementedError):
+            self.skipTest("symlinks unavailable on this host")
+        files = dict(wb.bundle_files(self.bundle))
+        self.assertIn(os.path.join(self.bundle, "lib", "libglfw.dylib"), files)  # in-bundle alias ships
+        os.symlink(outside, os.path.join(self.bundle, "lib", "escape.so"))
+        with self.assertRaises(SystemExit):
+            list(wb.bundle_files(self.bundle))
+
+    def test_no_binaries_is_an_error_not_a_guess(self):
+        self.stage({"daslib/x.das": b"//"})
+        with self.assertRaises(SystemExit):
+            wb.detect_platform_tag(list(wb.bundle_files(self.bundle)), "Linux", "x86_64")
+
+    # --- the wheel itself -----------------------------------------------------
+
+    def test_native_wheel_layout(self):
+        self.stage_minimal({"lib/libDaScript.lib": b"x" * 10, "include/a.h": b"//",
+                      "bin/daslang-live.exe": b"MZ", "bin/watchdog.exe": b"MZ"})
+        whl = wb.build(self.bundle, "v0.6.4-RC1", self.out, platform_tag="win_amd64")
+        self.assertTrue(whl.endswith("daslang-0.6.4rc1-py3-none-win_amd64.whl"))
+        names = self.zip_names(whl)
+        data_dir = "daslang-0.6.4rc1.data"
+        for n in ("daslang/__init__.py", "daslang/__main__.py",
+                  f"{data_dir}/scripts/daslang.exe", f"{data_dir}/scripts/lint.exe", f"{data_dir}/scripts/dastest.exe",
+                  f"{data_dir}/scripts/daslang-live.exe", f"{data_dir}/scripts/daslang-watchdog.exe",
+                  f"{data_dir}/scripts/daslang.root",
+                  f"{data_dir}/data/daslang_sdk/bin/daslang.exe", f"{data_dir}/data/daslang_sdk/daslib/strings.das",
+                  f"{data_dir}/data/daslang_sdk/include/a.h",
+                  "daslang-0.6.4rc1.dist-info/METADATA", "daslang-0.6.4rc1.dist-info/WHEEL",
+                  "daslang-0.6.4rc1.dist-info/RECORD", "daslang-0.6.4rc1.dist-info/LICENSE"):
+            self.assertIn(n, names)
+        for n in ("daslang/_cli.py", "daslang-0.6.4rc1.dist-info/entry_points.txt",
+                  f"{data_dir}/data/daslang_sdk/lib/libDaScript.lib"):
+            self.assertNotIn(n, names)
+        with zipfile.ZipFile(whl) as z:
+            self.assertEqual(z.read(f"{data_dir}/scripts/daslang.root"), b"../daslang_sdk\n../../daslang_sdk\n",
+                             "one candidate per pip layout, the venv's first")
+            self.assertEqual(z.read(f"{data_dir}/scripts/daslang-watchdog.exe"), b"MZ", "the watchdog's bytes under the package's command name")
+            self.assertEqual(z.read(f"{data_dir}/scripts/lint.exe"), z.read(f"{data_dir}/data/daslang_sdk/bin/lint.exe"))
+            wheel = z.read("daslang-0.6.4rc1.dist-info/WHEEL").decode()
+            self.assertIn("Tag: py3-none-win_amd64", wheel)
+            self.assertIn("Root-Is-Purelib: false", wheel)
+            meta = z.read("daslang-0.6.4rc1.dist-info/METADATA").decode()
+            self.assertIn("Version: 0.6.4rc1", meta)
+            self.assertIn("# daslang", meta)
+            for name in (f"{data_dir}/scripts/daslang.exe", f"{data_dir}/scripts/lint.exe",
+                         f"{data_dir}/data/daslang_sdk/bin/daslang.exe", f"{data_dir}/data/daslang_sdk/bin/daslang-live.exe"):
+                mode = (z.getinfo(name).external_attr >> 16) & 0o777
+                self.assertTrue(mode & 0o111, f"{name} not executable: {oct(mode)}")
+            record = z.read("daslang-0.6.4rc1.dist-info/RECORD").decode().splitlines()
+            listed = {line.split(",")[0] for line in record}
+            self.assertEqual(listed, names)
+            for line in record:
+                name, digest, size = line.split(",")
+                if name.endswith("/RECORD"):
+                    continue
+                payload = z.read(name)
+                self.assertEqual(int(size), len(payload), name)
+                self.assertEqual(digest, wb.urlsafe_sha256(payload), name)
+            compile(z.read("daslang/__main__.py"), "__main__.py", "exec")
+            compile(z.read("daslang/__init__.py"), "__init__.py", "exec")
+            init = z.read("daslang/__init__.py").decode()
+            self.assertIn('LAUNCH = "native"', init)
+            self.assertIn("'daslang-watchdog': ['bin/watchdog', 'bin/watchdog.exe']", init,
+                          "the watchdog keeps its bundle name behind the package's command")
+            self.assertIn("'lint': ['bin/lint.exe']", init, "a tool's exe keeps .exe on every platform")
+            main = z.read("daslang/__main__.py").decode()
+            self.assertIn('run("daslang")', main, "python -m daslang hands over to the bundle's daslang")
+            self.assertNotIn("_cli", main)
+            self.assertIn("def run(name):", init, "the hand-over lives in the package, shared with the shim layout")
+
+    def test_native_posix_scripts_drop_the_exe_suffix(self):
+        """A tool copy named `lint` dispatches as the lint tool: daslang strips .exe from its own
+        name, so the POSIX script is the bare command."""
+        self.stage_minimal({"bin/daslang": elf_with("2.34"), "bin/daslang-live": elf_with("2.34"),
+                            "bin/watchdog": elf_with("2.34")})
+        whl = wb.build(self.bundle, "v0.6.4", self.out, system="Linux", machine="x86_64")
+        names = self.zip_names(whl)
+        data_dir = "daslang-0.6.4.data"
+        for n in (f"{data_dir}/scripts/daslang", f"{data_dir}/scripts/lint", f"{data_dir}/scripts/das-fmt",
+                  f"{data_dir}/scripts/daslang-live", f"{data_dir}/scripts/daslang-watchdog", f"{data_dir}/scripts/daslang.root"):
+            self.assertIn(n, names)
+        self.assertNotIn(f"{data_dir}/scripts/lint.exe", names)
+        with zipfile.ZipFile(whl) as z:
+            self.assertEqual(z.read(f"{data_dir}/scripts/lint"), z.read(f"{data_dir}/data/daslang_sdk/bin/lint.exe"))
+            self.assertEqual(z.read(f"{data_dir}/scripts/daslang"), elf_with("2.34"))
+
+    def test_missing_license_is_fatal(self):
+        self.stage(self.windows_exes())
+        with self.assertRaises(SystemExit):
+            wb.build(self.bundle, "v0.6.4", self.out, platform_tag="win_amd64")
+
+    def test_readme_absent_falls_back_to_the_summary(self):
+        self.stage_minimal()
+        os.remove(os.path.join(self.bundle, "README.md"))
+        whl = wb.build(self.bundle, "v0.6.4", self.out, platform_tag="win_amd64")
+        with zipfile.ZipFile(whl) as z:
+            self.assertIn(wb.profile("daslang")["summary"], z.read("daslang-0.6.4.dist-info/METADATA").decode())
+
+    def test_over_the_size_cap_is_fatal(self):
+        self.stage_minimal()
+        saved = wb.MAX_WHEEL_MB
+        wb.MAX_WHEEL_MB = 0
+        try:
+            with self.assertRaises(SystemExit):
+                wb.build(self.bundle, "v0.6.4", self.out, platform_tag="win_amd64")
+        finally:
+            wb.MAX_WHEEL_MB = saved
+
+    def test_missing_tool_binary_is_fatal(self):
+        self.stage_minimal()
+        os.remove(os.path.join(self.bundle, "bin", "dastest.exe"))
+        with self.assertRaises(SystemExit):
+            wb.build(self.bundle, "v0.6.4", self.out, platform_tag="win_amd64")
+
+
+class InstalledLayoutTest(BundleFixture):
+    """The native wheel, installed by pip: the sidecar beside the commands names the tree pip
+    unpacked, and the package finds that tree through pip's own record of the install."""
+
+    def setUp(self):
+        super().setUp()
+        self.stage({"LICENSE": b"BSD", "README.md": b"# daslang", "daslib/strings.das": b"// das",
+                    "bin/daslang": b"#!/bin/sh\necho stub\n", "bin/daslang-live": b"#!/bin/sh\n",
+                    "bin/watchdog": b"#!/bin/sh\n",
+                    **{f"bin/{t}.exe": b"#!/bin/sh\n" for t in wb.profile("daslang")["commands"]}})
+        self.whl = wb.build(self.bundle, "v0.6.4", self.out, platform_tag="manylinux_2_34_x86_64"
+                            if sys.platform.startswith("linux") else ("macosx_11_0_arm64" if sys.platform == "darwin" else "win_amd64"))
+
+    def venv(self, name):
+        import subprocess
+        venv = os.path.join(self.tmp, name)
+        r = subprocess.run([sys.executable, "-m", "venv", venv], capture_output=True)
+        if r.returncode != 0:
+            self.skipTest("no venv module on this host")
+        bindir = os.path.join(venv, "Scripts" if os.name == "nt" else "bin")
+        py = os.path.join(bindir, "python.exe" if os.name == "nt" else "python")
+        return venv, bindir, py
+
+    def pip(self, py, *args):
+        import subprocess
+        r = subprocess.run([py, "-m", "pip", "install", "--disable-pip-version-check", "-q", *args], capture_output=True, text=True)
+        if r.returncode != 0 and "No module named pip" in r.stderr:
+            self.skipTest("no pip in the venv")
+        self.assertEqual(r.returncode, 0, r.stderr)
+
+    def test_venv_install_resolves_the_sidecar_and_the_record(self):
+        import subprocess
+        venv, bindir, py = self.venv("venv")
+        self.pip(py, self.whl)
+        sidecar = os.path.join(bindir, "daslang.root")
+        self.assertTrue(os.path.isfile(sidecar), "pip put the sidecar beside the commands")
+        first = open(sidecar).read().splitlines()[0]
+        resolved = os.path.normpath(os.path.join(bindir, first))
+        self.assertEqual(resolved, os.path.join(venv, "daslang_sdk"), "the first sidecar line names the venv's tree")
+        self.assertTrue(os.path.isfile(os.path.join(resolved, "bin", "daslang")), "the tree pip unpacked is the bundle")
+        for cmd in ("daslang", "lint", "daslang-watchdog"):
+            self.assertTrue(os.path.isfile(os.path.join(bindir, cmd + (".exe" if os.name == "nt" else ""))), cmd)
+        got = subprocess.run([py, "-c", "import daslang, os; print(os.path.normpath(daslang.sdk_root()))"],
+                             capture_output=True, text=True)
+        self.assertEqual(got.returncode, 0, got.stderr)
+        self.assertEqual(os.path.realpath(got.stdout.strip()), os.path.realpath(resolved), "sdk_root() finds the same tree")
+
+    def test_target_install_resolves_through_the_record(self):
+        import subprocess
+        venv, bindir, py = self.venv("venv_t")
+        target = os.path.join(self.tmp, "target")
+        self.pip(py, "--target", target, self.whl)
+        self.assertTrue(os.path.isdir(os.path.join(target, "daslang_sdk")), "--target unpacks the tree under the target")
+        env = dict(os.environ, PYTHONPATH=target)
+        got = subprocess.run([py, "-c", "import daslang, os; print(os.path.normpath(daslang.sdk_root()))"],
+                             capture_output=True, text=True, env=env)
+        self.assertEqual(got.returncode, 0, got.stderr)
+        self.assertEqual(os.path.realpath(got.stdout.strip()), os.path.realpath(os.path.join(target, "daslang_sdk")),
+                         "a --target tree sits beside the package; pip's record points elsewhere there")
+
+
+class DasllamaWheelTest(BundleFixture):
+    """The dasllama profile: a flat bundle (or the mac .app), the repo LICENSE, no trimming."""
+    BUNDLE_DIR = "dist"
+
+    def build(self, **kw):
+        return wb.build(self.bundle, "v0.6.5-RC1", self.out, package="dasllama", **kw)
+
+    def test_flat_bundle_shims_every_command(self):
+        self.stage({"dasllama-server.exe": elf_with("2.35"), "dasllama-cli.exe": elf_with("2.35"),
+                    "dasllama-bench.exe": elf_with("2.34"), "watchdog": elf_with("2.35"),
+                    "control.html": b"<html>", "include/x.h": b"kept"})
+        whl = self.build(system="Linux", machine="x86_64")
+        self.assertTrue(whl.endswith("dasllama-0.6.5rc1-py3-none-manylinux_2_35_x86_64.whl"))
+        with zipfile.ZipFile(whl) as z:
+            names = set(z.namelist())
+            eps = z.read("dasllama-0.6.5rc1.dist-info/entry_points.txt").decode()
+            mode = z.getinfo("dasllama/_sdk/watchdog").external_attr >> 16
+            init = z.read("dasllama/__init__.py").decode()
+            main = z.read("dasllama/__main__.py").decode()
+            meta = z.read("dasllama-0.6.5rc1.dist-info/METADATA").decode()
+        self.assertIn("dasllama/_sdk/include/x.h", names)
+        self.assertIn("dasllama-0.6.5rc1.dist-info/LICENSE", names)
+        self.assertIn("dasllama-watchdog = dasllama._cli:dasllama_watchdog", eps)
+        self.assertIn("dasllama-server = dasllama._cli:dasllama_server", eps)
+        self.assertTrue(mode & 0o111, "an extensionless executable keeps its exec bit")
+        self.assertIn("'dasllama-watchdog': ['watchdog'", init)
+        self.assertIn('LAUNCH = "shim"', init)
+        self.assertIn("dasllama/_cli.py", names)
+        self.assertNotIn("dasllama-0.6.5rc1.data/scripts/dasllama-cli", names)
+        self.assertIn('run("dasllama-cli")', main, "python -m dasllama runs the profile's main command")
+        self.assertIn(wb.profile("dasllama")["description"], meta, "no README: the summary and the description")
+
+    def test_mac_app_resolves_inside_the_bundle(self):
+        macos = "dasllama-server.app/Contents/MacOS/"
+        self.stage({macos + n: macho_with(14, 0) for n in
+                    ("dasllama-server", "dasllama-cli", "dasllama-bench", "watchdog")})
+        whl = self.build(system="Darwin", machine="arm64")
+        self.assertTrue(whl.endswith("py3-none-macosx_14_0_arm64.whl"))
+
+    def test_missing_command_is_fatal(self):
+        self.stage({"dasllama-server.exe": b"MZ", "dasllama-cli.exe": b"MZ", "watchdog.exe": b"MZ"})
+        with self.assertRaises(SystemExit):
+            self.build(platform_tag="win_amd64")
+
+
+if __name__ == "__main__":
+    unittest.main()
+%%
+File: doc/source/merged.py
+
+# -*- coding: utf-8 -*-
+"""
+    daslang
+    ~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    The Daslang domain.
+
+    NOTE: this is just modified copypaste of javascript from sphinx
+"""
+
+from docutils import nodes
+from docutils.parsers.rst import directives
+
+from sphinx import addnodes
+from sphinx.directives import ObjectDescription
+from sphinx.domains import Domain, ObjType
+from sphinx.domains.python import _pseudo_parse_arglist
+from sphinx.locale import _
+from sphinx.roles import XRefRole
+from sphinx.util.docfields import Field, GroupedField, TypedField
+from sphinx.util.docutils import SphinxDirective
+from sphinx.util.nodes import make_refnode
+
+if False:
+    # For type annotation
+    from typing import Any, Dict, Iterator, List, Tuple  # NOQA
+    from docutils import nodes  # NOQA
+    from sphinx.application import Sphinx  # NOQA
+    from sphinx.builders import Builder  # NOQA
+    from sphinx.environment import BuildEnvironment  # NOQA
+
+
+class DASObject(ObjectDescription):
+    """
+    Description of a Daslang object.
+    """
+    #: If set to ``True`` this object is callable and a `desc_parameterlist` is
+    #: added
+    has_arguments = False
+
+    #: If set to ``True`` the arguments of the object are optional
+    skip_empty_arguments = False
+
+    #: what is displayed right before the documentation entry
+    display_prefix = None  # type: unicode
+
+    #: If ``allow_nesting`` is ``True``, the object prefixes will be accumulated
+    #: based on directive nesting
+    allow_nesting = False
+
+    def handle_signature(self, sig, signode):
+        # type: (unicode, addnodes.desc_signature) -> Tuple[unicode, unicode]
+        """Breaks down construct signatures
+
+        Parses out prefix and argument list from construct definition. The
+        namespace and class will be determined by the nesting of domain
+        directives.
+        """
+        sig = sig.strip()
+        sig = sig.split("/*")[0].strip()
+        open_paranteses = sig.find('(')
+        closed_paranteses = sig.rfind(')')
+        if open_paranteses > 0 and closed_paranteses > open_paranteses:
+            # take substring from open to closed paranteses
+            member, arglist = sig[:closed_paranteses + 1].split('(', 1)
+            member = member.strip()
+            arglist = arglist[:-1].strip()
+            retType = sig[closed_paranteses + 1:].strip()
+        else:
+            member = sig
+            arglist = None
+            retType = None
+        # If construct is nested, prefix the current prefix
+        prefix = self.env.ref_context.get('das:object', None)
+        mod_name = self.env.ref_context.get('das:module')
+        name = member
+        try:
+            member_prefix, member_name = member.rsplit('.', 1)
+        except ValueError:
+            member_name = name
+            member_prefix = ''
+        finally:
+            name = member_name
+            if prefix and member_prefix:
+                prefix = '.'.join([prefix, member_prefix])
+            elif prefix is None and member_prefix:
+                prefix = member_prefix
+        fullname = name
+        if prefix:
+            fullname = '.'.join([prefix, name])
+
+        signode['module'] = mod_name
+        signode['object'] = prefix
+        signode['fullname'] = fullname
+
+        if self.display_prefix:
+            signode += addnodes.desc_annotation(self.display_prefix,
+                                                self.display_prefix)
+        if prefix:
+            signode += addnodes.desc_addname(prefix + '.', prefix + '.')
+        elif mod_name:
+            signode += addnodes.desc_addname(mod_name + '.', mod_name + '.')
+        signode += addnodes.desc_name(name, name)
+        if self.has_arguments:
+            if not arglist:
+                if not self.skip_empty_arguments:
+                    signode += addnodes.desc_parameterlist()
+            else:
+                _pseudo_parse_arglist(signode, arglist)
+        if retType:
+            signode += addnodes.desc_type(retType, retType)
+        return fullname, prefix
+
+    def add_target_and_index(self, name_obj, sig, signode):
+        # type: (Tuple[unicode, unicode], unicode, addnodes.desc_signature) -> None
+        mod_name = self.env.ref_context.get('das:module')
+        fullname = (mod_name and mod_name + '.' or '') + name_obj[0]
+        if fullname not in self.state.document.ids:
+            signode['names'].append(fullname)
+            signode['ids'].append(fullname.replace('$', '_S_'))
+            signode['first'] = not self.names
+            self.state.document.note_explicit_target(signode)
+            objects = self.env.domaindata['das']['objects']
+            if fullname in objects:
+                self.state_machine.reporter.warning(
+                    'duplicate object description of %s, ' % fullname +
+                    'other instance in ' +
+                    self.env.doc2path(objects[fullname][0]),
+                    line=self.lineno)
+            objects[fullname] = self.env.docname, self.objtype
+
+        indextext = self.get_index_text(mod_name, name_obj)
+        if indextext:
+            self.indexnode['entries'].append(('single', indextext,
+                                              fullname.replace('$', '_S_'),
+                                              '', None))
+
+    def get_index_text(self, objectname, name_obj):
+        # type: (unicode, Tuple[unicode, unicode]) -> unicode
+        name, obj = name_obj
+        if self.objtype == 'function':
+            if not obj:
+                return _('%s() (built-in function)') % name
+            return _('%s() (%s method)') % (name, obj)
+        elif self.objtype == 'class':
+            return _('%s() (class)') % name
+        elif self.objtype == 'data':
+            return _('%s (global variable or constant)') % name
+        elif self.objtype == 'attribute':
+            return _('%s (%s attribute)') % (name, obj)
+        return ''
+
+    def before_content(self):
+        # type: () -> None
+        """Handle object nesting before content
+
+        :py:class:`DASObject` represents Daslang language constructs. For
+        constructs that are nestable, this method will build up a stack of the
+        nesting heirarchy so that it can be later de-nested correctly, in
+        :py:meth:`after_content`.
+
+        For constructs that aren't nestable, the stack is bypassed, and instead
+        only the most recent object is tracked. This object prefix name will be
+        removed with :py:meth:`after_content`.
+
+        The following keys are used in ``self.env.ref_context``:
+
+            das:objects
+                Stores the object prefix history. With each nested element, we
+                add the object prefix to this list. When we exit that object's
+                nesting level, :py:meth:`after_content` is triggered and the
+                prefix is removed from the end of the list.
+
+            das:object
+                Current object prefix. This should generally reflect the last
+                element in the prefix history
+        """
+        prefix = None
+        if self.names:
+            (obj_name, obj_name_prefix) = self.names.pop()
+            prefix = obj_name_prefix.strip('.') if obj_name_prefix else None
+            if self.allow_nesting:
+                prefix = obj_name
+        if prefix:
+            self.env.ref_context['das:object'] = prefix
+            if self.allow_nesting:
+                objects = self.env.ref_context.setdefault('das:objects', [])
+                objects.append(prefix)
+
+    def after_content(self):
+        # type: () -> None
+        """Handle object de-nesting after content
+
+        If this class is a nestable object, removing the last nested class prefix
+        ends further nesting in the object.
+
+        If this class is not a nestable object, the list of classes should not
+        be altered as we didn't affect the nesting levels in
+        :py:meth:`before_content`.
+        """
+        objects = self.env.ref_context.setdefault('das:objects', [])
+        if self.allow_nesting:
+            try:
+                objects.pop()
+            except IndexError:
+                pass
+        self.env.ref_context['das:object'] = (objects[-1] if len(objects) > 0
+                                             else None)
+
+
+class DASAttribute(DASObject):
+    """Description of a Daslang attribute."""
+    has_arguments = True
+    skip_empty_arguments = True
+
+
+class DASCallable(DASObject):
+    """Description of a Daslang function, method or constructor."""
+    has_arguments = True
+
+    doc_field_types = [
+        TypedField('arguments', label=_('Arguments'),
+                   names=('argument', 'arg', 'parameter', 'param'),
+                   typerolename='func', typenames=('paramtype', 'type')),
+        GroupedField('errors', label=_('Throws'), rolename='err',
+                     names=('throws', ),
+                     can_collapse=True),
+        Field('returnvalue', label=_('Returns'), has_arg=False,
+              names=('returns', 'return')),
+        Field('returntype', label=_('Return type'), has_arg=False,
+              names=('rtype',)),
+    ]
+
+class DASOperator(DASCallable):
+    """Description of a Daslang function, method or constructor."""
+    has_arguments = True
+    skip_empty_arguments = True
+
+class DASConstructor(DASCallable):
+    """Like a callable but with a different prefix."""
+    display_prefix = 'class '
+    allow_nesting = True
+
+
+class DASModule(SphinxDirective):
+    """
+    Directive to mark description of a new Daslang module.
+
+    This directive specifies the module name that will be used by objects that
+    follow this directive.
+
+    Options
+    -------
+
+    noindex
+        If the ``noindex`` option is specified, no linkable elements will be
+        created, and the module won't be added to the global module index. This
+        is useful for splitting up the module definition across multiple
+        sections or files.
+
+    :param mod_name: Module name
+    """
+
+    has_content = False
+    required_arguments = 1
+    optional_arguments = 0
+    final_argument_whitespace = False
+    option_spec = {
+        'noindex': directives.flag
+    }
+
+    def run(self):
+        # type: () -> List[nodes.Node]
+        mod_name = self.arguments[0].strip()
+        self.env.ref_context['das:module'] = mod_name
+        noindex = 'noindex' in self.options
+        ret = []
+        if not noindex:
+            self.env.domaindata['das']['modules'][mod_name] = self.env.docname
+            # Make a duplicate entry in 'objects' to facilitate searching for
+            # the module in DaslangDomain.find_obj()
+            self.env.domaindata['das']['objects'][mod_name] = (self.env.docname, 'module')
+            targetnode = nodes.target('', '', ids=['module-' + mod_name],
+                                      ismod=True)
+            self.state.document.note_explicit_target(targetnode)
+            ret.append(targetnode)
+            indextext = _('%s (module)') % mod_name
+            inode = addnodes.index(entries=[('single', indextext,
+                                             'module-' + mod_name, '', None)])
+            ret.append(inode)
+        return ret
+
+
+class DASXRefRole(XRefRole):
+    def process_link(self, env, refnode, has_explicit_title, title, target):
+        # type: (BuildEnvironment, nodes.Node, bool, unicode, unicode) -> Tuple[unicode, unicode]  # NOQA
+        # basically what sphinx.domains.python.PyXRefRole does
+        refnode['das:object'] = env.ref_context.get('das:object')
+        refnode['das:module'] = env.ref_context.get('das:module')
+        if not has_explicit_title:
+            title = title.lstrip('.')
+            target = target.lstrip('~')
+            if title[0:1] == '~':
+                title = title[1:]
+                dot = title.rfind('.')
+                if dot != -1:
+                    title = title[dot + 1:]
+        if target[0:1] == '.':
+            target = target[1:]
+            refnode['refspecific'] = True
+        return title, target
+
+
+class DaslangDomain(Domain):
+    """Daslang language domain."""
+    name = 'das'
+    label = 'Daslang'
+    # if you add a new object type make sure to edit DASObject.get_index_string
+    object_types = {
+        'function':  ObjType(_('function'),  'func'),
+        'method':    ObjType(_('method'),    'meth'),
+        'class':     ObjType(_('class'),     'class'),
+        'data':      ObjType(_('data'),      'data'),
+        'attribute': ObjType(_('attribute'), 'attr'),
+        'module':    ObjType(_('module'),    'mod'),
+        'operator':  ObjType(_('operator'),    'op'),
+    }
+    directives = {
+        'function':  DASCallable,
+        'method':    DASCallable,
+        'class':     DASConstructor,
+        'data':      DASObject,
+        'attribute': DASObject,
+        'module':    DASModule,
+        'operator':  DASOperator,
+    }
+    roles = {
+        'func':  DASXRefRole(fix_parens=True),
+        'meth':  DASXRefRole(fix_parens=True),
+        'class': DASXRefRole(fix_parens=True),
+        'data':  DASXRefRole(),
+        'attr':  DASXRefRole(),
+        'mod':   DASXRefRole(),
+        'op':    DASXRefRole(),
+    }
+    initial_data = {
+        'objects': {},  # fullname -> docname, objtype
+        'modules': {},  # mod_name -> docname
+    }  # type: Dict[unicode, Dict[unicode, Tuple[unicode, unicode]]]
+
+    def clear_doc(self, docname):
+        # type: (unicode) -> None
+        for fullname, (pkg_docname, _l) in list(self.data['objects'].items()):
+            if pkg_docname == docname:
+                del self.data['objects'][fullname]
+        for mod_name, pkg_docname in list(self.data['modules'].items()):
+            if pkg_docname == docname:
+                del self.data['modules'][mod_name]
+
+    def merge_domaindata(self, docnames, otherdata):
+        # type: (List[unicode], Dict) -> None
+        # XXX check duplicates
+        for fullname, (fn, objtype) in otherdata['objects'].items():
+            if fn in docnames:
+                self.data['objects'][fullname] = (fn, objtype)
+        for mod_name, pkg_docname in otherdata['modules'].items():
+            if pkg_docname in docnames:
+                self.data['modules'][mod_name] = pkg_docname
+
+    def find_obj(self, env, mod_name, prefix, name, typ, searchorder=0):
+        # type: (BuildEnvironment, unicode, unicode, unicode, unicode, int) -> Tuple[unicode, Tuple[unicode, unicode]]  # NOQA
+        if name[-2:] == '()':
+            name = name[:-2]
+        objects = self.data['objects']
+
+        searches = []
+        if mod_name and prefix:
+            searches.append('.'.join([mod_name, prefix, name]))
+        if mod_name:
+            searches.append('.'.join([mod_name, name]))
+        if prefix:
+            searches.append('.'.join([prefix, name]))
+        searches.append(name)
+
+        if searchorder == 0:
+            searches.reverse()
+
+        newname = None
+        for search_name in searches:
+            if search_name in objects:
+                newname = search_name
+
+        return newname, objects.get(newname)
+
+    def resolve_xref(self, env, fromdocname, builder, typ, target, node,
+                     contnode):
+        # type: (BuildEnvironment, unicode, Builder, unicode, unicode, nodes.Node, nodes.Node) -> nodes.Node  # NOQA
+        mod_name = node.get('das:module')
+        prefix = node.get('das:object')
+        searchorder = node.hasattr('refspecific') and 1 or 0
+        name, obj = self.find_obj(env, mod_name, prefix, target, typ, searchorder)
+        if not obj:
+            return None
+        return make_refnode(builder, fromdocname, obj[0],
+                            name.replace('$', '_S_'), contnode, name)
+
+    def resolve_any_xref(self, env, fromdocname, builder, target, node,
+                         contnode):
+        # type: (BuildEnvironment, unicode, Builder, unicode, nodes.Node, nodes.Node) -> List[Tuple[unicode, nodes.Node]]  # NOQA
+        mod_name = node.get('das:module')
+        prefix = node.get('das:object')
+        name, obj = self.find_obj(env, mod_name, prefix, target, None, 1)
+        if not obj:
+            return []
+        return [('das:' + self.role_for_objtype(obj[1]),
+                 make_refnode(builder, fromdocname, obj[0],
+                              name.replace('$', '_S_'), contnode, name))]
+
+    def get_objects(self):
+        # type: () -> Iterator[Tuple[unicode, unicode, unicode, unicode, unicode, int]]
+        for refname, (docname, type) in list(self.data['objects'].items()):
+            yield refname, refname, type, docname, \
+                refname.replace('$', '_S_'), 1
+
+    def get_full_qualified_name(self, node):
+        # type: (nodes.Node) -> unicode
+        modname = node.get('das:module')
+        prefix = node.get('das:object')
+        target = node.get('reftarget')
+        if target is None:
+            return None
+        else:
+            return '.'.join(filter(None, [modname, prefix, target]))
+
+
+def setup(app):
+    # type: (Sphinx) -> Dict[unicode, Any]
+    app.add_domain(DaslangDomain)
+
+    return {
+        'version': 'builtin',
+        'env_version': 1,
+        'parallel_read_safe': True,
+        'parallel_write_safe': True,
+    }
+%%
+File: examples/dasLLAMA/wasm/mint_models.py
+
+#!/usr/bin/env python3
+"""Stage a browser example's model set: fetch the files its models.json names from Hugging Face,
+mint each GGUF under `images` into a .dlim against the wasm64 build's DlimConfiguration, copy the
+`packs` and `files` as they are (a front-end pack; a Pocket TTS GGUF, which is its own served
+form), copy each `tree` file from the repository itself (a checked-in model such as the
+voice-activity weights, named by its repo-relative path), and write models/manifest.json - the
+list the example's web shell reads, stamped with the IMAGE_VERSION the images carry (a set with no
+image carries the version the deploy expects).
+
+    mint_models.py --example examples/dasLLAMA/storywish --config wasm64.json \
+                   --daslang bin/daslang --out _site/examples/storywish/models \
+                   [--cache ~/.cache/dasllama-web-models] [--expect-image-version 35] [--stamp-page page.html]
+
+An entry's `rev` pins the repo commit its file is fetched at, so a file replaced on the repo's main
+does not reach a deploy before its models.json does; an entry without one reads main. The GGUFs are
+cached by sha256 (a download is verified before it is used, and never trusted from
+the cache without its hash in the name); the images are minted on every run - it takes
+milliseconds, and a mint for THIS build is the whole point. --expect-image-version is the deploy
+gate: the version read from each minted image's header must be the tree's, or the run exits 3 (any
+other failure exits 1, so a deploy can tell the correctness gate from a transient).
+--stamp-page writes that version into the shell's `/* @image-version */ 0` slot, so the page can
+refuse a set minted for another version before it fetches one.
+
+Standard library only: the deploy runner has python3 and nothing else.
+"""
+import argparse, hashlib, json, os, shutil, struct, subprocess, sys, urllib.request
+
+HF = "https://huggingface.co"
+IMAGE_MAGIC = 0x314d4c44   # 'DLM1' little-endian, dasllama_image.das
+
+
+def sha256_of(path):
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def entry_url(entry):
+    """where an entry's file is fetched from: its repo at the commit `rev` pins, at main where it pins none"""
+    return f"{HF}/{entry['repo']}/resolve/{entry.get('rev', 'main')}/{entry['file']}"
+
+
+def fetch(entry, cache):
+    """the file at cache/<sha256>-<name>, downloaded from its repo when absent, verified either way"""
+    os.makedirs(cache, exist_ok=True)
+    target = os.path.join(cache, f"{entry['sha256']}-{entry['file']}")
+    if not os.path.exists(target):
+        url = entry_url(entry)
+        print(f"fetching {url}")
+        tmp = target + ".part"
+        with urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "dasllama-web-models"})) as r, open(tmp, "wb") as f:
+            shutil.copyfileobj(r, f, 1 << 20)
+        os.replace(tmp, target)
+    got = sha256_of(target)
+    if got != entry["sha256"]:
+        os.remove(target)
+        raise SystemExit(f"{entry['file']}: sha256 {got}, models.json says {entry['sha256']} - the repo file changed; update models.json, or pin the commit that holds the old one with `rev`")
+    return target
+
+
+def image_version_of(path):
+    with open(path, "rb") as f:
+        magic, version = struct.unpack("<II", f.read(8))
+    if magic != IMAGE_MAGIC:
+        raise SystemExit(f"{path}: not a dasLLAMA image (magic {magic:#x})")
+    return version
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--example", required=True, help="the example's directory (holds models.json)")
+    ap.add_argument("--config", required=True, help="the wasm64 build's DlimConfiguration JSON (examples/dasLLAMA/wasm/dlim_config under node)")
+    ap.add_argument("--daslang", required=True, help="the host daslang that runs utils/dasllama-convert")
+    ap.add_argument("--out", required=True, help="the models/ directory to stage beside the page")
+    ap.add_argument("--cache", default=os.path.expanduser("~/.cache/dasllama-web-models"))
+    ap.add_argument("--expect-image-version", type=int, default=0, help="fail unless every minted image carries this IMAGE_VERSION")
+    ap.add_argument("--stamp-page", default="", help="write the image version into this shell's `/* @image-version */ 0` slot")
+    a = ap.parse_args()
+
+    repo_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+    with open(os.path.join(a.example, "models.json")) as f:
+        spec = json.load(f)
+    os.makedirs(a.out, exist_ok=True)
+    files, versions = [], set()
+    for key in ("images", "packs", "files", "tree"):
+        if key in spec and not spec[key]:
+            raise SystemExit(f"models.json names an empty `{key}` list - drop the key or fill it; a set that mints nothing must say so by omission")
+    if not any(spec.get(key) for key in ("images", "packs", "files", "tree")):
+        raise SystemExit("models.json stages nothing")
+
+    for entry in spec.get("images", []):
+        gguf = fetch(entry, a.cache)
+        dlim = os.path.join(a.out, entry["dlim"])
+        if os.path.exists(dlim):
+            os.remove(dlim)
+        env = dict(os.environ, DASLLAMA_IMAGE="0")   # the source GGUF's directory gets no sidecar of the host's own identity
+        cmd = [a.daslang, "-jit", os.path.join(repo_root, "utils", "dasllama-convert", "main.das"), "--",
+               "-m", gguf, "--config", a.config, "-o", dlim]
+        r = subprocess.run(cmd, env=env, capture_output=True, text=True)
+        if r.returncode != 0 or not os.path.exists(dlim):
+            sys.stderr.write(r.stdout[-4000:] + r.stderr[-4000:])
+            raise SystemExit(f"mint of {entry['file']} failed (exit {r.returncode})")
+        version = image_version_of(dlim)
+        versions.add(version)
+        files.append({"name": entry["dlim"], "bytes": os.path.getsize(dlim), "sha256": sha256_of(dlim), "source": f"{entry['repo']}/{entry['file']}"})
+        print(f"minted {entry['dlim']} ({os.path.getsize(dlim) >> 20} MB, IMAGE_VERSION {version}) from {entry['file']}")
+
+    # packs and files ship as they are: a front-end pack, or a GGUF that is its own served form (a Pocket file)
+    for entry in spec.get("packs", []) + spec.get("files", []):
+        src = fetch(entry, a.cache)
+        dst = os.path.join(a.out, entry["file"])
+        shutil.copyfile(src, dst)
+        files.append({"name": entry["file"], "bytes": os.path.getsize(dst), "sha256": entry["sha256"], "source": f"{entry['repo']}/{entry['file']}"})
+
+    # a file the tree itself carries: copied from the checkout, its hash held like a fetched file's
+    for entry in spec.get("tree", []):
+        src = os.path.join(repo_root, entry["path"])
+        got = sha256_of(src)
+        if got != entry["sha256"]:
+            raise SystemExit(f"{entry['file']}: sha256 {got}, models.json says {entry['sha256']} - the tree file changed; update models.json")
+        dst = os.path.join(a.out, entry["file"])
+        shutil.copyfile(src, dst)
+        files.append({"name": entry["file"], "bytes": os.path.getsize(dst), "sha256": entry["sha256"], "source": entry["path"]})
+
+    if len(versions) > 1:
+        raise SystemExit(f"the minted images disagree on IMAGE_VERSION: {sorted(versions)}")
+    version = versions.pop() if versions else a.expect_image_version
+    if a.expect_image_version and version != a.expect_image_version:
+        sys.stderr.write(f"minted images carry IMAGE_VERSION {version}, the tree says {a.expect_image_version} - the converter that minted them is not this tree's\n")
+        sys.exit(3)   # the deploy tells this exit apart: a version mismatch reds the run, every other failure stages a placeholder
+
+    manifest = {"image_version": version, "files": files}
+    with open(os.path.join(a.out, "manifest.json"), "w") as f:
+        json.dump(manifest, f, indent=2)
+        f.write("\n")
+    print(f"manifest.json: IMAGE_VERSION {version}, {len(files)} files, {sum(f['bytes'] for f in files) >> 20} MB")
+
+    if a.stamp_page:
+        with open(a.stamp_page) as f:
+            page = f.read()
+        slot = "/* @image-version */ 0"
+        if slot not in page:
+            raise SystemExit(f"{a.stamp_page}: no `{slot}` slot to stamp")
+        with open(a.stamp_page, "w") as f:
+            f.write(page.replace(slot, f"/* @image-version */ {version}"))
+        print(f"stamped {a.stamp_page} with IMAGE_VERSION {version}")
+
+
+if __name__ == "__main__":
+    main()
+%%
+File: examples/dasLLAMA/wasm/test_mint_models.py
+
+#!/usr/bin/env python3
+"""mint_models.py's refusals and its happy path, with no network and no daslang: the cache is
+pre-seeded under the sha256 names the script trusts, and the converter is a stand-in that writes a
+dasLLAMA image header carrying the IMAGE_VERSION the test asks for."""
+import hashlib
+import io
+import json
+import os
+import stat
+import struct
+import sys
+import tempfile
+import unittest
+from contextlib import redirect_stderr, redirect_stdout
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import mint_models  # noqa: E402
+
+FAKE_CONVERTER = """#!/usr/bin/env python3
+import os, struct, sys
+out = sys.argv[sys.argv.index("-o") + 1]
+with open(out, "wb") as f:
+    f.write(struct.pack("<II", 0x314d4c44, int(os.environ["FAKE_IMAGE_VERSION"])) + b"body" * 64)
+"""
+
+
+def sha(data):
+    return hashlib.sha256(data).hexdigest()
+
+
+class Fixture:
+    """an example directory with a models.json, a seeded cache, a converter stand-in and a page"""
+
+    def __init__(self, root, image_version=35):
+        self.root = Path(root)
+        self.example = self.root / "example"
+        self.cache = self.root / "cache"
+        self.out = self.root / "out"
+        self.example.mkdir()
+        self.cache.mkdir()
+        self.gguf = b"GGUF fake weights"
+        self.pack = b"phoneme pack bytes"
+        self.spec = {
+            "images": [{"file": "story.gguf", "repo": "someone/models", "sha256": sha(self.gguf), "dlim": "story.dlim"}],
+            "packs": [{"file": "pack.bin", "repo": "someone/models", "sha256": sha(self.pack)}],
+        }
+        (self.example / "models.json").write_text(json.dumps(self.spec))
+        (self.cache / f"{sha(self.gguf)}-story.gguf").write_bytes(self.gguf)
+        (self.cache / f"{sha(self.pack)}-pack.bin").write_bytes(self.pack)
+        self.converter = self.root / "daslang"
+        self.converter.write_text(FAKE_CONVERTER)
+        self.converter.chmod(self.converter.stat().st_mode | stat.S_IXUSR)
+        self.config = self.root / "wasm64.json"
+        self.config.write_text("{}")
+        self.page = self.root / "web_shell.html"
+        self.page.write_text("<script>const PAGE_IMAGE_VERSION = /* @image-version */ 0;</script>")
+        os.environ["FAKE_IMAGE_VERSION"] = str(image_version)
+
+    def argv(self, *extra):
+        return ["mint_models.py", "--example", str(self.example), "--config", str(self.config),
+                "--daslang", str(self.converter), "--out", str(self.out), "--cache", str(self.cache), *extra]
+
+
+def run_main(argv):
+    """main() under argv; returns (SystemExit code or None, stdout, stderr)"""
+    out, err = io.StringIO(), io.StringIO()
+    saved = sys.argv
+    sys.argv = argv
+    try:
+        with redirect_stdout(out), redirect_stderr(err):
+            try:
+                mint_models.main()
+                code = None
+            except SystemExit as e:
+                code = e.code
+    finally:
+        sys.argv = saved
+    return code, out.getvalue(), err.getvalue()
+
+
+class FetchTest(unittest.TestCase):
+    def test_an_entry_is_fetched_at_the_commit_it_pins_and_at_main_without_one(self):
+        entry = {"file": "m.gguf", "repo": "someone/models", "sha256": sha(b"x")}
+        self.assertEqual(mint_models.entry_url(entry), "https://huggingface.co/someone/models/resolve/main/m.gguf")
+        pinned = dict(entry, rev="0123abcd")
+        self.assertEqual(mint_models.entry_url(pinned), "https://huggingface.co/someone/models/resolve/0123abcd/m.gguf")
+
+    def test_a_cached_file_is_verified_before_it_is_trusted(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            data = b"model bytes"
+            entry = {"file": "m.gguf", "repo": "someone/models", "sha256": sha(data)}
+            cached = Path(tmp) / f"{sha(data)}-m.gguf"
+            cached.write_bytes(data)
+            self.assertEqual(mint_models.fetch(entry, tmp), str(cached))
+            cached.write_bytes(b"model bytes, changed under the same name")
+            with self.assertRaises(SystemExit) as caught:
+                mint_models.fetch(entry, tmp)
+            self.assertIn("models.json says", str(caught.exception))
+            self.assertIn(sha(data), str(caught.exception))
+            self.assertFalse(cached.exists(), "a file whose hash moved is dropped from the cache, not served again")
+
+
+class ImageVersionTest(unittest.TestCase):
+    def test_the_version_is_read_from_the_header_and_a_non_image_is_refused(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            image = Path(tmp) / "a.dlim"
+            image.write_bytes(struct.pack("<II", mint_models.IMAGE_MAGIC, 41) + b"\0" * 56)
+            self.assertEqual(mint_models.image_version_of(str(image)), 41)
+            image.write_bytes(b"GGUF" + b"\0" * 60)
+            with self.assertRaises(SystemExit) as caught:
+                mint_models.image_version_of(str(image))
+            self.assertIn("not a dasLLAMA image", str(caught.exception))
+
+
+class MintTest(unittest.TestCase):
+    def test_the_manifest_carries_the_minted_version_and_every_file_and_the_page_is_stamped(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            fx = Fixture(tmp, image_version=35)
+            code, out, err = run_main(fx.argv("--expect-image-version", "35", "--stamp-page", str(fx.page)))
+            self.assertIsNone(code, err)
+            manifest = json.loads((fx.out / "manifest.json").read_text())
+            self.assertEqual(manifest["image_version"], 35)
+            self.assertEqual([f["name"] for f in manifest["files"]], ["story.dlim", "pack.bin"])
+            dlim = fx.out / "story.dlim"
+            self.assertEqual(manifest["files"][0]["bytes"], dlim.stat().st_size)
+            self.assertEqual(manifest["files"][0]["sha256"], sha(dlim.read_bytes()))
+            self.assertEqual(manifest["files"][0]["source"], "someone/models/story.gguf")
+            self.assertEqual(manifest["files"][1]["sha256"], sha(fx.pack))
+            self.assertEqual((fx.out / "pack.bin").read_bytes(), fx.pack)
+            self.assertIn("/* @image-version */ 35", fx.page.read_text())
+            self.assertNotIn("/* @image-version */ 0", fx.page.read_text())
+            self.assertIn("manifest.json: IMAGE_VERSION 35, 2 files", out)
+
+    def test_a_version_the_tree_does_not_read_exits_3_before_the_manifest_is_written(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            fx = Fixture(tmp, image_version=33)
+            code, out, err = run_main(fx.argv("--expect-image-version", "35", "--stamp-page", str(fx.page)))
+            self.assertEqual(code, 3)
+            self.assertIn("IMAGE_VERSION 33, the tree says 35", err)
+            self.assertFalse((fx.out / "manifest.json").exists(), "no manifest for a set the page would refuse")
+            self.assertIn("/* @image-version */ 0", fx.page.read_text(), "the page keeps its unstamped slot")
+
+    def test_without_an_expected_version_the_minted_one_is_taken_as_is(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            fx = Fixture(tmp, image_version=33)
+            code, out, err = run_main(fx.argv())
+            self.assertIsNone(code, err)
+            self.assertEqual(json.loads((fx.out / "manifest.json").read_text())["image_version"], 33)
+
+    def test_a_page_without_the_slot_is_refused(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            fx = Fixture(tmp)
+            fx.page.write_text("<script>const PAGE_IMAGE_VERSION = 35;</script>")
+            code, out, err = run_main(fx.argv("--stamp-page", str(fx.page)))
+            self.assertIsInstance(code, str)
+            self.assertIn("no `/* @image-version */ 0` slot", code)
+
+    def test_a_pack_whose_hash_moved_stops_the_run(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            fx = Fixture(tmp)
+            (fx.cache / f"{sha(fx.pack)}-pack.bin").write_bytes(b"a different pack")
+            code, out, err = run_main(fx.argv())
+            self.assertIsInstance(code, str)
+            self.assertIn("pack.bin: sha256", code)
+            self.assertFalse((fx.out / "manifest.json").exists())
+
+    def test_a_converter_that_fails_is_reported_with_its_exit(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            fx = Fixture(tmp)
+            fx.converter.write_text("#!/usr/bin/env python3\nimport sys\nprint('boom')\nsys.exit(7)\n")
+            code, out, err = run_main(fx.argv())
+            self.assertIsInstance(code, str)
+            self.assertIn("mint of story.gguf failed (exit 7)", code)
+            self.assertIn("boom", err)
+
+
+class ServedAsIsTest(unittest.TestCase):
+    """the lists beside `images`: `files` (a GGUF that is its own served form) and `tree` (a file
+    the repository carries, named by its repo-relative path) - copied as they are, hash-held"""
+
+    def with_repo(self, fx, spec, tree_bytes=None):
+        """the spec written, and a stand-in repository root four levels above a fake script path,
+        the way the script finds the checkout; `tree_bytes` lands at models/vad.bin under it"""
+        fx.spec = spec
+        (fx.example / "models.json").write_text(json.dumps(spec))
+        repo = fx.root / "repo"
+        (repo / "models").mkdir(parents=True)
+        if tree_bytes is not None:
+            (repo / "models" / "vad.bin").write_bytes(tree_bytes)
+        return str(repo / "examples" / "dasLLAMA" / "wasm" / "mint_models.py")
+
+    def run_with_file(self, fake_file, argv):
+        saved = mint_models.__file__
+        mint_models.__file__ = fake_file
+        try:
+            return run_main(argv)
+        finally:
+            mint_models.__file__ = saved
+
+    def test_a_files_entry_is_copied_as_it_is_beside_the_image(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            fx = Fixture(tmp, image_version=35)
+            served = b"a Pocket file, served as it is"
+            (fx.cache / f"{sha(served)}-pocket.gguf").write_bytes(served)
+            spec = dict(fx.spec, files=[{"file": "pocket.gguf", "repo": "someone/tts", "sha256": sha(served)}])
+            fake_file = self.with_repo(fx, spec)
+            code, out, err = self.run_with_file(fake_file, fx.argv("--expect-image-version", "35"))
+            self.assertIsNone(code, err)
+            manifest = json.loads((fx.out / "manifest.json").read_text())
+            self.assertEqual([f["name"] for f in manifest["files"]], ["story.dlim", "pack.bin", "pocket.gguf"])
+            self.assertEqual((fx.out / "pocket.gguf").read_bytes(), served)
+            self.assertEqual(manifest["files"][2]["source"], "someone/tts/pocket.gguf")
+
+    def test_a_tree_entry_is_copied_from_the_checkout_and_named_by_its_path(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            fx = Fixture(tmp, image_version=35)
+            vad = b"voice activity weights"
+            spec = dict(fx.spec, tree=[{"file": "vad.bin", "path": "models/vad.bin", "sha256": sha(vad)}])
+            fake_file = self.with_repo(fx, spec, vad)
+            code, out, err = self.run_with_file(fake_file, fx.argv("--expect-image-version", "35"))
+            self.assertIsNone(code, err)
+            manifest = json.loads((fx.out / "manifest.json").read_text())
+            self.assertEqual((fx.out / "vad.bin").read_bytes(), vad)
+            self.assertEqual(manifest["files"][-1], {"name": "vad.bin", "bytes": len(vad), "sha256": sha(vad), "source": "models/vad.bin"})
+
+    def test_a_tree_file_whose_hash_moved_stops_the_run(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            fx = Fixture(tmp, image_version=35)
+            spec = dict(fx.spec, tree=[{"file": "vad.bin", "path": "models/vad.bin", "sha256": sha(b"the weights the page was built for")}])
+            fake_file = self.with_repo(fx, spec, b"other weights checked in since")
+            code, out, err = self.run_with_file(fake_file, fx.argv())
+            self.assertIsInstance(code, str)
+            self.assertIn("vad.bin: sha256", code)
+            self.assertIn("the tree file changed", code)
+            self.assertFalse((fx.out / "manifest.json").exists())
+
+    def test_a_set_with_no_image_carries_the_version_the_deploy_expects(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            fx = Fixture(tmp)
+            served = b"a Pocket file"
+            (fx.cache / f"{sha(served)}-pocket.gguf").write_bytes(served)
+            spec = {"files": [{"file": "pocket.gguf", "repo": "someone/tts", "sha256": sha(served)}]}
+            fake_file = self.with_repo(fx, spec)
+            code, out, err = self.run_with_file(fake_file, fx.argv("--expect-image-version", "41", "--stamp-page", str(fx.page)))
+            self.assertIsNone(code, err)
+            self.assertEqual(json.loads((fx.out / "manifest.json").read_text())["image_version"], 41)
+            self.assertIn("/* @image-version */ 41", fx.page.read_text())
+            self.assertFalse((fx.out / "story.dlim").exists(), "nothing was minted")
+
+    def test_a_set_with_no_image_and_no_expected_version_is_unstamped(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            fx = Fixture(tmp)
+            served = b"a Pocket file"
+            (fx.cache / f"{sha(served)}-pocket.gguf").write_bytes(served)
+            fake_file = self.with_repo(fx, {"files": [{"file": "pocket.gguf", "repo": "someone/tts", "sha256": sha(served)}]})
+            code, out, err = self.run_with_file(fake_file, fx.argv("--stamp-page", str(fx.page)))
+            self.assertIsNone(code, err)
+            self.assertEqual(json.loads((fx.out / "manifest.json").read_text())["image_version"], 0)
+            self.assertIn("/* @image-version */ 0", fx.page.read_text(), "0 is the unstamped slot the page reads as no check")
+
+
+if __name__ == "__main__":
+    unittest.main()
+%%
+File: examples/games/latchpoint/test_launchers.py
+
+import json
+import os
+from pathlib import Path
+import shutil
+import shlex
+import stat
+import subprocess
+import tempfile
+import unittest
+
+
+HERE = Path(os.environ.get("LATCHPOINT_LAUNCHER_SOURCE", Path(__file__).resolve().parent))
+
+
+class LauncherTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory(prefix="latchpoint launcher ")
+        self.root = Path(self.temp.name) / "repo with spaces"
+        self.latchpoint = self.root / "examples" / "games" / "latchpoint"
+        self.latchpoint.mkdir(parents=True)
+
+    def tearDown(self):
+        self.temp.cleanup()
+
+    def copy_launcher(self, name):
+        destination = self.latchpoint / name
+        shutil.copy2(HERE / name, destination)
+        return destination
+
+    @unittest.skipUnless(shutil.which("powershell") or shutil.which("pwsh"), "PowerShell is unavailable")
+    def test_game_script_quotes_spaced_main_path_for_start_process(self):
+        launcher = self.copy_launcher("start-game.ps1")
+        runtime = self.root / "bin" / "Release" / "daslang-live.exe"
+        runtime.parent.mkdir(parents=True)
+        runtime.touch()
+        capture = self.root / "start-process.json"
+        shell = shutil.which("powershell") or shutil.which("pwsh")
+        wrapper = """
+function global:Invoke-RestMethod { throw 'offline' }
+function global:Start-Process {
+    param($FilePath, $ArgumentList, $WorkingDirectory, $WindowStyle,
+          $RedirectStandardOutput, $RedirectStandardError)
+    $ArgumentList | ConvertTo-Json | Set-Content -LiteralPath $env:LAUNCH_CAPTURE
+}
+. $env:LAUNCH_SCRIPT
+"""
+        env = os.environ | {"LAUNCH_CAPTURE": str(capture), "LAUNCH_SCRIPT": str(launcher)}
+        subprocess.run([shell, "-NoProfile", "-Command", wrapper], check=True, env=env,
+                       capture_output=True, text=True)
+        arguments = json.loads(capture.read_text(encoding="utf-8-sig"))
+        self.assertEqual(arguments[1], f'"{self.latchpoint / "main.das"}"')
+
+    @unittest.skipUnless(shutil.which("powershell") or shutil.which("pwsh"), "PowerShell is unavailable")
+    def test_powershell_server_forwards_absolute_config(self):
+        launcher = self.copy_launcher("start-server.ps1")
+        runtime = self.root / "bin" / "Release" / "daslang.exe"
+        runtime.parent.mkdir(parents=True)
+        runtime.touch()
+        config = self.root / "config files" / "server.toml"
+        config.parent.mkdir()
+        config.touch()
+        capture = self.root / "python-args.json"
+        shell = shutil.which("powershell") or shutil.which("pwsh")
+        wrapper = """
+function global:python { $args | ConvertTo-Json | Set-Content -LiteralPath $env:LAUNCH_CAPTURE }
+Set-Location -LiteralPath $env:CONFIG_PARENT
+. $env:LAUNCH_SCRIPT -Config 'server.toml'
+"""
+        env = os.environ | {
+            "LAUNCH_CAPTURE": str(capture),
+            "LAUNCH_SCRIPT": str(launcher),
+            "CONFIG_PARENT": str(config.parent),
+        }
+        subprocess.run([shell, "-NoProfile", "-Command", wrapper], check=True, env=env,
+                       capture_output=True, text=True)
+        arguments = json.loads(capture.read_text(encoding="utf-8-sig"))
+        config_index = arguments.index("--config")
+        self.assertEqual(Path(arguments[config_index + 1]), config)
+
+    @unittest.skipUnless(shutil.which("bash"), "bash is unavailable")
+    def test_shell_server_forwards_absolute_config(self):
+        launcher = self.copy_launcher("start-server.sh")
+        runtime = self.root / "bin" / "daslang"
+        runtime.parent.mkdir(parents=True)
+        runtime.touch()
+        runtime.chmod(runtime.stat().st_mode | stat.S_IXUSR)
+        config = self.root / "config files" / "server.toml"
+        config.parent.mkdir()
+        config.touch()
+        stub_dir = self.root / "stubs"
+        stub_dir.mkdir()
+        capture = self.root / "python-args.txt"
+        def bash_path(path):
+            if os.name != "nt":
+                return str(path)
+            drive, tail = os.path.splitdrive(str(path))
+            return f"/mnt/{drive[0].lower()}/{tail.lstrip('\\/').replace(os.sep, '/')}"
+
+        python_stub = stub_dir / "python3"
+        python_stub.write_text(
+            f'#!/usr/bin/env bash\nprintf "%s\\n" "$@" > {shlex.quote(bash_path(capture))}\n',
+            encoding="utf-8", newline="\n")
+        python_stub.chmod(python_stub.stat().st_mode | stat.S_IXUSR)
+        command = (
+            f"export PATH={shlex.quote(bash_path(stub_dir))}:/usr/local/bin:/usr/bin:/bin; "
+            f"cd -- {shlex.quote(bash_path(config.parent))} && "
+            f"exec bash {shlex.quote(bash_path(launcher))} server.toml"
+        )
+        completed = subprocess.run(
+            ["bash", "-c", command], capture_output=True, text=True)
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        arguments = capture.read_text(encoding="utf-8").splitlines()
+        config_index = arguments.index("--config")
+        self.assertEqual(arguments[config_index + 1], bash_path(config))
+
+
+if __name__ == "__main__":
+    unittest.main()

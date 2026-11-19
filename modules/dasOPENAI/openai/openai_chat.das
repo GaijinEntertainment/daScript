@@ -78,6 +78,7 @@ struct ChatCompletionRequest {
     @optional tool_choice : string       //!< Tool selection ("auto", "none", or a specific name).
     @optional stream_options : StreamOptions  //!< ``include_usage``: a streamed reply ends on a usage chunk (``ChatStreamResult.usage``).
     @optional @embed chat_template_kwargs : string //!< Raw JSON for the server's chat template, e.g. ``{"enable_thinking":false}`` (llama.cpp-family servers).
+    @optional @embed cache_prompt : string //!< Raw JSON: ``false`` keeps the turn out of the prompt cache.
 }
 
 struct ChatChoice {
@@ -150,6 +151,10 @@ struct StreamTimings {
     //! A server's own timing of a streamed turn, in milliseconds.
     @optional ttft_ms : float   //!< Admission to the first token.
     @optional gen_ms : float    //!< The first token to the finish.
+    @optional prompt_ms : float    //!< llama.cpp-server's name for the prompt's evaluation time.
+    @optional predicted_ms : float //!< llama.cpp-server's name for the reply's generation time.
+    @optional draft_n : int     //!< Tokens the turn's speculative rounds drafted; 0 for none.
+    @optional draft_n_accepted : int //!< The drafted tokens the model's verify accepted.
 }
 
 struct ChatStreamResult {

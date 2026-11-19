@@ -102,9 +102,9 @@ carry the literal text `ATTRIBUTION SWEEP` on its own header-comment line, namin
 what its arms attribute.** Without the line a reader takes the mode's arms for an adoption
 decision it never made.
 
-**A new instrument that puts its own clock around a turn this repository's engine serves - one
-whole request, a prefill-plus-decode run, or a transcription or synthesis end to end - for a
-modality `lcpp_bench.das` has a flag for is a defect: add a run
+**A new instrument that puts its own clock around a turn this repository's engine serves inside
+the instrument's own process - one whole request, a prefill-plus-decode run, or a transcription or
+synthesis end to end - for a modality `lcpp_bench.das` has a flag for is a defect: add a run
 `../performance/gen_bench_records.das` spawns, or a `lcpp_bench.das` command a `../PROFILE.md`
 section documents, instead.** A second instrument's numbers cannot be compared to any row the
 board already carries.

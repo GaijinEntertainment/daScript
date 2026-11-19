@@ -61,6 +61,7 @@ require strings
 require math
 require daslib/jobque_boost   // the load turn's thread: its job over a Stream, its state in an atomic
 require _row_stats   // spread_of: the row statistic over reps
+require _served_turn   // stream_marked: the streamed turn under the client clock, the served instruments' one
 require _corpus   // load_corpus: the prompt corpus the system prompt is cut from
 
 [CommandLineArgs]
@@ -152,8 +153,6 @@ struct Args {
     help : bool
 }
 
-let CALIBRATION_CHARS = 8000   //! the untimed first turn's system prompt, the ruler for characters per token
-let CV_VOID = 3.0              //! percent; a row past it is not a measurement
 let TURN_TIMEOUT_S = 900
 let QUESTIONS = fixed_array(
     "Summarize the reference notes above in detail, section by section.",
@@ -271,19 +270,10 @@ def run_turn(plan : Plan; system, question : string; budget : int; started : Ato
                                      messages <- [ChatMessage(role = "system", content = system), ChatMessage(role = "user", content = question)],
                                      stream_options = StreamOptions(include_usage = true),
                                      chat_template_kwargs = "\{\"enable_thinking\":{plan.think}}")
-    var first_us = -1l
-    var last_us = -1l
-    let t0 = ref_time_ticks()
-    let res <- chat_stream(client_of(plan.url), req) $(_piece : string) {   //! reply text, reasoning included, moves the two clock marks
-        let now = int64(get_time_usec(t0))
-        if (first_us < 0l) {
-            first_us = now
-            if (started != null) {
-                started |> set(1)
-            }
-        }
-        last_us = now
-    }
+    var got <- stream_marked(plan.url, req, TURN_TIMEOUT_S, started)
+    let first_us = got.marks.first_us
+    let last_us = got.marks.last_us
+    let res & = got.res
     delete req
     turn.prompt_tokens = int64(res.usage.prompt_tokens)
     turn.completion_tokens = int64(res.usage.completion_tokens)
@@ -301,14 +291,8 @@ def run_turn(plan : Plan; system, question : string; budget : int; started : Ato
     }
     turn.ttft_us = first_us
     turn.gen_us = last_us - first_us
+    delete got
     return turn
-}
-
-//! the corpus as one text: its `%%` segments, the comment ones dropped, a blank line between them; "" for a file that is not there
-def corpus_text(path : string) : string {
-    return "" if (!stat(path).is_valid)
-    var inscope texts <- load_corpus(path)
-    return join(texts, "\n\n")
 }
 
 //! a system prompt of `chars` characters cut from `base`, cycled, opening on `nonce`
@@ -326,18 +310,13 @@ def system_prompt(base, nonce : string; chars : int) : string {
     }
 }
 
-def private flag(cv : float) : string => cv > CV_VOID ? "  VOID: cv over {CV_VOID}%" : ""
+def private flag(cv : float) : string => cv > CV_ROW_PCT ? "  VOID: cv over {CV_ROW_PCT}%" : ""
 
 //! what the server's own clock read for the same turns, as a row's bracket: the median of `vals`, or nothing when a turn reported none
 def own(var vals : array<float>; what, unit : string) : string {
-    for (v in vals) {
-        return "" if (v <= 0.0)
-    }
-    return "  [server's own {what} {spread_of(vals).median:.1f} {unit}]"
+    let median = readings_median(vals)
+    return median > 0.0 ? "  [server's own {what} {median:.1f} {unit}]" : ""
 }
-
-//! a turn's decode rate over `span_us`, the first token outside the span
-def rate(turn : Turn; span_us : float) : float => span_us > 0.0 ? float(turn.completion_tokens - 1l) * 1.0e6 / span_us : 0.0
 
 //! the three rows of one prompt size; false when a turn refused them
 def private size_rows(plan : Plan; base, run : string; size : int; chars_per_token : float) : bool {
@@ -364,8 +343,8 @@ def private size_rows(plan : Plan; base, run : string; size : int; chars_per_tok
         ttft_warm |> push(float(warm.ttft_us) / 1.0e6)
         prefill |> push(float(fresh) * 1.0e6 / float(cold.ttft_us))
         for (turn in [cold, warm]) {
-            decode |> push(rate(turn, float(turn.gen_us)))
-            own_decode |> push(rate(turn, turn.self_gen_ms * 1000.0))
+            decode |> push(reply_rate(turn.completion_tokens, float(turn.gen_us)))
+            own_decode |> push(reply_rate(turn.completion_tokens, turn.self_gen_ms * 1000.0))
         }
         own_cold |> push(cold.self_ttft_ms)
         own_warm |> push(warm.self_ttft_ms)
@@ -823,7 +802,7 @@ def scene_round(load : LoadJob; lanes : array<SceneJob>; var samples : array<Sce
                         jobs |> pop_archive() $(var job : LoadJob) {
                             let turn = run_turn(Plan(url = job.url, model = job.model), "You are a storyteller.", job.question, job.budget, state)
                             state |> set(LOAD_ENDED)
-                            out |> push_clone(SceneSample(lane = SCENE_CHAT, value = empty(turn.why) ? rate(turn, float(turn.gen_us)) : -1.0, why = turn.why))
+                            out |> push_clone(SceneSample(lane = SCENE_CHAT, value = empty(turn.why) ? reply_rate(turn.completion_tokens, float(turn.gen_us)) : -1.0, why = turn.why))
                         }
                         jobs |> release
                         out |> notify_and_release
@@ -870,7 +849,7 @@ def private scene_alone(load : LoadJob; var lanes : array<SceneJob>; reps : int;
     let plan = Plan(url = load.url, model = load.model)
     for (_rep in range(reps)) {
         let turn = run_turn(plan, "You are a storyteller.", load.question, load.budget)
-        alone |> push(SceneSample(lane = SCENE_CHAT, value = empty(turn.why) ? rate(turn, float(turn.gen_us)) : -1.0))
+        alone |> push(SceneSample(lane = SCENE_CHAT, value = empty(turn.why) ? reply_rate(turn.completion_tokens, float(turn.gen_us)) : -1.0))
     }
     return <- alone
 }
