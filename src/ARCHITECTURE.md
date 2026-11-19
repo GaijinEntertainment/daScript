@@ -10,11 +10,12 @@ A host compiles and runs on several threads. Each thread binds an environment
 and nothing orders one thread's first call against another's. So an object with static storage
 duration that code writes at run time has one of these homes:
 
-- **A thread** - `thread_local`, for state one thread's call sequence owns: the AOT main-module
-  name an emission sets and then reads, the parallel JIT emit queue between its `begin` and
-  its `run`, the arguments a `with_argv` block puts over the process command line.
-- **An environment** - a field of `daScriptEnvironment`, or of a `Program`, `Module` or
-  `Context` reached through it, for state one environment owns.
+- **A thread** - `thread_local`, for state one thread's call sequence owns: the parallel JIT
+  emit queue between its `begin` and its `run`, the JIT ABI check report a load fills and then
+  prints, the arguments a `with_argv` block puts over the process command line.
+- **An environment** - a field of `daScriptEnvironment`, or of a `Program`, `ModuleGroup`,
+  `Module` or `Context` reached through it, for state one environment owns: the compile log
+  and timings.
 - **A value built once** - a `const` function-local static built by its own initializer: a
   setting read from an environment variable.
 - **A guarded process object** - every read and write takes one named lock or goes through an
