@@ -91,7 +91,7 @@ def checked_url_rejects_request_line_controls(t : T?) {
 [test(description = "The native clients keep TLS origins apart and do not forward credentials across a redirect", timeout = 1200)]
 def native_clients_keep_tls_origins_and_redirect_credentials_separate(t : T?) {
     with_tls_fixture_mode(t, "clients") $(root, _dns_port, _ip_port) {
-        t |> equal(fread("{root}/client-results"), "1 1 1 1 1 1")
+        t |> equal(fread("{root}/client-results"), "1 1 1 1 1 1 1 1")
     }
 }
 

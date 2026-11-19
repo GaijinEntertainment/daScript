@@ -1,5 +1,6 @@
 #include <hv/HttpServer.h>
 #include <hv/HttpClient.h>
+#include <hv/TcpClient.h>
 #include <hv/hsocket.h>
 #include <hv/hlog.h>
 #include <hv/EventLoop.h>
@@ -107,9 +108,27 @@ static int async_status(hv::HttpClient & client, const std::string & url) {
     }) != 0) return -1;
     return future.wait_for(std::chrono::seconds(5)) == std::future_status::ready ? future.get() : -2;
 }
-static bool client_probes(const std::string & root, int dns_port) {
+static bool tls_connects(int port) {
+    auto connected = std::make_shared<std::promise<bool>>();
+    auto answered = std::make_shared<std::atomic<bool>>(false);
+    auto future = connected->get_future();
+    hv::TcpClient client;
+    if (client.createsocket(port, "127.0.0.1") < 0 || client.withTLS() != 0) return false;
+    client.onConnection = [connected, answered](const hv::SocketChannelPtr & channel) {
+        if (!answered->exchange(true)) connected->set_value(channel->isConnected());
+    };
+    client.start();
+    const bool result = future.wait_for(std::chrono::seconds(5)) == std::future_status::ready && future.get();
+    client.stop();
+    return result;
+}
+static bool client_probes(const std::string & root, int dns_port, int ip_port) {
     const std::string ca_file = root + "/ca.pem";
     const std::string dns_url = "https://localhost:" + std::to_string(dns_port);
+    const std::string server_cert = root + "/dns.pem", server_key = root + "/key.pem";
+    hssl_ctx_opt_t global{};
+    global.crt_file = server_cert.c_str(); global.key_file = server_key.c_str(); global.endpoint = HSSL_SERVER;
+    if (hssl_ctx_init(&global) == nullptr) return false;
     hv::HttpClient sync;
     hssl_ctx_opt_t options{};
     options.endpoint = HSSL_CLIENT; options.verify_peer = 1; options.ca_file = ca_file.c_str();
@@ -126,9 +145,14 @@ static bool client_probes(const std::string & root, int dns_port) {
     const bool first = async_status(async, dns_url + "/ok") == 200;
     const bool different_host = async_status(async, "https://127.0.0.1:" + std::to_string(dns_port) + "/ok") == 0;
     const bool downgrade = async_status(async, dns_url + "/redirect") == 0 && sync_reply(sync, dns_url + "/plaintext-count", "0");
+    hv::HttpClient plain;
+    HttpRequest unmatched; unmatched.url = "https://127.0.0.1:" + std::to_string(dns_port) + "/ok"; unmatched.timeout = 3; unmatched.retry_count = 0;
+    HttpResponse unmatched_response;
+    const bool global_context_unused = plain.send(&unmatched, &unmatched_response) != 0;
+    const bool tcp_ip_identity = tls_connects(ip_port) && !tls_connects(dns_port);
     FILE * output = fopen((root + "/client-results").c_str(), "wb");
     if (!output) return false;
-    fprintf(output, "%d %d %d %d %d %d", same, cross, bounded, first, different_host, downgrade);
+    fprintf(output, "%d %d %d %d %d %d %d %d", same, cross, bounded, first, different_host, downgrade, global_context_unused, tcp_ip_identity);
     fclose(output);
     return true;
 }
@@ -138,11 +162,11 @@ int main(int argc, char ** argv) {
     hlog_disable();
     if (argc == 3 && std::string(argv[2]) == "clients") {
         FILE * ready = fopen((root + "/ready").c_str(), "rb");
-        int port = 0;
+        int port = 0, ip_port = 0;
         if (!ready) return 13;
-        const bool parsed = fscanf(ready, "%d", &port) == 1;
+        const bool parsed = fscanf(ready, "%d %d", &port, &ip_port) == 2;
         fclose(ready);
-        return parsed && port > 0 && client_probes(root, port) ? 0 : 12;
+        return parsed && port > 0 && ip_port > 0 && client_probes(root, port, ip_port) ? 0 : 12;
     }
     auto ca_key = key(), server_key = key(), wrong_key = key();
     if (!ca_key || !server_key || !wrong_key) return 3;
