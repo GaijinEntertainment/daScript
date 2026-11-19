@@ -21,6 +21,9 @@ struct DastestArgs {
     @clarg_doc = "The whole suite's timeout in seconds: past it the process ends at once with exit code 124, no summary, and one line naming the file that was running. 0 disables it. The default is 20 minutes"
     timeout : float = 1200.0
 
+    @clarg_doc = "One [test] function's wall in seconds: the test arms the process's kill switch, and a test still running past it ends the process at once with exit code 125 and one line naming the test and, in the sequential mode, its file - no summary, no later test. [test(timeout = N)] does not raise it. 0 (default) disables it"
+    test_wall : float = 0.0
+
     @clarg_doc = "Print the top N slowest test files and highlight statistical timing outliers (above mean + 2x stddev)"
     timing_outliers : int = 0
 

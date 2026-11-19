@@ -90,6 +90,32 @@ def test_together_gives_each_file_a_fresh_context(tt : T?) {
     tt |> equal(r.exit_code, 0, "a clean run:\n{output}")
 }
 
+[test(description = "--together simulates its program once: a file whose [init] panics fails every file of the batch with one error each and runs no test", timeout = 1200)]
+def test_together_fails_every_file_when_the_simulate_fails(tt : T?) {
+    var output : string
+    let r <- run_together(["init_panics", "passing"], output)
+    tt |> success(r.exit_code != 0, "a failed simulate fails the run:\n{output}")
+    tt |> equal(r.report.errors, 2, "each file of the batch is one error")
+    tt |> equal(r.report.passed, 0, "no test ran")
+    tt |> success(find(output, "Failed to simulate the together root") >= 0,
+        "the failure is the root's simulate:\n{output}")
+}
+
+[test(description = "under --together a test past --test-wall ends the process with exit code 125 and a line naming the test's own file of the batch", timeout = 1200)]
+def test_together_wall_names_the_file(tt : T?) {
+    let das_root = get_das_root()
+    var output : string
+    let exit_code = run_and_capture([get_command_line_arguments()[0], "-dasroot", das_root,
+        "{das_root}/dastest/dastest.das", "--",
+        "--together", "{das_root}/dastest/tests/_fixture_passing.das",
+        "--together", "{das_root}/dastest/tests/_timeout_fixture/test_sleep.das",
+        "--module-cache-dir", test_temp_dir(), "--test-wall", "1"], output, 120.0)
+    tt |> equal(exit_code, 125, "the wall's exit code:\n{output}")
+    tt |> success(find(output, "kill switch: test 'test_sleep' of") >= 0
+        && find(output, "test_sleep.das (--test-wall) ran past 1s") >= 0,
+        "the wall names the batch's file the test is in:\n{output}")
+}
+
 [test(description = "--together refuses a batch whose files disagree on options, reporting one error per file and naming both values", timeout = 1200)]
 def test_together_refuses_disagreeing_options(tt : T?) {
     var output : string

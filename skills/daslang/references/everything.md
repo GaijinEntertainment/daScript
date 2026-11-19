@@ -4178,6 +4178,7 @@ The AST module provides access to the abstract syntax tree representation of das
 
 ### Compilation and file access
 
+- `clone_context` - Clones the simulated `source` context and runs the block with the clone: it shares the code - a JIT link included - and gets globals and heaps of its own with the init script run anew, so a program simulated once serves many independent runs.
 - `compile` - Compiles a daslang program from a source code string using the provided `FileAccess` and `ModuleGroup`, returning a `ProgramPtr` (null on failure).
 - `compile_file` - Compiles a file through `FileAccess` and invokes the block with a success flag, program and diagnostics.
 - `make_file_access` - Creates and returns a new `FileAccessPtr` (`smart_ptr<FileAccess>`) initialized as a default file-system-backed project.

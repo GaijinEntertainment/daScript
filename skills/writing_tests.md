@@ -151,8 +151,9 @@ Useful flags: `--failures-only` to quieten passing output, `--color`, `--timeout
 `--compile-only` to compile the test files without executing them, `--isolated-mode` to
 run each file in its own process (slower, but survives a crash in one file), and
 `--together <file>` (repeatable) to compile the listed files as one program, so a heavy module
-graph is parsed and JIT'd once for the list, each file then running in a fresh context of it and
-reporting on its own.
+graph is parsed, JIT'd and simulated once for the list, each file then running in a clone of that
+context - globals, heaps and `[init]`s of its own - and reporting on its own. `--test-wall <seconds>`
+ends the whole run, exit code 125, at the first `[test]` function that runs past it.
 
 ## Benchmarks
 

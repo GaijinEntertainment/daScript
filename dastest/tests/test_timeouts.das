@@ -61,6 +61,45 @@ def test_timeout(tt : T?) {
     }
 }
 
+[test(description = "a test still running past --test-wall ends the process at once with exit code 125 and a line naming the test and its file, and a suite whose tests finish under the wall passes", timeout = 1200)]
+def test_wall(tt : T?) {
+    tt |> run("a test that outlives the wall ends the process, exit code 125, named") <| @(t : T?) {
+        let exe = get_command_line_arguments()[0]
+        let cmd <- [exe, "-dasroot", get_das_root(), "{dastest_root()}/dastest.das", "--",
+            "--test", "{dastest_root()}/tests/_timeout_fixture", "--test-wall", "1"]
+        var output : string
+        let exit_code = run_and_capture(cmd, output, 60.0)
+        t |> equal(exit_code, 125, "expected the wall's exit code, got {exit_code}:\n{output}")
+        t |> success(output |> contains("kill switch: test 'test_sleep' of")
+            && output |> contains("test_sleep.das (--test-wall) ran past 1s"),
+            "the wall names the test and its file:\n{output}")
+        t |> success(!(output |> contains("should have ended the process")),
+            "the fixture's test ran to its end - the wall did not end the process:\n{output}")
+        t |> success(!(output |> contains("CALL STACK"))
+            && !(output |> contains("[daslang atexit]")),
+            "the wall ended the process as a crash, not a plain exit:\n{output}")
+    }
+
+    tt |> run("a finalize past the wall ends nothing: the wall guards a test") <| @(t : T?) {
+        var output : string
+        var exit_code : int
+        let fixture = "{dastest_root()}/tests/_fixture_wall_idle.das"
+        run_dastest_on(fixture, ["--test-wall", "1"], output, exit_code)
+        t |> equal(exit_code, 0, "the switch was disarmed as the test ended:\n{output}")
+        t |> success(output |> contains("1 tests, 1 passed"),
+            "expected the passing summary, got:\n{output}")
+    }
+
+    tt |> run("tests that finish under the wall pass (the control)") <| @(t : T?) {
+        var output : string
+        var exit_code : int
+        run_dastest_passing(["--test-wall", "3600"], output, exit_code)
+        t |> equal(exit_code, 0, "a generous wall fails nothing:\n{output}")
+        t |> success(output |> contains("3 tests, 3 passed"),
+            "expected the passing summary, got:\n{output}")
+    }
+}
+
 [test(description = "--max-file-time fails a completed file past the limit in both modes, and a file's declared test budgets raise its limit", timeout = 1200)]
 def test_max_file_time(tt : T?) {
     tt |> run("a generous file-time limit preserves a passing suite") <| @(t : T?) {
