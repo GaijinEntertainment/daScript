@@ -52,7 +52,9 @@ variable or runner flag the run reads, the value a tune companion returns (a fun
 the winner the `[tune]` framework picked for this box), a host toolchain, or a stocked artifact's
 presence. A change reaches a test file or a cell when it alters anything its result depends on -
 its test file, a shared helper, engine code it exercises, an in-tree fixture or corpus it reads, or
-a name it asserts on; a comment-only edit reaches none. These definitions bind the `REVIEW_*.md` companions
+a name it asserts on; an edit that changes only whitespace or comments, or that moves code with its
+text unchanged and adds or drops only the `require` lines the move needs, reaches none. These
+definitions bind the `REVIEW_*.md` companions
 beside this file wherever a companion does not define the term itself; a diff that changes one
 changes each companion's word-for-word copy of it too. A kernel-unit cell, a kernel class and a CPU
 oracle are as `REVIEW_KERNEL_CELLS.md` (beside this file) defines them; an encoder is as

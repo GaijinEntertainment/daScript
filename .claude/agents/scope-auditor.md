@@ -38,8 +38,11 @@ paid on every PR of the arc. So:
   tier beyond one named cell, a GPU home the diff does not touch, a re-tune of a box, a
   measurement, a quality rig where the diff does not change what a flag-free run synthesizes.
 
-The model-free suite is owed by every PR and is not yours to argue: list it, and say whether a
-run in hand already satisfies it.
+A diff that reaches no test file and no cell - every edit it holds changes only whitespace or
+comments, or moves code with its text unchanged - owes no run at all: the RUN list is empty,
+and one NOT RUN entry says so with the check that shows it. For every other diff the
+model-free suite is owed and is not yours to argue: list it, and say whether a run in hand
+already satisfies it.
 
 ## The report
 
