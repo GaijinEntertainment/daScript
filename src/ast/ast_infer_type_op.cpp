@@ -5,6 +5,8 @@
 #include "ast_infer_type.h"
 #include "daScript/ast/ast_visitor.h"
 
+#include <optional>
+
 namespace das {
 
     static const Structure * sealedMethodOwner ( Expression * left ) {
@@ -14,6 +16,13 @@ namespace das {
         if ( vt && vt->isPointer() ) vt = vt->firstType;
         if ( !vt || vt->baseType!=Type::tStructure || !vt->structType ) return nullptr;
         return vt->structType->isSealedMethod(eField->name) ? vt->structType : nullptr;
+    }
+
+    static std::optional<int> pointerStride ( const TypeDeclPtr & pointee ) {
+        bool failed = false;
+        uint64_t stride = pointee->getSizeOf64(failed);
+        if ( failed || stride > 0x7fffffff ) return std::nullopt;
+        return int(stride);
     }
 
     bool InferTypes::isBitfieldOp(const Function *fnc) const {
@@ -183,9 +192,15 @@ namespace das {
                           expr->at, CompilationError::not_resolved_yet_array_type);
                         return Visitor::visit(expr);
                     }
+                    auto strideOf = pointerStride(expr->subexpr->type->firstType);
+                    if ( !strideOf ) {
+                        error("pointer arithmetic on a type that is too big; " + describeType(expr->subexpr->type->firstType),
+                            "", "", expr->at, CompilationError::exceeds_array);
+                        return Visitor::visit(expr);
+                    }
                     reportAstChanged();
                     auto popc = new ExprCall(expr->at, pop);
-                    auto stride = expr->subexpr->type->firstType->getSizeOf();
+                    auto stride = *strideOf;
                     popc->arguments.push_back(expr->subexpr->clone());
                     popc->arguments.push_back(new ExprConstInt(expr->at, stride));
                     return popc;
@@ -426,10 +441,16 @@ namespace das {
                           expr->at, CompilationError::not_resolved_yet_array_type);
                         return Visitor::visit(expr);
                     }
+                    auto strideOf = pointerStride(expr->left->type->firstType);
+                    if ( !strideOf ) {
+                        error("pointer arithmetic on a type that is too big; " + describeType(expr->left->type->firstType),
+                            "", "", expr->at, CompilationError::exceeds_array);
+                        return Visitor::visit(expr);
+                    }
                     reportAstChanged();
                     auto popc = new ExprCall(expr->at, pop);
                     popc->alwaysSafe = expr->alwaysSafe;
-                    auto stride = expr->left->type->firstType->getSizeOf();
+                    auto stride = *strideOf;
                     popc->arguments.push_back(expr->left->clone());
                     popc->arguments.push_back(expr->right->clone());
                     popc->arguments.push_back(new ExprConstInt(expr->at, stride));
@@ -458,9 +479,15 @@ namespace das {
                     error("type is not fully inferred, fixed array dimension is unknown", "", "",
                           expr->at, CompilationError::not_resolved_yet_array_type);
                 } else {
+                    auto strideOf = pointerStride(expr->left->type->firstType);
+                    if ( !strideOf ) {
+                        error("pointer arithmetic on a type that is too big; " + describeType(expr->left->type->firstType),
+                            "", "", expr->at, CompilationError::exceeds_array);
+                        return Visitor::visit(expr);
+                    }
                     reportAstChanged();
                     auto popc = new ExprCall(expr->at, "i_das_ptr_diff");
-                    auto stride = expr->left->type->firstType->getSizeOf();
+                    auto stride = *strideOf;
                     popc->arguments.push_back(expr->left->clone());
                     popc->arguments.push_back(expr->right->clone());
                     popc->arguments.push_back(new ExprConstInt(expr->at, stride));
@@ -961,6 +988,9 @@ namespace das {
             } else if (expr->left->rtti_isAt()) {
                 ExprAt *eat = (ExprAt *)(expr->left);
                 if ( eat->no_promotion ) return nullptr;    // a![i] = v - the write path bypasses too
+                if ( !eat->subexpr->type || eat->subexpr->type->isExprType() ) return nullptr;
+                if ( !eat->index->type || eat->index->type->isExprType() ) return nullptr;
+                if ( expr->right->type->isExprType() ) return nullptr;
                 // lets find []= operator
                 auto opName = "[]" + expr->name;
                 if (auto opAtEq = inferGenericOperator3(opName, expr->at, eat->subexpr, eat->index, expr->right)) {

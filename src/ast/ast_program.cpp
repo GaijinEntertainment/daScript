@@ -474,6 +474,12 @@ namespace das {
             case Type::tUByte4:
             case Type::tUByte8:
             case Type::tUByte16:        return nullptr;
+            case Type::tPointer: {
+                auto res = new ExprConstPtr(at, cast<void *>::to(value));
+                res->isSmartPtr = type->smartPtr;
+                if ( type->firstType ) res->ptrType = new TypeDecl(*type->firstType);
+                return res;
+            }
             default:                    DAS_ASSERTF(0, "we should not even be here"); return nullptr;
         }
     }
