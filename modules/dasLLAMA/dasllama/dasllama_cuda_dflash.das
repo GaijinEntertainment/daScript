@@ -52,6 +52,7 @@ struct private DflashCud {
     invf : uint64              //! the rope's inverse frequencies
     x, hn, cv, dyn, o : uint64 //! [DF_ROWS][dim] rows: the residual, the normed rows, a conv's output, the conv coefficients, a branch
     q, qn, att : uint64        //! [DF_ROWS][qd]
+    tp : uint64                //! the attention's tile partials, [DF_ROWS][n_heads][tiles][2 + hs]
     kb, kn, vb : uint64        //! [DF_ROWS][kvd]
     g, u : uint64              //! [DF_ROWS][hidden]
     xq, xs : uint64            //! the feed of the widest row set, in the class `feed_kq` names
@@ -91,7 +92,7 @@ def private df_forget(var g : DflashCud) {
     }
     g.feed_kq = -1
     g.fblob = 0ul; g.invf = 0ul; g.x = 0ul; g.hn = 0ul; g.cv = 0ul; g.dyn = 0ul; g.o = 0ul
-    g.q = 0ul; g.qn = 0ul; g.att = 0ul; g.kb = 0ul; g.kn = 0ul; g.vb = 0ul; g.g = 0ul; g.u = 0ul; g.xq = 0ul; g.xs = 0ul
+    g.q = 0ul; g.qn = 0ul; g.att = 0ul; g.tp = 0ul; g.kb = 0ul; g.kn = 0ul; g.vb = 0ul; g.g = 0ul; g.u = 0ul; g.xq = 0ul; g.xs = 0ul
     g.capf = 0ul; g.logits = 0ul; g.hsel = 0ul; g.ids = 0ul; g.pid = 0ul; g.pval = 0ul; g.cid = 0ul; g.cval = 0ul
     g.sel_ok = false
     g.walk_ok = false
@@ -113,7 +114,7 @@ def private df_release(var g : DflashCud) {
         cuda_mem_free(g.fq[i])
         cuda_mem_free(g.fs[i])
     }
-    for (b in [g.fblob, g.invf, g.x, g.hn, g.cv, g.dyn, g.o, g.q, g.qn, g.att, g.kb, g.kn, g.vb, g.g, g.u, g.xq, g.xs,
+    for (b in [g.fblob, g.invf, g.x, g.hn, g.cv, g.dyn, g.o, g.q, g.qn, g.att, g.tp, g.kb, g.kn, g.vb, g.g, g.u, g.xq, g.xs,
                g.capf, g.logits, g.hsel, g.ids, g.pid, g.pval, g.cid, g.cval]) {
         cuda_mem_free(b)
     }
@@ -157,7 +158,7 @@ def private df_why(dr : DflashDrafter) : string {
     }
     delete sites
     return "a weight plane's decode GEMV did not compile on this device" if (!served)
-    let stamps = (ensure_dflash_conv_cls() && ensure_dflash_qkn_cls() && ensure_dflash_attn_cls() && ensure_cls_ar() && ensure_cls_dn_rq()
+    let stamps = (ensure_dflash_conv_cls() && ensure_dflash_qkn_cls() && ensure_dflash_attn_tile_cls() && ensure_dflash_attn_merge_cls() && ensure_cls_ar() && ensure_cls_dn_rq()
         && ensure_cls_q8k_rq() && ensure_q8_actrq_cls() && ensure_q8k_actrq_cls() && ensure_words_copy())
     return "a kernel of the pass did not compile on this device" if (!stamps)
     return ""
@@ -217,6 +218,7 @@ def private df_buffers(t : Model; dr : DflashDrafter; var g : DflashCud) : bool 
     g.q = cud_dev_zero(oom, DF_ROWS * qd * 4l)
     g.qn = cud_dev_zero(oom, DF_ROWS * qd * 4l)
     g.att = cud_dev_zero(oom, DF_ROWS * qd * 4l)
+    g.tp = cud_dev_zero(oom, gk_dflash_attn_partials(DF_ROWS, dr.n_heads, dr.hs) * 4l)
     g.kb = cud_dev_zero(oom, DF_ROWS * kvd * 4l)
     g.kn = cud_dev_zero(oom, DF_ROWS * kvd * 4l)
     g.vb = cud_dev_zero(oom, DF_ROWS * kvd * 4l)
@@ -433,10 +435,12 @@ def private df_layer(var g : DflashCud; dr : DflashDrafter; var s : void?; ring 
     df_qkn(g, dr, s, g.q, g.qn, dr.n_heads, dr.qn_offs[l], 0l, pos, rows)
     df_qkn(g, dr, s, g.kb, g.kn, dr.n_kv, dr.kn_offs[l], 0l, pos, rows)
     let lbase = uint(l * dr.window) * kvd
+    let tiles = gk_dflash_attn_tiles(nctx + rows)
     var pa = GkDflashAttnArgs(rows = uint(rows), pos0 = uint(pos), lo = uint(lo), nctx = uint(nctx), w = uint(dr.window), hs = uint(dr.hs),
         nheads = uint(dr.n_heads), grp = uint(dr.n_heads / dr.n_kv), scale = dr.attn_scale, rbase = 0u,
         koff = lbase, voff = lbase)
-    enc_dflash_attn_cls(s, fixed_array(g.qn, g.kn, g.vb, ring.rk, ring.rv, g.att), pa, dr.n_heads * rows)
+    enc_dflash_attn_tile_cls(s, fixed_array(g.qn, g.kn, g.vb, ring.rk, ring.rv, g.tp), pa, dr.n_heads * rows * tiles)
+    enc_dflash_attn_merge_cls(s, fixed_array(g.tp, g.att), pa, dr.n_heads * rows)
     df_rq(g, s, g.att, rows * qd, rows, dflash_site(l, 4))
     df_gemv(g, s, dflash_site(l, 4), g.o, rows)
     let abranch = df_branch(g, dr, s, dr.v2 ? dr.aconv_base_offs[l] : 0l, rows)

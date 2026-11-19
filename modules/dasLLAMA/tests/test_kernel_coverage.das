@@ -1410,7 +1410,7 @@ let private VK_CENSUS_NEVER_DISPATCHED <- [
     // the DFlash2 block drafter's pass, top-k and selector walk serve only a drafter attached beside a target, and no census
     // row loads one; their coverage is test_vkt_dflash_pass_kernels, test_vkt_dflash_topk and test_vkt_dflash_walk in
     // test_vulkan_tower_kernels.das, the stocked carriers the dflash-e2b-discrete and dflash-27b-discrete arms of test_dflash_drafter.das
-    "dflash_conv_cls_spv", "dflash_qkn_cls_spv", "dflash_attn_cls_spv", "dflash_topk_slices_cls_spv", "dflash_topk_merge_cls_spv",
+    "dflash_conv_cls_spv", "dflash_qkn_cls_spv", "dflash_attn_tile_cls_spv", "dflash_attn_merge_cls_spv", "dflash_topk_slices_cls_spv", "dflash_topk_merge_cls_spv",
     "dflash_walk_cls_spv",
     // the fused gate-up GEMV's N stamps serve only the N-row token command, which the zoo's one-region load never engages
     // (the batched rows need a region a row; the stocked regions files - test_gpu_resident_regions_qwen3.das and the

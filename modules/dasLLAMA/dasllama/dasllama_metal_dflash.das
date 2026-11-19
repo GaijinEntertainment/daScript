@@ -47,13 +47,23 @@ class MetalDflashQkn : GkDflashQkn {
     }
 }
 
-//! the block's attention on the template every home stamps (`GkDflashAttn`), a threadgroup of 256 a (head, row)
-[metal_dispatch(name = "enc_dflash_attn", pso = "g_df_pso_attn", tgmem = "metal_dflash_attn_msl_tgmem", tg = 256, grid = "wgs",
-    params = "wgs : int64")]
-class MetalDflashAttn : GkDflashAttn {
-    [metal_kernel(name = "metal_dflash_attn_msl")]
-    def metal_dflash_attn {
-        dflash_attn_body()
+//! a key tile of the block's attention on the template every home stamps (`GkDflashAttnTile`), a threadgroup of 256 a
+//! (row, head, tile)
+[metal_dispatch(name = "enc_dflash_attn_tile", pso = "g_df_pso_attn_tile", tgmem = "metal_dflash_attn_tile_msl_tgmem", tg = 256,
+    grid = "wgs", params = "wgs : int64")]
+class MetalDflashAttnTile : GkDflashAttnTile {
+    [metal_kernel(name = "metal_dflash_attn_tile_msl")]
+    def metal_dflash_attn_tile {
+        dflash_attn_tile_body()
+    }
+}
+
+//! the attention's tiles joined on the template every home stamps (`GkDflashAttnMerge`), a threadgroup of 256 a (row, head)
+[metal_dispatch(name = "enc_dflash_attn_merge", pso = "g_df_pso_attn_merge", tg = 256, grid = "wgs", params = "wgs : int64")]
+class MetalDflashAttnMerge : GkDflashAttnMerge {
+    [metal_kernel(name = "metal_dflash_attn_merge_msl")]
+    def metal_dflash_attn_merge {
+        dflash_attn_merge_body()
     }
 }
 
@@ -148,7 +158,8 @@ class MetalDflashAccept {
 
 var private g_df_pso_conv : MetalComputePipeline?
 var private g_df_pso_qkn : MetalComputePipeline?
-var private g_df_pso_attn : MetalComputePipeline?
+var private g_df_pso_attn_tile : MetalComputePipeline?
+var private g_df_pso_attn_merge : MetalComputePipeline?
 var private g_df_pso_topk_slices : MetalComputePipeline?
 var private g_df_pso_topk_merge : MetalComputePipeline?
 var private g_df_pso_walk : MetalComputePipeline?
@@ -200,6 +211,7 @@ struct private DflashGpu {
     bk : MetalBuffer?       //! [nblock][kvd]
     bv : MetalBuffer?
     batt : MetalBuffer?     //! [nblock][qd]
+    btp : MetalBuffer?      //! the attention's tile partials of one block, [nblock][n_heads][tiles][2 + hs]
     bo : MetalBuffer?       //! [nblock][dim] a sublayer's output
     boc : MetalBuffer?      //! ... after the output convolution
     bg : MetalBuffer?       //! [nblock][hidden] the gate, then silu(gate) * up
@@ -338,7 +350,8 @@ def private df_init : bool {
         var ok = true
         g_df_pso_conv = compile_stamp(metal_dflash_conv_msl, ok)
         g_df_pso_qkn = compile_stamp(metal_dflash_qkn_msl, ok)
-        g_df_pso_attn = compile_stamp(metal_dflash_attn_msl, ok)
+        g_df_pso_attn_tile = compile_stamp(metal_dflash_attn_tile_msl, ok)
+        g_df_pso_attn_merge = compile_stamp(metal_dflash_attn_merge_msl, ok)
         var sel_ok = true
         g_df_pso_topk_slices = compile_stamp(metal_dflash_topk_slices_msl, sel_ok)
         g_df_pso_topk_merge = compile_stamp(metal_dflash_topk_merge_msl, sel_ok)
@@ -348,7 +361,7 @@ def private df_init : bool {
         var acc_ok = true
         g_df_pso_accept = compile_stamp(metal_dflash_accept_msl, acc_ok)
     }
-    return g_df_pso_conv != null && g_df_pso_qkn != null && g_df_pso_attn != null
+    return g_df_pso_conv != null && g_df_pso_qkn != null && g_df_pso_attn_tile != null && g_df_pso_attn_merge != null
 }
 
 //! the device selector on (default) or the host's walk over the landed logits on the device pass (the A/B rail)
@@ -418,6 +431,7 @@ def private df_release(var g : DflashGpu) {
     release_handles(g.bacc_words, g.bacc_row)
     release_handles(g.binvf, g.btok, g.bx, g.bhn, g.bhc, g.bdyn)
     release_handles(g.bq, g.bk, g.bv, g.batt, g.bo, g.boc)
+    release_handle(g.btp)
     release_handles(g.bg, g.bu, g.bhsel, g.blog, g.bfc, g.bcr, g.bdx)
     for (pd in g.pends) {
         release_handle(pd.bcaps)
@@ -515,6 +529,7 @@ def private df_ready(t : Model; dr : DflashDrafter) : bool {
     g.bk = metal_new_buffer(g_dev, uint64(pr * kvd) * f4)
     g.bv = metal_new_buffer(g_dev, uint64(pr * kvd) * f4)
     g.batt = metal_new_buffer(g_dev, uint64(pr * qd) * f4)
+    g.btp = metal_new_buffer(g_dev, uint64(gk_dflash_attn_partials(n, dr.n_heads, dr.hs)) * f4)
     g.bo = metal_new_buffer(g_dev, uint64(pr * d) * f4)
     g.boc = metal_new_buffer(g_dev, uint64(pr * d) * f4)
     g.bg = metal_new_buffer(g_dev, uint64(pr * dr.hidden) * f4)
@@ -1127,7 +1142,9 @@ def private df_layer_attn(enc : MetalComputeEncoder?; dr : DflashDrafter; g : Df
     enc_dflash_qkn(enc, g.bk, g.bfblob, g.binvf, g.bk, kka, dr.n_kv * n)
     ka.koff = uint(l * dr.window * kvd)
     ka.voff = ka.koff
-    enc_dflash_attn(enc, g.bq, g.bk, g.bv, ring.bk, ring.bv, g.batt, ka, dr.n_heads * n)
+    let tiles = gk_dflash_attn_tiles(int64(ka.nctx) + n)
+    enc_dflash_attn_tile(enc, g.bq, g.bk, g.bv, ring.bk, ring.bv, g.btp, ka, dr.n_heads * n * tiles)
+    enc_dflash_attn_merge(enc, g.btp, g.batt, ka, dr.n_heads * n)
 }
 
 //! a layer past its attention over `rows` rows (conv blocks of `blk` rows, 0 = one block): the output projection and its

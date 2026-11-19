@@ -5,7 +5,7 @@ options _dasllama_internal = true
 module dasllama_vulkan_classes_dflash shared public
 
 //! The block drafter's stamps on the Vulkan home: the common templates Metal and the CUDA home stamp
-//! (`GkDflashConv`, `GkDflashQkn`, `GkDflashAttn`, `GkDflashTopk`, `GkDflashWalk`), each under this home's dispatch stem
+//! (`GkDflashConv`, `GkDflashQkn`, `GkDflashAttnTile`, `GkDflashAttnMerge`, `GkDflashTopk`, `GkDflashWalk`), each under this home's dispatch stem
 
 require dasllama/dasllama_lint public
 require spirv/spirv_shader
@@ -38,12 +38,21 @@ class DflashQkn : GkDflashQkn {
     }
 }
 
-//! the block drafter's attention over its ring and its own rows (`GkDflashAttn`)
-[vk_dispatch(name = "dflash_attn_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
-class DflashAttn : GkDflashAttn {
+//! a key tile of the block drafter's attention over its ring and its own rows (`GkDflashAttnTile`)
+[vk_dispatch(name = "dflash_attn_tile_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class DflashAttnTile : GkDflashAttnTile {
     [spirv_kernel(local_size_x = 256)]
     def run {
-        dflash_attn_body()
+        dflash_attn_tile_body()
+    }
+}
+
+//! the attention's tiles joined a (row, head) (`GkDflashAttnMerge`)
+[vk_dispatch(name = "dflash_attn_merge_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class DflashAttnMerge : GkDflashAttnMerge {
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        dflash_attn_merge_body()
     }
 }
 

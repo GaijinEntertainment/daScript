@@ -67,7 +67,7 @@ def test_cud_tower_vad(t0 : T?) {
 [test(description = "The block drafter's dynamic two-tap convolution, head norm and rope, and block attention over its ring on the CUDA home match their in-test CPU forms, with a block-boundary, a position-shift and an unwindowed control")]
 def test_cud_dflash_pass_kernels(t0 : T?) {
     t0 |> run("the block drafter's conv, head norm + rope and block attention on the CUDA home == the in-test CPU forms") <| @(t : T?) {
-        return if (!cuda_up(t) || !stamps_built(t, ensure_dflash_conv_cls() && ensure_dflash_qkn_cls() && ensure_dflash_attn_cls(), "the block drafter's pass stamps"))
+        return if (!cuda_up(t) || !stamps_built(t, ensure_dflash_conv_cls() && ensure_dflash_qkn_cls() && ensure_dflash_attn_tile_cls() && ensure_dflash_attn_merge_cls(), "the block drafter's pass stamps"))
         with_cu_planes() $(var cp) {
             df_conv_case(t, cp)
             df_qkn_case(t, cp)

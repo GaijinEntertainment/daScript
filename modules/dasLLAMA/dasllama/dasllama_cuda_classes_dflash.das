@@ -34,12 +34,21 @@ class CuDflashQkn : GkDflashQkn {
     }
 }
 
-//! the block drafter's attention over its ring and its own rows (`GkDflashAttn`)
-[cuda_dispatch(name = "dflash_attn_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
-class CuDflashAttn : GkDflashAttn {
-    [cuda_kernel(local_size_x = 256, name = "dflash_attn_cls_cuda")]
+//! a key tile of the block drafter's attention over its ring and its own rows (`GkDflashAttnTile`)
+[cuda_dispatch(name = "dflash_attn_tile_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class CuDflashAttnTile : GkDflashAttnTile {
+    [cuda_kernel(local_size_x = 256, name = "dflash_attn_tile_cls_cuda")]
     def run {
-        dflash_attn_body()
+        dflash_attn_tile_body()
+    }
+}
+
+//! the attention's tiles joined a (row, head) (`GkDflashAttnMerge`)
+[cuda_dispatch(name = "dflash_attn_merge_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class CuDflashAttnMerge : GkDflashAttnMerge {
+    [cuda_kernel(local_size_x = 256, name = "dflash_attn_merge_cls_cuda")]
+    def run {
+        dflash_attn_merge_body()
     }
 }
 

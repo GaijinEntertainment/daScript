@@ -51,6 +51,7 @@ let private B_IDS = 0x20000u
 let private B_LIST = 0x40000u  //! the selector's lists: a slice's, a row's
 let private B_WIDS = 0x80000u
 let private B_RING = 0x100000u
+let private B_TP = 0x200000u
 
 //! one GEMV site: its plane's format, its region record (the tensor's first block in the drafter's planes of that format), its
 //! set over the feed and the plane it writes, and its shape
@@ -67,7 +68,7 @@ struct private DfRing {
     rk : uint64
     rv : uint64
     s_qkn : VkDescriptorSet    //! the commit's K rows normed and roped into the ring
-    s_attn : VkDescriptorSet
+    s_attn_tile : VkDescriptorSet
 }
 
 struct private DflashVk {
@@ -78,6 +79,8 @@ struct private DflashVk {
     fblob_bytes, invf_bytes : int64
     x, hn, cv, dyn, o : uint64        //! [DF_ROWS][dim] rows: the residual, the normed rows, a conv's output, the conv coefficients, a branch
     q, qn, att : uint64               //! [DF_ROWS][qd]
+    tp : uint64                       //! the attention's tile partials, [DF_ROWS][n_heads][tiles][2 + hs]
+    tp_bytes : int64
     kb, kn, vb : uint64               //! [DF_ROWS][kvd]
     g, u : uint64                     //! [DF_ROWS][hidden]
     xq, xs : uint64                   //! the feed of the widest row set
@@ -99,7 +102,7 @@ struct private DflashVk {
     ring_said : bool           //! a session found no room for its ring, and the attach said so
     s_ar_xx, s_ar_xo, s_ar_xcv, s_ar_oo : VkDescriptorSet   //! the norm's sets by (rows, add partner): into `hn` every one
     s_conv_hn, s_conv_o : VkDescriptorSet
-    s_qkn_q, s_qkn_k : VkDescriptorSet
+    s_qkn_q, s_qkn_k, s_attn_merge : VkDescriptorSet
     s_rq_hn, s_rq_cv, s_rq_att, s_rq_capf : VkDescriptorSet
     s_actrq, s_emb, s_cls, s_topk_s, s_topk_m, s_walk : VkDescriptorSet
     feed_set : VkDescriptorSet        //! the requant set of the rows the feed was last quantized from, their base and count; `feed_live` false = none to requant again
@@ -124,7 +127,7 @@ def private df_forget(var g : DflashVk) {
         g.fs[i] = 0ul
     }
     g.fblob = 0ul; g.invf = 0ul; g.x = 0ul; g.hn = 0ul; g.cv = 0ul; g.dyn = 0ul; g.o = 0ul
-    g.q = 0ul; g.qn = 0ul; g.att = 0ul; g.kb = 0ul; g.kn = 0ul; g.vb = 0ul; g.g = 0ul; g.u = 0ul; g.xq = 0ul; g.xs = 0ul
+    g.q = 0ul; g.qn = 0ul; g.att = 0ul; g.tp = 0ul; g.kb = 0ul; g.kn = 0ul; g.vb = 0ul; g.g = 0ul; g.u = 0ul; g.xq = 0ul; g.xs = 0ul
     g.capf = 0ul; g.logits = 0ul; g.hsel = 0ul; g.ids = 0ul; g.pid = 0ul; g.pval = 0ul; g.cid = 0ul; g.cval = 0ul; g.wids = 0ul
     for (i in range(4)) {
         g.cb[i] = 0ul
@@ -155,7 +158,7 @@ def private df_release(var g : DflashVk) {
     release_device_buf(g.vb); release_device_buf(g.g); release_device_buf(g.u); release_device_buf(g.xq)
     release_device_buf(g.xs); release_device_buf(g.capf); release_device_buf(g.logits); release_device_buf(g.hsel)
     release_device_buf(g.ids); release_device_buf(g.pid); release_device_buf(g.pval); release_device_buf(g.cid)
-    release_device_buf(g.cval); release_device_buf(g.wids)
+    release_device_buf(g.cval); release_device_buf(g.wids); release_device_buf(g.tp)
     for (i in range(4)) {
         release_device_buf(g.cb[i])
     }
@@ -199,7 +202,7 @@ def private df_why(dr : DflashDrafter) : string {
     delete sites
     return "a weight plane's decode GEMV did not build on this device" if (!served)
     let cls_fmt = g_rd.cls_fmt_marker
-    let stamps = (ensure_dflash_conv_cls() && ensure_dflash_qkn_cls() && ensure_dflash_attn_cls() && ensure_cls_ar() && ensure_cls_dn_rq()
+    let stamps = (ensure_dflash_conv_cls() && ensure_dflash_qkn_cls() && ensure_dflash_attn_tile_cls() && ensure_dflash_attn_merge_cls() && ensure_cls_ar() && ensure_cls_dn_rq()
         && ensure_cls_q8k_rq() && ensure_q8_actrq_cls() && ensure_q8k_actrq_cls() && gemv_cls_ensure(cls_fmt) && gemv_cls_ensure_n(cls_fmt)
         && (g_rd.emb_blk < 0l || emb_cls_ensure(g_rd.emb_fmt)) && (g_rd.emb_f32 == 0ul || ensure_emb_gather_f32_cls()))
     return "a kernel of the pass did not build on this device" if (!stamps)
@@ -269,6 +272,8 @@ def private df_buffers(t : Model; dr : DflashDrafter; var g : DflashVk) : bool {
     g.q = soft_device_buf(oom, g.q_bytes)
     g.qn = soft_device_buf(oom, g.q_bytes)
     g.att = soft_device_buf(oom, g.q_bytes)
+    g.tp_bytes = gk_dflash_attn_partials(DF_ROWS, dr.n_heads, dr.hs) * 4l
+    g.tp = soft_device_buf(oom, g.tp_bytes)
     g.kv_bytes = DF_ROWS * kvd * 4l
     g.kb = soft_device_buf(oom, g.kv_bytes)
     g.kn = soft_device_buf(oom, g.kv_bytes)
@@ -299,7 +304,7 @@ def private df_buffers(t : Model; dr : DflashDrafter; var g : DflashVk) : bool {
     g.walk_ok = g.sel_ok && dr.v2 && df_walk_books(dr, g, vocab, oom)
     g.ring_bytes = dr.n_layers * dr.window * kvd * 4l
     let widest = max(max(max(g.logits_bytes, g.ring_bytes), max(g.capf_bytes, g.xq_bytes)),
-        max(max(g.hid_bytes, g.row_bytes), max(max(g.q_bytes, g.kv_bytes), g.dyn_bytes)))
+        max(max(g.hid_bytes, g.row_bytes), max(max(g.q_bytes, g.kv_bytes), max(g.dyn_bytes, g.tp_bytes))))
     return false if (oom || !vk_range_ok(widest))   //! every plane a set binds whole sits inside the device's storage range
     g.idin = make_host_buf(DF_ROWS * 4l, false)
     g.capin = make_host_buf(g.capf_bytes, false)
@@ -428,6 +433,7 @@ def private df_sets(var g : DflashVk; sites : array<DflashSitePlane>; bases : ar
     g.s_qkn_k = set_dflash_qkn_cls(fixed_array(g.kb, g.fblob, g.invf, g.kn), fixed_array(g.kv_bytes, g.fblob_bytes, g.invf_bytes, g.kv_bytes), fixed_array(B_KB, 0u, 0u, B_KN))
     g.s_rq_hn = set_rq_cls(fixed_array(g.hn, g.xq, g.xs), fixed_array(rb, g.xq_bytes, g.xs_bytes), fixed_array(B_HN, B_XQ, B_XQ))
     g.s_rq_cv = set_rq_cls(fixed_array(g.cv, g.xq, g.xs), fixed_array(rb, g.xq_bytes, g.xs_bytes), fixed_array(B_CV, B_XQ, B_XQ))
+    g.s_attn_merge = set_dflash_attn_merge_cls(fixed_array(g.tp, g.att), fixed_array(g.tp_bytes, g.q_bytes), fixed_array(B_TP, B_ATT))
     g.s_rq_att = set_rq_cls(fixed_array(g.att, g.xq, g.xs), fixed_array(g.q_bytes, g.xq_bytes, g.xs_bytes), fixed_array(B_ATT, B_XQ, B_XQ))
     g.s_rq_capf = set_rq_cls(fixed_array(g.capf, g.xq, g.xs), fixed_array(g.capf_bytes, g.xq_bytes, g.xs_bytes), fixed_array(B_CAPF, B_XQ, B_XQ))
     g.s_actrq = set_actrq_cls(fixed_array(g.g, g.u, g.xq, g.xs), fixed_array(g.hid_bytes, g.hid_bytes, g.xq_bytes, g.xs_bytes), fixed_array(B_G, B_U, B_XQ, B_XQ))
@@ -577,10 +583,12 @@ def private df_layer(var g : DflashVk; dr : DflashDrafter; raw : VkCommandBuffer
     df_qkn(dr, raw, h, g.s_qkn_q, dr.n_heads, dr.qn_offs[l], 0l, pos, rows)
     df_qkn(dr, raw, h, g.s_qkn_k, dr.n_kv, dr.kn_offs[l], 0l, pos, rows)
     let lbase = uint(l * dr.window) * kvd
+    let tiles = gk_dflash_attn_tiles(nctx + rows)
     var pa = GkDflashAttnArgs(rows = uint(rows), pos0 = uint(pos), lo = uint(lo), nctx = uint(nctx), w = uint(dr.window), hs = uint(dr.hs),
         nheads = uint(dr.n_heads), grp = uint(dr.n_heads / dr.n_kv), scale = dr.attn_scale, rbase = 0u,
         koff = lbase, voff = lbase)
-    enc_dflash_attn_cls(raw, h, ring.s_attn, pa, dr.n_heads * rows)
+    enc_dflash_attn_tile_cls(raw, h, ring.s_attn_tile, pa, dr.n_heads * rows * tiles)
+    enc_dflash_attn_merge_cls(raw, h, g.s_attn_merge, pa, dr.n_heads * rows)
     df_rq(g, raw, h, g.s_rq_att, 0l, rows * qd, g.sites[dflash_site(l, 4)].fmt)
     df_gemv(g, raw, h, dflash_site(l, 4), rows)
     df_branch_norm(g, dr, raw, h, dr.v2 ? dr.aconv_base_offs[l] : 0l, dr.ffn_norm_offs[l], rows)
@@ -638,8 +646,8 @@ def private df_ring(var g : DflashVk; uid : uint64) : DfRing {
         g.rings[uid] = DfRing(rk = rk, rv = rv,
             s_qkn = set_dflash_qkn_cls(fixed_array(g.kb, g.fblob, g.invf, rk), fixed_array(g.kv_bytes, g.fblob_bytes, g.invf_bytes, g.ring_bytes),
                 fixed_array(B_KB, 0u, 0u, B_RING)),
-            s_attn = set_dflash_attn_cls(fixed_array(g.qn, g.kn, g.vb, rk, rv, g.att),
-                fixed_array(g.q_bytes, g.kv_bytes, g.kv_bytes, g.ring_bytes, g.ring_bytes, g.q_bytes), fixed_array(B_QN, B_KN, B_VB, B_RING, B_RING, B_ATT)))
+            s_attn_tile = set_dflash_attn_tile_cls(fixed_array(g.qn, g.kn, g.vb, rk, rv, g.tp),
+                fixed_array(g.q_bytes, g.kv_bytes, g.kv_bytes, g.ring_bytes, g.ring_bytes, g.tp_bytes), fixed_array(B_QN, B_KN, B_VB, B_RING, B_RING, B_TP)))
     }
     return g.rings?[uid] ?? DfRing()
 }

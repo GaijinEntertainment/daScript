@@ -5,7 +5,7 @@ carries the Metal seats of the common speculative round, the box knob that sets 
 draft chain and the verify that commits it, and the recurrent layer's stages over groups of rows
 with the mirror pool they read; the assistant drafter on both homes is `ARCHITECTURE_GPU_MTP_ASSISTANT.md`,
 and a sampled stream's three acceptances, the drafter distribution a rejection-sampling round records
-and the chain cut are `ARCHITECTURE_GPU_MTP_ACCEPT.md`; the DFlash2 round's host seams are `ARCHITECTURE_GPU_MTP_ROUND.md`.
+and the chain cut are `ARCHITECTURE_GPU_MTP_ACCEPT.md`; the DFlash2 round's host seams are `ARCHITECTURE_GPU_MTP_ROUND.md`, its attention's key tiles `ARCHITECTURE_GPU_SHARED_DRAFTER.md`.
 `ARCHITECTURE_GPU_MTP_DECODE.md` beside it carries the decode driver's layer encoder, the row-buffer pad a
 multi-row verify dispatches under, the argument-alignment contract a kernel declares on its `[metal_dispatch]`, and the rotated
 prefix a rope-store kernel takes; the kernel forms a multi-row verify's rows sites take are

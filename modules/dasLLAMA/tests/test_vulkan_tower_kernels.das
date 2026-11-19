@@ -1222,7 +1222,7 @@ def test_vkt_dflash_pass_kernels(t0 : T?) {
                 t |> skip("no Vulkan device")
                 return
             }
-            let built = ensure_dflash_conv_cls() && ensure_dflash_qkn_cls() && ensure_dflash_attn_cls()
+            let built = ensure_dflash_conv_cls() && ensure_dflash_qkn_cls() && ensure_dflash_attn_tile_cls() && ensure_dflash_attn_merge_cls()
             t |> success(built, "the block drafter's pass stamps build on a device with Vulkan")
             return if (!built)
             with_cell_planes() $(var cp : CellPlanes) {
