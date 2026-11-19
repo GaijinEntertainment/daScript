@@ -18,6 +18,14 @@ A final PR's body also names the arc's PRs and the commit the first one branched
 The repo-wide gates do not depend on the kind: `make-pr` and the one full preflight run on
 every PR.
 
+## A change no test can see runs nothing
+
+`modules/dasLLAMA/tests/REVIEW.md` defines what a change reaches: an edit that changes only
+whitespace or comments, or that moves code with its text unchanged, reaches no test. A PR
+whose change reaches no test file and no cell owes no model-free run, and its scope report
+is one NOT RUN entry naming the check that shows it (for a whitespace-only edit, `git diff -w`
+prints nothing). The rest of this file is for a change a test can see.
+
 ## Intermediate PR
 
 Runs:
