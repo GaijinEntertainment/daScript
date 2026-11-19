@@ -137,6 +137,10 @@ A WebSocket client's `init` fails at once for a name that does not resolve.
 
 ## Request logging
 
+libhv's own log is discarded until `hv_set_log_file(path)` names a daily file; an empty path
+stops the file again. `DASLIVE_HV_LOG` set to `stderr`, `stdout`, `silent` or `file` decides
+instead - `file` is libhv's own `libhv.YYYYMMDD.log` in the working directory.
+
 `set_access_log(server, false)` disables libhv access logging before start; changing
 it while running returns false. Raw URL, header and proxy destination values are
 excluded from the patched low-level diagnostic paths. Lifecycle/error diagnostics

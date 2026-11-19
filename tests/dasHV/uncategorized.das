@@ -15,8 +15,9 @@ def file_stream_rejects_invalid_ownership_without_file_access(t : T?) {
     t |> equal(SERVE_FILE_STREAM(default<WebSocketServer>, null, "", 0l), -1)
 }
 
-// `hv_set_log_file` moves libhv's own daily log out of the working directory: a server started
-// after the call logs into `<path>.YYYYMMDD.log`, and an empty path changes nothing.
+// `hv_set_log_file` names libhv's own daily log: a server started
+// after the call logs into `<path>.YYYYMMDD.log`, and an empty path
+// stops the file again.
 
 
 class LogTestServer : HvWebServer {
@@ -33,7 +34,6 @@ def test_log_file(t : T?) {
         var terr = ""
         let dir = path_join(temp_directory(terr), "dashv_log_file_{ref_time_ticks()}")
         mkdir_rec(dir)
-        hv_set_log_file("")
         hv_set_log_file(path_join(dir, "hvlog"))
         with_test_server(type<LogTestServer>) $(base_url) {
             GET("{base_url}/ping") $(resp) {
@@ -47,7 +47,21 @@ def test_log_file(t : T?) {
             }
         }
         t |> success(length(logs) == 1, "one daily log under the named path: {logs}")
-        hv_set_log_file("libhv")
+        hv_set_log_file("")
+        rmdir_rec(dir)
+        mkdir_rec(dir)
+        with_test_server(type<LogTestServer>) $(base_url) {
+            GET("{base_url}/ping") $(resp) {
+                t |> equal(resp.body, "pong")
+            }
+        }
+        var after : array<string>
+        dir(dir) $(name) {
+            if (ends_with(name, ".log")) {
+                after |> push(name)
+            }
+        }
+        t |> success(empty(after), "an empty path stops the log file: {after}")
         rmdir_rec(dir)
     }
 }
@@ -78,7 +92,7 @@ def disabled_access_log_does_not_echo_request_secrets(t : T?) {
             request(request) $(_response) {}
         }
     }
-    hv_set_log_file("libhv")
+    hv_set_log_file("")
     var captured : string
     dir(root) $(filename) {
         if (ends_with(filename, ".log")) { captured += fread("{root}/{filename}") }

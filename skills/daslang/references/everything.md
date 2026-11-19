@@ -1246,7 +1246,7 @@ The DASHV module provides HTTP and WebSocket networking built on top of the `lib
 
 ### Logging
 
-- `hv_set_log_file` - Sends libhv's own log to a daily file <path>.YYYYMMDD.log (the directory must exist) instead of libhv.YYYYMMDD.log in the working directory.
+- `hv_set_log_file` - Sends libhv's own log to a daily file <path>.YYYYMMDD.log (the directory must exist).
 
 ## openai_common
 

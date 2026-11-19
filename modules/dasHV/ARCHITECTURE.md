@@ -44,8 +44,8 @@ Finish restores callbacks and releases the current admission token before `End`.
 
 The handle registries own every server and client adapter, and a registry is a
 static, destroyed after `main` returns. libhv destroys its default logger from an
-`atexit` handler registered on its first log line, after the registries exist, so
-it runs before them, while a loop thread may still log.
+`atexit` handler too, and a loop thread still running then may log into the
+destroyed logger or reach a destroyed registry.
 `Module_HV`'s destructor runs inside `Module::Shutdown`, before `main` returns, so it
 stops every live server and client there: `stop()` joins the loop threads, and the
 adapters' own destructors find them stopped. The live adapters are collected first

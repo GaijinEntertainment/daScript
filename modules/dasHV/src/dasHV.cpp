@@ -326,8 +326,14 @@ int das_wsc_close ( Handle<hv::WebSocketClient> h ) {
     return 0;
 }
 
+static void discard_hv_log ( int, const char *, int ) {}
+static bool hv_log_unrouted = false;
+
 void das_hv_set_log_file ( const char * path ) {
-    if ( path && *path ) hlog_set_file(path);
+    const bool named = path && *path;
+    if ( named ) hlog_set_file(path);
+    else if ( hv_log_unrouted ) hlog_set_file(DEFAULT_LOG_FILE);
+    if ( hv_log_unrouted ) hlog_set_handler(named ? nullptr : discard_hv_log);
 }
 
 bool das_wsc_is_connected ( Handle<hv::WebSocketClient> h ) {
@@ -1857,13 +1863,13 @@ public:
         WSADATA wsaData;
         WSAStartup(MAKEWORD(2, 2), &wsaData);
 #endif
-        // libhv defaults to file_logger (bin/libhv.YYYYMMDD.log). Invisible
-        // under popen + CI runners. Two env-gated opt-outs:
+        // libhv defaults to file_logger (libhv.YYYYMMDD.log in the working directory).
         //   DASLIVE_HV_LOG=stderr (or =1)  → redirect libhv to stderr
         //   DASLIVE_HV_LOG=stdout          → redirect libhv to stdout
         //   DASLIVE_HV_LOG=silent          → disable libhv logging entirely
+        //   DASLIVE_HV_LOG=file            → libhv's file_logger
         // DASLIVE_HV_LOG_LEVEL=DEBUG/INFO/WARN/ERROR overrides the level.
-        // Default unset → file_logger (unchanged).
+        // Default unset → no log file until hv_set_log_file names one.
         static std::once_flag logConfigured;
         std::call_once(logConfigured, []() {
             if (const char * route = std::getenv("DASLIVE_HV_LOG")) {
@@ -1874,6 +1880,9 @@ public:
                 } else if (!strcmp(route, "silent")) {
                     hlog_disable();
                 }
+            } else {
+                hv_log_unrouted = true;
+                hlog_set_handler(discard_hv_log);
             }
             if (const char * lvl = std::getenv("DASLIVE_HV_LOG_LEVEL")) {
                 hlog_set_level_by_str(lvl);
