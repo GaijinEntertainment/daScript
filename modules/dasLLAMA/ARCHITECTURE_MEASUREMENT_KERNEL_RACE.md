@@ -196,8 +196,8 @@ race nothing and write nothing.
 ### A family with no seat races nothing {#seated-families}
 
 The tuner races a family only where its registry holds a row beside the reference (`seated`,
-`harness/gen_tune_probe.das`). A native grid always does. A cross build stamps only the rows its
-class can run - the tune framework filters the grid by the class - so under `wasm-simd128`
+`harness/gen_tune_probe.das`). A grid built for the running box always does. A build for a class -
+a cross triple's, or `DAS_JIT_BASELINE`'s - stamps only the rows the class can run, so under `wasm-simd128`
 every family gated on NEON or AVX is a one-row registry: the walk leaves it out of the plan, the
 TEST gate and the sidecar. The q8 confirm pass, which spawns child compiles, goes with the q8
 family, so a mint inside a cross artifact starts no process.

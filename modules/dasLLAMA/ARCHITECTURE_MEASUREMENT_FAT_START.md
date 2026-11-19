@@ -9,7 +9,7 @@ the instrumentation rails stay in `ARCHITECTURE_MEASUREMENT.md`.
 
 ### A fat exe races its runtime section at first start {#fat-first-start}
 
-A fat exe (`DAS_TUNE_MODE=fat`, `modules/dasLLVM/ARCHITECTURE_TARGET_FEATURES.md` sec.11) ships
+A fat exe (`DAS_TUNE_MODE=fat`, the fat mode section of `modules/dasLLVM/ARCHITECTURE_CPU_CLASSES.md`) ships
 its kernels baked per CPU class and carries no tuner and no policy rail, so nothing would ever
 mint the sidecar's `"runtime"` section - the Metal twin crowns among its knobs, a 2-4x
 kernel-form gain of a tensor twin over its simdgroup kernel per twin-race row on the M5 Max

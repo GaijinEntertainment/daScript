@@ -25,6 +25,7 @@ let public JIT_CPU_CLASSES = [
     // the set does not name (bmi2, lzcnt, movbe; v4 adds avx512cd/dq), which the backend would emit
     // and cpuid is never asked for - the set alone is what the box is tested for and what LLVM enables
     JitCpuClass(name = "x86-base", arch = "x86_64", cpu = "x86-64", features = "sse4.2"),
+    JitCpuClass(name = "x86-avx", arch = "x86_64", cpu = "x86-64", features = "avx;f16c;sse4.2"),
     JitCpuClass(name = "x86-avx2", arch = "x86_64", cpu = "x86-64", features = "avx2;f16c;fma;sse4.2"),
     JitCpuClass(name = "x86-vnni256", arch = "x86_64", cpu = "x86-64", features = "avx2;f16c;fma;sse4.2;avxvnni"),
     JitCpuClass(name = "x86-vnni512", arch = "x86_64", cpu = "x86-64",
@@ -42,7 +43,7 @@ let public JIT_CPU_CLASSES = [
 //! The adoption ladder of an arch, most capable class first; "" for an arch with no classes.
 def public jit_cpu_class_ladder(arch : string) : string {
     if (arch == "x86_64") {
-        return "x86-amx;x86-vnni512;x86-vnni256;x86-avx2;x86-base"
+        return "x86-amx;x86-vnni512;x86-vnni256;x86-avx2;x86-avx;x86-base"
     }
     if (arch == "arm64" || arch == "aarch64") {
         return "arm-sve;arm-i8mm;arm-neon"
@@ -72,12 +73,15 @@ def public jit_cpu_class_names() : string {
 
 def public requires_hold(expr : string; has : block<(feature : string) : bool>) : bool {
     //! A `requires=` expression against a feature test: `,` joins terms
-    //! that must all hold, `|` the alternatives of a term. Empty holds.
+    //! that must all hold, `|` the alternatives of a term, `!` ahead of a
+    //! name holds where the feature is absent. Empty holds.
     for (term in split(expr, ",")) {
         continue if (empty(term))
         var holds = false
         for (alt in split(term, "|")) {
-            holds ||= !empty(alt) && invoke(has, alt)
+            let absent = starts_with(alt, "!")
+            let name = absent ? slice(alt, 1) : alt
+            holds ||= !empty(name) && invoke(has, name) != absent
         }
         return false if (!holds)
     }
@@ -115,9 +119,12 @@ def public jit_class_plus_features(name : string) : string {
 //! targets the running box.
 def public jit_baseline_class() : string => strip(g_env_jit.jit_baseline)
 
-[arch(at = "../ARCHITECTURE_TARGET_FEATURES.md#cross-class")]
-def public jit_cross_class() : string =>
-    starts_with(get_target_triple(), "wasm64") ? "wasm-simd128" : ""
+[arch(at = "../ARCHITECTURE_CPU_CLASSES.md#cross-class")]
+def public jit_cross_class() : string {
+    let triple = get_target_triple()
+    return "" if (empty(triple))
+    return starts_with(triple, "wasm64") ? "wasm-simd128" : jit_baseline_class()
+}
 
 //! The class this compile builds for; "" when it builds for the box
 def public jit_target_class() : string {
@@ -132,7 +139,7 @@ def public jit_baseline_has(feature : string) : bool {
 }
 
 //! "" when the baseline is unset or names a class of `target_arch`; else the refusal text.
-[arch(at = "../ARCHITECTURE_TARGET_FEATURES.md#cpu-classes")]
+[arch(at = "../ARCHITECTURE_CPU_CLASSES.md#cpu-classes")]
 def public jit_baseline_error(target_arch : string) : string {
     let baseline = jit_baseline_class()
     if (empty(baseline)) {

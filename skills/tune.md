@@ -84,7 +84,8 @@ generator (they become the generator's parameters and fold into the JIT DLL
 cache key). `suffix="..."` overrides the auto-derived variant name;
 `requires="feat"` is a fallback-eligibility hint (a comma-separated AND of
 `|`-separated OR alternatives, matched against the host CPU features plus the
-`DAS_JIT_*_FORCE_FEATURES` overrides). `tune_requires_ok(expr)` evaluates
+`DAS_JIT_*_FORCE_FEATURES` overrides; `!feat` passes where the feature is
+absent, which is how a row serves a class and none above it - `f16c,!avx2`). `tune_requires_ok(expr)` evaluates
 such an expression on its own, and `tune_pick_fallback(chain)` runs the same
 rule over a `;`-chain of `suffix` / `suffix:requires` entries - that is how a
 library whose permutations are *generated*, with no row to hang `requires=`
@@ -129,7 +130,10 @@ The `DAS_TUNE_MODE` environment variable selects the compile-time behavior:
     Stamp the full grid as `<name>__<suffix>` clones plus the
     `<name>_variants()` registry (name -> function-pointer rows). A harness
     benches them and records the winner (`tune`), or bit-exact-gates every
-    variant against the reference row (`test`).
+    variant against the reference row (`test`). A build for a CPU class - a
+    cross triple's, or the one `DAS_JIT_BASELINE` names - stamps only the
+    rows whose `requires=` the class passes: a mint under a class races what
+    the class can run, and a family with no such row keeps a one-row registry.
 
 `fat`
     A standalone exe (`-exe`) or library (`-lib`) under
@@ -214,7 +218,7 @@ them, not of its class.
 
 The class names follow the features `requires=` can gate: `x86-amx` (AMX-INT8 +
 AMX-TILE over the 512-bit VNNI gate) / `x86-vnni512` / `x86-vnni256` / `x86-avx2` /
-`x86-base`, `arm-sve` / `arm-i8mm` / `arm-neon`, and `wasm-simd128` for a
+`x86-avx` (AVX and F16C with no AVX2) / `x86-base`, `arm-sve` / `arm-i8mm` / `arm-neon`, and `wasm-simd128` for a
 wasm64 cross build (*Cross builds* below); any other
 architecture gets `<platform>-<arch>`, a key no shipped profile matches, so
 such a box always races (`tune_cpu_class()` computes the class this compile
@@ -394,9 +398,12 @@ box that builds it. A wasm64 triple builds for the class `wasm-simd128`: the
 and each `[tune]` function stamps the class profile's winner, else the first
 `fallback=` entry the class passes, else the reference body. The sidecar
 beside the app is not read - the build box measured it for its own CPU - and
-only `DAS_TUNE_FORCE` names a file that stamps. Every other cross triple has
-no class, and its tune annotations are inert: the artifact carries reference
-bodies, and only a `--jit-compile-only` dump keeps them live, for inspection.
+only `DAS_TUNE_FORCE` names a file that stamps. Any other triple gets its
+class from `DAS_JIT_BASELINE=<class>` - the way to build for a target whose
+hardware is fixed, a console - and is tuned the same way. A triple with
+neither has no class, and its tune annotations are inert: the artifact
+carries reference bodies, and only a `--jit-compile-only` dump keeps them
+live, for inspection.
 
 One more compile is inert for a different reason: under the host's
 `-documentation` policy - a documentation or reflection root - every tune
@@ -721,8 +728,8 @@ same protocol; the debugging concession is accepting an existing sidecar.
 
 A tuner is an ordinary `[export] def main` compiled with
 `DAS_TUNE_MODE=tune`, so the `<name>_variants()` registry holds the full
-grid as function pointers - under a cross build (*Cross builds*), the rows
-its class can run. It benches them (see the Measurement section
+grid as function pointers - under a build for a class (a cross build, or
+`DAS_JIT_BASELINE`), the rows the class can run. It benches them (see the Measurement section
 above and `modules/dasLLAMA/tune_for_this_box.md`), then records the winner:
 
 ```das

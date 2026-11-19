@@ -72,7 +72,8 @@ context - which is why the infer pass moved to `daslib/tune` with the annotation
 `tune_aot_gate()` and `tune_exe_gate()` are deliberately separate. `tune_aot_gate()` makes an
 artifact for a cross triple no CPU class serves fully tune-free, but keeps the grid for a
 `--jit-compile-only` dump under it, so the x64 emission rail can inspect it off-box. A triple a
-class serves (`jit_cross_class()` names the class) stamps for that class. `tune_exe_gate()` is true for both
+class serves (`jit_cross_class()` names the class: wasm64's own, or the baseline's under any
+other triple) stamps for that class. `tune_exe_gate()` is true for both
 `-exe` and `-lib`: the command line sets one compile policy for both, `jit_exe_mode`, and the
 option that makes the JIT emit a library is set after the compile, too late for a macro. Both
 artifacts still stamp and still emit the status `[init]`. A macro that must tell a library from
@@ -92,7 +93,7 @@ plus the `llvm_code_selftest::host_features` probe in `modules/dasLLVM/tests/llv
 
 ## The fat mode
 
-Mechanism: `modules/dasLLVM/ARCHITECTURE_TARGET_FEATURES.md#fat-mode`. Maintenance notes:
+Mechanism: `modules/dasLLVM/ARCHITECTURE_CPU_CLASSES.md#fat-mode`. Maintenance notes:
 
 - `stamp_fat` runs INSTEAD of the normal-mode pick, so a rule that changes how a winner is
   resolved (eligibility, companions' own entries, the fallback chain) has two homes: `tune_apply`
@@ -125,7 +126,7 @@ Mechanism: `modules/dasLLVM/ARCHITECTURE_TARGET_FEATURES.md#fat-mode`. Maintenan
 
 ## The forced file
 
-Mechanism: `modules/dasLLVM/ARCHITECTURE_TARGET_FEATURES.md#tune-forced-file`. Maintenance notes:
+Mechanism: `modules/dasLLVM/ARCHITECTURE_CPU_CLASSES.md#tune-forced-file`. Maintenance notes:
 
 - `tune_force_path()` is the only reader of the forced-file knob, `DAS_TUNE_FORCE`. `tune_manifest_path` answers the in-process
   override first, then the forced file, then `DAS_TUNE_MANIFEST`, then the default beside the app.

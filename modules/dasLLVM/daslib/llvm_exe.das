@@ -918,7 +918,7 @@ def private push_shared_unique(entry : SharedModuleEntry; var seen : table<strin
     deps.shared_modules |> push(entry)
 }
 
-[arch(at = "../ARCHITECTURE_TARGET_FEATURES.md#cross-class")]
+[arch(at = "../ARCHITECTURE_CPU_CLASSES.md#cross-class")]
 def private write_release_deps(prog : Program?; cross : bool) {
     let cfg <- jit_cli_options_or_default()
     let dst_path = cfg.list_shared_modules |> unwrap_or("")
