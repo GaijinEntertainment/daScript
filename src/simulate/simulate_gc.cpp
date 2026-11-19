@@ -6,6 +6,7 @@
 #include "simulate_gc.h"
 #include "daScript/simulate/debug_print.h"
 #include "daScript/misc/performance_time.h"
+#include "daScript/simulate/debug_agent.h"
 
 namespace das
 {

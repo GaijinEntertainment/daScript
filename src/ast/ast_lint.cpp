@@ -1253,7 +1253,7 @@ namespace das {
                 auto it = tableLookupCollision.back().find(subexprHash);
                 if ( it!=tableLookupCollision.back().end() ) {
                     if ( program->policies.temp_table_lint_warning ) {
-                        (*daScriptEnvironment::getBound()->g_compilerLog) << expr->subexpr->at.describe() << ": *warning* potential table lookup collision for " << subexprText << "\n";
+                        (*program->compileLog) << expr->subexpr->at.describe() << ": *warning* potential table lookup collision for " << subexprText << "\n";
                     } else {
                         program->error("potential table lookup collision for " + subexprText, "",
                                 "tab[key1] = tab[key2], or fun(tab[key1],tab[key2]) scenarios may produce undefined behavior",

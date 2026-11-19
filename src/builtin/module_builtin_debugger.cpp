@@ -8,6 +8,7 @@
 #include "module_builtin_rtti.h"
 #include "daScript/misc/performance_time.h"
 #include "daScript/misc/sysos.h"
+#include "daScript/simulate/debug_agent.h"
 
 #include <condition_variable>
 #include <atomic>
@@ -1293,8 +1294,309 @@ namespace debugger {
 
     // invoke_debug_agent_method("category","function",....)
 
-    extern std::recursive_mutex g_DebugAgentMutex;
-    extern das_safe_map<string, DebugAgentInstance>   g_DebugAgents;
+    static std::recursive_mutex g_DebugAgentMutex;
+    static das_safe_map<string, DebugAgentInstance>   g_DebugAgents;
+    static DAS_THREAD_LOCAL(bool) g_isInDebugAgentCreation;
+    static DAS_THREAD_LOCAL(DebugAgentInstance *) g_threadLocalDebugAgent;
+    extern atomic<int> g_envTotal;
+
+    DebugAgentInstance *& threadLocalDebugAgent () {
+        return *g_threadLocalDebugAgent;
+    }
+
+    void on_debug_agent_mutex ( const callable<void ()> & lmbd ) {
+        std::lock_guard<std::recursive_mutex> guard(g_DebugAgentMutex);
+        lmbd ();
+    }
+
+    void for_each_debug_agent ( const callable<void (const DebugAgentPtr &)> & lmbd ) {
+        if ( g_envTotal > 0 && threadLocalDebugAgent() && threadLocalDebugAgent()->debugAgent ) {
+            lmbd ( threadLocalDebugAgent()->debugAgent );
+        }
+        std::lock_guard<std::recursive_mutex> guard(g_DebugAgentMutex);
+        for ( auto & it : g_DebugAgents ) {
+            if ( !it.second.debugAgent ) continue;
+            lmbd ( it.second.debugAgent );
+        }
+    }
+
+    void dapiReportContextState ( Context & ctx, const char * category, const char * name, const TypeInfo * info, void * data ) {
+        for_each_debug_agent([&](const DebugAgentPtr & pAgent){
+            pAgent->onVariable(&ctx,category,name,(TypeInfo*)info,data);
+        });
+    }
+
+    void dapiSimulateContext ( Context & ctx ) {
+        for_each_debug_agent([&]( const DebugAgentPtr & pAgent ){
+            pAgent->onSimulateContext(&ctx);
+        });
+    }
+
+    void dapiUserCommand ( const char * command ) {
+        if ( !command ) command = "";
+        bool any = false;
+        for_each_debug_agent([&]( const DebugAgentPtr & pAgent ){
+            if ( !any ) any = pAgent->onUserCommand(command);
+        });
+    }
+
+    void dapiOnBeforeGC ( Context & ctx ) {
+        for_each_debug_agent([&]( const DebugAgentPtr & pAgent ){
+            pAgent->onBeforeGC(&ctx);
+        });
+    }
+
+    void dapiOnAfterGC ( Context & ctx ) {
+        for_each_debug_agent([&]( const DebugAgentPtr & pAgent ){
+            pAgent->onAfterGC(&ctx);
+        });
+    }
+
+    void dapiInstrumentFunctionThreadLocal ( Context & ctx, SimFunction * sim, bool entering, uint64_t userData ) {
+        auto instance = threadLocalDebugAgent();
+        if ( instance && instance->debugAgent ) {
+            instance->debugAgent->onInstrumentFunction(&ctx, sim, entering, userData);
+        }
+    }
+
+    void tickSpecificDebugAgent ( const char * name ) {
+        std::lock_guard<std::recursive_mutex> guard(g_DebugAgentMutex);
+        auto it = g_DebugAgents.find(name);
+        if ( it != g_DebugAgents.end() ) {
+            it->second.debugAgent->onTick();
+        }
+    }
+
+    void tickDebugAgent ( ) {
+        for_each_debug_agent([&](const DebugAgentPtr & pAgent){
+            pAgent->onTick();
+        });
+    }
+
+    void collectDebugAgentState ( Context & ctx, const LineInfo & at ) {
+        for_each_debug_agent([&](const DebugAgentPtr & pAgent){
+            pAgent->onCollect( &ctx, at );
+        });
+    }
+
+    void onBreakpointsReset ( const char * file, int breakpointsNum ) {
+        for_each_debug_agent([&](const DebugAgentPtr & pAgent){
+            pAgent->onBreakpointsReset( file, breakpointsNum );
+        });
+    }
+
+    class CppOnlyDebugAgent : public DebugAgent {
+    public:
+        virtual void onCreateContext ( Context * ctx ) override { if ( onCreateContextOp ) onCreateContextOp(ctx); }
+        virtual void onDestroyContext ( Context * ctx ) override { if ( onDestroyContextOp ) onDestroyContextOp(ctx); }
+        virtual bool onLog ( Context * context, const LineInfo * at, int level, const char * text ) override { return onLogOp ? onLogOp(context, at, level, text) : false; }
+        virtual bool isCppOnlyAgent() const override { return true; }
+    public:
+        function<void(Context*)> onCreateContextOp;
+        function<void(Context*)> onDestroyContextOp;
+        function<bool(Context *, const LineInfo *, int, const char *)> onLogOp;
+    };
+
+    template <typename TT>
+    void onCppDebugAgent ( const char * category, TT && lmb ) {
+        std::lock_guard<std::recursive_mutex> guard(g_DebugAgentMutex);
+        auto it = g_DebugAgents.find(category);
+        CppOnlyDebugAgent * agent = nullptr;
+        if ( it != g_DebugAgents.end() ) {
+            DAS_VERIFY(it->second.debugAgent->isCppOnlyAgent());
+            agent = (CppOnlyDebugAgent *) it->second.debugAgent.get();
+        } else {
+            auto da = make_smart<CppOnlyDebugAgent>();
+            agent = (CppOnlyDebugAgent *) da.get();
+            g_DebugAgents[category] = {
+                nullptr,
+                da
+            };
+        }
+        lmb(agent);
+    }
+
+    void onCreateCppDebugAgent ( const char * category, function<void (Context *)> && lmb ) {
+        onCppDebugAgent(category, [&](CppOnlyDebugAgent * agent){
+            agent->onCreateContextOp = das::move(lmb);
+        });
+    }
+
+    void onDestroyCppDebugAgent ( const char * category, function<void (Context *)> && lmb ) {
+        onCppDebugAgent(category, [&](CppOnlyDebugAgent * agent){
+            agent->onDestroyContextOp = das::move(lmb);
+        });
+    }
+
+    void onLogCppDebugAgent ( const char * category, function<bool(Context *, const LineInfo *, int, const char *)> && lmb ) {
+        onCppDebugAgent(category, [&](CppOnlyDebugAgent * agent){
+            agent->onLogOp = das::move(lmb);
+        });
+    }
+
+    void uninstallCppDebugAgent ( const char * category ) {
+        std::lock_guard<std::recursive_mutex> guard(g_DebugAgentMutex);
+        auto it = g_DebugAgents.find(category);
+        if ( it != g_DebugAgents.end() ) {
+            DebugAgentInstance inst = das::move(it->second);
+            g_DebugAgents.erase(it);
+            inst.debugAgent.reset();  // release agent before context
+        }
+    }
+
+    void deleteDebugAgent ( const char * category, LineInfoArg * at, Context * context ) {
+        if ( !category ) context->throw_error_at(at, "need to specify category");
+        std::lock_guard<std::recursive_mutex> guard(g_DebugAgentMutex);
+        auto it = g_DebugAgents.find(category);
+        if ( it != g_DebugAgents.end() ) {
+            DebugAgent * oldAgentPtr = it->second.debugAgent.get();
+            for ( auto & ap : g_DebugAgents ) {
+                ap.second.debugAgent->onUninstall(oldAgentPtr);
+            }
+            DebugAgentInstance inst = das::move(it->second);
+            g_DebugAgents.erase(it);
+            inst.debugAgent.reset();  // release agent before context
+        }
+    }
+
+
+
+    // Standalone-AOT contexts are constructed as member objects (see
+    // daslib/aot_standalone.das::writeStandaloneCtor), not via make_shared,
+    // so their weak_from_this() is empty and shared_from_this() throws
+    // bad_weak_ptr. The agent adapter only needs the context's raw pointer
+    // for dispatch (passed at make_debug_agent time); debugAgentContext is
+    // only consulted by getDebugAgentContext, which already returns an
+    // error for null. So fall back to a null shared_ptr in that case
+    // instead of aborting the process.
+    static inline shared_ptr<Context> debugAgentContextOrNull ( Context * context ) {
+        auto wp = context->weak_from_this();
+        return wp.expired() ? nullptr : wp.lock();
+    }
+
+    void installThreadLocalDebugAgent ( DebugAgentPtr newAgent, LineInfoArg * at, Context * context ) {
+        if ( threadLocalDebugAgent() && threadLocalDebugAgent()->debugAgent ) {
+            context->throw_error_at(at, "thread local debug agent already installed");
+        }
+        std::lock_guard<std::recursive_mutex> guard(g_DebugAgentMutex);
+        threadLocalDebugAgent() = new DebugAgentInstance{
+            debugAgentContextOrNull(context),
+            newAgent
+        };
+        DebugAgent * newAgentPtr = newAgent.get();
+        for_each_debug_agent([newAgentPtr](DebugAgentPtr agent){
+            agent->onInstall(newAgentPtr);
+        });
+    }
+
+    void installDebugAgent ( DebugAgentPtr newAgent, const char * category, LineInfoArg * at, Context * context ) {
+        if ( !category ) context->throw_error_at(at, "need to specify category");
+        std::lock_guard<std::recursive_mutex> guard(g_DebugAgentMutex);
+        auto it = g_DebugAgents.find(category);
+        if ( it != g_DebugAgents.end() ) {
+            DebugAgent * oldAgentPtr = it->second.debugAgent.get();
+            for_each_debug_agent([&](const DebugAgentPtr & pAgent){
+                pAgent->onUninstall(oldAgentPtr);
+            });
+        }
+        g_DebugAgents[category] = {
+            debugAgentContextOrNull(context),
+            newAgent
+        };
+        DebugAgent * newAgentPtr = newAgent.get();
+        for_each_debug_agent([&](const DebugAgentPtr & pAgent){
+            pAgent->onInstall(newAgentPtr);
+        });
+    }
+
+    Context & getDebugAgentContext ( const char * category, LineInfoArg * at, Context * context ) {
+        if ( !category ) context->throw_error_at(at, "need to specify category");
+        std::lock_guard<std::recursive_mutex> guard(g_DebugAgentMutex);
+        auto it = g_DebugAgents.find(category);
+        if ( it == g_DebugAgents.end() ) context->throw_error_at(at, "can't get debug agent '%s'", category);
+        if ( !it->second.debugAgentContext ) context->throw_error_at(at, "debug agent '%s' is a CPP-only agent", category);
+        return *it->second.debugAgentContext;
+    }
+
+    bool hasDebugAgentContext ( const char * category, LineInfoArg * at, Context * context ) {
+        if ( !category ) context->throw_error_at(at, "need to specify category");
+        std::lock_guard<std::recursive_mutex> guard(g_DebugAgentMutex);
+        auto it = g_DebugAgents.find(category);
+        return it != g_DebugAgents.end();
+    }
+
+    void lockDebugAgent ( const TBlock<void> & blk, Context * context, LineInfoArg * line ) {
+        std::lock_guard<std::recursive_mutex> guard(g_DebugAgentMutex);
+        context->invoke(blk, nullptr, nullptr, line);
+    }
+}
+
+das::Context* get_clone_context( das::Context * ctx, uint32_t category );//link time resolved dependencies
+
+namespace das
+{
+
+    void forkDebugAgentContext ( Func exFn, Context * context, LineInfoArg * lineinfo ) {
+        *g_isInDebugAgentCreation = true;
+        shared_ptr<Context> forkContext;
+        bool realPersistent = context->persistent;
+        context->persistent = true;
+        forkContext.reset(get_clone_context(context, uint32_t(ContextCategory::debug_context)));
+        context->persistent = realPersistent;
+        context->sharedPtrContext = true;
+        *g_isInDebugAgentCreation = false;
+        vec4f args[1];
+        args[0] = cast<Context *>::from(context);
+        SimFunction * fun = exFn.PTR;
+        forkContext->callOrFastcall(fun, args, lineinfo);
+    }
+
+    bool isInDebugAgentCreation() {
+        return *g_isInDebugAgentCreation;
+    }
+
+    void shutdownDebugAgent() {
+        bool hasThreadLocal = threadLocalDebugAgent() && threadLocalDebugAgent()->debugAgent;
+        DebugAgent * tlAgent = hasThreadLocal ? threadLocalDebugAgent()->debugAgent.get() : nullptr;
+        for_each_debug_agent([&](const DebugAgentPtr & pAgent){
+            if ( hasThreadLocal ) {
+                tlAgent->onUninstall(pAgent.get());
+            }
+            for ( auto & ap : g_DebugAgents ) {
+                if ( ap.second.debugAgent ) {
+                    ap.second.debugAgent->onUninstall(pAgent.get());
+                }
+            }
+        });
+        das_safe_map<string,DebugAgentInstance> agents;
+        {
+            std::lock_guard<std::recursive_mutex> guard(g_DebugAgentMutex);
+            swap(agents, g_DebugAgents);
+            delete threadLocalDebugAgent();
+            threadLocalDebugAgent() = nullptr;
+        }
+        // release agents before contexts to avoid use-after-free
+        // (agent objects live on the context heap)
+        for ( auto & ap : agents ) {
+            ap.second.debugAgent.reset();
+        }
+    }
+
+    void shutdownThreadLocalDebugAgent() {
+        bool hasThreadLocal = threadLocalDebugAgent() && threadLocalDebugAgent()->debugAgent;
+        if ( hasThreadLocal ) {
+            DebugAgent * tlAgent = threadLocalDebugAgent()->debugAgent.get();
+            for_each_debug_agent([&](const DebugAgentPtr & pAgent){
+                pAgent->onUninstall(tlAgent);
+            });
+            {
+                std::lock_guard<std::recursive_mutex> guard(g_DebugAgentMutex);
+                delete threadLocalDebugAgent();
+                threadLocalDebugAgent() = nullptr;
+            }
+        }
+    }
+
 
 #define MAX_DEBUG_AGENT_ARGS 16
 
@@ -1308,9 +1610,9 @@ namespace debugger {
         Context * invCtx = nullptr;
         DebugAgentAdapter * adapter = nullptr;
         if ( !*category ) {
-            if ( *daScriptEnvironment::g_threadLocalDebugAgent && (*daScriptEnvironment::g_threadLocalDebugAgent)->debugAgent ) {
-                invCtx = (*daScriptEnvironment::g_threadLocalDebugAgent)->debugAgentContext.get();
-                adapter = (DebugAgentAdapter *)(*daScriptEnvironment::g_threadLocalDebugAgent)->debugAgent.get();
+            if ( threadLocalDebugAgent() && threadLocalDebugAgent()->debugAgent ) {
+                invCtx = threadLocalDebugAgent()->debugAgentContext.get();
+                adapter = (DebugAgentAdapter *)threadLocalDebugAgent()->debugAgent.get();
             } else {
                 g_DebugAgentMutex.unlock();
                 context.throw_error_at(call->debugInfo, "no thread-local debug agent available");
@@ -1364,9 +1666,9 @@ namespace debugger {
         Context * invCtx = nullptr;
         DebugAgentAdapter * adapter = nullptr;
         if ( !*category ) {
-            if ( *daScriptEnvironment::g_threadLocalDebugAgent && (*daScriptEnvironment::g_threadLocalDebugAgent)->debugAgent ) {
-                invCtx = (*daScriptEnvironment::g_threadLocalDebugAgent)->debugAgentContext.get();
-                adapter = (DebugAgentAdapter *)(*daScriptEnvironment::g_threadLocalDebugAgent)->debugAgent.get();
+            if ( threadLocalDebugAgent() && threadLocalDebugAgent()->debugAgent ) {
+                invCtx = threadLocalDebugAgent()->debugAgentContext.get();
+                adapter = (DebugAgentAdapter *)threadLocalDebugAgent()->debugAgent.get();
             } else {
                 g_DebugAgentMutex.unlock();
                 context.throw_error_at(call->debugInfo, "no thread-local debug agent available");

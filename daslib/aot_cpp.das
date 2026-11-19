@@ -38,10 +38,9 @@ var private g_aot_main_module_name = ""
 
 def public set_aot_main_module_name(name : string) {
     //! aotModuleName returns this for the unnamed (promoted) main module; "" (the default) leaves its types in an anonymous namespace.
-    //! Module-global for the process - set it around one emission and restore "".
-    //! Forwards to the C++ twin so DebugInfoHelper's cached cpp type names agree.
+    //! Emission state of the context running the emitter -
+    //! set it around one emission and restore "".
     g_aot_main_module_name = name
-    set_aot_main_module_name_cpp(name)
 }
 
 def aotModuleName(pm : Module?) {
@@ -919,19 +918,25 @@ class public AotDebugInfoHelper {
             writeDim(writer, fld, suffix);
             writeArgTypes(writer, fld, suffix);
             writeArgNames(writer, fld, suffix);
-            let ns = aotModuleNameFromString(info.module_name)
-            let prefix = !empty(ns) ? "{ns}::" : "";
             writeVarAnnotationArgs(writer, fld, "{structInfoName(info)}_field_{fi}_ann");
             let fldAnnRef = fld.annotation_argument_count > 0u ? ", {structInfoName(info)}_field_{fi}_ann, {int(fld.annotation_argument_count)}u" : ""
-            let structCppName = aotSuffixNameEx(info.name, "_S",
-                g_struct_enum_collide |> key_exists(structEnumNsKey(ns, info.name)))
-            write(*writer, "VarInfo {structInfoName(info)}_field_{fi} =  \{ {describeCppVarInfo(prefix + structCppName, fld,suffix)}{fldAnnRef} \};\n");
+            let fldInfo = describeCppVarInfo(structInfoCppName(info), fld, suffix)
+            let fldName = "{structInfoName(info)}_field_{fi}"
+            write(*writer, "VarInfo {fldName} =  \{ {fldInfo}{fldAnnRef} \};\n");
         }
         let fields = (each(range(info.count))
             ._select("&{structInfoName(info)}_field_{_}")
             .to_array()
             ._fold()) |> join(", ")
         write(*writer, "VarInfo * {structInfoName(info)}_fields[{info.count:d}] =  \{ {fields} \};\n");
+    }
+
+    def structInfoCppName(info : StructInfo?) : string {
+        let ns = aotModuleNameFromString(info.module_name)
+        let prefix = !empty(ns) ? "{ns}::" : "";
+        let structCppName = aotSuffixNameEx(info.name, "_S",
+            g_struct_enum_collide |> key_exists(structEnumNsKey(ns, info.name)))
+        return prefix + structCppName
     }
 
     def describeCppStructInfo(info : StructInfo?) {
@@ -942,7 +947,8 @@ class public AotDebugInfoHelper {
             } else {
                 write(writer, "nullptr, ")
             }
-            let info_size = cross_platform ? "TypeSize<{helper |> debug_helper_find_struct_cppname(info)}>::size" : "{info.size:d}";
+            let cppName = structInfoCppName(info)
+            let info_size = cross_platform ? "TypeSize<{cppName}>::size" : "{info.size:d}";
             let annRef = info.annotation_count > 0u ? "{structInfoName(info)}_ann" : "nullptr";
             write(writer, "{info.count:d}, {info_size}, UINT64_C(0x{info.init_mnh:x}), {annRef}, {int(info.annotation_count)}u, UINT64_C(0x{info.hash:x}), {info.firstGcField:d}")
         }
@@ -1070,7 +1076,12 @@ class public AotDebugInfoHelper {
             write(writer, "{unsafe(reinterpret<int>(info.flags))}")
             write_sep();
 
-            let info_size = cross_platform ? "TypeSize<{helper |> debug_helper_find_type_cppname(info)}>::size" : "{info.size:d}";
+            var info_size = "{info.size:d}"
+            if (cross_platform) {
+                let cfg = DescribeConfig(skip_ref = true, skip_const = true)
+                let cppName = describeCppType(helper |> debug_helper_find_type_decl(info), cfg)
+                info_size = "TypeSize<{cppName}>::size"
+            }
             write(writer, "{info_size}")
             write_sep();
             write(writer, "UINT64_C(0x{info.hash:x})");

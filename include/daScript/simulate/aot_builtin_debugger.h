@@ -1,5 +1,7 @@
 #pragma once
 
+#include "daScript/simulate/debug_agent.h"
+
 namespace das {
 
     DAS_API DebugAgentPtr makeDebugAgent ( const void * pClass, const StructInfo * info, Context * context );

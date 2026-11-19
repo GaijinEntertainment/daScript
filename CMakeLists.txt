@@ -1878,6 +1878,7 @@ SET(DAS_SIMULATE_INCLUDES
     include/daScript/simulate/code_of_policies.h
     include/daScript/simulate/das_qsort_r.h
     include/daScript/simulate/data_walker.h
+    include/daScript/simulate/debug_agent.h
     include/daScript/simulate/debug_info.h
     include/daScript/simulate/debug_print.h
     include/daScript/simulate/for_each.h

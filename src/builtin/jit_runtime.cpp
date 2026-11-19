@@ -598,12 +598,15 @@ extern "C" {
     // each compares against the TARGET runtime annotation and records every
     // divergence. jit_handled_abi_check_report() warns on stderr with them all at once
     // (nothing when clean) and the program runs on - a drift rarely breaks the app.
-    static string g_abi_check_report;
-    static int    g_abi_check_count = 0;        // mismatches
-    static int    g_abi_types_checked = 0;      // type-size checks where the target annotation was found
-    static int    g_abi_types_skipped = 0;      // ... not registered on target (module not linked here)
-    static int    g_abi_fields_checked = 0;
-    static int    g_abi_fields_skipped = 0;
+    struct JitAbiCheckReport {
+        string  text;
+        int     mismatches = 0;
+        int     typesChecked = 0;     // type-size checks where the target annotation was found
+        int     typesSkipped = 0;     // ... not registered on target (module not linked here)
+        int     fieldsChecked = 0;
+        int     fieldsSkipped = 0;
+    };
+    static thread_local JitAbiCheckReport g_abiCheck;
 
     static TypeAnnotation * jit_find_handled_annotation ( const char * moduleName, const char * typeName ) {
         TypeAnnotation * found = nullptr;
@@ -624,24 +627,24 @@ extern "C" {
 
     DAS_API void jit_check_handled_type_size ( const char * moduleName, const char * typeName, uint32_t hostSize ) {
         auto ann = jit_find_handled_annotation(moduleName, typeName);
-        if ( !ann ) { g_abi_types_skipped ++; return; } // not registered on target -> module not linked here
-        if ( !ann->isLocal() && !ann->canCopy() && !ann->canMove() ) { g_abi_types_skipped ++; return; }
-        g_abi_types_checked ++;
+        if ( !ann ) { g_abiCheck.typesSkipped ++; return; } // not registered on target -> module not linked here
+        if ( !ann->isLocal() && !ann->canCopy() && !ann->canMove() ) { g_abiCheck.typesSkipped ++; return; }
+        g_abiCheck.typesChecked ++;
         uint32_t targetSize = uint32_t(ann->getSizeOf());
         if ( targetSize != hostSize ) {
             char buf[256];
             snprintf(buf, sizeof(buf), "  size   %s::%s  host=%u target=%u\n",
                 moduleName, typeName, hostSize, targetSize);
-            g_abi_check_report += buf;
-            g_abi_check_count ++;
+            g_abiCheck.text += buf;
+            g_abiCheck.mismatches ++;
         }
     }
 
     DAS_API void jit_check_handled_field_offset ( const char * moduleName, const char * typeName,
                                                   const char * fieldName, uint32_t hostOffset ) {
         auto ann = jit_find_handled_annotation(moduleName, typeName);
-        if ( !ann ) { g_abi_fields_skipped ++; return; }
-        g_abi_fields_checked ++;
+        if ( !ann ) { g_abiCheck.fieldsSkipped ++; return; }
+        g_abiCheck.fieldsChecked ++;
         uint32_t targetOffset = ann->getFieldOffset(fieldName);
         if ( targetOffset != hostOffset ) {
             char buf[256];
@@ -651,23 +654,21 @@ extern "C" {
             else
                 snprintf(buf, sizeof(buf), "  offset %s::%s.%s  host=%u target=%u\n",
                     moduleName, typeName, fieldName, hostOffset, targetOffset);
-            g_abi_check_report += buf;
-            g_abi_check_count ++;
+            g_abiCheck.text += buf;
+            g_abiCheck.mismatches ++;
         }
     }
 
     DAS_API void jit_handled_abi_check_report () {
-        if ( g_abi_check_count ) {
+        if ( g_abiCheck.mismatches ) {
             fprintf(stderr, "JIT ABI CHECK: %d handled-type layout mismatch(es) (host-baked vs target runtime; "
                 "types %d checked / %d skipped, fields %d checked / %d skipped):\n%s",
-                g_abi_check_count, g_abi_types_checked, g_abi_types_skipped, g_abi_fields_checked, g_abi_fields_skipped,
-                g_abi_check_report.c_str());
+                g_abiCheck.mismatches, g_abiCheck.typesChecked, g_abiCheck.typesSkipped, g_abiCheck.fieldsChecked, g_abiCheck.fieldsSkipped,
+                g_abiCheck.text.c_str());
             fflush(stderr);
         }
         // reset so a subsequent sweep in the same process reports only its own results
-        g_abi_types_checked = g_abi_types_skipped = g_abi_fields_checked = g_abi_fields_skipped = 0;
-        g_abi_check_count = 0;
-        g_abi_check_report.clear();
+        g_abiCheck = JitAbiCheckReport();
     }
 
     DAS_API void * jit_alloc_heap ( uint32_t bytes, Context * context ) {

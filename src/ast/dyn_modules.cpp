@@ -156,14 +156,13 @@ static string hex64(uint64_t v) {
 }
 
 // one hash per file per FileAccess, however many descriptors share it
-static bool dep_stamp(const smart_ptr<FileAccess> & fa, const string & path, uint32_t & size, uint64_t & hash) {
+struct DepStampCache {
     struct Entry { const FileInfo * fi; uint32_t size; uint64_t hash; };
-    static thread_local const FileAccess * owner = nullptr;
-    static thread_local das::unordered_map<string, Entry> cache;
-    if ( owner != fa.get() ) {
-        owner = fa.get();
-        cache.clear();
-    }
+    das::unordered_map<string, Entry> entries;
+};
+
+static bool dep_stamp(DepStampCache & stamps, const smart_ptr<FileAccess> & fa, const string & path, uint32_t & size, uint64_t & hash) {
+    auto & cache = stamps.entries;
     auto fi = fa->getFileInfo(path);
     if ( !fi ) return false;
     auto it = cache.find(path);
@@ -178,7 +177,7 @@ static bool dep_stamp(const smart_ptr<FileAccess> & fa, const string & path, uin
     if ( !src ) return false;
     size = len;
     hash = hash_block64((const uint8_t *) src, len);
-    cache[path] = Entry{fi, size, hash};
+    cache[path] = DepStampCache::Entry{fi, size, hash};
     return true;
 }
 
@@ -243,10 +242,10 @@ static ManifestKey manifest_key(const string & path) {
 }
 
 static ManifestRead read_manifest(const string & file, uint32_t descSize, uint64_t descHash, const ManifestKey & key,
-                                  const smart_ptr<FileAccess> & fa) {
+                                  const smart_ptr<FileAccess> & fa, DepStampCache & stamps) {
     ManifestRead res;
 #if DAS_NO_FILEIO
-    (void)file; (void)descSize; (void)descHash; (void)key; (void)fa;
+    (void)file; (void)descSize; (void)descHash; (void)key; (void)fa; (void)stamps;
     return res;
 #else
     FILE * f = das_fopen_utf8(file.c_str(), "rb");
@@ -311,7 +310,7 @@ static ManifestRead read_manifest(const string & file, uint32_t descSize, uint64
             uint32_t size = 0;
             uint64_t hash = 0;
             const string depPath = from_portable(fields[1], key.dasRoot);
-            if ( !dep_stamp(fa, depPath, size, hash) ) return stale("dependency missing");
+            if ( !dep_stamp(stamps, fa, depPath, size, hash) ) return stale("dependency missing");
             if ( fields[2] != to_string(size) || fields[3] != hex64(hash) ) return stale("dependency changed");
             res.deps.push_back(DepStamp{depPath, size, hash});
         } else if ( kind == "np" ) {
@@ -441,7 +440,7 @@ static void name_replayed_rows() {
     g_nameless_manifests.clear();
 }
 
-static Result init_dyn_modules(smart_ptr<FileAccess> fa, string path, TextWriter &tout, bool debug = false) {
+static Result init_dyn_modules(smart_ptr<FileAccess> fa, string path, TextWriter &tout, DepStampCache & stamps, bool debug = false) {
     const auto mod_filename = path + "/" + MODULE_SUFFIX;
     if (debug) {
         tout << "try file: " << mod_filename << ".\n";
@@ -470,7 +469,7 @@ static Result init_dyn_modules(smart_ptr<FileAccess> fa, string path, TextWriter
     const bool useManifest = src && !g_ignore_manifests;
     const char * noManifestWhy = !src ? "no source" : g_ignore_manifests ? "manifests ignored" : "no_manifest";
 #endif
-    auto mr = useManifest ? read_manifest(manifest, len, stamp, key, fa) : ManifestRead();
+    auto mr = useManifest ? read_manifest(manifest, len, stamp, key, fa, stamps) : ManifestRead();
     if ( mr.verdict == ManifestVerdict::Replay ) {
         int64_t dllUsec = 0;
         size_t deferred = 0;
@@ -526,7 +525,7 @@ static Result init_dyn_modules(smart_ptr<FileAccess> fa, string path, TextWriter
     for ( auto & dep : depFiles ) {
         DepStamp d;
         d.path = dep;
-        if ( !dep_stamp(fa, dep, d.size, d.hash) ) { why = "cannot stamp " + dep; break; }
+        if ( !dep_stamp(stamps, fa, dep, d.size, d.hash) ) { why = "cannot stamp " + dep; break; }
         deps.push_back(das::move(d));
     }
     const bool written = why.empty() && write_manifest(manifest, len, stamp, key, deps, rows, optOut, why);
@@ -574,7 +573,7 @@ static das_hash_set<das::string> collect_module_names(const das::string &path) {
 #endif // DAS_NO_FILEIO
 }
 
-static bool init_modules_for_folder(FileAccessPtr fa, const das::string &path, das::TextWriter &tout,
+static bool init_modules_for_folder(FileAccessPtr fa, const das::string &path, das::TextWriter &tout, DepStampCache & stamps,
                                     const das_hash_set<das::string> *skip_set = nullptr,
                                     const das_hash_set<das::string> *disabled_set = nullptr) {
 #if DAS_NO_FILEIO
@@ -583,9 +582,9 @@ static bool init_modules_for_folder(FileAccessPtr fa, const das::string &path, d
     using namespace das;
     string modules_path = path + "/modules/";
     struct Walk {
-        FileAccessPtr fa; string modules_path; TextWriter * tout;
+        FileAccessPtr fa; string modules_path; TextWriter * tout; DepStampCache * stamps;
         const das_hash_set<das::string> * skip_set; const das_hash_set<das::string> * disabled_set; bool all_good;
-    } walk { fa, modules_path, &tout, skip_set, disabled_set, true };
+    } walk { fa, modules_path, &tout, &stamps, skip_set, disabled_set, true };
     das_each_directory_entry(modules_path.c_str(), [](const char * name, bool, void * user) {
         auto & w = *(Walk *) user;
         if (w.skip_set && w.skip_set->count(normalize_module_name(das::string(name)))) {
@@ -597,7 +596,7 @@ static bool init_modules_for_folder(FileAccessPtr fa, const das::string &path, d
         if (w.disabled_set && w.disabled_set->count(force_lower(das::string(name)))) {
             return;   // explicitly disabled (--disable-module) — never load/register
         }
-        w.all_good &= Result::OK == init_dyn_modules(w.fa, w.modules_path + name, *w.tout, false);
+        w.all_good &= Result::OK == init_dyn_modules(w.fa, w.modules_path + name, *w.tout, *w.stamps, false);
     }, &walk);
     return walk.all_good;
 #endif // DAS_NO_FILEIO
@@ -710,12 +709,13 @@ bool require_dynamic_modules(FileAccessPtr file_access,
     for (const auto &name : load_module_names) {
         dasroot_skip.insert(name);
     }
-    bool all_good = das::init_modules_for_folder(file_access, das_root, tout,
+    DepStampCache stamps;
+    bool all_good = das::init_modules_for_folder(file_access, das_root, tout, stamps,
         dasroot_skip.empty() ? nullptr : &dasroot_skip, disabled_ptr);
     if (has_project) {
         // Init for project_root, skipping anything an explicit -load_module
         // already covers (load_module wins over project_root/modules/<name>).
-        all_good &= das::init_modules_for_folder(file_access, project_root, tout,
+        all_good &= das::init_modules_for_folder(file_access, project_root, tout, stamps,
             load_module_names.empty() ? nullptr : &load_module_names, disabled_ptr);
     }
     // Finally, init each explicit -load_module path directly (unless disabled).
@@ -723,7 +723,7 @@ bool require_dynamic_modules(FileAccessPtr file_access,
         if (disabled_ptr && disabled_ptr->count(force_lower(path_basename(p)))) {
             continue;
         }
-        all_good &= (Result::OK == init_dyn_modules(file_access, p, tout));
+        all_good &= (Result::OK == init_dyn_modules(file_access, p, tout, stamps));
     }
     // Module .so's may carry DT_NEEDED on sibling-module .so's (e.g. node-editor ->
     // dasModuleImgui) that live in modules/<dep>/ and aren't on RUNPATH. Directory

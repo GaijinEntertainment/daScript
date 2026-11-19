@@ -20,6 +20,7 @@
 #include "daScript/misc/gc_node.h"
 #include "daScript/simulate/aot_builtin.h"
 #include "daScript/simulate/standalone_ctx_utils.h"
+#include "daScript/simulate/debug_agent.h"
 
 das::Context * get_context ( int stackSize=0 );//link time resolved dependencies
 
@@ -3699,7 +3700,7 @@ namespace das
             context.constStringHeap->setInitialSize(globalStringHeapSize);
         }
         DebugInfoHelper helper(context.debugInfo);
-        helper.collectCppNames = false;     // nothing reads a simulate's C++ spellings (ast.h DebugInfoHelper)
+        helper.collectTypeDecls = false;    // nothing reads a simulate's type map (ast.h DebugInfoHelper)
         context.thisHelper = &helper;
         context.globalVariables = (GlobalVariable *) context.code->allocate( totalVariables*sizeof(GlobalVariable) );
         context.globalsSize = 0;

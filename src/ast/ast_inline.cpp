@@ -3365,7 +3365,7 @@ namespace das {
             }, "*");
         }
         if ( !anyInline && !autoEnabled ) return false;
-        InlinePatch patch(this, daScriptEnvironment::getBound()->g_compilerLog,
+        InlinePatch patch(this, compileLog,
             options.getBoolOption("log_optimization", policies.log_optimization),
             mustEnabled && anyInline, autoCfg);
         vector<Function *> order;

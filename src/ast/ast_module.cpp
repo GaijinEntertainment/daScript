@@ -10,6 +10,7 @@
 #include "daScript/ast/dyn_modules.h"
 #include "daScript/ast/ast_serializer.h"
 #include "daScript/misc/das_asan.h"
+#include "daScript/simulate/debug_agent.h"
 
 #include <atomic>
 #include <mutex>
@@ -701,7 +702,7 @@ namespace das {
         }
         if ( functions.insert(mangledName, fn) ) {
             auto & overloads = functionsByName[hash64z(fn->name.c_str())];
-            if ( overloads.empty() ) daScriptEnvironment::getBound()->functionNameGeneration++;
+            if ( overloads.empty() ) nameGeneration++;
             overloads.push_back(fn);
             fn->module = this;
             return true;
@@ -749,7 +750,7 @@ namespace das {
         fn->module = nullptr;
         if ( generics.insert(mangledName, fn) ) {
             auto & overloads = genericsByName[hash64z(fn->name.c_str())];
-            if ( overloads.empty() ) daScriptEnvironment::getBound()->functionNameGeneration++;
+            if ( overloads.empty() ) nameGeneration++;
             overloads.push_back(fn);
             fn->module = this;
             return true;
@@ -1212,7 +1213,8 @@ namespace das {
     }
 
     bool ModuleLibrary::hasFunctionOrGenericNamed ( const string & name ) const {
-        auto gen = daScriptEnvironment::getBound()->functionNameGeneration;
+        uint64_t gen = 0;
+        for ( auto pm : modules ) gen += pm->nameGeneration;
         if ( gen != functionNameCacheGeneration || modules.size() != functionNameCacheModuleCount ) {
             functionNameCache.clear();
             functionNameCacheGeneration = gen;

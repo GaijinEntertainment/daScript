@@ -29,6 +29,7 @@
 extern "C" char __heap_base;
 #endif
 #include "daScript/simulate/debug_print.h"
+#include "daScript/simulate/debug_agent.h"
 #include "../parser/parser_impl.h"
 
 // arm64 CPU-feature detection headers — MUST be at file scope, not inside `namespace das`.
@@ -323,10 +324,11 @@ namespace das
         };
         virtual bool verifyCall ( ExprCallFunc * call, AnnotationArgumentList & args,
             const AnnotationArgumentList & /*progArgs */, string & /*err*/ ) override {
-            DAS_ASSERT(daScriptEnvironment::getBound()->g_compilerLog);
-            (*daScriptEnvironment::getBound()->g_compilerLog) << call->at.describe() << ": *warning* function " << call->func->name << " is deprecated\n";
+            auto log = compilingProgramLog();
+            DAS_ASSERT(log);
+            (*log) << call->at.describe() << ": *warning* function " << call->func->name << " is deprecated\n";
             if ( auto arg = args.find("message",Type::tString) ) {
-                (*daScriptEnvironment::getBound()->g_compilerLog) << "\t" << arg->sValue << "\n";
+                (*log) << "\t" << arg->sValue << "\n";
             }
             return true;
         }
@@ -1865,9 +1867,9 @@ namespace das
     }
 
     void toCompilerLog ( const char * text, Context * context, LineInfoArg * at ) {
-        if ( daScriptEnvironment::getBound()->g_compilerLog ) {
+        if ( auto log = compilingProgramLog() ) {
             if ( text ) {
-                (*daScriptEnvironment::getBound()->g_compilerLog) << text;
+                (*log) << text;
             }
         } else {
             context->throw_error_at(at, "can only write to compiler log during compilation");
@@ -1932,11 +1934,13 @@ namespace das
     }
 
     const char * compiling_file_name ( ) {
-        return daScriptEnvironment::getBound() ? daScriptEnvironment::getBound()->g_compilingFileName : nullptr;
+        auto env = daScriptEnvironment::getBound();
+        return env && env->g_Program ? env->g_Program->thisModule->fileName.c_str() : nullptr;
     }
 
     const char * compiling_module_name ( ) {
-        return daScriptEnvironment::getBound() ? daScriptEnvironment::getBound()->g_compilingModuleName : nullptr;
+        auto env = daScriptEnvironment::getBound();
+        return env && env->g_Program ? env->g_Program->thisModule->name.c_str() : nullptr;
     }
 
     const char * get_module_file_name ( const char * name, Context * context ) {

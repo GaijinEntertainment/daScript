@@ -139,7 +139,7 @@ Companion documents carry separate concerns.
   verification would acquire the agent registry while holding the context mutex, opposite to the
   debugger tick's registry-to-context order.
 - **A hook never waits on a thread that has yet to create a context** - the tick holds the
-  agent registry (`g_DebugAgentMutex`, `src/runtime/context.cpp`) for the whole callback, and
+  agent registry (`g_DebugAgentMutex`, `src/builtin/module_builtin_debugger.cpp`) for the whole callback, and
   every `Context` construction walks that registry for `onCreateContext`, so a `new_thread`
   started while a hook blocks cannot begin. `try_invoke_in_context` is the non-blocking attempt
   on the context mutex - false while a hook runs - so the threadlock test proves the

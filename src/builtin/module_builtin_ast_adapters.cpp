@@ -361,8 +361,8 @@ namespace das {
             }
             context->clearException();
         }
-        if (bound->g_Program) {
-            bound->macroTimeTicks += ref_time_ticks() - timeM;
+        if (bound->g_Program && bound->g_Program->thisModuleGroup) {
+            bound->g_Program->thisModuleGroup->compileTimes.macroTicks += ref_time_ticks() - timeM;
         }
     }
 

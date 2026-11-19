@@ -13,7 +13,6 @@ namespace das {
     bool jit_par_emit_run ( int32_t threads, int32_t fileType, void * fnRunPasses, void * fnVerifyModule,
                             void * fnEmitToFile, void * fnGetErrorMessage, void * fnDisposeErrorMessage,
                             void * fnDisposeMessage, bool logTimes, Context * context );
-    string aotModuleName ( Module * pm );
 }
 
 namespace {
@@ -66,14 +65,4 @@ TEST_CASE("the parallel JIT emit workers run the jobs of the thread that called 
     queueJob(second);
     REQUIRE(runQueuedJobs(2));
     CHECK_EQ(g_verified.size(), 2u);
-}
-
-TEST_CASE("the AOT main module name belongs to the thread that set it") {
-    auto program = make_smart<Program>();
-    setAotMainModuleName("alpha");
-    std::thread other([]() { setAotMainModuleName("beta"); });
-    other.join();
-    const string name = aotModuleName(program->thisModule.get());
-    setAotMainModuleName("");
-    CHECK_EQ(name, "alpha");
 }
