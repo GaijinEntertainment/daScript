@@ -39,6 +39,34 @@ def test_the_formatter_keeps_a_pointer_return_type_after_a_visibility_keyword(t 
     t |> success(find(formatted, "def private h : int? \{") >= 0, "{formatted}")
 }
 
+[test(description = "the formatter leaves a pointer parameter type unspaced when a comment sits between the parameter and the separator before it")]
+def test_the_formatter_keeps_a_pointer_parameter_type_after_a_comment(t : T?) {
+    for (params in ["a : int;   // a note\n         b : int?;\n         c : array<int?>",
+            "a : int,   // a note\n         b : int?",
+            " // a note\n         b : int?",
+            "a : int;   // a note\n         // another\n         b : int? = null"]) {
+        let source = "options gen2\n\ndef pick({params}) : int? \{\n    return null\n\}\n"
+        t |> equal(format_source_string(source), source)
+    }
+    t |> run("a lambda parameter list keeps its pointer type unspaced too") @(t : T?) {
+        let source = ("options gen2\n\ndef f() \{\n    let l = @(a : int; // a note\n"
+            + "              b : int?) \{\n        return b\n    \}\n\}\n")
+        t |> equal(format_source_string(source), source)
+    }
+}
+
+[test(description = "the formatter keeps a ternary in a parameter's default value spaced")]
+def test_the_formatter_keeps_a_ternary_in_a_default_value(t : T?) {
+    for (param in ["a = flag ? x : y ? z : q",
+            "a : int = pick(1, flag ? x : y ? z : q)",
+            "a : array<int> = [1, flag ? x : y ? z : q]",
+            "a : table<int; int> = \{ 1 => 2, 3 => flag ? x : y ? z : q \}",
+            "a : int = pick(1, // a note\n      flag ? x : y ? z : q)"]) {
+        let source = "options gen2\n\ndef f({param}) \{\n    return a\n\}\n"
+        t |> equal(format_source_string(source), source)
+    }
+}
+
 [test(description = "the formatter spaces a ternary in an expression-bodied function")]
 def test_the_formatter_spaces_a_ternary_in_an_expression_body(t : T?) {
     let source = "options gen2\n\ndef k : int => g_flag?1:2\n"

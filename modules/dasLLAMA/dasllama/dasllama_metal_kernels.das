@@ -4934,7 +4934,7 @@ def private enc_b32_glu_stamp(key : int; enc : MetalComputeEncoder?; bq : MetalB
 
 //! the GEMV stamp `key` names in `B32_GEMV_STEMS` (format, form)
 def private enc_b32_gemv_stamp(key : int; enc : MetalComputeEncoder?; bq : MetalBuffer?; qoff : uint64; bs : MetalBuffer?; soff : uint64;   // nolint:STYLE037 — the stamp macro's one ladder arm per stem
-                               bx : MetalBuffer ?; xoff : uint64; by : MetalBuffer?; yoff : uint64; bn, bd : MetalBuffer?; rows, n : int64) {
+                               bx : MetalBuffer?; xoff : uint64; by : MetalBuffer?; yoff : uint64; bn, bd : MetalBuffer?; rows, n : int64) {
     stamp_ladder(key, B32_GEMV_STEMS) <| $() {
         stamp_enc_c(enc, bq, qoff, bs, soff, bx, xoff, by, yoff, bn, bd, rows, n)
     }
@@ -4991,7 +4991,7 @@ def enc_b32_mvb(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; woff, rows, 
 
 //! the small-batch stamp `key` names in `B32_MVB_STEMS` (column width, K split, format)
 def private enc_b32_mvb_stamp(key : int; enc : MetalComputeEncoder?; bq : MetalBuffer?; qoff : uint64; bs : MetalBuffer?; soff : uint64;   // nolint:STYLE037 — the stamp macro's one ladder arm per stem
-                              bx : MetalBuffer ?; xoff : uint64; by : MetalBuffer?; yoff : uint64; bn, bd : MetalBuffer?; var mv : KqMvArgs; rows, gcols : int64) {
+                              bx : MetalBuffer?; xoff : uint64; by : MetalBuffer?; yoff : uint64; bn, bd : MetalBuffer?; var mv : KqMvArgs; rows, gcols : int64) {
     stamp_ladder(key, B32_MVB_STEMS) <| $() {
         stamp_enc_c(enc, bq, qoff, bs, soff, bx, xoff, by, yoff, bn, bd, mv, rows, gcols)
     }

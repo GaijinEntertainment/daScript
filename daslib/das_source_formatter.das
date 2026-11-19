@@ -569,6 +569,14 @@ def have_formatter_token(ctx : FormatterCtx; command : string) {
 }
 
 
+def private prev_non_comment_token(ctx : FormatterCtx; i : int) : int {
+    var j = i - 1
+    while (j >= 0 && ctx.tokens[j].tokenType == TokenType.COMMENT) {
+        j--
+    }
+    return j
+}
+
 def private mark_type_after_separator(var ctx : FormatterCtx; i, j : int) : void {
     let colonPos = ctx |> search_token_in_line(j, ctx |> eq(i, "typedef") ? "=" : ":")
     if (colonPos > 0) {
@@ -707,11 +715,16 @@ def mark_token_context(var ctx : FormatterCtx) { // nolint:STYLE037,STYLE038 —
             let beginParams = pos + 1;
             ctx.tokens[beginParams].dontAddSpacesAround = true;
             let endParams = ctx |> find_pair_paren(pos + 1);
+            var pc : ParenCounter
             for (j in range(beginParams, endParams + 1)) {
+                ctx |> update_paren(j, pc)
                 ctx.tokens[j].isInFunctionParam = need_in_func_param;
-                if (j - 1 == beginParams || ctx |> eq(j - 1, ";") || ctx |> eq(j - 1, ",")) {
+                let prev = ctx |> prev_non_comment_token(j)
+                let inParamList = pc.paren == 1 && pc.square == 0 && pc.curly == 0
+                if (inParamList && (prev == beginParams || ctx |> eq(prev, ";", ","))) {
                     let colonPos = ctx |> search_token_in_line(j, ":");
-                    if (colonPos > 0) {
+                    let assignPos = ctx |> search_token_in_line(j, "=")
+                    if (colonPos > 0 && (assignPos <= 0 || assignPos > colonPos)) {
                         ctx |> mark_tokens_as_type(colonPos + 1);
                     }
                 }
