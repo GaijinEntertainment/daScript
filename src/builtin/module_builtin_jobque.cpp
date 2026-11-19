@@ -1445,6 +1445,7 @@ namespace das {
     }
 
     void withJobQue ( const TBlock<void> & block, Context * context, LineInfoArg * lineInfo ) {
+        bool ok;    // src/builtin/ARCHITECTURE_JOBQUE.md#jobque-block-panic
         {
             shared_ptr<JobQue> jq;
             {
@@ -1452,7 +1453,9 @@ namespace das {
                 if ( !g_jobQue ) g_jobQue = make_shared<JobQue>();  // check under the lock: create_job_que can also init g_jobQue concurrently
                 jq = g_jobQue;
             }
-            context->invoke(block, nullptr, nullptr, lineInfo);
+            ok = context->runWithCatch([&]() {
+                context->invoke(block, nullptr, nullptr, lineInfo);
+            });
         }
         // Batch dispatch is a thread-local, block-scoped contract: flush any stragglers and reset the
         // flag so it cannot leak into unrelated jobque users later on this thread (e.g. the next test
@@ -1479,6 +1482,11 @@ namespace das {
         {
             lock_guard<mutex> guard(g_jobQueMutex);
             if ( g_jobQue.use_count()==1 ) g_jobQue.reset();
+        }
+        if ( !ok ) {
+            char dropped[JOB_PANIC_MSG_BYTES];
+            takeJobPanic(dropped);
+            context->rethrow();
         }
         raiseJobPanic(context, lineInfo);   // src/builtin/ARCHITECTURE_JOBQUE.md#jobque-team-panic
         if ( !drained ) {

@@ -151,3 +151,57 @@ def test_concurrent_jobs(t : T?) {
     }
 }
 
+
+[test(description = "A panic of the with_job_que block's own body, recovered outside the block, leaves no job queue in the process, and a later with_job_que opens one and releases it")]
+def test_block_panic_releases_the_queue(t : T?) {
+    t |> success(!is_job_que_available(), "no queue stands before the block")
+    var caught = false
+    try {
+        with_job_que() {
+            panic("the block's own panic")
+        }
+    } recover {
+        caught = true
+    }
+    t |> success(caught, "the block's panic reaches the recover around it")
+    t |> success(!is_job_que_available(), "the queue the block opened is released")
+    with_job_que() {
+        t |> success(is_job_que_available(), "a later block opens a queue")
+    }
+    t |> success(!is_job_que_available(), "and releases it")
+}
+
+[test(description = "A job's panic recorded while a with_job_que block runs is dropped when the block itself panics: one panic reaches the recover around the block, the queue is released, and the next with_job_que block ends clean")]
+def test_block_panic_drops_a_recorded_job_panic(t : T?) {
+    var recovered = false
+    try {
+        with_job_que() {
+            var status = job_status_create()
+            status |> append(1)
+            new_job() @() {
+                //! the worker records the panic, then notifies the
+                //! captured status for the job
+                if (status != null) {
+                    panic("the job's panic")
+                }
+                status |> notify_and_release
+            }
+            status |> join
+            unsafe(job_status_remove(status))
+            panic("the block's own panic")
+        }
+    } recover {
+        recovered = true
+    }
+    t |> success(recovered, "the block's panic reaches the recover around it")
+    t |> success(!is_job_que_available(), "the queue the block opened is released")
+    var later = true
+    try {
+        with_job_que() {
+            later = true
+        }
+    } recover {
+        later = false
+    }
+    t |> success(later, "a later block does not end on the earlier job's panic")
+}

@@ -29,6 +29,18 @@ run on. The caller re-raises when its enclosing `with_job_status` block ends - w
 `new_thread` has no join point to report at, so its panic reports on the thread and ends the process
 there, as before.
 
+### A panic of the `with_job_que` block releases the queue {#jobque-block-panic}
+
+`with_job_que` holds the process queue through a `shared_ptr` of its own scope and releases the queue
+on the way out when that reference is the last. A panic of the block's own body - on the caller's
+thread, outside any dispatch - is a longjmp with exceptions off, and one that left through the scope
+would skip that reference: the count never returns to one, so no later `with_job_que` releases the
+queue and `is_job_que_available` answers true for the rest of the process. The block therefore runs
+under `runWithCatch`; the queue is flushed, drained and released exactly as on a clean exit, and the
+block's panic leaves from there. It is the one panic that leaves: a job's panic recorded while the
+block ran is taken and dropped with it, so it does not surface at the end of a later, unrelated
+scope, and the drain's complaint is not raised.
+
 ### Idle channel consumers {#channel-idle-wait}
 
 `Channel::pop` waits on a condition variable until an item arrives or all producers
