@@ -180,6 +180,10 @@ cmake -B build-clangcl -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=cl
 cmake --build build-clangcl --parallel
 ```
 
+CI passes the compiler by path, `%VCINSTALLDIR%\Tools\Llvm\x64\bin\clang-cl.exe`: the hosted
+image also has a standalone LLVM on `PATH`, and the STL of a Visual Studio update refuses a
+clang older than the one that update ships (`STL1000`). Do the same on a box with two clangs.
+
 Single file, from a VS dev prompt with clang-cl on PATH
 (mac/WSL: `clang -fsyntax-only -std=c++17 ...`):
 
