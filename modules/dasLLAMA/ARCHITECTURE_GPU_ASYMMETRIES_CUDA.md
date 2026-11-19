@@ -241,8 +241,8 @@ formats and on a 2B model's Q8_0 planes, narrow or small, whose turn is not wait
 ### The block drafter's round on the CUDA home keeps its accept on the host {#cuda-dflash-pass}
 
 **The round is the drafter's pass and the verify command on one stream, the recurrent commit beside the pass on a second.**
-The pass (`dasllama_cuda_dflash`) stamps the templates Metal stamps (`GkDflashConv`, `GkDflashQkn`, `GkDflashAttn`,
-`GkDflashTopk`, `GkDflashWalk`), runs its weight sites through the token chain's GEMV leaves in each plane's own format
+The pass (`dasllama_cuda_dflash`) stamps the templates Metal stamps (`GkDflashConv`, `GkDflashQkn`, `GkDflashAttnTile`,
+`GkDflashAttnMerge`, `GkDflashTopk`, `GkDflashWalk`), runs its weight sites through the token chain's GEMV leaves in each plane's own format
 (`cud_rows_gemv`), and ends in the device selector - the top-k, then the walk over the two codebooks uploaded in the CPU
 form, the picks alone landing (`dflash_device_stats().walked`; `set_dflash_device_selector` lands the lists for the
 host's walk, the reference the device walk is held to). The verify lands every row's pick and no logits, and the host

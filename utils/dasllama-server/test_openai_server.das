@@ -619,6 +619,17 @@ def test_openai_server(t : T?) {   // nolint:STYLE038 — one live server sessio
                     }
                 }
             }
+            let compl_off = compl_usage(base_url, "\{\"prompt\":\"{long_prompt}\",\"max_tokens\":4,\"cache_prompt\":false}")
+            t |> equal(compl_off.cached, 0, "/v1/completions: cache_prompt false attaches nothing of its {compl_off.prompt} prompt tokens")
+            let compl_on = compl_usage(base_url, cache_body)
+            t |> success(compl_on.cached > 0, "control: the same completion without the field attaches ({compl_on.cached} of {compl_on.prompt})")
+            let chat_long = "\{\"messages\":[\{\"role\":\"user\",\"content\":\"{long_prompt}\"}],\"max_tokens\":2"
+            let chat_first = chat_usage(base_url, "{chat_long}}")
+            let chat_off = chat_usage(base_url, "{chat_long},\"cache_prompt\":false}")
+            let chat_on = chat_usage(base_url, "{chat_long}}")
+            t |> success(chat_first.prompt > 0, "the chat that fills the cache answered ({chat_first.prompt} prompt tokens)")
+            t |> equal(chat_off.cached, 0, "/v1/chat/completions: cache_prompt false attaches nothing of its {chat_off.prompt} prompt tokens")
+            t |> success(chat_on.cached > 0, "control: the same chat without the field attaches ({chat_on.cached} of {chat_on.prompt})")
             // GET /config — launcher-registered surface + live status (model picker, gpu badge)
             GET("{base_url}/config") $(resp) {
                 t |> equal(int(resp.status_code), int(http_status.OK))
@@ -927,32 +938,6 @@ def private ascii_only(s : string) : bool {
 
 let TEST_PORT_PRESERVE = 18190   // 18140-18141 are the bench and catalog cells', 18150-18157 test_openai_server_mtp.das's
 let QWEN3_PATH = path_join(models_dir(), "Qwen3-0.6B-Q8_0.gguf")
-
-//! a buffered chat reply's content and `usage` counts: prompt tokens, completion tokens, the prefix-cache hit
-struct private ChatUsage {
-    reply : string
-    prompt : int = -1
-    completion : int = -1
-    cached : int = -1
-}
-
-def private chat_usage(base_url : string; body : string) : ChatUsage {
-    var u = ChatUsage()
-    POST("{base_url}/v1/chat/completions", body) $(resp) {
-        var err : string
-        var js = read_json(string(resp.body), err)
-        if (js != null) {
-            u.reply = js?["choices"]?[0]?["message"]?["content"] ?? ""
-            u.prompt = int(js?["usage"]?["prompt_tokens"] ?? -1l)
-            u.completion = int(js?["usage"]?["completion_tokens"] ?? -1l)
-            u.cached = int(js?["usage"]?["prompt_tokens_details"]?["cached_tokens"] ?? -1l)
-            unsafe {
-                delete js
-            }
-        }
-    }
-    return u
-}
 
 [test(description = "preserve_thinking replays the think block so the next turn attaches the whole first exchange off the prefix cache", timeout = 1200)]
 def test_openai_server_preserve_thinking(t : T?) {

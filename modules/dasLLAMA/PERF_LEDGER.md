@@ -9692,3 +9692,10 @@ above, measured at commit 74a7060033 with tuned kernels.
   a slot - 8,576 at n 4096, 2,144 at n 1024.
 - **Pocket's rope tables** (`rope_cos`, `rope_sin` of a `PocketScratch`, and the `g_rope_cos` / `g_rope_sin` pair):
   `t x (dh / 2) x 4` bytes each - 2,048 bytes at one row of a 1024-wide head, 524,288 at 256 rows.
+
+### What the block drafter's tiled attention holds (the sizes are arithmetic, no run)
+
+- **The tiles' partials plane** (`tp` of the CUDA and Vulkan drafter arms, `btp` of the Metal one; read by
+  `GkDflashAttnMerge` on all three homes, sized by `gk_dflash_attn_partials`): `rows x n_heads x 9 x (hs + 2) x 4` bytes,
+  one plane a process, 9 the tiles of the 2304-key cap - 898,560 bytes for the E2B drafter on a discrete home (16 rows,
+  12 heads of 128), 449,280 on Metal (its block's 8 rows).

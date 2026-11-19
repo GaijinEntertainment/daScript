@@ -1384,6 +1384,36 @@ def cell_scheduler_device_mode(t : T?; file : string) {
             delete dev
         }
     }
+    t |> run("a device-mode request that asks for no cache adopts no parked rows and parks none of its own") @(t : T?) {
+        with_regions_rig(t, file) $(tr) {
+            var sch <- create_scheduler(tr, 2l, 4l, 64l, 0l, 8l, mirror_kv_dtype())
+            t |> success(set_device_kv(sch, true), "the scheduler serves device-home sessions")
+            var events : array<SchedEvent>
+            var prompt <- prose_ids(33l, 11l)
+            submit(tr, sch, make_req(1l, prompt, 8l))
+            drain(tr, sch, events)
+            let claims = length(sch.parked)
+            var uncached <- make_req(2l, prompt, 8l)
+            uncached.no_cache = true
+            submit(tr, sch, uncached)
+            drain(tr, sch, events)
+            t |> equal(cached_of(events, 2l), 0l, "a no-cache request adopts nothing off a region that holds its prompt")
+            t |> equal(length(sch.parked), claims, "... and parks no claim of its own ({length(sch.parked)} parked, {claims} before it)")
+            submit(tr, sch, make_req(3l, prompt, 8l))
+            drain(tr, sch, events)
+            if (gpu_device_prefill_continues(tr)) {
+                t |> success(cached_of(events, 3l) > 0l, "control: the same prompt with the cache on adopts the first request's rows ({cached_of(events, 3l)} of them)")
+            } else {
+                t |> equal(cached_of(events, 3l), 0l, "a recurrent model's turn prefills whole, from zero: its control adopts nothing either")
+            }
+            var passes <- gpu_cpu_passes_()
+            t |> equal(length(passes), 0, "the device served every call: {passes}")
+            delete passes
+            delete prompt
+            delete events
+            delete sch
+        }
+    }
 }
 
 //! a paged scheduler's host-cached streams on the resident driver: their pages go up a physical run at a time, the rows the device

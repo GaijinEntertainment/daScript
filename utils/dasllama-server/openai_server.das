@@ -1969,6 +1969,8 @@ struct private OaiStreamChunk {
 struct private OaiStreamTimings {
     ttft_ms : float
     gen_ms : float
+    @optional draft_n : int64
+    @optional draft_n_accepted : int64
 }
 
 struct private OaiUsageChunk {
@@ -2406,7 +2408,8 @@ def private send_usage_chunk(srv : FrontLink; writer : WriterRef;
     var chunk = OaiUsageChunk(id = id, _object = is_chat ? "chat.completion.chunk" : "text_completion",
                               created = created, model = cur_name(),
                               usage = usage_of(e),
-                              timings = OaiStreamTimings(ttft_ms = float(e.ttft_us) / 1000.0, gen_ms = float(e.gen_us) / 1000.0))
+                              timings = OaiStreamTimings(ttft_ms = float(e.ttft_us) / 1000.0, gen_ms = float(e.gen_us) / 1000.0,
+                                                         draft_n = e.n_drafted, draft_n_accepted = e.n_accepted))
     sse_event(srv, writer, sprint_json(chunk, false), "")
     delete chunk
 }
@@ -2588,10 +2591,10 @@ let CHAT_FIELDS : table<string> <- { "model", "messages", "stream", "temperature
                                      "presence_penalty", "frequency_penalty", "repeat_penalty", "seed",
                                      "max_tokens", "max_completion_tokens", "tools", "tool_choice",
                                      "enable_thinking", "chat_template_kwargs", "truncation", "stream_options",
-                                     "response_format", "stop", "reasoning_effort", "thinking_budget" }
+                                     "response_format", "stop", "reasoning_effort", "thinking_budget", "cache_prompt" }
 let COMPL_FIELDS : table<string> <- { "model", "prompt", "stream", "temperature", "top_k", "top_p", "min_p",
                                      "presence_penalty", "frequency_penalty", "repeat_penalty", "seed",
-                                     "max_tokens", "stream_options", "stop" }
+                                     "max_tokens", "stream_options", "stop", "cache_prompt" }
 let EMB_FIELDS : table<string> <- { "model", "input", "pooling", "dimensions" }
 
 // Sampling knobs shared by both completion routes — OpenAI names, plus the llama.cpp-style
@@ -3244,12 +3247,12 @@ def private register_request(srv : FrontLink; writer : WriterRef;
                              var nothink : NothinkStopGuard = NothinkStopGuard(); stable_at : int64 = 0l;
                              include_usage : bool = false; resumed : bool = false;
                              var constraint : TokenConstraint? = null; system_at : int64 = 0l; system_head_at : int64 = 0l;
-                             messages_end_at : int64 = 0l) {
+                             messages_end_at : int64 = 0l; no_cache : bool = false) {
     var no_types : table<string; table<string; string>>
     var no_marks = ThinkBudgetMarks()
     register_request(srv, writer, prompt, stop_ids, close_toks, stop_strs, spans, params, max_new, streaming, is_chat, prefix,
                      tools_declared, call_open, call_close, seed, think, tool_mode, reuse_id, nothink, stable_at, include_usage,
-                     resumed, constraint, system_at, system_head_at, messages_end_at, no_types, 0l, no_marks)
+                     resumed, constraint, system_at, system_head_at, messages_end_at, no_types, 0l, no_marks, no_cache)
 }
 
 //! `register_request` with the declared tools' parameter types, what a Qwen3.5/3.6 reply's values are typed by
@@ -3265,7 +3268,8 @@ def private register_request(srv : FrontLink; writer : WriterRef;
                              var nothink : NothinkStopGuard; stable_at : int64;
                              include_usage : bool; resumed : bool;
                              var constraint : TokenConstraint?; system_at : int64; system_head_at : int64; messages_end_at : int64;
-                             var tool_types : table<string; table<string; string>>; think_budget : int64; var think_marks : ThinkBudgetMarks) {
+                             var tool_types : table<string; table<string; string>>; think_budget : int64; var think_marks : ThinkBudgetMarks;
+                             no_cache : bool) {
     if (bench_hold_active()) {
         unsafe {
             delete constraint
@@ -3285,7 +3289,7 @@ def private register_request(srv : FrontLink; writer : WriterRef;
     let cid = "{prefix}-{rid}"
     let created = created_ts()
     var preq <- PendingReq(id = rid, params = params, max_new = max_new, seed = seed, stable_at = stable_at, system_at = system_at, system_head_at = system_head_at,
-                           messages_end_at = messages_end_at, think_budget = think_budget)
+                           messages_end_at = messages_end_at, think_budget = think_budget, no_cache = no_cache)
     preq.think_marks <- think_marks
     var encoded_rows = 0l
     for (sp in spans) {
@@ -3866,7 +3870,7 @@ def private handle_chat_tail(srv : FrontLink; writer : WriterRef; js : JsonValue
         delete close
         delete think_marks
     }
-    if (resume_rid != 0l && g_media_cover_probe && uncovered_media(prompt, refs)) {
+    if (resume_rid != 0l && g_media_cover_probe && uncovered_media(prompt, refs, wants_no_cache(js))) {
         // a part this slot knows, under a prompt whose cached prefix stops short of it: the worker encodes it, and
         // the request resumes here with its rows
         var wire = unsafe(g_media_wires?[resume_rid])
@@ -3899,13 +3903,14 @@ def private handle_chat_tail(srv : FrontLink; writer : WriterRef; js : JsonValue
                      streaming, true, "chatcmpl",
                      has_tools, call_open, call_close, seed, think_stream, wire_tool_mode, resume_rid,
                      nothink, stable_at, wants_usage(js), resumed, constraint, system_at, system_head_at, messages_end_at,
-                     tool_param_types(tools), think_budget, think_marks)
+                     tool_param_types(tools), think_budget, think_marks, wants_no_cache(js))
 }
 
 //! Marks the refs that bring no rows and whose span the slot's prefix cache does not hold under `prompt`; true when
-//! there is one. A flat (unpaged) scheduler holds nothing, so every rowless ref is marked.
-def private uncovered_media(prompt : array<int64>; var refs : array<MediaRef>) : bool {
-    let covered = cur_sched().paged ? prefix_match_len(cur_sched().prefix, cur_sched().pool, prompt) : 0l
+//! there is one. A flat (unpaged) scheduler holds nothing, and a request that asks for no cache attaches nothing, so
+//! every rowless ref of either is marked.
+def private uncovered_media(prompt : array<int64>; var refs : array<MediaRef>; no_cache : bool) : bool {
+    let covered = cur_sched().paged && !no_cache ? prefix_match_len(cur_sched().prefix, cur_sched().pool, prompt) : 0l
     var any = false
     var from = 0l
     for (r in refs) {
@@ -3944,6 +3949,8 @@ def private media_spans(prompt : array<int64>; var refs : array<MediaRef>) : arr
 
 //! whether a request asks its stream to end on the usage chunk (`stream_options.include_usage`)
 def private wants_usage(js : JsonValue?) : bool => js?["stream_options"]?["include_usage"] ?? false
+
+def private wants_no_cache(js : JsonValue?) : bool => !(js?["cache_prompt"] ?? true)
 
 def private handle_completion(srv : FrontLink; req : FrontReq; writer : WriterRef) {
     if (reject_deferred_while_draining(srv, writer) || reject_while_benching(srv, writer)) {
@@ -3984,7 +3991,7 @@ def private handle_completion(srv : FrontLink; req : FrontReq; writer : WriterRe
     var no_spans : array<MediaSpan>
     register_request(srv, writer, toks, stop_ids, none_close, stop_strs, no_spans,
                      params, max_new, streaming, false, "cmpl",
-                     [seed = seed, include_usage = wants_usage(js)])
+                     [seed = seed, include_usage = wants_usage(js), no_cache = wants_no_cache(js)])
 }
 
 //! the ids of the `wires` whose client vanished, each one's writer released
@@ -8146,12 +8153,14 @@ def private slot_block_drafter(s : ModelSlot) : bool {
 var private g_block_drafter_slot = ""   //! the slot whose model the process's block drafter is attached to
 
 // one scheduler per slot: the init args are the defaults, SlotOpts sentinels override per slot
+[arch(at = "README.md#slot-gpu-marks")]
 def private init_slot_schedulers(max_streams, max_queue, chunk_tokens, idle_chunk_tokens, page_rows, prefix_groups, prefix_states, prefix_state_bytes : int64; kv_dtype : KVDtype; mtp : int) {
     g_sched_defaults = SchedDefaults(max_streams = max_streams, max_queue = max_queue,
                                      chunk_tokens = chunk_tokens, idle_chunk_tokens = idle_chunk_tokens, page_rows = page_rows,
                                      prefix_groups = prefix_groups, prefix_states = prefix_states, prefix_state_bytes = prefix_state_bytes,
                                      kv_dtype = kv_dtype, mtp = mtp)
-    for (s in g_slots) {
+    for (s, si in g_slots, count()) {
+        install_slot_marks(si)
         init_one_scheduler(s)
     }
 }
@@ -8254,6 +8263,9 @@ def private trimmed_slot_refusal : string {
     for (s, si in g_slots, count()) {
         continue if (!s.model.planes_trimmed)
         let holds = si == g_gpu_owner
+        if (holds) {
+            install_slot_marks(si)
+        }
         sync_slot_device_kv(g_slots[si], holds)
         continue if (holds && s.sched.device_kv)
         let why = !holds ? "it does not hold the device tier" : "its {s.sched.max_streams} streams cannot each hold a device region ({s.gpu_regions} regions{s.backend_effective != "gpu:resident" ? ", the driver not armed" : ""})"

@@ -1984,21 +1984,18 @@ def df_qkn_case(t : T?; var cp : auto(C)) {
     check_exceeds(t, "{tag} control: the rows roped one position on land off the stamp's", y_dev, y_next, NORM_BAR)
 }
 
-//! the block drafter's attention (`GkDflashAttn`) against the in-test softmax: four query heads of 64 over two key-value
-//! heads, a block of eight rows at positions 100 .. over a layer's ring at an offset, its 44-position window masking the
-//! furthest of positions 60 .. 99 - at the panel's first block and its second; the unwindowed softmax the control
-def df_attn_case(t : T?; var cp : auto(C)) {   // nolint:STYLE038 — one fixture, its two block legs and their control
-    let tag = "dflash_attn"
-    let hs = 64
+//! the block drafter's attention (`GkDflashAttnTile`, `GkDflashAttnMerge`) against the in-test softmax: four query heads of
+//! `hs` over two key-value heads, eight rows at `pos0` .. over the `nctx` ring positions from `lo`, the window `w` masking the
+//! furthest, in `want_tiles` key tiles - at the panel's first block and its second; the unwindowed softmax the control
+def private df_attn_shape(t : T?; var cp : auto(C); hs, w, pos0, lo, nctx, want_tiles : int) {   // nolint:STYLE038 — one fixture, its two block legs and their control
+    let tag = "dflash_attn hs{hs} w{w}"
     let nheads = 4
     let grp = 2
     let kvd = (nheads / grp) * hs
     let qd = nheads * hs
     let rows = 8
-    let w = 44
-    let pos0 = 100
-    let lo = 60
-    let nctx = 40
+    let tiles = int(gk_dflash_attn_tiles(int64(nctx + rows)))
+    t |> equal(tiles, want_tiles, "{tag}: {nctx + rows} keys split into the tiles the shape is for")
     let scale = 1.0 / sqrt(float(hs))
     let ringoff = w * kvd + 9
     for (arm in range(2)) {
@@ -2016,10 +2013,12 @@ def df_attn_case(t : T?; var cp : auto(C)) {   // nolint:STYLE038 — one fixtur
         let rkp = cp |> in_(rk)
         let rvp = cp |> in_(rv)
         let op = cp |> out_(prow * qd)
+        let tpp = cp |> out_(nheads * rows * tiles * (hs + 2))
         var pa = GkDflashAttnArgs(rows = uint(rows), pos0 = uint(pos0), lo = uint(lo), nctx = uint(nctx), w = uint(w), hs = uint(hs),
             nheads = uint(nheads), grp = uint(grp), scale = scale, rbase = uint(rbase), koff = uint(ringoff), voff = uint(ringoff))
         cp |> cell_launch(t, tag) $(var rl) {
-            enc_dflash_attn_cls(rl, seats(fixed_array(qp, kbp, vbp, rkp, rvp, op)), pa, int64(nheads * rows))
+            enc_dflash_attn_tile_cls(rl, seats(fixed_array(qp, kbp, vbp, rkp, rvp, tpp)), pa, int64(nheads * rows * tiles))
+            enc_dflash_attn_merge_cls(rl, seats(fixed_array(tpp, op)), pa, int64(nheads * rows))
         }
         var inscope o_all <- cp |> plane_run(op)
         var inscope o_dev <- [for (i in range(rows * qd)); o_all[rbase * qd + i]]
@@ -2074,4 +2073,12 @@ def df_attn_case(t : T?; var cp : auto(C)) {   // nolint:STYLE038 — one fixtur
             slack_kept(t, tag, cp, op, type<uint>, 0, rbase * qd, NAN_SENTINEL_BITS)
         }
     }
+}
+
+//! the attention at one key tile (a 44-position window under a block at 100), at two, the tiles' join (300 under a block at
+//! 400), and at two with heads of 96, which leave the value sum's last lanes idle
+def df_attn_case(t : T?; var cp : auto(C)) {
+    df_attn_shape(t, cp, 64, 44, 100, 60, 40, 1)
+    df_attn_shape(t, cp, 64, 300, 400, 101, 299, 2)
+    df_attn_shape(t, cp, 96, 300, 400, 101, 299, 2)
 }

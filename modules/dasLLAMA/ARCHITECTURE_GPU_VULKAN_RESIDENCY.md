@@ -123,7 +123,7 @@ token: a conversation's next turn prefills its new suffix alone, with no copy. A
 model's parked claim is adopted at every token it holds or at the longest checkpoint the request
 shares (`#device-home-checkpoints`), since its state stands at those positions alone. `dasllama-server` turns the mode on
 per slot before each step (`sync_slot_device_kv`) while the slot is served whole from the device,
-has a region per stream and no media tower or self-speculation, and sizes the slot's context
+has a region per stream, no media tower, and a speculative round the driver runs whole on the device, and sizes the slot's context
 to a region's. `tests/_resident_regions.das` holds the sessions, the pin, the park and the
 mode against host-cached twins on the same device, on a qwen2 and on the E-series carrier.
 
@@ -220,7 +220,9 @@ codec, the device-embed arm, the NextN head's arm, the per-layer-embedding proje
 reading as no-model; the restore is its exact inverse. The whole-model drop clears the same set
 and deselects the `"vulkan"` overrides, so a dropped model's prefill and decode take the plain
 CPU path and a later re-arm passes `resident_upload`'s no-active-override gate. The three carry
-the same set, which is why a model's device state never survives into the next.
+the same set, which is why a model's device state never survives into the next. A reader of the installed
+state runs under its model's marks: `dasllama-server` installs a slot's marks before it makes that slot's
+scheduler, where a block drafter's attach asks the installed model's driver whether its pass runs on the device.
 `vk_drop_model_state`'s sweep frees every `make_device_buf` result and clears `RDec` (the resident decode driver's
 state); it does not reach a driver's own handle to such a buffer, a `*_ready` latch or a profiler accumulator - a
 driver clears those in a listener it registers through `register_vk_drop_hook` - and pipelines survive the drop. The upload

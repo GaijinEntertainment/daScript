@@ -26,3 +26,10 @@ def load_corpus(path : string) : array<string> {
     }
     return <- texts
 }
+
+//! the corpus as one text: its `%%` segments, the comment ones dropped, a blank line between them; "" for a file that is not there
+def corpus_text(path : string) : string {
+    return "" if (!stat(path).is_valid)
+    var inscope texts <- load_corpus(path)
+    return join(texts, "\n\n")
+}

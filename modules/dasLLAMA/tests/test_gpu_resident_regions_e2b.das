@@ -56,7 +56,7 @@ def test_device_home_sessions(t : T?) {
     cell_device_home_sessions(t, REGIONS_FILE)
 }
 
-[test(description = "On gemma-4-E2B a device-mode scheduler emits the host-cached scheduler's tokens, a second turn adopts its first turn's rows, and a tick hands two streams to one segmented window where it serves")]
+[test(description = "On gemma-4-E2B a device-mode scheduler emits the host-cached scheduler's tokens, a second turn adopts its first turn's rows, and a tick hands two streams to one segmented window where it serves; a request that asks for no cache adopts no parked rows and parks none")]
 def test_scheduler_device_mode(t : T?) {
     cell_scheduler_device_mode(t, REGIONS_FILE)
     cell_scheduler_device_handoff(t, REGIONS_FILE)

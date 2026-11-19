@@ -1,0 +1,47 @@
+{
+    "defaults": {
+        "lengths": [0, 2048, 4096, 8192, 16384],
+        "widths": [1, 2, 4],
+        "wide_widths": [8, 16, 32],
+        "width_lengths": [0, 4096],
+        "reply_tokens": 128,
+        "arm_reply_tokens": 512,
+        "reps": 3,
+        "cell_seconds": 120,
+        "arms": ["off"],
+        "cliff_share": 0.6,
+        "stall_times": 10.0,
+        "unfair_times": 2.0,
+        "server": { "ctx": 32768, "streams": 4 },
+        "wide_server": { "ctx": 8192, "streams": 16 }
+    },
+    "arm_flags": {
+        "nextn": { "das": ["--mtp", "true"], "llama": ["--spec-type", "draft-mtp"] },
+        "assistant": { "das": ["--mtp", "true"], "llama": ["--spec-type", "draft-mtp", "--spec-draft-model", "{drafter}", "-ngld", "99"] },
+        "dflash": { "das": ["--drafter", "{drafter}"], "llama": ["--spec-type", "draft-dflash", "--spec-draft-model", "{drafter}", "-ngld", "99"] },
+        "dflash2": { "das": ["--drafter", "{drafter}"], "llama": ["--spec-type", "draft-dflash2", "--spec-draft-model", "{drafter}", "-ngld", "99"] }
+    },
+    "models": {
+        "Llama-3.2-1B-Instruct-Q8_0": {},
+        "Llama-3.2-1B-Instruct-Q4_K_M": {},
+        "Llama-3.2-3B-Instruct-Q4_K_M": {},
+        "gemma-4-E2B-it-Q8_0": {
+            "arms": ["off", "dflash2"],
+            "drafter": "drafters/gemma-4-E2B-it-dflash2-GGUF/gemma-4-E2B-it-dflash2-Q8_0.gguf"
+        },
+        "Qwen3.5-0.8B-MTP-Q8_0": {
+            "arms": ["off", "nextn"]
+        },
+        "gemma-4-26B-A4B-it-Q4_K_M": {
+            "arms": ["off", "assistant", "dflash"],
+            "drafters": {
+                "assistant": "mtp-gemma-4-26B-A4B-it-Q8_0.gguf",
+                "dflash": "drafters/gemma-4-26B-A4B-it-DFlash-GGUF/gemma-4-26B-A4B-it-DFlash-Q8_0.gguf"
+            }
+        },
+        "Qwen3.6-35B-A3B-MTP-UD-Q4_K_M": {
+            "arms": ["off", "nextn", "dflash2"],
+            "drafter": "drafters/Qwen3.6-35B-A3B-DFlash2-GGUF/Qwen3.6-35B-A3B-DFlash2-Q8_0.gguf"
+        }
+    }
+}

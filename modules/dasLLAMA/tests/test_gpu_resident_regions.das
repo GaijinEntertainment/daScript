@@ -48,7 +48,7 @@ def test_device_kv_park_adopt(t : T?) {
     cell_device_kv_park_adopt(t, REGIONS_FILE)
 }
 
-[test(description = "A device-mode scheduler emits the host-cached scheduler's tokens on the shared code path, lands picks alone for argmax streams, parks claims within its slots, and a second turn adopts its first turn's rows")]
+[test(description = "A device-mode scheduler emits the host-cached scheduler's tokens on the shared code path, lands picks alone for argmax streams, parks claims within its slots, and a second turn adopts its first turn's rows; a request that asks for no cache adopts no parked rows and parks none")]
 def test_scheduler_device_mode(t : T?) {
     cell_scheduler_device_mode(t, REGIONS_FILE)
 }

@@ -1890,7 +1890,7 @@ var private g_rdec_bcaps_said = false
 var private g_rdec_no_rows : array<float>   //! the plain verify's head rope rows: none
 var private g_rdec_bcaps_dim = 0l          //! the armed model's row width
 var private @scratch g_rdec_bcaps_layers : array<int64>
-var private @scratch g_rdec_bcaps_img : array<float>
+var private @scratch @exact_size g_rdec_bcaps_img : array<float>
 
 //! the capture arm is another model's from here on: the next round's sync arms it again for the model in place
 def private rdec_block_caps_forget {
@@ -1932,7 +1932,9 @@ def private rdec_block_caps_rearm(t : Model) {
 //! an embedding's window (`keep_hidden`) captured none
 def private rdec_block_caps_land(var s : Session; window : bool; row0, n, pos0 : int64) {
     return if (!g_rdec_bcaps_on || (window && s.keep_hidden))
-    g_rdec_bcaps_img |> resize(n * long_length(g_rdec_bcaps_layers) * g_rdec_bcaps_dim)   // nolint:PERF026,LINT019 - exact: the drafter clones the image whole
+    let need = n * long_length(g_rdec_bcaps_layers) * g_rdec_bcaps_dim
+    g_rdec_bcaps_img |> reserve(need)   // a prefill window's rows pass the unreserved-resize bound: 4096 rows of four 1536-wide layers are 100 MB
+    g_rdec_bcaps_img |> resize(need)   // nolint:PERF026,LINT019 - exact: the drafter clones the image whole
     rdec_block_caps_rows(window, row0, n, g_rdec_bcaps_img)
     mtp_block_land_rows(s, g_rdec_bcaps_img, n, pos0)
 }
@@ -6932,8 +6934,13 @@ def gpu_free_regions_() : int64 {
 def gpu_device_sessions_() : int64 => g_rdec_active ? long_length(g_rdec_regions) : 0l
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-mtp-device-home")]
-def gpu_resident_mtp_device_home_(t : Model) : bool
-    => g_rdec_active && g_rdec_head_armed && rdec_verify_rows() >= 2l && (t.config.recr_mask == 0ul || rdec_rollback_installed())
+def gpu_resident_mtp_device_home_(t : Model) : bool {
+    return false if (!g_rdec_active || rdec_verify_rows() < 2l || (t.config.recr_mask != 0ul && !rdec_rollback_installed()))
+    return true if (g_rdec_head_armed)
+    return false if (!rdec_verify_plain())
+    rdec_block_caps_sync(t)
+    return g_rdec_bcaps_on
+}
 
 //! A device-home session of `t` prefills from a position past zero on every model the driver serves
 [unused_argument(t)]

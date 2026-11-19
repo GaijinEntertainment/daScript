@@ -4056,7 +4056,16 @@ has not heard (a WAV's four reps read `new` four times; a clip that is no WAV go
 fake hears it twice and the row is refused), a row answers the text its reps read and refuses
 reps that read different texts or a text other than the one asked, and the loaded row stands while
 the fake chat turn outlasts two fast reps and is refused when the reps outlive the turn, when the
-turn carries no reply text, and when the loaded text differs from the idle one. `test_prompt_files_id_list`:
+turn carries no reply text, and when the loaded text differs from the idle one. The model bench's cells
+(`../harness/model_bench.das` and its runner `model_bench_run.das`, the fake `_fake_chat_server.das`, which
+`_fake_chat_root.das` serves as a child process): `test_model_bench_rules` (the prompt's id line, a turn's refusals,
+an entry's settings over the defaults, the row flags), `test_model_bench_against_a_fake_server` (a turn, a cell, a
+wave of eight and its control of one), `test_model_bench_driver` (a whole run: the ladder's and the widths' row
+names, the `--max-length` stop, an arm's rows and `--arm off`, the wide pass's stream cap, the runs that exit 1),
+`test_model_bench_cell_reads` (`cache_prompt` on the wire, a cell's draft sums, a stall, llama.cpp's timing names,
+an unfair wave, the shipped config) and `test_model_bench_runner` (the command lines, the joined run files, and a
+model run end to end against the fake as a child on port 18171: one card, and the runs a model fails).
+`test_prompt_files_id_list`:
 `../harness/_prompt_files.das`'s `id_list` keeping a comma list's numbers in order (an empty part and a word dropped, every
 number kept unbounded - the control), dropping numbers below `lo` and past `hi` with both bounds kept, and an absent file's
 `read_ids` none. The synthesis and

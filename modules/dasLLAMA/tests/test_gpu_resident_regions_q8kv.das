@@ -60,7 +60,7 @@ def test_device_kv_park_adopt(t : T?) {
     }
 }
 
-[test(description = "Under a q8_0 mirror a device-mode scheduler emits the host-cached scheduler's tokens over the codec's agreeing prefix, and a second turn adopts its first turn's rows")]
+[test(description = "Under a q8_0 mirror a device-mode scheduler emits the host-cached scheduler's tokens over the codec's agreeing prefix, and a second turn adopts its first turn's rows; a request that asks for no cache adopts no parked rows and parks none")]
 def test_scheduler_device_mode(t : T?) {
     with_kv_dtype(KVDtype.q8_0) {
         cell_scheduler_device_mode(t, REGIONS_FILE)

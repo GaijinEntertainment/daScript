@@ -284,16 +284,17 @@ def private stats_counts(t : T?; base_url : string) : tuple<admitted : int64; me
 }
 
 //! a greedy chat under the system line `system`: the clip then `text` in one user message, or `text` alone for an empty `b64`
-def private system_chat_body(system, b64, text : string; stream : bool) : string {
+def private system_chat_body(system, b64, text : string; stream : bool; no_cache : bool = false) : string {
+    let cache = no_cache ? "\"cache_prompt\":false," : ""
     let audio = empty(b64) ? "" : "\{\"type\":\"input_audio\",\"input_audio\":\{\"data\":\"{b64}\",\"format\":\"wav\"}},"
-    return "\{\"temperature\":0,\"stream\":{stream},\"messages\":[\{\"role\":\"system\",\"content\":\"{system}\"},\{\"role\":\"user\",\"content\":[{audio}\{\"type\":\"text\",\"text\":\"{text}\"}]}]}"
+    return "\{{cache}\"temperature\":0,\"stream\":{stream},\"messages\":[\{\"role\":\"system\",\"content\":\"{system}\"},\{\"role\":\"user\",\"content\":[{audio}\{\"type\":\"text\",\"text\":\"{text}\"}]}]}"
 }
 
 //! one ask of the clip under `system`: the reply, and how far the admitted-stream and media-row counters moved for it
-def private ask_counted(t : T?; base_url, system, b64, text : string; tag : string) : tuple<reply : ChatReply; admitted : int64; rows : int64> {
+def private ask_counted(t : T?; base_url, system, b64, text : string; tag : string; no_cache : bool = false) : tuple<reply : ChatReply; admitted : int64; rows : int64> {
     let before = stats_counts(t, base_url)
     var reply = ChatReply()
-    POST("{base_url}/v1/chat/completions", system_chat_body(system, b64, text, false)) $(resp) {
+    POST("{base_url}/v1/chat/completions", system_chat_body(system, b64, text, false, no_cache)) $(resp) {
         t |> equal(int(resp.status_code), int(http_status.OK), "{tag}: {resp.body}")
         reply = usage_of(t, string(resp.body), tag)
     }
@@ -360,7 +361,8 @@ def test_openai_server_audio_tower(t : T?) {
 }
 
 //! The clip is known, but no cached prefix runs under a new system line to its span: the probe sends it to the encoder
-//! before the submit, so one stream is admitted, carrying the clip's rows. Asked again, the cache holds the span.
+//! before the submit, so one stream is admitted, carrying the clip's rows. Asked again, the cache holds the span - and
+//! asked with `cache_prompt` false, the request attaches no cached span, so the clip is encoded before the submit again.
 def private check_known_clip_reencoded(t : T?; base_url, b64, text : string) {
     let sys_plain = text_prompt(t, base_url, SYS_A, text)
     let moved = ask_counted(t, base_url, SYS_A, b64, text, "a known clip under a new system line")
@@ -372,6 +374,10 @@ def private check_known_clip_reencoded(t : T?; base_url, b64, text : string) {
     t |> equal(again.admitted, 1l, "one stream admitted")
     t |> equal(again.rows, 0l, "the cached span brings no rows")
     t |> equal(again.reply.prompt, moved.reply.prompt, "the same prompt")
+    let uncached = ask_counted(t, base_url, SYS_A, b64, text, "the same ask with cache_prompt false", true)
+    t |> equal(uncached.admitted, 1l, "one stream admitted: a no-cache ask's clip is encoded before the submit")
+    t |> equal(uncached.rows, int64(UV_ROWS), "and it brought the clip's rows, the cached span unused")
+    t |> equal(uncached.reply.prompt, moved.reply.prompt, "the same prompt")
 }
 
 //! A request's media parts are capped: one past the limit is refused by name before any part decodes; at the limit

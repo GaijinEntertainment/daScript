@@ -2,8 +2,9 @@
 
 Companion to `ARCHITECTURE_MEASUREMENT.md`; a section is cited by its anchor. This document
 carries the client clock around a live chat server's turns and what its figures are
-(`#served-turn-instrument`), and the third-party servers it reads under the same clock
-(`#served-third-party`). The benchmark rig, the tune gate and the instrumentation rails stay in
+(`#served-turn-instrument`), the third-party servers it reads under the same clock
+(`#served-third-party`), and the model bench, which reads a model's own rates through a server
+(`#model-bench`, `#model-bench-runner`). The benchmark rig, the tune gate and the instrumentation rails stay in
 `ARCHITECTURE_MEASUREMENT.md`.
 
 ### The served-turn instrument {#served-turn-instrument}
@@ -112,3 +113,67 @@ cache sizes itself (the entry quotes its log's slot count, tagged `external`, si
 ours reads it). The client is `served_bench.das -- --url <server> --sizes 512,3000,9000 --reply 200
 --reps 2`, the same corpus and the same reply length on both sides, and the entry names both
 servers' flags beside the figures.
+
+### The model bench {#model-bench}
+
+`harness/model_bench.das` reads a model's own rates through a chat server: prefill and decode, at
+one stream and at several, with a drafter and without, on the same client clock and wire as the
+served-turn instrument. Where that instrument times what a client of a server waits for - a cold
+turn, a warm one, the cache between them - the model bench keeps every cache out of its clock. Each
+prompt opens on an id no server has seen, a turn is refused when the server reports prompt tokens
+read off a cache past a chat template's fixed head, and the request carries `cache_prompt: false`,
+which keeps a turn out of dasllama-server's prefix cache whole - no opening attached, no checkpoint
+stop, nothing left behind - and off llama.cpp-server's.
+
+One streamed turn gives both rates: the prompt's tokens over the time to the first reply text, and
+the reply's tokens after the first over the time after it, which is the decode rate at that context
+length. The prompt is a frozen corpus of this repository's Python sources
+(`benchmarks/data/python_context.txt`) cut to the length, then a task that asks for code alone; one
+untimed turn a cell reads the tokens its cut makes, so a cell's prompts land within a hundredth of
+the length it names. The ladder climbs the config's lengths and stops at the first cell its own
+measured rates predict past the cell's time, and a turn that outlasts three times its prediction is
+cut off: a slow box gets a shorter ladder, and a collapse is a refused cell, not a hang. A cell that
+a turn failed, cut short or read off a cache is refused with its reason and never averaged in.
+
+The width rows send a wave of streams at once, each its own prompt, at two lengths: a row is the
+streams combined - their prompt tokens over the time to the wave's last first text, their decode
+rates summed. A wave wider than the server's streams is not sent, since it would time the server's
+queue. A speculative arm's rows are long replies at the same two lengths at one stream, read against
+plain rows of the same reply length, each with the drafted and accepted tokens the server reports
+(`timings.draft_n`, `draft_n_accepted`); a round's verify pays attention over the whole context, so
+an arm's gain shrinks with the prompt, and the row at the longer length shows where it ends.
+
+A row is named as the ladder names its rows, with the context a decode ran after, the width and the
+arm: `pp4096`, `tg128+4096`, `pp4096@4`, `tg128@8`, `tg512+4096:dflash2`. A row carries its flags -
+`noisy`, `cliff` (a rate under a share of the rung before it, at twice the length), `stall` (one gap
+between reply chunks far past the median), `scaling` (a combined rate under the width before it),
+`unfair` (a wave's last first text far past its first) - and they are what the bench is for: a
+pathological case shows as a flagged or refused row without a reader comparing columns.
+
+### The model bench's runner and its cards {#model-bench-runner}
+
+`harness/model_bench_run.das` owns everything the bench does not: it starts a server for a model,
+waits until it answers, runs the bench against it, stops it, and writes the model's card. The
+server and the bench are children of the runner (`daslib/fio`'s process handle): the runner drains
+the server's output into a log while the bench runs, and closing the handle stops whatever of the
+server still runs, so a server that never answers or does not stop takes no port into the next
+start. A server counts as up once the model list that answers on the port names the model file the
+runner started it on; any other answer is another process on the port, and the arm fails. The server
+runs from the tree it is told, with that tree's binary, so the bench of one tree reads the server of
+another; under `--llama-server` the server is llama.cpp's on the same file - every layer on the GPU,
+the config's slots with the config's context a slot, greedy - and its card is an engine `llama.cpp`
+run beside ours; `--server-arg` gives any other server's command line an argument at a time, with the
+model file, the port and the entry's server plan filled in. A model's entry in
+`harness/model_bench.json` is its whole setup: the lengths and widths, the server's streams and
+context, its arms with the drafter each takes, and the wide pass's server, which holds enough
+streams, each with room for the longest width prompt, for a wave of sixteen. An arm is a server
+start of its own, with the arguments the config's `arm_flags` table gives that arm on that server,
+because a slot that drafts is set up to draft at boot; the plain start runs the whole ladder and the
+long plain rows the arms are read against.
+
+A card is one run of the ladder's record (`BenchModel` / `BenchRun`, `performance/profile_common`):
+the engine, backend, box and hardware, the server's commit, both command lines, the model file's
+identity, and the bench's rows as its `tests`. The bench's own run file beside it keeps what the
+record's schema does not carry - a row's token count, flags and draft counts, what was refused and
+why - and every timed request is a line of a third file. The files land under the tree's ignored
+`logs/model_bench` unless the run names a folder.

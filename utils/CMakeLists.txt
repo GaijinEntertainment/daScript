@@ -396,6 +396,18 @@ FOREACH(_das ${DAS_UTILS_TO_TEST})
     )
 ENDFOREACH()
 
+SET(DAS_UTILS_TO_COMPILE
+    dasllama-server/test_openai_server.das
+    dasllama-server/test_openai_server_mtp.das
+)
+
+FOREACH(_das ${DAS_UTILS_TO_COMPILE})
+    LIST(APPEND _run_utils_tests
+        COMMAND ${CMAKE_COMMAND} -E echo "Compiling tests ${_das}"
+        COMMAND daslang ${PROJECT_SOURCE_DIR}/dastest/dastest.das -- --color --failures-only --compile-only --test ${PROJECT_SOURCE_DIR}/utils/${_das}
+    )
+ENDFOREACH()
+
 add_das_target(run_utils_tests
     ${_run_utils_tests}
     WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}

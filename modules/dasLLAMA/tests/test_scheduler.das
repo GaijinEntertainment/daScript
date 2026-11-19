@@ -925,7 +925,7 @@ def test_scheduler_batching(t : T?) {
 
 // ===== paged serving + prefix cache: a repeat request attaches pages and skips their prefill =====
 
-[test(description = "A paged scheduler's repeat request attaches the donated pages up to np-1 tokens and emits the cold stream, and a stop-finished stream donates rows aligned with its close so a continuation attach equals cold")]
+[test(description = "A paged scheduler's repeat request attaches the donated pages up to np-1 tokens and emits the cold stream, a no-cache request attaches and donates nothing, and a stop-finished stream donates rows aligned with its close so a continuation attach equals cold")]
 def test_scheduler_prefix_cache(t : T?) {   // nolint:STYLE038 — one model load per test: every assertion runs against that model inside the same jobque scope
     t |> run("paged scheduler: repeat request attaches cached pages, identical stream (needs SmolLM2-135M)") @(t : T?) {
         if (model_missing(t)) {
@@ -961,6 +961,29 @@ def test_scheduler_prefix_cache(t : T?) {   // nolint:STYLE038 — one model loa
             // idle scheduler: the only live page holds are the cache's
             t |> equal(int64(length(sch.pool.free_groups)),
                        sch.pool.capacity_groups - prefix_held_groups(sch.prefix))
+            t |> equal(fin2.n_drafted, 0l, "a plain stream's finish carries no draft count")
+
+            let held = prefix_held_groups(sch.prefix)
+            events |> clear()
+            var off <- make_req(3l, prompt, greedy, 8l, none)
+            off.no_cache = true
+            t |> success(submit(m, sch, off), "no-cache stream queued")
+            drain(m, sch, events)
+            var uncached <- toks_of(events, 3l)
+            t |> equal(finished_of(events, 3l).n_cached, 0l, "a no-cache request attaches nothing off a cache that holds its prompt")
+            t |> success(ids_equal(uncached, cold), "... and emits the cold stream ('{decode(m, uncached)}' against '{decode(m, cold)}')")
+            t |> equal(sch.cached_tokens, fin2.n_cached, "... and counts no cached token")
+            t |> equal(prefix_held_groups(sch.prefix), held, "... and donates no page")
+            t |> equal(int64(length(sch.pool.free_groups)), sch.pool.capacity_groups - held, "... and holds no page once reaped")
+            delete uncached
+            var sch0 <- create_scheduler(m, 1l, 4l, 64l, 16l)
+            events |> clear()
+            var lone <- make_req(4l, prompt, greedy, 8l, none)
+            lone.no_cache = true
+            t |> success(submit(m, sch0, lone), "no-cache stream queued on an empty cache")
+            drain(m, sch0, events)
+            t |> equal(prefix_held_groups(sch0.prefix), 0l, "control: a no-cache request leaves an empty cache empty, where the cold stream above donated")
+            delete sch0
 
             // ===== stop-finished streams donate an ALIGNED history: continuation attach == cold.
             // A "stop" finish must donate rows matching prompt + emitted + close exactly — the stop
@@ -1137,6 +1160,8 @@ def test_scheduler_mtp(t : T?) {   // nolint:STYLE038 — one model load per tes
             t |> success(sch.mtp_drafted > 0l, "the spec tick actually drafted ({sch.mtp_drafted} drafts)")
             t |> success(sch.mtp_accepted > 0l, "some drafts accepted ({sch.mtp_accepted} of {sch.mtp_drafted})")
             t |> equal(finished_of(events, 2l).n_gen, 24l)
+            t |> equal(finished_of(events, 2l).n_drafted, sch.mtp_drafted, "the lone stream's finish carries the scheduler's whole draft count")
+            t |> equal(finished_of(events, 2l).n_accepted, sch.mtp_accepted, "... and its accepted count")
             //! top-k 1 makes every draw the penalized argmax, so the seeded sampled stream is deterministic and must equal the plain scheduler's
             let sp = SamplingParams(temp = 0.7, top_k = 1l, penalty = 1.1)
             var ref_s <- plain_reply(m, prompt, 24l, 3l, 8l, sp, 4242)

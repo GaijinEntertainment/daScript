@@ -5,9 +5,9 @@ require daslib/clargs
 require strings
 require daslib/strings_boost
 
-// The reference supply chain: build pinned llama-bench (and llama-batched-bench beside it, the tg@N row's reference)
-// binaries per build flavor, so every box — and any community user who wants our exact reference —
-// benches against the identical binary. One git worktree at the pinned sha, one build dir per flavor:
+// The reference supply chain: build the pinned llama-bench per build flavor, so every box — and any community user who
+// wants our exact reference — benches against the identical binary. Two more binaries build beside it:
+// llama-batched-bench, the tg@N row's reference, and llama-server, the served rows' reference. One git worktree at the pinned sha, one build dir per flavor:
 //   clean-cpu: -DGGML_ACCELERATE=OFF -DGGML_BLAS=OFF -DGGML_METAL=OFF — kernel-vs-kernel fair
 //              (on Apple Silicon, Accelerate routes GEMM through the AMX coprocessor; das's own
 //              kernels don't use it)
@@ -179,7 +179,7 @@ def private build_flavor(dest, f, short_sha : string; jobs : int) : int {
             return 1
         }
     }
-    if (run_visible("cmake --build \"{build_dir}\" --config Release --target llama-bench llama-batched-bench llama-mtmd-cli -j {jobs}") != 0) {
+    if (run_visible("cmake --build \"{build_dir}\" --config Release --target llama-bench llama-batched-bench llama-mtmd-cli llama-server -j {jobs}") != 0) {
         print("error: build failed for {f}\n")
         return 1
     }
@@ -192,7 +192,13 @@ def private build_flavor(dest, f, short_sha : string; jobs : int) : int {
         print("error: {f} built but llama-batched-bench not found beside {bench} - the tg@N row's reference\n")
         return 1
     }
+    let server = replace(bench, "llama-bench", "llama-server")
+    if (!fexist(server)) {
+        print("error: {f} built but llama-server not found beside {bench} - the served rows' reference\n")
+        return 1
+    }
     print("{f}: {bench} (llama.cpp {short_sha})\n")
     print("    lcpp_bench: --ref \"{bench}\" --ref-flavor {f}\n")
+    print("    served rows: {server}\n")
     return 0
 }
