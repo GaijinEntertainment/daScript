@@ -1,6 +1,7 @@
 options gen2
-options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 options _dasllama_internal = true
+
+module _child_home_words shared
 
 require dasllama/dasllama_transformer   // the umbrella's [init] registrations: the CUDA home's seats under DASLLAMA_CUDA=1
 require dasllama/dasllama_config   // DlimVulkanConfig
@@ -17,8 +18,7 @@ def private mark(name : string) {
     to_log(LOG_INFO, "CASE {name}\n")
 }
 
-[export]
-def main() {
+def public child_home_words() {
     mark("fallback")
     to_log(LOG_INFO, "FALLBACK {rdec_fallback_words()}\n")
     static_if (typeinfo builtin_module_exists(vulkan)) {

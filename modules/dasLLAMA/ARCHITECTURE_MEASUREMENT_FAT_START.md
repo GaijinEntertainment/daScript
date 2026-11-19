@@ -25,11 +25,12 @@ hook wrote. The hook answers false outside a fat exe (`tune_fat_built()`) and in
 has nothing to race, so it runs the default knobs and writes nothing; the default apply answers
 `library` there before it looks for any file (`box_profile_in_library`). Inside a fat exe it runs
 `dasllama_race_runtime_section`: the Metal twin races (`dasllama_metal_crown_race` - both halves,
-synthetic, no model) under the tune progress display, then `dasllama_runtime_snapshot` - the same
-writer the mint's kernel half ends with - merged into the app sidecar with the kernels section
-untouched. The next start reads it and races nothing. A box without a Metal device records the
-knob defaults, so the file still documents the box. An unwritable location keeps the crowns for
-the process and says so.
+synthetic, no model) under the tune progress display, then `dasllama_write_runtime_section` - the
+snapshot (`dasllama_runtime_snapshot`, the same writer the mint's kernel half ends with) merged
+into the app sidecar with the kernels section untouched. The race and the write are two functions:
+the write takes the crown list, so it runs without a race. The next start reads it and races
+nothing. A box without a Metal device records the knob defaults, so the file still documents the
+box. An unwritable location keeps the crowns for the process and says so.
 
 The sidecar of a fat exe lives per user, `~/.dasllama/tune/<exe>.tune.json` (`USERPROFILE` on
 Windows), never beside the exe: a packaged exe sits in a directory its user cannot write or an
@@ -77,7 +78,9 @@ name, size and mtime of every `dasllama_metal*.das`, `dasllama_gpu_kernels_commo
 and of the MSL emitter under `modules/dasMetal/metal/`, whose edits move every kernel's text). A file whose identity or digest
 differs is not valid for this run (`dasllama_box_runtime_valid`), and the hook races again
 (`dasllama_box_runtime_race`: the same synthetic twin race the fat exe runs, no model, no child)
-and overwrites it; a shared binary's mtime is no key here, since every script on a box shares one
-binary and a kernel edit moves the verdict without rebuilding it. A race runs at most once per
-process, so an unwritable home keeps the crowns for the process and says so. No kernels section is
-ever written to this file, so the tune framework's stale-sidecar merge cannot drop one from it.
+and overwrites it through `dasllama_box_runtime_write`, the file's one writer - the identity, the
+digest and the section in one rename; a shared binary's mtime is no key here, since every script
+on a box shares one binary and a kernel edit moves the verdict without rebuilding it. A race runs
+at most once per process, so an unwritable home keeps the crowns for the process and says so. No
+kernels section is ever written to this file, so the tune framework's stale-sidecar merge cannot
+drop one from it.

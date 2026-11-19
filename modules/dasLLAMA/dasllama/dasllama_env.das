@@ -1301,3 +1301,6 @@ def public registered_env_names() : array<string> {
 
 //! a tri-state pin over an environment knob: -1 the environment's `env`, 0 off, any other value on
 def pin_over_env(pin : int; env : bool) : bool => pin < 0 ? env : pin != 0
+
+//! true in the full suite (`DASLLAMA_PARITY_FULL=1`): the large tier's cells run, and the cells no test wall admits
+def public parity_full_mode() : bool => g_env_test.parity_full

@@ -14,9 +14,11 @@ anchor.
 - **`dasllama_fat_start.das`** - a fat exe's first start: the runtime-section snapshot the tuner's
   kernel half also writes, the Metal twin crown race and the three homes' short-window knee races
   (`dasllama_metal_knee_race`, `dasllama_vulkan_knee_race`, `dasllama_cuda_knee_race`; synthetic, no model), the first-start hook
-  it registers with the box-profile apply, and the per-user sidecar placement - the path, the
+  it registers with the box-profile apply, the per-user sidecar placement - the path, the
   one-time adoption of a sidecar beside the exe, and the placement hook the apply runs first
-  (`ARCHITECTURE_MEASUREMENT_FAT_START.md#fat-first-start`). The placement hook is optional, unlike a
+  (`ARCHITECTURE_MEASUREMENT_FAT_START.md#fat-first-start`) - and the per-box runtime file a run
+  with no sidecar of its own reads: its path, its validity check, its race and its one writer
+  (`ARCHITECTURE_MEASUREMENT_FAT_START.md#box-runtime-file`). The placement hook is optional, unlike a
   hook that does the work itself: unset, the apply reads the sidecar where the tune framework put
   it, which is what every build but a fat exe wants.
 - **`dasllama_bench.das`** - the benchmark rows as one-rep steps over a `Model` and a `Session`:
@@ -95,5 +97,30 @@ anchor.
 `REVIEW.das`'s `check_harness_dashv` walks `harness/` and reds a tool that requires `dashv` and
 names `dasllama.io`: the exchange module is the sidecar exchange host's one client, and a harness
 tool reaches it through `dasllama/dasllama_exchange`. It licenses no names.
+
+### The test child {#test-child}
+
+`tests/_child_root.das` is the one program a test under `tests/` starts as a child for a claim a
+process decides - a knob the engine reads at context init, a line only a process's log carries, an
+exit a panic decides. It dispatches a verb to a function of a `_child_<verb>.das` module, and it
+starts no thread of its own: a thread is a second context, whose init would say every
+once-a-process line again, so the spawning test's timer is the verb's wall (`run_verb_child`).
+`tests/_child_run.das` owns its key, its build and its spawn. The runner (`tests/run.das`) builds
+it once a run as a standalone exe, split by module, beside the module-cache record of the entry
+program's compile - a record serves the root file it was written from, by path - under one key of
+the runtime libraries, the build environment and the sources the build reads. A spawn then costs
+a process start, where a root of its own costs an engine compile inside its test. A standalone exe
+keeps its sidecar beside it, so the per-box file's hook stands down in the test child
+(`ARCHITECTURE_MEASUREMENT_FAT_START.md#box-runtime-file`).
+
+`tests/REVIEW.das`'s `check_one_test_child` reds a `_*_root.das` file, a `child_cmd` or
+`child_cmd_at` call naming a root, and a `child_cmd_root` caller outside its licensed sets.
+`OWN_ROOTS` licenses a program whose claim a verb cannot carry - the program's own compile, the
+process it runs in, a model a stocked test loads, or a server or runner started by its command
+line: `_child_root.das`, `_tuned_fallbacks_root.das`, `_exe_smoke_root.das`,
+`_box_runtime_root.das`, `_resident_load_root.das`, `_audio_lane_whisper_root.das`,
+`_mx4_mint_root.das`, `_fake_chat_root.das`, `run.das` and `dastest.das`. `ROOT_CMD_CALLERS`
+licenses a test file that names its child's root itself: `test_f32_batch_tile_perms.das`, whose
+root is a copy it writes.
 
 The decode pick tape: `ARCHITECTURE_ENGINE_MECHANISMS.md#moe-pick-tape`.

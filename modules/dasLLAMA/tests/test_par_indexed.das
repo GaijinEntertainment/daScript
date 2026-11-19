@@ -5,9 +5,9 @@ options persistent_heap   // a dastest root frees what it deletes only on this h
 require dastest/testing_boost public
 require dasllama/dasllama_par
 require dasllama/dasllama_math
-require daslib/fio
 require strings
 require _compares   // no_children_here: the child cell's skip on a wasm target
+require _child_run   // the test child's `single-thread` verb
 
 // maybe_parallel_for_indexed contract across all three arms (team / fifo / inline):
 // exactly-once coverage, slot < get_dispatch_slot_bound(), and per-slot scratch — each
@@ -16,7 +16,7 @@ require _compares   // no_children_here: the child cell's skip on a wasm target
 //
 // Single-thread mode is gated here too. Its environment half runs in child processes -
 // DASLLAMA_SINGLE_THREAD loads once at context init, so a child started with it set or unset is
-// the only instrument - and those children spawn _single_thread_root.das.
+// the only instrument - and those children spawn the test child's `single-thread` verb.
 
 def indexed_round(t : T?; nj, first, total : int) {
     let bound = get_dispatch_slot_bound()
@@ -197,21 +197,9 @@ def test_single_thread(t : T?) {
     }
 }
 
-def private das_exe() : string {
-    let args <- get_command_line_arguments()
-    return empty(args) ? "" : args[0]
-}
-
 def private spawn_root(single : string; var output : string&) : int {
-    let cmd = "\"{das_exe()}\" -dasroot \"{get_das_root()}\" \"{get_das_root()}/modules/dasLLAMA/tests/_single_thread_root.das\" 2>&1"
-    let win = get_platform_name() == "windows"
     //! the announce is an info record, dropped at to_log's default floor - the child runs at info
-    let armed = win ? "set \"DASLLAMA_SINGLE_THREAD={single}\"&& set \"DAS_LOG_LEVEL=info\"&& {cmd}" : "DASLLAMA_SINGLE_THREAD={single} DAS_LOG_LEVEL=info {cmd}"
-    return unsafe(popen_timeout(armed, 300.0, $(f) {
-        if (f != null) {
-            output = fread(f)
-        }
-    }))
+    return run_verb_child(child_verb_cmd("single-thread", [(name = "DASLLAMA_SINGLE_THREAD", value = single), (name = "DAS_LOG_LEVEL", value = "info")]), output)
 }
 
 def private count_of(haystack, needle : string) : int {

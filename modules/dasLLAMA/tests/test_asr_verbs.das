@@ -281,10 +281,10 @@ let private LANE_FAMILIES = ["qwen3a", "gemma4a", "canary", "parakeet", "gigaam"
 let private LANE_SAY = "dasLLAMA: DASLLAMA_AUDIO_LANE="
 let private LANE_SAY_TAIL = " over its family's own lane; unset it for that lane"
 
-//! `_audio_lane_root.das` under DASLLAMA_AUDIO_LANE=`v` ("" unset), at the info floor its records print at
+//! the test child's `audio-lane` verb under DASLLAMA_AUDIO_LANE=`v` ("" unset), at the info floor its records print at
 def private audio_lane_child(t : T?; v : string) : string {
     var out : string
-    let rc = run_child(child_cmd("_audio_lane_root.das", [(name = "DASLLAMA_AUDIO_LANE", value = v), (name = "DAS_LOG_LEVEL", value = "info")]), out)
+    let rc = run_verb_child(child_verb_cmd("audio-lane", [(name = "DASLLAMA_AUDIO_LANE", value = v), (name = "DAS_LOG_LEVEL", value = "info")]), out)
     t |> equal(rc, 0, "the lane root ran (DASLLAMA_AUDIO_LANE='{v}'):\n{out}")
     t |> success(find(out, "ROOT_DONE") >= 0, "the lane root reached its end:\n{out}")
     return out
@@ -496,7 +496,7 @@ def test_tower_kq_source_conversion(t : T?) {
     t |> run("the line the pick says: the type, its member and the lane form, once a load, and none over a Q8_0 or float source") @(t : T?) {
         var out : string
         let paths = join([for (p in [q4k, q6k, q41, q80, f16, vq4k, junk]); "\"{p}\""], " ")
-        let rc = run_child(child_cmd("_flavor_decline_root.das", [(name = "DAS_LOG_LEVEL", value = "info")], "src {paths}"), out)
+        let rc = run_verb_child(child_verb_cmd("flavor-decline", [(name = "DAS_LOG_LEVEL", value = "info")], "src {paths}"), out)
         t |> equal(rc, 0, "the root ran:\n{out}")
         t |> success(find(out, "ROOT_DONE") >= 0, "the root reached its end:\n{out}")
         for (what in fixed_array("Q4_K (the k4 member)", "Q6_K (the k6 member)", "Q4_1 (a type no KqFmt member serves)")) {

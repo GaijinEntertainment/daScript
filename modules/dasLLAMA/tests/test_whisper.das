@@ -22,6 +22,7 @@ require daslib/defer
 require math
 require strings
 require _model_tier   // model_available() presence/size-tier gate (see the file's header)
+require dasllama/dasllama_env   // parity_full_mode: the full suite's flag
 require ?das_metal dasllama/dasllama_metal_asr_dec   // set_metal_wdec — the CPU-claim cells pin the GPU cross-KV hook off
 require ?das_metal dasllama/dasllama_metal_tower     // set_metal_tower — the mtmd-oracle cells pin the GPU conv hook off
 require ?das_metal dasllama/dasllama_metal_prefill   // metal_prefill_shutdown — the crown-pin cell drops the trio's cached flags

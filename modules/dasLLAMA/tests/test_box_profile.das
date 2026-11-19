@@ -377,11 +377,11 @@ def test_stale_unreadable_sidecar_applies_nothing(t : T?) {
 [test(description = "In a child process DASLLAMA_METAL_TENSOR=0 leaves the profile Metal tensor crowns unapplied, while the same profile with the knob unset crowns mulmm_q8")]
 def test_metal_tensor_knob_leaves_the_crowns_unapplied(t : T?) {
     var out : string
-    let rc = run_child(child_cmd("_metal_tensor_root.das", [(name = "DASLLAMA_METAL_TENSOR", value = "0")]), out)
+    let rc = run_verb_child(child_verb_cmd("metal-tensor", [(name = "DASLLAMA_METAL_TENSOR", value = "0")]), out)
     t |> equal(0, rc, "the child ran (rc {rc}):\n{out}")
     t |> success(find(out, "CROWNS=[]") >= 0, "under DASLLAMA_METAL_TENSOR=0 the profile's crowns stay unapplied:\n{out}")
     var out2 : string
-    let rc2 = run_child(child_cmd("_metal_tensor_root.das", [(name = "DASLLAMA_METAL_TENSOR", value = "")]), out2)
+    let rc2 = run_verb_child(child_verb_cmd("metal-tensor", [(name = "DASLLAMA_METAL_TENSOR", value = "")]), out2)
     t |> equal(0, rc2, "the control child ran (rc {rc2}):\n{out2}")
     t |> success(find(out2, "CROWNS=[mulmm_q8]") >= 0, "with the knob unset the same profile crowns mulmm_q8:\n{out2}")
 }

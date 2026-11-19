@@ -8,10 +8,14 @@ full-suite run turns a one-arm fix into an afternoon.
 
 ```
 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --arm <filter> [--suite decode|mtp|prefill|matrix|kernels|image|image-vulkan|coverage|all] [--family llama]
-./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --suite model-free        # the per-PR gate that needs no models - runs the same on a bare box, no --arm
+./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --suite model-free        # the per-PR gate that needs no models - runs the same on a bare box, no --arm. Outside the full suite (DASLLAMA_PARITY_FULL=1) every [test] function has a 30 s wall: a test past it ends the child with exit code 125 and the run with it (a WALL line, no later file, no retry), and a batch that ends without every file's verdict stops the run the same way (LOST)
+./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --suite model-free --skip 4          # the resume of a stopped run: no child before the run's 4th (counted from 0) starts - the N a WALL or LOST stop's RESUME line names; the REPORT says "resumed at child 4"
+./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --suite model-free --test-wall 0     # one [test] function's wall in seconds for this run, on any suite; 0 = no wall; the REPORT carries it
+./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --changed --stop-file /shared/STOP   # a marker the boxes of one run share (a fleet's shards): the box that stops at a wall writes it, and a run that finds it starts no further child
 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --changed [--base origin/master]   # the per-PR run on a box with models, and after an edit: the files the changed paths reach
 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --suite stocked           # every model-gated file, no --arm; a core-module change reaches every one of them through --changed
 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --suite stocked --exclude test_ple_modes   # the iteration form - drops the PLE file
+./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --suite gpu-kernels       # the extended model-free pass - the Vulkan and CUDA device kernel files: no model and no test wall. On a box you keep it costs the tests' own work and no compile, because the GPU driver caches every kernel it compiled, and nothing where no device answers: run it beside model-free. Only a box that never ran it pays the driver's first compile of every kernel. The stocked suite runs these files first
 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --suite wasm              # the kernel files with a wasm seat, as one wasm64 release under node; takes emcc, node and the wasm64 archives
 DASLLAMA_GPU=1 DASLLAMA_CUDA=1 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --changed --only cuda,segments,regions,resident_moe,embeddings   # the CUDA home's pass: the run's CUDA files, the segmented window, the regions rig and the resident MoE files
 DASLLAMA_GPU=1 DASLLAMA_CUDA=1 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --area vision --only gemma4uv,gemma4v,gemma3v,qwen3v,qwen25v   # the CUDA home's vision run: the five vision family files, whose discrete-home cells the first run's --only tokens do not reach
@@ -19,7 +23,7 @@ DASLLAMA_GPU=1 DASLLAMA_CUDA=1 ./bin/daslang -jit modules/dasLLAMA/tests/run.das
 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --changed --shard 1/3             # one of three boxes: every third file of the same run, from the first
 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --changed --poison-kv             # every child's K/V caches start as NaN (DASLLAMA_KV_INIT=poison): a read of a row no store wrote reds its cell; each session touches its whole cache, so the run's memory is not the product's
 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --area audio            # one area: audio | vision | tts | translate | llm | infra (comma list)
-./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --suite model-free --batch 1    # one child a file (the default is ten a child, compiled as one program: the engine parsed and JIT'd once a batch)
+./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --suite model-free --batch 1    # one child a file (the default is the whole suite in one child on this suite and ten a child on any other run, compiled as one program: the engine parsed and JIT'd once a batch)
 ```
 
 An AREA is what someone working on audio, vision, TTS, the LLM engine or the tooling runs after an
@@ -112,14 +116,17 @@ test program's AST record, one per file, the folder keyed by the daslang binary)
 unchanged module prefix, so an engine test file that parses in ~90 s cold opens in a few seconds warm, and an
 engine edit re-parses the edited module and the modules after it alone. The `CACHE` line names the folder; a
 run on the runner's own binary removes the folders of earlier binaries, whose records can never serve again,
-and a `--das` dry run keeps them. `--batch N` (default 10; 1 = one child a file) hands N files to one child as ONE program (dastest's
+and a `--das` dry run keeps them. `--batch N` (default the whole suite in one child on the model-free suite - twenty files a child on Windows, where a DLL's 65,535 exports bound a batch's JIT - and 10 on any other run; 1 = one child a file) hands N files to one child as ONE program (dastest's
 `--together`: a generated root requires every file, so the engine's parse and JIT - the 20 s a small file pays - are
-paid once a batch, and each file then runs in a fresh context of that program, ~4 s of DLL reload), each file still
+paid once a batch, and each file then runs in a clone of that program's one context - globals, heaps and `[init]`s
+of its own, the code and its JIT link shared, so a file costs a clone and no relink), each file still
 reporting its own `PASS` / `FAIL` line and the child's timeout N times the single's; a batch that dies before every
-file's verdict reruns the verdict-less files one child each (`RETRY` lines), and the image suite's child, every
+file's verdict reruns the verdict-less files one child each (`RETRY` lines) - under a test wall it stops the run
+instead (a `LOST` line), as a test past the wall does (`WALL`), each with the `RESUME` line naming the `--skip N` that
+starts the run again at that child - and the image suite's child, every
 expected-failure compile test (`cant_*`, `failed_*`, `invalid_*` - a root requiring one fails to compile whole) and the
 tier contract files (`TIER_CONTRACT_FILES`: `test_gpu_tier.das`, `test_gpu_serving_declines.das`) run alone whatever
-the batch. A fresh context means fresh globals,
+the batch, without cutting the batch around them. A file's own context means fresh globals,
 `[init]`s and model caches a file - but the PROGRAM is shared: a module any file of the batch requires is in every
 file's context, so a batch-mate requiring the engine core brings the Vulkan home's entry, which arms the tier at
 `[init]` under the run's `DASLLAMA_GPU=1`, and a cell that reads the tier as no entry armed it (the contract files'
@@ -1089,7 +1096,9 @@ omission a compile refusal (`test_lens_tgmem_gate` above).
 
 ## The per-PR runs - model-free whole, the stocked files by reach
 
-The split between the `model-free` and `stocked` suites: a file that reaches a machine-local
+The split between the `model-free`, `gpu-kernels` and `stocked` suites: the five Vulkan and CUDA device
+kernel files are `gpu-kernels` (no model; a device's first compile of a kernel is the driver's time, so
+they run with no test wall), and of the rest a file that reaches a machine-local
 fixture root (`models_dir()`, `model_available()`, `llama2c_dir()`, `whisper_dir()`, the ASR corpus's `corpus_dir()` /
 `asr_clip()`, `asr_oracle_dir()`) is `stocked`,
 every other suite-less file is `model-free`, and `test_run_suites.das` reads the files and fails a
@@ -1482,7 +1491,7 @@ the poisoned expectation the control: the host twin (the discrete templates' own
 (`<fmt>q8_rm_gemv_gen`: q8, the per-32 and MXFP4 planes, the fifteen superblock formats) and their four-token
 tiles (`<fmt>q8_rm_tile4_gen`, four activation rows against the planar rows a token). A new expert format lands its cells
 here (`HOW_TO_ADD_A_FORMAT.md`, the Vulkan section's one-copy step).
-`test_vulkan_moe_cm2.das` - model-free (a cm2 device, else skips): the cm2 expert chain over a
+`test_vulkan_moe_cm2.das` - `gpu-kernels` (no model; a cm2 device, else skips): the cm2 expert chain over a
 device-side f16 gather, the streamed-group slot hand-off, the streamed split's head on the
 per-expert chain (one expert, and two experts through the ring - each its own copy and submit;
 the head's routing puts one slot a region, since the by-row combine adds a region's rows onto
@@ -1491,7 +1500,7 @@ the identity slot map at unit weight.
 `test_vulkan_kernels.das`, `test_vulkan_kernels_gemm.das` (the batch and cm2 / KHR tile cells,
 the f16 GEMM cells and the tile-pick cell) and `test_vulkan_kernels_attn.das` (the decode, prefill
 and flash attention cells and `test_vkd_kv16_readers`) - one census over three files, every other
-cell in the first: model-free (a Vulkan device, else skips; the three lens cells,
+cell in the first: `gpu-kernels` (no model; a Vulkan device, else skips; the three lens cells,
 `test_vkd_readonly_stamp`, `test_vkd_lens_readonly_gate` and `test_vkd_lens_binding_cap`, and the flash ladders' refusal cell
 `test_vkd_fa_stamp_refusals` need only the dasVulkan module): the
 per-class CPU-oracle units of the Vulkan kernel census (`_vkd_oracles.das` runs the class methods on the CPU as the
@@ -1760,8 +1769,11 @@ records/sidecar corpus, so a writer-schema change reds here first; and hostile d
 by named path - among them a `held` annotation that is a number or past its length bound, a
 ledger-row hold the control.
 `test_fat_start.das` - model-free: the runtime section's writer and a fat exe's first-start race
-(`dasllama_fat_start`) - the snapshot's crowns and knobs, the race writing the redirected sidecar's
-runtime section and the checked apply reading it back (the Metal twins race on a Metal box, ~15 s),
+(`dasllama_fat_start`) - the snapshot's crowns and knobs, the writer (`dasllama_write_runtime_section`) writing the
+redirected sidecar's runtime section and the checked apply reading it back, and the same asserts over the race itself
+in the full suite alone (`test_first_start_race_writes_the_section_the_apply_reads`: on a das_metal build it skips
+outside `DASLLAMA_PARITY_FULL=1` - the Metal twins and knees race their whole ladders, past the test wall; so does the
+Metal knee race's cell `test_the_knee_race_sets_the_split_knees`),
 the Vulkan short window's knee race (`test_the_vulkan_knee_race_sets_the_knee`: under an asked GPU tier on a cm2 device the
 knob, set to a value no rung offers first, lands on a rung of the race or 0 and the snapshot records it; elsewhere it
 stands - a correctness cell, not a verdict on which rung wins), the box-profile apply firing an installed race hook exactly once for a missing section, and the
@@ -1773,11 +1785,12 @@ location is explicit exactly where `DAS_TUNE_MANIFEST` chose one (the suite runn
 box with a minted manifest), and that manifest is the path read again once the override clears;
 and the per-box runtime file (`test_box_runtime_file`): its path under the home's `tune/` with a
 stable key, validity as this box plus these kernels plus a runtime section (other kernels, another
-box, a kernels-only file and no file each invalid), the race writing a valid file with no kernels
-section that the apply reads, the hook answering "" under an explicit manifest, and two children on
-`_box_runtime_root.das` under a temp home (`_child_run.das` spawns them, as the jobque tripwire's
-are): one with no manifest reads the box file under that home, raced and written first, and one on
-`DAS_TUNE_POLICY=reference` reads "" and writes nothing.
+box, a kernels-only file and no file each invalid), the writer (`dasllama_box_runtime_write`, with and without the
+knees) writing a valid file with no kernels section that the apply reads, and the hook answering "" under an explicit
+manifest; and, in the full suite alone (`test_box_runtime_file_is_raced` skips outside `DASLLAMA_PARITY_FULL=1` on
+every box - the race runs the Metal ladders and each child compiles the engine), the race writing such a file and two
+children on `_box_runtime_root.das` under a temp home (`_child_run.das` spawns them): one with no manifest reads the box
+file under that home, raced and written first, and one on `DAS_TUNE_POLICY=reference` reads "" and writes nothing.
 `test_fat_hook_umbrella.das` - model-free: a program requiring the engine umbrella alone (what
 the shipped bench requires, never the facade) carries the first-start race hook - the umbrella's
 `[init]` set registers it, or a fat bench exe would serve Metal uncrowned forever.
@@ -2083,7 +2096,7 @@ second subtest the norms plane's head block - past the trunk's q/k rows and its 
 on the final norm's row) and the same-slab verify seat (`test_rdec_verify_seat`: the rows, their ids (and a call's empty ids),
 the position, the pick ask and every landing forwarded, the picks and hidden rows landed under the ask
 and the logits left alone); the unset N-row token command and per-layer planes panicking with the module to require
-(`test_unset_seats_name_their_module`); the homes' words (`test_home_words`: two children on `_home_words_root.das`, one with
+(`test_unset_seats_name_their_module`); the homes' words (`test_home_words`: two children on the test child's `home-words` verb, one with
 no ask and one under `DASLLAMA_GPU=1 DASLLAMA_CUDA=1`, each printing `rdec_fallback_words` - the per-op rails' words with no
 ask, the CPU rails' words under the CUDA ask on a dasCUDA build - and each home's dry-bake arm refusing a config that names
 the other home (`vulkan_dry_bake_arm` a `cuda` home, `moe_gpu_dry_bake_arm` a `vulkan` home under the ask), the arm false and
@@ -2094,7 +2107,7 @@ their places in the list and the rest to -1, a layer at 8 or -1 refused with no 
 the control; `rdec_caps_layer` reading that map, no slots capturing none; `rdec_caps_unpack` laying two slots' rows of a
 five-row stride out row-major from row 1, the slot-major span copied as it lies differing - the control); and the
 overrides' announces (`test_override_announces`: two children on
-`_override_announce_root.das` through `_child_run.das`, unset and under `DASLLAMA_METAL_FUSE=0`, each case's lines read between
+the test child's `override-announce` verb (`_child_run.das`), unset and under `DASLLAMA_METAL_FUSE=0`, each case's lines read between
 its `CASE` records - the sliding layers' rings ringed, flat and silent on a model with none, on Metal once a layout; the pinned
 host embed only where the ids seat would gather; both device-gather lines; the Metal batch gather, gemma-4 MoE tail and fuse
 pins, the fuse line once a state, the knob's at context init; the assistant drafter's sidecar lookup, no resolver registered in
@@ -2720,7 +2733,7 @@ short-window cell's form: its per-layer gate and projection rows asserted F32, s
 tails of 2, 9 and 16 rows after a 40-row opening, one peel counted each, the last row and four fed steps within
 `GEMMA_LOGIT_BAR_REL` of the same tail stepped a row at a time, the row one step off the control - a router dispatch the
 encoder does not tile past eight columns lands the 9- and 16-row tails 32 and 47 logits off); the same skips. The CUDA kernel cells
-beside them, `test_cuda_kernels.das` (model-free; a CUDA device with NVRTC, else every cell but the leak gate skips;
+beside them, `test_cuda_kernels.das` (`gpu-kernels` - no model; a CUDA device with NVRTC, else every cell but the leak gate skips;
 the per-format cells - the kq cm2 tiles, the kq and per-32 GEMVs, the token-table gathers, the Q8_K feeds -, the biased
 act twins, the deltanet family and the mx4 and nv4 FP4 leaves over the expert schedule also skip without dasVulkan, and the
 routing cell's bucket-schedule arms register a skip of their own there; the FP4 leaves also skip on a card below the FP4 rung,
@@ -2846,7 +2859,7 @@ tiny, a row floor past the rows keeping it whole, the forced m column held at a 
 (`set_cuda_tower_cm2_col`, `set_cuda_tower_splitk_fill`, `set_cuda_tower_splitk_min_rows`) answers the value it replaced and its
 getter the value set (a column no tile has pins none, a negative bound or floor clamps to 0), every seam put back as found; the
 forced split count is `DASLLAMA_CM2_SPLITK`, read at init, which no cell sets. `test_cud_tower_flavor_refusals` (device-free)
-holds `cut_lane_arms`' refusals: with the tower knob off no CUDA flavor, and, in a child on `_flavor_decline_root.das` at the
+holds `cut_lane_arms`' refusals: with the tower knob off no CUDA flavor, and, in a child on the test child's `flavor-decline` verb at the
 info floor with no home armed, the knob's and the device's lines naming the condition.
 `test_cuda_tower_whisper_chain.das` - model-free (the rail cells need a CUDA device with NVRTC, else skip): the rail primitives the whisper decoder
 runs first, on the CUDA rail - `rail_gemv_q8` over one record's region pairs one alignment unit past the GEMV site's offset in a
@@ -3672,7 +3685,7 @@ cleanly with no model open.
 configured panics naming `setup_dasllama_jobque()` (a bare queue decodes ~200x slower - the
 fork-context clone per job, a wake per job, workers parking at once), `DASLLAMA_ALLOW_BARE_JOBQUE=1`
 downgrades it to a warning, a configured queue is silent; the bare arms spawn
-`_jobque_tripwire_root.das`. `test_team_job_panic_exits_nonzero` spawns `_team_panic_root.das`,
+the test child's `jobque-tripwire` verb. `test_team_job_panic_exits_nonzero` spawns its `team-panic` verb,
 whose chunk panics on a worker: the child exits non-zero, its output carries `JOB EXCEPTION` and
 the panic's text, and the program does not run past the dispatch. The child runs with four
 settings: `DAS_TUNE_POLICY=fallback` (the root requires the engine's tuned kernels, and the
@@ -3917,7 +3930,7 @@ tag the six facade-loaded families register, read off `image_family_tags`, routi
 each family's count the sweep's control, a chat tower's lane and an unregistered one routing nowhere), the audio families' lane knobs (qwen3a /
 gemma4a / canary / parakeet: the un-pinned default against the predicate the policy itself consults, both
 pins, and reset from the EXACT pin), the environment's lane ask (`test_audio_lane_env`: four children on
-`_audio_lane_root.das` through `_child_run.das`, `DASLLAMA_AUDIO_LANE` unset, `8`, `16` and `4` - unset every family's
+the test child's `audio-lane` verb (`_child_run.das`), `DASLLAMA_AUDIO_LANE` unset, `8`, `16` and `4` - unset every family's
 un-pinned lane and reset its own policy, read in the child, and nothing naming the knob; `8` and `16` every family's
 un-pinned lane and reset the knob's, both pins and the facade's `set_asr_tower_q8` beating it, the whisper facade's lane the
 knob's and its fp32 rail the exact one, one say line where a family moved off its policy and none where none moved, and the
@@ -3930,7 +3943,7 @@ value read back, put back as found), and parakeet's SPM detokenizer over a toy v
 outside the audio tower and a file no GGUF reader opens as none; Q4_K and Q6_K named by their members, Q4_1 - which
 `kq_fmt_of` answers with its q8 fallback - and an unknown type as no member's; every source and a named `.dlim` keeping
 the CUDA flavor on both lanes, no registered driver and the CPU flavor pin mapping the CPU image - and the line the pick
-says, read off a child on `_flavor_decline_root.das` at the info floor under the CUDA flavor and then the CPU image, once
+says, read off a child on the test child's `flavor-decline` verb at the info floor under the CUDA flavor and then the CPU image, once
 a lane for each quantized source naming the type, its member and the lane form (q8 on both, f16 under the CUDA flavor, f32
 on the CPU image) and none for the rest.
 `test_tower_lane_helpers` holds the halfword-lane helpers to written-out truth tables: `tower_dev_halfword` false on the CPU
@@ -4064,8 +4077,9 @@ an entry's settings over the defaults, the row flags), `test_model_bench_against
 wave of eight and its control of one), `test_model_bench_driver` (a whole run: the ladder's and the widths' row
 names, the `--max-length` stop, an arm's rows and `--arm off`, the wide pass's stream cap, the runs that exit 1),
 `test_model_bench_cell_reads` (`cache_prompt` on the wire, a cell's draft sums, a stall, llama.cpp's timing names,
-an unfair wave, the shipped config) and `test_model_bench_runner` (the command lines, the joined run files, and a
-model run end to end against the fake as a child on port 18171: one card, and the runs a model fails).
+an unfair wave, the shipped config), `test_model_bench_runner` (the command lines, the joined run files),
+`test_model_bench_runner_card` (a model run end to end against the fake as a child on port 18171: one card) and
+`test_model_bench_runner_failures` (the runs a model fails). The runner's fake child pauses 20 ms a word.
 `test_prompt_files_id_list`:
 `../harness/_prompt_files.das`'s `id_list` keeping a comma list's numbers in order (an empty part and a word dropped, every
 number kept unbounded - the control), dropping numbers below `lo` and past `hi` with both bounds kept, and an absent file's

@@ -292,7 +292,7 @@ def test_cud_tower_flavor_refusals(t0 : T?) {
         t |> equal(cuda_tower_on(), was, "the knob put back as found")
         var out : string
         let envs <- [(name = "DAS_LOG_LEVEL", value = "info"), (name = "DASLLAMA_GPU", value = ""), (name = "DASLLAMA_CUDA", value = "")]
-        let rc = run_child(child_cmd("_flavor_decline_root.das", envs, "cut"), out)
+        let rc = run_verb_child(child_verb_cmd("flavor-decline", envs, "cut"), out)
         t |> equal(rc, 0, "the decline root ran:\n{out}")
         t |> success(find(out, "ROOT_DONE") >= 0, "the decline root reached its end:\n{out}")
         t |> success(find(out, "CUT knob false") >= 0 && find(out, "CUT device false") >= 0, "both arms refuse:\n{out}")
