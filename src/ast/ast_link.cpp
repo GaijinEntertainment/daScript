@@ -17,6 +17,7 @@ namespace das {
         }
     };
 
+    // src/ast/ARCHITECTURE.md#program-scoped-symbol-state
     void linkProgram ( Program * program, TextWriter & logs ) {
         auto & library = program->library;
         auto thisModule = program->thisModule.get();
@@ -28,7 +29,6 @@ namespace das {
             }
             return true;
         }, "*");
-        // allocate used variables and functions indices - per pass, so -1 means this pass never saw it
         program->clearIndices();
         program->totalVariables = 0;
         program->totalFunctions = 0;
@@ -61,7 +61,7 @@ namespace das {
                         logs << "\n";
                     }
                 }
-                else {
+                else if ( !func->builtIn ) {
                     program->setIndex(func, -2);
                 }
             }

@@ -585,10 +585,15 @@ jobs:
 
     - name: "Build: Daslang (Ninja + clang-cl)"
       shell: pwsh
-      # Ninja + clang-cl (from vcvars PATH). No VS-generator, so no VS-major pinning
-      # to the runner image and no MSBuild CustomBuild sweep wrapper (see job header).
+      # Ninja + the clang-cl Visual Studio ships, by path: the image's standalone LLVM is on
+      # PATH too, and the STL refuses a clang older than the one its own update ships. No
+      # VS-generator, so no VS-major pinning to the runner image and no MSBuild CustomBuild
+      # sweep wrapper (see job header).
       run: |
-        cmake -B build-clangcl -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=clang-cl -DCMAKE_CXX_COMPILER=clang-cl -DCMAKE_C_COMPILER_LAUNCHER=sccache -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
+        $clang = (Join-Path $env:VCINSTALLDIR 'Tools\Llvm\x64\bin\clang-cl.exe') -replace '\\', '/'
+        if (-not (Test-Path $clang)) { Write-Error "no clang-cl at $clang"; exit 1 }
+        & $clang --version
+        cmake -B build-clangcl -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER="$clang" -DCMAKE_CXX_COMPILER="$clang" -DCMAKE_C_COMPILER_LAUNCHER=sccache -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
         if ($LASTEXITCODE -ne 0) { exit 1 }
 
     - name: "Test"

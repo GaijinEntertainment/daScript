@@ -153,20 +153,24 @@ policies are its own copy, so the caller's program, its dependencies and every l
 keep the policy: a host that ignores shared modules still gets the JIT emitter, promoted
 beside its privately compiled program.
 
-## Program-scoped symbol state (`ast.h`, `ast_export.cpp`, `ast_allocate_stack.cpp`) {#program-scoped-symbol-state}
+## Program-scoped symbol state (`ast.h`, `ast_export.cpp`, `ast_link.cpp`, `ast_allocate_stack.cpp`) {#program-scoped-symbol-state}
 
 Whether a program uses a function or a global, and the slot each holds in that program's
 context, are decided per program - the symbol-use pass (`markSymbolUse` and its variants,
-`ast_export.cpp`) walks the whole library from the program's roots, and `allocateStack` numbers
-what it marked; `markFunctionDependencies`, which `collect_dependencies` runs for a macro, walks
+`ast_export.cpp`) walks the whole library from the program's roots, and `linkProgram`
+(`ast_link.cpp`), the first step of `Program::simulate`, numbers what it marked;
+`markFunctionDependencies`, which `collect_dependencies` runs for a macro, walks
 one function's closure only, refreshing the use-edges it reaches and leaving the rest of the
 program's symbol state as it found it - while the `Function` and `Variable` objects of a shared module are one instance
 for every program in the process. The state therefore lives on `Program`, one record per object:
 `functionStates` maps a function to its `FunctionSymbolState`, `variableStates` a global to its
 `VariableSymbolState`, read through `isUsed` and `indexOf` and written through `setUsed` and
 `setIndex`; `clearSymbolUse` drops every use flag and `clearIndices` every slot.
-An index is `-1` for an object the allocation never saw, `-2` for one it saw and found unused,
-the context slot otherwise; the constant folder tells the first from the rest. Simulate reads
+An index is `-1` for an object the link keeps no record of, `-2` for one it saw and found
+unused, and the context slot otherwise. The link keeps no record of an object it never saw, nor
+of a builtin function: a builtin never takes a slot, a library holds thousands of them, and a
+record for each would sit in every program's table. The constant folder is the one reader that
+tells `-1` from the rest, and it asks only about calls to non-builtin functions. Simulate reads
 the tables through `context.thisProgram`, and das code through the `ast` module's `is_used`,
 `function_index` and `variable_index`, each taking the program - a null program there is a
 holder nobody filled and throws, never an answer. `Program::simulate` binds itself to the
@@ -177,8 +181,8 @@ expression outside that call takes the compiling program from the bound environm
 `eval_single_expression` sets it on the context it makes, and on a caller's context only when
 that context has none, putting back what was there. A context that still has no program answers
 -1 for every function and variable (`programIndexOf`, `ast_simulate.cpp`) - with no tables to
-read, nothing is used and nothing holds a slot. The index tables are per allocation:
-`allocateStack` clears both before numbering, so -1 means this pass never saw the object, and a
+read, nothing is used and nothing holds a slot. The index tables are per link: `linkProgram`
+clears both before numbering, so -1 means this link keeps no record of the object, and a
 folding round's slots do not survive into the final pass. A compile nested inside another - a
 macro calling `compile`, a late `require` (`#require-after-walk`), the folding program - fills its own tables
 and leaves the outer program's answers standing. The stream a module-cache record carries has
