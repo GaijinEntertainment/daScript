@@ -23,7 +23,11 @@ every PR.
 Runs:
 
 1. `./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --suite model-free` - it needs no
-   models and runs the same on any box.
+   models and runs the same on any box. A test past 30 s ends the run where it stands (`WALL`);
+   its `RESUME` line names the `--skip N` that starts again there. On a box with a Vulkan or CUDA
+   device add `--suite gpu-kernels`, the device kernel files: no wall, and only the tests' own
+   work on a box that ran them before - the GPU driver keeps every kernel it compiled, so only a
+   fresh box pays the compiles.
 2. The runs the scope report names (next section), and no others.
 
 Not owed: the whole stocked suite, a fleet run, the large tier (`DASLLAMA_PARITY_FULL=1`)

@@ -19,6 +19,7 @@ require dasllama/dasllama_common   // Session: logits_of copies its row
 require dasllama/dasllama_convert   // cvt_f32_to_f16_sat_array: check_halves' expectation
 require daslib/fio
 require daslib/command_line
+require dasllama/dasllama_env   // parity_full_mode: the full suite's flag
 
 let POISON = 7.5   //! the slots a kernel must never read or write: a large finite value, so a stray read lands in the sum
 let SLAB_GAP = 3   //! the poisoned slots `put_run` leaves before a run of a slab plane
@@ -695,11 +696,27 @@ def no_children_here(t : T?) : bool {
     return true
 }
 
+//! true, with a skip recorded, outside the full suite (DASLLAMA_PARITY_FULL=1): a cell whose body no test's wall admits -
+//! `why` says what it runs. The full suite runs with no wall
+def full_suite_only(t : T?; why : string) : bool {
+    return false if (parity_full_mode())
+    t |> skip("full suite only (DASLLAMA_PARITY_FULL=1): {why}")
+    return true
+}
+
 def spawn_compile_only(src, tag : string; timeout : float) : tuple<rc : int; out : string> {
     let path = path_join(test_temp_dir(), "prog_{tag}.das")
     return (rc = -1, out = "fwrite failed") if (!fwrite(path, src))
+    return spawn_compile_file(path, timeout, "")
+}
+
+//! compiles the program at `path` in a child, against the module-cache record `cache` where one is named - a record is
+//! its root file's, by path, so the path is the one the record was written from
+def spawn_compile_file(path : string; timeout : float; cache : string) : tuple<rc : int; out : string> {
     var out : string
-    let rc = run_and_capture([get_das_exe(), "-compile-only", path], out, timeout)
+    //! this run's root, not the binary's own: under `-dasroot` the fixture compiles the tree the test runs in
+    let rc = run_and_capture(empty(cache) ? [get_das_exe(), "-dasroot", get_das_root(), "-compile-only", path]
+        : [get_das_exe(), "-dasroot", get_das_root(), "-module-cache", cache, "-compile-only", path], out, timeout)
     return (rc = rc, out = out)
 }
 

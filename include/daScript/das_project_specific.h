@@ -17,3 +17,4 @@ namespace das {
 }
 
 DAS_API das::Context * get_context( int stackSize = 0 );
+DAS_API das::Context * get_clone_context( das::Context * ctx, uint32_t category );

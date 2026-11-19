@@ -7,17 +7,27 @@ doc: `../ARCHITECTURE.md`.
 folder's `REVIEW.das` as its gate; a diff that weakens it is a defect.**
 
 **A `[test]` a diff adds or moves into a file that an `--arm` suite lists (every `run.das` suite but
-`model-free` and `stocked`) gates each model-loading cell on `arm_on(t, name)` (`_model_tier.das`)
-with that suite's arm; a test with no arm goes into a `model-free` or `stocked` file.** A file an
-`--arm` suite lists runs only where a run names its arms - `--arm`, or the `image` suite arms a
-`--changed` or `--area` plan owns (`area_image_arms`, `run.das`) - never in a `model-free` or
-`stocked` run.
+`model-free`, `gpu-kernels` and `stocked`) gates each model-loading cell on `arm_on(t, name)`
+(`_model_tier.das`) with that suite's arm; a test with no arm goes into a `model-free`,
+`gpu-kernels` or `stocked` file.** A file an `--arm` suite lists runs only where a run names its
+arms - `--arm`, or the `image` suite arms a `--changed` or `--area` plan owns (`area_image_arms`,
+`run.das`) - never in a `model-free`, `gpu-kernels` or `stocked` run.
 
 **A `[test]` a diff adds or moves that reaches no stocked artifact goes into a `model-free`
-file, never a `stocked` one; a diff that weakens the model-free/stocked check of
-`test_run_suites.das` is a defect.** A stocked file runs only where the models are stocked, so
-a model-free test inside it stops running on every other box; `test_run_suites.das` reds the
-reverse, a model-free file whose text reaches a model file.
+file - into a `gpu-kernels` file where it compiles a kernel on a Vulkan or CUDA device - never a
+`stocked` one; a diff that weakens the model-free/stocked check of `test_run_suites.das` is a
+defect.** A stocked file runs only where the models are stocked, so a model-free test inside it
+stops running on every other box; a device's first compile of a kernel is the driver's time,
+which the model-free suite's test wall does not admit; `test_run_suites.das` reds a model-free or
+`gpu-kernels` file whose text reaches a model file.
+
+**A diff that adds a child process running a `.das` program of this folder adds it as a verb of
+the test child - a `_child_<verb>.das` module `_child_root.das` dispatches, spawned through
+`child_verb_cmd` (`_child_run.das`) - or as a row of `OWN_ROOTS` in `REVIEW.das` (beside this
+file), which holds a program only for a claim a verb cannot carry: the program's own compile, the
+process it runs in, a server started by its command line, the runner itself. Weakening that
+gate is a defect.** The runner builds the test child once a run as an exe, so a verb is a process
+start, where a root of its own is an engine compile inside its test's wall.
 
 **A diff that adds, renames, merges or removes a test file keeps every `--only` / `--exclude`
 token written in `CLAUDE.md` (beside this file) or `../CLAUDE.md` matching every file that now
@@ -34,7 +44,7 @@ has no models. A lane may run such a file interpreted (`FILES`, not `JIT_FILES`)
 **An `[init]` in a test file here, or in a `_*.das` fixture one requires, calls nothing but
 `allow_cpu_prefill()`; the value a cell needs - a K/V codec, a prompt window, a mirror context,
 a GEMM mode, an MMQ route, a VRAM cap - is set inside its `[test]`, or in the fixture's load
-helper the test calls, before the first load or device use.** The runner compiles ten files as
+helper the test calls, before the first load or device use.** The runner compiles a batch's files as
 one program and runs every module's `[init]` in every batch-mate's context, so a value set at
 `[init]` reaches files that never asked for it, and their cells skip or measure the wrong rail;
 `allow_cpu_prefill()` only matches the `DASLLAMA_CPU_PREFILL=1` every child runs under.

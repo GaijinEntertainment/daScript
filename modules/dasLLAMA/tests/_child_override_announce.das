@@ -1,6 +1,7 @@
 options gen2
-options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 options _dasllama_internal = true
+
+module _child_override_announce shared
 
 require dasllama/dasllama_common
 require dasllama/dasllama_gpu_resident
@@ -102,8 +103,11 @@ def private metal_cases {
     }
 }
 
-//! no module of this root registers the assistant drafter's sidecar resolver (dasllama/dasllama_mtp_gemma does)
+//! the assistant drafter's sidecar lookup in a program whose resolver is not registered (dasllama/dasllama_mtp_gemma
+//! registers it, and the test child links that module for its other verbs): unregistered here first
 def private sidecar_cases {
+    let none : function<(model_path : string) : string>
+    register_mtp_sidecar(none)
     mark("sidecar_no_resolver")
     let side = mtp_drafter_sidecar_("gemma-4-26B-A4B-it-Q4_K_M.gguf")
     to_log(LOG_INFO, "SIDECAR '{side}'\n")
@@ -133,8 +137,7 @@ def private stream_lever_cases {
     stream_levers_say()
 }
 
-[export]
-def main() {
+def public child_override_announce() {
     ring_cases()
     embed_cases()
     sidecar_cases()

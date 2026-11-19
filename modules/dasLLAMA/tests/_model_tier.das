@@ -89,9 +89,6 @@ def asr_oracle_dir(family : string) : string => path_join(models_dir(), "asr_ora
 //! the machine-local llama2.c checkout (stories15M.bin, tokenizer.bin); override with DASLLAMA_LLAMA2C_DIR (e.g. the x64 handoff box)
 def llama2c_dir() : string => root_or(g_env_test.llama2c_dir, "/Users/borisbatkin/Work/llama2.c")
 
-// True when the large tier is enabled for this run (the pre-PR full sweep).
-def parity_full_mode() : bool => g_env_test.parity_full
-
 // Arm filter for the metal suites: DASLLAMA_TEST_ARMS = comma-separated substrings; when set,
 // only arm blocks whose name matches a token run. The skip is LOUD (t |> skip) so a filtered
 // run can never masquerade as full coverage. Unset/empty = every arm runs. Drive through

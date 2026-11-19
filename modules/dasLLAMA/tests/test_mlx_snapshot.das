@@ -5,6 +5,7 @@ options _dasllama_internal = true
 
 require dastest/testing_boost public
 require _model_tier
+require dasllama/dasllama_env   // parity_full_mode: the full suite's flag
 require dasllama/dasllama_core
 require dasllama/dasllama_common
 require dasllama/dasllama_load

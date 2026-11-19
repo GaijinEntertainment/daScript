@@ -713,7 +713,7 @@ let private FUSE_OFF = "dasLLAMA metal decode: every decode sandwich seam runs t
 //! the announce root under `fuse` for DASLLAMA_METAL_FUSE ("" unset), at the info floor the ringed and gather lines print at
 def private announce_child(t : T?; fuse : string) : string {
     var out : string
-    let rc = run_child(child_cmd("_override_announce_root.das", [(name = "DASLLAMA_METAL_FUSE", value = fuse), (name = "DAS_LOG_LEVEL", value = "info")]), out)
+    let rc = run_verb_child(child_verb_cmd("override-announce", [(name = "DASLLAMA_METAL_FUSE", value = fuse), (name = "DAS_LOG_LEVEL", value = "info")]), out)
     t |> equal(rc, 0, "the announce root ran (DASLLAMA_METAL_FUSE='{fuse}'):\n{out}")
     t |> success(find(out, "ROOT_DONE") >= 0, "the announce root reached its end:\n{out}")
     return out
@@ -795,7 +795,7 @@ let private FOREIGN_HOME_CUDA = "dasLLAMA cuda tier: dry-bake config names home 
 //! the home-words root under the ask `cuda` ("1": DASLLAMA_GPU=1 with DASLLAMA_CUDA=1; "": neither), at the info floor its records print at
 def private home_words_child(t : T?; cuda : string) : string {
     var out : string
-    let rc = run_child(child_cmd("_home_words_root.das", [(name = "DASLLAMA_GPU", value = cuda), (name = "DASLLAMA_CUDA", value = cuda), (name = "DAS_LOG_LEVEL", value = "info")]), out)
+    let rc = run_verb_child(child_verb_cmd("home-words", [(name = "DASLLAMA_GPU", value = cuda), (name = "DASLLAMA_CUDA", value = cuda), (name = "DAS_LOG_LEVEL", value = "info")]), out)
     t |> equal(rc, 0, "the home-words root ran (DASLLAMA_CUDA='{cuda}'):\n{out}")
     t |> success(find(out, "ROOT_DONE") >= 0, "the home-words root reached its end:\n{out}")
     return out

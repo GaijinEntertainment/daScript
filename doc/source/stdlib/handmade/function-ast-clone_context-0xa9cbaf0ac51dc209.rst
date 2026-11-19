@@ -1,0 +1,1 @@
+Clones the simulated ``source`` context and runs the block with the clone: it shares the code - a JIT link included - and gets globals and heaps of its own with the init script run anew, so a program simulated once serves many independent runs. The block receives ``true`` and the clone, or ``false``, a null context and the reason where the clone's init failed.

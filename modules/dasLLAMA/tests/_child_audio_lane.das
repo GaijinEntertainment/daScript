@@ -1,13 +1,14 @@
 options gen2
-options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 options _dasllama_internal = true
+
+module _child_audio_lane shared
 
 require dasllama/dasllama_asr   // the ASR families and the facade's whisper lane
 require dasllama/dasllama_audio   // the chat towers' lane trio
 require dasllama/dasllama_tower   // announce_lane
 
-// The fixture test_asr_verbs.das spawns under each DASLLAMA_AUDIO_LANE value: the knob loads once at context init, so each
-// value is a process. Every lane answer prints as one `LANE <family> <state> <lane>` record, the policy each family's
+// The test child's `audio-lane` verb, which test_asr_verbs.das spawns under each DASLLAMA_AUDIO_LANE value: the knob loads
+// once at context init, so each value is a process. Every lane answer prints as one `LANE <family> <state> <lane>` record, the policy each family's
 // accessor reads un-pinned as `POLICY <family> <lane>`, and the lane lines `announce_lane` prints follow `CASE announce`.
 
 def private lane_word(q8 : bool) : string => q8 ? "q8" : "exact"
@@ -28,8 +29,7 @@ def private walk(family : string; pin : block<(on : bool) : void>; reset : block
     say(family, "reset", serves |> invoke())
 }
 
-[export]
-def main() {
+def public child_audio_lane() {
     set_asr_fp32(false)
     set_asr_tower_fp32(false)
     to_log(LOG_INFO, "POLICY qwen3a q8\nPOLICY gemma4a q8\nPOLICY canary q8\nPOLICY parakeet q8\nPOLICY whisper q8\n")

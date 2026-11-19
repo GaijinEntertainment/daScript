@@ -11,8 +11,12 @@ ONLY through `tests/run.das`).
 
 ## Test workflow
 
-Every run hands ten files to a child as one program (`--batch N`, default 10; `--batch 1` is one
-child a file): the engine's parse and JIT are paid once a batch, each file in a fresh context.
+Every run hands ten files to a child as one program - the whole suite on the model-free suite - (`--batch N`;
+`--batch 1` is one child a file): the engine's parse and JIT are paid once a batch, each file in a context of its own.
+Outside the full suite (`DASLLAMA_PARITY_FULL=1`) a model-free test past 30 s ends the run where it stands (`WALL`),
+as a batch without its verdicts does (`LOST`); `--skip N` resumes at the child the `RESUME` line names, `--test-wall N`
+sets the wall for a run (0 = none) and `--stop-file <path>` shares the stop between a run's boxes. `--suite gpu-kernels`
+is the Vulkan and CUDA device kernel files - no model, no wall; the stocked suite runs them first.
 After an edit: `./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --changed` runs the tests
 the changed files reach, by file: a test file itself, a fixture the tests requiring it, an engine
 module its `MODULE_WITNESSES` row or - a core module - every model-free `llm` file and one

@@ -1,6 +1,7 @@
 options gen2
-options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 options _dasllama_internal = true
+
+module _child_flavor_decline shared
 
 require daslib/fio   // base_name: a file's record names it by its name alone
 require dasllama/dasllama_qwen3a   // Qwen3aFlavor: the record a qwen3a load hands its flavor pick
@@ -41,11 +42,9 @@ def private cut_case() {
     }
 }
 
-[export]
-def main() {
-    let args <- get_command_line_arguments()
-    let at = find_index(args, "--")
-    var rest <- [for (i in range(at + 1, length(args))); args[i]; where at >= 0]
+//! `args`: `src <gguf>...` or `cut`
+def public child_flavor_decline(args : array<string>) {
+    var rest := args
     if (!empty(rest) && rest[0] == "src") {
         rest |> erase(0)
         src_case(rest)

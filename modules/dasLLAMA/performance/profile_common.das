@@ -800,9 +800,11 @@ def private platform_smt() : string {
     return tpc > 1 ? "on" : (tpc == 1 ? "off" : "")
 }
 
-//! Probe this box's hardware identity (see `HardwareInfo`). One-shot — a handful of child
-//! processes; call once per run, not per row.
-def gather_hardware : HardwareInfo {
+var private g_box_hardware : HardwareInfo   //! the fields of the box nothing changes while a process runs
+var private g_box_hardware_read = false
+
+//! the box's own fields, probed - a handful of child processes, seconds of them on Windows
+def private probe_box_hardware : HardwareInfo {
     let cpu = platform_cpu()
     let os = platform_os()
     let cores = platform_cores()
@@ -816,9 +818,20 @@ def gather_hardware : HardwareInfo {
         gpu = platform_gpu(),
         model_id = platform_model_id(),
         ram_config = platform_ram_config(),
-        power_plan = platform_power_plan(),
-        remote_desktop = platform_remote_desktop(),
         smt = platform_smt())
+}
+
+//! This box's hardware identity (see `HardwareInfo`). The box's own fields are probed once a process; the power plan
+//! and the remote-desktop state are read at every call - they are the measurement's, and they change under a run.
+def gather_hardware : HardwareInfo {
+    if (!g_box_hardware_read) {
+        g_box_hardware = probe_box_hardware()
+        g_box_hardware_read = true
+    }
+    var hardware = g_box_hardware
+    hardware.power_plan = platform_power_plan()
+    hardware.remote_desktop = platform_remote_desktop()
+    return hardware
 }
 
 // ===== Input-file identity (.sha sidecars) =====

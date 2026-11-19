@@ -55,7 +55,7 @@ def private reaches_fixture_root(file : string) : bool {
 [test(description = "Every model-free suite file reaches no machine-local fixture root by its text or a same-folder fixture, every stocked file reaches one and declares persistent_heap, and no file sits in both lists")]
 def test_suite_split_matches_the_files(t : T?) {
     var seen : table<string; void?>
-    for (file in suite_files("model-free")) {
+    for (file in free_files()) {
         continue if (base_name(file) == "test_run_suites.das")   //! this file names the roots as strings and reaches none
         t |> success(!empty(file_text(file)), "model-free file exists and reads: {file}")
         t |> success(!reaches_fixture_root(file), "a model-free file reaches no fixture root - move it to `stocked`: {file}")
@@ -75,7 +75,7 @@ def test_suite_split_matches_the_files(t : T?) {
 [test(description = "Every test_, failed_ and uncategorized file in the folder sits in some run.das suite except the declared CPU-prefill tripwire, over more than 50 files walked, and run.das carries no [init]")]
 def test_every_file_sits_in_a_suite(t : T?) {
     var listed : table<string; void?>   // nolint:STYLE027 - a nested walk over the suite tables, not one comprehension
-    for (suite in ["decode", "mtp", "prefill", "matrix", "kernels", "image", "image-vulkan", "coverage", "model-free", "stocked"]) {
+    for (suite in ["decode", "mtp", "prefill", "matrix", "kernels", "gpu-kernels", "image", "image-vulkan", "coverage", "model-free", "stocked"]) {
         for (file in suite_files(suite)) {
             listed |> insert(base_name(file), null)
         }
@@ -97,7 +97,7 @@ def test_every_file_sits_in_a_suite(t : T?) {
 //! every such file has at least one area, and every image-suite arm an area names exists
 [test(description = "The runner's area tables cover the model-free plus stocked census exactly, every image arm an area names exists in test_model_image, and every image arm is reachable from an area or listed unclaimed")]
 def test_area_tables_match_the_census(t : T?) {
-    var census <- [for (f in suite_files("model-free")); base_name(f)]
+    var census <- [for (f in free_files()); base_name(f)]
     census |> push_from([for (f in suite_files("stocked")); base_name(f)])
     var covered : table<string; void?>
     for (a in AREAS) {
@@ -264,8 +264,9 @@ def private das_exe() : string {
     return empty(args) ? "" : args[0]
 }
 
-def private run_runner(args : string; var output : string&) : int {
-    return unsafe(popen_timeout("{das_exe()} -dasroot {get_das_root()} {TESTS_DIR}/run.das -- {args}", 120.0, $(f) {
+//! the runner on `args`; `env` is a POSIX prefix of `NAME=value ` tokens its children inherit
+def private run_runner(args : string; var output : string&; env : string = "") : int {
+    return unsafe(popen_timeout("{env}{das_exe()} -dasroot {get_das_root()} {TESTS_DIR}/run.das -- {args}", 120.0, $(f) {
         if (f != null) {
             output = fread(f)
         }
@@ -344,6 +345,147 @@ def test_runner_retries_a_verdictless_batch(t : T?) {
     var clean : string
     t |> equal(run_runner("--area infra --only test_box --das /usr/bin/true", clean), 0, "a green child with no verdict is no retry:\n{clean}")
     t |> success(find(clean, "RETRY") < 0, "nothing retried:\n{clean}")
+}
+
+[test(description = "The model-free suite's wall is 30 s outside the full suite and the run's own under --test-wall, its batch is the whole suite off Windows and --batch where given, the kill switch's line is read out of a child's log, and the device kernel files sit beside the model-free ones as files that load no model")]
+def test_wall_and_batch_defaults(t : T?) {
+    let plain = RunArgs(suite = "model-free")
+    t |> equal(wall_seconds_in(plain, false), TEST_WALL_SECONDS, "the model-free suite's own wall")
+    t |> equal(wall_seconds_in(plain, true), 0, "no wall in the full suite, whose cells are the ones no wall admits")
+    t |> equal(wall_seconds_in(RunArgs(suite = "model-free", test_wall = 0), false), 0, "--test-wall 0 is no wall")
+    t |> equal(wall_seconds_in(RunArgs(suite = "stocked", test_wall = 45), true), 45, "--test-wall walls any suite, the full one too")
+    t |> equal(wall_seconds_in(RunArgs(suite = "stocked"), false), 0, "no other suite has a wall of its own")
+    t |> equal(wall_seconds_in(RunArgs(suite = "gpu-kernels"), false), 0, "the device kernel files run with no wall")
+    t |> equal(batch_files(plain), get_platform_name() == "windows" ? MODEL_FREE_BATCH_WINDOWS : MODEL_FREE_BATCH, "the model-free suite's own batch")
+    t |> success(MODEL_FREE_BATCH >= length(suite_files("model-free")), "off Windows the whole model-free suite is one batch")
+    t |> equal(batch_files(RunArgs(suite = "model-free", batch = 3)), 3, "--batch wins")
+    t |> equal(batch_files(RunArgs(suite = "stocked")), MODEL_BATCH, "any other run batches by MODEL_BATCH")
+    t |> equal(scope_relaxed_in(plain, true), " full suite (DASLLAMA_PARITY_FULL=1): no test wall", "the full suite's lifted wall is said in the REPORT")
+    t |> equal(scope_relaxed_in(plain, false), "", "the plain walled run says nothing")
+    t |> equal(scope_relaxed_in(RunArgs(suite = "model-free", test_wall = 0, skip = 2), true), " no test wall resumed at child 2", "a wall given by hand is the one said")
+    t |> equal(scope_relaxed_in(RunArgs(suite = "stocked"), true), "", "a suite with no wall of its own has none to lift")
+    let said = "kill switch: test 'test_x' of a.das (--test-wall) ran past 30s; the process ends here with exit code 125"
+    t |> equal(log_wall_line("=== RUN 'test_x'\n[E] {said}\n"), said, "the kill switch's line, from its own first word")
+    t |> equal(log_wall_line("=== RUN 'test_x'\n--- PASS 'test_x' (0.1s)\n"), "", "no line where the switch said nothing")
+    let free <- free_files()
+    for (f in suite_files("gpu-kernels")) {
+        t |> success(find_index(free, f) >= 0, "a device kernel file loads no model: {f}")
+        t |> success(find_index(suite_files("model-free"), f) < 0, "... and sits outside the walled suite: {f}")
+    }
+    t |> equal(length(free), length(suite_files("model-free")) + length(suite_files("gpu-kernels")), "the two lists share no file")
+}
+
+//! the 1-based-free index `K` of the child whose `START` line names `tag`, as its `child K/N` says ("" where none does)
+def private child_index(out, tag : string) : string {
+    let head = "START {tag}: child "
+    let at = find(out, head)
+    return "" if (at < 0)
+    let from = at + length(head)
+    return slice(out, from, find(out, "/", from))
+}
+
+[test(description = "Under a test wall a batch child that exits red before any verdict stops the run with a LOST line and the --skip of that child to resume on, retrying nothing, while a lone red file is a plain failure and the run goes on; the stop writes the run's stop file and a run that finds it starts no child; a resumed run starts no child before its --skip, says so in its REPORT, and reruns a later batch's files from the first")]
+def test_walled_run_stops_at_a_lost_batch(t : T?) {
+    if (get_platform_name() == "windows") {
+        t |> skip("the dry run stands in a POSIX no-op binary for the child")
+        return
+    }
+    let stop = path_join(test_temp_dir(), "dasllama_run_stop_{get_time_usec(0l)}")
+    var out : string
+    let rc = run_runner("--suite model-free --test-wall 30 --das /usr/bin/false --stop-file {stop}", out)
+    t |> success(rc != 0, "a run stopped at a lost batch exits red:\n{out}")
+    t |> success(find(out, " --test-wall 30 ") >= 0, "a walled run hands its children the wall:\n{out}")
+    t |> success(find(out, "LOST failed_dasllama_lint_require.das") < 0 && find(out, "START failed_dasllama_lint_sidedoor.das: ") >= 0,
+        "a lone red file is a failure of its own, and the run goes on:\n{out}")
+    let lost_at = find(out, "LOST ")
+    t |> success(lost_at >= 0 && find(out, "files have a verdict") >= 0, "the batch with no verdict is named lost:\n{out}")
+    let tag = lost_at < 0 ? "" : slice(out, lost_at + length("LOST "), find(out, ": ", lost_at))
+    let at = child_index(out, tag)
+    t |> success(!empty(at) && find(out, "RESUME once it is fixed: remove {stop}, then this command with --skip {at}\n") >= 0,
+        "the line to resume on names the lost child ({tag}, child {at}):\n{out}")
+    t |> success(find(out, "RETRY") < 0, "no file of the batch reruns alone:\n{out}")
+    t |> success(find(out, "STOPPED, the files after it not run") >= 0, "the run says it stopped short:\n{out}")
+    t |> success(find(fread(stop), tag) >= 0, "the stop wrote the run's stop file, naming the child: {stop}")
+    var marked : string
+    t |> success(run_runner("--suite model-free --das /usr/bin/true --stop-file {stop}", marked) != 0, "a run that finds the stop file exits red:\n{marked}")
+    t |> success(find(marked, "remove {stop}, or drop --stop-file, to run") >= 0 && find(marked, "START ") < 0,
+        "... starts no child, and says how to clear it:\n{marked}")
+    remove(stop)
+    var resumed : string
+    t |> equal(run_runner("--suite model-free --test-wall 30 --das /usr/bin/true --skip 1", resumed), 0, "a resumed dry run exits clean:\n{resumed}")
+    t |> success(find(resumed, "SKIP failed_dasllama_lint_require.das: child 0/") >= 0, "the child before --skip is not started:\n{resumed}")
+    t |> success(find(resumed, "START failed_dasllama_lint_require.das: ") < 0, "... and has no START line:\n{resumed}")
+    t |> success(find(resumed, "test wall 30 s resumed at child 1") >= 0, "the REPORT carries the wall and the resume:\n{resumed}")
+    var open_run : string
+    t |> success(run_runner("--suite model-free --test-wall 0 --das /usr/bin/false --skip {at}", open_run) != 0, "with no wall the red batch is retried:\n{open_run}")
+    t |> success(find(open_run, " --test-wall ") < 0 && find(open_run, " no test wall resumed at child {at}") >= 0,
+        "--test-wall 0 hands the children no wall and says so in the REPORT:\n{open_run}")
+    let first = slice(tag, 0, find(tag, "+"))
+    t |> success(find(open_run, "RETRY {tag}: ") >= 0 || find(open_run, "RETRY {first}: ") >= 0, "the batch's files are retried:\n{open_run}")
+    t |> success(find(open_run, "START {first}: ") >= 0 && find(open_run, "SKIP {first}: ") < 0, "the retry starts at its own first file, whatever --skip the run took:\n{open_run}")
+}
+
+//! a stand-in child binary under the test's temp folder: it prints the file FAKE_CHILD_LOG names and exits with FAKE_CHILD_RC
+def private fake_child() : string {
+    let path = path_join(test_temp_dir(), "dasllama_fake_child.sh")
+    fwrite(path, "#!/bin/sh\nif [ -n \"$FAKE_CHILD_LOG\" ]; then cat \"$FAKE_CHILD_LOG\"; fi\nexit $FAKE_CHILD_RC\n")
+    var out : string
+    run_and_capture(["chmod", "+x", path], out)
+    return path
+}
+
+[test(description = "A child that ends with the kill switch's exit code stops the run with a WALL line carrying the switch's own line where the log holds one, a walled batch whose root failed is lost by that name, and a walled batch that is red with every file's verdict counts its failures and stops nothing")]
+def test_runner_reads_a_red_child(t : T?) {
+    if (get_platform_name() == "windows") {
+        t |> skip("the stand-in child is a POSIX shell script")
+        return
+    }
+    let child = fake_child()
+    let log = path_join(test_temp_dir(), "dasllama_fake_child.log")
+    var out : string
+    t |> success(run_runner("--suite model-free --das {child}", out, "FAKE_CHILD_RC=125 FAKE_CHILD_LOG= ") != 0, "a child at the wall's exit code reds the run:\n{out}")
+    t |> success(find(out, "WALL failed_dasllama_lint_require.das: a child ended with the kill switch's exit code 125") >= 0,
+        "a wall exit with no line of the switch's is still a wall:\n{out}")
+    t |> success(find(out, "this command with --skip 0\n") >= 0 && find(out, "START failed_dasllama_lint_sidedoor.das: ") < 0,
+        "the run stops at that child, lone file or not:\n{out}")
+    let said = "kill switch: test 'test_x' of a.das (--test-wall) ran past 30s; the process ends here with exit code 125"
+    fwrite(log, "=== RUN 'test_x'\n{said}\n")
+    run_runner("--suite model-free --das {child}", out, "FAKE_CHILD_RC=125 FAKE_CHILD_LOG={log} ")
+    t |> success(find(out, "WALL failed_dasllama_lint_require.das: {said}") >= 0, "the WALL line is the switch's own:\n{out}")
+    fwrite(log, "[E] Failed to compile the together root x.das\nFAIL modules/dasLLAMA/tests/test_box_ident.das (0.0s)\nFAIL modules/dasLLAMA/tests/test_box_profile.das (0.0s)\n")
+    run_runner("--area infra --only test_box --test-wall 30 --das {child}", out, "FAKE_CHILD_RC=2 FAKE_CHILD_LOG={log} ")
+    t |> success(find(out, "LOST test_box_ident.das+1: the batch ended with exit 2: its root failed, no file ran") >= 0,
+        "a walled batch whose root failed is lost by that name:\n{out}")
+    fwrite(log, "PASS modules/dasLLAMA/tests/test_box_ident.das (0.1s)\nFAIL modules/dasLLAMA/tests/test_box_profile.das (0.1s)\n")
+    run_runner("--area infra --only test_box --test-wall 30 --das {child}", out, "FAKE_CHILD_RC=1 FAKE_CHILD_LOG={log} ")
+    t |> success(find(out, "LOST ") < 0 && find(out, "RETRY") < 0 && find(out, "2 file(s), 1 failed (test_box_profile.das)") >= 0,
+        "a walled batch with every verdict counts its failures and stops nothing:\n{out}")
+    remove(log)
+    remove(child)
+}
+
+[test(description = "The device kernel suite runs whole with no arm under the stocked child budget, a path of one of its files reaches that file, every one of them sits in some area's plan, and the stocked plan starts with them; a run that reaps no image walks no models folder")]
+def test_gpu_kernels_suite(t : T?) {
+    t |> equal(child_timeout(RunArgs(suite = "gpu-kernels")), child_timeout(RunArgs(suite = "stocked")), "the device kernel files take the stocked budget")
+    t |> success(child_timeout(RunArgs(suite = "gpu-kernels")) > child_timeout(RunArgs(suite = "model-free")), "... past the model-free one")
+    t |> equal(check_suite_args(RunArgs(suite = "gpu-kernels")), 0, "the suite runs whole, with no --arm")
+    t |> success(check_suite_args(RunArgs(suite = "gpu-kernels", arm = "x")) != 0, "... and takes none")
+    let planned <- area_plan([for (a in AREAS); a])
+    for (f in suite_files("gpu-kernels")) {
+        let reach <- reach_for_path(f)
+        t |> success(find_index(reach.files, base_name(f)) >= 0 && empty(reach.note), "a changed device kernel file runs itself: {f} ({reach.note})")
+        t |> success(find_index(planned.files, f) >= 0, "an area plans the file: {f}")
+    }
+    let stocked <- plan_files(RunArgs(suite = "stocked"), [for (a in AREAS); a; where false])
+    let kernels <- suite_files("gpu-kernels")
+    t |> equal(join([for (i in range(length(kernels))); stocked.files[i]], ","), join(kernels, ","), "the stocked plan starts with the device kernel files")
+    t |> equal(length(stocked.files), length(kernels) + length(suite_files("stocked")), "... ahead of every stocked file")
+    let dir = path_join(test_temp_dir(), "dasllama_images_at_start_{get_time_usec(0l)}")
+    mkdir_rec(dir)
+    fwrite(path_join(dir, "a.dlim"), "x")
+    t |> success(empty(images_at_start(RunArgs(), dir)), "a run that reaps nothing walks no models folder")
+    t |> equal(length(images_at_start(RunArgs(reap_images = true), dir)), 1, "a reaping run keeps the images there as it starts")
+    rmdir_rec(dir)
 }
 
 [test(description = "`wasm_summary` reads the last summary line of a wasm test release's log and its FAIL names, and returns no line for a log that died before one")]
@@ -494,7 +636,7 @@ def test_reach_for_path(t : T?) {
     t |> equal(join(bench.files, ","), join(BENCH_WITNESSES, ","), "a benchmark reaches the bench rows' files")
     let outside <- reach_for_path("src/ast/ast_parse.cpp")
     t |> success(empty(outside.files) && empty(outside.areas) && empty(outside.note), "a path outside the module reaches nothing")
-    var listed <- suite_files("model-free")
+    var listed <- free_files()
     listed |> push_from(suite_files("stocked"))
     let census <- {for (f in listed); base_name(f) => null}
     for (name in LLM_CORE_WITNESSES) {
@@ -541,7 +683,7 @@ def test_child_cache_dir(t : T?) {
     }
 }
 
-[test(description = "`child_chunks` batches files in order by the batch size, and cuts out the image file on area runs, an expected-failure compile test, and a tier contract file to run alone")]
+[test(description = "`child_chunks` batches files in order by the batch size, and gives the image file on area runs, an expected-failure compile test, and a tier contract file a child of its own that leaves the files around it in one batch")]
 def test_child_chunks(t : T?) {
     let files <- [for (i in range(7)); "{TESTS_DIR}/test_{i}.das"]
     let threes <- child_chunks(files, 3, false)
@@ -554,23 +696,24 @@ def test_child_chunks(t : T?) {
     with_image |> push("{TESTS_DIR}/test_model_image.das")
     with_image |> push("{TESTS_DIR}/test_9.das")
     let area <- child_chunks(with_image, 10, true)
-    t |> equal(length(area), 3, "an area run cuts the image file out: the files before it, the image file, the files after")
-    t |> equal(join(area[1], ","), "{TESTS_DIR}/test_model_image.das", "the image file's child carries it alone")
-    t |> equal(join(area[2], ","), "{TESTS_DIR}/test_9.das", "the files after it start a child of their own")
+    t |> equal(length(area), 2, "an area run takes the image file out: the image file, and the files around it as one batch")
+    t |> equal(join(area[0], ","), "{TESTS_DIR}/test_model_image.das", "the image file's child carries it alone")
+    t |> equal(join(area[1], ","), "{TESTS_DIR}/test_0.das,{TESTS_DIR}/test_1.das,{TESTS_DIR}/test_9.das", "the files before and after it ride one child")
     let suite <- child_chunks(with_image, 10, false)
     t |> equal(length(suite), 1, "a suite run batches the image file like any other")
     var with_failed <- [for (i in range(2)); "{TESTS_DIR}/test_{i}.das"]
     with_failed |> push("{TESTS_DIR}/failed_lint.das")
     with_failed |> push("{TESTS_DIR}/test_9.das")
     let expected_failure <- child_chunks(with_failed, 10, false)
-    t |> equal(length(expected_failure), 3, "an expected-failure compile test cuts the batch: the files before it, itself, the files after")
-    t |> equal(join(expected_failure[1], ","), "{TESTS_DIR}/failed_lint.das", "it runs alone, where dastest reads its expected errors")
+    t |> equal(length(expected_failure), 2, "an expected-failure compile test leaves the batch whole: itself, and the files around it")
+    t |> equal(join(expected_failure[0], ","), "{TESTS_DIR}/failed_lint.das", "it runs alone, where dastest reads its expected errors")
     var with_tier <- [for (i in range(2)); "{TESTS_DIR}/test_{i}.das"]
     with_tier |> push("{TESTS_DIR}/test_gpu_tier.das")
     with_tier |> push("{TESTS_DIR}/test_9.das")
     let tier <- child_chunks(with_tier, 10, false)
-    t |> equal(length(tier), 3, "a tier contract file cuts the batch: the files before it, itself, the files after")
-    t |> equal(join(tier[1], ","), "{TESTS_DIR}/test_gpu_tier.das", "it runs alone, where no batch-mate's entry arms the tier at [init]")
+    t |> equal(length(tier), 2, "a tier contract file leaves the batch whole: itself, and the files around it")
+    t |> equal(join(tier[0], ","), "{TESTS_DIR}/test_gpu_tier.das", "it runs alone, where no batch-mate's entry arms the tier at [init]")
+    t |> equal(length(tier[1]), 3, "the files before and after it ride one child")
 }
 
 [test(description = "`model_names` reads every whole quoted .gguf name out of a file's text once and skips interpolated names, paths and patterns, and `missing_models` lists the names a run's files and the fixtures they require ask that the directory lacks, each with its askers, while a directory holding them lists none")]

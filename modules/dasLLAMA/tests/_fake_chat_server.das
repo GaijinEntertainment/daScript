@@ -21,11 +21,14 @@ def private piece(key, text : string) : string => "data: \{\"choices\":[\{\"inde
 
 var private g_fake_name = "fake"   //! the one id the model list answers
 var private g_fake_sized = false    //! every request is the `fakesized` model's
+var private g_fake_word_ms = 100u   //! the pause ahead of every word of a reply
 
-//! what a process serving the fake sets before it starts: its model list's id, and whether every request is sized
-def set_fake_chat(name : string; sized : bool) {
+//! what a process serving the fake sets before it starts: its model list's id, whether every request is sized, and
+//! the pause ahead of a word
+def set_fake_chat(name : string; sized : bool; word_ms : int = 100) {
     g_fake_name = name
     g_fake_sized = sized
+    g_fake_word_ms = uint(word_ms)
 }
 
 //! a chat server that answers by the request's "model" field: `fail` every turn an error, `fakefailreps` every turn but
@@ -52,7 +55,7 @@ class FakeChatServer : HvWebServer {
             let oneword = find(body, "\"model\":\"oneword\"") >= 0
             if (find(body, "\"model\":\"notext\"") < 0) {
                 for (word in ["one", " two", " three"]) {
-                    sleep(word == " three" && find(body, "fakestall") >= 0 ? 700u : 100u)
+                    sleep(word == " three" && find(body, "fakestall") >= 0 ? 700u : g_fake_word_ms)
                     sse_event(server, writer, slice(piece("content", word), 6), "")
                     break if (oneword)
                 }

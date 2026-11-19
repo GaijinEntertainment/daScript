@@ -14,11 +14,11 @@ require _child_run
 // dispatches silently. The bare arms run in child processes - the check fires once per process and
 // the env knob loads at context init - so a child's stdout and exit code are the instrument.
 
-def private run(cmd : string; var output : string&) : int => run_child(cmd, output)
+def private run(cmd : string; var output : string&) : int => run_verb_child(cmd, output)
 
 [test(description = "In a child process the engine's first dispatch on an unconfigured job queue exits non-zero, naming setup_dasllama_jobque, and the program never runs on")]
 def test_bare_queue_panics(t : T?) {
-    let cmd = child_cmd("_jobque_tripwire_root.das", [(name = "DASLLAMA_ALLOW_BARE_JOBQUE", value = "0")])
+    let cmd = child_verb_cmd("jobque-tripwire", [(name = "DASLLAMA_ALLOW_BARE_JOBQUE", value = "0")])
     var out : string
     let rc = run(cmd, out)
     t |> success(rc != 0, "a bare queue's first engine dispatch panics (rc {rc}):\n{out}")
@@ -28,7 +28,7 @@ def test_bare_queue_panics(t : T?) {
 
 [test(description = "With DASLLAMA_ALLOW_BARE_JOBQUE=1 a child's dispatch on an unconfigured queue still warns that it is not configured but exits 0 and runs to its end")]
 def test_allow_bare_jobque_warns_and_runs(t : T?) {
-    let cmd = child_cmd("_jobque_tripwire_root.das", [(name = "DASLLAMA_ALLOW_BARE_JOBQUE", value = "1")])
+    let cmd = child_verb_cmd("jobque-tripwire", [(name = "DASLLAMA_ALLOW_BARE_JOBQUE", value = "1")])
     var out : string
     let rc = run(cmd, out)
     t |> equal(rc, 0, "the escape hatch lets the program run:\n{out}")
@@ -41,7 +41,7 @@ def test_team_job_panic_exits_nonzero(t : T?) {
     // the fallback tune policy: the root carries the engine's tune scope, and the default policy would mint and re-exec the child at startup - under a pipe that chain never closes
     // no worker pin: the child inherits this process's affinity mask, and a hard-pinned worker outside it never runs the chunk
     // the dispatch must reach the queue: an inherited DASLLAMA_SINGLE_THREAD=1 would run the chunk inline, with no job exception to report
-    let cmd = child_cmd("_team_panic_root.das", [(name = "DAS_TUNE_POLICY", value = "fallback"), (name = "DAS_JOBQUE_AFFINITY", value = "0"),
+    let cmd = child_verb_cmd("team-panic", [(name = "DAS_TUNE_POLICY", value = "fallback"), (name = "DAS_JOBQUE_AFFINITY", value = "0"),
         (name = "DAS_JOBQUE_THREADS", value = "2"), (name = "DASLLAMA_SINGLE_THREAD", value = "0")])
     var out : string
     let rc = run(cmd, out)

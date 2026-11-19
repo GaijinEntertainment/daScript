@@ -18,6 +18,7 @@ require daslib/fio   // nolint:STYLE030,LINT019 - path_join and fmap, inside the
 require math   // nolint:STYLE030,LINT019 - min, inside the das_metal halves
 require daslib/linq   // long_count: the planes a format tags
 require _model_tier
+require dasllama/dasllama_env   // nolint:STYLE030,LINT019 - parity_full_mode, inside the das_metal half
 require _format_census   // census_cell, census_sites_all: the census both homes run
 require dasllama/dasllama_gguf   // nolint:STYLE030,LINT019 - parse_gguf_meta, inside the das_metal halves
 

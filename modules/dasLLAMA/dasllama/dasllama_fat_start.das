@@ -144,9 +144,26 @@ def public dasllama_cuda_knee_race() : bool {
     }
 }
 
-//! Race the runtime section on this box and write it into the app sidecar
-//! (`tune_manifest_path()`), the kernels section untouched: the Metal twins under the tune
-//! progress display, then the knob snapshot. True when the sidecar was written.
+//! Write this process's runtime section - the knob snapshot under the crown list `crowns` - into the app sidecar
+//! (`tune_manifest_path()`), the kernels section untouched. True when the sidecar was written; an unwritable location
+//! keeps the crowns for the process.
+[arch(at = "../ARCHITECTURE_MEASUREMENT_FAT_START.md#fat-first-start")]
+def public dasllama_write_runtime_section(crowns : string) : bool {
+    static_if (typeinfo module_exists(llvm_tune)) {
+        var runtime = dasllama_runtime_snapshot(crowns)
+        let noKernels : table<string; string>
+        let wrote = tune_sidecar_merge(noKernels, runtime)
+        if (!wrote) {
+            hold_crowns(crowns)
+        }
+        return wrote
+    } else {
+        return false
+    }
+}
+
+//! Race the runtime section on this box and write it into the app sidecar (`dasllama_write_runtime_section`): the
+//! Metal twins and every home's knees under the tune progress display. True when the sidecar was written.
 [arch(at = "../ARCHITECTURE_MEASUREMENT_FAT_START.md#fat-first-start")]
 def public dasllama_race_runtime_section() : bool {
     static_if (typeinfo module_exists(llvm_tune)) {
@@ -164,14 +181,11 @@ def public dasllama_race_runtime_section() : bool {
         if (!race.ran) {
             to_log(LOG_INFO, "dasLLAMA: no Metal device - the runtime section records the knob defaults\n")
         }
-        var runtime = dasllama_runtime_snapshot(crowns)
-        let noKernels : table<string; string>
-        let wrote = tune_sidecar_merge(noKernels, runtime)
+        delete race
+        let wrote = dasllama_write_runtime_section(crowns)
         if (!wrote) {
             to_log(LOG_WARNING, "dasLLAMA: could not write {path} - the crowns hold for this process only; set DAS_TUNE_MANIFEST to a writable path to keep them\n")
-            hold_crowns(crowns)
         }
-        delete race
         return wrote
     } else {
         return false
@@ -291,20 +305,12 @@ def public dasllama_box_runtime_valid(path, digest : string) : bool {
     return ok
 }
 
-//! Race the Metal twin crowns on this box and write the runtime section, the box identity and `digest` to `path` - the
-//! per-box file every run on the box reads from then on. True when the file was written.
-def public dasllama_box_runtime_race(path, digest : string) : bool {
+//! Write the per-box file at `path`: the box identity, `digest`, and a runtime section of the crown list `crowns` and -
+//! where `knees` says the knee race ran - the raced knees as this process holds them. The crowns and the raced knees
+//! alone: the knobs a process holds at its first apply are its own, not the box's. True when the file was written, in
+//! one rename, so a reader never sees a half-written file
+def public dasllama_box_runtime_write(path, digest, crowns : string; knees : bool) : bool {
     static_if (typeinfo module_exists(llvm_tune)) {
-        let t0 = get_clock()
-        to_log(LOG_INFO, "dasLLAMA: first run on this box with these kernels - racing the Metal twin crowns, kept in {path} for every run on it\n")
-        tune_progress_plan("dasllama_box_start", 1)
-        tune_progress_kernel_begin("metal_crowns", 0)
-        var race <- dasllama_metal_crown_race()
-        let crowns = join(race.wins, ",")
-        tune_progress_kernel_end("metal_crowns", crowns, !race.ran ? "skipped" : (empty(crowns) ? "holds" : "beats"))
-        tune_progress_finish()
-        //! the crowns and the raced knees alone: the knobs a process holds at its first apply are its own, not the box's
-        let knees = dasllama_metal_knee_race()
         var doc = JV((kernel_library = digest, provenance = JV((box = tune_box_identity(),
             platform = get_platform_name(), arch = get_architecture_name())),
             runtime = (knees ? JV((metal_tensor = crowns, metal_split_k_tgs = metal_split_k_tgs(),
@@ -316,13 +322,32 @@ def public dasllama_box_runtime_race(path, digest : string) : bool {
         let tmp = "{path}.{get_time_usec(0l)}.tmp"
         var wrote = fwrite(tmp, write_json(doc))
         if (wrote) {
-            let moved = rename_result(tmp, path)   //! one rename: a reader never sees a half-written file
+            let moved = rename_result(tmp, path)
             wrote = moved is value && moved as value
             if (!wrote) {
                 remove(tmp)
             }
         }
         delete_json(doc)
+        return wrote
+    } else {
+        return false
+    }
+}
+
+//! Race the Metal twin crowns and knees on this box and write them to `path` (`dasllama_box_runtime_write`) - the
+//! per-box file every run on the box reads from then on. True when the file was written.
+def public dasllama_box_runtime_race(path, digest : string) : bool {
+    static_if (typeinfo module_exists(llvm_tune)) {
+        let t0 = get_clock()
+        to_log(LOG_INFO, "dasLLAMA: first run on this box with these kernels - racing the Metal twin crowns, kept in {path} for every run on it\n")
+        tune_progress_plan("dasllama_box_start", 1)
+        tune_progress_kernel_begin("metal_crowns", 0)
+        var race <- dasllama_metal_crown_race()
+        let crowns = join(race.wins, ",")
+        tune_progress_kernel_end("metal_crowns", crowns, !race.ran ? "skipped" : (empty(crowns) ? "holds" : "beats"))
+        tune_progress_finish()
+        let wrote = dasllama_box_runtime_write(path, digest, crowns, dasllama_metal_knee_race())
         let secs = get_clock() - t0
         if (wrote) {
             to_log(LOG_WARNING, "dasLLAMA: metal crowns raced for this box ({secs} s) -> {path}\n")

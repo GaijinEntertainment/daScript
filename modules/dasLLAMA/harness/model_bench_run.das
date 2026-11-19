@@ -111,6 +111,7 @@ struct RunnerArgs {
 }
 
 let STOP_SECONDS = 120
+let PORT_CONNECT_SECONDS = uint16(1)   //! a local port that listens accepts well inside it
 let DEFAULT_PORT = 8911
 let DEFAULT_BOOT_SECONDS = 900
 
@@ -123,12 +124,18 @@ def tree_binary(tree : string) : string {
     return ""
 }
 
-//! the server's model list as it answers it; empty when nothing answers on `port`
+//! the server's model list as it answers it; empty when nothing answers on `port`. The connect is bounded: a
+//! closed local port refuses at once on Linux and macOS, and on Windows only when the client's own timeout ends
 def server_models(port : int) : string {
     var body = ""
-    GET("http://127.0.0.1:{port}/v1/models") $(resp) {
-        if (resp != null && resp.status_code == http_status.OK) {
-            body = string(resp.body)
+    with_http_request() $(var req) {
+        req.method = http_method.GET
+        req.url := "http://127.0.0.1:{port}/v1/models"
+        req.connect_timeout = PORT_CONNECT_SECONDS
+        request(req) $(resp) {
+            if (resp != null && resp.status_code == http_status.OK) {
+                body = string(resp.body)
+            }
         }
     }
     return body

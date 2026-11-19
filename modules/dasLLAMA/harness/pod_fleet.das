@@ -145,7 +145,8 @@ def prep_command() : string =>
 //! the remote command that starts shard `index`/`n` of the run: the children's logs under the run's folder on
 //! the volume (TMPDIR), the runner's own log beside them, RUN-EXIT=<rc> as its last line; the runner reaps the images
 //! its children mint where the environment names the pod's own models directory (`--reap-images`: under any other
-//! directory the mints are another pod's too, and stay), and the memory tracker beside it keeps
+//! directory the mints are another pod's too, and stay), every shard names the run's one stop file (`--stop-file`: a
+//! test past its wall on one pod starts no later child on any), and the memory tracker beside it keeps
 //! the largest child's peak in the folder's `mem_peak.txt`. LD_LIBRARY_PATH puts the
 //! pod's copy of the runtime libraries ahead of the binary's RUNPATH, which names the volume tree's - a rebuild
 //! there mid-run would otherwise kill every child started after it. Non-private:
@@ -157,7 +158,7 @@ def run_command(cfg : FleetArgs; run : string; index, n : int) : string {
     let inner = ("cd {POD_TREE} && export LD_LIBRARY_PATH={POD_TREE}/lib TMPDIR={tmp} {cfg.env}"
         + " && (sh modules/dasLLAMA/harness/pod_mem_track.sh {tmp}/mem_peak.txt & echo $! > {tmp}/mem_track.pid)"
         + " && ./bin/daslang -jit -module-cache .cache/daslang/module_cache/dastest.dascache modules/dasLLAMA/tests/run.das --"
-        + " {cfg.args} --shard {index}/{n}{reap};"
+        + " {cfg.args} --shard {index}/{n}{reap} --stop-file {FLEET_LOGS}/{run}/STOP;"
         + " rc=$?; kill $(cat {tmp}/mem_track.pid); echo RUN-EXIT=$rc")
     //! `;` not `&&` ahead of the detached command: `a && b &` backgrounds a subshell that keeps the ssh session's
     //! output open, and the ssh call then lasts as long as the run
@@ -169,7 +170,7 @@ def run_command(cfg : FleetArgs; run : string; index, n : int) : string {
 //! red DONE line; then every pod's peak - the largest child's resident kB and the file it ran
 def status_command(run : string) : string =>
     ("for f in {FLEET_LOGS}/{run}/shard_*.log; do echo \"== $f: $(grep -cE 'DONE' $f) done\";"
-        + " grep -E '^\\[I\\] (SHARD|REPORT|NEXT)|^\\[W\\] MISSING|RUN-EXIT' $f; grep -E 'DONE' $f | grep -vE ' 0 failed, 0 errors'; done;"
+        + " grep -E '^\\[I\\] (SHARD|REPORT|NEXT)|^\\[W\\] MISSING|RUN-EXIT|WALL |LOST |STOPPED' $f; grep -E 'DONE' $f | grep -vE ' 0 failed, 0 errors'; done;"
         + " for p in {FLEET_LOGS}/{run}/pod_*/mem_peak.txt; do echo \"PEAK-KB $p: $(cat $p)\"; done; true")
 
 //! the remote command that reads every child log of `run` off the volume into one line a verdict: `F <seconds> <file>` for a

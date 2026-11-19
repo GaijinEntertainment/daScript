@@ -15,6 +15,7 @@ require daslib/defer
 require math
 
 require dastest_clargs
+require kill_switch
 require log
 require testing
 require suite_result public
@@ -24,6 +25,10 @@ require suite_result public
 def public tests_jit_enabled() : bool => jit_enabled() && !is_standalone_exe()
 
 var test_results : array<SuiteTestResult>
+//! a `[test]` function's wall in seconds (`--test-wall`, 0 = none)
+//! and the file its tests are named beside
+var test_wall_seconds : float
+var test_wall_file : string
 var bench_messages : array<string>
 var test_inputs : array<string>
 
@@ -349,8 +354,10 @@ def private together_root(files : array<string>; ctx : SuiteCtx) : TogetherRoot 
     return <- (path = root_path, dirs <- dirs, why = write_why)
 }
 
-//! runs `files` as one program, each file's module in a fresh
-//! context; `blk` gets every file's status and wall time, in order
+//! runs `files` as one program simulated once, each file's module
+//! in a clone of its context - globals and heaps of its own, its
+//! init run, the code and its JIT link shared; `blk` gets every
+//! file's status and wall time, in order
 def test_together(files : array<string>; var ctx : SuiteCtx; blk : TogetherReport) : SuiteResult {
     var res : SuiteResult
     var inscope fileCtx <- internalFileCtx(ctx)
@@ -369,8 +376,8 @@ def test_together(files : array<string>; var ctx : SuiteCtx; blk : TogetherRepor
     using() $(var mg : ModuleGroup) {
         using() $(var cop : CodeOfPolicies) {
             test_policies(ctx, cop, access)
-            // a non-JIT simulate frees the symbol tables, and every file
-            // simulates the program anew
+            // a non-JIT simulate frees the symbol tables, which every
+            // file's walk of the program's modules reads
             cop.keep_symbol_tables = true
             let cache = test_module_cache_path(ctx, root_path, cop)
             compile_file(root_path, access, unsafe(addr(mg)), cop, cache) $(ok, program, output) {
@@ -382,35 +389,44 @@ def test_together(files : array<string>; var ctx : SuiteCtx; blk : TogetherRepor
                 if (!empty(output) && !log::failuresOnly) {
                     log::info("{output}")
                 }
-                for (f in files) {
-                    let want = stem(f)
-                    let t0 = ref_time_ticks()
-                    var status : SuiteResult
-                    ctx.queued_benchmarks |> clear
-                    simulate(program) $(sok; context; serrors) {
-                        if (!sok) {
-                            log::error("Failed to simulate the together root {root_path} for {f}"
-                                + "\n{serrors}")
-                            status.total++
-                            status.errors++
-                            return
-                        }
-                        var found = false
-                        program_for_each_module(program) $(m) {
-                            if (m.name == want) {
-                                found = true
-                                let module_result = test_module(*m, *context, ctx, fileCtx)
-                                after_module(ctx, fileCtx, *context, module_result, status)
+                // one simulate: the JIT links the program's code
+                // once, and every file's context is a clone of it
+                simulate(program) $(sok; base; serrors) {
+                    if (!sok) {
+                        log::error("Failed to simulate the together root {root_path}\n{serrors}")
+                        fail_together(files, res, blk)
+                        return
+                    }
+                    for (f in files) {
+                        let want = stem(f)
+                        let t0 = ref_time_ticks()
+                        test_wall_file = f
+                        var status : SuiteResult
+                        ctx.queued_benchmarks |> clear
+                        clone_context(*base) $(cok; context; cerrors) {
+                            if (!cok) {
+                                log::error("Failed to start a context for {f}: {cerrors}")
+                                status.total++
+                                status.errors++
+                                return
+                            }
+                            var found = false
+                            program_for_each_module(program) $(m) {
+                                if (m.name == want) {
+                                    found = true
+                                    let module_result = test_module(*m, *context, ctx, fileCtx)
+                                    after_module(ctx, fileCtx, *context, module_result, status)
+                                }
+                            }
+                            if (!found) {
+                                log::error("no module `{want}` for {f} in the root's program")
+                                status.total++
+                                status.errors++
                             }
                         }
-                        if (!found) {
-                            log::error("no module `{want}` for {f} in the root's program")
-                            status.total++
-                            status.errors++
-                        }
+                        res += status
+                        invoke(blk, f, status, get_time_nsec(t0) / 1000l)
                     }
-                    res += status
-                    invoke(blk, f, status, get_time_nsec(t0) / 1000l)
                 }
             }
         }
@@ -689,6 +705,18 @@ def private test_any(name : string; func; args_num : int;  // nolint:STYLE038 - 
                      meta : TestMeta = default<TestMeta>) {
     if (!log::failuresOnly) {
         log::info("{context.indenting}=== RUN '{name}'")
+    }
+    //! a `[test]` function, not a subtest of one
+    let walled = test_wall_seconds > 0.0 && empty(context.indenting)
+    if (walled) {
+        let beside = empty(test_wall_file) ? "" : " of {test_wall_file}"
+        let said = "kill switch: test '{name}'{beside} (--test-wall) ran past {test_wall_seconds}s"
+        kill_switch_arm(KILL_SWITCH_TEST, test_wall_seconds, said)
+    }
+    defer() {
+        if (walled) {
+            kill_switch_disarm(KILL_SWITCH_TEST)
+        }
     }
     let beforeFailed = res.failed
     let beforeErrors = res.errors

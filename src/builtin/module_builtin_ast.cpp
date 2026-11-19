@@ -1707,6 +1707,18 @@ namespace das {
         ctx->delRef();
     }
 
+    void ast_clone_context ( Context & source,
+            const TBlock<void,bool,smart_ptr_raw<Context>,string> & block, Context * context, LineInfoArg * lineinfo ) {
+        auto ctx = get_clone_context(&source, source.category.value);
+        ctx->addRef();
+        if ( ctx->failed ) {
+            das_invoke<void>::invoke<bool,smart_ptr_raw<Context>,const string &>(context,lineinfo,block,false,nullptr,"the clone's init script failed");
+        } else {
+            das_invoke<void>::invoke<bool,smart_ptr_raw<Context>,const string &>(context,lineinfo,block,true,ctx,"");
+        }
+        ctx->delRef();
+    }
+
 #if !DAS_NO_FILEIO
 
     bool ast_set_file_source ( smart_ptr_raw<FileAccess> access, char * fname, char * str, Context * context, LineInfoArg * at ) {
@@ -1787,6 +1799,9 @@ namespace das {
         addExtern<DAS_BIND_FUN(ast_simulate)>(*this, lib, "simulate",
             SideEffects::modifyExternal, "ast_simulate")
                 ->args({"program","block","context","line"});
+        addExtern<DAS_BIND_FUN(ast_clone_context)>(*this, lib, "clone_context",
+            SideEffects::modifyExternal, "ast_clone_context")
+                ->args({"source","block","context","line"});
         addExtern<DAS_BIND_FUN(ast_create_serializer)>(*this, lib, "create_ast_serializer",
             SideEffects::modifyExternal, "ast_create_serializer");
         addExtern<DAS_BIND_FUN(ast_create_deserializer)>(*this, lib, "create_ast_deserializer",

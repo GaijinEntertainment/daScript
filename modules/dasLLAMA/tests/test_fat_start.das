@@ -13,6 +13,7 @@ require daslib/jobque_boost   // with_job_que - the snapshot's lane count and th
 require daslib/fio
 require daslib/env_registry
 require strings
+require _compares   // full_suite_only
 require _child_run   // the per-box file's policy stand-down reads the tune policy at context init, so it is a child's to show
 require dasllama/dasllama_gpu_knee   // the split rule and the pricing both homes' knee races share
 require ?das_metal dasllama/dasllama_metal_kernels   // metal_knee_tiles: a Metal rung's grid
@@ -22,9 +23,11 @@ require ?cuda cuda/das_cuda_boost   // cuda_device_bytes_allocated: the CUDA kne
 require dasllama/dasllama_env   // dasllama_home_dir_from - the box file's path under a child's redirected home
 
 // The runtime section's writer and first-start race (dasllama_fat_start), model-free: the
-// snapshot carries the crowns and the knobs; the race writes the app sidecar's runtime section
-// and the checked apply reads it back (on a Metal box the twins race, ~15 s; elsewhere the
-// section records the defaults, and the split-K knee race's cell skips); the box-profile apply fires an installed race hook exactly when
+// snapshot carries the crowns and the knobs; the writer writes the app sidecar's runtime section
+// and the checked apply reads it back. The cells that run a race itself skip outside the full suite
+// (DASLLAMA_PARITY_FULL=1): the first-start race and the Metal knee race on a das_metal build - the
+// twins and knees race their whole ladders, past the test wall - and the box file's race with its two
+// children on every box; without a Metal device the knee race's cell skips. The box-profile apply fires an installed race hook exactly when
 // no section of this box's own exists; and outside a fat exe the fat hook does nothing. The
 // sidecar path is redirected into a temp directory for every case, so the app's real sidecar is
 // never touched.
@@ -69,27 +72,73 @@ def test_the_snapshot_needs_no_job_queue(t : T?) {
     }
 }
 
-[test(description = "The first-start race writes a redirected sidecar whose runtime section names the crown list and the split-K knees with an empty kernels section, and the checked box-profile apply then reads it back")]
-def test_first_start_race_writes_the_section_the_apply_reads(t : T?) {
+//! every knob a first-start or box race writes - the crown list, the Metal knees, the Vulkan and CUDA short-window knees -
+//! as a cell found them
+struct private RacedKnobs {
+    crowns : string
+    q8, kq, rows, q8b, kqb, hmm, devw, vk, cud : int64
+}
+
+def private raced_knobs() : RacedKnobs
+    => RacedKnobs(crowns = get_metal_tensor_crowns(), q8 = metal_split_k_tgs(), kq = metal_split_k_tgs_kq(),
+        rows = metal_q8_n32_rows(), q8b = metal_split_k_tgs_base(), kqb = metal_split_k_tgs_kq_base(),
+        hmm = metal_split_k_tgs_hmm(), devw = metal_devw_min_tgs(), vk = vk_split_k_tgs(), cud = cud_split_k_tgs())
+
+def private put_back(knobs : RacedKnobs) {
+    set_metal_tensor_crowns(knobs.crowns)
+    set_metal_split_k_tgs(knobs.q8)
+    set_metal_split_k_tgs_kq(knobs.kq)
+    set_metal_q8_n32_rows(knobs.rows)
+    set_metal_split_k_tgs_base(knobs.q8b)
+    set_metal_split_k_tgs_kq_base(knobs.kqb)
+    set_metal_split_k_tgs_hmm(knobs.hmm)
+    set_metal_devw_min_tgs(knobs.devw)
+    set_vk_split_k_tgs(knobs.vk)
+    set_cud_split_k_tgs(knobs.cud)
+}
+
+//! the redirected sidecar at `path` after `wrote` reported a write of the runtime section: the file, its section's crown
+//! list and knees, the kernels section left empty, and the checked apply reading it back
+def private check_runtime_section(t : T?; path : string; wrote : bool) {
+    t |> success(wrote, "the redirected sidecar is written")
+    t |> success(fexist(path), "the sidecar exists at the redirected path: {path}")
+    let text = fread(path)
+    t |> success(find(text, "\"runtime\"") >= 0, "the file carries a runtime section:\n{text}")
+    t |> success(find(text, "\"metal_tensor\"") >= 0, "the section names the crown list, empty or not")
+    t |> success(find(text, "\"metal_split_k_tgs\"") >= 0 && find(text, "\"metal_split_k_tgs_kq\"") >= 0
+        && find(text, "\"metal_q8_n32_rows\"") >= 0 && find(text, "\"metal_split_k_tgs_base\"") >= 0
+        && find(text, "\"metal_split_k_tgs_kq_base\"") >= 0, "the section carries the split-K knees")
+    var err = ""
+    var doc = read_json(text, err)
+    let ks = doc?["kernels"]
+    t |> success(ks == null || !(ks.value is _object) || empty(ks as _object), "the kernels section stays empty - a first start races no kernel:\n{text}")
+    delete_json(doc)
+    apply_box_profile_runtime()
+    t |> success(box_profile_runtime_applied(), "the checked apply reads the section it wrote (declined: '{box_profile_runtime_declined()}')")
+}
+
+[test(description = "The runtime section's writer writes a redirected sidecar whose runtime section names the crown list it was handed and the split-K knees with an empty kernels section, and the checked box-profile apply then reads it back")]
+def test_the_runtime_section_writer_writes_what_the_apply_reads(t : T?) {
     with_job_que() {
         with_temp_sidecar(t) $(path) {
-            let crowns = get_metal_tensor_crowns()
-            t |> success(dasllama_race_runtime_section(), "the race writes the redirected sidecar")
-            t |> success(fexist(path), "the sidecar exists at the redirected path: {path}")
-            let text = fread(path)
-            t |> success(find(text, "\"runtime\"") >= 0, "the file carries a runtime section:\n{text}")
-            t |> success(find(text, "\"metal_tensor\"") >= 0, "the section names the crown list, empty or not")
-            t |> success(find(text, "\"metal_split_k_tgs\"") >= 0 && find(text, "\"metal_split_k_tgs_kq\"") >= 0
-                && find(text, "\"metal_q8_n32_rows\"") >= 0 && find(text, "\"metal_split_k_tgs_base\"") >= 0
-                && find(text, "\"metal_split_k_tgs_kq_base\"") >= 0, "the section carries the split-K knees")
-            var err = ""
-            var doc = read_json(text, err)
-            let ks = doc?["kernels"]
-            t |> success(ks == null || !(ks.value is _object) || empty(ks as _object), "the kernels section stays empty - a first start races no kernel:\n{text}")
-            delete_json(doc)
-            apply_box_profile_runtime()
-            t |> success(box_profile_runtime_applied(), "the checked apply reads the section the race wrote (declined: '{box_profile_runtime_declined()}')")
-            set_metal_tensor_crowns(crowns)
+            let before = raced_knobs()
+            check_runtime_section(t, path, dasllama_write_runtime_section("mulmm_q8"))
+            t |> success(find(fread(path), "mulmm_q8") >= 0, "the section names the crown it was handed")
+            put_back(before)
+        }
+    }
+}
+
+[test(description = "In the full suite the first-start race runs its real ladders and writes a redirected sidecar whose runtime section names the crown list and the split-K knees with an empty kernels section, which the checked box-profile apply then reads back")]
+def test_first_start_race_writes_the_section_the_apply_reads(t : T?) {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        return if (full_suite_only(t, "the first start's Metal crown and knee races run their whole ladders"))
+    }
+    with_job_que() {
+        with_temp_sidecar(t) $(path) {
+            let before = raced_knobs()
+            check_runtime_section(t, path, dasllama_race_runtime_section())
+            put_back(before)
         }
     }
 }
@@ -98,16 +147,13 @@ def test_first_start_race_writes_the_section_the_apply_reads(t : T?) {
 //! snapshot records; without one it races nothing and the knobs stand (ARCHITECTURE_GPU_PREFILL_GEMM.md#prefill-split-k)
 [test(description = "On a Metal box the split-K knee race lands every knee, the n32 rows and the dev-W grid floor on a rung of its own race or off, and the snapshot records the raced K-quant knees; with no device every knee stands")]
 def test_the_knee_race_sets_the_split_knees(t : T?) {
-    let q8 = metal_split_k_tgs()
-    let kq = metal_split_k_tgs_kq()
-    let rows = metal_q8_n32_rows()
-    let q8b = metal_split_k_tgs_base()
-    let kqb = metal_split_k_tgs_kq_base()
-    let hmm = metal_split_k_tgs_hmm()
-    let devw = metal_devw_min_tgs()
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        return if (full_suite_only(t, "the Metal knee race runs its whole ladder"))
+    }
+    let before = raced_knobs()
     let ran = dasllama_metal_knee_race()
     if (!ran) {
-        t |> equal(metal_split_k_tgs(), q8, "no device: the q8 knee stands")
+        t |> equal(metal_split_k_tgs(), before.q8, "no device: the q8 knee stands")
         t |> skip("no Metal device - the knee race ran nothing")
         return
     }
@@ -128,13 +174,7 @@ def test_the_knee_race_sets_the_split_knees(t : T?) {
     t |> equal(read_json_field(js, "metal_split_k_tgs_kq", -1l), metal_split_k_tgs_kq(), "the snapshot records the raced K-quant knee")
     t |> equal(read_json_field(js, "metal_split_k_tgs_kq_base", -1l), metal_split_k_tgs_kq_base(), "the snapshot records the raced K-quant base knee")
     delete_json(js)
-    set_metal_split_k_tgs(q8)
-    set_metal_split_k_tgs_kq(kq)
-    set_metal_q8_n32_rows(rows)
-    set_metal_split_k_tgs_base(q8b)
-    set_metal_split_k_tgs_kq_base(kqb)
-    set_metal_split_k_tgs_hmm(hmm)
-    set_metal_devw_min_tgs(devw)
+    put_back(before)
 }
 
 //! whether this context's Vulkan device is up and serves the cm2 s column
@@ -263,9 +303,27 @@ def private fake_place() {
     set_tune_manifest_runtime_path(g_fake_place_target)
 }
 
+//! a box file's path under a temp home of its own
+def private box_file_scratch() : string {
+    var terr = ""
+    return path_join(path_join(temp_directory(terr), "dasllama_test_box_home_{get_time_usec(0l)}"), "box.tune.json")
+}
+
+//! the box file at `path` after `wrote` reported its write: valid for this run's kernels, no kernels section, read by the
+//! apply; the file is removed
+def private check_box_file(t : T?; path : string; wrote : bool) {
+    t |> success(wrote, "the file is written: {path}")
+    t |> success(dasllama_box_runtime_valid(path, dasllama_kernel_sources_digest()), "the file is valid for this run")
+    let text = fread(path)
+    t |> success(find(text, "\"kernels\"") < 0, "no kernels section is written to the box file:\n{text}")
+    apply_box_profile_runtime_at(path)
+    t |> success(box_profile_runtime_applied(), "the apply reads the section (declined: '{box_profile_runtime_declined()}')")
+    remove(path)
+}
+
 //! the per-box runtime file: its path under the home's tune/, what makes it valid for this run (this box, these kernels, a
-//! runtime section), the race writing one the apply reads, and the hook standing down under an explicit manifest
-[test(description = "The per-box runtime file sits at a stable box-keyed path under tune, is valid only for this box, these kernels and a runtime section, is raced and applied when no manifest is set, and stands down under a manifest or the reference policy")]
+//! runtime section), the writer writing one the apply reads, and the hook standing down under an explicit manifest
+[test(description = "The per-box runtime file sits at a stable box-keyed path under tune, is valid only for this box, these kernels and a runtime section, is written by its writer in a form the apply reads, and stands down under an explicit manifest")]
 def test_box_runtime_file(t : T?) {
     t |> run("the per-box path sits under tune/ with a key that is this box's and stable") @(t : T?) {
         let p = dasllama_box_runtime_path_from("H/.dasllama")
@@ -291,26 +349,36 @@ def test_box_runtime_file(t : T?) {
         remove(path)
         t |> success(!dasllama_box_runtime_valid(path, digest), "no file: not valid")
     }
-    t |> run("the race writes a file the apply reads, valid for these kernels") @(t : T?) {
+    t |> run("the writer writes a file the apply reads, valid for these kernels, with and without the knees") @(t : T?) {
         with_job_que() {
-            var terr = ""
-            let dir = temp_directory(terr)
-            let path = path_join(path_join(dir, "dasllama_test_box_home_{get_time_usec(0l)}"), "box.tune.json")
-            let digest = dasllama_kernel_sources_digest()
-            let crowns = get_metal_tensor_crowns()
-            t |> success(dasllama_box_runtime_race(path, digest), "the race writes the file: {path}")
-            t |> success(dasllama_box_runtime_valid(path, digest), "the file it wrote is valid for this run")
-            let text = fread(path)
-            t |> success(find(text, "\"kernels\"") < 0, "no kernels section is written to the box file:\n{text}")
-            apply_box_profile_runtime_at(path)
-            t |> success(box_profile_runtime_applied(), "the apply reads the section (declined: '{box_profile_runtime_declined()}')")
-            set_metal_tensor_crowns(crowns)
-            remove(path)
+            let before = raced_knobs()
+            for (knees in [false, true]) {
+                let path = box_file_scratch()
+                let wrote = dasllama_box_runtime_write(path, dasllama_kernel_sources_digest(), "mulmm_q8", knees)
+                let text = fread(path)
+                t |> equal(find(text, "\"metal_split_k_tgs\"") >= 0, knees, "the section carries the knees only where a knee race ran (knees {knees}):\n{text}")
+                t |> success(find(text, "mulmm_q8") >= 0, "... and the crown list it was handed")
+                check_box_file(t, path, wrote)
+            }
+            put_back(before)
         }
     }
     t |> run("under an explicit manifest the hook stands down") @(t : T?) {
         with_temp_sidecar(t) $(_path) {
             t |> equal("", dasllama_box_runtime_file(), "a chosen manifest keeps the process off the box file")
+        }
+    }
+}
+
+[test(description = "The per-box runtime file's race writes a file the apply reads with no kernels section, and a child with no manifest races into its home's box file while a child on the reference policy writes nothing")]
+def test_box_runtime_file_is_raced(t : T?) {
+    return if (full_suite_only(t, "the box file's race runs the Metal ladders, and each of its two children compiles the engine"))
+    t |> run("the race writes a file the apply reads, valid for these kernels") @(t : T?) {
+        with_job_que() {
+            let before = raced_knobs()
+            let path = box_file_scratch()
+            check_box_file(t, path, dasllama_box_runtime_race(path, dasllama_kernel_sources_digest()))
+            put_back(before)
         }
     }
     t |> run("a run with no manifest races into the home's box file; the reference policy stands down") @(t : T?) {

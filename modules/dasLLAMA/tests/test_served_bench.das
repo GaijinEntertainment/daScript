@@ -636,7 +636,7 @@ def private runner_args(dir, config : string; more : array<string>) : RunnerArgs
         server_engine = "fake")
     args.model <- ["stub"]
     args.server_arg <- [get_das_exe(), path_join(get_das_root(), "modules/dasLLAMA/tests/_fake_chat_root.das"), "-dasroot", get_das_root(), "--",
-        "--port", "\{port\}", "--name", "\{gguf\}"]
+        "--word-ms", "20", "--port", "\{port\}", "--name", "\{gguf\}"]
     args.server_arg |> push_from(more)
     return <- args
 }
@@ -769,10 +769,24 @@ def private runner_failures_cell(t : T?; dir, config_path : string) {
     delete config
 }
 
-[test(description = "The model bench runner builds each server's and the bench's command lines from its flags and the config, joins the bench's run files, and - against the fake chat server as a child process - runs a model's plain and arm starts into one card, and fails a model whose server exits, names another model, finds its port taken, or whose file is missing", timeout = 1200)]
-def test_model_bench_runner(t : T?) {
-    let dir = path_join(test_temp_dir(), "model_bench_runner_{ref_time_ticks()}")
+//! a folder of its own for a runner test, the stub model's and its drafter's files in it
+def private runner_test_dir(name : string) : string {
+    let dir = path_join(test_temp_dir(), "{name}_{ref_time_ticks()}")
     mkdir_rec(dir)
+    fwrite(path_join(dir, "stub.gguf"), "x")
+    fwrite(path_join(dir, "d.gguf"), "x")
+    return dir
+}
+
+def private runner_test_done(dir, config_path : string) {
+    remove(config_path)
+    var err = ""
+    rmdir_rec(dir, err)
+}
+
+[test(description = "The model bench runner builds each server's and the bench's command lines from its flags and the config, and joins the bench's run files")]
+def test_model_bench_runner(t : T?) {
+    let dir = runner_test_dir("model_bench_runner")
     let config_path = bench_test_config(t, "model_bench_runner")
     t |> run("the command lines") @(t : T?) {
         runner_lines_cell(t, dir, config_path)
@@ -780,15 +794,21 @@ def test_model_bench_runner(t : T?) {
     t |> run("two run files join into one") @(t : T?) {
         runner_join_cell(t, dir)
     }
-    fwrite(path_join(dir, "stub.gguf"), "x")
-    fwrite(path_join(dir, "d.gguf"), "x")
-    t |> run("a model's plain and arm starts against the fake: one card with every row") @(t : T?) {
-        runner_card_cell(t, dir, config_path)
-    }
-    t |> run("a model fails when its server exits, names another model, finds the port taken, or has no file") @(t : T?) {
-        runner_failures_cell(t, dir, config_path)
-    }
-    remove(config_path)
-    var err = ""
-    rmdir_rec(dir, err)
+    runner_test_done(dir, config_path)
+}
+
+[test(description = "Against the fake chat server as a child process, the model bench runner runs a model's plain and arm starts into one card carrying every row", timeout = 1200)]
+def test_model_bench_runner_card(t : T?) {
+    let dir = runner_test_dir("model_bench_runner_card")
+    let config_path = bench_test_config(t, "model_bench_runner_card")
+    runner_card_cell(t, dir, config_path)
+    runner_test_done(dir, config_path)
+}
+
+[test(description = "Against the fake chat server as a child process, the model bench runner fails a model whose server exits, names another model, finds its port taken, or whose file is missing", timeout = 1200)]
+def test_model_bench_runner_failures(t : T?) {
+    let dir = runner_test_dir("model_bench_runner_failures")
+    let config_path = bench_test_config(t, "model_bench_runner_failures")
+    runner_failures_cell(t, dir, config_path)
+    runner_test_done(dir, config_path)
 }

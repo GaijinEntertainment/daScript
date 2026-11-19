@@ -17,6 +17,8 @@ require dastest/fs
 require strings
 require math
 require dasllama/dasllama_env
+require _child_run   // child_exe_ensure: the test child's exe, built before the run's first child
+require dastest/kill_switch   // KILL_SWITCH_EXIT_CODE: the exit of a child its test wall ended
 require ../performance/box_ident.das   // derive_box_name — hardware-keyed, engine-free
 require ../../../utils/common/text_lines.das   // split_trimmed: the comma lists
 
@@ -36,7 +38,7 @@ struct RunArgs {
     full : bool
 
     @clarg_short = "s"
-    @clarg_doc = "Suite: decode | mtp | prefill | matrix | kernels | image | image-vulkan | coverage | model-free | stocked | wasm | all (default all; all excludes image-vulkan, model-free, stocked and wasm)"
+    @clarg_doc = "Suite: decode | mtp | prefill | matrix | kernels | gpu-kernels | image | image-vulkan | coverage | model-free | stocked | wasm | all (default all; all excludes image-vulkan, gpu-kernels, model-free, stocked and wasm). gpu-kernels is the Vulkan and CUDA device kernel files: no model, and no test wall - a device's first compile of a kernel is the driver's time, which no test wall admits on a box that never ran it; the stocked suite runs them first"
     suite : string = "all"
 
     @clarg_short = "x"
@@ -65,8 +67,8 @@ struct RunArgs {
     nreps : int = 1
 
     @clarg_short = "b"
-    @clarg_doc = "Files per child (default 10): past 1 the child compiles its files as ONE program (dastest --together), so the engine's parse and JIT are paid once a batch and each file still reports as its own; a batch that dies before every file's verdict reruns the files without one, one child each. The image suite's child always runs alone; 1 = one child a file"
-    batch : int = 10
+    @clarg_doc = "Files per child (default the whole suite in one child on the model-free suite, 10 on any other run): past 1 the child compiles its files as ONE program (dastest --together), so the engine's parse and JIT are paid once a batch and each file still reports as its own; a batch that dies before every file's verdict reruns the files without one, one child each - under a test wall it stops the run instead. The image suite's child always runs alone; 1 = one child a file"
+    batch : int = 0
     @clarg_name = "no-tune"
     @clarg_doc = "Short-circuit the [tune] framework in every child (DAS_TUNE_POLICY=reference): the reference bodies run — the portable tier's arm"
     no_tune : bool
@@ -74,6 +76,14 @@ struct RunArgs {
     @clarg_name = "reap-images"
     @clarg_doc = "After every child, delete the prepared images (.dlim) and save temp files (.tmp) under the models directory that were not there when the run started - for a box whose run alone writes that directory (a fleet pod's own folder of links), so a suite's mints never fill its disk"
     reap_images : bool
+    @clarg_name = "test-wall"
+    @clarg_doc = "One [test] function's wall in seconds for this run, in place of the suite's own (30 in the model-free suite, none elsewhere); 0 runs with no wall. The REPORT line carries a wall given here, so a relaxed run cannot read as a plain one"
+    test_wall : int = -1
+    @clarg_doc = "Start no child before the run's Nth (counted from 0): the resume of a run a wall stopped, on the N its WALL line names. The REPORT line carries it, so a resumed run cannot read as a whole one"
+    skip : int = 0
+    @clarg_name = "stop-file"
+    @clarg_doc = "A marker shared by the boxes of one run (a fleet's shards): the run that sees a test past the wall writes it, and a run that finds it starts no further child, so one box at the wall ends every box's run"
+    stop_file : string
     @clarg_name = "poison-kv"
     @clarg_doc = "Start every child's K/V slabs as NaN (DASLLAMA_KV_INIT=poison): a read of a row no store wrote reaches the logits as NaN and reds its cell - the run a change to a K/V store or reader cites. Every session then touches its whole slab, so the run's memory is not the product's"
     poison_kv : bool
@@ -105,6 +115,12 @@ def suite_files(name : string) : array<string> {   // nolint:STYLE038 - a flat s
                     "modules/dasLLAMA/tests/test_metal_gemv_kernels.das",
                     "modules/dasLLAMA/tests/test_metal_misc_kernels.das",
                     "modules/dasLLAMA/tests/test_metal_gemm_kernels.das" ]
+    } elif (name == "gpu-kernels") {
+        return <- [ "modules/dasLLAMA/tests/test_vulkan_kernels.das",
+                    "modules/dasLLAMA/tests/test_vulkan_kernels_attn.das",
+                    "modules/dasLLAMA/tests/test_vulkan_kernels_gemm.das",
+                    "modules/dasLLAMA/tests/test_vulkan_moe_cm2.das",
+                    "modules/dasLLAMA/tests/test_cuda_kernels.das" ]
     } elif (name == "image") {
         return <- [ "modules/dasLLAMA/tests/test_model_image.das" ]
     } elif (name == "image-vulkan") {
@@ -182,14 +198,9 @@ def suite_files(name : string) : array<string> {   // nolint:STYLE038 - a flat s
                     "modules/dasLLAMA/tests/test_vulkan_tts_kernels.das",
                     "modules/dasLLAMA/tests/test_vulkan_tts_pocket_kernels.das",
                     "modules/dasLLAMA/tests/test_vulkan_tts_source_kernels.das",
-                    "modules/dasLLAMA/tests/test_vulkan_kernels.das",
-                    "modules/dasLLAMA/tests/test_vulkan_kernels_attn.das",
-                    "modules/dasLLAMA/tests/test_vulkan_kernels_gemm.das",
-                    "modules/dasLLAMA/tests/test_vulkan_moe_cm2.das",
                     "modules/dasLLAMA/tests/test_vulkan_host_twin.das",
                     "modules/dasLLAMA/tests/test_vulkan_tier.das",
                     "modules/dasLLAMA/tests/test_vulkan_shared_device.das",
-                    "modules/dasLLAMA/tests/test_cuda_kernels.das",
                     "modules/dasLLAMA/tests/test_cuda_tower_front.das",
                     "modules/dasLLAMA/tests/test_cuda_tower_blocks.das",
                     "modules/dasLLAMA/tests/test_cuda_tower_asr.das",
@@ -605,9 +616,17 @@ struct Reach {
     note : string           //! why a path runs nothing, "" when it runs something or lies outside the module
 }
 
+//! the files that load no model: the model-free suite, and the device kernel files (`gpu-kernels`) the test wall keeps
+//! out of it. Non-private: test_run_suites.das pins the census
+def free_files() : array<string> {
+    var files <- suite_files("model-free")
+    files |> push_from(suite_files("gpu-kernels"))
+    return <- files
+}
+
 //! the llm area's model-free files - the kernel cells and the units every engine change reaches
 def private llm_model_free() : array<string> {
-    let free <- suite_files("model-free")
+    let free <- free_files()
     return <- [for (name in area_tests("llm")); name; where find_index(free, "{TESTS_DIR}/{name}") >= 0]
 }
 
@@ -656,7 +675,7 @@ def tests_requiring(stem : string) : array<string> {
             }
         }
     }
-    var listed <- suite_files("model-free")
+    var listed <- free_files()
     listed |> push_from(suite_files("stocked"))
     let census <- {for (f in listed); base_name(f) => null}   //! a model-suite file the fixture reaches takes --arm, not this run
     var files <- [for (name, stems in keys(requires), values(requires)); name; where key_exists(census, name) && any_reached(stems, reached)]
@@ -695,7 +714,7 @@ def reach_for_path(path : string) : Reach {
             }
             return <- r
         }
-        if (find_index(suite_files("model-free"), p) >= 0 || find_index(suite_files("stocked"), p) >= 0) {
+        if (find_index(free_files(), p) >= 0 || find_index(suite_files("stocked"), p) >= 0) {
             r.files |> push(name)
         } else {
             r.note = "a model suite file: run its suite with --arm scoped to the change"
@@ -778,14 +797,18 @@ def shard_files(files : array<string>; shard : string) : tuple<kept : array<stri
 // printing one — crash, kill, or compile error). A final line with no trailing newline counts:
 // a killed run's last bytes are exactly the ones worth reporting.
 // Non-private: test_run_summary.das gates it.
-def log_summary(log_path : string) : string {
-    var summary = ""
-    for (line in non_empty_lines(fread(log_path))) {
-        if (find(line, " tests, ") >= 0) {
-            summary = clone_string(line)
+def log_summary(log_path : string) : string => last_line_with(fread(log_path), " tests, ").line
+
+//! the last non-empty line of `text` that holds `needle`, and where in it the needle starts ("" and -1 where none does)
+def private last_line_with(text, needle : string) : tuple<line : string; at : int> {
+    var found = (line = "", at = -1)
+    for (line in non_empty_lines(text)) {
+        let at = find(line, needle)
+        if (at >= 0) {
+            found = (line = clone_string(line), at = at)
         }
     }
-    return summary
+    return found
 }
 
 //! the PASS and FAIL file sets of a dastest log, by base name - a tty color code may sit ahead of the word - and
@@ -889,7 +912,7 @@ def private changed_paths(base : string) : array<string> {
 //! the files an area list runs, as runner paths: every area file (deduplicated, sorted) that the
 //! model-free or stocked census lists; returns the image-suite arm tokens the areas own too
 def area_plan(areas : array<string>) : tuple<files : array<string>; image_arms : string> {
-    let free <- suite_files("model-free")
+    let free <- free_files()
     let stocked <- suite_files("stocked")
     var picked : table<string; void?>
     var arms : array<string>
@@ -1005,10 +1028,40 @@ def private describe_reach(r : Reach) : string {
     return empty(r.areas) ? what : "{what}{sep}areas {join(r.areas, ",")} whole"
 }
 
+//! a `[test]` function's wall in seconds in the suites the wall is armed for: past it the test is a red that ends the run
+let MODEL_FREE_BATCH = 1000   //! the whole suite one program: no file loads a model, and a file costs a context's clone, so one parse and one JIT serve them all
+//! on Windows a batch's JIT DLL exports over two symbols a function and a DLL holds 65,535 exports: the suite whole
+//! does not link as one DLL, nor does a batch of thirty of its files; twenty do
+let MODEL_FREE_BATCH_WINDOWS = 20
+let MODEL_BATCH = 10
+let TEST_WALL_SECONDS = 30
+//! the exit code of a child its kill switch ended: a test past `--test-wall` (dastest's `kill_switch.das`)
+//! files a child: `--batch`, else `MODEL_FREE_BATCH` on the model-free suite (`MODEL_FREE_BATCH_WINDOWS` on Windows) and
+//! `MODEL_BATCH` on any other run
+def batch_files(cfg : RunArgs) : int
+    => (cfg.batch > 0 ? cfg.batch
+        : (cfg.suite != "model-free" ? MODEL_BATCH : (get_platform_name() == "windows" ? MODEL_FREE_BATCH_WINDOWS : MODEL_FREE_BATCH)))
+
+//! a child's per-test wall in seconds, 0 = none: the run's own (`--test-wall`), else the model-free suite's outside the
+//! full suite (DASLLAMA_PARITY_FULL=1), whose cells are the ones no wall admits
+def wall_seconds(cfg : RunArgs) : int => wall_seconds_in(cfg, parity_full_mode())
+
+//! `wall_seconds` where `full` says whether the run is the full suite. Non-private: test_run_suites.das pins both
+def wall_seconds_in(cfg : RunArgs; full : bool) : int
+    => cfg.test_wall >= 0 ? cfg.test_wall : ((cfg.suite == "model-free" && !full) ? TEST_WALL_SECONDS : 0)
+
+//! the line a child's kill switch printed as it ended the process ("" where the log holds none). Non-private:
+//! test_run_suites.das gates it
+def log_wall_line(log_text : string) : string {
+    let said = last_line_with(log_text, "kill switch: ")
+    return said.at < 0 ? "" : slice(said.line, said.at)
+}
+
 //! a child's dastest timeout in seconds: the full gate, the stocked gate and --changed (the stocked files a change
 //! reaches) hold the large tier's tails - the parity file alone runs past 20 min there, the llama resident file's
 //! CPU chains past 1200 s on a cold JIT cache; 1200 s is the arm-mode budget
-def child_timeout(cfg : RunArgs) : int => (cfg.full || cfg.suite == "stocked" || cfg.changed) ? 3600 : 1200
+def child_timeout(cfg : RunArgs) : int
+    => (cfg.full || cfg.suite == "stocked" || cfg.suite == "gpu-kernels" || cfg.changed) ? 3600 : 1200
 
 //! the suite forms' argument contract: 0 = run, else main's exit code
 def check_suite_args(cfg : RunArgs) : int {
@@ -1016,7 +1069,7 @@ def check_suite_args(cfg : RunArgs) : int {
         to_log(LOG_ERROR, "--no-tune sets DASLLAMA_IMAGE=0 in every child, so it cannot drive the image suites - drop --no-tune or pick another suite\n")
         return 2
     }
-    if (cfg.suite == "model-free" || cfg.suite == "stocked" || cfg.suite == "wasm") {
+    if (cfg.suite == "model-free" || cfg.suite == "gpu-kernels" || cfg.suite == "stocked" || cfg.suite == "wasm") {
         if (cfg.full || !empty(cfg.arm)) {   //! the per-PR gates have no arms to scope: a filter would silently shrink them
             to_log(LOG_ERROR, "--suite {cfg.suite} takes neither --arm nor --full: it is a whole per-PR gate (--exclude names what it drops)\n")
             return 2
@@ -1038,7 +1091,11 @@ def plan_files(cfg : RunArgs; areas : array<string>) : tuple<files : array<strin
     if (!empty(areas)) {
         return <- area_plan(areas)
     }
-    return <- (files <- suite_files(cfg.suite), image_arms = cfg.arm)
+    var files <- suite_files(cfg.suite == "stocked" ? "gpu-kernels" : cfg.suite)
+    if (cfg.suite == "stocked") {   //! the device kernel files first: the box's kernels compiled before a model's cell asks for one
+        files |> push_from(suite_files("stocked"))
+    }
+    return <- (files <- files, image_arms = cfg.arm)
 }
 
 def private temp_dir() : string {
@@ -1053,6 +1110,7 @@ struct RunTally {
     failures : int
     skipped : int
     failed_tags : array<string>
+    walled : string   //! why the run stopped short - a test past the wall, a batch without its verdicts ("" = it ran to its end)
 }
 
 //! the per-test cache folder of the run's binary, and the folders of earlier binaries removed when the run is
@@ -1154,6 +1212,17 @@ def image_set(dir : string) : table<string> {
     return <- {for (name in image_files(dir)); name}
 }
 
+//! the images a reaping run (`--reap-images`) leaves alone: the ones there as it starts. A run that reaps nothing walks
+//! no models directory - the walk is every file under it, and on a pod that is the network volume. Non-private:
+//! test_run_suites.das pins it
+def images_at_start(cfg : RunArgs; models : string) : table<string> {
+    var kept : table<string>
+    if (cfg.reap_images) {
+        kept <- image_set(models)
+    }
+    return <- kept
+}
+
 //! every image and save temp file under `dir` that `kept` - the names there when the run started - does not hold, removed:
 //! how many, and their bytes. Non-private: test_run_suites.das pins it
 def reap_images(dir : string; kept : table<string>) : tuple<count : int; bytes : int64> {
@@ -1192,12 +1261,118 @@ def private log_missing_models(files : array<string>) {
 
 //! one dastest child per file, `--nreps` times. On an area run the image suite's child gets the
 //! areas' arms and every other child none; a suite run passes --arm through to every child
+//! A child that ended red, by its log - true where it ends the run, no later file and no retry: a test past the wall, or
+//! under a wall (`wall` > 0) a batch without every file's verdict - its root failed, or it died midway; `--batch 1` is
+//! the run that finds the file. Else a lone file is the red, and a batch's verdicts are counted (`count_batch`)
+def private red_child(cfg : RunArgs; wall : int; tag : string; chunk : array<string>; log_path : string; rc, at : int;
+                      var tally : RunTally; var retry : array<string>) : bool {
+    if (rc == KILL_SWITCH_EXIT_CODE) {
+        let said = log_wall_line(fread(log_path))
+        stop_run(cfg, tag, "WALL", empty(said) ? "a child ended with the kill switch's exit code {rc}" : said, at, tally)
+        return true
+    }
+    let n = length(chunk)
+    if (n == 1) {
+        tally.failures++
+        tally.failed_tags |> push(tag)
+        return false
+    }
+    let verdicts <- log_verdicts(log_path)
+    let have = length(verdicts.passed) + length(verdicts.failed)
+    if (wall > 0 && (verdicts.root_failed || have != n)) {
+        tally.failures += length(verdicts.failed)
+        tally.failed_tags |> push_from(verdicts.failed)
+        let got = verdicts.root_failed ? "its root failed, no file ran" : "{have} of {n} files have a verdict"
+        stop_run(cfg, tag, "LOST", "the batch ended with exit {rc}: {got} (read its log)", at, tally)
+        return true
+    }
+    count_batch(tag, chunk, verdicts, rc, tally, retry)
+    return false
+}
+
+//! a red batch's verdicts: each file's own counts, the files that have none rerun alone (`retry`), and - every file
+//! passed, the exit still red - the batch is its own red
+def private count_batch(tag : string; chunk : array<string>; verdicts : tuple<passed : array<string>; failed : array<string>; root_failed : bool>;
+                        rc : int; var tally : RunTally; var retry : array<string>) {
+    let n = length(chunk)
+    if (verdicts.root_failed) {
+        // the root failed to compile or to simulate, or refused the list: no file ran, every file reruns alone
+        to_log(LOG_WARNING, "RETRY {tag}: the batch's root failed - its {n} files run one child each\n")
+        retry |> push_from(chunk)
+        return
+    }
+    tally.failures += length(verdicts.failed)
+    tally.failed_tags |> push_from(verdicts.failed)
+    if (empty(verdicts.failed) && length(verdicts.passed) == n) {
+        // every file passed and the child still exited red - a crash at its shutdown: the batch's own red
+        tally.failures++
+        tally.failed_tags |> push("{tag} (exit {rc} after every verdict)")
+    }
+    for (f in chunk) {
+        let b = base_name(f)
+        if (find_index(verdicts.passed, b) < 0 && find_index(verdicts.failed, b) < 0) {
+            to_log(LOG_WARNING, "RETRY {b}: the batch {tag} ended without its verdict - it runs alone\n")
+            retry |> push(f)
+        }
+    }
+}
+
+//! true where a run already stopped under the run's stop file (`--stop-file`) - another box's, or an earlier run's on
+//! the same file: `tag` is not run and the tally says why and how to clear it
+def private stopped_by_marker(cfg : RunArgs; tag : string; var tally : RunTally) : bool {
+    return false if (empty(cfg.stop_file) || !fexist(cfg.stop_file))
+    tally.walled = "stopped before {tag}: a run stopped under this stop file - remove {cfg.stop_file}, or drop --stop-file, to run"
+    tally.failures++
+    tally.failed_tags |> push("{tag} (not run: the run was stopped)")
+    to_log(LOG_ERROR, "WALL {tally.walled}\n")
+    return true
+}
+
+//! the run ends at the child `tag`, the run's `at`th, for `why`: the tally takes it, the run's stop marker (`--stop-file`)
+//! is written for the run's other boxes, and the line to resume on is said. `kind` names the stop in the lines
+def private stop_run(cfg : RunArgs; tag, kind, why : string; at : int; var tally : RunTally) {
+    tally.walled = why
+    to_log(LOG_ERROR, "{kind} {tag}: {why} - the run stops here, no later file runs\n")
+    let marked = !empty(cfg.stop_file)
+    let clear = marked ? "remove {cfg.stop_file}, then " : ""
+    to_log(LOG_ERROR, "RESUME once it is fixed: {clear}this command with --skip {at}\n")
+    if (marked && !fexist(cfg.stop_file)) {
+        fwrite(cfg.stop_file, "{tag}: {why}\n")
+    }
+    tally.failures++
+    tally.failed_tags |> push("{tag} ({kind})")
+}
+
+//! true where the test child's exe and the entry program's compile record are current for a run over `files` - built
+//! here, on the run's own binary, where a file takes either (`child_verb_cmd`, `child_compile_cache`) and none current
+//! stands; false, said, where a build failed
+def private child_exe_ready(cfg : RunArgs; files : array<string>) : bool {
+    return true if (!empty(cfg.das))   //! a dry run on another binary runs no test of this tree: nothing to build
+    var spawns = false
+    for (f in files) {
+        let text = fread(f)
+        spawns ||= find(text, "child_verb_cmd(") >= 0 || find(text, "child_compile_cache(") >= 0
+    }
+    return true if (!spawns)
+    let t0 = ref_time_ticks()
+    let why = child_exe_ensure()
+    let secs = double(get_time_nsec(t0)) / 1000000000.0lf
+    if (!empty(why)) {
+        to_log(LOG_ERROR, "CHILD {why}\n")
+        return false
+    }
+    to_log(LOG_INFO, "CHILD the test child's exe and the entry program's compile record are current ({secs}s)\n")
+    return true
+}
+
 def private run_files(cfg : RunArgs; files : array<string>; image_arms : string; area_run : bool) : RunTally {
     let tmp = temp_dir()
     let win = get_platform_name() == "windows"
     let envs = child_envs(cfg, win, cfg.arm)
     let image_envs = child_envs(cfg, win, image_arms)
     let tmo = child_timeout(cfg)
+    let wall = wall_seconds(cfg)
+    let wall_flag = wall > 0 ? " --test-wall {wall}" : ""
     let reps = max(cfg.nreps, 1)
     let das_exe = empty(cfg.das) ? get_command_line_arguments()[0] : cfg.das
     mkdir(dir_name(MODULE_CACHE))
@@ -1205,19 +1380,26 @@ def private run_files(cfg : RunArgs; files : array<string>; image_arms : string;
     let cache_flag = empty(cache_dir) ? "" : " --module-cache-dir {cache_dir}"
     to_log(LOG_INFO, empty(cache_dir) ? "CACHE none - the binary could not be stat'd, every child parses the engine\n" : "CACHE {cache_dir}\n")
     let models = models_dir_resolved()
-    let kept_images <- image_set(models)
+    let kept_images <- images_at_start(cfg, models)
     var tally : RunTally
     for (rep in range(reps)) {
         let rep_tag = reps > 1 ? " rep {rep + 1}/{reps}" : ""
         var inscope retry : array<string>
-        for (chunk in child_chunks(files, max(cfg.batch, 1), area_run)) {
+        var inscope chunks <- child_chunks(files, batch_files(cfg), area_run)
+        for (chunk, at in chunks, count()) {
             let n = length(chunk)
+            let seat = "child {at}/{length(chunks)}"
             let tag = n == 1 ? base_name(chunk[0]) : "{base_name(chunk[0])}+{n - 1}"
+            if (at < cfg.skip) {
+                to_log(LOG_INFO, "SKIP {tag}: {seat}, before --skip {cfg.skip}\n")
+                continue
+            }
             let log_path = path_join(tmp, "dasllama_run_{tag}_{rep}_{ref_time_ticks()}.log")
             let file_envs = (area_run && tag == "test_model_image.das") ? image_envs : envs
             let file_args = n == 1 ? " --test \"{chunk[0]}\"" : join([for (f in chunk); " --together \"{f}\""], "")
-            let cmd = "{file_envs}\"{das_exe}\" -jit -module-cache {MODULE_CACHE} dastest/dastest.das --{file_args} --timeout {tmo * n}{cache_flag} > \"{log_path}\" 2>&1"
-            to_log(LOG_INFO, "START {tag}{rep_tag}: {cmd}\n")
+            return <- tally if (stopped_by_marker(cfg, tag, tally))
+            let cmd = "{file_envs}\"{das_exe}\" -jit -module-cache {MODULE_CACHE} dastest/dastest.das --{file_args} --timeout {tmo * n}{wall_flag}{cache_flag} > \"{log_path}\" 2>&1"
+            to_log(LOG_INFO, "START {tag}{rep_tag}: {seat}: {cmd}\n")
             let t0 = ref_time_ticks()
             let rc = unsafe(popen(cmd) $(f) {
                 let _drain = fread(f)   // output is redirected; drain keeps the pipe contract
@@ -1225,42 +1407,19 @@ def private run_files(cfg : RunArgs; files : array<string>; image_arms : string;
             let secs = double(get_time_nsec(t0)) / 1000000000.0lf
             let summary = log_summary(log_path)
             let verdict = !empty(summary) ? summary : "no dastest summary - the run died early (read the log)"
-            to_log(rc == 0 ? LOG_INFO : LOG_ERROR, "DONE {tag}: exit={rc} {verdict} elapsed={secs}s log={log_path}\n")
+            to_log(rc == 0 ? LOG_INFO : LOG_ERROR, "DONE {tag}: {seat} exit={rc} {verdict} elapsed={secs}s log={log_path}\n")
             tally.skipped += skipped_cells(summary)
             reap_after(cfg, models, kept_images, tag)
             continue if (rc == 0)
-            if (n == 1) {
-                tally.failures++
-                tally.failed_tags |> push(tag)
-                continue
-            }
-            let verdicts <- log_verdicts(log_path)
-            if (verdicts.root_failed) {
-                // the root failed to compile or to simulate, or refused the list: no file ran, every file reruns alone
-                to_log(LOG_WARNING, "RETRY {tag}: the batch's root failed - its {n} files run one child each\n")
-                retry |> push_from(chunk)
-                continue
-            }
-            tally.failures += length(verdicts.failed)
-            tally.failed_tags |> push_from(verdicts.failed)
-            if (empty(verdicts.failed) && length(verdicts.passed) == n) {
-                // every file passed and the child still exited red - a crash at its shutdown: the batch's own red
-                tally.failures++
-                tally.failed_tags |> push("{tag} (exit {rc} after every verdict)")
-            }
-            for (f in chunk) {
-                let b = base_name(f)
-                if (find_index(verdicts.passed, b) < 0 && find_index(verdicts.failed, b) < 0) {
-                    to_log(LOG_WARNING, "RETRY {b}: the batch {tag} ended without its verdict - it runs alone\n")
-                    retry |> push(f)
-                }
-            }
+            return <- tally if (red_child(cfg, wall, tag, chunk, log_path, rc, at, tally, retry))
         }
         if (!empty(retry)) {
             var single := cfg
             single.batch = 1
             single.nreps = 1
+            single.skip = 0
             tally += run_files(single, retry, image_arms, area_run)
+            return <- tally if (!empty(tally.walled))
         }
     }
     return <- tally
@@ -1380,6 +1539,12 @@ def private run_wasm(cfg : RunArgs; files : array<string>) : RunTally {
 //! the run's executor: the wasm suite's one release, else the dastest children
 def private run_plan(cfg : RunArgs; files : array<string>; image_arms : string; area_run : bool) : RunTally {
     return <- run_wasm(cfg, files) if (cfg.suite == "wasm" && !area_run)
+    if (!child_exe_ready(cfg, files)) {
+        var tally : RunTally
+        tally.failures = 1
+        tally.failed_tags |> push("the test child's exe")
+        return <- tally
+    }
     return <- run_files(cfg, files, image_arms, area_run)
 }
 
@@ -1387,25 +1552,29 @@ def operator +=(var a : RunTally; b : RunTally) {
     a.failures += b.failures
     a.skipped += b.skipped
     a.failed_tags |> push_from(b.failed_tags)
+    if (empty(a.walled)) {
+        a.walled = b.walled
+    }
 }
 
 //! `per` files a child, in order; alone: an area run's image file, a cant_/failed_/invalid_ file (a root requiring it fails
-//! whole) and a tier contract file (`TIER_CONTRACT_FILES`)
+//! whole) and a tier contract file (`TIER_CONTRACT_FILES`). A file that runs alone leaves the batch around it whole: its
+//! neighbours ride one child, not one each
 def child_chunks(files : array<string>; per : int; area_run : bool) : array<array<string>> {
     var chunks : array<array<string>>
     chunks |> reserve(length(files) / max(per, 1) + 1)
     var cur : array<string>
     for (f in files) {
         let b = base_name(f)
-        let alone = (area_run && b == "test_model_image.das") || is_expected_failure_test(f) || has_value(TIER_CONTRACT_FILES, b)
-        if (alone && !empty(cur)) {
-            chunks |> emplace(cur)
+        if ((area_run && b == "test_model_image.das") || is_expected_failure_test(f) || has_value(TIER_CONTRACT_FILES, b)) {
+            chunks |> emplace([f])
+            continue
         }
         if (empty(cur)) {
             cur |> reserve(per)
         }
         cur |> push(f)
-        if (alone || length(cur) >= per) {
+        if (length(cur) >= per) {
             chunks |> emplace(cur)
         }
     }
@@ -1415,12 +1584,27 @@ def child_chunks(files : array<string>; per : int; area_run : bool) : array<arra
     return <- chunks
 }
 
+//! what makes the run less than the plain run of its scope: a wall given by hand, the model-free suite's own wall lifted
+//! by the full suite (`full`), a resume
+def private scope_relaxed(cfg : RunArgs) : string => scope_relaxed_in(cfg, parity_full_mode())
+
+//! `scope_relaxed` where `full` says whether the run is the full suite. Non-private: test_run_suites.das pins it
+def scope_relaxed_in(cfg : RunArgs; full : bool) : string {
+    let lifted = cfg.test_wall < 0 && cfg.suite == "model-free" && full
+    return ((cfg.test_wall < 0 ? "" : (cfg.test_wall == 0 ? " no test wall" : " test wall {cfg.test_wall} s"))
+        + (lifted ? " full suite (DASLLAMA_PARITY_FULL=1): no test wall" : "")
+        + (cfg.skip > 0 ? " resumed at child {cfg.skip}" : ""))
+}
+
 //! the run tells the next step itself: what ran, what a missing model skipped, what is still owed
 def private print_report(cfg : RunArgs; areas : array<string>; n_files, n_excluded : int; tally : RunTally; core : bool) {
     let scope = ((cfg.changed ? "changed vs {cfg.base}" : (!empty(areas) ? "areas {join(areas, ",")}" : "suite {cfg.suite}"))
-        + (empty(cfg.only) ? "" : " only {cfg.only}") + (empty(cfg.shard) ? "" : " shard {cfg.shard}"))
+        + (empty(cfg.only) ? "" : " only {cfg.only}") + (empty(cfg.shard) ? "" : " shard {cfg.shard}") + scope_relaxed(cfg))
     let failed_list = empty(tally.failed_tags) ? "" : " ({join(tally.failed_tags, ", ")})"
     let excluded = n_excluded == 0 ? "" : ", {n_excluded} file(s) excluded"
+    if (!empty(tally.walled)) {
+        to_log(LOG_ERROR, "STOPPED, the files after it not run: {tally.walled}\n")
+    }
     to_log(tally.failures == 0 ? LOG_INFO : LOG_ERROR, "REPORT {scope}: {n_files} file(s), {tally.failures} failed{failed_list}, {tally.skipped} cell(s) skipped (a filtered arm, an absent device, or a missing model or fixture - each skips loudly){excluded}\n")
     if (!empty(cfg.shard)) {
         let n = to_int(split(cfg.shard, "/")[1])
