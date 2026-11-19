@@ -51,7 +51,10 @@ let Q8_BLOCK_BYTES = Q8_BLOCK_ELEMS + 2l   //! a block's bytes: its quants and t
 //! A K-quant 16-bit rows kernel's row scratch: the row's `n` int16 weights, then eight int16 mins a
 //! superblock, then two floats (d, dmin) a superblock.
 let X16_ROW_MINS_SB = 16l     //! bytes of mins a superblock
-let X16_ROW_SCALES_SB = 8l    //! bytes of scales a superblock
+let X16_ROW_SCALE_BYTES = 4l  //! one scale, widened to float
+let X16_ROW_SCALES_SB = 2l * X16_ROW_SCALE_BYTES   //! bytes of scales a superblock: d, then dmin
+let X16_SB_BYTES = 2l * KQ_SB_ELEMS   //! a superblock of int16 weights, or of an activation image
+let X16_DOT_BYTES = 16l       //! one dot operand: eight int16 lanes
 
 def x16_row_scratch_bytes(n : int64) : int64 =>
     2l * n + (X16_ROW_MINS_SB + X16_ROW_SCALES_SB) * (n / KQ_SB_ELEMS)

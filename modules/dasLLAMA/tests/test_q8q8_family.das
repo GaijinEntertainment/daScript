@@ -549,6 +549,14 @@ def private q8x16_gate(t : T?; n, ntok : int64) {
     }
 }
 
+let X16_SEAT_REQUIRES = "simd128|f16c,simd128|!avx2"   //! the 16-bit rows families' `requires=` (`dasllama_math_gen.das`)
+
+//! a 16-bit rows seat emits exactly where the build's class passes the families' gate and the run stamps kernels
+def private seat_follows_the_class(t : T?; seat : bool) {
+    let classSeat = tune_requires_ok(X16_SEAT_REQUIRES) && tune_policy_env() != "reference"
+    t |> equal(seat, classSeat, "a 16-bit rows seat emits where the build's class passes the rows' requires, and nowhere else")
+}
+
 def private skip_batch_legs_without_a_seat(t : T?; seat : bool) {
     t |> run("the batch entries' compares, where a seat emits") @(t : T?) {
         if (!seat) {
@@ -566,6 +574,7 @@ def test_q8x16_rows(t : T?) {
                 q8x16_gate(t, n, 7l)
             }
         }
+        seat_follows_the_class(t, q8x16_witness_gen())
         skip_batch_legs_without_a_seat(t, q8x16_witness_gen())
     }
 }
@@ -939,7 +948,7 @@ def private kqx16_gate(t : T?; fmt : KqFmt; n, d, ntok : int64) {
         let xsp = addr<float const?>(x.xs[0])
         kqx16_rows_reference(fmt, addr(rows[0]), kqp, ksp, addr<int16 const?>(x16[0]), xsp, addr<int16 const?>(xb16[0]),
             addr(scratch[0]), n, d, ntok)
-        served = kqx16_batch(id, addr(batch[0]), kqp, ksp, addr<int8 const?>(x.xq[0]), xsp,
+        served = kqx16_batch(fmt, addr(batch[0]), kqp, ksp, addr<int8 const?>(x.xq[0]), xsp,
             addr<int const?>(x.xbs[0]), n, d, ntok)
     }
     let shape = "n={n} d={d} ntok={ntok}"
@@ -972,6 +981,7 @@ def test_kqx16_rows(t : T?) {
             t |> run("{fmt}: an odd row count over four tokens") @(t : T?) {
                 kqx16_gate(t, fmt, 1024l, 33l, 4l)
             }
+            seat_follows_the_class(t, kqx16_witness(fmt))
             skip_batch_legs_without_a_seat(t, kqx16_witness(fmt))
         }
     }

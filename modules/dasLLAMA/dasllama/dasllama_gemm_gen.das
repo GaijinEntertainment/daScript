@@ -5407,9 +5407,20 @@ struct private X16Emit {
     nt : int    //! tokens abreast
 }
 
-[arch(at = "../ARCHITECTURE_CPU_KERNELS.md#wasm-x16-rows")]
-def private x16_target_serves(gc : LlvmCodeCtx) : bool =>
-    gc.jit.target.arch == JitTargetArch.wasm && LLVMLookupIntrinsicID("llvm.wasm.dot") != 0u
+[arch(at = "../ARCHITECTURE_CPU_KERNELS.md#x16-rows")]
+def private x16_dot_intrinsic(gc : LlvmCodeCtx) : string {
+    //! "" where the kernels do not emit
+    let target = gc.jit.target
+    return "llvm.wasm.dot" if (target.arch == JitTargetArch.wasm)
+    let x64 = target.arch == JitTargetArch.x64
+    return "llvm.x86.sse2.pmadd.wd" if (x64 && target.features.x64_f16c && !target.features.x64_avx2)
+    return ""
+}
+
+def private x16_target_serves(gc : LlvmCodeCtx) : bool {
+    let dot = x16_dot_intrinsic(gc)
+    return !empty(dot) && LLVMLookupIntrinsicID(dot) != 0u
+}
 
 //! the emit state of one 16-bit rows kernel, its builder at the function's entry block; `dot_decl` null where this LLVM lacks a call the kernels stand on
 def private x16_emit_begin(var gc : LlvmCodeCtx) : X16Emit {
@@ -5422,7 +5433,7 @@ def private x16_emit_begin(var gc : LlvmCodeCtx) : X16Emit {
     var noTypes : array<LLVMOpaqueType?>
     var sumTypes <- [e.v4i32]
     e.sum_decl = LLVMGetIntrinsicDeclaration(mod, LLVMLookupIntrinsicID("llvm.vector.reduce.add"), sumTypes)
-    e.dot_decl = e.sum_decl == null ? null : LLVMGetIntrinsicDeclaration(mod, LLVMLookupIntrinsicID("llvm.wasm.dot"), noTypes)
+    e.dot_decl = e.sum_decl == null ? null : LLVMGetIntrinsicDeclaration(mod, LLVMLookupIntrinsicID(x16_dot_intrinsic(gc)), noTypes)
     return e if (e.dot_decl == null)
     var dotArgs <- [e.v8i16, e.v8i16]
     e.dot_ty = LLVMFunctionType(e.v4i32, dotArgs)
@@ -5488,23 +5499,24 @@ def private x16_loop(e : X16Emit; var from, to : LLVMOpaqueValue?; step : int64;
 }
 
 //! the eight 6-bit (scale, min) pairs of a Q4_K scale block at `sp`, `k4_sc_mn`'s decode: the scales as i16 lane splats, the mins stored as i16 at `mdst`
-def private x16_k4_scales(var e : X16Emit; var sp, mdst : LLVMOpaqueValue?) : LLVMOpaqueValue? [8] {
+def private x16_k4_scales(var e : X16Emit; var sp, mdst : LLVMOpaqueValue?) : LLVMOpaqueValue? [K45_SUBS] {
     let i32 = e.types.t_int32
-    var by : LLVMOpaqueValue? [12]
-    for (k in range(12)) {
+    let half = K45_SUBS / 2
+    var by : LLVMOpaqueValue? [K45_PACK_BYTES]
+    for (k in range(K45_PACK_BYTES)) {
         by[k] = LLVMBuildZExt(e.b, LLVMBuildLoad2Aligned(e.b, e.types.t_int8, x16_at(e, sp, x16_const64(e, int64(k))), 1u, ""), i32, "")
     }
-    var sc : LLVMOpaqueValue? [8]
-    for (j in range(8)) {
+    var sc : LLVMOpaqueValue? [K45_SUBS]
+    for (j in range(K45_SUBS)) {
         var s, m : LLVMOpaqueValue?
-        if (j < 4) {
+        if (j < half) {
             s = LLVMBuildAnd(e.b, by[j], e.types->ConstI32(63ul), "")
-            m = LLVMBuildAnd(e.b, by[j + 4], e.types->ConstI32(63ul), "")
+            m = LLVMBuildAnd(e.b, by[j + half], e.types->ConstI32(63ul), "")
         } else {
-            let hiS = LLVMBuildShl(e.b, LLVMBuildLShr(e.b, by[j - 4], e.types->ConstI32(6ul), ""), e.types->ConstI32(4ul), "")
+            let hiS = LLVMBuildShl(e.b, LLVMBuildLShr(e.b, by[j - half], e.types->ConstI32(6ul), ""), e.types->ConstI32(4ul), "")
             let hiM = LLVMBuildShl(e.b, LLVMBuildLShr(e.b, by[j], e.types->ConstI32(6ul), ""), e.types->ConstI32(4ul), "")
-            s = LLVMBuildOr(e.b, LLVMBuildAnd(e.b, by[j + 4], e.types->ConstI32(15ul), ""), hiS, "")
-            m = LLVMBuildOr(e.b, LLVMBuildLShr(e.b, by[j + 4], e.types->ConstI32(4ul), ""), hiM, "")
+            s = LLVMBuildOr(e.b, LLVMBuildAnd(e.b, by[j + half], e.types->ConstI32(15ul), ""), hiS, "")
+            m = LLVMBuildOr(e.b, LLVMBuildLShr(e.b, by[j + half], e.types->ConstI32(4ul), ""), hiM, "")
         }
         LLVMBuildStoreAligned(e.b, LLVMBuildTrunc(e.b, m, e.types.t_int16, ""), x16_at(e, mdst, x16_const64(e, int64(j * 2))), 2u)
         var one = LLVMBuildInsertElement(e.b, LLVMGetUndef(e.v8i16), LLVMBuildTrunc(e.b, s, e.types.t_int16, ""), e.types->ConstI32(0ul), "")
@@ -5515,14 +5527,14 @@ def private x16_k4_scales(var e : X16Emit; var sp, mdst : LLVMOpaqueValue?) : LL
 
 //! one superblock of row weights as scaled i16 at `wdst`: quant q of sub-block j stored as q * scale j, weight order;
 //! `high_bit` is Q5_K, whose quant is the nibble and bit j of the element's byte past the 128 nibble bytes
-def private x16_k45_weights(var e : X16Emit; var qp, wdst : LLVMOpaqueValue?; sc : LLVMOpaqueValue? [8]; high_bit : bool) {
+def private x16_k45_weights(var e : X16Emit; var qp, wdst : LLVMOpaqueValue?; sc : LLVMOpaqueValue? [K45_SUBS]; high_bit : bool) {
     let mask = const_splat(e.types.t_int8, 16, 15ul)
     let four = const_splat(e.types.t_int8, 16, 4ul)
     let one = const_splat(e.types.t_int8, 16, 1ul)
     for (h in range(2)) {
         var hb : LLVMOpaqueValue?
         if (high_bit) {
-            hb = LLVMBuildLoad2Aligned(e.b, e.v16i8, x16_at(e, qp, x16_const64(e, int64(128 + h * 16))), 1u, "qh")
+            hb = LLVMBuildLoad2Aligned(e.b, e.v16i8, x16_at(e, qp, x16_const64(e, K4_QSB + int64(h * 16))), 1u, "qh")
         }
         for (js in range(4)) {
             var q = LLVMBuildLoad2Aligned(e.b, e.v16i8, x16_at(e, qp, x16_const64(e, int64(js * 32 + h * 16))), 1u, "q")
@@ -5558,7 +5570,7 @@ def private x16_k6_weights(var e : X16Emit; var qp, sp, wdst : LLVMOpaqueValue?)
         for (g in range(4)) {
             for (part in range(2)) {
                 var ql = LLVMBuildLoad2Aligned(e.b, e.v16i8, x16_at(e, qp, x16_const64(e, int64(half * 64 + (g & 1) * 32 + part * 16))), 1u, "ql")
-                var qh = LLVMBuildLoad2Aligned(e.b, e.v16i8, x16_at(e, qp, x16_const64(e, int64(128 + half * 32 + part * 16))), 1u, "qh")
+                var qh = LLVMBuildLoad2Aligned(e.b, e.v16i8, x16_at(e, qp, x16_const64(e, K6_QL_BYTES + int64(half) * (K6_QH_BYTES / 2l) + int64(part * 16))), 1u, "qh")
                 let lo = g < 2 ? LLVMBuildAnd(e.b, ql, mask, "") : LLVMBuildLShr(e.b, ql, four, "")
                 let hi = LLVMBuildShl(e.b, LLVMBuildAnd(e.b, LLVMBuildLShr(e.b, qh, const_splat(i8, 16, uint64(g * 2)), ""), three, ""), four, "")
                 var q = LLVMBuildSub(e.b, LLVMBuildOr(e.b, lo, hi, ""), bias, "q")
@@ -5594,8 +5606,8 @@ def private x16_tokens(var e : X16Emit; var t0, row : LLVMOpaqueValue?; ntk : in
         for (u in range(ntk)) {
             LLVMBuildStoreAligned(e.b, LLVMConstNull(e.v4i32), acc[u], 16u)
         }
-        var sbOff = LLVMBuildShl(e.b, sb, x16_const64(e, 9l), "")
-        x16_loop(e, LLVMConstNull(e.types.t_int64), x16_const64(e, 512l), 16l, "k") $(var k : LLVMOpaqueValue?) {
+        var sbOff = LLVMBuildMul(e.b, sb, x16_const64(e, X16_SB_BYTES), "")
+        x16_loop(e, LLVMConstNull(e.types.t_int64), x16_const64(e, X16_SB_BYTES), X16_DOT_BYTES, "k") $(var k : LLVMOpaqueValue?) {
             var off = LLVMBuildAdd(e.b, sbOff, k, "")
             var w = LLVMBuildLoad2Aligned(e.b, e.v8i16, x16_at(e, wrow, off), 2u, "w")
             for (u in range(ntk)) {
@@ -5610,7 +5622,7 @@ def private x16_tokens(var e : X16Emit; var t0, row : LLVMOpaqueValue?; ntk : in
         var minv, dm : LLVMOpaqueValue?
         if (mins) {
             minv = LLVMBuildLoad2Aligned(e.b, e.v8i16, x16_at(e, mrow, mOff), 2u, "mins")
-            dm = LLVMBuildLoad2Aligned(e.b, f32, x16_at(e, frow, LLVMBuildAdd(e.b, fOff, x16_const64(e, 4l), "")), 4u, "dm")
+            dm = LLVMBuildLoad2Aligned(e.b, f32, x16_at(e, frow, LLVMBuildAdd(e.b, fOff, x16_const64(e, X16_ROW_SCALE_BYTES), "")), 4u, "dm")
         }
         for (u in range(ntk)) {
             var isum = x16_lane_sum(e, LLVMBuildLoad2Aligned(e.b, e.v4i32, acc[u], 16u, ""))
@@ -5648,11 +5660,36 @@ def private x16_token_walk(e : X16Emit; var tMain, ntok : LLVMOpaqueValue?;
     }
 }
 
-[arch(at = "../ARCHITECTURE_CPU_KERNELS.md#wasm-x16-rows")]
-def private kqx16_rows_emit(var gc : LlvmCodeCtx; fmt : KqFmt) : bool {
-    let k6 = fmt == KqFmt.k6
+//! a format's scale block as its rows kernel reads it: the f16 d at `d_offset`, and dmin with eight mins after it where `keeps_mins`
+struct private X16Form {
+    d_offset : int64
+    keeps_mins : bool
+}
+
+def private x16_form(_f : KqTag_k4 | KqTag_k5) : X16Form => X16Form(d_offset = 0l, keeps_mins = true)
+
+def private x16_form(_f : KqTag_k6) : X16Form => X16Form(d_offset = K6_D_AT, keeps_mins = false)
+
+def private x16_high_bit(_f : KqTag_k4) : bool => false
+
+def private x16_high_bit(_f : KqTag_k5) : bool => true
+
+//! one superblock of row weights as scaled int16 at `wdst`, a Q4_K / Q5_K block's mins at `mdst`
+def private x16_row_weights(var e : X16Emit; var qsrc, sp, wdst, mdst : LLVMOpaqueValue?; f : KqTag_k4 | KqTag_k5) {
+    let sc = x16_k4_scales(e, x16_at(e, sp, x16_const64(e, K45_HEAD_BYTES)), mdst)
+    x16_k45_weights(e, qsrc, wdst, sc, x16_high_bit(f))
+}
+
+def private x16_row_weights(var e : X16Emit; var qsrc, sp, wdst, _mdst : LLVMOpaqueValue?; _f : KqTag_k6) {
+    x16_k6_weights(e, qsrc, sp, wdst)
+}
+
+[arch(at = "../ARCHITECTURE_CPU_KERNELS.md#x16-rows")]
+def private kqx16_rows_emit(var gc : LlvmCodeCtx; fmt : KqFmt; tag : KqTag_k4 | KqTag_k5 | KqTag_k6) : bool {
     let qsb = kq_qsb(fmt)
     let ssb = kq_ssb(fmt)
+    let form = x16_form(tag)
+    let scales = form.keeps_mins ? 2 : 1
     var e = x16_rows_begin(gc, 12)
     if (e.dot_decl == null) return false
     let i64 = e.types.t_int64
@@ -5673,8 +5710,8 @@ def private kqx16_rows_emit(var gc : LlvmCodeCtx; fmt : KqFmt) : bool {
         acc[u] = LLVMBuildAlloca(e.b, e.v4i32, "acc{u}")
         facc[u] = LLVMBuildAlloca(e.b, e.types.t_float, "facc{u}")
     }
-    var nsb = LLVMBuildLShr(e.b, n, x16_const64(e, 8l), "nsb")
-    var nb = LLVMBuildLShr(e.b, n, x16_const64(e, 5l), "nb")
+    var nsb = LLVMBuildUDiv(e.b, n, x16_const64(e, KQ_SB_ELEMS), "nsb")
+    var nb = LLVMBuildUDiv(e.b, n, x16_const64(e, KQ_B32_ELEMS), "nb")
     var mrow = x16_at(e, wrow, LLVMBuildShl(e.b, n, x16_const64(e, 1l), ""))
     var frow = x16_at(e, mrow, LLVMBuildMul(e.b, nsb, x16_const64(e, X16_ROW_MINS_SB), ""))
     var tMain = x16_whole_steps(e, ntok)
@@ -5685,31 +5722,35 @@ def private kqx16_rows_emit(var gc : LlvmCodeCtx; fmt : KqFmt) : bool {
             var sp = x16_at(e, ksrow, LLVMBuildMul(e.b, sb, x16_const64(e, ssb), ""))
             let half = LLVMHalfTypeInContext(e.ctx)
             var fdst = x16_at(e, frow, LLVMBuildMul(e.b, sb, x16_const64(e, X16_ROW_SCALES_SB), ""))
-            for (k in range(k6 ? 1 : 2)) {
-                var h = LLVMBuildLoad2Aligned(e.b, e.types.t_int16, x16_at(e, sp, x16_const64(e, int64(k6 ? 16 : k * 2))), 1u, "")
+            for (k in range(scales)) {
+                var h = LLVMBuildLoad2Aligned(e.b, e.types.t_int16, x16_at(e, sp, x16_const64(e, form.d_offset + int64(k * 2))), 1u, "")
                 var f = LLVMBuildFPExt(e.b, LLVMBuildBitCast(e.b, h, half, ""), e.types.t_float, "")
-                LLVMBuildStoreAligned(e.b, f, x16_at(e, fdst, x16_const64(e, int64(k * 4))), 4u)
+                LLVMBuildStoreAligned(e.b, f, x16_at(e, fdst, x16_const64(e, int64(k) * X16_ROW_SCALE_BYTES)), 4u)
             }
             var qsrc = x16_at(e, kqrow, LLVMBuildMul(e.b, sb, x16_const64(e, qsb), ""))
-            var wdst = x16_at(e, wrow, LLVMBuildShl(e.b, sb, x16_const64(e, 9l), ""))
-            if (k6) {
-                x16_k6_weights(e, qsrc, sp, wdst)
-            } else {
-                var mdst = x16_at(e, mrow, LLVMBuildMul(e.b, sb, x16_const64(e, X16_ROW_MINS_SB), ""))
-                var sc = x16_k4_scales(e, x16_at(e, sp, x16_const64(e, 4l)), mdst)
-                x16_k45_weights(e, qsrc, wdst, sc, fmt == KqFmt.k5)
-            }
+            var wdst = x16_at(e, wrow, LLVMBuildMul(e.b, sb, x16_const64(e, X16_SB_BYTES), ""))
+            var mdst = x16_at(e, mrow, LLVMBuildMul(e.b, sb, x16_const64(e, X16_ROW_MINS_SB), ""))
+            x16_row_weights(e, qsrc, sp, wdst, mdst, tag)
         }
         x16_token_walk(e, tMain, ntok) $(var t0 : LLVMOpaqueValue?; abreast : int) {
-            x16_tokens(e, t0, row, abreast, !k6, yp, x16, xsp, xb16, wrow, mrow, frow, n, d, nsb, nb, acc, facc)
+            x16_tokens(e, t0, row, abreast, form.keeps_mins, yp, x16, xsp, xb16, wrow, mrow, frow, n, d, nsb, nb, acc, facc)
         }
     }
     LLVMBuildRetVoid(e.b)
     return true
 }
 
-def private kqx16_rows_gen(var gc : LlvmCodeCtx) : bool =>
-    kqx16_rows_emit(gc, kq_fmt_of_id(kq_gen_fmt(gc), "kqx16_rows_gen"))
+//! a format with no 16-bit rows emitter
+def private kqx16_rows_emit(var _gc : LlvmCodeCtx; _fmt : KqFmt; _f : auto(TT)) : bool => false
+
+def private kqx16_rows_gen(var gc : LlvmCodeCtx) : bool {   // nolint:STYLE037 - kq_fmt_stamp's generated arms, one a format
+    let fmt = kq_fmt_of_id(kq_gen_fmt(gc), "kqx16_rows_gen")
+    var emitted = false
+    kq_fmt_stamp(fmt) $(F) {
+        emitted = kqx16_rows_emit(gc, fmt, F)
+    }
+    return emitted
+}
 
 //! `ntk` tokens from token `t0` of row `row` of a Q8_0 plane: each 32-block's four pair-sum lanes scaled into the token's four float lanes, the lanes summed in order at the row's end
 def private x16_q8_tokens(var e : X16Emit; var t0, row : LLVMOpaqueValue?; ntk : int; s16 : bool; var yp, wrow, srow, x16, xsp, n, d, nb : LLVMOpaqueValue?;
@@ -5724,8 +5765,8 @@ def private x16_q8_tokens(var e : X16Emit; var t0, row : LLVMOpaqueValue?; ntk :
         LLVMBuildStoreAligned(e.b, LLVMConstNull(e.v4f32), facc[u], 16u)
     }
     x16_loop(e, LLVMConstNull(e.types.t_int64), nb, 1l, "blk") $(var bi : LLVMOpaqueValue?) {
-        var wOff = LLVMBuildShl(e.b, bi, x16_const64(e, 5l), "")
-        var xOff = LLVMBuildShl(e.b, bi, x16_const64(e, 6l), "")
+        var wOff = LLVMBuildMul(e.b, bi, x16_const64(e, Q8_BLOCK_ELEMS), "")
+        var xOff = LLVMBuildMul(e.b, bi, x16_const64(e, 2l * Q8_BLOCK_ELEMS), "")
         var sums : LLVMOpaqueValue? [4]
         for (s in range(4)) {
             var w8 = LLVMBuildLoad2Aligned(e.b, v8i8, x16_at(e, wrow, LLVMBuildAdd(e.b, wOff, x16_const64(e, int64(s * 8)), "")), 1u, "")
@@ -5763,7 +5804,7 @@ def private x16_q8_tokens(var e : X16Emit; var t0, row : LLVMOpaqueValue?; ntk :
     }
 }
 
-[arch(at = "../ARCHITECTURE_CPU_KERNELS.md#wasm-x16-rows")]
+[arch(at = "../ARCHITECTURE_CPU_KERNELS.md#x16-rows")]
 def private q8x16_rows_gen(var gc : LlvmCodeCtx) : bool {
     var e = x16_rows_begin(gc, 10)
     if (e.dot_decl == null) return false
@@ -5783,7 +5824,7 @@ def private q8x16_rows_gen(var gc : LlvmCodeCtx) : bool {
     for (u in range(4)) {
         facc[u] = LLVMBuildAlloca(e.b, e.v4f32, "facc{u}")
     }
-    var nb = LLVMBuildLShr(e.b, n, x16_const64(e, 5l), "nb")
+    var nb = LLVMBuildUDiv(e.b, n, x16_const64(e, Q8_BLOCK_ELEMS), "nb")
     var tMain = x16_whole_steps(e, ntok)
     x16_loop(e, rb, re, 1l, "row") $(var row : LLVMOpaqueValue?) {
         var wrow = x16_at(e, wp, LLVMBuildMul(e.b, row, n, ""))

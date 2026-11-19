@@ -278,7 +278,7 @@ Each companion's sections are anchored by topic; a citation spells `<doc>.md#<an
   batch tile's lattice (`ARCHITECTURE_CPU_KERNELS.md#f32-batch-tile-lattice`) and the bf16 weight
   plane's matrix-unit family (`ARCHITECTURE_CPU_KERNELS.md#bf16-weight-tile-family`); the q8 chain's
   activation forms against the reference's
-  (`ARCHITECTURE_CPU_KERNELS.md#q8-activation-forms`); the 16-bit activation image the disk-order K-quant and q8 batch GEMMs read on wasm (`ARCHITECTURE_CPU_KERNELS.md#wasm-x16-rows`).
+  (`ARCHITECTURE_CPU_KERNELS.md#q8-activation-forms`); the 16-bit activation image the disk-order K-quant and q8 batch GEMMs read on wasm and on x86 without AVX2 (`ARCHITECTURE_CPU_KERNELS.md#x16-rows`).
 
 - `ARCHITECTURE_TTS.md` - the TTS block home's two layouts, tap stacking, the padded concat width, the served carrier
   on the image rail, the sine source's operation order, and the rig's scoring.
