@@ -4,6 +4,9 @@ options persistent_heap   // a dastest root frees what it deletes only on this h
 
 require dastest/testing_boost public
 require ../harness/pod_fleet.das
+require ../harness/class_mint_text.das
+require daslib/json
+require daslib/json_boost
 require daslib/command_line
 require daslib/fio
 require daslib/strings_boost
@@ -223,4 +226,20 @@ def test_float_a_gate(t : T?) {
         let r = spawn_compile("(float_a_ok=true)", "licensed")
         t |> equal(0, r.rc, "licensed fixture compiles: {slice(r.out, 0, 400)}")
     }
+}
+
+[test(description = "class_mint's text is one JSON object: the profile and the sidecar embedded whole where the mint finished, the error alone where a step failed, a quote in the reason escaped")]
+def test_class_mint_text(t : T?) {
+    var err = ""
+    var done = read_json(mint_result_text("\{\"kernels\": \{\"k\": \"nt4\"\}\}", "\{\"race\": \{\"k\": 1\}\}"), err)
+    t |> success(done != null, "a finished mint's text parses: {err}")
+    t |> equal(done?["profile"]?["kernels"]?["k"] ?? "", "nt4", "the profile rides whole")
+    t |> equal(done?["sidecar"]?["race"]?["k"] ?? 0.0lf, 1.0lf, "the sidecar rides whole, race tables included")
+    t |> equal(done?["error"] ?? "", "", "a finished mint carries no error")
+    delete_json(done)
+    var failed = read_json(mint_failure_text("the \"race\" failed"), err)
+    t |> success(failed != null, "a failed mint's text parses: {err}")
+    t |> equal(failed?["error"] ?? "", "the \"race\" failed", "the reason survives its quotes")
+    t |> equal(failed?["profile"]?["kernels"]?["k"] ?? "", "", "a failed mint carries no profile")
+    delete_json(failed)
 }
