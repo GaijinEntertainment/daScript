@@ -77,7 +77,7 @@ def jit_cli_compile_only() : bool =>
 
 var private g_cross_dump_noted = false
 
-[arch(at = "../ARCHITECTURE_TARGET_FEATURES.md#cross-class")]
+[arch(at = "../ARCHITECTURE_CPU_CLASSES.md#cross-class")]
 def tune_aot_gate() : bool {
     let classless_cross = !empty(get_target_triple()) && empty(jit_cross_class())
     let cross_dump = classless_cross && jit_cli_compile_only()
@@ -151,9 +151,34 @@ def set_tune_manifest_runtime_path(p : string) {
     g_runtime_manifest = p
 }
 
+let private MEMORY_SIDECAR_PATH = "<memory>"
+var private g_memory_sidecar_text = ""
+
+[arch(at = "../ARCHITECTURE_CPU_CLASSES.md#tune-memory-sidecar")]
+def set_tune_manifest_in_memory() {
+    //! Keep the sidecar in memory, starting it empty: the get/set APIs
+    //! read and write a text this process holds and touch no file.
+    to_log(LOG_INFO, "llvm_tune: set_tune_manifest_in_memory - the sidecar is a text"
+        + " in this process, no file is read or written\n")
+    g_runtime_manifest = MEMORY_SIDECAR_PATH
+    g_memory_sidecar_text = ""
+}
+
+//! The sidecar's text, "" where nothing has written one.
+def tune_manifest_text() : string => sidecar_read(tune_manifest_path())
+
+def private sidecar_read(path : string) : string =>
+    path == MEMORY_SIDECAR_PATH ? g_memory_sidecar_text : fread(path)
+
+def private sidecar_write(path, text : string) : bool {
+    return fwrite(path, text) if (path != MEMORY_SIDECAR_PATH)
+    g_memory_sidecar_text = text
+    return true
+}
+
 //! The file a forced build stamps from (`DAS_TUNE_FORCE`), "" when
 //! the build is not forced.
-[arch(at = "../ARCHITECTURE_TARGET_FEATURES.md#tune-forced-file")]
+[arch(at = "../ARCHITECTURE_CPU_CLASSES.md#tune-forced-file")]
 def tune_force_path() : string => strip(g_env_tune.tune_force)
 
 //! `path` is the forced file: no box or age check judges it
@@ -232,17 +257,24 @@ def private linux_cpu_brand() : string {
     return brand
 }
 
+def private tune_target_platform() : string {
+    let cross = get_cross_platform_name()
+    return cross if (!empty(cross))
+    let triple = get_target_triple()
+    return empty(triple) ? get_platform_name() : triple
+}
+
     //! This box's tune identity: platform|arch|model_id|os_build|cpu — a sidecar carrying a
     //! different identity reads as stale (the cross-box hazard). Always five fields, non-empty
     //! cpu (the schema requires it); os_build keeps its full value, `box_match_key` folds it.
-[arch(at = "../ARCHITECTURE_TARGET_FEATURES.md#cross-class")]
+[arch(at = "../ARCHITECTURE_CPU_CLASSES.md#cross-class")]
 def tune_box_identity() : string {
     if (!empty(g_box_identity)) {
         return g_box_identity
     }
     let cross = jit_cross_class()
     if (!empty(cross)) {
-        g_box_identity = "{get_cross_platform_name()}|{get_target_architecture_name()}|||{cross}"
+        g_box_identity = "{tune_target_platform()}|{get_target_architecture_name()}|||{cross}"
         return g_box_identity
     }
     var model_id = ""   // nolint:LINT003,LINT019 - only the macOS branch writes it, and a host compile with platform folding drops that branch
@@ -273,7 +305,7 @@ def tune_box_identity() : string {
     } elif (plat == "osx" || plat == "darwin") {   // get_platform_name says "darwin" on macOS
         var lines : array<string>
         unsafe(popen("sysctl -n hw.model kern.osversion machdep.cpu.brand_string 2>/dev/null") $(f) {
-            while (!feof(f)) {
+            while (f != null && !feof(f)) {
                 let ln = strip(fgets(f))
                 if (!empty(ln)) {
                     lines |> push(ln)
@@ -287,7 +319,9 @@ def tune_box_identity() : string {
         delete lines
     } else {
         unsafe(popen("uname -r 2>/dev/null") $(f) {
-            os_build = strip(fgets(f))
+            if (f != null) {
+                os_build = strip(fgets(f))
+            }
         })
         cpu = linux_cpu_brand()
     }
@@ -325,7 +359,7 @@ def private sidecar_box(path : string; mkey : string) : string {
         return g_box_cache[key]
     }
     var box = ""
-    let text = fread(path)
+    let text = sidecar_read(path)
     if (!empty(text)) {
         var err = ""
         var doc = read_json(text, err)
@@ -345,7 +379,7 @@ def private sidecar_box(path : string; mkey : string) : string {
 // a hand-edited sidecar may carry a number where tune_provenance_note writes strings — read both
 def private sidecar_prov_value(path : string; key : string) : string {
     var r = ""
-    let text = fread(path)
+    let text = sidecar_read(path)
     if (!empty(text)) {
         var err = ""
         var doc = read_json(text, err)
@@ -416,7 +450,7 @@ def private read_manifest(path : string; var found : bool&) : table<string; stri
     if (empty(path) || tune_sidecar_stale(path)) {
         return <- tab
     }
-    let text = fread(path)
+    let text = sidecar_read(path)
     if (empty(text)) {
         return <- tab
     }
@@ -451,16 +485,22 @@ def tune_manifest_get(fname : string) : string {
 
 var private g_cross_sidecar_noted = false
 
-def private cross_class_note() : string =>
-    "--jit-target={get_target_triple()} builds for the class {jit_cross_class()}"
+def private class_build_note() : string {
+    let baseline = jit_baseline_class()
+    let triple = get_target_triple()
+    return "DAS_JIT_BASELINE={baseline} builds for that class" if (empty(triple))
+    let target = "--jit-target={triple}"
+    return (empty(baseline) ? "{target} builds for the class {jit_cross_class()}"
+        : "{target} under DAS_JIT_BASELINE={baseline} builds for that class")
+}
 
-[arch(at = "../ARCHITECTURE_TARGET_FEATURES.md#cross-class")]
+[arch(at = "../ARCHITECTURE_CPU_CLASSES.md#cross-class")]
 def private stamp_manifest_path() : string {
     let mpath = tune_manifest_path()
     return mpath if (empty(jit_cross_class()) || is_forced(mpath))
     if (!g_cross_sidecar_noted && fexist(mpath)) {
         g_cross_sidecar_noted = true
-        to_log(LOG_INFO, "llvm_tune: {cross_class_note()} - the sidecar {mpath} does not stamp\n")
+        to_log(LOG_INFO, "llvm_tune: {class_build_note()} - the sidecar {mpath} does not stamp\n")
     }
     return ""
 }
@@ -580,7 +620,7 @@ def tune_kernel_pick(fname : string; var source : string&) : string {
 //! the kernel winners are the binary's); empty when another box's, exchange-adopted, or unreadable
 def private load_sidecar_doc(path : string) : JsonValue? {
     var doc : JsonValue?
-    let text = fread(path)
+    let text = sidecar_read(path)
     if (!empty(text)) {
         var err = ""
         doc = read_json(text, err)
@@ -619,9 +659,7 @@ def private save_sidecar_doc(path : string; var doc : JsonValue?) : bool {
             + " - nothing writes it\n")
         return false
     }
-    let cross_platform = get_cross_platform_name()
-    let platform = empty(cross_platform) ? get_platform_name() : cross_platform
-    var prov = JV((binary = tilde_home(running_binary()), platform = platform,
+    var prov = JV((binary = tilde_home(running_binary()), platform = tune_target_platform(),
         arch = get_target_architecture_name(), box = tune_box_identity(), written = iso8601_now(),
         features = tune_feature_fingerprint()))
     let old = doc?["provenance"]
@@ -644,7 +682,7 @@ def private save_sidecar_doc(path : string; var doc : JsonValue?) : bool {
         }
     }
     update(doc, "provenance", prov)
-    let ok = fwrite(path, write_json(doc, true))
+    let ok = sidecar_write(path, write_json(doc, true))
     if (ok) {
         // mtime is 1s-granular: a same-second re-read must not reuse a PRE-write box observation
         var sfs : FStat
@@ -745,12 +783,23 @@ def tune_sidecar_section_merge(section : string; var entries : table<string; Jso
     //! the sidecar's `"kernels"` plus origin/class/features provenance — race tables, runtime
     //! knobs and box identity stay behind. Check the file in under `[tune_scope(defaults=...)]`.
 def tune_profile_export(outPath : string; klass : string) : bool {
+    let text = tune_profile_text(klass)
+    return false if (empty(text))
+    let ok = fwrite(outPath, text)
+    print(ok ? "llvm_tune: profile '{klass}' exported -> {outPath}\n"
+             : "llvm_tune: profile export FAILED writing {outPath}\n")
+    return ok
+}
+
+def tune_profile_text(klass : string) : string {
+    //! `tune_profile_export`'s profile as text, "" where the sidecar
+    //! holds no kernels.
     var doc = load_sidecar_doc(tune_manifest_path())
     let ks = doc?["kernels"]
     if (ks == null || !(ks.value is _object) || empty(ks as _object)) {
         print("llvm_tune: profile export refused - no kernels in {tune_manifest_path()} (mint first, and check the sidecar is not stale)\n")
         delete_json(doc)
-        return false
+        return ""
     }
     var kernels <- {for (k, v in keys(ks as _object), values(ks as _object)); k => JV(v as _string); where v != null && v is _string}
     var prov : table<string; JsonValue?>
@@ -768,12 +817,11 @@ def tune_profile_export(outPath : string; klass : string) : bool {
     prov["class"] = JV(klass)
     prov["written"] = JV(iso8601_now())
     var out = JV({ "kernels" => JV(kernels), "provenance" => JV(prov) })
-    let ok = fwrite(outPath, write_json(out, true))
-    print(ok ? "llvm_tune: profile '{klass}' exported -> {outPath} ({length(ks as _object)} kernel entries)\n"
-             : "llvm_tune: profile export FAILED writing {outPath}\n")
+    let text = write_json(out, true)
+    print("llvm_tune: profile '{klass}': {length(ks as _object)} kernel entries\n")
     delete_json(out)
     delete_json(doc)
-    return ok
+    return text
 }
 
 // ===== the tune history (~/.tune-history) =====
@@ -837,7 +885,7 @@ def tune_history_archive(path : string; verdict : string; note : string) : strin
     var ok = false
     if (verdict == "ok") {
         dest = "{dir}/{stamp}_{stem}.tune.json"
-        let text = fread(path)
+        let text = sidecar_read(path)
         ok = !empty(text) && fwrite(dest, text)
     } else {
         dest = "{dir}/{stamp}_{stem}.FAILED.json"
@@ -1031,7 +1079,7 @@ def tune_library_built() : bool => tune_library_built_word() != 0
 
 //! A standalone library's `[init]` call: marks the artifact as a
 //! library.
-[arch(at = "../ARCHITECTURE_TARGET_FEATURES.md#fat-mode")]
+[arch(at = "../ARCHITECTURE_CPU_CLASSES.md#fat-mode")]
 def tune_library_init() {
     tune_library_built_set(1)
 }
@@ -1060,7 +1108,7 @@ def tune_fat_box_in_class(klass : string) : bool {
 
 //! A fat exe's `[init]`: refuse a box below the baseline, then set the mask to every class of the
 //! ladder this box is in - or the one `DAS_TUNE_FAT_CLASS` pins, when the box is in it.
-[arch(at = "../ARCHITECTURE_TARGET_FEATURES.md#fat-mode")]
+[arch(at = "../ARCHITECTURE_CPU_CLASSES.md#fat-mode")]
 def tune_fat_init(baseline : string) {
     let brow = jit_cpu_class_row(baseline)
     if (!tune_fat_box_in_class(baseline)) {
@@ -1167,7 +1215,7 @@ def private resolve_version_of(prog : Program?; spec, keyOverride : string;
 // read path itself is scope-independent (every module reads the app sidecar).
 var private g_scopes : table<string; TuneScope>
 
-[arch(at = "../ARCHITECTURE_TARGET_FEATURES.md#seatless-families")]
+[arch(at = "../ARCHITECTURE_CPU_CLASSES.md#seatless-families")]
 def private family_has_seat(annotations : AnnotationList) : bool {
     var inscope rows : array<string>
     for (ann in annotations) {
@@ -1546,8 +1594,8 @@ def tune_pick_fallback(chain : string) : string {
     return ""
 }
 
-let private TUNE_KNOWN_FEATURES = ("avx2;f16c;fma;sse4.2;avxvnni;avxvnniint8;avx512f;avx512bw;" +
-    "avx512vl;avx512vnni;avx512vbmi;avx512bf16;amx-tile;amx-int8;amx-bf16;amx-fp16;" +
+let private TUNE_KNOWN_FEATURES = ("avx;avx2;f16c;fma;sse4.2;avxvnni;avxvnniint8;avx512f;" +
+    "avx512bw;avx512vl;avx512vnni;avx512vbmi;avx512bf16;amx-tile;amx-int8;amx-bf16;amx-fp16;" +
     "neon;dotprod;i8mm;bf16;fullfp16;sve;lse;simd128")
 
     //! The ';'-joined subset of the known `requires=` feature names this box passes — stamped
@@ -1577,7 +1625,10 @@ def tune_cpu_class() : string {
         if (fallback_feature_ok("avxvnni")) {
             return "x86-vnni256"
         }
-        return fallback_feature_ok("avx2") ? "x86-avx2" : "x86-base"
+        if (fallback_feature_ok("avx2")) {
+            return "x86-avx2"
+        }
+        return (fallback_feature_ok("avx") && fallback_feature_ok("f16c")) ? "x86-avx" : "x86-base"
     }
     if (arch == "arm64" || arch == "aarch64") {
         if (fallback_feature_ok("i8mm")) {
@@ -1959,13 +2010,13 @@ def private emit_reference_registries(func : FunctionPtr; comps : array<TuneComp
     return ok
 }
 
-[arch(at = "../ARCHITECTURE_TARGET_FEATURES.md#cross-grid")]
+[arch(at = "../ARCHITECTURE_CPU_CLASSES.md#cross-grid")]
 def private stamped_rows(perms : array<TunePerm>) : array<TunePerm> {
-    let whole = empty(jit_cross_class())
+    let whole = empty(jit_target_class())
     return <- [for (p in perms); clone_to_move(p); where whole || perm_requires_ok(p)]
 }
 
-[arch(at = "../ARCHITECTURE_TARGET_FEATURES.md#seatless-families")]
+[arch(at = "../ARCHITECTURE_CPU_CLASSES.md#seatless-families")]
 def private grid_has_seat_in(perms : array<TunePerm>; klasses : array<string>) : bool {
     var inscope rows <- [for (p in perms); p.requires]
     for (klass in klasses) {
@@ -1978,7 +2029,7 @@ def private grid_has_seat_in(perms : array<TunePerm>; klasses : array<string>) :
     //! `DAS_TUNE_MODE=fat`: one `<name>__fat_<class>` clone per ship-set class, each stamped from its
     //! class's profile (else the fallback chain under the class's set), and the function's own body
     //! is the dispatch over `tune_fat_mask()`, baseline last: -exe, -lib.
-[arch(at = "../ARCHITECTURE_TARGET_FEATURES.md#fat-mode")]
+[arch(at = "../ARCHITECTURE_CPU_CLASSES.md#fat-mode")]
 def private stamp_fat(var func : FunctionPtr; genKey : string; perms : array<TunePerm>; var comps : array<TuneCompanion>;   // nolint:STYLE037 - one flat pass per class: pick, clone, companions, dispatch arm
                       args : AnnotationArgumentList; var errors : das_string) : bool {
     if (!tune_exe_gate()) {
@@ -2131,7 +2182,7 @@ def tune_apply(var func : FunctionPtr; var _group : ModuleGroup; // nolint:STYLE
         var rows <- stamped_rows(perms)
         if (length(rows) < length(perms)) {
             let kept = "{length(rows)} of {length(perms)} rows can run"
-            print("llvm_tune: [tune] {func.name}: {cross_class_note()} - {kept}\n")
+            print("llvm_tune: [tune] {func.name}: {class_build_note()} - {kept}\n")
         }
         delete perms
         if (empty(rows)) {
@@ -3004,7 +3055,7 @@ def tune_restart_needed(scopeName : string; manifestPath : string; tunerPath : s
 // final stamped truth per [tune] function, read off the AST (the tune_suffix/tune_from args
 // stamp_llvm_code records) — no macro-state bank, so shared-context reuse across compiles
 // can't pollute it
-[arch(at = "../ARCHITECTURE_TARGET_FEATURES.md#fat-mode")]
+[arch(at = "../ARCHITECTURE_CPU_CLASSES.md#fat-mode")]
 def private collect_status(prog : Program?) : array<TuneStatus> {
     var rows : array<TuneStatus>
     let sidecar = tune_manifest_path()
@@ -3345,7 +3396,7 @@ class private TunePolicyDefaultMarker : AstFunctionAnnotation {
 
     //! a standalone root with no `main` is a library: it gets the
     //! status `[init]` an exe's `main` anchors, once
-[arch(at = "../ARCHITECTURE_TARGET_FEATURES.md#fat-mode")]
+[arch(at = "../ARCHITECTURE_CPU_CLASSES.md#fat-mode")]
 def private library_status_init() : bool {
     return false if (!exe_status_report()
         || (compiling_module() |> find_unique_function(STATUS_INIT_NAME, false)) != null)

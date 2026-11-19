@@ -142,17 +142,22 @@ def test_llvm_tune_grid_mode(t : T?) {
     delete lines
 }
 
+//! the cross-grid fixture's command line, up to its `--`: a test-mode
+//! build under `baseline`
+def private cross_grid_run(baseline : string) : string {
+    let args <- get_command_line_arguments()  // locked view — do not delete
+    let client = "{get_this_module_dir()}/_llvm_tune_cross_grid_client.das"
+    let env = child_env([("DAS_TUNE_MODE", "test"), ("DAS_JIT_BASELINE", baseline)])
+    return "{env}\"{args[0]}\" -no-module-cache -jit \"{client}\" --"
+}
+
 [test(description = "a cross class's tune grid holds only the rows the class can run", timeout = 1200)]
 def test_llvm_tune_cross_grid(t : T?) {
     if (!jit_enabled()) {
         t |> success(true)
         return
     }
-    let args <- get_command_line_arguments()  // locked view — do not delete
-    let bin = args[0]
-    let client = "{get_this_module_dir()}/_llvm_tune_cross_grid_client.das"
-    let env = child_env([("DAS_TUNE_MODE", "test")])
-    let run = "{env}\"{bin}\" -no-module-cache -jit \"{client}\" --"
+    let run = cross_grid_run("")
     var native : array<string>
     let nativeRc = spawn_child("{run} --jit-compile-only", native)
     t |> equal(nativeRc, 0, join(native, " | "))
@@ -167,6 +172,49 @@ def test_llvm_tune_cross_grid(t : T?) {
         "the wasm grid holds the simd128 row alone: {join(cross, " | ")}")
     t |> success(cross |> has_value("SEATLESS reference"),
         "a family with no wasm seat keeps its reference row alone")
+    t |> success(cross |> has_value("BYCLASS reference,k5"),
+        "a row gated on a feature's absence is a wasm seat: {join(cross, " | ")}")
+    t |> success(cross |> has_value("BOX emscripten|wasm64|||wasm-simd128"),
+        "a wasm artifact's identity names its class: {join(cross, " | ")}")
+    let wasmNote = "--jit-target=wasm64-unknown-emscripten builds for the class wasm-simd128"
+    t |> success(cross |> has("cross_mixed: {wasmNote}"),
+        "the narrowed grid names the triple and its class: {join(cross, " | ")}")
+}
+
+[test(description = "a build under DAS_JIT_BASELINE keeps the grid rows its class can run, and under a cross triple is a cross build for that class: its grid, its identity", timeout = 1200)]
+def test_llvm_tune_baseline_cross_grid(t : T?) {
+    if (!jit_enabled()) {
+        t |> success(true)
+        return
+    }
+    let x86 = get_architecture_name() == "x86_64"
+    let klass = x86 ? "x86-avx2" : "arm-neon"
+    let arch = x86 ? "x86_64" : "arm64"
+    let triple = x86 ? "x86_64-unknown-linux-gnu" : "aarch64-unknown-linux-gnu"
+    let run = cross_grid_run(klass)
+    var cross : array<string>
+    let rc = spawn_child("{run} --jit-target={triple} --jit-compile-only", cross)
+    t |> equal(rc, 0, join(cross, " | "))
+    t |> success(cross |> has_value("MIXED reference"),
+        "no row gated on another class's features is in the grid: {join(cross, " | ")}")
+    t |> success(cross |> has_value("BYCLASS reference,k4"),
+        "the grid holds the row the baseline's class passes, and not the one gated on its absence")
+    t |> success(cross |> has_value("BOX {triple}|{arch}|||{klass}"),
+        "the identity names the triple and the class, never the build box: {join(cross, " | ")}")
+    let crossNote = "--jit-target={triple} under DAS_JIT_BASELINE={klass} builds for that class"
+    t |> success(cross |> has("cross_mixed: {crossNote}"),
+        "the narrowed grid names the triple and the baseline: {join(cross, " | ")}")
+    var native : array<string>
+    let nativeRc = spawn_child("{run} --jit-compile-only", native)
+    t |> equal(nativeRc, 0, join(native, " | "))
+    t |> success(native |> has_value("MIXED reference"),
+        "a native build under the baseline holds no row of another class: {join(native, " | ")}")
+    t |> success(native |> has_value("BYCLASS reference,k4"),
+        "a native build under the baseline holds the class's own row: {join(native, " | ")}")
+    t |> success(!(native |> has("|||{klass}")),
+        "with no triple the identity is the build box's own: {join(native, " | ")}")
+    t |> success(native |> has("cross_mixed: DAS_JIT_BASELINE={klass} builds for that class"),
+        "the narrowed grid names the baseline alone: {join(native, " | ")}")
 }
 
 // The fat mode (DAS_TUNE_MODE=fat under DAS_JIT_BASELINE=<class>, -exe) through child daslang

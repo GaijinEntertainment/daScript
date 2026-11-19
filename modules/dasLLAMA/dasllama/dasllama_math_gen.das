@@ -4960,7 +4960,7 @@ def private k45x16_rows_ref(var yp : float?; kqp : uint8 const?; ksp : uint8 con
     }
 }
 
-[tune_perm(nt = 4, requires = "simd128"), tune_perm(nt = 2, requires = "simd128"), tune_perm(nt = 1, requires = "simd128"),
+[tune_perm(nt = 4, requires = "simd128|f16c,simd128|!avx2"), tune_perm(nt = 2, requires = "simd128|f16c,simd128|!avx2"), tune_perm(nt = 1, requires = "simd128|f16c,simd128|!avx2"),
  tune_companion(fn = "k4x16_witness_gen", gen = "dasllama_gemm_gen::x16_witness"),
  tune(gen = "dasllama_gemm_gen::k4_x16rows", fallback = "nt4"),
  hint(unsafe_range_check, noalias = yp, noalias = kqp, noalias = ksp, noalias = x16, noalias = xsp, noalias = xb16), unused_argument(_scratch)]
@@ -4972,7 +4972,7 @@ def k4x16_rows_gen(var yp : float?; kqp : uint8 const?; ksp : uint8 const?; x16 
 }
 
 //! `k4x16_rows_gen`'s Q5_K twin, by `dot_kq`'s k5 arithmetic: the same scale block, a five-bit quant
-[tune_perm(nt = 4, requires = "simd128"), tune_perm(nt = 2, requires = "simd128"), tune_perm(nt = 1, requires = "simd128"),
+[tune_perm(nt = 4, requires = "simd128|f16c,simd128|!avx2"), tune_perm(nt = 2, requires = "simd128|f16c,simd128|!avx2"), tune_perm(nt = 1, requires = "simd128|f16c,simd128|!avx2"),
  tune_companion(fn = "k5x16_witness_gen", gen = "dasllama_gemm_gen::x16_witness"),
  tune(gen = "dasllama_gemm_gen::k5_x16rows", fallback = "nt4"),
  hint(unsafe_range_check, noalias = yp, noalias = kqp, noalias = ksp, noalias = x16, noalias = xsp, noalias = xb16), unused_argument(_scratch)]
@@ -4980,7 +4980,7 @@ def k5x16_rows_gen(var yp : float?; kqp : uint8 const?; ksp : uint8 const?; x16 
     k45x16_rows_ref(yp, kqp, ksp, x16, xsp, xb16, n, d, ntok, rb, re, K5_QSB, KqTag_k5())
 }
 
-[tune_perm(nt = 4, requires = "simd128"), tune_perm(nt = 2, requires = "simd128"), tune_perm(nt = 1, requires = "simd128"),
+[tune_perm(nt = 4, requires = "simd128|f16c,simd128|!avx2"), tune_perm(nt = 2, requires = "simd128|f16c,simd128|!avx2"), tune_perm(nt = 1, requires = "simd128|f16c,simd128|!avx2"),
  tune_companion(fn = "k6x16_witness_gen", gen = "dasllama_gemm_gen::x16_witness"),
  tune(gen = "dasllama_gemm_gen::k6_x16rows", fallback = "nt4"),
  hint(unsafe_range_check, noalias = yp, noalias = kqp, noalias = ksp, noalias = x16, noalias = xsp), unused_argument(_xb16, _scratch)]
@@ -5042,7 +5042,7 @@ def private x16_image(xqp : int8 const?; count : int64) : int16 const? {
 typedef Kqx16RowsFn = function<(var yp : float?; kqp : uint8 const?; ksp : uint8 const?; x16 : int16 const?; xsp : float const?; xb16 : int16 const?; var scratch : uint8?; n, d, ntok, rb, re : int64) : void>
 
 //! `rows`: `kqx16_batch` passes the stamped row, a tuner each seat
-[hot_path, arch(at = "../ARCHITECTURE_CPU_KERNELS.md#wasm-x16-rows")]
+[hot_path, arch(at = "../ARCHITECTURE_CPU_KERNELS.md#x16-rows")]
 def kqx16_batch_with(rows : Kqx16RowsFn; var yp : float?; kqp : uint8 const?; ksp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, d, ntok : int64) {
     let nb = n / Q8_BLOCK_ELEMS
     let x16 = x16_image(xqp, ntok * n)
@@ -5066,20 +5066,37 @@ def kqx16_batch_with(rows : Kqx16RowsFn; var yp : float?; kqp : uint8 const?; ks
     }
 }
 
-//! the stamped 16-bit rows kernel that serves format `fmt` (a schema id): null where the format has none or it did not emit
-def private kqx16_stamped(fmt : int) : Kqx16RowsFn {
+//! `rows` where its kernel emitted, else null
+def private kqx16_emitted(emits : bool; rows : Kqx16RowsFn) : Kqx16RowsFn {
     let none : Kqx16RowsFn
-    if (fmt == kq_desc(KqFmt.k4).schema_id) return k4x16_witness_gen() ? @@k4x16_rows_gen : none
-    if (fmt == kq_desc(KqFmt.k5).schema_id) return k5x16_witness_gen() ? @@k5x16_rows_gen : none
-    if (fmt == kq_desc(KqFmt.k6).schema_id) return k6x16_witness_gen() ? @@k6x16_rows_gen : none
+    return emits ? rows : none
+}
+
+//! the stamped 16-bit rows kernel of a format: null where the format has none or it did not emit
+def private kqx16_stamped(_f : KqTag_k4) : Kqx16RowsFn => kqx16_emitted(k4x16_witness_gen(), @@k4x16_rows_gen)
+
+def private kqx16_stamped(_f : KqTag_k5) : Kqx16RowsFn => kqx16_emitted(k5x16_witness_gen(), @@k5x16_rows_gen)
+
+def private kqx16_stamped(_f : KqTag_k6) : Kqx16RowsFn => kqx16_emitted(k6x16_witness_gen(), @@k6x16_rows_gen)
+
+def private kqx16_stamped(_f : auto(TT)) : Kqx16RowsFn {
+    let none : Kqx16RowsFn
     return none
 }
 
+def private kqx16_stamped_of(fmt : KqFmt) : Kqx16RowsFn {   // nolint:STYLE037 - kq_fmt_stamp's generated arms, one a format
+    var rows : Kqx16RowsFn
+    kq_fmt_stamp(fmt) $(F) {
+        rows = kqx16_stamped(F)
+    }
+    return rows
+}
+
 [hot_path]
-def kqx16_batch(fmt : int; var yp : float?; kqp : uint8 const?; ksp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, d, ntok : int64) : bool {
+def kqx16_batch(fmt : KqFmt; var yp : float?; kqp : uint8 const?; ksp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, d, ntok : int64) : bool {
     //! the generated tier's take on the disk-order kq GEMM (`set_kq_gemm_gen`): Q4_K, Q5_K and Q6_K through their
     //! stamped 16-bit rows kernels; false where the format has none or the row is not whole superblocks
-    let rows = kqx16_stamped(fmt)
+    let rows = kqx16_stamped_of(fmt)
     if (rows == null || n % KQ_SB_ELEMS != 0l) return false
     kqx16_batch_with(rows, yp, kqp, ksp, xqp, xsp, xbsp, n, d, ntok)
     return true
@@ -5119,7 +5136,7 @@ def q8x16_rows_s16_gen(var yp : float?; wp : int8 const?; sp : uint16 const?; x1
     q8x16_rows_ref(yp, wp, sp, x16, xsp, n, d, ntok, rb, re)
 }
 
-[tune_perm(nt = 4, requires = "simd128"), tune_perm(nt = 2, requires = "simd128"), tune_perm(nt = 1, requires = "simd128"),
+[tune_perm(nt = 4, requires = "simd128|f16c,simd128|!avx2"), tune_perm(nt = 2, requires = "simd128|f16c,simd128|!avx2"), tune_perm(nt = 1, requires = "simd128|f16c,simd128|!avx2"),
  tune_companion(fn = "q8x16_rows_s16_gen", gen = "dasllama_gemm_gen::q8x16_rows"),
  tune_companion(fn = "q8x16_witness_gen", gen = "dasllama_gemm_gen::x16_witness"),
  tune(gen = "dasllama_gemm_gen::q8x16_rows", fallback = "nt4"),
@@ -5138,7 +5155,7 @@ def private q8x16_stamped(_sp : float const?) : Q8x16RowsFn => @@q8x16_rows_gen
 def private q8x16_stamped(_sp : uint16 const?) : Q8x16RowsFnS16 => @@q8x16_rows_s16_gen
 
 //! `rows`: the batch slots pass the stamped row, a tuner each seat
-[arch(at = "../ARCHITECTURE_CPU_KERNELS.md#wasm-x16-rows")]
+[arch(at = "../ARCHITECTURE_CPU_KERNELS.md#x16-rows")]
 def q8x16_batch_with(rows : auto(FN); var yp : float?; wp : int8 const?; sp : auto(ST); xqp : int8 const?; xsp : float const?; n, d, ntok : int64) {
     let x16 = x16_image(xqp, ntok * n)
     var myp = yp
@@ -5155,11 +5172,11 @@ def private q8x16_batch_any(var yp : float?; wp : int8 const?; sp : auto(ST); xq
     return true
 }
 
-[hot_path, arch(at = "../ARCHITECTURE_CPU_KERNELS.md#wasm-x16-rows")]
+[hot_path, arch(at = "../ARCHITECTURE_CPU_KERNELS.md#x16-rows")]
 def q8x16_batch(var yp : float?; wp : int8 const?; sp : float const?; xqp : int8 const?; xsp : float const?; n, d, ntok : int64) : bool =>
     q8x16_batch_any(yp, wp, sp, xqp, xsp, n, d, ntok)
 
-[hot_path, arch(at = "../ARCHITECTURE_CPU_KERNELS.md#wasm-x16-rows")]
+[hot_path, arch(at = "../ARCHITECTURE_CPU_KERNELS.md#x16-rows")]
 def q8x16_batch_s16(var yp : float?; wp : int8 const?; sp : uint16 const?; xqp : int8 const?; xsp : float const?; n, d, ntok : int64) : bool =>
     q8x16_batch_any(yp, wp, sp, xqp, xsp, n, d, ntok)
 

@@ -63,12 +63,14 @@ carries the per-target knowledge instead of this file. Nothing here competes wit
 the tune grid crowns: that one walks the repacked grp planes (`k4q8_gemv_gen`), a different
 layout, and reaches the k4 arm of `dot_kq` only on the disk-order arm.
 
-### On wasm the disk-order K-quant and q8 batch GEMMs read a 16-bit activation image {#wasm-x16-rows}
+### Where integer SIMD stops at 128 bits the disk-order K-quant and q8 batch GEMMs read a 16-bit activation image {#x16-rows}
 
 Wasm SIMD128 has one cheap widening multiply-add, `i32x4.dot_i16x8_s`: sixteen-bit lanes in, pair
 sums out. The int8 `idot` costs more there - an unsigned nibble against a signed activation has no
-`extmul`, so each half is two extends and an `i16x8.mul`, then a pairwise add. The disk-order
-GEMM of Q4_K, Q5_K and Q6_K on a wasm target therefore leaves `dot_kq` for a generated rows
+`extmul`, so each half is two extends and an `i16x8.mul`, then a pairwise add. x86 below AVX2 is
+the same machine for this purpose: `pmaddwd` is that multiply-add, lane for lane, and no generated
+family has a 128-bit integer row. The disk-order
+GEMM of Q4_K, Q5_K and Q6_K on those targets therefore leaves `dot_kq` for a generated rows
 kernel over operands already sixteen bits wide: `k4x16_rows_gen`, `k5x16_rows_gen` and
 `k6x16_rows_gen` (`dasllama_gemm_gen::<fmt>_x16rows`, one generator keyed by format).
 
@@ -102,7 +104,11 @@ reassociation, not bit for bit, and its reference body states the grouping. It r
 portable backend through `set_q8_batch_gen`: the backend's batch slots try the generated kernel
 first, and the backend keeps its name, so an image baked for `portable` still loads.
 
-The four kernels are `[tune]` families whose seats differ in `nt` and are gated on `simd128`. Every
+The four kernels are `[tune]` families whose seats differ in `nt` and are gated on
+`simd128|f16c,simd128|!avx2`: a wasm target, or an x86 class with hardware half converts and no
+AVX2 (`x86-avx`). The emitter reads its scales as halves, so it declines an x86 target without
+F16C; an AVX2 class is served by the 256-bit families, so the gate names the absence and the
+emitter declines there too - a whole-grid tune build on an AVX2 box races no 16-bit seat. Every
 other family's rows are gated on their own instruction set too - the NEON-shaped rows on `neon`,
 the x64 rows on theirs - so on a wasm target those families have no seat: they stamp their
 reference bodies, owe a wasm profile no entry, and gain one when a wasm seat is added to them.

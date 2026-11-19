@@ -2,7 +2,8 @@
 
 The design document `REVIEW.md` cites. A section's `{#anchor}` is its stable reference target;
 usage and installation live in `README.md`, the debugger rail and its roadmap in `DEBUGGING.md`.
-Companions: `ARCHITECTURE_TARGET_FEATURES.md` (CPU feature truth, the tier gates, the CPU classes),
+Companions: `ARCHITECTURE_TARGET_FEATURES.md` (CPU feature truth, the tier gates),
+`ARCHITECTURE_CPU_CLASSES.md` (the CPU classes, the fat mode, tune under a class),
 `ARCHITECTURE_DEBUG_INFO.md` (the `--jit-debug` DWARF rail - sec.12), `ARCHITECTURE_JIT_ENTRY.md`
 (the entry module, the emitter-free cache hit, the candidate-set key), `ARCHITECTURE_EXE.md` (the
 standalone exe's link decision and startup - sec.10), `ARCHITECTURE_FAST_MATH.md`
@@ -102,10 +103,10 @@ ABI) and sec.2.1 (the split obj cache's positional invalidation).
 The backend's override knobs - the escapes that change what a run compiles, tunes, or emits
 beyond its defaults - are: `DAS_TUNE_POLICY` (replaces the declared/injected tune policy),
 `DAS_TUNE_MODE` (grid/tuner compile modes, and `fat` - one clone per shipped CPU class in a
-standalone exe or library; `ARCHITECTURE_TARGET_FEATURES.md` sec.11), `DAS_TUNE_FAT_CLASS` (pins
+standalone exe or library; `ARCHITECTURE_CPU_CLASSES.md#fat-mode`), `DAS_TUNE_FAT_CLASS` (pins
 the class a fat exe runs at startup, or a fat library when its host creates it),
-`DAS_TUNE_MANIFEST` (pins the sidecar), `DAS_TUNE_FORCE` (stamps from one named file with no box
-or age check, and no saver writes that file; `ARCHITECTURE_TARGET_FEATURES.md#tune-forced-file`),
+`DAS_TUNE_MANIFEST` (pins the sidecar), `set_tune_manifest_in_memory()` (the runtime setter that keeps the sidecar a text in the process, ahead of every file knob), `DAS_TUNE_FORCE` (stamps from one named file with no box
+or age check, and no saver writes that file; `ARCHITECTURE_CPU_CLASSES.md#tune-forced-file`),
 `DAS_TUNE_NOISE_CV` (recalibrates the tuner noise gate), `DAS_TUNE_NOISE_OVERRIDE` (mints
 through a failing gate), `--tune` (forced re-mint), `--tune-only` / `DAS_TUNE_ONLY` (re-mints
 only the named families; the policy guard arms it itself for a profile's residue),
@@ -114,9 +115,10 @@ partition to re-emit, bypassing the obj cache), `--jit-lto` (a split `-exe`'s pa
 bitcode and its link runs LTO), `DAS_JIT_PROBE_LTO` (the DLL path's twin: split partitions emit
 bitcode and the link runs lld LTO - a dev probe artifact), `DAS_JIT_X64_FORCE_FEATURES` /
 `DAS_JIT_ARM64_FORCE_FEATURES` (force CPU features past detection - emission, the cache keys,
-and `cpu_supports`-based tune eligibility all follow), `--jit-target=<triple>` (a cross compile; under a triple a CPU class serves - wasm64 - the tune framework builds for that class: the sidecar beside the app does not stamp, a tune or test build keeps the rows the class can run, and a release ships no `llvm` module; `ARCHITECTURE_TARGET_FEATURES.md#cross-class`), `DAS_JIT_BASELINE` (build for a CPU class
+and `cpu_supports`-based tune eligibility all follow), `--jit-target=<triple>` (a cross compile; under a triple a CPU class serves - wasm64, or any triple built under a baseline - the tune framework builds for that class: the sidecar beside the app does not stamp, a tune or test build keeps the rows the class can run, and a release ships no `llvm` module; `ARCHITECTURE_CPU_CLASSES.md#cross-class`), `DAS_JIT_BASELINE` (build for a CPU class
 instead of the box - the machine, the gates, the tune ladder and the cache keys all follow;
-`ARCHITECTURE_TARGET_FEATURES.md` sec.10), `--jit-debug` / `-g` (emit DWARF or CodeView debug
+a tune or test build keeps the rows the class can run, and under a `--jit-target` triple it names the class the cross artifact is tuned for;
+`ARCHITECTURE_CPU_CLASSES.md#cpu-classes`), `--jit-debug` / `-g` (emit DWARF or CodeView debug
 info and promote every argument to a stack slot for it; `ARCHITECTURE_DEBUG_INFO.md` sec.12), `--jit-remarks` / `--jit-remarks-missed` / `--jit-remarks-analysis` (LLVM's `-pass-remarks*` regexes, parsed once per process with the other JIT cl::opts: the matching passes' optimization remarks print to stderr, and codegen runs past the DLL and obj caches so every function's passes run), `--jit-compile-only` / `options jit_compile_only` (build, verify and optimize, then write, load and install nothing - the program runs interpreted; under a `--jit-target` cross triple it also keeps the `[tune]` grid a cross artifact would stamp as reference bodies, which is what the emission dump inspects), `--jit-sanitize` / `options jit_sanitize` (`address` runs LLVM's `asan` pass after the optimizer on functions marked `sanitize_address`; `undefined` runs `bounds-checking`; a sanitizer host defaults to its own, `none` to nothing; an exe or a library links with `-fsanitize=` for the host's sanitizers and the requested ones, through `clang++` unless a linker is named; an ASan host lowers every array push to the runtime call, which keeps the buffer's container annotation - `src/misc/ARCHITECTURE.md` sec.10), and the
 runtime escape API `tune_suppress_mint(knob)` (a library `[init]` suppresses the auto/restart mint; the
 caller passes the knob name it acts for). The announce contract: an override announces at the point it
@@ -134,8 +136,8 @@ In-process overrides therefore go through the tune setters (`tune_set_verbosity`
 
 ## 4. Host CPU feature truth on aarch64
 
-Moved to `ARCHITECTURE_TARGET_FEATURES.md` sec.4, with sec.6 (the x64 tier gates) and sec.10
-(CPU classes and `DAS_JIT_BASELINE`).
+Moved to `ARCHITECTURE_TARGET_FEATURES.md` sec.4, with sec.6 (the x64 tier gates); sec.10
+(CPU classes and `DAS_JIT_BASELINE`) is `ARCHITECTURE_CPU_CLASSES.md#cpu-classes`.
 
 ## 5. The tune sidecar is a module-cache dependency {#tune-sidecar-cache-pin}
 

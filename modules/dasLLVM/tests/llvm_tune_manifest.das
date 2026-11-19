@@ -330,3 +330,45 @@ def test_llvm_tune_stale_save_keeps_runtime(t : T?) {
     set_tune_manifest_runtime_path("")
     remove(path)
 }
+
+[test(description = "a sidecar kept in memory takes the set and get calls and the profile export as text, and writes no file")]
+def test_llvm_tune_sidecar_in_memory(t : T?) {
+    set_tune_manifest_in_memory()
+    t |> equal(tune_manifest_text(), "", "an in-memory sidecar starts empty")
+    t |> equal(tune_profile_text("llvm-tune-test-class"), "", "no kernels, no profile")
+    t |> success(tune_manifest_set("mem_kernel_a", "k1"), "the first set lands")
+    t |> success(tune_manifest_set("mem_kernel_b", "k2"), "the second set keeps the first")
+    t |> equal(tune_manifest_get("mem_kernel_a"), "k1")
+    t |> equal(tune_manifest_get("mem_kernel_b"), "k2")
+    let text = tune_manifest_text()
+    t |> success(find(text, "mem_kernel_a") >= 0 && find(text, "provenance") >= 0,
+        "the text is the sidecar document: {text}")
+    t |> success(!fexist("<memory>"), "nothing was written under the in-memory name")
+    let profile = tune_profile_text("llvm-tune-test-class")
+    var err = ""
+    var doc = read_json(profile, err)
+    t |> success(doc != null, "the profile text parses: {err}")
+    t |> equal(doc?["kernels"]?["mem_kernel_b"] ?? "", "k2", "the profile carries the winners")
+    t |> equal(doc?["provenance"]?["class"] ?? "", "llvm-tune-test-class",
+        "the profile names the class asked for")
+    t |> equal(doc?["provenance"]?["origin"] ?? "", "profile")
+    t |> equal(doc?["provenance"]?["box"] ?? "", "", "a profile carries no box identity")
+    delete_json(doc)
+    let tmpRes = create_temp_file_result("llvm_tune_profile_", ".json")
+    if (tmpRes is error) {
+        t |> failure("could not create a temp file: {tmpRes as error}")
+        return
+    }
+    let exported = tmpRes as value
+    t |> success(tune_profile_export(exported, "llvm-tune-test-class"),
+        "the export writes the profile")
+    var ferr = ""
+    var fdoc = read_json(fread(exported), ferr)
+    t |> equal(fdoc?["kernels"]?["mem_kernel_a"] ?? "", "k1",
+        "the exported file is the profile: {ferr}")
+    delete_json(fdoc)
+    remove(exported)
+    set_tune_manifest_in_memory()
+    t |> equal(tune_manifest_get("mem_kernel_a"), "", "asking for it again starts it empty")
+    set_tune_manifest_runtime_path("")
+}

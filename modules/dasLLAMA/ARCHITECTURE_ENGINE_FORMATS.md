@@ -259,7 +259,9 @@ repack walks that plane's region alone (`shexp_plane_q8`).
   mx4 kernel shape: each shape is a `def template` over a dot and a chunk-split placeholder, and `[from_template]` stamps
   it per (dot, split) and per weight-scale plane (the f32 plane and the wscale_f16 halfword plane,
   bit-identical over the widened plane). The idot4 stamps the arm64 tier registers live here too:
-  the `idot4` builtin is plain das that every target lowers for itself.
+  the `idot4` builtin is plain das that every target lowers for itself. Its q8 batch slots and
+  disk-order kq GEMM try the generated tier first, through the hooks it holds (`set_q8_batch_gen`,
+  `set_kq_gemm_gen`): the portable module sits below that tier and cannot name it.
 - **`dasllama_math_aarch64_neon.das`** - the arm64 lane-indexed SDOT tier: the `sdot4_laneq` /
   `tbl16` composers only, plus the registration of the idot4 stamps as "arm64-sdot". Its `[init]`
   never fires off-arch (`ARCHITECTURE_INVARIANTS.md#inherited-invariants`, three-layer safety model), so an
@@ -273,7 +275,8 @@ repack walks that plane's region alone (`shexp_plane_q8`).
   registration. A hand-written tile that the generator could emit belongs in the generator.
   The bf16 tile's operand builders - the activation widen (`xbf16_build`, its `bf16_bits`
   narrow, the f32 plane's `xbf16_build_f32`), the row-dequant reference panel
-  (`kq_panel_rows_bf16`) and the native bf16 plane's k-pair panel (`bf16w_panel_build`) - sit in
+  (`kq_panel_rows_bf16`), the native bf16 plane's k-pair panel (`bf16w_panel_build`) and the
+  16-bit rows kernels' activation image (`x16_image`) - sit in
   `dasllama_math_gen.das` beside the walk that runs them once per batch call, in its JIT
   partition (`ARCHITECTURE_CPU_KERNELS.md#jit-partition-inlining`). The JIT cache keys a
   generated kernel by its stub's hash and its perm's arguments, never by the generator's text,

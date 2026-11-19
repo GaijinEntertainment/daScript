@@ -12,10 +12,13 @@ changes while the measured values of the artifact stay as they were - is a defec
 artifact on a quiet box with no remote-desktop session instead.**
 
 **A diff that changes a `kernels` entry of a `defaults/<class>.tune-defaults.json` profile
-names, in the PR body, the box that ran the tune - a box of that CPU class, or any box for
-`wasm-simd128` - and quotes the tuner line naming the new value as the entry's winner, from that
-box's `../benchmarks/modules/.daspkg.log` or, for `wasm-simd128`, from the output of the
-`DAS_TUNE_MODE=tune` node runs of `../harness/wasm_mint/run.cjs`; a changed entry no quoted line
+names, in the PR body, the box that ran the tune - a box of that CPU class, a box of a class
+above it run under `DAS_JIT_BASELINE=<class>` when the body says no box of the class was at hand
+(`../HOW_TO_GET_SIDECAR.md`, the class minted under a pin), or any box for `wasm-simd128` - and
+quotes the tuner line naming the new value as the entry's winner, from that box's
+`../benchmarks/modules/.daspkg.log`, from the pinned mint's `../harness/dasllama_tuner.das`
+output, or, for `wasm-simd128`, from the output of the `DAS_TUNE_MODE=tune` node runs of
+`../harness/wasm_mint/run.cjs`; a changed entry no quoted line
 backs is a defect - re-mint the profile on such a box.** A `kernels`
 entry names the variant the tuner timed fastest there; an entry written by hand was never timed.
 

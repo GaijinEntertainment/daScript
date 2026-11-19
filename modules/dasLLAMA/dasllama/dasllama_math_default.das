@@ -963,7 +963,7 @@ def kq_rows_batch_kernel(f : auto(TT); fmt : KqFmt; var yp : float?; kqp : uint8
 }
 
 //! a generated tier's take on the disk-order kq GEMM: true where it served the call, false to leave it to the portable walk
-typedef KqGemmGenFn = function<(fmt : int; var yp : float?; kqp : uint8 const?; ksp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, d, ntok : int64) : bool>
+typedef KqGemmGenFn = function<(fmt : KqFmt; var yp : float?; kqp : uint8 const?; ksp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, d, ntok : int64) : bool>
 
 var private g_kq_gemm_gen : KqGemmGenFn
 def set_kq_gemm_gen(fn : KqGemmGenFn) {
@@ -972,8 +972,8 @@ def set_kq_gemm_gen(fn : KqGemmGenFn) {
 
 //! the disk-order GEMM over `ntok` Q8_K activation rows, the rows split over the pool - the GEMV's chunking at one token
 def private kq_gemm_kernel(fmt : int; var yp : float?; kqp : uint8 const?; ksp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, d, ntok : int64) {   // nolint:STYLE037 - the stamp's ladder, one arm per KqFmt member
-    if (g_kq_gemm_gen != null && invoke(g_kq_gemm_gen, fmt, yp, kqp, ksp, xqp, xsp, xbsp, n, d, ntok)) return
     let kf = kq_fmt_of_id(fmt, "kq_gemm_kernel")
+    if (g_kq_gemm_gen != null && invoke(g_kq_gemm_gen, kf, yp, kqp, ksp, xqp, xsp, xbsp, n, d, ntok)) return
     var myp = yp
     let chunks = ntok == 1l ? matmul_chunks_gemv(int(d), 1, n * d) : matmul_chunks(int(d), 1, n * d * ntok)
     kq_fmt_stamp(kf) $(F) {

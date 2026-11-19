@@ -760,11 +760,17 @@ let K4_SSB = 20l    // Q4_K scale plane: 16B disk block + 4B pad, decoded in pla
 let K5_QSB = 160l   // Q5_K quant plane: 128 nibble bytes + 32 qh bytes
 let K5_QH_B32 = (K5_QSB - K4_QSB) / (KQ_SB_ELEMS / KQ_B32_ELEMS)   //! a k5 superblock's qh bytes a 32-block (its 32 past the nibbles, over eight blocks)
 let K5_SSB = 20l    // Q5_K scale plane: same 20B row as k4
+let K45_HEAD_BYTES = 4l   //! a Q4_K / Q5_K disk scale block's head: f16 d, f16 dmin
+let K45_PACK_BYTES = 12   //! a Q4_K / Q5_K scale block's eight (scale, min) pairs after the head, six bits each
+let K45_SUBS = 8          //! a Q4_K / Q5_K superblock's sub-blocks, 32 weights each
 //! the k4 / k5 device scale record (`KQ_DEV_SSB` bytes): f16 d, f16 dmin, the eight 6-bit sub-scales decoded to a byte each at +4, the eight mins at +12
 let KQ_SREC_SCALES_OFF = 4l
 let KQ_SREC_MINS_OFF = 12l
 let K6_QSB = 192l   // Q6_K quant plane: 128 ql + 64 qh bytes
 let K6_SSB = 18l    // Q6_K scale plane: 16 int8 sub-scales + f16 d, native
+let K6_D_AT = K6_SSB - 2l   //! a Q6_K scale block's f16 d, after its sixteen int8 sub-scales
+let K6_QL_BYTES = 128l    //! a Q6_K superblock's low-nibble bytes, ahead of the qh bytes
+let K6_QH_BYTES = K6_QSB - K6_QL_BYTES   //! its qh bytes: two bits a weight, a half of them a 128-weight half
 let Q40_QSB = 128l  // Q4_0 quant plane: 128 nibble bytes (k4 tiling)
 let Q40_SSB = 16l   // Q4_0 scale plane: 8 x f16 d, verbatim
 let Q51_QB = 20l    // q5_1 quant plane PER 32-BLOCK: 16 nibble bytes (k/k+16 pairing) + 4 qh

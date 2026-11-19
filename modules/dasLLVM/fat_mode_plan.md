@@ -1,7 +1,7 @@
 # The fat tune mode - one exe, one clone per CPU class
 
 The plan for the third `[tune]` mode. `skills/tune.md` carries the two existing modes;
-`ARCHITECTURE_TARGET_FEATURES.md` sec.10 carries the CPU classes and the baseline the mode builds
+`ARCHITECTURE_CPU_CLASSES.md#cpu-classes` carries the CPU classes and the baseline the mode builds
 on. Present-tense mechanism text moves into the architecture docs as each piece lands; this file
 keeps the plan, the rules decided up front, and the ledger.
 
@@ -18,7 +18,7 @@ among them - is raced inside the exe at first start, because that race needs no 
 1. **Baseline class** - `DAS_JIT_BASELINE`, the class table, one truth on every rail. Landed:
    `daslib/llvm_cpu_class.das`, `tests/llvm_jit_baseline.das`.
 2. **Fat stamping** in `daslib/llvm_tune.das` - `DAS_TUNE_MODE=fat`, refused outside `-exe`
-   and without the baseline. Landed (`ARCHITECTURE_TARGET_FEATURES.md` sec.11): the ship set,
+   and without the baseline. Landed (`ARCHITECTURE_CPU_CLASSES.md#fat-mode`): the ship set,
    the per-class clones and companions, the dispatch chain over a runtime class MASK (one bit
    per ladder class, so a class's membership is its own full feature set - a vnni512 box
    without vbmi is not in `x86-vnni512` and takes the avx2 clone), `DAS_TUNE_FAT_CLASS`, the

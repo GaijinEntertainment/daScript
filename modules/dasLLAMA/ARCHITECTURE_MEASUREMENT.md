@@ -194,7 +194,7 @@ cards. `performance/REVIEW.das` checks the records' tree-decidable provenance:
   scope's modules declare (`tune_gen_families`, a text scan of `dasllama/`) that the profile's
   class has a seat in - a `[tune_perm]` row with no `requires=`, or one the profile's `features`
   pass (`family_has_seat`; the framework's own rule,
-  `../dasLLVM/ARCHITECTURE_TARGET_FEATURES.md#seatless-families`): the set a fat
+  `../dasLLVM/ARCHITECTURE_CPU_CLASSES.md#seatless-families`): the set a fat
   release demands a profile clone for - a fat exe ships clones, never fallback stamps - so a
   class whose profile lacks one fails here instead of in `daspkg release --fat`. A profile
   carries no `engine_sha` because its validity is its release pin and its feature class: a

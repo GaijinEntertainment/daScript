@@ -32,6 +32,16 @@ def test_and_conjunction(t : T?) {
     t |> success(!tune_requires_ok("no_such_feature_xyz,neon"))
 }
 
+[test(description = "a ! ahead of a requires= name passes exactly when the feature is absent")]
+def test_absent_feature(t : T?) {
+    t |> success(tune_requires_ok("!no_such_feature_xyz"))
+    t |> equal(tune_requires_ok("!neon"), !tune_requires_ok("neon"))
+    t |> success(!tune_requires_ok("neon,!neon"), "a feature and its absence never hold together")
+    t |> success(tune_requires_ok("neon|!neon"), "one of a feature and its absence always holds")
+    t |> success(!tune_requires_ok("!"), "a ! with no name never passes")
+    t |> equal(tune_pick_fallback("gated:!no_such_feature_xyz;generic"), "gated")
+}
+
 [test(description = "a fallback chain with no gating picks its first entry")]
 def test_plain_chain_is_the_first_entry(t : T?) {
     // no `:` anywhere means an ordered list with no gating — backward compatible with a bare name

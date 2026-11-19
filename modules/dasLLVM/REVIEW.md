@@ -1,8 +1,8 @@
 # dasLLVM Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-docs: `ARCHITECTURE.md`, `ARCHITECTURE_CODEGEN_IDENTITY.md`, `ARCHITECTURE_DEBUG_INFO.md`,
-`ARCHITECTURE_EXE.md`, `ARCHITECTURE_JIT_ENTRY.md`, `ARCHITECTURE_LIB.md`,
+docs: `ARCHITECTURE.md`, `ARCHITECTURE_CODEGEN_IDENTITY.md`, `ARCHITECTURE_CPU_CLASSES.md`,
+`ARCHITECTURE_DEBUG_INFO.md`, `ARCHITECTURE_EXE.md`, `ARCHITECTURE_JIT_ENTRY.md`, `ARCHITECTURE_LIB.md`,
 `ARCHITECTURE_TARGET_FEATURES.md`, `ARCHITECTURE_VECTOR_MATH.md`. Planned work: `LEDGER.md`.
 The `tests/` subfolder has its own checklist, `tests/REVIEW.md`: a `[test]` file, or a file that
 exists only for tests to build, run or require (a program root, a client, a fixture module),

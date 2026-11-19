@@ -4028,7 +4028,8 @@ start a `--poison-kv` run hands its children (`test_poison_kv_envs`: `DASLLAMA_K
 no start named without the flag), and a dry run of the runner with a no-op child binary.
 Requires `run` by bare same-dir name.
 `uncategorized_persistent_heap_stack_524288.das` - model-free: the pod fleet's planners, the tune interrupt gate in a
-spawned child (`test_interrupt_aborts_without_minting`) and the Metal lens's FLOAT A refusal (`test_float_a_gate`).
+spawned child (`test_interrupt_aborts_without_minting`), the Metal lens's FLOAT A refusal (`test_float_a_gate`) and
+the class mint's returned text (`test_class_mint_text`: `../harness/class_mint_text.das`'s two forms, each parsed back).
 `test_fleet_create_argv` and `test_fleet_commands` (pod-free): the pod fleet's planners (`../harness/pod_fleet.das`) -
 the `runpodctl pod create` argument list (the models volume and its data center, the GPU, the
 disk, the ssh port, the key in the boot's environment, the boot installing sshd, rsync, git and

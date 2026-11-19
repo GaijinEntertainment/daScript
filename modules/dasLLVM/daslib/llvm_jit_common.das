@@ -760,7 +760,7 @@ def public make_jit_target(target_triple : string = ""; host_features_asked : bo
 //! `target` with its tier gates at one CPU class's set - what a
 //! fat-mode clone's generator emits for, not the baseline the process
 //! targets
-[arch(at = "../ARCHITECTURE_TARGET_FEATURES.md#fat-mode")]
+[arch(at = "../ARCHITECTURE_CPU_CLASSES.md#fat-mode")]
 def public class_target(target : JitTarget; klass : string) : JitTarget {
     var t = target
     let x64 = t.arch == JitTargetArch.x64

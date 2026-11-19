@@ -21,6 +21,7 @@ classes and the AWS instance that carries each (`us-west-2`):
 
 | class (`tune_cpu_class()`) | what gates it | instance |
 |---|---|---|
+| `x86-avx` | avx + f16c, no avx2 | none: Jaguar, Ivy Bridge, Piledriver - minted under a pin, section 10 |
 | `x86-avx2` | avx2, no VNNI | `c5a.4xlarge` (EPYC zen2), or any zen2/zen3 box |
 | `x86-vnni512` | avx512vnni + avx512bw | `c7a.4xlarge` (EPYC zen4) |
 | `x86-amx` | amx-int8 + amx-bf16 + amx-tile (+ avx512vnni, avx512bf16) | `c7i.4xlarge` (Sapphire Rapids), `c8i` (Granite Rapids) |
@@ -228,9 +229,10 @@ Then run a model-level sanity row on the vehicle against the reference build:
 ~/llama.cpp/build-clean-cpu/bin/llama-bench --ref-flavor clean-cpu --ref-no-affinity`.
 
 A class with no shipped profile needs the class first, on the branch the box clones:
-`tune_cpu_class()` and the ladder in `tune_class_chain()` (`modules/dasLLVM/daslib/llvm_tune.das`),
-the new class above the one it supersedes, and every feature a `requires=` names in
-`TUNE_KNOWN_FEATURES` there. Until its profile ships, a box of the new class adopts the class below
+its row in `JIT_CPU_CLASSES` and its place in `jit_cpu_class_ladder`
+(`modules/dasLLVM/daslib/llvm_cpu_class.das`), the new class above the one it supersedes, its arm
+in `tune_cpu_class()` and every feature a `requires=` names in `TUNE_KNOWN_FEATURES`
+(`modules/dasLLVM/daslib/llvm_tune.das`). Until its profile ships, a box of the new class adopts the class below
 it (the chain) and races only the seats that class could not answer. Then the same mint and export
 produce `<class>.tune-defaults.json`, and that one IS committed. Box differences the walk carries:
 
@@ -314,7 +316,7 @@ aws ec2 terminate-instances --instance-ids <id>
 ## 9. The wasm profile
 
 A wasm64 artifact is its own class, `wasm-simd128`, whatever box built it
-(`../dasLLVM/ARCHITECTURE_TARGET_FEATURES.md#cross-class`), so its profile is minted inside the
+(`../dasLLVM/ARCHITECTURE_CPU_CLASSES.md#cross-class`), so its profile is minted inside the
 artifact: both tuners and the export are built as wasm releases and run under node. Sections 1
 to 6 do not apply - no reference exe, no kernel ladder, no vehicle model. The files are the three
 packages under `harness/wasm_mint/` - `tuner/` (the generator families, `gen_tune_probe.das`),
@@ -342,7 +344,7 @@ cp ~/mint_wasm/io/wasm-simd128.tune-defaults.json modules/dasLLAMA/performance/d
 Trap: the export runs in wasm too - a native `export_tune_profile.das` reads this sidecar as another box's and refuses it with "no kernels".
 
 `DAS_TUNE_MODE=tune` at a tuner's build stamps its grid; a cross build's generator grid is the
-rows the class can run (`../dasLLVM/ARCHITECTURE_TARGET_FEATURES.md#cross-grid`), and the
+rows the class can run (`../dasLLVM/ARCHITECTURE_CPU_CLASSES.md#cross-grid`), and the
 generator tuner races the families that have one
 (`ARCHITECTURE_MEASUREMENT_KERNEL_RACE.md#seated-families`). `run.cjs` mounts the host directory
 at `/out` and puts the sidecar at `/out/wasm.tune.json`: the two tuners write into the one file,
@@ -357,3 +359,58 @@ from the committed profile: time the model the family serves against a build mad
 profile landed (`ARCHITECTURE_MEASUREMENT_KERNEL_RACE.md#x16-served-race`).
 
 Section 7's gate binds this profile as it binds every other.
+
+## 10. A class minted under a pin
+
+A class no box at hand belongs to is minted on a box above it, under `DAS_JIT_BASELINE=<class>`:
+the build targets the class, the tune grid holds the rows the class can run
+(`../dasLLVM/ARCHITECTURE_CPU_CLASSES.md#cross-grid`), and the tuner races those. Sections 3 and
+5 do not apply, and of section 6 only the provenance line and the export - no reference exe, no
+ladder, no vehicle model. Run it in a tree that
+already carries the class row (`JIT_CPU_CLASSES`, `../dasLLVM/daslib/llvm_cpu_class.das`):
+
+```
+export DAS_JIT_BASELINE=x86-avx DAS_JOBQUE_THREADS=8
+M=~/mint_class/class.tune.json
+mkdir -p ~/mint_class && rm -f $M
+DAS_TUNE_MODE=test bin/daslang -jit modules/dasLLAMA/harness/gen_tune_probe.das
+DAS_TUNE_MODE=tune DAS_TUNE_MANIFEST=$M bin/daslang -jit modules/dasLLAMA/harness/dasllama_tuner.das
+bin/daslang -jit modules/dasLLAMA/harness/export_tune_profile.das -- --sidecar $M
+```
+
+The TEST line ends `GEN TUNE TEST OK`; the export writes
+`performance/defaults/<class>.tune-defaults.json`, and section 6's provenance line reads
+`ok ok <the class's features> <n>`.
+
+Trap: a suite run under the pin before the class's profile is committed mints at its first
+child, since a class with no profile is an untuned box - commit the profile first.
+
+The pin makes the code the class's, never the timings: the winners are the minting box's, so the
+profile is a stand-in until a box of the class runs these same commands.
+
+A target with no compiler, no tuner process and its own file IO - a console - takes the mint as
+one library call, `class_mint()` of `harness/class_mint.das`, built with the pin and the
+target's triple (`../dasLLVM/ARCHITECTURE_CPU_CLASSES.md#cross-class`):
+
+```
+DAS_TUNE_MODE=tune DAS_JIT_BASELINE=x86-avx bin/daslang -lib -output out/classmint \
+    --disable-module dasvulkan --disable-module dascuda --disable-module dasmetal \
+    --disable-module dasaccelerate --disable-module dashv \
+    modules/dasLLAMA/harness/class_mint.das -- --jit-target=<triple>
+```
+
+It writes `out/classmint.o` and `out/classmint.h`; the target's link brings the runtime archive.
+The host calls `classmint_create()`, then `classmint_class_mint(ctx)`: the test gate, both
+tuners, the sidecar kept in memory, no file touched
+(`../dasLLVM/ARCHITECTURE_CPU_CLASSES.md#tune-memory-sidecar`). The text it returns is one JSON object -
+`profile`, the file to commit as `performance/defaults/<class>.tune-defaults.json`, and
+`sidecar`, the whole mint with its race tables - or `error` alone. Send the whole text home:
+the race tables are the evidence a winner is read against.
+
+Trap: without the `--disable-module` flags the object registers the GPU modules its host
+compiler carries, and the target's link fails on archives the target does not have.
+Trap: with no `--jit-target` the same command builds a library for the build box, which is how
+the call is tried before the target sees it; run its host under `DAS_JIT_BASELINE=<class>`, or
+the profile is labelled with the box's own class.
+
+Section 7's gate binds this profile too.
