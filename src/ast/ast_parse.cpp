@@ -624,14 +624,6 @@ namespace das {
     extern "C" int get_time_usec (int64_t reft);
     extern "C" int64_t ref_time_delta_to_usec (int64_t reft);
 
-    static DAS_THREAD_LOCAL(int64_t) totParse;
-    static DAS_THREAD_LOCAL(int64_t) totInfer;
-    static DAS_THREAD_LOCAL(int64_t) totOpt;
-    static DAS_THREAD_LOCAL(int64_t) totM;
-    static DAS_THREAD_LOCAL(int64_t) totCacheRead;
-    static DAS_THREAD_LOCAL(int64_t) cntCacheRead;
-    static DAS_THREAD_LOCAL(int64_t) totCacheMacroSim;
-    static DAS_THREAD_LOCAL(int64_t) totCacheFinalize;
 
     // deserialization may have left the active gc root pointing at (or the old program
     // owning) a module root that dies with the old program — repoint around the swap so
@@ -1186,7 +1178,7 @@ namespace das {
 
     struct ModuleCompileTimes {
         int64_t     startTicks = ref_time_ticks();
-        int64_t     macroStartTicks = daScriptEnvironment::getBound()->macroTimeTicks;
+        int64_t     macroStartTicks = 0;
         int64_t     parseUsec = 0;
         int64_t     inferUsec = 0;
         int64_t     optUsec = 0;
@@ -1203,9 +1195,11 @@ namespace das {
         ModuleGcFinalize            gcFinalize;
         ReuseCacheGuard             reuseCache;
         ModuleCompileTimes          times;
-        ModuleCompileScope ( const string & moduleName, const string & fileName, TextWriter & logs, const CodeOfPolicies & policies, bool isDep )
+        ModuleCompileScope ( const string & moduleName, const string & fileName, TextWriter & logs, ModuleGroup & libGroup,
+                const CodeOfPolicies & policies, bool isDep )
             : callbackGuard(moduleName, fileName), program(make_smart<Program>()),
               gcScope(program->thisModule->module_gc_root.get()), gcFinalize(program.get()) {
+            times.macroStartTicks = libGroup.compileTimes.macroTicks;
             gcFinalize.logs = &logs;
             gcFinalize.remapTypes = isDep;
             program->library.renameModule(program->thisModule.get(), moduleName);
@@ -1218,26 +1212,17 @@ namespace das {
     struct CompileEnvScope {
         daScriptEnvironment *   env;
         ProgramPtr              program;
-        TextWriter *            log;
-        const char *            fileName;
-        const char *            moduleName;
-        CompileEnvScope ( daScriptEnvironment * e ) : env(e), program(e->g_Program), log(e->g_compilerLog),
-            fileName(e->g_compilingFileName), moduleName(e->g_compilingModuleName) {}
+        CompileEnvScope ( daScriptEnvironment * e ) : env(e), program(e->g_Program) {}
         ~CompileEnvScope () {
             env->g_Program = program;
-            env->g_compilerLog = log;
-            env->g_compilingFileName = fileName;
-            env->g_compilingModuleName = moduleName;
         }
     };
 
     static void bindCompilingProgram ( const ProgramPtr & program, const string & fileName, const string & moduleName,
             const FileAccessPtr & access, TextWriter & logs, ModuleGroup & libGroup, bool isDep, const CodeOfPolicies & policies ) {
         program->access = access;
+        program->compileLog = &logs;
         daScriptEnvironment::getBound()->g_Program = program;
-        daScriptEnvironment::getBound()->g_compilerLog = &logs;
-        daScriptEnvironment::getBound()->g_compilingFileName = fileName.c_str();
-        daScriptEnvironment::getBound()->g_compilingModuleName = moduleName.c_str();
         program->promoteToBuiltin = false;
         program->isCompiling = true;
         program->isDependency = isDep;
@@ -1260,10 +1245,9 @@ namespace das {
     }
 
     static void unbindCompilingProgram () {
-        daScriptEnvironment::getBound()->g_Program.reset();
-        daScriptEnvironment::getBound()->g_compilerLog = nullptr;
-        daScriptEnvironment::getBound()->g_compilingFileName = nullptr;
-        daScriptEnvironment::getBound()->g_compilingModuleName = nullptr;
+        auto & bound = daScriptEnvironment::getBound()->g_Program;
+        if ( bound ) bound->compileLog = nullptr;
+        bound.reset();
     }
 
     static void inferAndFinalizeModule ( const ProgramPtr & program, const string & fileName, const string & moduleName,
@@ -1281,7 +1265,7 @@ namespace das {
                               bool inferAfterParse,
                               const ModuleCacheStream & stream = ModuleCacheStream() ) {
         verifyCodeOfPoliciesStamp(policies);
-        ModuleCompileScope scope(moduleName, fileName, logs, policies, isDep);
+        ModuleCompileScope scope(moduleName, fileName, logs, libGroup, policies, isDep);
         auto & program = scope.program;
         auto & times = scope.times;
 
@@ -1293,10 +1277,10 @@ namespace das {
             program->access = access;   // the read replaced the program object
             auto readT = get_time_usec(times.startTicks);
             auto macroSimT = int64_t(serializer_read->totMacroTime - macroSim0);
-            *totCacheFinalize += int64_t(serializer_read->totFinalizeTime - finalize0);
-            *totCacheRead += readT;
-            *cntCacheRead += 1;
-            *totCacheMacroSim += macroSimT;
+            libGroup.compileTimes.cacheFinalize += int64_t(serializer_read->totFinalizeTime - finalize0);
+            libGroup.compileTimes.cacheRead += readT;
+            libGroup.compileTimes.cacheReadCount += 1;
+            libGroup.compileTimes.cacheMacroSim += macroSimT;
             if ( policies.log_module_compile_time ) {
                 logs << "cache read took " << (readT / 1000000.) << ", " << program->thisModule->name << " (" << fileName << ")";
                 if ( macroSimT ) logs << " -- macro simulate " << (macroSimT / 1000000.);
@@ -1387,7 +1371,7 @@ namespace das {
         }
         parserState = DasParserState();
         times.parseUsec = get_time_usec(times.startTicks);
-        *totParse += times.parseUsec;
+        libGroup.compileTimes.parse += times.parseUsec;
         if ( err && !program->failed() ) {
             program->error("syntax error", "", "", LineInfo(), CompilationError::syntax_error);
         }
@@ -1437,7 +1421,7 @@ namespace das {
         gcStageReportDelta(moduleName.c_str(), fileName.c_str(), "parse", logs);
         callCompilationCallback(moduleName, fileName, "infer");
         // restartInfer: timer must be inside the label so each leg is timed independently.
-        // The pre-edit form (timeI set ONCE before the label) over-counted *totInfer on
+        // The pre-edit form (timeI set ONCE before the label) over-counted the infer total on
         // patchAnnotations() restarts: get_time_usec(timeI) included all previous legs,
         // and we added it again each iteration.
         restartInfer:
@@ -1447,7 +1431,7 @@ namespace das {
             if ( policies.macro_context_collect ) libGroup.collectMacroContexts();
             uint64_t inferLegT = get_time_usec(timeI);
             times.inferUsec += inferLegT;
-            *totInfer += inferLegT;
+            libGroup.compileTimes.infer += inferLegT;
         }
         if ( !program->failed() ) {
             program->buildAccessFlags(logs);    // this is used by the lint pass
@@ -1528,7 +1512,7 @@ namespace das {
             }
             if ( policies.macro_context_collect ) libGroup.collectMacroContexts();
             times.optUsec = get_time_usec(timeO);
-            *totOpt += times.optUsec;
+            libGroup.compileTimes.opt += times.optUsec;
             gcStageReportDelta(moduleName.c_str(), fileName.c_str(), "optimize", logs);
             if (!program->failed())
                 program->verifyAndFoldContracts();
@@ -1556,9 +1540,7 @@ namespace das {
                 logs << *program;
             }
         }
-        daScriptEnvironment::getBound()->g_compilerLog = nullptr;
-        daScriptEnvironment::getBound()->g_compilingFileName = nullptr;
-        daScriptEnvironment::getBound()->g_compilingModuleName = nullptr;
+        program->compileLog = nullptr;
         sort(program->errors.begin(), program->errors.end());
         program->deduplicateErrors();
         program->isCompiling = false;
@@ -1580,7 +1562,7 @@ namespace das {
                 if (!program->failed())
                     program->makeMacroModule(logs);
                 times.macroModUsec = get_time_usec(timeM);
-                *totM += times.macroModUsec;
+                libGroup.compileTimes.macroModules += times.macroModUsec;
             }
         }
         daScriptEnvironment::getBound()->g_Program.reset();
@@ -1593,7 +1575,7 @@ namespace das {
         // top-level summary covers the entry's full cost authoritatively.
         if ( logModule && isDep ) {
             auto dt = get_time_usec(times.startTicks) / 1000000.;
-            auto macroDelta = ref_time_delta_to_usec(daScriptEnvironment::getBound()->macroTimeTicks - times.macroStartTicks);
+            auto macroDelta = ref_time_delta_to_usec(libGroup.compileTimes.macroTicks - times.macroStartTicks);
             logs << "compiler took " << dt << ", " << program->thisModule->name << " (" << fileName << ") -- " << countUsedFunctions(program.get()) << " functions\n"
                  << "\tparse    " << (times.parseUsec    / 1000000.) << "\n"
                  << "\tinfer    " << (times.inferUsec    / 1000000.) << " (" << program->inferPassesUsed << " passes)\n"
@@ -1657,7 +1639,7 @@ namespace das {
         verifyCodeOfPoliciesStamp(policies);
         CompileEnvScope envScope(daScriptEnvironment::getBound());
         const string fileName;
-        ModuleCompileScope scope(moduleName, fileName, logs, policies, isDep);
+        ModuleCompileScope scope(moduleName, fileName, logs, libGroup, policies, isDep);
         auto & program = scope.program;
         program->thisModule->isModule = isDep;
         bindCompilingProgram(program, fileName, moduleName, access, logs, libGroup, isDep, policies);
@@ -1666,7 +1648,7 @@ namespace das {
         if ( !program->failed() ) verifyBuiltOwnership(program.get());
         if ( !program->failed() ) connectBuiltRequires(program.get());
         scope.times.parseUsec = get_time_usec(scope.times.startTicks);
-        *totParse += scope.times.parseUsec;
+        libGroup.compileTimes.parse += scope.times.parseUsec;
         if ( program->failed() ) {
             unbindCompilingProgram();
             sort(program->errors.begin(),program->errors.end());
@@ -2172,7 +2154,7 @@ namespace das {
         policies.ignore_shared_modules = false;     // src/ast/ARCHITECTURE.md#require-after-walk
         auto env = daScriptEnvironment::getBound();
         // a relative target resolves against the file issuing the require, as a written require would
-        auto info = access->getModuleInfo(requireName, env->g_compilingFileName ? env->g_compilingFileName : "");
+        auto info = access->getModuleInfo(requireName, env->g_Program ? env->g_Program->thisModule->fileName : string());
         string modName = info.moduleName.empty() ? requireName : info.moduleName;
         if ( auto mod = Module::requireEx(modName, true, requireName, info.fileName) ) return mod;
         if ( info.fileName.empty() ) {
@@ -2363,15 +2345,7 @@ namespace das {
         ReuseCacheGuard rcg;
         bool exportAll = policies.export_all;
         auto time0 = ref_time_ticks();
-        *totParse = 0;
-        *totInfer = 0;
-        *totOpt = 0;
-        *totM = 0;
-        *totCacheRead = 0;
-        *cntCacheRead = 0;
-        *totCacheMacroSim = 0;
-        *totCacheFinalize = 0;
-        daScriptEnvironment::getBound()->macroTimeTicks = 0;
+        libGroup.compileTimes = CompileTimeTotals();
         PrerequisiteWalk walk;
         vector<FileInfo *> chain;
         uint64_t preqT = 0;
@@ -2424,12 +2398,12 @@ namespace das {
                 auto totT = get_time_usec(time0);
                 logs << "total compile took " << (totT  / 1000000.) << ", " << fileName << " -- " << countUsedFunctions(res.get()) << " functions\n"
                      << "\trequire  " << (preqT    / 1000000.) << "\n"
-                     << "\tcache read " << (*totCacheRead / 1000000.) << " (" << *cntCacheRead << " modules, decode " << ((*totCacheRead - *totCacheFinalize) / 1000000.) << ", finalize " << (*totCacheFinalize / 1000000.) << " of which macro simulate " << (*totCacheMacroSim / 1000000.) << ")\n"
-                     << "\tparse    " << (*totParse / 1000000.) << "\n"
-                     << "\tinfer    " << (*totInfer / 1000000.) << "\n"
-                     << "\toptimize " << (*totOpt   / 1000000.) << "\n"
-                     << "\tmacro (in infer) " << (ref_time_delta_to_usec(daScriptEnvironment::getBound()->macroTimeTicks)  / 1000000.) << "\n"
-                     << "\tmacro mods " << (*totM     / 1000000.) << "\n"
+                     << "\tcache read " << (libGroup.compileTimes.cacheRead / 1000000.) << " (" << libGroup.compileTimes.cacheReadCount << " modules, decode " << ((libGroup.compileTimes.cacheRead - libGroup.compileTimes.cacheFinalize) / 1000000.) << ", finalize " << (libGroup.compileTimes.cacheFinalize / 1000000.) << " of which macro simulate " << (libGroup.compileTimes.cacheMacroSim / 1000000.) << ")\n"
+                     << "\tparse    " << (libGroup.compileTimes.parse / 1000000.) << "\n"
+                     << "\tinfer    " << (libGroup.compileTimes.infer / 1000000.) << "\n"
+                     << "\toptimize " << (libGroup.compileTimes.opt   / 1000000.) << "\n"
+                     << "\tmacro (in infer) " << (ref_time_delta_to_usec(libGroup.compileTimes.macroTicks)  / 1000000.) << "\n"
+                     << "\tmacro mods " << (libGroup.compileTimes.macroModules / 1000000.) << "\n"
                 ;
             }
             return res;

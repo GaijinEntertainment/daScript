@@ -137,9 +137,10 @@ caller and its macros do not apply to the caller's program; the caller reaches i
 macro context (`Module::macroContext`, `daslib/cross_context`'s `macro_context_of`). Every macro
 context carries a context mutex from its creation (`makeMacroModule`), because
 `invoke_in_context` locks its target and a mutex created at the first call would be created
-twice by two callers. The call saves and restores the environment's bound program, compiler log
-and compiling names around the walk in a scope object, since it may run mid-parse of another
-module and an unwind must put them back; the symbol state its passes compute lives on its own
+twice by two callers. The call saves and restores the environment's bound program around the walk
+in a scope object, since it may run mid-parse of another module and an unwind must put it
+back - the compile log and the compiling file and module names are the program's own, so they
+come back with it; the symbol state its passes compute lives on its own
 `Program` (`#program-scoped-symbol-state`), so the caller's - which may be mid-simulate with a JIT reading it - is
 untouched. One recursive mutex serializes every late require in the process. The late walk is
 a compile of its own and never joins another compile's stream: under `CodeOfPolicies::module_cache`

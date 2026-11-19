@@ -57,7 +57,7 @@ fill that uses it reads freed memory. `buildDaScriptProgram` adds the outer `gc_
 `GcCollectOnExit` that `compileDaScript` has, for what the executable tail allocates.
 
 **The environment.** A build binds the program it compiles to the environment
-(`g_Program`, the compiler log, the compiling names), as a parse does. `buildDaScriptModuleEx`
+(`g_Program`), as a parse does; the compile log and the compiling names are that program's own. `buildDaScriptModuleEx`
 and `requireDefaultModules` save and restore the outer binding (`CompileEnvScope`), so a build
 started inside another module's fill, or from a macro, leaves the outer compile bound.
 

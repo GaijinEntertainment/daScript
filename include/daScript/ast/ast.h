@@ -1246,6 +1246,7 @@ namespace das
         fragile_hash<vector<Function*>>             functionsByName;    // all functions of the same name
         safebox<Function, FunctionPtr>              generics;           // mangled name 2 generic name
         fragile_hash<vector<Function*>>             genericsByName;     // all generics of the same name
+        uint64_t                                    nameGeneration = 0;
         mutable das_insert_only_map<string, ExprCallFactory>    callThis;
         das_insert_only_map<string, unique_ptr<TypeInfoMacro>>  typeInfoMacros;
         das_insert_only_map<uint64_t, uint64_t>             annotationData;
@@ -1423,8 +1424,21 @@ namespace das
     };
     typedef shared_ptr<ModuleGroupUserData> ModuleGroupUserDataPtr;
 
+    struct CompileTimeTotals {
+        int64_t parse = 0;
+        int64_t infer = 0;
+        int64_t opt = 0;
+        int64_t macroModules = 0;
+        int64_t cacheRead = 0;
+        int64_t cacheReadCount = 0;
+        int64_t cacheMacroSim = 0;
+        int64_t cacheFinalize = 0;
+        int64_t macroTicks = 0;
+    };
+
     class DAS_API ModuleGroup : public ModuleLibrary {
     public:
+        CompileTimeTotals compileTimes;
         virtual ~ModuleGroup();
         ModuleGroupUserData * getUserData ( const string & dataName ) const;
         bool setUserData ( ModuleGroupUserData * data );
@@ -1754,6 +1768,7 @@ namespace das
         bool                        visitBuiltinFunctions = false;
         bool                        reportingInferErrors = false;
         uint64_t                    initSemanticHashWithDep = 0;
+        TextWriter *                compileLog = nullptr;
         union {
             struct {
                 bool    failToCompile : 1;
@@ -1909,13 +1924,8 @@ namespace das
         ProgramPtr      g_Program;
         bool            g_isInAot = false;
         Module *        modules = nullptr;
-        uint64_t        functionNameGeneration = 0;    // bumped when any module gains a new function or generic name
         int             das_def_tab_size = 4;
         bool            g_resolve_annotations = true;
-        TextWriter *    g_compilerLog = nullptr;
-        const char *    g_compilingFileName = nullptr;
-        const char *    g_compilingModuleName = nullptr;
-        int64_t         macroTimeTicks = 0;
 
         vector<DynamicModuleInfo> *g_dyn_modules_resolve = nullptr;
         inline static DAS_THREAD_LOCAL(DebugAgentInstance *) g_threadLocalDebugAgent;
@@ -1960,6 +1970,11 @@ namespace das
         daScriptEnvironmentGuard(das::daScriptEnvironment *bound = nullptr, das::daScriptEnvironment *owned = nullptr);
         ~daScriptEnvironmentGuard();
     };
+
+    inline TextWriter * compilingProgramLog () {
+        auto env = daScriptEnvironment::getBound();
+        return env && env->g_Program ? env->g_Program->compileLog : nullptr;
+    }
 
     typedef void (*daScriptCompilationCallback)(const string & moduleName, const string & fileName, const string & status);
 

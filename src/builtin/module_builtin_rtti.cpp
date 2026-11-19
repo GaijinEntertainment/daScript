@@ -1259,7 +1259,7 @@ namespace das {
         auto program = env->g_Program;
         if ( !program || !program->access ) return false;
         // the base the collector and the parser resolve a relative guard against: the file being compiled
-        auto ginfo = program->access->getModuleInfo(m.guard, env->g_compilingFileName ? env->g_compilingFileName : "");
+        auto ginfo = program->access->getModuleInfo(m.guard, program->thisModule->fileName);
         return !ginfo.fileName.empty() && program->access->getFileInfo(ginfo.fileName) != nullptr;
     }
 

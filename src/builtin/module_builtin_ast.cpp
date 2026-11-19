@@ -905,10 +905,11 @@ namespace das {
 
     void das_comp_log ( const char * text, Context * context, LineInfoArg * at ) {
         if ( !text ) return;
-        if ( !daScriptEnvironment::getBound() || !(daScriptEnvironment::getBound()->g_compilerLog )) {
+        auto log = compilingProgramLog();
+        if ( !log ) {
              context->throw_error_at(at, "compiler log is not set. its only available for the macros during compilation");
         }
-        (*(daScriptEnvironment::getBound()->g_compilerLog) << text);
+        (*log) << text;
     }
 
     Annotation * get_expression_annotation ( Expression * expr, Context * context, LineInfoArg * at ) {
