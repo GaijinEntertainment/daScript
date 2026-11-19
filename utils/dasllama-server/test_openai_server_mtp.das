@@ -87,6 +87,32 @@ def private chat_then_drafted(t : T?; base_url : string; content : string) : tup
 
 def private drafted_after_chat(t : T?; base_url : string) : int64 => chat_then_drafted(t, base_url, COUNT_TURN).drafted
 
+//! the draft counts in the `timings` of a streamed greedy chat's usage chunk, -1 for a key the chunk does not carry
+def private streamed_draft_counts(t : T?; base_url : string) : tuple<drafted : int64; accepted : int64> {
+    var drafted = -1l
+    var accepted = -1l
+    POST("{base_url}/v1/chat/completions",
+         "\{\"messages\":[\{\"role\":\"user\",\"content\":\"{COUNT_TURN}\"}],\"max_tokens\":24,\"temperature\":0," +
+         "\"stream\":true,\"stream_options\":\{\"include_usage\":true},\"cache_prompt\":false}") $(resp) {
+        t |> equal(int(resp.status_code), int(http_status.OK))
+        var inscope datas <- sse_datas(string(resp.body))
+        t |> success(length(datas) >= 2, "a usage chunk ahead of [DONE] ({length(datas)} events)")
+        if (length(datas) >= 2) {
+            var perr = ""
+            var js = read_json(datas[length(datas) - 2], perr)
+            t |> success(js != null, "the usage chunk parses: {perr}")
+            if (js != null) {
+                drafted = js?["timings"]?["draft_n"] ?? -1l
+                accepted = js?["timings"]?["draft_n_accepted"] ?? -1l
+                unsafe {
+                    delete js
+                }
+            }
+        }
+    }
+    return (drafted = drafted, accepted = accepted)
+}
+
 [test(description = "on Metal the NextN-headed slot decodes plain when unset or at four streams and drafts only when explicitly on", timeout = 1200)]
 def test_mtp_default_on_metal(t : T?) {
     if (model_missing(t, MTP_PATH)) {
@@ -118,7 +144,7 @@ def test_mtp_default_on_metal(t : T?) {
     }
 }
 
-[test(description = "on the CPU the unset default decodes plain, an explicit setting wins, and a constrained reply decodes plain beside drafting streams", timeout = 1200)]
+[test(description = "on the CPU the unset default decodes plain, an explicit setting wins and a drafting turn's timings carry its draft counts, and a constrained reply decodes plain beside drafting streams", timeout = 1200)]
 def test_mtp_default_on_cpu(t : T?) {
     if (model_missing(t, MTP_PATH)) {
         return
@@ -126,11 +152,19 @@ def test_mtp_default_on_cpu(t : T?) {
     t |> run("unset, one stream on the CPU: the NextN-headed slot decodes plain") @(t : T?) {
         with_mtp_server(t, MTP_PATH, TEST_PORT + 3, 1l, -1, false) $(base_url) {
             t |> equal(0l, drafted_after_chat(t, base_url), "no draft on the CPU")
+            t |> equal(streamed_draft_counts(t, base_url).drafted, -1l, "a plain turn's timings carry no draft count")
         }
     }
     t |> run("explicit on, one stream on the CPU: the setting wins over the default") @(t : T?) {
         with_mtp_server(t, MTP_PATH, TEST_PORT + 4, 1l, 1, false) $(base_url) {
             t |> success(drafted_after_chat(t, base_url) > 0l, "mtp = true drafts on the CPU")
+            let before = slot_drafts(t, base_url)
+            let turn = streamed_draft_counts(t, base_url)
+            t |> success(turn.drafted > 0l && turn.accepted > 0l && turn.accepted <= turn.drafted,
+                "a drafting turn's timings carry its own counts ({turn.accepted} accepted of {turn.drafted})")
+            let after = slot_drafts(t, base_url)
+            t |> equal(after.drafted - before.drafted, turn.drafted, "... the drafts the slot's counter rose by over that turn")
+            t |> equal(after.accepted - before.accepted, turn.accepted, "... and the accepted ones its accepted counter rose by")
         }
     }
     t |> run("explicit on, four streams on the CPU: the setting wins over the default") @(t : T?) {

@@ -619,6 +619,17 @@ def test_openai_server(t : T?) {   // nolint:STYLE038 — one live server sessio
                     }
                 }
             }
+            let compl_off = compl_usage(base_url, "\{\"prompt\":\"{long_prompt}\",\"max_tokens\":4,\"cache_prompt\":false}")
+            t |> equal(compl_off.cached, 0, "/v1/completions: cache_prompt false attaches nothing of its {compl_off.prompt} prompt tokens")
+            let compl_on = compl_usage(base_url, cache_body)
+            t |> success(compl_on.cached > 0, "control: the same completion without the field attaches ({compl_on.cached} of {compl_on.prompt})")
+            let chat_long = "\{\"messages\":[\{\"role\":\"user\",\"content\":\"{long_prompt}\"}],\"max_tokens\":2"
+            let chat_first = chat_usage(base_url, "{chat_long}}")
+            let chat_off = chat_usage(base_url, "{chat_long},\"cache_prompt\":false}")
+            let chat_on = chat_usage(base_url, "{chat_long}}")
+            t |> success(chat_first.prompt > 0, "the chat that fills the cache answered ({chat_first.prompt} prompt tokens)")
+            t |> equal(chat_off.cached, 0, "/v1/chat/completions: cache_prompt false attaches nothing of its {chat_off.prompt} prompt tokens")
+            t |> success(chat_on.cached > 0, "control: the same chat without the field attaches ({chat_on.cached} of {chat_on.prompt})")
             // GET /config — launcher-registered surface + live status (model picker, gpu badge)
             GET("{base_url}/config") $(resp) {
                 t |> equal(int(resp.status_code), int(http_status.OK))

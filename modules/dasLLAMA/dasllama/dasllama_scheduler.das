@@ -41,6 +41,8 @@ struct SchedEvent {
     n_cached : int64 = 0l                   // finished: prefix-cache hit length (tokens attached at admit)
     ttft_us : int64 = 0l                    // finished: admit -> first sampled token (microseconds)
     gen_us : int64 = 0l                     // finished: first sampled token -> finish (microseconds)
+    n_drafted : int64 = 0l                  //! finished: tokens the stream's speculative rounds drafted
+    n_accepted : int64 = 0l                 //! finished: the drafted tokens its verify accepted
 }
 
 //! One media span of a prompt: `n` positions from prompt index `at`, each entry a `media_position_id` of the media's
@@ -85,6 +87,7 @@ struct PendingReq {
     media_grid : int2                       // qwen mrope: the merged image grid (nx, ny) roping the rows; (0,0) = sequential positions (gemma, audio)
     spans : array<MediaSpan>                //! media already INLINE in `prompt` as position ids (a transcript renderer's form); `submit` folds the splice fields above into one
     constraint : TokenConstraintBox         //! the token admission the stream samples under (null = unconstrained); the stream takes it over at admission, an evicted request frees it
+    no_cache : bool                         //! the request takes no part in the prefix cache: it attaches no cached opening, stops at no checkpoint and leaves nothing behind
 }
 
 //! One active generation stream: the owned KV session plus its request state. Managed wholly by
@@ -116,6 +119,7 @@ struct Stream {
     finish : string = ""
     constraint : TokenConstraintBox         //! owned here (freed with the stream); the session carries the pointer and never frees it
     n_cached : int64                        // prefix-cache hit length (set at admit; 0 in flat mode)
+    no_cache : bool                         //! the request's own (`PendingReq.no_cache`): nothing attached at admit, nothing donated or parked at the reap
     ckpt_at : int64                         //! the prompt position the prefill stops at to leave a recurrent checkpoint (0 = none)
     ckpt_sys_at : int64                     //! an earlier stop for the checkpoint at the shared system opening (0 = none; always under `ckpt_at`)
     ckpt_head_at : int64                    //! an earlier stop still, at the opening's shared head - the system text ahead of the tool block, or the tool block ahead of the text (0 = none; always under `ckpt_sys_at`)
@@ -493,7 +497,8 @@ def private finish_stream(var st : Stream; finish : string; var events : array<S
     events |> push(SchedEvent(stream = st.id, kind = SchedEventKind.finished, finish = finish,
                               n_prompt = long_length(st.prompt), n_gen = st.n_gen,
                               n_cached = st.n_cached, ttft_us = st.ttft_us,
-                              gen_us = gen_us))
+                              gen_us = gen_us,
+                              n_drafted = st.session.mtp_drafted, n_accepted = st.session.mtp_accepted))
 }
 
 // Sample the next token from st.session's fresh logits and run the emit protocol — stop-id check,
@@ -717,7 +722,7 @@ def private reap_finished(m : Model; var sch : Scheduler) {
                 park_stream(m, sch, sch.streams[i])
                 prof_add("sched_park", t_park)
             } elif (sch.paged) {
-                if (sch.streams[i].finish != "media_lost") {
+                if (sch.streams[i].finish != "media_lost" && !sch.streams[i].no_cache) {
                     donate_stream(m, sch, sch.streams[i])
                 }
                 release_kv_pages(sch.streams[i].session)
@@ -750,9 +755,16 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
                          stop_strs <- sch.queue[0].stop_strs, nothink <- sch.queue[0].nothink,
                          spans <- sch.queue[0].spans, constraint <- sch.queue[0].constraint,
                          max_new = sch.queue[0].max_new, t_admit = ref_time_ticks(),
-                         think_budget = sch.queue[0].think_budget, think_marks <- sch.queue[0].think_marks)
+                         think_budget = sch.queue[0].think_budget, think_marks <- sch.queue[0].think_marks,
+                         no_cache = sch.queue[0].no_cache)
         st.think_state = st.think_marks.opened ? 1 : 0
-        if (sch.device_kv) {
+        if (sch.device_kv && st.no_cache) {
+            st.session <- create_device_session(m, gpu_device_session_dtype())
+            if (device_pool_on(m, sch, st.session)) {   // the fresh session takes a region a parked claim may hold: that claim's tails go to the pool first
+                flush_victims(m, sch)
+            }
+            to_log(LOG_INFO, "[stream {st.id}] device prefix: none asked for, full {length(st.prompt)}-tok prefill, no stops\n")
+        } elif (sch.device_kv) {
             let t_attach = prof_ticks()
             st.session <- create_device_session(m, gpu_device_session_dtype())
             let hit = device_attach(m, sch, st.session, st.prompt)
@@ -763,6 +775,9 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
             st.n_cached = matched
             sch.cached_tokens += matched
             to_log(LOG_INFO, "[stream {st.id}] device prefix: {matched}/{length(st.prompt)} tok {hit.pooled ? "taken up from the host pool" : "already on the device"} (stops at {st.ckpt_head_at}, {st.ckpt_sys_at}, {st.ckpt_at}, {st.ckpt_end_at}; pool {length(sch.prefix.states)} checkpoints, {sch.prefix.state_bytes / 1048576l} MB)\n")
+        } elif (sch.paged && st.no_cache) {
+            st.session <- create_session(m, sch.pool)
+            to_log(LOG_INFO, "[stream {st.id}] prefix cache: none asked for, full {length(st.prompt)}-tok prefill, no checkpoints\n")
         } elif (sch.paged) {
             st.session <- create_session(m, sch.pool)
             var matched = prefix_attach(sch.prefix, sch.pool, st.session, st.prompt)
@@ -1201,7 +1216,7 @@ def private donate_stream(m : Model; var sch : Scheduler; var st : Stream) {
 }
 
 def private park_stream(m : Model; var sch : Scheduler; var st : Stream) {
-    if (!gpu_device_prefill_continues(m)) {
+    if (!gpu_device_prefill_continues(m) || st.no_cache) {   // the region is given up with no claim kept: nothing adopts its rows
         gpu_device_kv_park(st.session)
         return
     }

@@ -44,7 +44,7 @@ def test_device_home_sessions(t : T?) {
     cell_device_home_sessions(t, REGIONS_FILE)
 }
 
-[test(description = "On the hybrid a device-mode scheduler emits the host-cached scheduler's tokens and lands picks alone for argmax streams, a recurrent turn prefilling whole where its prefill cannot continue")]
+[test(description = "On the hybrid a device-mode scheduler emits the host-cached scheduler's tokens and lands picks alone for argmax streams, a recurrent turn prefilling whole where its prefill cannot continue; a request that asks for no cache adopts no parked rows and parks none")]
 def test_scheduler_device_mode(t : T?) {
     cell_scheduler_device_mode(t, REGIONS_FILE)
 }
