@@ -4,6 +4,7 @@
 #include "daScript/ast/ast_handle.h"
 #include "daScript/ast/ast_expressions.h"
 #include "daScript/ast/ast_visitor.h"
+#include "daScript/simulate/debug_agent.h"
 
 namespace das {
     DAS_CC_API char * ast_describe_typedecl ( TypeDecl * t, bool d_extra, bool d_contracts, bool d_module, Context * context, LineInfoArg * at );

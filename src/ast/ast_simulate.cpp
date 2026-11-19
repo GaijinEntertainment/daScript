@@ -20,6 +20,7 @@
 #include "daScript/misc/gc_node.h"
 #include "daScript/simulate/aot_builtin.h"
 #include "daScript/simulate/standalone_ctx_utils.h"
+#include "daScript/simulate/debug_agent.h"
 
 das::Context * get_context ( int stackSize=0 );//link time resolved dependencies
 

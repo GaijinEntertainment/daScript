@@ -1928,7 +1928,6 @@ namespace das
         bool            g_resolve_annotations = true;
 
         vector<DynamicModuleInfo> *g_dyn_modules_resolve = nullptr;
-        inline static DAS_THREAD_LOCAL(DebugAgentInstance *) g_threadLocalDebugAgent;
         uint64_t        dataWalkerStringLimit = 0;
         bool            g_modulesInitialized = false;
 

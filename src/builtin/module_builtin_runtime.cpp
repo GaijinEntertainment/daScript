@@ -29,6 +29,7 @@
 extern "C" char __heap_base;
 #endif
 #include "daScript/simulate/debug_print.h"
+#include "daScript/simulate/debug_agent.h"
 #include "../parser/parser_impl.h"
 
 // arm64 CPU-feature detection headers — MUST be at file scope, not inside `namespace das`.

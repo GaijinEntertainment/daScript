@@ -7,4 +7,5 @@
 #include <daScript/ast/ast_handle.h>
 #include <daScript/simulate/bind_enum.h>
 #include <daScript/simulate/fs_file_info.h>
+#include <daScript/simulate/debug_agent.h>
 #include <daScript/misc/sysos.h>

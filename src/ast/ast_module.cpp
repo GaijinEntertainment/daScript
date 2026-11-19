@@ -10,6 +10,7 @@
 #include "daScript/ast/dyn_modules.h"
 #include "daScript/ast/ast_serializer.h"
 #include "daScript/misc/das_asan.h"
+#include "daScript/simulate/debug_agent.h"
 
 #include <atomic>
 #include <mutex>

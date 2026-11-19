@@ -6,6 +6,7 @@
 #include "daScript/ast/ast_handle.h"
 
 #include "daScript/misc/job_que.h"
+#include "daScript/simulate/debug_agent.h"
 
 #include <cstdio>
 #include <cstdlib>
