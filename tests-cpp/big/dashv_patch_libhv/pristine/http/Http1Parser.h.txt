@@ -1,5 +1,5 @@
-// Excerpts from pinned libhv 303f50c7, used to test patch anchors.
-
-    virtual int GetError() {
+// Excerpts from pinned libhv 060a4b6c, used to test patch anchors.
 
             if (stricmp(header_field.c_str(), "Set-CooKie") == 0 ||
+
+    virtual int GetError() {

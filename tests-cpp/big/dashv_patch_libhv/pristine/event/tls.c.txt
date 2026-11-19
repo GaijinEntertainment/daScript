@@ -1,0 +1,13 @@
+// Excerpts from pinned libhv 060a4b6c, used to test patch anchors.
+
+    if (g_ssl_ctx) return g_ssl_ctx;
+    io->ssl_ctx = hssl_ctx_new(NULL);
+
+    if (io->proxy && io->proxy->setting.target_host[0] && !is_ipaddr(io->proxy->setting.target_host)) {
+        sni = io->proxy->setting.target_host;
+    } else if (io->hostname && !is_ipaddr(io->hostname)) {
+        sni = io->hostname;
+    }
+    if (sni) {
+        hssl_set_sni_hostname(io->ssl, sni);
+    }

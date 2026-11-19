@@ -123,9 +123,17 @@ Do not retain the response pointer. This API does not validate provider JSON or 
 
 Ordinary native synchronous and asynchronous requests retain redirects, bounded to five hops, but do
 not follow an HTTPS-to-HTTP downgrade; cross-origin redirects remove authorization
-and cookie headers. Pooled asynchronous connections are separated by scheme,
-hostname, port and resolved address. Services handling credentials should prefer `request_checked`
+and cookie headers. A `Proxy-Authorization` header reaches a proxy only, never the
+origin. Pooled asynchronous connections are separated by TLS use,
+hostname, port and proxy. Services handling credentials should prefer `request_checked`
 and explicitly decide which responses and destinations are acceptable.
+
+## Name resolution
+
+Every client and the server's proxy routes resolve hostnames through the operating
+system resolver. libhv's own UDP resolver is not used: it reads only the first
+nameservers the adapters list and knows no search domain, mDNS name or `localhost`.
+A WebSocket client's `init` fails at once for a name that does not resolve.
 
 ## Request logging
 

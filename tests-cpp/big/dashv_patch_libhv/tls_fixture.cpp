@@ -86,7 +86,6 @@ static int prepare_tls(hv::HttpServer & server, const std::string & cert, const 
     if (getsockname(fd, &address.sa, &size) != 0) { closesocket(fd); return -1; }
     const int port = sockaddr_port(&address);
     server.setThreadNum(1);
-    server.setPort(0, 0);
     server.setListenFD(-1, fd);
     return port;
 }
@@ -118,7 +117,7 @@ static bool client_probes(const std::string & root, int dns_port) {
     sync.setHeader("Authorization", "fixture-secret");
     sync.setHeader("Cookie", "fixture-cookie");
     sync.setHeader("Proxy-Authorization", "fixture-proxy");
-    const bool same = sync_reply(sync, dns_url + "/same", "fixture-secret|fixture-proxy|fixture-cookie");
+    const bool same = sync_reply(sync, dns_url + "/same", "fixture-secret||fixture-cookie");
     const bool cross = sync_reply(sync, dns_url + "/cross", "||");
     HttpRequest loop; loop.url = dns_url + "/loop"; loop.timeout = 3; loop.retry_count = 0;
     HttpResponse response;

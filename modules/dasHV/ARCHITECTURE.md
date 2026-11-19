@@ -52,6 +52,17 @@ adapters' own destructors find them stopped. The live adapters are collected fir
 and stopped outside the registry lock, because loop-thread callbacks look handles up
 through that lock.
 
+## Name resolution {#name-resolution}
+
+Every hostname dasHV looks up resolves through the operating system resolver. libhv resolves
+a client's hostname on its event loop with a resolver of its own, which asks only the first
+nameservers the adapters list and knows no search domain, mDNS name or `localhost`.
+`patch_libhv_dns.cmake` answers a query that names no nameserver of its own with `getaddrinfo`
+instead, and neither libhv's clients nor dasHV name one. Because that lookup
+runs on the loop, libhv's `open` returns before the name is known. `das_wsc_open` resolves the
+host on the caller's thread first, so opening a WebSocket client on a name that does not
+resolve fails at once with the resolver's error, and nothing is connected.
+
 ## WebSocket sends run on the channel's loop {#websocket-send-on-loop}
 
 A das program calls `send` on a server channel or a client from its own thread, while

@@ -18,7 +18,7 @@ IF ((NOT DAS_HV_INCLUDED) AND ((NOT ${DAS_HV_DISABLED}) OR (NOT DEFINED DAS_HV_D
     if(WIN32 AND MSVC)
         set(HV_LIBRARIES ${DAS_HV_DIR}/hv/$<CONFIG>/lib/hv_static.lib)
     elseif(WIN32)
-        set(HV_LIBRARIES ${DAS_HV_DIR}/hv/$<CONFIG>/lib/libhv_static.a winmm)
+        set(HV_LIBRARIES ${DAS_HV_DIR}/hv/$<CONFIG>/lib/libhv_static.a winmm iphlpapi)
     else()
         set(HV_LIBRARIES ${DAS_HV_DIR}/hv/$<CONFIG>/lib/libhv.a)
     endif()
@@ -100,8 +100,8 @@ IF ((NOT DAS_HV_INCLUDED) AND ((NOT ${DAS_HV_DISABLED}) OR (NOT DEFINED DAS_HV_D
 	ExternalProject_Add(
 		LIBHV
         DEPENDS ${HV_BUILD_DEPENDENCIES}
-		URL https://github.com/ithewei/libhv/archive/303f50c7b23f250c5b620d92c04b41060e1701c2.tar.gz
-		URL_HASH SHA256=43f425dae61d060913c5ce280c9776dfb98c61bb965a38c5a38d4788a7295201
+		URL https://github.com/ithewei/libhv/archive/060a4b6c0cf8ae252741d0a58976376eac02e8c5.tar.gz
+		URL_HASH SHA256=a587f4cf5f407423f89a3b5ce04c26df6fef272464f6420857ed4dbf3df2d6e8
 		DOWNLOAD_EXTRACT_TIMESTAMP FALSE
 		INACTIVITY_TIMEOUT 60
 		PATCH_COMMAND ${CMAKE_COMMAND} -DLIBHV_SRC_DIR=<SOURCE_DIR> -P ${DAS_HV_DIR}/patch_libhv.cmake
@@ -111,7 +111,7 @@ IF ((NOT DAS_HV_INCLUDED) AND ((NOT ${DAS_HV_DISABLED}) OR (NOT DEFINED DAS_HV_D
 		BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --config $<CONFIG> ${DAS_NESTED_BUILD_TOOL_ARGS}
 		INSTALL_COMMAND ${CMAKE_COMMAND} --install <BINARY_DIR> --config $<CONFIG> --prefix ${DAS_HV_DIR}/hv/$<CONFIG>
 	)
-	ExternalProject_Add_StepDependencies(LIBHV patch ${DAS_HV_DIR}/patch_libhv.cmake ${DAS_HV_DIR}/patch_libhv_limits.cmake ${DAS_HV_DIR}/patch_libhv_upgrade.cmake ${DAS_HV_DIR}/patch_libhv_tls.cmake ${DAS_HV_DIR}/patch_libhv_pipeline.cmake ${DAS_HV_DIR}/patch_libhv_logging.cmake ${DAS_HV_DIR}/patch_libhv_cookies.cmake ${DAS_HV_DIR}/patch_libhv_shutdown.cmake ${DAS_HV_DIR}/patch_libhv_date.cmake)
+	ExternalProject_Add_StepDependencies(LIBHV patch ${DAS_HV_DIR}/patch_libhv.cmake ${DAS_HV_DIR}/patch_libhv_limits.cmake ${DAS_HV_DIR}/patch_libhv_upgrade.cmake ${DAS_HV_DIR}/patch_libhv_tls.cmake ${DAS_HV_DIR}/patch_libhv_pipeline.cmake ${DAS_HV_DIR}/patch_libhv_logging.cmake ${DAS_HV_DIR}/patch_libhv_cookies.cmake ${DAS_HV_DIR}/patch_libhv_shutdown.cmake ${DAS_HV_DIR}/patch_libhv_date.cmake ${DAS_HV_DIR}/patch_libhv_dns.cmake)
     set(HV_PATCHED_PUBLIC_HEADERS)
     foreach(header AsyncHttpClient.h HttpParser.h HttpMessage.h WebSocketParser.h WebSocketServer.h HttpResponseWriter.h HttpService.h)
         list(APPEND HV_PATCHED_PUBLIC_HEADERS "${DAS_HV_DIR}/hv/$<CONFIG>/include/hv/${header}")

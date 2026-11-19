@@ -5,9 +5,7 @@ cmake_minimum_required(VERSION 3.12)
 # tarball's text. A pristine anchor that is missing fails the build: a pin bump that touched the
 # patched code re-decides the patch, it never builds unpatched.
 #
-#   base/hlog.c - logger_set_file closes the open log file, so a later hlog_set_file switches files
-#                 instead of writing to the old one until the date changes (ithewei/libhv#892).
-#                 logger_enable_fsync uses the logger mutex shared by all serving threads.
+#   base/hlog.c - logger_enable_fsync uses the logger mutex shared by all serving threads.
 #   base/htime.c - hv_compile_datetime reads a fixed date under HV_REPRODUCIBLE_BUILD, so the build
 #                  is byte-reproducible; without it, __DATE__/__TIME__ as before.
 #
@@ -52,46 +50,6 @@ endfunction()
 
 das_hv_patch_begin("base/hlog.c")
 das_hv_hunk([=[
-    logger_set_file(logger, DEFAULT_LOG_FILE);
-    logger->last_logfile_ts = 0;
-    logger->can_write_cnt = -1;
-    hmutex_init(&logger->mutex_);
-]=] [=[
-    logger->last_logfile_ts = 0;
-    logger->can_write_cnt = -1;
-    hmutex_init(&logger->mutex_);
-    logger_set_file(logger, DEFAULT_LOG_FILE);
-]=])
-das_hv_hunk([=[
-void logger_set_file(logger_t* logger, const char* filepath) {
-    strncpy(logger->filepath, filepath, sizeof(logger->filepath) - 1);
-    // remove suffix .log
-    char* suffix = strrchr(logger->filepath, '.');
-    if (suffix && strcmp(suffix, ".log") == 0) {
-        *suffix = '\0';
-    }
-}
-]=] [=[
-void logger_set_file(logger_t* logger, const char* filepath) {
-    hmutex_lock(&logger->mutex_);
-    strncpy(logger->filepath, filepath, sizeof(logger->filepath) - 1);
-    logger->filepath[sizeof(logger->filepath) - 1] = '\0';
-    // remove suffix .log
-    char* suffix = strrchr(logger->filepath, '.');
-    if (suffix && strcmp(suffix, ".log") == 0) {
-        *suffix = '\0';
-    }
-    if (logger->fp_) {
-        fclose(logger->fp_);
-        logger->fp_ = NULL;
-    }
-    logger->cur_logfile[0] = '\0';
-    logger->last_logfile_ts = 0;
-    logger->can_write_cnt = -1;
-    hmutex_unlock(&logger->mutex_);
-}
-]=])
-das_hv_hunk([=[
 void logger_enable_fsync(logger_t* logger, int on) {
     logger->enable_fsync = on;
 }
@@ -134,3 +92,5 @@ include(${CMAKE_CURRENT_LIST_DIR}/patch_libhv_cookies.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/patch_libhv_shutdown.cmake)
 
 include(${CMAKE_CURRENT_LIST_DIR}/patch_libhv_date.cmake)
+
+include(${CMAKE_CURRENT_LIST_DIR}/patch_libhv_dns.cmake)

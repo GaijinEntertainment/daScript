@@ -246,9 +246,22 @@ Handle<hv::WebSocketClient> makeWebSocketClient ( const void * pClass, const Str
     return HandleRegistry<hv::WebSocketClient>::instance().acquire(sp);
 }
 
+// modules/dasHV/ARCHITECTURE.md#name-resolution
 int das_wsc_open ( Handle<hv::WebSocketClient> h, const char* url ) {
     auto p = HandleRegistry<hv::WebSocketClient>::instance().lookup(h);
     if ( !p ) return -1;
+    string target = url ? url : "";
+    if ( strncmp(target.c_str(), "ws", 2) != 0 ) target = "ws://" + target;
+    HttpRequest probe;
+    probe.url = "http" + target.substr(2);
+    probe.ParseUrl();
+    sockaddr_u resolved;
+    memset(&resolved, 0, sizeof(resolved));
+    const int resolve_error = sockaddr_set_ipport(&resolved, probe.host.c_str(), probe.port);
+    if ( resolve_error != 0 ) {
+        p->close();
+        return NABS(resolve_error);
+    }
     return p->open(url ? url : "");
 }
 
@@ -828,9 +841,8 @@ Handle<hv::WebSocketServer> makeWebSocketServer ( int port, int httpsPort, const
         }
     }
     auto adapter = new WebServer_Adapter((char *)pClass,info,context);
-    // libHV serves nothing for port 0 - it listens only above zero - so a server asked for any free
-    // port learns one from a socket of its own and releases it. Resolved here rather than at start,
-    // so bound_port answers before the event loop runs and a route still registers single-threaded.
+    // Port 0 resolves here rather than at start, so bound_port answers before the event loop runs and
+    // a route still registers single-threaded.
     if ( port == 0 ) {
         int fd = Listen(0, adapter->host);
         if ( fd >= 0 ) {
@@ -842,7 +854,7 @@ Handle<hv::WebSocketServer> makeWebSocketServer ( int port, int httpsPort, const
         }
     }
     adapter->port = port;
-    adapter->https_port = httpsPort;
+    adapter->https_port = httpsPort > 0 ? httpsPort : -1;
     shared_ptr<hv::WebSocketServer> sp(adapter);
     adapter->self_handle = HandleRegistry<hv::WebSocketServer>::instance().acquire(sp);
     return adapter->self_handle;

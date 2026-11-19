@@ -113,13 +113,15 @@ TEST_CASE("WebSocket control frames cannot be fragmented or oversized") {
     }
 }
 
-TEST_CASE("WebSocket reserved opcodes are not delivered") {
-    WebSocketParser parser;
-    int delivered = 0;
-    parser.onMessage = [&](int, const std::string &) { ++delivered; };
-    const auto packet = frame(3, true, "reserved");
-    CHECK(parser.FeedRecvData(packet.data(), packet.size()) != int(packet.size()));
-    CHECK(delivered == 0);
+TEST_CASE("WebSocket reserved data and control opcodes are not delivered") {
+    for (int reserved : {0x3, 0xB}) {
+        WebSocketParser parser;
+        int delivered = 0;
+        parser.onMessage = [&](int, const std::string &) { ++delivered; };
+        const auto packet = frame(reserved, true, "reserved");
+        CHECK(parser.FeedRecvData(packet.data(), packet.size()) != int(packet.size()));
+        CHECK(delivered == 0);
+    }
 }
 
 TEST_CASE("WebSocket data opener cannot replace an unfinished message") {

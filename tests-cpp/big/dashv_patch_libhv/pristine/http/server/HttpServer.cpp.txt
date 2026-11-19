@@ -1,7 +1,4 @@
-    // stop all loops
-    for (auto& loop : privdata->loops) {
-        loop->stop();
-    }
+// Excerpts from pinned libhv 060a4b6c, used to test patch anchors.
 
             gmtime_fmt(hloop_now(hevent_loop(timer)), HttpMessage::s_date);
 
@@ -13,4 +10,9 @@
     if (server->service == NULL) {
         privdata->service = std::make_shared<HttpService>();
         server->service = privdata->service.get();
+    }
+
+    // stop all loops
+    for (auto& loop : privdata->loops) {
+        loop->stop();
     }

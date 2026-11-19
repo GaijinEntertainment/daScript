@@ -45,6 +45,15 @@ def send_before_open_answers_at_once(t : T?) {
     unsafe { delete client }
 }
 
+[test(description = "Opening a WebSocket client on a hostname that does not resolve fails at once and connects nothing", timeout = 1200)]
+def open_on_unresolvable_host_fails_at_once(t : T?) {
+    var client = new ProbeWsClient()
+    t |> success(client->init("ws://unresolvable.invalid:9/ws") != 0, "the name does not resolve")
+    t |> success(!client->is_connected())
+    client->cleanup()
+    unsafe { delete client }
+}
+
 [test(description = "A WebSocket upgrade waits for application approval without blocking plain HTTP requests")]
 def approval_precedes_upgrade_without_blocking_http(t : T?) {
     var server = new AdmissionServer()

@@ -1,11 +1,8 @@
-// Excerpts from pinned libhv 303f50c7, used to test patch anchors.
-
-    redirect = 1;
-    proxy = 0;
+// Excerpts from pinned libhv 060a4b6c, used to test patch anchors.
 
 #include "hurl.h"
 
-void HttpRequest::ParseUrl() {
+char HttpMessage::s_date[32] = {0};
 
                 hlogi("Cookie Unrecognized key '%s'", key.c_str());
 
@@ -16,7 +13,10 @@ void HttpMessage::AddCookie(const HttpCookie& cookie) {
     // cookies
     const char* cookie_field = "Cookie";
 
-char HttpMessage::s_date[32] = {0};
+    redirect = 1;
+    proxy = 0;
+
+void HttpRequest::ParseUrl() {
 
         if (*s_date) {
             headers["Date"] = s_date;

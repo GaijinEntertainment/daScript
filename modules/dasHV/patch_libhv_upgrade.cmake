@@ -28,11 +28,9 @@ das_hv_hunk([=[
 ]=])
 das_hv_hunk([=[
 int HttpResponseWriter::WriteChunked(const char* buf, int len /* = -1 */) {
-    int ret = 0;
 ]=] [=[
 int HttpResponseWriter::WriteChunked(const char* buf, int len /* = -1 */) {
     if (awaiting_upgrade) return -1;
-    int ret = 0;
 ]=])
 das_hv_hunk([=[
 int HttpResponseWriter::WriteBody(const char* buf, int len /* = -1 */) {
