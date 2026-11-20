@@ -685,6 +685,9 @@ class public LlvmJitVisitor : AstVisitor {
             var param = LLVMGetParam(fn, ai)
             if (a._type.isRef) {
                 LLVMSetParamAlignment(param, uint(a._type.alignOf))
+                LLVMAddAttributeToFunctionArgument(fn, ai, attributes.nonnull)
+                LLVMAddAttributeToFunctionArgument(fn, ai, LLVMCreateEnumAttribute(g_ctx,
+                    LLVMGetEnumAttributeKindForName("dereferenceable"), uint64(a._type.sizeOf)))
             }
             LLVMSetValueName(param, string(a.name))
             //! a container, or a type holding one, is lock-written by `for`:
@@ -1527,6 +1530,10 @@ class public LlvmJitVisitor : AstVisitor {
         if (func.sideEffectFlags == bitfield(0)) {
             LLVMAddCallSiteAttribute(ccall, -1 |> uint(), attributes.nounwind)     // TODO: better no-unwind?
             LLVMAddCallSiteAttribute(ccall, -1 |> uint(), attributes.willreturn)
+            let mem = pure_call_memory(func, is_cmres)
+            if (mem != null) {
+                LLVMAddCallSiteAttribute(ccall, -1 |> uint(), mem)
+            }
         }
         for (arg, ai in args, ucount(start)) {
             let maybe_ext = need_z_or_s_ext(arg._type)
@@ -1542,6 +1549,22 @@ class public LlvmJitVisitor : AstVisitor {
 
         }
         return ccall
+    }
+
+    def pure_call_memory(func : Function?; is_cmres : bool) : LLVMOpaqueAttributeRef? {
+        var values = 0
+        for (a in func.arguments) {
+            assume at = a._type
+            if (at.baseType == Type.fakeContext || at.baseType == Type.fakeLineInfo) continue
+            if (at.isRef || at.isPointer || at.isHandle
+                    || !(at.isWorkhorseType || at.isString)) return null
+            values++
+        }
+        if (values == 0) return null
+        let res = func.result
+        let scalar = (!is_cmres && !res.isVoid && res.isWorkhorseType
+            && !res.isPointer && !res.isString)
+        return scalar ? attributes.memory_read : attributes.memory_pure_ctx
     }
 
     def need_z_or_s_ext(_type : TypeDeclPtr) {
@@ -2814,7 +2837,9 @@ class public LlvmJitVisitor : AstVisitor {
         } elif (subExprT.baseType == Type.tFixedArray) {
             let maxIndex = subExprT.fixedDim
             var etype = clone_type(subExprT.firstType)   // element of the fixed-array chain
-            check_range(tidx, types.ConstI32(uint64(maxIndex)), expr.at, "dim index out of range", is_signed_index_type(expr.index._type))
+            if (!expr.atFlags.no_bound_check) {
+                check_range(tidx, types.ConstI32(uint64(maxIndex)), expr.at, "dim index out of range", is_signed_index_type(expr.index._type))
+            }
             var ptr_idx = build_array_index(tsrc, tidx, etype, "dim_at")
             if (expr.atFlags.r2v) {
                 var at_r2v = LLVMBuildLoadData2Aligned(g_builder, type_to_llvm_abi_type(expr._type),
@@ -2826,7 +2851,9 @@ class public LlvmJitVisitor : AstVisitor {
         } elif (subExprT.isGoodArrayType) {
             var arr = LLVMBuildLoadData2Aligned(g_builder, type_to_llvm_type(expr.subexpr._type), tsrc, expr.subexpr._type.alignOf, "arr")
             var size = LLVMBuildExtractValue(g_builder, arr, uint(JIT_ARRAY.SIZE), "array.size")
-            check_range(tidx, size, expr.at, "array index out of range", is_signed_index_type(expr.index._type))
+            if (!expr.atFlags.no_bound_check) {
+                check_range(tidx, size, expr.at, "array index out of range", is_signed_index_type(expr.index._type))
+            }
             var data = LLVMBuildExtractValue(g_builder, arr, uint(JIT_ARRAY.DATA), "array.data")
             var ptr_idx = build_array_index(data, tidx, subExprT.firstType, "array_at")
             if (expr.atFlags.r2v) {
@@ -2851,7 +2878,9 @@ class public LlvmJitVisitor : AstVisitor {
                 setE(expr, ptr_idx)
             }
         } elif (subExprT.isVectorType) {
-            check_range(tidx, types.ConstI32(uint64(subExprT.vectorDim)), expr.at, "vector index out of range", is_signed_index_type(expr.index._type))
+            if (!expr.atFlags.no_bound_check) {
+                check_range(tidx, types.ConstI32(uint64(subExprT.vectorDim)), expr.at, "vector index out of range", is_signed_index_type(expr.index._type))
+            }
             if (expr.atFlags.r2v) {
                 var lvec = LLVMBuildLoadData2Aligned(g_builder, type_to_llvm_type(expr.subexpr._type),
                     tsrc, subExprT.alignOf, "vector_at")

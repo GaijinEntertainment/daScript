@@ -931,6 +931,14 @@ namespace das {
             if ( idx>=size ) __context__->throw_error_ex("vector index out of range, %u of %u", idx, size);
             return (&value.x)[idx];
         }
+        template <typename IndexT>
+        static __forceinline TT & unchecked_at ( VecT & value, IndexT index, Context * ) {
+            return (&value.x)[index];
+        }
+        template <typename IndexT>
+        static __forceinline const TT & unchecked_at ( const VecT & value, IndexT index, Context * ) {
+            return (&value.x)[index];
+        }
     // safe index
         static __forceinline TT * safe_at ( VecT * value, int32_t index, Context * ) {
             if (!value) return nullptr;
@@ -973,6 +981,14 @@ namespace das {
         static __forceinline const TT & at ( const VecT & value, uint32_t idx, Context * __context__ ) {
             if ( idx>=size ) __context__->throw_error_ex("vector index out of range, %u of %u", idx, size);
             return ((const TT *)&value)[idx];
+        }
+        template <typename IndexT>
+        static __forceinline TT & unchecked_at ( VecT & value, IndexT index, Context * ) {
+            return ((TT *)&value)[index];
+        }
+        template <typename IndexT>
+        static __forceinline const TT & unchecked_at ( const VecT & value, IndexT index, Context * ) {
+            return ((const TT *)&value)[index];
         }
         static __forceinline TT * safe_at ( VecT * value, int32_t index, Context * ) {
             if (!value) return nullptr;

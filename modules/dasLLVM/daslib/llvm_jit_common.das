@@ -117,6 +117,12 @@ var public g_t_sequence : LLVMOpaqueType?
 
 var public g_str2v : table<string; LLVMOpaqueValue?>
 
+let private MOD_REF_READ = 1ul
+let private MOD_REF_READ_WRITE = 3ul
+
+def private memory_effects(arg_mem, inaccessible_mem, errno_mem, other : uint64) : uint64 => (
+    arg_mem | (inaccessible_mem << 2ul) | (errno_mem << 4ul) | (other << 6ul))
+
 class public Attributes {
     noreturn : LLVMOpaqueAttributeRef?
     readonly : LLVMOpaqueAttributeRef?
@@ -133,6 +139,7 @@ class public Attributes {
     nofree : LLVMOpaqueAttributeRef?
     norecurse : LLVMOpaqueAttributeRef?
     noalias : LLVMOpaqueAttributeRef?
+    nonnull : LLVMOpaqueAttributeRef?
     speculatable : LLVMOpaqueAttributeRef?
     sext : LLVMOpaqueAttributeRef?
     zext : LLVMOpaqueAttributeRef?
@@ -144,6 +151,8 @@ class public Attributes {
     memory_arg_inaccessible_rw : LLVMOpaqueAttributeRef?
     // memory(none) — a pure function of its arguments; the global-offset lookups
     memory_none : LLVMOpaqueAttributeRef?
+    memory_read : LLVMOpaqueAttributeRef?
+    memory_pure_ctx : LLVMOpaqueAttributeRef?
 
     def Attributes(ctx : LLVMContextRef) {
         noreturn = ctx |> LLVMGetEnumAttribute("noreturn")
@@ -161,6 +170,7 @@ class public Attributes {
         nofree = ctx |> LLVMGetEnumAttribute("nofree")
         norecurse = ctx |> LLVMGetEnumAttribute("norecurse")
         noalias = ctx |> LLVMGetEnumAttribute("noalias")
+        nonnull = ctx |> LLVMGetEnumAttribute("nonnull")
         speculatable = ctx |> LLVMGetEnumAttribute("speculatable")
         sext = ctx |> LLVMGetEnumAttribute("signext")
         zext = ctx |> LLVMGetEnumAttribute("zeroext")
@@ -168,6 +178,11 @@ class public Attributes {
         memory_inaccessible_rw = LLVMCreateEnumAttribute(ctx, memory_kind, 12ul)
         memory_arg_inaccessible_rw = LLVMCreateEnumAttribute(ctx, memory_kind, 15ul)
         memory_none = LLVMCreateEnumAttribute(ctx, memory_kind, 0ul)
+        memory_read = LLVMCreateEnumAttribute(ctx, memory_kind,
+            memory_effects(MOD_REF_READ, MOD_REF_READ, MOD_REF_READ, MOD_REF_READ))
+        memory_pure_ctx = LLVMCreateEnumAttribute(ctx, memory_kind,
+            memory_effects(MOD_REF_READ_WRITE, MOD_REF_READ_WRITE,
+                MOD_REF_READ_WRITE, MOD_REF_READ))
     }
 
 }
