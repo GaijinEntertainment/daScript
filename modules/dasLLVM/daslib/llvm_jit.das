@@ -2814,7 +2814,9 @@ class public LlvmJitVisitor : AstVisitor {
         } elif (subExprT.baseType == Type.tFixedArray) {
             let maxIndex = subExprT.fixedDim
             var etype = clone_type(subExprT.firstType)   // element of the fixed-array chain
-            check_range(tidx, types.ConstI32(uint64(maxIndex)), expr.at, "dim index out of range", is_signed_index_type(expr.index._type))
+            if (!expr.atFlags.no_bound_check) {
+                check_range(tidx, types.ConstI32(uint64(maxIndex)), expr.at, "dim index out of range", is_signed_index_type(expr.index._type))
+            }
             var ptr_idx = build_array_index(tsrc, tidx, etype, "dim_at")
             if (expr.atFlags.r2v) {
                 var at_r2v = LLVMBuildLoadData2Aligned(g_builder, type_to_llvm_abi_type(expr._type),
@@ -2826,7 +2828,9 @@ class public LlvmJitVisitor : AstVisitor {
         } elif (subExprT.isGoodArrayType) {
             var arr = LLVMBuildLoadData2Aligned(g_builder, type_to_llvm_type(expr.subexpr._type), tsrc, expr.subexpr._type.alignOf, "arr")
             var size = LLVMBuildExtractValue(g_builder, arr, uint(JIT_ARRAY.SIZE), "array.size")
-            check_range(tidx, size, expr.at, "array index out of range", is_signed_index_type(expr.index._type))
+            if (!expr.atFlags.no_bound_check) {
+                check_range(tidx, size, expr.at, "array index out of range", is_signed_index_type(expr.index._type))
+            }
             var data = LLVMBuildExtractValue(g_builder, arr, uint(JIT_ARRAY.DATA), "array.data")
             var ptr_idx = build_array_index(data, tidx, subExprT.firstType, "array_at")
             if (expr.atFlags.r2v) {
@@ -2851,7 +2855,9 @@ class public LlvmJitVisitor : AstVisitor {
                 setE(expr, ptr_idx)
             }
         } elif (subExprT.isVectorType) {
-            check_range(tidx, types.ConstI32(uint64(subExprT.vectorDim)), expr.at, "vector index out of range", is_signed_index_type(expr.index._type))
+            if (!expr.atFlags.no_bound_check) {
+                check_range(tidx, types.ConstI32(uint64(subExprT.vectorDim)), expr.at, "vector index out of range", is_signed_index_type(expr.index._type))
+            }
             if (expr.atFlags.r2v) {
                 var lvec = LLVMBuildLoadData2Aligned(g_builder, type_to_llvm_type(expr.subexpr._type),
                     tsrc, subExprT.alignOf, "vector_at")

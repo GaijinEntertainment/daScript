@@ -2543,23 +2543,25 @@ class public CppAot : AstVisitor {
         }
         if (!(expr.subexpr._type.baseType == Type.tFixedArray || expr.subexpr._type.isGoodArrayType || expr.subexpr._type.isGoodTableType)) {
             let type_str = describeCppType(expr.subexpr._type, DescribeConfig(skip_ref = true, cross_platform = cross_platform));
-            write(*ss, "das_index<{type_str}>::at(");
+            let unchecked = expr.atFlags.no_bound_check && expr.subexpr._type.isVectorType
+            write(*ss, "das_index<{type_str}>::{unchecked ? "unchecked_at" : "at"}(");
         }
+    }
+    def at_by_brackets(expr : ExprAt?) : bool {
+        assume st = expr.subexpr._type
+        let indexable = st.baseType == Type.tFixedArray || st.isGoodArrayType
+        return st.flags.isNativeDim || (expr.atFlags.no_bound_check && indexable)
     }
     def override preVisitExprAtIndex(var expr : ExprAt?; index : ExpressionPtr) {
         if (expr.subexpr._type.baseType == Type.tFixedArray || expr.subexpr._type.isGoodArrayType || expr.subexpr._type.isGoodTableType) {
-            if (expr.subexpr._type.flags.isNativeDim) {
-                write(*ss, "[");
-            } else {
-                write(*ss, "(");
-            }
+            write(*ss, at_by_brackets(expr) ? "[" : "(")
         } else {
             write(*ss, ",");
         }
 
     }
     def override visitExprAt(var expr : ExprAt?) : ExpressionPtr {
-        if (expr.subexpr._type.flags.isNativeDim) {
+        if (at_by_brackets(expr)) {
             write(*ss, "]");
         } else {
             write(*ss, ",__context__)");
