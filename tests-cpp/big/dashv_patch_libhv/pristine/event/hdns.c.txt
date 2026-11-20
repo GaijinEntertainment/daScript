@@ -1,0 +1,3 @@
+// Excerpts from pinned libhv 060a4b6c, used to test patch anchors.
+
+    // 2) hosts + cache lookups (need config loaded)

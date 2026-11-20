@@ -2,6 +2,7 @@
 #include <doctest/doctest.h>
 #include <hv/HttpParser.h>
 #include <hv/HttpServer.h>
+#include <hv/HttpResponseWriter.h>
 #include "../../../modules/dasHV/src/http_request_snapshot.h"
 #include <hv/WebSocketParser.h>
 #include <hv/wsdef.h>
@@ -113,13 +114,15 @@ TEST_CASE("WebSocket control frames cannot be fragmented or oversized") {
     }
 }
 
-TEST_CASE("WebSocket reserved opcodes are not delivered") {
-    WebSocketParser parser;
-    int delivered = 0;
-    parser.onMessage = [&](int, const std::string &) { ++delivered; };
-    const auto packet = frame(3, true, "reserved");
-    CHECK(parser.FeedRecvData(packet.data(), packet.size()) != int(packet.size()));
-    CHECK(delivered == 0);
+TEST_CASE("WebSocket reserved data and control opcodes are not delivered") {
+    for (int reserved : {0x3, 0xB}) {
+        WebSocketParser parser;
+        int delivered = 0;
+        parser.onMessage = [&](int, const std::string &) { ++delivered; };
+        const auto packet = frame(reserved, true, "reserved");
+        CHECK(parser.FeedRecvData(packet.data(), packet.size()) != int(packet.size()));
+        CHECK(delivered == 0);
+    }
 }
 
 TEST_CASE("WebSocket data opener cannot replace an unfinished message") {
@@ -230,4 +233,14 @@ TEST_CASE("server startup publishes default static routes before workers") {
         REQUIRE(ready_status == std::future_status::ready);
         CHECK(path == "/startup-root/asset.txt");
     }
+}
+
+TEST_CASE("A chunk written while a WebSocket upgrade is pending is refused and leaves the response untouched") {
+    auto response = std::make_shared<HttpResponse>();
+    hv::HttpResponseWriter writer(nullptr, response);
+    writer.awaiting_upgrade = true;
+    CHECK(writer.WriteChunked("x", 1) == -1);
+    const int state = writer.state;
+    CHECK(state == int(hv::HttpResponseWriter::SEND_BEGIN));
+    CHECK(response->GetHeader("Transfer-Encoding").empty());
 }

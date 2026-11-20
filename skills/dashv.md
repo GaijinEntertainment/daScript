@@ -75,8 +75,8 @@ STREAM("/events") <| @(var req : HttpRequest?; var writer : HttpResponseWriter?)
   type from the file name) and covers the body with the cap; `respond` covers its body the same
   way. Set extra headers first with `set_header(server, writer, k, v)` - they serialize when the
   terminal op writes. Writer-rail write failures are still async: the das call cannot return
-  them; they land as `dasHV:` ERROR lines in libhv's log (`bin/libhv.*.log` by default - route
-  with `DASLIVE_HV_LOG=stderr`), and `is_writer_connected` flips false afterwards.
+  them; they land as `dasHV:` ERROR lines in libhv's log (discarded by default - name a file with
+  `hv_set_log_file` or route with `DASLIVE_HV_LOG=stderr`), and `is_writer_connected` flips false afterwards.
 - `is_writer_connected(server, writer)` - true while the writer's client connection is still open
   (false for null / unknown / released writers). The async write ops never report a dead peer, so
   a long-lived stream **polls this to evict abandoned clients** (see `openai_server.das`'s

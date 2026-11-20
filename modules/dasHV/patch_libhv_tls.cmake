@@ -149,30 +149,27 @@ das_hv_hunk([=[
             if (retry_count-- > 0 && left_time > req->retry_delay + connect_timeout * 1000) {
 ]=])
 das_hv_hunk([=[
-        } else if (g_ssl_ctx) {
-            ssl_ctx = g_ssl_ctx;
-        } else {
+    } else if (g_ssl_ctx) {
+        ssl_ctx = g_ssl_ctx;
+    } else {
 ]=] [=[
-        } else {
+    } else {
 ]=])
 das_hv_hunk([=[
-        if (!is_ipaddr(host)) {
-            hssl_set_sni_hostname(cli->ssl, host);
-        }
+    if (sni_host && !is_ipaddr(sni_host)) {
+        hssl_set_sni_hostname(cli->ssl, sni_host);
+    }
 ]=] [=[
-        if (hssl_set_sni_hostname(cli->ssl, host) != HSSL_OK) {
-            hssl_free(cli->ssl); cli->ssl = NULL;
-            closesocket(connfd);
-            return NABS(ERR_SSL);
-        }
+    if (hssl_set_sni_hostname(cli->ssl, sni_host) != HSSL_OK) {
+        hssl_free(cli->ssl); cli->ssl = NULL;
+        return NABS(ERR_SSL);
+    }
 ]=])
 das_hv_hunk([=[
-    char recvbuf[1024] = {0};
-    char* data = NULL;
+    cli->parser->SubmitRequest(req);
 ]=] [=[
     cli->parser->max_body_size = req->response_body_limit;
-    char recvbuf[1024] = {0};
-    char* data = NULL;
+    cli->parser->SubmitRequest(req);
 ]=])
 das_hv_hunk([=[
         int nparse = cli->parser->FeedRecvData(recvbuf, nrecv);
@@ -188,34 +185,23 @@ das_hv_hunk([=[
         }
 ]=])
 das_hv_hunk([=[
-static int http_client_redirect(HttpRequest* req, HttpResponse* resp) {
-    std::string location = resp->headers["Location"];
-    if (!location.empty()) {
-        hlogi("redirect %s => %s", req->url.c_str(), location.c_str());
-        req->url = location;
-        req->ParseUrl();
-        req->headers["Host"] = req->host;
-        resp->Reset();
-        return http_client_send(req, resp);
-    }
-    return 0;
+static void http_client_prepare_redirect(HttpRequest* req, const std::string& location) {
+    std::string redirect_url = http_client_redirect_url(req, location);
+    req->url = redirect_url;
+    req->headers.erase("Host");
+    req->ParseUrl();
 }
 ]=] [=[
-static int http_client_redirect(http_client_t* cli, HttpRequest* req, HttpResponse* resp) {
-    std::string location = resp->headers["Location"];
-    if (!location.empty()) {
-        const int redirected = req->RedirectTo(location);
-        if (redirected != 0) return redirected;
-        resp->Reset();
-        return http_client_send(cli, req, resp);
-    }
-    return 0;
+static int http_client_prepare_redirect(HttpRequest* req, const std::string& location) {
+    return req->RedirectTo(http_client_redirect_url(req, location));
 }
 ]=])
 das_hv_hunk([=[
-        return http_client_redirect(req, resp);
+        hlogi("redirect %s => %s", req->url.c_str(), location.c_str());
+        http_client_prepare_redirect(req, location);
 ]=] [=[
-        return http_client_redirect(cli, req, resp);
+        const int redirected = http_client_prepare_redirect(req, location);
+        if (redirected != 0) return redirected;
 ]=])
 das_hv_hunk([=[
     for (const auto& pair : cli->headers) {
@@ -228,57 +214,51 @@ das_hv_hunk([=[
 ]=])
 das_hv_patch_end()
 
-das_hv_patch_begin("event/nio.c")
+das_hv_patch_begin("event/tls.c")
 das_hv_hunk([=[
-                } else if (g_ssl_ctx) {
-                    ssl_ctx = g_ssl_ctx;
-                } else {
+    if (g_ssl_ctx) return g_ssl_ctx;
+    io->ssl_ctx = hssl_ctx_new(NULL);
 ]=] [=[
-                } else {
+    io->ssl_ctx = hssl_ctx_new(NULL);
 ]=])
 das_hv_hunk([=[
-            if (io->hostname) {
-                hssl_set_sni_hostname(io->ssl, io->hostname);
-            }
+    if (io->proxy && io->proxy->setting.target_host[0] && !is_ipaddr(io->proxy->setting.target_host)) {
+        sni = io->proxy->setting.target_host;
+    } else if (io->hostname && !is_ipaddr(io->hostname)) {
+        sni = io->hostname;
+    }
+    if (sni) {
+        hssl_set_sni_hostname(io->ssl, sni);
+    }
 ]=] [=[
-            if (io->hostname && hssl_set_sni_hostname(io->ssl, io->hostname) != HSSL_OK) {
-                io->error = ERR_SSL;
-                goto connect_error;
-            }
+    if (io->proxy && io->proxy->setting.target_host[0]) {
+        sni = io->proxy->setting.target_host;
+    } else if (io->hostname) {
+        sni = io->hostname;
+    }
+    if (sni && hssl_set_sni_hostname(io->ssl, sni) != HSSL_OK) {
+        io->error = ERR_SSL;
+        hio_close(io);
+        return -1;
+    }
 ]=])
 das_hv_patch_end()
 
 das_hv_patch_begin("evpp/TcpClient.h")
 das_hv_hunk([=[
-            if (!is_ipaddr(remote_host.c_str())) {
-                channel->setHostname(remote_host);
-            }
+            if (sni && sni[0] && !is_ipaddr(sni)) {
 ]=] [=[
-            channel->setHostname(remote_host);
+            if (sni && sni[0]) {
 ]=])
 das_hv_patch_end()
 
 das_hv_patch_begin("http/client/AsyncHttpClient.cpp")
 das_hv_hunk([=[
-            if (!is_ipaddr(host)) {
-                hio_set_hostname(connio, host);
-            }
+        if (!is_ipaddr(req->host.c_str())) {
+            hio_set_hostname(connio, req->host.c_str());
+        }
 ]=] [=[
-            hio_set_hostname(connio, host);
-]=])
-das_hv_hunk([=[
-    auto iter = conn_pools.find(strAddr);
-]=] [=[
-    const std::string pool_key = req->scheme + "://" + req->host + ":" + std::to_string(req->port) + "@" + strAddr;
-    auto iter = conn_pools.find(pool_key);
-]=])
-das_hv_hunk([=[
-    ctx->task = task;
-    channel->onconnect = [&channel]() {
-]=] [=[
-    ctx->task = task;
-    ctx->pool_key = pool_key;
-    channel->onconnect = [&channel]() {
+        hio_set_hostname(connio, req->host.c_str());
 ]=])
 das_hv_hunk([=[
                     hlogi("redirect %s => %s", req->url.c_str(), location.c_str());
@@ -291,16 +271,6 @@ das_hv_hunk([=[
                         channel->close();
                         return;
                     }
-]=])
-das_hv_hunk([=[
-                conn_pools[channel->peeraddr()].add(channel->fd());
-]=] [=[
-                conn_pools[ctx->pool_key].add(channel->fd());
-]=])
-das_hv_hunk([=[
-        auto iter = conn_pools.find(channel->peeraddr());
-]=] [=[
-        auto iter = conn_pools.find(ctx->pool_key);
 ]=])
 das_hv_patch_end()
 
@@ -361,14 +331,5 @@ int HttpRequest::RedirectTo(const std::string& location) {
 }
 
 void HttpRequest::ParseUrl() {
-]=])
-das_hv_patch_end()
-
-das_hv_patch_begin("http/client/AsyncHttpClient.h")
-das_hv_hunk([=[
-    HttpClientTaskPtr   task;
-]=] [=[
-    HttpClientTaskPtr   task;
-    std::string        pool_key;
 ]=])
 das_hv_patch_end()

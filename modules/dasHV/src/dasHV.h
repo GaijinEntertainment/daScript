@@ -51,6 +51,7 @@ bool das_wss_set_limits(Handle<hv::WebSocketServer> h, int http_bytes, int ws_by
 bool das_wss_set_connection_limits(Handle<hv::WebSocketServer> h, int messages, int bytes, int write_bytes);
 int das_wss_start ( Handle<hv::WebSocketServer> h );
 int das_wss_bound_port ( Handle<hv::WebSocketServer> h );
+int das_wss_bound_https_port ( Handle<hv::WebSocketServer> h );
 void das_wss_tick ( Handle<hv::WebSocketServer> h );
 int das_wss_stop ( Handle<hv::WebSocketServer> h );
 void das_wss_get ( Handle<hv::WebSocketServer> h, const char * url, Lambda lmb, Context * context, LineInfoArg * at );

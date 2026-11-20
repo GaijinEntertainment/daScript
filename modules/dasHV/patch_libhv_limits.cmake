@@ -52,8 +52,7 @@ das_hv_hunk([=[
         size_t reserve_length = (size_t)MIN(parser->content_length, MAX_CONTENT_LENGTH - 1) + 1;
 ]=])
 das_hv_hunk([=[
-    int chunk_size = parser->content_length;
-    int reserve_size = MIN(chunk_size + 1, MAX_CONTENT_LENGTH);
+    uint64_t chunk_size = parser->content_length;
 ]=] [=[
     if (hp->max_body_size && (parser->content_length > hp->max_body_size ||
         hp->body_received > hp->max_body_size - parser->content_length)) {
@@ -61,7 +60,6 @@ das_hv_hunk([=[
         return -1;
     }
     uint64_t chunk_size = parser->content_length;
-    size_t reserve_size = (size_t)MIN(chunk_size, MAX_CONTENT_LENGTH - 1) + 1;
 ]=])
 das_hv_patch_end()
 
@@ -142,111 +140,31 @@ das_hv_hunk([=[
     std::string                         message;
 ]=] [=[
     std::string                         message;
-    std::string                         control_message;
     size_t                              max_message_size = 0;
     bool                                fragmented = false;
-    bool                                control_frame = false;
 ]=])
 das_hv_patch_end()
 
 das_hv_patch_begin("http/WebSocketParser.cpp")
 das_hv_hunk([=[
-static int on_frame_header(websocket_parser* parser) {
-    WebSocketParser* wp = (WebSocketParser*)parser->data;
-    int opcode = parser->flags & WS_OP_MASK;
-    // printf("on_frame_header opcode=%d\n", opcode);
+        if (!(parser->flags & WS_FIN) || parser->length > MAX_CONTROL_PAYLOAD_LENGTH) {
+]=] [=[
+        if (!(parser->flags & WS_FIN) || parser->length > MAX_CONTROL_PAYLOAD_LENGTH || opcode > WS_OP_PONG) {
+]=])
+das_hv_hunk([=[
     if (opcode != WS_OP_CONTINUE) {
         wp->opcode = opcode;
     }
-    int length = parser->length;
-    int reserve_length = MIN(length + 1, MAX_PAYLOAD_LENGTH);
-    if (reserve_length > wp->message.capacity()) {
-        wp->message.reserve(reserve_length);
-    }
-    if (wp->state == WS_FRAME_BEGIN ||
-        wp->state == WS_FRAME_FIN) {
+]=] [=[
+    if (opcode == WS_OP_CONTINUE) {
+        if (!wp->fragmented) return -1;
+    } else {
+        if (wp->fragmented || (opcode != WS_OP_TEXT && opcode != WS_OP_BINARY)) return -1;
+        wp->opcode = opcode;
         wp->message.clear();
     }
-    wp->state = WS_FRAME_HEADER;
-    return 0;
-}
-
-static int on_frame_body(websocket_parser* parser, const char * at, size_t length) {
-    // printf("on_frame_body length=%d\n", (int)length);
-    WebSocketParser* wp = (WebSocketParser*)parser->data;
-    wp->state = WS_FRAME_BODY;
-    if (wp->parser->flags & WS_HAS_MASK) {
-        websocket_parser_decode((char*)at, at, length, wp->parser);
-    }
-    wp->message.append(at, length);
-    return 0;
-}
-
-static int on_frame_end(websocket_parser* parser) {
-    // printf("on_frame_end\n");
-    WebSocketParser* wp = (WebSocketParser*)parser->data;
-    wp->state = WS_FRAME_END;
-    if (wp->parser->flags & WS_FIN) {
-        wp->state = WS_FRAME_FIN;
-        if (wp->onMessage) {
-            wp->onMessage(wp->opcode, wp->message);
-        }
-    }
-    return 0;
-}
-]=] [=[
-static int on_frame_header(websocket_parser* parser) {
-    WebSocketParser* wp = (WebSocketParser*)parser->data;
-    int frame_opcode = parser->flags & WS_OP_MASK;
-    wp->control_frame = frame_opcode >= WS_OP_CLOSE;
-    if (wp->control_frame) {
-        if (!(parser->flags & WS_FIN) || parser->length > 125 || frame_opcode > WS_OP_PONG) return -1;
-        wp->control_message.clear();
-    } else {
-        if (frame_opcode == WS_OP_CONTINUE) {
-            if (!wp->fragmented) return -1;
-        } else {
-            if (wp->fragmented || (frame_opcode != WS_OP_TEXT && frame_opcode != WS_OP_BINARY)) return -1;
-            wp->opcode = frame_opcode;
-            wp->message.clear();
-        }
-        if (wp->max_message_size && (parser->length > wp->max_message_size ||
-            wp->message.size() > wp->max_message_size - parser->length)) return -1;
-        wp->fragmented = !(parser->flags & WS_FIN);
-    }
-    auto& payload = wp->control_frame ? wp->control_message : wp->message;
-    size_t reserve_length = payload.size() + (size_t)MIN(parser->length, MAX_PAYLOAD_LENGTH);
-    if (reserve_length > payload.capacity()) payload.reserve(reserve_length);
-    wp->state = WS_FRAME_HEADER;
-    return 0;
-}
-
-static int on_frame_body(websocket_parser* parser, const char * at, size_t length) {
-    WebSocketParser* wp = (WebSocketParser*)parser->data;
-    auto& payload = wp->control_frame ? wp->control_message : wp->message;
-    size_t limit = wp->control_frame ? 125 : wp->max_message_size;
-    if (limit && (length > limit || payload.size() > limit - length)) return -1;
-    wp->state = WS_FRAME_BODY;
-    if (wp->parser->flags & WS_HAS_MASK) {
-        websocket_parser_decode((char*)at, at, length, wp->parser);
-    }
-    payload.append(at, length);
-    return 0;
-}
-
-static int on_frame_end(websocket_parser* parser) {
-    WebSocketParser* wp = (WebSocketParser*)parser->data;
-    wp->state = WS_FRAME_END;
-    if (parser->flags & WS_FIN) {
-        wp->state = WS_FRAME_FIN;
-        if (wp->onMessage) {
-            wp->onMessage(wp->control_frame ? (parser->flags & WS_OP_MASK) : wp->opcode,
-                wp->control_frame ? wp->control_message : wp->message);
-        }
-    }
-    return 0;
-}
-
-
+    if (wp->max_message_size && (parser->length > wp->max_message_size ||
+        wp->message.size() > wp->max_message_size - parser->length)) return -1;
+    wp->fragmented = !(parser->flags & WS_FIN);
 ]=])
 das_hv_patch_end()

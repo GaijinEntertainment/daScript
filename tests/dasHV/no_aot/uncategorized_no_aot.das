@@ -111,7 +111,7 @@ def bounded_file_writer_handles_slow_peer_and_keepalive(t : T?) {
     }
 }
 
-[test(description = "Serving a special file such as a fifo does not block server shutdown, proven by a child process", timeout = 1200)]
+[test(description = "Serving a special file such as a fifo does not block server shutdown, and a server that names no log file writes none, proven by a child process", timeout = 1200)]
 def special_file_response_does_not_block_shutdown(t : T?) {
     let made = create_temp_directory_result("hv-special-")
     t |> success(made is value)
@@ -124,7 +124,9 @@ def special_file_response_does_not_block_shutdown(t : T?) {
             }
         }
         let fixture = "{get_das_root()}/tests/dasHV/no_aot/_file_stream_child.das"
-        with_process([get_host_binary(), "-dasroot", get_das_root(), fixture, "--", root]) $(var child) {
+        let inherited : array<string>
+        let argv <- [get_host_binary(), "-dasroot", get_das_root(), fixture, "--", root]
+        with_process(argv, root, inherited) $(var child) {
             let started = ref_time_ticks()
             while (!fexist("{root}/ready") && get_time_usec(started) < 15000000) {
                 unsafe(process_drain(child) $(_line) {})
@@ -144,6 +146,13 @@ def special_file_response_does_not_block_shutdown(t : T?) {
                 peer->close(); unsafe { delete peer }
                 verify(fwrite("{root}/release", "done"))
                 t |> equal(unsafe(process_wait(child, 3.0)), 0, "server stops without a blocked file open")
+                var logs : array<string>
+                dir(root) $(name) {
+                    if (ends_with(name, ".log")) {
+                        logs |> push(name)
+                    }
+                }
+                t |> success(empty(logs), "the child's directory holds no libhv log: {logs}")
             }
         }
     } finally {

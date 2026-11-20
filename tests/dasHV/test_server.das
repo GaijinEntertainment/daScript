@@ -599,3 +599,28 @@ def test_wildcard_priority(t : T?) {
         }
     }
 }
+
+[test(description = "A server given no HTTPS port opens no HTTPS listener and reports -1 for it")]
+def server_without_https_port_reports_none(t : T?) {
+    var server = new RouteTestServer()
+    server->init(0)
+    t |> equal(server->start(), 0)
+    t |> success(server->bound_port() > 0)
+    t |> equal(server->bound_https_port(), -1)
+    server->stop()
+    server->cleanup()
+    unsafe {
+        delete server
+    }
+}
+
+[test(description = "A server given an HTTPS port reports that port")]
+def server_with_https_port_reports_it(t : T?) {
+    var server = new RouteTestServer()
+    server->init_wss(0, 8443)
+    t |> equal(server->bound_https_port(), 8443)
+    server->cleanup()
+    unsafe {
+        delete server
+    }
+}

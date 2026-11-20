@@ -97,7 +97,7 @@ def test_chat_live_openrouter(t : T?) {
         return if (!live_key(t, "OPENROUTER_API_KEY"))
         let client = openai_client("https://openrouter.ai/api/v1", get_env_variable("OPENROUTER_API_KEY"))
         let req = ChatCompletionRequest(
-            model = "liquid/lfm-2.5-1.2b-instruct:free",
+            model = "liquid/lfm-3-1.7b:free",
             messages <- [ChatMessage(role = "user", content = "Reply with exactly the word: pong")],
             max_tokens = 16)
         let res = chat(client, req)
@@ -163,9 +163,9 @@ def test_stream_live_openrouter(t : T?) {
         return if (!live_key(t, "OPENROUTER_API_KEY"))
         let client = openai_client("https://openrouter.ai/api/v1", get_env_variable("OPENROUTER_API_KEY"))
         var req = ChatCompletionRequest(
-            model = "liquid/lfm-2.5-1.2b-instruct:free",
+            model = "liquid/lfm-3-1.7b:free",
             messages <- [ChatMessage(role = "user", content = "Say: streaming works")],
-            max_tokens = 32)
+            max_tokens = 512)
         var deltas = 0
         let res = chat_stream(client, req) $(delta : string) {
             deltas++
@@ -225,7 +225,7 @@ def test_tools_live_openrouter(t : T?) {
         return if (!live_key(t, "OPENROUTER_API_KEY"))
         let client = openai_client("https://openrouter.ai/api/v1", get_env_variable("OPENROUTER_API_KEY"))
         var req = ChatCompletionRequest(
-            model = "deepseek/deepseek-v4-flash:free",
+            model = "liquid/lfm-3-1.7b:free",
             messages <- [ChatMessage(role = "user", content = "What is the weather in Paris? Use the get_weather tool.")])
         req.tools |> push(weather_tool())
         req.tool_choice = "auto"

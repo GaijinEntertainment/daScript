@@ -240,7 +240,11 @@ class HvWebServer {
     def abstract onWsOpenRequest(channel : WebSocketChannel; var request : HttpRequest?#) : void
         //! onWsOpenRequest receives a borrowed upgrade-request snapshot; clone retained strings.
         //! Without an onWsOpenRequest override, the native adapter calls onWsOpen.
-
+    def bound_https_port : int {
+        //! The HTTPS port given to ``init_wss``, or -1 for a server
+        //! initialized without one.
+        return bound_https_port(server)
+    }
 }
 
 def with_http_request(blk : block<(var req : HttpRequest?#) : void>) {

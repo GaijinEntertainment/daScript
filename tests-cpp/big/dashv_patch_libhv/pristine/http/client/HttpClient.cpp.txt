@@ -1,35 +1,17 @@
-// Excerpts from pinned libhv 303f50c7, used to test patch anchors.
+// Excerpts from pinned libhv 060a4b6c, used to test patch anchors.
 
-        } else if (g_ssl_ctx) {
-            ssl_ctx = g_ssl_ctx;
-        } else {
+    for (const auto& pair : cli->headers) {
+        if (req->headers.find(pair.first) == req->headers.end()) {
 
-        if (!is_ipaddr(host)) {
-            hssl_set_sni_hostname(cli->ssl, host);
-        }
+    } else if (g_ssl_ctx) {
+        ssl_ctx = g_ssl_ctx;
+    } else {
 
-    char recvbuf[1024] = {0};
-    char* data = NULL;
-
-        int nparse = cli->parser->FeedRecvData(recvbuf, nrecv);
-        if (nparse != nrecv) {
-            return ERR_PARSE;
-        }
-
-static int http_client_redirect(HttpRequest* req, HttpResponse* resp) {
-    std::string location = resp->headers["Location"];
-    if (!location.empty()) {
-        hlogi("redirect %s => %s", req->url.c_str(), location.c_str());
-        req->url = location;
-        req->ParseUrl();
-        req->headers["Host"] = req->host;
-        resp->Reset();
-        return http_client_send(req, resp);
+    if (sni_host && !is_ipaddr(sni_host)) {
+        hssl_set_sni_hostname(cli->ssl, sni_host);
     }
-    return 0;
-}
 
-        return http_client_redirect(req, resp);
+    cli->parser->SubmitRequest(req);
 
             if (cli->parser->IsEof()) {
                 err = 0;
@@ -37,5 +19,17 @@ static int http_client_redirect(HttpRequest* req, HttpResponse* resp) {
             }
             if (retry_count-- > 0 && left_time > req->retry_delay + connect_timeout * 1000) {
 
-    for (const auto& pair : cli->headers) {
-        if (req->headers.find(pair.first) == req->headers.end()) {
+        int nparse = cli->parser->FeedRecvData(recvbuf, nrecv);
+        if (nparse != nrecv) {
+            return ERR_PARSE;
+        }
+
+static void http_client_prepare_redirect(HttpRequest* req, const std::string& location) {
+    std::string redirect_url = http_client_redirect_url(req, location);
+    req->url = redirect_url;
+    req->headers.erase("Host");
+    req->ParseUrl();
+}
+
+        hlogi("redirect %s => %s", req->url.c_str(), location.c_str());
+        http_client_prepare_redirect(req, location);

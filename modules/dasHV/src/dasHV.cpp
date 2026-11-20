@@ -246,9 +246,22 @@ Handle<hv::WebSocketClient> makeWebSocketClient ( const void * pClass, const Str
     return HandleRegistry<hv::WebSocketClient>::instance().acquire(sp);
 }
 
+// modules/dasHV/ARCHITECTURE.md#name-resolution
 int das_wsc_open ( Handle<hv::WebSocketClient> h, const char* url ) {
     auto p = HandleRegistry<hv::WebSocketClient>::instance().lookup(h);
     if ( !p ) return -1;
+    string target = url ? url : "";
+    if ( strncmp(target.c_str(), "ws", 2) != 0 ) target = "ws://" + target;
+    HttpRequest probe;
+    probe.url = "http" + target.substr(2);
+    probe.ParseUrl();
+    sockaddr_u resolved;
+    memset(&resolved, 0, sizeof(resolved));
+    const int resolve_error = sockaddr_set_ipport(&resolved, probe.host.c_str(), probe.port);
+    if ( resolve_error != 0 ) {
+        p->close();
+        return NABS(resolve_error);
+    }
     return p->open(url ? url : "");
 }
 
@@ -313,8 +326,14 @@ int das_wsc_close ( Handle<hv::WebSocketClient> h ) {
     return 0;
 }
 
+static void discard_hv_log ( int, const char *, int ) {}
+static bool hv_log_unrouted = false;
+
 void das_hv_set_log_file ( const char * path ) {
-    if ( path && *path ) hlog_set_file(path);
+    const bool named = path && *path;
+    if ( named ) hlog_set_file(path);
+    else if ( hv_log_unrouted ) hlog_set_file(DEFAULT_LOG_FILE);
+    if ( hv_log_unrouted ) hlog_set_handler(named ? nullptr : discard_hv_log);
 }
 
 bool das_wsc_is_connected ( Handle<hv::WebSocketClient> h ) {
@@ -828,9 +847,8 @@ Handle<hv::WebSocketServer> makeWebSocketServer ( int port, int httpsPort, const
         }
     }
     auto adapter = new WebServer_Adapter((char *)pClass,info,context);
-    // libHV serves nothing for port 0 - it listens only above zero - so a server asked for any free
-    // port learns one from a socket of its own and releases it. Resolved here rather than at start,
-    // so bound_port answers before the event loop runs and a route still registers single-threaded.
+    // Port 0 resolves here rather than at start, so bound_port answers before the event loop runs and
+    // a route still registers single-threaded.
     if ( port == 0 ) {
         int fd = Listen(0, adapter->host);
         if ( fd >= 0 ) {
@@ -842,7 +860,7 @@ Handle<hv::WebSocketServer> makeWebSocketServer ( int port, int httpsPort, const
         }
     }
     adapter->port = port;
-    adapter->https_port = httpsPort;
+    adapter->https_port = httpsPort > 0 ? httpsPort : -1;
     shared_ptr<hv::WebSocketServer> sp(adapter);
     adapter->self_handle = HandleRegistry<hv::WebSocketServer>::instance().acquire(sp);
     return adapter->self_handle;
@@ -914,6 +932,12 @@ int das_wss_bound_port ( Handle<hv::WebSocketServer> h ) {
     auto adapter = lookup_server(h);
     if ( !adapter ) return -1;
     return adapter->port;
+}
+
+int das_wss_bound_https_port ( Handle<hv::WebSocketServer> h ) {
+    auto adapter = lookup_server(h);
+    if ( !adapter ) return -1;
+    return adapter->https_port;
 }
 
 void das_wss_tick ( Handle<hv::WebSocketServer> h ) {
@@ -1839,13 +1863,13 @@ public:
         WSADATA wsaData;
         WSAStartup(MAKEWORD(2, 2), &wsaData);
 #endif
-        // libhv defaults to file_logger (bin/libhv.YYYYMMDD.log). Invisible
-        // under popen + CI runners. Two env-gated opt-outs:
+        // libhv defaults to file_logger (libhv.YYYYMMDD.log in the working directory).
         //   DASLIVE_HV_LOG=stderr (or =1)  → redirect libhv to stderr
         //   DASLIVE_HV_LOG=stdout          → redirect libhv to stdout
         //   DASLIVE_HV_LOG=silent          → disable libhv logging entirely
+        //   DASLIVE_HV_LOG=file            → libhv's file_logger
         // DASLIVE_HV_LOG_LEVEL=DEBUG/INFO/WARN/ERROR overrides the level.
-        // Default unset → file_logger (unchanged).
+        // Default unset → no log file until hv_set_log_file names one.
         static std::once_flag logConfigured;
         std::call_once(logConfigured, []() {
             if (const char * route = std::getenv("DASLIVE_HV_LOG")) {
@@ -1856,6 +1880,9 @@ public:
                 } else if (!strcmp(route, "silent")) {
                     hlog_disable();
                 }
+            } else {
+                hv_log_unrouted = true;
+                hlog_set_handler(discard_hv_log);
             }
             if (const char * lvl = std::getenv("DASLIVE_HV_LOG_LEVEL")) {
                 hlog_set_level_by_str(lvl);
@@ -1950,6 +1977,9 @@ public:
                 ->args({"server"});
         addExtern<DAS_BIND_FUN(das_wss_bound_port)> (*this, lib, "bound_port",
             SideEffects::worstDefault, "das_wss_bound_port")
+                ->args({"server"});
+        addExtern<DAS_BIND_FUN(das_wss_bound_https_port)> (*this, lib, "bound_https_port",
+            SideEffects::worstDefault, "das_wss_bound_https_port")
                 ->args({"server"});
         addExtern<DAS_BIND_FUN(das_wss_tick)> (*this, lib, "tick",
             SideEffects::worstDefault, "das_wss_tick")
