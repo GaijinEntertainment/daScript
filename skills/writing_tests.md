@@ -153,7 +153,8 @@ run each file in its own process (slower, but survives a crash in one file), and
 `--together <file>` (repeatable) to compile the listed files as one program, so a heavy module
 graph is parsed, JIT'd and simulated once for the list, each file then running in a clone of that
 context - globals, heaps and `[init]`s of its own - and reporting on its own. `--test-wall <seconds>`
-ends the whole run, exit code 125, at the first `[test]` function that runs past it.
+ends the whole run, exit code 125, at the first `[test]` function that runs past it - or past the
+longer budget the test declares (`timeout = N`).
 
 ## Benchmarks
 

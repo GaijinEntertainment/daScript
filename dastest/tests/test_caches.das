@@ -89,20 +89,23 @@ def test_module_cache_filenames(t : T?) {
     t |> success(first != module_cache_path("first/test.das", policies))
 }
 
-[test(description = "a fresh runner rejects a malformed worker module-cache path with exit code 1 and a named message", timeout = 1200)]
+[test(description = "a fresh runner rejects a malformed worker module-cache path or run-env pair with exit code 1 and a message naming which", timeout = 1200)]
 def test_invalid_worker_module_cache_path(t : T?) {
     let malformed = base64_encode(test_temp_dir()) + "=ignored"
-    for (encoded in ["#", malformed]) {
-        var inscope argv <- [get_host_binary(), "-dasroot", get_das_root(),
-            "-no-module-cache", path_join(get_das_root(),
-                "dastest/dastest.das"), "--", "--worker-module-cache-dir",
-            encoded, "--test", path_join(get_das_root(),
-                "dastest/tests/_fixtures/mc_key_case.das")]
-        var output : string
-        let code = run_and_capture(argv, output, 300.0)
-        t |> equal(code, 1, output)
-        t |> success(find(output, "invalid worker module-cache path") >= 0,
-            output)
+    let flags = [("--worker-module-cache-dir", "invalid worker module-cache path"),
+        ("--worker-run-env", "invalid worker run-env pair")]
+    for (flag in flags) {
+        for (encoded in ["#", malformed]) {
+            var inscope argv <- [get_host_binary(), "-dasroot", get_das_root(),
+                "-no-module-cache", path_join(get_das_root(),
+                    "dastest/dastest.das"), "--", flag._0,
+                encoded, "--test", path_join(get_das_root(),
+                    "dastest/tests/_fixtures/mc_key_case.das")]
+            var output : string
+            let code = run_and_capture(argv, output, 300.0)
+            t |> equal(code, 1, output)
+            t |> success(find(output, flag._1) >= 0, output)
+        }
     }
 }
 
@@ -278,4 +281,58 @@ def test_result_cache(tt : T?) {
         let rerun = run_result_cache(file, "")
         t |> success(!served_from_cache(rerun), "the cache is opt-in:\n{rerun.output}")
     }
+}
+
+[test(description = "--run-env sets a variable for a compiled test's run under --test, --together and isolated workers, byte for byte, two values of it share one compile record where the same values in the environment make two, and a pair with no NAME stops dastest with exit code 2", timeout = 1200)]
+def test_run_env(t : T?) {
+    let exe = get_command_line_arguments()[0]
+    let root = get_das_root()
+    let fixture = "{root}/dastest/tests/_fixture_run_env.das"
+    let stamp = get_time_usec(0l)
+    var output : string
+    let unset <- ["DASTEST_RUN_ENV_PROBE="]
+    let host_cache = path_join(test_temp_dir(), "run_env_host_{stamp}.bin")
+    var plain <- [exe, "-dasroot", root, "-module-cache", host_cache,
+        "{root}/dastest/dastest.das", "--", "--failures-only", "--test", fixture]
+    let plain_rc = run_and_capture(plain, "", unset, output, 300.0)
+    t |> success(plain_rc != 0, "control: without the flag the probe is not set: {output}")
+    let by_flag = path_join(test_temp_dir(), "run_env_flag_{stamp}")
+    let by_env = path_join(test_temp_dir(), "run_env_env_{stamp}")
+    for (value in ["one", "two"]) {
+        var inscope flagged := plain
+        flagged |> push_from(["--module-cache-dir", by_flag,
+            "--run-env", "DASTEST_RUN_ENV_PROBE={value}"])
+        let by_flag_rc = run_and_capture(flagged, "", unset, output, 300.0)
+        t |> equal(by_flag_rc, 0, "the flag sets the probe to '{value}' for the run: {output}")
+        var inscope exported := plain
+        exported |> push_from(["--module-cache-dir", by_env])
+        let by_env_rc = run_and_capture(exported, "", ["DASTEST_RUN_ENV_PROBE={value}"],
+            output, 300.0)
+        t |> equal(by_env_rc, 0, "the environment sets it too: {output}")
+    }
+    t |> equal(cache_count(by_flag), 1, "two values by the flag compile once: one record")
+    t |> equal(cache_count(by_env), 2, "control: two values in the environment name two records")
+    let together <- [exe, "-dasroot", root, "-module-cache", host_cache,
+        "{root}/dastest/dastest.das", "--", "--failures-only",
+        "--together", fixture, "--run-env", "DASTEST_RUN_ENV_PROBE=on"]
+    let together_rc = run_and_capture(together, "", unset, output, 300.0)
+    t |> equal(together_rc, 0, "the flag reaches a --together run: {output}")
+    let shell_text = "a b $HOME \"quoted\" 'single'"
+    var inscope isolated := plain
+    isolated |> push_from(["--isolated-mode", "--isolated-mode-threads", "1",
+        "--run-env", "DASTEST_RUN_ENV_PROBE={shell_text}"])
+    let isolated_env <- ["DASTEST_RUN_ENV_PROBE=", "DASTEST_RUN_ENV_EXPECT={shell_text}"]
+    let isolated_rc = run_and_capture(isolated, "", isolated_env, output, 300.0)
+    t |> equal(isolated_rc, 0, "an isolated worker gets the value byte for byte: {output}")
+    for (bad in ["DASTEST_RUN_ENV_PROBE", "=no_name"]) {
+        var inscope refused := plain
+        refused |> push_from(["--run-env", bad])
+        let refused_rc = run_and_capture(refused, "", unset, output, 300.0)
+        t |> equal(refused_rc, 2, "'{bad}' is not NAME=VALUE: {output}")
+        let named = find(output, "--run-env '{bad}'") >= 0
+        t |> success(named, "the line names the flag and the pair: {output}")
+    }
+    var err : string
+    rmdir_rec(by_flag, err)
+    rmdir_rec(by_env, err)
 }

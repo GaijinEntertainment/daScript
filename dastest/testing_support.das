@@ -50,3 +50,29 @@ def public fapprox(x, y : float) : bool => abs(x - y) <= 1e-4 * max(1.0, max(abs
 //! triples there, never past five minutes
 def public child_deadline(seconds : float) : float =>
     shared_module_extension() == "_debug.shared_module" ? min(seconds * 3.0, 300.0) : seconds
+
+//! Run `blk` with each ``(name, value)`` of `pairs` set in the
+//! process environment, in order, then put the environment back
+//! exactly: the pairs are undone in reverse, so a name listed twice
+//! ends as it began, a variable that was absent is removed again, and
+//! one that was present gets its earlier value.
+def public with_env_variables(pairs : array<tuple<name : string; value : string>>;
+                              blk : block<() : void>) {
+    var before : array<tuple<name : string; present : bool; value : string>>
+    before |> reserve(length(pairs))
+    for (p in pairs) {
+        let present = has_env_variable(p.name)
+        before |> push((name = p.name, present = present, value = get_env_variable(p.name)))
+        set_env_variable(p.name, p.value)
+    }
+    invoke(blk)
+    while (!empty(before)) {
+        let was = before |> back()
+        if (was.present) {
+            set_env_variable(was.name, was.value)
+        } else {
+            unset_env_variable(was.name)
+        }
+        before |> pop()
+    }
+}

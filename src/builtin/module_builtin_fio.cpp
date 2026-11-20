@@ -302,6 +302,7 @@ namespace das {
     bool has_env_variable ( const char *, Context *, LineInfoArg * ) { return false; }
     char * get_env_variable ( const char *, Context *, LineInfoArg * ) { return nullptr; }
     void set_env_variable ( const char * var, const char * value, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
+    void unset_env_variable ( const char * var, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
     char * sanitize_command_line ( const char * cmd, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
     char * builtin_describe_pending_dynamic_modules ( Context * context, LineInfoArg * at ) GENERATE_IO_STUB
     // filesystem stubs
@@ -384,6 +385,7 @@ namespace das {
     bool builtin_rmdir ( const char * ) GENERATE_IO_STUB_RET
     bool builtin_fexist ( const char * ) GENERATE_IO_STUB_RET
     bool builtin_rmdir_rec ( const char * ) GENERATE_IO_STUB_RET
+    const char * rmdir_rec_refusal ( const char * ) { return "file io is disabled"; }
     bool builtin_fs_is_absolute ( const char * ) GENERATE_IO_STUB_RET
     void * register_dynamic_module ( const char *, const char *, int, Context *, LineInfoArg * ) GENERATE_IO_STUB_RET
     void register_native_path ( const char *, const char *, const char *, Context *, LineInfoArg * ) GENERATE_IO_STUB
@@ -2508,8 +2510,43 @@ namespace das {
     }
 #endif
 
+    static bool rmdir_rec_is_separator ( char c ) {
+        return c=='/' || c=='\\';
+    }
+
+#if defined(_WIN32)
+    static string rmdir_rec_unprefixed ( const string & p ) {
+        if ( p.size()<4 || !rmdir_rec_is_separator(p[0]) || !rmdir_rec_is_separator(p[1])
+            || (p[2]!='?' && p[2]!='.') || !rmdir_rec_is_separator(p[3]) ) return p;
+        string rest = p.substr(4);
+        bool unc = rest.size()>=3 && _strnicmp(rest.c_str(), "UNC", 3)==0
+            && (rest.size()==3 || rmdir_rec_is_separator(rest[3]));
+        return unc ? "\\\\" + (rest.size()>3 ? rest.substr(4) : string()) : rest;
+    }
+#endif
+
+    const char * rmdir_rec_refusal ( const char * path ) {
+        if ( !path || !*path ) return "the path is empty";
+        string p(path);
+        while ( p.size()>1 && rmdir_rec_is_separator(p.back()) ) p.pop_back();
+#if defined(_WIN32)
+        string bare = rmdir_rec_unprefixed(p);
+        auto fp = das_to_path(bare.c_str());
+        auto rootName = fp.root_name().native();
+        bool unc = rootName.size()>2 && (rootName[0]==L'/' || rootName[0]==L'\\') && (rootName[1]==L'/' || rootName[1]==L'\\');
+        if ( !fp.has_relative_path() || (unc && !fp.relative_path().has_parent_path()) ) return "the path is a filesystem root";
+        size_t cut = p.find_last_of("/\\:");
+#else
+        if ( !das_to_path(p.c_str()).has_relative_path() ) return "the path is a filesystem root";
+        size_t cut = p.find_last_of("/\\");
+#endif
+        string last = cut==string::npos ? p : p.substr(cut+1);
+        if ( last=="." || last==".." ) return "the path's last component is '.' or '..'";
+        return nullptr;
+    }
+
     bool builtin_rmdir_rec ( const char * path ) {
-        if ( !path ) return false;
+        if ( rmdir_rec_refusal(path) ) return false;
 #if defined(_WIN32)
         auto widePath = das_utf8_to_wide(path);
         return !widePath.empty() && rmdir_rec_impl(widePath);
@@ -2630,6 +2667,11 @@ namespace das {
         // process-wide; children spawned via popen/popen_argv inherit it
         if ( !var || !*var ) return;
         das_setenv(var, value);
+    }
+
+    void unset_env_variable ( const char * var, Context *, LineInfoArg * ) {
+        if ( !var || !*var ) return;
+        das_unsetenv(var);
     }
 
     enum class RegisterOnError {
@@ -3227,7 +3269,11 @@ namespace das {
 
     bool builtin_rmdir_rec_ec ( const char * path, char * & error, Context * ctx, LineInfoArg * at ) {
         error = nullptr;
-        if ( !path ) { error = empty_path_error(ctx, at); return false; }
+        if ( auto reason = rmdir_rec_refusal(path) ) {
+            string why = string("rmdir_rec refuses '") + (path ? path : "") + "': " + reason;
+            error = ctx->allocateString(why.c_str(), uint32_t(why.size()), at);
+            return false;
+        }
         std::error_code ec;
         std::filesystem::remove_all(das_to_path(path), ec);
         if ( ec ) { error = ec_to_string(ec, ctx, at); return false; }
@@ -3630,6 +3676,9 @@ namespace das {
             addExtern<DAS_BIND_FUN(set_env_variable)>(*this, lib, "set_env_variable",
                 SideEffects::modifyExternal, "set_env_variable")
                     ->args({"var","value","context","at"});
+            addExtern<DAS_BIND_FUN(unset_env_variable)>(*this, lib, "unset_env_variable",
+                SideEffects::modifyExternal, "unset_env_variable")
+                    ->args({"var","context","at"});
             addExtern<DAS_BIND_FUN(has_env_variable)>(*this, lib, "has_env_variable",
                 SideEffects::accessExternal, "has_env_variable")
                     ->args({"var","context","at"});

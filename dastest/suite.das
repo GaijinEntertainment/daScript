@@ -18,6 +18,7 @@ require dastest_clargs
 require kill_switch
 require log
 require testing
+require testing_support
 require suite_result public
 
 //! a standalone exe reports jit_enabled() but carries no llvm/dasbind
@@ -41,6 +42,7 @@ struct SuiteCtx {
     dastestRoot : string
     projectPath : string
     moduleCacheDir : string
+    runEnv : array<string>   //! `--run-env` pairs: the environment of a compiled program's run
     uriPaths : bool = false
     verbose : bool = false
     compile_only : bool = false
@@ -105,6 +107,7 @@ def SuiteCtx(args : DastestArgs) : SuiteCtx {
     ctx.uriPaths = args.uri_paths
     ctx.projectPath = args.test_project
     ctx.moduleCacheDir = args.module_cache_dir
+    ctx.runEnv := args.run_env
     ctx.compile_only = args.compile_only
     ctx.use_aot = args.use_aot || is_in_aot()
     ctx.aot_macros = args.aot_macros
@@ -354,6 +357,22 @@ def private together_root(files : array<string>; ctx : SuiteCtx) : TogetherRoot 
     return <- (path = root_path, dirs <- dirs, why = write_why)
 }
 
+//! `body` under the run's environment (`--run-env`): each NAME=VALUE
+//! pair set for the block and the environment put back after it. A
+//! compile reads the environment into its record's name, so the pairs
+//! go in only once a program has compiled; `dastest.das` refuses a
+//! pair with no NAME before any run
+def private with_run_env(ctx : SuiteCtx; body : block<void>) {
+    let pairs <- [for (pair in ctx.runEnv); run_env_pair(pair)]
+    with_env_variables(pairs, body)
+}
+
+//! `pair` split at its first `=`: the variable's name and its value
+def private run_env_pair(pair : string) : tuple<name : string; value : string> {
+    let eq = find(pair, "=")
+    return (name = slice(pair, 0, eq), value = slice(pair, eq + 1))
+}
+
 //! runs `files` as one program simulated once, each file's module
 //! in a clone of its context - globals and heaps of its own, its
 //! init run, the code and its JIT link shared; `blk` gets every
@@ -391,41 +410,43 @@ def test_together(files : array<string>; var ctx : SuiteCtx; blk : TogetherRepor
                 }
                 // one simulate: the JIT links the program's code
                 // once, and every file's context is a clone of it
-                simulate(program) $(sok; base; serrors) {
-                    if (!sok) {
-                        log::error("Failed to simulate the together root {root_path}\n{serrors}")
-                        fail_together(files, res, blk)
-                        return
-                    }
-                    for (f in files) {
-                        let want = stem(f)
-                        let t0 = ref_time_ticks()
-                        test_wall_file = f
-                        var status : SuiteResult
-                        ctx.queued_benchmarks |> clear
-                        clone_context(*base) $(cok; context; cerrors) {
-                            if (!cok) {
-                                log::error("Failed to start a context for {f}: {cerrors}")
-                                status.total++
-                                status.errors++
-                                return
-                            }
-                            var found = false
-                            program_for_each_module(program) $(m) {
-                                if (m.name == want) {
-                                    found = true
-                                    let module_result = test_module(*m, *context, ctx, fileCtx)
-                                    after_module(ctx, fileCtx, *context, module_result, status)
+                with_run_env(ctx) {
+                    simulate(program) $(sok; base; serrors) {
+                        if (!sok) {
+                            log::error("Failed to simulate the together root {root_path}\n{serrors}")
+                            fail_together(files, res, blk)
+                            return
+                        }
+                        for (f in files) {
+                            let want = stem(f)
+                            let t0 = ref_time_ticks()
+                            test_wall_file = f
+                            var status : SuiteResult
+                            ctx.queued_benchmarks |> clear
+                            clone_context(*base) $(cok; context; cerrors) {
+                                if (!cok) {
+                                    log::error("Failed to start a context for {f}: {cerrors}")
+                                    status.total++
+                                    status.errors++
+                                    return
+                                }
+                                var found = false
+                                program_for_each_module(program) $(m) {
+                                    if (m.name == want) {
+                                        found = true
+                                        let module_result = test_module(*m, *context, ctx, fileCtx)
+                                        after_module(ctx, fileCtx, *context, module_result, status)
+                                    }
+                                }
+                                if (!found) {
+                                    log::error("no module `{want}` for {f} in the root's program")
+                                    status.total++
+                                    status.errors++
                                 }
                             }
-                            if (!found) {
-                                log::error("no module `{want}` for {f} in the root's program")
-                                status.total++
-                                status.errors++
-                            }
+                            res += status
+                            invoke(blk, f, status, get_time_nsec(t0) / 1000l)
                         }
-                        res += status
-                        invoke(blk, f, status, get_time_nsec(t0) / 1000l)
                     }
                 }
             }
@@ -514,28 +535,30 @@ def test_file(file_name : string; var ctx : SuiteCtx; var file_ctx : FileCtx) : 
                     }
                     return
                 }
-                simulate(program) $(sok; context; serrors) {
-                    if (!sok) {
-                        res.total ++
-                        res.errors ++
-                        log::error("Failed to simulate {file_name}\n{serrors}")
-                        return
-                    }
-                    var mod = program |> get_this_module()
-                    if (mod != null && context != null) {
-                        let module_result = test_module(*mod, *context, ctx, file_ctx)
-                        after_module(ctx, file_ctx, *context, module_result, res)
-                    } else {
-                        res.errors ++
-                        res.total ++
-                        var msg = "Failed to execute {file_name}"
-                        if (mod == null) {
-                            msg = "{msg}. Current module is null."
+                with_run_env(ctx) {
+                    simulate(program) $(sok; context; serrors) {
+                        if (!sok) {
+                            res.total ++
+                            res.errors ++
+                            log::error("Failed to simulate {file_name}\n{serrors}")
+                            return
                         }
-                        if (context == null) {
-                            msg = "{msg}. Current context is null."
+                        var mod = program |> get_this_module()
+                        if (mod != null && context != null) {
+                            let module_result = test_module(*mod, *context, ctx, file_ctx)
+                            after_module(ctx, file_ctx, *context, module_result, res)
+                        } else {
+                            res.errors ++
+                            res.total ++
+                            var msg = "Failed to execute {file_name}"
+                            if (mod == null) {
+                                msg = "{msg}. Current module is null."
+                            }
+                            if (context == null) {
+                                msg = "{msg}. Current context is null."
+                            }
+                            log::error(msg)
                         }
-                        log::error(msg)
                     }
                 }
             }
@@ -700,6 +723,11 @@ def private record_test_log(context : FileCtx; var messages : array<string>;
     }
 }
 
+//! the wall a walled run holds one test to: the run's
+//! `--test-wall`, or the budget the test declares
+//! (`[test(timeout = N)]`, 0 for none) where that is longer
+def test_wall_of(run_wall, declared : float) : float => max(run_wall, declared)
+
 def private test_any(name : string; func; args_num : int;  // nolint:STYLE038 - one arm per shape
                      var context : FileCtx; var res : SuiteResult&;
                      meta : TestMeta = default<TestMeta>) {
@@ -709,9 +737,10 @@ def private test_any(name : string; func; args_num : int;  // nolint:STYLE038 - 
     //! a `[test]` function, not a subtest of one
     let walled = test_wall_seconds > 0.0 && empty(context.indenting)
     if (walled) {
+        let wall = test_wall_of(test_wall_seconds, meta.timeoutSec)
         let beside = empty(test_wall_file) ? "" : " of {test_wall_file}"
-        let said = "kill switch: test '{name}'{beside} (--test-wall) ran past {test_wall_seconds}s"
-        kill_switch_arm(KILL_SWITCH_TEST, test_wall_seconds, said)
+        let said = "kill switch: test '{name}'{beside} (--test-wall) ran past {wall}s"
+        kill_switch_arm(KILL_SWITCH_TEST, wall, said)
     }
     defer() {
         if (walled) {

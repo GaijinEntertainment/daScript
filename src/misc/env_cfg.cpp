@@ -77,6 +77,16 @@ namespace das {
 #endif
     }
 
+    void das_unsetenv ( const char * name ) {
+#if DAS_TARGET_PS
+        (void)name;
+#elif defined(_WIN32)
+        _wputenv_s(env_wide(name).c_str(), L"");
+#else
+        unsetenv(name);
+#endif
+    }
+
     char * const * das_environ () {
 #if DAS_TARGET_PS
         return nullptr;

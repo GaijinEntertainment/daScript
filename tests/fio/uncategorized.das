@@ -60,3 +60,10 @@ def test_exit_now_binds_under_aot(t : T?) {
         t |> success(!empty(args), "the process is still here: argv carried the interpreter")
     }
 }
+
+[test(description = "unset_env_variable removes a variable that was set")]
+def test_unset_env_variable(t : T?) {
+    set_env_variable("DAS_T_UNSET_ME", "here")
+    unset_env_variable("DAS_T_UNSET_ME")
+    t |> success(!has_env_variable("DAS_T_UNSET_ME"), "the variable is gone")
+}

@@ -373,3 +373,39 @@ def test_isolated_mode(tt : T?) {  // nolint:STYLE038 - one isolated sweep check
             "control run without --failures-only should print PASS lines, got:\n{output}")
     }
 }
+
+[test(description = "with_env_variables sets its pairs for the block only, giving a present variable its value back, removing an absent one again, and leaving a name listed twice as it began")]
+def test_with_env_variables(t : T?) {
+    t |> run("the pairs are set while the block runs") @(t : T?) {
+        unset_env_variable("DAS_T_WITH_ENV_IN")
+        var inside = ""
+        with_env_variables([(name = "DAS_T_WITH_ENV_IN", value = "in the block")]) {
+            inside = get_env_variable("DAS_T_WITH_ENV_IN")
+        }
+        t |> equal(inside, "in the block")
+    }
+    t |> run("a variable present before gets its value back") @(t : T?) {
+        set_env_variable("DAS_T_WITH_ENV_PRESENT", "before")
+        with_env_variables([(name = "DAS_T_WITH_ENV_PRESENT", value = "during")]) {
+            t |> equal(get_env_variable("DAS_T_WITH_ENV_PRESENT"), "during")
+        }
+        t |> equal(get_env_variable("DAS_T_WITH_ENV_PRESENT"), "before")
+        unset_env_variable("DAS_T_WITH_ENV_PRESENT")
+    }
+    t |> run("a variable absent before is absent again") @(t : T?) {
+        unset_env_variable("DAS_T_WITH_ENV_ABSENT")
+        with_env_variables([(name = "DAS_T_WITH_ENV_ABSENT", value = "during")]) {
+            t |> success(has_env_variable("DAS_T_WITH_ENV_ABSENT"), "set inside the block")
+        }
+        t |> success(!has_env_variable("DAS_T_WITH_ENV_ABSENT"), "removed, not left empty")
+    }
+    t |> run("a name listed twice ends as it began") @(t : T?) {
+        set_env_variable("DAS_T_WITH_ENV_TWICE", "original")
+        with_env_variables([(name = "DAS_T_WITH_ENV_TWICE", value = "first"),
+                            (name = "DAS_T_WITH_ENV_TWICE", value = "second")]) {
+            t |> equal(get_env_variable("DAS_T_WITH_ENV_TWICE"), "second")
+        }
+        t |> equal(get_env_variable("DAS_T_WITH_ENV_TWICE"), "original")
+        unset_env_variable("DAS_T_WITH_ENV_TWICE")
+    }
+}

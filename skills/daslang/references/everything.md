@@ -959,6 +959,7 @@ The FIO module implements file input/output and filesystem operations. It provid
 - `spawn_argv` - Launches a detached subprocess directly from an argument array without invoking a shell.
 - `spawn_process` - Spawns `argv` as a long-lived child and returns its handle.
 - `system` - Runs a shell command via the C runtime `system()` function.
+- `unset_env_variable` - Removes an environment variable from the current process (`unsetenv`, or `_wputenv_s` with an empty value on Windows).
 - `with_process` - `with_process` inheriting the parent's directory and environment.
 
 ### Dynamic modules
@@ -4496,7 +4497,7 @@ The AST module provides access to the abstract syntax tree representation of das
 
 ### Debug info helpers
 
-- `debug_helper_find_type_decl` - Finds a type in the DebugInfoHelper and returns the TypeDecl it was made from.
+- `debug_helper_find_type_decl` - Returns the TypeDecl the DebugInfoHelper built the given TypeInfo from; throws if the TypeInfo was not created by this helper.
 - `debug_helper_iter_enums` - Iterates through all enumerations in the DebugInfoHelper, invoking the provided block for each one.
 - `debug_helper_iter_funcs` - Iterates through all functions in the DebugInfoHelper, invoking the provided block for each one.
 - `debug_helper_iter_structs` - Iterates through all structures in the DebugInfoHelper, invoking the provided block for each one.

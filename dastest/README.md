@@ -58,7 +58,8 @@ Any other argument, or a wrong type, is a compile error from the macro.
 - `--cov-path <path>`: Path to write coverage report data to
 - `--timing-outliers <n>`: Print the top N slowest test files and highlight statistical timing outliers (above mean + 2x stddev). `0` (default) prints none
 - `--timeout <seconds>`: The whole suite's timeout. Past it the process ends at once with exit code 124 and no summary, after one line naming the timeout and, in the sequential mode, the file that was running (`--failures-only` hides the `run N/M` lines, so this line is the one record). `0` disables it. The default is 20 minutes
-- `--test-wall <seconds>`: One `[test]` function's wall. Each test arms the process's kill switch (`kill_switch.das`), and a test still running past the wall ends the process at once with exit code 125 and no summary, after one line naming the test and, in the sequential mode, its file; no later test runs. A test's `[test(timeout = N)]` does not raise it. `0` (default) disables it.
+- `--test-wall <seconds>`: One `[test]` function's wall. Each test arms the process's kill switch (`kill_switch.das`), and a test still running past the wall ends the process at once with exit code 125 and no summary, after one line naming the test and, in the sequential mode, its file; no later test runs. A test that declares a longer budget, `[test(timeout = N)]`, is held to that budget instead; a shorter one changes nothing. `0` (default) disables it.
+- `--run-env NAME=VALUE` (repeatable): A variable set only while the compiled tests run - once a test program has compiled, put back exactly when its run ends (a variable that was absent is removed again) - so a value only the running tests read names no compile record of its own: a run under another value reads the same cached program. It reaches `--together` runs and isolated workers byte for byte. A pair with no `=` or an empty name stops dastest with exit code 2 and a line naming the pair. A variable a macro reads while compiling stays in the environment.
 - `--max-file-time <seconds>`: Fail after the suite finishes if any completed test file exceeded this wall-clock duration plus the `[test(timeout = N)]` budgets it declares. `0` (default) disables the limit; this is independent of the global `--timeout` deadlock guard.
 - `--isolated-mode`: Run tests in isolated processes, useful to catch crashes
 - `--isolated-mode-threads <n>`: Number of worker threads in isolated mode. `0` uses a conservative JIT rule (`min(32, max(4, logical_threads / 2))`) and 2x hardware threads otherwise. Preflight can override the JIT width per machine through its user config.
@@ -93,6 +94,8 @@ Note that benchmarks will be executed only if all module tests have already pass
 - `--worker-module-cache-dir <base64>`: Internal encoding of
   `--module-cache-dir` for workers, preserving literal path bytes through
   the process shell.
+- `--worker-run-env <base64>` (repeatable): Internal encoding of one
+  `--run-env` pair for workers, preserving its bytes through the process shell.
 
 ### Benchmark measurement {#benchmark-measurement}
 
@@ -137,6 +140,14 @@ it, so a `new_thread` body or a job - each runs in its own context - gets a diff
 ```das
 let out = path_join(test_temp_dir(), "out.png")
 ```
+
+## A test's environment
+
+`with_env_variables(pairs, blk)` (`testing_boost`) runs `blk` with each `(name, value)` of
+`pairs` set in the process environment, in order, then puts the environment back exactly: the
+pairs are undone in reverse, so a name listed twice ends as it began, a variable that was absent
+is removed again, and one that was present gets its earlier value. `--run-env` runs a compiled
+test through it.
 
 ## review_gate.das
 

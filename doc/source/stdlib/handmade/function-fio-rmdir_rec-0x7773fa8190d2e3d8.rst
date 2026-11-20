@@ -1,1 +1,1 @@
-Recursively removes a directory and all its contents (files and subdirectories). Returns true on success.
+Recursively removes a directory and all its contents (files and subdirectories). Returns true on success. Returns false, removing nothing, for an empty path, a filesystem root (on Windows also a drive, a share root, and either one under the ``\\?\`` prefix), and a path whose last component is ``.`` or ``..``.
