@@ -84,21 +84,29 @@ let private BATCH_ROW_BAR_REL = 0.15
 //! a row against the session alone: within the batched-row bar of `want`'s peak, with `control` - the session's logits one
 //! token off - outside it; under a tq4 mirror the control form, since the 4-bit codec's rounding at a near-tie reads half
 //! the peak. Both argmax logged, not asserted the same, since a near-tie inside the bar flips the pick
+def private hold_equal(var h : Held; tr : Model; got, want, control : array<float>; what : string) {
+    hold_within(h, tr, got, want, control, what, BATCH_ROW_BAR_REL)
+}
+
 def private hold_equal(t : T?; tr : Model; got, want, control : array<float>; what : string) {
     hold_within(t, tr, got, want, control, what, BATCH_ROW_BAR_REL)
 }
 
 //! `got` within `rel` of `want`'s peak, and `control` - logits one token off - outside it; under a tq4 mirror, `tq4_within`
 def private hold_within(t : T?; tr : Model; got, want, control : array<float>; what : string; rel : float = SPLIT_BAR_REL) {
+    held_on(t) $(var h) {
+        hold_within(h, tr, got, want, control, what, rel)
+    }
+}
+
+//! `hold_within` held for the asserts after a model's block: the peaks logged now, the rows held under the mirror's form
+def private hold_within(var h : Held; tr : Model; got, want, control : array<float>; what : string; rel : float = SPLIT_BAR_REL) {
     log_peaks(tr, what, got, want)
     if (mirror_kv_dtype() == KVDtype.tq4) {
-        tq4_within(t, got, want, control, what)
-        return
+        h |> held_near(what, got, want, control)
+    } else {
+        h |> held_row(what, got, want, control, rel)
     }
-    let bar = row_bar(want, rel)
-    let diff = row_within(t, what, got, want, bar)
-    let off = control_past(t, what, got, control, bar)
-    to_log(LOG_INFO, "{what}: maxdiff {diff}, the row one off {off}, bar {bar}\n")
 }
 
 //! `file` loaded at `regions` regions. A card whose room the plan does not fit registers a skip naming it, any other decline
@@ -179,36 +187,44 @@ def private alone_runs(tr : Model; pa, pb : array<int64>) : AloneRuns {
 }
 
 //! two sessions over `pa` and `pb`, a region each, prefilled then stepped one row at a time, interleaved, against each alone
-def private interleaved_single_steps_body(t : T?; tr : Model; pa, pb : array<int64>) {
+def private interleaved_single_steps_body(var h : Held; tr : Model; pa, pb : array<int64>) {
     var al <- alone_runs(tr, pa, pb)
-    t |> success(logits_maxdiff(al.ra[0], al.rb[0]) > 0.0, "the two prompts read different logits, so a crossed region cannot pass")
+    let apart = logits_maxdiff(al.ra[0], al.rb[0])
+    h |> held_fact(apart > 0.0 && apart < INFINITE_DIFF, "the two prompts read different finite logits ({apart} apart), so a crossed region cannot pass")
     var sa <- create_session(tr, mirror_kv_dtype())
     var sb <- create_session(tr, mirror_kv_dtype())
     forward_prefill(tr, sa, pa, long_length(pa), 0l)
-    hold_equal(t, tr, sa.logits, al.ra[0], al.ra[1], "session A's prefill")
+    hold_equal(h, tr, sa.logits, al.ra[0], al.ra[1], "session A's prefill")
     forward_prefill(tr, sb, pb, long_length(pb), 0l)
-    hold_equal(t, tr, sb.logits, al.rb[0], al.rb[1], "session B's prefill, A's rows live beside it")
-    t |> success(sa.rdec_region != sb.rdec_region, "the sessions sit in different regions ({sa.rdec_region}, {sb.rdec_region})")
+    hold_equal(h, tr, sb.logits, al.rb[0], al.rb[1], "session B's prefill, A's rows live beside it")
+    h |> held_fact(sa.rdec_region != sb.rdec_region, "the sessions sit in different regions ({sa.rdec_region}, {sb.rdec_region})")
     for (st in range64(STEPS)) {
         forward(tr, sa, al.fa[st], long_length(pa) + st)
-        hold_equal(t, tr, sa.logits, al.ra[st + 1l], al.ra[st], "session A step {st}")
+        hold_equal(h, tr, sa.logits, al.ra[st + 1l], al.ra[st], "session A step {st}")
         forward(tr, sb, al.fb[st], long_length(pb) + st)
-        hold_equal(t, tr, sb.logits, al.rb[st + 1l], al.rb[st], "session B step {st}")
+        hold_equal(h, tr, sb.logits, al.rb[st + 1l], al.rb[st], "session B step {st}")
     }
-    served_every_call(t)
+    h |> held_served()
     delete sa
     delete sb
     delete al
 }
 
+//! the interleaved cell's collection on a two-region load, its asserts held
+def regions_interleaved_rows(var h : Held; tr : Model) {
+    var pa <- prompt_a()
+    var pb <- prompt_b()
+    interleaved_single_steps_body(h, tr, pa, pb)
+    delete pa
+    delete pb
+}
+
 def cell_regions_interleaved_single_steps(t : T?; file : string) {
     t |> run("two sessions, a region each: single steps interleaved read what each session reads alone") @(t : T?) {
         with_regions_rig(t, file) $(tr) {
-            var pa <- prompt_a()
-            var pb <- prompt_b()
-            interleaved_single_steps_body(t, tr, pa, pb)
-            delete pa
-            delete pb
+            held_on(t) $(var h) {
+                regions_interleaved_rows(h, tr)
+            }
         }
     }
 }
@@ -263,7 +279,9 @@ def cell_regions_wide_single_steps(t : T?; file : string) {
             static_if (typeinfo builtin_module_exists(vulkan)) {
                 t |> success(long_length(pa) > RD_WIDE_POS && long_length(pb) > RD_WIDE_POS, "both prompts run past the wide position ({RD_WIDE_POS})")
             }
-            interleaved_single_steps_body(t, tr, pa, pb)
+            held_on(t) $(var h) {
+                interleaved_single_steps_body(h, tr, pa, pb)
+            }
             delete pa
             delete pb
         }
@@ -393,45 +411,53 @@ def cell_window_qkn_fused(t : T?; file : string; bar : LogitsBar = LogitsBar.spl
     t |> run("the window's q/k norm, rope and store as one fused pass reads within the {bar} of the split pair") @(t : T?) {
         return if (!vulkan_home_cell(t))
         with_regions_rig(t, file) $(tr) {
-            static_if (typeinfo builtin_module_exists(vulkan)) {
-                t |> success(tr.config.qk_norm, "the carrier norms its q and k heads")
-                var prompt <- prose_ids(PF_WINDOW_ROWS + 88l, 0l)
-                var feed <- feed_a()
-                let lever = vulkan_prefill_qkn_fuse()
-                var rows : array<array<array<float>>>
-                var fused_counts, split_counts : int64[2]
-                for (fused in fixed_array(true, false)) {
-                    set_vulkan_prefill_qkn_fuse(fused)
-                    let qkr0 = census("qkn_rope_cls_spv") + census("qkn_rope_f16_cls_spv")
-                    let rms0 = census("qk_rms_cls_spv")
-                    var s <- create_session(tr, mirror_kv_dtype())
-                    forward_prefill(tr, s, prompt, long_length(prompt), 0l)
-                    let counts = fixed_array(census("qkn_rope_cls_spv") + census("qkn_rope_f16_cls_spv") - qkr0, census("qk_rms_cls_spv") - rms0)
-                    if (fused) {
-                        fused_counts = counts
-                    } else {
-                        split_counts = counts
-                    }
-                    s.n_past = long_length(prompt)
-                    var r <- steps_after(tr, s, feed)   //! the prompt's logits, then each fed step's
-                    rows |> emplace(r)
-                    delete s
-                }
-                set_vulkan_prefill_qkn_fuse(lever)
-                to_log(LOG_INFO, "window qkn: fused form {fused_counts[0]} fused passes and {fused_counts[1]} norm passes, split form {split_counts[0]} and {split_counts[1]}\n")
-                t |> success(fused_counts[0] > 0l && fused_counts[1] == 0l, "the fused form's prefill ran the fused pass and no norm pass ({fused_counts[0]}, {fused_counts[1]})")
-                t |> success(split_counts[0] == 0l && split_counts[1] > 0l, "the split form's prefill ran the norm pass and no fused pass ({split_counts[0]}, {split_counts[1]})")
-                for (st in range(length(rows[0]))) {   //! the two passes reduce the norm in another order: the split bar, the row one step off its control
-                    hold_bar(t, tr, rows[0][st], rows[1][st], rows[1][st > 0 ? st - 1 : 1], bar, st == 0 ? "the prompt's logits, fused against split" : "step {st - 1}, fused against split")
-                }
-                served_every_call(t)
-                delete rows
-                delete prompt
-                delete feed
-            } else {
-                t |> skip("dasVulkan not present")
+            held_on(t) $(var h) {
+                regions_window_qkn_rows(h, tr, bar)
             }
         }
+    }
+}
+
+//! the fused q/k norm cell's collection on a two-region load of the Vulkan home
+def regions_window_qkn_rows(var h : Held; tr : Model; bar : LogitsBar = LogitsBar.split_bar) {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        h |> held_fact(tr.config.qk_norm, "the carrier norms its q and k heads")
+        var prompt <- prose_ids(PF_WINDOW_ROWS + 88l, 0l)
+        var feed <- feed_a()
+        let lever = vulkan_prefill_qkn_fuse()
+        var rows : array<array<array<float>>>
+        rows |> reserve(2)
+        var fused_counts, split_counts : int64[2]
+        for (fused in fixed_array(true, false)) {
+            set_vulkan_prefill_qkn_fuse(fused)
+            let qkr0 = census("qkn_rope_cls_spv") + census("qkn_rope_f16_cls_spv")
+            let rms0 = census("qk_rms_cls_spv")
+            var s <- create_session(tr, mirror_kv_dtype())
+            forward_prefill(tr, s, prompt, long_length(prompt), 0l)
+            let counts = fixed_array(census("qkn_rope_cls_spv") + census("qkn_rope_f16_cls_spv") - qkr0, census("qk_rms_cls_spv") - rms0)
+            if (fused) {
+                fused_counts = counts
+            } else {
+                split_counts = counts
+            }
+            s.n_past = long_length(prompt)
+            var r <- steps_after(tr, s, feed)   //! the prompt's logits, then each fed step's
+            rows |> emplace(r)
+            delete s
+        }
+        set_vulkan_prefill_qkn_fuse(lever)
+        to_log(LOG_INFO, "window qkn: fused form {fused_counts[0]} fused passes and {fused_counts[1]} norm passes, split form {split_counts[0]} and {split_counts[1]}\n")
+        h |> held_fact(fused_counts[0] > 0l && fused_counts[1] == 0l, "the fused form's prefill ran the fused pass and no norm pass ({fused_counts[0]}, {fused_counts[1]})")
+        h |> held_fact(split_counts[0] == 0l && split_counts[1] > 0l, "the split form's prefill ran the norm pass and no fused pass ({split_counts[0]}, {split_counts[1]})")
+        for (st in range(length(rows[0]))) {   //! the two passes reduce the norm in another order: the split bar, the row one step off its control
+            hold_bar(h, tr, rows[0][st], rows[1][st], rows[1][st > 0 ? st - 1 : 1], bar, st == 0 ? "the prompt's logits, fused against split" : "step {st - 1}, fused against split")
+        }
+        h |> held_served()
+        delete rows
+        delete prompt
+        delete feed
+    } else {
+        h |> held_skip("dasVulkan not present")
     }
 }
 
@@ -466,11 +492,17 @@ def private bar_rel(bar : LogitsBar) : float {
 //! a row's logits against its session alone under `bar`: within the batched-row, split, wide or routed bar with `control` -
 //! the row's previous step - outside it, or the control form alone
 def private hold_bar(t : T?; tr : Model; got, want, control : array<float>; bar : LogitsBar; what : string) {
+    held_on(t) $(var h) {
+        hold_bar(h, tr, got, want, control, bar, what)
+    }
+}
+
+def private hold_bar(var h : Held; tr : Model; got, want, control : array<float>; bar : LogitsBar; what : string) {
     if (bar == LogitsBar.ctrl_bar) {
         log_peaks(tr, what, got, want)
-        tq4_within(t, got, want, control, what)
+        h |> held_near(what, got, want, control)
     } else {
-        hold_within(t, tr, got, want, control, what, bar == LogitsBar.bit_exact ? BATCH_ROW_BAR_REL : bar_rel(bar))
+        hold_within(h, tr, got, want, control, what, bar == LogitsBar.bit_exact ? BATCH_ROW_BAR_REL : bar_rel(bar))
     }
 }
 
@@ -569,17 +601,17 @@ def private rows_bar(bar : LogitsBar; rows, pos : int64) : LogitsBar {
     return bar
 }
 
-def private batched_steps_body(t : T?; tr : Model; prompts, feeds : array<array<int64>>; bar0 : LogitsBar) {
+def private batched_steps_body(var h : Held; tr : Model; prompts, feeds : array<array<int64>>; bar0 : LogitsBar) {
     let rows = long_length(prompts)
     var furthest = 0l
     for (p in prompts) {
         furthest = max(furthest, long_length(p))
     }
     let bar = rows_bar(bar0, rows, furthest + long_length(feeds[0]))
-    t |> success(home_rows_split_alike(1l, furthest + long_length(feeds[0])), "one row splits a layer's keys as one row does")
+    h |> held_fact(home_rows_split_alike(1l, furthest + long_length(feeds[0])), "one row splits a layer's keys as one row does")
     let steps_alone0 = rdec_nrow_steps()
     var alone <- [for (i in range64(rows)); logits_alone(tr, prompts[i], feeds[i])]
-    t |> equal(rdec_nrow_steps() - steps_alone0, 0l, "the sessions alone stepped through the one-row command: the N-row counter's control")
+    h |> held_equal(rdec_nrow_steps() - steps_alone0, 0l, "the sessions alone stepped through the one-row command: the N-row counter's control")
     var sessions : array<Session>
     sessions |> reserve(rows)
     for (i in range64(rows)) {
@@ -597,20 +629,20 @@ def private batched_steps_body(t : T?; tr : Model; prompts, feeds : array<array<
             eval_batch(tr, ws, sx, toks)
             delete toks
             for (i in range64(rows)) {
-                hold_bar(t, tr, sessions[i].logits, alone[i][st + 1l], alone[i][st], bar, "batched step {st}, row {i}")
+                hold_bar(h, tr, sessions[i].logits, alone[i][st + 1l], alone[i][st], bar, "batched step {st}, row {i}")
             }
         }
     }
     if (hybrid) {
-        t |> success(dn_state_home(sessions[rows - 1l]) != home0, "the last session's recurrent state came home from its region's slot after the batched steps")
+        h |> held_fact(dn_state_home(sessions[rows - 1l]) != home0, "the last session's recurrent state came home from its region's slot after the batched steps")
     }
     for (i in range64(rows)) {
-        t |> equal(sessions[i].rdec_gen, gens[i], "row {i} kept its claim through every step: its history never came up from the host again")
+        h |> held_equal(sessions[i].rdec_gen, gens[i], "row {i} kept its claim through every step: its history never came up from the host again")
     }
-    served_every_call(t)
-    let groups = batched_groups(t, rows)
+    h |> held_served()
+    let groups = batched_groups(h, rows)
     let stepped = rdec_nrow_steps() - steps0
-    t |> equal(stepped, STEPS * groups, "every batched step went through the N-row command, {groups} command(s) a step ({stepped} of {STEPS * groups})")
+    h |> held_equal(stepped, STEPS * groups, "every batched step went through the N-row command, {groups} command(s) a step ({stepped} of {STEPS * groups})")
     unsafe {
         delete sess
     }
@@ -621,17 +653,29 @@ def private batched_steps_body(t : T?; tr : Model; prompts, feeds : array<array<
 
 //! the commands a batched step of `rows` rows takes: the fewest groups of the rows the N-row command steps at once, the command
 //! asserted to serve the rows at once (a declined command passes the bars above the same); one where the module is absent
-def private batched_groups(t : T?; rows : int64) : int64 {
+def private batched_groups(var h : Held; rows : int64) : int64 {
     let at_once = home_token_n_rows()
-    t |> success(at_once >= 2l, "the N-row token command serves the rows at once ({at_once} rows)")
+    h |> held_fact(at_once >= 2l, "the N-row token command serves the rows at once ({at_once} rows)")
     return at_once > 0l ? (rows + at_once - 1l) / at_once : 1l
 }
 
-//! the two-prompt form over `pa` and `pb` with the rig's feeds
+def private batched_steps_body(t : T?; tr : Model; prompts, feeds : array<array<int64>>; bar0 : LogitsBar) {
+    held_on(t) $(var h) {
+        batched_steps_body(h, tr, prompts, feeds, bar0)
+    }
+}
+
 def private batched_steps_body(t : T?; tr : Model; pa, pb : array<int64>; bar : LogitsBar) {
+    held_on(t) $(var h) {
+        batched_steps_body(h, tr, pa, pb, bar)
+    }
+}
+
+//! the two-prompt form over `pa` and `pb` with the rig's feeds
+def private batched_steps_body(var h : Held; tr : Model; pa, pb : array<int64>; bar : LogitsBar) {
     var prompts <- [ <- clone_to_move(pa), <- clone_to_move(pb)]
     var feeds <- [ <- feed_a(), <- feed_b()]
-    batched_steps_body(t, tr, prompts, feeds, bar)
+    batched_steps_body(h, tr, prompts, feeds, bar)
     delete prompts
     delete feeds
 }
@@ -643,27 +687,34 @@ def cell_regions_batched_side_rows(t : T?; file : string) {
     t |> run("the side rows of the sessions alone and of the batched steps gather on the device off the rows' ids") @(t : T?) {
         with_gpu_resident_embed(1) {
             with_regions_rig(t, file) $(tr) {
-                t |> success(has_ple(tr.config) && home_side_gather_on(), "the driver gathers the side rows off the ids (the table and the projection on the device)")
-                var pa <- prompt_a()
-                var pb <- prompt_b()
-                let host0 = ple_host_gather_rows()
-                let dev0 = home_nrow_side_gathered()
-                batched_steps_body(t, tr, pa, pb, LogitsBar.bit_exact)
-                t |> equal(ple_host_gather_rows() - host0, 0l, "the host gathered no table row")
-                t |> equal(home_nrow_side_gathered() - dev0, 2l * STEPS, "every batched row's side row gathered off its id")
-                delete pa
-                delete pb
+                held_on(t) $(var h) {
+                    regions_side_rows(h, tr)
+                }
             }
         }
     }
 }
 
+//! the side-rows cell's collection on a two-region load gathering its token rows on the device
+def regions_side_rows(var h : Held; tr : Model) {
+    h |> held_fact(has_ple(tr.config) && home_side_gather_on(), "the driver gathers the side rows off the ids (the table and the projection on the device)")
+    var pa <- prompt_a()
+    var pb <- prompt_b()
+    let host0 = ple_host_gather_rows()
+    let dev0 = home_nrow_side_gathered()
+    batched_steps_body(h, tr, pa, pb, LogitsBar.bit_exact)
+    h |> held_equal(ple_host_gather_rows() - host0, 0l, "the host gathered no table row")
+    h |> held_equal(home_nrow_side_gathered() - dev0, 2l * STEPS, "every batched row's side row gathered off its id")
+    delete pa
+    delete pb
+}
+
 //! two sessions over prompts A and B batched through STEPS steps: every row's logits a step, the N-row command serving every step
-def private batched_rows_logits(t : T?; tr : Model) : array<array<float>> {
+def private batched_rows_logits(var h : Held; tr : Model) : array<array<float>> {
     var prompts <- [ <- prompt_a(), <- prompt_b()]
     var feeds <- [ <- feed_a(), <- feed_b()]
-    var rows <- batched_logits_rows(t, tr, prompts, feeds, mirror_kv_dtype(), STEPS) <| $ => rdec_nrow_steps()
-    served_every_call(t)
+    var rows <- batched_logits_rows(h, tr, prompts, feeds, mirror_kv_dtype(), STEPS) <| $ => rdec_nrow_steps()
+    h |> held_served()
     delete prompts
     delete feeds
     return <- rows
@@ -678,36 +729,46 @@ def private batched_rows_logits(t : T?; tr : Model) : array<array<float>> {
 def cell_regions_batched_embed_gather(t : T?; file : string) {
     t |> run("the batched rows gather their token rows on the device, bit for bit the rows the host embeds") @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
-            var dev, host : array<array<float>>
+            var inscope h : Held
+            var inscope dev, host : array<array<float>>
             with_gpu_resident_embed(1) {
                 with_regions_rig(t, file) $(tr) {
-                    let g0 = home_nrow_embed_gathered()
-                    let h0 = batch_rows_host_embedded()
                     delete dev
-                    dev <- batched_rows_logits(t, tr)
-                    t |> equal(home_nrow_embed_gathered() - g0, 2l * STEPS, "every batched row's token row gathered off its id")
-                    t |> equal(batch_rows_host_embedded() - h0, 0l, "the host embedded no batched row")
+                    dev <- regions_embed_rows(h, tr, true)
                 }
             }
             with_gpu_resident_embed(0) {
                 with_regions_rig(t, file, RegionsLoad(host = true)) $(tr) {
-                    let g0 = home_nrow_embed_gathered()
-                    let h0 = batch_rows_host_embedded()
-                    let side0 = home_nrow_side_gathered()
                     delete host
-                    host <- batched_rows_logits(t, tr)
-                    t |> equal(home_nrow_embed_gathered() - g0, 0l, "with the gather off no batched row gathered: the counter's control")
-                    t |> equal(batch_rows_host_embedded() - h0, 2l * STEPS, "with the gather off the host embedded every batched row")
-                    t |> equal(home_nrow_side_gathered() - side0, 0l, "with the gather off no side row gathered off an id: the side-rows cell's control")
-                    gathered_rows_bit_same(t, tr, file, dev, host, 2l)
+                    host <- regions_embed_rows(h, tr, false)
+                    log_gathered_rows(tr, file, dev, host, 2l)
                 }
             }
-            delete dev
-            delete host
+            held_within(t, h)
+            gathered_rows_bit_same(t, file, dev, host, 2l)
         } else {
             t |> skip("no dasVulkan module on this build: the batched rows' device gather is the Vulkan driver's")
         }
     }
+}
+
+//! one half of the embed-gather cell on a two-region load: the batched rows, and where each token row came from - with the
+//! gather on (`gathered`) every one off its id and none embedded on the host; with it off every one embedded on the host,
+//! none gathered and no side row gathered off an id, the counters' controls
+def regions_embed_rows(var h : Held; tr : Model; gathered : bool) : array<array<float>> {
+    let g0 = home_nrow_embed_gathered()
+    let h0 = batch_rows_host_embedded()
+    let side0 = home_nrow_side_gathered()
+    var rows <- batched_rows_logits(h, tr)
+    let off_ids = gathered ? 2l * STEPS : 0l
+    h |> held_equal(home_nrow_embed_gathered() - g0, off_ids, gathered
+        ? "every batched row's token row gathered off its id" : "with the gather off no batched row gathered: the counter's control")
+    h |> held_equal(batch_rows_host_embedded() - h0, 2l * STEPS - off_ids, gathered
+        ? "the host embedded no batched row" : "with the gather off the host embedded every batched row")
+    if (!gathered) {
+        h |> held_equal(home_nrow_side_gathered() - side0, 0l, "with the gather off no side row gathered off an id: the side-rows cell's control")
+    }
+    return <- rows
 }
 
 //! the coverage census over the per-32 formats' stamps of one GEMV form (`suffix`), summed; NO_CENSUS with no vulkan module
@@ -748,256 +809,60 @@ def cell_regions_batched_down_fold(t : T?; file : string; bar : LogitsBar) {
 def cell_regions_batched_steps(t : T?; file : string; bar : LogitsBar = LogitsBar.bit_exact; split_forms : bool = false) {
     t |> run("two sessions, a region each: a batched step over both reads what each session reads alone, with no history resync") @(t : T?) {
         with_regions_rig(t, file, RegionsLoad(split_forms = split_forms)) $(tr) {
-            var pa <- prompt_a()
-            var pb <- prompt_b()
-            let sum0 = b32_census("_gemv_sum_cls_spv")
-            batched_steps_body(t, tr, pa, pb, bar)
-            if (split_forms && sum0 != NO_CENSUS) {
-                t |> equal(b32_census("_gemv_sum_cls_spv") - sum0, 0l, "the split forms fold no routed down: no summed down stamp dispatched")
-            }
-            delete pa
-            delete pb
-        }
-    }
-}
-
-//! a long-context file's shape: the regions and the context the carrier loads at (every host-cached session's cache sized to
-//! that context), the prompt the CPU chain answers and its bar, the continuation's length and cut (a window multiple), and
-//! the bar the batched rows hold against each session alone; the streams cell runs `regions` device-home streams at
-//! ctx x (28 + 18 i) / 100 positions
-struct LongCtx {
-    regions : int64 = 2l
-    ctx : int64
-    cpu_n : int64 = 12288l
-    cpu_bar_rel : float = 0.10
-    split_n : int64
-    split_cut : int64
-    bar : LogitsBar = LogitsBar.bit_exact
-    streams_bar : LogitsBar = LogitsBar.bit_exact   //! the streams cell's: past the wide position the one-row command's wide twin and the N-row command's split pieces sum the keys in another order, so a carrier bit for bit at short prompts holds the split bar there
-    streams_rel : float = 0.0   //! > 0: the streams cell's bar, as a share of the max logit, in place of `streams_bar`'s - a carrier whose reading the file states
-}
-
-def private long_load(lc : LongCtx; ring : int = -1; host : bool = false) : RegionsLoad => RegionsLoad(regions = lc.regions, ctx = lc.ctx, host_ctx = lc.ctx, ring = ring, host = host)
-
-//! a long cell's mirror on a sliding model rings its sliding layers: the plan charges the rings, not the whole context, on every layer
-def private rings_armed(t : T?; tr : Model) {
-    return if (tr.config.sliding_window == 0l)
-    t |> success(gpu_resident_kv_ring_slack() > 0l, "the sliding layers ride rings ({gpu_resident_mirror_bytes() >> 20l} MB of mirror over {gpu_resident_mirror_slabs()} slab pairs)")
-}
-
-//! the rows-through-host cells' mirror: in slabs on a flat model, the rings on a sliding one
-def private long_mirror_held(t : T?; tr : Model) {
-    if (tr.config.sliding_window > 0l) {
-        rings_armed(t, tr)
-    } else {
-        t |> success(gpu_resident_mirror_slabs() > 1l, "the mirror binds more than one slab pair ({gpu_resident_mirror_slabs()})")
-    }
-}
-
-def private stream_positions(lc : LongCtx) : array<int64> => <- [for (i in range64(lc.regions)); lc.ctx * (28l + 18l * i) / 100l]
-
-//! the bytes one mirror side may bind over `regions` regions on the serving home: the device's binding range (a home whose
-//! driver has none answers a range no mirror reaches), and under a block codec the kernels' 32-bit byte span
-def private mirror_side_cap(regions : int64) : int64 {
-    let binding = moe_gpu_binding_cap(regions)
-    return kv_block_codec(mirror_kv_dtype()) ? min(binding, BLOCK_CODEC_SIDE_BYTES) : binding
-}
-
-//! the mirror in slabs: `regions` regions at `ctx` positions each seat the layers in two or more slab pairs where a mirror
-//! side runs past the home's cap (`mirror_side_cap`), one pair where it does not; the interleaved single steps and the
-//! batched steps over two sessions then read what each session reads alone - every layer's sets, sync and readback bound
-//! the slab its rows sit in
-[cold_path]
-def cell_regions_slabbed_mirror(t : T?; file : string; lc : LongCtx) {
-    t |> run("a mirror of {lc.regions} regions x {lc.ctx} positions, every row kept, binds in as many slab pairs as a side needs, and the steps over two sessions read what each reads alone") @(t : T?) {
-        with_regions_rig(t, file, long_load(lc, 0)) $(tr) {
-            let slabs = gpu_resident_mirror_slabs()
-            let side = gpu_resident_mirror_bytes() / 2l
-            let cap = mirror_side_cap(lc.regions)
-            if (side > cap) {
-                t |> success(slabs > 1l, "the mirror binds more than one slab pair at {lc.regions} regions x {lc.ctx} positions ({slabs} slabs: a side of {side >> 20l} MB against a binding of {cap >> 20l} MB)")
-            } else {
-                t |> equal(slabs, 1l, "one binding of this home holds a whole mirror side ({side >> 20l} MB), so the mirror binds in one slab pair")
-            }
-            t |> equal(gpu_device_sessions(), lc.regions, "the armed driver serves a device-home session per region asked")
-            t |> equal(gpu_device_session_ctx(), lc.ctx, "a region holds the whole context asked - nothing shortened to one binding's range")
-            var pa <- prompt_a()
-            var pb <- prompt_b()
-            let steps0 = rdec_nrow_steps()
-            interleaved_single_steps_body(t, tr, pa, pb)
-            t |> equal(rdec_nrow_steps(), steps0, "the one-row steps moved no N-row count: the batched cell's counter control")
-            batched_steps_body(t, tr, pa, pb, lc.bar)
-            delete pa
-            delete pb
-        }
-    }
-}
-
-//! a long prompt against the CPU chain: `cpu_n` prose tokens prefilled on the device and eight fed steps, every row within
-//! the bar of the CPU chain's row with the one-step-off control - the rows deep in a region read as the host's do
-[cold_path]
-def cell_long_prompt_against_cpu(t : T?; file : string; lc : LongCtx) {
-    t |> run("a {lc.cpu_n}-token prompt on a {lc.regions} x {lc.ctx} mirror: the resident rows against the CPU chain at every step") @(t : T?) {
-        with_regions_rig(t, file, long_load(lc, -1, true)) $(tr) {
-            t |> equal(gpu_device_session_ctx(), lc.ctx, "a region holds the whole context asked")
-            rings_armed(t, tr)
-            forced_feed_over(t, tr, "long prompt: ", lc.cpu_n, STEPS, lc.cpu_bar_rel, 3l) $ {
-                served_every_call(t)
+            held_on(t) $(var h) {
+                regions_batched_rows(h, tr, bar, split_forms)
             }
         }
     }
 }
 
-//! a long prompt continued on the device: `split_n` tokens in one call against the same cut at `split_cut`, then four steps
-//! over the continued rows, within the split bar with the one-token-off control
-[cold_path]
-def cell_long_continuation(t : T?; file : string; lc : LongCtx) {
-    t |> run("a {lc.split_n}-token prompt cut at {lc.split_cut}: the continued prefill and the steps over it against the one-call prefill") @(t : T?) {
-        with_regions_rig(t, file, long_load(lc)) $(tr) {
-            return if (!assert_pf_window(t))
-            rings_armed(t, tr)
-            continue_at(t, tr, lc.split_n, lc.split_cut, SPLIT_BAR_REL)
-            served_every_call(t)
-        }
+//! the batched cell's collection on a two-region load - `split_forms` the load's fuse knob off
+def regions_batched_rows(var h : Held; tr : Model; bar : LogitsBar = LogitsBar.bit_exact; split_forms : bool = false) {
+    var pa <- prompt_a()
+    var pb <- prompt_b()
+    let sum0 = b32_census("_gemv_sum_cls_spv")
+    batched_steps_body(h, tr, pa, pb, bar)
+    if (split_forms && sum0 != NO_CENSUS) {
+        h |> held_equal(b32_census("_gemv_sum_cls_spv") - sum0, 0l, "the split forms fold no routed down: no summed down stamp dispatched")
     }
-}
-
-//! the rows that cross the host at a slab past the first: a session's rows brought down after a device prefill (`rows_n`
-//! tokens, every layer's slab read back) carry eight CPU steps within the bar of the CPU chain's, and a session prefilled
-//! on the CPU rails under the server's prefill pin (its rows uploaded to every layer's slab) carries eight resident steps
-//! within the same bar - a layer seated past slab 0 synced or read through slab 0 lands its keys in another layer's rows
-[cold_path]
-def cell_long_rows_through_host(t : T?; file : string; lc : LongCtx) {
-    let rows_n = lc.cpu_n / 3l
-    t |> run("{rows_n} tokens prefilled on the device, the rows brought down: the CPU chain's steps over them against the CPU chain alone") @(t : T?) {
-        with_regions_rig(t, file, long_load(lc, -1, true)) $(tr) {
-            long_mirror_held(t, tr)
-            var prompt <- prose_ids(rows_n, 5l)
-            var toks <- feed_a()
-            var s <- create_session(tr, mirror_kv_dtype())
-            let served0 = gpu_resident_prefills_()
-            forward_prefill(tr, s, prompt, rows_n, 0l)
-            t |> equal(gpu_resident_prefills_(), served0 + 1l, "the window chain served the prompt")
-            moe_gpu_hydrate_session(tr, s)
-            t |> success(s.rdec_host_current, "every layer's rows came down to the host")
-            moe_gpu_drop_model()
-            var down : array<array<float>>
-            down |> emplace <| logits_of(s, tr.config.vocab_size)
-            for (st in range64(STEPS)) {
-                forward(tr, s, toks[st], rows_n + st)
-                down |> emplace <| logits_of(s, tr.config.vocab_size)
-            }
-            var cpu <- feed_alone(tr, mirror_kv_dtype(), prompt, toks)
-            feed_steps_within(t, tr, "rows down: ", rows_n, down, cpu, toks, lc.cpu_bar_rel, "the CPU chain over the rows brought down")
-            delete s
-            delete down
-            delete cpu
-            delete prompt
-            delete toks
-        }
-    }
-    t |> run("{rows_n} tokens prefilled on the CPU rails under the prefill pin, the rows uploaded: the resident steps over them against the CPU chain alone") @(t : T?) {
-        with_regions_rig(t, file, long_load(lc, -1, true)) $(tr) {
-            long_mirror_held(t, tr)
-            var prompt <- prose_ids(rows_n, 5l)
-            var toks <- feed_a()
-            reset_gpu_cpu_passes()
-            set_resident_prefill_allowed(false)
-            var sg <- create_session(tr, mirror_kv_dtype())
-            var up <- feed_logits(tr, sg, prompt, toks)
-            set_resident_prefill_allowed(true)
-            only_pass(t, "pinned_off", "the prompt passed to the CPU rails under the server's prefill pin and nothing else did", 1l)
-            delete sg
-            moe_gpu_drop_model()
-            var cpu <- feed_alone(tr, mirror_kv_dtype(), prompt, toks)
-            feed_steps_within(t, tr, "rows up: ", rows_n, up, cpu, toks, lc.cpu_bar_rel, "resident over the rows uploaded")
-            delete up
-            delete cpu
-            delete prompt
-            delete toks
-        }
-    }
-}
-
-//! `regions` device-home streams at `stream_positions`, a region each: every prefill bit for bit the host-cached session's,
-//! then a batched step over every row at every step reads what each session reads alone under the bar
-[cold_path]
-def cell_long_streams(t : T?; file : string; lc : LongCtx) {
-    t |> run("{lc.regions} device-home streams at {lc.ctx * 28l / 100l} to {lc.ctx * (28l + 18l * (lc.regions - 1l)) / 100l} positions: a batched step over all of them reads what each reads alone") @(t : T?) {
-        with_regions_rig(t, file, long_load(lc)) $(tr) {
-            rings_armed(t, tr)
-            let n = lc.regions
-            var at <- stream_positions(lc)
-            t |> equal(gpu_device_sessions(), n, "the armed driver serves a device-home session per region")
-            var prompts, feeds : array<array<int64>>
-            var alone : array<array<array<float>>>
-            let steps0 = rdec_nrow_steps()
-            for (i in range64(n)) {
-                prompts |> emplace <| prose_ids(at[i], 11l * (i + 1l))
-                feeds |> emplace <| ramp_ids(STEPS, i, 2000l + 100l * i, 53l, 4000l)
-                alone |> emplace <| feed_alone(tr, mirror_kv_dtype(), prompts[i], feeds[i])
-            }
-            t |> equal(rdec_nrow_steps(), steps0, "the one-row steps alone moved no N-row count: the batched counter's control")
-            var owned : array<Session>
-            owned |> reserve(n)
-            for (_i in range64(n)) {
-                owned |> emplace <| device_session(tr)
-            }
-            for (i in range64(n)) {
-                eval(tr, owned[i], prompts[i])
-                hold_equal(t, tr, owned[i].logits, alone[i][0], alone[i][1], "stream {i}'s {at[i]}-token prefill on the device")
-            }
-            var sess <- [for (i in range64(n)); unsafe(addr(owned[i]))]
-            let streams_bar = rows_bar(lc.streams_bar, n, at[n - 1l] + STEPS)
-            with_batch_rows(tr, sess) $(var ws; var rows) {
-                for (st in range64(STEPS)) {
-                    var toks <- [for (i in range64(n)); feeds[i][st]]
-                    eval_batch(tr, ws, rows, toks)
-                    delete toks
-                    for (i in range64(n)) {
-                        let what = "batched step {st}, stream {i} at {at[i] + st} positions"
-                        if (lc.streams_rel > 0.0) {
-                            hold_within(t, tr, owned[i].logits, alone[i][st + 1l], alone[i][st], what, lc.streams_rel)
-                        } else {
-                            hold_bar(t, tr, owned[i].logits, alone[i][st + 1l], alone[i][st], streams_bar, what)
-                        }
-                    }
-                }
-            }
-            unsafe {
-                delete sess
-            }
-            t |> equal(rdec_nrow_steps() - steps0, STEPS, "every batched step went through the N-row command")
-            let nrows = home_token_n_rows()
-            t |> success(nrows >= n, "the N-row token command serves the {n} rows at once ({nrows} rows)")
-            served_every_call(t)
-            for (i in range64(n)) {
-                gpu_device_kv_park(owned[i])
-            }
-            delete owned
-            delete prompts
-            delete feeds
-            delete alone
-            delete at
-        }
-    }
+    delete pa
+    delete pb
 }
 
 //! the same past the unsplit position: both prompts run longer than RD_UNSPLIT_POS, so the batched steps take the
 //! N-row command's split attention form - the arrival counters a row apart, the last piece of each row combining
+//! the three batched-step cells on one two-region load of `file`: a batched step over two sessions, the split form past
+//! the unsplit position, and a batched step ahead of any one-row step
+def cell_regions_batched_once(t : T?; file : string; bar : LogitsBar = LogitsBar.bit_exact) {
+    with_regions_rig(t, file) $(tr) {
+        held_on(t) $(var h) {
+            regions_batched_rows(h, tr, bar)
+            regions_split_rows(h, tr, bar)
+            regions_batched_first_rows(h, tr)
+        }
+    }
+}
+
 def cell_regions_batched_steps_split(t : T?; file : string; bar : LogitsBar = LogitsBar.bit_exact) {
     t |> run("two sessions past the unsplit position: the split N-row command reads what each session reads alone") @(t : T?) {
         with_regions_rig(t, file) $(tr) {
-            var pa <- resident_prompt(PF_WINDOW_ROWS + 8l)
-            var pb <- ramp_ids(PF_WINDOW_ROWS + 25l, 0l, 3000l, 91l, 6000l)
-            static_if (typeinfo builtin_module_exists(vulkan)) {
-                t |> success(long_length(pa) > RD_UNSPLIT_POS && long_length(pb) > RD_UNSPLIT_POS, "both prompts run past the unsplit position ({RD_UNSPLIT_POS})")
+            held_on(t) $(var h) {
+                regions_split_rows(h, tr, bar)
             }
-            batched_steps_body(t, tr, pa, pb, bar)
-            delete pa
-            delete pb
         }
     }
+}
+
+//! the split cell's collection on a two-region load
+def regions_split_rows(var h : Held; tr : Model; bar : LogitsBar = LogitsBar.bit_exact) {
+    var pa <- resident_prompt(PF_WINDOW_ROWS + 8l)
+    var pb <- ramp_ids(PF_WINDOW_ROWS + 25l, 0l, 3000l, 91l, 6000l)
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        h |> held_fact(long_length(pa) > RD_UNSPLIT_POS && long_length(pb) > RD_UNSPLIT_POS, "both prompts run past the unsplit position ({RD_UNSPLIT_POS})")
+    }
+    batched_steps_body(h, tr, pa, pb, bar)
+    delete pa
+    delete pb
 }
 
 //! DASLLAMA_VK_FUSE_BISECT a bit at a time: the one-row steps under each bit within the split bar of the fused run (the fused
@@ -1060,47 +925,54 @@ def private pair_step(tr : Model; var sa, sb : Session; ta, tb : int64) {
 def cell_regions_batched_first(t : T?; file : string) {
     t |> run("a batched step first, one-row steps, a batched step again: the rows read what each session reads alone throughout") @(t : T?) {
         with_regions_rig(t, file) $(tr) {
-            var pa <- prompt_a()
-            var pb <- prompt_b()
-            var fa <- feed_a()
-            var fb <- feed_b()
-            var sa <- create_session(tr, mirror_kv_dtype())
-            var sb <- create_session(tr, mirror_kv_dtype())
-            eval(tr, sa, pa)
-            eval(tr, sb, pb)
-            var got_a, got_b : array<array<float>>
-            with_batch_rows(tr, sa, sb) $(var ws; var sess) {
-                for (st in range64(STEPS)) {
-                    if (st == 1l) {
-                        pair_step(tr, sa, sb, fa[st], fb[st])
-                    } else {
-                        var toks <- [fa[st], fb[st]]
-                        eval_batch(tr, ws, sess, toks)
-                        delete toks
-                    }
-                    got_a |> emplace <| logits_of(sa, tr.config.vocab_size)
-                    got_b |> emplace <| logits_of(sb, tr.config.vocab_size)
-                }
+            held_on(t) $(var h) {
+                regions_batched_first_rows(h, tr)
             }
-            served_every_call(t)
-            var ra <- logits_alone(tr, pa, fa)
-            var rb <- logits_alone(tr, pb, fb)
-            for (st in range64(STEPS)) {
-                hold_equal(t, tr, got_a[st], ra[st + 1l], ra[st], "batched-first step {st}, row A")
-                hold_equal(t, tr, got_b[st], rb[st + 1l], rb[st], "batched-first step {st}, row B")
-            }
-            delete sa
-            delete sb
-            delete got_a
-            delete got_b
-            delete ra
-            delete rb
-            delete pa
-            delete pb
-            delete fa
-            delete fb
         }
     }
+}
+
+//! the batched-first cell's collection on a two-region load
+def regions_batched_first_rows(var h : Held; tr : Model) {
+    var pa <- prompt_a()
+    var pb <- prompt_b()
+    var fa <- feed_a()
+    var fb <- feed_b()
+    var sa <- create_session(tr, mirror_kv_dtype())
+    var sb <- create_session(tr, mirror_kv_dtype())
+    eval(tr, sa, pa)
+    eval(tr, sb, pb)
+    var got_a, got_b : array<array<float>>
+    with_batch_rows(tr, sa, sb) $(var ws; var sess) {
+        for (st in range64(STEPS)) {
+            if (st == 1l) {
+                pair_step(tr, sa, sb, fa[st], fb[st])
+            } else {
+                var toks <- [fa[st], fb[st]]
+                eval_batch(tr, ws, sess, toks)
+                delete toks
+            }
+            got_a |> emplace <| logits_of(sa, tr.config.vocab_size)
+            got_b |> emplace <| logits_of(sb, tr.config.vocab_size)
+        }
+    }
+    h |> held_served()
+    var ra <- logits_alone(tr, pa, fa)
+    var rb <- logits_alone(tr, pb, fb)
+    for (st in range64(STEPS)) {
+        hold_equal(h, tr, got_a[st], ra[st + 1l], ra[st], "batched-first step {st}, row A")
+        hold_equal(h, tr, got_b[st], rb[st + 1l], rb[st], "batched-first step {st}, row B")
+    }
+    delete sa
+    delete sb
+    delete got_a
+    delete got_b
+    delete ra
+    delete rb
+    delete pa
+    delete pb
+    delete fa
+    delete fb
 }
 
 def private device_session(tr : Model) : Session => <- create_device_session(tr, gpu_device_session_dtype())
@@ -1122,81 +994,93 @@ def private with_device_pair(tr : Model; pa, pb : array<int64>; body : block<(va
 def cell_device_home_sessions(t : T?; file : string) {
     t |> run("two device-home sessions step between each other and in one batched step, bit for bit a host-cached session alone") @(t : T?) {
         with_regions_rig(t, file) $(tr) {
-            t |> equal(gpu_device_sessions(), 2l, "the armed driver serves a device-home session per region")
-            var pa <- prompt_a()
-            var pb <- prompt_b()
-            var al <- alone_runs(tr, pa, pb)
-            set_resident_prefill_allowed(false)   // the server's setting: the pin binds host-cached sessions, a device-home one prefills on the device all the same
-            with_device_pair(tr, pa, pb) $(var sa; var sb) {
-                t |> equal(length(sa.key_cache) + length(sa.value_cache), 0, "a device-home session allocates no host cache")
-                hold_equal(t, tr, sa.logits, al.ra[0], al.ra[1], "device-home A's prefill")
-                hold_equal(t, tr, sb.logits, al.rb[0], al.rb[1], "device-home B's prefill")
-                let half = STEPS / 2l
-                for (st in range64(half)) {
-                    var ta <- [al.fa[st]]
-                    var tb <- [al.fb[st]]
-                    eval(tr, sa, ta)
-                    hold_equal(t, tr, sa.logits, al.ra[st + 1l], al.ra[st], "device-home A single step {st}")
-                    eval(tr, sb, tb)
-                    hold_equal(t, tr, sb.logits, al.rb[st + 1l], al.rb[st], "device-home B single step {st}")
-                    delete ta
-                    delete tb
-                }
-                moe_gpu_hydrate_session(tr, sa)
-                t |> equal(length(sa.key_cache) + length(sa.value_cache), 0, "hydrating a device-home session brings nothing down: it has no host cache to fill")
-                with_batch_rows(tr, sa, sb) $(var ws; var sess) {
-                    for (st in range64(half, STEPS)) {
-                        var toks <- [al.fa[st], al.fb[st]]
-                        eval_batch(tr, ws, sess, toks)
-                        delete toks
-                        hold_equal(t, tr, sa.logits, al.ra[st + 1l], al.ra[st], "device-home batched step {st}, row A")
-                        hold_equal(t, tr, sb.logits, al.rb[st + 1l], al.rb[st], "device-home batched step {st}, row B")
-                    }
-                }
-                set_resident_prefill_allowed(true)
-                var passes <- gpu_cpu_passes_()
-                t |> equal(length(passes), 0, "the device served every call, the prefills under the pin among them: {passes}")
-                delete passes
+            held_on(t) $(var h) {
+                regions_device_home_rows(h, tr)
             }
-            delete al
-            delete pa
-            delete pb
         }
     }
     cell_device_home_pin(t, file)
 }
 
+//! the device-home cell's collection on a two-region load
+def regions_device_home_rows(var h : Held; tr : Model) {
+    h |> held_equal(gpu_device_sessions(), 2l, "the armed driver serves a device-home session per region")
+    var pa <- prompt_a()
+    var pb <- prompt_b()
+    var al <- alone_runs(tr, pa, pb)
+    set_resident_prefill_allowed(false)   // the server's setting: the pin binds host-cached sessions, a device-home one prefills on the device all the same
+    with_device_pair(tr, pa, pb) $(var sa; var sb) {
+        h |> held_equal(length(sa.key_cache) + length(sa.value_cache), 0, "a device-home session allocates no host cache")
+        hold_equal(h, tr, sa.logits, al.ra[0], al.ra[1], "device-home A's prefill")
+        hold_equal(h, tr, sb.logits, al.rb[0], al.rb[1], "device-home B's prefill")
+        let half = STEPS / 2l
+        for (st in range64(half)) {
+            var ta <- [al.fa[st]]
+            var tb <- [al.fb[st]]
+            eval(tr, sa, ta)
+            hold_equal(h, tr, sa.logits, al.ra[st + 1l], al.ra[st], "device-home A single step {st}")
+            eval(tr, sb, tb)
+            hold_equal(h, tr, sb.logits, al.rb[st + 1l], al.rb[st], "device-home B single step {st}")
+            delete ta
+            delete tb
+        }
+        moe_gpu_hydrate_session(tr, sa)
+        h |> held_equal(length(sa.key_cache) + length(sa.value_cache), 0, "hydrating a device-home session brings nothing down: it has no host cache to fill")
+        with_batch_rows(tr, sa, sb) $(var ws; var sess) {
+            for (st in range64(half, STEPS)) {
+                var toks <- [al.fa[st], al.fb[st]]
+                eval_batch(tr, ws, sess, toks)
+                delete toks
+                hold_equal(h, tr, sa.logits, al.ra[st + 1l], al.ra[st], "device-home batched step {st}, row A")
+                hold_equal(h, tr, sb.logits, al.rb[st + 1l], al.rb[st], "device-home batched step {st}, row B")
+            }
+        }
+        set_resident_prefill_allowed(true)
+        h |> held_served("the device served every call, the prefills under the pin among them")
+    }
+    delete al
+    delete pa
+    delete pb
+}
+
 def private cell_device_home_pin(t : T?; file : string) {
     t |> run("a live device-home session's region is never handed to another session: the outsider passes, the owners step on") @(t : T?) {
         with_regions_rig(t, file, RegionsLoad(host = true)) $(tr) {
-            var pa <- prompt_a()
-            var pb <- prompt_b()
-            var al <- alone_runs(tr, pa, pb)
-            with_device_pair(tr, pa, pb) $(var sa; var sb) {
-                var outsider <- create_session(tr, mirror_kv_dtype())
-                eval(tr, outsider, pa)
-                only_pass(t, "busy", "the outsider's call passed as busy, and only it")
-                var ta <- [al.fa[0]]
-                var tb <- [al.fb[0]]
-                eval(tr, sa, ta)
-                hold_equal(t, tr, sa.logits, al.ra[1], al.ra[0], "owner A's next step, its region untouched")
-                eval(tr, sb, tb)
-                hold_equal(t, tr, sb.logits, al.rb[1], al.rb[0], "owner B's next step, its region untouched")
-                gpu_device_kv_park(sa)
-                var late <- create_session(tr, mirror_kv_dtype())
-                let served0 = gpu_resident_prefills_()
-                eval(tr, late, pa)
-                t |> equal(gpu_resident_prefills_(), served0 + 1l, "a parked region is anyone's: the next outsider prefills on the device")
-                delete ta
-                delete tb
-                delete late
-                delete outsider
+            held_on(t) $(var h) {
+                regions_device_home_pin_rows(h, tr)
             }
-            delete al
-            delete pa
-            delete pb
         }
     }
+}
+
+//! the pin cell's collection on a two-region load whose planes stay on the host: the outsider's call passes as busy by design
+def regions_device_home_pin_rows(var h : Held; tr : Model) {
+    var pa <- prompt_a()
+    var pb <- prompt_b()
+    var al <- alone_runs(tr, pa, pb)
+    with_device_pair(tr, pa, pb) $(var sa; var sb) {
+        var outsider <- create_session(tr, mirror_kv_dtype())
+        eval(tr, outsider, pa)
+        h |> held_only_pass("busy", "the outsider's call passed as busy, and only it")
+        var ta <- [al.fa[0]]
+        var tb <- [al.fb[0]]
+        eval(tr, sa, ta)
+        hold_equal(h, tr, sa.logits, al.ra[1], al.ra[0], "owner A's next step, its region untouched")
+        eval(tr, sb, tb)
+        hold_equal(h, tr, sb.logits, al.rb[1], al.rb[0], "owner B's next step, its region untouched")
+        gpu_device_kv_park(sa)
+        var late <- create_session(tr, mirror_kv_dtype())
+        let served0 = gpu_resident_prefills_()
+        eval(tr, late, pa)
+        h |> held_equal(gpu_resident_prefills_(), served0 + 1l, "a parked region is anyone's: the next outsider prefills on the device")
+        delete ta
+        delete tb
+        delete late
+        delete outsider
+    }
+    delete al
+    delete pa
+    delete pb
 }
 
 def cell_device_kv_park_adopt(t : T?; file : string) {
@@ -1322,18 +1206,25 @@ let private CODEC_STREAM_AGREE = 2l
 //! `want` side's for every id below `same_below` (through `CODEC_STREAM_AGREE` tokens under a block-codec mirror)
 def private hold_streams_equal(t : T?; m : Model; want, got : array<SchedEvent>;
                                first, last, same_below : int64; want_name, got_name : string) {
+    held_on(t) $(var h) {
+        hold_streams_equal(h, m, want, got, first, last, same_below, want_name, got_name)
+    }
+}
+
+def private hold_streams_equal(var h : Held; m : Model; want, got : array<SchedEvent>;
+                               first, last, same_below : int64; want_name, got_name : string) {
     let codec = kv_block_codec(mirror_kv_dtype())
     for (id in range64(first, last)) {
         var tw <- toks_of(want, id)
         var tg <- toks_of(got, id)
         log_gen_texts(m, "request {id} (CPU = {want_name}, GPU = {got_name})", tw, tg)
-        t |> equal(length(tg), 8, "request {id} ran its eight tokens")
+        h |> held_equal(length(tg), 8, "request {id} ran its eight tokens")
         if (id < same_below) {
             let both = min(long_length(tw), long_length(tg))
             let through = codec ? min(CODEC_STREAM_AGREE, both) : both
             let scope = codec ? " through the first {through} tokens (a block-codec mirror)" : ""
-            t |> success(long_length(tw) == long_length(tg) && ids_equal(subarray(tw, range64(0l, through)), subarray(tg, range64(0l, through))),
-                         "request {id}: {got_name} {tg} against {want_name} {tw}{scope}")
+            h |> held_fact(long_length(tw) == long_length(tg) && ids_equal(subarray(tw, range64(0l, through)), subarray(tg, range64(0l, through))),
+                           "request {id}: {got_name} {tg} against {want_name} {tw}{scope}")
         }
         delete tw
         delete tg
@@ -1343,77 +1234,87 @@ def private hold_streams_equal(t : T?; m : Model; want, got : array<SchedEvent>;
 def cell_scheduler_device_mode(t : T?; file : string) {
     t |> run("a device-mode scheduler emits what the host-cached one does where the two run one code path, and a second turn adopts its first turn's rows") @(t : T?) {
         with_regions_rig(t, file) $(tr) {
-            var host, dev : array<SchedEvent>
-            let served0 = gpu_resident_prefills_()
-            t |> success(!serve_four(tr, false, host).on, "the control scheduler serves host-cached sessions")
-            let served1 = gpu_resident_prefills_()
-            let picks0 = rdec_picks_served()
-            let segw0 = segment_windows_count()
-            let served = serve_four(tr, true, dev)
-            t |> success(served.on, "an idle scheduler switches to device-home sessions")
-            if (gpu_device_prefill_segments(tr)) {   //! the two prompts admitted together ride one segmented window: the tick's witness
-                t |> success(segment_windows_count() - segw0 >= 1l, "the device-home tick handed its prefilling streams to the segmented window ({segment_windows_count() - segw0} windows)")
-            } else {
-                t |> equal(segment_windows_count() - segw0, 0l, "a model the segmented window declines takes a stream's own call a tick")
+            held_on(t) $(var h) {
+                regions_scheduler_rows(h, tr)
             }
-            //! every decode step of the three argmax requests lands a pick (their first token samples off the prefill's logits inline);
-            //! the sampled fourth request's steps land logits, so the count is the rows stepped less its own
-            var td4 <- toks_of(dev, 4l)
-            let sampled_steps = long_length(td4) - 1l
-            delete td4
-            t |> equal(rdec_picks_served() - picks0, served.rows_stepped - sampled_steps, "the device landed the argmax streams' picks alone, no logits row ({served.rows_stepped} rows stepped, {sampled_steps} of them the sampled request's)")
-            t |> success(served.rows_stepped - sampled_steps >= 21l, "the three argmax requests stepped seven decode rows each at least ({served.rows_stepped - sampled_steps})")
-            // four turns on two stream slots: the first turn's claim is evicted by the third's, the third's is spent by the turn that adopts it
-            t |> equal(served.parked, gpu_device_prefill_continues(tr) ? 2 : 0, "parked claims stay within the stream slots, and a model whose prefill cannot continue parks none")
-            // one code path on both sides: each prompt enters the window chain once and each step the batched token command;
-            // a device-home stream differs by the host copy it skips. The adopting turn splits its prefill, so it holds no token compare
-            t |> equal(served1 - served0, 4l, "the host-cached side prefilled its four prompts on the device, one call each")
-            t |> equal(gpu_resident_prefills_() - served1, 4l, "and so did the device-home side")
-            let same_below = gpu_device_prefill_continues(tr) ? 4l : 5l
-            hold_streams_equal(t, tr, host, dev, 1l, 5l, same_below, "host-cached", "device-home")
-            t |> equal(cached_of(host, 4l), 0l, "the host-cached flat scheduler keeps no prefix")
-            if (gpu_device_prefill_continues(tr)) {
-                t |> success(cached_of(dev, 4l) >= 33l, "the second turn adopted the rows of the turn it continues from the device ({cached_of(dev, 4l)} of them)")
-            } else {
-                t |> equal(cached_of(dev, 4l), 0l, "a recurrent model's turn prefills whole, from zero: nothing is adopted")
-            }
-            var passes <- gpu_cpu_passes_()
-            t |> equal(length(passes), 0, "the device served every call of both runs: {passes}")
-            delete passes
-            delete host
-            delete dev
         }
     }
     t |> run("a device-mode request that asks for no cache adopts no parked rows and parks none of its own") @(t : T?) {
         with_regions_rig(t, file) $(tr) {
-            var sch <- create_scheduler(tr, 2l, 4l, 64l, 0l, 8l, mirror_kv_dtype())
-            t |> success(set_device_kv(sch, true), "the scheduler serves device-home sessions")
-            var events : array<SchedEvent>
-            var prompt <- prose_ids(33l, 11l)
-            submit(tr, sch, make_req(1l, prompt, 8l))
-            drain(tr, sch, events)
-            let claims = length(sch.parked)
-            var uncached <- make_req(2l, prompt, 8l)
-            uncached.no_cache = true
-            submit(tr, sch, uncached)
-            drain(tr, sch, events)
-            t |> equal(cached_of(events, 2l), 0l, "a no-cache request adopts nothing off a region that holds its prompt")
-            t |> equal(length(sch.parked), claims, "... and parks no claim of its own ({length(sch.parked)} parked, {claims} before it)")
-            submit(tr, sch, make_req(3l, prompt, 8l))
-            drain(tr, sch, events)
-            if (gpu_device_prefill_continues(tr)) {
-                t |> success(cached_of(events, 3l) > 0l, "control: the same prompt with the cache on adopts the first request's rows ({cached_of(events, 3l)} of them)")
-            } else {
-                t |> equal(cached_of(events, 3l), 0l, "a recurrent model's turn prefills whole, from zero: its control adopts nothing either")
+            held_on(t) $(var h) {
+                regions_scheduler_no_cache_rows(h, tr)
             }
-            var passes <- gpu_cpu_passes_()
-            t |> equal(length(passes), 0, "the device served every call: {passes}")
-            delete passes
-            delete prompt
-            delete events
-            delete sch
         }
     }
+}
+
+//! the device-mode scheduler cell's collection on a two-region load: the host-cached run, then the device-home run
+def regions_scheduler_rows(var h : Held; tr : Model) {
+    var host, dev : array<SchedEvent>
+    let served0 = gpu_resident_prefills_()
+    h |> held_fact(!serve_four(tr, false, host).on, "the control scheduler serves host-cached sessions")
+    let served1 = gpu_resident_prefills_()
+    let picks0 = rdec_picks_served()
+    let segw0 = segment_windows_count()
+    let served = serve_four(tr, true, dev)
+    h |> held_fact(served.on, "an idle scheduler switches to device-home sessions")
+    if (gpu_device_prefill_segments(tr)) {   //! the two prompts admitted together ride one segmented window: the tick's witness
+        h |> held_fact(segment_windows_count() - segw0 >= 1l, "the device-home tick handed its prefilling streams to the segmented window ({segment_windows_count() - segw0} windows)")
+    } else {
+        h |> held_equal(segment_windows_count() - segw0, 0l, "a model the segmented window declines takes a stream's own call a tick")
+    }
+    //! every decode step of the three argmax requests lands a pick (their first token samples off the prefill's logits inline);
+    //! the sampled fourth request's steps land logits, so the count is the rows stepped less its own
+    var td4 <- toks_of(dev, 4l)
+    let sampled_steps = long_length(td4) - 1l
+    delete td4
+    h |> held_equal(rdec_picks_served() - picks0, served.rows_stepped - sampled_steps, "the device landed the argmax streams' picks alone, no logits row ({served.rows_stepped} rows stepped, {sampled_steps} of them the sampled request's)")
+    h |> held_fact(served.rows_stepped - sampled_steps >= 21l, "the three argmax requests stepped seven decode rows each at least ({served.rows_stepped - sampled_steps})")
+    // four turns on two stream slots: the first turn's claim is evicted by the third's, the third's is spent by the turn that adopts it
+    h |> held_equal(served.parked, gpu_device_prefill_continues(tr) ? 2 : 0, "parked claims stay within the stream slots, and a model whose prefill cannot continue parks none")
+    // one code path on both sides: each prompt enters the window chain once and each step the batched token command;
+    // a device-home stream differs by the host copy it skips. The adopting turn splits its prefill, so it holds no token compare
+    h |> held_equal(served1 - served0, 4l, "the host-cached side prefilled its four prompts on the device, one call each")
+    h |> held_equal(gpu_resident_prefills_() - served1, 4l, "and so did the device-home side")
+    let same_below = gpu_device_prefill_continues(tr) ? 4l : 5l
+    hold_streams_equal(h, tr, host, dev, 1l, 5l, same_below, "host-cached", "device-home")
+    h |> held_equal(cached_of(host, 4l), 0l, "the host-cached flat scheduler keeps no prefix")
+    if (gpu_device_prefill_continues(tr)) {
+        h |> held_fact(cached_of(dev, 4l) >= 33l, "the second turn adopted the rows of the turn it continues from the device ({cached_of(dev, 4l)} of them)")
+    } else {
+        h |> held_equal(cached_of(dev, 4l), 0l, "a recurrent model's turn prefills whole, from zero: nothing is adopted")
+    }
+    h |> held_served("the device served every call of both runs")
+    delete host
+    delete dev
+}
+
+//! the device-mode scheduler's no-cache request on a two-region load, its cache-on control after it
+def regions_scheduler_no_cache_rows(var h : Held; tr : Model) {
+    var sch <- create_scheduler(tr, 2l, 4l, 64l, 0l, 8l, mirror_kv_dtype())
+    h |> held_fact(set_device_kv(sch, true), "the scheduler serves device-home sessions")
+    var events : array<SchedEvent>
+    var prompt <- prose_ids(33l, 11l)
+    submit(tr, sch, make_req(1l, prompt, 8l))
+    drain(tr, sch, events)
+    let claims = length(sch.parked)
+    var uncached <- make_req(2l, prompt, 8l)
+    uncached.no_cache = true
+    submit(tr, sch, uncached)
+    drain(tr, sch, events)
+    h |> held_equal(cached_of(events, 2l), 0l, "a no-cache request adopts nothing off a region that holds its prompt")
+    h |> held_equal(length(sch.parked), claims, "... and parks no claim of its own ({length(sch.parked)} parked, {claims} before it)")
+    submit(tr, sch, make_req(3l, prompt, 8l))
+    drain(tr, sch, events)
+    if (gpu_device_prefill_continues(tr)) {
+        h |> held_fact(cached_of(events, 3l) > 0l, "control: the same prompt with the cache on adopts the first request's rows ({cached_of(events, 3l)} of them)")
+    } else {
+        h |> held_equal(cached_of(events, 3l), 0l, "a recurrent model's turn prefills whole, from zero: its control adopts nothing either")
+    }
+    h |> held_served()
+    delete prompt
+    delete events
+    delete sch
 }
 
 //! a paged scheduler's host-cached streams on the resident driver: their pages go up a physical run at a time, the rows the device
@@ -1736,67 +1637,74 @@ def cell_device_pool_head_rows(t : T?; file : string) {
 def cell_ring_floor(t : T?; file : string) {
     t |> run("a ringed history continues from its ring floor on: under it a call panics and a park, an export and an import refuse") @(t : T?) {
         with_regions_rig(t, file, RegionsLoad(ring = 1)) $(tr) {
-            let slack = gpu_resident_kv_ring_slack()
-            t |> success(slack > 0l, "the ringed load armed its rings (slack {slack})")
-            return if (slack <= 0l)
-            let n = max(1300l, slack + 300l)   //! past the ring's slack on any card (2048 rows on the RTX PRO 4500), so the floor stands above the 40-row calls
-            let floor = n - slack
-            var prompt <- prose_ids(n, 0l)
-            var short <- prose_ids(40l, 1l)
-            var s <- create_session(tr, mirror_kv_dtype())
-            eval(tr, s, prompt)
-            t |> equal(s.kv_ring_floor, floor, "the prompt's rows less the ring's slack are the floor")
-            s.n_past = 40l
-            let why = panic_text() ${
-                var one <- [prompt[40]]
-                eval(tr, s, one)
+            held_on(t) $(var h) {
+                regions_ring_floor_rows(h, tr)
             }
-            t |> success(find(why, "from position {floor} on") >= 0, "a call at 40 continues under the floor and panics: {why}")
-            s.n_past = 0l
-            eval(tr, s, short)
-            t |> equal(s.kv_ring_floor, 0l, "a prompt from 0 rebuilds the history: its 40 rows reach no ring, so no floor")
-            s.n_past = 0l
-            eval(tr, s, prompt)
-            t |> equal(s.kv_ring_floor, floor, "the long prompt again raises the floor")
-            s.n_past = 0l
-            var row0 <- [short[0]]
-            eval(tr, s, row0)
-            t |> equal(s.kv_ring_floor, 0l, "a one-token decode of row 0 rebuilds the history too: the claim's high-water mark drops with it, so no floor")
-            let why1 = panic_text() ${
-                var row1 <- [short[1]]
-                eval(tr, s, row1)
-            }
-            t |> equal(why1, "", "and the decode at 1 continues (a bench's tg rows after its pp rows)")
-            delete row0
-            delete s
-            var d <- device_session(tr)
-            eval(tr, d, prompt)
-            t |> equal(d.kv_ring_floor, floor, "a device-home session's floor is the same")
-            let claim = gpu_device_kv_park(d)
-            delete d
-            var a <- device_session(tr)
-            t |> success(!gpu_device_kv_adopt(a, claim, 40l) && a.n_past == 0l, "a parked claim refuses an opening under its floor")
-            t |> success(gpu_device_kv_adopt(a, claim, n), "and hands every row over (the control)")
-            t |> equal(a.kv_ring_floor, floor, "the adopter carries the claim's floor")
-            let claim2 = gpu_device_kv_park(a)
-            delete a
-            var pool <- create_kv_pool(tr, 64l, gpu_device_session_dtype())
-            var carrier <- create_session(tr, pool)
-            t |> success(!gpu_device_kv_export(tr, claim2, carrier, 0l, 40l), "an export ending under the floor refuses")
-            t |> success(gpu_device_kv_export(tr, claim2, carrier, 0l, n), "an export of every row goes down (the control)")
-            t |> equal(carrier.kv_ring_floor, floor, "the carrier carries the floor")
-            var up <- device_session(tr)
-            t |> success(!gpu_device_kv_import(tr, up, carrier, 40l), "an import ending under the carrier's floor refuses")
-            t |> success(gpu_device_kv_import(tr, up, carrier, n), "an import of every row comes up (the control)")
-            t |> equal(up.kv_ring_floor, floor, "the imported session carries the floor")
-            gpu_device_kv_park(up)
-            delete up
-            delete carrier
-            delete pool
-            delete short
-            delete prompt
         }
     }
+}
+
+//! the ring-floor cell's collection on a ringed two-region load
+def regions_ring_floor_rows(var h : Held; tr : Model) {
+    let slack = gpu_resident_kv_ring_slack()
+    h |> held_fact(slack > 0l, "the ringed load armed its rings (slack {slack})")
+    return if (slack <= 0l)
+    let n = max(1300l, slack + 300l)   //! past the ring's slack on any card (2048 rows on the RTX PRO 4500), so the floor stands above the 40-row calls
+    let floor = n - slack
+    var prompt <- prose_ids(n, 0l)
+    var short <- prose_ids(40l, 1l)
+    var s <- create_session(tr, mirror_kv_dtype())
+    eval(tr, s, prompt)
+    h |> held_equal(s.kv_ring_floor, floor, "the prompt's rows less the ring's slack are the floor")
+    s.n_past = 40l
+    let why = panic_text() ${
+        var one <- [prompt[40]]
+        eval(tr, s, one)
+    }
+    h |> held_fact(find(why, "from position {floor} on") >= 0, "a call at 40 continues under the floor and panics: {why}")
+    s.n_past = 0l
+    eval(tr, s, short)
+    h |> held_equal(s.kv_ring_floor, 0l, "a prompt from 0 rebuilds the history: its 40 rows reach no ring, so no floor")
+    s.n_past = 0l
+    eval(tr, s, prompt)
+    h |> held_equal(s.kv_ring_floor, floor, "the long prompt again raises the floor")
+    s.n_past = 0l
+    var row0 <- [short[0]]
+    eval(tr, s, row0)
+    h |> held_equal(s.kv_ring_floor, 0l, "a one-token decode of row 0 rebuilds the history too: the claim's high-water mark drops with it, so no floor")
+    let why1 = panic_text() ${
+        var row1 <- [short[1]]
+        eval(tr, s, row1)
+    }
+    h |> held_equal(why1, "", "and the decode at 1 continues (a bench's tg rows after its pp rows)")
+    delete row0
+    delete s
+    var d <- device_session(tr)
+    eval(tr, d, prompt)
+    h |> held_equal(d.kv_ring_floor, floor, "a device-home session's floor is the same")
+    let claim = gpu_device_kv_park(d)
+    delete d
+    var a <- device_session(tr)
+    h |> held_fact(!gpu_device_kv_adopt(a, claim, 40l) && a.n_past == 0l, "a parked claim refuses an opening under its floor")
+    h |> held_fact(gpu_device_kv_adopt(a, claim, n), "and hands every row over (the control)")
+    h |> held_equal(a.kv_ring_floor, floor, "the adopter carries the claim's floor")
+    let claim2 = gpu_device_kv_park(a)
+    delete a
+    var pool <- create_kv_pool(tr, 64l, gpu_device_session_dtype())
+    var carrier <- create_session(tr, pool)
+    h |> held_fact(!gpu_device_kv_export(tr, claim2, carrier, 0l, 40l), "an export ending under the floor refuses")
+    h |> held_fact(gpu_device_kv_export(tr, claim2, carrier, 0l, n), "an export of every row goes down (the control)")
+    h |> held_equal(carrier.kv_ring_floor, floor, "the carrier carries the floor")
+    var up <- device_session(tr)
+    h |> held_fact(!gpu_device_kv_import(tr, up, carrier, 40l), "an import ending under the carrier's floor refuses")
+    h |> held_fact(gpu_device_kv_import(tr, up, carrier, n), "an import of every row comes up (the control)")
+    h |> held_equal(up.kv_ring_floor, floor, "the imported session carries the floor")
+    gpu_device_kv_park(up)
+    delete up
+    delete carrier
+    delete pool
+    delete short
+    delete prompt
 }
 
 def cell_scheduler_device_prefill_chunks(t : T?; file : string) {
@@ -1829,35 +1737,42 @@ def cell_scheduler_device_prefill_chunks(t : T?; file : string) {
 def cell_scheduler_device_handoff(t : T?; file : string) {
     t |> run("a device-home tick hands two streams to one segmented window where the model's window serves, and takes one stream's call where it declines") @(t : T?) {
         with_regions_rig(t, file) $(tr) {
-            var sch <- create_scheduler(tr, 2l, 4l, 64l, 0l, 0l, mirror_kv_dtype())
-            t |> success(set_device_kv(sch, true), "an idle scheduler switches to device-home sessions")
-            var pa <- prose_ids(300l, 5l)
-            var pb <- prose_ids(2l * PF_WINDOW_ROWS, 9l)
-            var events : array<SchedEvent>
-            let served0 = gpu_resident_prefills_()
-            let segw0 = segment_windows_count()
-            submit(tr, sch, make_req(1l, pa, 2l))
-            submit(tr, sch, make_req(2l, pb, 2l))
-            drain(tr, sch, events)
-            let calls = gpu_resident_prefills_() - served0
-            if (gpu_device_prefill_segments(tr)) {
-                t |> equal(calls, 4l, "the first tick's window carried both streams and cut the second's prompt there ({calls} calls)")
-                t |> success(segment_windows_count() - segw0 >= 1l, "... through the segmented window")
-            } else {
-                let whole = gpu_device_prefill_continues(tr) ? 2l : 1l
-                t |> equal(calls, 1l + whole, "each tick took one stream's own call, the second stream's prompt whole windows or whole where the model's prefill cannot continue ({calls} calls)")
-                t |> equal(segment_windows_count() - segw0, 0l, "... no segmented window")
+            held_on(t) $(var h) {
+                regions_scheduler_handoff_rows(h, tr)
             }
-            t |> equal(length(toks_of(events, 1l)), 2, "the first stream ran its two tokens")
-            t |> equal(length(toks_of(events, 2l)), 2, "the second stream ran its two tokens")
-            served_every_call(t)
-            set_device_kv(sch, false)
-            delete events
-            delete pa
-            delete pb
-            delete sch
         }
     }
+}
+
+//! the handoff cell's collection on a two-region load
+def regions_scheduler_handoff_rows(var h : Held; tr : Model) {
+    var sch <- create_scheduler(tr, 2l, 4l, 64l, 0l, 0l, mirror_kv_dtype())
+    h |> held_fact(set_device_kv(sch, true), "an idle scheduler switches to device-home sessions")
+    var pa <- prose_ids(300l, 5l)
+    var pb <- prose_ids(2l * PF_WINDOW_ROWS, 9l)
+    var events : array<SchedEvent>
+    let served0 = gpu_resident_prefills_()
+    let segw0 = segment_windows_count()
+    submit(tr, sch, make_req(1l, pa, 2l))
+    submit(tr, sch, make_req(2l, pb, 2l))
+    drain(tr, sch, events)
+    let calls = gpu_resident_prefills_() - served0
+    if (gpu_device_prefill_segments(tr)) {
+        h |> held_equal(calls, 4l, "the first tick's window carried both streams and cut the second's prompt there ({calls} calls)")
+        h |> held_fact(segment_windows_count() - segw0 >= 1l, "... through the segmented window")
+    } else {
+        let whole = gpu_device_prefill_continues(tr) ? 2l : 1l
+        h |> held_equal(calls, 1l + whole, "each tick took one stream's own call, the second stream's prompt whole windows or whole where the model's prefill cannot continue ({calls} calls)")
+        h |> held_equal(segment_windows_count() - segw0, 0l, "... no segmented window")
+    }
+    h |> held_equal(length(toks_of(events, 1l)), 2, "the first stream ran its two tokens")
+    h |> held_equal(length(toks_of(events, 2l)), 2, "the second stream ran its two tokens")
+    h |> held_served()
+    set_device_kv(sch, false)
+    delete events
+    delete pa
+    delete pb
+    delete sch
 }
 
 def cell_device_home_guards(t : T?; file : string) {
@@ -1980,10 +1895,10 @@ def cell_passes_with_their_rows(t : T?; file : string) {
 
 //! the census key of the decode attention stamp the armed mirror codec and `tr`'s head shape pick, its slab asserted
 //! `slab_heads` q heads wide ("" with no vulkan module)
-def private da_attn_stamp_key(t : T?; tr : Model; slab_heads : int) : string {
+def private da_attn_stamp_key(var h : Held; tr : Model; slab_heads : int) : string {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         let kv_mul = tr.config.n_heads / tr.config.n_kv_heads
-        t |> equal(da_slab_heads(kv_mul), int64(slab_heads), "the carrier's {kv_mul} q heads a kv head pick the {slab_heads}-head slab")
+        h |> held_equal(da_slab_heads(kv_mul), int64(slab_heads), "the carrier's {kv_mul} q heads a kv head pick the {slab_heads}-head slab")
         return "{da_attn_stamp_name(mirror_kv_dtype(), da_slab_of(tr.config.attn_sinks, kv_mul))}_cls_spv"
     } else {
         return ""
@@ -1997,24 +1912,31 @@ def cell_regions_stamp_served(t : T?; file : string; slab_heads : int) {
     t |> run("the driver's step dispatches the stamp the carrier's shape picks") @(t : T?) {
         return if (!vulkan_home_cell(t))
         with_regions_rig(t, file) $(tr) {
-            var pa <- prompt_a()
-            var fa <- feed_a()
-            var s <- create_session(tr, mirror_kv_dtype())
-            forward_prefill(tr, s, pa, long_length(pa), 0l)
-            let key = da_attn_stamp_key(t, tr, slab_heads)
-            let before = census(key)
-            forward(tr, s, fa[0], long_length(pa))
-            let after = census(key)
-            if (before == NO_CENSUS) {
-                t |> skip("no kernel census on this build (no dasVulkan module): the stamp's dispatch cannot be counted")
-            } else {
-                t |> success(after > before, "the step dispatched {key} ({after - before} dispatches)")
+            held_on(t) $(var h) {
+                regions_stamp_rows(h, tr, slab_heads)
             }
-            delete s
-            delete pa
-            delete fa
         }
     }
+}
+
+//! the stamp cell's collection on a two-region load of the Vulkan home; a held skip without a census
+def regions_stamp_rows(var h : Held; tr : Model; slab_heads : int) {
+    var pa <- prompt_a()
+    var fa <- feed_a()
+    var s <- create_session(tr, mirror_kv_dtype())
+    forward_prefill(tr, s, pa, long_length(pa), 0l)
+    let key = da_attn_stamp_key(h, tr, slab_heads)
+    let before = census(key)
+    forward(tr, s, fa[0], long_length(pa))
+    let after = census(key)
+    if (before == NO_CENSUS) {
+        h |> held_skip("no kernel census on this build (no dasVulkan module): the stamp's dispatch cannot be counted")
+    } else {
+        h |> held_fact(after > before, "the step dispatched {key} ({after - before} dispatches)")
+    }
+    delete s
+    delete pa
+    delete fa
 }
 
 //! where `on`, the fuse knob pinned to 0 - the split one-row forms - for the next load
@@ -2144,20 +2066,27 @@ def cell_regions_batched_widen(t : T?; file : string; bar : LogitsBar = LogitsBa
 def cell_regions_batched_groups(t : T?; file : string; rows : int64; bar : LogitsBar = LogitsBar.split_bar) {
     t |> run("{rows} sessions, a region each: a batched step over all of them runs in groups of the command's rows, its GEMVs in column tiles, and every row reads what its session reads alone") @(t : T?) {
         with_regions_rig(t, file, RegionsLoad(regions = rows)) $(tr) {
-            let at_once = home_token_n_rows()
-            t |> success(at_once >= 2l && (at_once < rows || min(rows, at_once) > int64(GEMV_COL_TILE)),
-                "the command steps {at_once} rows at once against the {rows} rows: the cell measures the groups or the column tiles past {GEMV_COL_TILE}")
-            var prompts <- [for (i in range64(rows)); ramp_ids(40l + i, i, 1000l + 100l * i, 37l + 2l * i, 5000l)]
-            var feeds <- [for (i in range64(rows)); ramp_ids(STEPS, i, 2000l, 53l, 4000l)]
-            let leaf0 = home_rows_leaf_launches()
-            with_rows_leaf(false) {
-                batched_steps_body(t, tr, prompts, feeds, bar)
+            held_on(t) $(var h) {
+                regions_groups_rows(h, tr, rows, bar)
             }
-            t |> equal(home_rows_leaf_launches() - leaf0, 0l, "the steps launched no rows tensor leaf: the column tiles served every site")
-            delete prompts
-            delete feeds
         }
     }
+}
+
+//! the groups cell's collection on a load of `rows` regions
+def regions_groups_rows(var h : Held; tr : Model; rows : int64; bar : LogitsBar = LogitsBar.split_bar) {
+    let at_once = home_token_n_rows()
+    h |> held_fact(at_once >= 2l && (at_once < rows || min(rows, at_once) > int64(GEMV_COL_TILE)),
+        "the command steps {at_once} rows at once against the {rows} rows: the cell measures the groups or the column tiles past {GEMV_COL_TILE}")
+    var prompts <- [for (i in range64(rows)); ramp_ids(40l + i, i, 1000l + 100l * i, 37l + 2l * i, 5000l)]
+    var feeds <- [for (i in range64(rows)); ramp_ids(STEPS, i, 2000l, 53l, 4000l)]
+    let leaf0 = home_rows_leaf_launches()
+    with_rows_leaf(false) {
+        batched_steps_body(h, tr, prompts, feeds, bar)
+    }
+    h |> held_equal(home_rows_leaf_launches() - leaf0, 0l, "the steps launched no rows tensor leaf: the column tiles served every site")
+    delete prompts
+    delete feeds
 }
 
 //! `rows` sessions' batched steps on the CUDA home's rows tensor leaf: a leaf stamp launched, and every row nearer its session

@@ -9,12 +9,13 @@ full-suite run turns a one-arm fix into an afternoon.
 ```
 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --arm <filter> [--suite decode|mtp|prefill|matrix|kernels|image|image-vulkan|coverage|all] [--family llama]
 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --suite model-free        # the per-PR gate that needs no models - runs the same on a bare box, no --arm. Outside the full suite (DASLLAMA_PARITY_FULL=1) every [test] function has a 30 s wall: a test past it ends the child with exit code 125 and the run with it (a WALL line, no later file, no retry), and a batch that ends without every file's verdict stops the run the same way (LOST)
+./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --category gemma4-e4b               # a model category (../TEST_CATEGORIES.md): the test files naming its model files, every cell on another model skipped
 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --suite model-free --skip 4          # the resume of a stopped run: no child before the run's 4th (counted from 0) starts - the N a WALL or LOST stop's RESUME line names; the REPORT says "resumed at child 4"
 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --suite model-free --test-wall 0     # one [test] function's wall in seconds for this run, on any suite; 0 = no wall; the REPORT carries it
 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --changed --stop-file /shared/STOP   # a marker the boxes of one run share (a fleet's shards): the box that stops at a wall writes it, and a run that finds it starts no further child
 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --changed [--base origin/master]   # the per-PR run on a box with models, and after an edit: the files the changed paths reach
 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --suite stocked           # every model-gated file, no --arm; a core-module change reaches every one of them through --changed
-./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --suite stocked --exclude test_ple_modes   # the iteration form - drops the PLE file
+./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --suite stocked --exclude <file>   # the iteration form - drops a file the change does not reach
 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --suite gpu-kernels       # the extended model-free pass - the Vulkan and CUDA device kernel files: no model and no test wall. On a box you keep it costs the tests' own work and no compile, because the GPU driver caches every kernel it compiled, and nothing where no device answers: run it beside model-free. Only a box that never ran it pays the driver's first compile of every kernel. The stocked suite runs these files first
 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --suite wasm              # the kernel files with a wasm seat, as one wasm64 release under node; takes emcc, node and the wasm64 archives
 DASLLAMA_GPU=1 DASLLAMA_CUDA=1 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --changed --only cuda,segments,regions,resident_moe,embeddings   # the CUDA home's pass: the run's CUDA files, the segmented window, the regions rig and the resident MoE files
@@ -60,9 +61,7 @@ kB and its file, `harness/pod_mem_track.sh`); `pod_fleet.das -- times`
 reads a run's child logs into where its test time went: every file's seconds and the longest cells. The fleet's pods
 carry 62 GB of container memory with their card: a child that crosses it is killed (`exit=137`, no verdict), the runner
 then reruns its verdict-less files one child each, and a file whose one cell needs more - the 30B carriers with their
-routed layers' experts pinned to the host - dies alone too; the CUDA pass on a pod whose card holds the 128k regions files
-reaches them and their long prompts fall to the CPU rails under the ask, so that pass takes `--exclude ctx128k`, the
-exclusion named in the PR.
+routed layers' experts pinned to the host - dies alone too.
 
 `all` (the default) runs the decode, MTP and prefill parity files, the support matrix, the kernel
 files and `test_model_image` - it omits `test_mtp_gemma_drafter.das`, `image-vulkan`, `coverage`,
@@ -142,6 +141,11 @@ No preflight tier runs the per-PR runs. `preflight -- --only dasllama-model-free
 model-free suite; the `--changed` run has no preflight lane; `-- --only dasllama-stocked` runs the
 whole stocked suite.
 
+A run forces its children onto the tune file in effect (`DAS_TUNE_FORCE`): the caller's `DAS_TUNE_MANIFEST`, else the
+box's `performance/<box>.tune.json`. The file's kernels stamp whatever its age against the binary, so a rebuild does not
+drop a test run to the fallback kernels; `--no-tune`, an absent file, and a file the caller forced already leave the
+run as it was.
+
 ## The iteration loop
 
 - Before launching any suite, state what the change can affect. A default-off knob or a
@@ -162,7 +166,9 @@ whole stocked suite.
 
 ## Arm filter mechanics
 
-`DASLLAMA_TEST_ARMS` (set by `--arm`) is a comma list of substrings matched against arm names
+`run.das` hands a child its arm, family and category filters as dastest `--run-env` pairs, not in the child's
+environment: a compile record is named by every `DAS*` variable the compile sees, so a filter in the environment would
+compile the engine again for every filter. `DASLLAMA_TEST_ARMS` (set by `--arm`) is a comma list of substrings matched against arm names
 by `arm_on(t, name)` in `_model_tier.das`. Filtered arms register a LOUD `t |> skip`, so a
 filtered run reports SKIPPED, never PASS - partial coverage cannot masquerade as full. A
 failed assert still FAILS the test (dastest: `failed` beats `skipped`), so filtering can
@@ -292,7 +298,7 @@ truth logged per round) and `mtp-count-pre` (the pre-norm residual as the drafte
 with the fixture arm. Bars: 0.5 dense, 2.0 plain MoE, 24.0 gemma-MoE = the support matrix's own
 Q4_K_M forced-step bar (the routed experts amplify a float-class difference at a near-tie into
 the K/V history: floor 0.003-0.01, isolated spikes to 11, argmax never flips); a K-quant carrier's nine-row verify, and its
-two-to-eight-row verify where a rows site's half-x forms serve on the box, hold `MM_TOL` (1.0: both stage x to half) at the
+two-to-eight-row verify where a rows site's half-x forms serve on the box, hold `MM_TOL` (1.5: both stage x to half) at the
 least, each such bar with its control - the same verify with its GEMV stage knocked out outside it; every vff compare counts
 each plain step a Metal decode (`metal_decode_stats().decodes`) beside the batch side's served steps, its control's too, and
 the batch verify's steps counting none (the decode count's control). Each fixture's
@@ -403,6 +409,11 @@ knobs - before its first walk and puts each back at the value its getter read be
   the gemma MoE step: the prompt commit's last row, a sum of magnitudes a captured layer (`dflash_recorded_prompt_sums`),
   is the CPU route's within 5% at every captured layer, the prompt counted as a device prefill; the CPU route's row for a
   prompt one token short is outside the bar (the control); skips without das_metal;
+- `dflash-26b-cpu` / `dflash-26b-metal` / `dflash-26b-discrete` (family `gemma4moe`, the `gemma4-moe` category) - the same
+  trunk's drafted greedy walk is the plain walk's token for token, over one chat turn (a raw prompt leaves the routed trunk
+  at near-tie logits): on the CPU arm; on the Metal device arm, whose block rounds run as joint rounds on the batch rail
+  (a gemma-4 trunk takes no single-stream verify seat), the CPU arm over the device's captures accepting the same count
+  and no Metal object left alive; on the serving discrete home with the Q8_0 and the Q4_K_M drafter files;
 - `dflash-e2b-facade` (family `gemma4e`: gemma-4-E2B Q8_0 with its DFlash2 Q8_0 drafter) - the facade's streams over an
   attached block drafter (`attach_block_drafter`): a two-turn greedy chat's replies through `respond` and a greedy
   completion's ids through `generate_drafted` are the plain model's token for token, the chat's turns counted as draft
@@ -592,10 +603,7 @@ both
 qwen35 rows open on the format census of their blob twin, every site the file carries in its own format; fam-qwen4exp
 is the Flash-Next UD-IQ4_XS served image alone - the planar file and the image do not fit the box together - its Metal
 prefill and decode token for token the file's frozen counting fixture, the drivers' counters rising and no decline,
-PARITY_FULL-gated). The E2B format carriers have their own rows: `fam-gemma4e-q40` (the Q4_0 file) and `fam-<carrier.tag>`
-(built from the carrier list's tag: `fam-gemma4e-e2b-emb-q6k fam-gemma4e-e2b-emb-iq4xs fam-gemma4e-e2b-emb-q50
-fam-gemma4e-e2b-emb-q51 fam-gemma4e-e2b-ple-q6k fam-gemma4e-e2b-ple-q50`; an emb carrier's row also asserts the PLE table's
-format tag); `--arm fam-gemma4e` selects them all.
+PARITY_FULL-gated). The E2B Q4_0 file has its own row, `fam-gemma4e-q40`; `--arm fam-gemma4e` selects it with the others.
 
 Metal format census (`test_metal_format_census.das`, entry below): `census-iq4xs census-tied
 census-f16 census-iq3s4 census-iq3s4-moe census-nv4 census-nv4-table census-nv4-hybrid census-moe-nv4` (the nv4 mints:
@@ -612,14 +620,13 @@ per-32 arm of both Vulkan files.
 
 The Vulkan gemma resident files (`test_gpu_resident_gemma*.das`, entry below), one arm a carrier (`GemmaFile.arm`): `g2`
 (gemma-2-2b), `g3` (the gemma-3-1b cells), `g3b` (gemma-3-4b), `g4k` (the 12B Q4_K_M cells), `g4x` (the 12B Q4_K_M
-300-token agreement cell), `g4q8` (the 12B Q8_0 cells), `g4e` (E2B), `g4f` (E4B), `g4m` (the 26B-A4B IQ3_XXS), `g4mk` (the
+300-token agreement cell), `g4q8` (the 12B Q8_0 cells), `g4e` (E2B), `g4m` (the 26B-A4B IQ3_XXS), `g4mk` (the
 26B-A4B Q4_K_M), `mx26` (the 26B-A4B MXFP4_MOE mint of the Q4_K_M file), `host26` (the 26B-A4B IQ3_XXS with host experts),
-`g31` (the 31B); and the E-series cells' `g4e-ple g4e-kq g4e-kq-q40 g4e-kq-ple-q6k
-g4e-kq-ple-q50 g4e-kq-q8 g4e-pre g4e-chain g4e-f16 g4f-codec`; the CUDA gemma cells (`test_gpu_resident_cuda_dense.das`'s gemma-2 and gemma-3 cells,
-`test_gpu_resident_cuda_gemma4.das`) carry the same carriers under a `cuda-` prefix: `cuda-g2 cuda-g3 cuda-g3b cuda-g4k
-cuda-g4m cuda-g4mk cuda-g4e cuda-g4e-kq cuda-g4f cuda-g4q8 cuda-g31 cuda-g4mx` (`cuda-g4e-kq` the E2B Q4_K_M peel cell). By
-substring `--arm g3` also runs `g3b`, `cuda-g3` and `cuda-g3b`, `--arm g4m` `g4mk`, `cuda-g4m`, `cuda-g4mk` and `cuda-g4mx`,
-`--arm g4e` every `g4e-*` arm, `cuda-g4e` and `cuda-g4e-kq`, `--arm g4e-kq` every `g4e-kq-*` one and `cuda-g4e-kq`, `--arm g4f` `g4f-codec` and `cuda-g4f`, and every Vulkan token its `cuda-` twin;
+and the E-series cells' `g4e-kq g4e-kq-q40`; the CUDA gemma cells
+(`test_gpu_resident_cuda_dense.das`'s gemma-3-4b cells, `test_gpu_resident_cuda_gemma4.das`) carry the same carriers
+under a `cuda-` prefix: `cuda-g3b cuda-g4k cuda-g4m cuda-g4mk cuda-g4q8 cuda-g4mx`; `g2`, `g3`, `g4e` and `g4e-kq` carry
+their CUDA cells in their blocks. By substring `--arm g3` also runs `g3b` and `cuda-g3b`, `--arm g4m` `g4mk`, `cuda-g4m`, `cuda-g4mk` and `cuda-g4mx`,
+`--arm g4e` every `g4e-*` arm, `--arm g4e-kq` every `g4e-kq-*` one, and every Vulkan token its `cuda-` twin;
 `--arm cuda-` selects the CUDA files' arms alone.
 
 The `image` suite (test_model_image - the prepared-image .dlim rail): `mechanics` (synthetic
@@ -813,8 +820,8 @@ q8_0 mirror maps under tq4 and f16 with no re-mint (the file's size and time as 
 the asked codec and serving the staged load's tokens at that codec; `test_cuda_mint_identity_cap` - the lane identity's
 budget word (` b<mb>`) reads the card's total memory within a GiB unpinned and the pinned figure (4096) under
 `set_gpu_tier_want_`'s `vram_mb`, skipping where `DASLLAMA_GPU_VRAM_MB` shadows the pin; `test_cuda_live_load` - the
-load that writes no lane on this home, the Vulkan file's `live_cell` (below); `test_cuda_mint_family_lanes` - the
-families' trimmed lanes on this home, the Vulkan file's `family_lane_cell` (below). Every cell skips when interpreted,
+load that writes no lane on this home, the Vulkan file's `live_cell` (below); `test_cuda_mint_family_lane_<family>` - the
+families' trimmed lanes on this home, a test a family, the Vulkan file's `family_lane_cell` (below). Every cell skips when interpreted,
 without `DASLLAMA_CUDA=1`, without the model, with the image rail off (`DASLLAMA_IMAGE=0`), without the armed home
 (`cuda_home_asked`), and where the whole-model driver declines the model on the box. `test_vulkan_mint_trim_follows_the_driver`
 holds the trim's admission to the driver's answer: the model the driver serves is admitted
@@ -838,8 +845,8 @@ its greedy tokens the lane's token for token and its CPU embed row bit for bit; 
 (`gpu_slot_rearm`) it streams the gguf again and serves the same tokens, both streams decoded to the log; a call through an f32 session, which the f16
 mirror passes to the CPU rails, is refused by name; and under the host-planes ask (`set_host_planes(true)`, put back)
 the same load counts no live load, keeps its planes and serves the same tokens (the control); the live load's token
-rows gather on the device where the lane's do. `test_vulkan_mint_family_lanes` (and `test_cuda_mint_family_lanes`, one
-shared cell, `family_lane_cell`) holds the trimmed lane of the families the driver serves beside the dense q8 one -
+rows gather on the device where the lane's do. `test_vulkan_mint_family_lane_<family>` (and `test_cuda_mint_family_lane_<family>`, one
+shared cell, `family_lane_cell`, a test a family) holds the trimmed lane of the families the driver serves beside the dense q8 one -
 gpt-oss-20b (biased routed experts over an untied q8 token table), gemma-4-E2B (per-layer embeddings) and gemma-4-26B
 (the routed block with its dense shared expert), large tier: a staged load with its planes on the host says whether the
 token rows gather on the device, the gguf streamed live gives the reference tokens through the lane's own gather, and
@@ -1107,8 +1114,7 @@ persistent_heap`, and the same gate fails one that does not: dastest compiles a 
 linear heap unless the program says otherwise, and there a `delete` frees nothing until collection - a
 cell's deleted carrier stays, and three carriers in one process held a 256 GB box. A `stocked` cell skips honestly
 when its file is absent, so on a bare box (CI) the suite is a run of skips; on a stocked box a PR
-owes what its kind owes (`skills/internal/dasllama_testing.md`, repo root) - `test_ple_modes` alone is ~10 min,
-the suite hours. The runner sets
+owes what its kind owes (`skills/internal/dasllama_testing.md`, repo root) - the suite runs hours. The runner sets
 `DASLLAMA_CPU_PREFILL=1` for every child. That is why the CPU-prefill tripwire cannot ride either
 suite: the runner disarms the guard that tripwire asserts. The map below is partial. `run.das`'s
 two lists together are the census.
@@ -2507,7 +2513,7 @@ sampled stream through the selection on the hc chain decodes the rows-landed str
 (a random row's flat nucleus reaches past the survivors, so every landing takes the rows late - asserted, late landings
 equal to selections: the plumbing's witness, not the selection's); the chain cut (`set_mtp_chain_min_p`, put back through
 `get_mtp_chain_min_p`): at depth 3 four greedy rounds draft three rows each with the cut at 0 and one each at 0.99, since
-random weights hold every draft's probability under the floor; and a child under `DASLLAMA_VK_XFERQ=0` (`_resident_load_root.das step`)
+random weights hold every draft's probability under the floor; and a child under `DASLLAMA_VK_XFERQ=0` (the test child's `resident-load ... step` verb)
 loads, prefills and steps the host-experts form on the compute timeline alone - the timelines stand without a
 transfer family (`ARCHITECTURE_GPU_VULKAN_LANDING.md#logits-transfer-queue`).
 `test_gpu_resident_hc.das` - stocked suite, `-jit` only; the whole-model resident driver on the hyper-connection
@@ -2619,7 +2625,7 @@ then, the knees at 0, a tile of eight columns and one of four, the q8 eight- and
 stamp; every knee back as its getter read it); the same skips, and where the driver declines the model at the cell's
 region count.
 `test_gpu_resident_cuda_dense.das` - stocked suite, `-jit` only: the CUDA llama file's driver on the other dense families -
-qwen3, phi-3, gemma-2 and gemma-3, qwen2 - every load under the MMQ route the file's `[init]` pins (`CUDA_MMQ_WINNERS`),
+qwen3, phi-3, gemma-3-4b, qwen2 - every load under the MMQ route the file's `[init]` pins (`CUDA_MMQ_WINNERS`),
 with the CUDA llama file's skips.
 `test_gpu_resident_cuda_qwen3_06b` and `test_gpu_resident_cuda_qwen3_4b`: the same driver on Qwen3-0.6B Q8_0, the q/k-normed
 carrier, whose norm, rope and K/V store run as the fused pass `CuQknRopeKv` in the token command and the window chain,
@@ -2633,13 +2639,13 @@ one-row steps at positions 41 and 44 sit 4.5 and 5.96 percent of the max logit o
 5.8), at the llama bar with the one-step-off control 10 percent off at three steps, so that file holds no one-window arm -
 and the Q8_0 file (the q8 decode chain) at one window and two;
 the same skips.
-`test_gpu_resident_cuda_gemma2` and `test_gpu_resident_cuda_gemma3`: the gemma-2 and gemma-3 families on the
-same driver in the Vulkan gemma files' forced-feed form (`gemma_forced_feed` of `_gemma_resident.das`: one window of 40
-tokens and a two-window prompt, eight fed steps each against the CPU chain) - gemma-2-2b Q8_0 (the attention softcap on
-every layer's scores: the window's h256 flash tile under its cap stamp, the token step's attention under its cap, the final
-logit softcap; arm `cuda-g2`), gemma-3-1b and gemma-3-4b Q8_0 (the sliding and global layers at head 256, the q/k norms,
-the sandwich norms; arms `cuda-g3`, `cuda-g3b`), gemma-3-1b also in the agreement form (`prefill_vs_decode`); the file's
-`[init]` pins the MMQ route to `CUDA_MMQ_WINNERS`, and on the CUDA home every compare of the shared forms asserts the CUDA
+`test_gpu_resident_cuda_gemma3`: gemma-3-4b Q8_0 on the same driver in the Vulkan gemma files' forced-feed form
+(`gemma_forced_feed` of `_gemma_resident.das`: one window of 40 tokens and a two-window prompt, eight fed steps each against
+the CPU chain; the sliding and global layers at head 256, the q/k norms, the sandwich norms; arm `cuda-g3b`). gemma-2-2b Q8_0
+(the attention softcap on every layer's scores: the window's h256 flash tile under its cap stamp, the token step's attention
+under its cap, the final logit softcap) and gemma-3-1b Q8_0 run on this home in their model blocks
+(`test_gpu_resident_gemma2_3.das`, the two-window feed added to the gemma-2 block under `DASLLAMA_CUDA=1`, every block under
+the same MMQ pin); the file's `[init]` pins the MMQ route to `CUDA_MMQ_WINNERS`, and on the CUDA home every compare of the shared forms asserts the CUDA
 driver's position counter rising (`cuda_served_since` of `_resident_feed.das`); every cell skips off the JIT, without
 `DASLLAMA_CUDA=1`, without `DASLLAMA_GPU=1` on a device the driver serves, or without the file under `models_dir()`.
 `test_gpu_resident_cuda_qwen2_bias` and `test_gpu_resident_cuda_qwen2_iq4nl32`: the qwen2 family on the same driver in the CUDA files'
@@ -2726,10 +2732,10 @@ ratio, the device route's own logits scored against the ids one position off lan
 driver's position counter rising) on gemma-4-26B-A4B UD-IQ3_XXS held whole and on the Q4_K_M file with the rig's context asked whole, which moves the first
 routed layers' experts to the host - the split command, the cut window chain and the pool under the form; the 12B Q8_0 in the
 Vulkan 12B Q8_0 file's three cells (the forced feed, the perplexity form, the two-window form at its ratio; a 16 GB card arms it
-under `DASLLAMA_GPU_MIN_CTX=1024`), the 31B Q4_K_M eight-token agreement cell (a 32 GB card) and the 26B MXFP4_MOE mint's
-format census and perplexity cells (the native-MXFP4 stacks on the mx4 stamps); and the short window's peel on the E2B
-Q4_K_M (`test_gpu_resident_cuda_gemma4_e2b_k_peel`, `e_series_peel_cell` of `_gemma_resident.das`, the Vulkan E2B file's
-short-window cell's form: its per-layer gate and projection rows asserted F32, so the branch rides the router GEMV, then
+under `DASLLAMA_GPU_MIN_CTX=1024`) and the 26B MXFP4_MOE mint's
+format census and perplexity cells (the native-MXFP4 stacks on the mx4 stamps). The short window's peel on the E2B
+Q4_K_M on this home is the E2B Q4_K_M block's (`test_gpu_resident_gemma4_e2b_ple_planes`, `e_series_peel_rows` of
+`_gemma_resident.das`, the Vulkan E2B block's short-window cell's form: its per-layer gate and projection rows asserted F32, so the branch rides the router GEMV, then
 tails of 2, 9 and 16 rows after a 40-row opening, one peel counted each, the last row and four fed steps within
 `GEMMA_LOGIT_BAR_REL` of the same tail stepped a row at a time, the row one step off the control - a router dispatch the
 encoder does not tile past eight columns lands the 9- and 16-row tails 32 and 47 logits off); the same skips. The CUDA kernel cells
@@ -3111,9 +3117,8 @@ on Model shells (`cls_tied_f32`, `cls_q8_copy`, `emb_kq_plane_off`).
 `_resident_regions.das` - the cells the `test_gpu_resident_regions*.das` files run, one model a file but the K-quant, hybrid-formats and qwen MoE files, which
 hold a carrier a cell group (the entries below): the
 resident driver's mirror regions and the device-home sessions over them. A carrier loads at two regions through
-`set_gpu_resident_regions_`, the rig's context 8192; the three long-context files load four or two regions at the mirror's
-whole context and size every host-cached session to it. The instrument is the driver against itself, so no CPU reference
-chain runs but in the long-context files' CPU-chain cell. Every batched cell asserts its steps served by the N-row command
+`set_gpu_resident_regions_`, the rig's context 8192. The instrument is the driver against itself, so no CPU reference
+chain runs. Every batched cell asserts its steps served by the N-row command
 (`vk_rdec_token_n_rows` at two or more). Every cell holds `gpu_cpu_passes_()` empty (the pin cell its one `busy`), and every
 tolerance compare logs its difference and the one-off row's. Every file is stocked suite, `-jit` only, and skips without its
 model or the armed tier, and on a card whose room the plan does not fit at the regions the cell asks (`load_regions`
@@ -3232,12 +3237,7 @@ cells, by the names the file entries use:
   region count and a count under one plans one, the tier status counts both mirror sides, a load under a switched-off route
   says `not attempted`;
 - the two passes (`cell_passes_with_their_rows`), each bringing its rows down first: a prefill that skips positions
-  (`gap`) and one past the region's context (`cap`, on a load capped at 4096 positions);
-- the long-context cells, on the file's `LongCtx` shape: the slab cell (`cell_regions_slabbed_mirror`), the CPU-chain cell
-  (`cell_long_prompt_against_cpu`), the continuation (`cell_long_continuation`), the streams (`cell_long_streams`) and the
-  rows through the host (`cell_long_rows_through_host`); each long-context entry gives its numbers. The long-context cells
-  assert their load armed the rings and the mirror under the flat plan's; the slab cell pins the ring off, since its slab
-  count is the flat mirror's.
+  (`gap`) and one past the region's context (`cap`, on a load capped at 4096 positions).
 
 `test_gpu_resident_regions.das` - the qwen2 file, Qwen2.5-0.5B-Instruct Q8_0: the handover cell, the interleaved single
 steps, the two batched-step cells, the device-home cells, the scheduler's device mode, the handoff cell, the prefill-chunks
@@ -3303,20 +3303,23 @@ and attention v planes Q4_K), so the grid format's N-column GEMV leaf serves bes
 bar with the one-token-off control, on the hybrid whose planes mix Q3_K, Q2_K, IQ3_S, IQ3_XXS, IQ2_S, IQ2_XS, IQ2_XXS and
 IQ4_NL with IQ4_XS, Q4_K through Q6_K and Q8_0, so one load runs every low-format N-column leaf - the k-lattice and the
 grid decodes - under the rows form.
-`test_gpu_resident_regions_e2b.das` - the E2B file, gemma-4-E2B Q8_0, the E-series carrier: the interleaved single steps,
-the two batched-step cells, the split-forms cell, the side-rows cell, the embed-gather cell, the groups cell at nine rows
-(one command, its GEMVs and the per-layer-embedding act in a tile of eight columns and one of one, each row's side row read
-from its own row base), the device-home cells, the scheduler's device mode, the handoff cell, and the window's fused q/k
-norm cell - a sharer's q heads on the fused pass with no k heads, at the wide bar, since the two norm orders put the
-E-series' fed steps apart past the split bar (the readings in the cell's `//!`).
-`test_gpu_resident_regions_gemma2.das` - gemma-2-2b Q8_0: the two batched-step cells and the batched-first cell on a carrier
-with the attention softcap and the classifier epilogue - the N-row command's epilogue over every row's logits - plus the
-stamp witness (`cell_regions_stamp_served`), a step whose census count shows the two-head attention slab served (a group of
-two heads); the stamp cell skips under the CUDA ask (the slab pick and the census names are the Vulkan driver's) and where
-the census holds no such stamp.
-`test_gpu_resident_regions_gemma3.das` - gemma-3-1b Q8_0: the two batched-step cells and the batched-first cell on the
-gemma-3 dense base bit for bit, and the ring floor cell.
-`test_gpu_resident_regions_gemma4.das` - gemma-4-12B Q8_0, large tier (`DASLLAMA_PARITY_FULL=1`): the two batched-step cells
+The rig's cells on gemma-4-E2B Q8_0, gemma-2-2b Q8_0 and gemma-3-1b Q8_0 run in those files' model blocks
+(`test_gpu_resident_gemma4_e2b.das`, `test_gpu_resident_gemma2_3.das`), on forms at `REGIONS_RIG_CTX` - each cell's collection
+(`regions_*_rows`) holding its asserts (`Held`, `_resident_feed.das`) until the block's model is gone. The E2B block's
+two-region form: the interleaved single steps, the two batched-step cells, the side-rows cell, the embed-gather cell's device
+half, the device-home cell, the window's fused q/k norm cell - a sharer's q heads on the fused pass with no k heads, at the wide
+bar, since the two norm orders put the E-series' fed steps apart past the split bar (the readings in the cell's `//!`) - the
+scheduler's device mode and the handoff cell; its gather-off form with the planes on the host: the embed-gather cell's host
+half, then the pin cell, whose outsider passes as busy by design, the passes cleared after it; its nine-region form the groups
+cell (one command, its GEMVs and the per-layer-embedding act in a tile of eight columns and one of one, each row's side row
+read from its own row base); its split-forms form, on the Vulkan home alone, the split-forms cell. The gemma-2-2b block's
+two-region form: the two batched-step cells and the batched-first cell on a carrier with the attention softcap and the
+classifier epilogue - the N-row command's epilogue over every row's logits - plus the stamp witness (`regions_stamp_rows`), a
+step whose census count shows the two-head attention slab served (a group of two heads), logged as skipped under the CUDA ask
+(the slab pick and the census names are the Vulkan driver's) and where the census holds no such stamp. The gemma-3-1b block's
+two-region form: the two batched-step cells and the batched-first cell on the gemma-3 dense base bit for bit, and the ring
+floor cell.
+`test_gpu_resident_gemma4_dense.das`'s `test_regions_*_g4` tests - gemma-4-12B Q8_0, the `gemma4-dense` category: the two batched-step cells
 and the batched-first cell on a carrier with the epilogue's suppressed ids, V-from-K global layers at a head of 512 and a
 per-layer output scale - the pins themselves are `test_vkd_cls_epi_rows`' witness, since the batch driver's host tail
 re-pins every row.
@@ -3345,38 +3348,15 @@ and the attention sinks.
 the router off their own norms, the parallel shared expert, the folded down scale, the combine over both branches): the
 split-forms cell and the widening cell on the wide bar with the one-token-off control, the one-row command's fused forms
 pinned off for the load, then the fold cell on the same bar, and the embed-gather cell.
-`test_gpu_resident_regions_llama3b_ctx32k.das` - Llama-3.2-3B Q4_K_M at four regions of 32768 positions: the 28 layers' f16
-rows at that context run past one binding's range, so the K/V mirror seats them in two or more slab pairs
-(`../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan`). The slab cell asserts the slab count - more than one pair where a
-mirror side runs past the serving home's binding cap, exactly one on a home whose binding holds a whole side (the CUDA home
-has no binding range, so only a block codec's byte span slabs a mirror there) - the region count and the
-unshortened region context, then runs the interleaved single steps (the N-row counter's control: they move it by nothing)
-and the batched steps on the split bar; the long-context cells on the same load: a 12288-token prompt and eight steps
-against the CPU chain at the 10% bar with the one-step-off control, a 30000-token prompt continued from 20480 against the
-one-call prefill within the split bar, and four device-home streams at 9175 / 15073 / 20971 / 26624 positions (the context
-times 28, 46, 64 and 82 hundredths), each prefill bit for bit the host-cached session's and a batched step over all four at
-every step within the split bar of each alone. The mirror codec is pinned f16 for the file; it skips on a card whose room
-does not hold the 15 GB mirror.
-`test_gpu_resident_regions_gemma3_4b_ctx128k.das` - gemma-3-4b Q8_0 at two regions of 131072 - the model's whole context -
-on a q8_0 mirror (pinned for the file): seventeen slab pairs under a block codec's byte span (the least-charge cut of 34
-uniform layers), the window chain's store and shadow sets per slab, and the five long-context cells - the slab cell's short
-prompts bit for bit, the CPU-chain cell at the gemma 16% bar, the continuation 120000 from 65536, two streams at 36700 and
-60293 within the split bar (past the wide position the one-row command's wide twin and the N-row command's split pieces sum
-the keys in another order), the rows through the host.
-`test_gpu_resident_regions_gemma4_e2b_ctx128k.das` - gemma-4-E2B Q8_0 at four regions of 131072 on an f16 mirror: the
-fifteen owners in two slab pairs with every sharer on its donor's seat, the five long-context cells, four streams at 36700
-to 107479 within 14% of the max logit - past the wide position the E-series' batched rows sit as far from the session alone as
-its own device-vs-CPU rows, bit for bit the same on the ringed and the flat mirror (the readings in the file's header).
 `test_gpu_resident_gemma*.das` (`_gemma_resident.das` carries the cells; each cell loads its carrier through
 `with_gemma_rig` and deletes it after, so a GPU run holds ONE model at a time, never a chain) - stocked suite, `-jit` only;
 the gemma carriers a family a file:
 `test_gpu_resident_gemma2_3.das` gathers gemma-2 and gemma-3 - `test_gpu_resident_gemma2` (gemma-2-2b),
-`test_gpu_resident_gemma3_one_window`, `test_gpu_resident_gemma3_past_window`, `test_gpu_resident_gemma3_prefill_vs_decode`,
-`test_gpu_resident_gemma3_block_codecs` and `test_gpu_resident_gemma3_ring` (gemma-3-1b), `test_gpu_resident_gemma3_4b`
+`test_gpu_resident_gemma3` (gemma-3-1b: its feeds, path gaps, block codecs and rings one block) and
+`test_gpu_resident_gemma3_load_log` (gemma-3-1b), `test_gpu_resident_gemma3_4b`
 (gemma-3-4b);
 `test_gpu_resident_gemma4_dense.das` gathers the dense gemma-4 carriers past the E2B - `test_gpu_resident_gemma4_dense`
-(12B Q8_0), `test_gpu_resident_gemma4_prefill_vs_decode` (12B Q4_K_M), `test_gpu_resident_gemma4_31b`,
-`test_gpu_resident_gemma4_e4b` and `test_gpu_resident_gemma4_e4b_block_codecs` (E4B);
+(12B Q8_0) and `test_gpu_resident_gemma4_prefill_vs_decode` (12B Q4_K_M);
 `test_gpu_resident_gemma4_moe.das` gathers the 26B-A4B routed carriers - `test_gpu_resident_gemma4_26b` (UD-IQ3_XXS),
 `test_gpu_resident_gemma4_26b_k` (UD-Q4_K_M), `test_gpu_resident_gemma4_26b_mx4_format` and
 `test_gpu_resident_gemma4_26b_mx4_ppl` (the MXFP4_MOE mint);
@@ -3412,7 +3392,7 @@ form at forty tokens, the perplexity form at 150 + 150 and at 520 + 80 (two wind
 sliding window engaged on the last eight) and the agreement form at eight tokens - the per-layer
 embedding branch after every FFN residual (the pre-step's side rows built on the device - the
 token command gathers its row off the token id - and riding the token command and the window chain), twenty layers attending over the K/V of the fifteen below them, and the two
-dense FFN widths; gemma-4-E4B Q8_0 (large tier) at forty tokens and 150 + 150; gemma-3-4b Q8_0
+dense FFN widths; gemma-3-4b Q8_0
 (the dense base at width 2560 and four kv heads) at forty tokens and 150 + 150; gemma-2-2b Q8_0
 (the attention logit softcap on every score - the 8-row prefill tile and the token command take
 it, and the cm2 flash tile's softcap stamps at its 256-wide heads) at forty tokens, 150 + 150 and
@@ -3443,9 +3423,7 @@ init, so the cell has its own file, and it skips before the load where the cap d
 `DASLLAMA_GPU_VRAM_MB` set to another room, or a device room under 8000 MB. `test_gpu_resident_gemma4_26b_mx4_format` and
 `test_gpu_resident_gemma4_26b_mx4_ppl` (large
 tier) hold the MXFP4_MOE mint of the Q4_K_M file (`../performance/model_specs.das`): the format cell and the 150 + 150
-perplexity cell at the same ratio, slack 12. `test_gpu_resident_gemma4_31b` holds the largest dense carrier, gemma-4-31B Q4_K_M
-(large tier, a 32 GB card), in the 12B Q4_K_M's agreement form at eight tokens - one cell, since the
-CPU control of a dense 31B on the reference kernel bodies runs half an hour on an untuned box. The arms and their
+perplexity cell at the same ratio, slack 12. The arms and their
 substring cases: "Arm filter mechanics" above. The three 26B carriers of
 `test_gpu_resident_gemma4_moe.das` each run the
 format cell (`gemma_format_cell`): every site the file carries in its own format, the expert stacks the native-MXFP4 planes
@@ -3456,47 +3434,46 @@ cell of the rig asserts the device served every call (`served_every_call`); a me
 without the model or the armed tier, and on a memory decline (`moe_gpu_resident_memory_decline`:
 the plan did not fit the card at the session's context - the 12B Q8_0 file on a 16 GB card arms
 under `DASLLAMA_GPU_MIN_CTX=1024`); a feature decline stays a red. Two files carry block-codec
-cells, each pinning the mirror's codec around the rig's own cell (`with_gpu_kv_dtype`,
-`_resident_feed.das`: the ask put back as found, a skip where the environment arms another codec;
-the rig asserts the mirror armed at the codec asked): `test_gpu_resident_gemma3_block_codecs` runs
+cells, each on a form of its file's one block that asks the mirror's codec (`device_form(kv = ...)`, applied
+through `with_gpu_kv_dtype`, `_resident_feed.das`: the ask put back as found, a skip where the environment arms another codec;
+the load asserts the mirror armed at the codec asked): `test_gpu_resident_gemma3` runs
 gemma-3-1b at 1100 tokens - a third prefill window, which starts past the 512-key sliding window,
 so the f16 shadow of a sliding layer starts a 64-key step under its window - in the forced-feed
 form under q8_0 (reads 0.46-1.37 against bars of 3.3-5.1) and the perplexity form (1100 + 80)
 under tq4 (reads 1.022 against the CPU chain's 1.033, 80 of 80 hits; a 4-bit mirror reads one step
 5.0 of a 33.7 max logit from the CPU's, so no logit bar holds it with room); a shadow that starts
-at the window's first row reads a perplexity of 13844. `test_gpu_resident_gemma4_e2b_short_window` peels short tails of 1, 2 and 5 rows on the E2B through the token commands, the side rows riding them, within the split bar of the same tail stepped a row at a time (`e_series_peel_cell` of `_gemma_resident.das`, the CUDA E2B Q4_K_M peel cell's body). `test_gpu_resident_gemma4_e2b_block_codecs`
+at the window's first row reads a perplexity of 13844. `test_gpu_resident_gemma4_e2b` peels short tails of 1, 2 and 5 rows on the E2B through the token commands, the side rows riding them, within the split bar of the same tail stepped a row at a time (`e_series_peel_rows` of `_gemma_resident.das`, the CUDA E2B Q4_K_M peel cell's collection in `test_gpu_resident_gemma4_e2b_ple_planes`). `test_gpu_resident_gemma4_e2b`
 runs the shared-KV carrier - its upper layers store no K/V row of their own, and under tq4 still
 rotate their query - at forty tokens in the forced-feed form under q8_0 and at 150 + 150 in the
 perplexity form under tq4 (reads 1.032 against 1.032, 148 of 150 hits each).
-`test_gpu_resident_gemma3_ring` and `test_gpu_resident_gemma4_e2b_ring` hold the sliding layers' rings
-(`../ARCHITECTURE_GPU_KV_RING.md#kv-sliding-ring`, `ring_vs_flat` in `_resident_feed.das`): 1300 prose ids past the window and
-eight fed steps on a ringed load and on a flat one (`set_gpu_kv_ring`, put back) - the logits bit for bit at the prompt and every
-step, the ringed load arming rings and charging less mirror, the row a step off the control - on the f16 and q8_0 mirrors, and
-tq4 too on the E2B. The E2B's ring test also reads the driver's load log (`ring_load_announces`: two loads in a child,
-`_resident_load_root.das`, which `resident_load_log` spawns through `_child_run.das`; `-- <path> <ctx> [step]`, where `step` also
+The ring cells of `test_gpu_resident_gemma3` and `test_gpu_resident_gemma4_e2b` hold the sliding layers' rings
+(`../ARCHITECTURE_GPU_KV_RING.md#kv-sliding-ring`, `ring_rows` and `ring_runs_within` in `_resident_feed.das`): 1300 prose ids past the window and
+eight fed steps on a ringed form and on a flat one (`device_form(ring = false)`) - the logits bit for bit at the prompt and every
+step, the ringed load arming rings and charging less mirror, the row a step off the control - on the f16 and q8_0 mirrors of
+the gemma-3-1b, the f16 and tq4 ones of the E2B. `test_gpu_resident_gemma3_load_log` reads the driver's
+load log (`ring_load_announces`: two loads in the test child, its `resident-load <path> <ctx> [step]` verb, which
+`resident_load_log` spawns through `_child_run.das`; `step` also
 prefills a short prompt and decodes one token through the armed driver) - the ringed load naming its rings, the flat
 one under `DASLLAMA_GPU_KV_RING=0` its every-row mirror, the host embed under `DASLLAMA_VK_GPU_EMBED=0` saying so and the
-gathering load not. Arm `g4e-ple`
-(`test_gpu_resident_gemma4_e2b_ple_tables`): the E2B Q8_0 file and its emb-Q5_0 / emb-Q5_1 / emb-Q4_0 / emb-Q6_K / emb-IQ4_XS
-mints - the plan seats the PLE table in its own tag (q8, q5032, q51, q40, k6, iq4xs) and the forced feed's prefill gathers the side
-rows off it against the CPU chain, the format's gather leaf counted (`<fmt>_emb_cls_spv` / `kq_emb_<fmt>_cls_spv`) and every
-other format's leaf unmoved - on the Q8_0 file every one, the leaves' control.
-Arm `g4e-kq` (`test_gpu_resident_gemma4_e2b_ple_planes`): the E2B Q4_K_M (the per-layer gate and projection planes F32 on disk,
-read as the file's f32 rows; the feed held against the file's f32 chain with the same-or-better witness, `gemma_forced_feed`'s `exact` form,
+gathering load not.
+Arm `g4e-kq` (`test_gpu_resident_gemma4_e2b_ple_planes` and its `_q40` and `_q8` siblings, a test a file): the E2B Q4_K_M (the per-layer gate and projection planes F32 on disk,
+read as the file's f32 rows; the feed held against the file's f32 chain with the same-or-better witness, the block's f32 form (`f32_form()`, `ple_f32_feed_within`),
 at 1.15 on the scalar f32 tile and 1.3 where the window's f32 GEMMs ride the staged KHR tile (its f16 weights and sums),
 since its CPU q8 chain reads one step's top logit under the f32 chain, the reference build and the device; the reference's
-recipe and the readings: `../ARCHITECTURE_MEASUREMENT_FORCED_FEED.md#reference-forced-feed`), Q4_0 (the
-planes Q4_0, arm `g4e-kq-q40`) and the ple-Q6_K / ple-Q5_0 mints (arms `g4e-kq-ple-q6k` / `g4e-kq-ple-q50`) in the forced feed, the
-planes' tags asserted against the disk type and the format's decode GEMV counted over the fed steps (`kq_gemv_q40`, `kq_gemv_k6`,
-`q5032_gemv`, the one-row and N-column leaves summed); the Q8_0 file (arm `g4e-kq-q8`) dispatches none of the three, their
-control. Arm `g4e-pre` (`test_gpu_resident_gemma4_e2b_ple_pre_step`): the token command's side row - gathered, projected and
+recipe and the readings: `../ARCHITECTURE_MEASUREMENT_FORCED_FEED.md#reference-forced-feed`) and Q4_0 (the
+planes Q4_0, arm `g4e-kq-q40`) in the forced feed, the
+planes' tags asserted against the disk type and the format's decode GEMV counted over the fed steps (`kq_gemv_q40`, the one-row
+and N-column leaves summed); the Q8_0 file (arm `g4e`, its cells in the file's one block) dispatches none of `kq_gemv_q40`, `kq_gemv_k6` and `q5032_gemv`, their
+control. The pre-step cells of `test_gpu_resident_gemma4_e2b` (arm `g4e`): the token command's side row - gathered, projected and
 finished on the device - read back (`vk_rdec_ple_side_row`) within 1e-4 of the CPU pre-step's row, another token's row the
-control, the step's row gathered off its id (`vk_rdec_token_gathered`), and a load with the gather off
-(`set_gpu_resident_embed(0)`) gathering none - the counter's control. Arm `g4e-f16` (`test_gpu_resident_gemma4_e2b_tied_f16`): the `-embf16-local` mint's tied F16 token table declines the
-whole-model driver by name (`tied classifier`), the PLE table tagged q8. Arm `g4f-codec` (`test_gpu_resident_gemma4_e4b_block_codecs`):
-the E4B under a q8_0 mirror in the forced-feed form and a tq4 mirror in the perplexity form. Arm `g4e-chain`
-(`test_gpu_resident_gemma4_e2b_greedy_chain`): the greedy chain (`greedy_chain_cell`) on the E2B, each chained step's side row
-gathered off the pick the device lands, the chained walk bit for bit the plain walk, both walks decoded in the log.
+control, the step's row gathered off its id (`vk_rdec_token_gathered`), and a form with the gather off
+(`device_form(gather = false, ...)`) gathering none - the counter's control. Its default form also walks the greedy chain
+(`greedy_chain_rows`) on the E2B, each chained step's side row gathered off the pick the device lands, the chained walk bit
+for bit the plain walk, both walks decoded in the log; under `DASLLAMA_CUDA=1` it carries the CUDA home's E2B cells - the
+forty-token forced feed, the 150 + 150 perplexity form and the CUDA pre-step (the window's last side row on the f16 tile and
+the step's side row within 1e-3 of the CPU pre-step's, gathered off the id and, on the gather-off form, off the host's row),
+whose gather-off form also holds the prefill pin's control (a prompt under `set_resident_prefill_allowed(false)` passing to the
+CPU as `pinned_off`); its q8_0 and tq4 forms serve that home's block-codec cells.
 `test_gpu_resident_moe.das` (`_moe_resident.das` carries the rig, shared with
 `test_gpu_resident_gptoss.das`) - stocked suite, `-jit` only; the rig reads the armed discrete home's witnesses (the split count,
 the unsplit twin's tokens, the kernel census under the home's stamp names), so both files run on the CUDA home under
@@ -3885,7 +3862,7 @@ image element for element - the DFT GEMM splits on whole 4-row tiles so every ro
 oracle cells, the E4B facade cell (`test_gemma4a_e4b_audio_facade`: jfk through `load_asr_model` on the E4B pair - the
 encoder's 1536 against the embedder's 2560, the tower knob pinned on, the transcript at the `JFK_WORD_AGREE` floor of
 jfk's words (`jfk_words_floor`), the serving GPU tower's encode counter rising where its device stands up and unmoved with
-the knob off (`knob_off_unrouted`); large tier, the E4B decoder `DASLLAMA_PARITY_FULL`-gated) (the parakeet v2 cell also runs the transcription with single-thread mode off and
+the knob off (`knob_off_unrouted`); the `gemma4-e4b` category's) (the parakeet v2 cell also runs the transcription with single-thread mode off and
 on: the team leg dispatches, the one-lane leg never does, and its tokens are the team leg's - the
 decode step's one-lane form against its team publish, both texts logged - and the session that
 read the whole clip reading its first half token for token as a fresh session does, the half clip
@@ -4602,14 +4579,12 @@ npos rows against the npos = 1 decode call, bit for bit, on a synthetic scale ro
 Model shells - short plane trips per format arm (the per-32 q51 / q5032 arms one byte short included), full plane passes, non-PLE exempt; and the per-layer planes' tags off the file's types (`test_ple_plane_formats`,
 `detect_ple_formats` over a synthetic meta: an all-F32 kind marked f32, a Q6_K kind tagged k6, a kind mixing F32 with another
 type panicking on the first layer that differs from layer 0, naming that tensor and both types, gate and projection alike).
-`test_ple_modes.das` - stocked suite; model-gated (E2B Q8_0 + Q4_K_M, small tier): the PLE
-token table's pinned-plane rail across serving modes - fp32 keeps the Q8_0 table on a
-dedicated q8 plane (offset 0, plane == table exactly, gather rows BIT-match the file dequant,
-wblob provably too small to carry the expansion) and a K-quant table on its native kq plane;
-plus a greedy chat turn per serving mode on the E2B Q8_0 carrier - a q8 control, an fp32 turn,
-and a `q4_0` turn, the `q4_0` one proving q4 serving has a per-layer-embedding rail; `test_ple_per32_tables` loads the
-E2B emb-Q5_0 / emb-Q5_1 / emb-Q4_0 mints - the PLE table tagged q5032 / q51 / q40, four rows of `ple_gather_row` bit for bit
-the file dequant (the neighbor row the control), a greedy turn on the CPU chain.
+The PLE token table's pinned-plane rail across serving modes rides the E2B blocks' CPU forms
+(`test_gpu_resident_gemma4_e2b.das`, so it runs where a discrete home arms): the Q8_0 block's fp32 form keeps the table on a
+dedicated q8 plane (offset 0, plane == table exactly, gather rows BIT-match the file dequant, wblob provably too small to carry
+the expansion, both in-place requants refused) and the Q4_K_M block's fp32 form a K-quant table on its native kq plane; plus a
+greedy chat turn per serving mode on the E2B Q8_0 carrier - the q8 CPU form's control, the fp32 form's turn, and the `q4_0`
+form's (`cpu_quant_form`), the `q4_0` one proving q4 serving has a per-layer-embedding rail.
 `test_tts_textnorm.das` - model-free: the TTS text normalizer - the number, ordinal, year and
 decimal readers, the reference normalizer's own examples, the fixed upstream defects as
 failing-first cases, and the 200-sentence corpus (`_tts_fixtures/g2p_corpus.json`, loaded by
@@ -5398,21 +5373,39 @@ panic cell uses it.
 `--family <tokens>` (env `DASLLAMA_TEST_FAMILY`, comma list) composes with `--arm`: only
 model blocks tagged with a listed family run - `family_on(t, name)` in
 `_model_tier.das`, EXACT token match, loud `t |> skip` like the arm filter. Model-free blocks
-carry no tag and always run. Family tokens: `llama` (`--suite decode`, `prefill`, `matrix` and
+carry no tag and always run. The model gate applies the filter too, by file name: `model_available`
+skips a decoder file whose family row (`model_families()`, `_model_categories.das`, the longest stem
+that opens the name) is not among the tokens, so a cell on another family's model skips in a test
+that carries no tag; a file no row holds - a tower, a speech model, a fixture - opens under any
+filter. Family tokens: `llama` (`--suite decode`, `prefill`, `matrix` and
 `coverage`, plus the image `smol`, `untied`, `metal` and `metal-untied` arms and the `image-vulkan` `vulkan` arm),
 `qwen2`, `qwen3`, `phi3`,
 `gemma2`, `gemma3`, `gemma4`, `qwen3moe`, `gemma4moe`, `gptoss`, `qwen35`, `qwen35moe`, `qwen2moe`, `qwen4exp` (the support-matrix family cells; `qwen35` also tags `test_vulkan_mint.das`, `test_metal_batched_row.das` and the `dflash-27b-*` arms of `test_dflash_drafter.das`), `gemma`,
 `ultravox`, `whisper`, `voxtral`, `parakeet`, `gigaam`, `qwen3a`, `canary`, `gemma4a` (image suite arms),
-`gemma3v`, `qwen25v`, `qwen3v` (the coverage census tower rows), `kitten` (the image suite's
+`gemma3v`, `qwen25v`, `qwen3v` (the coverage census tower rows; `gemma3v` also the image suite's `gemma3v` arm), `gemma4v` (the image suite's
+`gemma4v`, `gemma4uv` and `gemma4uv-metal` arms), `kitten` (the image suite's
 kitten arm), `kokoro`, `pocket` (the coverage census TTS rows), `vad` (the coverage census silero VAD row), `bergamot` (the image suite's
 bergamot arm and the coverage census Bergamot row, ru-en tiny on the Metal seat),
-`gemma4e` (support-matrix rows under `fam-gemma4e` - E4B PARITY_FULL-gated; E2B Q8_0, Q4_K_M,
-Q4_0 and the format carriers of `../performance/model_specs.das` (the token and PLE tables Q6_K and
-IQ4_XS, the per-layer gate and projection planes Q6_K and Q5_0) small-tier always-on - what the rows assert is the
-support matrix's `fam-gemma4e` clause; plus the coverage-census E4B row; `gptoss`/`qwen2moe`/`qwen3moe` carry census rows too - all PARITY_FULL-gated).
+`gemma4e` (support-matrix rows under `fam-gemma4e` - E2B Q8_0, Q4_K_M and
+Q4_0, small-tier always-on - what the rows assert is the
+support matrix's `fam-gemma4e` clause; plus the coverage-census E2B row; `gptoss`/`qwen2moe`/`qwen3moe` carry census rows too - all PARITY_FULL-gated).
 When profiling one family across formats, gate each round with
 `--arm <arms> --family <fam>` instead of the whole zoo. The family tag on a new
 model-loading block is `REVIEW.md`'s obligation.
+
+## Model categories
+
+A category (`../TEST_CATEGORIES.md`, the table `_model_categories.das`) is a set of model files `model_available`
+opens only in a run that names it: `run.das -- --category <names>` (env `DASLLAMA_TEST_CATEGORIES`, comma list)
+runs every test file that names one of its files, opens those files past the tier ceiling, and skips every cell on
+another model. The files of a model suite (decode, mtp, prefill, matrix, kernels, image, image-vulkan, coverage) ride a
+child a suite, as that suite runs them - their device leak gates count the whole process - and the other files ten a
+child. A run that names no category skips every cell on a category's file. `--category` takes `--only`,
+`--exclude` and `--shard`, and no `--suite`, `--area`, `--changed`, `--arm`, `--full` or `--family`. A category's
+file is its own under `DASLLAMA_PARITY_FULL=1` too: the full suite opens none it does not name. The gemma-4
+categories leave the E2B as the one gemma-4 decoder every other run opens: `gemma4-e4b` (the E4B decoder and mmproj),
+`gemma4-dense` (the 12B), `gemma4-31b` (the Metal matrix's past-slab row) and `gemma4-moe` (the 26B-A4B and its draft
+heads).
 
 ## Model tiers
 

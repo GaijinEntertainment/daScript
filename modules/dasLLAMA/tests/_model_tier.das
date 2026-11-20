@@ -27,6 +27,7 @@ require dasllama/dasllama_math
 require dasllama/dasllama_gpu_resident   // resident_mirror_dtype — the mirror codec the box arms
 require ../performance/model_specs.das   // prefix_match_len / fixture_ok — the fixture compare the board gates read too
 require _compares public
+require _model_categories public   // category_gate - the files a run opens only when it names their category
 
 //! The KV codec a session takes to be served by the mirror the last load armed - a session on another codec rides the CPU rails.
 def mirror_kv_dtype() : KVDtype => gpu_device_session_dtype_()
@@ -96,7 +97,7 @@ def llama2c_dir() : string => root_or(g_env_test.llama2c_dir, "/Users/borisbatki
 def arm_on(t : T?; name : string) : bool => filter_on(t, g_env_test.test_arms, "DASLLAMA_TEST_ARMS", "arm", name, false)
 
 // Family filter for the model-loading suites: DASLLAMA_TEST_FAMILY = comma-separated family
-// tokens (llama, qwen2, qwen3, phi3, gemma, ultravox, whisper, voxtral) matched EXACTLY — not
+// tokens (the list is CLAUDE.md's family filter section) matched EXACTLY — not
 // substrings, so "llama" can never accidentally select a non-llama block. When set, only blocks tagged with a
 // listed family run; model-free blocks (kernel units, the image mechanics arm) carry no tag and
 // always run. Loud-skip contract identical to arm_on. Drive through run.das --family — the
@@ -109,10 +110,12 @@ def private filter_on(t : T?; filter, env, what, name : string; exact : bool) : 
     if (empty(filter)) {
         return true
     }
-    for (tok in split(filter, ",")) {
-        let tk = strip(tok)   // "arm12, batch" — the comma-adjacent space must not defeat the match
-        if (exact ? tk == name : (!empty(tk) && find(name, tk) >= 0)) {
-            return true
+    if (exact) {
+        return true if (list_names(filter, name))
+    } else {
+        for (tok in split(filter, ",")) {
+            let tk = strip(tok)   // "arm12, batch" — the comma-adjacent space must not defeat the match
+            return true if (!empty(tk) && find(name, tk) >= 0)
         }
     }
     t |> skip("{what} '{name}' filtered out ({env}={filter})")
@@ -155,11 +158,24 @@ def log_logits_pair(m : Model; tag : string; got, want : array<float>; diff : fl
 //! a device-gathered run's rows against the host-embedded run's (`per_step` a step): the counts equal, every row's logits pair
 //! logged and its maxdiff 0
 def gathered_rows_bit_same(t : T?; m : Model; tag : string; dev, host : array<array<float>>; per_step : int64) {
+    log_gathered_rows(m, tag, dev, host, per_step)
+    gathered_rows_bit_same(t, tag, dev, host, per_step)
+}
+
+//! the gathered rows' compare log alone, read while the model `m` decodes the picks
+def log_gathered_rows(m : Model; tag : string; dev, host : array<array<float>>; per_step : int64) {
+    for (i in range64(min(long_length(dev), long_length(host)))) {
+        let at = "{tag} step {i / per_step}, row {i % per_step}"
+        log_logits_pair(m, "{at}: the gathered row against the host row", dev[i], host[i], logits_maxdiff(dev[i], host[i]))
+    }
+}
+
+//! the gathered rows' asserts alone, after the model is gone
+def gathered_rows_bit_same(t : T?; tag : string; dev, host : array<array<float>>; per_step : int64) {
     t |> equal(long_length(dev), long_length(host), "{tag}: both runs stepped every row")
     for (i in range64(min(long_length(dev), long_length(host)))) {
         let diff = logits_maxdiff(dev[i], host[i])
         let at = "{tag} step {i / per_step}, row {i % per_step}"
-        log_logits_pair(m, "{at}: the gathered row against the host row", dev[i], host[i], diff)
         t |> equal(diff, 0.0, "{at}: the gathered rows' logits bit for bit the host rows' (maxdiff {diff})")
     }
 }
@@ -428,12 +444,16 @@ def tts_pack_missing(t : T?; packs : array<string>) : bool {
 }
 
 // Presence + tier gate for a model-loading test. Returns true if the caller should proceed to
-// load `path`; otherwise registers a LOUD skip on `t` (model absent, or large-tier without
-// DASLLAMA_PARITY_FULL) and returns false — the arm lands in the suite's skipped count instead
+// load `path`; otherwise registers a LOUD skip on `t` (a category the run did not name, model absent, or
+// large-tier without DASLLAMA_PARITY_FULL) and returns false — the arm lands in the suite's skipped count instead
 // of masquerading as a pass (two real x64 failures hid behind the passing form for months).
 // `skip` does NOT unwind: the caller's `if (!model_available(t, path)) return` exits the arm.
 def model_available(t : T?; path : string) : bool {
-    let why = model_tier_skip_reason(path, parity_full_mode())
+    let gate = category_gate(path, g_env_test.test_categories)
+    var why = empty(gate.why) ? family_skip_reason(path, g_env_test.test_family) : gate.why
+    if (empty(why)) {
+        why = model_tier_skip_reason(path, parity_full_mode() || gate.lifts_tier)
+    }
     return true if (empty(why))
     t |> skip(why)
     return false

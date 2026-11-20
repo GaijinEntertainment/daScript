@@ -194,12 +194,15 @@ def test_embeddings_qwen3_embedding(t : T?) {
     }
 }
 
+let private PAST_CONTEXT_SEQ = 256l   //! the context the past-the-context cell loads at: the cut is what it reads, at any context
+
 [test(description = "On tinyllama, a text running past the context embeds to a finite unit vector at cosine above 0.9999 to its leading seq_len tokens alone, while the overflow text by itself embeds elsewhere")]
 def test_embeddings_past_the_context(t : T?) {
     t |> run("a text past the model's context embeds its leading seq_len tokens: a unit vector, no panic (tinyllama Q8)") <| @(tt : T?) {
         let path = path_join(models_dir(), "tinyllama-1.1b-chat-v1.0.Q8_0.gguf")
         return if (!jit_model_available(tt, path))
         var m <- load_model_uncached(path, QuantMode.q8)
+        m.config.seq_len = min(m.config.seq_len, PAST_CONTEXT_SEQ)
         // one token a word: a text of exactly the context's token count, then the same text with a thousand other words past it
         let cut_text = strip(build_string() $(var w) {
             for (_i in range64(m.config.seq_len - 1l)) {   // BOS takes the first slot; the trailing space is stripped below

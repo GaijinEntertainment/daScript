@@ -65,7 +65,7 @@ def test_metal_batched_row_llama(t : T?) {
 [test(description = "On gemma-4-E2B Q8, the batched bench row serves four streams at a rate through the Metal batched driver's PLE rows form, every timed step a device step, none on the CPU stack")]
 def test_metal_batched_row_eseries(t : T?) {
     t |> run("the batched row serves an E-series carrier through the batched driver's PLE rows form (gemma-4-E2B Q8)") <| @(t : T?) {
-        if (!family_on(t, "gemma")) return
+        if (!family_on(t, "gemma4e")) return
         static_if (typeinfo builtin_module_exists(das_metal)) {
             let path = path_join(models_dir(), "gemma-4-E2B-it-Q8_0.gguf")
             return if (!jit_model_available(t, path))

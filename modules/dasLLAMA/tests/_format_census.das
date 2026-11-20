@@ -102,30 +102,40 @@ def census_cell(t : T?; tr : Model; path, tag : string; want : array<string>) {
 }
 
 //! the same census binding the own-format duty to the sites `bound` names alone (every site when empty): a carrier whose
-//! other sites the tier serves off a converted form by design - a BF16 plane as q8 - holds its own-bytes sites to the duty; a
-//! safetensors snapshot directory is read through its synthesized meta
+//! other sites the tier serves off a converted form by design - a BF16 plane as q8 - holds its own-bytes sites to the duty
 def census_cell(t : T?; tr : Model; path, tag : string; want, bound : array<string>) {
+    var inscope sites <- census_sites(tr, path)
+    census_sites_within(t, sites, path, tag, want, bound)
+}
+
+//! every site's tally of the loaded model `tr` against the file at `path` (a safetensors snapshot directory through its
+//! synthesized meta); empty when the file does not open
+def census_sites(tr : Model; path : string) : array<SiteCensus> {
+    var sites : array<SiteCensus>
     if (hf_snapshot(path)) {
         with_hf_snapshot(path, false) $(m, _bytes) {
-            census_report(t, tr, m, tag, want, bound)
+            delete sites
+            sites <- format_census(tr, m)
         }
-        return
+        return <- sites
     }
     let f = fopen(path, "rb")
-    if (f == null) {
+    return <- sites if (f == null)
+    fmap(f) $(var bytes : array<uint8>#) {
+        var inscope m <- parse_gguf_meta(bytes)
+        delete sites
+        sites <- format_census(tr, m)
+    }
+    fclose(f)
+    return <- sites
+}
+
+//! `census_sites`' tallies of the file at `path` asserted and logged under `tag`, as `census_cell` says
+def census_sites_within(t : T?; sites : array<SiteCensus>; path, tag : string; want, bound : array<string>) {
+    if (empty(sites)) {
         t |> failure("{tag}: cannot open {path}")
         return
     }
-    fmap(f) $(var bytes : array<uint8>#) {
-        var inscope m <- parse_gguf_meta(bytes)
-        census_report(t, tr, m, tag, want, bound)
-    }
-    fclose(f)
-}
-
-//! the census of `tr` against the file's meta `m`, asserted and logged as `census_cell` says
-def private census_report(t : T?; tr : Model; m : GGUFMeta; tag : string; want, bound : array<string>) {
-    var inscope sites <- format_census(tr, m)
     let copies = build_string() $(var w) {
         for (s in sites) {
             if (want |> has_value(s.site)) {

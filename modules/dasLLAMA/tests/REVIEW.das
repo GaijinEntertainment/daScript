@@ -5,6 +5,8 @@ require dastest/test_shape
 require daslib/fio
 require strings
 require daslib/strings_boost
+require _model_categories
+require ../../../utils/common/text_lines.das   // split_trimmed: a table cell's comma list
 
 // The mechanical half of modules/dasLLAMA/tests/REVIEW_FILES.md
 // (contract: REVIEW_COMMON.md at the repo root). Run from the repo
@@ -15,7 +17,7 @@ require daslib/strings_boost
 //! the programs a child process of this folder runs as a program of its own, each for a claim a verb of the test
 //! child cannot carry
 let private OWN_ROOTS = fixed_array("_child_root.das", "_tuned_fallbacks_root.das", "_exe_smoke_root.das", "_box_runtime_root.das",
-    "_resident_load_root.das", "_audio_lane_whisper_root.das", "_mx4_mint_root.das", "_fake_chat_root.das", "run.das",
+    "_audio_lane_whisper_root.das", "_mx4_mint_root.das", "_fake_chat_root.das", "run.das",
     "dastest.das")
 
 //! the test files that build a child's command line on a root they name themselves (`child_cmd_root`): the
@@ -67,9 +69,81 @@ def private check_one_test_child() {
     }
 }
 
+let private CATEGORIES_DOC = "modules/dasLLAMA/TEST_CATEGORIES.md"
+
+let private ONE_CATEGORY_ROW = ("a model category is one row of `model_categories` (`_model_categories.das`) and one table row "
+    + "under `## Categories` of TEST_CATEGORIES.md holding the category's name, each stem of its model files and its topics word "
+    + "for word - add, change or drop the two in the same change (ARCHITECTURE_ENGINE_SUPPORT.md#test-model-filters)")
+
+//! the categories document and the categories table name the same categories, each with its stems and topics
+[arch(at = "../ARCHITECTURE_ENGINE_SUPPORT.md#test-model-filters")]
+def private check_test_categories() {
+    var inscope rows <- markdown_table_rows(fread(CATEGORIES_DOC), "Categories")
+    var known : table<string>
+    for (cat in model_categories()) {
+        known |> insert(cat.name)
+        var row_agrees = false
+        for (row in rows) {
+            continue if (length(row) < 3 || row[0] != cat.name)
+            var inscope stems <- split_trimmed(row[1], ",")
+            row_agrees = row[2] == cat.topics
+            for (stem in split_trimmed(cat.stems, ",")) {
+                row_agrees &&= has_value(stems, stem)
+            }
+        }
+        if (!row_agrees) {
+            gate_finding(CATEGORIES_DOC, "{ONE_CATEGORY_ROW} (the category {cat.name})")
+        }
+    }
+    for (row, at in rows, count()) {
+        if (at > 0 && !empty(row) && !key_exists(known, row[0])) {
+            gate_finding(CATEGORIES_DOC, "{ONE_CATEGORY_ROW} (the row {row[0]})")
+        }
+    }
+}
+
+let private MODEL_ONCE = ("a model file loads once a form in an area's run: `with_cpu_and_gpu_model` is called once an area and model "
+    + "file across this folder, its forms the call's list - fold the cells of this call, and the forms they need, into the first "
+    + "call (ARCHITECTURE_ENGINE_SUPPORT.md#test-load-once)")
+
+let private MODEL_LITERAL = ("`with_cpu_and_gpu_model` takes its run area and its model file as string literals - `t, \"llm\", "
+    + "\"<file>.gguf\", ...`: this gate reads them to hold one call an area and model across the folder "
+    + "(ARCHITECTURE_ENGINE_SUPPORT.md#test-load-once)")
+
+//! one call of `with_cpu_and_gpu_model` an area and model file across the folder's test files: a second call naming the same
+//! area and file, in any file and whatever its other arguments, is a second full load of a form; every call names its area and
+//! file by literals on the call's first line
+[arch(at = "../ARCHITECTURE_ENGINE_SUPPORT.md#test-load-once")]
+def private check_models_load_once() {
+    var seen : table<string; string>
+    for (f in tracked_files(["modules/dasLLAMA/tests/test_*.das"], "the model blocks")) {
+        let text = fread(f)
+        var inscope calls <- split(text, "with_cpu_and_gpu_model(t, ")
+        calls |> erase(0)
+        for (tail in calls) {
+            let eol = find(tail, "\n")
+            let head = eol >= 0 ? slice(tail, 0, eol) : tail
+            let at = find_line(text, "with_cpu_and_gpu_model(t, {head}")
+            var inscope lits <- split(head, "\"")   //! `"area", "file", rest`: empty, the area, the comma, the file, the rest
+            if (!(head |> starts_with("\"")) || length(lits) < 5 || strip(lits[2]) != ",") {
+                gate_finding(f, at, MODEL_LITERAL)
+                continue
+            }
+            let key = "{lits[1]}, {lits[3]}"
+            if (key_exists(seen, key)) {
+                gate_finding(f, at, "{MODEL_ONCE} - the first call is in {seen?[key] ?? ""}")
+            } else {
+                seen |> insert(key, base_name(f))
+            }
+        }
+    }
+}
+
 [export]
 def main() : int {
     check_test_shape("modules/dasLLAMA/tests", 100, true)
     check_one_test_child()
+    check_test_categories()
+    check_models_load_once()
     return gate_verdict("modules/dasLLAMA/tests")
 }

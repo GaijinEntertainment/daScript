@@ -96,8 +96,8 @@ override's stages on that model's blob twin (`blob_twin(t, path, seq_cap)`,
 shape, so one `Session` serves both.
 
 **A diff that adds a cell loading a model on the Vulkan or CUDA home, or changes the load such a
-cell takes, loads through `load_resident`, or `load_resident_as` / `load_resident_at` with `host`
-false (`_resident_feed.das`), which keep no host copy of the weight planes; only a cell that runs
-CPU inference on that same model, or reads its weight planes, in its own code or a helper it calls,
-loads through `load_resident_host`, or those two with `host` true, or calls `set_host_planes(true)`
-/ `set_vulkan_trim(false)`.** A host copy beside the device's is a load the product never makes.
+cell takes, loads through `load_resident`, `load_resident_lane`, `load_resident_host` with `image`
+true, or `load_resident_as` / `load_resident_at` with `host` false (`_resident_feed.das`), which
+keep no host copy of the weight planes; only a cell that runs CPU inference on that model, or reads
+its weight planes, itself or through a helper, loads through `load_resident_host` with `image`
+false, those two with `host` true, or calls `set_host_planes(true)` / `set_vulkan_trim(false)`.** A host copy beside the device's is a load the product never makes.

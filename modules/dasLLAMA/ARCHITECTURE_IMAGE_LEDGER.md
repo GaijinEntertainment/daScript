@@ -50,3 +50,11 @@ fire it and are ruled acceptable, each with its reason.
   subject - the projector-type sniff routing the mmproj to gemma4a, the decoder width the embedder must project to, the lane
   the facade picks - and it has no in-memory form; they pin no lane, and `--no-tune` runs them with `DASLLAMA_IMAGE=0`, so
   the images they mint are the box's own.
+- **The load-once block's cells** - `test_gpu_resident_gemma3` (`tests/test_gpu_resident_gemma2_3.das`) and
+  `test_gpu_resident_gemma4_e2b` (`tests/test_gpu_resident_gemma4_e2b.das`), and any cell whose `with_cpu_and_gpu_model` call
+  (`tests/_cpu_gpu_model.das`) lists three or more device forms that keep no host planes, where the image rail is on: the
+  first such form streams the file, and each later one loads through `load_model_cached` (`load_resident_lane`), which
+  mints the file's device lane beside it once and maps it after. The reason: a streamed load rebuilds the device's planes
+  from the file's blocks for every form, the same work each time, and a mapped lane skips it. The block removes each lane
+  it minted when its last device form ends and no image that stood beside the file before it; where a load renamed one
+  of those to its lane's name, the block removes nothing. The forms pin no lane, so the image is the box's own.

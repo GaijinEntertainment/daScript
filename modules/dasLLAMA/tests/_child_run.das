@@ -71,7 +71,7 @@ let private CHILD_BUILD_SECONDS = 1800l   //! the two builds' cap: an engine com
 let private CHILD_SOURCE_DIRS = fixed_array("daslib", "dastest", "modules/dasLLAMA/dasllama", "modules/dasLLAMA/tests",
     "modules/dasLLVM/daslib", "modules/dasMetal/metal", "modules/dasVulkan/daslib", "modules/dasCUDA/daslib")
 //! the environment a build bakes into the exe: the tune and JIT settings macros read at compile time
-let private CHILD_BUILD_ENVS = fixed_array("DAS_TUNE_MANIFEST", "DAS_TUNE_POLICY", "DAS_TUNE_MODE", "DAS_JIT_BASELINE")
+let private CHILD_BUILD_ENVS = fixed_array("DAS_TUNE_MANIFEST", "DAS_TUNE_FORCE", "DAS_TUNE_POLICY", "DAS_TUNE_MODE", "DAS_JIT_BASELINE")
 
 //! The key of the test child's exe for this tree, binary and build environment: the size and time of the libraries the
 //! binary is built of (the binary's own where the tree has no `lib/`) and of every `.das` the build can read - a tests-folder file counts where it is the child's own (`_child_*.das`) - and the

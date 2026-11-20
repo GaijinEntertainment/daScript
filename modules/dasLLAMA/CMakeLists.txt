@@ -28,10 +28,10 @@ IF(NOT DAS_LLAMA_INCLUDED)
         modules/dasLLAMA/harness/tune_tb.das
         modules/dasLLAMA/tests/_kq_dot.das
         modules/dasLLAMA/tests/_compares.das)
-    # dasllama/, the tuner set and the box probes carry [arch] citations; ship generated excerpts
-    # of the cited sections (registry processed by the root CMakeLists)
+    # dasllama/, the tuner set, the box probes and the model-set table carry [arch] citations; ship
+    # generated excerpts of the cited sections (registry processed by the root CMakeLists)
     string(JOIN "," _das_llama_arch_scan modules/dasLLAMA/dasllama ${DAS_LLAMA_TUNER_FILES}
-        modules/dasLLAMA/performance/box_ident.das)
+        modules/dasLLAMA/performance/box_ident.das modules/dasLLAMA/performance/model_specs.das)
     set_property(GLOBAL APPEND PROPERTY DAS_ARCH_EXTRACT_SPECS
         "${_das_llama_arch_scan}|modules/dasLLAMA|${DAS_INSTALL_MODULESDIR}/dasLLAMA")
     install(FILES ${PROJECT_SOURCE_DIR}/modules/dasLLAMA/.das_module

@@ -39,8 +39,13 @@ Runs:
 2. The runs the scope report names (next section), and no others.
 
 Not owed: the whole stocked suite, a fleet run, the large tier (`DASLLAMA_PARITY_FULL=1`)
-beyond a cell the scope names, a GPU home the change does not touch, a re-tune of the box,
+beyond a cell the scope names, a model category (`modules/dasLLAMA/TEST_CATEGORIES.md`) whose
+topics the change does not touch, a GPU home the change does not touch, a re-tune of the box,
 and any measurement (see Profiling).
+
+A model category is owed by intent, never by a file list: the PR whose work touches a topic
+of a category's row runs `run.das -- --category <name>` and cites its `REPORT` line, and the
+body's Validation names the categories the work touched.
 
 The body's Validation carries the scope report: each RUN entry's command with that run's
 `REPORT` line, and each NOT RUN entry with its reason.

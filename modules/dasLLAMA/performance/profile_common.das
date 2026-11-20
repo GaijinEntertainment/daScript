@@ -47,10 +47,8 @@ def models_dir() : string =>
 // another box's crowns and poisons its store.
 def box_name() : string => derive_box_name(g_env_prof.box)
 
-//! The per-box shared tune manifest (`DAS_TUNE_MANIFEST` target): ONE tune per box, so every
-//! rig process — every cell — stamps the same winners and their .dlim image
-//! identities agree. Gitignored (machine-local; staleness = older than the binary).
-def public rig_tune_manifest() : string => "modules/dasLLAMA/performance/{box_name()}.tune.json"
+//! this box's shared tune manifest (`box_tune_manifest`)
+def public rig_tune_manifest() : string => box_tune_manifest(g_env_prof.box)
 
 //! Profiling lane/thread count: min(16, physical performance cores), same count both engines,
 //! pinned — one rule for every box (M1 Max 8, M4 Pro 10, M3 Air 4, big x86 16). Fixed by policy:

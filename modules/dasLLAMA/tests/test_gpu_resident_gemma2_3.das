@@ -6,88 +6,147 @@ options _dasllama_internal = true
 require dastest/testing_boost public
 require dasllama/dasllama_kv_dtype   // KVDtype: the block-codec cells' mirror ask
 require _gemma_resident
+require dasllama/dasllama_math   // with_dasllama_jobque_: the ring compares after the block read argmax off the queue
+require _resident_regions   // the regions cells' collections, REGIONS_RIG_CTX
+require _resident_feed   // Held, held_within: the regions cells' readings
+require dasllama/dasllama_common   // Model
 
 // gemma-2-2b Q8_0 (the attention logit softcap, a window on the even layers, no qk-norm): arm `g2`. Skips off the
 // JIT, without DASLLAMA_GPU=1 on a device the whole-model driver serves, without the file under models_dir(), or
-// when the residency plan does not fit the card (DASLLAMA_GPU_MIN_CTX shortens the mirror).
+// when the residency plan does not fit the card (DASLLAMA_GPU_MIN_CTX shortens the mirror). The two-region form, at
+// REGIONS_RIG_CTX, carries the rig's batched cells: the N-row token command serves two rows bit for bit against the sessions
+// alone - at one window, past the unsplit position so the split attention form records, and a batched step before any one-row
+// step - and, on the Vulkan home with a kernel census, the stamp cell.
 let private GEMMA2_FILE = GemmaFile(file = "gemma-2-2b-it-Q8_0.gguf", arm = "g2")
 
-[test(description = "On the whole-model driver gemma-2-2b Q8_0 with the attention softcap keeps forty-token forced-feed logits within 16 percent of max logit of the CPU chain, perplexity within 1.05x, and window chain against token command within 6x the CPU's own gap")]
+[test(description = "On the whole-model driver gemma-2-2b Q8_0 with the attention softcap keeps forty-token forced-feed logits within 16 percent of max logit of the CPU chain, perplexity within 1.05x, and window chain against token command within 6x of the CPU chain's own two paths; over two mirror regions, with the attention softcap and the final logit softcap, batched steps over two sessions - at one window, past the unsplit position, and before any one-row step - read what each session reads alone, and its two q heads per kv head make a step dispatch the two-head slab decode attention stamp of the armed mirror codec; each form loads once")]
 def test_gpu_resident_gemma2(t : T?) {
-    t |> run("gemma-2-2b: resident prefill + decode vs the CPU chain, forty tokens - the attention logit softcap on the 8-row tile and the token command") @(t : T?) {
-        gemma_forced_feed(t, 40l, GEMMA2_FILE)
+    return if (!family_on(t, "gemma2") || !arm_on(t, GEMMA2_FILE.arm))
+    let gaps <- [8l]
+    let walks <- [(n = 150l, steps = 150l)]
+    var feeds <- [40l]
+    if (gpu_want_cuda()) {   //! the CUDA home's own cell: a two-window prompt and eight steps
+        feeds |> push(PF_WINDOW_ROWS + 88l)
     }
-    t |> run("gemma-2-2b: 150 prose ids prefilled, 150 teacher-forced, scored as a perplexity against the CPU chain") @(t : T?) {
-        ppl_compare(t, 150l, 150l, GEMMA2_FILE)
+    var rows : GemmaRows[2]
+    var regions : Held
+    let forms <- [device_form(), device_form(regions = 2l, ctx = REGIONS_RIG_CTX)]
+    with_cuda_mmq_winners() {
+        let ran = with_cpu_and_gpu_model(t, "llm", "gemma-2-2b-it-Q8_0.gguf", GEMMA_RIG_CTX, forms) $(m, form) {
+            if (form.on_gpu && form.regions == 2l) {
+                if (gpu_want_cuda()) {
+                    regions |> held_skip("the CUDA home is asked: the slab pick and the census names are the Vulkan driver's")
+                } else {   //! first on the load: the census counts a token command's dispatches as it records, and a later step replays
+                    regions_stamp_rows(regions, m, 2)
+                }
+                regions_batched_rows(regions, m)
+                regions_split_rows(regions, m)
+                regions_batched_first_rows(regions, m)
+            } else {
+                rows[form.on_gpu ? 1 : 0] <- gemma_rows(m, form, feeds, gaps, walks)
+            }
+        }
+        if (ran) {
+            gemma_rows_within(t, "gemma-2-2b", rows[1], rows[0], gaps, walks)
+            held_within(t, regions, "gemma-2-2b Q8_0, two regions: ", false)
+        }
     }
-    t |> run("gemma-2-2b: eight tokens through the window chain against the token command, both arms") @(t : T?) {
-        prefill_vs_decode(t, 8l, GEMMA2_FILE)
-    }
+    delete rows
+    delete regions
+    delete feeds
 }
 
 // gemma-3-1b Q8_0 (the dense base: sandwich norms, sliding layers beside the global ones with their own rope class,
 // the GeGLU FFN, the sqrt(dim) embed scale): arm `g3`. Skips off the JIT, without DASLLAMA_GPU=1 on a device the
-// whole-model driver serves, without the file under models_dir(), or when the residency plan does not fit the card.
+// whole-model driver serves, without the file under models_dir(), or when the residency plan does not fit the card; the
+// block-codec forms also skip where the environment arms another mirror codec over the one they ask (DASLLAMA_VK_KV32=1). The
+// two-region form, at REGIONS_RIG_CTX, carries the rig's batched cells and, on its ringed load, the session's ring floor through
+// every rail that moves its rows (a continuation, a prompt from 0, a park, an export, an import).
 let private GEMMA3_FILE = GemmaFile(file = "gemma-3-1b-it-Q8_0.gguf", arm = "g3")
-
-[test(description = "On the whole-model driver gemma-3-1b Q8_0 with sandwich norms and sliding layers on the device keeps forced-feed logits within 16 percent of max logit of the CPU chain at forty-token and eight-token prompts")]
-def test_gpu_resident_gemma3_one_window(t : T?) {
-    t |> run("gemma-3-1b: resident prefill + decode with sandwich norms and sliding layers on device vs the CPU chain, one window") @(t : T?) {
-        gemma_forced_feed(t, 40l, GEMMA3_FILE)
-    }
-    t |> run("gemma-3-1b: an eight-token prompt - the shortest window, where this model's logits move most with the rounding") @(t : T?) {
-        gemma_forced_feed(t, 8l, GEMMA3_FILE)
-    }
-}
-
-[test(description = "On the whole-model driver gemma-3-1b keeps forced-feed logits within 16 percent of the CPU chain over two-window prompts of 520 and 600 tokens, where the sliding layers mask below their window on the prefill tiles and the decode")]
-def test_gpu_resident_gemma3_past_window(t : T?) {
-    t |> run("gemma-3-1b: a 520-token prompt - two prefill windows, the sliding window engaged on the last eight positions") @(t : T?) {
-        assert_pf_window(t)
-        gemma_forced_feed(t, PF_WINDOW_ROWS + 8l, GEMMA3_FILE)
-    }
-    t |> run("gemma-3-1b: a 600-token prompt - every sliding layer masks below its window on the prefill tiles, then the decode chunks past it") @(t : T?) {
-        assert_pf_window(t)
-        gemma_forced_feed(t, PF_WINDOW_ROWS + 88l, GEMMA3_FILE)
-    }
-}
-
-[test(description = "On the whole-model driver gemma-3-1b's window chain and token command agree over 8 and 40 tokens within 6x the distance between the CPU chain's own prefill and decode paths")]
-def test_gpu_resident_gemma3_prefill_vs_decode(t : T?) {
-    t |> run("gemma-3-1b: eight tokens through the window chain against the same eight through the token command, both arms") @(t : T?) {
-        prefill_vs_decode(t, 8l, GEMMA3_FILE)
-    }
-    t |> run("gemma-3-1b: the same at forty tokens") @(t : T?) {
-        prefill_vs_decode(t, 40l, GEMMA3_FILE)
-    }
-}
 
 let private PAST_SLIDING_WINDOW = 2l * PF_WINDOW_ROWS + 76l   //! a third prefill window: it starts a window's rows past the 512-key sliding window
 
-[test(description = "On the whole-model driver gemma-3-1b over a q8_0 K/V mirror keeps 1100-token forced-feed logits within 16 percent of the CPU chain past the sliding window, and over a tq4 mirror keeps the teacher-forced perplexity within 1.05x")]
-def test_gpu_resident_gemma3_block_codecs(t : T?) {
-    t |> run("gemma-3-1b: a q8_0 K/V mirror at 1100 tokens - the third window's f16 shadow starts past the sliding layers' window") @(t : T?) {
-        assert_pf_window(t)
-        with_gpu_kv_dtype(t, KVDtype.q8_0) {
-            gemma_forced_feed(t, PAST_SLIDING_WINDOW, GEMMA3_FILE)
+[test(description = "On the whole-model driver gemma-3-1b Q8_0 with sandwich norms and sliding layers on the device keeps forced-feed logits within 16 percent of max logit of the CPU chain at prompts of 40, 8, 520 and 600 tokens, and its window chain and token command agree over 8 and 40 tokens within 6x of the CPU chain's own two paths; over a q8_0 K/V mirror it keeps the forced-feed logits within 16 percent past the sliding window, over a tq4 mirror the teacher-forced perplexity within 1.05x; its ringed K/V mirrors match a flat every-row mirror bit for bit over 1300 prose ids and eight steps on the default and the q8_0 mirror; over two mirror regions, with sandwich norms, sliding and global layers and GeGLU, batched steps over two sessions - at one window, past the unsplit position, and before any one-row step - read what each session reads alone, and on the ringed load the ring floor sits at the prompt's rows less the slack: a call under it panics, a prompt from 0 clears it, and a park, export or import under it refuses while every row moves with it; each form loads once")]
+def test_gpu_resident_gemma3(t : T?) {
+    return if (!family_on(t, "gemma3") || !arm_on(t, GEMMA3_FILE.arm))
+    var r : G3Rows
+    //! forty and eight tokens in one window; 520 and 600 across two, the sliding window engaged, where the prompt window is the cells' own
+    r.feeds <- assert_pf_window(t) ? [40l, 8l, PF_WINDOW_ROWS + 8l, PF_WINDOW_ROWS + 88l] : [40l, 8l]
+    let forms <- [device_form(), device_form(kv = KVDtype.q8_0), device_form(kv = KVDtype.tq4), device_form(ring = false),
+        device_form(kv = KVDtype.q8_0, ring = false), device_form(regions = 2l, ctx = REGIONS_RIG_CTX)]
+    with_cuda_mmq_winners() {
+        let ran = with_cpu_and_gpu_model(t, "llm", "gemma-3-1b-it-Q8_0.gguf", GEMMA_RIG_CTX, forms) $(m, form) {
+            g3_rows(r, m, form)
+        }
+        if (ran) {
+            g3_rows_within(t, r)
         }
     }
-    t |> run("gemma-3-1b: the same prompt over a tq4 mirror, 80 ids teacher-forced after it and scored as a perplexity against the CPU chain") @(t : T?) {
-        assert_pf_window(t)
-        with_gpu_kv_dtype(t, KVDtype.tq4) {
-            ppl_compare(t, PAST_SLIDING_WINDOW, 80l, GEMMA3_FILE)   //! a 4-bit mirror reads one step 5.0 of a 33.7 max logit from the CPU's: no logit bar holds it with room
+    delete r
+}
+
+//! what the gemma-3-1b file's forms collect: the default device form's feeds and path gaps with their CPU side on its codec
+//! (`main_kv`), the q8_0 mirror's forced feed past the sliding window and the tq4 mirror's teacher-forced walk (each a CPU side,
+//! a device side), the rings (the default codec ringed and flat, the q8_0 mirror ringed and flat), and the rig's cells on the
+//! two-region form; each `_ran` says a form collected
+struct G3Rows {
+    feeds : array<int64>
+    main_ran : bool
+    main_kv : KVDtype
+    rows : GemmaRows[2]
+    codec : CodecRows
+    regions : Held
+}
+
+let private G3_GAPS = fixed_array(8l, 40l)
+//! the q8_0 feed runs past the sliding window; a 4-bit mirror reads one step 5.0 of a 33.7 max logit from the CPU's, so no
+//! logit bar holds its walk with room
+let private G3_CODEC = CodecCells(q8_feed = PAST_SLIDING_WINDOW, tq4_walk = (n = PAST_SLIDING_WINDOW, steps = 80l),
+    ring_kv = KVDtype.q8_0, q8_note = "the third window's f16 shadow starts past the sliding layers' window",
+    tq4_note = "its teacher-forced walk")
+
+//! one form's collection of the gemma-3-1b file's cells into `r`
+def private g3_rows(var r : G3Rows; m : Model; form : ModelForm) {
+    var inscope gaps <- [for (g in G3_GAPS); g]
+    if (form.on_gpu && form.regions == 2l) {
+        regions_batched_rows(r.regions, m)
+        regions_split_rows(r.regions, m)
+        regions_batched_first_rows(r.regions, m)
+        regions_ring_floor_rows(r.regions, m)
+    } elif (device_default(form)) {
+        r.main_ran = true
+        r.main_kv = form.kv
+        r.rows[1] <- gemma_rows(m, form, r.feeds, gaps, array<GemmaWalk>())
+        codec_rows(r.codec, m, form, G3_CODEC)
+    } elif (form.on_gpu) {
+        codec_rows(r.codec, m, form, G3_CODEC)
+    } else {
+        if (r.main_ran && form.kv == r.main_kv) {
+            r.rows[0] <- gemma_rows(m, form, r.feeds, gaps, array<GemmaWalk>())
         }
+        codec_rows(r.codec, m, form, G3_CODEC)
     }
 }
 
-//! the sliding layers' rings against the flat mirror (`ring_vs_flat`): 1300 prose ids past the 512-position window and eight steps,
-//! bit for bit, on the f16 mirror and the q8_0 one
-[test(description = "On the whole-model driver gemma-3-1b's sliding layers on ringed K/V mirrors match a flat every-row mirror bit for bit over 1300 prose ids past the 512-position window and eight steps, on f16 and q8_0 mirrors")]
-def test_gpu_resident_gemma3_ring(t : T?) {
-    for (kv in fixed_array(KVDtype.f16, KVDtype.q8_0)) {
-        t |> run("gemma-3-1b Q8_0: the sliding layers' rings against every row kept, a {kv} mirror, 1300 ids and eight steps") @(t : T?) {
-            ring_vs_flat(t, 1300l, GEMMA3_FILE, kv)
-        }
+//! the gemma-3-1b file's compares on what its forms collected, each cell where its forms ran
+def private g3_rows_within(t : T?; r : G3Rows) {
+    var inscope gaps <- [for (g in G3_GAPS); g]
+    if (r.main_ran) {
+        gemma_rows_within(t, "gemma-3-1b", r.rows[1], r.rows[0], gaps, array<GemmaWalk>())
+    }
+    codec_rows_within(t, "gemma-3-1b Q8_0", r.codec, G3_CODEC)
+    held_within(t, r.regions, "gemma-3-1b Q8_0, two regions: ", false)
+    with_dasllama_jobque_() {
+        codec_rings_within(t, "gemma-3-1b Q8_0", r.codec, G3_CODEC, r.main_kv)
+    }
+}
+
+//! the driver's load-time lines, read off two loads in the test child: no in-process cell reads what to_log prints
+[test(description = "The whole-model driver's load log on gemma-3-1b names its rings on a ringed load, its every-row mirror on a flat one, and the host embed only where the token gather is pinned off", timeout = 1200)]
+def test_gpu_resident_gemma3_load_log(t : T?) {
+    return if (!family_on(t, "gemma3"))
+    t |> run("gemma-3-1b Q8_0: the resident driver's load log names the rings, the flat mirror and the host embed under their pins") @(t : T?) {
+        ring_load_announces(t, GEMMA3_FILE)
     }
 }
 
@@ -96,12 +155,16 @@ def test_gpu_resident_gemma3_ring(t : T?) {
 // fit the card (DASLLAMA_GPU_MIN_CTX shortens the mirror).
 let private GEMMA3_4B_FILE = GemmaFile(file = "gemma-3-4b-it-Q8_0.gguf", arm = "g3b")
 
-[test(description = "On the whole-model driver gemma-3-4b Q8_0 keeps forty-token forced-feed logits within 16 percent of max logit of the CPU chain and its 150-position teacher-forced perplexity within 1.05x of the CPU chain's")]
+[test(description = "On the whole-model driver gemma-3-4b Q8_0 keeps forty-token forced-feed logits within 16 percent of max logit of the CPU chain and its 150-position teacher-forced perplexity within 1.05x of the CPU chain's; each form loads once")]
 def test_gpu_resident_gemma3_4b(t : T?) {
-    t |> run("gemma-3-4b: resident prefill + decode vs the CPU chain, forty tokens - the dense base at its wider geometry") @(t : T?) {
-        gemma_forced_feed(t, 40l, GEMMA3_4B_FILE)
+    return if (!family_on(t, "gemma3") || !arm_on(t, GEMMA3_4B_FILE.arm))
+    let walks <- [(n = 150l, steps = 150l)]
+    var rows : GemmaRows[2]
+    let ran = with_cpu_and_gpu_model(t, "llm", "gemma-3-4b-it-Q8_0.gguf", GEMMA_RIG_CTX) $(m, form) {
+        rows[form.on_gpu ? 1 : 0] <- gemma_rows(m, form, [40l], array<int64>(), walks)
     }
-    t |> run("gemma-3-4b: 150 prose ids prefilled, 150 teacher-forced, scored as a perplexity against the CPU chain") @(t : T?) {
-        ppl_compare(t, 150l, 150l, GEMMA3_4B_FILE)
+    if (ran) {
+        gemma_rows_within(t, "gemma-3-4b", rows[1], rows[0], array<int64>(), walks)
     }
+    delete rows
 }

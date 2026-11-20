@@ -4,7 +4,8 @@ dasLLAMA is the daslang LLM / ASR / vision engine, in-tree at `modules/dasLLAMA/
 built and why is the `ARCHITECTURE*.md` set beside this file** (`ARCHITECTURE.md` routes to the
 engine, image, GPU, Vulkan, Metal, measurement and media companions) - read the section you
 are about to work in before writing code here. The rules binding a diff are `REVIEW*.md`;
-`ENVIRONMENT.md` lists every knob; `followup_general.md` / `followup_metal.md` /
+`ENVIRONMENT.md` lists every knob; `TEST_CATEGORIES.md` lists the model categories - the large models a run opens
+only when it names them, and the work each one covers; `followup_general.md` / `followup_metal.md` /
 `followup_vulkan.md` are the ledgers;
 `PERF_LEDGER.md` is the measured record; `tests/CLAUDE.md` is the test discipline (run suites
 ONLY through `tests/run.das`).
@@ -21,10 +22,11 @@ After an edit: `./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --changed` 
 the changed files reach, by file: a test file itself, a fixture the tests requiring it, an engine
 module its `MODULE_WITNESSES` row or - a core module - every model-free `llm` file and one
 stocked witness a family and home, and its other areas (`audio | vision | tts | translate | infra`) whole;
-`--area <a,b>` names areas directly. A changed file in a model suite (decode | mtp | prefill |
+`--area <a,b>` names areas directly. `--category <name>` runs a model category (`TEST_CATEGORIES.md`): when the
+work touches a topic its row names, run it - no other run opens its model files. A changed file in a model suite (decode | mtp | prefill |
 matrix | image) reaches nothing - `--changed` names it; run that suite with `--arm` scoped to the
 change. Before a PR: `skills/internal/dasllama_testing.md` (repo root) says what a PR runs by its
-kind. `--exclude test_ple_modes` is the between-PR iteration form. `--shard i/n`
+kind. `--exclude <file>` is the between-PR iteration form. `--shard i/n`
 splits one run over n boxes (the same command on each, its own `i`), and the PR cites every
 shard's `REPORT`. `--no-tune` runs any suite but the image suites on the reference kernel bodies
 (`DAS_TUNE_POLICY=reference`, the image rail off) - the portable tier's arm. `--poison-kv` starts every

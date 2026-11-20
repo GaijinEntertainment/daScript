@@ -260,3 +260,8 @@ def public derive_box_name(env_box : string) : string {
     g_box_cached = tag
     return tag
 }
+
+//! The per-box shared tune manifest (`DAS_TUNE_MANIFEST` target) of the box `env_box` names: ONE tune per box, so every
+//! process on it - a rig cell, a test child - stamps the same winners and their .dlim image identities agree. Gitignored
+//! (machine-local; staleness = older than the binary).
+def public box_tune_manifest(env_box : string) : string => "modules/dasLLAMA/performance/{derive_box_name(env_box)}.tune.json"

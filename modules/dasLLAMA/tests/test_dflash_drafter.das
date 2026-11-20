@@ -232,13 +232,30 @@ def private planes_tag_disk_types(t : T?; path : string; tag : string) {
     delete dr
 }
 
+//! a walk's prompt ids: `text` raw, or as one user turn of the model's chat template with thinking off (`chat`) - the form a
+//! routed gemma-4 trunk needs, whose logits sit at near-ties past a raw prompt
+def private walk_prompt(m : Model; text : string; chat : bool) : array<int64> {
+    return <- encode(m, text, true) if (!chat)
+    var turn <- create_chat_renderer(m, "")
+    set_thinking(turn, false)
+    add_user(turn, text)
+    var ids <- render_turn(m, turn)
+    delete turn
+    return <- ids
+}
+
+//! the text a CPU or Metal lossless walk continues: the prose prompt, or for the chat form the counting prompt - the chat
+//! form is the routed gemma-4 trunk's, whose logits sit at near-ties past prose, so its exact compare takes a continuation
+//! the prompt's own text dictates
+def private walk_text(chat : bool) : string => chat ? COUNT_PROMPT : PROMPT
+
 //! a lossless walk's served witness: `walk`'s ids back, the caller's counters read around it
 typedef private WalkServed = block<(spec : bool; walk : block<() : array<int64>>) : array<int64>>
 
 //! the plain greedy walk against the speculative one on `m`, the drafter file `drafter` attached on the asked arm: the ids
 //! equal, drafts accepted; the accepted count back for the arms' compare, the drafter left attached for the caller's witnesses,
 //! the arm's knob put back as found; `served` runs each walk (`spec` false for the plain one) inside the caller's counter readings
-def private lossless_walk(t : T?; m : Model; drafter : string; device : bool; tag : string; text : string; served : WalkServed) : int64 {
+def private lossless_walk(t : T?; m : Model; drafter : string; device : bool; tag : string; text : string; chat : bool; served : WalkServed) : int64 {
     let device0 = dflash_device_knob()
     set_dflash_device(device)
     let why = attach_dflash_drafter(m, path_join(_model_tier::models_dir(), drafter))
@@ -246,7 +263,7 @@ def private lossless_walk(t : T?; m : Model; drafter : string; device : bool; ta
     t |> equal(why, "", "{tag}: the drafter attaches")
     return 0l if (!empty(why))
     t |> equal(dflash_on_device(), device, "{tag}: the pass runs on the {device ? "device" : "CPU"}")
-    let prompt <- encode(m, text, true)
+    let prompt <- walk_prompt(m, text, chat)
     let total = long_length(prompt) - 1l + STEPS
     var s1 = make_run_state(m.config, KVDtype.f16, KVDtype.f16)
     let plain <- invoke(served, false, $() : array<int64> {
@@ -263,7 +280,9 @@ def private lossless_walk(t : T?; m : Model; drafter : string; device : bool; ta
     while (same < long_length(plain) && same < long_length(spec) && plain[same] == spec[same]) {
         same++
     }
-    t |> equal(same, long_length(plain), "{tag}: speculative == plain token for token (plain '{decode(m, plain)}', speculative '{decode(m, spec)}')")
+    to_log(LOG_INFO, "{tag} plain text: {eyeball_text(m, plain)}\n")
+    to_log(LOG_INFO, "{tag} speculative text: {eyeball_text(m, spec)}\n")
+    t |> equal(same, long_length(plain), "{tag}: speculative == plain token for token (both walks decoded above)")
     let off = min(length(spec), length(plain)) - 1
     t |> success(off > 0 && first_mismatch(spec, plain, 0, 1, off) >= 0, "{tag}: the control - the speculative walk against the plain walk one step on misses")
     t |> success(na > 0l && nd >= na, "{tag}: drafts accepted {na} of {nd}")
@@ -272,8 +291,8 @@ def private lossless_walk(t : T?; m : Model; drafter : string; device : bool; ta
     return na
 }
 
-def private lossless_walk(t : T?; m : Model; drafter : string; device : bool; tag : string; text : string = PROMPT) : int64 {
-    return lossless_walk(t, m, drafter, device, tag, text) $(_spec; walk) {
+def private lossless_walk(t : T?; m : Model; drafter : string; device : bool; tag : string; text : string = PROMPT; chat : bool = false) : int64 {
+    return lossless_walk(t, m, drafter, device, tag, text, chat) $(_spec; walk) {
         return <- invoke(walk)
     }
 }
@@ -288,8 +307,8 @@ def private metal_trunk_calls() : int64 {
 }
 
 //! the lossless walk over the Metal-served trunk, each walk's trunk calls asserted rising on the Metal drivers
-def private metal_lossless_walk(t : T?; m : Model; drafter : string; device : bool; tag : string) : int64 {
-    return lossless_walk(t, m, drafter, device, tag, PROMPT) $(spec; walk) {
+def private metal_lossless_walk(t : T?; m : Model; drafter : string; device : bool; tag : string; chat : bool = false) : int64 {
+    return lossless_walk(t, m, drafter, device, tag, walk_text(chat), chat) $(spec; walk) {
         let c0 = metal_trunk_calls()
         var ids <- invoke(walk)
         let c1 = metal_trunk_calls()
@@ -310,14 +329,14 @@ def private load_trunk(t : T?; path : string; metal : bool) : Model {
 }
 
 //! the lossless gate on the CPU arm over the planar trunk with the drafter file `drafter`
-def private cpu_lossless_cell(t : T?; drafter : string; tag : string) {
-    let trunk = path_join(_model_tier::models_dir(), TRUNK_FILE)
+def private cpu_lossless_cell(t : T?; drafter : string; tag : string; trunk_file : string = TRUNK_FILE; chat : bool = false) {
+    let trunk = path_join(_model_tier::models_dir(), trunk_file)
     return if (!model_available(t, trunk) || !model_available(t, path_join(_model_tier::models_dir(), drafter)))
     let prior = get_metal_mode()
     set_metal_mode(MetalMode.off)
     with_dasllama_jobque() {
         var m <- load_trunk(t, trunk, false)
-        lossless_walk(t, m, drafter, false, tag)
+        lossless_walk(t, m, drafter, false, tag, walk_text(chat), chat)
         detach_dflash_drafter()
         delete m
     }
@@ -503,6 +522,34 @@ def private set_metal_dflash_knobs(k : MetalDflashKnobs) {
     }
 }
 
+//! `body` on the served `trunk` under the Metal home - the mode required, the box's crowns applied as the server applies
+//! them, the decode override Metal's - then the decode and prefill drivers shut down and the override and the mode put back;
+//! under `leaks` the block drafter shuts down too, and no Metal object outlives the shutdown (asserted under `tag`)
+def private with_metal_trunk(t : T?; trunk, tag : string; leaks : bool; body : block<(var m : Model) : void>) {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        let prior = get_metal_mode()
+        set_metal_mode(MetalMode.required)
+        apply_box_profile_runtime()
+        let override0 = active_decode_override()
+        select_decode_override("metal")
+        with_dasllama_jobque() {
+            var m <- load_trunk(t, trunk, true)
+            invoke(body, m)
+            delete m
+        }
+        if (leaks) {
+            metal_dflash_shutdown()
+        }
+        metal_decode_shutdown()
+        metal_prefill_shutdown()
+        select_decode_override(override0)
+        set_metal_mode(prior)
+        if (leaks) {
+            t |> equal(metal_log_leaks_if_any(), 0l, "{tag}: no leaked Metal objects after shutdown")
+        }
+    }
+}
+
 //! the lossless gate on the Metal home's device arm over the served `trunk` with the drafter file `drafter`, every format in
 //! `fmts` counted among the pass's sites and the rows8 form serving where the box runs it - and every format in `trunk_fmts`
 //! among the trunk's rows8 sites -, every pass's selector on the device and held for the verify, every held verify's accept on
@@ -512,15 +559,9 @@ def private set_metal_dflash_knobs(k : MetalDflashKnobs) {
 def private metal_lossless_cell(t : T?; trunk, drafter : string; fmts, trunk_fmts : array<KqFmt>; tag : string; rows8 : bool = true) {
     static_if (typeinfo builtin_module_exists(das_metal)) {
         return if (empty(trunk) || !model_available(t, path_join(_model_tier::models_dir(), drafter)))
-        let prior = get_metal_mode()
         let knobs0 = metal_dflash_knobs()
-        set_metal_mode(MetalMode.required)
-        apply_box_profile_runtime()   //! the box's crowns: the served trunk's forms, as the server applies them
-        let override0 = active_decode_override()
-        select_decode_override("metal")
         set_metal_dflash_knobs(MetalDflashKnobs(record = true, select = true, accept = true, tape = true, unwaited = true))
-        with_dasllama_jobque() {
-            var m <- load_trunk(t, trunk, true)
+        with_metal_trunk(t, trunk, "", false) $(var m) {
             let rp0 = metal_verify_replays()
             let tape0 = metal_verify_replays_in_place()
             let dev = metal_lossless_walk(t, m, drafter, true, "{tag} device arm")
@@ -569,13 +610,8 @@ def private metal_lossless_cell(t : T?; trunk, drafter : string; fmts, trunk_fmt
             t |> equal(dev, cpu, "{tag}: both arms accept the same count")
             depth_walk(t, m, drafter, SHALLOW_DEPTH, "{tag} device arm at depth {SHALLOW_DEPTH}")
             depth_walk(t, m, drafter, 0l, "{tag} device arm, no depth set")
-            delete m
         }
-        metal_decode_shutdown()
-        metal_prefill_shutdown()
         set_metal_dflash_knobs(knobs0)
-        select_decode_override(override0)
-        set_metal_mode(prior)
     } else {
         t |> skip("{tag}: no das_metal in this build")
     }
@@ -750,20 +786,9 @@ def test_dflash_27b_sampled_cpu(t : T?) {
 def private sampled_metal_cell(t : T?; trunk : string; tag : string) {
     static_if (typeinfo builtin_module_exists(das_metal)) {
         return if (empty(trunk) || !model_available(t, path_join(_model_tier::models_dir(), DRAFTER_FILE)))
-        let prior = get_metal_mode()
-        set_metal_mode(MetalMode.required)
-        apply_box_profile_runtime()
-        let override0 = active_decode_override()
-        select_decode_override("metal")
-        with_dasllama_jobque() {
-            var m <- load_trunk(t, trunk, true)
+        with_metal_trunk(t, trunk, "", false) $(var m) {
             sampled_modes_walk(t, m, DRAFTER_FILE, true, tag)
-            delete m
         }
-        metal_decode_shutdown()
-        metal_prefill_shutdown()
-        select_decode_override(override0)
-        set_metal_mode(prior)
     } else {
         t |> skip("{tag}: no das_metal in this build")
     }
@@ -862,23 +887,12 @@ def test_dflash_27b_joint(t : T?) {
         let trunk = gguf_trunk(t)
         let drafter = path_join(_model_tier::models_dir(), DRAFTER_FILE)
         return if (empty(trunk) || !model_available(t, drafter))
-        let prior = get_metal_mode()
-        let override0 = active_decode_override()
-        set_metal_mode(MetalMode.required)
-        apply_box_profile_runtime()
-        select_decode_override("metal")
-        with_dasllama_jobque() {
-            var m <- load_trunk(t, trunk, true)
+        with_metal_trunk(t, trunk, "", false) $(var m) {
             set_dflash_device(true)
             t |> equal(attach_block_drafter(m, drafter), "", "the drafter attaches")
             joint_streams_leg(t, m)
             detach_block_drafter()
-            delete m
         }
-        metal_decode_shutdown()
-        metal_prefill_shutdown()
-        select_decode_override(override0)
-        set_metal_mode(prior)
     } else {
         t |> skip("27B joint streams: no das_metal in this build")
     }
@@ -886,6 +900,7 @@ def test_dflash_27b_joint(t : T?) {
 
 let private G26_TRUNK_FILE = "gemma-4-26B-A4B-it-Q4_K_M.gguf"
 let private G26_DRAFTER_FILE = "drafters/gemma-4-26B-A4B-it-DFlash-GGUF/gemma-4-26B-A4B-it-DFlash-Q8_0.gguf"
+let private G26_DRAFTER_K4_FILE = "drafters/gemma-4-26B-A4B-it-DFlash-GGUF/gemma-4-26B-A4B-it-DFlash-Q4_K_M.gguf"
 let private CAPTURE_STEPS = 4l
 let private CAPTURE_REL = 0.05   //! the two routes' sums part by up to 3.2% at the deepest layers (the routed experts' float order); a row short moves every slot 7% or more
 
@@ -937,10 +952,12 @@ def test_dflash_26b_prompt_capture(t : T?) {
             t |> success(metal_prefill_stats().prefills > pf0, "the prompt ran as a device prefill window")
             delete md
         }
+        metal_dflash_shutdown()
         metal_decode_shutdown()
         metal_prefill_shutdown()
         select_decode_override(override0)
         set_metal_mode(prior)
+        t |> equal(metal_log_leaks_if_any(), 0l, "26B capture: no leaked Metal objects after shutdown")
         t |> success(!empty(cpu) && length(cpu) == length(dev), "both routes recorded every captured layer ({length(cpu)} CPU, {length(dev)} device)")
         to_log(LOG_INFO, "26B prompt capture sums: CPU {cpu}, device {dev}, CPU a token short {cpu_short}\n")
         t |> equal(mismatch_rel("26B capture, device against CPU", dev, cpu, CAPTURE_REL), 0, "the device window's captured rows are the CPU route's")
@@ -948,6 +965,55 @@ def test_dflash_26b_prompt_capture(t : T?) {
         t |> success(mismatch_rel("26B capture CONTROL(expected-red)", cpu_short, cpu, CAPTURE_REL) > 0, "a prompt one token short reads other rows (the bar's control)")
     } else {
         t |> skip("26B capture: no das_metal in this build")
+    }
+}
+
+[test(description = "On the planar gemma-4-26B Q4_K_M trunk with its Q8_0 DFlash drafter on the CPU arm, over a chat turn, the greedy speculative walk emits the plain greedy walk's ids token for token with drafts accepted")]
+def test_dflash_26b_cpu(t : T?) {
+    if (!arm_on(t, "dflash-26b-cpu") || !family_on(t, "gemma4moe")) {
+        return
+    }
+    cpu_lossless_cell(t, G26_DRAFTER_FILE, "26B cpu", G26_TRUNK_FILE, true)
+}
+
+//! the lossless gate on the Metal device arm over a trunk the single-stream verify seat does not take (a gemma-4 shape): every
+//! block round runs as the home's joint round on the batch rail, and the CPU arm over the device's captures accepts the same count
+def private metal_joint_cell(t : T?; trunk_file, drafter, tag : string) {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        let trunk = path_join(_model_tier::models_dir(), trunk_file)
+        return if (!model_available(t, trunk) || !model_available(t, path_join(_model_tier::models_dir(), drafter)))
+        with_metal_trunk(t, trunk, tag, true) $(var m) {
+            let rounds0 = metal_dflash_joint_rounds().rounds
+            let dev = metal_lossless_walk(t, m, drafter, true, "{tag} device arm", true)
+            let rounds = metal_dflash_joint_rounds().rounds - rounds0
+            detach_dflash_drafter()
+            t |> success(rounds > 0l, "{tag}: the block rounds ran as the home's joint rounds on the batch rail ({rounds})")
+            let cpu = metal_lossless_walk(t, m, drafter, false, "{tag}, the CPU arm on the device's captures", true)
+            detach_dflash_drafter()
+            t |> equal(dev, cpu, "{tag}: both arms accept the same count")
+        }
+    } else {
+        t |> skip("{tag}: no das_metal in this build")
+    }
+}
+
+[test(description = "On the Metal device arm over the gemma-4-26B Q4_K_M trunk the greedy DFlash walk over a chat turn is lossless, its block rounds run as joint rounds on the batch rail, and the CPU arm accepts the same count")]
+def test_dflash_26b_metal(t : T?) {
+    if (!arm_on(t, "dflash-26b-metal") || !family_on(t, "gemma4moe")) {
+        return
+    }
+    metal_joint_cell(t, G26_TRUNK_FILE, G26_DRAFTER_FILE, "26B metal")
+}
+
+[test(description = "On the gemma-4-26B's resident trunk on the serving discrete home, the Q8_0 and Q4_K_M DFlash drafters' greedy walks on the device arm are the plain walk's on the same device")]
+def test_dflash_26b_discrete(t : T?) {
+    if (!arm_on(t, "dflash-26b-discrete") || !family_on(t, "gemma4moe")) {
+        return
+    }
+    static_if (typeinfo module_exists(dasllama_vulkan_dflash) || typeinfo module_exists(dasllama_cuda_dflash)) {
+        discrete_lossless_cell(t, G26_TRUNK_FILE, [G26_DRAFTER_FILE, G26_DRAFTER_K4_FILE], "26B discrete", false, true, false)
+    } else {
+        t |> skip("26B discrete: no discrete GPU home in this build")
     }
 }
 
@@ -1041,13 +1107,7 @@ def test_dflash_e2b_facade_streams(t : T?) {
         let trunk = path_join(_model_tier::models_dir(), E2B_TRUNK_FILE)
         let drafter = path_join(_model_tier::models_dir(), E2B_DRAFTER_FILE)
         return if (!model_available(t, trunk) || !model_available(t, drafter))
-        let prior = get_metal_mode()
-        let override0 = active_decode_override()
-        set_metal_mode(MetalMode.required)
-        apply_box_profile_runtime()
-        select_decode_override("metal")
-        with_dasllama_jobque() {
-            var m <- load_trunk(t, trunk, true)
+        with_metal_trunk(t, trunk, "", false) $(var m) {
             let prompt <- encode(m, PROMPT, true)
             var inscope plain_replies <- chat_replies(m)
             var s1 = make_run_state(m.config, KVDtype.f16, KVDtype.f16)
@@ -1102,12 +1162,7 @@ def test_dflash_e2b_facade_streams(t : T?) {
             joint_streams_leg(t, m)
             detach_block_drafter()
             t |> success(!block_drafter_attached(m), "the facade reports it detached")
-            delete m
         }
-        metal_decode_shutdown()
-        metal_prefill_shutdown()
-        select_decode_override(override0)
-        set_metal_mode(prior)
     } else {
         t |> skip("E2B facade streams: no das_metal in this build")
     }
@@ -1132,28 +1187,33 @@ def private discrete_trunk_served(t : T?; spec : bool; what : string; walk : blo
 }
 
 //! the lossless walk over the counting prompt on the discrete trunk, each walk's trunk served on the device
-def private discrete_lossless_walk(t : T?; m : Model; drafter, tag : string) : int64 {
-    return lossless_walk(t, m, drafter, true, tag, COUNT_PROMPT) $(spec; walk) {
+def private discrete_lossless_walk(t : T?; m : Model; drafter, tag : string; chat : bool = false) : int64 {
+    return lossless_walk(t, m, drafter, true, tag, COUNT_PROMPT, chat) $(spec; walk) {
         return <- discrete_trunk_served(t, spec, "{tag}, the {spec ? "speculative" : "plain"} walk", walk)
     }
 }
 
 //! one drafter file's legs on the discrete trunk `m`: the counting walk the plain walk's with every pass on the device
 //! selector and its walk; the walk knob off, the host's walk over the landed lists drafts the same ids; the selector knob
-//! off, the host's selector over the landed logits drafts them too; every walk's trunk served on the device
-def private discrete_drafter_legs(t : T?; m : Model; drafter, tag : string) {
+//! off, the host's selector over the landed logits drafts them too; every walk's trunk served on the device. A DFlash file
+//! (`dflash2` false) carries no selector: its pass ends at the top-k, with no walk for either side
+def private discrete_drafter_legs(t : T?; m : Model; drafter, tag : string; chat : bool = false; dflash2 : bool = true) {
     return if (!model_available(t, path_join(_model_tier::models_dir(), drafter)))
     let selector0 = dflash_device_selector()
     let record0 = dflash_record_on()
     set_dflash_device_selector(true, true)
     set_dflash_record(true)
-    let dev = discrete_lossless_walk(t, m, drafter, "{tag} device arm")
+    let dev = discrete_lossless_walk(t, m, drafter, "{tag} device arm", chat)
     var inscope dev_drafts <- dflash_recorded_drafts()
     let c = dflash_device_stats()
     to_log(LOG_INFO, "{tag}: the device arm committed {c.commits} times over {c.passes} passes\n")
     t |> success(c.passes > 0l, "{tag}: the pass ran on the device ({c.passes} passes)")
     t |> equal(c.selected, c.passes, "{tag}: every pass ended on the device's top-k")
-    t |> equal(c.walked, c.passes, "{tag}: every pass's selector walk ran on the device")
+    if (dflash2) {
+        t |> equal(c.walked, c.passes, "{tag}: every pass's selector walk ran on the device")
+    } else {
+        t |> equal(c.walked, 0l, "{tag}: a file with no selector has no walk for the device")
+    }
     let ctrl_prompt <- encode(m, COUNT_PROMPT, true)
     var s0 = make_run_state(m.config, KVDtype.f16, KVDtype.f16)
     let plain <- discrete_trunk_served(t, false, "{tag}: the control's plain walk") $() : array<int64> {
@@ -1166,7 +1226,7 @@ def private discrete_drafter_legs(t : T?; m : Model; drafter, tag : string) {
     detach_dflash_drafter()
     set_dflash_device_selector(true, false)
     set_dflash_record(true)
-    let host_walk = discrete_lossless_walk(t, m, drafter, "{tag} device arm, the host's walk")
+    let host_walk = discrete_lossless_walk(t, m, drafter, "{tag} device arm, the host's walk", chat)
     var inscope host_walk_drafts <- dflash_recorded_drafts()
     let cw = dflash_device_stats()
     t |> success(cw.selected == cw.passes && cw.walked == 0l, "{tag}: the walk knob off, the lists land for the host's walk ({cw.walked} walked on the device)")
@@ -1175,7 +1235,7 @@ def private discrete_drafter_legs(t : T?; m : Model; drafter, tag : string) {
     same_drafts(t, m, dev_drafts, host_walk_drafts, "{tag}: the device walk's drafts are the host walk's")
     set_dflash_device_selector(false, true)
     set_dflash_record(true)
-    let host_sel = discrete_lossless_walk(t, m, drafter, "{tag} device arm, the host's selector")
+    let host_sel = discrete_lossless_walk(t, m, drafter, "{tag} device arm, the host's selector", chat)
     var inscope host_sel_drafts <- dflash_recorded_drafts()
     t |> equal(dflash_device_stats().selected, 0l, "{tag}: the selector knob off, no pass ends on the device's top-k")
     detach_dflash_drafter()
@@ -1267,7 +1327,8 @@ def private discrete_embed_leg(t : T?; m : Model; drafter, tag : string) {
 }
 
 //! the lossless gate on the serving discrete home's device arm over the resident trunk `trunk_file`, a set of legs a drafter file
-def private discrete_lossless_cell(t : T?; trunk_file : string; drafters : array<string>; tag : string; stop_embed : bool = false) {
+def private discrete_lossless_cell(t : T?; trunk_file : string; drafters : array<string>; tag : string; stop_embed : bool = false; chat : bool = false;
+                                   dflash2 : bool = true) {
     let trunk = path_join(_model_tier::models_dir(), trunk_file)
     with_dasllama_jobque() {
         var m <- resident_trunk(t, trunk, DISCRETE_CTX, "") $() : Model {
@@ -1275,7 +1336,7 @@ def private discrete_lossless_cell(t : T?; trunk_file : string; drafters : array
         }
         if (m.config.n_layers > 0l) {
             for (d in drafters) {
-                discrete_drafter_legs(t, m, d, "{tag}, {base_name(d)}")
+                discrete_drafter_legs(t, m, d, "{tag}, {base_name(d)}", chat, dflash2)
                 if (stop_embed) {
                     discrete_stop_leg(t, m, d, "{tag}, {base_name(d)}, a stop id")
                     discrete_embed_leg(t, m, d, "{tag}, {base_name(d)}, an embedding call")

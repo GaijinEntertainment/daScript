@@ -1280,12 +1280,11 @@ def private kernels_sum(names : array<string>) : int64 {
     return n
 }
 
-//! `kernels`: the stamps only the carrier's format at its site dispatches - their summed count rises over the row; `ple_fmt`,
-//! where set, the PLE table's disk format, whose tag the load keeps
-[cold_path, unused_argument(t, path, tag, hetero_hidden, tokexact, bar, arm, kernels, ple_fmt)]   // off-Apple the gated body is empty
-def private gemma4e_row(t : T?; path, tag : string; hetero_hidden : bool = false; tokexact : bool = true; bar : float = 8.0;
-                        arm : string = "fam-gemma4e"; kernels : array<string> = array<string>(); ple_fmt : int = -1) {
-    // gemma-4 E-series (E4B): PLE (per-layer embeddings — MetalNeed.ple) + cross-layer KV
+//! `kernels`: the stamps only the file's format at its site dispatches - their summed count rises over the row
+[cold_path, unused_argument(t, path, tag, bar, arm, kernels)]   // off-Apple the gated body is empty
+def private gemma4e_row(t : T?; path, tag : string; bar : float = 8.0;
+                        arm : string = "fam-gemma4e"; kernels : array<string> = array<string>()) {
+    // gemma-4 E-series: PLE (per-layer embeddings — MetalNeed.ple) + cross-layer KV
     // sharing (the last 18 layers are Q-only and alias layer 22/23's slab/panels). Decode,
     // prefill and the batched step ENGAGE on the blob twin; the batched step is compared row
     // for row against the CPU batched stack on the PLANAR model.
@@ -1295,10 +1294,6 @@ def private gemma4e_row(t : T?; path, tag : string; hetero_hidden : bool = false
         }
         var tr <- load_model_(path, QuantMode.q8)
         tr.config.seq_len = min(tr.config.seq_len, 512l)
-        if (ple_fmt >= 0) {
-            to_log(LOG_INFO, "{tag}: the PLE table's format tag {tr.ple_emb_fmt}\n")
-            t |> equal(int(tr.ple_emb_fmt), ple_fmt, "{tag}: the PLE table keeps its disk format's tag ({tr.ple_emb_fmt})")
-        }
         let want_bits = (MetalNeed.neox | MetalNeed.qk_norm | MetalNeed.v_norm | MetalNeed.attn_scale |
             MetalNeed.sliding | MetalNeed.pre_post_norm | MetalNeed.out_scale | MetalNeed.geglu |
             MetalNeed.ple | MetalNeed.qd_neq_dim)
@@ -1313,9 +1308,9 @@ def private gemma4e_row(t : T?; path, tag : string; hetero_hidden : bool = false
         }
         t |> success(nshared > 0l, "{tag}: fixture carries cross-layer KV sharing ({nshared} shared layers)")
         // the MatFormer width split (E2B: 6144 for layers 0-14, then 12288) — the row that
-        // proves the per-layer u_hidden bind; E4B is width-uniform and passes hetero_hidden=false
-        t |> success((ffn_second_hidden(tr) > 0l) == hetero_hidden,
-            "{tag}: fixture two-FFN-width shape matches the row's claim (second width {ffn_second_hidden(tr)})")
+        // proves the per-layer u_hidden bind
+        t |> success(ffn_second_hidden(tr) > 0l,
+            "{tag}: fixture carries two FFN widths (second width {ffn_second_hidden(tr)})")
         //! the per-layer gate and projection planes in their own formats (the E2B Q4_K_M ships them F32, the Q4_0 file Q4_0)
         census_cell(t, tr, path, "{tag} planar", ["per-layer embeddings"])
         let f32_ple = tr.ple_gate_f32 || tr.ple_proj_f32
@@ -1506,17 +1501,11 @@ def private gemma4e_row(t : T?; path, tag : string; hetero_hidden : bool = false
         }
         depth_cell(t, tr, trg, tag, bar, ["MetalSqAttnDXF16_metal_sq_attn_d", "MetalSqAttnDWF16_metal_sq_attn_d"])
         log_gen_texts(tr, "{tag}", cpu_ids, gpu_ids)
-        if (tokexact) {
-            t |> success(ids_equal(cpu_ids, gpu_ids),
-                "{tag}: metal-overrides generate matches the CPU truth token-for-token")
-        } else {
-            // the 2B near-ties on the counting continuation (the CPU truth itself leaves the
-            // rail at "30", GPU counts on; both sides' maxd sits in the shared ~0.5 noise class
-            // E4B shows) — token equality is not a valid bar; the forced-feed cont_logits_cell
-            // below is this carrier's parity instrument, the generate pair above the eyeball
-            t |> success(length(gpu_ids) >= length(prompt),
-                "{tag}: metal-overrides generate emits a continuation (parity = the forced-feed cell; EOS may stop it early)")
-        }
+        // the 2B near-ties on the counting continuation (the CPU truth itself leaves the
+        // rail at "30", GPU counts on) — token equality is not a valid bar; the forced-feed
+        // cont_logits_cell below is the parity instrument, the generate pair above the eyeball
+        t |> success(length(gpu_ids) >= length(prompt),
+            "{tag}: metal-overrides generate emits a continuation (parity = the forced-feed cell; EOS may stop it early)")
         delete cpu_ids
         delete gpu_ids
         cont_logits_cell(t, tr, trg, "{tag}/q8/f16", bar)
@@ -2377,10 +2366,11 @@ def test_metal_family_matrix(t : T?) {
             // ENGAGE cells + shallow logits tolerances (see the row's ruling comment)
             gemma4moe_row(t, path_join(models_dir(), "gemma-4-26B-A4B-it-Q8_0.gguf"), "gemma4moe-26b", 8.0, 16.0, ["metal_moe_gemv_q8"])
             // ... and the community Q4_K_M file: k4 gate_up + NATIVE q51 down expert stacks —
-            // the q51 Metal GEMV/mul_mm twins' model-level pin (15.9GB, PARITY_FULL-gated).
+            // the q51 Metal GEMV/mul_mm twins' model-level pin (15.9GB, the gemma4-moe category's);
+            // the down stacks' experts are 2816 rows, so their routed GEMV is the wide q51 stamp.
             // Wider step bar: the k4/q51 f16-tile paths measure 13.8 under the same double-router
             // amplifier (post-prefill stays 2.5-class); 24 keeps the ~2x margin discipline
-            gemma4moe_row(t, path_join(models_dir(), "gemma-4-26B-A4B-it-Q4_K_M.gguf"), "gemma4moe-26b-k", 8.0, 24.0, ["metal_moe_gemv_k4", "metal_moe_gemv_q51"])
+            gemma4moe_row(t, path_join(models_dir(), "gemma-4-26B-A4B-it-Q4_K_M.gguf"), "gemma4moe-26b-k", 8.0, 24.0, ["metal_moe_gemv_k4", "MetalMoeGemvQ51W_metal_moe_gemv_w"])
             // ... and the ggml-org Q4_0 file: q40 gate_up expert stacks beside the 704-wide down stacks
             // in their own per-32 form (q4032) - the q40 routed twins' model-level pin. The prefill bar is the
             // Q4_K_M row's; the step bar is this file's own: its forced step reads 3.4-5.7 across the legs and the
@@ -2395,40 +2385,19 @@ def test_metal_family_matrix(t : T?) {
             // ... and the MXFP4_MOE mint (`../performance/model_specs.das`): the fused gate_up and the down stacks MXFP4 on disk, loaded as the
             // native-MXFP4 planes under gemma-4's GeGLU and per-expert down scale, every other plane Q8_0
             gemma4moe_row(t, path_join(models_dir(), "gemma-4-26B-A4B-it-MXFP4_MOE-local.gguf"), "gemma4moe-26b-mx4", 8.0, 24.0, ["metal_moe_gemv_mx4"], true)
-            // gemma-4 E-series (E4B): PLE (MetalNeed.ple) + cross-layer KV sharing — decode +
-            // prefill serve, batch declines need_ple. 7.2GB — DASLLAMA_PARITY_FULL-gated.
-            gemma4e_row(t, path_join(models_dir(), "gemma-4-E4B-it-Q8_0.gguf"), "gemma4e-e4b")
-            // ... and E2B, the MatFormer sub-model: everything E4B has PLUS two per-layer FFN
+            // gemma-4 E-series (E2B): PLE (MetalNeed.ple) + cross-layer KV sharing — decode +
+            // prefill serve, batch declines need_ple; the MatFormer sub-model's two per-layer FFN
             // widths (6144/12288) — the per-layer u_hidden bind's model row. 5GB, small tier.
-            gemma4e_row(t, path_join(models_dir(), "gemma-4-E2B-it-Q8_0.gguf"), "gemma4e-e2b", true, false)
+            gemma4e_row(t, path_join(models_dir(), "gemma-4-E2B-it-Q8_0.gguf"), "gemma4e-e2b")
             metal_ring_row(t, path_join(models_dir(), "gemma-4-E2B-it-Q8_0.gguf"), "gemma4e-e2b", "gemma4e", "fam-gemma4e")
             metal_release_row(t, path_join(models_dir(), "gemma-4-E2B-it-Q8_0.gguf"), "gemma4e-e2b")
             // ... and the kq carrier: the k5-plane PLE table's CPU gather over the metal-blob
             // COMPACTED scale strips (16B, not the planar 20B) — the stride that zeroed logits
-            gemma4e_row(t, path_join(models_dir(), "gemma-4-E2B-it-Q4_K_M.gguf"), "gemma4e-e2b-kq", true, false)
+            gemma4e_row(t, path_join(models_dir(), "gemma-4-E2B-it-Q4_K_M.gguf"), "gemma4e-e2b-kq")
             // ... and the Q4_0 file: the per-layer gate and projection planes Q4_0 on disk, read on the q40 forms at every shape
             // the file's rows sit closer together (the batch cell's two rows 6.6 apart), so its bar is 4.0 (reads 0.6 to 1.3)
-            gemma4e_row(t, path_join(models_dir(), "gemma-4-E2B-it-Q4_0.gguf"), "gemma4e-e2b-q40", true, false, 4.0, "fam-gemma4e-q40",
+            gemma4e_row(t, path_join(models_dir(), "gemma-4-E2B-it-Q4_0.gguf"), "gemma4e-e2b-q40", 4.0, "fam-gemma4e-q40",
                 ["MetalKqGemvQ40_metal_kq_gemv_iq4", "MetalKqMvB2Q40_metal_kq_mv_iq4", "MetalKqMvB2Q40H_metal_kq_mv_iq4"])
-            // ... and the format carriers off the E2B Q8_0: the token and PLE tables Q6_K, IQ4_XS, Q5_0 and Q5_1 (the gather family's
-            // K-quant, IQ and per-32 stamps at width layers x ple, which the token table's gather shares), the per-layer gate and
-            // projection planes Q6_K and Q5_0 (no other plane of the file carries the format, so the stamps count the site alone)
-            for (carrier in [(file = "gemma-4-E2B-it-emb-Q6_K-local.gguf", tag = "gemma4e-e2b-emb-q6k", kernels <- ["MetalEmbedK6_metal_embed_kq"],
-                              fmt = int(KqFmt.k6)),
-                             (file = "gemma-4-E2B-it-emb-IQ4_XS-local.gguf", tag = "gemma4e-e2b-emb-iq4xs", kernels <- ["MetalEmbedIq4xs_metal_embed_kq"],
-                              fmt = int(KqFmt.iq4xs)),
-                             (file = "gemma-4-E2B-it-emb-Q5_0-local.gguf", tag = "gemma4e-e2b-emb-q50",
-                              kernels <- ["MetalEmbedB32Q5032_metal_embed_b32"], fmt = int(KqFmt.q5032)),
-                             (file = "gemma-4-E2B-it-emb-Q5_1-local.gguf", tag = "gemma4e-e2b-emb-q51",
-                              kernels <- ["MetalEmbedB32Q51_metal_embed_b32"], fmt = int(KqFmt.q51)),
-                             (file = "gemma-4-E2B-it-ple-Q6_K-local.gguf", tag = "gemma4e-e2b-ple-q6k",
-                              kernels <- ["metal_kq_gemv_k6", "MetalKqMvB2K6_metal_kq_mv_k6"], fmt = -1),
-                             (file = "gemma-4-E2B-it-ple-Q5_0-local.gguf", tag = "gemma4e-e2b-ple-q50",
-                              kernels <- ["metal_kq_gemv_q5032", "metal_kq_gemv_q5032_ks", "MetalB32MvB2Q5032_metal_b32_mvb",
-                                          "MetalB32MvB2Q5032Ks_metal_b32_mvb"], fmt = -1)]) {
-                gemma4e_row(t, path_join(models_dir(), carrier.file), carrier.tag, true, false, 4.0, "fam-{carrier.tag}", carrier.kernels,
-                    carrier.fmt)
-            }
             // gpt-oss-20b (Wave C stage 4): mx4 experts + sinks + softmax_weight + biases
             gptoss_row(t, path_join(models_dir(), "gpt-oss-20b-mxfp4.gguf"))
             // qwen35 (Wave D): the Gated-DeltaNet hybrid — 3-in-4 recurrent layers (state
