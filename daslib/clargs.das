@@ -1231,26 +1231,31 @@ class EnvConfigMacro : AstStructureAnnotation {
         if (is_opt) {
             if (bt == Type.tBool) {
                 return qmacro_block() {
-                    dst.$f(fname) = env_config_opt_flag($v(env_name), dst.$f(fname))
+                    let loaded = env_config_opt_flag($v(env_name), dst.$f(fname))
+                    dst.$f(fname) = loaded
                 }
             }
             if (bt == Type.tInt) {
                 return qmacro_block() {
-                    dst.$f(fname) = env_config_opt_int($v(env_name), dst.$f(fname))
+                    let loaded = env_config_opt_int($v(env_name), dst.$f(fname))
+                    dst.$f(fname) = loaded
                 }
             }
             if (bt == Type.tInt64) {
                 return qmacro_block() {
-                    dst.$f(fname) = env_config_opt_int64($v(env_name), dst.$f(fname))
+                    let loaded = env_config_opt_int64($v(env_name), dst.$f(fname))
+                    dst.$f(fname) = loaded
                 }
             }
             if (bt == Type.tFloat) {
                 return qmacro_block() {
-                    dst.$f(fname) = env_config_opt_float($v(env_name), dst.$f(fname))
+                    let loaded = env_config_opt_float($v(env_name), dst.$f(fname))
+                    dst.$f(fname) = loaded
                 }
             }
             return qmacro_block() {
-                dst.$f(fname) = env_config_opt_string($v(env_name), dst.$f(fname))
+                let loaded = env_config_opt_string($v(env_name), dst.$f(fname))
+                dst.$f(fname) = loaded
             }
         }
         if (bt == Type.tBool) {

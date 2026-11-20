@@ -2,6 +2,7 @@ options gen2
 options indenting = 4
 
 require _lint_child public
+require _lint_cli
 
 require strings
 require daslib/fio
@@ -212,6 +213,35 @@ def call_named_match(x : int) : string {
         }
     }
     return res
+}
+
+[test(description = "--cop name=value sets that CodeOfPolicies field for every compile: with no_aliasing=true an assignment whose value reads its own target fails, the same value through a local and a file with options no_aliasing = false pass, without it the file passes, and an unknown field is an error", timeout = 1200)]
+def test_lint_cop_override(t : T?) {
+    let root = path_join(test_temp_dir(), "cop_override")
+    mkdir_rec(root)
+    let pair = "struct Pair \{\n    a : int\n    b : int\n\}\n\n"
+    let open_main = "[export]\ndef main \{\n    var p = Pair(a = 1, b = 2)\n"
+    let close_main = "    print(\"\{p.a\}\\n\")\n\}\n"
+    let swapped = "{open_main}    p = Pair(a = p.b, b = p.a)\n{close_main}"
+    let through_local = "{open_main}    let q = Pair(a = p.b, b = p.a)\n    p = q\n{close_main}"
+    plant(root, "aliases.das", "options gen2\n\n{pair}{swapped}")
+    plant(root, "opted_out.das", "options gen2\noptions no_aliasing = false\n\n{pair}{swapped}")
+    plant(root, "local_first.das", "options gen2\n\n{pair}{through_local}")
+    let plain = run_lint(root, [], [])
+    t |> equal(status_of(plain, root, "aliases.das"), "PASS", "no override, no check\n{plain}")
+    let out = run_lint(root, ["--cop", "no_aliasing=true"], [])
+    t |> equal(status_of(out, root, "aliases.das"), "FAIL",
+        "the struct reads p while it is built into p\n{out}")
+    t |> success(find(out, "30151") >= 0, "the failure is the aliasing error\n{out}")
+    t |> equal(status_of(out, root, "local_first.das"), "PASS", "a local breaks the alias\n{out}")
+    t |> equal(status_of(out, root, "opted_out.das"), "PASS", "the file's own option wins\n{out}")
+    var bad : string
+    var no_host : array<string>
+    var after <- [root, "--cop", "no_such_policy=true"]
+    let rc = run_and_capture(lint_cli_argv(no_host, after), bad)
+    t |> equal(rc, 1, "an unknown field stops the run\n{bad}")
+    t |> success(find(bad, "error: --cop no_such_policy=true") >= 0,
+        "an unknown field is refused\n{bad}")
 }
 
 [test(description = "STYLE044 does not treat a call whose name merely contains match as a match head")]
