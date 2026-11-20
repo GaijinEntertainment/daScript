@@ -9,7 +9,7 @@ every cell of that file. A named-cell entry opens on a `[test]` function (`` `<f
 cell must hold ``) and pins every cell that function runs. A pinned test
 cell is a cell an entry pins, in the set before the diff or in the set after it; the pinned set
 alone decides whether a cell is one. A bar is the tolerance a compare accepts; a bar on a compare
-whose two sides the cell computes is never a value maintained outside the cell, whatever model file
+whose two sides the cell computes is never a value an outside source can change, whatever model file
 it was measured on. The pinned set, one entry a line, each with what it must keep holding:
 
 - `test_run_suites.das` must hold the per-PR split (`model-free`, `gpu-kernels`, `stocked`), the folder census, the area
@@ -288,8 +288,8 @@ input, and that an outside source can change while no sha, row or tag in this re
 adds the cell to the pinned set in the same change.** Such a value is a literal or a copied
 condition restating that source, or a read of a file under `models_dir()` that the cell does not
 build and that no `../performance/model_specs.das` row pins by sha256 (an oracle dump, a truth
-cache). A new entry in an existing cell's expectation list is not a new assert, and a
-`../dasllama/` constant compared by name is not such a value.
+cache). A new entry in an existing cell's expectation list is not a new assert, and a constant this
+repository declares, compared by name, is not such a value.
 
 **A diff that adds a cell or an assert that a checked-in table names as its evidence -
 `../README.md`'s model table, a kernel list whose coverage note names a cell as each kernel's

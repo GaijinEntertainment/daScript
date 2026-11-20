@@ -13,10 +13,10 @@ file it pins whole, or changes which `run.das` suites list one, applies that che
 **A diff that adds, moves, merges, renames or removes a test file or a `[test]` applies
 `REVIEW_FILES.md` (beside this file) too - where a test lives, what the runner's file names keep.**
 
-**A diff that adds or changes an assert whose expected value restates or reads something
-maintained outside its cell, or whose expected value a checked-in table names as its evidence,
-applies `REVIEW_PINNED_GATES.md` (beside this file) too.** A bar on a compare whose two sides
-the cell computes is never such a value, whatever model file it was measured on.
+**A diff that adds or changes an assert whose expected value restates or reads something that can
+change while nothing in this repository changes, or whose expected value a checked-in table names as
+its evidence, applies `REVIEW_PINNED_GATES.md` (beside this file) too.** A bar on a compare whose
+two sides the cell computes is never such a value, whatever model file it was measured on.
 
 **A cell that calls - in its own code or through a helper - a `../dasllama/` call that sets a
 module or process global a later load, route choice or kernel dispatch reads (that property is
@@ -38,27 +38,26 @@ is a named function a cell of a `test_*_kernels.das` file calls to compare one k
 CPU oracle. A file's `CLAUDE.md` entry is every `CLAUDE.md` clause stating a fact about the file
 (named with or without its `.das` suffix), one of its cells, or one of its gate functions, wherever
 in `CLAUDE.md` the clause sits; a brace list naming several files at once
-(`test_metal_{prefill,decode}_kernels`) or a suite roster states none. A compare's two sides are
-the two computations whose mismatch reds the assert; a reference that only decides where the
-compare stops is neither side. A bound assert is a compare of two computed sides, or a measured
-quality figure against a tolerance; a floor on a capacity, a configuration or a roster size is not
-one, nor is an index guard or a route counter. A stocked artifact is a file a test reads from under
-`models_dir()` that neither this repo's build nor its tests produce - model files, mmprojs,
-front-end packs, image fixtures, oracle dumps. An area is a name in `run.das`'s `AREAS` list,
-standing for the files `run.das`'s `area_tests` returns for it. A box fact is a condition one box
-or run mode meets and another does not: the device or its memory, whether the build carries a
-module (`typeinfo module_exists` or `typeinfo builtin_module_exists`), the value of an environment
-variable or runner flag the run reads, the value a tune companion returns (a function whose body is
-the winner the `[tune]` framework picked for this box), a host toolchain, or a stocked artifact's
-presence. A change reaches a test file or a cell when it alters anything its result depends on -
-its test file, a shared helper, engine code it exercises, an in-tree fixture or corpus it reads, or
-a name it asserts on; an edit that changes only whitespace or comments, or that moves code with its
-text unchanged and adds or drops only the `require` lines the move needs, reaches none. These
-definitions bind the `REVIEW_*.md` companions
-beside this file wherever a companion does not define the term itself; a diff that changes one
-changes each companion's word-for-word copy of it too. A kernel-unit cell, a kernel class and a CPU
-oracle are as `REVIEW_KERNEL_CELLS.md` (beside this file) defines them; an encoder is as
-`REVIEW_MEDIA_CELLS.md` defines it.
+(`test_metal_{prefill,decode}_kernels`) or a suite roster states none. A compare's two sides are the
+two computations whose mismatch reds the assert; a reference that only decides where the compare
+stops is neither side. A bound assert is a compare of two computed sides, or a measured quality
+figure against a tolerance; a floor on a capacity or a configuration, or a compare of entry counts
+or roster sizes, is not one, nor is an index guard or a route counter. A stocked artifact is a file
+a test reads from under `models_dir()` that neither this repo's build nor its tests produce - model
+files, mmprojs, front-end packs, image fixtures, oracle dumps. An area is a name in `run.das`'s
+`AREAS` list, standing for the files `run.das`'s `area_tests` returns for it. A box fact is a
+condition one box or run mode meets and another does not: the device or its memory, whether the
+build carries a module (`typeinfo module_exists` or `typeinfo builtin_module_exists`), the value of
+an environment variable or runner flag the run reads, the value a tune companion returns (a function
+whose body is the winner the `[tune]` framework picked for this box), a host toolchain, or a stocked
+artifact's presence. A change reaches a test file or a cell when it alters anything its result
+depends on - its test file, a shared helper, engine code it exercises, an in-tree fixture or corpus
+it reads, or a name it asserts on; an edit that changes only whitespace or comments, or that moves
+code with its text unchanged and adds or drops only the `require` lines the move needs, reaches
+none. These definitions bind the `REVIEW_*.md` companions beside this file wherever a companion does
+not define the term itself; a diff that changes one changes each companion's word-for-word copy of
+it too. A kernel-unit cell, a kernel class and a CPU oracle are as `REVIEW_KERNEL_CELLS.md` (beside
+this file) defines them; an encoder is as `REVIEW_MEDIA_CELLS.md` defines it.
 
 **A test file in this folder whose cells cannot hold under `DASLLAMA_CPU_PREFILL=1` says so in its
 header (its top comment block) and joins the list of files that sit in no suite (`exempt` in
@@ -85,10 +84,11 @@ model-gated suite's cells skip, and a run of skips is not the coverage the suite
 of it true of the file as added.**
 
 **A diff that adds a cell or a gate function to a file, or a function to a `_*.das` fixture module
-in this folder, whose `CLAUDE.md` entry names every one of that kind, states how many there are, or
-states a fact of every one of them ("every", "each", "all"), adds the new one to each such list,
-corrects each such count, and corrects each such clause the new one makes false, in the same
-change, every clause it adds or corrects true of the file as the diff leaves it.**
+in this folder, whose `CLAUDE.md` entry names every one of that kind the file held before the diff,
+whether or not the entry claims to, states how many there are, or states a fact of every one of them
+("every", "each", "all"), adds the new one to each such list, corrects each such count, and corrects
+each such clause the new one makes false, in the same change, every clause it adds or corrects true
+of the file as the diff leaves it.**
 
 **A diff that removes, moves or renames a cell or a gate function, or changes a cell's suite, its
 skip condition, or any fact a `CLAUDE.md` entry states about it - the class it dispatches, the
@@ -238,11 +238,13 @@ carrier above `MODEL_TIER_CEILING_BYTES` (`../dasllama/dasllama_gguf.das`) is a 
 their parity on small models, through pins; a cell whose two sides both run on the device
 streams nothing beside the device's bytes, and the tier does not bind it.
 
-**A cell never changes an environment-read knob - one the running config reads once, at context
-init - for its own process once that process has read it; it passes the value to a child it spawns,
-either as the spawn's environment argument or, for a spawn that inherits the parent's environment,
-by setting the knob right before the spawn and restoring the previous value right after (the empty
-string where it was unset).** A set after that process starts is invisible to a config already read.
+**Only a cell whose claim is about a fresh read of an environment-read knob - one the running config
+reads once, at context init - (a config it builds itself with `env_config`) sets it in its own
+process, reads that fresh config and restores the previous value right after. Any other cell that
+needs another value passes it to a child it spawns, either as the spawn's environment argument or,
+for a spawn that inherits the parent's environment, by setting the knob right before the spawn and
+restoring the previous value right after. Restoring a knob that was unset sets it to the empty
+string.** A set after that process starts is invisible to a config already read.
 
 **A cell that picks its bar, its route or its expected value by an environment-read knob its own
 process has already read - a skip gate on the knob is no such pick - names that knob's value in

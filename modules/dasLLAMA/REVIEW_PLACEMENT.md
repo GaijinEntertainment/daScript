@@ -14,13 +14,13 @@ that file to, or its role row or file bullet in `ARCHITECTURE_GPU.md#gpu-backend
 lines own the per-file list; a rule naming what KIND of code lands in which file is the
 checklist's own.
 
-**A top-level declaration under `dasllama/` - a def, a class (a kernel class among them), a
-struct, an enum, a typedef, a module global (`let` or `var`, private or not), a named constant or
-a `require` - lands in the file whose charter line names its concern, or the diff adds the concern
-to the charter line of the file it lands in. A declaration's concern is what it computes or holds,
-never the concern of the code that calls it; a charter line naming code several files share claims
-a declaration of that kind with one caller too. Another file's charter naming the same kind of code
-does not license the landing.**
+**A top-level declaration under `dasllama/` - a def, a class (a kernel class among them), a struct,
+an enum, a typedef, a module global (`let` or `var`, private or not), a named constant or a
+`require` - lands in the file whose charter line names its concern, or the diff adds the concern to
+its file's charter line. A declaration's concern is what it computes or holds, never the concern of
+the code that calls it or reads what it produces; a charter line naming code several files share
+claims a declaration of that kind with one caller too. Another file's charter naming the same kind
+of code does not license the landing.**
 
 **A landing in a file whose charter row carries a `must not hold` cell - the concerns that file
 never holds - naming the landed concern is a defect - land it where its concern is chartered, or
