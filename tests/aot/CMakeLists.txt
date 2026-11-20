@@ -400,6 +400,10 @@ SET(AOT_SUBSET_DASLIB_MODULE_FILES
     daslib/fio.das
     daslib/command_line.das
 )
+# A fast-math build's subset also runs tests/math, which needs these two daslib modules.
+if(DAS_FAST_MATH)
+    list(APPEND AOT_SUBSET_DASLIB_MODULE_FILES daslib/math_boost.das daslib/color_mapping.das)
+endif()
 
 # Language test module files (libraries required by tests)
 SET(AOT_LANGUAGE_MODULE_FILES
@@ -616,7 +620,8 @@ DAS_AOT_PCH(test_aot)
 # test binary that measures correctness, not performance.
 
 ### AOT subset target — the per-PR CI gate
-# tests/language only (+ dastest/testing.das and the language fixture modules).
+# tests/language only (+ dastest/testing.das and the language fixture modules; a fast-math
+# build adds tests/math).
 # Part of the default build on every lane, Debug included: a fast compile+link
 # gate (~230 TUs, no LTO). The full suite builds and runs on the nightly cron.
 add_executable(test_aot_subset ${DAS_DASCRIPT_MAIN_SRC}
@@ -635,6 +640,10 @@ target_include_directories(test_aot_subset PRIVATE ${TEST_AOT_INCLUDE_DIRS})
 target_compile_definitions(test_aot_subset PRIVATE ${TEST_AOT_COMPILE_DEFS})
 SETUP_CPP11(test_aot_subset)
 DAS_AOT_PCH(test_aot_subset)
+if(DAS_FAST_MATH)
+    target_sources(test_aot_subset PRIVATE ${MATH_AOT_GENERATED_SRC} ${MATH_MODULES_AOT_GENERATED_SRC})
+    add_dependencies(test_aot_subset test_aot_math test_aot_math_modules)
+endif()
 
 ### AOT bench host — the nightly benchmark stand's aot lane
 # Every benchmark under benchmarks/ (its `_*` helper modules as libs) over the full daslib closure

@@ -16,6 +16,15 @@
 # budget set in nightly.yml), the unoptimized Windows Debug cell and the linux
 # sanitizer cells (ci/ci_matrix.py) - and ride a hosted runner that swings
 # another ~1.4x night to night.
+
+# What a fast-math build sweeps: under JIT the folders whose tests have a HOST_FAST_MATH arm,
+# under AOT the two of them test_aot_subset carries.
+set(_DAS_FAST_MATH_JIT_DIRS)
+foreach(_dir flatten jit jit_tests language math spirv type_lattice)
+    list(APPEND _DAS_FAST_MATH_JIT_DIRS ${PROJECT_SOURCE_DIR}/tests/${_dir})
+endforeach()
+set(_DAS_FAST_MATH_AOT_DIRS ${PROJECT_SOURCE_DIR}/tests/language ${PROJECT_SOURCE_DIR}/tests/math)
+
 if(NOT DAS_TOOLS_DISABLED)
     set(DAS_TEST_TIMEOUT 1800 CACHE STRING
         "dastest global suite watchdog, seconds, for run_tests_interpreter")
@@ -60,12 +69,16 @@ if(NOT DAS_TOOLS_DISABLED)
         endif()
 
         # A sanitizer lane sweeps tests/language only: the whole suite under asan/tsan/ubsan
-        # costs ~10 minutes more without proportionate coverage.
-        set(_DAS_JIT_TEST_DIR ${_DAS_TEST_DIR})
+        # costs ~10 minutes more without proportionate coverage. A fast-math build sweeps its own
+        # folder list.
+        set(_DAS_JIT_TEST_DIRS ${_DAS_TEST_DIR})
         if(DAS_USE_SANITIZER AND NOT DAS_USE_SANITIZER STREQUAL "none")
-            set(_DAS_JIT_TEST_DIR ${_DAS_TEST_DIR}/language)
+            set(_DAS_JIT_TEST_DIRS ${_DAS_TEST_DIR}/language)
+        elseif(DAS_FAST_MATH)
+            set(_DAS_JIT_TEST_DIRS ${_DAS_FAST_MATH_JIT_DIRS})
         endif()
-        set(_DAS_JIT_COMMON --color --failures-only --test ${_DAS_JIT_TEST_DIR} --cache-dir ${DAS_TEST_CACHE_DIR})
+        list(TRANSFORM _DAS_JIT_TEST_DIRS PREPEND "--test;" OUTPUT_VARIABLE _DAS_JIT_TEST_ARGS)
+        set(_DAS_JIT_COMMON --color --failures-only ${_DAS_JIT_TEST_ARGS} --cache-dir ${DAS_TEST_CACHE_DIR})
 
         set(DAS_TEST_JIT_TIMEOUT 1800 CACHE STRING
             "dastest global suite watchdog, seconds, for run_tests_jit")
@@ -73,7 +86,8 @@ if(NOT DAS_TOOLS_DISABLED)
             "dastest global suite watchdog, seconds, for run_tests_jit_isolated")
         # One ninja edge per 16 test files, so ninja -j is the only parallelism. jit.exe fills the
         # dll cache first; it fails on files needing modules it lacks, so its exit code is ignored.
-        file(GLOB_RECURSE _jit_files CONFIGURE_DEPENDS ${_DAS_JIT_TEST_DIR}/*.das)
+        list(TRANSFORM _DAS_JIT_TEST_DIRS APPEND "/*.das" OUTPUT_VARIABLE _jit_globs)
+        file(GLOB_RECURSE _jit_files CONFIGURE_DEPENDS ${_jit_globs})
         list(FILTER _jit_files EXCLUDE REGEX "/_")
         set(_jit_chunks)
         set(_aot_chunks)
@@ -97,7 +111,7 @@ if(NOT DAS_TOOLS_DISABLED)
             if(TARGET test_llvm_aot AND _aot)
                 list(TRANSFORM _aot PREPEND "--test-only;" OUTPUT_VARIABLE _only)
                 add_custom_command(OUTPUT llvm_aot_chunk_${_n}
-                    COMMAND ${DAS_SANITIZER_ENV} $<TARGET_FILE:test_llvm_aot> -use-aot ${_DAS_DASTEST} -- --use-aot --color --failures-only --timeout 1800 ${_only} --test ${_DAS_JIT_TEST_DIR}
+                    COMMAND ${DAS_SANITIZER_ENV} $<TARGET_FILE:test_llvm_aot> -use-aot ${_DAS_DASTEST} -- --use-aot --color --failures-only --timeout 1800 ${_only} ${_DAS_JIT_TEST_ARGS}
                     DEPENDS test_llvm_aot
                     WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
                 set_source_files_properties(llvm_aot_chunk_${_n} PROPERTIES SYMBOLIC TRUE)
@@ -138,15 +152,20 @@ if(TARGET test_aot)
     )
 endif()
 
-# Fast AOT run over tests/language only, against the subset binary that per-PR
-# CI already builds as part of ALL. The build lane runs it; the shared result
+# Fast AOT run over tests/language (and tests/math in a fast-math build), against the subset
+# binary that per-PR CI already builds as part of ALL. The build lane runs it; the shared result
 # cache serves it until the subset binary changes.
 if(TARGET test_aot_subset)
+    set(_aot_subset_test_dirs ${PROJECT_SOURCE_DIR}/tests/language)
+    if(DAS_FAST_MATH)
+        set(_aot_subset_test_dirs ${_DAS_FAST_MATH_AOT_DIRS})
+    endif()
+    list(TRANSFORM _aot_subset_test_dirs PREPEND "--test;" OUTPUT_VARIABLE _aot_subset_test_args)
     add_das_target(run_tests_aot_subset
-        COMMAND ${DAS_SANITIZER_ENV} $<TARGET_FILE:test_aot_subset> -use-aot ${PROJECT_SOURCE_DIR}/dastest/dastest.das -- --use-aot --color --failures-only --timeout ${DAS_TEST_TIMEOUT_AOT} --test ${PROJECT_SOURCE_DIR}/tests/language --cache-dir ${DAS_TEST_CACHE_DIR}
+        COMMAND ${DAS_SANITIZER_ENV} $<TARGET_FILE:test_aot_subset> -use-aot ${PROJECT_SOURCE_DIR}/dastest/dastest.das -- --use-aot --color --failures-only --timeout ${DAS_TEST_TIMEOUT_AOT} ${_aot_subset_test_args} --cache-dir ${DAS_TEST_CACHE_DIR}
         DEPENDS test_aot_subset dastest_cache_guard
         WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
-        COMMENT "Running tests (AOT, tests/language subset)"
+        COMMENT "Running tests (AOT subset)"
     )
 endif()
 
