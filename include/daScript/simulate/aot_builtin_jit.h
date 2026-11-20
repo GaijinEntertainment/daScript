@@ -24,4 +24,5 @@ namespace das {
     bool das_instrument_jit ( void * pfun, const Func func, const LineInfo & info, Context & context );
     void * das_instrument_line_info ( const LineInfo & info, Context * context, LineInfoArg * at );
     void * das_get_builtin_function_address ( Function * fn, Context * context, LineInfoArg * at );
+    const char * das_get_builtin_function_link_name ( Function * fn, Context * context, LineInfoArg * at );
 }

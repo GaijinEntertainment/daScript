@@ -31,7 +31,7 @@ struct public JitCliOptions {
     obj_cache : Option<int>
 
     @clarg_name = "jit-lto"
-    @clarg_doc = "JIT (-exe with --jit-split-modules, host target only): the partitions emit bitcode and the link runs LTO, so the split build keeps the one-unit form's cross-module inlining; the target cpu and features ride each function, so the LTO backend emits what the target machine would. The link is regular LTO (one merged module, its optimization serial) at level 3, the codegen level every exe pins: lld-link takes /opt:lldlto=3, a POSIX build links through clang++ with -flto -O3 (a GNU driver handles no bitcode, and a clang older than the LLVM daslang bundles reads none of its bitcode; --jit-path-to-linker names another clang). A build flag only, no script-level pin: an exe's form is its build command's"
+    @clarg_doc = "JIT (host-target -exe): link with LTO. Such an exe builds split (one partition a das module) with bitcode partitions, and the link runs regular LTO at level 3 so code inlines across das modules and, with --jit-static over bitcode runtime archives, into the runtime: lld-link takes /opt:lldlto=3, a POSIX build links through clang++-<bundled LLVM major> (or a clang++ at least that new) with -flto -O3, and without such a driver the exe links without LTO. --jit-split-modules=0 builds one unit, which links without LTO"
     lto : Option<bool>
 
     @clarg_short = "g"

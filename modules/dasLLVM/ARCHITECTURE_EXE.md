@@ -65,12 +65,12 @@ announces of each form.
 
 ## 4. The split exe's LTO link {#split-exe-lto}
 
-Under `--jit-lto` (`resolve_split_options`: a split exe for the host only, no `--jit-target` - no
-cross-target arm has run the link; a build flag with no script pin, like the exe's split; `clang++`
-as the driver on a POSIX box unless `--jit-path-to-linker` names another, since a GNU driver handles
-no bitcode and a driver older than the bundled LLVM reads none of its bitcode - no POSIX driver is
-bundled, so the exe tests gate their LTO cell on the PATH driver's major through `lto_driver_missing`;
-a mingw host's default driver is already a clang) the partitions leave as bitcode
+With `--jit-lto` (`resolve_split_options`: a host-target exe, no `--jit-target` - no cross-target arm
+has run the link; `--jit-split-modules=0` turns it off; on a POSIX box the driver
+is `clang++-<bundled LLVM major>` or a `clang++` at least that new unless `--jit-path-to-linker`
+names another, since a GNU driver handles no bitcode and an older driver reads none of it - with no
+such driver on PATH the exe links without LTO, and the exe tests gate their LTO cell through
+`lto_driver_missing`; a mingw host's default driver is already a clang) the partitions leave as bitcode
 after the pool's optimize pass and no object emission (the pool skips a job with no object path),
 the module triple the one the target machine carries (`host_jit_triple` where the host's toolchain
 differs from LLVM's default), every function stamped with the cpu and features the target machine

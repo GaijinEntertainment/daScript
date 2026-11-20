@@ -50,10 +50,10 @@ entirely: the key fold and probe cost lands in **irgen**, the `obj cache - K/N p
 cached` line prints unconditionally beside the split announce, and per-partition
 `obj cache hit` lines print under the log option.
 
-An `-exe` takes the same driver when its build passes `--jit-split-modules` (its default stays
-one unit): the entry rides a partition of its own (`exe_main`), the partitions link once with no
-obj cache, and the objects and the response file go with the link. Under `--jit-lto` the
-partitions leave as bitcode, every function stamped with the cpu and features the target machine
+A host-target `-exe` with `--jit-lto` takes the same driver, for its LTO link (without it, or with
+`--jit-split-modules=0`, it keeps one unit): the entry rides a partition of its own (`exe_main`), the
+partitions link once with no obj cache, and the objects and the response file go with the link.
+Under LTO the partitions leave as bitcode, every function stamped with the cpu and features the target machine
 would carry (`default_target_cpu_features` - lld's LTO backend builds its subtarget from the
 module, not from a machine), and the link runs LTO (`lto_linker_args`: `/opt:lldlto=3` on
 lld-link, `-flto` on a POSIX driver, where the plan links through `clang++` unless
@@ -111,8 +111,8 @@ or age check, and no saver writes that file; `ARCHITECTURE_CPU_CLASSES.md#tune-f
 through a failing gate), `--tune` (forced re-mint), `--tune-only` / `DAS_TUNE_ONLY` (re-mints
 only the named families; the policy guard arms it itself for a profile's residue),
 `DAS_TUNE_CONTROL` (a supervisor's stop request - tuners abort between families), `DAS_JIT_MANIFEST` (a run records every cached DLL it loads or writes in that directory; `ARCHITECTURE_CODEGEN_IDENTITY.md#jit-cache-sweep`), `--jit-obj-cache=0` (forces every split
-partition to re-emit, bypassing the obj cache), `--jit-lto` (a split `-exe`'s partitions emit
-bitcode and its link runs LTO), `DAS_JIT_PROBE_LTO` (the DLL path's twin: split partitions emit
+partition to re-emit, bypassing the obj cache), `--jit-lto` (a host-target `-exe` links
+with LTO; off by default), `DAS_JIT_PROBE_LTO` (the DLL path's twin: split partitions emit
 bitcode and the link runs lld LTO - a dev probe artifact), `DAS_JIT_X64_FORCE_FEATURES` /
 `DAS_JIT_ARM64_FORCE_FEATURES` (force CPU features past detection - emission, the cache keys,
 and `cpu_supports`-based tune eligibility all follow), `--jit-target=<triple>` (a cross compile; under a triple a CPU class serves - wasm64, or any triple built under a baseline - the tune framework builds for that class: the sidecar beside the app does not stamp, a tune or test build keeps the rows the class can run, and a release ships no `llvm` module; `ARCHITECTURE_CPU_CLASSES.md#cross-class`), `DAS_JIT_BASELINE` (build for a CPU class

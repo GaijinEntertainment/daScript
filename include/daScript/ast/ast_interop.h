@@ -25,6 +25,8 @@ namespace das
         }
     };
 
+    struct JitTarget { void * address; const char * linkName; };
+
     template  <typename FuncT, typename SimNodeT, typename FuncArgT>
     class ExternalFn : public ExternalFnBase {
         static_assert ( is_base_of<SimNode_CallBase, SimNodeT>::value, "only call-based nodes allowed" );
@@ -33,12 +35,14 @@ namespace das
         void * builtinAddress = nullptr;
         // out-of-line on purpose: the construction body is per-signature COMDAT,
         // so each bind site costs a call, not an inlined copy of constructExternal
-        ___noinline ExternalFn(FuncT fnp, void * builtinAddr, const char * name, const ModuleLibrary & lib, const char * cppName = nullptr)
-        : ExternalFnBase(name,cppName), fn(fnp), builtinAddress(builtinAddr) {
+        ___noinline ExternalFn(FuncT fnp, JitTarget jit, const char * name, const ModuleLibrary & lib, const char * cppName = nullptr)
+        : ExternalFnBase(name,cppName), fn(fnp), builtinAddress(jit.address) {
+            builtinLinkName = jit.linkName;
             constructExternal(makeFuncArgs<FuncArgT>::make(lib));
         }
-        ___noinline ExternalFn(FuncT fnp, void * builtinAddr, const char * name, const char * cppName = nullptr)
-        : ExternalFnBase(name,cppName), fn(fnp), builtinAddress(builtinAddr) {
+        ___noinline ExternalFn(FuncT fnp, JitTarget jit, const char * name, const char * cppName = nullptr)
+        : ExternalFnBase(name,cppName), fn(fnp), builtinAddress(jit.address) {
+            builtinLinkName = jit.linkName;
         }
         virtual SimNode * makeSimNode ( Context & context, const vector<ExpressionPtr> & ) override {
             const char * fnName = context.code->allocateName(this->name);
@@ -49,11 +53,12 @@ namespace das
         }
     };
 
-    // the JIT-callable address for a bind: the raw fn for plain-ABI binds, an
+    // the JIT-callable address for a bind and its symbol: the raw fn for plain-ABI binds, an
     // ImplWrapCall wrapper (per-function code) only for cmres and vector-ABI binds
     template <typename SimNodeType, typename FuncT, FuncT fn>
-    __forceinline void * makeJitAddress () {
-        return ImplWrapCall<SimNodeType::IS_CMRES, NeedVectorWrap<FuncT>::value, FuncT, fn>::get_builtin_address();
+    __forceinline JitTarget makeJitTarget () {
+        using W = ImplWrapCall<SimNodeType::IS_CMRES, NeedVectorWrap<FuncT>::value, FuncT, fn>;
+        return { W::get_builtin_address(), W::get_builtin_link_name() };
     }
 
     template  <typename FuncT, FuncT fn, typename SimNodeT, typename FuncArgT>
@@ -61,8 +66,9 @@ namespace das
         static_assert ( is_base_of<SimNode_CallBase, SimNodeT>::value, "only call-based nodes allowed" );
     public:
         void * builtinAddress = nullptr;
-        ___noinline ExternalFnInline(void * builtinAddr, const char * name, const ModuleLibrary & lib, const char * cppName = nullptr)
-        : ExternalFnBase(name,cppName), builtinAddress(builtinAddr) {
+        ___noinline ExternalFnInline(JitTarget jit, const char * name, const ModuleLibrary & lib, const char * cppName = nullptr)
+        : ExternalFnBase(name,cppName), builtinAddress(jit.address) {
+            builtinLinkName = jit.linkName;
             this->nttp = true;
             constructExternal(makeFuncArgs<FuncArgT>::make(lib));
         }
@@ -246,7 +252,7 @@ namespace das
     inline auto addExternProperty ( Module & mod, const ModuleLibrary & lib, const char * name, const char * cppName = nullptr,
                                     bool explicitConst=false, SideEffects sideEffects = SideEffects::none ) {
         using SimNodeType = SimNodeT<FuncT>;
-        auto fnX = new ExternalFn<FuncT, SimNodeType, FuncT>(fn, makeJitAddress<SimNodeType,FuncT,fn>(), name, lib, cppName);
+        auto fnX = new ExternalFn<FuncT, SimNodeType, FuncT>(fn, makeJitTarget<SimNodeType,FuncT,fn>(), name, lib, cppName);
         defaultTempFn tempFn;
         tempFn(fnX);
         fnX->arguments[0]->type->explicitConst = explicitConst;
@@ -264,7 +270,7 @@ namespace das
     inline auto addExternPropertyForType ( Module & mod, const ModuleLibrary & lib, const char * name, const char * cppName = nullptr,
                                     bool explicitConst=false, SideEffects sideEffects = SideEffects::none) {
         using SimNodeType = SimNodeT<FuncT>;
-        auto fnX = new ExternalFn<FuncT, SimNodeType, FuncT>(fn, makeJitAddress<SimNodeType,FuncT,fn>(), name, cppName);
+        auto fnX = new ExternalFn<FuncT, SimNodeType, FuncT>(fn, makeJitTarget<SimNodeType,FuncT,fn>(), name, cppName);
         vector<TypeDeclPtr> types(2);
         types[0] = makeType<RetType>(lib);
         types[1] = makeType<ArgType>(lib);
@@ -289,7 +295,7 @@ namespace das
     inline auto addExternInline ( Module & mod, const ModuleLibrary & lib, const char * name, SideEffects seFlags,
                                   const char * cppName = nullptr, QQ && tempFn = QQ() ) {
         using SimNodeType = SimNode_ExtFuncCallInline<FuncT, fn>;
-        auto fnX = new ExternalFnInline<FuncT, fn, SimNodeType, FuncT>(makeJitAddress<SimNodeType,FuncT,fn>(), name, lib, cppName);
+        auto fnX = new ExternalFnInline<FuncT, fn, SimNodeType, FuncT>(makeJitTarget<SimNodeType,FuncT,fn>(), name, lib, cppName);
         tempFn(fnX);
         addExternFunc(mod, fnX, SimNodeType::IS_CMRES, seFlags);
         return fnX;
@@ -300,7 +306,7 @@ namespace das
     inline auto addExternInlineEx ( Module & mod, const ModuleLibrary & lib, const char * name, SideEffects seFlags,
                                     const char * cppName = nullptr, QQ && tempFn = QQ() ) {
         using SimNodeType = SimNode_ExtFuncCallInline<FuncT, fn>;
-        auto fnX = new ExternalFnInline<FuncT, fn, SimNodeType, FuncArgT>(makeJitAddress<SimNodeType,FuncT,fn>(), name, lib, cppName);
+        auto fnX = new ExternalFnInline<FuncT, fn, SimNodeType, FuncArgT>(makeJitTarget<SimNodeType,FuncT,fn>(), name, lib, cppName);
         tempFn(fnX);
         addExternFunc(mod, fnX, SimNodeType::IS_CMRES, seFlags);
         return fnX;
@@ -310,7 +316,7 @@ namespace das
     inline auto addExtern ( Module & mod, const ModuleLibrary & lib, const char * name, SideEffects seFlags,
                                   const char * cppName = nullptr, QQ && tempFn = QQ() ) {
         using SimNodeType = SimNodeT<FuncT>;
-        auto fnX = new ExternalFn<FuncT, SimNodeType, FuncT>(fn, makeJitAddress<SimNodeType,FuncT,fn>(), name, lib, cppName);
+        auto fnX = new ExternalFn<FuncT, SimNodeType, FuncT>(fn, makeJitTarget<SimNodeType,FuncT,fn>(), name, lib, cppName);
         tempFn(fnX);
 #if VERIFY_JIT_ARGUMENTS
         VerifyFn<FuncT, fn>::verify(fnX);
@@ -323,7 +329,7 @@ namespace das
     inline auto makeExtern ( const ModuleLibrary & lib, const char * name,
                                 const char * cppName = nullptr, QQ && tempFn = QQ() ) {
         using SimNodeType = SimNodeT<FuncT>;
-        auto fnX = new ExternalFn<FuncT, SimNodeType, FuncT>(fn, makeJitAddress<SimNodeType,FuncT,fn>(), name, lib, cppName);
+        auto fnX = new ExternalFn<FuncT, SimNodeType, FuncT>(fn, makeJitTarget<SimNodeType,FuncT,fn>(), name, lib, cppName);
         tempFn(fnX);
 
         if (!SimNodeType::IS_CMRES) {
@@ -345,7 +351,7 @@ namespace das
     inline auto addExternEx ( Module & mod, const ModuleLibrary & lib, const char * name, SideEffects seFlags,
                                   const char * cppName = nullptr, QQ && tempFn = QQ() ) {
         using SimNodeType = SimNodeT<FuncT>;
-        auto fnX = new ExternalFn<FuncT, SimNodeType, FuncArgT>(fn, makeJitAddress<SimNodeType,FuncT,fn>(), name, lib, cppName);
+        auto fnX = new ExternalFn<FuncT, SimNodeType, FuncArgT>(fn, makeJitTarget<SimNodeType,FuncT,fn>(), name, lib, cppName);
         tempFn(fnX);
 #if VERIFY_JIT_ARGUMENTS
         VerifyFn<FuncT, fn>::verify(fnX);
@@ -359,7 +365,7 @@ namespace das
         const char * cppName = nullptr, QQ && tempFn = QQ() )
     {
         using SimNodeType = SimNodeT<FuncT>;
-        auto fnX = new ExternalFn<FuncT, SimNodeType, FuncT>(fn, makeJitAddress<SimNodeType,FuncT,fn>(), name, lib, cppName);
+        auto fnX = new ExternalFn<FuncT, SimNodeType, FuncT>(fn, makeJitTarget<SimNodeType,FuncT,fn>(), name, lib, cppName);
         tempFn(fnX);
         fnX->result->temporary = true;
 #if VERIFY_JIT_ARGUMENTS
