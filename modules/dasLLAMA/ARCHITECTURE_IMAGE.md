@@ -179,7 +179,10 @@ starts, so the carrier is still whole and its caller keeps serving it. A section
 streams sizes as empty in the carrier, so its mint hands the sizing pass the section's bytes up to
 a whole page (`section_bytes`), counted by the same per-tensor decision its writer takes
 (`wjob_emits` for whisper, `gg_plane_total` for GigaAM, `vulkan_mint_measure` for a GPU lane's
-twin). The walk ends on an assert that the reserve exceeds what it wrote by no more than the
+twin). A plane the walk rewrites on its way out sizes at the form it is written in: a blob build's
+K-quant scale planes take their device form as each one's turn comes, so the streaming mint takes
+what each pending plane sheds off the reserve (`blob_scale_shed_bytes`, `metal_kq_scale_form_bytes`).
+The walk ends on an assert that the reserve exceeds what it wrote by no more than the
 section table's slack: a bound in place of a count is a bug the same as an undercount, because
 the memory chunk is allocated at the reserve.
 

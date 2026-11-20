@@ -334,6 +334,11 @@ def private load_resident_by(path : string; regions, strict_ctx, host_layers : i
 def load_resident(path : string; regions : int64 = 0l; strict_ctx : int64 = 0l; host_layers : int64 = 0l) : Model =>
     <- load_resident_by(path, regions, strict_ctx, host_layers, ResidentLoad.served)
 
+//! the resident load through the image rail, as a load with the rail on takes it: the file's device lane mapped - minted
+//! beside the file where none stands - and, under the home's trim, no host copy of the weight planes
+def load_resident_lane(path : string; regions : int64 = 0l) : Model =>
+    <- load_resident_by(path, regions, 0l, 0l, ResidentLoad.image)
+
 //! the resident load of a cell that runs the CPU chain on the same model, or reads its planes: the weight planes stay on the
 //! host beside the device's copy (`image`: through the image rail instead, as the run's levers leave the lane)
 def load_resident_host(path : string; regions : int64 = 0l; strict_ctx : int64 = 0l; host_layers : int64 = 0l; image : bool = false) : Model =>
@@ -354,9 +359,9 @@ def load_resident_at(path : string; kv : KVDtype; regions : int64 = 0l; strict_c
 
 //! the served witness: no call of the armed driver passed to the CPU rails since the model armed
 def served_every_call(t : T?) {
-    var passes <- gpu_cpu_passes_()
-    t |> equal(length(passes), 0, "the device served every call: {passes}")
-    delete passes
+    held_on(t) $(var h) {
+        h |> held_served()
+    }
 }
 
 //! the CUDA driver's served-position count across the process's models (`cud_rdec_served_total`, which a model drop inside the
@@ -382,8 +387,23 @@ def cuda_windows_run() : int64 {
 //! compare's device rows): asserted under `what`; off the home (`c0` -1) nothing is asserted
 def cuda_served_since(t : T?; c0, n : int64; what : string) {
     return if (c0 < 0l)
+    cuda_served_within(t, cuda_positions_served() - c0, n, what)
+}
+
+//! what a CUDA served-count check says under `what`: the `served` positions against the `n` asked
+def private cuda_served_text(what : string; served, n : int64) : string
+    => "{what}: the CUDA driver served {served} positions (at least {n} asked) - the device rows ran on the CUDA driver"
+
+//! a stored count of positions the CUDA driver served is at least the `n` asked: asserted under `what`
+def cuda_served_within(t : T?; served, n : int64; what : string) {
+    t |> success(served >= n, cuda_served_text(what, served, n))
+}
+
+//! `cuda_served_since` read now into `h`: off the home (`c0` -1) nothing is held
+def held_cuda_served(var h : Held; c0, n : int64; what : string) {
+    return if (c0 < 0l)
     let served = cuda_positions_served() - c0
-    t |> success(served >= n, "{what}: the CUDA driver served {served} positions (at least {n} asked) - the device rows ran on the CUDA driver")
+    h |> held_fact(served >= n, cuda_served_text(what, served, n))
 }
 
 //! the counter's control on the CUDA home: no position served since `c0`; off the home nothing is asserted
@@ -419,9 +439,9 @@ def pass_total : int64 => pass_count("")
 //! the driver passed calls to the CPU rails for `reason` alone since the model armed - `count` of them where past 0 - asserted
 //! under `what` with every pass logged
 def only_pass(t : T?; reason, what : string; count : int64 = 0l) {
-    var passes <- gpu_cpu_passes_()
-    t |> success(length(passes) == 1 && passes[0].reason == reason && (count <= 0l || passes[0].count == count), "{what}: {passes}")
-    delete passes
+    held_on(t) $(var h) {
+        h |> held_only_pass(reason, what, count)
+    }
 }
 
 //! the pick a device landed against the CPU logits of the same row, tie-aware: the pick is the CPU argmax, or its CPU logit sits
@@ -471,6 +491,15 @@ def with_batch_rows(tr : Model; var sess : array<Session?>; body : block<(var ws
 //! the batched driver's own step count (`steps_of`) up by every step
 def batched_logits_rows(t : T?; tr : Model; prompts, feeds : array<array<int64>>; kv : KVDtype; steps : int64;
                         steps_of : block<() : int64>) : array<array<float>> {
+    var inscope h : Held
+    var rows <- batched_logits_rows(h, tr, prompts, feeds, kv, steps, steps_of)
+    held_within(t, h)
+    return <- rows
+}
+
+//! `batched_logits_rows` with its step count held for the asserts after a model's block
+def batched_logits_rows(var h : Held; tr : Model; prompts, feeds : array<array<int64>>; kv : KVDtype; steps : int64;
+                        steps_of : block<() : int64>) : array<array<float>> {
     let n = length(prompts)
     var sessions : array<Session>
     sessions |> reserve(n)
@@ -492,7 +521,7 @@ def batched_logits_rows(t : T?; tr : Model; prompts, feeds : array<array<int64>>
             }
         }
     }
-    t |> equal(invoke(steps_of) - steps0, steps, "every batched step went through the batched driver")
+    h |> held_equal(invoke(steps_of) - steps0, steps, "every batched step went through the batched driver")
     unsafe {
         delete sess
     }
@@ -793,12 +822,32 @@ def prose_feed(tr : Model; n, steps : int64) : ProseFeed {
     return <- f
 }
 
-//! one load's run in `ring_vs_flat`: the logits rows, whether the driver armed the rings, and the mirror's bytes on the card
-struct private RingRun {
+//! one load's run in `ring_vs_flat` (`ring_rows`): the logits rows, the positions and window chains the CUDA driver served for
+//! them (-1 off the CUDA home) at the prompt window `pf_rows`, whether the driver armed the rings, the mirror's bytes on the card
+struct RingRun {
     rows : array<array<float>>
+    cuda : int64
+    windows : int64
+    pf_rows : int64
     slack : int64
     mirror : int64
     window : int64
+}
+
+//! `n` prose ids and eight fed steps through the armed driver on a session of codec `kv`, and what the load armed for them
+def ring_rows(tr : Model; kv : KVDtype; n : int64) : RingRun {
+    var run : RingRun
+    var inscope feed <- prose_feed(tr, n, 8l)
+    let c0 = cuda_positions_served()
+    let w0 = cuda_windows_run()
+    run.rows <- feed_alone(tr, kv, feed.prompt, feed.toks)
+    run.cuda = c0 >= 0l ? cuda_positions_served() - c0 : -1l
+    run.windows = w0 >= 0l ? cuda_windows_run() - w0 : -1l
+    run.pf_rows = pf_window_rows()
+    run.slack = gpu_resident_kv_ring_slack()
+    run.mirror = gpu_resident_mirror_bytes()
+    run.window = tr.config.sliding_window
+    return <- run
 }
 
 //! `path` loaded at mirror codec `kv` under the ring pin `ring` (`with_gpu_kv_ring`) and the session cap `ctx`, the `n` prose ids
@@ -812,46 +861,53 @@ def private ring_run(t : T?; path : string; kv : KVDtype; ring : int; n, ctx : i
         }
         return <- m
     }
-    var run : RingRun
     let ok = tr.config.n_layers > 0l
+    var run <- ok ? ring_rows(tr, kv, n) : RingRun()
     if (ok) {
-        var inscope feed <- prose_feed(tr, n, 8l)
-        let c0 = cuda_positions_served()
-        let w0 = cuda_windows_run()
-        run.rows <- feed_alone(tr, kv, feed.prompt, feed.toks)
         served_every_call(t)
-        let load = ring != 0 ? "the ringed load" : "the flat load"
-        cuda_served_since(t, c0, n + 8l, load)
-        if (w0 >= 0l) {   // the CUDA home: the prompt ran as the window chains its rows take at the pinned window
-            let rows = pf_window_rows()
-            t |> equal(cuda_windows_run() - w0, (n + rows - 1l) / rows, "{load}: the {n} prose ids ran as {(n + rows - 1l) / rows} window chain(s) of {rows} rows on the CUDA driver")
-        }
-        run.slack = gpu_resident_kv_ring_slack()
-        run.mirror = gpu_resident_mirror_bytes()
-        run.window = tr.config.sliding_window
     }
     moe_gpu_drop_model()
     delete tr
     return <- (ok = ok, run <- run)
 }
 
+//! one load's CUDA witnesses in `ring_vs_flat`: the driver served the `n` prose ids and eight steps, the prompt as the window
+//! chains its rows take at the pinned window
+def private ring_served_within(t : T?; tag, load : string; run : RingRun; n : int64) {
+    if (run.cuda >= 0l) {
+        cuda_served_within(t, run.cuda, n + 8l, "{tag}{load}")
+    }
+    if (run.windows >= 0l) {
+        let rows = run.pf_rows
+        t |> equal(run.windows, (n + rows - 1l) / rows, "{tag}{load}: the {n} prose ids ran as {(n + rows - 1l) / rows} window chain(s) of {rows} rows on the CUDA driver")
+    }
+}
+
+//! The ringed load's run against the flat load's (`ring_rows` on each): the `n` prose ids past the window, the rings armed on the
+//! ringed load alone and charging the card less mirror, the logits bit for bit - a ring moves where a row sits and never which
+//! rows a query reads or their order - each row's control the flat row a step off; `tag` opens each message
+def ring_runs_within(t : T?; tag : string; n : int64; ringed, flat : RingRun) {
+    ring_served_within(t, tag, "the ringed load", ringed, n)
+    ring_served_within(t, tag, "the flat load", flat, n)
+    t |> success(n > ringed.window && ringed.window > 0l, "{tag}the {n}-token prompt runs past the {ringed.window}-position window")
+    t |> success(ringed.slack > 0l && flat.slack == 0l, "{tag}the ringed load armed its rings (slack {ringed.slack}), the flat load none ({flat.slack})")
+    t |> success(ringed.mirror < flat.mirror, "{tag}the rings charge the card less mirror ({ringed.mirror >> 20l} MB) than every row ({flat.mirror >> 20l} MB)")
+    for (st in range(length(ringed.rows))) {
+        let what = st == 0 ? "the prompt's logits" : "step {st - 1}"
+        check_exact(t, "{tag}{what}: the ringed mirror against the flat one, bit for bit", ringed.rows[st], flat.rows[st])
+        check_exceeds(t, "{tag}{what} control: the flat row a step off", ringed.rows[st], flat.rows[st > 0 ? st - 1 : 1], BAR_EXACT)
+    }
+}
+
 //! The sliding layers' rings against the flat mirror on one driver: `n` prose ids past the window and eight fed steps on a ringed load
-//! and a flat one (`set_gpu_kv_ring`), at mirror codec `kv` under the session cap `ctx` - the logits bit for bit, since a ring moves
-//! where a row sits and never which rows a query reads or their order
+//! and a flat one (`set_gpu_kv_ring`), at mirror codec `kv` under the session cap `ctx`, held by `ring_runs_within`
 def ring_vs_flat(t : T?; n : int64; path : string; kv : KVDtype; ctx : int64) {
     return if (!resident_ready(t, path))
     with_dasllama_jobque_() {
         var inscope ringed <- ring_run(t, path, kv, 1, n, ctx)
         var inscope flat <- ring_run(t, path, kv, 0, n, ctx)
         if (ringed.ok && flat.ok) {
-            t |> success(n > ringed.run.window && ringed.run.window > 0l, "the {n}-token prompt runs past the {ringed.run.window}-position window")
-            t |> success(ringed.run.slack > 0l && flat.run.slack == 0l, "the ringed load armed its rings (slack {ringed.run.slack}), the flat load none ({flat.run.slack})")
-            t |> success(ringed.run.mirror < flat.run.mirror, "the rings charge the card less mirror ({ringed.run.mirror >> 20l} MB) than every row ({flat.run.mirror >> 20l} MB)")
-            for (st in range(length(ringed.run.rows))) {
-                let what = st == 0 ? "the prompt's logits" : "step {st - 1}"
-                check_exact(t, "{what}: the ringed mirror against the flat one, bit for bit", ringed.run.rows[st], flat.run.rows[st])
-                check_exceeds(t, "{what} control: the flat row a step off", ringed.run.rows[st], flat.run.rows[st > 0 ? st - 1 : 1], BAR_EXACT)
-            }
+            ring_runs_within(t, "", n, ringed.run, flat.run)
         }
     }
 }
@@ -957,7 +1013,12 @@ def f32_chain_rows(path : string; prompt, toks : array<int64>) : array<array<flo
 //! the same-or-better witness: the device no further from the f32 chain's rows than `ratio` of the CPU q8 chain's own
 //! summed distance, the f32 rows one step off past that bound; `tr` decodes the logged picks
 def f32_chain_witness(t : T?; tr : Model; what : string; fed : FeedPair; f32_rows : array<array<float>>; ratio : float = F32_DIST_REL) {
-    let dist = chain_distances(t, tr, what, fed.gpu, fed.cpu, f32_rows, 0, "the f32 chain", "the CPU q8 chain")
+    f32_chain_witness(t, what, fed.gpu, fed.cpu, f32_rows, ratio) $(id) => decode_(tr, [id])
+}
+
+//! `f32_chain_witness` on the device's rows `gpu` and the CPU q8 chain's `cpu`, `piece` decoding the logged picks
+def f32_chain_witness(t : T?; what : string; gpu, cpu, f32_rows : array<array<float>>; ratio : float; piece : block<(id : int64) : string>) {
+    let dist = chain_distances(t, what, gpu, cpu, f32_rows, 0, "the f32 chain", "the CPU q8 chain", piece)
     t |> success(dist.dev_ref <= ratio * dist.cpu_ref, "{what}: the device sits no further from the f32 chain ({dist.dev_ref}) than {ratio} of the CPU q8 chain's own distance ({dist.cpu_ref})")
     t |> success(dist.dev_ref_ctrl > ratio * dist.cpu_ref, "{what} control: the f32 rows one step off sit past that bound ({dist.dev_ref_ctrl})")
 }
@@ -998,20 +1059,30 @@ def forced_feed_over(t : T?; tr : Model; tag : string; n, steps : int64; bar_rel
 //! every row of `gpu` (the prefill's, then each fed step's) within `bar_rel` of the CPU chain's max live |logit| of the
 //! same row, and each step's one-step-off compare (the previous step's CPU row, a disconnected mechanism) past the bar;
 //! both argmaxes logged under `tag` with the piece `tr` decodes them to, the two arms named `gpu_name` and `cpu_name` in every message
-def feed_steps_within(t : T?; tr : Model; tag : string; nprompt : int64; gpu, cpu : array<array<float>>; toks : array<int64>; bar_rel : float; gpu_name : string = "resident"; cpu_name : string = "the CPU chain") {
+def feed_steps_within(t : T?; tag : string; nprompt : int64; gpu, cpu : array<array<float>>; toks : array<int64>; bar_rel : float; gpu_name, cpu_name : string; piece : block<(id : int64) : string>) {
     for (st in range64(long_length(cpu))) {
         let bar = row_bar(cpu[st], bar_rel)
         let ag = argmax_of(gpu[st])
         let ac = argmax_of(cpu[st])
         let what = tag + (st == 0l ? "prefill ({nprompt} tokens)" : "step {st - 1l} (fed {toks[st - 1l]})") + " [{tile_arm_tag()}]"
         let diff = row_within(t, "{what} logits, {gpu_name} against {cpu_name}", gpu[st], cpu[st], bar)
-        to_log(LOG_INFO, "{what}: argmax cpu {ac} '{decode_(tr, [ac])}' ({cpu[st][ac]}), {gpu_name} {ag} '{decode_(tr, [ag])}' ({gpu[st][ag]}); logits maxdiff {diff} (bar {bar})\n")
+        to_log(LOG_INFO, "{what}: argmax cpu {ac} '{invoke(piece, ac)}' ({cpu[st][ac]}), {gpu_name} {ag} '{invoke(piece, ag)}' ({gpu[st][ag]}); logits maxdiff {diff} (bar {bar})\n")
         let ctrl = st > 0l ? st - 1l : 1l   // the row one step off: the step before, or the step after for the prompt's row
         if (ctrl < long_length(cpu)) {
             let off = control_past(t, "{what} one-step-off", gpu[st], cpu[ctrl], bar)
             to_log(LOG_INFO, "{what}: one-step-off control maxdiff {off} (bar {bar})\n")
         }
     }
+}
+
+//! `feed_steps_within` with every argmax decoded to the piece `tr` reads it as
+def feed_steps_within(t : T?; tr : Model; tag : string; nprompt : int64; gpu, cpu : array<array<float>>; toks : array<int64>; bar_rel : float; gpu_name : string = "resident"; cpu_name : string = "the CPU chain") {
+    feed_steps_within(t, tag, nprompt, gpu, cpu, toks, bar_rel, gpu_name, cpu_name) $(id) => decode_(tr, [id])
+}
+
+//! `feed_steps_within` with no model at hand: the argmaxes by their ids
+def feed_steps_within(t : T?; tag : string; nprompt : int64; gpu, cpu : array<array<float>>; toks : array<int64>; bar_rel : float; gpu_name : string = "resident"; cpu_name : string = "the CPU chain") {
+    feed_steps_within(t, tag, nprompt, gpu, cpu, toks, bar_rel, gpu_name, cpu_name) $(_id) => ""
 }
 
 //! three chains' summed row distances - the device and the CPU chain each from a reference chain, and from each other -
@@ -1027,7 +1098,11 @@ struct ChainDistances {
 //! The distances over rows [first, ..) of three chains - the device, the CPU chain `cpu_name` and the reference `ref_name` -
 //! every row logged with each chain's argmax decoded. A NaN in a row reads as an infinite distance, which would pass any
 //! ratio of two sums, so every sum is asserted finite.
-def chain_distances(t : T?; tr : Model; what : string; gpu, cpu, ref_chain : array<array<float>>; first : int; ref_name : string = "f16"; cpu_name : string = "the CPU codec chain") : ChainDistances {
+def chain_distances(t : T?; tr : Model; what : string; gpu, cpu, ref_chain : array<array<float>>; first : int; ref_name : string = "f16"; cpu_name : string = "the CPU codec chain") : ChainDistances =>
+    chain_distances(t, what, gpu, cpu, ref_chain, first, ref_name, cpu_name) $(id) => decode_(tr, [id])
+
+//! `chain_distances` with `piece` decoding the logged argmaxes
+def chain_distances(t : T?; what : string; gpu, cpu, ref_chain : array<array<float>>; first : int; ref_name, cpu_name : string; piece : block<(id : int64) : string>) : ChainDistances {
     var dist : ChainDistances
     for (st in range(first, length(ref_chain))) {
         let off = st > 0 ? st - 1 : 1
@@ -1037,7 +1112,7 @@ def chain_distances(t : T?; tr : Model; what : string; gpu, cpu, ref_chain : arr
         let af = argmax_of(ref_chain[st])
         let ac = argmax_of(cpu[st])
         let ag = argmax_of(gpu[st])
-        to_log(LOG_INFO, "{what}, row {st}: the device {dd} from {ref_name}, {cpu_name} {dc}, the two {dp} apart; argmax {ref_name} {af} '{decode_(tr, [af])}', {cpu_name} {ac} '{decode_(tr, [ac])}', device {ag} '{decode_(tr, [ag])}'\n")
+        to_log(LOG_INFO, "{what}, row {st}: the device {dd} from {ref_name}, {cpu_name} {dc}, the two {dp} apart; argmax {ref_name} {af} '{invoke(piece, af)}', {cpu_name} {ac} '{invoke(piece, ac)}', device {ag} '{invoke(piece, ag)}'\n")
         dist.dev_ref += dd
         dist.cpu_ref += dc
         dist.dev_cpu += dp
@@ -1183,65 +1258,70 @@ def greedy_chain_cell(t : T?; path : string) {
     if (!resident_ready(t, path)) return
     var tr <- load_resident(path, 1l)
     t |> success(moe_gpu_resident_active(), "the whole-model driver armed on the model (the load log names any decline)")
-    if (chain_home()) {
-        static_if (typeinfo builtin_module_exists(vulkan)) {
-            if (!gpu_want_cuda() && g_gpu.xfer_fam < 0) {   //! the chain lands its pick behind the transfer queue, which a one-family device (an iGPU) has none of
-                t |> skip("the greedy chain asks a transfer queue: this device has one queue family")
-                delete tr
-                return
-            }
-        }
-        with_dasllama_jobque_() {
-            var prompt <- resident_prompt(40l)
-            for (off in fixed_array(0l, 3l)) {
-                let c0 = cuda_positions_served()
-                var plain <- chain_walk(tr, prompt, CHAIN_STEPS, off, 0)
-                let st0 = chain_stats()
-                var chained <- chain_walk(tr, prompt, CHAIN_STEPS, off, 1)
-                let st1 = chain_stats()
-                let hits = st1.hits - st0.hits
-                let misses = st1.misses - st0.misses
-                let offs = off > 0l ? CHAIN_STEPS / off : 0l
-                let what = off > 0l ? "the walk fed off the pick every {off}rd step" : "the argmax walk"
-                to_log(LOG_INFO, "{path} {what}: {hits} chained steps taken, {misses} discarded\n")
-                log_gen_texts(tr, "{path} {what} (plain, chained)", plain.toks, chained.toks)
-                var differ = 0
-                for (i in range64(CHAIN_STEPS)) {
-                    differ += chained.toks[i] != plain.toks[i] ? 1 : 0
-                    t |> equal(logits_maxdiff(chained.rows[i], plain.rows[i]), 0.0, "{what}, step {i}: the chained run's logits are the plain run's bit for bit")
-                }
-                t |> equal(differ, 0, "{what}: the chained run's tokens are the plain run's")
-                t |> equal(misses, offs, "{what}: every off-pick step discarded its chained step, and no other did")
-                t |> equal(hits, CHAIN_STEPS - 1l - offs, "{what}: every other step after the first took its chained step")
-                let sa0 = chain_stats()
-                var adaptive <- chain_walk(tr, prompt, CHAIN_STEPS, off, -1)
-                let sa1 = chain_stats()
-                log_gen_texts(tr, "{path} {what} (plain, adaptive)", plain.toks, adaptive.toks)
-                for (i in range64(CHAIN_STEPS)) {
-                    t |> equal(adaptive.toks[i], plain.toks[i], "{what}, step {i}: adaptive token")
-                    t |> equal(logits_maxdiff(adaptive.rows[i], plain.rows[i]), 0.0,
-                        "{what}, step {i}: the adaptive run's logits are the plain run's")
-                }
-                //! the last walk's settle-dropped chain counts nothing; off every
-                //! 3rd, each miss (len 0 -> 1) skips the next step, the one after
-                //! hits and resets it: misses 2/5/../23, hits 1/4/../22
-                let backed = offs > 0l ? offs - 1l : 0l
-                t |> equal(sa1.misses - sa0.misses, offs,
-                    "{what}: adaptive, every off-pick step a miss")
-                t |> equal(sa1.hits - sa0.hits, CHAIN_STEPS - 1l - offs - backed,
-                    "{what}: adaptive, the step after each miss but the last unchained")
-                served_every_call(t)
-                cuda_served_since(t, c0, 3l * CHAIN_STEPS, "{what}: the three walks")
-                delete plain
-                delete chained
-                delete adaptive
-            }
-            delete prompt
-        }
-    } else {
-        t |> skip("no discrete GPU home on this build: the greedy chain is the Vulkan and CUDA drivers'")
+    var inscope h : Held
+    with_dasllama_jobque_() {
+        greedy_chain_rows(h, tr, path)
     }
+    held_within(t, h)
     delete tr
+}
+
+//! the greedy chain cell's walks on `tr`, armed at one mirror region, inside the engine's job queue; its asserts held
+def greedy_chain_rows(var h : Held; tr : Model; path : string) {
+    if (!chain_home()) {
+        h |> held_skip("no discrete GPU home on this build: the greedy chain is the Vulkan and CUDA drivers'")
+        return
+    }
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        if (!gpu_want_cuda() && g_gpu.xfer_fam < 0) {   //! the chain lands its pick behind the transfer queue, which a one-family device (an iGPU) has none of
+            h |> held_skip("the greedy chain asks a transfer queue: this device has one queue family")
+            return
+        }
+    }
+    var prompt <- resident_prompt(40l)
+    for (off in fixed_array(0l, 3l)) {
+        let c0 = cuda_positions_served()
+        var plain <- chain_walk(tr, prompt, CHAIN_STEPS, off, 0)
+        let st0 = chain_stats()
+        var chained <- chain_walk(tr, prompt, CHAIN_STEPS, off, 1)
+        let st1 = chain_stats()
+        let hits = st1.hits - st0.hits
+        let misses = st1.misses - st0.misses
+        let offs = off > 0l ? CHAIN_STEPS / off : 0l
+        let what = off > 0l ? "the walk fed off the pick every {off}rd step" : "the argmax walk"
+        to_log(LOG_INFO, "{path} {what}: {hits} chained steps taken, {misses} discarded\n")
+        log_gen_texts(tr, "{path} {what} (plain, chained)", plain.toks, chained.toks)
+        var differ = 0
+        for (i in range64(CHAIN_STEPS)) {
+            differ += chained.toks[i] != plain.toks[i] ? 1 : 0
+            h |> held_same("{what}, step {i}: the chained run's logits are the plain run's", chained.rows[i], plain.rows[i])
+        }
+        h |> held_equal(differ, 0, "{what}: the chained run's tokens are the plain run's")
+        h |> held_equal(misses, offs, "{what}: every off-pick step discarded its chained step, and no other did")
+        h |> held_equal(hits, CHAIN_STEPS - 1l - offs, "{what}: every other step after the first took its chained step")
+        let sa0 = chain_stats()
+        var adaptive <- chain_walk(tr, prompt, CHAIN_STEPS, off, -1)
+        let sa1 = chain_stats()
+        log_gen_texts(tr, "{path} {what} (plain, adaptive)", plain.toks, adaptive.toks)
+        for (i in range64(CHAIN_STEPS)) {
+            h |> held_equal(adaptive.toks[i], plain.toks[i], "{what}, step {i}: adaptive token")
+            h |> held_same("{what}, step {i}: the adaptive run's logits are the plain run's", adaptive.rows[i], plain.rows[i])
+        }
+        //! the last walk's settle-dropped chain counts nothing; off every
+        //! 3rd, each miss (len 0 -> 1) skips the next step, the one after
+        //! hits and resets it: misses 2/5/../23, hits 1/4/../22
+        let backed = offs > 0l ? offs - 1l : 0l
+        h |> held_equal(sa1.misses - sa0.misses, offs,
+            "{what}: adaptive, every off-pick step a miss")
+        h |> held_equal(sa1.hits - sa0.hits, CHAIN_STEPS - 1l - offs - backed,
+            "{what}: adaptive, the step after each miss but the last unchained")
+        h |> held_served()
+        h |> held_cuda_served(c0, 3l * CHAIN_STEPS, "{what}: the three walks")
+        delete plain
+        delete chained
+        delete adaptive
+    }
+    delete prompt
 }
 
 let private PEEL_OPEN = 40l
@@ -1375,4 +1455,134 @@ def kernel_skip_cell(t : T?; path : string; skip_stem, other : string) {
         delete s
     }
     delete tr
+}
+
+//! what one check of a cell holds off a loaded model for the asserts after the model's block (`held_within`): a condition read
+//! (`fact`), two readings `equal` compares (`pair`), a logits row against its reference within a share of the reference's peak
+//! with its control past the bar (`row`), the tq4 mirror's nearer-than-the-control form (`near`), two rows bit for bit
+//! (`same`), or a skip - the cell the armed home does not carry
+enum HeldKind {
+    fact
+    pair
+    row
+    near
+    same
+    skip
+}
+
+struct HeldCheck {
+    kind : HeldKind
+    ok : bool
+    got_s : string
+    want_s : string
+    msg : string
+    rel : float
+    got : array<float>
+    want : array<float>
+    control : array<float>
+}
+
+//! a cell's readings in the order it read them: the block collects them, `held_within` asserts them once the model is gone
+struct Held {
+    checks : array<HeldCheck>
+}
+
+def held_fact(var h : Held; ok : bool; msg : string) {
+    h.checks |> emplace(HeldCheck(kind = HeldKind.fact, ok = ok, msg = msg))
+}
+
+//! `got` equal to `want`, both read as their text
+def held_equal(var h : Held; got, want : auto(TT); msg : string) {
+    h.checks |> emplace(HeldCheck(kind = HeldKind.pair, got_s = "{got}", want_s = "{want}", msg = msg))
+}
+
+def held_skip(var h : Held; msg : string) {
+    h.checks |> emplace(HeldCheck(kind = HeldKind.skip, msg = msg))
+}
+
+//! `got` within `rel` of `want`'s peak, `control` - the row one off - past the bar
+def held_row(var h : Held; what : string; got, want, control : array<float>; rel : float) {
+    h.checks |> emplace(HeldCheck(kind = HeldKind.row, msg = what, rel = rel, got := got, want := want, control := control))
+}
+
+//! `got` nearer `want` than `control` (`tq4_within`)
+def held_near(var h : Held; what : string; got, want, control : array<float>) {
+    h.checks |> emplace(HeldCheck(kind = HeldKind.near, msg = what, got := got, want := want, control := control))
+}
+
+//! `got` bit for bit `want`
+def held_same(var h : Held; what : string; got, want : array<float>) {
+    h.checks |> emplace(HeldCheck(kind = HeldKind.same, msg = what, got := got, want := want))
+}
+
+//! the served witness read now: no call of the armed driver passed to the CPU rails since the model armed
+def held_served(var h : Held; what : string = "the device served every call") {
+    var passes <- gpu_cpu_passes_()
+    h |> held_equal(length(passes), 0, "{what}: {passes}")
+    delete passes
+}
+
+//! the passes read now: calls passed to the CPU rails for `reason` alone - `count` of them where past 0 (`only_pass`)
+def held_only_pass(var h : Held; reason, what : string; count : int64 = 0l) {
+    var passes <- gpu_cpu_passes_()
+    h |> held_fact(length(passes) == 1 && passes[0].reason == reason && (count <= 0l || passes[0].count == count), "{what}: {passes}")
+    delete passes
+}
+
+//! `body` collects into a recorder of its own, and its checks are asserted on `t` when it ends
+def held_on(t : T?; body : block<(var h : Held) : void>) {
+    var inscope h : Held
+    invoke(body, h)
+    held_within(t, h)
+}
+
+//! every held check asserted on `t`, `tag` opening each message; a held skip skips `t` where `mark_skips`, else it is logged and
+//! the verdict of the other cells read off the same block stands
+def held_within(t : T?; h : Held; tag : string = ""; mark_skips : bool = true) {
+    for (c in h.checks) {
+        if (c.kind == HeldKind.fact) {
+            t |> success(c.ok, "{tag}{c.msg}")
+        } elif (c.kind == HeldKind.pair) {
+            t |> equal(c.got_s, c.want_s, "{tag}{c.msg}")
+        } elif (c.kind == HeldKind.row) {
+            let bar = row_bar(c.want, c.rel)
+            let diff = row_within(t, "{tag}{c.msg}", c.got, c.want, bar)
+            let off = control_past(t, "{tag}{c.msg}", c.got, c.control, bar)
+            to_log(LOG_INFO, "{tag}{c.msg}: maxdiff {diff}, the row one off {off}, bar {bar}\n")
+        } elif (c.kind == HeldKind.near) {
+            tq4_within(t, c.got, c.want, c.control, "{tag}{c.msg}")
+        } elif (c.kind == HeldKind.same) {
+            let diff = logits_maxdiff(c.got, c.want)
+            t |> success(diff == 0.0, "{tag}{c.msg}: bit for bit (maxdiff {diff})")
+        } elif (mark_skips) {
+            t |> skip("{tag}{c.msg}")
+        } else {
+            to_log(LOG_WARNING, "\tskipped: {tag}{c.msg}\n")
+        }
+    }
+}
+
+//! `blk` with the CUDA home's MMQ route pinned to `v` (`set_cuda_mmq_pin`), the pin put back to what `cuda_mmq_pin` read
+//! before; `blk` alone in a build with no CUDA module
+def with_cuda_mmq_pin(v : int64; blk : block<() : void>) {
+    static_if (typeinfo builtin_module_exists(cuda)) {
+        let was = cuda_mmq_pin()
+        set_cuda_mmq_pin(v)
+        invoke(blk)
+        set_cuda_mmq_pin(was)
+    } else {
+        invoke(blk)
+    }
+}
+
+//! `body` under the CUDA home's MMQ route pinned `CUDA_MMQ_WINNERS` - the route the CUDA cells measure - the pin put back after;
+//! `body` alone off the CUDA home
+def with_cuda_mmq_winners(body : block<() : void>) {
+    static_if (typeinfo builtin_module_exists(cuda)) {
+        if (gpu_want_cuda()) {
+            with_cuda_mmq_pin(CUDA_MMQ_WINNERS, body)
+            return
+        }
+    }
+    invoke(body)
 }

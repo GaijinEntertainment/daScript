@@ -110,7 +110,7 @@ skip clauses true for every cell in the class.**
 is unreachable to whoever is choosing what to run.
 
 **A diff that adds, changes, or drops a cell's skip condition other than the runner's own
-`--arm` / `--family` filter - a `t |> skip` or an early return - updates in the same change the
+`--arm` / `--family` / `--category` filter - a `t |> skip` or an early return - updates in the same change the
 header of every test file that runs the cell, wherever the cell is defined, so that the header
 names every fact the cells that file runs skip on.**
 
@@ -137,9 +137,11 @@ the cell on every box, and the suite still passes.
 
 **A cell that loads or gates on a stocked model file - a `.gguf` carrier, its shards, or an mmproj -
 gates through `model_available` (`_model_tier.das`), one call per file; a test that cannot require
-`_model_tier.das` open-codes the same two checks: the file and every sibling shard are present, and
-their total size is under `MODEL_TIER_CEILING_BYTES` (`../dasllama/dasllama_gguf.das`) unless
-`DASLLAMA_PARITY_FULL=1` is set.** `DASLLAMA_PARITY_FULL=1` belongs to a cited run - an arc's final
+`_model_tier.das` open-codes its checks: the file and every sibling shard are present, their total
+size is under `MODEL_TIER_CEILING_BYTES` (`../dasllama/dasllama_gguf.das`) unless
+`DASLLAMA_PARITY_FULL=1` is set or the run names the file's category, and neither the run's
+category filter nor its family filter skips the file (`category_skip_reason`,
+`family_skip_reason`, `_model_categories.das`).** `DASLLAMA_PARITY_FULL=1` belongs to a cited run - an arc's final
 PR's, or one an intermediate PR's scope report names - never to the iteration loop.
 
 **A cell - or a program a cell builds or spawns - that is not about the `.dlim` model image calls
@@ -205,12 +207,30 @@ then names everything the cell reads; an artifact's url and checksum sit in one 
 **A test that reads a vision encode oracle dump without naming the minting arm in its header - the
 backend, the flash-attention setting and the mmproj precision the dump came from - is a defect.**
 
-**A diff that adds a model-loading block to a file of a `run.das` suite that accepts `--arm` tags
-it with the carrier family it loads: one `family_on(t, name)` check per carrier family
-(`_model_tier.das`), the token that family's entry in `CLAUDE.md`'s family filter list (a family
-with no entry adds one in the same change), the checks in sequence so a block loading several
-families runs only under a filter naming every one of them.** Kitten and kokoro are two families
-of one architecture; an untagged block runs under every `--family` filter.
+**A diff that adds a `[test]` or a block that loads a stocked model file - a `.gguf` carrier, its
+shards, or an mmproj - in a file of any `run.das` suite, tags it with the carrier family it loads: one `family_on(t, name)` check per carrier family
+(`_model_tier.das`) ahead of its first load, the token that family's entry in `CLAUDE.md`'s family
+filter list (a family with no entry adds one in the same change), the checks in sequence so a test
+loading several families runs only under a filter naming every one of them.** Kitten and kokoro are
+two families of one architecture; an untagged test runs under every `--family` filter, each load
+of another family's decoder file skipping inside it.
+
+**A diff that adds or moves a cell in this folder never loads a model file, through any loader but
+the area's `with_cpu_and_gpu_model` call for that file (`_cpu_gpu_model.das`), in a form that call
+or another test of the area already loads on a discrete home - a GPU backend whose device memory is
+not the host's; the cell joins that call, with its form added to the call's forms list, or the one
+test that loads the form.** A form is one load of the file under one set of load-time knobs and one
+load mode; a run area is the set of cells one `with_cpu_and_gpu_model` area name gathers; a load a
+child process makes is its own.
+
+**A diff that compares two forms of a `with_cpu_and_gpu_model` call - two loads of its file under
+different load-time knobs or load mode - makes the compare after the call returns, on what the
+call's body collected.**
+
+**A diff that makes a test load a language-model `.gguf` - not a tower, speech model or fixture -
+whose name no row of `model_families()` (`_model_categories.das`) holds adds the row in the same
+change, under the token the test's `family_on` check names.** `model_available` skips another
+family's file by that row; a file with no row loads under every `--family` filter.
 
 **A diff that adds or moves a batched-vs-sequential parity cell - one comparing the batched
 stack against a per-session sequential forward whose sequential side runs on the CPU - onto a

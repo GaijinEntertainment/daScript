@@ -17,7 +17,9 @@ require dastest/fs
 require strings
 require math
 require dasllama/dasllama_env
+require llvm/daslib/llvm_env   // g_env_tune.tune_force: a tune file the caller forced already
 require _child_run   // child_exe_ensure: the test child's exe, built before the run's first child
+require _model_categories   // the model categories a run names with --category
 require dastest/kill_switch   // KILL_SWITCH_EXIT_CODE: the exit of a child its test wall ended
 require ../performance/box_ident.das   // derive_box_name — hardware-keyed, engine-free
 require ../../../utils/common/text_lines.das   // split_trimmed: the comma lists
@@ -42,7 +44,7 @@ struct RunArgs {
     suite : string = "all"
 
     @clarg_short = "x"
-    @clarg_doc = "Exclude — comma-separated substrings; a suite file whose name contains one is dropped, each named on an EXCLUDED line (e.g. --suite stocked --exclude test_ple_modes)"
+    @clarg_doc = "Exclude — comma-separated substrings; a suite file whose name contains one is dropped, each named on an EXCLUDED line (e.g. --suite stocked --exclude test_gpu_resident_gemma4_e2b)"
     exclude : string
 
     @clarg_doc = "Shard i/n — this box runs every n-th file of the run's file list from the i-th (1-based), so n boxes on the same command with --shard 1/n .. n/n cover the run once; the REPORT line names the shard and the NEXT line the shards still owed"
@@ -58,6 +60,9 @@ struct RunArgs {
 
     @clarg_doc = "Diff base for --changed (default origin/master)"
     base : string = "origin/master"
+
+    @clarg_doc = "Category - comma-separated model categories (../TEST_CATEGORIES.md): runs the test files that name a category's model files, each cell on another model skipped. No other run opens a category's files. Takes --only, --exclude and --shard; no --suite, --area, --changed, --arm or --family"
+    category : string
 
     @clarg_doc = "Family filter — comma-separated family tokens (the full list lives in tests/CLAUDE.md, EXACT match); only blocks of these model families run (model-free blocks always run); sets DASLLAMA_TEST_FAMILY"
     family : string
@@ -256,10 +261,6 @@ def suite_files(name : string) : array<string> {   // nolint:STYLE038 - a flat s
                     "modules/dasLLAMA/tests/test_gpu_resident_codec_llama.das",
                     "modules/dasLLAMA/tests/test_gpu_resident_qwen2.das",
                     "modules/dasLLAMA/tests/test_gpu_resident_regions.das",
-                    "modules/dasLLAMA/tests/test_gpu_resident_regions_e2b.das",
-                    "modules/dasLLAMA/tests/test_gpu_resident_regions_gemma2.das",
-                    "modules/dasLLAMA/tests/test_gpu_resident_regions_gemma3.das",
-                    "modules/dasLLAMA/tests/test_gpu_resident_regions_gemma4.das",
                     "modules/dasLLAMA/tests/test_gpu_resident_regions_gptoss.das",
                     "modules/dasLLAMA/tests/test_gpu_resident_regions_qwen_moe.das",
                     "modules/dasLLAMA/tests/test_gpu_resident_regions_qwen35moe.das",
@@ -267,9 +268,6 @@ def suite_files(name : string) : array<string> {   // nolint:STYLE038 - a flat s
                     "modules/dasLLAMA/tests/test_gpu_resident_regions_hybrid.das",
                     "modules/dasLLAMA/tests/test_gpu_resident_regions_hybrid_formats.das",
                     "modules/dasLLAMA/tests/test_gpu_resident_regions_kquant.das",
-                    "modules/dasLLAMA/tests/test_gpu_resident_regions_llama3b_ctx32k.das",
-                    "modules/dasLLAMA/tests/test_gpu_resident_regions_gemma3_4b_ctx128k.das",
-                    "modules/dasLLAMA/tests/test_gpu_resident_regions_gemma4_e2b_ctx128k.das",
                     "modules/dasLLAMA/tests/test_gpu_resident_regions_qwen3.das",
                     "modules/dasLLAMA/tests/test_gpu_resident_regions_q8kv.das",
                     "modules/dasLLAMA/tests/test_gpu_resident_regions_tq4kv.das",
@@ -286,7 +284,6 @@ def suite_files(name : string) : array<string> {   // nolint:STYLE038 - a flat s
                     "modules/dasLLAMA/tests/test_interpreter.das",
                     "modules/dasLLAMA/tests/test_parity_pregate.das",
                     "modules/dasLLAMA/tests/test_parrot.das",
-                    "modules/dasLLAMA/tests/test_ple_modes.das",
                     "modules/dasLLAMA/tests/test_prefill.das",
                     "modules/dasLLAMA/tests/test_qwen3v.das",
                     "modules/dasLLAMA/tests/test_qwen25v.das",
@@ -381,14 +378,14 @@ def area_tests(area : string) : array<string> {
         return <- [ "test_arch_registry.das", "test_batch_decode.das", "test_bench_records_schema.das",
                     "test_chat.das", "test_deltanet.das", "test_dispatch_shaping.das", "test_driver_knob_getters.das", "test_facade.das",
                     "test_forward.das", "test_fused_decode.das", "test_gguf_quant.das", "test_gguf_shards.das", "test_mlx_snapshot.das", "test_mlx_qwen4exp.das",
-                    "test_gpu_home.das", "test_gpu_model_swap.das", "test_gpu_perop_kv_codec.das", "test_gpu_resident_codec_llama.das", "test_gpu_resident_gemma2_3.das", "test_gpu_resident_gemma4_dense.das", "test_gpu_resident_gemma4_moe.das", "test_gpu_resident_gemma4_26b_host.das", "test_gpu_resident_moe_host_pinned.das", "test_gpu_resident_gemma4_e2b.das", "test_gpu_resident_gptoss.das", "test_gpu_resident_hc.das", "test_gpu_resident_hc_micro.das", "test_gpu_resident_window.das", "test_gpu_resident_hybrid.das", "test_gpu_resident_llama.das", "test_gpu_resident_cuda_llama.das", "test_gpu_resident_cuda_dense.das", "test_gpu_resident_cuda_batch.das", "test_gpu_resident_cuda_qwen35.das", "test_gpu_resident_cuda_mtp.das", "test_gpu_resident_cuda_moe.das", "test_gpu_resident_cuda_moe_host.das", "test_gpu_resident_cuda_gemma4.das", "test_gpu_resident_segments.das", "test_gpu_resident_moe.das", "test_gpu_resident_moe_formats.das", "test_gpu_resident_format_census.das", "test_gpu_resident_qwen2.das", "test_gpu_resident_regions.das", "test_gpu_resident_regions_e2b.das", "test_gpu_resident_regions_gptoss.das", "test_gpu_resident_regions_qwen_moe.das", "test_gpu_resident_regions_qwen35moe.das", "test_gpu_resident_regions_gemma4moe.das", "test_gpu_resident_regions_gemma2.das", "test_gpu_resident_regions_gemma3.das", "test_gpu_resident_regions_gemma4.das", "test_gpu_resident_regions_hybrid.das", "test_gpu_resident_regions_hybrid_formats.das", "test_gpu_resident_regions_kquant.das", "test_gpu_resident_regions_llama3b_ctx32k.das", "test_gpu_resident_regions_gemma3_4b_ctx128k.das", "test_gpu_resident_regions_gemma4_e2b_ctx128k.das", "test_gpu_resident_regions_qwen3.das", "test_gpu_resident_regions_q8kv.das", "test_gpu_resident_regions_tq4kv.das", "test_gpu_serving_declines.das", "test_gpu_tier.das", "test_groupn.das",
+                    "test_gpu_home.das", "test_gpu_model_swap.das", "test_gpu_perop_kv_codec.das", "test_gpu_resident_codec_llama.das", "test_gpu_resident_gemma2_3.das", "test_gpu_resident_gemma4_dense.das", "test_gpu_resident_gemma4_moe.das", "test_gpu_resident_gemma4_26b_host.das", "test_gpu_resident_moe_host_pinned.das", "test_gpu_resident_gemma4_e2b.das", "test_gpu_resident_gptoss.das", "test_gpu_resident_hc.das", "test_gpu_resident_hc_micro.das", "test_gpu_resident_window.das", "test_gpu_resident_hybrid.das", "test_gpu_resident_llama.das", "test_gpu_resident_cuda_llama.das", "test_gpu_resident_cuda_dense.das", "test_gpu_resident_cuda_batch.das", "test_gpu_resident_cuda_qwen35.das", "test_gpu_resident_cuda_mtp.das", "test_gpu_resident_cuda_moe.das", "test_gpu_resident_cuda_moe_host.das", "test_gpu_resident_cuda_gemma4.das", "test_gpu_resident_segments.das", "test_gpu_resident_moe.das", "test_gpu_resident_moe_formats.das", "test_gpu_resident_format_census.das", "test_gpu_resident_qwen2.das", "test_gpu_resident_regions.das", "test_gpu_resident_regions_gptoss.das", "test_gpu_resident_regions_qwen_moe.das", "test_gpu_resident_regions_qwen35moe.das", "test_gpu_resident_regions_gemma4moe.das", "test_gpu_resident_regions_hybrid.das", "test_gpu_resident_regions_hybrid_formats.das", "test_gpu_resident_regions_kquant.das", "test_gpu_resident_regions_qwen3.das", "test_gpu_resident_regions_q8kv.das", "test_gpu_resident_regions_tq4kv.das", "test_gpu_serving_declines.das", "test_gpu_tier.das", "test_groupn.das",
                     "test_embeddings.das", "test_jobque_tripwire.das", "test_kernel_backend.das", "test_kqformat.das", "test_kquant.das",
                     "test_kv_codec.das", "test_kv_paged.das", "test_kv_prefix.das", "test_metal_batched_row.das", "test_metal_format_census.das", "test_math_activations.das",
                     "test_math_elementwise.das", "test_matmul_batch.das", "test_f32_batch_tile_perms.das",
                     "test_mtp.das",
                     "test_mtp_gemma_drafter.das", "test_dflash_drafter.das", "test_mtp_sampled_walk.das", "test_mtp_snapshot.das", "test_mtp_accept_walks.das", "test_mxfp4.das",
                     "test_par_indexed.das", "test_parity.das", "test_parity_pregate.das",
-                    "test_plane.das", "test_ple_check.das", "test_ple_modes.das", "test_prefill.das", "test_prefill_cpu_kernels.das",
+                    "test_plane.das", "test_ple_check.das", "test_prefill.das", "test_prefill_cpu_kernels.das",
                     "test_q8q8_family.das", "test_quant.das", "test_qwen4exp.das",
                     "test_repack.das", "test_rope.das", "test_rope_apply.das",
                     "test_sampling.das", "test_cuda_kernels.das",
@@ -514,9 +511,9 @@ let MODULE_WITNESSES <- {
     "dasllama_arch_qwen2moe" => "test_gpu_resident_moe.das,test_gpu_resident_cuda_moe.das,test_gpu_resident_cuda_moe_host.das,test_gpu_resident_regions_qwen_moe.das,test_gpu_resident_moe_host_pinned.das",
     "dasllama_arch_qwen4exp" => "test_qwen4exp.das,test_gpu_resident_hc.das,test_gpu_resident_hc_micro.das",
     "dasllama_arch_gptoss" => "test_gpu_resident_gptoss.das,test_gpu_resident_regions_gptoss.das,test_gpu_resident_cuda_moe.das",
-    "dasllama_arch_gemma2" => "test_gpu_resident_gemma2_3.das,test_gpu_resident_cuda_dense.das,test_gpu_resident_regions_gemma2.das",
-    "dasllama_arch_gemma3" => "test_gpu_resident_gemma2_3.das,test_gpu_resident_cuda_dense.das,test_gpu_resident_regions_gemma3.das",
-    "dasllama_arch_gemma4" => "test_gpu_resident_cuda_gemma4.das,test_gpu_resident_gemma4_e2b.das,test_gpu_resident_gemma4_dense.das,test_gpu_resident_gemma4_moe.das,test_gpu_resident_regions_gemma4.das,test_gpu_resident_regions_gemma4moe.das,test_ple_modes.das,test_mtp_gemma_drafter.das",
+    "dasllama_arch_gemma2" => "test_gpu_resident_gemma2_3.das,test_gpu_resident_cuda_dense.das",
+    "dasllama_arch_gemma3" => "test_gpu_resident_gemma2_3.das,test_gpu_resident_cuda_dense.das",
+    "dasllama_arch_gemma4" => "test_gpu_resident_cuda_gemma4.das,test_gpu_resident_gemma4_e2b.das,test_gpu_resident_gemma4_dense.das,test_gpu_resident_gemma4_moe.das,test_gpu_resident_regions_gemma4moe.das,test_mtp_gemma_drafter.das",
     "dasllama_arch_phi3" => "test_gpu_resident_cuda_dense.das,test_gpu_resident_regions_kquant.das",
     "dasllama_arch_glm4moe" => "test_mtp.das", "dasllama_arch_mistral3" => "test_chat.das,test_model_specs.das",
     "dasllama_moe" => "test_gpu_resident_moe.das,test_gpu_resident_moe_formats.das,test_gpu_resident_cuda_moe.das,test_gpu_resident_gptoss.das,test_gpu_resident_gemma4_moe.das,test_vulkan_dec_tail.das,test_vulkan_moe_cm2.das,test_vulkan_host_twin.das",
@@ -531,7 +528,7 @@ let MODULE_WITNESSES <- {
     "dasllama_batch" => "test_batch_decode.das,test_matmul_batch.das,test_gpu_resident_cuda_batch.das",
     "dasllama_kv_codec" => KV_CODEC_WITNESSES, "dasllama_kv_dtype" => KV_CODEC_WITNESSES,
     "dasllama_prefix" => "test_kv_prefix.das,test_kv_paged.das",
-    "dasllama_ple" => "test_ple_check.das,test_ple_modes.das,test_gpu_resident_gemma4_e2b.das,test_gpu_resident_regions_e2b.das",
+    "dasllama_ple" => "test_ple_check.das,test_gpu_resident_gemma4_e2b.das",
     "dasllama_parity" => "test_parity.das,test_parity_pregate.das,uncategorized__dasllama_internal_persistent_heap_stack_524288.das",
     "dasllama_bench" => "test_facade.das,test_served_bench.das",
     "dasllama_tokenizer" => TOKENIZER_WITNESSES, "dasllama_bpe" => TOKENIZER_WITNESSES, "dasllama_spm" => TOKENIZER_WITNESSES,
@@ -835,24 +832,35 @@ def log_verdicts(log_path : string) : tuple<passed : array<string>; failed : arr
     return <- (passed <- passed, failed <- failed, root_failed = root_failed)
 }
 
+//! the filters a child's tests read at run time - the arms (none under the full suite), the families, the categories - as
+//! dastest `--run-env` pairs: dastest sets them once the test program has compiled, so a filter is no part of the
+//! program's compile record and a run under another filter reads the same record. Non-private: test_run_suites.das pins it
+def child_run_env(cfg : RunArgs; arm : string) : string {
+    var pairs : array<string>
+    if (!cfg.full) {
+        pairs |> push("DASLLAMA_TEST_ARMS={arm}")
+    }
+    if (!empty(cfg.family)) {   // composes with either mode: a family-scoped full gate is the profiling-cadence default
+        pairs |> push("DASLLAMA_TEST_FAMILY={cfg.family}")
+    }
+    if (!empty(cfg.category)) {
+        pairs |> push("DASLLAMA_TEST_CATEGORIES={cfg.category}")
+    }
+    return join([for (pair in pairs); " --run-env \"{pair}\""], "")
+}
+
 // CPU_PREFILL: the suites' CPU truth halves and parity controls prefill on the CPU by intent.
 // HAZARD_STRICT: the scheduling-unification ratchet's runtime half — an undeclared dispatch
 // on an armed hazard oracle PANICS here, so declaration gaps can never ship quietly.
 // cmd.exe has no VAR=val prefix — `set "VAR=val"&&` is the safe form (llvm_tune's tuner_cmd)
 // Non-private: test_run_suites.das pins the K/V start a `--poison-kv` run hands its children
-def child_envs(cfg : RunArgs; win : bool; arm : string) : string {
+def child_envs(cfg : RunArgs; win : bool) : string {
     var envs = ""
     if (win) {
-        envs = ((cfg.full ? "set \"DASLLAMA_PARITY_FULL=1\"&& " : "set \"DASLLAMA_TEST_ARMS={arm}\"&& ")
+        envs = ((cfg.full ? "set \"DASLLAMA_PARITY_FULL=1\"&& " : "")
             + "set \"DASLLAMA_CPU_PREFILL=1\"&& set \"DASLLAMA_METAL_HAZARD_STRICT=1\"&& ")
-        if (!empty(cfg.family)) {   // composes with either mode: a family-scoped full gate is the profiling-cadence default
-            envs = "{envs}set \"DASLLAMA_TEST_FAMILY={cfg.family}\"&& "
-        }
     } else {
-        envs = (cfg.full ? "DASLLAMA_PARITY_FULL=1" : "DASLLAMA_TEST_ARMS='{arm}'") + " DASLLAMA_CPU_PREFILL=1 DASLLAMA_METAL_HAZARD_STRICT=1 "
-        if (!empty(cfg.family)) {
-            envs = "DASLLAMA_TEST_FAMILY='{cfg.family}' {envs}"
-        }
+        envs = (cfg.full ? "DASLLAMA_PARITY_FULL=1 " : "") + "DASLLAMA_CPU_PREFILL=1 DASLLAMA_METAL_HAZARD_STRICT=1 "
         if (get_platform_name() == "linux") {
             // glibc parks each late-loaded module's thread-local block in a 512-byte
             // surplus; libLLVM, a shared module and the NVIDIA Vulkan driver's three
@@ -881,14 +889,36 @@ def child_envs(cfg : RunArgs; win : bool; arm : string) : string {
     // DAS_TUNE_MANIFEST inherits; a box without a minted manifest keeps sidecar behavior. The
     // --no-tune arm pins nothing: an explicit manifest disables the policy rail it runs on.
     if (empty(g_env_core.tune_manifest) && !cfg.no_tune) {
-        let manifest = "modules/dasLLAMA/performance/{derive_box_name(g_env_prof.box)}.tune.json"
+        let manifest = box_tune_manifest(g_env_prof.box)
         var mst : FStat
         if (stat(manifest, mst)) {
             envs = (win ? "{envs}set \"DAS_TUNE_MANIFEST={manifest}\"&& "
                 : "DAS_TUNE_MANIFEST='{manifest}' {envs}")
         }
     }
-    return envs
+    return forced_env(envs, forced_tune_file(cfg), win)
+}
+
+//! `envs` with the tune file `forced` named ahead of a child (`DAS_TUNE_FORCE`), in cmd.exe's form under `win`; `envs`
+//! where no file is forced. Non-private: test_run_suites.das pins both forms
+def forced_env(envs, forced : string; win : bool) : string {
+    return envs if (empty(forced))
+    return win ? "{envs}set \"DAS_TUNE_FORCE={forced}\"&& " : "DAS_TUNE_FORCE='{forced}' {envs}"
+}
+
+//! The tune file a run's children are forced onto (`DAS_TUNE_FORCE`), "" for none: the manifest in effect - the caller's
+//! `DAS_TUNE_MANIFEST`, else the box's - so its kernels stamp whatever the file's age against the binary; a test run reads
+//! the box's winners, and a rebuild does not drop every kernel to its fallback. None under `--no-tune`, where the file
+//! is absent, or where the caller forced a file already
+def forced_tune_file(cfg : RunArgs) : string
+    => forced_tune_file_of(cfg.no_tune, g_env_tune.tune_force, g_env_core.tune_manifest, box_tune_manifest(g_env_prof.box))
+
+//! `forced_tune_file` on what the run read: `caller_forced` a file the caller forced, `manifest` the caller's
+//! `DAS_TUNE_MANIFEST`, `box_manifest` the box's own. Non-private: test_run_suites.das pins each answer
+def forced_tune_file_of(no_tune : bool; caller_forced, manifest, box_manifest : string) : string {
+    return "" if (no_tune || !empty(caller_forced))
+    let file = empty(manifest) ? box_manifest : manifest
+    return stat(file).is_valid ? file : ""
 }
 
 //! stdout of a git command, "" when git is absent or the command fails
@@ -1034,13 +1064,16 @@ let MODEL_FREE_BATCH = 1000   //! the whole suite one program: no file loads a m
 //! does not link as one DLL, nor does a batch of thirty of its files; twenty do
 let MODEL_FREE_BATCH_WINDOWS = 20
 let MODEL_BATCH = 10
+//! the suites whose files run as a process of their own kind: their device leak gates count the whole process
+let PROCESS_SUITES <- ["decode", "mtp", "prefill", "matrix", "kernels", "image", "image-vulkan", "coverage"]
 let TEST_WALL_SECONDS = 30
 //! the exit code of a child its kill switch ended: a test past `--test-wall` (dastest's `kill_switch.das`)
 //! files a child: `--batch`, else `MODEL_FREE_BATCH` on the model-free suite (`MODEL_FREE_BATCH_WINDOWS` on Windows) and
 //! `MODEL_BATCH` on any other run
-def batch_files(cfg : RunArgs) : int
-    => (cfg.batch > 0 ? cfg.batch
-        : (cfg.suite != "model-free" ? MODEL_BATCH : (get_platform_name() == "windows" ? MODEL_FREE_BATCH_WINDOWS : MODEL_FREE_BATCH)))
+def batch_files(cfg : RunArgs) : int {
+    return cfg.batch if (cfg.batch > 0)
+    return cfg.suite != "model-free" ? MODEL_BATCH : (get_platform_name() == "windows" ? MODEL_FREE_BATCH_WINDOWS : MODEL_FREE_BATCH)
+}
 
 //! a child's per-test wall in seconds, 0 = none: the run's own (`--test-wall`), else the model-free suite's outside the
 //! full suite (DASLLAMA_PARITY_FULL=1), whose cells are the ones no wall admits
@@ -1080,6 +1113,64 @@ def check_suite_args(cfg : RunArgs) : int {
     }
     if (cfg.full) {
         to_log(LOG_ERROR, "please narrow the scope to the correct set of gates, metal is not fully implemented yet\n")
+        return 2
+    }
+    return 0
+}
+
+//! the test files of this folder that name a model file of one of the categories `named` lists
+def category_files(named : string) : array<string> {
+    var files : array<string>
+    dir(TESTS_DIR) $(name) {
+        return if (!(name |> ends_with(".das")) || !(name |> starts_with("test_") || name |> starts_with("uncategorized")))
+        for (model in model_names(fread("{TESTS_DIR}/{name}"))) {
+            let cat = model_category(model)
+            if (!empty(cat) && list_names(named, cat)) {   //! a model of no category is no category's, whatever `named` holds
+                files |> push("{TESTS_DIR}/{name}")
+                break
+            }
+        }
+    }
+    sort(files)
+    return <- files
+}
+
+//! true when the filter value `v` is names and the marks between them - letters, digits and `_ , . : + -` - so it reads the
+//! same inside a child's command line under every shell
+def filter_value_stands(v : string) : bool {
+    for (c in v) {
+        let name_char = is_alpha(c) || is_number(c)
+        return false if (!name_char && c != '_' && c != ',' && c != '.' && c != ':' && c != '+' && c != '-')
+    }
+    return true
+}
+
+//! 0 when --arm, --family and --category stand as the text a child's command line carries (`child_run_env`); a value with
+//! any other character ends the run, the flag named
+def check_filter_args(cfg : RunArgs) : int {
+    for (flag, v in fixed_array("--arm", "--family", "--category"), fixed_array(cfg.arm, cfg.family, cfg.category)) {
+        if (!filter_value_stands(v)) {
+            to_log(LOG_ERROR, "{flag} '{v}' holds a character a filter cannot carry: names, and , . : + - between them\n")
+            return 2
+        }
+    }
+    return 0
+}
+
+//! 0 when --category stands: every name a category, and no flag beside it that picks files or cells another way
+def check_category_args(cfg : RunArgs) : int {
+    if (length(split(cfg.category, ",")) != length(split_trimmed(cfg.category, ","))) {
+        to_log(LOG_ERROR, "--category '{cfg.category}' holds an empty name between its commas\n")
+        return 2
+    }
+    let unknown <- unknown_categories(cfg.category)
+    if (!empty(unknown)) {
+        let known <- [for (cat in model_categories()); cat.name]
+        to_log(LOG_ERROR, "unknown --category '{join(unknown, ",")}' ({join(known, " | ")}; ../TEST_CATEGORIES.md)\n")
+        return 2
+    }
+    if (cfg.suite != "all" || !empty(cfg.area) || cfg.changed || !empty(cfg.arm) || cfg.full || !empty(cfg.family)) {
+        to_log(LOG_ERROR, "--category runs its categories' files whole: it takes no --suite, --area, --changed, --arm, --full or --family\n")
         return 2
     }
     return 0
@@ -1156,9 +1247,8 @@ def model_names(text : string) : array<string> {
     return <- out
 }
 
-//! the model files the run's `files`, and the fixtures they reach, name that `dir` does not hold, each with the files that
-//! name it: the cells that would skip, said before the run. Non-private: test_run_suites.das pins it
-def missing_models(files : array<string>; dir : string) : array<tuple<name : string; asked : string>> {
+//! the names of `files` and of every fixture of this folder they require, at any depth
+def reached_names(files : array<string>) : table<string> {
     var requires <- folder_requires()
     var reached : table<string>
     var queue <- [for (f in files); base_name(f)]
@@ -1173,6 +1263,13 @@ def missing_models(files : array<string>; dir : string) : array<tuple<name : str
             }
         }
     }
+    return <- reached
+}
+
+//! the model files the run's `files`, and the fixtures they reach, name that `dir` does not hold, each with the files that
+//! name it: the cells that would skip, said before the run. Non-private: test_run_suites.das pins it
+def missing_models(files : array<string>; dir : string) : array<tuple<name : string; asked : string>> {
+    var reached <- reached_names(files)
     var asked : table<string; array<string>>
     for (name in keys(reached)) {
         var text = ""
@@ -1349,9 +1446,9 @@ def private stop_run(cfg : RunArgs; tag, kind, why : string; at : int; var tally
 def private child_exe_ready(cfg : RunArgs; files : array<string>) : bool {
     return true if (!empty(cfg.das))   //! a dry run on another binary runs no test of this tree: nothing to build
     var spawns = false
-    for (f in files) {
-        let text = fread(f)
-        spawns ||= find(text, "child_verb_cmd(") >= 0 || find(text, "child_compile_cache(") >= 0
+    for (name in keys(reached_names(files))) {   //! a test spawns the child through a fixture's cell as well as by its own call
+        let text = fread("{TESTS_DIR}/{name}")
+        spawns ||= name != "_child_run.das" && (find(text, "child_verb_cmd(") >= 0 || find(text, "child_compile_cache(") >= 0)
     }
     return true if (!spawns)
     let t0 = ref_time_ticks()
@@ -1368,8 +1465,7 @@ def private child_exe_ready(cfg : RunArgs; files : array<string>) : bool {
 def private run_files(cfg : RunArgs; files : array<string>; image_arms : string; area_run : bool) : RunTally {
     let tmp = temp_dir()
     let win = get_platform_name() == "windows"
-    let envs = child_envs(cfg, win, cfg.arm)
-    let image_envs = child_envs(cfg, win, image_arms)
+    let envs = child_envs(cfg, win)
     let tmo = child_timeout(cfg)
     let wall = wall_seconds(cfg)
     let wall_flag = wall > 0 ? " --test-wall {wall}" : ""
@@ -1385,7 +1481,7 @@ def private run_files(cfg : RunArgs; files : array<string>; image_arms : string;
     for (rep in range(reps)) {
         let rep_tag = reps > 1 ? " rep {rep + 1}/{reps}" : ""
         var inscope retry : array<string>
-        var inscope chunks <- child_chunks(files, batch_files(cfg), area_run)
+        var inscope chunks <- run_chunks(cfg, files, area_run)
         for (chunk, at in chunks, count()) {
             let n = length(chunk)
             let seat = "child {at}/{length(chunks)}"
@@ -1395,10 +1491,10 @@ def private run_files(cfg : RunArgs; files : array<string>; image_arms : string;
                 continue
             }
             let log_path = path_join(tmp, "dasllama_run_{tag}_{rep}_{ref_time_ticks()}.log")
-            let file_envs = (area_run && tag == "test_model_image.das") ? image_envs : envs
             let file_args = n == 1 ? " --test \"{chunk[0]}\"" : join([for (f in chunk); " --together \"{f}\""], "")
             return <- tally if (stopped_by_marker(cfg, tag, tally))
-            let cmd = "{file_envs}\"{das_exe}\" -jit -module-cache {MODULE_CACHE} dastest/dastest.das --{file_args} --timeout {tmo * n}{wall_flag}{cache_flag} > \"{log_path}\" 2>&1"
+            let run_env = child_run_env(cfg, (area_run && tag == "test_model_image.das") ? image_arms : cfg.arm)
+            let cmd = "{envs}\"{das_exe}\" -jit -module-cache {MODULE_CACHE} dastest/dastest.das --{file_args} --timeout {tmo * n}{wall_flag}{cache_flag}{run_env} > \"{log_path}\" 2>&1"
             to_log(LOG_INFO, "START {tag}{rep_tag}: {seat}: {cmd}\n")
             let t0 = ref_time_ticks()
             let rc = unsafe(popen(cmd) $(f) {
@@ -1584,6 +1680,33 @@ def child_chunks(files : array<string>; per : int; area_run : bool) : array<arra
     return <- chunks
 }
 
+//! a category run's children: the files of each process suite (`PROCESS_SUITES`) one child a suite, as that suite runs
+//! them, and the other files `per` a child; at `per` 1 - the rerun of a batch whose root failed - a file a child
+def category_chunks(files : array<string>; per : int) : array<array<string>> {
+    return <- child_chunks(files, 1, false) if (per == 1)
+    var chunks : array<array<string>>
+    var taken : table<string>
+    for (suite in PROCESS_SUITES) {
+        var inscope members <- suite_files(suite)
+        var own <- [for (f in files); f; where !key_exists(taken, f) && has_value(members, f)]
+        for (f in own) {
+            taken |> insert(f)
+        }
+        if (!empty(own)) {
+            chunks |> emplace(own)
+        }
+    }
+    var rest <- child_chunks([for (f in files); f; where !key_exists(taken, f)], per, false)
+    chunks |> push_clone_from(rest)
+    return <- chunks
+}
+
+//! the run's children: a category run's by suite, any other run's `batch_files` a child
+def run_chunks(cfg : RunArgs; files : array<string>; area_run : bool) : array<array<string>> {
+    return <- category_chunks(files, batch_files(cfg)) if (!empty(cfg.category))
+    return <- child_chunks(files, batch_files(cfg), area_run)
+}
+
 //! what makes the run less than the plain run of its scope: a wall given by hand, the model-free suite's own wall lifted
 //! by the full suite (`full`), a resume
 def private scope_relaxed(cfg : RunArgs) : string => scope_relaxed_in(cfg, parity_full_mode())
@@ -1598,7 +1721,8 @@ def scope_relaxed_in(cfg : RunArgs; full : bool) : string {
 
 //! the run tells the next step itself: what ran, what a missing model skipped, what is still owed
 def private print_report(cfg : RunArgs; areas : array<string>; n_files, n_excluded : int; tally : RunTally; core : bool) {
-    let scope = ((cfg.changed ? "changed vs {cfg.base}" : (!empty(areas) ? "areas {join(areas, ",")}" : "suite {cfg.suite}"))
+    let picked = !empty(cfg.category) ? "category {cfg.category}" : "suite {cfg.suite}"
+    let scope = ((cfg.changed ? "changed vs {cfg.base}" : (!empty(areas) ? "areas {join(areas, ",")}" : picked))
         + (empty(cfg.only) ? "" : " only {cfg.only}") + (empty(cfg.shard) ? "" : " shard {cfg.shard}") + scope_relaxed(cfg))
     let failed_list = empty(tally.failed_tags) ? "" : " ({join(tally.failed_tags, ", ")})"
     let excluded = n_excluded == 0 ? "" : ", {n_excluded} file(s) excluded"
@@ -1628,6 +1752,46 @@ def private print_report(cfg : RunArgs; areas : array<string>; n_files, n_exclud
     }
 }
 
+//! what a run covers, read off its flags: the areas an area or changed run names, the files, the image child's arms,
+//! and whether a changed run reached the engine core. `status` is the exit code of a run its flags end, -1 otherwise
+struct RunScope {
+    status : int = -1
+    areas : array<string>
+    files : array<string>
+    image_arms : string
+    core : bool
+}
+
+def private run_scope(cfg : RunArgs) : RunScope {
+    var scope = RunScope()
+    let by_category = !empty(cfg.category)
+    if (check_filter_args(cfg) != 0 || (by_category && check_category_args(cfg) != 0)) {
+        scope.status = 2
+        return <- scope
+    }
+    var sel <- select_areas(cfg)
+    scope.status = sel.status
+    return <- scope if (scope.status >= 0)
+    scope.areas <- sel.areas
+    scope.status = (empty(scope.areas) && !cfg.changed && !by_category) ? check_suite_args(cfg) : 0
+    return <- scope if (scope.status != 0)
+    scope.status = -1
+    if (by_category) {
+        scope.files <- category_files(cfg.category)
+    } elif (cfg.changed) {
+        var changed <- changed_plan(cfg)
+        scope.status = changed.status
+        scope.files <- changed.files
+        scope.image_arms = changed.image_arms
+        scope.core = changed.core
+    } else {
+        var plan <- plan_files(cfg, scope.areas)
+        scope.files <- plan.files
+        scope.image_arms = plan.image_arms
+    }
+    return <- scope
+}
+
 [export]
 def main() : int {
     //! the runner's lines (AREAS, START, CHANGED, REPORT, NEXT) are its output: the to_log floor is info
@@ -1646,26 +1810,16 @@ def main() : int {
         print_help(get_command_info(type<RunArgs>), "modules/dasLLAMA/tests/run.das")
         return 0
     }
-    var sel <- select_areas(cfg)
-    if (sel.status >= 0) {
-        return sel.status
+    var plan <- run_scope(cfg)
+    if (plan.status >= 0) {
+        return plan.status
     }
-    let areas <- sel.areas
-    let suite_rc = (empty(areas) && !cfg.changed) ? check_suite_args(cfg) : 0
-    if (suite_rc != 0) {
-        return suite_rc
+    let forced = forced_tune_file(cfg)
+    if (!empty(forced)) {   //! the test child's build reads the runner's own environment
+        set_env_variable("DAS_TUNE_FORCE", forced)
     }
-    var plan <- plan_files(cfg, areas)
-    var core = false
-    if (cfg.changed) {
-        var changed <- changed_plan(cfg)
-        if (changed.status >= 0) {
-            return changed.status
-        }
-        plan.files <- changed.files
-        plan.image_arms = changed.image_arms
-        core = changed.core
-    }
+    let areas <- plan.areas
+    let core = plan.core
     if (empty(plan.files)) {
         to_log(LOG_ERROR, "unknown --suite '{cfg.suite}' (decode | mtp | prefill | matrix | kernels | image | image-vulkan | coverage | model-free | stocked | wasm | all)\n")
         return 2

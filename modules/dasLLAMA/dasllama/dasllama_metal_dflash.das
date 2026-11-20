@@ -665,6 +665,21 @@ def private df_detach {
     }
 }
 
+//! Release the drafter driver's device objects - the attached pass's buffers and the driver's own pipelines; the leak gate's
+//! rail, as `metal_decode_shutdown`. The next attach compiles the pipelines again.
+def public metal_dflash_shutdown {
+    df_detach()
+    release_handles(g_df_pso_conv, g_df_pso_qkn, g_df_pso_attn_tile, g_df_pso_attn_merge)
+    release_handles(g_df_pso_topk_slices, g_df_pso_topk_merge, g_df_pso_walk, g_df_pso_walk_soft, g_df_pso_accept)
+    g_df_tried = false
+}
+
+//! this context's drafter driver down at its end, as the decode and prefill drivers' `metal_context_shutdown`
+[finalize, arch(at="../ARCHITECTURE_GPU_METAL_LIFECYCLE.md#metal-family-lifecycle")]
+def private metal_dflash_context_shutdown {
+    metal_dflash_shutdown()
+}
+
 var private g_df_ws : BatchWorkspace   //! the joint round's verify workspace, made at the first round of an attach
 var private g_df_ws_ok = false
 var private @scratch g_df_gw : MtpRoundGather   //! the tick's warm streams, a verify group each

@@ -68,7 +68,7 @@ log line a parity rule reads - the resident driver's `resident driver armed (...
 per-op tier's `GPU MoE tier:` report, the `resident override passed a call` line - applies
 `REVIEW_GPU_PARITY.md` too.**
 
-**A diff that hands a GPU call the device served (a decode, prefill, tower driver's stage or ASR decoder step)
+**A diff that makes a GPU backend serve a call, changes a served call's stages, or hands one
 to the CPU path; lands a model family, backend arm or session shape with a batched decode step; calls
 `create_device_session`, `set_device_kv` or `moe_gpu_drop_model`; calls or defines a `set_*` or `reset_*`
 function or an `install_moe_gpu_resident_*` declaration in `dasllama/dasllama_core.das`, `dasllama/dasllama_env.das`

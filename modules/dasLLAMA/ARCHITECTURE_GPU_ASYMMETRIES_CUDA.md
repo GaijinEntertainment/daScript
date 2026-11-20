@@ -247,8 +247,8 @@ The pass (`dasllama_cuda_dflash`) stamps the templates Metal stamps (`GkDflashCo
 form, the picks alone landing (`dflash_device_stats().walked`; `set_dflash_device_selector` lands the lists for the
 host's walk, the reference the device walk is held to). The verify lands every row's pick and no logits, and the host
 walks the picks for the count (`mtp_seat_accept_walk`): that walk cuts at a stop id, and the commit and the next pass
-take the count as launch arguments, so a device accept (Metal's `MetalDflashAccept`, that home's own kernel) would add a
-launch and save no wait here. The recurrent rows a round keeps are scanned into the slot on a side stream as the next
+take the count as launch arguments, so the round waits on the host twice - after the pass, for the drafts, and after the
+verify, for the count - where Metal's waits once (`MetalDflashAccept`, the verify encoded behind the pass). The recurrent rows a round keeps are scanned into the slot on a side stream as the next
 pass starts (`cud_rdec_commit_kick`), joined before a command reads the state.
 
 ### The tower chains replay from captured graphs {#cuda-chain-graphs}

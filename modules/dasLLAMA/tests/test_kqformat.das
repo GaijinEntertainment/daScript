@@ -15,6 +15,7 @@ require dasllama/dasllama_common   // kq_fmt_row_ok - the dense-row demotion
 require dasllama/dasllama_blocks   // kq_bytes_per_weight - the split estimate's per-format price
 require dasllama/dasllama_gguf   // ggml_type_bytes - the disk-byte oracle of the descriptor rows; gguf_need_tensor's refusal
 require dasllama/dasllama_load   // conv_row_name - the load report row a converted plane reads under
+require dasllama/dasllama_layout   // metal_kq_scale_form - the scale plane's device form and its size
 require strings
 require dasllama/dasllama_gemm_schema   // the int-id delegation under test
 require ?vulkan dasllama/dasllama_vulkan_common   // DAT_KEY_FMTS, the decode block's layer-key radix
@@ -618,4 +619,25 @@ def test_kq_tile_stamped(t : T?) {
     t |> success(kq_tile_stamped(k6, "q8/b k4", a, STAMPED_TAILS), "without `!b32` the superblock member keeps its tails (the control)")
     t |> success(kq_tile_stamped(q8, "q8/b k4", a, STAMPED_TAILS), "a pair word keeps the member's other tail")
     t |> success(!kq_tile_stamped(k4, "q8/b k4", a, STAMPED_TAILS), "... and the member word still drops it")
+}
+
+[test(description = "`metal_kq_scale_form_bytes` names the bytes `metal_kq_scale_form` leaves of a scale plane, for every superblock format: the 16-byte strip of k4 and k5, the split form of the others that move, and the plane as it is for the ones that serve as they are")]
+def test_metal_kq_scale_form_bytes(t : T?) {
+    let nsb = 5l
+    var moved = 0
+    for (f in type<KqFmt>) {
+        continue if (!kq_sb(f))
+        let n = nsb * kq_ssb(f)
+        var ks : array<uint8>
+        ks |> resize(n)
+        metal_kq_scale_form(f, ks)
+        t |> equal(metal_kq_scale_form_bytes(f, n), long_length(ks), "{f}: the size of the device form of {nsb} superblocks ({n} bytes at the engine's stride)")
+        t |> equal(long_length(ks) != n, metal_kq_scale_moves(f) && kq_split_scale_bytes(f, nsb) != n || f == KqFmt.k4 || f == KqFmt.k5, "{f}: the plane changes size where its form does")
+        moved += long_length(ks) != n ? 1 : 0
+        delete ks
+    }
+    t |> success(moved >= 2, "the walk met formats whose device form is another size ({moved}) - the equalities are no accident of an identity")
+    t |> equal(metal_kq_scale_form_bytes(KqFmt.k4, nsb * 20l), nsb * 16l, "k4: twenty bytes a superblock down to sixteen")
+    t |> equal(metal_kq_scale_form_bytes(KqFmt.k6, 0l), 0l, "an empty plane stays empty")
+    t |> equal(metal_kq_scale_form_bytes(KqFmt.q8, 640l), 640l, "a format off the superblock lattice has no scale plane to move")
 }

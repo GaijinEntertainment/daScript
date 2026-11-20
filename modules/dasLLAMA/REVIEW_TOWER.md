@@ -3,7 +3,7 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
 docs: `ARCHITECTURE_GPU_TOWER.md`, `ARCHITECTURE_GPU_TOWER_VULKAN.md`,
 `ARCHITECTURE_GPU_TOWER_VULKAN_VISION.md`, `ARCHITECTURE_GPU_TOWER_VULKAN_TTS.md`,
-`ARCHITECTURE_MEDIA.md`, `ARCHITECTURE_GPU_ASYMMETRIES.md`. Planned work: `followup_metal.md`,
+`ARCHITECTURE_MEDIA.md`. Planned work: `followup_metal.md`,
 `followup_vulkan.md`.
 
 A tower driver file is `dasllama/dasllama_metal_tower.das`, `dasllama/dasllama_vulkan_tower.das`,
@@ -113,16 +113,6 @@ the call site skips when the hook serves.
 
 **A diff that makes a tower chain compute anything the CPU code its seat's hook replaces does not
 compute changes that CPU code the same way, in the same diff.**
-
-**A diff that adds or changes a family's chain in the Metal tower or in
-`dasllama/dasllama_metal_asr_dec.das` puts on the device, in the same change, every stage that
-family's CPU chain runs inside a transcription, synthesis or image-encode call, for every model and
-weight lane the family serves.** It binds whenever the stage would serve: a Metal device is
-present, the stage's knob is on (`DASLLAMA_METAL_TOWER`; `DASLLAMA_METAL_WDEC` for the cross-KV;
-`DASLLAMA_METAL_WDEC` and `DASLLAMA_METAL_WDEC_STEP` for the decode step; `DASLLAMA_METAL_RNNT` for
-the transducer decode), and the stage's command buffer succeeded. Only an
-`ARCHITECTURE_GPU_ASYMMETRIES.md#gpu-asymmetries` entry or a `followup_metal.md` row ledgers a
-case. A CPU stage behind a Metal chain looks served.
 
 **A diff that changes what a TTS seat's chain computes in a tower driver applies `REVIEW_TTS.md`
 too.**

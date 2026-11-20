@@ -4,6 +4,7 @@ options persistent_heap   // a dastest root frees what it deletes only on this h
 
 require dastest/testing_boost public
 require run
+require _model_categories
 require daslib/fio
 require daslib/strings_boost
 require strings
@@ -266,7 +267,10 @@ def private das_exe() : string {
 
 //! the runner on `args`; `env` is a POSIX prefix of `NAME=value ` tokens its children inherit
 def private run_runner(args : string; var output : string&; env : string = "") : int {
-    return unsafe(popen_timeout("{env}{das_exe()} -dasroot {get_das_root()} {TESTS_DIR}/run.das -- {args}", 120.0, $(f) {
+    //! the runner's child logs land in the test's own folder; cmd.exe has no `NAME=value` prefix, and `temp_dir` reads TEMP there
+    let scratch = get_platform_name() == "windows" ? "" : "TMPDIR='{test_temp_dir()}' "
+    let cache = "-module-cache {path_join(test_temp_dir(), "run_suites.dascache")}"   //! and its compile record
+    return unsafe(popen_timeout("{scratch}{env}{das_exe()} -dasroot {get_das_root()} {cache} {TESTS_DIR}/run.das -- {args}", 120.0, $(f) {
         if (f != null) {
             output = fread(f)
         }
@@ -289,13 +293,13 @@ def test_runner_dry_run(t : T?) {
     let image_start = find(out, "START test_model_image.das: ")
     let image_line_end = find(out, "\n", image_start)
     let image_line = slice(out, image_start, image_line_end)
-    t |> success(find(image_line, "DASLLAMA_TEST_ARMS='whisper,") >= 0 && find(image_line, "gemma3v") >= 0, "the image child gets the union of the areas' arms:\n{image_line}")
+    t |> success(find(image_line, "--run-env \"DASLLAMA_TEST_ARMS=whisper,") >= 0 && find(image_line, "gemma3v") >= 0, "the image child gets the union of the areas' arms:\n{image_line}")
     t |> success(find(image_line, " --test \"") >= 0 && find(image_line, "--together") < 0, "the image child runs alone, under --test:\n{image_line}")
     let audio_cmd = find(out, "--together \"{TESTS_DIR}/test_audio.das\"")
     t |> success(audio_cmd >= 0, "the audio file rides a --together batch:\n{out}")
     let audio_start = rfind(slice(out, 0, max(audio_cmd, 0)), "START ")
     let audio_line = slice(out, audio_start, find(out, "\n", audio_start))
-    t |> success(find(audio_line, "DASLLAMA_TEST_ARMS=''") >= 0, "every other child gets no arm filter:\n{audio_line}")
+    t |> success(find(audio_line, "--run-env \"DASLLAMA_TEST_ARMS=\"") >= 0, "every other child gets no arm filter:\n{audio_line}")
     var single : string
     t |> equal(run_runner("--area audio --das /usr/bin/true --batch 1", single), 0, "a dry area run at --batch 1 exits clean:\n{single}")
     t |> success(find(single, "START test_audio.das: ") >= 0 && find(single, "--together") < 0, "at --batch 1 every file is its own --test child:\n{single}")
@@ -488,6 +492,137 @@ def test_gpu_kernels_suite(t : T?) {
     rmdir_rec(dir)
 }
 
+[test(description = "A model category holds the files whose names carry one of its stems: a run that names no category opens none of them, a run that names one opens its files past the size tier and no other model, and a name that is no category's is reported")]
+def test_model_categories(t : T?) {
+    t |> equal(model_category("/models/gemma-4-E4B-it-Q8_0"), "gemma4-e4b", "the decoder, by its path")
+    t |> equal(model_category("mmproj-gemma-4-E4B-it-BF16"), "gemma4-e4b", "the mmproj")
+    t |> equal(model_category("gemma-4-E2B-it-Q8_0"), "", "the family's small carrier is in none")
+    t |> equal(model_category("gemma-4-12b-it-Q6_K"), "gemma4-dense", "a stem in either casing")
+    t |> equal(model_category("mmproj-gemma-4-12B-it-BF16"), "", "a stem opens the name: the 12B's vision projector is no dense decoder")
+    t |> equal(model_category("mtp-gemma-4-26B-A4B-it-Q8_0"), "gemma4-moe", "a draft head rides its target's category")
+    t |> success(find(category_skip_reason("gemma-4-E4B-it-Q8_0", ""), "--category gemma4-e4b") >= 0, "a run that names none leaves a category's file, the reason naming the flag")
+    t |> equal(category_skip_reason("gemma-4-E2B-it-Q8_0", ""), "", "... and opens a model of no category")
+    t |> equal(category_skip_reason("gemma-4-E4B-it-Q8_0", "other, gemma4-e4b"), "", "a named category's file opens")
+    t |> success(find(category_skip_reason("gemma-4-E2B-it-Q8_0", "gemma4-e4b"), "outside the named categories") >= 0, "... and no other model does")
+    t |> success(list_names("a, gemma4-e4b", "gemma4-e4b") && !list_names("gemma4-e4bx", "gemma4-e4b") && !list_names("gemma4", "gemma4-e4b"), "a category is named whole")
+    t |> equal(join(unknown_categories("gemma4-e4b, nope,,other"), ","), "nope,other", "the names that are no category's")
+    t |> success(category_gate("gemma-4-E4B-it-Q8_0", "gemma4-e4b").lifts_tier, "a named category's file is past the size tier")
+    t |> success(!category_gate("gemma-4-E2B-it-Q8_0", "").lifts_tier && !category_gate("gemma-4-E2B-it-Q8_0", "gemma4-e4b").lifts_tier, "... and no other file is")
+    for (cat in model_categories()) {
+        t |> success(!empty(cat.name) && !empty(cat.stems) && !empty(cat.topics), "the category {cat.name} names its files and its topics")
+        t |> success(!empty(category_files(cat.name)), "... and a test file names one of its models")
+    }
+}
+
+[test(description = "A family run opens the model files of the families it names and of no row, by the file's name: the longest stem that opens a name is its family's")]
+def test_model_families(t : T?) {
+    t |> equal(model_family("/models/gemma-4-E2B-it-Q8_0.gguf"), "gemma4e", "the E-series carrier, by its path")
+    t |> equal(model_family("drafters/x/gemma-4-E2B-it-dflash2-Q8_0.gguf"), "gemma4e", "a drafter rides its trunk's family")
+    t |> equal(model_family("Qwen3-30B-A3B-Instruct-2507-Q4_K_M.gguf"), "qwen3moe", "the longest stem wins: the routed model under `Qwen3-`")
+    t |> equal(model_family("Qwen3-0.6B-Q8_0.gguf"), "qwen3", "... and the dense one keeps the short stem")
+    t |> equal(model_family("mmproj-gemma-4-E2B-it-bf16.gguf"), "", "a tower is in no row")
+    t |> equal(family_skip_reason("Llama-3.2-1B-Instruct-Q8_0.gguf", ""), "", "a run that names no family opens every file")
+    t |> equal(family_skip_reason("gemma-4-E2B-it-Q8_0.gguf", "gemma2, gemma4e"), "", "a named family's file opens")
+    t |> success(find(family_skip_reason("Llama-3.2-1B-Instruct-Q8_0.gguf", "gemma4e"), "the llama family's") >= 0, "another family's file is left, the reason naming its family")
+    t |> equal(family_skip_reason("mmproj-gemma-4-E2B-it-bf16.gguf", "llama"), "", "a file of no row is open to any family run")
+    var seen : table<string>
+    for (fam in model_families()) {
+        t |> success(!empty(fam.name) && !empty(fam.stems) && !key_exists(seen, fam.name), "the family {fam.name} has one row with stems")
+        seen |> insert(fam.name)
+    }
+}
+
+[test(description = "`--category` takes known names and no flag that picks files or cells another way, plans the test files naming the categories' models, and hands every child the names", timeout = 1200)]
+def test_category_run(t : T?) {
+    t |> equal(check_filter_args(RunArgs(arm = "fam_gemma4e,g4e.q8:x+y-z", family = "gemma4e", category = "gemma4-e4b")), 0,
+        "names and the marks between them stand")
+    for (bad in [RunArgs(arm = "x$(id)"), RunArgs(family = "a`b"), RunArgs(category = "a\"b"), RunArgs(arm = "a b")]) {
+        t |> success(check_filter_args(bad) != 0, "a filter a shell would read as its own is refused: '{bad.arm}{bad.family}{bad.category}'")
+    }
+    t |> equal(check_category_args(RunArgs(category = "gemma4-e4b")), 0, "a known category stands alone")
+    t |> success(check_category_args(RunArgs(category = "gemma4-e4b,nope")) != 0, "a name that is no category's is refused")
+    t |> success(check_category_args(RunArgs(category = "gemma4-e4b,")) != 0 && check_category_args(RunArgs(category = ",gemma4-e4b")) != 0,
+        "an empty name between the commas is refused")
+    for (clash in [RunArgs(category = "gemma4-e4b", suite = "stocked"), RunArgs(category = "gemma4-e4b", area = "audio"),
+                   RunArgs(category = "gemma4-e4b", changed = true), RunArgs(category = "gemma4-e4b", arm = "g4e"),
+                   RunArgs(category = "gemma4-e4b", full = true), RunArgs(category = "gemma4-e4b", family = "gemma4a")]) {
+        t |> success(check_category_args(clash) != 0, "refused beside --suite {clash.suite} --area '{clash.area}' --changed {clash.changed} --arm '{clash.arm}' --full {clash.full} --family '{clash.family}'")
+    }
+    let files <- category_files("gemma4-e4b")
+    t |> success(find_index(files, "{TESTS_DIR}/test_gemma4v.das") >= 0 && find_index(files, "{TESTS_DIR}/test_whisper.das") >= 0, "the files naming an E4B model: {join(files, " ")}")
+    t |> success(find_index(files, "{TESTS_DIR}/test_chat.das") < 0, "a file that names none stays out")
+    t |> success(empty(category_files("nope")), "a name that is no category's plans nothing")
+    t |> equal(length(category_files("gemma4-e4b,")), length(files), "an empty name plans no file of a model in no category")
+    t |> success(empty([for (f in files); f; where base_name(f) |> starts_with("_")]), "a helper file that names a model is no test file: {join(files, " ")}")
+    let named = RunArgs(category = "gemma4-e4b")
+    let matrix = "{TESTS_DIR}/test_metal_support_matrix.das"
+    let coverage = "{TESTS_DIR}/test_kernel_coverage.das"
+    let plain <- [for (i in range(12)); "{TESTS_DIR}/test_plain_{i}.das"]
+    var mixed <- [for (f in plain); f]
+    mixed |> push(matrix)
+    mixed |> push(coverage)
+    let chunks <- category_chunks(mixed, batch_files(named))
+    t |> equal(length(chunks), 4, "a process suite's files ride a child of their own, the others ten a child: {chunks}")
+    t |> success(length(chunks[0]) == 1 && chunks[0][0] == matrix && length(chunks[1]) == 1 && chunks[1][0] == coverage, "the matrix file and the coverage file each alone")
+    t |> success(length(chunks[2]) == 10 && length(chunks[3]) == 2, "the twelve other files in two children")
+    t |> equal(length(run_chunks(named, mixed, false)), 4, "a category run's children are the category's chunks")
+    t |> equal(batch_files(named), batch_files(RunArgs(suite = "stocked")), "a category run batches as a model suite does")
+    let mtp <- suite_files("mtp")
+    t |> success(length(mtp) > 1 && length(category_chunks(mtp, 10)) == 1, "the files of one process suite share its child")
+    t |> equal(length(category_chunks(mtp, 1)), length(mtp), "at one file a child - a failed root's rerun - each file is its own child")
+    t |> success(find(child_run_env(named, ""), " --run-env \"DASLLAMA_TEST_CATEGORIES=gemma4-e4b\"") >= 0, "a run-time pair of the child: {child_run_env(named, "")}")
+    t |> success(find(child_envs(named, false), "DASLLAMA_TEST_") < 0 && find(child_envs(named, true), "DASLLAMA_TEST_") < 0, "no filter rides the child's environment prefix: it would name another compile record")
+    t |> success(find(child_run_env(RunArgs(), ""), "DASLLAMA_TEST_CATEGORIES") < 0, "no flag, no names")
+    var fam = RunArgs()
+    fam.family = "gemma4e"
+    fam.arm = "g4e"
+    t |> equal(child_run_env(fam, fam.arm), " --run-env \"DASLLAMA_TEST_ARMS=g4e\" --run-env \"DASLLAMA_TEST_FAMILY=gemma4e\"", "the arms and the families a run names")
+    t |> success(find(child_envs(fam, false), "DASLLAMA_TEST_") < 0 && find(child_envs(fam, true), "DASLLAMA_TEST_") < 0, "the arms and families ride no environment prefix either")
+    fam.full = true
+    t |> equal(child_run_env(fam, fam.arm), " --run-env \"DASLLAMA_TEST_FAMILY=gemma4e\"", "the full suite names no arm")
+    if (get_platform_name() == "windows") {
+        t |> skip("the dry run stands in a POSIX no-op binary for the child")
+        return
+    }
+    var out : string
+    t |> equal(run_runner("--category gemma4-e4b --das /usr/bin/true", out), 0, "a dry category run exits clean:\n{out}")
+    t |> success(find(out, "REPORT category gemma4-e4b: {length(files)} file(s)") >= 0, "the REPORT names the category and its files:\n{out}")
+    t |> success(run_runner("--category nope --das /usr/bin/true", out) != 0 && find(out, "unknown --category 'nope'") >= 0, "an unknown category stops the run:\n{out}")
+    t |> success(run_runner("--suite model-free --arm a@b --das /usr/bin/true", out) != 0 && find(out, "--arm 'a@b' holds a character") >= 0,
+        "a filter value a child's command line cannot carry stops the run:\n{out}")
+}
+
+[test(description = "A run forces its children onto the tune file in effect, whatever the file's age: the caller's manifest where it exists, nothing under --no-tune, for an absent file, or where the caller forced a file already", timeout = 1200)]
+def test_forced_tune_file(t : T?) {
+    let box = path_join(test_temp_dir(), "forced_box_{get_time_usec(0l)}.tune.json")
+    t |> success(fwrite(box, "\{}"), "a box tune file is written")
+    t |> equal(forced_tune_file_of(false, "", "", box), box, "with no manifest named the box's own file is forced")
+    t |> equal(forced_tune_file_of(false, "", "{box}.other", box), "", "a named manifest that is not there forces nothing, the box's file or no")
+    t |> equal(forced_tune_file_of(true, "", "", box), "", "--no-tune forces nothing")
+    t |> equal(forced_tune_file_of(false, "theirs.json", "", box), "", "a file the caller forced stands")
+    remove(box)
+    t |> equal(forced_env("A=1 ", "x.json", false), "DAS_TUNE_FORCE='x.json' A=1 ", "the POSIX prefix names the forced file")
+    t |> equal(forced_env("set \"A=1\"&& ", "x.json", true), "set \"A=1\"&& set \"DAS_TUNE_FORCE=x.json\"&& ", "cmd.exe's form sets it")
+    t |> equal(forced_env("A=1 ", "", false), "A=1 ", "no forced file, no variable")
+    if (get_platform_name() == "windows") {
+        t |> skip("the dry run stands in a POSIX no-op binary for the child")
+        return
+    }
+    let file = path_join(test_temp_dir(), "forced_{get_time_usec(0l)}.tune.json")
+    t |> success(fwrite(file, "\{}"), "a tune file is written")
+    let run = "--suite model-free --only test_run_suites --das /usr/bin/true"
+    var out : string
+    t |> equal(run_runner(run, out, "DAS_TUNE_FORCE= DAS_TUNE_MANIFEST='{file}' "), 0, "the dry run exits clean:\n{out}")
+    t |> success(find(out, "DAS_TUNE_FORCE='{file}' ") >= 0, "the child is forced onto the caller's manifest:\n{out}")
+    t |> equal(run_runner("{run} --no-tune", out, "DAS_TUNE_FORCE= DAS_TUNE_MANIFEST='{file}' "), 0, "the --no-tune dry run exits clean:\n{out}")
+    t |> success(find(out, "DAS_TUNE_FORCE=") < 0, "--no-tune forces no file:\n{out}")
+    t |> equal(run_runner(run, out, "DAS_TUNE_FORCE= DAS_TUNE_MANIFEST='{file}.absent' "), 0, "the absent-file dry run exits clean:\n{out}")
+    t |> success(find(out, "DAS_TUNE_FORCE=") < 0, "a manifest that is not there forces nothing:\n{out}")
+    t |> equal(run_runner(run, out, "DAS_TUNE_FORCE='{file}.theirs' DAS_TUNE_MANIFEST='{file}' "), 0, "the caller-forced dry run exits clean:\n{out}")
+    t |> success(find(out, "DAS_TUNE_FORCE='{file}' ") < 0, "a file the caller forced stands: the run adds none of its own:\n{out}")
+    remove(file)
+}
+
 [test(description = "`wasm_summary` reads the last summary line of a wasm test release's log and its FAIL names, and returns no line for a log that died before one")]
 def test_wasm_summary(t : T?) {
     let log = "PASS test_a\nFAIL test_b\n=== 1/2 passed, 1 failed ===\nSKIP test_c\nFAIL test_d\n=== 2/4 passed, 2 failed ===\n"
@@ -531,15 +666,15 @@ def test_wasm_package(t : T?) {
 
 [test(description = "`exclude_files` drops the files whose base name contains any comma-listed token, ignores blank tokens, matches base names not directories, and keeps everything on an empty list")]
 def test_exclude_filter(t : T?) {
-    let files <- ["modules/dasLLAMA/tests/test_ple_modes.das", "modules/dasLLAMA/tests/test_parity.das", "modules/dasLLAMA/tests/test_prefill.das"]
+    let files <- ["modules/dasLLAMA/tests/test_gpu_resident_gemma4_e2b.das", "modules/dasLLAMA/tests/test_parity.das", "modules/dasLLAMA/tests/test_prefill.das"]
     let none <- exclude_files(files, "")
     t |> equal(length(none.kept), 3, "an empty exclude keeps every file")
     t |> equal(length(none.dropped), 0, "an empty exclude drops nothing")
-    let one <- exclude_files(files, "ple_modes")
+    let one <- exclude_files(files, "gemma4_e2b")
     t |> equal(length(one.kept), 2, "a token drops the files whose base name contains it")
     t |> equal(length(one.dropped), 1, "the dropped list carries the match")
     t |> equal(one.dropped[0], files[0], "the dropped file is the matching one")
-    let two <- exclude_files(files, " ple_modes, ,prefill ")
+    let two <- exclude_files(files, " gemma4_e2b, ,prefill ")
     t |> equal(length(two.kept), 1, "a comma list drops every match, blanks ignored")
     t |> equal(two.kept[0], files[1], "the survivor is the unmatched file")
     let dir <- exclude_files(files, "dasLLAMA")
@@ -779,8 +914,8 @@ def test_reap_images(t : T?) {
 [test(description = "A `--poison-kv` run hands every child DASLLAMA_KV_INIT=poison on both shells' forms, and a run without the flag names no K/V start")]
 def test_poison_kv_envs(t : T?) {
     var cfg = RunArgs()
-    t |> success(find(child_envs(cfg, false, ""), "DASLLAMA_KV_INIT") < 0 && find(child_envs(cfg, true, ""), "DASLLAMA_KV_INIT") < 0, "no flag, no K/V start named: the children take the product's")
+    t |> success(find(child_envs(cfg, false), "DASLLAMA_KV_INIT") < 0 && find(child_envs(cfg, true), "DASLLAMA_KV_INIT") < 0, "no flag, no K/V start named: the children take the product's")
     cfg.poison_kv = true
-    t |> success(find(child_envs(cfg, false, ""), "DASLLAMA_KV_INIT=poison ") >= 0, "the posix prefix: {child_envs(cfg, false, "")}")
-    t |> success(find(child_envs(cfg, true, ""), "set \"DASLLAMA_KV_INIT=poison\"&& ") >= 0, "the cmd.exe form: {child_envs(cfg, true, "")}")
+    t |> success(find(child_envs(cfg, false), "DASLLAMA_KV_INIT=poison ") >= 0, "the posix prefix: {child_envs(cfg, false)}")
+    t |> success(find(child_envs(cfg, true), "set \"DASLLAMA_KV_INIT=poison\"&& ") >= 0, "the cmd.exe form: {child_envs(cfg, true)}")
 }

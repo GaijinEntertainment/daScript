@@ -226,8 +226,8 @@ def test_gpu_resident_hc_micro_single_queue(t : T?) {
     t |> run("micro-qwen4exp with the transfer queue off (DASLLAMA_VK_XFERQ=0): the host-experts form's streamed bundles and token command run on the compute timeline alone - a child loads, prefills and steps") @(t : T?) {
         if (!micro_ready(t)) return
         var out : string
-        let rc = run_child(child_cmd("_resident_load_root.das", [(name = "DASLLAMA_VK_XFERQ", value = "0"), (name = "DAS_LOG_LEVEL", value = "info")],
-            "\"{path_join(models_dir(), MICRO_TRUNK)}\" 0 step", true), out)
+        let rc = run_child(child_verb_cmd("resident-load", [(name = "DASLLAMA_VK_XFERQ", value = "0"), (name = "DAS_LOG_LEVEL", value = "info")],
+            "\"{path_join(models_dir(), MICRO_TRUNK)}\" 0 step"), out)
         t |> equal(rc, 0, "the single-queue child ran to its end:\n{out}")
         t |> success(find(out, "RESIDENT_LOAD active=true") >= 0, "the whole-model driver armed without a transfer family:\n{out}")
         t |> success(find(out, "transfer queue armed") < 0, "no transfer queue served the child:\n{out}")

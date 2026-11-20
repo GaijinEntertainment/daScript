@@ -12,6 +12,7 @@ require _child_override_announce
 require _child_flavor_decline
 require _child_jobque_tripwire
 require _child_team_panic
+require _child_resident_load
 
 // The test child: ONE program for every once-per-process contract the tests of this folder check - a knob the engine
 // reads at context init, a line only a process's log carries, an exit a panic decides. A test spawns it with a verb and
@@ -42,6 +43,8 @@ def main() {
         child_jobque_tripwire()
     } elif (verb == "team-panic") {
         child_team_panic()
+    } elif (verb == "resident-load") {
+        child_resident_load([for (i in range(1, length(args))); args[i]])
     } else {
         print("the test child has no verb '{verb}'\n")
         unsafe(fio::exit_now(2))

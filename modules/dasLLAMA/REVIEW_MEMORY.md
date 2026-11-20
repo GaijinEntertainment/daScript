@@ -57,10 +57,11 @@ variable, parameter or struct field that the call in that function names as the 
 that flags a `resize` with no reserve before it - checks a resize only when that declaration
 carries `@exact_size`.
 
-**Every `resize` of a buffer in `dasllama/` whose element count grows with a model-file count
-follows a `reserve(n)` or `ensure_capacity(n)` whose `n` is at least the resized count,
-or goes through a `dasllama/dasllama_math.das` helper whose own body does that before it resizes
-(`reserve_resize`, `grow_resize`), or is the builtin `scratch_resize` on a `@scratch` buffer.**
+**A diff that adds or changes a `resize` in `dasllama/` that can grow a buffer whose element count
+grows with a model-file count puts before it a `reserve(n)` or `ensure_capacity(n)` whose `n` is at
+least the resized count, or routes it through a `dasllama/dasllama_math.das` helper whose own body
+does that before it resizes (`reserve_resize`, `grow_resize`), or makes it the builtin
+`scratch_resize` on a `@scratch` buffer.**
 The lint never compares the two counts, and a resize past the heap's limit on unreserved growth
 (`max_unreserved_size`) panics on the first model big enough.
 

@@ -1552,6 +1552,14 @@ def kq_qsb(f : KqFmt) : int64 {
     return qsb
 }
 
+let KQ_STRIP_BYTES = 16l   //! the scale strip a superblock keeps in a device form: the disk block's first sixteen bytes
+
+//! the d bytes a superblock keeps beside its strip in the split scale form
+def kq_split_tail_bytes(f : KqFmt) : int64 => f == KqFmt.k2 ? 4l : 2l
+
+//! the bytes the split scale form holds of `nsb` superblocks: a strip and a d tail a superblock
+def kq_split_scale_bytes(f : KqFmt; nsb : int64) : int64 => nsb * (KQ_STRIP_BYTES + kq_split_tail_bytes(f))
+
 //! Scale-plane bytes per stride unit (see kq_qsb for the unit).
 def kq_ssb(f : KqFmt) : int64 {
     let ssb = kq_desc(f).ssb

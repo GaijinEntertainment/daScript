@@ -60,22 +60,32 @@ def test_cuda_live_load(tst : T?) {
 }
 
 //! the families whose trimmed lane the whole-model driver serves beside the dense q8 one: biased routed experts over an untied
-//! q8 token table, per-layer embeddings, and the gemma-4 routed block with its dense shared expert
-let private FAMILY_LANES <- [(family = "gptoss", file = "gpt-oss-20b-mxfp4.gguf"), (family = "gemma4e", file = "gemma-4-E2B-it-Q8_0.gguf"),
-    (family = "gemma4moe", file = "gemma-4-26B-A4B-it-Q4_K_M.gguf")]
-
-[test(description = "gpt-oss-20b, gemma-4-E2B and gemma-4-26B each mint a trimmed cuda lane with no planar family on the host, and the lane - cold, warm and re-armed - serves the live load's greedy tokens exactly with the token rows gathered on the device wherever a load with its planes on the host gathers them")]
-def test_cuda_mint_family_lanes(tst : T?) {
-    for (fam in FAMILY_LANES) {
-        tst |> run("{fam.file}: the trimmed cuda lane serves the live load's tokens cold, warm and re-armed, the token rows gathered where the staged load's are") @(t : T?) {
-            return if (!cuda_home_asked(t))
-            with_mint_file(t, fam.family, fam.file) $(path) {
-                with_gpu_kv_dtype(t, KVDtype.f16) {
-                    family_lane_cell(t, path)
-                }
+//! q8 token table, per-layer embeddings, and the gemma-4 routed block with its dense shared expert - a test a family:
+//! its trimmed cuda lane minted with no planar family on the host, then served cold, warm and re-armed
+def private family_lane_test(tst : T?; family, file : string) {
+    tst |> run("{file}: the trimmed cuda lane serves the live load's tokens cold, warm and re-armed, the token rows gathered where the staged load's are") @(t : T?) {
+        return if (!cuda_home_asked(t))
+        with_mint_file(t, family, file) $(path) {
+            with_gpu_kv_dtype(t, KVDtype.f16) {
+                family_lane_cell(t, path)
             }
         }
     }
+}
+
+[test(description = "gpt-oss-20b mints a trimmed cuda lane with no planar family on the host, and the lane - cold, warm and re-armed - serves the live load's greedy tokens exactly with the token rows gathered on the device wherever a load with its planes on the host gathers them")]
+def test_cuda_mint_family_lane_gptoss(tst : T?) {
+    family_lane_test(tst, "gptoss", "gpt-oss-20b-mxfp4.gguf")
+}
+
+[test(description = "gemma-4-E2B, with its per-layer embeddings, mints a trimmed cuda lane with no planar family on the host, and the lane - cold, warm and re-armed - serves the live load's greedy tokens exactly")]
+def test_cuda_mint_family_lane_gemma4e(tst : T?) {
+    family_lane_test(tst, "gemma4e", "gemma-4-E2B-it-Q8_0.gguf")
+}
+
+[test(description = "gemma-4-26B, with its routed block and dense shared expert, mints a trimmed cuda lane with no planar family on the host, and the lane - cold, warm and re-armed - serves the live load's greedy tokens exactly")]
+def test_cuda_mint_family_lane_gemma4moe(tst : T?) {
+    family_lane_test(tst, "gemma4moe", "gemma-4-26B-A4B-it-Q4_K_M.gguf")
 }
 
 [test(description = "The Qwen3.5-0.8B Q4_K_M twin mints its cuda lane off its native K-quant planes, named for the armed backend, and maps back warm to the same greedy tokens")]

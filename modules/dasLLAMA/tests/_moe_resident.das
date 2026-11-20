@@ -208,10 +208,9 @@ def moe_fixture_admitted(t : T?; tr : Model; fx : MoeFixture) : int64 {
 def moe_forced_feed(t : T?; n : int64; fx : MoeFixture) {
     static_if (typeinfo builtin_module_exists(cuda)) {
         if (fx.fp4_chain && gpu_want_cuda()) {   //! the FP4 chain's census assert reads the MMQ route: pinned to the winners, so `DASLLAMA_CUDA_MMQ` cannot stand it down
-            let was = cuda_mmq_pin()
-            set_cuda_mmq_pin(CUDA_MMQ_WINNERS)
-            moe_forced_feed_pinned(t, n, fx)
-            set_cuda_mmq_pin(was)
+            with_cuda_mmq_pin(CUDA_MMQ_WINNERS) {
+                moe_forced_feed_pinned(t, n, fx)
+            }
             return
         }
     }

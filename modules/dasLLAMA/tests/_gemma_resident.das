@@ -37,6 +37,11 @@ def cpu_side_row(tr : Model; tok : int64) : array<float> {
 def side_row_within(t : T?; dev : array<float>; tr : Model; tok : int64; what : string; rel : float) {
     var inscope cpu <- cpu_side_row(tr, tok)
     var inscope other <- cpu_side_row(tr, tok + 1l)
+    side_rows_within(t, dev, cpu, other, what, rel)
+}
+
+//! `side_row_within` on the CPU pre-step's rows already built: `cpu` the token's, `other` the control token's
+def side_rows_within(t : T?; dev, cpu, other : array<float>; what : string; rel : float) {
     let mx = logits_maxdiff(dev, cpu)   // a NaN on either side reads as infinite
     var big = 0.0   // the bar's scale: the CPU row's largest finite magnitude
     for (v in cpu) {
@@ -70,6 +75,7 @@ require dasllama/dasllama_math   // with_dasllama_jobque_ (the engine-standard j
 require dasllama/dasllama_gpu_tier   // moe_gpu_tier_installed / gpu_want_auto: is the tier armed
 require dasllama/dasllama_gpu_resident   // moe_gpu_resident_active: did the whole-model driver take the model
 require _model_tier public   // models_dir() + model_available() presence/size-tier gate, arm_on, live_maxabs, SUPPRESSED_LOGIT
+require _cpu_gpu_model public   // with_cpu_and_gpu_model, ModelForm, the feed rows
 require _resident_feed public   // resident_ready, load_resident, resident_then_cpu_feed, feed_steps_within, feed_logits
 require _format_census   // census_cell: the routed files' every site in its own format
 require _compares   // INFINITE_DIFF: the agreement form's control read finite
@@ -108,10 +114,14 @@ def private gemma_model(t : T?; gf : GemmaFile) : Model {
         let host = gpu_resident_host_layers()
         t |> success(host > 0l && host < tr.config.n_layers, "the first {host} of {tr.config.n_layers} routed layers' experts serve on the host, the rest on the device")
     }
-    t |> success(tr.config.pre_post_norm && tr.config.sliding_window > 0l && tr.config.ffn_act == FfnAct.gelu,
-        "the fixture carries the sandwich norms, a sliding window and the GeGLU FFN (the arms this file gates)")
+    t |> success(gemma_carrier_arms(tr), GEMMA_CARRIER_ARMS)
     return <- tr
 }
+
+let GEMMA_CARRIER_ARMS = "the fixture carries the sandwich norms, a sliding window and the GeGLU FFN (the arms this file gates)"
+
+//! the model carries the arms the gemma cells gate: the sandwich norms, a sliding window and the GeGLU FFN
+def gemma_carrier_arms(tr : Model) : bool => tr.config.pre_post_norm && tr.config.sliding_window > 0l && tr.config.ffn_act == FfnAct.gelu
 
 //! the gemma cell's rig: the fixture on the armed driver (or the cell skipped, saying why - its arm filtered among the reasons),
 //! `body` inside the engine's job queue, the model deleted after
@@ -161,52 +171,30 @@ def gemma_format_cell(t : T?; gf : GemmaFile; mx4 : bool) {
 }
 
 //! prefill `n` tokens + 8 fed steps on the resident driver with every call served, then the same on the all-CPU chain; the
-//! prefill logits and every step's within the bar, the one-step-off control past it. `exact` holds the rows against the file's f32
-//! chain (`f32_chain_rows`) where the CPU q8 chain is no reference: on the E2B Q4_K_M file the Q8_K activations make the feed
-//! chaotic, so step 4's top logit reads 17.85 (arm64), 16.70 (x64) and 18.50 (x64 on the reference kernel bodies) where the f32
-//! chain reads 19.14, and the reference build's quantized CPU path reads 17.8 to 20.1 by its attention form and batching, each
-//! chain summing as far from the f32 rows - and adds that the device sits no further from that chain than the CPU q8 chain
-//! (`f32_chain_witness`, within `f32_ratio` of the CPU q8 chain's distance, `f32_route` naming the route that ratio is for)
-[cold_path, arch(at="../ARCHITECTURE_MEASUREMENT_FORCED_FEED.md#reference-forced-feed")]
-def gemma_forced_feed(t : T?; n : int64; gf : GemmaFile; exact : bool = false; f32_ratio : float = F32_DIST_REL; f32_route : string = "") {
+//! prefill logits and every step's within the bar, the one-step-off control past it
+[cold_path]
+def gemma_forced_feed(t : T?; n : int64; gf : GemmaFile) {
     with_gemma_rig(t, gf) $(tr) {
         var inscope feed <- prose_feed(tr, n, 8l)
         var fed <- resident_then_cpu_feed(t, tr, feed.prompt, feed.toks) $ {
             served_every_call(t)
         }
-        if (exact) {
-            var f32_rows <- f32_chain_rows(path_join(models_dir(), gf.file), feed.prompt, feed.toks)
-            feed_steps_within(t, tr, "", n, fed.gpu, f32_rows, feed.toks, GEMMA_LOGIT_BAR_REL, "resident", "the f32 chain")
-            f32_chain_witness(t, tr, "{gf.file}: {n} tokens against the f32 chain{f32_route}", fed, f32_rows, f32_ratio)
-            delete f32_rows
-        } else {
-            feed_steps_within(t, tr, "", n, fed.gpu, fed.cpu, feed.toks, GEMMA_LOGIT_BAR_REL)
-        }
+        feed_steps_within(t, tr, "", n, fed.gpu, fed.cpu, feed.toks, GEMMA_LOGIT_BAR_REL)
         delete fed
     }
-}
-
-//! `ring_vs_flat` on the gemma fixture `gf` under the rig's context
-[cold_path]
-def ring_vs_flat(t : T?; n : int64; gf : GemmaFile; kv : KVDtype) {
-    return if (!arm_on(t, gf.arm))
-    let levers = resident_levers()
-    set_gpu_ctx_max(GEMMA_RIG_CTX)   //! the rig's mirror context for both loads; the levers go back after
-    ring_vs_flat(t, n, path_join(models_dir(), gf.file), kv, GEMMA_RIG_CTX)
-    restore_resident_levers(levers)
 }
 
 let RESIDENT_RING_ON = "dasLLAMA: resident driver - the sliding layers' K/V rows ride rings of their window plus"
 let RESIDENT_RING_OFF = "dasLLAMA: resident driver - the sliding layers' K/V rows keep every position's row, no ring, as asked"
 let RESIDENT_EMBED_OFF = "dasLLAMA: resident driver - the host embeds every token row as asked"
 
-//! the whole-model driver's load log for `gf` - what to_log prints, which no in-process cell reads - from one resident load in a
-//! child (`_resident_load_root.das`) at the context `ctx` asked whole (0 none) under `envs`; "" with the skip `resident_ready` names
+//! the whole-model driver's load log for `gf` - what to_log prints, which no in-process cell reads - from one resident load in
+//! the test child (its `resident-load` verb) at the context `ctx` asked whole (0 none) under `envs`; "" with the skip `resident_ready` names
 def resident_load_log(t : T?; gf : GemmaFile; ctx : int64; envs : array<tuple<name : string; value : string>>) : string {
     let path = path_join(models_dir(), gf.file)
     return "" if (!resident_ready(t, path))
     var out : string
-    let rc = run_child(child_cmd("_resident_load_root.das", envs, "\"{path}\" {ctx}", true), out)
+    let rc = run_child(child_verb_cmd("resident-load", envs, "\"{path}\" {ctx}"), out)
     t |> equal(rc, 0, "the load root ran:\n{out}")
     t |> success(find(out, "RESIDENT_LOAD active=true") >= 0, "the whole-model driver armed in the child:\n{out}")
     return out
@@ -229,6 +217,66 @@ def ring_load_announces(t : T?; gf : GemmaFile) {
     t |> success(find(ringed, RESIDENT_EMBED_OFF) < 0, "the gathering load says nothing of the host embed")
 }
 
+//! one arm's two paths over the same prose ids: the worst row distance between the window chain and the token command, as
+//! a fraction of the row's largest live logit - aligned, one position behind, and against the token command's first row
+struct PathGap {
+    gap : float
+    off : float
+    first : float
+}
+
+//! `n` prose ids through the window chain against the same ids through the token command, on sessions of codec `kv`; the
+//! arm named `name` in the log
+def path_gap(tr : Model; kv : KVDtype; n : int64; name : string) : PathGap {
+    var toks <- prose_tokens(tr, n + 4l)
+    var window_prompt <- [for (i in range64(n)); toks[i]]
+    var window_steps <- [for (i in range64(n, n + 4l)); toks[i]]
+    var token_prompt <- [toks[0]]
+    var token_steps <- [for (i in range64(1l, n + 4l)); toks[i]]
+    var a <- feed_alone(tr, kv, window_prompt, window_steps)
+    var b <- feed_alone(tr, kv, token_prompt, token_steps)
+    var worst = 0.0
+    var worst_off = 0.0
+    var worst_first = 0.0
+    for (k in range64(long_length(a))) {
+        let j = n - 1l + k
+        let scale = live_maxabs(a[k])
+        let rel = logits_maxdiff(a[k], b[j]) / scale
+        if (rel > worst) {
+            worst = rel
+        }
+        let off = logits_maxdiff(a[k], b[j - 1l]) / scale   // the token command one position behind: logged, since a one-position shift moves prose logits less than the bar on the 12B and 31B
+        if (off > worst_off) {
+            worst_off = off
+        }
+        let first = logits_maxdiff(a[k], b[0]) / scale   // the control: the token command's row at position 0 - the same window read every position off
+        if (first > worst_first) {
+            worst_first = first
+        }
+        let ia = argmax_of(a[k])
+        let ib = argmax_of(b[j])
+        to_log(LOG_INFO, "{name}: position {n + k - 1l}: prefilled-in-one vs decoded-one-by-one logits maxdiff {logits_maxdiff(a[k], b[j])} of max |logit| {scale}, argmax {ia} ({a[k][ia]}) vs {ib} ({b[j][ib]}); one position off {off}, the first position {first}\n")
+    }
+    delete a
+    delete b
+    delete toks
+    delete window_prompt
+    delete window_steps
+    delete token_prompt
+    delete token_steps
+    return PathGap(gap = worst, off = worst_off, first = worst_first)
+}
+
+//! the resident arm's two paths agree within `GEMMA_PATH_GAP_RATIO` of the CPU chain's own two, with both controls
+def path_gaps_within(t : T?; n : int64; res, cpu : PathGap) {
+    let bar = GEMMA_PATH_GAP_RATIO * cpu.gap
+    to_log(LOG_INFO, "{n} tokens: the resident paths sit {res.gap} of the max logit apart, the CPU paths {cpu.gap} - ratio {res.gap / cpu.gap} (bar {bar}); one position off: resident {res.off}, cpu {cpu.off}; the first position: resident {res.first}, cpu {cpu.first}\n")
+    t |> success(res.gap <= bar, "the resident window chain and token command agree within {GEMMA_PATH_GAP_RATIO}x of the CPU chain's own two paths (resident {res.gap}, cpu {cpu.gap})")
+    // the control on the resident route: the window's rows against the token command's first row - the same window read every position off - land outside the bar; a one-position shift cannot (the CPU chain's own paths sit 0.17 to 0.39 apart on the 12B and 31B, and 6x of that is wider than one position moves prose logits, 0.67 to 1.57), so it is logged beside the aligned gap alone
+    t |> success(is_finite(res.first) && res.first < INFINITE_DIFF && res.first > bar, "control: on the resident route the window's rows against the token command's first row land outside the bar ({res.first} against {bar})")
+    t |> success(res.off > res.gap && cpu.off > cpu.gap, "one position behind, both arms read a wider gap than aligned (resident {res.off} vs {res.gap}, cpu {cpu.off} vs {cpu.gap})")
+}
+
 //! the same tokens through the window chain at once and through the token command one at a time,
 //! on one arm: the two GPU paths' logits at every shared position against each other, then the CPU
 //! arm's own pair as the yardstick of how far a prefill kernel and a decode kernel sit apart on
@@ -236,65 +284,13 @@ def ring_load_announces(t : T?; gf : GemmaFile) {
 [cold_path]
 def prefill_vs_decode(t : T?; n : int64; gf : GemmaFile) {
     with_gemma_rig(t, gf) $(tr) {
-        let RESIDENT = 0
-        let CPU = 1
-        var toks <- prose_tokens(tr, n + 4l)
-        var window_prompt <- [for (i in range64(n)); toks[i]]
-        var window_steps <- [for (i in range64(n, n + 4l)); toks[i]]
-        var token_prompt <- [toks[0]]
-        var token_steps <- [for (i in range64(1l, n + 4l)); toks[i]]
-        var gap, gap_off, gap_first : float[2]
-        for (arm in range(2)) {
-            if (arm == CPU) {
-                moe_gpu_drop_model()
-            }
-            let name = arm == RESIDENT ? "resident" : "cpu"
-            let c0 = cuda_positions_served()
-            var a <- feed_alone(tr, mirror_kv_dtype(), window_prompt, window_steps)
-            var b <- feed_alone(tr, mirror_kv_dtype(), token_prompt, token_steps)
-            if (arm == RESIDENT) {
-                served_every_call(t)
-                cuda_served_since(t, c0, 2l * (n + 4l), "the window chain and the token command over {n + 4l} tokens each")
-            }
-            var worst = 0.0
-            var worst_off = 0.0
-            var worst_first = 0.0
-            for (k in range64(long_length(a))) {
-                let j = n - 1l + k
-                let scale = live_maxabs(a[k])
-                let rel = logits_maxdiff(a[k], b[j]) / scale
-                if (rel > worst) {
-                    worst = rel
-                }
-                let off = logits_maxdiff(a[k], b[j - 1l]) / scale   // the token command one position behind: logged, since a one-position shift moves prose logits less than the bar on the 12B and 31B
-                if (off > worst_off) {
-                    worst_off = off
-                }
-                let first = logits_maxdiff(a[k], b[0]) / scale   // the control: the token command's row at position 0 - the same window read every position off
-                if (first > worst_first) {
-                    worst_first = first
-                }
-                let ia = argmax_of(a[k])
-                let ib = argmax_of(b[j])
-                to_log(LOG_INFO, "{name}: position {n + k - 1l}: prefilled-in-one vs decoded-one-by-one logits maxdiff {logits_maxdiff(a[k], b[j])} of max |logit| {scale}, argmax {ia} ({a[k][ia]}) vs {ib} ({b[j][ib]}); one position off {off}, the first position {first}\n")
-            }
-            gap[arm] = worst
-            gap_off[arm] = worst_off
-            gap_first[arm] = worst_first
-            delete a
-            delete b
-        }
-        let bar = GEMMA_PATH_GAP_RATIO * gap[CPU]
-        to_log(LOG_INFO, "{n} tokens: the resident paths sit {gap[RESIDENT]} of the max logit apart, the CPU paths {gap[CPU]} - ratio {gap[RESIDENT] / gap[CPU]} (bar {bar}); one position off: resident {gap_off[RESIDENT]}, cpu {gap_off[CPU]}; the first position: resident {gap_first[RESIDENT]}, cpu {gap_first[CPU]}\n")
-        t |> success(gap[RESIDENT] <= bar, "the resident window chain and token command agree within {GEMMA_PATH_GAP_RATIO}x of the CPU chain's own two paths (resident {gap[RESIDENT]}, cpu {gap[CPU]})")
-        // the control on the resident route: the window's rows against the token command's first row - the same window read every position off - land outside the bar; a one-position shift cannot (the CPU chain's own paths sit 0.17 to 0.39 apart on the 12B and 31B, and 6x of that is wider than one position moves prose logits, 0.67 to 1.57), so it is logged beside the aligned gap alone
-        t |> success(is_finite(gap_first[RESIDENT]) && gap_first[RESIDENT] < INFINITE_DIFF && gap_first[RESIDENT] > bar, "control: on the resident route the window's rows against the token command's first row land outside the bar ({gap_first[RESIDENT]} against {bar})")
-        t |> success(gap_off[RESIDENT] > gap[RESIDENT] && gap_off[CPU] > gap[CPU], "one position behind, both arms read a wider gap than aligned (resident {gap_off[RESIDENT]} vs {gap[RESIDENT]}, cpu {gap_off[CPU]} vs {gap[CPU]})")
-        delete toks
-        delete window_prompt
-        delete window_steps
-        delete token_prompt
-        delete token_steps
+        let c0 = cuda_positions_served()
+        let res = path_gap(tr, mirror_kv_dtype(), n, "resident")
+        served_every_call(t)
+        cuda_served_since(t, c0, 2l * (n + 4l), "the window chain and the token command over {n + 4l} tokens each")
+        moe_gpu_drop_model()
+        let cpu = path_gap(tr, mirror_kv_dtype(), n, "cpu")
+        path_gaps_within(t, n, res, cpu)
     }
 }
 
@@ -302,6 +298,23 @@ def prefill_vs_decode(t : T?; n : int64; gf : GemmaFile) {
 //! a 40-row opening each tail of `tails` rows peels as one prefill call (one peel counted), and its last row and four fed steps sit
 //! within `rel` of the same tail stepped a row at a time on a second session, the row one step off the control
 def e_series_peel_cell(t : T?; tr : Model; tails : array<int64>; rel : float) {
+    var inscope peels <- e_series_peel_rows(tr, tails)
+    e_series_peels_within(t, peels, rel)
+    served_every_call(t)
+}
+
+//! one tail of the peel cell: its row count, the peels its prefill counted, the peeled session's rows and the row-at-a-time ones
+struct PeelTail {
+    rows : int64
+    peels : int64
+    got : array<array<float>>
+    want : array<array<float>>
+}
+
+//! `e_series_peel_cell`'s collection on the armed driver: each tail's peel count and both sessions' rows, the argmax rows logged
+def e_series_peel_rows(tr : Model; tails : array<int64>) : array<PeelTail> {
+    var out : array<PeelTail>
+    out |> reserve(length(tails))
     var opening <- resident_prompt(40l)
     var feed <- resident_feed(RDEC_NROW_MAX)
     let lever = vulkan_prefill_peel()
@@ -313,7 +326,7 @@ def e_series_peel_cell(t : T?; tr : Model; tails : array<int64>; rel : float) {
         eval(tr, sa, opening)
         let peels0 = moe_gpu_resident_peels()
         forward_prefill(tr, sa, tail, rows, 40l)
-        t |> equal(moe_gpu_resident_peels() - peels0, 1l, "a tail of {rows} rows peels through the token commands")
+        let peels = moe_gpu_resident_peels() - peels0
         sa.n_past = 40l + rows
         var got <- steps_after(tr, sa, steps)
         var sb <- create_session(tr, mirror_kv_dtype())
@@ -325,24 +338,34 @@ def e_series_peel_cell(t : T?; tr : Model; tails : array<int64>; rel : float) {
             eval_(tr, sb, one)
         }
         var want <- steps_after(tr, sb, steps)
-        rows_within_control(t, "a tail of {rows} rows", got, want, rel, 1l, 1.0, $(r) => r == 0l ? "the tail's last row" : "step {r}")
         log_argmax_rows(tr, "a tail of {rows} rows: the row-at-a-time rows, then the tail's", got, want)
-        served_every_call(t)
+        out |> emplace(PeelTail(rows = rows, peels = peels, got <- got, want <- want))
         delete sa
         delete sb
-        delete got
-        delete want
         delete tail
         delete steps
     }
     set_vulkan_prefill_peel(lever)
     delete opening
     delete feed
+    return <- out
+}
+
+//! each collected tail peeled once, its rows within `rel` of the row-at-a-time rows, the row one step off the control
+def e_series_peels_within(t : T?; peels : array<PeelTail>; rel : float) {
+    for (p in peels) {
+        t |> equal(p.peels, 1l, "a tail of {p.rows} rows peels through the token commands")
+        rows_within_control(t, "a tail of {p.rows} rows", p.got, p.want, rel, 1l, 1.0, $(r) => r == 0l ? "the tail's last row" : "step {r}")
+    }
 }
 
 //! teacher-forced negative log-likelihood over `steps` positions after `n` prefilled ids: the sum over the
 //! true next ids, the sum over the ids one position off (the control), and the argmax hits on each
-def private forced_nll(tr : Model; var s : Session; ids : array<int64>; n, steps : int64) : tuple<nll : float; off : float; hits : int64; off_hits : int64> {
+//! a teacher-forced walk's sums: the targets' negative log-likelihood, the same against the ids one position off, and the
+//! argmax hits of each
+typedef ForcedNll = tuple<nll : float; off : float; hits : int64; off_hits : int64>
+
+def forced_nll(tr : Model; var s : Session; ids : array<int64>; n, steps : int64) : ForcedNll {
     var prompt <- [for (i in range64(n)); ids[i]]
     forward_prefill(tr, s, prompt, n, 0l)
     delete prompt
@@ -365,6 +388,96 @@ def private forced_nll(tr : Model; var s : Session; ids : array<int64>; n, steps
         }
     }
     return (nll = nll, off = off, hits = hits, off_hits = off_hits)
+}
+
+//! `n` prose ids prefilled and `steps` teacher-forced after them on a session of codec `kv`
+def prose_forced_nll(tr : Model; kv : KVDtype; n, steps : int64) : ForcedNll {
+    var ids <- prose_tokens(tr, n + steps + 1l)
+    var s <- create_session(tr, kv)
+    let r = forced_nll(tr, s, ids, n, steps)
+    delete s
+    delete ids
+    return r
+}
+
+//! the resident walk `g` against the CPU chain's `c` as perplexities over `steps` positions past an `n`-id prefill: the
+//! resident within `ppl_ratio` of the CPU chain's, its argmax hits within `hits_slack`, and the one-position-off controls
+def ppl_within(t : T?; n, steps : int64; g, c : ForcedNll; hits_slack : int64 = 3l; ppl_ratio : float = GEMMA_PPL_RATIO) {
+    let fsteps = float(steps)
+    let ppl_g = exp(g.nll / fsteps)
+    let ppl_c = exp(c.nll / fsteps)
+    let ppl_off = exp(c.off / fsteps)
+    let ppl_g_off = exp(g.off / fsteps)   // the device route's own control: its logits scored against the ids one position off
+    to_log(LOG_INFO, "{n} prefilled + {steps} teacher-forced [{tile_arm_tag()}]: PPL resident {ppl_g} (hits {g.hits}/{steps}, one-off {ppl_g_off}), cpu {ppl_c} (hits {c.hits}/{steps}, one-off hits {c.off_hits}), one-off control {ppl_off}\n")
+    t |> success(ppl_g <= ppl_c * ppl_ratio, "the resident perplexity {ppl_g} sits within {ppl_ratio}x of the CPU chain's {ppl_c}")
+    t |> success(g.hits + hits_slack >= c.hits, "the resident argmax hits ({g.hits}) sit within {hits_slack} of the CPU chain's ({c.hits}) over {steps} positions")
+    t |> success(is_finite(ppl_g_off) && ppl_g_off > ppl_c * ppl_ratio, "control on the device route: the resident logits scored against the ids one position off read {ppl_g_off}, outside {ppl_ratio}x of the CPU chain's {ppl_c}")
+    t |> success(ppl_off >= 3.0 * ppl_c, "control: the one-position-off targets read {ppl_off}, at least three times the CPU chain's {ppl_c}")
+    t |> success(c.off_hits + hits_slack < c.hits, "control: the one-position-off targets hit {c.off_hits}, under the hits bar's reach ({c.hits} - {hits_slack})")
+}
+
+//! a teacher-forced walk's shape: `n` ids prefilled, `steps` scored after them
+typedef GemmaWalk = tuple<n : int64; steps : int64>
+
+//! what one pass collects for a gemma file's cells on the driver's default form: a forced feed a prompt length, the two
+//! paths' gap a length with the positions the CUDA home served for it, a teacher-forced walk a `GemmaWalk` with the
+//! resident window chains its prompt took and the positions the CUDA home served for it
+struct GemmaRows {
+    feeds : array<FeedRows>
+    gaps : array<PathGap>
+    gap_cuda : array<int64>
+    nlls : array<ForcedNll>
+    nll_prefills : array<int64>
+    nll_cuda : array<int64>
+}
+
+def gemma_rows(m : Model; form : ModelForm; feeds, gaps : array<int64>; walks : array<GemmaWalk>) : GemmaRows {
+    var r : GemmaRows
+    r.feeds |> reserve(length(feeds))
+    r.gaps |> reserve(length(gaps))
+    r.gap_cuda |> reserve(length(gaps))
+    r.nlls |> reserve(length(walks))
+    r.nll_prefills |> reserve(length(walks))
+    r.nll_cuda |> reserve(length(walks))
+    for (n in feeds) {
+        r.feeds |> emplace <| prose_feed_rows(m, form, n)
+    }
+    for (n in gaps) {
+        let c0 = cuda_positions_served()
+        r.gaps |> push(path_gap(m, form.kv, n, form.on_gpu ? "resident" : "cpu"))
+        r.gap_cuda |> push(c0 >= 0l ? cuda_positions_served() - c0 : -1l)
+    }
+    for (w in walks) {
+        let p0 = gpu_resident_prefills_()
+        let c0 = cuda_positions_served()
+        r.nlls |> push(prose_forced_nll(m, form.kv, w.n, w.steps))
+        r.nll_prefills |> push(gpu_resident_prefills_() - p0)
+        r.nll_cuda |> push(c0 >= 0l ? cuda_positions_served() - c0 : -1l)
+    }
+    return <- r
+}
+
+//! the device pass's collections against the CPU pass's, cell by cell: every feed's rows within the gemma logit bar, every
+//! length's two paths within the path-gap ratio, every walk's perplexity within `ppl_ratio`; `tag` opens each message
+def gemma_rows_within(t : T?; tag : string; gpu, cpu : GemmaRows; gaps : array<int64>; walks : array<GemmaWalk>; ppl_ratio : float = GEMMA_PPL_RATIO) {
+    with_dasllama_jobque_() {   //! the compares read each row's argmax, which asks the queue
+        for (g, c in gpu.feeds, cpu.feeds) {
+            feed_rows_within(t, "{tag}, {g.nprompt} tokens: ", g, c, GEMMA_LOGIT_BAR_REL)
+        }
+        for (n, g, c, cuda in gaps, gpu.gaps, cpu.gaps, gpu.gap_cuda) {
+            if (cuda >= 0l) {
+                t |> equal(cuda, 2l * (n + 4l), "{tag}: the CUDA driver served the window chain and the token command over {n + 4l} tokens each")
+            }
+            path_gaps_within(t, n, g, c)
+        }
+        for (w, g, c, pf, cuda in walks, gpu.nlls, cpu.nlls, gpu.nll_prefills, gpu.nll_cuda) {
+            t |> equal(pf, 1l, "{tag}: the resident window chain served the {w.n}-token prompt of the walk")
+            if (cuda >= 0l) {
+                t |> success(cuda >= w.n + w.steps - 1l, "{tag}: the CUDA driver served {cuda} positions of the walk's {w.n}-id prefill and {w.steps - 1l} teacher-forced steps")
+            }
+            ppl_within(t, w.n, w.steps, g, c, 3l, ppl_ratio)
+        }
+    }
 }
 
 //! the same prose through the resident driver and the CPU chain, scored as a perplexity over `steps`
@@ -390,17 +503,81 @@ def ppl_compare(t : T?; n, steps : int64; gf : GemmaFile; hits_slack : int64 = 3
         var sc <- create_session(tr, mirror_kv_dtype())
         let c = forced_nll(tr, sc, ids, n, steps)
         delete sc
-        let fsteps = float(steps)
-        let ppl_g = exp(g.nll / fsteps)
-        let ppl_c = exp(c.nll / fsteps)
-        let ppl_off = exp(c.off / fsteps)
-        let ppl_g_off = exp(g.off / fsteps)   // the device route's own control: its logits scored against the ids one position off
-        to_log(LOG_INFO, "{n} prefilled + {steps} teacher-forced [{tile_arm_tag()}]: PPL resident {ppl_g} (hits {g.hits}/{steps}, one-off {ppl_g_off}), cpu {ppl_c} (hits {c.hits}/{steps}, one-off hits {c.off_hits}), one-off control {ppl_off}\n")
-        t |> success(ppl_g <= ppl_c * ppl_ratio, "the resident perplexity {ppl_g} sits within {ppl_ratio}x of the CPU chain's {ppl_c}")
-        t |> success(g.hits + hits_slack >= c.hits, "the resident argmax hits ({g.hits}) sit within {hits_slack} of the CPU chain's ({c.hits}) over {steps} positions")
-        t |> success(is_finite(ppl_g_off) && ppl_g_off > ppl_c * ppl_ratio, "control on the device route: the resident logits scored against the ids one position off read {ppl_g_off}, outside {ppl_ratio}x of the CPU chain's {ppl_c}")
-        t |> success(ppl_off >= 3.0 * ppl_c, "control: the one-position-off targets read {ppl_off}, at least three times the CPU chain's {ppl_c}")
-        t |> success(c.off_hits + hits_slack < c.hits, "control: the one-position-off targets hit {c.off_hits}, under the hits bar's reach ({c.hits} - {hits_slack})")
+        ppl_within(t, n, steps, g, c, hits_slack, ppl_ratio)
         delete ids
+    }
+}
+
+let GEMMA_RING_IDS = 1300l   //! the ring cells' prose ids: past the 512-position window, three windows over
+
+//! a gemma file's block-codec and ring cells: the q8_0 mirror's forced feed of `q8_feed` ids, the tq4 mirror's
+//! teacher-forced walk, and the mirror the second ring pair runs on, each cell's note for its message
+struct CodecCells {
+    q8_feed : int64
+    tq4_walk : GemmaWalk
+    ring_kv : KVDtype
+    q8_note : string
+    tq4_note : string
+}
+
+//! what those cells collect over a file's forms: the q8_0 feed and the tq4 walk, each a CPU side ([0]) and a device side
+//! ([1]), and the rings - the default codec ringed and flat ([0], [1]), the `ring_kv` mirror ringed and flat ([2], [3]);
+//! each `_ran` says a device form collected
+struct CodecRows {
+    q8 : GemmaRows[2]
+    q8_ran : bool
+    tq4 : GemmaRows[2]
+    tq4_ran : bool
+    rings : RingRun[4]
+    ring_ran : bool[4]
+}
+
+//! one form's share of the codec and ring cells: a CPU form its codec's reference side, the default device form the ringed
+//! run, a flat form its flat run, and a ringed form with an asked mirror that mirror's cell and, on `ring_kv`, its ringed run
+def codec_rows(var c : CodecRows; m : Model; form : ModelForm; cells : CodecCells) {
+    if (!form.on_gpu) {
+        if (form.kv == KVDtype.q8_0) {
+            c.q8[0] <- gemma_rows(m, form, [cells.q8_feed], array<int64>(), array<GemmaWalk>())
+        }
+        if (form.kv == KVDtype.tq4) {
+            c.tq4[0] <- gemma_rows(m, form, array<int64>(), array<int64>(), [cells.tq4_walk])
+        }
+        return
+    }
+    var ring = form.kv_asked ? 3 : 1
+    if (form.ring) {
+        ring = form.kv_asked ? (form.kv == cells.ring_kv ? 2 : -1) : 0
+        if (form.kv_asked && form.kv == KVDtype.q8_0) {
+            c.q8[1] <- gemma_rows(m, form, [cells.q8_feed], array<int64>(), array<GemmaWalk>())
+            c.q8_ran = true
+        } elif (form.kv_asked) {
+            c.tq4[1] <- gemma_rows(m, form, array<int64>(), array<int64>(), [cells.tq4_walk])
+            c.tq4_ran = true
+        }
+    }
+    if (ring >= 0) {
+        c.rings[ring] <- ring_rows(m, form.kv, GEMMA_RING_IDS)
+        c.ring_ran[ring] = true
+    }
+}
+
+//! the codec cells' compares under `tag`, each where its device form ran
+def codec_rows_within(t : T?; tag : string; c : CodecRows; cells : CodecCells) {
+    if (c.q8_ran) {
+        gemma_rows_within(t, "{tag}, a q8_0 K/V mirror - {cells.q8_note}", c.q8[1], c.q8[0], array<int64>(), array<GemmaWalk>())
+    }
+    if (c.tq4_ran) {
+        gemma_rows_within(t, "{tag}, a tq4 K/V mirror - {cells.tq4_note}", c.tq4[1], c.tq4[0], array<int64>(), [cells.tq4_walk])
+    }
+}
+
+//! the ring cells' compares under `tag` - the default mirror `main_kv` ringed against flat, then `ring_kv`'s - each where
+//! both its forms ran; inside the job queue
+def codec_rings_within(t : T?; tag : string; c : CodecRows; cells : CodecCells; main_kv : KVDtype) {
+    if (c.ring_ran[0] && c.ring_ran[1]) {
+        ring_runs_within(t, "{tag}, the rings on a {main_kv} mirror: ", GEMMA_RING_IDS, c.rings[0], c.rings[1])
+    }
+    if (c.ring_ran[2] && c.ring_ran[3]) {
+        ring_runs_within(t, "{tag}, the rings on a {cells.ring_kv} mirror: ", GEMMA_RING_IDS, c.rings[2], c.rings[3])
     }
 }

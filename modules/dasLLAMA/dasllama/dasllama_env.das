@@ -1025,6 +1025,9 @@ struct public TestEnv {
     @clarg_doc = "Comma-separated filter restricting which model families run."
     test_family : string = ""
 
+    @clarg_doc = "Comma-separated model categories the tests run: with none named, a test opens no category's model file; with some named, it opens theirs and no other model. Set by tests/run.das --category."
+    test_categories : string = ""
+
     @clarg_doc = "Debug: dasllama-server runs its validated collection at every lifecycle safe point, so a pointer left to a freed value fails at the tick that left it."
     gc_stress : bool = false
 
@@ -1117,6 +1120,10 @@ struct public CoreEnv {
 
     @clarg_doc = "Kernel-tuning mode. The [tune] framework owns these; see skills/tune.md."
     tune_mode : string = ""
+
+    @clarg_path
+    @clarg_doc = "A tune sidecar taken whatever its age against the binary. The [tune] framework owns these; see skills/tune.md. tests/run.das sets it for its children to the manifest in effect."
+    tune_force : string = ""
 
     @clarg_default_doc = "warning (daslang's to_log floor); tests/run.das sets info for itself and its children when unset"
     @clarg_doc = "The to_log floor daslang reads per call (trace, debug, info, warning, error or critical); see skills/internal/environment_variables.md."

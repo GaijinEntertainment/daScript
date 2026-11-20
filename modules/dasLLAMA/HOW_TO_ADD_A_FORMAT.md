@@ -861,7 +861,8 @@ Pick the vehicle by census, not by name: an ftype is a MIX, and a natural downlo
 unsupported sibling on `attn_k`/`attn_q` so the file cannot load end to end. `harness/gguf_dump.das`
 reads the tensor type table in seconds; pick a file whose mix is the supported set plus the new
 format, or mint one from a Q8_0 with `llama-quantize --allow-requantize --imatrix <imatrix>
---tensor-type attn_k=<fmt> --tensor-type attn_q=<fmt> <Q8_0> <out> <FTYPE>`. A vehicle the resident
+--tensor-type attn_k=<fmt> --tensor-type attn_q=<fmt> <Q8_0> <out> <FTYPE>` and upload it as the
+served-cell paragraph below says. A vehicle the resident
 driver declines proves the kernels and not the tier; `resident_decline_reason` prints the reason.
 Then `examples/dasLLAMA/run.das` against the reference build's `simple_ids` oracle for the same
 prompt: the criterion is the margin form (`harness/oracle/simple_ids_margin.cpp` prints per-step
@@ -877,10 +878,14 @@ not decline. For each, a cell loads a file whose plane at that site carries the 
 the assertions `REVIEW_KQ_FORMATS.md`'s proving rule names.
 On the Vulkan whole-model driver the cell also runs `served_every_call`
 (`tests/_resident_feed.das`), which asserts no call took a CPU pass. Where no catalogued file puts
-the format at the site (an expert stack, a token table), mint one: a `-local` recipe row in
-`performance/model_specs.das` (`llama-quantize --allow-requantize --tensor-type <site>=<fmt>`,
-or `--token-embedding-type <fmt>` for the table), minted on each box from its own download,
-never copied between boxes.
+the format at the site (an expert stack, a token table), mint one on a carrier of the format
+matrix - Llama-3.2-1B-Instruct for a dense site or a table, Qwen1.5-MoE-A2.7B-Chat for an expert
+stack: a `-local` recipe row in `performance/model_specs.das` (`llama-quantize --allow-requantize
+--tensor-type <site>=<fmt>`, or `--token-embedding-type <fmt>` for the table). Mint it once and
+upload the minted file to the format matrix's Hugging Face repository under its model's folder -
+`hf upload borisbat/dasllama-formats <file> <Model>/<file>` - then give the row the upload's
+commit-pinned `url`, its `bytes` and its `sha256` beside the recipe
+(`ARCHITECTURE_ENGINE_SUPPORT.md#format-matrix-files`).
 
 A site the format does not serve on a GPU backend is declined at load by that backend's
 mechanism; the CPU declines nothing:

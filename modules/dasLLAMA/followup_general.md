@@ -2898,15 +2898,13 @@
     Done = every plane the plan charges taken at the arm on both homes, or checked where it is made and refused by
     name, each with a cell that holds the refusal through a fault seat as
     `test_gpu_resident_cuda_window_planes_at_arm` does; the asymmetry entry removed with it.
-310. **Four Vulkan-home test files fail under the CUDA ask where their headers say they skip.**
-    `test_gpu_resident_gptoss.das`, `test_gpu_resident_gemma4_e2b.das`, `test_gpu_resident_format_census.das` and
-    `test_gpu_resident_regions_gemma4_e2b_ctx128k.das` hold cells that place layers on the per-op tier the CUDA home
+310. **Three Vulkan-home test files fail under the CUDA ask where their headers say they skip.**
+    `test_gpu_resident_gptoss.das`, `test_gpu_resident_gemma4_e2b.das` and `test_gpu_resident_format_census.das`
+    hold cells that place layers on the per-op tier the CUDA home
     lacks, read the Vulkan driver's witnesses with the CUDA driver armed, or hold a bar measured on the Vulkan home;
-    the documented CUDA pass names none of the first three and excludes the 128k files, on the ground that their long
-    prompts fall to the CPU rails - where the 128k cell now runs on the CUDA driver throughout. Done = each cell
-    skipping by name under the ask or reading the armed home's witness and bar, a run of the four under
-    `DASLLAMA_GPU=1 DASLLAMA_CUDA=1` green, and the CUDA pass either taking the 128k files or stating the reason it
-    leaves them out.
+    the documented CUDA pass names none of them. Done = each cell
+    skipping by name under the ask or reading the armed home's witness and bar, and a run of the three under
+    `DASLLAMA_GPU=1 DASLLAMA_CUDA=1` green.
 311. **A batched step the whole-model driver declines reads host K/V the host never held.** `rdec_batch_rows_served`
     passes a batch to the CPU on a row past the mirror's cap or a recurrent row off its position without hydrating the
     batch's sessions, where the one-row step's declines hydrate first (`rdec_pass_hydrated`); `attention_batch_decode`

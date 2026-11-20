@@ -2389,6 +2389,26 @@ half-width dot); the whole bf16 tower set shares that gap.
     oracle ids one step early: every step whose input moved lands outside the bar, the nearest 10.58 to 10.62 on jfk's 21
     steps, 11.55 to 11.61 on clip 09's 17 and 11.40 to 11.41 on clip 05's 12. The same run's `test_vulkan_tower_kernels.das`
     dies at start (exit 139): the Vulkan files do not run on the M5.
+- **MEASURED (2026-11-19) - the driver-against-itself bar on the two gemma-4 category carriers, M5 Max (128 GB).** Each
+  reading is a `tests/run.das -- --category <name> --only test_metal_mtp_parity` run, one model process on the box, the box
+  profile `performance/m5.tune.json` (77,356 B, minted 2026-11-18) forced on the child (`DAS_TUNE_FORCE`); a second run of
+  each reads the same figures. Flags: the category's files opened past the size tier, `DAS_TUNE_POLICY` unset, the CPU
+  kernel backend unpinned (the box's own), Metal required.
+  - gemma-4-12B-it Q4_K_M (`gemma4-dense`, `test_metal_verify_gemma12`): the nine-row arm `mtp-vff9-g12` reads 1.10 over 108
+    rows, no argmax flip - 0.84 in the 2026-10-17 entry above, on that day's 39,101 B profile. `MM_TOL` moves 1.0 to 1.5.
+    What moved the reading between the two profiles is not isolated.
+  - gemma-4-26B-A4B-it Q4_K_M (`gemma4-moe`, `test_metal_verify_gemma26`): the drafter's counting free-run is the plain run
+    token for token at depth 1 and shares its first 37 of 40 tokens at depth 2 and 4, counting and sampled. The same run's
+    verify rows flip 3 argmaxes of 108 inside the routed-expert bar (maxd 13.6 of 24, the widest flipped margin 1.90), so
+    a drafted round past one row accepts a near-tie the plain step reads the other way. The cell holds 32 shared tokens
+    (`G26_COUNT_AGREE`) at depth 2 and past it, 40 at depth 1.
+- **NOTE (2026-11-20) - where the gemma cells named in the entries above run.** The entries keep the names their runs had.
+  The E2B pre-step, block-codec, ring and two-region cells are forms of `test_gpu_resident_gemma4_e2b`
+  (`tests/test_gpu_resident_gemma4_e2b.das`); the gemma-3-1b block-codec and region cells are forms of
+  `test_gpu_resident_gemma3` (`tests/test_gpu_resident_gemma2_3.das`); the E2B Q4_0 planes cell is
+  `test_gpu_resident_gemma4_e2b_ple_planes_q40`. The four E2B format carriers (emb-Q6_K, emb-IQ4_XS, ple-Q6_K, ple-Q5_0), the
+  E4B block-codec cell and `test_gpu_resident_regions_llama3b_ctx32k.das` no longer run: no later entry re-reads their
+  figures.
 - **MEASURED (2026-10-17) - the window's f32 per-layer-embedding GEMMs on the staged KHR tile, and the K-quant staged race,
   the pod.** Box: the RunPod RTX PRO 4500 Blackwell 32 GB, driver 580.159.04 (no `VK_NV_cooperative_matrix_decode_vector`:
   the cm2 tiles run the scalar decode arm), one GPU process at a time. Commands, verbatim, from the tree root under

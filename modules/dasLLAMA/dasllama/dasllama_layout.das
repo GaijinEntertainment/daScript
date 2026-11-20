@@ -215,15 +215,38 @@ def metal_blob_scale_plane(var t : Model; name : string) : bool {
 //! they are
 def metal_kq_scale_moves(f : KqFmt) : bool => f != KqFmt.q40 && f != KqFmt.iq4nl && f != KqFmt.nv4
 
-//! A K-quant scale plane `ks` of `f` put into its Metal device form in place: k4/k5 the 16-byte disk block a superblock,
-//! a non-superblock or empty plane and a format `metal_kq_scale_moves` leaves as they are, every other format split into
-//! scale and d rows (`kq_split_scale_plane`) - the one place a format's Metal scale form is decided, for every caller.
+//! the Metal device form of a K-quant scale plane: left as the engine holds it, the strip a superblock, or scale and d rows
+enum KqScaleForm {
+    kept
+    strip
+    split
+}
+
+//! the form `f`'s scale plane takes on the Metal device: k4/k5 the strip a superblock, a format off the superblock
+//! lattice and one `metal_kq_scale_moves` leaves kept, every other format split (`kq_split_scale_plane`) - the one place a
+//! format's Metal scale form is decided, for every caller.
+def metal_kq_scale_form_of(f : KqFmt) : KqScaleForm {
+    return KqScaleForm.kept if (!kq_sb(f) || !metal_kq_scale_moves(f))
+    return f == KqFmt.k4 || f == KqFmt.k5 ? KqScaleForm.strip : KqScaleForm.split
+}
+
+//! the bytes `metal_kq_scale_form` leaves of a scale plane of `n` bytes at `f`'s engine stride
+def metal_kq_scale_form_bytes(f : KqFmt; n : int64) : int64 {
+    let form = metal_kq_scale_form_of(f)
+    return n if (form == KqScaleForm.kept || n == 0l)
+    let nsb = n / kq_ssb(f)
+    return form == KqScaleForm.strip ? nsb * KQ_STRIP_BYTES : kq_split_scale_bytes(f, nsb)
+}
+
+//! A K-quant scale plane `ks` of `f` put into its Metal device form (`metal_kq_scale_form_of`) in place; an empty plane
+//! stays empty.
 [arch(at = "../ARCHITECTURE_GPU_QUANT_PLANES.md#metal-kq-split-scale-plane")]
 def metal_kq_scale_form(f : KqFmt; var ks : array<uint8>) {
-    return if (!kq_sb(f) || empty(ks))
-    if (f == KqFmt.k4 || f == KqFmt.k5) {
-        compact_kq_scale_strip(ks)
-    } elif (metal_kq_scale_moves(f)) {
+    let form = metal_kq_scale_form_of(f)
+    return if (form == KqScaleForm.kept || empty(ks))
+    if (form == KqScaleForm.strip) {
+        compact_kq_scale_strip(ks, kq_ssb(f))
+    } else {
         var @exact_size xc : array<uint8>
         kq_split_scale_plane(f, unsafe(addr<uint8 const?>(ks[0])), long_length(ks) / kq_ssb(f), xc)
         delete ks
@@ -277,19 +300,19 @@ def private metal_blob_materialize(var t : Model) {
     to_log(LOG_INFO, "dasLLAMA: metal-blob transform ({sh.blocks} blocks) in {get_time_usec(ts) / 1000} ms\n")
 }
 
-// 20B -> 16B in place: keep bytes [0..16) of every superblock strip, then shrink. Forward
-// byte moves are safe — every destination sits below its source (regions can overlap).
-def private compact_kq_scale_strip(var ks : array<uint8>) {
-    let nsb = long_length(ks) / 20l
+// a superblock's `ssb` scale bytes down to its strip, in place: keep the first KQ_STRIP_BYTES of every superblock, then
+// shrink. Forward byte moves are safe — every destination sits below its source (regions can overlap).
+def private compact_kq_scale_strip(var ks : array<uint8>; ssb : int64) {
+    let nsb = long_length(ks) / ssb
     unsafe {
         var p = addr(ks[0])
         for (sb in range64(1l, nsb)) {   // sb 0 already sits at 0
-            for (i in range64(16l)) {
-                p[sb * 16l + i] = p[sb * 20l + i]
+            for (i in range64(KQ_STRIP_BYTES)) {
+                p[sb * KQ_STRIP_BYTES + i] = p[sb * ssb + i]
             }
         }
     }
-    ks |> resize(nsb * 16l)
+    ks |> resize(nsb * KQ_STRIP_BYTES)
 }
 
 // ===== CPU repack walkers (backend grp<mr> interleave, in place at load) =====

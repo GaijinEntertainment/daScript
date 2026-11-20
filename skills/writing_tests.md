@@ -154,7 +154,9 @@ run each file in its own process (slower, but survives a crash in one file), and
 graph is parsed, JIT'd and simulated once for the list, each file then running in a clone of that
 context - globals, heaps and `[init]`s of its own - and reporting on its own. `--test-wall <seconds>`
 ends the whole run, exit code 125, at the first `[test]` function that runs past it - or past the
-longer budget the test declares (`timeout = N`).
+longer budget the test declares (`timeout = N`). `--force-tune`
+stamps the tests' `[tune]` kernels from the `DAS_TUNE_MANIFEST` file whatever its age: a sidecar
+older than a rebuilt binary still serves a test run.
 
 ## Benchmarks
 

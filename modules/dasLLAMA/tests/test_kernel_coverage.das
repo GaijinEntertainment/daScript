@@ -467,10 +467,10 @@ def private census_zoo(t : T?) {
     cov_model(t, path_join(models_dir(), "Qwen3.5-0.8B-Q8_0.gguf"), "qwen35",
         [KVDtype.f16], [2])
     // gemma4e: PLE + V-from-K (no PLE batch arm — a blob-twin CPU batch fallback
-    // would trip the blob-only panic, so no batch shapes here); large tier; the three codecs
+    // would trip the blob-only panic, so no batch shapes here); the three codecs
     // reach the head-of-512 fused attention's three stamps on the full-context layers
     let none : array<int>
-    cov_model(t, path_join(models_dir(), "gemma-4-E4B-it-Q8_0.gguf"), "gemma4e",
+    cov_model(t, path_join(models_dir(), "gemma-4-E2B-it-Q8_0.gguf"), "gemma4e",
         [KVDtype.f16, KVDtype.q8_0, KVDtype.tq4], none)
     // gemma4: the checkpoint suppress list (suppress_tokens metadata rides the 12B
     // family, NOT the E-series) + K-quant at 12B shapes; large tier

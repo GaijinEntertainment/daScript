@@ -783,12 +783,23 @@ def blob_stream_eligible(t : Model) : bool => g_blob_hooks_set && invoke(g_blob_
 let BLOB_SCALE_PLANES = fixed_array("k4s", "k5s", "k6s", "iq4xss", "k3s", "iq3ss", "iq3xxss",
                                     "k2s", "iq2ss", "iq2xss", "iq2xxss", "iq3s4s")
 
+//! the bit of the plane `name` in `Model.blob_scaled` while the blob hooks are set; -1 for a plane off the blob set, or
+//! with no hooks
+def private blob_scale_bit(name : string) : int => g_blob_hooks_set ? find_index(BLOB_SCALE_PLANES, name) : -1
+
+//! True while a blob build still owes the plane `name` its device form: a scale plane of the blob set, the hooks set,
+//! and the transform not yet run on this carrier
+def blob_scale_plane_pending(t : Model; name : string) : bool {
+    let bit = blob_scale_bit(name)
+    return bit >= 0 && (t.blob_scaled & (1u << uint(bit))) == 0u
+}
+
 //! Put one kq scale plane into its device form during a blob build (see metal_blob_scale_plane),
 //! at most once per carrier: the transform rewrites the plane IN PLACE, and a writer that dies
 //! mid-walk hands the planes it already converted to the in-memory streamer, which walks them again.
 def blob_stream_scale_plane(var t : Model; name : string) : bool {
-    let bit = BLOB_SCALE_PLANES |> find_index(name)
-    if (!g_blob_hooks_set || bit < 0) {
+    let bit = blob_scale_bit(name)
+    if (bit < 0) {
         return false
     }
     let mask = 1u << uint(bit)
@@ -1125,10 +1136,10 @@ def stream_job_view(m : GGUFMeta; bytes : array<uint8> | #; t : Model; jobs : ar
 //! a k3/k6 source row carries its strip first and the d last; every other split format the d first and the strip at 4
 def kq_split_scale_plane(f : KqFmt; sp : uint8 const?; nsb : int64; var dst : array<uint8>) {
     let ssb = kq_ssb(f)
-    let tail = f == KqFmt.k2 ? 4l : 2l
+    let tail = kq_split_tail_bytes(f)
     let strip_at = f == KqFmt.k3 || f == KqFmt.k6 ? 0l : 4l
     let tail_at = f == KqFmt.k3 || f == KqFmt.k6 ? 16l : 0l
-    dst |> reserve_resize(nsb * (16l + tail))
+    dst |> reserve_resize(kq_split_scale_bytes(f, nsb))
     unsafe {
         var dp = addr(dst[0])
         for (sb in range64(nsb)) {

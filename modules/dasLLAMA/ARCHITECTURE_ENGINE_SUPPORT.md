@@ -118,9 +118,43 @@ keeps its sidecar beside it, so the per-box file's hook stands down in the test 
 `OWN_ROOTS` licenses a program whose claim a verb cannot carry - the program's own compile, the
 process it runs in, a model a stocked test loads, or a server or runner started by its command
 line: `_child_root.das`, `_tuned_fallbacks_root.das`, `_exe_smoke_root.das`,
-`_box_runtime_root.das`, `_resident_load_root.das`, `_audio_lane_whisper_root.das`,
+`_box_runtime_root.das`, `_audio_lane_whisper_root.das`,
 `_mx4_mint_root.das`, `_fake_chat_root.das`, `run.das` and `dastest.das`. `ROOT_CMD_CALLERS`
 licenses a test file that names its child's root itself: `test_f32_batch_tile_perms.das`, whose
 root is a copy it writes.
+
+### The model filters of a test run {#test-model-filters}
+
+`tests/_model_categories.das` owns the two tables a run picks model files by. A category is a set
+of files no run opens unless it names the category: a large model whose family's small one takes
+the same paths, held for the cells only the large one reaches. A family is the set of decoder files
+a `--family` run opens; a file's family is the row whose stem opens the most of its name.
+`model_available` (`tests/_model_tier.das`) is the one gate that reads both, so a test names its
+model file and nothing else. The runner hands `--category`, `--family` and `--arm` to a child as
+dastest `--run-env` pairs, set once the child's program has compiled: a filter value is no part of
+the compile record, and a run under another filter reads the same record. `TEST_CATEGORIES.md`
+carries the categories for a reader, a table row a category under `## Categories`, and
+`tests/REVIEW.das`'s `check_test_categories` holds the table and the document to each other.
+
+### A model file loads once a form {#test-load-once}
+
+`tests/_cpu_gpu_model.das` owns the load of a model file for the cells of a run area on the
+discrete homes. `with_cpu_and_gpu_model` takes the area, the file and a list of forms - a device
+form is one set of the driver's load-time knobs, a CPU form one load mode - loads each form once,
+one loaded model at a time, and runs the caller's body on it; the body collects what the compares
+across forms read, and those compares follow the call. The first device form streams the file, and
+where the list holds three or more such forms each later one maps the file's device lane
+(`ARCHITECTURE_IMAGE_LEDGER.md#suite-image-mints`). A call names its area and its file by string
+literals, which `tests/REVIEW.das`'s `check_models_load_once` reads to hold one call an area and
+file across the folder.
+
+### The format matrix's files {#format-matrix-files}
+
+The format matrix's files sit in one Hugging Face repository, a folder a model: `FORMATS_HF`
+(`performance/model_specs.das`) pins the repository's commit, and a row whose `url` opens with it
+names its file there by `url`, `bytes` and `sha256`. Every box downloads such a file by its row - a
+carrier minted to put one weight format at one site, or a published file kept beside it. Two mints
+of one recipe are not promised the same bytes, so a box that minted its own would read another file
+than the row's checksum names. A `-local` row with no `url` is minted on each box by its `recipe`.
 
 The decode pick tape: `ARCHITECTURE_ENGINE_MECHANISMS.md#moe-pick-tape`.

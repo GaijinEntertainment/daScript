@@ -49,14 +49,6 @@ def cuda_mmq_name(v : int64) : string {
     return "CUDA_MMQ_UNPINNED"
 }
 
-//! `blk` with the MMQ route pinned to `v` (`set_cuda_mmq_pin`), the pin put back to what `cuda_mmq_pin` read before
-def with_cuda_mmq_pin(v : int64; blk : block<() : void>) {
-    let was = cuda_mmq_pin()
-    set_cuda_mmq_pin(v)
-    invoke(blk)
-    set_cuda_mmq_pin(was)
-}
-
 //! true where the CUDA home is asked for and its card carries the FP4 tensor rung; else the cell has registered the skip
 //! naming why and its caller returns
 def fp4_rung_on(t : T?) : bool {

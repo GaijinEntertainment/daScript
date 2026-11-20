@@ -430,3 +430,32 @@ def test_scan_dir_is_sorted(t : T?) {
     t |> equal(join([for (f in found); base_name(f)], " "), "y.das Z.das a.das b.das c.das d.das")
     rmdir_rec(root)
 }
+
+[test(description = "--force-tune forces the run's tune manifest on the tests it compiles, and refuses a run whose DAS_TUNE_MANIFEST names no file with exit code 2", timeout = 1200)]
+def test_force_tune(t : T?) {
+    let exe = get_command_line_arguments()[0]
+    let root = get_das_root()
+    let manifest = path_join(test_temp_dir(), "force_tune_{get_time_usec(0l)}.tune.json")
+    t |> success(fwrite(manifest, "\{}"), "a manifest is written")
+    var argv <- [exe, "-dasroot", root,
+        "-module-cache", path_join(test_temp_dir(), "force_tune.dascache"),
+        "{root}/dastest/dastest.das", "--", "--failures-only",
+        "--test", "{root}/dastest/tests/_fixture_force_tune.das"]
+    var output : string
+    let plain <- ["DAS_TUNE_MANIFEST={manifest}", "DAS_TUNE_FORCE="]
+    let unforced = run_and_capture(argv, "", plain, output, 300.0)
+    t |> success(unforced != 0,
+        "control: without the flag the forced file is not the manifest: {output}")
+    argv |> push("--force-tune")
+    let forced = run_and_capture(argv, "", plain, output, 300.0)
+    t |> equal(forced, 0, "with the flag the forced file is the manifest: {output}")
+    let absent <- ["DAS_TUNE_MANIFEST={manifest}.absent", "DAS_TUNE_FORCE="]
+    let refused = run_and_capture(argv, "", absent, output, 300.0)
+    t |> equal(refused, 2, "a manifest that is not there refuses the run: {output}")
+    t |> success(find(output, "--force-tune: DAS_TUNE_MANIFEST names no file") >= 0,
+        "... and the line says why: {output}")
+    let folder <- ["DAS_TUNE_MANIFEST={test_temp_dir()}", "DAS_TUNE_FORCE="]
+    let not_a_file = run_and_capture(argv, "", folder, output, 300.0)
+    t |> equal(not_a_file, 2, "a manifest that is a folder refuses the run: {output}")
+    remove(manifest)
+}

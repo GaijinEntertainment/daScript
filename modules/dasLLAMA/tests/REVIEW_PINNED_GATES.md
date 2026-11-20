@@ -21,8 +21,8 @@ it was measured on. The pinned set, one entry a line, each with what it must kee
   `LLM_CORE_WITNESSES` naming only census files, and every witness row's module existing with a
   `MODULE_AREAS` row that holds `llm` -, the children's module-cache folder, the model files a
   run names that its models directory lacks (the `MISSING` lines), the image reap behind
-  `--reap-images` and its gate, the K/V start `--poison-kv` hands the children, and the
-  `options persistent_heap` line in every test file `run.das`'s `stocked` suite lists.
+  `--reap-images` and its gate, the K/V start `--poison-kv` hands the children, the `options persistent_heap` line of the
+  `stocked` files, the model categories and families, the `--category` run, a child's `--run-env` filters, the forced tune file.
 - `test_facade_docs.das`'s `test_program_roots` cell must hold the `ROOT_DIRS` sweep,
   `options stack = 524288` and the prefill intent.
 - `test_env_registry.das` must hold the `../ENVIRONMENT.md` knob contract.
