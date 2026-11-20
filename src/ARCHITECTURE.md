@@ -36,6 +36,9 @@ Ruled exceptions:
 - `g_pending_dynamic_modules`, `g_registered_dynamic_modules` and `g_registered_native_paths`
   (`builtin/module_builtin_fio.cpp`) and `g_nameless_manifests` (`ast/dyn_modules.cpp`) belong
   to the process, and the one module scan a process runs writes them.
+- The process environment is the C runtime's object, not one of these homes. `misc/env_cfg.cpp`
+  is the one file that touches it: `das_getenv`, `das_setenv` and `das_unsetenv` forward to the
+  runtime's calls with no lock of their own, and `das_environ` returns the runtime's own array.
 
 ## The sites that read a `require` {#require-sites}
 

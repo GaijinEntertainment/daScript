@@ -19,6 +19,7 @@ namespace das {
 
     // generic write; on PS there is no environment and the call is a no-op
     DAS_API void das_setenv ( const char * name, const char * value );
+    DAS_API void das_unsetenv ( const char * name );
 
     // every entry of the environment as "NAME=VALUE", NULL-terminated, for a reader that needs
     // the whole set rather than one name; null on PS, which has no environment. The raw

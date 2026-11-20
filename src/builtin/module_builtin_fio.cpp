@@ -302,6 +302,7 @@ namespace das {
     bool has_env_variable ( const char *, Context *, LineInfoArg * ) { return false; }
     char * get_env_variable ( const char *, Context *, LineInfoArg * ) { return nullptr; }
     void set_env_variable ( const char * var, const char * value, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
+    void unset_env_variable ( const char * var, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
     char * sanitize_command_line ( const char * cmd, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
     char * builtin_describe_pending_dynamic_modules ( Context * context, LineInfoArg * at ) GENERATE_IO_STUB
     // filesystem stubs
@@ -384,8 +385,8 @@ namespace das {
     bool builtin_rmdir ( const char * ) GENERATE_IO_STUB_RET
     bool builtin_fexist ( const char * ) GENERATE_IO_STUB_RET
     bool builtin_rmdir_rec ( const char * ) GENERATE_IO_STUB_RET
-    bool builtin_fs_is_absolute ( const char * ) GENERATE_IO_STUB_RET
     const char * rmdir_rec_refusal ( const char * ) { return "file io is disabled"; }
+    bool builtin_fs_is_absolute ( const char * ) GENERATE_IO_STUB_RET
     void * register_dynamic_module ( const char *, const char *, int, Context *, LineInfoArg * ) GENERATE_IO_STUB_RET
     void register_native_path ( const char *, const char *, const char *, Context *, LineInfoArg * ) GENERATE_IO_STUB
     void register_module_group ( const char *, const char *, const char *, Context *, LineInfoArg * ) GENERATE_IO_STUB
@@ -2509,7 +2510,6 @@ namespace das {
     }
 #endif
 
-    bool builtin_rmdir_rec ( const char * path ) {
     static bool rmdir_rec_is_separator ( char c ) {
         return c=='/' || c=='\\';
     }
@@ -2545,6 +2545,7 @@ namespace das {
         return nullptr;
     }
 
+    bool builtin_rmdir_rec ( const char * path ) {
         if ( rmdir_rec_refusal(path) ) return false;
 #if defined(_WIN32)
         auto widePath = das_utf8_to_wide(path);
@@ -2666,6 +2667,11 @@ namespace das {
         // process-wide; children spawned via popen/popen_argv inherit it
         if ( !var || !*var ) return;
         das_setenv(var, value);
+    }
+
+    void unset_env_variable ( const char * var, Context *, LineInfoArg * ) {
+        if ( !var || !*var ) return;
+        das_unsetenv(var);
     }
 
     enum class RegisterOnError {
@@ -3670,6 +3676,9 @@ namespace das {
             addExtern<DAS_BIND_FUN(set_env_variable)>(*this, lib, "set_env_variable",
                 SideEffects::modifyExternal, "set_env_variable")
                     ->args({"var","value","context","at"});
+            addExtern<DAS_BIND_FUN(unset_env_variable)>(*this, lib, "unset_env_variable",
+                SideEffects::modifyExternal, "unset_env_variable")
+                    ->args({"var","context","at"});
             addExtern<DAS_BIND_FUN(has_env_variable)>(*this, lib, "has_env_variable",
                 SideEffects::accessExternal, "has_env_variable")
                     ->args({"var","context","at"});

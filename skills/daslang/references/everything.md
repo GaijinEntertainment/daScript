@@ -959,6 +959,7 @@ The FIO module implements file input/output and filesystem operations. It provid
 - `spawn_argv` - Launches a detached subprocess directly from an argument array without invoking a shell.
 - `spawn_process` - Spawns `argv` as a long-lived child and returns its handle.
 - `system` - Runs a shell command via the C runtime `system()` function.
+- `unset_env_variable` - Removes an environment variable from the current process (`unsetenv`, or `_wputenv_s` with an empty value on Windows).
 - `with_process` - `with_process` inheriting the parent's directory and environment.
 
 ### Dynamic modules
