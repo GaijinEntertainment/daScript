@@ -723,6 +723,11 @@ def private record_test_log(context : FileCtx; var messages : array<string>;
     }
 }
 
+//! the wall a walled run holds one test to: the run's
+//! `--test-wall`, or the budget the test declares
+//! (`[test(timeout = N)]`, 0 for none) where that is longer
+def test_wall_of(run_wall, declared : float) : float => max(run_wall, declared)
+
 def private test_any(name : string; func; args_num : int;  // nolint:STYLE038 - one arm per shape
                      var context : FileCtx; var res : SuiteResult&;
                      meta : TestMeta = default<TestMeta>) {
@@ -732,9 +737,10 @@ def private test_any(name : string; func; args_num : int;  // nolint:STYLE038 - 
     //! a `[test]` function, not a subtest of one
     let walled = test_wall_seconds > 0.0 && empty(context.indenting)
     if (walled) {
+        let wall = test_wall_of(test_wall_seconds, meta.timeoutSec)
         let beside = empty(test_wall_file) ? "" : " of {test_wall_file}"
-        let said = "kill switch: test '{name}'{beside} (--test-wall) ran past {test_wall_seconds}s"
-        kill_switch_arm(KILL_SWITCH_TEST, test_wall_seconds, said)
+        let said = "kill switch: test '{name}'{beside} (--test-wall) ran past {wall}s"
+        kill_switch_arm(KILL_SWITCH_TEST, wall, said)
     }
     defer() {
         if (walled) {

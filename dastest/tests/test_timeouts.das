@@ -90,6 +90,28 @@ def test_wall(tt : T?) {
             "expected the passing summary, got:\n{output}")
     }
 
+    tt |> run("a test that declares a longer budget is held to it, not to the wall") <| @(t : T?) {
+        var output : string
+        var exit_code : int
+        let fixture = "{dastest_root()}/tests/_fixture_wall_budget.das"
+        run_dastest_on(fixture, ["--test-wall", "1"], output, exit_code)
+        t |> equal(exit_code, 0, "the declared budget raised the wall:\n{output}")
+        t |> success(output |> contains("1 tests, 1 passed"),
+            "expected the passing summary, got:\n{output}")
+    }
+
+    tt |> run("a budget under the wall does not lower it: the test ends, then fails") <| @(t : T?) {
+        var output : string
+        var exit_code : int
+        let fixture = "{dastest_root()}/tests/_fixture_wall_short_budget.das"
+        run_dastest_on(fixture, ["--test-wall", "20"], output, exit_code)
+        t |> success(exit_code != 125 && exit_code != 0,
+            "the wall stayed at the run's, exit code {exit_code}:\n{output}")
+        t |> success(output |> contains("FAIL 'test_past_its_budget'")
+            && output |> contains("exceeding its timeout=1.000s"),
+            "the test ran to its end and failed on the budget it declares:\n{output}")
+    }
+
     tt |> run("tests that finish under the wall pass (the control)") <| @(t : T?) {
         var output : string
         var exit_code : int
