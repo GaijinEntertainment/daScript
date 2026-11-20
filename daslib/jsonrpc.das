@@ -194,7 +194,8 @@ def public parse_request(line : string; strict : bool = false) : ParsedRequest {
         result.error_envelope = error("null", PARSE_ERROR, "parse error: {parse_error_msg}")
         return result
     }
-    result = parse_one_request(parsed, strict)
+    var one <- parse_one_request(parsed, strict)
+    result <- one
     result.document = parsed
     return result
 }
