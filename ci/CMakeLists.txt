@@ -19,6 +19,7 @@ das_lane_python(check_rpm_spec "Testing the rpm spec render" "ci/test_rpm_build.
 das_lane_python(check_deb_control "Testing the deb control render" "ci/test_deb_build.py")
 das_lane_python(check_manifest_render "Testing the Homebrew and scoop manifest render" "ci/test_render_manifests.py")
 das_lane_python(check_runner_info "Testing the runner info cache-size lines" "ci/test_runner_info.py")
+das_lane_python(check_ninja_log_report "Testing the ninja log report" "ci/test_ninja_log_report.py")
 das_lane_python(check_tree_sitter_parse_sources "Testing the tree-sitter source parse selection"
     "ci/test_tree_sitter_parse_sources.py")
 
@@ -76,6 +77,7 @@ endfunction()
 
 set(DAS_EXTENDED_CORE
     check_workflow_matrix check_shipped_skills check_md_ascii check_wheel_repack check_manifest_render
+    check_ninja_log_report
     check_example_games check_dasllama_site run_tests_bench_updater
     run_tests_pr_babysit check_dasgen run_tests_review_md run_tests_dastest
     check_lint_tree check_lint_dasllama check_ast_verify_changed check_line_length check_gated_das check_review_gates

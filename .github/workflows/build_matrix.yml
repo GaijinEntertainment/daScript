@@ -286,6 +286,10 @@ jobs:
           cmake --build ./build --config ${{ matrix.cmake_preset }} --target jit_cache_sweep
         fi
 
+    - name: "Build time by target"
+      if: ${{ !cancelled() }}
+      run: python3 ci/ninja_log_report.py build/.ninja_log
+
     # The lane targets above are what compiles (Build only configures), so the slot is saved
     # here, and on a red sweep too: the objects a failed run compiled are as good as any.
     - name: "Save sccache objects"

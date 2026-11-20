@@ -126,6 +126,7 @@ configure.
 | Interpreter sweep | `cmake --build build --config Release --target run_tests_sweeps` - the whole per-PR sweep, JIT then interpreter, each retried isolated; alone: `cmake --build build --config Release --target run_tests_interpreter` | fails if a completed test file exceeded 30 s |
 | JIT sweep | `cmake --build build --config Release --target run_tests_jit` (`run_tests_sweeps` runs it first, then the interpreter sweep) | Windows-local `clang-cl` link failures are env noise; the catchable class is LLVM verifier errors, end-to-end JIT needs WSL/mac. 2-test smoke: `skills/internal/make_pr.md` sec.2.5 |
 | Sweep the JIT cache | with `DAS_JIT_MANIFEST` set to an empty directory for the `run_tests_jit` (or `run_tests_sweeps`) run and for this command: `cmake --build build --config Release --target jit_cache_sweep`; to count without deleting, `DAS_LOG_LEVEL=info bin/Release/jit.exe --sweep --sweep-dry-run` from the repo root (`bin/jit.exe` on a single-config generator) | deletes what the recorded run did not use, so on a dev box it removes every other program's cached DLLs too - run the dry form first. With the variable unset, or a manifest that names no DLL, it deletes nothing and fails |
+| Build time by target | on a Ninja build: `python3 ci/ninja_log_report.py build/.ninja_log` | one table per ninja invocation: edge-minutes by target, compiles and links folded into one row each. Prints a note and passes where there is no log |
 | Small C++ tests | `cmake --build build --config Release --target test-small` | drop `--build-config` on single-config generators. **Run after touching `tests-cpp/`** - MSVC tolerates C++ clang/gcc reject; `skills/internal/writing_cpp_tests.md` |
 | Compile (windows 64 Debug, nightly) | `cmake --build build --config Debug` | the default build as MSVC Debug; no test runs in this cell |
 | AOT sweep (full) | `cmake --build build --config Release --target run_tests_slow` - the full `test_aot` build, the AOT sweep over tests/, then the big C++ tests | nightly + manual dispatch only, so this is the **only** pre-push gate for AOT regressions outside tests/language - don't skip it; the sweep closes with its 30 slowest files (`--timing-outliers 30`). Under a sanitizer it leaves out `tests/lsp`, `tests/lint`, `tests/module_cache`, `tests/dastest` and `tests/mcp` - compiler and tool tests the cell's interpreter sweep already runs |
@@ -165,6 +166,17 @@ the strict-warning compile of the default targets.
 | Configure: tools disabled | `cmake -B build-tools-off -DDAS_TOOLS_DISABLED=ON -DDAS_AOT_EXAMPLES_DISABLED=ON`, plus the module flags of the tree's own build | any platform and generator, in a build directory of its own. Keep the module flags: a configure removes the `.shared_module` of every in-tree module it leaves off |
 | Build: Daslang (gcc -Werror) | Linux/WSL: `CC=gcc CXX=g++ cmake -B build-gcc -G Ninja -DCMAKE_BUILD_TYPE=Release -DDAS_GLFW_DISABLED=ON -DDAS_HV_DISABLED=OFF -DDAS_SQLITE_DISABLED=OFF -DDAS_LLVM_DISABLED=ON`, then `cmake --build build-gcc --parallel` | the warnings only gcc emits; no MSVC mirror |
 
+## nightly.yml - build_windows_relwithdebinfo_nightly and build_windows_release_llvm_nightly
+
+Both configure Ninja in `build/`. `build_windows_relwithdebinfo_nightly` builds RelWithDebInfo
+and its `Test` step runs `run_build_sanitizers`; `build_windows_release_llvm_nightly` builds
+Release and its `Test` step runs `run_build`, retried as `run_build_isolated` when it fails.
+
+| CI step | Local mirror | Notes |
+|---|---|---|
+| Test | `cmake --build build --config <type> --target <lane>` | the job's build type and lane target, named above |
+| Build time by target | `python3 ci/ninja_log_report.py build/.ninja_log` | red or green; what it prints is in the build matrix table |
+
 ## nightly.yml - build_windows_mingw
 
 msys2 CLANG64 build with dasClangBind + dasLLVM ON, full interp/JIT/AOT sweeps,
@@ -173,6 +185,10 @@ freshness check (`git diff --exit-code -- modules/dasClangBind/src/`) and
 `test_const_preproc.das`. No msys2 mirror - use the clang-cl frontend pass
 below. After regenerating dasClangBind bindings run the self-binder per
 `skills/internal/clang_bind_build.md`.
+
+| CI step | Local mirror | Notes |
+|---|---|---|
+| Build time by target | `python3 ci/ninja_log_report.py build-mingw/.ninja_log` | red or green; what it prints is in the build matrix table |
 
 ## nightly.yml - build_windows_clangcl
 
@@ -196,6 +212,10 @@ cmake --build build-clangcl --parallel
 CI passes the compiler by path, `%VCINSTALLDIR%\Tools\Llvm\x64\bin\clang-cl.exe`: the hosted
 image also has a standalone LLVM on `PATH`, and the STL of a Visual Studio update refuses a
 clang older than the one that update ships (`STL1000`). Do the same on a box with two clangs.
+
+| CI step | Local mirror | Notes |
+|---|---|---|
+| Build time by target | `python3 ci/ninja_log_report.py build-clangcl/.ninja_log` | red or green; what it prints is in the build matrix table |
 
 Single file, from a VS dev prompt with clang-cl on PATH
 (mac/WSL: `clang -fsyntax-only -std=c++17 ...`):
@@ -273,7 +293,9 @@ test rather than a check that silently stopped running.
 | Example games wired to the site | `cmake --build build --config Release --target check_example_games` | `examples/games/REVIEW.das`; the card id every place it is written down |
 | Shipped-skills gate | `cmake --build build --config Release --target check_shipped_skills` | |
 | pip wheel repack | `cmake --build build --config Release --target check_wheel_repack` | |
-| rpm spec render | `cmake --build build --config Release --target check_rpm_spec` | the spec `rpm_build.sh` emits under `--spec-only` - no rpmbuild, so it runs on every cell |
+| ninja log report | `cmake --build build --config Release --target check_ninja_log_report` | the tables `ci/ninja_log_report.py` prints for a staged log |
+| Build time by target | on a Ninja build: `python3 ci/ninja_log_report.py build/.ninja_log` | runs after the checks, red or green; the same step as the build matrix's |
+| rpm spec render | `cmake --build build --config Release --target check_rpm_spec` | the spec `rpm_build.sh` emits under `--spec-only` - no rpmbuild, so it runs on every posix cell |
 | Runner info cache sizes | `cmake --build build --config Release --target check_runner_info` | posix only; the `runner: cache` lines `ci/runner_info.sh` prints for a staged tree |
 | tree-sitter source selection | `cmake --build build --config Release --target check_tree_sitter_parse_sources` | posix only; the files `ci/tree_sitter_parse_sources.sh` hands to the parser, against a stub `tree-sitter` - the real parse is `tree_sitter_daslang_sources.yml` |
 | Benchmark results updater | `cmake --build build --config Release --target run_tests_bench_updater` | |

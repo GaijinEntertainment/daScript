@@ -210,6 +210,10 @@ jobs:
     - name: "Test"
       run: cmake --build ./build --config RelWithDebInfo --target run_build_sanitizers --parallel
 
+    - name: "Build time by target"
+      if: ${{ !cancelled() }}
+      run: python3 ci/ninja_log_report.py build/.ninja_log
+
     # The lane target is what compiles (Build only configures), so the slot is saved after it,
     # on a red sweep too: the objects a failed run compiled are as good as any.
     - name: "Save sccache objects"
@@ -325,6 +329,10 @@ jobs:
       run: |
         cmake --build ./build --config Release --target run_build --parallel \
           || cmake --build ./build --config Release --target run_build_isolated --parallel
+
+    - name: "Build time by target"
+      if: ${{ !cancelled() }}
+      run: python3 ci/ninja_log_report.py build/.ninja_log
 
     - name: "Save sccache objects"
       if: ${{ !cancelled() && github.ref == 'refs/heads/master' }}
@@ -459,6 +467,11 @@ jobs:
       run: |
         cmake --build ./build-mingw --config Release --target run_build_mingw --parallel \
           || cmake --build ./build-mingw --config Release --target run_build_mingw_isolated --parallel
+
+    - name: "Build time by target"
+      if: ${{ !cancelled() }}
+      shell: bash
+      run: python3 ci/ninja_log_report.py build-mingw/.ninja_log
 
     - name: "Save sccache objects"
       if: ${{ !cancelled() && github.ref == 'refs/heads/master' }}
@@ -601,6 +614,10 @@ jobs:
       run: |
         cmake --build ./build-clangcl --config Release --target run_build_clangcl --parallel
         if ($LASTEXITCODE -ne 0) { exit 1 }
+
+    - name: "Build time by target"
+      if: ${{ !cancelled() }}
+      run: python3 ci/ninja_log_report.py build-clangcl/.ninja_log
 
     - name: "Save sccache objects"
       if: ${{ !cancelled() && github.ref == 'refs/heads/master' }}
