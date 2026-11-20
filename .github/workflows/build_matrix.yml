@@ -179,6 +179,8 @@ jobs:
         echo "SCCACHE_DIR=${{ runner.temp }}/sccache" >> $GITHUB_ENV
         echo "SCCACHE_GHA_ENABLED=false" >> $GITHUB_ENV
         echo "ZERO_AR_DATE=1" >> $GITHUB_ENV
+        # every JIT run of the job records the cached DLLs it uses here; "Sweep the JIT cache" reads it
+        echo "DAS_JIT_MANIFEST=${{ runner.temp }}/jit_manifest" >> $GITHUB_ENV
         # SCCACHE_CACHE_SIZE bounds the slot: the default is 10G, and a slot grows to its bound
         # with objects of commits long gone. Unbounded slots fill the repository's cache quota,
         # and the slots the nightly cells save once a day are the ones evicted, before the next
@@ -272,6 +274,17 @@ jobs:
     - name: "Nightly Backend Sweeps"
       if: inputs.lane == 'build_nightly' && matrix.phase == 'backend'
       run: cmake --build ./build --config ${{ matrix.cmake_preset }} --target run_backend_sweeps --parallel
+
+    # The slot carries .cache/daslang/_anon_*, and nothing else collects the DLLs and objects
+    # earlier runs left there. A cell that ran the per-PR tests recorded what it used, so it
+    # deletes the rest before the save. A red run recorded only part and sweeps nothing; a cell
+    # that ran no JIT has no manifest and nothing to sweep.
+    - name: "Sweep the JIT cache"
+      if: (inputs.lane == 'build' || matrix.nightly_only == 'ON') && (matrix.phase == 'all' || matrix.phase == 'tests')
+      run: |
+        if [ -d "$DAS_JIT_MANIFEST" ]; then
+          cmake --build ./build --config ${{ matrix.cmake_preset }} --target jit_cache_sweep
+        fi
 
     # The lane targets above are what compiles (Build only configures), so the slot is saved
     # here, and on a red sweep too: the objects a failed run compiled are as good as any.

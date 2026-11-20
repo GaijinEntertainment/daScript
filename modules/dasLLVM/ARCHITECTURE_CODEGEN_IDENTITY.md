@@ -39,9 +39,10 @@ declaration, irgen, and the optimize/emit pool outright. Three consequences for 
 require chain as its dependencies allow (registration-only requires, like the dasLLAMA GPU
 tiers, belong at the END of an umbrella, not in a root module everything depends on); a
 rename-without-body change still re-keys, because the module hash folds symbol names, not
-just function hashes; and **the cache holds exactly one generation** - the GC keep-set is
-the current link set, so reverting an edit is an eviction, not a hit: the run after a revert
-re-emits from the reverted module on, same as the edit did.
+just function hashes; and **a process collects only what it wrote itself** - after a link,
+`jit_gc_stale_dlls` deletes the artifacts this process published that the current link set
+does not name, and leaves every file an earlier process wrote. Those stay until a sweep
+(`#jit-cache-sweep`).
 
 ### The runtime's type layouts are a key input {#handled-layouts-key}
 
@@ -49,12 +50,31 @@ Generated code bakes the size of a handled (C++-bound) type and the offset of ea
 as constants, and no AST hash sees either: a C++ member added to a bound class moves every field
 behind it while each function's source stays the same. `jit_env_salt` therefore folds
 `handled_layout_hash` - one term per handled type annotation (module, name, size) and, where the
-annotation binds a structure, one per field (module, type, field, offset), over every module the
-running binary registers, summed so the order of the walk is no input. A rebuilt runtime whose
-layouts moved keys a new DLL and new partition objects, and the old ones are collected as stale;
-a rebuild that moved none hits the cache. The walk costs tens of microseconds, so every compile
+annotation binds a structure, one per field (module, type, field, offset), over every module of
+the compiled program's library, summed so the order of the walk is no input. The library is the
+modules its module group already held plus the ones the program requires; a module another
+program of the process loaded on demand is not in it, so it does not re-key this one. A rebuilt
+runtime whose layouts moved keys a new DLL and new partition objects; a rebuild that moved none
+hits the cache. The walk costs tens of microseconds, so every compile
 takes it. What the salt does not see is a bound type's behavior behind an unchanged layout -
 that is `LLVM_JIT_CODEGEN_VERSION`'s job.
+
+### A sweep deletes what no run used {#jit-cache-sweep}
+
+A cache folder accumulates: every key a program ever had leaves its DLL, its link by-products
+and its partition objects there, and a process collects only what it wrote itself
+(`#split-obj-cache`). Under `DAS_JIT_MANIFEST=<dir>` a run records every cached DLL it uses: a
+cache hit and a write each leave an empty file `<folder>.<key>` in the directory - one file a
+DLL, so processes running in parallel share no file - and a write also leaves `<key>.files`
+beside the DLL, naming the objects it was linked from, one name a line. Only a
+content-addressed DLL is recorded; one at a pinned output path has no key and is left out. `jit_sweep` (`daslib/llvm_jit_sweep.das`,
+the jit tool's `--sweep`) keeps, in each `_anon_*` folder the manifest names, the files that
+carry a recorded key's prefix and the objects that key's `.files` lists; it deletes the
+folder's other files, and deletes whole every `_anon_*` folder the manifest does not name. A
+DLL written before the list existed keeps its own files and loses its objects, which the next
+miss re-emits. A missing or empty manifest sweeps nothing: it is a run that recorded nothing,
+not one that used nothing. A program dastest serves from its result cache is not compiled, so
+its DLL is not recorded and a sweep deletes it.
 
 ### Extern slot names are a key input {#extern-slot-names-key}
 

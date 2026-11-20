@@ -110,7 +110,7 @@ or age check, and no saver writes that file; `ARCHITECTURE_CPU_CLASSES.md#tune-f
 `DAS_TUNE_NOISE_CV` (recalibrates the tuner noise gate), `DAS_TUNE_NOISE_OVERRIDE` (mints
 through a failing gate), `--tune` (forced re-mint), `--tune-only` / `DAS_TUNE_ONLY` (re-mints
 only the named families; the policy guard arms it itself for a profile's residue),
-`DAS_TUNE_CONTROL` (a supervisor's stop request - tuners abort between families), `--jit-obj-cache=0` (forces every split
+`DAS_TUNE_CONTROL` (a supervisor's stop request - tuners abort between families), `DAS_JIT_MANIFEST` (a run records every cached DLL it loads or writes in that directory; `ARCHITECTURE_CODEGEN_IDENTITY.md#jit-cache-sweep`), `--jit-obj-cache=0` (forces every split
 partition to re-emit, bypassing the obj cache), `--jit-lto` (a split `-exe`'s partitions emit
 bitcode and its link runs LTO), `DAS_JIT_PROBE_LTO` (the DLL path's twin: split partitions emit
 bitcode and the link runs lld LTO - a dev probe artifact), `DAS_JIT_X64_FORCE_FEATURES` /

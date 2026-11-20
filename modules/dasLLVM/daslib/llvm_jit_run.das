@@ -7,6 +7,7 @@ options no_global_variables = false
 require llvm/daslib/llvm_boost
 require llvm/daslib/llvm_dll_utils
 require llvm/daslib/llvm_jit_plan public
+require llvm/daslib/llvm_jit_sweep
 require llvm/daslib/llvm_jit_cli
 require llvm/daslib/llvm_exe
 require llvm/daslib/jit_standalone
@@ -37,7 +38,7 @@ var LINK_WHOLE_LIB = false // when true, standalone exe links against the whole 
 
 // Read by tests-cpp/small/test_jit_emitter_pin.cpp: FNV-1a64 of the emitter sources
 // (normalized to LF; file list in the test)
-let LLVM_JIT_EMITTER_HASH : uint64 = 0xb70f6e89dff1f6c0ul
+let LLVM_JIT_EMITTER_HASH : uint64 = 0x5fc02e1fac78ab65ul
 
 [arch(at = "../ARCHITECTURE_FAST_MATH.md#never-fast-math")]
 def private apply_fast_math_to_module(m : LLVMOpaqueModule?) {
@@ -157,6 +158,8 @@ def private reopen_and_gc_dll(prog : Program?; var dll : DLLHandle?&; output_pat
             keep_names |> insert(base_name(obj))
         }
         jit_gc_stale_dlls(dir_name(output_path), dll_hash_basename, keep_names, mine)
+        jit_write_link_list(output_path, keep_objs)
+        jit_manifest_record(output_path, dll_hash_basename)
     }
 }
 
@@ -454,8 +457,8 @@ def private run_split_codegen(prog : Program?; ctx : Context?; funcs : array<Fun
     let pipeline = LLVM_ENABLE_OPT_PASS ? opt_pipeline_string(opt_level |> uint, size_level |> uint, sanitize) : ""
     // obj cache key = env salt + the RUNNING chained fold of module hashes: positional invalidation (ARCHITECTURE_CODEGEN_IDENTITY.md §2.1); probe = file existence on key-named objs
     var chain = LLVM_JIT_CODEGEN_VERSION
-    let env_salt = jit_env_salt(opt_level, size_level, jit_flags.emit_prologue, debug_info,
-        target_triple, jit_target.klass, true, use_host_cpu, sanitize)
+    let env_salt = jit_program_salt(prog, opt_level, size_level, jit_flags.emit_prologue,
+        debug_info, target_triple, jit_target.klass, true, use_host_cpu, sanitize)
     // DAS_JIT_DUMP_HASHES: per-function fold forensics - diff two runs to locate a key divergence
     let dump_hashes = g_env_jit.jit_dump_hashes
     var objs : array<string>
@@ -857,6 +860,7 @@ def public run_jit(prog : Program?; var ctx : Context?; cli_opts : JitCliOptions
                 to_log(LOG_INFO, "LLVM JIT: DLL cache miss, codegen for {output_path}.dll\n")
             } else {
                 to_log(LOG_INFO, "LLVM JIT: DLL cache hit {output_path}.dll\n")
+                jit_manifest_record(output_path, dll_hash_basename)
             }
         }
         t_probe = get_time_usec(phase_tm)

@@ -23,10 +23,12 @@ paths it created uniquely for this process (a temp file or a temp directory), an
 two runs at once collide on a shared path under `build/` (repo root).
 
 **A test that spawns a daslang child keeps every path the child writes inside a directory `<dir>`
-the test created uniquely for this process.** A child writes its caches under the cwd unless
-these move or stop them: `-output <dir>/...` (an `-exe` build, the JIT cache),
-`-module-cache <dir>/...` or `-no-module-cache` (the front-end cache), `-jit-no-cache` (the JIT
-cache), a working directory inside `<dir>` (both caches).
+the test created uniquely for this process.** A child writes its two caches - the front-end
+module cache and the JIT cache - under the cwd unless these move or stop them: `-output
+<dir>/...` (an `-exe` build, the JIT cache), `-module-cache <dir>/...` or `-no-module-cache`
+(the front-end cache), `-jit-no-cache` (the JIT cache), a working directory inside `<dir>`
+(both caches). A child the test hands `DAS_JIT_MANIFEST=<dir>/...` also writes the record of
+the cached DLLs it used into that directory.
 
 **A test whose child compiles through the front-end module cache - any child but a `-exe`,
 `-compile-only`, `-documentation`, debugger or AOT run - and asserts a line a macro prints at

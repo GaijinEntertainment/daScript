@@ -18,6 +18,7 @@ das_lane_python(check_wheel_repack "Testing the pip wheel repack" "ci/test_wheel
 das_lane_python(check_rpm_spec "Testing the rpm spec render" "ci/test_rpm_build.py")
 das_lane_python(check_deb_control "Testing the deb control render" "ci/test_deb_build.py")
 das_lane_python(check_manifest_render "Testing the Homebrew and scoop manifest render" "ci/test_render_manifests.py")
+das_lane_python(check_runner_info "Testing the runner info cache-size lines" "ci/test_runner_info.py")
 das_lane_python(check_tree_sitter_parse_sources "Testing the tree-sitter source parse selection"
     "ci/test_tree_sitter_parse_sources.py")
 
@@ -84,8 +85,9 @@ if(NOT WIN32)
     # check_model_mint: its test stands in a shell script for daslang, which Windows cannot exec;
     # check_rpm_spec, check_deb_control: Linux packages, and their fixtures' exec bits mean nothing on NTFS
     # check_tree_sitter_parse_sources: its test stands in a shell script for tree-sitter
+    # check_runner_info: its test runs a bash script, and python's `bash` on Windows is WSL's
     list(APPEND DAS_EXTENDED_CORE check_model_mint check_rpm_spec check_deb_control
-        check_tree_sitter_parse_sources)
+        check_tree_sitter_parse_sources check_runner_info)
 endif()
 
 set(DAS_EXTENDED_MODULES

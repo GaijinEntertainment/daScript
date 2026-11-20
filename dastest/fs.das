@@ -97,19 +97,19 @@ def scan_dir(path : string; var cache : table<string; void?>; var res : array<st
     if (!dirStat.is_dir) {
         return false
     }
+    var names : array<string>
     fio::dir(path) $(n) {
-        if (n == "." || n == "..") {
-            return
+        if (n != "." && n != "..") {
+            names |> push(n)
         }
+    }
+    sort(names)
+    for (n in names) {
         let f = path |> join_path(n)
         let fStat = stat(f)
-        if (!fStat.is_valid) {
-            return
-        }
+        if (!fStat.is_valid) continue
         if (fStat.is_dir) {
-            if (n |> starts_with("_") || !invoke(dir_filter, n)) {
-                return
-            }
+            if (n |> starts_with("_") || !invoke(dir_filter, n)) continue
             f |> scan_dir(cache, res, suffix, dir_filter)
         } elif (fStat.is_reg && f |> ends_with(suffix) && !(n |> starts_with("_")) && !cache |> key_exists(f)) {
             cache |> insert(f, null)

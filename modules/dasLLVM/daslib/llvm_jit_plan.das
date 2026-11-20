@@ -18,6 +18,7 @@ module llvm_jit_plan shared private
 require llvm/bindings/llvm_host
 require llvm/daslib/llvm_dll_utils public
 require llvm/daslib/llvm_env
+require llvm/daslib/llvm_jit_sweep
 require llvm/daslib/llvm_cpu_class
 require llvm/daslib/llvm_jit_cli
 require daslib/ast_boost
@@ -544,11 +545,10 @@ def public handled_layout_term(mod, typ, field : string; value : uint64) : uint6
     return (h ^ value) * JIT_FNV_PRIME
 }
 
-//! the size of every handled type the running binary registers and the field offsets of every structure among them, summed so the walk's order is no input
 [arch(at = "../ARCHITECTURE_CODEGEN_IDENTITY.md#handled-layouts-key")]
-def public handled_layout_hash() : uint64 {
+def public handled_layout_hash(prog : Program?) : uint64 {
     var acc = 0ul
-    program_for_each_registered_module() $(m) {
+    prog |> for_each_module() $(m) {
         let mod = string(m.name)
         module_for_each_annotation(m) $(value) {
             return if (!value.isTypeAnnotation)
@@ -563,13 +563,20 @@ def public handled_layout_hash() : uint64 {
     return acc
 }
 
+def public jit_program_salt(prog : Program?; opt_level : int; size_level : int;
+                            emit_prologue : bool; debug_info : bool; target_triple : string;
+                            baseline : CpuClass; split : bool; use_host_cpu : bool;
+                            sanitize : JitSanitize) : uint64 =>
+    jit_env_salt(opt_level, size_level, emit_prologue, debug_info, target_triple, baseline, split,
+        use_host_cpu, sanitize, handled_layout_hash(prog))
+
 // The environment/config salt shared by the whole-DLL key AND the per-partition obj cache key.
 // ONE helper on purpose: a salt component folded into the DLL key but not the partition key
 // would let a config change reuse stale cached partition objects.
 def public jit_env_salt(opt_level : int; size_level : int; emit_prologue : bool; debug_info : bool;
                         target_triple : string; baseline : CpuClass; split : bool;
                         use_host_cpu : bool; sanitize : JitSanitize;
-                        layouts : uint64 = handled_layout_hash()) : uint64 {
+                        layouts : uint64) : uint64 {
     var h = LLVM_JIT_CODEGEN_VERSION
     // host/binary identity: object format follows the triple (COFF vs ELF on one checkout), and the emitting binary bakes its Context offsets into every global access - neither is in any AST hash
     if (empty(target_triple)) {
@@ -644,17 +651,17 @@ def public jit_dll_basename(prog : Program?; funcs : array<FunctionPtr>; opt_lev
         h = (h ^ get_function_aot_hash(prog, fn)) * JIT_FNV_PRIME
     }
     h = fold_jit_only_inputs(prog, funcs, h)
-    h = (h ^ jit_env_salt(opt_level, size_level, emit_prologue, debug_info, target_triple,
+    h = (h ^ jit_program_salt(prog, opt_level, size_level, emit_prologue, debug_info, target_triple,
         baseline, split, use_host_cpu, sanitize)) * JIT_FNV_PRIME
     return "{h}"
 }
 
 def public jit_gc_stale_dlls(subdir : string; keep_basename : string; keep_names : table<string>; mine : table<string>) {
     // keep mask: the current DLL-hash prefix (dll/lib/exp/pdb/rsp + monolith .o) OR an exact keep_names entry (split obj cache's live partition objects - named by partition key, not dll hash)
-    let keep_prefix = "{keep_basename}."
+    let keep_prefix = jit_key_prefix(keep_basename)
     dir(subdir) $(fname) {
-        if (fname == "." || fname == ".." || fname |> starts_with(keep_prefix)
-            || keep_names |> key_exists(fname) || !(mine |> key_exists(fname))) return
+        if (fname == "." || fname == ".." || jit_key_keeps(fname, keep_prefix, keep_names)
+            || !(mine |> key_exists(fname))) return
         let full_path = "{subdir}/{fname}"
         var err : string
         let ok = remove(full_path, err)
