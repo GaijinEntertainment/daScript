@@ -70,7 +70,9 @@ def build_cells(nightly):
                 cells.append(dict(target="linux", architecture=64, cmake_preset="Release", sanitizers=san,
                                   runner="ubuntu-latest", build_name="linux_" + san, nightly_only="ON",
                                   fast_math="OFF", phase=phase, cmake_extra=CLANG + SLOW_SWEEP_BUDGETS, **cmake))
-        # the tree built -ffast-math, the way an embedder that passes it does (dagor is one)
+        # the tree built -ffast-math, the way an embedder that passes it does (dagor is one). It
+        # runs the per-PR lane only (build_matrix.yml skips its Nightly Tests step): the cell is a
+        # second full build of the tree, and the full AOT suite on top would double the job
         cells.append(dict(target="linux", architecture=64, cmake_preset="Release", sanitizers="none",
                           fast_math="ON", runner="ubuntu-latest", build_name="linux_fastmath",
                           nightly_only="ON", phase="all",

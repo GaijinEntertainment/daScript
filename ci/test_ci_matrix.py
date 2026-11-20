@@ -193,6 +193,53 @@ class WorkflowShapes(unittest.TestCase):
         self.assertIn("inputs.lane == 'build_nightly' && matrix.phase == 'slow'", text)
         self.assertIn("inputs.lane == 'build_nightly' && matrix.phase == 'backend'", text)
 
+    def test_the_fast_math_cell_runs_the_per_pr_lane_narrowed_and_no_nightly_step(self):
+        cells = [c for c in ci_matrix.build_cells(True) if c["fast_math"] == "ON"]
+        self.assertEqual([(c["phase"], c.get("nightly_only")) for c in cells], [("all", "ON")])
+        step = self.read("build_matrix.yml").split('- name: "Nightly Tests"', 1)[1].split("- name:", 1)[0]
+        self.assertIn("      if: matrix.cmake_preset == 'Release' && matrix.sanitizers == 'none'"
+                      " && matrix.fast_math != 'ON' && inputs.lane == 'build_nightly'\n", step)
+        tests_cmake = self.tests_cmake()
+        self.assertIn("        elseif(DAS_FAST_MATH)\n"
+                      "            set(_DAS_JIT_TEST_DIRS ${_DAS_FAST_MATH_JIT_DIRS})\n", tests_cmake)
+        self.assertIn("    if(DAS_FAST_MATH)\n"
+                      "        set(_aot_subset_test_dirs ${_DAS_FAST_MATH_AOT_DIRS})\n", tests_cmake)
+        self.assertIn("set(_DAS_FAST_MATH_AOT_DIRS ${PROJECT_SOURCE_DIR}/tests/language"
+                      " ${PROJECT_SOURCE_DIR}/tests/math)\n", tests_cmake)
+
+        with open(os.path.join(os.path.dirname(HERE), "tests", "aot", "CMakeLists.txt"), encoding="utf-8") as f:
+            aot_cmake = f.read()
+        self.assertIn("if(DAS_FAST_MATH)\n    list(APPEND AOT_SUBSET_DASLIB_MODULE_FILES"
+                      " daslib/math_boost.das daslib/color_mapping.das)\n", aot_cmake)
+        self.assertIn("if(DAS_FAST_MATH)\n    target_sources(test_aot_subset PRIVATE"
+                      " ${MATH_AOT_GENERATED_SRC} ${MATH_MODULES_AOT_GENERATED_SRC})\n"
+                      "    add_dependencies(test_aot_subset test_aot_math test_aot_math_modules)\n", aot_cmake)
+
+    def tests_cmake(self):
+        with open(os.path.join(os.path.dirname(HERE), "tests", "CMakeLists.txt"), encoding="utf-8") as f:
+            return f.read()
+
+    def test_the_fast_math_jit_sweep_takes_every_folder_with_a_fast_math_arm(self):
+        """A JIT run on a fast-math host turns the JIT's own fast-math on, and a test says what it
+        expects there through HOST_FAST_MATH. A folder with such a test that the fast-math sweep
+        leaves out is an arm no JIT run reaches."""
+        listed = re.search(r"set\(_DAS_FAST_MATH_JIT_DIRS\)\nforeach\(_dir ([a-z_ ]+)\)\n"
+                           r"    list\(APPEND _DAS_FAST_MATH_JIT_DIRS \$\{PROJECT_SOURCE_DIR\}/tests/\$\{_dir\}\)\n",
+                           self.tests_cmake())
+        self.assertIsNotNone(listed)
+        tests = os.path.join(os.path.dirname(HERE), "tests")
+        with_arm = set()
+        for folder, _, files in os.walk(tests):
+            if "_generated" in folder:
+                continue
+            for name in files:
+                if not name.endswith(".das"):
+                    continue
+                with open(os.path.join(folder, name), encoding="utf-8", errors="replace") as f:
+                    if "HOST_FAST_MATH" in f.read():
+                        with_arm.add(os.path.relpath(folder, tests).replace(os.sep, "/").split("/")[0])
+        self.assertEqual(sorted(listed.group(1).split()), sorted(with_arm))
+
     def test_slots_are_saved_under_a_run_key_and_restored_by_prefix(self):
         # a delete-then-save refresh left the key empty for the length of a build, and a run
         # cancelled between the two left it empty for good; a run-unique key with a prefix restore
