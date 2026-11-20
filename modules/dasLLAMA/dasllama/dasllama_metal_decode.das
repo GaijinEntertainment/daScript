@@ -3667,6 +3667,7 @@ def private metal_block_embed_rows(t : Model; toks : array<int64>; var dst : arr
     metal_commit(cb)
     metal_wait_until_completed(cb)
     let ok = !metal_command_buffer_failed(cb)
+    metal_release(cb)
     if (ok) {
         dst |> reserve_resize(n * dim)
         unsafe {
@@ -3712,6 +3713,7 @@ def private metal_block_cls_rows(t : Model; rows : array<float>; n : int64; var 
     metal_commit(cb)
     metal_wait_until_completed(cb)
     let ok = !metal_command_buffer_failed(cb)
+    metal_release(cb)
     if (ok) {
         logits |> reserve_resize(n * vocab)
         unsafe {

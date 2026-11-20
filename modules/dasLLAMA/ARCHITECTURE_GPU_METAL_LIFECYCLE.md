@@ -21,9 +21,9 @@ frees its host planes and leaves its regions cached until the weights epoch move
 `metal_prefill_shutdown`, bounded by the largest shape the process served; a boundary that must hand the device back calls
 both, and a context's end calls both for it (`metal_context_shutdown`, a `[finalize]`, where the device came up; the
 GEMM driver's `metal_gemm_context_shutdown` is its twin for that driver's own device, pipelines and caches; the
-tower's `metal_tower_context_shutdown`, the ASR decoders' `metal_asr_dec_context_shutdown` and the translator's
-`metal_nmt_context_shutdown` are the twins for the pools, slabs and weight blobs those drivers own, which no decode or
-prefill shutdown reaches): device state a context left alive would outlive it in the process - dastest's `--together`
+tower's `metal_tower_context_shutdown`, the ASR decoders' `metal_asr_dec_context_shutdown`, the translator's
+`metal_nmt_context_shutdown` and the block drafter's `metal_dflash_context_shutdown` are the twins for the pools, slabs,
+weight blobs and pipelines those drivers own, which no decode or prefill shutdown reaches): device state a context left alive would outlive it in the process - dastest's `--together`
 runs a file a context, a host may hold several - and the next context's leak gate would count it. A released buffer leaves the process footprint because the binding reads `contents` inside an autorelease pool
 (`../dasMetal/ARCHITECTURE.md`), and the footprint (`metal_footprint_settled`), not the live-object count, witnesses it -
 the support matrix's release row (`metal_release_row`) holds three load-serve-delete cycles of E2B to their first close.
