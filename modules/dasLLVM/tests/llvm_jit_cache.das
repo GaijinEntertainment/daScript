@@ -281,52 +281,84 @@ def test_layout_term(t : T?) {
     }
 }
 
-[test(description = "the running binary's handled layout hash is the same on every walk and covers handled types that bind no structure")]
+def private layouts_of(script : string) : uint64 {
+    var layouts = 0ul
+    compile_for_jit("{get_this_module_dir()}/{script}", false) $(var program) {
+        layouts = handled_layout_hash(get_ptr(program))
+    }
+    return layouts
+}
+
+[test(description = "a program's handled layout hash is the same on every walk, covers handled types that bind no structure, folds a module the program requires, and does not move when another program of the process loads a module")]
 def test_layout_hash(t : T?) {
-    t |> run("the running binary's layouts hash the same on every walk") @(t : T?) {
-        let first = handled_layout_hash()
-        t |> success(first != 0ul, "the walk found handled types")
-        t |> equal(handled_layout_hash(), first)
+    t |> run("a program's layouts hash the same on every walk") @(t : T?) {
+        compile_for_jit("{get_this_module_dir()}/_llvm_compile_only_client.das",
+                        false) $(var program) {
+            let first = handled_layout_hash(get_ptr(program))
+            t |> success(first != 0ul, "the walk found handled types")
+            t |> equal(handled_layout_hash(get_ptr(program)), first)
+        }
     }
     t |> run("a handled type that binds no structure is a term too") @(t : T?) {
-        var structures = 0ul
-        var others = 0
-        program_for_each_registered_module() $(m) {
-            let mod = string(m.name)
-            module_for_each_annotation(m) $(value) {
-                return if (!value.isTypeAnnotation)
-                if (!value.isBasicStructureAnnotation) {
-                    others++
-                    return
-                }
-                let typ = string(value.name)
-                structures += handled_layout_term(mod, typ, "", uint64(get_handled_type_size(unsafe(reinterpret<TypeAnnotation?>(value)))))
-                for_each_field(*unsafe(reinterpret<BasicStructureAnnotation?>(value))) $(name, _cppName, _xtype, offset) {
-                    structures += handled_layout_term(mod, typ, name, uint64(offset))
+        compile_for_jit("{get_this_module_dir()}/_llvm_compile_only_client.das",
+                        false) $(var program) {
+            var structures = 0ul
+            var others = 0
+            get_ptr(program) |> for_each_module() $(m) {
+                let mod = string(m.name)
+                module_for_each_annotation(m) $(value) {
+                    return if (!value.isTypeAnnotation)
+                    if (!value.isBasicStructureAnnotation) {
+                        others++
+                        return
+                    }
+                    let typ = string(value.name)
+                    structures += handled_layout_term(mod, typ, "",
+                                                      uint64(
+                                                             get_handled_type_size(
+                        unsafe(reinterpret<TypeAnnotation?>(value)))))
+                    for_each_field(*unsafe(reinterpret<BasicStructureAnnotation?>(value))) $(name, _cppName, _xtype, offset) {
+                        structures += handled_layout_term(mod, typ, name, uint64(offset))
+                    }
                 }
             }
+            t |> success(others > 0,
+                "the program's library holds handled types that bind no structure ({others})")
+            t |> success(handled_layout_hash(get_ptr(program)) != structures,
+                         "the hash is not the structures' terms alone")
         }
-        t |> success(others > 0, "the binary registers handled types that bind no structure ({others})")
-        t |> success(handled_layout_hash() != structures, "the hash is not the structures' terms alone")
+    }
+    t |> run("a required module's layouts fold, another program's do not") @(t : T?) {
+        let plain = layouts_of("_llvm_compile_only_client.das")
+        let with_module = layouts_of("_llvm_layouts_module_client.das")
+        t |> success(with_module != plain,
+                     "the program that requires the module folds its handled types")
+        t |> equal(layouts_of("_llvm_compile_only_client.das"), plain,
+                   "the module the other program loaded is no input of this one")
     }
 }
 
-[test(description = "the JIT env salt a compile takes folds this binary's handled layout hash and the typed aliasing switch")]
+[test(description = "the salt both JIT keys take is the env salt over the program's handled layout hash, and the env salt folds the layouts it is given and the typed aliasing switch")]
 def test_salt_folds_layouts(t : T?) {
-    let here = handled_layout_hash()
-    t |> run("the salt a compile takes is the salt over this binary's layouts") @(t : T?) {
-        t |> equal(jit_env_salt(3, 0, false, false, "", CpuClass.none, true, true, JitSanitize()),
-            salt(here))
+    let layouts = layouts_of("_llvm_compile_only_client.das")
+    t |> run("the salt a compile takes is the salt over its program's layouts") @(t : T?) {
+        compile_for_jit("{get_this_module_dir()}/_llvm_compile_only_client.das",
+                        false) $(var program) {
+            t |> equal(
+                       jit_program_salt(get_ptr(program), 3, 0, false, false, "", CpuClass.none,
+                                        true, true, JitSanitize()),
+                salt(handled_layout_hash(get_ptr(program))))
+        }
     }
     t |> run("other layouts are another salt") @(t : T?) {
-        t |> success(salt(here + 1ul) != salt(here))
+        t |> success(salt(layouts + 1ul) != salt(layouts))
     }
     t |> run("the typed aliasing switch is another salt") @(t : T?) {
-        let on = salt(here)
+        let on = salt(layouts)
         g_jit_strict_aliasing = false
-        let off = salt(here)
+        let off = salt(layouts)
         g_jit_strict_aliasing = true
         t |> success(on != off)
-        t |> equal(on, salt(here))
+        t |> equal(on, salt(layouts))
     }
 }

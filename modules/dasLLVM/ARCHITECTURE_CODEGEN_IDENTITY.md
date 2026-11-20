@@ -49,10 +49,12 @@ Generated code bakes the size of a handled (C++-bound) type and the offset of ea
 as constants, and no AST hash sees either: a C++ member added to a bound class moves every field
 behind it while each function's source stays the same. `jit_env_salt` therefore folds
 `handled_layout_hash` - one term per handled type annotation (module, name, size) and, where the
-annotation binds a structure, one per field (module, type, field, offset), over every module the
-running binary registers, summed so the order of the walk is no input. A rebuilt runtime whose
-layouts moved keys a new DLL and new partition objects, and the old ones are collected as stale;
-a rebuild that moved none hits the cache. The walk costs tens of microseconds, so every compile
+annotation binds a structure, one per field (module, type, field, offset), over every module of
+the compiled program's library, summed so the order of the walk is no input. The library is the
+modules its module group already held plus the ones the program requires; a module another
+program of the process loaded on demand is not in it, so it does not re-key this one. A rebuilt
+runtime whose layouts moved keys a new DLL and new partition objects; a rebuild that moved none
+hits the cache. The walk costs tens of microseconds, so every compile
 takes it. What the salt does not see is a bound type's behavior behind an unchanged layout -
 that is `LLVM_JIT_CODEGEN_VERSION`'s job.
 
