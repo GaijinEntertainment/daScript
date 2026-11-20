@@ -2640,7 +2640,7 @@ if(TARGET daslang)
         message(FATAL_ERROR "dastest_cache_guard runs rm -rf on DAS_TEST_CACHE_DIR; refusing \"${DAS_TEST_CACHE_DIR}\"")
     endif()
     set(_das_test_binaries)
-    foreach(_t daslang daslang_main libDaScriptDyn libDaScriptDyn_runtime daslang-live daslang_live_main watchdog dasbind_probe ${_das_shared_modules} test_aot_subset)
+    foreach(_t daslang daslang_main libDaScriptDyn libDaScriptDyn_runtime daslang-live daslang_live_main watchdog dasbind_probe ${_das_shared_modules})
         if(TARGET ${_t})
             list(APPEND _das_test_binaries ${_t})
         endif()
@@ -2654,6 +2654,18 @@ if(TARGET daslang)
         COMMAND ${CMAKE_COMMAND} -E make_directory ${DAS_TEST_CACHE_DIR}
         COMMAND ${CMAKE_COMMAND} -E copy ${_identity} ${DAS_TEST_CACHE_DIR})
     add_dependencies(dastest_cache_guard ${_das_test_binaries})
+    # The AOT subset's results sit in a folder of their own under the cache, behind a guard of
+    # their own: a lane that runs no AOT sweep does not build test_aot_subset to hash it.
+    if(TARGET test_aot_subset)
+        set(_aot_identity ${DAS_LANE_STAMP_DIR}/aot_binary_identity.txt)
+        add_custom_target(dastest_aot_cache_guard
+            COMMAND ${CMAKE_COMMAND} -E sha256sum $<TARGET_FILE:test_aot_subset> > ${_aot_identity}
+            COMMAND ${CMAKE_COMMAND} -DNEW=${_aot_identity} -DDIR=${DAS_TEST_AOT_CACHE_DIR}
+                    -DENABLED=${DAS_TEST_RESULT_CACHE} -P ${PROJECT_SOURCE_DIR}/cmake/dastest_cache_guard.cmake
+            COMMAND ${CMAKE_COMMAND} -E make_directory ${DAS_TEST_AOT_CACHE_DIR}
+            COMMAND ${CMAKE_COMMAND} -E copy ${_aot_identity} ${DAS_TEST_AOT_CACHE_DIR}/binary_identity.txt)
+        add_dependencies(dastest_aot_cache_guard dastest_cache_guard test_aot_subset)
+    endif()
 endif()
 foreach(_t check_lint_tree check_lint_dasllama check_vulkan run_tests_vulkan run_tests_imgui_integration
         build_site_wasm check_playground_samples run_imgui2rst run_vulkan2rst)

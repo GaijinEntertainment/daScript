@@ -153,7 +153,7 @@ if(TARGET test_aot)
 endif()
 
 # Fast AOT run over tests/language (and tests/math in a fast-math build), against the subset
-# binary that per-PR CI already builds as part of ALL. The build lane runs it; the shared result
+# binary that per-PR CI already builds as part of ALL. The build lane runs it; its own result
 # cache serves it until the subset binary changes.
 if(TARGET test_aot_subset)
     set(_aot_subset_test_dirs ${PROJECT_SOURCE_DIR}/tests/language)
@@ -162,8 +162,8 @@ if(TARGET test_aot_subset)
     endif()
     list(TRANSFORM _aot_subset_test_dirs PREPEND "--test;" OUTPUT_VARIABLE _aot_subset_test_args)
     add_das_target(run_tests_aot_subset
-        COMMAND ${DAS_SANITIZER_ENV} $<TARGET_FILE:test_aot_subset> -use-aot ${PROJECT_SOURCE_DIR}/dastest/dastest.das -- --use-aot --color --failures-only --timeout ${DAS_TEST_TIMEOUT_AOT} ${_aot_subset_test_args} --cache-dir ${DAS_TEST_CACHE_DIR}
-        DEPENDS test_aot_subset dastest_cache_guard
+        COMMAND ${DAS_SANITIZER_ENV} $<TARGET_FILE:test_aot_subset> -use-aot ${PROJECT_SOURCE_DIR}/dastest/dastest.das -- --use-aot --color --failures-only --timeout ${DAS_TEST_TIMEOUT_AOT} ${_aot_subset_test_args} --cache-dir ${DAS_TEST_AOT_CACHE_DIR}
+        DEPENDS test_aot_subset dastest_aot_cache_guard
         WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
         COMMENT "Running tests (AOT subset)"
     )
