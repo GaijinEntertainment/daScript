@@ -289,8 +289,8 @@ files, or a ledger row naming a licence as a reason to adopt or reject a model, 
 dependency; anywhere else in checked-in text - docs, comments, or string data - it is a defect.**
 
 **A diff that writes a CPU feature name in a `[tune_perm]` `requires=` argument that
-`TUNE_KNOWN_FEATURES` (`modules/dasLLVM/daslib/llvm_tune.das`, repo root) does not list adds it
-there in the same change.** The `features` fingerprint saved with every sidecar is this box's
+the `CpuFeatures` bitfield (`modules/dasLLVM/daslib/llvm_cpu_class.das`, repo root) does not
+carry adds its bit there in the same change.** The `features` fingerprint saved with every sidecar is this box's
 pass/fail over that list, so a name outside it is never recorded and a box adopting a shipped
 profile re-runs the tuning the profile was meant to save.
 

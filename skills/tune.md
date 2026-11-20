@@ -85,8 +85,8 @@ cache key). `suffix="..."` overrides the auto-derived variant name;
 `requires="feat"` is a fallback-eligibility hint (a comma-separated AND of
 `|`-separated OR alternatives, matched against the host CPU features plus the
 `DAS_JIT_*_FORCE_FEATURES` overrides; `!feat` passes where the feature is
-absent, which is how a row serves a class and none above it - `f16c,!avx2`). `tune_requires_ok(expr)` evaluates
-such an expression on its own, and `tune_pick_fallback(chain)` runs the same
+absent, which is how a row serves a class and none above it - `f16c,!avx2`). `tune_requires_ok(expr, target)` evaluates
+such an expression on its own, and `tune_pick_fallback(chain, target)` runs the same
 rule over a `;`-chain of `suffix` / `suffix:requires` entries - that is how a
 library whose permutations are *generated*, with no row to hang `requires=`
 on, still gets a per-ISA default.
@@ -220,12 +220,12 @@ The class names follow the features `requires=` can gate: `x86-amx` (AMX-INT8 +
 AMX-TILE over the 512-bit VNNI gate) / `x86-vnni512` / `x86-vnni256` / `x86-avx2` /
 `x86-avx` (AVX and F16C with no AVX2) / `x86-base`, `arm-sve` / `arm-i8mm` / `arm-neon`, and `wasm-simd128` for a
 wasm64 cross build (*Cross builds* below); any other
-architecture gets `<platform>-<arch>`, a key no shipped profile matches, so
-such a box always races (`tune_cpu_class()` computes the class this compile
-builds for - this box's, unless `DAS_JIT_BASELINE` or a cross triple names
-one - and `tune_class_chain()` its adoption ladder). The profile is read at
-**compile time**: with no sidecar entry, a `[tune]` or `[tuned]` kernel walks
-the ladder from that class downward and stamps its entry from the first profile
+architecture gets no class, so no shipped profile matches and such a box always races (`tune_process_target().klass` is the class this
+compile builds for - this box's, unless `--jit-target-arch`, `DAS_JIT_BASELINE`
+or a cross triple names one - and `tune_class_chain(target)` its adoption
+ladder). The profile is read at **compile time**: with no sidecar entry, a
+`[tune]` or `[tuned]` kernel walks the ladder from that class downward and
+stamps its entry from the first profile
 that exists and matches the scope's version pin (`tune_status` reports the
 source as `profile`). The auto/restart guard then walks the same ladder at
 startup and races only what the profile could not answer:

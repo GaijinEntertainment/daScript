@@ -546,13 +546,13 @@ def private fat_gate_why(_) : string {
     var bestBit : table<string; int>
     var bestSrc : table<string; string>
     for (r in st) {
-        continue if (empty(r.klass))
+        continue if (r.klass == CpuClass.none)
         let bit = tune_fat_class_bit(r.klass)
         continue if ((tune_fat_mask() & bit) == 0)
         let cur = (bestBit |> key_exists(r.fname)) ? bestBit[r.fname] : 2147483647
         if (bit < cur) {
             bestBit[r.fname] = bit
-            bestSrc[r.fname] = "{r.source}:{r.klass}"
+            bestSrc[r.fname] = "{r.source}:{cpu_class_name(r.klass)}"
         }
     }
     delete st

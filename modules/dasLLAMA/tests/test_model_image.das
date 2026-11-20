@@ -950,7 +950,7 @@ def test_image_mechanics(t : T?) {
         t |> equal(image_identity_of(dc), planar_plain, "and never into the planar one")
         t |> equal(dlim_identity_tag(blob_devw), METAL_IMAGE_TAG, "the tag stays parseable")
         static_if (typeinfo builtin_module_exists(llvm)) {
-            t |> equal(image_lane_name(), "cpu-{tune_cpu_class()}", "the planar lane names the box's tune class")
+            t |> equal(image_lane_name(), "cpu-{cpu_class_name(tune_native_target().klass)}", "the planar lane names the box's tune class")
         } else {
             t |> equal(image_lane_name(), "cpu-{get_architecture_name()}", "the planar lane names the architecture where no tune framework is built")
         }

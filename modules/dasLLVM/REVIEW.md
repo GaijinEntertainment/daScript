@@ -16,7 +16,7 @@ answers to it wherever the diff puts it under this module.
   (its mtime is older than the running binary) or that another machine wrote is reviewed with
   `skills/tune.md`.**
 
-- **A change to the tune framework - `daslib/llvm_tune.das`, `requires_hold` or `any_row_runs`
+- **A change to the tune framework - `daslib/llvm_tune.das`, `cpu_features_pass` or `any_row_runs`
   in `daslib/llvm_cpu_class.das`, a test under `tests/` here that carries a
   `require llvm/daslib/llvm_tune` line of its own or spawns a child on a script that carries
   one, the `registerModuleGroupMember("tune_framework", ...)` row in `src/dasLLVM.cpp`, or the
@@ -204,6 +204,6 @@ answers to it wherever the diff puts it under this module.
   code, and a walk that skips them leaves the address globals they need null in the exe.
 
 - **A diff that builds a feature string for a machine that has a force knob - a
-  `*_forced_plus_features` function in `daslib/llvm_jit_common.das` - appends the forced names
+  `forced_plus_features` append in `daslib/llvm_jit_common.das` - appends the forced names
   AFTER the detected host features.** LLVM's `SubtargetFeatures` takes the last occurrence of a
   name, so a forced feature placed first is silently overridden by detection.

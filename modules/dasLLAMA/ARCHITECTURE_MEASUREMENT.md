@@ -5,7 +5,8 @@ away from the served graph and the timing-race vocabulary are
 `ARCHITECTURE_MEASUREMENT_KERNEL_RACE.md#timing-race-vocabulary`; the Vulkan GEMM probe's arms,
 shapes and alternates are `ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md#vk-gemm-probe`; a fat exe's
 first-start race and where it keeps its sidecar are
-`ARCHITECTURE_MEASUREMENT_FAT_START.md#fat-first-start`; the client clock around a live server's
+`ARCHITECTURE_MEASUREMENT_FAT_START.md#fat-first-start`; how a `[tuned]` kernel picks its perm at its own
+compile is `ARCHITECTURE_MEASUREMENT_TUNED_PERM.md#tuned-perm-precedence`; the client clock around a live server's
 turns is `ARCHITECTURE_MEASUREMENT_SERVED.md#served-turn-instrument` and a model's own rates through a server `#model-bench` there; the reference build's forced
 feed beside the gemma feed cells is `ARCHITECTURE_MEASUREMENT_FORCED_FEED.md#reference-forced-feed`;
 the ASR board's GPU row pairs (`ARCHITECTURE_MEASUREMENT_AUDIO.md#asr-gpu-pairs`), the MLX ASR
@@ -245,23 +246,6 @@ rule's.
 ### A routed MoE's parity fixture holds as a half-span prefix {#fixture-prefix-bar}
 
 The timed run's fixture gate holds every carrier as a matching prefix of half the checked span; the `--parity` pregate holds token for token, except on a carrier whose evidence sets `prefix_bar` (`ParityEvidence`, `performance/model_specs.das`) - the gemma-4-26B MoE, Q8_0 and Q4_K_M - which it holds to the same half-span prefix over the whole fixture. The 26B routes a discrete top-8 of 128 experts a layer and its forward amplifies one ulp of rounding layer over layer, so any float engine's logits move by whole points when only the accumulation order changes - the reference engine's between thread counts or micro-batch sizes, ours between JIT routes - and a token past the opening is a coin flip, not a forward bug. `fixture_ok` is the one bar both gates read.
-
-### A `[tuned]` kernel's perm is decided at its own compile {#tuned-perm-precedence}
-
-`dasllama_tune.das` picks one perm per `[tuned]` kernel, first match wins: the `reference` tune
-policy (the kill switch - the template's own loops, no hints stamped), a `perm=` pin on the
-annotation, this box's sidecar `"kernels"` entry, this box's class entry in the shipped defaults
-profile (`performance/defaults`), the annotation's `fallback` `;`-chain, then `DEFAULT_PERM`.
-`tune_kernel_pick` (llvm_tune) reads the sidecar and the profile in that order and hands back the
-FILE its answer came from, so a verbose compile names which of the two stamped each kernel. A box
-the shipped profile covers therefore compiles tuned kernels without racing anything, and a box it
-does not cover falls to the fallback chain - never to another box's winners. With no tune
-framework in the build the first three steps do not exist - no policy env, no sidecar, no
-profile - so the ladder is the `perm=` pin, then the `fallback` chain's first UNCONDITIONAL
-entry (a `suffix:requires` seat cannot be judged with no feature probe), then `DEFAULT_PERM`,
-and the compile reports nothing. `[dasllama_fallbacks]` reads each kernel's fallback off its `[tuned]`
-annotation, so `dasllama_tuned_fallbacks()` is whole whether the kernel's module compiled in this
-process or the front-end module cache served it.
 
 ### The mint's own wall rides in the sidecar's provenance {#mint-wall-provenance}
 

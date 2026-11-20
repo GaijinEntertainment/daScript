@@ -21,7 +21,7 @@ carries `amx-bf16` and `avx512bf16` beside `amx-tile` and `amx-int8` because eve
 from Sapphire Rapids on, has all four, so the extra features do not narrow the class.
 The set is the fingerprint the class's shipped profile records (`skills/tune.md`, the shipped
 defaults profiles), so a profile and the class it is keyed by state the same silicon. A box is
-in a class when it carries every feature of the set; `tune_cpu_class()` names the highest class
+in a class when it carries every feature of the set; `tune_native_target().klass` names the highest class
 this box is in, and `jit_cpu_class_ladder` is the one adoption ladder both the compile-time
 profile walk and the runtime pick descend. M1 is `arm-neon` (it has no i8mm); M2 and later are
 `arm-i8mm`; Neoverse V1/V2 (Graviton3+) are `arm-sve`. `arm-sve` gates no seat of its own - it
@@ -32,17 +32,29 @@ runs as `x86-avx2`, because the set is the contract and a subset of it is not.
 
 `DAS_JIT_BASELINE=<class>` builds for a class instead of the running box. It is one truth on
 every rail - the DLL, the standalone exe, the AOT object: the class's set reads as forced
-(`x64_forced_feature` / `arm64_forced_feature` answer it before the force env), so the tier
+(`forced_plus_features` puts it before the force env's names), so the tier
 gates, the machine's feature string and the `requires=` eligibility of every `[tune_perm]` follow
 the class; `make_jit_target` drops to the generic rail whatever the caller asked;
-`create_default_target_machine` names the class's cpu; `tune_cpu_class()` answers the class, so the
+`create_default_target_machine` names the class's cpu; `tune_process_target().klass` answers the class, so the
 profile ladder starts at it; and `jit_env_salt` folds the class, so the artifact never serves a
 host run. A kernel-carrying exe stops targeting the box (`exe_host_cpu` is false under a
 baseline). The force env still appends after the class's set, as after detection. A baseline
 never crosses architectures - `jit_baseline_error` refuses a class of another arch, and a name no
-row carries, by name, before any IR is built. The variable is environment-only by construction:
-the AST module cache keys on `DAS*`, and a flag read at JIT time would serve stamps minted for
-another class.
+row carries, by name, before any IR is built. `--jit-target-arch=<class>` is the same choice on
+the command line, and wins over the variable. `jit_baseline_class` is pure - the JIT's flags and
+the variable come in as arguments - and the class is read once, where a build starts: the JIT plan
+(`plan.baseline`, then `JitTarget.klass` for everything the target drives) and each tune macro's
+entry, and passed down from there. The tune side passes content, not the name. A compile stamps kernels from one `TuneView` - its
+`TuneTarget` (the class and the `requires=` set it passes, the class's row or else this box's
+cpuid), the sidecar's picks and the profiles read for that target down the target's own arch's
+ladder - built once per macro entry by `tune_view` and passed down, so no helper below an entry
+reads a file, a flag or cpuid. A running program has no view: its kernels are stamped already, and
+what it writes - a sidecar, an adopted profile - is this box's, so it reads `tune_native_target()`.
+Beside `--jit-target` the class is the cross build's: the triple names the arch, the class its
+features. A cross target's default machine is the target's own - its triple, the class's cpu (none without
+a class), its feature string (`create_default_target_machine`) - so the optimizer runs on the target's cost model and
+no host machine is ever handed a set that belongs to another machine. A wasm compile is the exception: its
+passes run under the host's generic machine (`ARCHITECTURE_TARGET_FEATURES.md#wasm-feature-string`), which carries no feature string at all.
 
 At the runtime of a built artifact the variable is inert for dispatch: the class an exe runs on
 is read from cpuid, never from an environment a build left behind.
@@ -125,9 +137,12 @@ for any other triple built under `DAS_JIT_BASELINE`, and nothing for a triple wi
 wasm class's set is the wasm runtime archive's own - `simd128`, the feature string of
 `ARCHITECTURE_TARGET_FEATURES.md#wasm-feature-string` - so every wasm64 artifact is in the class and no box is asked. A baseline under
 a triple is how a target of fixed hardware gets its class: the build names the class the
-platform is, and nothing reads a cpuid. `jit_target_class`
-is the baseline's class when one is set and the cross triple's otherwise. `tune_cpu_class`, the
-`requires=` test and the profile ladder read it, so the build box's cpuid decides nothing about
+platform is, and nothing reads a cpuid. `tune_build_target` - which `tune_process_target` calls
+with this process's own flags and triple - takes the named class when one is set and the cross
+triple's otherwise, the cross class with its set alone. A triple a class serves makes a cross
+build whether the class is named or implied, so the sidecar beside the app does not stamp it and
+its tune and test grids keep only the rows the class passes. The `TuneTarget`'s set, the `requires=` test and the
+profile ladder read it, so the build box's cpuid decides nothing about
 a cross artifact; inside the artifact `cpu_supports("simd128")` answers true, because the
 runtime archive is compiled with the feature. Its tune identity asks no box either:
 `tune_box_identity` names the target's platform - the triple itself where no platform name maps

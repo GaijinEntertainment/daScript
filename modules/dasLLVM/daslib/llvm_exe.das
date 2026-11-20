@@ -28,6 +28,7 @@ require daslib/rtti
 require llvm/daslib/llvm_jit_cli
 require daslib/option
 require llvm/daslib/llvm_tune   // tune_scopes_status for the release-deps JSON
+require llvm/daslib/llvm_cpu_class
 require daslib/json_boost
 require jit
 require daslib/fio
@@ -970,7 +971,8 @@ def private write_release_deps(prog : Program?; cross : bool) {
         }
     }
     // Tune scopes + per-key completeness vs the app sidecar: daspkg release runs incomplete scopes' tuners and rebuilds.
-    var tstat <- tune_scopes_status(prog)
+    var inscope view <- tune_view(tune_build_target(cfg, get_target_triple()))
+    var tstat <- tune_scopes_status(prog, view)
     deps.tune_scopes |> reserve(length(tstat))
     for (ts in tstat) {
         deps.tune_scopes |> push(TuneScopeDep(name = ts.name, manifest = ts.manifest,
@@ -1468,7 +1470,7 @@ def public inject_main(program_context : Context?; ctx : LLVMContextRef; // noli
             types.LLVMVoidPtrType() // argv
         )
     )
-    let main_sym = target.arch == JitTargetArch.wasm ? "__main_argc_argv" : "main"
+    let main_sym = target_wasm(target) ? "__main_argc_argv" : "main"
     let main_fn = LLVMAddFunctionWithType(mod, main_sym, main_fn_type)
     let entry = LLVMAppendBasicBlockInContext(ctx, main_fn, "entry")
     LLVMPositionBuilderAtEnd(builder, entry)
@@ -1512,7 +1514,7 @@ def public inject_main(program_context : Context?; ctx : LLVMContextRef; // noli
     // Match the interpreter's WebLoop: on wasm a program exporting `update` runs as init() once +
     // update() per browser frame + shutdown() (the browser can't block in main's while-loop). `main`
     // stays the desktop driver, bypassed here — so the same .das cross-compiles unchanged for web.
-    if (target.arch == JitTargetArch.wasm) {
+    if (target_wasm(target)) {
         var update_impl = ""
         var update_returns_value = false
         var update_count = 0

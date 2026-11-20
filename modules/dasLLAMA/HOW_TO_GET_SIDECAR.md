@@ -9,7 +9,7 @@ What a sidecar and a profile are: `skills/tune.md` (the `[tune]` framework, the 
 `performance/REVIEW.md` (what a committed profile must satisfy). Short form: the tuner races every
 kernel family's `[tune_perm]` seats on the box and writes the winners into the app's sidecar;
 `export_tune_profile.das` strips the box-specific rows and saves the kernel winners as the class
-profile; a box whose `tune_cpu_class()` resolves to that class is covered by the profile at its
+profile; a box whose `tune_native_target().klass` resolves to that class is covered by the profile at its
 first compile - no race, no sidecar, no restart - unless its ISA unlocks a seat the profile never
 saw, which it adopts and races.
 
@@ -19,7 +19,7 @@ A box of a class stamps that class's profile at its first compile
 (`ARCHITECTURE_ENGINE_FORMATS.md#cpu-kernel-tiers`, the `dasllama_tune_scope.das` charter). CPU
 classes and the AWS instance that carries each (`us-west-2`):
 
-| class (`tune_cpu_class()`) | what gates it | instance |
+| class (`tune_native_target().klass`) | what gates it | instance |
 |---|---|---|
 | `x86-avx` | avx + f16c, no avx2 | none: Jaguar, Ivy Bridge, Piledriver - minted under a pin, section 10 |
 | `x86-avx2` | avx2, no VNNI | `c5a.4xlarge` (EPYC zen2), or any zen2/zen3 box |
@@ -194,7 +194,7 @@ python3 -c 'import json;d=json.load(open("modules/dasLLAMA/benchmarks/lcpp_bench
 
 `ok ok <features> <n>` is the pass: `noise` is the tuner's own drift verdict (a busy or thermally
 unstable box says otherwise - re-mint, never edit), `validation` is every winner checked against
-its fallback, `features` is the box's fingerprint of `TUNE_KNOWN_FEATURES` (zen4:
+its fallback, `features` is the box's fingerprint of `CpuFeatures` (zen4:
 `avx2;f16c;fma;sse4.2;avx512f;avx512bw;avx512vl;avx512vnni`), `<n>` the number of kernels the
 tune scope declares, a kq gemv's own `<fmt>q8_gemv_gen` seat included.
 
@@ -205,7 +205,7 @@ bin/daslang -jit modules/dasLLAMA/harness/export_tune_profile.das -- --sidecar m
 git status --short modules/dasLLAMA/performance/defaults/
 ```
 
-It writes `performance/defaults/<class>.tune-defaults.json` for this box's `tune_cpu_class()`
+It writes `performance/defaults/<class>.tune-defaults.json` for this box's `tune_native_target().klass`
 (`--class <name>` overrides, `--out <dir>` relocates) with the box, engine sha and timing rows
 stripped - a profile is kernel winners plus the provenance the adopt path checks.
 
@@ -231,8 +231,8 @@ Then run a model-level sanity row on the vehicle against the reference build:
 A class with no shipped profile needs the class first, on the branch the box clones:
 its row in `JIT_CPU_CLASSES` and its place in `jit_cpu_class_ladder`
 (`modules/dasLLVM/daslib/llvm_cpu_class.das`), the new class above the one it supersedes, its arm
-in `tune_cpu_class()` and every feature a `requires=` names in `TUNE_KNOWN_FEATURES`
-(`modules/dasLLVM/daslib/llvm_tune.das`). Until its profile ships, a box of the new class adopts the class below
+in `tune_native_target().klass` (`modules/dasLLVM/daslib/llvm_tune.das`) and every feature a `requires=` names
+in `CpuFeatures`. Until its profile ships, a box of the new class adopts the class below
 it (the chain) and races only the seats that class could not answer. Then the same mint and export
 produce `<class>.tune-defaults.json`, and that one IS committed. Box differences the walk carries:
 

@@ -35,7 +35,7 @@ def public lib_link_note(target : JitTarget; kind : JitArtifact; link_whole_lib 
         JitArtifact.object => $ {
             let generic = ("Link this {get_target_triple()} object with libDaScript_runtime " +
                 "built for the same target\nwith the same C++ standard library.")
-            return generic if (target.arch != JitTargetArch.wasm)
+            return generic if (!target_wasm(target))
             let threads = target.wasm_threads ? " -pthread" : ""
             let whole = (link_whole_lib
                 ? ("\nThis library registers a module that lives in the compiler library, " +

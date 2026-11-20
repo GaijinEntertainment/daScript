@@ -12,6 +12,7 @@ options no_global_variables = false
 module llvm_jit_intrin shared private
 
 require llvm/daslib/llvm_boost
+require llvm/daslib/llvm_cpu_class
 require llvm/daslib/llvm_jit_common
 require llvm/daslib/llvm_jit_runtime
 require daslib/ast_boost
@@ -201,7 +202,7 @@ let g_aarch64_i8mm_intrin_lookup <- {   // ARMv8.6 i8mm
 }
 
 // x86-64 intrinsics (the llvm/x64_avx header) — same fallback
-// contract, gated on JitTarget.features.x64_avx2: NOT just the arch,
+// contract, gated on JitTarget.features.avx2: NOT just the arch,
 // because AVX2 is not universal on x86-64 and emitting
 // llvm.x86.avx2.* against a target without +avx2 is a fatal "Cannot
 // select" at codegen. Exactness precondition of the dot family (x in
@@ -267,25 +268,26 @@ def private get_intrinsic(target : JitTarget; name : string) : IntrinsicFn {
         }
     }
     invoke(find_in, g_intrin_lookup)
-    if (target.arch == JitTargetArch.aarch64) {
+    if (target_aarch64(target)) {
         invoke(find_in, g_aarch64_intrin_lookup)
     }
-    if (target.features.arm64_dotprod) {
+    if (target.features.dotprod) {
         invoke(find_in, g_aarch64_dotprod_intrin_lookup)
     }
-    if (target.features.arm64_i8mm) {
+    if (target.features.i8mm) {
         invoke(find_in, g_aarch64_i8mm_intrin_lookup)
     }
-    if (target.features.x64_avx2) {
+    if (target.features.avx2) {
         invoke(find_in, g_x64_intrin_lookup)
     }
-    if (target.features.x64_vnni256) {
+    let tiers = x64_tiers(target.features)
+    if (tiers.vnni256) {
         invoke(find_in, g_x64_vnni256_intrin_lookup)
     }
-    if (target.features.x64_avx512bw) {
+    if (tiers.avx512bw) {
         invoke(find_in, g_x64_avx512bw_intrin_lookup)
     }
-    if (target.features.x64_avx512vnni) {
+    if (tiers.avx512vnni) {
         invoke(find_in, g_x64_avx512vnni_intrin_lookup)
     }
     invoke(find_in, target_has_half_converts(target) ? g_f16_cvt_intrin_lookup
@@ -1031,7 +1033,7 @@ def private vmath_fsplat(ctx : JitCtx; opType : TypeDeclPtr; v : double) : LLVMO
 [arch(at = "../ARCHITECTURE_TARGET_FEATURES.md#wasm-lowerings")]
 def private build_round(var ctx : JitCtx; expr : ExprCallFunc?;
                         arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
-    if (ctx.target.arch != JitTargetArch.wasm) {
+    if (!target_wasm(ctx.target)) {
         return intrinsic_math_any_float_op1("round", ctx.builder, expr, arguments)
     }
     assume opType = expr.arguments[0]._type
@@ -1179,18 +1181,18 @@ def private vmath_vector_float(opType : TypeDeclPtr) : bool =>
 
 [arch(at = "../ARCHITECTURE_VECTOR_MATH.md#vector-poly-rail")]
 def private vmath_poly_gate(target : JitTarget; opType : TypeDeclPtr) : bool =>
-    vmath_vector_float(opType) && target.arch != JitTargetArch.other
+    vmath_vector_float(opType) && cpu_class_arch(target.klass) != CpuClass.none
 
 [arch(at = "../ARCHITECTURE_VECTOR_MATH.md#vector-poly-rail")]
 def private vmath_exp_gate(target : JitTarget; opType : TypeDeclPtr) : bool =>
     (vmath_vector_float(opType)
-        && (target.arch == JitTargetArch.aarch64 || target.features.x64_avx512bw))
+        && (target_aarch64(target) || x64_tiers(target.features).avx512bw))
 
 [arch(at = "../ARCHITECTURE_VECTOR_MATH.md#vector-poly-rail")]
 def private vmath_hyper_gate(target : JitTarget; opType : TypeDeclPtr;
                              name : string) : bool {
-    if (name == "cosh") return vmath_vector_float(opType) && target.arch == JitTargetArch.aarch64
-    if (name == "sinh" && target.arch == JitTargetArch.x64) return false
+    if (name == "cosh") return vmath_vector_float(opType) && target_aarch64(target)
+    if (name == "sinh" && target_x64(target)) return false
     return vmath_poly_gate(target, opType)
 }
 
@@ -1605,7 +1607,7 @@ def private idot_wasm_simd128(var ctx : JitCtx; acc, a, b : LLVMOpaqueValue?;
 [arch(at = "../ARCHITECTURE_TARGET_FEATURES.md#idot-lowerings")]
 def intrinsic_lattice_idot(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
     let aUnsigned = expr.arguments[0]._type.vectorBaseType == Type.tUInt8
-    if (ctx.target.arch == JitTargetArch.wasm) {
+    if (target_wasm(ctx.target)) {
         let v4i32 = ctx.types.LLVMInt4Type()
         let foldQuadLanes = false
         var s = idot_wasm_simd128(ctx, null, arguments[0], arguments[1], aUnsigned, foldQuadLanes)
@@ -1620,7 +1622,7 @@ def intrinsic_lattice_idot(var ctx : JitCtx; expr : ExprCallFunc?; arguments : a
             }
         }
     }
-    if (ctx.target.features.arm64_dotprod && !aUnsigned) {
+    if (ctx.target.features.dotprod && !aUnsigned) {
         let v4i32 = ctx.types.LLVMInt4Type()
         var s = idot_sdot_aarch64(ctx, LLVMConstNull(v4i32), arguments[0], arguments[1])
         if (s != null) {
@@ -1652,7 +1654,7 @@ def intrinsic_lattice_idot4(var ctx : JitCtx; expr : ExprCallFunc?; arguments : 
     let hasAcc = length(arguments) == 3
     let aIdx = hasAcc ? 1 : 0
     let aUnsigned = expr.arguments[aIdx]._type.vectorBaseType == Type.tUInt8
-    if (ctx.target.arch == JitTargetArch.wasm) {
+    if (target_wasm(ctx.target)) {
         let foldQuadLanes = true
         var s = idot_wasm_simd128(ctx, hasAcc ? arguments[0] : null, arguments[aIdx],
             arguments[aIdx + 1], aUnsigned, foldQuadLanes)
@@ -1660,7 +1662,7 @@ def intrinsic_lattice_idot4(var ctx : JitCtx; expr : ExprCallFunc?; arguments : 
             return s
         }
     }
-    if (ctx.target.features.arm64_dotprod && !aUnsigned) {
+    if (ctx.target.features.dotprod && !aUnsigned) {
         let v4i32 = ctx.types.LLVMInt4Type()
         var acc = hasAcc ? arguments[0] : LLVMConstNull(v4i32)
         var s = idot_sdot_aarch64(ctx, acc, arguments[aIdx], arguments[aIdx + 1])
@@ -1688,7 +1690,7 @@ def intrinsic_lattice_idot4(var ctx : JitCtx; expr : ExprCallFunc?; arguments : 
 def intrinsic_lattice_shuffle(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
     let v16i8 = LLVMVectorType(ctx.types.t_int8, 16u)
     var idx = LLVMBuildAnd(ctx.builder, arguments[1], splat_v16i8(ctx, 15), "shuffle_idx")
-    if (ctx.target.arch == JitTargetArch.aarch64) {
+    if (target_aarch64(ctx.target)) {
         let id = LLVMLookupIntrinsicID("llvm.aarch64.neon.tbl1")
         var declTypes <- [v16i8]
         var decl = id != 0u ? LLVMGetIntrinsicDeclaration(g_mod, id, declTypes) : null

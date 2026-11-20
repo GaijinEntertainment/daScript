@@ -13,7 +13,7 @@ struct ExportArgs {
     @clarg_doc = "Output directory (default: modules/dasLLAMA/performance/defaults beside this script)"
     out_dir : string
 
-    @clarg_doc = "CPU class name to export as (default: this box's tune_cpu_class())"
+    @clarg_doc = "CPU class name to export as (default: this box's tune class)"
     klass : string
 }
 
@@ -31,9 +31,13 @@ def main : int {
     if (!empty(cfg.sidecar)) {
         set_tune_manifest_runtime_path(cfg.sidecar)
     }
-    let klass = empty(cfg.klass) ? tune_cpu_class() : cfg.klass
+    let klass = empty(cfg.klass) ? tune_native_target().klass : cpu_class_of(cfg.klass)
+    if (cpu_class_generic(klass)) {
+        to_log(LOG_ERROR, "export_tune_profile: '{cfg.klass}' names no CPU class - the classes are {jit_cpu_class_names()}\n")
+        return 1
+    }
     let outDir = empty(cfg.out_dir) ? path_join(path_join(get_this_module_dir(), ".."), "performance/defaults") : cfg.out_dir
     mkdir(outDir)
-    let outPath = path_join(outDir, "{klass}.tune-defaults.json")
+    let outPath = path_join(outDir, "{cpu_class_name(klass)}.tune-defaults.json")
     return tune_profile_export(outPath, klass) ? 0 : 1
 }

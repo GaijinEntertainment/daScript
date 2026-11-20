@@ -17,20 +17,22 @@ require _spawn_common
 
 [test(description = "the arm64 class ladder runs arm-sve, arm-i8mm, arm-neon, each class carrying every feature of the class below it, with sve splitting the top two")]
 def test_arm_ladder_nests(t : T?) {
-    let ladder <- [for (c in split(jit_cpu_class_ladder("arm64"), ";")); c; where !empty(c)]
+    let ladder <- [for (c in jit_cpu_class_ladder(CpuClass.arm_generic)); cpu_class_name(c)]
     t |> equal(join(ladder, ";"), "arm-sve;arm-i8mm;arm-neon",
         "the arm64 ladder, most capable first")
     for (i in range(length(ladder))) {
-        let row = jit_cpu_class_row(ladder[i])
-        t |> equal(row.name, ladder[i], "the ladder's {ladder[i]} is a row of the class table")
-        t |> equal(row.arch, "arm64", "{ladder[i]} belongs to arm64")
+        let row = jit_cpu_class_row(cpu_class_of(ladder[i]))
+        t |> equal(cpu_class_name(row.klass), ladder[i],
+            "the ladder's {ladder[i]} is a row of the class table")
+        t |> success(cpu_class_arch(row.klass) == CpuClass.arm_generic,
+            "{ladder[i]} belongs to arm64")
         continue if (i + 1 >= length(ladder))
-        for (f in split(jit_cpu_class_row(ladder[i + 1]).features, ";")) {
-            t |> success(jit_class_has(ladder[i], f),
-                "{ladder[i]} carries {f}, which the lower {ladder[i + 1]} has")
-        }
+        let lower = jit_cpu_class_row(cpu_class_of(ladder[i + 1])).features
+        t |> success((row.features & lower) == lower,
+            "{ladder[i]} carries every feature the lower {ladder[i + 1]} has")
     }
-    t |> success(jit_class_has("arm-sve", "sve") && !jit_class_has("arm-i8mm", "sve"),
+    t |> success((jit_cpu_class_row(CpuClass.arm_sve).features.sve &&
+            !jit_cpu_class_row(CpuClass.arm_i8mm).features.sve),
         "sve is what splits arm-sve from arm-i8mm")
 }
 
@@ -45,7 +47,8 @@ def private probe_class(t : T?; forced : string) : string {
     fopen(script, "w") $(f) {
         if (f != null) {
             fprint(f, "options gen2\nrequire llvm/daslib/llvm_tune\n")
-            fprint(f, "[export] def main() \{ print(\"CLASS=[\{tune_cpu_class()}]\\n\"); \}\n")
+            fprint(f, ("[export] def main() \{ " +
+                "print(\"CLASS=[\{cpu_class_name(tune_native_target().klass)}]\\n\"); \}\n"))
         }
     }
     let args <- get_command_line_arguments()  // locked view — do not delete

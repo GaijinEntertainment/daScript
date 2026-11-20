@@ -12,8 +12,8 @@ An aarch64 host target reads its CPU features from two sources, because neither 
 the features - and a part this LLVM cannot name maps to the generic CPU, where SDOT and SMMLA
 have no instruction to select and codegen aborts. `cpu_supports` reads the operating system
 instead (sysctl / `AT_HWCAP` / `IsProcessorFeaturePresent`), so it answers for silicon LLVM has
-never heard of. The tier gates (`make_jit_target` - `JitTarget.features.arm64_dotprod`, `_i8mm`,
-`_fullfp16`) and the target machine's feature string (`create_default_target_machine`) therefore
+never heard of. The tier gates (`make_jit_target` - `JitTarget.features.dotprod`, `.i8mm`,
+`.fullfp16`) and the target machine's feature string (`create_default_target_machine`) therefore
 take the union of the two: an LLVM host-string hit OR a `cpu_supports` hit (fullfp16 additionally
 reads darwin-arm64 as always-on - every Apple Silicon part has it). One asymmetry: the host rail's
 machine string carries `+dotprod` unconditionally (every part the JIT has run on has it), while the
@@ -41,30 +41,32 @@ have, so the artifact is for another machine and executing it here traps.
 
 ## 6. The x64 kernel-matrix tier gates {#x64-tier-gates}
 
-An x64 host target publishes eight boolean gates (`JitTarget.x64_*`), one per instruction tier the
-kernel matrix and the tune grids select on: `avx2`, `f16c`, `vnni256` (256-bit VPDPBUSD by either
+An x64 host target's `JitTarget.features` (a `CpuFeatures` set) carries the instruction tiers the
+kernel matrix and the tune grids select on - a single bit where the tier is one feature, a
+bit of `x64_tiers(f) : X64Tiers` where it combines several: `avx2`, `f16c`, `vnni256` (256-bit VPDPBUSD by either
 VEX AVX-VNNI or EVEX AVX512-VNNI+VL), `avx512bw` (zmm byte ops - BW, not merely F), `avx512vnni`
 (zmm VPDPBUSD; implies bw, the sign trick around it is BW), `avx512vbmi` (VPERMI2B / VPERMB /
 VPMULTISHIFTQB - the grid formats' symbol lattice), `vnniint8` (VEX VPDPBSSD, native s8 x s8),
 `amx` (both amx-tile and amx-int8; the per-process XTILEDATA grant is a separate runtime step
 the family's own witness performs) and `amx_bf16` (amx-tile, amx-bf16 and avx512bf16 -
-TDPBF16PS and the panel's VCVTNEPS2BF16, the bf16 tile family; `amx-fp16` is probed for the Granite Rapids fp16 tiles but gates nothing yet). `make_jit_target` decides each from cpuid truth OR'd with
-the `DAS_JIT_X64_FORCE_FEATURES` emission-only override; a cross triple or a generic target
+TDPBF16PS and the panel's VCVTNEPS2BF16, the bf16 tile family; `amx-fp16` is probed for the Granite Rapids fp16 tiles but gates nothing yet). `make_jit_target` decides `avx2` and `f16c` from cpuid
+alone on a host target, and every other tier from cpuid truth OR'd with the `DAS_JIT_X64_FORCE_FEATURES`
+emission-only override; a cross triple or a generic target
 (`host_features = false`) drops to forced-only truth - cpuid is not consulted, the force env is
 the only tier source there.
 
 The cpuid truth is `das_cpu_supports` (`src/builtin/module_builtin_runtime.cpp`), a hand-kept table
 keyed by the LLVM target-feature spelling - so the force env and `llc -mattr` take the same names.
-A tier feature usually lands as three parts: its cpuid line there, its name in
-`TUNE_KNOWN_FEATURES` (`daslib/llvm_tune.das`, the profile fingerprint the `requires=` gates are
-checked against), and - when the emitters branch on it - a `JitTarget.x64_*` gate. The cpuid line
+A tier feature usually lands as three parts: its cpuid line there, its bit in
+`CpuFeatures` (`daslib/llvm_cpu_class.das`, the profile fingerprint the `requires=` gates are
+checked against), and - when the emitters branch on a combination - an `X64Tiers` bit. The cpuid line
 is the load-bearing one: a name missing from the table answers false on every box, so the perm
 that requires it declines everywhere and no error names the cause.
 
 ## 9. The idot family's target lowerings {#idot-lowerings}
 
 The exact integer dots on the 8-bit lattice have three lowerings, picked by target: one
-`@llvm.aarch64.neon.sdot` where the target has DotProd (`JitTarget.features.arm64_dotprod` - the host rail's
+`@llvm.aarch64.neon.sdot` where the target has DotProd (`JitTarget.features.dotprod` - the host rail's
 `+dotprod` append, or the force env on the generic rail), the SIMD128 form on a wasm target
 (`idot_wasm_simd128`), generic widen-multiply IR everywhere else. The native arms exist because
 neither backend produces them from the generic form: AArch64 expands it to zip/uzp/smull instead

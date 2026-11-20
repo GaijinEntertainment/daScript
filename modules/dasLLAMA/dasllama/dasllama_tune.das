@@ -207,8 +207,8 @@ def private emit_registry(var mod : Module?; tmpl : FunctionPtr; grid : array<Tu
 // Emit `dasllama_tuned_fallbacks() : table<string; string>` from the bank — the harness reads a
 // kernel's shipped default from here instead of restating it as a literal that a per-ISA chain
 // would silently outdate.
-def private emit_fallback_registry(var mod : Module?; var errors : das_string) : bool {
-    let bank <- tuned_fallbacks_of_program()
+def private emit_fallback_registry(var mod : Module?; view; var errors : das_string) : bool {
+    let bank <- tuned_fallbacks_of_program(view)
     var body : array<ExpressionPtr>
     body |> reserve(length(bank) + 2)
     body |> push <| qmacro_expr() {
@@ -239,8 +239,14 @@ def private emit_fallback_registry(var mod : Module?; var errors : das_string) :
 [structure_macro(name="dasllama_fallbacks")]
 class private FallbacksMacro : AstStructureAnnotation {
     def override apply(var st : StructurePtr; var group : ModuleGroup;
-                       var args : AnnotationArgumentList; var errors : das_string) : bool =>
-                           emit_fallback_registry(compiling_module(), errors)
+                       var args : AnnotationArgumentList; var errors : das_string) : bool {
+        static_if (typeinfo module_exists(llvm_tune)) {
+            var inscope view <- tune_view(tune_process_target())
+            return emit_fallback_registry(compiling_module(), view, errors)
+        } else {
+            return emit_fallback_registry(compiling_module(), false, errors)
+        }
+    }
 }
 
 //! `[dasllama_grid(src="dot_template")]` on any (dummy) struct emits the full grid of
@@ -305,13 +311,13 @@ def kernel_report_() : string {
     static_if (typeinfo module_exists(llvm_tune)) {
         var inscope rows <- tune_status()
         var inscope families : table<string>
-        var inscope classes : array<string>
+        var inscope classes : array<CpuClass>
         var inscope sources : table<string; int>
         var manifest_file = ""
         for (r in rows) {
             families |> insert(r.fname)
             sources[r.source]++
-            if (!empty(r.klass) && find_index(classes, r.klass) < 0) {
+            if (r.klass != CpuClass.none && find_index(classes, r.klass) < 0) {
                 classes |> push(r.klass)
             }
             if (r.source == "manifest") {
@@ -320,8 +326,9 @@ def kernel_report_() : string {
         }
         if (tune_fat_built()) {
             let mask = tune_fat_mask()
-            var inscope picked <- [for (c in classes); c; where 0 != (tune_fat_class_bit(c) & mask)]
-            return "fat build - kernels for {join(classes, ", ")}; this box runs {join(picked, ", ")}"
+            var inscope all <- [for (c in classes); cpu_class_name(c)]
+            var inscope picked <- [for (c in classes); cpu_class_name(c); where 0 != (tune_fat_class_bit(c) & mask)]
+            return "fat build - kernels for {join(all, ", ")}; this box runs {join(picked, ", ")}"
         }
         var inscope parts <- [for (k, n in keys(sources), values(sources)); "{n} {k}"]
         sort(parts)
@@ -354,12 +361,12 @@ def box_profile_verdict_at(path : string) : string {   // nolint:LINT012,LINT019
 }
 
 
-def private fallback_perm(args : AnnotationArgumentList) : string {
+def private fallback_perm(args : AnnotationArgumentList; view) : string {   // nolint:LINT012,LINT019 - `view` is read only in the framework arm
     let dv = find_arg(args, "fallback")
     if (dv is tString) {
         // ';'-chain of `suffix` or `suffix:requires` — one annotation, a per-ISA default
         static_if (typeinfo module_exists(llvm_tune)) {
-            let picked = tune_pick_fallback(dv as tString)
+            let picked = tune_pick_fallback(dv as tString, view.target)
             if (!empty(picked)) return picked
         } else {
             // no CPU-feature probe here, so take the first unconditional entry - the chain's ISA-neutral tail
@@ -373,14 +380,14 @@ def private fallback_perm(args : AnnotationArgumentList) : string {
 
 //! every `[tuned]` kernel's shipped fallback as this box resolves it (a `;`-chain picks per ISA), read off the annotations of
 //! the program's functions: a module the front-end cache serves runs no `[tuned]` apply, so nothing filled at apply time holds it
-[arch(at = "../ARCHITECTURE_MEASUREMENT.md#tuned-perm-precedence")]
-def private tuned_fallbacks_of_program() : table<string; string> {
+[arch(at = "../ARCHITECTURE_MEASUREMENT_TUNED_PERM.md#tuned-perm-precedence")]
+def private tuned_fallbacks_of_program(view) : table<string; string> {
     var bank : table<string; string>
     program_for_each_module(compiling_program()) $(mod) {
         for_each_function(mod, "") $(func) {
             for (ann in func.annotations) {
                 if (ann != null && ann.annotation.name == "tuned") {
-                    bank["{func.name}"] = fallback_perm(ann.arguments)
+                    bank["{func.name}"] = fallback_perm(ann.arguments, view)
                 }
             }
         }
@@ -398,10 +405,10 @@ def private report_perm(fname, perm, source : string) : string {   // nolint:LIN
 }
 
 // the annotation arg is spelled `fallback`: `default` is a grammar keyword and would not parse as an arg name
-[arch(at = "../ARCHITECTURE_MEASUREMENT.md#tuned-perm-precedence")]
-def private resolve_perm(func : FunctionPtr; args : AnnotationArgumentList) : string {
+[arch(at = "../ARCHITECTURE_MEASUREMENT_TUNED_PERM.md#tuned-perm-precedence")]
+def private resolve_perm(func : FunctionPtr; args : AnnotationArgumentList; view) : string {   // nolint:LINT012,LINT019 - `view` is read only in the framework arm
     let fname = "{func.name}"
-    let fb = fallback_perm(args)
+    let fb = fallback_perm(args, view)
     static_if (typeinfo module_exists(llvm_tune)) {
         if (tune_policy_env() == "reference") {
             // the true kill switch, [tune]'s twin: the template's own loops, no hints stamped
@@ -410,7 +417,7 @@ def private resolve_perm(func : FunctionPtr; args : AnnotationArgumentList) : st
         let av = find_arg(args, "perm")
         if (av is tString) return av as tString
         var pickSource = ""
-        let cfg = tune_kernel_pick(fname, pickSource)
+        let cfg = tune_kernel_pick(fname, pickSource, view)
         if (!empty(cfg)) {
             return report_perm(fname, cfg, pickSource)
         }
@@ -438,6 +445,41 @@ def private find_template_function(name : string) : FunctionPtr {
     return found
 }
 
+[arch(at = "../ARCHITECTURE_MEASUREMENT_TUNED_PERM.md#tuned-perm-precedence")]
+def private tuned_apply(var func : FunctionPtr; args : AnnotationArgumentList; view; var errors : das_string) : bool {
+    let tmpl_name = tuned_template_name(func, args)
+    var tmpl = find_template_function(tmpl_name)
+    if (tmpl == null) {
+        errors := "tuned: template function not found: {tmpl_name}"
+        return false
+    }
+    func.body = clone_expression(tmpl.body)
+    let suffix = resolve_perm(func, args, view)
+    let grid <- build_grid()
+    for (perm in grid) {
+        if (perm.suffix == suffix) {
+            apply_perm(func, perm)
+            return true
+        }
+    }
+    let av = find_arg(args, "perm")
+    if (av is tString) {
+        errors := "tuned: unknown perm '{suffix}' (not in grid)"
+        return false
+    }
+    let fname = "{func.name}"
+    let fb = fallback_perm(args, view)
+    print("dasllama_tune: {fname}: sidecar perm '{suffix}' is not in the grid (stale mint?) - stamping the fallback '{fb}'\n")
+    for (perm in grid) {
+        if (perm.suffix == fb) {
+            apply_perm(func, perm)
+            return true
+        }
+    }
+    errors := "tuned: fallback perm '{fb}' not in grid"
+    return false
+}
+
 //! `[tuned]` on an empty-body function clones its source template (`<name>_template`, or
 //! `src="..."`) and stamps the selected permutation's hints onto `[tune=N]` loops. The annotated
 //! function IS the real symbol. Perm precedence: `perm=` pin > sidecar > `fallback=` > vec8_u2.
@@ -445,39 +487,12 @@ def private find_template_function(name : string) : FunctionPtr {
 class private TunedMacro : AstFunctionAnnotation {
     def override apply(var func : FunctionPtr; var group : ModuleGroup;
                        var args : AnnotationArgumentList; var errors : das_string) : bool {
-        let tmpl_name = tuned_template_name(func, args)
-        var tmpl = find_template_function(tmpl_name)
-        if (tmpl == null) {
-            errors := "tuned: template function not found: {tmpl_name}"
-            return false
+        static_if (typeinfo module_exists(llvm_tune)) {
+            var inscope view <- tune_view(tune_process_target())
+            return tuned_apply(func, args, view, errors)
+        } else {
+            return tuned_apply(func, args, false, errors)
         }
-        func.body = clone_expression(tmpl.body)
-        let suffix = resolve_perm(func, args)
-        let grid <- build_grid()
-        for (perm in grid) {
-            if (perm.suffix == suffix) {
-                apply_perm(func, perm)
-                return true
-            }
-        }
-        //! an explicit `perm=` pin names the row the author wants - a miss is an authoring error
-        let av = find_arg(args, "perm")
-        if (av is tString) {
-            errors := "tuned: unknown perm '{suffix}' (not in grid)"
-            return false
-        }
-        //! a sidecar perm is measured data, not law - one the grid dropped falls back rather than brick the tuner that would re-race it
-        let fname = "{func.name}"
-        let fb = fallback_perm(args)
-        print("dasllama_tune: {fname}: sidecar perm '{suffix}' is not in the grid (stale mint?) - stamping the fallback '{fb}'\n")
-        for (perm in grid) {
-            if (perm.suffix == fb) {
-                apply_perm(func, perm)
-                return true
-            }
-        }
-        errors := "tuned: fallback perm '{fb}' not in grid"
-        return false
     }
 }
 

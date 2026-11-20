@@ -32,7 +32,7 @@ require jit
 // llvm_macro.das, llvm_jit_common.das, runtime helper ABI, default
 // target triple). Cache filenames fold this in, so a bump makes every
 // previously written DLL miss the cache on the next run and get GC'd.
-let public LLVM_JIT_CODEGEN_VERSION : uint64 = 0xC1ul
+let public LLVM_JIT_CODEGEN_VERSION : uint64 = 0xC2ul
 
 let public JIT_FNV_PRIME : uint64 = 1099511628211ul
 
@@ -566,8 +566,9 @@ def public handled_layout_hash() : uint64 {
 // The environment/config salt shared by the whole-DLL key AND the per-partition obj cache key.
 // ONE helper on purpose: a salt component folded into the DLL key but not the partition key
 // would let a config change reuse stale cached partition objects.
-def public jit_env_salt(opt_level : int; size_level : int; emit_prologue : bool; debug_info : bool; // nolint:STYLE037,STYLE038 - one flat fold per emission input; a split would hide which inputs key the cache
-                        target_triple : string; split : bool; use_host_cpu : bool; sanitize : JitSanitize;
+def public jit_env_salt(opt_level : int; size_level : int; emit_prologue : bool; debug_info : bool;
+                        target_triple : string; baseline : CpuClass; split : bool;
+                        use_host_cpu : bool; sanitize : JitSanitize;
                         layouts : uint64 = handled_layout_hash()) : uint64 {
     var h = LLVM_JIT_CODEGEN_VERSION
     // host/binary identity: object format follows the triple (COFF vs ELF on one checkout), and the emitting binary bakes its Context offsets into every global access - neither is in any AST hash
@@ -584,7 +585,9 @@ def public jit_env_salt(opt_level : int; size_level : int; emit_prologue : bool;
     h = (h ^ uint64(ARRAY_MAGIC)) * JIT_FNV_PRIME
     h = (h ^ uint64(ARRAY_LOCK_EXEMPT_FLAGS)) * JIT_FNV_PRIME
     h = (h ^ layouts) * JIT_FNV_PRIME
-    // full host-CPU identity when the TargetMachine bakes it - the cpuid bits below cover only the matrix-tier features; a wider box's object is an illegal instruction on a narrower one
+    // full host-CPU identity when the TargetMachine bakes it - the
+    // CpuFeatures set covers only the bits it names; a wider box's
+    // object is an illegal instruction on a narrower one
     if (use_host_cpu) {
         let host_cpu = LLVMGetHostCPUName()
         let host_features = LLVMGetHostCPUFeatures()
@@ -609,55 +612,21 @@ def public jit_env_salt(opt_level : int; size_level : int; emit_prologue : bool;
     h = (h ^ ((sanitize.address ? 1ul : 0ul) | (sanitize.undefined ? 2ul : 0ul) | (JIT_HOST_ASAN ? 4ul : 0ul))) * JIT_FNV_PRIME
     // split-built and monolith DLLs differ in inlining — never share a cache entry (bool only: partition count is data-driven)
     h = (h ^ (split ? 1ul : 0ul)) * JIT_FNV_PRIME
-    // EH vs longjmp hosts emit different unwind tables — must not share a cache entry (panic would crash)
+    // EH vs longjmp hosts emit different unwind tables — must not share
+    // a cache entry (panic would crash)
     h = (h ^ (das_is_exceptions_enabled() ? 1ul : 0ul)) * JIT_FNV_PRIME
-    // AVX2 gates the x64 intrinsic table — an AVX2-jitted DLL must not cache-hit an AVX2-less host (illegal instr)
-    h = (h ^ (cpu_supports("avx2") ? 1ul : 0ul)) * JIT_FNV_PRIME
-    // Matrix-tier cpuid bits (vnni256/avx512bw/avx512vnni) + DAS_JIT_X64_FORCE_FEATURES key emission the same way
-    var isa = 0ul
-    if (cpu_supports("avxvnni")) {
-        isa |= 1ul
-    }
-    if (cpu_supports("avx512f")) {
-        isa |= 2ul
-    }
-    if (cpu_supports("avx512bw")) {
-        isa |= 4ul
-    }
-    if (cpu_supports("avx512vl")) {
-        isa |= 8ul
-    }
-    if (cpu_supports("avx512vnni")) {
-        isa |= 16ul
-    }
-    if (cpu_supports("avx512vbmi")) {   // the grid formats' symbol lattice emits on it (grid = "vbmi")
-        h = (h ^ 0x1Bul) * JIT_FNV_PRIME
-    }
-    if (cpu_supports("amx-tile") && cpu_supports("amx-int8")) {   // tune_cpu_class picks x86-amx, which selects grid decode forms
-        h = (h ^ 0x1Cul) * JIT_FNV_PRIME
-    }
-    if (cpu_supports("amx-tile") && cpu_supports("amx-bf16") && cpu_supports("avx512bf16")) {   // the amx_bf16 tile gate: a bf16-less AMX part declines the perm
-        h = (h ^ 0x1Dul) * JIT_FNV_PRIME
-    }
-    if (cpu_supports("avxvnniint8")) {
-        isa |= 32ul
-    }
-    h = (h ^ isa) * JIT_FNV_PRIME
-    let forced = g_env_jit.jit_x64_force_features
-    if (!empty(forced)) {
+    // the box's cpuid set keys emission: a feature-gated artifact must
+    // not cache-hit a box without it
+    h = (h ^ uint64(uint(cpu_features_native()))) * JIT_FNV_PRIME
+    // the force envs (DAS_JIT_X64/ARM64_FORCE_FEATURES): a forced
+    // artifact must not cache-hit a normal run
+    let forced = "{g_env_jit.jit_x64_force_features};{g_env_jit.jit_arm64_force_features}"
+    if (forced != ";") {
         h = (h ^ hash(forced)) * JIT_FNV_PRIME
     }
-    // aarch64 twin (DAS_JIT_ARM64_FORCE_FEATURES, e.g. "i8mm"): a forced artifact must not cache-hit a normal run
-    let forced_arm = g_env_jit.jit_arm64_force_features
-    if (!empty(forced_arm)) {
-        h = (h ^ hash(forced_arm)) * JIT_FNV_PRIME
-    }
-    // aarch64 i8mm is an emission input (the +i8mm append): a warm pre-i8mm cache must not serve an i8mm host
-    h = (h ^ (cpu_supports("i8mm") ? 64ul : 0ul)) * JIT_FNV_PRIME
     // a baseline class (DAS_JIT_BASELINE) picks the machine, the gates and the tune ladder - its artifact never serves a host run
-    let baseline = jit_baseline_class()
-    if (!empty(baseline)) {
-        h = (h ^ hash(baseline)) * JIT_FNV_PRIME
+    if (!cpu_class_generic(baseline)) {
+        h = (h ^ hash(cpu_class_name(baseline))) * JIT_FNV_PRIME
     }
     // Cross-compile artifacts key on their triple — a --jit-target DLL must not cache-hit a host run (foreign-arch dlopen)
     if (!empty(target_triple)) {
@@ -667,14 +636,16 @@ def public jit_env_salt(opt_level : int; size_level : int; emit_prologue : bool;
 }
 
 def public jit_dll_basename(prog : Program?; funcs : array<FunctionPtr>; opt_level : int; size_level : int;
-                            emit_prologue : bool; debug_info : bool; target_triple : string; split : bool;
+                            emit_prologue : bool; debug_info : bool; target_triple : string;
+                            baseline : CpuClass; split : bool;
                             use_host_cpu : bool; sanitize : JitSanitize) : string {
     var h = LLVM_JIT_CODEGEN_VERSION
     for (fn in funcs) {
         h = (h ^ get_function_aot_hash(prog, fn)) * JIT_FNV_PRIME
     }
     h = fold_jit_only_inputs(prog, funcs, h)
-    h = (h ^ jit_env_salt(opt_level, size_level, emit_prologue, debug_info, target_triple, split, use_host_cpu, sanitize)) * JIT_FNV_PRIME
+    h = (h ^ jit_env_salt(opt_level, size_level, emit_prologue, debug_info, target_triple,
+        baseline, split, use_host_cpu, sanitize)) * JIT_FNV_PRIME
     return "{h}"
 }
 
@@ -1229,7 +1200,7 @@ struct public JitPlan {
     check_abi : bool
     linker_string : string
     register_all_modules : bool
-    baseline : string
+    baseline : CpuClass
     exe_host_cpu : bool
     use_host_cpu : bool
     log_jit_time : bool
@@ -1501,28 +1472,32 @@ def public make_jit_plan(prog : Program?; var ctx : Context?; announce : bool; c
     // A baseline class (DAS_JIT_BASELINE) replaces the box on every rail - exe, DLL and AOT object
     // alike: the machine, the gates and the tune ladder all read the class, so the artifact runs
     // on every box of that class. It never crosses architectures; that is --jit-target's job.
-    plan.baseline = jit_baseline_class()
-    if (!empty(plan.baseline)) {
-        let target_arch = (empty(plan.target_triple) ? get_architecture_name()
-            : ((starts_with(plan.target_triple, "aarch64") || starts_with(plan.target_triple, "arm64")) ? "arm64"
-            : ((starts_with(plan.target_triple, "x86_64") || starts_with(plan.target_triple, "amd64")) ? "x86_64" : plan.target_triple)))
-        let berr = jit_baseline_error(target_arch)
+    let baselineName = jit_baseline_class(cli_opts, g_env_jit.jit_baseline)
+    plan.baseline = cpu_class_of(baselineName)
+    if (!empty(baselineName)) {
+        let berr = jit_baseline_error(baselineName,
+            cpu_arch_of(empty(plan.target_triple) ? get_architecture_name() : plan.target_triple))
         if (!empty(berr)) {
             panic("LLVM JIT: {berr}")
         }
         if (announce) {
             let row = jit_cpu_class_row(plan.baseline)
-            to_log(LOG_INFO, "LLVM JIT: DAS_JIT_BASELINE={plan.baseline} - targeting the {plan.baseline} class (cpu {row.cpu}, features {row.features}) instead of this box\n")
+            to_log(LOG_INFO, ("LLVM JIT: DAS_JIT_BASELINE={baselineName} - targeting the " +
+                "{baselineName} class (cpu {row.cpu}, " +
+                "features {cpu_features_text(row.features, ";")}) " +
+                "instead of this box\n"))
         }
     }
-    plan.exe_host_cpu = plan.gen_exe && empty(plan.target_triple) && empty(plan.baseline) && has_generated_kernel(prog, plan.jit_all_functions)
+    plan.exe_host_cpu = (plan.gen_exe && empty(plan.target_triple) &&
+        plan.baseline == CpuClass.none && has_generated_kernel(prog, plan.jit_all_functions))
     if (announce && plan.exe_host_cpu) {
         to_log(LOG_INFO, "LLVM EXE: targeting the current box (CPU + features) - the build carries [llvm_code] kernels\n")
     }
     // AOT objects target the host CPU: the .o is statically linked into a binary that runs on this
     // box (same contract as the JIT), so bake host features — this force-appends +dotprod on aarch64,
     // without which the dasLLAMA Q8 SDOT kernels have no instruction to select and codegen aborts.
-    plan.use_host_cpu = empty(plan.baseline) && (plan.emit_aot_object ? true : (!plan.gen_exe || plan.exe_host_cpu))
+    plan.use_host_cpu = (plan.baseline == CpuClass.none &&
+        (plan.emit_aot_object ? true : (!plan.gen_exe || plan.exe_host_cpu)))
     plan.log_jit_time = prog._options |> find_arg("log_compile_time") ?as tBool ?? prog.policies.log_compile_time
 
     prog |> for_each_module() $(mod) {
@@ -1546,7 +1521,9 @@ def public make_jit_plan(prog : Program?; var ctx : Context?; announce : bool; c
     // inputs → same filename → cache hit. Only in dll-mode with the default output path; a pinned
     // jit_output_path or an exe keeps the user's path.
     if (plan.use_dll && plan.config_out_path |> empty()) {
-        plan.dll_hash_basename = jit_dll_basename(prog, plan.candidates, plan.opt_level, plan.size_level, plan.emit_prologue, plan.debug_info, plan.target_triple, plan.jit_split, plan.use_host_cpu, plan.sanitize)
+        plan.dll_hash_basename = jit_dll_basename(prog, plan.candidates, plan.opt_level,
+            plan.size_level, plan.emit_prologue, plan.debug_info, plan.target_triple, plan.baseline,
+            plan.jit_split, plan.use_host_cpu, plan.sanitize)
         plan.output_path = ".cache/daslang/{prog.thisNamespace}/{plan.dll_hash_basename}"
     }
     return <- plan

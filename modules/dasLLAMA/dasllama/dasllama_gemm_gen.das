@@ -155,6 +155,7 @@ def private kq_stub_fmt(gc : LlvmCodeCtx) : int {
 // fall back together on every rail, or repack and kernel desync (the two-function-stamp
 // contract). Rails: the format's emitter arm, knob validity, schema, per-ISA leg, geometry, vreg budget, dot availability.
 def private perm_declines(var gc : LlvmCodeCtx; p : TilePerm) : bool { // nolint:STYLE037,STYLE038 — the flat decline ladder IS the perm contract; splitting hides which leg refused
+    let tiers = x64_tiers(gc.jit.target.features)
     let sf = kq_stub_fmt(gc)
     if (sf >= 0 && !kq_has_emitter(sf)) return true
     if (p.dotPrim == "amx_bf16") {
@@ -164,8 +165,8 @@ def private perm_declines(var gc : LlvmCodeCtx; p : TilePerm) : bool { // nolint
             || (p.mr != 16) || (p.width != 512)
             || (p.bias != 0) || (p.pipe != 0) || (p.latch != 0)
             || (p.grid != "") || (p.pf != 0)
-            || (gc.jit.target.arch != JitTargetArch.x64) || (!gc.jit.target.features.x64_amx_bf16)
-            || (!gc.jit.target.features.x64_avx512vnni)
+            || (!target_x64(gc.jit.target)) || (!tiers.amx_bf16)
+            || (!tiers.avx512vnni)
             || (!gc.jit.target.os_linux)) return true
         let rt = q8q8_repack_type(p.mr, p.bias, kgroup_of(p))
         if (rt.interleave != p.mr || !rt.f32_scales) return true
@@ -192,8 +193,8 @@ def private perm_declines(var gc : LlvmCodeCtx; p : TilePerm) : bool { // nolint
             || (p.pipe != 0 && p.pipe != 1)
             || (p.latch != 0 && p.latch != 1)
             || (p.grid != "") || (p.pf != 0)
-            || (gc.jit.target.arch != JitTargetArch.x64) || (!gc.jit.target.features.x64_amx)
-            || (!gc.jit.target.features.x64_avx512vnni)     // the companions' busd512 lattice + zmm fold
+            || (!target_x64(gc.jit.target)) || (!tiers.amx)
+            || (!tiers.avx512vnni)     // the companions' busd512 lattice + zmm fold
             || (!gc.jit.target.os_linux)) return true
         let rt = q8q8_repack_type(p.mr, p.bias, kgroup_of(p))
         if (rt.interleave != p.mr || !rt.f32_scales) return true
@@ -234,7 +235,7 @@ def private perm_declines(var gc : LlvmCodeCtx; p : TilePerm) : bool { // nolint
     if (rt.interleave != p.mr || !rt.f32_scales) return true
     if (p.dotPrim == "smmla") {
         // the i8mm MMA leg: NEON widths, row-quad geometry, same q-reg budget as sdot, and the i8mm tier flag (M1 is dotprod-only)
-        if ((gc.jit.target.arch != JitTargetArch.aarch64) || (!gc.jit.target.features.arm64_i8mm) || (p.width != 128) || (p.grid != "") || (p.pf != 0)
+        if ((!target_aarch64(gc.jit.target)) || (!gc.jit.target.features.i8mm) || (p.width != 128) || (p.grid != "") || (p.pf != 0)
             || (p.mr % 4 != 0)
             || (2 * p.mr + p.nrsplit * p.mr / 4 + 2 * p.nrsplit + 2 > 32)) return true
         let mod = LLVMGetGlobalParent(gc.impl)
@@ -252,7 +253,7 @@ def private perm_declines(var gc : LlvmCodeCtx; p : TilePerm) : bool { // nolint
     }
     if (p.dotPrim == "sdot") {
         // the NEON leg (M2 shape): 128-bit q-regs, 4-row sdot lanes; mr>=8 budgets the FUSED-acc shape (kq shares one lo+hi acc there — half the mr4 formula's int-acc bank)
-        if ((gc.jit.target.arch != JitTargetArch.aarch64) || (p.width != 128) || (p.grid != "") || (p.pf != 0)
+        if ((!target_aarch64(gc.jit.target)) || (p.width != 128) || (p.grid != "") || (p.pf != 0)
             || (p.mr % 4 != 0)
             || (p.mr >= 8 ? (p.mr + p.nrsplit * p.mr / 4 + 2 * p.nrsplit + 2 > 32)
                           : (2 * p.mr + p.nrsplit * p.mr / 4 + 2 * p.nrsplit + 2 > 32))) return true
@@ -268,17 +269,17 @@ def private perm_declines(var gc : LlvmCodeCtx; p : TilePerm) : bool { // nolint
     }
     // the x64 legs — the mx4 companion's pshufb dequant is implied by the tiers below, so no separate rail
     if ((p.dotPrim != "maddubs" && p.dotPrim != "vpdpbusd" && p.dotPrim != "vpdpbssd")
-        || (gc.jit.target.arch != JitTargetArch.x64)
+        || (!target_x64(gc.jit.target))
         || (p.width != 256 && p.width != 512)
-        || (p.grid == "vbmi" && (p.width != 512 || p.dotPrim == "vpdpbssd" || !gc.jit.target.features.x64_avx512vbmi))   // the lattice is zmm VBMI
+        || (p.grid == "vbmi" && (p.width != 512 || p.dotPrim == "vpdpbssd" || !tiers.avx512vbmi))   // the lattice is zmm VBMI
         || (p.dotPrim == "vpdpbssd" && p.width != 256)) return true    // 512-bit bssd is AVX10 — unproven
     if (p.width == 256) {
-        if ((p.dotPrim == "maddubs" && !gc.jit.target.features.x64_avx2)
-            || (p.dotPrim == "vpdpbusd" && !gc.jit.target.features.x64_vnni256)
-            || (p.dotPrim == "vpdpbssd" && !gc.jit.target.features.x64_vnniint8)) return true
+        if ((p.dotPrim == "maddubs" && !gc.jit.target.features.avx2)
+            || (p.dotPrim == "vpdpbusd" && !tiers.vnni256)
+            || (p.dotPrim == "vpdpbssd" && !tiers.vnniint8)) return true
     } else {
-        if ((p.dotPrim == "maddubs" && !gc.jit.target.features.x64_avx512bw)
-            || (p.dotPrim == "vpdpbusd" && !gc.jit.target.features.x64_avx512vnni)) return true
+        if ((p.dotPrim == "maddubs" && !tiers.avx512bw)
+            || (p.dotPrim == "vpdpbusd" && !tiers.avx512vnni)) return true
     }
     let rv = p.width / 32                         // rows per vector = i32 acc lanes
     if (p.mr % rv != 0) return true
@@ -286,7 +287,7 @@ def private perm_declines(var gc : LlvmCodeCtx; p : TilePerm) : bool { // nolint
     if ((vq > 2)                                  // the weight bank is 8 dword-groups x vq
         || (p.nrsplit * vq > 8)) return true      // accumulator bank (emit_slice phi arrays)
     // vreg budget: float + int acc tiles + x splat/sign scratch + weight/|weight| in flight; EVEX targets have 32 ymm too
-    return 2 * p.nrsplit * vq + 6 > (p.width == 512 || gc.jit.target.features.x64_avx512bw ? 32 : 16)
+    return 2 * p.nrsplit * vq + 6 > (p.width == 512 || tiers.avx512bw ? 32 : 16)
 }
 
 // emission context threaded through the helpers: builder/types + the per-function value handles
@@ -316,6 +317,7 @@ struct private TileEmit {
     sign_code_pm1_g : LLVMOpaqueValue?   // the row-group grid decode: ksigns code -> eight +-1 bytes, [128 x i64], parity bit folded in
     gridRows : bool                      // set while the row-group grid decode emits: the column dword read (a panel-form win) reverts to byte loads
     vbmi : bool                          // grid = "vbmi": the grid gemv decodes through the VBMI symbol lattice (row form)
+    target_features : CpuFeatures
     pf : int                             // software prefetch distance along the weight stream (bytes; 0 = none)
     prefetch_decl : LLVMOpaqueValue?     // llvm.prefetch.p0
     prefetch_ty : LLVMOpaqueType?
@@ -1574,10 +1576,8 @@ def private grid_rows_path(te : TileEmit) : bool {
     if (te.vbmi) return true
     if (te.dotKind == DOT_SDOT) return te.rv == 4
     if (te.dotKind != DOT_MADDUBS && te.dotKind != DOT_VPDPBUSD && te.dotKind != DOT_VPDPBSSD) return false
-    let cls = tune_cpu_class()
-    if (cls == "x86-vnni512") return te.kq == 25
-    if (cls == "x86-amx") return te.kq == 25 || te.kq == 34
-    return false
+    let tiers = x64_tiers(te.target_features)
+    return tiers.avx512vnni && (te.kq == 25 || (tiers.amx && te.kq == 34))
 }
 
 //! the row-pair decode's sign table: the 128 ksigns codes with the code's parity as the 8th bit
@@ -2431,6 +2431,7 @@ def private setup_tile_emit(var te : TileEmit; var gc : LlvmCodeCtx; p : TilePer
     let rt = q8q8_repack_type(p.mr, p.bias, kgroup_of(p))
     te.builder = gc.jit.builder
     te.types = gc.jit.types
+    te.target_features = gc.jit.target.features
     te.interleave = rt.interleave
     te.dotKind = dot_kind(p.dotPrim)
     te.rm_acc_sets = p.accs
@@ -2577,6 +2578,7 @@ def private setup_amx_emit(var te : TileEmit; var gc : LlvmCodeCtx; p : TilePerm
     let raw = p.latch != 0 || bf16
     te.builder = gc.jit.builder
     te.types = gc.jit.types
+    te.target_features = gc.jit.target.features
     te.dotKind = bf16 ? DOT_AMX_BF16 : DOT_AMX
     te.interleave = 16
     te.rv = 16
@@ -5223,7 +5225,7 @@ def private panel_gen_impl(var gc : LlvmCodeCtx; fmt, q8ScaleBytes : int) : bool
     if (!is_panel_signature(gc.fn)) return false
     let p = parse_perm(gc)
     if (perm_declines(gc, p)) return false
-    var te = TileEmit(builder = gc.jit.builder, types = gc.jit.types, rv = 16)
+    var te = TileEmit(builder = gc.jit.builder, types = gc.jit.types, rv = 16, target_features = gc.jit.target.features)
     let b = gc.jit.builder
     var entry = LLVMAppendBasicBlockInContext(gc.jit.ctx, gc.impl, "entry")
     LLVMPositionBuilderAtEnd(b, entry)
@@ -5411,9 +5413,8 @@ struct private X16Emit {
 def private x16_dot_intrinsic(gc : LlvmCodeCtx) : string {
     //! "" where the kernels do not emit
     let target = gc.jit.target
-    return "llvm.wasm.dot" if (target.arch == JitTargetArch.wasm)
-    let x64 = target.arch == JitTargetArch.x64
-    return "llvm.x86.sse2.pmadd.wd" if (x64 && target.features.x64_f16c && !target.features.x64_avx2)
+    return "llvm.wasm.dot" if (target_wasm(target))
+    return "llvm.x86.sse2.pmadd.wd" if (target_x64(target) && target.features.f16c && !target.features.avx2)
     return ""
 }
 

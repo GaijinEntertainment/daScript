@@ -88,7 +88,8 @@ def image_identity_of(c : DlimConfiguration; tag : string = ""; version : int = 
 //! never the active backend, which is a pin the identity supersedes
 def private image_cpu_class() : string {
     static_if (typeinfo builtin_module_exists(llvm)) {
-        return tune_cpu_class()
+        let klass = tune_native_target().klass
+        return klass == CpuClass.none ? "{get_platform_name()}-{get_architecture_name()}" : cpu_class_name(klass)
     } else {
         return get_architecture_name()
     }

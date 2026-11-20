@@ -72,23 +72,11 @@ def private host_features_gen(var gc : LlvmCodeCtx) : bool {
     return true
 }
 
-// bakes the emitter's tier gates into a `() : int` stub as a bitmask (bit 0 avx2, 1 f16c,
-// 2 vnni256, 3 avx512bw, 4 avx512vnni, 5 avx512vbmi, 6 vnniint8, 7 amx, 8 arm dotprod, 9 i8mm,
-// 10 fullfp16) — the artifact-side witness of which class a build emitted for.
+// bakes the target's CpuFeatures set into a `() : int` stub - the
+// artifact-side witness of which class a build emitted for.
 def private tier_bits_gen(var gc : LlvmCodeCtx) : bool {
     if (!empty(gc.fn.arguments) || gc.fn.result.baseType != Type.tInt) return false
-    var bits = 0ul
-    bits |= gc.jit.target.features.x64_avx2 ? 1ul : 0ul
-    bits |= gc.jit.target.features.x64_f16c ? 2ul : 0ul
-    bits |= gc.jit.target.features.x64_vnni256 ? 4ul : 0ul
-    bits |= gc.jit.target.features.x64_avx512bw ? 8ul : 0ul
-    bits |= gc.jit.target.features.x64_avx512vnni ? 16ul : 0ul
-    bits |= gc.jit.target.features.x64_avx512vbmi ? 32ul : 0ul
-    bits |= gc.jit.target.features.x64_vnniint8 ? 64ul : 0ul
-    bits |= gc.jit.target.features.x64_amx ? 128ul : 0ul
-    bits |= gc.jit.target.features.arm64_dotprod ? 256ul : 0ul
-    bits |= gc.jit.target.features.arm64_i8mm ? 512ul : 0ul
-    bits |= gc.jit.target.features.arm64_fullfp16 ? 1024ul : 0ul
+    let bits = uint64(uint(gc.jit.target.features))
     var entry = LLVMAppendBasicBlockInContext(gc.jit.ctx, gc.impl, "entry")
     LLVMPositionBuilderAtEnd(gc.jit.builder, entry)
     LLVMBuildRet(gc.jit.builder, gc.jit.types->ConstI32(bits))

@@ -15,6 +15,7 @@ require daslib/strings_boost
 require strings
 require _spawn_common
 require _llvm_cache_common
+require llvm/daslib/llvm_cpu_class
 
 let HOST_CPU_LINE = "targeting the current box"
 let BASELINE_LINE = "DAS_JIT_BASELINE="
@@ -23,7 +24,8 @@ let BASELINE_LINE = "DAS_JIT_BASELINE="
 // the class's gates bake: avx2 + f16c on x86, dotprod + fullfp16 on arm
 def private lowest_class() : string => get_architecture_name() == "x86_64" ? "x86-avx2" : "arm-neon"
 
-def private lowest_class_bits() : int => get_architecture_name() == "x86_64" ? 3 : 1280
+def private lowest_class_bits() : int =>
+    int(uint(jit_cpu_class_row(cpu_class_of(lowest_class())).features))
 
 def private foreign_class() : string =>
     get_architecture_name() == "x86_64" ? "arm-neon" : "x86-avx2"
@@ -165,6 +167,45 @@ def test_baseline_under_a_cross_target(t : T?) {
         + "-- --jit-target {foreign_arch_triple()} --jit-compile-only", lx)
     t |> success(rcx != 0, "a cross target of the other arch refuses the class")
     t |> success(lx |> has("never crosses architectures"), "the refusal names the arch mismatch against the triple: {join(lx, "\n")}")
+    rmdir_rec(work)
+}
+
+[test(description = "--jit-target-arch sets the baseline, and beside --jit-target picks the triple's class", timeout = 1200)]
+def test_target_arch_flag(t : T?) {
+    if (!jit_enabled()) {
+        t |> success(true)
+        return
+    }
+    let args <- get_command_line_arguments()  // locked view — do not delete
+    let bin = args[0]
+    let work = make_work(t)
+    return if (empty(work))
+    let script = path_join(work, "kernel.das")
+    let exe_args = "-exe -output \"{path_join(work, "kernel")}.exe\" \"{script}\""
+
+    var lj : array<string>
+    spawn_child("{env_prefix("")}\"{bin}\" -jit -jit-no-cache \"{script}\" "
+        + "-- --jit-target-arch {lowest_class()}", lj)
+    t |> success(lj |> has("HOSTF=[0] TIER=[{lowest_class_bits()}]"),
+        "the flag bakes the class's gates: {join(lj, "\n")}")
+
+    var lw : array<string>
+    spawn_child("{env_prefix(foreign_class())}\"{bin}\" -jit -jit-no-cache \"{script}\" "
+        + "-- --jit-target-arch {lowest_class()}", lw)
+    t |> success(lw |> has("HOSTF=[0] TIER=[{lowest_class_bits()}]"),
+        "the flag wins over DAS_JIT_BASELINE: {join(lw, "\n")}")
+
+    var lc : array<string>
+    let rcc = spawn_child("{env_prefix("")}\"{bin}\" {exe_args} "
+        + "-- --jit-target {foreign_arch_triple()} --jit-target-arch {foreign_class()} "
+        + "--jit-compile-only", lc)
+    t |> equal(0, rcc, "a cross triple with its own arch's class compiles: {join(lc, "\n")}")
+
+    var lx : array<string>
+    let rcx = spawn_child("{env_prefix("")}\"{bin}\" {exe_args} "
+        + "-- --jit-target {foreign_arch_triple()} --jit-target-arch {lowest_class()} "
+        + "--jit-compile-only", lx)
+    t |> success(rcx != 0, "a class of another arch than the triple's is refused")
     rmdir_rec(work)
 }
 

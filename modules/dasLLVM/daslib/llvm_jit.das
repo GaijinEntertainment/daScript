@@ -851,15 +851,16 @@ class public LlvmJitVisitor : AstVisitor {
         var gc = LlvmCodeCtx(jit = jit,
                              fn = fun, impl = ffunc, impl_type = g_fn_types[fnmna.impl()], ann = ann)
         var generated = false
-        let klass = llvm_code_class_name(ann)
-        if (empty(klass)) {
+        let klass = cpu_class_of(llvm_code_class_name(ann))
+        if (klass == CpuClass.none) {
             generated = invoke_llvm_code_generator(gen_name, gc)
         } else {
             // a fat-mode clone lowers for its class and its generator sees the class's gates;
             // noinline keeps it a function - AArch64's inliner admits a callee with more features
             // when its body carries no target intrinsic, and the inlined copy would lower for the baseline
             LLVMAddTargetDependentFunctionAttr(ffunc, "target-cpu", jit_cpu_class_row(klass).cpu)
-            LLVMAddTargetDependentFunctionAttr(ffunc, "target-features", jit_class_plus_features(klass))
+            LLVMAddTargetDependentFunctionAttr(ffunc, "target-features",
+                cpu_features_text(jit_cpu_class_row(klass).features, ",", "+"))
             LLVMAddAttributeToFunction(ffunc, attributes.noinline)
             gc.jit.target = class_target(jit_target, klass)
             generated = invoke_llvm_code_generator(gen_name, gc)
@@ -3246,7 +3247,7 @@ class public LlvmJitVisitor : AstVisitor {
             // With native fullfp16 (arm64) the ops run directly on half — bit-identical for
             // single ops, since f32 carries 2p+2 precision bits of f16 (the double-rounding
             // safety bound for + - * /). Compares are exact either way.
-            let native = jit_target.features.arm64_fullfp16
+            let native = jit_target.features.fullfp16
             let halfT = (opType.isVectorType
                 ? LLVMVectorType(types.t_half, uint(opType.vectorDim))
                 : types.t_half)
@@ -4769,7 +4770,7 @@ class public LlvmJitVisitor : AstVisitor {
     // jit_get_handled_field_offset against the TARGET annotation, and return a load of it.
     def handled_field_offset_value(ann : TypeAnnotation?; fieldName : string) : LLVMOpaqueValue? {
         let host_offset = int(get_handled_type_field_offset(ann, fieldName))
-        if (jit_target.arch != JitTargetArch.wasm) {
+        if (!target_wasm(jit_target)) {
             return types.ConstI32(uint64(host_offset))
         }
         let modName = string(ann._module.name)
@@ -8045,7 +8046,7 @@ def private get_llvm_function_type(func : FunctionPtr; types : PrimitiveTypes?) 
 def private add_ctor_dtor_function(target : JitTarget;
                                    ctor_dtor : array<tuple<LLVMOpaqueValue?, LLVMOpaqueValue?>>;
                                    types : PrimitiveTypes?; skip_dtors : bool) {
-    let priority = target.arch == JitTargetArch.wasm ? 65535ul : 0ul
+    let priority = target_wasm(target) ? 65535ul : 0ul
     let dataPointerType = LLVMPointerType(types.t_int8, 0u)
     let funcType = LLVMPointerType(LLVMFunctionType(types.t_void, null, 0u, 0), 0u)
     var ctorTypes = fixed_array(types.t_int32, funcType, dataPointerType)

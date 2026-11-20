@@ -2,7 +2,7 @@
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
 docs: `ARCHITECTURE_MEASUREMENT.md`, `ARCHITECTURE_MEASUREMENT_RELEASE.md`,
-`ARCHITECTURE_MEASUREMENT_FAT_START.md`. Planned work: `followup_metal.md`, `followup_vulkan.md`,
+`ARCHITECTURE_MEASUREMENT_FAT_START.md`, `ARCHITECTURE_MEASUREMENT_TUNED_PERM.md`. Planned work: `followup_metal.md`, `followup_vulkan.md`,
 `followup_general.md`.
 
 **A rule here that governs a figure binds only a figure the change writes or changes - in the repo
