@@ -2,7 +2,8 @@
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
 docs: `ARCHITECTURE_GPU.md`, `ARCHITECTURE_GPU_MTP.md`, `ARCHITECTURE_GPU_VULKAN_NROW.md`,
-`ARCHITECTURE_ENGINE_MEMORY.md`. Planned work:
+`ARCHITECTURE_ENGINE_MEMORY.md`, `ARCHITECTURE_GPU_ASYMMETRIES.md`,
+`ARCHITECTURE_GPU_ASYMMETRIES_CUDA.md`. Planned work:
 `followup_metal.md`, `followup_vulkan.md`, `followup_general.md` (the CUDA rows).
 
 **A diff never hands a whole GPU call that the device served before the diff - a resident decode
@@ -10,6 +11,16 @@ or prefill, a stage a tower driver fills (an encoder or synthesis stage of an au
 model), or an ASR decoder step - to the CPU path silently; the shape it cannot serve on the device
 declines by name instead.** A call that runs on the CPU gives the user who
 selected the GPU a fraction of its speed.
+
+**A diff that makes a GPU backend serve a call - one request the engine's API answers, entry to
+return, any stage of which a GPU backend serves - or adds, changes, moves or removes a stage of a
+served call, puts on the device, in the same change, every stage the CPU path runs inside that
+call, for every model and weight format the call serves.** It binds where the stage would serve:
+its device present, its knobs on, its commands succeeded. Only an entry of
+`ARCHITECTURE_GPU_ASYMMETRIES.md#gpu-asymmetries` or
+`ARCHITECTURE_GPU_ASYMMETRIES_CUDA.md#cuda-asymmetries`, or a row of `followup_metal.md`,
+`followup_vulkan.md` or `followup_general.md`'s CUDA rows, ledgers a case. A host stage behind a
+device call looks served.
 
 **A diff that lands or changes a model family, a backend arm or a session shape so that, for any
 model it serves, its batched decode step reads a weight plane once per row instead of once for all
