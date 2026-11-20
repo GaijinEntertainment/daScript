@@ -12,6 +12,7 @@ module das_cuda_boost shared public
 require cuda_driver public
 require math
 require daslib/fio
+require daslib/jobque_boost
 require daslib/sha_256
 require daslib/strings_boost
 
@@ -191,15 +192,11 @@ enum public CudaImage {
     ptx
 }
 
-//! NVRTC: source text to the `kind` image. Empty with the compile log in `log` on failure; on success
-//! `log` carries the warnings.
-def public cuda_compile(source, name : string; compile_opts : array<string>; kind : CudaImage; var log : string&) : array<uint8> {
-    var image : array<uint8>
+//! `cuda_compile` past its library check: reads no global, so a skip-init job fork runs it
+[arch(at = "../ARCHITECTURE.md#cuda-cubin-prewarm")]
+def private nvrtc_compile(source, name : string; compile_opts : array<string>; kind : CudaImage; var log : string&) : array<uint8> {
     log = ""
-    if (!cuda_nvrtc_available()) {
-        log = "cuda_compile: no NVRTC library loaded (cuda_nvrtc_available() is false)"
-        return <- image
-    }
+    var image : array<uint8>
     var prog : void?
     var r = nvrtcCreateProgram(prog, source, empty(name) ? "kernel.cu" : name, 0, null, null)
     if (r != 0) {
@@ -244,6 +241,17 @@ def public cuda_compile(source, name : string; compile_opts : array<string>; kin
     }
     nvrtcDestroyProgram(prog)
     return <- image
+}
+
+//! NVRTC: source text to the `kind` image. Empty with the compile log in `log` on failure; on success
+//! `log` carries the warnings.
+def public cuda_compile(source, name : string; compile_opts : array<string>; kind : CudaImage; var log : string&) : array<uint8> {
+    log = ""
+    if (!cuda_nvrtc_available()) {
+        log = "cuda_compile: no NVRTC library loaded (cuda_nvrtc_available() is false)"
+        return <- array<uint8>()
+    }
+    return <- nvrtc_compile(source, name, compile_opts, kind, log)
 }
 
 //! a loaded cubin or PTX image; a kernel function is the module's and dies with it
@@ -537,26 +545,73 @@ def public cuda_launch(fn : void?; grid, block_size : uint3; shared_bytes : uint
     return cu_ok(cuLaunchKernel(fn, grid.x, grid.y, grid.z, block_size.x, block_size.y, block_size.z, shared_bytes, stream, null, extra_p), "cuLaunchKernel")
 }
 
-//! the NVRTC options every kernel compiles with: the context's own sm target, C++17 and fast math;
-//! `arch_suffix` is "a" for a kernel using the arch-specific tensor forms (FP4 on sm_120 needs it)
+//! the NVRTC options every kernel compiles with on a card of compute capability `sm`: its sm
+//! target, C++17 and fast math; `arch_suffix` is "a" for a kernel using the arch-specific tensor
+//! forms (FP4 on sm_120 needs it)
+def public cuda_compile_options(sm : int; arch_suffix : string = "") : array<string> =>
+    <- [ "--gpu-architecture=sm_{sm}{arch_suffix}", "--std=c++17", "--use_fast_math" ]
+
+//! the options under the context's own sm target
 def public cuda_compile_options(cc : CudaContext?; arch_suffix : string = "") : array<string> =>
-    <- [ "--gpu-architecture=sm_{cuda_device_compute_capability(cc)}{arch_suffix}", "--std=c++17", "--use_fast_math" ]
+    <- cuda_compile_options(cuda_device_compute_capability(cc), arch_suffix)
+
+//! a kernel text that uses the arch-specific tensor forms compiles for an `sm_<cc>a` target
+def public cuda_source_is_arch_specific(source : string) : bool => find(source, "__DAS_ARCH_A__") >= 0
+
+//! the options kernel text `source` compiles with on a card of compute capability `sm`: the one
+//! derivation the load and the prewarm share, so the prewarm writes the cubin a load reads
+def public cuda_text_compile_options(sm : int; source : string) : array<string> =>
+    <- cuda_compile_options(sm, cuda_source_is_arch_specific(source) ? "a" : "")
 
 let public CUDA_CACHE_DIR = ".cache/daslang/cuda"
 
-//! the cache key of a kernel text: every input the cubin depends on, so a toolkit or driver update,
-//! another card or another option set never serves a stale image
+//! the cache key under the NVRTC and driver versions given: every input the cubin depends on, so a
+//! toolkit or driver update, another card or another option set never serves a stale image
+def public cubin_cache_key(source : string; compile_opts : array<string>; nvrtc, driver : int) : string =>
+    sha256_hex("{nvrtc}|{driver}|{join(compile_opts, " ")}|{source}")
+
+//! the cache key under the loaded NVRTC and driver
 def public cubin_cache_key(source : string; compile_opts : array<string>) : string =>
-    sha256_hex("{cuda_nvrtc_version()}|{cuda_driver_version()}|{join(compile_opts, " ")}|{source}")
+    cubin_cache_key(source, compile_opts, cuda_nvrtc_version(), cuda_driver_version())
+
+//! the file a text's cubin lives at in `cache_dir`, under the NVRTC and driver versions given
+def public cubin_cache_path(cache_dir, source : string; compile_opts : array<string>; nvrtc, driver : int) : string =>
+    path_join(cache_dir, "{cubin_cache_key(source, compile_opts, nvrtc, driver)}.cubin")
+
+//! the file under the loaded NVRTC and driver
+def public cubin_cache_path(cache_dir, source : string; compile_opts : array<string>) : string =>
+    path_join(cache_dir, "{cubin_cache_key(source, compile_opts)}.cubin")
+
+//! a cache file a load serves: a regular file with bytes in it; an empty one is a miss
+def public cubin_is_hit(cached : FStat) : bool => cached.is_reg && cached.size > 0ul
+
+//! `image` written to `path` through a temp file renamed into place: a reader of `path` never
+//! sees a partial cubin; false where the file did not land
+[arch(at = "../ARCHITECTURE.md#cuda-cubin-prewarm")]
+def private cubin_store(path : string; image : array<uint8>) : bool {
+    let tmp = "{path}.{ref_time_ticks()}.tmp"
+    var written = false
+    fopen(tmp, "wb") $(f) {
+        if (f != null) {
+            written = fwrite(f, image) == length(image)
+        }
+    }
+    var rename_error : string
+    if (!written || !rename(tmp, path, rename_error)) {
+        remove(tmp, rename_error)
+        return false
+    }
+    return true
+}
 
 //! source text -> cubin through the cache in `cache_dir` (by default the shared one under the working
 //! directory, the JIT object cache's home): a hit reads the file, a miss compiles and writes it. Empty
 //! with `error` filled on a compile failure.
 def public cubin_cached(source, name : string; compile_opts : array<string>; var error : string&; cache_dir : string = CUDA_CACHE_DIR) : array<uint8> {
-    let path = path_join(cache_dir, "{cubin_cache_key(source, compile_opts)}.cubin")
+    let path = cubin_cache_path(cache_dir, source, compile_opts)
     var image : array<uint8>
     let cached = stat(path)
-    if (cached.is_reg && cached.size > 0ul) {
+    if (cubin_is_hit(cached)) {
         image |> resize(int64(cached.size))
         fopen(path, "rb") $(f) {
             if (f == null || fread(f, image) != int(cached.size)) {
@@ -575,30 +630,171 @@ def public cubin_cached(source, name : string; compile_opts : array<string>; var
     if (!stat(cache_dir).is_dir) {
         mkdir_rec(cache_dir)
     }
-    // a process-unique temp file renamed into place: a reader of the final path never sees a partial cubin
-    let tmp = "{path}.{ref_time_ticks()}.tmp"
-    var written = false
-    fopen(tmp, "wb") $(f) {
-        if (f != null) {
-            written = fwrite(f, image) == length(image)
-        }
-    }
-    var rename_error : string
-    if (!written || !rename(tmp, path, rename_error)) {
-        remove(tmp, rename_error)
-    }
+    cubin_store(path, image)
     return <- image
 }
 
-//! a kernel text that uses the arch-specific tensor forms compiles for an `sm_<cc>a` target
-def public cuda_source_is_arch_specific(source : string) : bool => find(source, "__DAS_ARCH_A__") >= 0
+//! one kernel text a prewarm compiles: the name its failure carries, the text, the options
+struct public CudaPrewarmText {
+    name : string
+    source : string
+    compile_opts : array<string>
+}
+
+struct public CudaPrewarmFailure {
+    name : string
+    log : string
+}
+
+//! what a prewarm did, each distinct cache key counted once
+struct public CudaPrewarmReport {
+    compiled : int
+    cached : int
+    failed : int
+    failures : array<CudaPrewarmFailure>
+    workers : int
+    wall_ms : int64
+}
+
+//! the compile a prewarm runs a text through: `cuda_compile_cubin_unchecked`, or a test's stand-in
+typedef CudaPrewarmCompile = function<(source, name : string; compile_opts : array<string>; var log : string&) : array<uint8>>
+
+//! NVRTC: source text to a cubin with no NVRTC-loaded check, the prewarm's compile: it reads no
+//! global, so a skip-init fork runs it; the caller checks `cuda_nvrtc_available()` first
+[arch(at = "../ARCHITECTURE.md#cuda-cubin-prewarm")]
+def public cuda_compile_cubin_unchecked(source, name : string; compile_opts : array<string>; var log : string&) : array<uint8> =>
+    <- nvrtc_compile(source, name, compile_opts, CudaImage.cubin, log)
+
+//! the most jobs a prewarm compiles on at once
+let public CUDA_PREWARM_MAX_WORKERS = 64
+
+//! a text a worker compiles, archived onto the queue stream so its bytes land in the worker's heap
+struct private CudaPrewarmJob {
+    name : string
+    source : string
+    compile_opts : array<string>
+    path : string
+}
+
+struct private CudaPrewarmDone {
+    name : string
+    log : string
+    ok : bool
+}
+
+//! the jobs on `queue` compiled and stored until it drains, one NVRTC program a job
+[arch(at = "../ARCHITECTURE.md#cuda-cubin-prewarm")]
+def private prewarm_worker(queue, done : Stream?; compile : CudaPrewarmCompile) {
+    var more = true
+    while (more) {
+        more = queue |> try_pop_archive() $(var job : CudaPrewarmJob&) {
+            var log : string
+            var image <- invoke(compile, job.source, job.name, job.compile_opts, log)
+            var ok = !empty(image)
+            if (ok && !cubin_store(job.path, image)) {
+                ok = false
+                log = "the cubin compiled and did not write to {job.path}"
+            }
+            done |> push_archive(CudaPrewarmDone(name = job.name, log = log, ok = ok))
+            delete image
+        }
+    }
+}
+
+//! the jobs a prewarm dispatches: one a live worker of the queue, at most `max_workers`
+def private cubin_prewarm_workers(max_workers : int) : int =>
+    clamp(min(get_total_hw_jobs(), get_jobque_worker_limit()), 1, max(max_workers, 1))
+
+//! the drain jobs on the job queue, `cubin_prewarm_workers` of them; answers how many ran
+def private prewarm_dispatch(var queue, done : Stream?; compile : CudaPrewarmCompile; max_workers : int) : int {
+    let workers = cubin_prewarm_workers(max_workers)
+    with_wait_group(workers) $(wg) {
+        for (_ in range(workers)) {
+            new_job() @() {
+                prewarm_worker(queue, done, compile)
+                queue |> release
+                done |> release
+                wg |> notify_and_release
+            }
+        }
+    }
+    return workers
+}
+
+//! the drain jobs on forks of this context, on the caller's queue where one is up and on one of
+//! their own otherwise. A caller that pools skip-init forks lends them; any other caller's flags
+//! turn pooling off for the dispatch, so every fork dies at its release and none joins the pool;
+//! both flags are put back after
+[arch(at = "../ARCHITECTURE.md#cuda-cubin-prewarm")]
+def private prewarm_on_forks(var queue, done : Stream?; compile : CudaPrewarmCompile; max_workers : int) : int {
+    let was_pooled = get_jobque_fork_pool()
+    let was_skip_init = get_jobque_fork_skip_init()
+    let lends_pool = was_pooled && was_skip_init
+    if (!lends_pool) {
+        set_jobque_fork_pool(false, was_skip_init)
+    }
+    var workers = 0
+    if (is_job_que_available()) {
+        workers = prewarm_dispatch(queue, done, compile, max_workers)
+    } else {
+        with_job_que() {
+            workers = prewarm_dispatch(queue, done, compile, max_workers)
+        }
+    }
+    set_jobque_fork_pool(was_pooled, was_skip_init)
+    return workers
+}
+
+//! Every text of `texts` whose cubin is not in `cache_dir` compiled through `compile` on job forks
+//! and written at its cache path (the NVRTC and driver versions given), so a later `cubin_cached`
+//! of the text reads the file. A failed text leaves no file: its next compile answers its log
+//! again. `compile` reads no global: a fork the caller's skip-init pool lends ran no `[init]`.
+[arch(at = "../ARCHITECTURE.md#cuda-cubin-prewarm")]
+def public cubin_prewarm(texts : array<CudaPrewarmText>; cache_dir : string; nvrtc, driver : int; compile : CudaPrewarmCompile;
+                         max_workers : int = CUDA_PREWARM_MAX_WORKERS) : CudaPrewarmReport {
+    let t0 = ref_time_ticks()
+    var report : CudaPrewarmReport
+    with_stream() $(var queue : Stream?) {
+        with_stream() $(var done : Stream?) {
+            var missing = 0
+            var seen : table<string>
+            for (text in texts) {
+                let path = cubin_cache_path(cache_dir, text.source, text.compile_opts, nvrtc, driver)
+                continue if (key_exists(seen, path))
+                seen |> insert(path)
+                if (cubin_is_hit(stat(path))) {
+                    report.cached++
+                    continue
+                }
+                queue |> push_archive(CudaPrewarmJob(name = text.name, source = text.source, compile_opts := text.compile_opts, path = path))
+                missing++
+            }
+            return if (missing == 0)
+            if (!stat(cache_dir).is_dir) {
+                mkdir_rec(cache_dir)
+            }
+            report.workers = prewarm_on_forks(queue, done, compile, min(missing, max_workers))
+            done |> gather_archive() $(var d : CudaPrewarmDone&) {
+                if (d.ok) {
+                    report.compiled++
+                } else {
+                    report.failed++
+                    report.failures |> push(CudaPrewarmFailure(name = d.name, log = d.log))
+                }
+            }
+        }
+    }
+    report.wall_ms = int64(get_time_usec(t0)) / 1000l
+    return <- report
+}
 
 //! source text -> loaded module, cubin for the context's device (cached in `cache_dir`); null with `error` filled on a compile or load failure
 [arch(at="../ARCHITECTURE_EMIT.md#cuda-kernel-vocabulary-tiers")]
 def public module_from_source(cc : CudaContext?; source, name : string; var error : string&; arch_suffix : string = "";
                               cache_dir : string = CUDA_CACHE_DIR) : CudaModule? {
-    let suffix = !empty(arch_suffix) ? arch_suffix : (cuda_source_is_arch_specific(source) ? "a" : "")
-    var image <- cubin_cached(source, name, cuda_compile_options(cc, suffix), error, cache_dir)
+    let sm = cuda_device_compute_capability(cc)
+    let compile_opts <- !empty(arch_suffix) ? cuda_compile_options(sm, arch_suffix) : cuda_text_compile_options(sm, source)
+    var image <- cubin_cached(source, name, compile_opts, error, cache_dir)
     return null if (empty(image))
     return cuda_load_module(image, error)
 }

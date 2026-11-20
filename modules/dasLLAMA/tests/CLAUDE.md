@@ -2801,7 +2801,10 @@ window row its grid entry's position row as halves; `combine_row_cls` over a six
 slots, each row's weighted down row onto its position's accumulated row, a position no row reaches untouched - the Vulkan
 kernel file's two cells), the combine-folded residual step's f32 form under the gated, the ungated and no shared
 expert and under the down biases over twelve slots), the compile gate over every
-`[cuda_dispatch]` kernel of the home, the shutdown leak gate, the worker-thread bind (`test_cud_worker_thread_binds`: a
+`[cuda_dispatch]` kernel of the home, the first arm's kernel prewarm (`test_cud_first_arm_prewarm`: a child on the test child's
+`cuda-cache` verb, `DASLLAMA_CUDA_CACHE_DIR` at an empty folder, arms the home and loads every kernel twice - the first load's
+prewarm compiles every kernel text the card runs, the texts seeded after the arm included, one cubin a row at the path its load
+reads, reads none, and every kernel loads; the second arm's compiles none), the shutdown leak gate, the worker-thread bind (`test_cud_worker_thread_binds`: a
 `new_thread` worker's own context enters the tier and reads the device's free memory as the main thread does), the short
 window's s column (`test_cud_q8_cm2s_split`: the q8 s tile split in two and four k chunks through the reduce against the
 f16-feed oracle, the last chunk short; `test_cud_cm2s_short_split_family`: every per-format tile row's s column split along
@@ -2834,7 +2837,7 @@ the float rows' Q8_K quants exact, the others a quant within one step), their ro
 where they write; `test_cud_moe_share` the routed step's sharing count to the distinct experts among its
 slots, one slot on a fresh expert counting one more.
 `test_cuda_tower_front.das`, `test_cuda_tower_blocks.das`, `test_cuda_tower_asr.das` - model-free (a CUDA device with
-NVRTC, else every cell but the closing leak gate and the blocks file's two device-free cells skips; a stamp NVRTC refuses on a box with a device reds its cell): the CUDA
+NVRTC, else every cell but the closing leak gate, the blocks file's two device-free cells and the front file's three skips; a stamp NVRTC refuses on a box with a device reds its cell): the CUDA
 home's tower stamps (`dasllama_cuda_classes_front`, `_blocks`, `_asr`, and the clamped Q8_0 feed and the `rsqrt` norm stamps of `dasllama_cuda_classes`)
 on the case bodies their Vulkan twins' cells in `test_vulkan_tower_kernels.das` run (`_discrete_cells.das`, one body a stamp
 family for both homes, the oracles `_kernel_oracles.das`, `_attn_oracle.das`, `_vad_oracle.das`, `_rnnt_oracle.das`, `_ctc_oracle.das`) - the
@@ -2855,6 +2858,13 @@ f16 GEMM s column (`test_cud_f16_gemm_s`: `CuF16GemmCm2WS` against the f32 dot o
 column, rows off the 32 column, under one column with a k tail, two columns at a wider row stride - the weight rows behind a
 poisoned lead, bit for bit the m column stamp `CuF16GemmCm2W`'s plane, the gaps and the tile footprint past the rows at the
 sentinel, a poisoned weight half the control). The half compares are `_compares.das`'s `check_halves`.
+The front file also holds the CUDA home's kernel prewarm, device-free: `test_cud_kernel_texts` (one kernel text a seeded kernel by
+name, a census one name short the control, no two kernels sharing a text, the FP4 rung's arch-specific texts among them),
+`test_cud_kernel_prewarm` (`cud_prewarm_for` under a stand-in compiler: below `FP4_RUNG_SM` every text but the rung's
+compiles, at it every text, each at the path a load reads, none cached on a fresh folder or under the other card's options,
+and a second prewarm compiles none and reads every text) and `test_cud_cache_dir_knob` (`cud_cache_dir_of` maps unset to
+`CUDA_CACHE_DIR`; a child on the test child's `cuda-cache` verb with `DASLLAMA_CUDA_CACHE_DIR` set and the GPU ask unset prints that folder
+as the home's).
 The blocks file also pins the tower's GEMM column picks. `test_cud_f16_cm2_col` (device-free) holds `f16_cm2_col` over literal
 SM counts: s to 64 rows, m on a card of unknown count, the cheaper wave past them. `test_cud_tower_cm2_pick` (skips under
 `DASLLAMA_CM2_TILE` or `DASLLAMA_CM2_SPLITK`, and on a card outside 35 to 48 SMs, where the pinned shapes read other picks)

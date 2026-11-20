@@ -25,6 +25,9 @@ let CHILD_VERB_SECONDS = 25.0
 //! `run_child` for a verb of the test child (`child_verb_cmd`): killed, with everything it spawned, past `CHILD_VERB_SECONDS`
 def run_verb_child(cmd : string; var output : string&) : int => run_child_within(cmd, CHILD_VERB_SECONDS, output)
 
+//! `run_verb_child` for a verb whose own work outlasts `CHILD_VERB_SECONDS`: killed past `seconds`
+def run_verb_child(cmd : string; seconds : float; var output : string&) : int => run_child_within(cmd, seconds, output)
+
 def private run_child_within(cmd : string; seconds : float; var output : string&) : int {
     return unsafe(popen_timeout(cmd, seconds, $(f) {
         if (f != null) {

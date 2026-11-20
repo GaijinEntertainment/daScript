@@ -88,6 +88,7 @@ class CudaDispatch : AstStructureAnnotation {
             var cs = new ExprCall(at = at, name := "cud_census_seed")
             cs.arguments |> emplace_new <| new ExprConstString(at = at, value := disp_name)
             cs.arguments |> emplace_new <| new ExprAddr(at = at, target := "ensure_{scan.base}")
+            cs.arguments |> emplace_new <| mk_gvar(at, text)
             var body <- array<ExpressionPtr>(cs)
             if (!add_generated(at, "{scan.base}`census", new TypeDecl(at = at, baseType = Type.tVoid), body) $(var fn : Function?) {
                     fn.flags.init = true

@@ -671,6 +671,10 @@ namespace das {
         return context->keepForkContexts.load(std::memory_order_relaxed);
     }
 
+    bool get_jobque_fork_skip_init ( Context * context, LineInfoArg * ) {
+        return context->forkSkipInitScript.load(std::memory_order_relaxed);
+    }
+
     void set_jobque_fork_skip_heap_reset ( bool skip, Context * context, LineInfoArg * ) {
         // Skip restartHeaps() when reusing a pooled fork (see Context::acquireForkContext). Only safe
         // when the dispatched jobs are pure compute that never leaks onto the fork heap — e.g.
@@ -1935,6 +1939,9 @@ namespace das {
                     ->args({"keep","skip_init","context","line"});
             addExtern<DAS_BIND_FUN(get_jobque_fork_pool)>(*this, lib,  "get_jobque_fork_pool",
                 SideEffects::accessExternal, "get_jobque_fork_pool")
+                    ->args({"context","line"});
+            addExtern<DAS_BIND_FUN(get_jobque_fork_skip_init)>(*this, lib,  "get_jobque_fork_skip_init",
+                SideEffects::accessExternal, "get_jobque_fork_skip_init")
                     ->args({"context","line"});
             addExtern<DAS_BIND_FUN(set_jobque_fork_skip_heap_reset)>(*this, lib,  "set_jobque_fork_skip_heap_reset",
                 SideEffects::modifyExternal, "set_jobque_fork_skip_heap_reset")

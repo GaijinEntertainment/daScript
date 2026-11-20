@@ -31,6 +31,8 @@ require dasllama/dasllama_math
 require daslib/math_bits   // nolint:STYLE030,LINT019 — the word hashes of the CUDA cells, inside the vulkan arm alone
 require daslib/jobque_boost   // the worker-thread cell: a context of its own on another thread
 require daslib/fio   // sleep: the wait for a worker context's end to land
+require daslib/strings_boost   // split: the arm child's records
+require _child_run   // the cache folder knob is read at init: the arm cell's home is a child's
 require dasllama/dasllama_kqformat
 require dasllama/dasllama_gpu_math   // ue4m3_half_f32 - the nv4 MMQ cell's reference scales
 require dasllama/dasllama_gpu_knee   // cud_split_k_tgs: the short-window pick cell pins the knee
@@ -3573,6 +3575,49 @@ def test_cud_compile_gate(t0 : T?) {
         var inscope off_rung <- cud_off_rung_names()
         let below = g_cud.sm < FP4_RUNG_SM
         t |> equal(!empty(off_rung), below, "the FP4 rung's kernels are left uncompiled on a card below compute capability {FP4_RUNG_SM}, and only there (this card: {g_cud.sm}, left out: {off_rung})")
+    }
+}
+
+//! the counts of the arm child's record `ARM <arm> rows=.. hits=.. compiled=.. cached=.. failed=..`, -1 where it is missing
+def private arm_record(out : string; arm : int) : table<string; int> {
+    var fields : table<string; int>
+    for (line in split(out, "\n")) {
+        continue if (!starts_with(line, "ARM {arm} "))
+        for (word in split(line, " ")) {
+            var inscope kv <- split(word, "=")
+            if (length(kv) == 2) {
+                fields.insert(kv[0], to_int(kv[1]))
+            }
+        }
+    }
+    return <- fields
+}
+
+let private FIRST_ARM_CHILD_SECONDS = 600.0   //! the arm child's limit: a prewarm of every kernel text into an empty folder
+
+[test(description = "The first kernel load of the CUDA home's first arm prewarms every kernel text the card runs into an empty cache folder, every text the program seeds included, one cubin a row at the path its load reads, and a second arm compiles none.", timeout = 1200)]
+def test_cud_first_arm_prewarm(t0 : T?) {
+    t0 |> run("the first arm prewarms the kernel texts; the second compiles none") <| @(t : T?) {
+        if (!cud_init()) {
+            t |> skip("no CUDA device with NVRTC")
+            return
+        }
+        let dir = path_join(test_temp_dir(), "cubin_first_arm_{ref_time_ticks()}")
+        var out : string
+        let cmd = child_verb_cmd("cuda-cache", [(name = "DASLLAMA_CUDA_CACHE_DIR", value = dir)], "arm")
+        let rc = run_verb_child(cmd, FIRST_ARM_CHILD_SECONDS, out)
+        t |> equal(rc, 0, "the arm child ran:\n{out}")
+        t |> success(find(out, "ROOT_DONE") >= 0, "the arm child reached its end:\n{out}")
+        let first <- arm_record(out, 0)
+        let second <- arm_record(out, 1)
+        let rows = first?["rows"] ?? -1
+        t |> success(rows > 0, "the child's home has kernel texts this card runs:\n{out}")
+        t |> equal(first?["hits"] ?? -1, rows, "one cubin a row at the path its load reads")
+        t |> equal(first?["compiled"] ?? -1, rows, "the first arm compiled every row into the empty folder")
+        t |> equal(first?["cached"] ?? -1, 0, "and read none from it")
+        t |> equal(first?["refused"] ?? -1, 0, "and every kernel then loaded")
+        t |> equal(second?["compiled"] ?? -1, 0, "the second arm compiles none")
+        t |> equal(second?["cached"] ?? -1, rows, "it reads every row from the cache")
     }
 }
 

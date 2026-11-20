@@ -17,15 +17,19 @@ def private cache_probe_source(t : T?; fail_read : bool) : string {
     let finish = find(text, "\n}", start)
     t |> strictEqual(finish > start, true)
     var body = slice(text, start, finish + 2)
-    let key = "cubin_cache_key(source, compile_opts)"
+    let path = "cubin_cache_path(cache_dir, source, compile_opts)"
+    let hit = "cubin_is_hit(cached)"
     let reader = "fread(f, image)"
     let compiler = "cuda_compile(source, name, compile_opts, CudaImage.cubin, log)"
-    for (site in fixed_array(key, reader, compiler)) {
+    let store = "cubin_store(path, image)"
+    for (site in fixed_array(path, hit, reader, compiler, store)) {
         t |> strictEqual(find(body, site) >= 0, true, "fault injection site: {site}")
     }
-    body = replace(body, key, "\"fixture\"")
+    body = replace(body, path, "path_join(cache_dir, \"fixture.cubin\")")
+    body = replace(body, hit, "(cached.is_reg && cached.size > 0ul)")
     body = replace(body, reader, "(FAIL_READ ? 0 : fread(f, image))")
     body = replace(body, compiler, "default<array<uint8>>")
+    body = replace(body, store, "true")
     return ("options gen2\noptions persistent_heap\n" +
         "options no_unused_function_arguments = false\n" +
         "require daslib/builtin\nrequire daslib/fio\nrequire strings\n" +
