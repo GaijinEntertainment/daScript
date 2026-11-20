@@ -134,6 +134,14 @@ if(WIN32)
     message(STATUS "run_extended_all: a windows configure leaves out ${DAS_EXTENDED_HOST_INDEPENDENT}")
 endif()
 das_lane_group(run_extended_all "Running every extended check" ${_extended_all})
+# run_extended_all in two jobs, both cut from _extended_all so they drop what a platform drops
+# from it; a check outside DAS_EXTENDED_CORE and DAS_EXTENDED_NIGHTLY falls to the modules half.
+set(_extended_all_modules ${_extended_all})
+list(REMOVE_ITEM _extended_all_modules ${DAS_EXTENDED_CORE} ${DAS_EXTENDED_NIGHTLY})
+set(_extended_all_core ${_extended_all})
+list(REMOVE_ITEM _extended_all_core ${_extended_all_modules})
+das_lane_group(run_extended_all_core "Running every extended check but the module suites" ${_extended_all_core})
+das_lane_group(run_extended_all_modules "Running the module suites of every extended check" ${_extended_all_modules})
 
 # The dasLLVM vector-math rail pins vecmath's answers on Apple silicon; the extended checks have
 # no macOS cell, so the darwin build cells run it.

@@ -119,9 +119,23 @@ class ExtendedMatrix(unittest.TestCase):
         cells = ci_matrix.extended_cells(False)
         self.assertEqual([(c["target"], c["role"]) for c in cells], [("linux", "core"), ("linux", "modules")])
 
-    def test_nightly_is_one_full_job_per_platform(self):
+    def test_nightly_is_one_full_job_on_linux_and_two_halves_on_windows(self):
         cells = ci_matrix.extended_cells(True)
-        self.assertEqual([(c["target"], c["role"]) for c in cells], [("linux", "all"), ("windows", "all")])
+        self.assertEqual([(c["target"], c["role"]) for c in cells],
+                         [("linux", "all"), ("windows", "all_core"), ("windows", "all_modules")])
+
+    def test_every_role_names_a_group_and_the_two_halves_make_the_whole(self):
+        with open(os.path.join(HERE, "CMakeLists.txt"), encoding="utf-8") as f:
+            text = f.read()
+        for nightly in (False, True):
+            for cell in ci_matrix.extended_cells(nightly):
+                self.assertIn("das_lane_group(run_extended_%s " % cell["role"], text)
+        self.assertIn("set(_extended_all_modules ${_extended_all})\n"
+                      "list(REMOVE_ITEM _extended_all_modules ${DAS_EXTENDED_CORE} ${DAS_EXTENDED_NIGHTLY})\n"
+                      "set(_extended_all_core ${_extended_all})\n"
+                      "list(REMOVE_ITEM _extended_all_core ${_extended_all_modules})\n", text)
+        self.assertRegex(text, r"das_lane_group\(run_extended_all_core \"[^\"]+\" \$\{_extended_all_core\}\)")
+        self.assertRegex(text, r"das_lane_group\(run_extended_all_modules \"[^\"]+\" \$\{_extended_all_modules\}\)")
 
     def test_only_a_lane_that_runs_the_aot_subset_builds_it(self):
         """Every dastest target depends on dastest_cache_guard, so a binary it hashes is a binary
@@ -164,8 +178,8 @@ class ExtendedMatrix(unittest.TestCase):
 
 
 class WorkflowShapes(unittest.TestCase):
-    """The workflows consume the matrices through pre_job; the role split must keep the nightly
-    `all` role running every step."""
+    """The workflows consume the matrices through pre_job; the role split must leave every step
+    running in some nightly job of each platform."""
 
     def read(self, name):
         with open(os.path.join(WORKFLOWS, name), encoding="utf-8") as f:
@@ -186,15 +200,33 @@ class WorkflowShapes(unittest.TestCase):
             self.assertFalse(re.search(r"^  schedule:", text, re.M), "%s carries a cron of its own" % name)
             self.assertFalse("uses: ./.github/workflows/nightly_issue.yml" in text, "%s files its own nightly issue" % name)
 
-    def test_role_conditions_exclude_one_role_only(self):
+    def test_role_conditions_only_exclude(self):
         # `matrix.role == 'core'` would drop the step from the nightly `all` job; the only admitted
         # spelling names the role a step does NOT run in
         text = self.read("extended_checks.yml")
-        refs = re.findall(r"matrix\.role\s*(==|!=)\s*'([a-z]+)'", text)
+        refs = re.findall(r"matrix\.role\s*(==|!=)\s*'([^']*)'", text)
         self.assertTrue(refs, "extended_checks.yml carries no role conditions")
         for op, role in refs:
             self.assertEqual(op, "!=", "matrix.role %s '%s'" % (op, role))
-            self.assertIn(role, ("core", "modules"), "matrix.role %s '%s'" % (op, role))
+            self.assertIn(role, ("core", "modules", "all_modules"), "matrix.role %s '%s'" % (op, role))
+
+    def test_one_job_of_a_slot_saves_it(self):
+        # jobs of one platform share a slot key; the module-suite job of each pair leaves the save
+        # and the prune to the other, so two jobs never write one key
+        text = self.read("extended_checks.yml")
+        steps = text.split("- name:")
+        conditioned = [step.split("\n", 1)[0].strip() for step in steps if "matrix.role !=" in step]
+        self.assertEqual(conditioned, ['"Save sccache objects"', '"Prune older sccache slots"'])
+        for step in steps:
+            if "matrix.role !=" in step:
+                self.assertIn("matrix.role != 'modules' && matrix.role != 'all_modules'", step)
+        for nightly in (False, True):
+            by_target = {}
+            for cell in ci_matrix.extended_cells(nightly):
+                by_target.setdefault(cell["target"], []).append(cell["role"])
+            for target, roles in by_target.items():
+                savers = [r for r in roles if r not in ("modules", "all_modules")]
+                self.assertEqual(len(savers), 1, "%s: %s" % (target, roles))
 
     def test_every_cache_restore_runs_on_the_cron_too(self):
         # the nightly cells are the slow ones; a restore gated off `schedule` is the old cold-build
