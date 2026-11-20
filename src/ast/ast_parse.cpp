@@ -1415,6 +1415,7 @@ namespace das {
             program->thisModule->allowPodInscope = access->isPodInScopeAllowed(program->thisModule->name, fileName);
         }
         program->thisModule->doNotAllowUnsafe = !access->canModuleBeUnsafe(program->thisModule->name, fileName);
+        program->thisModule->aliasingAllowed = !program->options.getBoolOption("no_aliasing", true);
         if ( policies.solid_context || program->options.getBoolOption("solid_context",false) ) {
             program->thisModule->isSolidContext = true;
         }

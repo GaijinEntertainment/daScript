@@ -3,9 +3,16 @@ require dastest/testing_boost public
 
 options no_aliasing
 
+require _aliasing_generic_lax
+
 struct Plain {
     a : int
     b : float
+}
+
+struct IntPair {
+    a : int
+    b : int
 }
 
 def private store_constants(var p : Plain?; var d : Plain?; var t : tuple<int; string>?) {
@@ -26,4 +33,12 @@ def test_store_constants(t : T?) {
     t |> equal(d.b, 2.0)
     t |> equal(tup._0, 3)
     t |> equal(tup._1, "three")
+}
+
+[test(description = "an aliasing generic from a module with no_aliasing off compiles in a no_aliasing caller and swaps through a temporary")]
+def test_lax_generic_instance(t : T?) {
+    var q = IntPair(a = 3, b = 4)
+    swap_fields(q)
+    t |> equal(q.a, 4)
+    t |> equal(q.b, 3)
 }
