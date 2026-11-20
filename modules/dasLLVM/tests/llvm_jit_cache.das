@@ -9,6 +9,7 @@ require daslib/rtti
 require daslib/strings_boost
 require llvm/daslib/llvm_jit_plan
 require llvm/daslib/llvm_cpu_class
+require llvm/daslib/llvm_jit_sweep
 require _llvm_cache_common
 
 [test(description = "the JIT's compile-only escape emits no partition and reads no cached object, and the program still runs interpreted to the right answer")]
@@ -360,5 +361,253 @@ def test_salt_folds_layouts(t : T?) {
         g_jit_strict_aliasing = true
         t |> success(on != off)
         t |> equal(on, salt(layouts))
+    }
+}
+
+def private folder_entries(folder : string) : array<string> {
+    var entries : array<string>
+    dir(folder) $(name) {
+        if (name != "." && name != "..") {
+            entries |> push(name)
+        }
+    }
+    return <- entries
+}
+
+[test(description = "under DAS_JIT_MANIFEST a JIT run records the cached DLL it writes and the next run records the one it loads, a written DLL lists objects that are on disk beside it, a run with the variable empty records nowhere, and a manifest that cannot be written is a warning", timeout = 1200)]
+def test_jit_manifest_records(t : T?) {
+    if (!jit_enabled()) {
+        t |> success(true)
+        return
+    }
+    let client = stage_split_client(t, "jit_manifest")
+    if (empty(client)) return
+    let work = dir_name(client)
+    let manifest = path_join(work, "manifest")
+    let exe = get_command_line_arguments()[0]
+    var output : string
+    let write_exit = run_and_capture([exe, "-jit", client], work, ["DAS_JIT_MANIFEST={manifest}"],
+                                     output, 300.0)
+    t |> equal(write_exit, 0, output)
+    let entries <- folder_entries(manifest)
+    t |> equal(length(entries), 1, "the run that wrote the DLL recorded it: {join(entries, " ")}")
+    if (length(entries) == 1) {
+        let dot = find(entries[0], ".")
+        let folder = path_join(work, ".cache/daslang/{slice(entries[0], 0, dot)}")
+        let key = slice(entries[0], dot + 1)
+        let objs <- split(fread(path_join(folder, "{key}.files")), "\n")
+        t |> success(length(objs) > 1,
+                     "the split DLL lists its partition objects: {join(objs, " ")}")
+        for (obj in objs) {
+            t |> success(stat(path_join(folder, obj)).is_valid, "{obj} is on disk")
+        }
+        remove(path_join(manifest, entries[0]))
+        let load_exit = run_and_capture([exe, "-jit", client], work,
+                                        ["DAS_JIT_MANIFEST={manifest}"], output, 300.0)
+        t |> equal(load_exit, 0, output)
+        let again <- folder_entries(manifest)
+        t |> equal(join(again, " "), entries[0],
+                   "the run that loaded the cached DLL recorded the same key")
+        remove(path_join(manifest, entries[0]))
+        let before <- folder_entries(work)
+        let unset_exit = run_and_capture([exe, "-jit", client], work, ["DAS_JIT_MANIFEST="], output,
+                                         300.0)
+        t |> equal(unset_exit, 0, output)
+        t |> equal(length(folder_entries(manifest)), 0,
+                   "a run with the variable empty records nothing in the manifest")
+        t |> equal(join(folder_entries(work), " "), join(before, " "),
+                   "and leaves no record anywhere else")
+        let blocked_exit = run_and_capture([exe, "-jit", client], work,
+                                           ["DAS_JIT_MANIFEST={client}/manifest"], output, 300.0)
+        t |> equal(blocked_exit, 0, output)
+        t |> success(find(output, "cannot record") >= 0,
+                     "a manifest under a file cannot be written, and the run says so: {output}")
+    }
+    rmdir_rec(work)
+}
+
+[test(description = "the emitter's own cache hit records the DLL it loads under DAS_JIT_MANIFEST, and a DLL with no content key is not recorded", timeout = 1200)]
+def test_jit_manifest_records_emitter_hit(t : T?) {
+    if (!jit_enabled()) {
+        t |> success(true)
+        return
+    }
+    var terr : string
+    let work = create_temp_directory("jit_manifest_emitter", terr)
+    if (empty(work)) {
+        t |> failure("create_temp_directory: {terr}")
+        return
+    }
+    for (
+         f in ["_llvm_manifest_emitter_root.das", "_llvm_cache_common.das",
+               "_llvm_compile_only_client.das"]) {
+        t |> success(copy_fixture(get_this_module_dir(), work, f), "stage {f}")
+    }
+    let manifest = path_join(work, "manifest")
+    var output : string
+    let exit_code = run_and_capture(
+                                    [get_command_line_arguments()[0],
+                                     path_join(work, "_llvm_manifest_emitter_root.das")],
+        work, ["DAS_JIT_MANIFEST={manifest}"], output, 600.0)
+    t |> equal(exit_code, 0, output)
+    t |> success(find(output, "EMPTIED 1") >= 0,
+        "the run that wrote the DLL recorded it, and the root emptied the manifest: {output}")
+    t |> success(find(output, "ROUND 1 ok=true") >= 0,
+                 "the second run reached the emitter: {output}")
+    t |> success(find(output, "KEYLESS DONE") >= 0,
+                 "the root asked for a record of a DLL with no key: {output}")
+    t |> equal(length(folder_entries(manifest)), 1,
+               "the emitter's cache hit recorded its DLL, and the keyless one left no record")
+    rmdir_rec(work)
+}
+
+def private sweep_fixture(t : T?; tag : string) : string {
+    var terr : string
+    let root = create_temp_directory("jit_sweep_{tag}", terr)
+    if (empty(root)) {
+        t |> failure("create_temp_directory: {terr}")
+        return ""
+    }
+    for (folder in ["cache/_anon_1", "cache/_anon_2", "cache/other", "manifest"]) {
+        mkdir_rec(path_join(root, folder))
+    }
+    let files = [
+        (name = "cache/_anon_1/0xa.dll", text = "dll"),
+        (name = "cache/_anon_1/0xa.files", text = "0x1.m_main.o\n0x2.m_fio.o"),
+        (name = "cache/_anon_1/0x1.m_main.o", text = "obj1"),
+        (name = "cache/_anon_1/0x2.m_fio.o", text = "obj2"),
+        (name = "cache/_anon_1/0xb.dll", text = "older"),
+        (name = "cache/_anon_1/0xb.files", text = "0x3.m_main.o"),
+        (name = "cache/_anon_1/0x3.m_main.o", text = "older obj"),
+        (name = "cache/_anon_2/0xc.dll", text = "unused"),
+        (name = "cache/_anon_file", text = "a file, not a cache folder"),
+        (name = "cache/other/keep.txt", text = "not a cache folder"),
+        (name = "manifest/_anon_1.0xa", text = ""),
+        (name = "manifest/_anon_9.0xz", text = "")
+    ]
+    for (f in files) {
+        t |> success(fwrite(path_join(root, f.name), f.text), "wrote {f.name}")
+    }
+    return root
+}
+
+def private files_left(root : string) : string {
+    var left : array<string>
+    for (folder in ["cache/_anon_1", "cache/_anon_2", "cache/other"]) {
+        left |> push_from(
+                          [for (name in folder_entries(path_join(root, folder)));
+                           "{folder}/{name}"])
+    }
+    sort(left)
+    return join(left, " ")
+}
+
+let private RECORDED_SET = ("cache/_anon_1/0x1.m_main.o cache/_anon_1/0x2.m_fio.o " +
+    "cache/_anon_1/0xa.dll cache/_anon_1/0xa.files cache/other/keep.txt")
+
+let private FIXTURE_ALL_FILES = ("cache/_anon_1/0x1.m_main.o cache/_anon_1/0x2.m_fio.o " +
+    "cache/_anon_1/0x3.m_main.o cache/_anon_1/0xa.dll cache/_anon_1/0xa.files " +
+    "cache/_anon_1/0xb.dll cache/_anon_1/0xb.files cache/_anon_2/0xc.dll cache/other/keep.txt")
+
+[test(description = "a JIT cache sweep keeps each recorded DLL with the objects its link list names, and deletes the older sets and the folders no run recorded; a dry run counts the same and deletes nothing; a missing or empty manifest sweeps nothing and says which it was; a file it cannot delete is counted")]
+def test_jit_sweep(t : T?) {
+    t |> run("a dry run counts and deletes nothing") @(t : T?) {
+        let root = sweep_fixture(t, "dry")
+        if (empty(root)) return
+        let res = jit_sweep(path_join(root, "cache"), path_join(root, "manifest"), true)
+        t |> equal(res.error, "")
+        t |> equal(res.folders_kept, 1)
+        t |> equal(res.folders_removed, 1)
+        t |> equal(res.files_kept, 4)
+        t |> equal(res.files_removed, 4)
+        t |> equal(res.bytes_removed, 32ul)
+        t |> equal(files_left(root), FIXTURE_ALL_FILES)
+        rmdir_rec(root)
+    }
+    t |> run("a sweep keeps the recorded set and what is not a cache folder") @(t : T?) {
+        let root = sweep_fixture(t, "real")
+        if (empty(root)) return
+        let res = jit_sweep(path_join(root, "cache"), path_join(root, "manifest"), false)
+        t |> equal(res.error, "")
+        t |> equal(res.folders_removed, 1)
+        t |> equal(res.files_removed, 4)
+        t |> equal(res.failed_deletes, 0)
+        t |> equal(files_left(root), RECORDED_SET)
+        t |> success(!stat(path_join(root, "cache/_anon_2")).is_valid,
+                     "the folder no run recorded is gone")
+        t |> success(stat(path_join(root, "cache/_anon_file")).is_valid,
+                     "a file named like a cache folder stays")
+        rmdir_rec(root)
+    }
+    t |> run("an empty manifest sweeps nothing") @(t : T?) {
+        let root = sweep_fixture(t, "empty")
+        if (empty(root)) return
+        remove(path_join(root, "manifest/_anon_1.0xa"))
+        remove(path_join(root, "manifest/_anon_9.0xz"))
+        let res = jit_sweep(path_join(root, "cache"), path_join(root, "manifest"), false)
+        t |> success(find(res.error, "names no DLL") >= 0,
+                     "the sweep says the manifest was empty: {res.error}")
+        t |> equal(res.files_removed, 0)
+        t |> equal(files_left(root), FIXTURE_ALL_FILES)
+        rmdir_rec(root)
+    }
+    t |> run("a missing manifest directory sweeps nothing") @(t : T?) {
+        let root = sweep_fixture(t, "missing")
+        if (empty(root)) return
+        let res = jit_sweep(path_join(root, "cache"), path_join(root, "no_such_dir"), false)
+        t |> success(find(res.error, "no manifest directory") >= 0,
+                     "the sweep says the directory was missing: {res.error}")
+        t |> equal(files_left(root), FIXTURE_ALL_FILES)
+        rmdir_rec(root)
+    }
+    t |> run("a file and a folder it cannot delete are counted and left") @(t : T?) {
+        if (get_platform_name() != "windows") {
+            t |> success(true, "an open file blocks its own delete on Windows alone")
+            return
+        }
+        let root = sweep_fixture(t, "held")
+        if (empty(root)) return
+        let older = fopen(path_join(root, "cache/_anon_1/0xb.dll"), "rb")
+        let unused = fopen(path_join(root, "cache/_anon_2/0xc.dll"), "rb")
+        let res = jit_sweep(path_join(root, "cache"), path_join(root, "manifest"), false)
+        fclose(older)
+        fclose(unused)
+        t |> equal(res.failed_deletes, 2, "the held file and the folder holding the other")
+        t |> success(stat(path_join(root, "cache/_anon_1/0xb.dll")).is_valid,
+                     "the held file is still there")
+        t |> success(stat(path_join(root, "cache/_anon_2/0xc.dll")).is_valid,
+                     "so is the one in the unrecorded folder")
+        rmdir_rec(root)
+    }
+}
+
+[test(description = "the jit tool's sweep front answers 1 with no manifest named or none to read and 0 after a sweep, and its summary names a dry run and the deletes that failed")]
+def test_jit_sweep_cli(t : T?) {
+    t |> run("no manifest named, or none to read, is exit 1 and deletes nothing") @(t : T?) {
+        let root = sweep_fixture(t, "cli_none")
+        if (empty(root)) return
+        t |> equal(jit_sweep_cli(path_join(root, "cache"), "", false), 1)
+        t |> equal(jit_sweep_cli(path_join(root, "cache"), path_join(root, "no_such_dir"), false),
+                   1)
+        t |> equal(files_left(root), FIXTURE_ALL_FILES)
+        rmdir_rec(root)
+    }
+    t |> run("a sweep is exit 0, dry or not") @(t : T?) {
+        let root = sweep_fixture(t, "cli_ok")
+        if (empty(root)) return
+        t |> equal(jit_sweep_cli(path_join(root, "cache"), path_join(root, "manifest"), true), 0)
+        t |> equal(files_left(root), FIXTURE_ALL_FILES)
+        t |> equal(jit_sweep_cli(path_join(root, "cache"), path_join(root, "manifest"), false), 0)
+        t |> success(!stat(path_join(root, "cache/_anon_2")).is_valid, "the sweep ran")
+        rmdir_rec(root)
+    }
+    t |> run("the summary names a dry run and the failed deletes") @(t : T?) {
+        var res = JitSweepResult(files_removed = 4, folders_removed = 1)
+        t |> success(jit_sweep_summary(res, true) |> starts_with("would delete 4 files"))
+        t |> success(jit_sweep_summary(res, false) |> starts_with("deleted 4 files"))
+        t |> success(find(jit_sweep_summary(res, false), "could not be deleted") < 0,
+                     "no failure, no failure clause")
+        res.failed_deletes = 2
+        t |> success(find(jit_sweep_summary(res, false), "; 2 could not be deleted") >= 0)
     }
 }

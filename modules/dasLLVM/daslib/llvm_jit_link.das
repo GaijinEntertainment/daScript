@@ -13,6 +13,7 @@ module llvm_jit_link shared private
 //! there, so a warm run never loads the emitter's contexts.
 
 require llvm/daslib/llvm_jit_plan
+require llvm/daslib/llvm_jit_sweep
 require llvm/daslib/llvm_jit_cli
 require daslib/ast_boost
 require daslib/cross_context
@@ -104,6 +105,7 @@ def public run_jit_linked(prog : Program?; var ctx : Context?) : bool {
         return run_jit_in_emitter(prog, ctx, plan.log_jit_time, t_hash, t_probe)
     }
     to_log(LOG_INFO, "LLVM JIT: DLL cache hit {plan.output_path}.dll\n")
+    jit_manifest_record(plan.output_path, plan.dll_hash_basename)
     install_dll_functions(dll, ctx, uids, probe.bound)
     let t_install = get_time_usec(phase_tm)
     phase_tm = ref_time_ticks()

@@ -18,6 +18,7 @@ module llvm_jit_plan shared private
 require llvm/bindings/llvm_host
 require llvm/daslib/llvm_dll_utils public
 require llvm/daslib/llvm_env
+require llvm/daslib/llvm_jit_sweep
 require llvm/daslib/llvm_cpu_class
 require llvm/daslib/llvm_jit_cli
 require daslib/ast_boost
@@ -657,10 +658,10 @@ def public jit_dll_basename(prog : Program?; funcs : array<FunctionPtr>; opt_lev
 
 def public jit_gc_stale_dlls(subdir : string; keep_basename : string; keep_names : table<string>; mine : table<string>) {
     // keep mask: the current DLL-hash prefix (dll/lib/exp/pdb/rsp + monolith .o) OR an exact keep_names entry (split obj cache's live partition objects - named by partition key, not dll hash)
-    let keep_prefix = "{keep_basename}."
+    let keep_prefix = jit_key_prefix(keep_basename)
     dir(subdir) $(fname) {
-        if (fname == "." || fname == ".." || fname |> starts_with(keep_prefix)
-            || keep_names |> key_exists(fname) || !(mine |> key_exists(fname))) return
+        if (fname == "." || fname == ".." || jit_key_keeps(fname, keep_prefix, keep_names)
+            || !(mine |> key_exists(fname))) return
         let full_path = "{subdir}/{fname}"
         var err : string
         let ok = remove(full_path, err)

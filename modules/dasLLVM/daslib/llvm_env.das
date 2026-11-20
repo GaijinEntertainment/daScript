@@ -40,6 +40,11 @@ struct public JitEnv {
     @clarg_default_doc = "unset (the build targets the running box)"
     @clarg_doc = "Build for a CPU class (llvm_cpu_class) of the build's arch, not this box"
     jit_baseline : string = ""
+
+    @clarg_path
+    @clarg_default_doc = "unset (nothing is recorded)"
+    @clarg_doc = "Record every cached JIT DLL this process loads or writes, as an empty file <folder>.<key> in this directory. A cache sweep keeps what the directory names and deletes the rest."
+    jit_manifest : string = ""
 }
 
 let public g_env_jit = env_config(type<JitEnv>)

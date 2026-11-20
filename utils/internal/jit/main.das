@@ -8,7 +8,9 @@ require daslib/strings_boost
 require dastest/folder_filter
 require dastest/fs
 
+require llvm/daslib/llvm_env
 require llvm/daslib/llvm_jit_cli
+require llvm/daslib/llvm_jit_sweep
 require llvm/daslib/llvm_jit_run // nolint:STYLE030 registration side effect: bakes the native llvm module into a standalone -exe build (see simulate() comment below)
 
 [CommandLineArgs]
@@ -50,6 +52,14 @@ struct JitToolArgs {
     @clarg_name = "parallel"
     @clarg_doc = "Spawn worker subprocesses to compile in parallel. `--parallel 0` (or pass with no value) auto-picks get_total_hw_threads(); positive N uses N workers. Omit the flag entirely for in-process sequential compile. daslang's compile pipeline isn't thread-safe inside one process, so workers are full subprocesses like dastest's isolated mode."
     parallel : Option<int>
+
+    @clarg_name = "sweep"
+    @clarg_doc = "Delete the cached JIT artifacts the DAS_JIT_MANIFEST directory does not name, then exit; no input is compiled. The cache is .cache/daslang under the working directory."
+    sweep : bool
+
+    @clarg_name = "sweep-dry-run"
+    @clarg_doc = "With --sweep: report what it would delete and delete nothing"
+    sweep_dry_run : bool
 
     @clarg_short = "?"
     @clarg_name = "show-help"
@@ -363,6 +373,8 @@ def main() : int {
         return 1
     }
     let tool <- tool_r |> move_unwrap
+    if (tool.sweep) return jit_sweep_cli(".cache/daslang", g_env_jit.jit_manifest,
+        tool.sweep_dry_run)
     if (tool.help || empty(tool.inputs)) {
         print_usage()
         return tool.help ? 0 : 1

@@ -23,6 +23,7 @@ Loaded once at context init into `g_env_jit`. The force-features pair exists to 
 | `DAS_JIT_X64_FORCE_FEATURES` | text | unset | Comma-separated x64 CPU features to force on (e.g. avx2,f16c), bypassing detection; LLVM target-feature spellings. Also satisfies cpu_supports-based tune eligibility. Executing a forced instruction the host lacks is an illegal instruction, not a diagnostic. |
 | `DAS_JIT_ARM64_FORCE_FEATURES` | text | unset | The arm64 twin (e.g. dotprod,i8mm). |
 | `DAS_JIT_BASELINE` | text | unset (the build targets the running box) | Build for a CPU class (llvm_cpu_class) of the build's arch, not this box |
+| `DAS_JIT_MANIFEST` | path | unset (nothing is recorded) | Record every cached JIT DLL this process loads or writes, as an empty file <folder>.<key> in this directory. A cache sweep keeps what the directory names and deletes the rest. |
 
 ## Kernel tuning
 

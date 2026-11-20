@@ -358,6 +358,15 @@ add_custom_target(jit_cache_all_tests
     COMMENT "JIT-compiling tests/ into the .cache/daslang folder"
 )
 
+# Deletes every cached JIT artifact the DAS_JIT_MANIFEST directory does not name: run it after the
+# test runs that recorded there (modules/dasLLVM/ARCHITECTURE_CODEGEN_IDENTITY.md#jit-cache-sweep).
+add_custom_target(jit_cache_sweep
+    COMMAND ${CMAKE_COMMAND} -E env DAS_LOG_LEVEL=info ${UTIL_BIN_DIR}/jit.exe --sweep
+    DEPENDS jit_exe
+    WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+    COMMENT "Deleting the cached JIT artifacts DAS_JIT_MANIFEST does not name"
+)
+
 SET(DAS_UTILS_TO_TEST
     internal/arch-extract/tests
     dascov
