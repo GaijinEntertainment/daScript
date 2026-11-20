@@ -273,7 +273,7 @@ jobs:
       run: python3 ci/ninja_log_report.py build/.ninja_log
 
     - name: "Save sccache objects"
-      if: ${{ !cancelled() && matrix.role != 'modules' && github.ref == 'refs/heads/master' }}
+      if: ${{ !cancelled() && matrix.role != 'modules' && matrix.role != 'all_modules' && github.ref == 'refs/heads/master' }}
       uses: actions/cache/save@v4
       with:
         path: |
@@ -283,7 +283,7 @@ jobs:
         key: sccache-extended-${{ matrix.target }}-${{ matrix.architecture }}@${{ github.run_id }}
 
     - name: "Prune older sccache slots"
-      if: ${{ !cancelled() && matrix.role != 'modules' && github.ref == 'refs/heads/master' }}
+      if: ${{ !cancelled() && matrix.role != 'modules' && matrix.role != 'all_modules' && github.ref == 'refs/heads/master' }}
       env:
         GH_TOKEN: ${{ github.token }}
         SCKEY: sccache-extended-${{ matrix.target }}-${{ matrix.architecture }}@
