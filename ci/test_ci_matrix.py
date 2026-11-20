@@ -255,6 +255,23 @@ class WorkflowShapes(unittest.TestCase):
         named = set(re.findall(r"\b(?:check|run|dry)_[a-z_0-9]+", body))
         self.assertEqual(named, self.NIGHTLY_ONLY)
 
+    def test_the_windows_cell_leaves_out_only_checks_a_linux_cell_runs(self):
+        """A check a windows configure drops must stay in a list the linux cells build, or no cell runs it."""
+        text = self.cmake_lists()
+
+        def names(list_name):
+            body = text.split("set(" + list_name, 1)[1].split(")", 1)[0]
+            return set(re.findall(r"\b(?:check|run|dry)_[a-z_0-9]+", body))
+
+        dropped = names("DAS_EXTENDED_HOST_INDEPENDENT")
+        self.assertTrue(dropped)
+        self.assertEqual(dropped - names("DAS_EXTENDED_CORE") - names("DAS_EXTENDED_MODULES"), set())
+        removal = "list(REMOVE_ITEM _extended_all ${DAS_EXTENDED_HOST_INDEPENDENT})"
+        self.assertIn(removal, text)
+        # the nearest `if` or `endif` above the removal is the windows guard, so only windows drops them
+        guards = re.findall(r"^\s*(if|endif)\(([^)]*)\)", text[:text.index(removal)], flags=re.M)
+        self.assertEqual(guards[-1], ("if", "WIN32"))
+
     def cmake_lists(self):
         with open(os.path.join(HERE, "CMakeLists.txt"), encoding="utf-8") as f:
             return f.read()

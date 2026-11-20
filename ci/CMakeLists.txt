@@ -121,8 +121,19 @@ endif()
 
 das_lane_group(run_extended_core "Running the extended checks (core)" ${DAS_EXTENDED_CORE})
 das_lane_group(run_extended_modules "Running the extended checks (modules)" ${DAS_EXTENDED_MODULES})
-das_lane_group(run_extended_all "Running every extended check"
-    ${DAS_EXTENDED_CORE} ${DAS_EXTENDED_MODULES} ${DAS_EXTENDED_NIGHTLY})
+# Checks whose answer does not depend on the host. A linux cell runs each of them, so a windows
+# configure leaves them out of run_extended_all.
+set(DAS_EXTENDED_HOST_INDEPENDENT
+    check_workflow_matrix check_shipped_skills check_md_ascii check_wheel_repack check_manifest_render
+    check_ninja_log_report check_example_games check_dasllama_site check_dasgen
+    check_lint_tree check_lint_dasllama check_ast_verify_changed check_line_length check_review_gates
+    check_format run_tests_dasllama_facade_lint)
+set(_extended_all ${DAS_EXTENDED_CORE} ${DAS_EXTENDED_MODULES} ${DAS_EXTENDED_NIGHTLY})
+if(WIN32)
+    list(REMOVE_ITEM _extended_all ${DAS_EXTENDED_HOST_INDEPENDENT})
+    message(STATUS "run_extended_all: a windows configure leaves out ${DAS_EXTENDED_HOST_INDEPENDENT}")
+endif()
+das_lane_group(run_extended_all "Running every extended check" ${_extended_all})
 
 # The dasLLVM vector-math rail pins vecmath's answers on Apple silicon; the extended checks have
 # no macOS cell, so the darwin build cells run it.

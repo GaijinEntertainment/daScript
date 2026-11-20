@@ -65,7 +65,7 @@ working-tree copy.
 | `build_matrix.yml` | `workflow_call` from `build.yml` and `nightly.yml`, with the lane | the build matrix job - section below |
 | `nightly_imgui.yml` | `workflow_call` from `nightly.yml` + `workflow_dispatch` | dasImgui playwright suite on ubuntu + macos - section below |
 | `extended_checks.yml` (per-PR) | every PR | two linux x86_64 jobs, `core` and `modules` (`ci/ci_matrix.py extended`), ALL release modules ON, plus `commit_messages` (ubuntu, no build) - section below |
-| `extended_checks.yml` (nightly) | `workflow_call` from `nightly.yml` | one job each on linux and windows running every step (role `all`), including the ones too slow for a PR: tutorial dry-runs, the run form of examples, coverage, the nano cross-compile, the AST verify tree sweep, doc-verify |
+| `extended_checks.yml` (nightly) | `workflow_call` from `nightly.yml` | one job each on linux and windows (role `all`), the windows job leaving out the platform-independent checks; between them every step runs, including the ones too slow for a PR: tutorial dry-runs, the run form of examples, coverage, the nano cross-compile, the AST verify tree sweep, doc-verify |
 | `wasm_build.yml` | every PR | emscripten build of `web/` on 3 OSes, the vecmath backend battery and `tests/language` under node, + `wasm_cross` |
 | `build_eastl.yml` | every PR | EASTL shadow-config build + no-fileio build (linux clang) |
 | `doc.yml` | only if `doc/**`, `daslib/**`, `src/builtin/**`, `modules/dasImgui/**`, `modules/dasVulkan/**`, or `modules/dasLLAMA/dasllama/**` changed; `release: prereleased` of a daslang tag (a `dasllama-*` tag runs nothing) | the doc gates |
@@ -237,9 +237,12 @@ python gates, review-md discovery, dastest's own suite, the REVIEW.das gates, ci
 and `modules` the module and service suites - ser/deser, MCP tools, boulder-dash,
 dasllama-server, env-knob registries, facade lint,
 dasweb-playground, dasllama-ladder, dasweb-buildd, dasweb-verify, the sequence smoke, the
-dasGlfw touch layer, the daslang_static sweep. The role names a group target, so the nightly job
-(role `all`, one each on linux and windows) runs every check plus the
-nightly-only ones: tutorial dry-runs and the run form of examples (preflight's `compile-sweep`
+dasGlfw touch layer, the daslang_static sweep. The role names a group target, so on the nightly
+(role `all`) the linux job runs every check plus the nightly-only ones, and the windows job
+runs the ones the lists hold on Windows, less `DAS_EXTENDED_HOST_INDEPENDENT`
+(`ci/CMakeLists.txt`): the checks whose answer does not depend on the platform, which the
+linux job gives. The nightly-only ones are
+tutorial dry-runs and the run form of examples (preflight's `compile-sweep`
 is their per-PR mirror), the AST verify tree sweep and doc-verify (policy), coverage (a report,
 not a gate), and the nano cross-compile - its arm-none-eabi toolchain is an apt
 package no developer box carries, so it has no local mirror. The dasLLVM vector-math rail is
@@ -262,7 +265,10 @@ cmake -B build -DDAS_HV_DISABLED=OFF -DDAS_LLVM_DISABLED=OFF -DDAS_AUDIO_DISABLE
 `run_extended_core` and `run_extended_modules` per PR and `run_extended_all` on the nightly.
 `ci/CMakeLists.txt` holds the three membership lists and defines every check as its own target,
 so the local mirror is either the group or a single check by name. A platform that does not
-define a member drops it, and the configure prints which. A new check lands as a target there
+define a member drops it, and the configure prints which. A Windows configure also drops
+`DAS_EXTENDED_HOST_INDEPENDENT` from `run_extended_all` and prints that list: mirror those on
+Windows with `run_extended_core`, `run_extended_modules`, or one check by name. A new check
+lands as a target there
 and joins a list; `ci/test_ci_matrix.py` pins all three sets, so one that joins none is a red
 test rather than a check that silently stopped running.
 
