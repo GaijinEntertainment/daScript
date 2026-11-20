@@ -897,6 +897,13 @@ namespace das {
         return ((BuiltInFunction *)fn)->getBuiltinAddress();
     }
 
+    const char * das_get_builtin_function_link_name ( Function * fn, Context * context, LineInfoArg * at ) {
+        if ( !fn ) context->throw_error_at(at, "expecting function");
+        if ( !fn->builtIn ) context->throw_error_at(at, "expecting built-in interop function");
+        auto name = ((BuiltInFunction *)fn)->builtinLinkName;
+        return name && is_linkable_symbol(name) ? name : nullptr;
+    }
+
     TypeInfo * das_make_type_info_structure ( Context & ctx, TypeDeclPtr ptr, Context * context, LineInfoArg * at ) {
         if ( !ptr ) context->throw_error_at(at, "expecting type");
         if ( !ctx.thisHelper ) context->throw_error_at(at, "missing type-info helper. context allready fully compiled");
@@ -2018,6 +2025,9 @@ namespace das {
                 ->args({"type","context","line"})->setTempStringResult();
         addExtern<DAS_BIND_FUN(das_get_builtin_function_address)>(*this, lib,  "get_builtin_function_address",
             SideEffects::none, "das_get_builtin_function_address")
+                ->args({"fn","context","at"});
+        addExtern<DAS_BIND_FUN(das_get_builtin_function_link_name)>(*this, lib,  "get_builtin_function_link_name",
+            SideEffects::none, "das_get_builtin_function_link_name")
                 ->args({"fn","context","at"});
         addExtern<DAS_BIND_FUN(get_mangled_name_v)>(*this, lib,  "get_mangled_name",
             SideEffects::none, "get_mangled_name_v")

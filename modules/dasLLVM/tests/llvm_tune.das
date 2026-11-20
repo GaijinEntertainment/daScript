@@ -243,7 +243,7 @@ def private has(lines : array<string>; needle : string) : bool {
 
 // the `attributes #N = { ... }` line of the IR function whose `define` line carries `needle`, "" when absent
 def private attr_group_of(lines : array<string>; needle : string) : string {
-    for (ln in lines) {
+    for (i, ln in count(), lines) {
         continue if (!(ln |> starts_with("define")) || find(ln, needle) < 0)
         let hashAt = rfind(ln, " #")
         continue if (hashAt < 0)
@@ -251,9 +251,10 @@ def private attr_group_of(lines : array<string>; needle : string) : string {
         let sp = find(rest, " ")
         let group = sp < 0 ? rest : slice(rest, 0, sp)
         let key = "attributes {group} = "
-        for (al in lines) {
-            if (al |> starts_with(key)) {
-                return al
+        for (j in range(i + 1, length(lines))) {
+            break if (lines[j] |> starts_with("; ModuleID"))
+            if (lines[j] |> starts_with(key)) {
+                return lines[j]
             }
         }
     }

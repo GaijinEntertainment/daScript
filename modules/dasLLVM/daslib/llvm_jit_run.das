@@ -611,7 +611,8 @@ def private run_split_codegen(prog : Program?; ctx : Context?; funcs : array<Fun
         // the off-state changes what the run compiles (every partition re-emits) - announce it
         to_log(LOG_INFO, "LLVM JIT: obj cache off - all {length(order)} partitions re-emit\n")
     }
-    let lto_run = main_ok && (target.lto || (g_env_jit.jit_probe_lto && !target.gen_exe))   //! the probe is the DLL rail's: an exe's link takes its LTO flags from --jit-lto alone
+    //! the probe is the DLL rail's: an exe takes its LTO from the plan
+    let lto_run = main_ok && (target.lto || (g_env_jit.jit_probe_lto && !target.gen_exe))
     if (main_ok) {
         for (p in g_split_parts) {
             stamp_module_target(p.mod, p.tm)
@@ -678,16 +679,18 @@ def private run_split_codegen(prog : Program?; ctx : Context?; funcs : array<Fun
             dump_module_ir(dump_to, p.mod)
         }
     }
-    // --jit-lto (a split exe) and DAS_JIT_PROBE_LTO (the DLL dev probe; the env folds into the cache keys; ARCHITECTURE.md §3): bitcode partitions + an LTO link
+    // a split exe's LTO and DAS_JIT_PROBE_LTO: bitcode + an LTO link
     if (lto_run) {
         // enforce the documented precondition outright - probe behavior must not depend on prior cache state
         if (obj_cache || cached != 0) {
             reset_jit_globals_after_failure()
-            panic("LLVM JIT: {target.lto ? "--jit-lto" : "DAS_JIT_PROBE_LTO"} needs every partition live - rerun with --jit-obj-cache=0")
+            let what = target.lto ? "the LTO link" : "DAS_JIT_PROBE_LTO"
+            panic("LLVM JIT: {what} needs every partition live - rerun with --jit-obj-cache=0")
         }
         assert(length(g_split_parts) == length(objs))   // objs[i] <-> g_split_parts[i] holds only with nothing cached
         if (target.lto) {
-            to_log(LOG_INFO, "LLVM JIT: --jit-lto - {length(g_split_parts)} bitcode partitions, the link runs LTO\n")
+            let parts = length(g_split_parts)
+            to_log(LOG_INFO, "LLVM JIT: LTO - {parts} bitcode partitions, the link runs LTO\n")
         } else {
             to_log(LOG_WARNING, "LLVM JIT: DAS_JIT_PROBE_LTO - linking {length(g_split_parts)} bitcode partitions (LTO probe artifact)\n")
         }
@@ -857,6 +860,7 @@ def public run_jit(prog : Program?; var ctx : Context?; cli_opts : JitCliOptions
         jit_flags.emit_prologue = emit_prologue
         jit_flags.need_di = debug_info
         jit_flags.dll_cache = use_dll && !(gen_lib || gen_wasm)
+        jit_flags.direct_builtins = lib_static && !gen_lib
         let jit_mode = emit_aot_object ? LlvmJitMode.LLVM_AOT : (gen_exe ? LlvmJitMode.EXE : LlvmJitMode.JIT)
 
         let attrs = new Attributes(g_ctx)

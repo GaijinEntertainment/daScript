@@ -123,7 +123,9 @@ def bundled_llvm_major() : int {
 //! why the POSIX LTO link cannot run on this box, or "" when it can: the driver is the clang++ on PATH, and it reads
 //! the bundled LLVM's bitcode only when its own LLVM is not older (Apple's clang numbers its LLVM its own way and never qualifies)
 def lto_driver_missing() : string {
-    if (get_platform_name() == "windows") return ""   // the windows host links LTO through the bundled lld-link and needs no driver on PATH
+    // windows links LTO through the bundled lld-link
+    let versioned = "clang++-{bundled_llvm_major()}"
+    if (get_platform_name() == "windows" || executable_on_path(versioned)) return ""
     if (!executable_on_path("clang++")) return "no clang++ on PATH: the POSIX LTO link needs a clang driver"
     var version_text = ""
     run_capture("clang++ --version 2>&1", version_text)

@@ -1,0 +1,1 @@
+Takes as argument a BuiltInFunction, and returns the symbol name the linker sees for its C++ function, or null when it is not known.

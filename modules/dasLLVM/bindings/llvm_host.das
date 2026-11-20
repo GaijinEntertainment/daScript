@@ -18,3 +18,5 @@ def LLVMGetHostCPUFeatures() : string {}
 def LLVMLoadLibraryPermanently(Filename : string implicit) : int {}
 [extern(cdecl, name="LLVMSearchForAddressOfSymbol", lib=llvm)]
 def LLVMSearchForAddressOfSymbol(symbolName : string implicit) : void? {}
+[extern(cdecl, name="LLVMGetVersion", lib=llvm)]
+def LLVMGetVersion(Major : uint? implicit; Minor : uint? implicit; Patch : uint? implicit) : void {}
