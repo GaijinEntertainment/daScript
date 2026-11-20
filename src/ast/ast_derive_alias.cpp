@@ -313,6 +313,27 @@ namespace das {
         }
     }
 
+    static bool readsNoMemory ( Expression * expr ) {
+        if ( expr->rtti_isConstant() ) return true;
+        if ( expr->rtti_isMakeStruct() ) {
+            auto mks = static_cast<ExprMakeStruct *>(expr);
+            if ( mks->block || mks->constructor || mks->useInitializer || mks->isNewHandle ) return false;
+            for ( auto & st : mks->structs ) {
+                for ( auto & fld : *st ) {
+                    if ( !readsNoMemory(fld->value) ) return false;
+                }
+            }
+            return true;
+        }
+        if ( expr->rtti_isMakeArray() ) {
+            for ( auto & val : static_cast<ExprMakeArray *>(expr)->values ) {
+                if ( !readsNoMemory(val) ) return false;
+            }
+            return true;
+        }
+        return false;
+    }
+
     // src/ast/ARCHITECTURE_ALIASING.md#in-place-build-aliases
     class AliasMarker : public Visitor {
     public:
@@ -376,7 +397,7 @@ namespace das {
         template <typename TT>
         void preVisitMakeLocal ( ExprMakeLocal * expr, TT && collectAliasSources ) {
             auto it = cmresDest.find(expr);
-            if ( it!=cmresDest.end() ) {
+            if ( it!=cmresDest.end() && !readsNoMemory(expr) ) {
                 // left
                 auto resOut = it->second;
                 ExpressionSources resSrc;
