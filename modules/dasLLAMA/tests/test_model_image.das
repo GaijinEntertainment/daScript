@@ -1190,6 +1190,30 @@ def private forced_logits_maxd(tc, tg : Model; prompt, teach : array<int64>; tag
 
 [test(description = "SmolLM2 and the untied TinyLlama mint a blob-form Metal image whose GPU teacher-forced logits sit within 4.0 of a planar CPU control, mint and warm-mapped greedy ids match exactly, and CPU inference on a blob model panics")]
 def test_metal_flavor_image(tst : T?) {
+    tst |> run("Llama-3.2-1B Q4_K_M: a K-quant file's cold metal mint saves its image and a warm load maps it") @(t : T?) {
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            return if (!family_on(t, "llama") || !arm_on(t, "metal") || !jit_only(t))
+            let path = path_join(models_dir(), "Llama-3.2-1B-Instruct-Q4_K_M.gguf")
+            if (!model_available(t, path)) {
+                return
+            }
+            let prior_backend = active_kernel_backend()
+            pin_kernel_backend("portable")
+            // the k4 and k6 scale planes take their device forms on the way into the image, after the sizing pass read them
+            let img_m = image_path_for(path, METAL_IMAGE_TAG)
+            remove(img_m)
+            set_metal_mode(MetalMode.when_available)
+            var cold <- load_model(path, QuantMode.q8)
+            t |> success(cold.metal_blob && cold.image_map != null, "the cold load serves the blob image it built")
+            t |> success(stat(img_m).is_valid, "... and saved it")
+            delete cold
+            var warm <- load_model(path, QuantMode.q8)
+            t |> success(warm.metal_blob && warm.image_map != null, "a warm load maps the saved image")
+            delete warm
+            set_metal_mode(MetalMode.off)
+            pin_kernel_backend(prior_backend)
+        }
+    }
     tst |> run("SmolLM2 q8: metal flavor - blob mint + map + GPU serve + CPU tripwire") @(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
             return if (!family_on(t, "llama") || !arm_on(t, "metal") || !jit_only(t))
@@ -2078,7 +2102,7 @@ def test_gemma4_image_roundtrip(t : T?) {
         // gemma4's configure sets gguf-overridable fallbacks (sliding_window, swa_pattern);
         // re-running it on an image load stomped the serialized overrides (caught 2026-07-16:
         // token drift on the mapped E2B while every llama-arch carrier round-tripped clean)
-        if (!family_on(t, "gemma") || !arm_on(t, "gemma")) return
+        if (!family_on(t, "gemma4e") || !arm_on(t, "gemma")) return
         let path = path_join(models_dir(), "gemma-4-E2B-it-Q8_0.gguf")
         return if (!jit_model_available(t, path))
         text_image_roundtrip(t, path, 16)
@@ -3250,7 +3274,7 @@ def private qwen3a_cpu_roundtrip(t : T?; path : string) {
 [test(description = "The gemma-4 mixed BF16 mmproj's embedder image keeps the F32 patch embedder on the fp32 plane and exactly the projection on the bf16 plane, element-exact against the staged read, while an all-F32 mmproj mints no bf16 plane")]
 def test_gemma4uv_embedder_image_roundtrip(t : T?) {
     t |> run("gemma4uv embedder: mapped image planes are element-exact vs mmproj, bf16 lane") @(t : T?) {
-        if (!family_on(t, "gemma") || !arm_on(t, "gemma4uv")) return
+        if (!family_on(t, "gemma4v") || !arm_on(t, "gemma4uv")) return
         let path = path_join(models_dir(), "mmproj-gemma-4-12B-it-BF16.gguf")
         return if (!jit_model_available(t, path))
         let img = image_path_for(path, "gemma4uv")
@@ -3302,7 +3326,7 @@ def test_gemma4uv_embedder_image_roundtrip(t : T?) {
 [test(description = "The gemma4v tower's exact and q8 images serve every plane element-exact against the staged read, a named .dlim serves its baked lane whatever the pin, and the q8 GPU flavor's image carries the mint's device block")]
 def test_gemma4v_tower_image_roundtrip(t : T?) {
     t |> run("gemma4v tower: mapped image planes are element-exact vs mmproj, bf16 lane") @(t : T?) {
-        if (!family_on(t, "gemma") || !arm_on(t, "gemma4v")) return
+        if (!family_on(t, "gemma4v") || !arm_on(t, "gemma4v")) return
         let path = path_join(models_dir(), "mmproj-gemma-4-E2B-it-bf16.gguf")
         return if (!jit_model_available(t, path))
         gemma4v_cpu_roundtrip(t, path)
@@ -3387,7 +3411,7 @@ def private gemma4v_cpu_roundtrip(t : T?; path : string) {
 [test(description = "The gemma3v tower's exact and q8 images serve every plane element-exact against the staged read and route by baked lane, the q8 GPU flavor carries the mint's device block, and with the tower off that image's first encode refuses by name")]
 def test_gemma3v_tower_image_roundtrip(t : T?) {
     t |> run("gemma3v tower: mapped image planes are element-exact vs mmproj, both lanes") @(t : T?) {
-        if (!family_on(t, "gemma") || !arm_on(t, "gemma3v")) {
+        if (!family_on(t, "gemma3v") || !arm_on(t, "gemma3v")) {
             return
         }
         let path = path_join(models_dir(), "mmproj-gemma-3-4b-it-F16.gguf")
@@ -3485,7 +3509,7 @@ def private gemma3v_cpu_roundtrip(t : T?; path : string) {
 def test_gemma4uv_metal_tower(tst : T?) {
     tst |> run("gemma4uv: the Metal tower serves the embedder - parity + counters + knob") @(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
-            if (!family_on(t, "gemma") || !arm_on(t, "gemma4uv-metal")) return
+            if (!family_on(t, "gemma4v") || !arm_on(t, "gemma4uv-metal")) return
             let path = path_join(models_dir(), "mmproj-gemma-4-12B-it-BF16.gguf")
             return if (!jit_model_available(t, path))
             var inscope emb <- load_gemma4uv_embedder(path)
@@ -4456,7 +4480,10 @@ def test_blob_stream_scale_plane_once(t : T?) {
         var m = Model()
         let k6 = int(KqFmt.k6)
         m.kq[k6].s <- split_scale_src(K6_SSB, nsb)
+        tt |> success(blob_scale_plane_pending(m, "k6s"), "the plane is owed its device form before the walk")
+        tt |> success(!blob_scale_plane_pending(m, "q8s"), "a plane off the blob set is owed none")
         tt |> success(blob_stream_scale_plane(m, "k6s"), "the first walk converts the plane")
+        tt |> success(!blob_scale_plane_pending(m, "k6s"), "and the plane is owed nothing after it")
         tt |> success(blob_stream_scale_plane(m, "k6s"), "the second walk answers for a plane already converted")
         tt |> equal(long_length(m.kq[k6].s), long_length(once), "the plane keeps its device-form size")
         var moved = 0l

@@ -595,21 +595,37 @@ def dlim_image_verdict(p : DlimPeek; current : table<string>) : string {
     return dlim_lane_foreign(dlim_identity_lane(p.identity)) ? "FOREIGN" : "OTHER"
 }
 
+//! The folder the images of `gguf_path` sit in: the directory itself, or the one a model file is in.
+def private dlim_folder(gguf_path : string) : string {
+    var st : FStat
+    return stat(gguf_path, st) && st.is_dir ? gguf_path : dir_name(gguf_path)
+}
+
+//! The name of every .dlim beside `gguf_path`: one model file's - to the dot, so "foo.gguf" never takes "foo.gguf2"'s -
+//! or, for a directory, every image in it. Empty where the path is not there.
+def dlim_names_beside(gguf_path : string) : array<string> {
+    var names : array<string>
+    var st : FStat
+    if (!stat(gguf_path, st)) {
+        return <- names
+    }
+    let base = st.is_dir ? "" : "{base_name(gguf_path)}."
+    dir(dlim_folder(gguf_path)) $(name : string) {
+        if (name |> ends_with(".dlim") && (base == "" || name |> starts_with(base))) {
+            names |> push(clone_string(name))
+        }
+    }
+    return <- names
+}
+
 //! Every .dlim beside `gguf_path` (or in a directory), with sizes and verdicts.
 def dlim_inventory_(gguf_path : string) : array<DlimImageInfo> {
     var out : array<DlimImageInfo>
-    var st : FStat
-    if (!stat(gguf_path, st)) {
-        return <- out
-    }
-    let dirp = st.is_dir ? gguf_path : dir_name(gguf_path)
-    let base = st.is_dir ? "" : base_name(gguf_path)
+    var inscope names <- dlim_names_beside(gguf_path)
     var current <- dlim_current_identities()
-    dir(dirp) $(name : string) {
-        if (!(name |> ends_with(".dlim")) || (base != "" && !(name |> starts_with(base)))) {
-            return
-        }
-        let full = path_join(dirp, name)
+    out |> reserve(length(names))
+    for (name in names) {
+        let full = path_join(dlim_folder(gguf_path), name)
         let p = image_peek(full)
         out |> push(DlimImageInfo(file = name, path = full, lane = dlim_file_lane(name), bytes = p.bytes, version = p.version,
                                   verdict = dlim_image_verdict(p, current), identity = p.identity))
@@ -706,19 +722,12 @@ def dlim_clean_(gguf_path : string; apply : bool; keep_other : bool = false) : t
 
 //! The batch-lifecycle sink: delete EVERY image beside `gguf_path` (one model file, or a whole
 //! directory), regardless of verdict or lane — for rigs that own the model dirs for a whole
-//! batch. A direct dir scan on purpose: the wipe ignores identities, peeking would be waste.
+//! batch. The names alone on purpose: the wipe ignores identities, peeking would be waste.
 def dlim_wipe(gguf_path : string) : tuple<removed : int; freed : int64> {
     var r = (removed = 0, freed = 0l)
-    var st : FStat
-    if (!stat(gguf_path, st)) {
-        return r
-    }
-    let dirp = st.is_dir ? gguf_path : dir_name(gguf_path)
-    // the trailing dot keeps the reach exact: wiping "foo.gguf" must not take "foo.gguf2"'s images
-    let base = st.is_dir ? "" : "{base_name(gguf_path)}."
-    dir(dirp) $(name : string) {
-        return if (!(name |> ends_with(".dlim")) || (base != "" && !(name |> starts_with(base))))
-        let full = path_join(dirp, name)
+    var inscope names <- dlim_names_beside(gguf_path)
+    for (name in names) {
+        let full = path_join(dlim_folder(gguf_path), name)
         let sz = int64(stat(full).size)
         if (remove(full)) {
             r.removed++
@@ -1792,7 +1801,7 @@ def private stream_save_prologue(var t : Model; jobs : array<FillJob>; tag : str
     let trimmed = vk_mint && t.planes_trimmed
     let ngram = ngram_stream_source().bytes   //! the n-gram table left on the mapping is sized here, the field being empty
     let added = planar_extra + section_bytes(devw_bytes) + vk_extra + section_bytes(ngram)
-    let skipped = stream_skipped_bytes(t, trimmed, !trimmed && scales_convert_at_save(t, jobs))
+    let skipped = stream_skipped_bytes(t, trimmed, !trimmed && scales_convert_at_save(t, jobs)) + blob_scale_shed_bytes(t)
     assert(added >= skipped, "dasLLAMA image: the sections a save skips outweigh the ones it adds")
     return StreamSave(devw_bytes = devw_bytes, vk_mint = vk_mint, extra = added - skipped)
 }
@@ -1833,6 +1842,20 @@ def private stream_skipped_bytes(var t : Model; trimmed, scales_convert : bool) 
         }
     }
     return skipped
+}
+
+//! the bytes a blob build's kq scale planes shed between the sizing pass and the walk: each takes its device form as its
+//! turn comes (`stream_plane_turn`), after the sizing pass read it at the engine's stride
+[arch(at = "../ARCHITECTURE_IMAGE.md#image-sizing-exactness")]
+def private blob_scale_shed_bytes(t : Model) : uint64 {
+    var shed = 0ul
+    return shed if (!t.metal_blob)
+    for (f in type<KqFmt>) {
+        continue if (!kq_sb(f) || !blob_scale_plane_pending(t, kq_plane_name(f, "s")))
+        let n = long_length(t.kq[int(f)].s)
+        shed += section_bytes(n) - section_bytes(metal_kq_scale_form_bytes(f, n))
+    }
+    return shed
 }
 
 //! One plane's turn in either streaming sink: the GPU lane's planes, the dev-W panel plane and a streamed
