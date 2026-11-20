@@ -83,8 +83,8 @@ working-tree copy.
 
 ## build_matrix.yml - the build matrix
 
-Per-lane steps: build -> JIT sweep (mints its own dll cache) -> interpreter sweep
--> `ctest -L small`. Per-PR lanes also build `test_aot_subset` (tests/language,
+Per-lane steps: build -> JIT sweep (loads the DLLs the restored slot carries and compiles the
+rest) -> interpreter sweep -> `ctest -L small` -> JIT cache sweep. Per-PR lanes also build `test_aot_subset` (tests/language,
 part of ALL) as a compile+link gate, and run no AOT tests.
 
 **The build matrix runs `run_build` (`run_tests_sweeps`, `test-small`), retried as
@@ -102,6 +102,18 @@ a day. Which sweeps
 sweep targets live under `if(NOT DAS_LLVM_DISABLED)`) or on Debug; no interpreter sweep under a
 sanitizer.
 
+**A cell that runs the `Test` step deletes the JIT artifacts it did not use, after a green run.**
+The job sets `DAS_JIT_MANIFEST`, every JIT run of the job records the cached DLLs it loads or
+writes there, and the `Sweep the JIT cache` step runs `jit_cache_sweep` (`jit.exe --sweep`),
+which deletes every file under `.cache/daslang/_anon_*` that no recorded DLL needs
+(`modules/dasLLVM/ARCHITECTURE_CODEGEN_IDENTITY.md#jit-cache-sweep`). The step needs the manifest
+directory to exist: a cell whose tests ran no JIT - dasLLVM off, Debug, or a sanitizer cell -
+recorded nothing and skips it. On `master` the slot is saved after the step; a red run skips the step and saves
+its slot as it is. A nightly Release cell the per-PR lane also runs skips `Test`, so it never runs
+the step, and it saves into the slot of the per-PR cell with the same key: it runs no
+`run_tests_jit`, so its manifest would name few of the DLLs that cell's next run loads, and the
+step would delete the rest.
+
 **The configure is one command for every cell.** The flags a cell varies by value -
 `CMAKE_BUILD_TYPE`, `DAS_LLVM_DISABLED`, `DAS_USE_SANITIZER`, `DAS_FAST_MATH` - are on that
 line; the rest is `matrix.cmake_extra`, one string per cell in `ci/ci_matrix.py`: the compiler
@@ -113,6 +125,7 @@ configure.
 |---|---|---|
 | Interpreter sweep | `cmake --build build --config Release --target run_tests_sweeps` - the whole per-PR sweep, JIT then interpreter, each retried isolated; alone: `cmake --build build --config Release --target run_tests_interpreter` | fails if a completed test file exceeded 30 s |
 | JIT sweep | `cmake --build build --config Release --target run_tests_jit` (`run_tests_sweeps` runs it first, then the interpreter sweep) | Windows-local `clang-cl` link failures are env noise; the catchable class is LLVM verifier errors, end-to-end JIT needs WSL/mac. 2-test smoke: `skills/internal/make_pr.md` sec.2.5 |
+| Sweep the JIT cache | with `DAS_JIT_MANIFEST` set to an empty directory for the `run_tests_jit` (or `run_tests_sweeps`) run and for this command: `cmake --build build --config Release --target jit_cache_sweep`; to count without deleting, `DAS_LOG_LEVEL=info bin/Release/jit.exe --sweep --sweep-dry-run` from the repo root (`bin/jit.exe` on a single-config generator) | deletes what the recorded run did not use, so on a dev box it removes every other program's cached DLLs too - run the dry form first. With the variable unset, or a manifest that names no DLL, it deletes nothing and fails |
 | Small C++ tests | `cmake --build build --config Release --target test-small` | drop `--build-config` on single-config generators. **Run after touching `tests-cpp/`** - MSVC tolerates C++ clang/gcc reject; `skills/internal/writing_cpp_tests.md` |
 | Compile (windows 64 Debug, nightly) | `cmake --build build --config Debug` | the default build as MSVC Debug; no test runs in this cell |
 | AOT sweep (full) | `cmake --build build --config Release --target run_tests_slow` - the full `test_aot` build, the AOT sweep over tests/, then the big C++ tests | nightly + manual dispatch only, so this is the **only** pre-push gate for AOT regressions outside tests/language - don't skip it; the sweep closes with its 30 slowest files (`--timing-outliers 30`). Under a sanitizer it leaves out `tests/lsp`, `tests/lint`, `tests/module_cache`, `tests/dastest` and `tests/mcp` - compiler and tool tests the cell's interpreter sweep already runs |
