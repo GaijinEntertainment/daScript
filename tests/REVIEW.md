@@ -16,9 +16,10 @@ under this folder the diff puts it, answers to `msl/REVIEW.md`.**
 returns its emitted words), wherever under this folder the diff puts it, answers to
 `spirv/REVIEW.md`.**
 
-**A test that runs a class carrying a `[cuda_kernel]` method or calls `with_cuda_context`, or a
-CUDA C emitter fixture (a test that compiles a kernel and checks the emitted CUDA C), wherever
-under this folder the diff puts it, answers to `cuda/REVIEW.md`.**
+**A test that requires a `modules/dasCUDA` module (`require cuda/...`), runs a class carrying a
+`[cuda_kernel]` method or calls `with_cuda_context`, or a CUDA C emitter fixture (a test that
+compiles a kernel and checks the emitted CUDA C), wherever under this folder the diff puts it,
+answers to `cuda/REVIEW.md`.**
 
 **A test that calls `tick_debug_agent`, wherever under this folder the diff puts it, answers to
 `debug_agent/REVIEW.md`.**
@@ -52,7 +53,8 @@ would hide what this test checks, or a test or tool that consumes the file itsel
 it differs from its neighbours only by its `options` - to the `uncategorized_<signature>.das` of
 its fence signature.
 
-**A diff that adds or changes a `[test]` that builds, spawns a child or waits on a peer gives it
+**A diff that adds or changes a `[test]` that builds (compiles a daslang program), spawns a
+child (starts a process) or waits on a peer (blocks on another process or a socket) gives it
 `timeout = 1200`, the suite default, never a number measured on the author's box
 (`ARCHITECTURE.md#test-timeout`).** CI runs several times slower than a workstation, so an
 estimate is a flake.
@@ -98,11 +100,11 @@ passed (`ARCHITECTURE.md#test-aot`).** Per-PR CI builds only the AOT subset bina
 test_aot_subset target), which compiles `tests/language` alone against a smaller set of `daslib`
 modules, so the PR's own checks do not prove `test_aot`.
 
-**A diff that adds or changes a `.das` file under `tests/` (repo root) whose name starts with
-none of `_`, `failed_`, `cant_`, `invalid_`, that `test_aot` does not compile, or compiles and
-does not run, states what stops `test_aot` compiling or running the file and why an AOT build of
-it tests nothing: in the file for `options no_aot`; beside the `DAS_AOT_SUITES` list for a file
-whose folder that list leaves out or that sits in a subfolder; beside the `AOT_*_FILES` filter in
-`aot/CMakeLists.txt` or the `--use-aot` skip in `.das_test` otherwise
-(`ARCHITECTURE.md#test-aot`).** Without a stated reason no later diff can tell whether the
-opt-out is still needed.
+**A diff that adds or changes a `.das` file under `tests/` (repo root) whose name starts with none
+of `_`, `failed_`, `cant_`, `invalid_`, that `test_aot` does not compile, or compiles and does not
+run, states what would stop an AOT build compiling or running the file, or, when nothing would, why
+an AOT build of it tests nothing: in the file for `options no_aot`; beside the `DAS_AOT_SUITES` list
+for a file whose folder that list leaves out or that sits in a subfolder; beside the `AOT_*_FILES`
+filter in `aot/CMakeLists.txt` or the `--use-aot` skip in `.das_test` otherwise
+(`ARCHITECTURE.md#test-aot`).** Without a stated reason no later diff can tell whether the opt-out
+is still needed.

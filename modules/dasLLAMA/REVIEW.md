@@ -24,10 +24,10 @@ changes which candidates a race times, or picks a numeric threshold by a race ap
 `REVIEW_RACE_PICKS.md` (beside this file) too.**
 
 **Wherever it lives, each of these answers to this folder's `benchmarks/REVIEW.md` beside its own
-folder's checklist: code that times a run on its own clock (not a spawned child's) and hands the
-wall or rate back as its result (a file printing it, or a function returning it to its caller); a
-kernel race - a run timing two kernel variants (arms) against each other in one process; a file
-`benchmarks/lcpp_bench.das` requires directly.**
+folder's checklist: code whose result - a file printing it, or a function returning it to its caller -
+is a wall or rate it timed on its own clock (not a spawned child's), not a time it reports beside the
+work it does; a kernel race - a run timing two kernel variants (arms) against each other in one
+process; a file `benchmarks/lcpp_bench.das` requires directly.**
 
 **A diff that writes a measured number down - into `PERF_LEDGER.md`, a checked-in doc outside
 `site*/` (repo root), a code comment, checked-in data a run produced, a commit message, or a PR
@@ -216,11 +216,11 @@ once and pass it; a guard that a `[cold_path]` callee repeats from every one of 
 in the callers and leaves the callee.** An edit to one copy leaves the other answering by the rule
 the edit replaced.
 
-**Logic or a named constant that two files in one folder both use, and that neither the language nor
-the test contract forces them to restate (a test's CPU reference copy of the arithmetic it checks is
-forced; one predicate written over an enum and again over its int value is not), lands once - in a
-file both already require, or in a new file both require when they share none - never as a second
-copy.** Two spellings drift apart on the first edit to one.
+**Logic or a named constant that two definitions in one folder, in one file or two, both use and that
+neither the language nor the test contract forces them to restate (a test's CPU reference copy of the
+arithmetic it checks is forced; one predicate written over an enum and again over its int value is not),
+lands once - in the file they share, a file both already require, or a new file both require when they
+require no common file - never as a second copy.** Two spellings drift apart on the first edit to one.
 
 **A piece that two folders both need, neither containing the other, lands in the folder that owns
 the concern, and the other folder requires it - never a copy in each.**
@@ -229,11 +229,11 @@ the concern, and the other folder requires it - never a copy in each.**
 without first proving both stdin and stdout are terminals is a defect - emit the question as
 a `@sidecar` event instead.** A supervised or piped boot must never block on input.
 
-**A print or log of an elapsed interval in an engine file (`dasllama/`) outside the profiling
-rails (`profile_tag` / `profile_marker`, `prof_add`, `asr_prof_add`, or a log `DASLLAMA_GPU_PROF`
-gates; `ARCHITECTURE_MEASUREMENT.md#sanctioned-instrumentation-rails`) that can fire more than
-once per model load, or more than once per process where it runs outside any load, is a defect -
-route it through a rail.**
+**A print or log of an elapsed interval in an engine file (`dasllama/`) outside the profiling rails
+(`profile_tag` / `profile_marker`, `prof_add`, `asr_prof_add`, or a log `DASLLAMA_GPU_PROF` gates;
+`ARCHITECTURE_MEASUREMENT.md#sanctioned-instrumentation-rails`) that can fire more than once per
+model load, or more than once per daslang `Context` (one script execution context) where it runs
+outside any load, is a defect - route it through a rail.**
 
 **In an engine file (`dasllama/`), a clock value that changes what the program DOES - control
 flow, eviction, a generated name; not a reported wall-clock time or a best-of reduction over

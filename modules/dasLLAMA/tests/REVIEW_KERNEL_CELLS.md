@@ -40,9 +40,9 @@ docs: `../ARCHITECTURE_GPU.md`, `../ARCHITECTURE_CPU_KERNELS.md`. Planned work:
   reach it on some shape that call does not decline, whether or not any model file the box holds
   has that shape.
 - A bound assert is a compare of two computed sides, or a measured quality figure against a
-  tolerance - never a floor on a capacity, a configuration or a roster size, an index guard, a
-  route counter, or the one-index assert against the input that a cell whose output buffer is its
-  input buffer makes; that assert is not a control either.
+  tolerance - never a floor on a capacity or a configuration, a compare of entry counts or roster
+  sizes, an index guard, a route counter, or the one-index assert against the input that a cell
+  whose output buffer is its input buffer makes; that assert is not a control either.
 - A sibling stamp is another stamp derived from the same class; it stands in for a stamp only where
   the code a rule asks about is the class's own, neither stamp overrides it - overriding a template
   constant that code reads overrides it - the sibling's cell compiles once the diff is applied, and

@@ -34,18 +34,22 @@ read.
 last `with_cuda_context` call.** Driver objects and device memory are invisible to every das leak
 detector; the live-object counter in `das_cuda_boost` is the only witness.
 
-**A `[test]` that calls `with_cuda_context` calls `feint` (the dastest skip) when `cuda_available()`
-is false or the context handed to its block is null, and one that compiles a kernel text also when
-`cuda_nvrtc_available()` is false.** Every CI lane runs the file, and a lane without a CUDA driver,
-device or NVRTC must not fail.
+**A `[test]` that calls `with_cuda_context` calls `t |> skip(msg)` and returns when
+`cuda_available()` is false or the context handed to its block is null - never `feint`, which counts
+as a pass.** Every CI lane runs the file, and a lane without a CUDA driver or device must not fail.
+
+**A `[test]` that compiles a kernel text through NVRTC, in its own code or through a function it
+calls, calls `t |> skip(msg)` and returns when `cuda_nvrtc_available()` is false - never `feint`.**
+A lane without NVRTC must not fail.
 
 **A diff that adds an entry to `all_cuda_texts` sets its `min_cc` - the lowest compute capability
 whose NVRTC target compiles that text - in the same change.** A test reads the floor from the
 entry; a text whose `min_cc` is too low fails, instead of skipping, on an older GPU.
 
 **A `[test]` that compiles an `all_cuda_texts` text skips it when `cuda_device_compute_capability`
-is below that entry's `min_cc` - by `feint` when it is the test's only text, by leaving it out of
-its loop otherwise.** A lane whose GPU lacks an instruction the text uses must skip it, not fail.
+is below that entry's `min_cc` - by `t |> skip(msg)` and returning when it is the test's only text,
+by leaving it out of its loop otherwise.** A lane whose GPU lacks an instruction the text uses must
+skip it, not fail.
 
 **A diff that removes or weakens `test_cuda_no_include` (`test_cuda_emit.das`), the check that no
 emitted CUDA text carries an `#include`, is a defect.**

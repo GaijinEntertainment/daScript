@@ -21,13 +21,16 @@ with no GPU driver.
 An override is an environment knob, a non-private setter in a `dasllama/` file whose value no
 `dasllama/` code chooses and that a file outside `tests/` calls (a harness, tool, example or host -
 a program embedding the engine), or an on-disk state file - one a run writes or a user places, never
-data a build ships - that moves a gate, policy, or threshold off its default and so changes what the
-run executes, writes, reads, mints (writes as a prepared image), or computes.
+data a build ships.
 
-Submitting the same GPU work another way is such a change. A measured time, the run's own
-duration, or the same work run at a different moment and submitted the same way is not. A CLI flag
-is never an override, nor is an environment knob naming a program the run spawns whose path the
-run's record carries in its `cmd`.
+An override moves a gate, policy, threshold, or a folder or file the run reads or writes as data off
+its default and so changes what the run executes, writes, reads, mints (writes as a prepared image),
+or computes.
+
+Submitting the same GPU work another way is such a change. A measured time, the run's own duration,
+or the same work run at a different moment and submitted the same way is not. A CLI flag is never an
+override, nor is an environment knob naming a program the run spawns whose path the run's record
+carries in its `cmd`.
 
 **A diff that adds an override without the announce is a defect.** An announce is the line the run
 prints where the override changes the outcome.

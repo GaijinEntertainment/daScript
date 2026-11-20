@@ -3,12 +3,14 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
 docs: `ARCHITECTURE.md`, `ARCHITECTURE_EMIT.md`, `ARCHITECTURE_EMIT_TILES.md`. Planned work: `LEDGER.md`.
 
-**Every change under this folder applies `modules/REVIEW_SHADER_EMITTERS.md` too** - the rules
-binding a kernel body, a launch of an emitted kernel and an emitter's lowering live there.
+**A diff that changes a `[cuda_kernel]` body, a function a `[cuda_kernel]` body calls, what
+`cuda/cuda_emit.das` writes, a launch of an emitted kernel or the size of a buffer it reads, or adds
+a comment, document line or assert claiming what emitted CUDA C holds, applies
+`modules/REVIEW_SHADER_EMITTERS.md` too.**
 
-**A new or changed extern in `cuda/cuda_driver.das`, or a new or changed public function in
-`cuda/das_cuda_boost.das`, ships a host-side test under `tests/cuda/` (repo root) in the same
-change.**
+**A new or changed extern in `cuda/cuda_driver.das`, or a new public symbol, or a public function
+whose behaviour changes, in `cuda/das_cuda_boost.das`, ships a host-side test under `tests/cuda/`
+(repo root) in the same change.**
 
 **A diff that adds an extern to `cuda/cuda_driver.das` sets its `name=` to the `_v2` export where
 the driver API header's `#define` maps the API to one; the das name stays unsuffixed.** The
@@ -30,8 +32,10 @@ of the struct passed as `params` - its fields in the kernel's parameter order at
 alignment - as the kernel's whole parameter space.** The emitter writes the kernel signature to
 that layout.
 
-**A diff that adds, drops or changes an input of `cubin_cache_key` names in the PR body that
-input and why a cubin compiled before the change cannot be served after it.**
+**A diff that changes what a `cubin_cache_key` overload hashes - the `|`-separated string it passes
+to `sha256_hex` (a field added, dropped, reordered or re-spelled) or a value it supplies to the
+overload that builds it - names in the PR body that change and why a cubin compiled before the
+change cannot be served after it.**
 
 **A diff that makes `cuda/cuda_emit.das` write a new text form - a construct, an operand type, or
 a new spelling of an existing construct - records that form through `census_kind` under a kind no

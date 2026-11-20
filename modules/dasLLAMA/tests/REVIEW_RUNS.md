@@ -5,11 +5,12 @@
 
 A PR's kind is the line its body's Validation section opens with: `Kind: final PR of the <arc> arc.`
 makes it a final PR; a PR opening `Kind: intermediate PR of the <arc> arc.`, or carrying neither
-line, is an intermediate PR. A final PR's change is the union of the diffs of its arc's PRs, its own
-included; its body names those PRs and the commit the arc's first PR branched from. Its `--changed`
-run takes `--base` at that commit, and the run plans a superset of the change. A scope report is the
-RUN and NOT RUN lists the `scope-auditor` agent returns for an intermediate PR's diff. A change
-reaches a test file or a cell as `REVIEW.md` (beside this file) defines it.
+line, as a PR outside any arc does, is an intermediate PR. A final PR's change is the union of the
+diffs of its arc's PRs, its own included; its body names those PRs and the commit the arc's first PR
+branched from. Its `--changed` run takes `--base` at that commit, and the run plans a superset of
+the change. A scope report is the RUN and NOT RUN lists the `scope-auditor` agent returns for an
+intermediate PR's diff. A change reaches a test file or a cell as `REVIEW.md` (beside this file)
+defines it.
 
 **A PR whose change reaches a test file or a cell runs `run.das -- --suite model-free`.**
 
