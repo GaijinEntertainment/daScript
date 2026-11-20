@@ -674,6 +674,15 @@ def main() : int {  // nolint:STYLE037,STYLE038 - CLI dispatch, one arm per mode
     }
 
     suite::test_wall_seconds = test_args.test_wall
+    if (test_args.force_tune) {
+        let manifest = get_env_variable("DAS_TUNE_MANIFEST")
+        let manifest_stat = stat(manifest)
+        if (empty(manifest) || !manifest_stat.is_valid || manifest_stat.is_dir) {
+            to_log(LOG_ERROR, "--force-tune: DAS_TUNE_MANIFEST names no file ('{manifest}')\n")
+            return 2
+        }
+        set_env_variable("DAS_TUNE_FORCE", manifest)
+    }
     timingOutliers = test_args.timing_outliers
     maxFileTime = test_args.max_file_time
     jsonFilePath = test_args.json_file

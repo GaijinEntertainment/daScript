@@ -3,10 +3,16 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture doc:
 `../README.md`.
 
-**A diff that adds a `[test]` here puts it in the existing category file for its topic or in
-`uncategorized.das`, never in a new file, with a `description`, and with `timeout = 1200` when
-the test spawns a child dastest** - the shape rules are `tests/REVIEW.md` (repo root) and
-`tests/ARCHITECTURE.md`; `REVIEW.das` (beside this file) applies them.
+**A `[test]` in a file here whose path holds no `_`-leading name answers to `tests/REVIEW.md` (repo
+root) too, whose shape rules `REVIEW.das` (beside this file) applies.**
+
+**A diff that adds a `[test]` to a file here whose path holds no `_`-leading name puts it in the
+existing file for its topic, or in `uncategorized.das` where no file holds that topic, never in a
+new file.**
+
+**A diff that adds a `[test]` here that spawns a child dastest declares `timeout = 1200` on it** -
+a run started with `--test-wall` ends a test that declares no longer budget at that wall, and a
+child dastest compiles a program of its own.
 
 **A diff that adds a `.das` file here that is not itself a test - a fixture another test runs, or a
 module a fixture requires - starts its name, or the name of a directory on its path under this

@@ -24,6 +24,10 @@ struct DastestArgs {
     @clarg_doc = "One [test] function's wall in seconds: the test arms the process's kill switch, and a test still running past it ends the process at once with exit code 125 and one line naming the test and, in the sequential mode, its file - no summary, no later test. [test(timeout = N)] does not raise it. 0 (default) disables it"
     test_wall : float = 0.0
 
+    @clarg_name = "force-tune"
+    @clarg_doc = "Force the tune sidecar: DAS_TUNE_FORCE takes the DAS_TUNE_MANIFEST file before a test compiles, so the tests' [tune] kernels stamp from it whatever its age against the binary or the box that minted it. Exit code 2 where DAS_TUNE_MANIFEST names no file"
+    force_tune : bool
+
     @clarg_doc = "Print the top N slowest test files and highlight statistical timing outliers (above mean + 2x stddev)"
     timing_outliers : int = 0
 
