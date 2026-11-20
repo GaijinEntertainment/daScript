@@ -1,5 +1,6 @@
 options gen2
 options indenting = 4
+options no_aliasing = false
 
 module linq shared public
 

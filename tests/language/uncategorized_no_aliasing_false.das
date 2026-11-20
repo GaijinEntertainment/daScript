@@ -2,6 +2,7 @@ options gen2
 require dastest/testing_boost public
 
 require daslib/random
+require math
 
 options no_aliasing = false // these tests make sense only with disabled aliasing
 
@@ -282,7 +283,7 @@ def test_aliasing(t : T?) {     // nolint:STYLE038 - one flat arm per aliasing s
         t |> equal(14, b.a)
     }
     t |> run("global variable pointer aliasing") @(t : T?) {
-        *g_p_a = Foo(a = 1)   // (I) 40212: [[ExprMakeStruct ]] always aliases
+        *g_p_a = Foo(a = 1)
         // (18) 40211: function set7 result aliases global variable ::g_p_a
         // 1<S<::Foo>>? through function set7
         g_b = set7()
@@ -382,5 +383,157 @@ def test_aliasing(t : T?) {     // nolint:STYLE038 - one flat arm per aliasing s
         // the lambda above
         g_a = invoke(fn, Foo(a = 1), 6, 7)
         t |> equal(14, g_a.a)
+    }
+}
+
+struct IpP {
+    a : int
+    b : int
+}
+
+struct IpW {
+    p : IpP
+    c : int
+}
+
+[safe_when_uninitialized]
+struct IpS {
+    a : int = ip_s_b()
+    b : int = ip_s_a()
+}
+
+var ip_g_s : IpS
+var ip_g_p = IpP(a = 0, b = 0)
+var ip_g_arr : array<IpP>
+
+[never_inline]
+def ip_s_a() : int => ip_g_s.a
+[never_inline]
+def ip_s_b() : int => ip_g_s.b
+[never_inline]
+def ip_p_a() : int => ip_g_p.a
+[never_inline]
+def ip_p_b() : int => ip_g_p.b
+[never_inline]
+def ip_get_a(q : IpP) : int => q.a
+[never_inline]
+def ip_get_b(q : IpP) : int => q.b
+
+[never_inline]
+def ip_init_s(var r : IpS&) {
+    r = default<IpS>
+}
+
+[never_inline]
+def ip_global_calls() {
+    ip_g_p = IpP(a = ip_p_b(), b = ip_p_a())
+}
+
+[never_inline]
+def ip_ref_calls(var r : IpP&) {
+    r = IpP(a = ip_p_b(), b = ip_p_a())
+}
+
+[never_inline]
+def ip_ref_globals(var r : IpP&) {
+    r = IpP(a = ip_g_p.b, b = ip_g_p.a)
+}
+
+[never_inline]
+def ip_ref_self_calls(var r : IpP&) {
+    r = IpP(a = ip_get_b(r), b = ip_get_a(r))
+}
+
+[never_inline]
+def ip_ref_other_ref(var r : IpP&; q : IpP) {
+    r = IpP(a = q.b, b = q.a)
+}
+
+[never_inline]
+def ip_global_ref_arg(q : IpP) {
+    ip_g_p = IpP(a = q.b, b = q.a)
+}
+
+[never_inline]
+def ip_ref_global_array(var r : IpP&) {
+    r = IpP(a = ip_g_arr[0].b, b = ip_g_arr[0].a)
+}
+
+[never_inline]
+def ip_ref_outer_arg(var r : IpP&; w : IpW) {
+    r = IpP(a = w.p.b, b = w.p.a)
+}
+
+def ip_swapped(t : T?; p : IpP) {
+    t |> equal(2, p.a)
+    t |> equal(1, p.b)
+}
+
+[test(description = "a value built in place reads its destination only before it writes it: a read through a call, a global or another reference makes it build a copy")]
+def test_make_in_place_reads(t : T?) {
+    t |> run("field initializers read a global destination through calls") @(t : T?) {
+        ip_g_s.a = 1
+        ip_g_s.b = 2
+        ip_g_s = default<IpS>
+        t |> equal(2, ip_g_s.a)
+        t |> equal(1, ip_g_s.b)
+    }
+    t |> run("field initializers read a reference destination through calls") @(t : T?) {
+        ip_g_s.a = 1
+        ip_g_s.b = 2
+        ip_init_s(ip_g_s)
+        t |> equal(2, ip_g_s.a)
+        t |> equal(1, ip_g_s.b)
+    }
+    t |> run("calls read a global destination") @(t : T?) {
+        ip_g_p = IpP(a = 1, b = 2)
+        ip_global_calls()
+        ip_swapped(t, ip_g_p)
+    }
+    t |> run("calls read the global a reference is bound to") @(t : T?) {
+        ip_g_p = IpP(a = 1, b = 2)
+        ip_ref_calls(ip_g_p)
+        ip_swapped(t, ip_g_p)
+    }
+    t |> run("the global a reference is bound to") @(t : T?) {
+        ip_g_p = IpP(a = 1, b = 2)
+        ip_ref_globals(ip_g_p)
+        ip_swapped(t, ip_g_p)
+    }
+    t |> run("calls take the reference destination") @(t : T?) {
+        var x = IpP(a = 1, b = 2)
+        ip_ref_self_calls(x)
+        ip_swapped(t, x)
+    }
+    t |> run("calls take the local destination") @(t : T?) {
+        var x = IpP(a = 1, b = 2)
+        x = IpP(a = ip_get_b(x), b = ip_get_a(x))
+        ip_swapped(t, x)
+    }
+    t |> run("builtin calls read the local destination") @(t : T?) {
+        var x = IpP(a = 1, b = 2)
+        x = IpP(a = abs(x.b), b = abs(x.a))
+        ip_swapped(t, x)
+    }
+    t |> run("two references to one object") @(t : T?) {
+        var x = IpP(a = 1, b = 2)
+        ip_ref_other_ref(x, x)
+        ip_swapped(t, x)
+    }
+    t |> run("a reference argument bound to the global destination") @(t : T?) {
+        ip_g_p = IpP(a = 1, b = 2)
+        ip_global_ref_arg(ip_g_p)
+        ip_swapped(t, ip_g_p)
+    }
+    t |> run("a reference bound to an element of a global array") @(t : T?) {
+        ip_g_arr |> clear()
+        ip_g_arr |> push(IpP(a = 1, b = 2))
+        ip_ref_global_array(ip_g_arr[0])
+        ip_swapped(t, ip_g_arr[0])
+    }
+    t |> run("a reference argument holding the destination") @(t : T?) {
+        var w = IpW(p = IpP(a = 1, b = 2), c = 0)
+        ip_ref_outer_arg(w.p, w)
+        ip_swapped(t, w.p)
     }
 }

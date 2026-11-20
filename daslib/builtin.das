@@ -2,6 +2,7 @@ options gen2
 options indenting = 4
 options remove_unused_symbols = false
 options strict_unsafe_delete = false
+options no_aliasing = false
 
 // This is builtin module. It included by default
 // in every other module. Compiler can freely

@@ -2,6 +2,7 @@ options gen2
 options indenting = 4
 options multiple_contexts
 options strict_smart_pointers = true
+options no_aliasing = false
 
 module decs shared public
 

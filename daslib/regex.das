@@ -869,7 +869,8 @@ def private re_assign_match_functions(var re : Regex) {
             panic("unsupported {node.op}")
         }
         if (node.sub_end != null && node.op != ReOp.Group && is_one_character(node.subexpr)) {
-            node.cset = character_class(re, node.subexpr)
+            let cset = character_class(re, node.subexpr)
+            node.cset = cset
             node.fun2 = @@re_match2_char_run
         }
     }
