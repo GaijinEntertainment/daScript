@@ -21,9 +21,11 @@ require llvm/daslib/llvm_tune   // tune_box_identity — the applied_box adoptio
 def private spawn_client(cmd : string; var lines : array<string>) : int {
     // verbose: the `llvm_tune: <fn> <- <perm>` stamp lines this test reads are the stamped-truth
     // proof, and they are verbose-only now (one per kernel is a wall in front of a real app)
+    //! the client reads its own sidecar: a manifest or a forced file
+    //! the caller's shell names would serve it instead
     let env = (get_platform_name() == "windows"
-        ? "set DAS_TUNE_VERBOSITY=verbose&& "
-        : "DAS_TUNE_VERBOSITY=verbose ")
+        ? "set DAS_TUNE_VERBOSITY=verbose&& set DAS_TUNE_MANIFEST=&& set DAS_TUNE_FORCE=&& "
+        : "DAS_TUNE_VERBOSITY=verbose DAS_TUNE_MANIFEST= DAS_TUNE_FORCE= ")
     // cmd.exe /c strips the first and last quote of a line that starts with a quote — but the env
     // prefix now leads, so the line never starts with a quote and no sacrificial wrap is needed
     let full = "{env}{cmd}"
