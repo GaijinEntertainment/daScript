@@ -261,6 +261,7 @@ test rather than a check that silently stopped running.
 | Shipped-skills gate | `cmake --build build --config Release --target check_shipped_skills` | |
 | pip wheel repack | `cmake --build build --config Release --target check_wheel_repack` | |
 | rpm spec render | `cmake --build build --config Release --target check_rpm_spec` | the spec `rpm_build.sh` emits under `--spec-only` - no rpmbuild, so it runs on every cell |
+| Runner info cache sizes | `cmake --build build --config Release --target check_runner_info` | posix only; the `runner: cache` lines `ci/runner_info.sh` prints for a staged tree |
 | tree-sitter source selection | `cmake --build build --config Release --target check_tree_sitter_parse_sources` | posix only; the files `ci/tree_sitter_parse_sources.sh` hands to the parser, against a stub `tree-sitter` - the real parse is `tree_sitter_daslang_sources.yml` |
 | Benchmark results updater | `cmake --build build --config Release --target run_tests_bench_updater` | |
 | pr-babysit verdict core | `cmake --build build --config Release --target run_tests_pr_babysit` | |
