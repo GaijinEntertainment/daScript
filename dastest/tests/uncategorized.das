@@ -5,6 +5,7 @@ options no_unused_block_arguments = false
 require dastest/testing_boost public
 require dastest/file_census
 require dastest/folder_filter
+require dastest/fs
 require daslib/fio
 require daslib/rtti
 require daslib/strings_boost
@@ -408,4 +409,24 @@ def test_with_env_variables(t : T?) {
         t |> equal(get_env_variable("DAS_T_WITH_ENV_TWICE"), "original")
         unset_env_variable("DAS_T_WITH_ENV_TWICE")
     }
+}
+
+[test(description = "a folder scan lists each folder's entries sorted by name, so a sweep visits its files in one order on every filesystem")]
+def test_scan_dir_is_sorted(t : T?) {
+    var terr : string
+    let root = create_temp_directory("scan_order", terr)
+    if (empty(root)) {
+        t |> failure("create_temp_directory: {terr}")
+        return
+    }
+    mkdir(path_join(root, "0"))
+    mkdir(path_join(root, "m"))
+    for (name in ["b.das", "Z.das", "m/d.das", "a.das", "0/y.das", "m/c.das"]) {
+        t |> success(fwrite(path_join(root, name), "options gen2\n"), "wrote {name}")
+    }
+    var cache : table<string; void?>
+    var found : array<string>
+    t |> success(fs::scan_dir(root, cache, found), "the folder scans")
+    t |> equal(join([for (f in found); base_name(f)], " "), "y.das Z.das a.das b.das c.das d.das")
+    rmdir_rec(root)
 }
