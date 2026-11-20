@@ -2,6 +2,7 @@ options gen2
 options no_global_variables = false
 options indenting = 4
 options strict_smart_pointers = true
+options no_aliasing = false
 
 module json shared public
 

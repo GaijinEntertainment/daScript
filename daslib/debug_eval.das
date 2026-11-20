@@ -1,6 +1,7 @@
 options gen2
 options strict_smart_pointers
 options indenting = 4
+options no_aliasing = false
 
 module debug_eval shared private
 

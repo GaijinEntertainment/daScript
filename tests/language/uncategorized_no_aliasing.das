@@ -35,6 +35,22 @@ def test_store_constants(t : T?) {
     t |> equal(tup._1, "three")
 }
 
+def private store_values(var p : IntPair?; var t : tuple<int; int>?; x : int) {
+    *p = IntPair(a = x, b = 1)
+    *t = (1, x)
+}
+
+[test(description = "a structure or tuple made of plain local values stored through a pointer compiles under no_aliasing")]
+def test_store_values(t : T?) {
+    var p : IntPair
+    var tup : tuple<int; int>
+    store_values(unsafe(addr(p)), unsafe(addr(tup)), 7)
+    t |> equal(p.a, 7)
+    t |> equal(p.b, 1)
+    t |> equal(tup._0, 1)
+    t |> equal(tup._1, 7)
+}
+
 [test(description = "an aliasing generic from a module with no_aliasing off compiles in a no_aliasing caller and swaps through a temporary")]
 def test_lax_generic_instance(t : T?) {
     var q = IntPair(a = 3, b = 4)
