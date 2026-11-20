@@ -56,6 +56,15 @@
 #endif
 
 namespace das {
+    // Itanium marks an internal-linkage name with L<length>, an anonymous namespace with _GLOBAL__N
+    bool is_linkable_symbol ( const char * name ) {
+        if ( strstr(name, "_GLOBAL__N") ) return false;
+        for ( const char * c = name; c[0] && c[1]; ++c ) {
+            if ( c[0]=='L' && c[1]>='0' && c[1]<='9' ) return false;
+        }
+        return true;
+    }
+
     // forward declarations from module_builtin_fio.cpp
     void * register_dynamic_module(const char *, const char *, int, Context *, LineInfoArg *);
     void register_native_path(const char *, const char *, const char *, Context *, LineInfoArg *);

@@ -1237,13 +1237,47 @@ def private jit_selects(fun : FunctionPtr; rqj : bool; aot_host : bool; jit_all 
     return !is_aot_function(get_function_by_mangled_name_hash(hash(get_mangled_name(fun)), *ctx))
 }
 
+//! a clang driver that reads the bundled LLVM's bitcode: `c++` on a
+//! GNU box drives no LTO, and an older clang reads none of it
+def private lto_driver() : string {
+    var major, minor, patch : uint
+    LLVMGetVersion(unsafe(addr(major)), unsafe(addr(minor)), unsafe(addr(patch)))
+    let versioned = "clang++-{int(major)}"
+    if (executable_on_path(versioned)) return versioned
+    if (!executable_on_path("clang++")) return ""
+    var text = ""
+    unsafe(popen("clang++ --version 2>&1") $(f) {
+        if (f != null) {
+            text = fread(f)
+        }
+    })
+    let at = find(text, "clang version ")
+    if (at < 0 || find(text, "Apple") >= 0) return ""
+    let rest = slice(text, at + length("clang version "))
+    let dot = find(rest, ".")
+    return to_int(dot < 0 ? rest : slice(rest, 0, dot)) >= int(major) ? "clang++" : ""
+}
+
 [arch(at="../ARCHITECTURE_EXE.md#split-exe-lto")]
 def private resolve_split_options(var plan : JitPlan; cli_opts : JitCliOptions; prog : Program?; announce : bool) {
     let split_option = prog._options |> find_arg("jit_split_modules")
     plan.split_requested = (cli_opts.split_modules |> is_some()) || !(split_option is nothing)
     plan.split_modules = cli_opts.split_modules |> unwrap_or(split_option ?as tInt ?? -1)
-    //! an exe splits on its build command alone (the script pin serves the DLL path, where it is inert for an exe as before), and for the host only: the slots' comdats are the host's object format
-    let exe_split = plan.gen_exe && !plan.gen_lib && !plan.gen_wasm && (cli_opts.split_modules |> is_some()) && empty(plan.target_triple)
+    //! a host-target exe splits for its LTO link, or when its build
+    //! command asks; the slots' comdats are the host's object format
+    let exe_host = plan.gen_exe && !plan.gen_lib && !plan.gen_wasm && empty(plan.target_triple)
+    var lto_wanted = exe_host && !(cli_opts.no_lto |> unwrap_or(false))
+    if (lto_wanted && empty(plan.path_to_linker) && get_platform_name() != "windows") {
+        plan.path_to_linker = lto_driver()
+        if (empty(plan.path_to_linker)) {
+            lto_wanted = false
+            if (announce) {
+                let why = "no clang++ that reads this LLVM's bitcode on PATH"
+                to_log(LOG_INFO, "LLVM JIT: {why} - the exe links without LTO\n")
+            }
+        }
+    }
+    let exe_split = exe_host && ((cli_opts.split_modules |> is_some()) || lto_wanted)
     plan.jit_split = plan.split_modules != 0 && (plan.use_dll || exe_split)
     if (announce && (cli_opts.split_modules |> is_some()) && plan.split_modules != 0 && !plan.jit_split) {
         to_log(LOG_WARNING, "LLVM JIT: --jit-split-modules applies to the JIT DLL path and to a host-target -exe only - ignored for this artifact mode\n")
@@ -1257,11 +1291,7 @@ def private resolve_split_options(var plan : JitPlan; cli_opts : JitCliOptions; 
     if (announce && (cli_opts.obj_cache |> is_some()) && !(plan.jit_split && plan.use_dll)) {
         to_log(LOG_WARNING, "LLVM JIT: --jit-obj-cache applies under --jit-split-modules dll mode only - ignored for this run\n")
     }
-    let lto_requested = cli_opts.lto |> unwrap_or(false)
-    plan.jit_lto = lto_requested && plan.jit_split && exe_split
-    if (announce && lto_requested && !plan.jit_lto) {
-        to_log(LOG_WARNING, "LLVM JIT: --jit-lto applies to a split -exe for the host only (-exe with --jit-split-modules, no --jit-target) - ignored for this run\n")
-    }
+    plan.jit_lto = lto_wanted && plan.jit_split
 }
 
 //! an exe or a library links the runtime libraries, which a sanitizer host built under its sanitizer and which call its
@@ -1450,12 +1480,6 @@ def public make_jit_plan(prog : Program?; var ctx : Context?; announce : bool; c
     plan.linker_string = cli_opts.linker_string |> unwrap_or((prog._options |> find_arg("jit_linker_string")) ?as tString ?? "")
     plan.register_all_modules = cli_opts.register_all_modules |> unwrap_or(false)
     resolve_split_options(plan, cli_opts, prog, announce)
-    if (plan.jit_lto && empty(plan.path_to_linker) && get_platform_name() != "windows") {
-        plan.path_to_linker = "clang++"   //! a POSIX LTO link needs a clang driver over lld or a plugin-capable ld; `c++` on a GNU box drives neither
-        if (announce) {
-            to_log(LOG_INFO, "LLVM JIT: --jit-lto links through clang++ (--jit-path-to-linker names another driver)\n")
-        }
-    }
 
     // Set global options
     LLVM_JIT_ALLOW_UNALIGNED_VECTOR_READ_OUT_OF_BOUNDS = prog._options |> find_arg("jit_vec3_ldu") ?as tBool ?? LLVM_JIT_ALLOW_UNALIGNED_VECTOR_READ_OUT_OF_BOUNDS_DEFAULT

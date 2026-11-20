@@ -214,6 +214,7 @@ bitfield public LlvmJitFlags {
     emit_prologue,
     // Is debug info needed. Debug info not fully supported and not tested yet.
     need_di,
+    direct_builtins,
 }
 
 // Non-string workhorse key types that get the inline open-addressed find/at (build_workhorse_*):
@@ -1585,6 +1586,17 @@ class public LlvmJitVisitor : AstVisitor {
         var ofunc = LLVMGetNamedGlobal(g_mod, mangled_name.glob())
         if (!(g_fn_types |> key_exists(mangled_name.publ()))) {
             g_fn_types[mangled_name.publ()] = extern_fn_type(expr.func)   //! a slot the entry partition declared ahead of this module's first call carries no signature yet
+        }
+        if (ofunc == null && flags.direct_builtins && !is_dasbind_late(expr.func)) {
+            let link_name = get_builtin_function_link_name(expr.func)
+            if (!empty(link_name)) {
+                let fn_type = g_fn_types[mangled_name.publ()]
+                var direct = LLVMGetNamedFunction(g_mod, link_name)
+                if (direct == null) {
+                    direct = LLVMAddFunctionWithType(g_mod, link_name, fn_type)
+                }
+                return tuple(direct, fn_type)
+            }
         }
         if (ofunc == null) {
             let fn_type = g_fn_types[mangled_name.publ()]

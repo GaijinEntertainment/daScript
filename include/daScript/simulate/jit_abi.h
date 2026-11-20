@@ -65,12 +65,50 @@ template <typename Ret, typename ... Args> struct NeedVectorWrap< Ret(*)(Args...
     };
 };
 
+#ifndef DAS_JIT_LINK_NAMES
+#define DAS_JIT_LINK_NAMES 1
+#endif
+
+DAS_API bool is_linkable_symbol ( const char * name );
+
+// The symbol name the linker sees for F, or nullptr where it is not known.
+// The asm operand prints the symbol exactly as the assembler gets it, so a
+// build can call F by name instead of through a startup-filled address slot.
+template <auto F>
+const char * linker_name_of () {
+#if DAS_JIT_LINK_NAMES && defined(__ELF__) && defined(__x86_64__)
+    const char * name;
+    asm(".pushsection .rodata.str1.1,\"aMS\",@progbits,1\n0:\t.asciz \"%c1\"\n\t.popsection\n\tlea 0b(%%rip), %0"
+        : "=r"(name) : "s"(F));
+    return is_linkable_symbol(name) ? name : nullptr;
+#elif DAS_JIT_LINK_NAMES && defined(__ELF__) && defined(__aarch64__)
+    // not tested
+    const char * name;
+    asm(".pushsection .rodata.str1.1,\"aMS\",@progbits,1\n0:\t.asciz \"%c1\"\n\t.popsection\n\tadrp %0, 0b\n\tadd %0, %0, :lo12:0b"
+        : "=r"(name) : "s"(F));
+    return is_linkable_symbol(name) ? name : nullptr;
+#elif DAS_JIT_LINK_NAMES && defined(_MSC_VER) && !defined(__clang__) && defined(_M_X64)
+    // not tested: the decorated name is "??$linker_name_of@$1" F "@das@@YAPEBDXZ", and a
+    // template argument list has its own back-reference table, so F's part is its symbol
+    static const string name = [] {
+        const string full = __FUNCDNAME__, head = "??$linker_name_of@$1", tail = "@das@@YAPEBDXZ";
+        if ( full.size() <= head.size() + tail.size() || full.compare(0, head.size(), head) != 0
+                || full.compare(full.size() - tail.size(), tail.size(), tail) != 0 ) return string();
+        return full.substr(head.size(), full.size() - head.size() - tail.size());
+    }();
+    return name.empty() ? nullptr : name.c_str();
+#else
+    return nullptr;
+#endif
+}
+
 // llvm ir -> c++
 template <int CMRES, int wrap, typename FuncT, FuncT fn> struct ImplWrapCall;
 
 template <typename FuncT, FuncT fn>     // no cmres, no wrap
 struct ImplWrapCall<false,false,FuncT,fn> {
     static void * get_builtin_address() { return (void *) fn; }
+    static const char * get_builtin_link_name() { return linker_name_of<fn>(); }
 };
 
 #if defined(_MSC_VER)
@@ -90,6 +128,7 @@ struct ImplWrapCall<true,wrap,RetT(*)(Args...),fn> {                        // w
         new (result) RetT (fnPtr(args...));
     };
     static void * get_builtin_address() { return (void *) &static_call; }
+    static const char * get_builtin_link_name() { return linker_name_of<&static_call>(); }
 };
 
 template <typename RetT, typename ...Args, RetT(*fn)(Args...)>
@@ -102,6 +141,7 @@ struct ImplWrapCall<false,true,RetT(*)(Args...),fn> {   // no cmres, wrap
         return static_cast<typename ResolvedWrapType<RetT>::rettype>(fnPtr(args...));   // note explicit cast
     };
     static void * get_builtin_address() { return (void *) &static_call; }
+    static const char * get_builtin_link_name() { return linker_name_of<&static_call>(); }
 };
 
 // c++ -> llvm ir
