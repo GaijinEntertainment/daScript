@@ -255,6 +255,64 @@ class WorkflowShapes(unittest.TestCase):
         named = set(re.findall(r"\b(?:check|run|dry)_[a-z_0-9]+", body))
         self.assertEqual(named, self.NIGHTLY_ONLY)
 
+    def test_the_windows_cell_leaves_out_only_checks_a_linux_cell_runs(self):
+        """A check a windows configure drops must stay in a list the linux cells build, or no cell runs it."""
+        text = self.cmake_lists()
+
+        def names(list_name):
+            body = text.split("set(" + list_name, 1)[1].split(")", 1)[0]
+            return set(re.findall(r"\b(?:check|run|dry)_[a-z_0-9]+", body))
+
+        dropped = names("DAS_EXTENDED_HOST_INDEPENDENT")
+        self.assertTrue(dropped)
+        self.assertEqual(dropped - names("DAS_EXTENDED_CORE") - names("DAS_EXTENDED_MODULES"), set())
+        removal = "list(REMOVE_ITEM _extended_all ${DAS_EXTENDED_HOST_INDEPENDENT})"
+        self.assertIn(removal, text)
+        # the nearest `if` or `endif` above the removal is the windows guard, so only windows drops them
+        guards = re.findall(r"^\s*(if|endif)\(([^)]*)\)", text[:text.index(removal)], flags=re.M)
+        self.assertEqual(guards[-1], ("if", "WIN32"))
+
+    def cmake_lists(self):
+        with open(os.path.join(HERE, "CMakeLists.txt"), encoding="utf-8") as f:
+            return f.read()
+
+    def test_every_ci_python_test_is_a_target_of_an_extended_list(self):
+        """das_lane_group skips a name that is no target and only prints a status line, so a test file
+        with no das_lane_python, or a target in no list, stops running with nothing red."""
+        text = self.cmake_lists()
+        for name in sorted(os.listdir(HERE)):
+            if not (name.startswith("test_") and name.endswith(".py")):
+                continue
+            lane = re.search(r'das_lane_python\((\w+)[^)]*"ci/' + re.escape(name) + r'[ "]', text)
+            self.assertIsNotNone(lane, f"ci/{name} is no das_lane_python target")
+            lists = "\n".join(line for line in text.splitlines()
+                              if "das_lane_python(" not in line and not line.lstrip().startswith("#"))
+            self.assertRegex(lists, r"\b" + lane.group(1) + r"\b", f"{lane.group(1)} is in no check list")
+
+    # every job that drives a lane through ninja, with the build directory its configure names
+    TIMED_JOBS = {
+        "build_matrix.yml": ["build"],
+        "extended_checks.yml": ["build"],
+        "nightly.yml": ["build", "build", "build-mingw", "build-clangcl"],
+    }
+
+    def test_each_ninja_lane_prints_its_time_by_target_before_the_slot_is_saved(self):
+        step = '- name: "Build time by target"'
+        save = '- name: "Save sccache objects"'
+        for workflow, build_dirs in self.TIMED_JOBS.items():
+            text = self.read(workflow)
+            found = [m.start() for m in re.finditer(re.escape(step), text)]
+            self.assertEqual(len(found), len(build_dirs), workflow)
+            for at, build_dir in zip(found, build_dirs):
+                body = text[at:text.index(save, at)]
+                self.assertEqual(body.count("- name:"), 1, f"{workflow}: the step is the last before the save")
+                self.assertIn("if: ${{ !cancelled() }}", body)
+                self.assertIn(f"run: python3 ci/ninja_log_report.py {build_dir}/.ninja_log", body)
+                job = text[text.rfind(save, 0, at) + 1:at]
+                self.assertRegex(job, r"-B\s*(\./)?" + re.escape(build_dir) + r"(?![-\w])",
+                                 f"{workflow}: the job configures {build_dir}")
+                self.assertIn("cmake --build", job)
+
 
 class CommandLine(unittest.TestCase):
     def run_tool(self, *args):
