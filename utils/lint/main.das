@@ -100,6 +100,8 @@ struct Config {
 
     @clarg_doc = "Resolve requires through this .das_project module map"
     project : string
+    @clarg_doc = "Set a CodeOfPolicies field for every compile, as name=value (a bool or an integer). Repeatable"
+    cop : array<string>
 
     @clarg_short = "d"
     @clarg_doc = "Disable rule(s). Repeatable or comma-separated. Codes only (e.g. PERF001,STYLE024). On overlap with --enable, --disable wins."
@@ -873,7 +875,26 @@ def private file_nolint_codes(prog : ProgramPtr; base : table<string>) : table<s
     return <- merged
 }
 
-def private lint_policies(var cop : CodeOfPolicies) {
+def private set_policy(var cop : CodeOfPolicies; name, value : string) : bool {
+    var found = false
+    let ti = typeinfo rtti_typeinfo(type<CodeOfPolicies>)
+    let ann = unsafe(reinterpret<BasicStructureAnnotation?>(ti.annotation))
+    basic_struct_for_each_field(*ann) $(field, _cpp_name, field_type, offset) {
+        return if (field != name)
+        let base = unsafe(addr<uint8?>(cop))
+        let at = unsafe(base + int(offset))
+        if (field_type.basicType == Type.tBool && (value == "true" || value == "false")) {
+            *unsafe(reinterpret<bool?>(at)) = value == "true"
+            found = true
+        } elif (field_type.basicType == Type.tInt || field_type.basicType == Type.tUInt) {
+            *unsafe(reinterpret<int?>(at)) = to_int(value)
+            found = true
+        }
+    }
+    return found
+}
+
+def private lint_policies(var cop : CodeOfPolicies; cop_overrides : array<string>) {
     cop.ignore_shared_modules = !lint_shared_modules
     cop.promote_shared_unoptimized = lint_shared_modules
     cop.export_all = true
@@ -881,10 +902,30 @@ def private lint_policies(var cop : CodeOfPolicies) {
     cop.no_optimizations = true
     cop.no_infer_time_folding = true
     cop.no_fold_unsafe = true
+    apply_cop_overrides(cop, cop_overrides)
 }
 
 var lint_cache_dir = ""
 var lint_shared_modules = false   //! the run's compiles promote and reuse the shared modules
+def private apply_cop_overrides(var cop : CodeOfPolicies; cop_overrides : array<string>) : bool {
+    var ok = true
+    for (o in cop_overrides) {
+        let eq = find(o, "=")
+        if (eq <= 0 || !set_policy(cop, slice(o, 0, eq), slice(o, eq + 1))) {
+            to_log(LOG_ERROR, "error: --cop {o}: expected name=value of a bool or integer policy\n")
+            ok = false
+        }
+    }
+    return ok
+}
+
+def private resolve_cop_overrides(cfg : Config) : bool {
+    var ok = true
+    using() $(var probe : CodeOfPolicies) {
+        ok = apply_cop_overrides(probe, cfg.cop)
+    }
+    return ok
+}
 var lint_cache_header = ""
 var content_hashes : table<string; string>
 
@@ -926,7 +967,8 @@ def host_disabled_modules() : array<string> {
 
 //! The cache entry of ``file`` under these options: one per file and option set, rewritten in place, so the folder never outgrows the tree
 def lint_cache_entry(file : string; run_paranoid, run_perf, run_style, comment_hygiene, lint_fixtures, lint_excluded_paths : bool;
-                     disabled_codes, enabled_codes : table<string>) : string {
+                     disabled_codes, enabled_codes : table<string>;
+                     cop_overrides : array<string>) : string {
     content_hashes |> erase(file)
     if (empty(lint_cache_header)) {
         let config_env = has_env_variable("DAS_LINT_CONFIG_PATH") ? get_env_variable("DAS_LINT_CONFIG_PATH") : ""
@@ -934,7 +976,8 @@ def lint_cache_entry(file : string; run_paranoid, run_perf, run_style, comment_h
         mkdir_rec(lint_cache_dir)
     }
     let codes = "{join(sort_keys(disabled_codes), ",")}|{join(sort_keys(enabled_codes), ",")}"
-    let flags = "{run_paranoid}{run_perf}{run_style}{comment_hygiene}{lint_fixtures}{lint_excluded_paths}"
+    let flags = ("{run_paranoid}{run_perf}{run_style}{comment_hygiene}{lint_fixtures}"
+        + "{lint_excluded_paths}{cop_overrides}")
     let key = "{normalize(file)}|{flags}|{codes}"
     return "{lint_cache_dir}/{hash(key)}"
 }
@@ -997,7 +1040,7 @@ def private note_compile_failure(issue_str : string; var result : LintResult) {
 
 def lint_file(file : string; run_paranoid, run_perf, run_style,
               comment_hygiene, lint_fixtures, lint_excluded_paths : bool;
-              disabled_codes, enabled_codes : table<string>;
+              disabled_codes, enabled_codes : table<string>; cop_overrides : array<string>;
               project : string = "") : LintResult {
     var result = LintResult(file = file)
     if (set_skip_reason(file, lint_fixtures, result)) {
@@ -1006,7 +1049,7 @@ def lint_file(file : string; run_paranoid, run_perf, run_style,
     let entry = (!empty(lint_cache_dir) && empty(project)
         ? lint_cache_entry(file, run_paranoid, run_perf, run_style,
             comment_hygiene, lint_fixtures, lint_excluded_paths,
-            disabled_codes, enabled_codes) : "")
+            disabled_codes, enabled_codes, cop_overrides) : "")
     if (!empty(entry) && lint_cache_hit(entry)) {
         result.cached = true
         return <- result
@@ -1015,7 +1058,7 @@ def lint_file(file : string; run_paranoid, run_perf, run_style,
     var inscope access <- make_file_access(project)
     using() $(var mg : ModuleGroup) {
         using() $(var cop : CodeOfPolicies) {
-            lint_policies(cop)
+            lint_policies(cop, cop_overrides)
             compile_file(file, access, unsafe(addr(mg)), cop) $(ok; program; issues) {
                 if (!ok) {
                     note_compile_failure(string(issues), result)
@@ -1064,11 +1107,11 @@ def lint_file(file : string; run_paranoid, run_perf, run_style,
 def lint_file_fixing(file : string; run_paranoid, run_perf, run_style,
                      comment_hygiene, lint_fixtures,
                      lint_excluded_paths : bool;
-                     disabled_codes, enabled_codes : table<string>;
+                     disabled_codes, enabled_codes : table<string>; cop_overrides : array<string>;
                      fix : bool; project : string = "") : LintResult {
     var result <- lint_file(file, run_paranoid, run_perf, run_style,
         comment_hygiene, lint_fixtures, lint_excluded_paths,
-        disabled_codes, enabled_codes, project)
+        disabled_codes, enabled_codes, cop_overrides, project)
     return <- result if (!fix || result.failed || !empty(result.skip_reason))
     var fixed = 0
     var rows : array<string>
@@ -1076,7 +1119,7 @@ def lint_file_fixing(file : string; run_paranoid, run_perf, run_style,
     for (_ in range(max_passes)) {
         var after <- lint_fix_pass(file, result, run_paranoid, run_perf, run_style,
                                    comment_hygiene, lint_fixtures, lint_excluded_paths,
-                                   disabled_codes, enabled_codes, project)
+                                   disabled_codes, enabled_codes, cop_overrides, project)
         let applied = after.fixed
         rows |> push_from(after.fixed_rows)
         delete result
@@ -1100,7 +1143,7 @@ def private fixed_finding_rows(text : string; issue : LintIssue) : array<string>
 
 def lint_fix_pass(file : string; result : LintResult; run_paranoid, run_perf, run_style,
                   comment_hygiene, lint_fixtures, lint_excluded_paths : bool;
-                  disabled_codes, enabled_codes : table<string>;
+                  disabled_codes, enabled_codes : table<string>; cop_overrides : array<string>;
                   project : string = "") : LintResult {
     var fixable <- [for (issue in result.issues); issue; where issue.fix.line > 0
         && (empty(issue.file) || normalize(issue.file) == normalize(file))]
@@ -1116,7 +1159,7 @@ def lint_fix_pass(file : string; result : LintResult; run_paranoid, run_perf, ru
     fwrite(file, patched.text)
     var after <- lint_file(file, run_paranoid, run_perf, run_style,
         comment_hygiene, lint_fixtures, lint_excluded_paths,
-        disabled_codes, enabled_codes, project)
+        disabled_codes, enabled_codes, cop_overrides, project)
     var kept_idx <- [for (k in range(length(fixes))); k]
     if (after.failed || !empty(after.skip_reason)) {
         kept_idx |> clear()
@@ -1130,7 +1173,7 @@ def lint_fix_pass(file : string; result : LintResult; run_paranoid, run_perf, ru
             delete after
             after <- lint_file(file, run_paranoid, run_perf, run_style,
                 comment_hygiene, lint_fixtures, lint_excluded_paths,
-                disabled_codes, enabled_codes, project)
+                disabled_codes, enabled_codes, cop_overrides, project)
             if (after.failed || !empty(after.skip_reason)) {
                 kept |> pop()
                 kept_idx |> pop()
@@ -1141,7 +1184,7 @@ def lint_fix_pass(file : string; result : LintResult; run_paranoid, run_perf, ru
         delete after
         after <- lint_file(file, run_paranoid, run_perf, run_style,
             comment_hygiene, lint_fixtures, lint_excluded_paths,
-            disabled_codes, enabled_codes, project)
+            disabled_codes, enabled_codes, cop_overrides, project)
     }
     after.fixed = patched.applied
     let kept_fixes <- [for (k in kept_idx); fixes[k]]
@@ -1243,14 +1286,14 @@ def maybe_collect(var since_collect : int&) {
 [unsafe_heap_collect]
 def run_worker(paths : array<string>; run_paranoid, run_perf, run_style,
                comment_hygiene, lint_fixtures, lint_excluded_paths : bool;
-               disabled_codes, enabled_codes : table<string>;
+               disabled_codes, enabled_codes : table<string>; cop_overrides : array<string>;
                fix : bool; project : string = "") {
     var since_collect = 0
     var inscope order <- lint_order(paths)
     for (idx in order) {
         let result = lint_file_fixing(paths[idx], run_paranoid, run_perf,
             run_style, comment_hygiene, lint_fixtures, lint_excluded_paths,
-            disabled_codes, enabled_codes, fix, project)
+            disabled_codes, enabled_codes, cop_overrides, fix, project)
         print("{JSON_PREFIX}{write_json(JV(result))}\n{JSON_PREFIX}")
         maybe_collect(since_collect)
     }
@@ -1307,6 +1350,10 @@ def build_worker_argv(spawn_prefix : array<string>; chunk_path : string; cfg : C
     if (!empty(cfg.project)) {
         argv |> push("--project={cfg.project}")
     }
+    for (o in cfg.cop) {
+        argv |> push("--cop")
+        argv |> push(o)
+    }
     return <- argv
 }
 
@@ -1329,7 +1376,7 @@ def run_parallel_lint(files : array<string>; cfg : Config) : array<LintResult> {
     var tmperr : string
     let tmpdir = temp_directory(tmperr)
     if (!empty(tmperr)) {
-        print("error: cannot resolve temp directory: {tmperr}\n")
+        to_log(LOG_ERROR, "error: cannot resolve temp directory: {tmperr}\n")
         return <- results
     }
 
@@ -1357,7 +1404,7 @@ def run_parallel_lint(files : array<string>; cfg : Config) : array<LintResult> {
             for (p in chunk_paths) {
                 remove(p)
             }
-            print("error: could not write chunk file {cp}\n")
+            to_log(LOG_ERROR, "error: could not write chunk file {cp}\n")
             return <- results
         }
         var inscope argv <- build_worker_argv(spawn_prefix, cp, cfg)
@@ -1404,7 +1451,7 @@ def parse_worker_output(cr : parallel_workers::ChunkResult; var results : array<
         var jerr : string
         let jv = piece |> read_json(jerr)
         if (jv == null) {
-            print("error: worker {cr.index} emitted invalid JSON: {jerr}\n")
+            to_log(LOG_ERROR, "error: worker {cr.index} emitted invalid JSON: {jerr}\n")
             continue
         }
         let lr <- from_JV(jv, type<LintResult>)
@@ -1417,12 +1464,14 @@ def parse_worker_output(cr : parallel_workers::ChunkResult; var results : array<
 def resolve_rule_filters(cfg : Config; var disabled_codes : table<string>&; var enabled_codes : table<string>&) : bool {
     let dis_bad = normalize_rule_list(cfg.disable, disabled_codes)
     if (!empty(dis_bad)) {
-        print("error: invalid rule code \"{dis_bad}\" in --disable (expected LINT|PERF|STYLE + 3 digits)\n")
+        to_log(LOG_ERROR, "error: invalid rule code \"{dis_bad}\" in --disable"
+            + " (expected LINT|PERF|STYLE + 3 digits)\n")
         return false
     }
     let en_bad = normalize_rule_list(cfg.enable, enabled_codes)
     if (!empty(en_bad)) {
-        print("error: invalid rule code \"{en_bad}\" in --enable (expected LINT|PERF|STYLE + 3 digits)\n")
+        to_log(LOG_ERROR, "error: invalid rule code \"{en_bad}\" in --enable"
+            + " (expected LINT|PERF|STYLE + 3 digits)\n")
         return false
     }
     // Layer repo-wide policy on top of CLI flags: default-off rules + .lint_config.
@@ -1678,7 +1727,7 @@ def lint_files(files : array<string>; cfg : Config; run_paranoid, run_perf, run_
             }
             var result <- lint_file_fixing(file, run_paranoid, run_perf, run_style,
                 cfg.comment_hygiene, cfg.lint_fixtures, cfg.lint_excluded_paths, disabled_codes,
-                enabled_codes, cfg.fix, cfg.project)
+                enabled_codes, cfg.cop, cfg.fix, cfg.project)
             tally_result(result, report.totals)
             if (cfg.json) {
                 report.results |> emplace(result)
@@ -1710,7 +1759,7 @@ def print_report(report : LintJson; files_count : int; cfg : Config) : int {
 def main() : int {
     var r <- parse_args(type<Config>)
     if (r |> is_err) {
-        print("error: {r |> unwrap_err}\n\n")
+        to_log(LOG_ERROR, "error: {r |> unwrap_err}\n\n")
         return print_lint_help(1)
     }
     let cfg <- r |> move_unwrap
@@ -1723,7 +1772,8 @@ def main() : int {
     let run_style = !any_only || cfg.style_only
 
     var disabled_codes, enabled_codes : table<string>
-    if (!resolve_rule_filters(cfg, disabled_codes, enabled_codes)) return 1
+    let filters_ok = resolve_rule_filters(cfg, disabled_codes, enabled_codes)
+    if (!filters_ok || !resolve_cop_overrides(cfg)) return 1
     configure_lint(cfg)
 
     // Worker mode: lint a pre-resolved list from a paths-from file and emit
@@ -1731,12 +1781,12 @@ def main() : int {
     if (!empty(cfg.paths_from)) {
         var paths : array<string>
         if (!read_paths_from(cfg.paths_from, paths)) {
-            print("error: cannot read paths-from file: {cfg.paths_from}\n")
+            to_log(LOG_ERROR, "error: cannot read paths-from file: {cfg.paths_from}\n")
             return 1
         }
         run_worker(paths, run_paranoid, run_perf, run_style,
             cfg.comment_hygiene, cfg.lint_fixtures, cfg.lint_excluded_paths,
-            disabled_codes, enabled_codes, cfg.fix, cfg.project)
+            disabled_codes, enabled_codes, cfg.cop, cfg.fix, cfg.project)
         return 0
     }
 

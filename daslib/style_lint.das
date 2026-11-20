@@ -2797,7 +2797,7 @@ class StyleLintVisitor : AstVisitor {
         for (i in range(1, length(v))) {
             let nx = v[i]
             if (nx.lo <= cur.hi || (cur.hi < INT64_MAX_V && nx.lo == cur.hi + 1l)) {
-                cur = Ivl(lo = cur.lo, hi = max(cur.hi, nx.hi))
+                cur.hi = max(cur.hi, nx.hi)
             } else {
                 out |> push(cur)
                 cur = nx
