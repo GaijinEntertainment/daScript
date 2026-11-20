@@ -1290,6 +1290,7 @@ namespace das
                 bool    allowPodInscope : 1;
                 bool    neverInline : 1;    // `options never_inline` (ast_inline.cpp)
                 bool    fromModuleCache : 1;
+                bool    aliasingAllowed : 1;
             };
             uint32_t        moduleFlags = 0;
         };

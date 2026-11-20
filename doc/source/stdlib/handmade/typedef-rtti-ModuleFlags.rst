@@ -11,3 +11,4 @@ This module is visible everywhere.
 This module allows pod inscope.
 This module's functions are never inlined (``options never_inline``).
 This module was read from the module cache.
+This module allows aliasing (``options no_aliasing = false``), and the instances of its generics are not checked for it.
