@@ -170,6 +170,7 @@ namespace das {
     DAS_API bool builtin_rmdir ( const char * path );
     DAS_API bool builtin_fexist ( const char * path );
     DAS_API bool builtin_rmdir_rec ( const char * path );
+    DAS_API const char * rmdir_rec_refusal ( const char * path );
     DAS_API bool has_env_variable ( const char * var, Context * context, LineInfoArg * at );
     DAS_API char * get_env_variable ( const char * var, Context * context, LineInfoArg * at );
     DAS_API void set_env_variable ( const char * var, const char * value, Context * context, LineInfoArg * at );

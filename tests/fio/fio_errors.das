@@ -2,6 +2,7 @@ options gen2
 require dastest/testing_boost public
 
 require daslib/fio
+require strings
 
 // ---- path manipulation (correctness, no error reporting) ----
 
@@ -170,6 +171,34 @@ def test_rmdir_rec_error(t : T?) {
         t |> success(ok, "rmdir_rec on non-existent path should succeed (remove_all semantics)")
         t |> success(empty(error), "error should be empty")
     }
+}
+
+[test(description = "rmdir_rec removes nothing for an empty path or a path ending in '.' or '..', in both of its forms")]
+def test_rmdir_rec_refuses_dot_paths(t : T?) {
+    // every refused path here names a temp directory, never the
+    // working directory: a build without the refusal removes the temp
+    // directory and fails the test, and nothing else
+    var terr = ""
+    let root = create_temp_directory("fio_rmdir_dot_", terr)
+    assert(!empty(root), "temp dir created")
+    let inner = path_join(root, "inner")
+    let kept = path_join(root, "kept.txt")
+    mkdir_rec(inner)
+    fwrite(kept, "must survive")
+    for (path in [path_join(root, "."), "{root}/./", path_join(inner, ".."), "{inner}/../", ""]) {
+        let null_note = " - an empty das string, which reaches C++ as a null pointer"
+        let how = empty(path) ? null_note : ""
+        var error : string
+        t |> success(!rmdir_rec(path, error), "'{path}' is refused{how}")
+        let reasoned = starts_with(error, "rmdir_rec refuses '{path}': ")
+        t |> success(reasoned, "... with a reason ({error})")
+        t |> success(!rmdir_rec(path), "'{path}' is refused by the form with no error")
+        let intact = stat(kept).is_reg && stat(inner).is_dir
+        t |> success(intact, "... and nothing under the directory is gone")
+    }
+    var error : string
+    t |> success(rmdir_rec(inner, error) && empty(error), "the directory's own name removes it")
+    t |> success(rmdir_rec(root, error), "the temp directory goes by its own name")
 }
 
 [test(description = "rmdir_rec removes a symlink and leaves its target in place")]

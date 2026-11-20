@@ -1,1 +1,1 @@
-Recursively removes a directory and all its contents. Reports errors via the error out-parameter.
+Recursively removes a directory and all its contents. Reports errors via the error out-parameter. Refuses, removing nothing, an empty path, a filesystem root (on Windows also a drive, a share root, and either one under the ``\\?\`` prefix), and a path whose last component is ``.`` or ``..``; the error reads ``rmdir_rec refuses '<path>': <reason>``.
