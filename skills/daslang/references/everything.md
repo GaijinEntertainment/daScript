@@ -4730,6 +4730,7 @@ The JOBQUE module provides low-level job queue and threading primitives. It incl
 - `get_current_processor` - Returns the index of the logical processor the calling thread is running on right now - on Windows, within the thread's processor group - or -1 where the platform exposes none (macOS, Haiku, platforms without a processor index) and when the query itself fails (Linux `sched_getcpu` returning -1).
 - `get_jobque_affinity` - Returns the worker-thread affinity mode previously set with set_jobque_affinity, or -1 when unset.
 - `get_jobque_fork_pool` - Report whether the current context pools its per-job fork contexts, which `set_jobque_fork_pool` turns on.
+- `get_jobque_fork_skip_init` - Report whether the current context clones its pooled per-job fork contexts without running the init script, which `set_jobque_fork_pool` turns on.
 - `get_jobque_team_mode` - Returns true when team dispatch mode is currently enabled on the job queue.
 - `get_jobque_team_prof` - Returns average per-operation team dispatch times in nanoseconds as float4: x = publish, y = serve, z = join tail, w = total.
 - `get_jobque_team_prof_counts` - Returns team dispatch profiling counters as int4: x = operations, y = chunks published, z = caller-served chunks, w = operations served solo by the caller.

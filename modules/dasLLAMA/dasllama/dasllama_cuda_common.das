@@ -27,6 +27,8 @@ struct CudGpu {
     copy : CudCopy           //! the copy stream: every pinned stack's DMA rides it, apart from the launches on `stream`
     side : CudSide           //! the rail's side streams, a fork's branches (`rail_fork`)
     commit : void?           //! the recurrent commit's stream: a hybrid round's kept rows scan into their slots beside the drafter's pass
+    nvrtc : int              //! the NVRTC version, read once at the arm: the prewarm's cache keys
+    driver : int             //! the driver version, the same
     dry : bool              //! the lane mint's walk: every seat runs its accept / refuse arithmetic and allocates and uploads nothing (`cud_mint_dry`)
     owner_ctx : uint64       //! the context that brought this state up - the only one whose end releases it
 }
@@ -64,6 +66,59 @@ def cud_init() : bool {
     return cud_init_first()
 }
 
+//! one [cuda_dispatch] kernel's text, seeded at program start
+struct CudKernelText {
+    name : string
+    text : string
+    is_arch_specific : bool   //! an `sm_<cc>a` text: the FP4 rung's
+}
+
+var private g_cud_texts : array<CudKernelText>   //! every seeded kernel's text, in seed order
+var private g_cud_prewarm_report : CudaPrewarmReport   //! what the last first-arm prewarm did
+
+//! the kernel texts: every [cuda_dispatch] kernel the program links, with its text
+def cud_kernel_texts : array<CudKernelText> => clone_to_move(g_cud_texts)
+
+//! a card of compute capability `sm` has a target for a text: an arch-specific one needs the
+//! FP4 rung
+def cud_has_target(sm : int; is_arch_specific : bool) : bool => !is_arch_specific || sm >= FP4_RUNG_SM
+
+//! the cubin cache folder under the knob `knob`: `CUDA_CACHE_DIR` where it is unset
+def cud_cache_dir_of(knob : string) : string => empty(knob) ? CUDA_CACHE_DIR : knob
+
+def cud_cache_dir : string => cud_cache_dir_of(g_env_vulkan.cuda_cache_dir)
+
+//! the prewarm of every seeded kernel a card of compute capability `sm` has a target for into
+//! `cache_dir`, keyed by the NVRTC and driver versions given
+def cud_prewarm_for(sm : int; cache_dir : string; nvrtc, driver : int; compile : CudaPrewarmCompile) : CudaPrewarmReport {
+    let texts <- [for (k in g_cud_texts);
+        CudaPrewarmText(name = k.name, source = k.text, compile_opts <- cuda_text_compile_options(sm, k.text));
+        where cud_has_target(sm, k.is_arch_specific)]
+    return <- cubin_prewarm(texts, cache_dir, nvrtc, driver, compile)
+}
+
+var private g_cud_prewarm_rows = -1   //! the kernel texts the last prewarm of this arm saw; -1 before the first
+
+//! the prewarm at a kernel load: every kernel's cubin compiled into the cache ahead of the load,
+//! so each load reads its file; a text seeded after the last prewarm brings one more
+[cold_path]
+def private cud_prewarm {
+    g_cud_prewarm_rows = length(g_cud_texts)
+    let knob = g_env_vulkan.cuda_cache_dir
+    let dir = cud_cache_dir_of(knob)
+    var r <- cud_prewarm_for(g_cud.sm, dir, g_cud.nvrtc, g_cud.driver, @@cuda_compile_cubin_unchecked)
+    let folder = empty(knob) ? dir : "DASLLAMA_CUDA_CACHE_DIR={dir}"
+    to_log(LOG_INFO, "dasLLAMA cuda tier: kernel prewarm {r.wall_ms} ms - {r.compiled} kernels compiled on {r.workers} workers, {r.cached} read from the cache ({folder}), {r.failed} failed\n")
+    for (f in r.failures) {
+        to_log(LOG_WARNING, "dasLLAMA cuda tier: {f.name} did not compile in the kernel prewarm; its load reports the log\n")
+    }
+    delete g_cud_prewarm_report
+    g_cud_prewarm_report <- r
+}
+
+//! what the last prewarm of this context did
+def cud_prewarm_report : CudaPrewarmReport => clone_to_move(g_cud_prewarm_report)
+
 [cold_path]
 def private cud_init_first() : bool {
     g_cud.tried = true
@@ -97,7 +152,9 @@ def private cud_init_first() : bool {
     g_cud.ready = true
     g_cud.owner_ctx = intptr(unsafe(addr(this_context())))
     cuda_set_launch_pdl(g_cud.sm >= 90 && g_env_vulkan.cuda_pdl != 0l)   // every kernel of the home comes through the emitter, which puts the entry wait in each
-    to_log(LOG_INFO, "dasLLAMA cuda tier: device ready ({g_cud.name}, {g_cud.sm_count} SMs, sm_{g_cud.sm}, driver {cuda_driver_version()}, nvrtc {cuda_nvrtc_version()}, programmatic dependent launch {cuda_launch_pdl() ? "on" : "off"})\n")
+    g_cud.driver = cuda_driver_version()
+    g_cud.nvrtc = cuda_nvrtc_version()
+    to_log(LOG_INFO, "dasLLAMA cuda tier: device ready ({g_cud.name}, {g_cud.sm_count} SMs, sm_{g_cud.sm}, driver {g_cud.driver}, nvrtc {g_cud.nvrtc}, programmatic dependent launch {cuda_launch_pdl() ? "on" : "off"})\n")
     return true
 }
 
@@ -134,6 +191,7 @@ def cud_shutdown() {
     g_cud_modules |> clear()
     g_cud_off_rung |> clear()
     g_cud_epoch++
+    g_cud_prewarm_rows = -1
     cuda_stream_destroy(g_cud.stream)
     g_cud.stream = null
     cuda_stream_destroy(g_cud.copy.stream)
@@ -272,15 +330,19 @@ def cud_class_fn(var c : CudClass; ord : int; text, entry : string; smem : uint6
         c.smem |> push(0u)
         c.blocks |> push(uint3(1u, 1u, 1u))
     }
+    if (g_cud_prewarm_rows != length(g_cud_texts)) {
+        cud_prewarm()
+    }
     return false if (key_exists(g_cud_off_rung, kernel))
-    if (g_cud.sm < FP4_RUNG_SM && cuda_source_is_arch_specific(text)) {
+    if (!cud_has_target(g_cud.sm, cuda_source_is_arch_specific(text))) {
         g_cud_off_rung |> insert(kernel)
         to_log(LOG_INFO, "dasLLAMA cuda tier: {kernel}: on the FP4 rung, which starts at compute capability {FP4_RUNG_SM}; this card is {g_cud.sm}, so it has no kernel\n")
         return false
     }
     var err : string
     var mod : CudaModule?
-    let fn = function_from_source(g_cud.cc, text, kernel, entry, mod, err, uint(smem))
+    let fn = function_from_source([cc = g_cud.cc, source = text, name = kernel, entry = entry, mod = mod, error = err,
+        shared_bytes = uint(smem), cache_dir = cud_cache_dir()])
     if (fn == null) {
         to_log(LOG_ERROR, "dasLLAMA cuda tier: {kernel}: {err}\n")
         return false
@@ -470,9 +532,11 @@ def cud_rail_launch(c : CudClass; ord : int; rl : CutRail; roles : auto(R); var 
 var private g_cud_census : table<string; int>
 var private g_cud_ensures : table<string; function<() : bool>>   //! every [cuda_dispatch] kernel's ensure, seeded at program start: the coverage universe, and the compile gate's reach
 
-//! every [cuda_dispatch] kernel joins the coverage universe at program start (the macro generates an [init] calling this)
-def cud_census_seed(kernel : string; ensure : function<() : bool>) {
+//! every [cuda_dispatch] kernel joins the coverage universe and the kernel texts at program start (the macro generates an
+//! [init] calling this)
+def cud_census_seed(kernel : string; ensure : function<() : bool>; text : string) {
     g_cud_ensures[kernel] = ensure
+    g_cud_texts |> push(CudKernelText(name = kernel, text = text, is_arch_specific = cuda_source_is_arch_specific(text)))
 }
 
 //! every seeded kernel's ensure run: the names whose function did not compile or load (the home's NVRTC compile gate);

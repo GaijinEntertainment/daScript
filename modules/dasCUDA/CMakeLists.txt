@@ -27,4 +27,8 @@ IF ((NOT DAS_CUDA_DAS_INCLUDED) AND (NOT DAS_CUDA_DISABLED) AND (CMAKE_SIZEOF_VO
         PATTERN "*.das"
         PATTERN "_*" EXCLUDE
     )
+    # cuda/ carries [arch] citations; ship generated excerpts of the cited sections
+    # (registry processed by the root CMakeLists)
+    set_property(GLOBAL APPEND PROPERTY DAS_ARCH_EXTRACT_SPECS
+        "modules/dasCUDA/cuda|modules/dasCUDA|${DAS_INSTALL_MODULESDIR}/dasCUDA")
 ENDIF()

@@ -649,6 +649,11 @@ struct public VulkanEnv {
     cuda_graphs : int64 = 1l
 
     @clarg_path
+    @clarg_default_doc = ".cache/daslang/cuda under the working directory"
+    @clarg_doc = "The folder of the CUDA home's cubin cache: every kernel text NVRTC compiled, under a key of the toolkit, the driver, the options and the text, which a process's first kernel load prewarms on job workers and every load reads. A fleet keeps it on a shared volume so a fresh pod compiles nothing."
+    cuda_cache_dir : string = ""
+
+    @clarg_path
     @clarg_doc = "Directory of <kernel>.spv files served instead of the emitted words at pipeline creation (offline spirv-opt / hand-patched A/B instrument)."
     vk_spv_override : string = ""
 

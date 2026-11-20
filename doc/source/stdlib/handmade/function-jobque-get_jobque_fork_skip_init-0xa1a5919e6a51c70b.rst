@@ -1,0 +1,1 @@
+Report whether the current context clones its pooled per-job fork contexts without running the init script, which `set_jobque_fork_pool` turns on. A library that changes the two flags for one dispatch reads both and puts both back.

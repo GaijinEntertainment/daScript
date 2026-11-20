@@ -69,9 +69,9 @@ plain pointers, a by-value argument struct, streams in place of command buffers.
   the toolkit's include dir on the command line, which a deployed box does not have. A kernel
   text is therefore self-contained: the emitter's prelude spells half and bf16 conversion as
   inline PTX and the tensor-core forms as inline `mma.sync`, and no kernel includes a header.
-- **Cubins, cached once per process-wide key.** NVRTC takes 35 to 50 ms a kernel and the driver's
-  PTX JIT another 17 at module load, while a cubin loads in 0.2 ms; a few hundred kernels per
-  model make the compile path a 20 s start. `cubin_cached` keys a text by NVRTC version, driver
+- **Cubins, cached once per process-wide key.** NVRTC takes tens of milliseconds for a small
+  kernel text and seconds for a large one, while a cubin loads in 0.2 ms; a few hundred kernels
+  make the compile path a start of minutes on one core. `cubin_cached` keys a text by NVRTC version, driver
   version, options and source under `.cache/daslang/cuda/` in the working directory - the JIT
   object cache's home - shared by every model and every run; a caller that must not share it
   (a test, into its run's temp dir) names its own `cache_dir`. An arch-specific target
@@ -117,12 +117,58 @@ or on an older arch, both instructions are no-ops, so a kernel text is one text 
 launch mode. Only a stream whose every kernel came through the emitter may turn the flag on: a
 kernel without the wait would read its predecessor's output early.
 
+### A known kernel set prewarms the cubin cache on job forks {#cuda-cubin-prewarm}
+
+A consumer that compiles its kernel texts one after another at first use waits on NVRTC with
+the GPU idle. A consumer whose kernel set is fixed at compile time hands the whole set to
+`cubin_prewarm` once, before the first load. The calling thread computes each text's cache path
+(`cubin_cache_path`, under the NVRTC and driver versions it is given) and stats it; a hit is
+`cubin_is_hit`, the predicate `cubin_cached` reads. Each text with no cubin goes onto a `Stream`
+as an archived record. Then the drain jobs go to the job queue: the caller's queue where one is
+up, otherwise one the prewarm opens. There is one drain job per live worker of the queue, at
+most `CUDA_PREWARM_MAX_WORKERS`, and each pulls records off the `Stream` until it is empty.
+
+NVRTC is thread-safe across program objects, and since CUDA 12.3 concurrent compiles also run
+its optimizer concurrently. Each job creates and destroys its own program.
+
+The options a text compiles with on a card come from one function, `cuda_text_compile_options`:
+the card's sm target, with the `a` suffix where the text is arch-specific.
+`module_from_source` and a consumer building the prewarm's texts both call it, so the prewarm
+writes the file a load reads.
+
+The jobs never leave a fork in a pool the caller does not already run. The prewarm reads both
+fork-pool flags (`get_jobque_fork_pool`, `get_jobque_fork_skip_init`). A caller that pools
+skip-init forks (`set_jobque_fork_pool(true, true)`, the dasLLAMA job queue's setting) lends its
+pool as it stands: the jobs run on skip-init forks, or on a pooled fork that did run `[init]`.
+For any other caller the prewarm turns pooling off for its dispatch: `new_job` then clones a
+fork per job, which runs the init script, and destroys it at the job's end, so no fork joins
+the pool, a late release included. Both flags are set back after the dispatch.
+
+A skip-init fork's globals are never initialized, so nothing a job runs reads a global. A
+text, its name, its options and its cache path arrive in the archived record, which copies the
+bytes into the fork's heap; a string captured into the job's lambda would point into the
+caller's heap. The outcome goes back the same way. The compile step reads no global:
+`cuda_compile_cubin_unchecked` skips the NVRTC-loaded check, which reads the library-name
+constants, so the caller checks `cuda_nvrtc_available()` first.
+
+The NVRTC entry points are late externs. Each binds at its first call: on the interpreter
+through dasbind's process-wide table, under the JIT through the JIT module's slot. No context's
+init binds them, so a skip-init fork reaches them.
+
+A worker writes its cubin through `cubin_store`, the same temp-file rename `cubin_cached`
+writes through, so a later load reads a whole file or none. A text that fails leaves no file:
+its load compiles it again and reports the compiler's log, as `cubin_cached` does. A cubin that
+compiles and does not write is a failure too, its log naming the path. The compile step is a
+parameter (`CudaPrewarmCompile`, `cuda_compile_cubin_unchecked` in service), so the scheduling
+and the cache arms run under a test's stand-in on a box with no NVRTC. A warm cache costs the
+keying and one stat a text, and no job is dispatched.
+
 ## Files
 
 | File | Purpose |
 |---|---|
 | `cuda/cuda_driver.das` | The externs: the driver API in seven families - init and device, context, module and function, memory and copies, streams and events, graphs (stream capture, instantiate, launch, destroy), launch and error text - and NVRTC's program lifecycle; the attribute and flag constants the calls take; the two library probes. |
-| `cuda/das_cuda_boost.das` | Host sugar over the externs: `cuda_available` / `cuda_nvrtc_available`, `with_cuda_context`, the error text and the last-error slot, the live-object registry and its gate (`cuda_log_leaks_if_any`), `cuda_compile`, the shared cubin cache (`cubin_cached`, `module_from_source`, `function_from_source` - the entry point with its dynamic-shared opt-in), device buffer helpers, `cuda_launch` / `run_compute_1d`, the graph verbs (`cuda_graph_capture` captures a block's launches on a stream into one executable graph, `cuda_graph_launch` replays it as one launch with the parameters as captured, so a step's inputs ride buffers the captured launches read; `cuda_graph_destroy`). |
+| `cuda/das_cuda_boost.das` | Host sugar over the externs: `cuda_available` / `cuda_nvrtc_available`, `with_cuda_context`, the error text and the last-error slot, the live-object registry and its gate (`cuda_log_leaks_if_any`), `cuda_compile`, the shared cubin cache (`cubin_cached`, `cubin_cache_path`, `cubin_prewarm`, `module_from_source`, `function_from_source` - the entry point with its dynamic-shared opt-in), device buffer helpers, `cuda_launch` / `run_compute_1d`, the graph verbs (`cuda_graph_capture` captures a block's launches on a stream into one executable graph, `cuda_graph_launch` replays it as one launch with the parameters as captured, so a step's inputs ride buffers the captured launches read; `cuda_graph_destroy`). |
 | `cuda/cuda_types.das` | The CUDA side of the type rail over `daslib/shader_emit_common` (the lattice spellings) and `daslib/shader_block_layout` (the classes): the half-family predicate and a shared element's byte size. |
 | `cuda/cuda_builtins.das` | The kernel vocabulary: a public re-export of `spirv/spirv_builtins` (the compute IDs, barriers, atomics and the subgroup set), so a class the Vulkan home stamps stamps here unchanged. |
 | `cuda/cuda_emit.das` | The text emitter: `generate_cuda(fn, var errors, cfg, var census, var smem) : string`. Manual recursion (`emit_value` / `emit_stmt`), the member and body scans, the prelude generators, the census at every emit site. What it writes: `ARCHITECTURE_EMIT.md` and its companion `ARCHITECTURE_EMIT_TILES.md`. |
