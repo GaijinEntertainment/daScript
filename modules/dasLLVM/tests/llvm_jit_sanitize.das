@@ -40,14 +40,11 @@ let SANITIZER_EXIT = 77
 //! when a sanitizer stops them, so a test reads the exit code, not the report text; this process read its
 //! sanitizer options at startup and is unaffected
 def private with_child_env(blk : block<() : void>) {
-    let saved <- [for (name in ["ASAN_OPTIONS", "UBSAN_OPTIONS", "DAS_LOG_LEVEL"]); get_env_variable(name)]
-    set_env_variable("ASAN_OPTIONS", "{saved[0]}:exitcode={SANITIZER_EXIT}")
-    set_env_variable("UBSAN_OPTIONS", "{saved[1]}:exitcode={SANITIZER_EXIT}")
-    set_env_variable("DAS_LOG_LEVEL", "info")
-    invoke(blk)
-    set_env_variable("ASAN_OPTIONS", saved[0])
-    set_env_variable("UBSAN_OPTIONS", saved[1])
-    set_env_variable("DAS_LOG_LEVEL", saved[2])
+    let saved <- [for (name in ["ASAN_OPTIONS", "UBSAN_OPTIONS"]); get_env_variable(name)]
+    with_env_variables([
+            (name = "ASAN_OPTIONS", value = "{saved[0]}:exitcode={SANITIZER_EXIT}"),
+            (name = "UBSAN_OPTIONS", value = "{saved[1]}:exitcode={SANITIZER_EXIT}"),
+            (name = "DAS_LOG_LEVEL", value = "info")], blk)
 }
 
 def private expect_stop(t : T?; rc : int; out : string; never : string) {

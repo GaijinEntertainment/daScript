@@ -91,6 +91,13 @@ struct DastestArgs {
     @clarg_doc = "Run top-level tests matching this name prefix"
     test_names : array<string>
 
+    @clarg_name = "run-env"
+    @clarg_doc = "NAME=VALUE set only while the compiled tests run, and put back after (repeatable); a new value does not recompile"
+    run_env : array<string>
+
+    @clarg_doc = "Base64 --run-env pair passed to isolated workers (repeatable)"
+    worker_run_env : array<string>
+
     @clarg_doc = "Run top-level benchmarks matching this name prefix"
     bench_names : array<string>
 

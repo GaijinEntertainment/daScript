@@ -543,6 +543,13 @@ def private record_pass(cache : ResultCache; file : string implicit; status : Su
 }
 
 
+//! the text a parent dastest base64-encoded for its worker; `ok` is
+//! false when `encoded` is not exactly that encoding
+def private worker_decoded(encoded : string) : tuple<ok : bool; text : string> {
+    let decoded = base64_decode(encoded)
+    return (ok = decoded.size >= 0 && base64_encode(decoded.text) == encoded, text = decoded.text)
+}
+
 [export]
 def main() : int {  // nolint:STYLE037,STYLE038 - CLI dispatch, one arm per mode
     // ansi-colors detection scans full argv for --color / --no-color so
@@ -562,13 +569,26 @@ def main() : int {  // nolint:STYLE037,STYLE038 - CLI dispatch, one arm per mode
     }
     var test_args <- parse_result |> move_unwrap
     if (!empty(test_args.worker_module_cache_dir)) {
-        let decoded = base64_decode(test_args.worker_module_cache_dir)
-        if (decoded.size < 0 || base64_encode(decoded.text)
-                != test_args.worker_module_cache_dir) {
+        let decoded = worker_decoded(test_args.worker_module_cache_dir)
+        if (!decoded.ok) {
             log::error("dastest: invalid worker module-cache path")
             return 1
         }
         test_args.module_cache_dir = decoded.text
+    }
+    test_args.run_env |> reserve(length(test_args.run_env) + length(test_args.worker_run_env))
+    for (encoded in test_args.worker_run_env) {
+        let decoded = worker_decoded(encoded)
+        if (!decoded.ok) {
+            log::error("dastest: invalid worker run-env pair")
+            return 1
+        }
+        test_args.run_env |> push(decoded.text)
+    }
+    let badRunEnv = find_index_if(test_args.run_env) $(pair) => find(pair, "=") <= 0
+    if (badRunEnv >= 0) {
+        log::red("command-line args: --run-env '{test_args.run_env[badRunEnv]}' is not NAME=VALUE")
+        return 2
     }
 
     // Set BEFORE the --run worker early-return below: workers must honor
@@ -786,9 +806,11 @@ def main() : int {  // nolint:STYLE037,STYLE038 - CLI dispatch, one arm per mode
             : (" --worker-module-cache-dir "
                 + base64_encode(test_args.module_cache_dir)
                 + (test_args.verbose ? " --verbose" : "")))
+        let runEnvFlags = join([for (pair in test_args.run_env);
+            " --worker-run-env {base64_encode(pair)}"], "")
         let cmdSuffix = (" {benchstr}{log::useTtyColors ? " --color" : ""}"
             + "{headlessFlag}{stackExcFlag}{failuresOnlyFlag}"
-            + "{useAotFlag}{compileOnlyFlag}{jitFlags}{moduleCacheFlag}")
+            + "{useAotFlag}{compileOnlyFlag}{jitFlags}{moduleCacheFlag}{runEnvFlags}")
         let batchSize = max(1, test_args.batch)
         // Group files into batches of batchSize. Each batch is run by one
         // worker subprocess (batchCmd); per-file singleCmds are kept so a
