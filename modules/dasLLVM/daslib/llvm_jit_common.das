@@ -1076,7 +1076,9 @@ def public emit_object_only(target : JitTarget; mod : LLVMOpaqueModule?; out_pat
 def public lto_linker_args(opt_level : uint) : string {
     let msvc_lld = get_platform_name() == "windows" && empty(host_jit_triple())
     let level = int(opt_level)   // a uint interpolates as hex
-    return msvc_lld ? "/opt:lldlto={level}" : "-flto -O{level}"
+    let threshold = int(LLVM_INLINE_THRESHOLD)
+    return (msvc_lld ? "/opt:lldlto={level} /mllvm:-inline-threshold={threshold}"
+        : "-flto -O{level} -Wl,-plugin-opt=-inline-threshold={threshold}")
 }
 
 // nolint:STYLE014
