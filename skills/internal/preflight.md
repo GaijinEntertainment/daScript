@@ -61,7 +61,7 @@ working-tree copy.
 | Workflow | Trigger | Jobs |
 |---|---|---|
 | `build.yml` (per-PR) | every PR commit (`pull_request`) + pushes to `master` | `build` matrix (`build_matrix.yml`, lane `build`: Debug + Release on linux, linux_arm, darwin15, darwin26; windows 32 Release, windows 64 Release), `bundle_smoke`, `build_linux_gcc` |
-| `nightly.yml` | `schedule` cron (daily 02:00 UTC), `workflow_dispatch`, and a `pull_request` whose body says `#nightly`, that carries `run-nightly` / `nightly-failure`, or that changes a file under `include/` or `src/` | `build` matrix (`build_matrix.yml`, lane `build_nightly`: the per-PR Release cells running `run_build_nightly` - the full AOT sweep and the three backend sweeps - plus the sanitizer cells - each three jobs, `tests`, `slow`, `backend`; `tests` and `backend` share one sccache slot, `slow` keeps its own - the fast-math cell and windows 64 Debug, which compiles and runs no test), `build_windows_relwithdebinfo_nightly`, `build_windows_release_llvm_nightly`, `build_windows_mingw`, `build_windows_clangcl`, and calls to `extended_checks.yml` (lane `extended_nightly`), `nightly_daspkg_index.yml`, `nightly_imgui.yml`, `nightly_playground.yml` and `nightly_vulkan.yml` - the only cron. Breaks surface within ~24 h, not at PR time |
+| `nightly.yml` | `schedule` cron (daily 02:00 UTC), `workflow_dispatch`, and a `pull_request` whose body says `#nightly`, that carries `run-nightly` / `nightly-failure`, or that changes a file under `include/` or `src/` | `build` matrix (`build_matrix.yml`, lane `build_nightly`: the per-PR Release cells running `run_build_nightly` - the full AOT sweep and the three backend sweeps - plus the sanitizer cells - each three jobs, `tests`, `slow`, `backend`; `tests` and `backend` share one sccache slot, `slow` keeps its own - the fast-math cell, which runs `run_build` alone, and windows 64 Debug, which compiles and runs no test), `build_windows_relwithdebinfo_nightly`, `build_windows_release_llvm_nightly`, `build_windows_mingw`, `build_windows_clangcl`, and calls to `extended_checks.yml` (lane `extended_nightly`), `nightly_daspkg_index.yml`, `nightly_imgui.yml`, `nightly_playground.yml` and `nightly_vulkan.yml` - the only cron. Breaks surface within ~24 h, not at PR time |
 | `build_matrix.yml` | `workflow_call` from `build.yml` and `nightly.yml`, with the lane | the build matrix job - section below |
 | `nightly_imgui.yml` | `workflow_call` from `nightly.yml` + `workflow_dispatch` | dasImgui playwright suite on ubuntu + macos - section below |
 | `extended_checks.yml` (per-PR) | every PR | two linux x86_64 jobs, `core` and `modules` (`ci/ci_matrix.py extended`), ALL release modules ON, plus `commit_messages` (ubuntu, no build) - section below |
@@ -84,17 +84,26 @@ working-tree copy.
 ## build_matrix.yml - the build matrix
 
 Per-lane steps: build -> JIT sweep (loads the DLLs the restored slot carries and compiles the
-rest) -> interpreter sweep -> `ctest -L small` -> JIT cache sweep. Per-PR lanes also build `test_aot_subset` (tests/language,
-part of ALL) as a compile+link gate, and run no AOT tests.
+rest) -> interpreter sweep -> `ctest -L small` -> JIT cache sweep. A cell that runs `run_build` builds
+`test_aot_subset` and sweeps `tests/language` with it (`run_tests_aot_subset`); the full AOT suite
+is the nightly's.
 
-**The build matrix runs `run_build` (`run_tests_sweeps`, `test-small`), retried as
-`run_build_isolated` (`run_tests_sweeps_isolated`, `test-small`) when it fails, and, on the nightly
-lane, `run_build_nightly` (`run_tests_slow`, `run_backend_sweeps`, `test_aot_subset`).** The retry
+**On the build lane a cell runs `run_build` (`run_tests_sweeps`, `test-small`,
+`run_tests_aot_subset`, and on darwin Release `run_tests_llvm_vector_math`), retried as
+`run_build_isolated` (the same with `run_tests_sweeps_isolated`) when it fails. On the nightly
+lane the per-PR Release cells run `run_build_nightly` (`run_tests_slow`, `run_backend_sweeps`,
+`test_aot_subset`) instead, the fast-math cell runs `run_build`, and a sanitizer cell's `tests`
+job runs `run_build_sanitizers` (`run_tests_interpreter`, `test-small`).** The retry
 is the workflow's `||`, not a cmake target. The sanitizer cells
 configure with raised watchdogs (`SLOW_SWEEP_BUDGETS` in `ci/ci_matrix.py`: 3600 s for a sweep
 and the full AOT suite, 7200 s isolated) - their sweeps run at half speed on their own and the
 default budgets fired on runner variance alone. The windows 64 Debug cell runs the `Compile`
-step alone (`phase` compile in `ci/ci_matrix.py`): the default build, no sweep. Every cell's
+step alone (`phase` compile in `ci/ci_matrix.py`): the default build, no sweep. The fast-math
+cell (linux Release, gcc, `-DDAS_FAST_MATH=ON`, nightly lane) runs `run_build` and no
+`Nightly Tests` step: its interpreter sweep takes all of `tests/`, its JIT sweep the folders
+whose tests have a `HOST_FAST_MATH` arm (`_DAS_FAST_MATH_JIT_DIRS` in `tests/CMakeLists.txt`),
+and its AOT subset `tests/language` and `tests/math`. No cell runs the full AOT suite, the backend sweeps or the big C++
+tests on a fast-math build. Every cell's
 sccache slot is bounded by `SCCACHE_CACHE_SIZE` (5000M on windows, 2000M elsewhere) - an
 unbounded slot grows to sccache's 10G default and evicts the slots the nightly cells save once
 a day. Which sweeps
@@ -130,12 +139,12 @@ configure.
 | Small C++ tests | `cmake --build build --config Release --target test-small` | drop `--build-config` on single-config generators. **Run after touching `tests-cpp/`** - MSVC tolerates C++ clang/gcc reject; `skills/internal/writing_cpp_tests.md` |
 | Compile (windows 64 Debug, nightly) | `cmake --build build --config Debug` | the default build as MSVC Debug; no test runs in this cell |
 | AOT sweep (full) | `cmake --build build --config Release --target run_tests_slow` - the full `test_aot` build, the AOT sweep over tests/, then the big C++ tests | nightly + manual dispatch only, so this is the **only** pre-push gate for AOT regressions outside tests/language - don't skip it; the sweep closes with its 30 slowest files (`--timing-outliers 30`). Under a sanitizer it leaves out `tests/lsp`, `tests/lint`, `tests/module_cache`, `tests/dastest` and `tests/mcp` - compiler and tool tests the cell's interpreter sweep already runs |
-| AOT subset gate | `cmake --build build --config Release --target test_aot_subset` (add `--target run_tests_aot_subset` to sweep tests/language too) | what per-PR lanes build |
+| AOT subset gate | `cmake --build build --config Release --target test_aot_subset` (add `--target run_tests_aot_subset` to sweep tests/language too) | what `run_build` builds and sweeps on every lane |
 | LLVM-AOT sweep | `cmake --build build --config Release --target run_backend_sweeps` runs all three; alone: `cmake --build build --config Release --target run_tests_llvm_aot` | nightly + dispatch. Emits a native `.o` per test through the LLVM backend instead of the C++ proxy, then sweeps tests/ against them - tests/language only under tsan, where the whole corpus outruns the suite watchdog |
 | Standalone sweep - C++ (`-ctx`) | `cmake --build build --config Release --target run_backend_sweeps`; alone: `cmake --build build --config Release --target run_standalone_sweep_aot` | nightly + dispatch. Emits, compiles, links and launches a standalone context per file of test_aot's corpus. `-DDAS_STANDALONE_SWEEP_FILTER=<regex>` narrows it |
 | Standalone sweep - LLVM (`-lib`) | `cmake --build build --config Release --target run_backend_sweeps`; alone: `cmake --build build --config Release --target standalone_sweep_jit` | nightly + dispatch. Same corpus through `daslang -lib`: emits each as a native library, loads it back through its generated bindings and drives it. Needs LLVM |
 | Debug lanes | `cmake --build build --config Debug --target daslang`, then the sweep against `bin/Debug/daslang.exe` - Debug coexists in-checkout with Release (`bin/Debug/`, `_debug.shared_module`) | Debug bypasses the fused interpreter permutations: a fused-path-only fix passes Release everywhere and trips Debug, and fused-path bugs need Release. Touched `src/simulate/simulate_fusion_*`? run both |
-| Fast-math lane (linux Release, `-ffast-math`) - nightly | Linux/WSL: `CC=gcc CXX=g++ cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DDAS_FAST_MATH=ON`, then `--target run_tests_interpreter` and `ctest -L small` | the tree gets the host's relaxed-float flag, the way an embedder passing `-ffast-math` builds it (dagor does). gcc, not clang: clang's `-Wnan-infinity-disabled` fires on every inf literal the tree and its vendored third-party spell, and neither is ours to patch. Vector-vs-scalar bit equality legitimately diverges here - gate such an arm on the `HOST_FAST_MATH` constant and skip. Nightly + dispatch only |
+| Fast-math lane (linux Release, gcc `-ffast-math`) - nightly | Linux/WSL: `CC=gcc CXX=g++ cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DDAS_FAST_MATH=ON -DDAS_LLVM_DISABLED=OFF`, then `cmake --build build --target run_build` | the tree gets the host's relaxed-float flag, the way an embedder passing `-ffast-math` builds it (dagor does), and on such a host the JIT turns its own fast-math on. gcc, not clang: clang's `-Wnan-infinity-disabled` fires on every inf literal the tree and its vendored third-party spell, and neither is ours to patch. Vector-vs-scalar bit equality legitimately diverges here - gate such an arm on the `HOST_FAST_MATH` constant and skip. A fast-math build narrows the JIT sweep and the LLVM-AOT sweep to the folders whose tests have such an arm (`ci/test_ci_matrix.py` fails when an arm appears in a folder the list lacks), and its `test_aot_subset` carries and sweeps `tests/language` and `tests/math`. On MSVC the flag is `/fp:fast`. Nightly + dispatch only |
 | Sanitizer lanes (linux Release asan/tsan/ubsan) - nightly | WSL: `CC=clang CXX=clang++ cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DDAS_USE_SANITIZER=<asan\|tsan\|ubsan>`, then the JIT sweep on `tests/language`. A sanitizer build narrows every backend sweep to `tests/language`: `test_llvm_aot` carries only it and the dastest harness, and both standalone sweeps take only it. Under asan the jitted code is instrumented with `address` by default (`--jit-sanitize=none` turns it off; add `--jit-sanitize=address,undefined` for the ubsan checks too), and run the interpreter sweep too - the das heap poisons what it has not handed out (`src/misc/ARCHITECTURE.md` sec.10), and CI runs neither | not mirrorable on Windows/mac. CI applies LSan suppressions (`format_error`, `uriParseSingleUriA`, `uriMakeOwner`). Nightly + dispatch only (40-55 minute jobs); force one early with `gh workflow run nightly.yml` |
 | linux_arm / darwin lanes | mac: same commands as linux; from Windows not mirrorable | ARM reds (LLVM SelectionDAG, alignment) are CI-only signals |
 

@@ -262,7 +262,7 @@ jobs:
       # per-PR ctest is -L small, so only this step executes a generated
       # context. memory_model_4gb allocates a real 4 GB chunk and stays
       # local-only.
-      if: matrix.cmake_preset == 'Release' && matrix.sanitizers == 'none' && inputs.lane == 'build_nightly'
+      if: matrix.cmake_preset == 'Release' && matrix.sanitizers == 'none' && matrix.fast_math != 'ON' && inputs.lane == 'build_nightly'
       run: cmake --build ./build --config ${{ matrix.cmake_preset }} --target run_build_nightly --parallel
 
     # A sanitizer cell takes the nightly steps one job at a time (ci/ci_matrix.py, the phase):
