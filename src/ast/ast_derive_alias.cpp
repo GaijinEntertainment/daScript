@@ -321,7 +321,7 @@ namespace das {
     class AliasMarker : public Visitor {
     public:
         AliasMarker ( const ProgramPtr & prog, bool permanent, bool everything, bool report, TextWriter & ls ) : program(prog), logs(ls) {
-            checkAliasing = report;
+            checkAliasing = programReport = report;
             logAliasing = program->options.getBoolOption("log_aliasing", false);
             isPermanent = permanent;
             isEverything = everything;
@@ -330,6 +330,7 @@ namespace das {
         ProgramPtr  program;
         das_hash_map<Expression *,Expression *> cmresDest;
         bool checkAliasing = false;
+        bool programReport = false;
         bool logAliasing = false;
         TextWriter & logs;
         bool isPermanent = false;
@@ -363,6 +364,11 @@ namespace das {
         virtual void preVisit ( ExprMove * expr ) override {
             Visitor::preVisit(expr);
             cmresDest[expr->right] = expr->left;
+        }
+        virtual void preVisit ( Function * fn ) override {
+            Visitor::preVisit(fn);
+            auto origin = fn->getOriginPtr();
+            checkAliasing = programReport && !(origin && origin->module && origin->module->aliasingAllowed);
         }
         virtual FunctionPtr visit ( Function * fn ) override {
             cmresDest.clear();
