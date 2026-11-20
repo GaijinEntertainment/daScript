@@ -8,6 +8,7 @@ file(MAKE_DIRECTORY ${DAS_LANE_STAMP_DIR})
 
 option(DAS_TEST_RESULT_CACHE "dastest lanes skip a file whose last pass still holds" ON)
 set(DAS_TEST_CACHE_DIR ${PROJECT_SOURCE_DIR}/.cache/daslang/test_cache)
+set(DAS_TEST_AOT_CACHE_DIR ${DAS_TEST_CACHE_DIR}/aot_subset)
 
 function(add_das_target name)
     cmake_policy(SET CMP0116 NEW)

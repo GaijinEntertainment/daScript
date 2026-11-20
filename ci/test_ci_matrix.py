@@ -123,6 +123,31 @@ class ExtendedMatrix(unittest.TestCase):
         cells = ci_matrix.extended_cells(True)
         self.assertEqual([(c["target"], c["role"]) for c in cells], [("linux", "all"), ("windows", "all")])
 
+    def test_only_a_lane_that_runs_the_aot_subset_builds_it(self):
+        """Every dastest target depends on dastest_cache_guard, so a binary it hashes is a binary
+        every extended cell builds. The subset binary is hashed by a guard of its own, over a
+        folder inside the cache: the main guard's drop takes it too, and the slot carries it."""
+        tree = os.path.dirname(HERE)
+        with open(os.path.join(tree, "CMakeLists.txt"), encoding="utf-8") as f:
+            top = f.read()
+        hashed = top.split("set(_das_test_binaries)", 1)[1].split("endforeach()", 1)[0]
+        self.assertIn("foreach(_t daslang ", hashed)
+        self.assertNotIn("test_aot", hashed)
+        self.assertIn("add_dependencies(dastest_aot_cache_guard dastest_cache_guard test_aot_subset)", top)
+        self.assertIn("-DDIR=${DAS_TEST_AOT_CACHE_DIR}", top)
+        # a configure without the AOT tests has no subset binary to guard
+        self.assertIn("    if(TARGET test_aot_subset)\n        set(_aot_identity ", top)
+        self.assertIn("-E sha256sum $<TARGET_FILE:test_aot_subset> > ${_aot_identity}\n", top)
+        # the guard script reads the last identity under this one name
+        self.assertIn("-E copy ${_aot_identity} ${DAS_TEST_AOT_CACHE_DIR}/binary_identity.txt)\n", top)
+        with open(os.path.join(tree, "cmake", "das_lane.cmake"), encoding="utf-8") as f:
+            self.assertIn("set(DAS_TEST_AOT_CACHE_DIR ${DAS_TEST_CACHE_DIR}/aot_subset)\n", f.read())
+        with open(os.path.join(tree, "tests", "CMakeLists.txt"), encoding="utf-8") as f:
+            run = f.read().split("add_das_target(run_tests_aot_subset", 1)[1].split(")\n", 1)[0]
+        self.assertIn("--cache-dir ${DAS_TEST_AOT_CACHE_DIR}", run)
+        self.assertIn("DEPENDS test_aot_subset dastest_aot_cache_guard", run)
+        self.assertNotIn("${DAS_TEST_CACHE_DIR}", run)
+
     def test_the_macos_only_check_rides_the_build_lane(self):
         # the extended checks have no macOS cell, so the one check cmake gives to APPLE alone has
         # to run where a macOS job still builds per PR
@@ -199,7 +224,7 @@ class WorkflowShapes(unittest.TestCase):
         step = self.read("build_matrix.yml").split('- name: "Nightly Tests"', 1)[1].split("- name:", 1)[0]
         self.assertIn("      if: matrix.cmake_preset == 'Release' && matrix.sanitizers == 'none'"
                       " && matrix.fast_math != 'ON' && inputs.lane == 'build_nightly'\n", step)
-        tests_cmake = self.tests_cmake()
+        tests_cmake = self.read_tests_cmake()
         self.assertIn("        elseif(DAS_FAST_MATH)\n"
                       "            set(_DAS_JIT_TEST_DIRS ${_DAS_FAST_MATH_JIT_DIRS})\n", tests_cmake)
         self.assertIn("    if(DAS_FAST_MATH)\n"
@@ -215,7 +240,7 @@ class WorkflowShapes(unittest.TestCase):
                       " ${MATH_AOT_GENERATED_SRC} ${MATH_MODULES_AOT_GENERATED_SRC})\n"
                       "    add_dependencies(test_aot_subset test_aot_math test_aot_math_modules)\n", aot_cmake)
 
-    def tests_cmake(self):
+    def read_tests_cmake(self):
         with open(os.path.join(os.path.dirname(HERE), "tests", "CMakeLists.txt"), encoding="utf-8") as f:
             return f.read()
 
@@ -225,7 +250,7 @@ class WorkflowShapes(unittest.TestCase):
         leaves out is an arm no JIT run reaches."""
         listed = re.search(r"set\(_DAS_FAST_MATH_JIT_DIRS\)\nforeach\(_dir ([a-z_ ]+)\)\n"
                            r"    list\(APPEND _DAS_FAST_MATH_JIT_DIRS \$\{PROJECT_SOURCE_DIR\}/tests/\$\{_dir\}\)\n",
-                           self.tests_cmake())
+                           self.read_tests_cmake())
         self.assertIsNotNone(listed)
         tests = os.path.join(os.path.dirname(HERE), "tests")
         with_arm = set()
