@@ -11,9 +11,9 @@ overload receives, wherever that string is written, applies `REVIEW_TOKENIZER.md
 file) too.**
 
 **A diff that touches a `followup_*.md`, an `ARCHITECTURE*.md` or a `HOW_TO_*.md` under this folder,
-removes or rewrites the problem a `followup_*.md` row states, renames an identifier a `followup_*.md` row
-names, adds a file under `dasllama/`, or adds a STYLE037/STYLE038 suppression anywhere under this folder
-applies `REVIEW_DOCS.md` (beside this file) too.**
+removes or rewrites the problem a `followup_*.md` row states, renames, moves or deletes an identifier
+or a file a `followup_*.md` row names, adds a file under `dasllama/`, or adds a STYLE037/STYLE038
+suppression anywhere under this folder applies `REVIEW_DOCS.md` (beside this file) too.**
 
 **A diff that adds, changes or drops a check in a `REVIEW.das` under this folder, adds or removes a
 name in a check's licensed set - the names a check does not flag - or changes a literal a check
@@ -248,10 +248,10 @@ can depend on - what it calls, types, requires or parses (facade functions, CLI 
 knobs, file formats, defaults, what the installed SDK lets a program `require`) - plus the in-repo
 rig and tool surface: any output another tool parses. A console-only diagnostic is not user-facing.
 
-**A diff that falsifies a statement in checked-in text under this folder - docs, `//!` docstrings,
-`//` comments, or string data, any language - or in a document outside this folder whose own
-checklist routed this diff here, updates that text in the same change** - no lint reads text no
-`[arch]` cites.
+**A diff that falsifies a statement of what the tree holds or does now in checked-in text under this
+folder - docs, `//!` docstrings, `//` comments, or string data, any language - or in a document
+outside this folder whose own checklist routed this diff here, updates that text in the same change**;
+no lint reads text no `[arch]` cites. A record naming its run by a date or a commit is no such statement.
 
 **Weakening `dasllama_lint` (`dasllama/dasllama_lint.das`) - the compile-time check that a
 consumer requires only this module's public entry modules, matched by the resolved file's

@@ -33,6 +33,10 @@ CPU run against a GPU run among them - applies `REVIEW_LANE_PINS.md` (beside thi
 audio samples - compares an encoder's output rows against a second source, or compares ASR
 transcripts, applies `REVIEW_MEDIA_CELLS.md` (beside this file) too.**
 
+**A diff that adds or moves a cell that skips or picks its assert or bar on a condition, adds or
+changes such a condition, or changes the body of a function in this folder that such a condition
+calls, applies `REVIEW_SKIPS.md` (beside this file) too.**
+
 A cell is one `t |> run` subtest, or a `[test]` function that runs no subtest, and owns the asserts
 of every helper it calls; a test file is a `.das` dastest runs - one holding a `[test]` function, or
 one whose `cant_`, `failed_` or `invalid_` prefix makes its compile the assertion. A gate function
@@ -94,11 +98,13 @@ whether or not the entry claims to, states how many there are, or states a fact 
 each such clause the new one makes false, in the same change, every clause it adds or corrects true
 of the file as the diff leaves it.**
 
-**A diff that removes, moves or renames a cell or a gate function, or changes a cell's suite, its
-skip condition, or any fact a `CLAUDE.md` entry states about it - the class it dispatches, the
-shapes, lengths, formats or lanes it sweeps, the predicate an assert reads, the bar it holds, its
-controls - corrects in the same change the `CLAUDE.md` entry of every test file running the cell,
-counts and skip clauses included.**
+**A diff that removes, moves or renames a cell or a gate function, or changes a cell's suite, the
+model-size tier it runs under (the files it loads total at or below `MODEL_TIER_CEILING_BYTES`, or
+above it), its `--category`, whether it loads a layer cut (a model file holding a subset of a
+carrier's blocks), its skip condition, or any fact a `CLAUDE.md` entry states about it - the class
+it dispatches, the shapes, lengths, formats or lanes it sweeps, the predicate an assert reads, the
+bar it holds, its controls - corrects in the same change the `CLAUDE.md` entry of every test file
+running the cell, counts, skip clauses and tier, category and cut wording included.**
 
 **A diff that adds a function to a `_*.das` fixture module in this folder, removes or renames one,
 changes what one does, or removes its last caller makes every `CLAUDE.md` clause stating a fact
@@ -129,20 +135,6 @@ returns without asserting registers `t |> skip` there; `feint` is a print, not a
 
 **A cell whose claim holds only where a box fact holds registers its skip on that fact before
 the asserts that need it - never a failure.**
-
-**A cell's skip condition, and any condition that picks a cell's assert or bar by something other
-than an input the cell sets itself (a format, a shape, a loop value) or a constant table a file of
-this folder declares (a row table among them - a table of per-row inputs the cell's file declares as
-a constant and the cell loops over), queries a box fact directly - a device query, a `typeinfo`
-module check, an environment read, a tune companion's return, a toolchain probe, a stocked
-artifact's presence - and never tests a registry a `register_*` call fills, or the presence or
-content of a file that the build, a mint or a test run writes (a minted `.dlim`, a generated binary,
-a dump a test wrote).** Once the producer is renamed, moved or removed, a condition on its product
-skips the cell on every box, and the suite still passes.
-
-**A cell's skip condition, or a condition that picks its assert or bar, never reads a value the run
-computed (a margin, a gap, a measured difference); a bar computed from the assert's own operands (a
-tolerance scaled by a measured magnitude) is not such a pick.**
 
 **A cell that loads or gates on a stocked model file - a `.gguf` carrier, its shards, or an mmproj -
 gates through `model_available` (`_model_tier.das`), one call per file; a test that cannot require
@@ -230,14 +222,19 @@ loading several families runs only under a filter naming every one of them.** Ki
 two families of one architecture; an untagged test runs under every `--family` filter, each load
 of another family's decoder file skipping inside it.
 
-**A diff that adds or moves a cell in this folder, or changes which model file a cell loads
-(directly or through a helper's file constant), never loads a model file, through any loader but the
-area's `with_cpu_and_gpu_model` call for that file (`_cpu_gpu_model.das`), in a form that call or
-another test of the area already loads on a discrete home - a GPU backend whose device memory is not
-the host's; the cell joins that call, with its form added to the call's forms list, or the one test
-that loads the form.** A form is one load of the file under one set of load-time knobs and one load
-mode; a run area is the set of cells one `with_cpu_and_gpu_model` area name gathers; a load a child
-process makes is its own.
+**A diff that adds or moves a cell in a test file of this folder any of whose cells loads a model on
+a discrete home - a GPU backend whose device memory is not the host's - or changes which model file a
+cell of such a file loads (directly or through a helper's file constant), never loads a model file,
+through any loader but the `with_cpu_and_gpu_model` call that run area's name makes for that file
+(`_cpu_gpu_model.das`), in a form (a device form, or the CPU form a `with_cpu_and_gpu_model` call
+loads beside its device forms) that call or another test of that run area already loads.** A form is
+one load of the file under one set of load-time knobs and one load mode; a run area is the set of
+cells one `with_cpu_and_gpu_model` area name gathers; a load a child process makes is its own.
+
+**In a test file of this folder any of whose cells loads a model on a discrete home, a cell that
+loads a model file in a form a `with_cpu_and_gpu_model` call or another test of its run area already
+loads joins the `with_cpu_and_gpu_model` call of the run area whose area name the cell's file
+passes, with its form added to the call's forms list, or the one test that loads the form.**
 
 **A diff that compares two forms of a `with_cpu_and_gpu_model` call - two loads of its file under
 different load-time knobs or load mode - makes the compare after the call returns, on what the
