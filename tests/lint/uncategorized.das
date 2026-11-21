@@ -113,3 +113,48 @@ def test_fixture_name_predicate(t : T?) {
         t |> success(!is_lint_fixture_name("test_fixture_name_predicate.das"))
     }
 }
+
+def lint018_cast_source() : string {
+    return [
+        /*  1 */ "options gen2",
+        /*  2 */ "",
+        /*  3 */ "def grow_to(var a : array<auto(numT)>; n : int | int64) \{",
+        /*  4 */ "    a |> resize(n)",
+        /*  5 */ "\}",
+        /*  6 */ "",
+        /*  7 */ "[export]",
+        /*  8 */ "def narrow(var a : array<int>; n : int64) \{",
+        /*  9 */ "    grow_to(a,",
+        /* 10 */ "        int(n))",
+        /* 11 */ "    resize(a,",
+        /* 12 */ "        int(n))",
+        /* 13 */ "\}"
+    ] |> join("\n")
+}
+
+[test(description = "a LINT018 finding sits on the cast its fix rewrites, not on the line the call starts", timeout = 1200)]
+def test_lint018_reports_the_cast(t : T?) {
+    t |> run("a helper call and a builtin call, the cast on the next line") @@(t : T?) {
+        var inscope access <- make_file_access("")
+        let path = "{get_das_root()}/tests/lint/_lint018_cast_fixture.das"
+        set_file_source(access, path, lint018_cast_source())
+        using() $(var mg : ModuleGroup) {
+            using() $(var cop : CodeOfPolicies) {
+                cop.export_all = true
+                cop.lint_check = true
+                compile_file(path, access, unsafe(addr(mg)), cop) $(ok; program; issues) {
+                    if (!ok) {
+                        t |> failure("fixture failed to compile: {issues}")
+                        return
+                    }
+                    let disabled : table<string>
+                    let enabled <- { "LINT018" }
+                    var found : array<LintIssue>
+                    paranoid_collect_issues(program, found, disabled, enabled)
+                    let lines <- [for (issue in found); issue.line]
+                    t |> equal(lines, [10, 12])
+                }
+            }
+        }
+    }
+}

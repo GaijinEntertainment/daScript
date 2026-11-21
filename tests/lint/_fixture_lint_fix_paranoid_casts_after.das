@@ -20,9 +20,14 @@ def lengths(s : string; arr : array<int>) : uint64 {
     return uint64(long_length(arr)) + uint64(t)
 }
 
+def grow_to(var arr : array<auto(numT)>; n : int | int64) {
+    arr |> resize(n)
+}
+
 def narrowing(n : int64; u : uint64; var arr : array<int>) : int {
     arr |> resize(n)
     arr |> reserve(int64(u))
+    arr |> grow_to(n)
     var total = 0
     for (i in range64(n)) {
         total += arr[i]

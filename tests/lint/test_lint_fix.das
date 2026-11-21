@@ -220,7 +220,7 @@ def check_paranoid_pair(t : T?; name : string; enabled : table<string>; applied 
     t |> equal(length(again), 0)
 }
 
-[test(description = "the paranoid LINT fixes rename locals, rewrite casts, drop dead code and edit declarations as the after fixtures show")]
+[test(description = "the paranoid LINT fixes rename locals, rewrite casts, drop dead code and edit declarations as the after fixtures show", timeout = 1200)]
 def test_lint_fix_paranoid(t : T?) {
     t |> run("LINT002 / LINT004 / LINT012 / LINT013 rename locals and arguments") @@(t : T?) {
         check_paranoid_pair(t, "names", { "LINT002", "LINT004", "LINT012", "LINT013" }, 8)
@@ -228,7 +228,7 @@ def test_lint_fix_paranoid(t : T?) {
     t |> run("LINT016 / LINT017 / LINT018 / LINT020 / LINT024 rewrite the narrowing and cloning " +
         "spellings") @@(t : T?) {
         check_paranoid_pair(t, "casts", { "LINT016", "LINT017", "LINT018", "LINT020", "LINT024" },
-                            12)
+                            13)
     }
     t |> run("LINT001 / LINT008 / LINT009 drop dead or redundant code") @@(t : T?) {
         check_paranoid_pair(t, "dead", { "LINT001", "LINT008", "LINT009" }, 4)

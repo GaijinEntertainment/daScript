@@ -650,6 +650,158 @@ def private lint018_fix(narrow : ExprCall?; widen : string) : LintFix {
     return lint_replace_fix(narrow, empty(widen) || empty(inner) ? inner : "{widen}({inner})")
 }
 
+//! The type an ``int(...)`` cast ``arg`` narrows - ``tInt64``,
+//! ``tUInt64``, or ``tUInt`` under ``also_uint`` - or ``none``.
+def private lint018_narrowed_from(arg : Expression const?; also_uint : bool) : Type {
+    return Type.none if (!(arg is ExprCall))
+    let scall = arg as ExprCall
+    return Type.none if (scall.name != "int" || length(scall.arguments) != 1
+        || scall.arguments[0]._type == null)
+    let bt = scall.arguments[0]._type.baseType
+    let narrows = bt == Type.tInt64 || bt == Type.tUInt64 || (also_uint && bt == Type.tUInt)
+    return narrows ? bt : Type.none
+}
+
+typedef private Lint018Slots = tuple<first : int; second : int; isMem : bool>
+
+//! The size and position slots of ``call`` whose callee carries
+//! a 64-bit overload; -1 for no slot, ``isMem`` for the ``memcpy``
+//! family.
+def private lint018_size_slots(call : ExprCall const?) : Lint018Slots {
+    let fname = string(call.func != null && call.func.fromGeneric != null
+        ? call.func.fromGeneric.name
+        : call.name)
+    let nargs = length(call.arguments)
+    if ((fname == "memcpy" || fname == "memmove" || fname == "memcmp") && nargs == 3) {
+        return (first = 2, second = -1, isMem = true)
+    }
+    let none = (first = -1, second = -1, isMem = false)
+    return none if (nargs < 2 || call.arguments[0]._type == null)
+    let bt = call.arguments[0]._type.baseType
+    if (bt == Type.tArray) {
+        let sized = (fname == "resize" || fname == "resize_no_init" || fname == "reserve"
+            || fname == "ensure_capacity" || fname == "scratch_reserve"
+            || fname == "scratch_ensure_capacity" || fname == "scratch_resize")
+        if ((nargs == 2 && (sized || fname == "erase")) || fname == "resize_and_init") {
+            return (first = 1, second = -1, isMem = false)
+        }
+        if (nargs == 3 && fname == "erase") return (first = 1, second = 2, isMem = false)
+    } elif (bt == Type.tTable && nargs == 2 && fname == "reserve") {
+        return (first = 1, second = -1, isMem = false)
+    }
+    return (first = -1, second = -1, isMem = false)
+}
+
+//! How a function's body reads one parameter.
+struct private Lint018ParamUse {
+    reads : int
+    size_reads : int
+}
+
+//! ``lint018_param_use``'s memo, ``<mangled name hash>#<k>`` -> how
+//! that function reads its k-th parameter; a key sits at no reads
+//! while its scan runs, so a recursive chain forwards nothing
+var private lint018_param_uses : table<string; Lint018ParamUse>
+
+//! The variable ``e`` passes on: itself, or the operand of an
+//! integer cast.
+def private lint018_passed_var(e : Expression const?) : Variable const? {
+    var expr = e
+    while (expr != null) {
+        if (expr is ExprVar) return (expr as ExprVar).variable
+        if (expr is ExprRef2Value) {
+            expr = (expr as ExprRef2Value).subexpr
+        } elif (expr is ExprCall) {
+            let c = expr as ExprCall
+            return null if (length(c.arguments) != 1 || !(c.name == "int" || c.name == "int64"
+                || c.name == "uint" || c.name == "uint64"))
+            expr = c.arguments[0]
+        } else {
+            return null
+        }
+    }
+    return null
+}
+
+//! counts the reads of one parameter in a function body, and those
+//! that are a size: an argument in a ``lint018_size_slots`` slot, or
+//! in a slot of a das function that forwards it as one
+class private Lint018ParamScan : AstVisitor {
+    @do_not_delete param : Variable const?
+    use : Lint018ParamUse
+    def override preVisitExprVar(expr : ExprVar?) : void {
+        if (lint018_passed_var(expr) == param) {
+            use.reads++
+        }
+    }
+    def override preVisitExprCall(expr : ExprCall?) : void {
+        let slots = lint018_size_slots(expr)
+        for (a, i in expr.arguments, count()) {
+            continue if (lint018_passed_var(a) != param)
+            if (i == slots.first || i == slots.second
+                    || lint018_param_use(expr.func, i).size_reads > 0) {
+                use.size_reads++
+            }
+        }
+    }
+}
+
+def private lint018_param_use(fn : Function const?; k : int) : Lint018ParamUse {
+    return Lint018ParamUse() if (fn == null || fn.flags.builtIn || fn.body == null
+        || k >= length(fn.arguments))
+    let key = "{fn.getMangledNameHash}#{k}"
+    if (key_exists(lint018_param_uses, key)) {
+        return lint018_param_uses?[key] ?? Lint018ParamUse()
+    }
+    lint018_param_uses[key] = Lint018ParamUse()
+    var scan = new Lint018ParamScan()
+    scan.param = fn.arguments[k]
+    make_visitor(*scan) $(adapter) {
+        visit(fn.body, adapter)
+    }
+    let use = scan.use
+    unsafe {
+        delete scan
+    }
+    lint018_param_uses[key] = use
+    return use
+}
+
+def private lint018_is_int64_twin(root, cand : Function const?; k : int) : bool {
+    return false if (cand == root || cand.name != root.name
+        || length(cand.arguments) != length(root.arguments))
+    for (a, b, i in root.arguments, cand.arguments, count()) {
+        return false if (a._type == null || b._type == null)
+        if (i == k) {
+            return false if (b._type.baseType != Type.tInt64)
+        } elif (describe(a._type) != describe(b._type)) {
+            return false
+        }
+    }
+    return true
+}
+
+def private lint018_has_int64_twin(root : Function const?; k : int) : bool {
+    return false if (root._module == null || root.arguments[k]._type == null
+        || root.arguments[k]._type.baseType != Type.tInt)
+    var found = false
+    let name = string(root.name)
+    for_each_function(root._module, name) $(fn) {
+        found = found || lint018_is_int64_twin(root, fn, k)
+    }
+    for_each_generic(root._module, name) $(fn) {
+        found = found || lint018_is_int64_twin(root, fn, k)
+    }
+    return found
+}
+
+def private lint018_option_takes(declared : TypeDecl const?; wide : Type) : bool {
+    for (alt in declared.argTypes) {
+        return true if (alt != null && alt.baseType == wide)
+    }
+    return false
+}
+
 //! ``twin(a, b)`` for ``call(narrow(a), narrow(b))`` when every
 //! argument narrows a ``wide`` value
 def private lint020_fix(call : ExprCall?; twin, narrow : string; wide : Type) : LintFix {
@@ -1502,6 +1654,7 @@ class LintVisitor : AstVisitor {
     def override preVisitProgram(_prog : ProgramPtr) : void {
         lint030_writers |> clear()
         lint031_writers |> clear()
+        lint018_param_uses |> clear()
         lint034_summary_memo |> clear()
         lint034_touches_memo |> clear()
         lint034_reaches_memo |> clear()
@@ -2169,56 +2322,73 @@ class LintVisitor : AstVisitor {
 
     def lint018_check_arg(expr : ExprCall?; fname : string; idx : int; isMem : bool) : bool {
         let a = expr.arguments[idx]
-        if (!(a is ExprCall)) return false
+        let bt = lint018_narrowed_from(a, isMem)
+        if (bt == Type.none) return false
         let scall = a as ExprCall
-        if (scall.name != "int" || length(scall.arguments) != 1) return false
-        let src = scall.arguments[0]._type
-        if (src == null) return false
-        let bt = src.baseType
         if (isMem) {
-            if (bt != Type.tInt64 && bt != Type.tUInt64 && bt != Type.tUInt) return false
             lint_error("LINT018: int(...) truncates the {fname} size above 2^31; {fname} has " +
-                "uint/int64/uint64 overloads, so drop the cast", expr.at, lint018_fix(scall, ""))
+                "uint/int64/uint64 overloads, so drop the cast", scall.at, lint018_fix(scall, ""))
         } elif (bt == Type.tInt64) {
             lint_error("LINT018: int(...) truncates the {fname} argument above 2^31; {fname} has " +
-                "an int64 overload, so drop the cast", expr.at, lint018_fix(scall, ""))
-        } elif (bt == Type.tUInt64) {
-            lint_error("LINT018: int(...) truncates the {fname} argument above 2^31; {fname} has " +
-                "an int64 overload - widen with int64(...) instead of narrowing", expr.at,
-                lint018_fix(scall, "int64"))
+                "an int64 overload, so drop the cast", scall.at, lint018_fix(scall, ""))
         } else {
-            return false
+            lint_error("LINT018: int(...) truncates the {fname} argument above 2^31; {fname} has " +
+                "an int64 overload - widen with int64(...) instead of narrowing", scall.at,
+                lint018_fix(scall, "int64"))
         }
         return true
     }
 
+    def check_lint018_forwarded_size(expr : ExprCall?) : void {
+        let fn = expr.func
+        return if (fn == null || fn.flags.builtIn || fn.body == null)
+        let root = root_generic(fn)
+        let fname = string(root.name)
+        for (a, k in expr.arguments, count()) {
+            break if (k >= length(fn.arguments) || k >= length(root.arguments))
+            let bt = lint018_narrowed_from(a, false)
+            let declared = root.arguments[k]._type
+            continue if (bt == Type.none || declared == null)
+            let scall = a as ExprCall
+            let head = ("LINT018: int(...) truncates the {fname} argument " +
+                "{root.arguments[k].name} above 2^31; ")
+            if (declared.baseType == Type.option) {
+                let declared_text = (describe(declared) |> replace(" const", "")
+                    |> replace("|", " | "))
+                if (lint018_option_takes(declared, bt)) {
+                    lint_error("{head}{fname} declares it {declared_text}, so drop the cast",
+                        scall.at, lint018_fix(scall, ""))
+                } elif (lint018_option_takes(declared, Type.tInt64)) {
+                    lint_error("{head}{fname} declares it {declared_text} - widen with " +
+                        "int64(...) instead of narrowing", scall.at, lint018_fix(scall, "int64"))
+                }
+                continue
+            }
+            let use = lint018_param_use(fn, k)
+            continue if (bt != Type.tInt64 || use.size_reads == 0)
+            if (lint018_has_int64_twin(root, k)) {
+                lint_error("{head}{fname} passes it on as a size and has an int64 overload, " +
+                    "so drop the cast", scall.at, lint018_fix(scall, ""))
+            } elif (declared.baseType == Type.autoinfer && empty(declared.alias)
+                    && use.size_reads == use.reads) {
+                lint_error("{head}{fname} takes any type there and only passes it on as a size, " +
+                    "so drop the cast", scall.at, lint018_fix(scall, ""))
+            }
+        }
+    }
+
     def check_lint018_mem_size_narrowing(expr : ExprCall?) : void {
         if (noLint || genericDepth > 0) return
+        let slots = lint018_size_slots(expr)
+        if (slots.first < 0) {
+            check_lint018_forwarded_size(expr)
+            return
+        }
         let fname = string(expr.func != null && expr.func.fromGeneric != null
             ? expr.func.fromGeneric.name
             : expr.name)
-        let nargs = length(expr.arguments)
-        if ((fname == "memcpy" || fname == "memmove" || fname == "memcmp") && nargs == 3) {
-            lint018_check_arg(expr, fname, 2, true)
-            return
-        }
-        if (nargs < 2 || expr.arguments[0]._type == null) return
-        let bt = expr.arguments[0]._type.baseType
-        if (bt == Type.tArray) {
-            if (nargs == 2 && (fname == "resize" || fname == "resize_no_init"
-                    || fname == "resize_and_init" || fname == "reserve" || fname == "erase")) {
-                lint018_check_arg(expr, fname, 1, false)
-            } elif (nargs == 3 && fname == "resize_and_init") {
-                lint018_check_arg(expr, fname, 1, false)
-            } elif (nargs == 3 && fname == "erase") {
-                if (!lint018_check_arg(expr, fname, 1, false)) {
-                    lint018_check_arg(expr, fname, 2, false)
-                }
-            }
-        } elif (bt == Type.tTable) {
-            if (nargs == 2 && fname == "reserve") {
-                lint018_check_arg(expr, fname, 1, false)
-            }
+        if (!lint018_check_arg(expr, fname, slots.first, slots.isMem) && slots.second >= 0) {
+            lint018_check_arg(expr, fname, slots.second, slots.isMem)
         }
     }
 
