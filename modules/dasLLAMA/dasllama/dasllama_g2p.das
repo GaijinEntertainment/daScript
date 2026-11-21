@@ -261,7 +261,7 @@ def private lex_is_dict(g : G2pModel; t : LexTable; i : int; british : bool) : b
 }
 
 //! the phonemes of a value span [a, b): the first byte is the entry kind, the rest the reading
-def private span_ps(g : G2pModel; a, b : int64) : string => bytes_str(g.data, a + 1l, int(b - a - 1l))
+def private span_ps(g : G2pModel; a, b : int64) : string => bytes_str(g.data, a + 1l, b - a - 1l)
 
 //! a single-dialect table's entry: the CMUdict section, whose values carry no dialect part
 def private lex_plain_single(g : G2pModel; t : LexTable; i : int) : string {
