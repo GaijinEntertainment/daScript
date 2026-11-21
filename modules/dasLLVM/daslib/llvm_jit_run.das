@@ -38,7 +38,7 @@ var LINK_WHOLE_LIB = false // when true, standalone exe links against the whole 
 
 // Read by tests-cpp/small/test_jit_emitter_pin.cpp: FNV-1a64 of the emitter sources
 // (normalized to LF; file list in the test)
-let LLVM_JIT_EMITTER_HASH : uint64 = 0xd417e25284e1a32dul
+let LLVM_JIT_EMITTER_HASH : uint64 = 0x6f70d5edecf29776ul
 
 [arch(at = "../ARCHITECTURE_FAST_MATH.md#never-fast-math")]
 def private apply_fast_math_to_module(m : LLVMOpaqueModule?) {
@@ -56,9 +56,9 @@ def private apply_fast_math_to_module(m : LLVMOpaqueModule?) {
     }
 }
 
-//! the TBAA class of an access of LLVM type `ty`: float and double
-//! each their own; wider integers, pointers and half one class; ""
-//! (aliases everything) for bytes, bools, vectors and aggregates
+//! the TBAA class of an access of LLVM type `ty`: float, double;
+//! one class for wider integers, pointers and half; "" (aliases
+//! everything) for bytes, bools, vectors and mixed aggregates
 def private tbaa_class_of(ty : LLVMOpaqueType?) : string {
     let kind = LLVMGetTypeKind(ty)
     if (kind == LLVMTypeKind.LLVMIntegerTypeKind) {
@@ -69,6 +69,17 @@ def private tbaa_class_of(ty : LLVMOpaqueType?) : string {
         return "float"
     } elif (kind == LLVMTypeKind.LLVMDoubleTypeKind) {
         return "double"
+    } elif (kind == LLVMTypeKind.LLVMStructTypeKind) {
+        let n = int(LLVMCountStructElementTypes(ty))
+        var cls = ""
+        for (i in range(n)) {
+            let c = tbaa_class_of(LLVMStructGetTypeAtIndex(ty, uint(i)))
+            if (empty(c) || (i > 0 && c != cls)) return ""
+            cls = c
+        }
+        return cls
+    } elif (kind == LLVMTypeKind.LLVMArrayTypeKind) {
+        return tbaa_class_of(LLVMGetElementType(ty))
     }
     return ""
 }

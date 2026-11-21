@@ -685,6 +685,9 @@ class public LlvmJitVisitor : AstVisitor {
             var param = LLVMGetParam(fn, ai)
             if (a._type.isRef) {
                 LLVMSetParamAlignment(param, uint(a._type.alignOf))
+                LLVMAddAttributeToFunctionArgument(fn, ai, attributes.nonnull)
+                LLVMAddAttributeToFunctionArgument(fn, ai, LLVMCreateEnumAttribute(g_ctx,
+                    LLVMGetEnumAttributeKindForName("dereferenceable"), uint64(a._type.sizeOf)))
             }
             LLVMSetValueName(param, string(a.name))
             //! a container, or a type holding one, is lock-written by `for`:
@@ -1527,6 +1530,10 @@ class public LlvmJitVisitor : AstVisitor {
         if (func.sideEffectFlags == bitfield(0)) {
             LLVMAddCallSiteAttribute(ccall, -1 |> uint(), attributes.nounwind)     // TODO: better no-unwind?
             LLVMAddCallSiteAttribute(ccall, -1 |> uint(), attributes.willreturn)
+            let mem = pure_call_memory(func, is_cmres)
+            if (mem != null) {
+                LLVMAddCallSiteAttribute(ccall, -1 |> uint(), mem)
+            }
         }
         for (arg, ai in args, ucount(start)) {
             let maybe_ext = need_z_or_s_ext(arg._type)
@@ -1542,6 +1549,22 @@ class public LlvmJitVisitor : AstVisitor {
 
         }
         return ccall
+    }
+
+    def pure_call_memory(func : Function?; is_cmres : bool) : LLVMOpaqueAttributeRef? {
+        var values = 0
+        for (a in func.arguments) {
+            assume at = a._type
+            if (at.baseType == Type.fakeContext || at.baseType == Type.fakeLineInfo) continue
+            if (at.isRef || at.isPointer || at.isHandle
+                    || !(at.isWorkhorseType || at.isString)) return null
+            values++
+        }
+        if (values == 0) return null
+        let res = func.result
+        let scalar = (!is_cmres && !res.isVoid && res.isWorkhorseType
+            && !res.isPointer && !res.isString)
+        return scalar ? attributes.memory_read : attributes.memory_pure_ctx
     }
 
     def need_z_or_s_ext(_type : TypeDeclPtr) {
