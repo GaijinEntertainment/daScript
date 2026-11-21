@@ -1577,8 +1577,8 @@ def private b32_plane_row_f32(f : KqFmt; kq, ks : array<uint8>; nin, nout, mr, r
     let gbase = blk0 + (r / mr) * mr * nb
     let rg = r % mr
     unsafe {
-        var tq <- temp_array(addr(qbuf[0]), int(qb), type<uint8>)
-        var ts <- temp_array(addr(sbuf[0]), int(sb), type<uint8>)
+        var tq <- temp_array(addr(qbuf[0]), qb, type<uint8>)
+        var ts <- temp_array(addr(sbuf[0]), sb, type<uint8>)
         for (bi in range64(nb)) {
             let qo = (gbase + bi * mr) * qb
             for (j in range64(qb)) {

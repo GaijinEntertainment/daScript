@@ -311,7 +311,7 @@ def private kpass_rows(kall : array<uint16>; q : array<float>; var att : array<f
 def private race_kpass(reps : int; var t : RaceTally) {
     let kvdim = KP_KVH * KP_HS
     var kall : array<uint16>
-    kall |> reserve_resize(int(KP_L * KP_KEYS * kvdim))
+    kall |> reserve_resize(KP_L * KP_KEYS * kvdim)
     for (i in range64(KP_L * KP_KEYS * kvdim)) {
         kall[i] = uint16(f32_to_f16(0.5 * sin(float(i % 977l) * 0.01)))
     }
