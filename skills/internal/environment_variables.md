@@ -65,7 +65,8 @@ the log.
 
 `DAS_LINT_DISABLE` is the "let me add a log line while I debug this" hatch: no source edit, no
 config change, and it reverts the moment the variable goes away. Surrounding whitespace is ignored
-and unknown codes are harmless. The `-no-lint` command-line flag skips the lint pass entirely.
+and unknown codes are harmless. The `-no-lint` command-line flag turns off
+every lint macro and the compiler's style rules; the compiler's semantic checks still run.
 
 ## Module cache
 

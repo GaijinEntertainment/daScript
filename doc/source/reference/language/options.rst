@@ -90,7 +90,10 @@ Lint Control
    * - ``lint``
      - bool
      - true
-     - Enables or disables all lint checks for this module.
+     - When ``false``, turns off the lint macros and the compiler's style rules for this
+       module: unused function and block arguments, calls to deprecated functions, writes to
+       a nameless temporary. Errors such as a missing ``return``, a duplicate table key or an
+       unknown option are reported either way.
    * - ``no_writing_to_nameless``
      - bool
      - true

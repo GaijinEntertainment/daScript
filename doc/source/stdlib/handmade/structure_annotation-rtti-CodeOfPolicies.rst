@@ -11,7 +11,7 @@ File name for AOT output (if not set, we generate a temporary file).
 If we are in code completion mode.
 Whether this is a documentation/reflection compile; build-machine-specific transforms stay disabled.
 Whether we are in lint-check mode (standalone linters set this so modules can adapt behavior).
-Skip Program::lint() entirely (as if every module set ``options lint = false``).
+Turn off the lint macros and the compiler's style rules (as if every module set ``options lint = false``); semantic checks still run.
 Skip the Module::Initialize() assert in compileDaScript (for environments initialized later, e.g. dynamic-module discovery).
 Export all functions and global variables.
 Treat every public, non-generic function of the entry module as [export] (daslang -lib -lib-export-all).
