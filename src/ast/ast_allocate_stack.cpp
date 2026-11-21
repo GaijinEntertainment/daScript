@@ -944,7 +944,10 @@ namespace das {
             if ( inStruct ) return;
             if ( expr->right->rtti_isMakeLocal() ) {
                 auto mkl = static_cast<ExprMakeLocal*>(expr->right);
-                if ( !mkl->alwaysAlias ) {
+                if ( mkl->alwaysAlias ) {
+                    expr->takeOverRightStack = false;
+                    mkl->doesNotNeedSp = false;
+                } else {
                     uint32_t sz = sizeof(void *);
                     expr->stackTop = allocateStack(sz);
                     expr->takeOverRightStack = true;
@@ -987,7 +990,10 @@ namespace das {
             if ( inStruct ) return;
             if ( expr->right->rtti_isMakeLocal() ) {
                 auto mkl = static_cast<ExprMakeLocal*>(expr->right);
-                if ( !mkl->alwaysAlias ) {
+                if ( mkl->alwaysAlias ) {
+                    expr->takeOverRightStack = false;
+                    mkl->doesNotNeedSp = false;
+                } else {
                     uint32_t sz = sizeof(void *);
                     expr->stackTop = allocateStack(sz);
                     expr->takeOverRightStack = true;
