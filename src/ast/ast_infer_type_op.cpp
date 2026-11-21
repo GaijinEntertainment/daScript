@@ -501,7 +501,7 @@ namespace das {
         // try promoting int literal on either side to match the other side's type
         {
             bool rangeError = false;
-            if (auto promoted = tryPromoteConstInt(expr->right, expr->left->type, rangeError, true)) {
+            if (auto promoted = tryPromoteConstInt(expr->right, expr->left->type, rangeError, !promoteFoldedIntConstants)) {
                 reportAstChanged();
                 expr->right = promoted;
                 return Visitor::visit(expr);
@@ -510,7 +510,7 @@ namespace das {
                 expr->type = new TypeDecl(); // suppress downstream mismatching_numeric_type
                 return Visitor::visit(expr);
             }
-            if (auto promoted = tryPromoteConstInt(expr->left, expr->right->type, rangeError, true)) {
+            if (auto promoted = tryPromoteConstInt(expr->left, expr->right->type, rangeError, !promoteFoldedIntConstants)) {
                 reportAstChanged();
                 expr->left = promoted;
                 return Visitor::visit(expr);

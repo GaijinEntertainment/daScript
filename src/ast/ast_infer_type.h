@@ -100,6 +100,7 @@ namespace das {
         bool alwaysExportInitializer = false;
         bool relaxedAssign = false;
         bool relaxedPointerConst = false;
+        bool promoteFoldedIntConstants = false;
         bool unsafeTableLookup = false;
         bool defaultInitContainers = true;
         bool withModuleIsUnsafe = false;
