@@ -441,19 +441,19 @@ namespace das {
         bool noLocalClassMembers;
         bool noWritingToNameless;
     public:
-        LintVisitor ( const ProgramPtr & prog ) : program(prog) {
+        LintVisitor ( const ProgramPtr & prog, bool styleRules ) : program(prog) {
             checkOnlyFastAot = program->options.getBoolOption("only_fast_aot", program->policies.only_fast_aot);
             checkAotSideEffects = program->options.getBoolOption("aot_order_side_effects", program->policies.aot_order_side_effects);
             checkNoGlobalHeap = program->options.getBoolOption("no_global_heap", program->policies.no_global_heap);
             checkNoGlobalVariables = program->options.getBoolOption("no_global_variables", program->policies.no_global_variables);
             checkNoGlobalVariablesAtAll = program->options.getBoolOption("no_global_variables_at_all", program->policies.no_global_variables_at_all);
-            checkUnusedArgument = program->options.getBoolOption("no_unused_function_arguments", program->policies.no_unused_function_arguments);
-            checkUnusedBlockArgument = program->options.getBoolOption("no_unused_block_arguments", program->policies.no_unused_block_arguments);
+            checkUnusedArgument = styleRules && program->options.getBoolOption("no_unused_function_arguments", program->policies.no_unused_function_arguments);
+            checkUnusedBlockArgument = styleRules && program->options.getBoolOption("no_unused_block_arguments", program->policies.no_unused_block_arguments);
             checkUnsafe = program->policies.no_unsafe || program->thisModule->doNotAllowUnsafe;
-            checkDeprecated = program->options.getBoolOption("no_deprecated", program->policies.no_deprecated);
+            checkDeprecated = styleRules && program->options.getBoolOption("no_deprecated", program->policies.no_deprecated);
             disableInit = prog->options.getBoolOption("no_init", prog->policies.no_init);
             noLocalClassMembers = prog->options.getBoolOption("no_local_class_members", prog->policies.no_local_class_members);
-            noWritingToNameless = prog->options.getBoolOption("no_writing_to_nameless", prog->policies.no_writing_to_nameless);
+            noWritingToNameless = styleRules && prog->options.getBoolOption("no_writing_to_nameless", prog->policies.no_writing_to_nameless);
         }
     public:
         void reportUnsafeTypeExpressions() {
@@ -1364,15 +1364,14 @@ namespace das {
 
     DAS_API vector<pair<string,Type>> getCodeOfPolicyOptions();
 
+    // src/ast/ARCHITECTURE.md#lint-switch
     void Program::lint ( TextWriter & /*logs*/, ModuleGroup & libGroup ) {
-        if (!options.getBoolOption("lint", !policies.no_lint)) {
-            return;
-        }
+        const bool lintOn = options.getBoolOption("lint", !policies.no_lint);
         // note: build access flags is now called before patchAnnotations, and is no longer needed in lint
         // TextWriter logs; buildAccessFlags(logs);
         checkSideEffects();
         // lint it
-        LintVisitor lintV(this);
+        LintVisitor lintV(this, lintOn);
         visit(lintV);
         lintV.reportUnsafeTypeExpressions();
         unsafe = lintV.anyUnsafe;
@@ -1425,7 +1424,7 @@ namespace das {
                 }
             }
         }
-        set<Module *> lints;
+        if ( !lintOn ) return;
         Module::foreach([&](Module * mod) -> bool {
             DAS_ASSERT ( mod!=thisModule.get() );
             for ( const auto & pm : mod->globalLintMacros ) {

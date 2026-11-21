@@ -38,7 +38,7 @@ namespace das {
         bool        completion = false;                 // this code is being compiled for 'completion' mode
         /*option*/ bool building_documentation = false; // source/reflection docs: disable build-machine-specific transforms
         bool        lint_check = false;                 // this code is being compiled for lint/style checking
-        bool        no_lint = false;                    // skip Program::lint() entirely
+        bool        no_lint = false;                    // lint style rules and lint macros are off; semantic checks still run
         bool        no_init_check = false;              // skip the Module::Initialize() assert, most of the time should be false (except maybe dynamic-module discovery)
         bool        export_all = false;                 // when user compiles, export all (public?) functions
         bool        export_public_functions = false;

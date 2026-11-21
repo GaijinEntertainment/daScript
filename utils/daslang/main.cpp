@@ -822,7 +822,7 @@ void print_help() {
         << "    -no-dynamic-modules  skip loading dynamic modules from dasroot and project root\n"
         << "    -ignore-manifest  compile every .das_module descriptor and load every C++ module on start, reading\n"
         << "                and writing no .das_module.manifest - by default a manifest's C++ module loads at the first require that names it\n"
-        << "    -no-lint    skip the lint pass (Program::lint)\n"
+        << "    -no-lint    turn off the lint style rules and lint macros\n"
         << "    --ast-verify  force-include daslib/ast_verify; checks AST structural invariants before each inference pass\n"
         << "    --ast-verify-batch  checks the finished tree only (no per-pass walks, no cross-module sweeps): cheap enough to gate many files (CI)\n"
         << "    --ast-verify-each-pass  also runs the verifier after every inference pass\n"

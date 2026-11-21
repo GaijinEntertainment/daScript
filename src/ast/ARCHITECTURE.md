@@ -251,6 +251,20 @@ and `optimizeProgram`, so what a `fixup()` generates - the shader-blob globals d
 and dasMetal fill - is folded and optimized like ordinary code. A call-shaped initializer a
 fixup sets is uninferred; the gated dirty re-infer resolves it before `foldUnsafe`.
 
+## What the lint switch turns off (`Program::lint`, `ast_lint.cpp`) {#lint-switch}
+
+`options lint = false` and the `no_lint` policy turn off two things: the lint macros modules
+register, and the compiler's style rules - an unused function argument, an unused block argument,
+a call to a deprecated function, a write to a nameless temporary. Every other check in
+`Program::lint` runs whatever the switch says. `checkSideEffects` runs first; `LintVisitor`
+reports what inference leaves to it - a control path that returns no value, a duplicate key in a
+table literal, a type past the 2 GB limit, two lookups into one table in one statement - and
+enforces every other policy a host sets, `no_unsafe`, `no_global_variables`, `no_global_heap`
+and `no_init` among them; the option check rejects an unknown option name; `Program::unsafe` is
+set from the same walk. The switch silences advice, never an error the language defines, so a
+module that compiles with the switch on compiles to the same program with it off, and a host
+reads the same `unsafe` answer either way.
+
 ## Devirtualization (`ast_devirtualize.cpp`) {#devirtualization}
 
 A class method is a function-pointer field every instance carries, and every class below the one

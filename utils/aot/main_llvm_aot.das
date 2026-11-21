@@ -56,9 +56,8 @@ def aot_object_one(input : string, output : string, gen2 : bool, gen2_make : boo
             // Extended RTTI: simulate-time macros (ast_typedecl via typeinfo(...)) generate no node
             // without it -> error[50503]. The interpreter and the C++-AOT path enable it too.
             cop.rtti = true
-            // Object emission is a codegen step, not authoring, and lint already ran upstream of it.
-            // no_global_variables is a lint-only style rule that the JIT path would otherwise apply
-            // fatally to modules with legit globals (daslib/debugger.das) even though JIT handles them.
+            // Object emission is a codegen step, not authoring:
+            // the lint macros and style rules already ran upstream.
             cop.no_lint = true
             cop.tune_frozen = true            // AOT is a cross-box artifact (see utils/aot/main.das)
             // Off so no wrapper is spliced that turns a runtime extern argument into a compile-time

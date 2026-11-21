@@ -168,3 +168,191 @@ def test_lint022_survives_trailing_no_lint(t : T?) {
         }
     }
 }
+
+//! the error text of compiling `source`, empty when it compiles
+def compile_source_errors(source : string; no_lint : bool; no_unsafe : bool = false) : string {
+    var errors = ""
+    var inscope access <- make_file_access("")
+    let path = "{get_das_root()}/tests/lint/_lint_switch_fixture.das"
+    set_file_source(access, path, source)
+    using() $(var mg : ModuleGroup) {
+        using() $(var cop : CodeOfPolicies) {
+            cop.no_lint = no_lint
+            cop.no_unsafe = no_unsafe
+            compile_file(path, access, unsafe(addr(mg)), cop) $(ok; _program; issues) {
+                errors = ok ? "" : "does not compile: {issues}"
+            }
+        }
+    }
+    return errors
+}
+
+def lint_switch_source(lint_off : bool; body : string) : string {
+    let head = lint_off ? "options gen2\noptions lint = false\n" : "options gen2\n"
+    return head + body
+}
+
+def lint_macro_finding_body() : string {
+    return [
+        "require daslib/lint",
+        "def keep(used_arg : int; dead_arg : int) : int \{",
+        "    return used_arg",
+        "\}",
+        "[export]",
+        "def main : int \{",
+        "    return keep(1, 2)",
+        "\}"
+    ] |> join("\n")
+}
+
+def unused_function_argument_body() : string {
+    return [
+        "options no_unused_function_arguments = true",
+        "[sideeffects]",
+        "def twice(a, b : int) \{",
+        "    return a * 2",
+        "\}",
+        "[export]",
+        "def main : int \{",
+        "    return twice(1, 2)",
+        "\}"
+    ] |> join("\n")
+}
+
+def unused_block_argument_body() : string {
+    return [
+        "options no_unused_block_arguments = true",
+        "def call(b : block<(x : int) : int>) : int \{",
+        "    return invoke(b, 1)",
+        "\}",
+        "[export]",
+        "def main : int \{",
+        "    return call() $(x) \{",
+        "        return 7",
+        "    \}",
+        "\}"
+    ] |> join("\n")
+}
+
+def deprecated_call_body() : string {
+    return [
+        "options no_deprecated = true",
+        "[deprecated(message = \"use fresh\")]",
+        "def stale() : int \{",
+        "    return 1",
+        "\}",
+        "[export]",
+        "def main : int \{",
+        "    return stale()",
+        "\}"
+    ] |> join("\n")
+}
+
+def nameless_write_body() : string {
+    return [
+        "struct Foo \{",
+        "    a : int",
+        "\}",
+        "[export]",
+        "def main : int \{",
+        "    Foo(a = 1) = Foo(a = 2)",
+        "    return 0",
+        "\}"
+    ] |> join("\n")
+}
+
+def falls_off_the_end_body() : string {
+    return [
+        "def pick(n : int) : int \{",
+        "    if (n > 5) \{",
+        "        return 2",
+        "    \}",
+        "\}",
+        "[export]",
+        "def main : int \{",
+        "    return pick(3)",
+        "\}"
+    ] |> join("\n")
+}
+
+def expect_lint_switch_silences(t : T?; code, body : string) {
+    let plain = compile_source_errors(lint_switch_source(false, body), false)
+    t |> success(find(plain, code) >= 0, "with lint on the source reports {code}: {plain}")
+    let by_option = compile_source_errors(lint_switch_source(true, body), false)
+    t |> equal(by_option, "", "under options lint = false")
+    let by_policy = compile_source_errors(lint_switch_source(false, body), true)
+    t |> equal(by_policy, "", "under the no_lint policy")
+}
+
+[test(description = "options lint = false and the no_lint policy silence a lint macro's finding", timeout = 1200)]
+def test_lint_switch_silences_lint_macros(t : T?) {
+    t |> run("a LINT012 finding of daslib/lint") @@(t : T?) {
+        expect_lint_switch_silences(t, "LINT012", lint_macro_finding_body())
+    }
+}
+
+[test(description = "options lint = false and the no_lint policy turn off each of the compiler's four style rules", timeout = 1200)]
+def test_lint_switch_turns_off_style_rules(t : T?) {
+    t |> run("an unused function argument") @@(t : T?) {
+        expect_lint_switch_silences(t, "30159", unused_function_argument_body())
+    }
+    t |> run("an unused block argument") @@(t : T?) {
+        expect_lint_switch_silences(t, "30121", unused_block_argument_body())
+    }
+    t |> run("a call to a deprecated function") @@(t : T?) {
+        expect_lint_switch_silences(t, "30927", deprecated_call_body())
+    }
+    t |> run("a write to a nameless temporary") @@(t : T?) {
+        expect_lint_switch_silences(t, "30922", nameless_write_body())
+    }
+}
+
+[test(description = "the no_lint policy keeps the error for a function that can end without a return", timeout = 1200)]
+def test_no_lint_policy_keeps_semantic_checks(t : T?) {
+    t |> run("a function that returns a value on one branch only") @@(t : T?) {
+        let source = lint_switch_source(false, falls_off_the_end_body())
+        let errors = compile_source_errors(source, true)
+        t |> success(find(errors, "30310") >= 0, "the compile reports 30310: {errors}")
+    }
+}
+
+def unsafe_block_body() : string {
+    return [
+        "[export]",
+        "def main : int \{",
+        "    var x = 1",
+        "    unsafe \{",
+        "        var p = addr(x)",
+        "        *p = 2",
+        "    \}",
+        "    return x",
+        "\}"
+    ] |> join("\n")
+}
+
+def mutable_global_body() : string {
+    return [
+        "options no_global_variables = true",
+        "var g_count = 5",
+        "[export]",
+        "def main : int \{",
+        "    return g_count",
+        "\}"
+    ] |> join("\n")
+}
+
+[test(description = "with lint off the no_unsafe policy and the no_global_variables option still reject a program", timeout = 1200)]
+def test_lint_switch_keeps_policy_checks(t : T?) {
+    t |> run("an unsafe block under the no_unsafe policy") @@(t : T?) {
+        let source = lint_switch_source(true, unsafe_block_body())
+        let by_option = compile_source_errors(source, false, true)
+        t |> success(find(by_option, "31012") >= 0, "options lint = false: {by_option}")
+        let by_policy = compile_source_errors(source, true, true)
+        t |> success(find(by_policy, "31012") >= 0, "the no_lint policy: {by_policy}")
+    }
+    t |> run("a mutable global under options no_global_variables") @@(t : T?) {
+        let source = lint_switch_source(true, mutable_global_body())
+        let errors = compile_source_errors(source, true)
+        t |> success(find(errors, "30930") >= 0, "the compile reports 30930: {errors}")
+    }
+}
