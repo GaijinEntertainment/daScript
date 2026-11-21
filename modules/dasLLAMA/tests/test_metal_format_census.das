@@ -30,16 +30,18 @@ def private allow_cpu_prefill_intent() {
 // The weight-format census: each site's tag against the file's own tensor type, one soft check a site so
 // the cell names every site still read through a converted copy, then a Metal prefill window and Metal
 // decode steps on the blob twin against the CPU chain over the same tokens, the device counters - the
-// token-table gather among them - asserted rising. Qwen3.6-35B-A3B-MTP-IQ4_XS-pure (every big plane
-// IQ4_XS on disk, the table untied) is large tier (DASLLAMA_PARITY_FULL=1); Llama-3.2-3B Q4_K_M holds
+// token-table gather among them - asserted rising. Qwen3.6-35B-A3B-4L-MTP-IQ4_XS-pure, the
+// carrier's four-block cut (every big plane IQ4_XS on disk, the table untied); Llama-3.2-3B Q4_K_M holds
 // the gather on a tied Q6_K table. Each skips off the JIT, without dasMetal or without its file.
 
-let private CENSUS_FILE = "Qwen3.6-35B-A3B-MTP-IQ4_XS-pure.gguf"
+let private CENSUS_FILE = "Qwen3.6-35B-A3B-4L-MTP-IQ4_XS-pure-local.gguf"
 let private TIED_FILE = "Llama-3.2-3B-Instruct-Q4_K_M.gguf"
 //! IQ3_S planes beside IQ3_XXS, Q4_K and a tied Q6_K table (Qwen2.5-1.5B IQ3_XS): the dense iq3s4 carrier
 let private IQ3S_DENSE_FILE = "Qwen2.5-1.5B-Instruct-IQ3_XS.gguf"
-//! the routed downs IQ3_S beside IQ2_S gate and up stacks (the qwen35moe hybrid, large tier): the routed iq3s4 carrier
-let private IQ3S_MOE_FILE = "Qwen3.6-35B-A3B-UD-IQ3_S.gguf"
+//! the routed downs IQ3_S beside IQ2_S gate and up stacks (the qwen35moe hybrid's four-block
+//! cut): the routed iq3s4 carrier
+let private IQ3S_MOE_FILE = "Qwen3.6-35B-A3B-4L-UD-IQ3_S-local.gguf"
+let private QWEN35MOE_BLOCKS = 4l   //! the 35B cuts' trunk blocks
 //! a qwen3 1.7B whose every plane and tied table is F16 on disk (the canary decoder): a table no KqFmt carries
 let private TIED_F16_FILE = "canary-qwen-2.5b-decoder-f16.gguf"
 //! the tied-F16 carrier's bar against the CPU chain: the device classifier reads the table's q8 copy where the CPU reads its fp32
@@ -73,7 +75,7 @@ def private census_unpin(pins : CensusPins) {
     set_wscale_f16(pins.wscale)
 }
 
-[test(description = "On Qwen3.6-35B-A3B IQ4_XS-pure, every site loads tagged with the file's own format, and the Metal prefill window and six decode steps stay within 6.0 of the CPU chain on the IQ4_XS forms, the table gathered on device")]
+[test(description = "On Qwen3.6-35B-A3B-4L IQ4_XS-pure, the four-block cut, every site loads tagged with the file's own format, and the Metal prefill window and six decode steps stay within 6.0 of the CPU chain on the IQ4_XS forms, the table gathered on device")]
 def test_metal_format_census_iq4xs_pure(t : T?) {
     t |> run("{CENSUS_FILE}: every site's tag is the file's format, and the Metal window and steps hold the CPU chain") <| @(t : T?) {
         if (!family_on(t, "qwen35moe") || !arm_on(t, "census-iq4xs")) return
@@ -83,6 +85,7 @@ def test_metal_format_census_iq4xs_pure(t : T?) {
             let pins = census_pin()
             var tr <- load_model_(path, QuantMode.q8)
             tr.config.seq_len = min(tr.config.seq_len, 512l)
+            cut_within(t, "", tr, QWEN35MOE_BLOCKS)
             let want <- census_sites_all()
             census_cell(t, tr, path, "planar", want)
             var trg <- blob_twin(t, path, 512l)
@@ -166,7 +169,7 @@ def private planes_tagged(m : Model; f : KqFmt) : int64 {
         + long_count(m.we2_fmt, $(x) => x == f) + long_count(m.we3_fmt, $(x) => x == f))
 }
 
-[test(description = "Under the lut pin, IQ3_S dense planes (Qwen2.5-1.5B) and routed downs (Qwen3.6-35B) load as iq3s4, none as the grid, and the Metal window and steps ride the iq3s4 stamps while holding the CPU chain")]
+[test(description = "Under the lut pin, IQ3_S dense planes (Qwen2.5-1.5B) and routed downs (Qwen3.6-35B-A3B-4L, the four-block cut) load as iq3s4, none as the grid, and the Metal window and steps ride the iq3s4 stamps while holding the CPU chain")]
 def test_metal_format_census_iq3s4(t : T?) {
     t |> run("{IQ3S_DENSE_FILE} under the lut pin: the dense IQ3_S planes serve as iq3s4 on Metal, the window and the steps on its stamps") <| @(t : T?) {
         if (!family_on(t, "qwen2") || !arm_on(t, "census-iq3s4")) return
@@ -212,6 +215,7 @@ def test_metal_format_census_iq3s4(t : T?) {
             set_iq3s_serve_pin("lut")
             var tr <- load_model_(path, QuantMode.q8)
             tr.config.seq_len = min(tr.config.seq_len, 512l)
+            cut_within(t, "", tr, QWEN35MOE_BLOCKS)
             let n35 = planes_tagged(tr, KqFmt.iq3s4)
             t |> success(n35 > 0l && planes_tagged(tr, KqFmt.iq3s) == 0l, "the IQ3_S expert stacks load as iq3s4 ({n35} stacks), none as the grid")
             census_cell(t, tr, path, "planar", ["routed experts"])
@@ -420,20 +424,21 @@ def test_metal_format_census_nv4(t : T?) {
 //! Max (a 4-bit routed stack's near-ties amplify a float-class difference), the one-step-off rows 10 and up
 let private NV4_MOE_BAR = 3.0
 
-//! the nv4 MoE carrier (large tier): the Qwen3-30B-A3B `--pure` NVFP4 mint - the 768-wide routed stacks, the table and the
+//! the nv4 MoE carrier: the Qwen3-30B-A3B `--pure` NVFP4 mint's seven-block cut - the 768-wide routed stacks, the table and the
 //! classifier as nv4 (the Qwen1.5-MoE's 1408-wide stacks sit off the 256 lattice, where NVFP4's 64-weight disk block lands and the
 //! nv4 superblock cannot, so that file's experts fall to the q8 rail) - each site's census asserted native, the window and the steps
 //! on the nv4 routed stamps against the CPU chain
-[test(description = "On Qwen3-30B-A3B NVFP4-pure, every routed stack loads as nv4 with every site native, and the Metal window and six steps ride the nv4 routed stamps and GEMV within 3.0 of the CPU chain")]
+[test(description = "On Qwen3-30B-A3B-7L NVFP4-pure, the seven-block cut, every routed stack loads as nv4 with every site native, and the Metal window and six steps ride the nv4 routed stamps and GEMV within 3.0 of the CPU chain")]
 def test_metal_format_census_nv4_moe(t : T?) {
-    t |> run("Qwen3-30B-A3B-NVFP4-pure-local.gguf: the nv4 routed stacks serve their own bytes on Metal - census, window and steps") <| @(t : T?) {
+    t |> run("Qwen3-30B-A3B-7L-NVFP4-pure-local.gguf: the nv4 routed stacks serve their own bytes on Metal - census, window and steps") <| @(t : T?) {
         if (!family_on(t, "qwen3moe") || !arm_on(t, "census-moe-nv4")) return
         static_if (typeinfo builtin_module_exists(das_metal)) {
-            let path = path_join(models_dir(), "Qwen3-30B-A3B-NVFP4-pure-local.gguf")
+            let path = path_join(models_dir(), "Qwen3-30B-A3B-7L-NVFP4-pure-local.gguf")
             return if (!jit_model_available(t, path))
             let pins = census_pin()
             var tr <- load_model_(path, QuantMode.q8)
             tr.config.seq_len = min(tr.config.seq_len, 512l)
+            cut_within(t, "", tr, 7l)
             let nexp = (long_count(tr.we1_fmt, $(x) => x == KqFmt.nv4)
                 + long_count(tr.we2_fmt, $(x) => x == KqFmt.nv4)
                 + long_count(tr.we3_fmt, $(x) => x == KqFmt.nv4))
@@ -471,11 +476,11 @@ let private PLAIN_MOE_BAR = 2.0
 //! - as q51, the Q4_0 mint's 1408-wide routed down stacks as q4032, the Q5_0 `--pure` mint's every site - the routed and shared
 //! expert stacks and the token table among them - as q5032, each site's census asserted native, the window and the steps on the
 //! device against the CPU chain
-[test(description = "On the Qwen1.5-MoE Q5_1, Q4_0 and Q5_0-pure mints, the routed and shared expert stacks load in their per-32 form with every site native, and the Metal window and steps ride their routed stamps within 2.0 of the CPU chain")]
+[test(description = "On the Qwen1.5-MoE-A2.7B-4L Q5_1, Q4_0 and Q5_0-pure mints' four-block cuts, the routed and shared expert stacks load in their per-32 form with every site native, and the Metal window and steps ride their routed stamps within 2.0 of the CPU chain")]
 def test_metal_format_census_per32_moe(t : T?) {
-    for (spec in [(file = "Qwen1.5-MoE-A2.7B-Chat-Q5_1-local.gguf", arm = "census-moe-q51", emb = "MetalEmbedB32Q51_metal_embed_b32", f = KqFmt.q51),
-                  (file = "Qwen1.5-MoE-A2.7B-Chat-Q4_0-local.gguf", arm = "census-moe-q4032", emb = "MetalEmbedQ40_metal_embed_kq", f = KqFmt.q4032),
-                  (file = "Qwen1.5-MoE-A2.7B-Chat-Q5_0-pure-local.gguf", arm = "census-moe-q5032", emb = "MetalEmbedB32Q5032_metal_embed_b32", f = KqFmt.q5032)]) {
+    for (spec in [(file = "Qwen1.5-MoE-A2.7B-4L-Q5_1-local.gguf", arm = "census-moe-q51", emb = "MetalEmbedB32Q51_metal_embed_b32", f = KqFmt.q51),
+                  (file = "Qwen1.5-MoE-A2.7B-4L-Q4_0-local.gguf", arm = "census-moe-q4032", emb = "MetalEmbedQ40_metal_embed_kq", f = KqFmt.q4032),
+                  (file = "Qwen1.5-MoE-A2.7B-4L-Q5_0-pure-local.gguf", arm = "census-moe-q5032", emb = "MetalEmbedB32Q5032_metal_embed_b32", f = KqFmt.q5032)]) {
         t |> run("{spec.file}: the per-32 shared expert and routed stacks serve their own bytes on Metal - census, window and steps") <| @(t : T?) {
             if (!family_on(t, "qwen2moe") || !arm_on(t, spec.arm)) return
             static_if (typeinfo builtin_module_exists(das_metal)) {
@@ -484,6 +489,7 @@ def test_metal_format_census_per32_moe(t : T?) {
                 let pins = census_pin()
                 var tr <- load_model_(path, QuantMode.q8)
                 tr.config.seq_len = min(tr.config.seq_len, 512l)
+                cut_within(t, "{spec.file}: ", tr, 4l)
                 let nexp = (long_count(tr.we1_fmt, $(x) => x == spec.f)
                     + long_count(tr.we2_fmt, $(x) => x == spec.f)
                     + long_count(tr.we3_fmt, $(x) => x == spec.f))

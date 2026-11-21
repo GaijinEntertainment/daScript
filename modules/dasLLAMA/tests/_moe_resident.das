@@ -1,5 +1,5 @@
 // The MoE cells of the whole-model resident driver, shared by the per-model test files
-// (test_gpu_resident_moe.das, test_gpu_resident_gptoss.das): the forced-feed logits-tolerance form of
+// (test_gpu_resident_qwen_moe.das, test_gpu_resident_gptoss.das): the forced-feed logits-tolerance form of
 // test_gpu_resident_hybrid - the same fixed tokens through the resident driver and the all-CPU chain,
 // the prefill logits and every step's within the bar, the one-step-off control past it, and the census
 // witnesses that the routed block ran on the device for every MoE layer (the window's per window, the
@@ -23,6 +23,8 @@ require dasllama/dasllama_gpu_math   // nolint:STYLE030,LINT019 — the grid hel
 require dasllama/dasllama_moe   // heat_totals, heat_reset and the shared expert's row counters: the per-op heat cell's witnesses
 require ?vulkan dasllama/dasllama_vulkan_common   // the resolved coopmat mode and the kernel census, where the module exists
 require ?cuda dasllama/dasllama_cuda_decode   // the same witnesses on the CUDA home
+require ?cuda dasllama/dasllama_cuda_stream   // cud_stream_stats: the host-layers forms' stream witnesses
+require ?cuda _cuda_feed   // stream_at, stream_witness: the CUDA home's host-layers cells
 require dasllama/dasllama_kqformat
 require dasllama/dasllama_env   // the chunked scan's knob, the census's gate
 require daslib/enum_trait   // the KqFmt members as a loop
@@ -81,13 +83,19 @@ def private fp4_chain_served() : bool {
     }
 }
 
-//! the logits bar as a fraction of the step's max |logit|: the routed chain's CPU-vs-device noise class (test_gpu_resident_moe.das's
+//! the logits bar as a fraction of the step's max |logit|: the routed chain's CPU-vs-device noise class (test_gpu_resident_qwen_moe.das's
 //! reading) - the arms agree to 1e-8 at layer 0 and part from layer 1 on, where the device chain's summation order moves the
 //! residual by ulps, the next layer's Q8 requant rounds a few elements the other way and the router flips a near-tie; against
 //! the all-CPU chain that reads 0.07-0.11 on the twin and the 30B at 40 and 600 tokens and 0.09-0.16 on the 35B, whose
 //! two-window step 4 sits on a router near-tie that any change of the device's summation order flips (0.04 under one order,
 //! 0.155-0.16 under two others); the one-step-off control reads 0.42-0.95, so the bar discriminates it by 2x and more
 let MOE_LOGIT_BAR_REL = 0.20
+
+//! the rarest experts the meet hands the host before the device
+//! claims: the host's rows on every carrier
+let MOE_HOST_FIRST = 8l
+//! the MoE cuts' mirror context
+let MOE_CUT_CTX = 8192l
 let FED_STEPS = 6l
 
 //! the token command's attention split count on the armed discrete home (0 without a module or the driver)
@@ -210,10 +218,10 @@ def moe_fixture_admitted(var h : Held; tr : Model; fx : MoeFixture) : int64 {
         return -1l
     }
     if (fx.host_layers_ask > 0l) {   //! the ask is a floor: a card that holds the rest moves exactly that many, one that does not moves more
-        h |> held_fact(host_layers >= fx.host_layers_ask,
+        h |> held_fact(host_layers >= fx.host_layers_ask && host_layers < tr.config.n_layers,
             "at least the first {fx.host_layers_ask} routed layers' experts serve on the host " +
-            "as the fixture asked (set_gpu_host_layers): {host_layers} of {tr.config.n_layers} " +
-            "do")
+            "as the fixture asked (set_gpu_host_layers), and fewer than all " +
+            "{tr.config.n_layers}: {host_layers} do")
     } elif (fx.expect_host_layers) {
         h |> held_fact(host_layers < tr.config.n_layers,
             "the card does not hold the experts whole: the first {host_layers} of " +
@@ -388,6 +396,16 @@ def moe_feed_rows(var h : Held; m : Model; form : ModelForm; fx : MoeFixture;
     return <- rows
 }
 
+//! the forced feed of each of `prompts` onto `feeds` (`moe_feed_rows`, `FED_STEPS` fed tokens), the census bound to the
+//! first feed `feeds` takes
+def moe_prompt_feeds(var feeds : array<FeedRows>; var h : Held; m : Model; form : ModelForm; fx : MoeFixture;
+                     prompts : array<int64>; host_layers : int64) {
+    feeds |> reserve(length(prompts))
+    for (n in prompts) {
+        feeds |> emplace <| moe_feed_rows(h, m, form, fx, n, FED_STEPS, host_layers, empty(feeds))
+    }
+}
+
 //! where the per-op tier's walk put a fixture's routed layers: the
 //! routed layers, and those whose stacks the device holds; zeros
 //! where the heat cell skipped
@@ -405,10 +423,7 @@ let HEAT_CELL_STEPS = 80l   //! fed steps past the heat pool's re-pin interval (
 //! - where the walk put the routed layers returned
 def moe_perop_heat_cell(t : T?; fx : MoeFixture; resident, slots : int64) : HeatPlacement {
     var placement : HeatPlacement
-    if (gpu_want_cuda()) {
-        t |> skip("the CUDA home is asked: the per-op tier and its heat pool are the Vulkan home's")
-        return placement
-    }
+    return placement if (!vulkan_home_asked(t, "the per-op tier and its heat pool are the Vulkan home's"))
     let path = path_join(models_dir(), fx.file)
     return placement if (!resident_ready(t, path))
     let route = gpu_resident_route_lever()
@@ -468,17 +483,166 @@ def moe_perop_heat_cell(t : T?; fx : MoeFixture; resident, slots : int64) : Heat
     return placement
 }
 
-//! the K/V codec rig's distance form (`codec_distance_over`) on a MoE fixture the driver admitted, the mirror asked at `kv`
-//! by the caller's pin: the device at `kv`, the CPU at `kv` and the CPU at f16 over an `n`-token prompt and the rig's fed steps
-[cold_path]
-def moe_codec_distance(t : T?; n : int64; fx : MoeFixture; kv : KVDtype; dist_rel, pair_rel : float) {
-    let path = path_join(models_dir(), fx.file)
-    if (!resident_ready(t, path)) return
-    var tr <- load_resident_host(path, 1l, fx.strict_ctx, fx.host_layers_ask)
-    if (moe_fixture_admitted(t, tr, fx) >= 0l) {
-        with_dasllama_jobque_() {
-            codec_distance_over(t, tr, n, kv, false, dist_rel, pair_rel)
+//! what a MoE cut's host-layers forms collect - the prompt stream on
+//! and off - the routed layers asked onto the host by `fx`:
+//! - the pinned feeds: `prompts` on the stream-on form, the routed
+//!   census bound to the load's first feed;
+//! - the stream twin: a 40-token feed and eight steps on each form
+//!   with the device claiming first;
+//! - on the CUDA home (`cuda`) the host cells: the stream-on feeds of
+//!   `prompts` and the stream-off feed under the CUDA driver's
+//!   counters, the meet handing the host its `host_first` rarest;
+//! `kv` the codec the forms armed, `h` every reading
+struct MoeHostRows {
+    fx : MoeFixture = MoeFixture()
+    prompts : array<int64>
+    cuda : bool
+    host_first : int64
+    h : Held
+    kv : KVDtype
+    ran : bool   //! the prompt-stream form ran, armed at `kv`
+    pinned : array<FeedRows>
+    cuda_on : array<FeedRows>
+    cuda_off : FeedRows
+    cuda_off_ran : bool
+    twin_on : FeedRows
+    twin_off : FeedRows
+    twin_on_ran : bool
+    twin_off_ran : bool
+    twin : bool = true   //! the stream twin collects on these forms
+}
+
+let private TWIN_IDS = 40l     //! the stream twin's prompt
+let private TWIN_STEPS = 8l    //! ... and its fed steps
+
+//! the CUDA stream chain's biased acts so far; -1 off the CUDA home
+def private stream_biased() : int64 {
+    static_if (typeinfo builtin_module_exists(cuda)) {
+        return cud_stream_stats().biased if (gpu_want_cuda())
+    }
+    return -1l
+}
+
+//! the stream twin's feed on a host-layers form, the device claiming
+//! first (`set_moe_host_first(0)`, put back); on the CUDA home a plain
+//! model's chain takes no bias row
+def private moe_twin_feed(var r : MoeHostRows; m : Model; form : ModelForm) : FeedRows {
+    let pins = pin_stream(0l, plain_steps = false)
+    let b0 = stream_biased()
+    var f <- resident_feed_rows(m, form, TWIN_IDS, TWIN_STEPS)
+    if (b0 >= 0l) {
+        r.h |> held_equal(stream_biased(), b0,
+            "control: the stream chain ran no biased act on a plain model")
+    }
+    restore_stream_pins(pins)
+    return <- f
+}
+
+//! the CUDA home's host cells on a host-layers form, the meet's host
+//! share pinned `r.host_first` (put back): with the stream on the
+//! exact host-layer count asked, each prompt's feed under the driver's
+//! counters, the stream's windows and the meet's split, the one-window
+//! feed's N-row decline; with it off the control - no window streamed,
+//! no expert met
+def private moe_cuda_host_rows(var r : MoeHostRows; m : Model; form : ModelForm) {
+    static_if (typeinfo builtin_module_exists(cuda)) {
+        let pins = pin_stream(r.host_first, plain_steps = false)
+        set_gpu_hot_dma(1)
+        set_gpu_dec_meet(0)
+        if (form.pf_stream) {
+            r.h |> held_equal(gpu_resident_host_layers(), r.fx.host_layers_ask,
+                "exactly the first {r.fx.host_layers_ask} routed layers' experts serve on " +
+                "the host as asked (set_gpu_host_layers; the card holds the rest)")
+            r.cuda_on |> reserve(length(r.prompts))
+            for (n in r.prompts) {
+                let at = stream_at()
+                r.cuda_on |> emplace <| cuda_feed_rows(r.h, m, form, n, prompt_windows(n))
+                stream_witness(r.h, r.fx.file, at, r.host_first)
+                if (n == r.prompts[0]) {
+                    let hot = cud_rdec_hot_stats()
+                    to_log(LOG_INFO, "{r.fx.file}: {gpu_resident_hot_slots()} pool slots a " +
+                        "layer; the pool launched {hot.submits} hit chains serving " +
+                        "{hot.hits} picks\n")
+                    r.h |> held_equal(rdec_token_n_rows(), 0l,
+                        "the N-row command declines a plan with routed experts on the host: " +
+                        "the split command steps a row at a time")
+                }
+            }
+        } else {
+            let at = stream_at()
+            delete r.cuda_off
+            r.cuda_off <- cuda_feed_rows(r.h, m, form, r.prompts[0], 1l)
+            stream_off_witness(r.h, r.fx.file, at)
+            r.cuda_off_ran = true
+        }
+        restore_stream_pins(pins)
+    }
+}
+
+//! one host-layers form's share: with the prompt stream on the
+//! fixture's admission, the pinned feeds, the twin's streamed half and
+//! the CUDA home's streamed cells; with it off the twin's host-sums
+//! half and the CUDA home's control
+def moe_host_rows(var r : MoeHostRows; m : Model; form : ModelForm) {
+    if (form.pf_stream) {
+        r.kv = form.kv
+        r.ran = true
+        let host_layers = moe_fixture_admitted(r.h, m, r.fx)
+        return if (host_layers < 0l)
+        moe_prompt_feeds(r.pinned, r.h, m, form, r.fx, r.prompts, host_layers)
+        if (r.twin) {
+            delete r.twin_on
+            r.twin_on <- moe_twin_feed(r, m, form)
+            r.twin_on_ran = true
+        }
+    } elif (r.twin) {
+        delete r.twin_off
+        r.twin_off <- moe_twin_feed(r, m, form)
+        r.twin_off_ran = true
+    }
+    if (r.cuda) {
+        moe_cuda_host_rows(r, m, form)
+    }
+}
+
+//! the host-layers forms' compares, `cpu` the CPU form's feeds of the
+//! same prompts (eight fed steps) on the codec the forms armed: what
+//! the forms held and the twin's streamed windows within the stream
+//! twin's bar of the host's sums whatever the CPU side; the pinned
+//! feeds within the fixture's bar and the CUDA home's feeds within the
+//! routed bar, each missing CPU twin a failure (`twin_collected`)
+def moe_host_rows_within(t : T?; tag : string; r : MoeHostRows; cpu : array<FeedRows>) {
+    held_within(t, r.h, tag, false)
+    moe_host_twin_within(t, tag, r)
+    for (f, i in r.pinned, count()) {
+        let what = "{tag}{f.nprompt} tokens: "
+        continue if (!twin_collected(t, i, length(cpu), what))
+        var inscope c <- feed_prefix(cpu[i], FED_STEPS)
+        feed_rows_within(t, what, f, c, r.fx.bar_rel)
+    }
+    for (f, i in r.cuda_on, count()) {
+        let what = "{tag}cuda, {f.nprompt} tokens: "
+        continue if (!twin_collected(t, i, length(cpu), what))
+        feed_rows_within(t, what, f, cpu[i], MOE_LOGIT_BAR_REL)
+    }
+    let off = "{tag}cuda, the prompt stream off: "
+    if (r.cuda_off_ran && twin_collected(t, 0, length(cpu), off)) {
+        feed_rows_within(t, off, r.cuda_off, cpu[0], MOE_LOGIT_BAR_REL)
+    }
+}
+
+//! the stream twin's compare: its streamed windows within the stream
+//! twin's bar of the host's sums, both off the device
+def private moe_host_twin_within(t : T?; tag : string; r : MoeHostRows) {
+    if (r.twin_on_ran && r.twin_off_ran) {
+        if (r.twin_on.cuda >= 0l) {
+            t |> equal(r.twin_on.cuda, TWIN_IDS + TWIN_STEPS,
+                "{tag}the CUDA driver served every position of the streamed prompt's load")
+        }
+        feed_steps_within(t, "{tag}the stream twin: ", TWIN_IDS, r.twin_on.rows, r.twin_off.rows,
+                r.twin_on.toks, STREAM_TWIN_BAR_REL, "the streamed windows",
+                "the host's sums") $(id) {
+            return feed_piece(r.twin_on, r.twin_off, id)
         }
     }
-    delete tr
 }

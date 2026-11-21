@@ -2523,7 +2523,7 @@
     Vulkan home's whole run green on the fold alone - one pass, every pair, no pair ledgered on.
 275. **Two knobs the cells cannot ask for in-process.** The hot pool's slot ask reads `g_env_gpu.gpu_heat`, then the want's
     `heat` where it is above 0, else `HOT_SLOTS_AUTO` (`resident_hot_ask`, `dasllama_gpu_resident.das`): a want of 0 means
-    auto, so no pin asks for NO pool, and the pool-off control in `tests/test_gpu_resident_cuda_moe_host.das` is a fourth
+    auto, so no pin asks for NO pool, and the pool-off control in `tests/test_gpu_resident_qwen_moe.das` is a fourth
     load with no host layer instead of a leg on the same load. And `DASLLAMA_RARE_ARENA=2` (the rail on every lane) has no
     setter spelling of its own - `set_rare_arena(1)` is its in-process twin, so the cell names the twin where the knob list
     names 2. Done = `set_gpu_hot_slots_pin(n)` / `gpu_hot_slots_pin()` (-1 unpinned, 0 = `HOT_SLOTS_NONE`, n a count) read by

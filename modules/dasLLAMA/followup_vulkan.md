@@ -1499,8 +1499,8 @@ module) is independent and can land any time - it is pure structure.
     `tests/test_vulkan_kernels.das`; a Q8_0 carrier is exact. The difference sits among the arms
     the K-quant chain alone takes - the split add+rms and Q8_K requant a site, the `a:rq_x` and
     `t:fin_rq` requants - and the Llama `_k` cells of `test_gpu_resident_regions_kquant.das` hold
-    the split bar with the one-token-off control meanwhile; the `q30` cells of
-    `test_gpu_resident_regions_qwen_moe.das` (Qwen3-30B-A3B Q4_K_M, its projections and experts
+    the split bar with the one-token-off control meanwhile; `test_regions_batched_steps_q30` in
+    `test_gpu_resident_qwen_moe.das` (Qwen3-30B-A3B Q4_K_M, its projections and experts
     all Q4_K) hold the same bar for the same reason - its rows
     read up to 0.63 of a logit apart at the same argmax (the qwen3moe regions cells' maxdiff lines on the pod, cm2 arm), where the gpt-oss file's Q8_0 projections
     read bit for bit. The work: the arm found by pinning each site's N-row form to its one-row twin

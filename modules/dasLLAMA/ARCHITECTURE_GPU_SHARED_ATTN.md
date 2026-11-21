@@ -179,8 +179,8 @@ byte-expanded halves (the even elements' word and the odd's) against a query pac
 the nibble's -8 offset paid once a block as eight times the block's query sum (`qsum`). The two
 chains quantize the query the same way (`quantize_q8_0_into`'s amax over 127 and its rounding) but
 from two nearby f32 queries, so their roundings part by a quant step on a share of the elements:
-the q8_0 cells' bars carry that noise over the f16 reading (`tests/test_gpu_resident_qwen2.das`,
-`tests/test_gpu_resident_regions_q8kv.das`), which the packed dot buys back at depth - a two-stream
+the q8_0 cells' bars carry that noise over the f16 reading (`tests/test_gpu_resident_qwen2.das`),
+which the packed dot buys back at depth - a two-stream
 8k decode on Qwen3-0.6B reads about 5 % faster under q8_0 (`PERF_LEDGER.md`). The V accumulate stays a float multiply of the probability
 and the dequantized quant: it carries no integer form. `da_attn_stamp_ensure` / `_set` / `_enc`
 pick the stamp by the mirror's codec, the sinks and the slab.

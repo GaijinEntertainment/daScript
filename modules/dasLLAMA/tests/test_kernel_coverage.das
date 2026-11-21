@@ -118,17 +118,17 @@ let private CENSUS_NEVER_DISPATCHED <- [
     "metal_kq_gemv_k3", "MetalKqMvB2K3", "MetalKqMvB4K3", "MetalKqMvB8K3", "MetalKqMulMmK3",
     "MetalKqGemvIq4xs", "MetalKqMvB2Iq4xs", "MetalKqMvB4Iq4xs", "MetalKqMvB8Iq4xs", "MetalKqMulMmIq4xs",
     // the iq4xs fat-threadgroup family, the fused chain's routed pair and its normed router: iq4xs planes again, the chain's
-    // carrier Qwen3.6-35B-A3B (large tier). Their coverage is kq_fat_gate and moe_fused_gate in test_metal_gemv_kernels.das
+    // carrier Qwen3.6-35B-A3B (its four-block cuts). Their coverage is kq_fat_gate and moe_fused_gate in test_metal_gemv_kernels.das
     // and the 35B's census-iq4xs arm in test_metal_format_census.das
     "MetalKqFatIq4xs", "MetalKqFatIq4xsN", "MetalKqFatIq4xsA", "MetalKqFatIq4xsNX",
     "metal_moe_gemv_gu_iq4xs", "metal_moe_down2_iq4xs", "metal_moe_router_n",
     // the iq4xs rows8 matrix-unit stamp: a five-to-eight-row step over iq4xs dense planes, and no census row holds an iq4xs
-    // plane at a batched step. The stocked carrier is Qwen3.6-35B-A3B-MTP-IQ4_XS-pure (the mtp-ffk-35b-iq4xs arm of
+    // plane at a batched step. The stocked carrier is Qwen3.6-35B-A3B-4L-MTP-IQ4_XS-pure (the mtp-ffk-35b-iq4xs arm of
     // test_metal_mtp_parity.das, its depth-4 verify's five rows); the model-free coverage is rows8_split_gate (kq 44) in
     // test_metal_gemm_kernels.das
     "MetalRows8Iq4xs",
     // the rows' expert union - its table, the gate/up and down over each entry's rows and the combine over partial rows - serves
-    // only under DASLLAMA_METAL_MOE_UNION (off by default); carrier the 35B file's mtp-ffk-35b-iq4xs arm under the knob, the
+    // only under DASLLAMA_METAL_MOE_UNION (off by default); carrier the 35B cut's mtp-ffk-35b-iq4xs arm under the knob, the
     // model-free coverage moe_union_gate in test_metal_gemv_kernels.das
     "MetalMoeUnion", "metal_moe_gu_union_iq4xs", "metal_moe_dn_union_iq4xs", "metal_moe_down2p_iq4xs",
     // ... the pair's Flash-Next stamps (the iq3s grid gate/up, the iq4nl32 down with the q8 or iq4nl32 shared down, the row and
@@ -363,8 +363,8 @@ let private CENSUS_NEVER_DISPATCHED <- [
     "metal_ga_dw"
 ]
 
-[unused_argument(t, path, family, kdts, nbs)]   // off-Apple the gated body is empty
-def private cov_model(t : T?; path, family : string; kdts : array<KVDtype>; nbs : array<int>) {
+[unused_argument(t, path, family, kdts, nbs, blocks)]   // off-Apple the gated body is empty
+def private cov_model(t : T?; path, family : string; kdts : array<KVDtype>; nbs : array<int>; blocks : int64 = 0l) {
     // one model's coverage sweep: per KV codec — GPU prefill (the ~120-id counting prompt
     // clears the npos gate), two greedy decode steps, then one batched step per requested B.
     // No parity asserts here — the census wants DISPATCH DIVERSITY, the parity suites own truth.
@@ -373,6 +373,9 @@ def private cov_model(t : T?; path, family : string; kdts : array<KVDtype>; nbs 
             return
         }
         var tr <- load_model_(path, QuantMode.q8)
+        if (blocks > 0l) {
+            cut_within(t, "{base_name(path)}: ", tr, blocks)
+        }
         if (!convert_model_to_metal_blob(tr)) {
             t |> failure("{base_name(path)}: metal-blob transform failed")
             delete tr
@@ -475,24 +478,24 @@ def private census_zoo(t : T?) {
     // gemma4: the checkpoint suppress list (suppress_tokens metadata rides the 12B
     // family, NOT the E-series) + K-quant at 12B shapes, on the 12B's first twelve blocks
     cov_model(t, path_join(models_dir(), "gemma-4-12B-12L-Q4_K_M-local.gguf"), "gemma4",
-        [KVDtype.f16], [2])
+        [KVDtype.f16], [2], 12l)
     // qwen3moe: the whole-graph GPU MoE family (router/bucket/select/combine +
     // expert GEMV/GEMMs); no batch shapes — MoE batch declines are graph-level and a
     // blob-twin CPU batch fallback would trip the blob-only panic; large tier
-    cov_model(t, path_join(models_dir(), "Qwen3-30B-A3B-Instruct-2507-Q4_K_M.gguf"), "qwen3moe",
-        [KVDtype.f16], none)
+    cov_model(t, path_join(models_dir(), "Qwen3-30B-A3B-7L-Q4_K_M-local.gguf"), "qwen3moe",
+        [KVDtype.f16], none, 7l)
     // gptoss: the MXFP4 expert stacks + swiglu_oai + attention sinks — the only carrier for the
     // mx4 expert kernels; no batch shapes for the same reason as the other MoE rows
     cov_model(t, path_join(models_dir(), "gpt-oss-4L-mxfp4-local.gguf"), "gptoss",
-        [KVDtype.f16], none)
+        [KVDtype.f16], none, 4l)
     // qwen2moe: q8 expert stacks + the sigmoid-gated shared expert on std attention; large tier
-    cov_model(t, path_join(models_dir(), "Qwen1.5-MoE-A2.7B-Chat.Q8_0.gguf"), "qwen2moe",
-        [KVDtype.f16], none)
+    cov_model(t, path_join(models_dir(), "Qwen1.5-MoE-A2.7B-4L-Q8_0-local.gguf"), "qwen2moe",
+        [KVDtype.f16], none, 4l)
     // gemma4moe: the only carrier of a Q4_0 routed expert plane - the gemma-4 dense-shared MoE
     // whose fused gate_up stacks are Q4_0 (the 704-wide down stacks serve as q4032, off the 256
     // lattice), on the 26B's first six blocks. No batch shapes, same reason as the other MoE rows
     cov_model(t, path_join(models_dir(), "gemma-4-26B-A4B-6L-Q4_0-local.gguf"), "gemma4moe",
-        [KVDtype.f16], none)
+        [KVDtype.f16], none, 6l)
     cov_tower(t)
 }
 
@@ -1396,7 +1399,7 @@ let private VK_CENSUS_NEVER_DISPATCHED <- [
     // the N-column decode GEMV leaves serve only the N-row token command, which the zoo's one-region loads never
     // engage (a batched step here rides f32 sessions on the per-op rails); the q8 row-pair stamps serve only past
     // `g_q8_n2_min_n`, off until a box's token command proves the pair. Their coverage is test_vkd_gemv_ncol in
-    // test_vulkan_kernels.das; the stocked carriers are the regions files - test_gpu_resident_regions_qwen3.das and
+    // test_vulkan_kernels.das; the stocked carriers are the regions files - test_gpu_resident_qwen3.das and
     // the gemma files for q8, test_gpu_resident_regions_kquant.das for k4 and k6, test_gpu_resident_regions_hybrid_formats.das
     // for iq3s (its iq3s cells) and the eight low-bit leaves (its q3kxl cells)
     "q8_gemv_n2_cls_spv", "q8_gemv_n4_cls_spv", "q8_gemv_n8_cls_spv",
@@ -1413,7 +1416,7 @@ let private VK_CENSUS_NEVER_DISPATCHED <- [
     "dflash_conv_cls_spv", "dflash_qkn_cls_spv", "dflash_attn_tile_cls_spv", "dflash_attn_merge_cls_spv", "dflash_topk_slices_cls_spv", "dflash_topk_merge_cls_spv",
     "dflash_walk_cls_spv",
     // the fused gate-up GEMV's N stamps serve only the N-row token command, which the zoo's one-region load never engages
-    // (the batched rows need a region a row; the stocked regions files - test_gpu_resident_regions_qwen3.das and the
+    // (the batched rows need a region a row; the stocked regions files - test_gpu_resident_qwen3.das and the
     // gemma files - reach them at two regions); their coverage is test_vkd_q8_gemv_gu_n in test_vulkan_kernels.das
     "q8_gemv_gu_n2_cls_spv", "q8_gemv_gu_n4_cls_spv", "q8_gemv_gu_n8_cls_spv",
     // the sink stamps over a block-codec K/V mirror (gpt-oss with the mirror asked in q8_0 or tq4: the census loads no sink
@@ -1457,8 +1460,8 @@ def private vk_cov_codec_model(t : T?; path, family : string; kv : KVDtype) {
     }
 }
 
-[unused_argument(t, path, family, nbs)]   // without vulkan the gated body is empty
-def private vk_cov_model(t : T?; path, family : string; nbs : array<int>) {
+[unused_argument(t, path, family, nbs, blocks)]   // without vulkan the gated body is empty
+def private vk_cov_model(t : T?; path, family : string; nbs : array<int>; blocks : int64 = 0l) {
     // one model's vulkan coverage sweep: GPU prefill (the counting prompt clears the npos gate),
     // two greedy decode steps, a continuation prefill, then one batched step per requested B.
     // No parity asserts — the census wants DISPATCH DIVERSITY, the parity suites own truth.
@@ -1467,6 +1470,9 @@ def private vk_cov_model(t : T?; path, family : string; nbs : array<int>) {
             return
         }
         var tr <- load_model_(path, QuantMode.q8)
+        if (blocks > 0l) {
+            cut_within(t, "{base_name(path)}: ", tr, blocks)
+        }
         tr.config.seq_len = min(tr.config.seq_len, 512l)
         let vocab = tr.config.vocab_size
         with_dasllama_jobque() {
@@ -1582,13 +1588,13 @@ def test_vulkan_kernel_coverage_serving(tst : T?) {
             // K-quant deltanet planes on the resident driver
             vk_cov_model(t, path_join(models_dir(), "Qwen3.5-9B-MTP-UD-Q5_K_XL.gguf"), "qwen35", none)
             // the MoE rows (expert FFN/qkv chains + heat cache) sit above the small tier
-            vk_cov_model(t, path_join(models_dir(), "Qwen1.5-MoE-A2.7B-Chat.Q8_0.gguf"), "qwen2moe", none)
-            vk_cov_model(t, path_join(models_dir(), "Qwen3-30B-A3B-Instruct-2507-Q4_K_M.gguf"), "qwen3moe", none)
+            vk_cov_model(t, path_join(models_dir(), "Qwen1.5-MoE-A2.7B-4L-Q8_0-local.gguf"), "qwen2moe", none, 4l)
+            vk_cov_model(t, path_join(models_dir(), "Qwen3-30B-A3B-7L-Q4_K_M-local.gguf"), "qwen3moe", none, 7l)
             // the Q4_K_M twin fits a 16 GB card whole: the whole-model driver's MoE block (the router on the f16
             // cm2 GEMM, the per-row select, the bucket schedule, the combine-folded residual step, the token command's routed block)
-            vk_cov_model(t, path_join(models_dir(), "Qwen1.5-MoE-A2.7B-Chat-Q4_K_M-local.gguf"), "qwen2moe", none)
+            vk_cov_model(t, path_join(models_dir(), "Qwen1.5-MoE-A2.7B-4L-Q4_K_M-local.gguf"), "qwen2moe", none, 4l)
             // the UD-IQ2_XXS 30B: the resident MoE block's s and e stamps over iq2xxs expert planes, whole on a 16 GB card
-            vk_cov_model(t, path_join(models_dir(), "Qwen3-30B-A3B-Instruct-2507-UD-IQ2_XXS.gguf"), "qwen3moe", none)
+            vk_cov_model(t, path_join(models_dir(), "Qwen3-30B-A3B-7L-UD-IQ2_XXS-local.gguf"), "qwen3moe", none, 7l)
             let knobs = gpu_knobs()   // the TTS rows serve on the tower knob: pinned on, restored after
             set_vulkan_tower(true)
             defer() {

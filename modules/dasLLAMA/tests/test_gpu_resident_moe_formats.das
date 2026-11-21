@@ -3,13 +3,14 @@ options persistent_heap
 options stack = 524288
 options _dasllama_internal = true
 
-// The host twin's model-level matrix: Qwen1.5-MoE-A2.7B-Chat's routed experts requantized to one format a file
+// The host twin's model-level matrix (the `qwen15-moe` category: `--category qwen15-moe` opens its files): Qwen1.5-MoE-A2.7B-Chat's
+// routed experts requantized to one format a file
 // (`moe-formats/Qwen1.5-MoE-A2.7B-Chat-exps-<TYPE>.gguf`, the rest Q8_0; the down stacks' 1408-wide rows take the type's
 // per-32 fallback where a superblock type is asked), four routed layers' experts pinned to the host under the streamed
 // split, the rare rail reading them off the tier's pinned device-layout planes through the host twin: the split token
 // command and the cut window chain against the CPU chain, one window and two; the pool's two knobs (the DMA fill, the
 // decode meet) and the rare rail's three A/B arms off, each pinned in process on a carrier of the matrix; the NVFP4 row
-// runs the same two cells on Qwen3.6-35B-A3B's own NVFP4 file (large tier). Skips: a file not
+// runs the same two cells on Qwen3.6-35B-A3B's own NVFP4 file (the qwen35moe-35b category: no cut of it). Skips: a file not
 // minted (the 35B NVFP4 not stocked - it is downloaded, not minted), DASLLAMA_PARITY_FULL unset for the large tier, no armed
 // Vulkan tier, the knob cells where the plan found no room for the pool, the expert-cache cell under
 // DASLLAMA_IMAGE=0 (it reads the lane). Run the format cells under DASLLAMA_IMAGE=0: a dozen carriers would mint a dozen
@@ -23,8 +24,12 @@ require dasllama/dasllama_gpu_resident
 require dasllama/dasllama_env
 require daslib/fio
 require dasllama/dasllama_blocks
+require dasllama/dasllama_math   // with_dasllama_jobque_: the cut block's compares
+require dasllama/dasllama_common   // Model
+require _cpu_gpu_model   // with_cpu_and_gpu_model, the forms, FeedRows
+require _format_census   // census_cell: the cut's every site in its own format
+require _kv_codec_cells   // codec_env_why: the block's f16 mirror ask
 
-let private HOST_FIRST = 8l   //! the rarest experts the meet hands the host before the device claims: the twin's rows on every carrier
 let private QWEN15_MOE_EXPERTS = 60l   //! the carrier's routed experts a layer (Qwen1.5-MoE-A2.7B): a pool at or past it never fills
 let private SHARE_CELL_SLOTS = 16l     //! the share cell's pool: a quarter of the experts, so a step's misses outrun the free slots
 
@@ -34,18 +39,33 @@ let private SHARE_CELL_SLOTS = 16l     //! the share cell's pool: a quarter of t
 //! steps' picks went through the one-row rail (a decode-meet cell routes them through the window's meet instead); a cell that
 //! served no window (its carrier not minted, the driver declined) skipped and is not asked
 def private witnessed(t : T?; one_row_rail, dev_rows : bool; body : block<() : void>) {
-    let c0 = g_moe_meet_cpu_experts
-    let r0 = g_rare_dev_rows
-    let d0 = g_rare_dec_rows
+    let at = host_rail_at()
     let p0 = gpu_resident_prefills_()
     invoke(body)
     return if (gpu_resident_prefills_() == p0)
-    t |> success(g_moe_meet_cpu_experts > c0, "the meet handed the host {g_moe_meet_cpu_experts - c0} experts over the cell's windows")
+    held_on(t) $(h) {
+        witness_since(h, at, one_row_rail, dev_rows, "the cell's windows")
+    }
+}
+
+//! the host rail's counters read now: the meet's host experts, the rare rail's window rows and step pairs
+struct private HostRailAt {
+    met : int64
+    dev_rows : int64
+    dec_rows : int64
+}
+
+def private host_rail_at() : HostRailAt => HostRailAt(met = g_moe_meet_cpu_experts, dev_rows = g_rare_dev_rows, dec_rows = g_rare_dec_rows)
+
+//! since `at`, held into `h`: the meet handed the host experts over `what`; under `dev_rows` the rare rail read rows off the
+//! device planes; under `one_row_rail` the fed steps' host picks went through the rail
+def private witness_since(var h : Held; at : HostRailAt; one_row_rail, dev_rows : bool; what : string) {
+    h |> held_fact(g_moe_meet_cpu_experts > at.met, "the meet handed the host {g_moe_meet_cpu_experts - at.met} experts over {what}")
     if (dev_rows) {
-        t |> success(g_rare_dev_rows > r0, "the rare rail read {g_rare_dev_rows - r0} rows off the device planes over the cell's windows - the kernels' rows are in the bar")
+        h |> held_fact(g_rare_dev_rows > at.dev_rows, "the rare rail read {g_rare_dev_rows - at.dev_rows} rows off the device planes over {what} - the kernels' rows are in the bar")
     }
     if (one_row_rail) {
-        t |> success(g_rare_dec_rows > d0, "the fed steps' host picks read {g_rare_dec_rows - d0} pairs off the device planes through the rail - the steps' logits are in the bar")
+        h |> held_fact(g_rare_dec_rows > at.dec_rows, "the fed steps' host picks read {g_rare_dec_rows - at.dec_rows} pairs off the device planes through the rail - the steps' logits are in the bar")
     }
 }
 
@@ -76,7 +96,7 @@ def private format_cells(t : T?; tag : string) {
 //! the matrix's two cells over any host-pinned carrier: `tag` names the expert format in the cell's title
 def private format_cells_of(t : T?; tag : string; fx : MoeFixture) {
     t |> run("{tag} experts on at least four host layers through the one-copy rail: the split token command and the cut window chain vs the CPU chain, one window") @(ct : T?) {
-        let pins = pin_stream(HOST_FIRST, pf_stream = 1, arena = 1, plain_steps = false)
+        let pins = pin_stream(MOE_HOST_FIRST, pf_stream = 1, arena = 1, plain_steps = false)
         with_gpu_kv_dtype(ct, KVDtype.f16) {
             witnessed(ct, true, true) {
                 moe_forced_feed(ct, 40l, fx)
@@ -85,7 +105,7 @@ def private format_cells_of(t : T?; tag : string; fx : MoeFixture) {
         restore_stream_pins(pins)
     }
     t |> run("{tag} experts on at least four host layers through the one-copy rail: the same across two windows") @(ct : T?) {
-        let pins = pin_stream(HOST_FIRST, pf_stream = 1, arena = 1, plain_steps = false)
+        let pins = pin_stream(MOE_HOST_FIRST, pf_stream = 1, arena = 1, plain_steps = false)
         with_gpu_kv_dtype(ct, KVDtype.f16) {
             if (assert_pf_window(ct)) {
                 witnessed(ct, true, true) {
@@ -106,7 +126,7 @@ def private knob_cells(t : T?; tag : string) {
     // fewer slots than the carrier's experts, so the pool fills and the heat gate has misses to leave the share
     t |> run("{tag} experts on twenty host layers, the fill's share of a step's misses past the heat gate: the token command vs the CPU chain") @(ct : T?) {
         return if (!pool_asked(ct))
-        let pins = pin_stream(HOST_FIRST, pf_stream = 1, arena = 1, plain_steps = false)
+        let pins = pin_stream(MOE_HOST_FIRST, pf_stream = 1, arena = 1, plain_steps = false)
         let heat0 = g_gpu_want.heat
         g_gpu_want.heat = SHARE_CELL_SLOTS
         set_gpu_hot_dma(1)
@@ -133,7 +153,7 @@ def private knob_cells(t : T?; tag : string) {
     }
     t |> run("{tag} experts on twenty host layers, the pool's misses filled by DMA: the token command vs the CPU chain") @(ct : T?) {
         return if (!pool_asked(ct))
-        let pins = pin_stream(HOST_FIRST, pf_stream = 1, arena = 1, plain_steps = false)
+        let pins = pin_stream(MOE_HOST_FIRST, pf_stream = 1, arena = 1, plain_steps = false)
         set_gpu_hot_dma(1)
         with_gpu_kv_dtype(ct, KVDtype.f16) {
             let p0 = gpu_resident_prefills_()
@@ -148,7 +168,7 @@ def private knob_cells(t : T?; tag : string) {
     }
     t |> run("{tag} experts on twenty host layers, the DMA fill off and the meet off: no expert lands by DMA, the token steps' misses take the host's upload beside the window's placements") @(ct : T?) {
         return if (!pool_asked(ct))
-        let pins = pin_stream(HOST_FIRST, pf_stream = 1, arena = 1, plain_steps = false)
+        let pins = pin_stream(MOE_HOST_FIRST, pf_stream = 1, arena = 1, plain_steps = false)
         set_gpu_hot_dma(0)   // the DMA cell's no-route leg (the meet off too: its claims ride DMA whatever the knob says)
         set_gpu_dec_meet(0)
         with_gpu_kv_dtype(ct, KVDtype.f16) {
@@ -165,7 +185,7 @@ def private knob_cells(t : T?; tag : string) {
         restore_stream_pins(pins)
     }
     t |> run("{tag} experts on twenty host layers, a token's picks through the decode meet: the token command vs the CPU chain") @(ct : T?) {
-        let pins = pin_stream(HOST_FIRST, pf_stream = 1, arena = 1, plain_steps = false)
+        let pins = pin_stream(MOE_HOST_FIRST, pf_stream = 1, arena = 1, plain_steps = false)
         set_gpu_dec_meet(1)
         with_gpu_kv_dtype(ct, KVDtype.f16) {
             let p0 = gpu_resident_prefills_()
@@ -202,7 +222,7 @@ def test_moe_formats_knobs_IQ4_XS(t : T?) {
 def test_moe_formats_rail_arms(t : T?) {
     let fx = MoeFixture(file = "moe-formats/Qwen1.5-MoE-A2.7B-Chat-exps-Q4_K.gguf", shexp = true, bar_rel = MOE_LOGIT_BAR_REL, host_layers_ask = 4l)
     t |> run("Q4_K experts on four host layers through the three-pass rail (DASLLAMA_RARE_ONEPASS=0): the token command vs the CPU chain") @(ct : T?) {
-        let pins = pin_stream(HOST_FIRST, pf_stream = 1, arena = 1, plain_steps = false)
+        let pins = pin_stream(MOE_HOST_FIRST, pf_stream = 1, arena = 1, plain_steps = false)
         set_rare_onepass(0)
         with_gpu_kv_dtype(ct, KVDtype.f16) {
             witnessed(ct, true, false) {
@@ -212,7 +232,7 @@ def test_moe_formats_rail_arms(t : T?) {
         restore_stream_pins(pins)
     }
     t |> run("Q4_K experts on four host layers, the rows core a row (DASLLAMA_RARE_BATCHED=0): the token command vs the CPU chain") @(ct : T?) {
-        let pins = pin_stream(HOST_FIRST, pf_stream = 1, arena = 1, plain_steps = false)
+        let pins = pin_stream(MOE_HOST_FIRST, pf_stream = 1, arena = 1, plain_steps = false)
         set_rare_batched(0)
         with_gpu_kv_dtype(ct, KVDtype.f16) {
             witnessed(ct, true, true) {
@@ -222,7 +242,7 @@ def test_moe_formats_rail_arms(t : T?) {
         restore_stream_pins(pins)
     }
     t |> run("Q4_K experts on four host layers off the planar planes (DASLLAMA_RARE_ARENA=0): the token command vs the CPU chain") @(ct : T?) {
-        let pins = pin_stream(HOST_FIRST, pf_stream = 1, arena = 1, plain_steps = false)
+        let pins = pin_stream(MOE_HOST_FIRST, pf_stream = 1, arena = 1, plain_steps = false)
         set_rare_arena(0)
         with_gpu_kv_dtype(ct, KVDtype.f16) {
             let r0 = g_rare_dev_rows
@@ -277,7 +297,88 @@ def test_moe_formats_IQ4_XS(t : T?) {
     format_cells(t, "IQ4_XS")
 }
 
-//! the carrier is the 35B NVFP4 file itself (large tier): its routed stacks reach the nv4 row-major kernels under the per-tensor scale word
+//! the MoE NVFP4 carrier on every run: the Qwen3-30B-A3B `--pure`
+//! NVFP4 mint cut to its first seven blocks - every routed stack, the
+//! attention q/k/v/o, the token table and the classifier nv4, the
+//! router and the norms F32, no shared expert; its feeds hold the
+//! routed bar, the CUDA prefill row reading 2.59 against 2.795 on the
+//! RTX PRO 4500 (1.08x), its one-step-off control 16.0
+let private NV4_CUT = MoeFixture(file = "Qwen3-30B-A3B-7L-NVFP4-pure-local.gguf", shexp = false,
+    census = true, fp4_chain = true, bar_rel = MOE_LOGIT_BAR_REL, host_layers_ask = 4l)
+let private NV4_CUT_BLOCKS = 7l
+
+//! the cut's block: the host-pinned form's census, its feeds of
+//! `prompts` with the one-copy rail's witnesses, the CPU form's feeds
+struct private Nv4CutRows {
+    prompts : array<int64>
+    h : Held
+    gpu : array<FeedRows>
+    cpu : array<FeedRows>
+    kv : KVDtype
+}
+
+//! one form's share: on the device the cut's blocks, the admission,
+//! the census, each prompt's feed - the meet handing the host experts,
+//! the rare rail reading the window's rows and the fed steps' picks off
+//! the device planes; on the CPU the same prompts on the device's codec
+def private nv4_cut_rows(t : T?; var r : Nv4CutRows; m : Model; form : ModelForm) {
+    if (!form.on_gpu) {
+        return if (form.kv != r.kv || empty(r.gpu))
+        r.cpu |> reserve(length(r.prompts))
+        for (n in r.prompts) {
+            r.cpu |> emplace <| resident_feed_rows(m, form, n, FED_STEPS)
+        }
+        return
+    }
+    r.kv = form.kv
+    cut_held(r.h, m, NV4_CUT_BLOCKS)
+    let host_layers = moe_fixture_admitted(r.h, m, NV4_CUT)
+    return if (host_layers < 0l)
+    var inscope any_sites, bound : array<string>
+    census_cell(t, m, path_join(models_dir(), NV4_CUT.file), "vulkan load", any_sites, bound)
+    r.gpu |> reserve(length(r.prompts))
+    for (n in r.prompts) {
+        let at = host_rail_at()
+        r.gpu |> emplace <| moe_feed_rows(r.h, m, form, NV4_CUT, n, FED_STEPS, host_layers, empty(r.gpu))
+        witness_since(r.h, at, true, true, "the {n}-token feed's windows")
+    }
+}
+
+[test(description = "Qwen3-30B-A3B-7L NVFP4-pure, every weight site nv4 on the seven-block cut, with four of its seven routed layers on the host reads every site in its own format, and the one-copy host rail plus the nv4 kernels hold the CPU chain within the routed bar over one and two windows; the form loads once")]
+def test_moe_formats_NVFP4_30B_cut(t : T?) {
+    return if (!family_on(t, "qwen3moe"))
+    var r : Nv4CutRows
+    r.prompts <- window_prompts(r.h)
+    var forms : array<ModelForm>
+    let why = codec_env_why(KVDtype.f16)
+    if (!empty(why)) {
+        r.h |> held_skip("the cut's f16 mirror: {why}")
+    } else {
+        forms |> push(device_form(kv = KVDtype.f16, regions = 1l, host_layers = NV4_CUT.host_layers_ask))
+    }
+    let pins = pin_stream(MOE_HOST_FIRST, pf_stream = 1, arena = 1, plain_steps = false)
+    var ran = false
+    with_cuda_mmq_winners() {
+        ran = with_cpu_and_gpu_model(t, "llm", "Qwen3-30B-A3B-7L-NVFP4-pure-local.gguf", MOE_CUT_CTX, forms) $(m, form) {
+            nv4_cut_rows(t, r, m, form)
+        }
+    }
+    restore_stream_pins(pins)
+    held_within(t, r.h, "{NV4_CUT.file}: ", false)
+    if (ran) {
+        with_dasllama_jobque_() {
+            for (f, i in r.gpu, count()) {
+                let what = "{NV4_CUT.file}, {f.nprompt} tokens: "
+                continue if (!twin_collected(t, i, length(r.cpu), what))
+                feed_rows_within(t, what, f, r.cpu[i], NV4_CUT.bar_rel)
+            }
+        }
+    }
+    delete r
+    delete forms
+}
+
+//! the carrier is the 35B NVFP4 file itself (the qwen35moe-35b category): its routed stacks reach the nv4 row-major kernels under the per-tensor scale word
 [test(description = "Qwen3.6-35B NVFP4 with four host layers reads its attention and expert sites in nv4 under the per-tensor scale, and the host rail plus nv4 kernels hold the CPU chain within the routed bar over one and two windows")]
 def test_moe_formats_NVFP4_35B(t : T?) {
     //! the census binds the file's nv4 sites; its BF16 deltanet planes, table and classifier serve as q8 by the tier's design
@@ -336,7 +437,7 @@ def test_moe_formats_hot_pool(t : T?) {
     let fx = MoeFixture(file = "moe-formats/Qwen1.5-MoE-A2.7B-Chat-exps-Q4_K.gguf", shexp = true, bar_rel = MOE_LOGIT_BAR_REL, host_layers_ask = 20l)
     t |> run("Q4_K experts on twenty host layers with the hot pool: the slots filled off the mirrors, the token command vs the CPU chain") @(ct : T?) {
         return if (!pool_asked(ct))
-        let pins = pin_stream(HOST_FIRST, pf_stream = 1, arena = 1, plain_steps = false)
+        let pins = pin_stream(MOE_HOST_FIRST, pf_stream = 1, arena = 1, plain_steps = false)
         set_gpu_hot_dma(0)   //! the host fill is the cell's subject: the DMA fill is `knob_cells`'
         with_gpu_kv_dtype(ct, KVDtype.f16) {
             let c0 = g_rare_slot_copies
@@ -362,7 +463,7 @@ def test_moe_formats_expert_cache(t : T?) {
             ct |> skip("the expert cache reads its misses off the lane file, and DASLLAMA_IMAGE=0 mints none")
             return
         }
-        let pins = pin_stream(HOST_FIRST, pf_stream = 1, arena = 1, plain_steps = false)
+        let pins = pin_stream(MOE_HOST_FIRST, pf_stream = 1, arena = 1, plain_steps = false)
         let cache_was = expert_cache_mb_pin()
         set_expert_cache_mb(3500l)
         remove("{path_join(models_dir(), fx.file)}.vulkan.dlim.heat")   //! an earlier run's profile would seat the first feed's hottest experts already

@@ -26,6 +26,7 @@ require ?vulkan dasllama/dasllama_vulkan_prefill   // vk_rdec_prefill_segment_wi
 require ?cuda dasllama/dasllama_cuda_decode   // the same witnesses on the CUDA home
 require _model_tier public   // models_dir() + model_available() presence/size-tier gate
 require _resident_feed   // served_every_call: the shared served witness
+require _cpu_gpu_model   // ModelForm, device_form, asking: the rig's forms
 require _compares   // the head-rows cell's draft compare
 require dasllama/dasllama_ple   // ple_host_gather_rows: the side rows' host witness
 
@@ -44,17 +45,6 @@ let private CAPPED_RIG_CTX = 4096l   //! the cap cell's context: the smallest th
 [init]
 def private regions_rig_init() {
     allow_cpu_prefill()   // the pin cell's outsider prefills on the CPU by design
-}
-
-//! `body` with the K/V mirror asked at `dt` for every load it makes, the codec ask put back as `body` found it, however
-//! `body` leaves - a test's pin, never a file's `[init]`, which reaches every batch-mate compiled into the same program
-def with_kv_dtype(dt : KVDtype; body : block<() : void>) {
-    let found = gpu_kv_want_pin()
-    defer() {
-        restore_gpu_kv_want(found)
-    }
-    set_gpu_kv_dtype(dt)
-    invoke(body)
 }
 
 let private STEPS = 8l
@@ -121,9 +111,7 @@ def private load_regions(t : T?; file : string; regions : int64; host_ctx : int6
     return <- tr
 }
 
-def private load_two_regions(t : T?; file : string) : Model => <- load_regions(t, file, 2l)
-
-//! the resident gate, and for a test that asks a mirror codec (`with_kv_dtype` around its cells) the skip where the
+//! the resident gate, and for a test that asks a mirror codec (a codec pin around its cells) the skip where the
 //! environment arms another over it: DASLLAMA_VK_KV32=1's f32 mirror
 def private regions_ready(t : T?; file : string) : bool {
     return false if (!resident_ready(t, path_join(models_dir(), file)))
@@ -219,23 +207,14 @@ def regions_interleaved_rows(var h : Held; tr : Model) {
     delete pb
 }
 
-def cell_regions_interleaved_single_steps(t : T?; file : string) {
-    t |> run("two sessions, a region each: single steps interleaved read what each session reads alone") @(t : T?) {
-        with_regions_rig(t, file) $(tr) {
-            held_on(t) $(var h) {
-                regions_interleaved_rows(h, tr)
-            }
-        }
-    }
-}
-
 //! two host-cached sessions over ONE region: A prefills and takes a one-row step (rows on the device alone), B prefills and takes
 //! the region, then the two step in turn, each taking it back - every row what the session reads alone within the batched-row bar, the driver's
 //! saved-claim counter up (A's rows read off the device before B's prefill overwrote them) and every call served
-[cold_path]
-def cell_region_taken_after_decode(t : T?; file : string) {
-    t |> run("two host-cached sessions over one region: the session that loses it keeps its device-only rows") @(t : T?) {
-        with_regions_rig(t, file, RegionsLoad(regions = 1l)) $(tr) {
+//! the cell's run on a one-region load the
+//! caller made
+def regions_taken_cell(t : T?; tr : Model) {
+    unsafe {
+        t |> run("two host-cached sessions over one region: the session that loses it keeps its device-only rows") @capture(& tr)(t : T ?) {
             var pa <- prompt_a()
             var pb <- prompt_b()
             var al <- alone_runs(tr, pa, pb)
@@ -269,35 +248,35 @@ def cell_region_taken_after_decode(t : T?; file : string) {
 
 let private WIDE_ROWS = 3072l   //! the token command's RD_WIDE_POS, asserted equal by the wide cell: its prompts run past it
 
-//! the same past the wide position: both prompts run longer than RD_WIDE_POS, so the one-row steps take the token command's
-//! wide twin - recorded on the first such step, its stamp names apart from the split form's
-def cell_regions_wide_single_steps(t : T?; file : string) {
-    t |> run("two sessions past the wide position: the wide twin reads what each session reads alone") @(t : T?) {
-        with_regions_rig(t, file) $(tr) {
-            var pa <- resident_prompt(WIDE_ROWS + 8l)
-            var pb <- ramp_ids(WIDE_ROWS + 25l, 0l, 3000l, 91l, 6000l)
-            static_if (typeinfo builtin_module_exists(vulkan)) {
-                t |> success(long_length(pa) > RD_WIDE_POS && long_length(pb) > RD_WIDE_POS, "both prompts run past the wide position ({RD_WIDE_POS})")
-            }
-            held_on(t) $(var h) {
-                interleaved_single_steps_body(h, tr, pa, pb)
-            }
-            delete pa
-            delete pb
-        }
+//! two sessions past the wide position on a two-region load: both prompts run longer than RD_WIDE_POS, so the one-row steps
+//! take the token command's wide twin - recorded on the first such step, its stamp names apart from the split form's
+def regions_wide_rows(var h : Held; tr : Model) {
+    var pa <- resident_prompt(WIDE_ROWS + 8l)
+    var pb <- ramp_ids(WIDE_ROWS + 25l, 0l, 3000l, 91l, 6000l)
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        h |> held_fact(long_length(pa) > RD_WIDE_POS && long_length(pb) > RD_WIDE_POS, "both prompts run past the wide position ({RD_WIDE_POS})")
     }
+    interleaved_single_steps_body(h, tr, pa, pb)
+    delete pa
+    delete pb
 }
 
 def private prose_ids(n, salt : int64) : array<int64> => <- resident_prompt(n, salt)
 
-//! the logits of `prompt`'s first `n - 1` tokens on a session of its own, gone before the caller makes the compared pair (two
-//! regions hold two live sessions): the one-token-short control a prefill compare holds its bar against
-def short_control(tr : Model; prompt : array<int64>; n : int64) : array<float> {
-    var short <- create_session(tr, mirror_kv_dtype())
+//! the logits of `prompt`'s first `n` tokens prefilled in one call on a session of its own at the codec `kv`, gone after
+def prefill_row(tr : Model; prompt : array<int64>; n : int64; kv : KVDtype) : array<float> {
+    var s <- create_session(tr, kv)
+    forward_prefill(tr, s, prompt, n, 0l)
+    var out <- logits_of(s, tr.config.vocab_size)
+    delete s
+    return <- out
+}
+
+//! the logits of `prompt`'s first `n - 1` tokens on a session of its own at the codec `kv`, gone before the caller makes the
+//! compared pair (two regions hold two live sessions): the one-token-short control a prefill compare holds its bar against
+def short_control(tr : Model; prompt : array<int64>; n : int64; kv : KVDtype = mirror_kv_dtype()) : array<float> {
     var less <- [for (i in range64(n - 1l)); prompt[i]]
-    forward_prefill(tr, short, less, n - 1l, 0l)
-    var out <- logits_of(short, tr.config.vocab_size)
-    delete short
+    var out <- prefill_row(tr, less, n - 1l, kv)
     delete less
     return <- out
 }
@@ -316,6 +295,35 @@ def private hold_continued(t : T?; tr : Model; got, want, control : array<float>
     } else {
         tq4_reported(t, got, want, control, what)
     }
+}
+
+//! the second half of `prompt` from a checkpoint a fresh session adopts: its first `half` rows prefilled, a checkpoint kept,
+//! one step past it, the claim parked and adopted behind the step, the id window seeded from the tokens, the continuation
+//! served; the adopted row back
+def adopted_row(t : T?; tr : Model; prompt : array<int64>; half : int64) : array<float> {
+    var first <- [for (i in range64(half)); prompt[i]]
+    var rest <- [for (i in range64(half, long_length(prompt))); prompt[i]]
+    var sa <- create_session(tr, mirror_kv_dtype())
+    forward_prefill(tr, sa, first, half, 0l)
+    sa.n_past = half
+    t |> success(gpu_device_kv_checkpoint(sa), "the region kept a checkpoint at the first half's end")
+    forward(tr, sa, prompt[half], half)
+    let claim = gpu_device_kv_park(sa)
+    t |> success(claim != 0l, "the stepped session parked its claim")
+    var sb <- create_session(tr, mirror_kv_dtype())
+    t |> success(gpu_device_kv_adopt(sb, claim, half), "a fresh session adopted the claim at the checkpoint, behind the step")
+    if (!empty(sb.ple_prev)) {
+        ple_window_seed(sb.ple_prev, prompt, half)
+    }
+    sb.n_past = half
+    forward_prefill(tr, sb, rest, long_length(rest), half)
+    served_every_call(t)
+    var adopted <- [for (x in sb.logits); x]
+    delete sb
+    delete sa
+    delete first
+    delete rest
+    return <- adopted
 }
 
 //! `prompt` prefilled in one call against the same prompt prefilled as [0, cut) then [cut, n), then four fed steps on both
@@ -361,8 +369,15 @@ def cell_prefill_continues_on_the_device(t : T?; file : string) {
 }
 
 def cell_prefill_continues_on_the_device(t : T?; file : string; rel : float) {
-    t |> run("a prefill from a position past zero runs the window chain over the region's rows") @(t : T?) {
-        with_regions_rig(t, file) $(tr) {
+    with_regions_rig(t, file) $(tr) {
+        regions_continues_cell(t, tr, rel)
+    }
+}
+
+//! `cell_prefill_continues_on_the_device`'s two runs on a load the caller made
+def regions_continues_cell(t : T?; tr : Model; rel : float) {
+    unsafe {
+        t |> run("a prefill from a position past zero runs the window chain over the region's rows") @capture(& tr)(t : T ?) {
             return if (!assert_pf_window(t))
             continue_at(t, tr, 57l, 40l, rel)     // a short tail inside the first window
             continue_at(t, tr, PF_WINDOW_ROWS + 88l, PF_WINDOW_ROWS, rel)   // the cut on the window boundary
@@ -371,8 +386,8 @@ def cell_prefill_continues_on_the_device(t : T?; file : string; rel : float) {
             served_every_call(t)
         }
     }
-    t |> run("the chat shape: a prompt, decoded steps, a second turn's prompt over that history, decoded steps") @(t : T?) {
-        with_regions_rig(t, file) $(tr) {
+    unsafe {
+        t |> run("the chat shape: a prompt, decoded steps, a second turn's prompt over that history, decoded steps") @capture(& tr)(t : T ?) {
             var turn1 <- prose_ids(40l, 0l)
             var said <- feed_a()
             var turn2 <- prose_ids(20l, 7l)
@@ -403,22 +418,10 @@ def cell_prefill_continues_on_the_device(t : T?; file : string; rel : float) {
     }
 }
 
-//! the window's fused q/k norm, rope and K/V store against its split pair (`set_vulkan_prefill_qkn_fuse`, put back as found): one
-//! prompt two windows long on each form, the prompt's logits and the fed steps within `bar` with the row one step off as the
-//! control, the census counting the fused pass's stamp on the fused form and the norm pass's on the split one
-[cold_path]
-def cell_window_qkn_fused(t : T?; file : string; bar : LogitsBar = LogitsBar.split_bar) {
-    t |> run("the window's q/k norm, rope and store as one fused pass reads within the {bar} of the split pair") @(t : T?) {
-        return if (!vulkan_home_cell(t))
-        with_regions_rig(t, file) $(tr) {
-            held_on(t) $(var h) {
-                regions_window_qkn_rows(h, tr, bar)
-            }
-        }
-    }
-}
-
-//! the fused q/k norm cell's collection on a two-region load of the Vulkan home
+//! the window's fused q/k norm, rope and K/V store against its split pair (`set_vulkan_prefill_qkn_fuse`, put back as found) on a
+//! two-region load of the Vulkan home: one prompt two windows long on each form, the prompt's logits and the fed steps within
+//! `bar` with the row one step off as the control, the census counting the fused pass's stamp on the fused form and the norm
+//! pass's on the split one
 def regions_window_qkn_rows(var h : Held; tr : Model; bar : LogitsBar = LogitsBar.split_bar) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         h |> held_fact(tr.config.qk_norm, "the carrier norms its q and k heads")
@@ -468,6 +471,10 @@ def regions_window_qkn_rows(var h : Held; tr : Model; bar : LogitsBar = LogitsBa
 //! arc's gemma dense and MoE sections)
 enum LogitsBar {
     bit_exact
+    //! bit for bit where the N-row command splits the keys as the row
+    //! alone does, else the wide bar: a routed carrier's cut whose
+    //! router sits on a near-tie under the split's summation order
+    bit_or_wide
     split_bar
     wide_bar
     routed_bar
@@ -575,19 +582,15 @@ def private home_nrow_embed_gathered : int64 {
     return 0l
 }
 
-//! a cell over a lever the Vulkan driver alone carries: false after the loud skip where the CUDA home is asked
-def private vulkan_home_cell(t : T?) : bool {
-    if (gpu_want_cuda()) {
-        t |> skip("the CUDA home is asked: this lever is the Vulkan driver's")
-        return false
-    }
-    return true
-}
-
 //! `bar`, or the split bar where a bit-for-bit claim cannot hold over `rows`: past the unsplit position the N-row command splits
 //! a layer's keys into fewer pieces than the row alone wherever its rows' workgroups over the pieces run past one wave of the
 //! card's SMs, and the two commands then sum the keys in two orders (`vk_rdec_rows_split_alike`)
 def private rows_bar(bar : LogitsBar; rows, pos : int64) : LogitsBar {
+    if (bar == LogitsBar.bit_or_wide) {
+        return LogitsBar.bit_exact if (home_rows_split_alike(rows, pos))
+        to_log(LOG_WARNING, "the N-row command over {rows} rows splits the keys apart from the row alone at {pos} positions on this card: the routed carrier's batched rows hold the wide bar, not bit for bit\n")
+        return LogitsBar.wide_bar
+    }
     if (bar == LogitsBar.bit_exact && !home_rows_split_alike(rows, pos)) {
         to_log(LOG_WARNING, "the N-row command over {rows} rows splits the keys apart from the row alone at {pos} positions on this card: the batched rows hold the split bar, not bit for bit\n")
         return LogitsBar.split_bar
@@ -861,49 +864,37 @@ def regions_split_rows(var h : Held; tr : Model; bar : LogitsBar = LogitsBar.bit
     delete pb
 }
 
-//! DASLLAMA_VK_FUSE_BISECT a bit at a time: the one-row steps under each bit within the split bar of the fused run (the fused
-//! and split forms round apart), the one-token-off control outside it; under the fused q/k norm's bit the batched rows
-//! hold bit for bit to the row alone on the split pair
-def cell_regions_fuse_bisect(t : T?; file : string) {
-    t |> run("the fuse bisect's every bit serves logits within the split bar of the fused run; the split-pair rows batch bit for bit") @(t : T?) {
-        return if (!regions_ready(t, file) || !vulkan_home_cell(t))
-        static_if (typeinfo builtin_module_exists(vulkan)) {
-            var pa <- prompt_a()
-            var fa <- feed_a()
-            with_dasllama_jobque_() {
-                vk_fuse_bisect_pin(0l)
-                var tr0 <- load_two_regions(t, file)
-                if (!moe_gpu_resident_active()) {
-                    delete tr0
-                    vk_fuse_bisect_pin(-1l)
-                    return
-                }
-                var base <- logits_alone(tr0, pa, fa)
-                delete tr0
-                for (bit in fixed_array(1l, 2l, 4l, 8l, 16l, 32l, 64l)) {
-                    vk_fuse_bisect_pin(bit)
-                    var tr <- load_two_regions(t, file)
-                    var got <- logits_alone(tr, pa, fa)
-                    for (st in range64(STEPS)) {
-                        hold_within(t, tr, got[st + 1l], base[st + 1l], base[st], "bisect bit {bit} step {st}")
-                    }
-                    delete got
-                    if (bit == 64l) {
-                        var pb <- prompt_b()
-                        batched_steps_body(t, tr, pa, pb, LogitsBar.bit_exact)
-                        delete pb
-                    }
-                    delete tr
-                }
-                vk_fuse_bisect_pin(-1l)
-                delete base
-            }
-            delete pa
-            delete fa
-        } else {
-            t |> skip("dasVulkan not present")
-        }
+//! the bits DASLLAMA_VK_FUSE_BISECT splits one load at a time (`vk_fuse_bisect_pin`), the fused q/k norm's the last
+let FUSE_BISECT_BITS = fixed_array(1l, 2l, 4l, 8l, 16l, 32l, 64l)
+
+//! the fuse bisect cell's base, on a two-region load the bisect pinned at no bit: the one-row steps' logits alone
+def regions_bisect_base(tr : Model) : array<array<float>> {
+    var pa <- prompt_a()
+    var fa <- feed_a()
+    var base <- logits_alone(tr, pa, fa)
+    delete pa
+    delete fa
+    return <- base
+}
+
+//! the fuse bisect cell on a two-region load the bisect pinned at `bit`: the one-row steps within the split bar of `base`
+//! (the fused and split forms round apart), the one-token-off control outside it; under the fused q/k norm's bit the
+//! batched rows bit for bit the row alone on the split pair
+def regions_bisect_rows(var h : Held; tr : Model; bit : int64; base : array<array<float>>) {
+    var pa <- prompt_a()
+    var fa <- feed_a()
+    var got <- logits_alone(tr, pa, fa)
+    for (st in range64(STEPS)) {
+        hold_within(h, tr, got[st + 1l], base[st + 1l], base[st], "bisect bit {bit} step {st}")
     }
+    delete got
+    if (bit == 64l) {
+        var pb <- prompt_b()
+        batched_steps_body(h, tr, pa, pb, LogitsBar.bit_exact)
+        delete pb
+    }
+    delete pa
+    delete fa
 }
 
 //! one one-row step on each of `sa` and `sb`, fed `ta` and `tb`
@@ -917,18 +908,7 @@ def private pair_step(tr : Model; var sa, sb : Session; ta, tb : int64) {
 }
 
 //! a batched step before any one-row step, a one-row step on each row, a batched step again - every row under the unsplit
-//! position, so the batched steps take the unsplit twin whether or not a one-row record came first
-def cell_regions_batched_first(t : T?; file : string) {
-    t |> run("a batched step first, one-row steps, a batched step again: the rows read what each session reads alone throughout") @(t : T?) {
-        with_regions_rig(t, file) $(tr) {
-            held_on(t) $(var h) {
-                regions_batched_first_rows(h, tr)
-            }
-        }
-    }
-}
-
-//! the batched-first cell's collection on a two-region load
+//! position, so the batched steps take the unsplit twin whether or not a one-row record came first - on a two-region load
 def regions_batched_first_rows(var h : Held; tr : Model) {
     var pa <- prompt_a()
     var pb <- prompt_b()
@@ -996,17 +976,6 @@ def private with_device_pair(tr : Model; pa, pb : array<int64>; body : block<(va
     delete sb
 }
 
-def cell_device_home_sessions(t : T?; file : string) {
-    t |> run("two device-home sessions step between each other and in one batched step, bit for bit a host-cached session alone") @(t : T?) {
-        with_regions_rig(t, file) $(tr) {
-            held_on(t) $(var h) {
-                regions_device_home_rows(h, tr)
-            }
-        }
-    }
-    cell_device_home_pin(t, file)
-}
-
 //! the device-home cell's collection on a two-region load
 def regions_device_home_rows(var h : Held; tr : Model) {
     h |> held_equal(gpu_device_sessions(), 2l, "the armed driver serves a device-home session per region")
@@ -1048,16 +1017,6 @@ def regions_device_home_rows(var h : Held; tr : Model) {
     delete pb
 }
 
-def private cell_device_home_pin(t : T?; file : string) {
-    t |> run("a live device-home session's region is never handed to another session: the outsider passes, the owners step on") @(t : T?) {
-        with_regions_rig(t, file, RegionsLoad(host = true)) $(tr) {
-            held_on(t) $(var h) {
-                regions_device_home_pin_rows(h, tr)
-            }
-        }
-    }
-}
-
 //! the pin cell's collection on a two-region load whose planes stay on the host: the outsider's call passes as busy by design
 def regions_device_home_pin_rows(var h : Held; tr : Model) {
     var pa <- prompt_a()
@@ -1088,9 +1047,10 @@ def regions_device_home_pin_rows(var h : Held; tr : Model) {
     delete pb
 }
 
-def cell_device_kv_park_adopt(t : T?; file : string) {
-    t |> run("a parked claim hands its rows to a later session once: the adopter prefills only the rest") @(t : T?) {
-        with_regions_rig(t, file) $(tr) {
+//! the cell's run on a two-region load the caller made
+def regions_park_adopt_cell(t : T?; tr : Model) {
+    unsafe {
+        t |> run("a parked claim hands its rows to a later session once: the adopter prefills only the rest") @capture(& tr)(t : T ?) {
             var prompt <- prose_ids(57l, 0l)
             var tail <- [for (i in range64(17l)); prompt[40l + i]]
             var short_logits <- short_control(tr, prompt, 57l)
@@ -1133,10 +1093,10 @@ def cell_device_kv_park_adopt(t : T?; file : string) {
 
 //! a recurrent model's parked claim keeps its state at its last row beside the rows: an adopter of all of them continues the
 //! stream as one call would have, and an adopter of fewer is refused, since the state stands at no earlier row
-[cold_path]
-def cell_device_kv_park_adopt_recurrent(t : T?; file : string) {
-    t |> run("a recurrent parked claim hands its rows and its state to a session that takes every row, and refuses a shorter opening") @(t : T?) {
-        with_regions_rig(t, file) $(tr) {
+//! the cell's run on a load the caller made
+def regions_park_adopt_recurrent_cell(t : T?; tr : Model) {
+    unsafe {
+        t |> run("a recurrent parked claim hands its rows and its state to a session that takes every row, and refuses a shorter opening") @capture(& tr)(t : T ?) {
             var prompt <- prose_ids(74l, 0l)
             var head <- [for (i in range64(57l)); prompt[i]]
             var tail <- [for (i in range64(17l)); prompt[57l + i]]
@@ -1236,23 +1196,6 @@ def private hold_streams_equal(var h : Held; m : Model; want, got : array<SchedE
     }
 }
 
-def cell_scheduler_device_mode(t : T?; file : string) {
-    t |> run("a device-mode scheduler emits what the host-cached one does where the two run one code path, and a second turn adopts its first turn's rows") @(t : T?) {
-        with_regions_rig(t, file) $(tr) {
-            held_on(t) $(var h) {
-                regions_scheduler_rows(h, tr)
-            }
-        }
-    }
-    t |> run("a device-mode request that asks for no cache adopts no parked rows and parks none of its own") @(t : T?) {
-        with_regions_rig(t, file) $(tr) {
-            held_on(t) $(var h) {
-                regions_scheduler_no_cache_rows(h, tr)
-            }
-        }
-    }
-}
-
 //! the device-mode scheduler cell's collection on a two-region load: the host-cached run, then the device-home run
 def regions_scheduler_rows(var h : Held; tr : Model) {
     var host, dev : array<SchedEvent>
@@ -1311,10 +1254,10 @@ def regions_scheduler_no_cache_rows(var h : Held; tr : Model) {
     h |> held_equal(length(sch.parked), claims, "... and parks no claim of its own ({length(sch.parked)} parked, {claims} before it)")
     submit(tr, sch, make_req(3l, prompt, 8l))
     drain(tr, sch, events)
-    if (gpu_device_prefill_continues(tr)) {
-        h |> held_fact(cached_of(events, 3l) > 0l, "control: the same prompt with the cache on adopts the first request's rows ({cached_of(events, 3l)} of them)")
+    if (tr.config.recr_mask != 0ul) {
+        h |> held_cell_skip("control: the same prompt with the cache on - a recurrent claim keeps its state at its last row only, so an opening that ends at the prompt boundary adopts nothing")
     } else {
-        h |> held_equal(cached_of(events, 3l), 0l, "a recurrent model's turn prefills whole, from zero: its control adopts nothing either")
+        h |> held_fact(cached_of(events, 3l) > 0l, "control: the same prompt with the cache on adopts the first request's rows ({cached_of(events, 3l)} of them)")
     }
     h |> held_served()
     delete prompt
@@ -1324,10 +1267,10 @@ def regions_scheduler_no_cache_rows(var h : Held; tr : Model) {
 
 //! a paged scheduler's host-cached streams on the resident driver: their pages go up a physical run at a time, the rows the device
 //! stepped come down into the pages before the prefix cache takes them, and a second turn attaches the first turn's pages
-[cold_path]
-def cell_scheduler_paged_resident(t : T?; file : string) {
-    t |> run("a paged scheduler's streams step on the device: token for token the flat scheduler's, and a second turn attaches the turn it continues") @(t : T?) {
-        with_regions_rig(t, file) $(tr) {
+//! the cell's run on a load the caller made
+def regions_scheduler_paged_cell(t : T?; tr : Model) {
+    unsafe {
+        t |> run("a paged scheduler's streams step on the device: token for token the flat scheduler's, and a second turn attaches the turn it continues") @capture(& tr)(t : T ?) {
             var flat, paged : array<SchedEvent>
             serve_four(tr, false, flat)
             let served0 = gpu_resident_prefills_()
@@ -1370,10 +1313,10 @@ def private serve_shared_opening(m : Model; device : bool; system, u1, u2 : arra
 //! a device-home recurrent stream keeps its state at the system prompt's end beside its rows: a second request on the same system
 //! prompt with another user turn adopts that checkpoint off the parked claim and prefills its own turn alone, token for token what
 //! the host-cached paged scheduler - whose prefix cache keeps the same checkpoint - emits
-[cold_path]
-def cell_device_checkpoint_adopt(t : T?; file : string) {
-    t |> run("a device-home recurrent stream's checkpoint at the system prompt's end serves the next request on that system prompt, token for token the host-cached prefix cache's run") @(t : T?) {
-        with_regions_rig(t, file) $(tr) {
+//! the cell's run on a load the caller made
+def regions_checkpoint_adopt_cell(t : T?; tr : Model) {
+    unsafe {
+        t |> run("a device-home recurrent stream's checkpoint at the system prompt's end serves the next request on that system prompt, token for token the host-cached prefix cache's run") @capture(& tr)(t : T ?) {
             var system <- prose_ids(100l, 3l)
             var u1 <- prose_ids(30l, 17l)
             var u2 <- prose_ids(30l, 29l)
@@ -1484,10 +1427,10 @@ def private hold_pool_openings(t : T?; m : Model; host, pooled : array<SchedEven
 //! decode on the device over the same prefill cuts, and the pool
 //! moves bytes, not numerics. With DASLLAMA_DEVICE_POOL=0 the cell
 //! holds the off rail instead.
-[cold_path]
-def cell_device_pool(t : T?; file : string) {
-    t |> run("a device-home scheduler's openings outlive their regions in the host pool: a later request takes them up, token for token the host-cached prefix cache's run") @(t : T?) {
-        with_regions_rig(t, file) $(tr) {
+//! the cell's run on a load the caller made
+def regions_pool_cell(t : T?; tr : Model) {
+    unsafe {
+        t |> run("a device-home scheduler's openings outlive their regions in the host pool: a later request takes them up, token for token the host-cached prefix cache's run") @capture(& tr)(t : T ?) {
             if (!gpu_device_kv_pool_armed()) {
                 //! the off rail: the regions alone, lost openings prefilled whole
                 var off : array<SchedEvent>
@@ -1534,10 +1477,11 @@ def cell_device_pool(t : T?; file : string) {
 //! The pool under a speculating scheduler: a device-home stream's draft head holds its own K/V rows in the region, and an
 //! opening that goes down to the pool carries them - a later request that takes the opening up drafts off the head's rows
 //! as the host-cached speculating scheduler does, token for token, every round drafted and verified on the device.
-[cold_path]
-def cell_device_pool_mtp(t : T?; file : string) {
-    t |> run("a speculating device-home scheduler keeps its openings in the host pool: the draft head's rows ride the moves, and a later request drafts off them as the host-cached speculating scheduler does") @(t : T?) {
-        with_regions_rig(t, file, RegionsLoad(host = true)) $(tr) {   //! the host-cached paged scheduler it compares against drafts on the CPU
+//! the cell's run on a load the caller made with the
+//! planes on the host
+def regions_pool_mtp_cell(t : T?; tr : Model; file : string) {
+    unsafe {
+        t |> run("a speculating device-home scheduler keeps its openings in the host pool: the draft head's rows ride the moves, and a later request drafts off them as the host-cached speculating scheduler does") @capture(& tr)(t : T ?) {
             if (!gpu_device_kv_pool_armed()) {
                 t |> skip("DASLLAMA_DEVICE_POOL=0: the pool is off")
                 return
@@ -1579,10 +1523,10 @@ def cell_device_pool_mtp(t : T?; file : string) {
 //! The head rows' ride itself, outside the scheduler: a device-home session's opening parked, exported to a paged carrier
 //! and imported into a fresh device-home session, which counts the head's rows to the position less one and drafts, off
 //! those rows, the logits the session that went down drafts.
-[cold_path]
-def cell_device_pool_head_rows(t : T?; file : string) {
-    t |> run("an opening down to the pool and up again carries the draft head's rows: the fresh session counts them and drafts what the session that went down drafts") @(t : T?) {
-        with_regions_rig(t, file) $(tr) {
+//! the cell's run on a load the caller made
+def regions_pool_head_cell(t : T?; tr : Model; file : string) {
+    unsafe {
+        t |> run("an opening down to the pool and up again carries the draft head's rows: the fresh session counts them and drafts what the session that went down drafts") @capture(& tr)(t : T ?) {
             if (!gpu_device_kv_pool_armed()) {
                 t |> skip("DASLLAMA_DEVICE_POOL=0: the pool is off")
                 return
@@ -1712,9 +1656,10 @@ def regions_ring_floor_rows(var h : Held; tr : Model) {
     delete prompt
 }
 
-def cell_scheduler_device_prefill_chunks(t : T?; file : string) {
-    t |> run("a device-home stream prefills in the device's windows, and a model whose prefill cannot continue in one call") @(t : T?) {
-        with_regions_rig(t, file) $(tr) {
+//! the cell's run on a load the caller made
+def regions_scheduler_chunks_cell(t : T?; tr : Model) {
+    unsafe {
+        t |> run("a device-home stream prefills in the device's windows, and a model whose prefill cannot continue in one call") @capture(& tr)(t : T ?) {
             var sch <- create_scheduler(tr, 2l, 4l, 64l, 0l, 0l, mirror_kv_dtype())
             t |> success(set_device_kv(sch, true), "an idle scheduler switches to device-home sessions")
             var long_prompt <- prose_ids(PF_WINDOW_ROWS + 188l, 3l)
@@ -1739,16 +1684,6 @@ def cell_scheduler_device_prefill_chunks(t : T?; file : string) {
 //! window serves, the tick hands both to one window and the second stream's prompt is cut there (A 300 + B 212, B 512, B 300:
 //! four calls counted a segment); where it declines, each tick is one stream's own call (A 300, B 512, B 512: three; A 300,
 //! B 1024: two where the model's prefill cannot continue) - the handoff never costs a declining model a window
-def cell_scheduler_device_handoff(t : T?; file : string) {
-    t |> run("a device-home tick hands two streams to one segmented window where the model's window serves, and takes one stream's call where it declines") @(t : T?) {
-        with_regions_rig(t, file) $(tr) {
-            held_on(t) $(var h) {
-                regions_scheduler_handoff_rows(h, tr)
-            }
-        }
-    }
-}
-
 //! the handoff cell's collection on a two-region load
 def regions_scheduler_handoff_rows(var h : Held; tr : Model) {
     var sch <- create_scheduler(tr, 2l, 4l, 64l, 0l, 0l, mirror_kv_dtype())
@@ -1780,9 +1715,11 @@ def regions_scheduler_handoff_rows(var h : Held; tr : Model) {
     delete sch
 }
 
-def cell_device_home_guards(t : T?; file : string) {
-    t |> run("a device-home session that finds no region panics with the reason, and the owners step on") @(t : T?) {
-        with_regions_rig(t, file) $(tr) {
+//! the cell's run on a two-region load the caller made: the refused call passes as busy by design, so a
+//! caller whose load reads the served witness after resets the passes (`reset_gpu_cpu_passes`)
+def regions_guards_cell(t : T?; tr : Model) {
+    unsafe {
+        t |> run("a device-home session that finds no region panics with the reason, and the owners step on") @capture(& tr)(t : T ?) {
             var pa <- prompt_a()
             var pb <- prompt_b()
             var fa <- feed_a()
@@ -1812,9 +1749,11 @@ def cell_device_home_guards(t : T?; file : string) {
     }
 }
 
-def cell_driver_reports(t : T?; file : string) {
-    t |> run("every reason a call can pass to the CPU has words of its own, the plan sizes every region, and the status counts the mirrors") @(t : T?) {
-        with_regions_rig(t, file) $(tr) {
+//! the driver's reasons, plan and status, run on a two-region load the caller made, the region count's lever put
+//! back as the run found it
+def regions_reports_cell(t : T?; tr : Model) {
+    unsafe {
+        t |> run("every reason a call can pass to the CPU has words of its own, the plan sizes every region, and the status counts the mirrors") @capture(& tr)(t : T ?) {
             let n = gpu_cpu_pass_reason_count()
             t |> success(n >= 10, "the armed driver registered its pass reasons ({n})")
             for (i in range(n)) {
@@ -1836,6 +1775,7 @@ def cell_driver_reports(t : T?; file : string) {
             let kv = mirror_kv_dtype()
             let cap = gpu_device_session_ctx()
             t |> success(cap > 0l && cap <= REGIONS_RIG_CTX, "a region's context is the rig's cap or under it ({cap})")
+            let regions0 = gpu_resident_regions_want()
             set_gpu_resident_regions_(1l)
             let one = resident_plan(tr, cap, kv, kv)
             set_gpu_resident_regions_(4l)
@@ -1844,7 +1784,7 @@ def cell_driver_reports(t : T?; file : string) {
             let zero = resident_plan(tr, cap, kv, kv)
             set_gpu_resident_regions_(2l)
             let two = resident_plan(tr, cap, kv, kv)
-            set_gpu_resident_regions_(1l)
+            set_gpu_resident_regions_(regions0)
             t |> success(one.kv_bytes > 0l && four.kv_bytes == 4l * one.kv_bytes, "four regions plan four times one region's K/V ({four.kv_bytes} against {one.kv_bytes})")
             t |> equal(zero.kv_bytes, one.kv_bytes, "a region count under one plans one region")
             let held = gpu_tier_status_().vram_bytes
@@ -1853,21 +1793,25 @@ def cell_driver_reports(t : T?; file : string) {
             t |> success(abs(weights_held - two.weight_bytes) * 50l <= two.weight_bytes, "the plan's weight tally is the upload's within 2% ({two.weight_bytes} planned against {weights_held} held): a plane tallied twice or never lands here")
         }
     }
-    t |> run("a load under a switched-off whole-model route says it was never attempted") @(t : T?) {
-        if (!regions_ready(t, file)) return
-        let levers = resident_levers()
-        set_gpu_resident_route(false)
-        var tr <- load_model_(path_join(models_dir(), file), QuantMode.q8)
-        restore_resident_levers(levers)
-        t |> success(!moe_gpu_resident_active(), "the whole-model driver did not arm")
-        t |> success(gpu_resident_decline_() |> starts_with("not attempted"), "and the reason says so: {gpu_resident_decline_()}")
-        delete tr
+}
+
+//! `cell_driver_reports`'s decline read on a load the caller made with the whole-model route switched off: the read is the
+//! driver's, `tr` the load it reads
+[unused_argument(tr)]
+def regions_route_off_cell(t : T?; tr : Model) {
+    unsafe {
+        t |> run("a load under a switched-off whole-model route says it was never attempted") @capture(& tr)(t : T ?) {
+            t |> success(!moe_gpu_resident_active(), "the whole-model driver did not arm")
+            t |> success(gpu_resident_decline_() |> starts_with("not attempted"), "and the reason says so: {gpu_resident_decline_()}")
+        }
     }
 }
 
-def cell_passes_with_their_rows(t : T?; file : string) {
-    t |> run("a prefill that skips positions passes as a gap, its device rows brought down first") @(t : T?) {
-        with_regions_rig(t, file, RegionsLoad(host = true)) $(tr) {
+//! the gap pass on a two-region load the caller made with the planes on the host: the call passes as gap by design, so a
+//! caller whose load reads the served witness after resets the passes (`reset_gpu_cpu_passes`)
+def regions_gap_cell(t : T?; tr : Model) {
+    unsafe {
+        t |> run("a prefill that skips positions passes as a gap, its device rows brought down first") @capture(& tr)(t : T ?) {
             var head <- prose_ids(40l, 0l)
             var tail <- prose_ids(10l, 9l)
             var s <- create_session(tr, mirror_kv_dtype())
@@ -1881,8 +1825,18 @@ def cell_passes_with_their_rows(t : T?; file : string) {
             delete tail
         }
     }
-    t |> run("a prefill past the region's context passes as cap, its device rows brought down first") @(t : T?) {
-        with_regions_rig(t, file, RegionsLoad(ctx = CAPPED_RIG_CTX, host = true)) $(tr) {
+}
+
+//! the regions' context the cap cell's load arms: the smallest the driver arms a capped mirror at, its host-cached sessions
+//! at the rig's context past it
+let REGIONS_CAPPED_CTX = CAPPED_RIG_CTX
+
+//! the cap pass on a two-region load the caller made at `REGIONS_CAPPED_CTX` with the planes on the host and the host-cached
+//! sessions at the rig's context: the call passes as cap by design, so a caller whose load reads the served witness after
+//! resets the passes (`reset_gpu_cpu_passes`)
+def regions_cap_cell(t : T?; tr : Model) {
+    unsafe {
+        t |> run("a prefill past the region's context passes as cap, its device rows brought down first") @capture(& tr)(t : T ?) {
             t |> equal(gpu_device_session_ctx(), CAPPED_RIG_CTX, "the regions armed at the capped context")
             var head <- prose_ids(CAPPED_RIG_CTX - 96l, 0l)
             var tail <- prose_ids(200l, 9l)
@@ -1895,6 +1849,60 @@ def cell_passes_with_their_rows(t : T?; file : string) {
             delete head
             delete tail
         }
+    }
+}
+
+//! the rig's cells a carrier's two-region form runs on one load, each collection into `h`, `rel` the continuations' bar: the
+//! driver's reports first, then two sessions interleaved, a prefill continued past zero, batched steps at one window and past the unsplit position,
+//! device-home sessions, a parked claim adopted, the device-home guards (their by-design busy pass reset after), then the
+//! device-mode scheduler's cells, whose streams leave parked claims behind
+def regions_rig_rows(t : T?; var h : Held; tr : Model; rel : float) {
+    regions_reports_cell(t, tr)   //! first: its status reads the load's upload alone, before a cell's batch workspace lands beside it
+    regions_interleaved_rows(h, tr)
+    regions_continues_cell(t, tr, rel)
+    regions_batched_rows(h, tr)
+    regions_split_rows(h, tr)
+    regions_device_home_rows(h, tr)
+    regions_park_adopt_cell(t, tr)
+    regions_guards_cell(t, tr)
+    reset_gpu_cpu_passes()
+    regions_scheduler_rows(h, tr)
+    regions_scheduler_no_cache_rows(h, tr)
+    regions_scheduler_chunks_cell(t, tr)
+    regions_scheduler_handoff_rows(h, tr)
+}
+
+//! the rig's cells a carrier's two-region form with the planes on the host runs on one load: the device-home pin's outsider
+//! and the gap pass, each pass by design reset after it
+def regions_host_rig_rows(t : T?; var h : Held; tr : Model) {
+    regions_device_home_pin_rows(h, tr)
+    reset_gpu_cpu_passes()
+    regions_gap_cell(t, tr)
+    reset_gpu_cpu_passes()
+}
+
+//! the rig's forms a carrier loads: two regions (the rig), the same with the planes on the host (the pin and the gap pass),
+//! at the capped context with the host-cached sessions at the rig's (the cap pass), and the per-op form (the route off)
+def regions_rig_forms() : array<ModelForm> {
+    return <- [device_form(regions = 2l, ctx = REGIONS_RIG_CTX), device_form(regions = 2l, host = true, ctx = REGIONS_RIG_CTX),
+        device_form(regions = 2l, host = true, ctx = REGIONS_CAPPED_CTX, host_ctx = REGIONS_RIG_CTX), device_form(perop = true)]
+}
+
+//! the rig's forms (`regions_rig_forms`), each asking the codec `kv`
+def regions_rig_forms(kv : KVDtype) : array<ModelForm> =>
+    <- [for (f in regions_rig_forms()); asking(f, kv)]
+
+//! one of the rig's two-region forms' cells on its load into `h`, `rel` the continuations' bar: the cap pass at the capped
+//! context (by design: reset after, as the form's witness reads the calls after it), the host rig with the planes on the
+//! host, the rig otherwise
+def regions_rig_form_rows(t : T?; var h : Held; tr : Model; form : ModelForm; rel : float) {
+    if (form.ctx == REGIONS_CAPPED_CTX) {
+        regions_cap_cell(t, tr)
+        reset_gpu_cpu_passes()
+    } elif (form.host) {
+        regions_host_rig_rows(t, h, tr)
+    } else {
+        regions_rig_rows(t, h, tr, rel)
     }
 }
 
@@ -1915,7 +1923,7 @@ def private da_attn_stamp_key(var h : Held; tr : Model; slab_heads : int) : stri
 //! slab pick and the census names are the Vulkan driver's, so the cell skips under the CUDA ask and without a census
 def cell_regions_stamp_served(t : T?; file : string; slab_heads : int) {
     t |> run("the driver's step dispatches the stamp the carrier's shape picks") @(t : T?) {
-        return if (!vulkan_home_cell(t))
+        return if (!vulkan_home_asked(t, "this lever is the Vulkan driver's"))
         with_regions_rig(t, file) $(tr) {
             held_on(t) $(var h) {
                 regions_stamp_rows(h, tr, slab_heads)
@@ -2083,20 +2091,28 @@ def regions_groups_rows(var h : Held; tr : Model; rows : int64; bar : LogitsBar 
 def cell_regions_batched_leaf(t : T?; file : string; rows : int64) {
     t |> run("{rows} sessions, a region each, on the rows tensor leaf: a leaf stamp launches and every row reads nearer its session alone than its previous step") @(t : T?) {
         with_regions_rig(t, file, RegionsLoad(regions = rows)) $(tr) {
-            let leaf0 = home_rows_leaf_launches()
-            if (leaf0 >= 0l) {
-                var prompts <- [for (i in range64(rows)); ramp_ids(40l + i, i, 1000l + 100l * i, 37l + 2l * i, 5000l)]
-                var feeds <- [for (i in range64(rows)); ramp_ids(STEPS, i, 2000l, 53l, 4000l)]
-                with_rows_leaf(true) {
-                    batched_steps_body(t, tr, prompts, feeds, LogitsBar.ctrl_bar)
-                }
-                let launched = home_rows_leaf_launches() - leaf0
-                t |> success(launched > 0l, "the batched steps launched the rows tensor leaf ({launched} launches)")
-                delete prompts
-                delete feeds
-            } else {
-                t |> skip("the armed home has no rows tensor leaf")
+            held_on(t) $(var h) {
+                regions_leaf_rows(h, tr, rows)
             }
         }
     }
+}
+
+//! the leaf cell's collection on a load of `rows` regions: a held
+//! skip on a home with no rows leaf
+def regions_leaf_rows(var h : Held; tr : Model; rows : int64) {
+    let leaf0 = home_rows_leaf_launches()
+    if (leaf0 < 0l) {
+        h |> held_skip("the armed home has no rows tensor leaf")
+        return
+    }
+    var prompts <- [for (i in range64(rows)); ramp_ids(40l + i, i, 1000l + 100l * i, 37l + 2l * i, 5000l)]
+    var feeds <- [for (i in range64(rows)); ramp_ids(STEPS, i, 2000l, 53l, 4000l)]
+    with_rows_leaf(true) {
+        batched_steps_body(h, tr, prompts, feeds, LogitsBar.ctrl_bar)
+    }
+    let launched = home_rows_leaf_launches() - leaf0
+    h |> held_fact(launched > 0l, "the batched steps launched the rows tensor leaf ({launched} launches)")
+    delete prompts
+    delete feeds
 }

@@ -89,7 +89,7 @@ def private ladder_row(stem, fmt : string; token_type : string = "") : ModelSpec
 }
 
 //! A layer cut (harness/gguf_cut_layers.py): `src`'s first `blocks`
-//! blocks as `{stem}-{blocks}L-{fmt}-local.gguf` in the format repo's
+//! blocks (and its NextN block, when it has one) as `{stem}-{blocks}L-{fmt}-local.gguf` in the format repo's
 //! `dir`; `lift_softcap` lifts gemma-4's final soft cap, which would
 //! pin most of a cut's logits
 def private cut_row(dir, src, stem, fmt : string; blocks : int; lift_softcap : bool; bytes : int64;
@@ -442,7 +442,7 @@ let PARAKEET_GGUF_RECIPE = "fetched: handy-computer/parakeet-tdt-0.6b-v3-gguf, t
 let CANARY_ENC_RECIPE = "convert: modules/dasLLAMA/harness/convert_canary_to_ggml.py over nvidia/canary-qwen-2.5b (nemo venv; encoder is a repack - sha canonical everywhere)"
 let CANARY_DEC_RECIPE = "convert: modules/dasLLAMA/harness/convert_canary_to_ggml.py over nvidia/canary-qwen-2.5b (nemo venv), then llama-quantize Q8_0 (a Q8_0 disk embedding lets the tied classifier serve cls_q8 on the Metal rail); bytes are per-arch (fp16 LoRA merge) - gate via asr_bench --text over jfk/jfk3/gb1 vs benchmarks/asr/canary_transcripts.expected"
 let TTS_HF = "{HF}/borisbat/dasllama-tts/resolve/a62130a44d6f8fef8a5113825c5f15b01e1c8f80"   //! the published set, commit-pinned
-let FORMATS_HF = "{HF}/borisbat/dasllama-formats/resolve/3ad8e77f034e9c04666ee02cd70099e79b2d8be6"   //! the format matrix, commit-pinned
+let FORMATS_HF = "{HF}/borisbat/dasllama-formats/resolve/665f993136619923f4a3db5cc7cb6054daf308a4"   //! the format matrix, commit-pinned
 let TTS_KITTEN_RECIPE = "convert: modules/dasLLAMA/performance/build_tts_data.das -- --root <g2p experiment root> --out <models dir> runs harness/convert_kitten.py over KittenML/kitten-tts-nano-0.8 @ 7a1db645b1f3ab9420761d87428e042b9cec3f26 and kitten-tts-mini-0.8 @ c02725660cea441db4c383af69f1f26f5cd00947 (the ONNX weights into GGUF, f32); THIRD_PARTY_NOTICES.md (repo root) carries the attribution"
 let TTS_KOKORO_RECIPE = "convert: modules/dasLLAMA/performance/build_tts_data.das -- --root <g2p experiment root> --out <models dir> runs harness/convert_kokoro.py at 807f0164c3 (a later converter also writes kokoro.voice_langs; the pinned file carries none, its voices named in the pipeline's shape) over hexgrad/Kokoro-82M @ f3ff3571791e39611d31c381e3a41a3af07b4987 (kokoro-v1_0.pth + the voice packs into GGUF, f32); THIRD_PARTY_NOTICES.md (repo root) carries the attribution"
 let TTS_KOKORO_RU_RECIPE = "convert: harness/convert_kokoro.py --checkpoint <pth> --config config.json --voices <dir of .bin packs> --name <stem> --lang ru --source 'zaakirio/kokoro-ru @ d649c57b239b18c4c384378127cbf01dba039bc1' (kokoro-ru-v2-base.pth with sveta and masha into kokoro-ru.gguf, kokoro-ru-v2-dima.pth with dima into kokoro-ru-dima.gguf, f32); THIRD_PARTY_NOTICES.md carries the attribution"
@@ -725,7 +725,7 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
             // BOTH MoE prefill paths off one load — bit-identical by construction
             parity <- ev_qwen_count([moe_reference = true])),
         // the small twin of the routed-experts arch for the resident MoE chain's cells
-        // (tests/test_gpu_resident_moe.das): 9.5 GB, whole on a 16 GB card with room to spare
+        // (tests/test_gpu_resident_qwen_moe.das): 9.5 GB, whole on a 16 GB card with room to spare
         ModelSpec(file = "Qwen1.5-MoE-A2.7B-Chat-Q4_K_M-local.gguf",
             url = "{FORMATS_HF}/Qwen1.5-MoE-A2.7B-Chat/Qwen1.5-MoE-A2.7B-Chat-Q4_K_M-local.gguf", bytes = 9496236768l, sha256 = "d2f8376b8391888b55548566a1e06afa8250c7c9e25dbf5da2a9a2b033984964",
             recipe = "llama-quantize --allow-requantize Qwen1.5-MoE-A2.7B-Chat.Q8_0.gguf Qwen1.5-MoE-A2.7B-Chat-Q4_K_M-local.gguf Q4_K_M",
@@ -854,6 +854,60 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
         cut_row("gemma-4-26B-A4B-it", "gemma-4-26B-A4B-it-MXFP4_MOE-local.gguf", "gemma-4-26B-A4B",
             "MXFP4_MOE", 6, true, 3585540800l,
             "a381dc268205cfbba038571b0aacfba05666c58c2181833fdcb11c94fae1e6e3"),
+        // the qwen MoE families at a size a per-PR run loads, each carrier's formats whole: Qwen1.5-MoE's first four blocks,
+        // Qwen3-30B-A3B's first seven (the Q4_K_M file's first Q4_K down stack sits at block 6), Qwen3.6-35B-A3B's first
+        // four (three deltanet layers and one attention layer), the MTP files' NextN block kept after them. No parity rows,
+        // as the gpt-oss cut
+        cut_row("Qwen1.5-MoE-A2.7B-Chat", "Qwen1.5-MoE-A2.7B-Chat.Q8_0.gguf", "Qwen1.5-MoE-A2.7B",
+            "Q8_0", 4, false, 3093637248l,
+            "5cc2a7813af497e5eb78a5a1dd4a207528153842159ea6f24a8e363f1d5ced0a"),
+        cut_row("Qwen1.5-MoE-A2.7B-Chat", "Qwen1.5-MoE-A2.7B-Chat-Q4_K_M-local.gguf", "Qwen1.5-MoE-A2.7B",
+            "Q4_K_M", 4, false, 2015158400l,
+            "8efb94f1a6b764e64cdc0535ab82b5561dc83495621f071828680d4ad82a7fcf"),
+        cut_row("Qwen1.5-MoE-A2.7B-Chat", "Qwen1.5-MoE-A2.7B-Chat-Q5_1-local.gguf", "Qwen1.5-MoE-A2.7B",
+            "Q5_1", 4, false, 2186127488l,
+            "6b98df972d28666c661fc92b6defb8441a0e338af99f14cc3733942290848828"),
+        cut_row("Qwen1.5-MoE-A2.7B-Chat", "Qwen1.5-MoE-A2.7B-Chat-Q5_0-pure-local.gguf", "Qwen1.5-MoE-A2.7B",
+            "Q5_0-pure", 4, false, 2004625536l,
+            "933da0a74e443efd4f219321fe815ea53e83a323cabb0652613f14c62393ce20"),
+        cut_row("Qwen1.5-MoE-A2.7B-Chat", "Qwen1.5-MoE-A2.7B-Chat-Q4_0-local.gguf", "Qwen1.5-MoE-A2.7B",
+            "Q4_0", 4, false, 1641621632l,
+            "2a4daf36e4205b7aa8f3144a42a15763da23174dd0e9110c87e992efee404fc3"),
+        cut_row("Qwen3-30B-A3B-Instruct-2507", "Qwen3-30B-A3B-Instruct-2507-Q4_K_M.gguf", "Qwen3-30B-A3B",
+            "Q4_K_M", 7, false, 3209229440l,
+            "e285387655a6030b01ac4f59ca35c6f738f1b09540b998249ab60b13760dddea"),
+        cut_row("Qwen3-30B-A3B-Instruct-2507", "Qwen3-30B-A3B-Instruct-2507-UD-IQ2_XXS.gguf", "Qwen3-30B-A3B",
+            "UD-IQ2_XXS", 7, false, 1928344704l,
+            "158752cc15a3976ea3652e02222cfafc67621a97ff57fbd781318bcfda6d4b88"),
+        cut_row("Qwen3-30B-A3B-Instruct-2507", "Qwen3-30B-A3B-Instruct-2507-UD-Q3_K_XL.gguf", "Qwen3-30B-A3B",
+            "UD-Q3_K_XL", 7, false, 2421765248l,
+            "9d5c85a91e160db53d5afdad8be881de09366a1ff936d31fa5c96d92089d5a71"),
+        cut_row("Qwen3-30B-A3B", "Qwen3-30B-A3B-NVFP4-pure-local.gguf", "Qwen3-30B-A3B",
+            "NVFP4-pure", 7, false, 2815957248l,
+            "18a1ceb15bffd26924b7daa1c9cc669477445c68e61f65b006196942c484d41e"),
+        cut_row("Qwen3.6-35B-A3B", "Qwen3.6-35B-A3B-UD-Q4_K_M.gguf", "Qwen3.6-35B-A3B",
+            "UD-Q4_K_M", 4, false, 3074384032l,
+            "0f8a80a82fa1cf9bf661731f257c09f3e4223b9787a0761f86b9236f71757d47"),
+        cut_row("Qwen3.6-35B-A3B", "Qwen3.6-35B-A3B-MTP-UD-Q4_K_M.gguf", "Qwen3.6-35B-A3B",
+            "MTP-UD-Q4_K_M", 4, false, 3603242432l,
+            "0ff2c681740e41750321f994c76123f18029df6f5129871ce2e276d15d9a9c39"),
+        cut_row("Qwen3.6-35B-A3B", "Qwen3.6-35B-A3B-MTP-IQ4_XS-pure.gguf", "Qwen3.6-35B-A3B",
+            "MTP-IQ4_XS-pure", 4, false, 2795842752l,
+            "5325c3b17d2dc01cd7cd3e34caa8613b93b7dfa2b5ae6d672b7b193c9a038f17"),
+        cut_row("Qwen3.6-35B-A3B", "Qwen3.6-35B-A3B-UD-IQ3_S.gguf", "Qwen3.6-35B-A3B",
+            "UD-IQ3_S", 4, false, 2120269984l,
+            "08d508ad6111a5eaebacc6c561ce16fbf23ff036746b51143da248a68460c038"),
+        cut_row("Qwen3.6-35B-A3B", "Qwen3.6-35B-A3B-UD-IQ2_XXS.gguf", "Qwen3.6-35B-A3B",
+            "UD-IQ2_XXS", 4, false, 1591623840l,
+            "69482587a2cb8bab2f210849e357468a6b01a9f5a65f91cdeb151ae040999134"),
+        // the dense hybrid 27B's two low-bit carriers: the first eight blocks (two attention layers, the UD file's first Q2_K
+        // plane at block 7) and the NextN block after them
+        cut_row("Qwen3.8-27B", "Qwen3.8-27B.i1-IQ3_S.gguf", "Qwen3.8-27B",
+            "i1-IQ3_S", 8, false, 3135880960l,
+            "937f834282d5a68cb4d77319fbc9e93c18119f4d566cd4bc23f2ead1a559c5e2"),
+        cut_row("Qwen3.8-27B", "Qwen3.8-27B-UD-Q3_K_XL.gguf", "Qwen3.8-27B",
+            "UD-Q3_K_XL", 8, false, 3184544960l,
+            "290c71c0d78c0cc683576dbc27fc5670b20913f32360647a47e9554b72180355"),
         ModelSpec(file = "Mistral-Small-3.1-24B-Instruct-2503-Q4_K_M.gguf", official = false,
             url = "{HF}/unsloth/Mistral-Small-3.1-24B-Instruct-2503-GGUF/resolve/main/Mistral-Small-3.1-24B-Instruct-2503-Q4_K_M.gguf",
             bytes = 14333910592l, sha256 = "6d670773c3908584349d41a5048d1472226b593c881fd394e8ac196c802e81e2",
@@ -901,7 +955,7 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
             // the MoE arm of the native-kq gate: the grouped prefill gathers per-expert token
             // batches off the K-form batch image (the seam the dense arms never touch)
             parity <- ev_qwen_count([kq_native = true, moe_reference = true])),
-        // the resident MoE chain's fixtures on a 16 GB card (tests/test_gpu_resident_moe.das): the 30B with no
+        // the resident MoE chain's fixtures on a 16 GB card (tests/test_gpu_resident_qwen_moe.das): the 30B with no
         // shared expert, and the 35B deltanet hybrid with a gated one - the whole-model fits the UD-Q4_K_M cannot make
         ModelSpec(file = "Qwen3-30B-A3B-Instruct-2507-UD-IQ2_XXS.gguf",
             url = "{HF}/unsloth/Qwen3-30B-A3B-Instruct-2507-GGUF/resolve/eea7b2be5805a5f151f8847ede8e5f9a9284bf77/Qwen3-30B-A3B-Instruct-2507-UD-IQ2_XXS.gguf",

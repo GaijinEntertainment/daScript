@@ -51,13 +51,39 @@ def prompt_windows(n : int64; rows : int64 = PF_WINDOW_ROWS) : int64 => (n + row
 
 //! the engine's prefill window is `rows` (the default `PF_WINDOW_ROWS`, or the window a file pins), where the vulkan module exists: a cell sizing its prompt past the window holds it
 def assert_pf_window(t : T?; rows : int64 = PF_WINDOW_ROWS) : bool {
-    static_if (typeinfo builtin_module_exists(vulkan)) {
-        if (pf_window_rows() != rows) {   //! the knob or a pin moved the window: the cell's prompt is sized against `rows`, so it skips rather than reads another shape
-            t |> skip("the prompt window is {pf_window_rows()} rows (DASLLAMA_GPU_PF_ROWS / set_pf_window_rows_pin), not the {rows} this cell sizes its prompt past")
-            return false
-        }
+    let why = pf_window_why(rows)
+    if (!empty(why)) {
+        t |> skip(why)
+        return false
     }
     return true
+}
+
+//! `assert_pf_window` held into `h`: false after the held skip
+def held_pf_window(var h : Held; rows : int64 = PF_WINDOW_ROWS) : bool {
+    let why = pf_window_why(rows)
+    if (!empty(why)) {
+        h |> held_skip(why)
+        return false
+    }
+    return true
+}
+
+let TWO_WINDOWS = PF_WINDOW_ROWS + 88l   //! a prompt two windows long, the seam's rows past the first
+
+//! the cells' prompts: 40 tokens, and two windows (`TWO_WINDOWS`) where the prompt window is the cells' own
+//! (`held_pf_window`, its skip held into `h`)
+def window_prompts(var h : Held) : array<int64> => <- held_pf_window(h) ? [40l, TWO_WINDOWS] : [40l]
+
+//! why a cell sizing its prompt past a `rows`-row window skips: the
+//! knob or a pin moved the window, so it reads another shape; ""
+//! where the window is `rows` or no vulkan module reads it
+def pf_window_why(rows : int64) : string {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        return ("the prompt window is {pf_window_rows()} rows (DASLLAMA_GPU_PF_ROWS / " +
+            "set_pf_window_rows_pin), not the {rows} this cell sizes its prompt past") if (pf_window_rows() != rows)
+    }
+    return ""
 }
 
 //! `n` ramp ids `base + ((i + salt) * stride) % span`: a prompt or a fed run no tokenizer is needed for
@@ -123,6 +149,20 @@ def resident_ready(t : T?; path : string) : bool {
 def cuda_home_why() : string {
     return "" if (gpu_want_cuda())
     return "the CUDA home is not asked for - needs DASLLAMA_CUDA=1 beside DASLLAMA_GPU=1"
+}
+
+//! why a cell the Vulkan home alone carries (`what`, the cell's reason) does not run: the CUDA home is asked; "" where it
+//! is not
+def vulkan_home_why(what : string) : string => gpu_want_cuda() ? "the CUDA home is asked: {what}" : ""
+
+//! the Vulkan home's own cell runs (`vulkan_home_why`); false after the loud skip
+def vulkan_home_asked(t : T?; what : string) : bool {
+    let why = vulkan_home_why(what)
+    if (!empty(why)) {
+        t |> skip(why)
+        return false
+    }
+    return true
 }
 
 //! the CUDA home asked for (`cuda_home_why`); false after the loud
@@ -272,15 +312,40 @@ def mirror_codec_held(var h : Held) {
     }
 }
 
+//! `mirror_codec_held` on the model `tr`: the codec the cell asks as `tr` serves it (`kv_codec_for` - a Q/K/V-biased model
+//! serves a tq4 ask at q8_0, the serving rule)
+def mirror_codec_held(var h : Held; tr : Model) {
+    let asked = gpu_kv_want_pin()
+    if (asked.pinned) {
+        h |> held_equal(mirror_kv_dtype(), kv_codec_for(tr.config, asked.value),
+            "the mirror armed at the codec the cell asks, as the model serves it")
+    }
+}
+
 //! a resident load's admission: false after a skip with the driver's decline (`note` after it) where the plan does not fit
 //! the card's room; else the driver asserted armed (`armed` the assert's text - any other decline reds it) and the pinned codec held
 def resident_admitted(t : T?; armed, note : string) : bool {
+    return false if (!resident_fits(t, armed, note))
+    mirror_codec_held(t)
+    return true
+}
+
+//! `resident_admitted` on the model `tr` the load made: the pinned codec held as `tr` serves it (`mirror_codec_held(h, tr)`)
+def resident_admitted(t : T?; armed, note : string; tr : Model) : bool {
+    return false if (!resident_fits(t, armed, note))
+    held_on(t) $(var h) {
+        mirror_codec_held(h, tr)
+    }
+    return true
+}
+
+//! the admission's skip where the plan does not fit the card's room, else the driver asserted armed
+def private resident_fits(t : T?; armed, note : string) : bool {
     if (!moe_gpu_resident_active() && moe_gpu_resident_memory_decline()) {
         t |> skip("the residency plan does not fit this card ({gpu_resident_decline_()}){note}")
         return false
     }
     t |> success(moe_gpu_resident_active(), armed)
-    mirror_codec_held(t)
     return true
 }
 
@@ -290,7 +355,7 @@ def resident_admitted(t : T?; armed, note : string) : bool {
 def resident_trunk(t : T?; path : string; ctx : int64; note : string; load : block<() : Model>) : Model {
     return <- Model() if (!resident_ready(t, path))
     var tr <- invoke(load)
-    if (!resident_admitted(t, "the whole-model driver armed on the model (the load log names any decline)", note)) {
+    if (!resident_admitted(t, "the whole-model driver armed on the model (the load log names any decline)", note, tr)) {
         delete tr
         return <- Model()
     }
@@ -340,6 +405,12 @@ def census(kernel : string) : int64 {
     }
     return NO_CENSUS
 }
+
+//! the census count `now` reads past `c0`, the count before the run; NO_CENSUS where `c0` stood down
+def census_delta(c0, now : int64) : int64 => c0 == NO_CENSUS ? NO_CENSUS : now - c0
+
+//! `kernel`'s census count past `c0`, the count before the run (`census_delta`)
+def census_since(kernel : string; c0 : int64) : int64 => census_delta(c0, census(kernel))
 
 //! how a resident cell's model loads: `served` is the product's load with no image (on a discrete home the gguf streams onto
 //! the card and no weight plane stays on the host), `host` keeps the planes beside the device's copy, `image` takes the rail
@@ -497,11 +568,16 @@ def only_pass(t : T?; reason, what : string; count : int64 = 0l) {
 
 //! the pick a device landed against the CPU logits of the same row, tie-aware: the pick is the CPU argmax, or its CPU logit sits
 //! within `rel` of the CPU argmax's (a near-tie the two chains' rounding flips); both decoded and logged with their CPU logits
-def pick_agrees(t : T?; tr : Model; what : string; pick : int64; cpu : array<float>; rel : float) : bool {
+def pick_agrees(t : T?; tr : Model; what : string; pick : int64; cpu : array<float>; rel : float) : bool =>
+    pick_agrees(t, what, pick, cpu, rel) $(id) => decode_(tr, [id])
+
+//! `pick_agrees` with no model at hand: `piece` decodes the logged ids
+def pick_agrees(t : T?; what : string; pick : int64; cpu : array<float>; rel : float;
+                piece : block<(id : int64) : string>) : bool {
     let ac = argmax_of(cpu)
     let bar = row_bar(cpu, rel)
     let in_bar = pick >= 0l && pick < long_length(cpu) && cpu[pick] >= cpu[ac] - bar
-    to_log(LOG_INFO, "{what}: device pick {pick} '{decode_(tr, [pick])}' (CPU logit {pick >= 0l && pick < long_length(cpu) ? cpu[pick] : 0.0}), CPU argmax {ac} '{decode_(tr, [ac])}' ({cpu[ac]}), tie bar {bar}\n")
+    to_log(LOG_INFO, "{what}: device pick {pick} '{invoke(piece, pick)}' (CPU logit {pick >= 0l && pick < long_length(cpu) ? cpu[pick] : 0.0}), CPU argmax {ac} '{invoke(piece, ac)}' ({cpu[ac]}), tie bar {bar}\n")
     t |> success(pick == ac || in_bar, "{what}: the device pick is the CPU argmax, or its CPU logit is within {bar} of the CPU argmax's (a near-tie)")
     return pick == ac
 }
@@ -1013,7 +1089,9 @@ def resident_then_cpu_feed(t : T?; tr : Model; prompt, toks : array<int64>; afte
 //! the stream twin's bar, of the row's largest live logit: the device's chain over its share of the routed experts against the host's
 //! f32 sums over the same share reads 0.4 to 1.0 of the rows' 7-12 max logits on both homes (Qwen1.5-MoE Q8_0 and gpt-oss on the
 //! 5060 Ti) and 1.30 of 8.0 on gpt-oss's CUDA prefill window on the RTX PRO 4500 (driver 595), under the CPU chain's fifth; the
-//! chain's biased-act count is the form's own witness beside it
+//! chain's biased-act count is the form's own witness beside it; on the Qwen1.5-MoE four-block cuts on the Vulkan home (RTX
+//! PRO 4500) the worst row reads 0.373 against a 2.13 bar (Q4_K_M) and 0.205 against 2.14 (Q8_0), the one-step-off control
+//! 15.2 at least
 let STREAM_TWIN_BAR_REL = 0.18
 
 //! `path` loaded twice with `host_layers` routed layers' experts on the host - the prompt stream pinned on, then off - the streamed
@@ -1550,6 +1628,7 @@ struct HeldCheck {
     got : array<float>
     want : array<float>
     control : array<float>
+    counted : bool   //! a skip of a cell of its own: a skipped subtest wherever `held_within` would skip the whole test
 }
 
 //! a cell's readings in the order it read them: the block collects them, `held_within` asserts them once the model is gone
@@ -1566,8 +1645,20 @@ def held_equal(var h : Held; got, want : auto(TT); msg : string) {
     h.checks |> emplace(HeldCheck(kind = HeldKind.pair, got_s = "{got}", want_s = "{want}", msg = msg))
 }
 
-def held_skip(var h : Held; msg : string) {
-    h.checks |> emplace(HeldCheck(kind = HeldKind.skip, msg = msg))
+//! `cut_claim` (`_model_tier.das`) collected into `h`
+def cut_held(var h : Held; m : Model; blocks : int64; arch : string = "") {
+    let c = cut_claim(m, blocks, arch)
+    h |> held_fact(c.ok, c.msg)
+}
+
+def held_skip(var h : Held; msg : string; counted : bool = false) {
+    h.checks |> emplace(HeldCheck(kind = HeldKind.skip, msg = msg, counted = counted))
+}
+
+//! `held_skip` of a cell of its own: `held_within` registers it as a skipped subtest (`skip_cell`) also where its
+//! `mark_skips` would skip the whole test
+def held_cell_skip(var h : Held; msg : string) {
+    held_skip(h, msg, counted = true)
 }
 
 //! `got` within `rel` of `want`'s peak, `control` - the row one off - past the bar
@@ -1606,8 +1697,16 @@ def held_on(t : T?; body : block<(var h : Held) : void>) {
     held_within(t, h)
 }
 
-//! every held check asserted on `t`, `tag` opening each message; a held skip skips `t` where `mark_skips`, else it is logged and
-//! the verdict of the other cells read off the same block stands
+//! a skipped subtest of its own named `what`: the run's skipped cells count it, and the verdict of `t`'s other cells stands
+def skip_cell(t : T?; what : string) {
+    t |> run(what) @(t : T?) {
+        t |> skip(what)
+    }
+}
+
+//! every held check asserted on `t`, `tag` opening each message; a held skip skips `t` where `mark_skips`, else - and for a
+//! `held_cell_skip` always - it is a skipped subtest of its own (`skip_cell`), the verdict of the other cells read off the
+//! same block standing
 def held_within(t : T?; h : Held; tag : string = ""; mark_skips : bool = true) {
     for (c in h.checks) {
         if (c.kind == HeldKind.fact) {
@@ -1624,10 +1723,10 @@ def held_within(t : T?; h : Held; tag : string = ""; mark_skips : bool = true) {
         } elif (c.kind == HeldKind.same) {
             let diff = logits_maxdiff(c.got, c.want)
             t |> success(diff == 0.0, "{tag}{c.msg}: bit for bit (maxdiff {diff})")
-        } elif (mark_skips) {
-            t |> skip("{tag}{c.msg}")
+        } elif (c.counted || !mark_skips) {
+            skip_cell(t, "{tag}{c.msg}")
         } else {
-            to_log(LOG_WARNING, "\tskipped: {tag}{c.msg}\n")
+            t |> skip("{tag}{c.msg}")
         }
     }
 }

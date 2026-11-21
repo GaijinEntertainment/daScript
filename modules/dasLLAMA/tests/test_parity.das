@@ -309,10 +309,11 @@ let private CUT_GAP_REL = 0.02
 //! `prompt` prefilled and the reference's stream `ids` fed after it:
 //! every id within `bar` (of the row's largest logit) under its row's
 //! top logit, a NaN gap the worst, and the stream one step late - the
-//! control, every gap it reads finite - outside that on most rows;
-//! the reference's text and our picks' logged
+//! control, every gap it reads finite - outside that on all but one
+//! row in `late_per`; the reference's text, our picks', the two worst
+//! gaps and the late stream's gaps sorted logged
 def private forced_stream_within(t : T?; tr : Model; prompt, ids : array<int64>; bar : float;
-                                 what : string) {
+                                 what : string; late_per : int = 4) {
     with_pinned_kernels() {
         var inscope rows <- feed_alone(tr, KVDtype.f32, prompt, ids)
         let n = length(ids)
@@ -320,6 +321,8 @@ def private forced_stream_within(t : T?; tr : Model; prompt, ids : array<int64>;
         to_log(LOG_INFO, "{what}: the reference's text {eyeball_text(tr, ids)}\n")
         to_log(LOG_INFO, "{what}: our picks' text {eyeball_text(tr, picks)}\n")
         var worst = 0.0
+        var second = 0.0
+        var lates : array<float>
         var late = 0
         var late_unread = 0
         var nearest_late = INFINITE_DIFF
@@ -327,7 +330,13 @@ def private forced_stream_within(t : T?; tr : Model; prompt, ids : array<int64>;
             let top = rows[i][picks[i]]
             let scale = live_maxabs(rows[i])
             let gap = (top - rows[i][ids[i]]) / scale
-            worst = is_nan(gap) ? INFINITE_DIFF : max(worst, gap)
+            let g = is_nan(gap) ? INFINITE_DIFF : gap
+            if (g > worst) {
+                second = worst
+                worst = g
+            } elif (g > second) {
+                second = g
+            }
             continue if (i + 1 >= n || ids[i + 1] == ids[i])
             let late_gap = (top - rows[i][ids[i + 1]]) / scale
             if (!is_finite(late_gap)) {
@@ -335,16 +344,19 @@ def private forced_stream_within(t : T?; tr : Model; prompt, ids : array<int64>;
                 continue
             }
             nearest_late = min(nearest_late, late_gap)
+            lates |> push(late_gap)
             if (late_gap <= bar) {
                 late++
             }
         }
         to_log(LOG_INFO, "{what}: the worst gap {worst} of the top logit, {late} of {n - 1} late " +
             "ids inside the bar, the nearest late id {nearest_late}\n")
+        sort(lates)
+        to_log(LOG_INFO, "{what}: the second-worst gap {second}; the late stream's gaps sorted {lates}\n")
         t |> success(worst <= bar,
             "{what}: every reference id within {bar} of its row's top logit (worst {worst})")
         t |> equal(late_unread, 0, "{what}: control - every late id's gap reads finite")
-        t |> success(late * 4 < n,
+        t |> success(late * late_per < n,
             "{what}: control - the stream one step late sits inside the bar on {late} of " +
             "{n - 1} rows")
     }
@@ -361,7 +373,7 @@ def private cut_stream(t : T?; cut, full : string; blocks : int64;
     with_parity_backend(t) {
         var inscope spec <- spec_by_file(full)
         var tr <- parity_row_load(path, spec)
-        t |> equal(tr.config.n_layers, blocks, "{cut} holds the {blocks} blocks its name claims")
+        cut_within(t, "{cut}: ", tr, blocks)
         with_dasllama_jobque_() {
             var inscope prompt <- parity_prompt(tr, spec)
             invoke(body, tr, spec, prompt)
@@ -434,6 +446,51 @@ def test_parity_gemma4_26b_cut(t : T?) {
     }
 }
 
+
+//! the Qwen1.5-MoE-A2.7B-4L Q8_0 cut's greedy stream under the
+//! reference after the qwen counting fixture (`1, 2, 3, 4, 5, 6, 7,`):
+//! the worst reference id reads 0.0083 of the top logit under ours on
+//! the M5's CPU chain, the nearest late id 0.31 - the cut's bar `CUT_GAP_REL`
+let private QWEN2MOE_CUT_REF <- [220l, 101371l, 112781l, 108339l, 108339l, 102895l, 99710l, 44851l, 104362l, 101353l,
+                                 9931l, 31628l, 34794l, 141536l, 102423l, 99829l, 58158l, 119519l, 76111l, 122559l,
+                                 56273l, 119261l, 87364l, 52774l, 37160l, 113202l, 111846l, 107698l, 22211l, 117724l,
+                                 103712l, 89831l, 105211l, 28330l, 101175l, 100273l, 96922l, 117166l, 1395l, 93994l]
+
+[test(description = "Qwen1.5-MoE-A2.7B-4L Q8_0, the carrier's first four blocks, fed the reference's greedy stream after the counting fixture keeps every reference id within 2% of its row's top logit, the stream one step late outside")]
+def test_parity_qwen2moe_cut(t : T?) {
+    t |> run("the routed qwen2moe forward on the four-block cut (60 experts, 4 routed, the gated shared expert), the reference's ids fed") @(t : T?) {
+        return if (!family_on(t, "qwen2moe") || !jit_only(t))
+        cut_stream(t, "Qwen1.5-MoE-A2.7B-4L-Q8_0-local.gguf", "Qwen1.5-MoE-A2.7B-Chat.Q8_0.gguf", 4l) $(tr, _spec, prompt) {
+            forced_stream_within(t, tr, prompt, QWEN2MOE_CUT_REF, CUT_GAP_REL, "Qwen1.5-MoE-A2.7B-4L Q8_0")
+        }
+    }
+}
+
+//! the Qwen3.6-35B-A3B-4L UD-Q4_K_M cut's greedy stream under the
+//! reference after the qwen counting fixture
+let private QWEN35MOE_CUT_REF <- [4831l, 150481l, 97148l, 97148l, 97148l, 520l, 78931l, 165676l, 162576l, 45560l,
+                                  138170l, 50831l, 1313l, 72227l, 128702l, 97389l, 10167l, 160370l, 1320l, 174222l,
+                                  7346l, 72l, 39787l, 80151l, 12181l, 38012l, 391l, 391l, 391l, 53206l,
+                                  41669l, 245136l, 5262l, 39231l, 245739l, 74475l, 90496l, 19483l, 4096l, 112516l]
+
+//! the 35B cut's bar, twice its measured worst: the reference's ids
+//! sit up to 0.0171 of the top logit under ours on the M5's CPU chain
+//! (the next 0.0096), and one of the 39 late ids sits inside it (a
+//! repeat of our own pick, gap 0; the next 0.076) - the control holds
+//! at most one late id in eight inside the bar
+let private QWEN35MOE_CUT_GAP_REL = 0.035
+let private QWEN35MOE_CUT_LATE_PER = 8
+
+[test(description = "Qwen3.6-35B-A3B-4L UD-Q4_K_M, the 35B's first four blocks, fed the reference's greedy stream after the counting fixture keeps every reference id within 3.5% of its row's top logit, the stream one step late outside on all but one row in eight")]
+def test_parity_qwen35moe_cut(t : T?) {
+    t |> run("the deltanet hybrid MoE forward on the four-block cut (three recurrent layers, one attention layer, 256 experts, 8 routed, the gated shared expert), the reference's ids fed") @(t : T?) {
+        return if (!family_on(t, "qwen35moe") || !jit_only(t))
+        cut_stream(t, "Qwen3.6-35B-A3B-4L-UD-Q4_K_M-local.gguf", "Qwen3.6-35B-A3B-UD-Q4_K_M.gguf", 4l) $(tr, _spec, prompt) {
+            forced_stream_within(t, tr, prompt, QWEN35MOE_CUT_REF, QWEN35MOE_CUT_GAP_REL,
+                "Qwen3.6-35B-A3B-4L UD-Q4_K_M", QWEN35MOE_CUT_LATE_PER)
+        }
+    }
+}
 
 // The parity dump round trip on Qwen3.5-0.8B-MTP: the device arm's forced-feed run to a file, the CPU arm's with the device
 // arm's prompt, feed and routing tape replayed off that file, and the two files compared under the regions files' bar - the

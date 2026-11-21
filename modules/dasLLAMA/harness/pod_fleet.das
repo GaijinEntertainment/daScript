@@ -26,6 +26,7 @@ require daslib/cmp
 require daslib/clargs
 require daslib/fio
 require daslib/strings_boost
+require daslib/strings_convert
 require strings
 require dasllama/dasllama_env
 require ../tests/_model_categories.das   // CUDA_PASS_ONLY: the CUDA home's pass
@@ -48,6 +49,8 @@ struct FleetArgs {
     image : string = "nvidia/cuda:12.8.1-devel-ubuntu24.04"
     @clarg_doc = "up: the pods' container disk in GB - the tree's copy and the children's AST records live there"
     disk : int = 60
+    @clarg_doc = "up: the fewest cores a pod's cgroup quota may give it, else remade; 0 = off"
+    min_cores : float = 20.0
     @clarg_doc = "the ssh private key the pods admit; its .pub is handed to every pod"
     key : string = "~/.ssh/runpod"
     @clarg_doc = "run: the children's environment - KEY=VALUE tokens separated by spaces; the models directory is the pod's own folder of links to the volume's models, the image rail is off (DASLLAMA_IMAGE=0) and so is the large tier; an image suite's run passes its own --env with the rail on"
@@ -141,6 +144,64 @@ struct PodRecord {
     id : string
     name : string
     ssh : PodSsh
+}
+
+//! the pods `up` makes at one index before an allotment under
+//! the floor fails it
+let CPU_TRIES = 3
+
+//! a pod's CPU allotment as its cgroup's `cpu.max` reads: the
+//! cores its quota buys a period, unlimited (the quota `max`),
+//! or why the text is no `cpu.max`
+variant CpuMax {
+    cores : float
+    unlimited : bool
+    failure : string
+}
+
+//! the remote command that reads the pod's cgroup CPU quota.
+//! Non-private: the pod-fleet tests read it
+def cpu_max_command() : string => "cat /sys/fs/cgroup/cpu.max"
+
+//! a `cpu.max` text (`<quota> <period>`, a trailing newline
+//! allowed) as the pod's allotment. Non-private: the pod-fleet
+//! tests read it
+def cpu_max_cores(text : string) : CpuMax {
+    let line = strip(text)
+    let words <- split(line, " ")
+    return CpuMax(failure = "cpu.max is not `<quota> <period>`: '{line}'") if (length(words) != 2)
+    let period = try_to_int64(words[1])
+    return CpuMax(failure = "cpu.max period '{words[1]}' is not a number") if (period is err)
+    return CpuMax(failure = "cpu.max period is {words[1]}: no rate") if (unwrap(period) <= 0l)
+    return CpuMax(unlimited = true) if (words[0] == "max")
+    let quota = try_to_int64(words[0])
+    return CpuMax(failure = "cpu.max quota '{words[0]}' is not a number") if (quota is err)
+    return CpuMax(cores = float(unwrap(quota)) / float(unwrap(period)))
+}
+
+//! whether `up` keeps a new pod: every pod with the check off
+//! (`min_cores` 0), an unlimited one, one at the floor or over
+//! it; an unread allotment is replaced. Non-private: the
+//! pod-fleet tests read it
+def keeps_pod(min_cores : float; cpu : CpuMax) : bool {
+    return true if (min_cores <= 0.0 || cpu is unlimited)
+    return cpu is cores && (cpu as cores) >= min_cores
+}
+
+//! the allotment as `up`'s log line states it
+def cpu_reading(cpu : CpuMax) : string {
+    return "{fmt(":.1f", cpu as cores)} cores" if (cpu is cores)
+    return "unlimited cores" if (cpu is unlimited)
+    return "no allotment read ({cpu as failure})"
+}
+
+//! the failure of `up` when every try at pod `index` came in
+//! under the floor: the floor and each try's cores.
+//! Non-private: the pod-fleet tests read it
+def cores_refusal(index : int; min_cores : float; readings : array<string>) : string {
+    let floor = fmt(":.1f", min_cores)
+    return ("pod_fleet: POD {index}: all {length(readings)} tries came in under the {floor}-core"
+        + " floor ({join(readings, ", ")}); `--min-cores 0` keeps such a pod")
 }
 
 let POD_TREE = "/root/daScript"
@@ -337,6 +398,55 @@ def private run_capture(argv : array<string>; timeout_sec : float) : tuple<rc : 
     return (rc = rc, out = out)
 }
 
+def private delete_pod(cfg : FleetArgs; id : string) : tuple<rc : int; out : string> =>
+    run_capture([cfg.runpodctl, "pod", "delete", id], 120.0)
+
+//! pod `index` of `up`, made again while its cgroup allotment
+//! comes in under `--min-cores`, CPU_TRIES pods in all: 0 when
+//! one is kept, 1 when none is made (the pods before it stand),
+//! 2 when every try came in short or a short pod outlived its
+//! delete (the fleet file keeps it for `down`)
+def private make_pod(cfg : FleetArgs; var fleet : Fleet; index, want : int; pub : string) : int {
+    var readings : array<string>
+    readings |> reserve(CPU_TRIES)
+    fleet.pods |> reserve(length(fleet.pods) + 1)
+    for (attempt in range(CPU_TRIES)) {
+        let tried = "POD {index}/{want} (try {attempt + 1}/{CPU_TRIES})"
+        to_log(LOG_INFO, "{tried}: creating on {cfg.gpu} in {cfg.datacenter}\n")
+        let made = run_capture(create_argv(cfg, index, pub), 900.0)
+        var rec : PodRecord
+        let at = find(made.out, "\{")
+        let read_rec = at >= 0 && sscan_json(slice(made.out, at), rec)
+        if (made.rc != 0 || !read_rec || empty(rec.id) || empty(rec.ssh.ip)) {
+            to_log(LOG_ERROR, "{tried}: not made (exit {made.rc}):\n{made.out}\n")
+            return 1
+        }
+        let pod = FleetPod(id = rec.id, name = rec.name, ip = rec.ssh.ip, port = rec.ssh.port,
+            index = index)
+        fleet.pods |> push(pod)
+        save_fleet(home_path(cfg.fleet), fleet)
+        to_log(LOG_INFO, "{tried}: {rec.id} at {rec.ssh.ip}:{rec.ssh.port}\n")
+        let read = run_capture(ssh_argv(cfg, pod, cpu_max_command()), 60.0)
+        let cpu = read.rc == 0 ? cpu_max_cores(read.out) : CpuMax(failure = "ssh exit {read.rc}")
+        if (keeps_pod(cfg.min_cores, cpu)) {
+            to_log(LOG_INFO, "POD {index} {rec.id}: {cpu_reading(cpu)}\n")
+            return 0
+        }
+        readings |> push(cpu_reading(cpu))
+        let short = "POD {index} {rec.id}: {cpu_reading(cpu)}"
+        to_log(LOG_INFO, "{short}, under the floor - replacing it\n")
+        let gone = delete_pod(cfg, rec.id)
+        if (gone.rc != 0) {
+            to_log(LOG_ERROR, "POD {index} {rec.id}: not deleted (exit {gone.rc}):\n{gone.out}\n")
+            return 2
+        }
+        fleet.pods |> pop()
+        save_fleet(home_path(cfg.fleet), fleet)
+    }
+    to_log(LOG_ERROR, "{cores_refusal(index, cfg.min_cores, readings)}\n")
+    return 2
+}
+
 //! `up`: `--pods` more pods join the fleet, their indices after the
 //! pods already in it, each copying the tree once made; a fleet past
 //! one pod a home is refused
@@ -355,17 +465,9 @@ def private verb_up(cfg : FleetArgs; var fleet : Fleet) : int {
     let first_index = next_pod_index(fleet)
     let want = first_index + cfg.pods - 1
     for (index in range(first_index, want + 1)) {
-        to_log(LOG_INFO, "POD {index}/{want}: creating on {cfg.gpu} in {cfg.datacenter}\n")
-        let made = run_capture(create_argv(cfg, index, pub), 900.0)
-        var rec : PodRecord
-        let at = find(made.out, "\{")
-        if (made.rc != 0 || at < 0 || !sscan_json(slice(made.out, at), rec) || empty(rec.id) || empty(rec.ssh.ip)) {
-            to_log(LOG_ERROR, "POD {index}/{want}: not made (exit {made.rc}):\n{made.out}\n")
-            break
-        }
-        fleet.pods |> push(FleetPod(id = rec.id, name = rec.name, ip = rec.ssh.ip, port = rec.ssh.port, index = index))
-        save_fleet(home_path(cfg.fleet), fleet)
-        to_log(LOG_INFO, "POD {index}/{want}: {rec.id} at {rec.ssh.ip}:{rec.ssh.port}\n")
+        let got = make_pod(cfg, fleet, index, want, pub)
+        return 1 if (got == 2)
+        break if (got == 1)
     }
     if (length(fleet.pods) == first) {
         to_log(LOG_ERROR, "pod_fleet: no pod made\n")
@@ -466,7 +568,7 @@ def private verb_down(cfg : FleetArgs; var fleet : Fleet) : int {
     }
     var kept : array<FleetPod>
     for (pod in fleet.pods) {
-        let gone = run_capture([cfg.runpodctl, "pod", "delete", pod.id], 120.0)
+        let gone = delete_pod(cfg, pod.id)
         if (gone.rc != 0) {
             to_log(LOG_ERROR, "DOWN {pod.index}: {pod.id} not deleted (exit {gone.rc}):\n{gone.out}\n")
             kept |> push(pod)
