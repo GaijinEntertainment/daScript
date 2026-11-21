@@ -384,3 +384,217 @@ def test_aliasing(t : T?) {     // nolint:STYLE038 - one flat arm per aliasing s
         t |> equal(14, g_a.a)
     }
 }
+
+struct Triple {
+    a : int
+    b : int
+    c : int
+}
+
+[never_inline]
+def sum_triple(src : Triple) : Triple => Triple(a = 1, b = 2, c = src.a + src.b)
+
+[inline]
+def rewrite_first_through_loop(var arr : array<Triple>) {
+    for (p in arr) {
+        arr[0] = Triple(a = 1, b = 2, c = p.a + p.b)
+    }
+}
+
+[unsafe_outside_of_for]
+def each_triple(var arr : array<Triple>) : iterator<Triple&> => <- unsafe(each(arr))
+
+[test(description = "a value built into an array element that the right side reads through a loop variable over that array, or into the loop variable while the right side reads the array, reads the element as it was before the write")]
+def test_loop_variable_aliasing(t : T?) {
+    t |> run("literal reads the loop variable") @(t : T?) {
+        var arr <- [Triple(a = 10, b = 20, c = 0)]
+        for (p in arr) {
+            arr[0] = Triple(a = 1, b = 2, c = p.a + p.b)
+        }
+        t |> equal(30, arr[0].c)
+    }
+    t |> run("literal is written through the loop variable") @(t : T?) {
+        var arr <- [Triple(a = 10, b = 20, c = 0)]
+        for (p in arr) {
+            p = Triple(a = 1, b = 2, c = arr[0].a + arr[0].b)
+        }
+        t |> equal(30, arr[0].c)
+    }
+    t |> run("call reads the loop variable") @(t : T?) {
+        var arr <- [Triple(a = 10, b = 20, c = 0)]
+        for (p in arr) {
+            arr[0] = sum_triple(p)
+        }
+        t |> equal(30, arr[0].c)
+    }
+    t |> run("loop over an iterator, literal reads the loop variable") @(t : T?) {
+        var arr <- [Triple(a = 10, b = 20, c = 0)]
+        for (p in each(arr)) {
+            arr[0] = Triple(a = 1, b = 2, c = p.a + p.b)
+        }
+        t |> equal(30, arr[0].c)
+    }
+    t |> run("loop over an iterator, literal is written through the loop variable") @(t : T?) {
+        var arr <- [Triple(a = 10, b = 20, c = 0)]  // nolint:LINT003 - written through p
+        for (p in each(arr)) {
+            p = Triple(a = 1, b = 2, c = arr[0].a + arr[0].b)
+        }
+        t |> equal(30, arr[0].c)
+    }
+    t |> run("loop variable of a nested loop") @(t : T?) {
+        var grid <- [[Triple(a = 10, b = 20, c = 0)]]
+        for (row in grid) {
+            for (p in row) {
+                grid[0][0] = Triple(a = 1, b = 2, c = p.a + p.b)
+            }
+        }
+        t |> equal(30, grid[0][0].c)
+    }
+    t |> run("loop in a function spliced into its caller") @(t : T?) {
+        var arr <- [Triple(a = 10, b = 20, c = 0)]
+        rewrite_first_through_loop(arr)
+        t |> equal(30, arr[0].c)
+    }
+    t |> run("iterator from an invoke, literal written through the loop variable") @(t : T?) {
+        var arr <- [Triple(a = 10, b = 20, c = 0)]
+        let fn = @@each_triple
+        for (p in (invoke(fn, arr))) {
+            p = Triple(a = 1, b = 2, c = arr[0].a + arr[0].b)
+        }
+        t |> equal(30, arr[0].c)
+    }
+}
+
+[test(description = "a value built into a variable that the right side reads through a reference local bound to it reads the variable as it was before the write")]
+def test_ref_local_aliasing(t : T?) {
+    t |> run("struct literal") @(t : T?) {
+        var q = Triple(a = 10, b = 20, c = 0)
+        let r & = q
+        q = Triple(a = 1, b = 2, c = r.a + r.b)
+        t |> equal(30, q.c)
+    }
+    t |> run("tuple literal") @(t : T?) {
+        var tup = (10, 20, 0)
+        let r & = tup
+        tup = (1, 2, r._0 + r._1)
+        t |> equal(30, tup._2)
+    }
+    t |> run("call") @(t : T?) {
+        var q = Triple(a = 10, b = 20, c = 0)
+        let r & = q
+        q = sum_triple(r)
+        t |> equal(30, q.c)
+    }
+}
+
+var g_triple = Triple(a = 10, b = 20, c = 0)
+
+[never_inline]
+def sum_g_triple() : int => g_triple.a + g_triple.b
+
+[never_inline]
+def add_ints(x, y : int) : int => x + y
+
+[never_inline]
+def call_int_block(blk : block<() : int>) : int => invoke(blk)
+
+[never_inline]
+def rewrite_global_from(third : int& = g_triple.a) {
+    g_triple = Triple(a = 1, b = 2, c = third)
+}
+
+[test(description = "a literal built into a target reads the target as it was before the write wherever its right side reads it - under a value call, an index, a condition, a block handed to a call, or a call that reads the global target")]
+def test_literal_reads_its_target(t : T?) {
+    t |> run("under a value call") @(t : T?) {
+        var q = Triple(a = 10, b = 20, c = 0)
+        q = Triple(a = 1, b = 2, c = add_ints(q.a, q.b))
+        t |> equal(30, q.c)
+    }
+    t |> run("under an index") @(t : T?) {
+        let lut <- [for (i in range(32)); i * 100]
+        var q = Triple(a = 10, b = 20, c = 0)
+        q = Triple(a = 1, b = 2, c = lut[q.a])
+        t |> equal(1000, q.c)
+    }
+    t |> run("under a condition") @(t : T?) {
+        var q = Triple(a = 10, b = 20, c = 0)
+        q = Triple(a = 1, b = 2, c = q.a > 5 ? 111 : 222)
+        t |> equal(111, q.c)
+    }
+    t |> run("under a safe index") @(t : T?) {
+        let lut = fixed_array(0, 100, 200)
+        var q = Triple(a = 2, b = 20, c = 0)
+        q = Triple(a = 1, b = 2, c = lut?[q.a] ?? -1)
+        t |> equal(200, q.c)
+    }
+    t |> run("under an invoke of a value function") @(t : T?) {
+        let fn = @@add_ints
+        var q = Triple(a = 10, b = 20, c = 0)
+        q = Triple(a = 1, b = 2, c = invoke(fn, q.a, q.b))
+        t |> equal(30, q.c)
+    }
+    t |> run("tuple literal under a value call") @(t : T?) {
+        var tup = (10, 20, 0)
+        tup = (1, 2, add_ints(tup._0, tup._1))
+        t |> equal(30, tup._2)
+    }
+    t |> run("array literal under a value call") @(t : T?) {
+        var fa = fixed_array(10, 20, 0)
+        fa = fixed_array(1, 2, add_ints(fa[0], fa[1]))
+        t |> equal(30, fa[2])
+    }
+    t |> run("in a block handed to a call") @(t : T?) {
+        var q = Triple(a = 10, b = 20, c = 0)
+        q = Triple(a = 1, b = 2, c = call_int_block($ => q.a + q.b))
+        t |> equal(30, q.c)
+    }
+    t |> run("in a call that reads the global target") @(t : T?) {
+        g_triple = Triple(a = 10, b = 20, c = 0)
+        g_triple = Triple(a = 1, b = 2, c = sum_g_triple())
+        t |> equal(30, g_triple.c)
+    }
+    t |> run("in an invoke of a function that reads the global target") @(t : T?) {
+        var fn = @@sum_g_triple
+        fn = @@sum_g_triple
+        g_triple = Triple(a = 10, b = 20, c = 0)
+        g_triple = Triple(a = 1, b = 2, c = invoke(fn))
+        t |> equal(30, g_triple.c)
+    }
+}
+
+[test(description = "an assignment whose right side cannot read the half-written target takes no temporary - under no_aliasing none of these is an error")]
+def test_no_temporary_without_a_read_of_the_target(t : T?) {
+    t |> run("value local copied from the target before the write") @(t : T?) {
+        var q = Triple(a = 10, b = 20, c = 0)
+        let sum = q.a + q.b
+        q = Triple(a = 1, b = 2, c = sum)
+        t |> equal(30, q.c)
+    }
+    t |> run("reference local bound through an index that read the target") @(t : T?) {
+        var others <- [Triple(a = 10, b = 20, c = 0)]
+        var q = Triple(a = 0, b = 20, c = 0)
+        let r & = unsafe(others[q.a])
+        q = Triple(a = 1, b = 2, c = r.a + r.b)
+        t |> equal(30, q.c)
+    }
+    t |> run("reference argument whose default names the global target") @(t : T?) {
+        g_triple = Triple(a = 10, b = 20, c = 0)
+        let third = 30
+        rewrite_global_from(third)
+        t |> equal(30, g_triple.c)
+    }
+    t |> run("call argument holding a call that reads the global target") @(t : T?) {
+        g_triple = Triple(a = 10, b = 20, c = 0)
+        g_triple = sum_triple(Triple(a = sum_g_triple(), b = 5, c = 0))
+        t |> equal(35, g_triple.c)
+    }
+    t |> run("loop source indexed through a dereferenced pointer") @(t : T?) {
+        var rows <- [[Triple(a = 10, b = 20, c = 0)]]
+        var row = 0
+        let prow = unsafe(addr(row))
+        for (p in rows[*prow]) {
+            p = Triple(a = 1, b = 2, c = 3)
+        }
+        t |> equal(3, rows[0][0].c)
+    }
+}

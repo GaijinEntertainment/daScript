@@ -2048,7 +2048,8 @@ def private raw_decode_text(var ctx : CudaCtx; ec : ExprCall?; wi : WgInfo; blkT
     let bpr = wi.cols / b1
     let slot_bytes = uint64(wi.rows * wi.cols)
     if (!key_exists(ctx.raw_rings, tname)) {
-        ctx.raw_rings[tname] = RawRing(off = smem_carve(ctx, slot_bytes), slot_bytes = slot_bytes)
+        let off = smem_carve(ctx, slot_bytes)
+        ctx.raw_rings[tname] = RawRing(off = off, slot_bytes = slot_bytes)
     }
     let ring = ctx.raw_rings[tname]
     let dbl = ctx.decode_slot_pairs[tname]

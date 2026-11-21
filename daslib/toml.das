@@ -799,7 +799,8 @@ def private new_stream(text : string) : TomlTokenStream {
             push(ts.data, b)
         }
     }
-    ts.state = LexState(pos = 0, n = length(ts.data), line = 1, row = 0)
+    let count = length(ts.data)
+    ts.state = LexState(pos = 0, n = count, line = 1, row = 0)
     ts.has_ahead = false
     return <- ts
 }
