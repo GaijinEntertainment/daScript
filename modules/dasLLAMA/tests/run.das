@@ -47,8 +47,6 @@ struct RunArgs {
     @clarg_doc = "Exclude — comma-separated substrings; a suite file whose name contains one is dropped, each named on an EXCLUDED line (e.g. --suite stocked --exclude test_gpu_resident_gemma4_e2b)"
     exclude : string
 
-    @clarg_doc = "Shard i/n — this box runs every n-th file of the run's file list from the i-th (1-based), so n boxes on the same command with --shard 1/n .. n/n cover the run once; the REPORT line names the shard and the NEXT line the shards still owed"
-    shard : string
     @clarg_doc = "Only — comma-separated substrings; a file of the run whose name contains none is dropped, each kept file named on an ONLY line and the REPORT line carrying the tokens, so a narrowed run cannot read as whole (e.g. --changed --only cuda,segments under DASLLAMA_CUDA=1: the CUDA home's files of the run)"
     only : string
 
@@ -61,7 +59,7 @@ struct RunArgs {
     @clarg_doc = "Diff base for --changed (default origin/master)"
     base : string = "origin/master"
 
-    @clarg_doc = "Category - comma-separated model categories (../TEST_CATEGORIES.md): runs the test files that name a category's model files, each cell on another model skipped. No other run opens a category's files. Takes --only, --exclude and --shard; no --suite, --area, --changed, --arm or --family"
+    @clarg_doc = "Category - comma-separated model categories (../TEST_CATEGORIES.md): runs the test files that name a category's model files, each cell on another model skipped. No other run opens a category's files. Takes --only and --exclude; no --suite, --area, --changed, --arm or --family"
     category : string
 
     @clarg_doc = "Family filter — comma-separated family tokens (the full list lives in tests/CLAUDE.md, EXACT match); only blocks of these model families run (model-free blocks always run); sets DASLLAMA_TEST_FAMILY"
@@ -87,7 +85,7 @@ struct RunArgs {
     @clarg_doc = "Start no child before the run's Nth (counted from 0): the resume of a run a wall stopped, on the N its WALL line names. The REPORT line carries it, so a resumed run cannot read as a whole one"
     skip : int = 0
     @clarg_name = "stop-file"
-    @clarg_doc = "A marker shared by the boxes of one run (a fleet's shards): the run that sees a test past the wall writes it, and a run that finds it starts no further child, so one box at the wall ends every box's run"
+    @clarg_doc = "A marker shared by the boxes of one run (the fleet's two homes, a pod each): the run that sees a test past the wall writes it, and a run that finds it starts no further child, so one box at the wall ends every box's run"
     stop_file : string
     @clarg_name = "poison-kv"
     @clarg_doc = "Start every child's K/V slabs as NaN (DASLLAMA_KV_INIT=poison): a read of a row no store wrote reaches the logits as NaN and reds its cell - the run a change to a K/V store or reader cites. Every session then touches its whole slab, so the run's memory is not the product's"
@@ -261,10 +259,8 @@ def suite_files(name : string) : array<string> {   // nolint:STYLE038 - a flat s
                     "modules/dasLLAMA/tests/test_gpu_resident_codec_llama.das",
                     "modules/dasLLAMA/tests/test_gpu_resident_qwen2.das",
                     "modules/dasLLAMA/tests/test_gpu_resident_regions.das",
-                    "modules/dasLLAMA/tests/test_gpu_resident_regions_gptoss.das",
                     "modules/dasLLAMA/tests/test_gpu_resident_regions_qwen_moe.das",
                     "modules/dasLLAMA/tests/test_gpu_resident_regions_qwen35moe.das",
-                    "modules/dasLLAMA/tests/test_gpu_resident_regions_gemma4moe.das",
                     "modules/dasLLAMA/tests/test_gpu_resident_regions_hybrid.das",
                     "modules/dasLLAMA/tests/test_gpu_resident_regions_hybrid_formats.das",
                     "modules/dasLLAMA/tests/test_gpu_resident_regions_kquant.das",
@@ -378,7 +374,7 @@ def area_tests(area : string) : array<string> {
         return <- [ "test_arch_registry.das", "test_batch_decode.das", "test_bench_records_schema.das",
                     "test_chat.das", "test_deltanet.das", "test_dispatch_shaping.das", "test_driver_knob_getters.das", "test_facade.das",
                     "test_forward.das", "test_fused_decode.das", "test_gguf_quant.das", "test_gguf_shards.das", "test_mlx_snapshot.das", "test_mlx_qwen4exp.das",
-                    "test_gpu_home.das", "test_gpu_model_swap.das", "test_gpu_perop_kv_codec.das", "test_gpu_resident_codec_llama.das", "test_gpu_resident_gemma2_3.das", "test_gpu_resident_gemma4_dense.das", "test_gpu_resident_gemma4_moe.das", "test_gpu_resident_gemma4_26b_host.das", "test_gpu_resident_moe_host_pinned.das", "test_gpu_resident_gemma4_e2b.das", "test_gpu_resident_gptoss.das", "test_gpu_resident_hc.das", "test_gpu_resident_hc_micro.das", "test_gpu_resident_window.das", "test_gpu_resident_hybrid.das", "test_gpu_resident_llama.das", "test_gpu_resident_cuda_llama.das", "test_gpu_resident_cuda_dense.das", "test_gpu_resident_cuda_batch.das", "test_gpu_resident_cuda_qwen35.das", "test_gpu_resident_cuda_mtp.das", "test_gpu_resident_cuda_moe.das", "test_gpu_resident_cuda_moe_host.das", "test_gpu_resident_cuda_gemma4.das", "test_gpu_resident_segments.das", "test_gpu_resident_moe.das", "test_gpu_resident_moe_formats.das", "test_gpu_resident_format_census.das", "test_gpu_resident_qwen2.das", "test_gpu_resident_regions.das", "test_gpu_resident_regions_gptoss.das", "test_gpu_resident_regions_qwen_moe.das", "test_gpu_resident_regions_qwen35moe.das", "test_gpu_resident_regions_gemma4moe.das", "test_gpu_resident_regions_hybrid.das", "test_gpu_resident_regions_hybrid_formats.das", "test_gpu_resident_regions_kquant.das", "test_gpu_resident_regions_qwen3.das", "test_gpu_resident_regions_q8kv.das", "test_gpu_resident_regions_tq4kv.das", "test_gpu_serving_declines.das", "test_gpu_tier.das", "test_groupn.das",
+                    "test_gpu_home.das", "test_gpu_model_swap.das", "test_gpu_perop_kv_codec.das", "test_gpu_resident_codec_llama.das", "test_gpu_resident_gemma2_3.das", "test_gpu_resident_gemma4_dense.das", "test_gpu_resident_gemma4_moe.das", "test_gpu_resident_gemma4_26b_host.das", "test_gpu_resident_moe_host_pinned.das", "test_gpu_resident_gemma4_e2b.das", "test_gpu_resident_gptoss.das", "test_gpu_resident_hc.das", "test_gpu_resident_hc_micro.das", "test_gpu_resident_window.das", "test_gpu_resident_hybrid.das", "test_gpu_resident_llama.das", "test_gpu_resident_cuda_llama.das", "test_gpu_resident_cuda_dense.das", "test_gpu_resident_cuda_batch.das", "test_gpu_resident_cuda_qwen35.das", "test_gpu_resident_cuda_mtp.das", "test_gpu_resident_cuda_moe.das", "test_gpu_resident_cuda_moe_host.das", "test_gpu_resident_cuda_gemma4.das", "test_gpu_resident_segments.das", "test_gpu_resident_moe.das", "test_gpu_resident_moe_formats.das", "test_gpu_resident_format_census.das", "test_gpu_resident_qwen2.das", "test_gpu_resident_regions.das", "test_gpu_resident_regions_qwen_moe.das", "test_gpu_resident_regions_qwen35moe.das", "test_gpu_resident_regions_hybrid.das", "test_gpu_resident_regions_hybrid_formats.das", "test_gpu_resident_regions_kquant.das", "test_gpu_resident_regions_qwen3.das", "test_gpu_resident_regions_q8kv.das", "test_gpu_resident_regions_tq4kv.das", "test_gpu_serving_declines.das", "test_gpu_tier.das", "test_groupn.das",
                     "test_embeddings.das", "test_jobque_tripwire.das", "test_kernel_backend.das", "test_kqformat.das", "test_kquant.das",
                     "test_kv_codec.das", "test_kv_paged.das", "test_kv_prefix.das", "test_metal_batched_row.das", "test_metal_format_census.das", "test_math_activations.das",
                     "test_math_elementwise.das", "test_matmul_batch.das", "test_f32_batch_tile_perms.das",
@@ -480,7 +476,7 @@ let MODULE_AREAS <- {
 
 //! the stocked llm files a change to the engine core reaches - a witness a family and home, the codec rig, the regions
 //! form, the segmented window, the CPU chains - beside every model-free llm file: the per-edit gate. The whole stocked
-//! set stays the pre-merge gate (`--suite stocked`, sharded over the fleet). Non-private: test_run_suites.das pins it
+//! set stays the pre-merge gate (`--suite stocked` over the fleet, a pod a GPU home). Non-private: test_run_suites.das pins it
 let LLM_CORE_WITNESSES <- [
     "test_batch_decode.das", "test_deltanet.das", "test_forward.das", "test_gpu_perop_kv_codec.das",
     "test_gpu_resident_codec_llama.das", "test_gpu_resident_cuda_llama.das", "test_gpu_resident_cuda_moe.das",
@@ -490,7 +486,7 @@ let LLM_CORE_WITNESSES <- [
     "test_gpu_resident_regions.das", "test_gpu_resident_regions_kquant.das", "test_gpu_resident_regions_qwen3.das",
     "test_gpu_resident_segments.das", "test_kv_codec.das", "test_mtp.das", "test_prefill.das", "test_scheduler.das" ]
 
-let CUDA_WITNESSES = "test_cuda_kernels.das,test_gpu_resident_cuda_llama.das,test_gpu_resident_cuda_batch.das,test_gpu_resident_cuda_dense.das,test_gpu_resident_cuda_qwen35.das,test_gpu_resident_cuda_mtp.das,test_gpu_resident_cuda_moe.das,test_gpu_resident_cuda_moe_host.das,test_gpu_resident_cuda_gemma4.das,test_gpu_resident_segments.das,test_cuda_mint.das"
+let CUDA_WITNESSES = "test_cuda_kernels.das,test_gpu_resident_cuda_llama.das,test_gpu_resident_cuda_batch.das,test_gpu_resident_cuda_dense.das,test_gpu_resident_cuda_qwen35.das,test_gpu_resident_cuda_mtp.das,test_gpu_resident_cuda_moe.das,test_gpu_resident_cuda_moe_host.das,test_gpu_resident_cuda_gemma4.das,test_gpu_resident_segments.das,test_cuda_mint.das,test_gpu_resident_gptoss.das,test_gpu_resident_gemma4_dense.das,test_gpu_resident_gemma4_moe.das"
 let KV_CODEC_WITNESSES = "test_kv_codec.das,test_vulkan_kv_codec_kernels.das,test_gpu_resident_codec_llama.das,test_gpu_perop_kv_codec.das,test_gpu_resident_cuda_llama.das,test_gpu_resident_regions_q8kv.das,test_gpu_resident_regions_tq4kv.das"
 let TOKENIZER_WITNESSES = "test_tokenizer.das,test_tts_textnorm.das,test_chat.das,test_tok_seed.das"
 let METAL_WITNESSES = "test_metal_batched_row.das,test_metal_format_census.das,test_matmul_batch.das,uncategorized_no_aot_persistent_heap.das,uncategorized_persistent_heap_stack_524288.das"
@@ -510,10 +506,10 @@ let MODULE_WITNESSES <- {
     "dasllama_arch_qwen3moe" => "test_gpu_resident_regions_qwen_moe.das,test_gpu_resident_moe_formats.das,test_gpu_resident_format_census.das,test_gpu_resident_cuda_moe.das",
     "dasllama_arch_qwen2moe" => "test_gpu_resident_moe.das,test_gpu_resident_cuda_moe.das,test_gpu_resident_cuda_moe_host.das,test_gpu_resident_regions_qwen_moe.das,test_gpu_resident_moe_host_pinned.das",
     "dasllama_arch_qwen4exp" => "test_qwen4exp.das,test_gpu_resident_hc.das,test_gpu_resident_hc_micro.das",
-    "dasllama_arch_gptoss" => "test_gpu_resident_gptoss.das,test_gpu_resident_regions_gptoss.das,test_gpu_resident_cuda_moe.das",
+    "dasllama_arch_gptoss" => "test_gpu_resident_gptoss.das",
     "dasllama_arch_gemma2" => "test_gpu_resident_gemma2_3.das,test_gpu_resident_cuda_dense.das",
     "dasllama_arch_gemma3" => "test_gpu_resident_gemma2_3.das,test_gpu_resident_cuda_dense.das",
-    "dasllama_arch_gemma4" => "test_gpu_resident_cuda_gemma4.das,test_gpu_resident_gemma4_e2b.das,test_gpu_resident_gemma4_dense.das,test_gpu_resident_gemma4_moe.das,test_gpu_resident_regions_gemma4moe.das,test_mtp_gemma_drafter.das",
+    "dasllama_arch_gemma4" => "test_gpu_resident_cuda_gemma4.das,test_gpu_resident_gemma4_e2b.das,test_gpu_resident_gemma4_dense.das,test_gpu_resident_gemma4_moe.das,test_mtp_gemma_drafter.das",
     "dasllama_arch_phi3" => "test_gpu_resident_cuda_dense.das,test_gpu_resident_regions_kquant.das",
     "dasllama_arch_glm4moe" => "test_mtp.das", "dasllama_arch_mistral3" => "test_chat.das,test_model_specs.das",
     "dasllama_moe" => "test_gpu_resident_moe.das,test_gpu_resident_moe_formats.das,test_gpu_resident_cuda_moe.das,test_gpu_resident_gptoss.das,test_gpu_resident_gemma4_moe.das,test_vulkan_dec_tail.das,test_vulkan_moe_cm2.das,test_vulkan_host_twin.das",
@@ -768,26 +764,6 @@ def only_files(files : array<string>; only : string) : array<string> {
         }
     }
     return <- kept
-}
-
-//! --shard i/n: the files at every n-th index from the (i - 1)-th of the list's order, which the
-//! planners sort, so the shards of one command partition its run and spread the costly
-//! neighbours. `why` names a form the flag refuses; "" takes the whole list. Non-private:
-//! test_run_suites.das gates it
-def shard_files(files : array<string>; shard : string) : tuple<kept : array<string>; why : string> {
-    if (empty(shard)) {
-        var whole := files
-        return <- (kept <- whole, why = "")
-    }
-    let parts <- split(shard, "/")
-    let i = length(parts) == 2 ? to_int(parts[0]) : 0
-    let n = length(parts) == 2 ? to_int(parts[1]) : 0
-    if (length(parts) != 2 || i < 1 || n < 1 || i > n || "{i}/{n}" != shard) {
-        var none : array<string>
-        return <- (kept <- none, why = "--shard '{shard}' is not i/n with 1 <= i <= n")
-    }
-    var kept <- [for (k in range(length(files))); files[k]; where k % n == i - 1]
-    return <- (kept <- kept, why = "")
 }
 
 // the trailing "N tests, ..." summary line of a dastest log ("" when the run died before
@@ -1723,23 +1699,16 @@ def scope_relaxed_in(cfg : RunArgs; full : bool) : string {
 def private print_report(cfg : RunArgs; areas : array<string>; n_files, n_excluded : int; tally : RunTally; core : bool) {
     let picked = !empty(cfg.category) ? "category {cfg.category}" : "suite {cfg.suite}"
     let scope = ((cfg.changed ? "changed vs {cfg.base}" : (!empty(areas) ? "areas {join(areas, ",")}" : picked))
-        + (empty(cfg.only) ? "" : " only {cfg.only}") + (empty(cfg.shard) ? "" : " shard {cfg.shard}") + scope_relaxed(cfg))
+        + (empty(cfg.only) ? "" : " only {cfg.only}") + scope_relaxed(cfg))
     let failed_list = empty(tally.failed_tags) ? "" : " ({join(tally.failed_tags, ", ")})"
     let excluded = n_excluded == 0 ? "" : ", {n_excluded} file(s) excluded"
     if (!empty(tally.walled)) {
         to_log(LOG_ERROR, "STOPPED, the files after it not run: {tally.walled}\n")
     }
     to_log(tally.failures == 0 ? LOG_INFO : LOG_ERROR, "REPORT {scope}: {n_files} file(s), {tally.failures} failed{failed_list}, {tally.skipped} cell(s) skipped (a filtered arm, an absent device, or a missing model or fixture - each skips loudly){excluded}\n")
-    if (!empty(cfg.shard)) {
-        let n = to_int(split(cfg.shard, "/")[1])
-        let others <- [for (k in range(n)); "{k + 1}/{n}"; where "{k + 1}/{n}" != cfg.shard]
-        if (!empty(others)) {
-            to_log(LOG_INFO, "NEXT the run's other shard(s), each on its own box, with the same command: --shard {join(others, ", --shard ")}\n")
-        }
-    }
     if (cfg.changed) {
         if (core) {
-            to_log(LOG_INFO, "NEXT the engine core changed: the whole stocked set before the PR - run.das -- --suite stocked, sharded over the fleet (harness/pod_fleet.das)\n")
+            to_log(LOG_INFO, "NEXT the engine core changed: the whole stocked set before the PR - run.das -- --suite stocked over the fleet, a pod a GPU home (harness/pod_fleet.das)\n")
             to_log(LOG_INFO, "NEXT the model suites (decode | prefill | matrix) take --arm scoped to the change: run.das -- --arm <arms> --suite <name>\n")
         }
     } elif (!empty(areas)) {
@@ -1846,20 +1815,8 @@ def main() : int {
             return 2
         }
     }
-    let shard <- shard_files(only, cfg.shard)
-    if (!empty(shard.why)) {
-        to_log(LOG_ERROR, "{shard.why}\n")
-        return 2
-    }
-    if (!empty(cfg.shard)) {
-        to_log(LOG_INFO, "SHARD {cfg.shard}: {length(shard.kept)} of {length(only)} file(s)\n")
-    }
-    if (empty(shard.kept)) {
-        to_log(LOG_ERROR, "--shard {cfg.shard} holds no file of this run's {length(only)}\n")
-        return 2
-    }
-    log_missing_models(shard.kept)
-    let tally <- run_plan(cfg, shard.kept, plan.image_arms, !empty(areas) || cfg.changed)
-    print_report(cfg, areas, length(shard.kept), length(split.dropped), tally, core)
+    log_missing_models(only)
+    let tally <- run_plan(cfg, only, plan.image_arms, !empty(areas) || cfg.changed)
+    print_report(cfg, areas, length(only), length(split.dropped), tally, core)
     return tally.failures
 }

@@ -26,9 +26,7 @@ stocked witness a family and home, and its other areas (`audio | vision | tts | 
 work touches a topic its row names, run it - no other run opens its model files. A changed file in a model suite (decode | mtp | prefill |
 matrix | image) reaches nothing - `--changed` names it; run that suite with `--arm` scoped to the
 change. Before a PR: `skills/internal/dasllama_testing.md` (repo root) says what a PR runs by its
-kind. `--exclude <file>` is the between-PR iteration form. `--shard i/n`
-splits one run over n boxes (the same command on each, its own `i`), and the PR cites every
-shard's `REPORT`. `--no-tune` runs any suite but the image suites on the reference kernel bodies
+kind. `--exclude <file>` is the between-PR iteration form. `--no-tune` runs any suite but the image suites on the reference kernel bodies
 (`DAS_TUNE_POLICY=reference`, the image rail off) - the portable tier's arm. `--poison-kv` starts every
 child's K/V caches as NaN, so a read of a row no store wrote reds its cell - the run a change to a K/V
 store or reader cites; `--reap-images` deletes the images a run's children mint, for a box whose run alone

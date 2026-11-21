@@ -133,7 +133,8 @@ PR's.
 
 The run rules of `modules/dasLLAMA/tests/REVIEW_RUNS.md` bind this PR in full: the
 model-free suite, `run.das -- --changed --base <the commit the body names>` with no
-`--exclude` or `--only`, the whole stocked suite over the fleet, the large tier, every
+`--exclude` or `--only`, the whole stocked suite over the fleet with the large tier
+(`pod_fleet.das -- run --full`), every model category, every
 capability box and GPU home the arc's change reaches. Beyond them it runs:
 
 - Every model suite - decode, mtp, prefill, matrix, kernels, image, image-vulkan, coverage -

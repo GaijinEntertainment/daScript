@@ -148,13 +148,15 @@ where the list holds three or more such forms each later one maps the file's dev
 literals, which `tests/REVIEW.das`'s `check_models_load_once` reads to hold one call an area and
 file across the folder.
 
-### The format matrix's files {#format-matrix-files}
+### The format repository's files {#format-matrix-files}
 
-The format matrix's files sit in one Hugging Face repository, a folder a model: `FORMATS_HF`
-(`performance/model_specs.das`) pins the repository's commit, and a row whose `url` opens with it
-names its file there by `url`, `bytes` and `sha256`. Every box downloads such a file by its row - a
-carrier minted to put one weight format at one site, or a published file kept beside it. Two mints
-of one recipe are not promised the same bytes, so a box that minted its own would read another file
-than the row's checksum names. A `-local` row with no `url` is minted on each box by its `recipe`.
+The format repository holds the files a test or a record reads byte for byte and no box makes for
+itself: a carrier minted to put one weight format at one site (the format matrix), a cut of a large
+model's first blocks that a per-PR test loads in the whole file's place, and a published file kept
+beside them. It is one Hugging Face repository, a folder a model: `FORMATS_HF`
+(`performance/model_specs.das`) pins its commit, and a row whose `url` opens with it names its file
+there by `url`, `bytes` and `sha256`. Every box downloads such a file by its row: two runs of one
+recipe are not promised the same bytes, so a box that made its own would read another file than the
+row's checksum names. A `-local` row with no `url` is minted on each box by its `recipe`.
 
 The decode pick tape: `ARCHITECTURE_ENGINE_MECHANISMS.md#moe-pick-tape`.

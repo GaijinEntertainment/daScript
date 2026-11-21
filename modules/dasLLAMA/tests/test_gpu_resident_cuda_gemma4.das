@@ -12,22 +12,21 @@ require dasllama/dasllama_cuda_decode   // set_cuda_mmq_pin: the file's MMQ rout
 // the dense branch, the routed feed under its own pre norm, the router over x under its scale row, the picks' weights under the
 // per-expert down scales, the combine under the four norms (`../ARCHITECTURE_GPU_VULKAN_MOE.md#vk-gemma4-moe-block`), in the
 // Vulkan 26B files' perplexity form (token parity is no instrument on the 26B: a router near-tie flips whole positions). Two
-// carriers, large tier: the UD-IQ3_XXS file, which a 16 GB card holds whole, and the Q4_K_M file, which it does not - the plan
+// carriers, the `gemma4-moe` category's: the UD-IQ3_XXS file, which a 16 GB card holds whole, and the Q4_K_M file, which it does not - the plan
 // moves the first routed layers' experts to the host, so the split command, the cut window chain and the pool serve the form.
-// The dense gemma-4-12B opens the file in the Vulkan 12B file's agreement form (the window chain against the token command, the
-// CPU chain's own pair the yardstick - on a K-quant file the CPU chain's prefill and decode land far apart): gemma-4's global
-// layers take V off the raw k row at heads of 512 (the wide-head batch attention on the window) and its sliding layers scale V
-// by its own rms. Every load runs under the MMQ route pinned `CUDA_MMQ_WINNERS` (the file's `[init]`): the K-quant window
-// sites on the int8 leaves, the MXFP4 stacks on the FP4 rung where the card carries it.
-// Every cell skips off the JIT, without DASLLAMA_CUDA=1, without DASLLAMA_GPU=1 on a device the driver serves, without the file
-// under models_dir(), or without DASLLAMA_PARITY_FULL=1. The E2B's cells on this home are its model blocks'
+// Every load runs under the MMQ route pinned `CUDA_MMQ_WINNERS`: the K-quant window sites on the int8 leaves, the MXFP4
+// stacks on the FP4 rung where the card carries it. The cuts' cells on this home - the 12B-12L files' agreement form and
+// forced feed, the 26B-6L MXFP4_MOE format census - ride the Vulkan gemma files' blocks and cells
+// (`test_gpu_resident_gemma4_dense.das`, `test_gpu_resident_gemma4_moe.das`), each form loaded once under the CUDA ask;
+// this file holds the whole files' perplexity cells, which read real text. Every cell skips off the JIT, without DASLLAMA_CUDA=1, without
+// DASLLAMA_GPU=1 on a device the driver serves, or without the file under models_dir(); a whole file's cell also without
+// its category named or DASLLAMA_PARITY_FULL=1. The E2B's cells on this home are its model blocks'
 // (`test_gpu_resident_gemma4_e2b.das`).
 
 def private cuda_gemma4_intent() {
     set_cuda_mmq_pin(CUDA_MMQ_WINNERS)   // the MMQ route every load of the file measures
 }
 
-let private FILE_12B = GemmaFile(file = "gemma-4-12B-it-Q4_K_M.gguf", arm = "cuda-g4k")   //! the dense gemma-4: the global layers' heads of 512 take V off the raw k row, the sliding layers' V its own rms
 let private FILE_26B = GemmaFile(file = "gemma-4-26B-A4B-it-UD-IQ3_XXS.gguf", arm = "cuda-g4m")
 let private FILE_26B_K = GemmaFile(file = "gemma-4-26B-A4B-it-Q4_K_M.gguf", arm = "cuda-g4mk", host_experts = true)   //! the rig's context asked whole: the plan moves routed layers' experts to the host
 let private FILE_12B_Q8 = GemmaFile(file = "gemma-4-12B-it-Q8_0.gguf", arm = "cuda-g4q8")   //! the dense carrier on the Q8_0 planes (the Vulkan 12B Q8_0 file's cells)
@@ -37,30 +36,11 @@ let private FILE_26B_MX4 = GemmaFile(file = "gemma-4-26B-A4B-it-MXFP4_MOE-q4km-l
 let private GEMMA4_Q8_TWO_WINDOW_PPL_RATIO = 1.3
 let private HITS_SLACK = 12l   //! the Vulkan 26B files' slack: a router near-tie flips whole positions between the arms
 
-[test(description = "On the CUDA whole-model driver gemma-4-12B Q4_K_M's window chain and token command agree over 8 and 300 tokens within 6x the CPU chain's own prefill-versus-decode gap, covering V-from-K 512-wide global heads and v-normed sliding layers")]
-def test_gpu_resident_cuda_gemma4_12b(t : T?) {
+//! the whole file's perplexity cells (a 16 GB card arms it under DASLLAMA_GPU_MIN_CTX=1024)
+[test(description = "On the CUDA driver gemma-4-12B Q8_0 keeps its teacher-forced perplexity within 1.05x of the CPU chain's over 150 positions and 1.3x past two windows")]
+def test_gpu_resident_cuda_gemma4_12b_q8_ppl(t : T?) {
     return if (!family_on(t, "gemma4"))
     cuda_gemma4_intent()
-    t |> run("gemma-4-12B Q4_K_M: eight tokens through the window chain against the token command on the CUDA driver, the CPU chain's own pair the yardstick - the V-from-K global layers on the wide-head window attention, the v-normed sliding layers") @(t : T?) {
-        return if (!cuda_home_asked(t))
-        prefill_vs_decode(t, 8l, FILE_12B)
-    }
-    t |> run("gemma-4-12B Q4_K_M: the same at 300 tokens - the wide heads over many keys on both paths") @(t : T?) {
-        return if (!cuda_home_asked(t))
-        prefill_vs_decode(t, 300l, FILE_12B)
-    }
-}
-
-//! the dense gemma-4 on the Q8_0 planes: the Vulkan 12B Q8_0 file's three cells on the CUDA driver (a 16 GB card arms it under
-//! DASLLAMA_GPU_MIN_CTX=1024)
-[test(description = "On the CUDA driver gemma-4-12B Q8_0 keeps one-window forced-feed logits within 16 percent of max logit of the CPU chain, and its teacher-forced perplexity within 1.05x of the CPU chain's over 150 positions and 1.3x past two windows")]
-def test_gpu_resident_cuda_gemma4_12b_q8(t : T?) {
-    return if (!family_on(t, "gemma4"))
-    cuda_gemma4_intent()
-    t |> run("gemma-4-12B Q8_0: resident prefill + decode on the CUDA driver - v-norm, V-from-K 512-heads, the layer scale, the capped and pinned logits - vs the CPU chain, one window") @(t : T?) {
-        return if (!cuda_home_asked(t))
-        gemma_forced_feed(t, 40l, FILE_12B_Q8)
-    }
     t |> run("gemma-4-12B Q8_0: 150 prose ids prefilled, 150 teacher-forced - the wide heads over up to 300 keys on the token command, scored as a perplexity against the CPU chain") @(t : T?) {
         return if (!cuda_home_asked(t))
         ppl_compare(t, 150l, 150l, FILE_12B_Q8)
@@ -72,16 +52,11 @@ def test_gpu_resident_cuda_gemma4_12b_q8(t : T?) {
     }
 }
 
-//! the native-MXFP4 routed rail on the CUDA driver: the Vulkan MXFP4_MOE file's two cells - every site in its own format, the
-//! expert stacks on the mx4 stamps, and the perplexity form at the routed model's slack
-[test(description = "On the CUDA driver gemma-4-26B MXFP4_MOE serves every site in its own format with the native-MXFP4 expert stacks on the mx4 stamps and every call served, and its teacher-forced perplexity stays within 2x of the CPU chain's")]
-def test_gpu_resident_cuda_gemma4_26b_mx4(t : T?) {
+//! the native-MXFP4 routed rail on the CUDA driver: the perplexity form at the routed model's slack
+[test(description = "On the CUDA driver gemma-4-26B MXFP4_MOE's teacher-forced perplexity stays within 2x of the CPU chain's")]
+def test_gpu_resident_cuda_gemma4_26b_mx4_ppl(t : T?) {
     return if (!family_on(t, "gemma4moe"))
     cuda_gemma4_intent()
-    t |> run("gemma-4-26B-A4B MXFP4_MOE: every site in its own format - the native-MXFP4 expert stacks among them - and the CUDA driver serving every call") @(t : T?) {
-        return if (!cuda_home_asked(t))
-        gemma_format_cell(t, FILE_26B_MX4, true)
-    }
     t |> run("gemma-4-26B-A4B MXFP4_MOE: 150 prose ids prefilled, 150 teacher-forced, scored as a perplexity against the CPU chain - the native-MXFP4 routed rail on the CUDA driver") @(t : T?) {
         return if (!cuda_home_asked(t))
         ppl_compare(t, 150l, 150l, FILE_26B_MX4, HITS_SLACK, GEMMA_MOE_PPL_RATIO)

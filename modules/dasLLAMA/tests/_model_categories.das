@@ -8,6 +8,14 @@ require daslib/strings_boost
 require strings
 require ../../../utils/common/text_lines.das   // split_trimmed: the comma lists
 
+//! the `--only` tokens of the CUDA home's pass: under the CUDA ask a
+//! file outside them runs the Vulkan home's tests on a home that
+//! serves the dense slice alone and reds on its declines. The fleet's
+//! CUDA pod and `tests/CLAUDE.md`'s command read this list, and
+//! `test_run_suites.das` holds every CUDA-reaching file to a token
+let CUDA_PASS_ONLY = ("cuda,segments,regions,resident_moe,embeddings,gptoss,gemma4_dense,"
+    + "gemma4_moe,gemma2_3,gemma4_e2b,mtp_gemma_drafter")
+
 //! A model category: model files no run opens unless the run names the category. `stems` is a comma list - a file is
 //! the category's when its name starts with one of them; `topics` is what only these files reach
 typedef ModelCategory = tuple<name : string; stems : string; topics : string>
@@ -17,12 +25,14 @@ def model_categories() : array<ModelCategory> {
     return <- [
         (name = "gemma4-e4b", stems = "gemma-4-E4B,mmproj-gemma-4-E4B",
             topics = "the gemma-4 audio embedder widening 1536 to a 2560 decoder, the gemma-4 vision projector at 2560 with no std bias"),
-        (name = "gemma4-dense", stems = "gemma-4-12B,gemma-4-12b,gemma-3-4b",
-            topics = "the dense gemma-4 decoder: the global layers that take V off the K row at heads of 512, the checkpoint's suppress list, K-quant and Q8_0 planes at the 12B's shapes; the gemma-3 dense base at the 4B's wider geometry, and the image chat on it"),
+        (name = "gemma4-dense", stems = "gemma-4-12B-it,gemma-4-12b-it,gemma-3-4b",
+            topics = "the dense gemma-4 decoder at its forty-eight blocks: the frozen greedy fixtures against the reference, the resident drivers' teacher-forced perplexity against the CPU chain, the Metal counting generates and batched decode token for token against the CPU truth on the K-quant and Q8_0 planes, the image chat on the 12B; the gemma-3 dense base at the 4B's wider geometry, and the image chat on it"),
         (name = "gemma4-31b", stems = "gemma-4-31B,mmproj-gemma-4-31B",
             topics = "the Metal residual step past its 4096-float slab, on a decode of the 31B's 5376-wide rows"),
-        (name = "gemma4-moe", stems = "gemma-4-26B,mtp-gemma-4-26B,mmproj-gemma-4-26B",
-            topics = "the routed gemma-4 decoder: the experts under GeGLU with a per-expert down scale, the expert stacks in MXFP4, IQ and K-quant formats, the NextN draft head, the DFlash block drafter's rounds on the routed trunk")
+        (name = "gptoss-20b", stems = "gpt-oss-20b",
+            topics = "the gpt-oss decoder at its twenty-four blocks: the frozen greedy fixtures against the reference, short and with the sliding window engaged; a cold planar mint streaming the native-MXFP4 expert planes under their bytes"),
+        (name = "gemma4-moe", stems = "gemma-4-26B-A4B-it,gemma-4-26B_q4_0,mtp-gemma-4-26B,mmproj-gemma-4-26B",
+            topics = "the routed gemma-4 decoder at its thirty blocks: the frozen greedy fixtures against the reference, the resident drivers' teacher-forced perplexity against the CPU chain on the IQ, K-quant and MXFP4 expert stacks and with routed layers' experts on the host under a pinned plan room, the IQ4_XS stack only the last block carries, a cold planar mint streaming the native-MXFP4 expert planes, the QAT Q4_0 file's repacked expert planes, the NextN draft head, the DFlash block drafter's rounds on the routed trunk")
     ]
 }
 

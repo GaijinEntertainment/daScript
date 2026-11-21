@@ -4,7 +4,7 @@ options persistent_heap
 options _dasllama_internal = true
 
 require dastest/testing_boost public
-require dasllama/dasllama_transformer   // the umbrella's [init] registrations arm the MoE archs and the CUDA home
+require dasllama/dasllama_transformer   // nolint:STYLE029,STYLE030,LINT019 — its [init] arms the MoE archs and the CUDA home
 require dasllama/dasllama_common   // forward_prefill, forward, mtp_spec_eval, get_mtp_spec / set_mtp_spec
 require dasllama/dasllama   // create_session
 require daslib/jobque_boost
@@ -27,11 +27,15 @@ require _moe_resident   // MOE_LOGIT_BAR_REL: the routed chain's CPU-vs-device n
 // the file loads on, not only on one whose room forces the form. The two carriers reach the Q8_0 and the K-quant expert gathers
 // of the hot expert pool, whose hit chains serve the pooled picks beside the host's sums; the 35B NextN hybrid (large tier,
 // the plan moving more than the one layer asked) rides the same form with its head: the speculative round's draft and verify
-// over the segments. The forced-feed form the CUDA files share (`_cuda_feed.das`) at the MoE bar, the MMQ route pinned
+// over the segments. gpt-oss-4L's host-layers cells ride the
+// one load a form of `test_gpu_resident_gptoss.das`.
+// The forced-feed form the CUDA files share (`_cuda_feed.das`)
+// at the MoE bar, the MMQ route pinned
 // `CUDA_MMQ_WINNERS` for every load (the file's `[init]`). Every cell skips off the JIT, without DASLLAMA_CUDA=1, without
 // DASLLAMA_GPU=1 on a device the driver serves, without the file under models_dir(), without DASLLAMA_PARITY_FULL=1 (every
-// carrier sits past the large tier's bytes), or where the prompt window is not PF_WINDOW_ROWS rows; the gpt-oss cells also skip
-// on a card below the FP4 rung (`FP4_RUNG_SM`, compute capability 120); the pool cells skip where the plan finds no room for
+// carrier sits past the large tier's bytes), or where the prompt
+// window is not PF_WINDOW_ROWS rows; the pool cells skip where
+// the plan finds no room for
 // the pool beside the mirror, and where DASLLAMA_GPU_HEAT in the environment shadows the cell's slot ask; the 35B cell's pool
 // assert skips where the plan armed no pool. The meet's asserts run under DASLLAMA_GPU_MOE_SPLIT=1 (the default) alone, and
 // their texts name the knob's value.
@@ -47,81 +51,43 @@ def private moe_host_intent() {
     set_cuda_mmq_pin(CUDA_MMQ_WINNERS)   // the MMQ route every load of the file measures: the K-quant and Q8_0 window sites on the int8 leaves
 }
 
-//! the host cells' pins (`stream_pins` as the cell found them, `restore_stream_pins` puts them back): the prompt stream on, the
-//! meet's host share at `HOST_FIRST`, the pool's misses filled by DMA (the knob's default), the decode meet off (the one-row host
-//! step the split command takes) and no slot ask (the plan's own pool)
-def private pin_stream : StreamPins {
-    let was = stream_pins()
-    set_gpu_want_pf_stream(1)
-    set_moe_host_first(HOST_FIRST)
-    set_gpu_hot_dma(1)
-    set_gpu_dec_meet(0)
-    want_heat(0l)
-    return was
-}
-
-//! the knob's value a red names: the meet runs under DASLLAMA_GPU_MOE_SPLIT=1, the whole-layer rail under 0
-def private split_knob : string => "DASLLAMA_GPU_MOE_SPLIT={gpu_want_moe_split() ? 1 : 0}"
-
-//! the streamed prompt's witnesses after a feed: the chain ran the window(s) it was asked (`cud_stream_stats`), the meet split the
-//! experts between the device and the host; under `off` the control - no window streamed, no expert met on either side
-def private stream_witness(t : T?; file : string; w0 : int64; g0, c0 : int64; off : bool) {
-    let st = cud_stream_stats()
-    to_log(LOG_INFO, "{file}: the chain ran {st.windows - w0} streamed windows, {st.bundles} bundles of {st.experts} experts since the device came up; the meet took {g_moe_meet_gpu_experts - g0} experts on the device and handed the host {g_moe_meet_cpu_experts - c0} ({split_knob()})\n")
-    if (off) {
-        t |> equal(st.windows - w0, 0l, "control: with the prompt stream off the chain ran no window - the host summed every routed layer on the host")
-        t |> equal(g_moe_meet_gpu_experts - g0, 0l, "control: with the prompt stream off the meet took no expert on the device ({split_knob()})")
-        t |> equal(g_moe_meet_cpu_experts - c0, 0l, "control: ... and handed the host none")
-        return
-    }
-    t |> success(st.windows - w0 > 0l, "the {gpu_want_moe_split() ? "per-expert chain" : "whole-layer rail"} ran {st.windows - w0} streamed windows over the prompt's host layers ({split_knob()})")
-    return if (!gpu_want_moe_split())   // DASLLAMA_GPU_MOE_SPLIT=0: the whole-layer rail takes every region, no meet
-    t |> success(g_moe_meet_gpu_experts - g0 > 0l, "the meet took {g_moe_meet_gpu_experts - g0} experts on the device ({split_knob()})")
-    t |> success(g_moe_meet_cpu_experts - c0 > 0l, "the meet handed the host {g_moe_meet_cpu_experts - c0} experts (set_moe_host_first({HOST_FIRST}), {split_knob()})")
-}
 
 [cold_path]
 def private host_cells(t : T?; file : string) {
     t |> run("{file} with {HOST_LAYERS} routed layers' experts pinned to the host: the split token command and the cut window chain on the CUDA driver vs the CPU chain, one window (40 tokens) and eight steps; the window's picks streamed through the per-expert chain, the meet splitting them with the host") @(t : T?) {
-        let pins = pin_stream()
-        let w0 = cud_stream_stats().windows
-        let g0 = g_moe_meet_gpu_experts
-        let c0 = g_moe_meet_cpu_experts
+        let pins = pin_stream(HOST_FIRST, pf_stream = 1)
+        let at = stream_at()
         cuda_forced_feed(t, file, "qwen2moe", 40l, 1l, MOE_LOGIT_BAR_REL, HOST_LAYERS, false) $ {
             let hot = cud_rdec_hot_stats()
             to_log(LOG_INFO, "{file}: {gpu_resident_hot_slots()} pool slots a layer; the pool launched {hot.submits} hit chains serving {hot.hits} picks\n")
-            stream_witness(t, file, w0, g0, c0, false)
+            stream_witness(t, file, at, HOST_FIRST)
             t |> equal(rdec_token_n_rows(), 0l, "the N-row command declines a plan with routed experts on the host: the split command steps a row at a time")
         }
         restore_stream_pins(pins)
     }
     t |> run("{file} with {HOST_LAYERS} routed layers' experts pinned to the host: the same across two windows") @(t : T?) {
-        let pins = pin_stream()
-        let w0 = cud_stream_stats().windows
-        let g0 = g_moe_meet_gpu_experts
-        let c0 = g_moe_meet_cpu_experts
+        let pins = pin_stream(HOST_FIRST, pf_stream = 1)
+        let at = stream_at()
         cuda_forced_feed(t, file, "qwen2moe", PF_WINDOW_ROWS + 88l, 2l, MOE_LOGIT_BAR_REL, HOST_LAYERS, false) $ {
-            stream_witness(t, file, w0, g0, c0, false)
+            stream_witness(t, file, at, HOST_FIRST)
         }
         restore_stream_pins(pins)
     }
     t |> run("{file} with {HOST_LAYERS} routed layers' experts pinned to the host: the streamed windows' rows against the host's sums' at the stream twin's bar, the device claiming first; a plain model's chain takes no bias row") @(t : T?) {
         let path = cuda_model_path(t, file)
         return if (empty(path))
-        let pins = pin_stream()
+        let pins = pin_stream(HOST_FIRST, pf_stream = 1)
         let b0 = cud_stream_stats().biased
         stream_twin_within(t, path, HOST_LAYERS, 40l, 8l, STREAM_TWIN_BAR_REL, "{file} cuda ")
         t |> equal(cud_stream_stats().biased, b0, "control: the chain ran no biased act on a plain model")
         restore_stream_pins(pins)
     }
     t |> run("{file} with {HOST_LAYERS} routed layers' experts pinned to the host, the prompt stream off (set_gpu_want_pf_stream(0)): the window keeps the host's sums, the chain runs no window and the meet claims nothing") @(t : T?) {
-        let pins = pin_stream()
+        let pins = pin_stream(HOST_FIRST, pf_stream = 1)
         set_gpu_want_pf_stream(0)
-        let w0 = cud_stream_stats().windows
-        let g0 = g_moe_meet_gpu_experts
-        let c0 = g_moe_meet_cpu_experts
+        let at = stream_at()
         cuda_forced_feed(t, file, "qwen2moe", 40l, 1l, MOE_LOGIT_BAR_REL, HOST_LAYERS, false) $ {
-            stream_witness(t, file, w0, g0, c0, true)
+            stream_off_witness(t, file, at)
         }
         restore_stream_pins(pins)
     }
@@ -163,7 +129,7 @@ def private pool_plan_held(t : T?) {
 def test_gpu_resident_cuda_moe_host_pool(t : T?) {   // nolint:STYLE038 - the pool's four legs (DMA + meet, both off, no host layer) are one flat list over one carrier
     t |> run("{FILE_K} with {HOST_LAYERS} routed layers' experts pinned to the host and {POOL_SLOTS} pool slots a layer asked (set_gpu_tier_want_, the want DASLLAMA_GPU_HEAT shadows) at a {POOL_CTX} context: the steps' misses filled by DMA off the stream stacks, the hit chains serving the pooled picks") @(t : T?) {
         return if (!pool_asked(t))
-        let pins = pin_stream()
+        let pins = pin_stream(HOST_FIRST, pf_stream = 1)
         let levers = resident_levers()
         set_gpu_ctx_max(POOL_CTX)
         want_heat(POOL_SLOTS)
@@ -186,7 +152,7 @@ def test_gpu_resident_cuda_moe_host_pool(t : T?) {   // nolint:STYLE038 - the po
     }
     t |> run("{FILE_K} with {HOST_LAYERS} routed layers' experts pinned to the host and {POOL_SLOTS} pool slots a layer at a {POOL_CTX} context, the decode meet on: the fed steps' picks claimed through the window's meet over the pool, each step's layers a streamed window") @(t : T?) {
         return if (!pool_asked(t))
-        let pins = pin_stream()
+        let pins = pin_stream(HOST_FIRST, pf_stream = 1)
         let levers = resident_levers()
         set_gpu_ctx_max(POOL_CTX)
         want_heat(POOL_SLOTS)
@@ -206,7 +172,7 @@ def test_gpu_resident_cuda_moe_host_pool(t : T?) {   // nolint:STYLE038 - the po
     }
     t |> run("{FILE_K} with {HOST_LAYERS} routed layers' experts pinned to the host and {POOL_SLOTS} pool slots a layer at a {POOL_CTX} context, the DMA fill off and the meet off (control): no expert lands by DMA, no step is met, the steps' misses take the host's upload") @(t : T?) {
         return if (!pool_asked(t))
-        let pins = pin_stream()
+        let pins = pin_stream(HOST_FIRST, pf_stream = 1)
         let levers = resident_levers()
         set_gpu_ctx_max(POOL_CTX)
         want_heat(POOL_SLOTS)
@@ -227,7 +193,7 @@ def test_gpu_resident_cuda_moe_host_pool(t : T?) {   // nolint:STYLE038 - the po
     }
     t |> run("{FILE_K} with every routed layer's experts on the device (no host layer asked) at a {POOL_CTX} context (control): the plan arms no pool, so the pool launches no hit chain, the copy stream fills nothing and no step is met") @(t : T?) {
         return if (!pool_asked(t))
-        let pins = pin_stream()
+        let pins = pin_stream(HOST_FIRST, pf_stream = 1)
         let levers = resident_levers()
         set_gpu_ctx_max(POOL_CTX)
         want_heat(POOL_SLOTS)
@@ -257,7 +223,7 @@ def test_gpu_resident_cuda_moe_host_pool_unstreamed(t : T?) {
     moe_host_intent()
     t |> run("{FILE_K} with {HOST_LAYERS} routed layers' experts pinned to the host, {POOL_SLOTS} pool slots a layer at a {POOL_CTX} context and the prompt stream OFF: no stream stack stands, so the DMA fill declines by name and the host's fill lands every pooled expert; the fed steps still the CPU chain's") @(t : T?) {
         return if (!pool_asked(t))
-        let pins = pin_stream()
+        let pins = pin_stream(HOST_FIRST, pf_stream = 1)
         let levers = resident_levers()
         set_gpu_ctx_max(POOL_CTX)
         want_heat(POOL_SLOTS)
@@ -279,43 +245,6 @@ def test_gpu_resident_cuda_moe_host_pool_unstreamed(t : T?) {
         restore_stream_pins(pins)
     }
 }
-
-let private FILE_GPTOSS = "gpt-oss-20b-mxfp4.gguf"   //! 32 experts, 4 routed, the biased softmax router, native-MXFP4 stacks: the biased expert act
-let private HOST_LAYERS_GPTOSS = 2l
-
-//! gpt-oss's biased stacks on the host-layers form: the window's picks through the per-expert chain over the mx4 slot - the s column
-//! alone, the only tile the format has - the fed steps against the CPU chain at the routed block's bar (the CUDA MoE file's reading)
-[test(description = "On the CUDA driver gpt-oss-20b with routed layers pinned to the host streams its biased mx4 stacks through the per-expert chain within the MoE bar of the CPU chain, and the streamed windows' rows match the host's sums at the stream twin's bar")]
-def test_gpu_resident_cuda_moe_host_gptoss(t : T?) {
-    moe_host_intent()
-    t |> run("{FILE_GPTOSS} with {HOST_LAYERS_GPTOSS} routed layers' experts pinned to the host: the split token command and the cut window chain on the CUDA driver vs the CPU chain, one window (40 tokens) and eight steps; the biased mx4 stacks streamed through the per-expert chain") @(t : T?) {
-        return if (!fp4_rung_on(t))
-        let pins = pin_stream()
-        set_moe_host_first(0l)   // the device claims first: a 32-expert layer at a host-first of eight hands the host every region
-        let w0 = cud_stream_stats().windows
-        let g0 = g_moe_meet_gpu_experts
-        let c0 = g_moe_meet_cpu_experts
-        with_cuda_mmq_pin(CUDA_MMQ_WINNERS) {
-            cuda_forced_feed(t, FILE_GPTOSS, "gpt-oss", 40l, 1l, MOE_LOGIT_BAR_REL, HOST_LAYERS_GPTOSS, false) $ {
-                stream_witness(t, FILE_GPTOSS, w0, g0, c0, false)
-            }
-        }
-        restore_stream_pins(pins)
-    }
-    t |> run("{FILE_GPTOSS} with {HOST_LAYERS_GPTOSS} routed layers' experts pinned to the host: the streamed windows' rows against the host's sums' at the stream twin's bar - the chain's clamped swiglu and the picks' gate and up bias rows") @(t : T?) {
-        return if (!fp4_rung_on(t))
-        let path = cuda_model_path(t, FILE_GPTOSS)
-        return if (empty(path))
-        let pins = pin_stream()
-        let b0 = cud_stream_stats().biased
-        with_cuda_mmq_pin(CUDA_MMQ_WINNERS) {
-            stream_twin_within(t, path, HOST_LAYERS_GPTOSS, 40l, 8l, STREAM_TWIN_BAR_REL, "{FILE_GPTOSS} cuda ")
-        }
-        t |> success(cud_stream_stats().biased > b0, "the chain's acts took the routed form's bias rows ({cud_stream_stats().biased - b0} biased acts)")
-        restore_stream_pins(pins)
-    }
-}
-
 
 [test(description = "On the CUDA driver the Qwen1.5-MoE Q8_0 carrier with four routed layers on the host runs the split token command and cut window chain within 20 percent of the CPU chain over one and two windows, the meet splitting experts, and with the prompt stream off as control")]
 def test_gpu_resident_cuda_moe_host_q8(t : T?) {
@@ -383,10 +312,8 @@ def private mtp_rounds_served(t : T?; tr : Model) {
 def test_gpu_resident_cuda_moe_host_35b(t : T?) {
     moe_host_intent()
     t |> run("{FILE_35B} with its first routed layer's experts asked onto the host (the plan moves what the card cannot hold): the split token command and the cut window chain on the CUDA driver vs the CPU chain, one window (40 tokens) and eight steps, the window's picks streamed through the per-expert chain over the pool's prefix, the hot expert pool's hit chains serving picks") @(t : T?) {
-        let pins = pin_stream()
-        let w0 = cud_stream_stats().windows
-        let g0 = g_moe_meet_gpu_experts
-        let c0 = g_moe_meet_cpu_experts
+        let pins = pin_stream(HOST_FIRST, pf_stream = 1)
+        let at = stream_at()
         let d0 = cud_stream_dma_fills()
         cuda_forced_feed(t, FILE_35B, "qwen35moe", 40l, 1l, MOE_LOGIT_BAR_REL, 1l, true) $ {
             let hot = cud_rdec_hot_stats()
@@ -394,14 +321,14 @@ def test_gpu_resident_cuda_moe_host_35b(t : T?) {
             if (pool_armed(t)) {
                 t |> success(hot.submits > 0l && hot.hits > 0l, "the pool's hit chains served picks beside the host's sums ({hot.submits} chains, {hot.hits} picks)")
             }
-            stream_witness(t, FILE_35B, w0, g0, c0, false)
+            stream_witness(t, FILE_35B, at, HOST_FIRST)
         }
         restore_stream_pins(pins)
     }
     t |> run("{FILE_35B}: the NextN head beside the host layers - {ROUNDS_35B} speculative rounds, every draft and verify on the device; the same tokens plain with speculation off drafting and verifying nothing") @(t : T?) {
         let path = cuda_model_path(t, FILE_35B)
         if (empty(path)) return
-        let pins = pin_stream()
+        let pins = pin_stream(HOST_FIRST, pf_stream = 1)
         let levers = resident_levers()
         cuda_feed_window()
         var tr <- load_resident(path, 1l, 0l, 1l)

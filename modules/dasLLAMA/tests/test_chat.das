@@ -710,10 +710,10 @@ def test_gemma4_e_media_body(t : T?) {
     }
 }
 
-[test(description = "On gpt-oss-20b the reasoning budget opens on the channel mark, analysis and message mark, leaves on the end mark, forces a close into the final channel, and ends the turn on a later channel mark")]
+[test(description = "On gpt-oss-4L the reasoning budget opens on the channel mark, analysis and message mark, leaves on the end mark, forces a close into the final channel, and ends the turn on a later channel mark")]
 def test_chat_gptoss_budget_marks(t : T?) {
-    t |> run("gpt-oss: the reasoning budget's marks are harmony's analysis channel and its end (needs gpt-oss-20b, large tier)") @(t : T?) {
-        let path = path_join(models_dir(), "gpt-oss-20b-mxfp4.gguf")
+    t |> run("gpt-oss: the reasoning budget's marks are harmony's analysis channel and its end (needs gpt-oss-4L)") @(t : T?) {
+        let path = path_join(models_dir(), "gpt-oss-4L-mxfp4-local.gguf")
         if (!model_available(t, path)) {
             return
         }

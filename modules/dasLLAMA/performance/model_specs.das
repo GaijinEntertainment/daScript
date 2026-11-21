@@ -88,6 +88,18 @@ def private ladder_row(stem, fmt : string; token_type : string = "") : ModelSpec
     return <- row
 }
 
+//! A layer cut (harness/gguf_cut_layers.py): `src`'s first `blocks`
+//! blocks as `{stem}-{blocks}L-{fmt}-local.gguf` in the format repo's
+//! `dir`; `lift_softcap` lifts gemma-4's final soft cap, which would
+//! pin most of a cut's logits
+def private cut_row(dir, src, stem, fmt : string; blocks : int; lift_softcap : bool; bytes : int64;
+                    sha256 : string) : ModelSpec {
+    let file = "{stem}-{blocks}L-{fmt}-local.gguf"
+    let lift = lift_softcap ? " --set gemma4.final_logit_softcapping=100000" : ""
+    return ModelSpec(file = file, url = "{FORMATS_HF}/{dir}/{file}", bytes = bytes,
+        sha256 = sha256, recipe = "harness/gguf_cut_layers.py {src} {file} {blocks}{lift}")
+}
+
 //! A spec's frozen greedy parity fixture — evidence as DATA (pinned ids, never a test name).
 //! Empty `gen` = no evidence. `prompt_text` (instead of `prompt`) = the prompt encodes in-test
 //! through the model's own tokenizer; the decoded-text eyeball is derived the same way, never stored.
@@ -430,7 +442,7 @@ let PARAKEET_GGUF_RECIPE = "fetched: handy-computer/parakeet-tdt-0.6b-v3-gguf, t
 let CANARY_ENC_RECIPE = "convert: modules/dasLLAMA/harness/convert_canary_to_ggml.py over nvidia/canary-qwen-2.5b (nemo venv; encoder is a repack - sha canonical everywhere)"
 let CANARY_DEC_RECIPE = "convert: modules/dasLLAMA/harness/convert_canary_to_ggml.py over nvidia/canary-qwen-2.5b (nemo venv), then llama-quantize Q8_0 (a Q8_0 disk embedding lets the tied classifier serve cls_q8 on the Metal rail); bytes are per-arch (fp16 LoRA merge) - gate via asr_bench --text over jfk/jfk3/gb1 vs benchmarks/asr/canary_transcripts.expected"
 let TTS_HF = "{HF}/borisbat/dasllama-tts/resolve/a62130a44d6f8fef8a5113825c5f15b01e1c8f80"   //! the published set, commit-pinned
-let FORMATS_HF = "{HF}/borisbat/dasllama-formats/resolve/b71cf589d7963fffab1713d48f06f8e25014f6bc"   //! the format matrix, commit-pinned
+let FORMATS_HF = "{HF}/borisbat/dasllama-formats/resolve/3ad8e77f034e9c04666ee02cd70099e79b2d8be6"   //! the format matrix, commit-pinned
 let TTS_KITTEN_RECIPE = "convert: modules/dasLLAMA/performance/build_tts_data.das -- --root <g2p experiment root> --out <models dir> runs harness/convert_kitten.py over KittenML/kitten-tts-nano-0.8 @ 7a1db645b1f3ab9420761d87428e042b9cec3f26 and kitten-tts-mini-0.8 @ c02725660cea441db4c383af69f1f26f5cd00947 (the ONNX weights into GGUF, f32); THIRD_PARTY_NOTICES.md (repo root) carries the attribution"
 let TTS_KOKORO_RECIPE = "convert: modules/dasLLAMA/performance/build_tts_data.das -- --root <g2p experiment root> --out <models dir> runs harness/convert_kokoro.py at 807f0164c3 (a later converter also writes kokoro.voice_langs; the pinned file carries none, its voices named in the pipeline's shape) over hexgrad/Kokoro-82M @ f3ff3571791e39611d31c381e3a41a3af07b4987 (kokoro-v1_0.pth + the voice packs into GGUF, f32); THIRD_PARTY_NOTICES.md (repo root) carries the attribution"
 let TTS_KOKORO_RU_RECIPE = "convert: harness/convert_kokoro.py --checkpoint <pth> --config config.json --voices <dir of .bin packs> --name <stem> --lang ru --source 'zaakirio/kokoro-ru @ d649c57b239b18c4c384378127cbf01dba039bc1' (kokoro-ru-v2-base.pth with sveta and masha into kokoro-ru.gguf, kokoro-ru-v2-dima.pth with dima into kokoro-ru-dima.gguf, f32); THIRD_PARTY_NOTICES.md carries the attribution"
@@ -811,6 +823,37 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
             url = "{HF}/ggml-org/gpt-oss-20b-GGUF/resolve/e1dc459feff949ff451ce107337a2026daa80df8/gpt-oss-20b-mxfp4.gguf",
             bytes = 12109566560l, sha256 = "be37a636aca0fc1aae0d32325f82f6b4d21495f06823b5fbc1898ae0303e9935",
             parity <- ev_gptoss()),
+        // the 20b's first four blocks, two sliding and two full: the gpt-oss paths at a size a per-PR run loads.
+        // No parity row: four blocks of twenty-four write no confident text, and test_parity holds its forced feed
+        cut_row("gpt-oss-20b", "gpt-oss-20b-mxfp4.gguf", "gpt-oss",
+            "mxfp4", 4, false, 3054636512l,
+            "ff9885f578470ed39d56371832c1b43a2221c4428b040b933091f7f7de93ebe6"),
+        // the dense and the routed gemma-4 at a size a per-PR run loads: the 12B's first twelve blocks (two global
+        // layers) and the 26B's first six (one), the final soft cap lifted - a cut's logits sit far past it, and the cap
+        // would pin most of every row. No parity rows, as the gpt-oss cut
+        cut_row("gemma-4-12B-it", "gemma-4-12B-it-Q4_K_M.gguf", "gemma-4-12B",
+            "Q4_K_M", 12, true, 2508950848l,
+            "b9eee5f3ab5420f339daf2e3ba4b9948d44edcb3448926c3d2a6302539fbad96"),
+        cut_row("gemma-4-26B-A4B-it", "gemma-4-26B-A4B-it-Q4_K_M.gguf", "gemma-4-26B-A4B",
+            "Q4_K_M", 6, true, 4013753760l,
+            "28b682d9320a0755a4775555bdcbd11e23966839f4a7e99eb88c688fca80cece"),
+        // the same cuts of the formats whose own rails a device cell pins: the 12B's Q8_0 planes, the 26B's Q8_0, Q4_0,
+        // IQ2_S and native-MXFP4 expert stacks
+        cut_row("gemma-4-12B-it", "gemma-4-12B-it-Q8_0.gguf", "gemma-4-12B",
+            "Q8_0", 12, true, 3981422240l,
+            "3c4e3762dc24cc41d3de290b2eebb5b00ca32a34d9e58e0aedb4dce01598e79d"),
+        cut_row("gemma-4-26B-A4B-it", "gemma-4-26B-A4B-it-Q8_0.gguf", "gemma-4-26B-A4B",
+            "Q8_0", 6, true, 6012076736l,
+            "b5863a75da6447914b2ed01141c63a8c8d530825f50275edac4aa75c61026d45"),
+        cut_row("gemma-4-26B-A4B-it", "gemma-4-26B-A4B-it-Q4_0.gguf", "gemma-4-26B-A4B",
+            "Q4_0", 6, true, 3563733696l,
+            "bcb1beab971e6f3139679ce44307838e7f321ef0ec6cdacbb4e4a59a637d0963"),
+        cut_row("gemma-4-26B-A4B-it", "gemma-4-26B-A4B-it-UD-IQ3_XXS.gguf", "gemma-4-26B-A4B",
+            "UD-IQ3_XXS", 6, true, 2740961184l,
+            "21e125c5e87982edb44ad19b9861749e5f11d38dcd04f8297339b09e1213b136"),
+        cut_row("gemma-4-26B-A4B-it", "gemma-4-26B-A4B-it-MXFP4_MOE-local.gguf", "gemma-4-26B-A4B",
+            "MXFP4_MOE", 6, true, 3585540800l,
+            "a381dc268205cfbba038571b0aacfba05666c58c2181833fdcb11c94fae1e6e3"),
         ModelSpec(file = "Mistral-Small-3.1-24B-Instruct-2503-Q4_K_M.gguf", official = false,
             url = "{HF}/unsloth/Mistral-Small-3.1-24B-Instruct-2503-GGUF/resolve/main/Mistral-Small-3.1-24B-Instruct-2503-Q4_K_M.gguf",
             bytes = 14333910592l, sha256 = "6d670773c3908584349d41a5048d1472226b593c881fd394e8ac196c802e81e2",

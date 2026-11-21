@@ -26,19 +26,17 @@ let CODEC_ROWS_CTRL = 0.2   //! a stored row held to the next one differs at 0.3
 //! rows in the codec's place would read near 0 (every resident carrier reads 0.95-1.01)
 let CODEC_APPLIED_REL = 0.5
 
-//! whether the environment lets the mirror arm at `kv`: the f32 mirror arms under `DASLLAMA_VK_KV32=1` alone (the in-process ask
-//! is refused by name), every block codec under it unset - false after the loud skip
-def codec_env_arms(t : T?; kv : KVDtype) : bool {
+//! why the environment keeps the mirror off `kv`: the f32 mirror
+//! arms under `DASLLAMA_VK_KV32=1` alone (the in-process ask is
+//! refused by name), every block codec under it unset; "" where it
+//! arms
+def codec_env_why(kv : KVDtype) : string {
     let kv32 = g_env_vulkan.vk_kv32 != 0l
-    if (kv == KVDtype.f32 && !kv32) {
-        t |> skip("the f32 mirror arms under DASLLAMA_VK_KV32=1 alone - the arm runs there")
-        return false
-    }
-    if (kv != KVDtype.f32 && kv32) {
-        t |> skip("DASLLAMA_VK_KV32=1 arms the f32 mirror over the {kv} asked - a codec cell needs it unset")
-        return false
-    }
-    return true
+    return ("the f32 mirror arms under DASLLAMA_VK_KV32=1 alone - " +
+        "the arm runs there") if (kv == KVDtype.f32 && !kv32)
+    return ("DASLLAMA_VK_KV32=1 arms the f32 mirror over the {kv} asked - " +
+        "a codec cell needs it unset") if (kv != KVDtype.f32 && kv32)
+    return ""
 }
 
 //! `blk` over `file` (under models_dir()) loaded with the whole-model route pinned on and the mirror asked at `kv` (the levers put back), inside the

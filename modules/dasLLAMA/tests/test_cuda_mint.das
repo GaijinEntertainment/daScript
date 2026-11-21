@@ -73,9 +73,9 @@ def private family_lane_test(tst : T?; family, file : string) {
     }
 }
 
-[test(description = "gpt-oss-20b mints a trimmed cuda lane with no planar family on the host, and the lane - cold, warm and re-armed - serves the live load's greedy tokens exactly with the token rows gathered on the device wherever a load with its planes on the host gathers them")]
+[test(description = "gpt-oss-4L mints a trimmed cuda lane with no planar family on the host, and the lane - cold, warm and re-armed - serves the live load's greedy tokens exactly with the token rows gathered on the device wherever a load with its planes on the host gathers them")]
 def test_cuda_mint_family_lane_gptoss(tst : T?) {
-    family_lane_test(tst, "gptoss", "gpt-oss-20b-mxfp4.gguf")
+    family_lane_test(tst, "gptoss", "gpt-oss-4L-mxfp4-local.gguf")
 }
 
 [test(description = "gemma-4-E2B, with its per-layer embeddings, mints a trimmed cuda lane with no planar family on the host, and the lane - cold, warm and re-armed - serves the live load's greedy tokens exactly")]
@@ -83,9 +83,9 @@ def test_cuda_mint_family_lane_gemma4e(tst : T?) {
     family_lane_test(tst, "gemma4e", "gemma-4-E2B-it-Q8_0.gguf")
 }
 
-[test(description = "gemma-4-26B, with its routed block and dense shared expert, mints a trimmed cuda lane with no planar family on the host, and the lane - cold, warm and re-armed - serves the live load's greedy tokens exactly")]
+[test(description = "gemma-4-26B-A4B-6L, with its routed block and dense shared expert, mints a trimmed cuda lane with no planar family on the host, and the lane - cold, warm and re-armed - serves the live load's greedy tokens exactly")]
 def test_cuda_mint_family_lane_gemma4moe(tst : T?) {
-    family_lane_test(tst, "gemma4moe", "gemma-4-26B-A4B-it-Q4_K_M.gguf")
+    family_lane_test(tst, "gemma4moe", "gemma-4-26B-A4B-6L-Q4_K_M-local.gguf")
 }
 
 [test(description = "The Qwen3.5-0.8B Q4_K_M twin mints its cuda lane off its native K-quant planes, named for the armed backend, and maps back warm to the same greedy tokens")]

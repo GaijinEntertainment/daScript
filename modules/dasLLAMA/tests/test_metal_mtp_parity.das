@@ -1094,9 +1094,17 @@ def private vff_arms(t : T?; tr, trg : Model; tag : string; prompt : array<int64
     }
 }
 
+//! the arms a verify fixture's load serves on `tag`
+def private verify_arms(tag : string) : array<string> {
+    let arms = fixed_array("dff", "dff8", "vff", "vff1", "vff5", "vff9", "vffc", "count")
+    return <- [for (arm in arms); "mtp-{arm}-{tag}"]
+}
+
 [cold_path]
 def private run_verify_fixture(t : T?; file, tag : string; tol : float; expect_decline : string = ""; count_agree : int64 = COUNT_STEPS) {   // nolint:LINT012,LINT019 — the body is the das_metal half
     static_if (typeinfo builtin_module_exists(das_metal)) {
+        var inscope arms <- verify_arms(tag)
+        return if (!arms_on(t, arms))
         let path = path_join(models_dir(), file)
         if (!model_available(t, path)) {
             return
@@ -1179,6 +1187,14 @@ def test_metal_verify_gemma26(t : T?) {
     }
 }
 
+[test(description = "On gemma-4-26B-A4B-6L Q4_K_M the batch rail's same-slab verify rows and distinct-session steps hold the plain GPU step within 2.0")]
+def test_metal_verify_gemma26_cut(t : T?) {
+    t |> run("batch-rail same-slab verify vs plain GPU decode - gemma-4-26B-A4B-6L-Q4_K_M-local") <| @(t : T?) {
+        return if (!family_on(t, "gemma4moe"))
+        run_verify_fixture(t, "gemma-4-26B-A4B-6L-Q4_K_M-local.gguf", "g26", G26_CUT_TOL)
+    }
+}
+
 // the control for the batch-rail same-slab verify: the batch parity fixture itself (attention-only,
 // batch B=2/3/6 token-exact vs the CPU control) - a failure here is the same-slab plumbing, not gemma
 [test(description = "The control carrier Llama-3.2-1B Q8_0: the batch rail's same-slab verify rows and distinct-session steps hold the plain GPU step within 0.5, so a red elsewhere is the carrier, not the same-slab plumbing.")]
@@ -1188,10 +1204,17 @@ def test_metal_verify_llama1b(t : T?) {
     }
 }
 
-[test(description = "On gemma-4-12B Q4_K_M the batch rail serves the same-slab verify with no decline, its rows and distinct-session steps within 0.5 of the plain GPU step (1.5 where a K-quant site stages x to half), and the drafter's speculative count matches plain where a sidecar sits.")]
+//! the 12B cut's bar: its rows run to a 1000 peak past the lifted cap, the 12B's 0.5 a share of a 30 one - the distinct
+//! sessions read 1.65 off the single step, the same-slab verify 1.75 on four rows and 3.54 on nine, the verify with its
+//! GEMV stage knocked out 15.9 and past
+let private G12_CUT_TOL = 6.0
+//! the 26B cut's bar: the distinct sessions read 0.49 off the single step and the same-slab verify 0.47
+let private G26_CUT_TOL = 2.0
+
+[test(description = "On gemma-4-12B-12L Q4_K_M the batch rail serves the same-slab verify with no decline, its rows and distinct-session steps within 6.0 of the plain GPU step on the cut's thousand-logit rows.")]
 def test_metal_verify_gemma12(t : T?) {
-    t |> run("batch-rail same-slab verify vs plain GPU decode - gemma-4-12B-it-Q4_K_M (large tier)") <| @(t : T?) {
-        run_verify_fixture(t, "gemma-4-12B-it-Q4_K_M.gguf", "g12", 0.5)
+    t |> run("batch-rail same-slab verify vs plain GPU decode - gemma-4-12B-12L-Q4_K_M-local") <| @(t : T?) {
+        run_verify_fixture(t, "gemma-4-12B-12L-Q4_K_M-local.gguf", "g12", G12_CUT_TOL)
     }
 }
 

@@ -1,14 +1,22 @@
 options gen2
 options _dasllama_internal = true
 
-// A pod fleet for the test runner: n RunPod pods on the models volume, each holding its own copy of the
-// volume's tree and its own folder of links to the volume's models (an image a cell mints lands on the pod's
-// disk, and the runner reaps it after the file), each running one shard of the same run.das command. The shards' logs land on the volume
-// (/workspace/logs/fleet/<run>/), so any pod of the fleet reads them all. The fleet file holds the pods this
-// tool made and nothing else: `down` deletes those alone.
+// A pod fleet for the test runner: one RunPod pod a GPU home on the
+// models volume, each with its own copy of the volume's tree and its
+// own folder of links to the volume's models (an image a cell mints
+// lands on the pod's disk, and the runner reaps it after the file).
+// The first pod runs the whole run.das command on the Vulkan home,
+// the second the same command on the CUDA home, kept to the CUDA
+// pass's files (`--only` CUDA_PASS_ONLY). No pod runs a part of a
+// home's run: a home's run that outgrows its pod cuts tests, never
+// adds a pod. The homes' logs land on the volume
+// (/workspace/logs/fleet/<run>/), so any pod reads them all. The
+// fleet file holds the pods this tool made and nothing else: `down`
+// deletes those alone.
 //
-//   daslang modules/dasLLAMA/harness/pod_fleet.das -- up --pods 3
-//   daslang modules/dasLLAMA/harness/pod_fleet.das -- run                      # the per-PR run, sharded over the fleet
+//   daslang modules/dasLLAMA/harness/pod_fleet.das -- up
+//   daslang modules/dasLLAMA/harness/pod_fleet.das -- run  # per PR
+//   daslang modules/dasLLAMA/harness/pod_fleet.das -- run --full               # an arc's final run: the large tier too
 //   daslang modules/dasLLAMA/harness/pod_fleet.das -- run --args "--suite model-free" --env "DASLLAMA_GPU=1"
 //   daslang modules/dasLLAMA/harness/pod_fleet.das -- status
 //   daslang modules/dasLLAMA/harness/pod_fleet.das -- times                    # where the last run's test time went: the files and the cells
@@ -20,6 +28,7 @@ require daslib/fio
 require daslib/strings_boost
 require strings
 require dasllama/dasllama_env
+require ../tests/_model_categories.das   // CUDA_PASS_ONLY: the CUDA home's pass
 require math   // min: the times report's top cut
 
 [CommandLineArgs]
@@ -27,7 +36,7 @@ struct FleetArgs {
     @clarg_positional
     @clarg_doc = "up | sync | run | status | times | down"
     verb : string
-    @clarg_doc = "up: pods to make"
+    @clarg_doc = "up: pods to make, 1 or 2 - the first runs the Vulkan home, the second CUDA"
     pods : int = 2
     @clarg_doc = "up: the GPU, as `runpodctl gpu list` names it"
     gpu : string = "NVIDIA RTX PRO 4500 Blackwell"
@@ -41,9 +50,11 @@ struct FleetArgs {
     disk : int = 60
     @clarg_doc = "the ssh private key the pods admit; its .pub is handed to every pod"
     key : string = "~/.ssh/runpod"
-    @clarg_doc = "run: the children's environment - KEY=VALUE tokens separated by spaces; the models directory is the pod's own folder of links to the volume's models and the image rail is off (DASLLAMA_IMAGE=0); an image suite's run passes its own --env with the rail on"
-    env : string = "DASLLAMA_MODELS_DIR=/root/models DASLLAMA_GPU=1 DASLLAMA_IMAGE=0 DASLLAMA_ALLOW_UNTUNED=1 DASLLAMA_PARITY_FULL=1"
-    @clarg_doc = "run: the run.das arguments; the tool appends each pod's --shard i/n"
+    @clarg_doc = "run: the children's environment - KEY=VALUE tokens separated by spaces; the models directory is the pod's own folder of links to the volume's models, the image rail is off (DASLLAMA_IMAGE=0) and so is the large tier; an image suite's run passes its own --env with the rail on"
+    env : string = "DASLLAMA_MODELS_DIR=/root/models DASLLAMA_GPU=1 DASLLAMA_IMAGE=0 DASLLAMA_ALLOW_UNTUNED=1"
+    @clarg_doc = "run: the full suite - the children also take DASLLAMA_PARITY_FULL=1, so the models past the size tier run and no test wall stands; an arc's final run"
+    full : bool
+    @clarg_doc = "run: the run.das arguments, no --only; the CUDA pod adds the CUDA pass's"
     args : string = "--changed --base origin/master"
     @clarg_doc = "status, times: the run to read (default: the fleet file's last run)"
     run : string
@@ -80,9 +91,45 @@ def next_pod_index(fleet : Fleet) : int {
     return top + 1
 }
 
-//! the shard each live pod runs, 1..n in the fleet's order, whatever the pods' indices (a partial `down` leaves them sparse).
-//! Non-private: the pod-fleet tests (tests/uncategorized_persistent_heap_stack_524288.das) hold it
-def shard_plan(fleet : Fleet) : array<tuple<pod : int; shard : int>> => <- [for (i, pod in iter_range(fleet.pods), fleet.pods); (pod = pod.index, shard = i + 1)]
+//! the GPU homes a fleet runs, a pod each in this order
+def fleet_homes() : array<string> => <- ["vulkan", "cuda"]
+
+//! a fleet of `have` pods taking `add` more: the refusal, or "" when
+//! it stands - a pod a home, two at most. Non-private: the pod-fleet
+//! tests (tests/uncategorized_persistent_heap_stack_524288.das) hold
+//! it
+def fleet_refusal(have, add : int) : string {
+    let most = length(fleet_homes())
+    return "pod_fleet: --pods takes 1 or {most}, not {add}" if (add < 1 || add > most)
+    return "" if (have + add <= most)
+    return ("pod_fleet: a fleet holds one pod a GPU home ({join(fleet_homes(), ", ")}),"
+        + " {most} at most, not {have + add}: a home's run that outgrows its pod cuts tests"
+        + " and never adds a pod")
+}
+
+//! the refusal of `run` arguments that carry their own `--only`, or
+//! "": each home runs its whole per-PR set, the CUDA home its pass's
+//! files. Non-private: the pod-fleet tests
+//! (tests/uncategorized_persistent_heap_stack_524288.das) hold it
+def args_refusal(args : string) : string {
+    for (word in split(args, " ")) {
+        if (word == "--only" || word |> starts_with("--only=")) {
+            return ("pod_fleet: --args carries --only; the fleet runs each home's whole per-PR set"
+                + " - the Vulkan home every file, the CUDA home its pass's ({CUDA_PASS_ONLY})")
+        }
+    }
+    return ""
+}
+
+//! each home's pod: its seat in the fleet's order, whatever the pods'
+//! indices (a partial `down` leaves them sparse), -1 for a home with
+//! no pod. Non-private: the pod-fleet tests
+//! (tests/uncategorized_persistent_heap_stack_524288.das) hold it
+def home_plan(fleet : Fleet) : array<tuple<home : string; seat : int>> {
+    let homes <- fleet_homes()
+    let n = length(fleet.pods)
+    return <- [for (i, home in iter_range(homes), homes); (home = home, seat = i < n ? i : -1)]
+}
 
 //! the shape of a `runpodctl pod create --wait -o json` record this tool reads; every other key is ignored
 struct PodSsh {
@@ -142,41 +189,62 @@ def prep_command() : string =>
         + " && find . ! -type d ! -name \"*.dlim\" ! -name \"*.tmp\" -exec ln -s {VOLUME_MODELS}/\{\} {POD_MODELS}/\{\} \\;"
         + " && echo PREP-OK")
 
-//! the remote command that starts shard `index`/`n` of the run: the children's logs under the run's folder on
-//! the volume (TMPDIR), the runner's own log beside them, RUN-EXIT=<rc> as its last line; the runner reaps the images
-//! its children mint where the environment names the pod's own models directory (`--reap-images`: under any other
-//! directory the mints are another pod's too, and stay), every shard names the run's one stop file (`--stop-file`: a
-//! test past its wall on one pod starts no later child on any), and the memory tracker beside it keeps
-//! the largest child's peak in the folder's `mem_peak.txt`. LD_LIBRARY_PATH puts the
-//! pod's copy of the runtime libraries ahead of the binary's RUNPATH, which names the volume tree's - a rebuild
-//! there mid-run would otherwise kill every child started after it. Non-private:
-//! the pod-fleet tests (tests/uncategorized_persistent_heap_stack_524288.das) read it
-def run_command(cfg : FleetArgs; run : string; index, n : int) : string {
-    let log = "{FLEET_LOGS}/{run}/shard_{index}.log"
-    let tmp = "{FLEET_LOGS}/{run}/pod_{index}"
+//! the remote command that starts the run on `home`, the CUDA home
+//! under DASLLAMA_CUDA=1 and kept to its pass's files (`--only`
+//! CUDA_PASS_ONLY): the children's logs in the home's folder of
+//! the run on the volume (TMPDIR), the runner's own log `<home>.log`
+//! beside it, RUN-EXIT=<rc> as its last line; the runner reaps the
+//! images its children mint where the environment names the pod's own
+//! models directory (`--reap-images`: under any other directory the
+//! mints are another pod's too, and stay), both homes name the run's
+//! one stop file (`--stop-file`: a test past its wall on one pod
+//! starts no later child on any), and the memory tracker beside it
+//! keeps the largest child's peak in the folder's `mem_peak.txt`.
+//! LD_LIBRARY_PATH puts the pod's copy of the runtime libraries ahead
+//! of the binary's RUNPATH, which names the volume tree's - a rebuild
+//! there mid-run would otherwise kill every child started after it.
+//! Non-private: the pod-fleet tests
+//! (tests/uncategorized_persistent_heap_stack_524288.das) read it
+def run_command(cfg : FleetArgs; run, home : string) : string {
+    let log = "{FLEET_LOGS}/{run}/{home}.log"
+    let tmp = "{FLEET_LOGS}/{run}/{home}"
     let reap = find(" {cfg.env} ", " DASLLAMA_MODELS_DIR={POD_MODELS} ") >= 0 ? " --reap-images" : ""
-    let inner = ("cd {POD_TREE} && export LD_LIBRARY_PATH={POD_TREE}/lib TMPDIR={tmp} {cfg.env}"
+    let cuda = home == "cuda" ? " DASLLAMA_CUDA=1" : ""
+    let only = home == "cuda" ? " --only {CUDA_PASS_ONLY}" : ""
+    let full = cfg.full ? " DASLLAMA_PARITY_FULL=1" : ""
+    let inner = ("cd {POD_TREE} && export LD_LIBRARY_PATH={POD_TREE}/lib TMPDIR={tmp}"
+        + " {cfg.env}{cuda}{full}"
         + " && (sh modules/dasLLAMA/harness/pod_mem_track.sh {tmp}/mem_peak.txt & echo $! > {tmp}/mem_track.pid)"
         + " && ./bin/daslang -jit -module-cache .cache/daslang/module_cache/dastest.dascache modules/dasLLAMA/tests/run.das --"
-        + " {cfg.args} --shard {index}/{n}{reap} --stop-file {FLEET_LOGS}/{run}/STOP;"
+        + " {cfg.args}{only}{reap} --stop-file {FLEET_LOGS}/{run}/STOP;"
         + " rc=$?; kill $(cat {tmp}/mem_track.pid); echo RUN-EXIT=$rc")
     //! `;` not `&&` ahead of the detached command: `a && b &` backgrounds a subshell that keeps the ssh session's
     //! output open, and the ssh call then lasts as long as the run
-    return "mkdir -p {tmp}; setsid nohup sh -c '{inner}' > {log} 2>&1 < /dev/null & echo STARTED {index}/{n}"
+    let detached = "setsid nohup sh -c '{inner}' > {log} 2>&1 < /dev/null &"
+    return "mkdir -p {tmp}; {detached} echo STARTED {home}"
 }
 
-//! the remote command that reads every shard of `run` off the volume: its DONE count, its SHARD, REPORT and NEXT
-//! lines, its MISSING lines (a model file the shard's cells ask that the volume lacks), its RUN-EXIT line and every
-//! red DONE line; then every pod's peak - the largest child's resident kB and the file it ran
-def status_command(run : string) : string =>
-    ("for f in {FLEET_LOGS}/{run}/shard_*.log; do echo \"== $f: $(grep -cE 'DONE' $f) done\";"
-        + " grep -E '^\\[I\\] (SHARD|REPORT|NEXT)|^\\[W\\] MISSING|RUN-EXIT|WALL |LOST |STOPPED' $f; grep -E 'DONE' $f | grep -vE ' 0 failed, 0 errors'; done;"
-        + " for p in {FLEET_LOGS}/{run}/pod_*/mem_peak.txt; do echo \"PEAK-KB $p: $(cat $p)\"; done; true")
+//! the remote command that reads each home's log of `run` off the
+//! volume, under the home's name: its DONE count, REPORT and NEXT
+//! lines, MISSING lines (a model file the home's cells ask that the
+//! volume lacks), RUN-EXIT line and every red DONE line; then each
+//! home's peak - the largest child's resident kB and the file it ran.
+//! A home no pod ran has no log and prints nothing
+def status_command(run : string) : string {
+    let homes = join(fleet_homes(), " ")
+    let at = "{FLEET_LOGS}/{run}"
+    return ("for h in {homes}; do f={at}/$h.log; [ -f $f ] || continue;"
+        + " echo \"== $h: $(grep -cE 'DONE' $f) done\";"
+        + " grep -E '^\\[I\\] (REPORT|NEXT)|^\\[W\\] MISSING|RUN-EXIT|WALL |LOST |STOPPED' $f;"
+        + " grep -E 'DONE' $f | grep -vE ' 0 failed, 0 errors'; done;"
+        + " for h in {homes}; do p={at}/$h/mem_peak.txt;"
+        + " [ -f $p ] && echo \"PEAK-KB $h: $(cat $p)\"; done; true")
+}
 
 //! the remote command that reads every child log of `run` off the volume into one line a verdict: `F <seconds> <file>` for a
 //! test file's PASS / FAIL line and `T <seconds> <cell>` for a `[test]` function's, the colour codes stripped first
 def times_command(run : string) : string =>
-    ("cat {FLEET_LOGS}/{run}/pod_*/dasllama_run_*.log | sed -E 's/\\x1b\\[[0-9;]*m//g'"
+    ("cat {FLEET_LOGS}/{run}/*/dasllama_run_*.log | sed -E 's/\\x1b\\[[0-9;]*m//g'"
         + " | sed -nE \"s/^(PASS|FAIL) (modules\\/[^ ]+\\.das) \\(([0-9.]+)s\\).*/F \\3 \\2/p; s/^--- (PASS|FAIL) '([^']*)' \\(([0-9.]+)s\\).*/T \\3 \\2/p\"; true")
 
 //! the run's test time by file (every file's seconds summed over the children that ran it) and its longest cells (a cell's
@@ -269,8 +337,15 @@ def private run_capture(argv : array<string>; timeout_sec : float) : tuple<rc : 
     return (rc = rc, out = out)
 }
 
-//! `up`: `--pods` more pods join the fleet, their indices after the pods already in it, each copying the tree once made
+//! `up`: `--pods` more pods join the fleet, their indices after the
+//! pods already in it, each copying the tree once made; a fleet past
+//! one pod a home is refused
 def private verb_up(cfg : FleetArgs; var fleet : Fleet) : int {
+    let refused = fleet_refusal(length(fleet.pods), cfg.pods)
+    if (!empty(refused)) {
+        to_log(LOG_ERROR, "{refused}\n")
+        return 2
+    }
     let pub = strip(file_text("{home_path(cfg.key)}.pub"))
     if (empty(pub)) {
         to_log(LOG_ERROR, "pod_fleet: no public key at {home_path(cfg.key)}.pub\n")
@@ -305,7 +380,7 @@ def private verb_up(cfg : FleetArgs; var fleet : Fleet) : int {
             return 1
         }
     }
-    to_log(LOG_INFO, "FLEET {length(fleet.pods)} pod(s) ready; `run` shards a command over them\n")
+    to_log(LOG_INFO, "FLEET {length(fleet.pods)} pod(s) ready; `run` runs a home on each\n")
     return 0
 }
 
@@ -331,22 +406,39 @@ def private verb_run(cfg : FleetArgs; var fleet : Fleet) : int {
         to_log(LOG_ERROR, "pod_fleet: no fleet - `up` first\n")
         return 2
     }
+    let refused = fleet_refusal(0, length(fleet.pods))
+    if (!empty(refused)) {
+        to_log(LOG_ERROR, "{refused}; `down` the fleet and `up` again\n")
+        return 2
+    }
+    let narrowed = args_refusal(cfg.args)
+    if (!empty(narrowed)) {
+        to_log(LOG_ERROR, "{narrowed}\n")
+        return 2
+    }
     let stamp = run_capture(ssh_argv(cfg, fleet.pods[0], "date -u +%Y%m%d-%H%M%S"), 60.0)
     let run = strip(stamp.out)
     if (stamp.rc != 0 || empty(run)) {
         to_log(LOG_ERROR, "pod_fleet: pod {fleet.pods[0].index} is not reachable (exit {stamp.rc}):\n{stamp.out}\n")
         return 1
     }
-    let n = length(fleet.pods)
-    fleet.last_run = run   //! saved before the starts, so `status` reads a run whose later shard failed to start
+    fleet.last_run = run   //! saved first: `status` reads a run whose CUDA start failed
     save_fleet(home_path(cfg.fleet), fleet)
-    for (pod, seat in fleet.pods, shard_plan(fleet)) {
-        let started = run_capture(ssh_argv(cfg, pod, run_command(cfg, run, seat.shard, n)), 60.0)
+    for (seat in home_plan(fleet)) {
+        if (seat.seat < 0) {
+            let held = length(fleet.pods)
+            to_log(LOG_INFO, "RUN {run} {seat.home} home: no pod - the fleet holds {held}\n")
+            continue
+        }
+        let pod = fleet.pods[seat.seat]
+        let started = run_capture(ssh_argv(cfg, pod, run_command(cfg, run, seat.home)), 60.0)
         if (started.rc != 0 || find(started.out, "STARTED") < 0) {
-            to_log(LOG_ERROR, "RUN {run} shard {seat.shard}/{n}: not started on pod {pod.index} (exit {started.rc}):\n{started.out}\n")
+            let why = "(exit {started.rc}):\n{started.out}"
+            to_log(LOG_ERROR, "RUN {run} {seat.home} home: not started on pod {pod.index} {why}\n")
             return 1
         }
-        to_log(LOG_INFO, "RUN {run} shard {seat.shard}/{n} started on pod {pod.index} ({pod.id}): run.das -- {cfg.args} --shard {seat.shard}/{n}\n")
+        let on = "pod {pod.index} ({pod.id})"
+        to_log(LOG_INFO, "RUN {run} {seat.home} home started on {on}: run.das -- {cfg.args}\n")
     }
     to_log(LOG_INFO, "RUN {run}: logs under {FLEET_LOGS}/{run}/ on the volume; `status` reads them\n")
     return 0

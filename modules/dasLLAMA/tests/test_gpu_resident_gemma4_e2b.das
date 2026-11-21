@@ -136,13 +136,12 @@ def private pre_step_within(t : T?; tag : string; p : PreStep; r : E2bRows) {
     }
 }
 
-//! what the Q8_0 file's forms collect: the default device form's cells and their CPU side on its codec (`main_kv`), the
+//! what the Q8_0 file's forms collect: the default device form's cells and their CPU side on its codec (`main`), the
 //! block codecs' cells (the q8_0 mirror's forced feed, the tq4 mirror's walk; each a CPU side, a device side), the rings
 //! (the default codec ringed and flat, the tq4 mirror ringed and flat), the pre-step (the gather on, the gather off) and the
 //! CPU pre-step's rows of its token and of the control token; each `_ran` says a form collected
 struct E2bRows {
-    main_ran : bool
-    main_kv : KVDtype
+    main : MainPair
     rows : GemmaRows[2]
     ple : PleFeed[2]
     peels : array<PeelTail>
@@ -151,10 +150,8 @@ struct E2bRows {
     side_cpu, side_other : array<float>
     chain : Held   //! the greedy chain's walks on the default form's one region
     regions : Held   //! the rig's two-session cells on the two-region form
-    gathered : array<array<float>>   //! the embed-gather cell's batched rows, the token rows gathered on the device
+    gather : GatherPair   //! the embed-gather cell's batched rows, both halves
     host_rows : Held   //! the gather-off form's host half of the embed-gather cell, the pin cell, the CUDA prefill pin's control
-    host_embedded : array<array<float>>   //! ... the batched rows the host embedded
-    gather_ran : bool[2]
     groups : Held   //! the groups cell on the nine-region form
     split_forms : Held   //! the split one-row forms on the Vulkan home
     cuda : bool   //! the default form ran on the CUDA home: its own cells collected
@@ -172,9 +169,8 @@ let private E2B_CODEC = CodecCells(q8_feed = 40l, tq4_walk = (n = 150l, steps = 
 //! one form's collection of the Q8_0 file's cells into `r` (`walks` the default form's teacher-forced walks)
 def private e2b_rows(var r : E2bRows; var m : Model; form : ModelForm; feeds : array<int64>; walks : array<GemmaWalk>) {
     var inscope gaps <- [for (g in E2B_GAPS); g]
-    if (device_default(form)) {
-        r.main_ran = true
-        r.main_kv = form.kv
+    let side = main_side(r.main, form)
+    if (side == MainSide.device) {
         r.ple[1] <- ple_feed(m, form, GEMMA4E_FILE.file)
         r.rows[1] <- gemma_rows(m, form, feeds, gaps, walks)
         delete r.peels
@@ -186,7 +182,7 @@ def private e2b_rows(var r : E2bRows; var m : Model; form : ModelForm; feeds : a
     } elif (form.on_gpu && form.regions == 2l && form.gather && !form.split_forms) {
         e2b_regions_rows(r, m)
     } elif (form.on_gpu && form.regions == 2l && form.split_forms) {
-        regions_batched_rows(r.split_forms, m, LogitsBar.bit_exact, true)
+        regions_batched_rows(r.split_forms, m, LogitsBar.bit_exact, DownFold.split_forms)
     } elif (form.on_gpu && form.regions == 9l) {
         regions_groups_rows(r.groups, m, 9l, LogitsBar.bit_exact)
     } elif (form.on_gpu && form.regions == 2l) {
@@ -202,7 +198,7 @@ def private e2b_rows(var r : E2bRows; var m : Model; form : ModelForm; feeds : a
         r.turns[2] = ple_greedy_turn(m)
         r.turn_ran[2] = true
     } else {
-        if (r.main_ran && form.kv == r.main_kv) {
+        if (side == MainSide.cpu) {
             r.ple[0] <- ple_feed(m, form, GEMMA4E_FILE.file)
             r.rows[0] <- gemma_rows(m, form, feeds, gaps, walks)
             delete r.side_cpu
@@ -224,7 +220,7 @@ def private e2b_rows(var r : E2bRows; var m : Model; form : ModelForm; feeds : a
 //! the Q8_0 file's compares on what its forms collected, each cell where its forms ran
 def private e2b_rows_within(t : T?; r : E2bRows; walks : array<GemmaWalk>) {
     var inscope gaps <- [for (g in E2B_GAPS); g]
-    if (r.main_ran) {
+    if (r.main.ran) {
         gemma_rows_within(t, "gemma-4-E2B Q8_0", r.rows[1], r.rows[0], gaps, walks)
     }
     held_within(t, r.chain, "gemma-4-E2B Q8_0, the greedy chain: ", false)
@@ -232,9 +228,7 @@ def private e2b_rows_within(t : T?; r : E2bRows; walks : array<GemmaWalk>) {
     held_within(t, r.host_rows, "gemma-4-E2B Q8_0, two regions, the gather off: ", false)
     held_within(t, r.groups, "gemma-4-E2B Q8_0, nine regions: ", false)
     held_within(t, r.split_forms, "gemma-4-E2B Q8_0, two regions, the split one-row forms: ", false)
-    if (r.gather_ran[0] && r.gather_ran[1]) {
-        gathered_rows_bit_same(t, "gemma-4-E2B Q8_0, the embed gather", r.gathered, r.host_embedded, 2l)
-    }
+    gather_pair_within(t, "gemma-4-E2B Q8_0, the embed gather", r.gather)
     for (i, what in range(2), fixed_array("the gather on", "the gather off")) {
         if (r.pre[i].ran) {
             pre_step_within(t, "gemma-4-E2B Q8_0, the pre-step, {what}: ", r.pre[i], r)
@@ -250,11 +244,12 @@ def private e2b_rows_within(t : T?; r : E2bRows; walks : array<GemmaWalk>) {
     }
     codec_rows_within(t, "gemma-4-E2B Q8_0", r.codec, E2B_CODEC)
     with_dasllama_jobque_() {
-        if (r.main_ran) {
+        if (r.main.ran) {
             ple_feed_within(t, "gemma-4-E2B Q8_0", r.ple[1], r.ple[0], GEMMA4E_FILE.file, "")
             e_series_peels_within(t, r.peels, SPLIT_BAR_REL)
         }
-        codec_rings_within(t, "gemma-4-E2B Q8_0", r.codec, E2B_CODEC, r.main_kv)
+        rings_within(t, "gemma-4-E2B Q8_0", GEMMA_RING_IDS, r.codec.rings, r.main.kv,
+            E2B_CODEC.ring_kv)
     }
 }
 
@@ -483,13 +478,7 @@ def private e2b_regions_rows(var r : E2bRows; m : Model) {
     regions_batched_rows(r.regions, m)
     regions_split_rows(r.regions, m)
     regions_side_rows(r.regions, m)
-    static_if (typeinfo builtin_module_exists(vulkan)) {
-        delete r.gathered
-        r.gathered <- regions_embed_rows(r.regions, m, true)
-        r.gather_ran[0] = true
-    } else {
-        r.regions |> held_skip("no dasVulkan module on this build: the batched rows' device gather is the Vulkan driver's")
-    }
+    gather_half(r.gather, r.regions, m, true, GEMMA4E_FILE.file)
     regions_device_home_rows(r.regions, m)
     if (gpu_want_cuda()) {
         r.regions |> held_skip("the CUDA home is asked: the window's fused q/k norm lever is the Vulkan driver's")
@@ -505,12 +494,7 @@ def private e2b_regions_rows(var r : E2bRows; m : Model) {
 //! CPU by design - the pin cell's outsider, the CUDA prefill pin's prompt - after the served witness of every call before them;
 //! the passes they leave are cleared, so the form's own witness reads the calls after them
 def private e2b_host_rows(var r : E2bRows; m : Model) {
-    static_if (typeinfo builtin_module_exists(vulkan)) {
-        delete r.host_embedded
-        r.host_embedded <- regions_embed_rows(r.host_rows, m, false)
-        log_gathered_rows(m, GEMMA4E_FILE.file, r.gathered, r.host_embedded, 2l)
-        r.gather_ran[1] = true
-    }
+    gather_half(r.gather, r.host_rows, m, false, GEMMA4E_FILE.file)
     r.host_rows |> held_served("the device served every call before the by-design passes")
     regions_device_home_pin_rows(r.host_rows, m)
     if (r.cuda) {
