@@ -100,17 +100,18 @@ def test_vulkan_mint_family_lane_gemma4moe(tst : T?) {
     family_lane_test(tst, "gemma4moe", "gemma-4-26B-A4B-6L-Q4_K_M-local.gguf")
 }
 
-let private MOE_FILE = "Qwen1.5-MoE-A2.7B-Chat-Q4_K_M-local.gguf"
-let private MOE_HOST_LAYERS = 20l   //! routed layers asked onto the host: their stacks stream, the plan's room arms the unasked pool beside the mirror
+let private MOE_FILE = "Qwen1.5-MoE-A2.7B-4L-Q4_K_M-local.gguf"   //! the Q4_K_M mint's four-block cut
+let private MOE_BLOCKS = 4l
+let private MOE_HOST_LAYERS = 2l   //! routed layers asked onto the host, of the cut's four: their stacks stream, the plan's room arms the unasked pool beside the mirror
 
-//! the MoE lane under the trim: twenty routed layers' expert stacks streamed to the host's pinned mirrors, so the lane drops every
+//! the MoE lane under the trim: two of the cut's four routed layers' expert stacks streamed to the host's pinned mirrors, so the lane drops every
 //! planar family and the host reads the mirrors through the rare rail; on the untrimmed lane the rail's arena arm pinned off
 //! reads the planar planes (none through the rail) and pinned on - `set_rare_arena(1)`, the in-process twin of
 //! DASLLAMA_RARE_ARENA=2 - reads the same picks off the mirrors through the rail, its rows within the routed block's bar of the
 //! planar kernels'; the trimmed lane's rail follows the knob's default policy (the pin put back as found)
-[test(description = "Qwen1.5-MoE with twenty routed layers streamed to the host: the trimmed lane drops the planar families and its fed logit rows hold the routed-block bar against the untrimmed lane, cold and warm, through the rare rail")]
+[test(description = "Qwen1.5-MoE-A2.7B-4L with two of its four routed layers streamed to the host: the trimmed lane drops the planar families and its fed logit rows hold the routed-block bar against the untrimmed lane, cold and warm, through the rare rail")]
 def test_vulkan_mint_moe_streamed(tst : T?) {
-    tst |> run("Qwen1.5-MoE Q4_K_M with twenty routed layers streamed: the trimmed lane drops the planar families and serves the untrimmed lane's tokens, cold and warm, off the mirrors; the untrimmed lane's picks through the rail under the arena pin alone") @(t : T?) {
+    tst |> run("Qwen1.5-MoE-A2.7B-4L Q4_K_M with two of its four routed layers streamed: the trimmed lane drops the planar families and serves the untrimmed lane's tokens, cold and warm, off the mirrors; the untrimmed lane's picks through the rail under the arena pin alone") @(t : T?) {
         return if (!family_on(t, "qwen2moe"))
         let path = path_join(models_dir(), MOE_FILE)
         return if (mint_skip(t, path))
@@ -122,6 +123,7 @@ def test_vulkan_mint_moe_streamed(tst : T?) {
         set_gpu_want_pf_stream(1)
         with_cold_lane(t, path, "the MoE") $(var plain; img_v) {
             t |> success(!plain.planes_trimmed && long_length(plain.vkplan) > 0l, "the served image is the vulkan lane, the planar families kept with the trim off")
+            cut_within(t, "", plain, MOE_BLOCKS)
             t |> equal(gpu_resident_host_layers(), MOE_HOST_LAYERS, "the first {MOE_HOST_LAYERS} routed layers' experts serve on the host")
             let plain_bytes = stat(img_v).size
             set_rare_arena(0)   // the arena arm pinned off: the host picks read the planar planes the untrimmed lane kept

@@ -85,7 +85,7 @@ against; the window chain encodes per call and reads the same accessor. The resi
 who sits where (`RdecRegion`: rows, the owning claim's generation, a last-bind tick): a session
 binds its own region while its claim stands, else the least recently used one, which its next
 claim takes. Two sessions in two regions step between each other, or in one batched step, with no
-K/V crossing the bus - `tests/test_gpu_resident_regions.das` holds each bit for bit to the
+K/V crossing the bus - `tests/test_gpu_resident_qwen2.das` holds each bit for bit to the
 session alone. A session past the region count takes another's region and brings its history up
 from the host, as every session did on the single mirror. An owner whose region another session
 took is served from the host or not at all: where its rows never came down, its next prefill or

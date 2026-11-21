@@ -152,8 +152,8 @@ file across the folder.
 
 The format repository holds the files a test or a record reads byte for byte and no box makes for
 itself: a carrier minted to put one weight format at one site (the format matrix), a cut of a large
-model's first blocks that a per-PR test loads in the whole file's place, and a published file kept
-beside them. It is one Hugging Face repository, a folder a model: `FORMATS_HF`
+model's first blocks (and its NextN draft block, renumbered after them, where the file has one)
+that a per-PR test loads in the whole file's place, and a published file kept beside them. It is one Hugging Face repository, a folder a model: `FORMATS_HF`
 (`performance/model_specs.das`) pins its commit, and a row whose `url` opens with it names its file
 there by `url`, `bytes` and `sha256`. Every box downloads such a file by its row: two runs of one
 recipe are not promised the same bytes, so a box that made its own would read another file than the

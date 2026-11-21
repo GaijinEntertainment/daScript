@@ -157,16 +157,17 @@ def test_metal_batch_gather_eseries(t : T?) {
     metal_batch_gather_cell(t, "gemma-4-E2B-it-Q8_0.gguf", "gemma")
 }
 
-[test(description = "On the shared-expert Qwen1.5-MoE-A2.7B Q8, the batched bench row serves four streams at a rate through the Metal batched driver's rows site, every timed step a device step, none on the CPU stack")]
+[test(description = "On the shared-expert Qwen1.5-MoE-A2.7B-4L Q8_0, the batched bench row serves four streams at a rate through the Metal batched driver's rows site, every timed step a device step, none on the CPU stack")]
 def test_metal_batched_row_shexp(t : T?) {
-    t |> run("the batched row serves a shared-expert MoE through the batched driver's rows site (Qwen1.5-MoE-A2.7B Q8)") <| @(t : T?) {
+    t |> run("the batched row serves a shared-expert MoE through the batched driver's rows site (Qwen1.5-MoE-A2.7B-4L Q8_0)") <| @(t : T?) {
         if (!family_on(t, "qwen2moe")) return
         static_if (typeinfo builtin_module_exists(das_metal)) {
-            let path = path_join(models_dir(), "Qwen1.5-MoE-A2.7B-Chat.Q8_0.gguf")
+            let path = path_join(models_dir(), "Qwen1.5-MoE-A2.7B-4L-Q8_0-local.gguf")
             return if (!jit_model_available(t, path))
             let prior_mode = get_metal_mode()
             set_metal_mode(MetalMode.when_available)
             var tr <- blob_twin(t, path, 256l)
+            cut_within(t, "", tr, 4l)
             with_dasllama_jobque_() {
                 let census0 = batch_step_census()
                 let served = bench_tg_batched_rep(tr, 4l, 32l, 8l, 1l)
@@ -189,16 +190,17 @@ def test_metal_batched_row_shexp(t : T?) {
 let SHEXP_SAMESLAB_BAR = 2.0
 let SHEXP_SAMESLAB_ROUNDS = 12l
 
-[test(description = "On Qwen1.5-MoE-A2.7B Q8, one row through the batched driver's same-slab verify lands logits within 2.0 of the single-row step's over 12 rounds, while the one-step-off control lands outside that bar")]
+[test(description = "On Qwen1.5-MoE-A2.7B-4L Q8_0, one row through the batched driver's same-slab verify lands logits within 2.0 of the single-row step's over 12 rounds, while the one-step-off control lands outside that bar")]
 def test_metal_batched_row_shexp_sameslab(t : T?) {
-    t |> run("one row of a shared-expert MoE through the batched driver's same-slab verify binds its own panels: its logits are the single-row step's (Qwen1.5-MoE-A2.7B Q8)") <| @(t : T?) {
+    t |> run("one row of a shared-expert MoE through the batched driver's same-slab verify binds its own panels: its logits are the single-row step's (Qwen1.5-MoE-A2.7B-4L Q8_0)") <| @(t : T?) {
         if (!family_on(t, "qwen2moe")) return
         static_if (typeinfo builtin_module_exists(das_metal)) {
-            let path = path_join(models_dir(), "Qwen1.5-MoE-A2.7B-Chat.Q8_0.gguf")
+            let path = path_join(models_dir(), "Qwen1.5-MoE-A2.7B-4L-Q8_0-local.gguf")
             return if (!jit_model_available(t, path))
             let prior_mode = get_metal_mode()
             set_metal_mode(MetalMode.when_available)
             var tr <- blob_twin(t, path, 256l)
+            cut_within(t, "", tr, 4l)
             with_dasllama_jobque_() {
                 let c = tr.config
                 let vocab = c.vocab_size

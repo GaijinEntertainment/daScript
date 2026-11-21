@@ -4,7 +4,7 @@ options persistent_heap   // + explicit deletes in the cells: the model and sess
 options _dasllama_internal = true
 
 require dastest/testing_boost public
-require _moe_resident   // MoeFixture, moe_feed_rows, moe_perop_heat_cell
+require _moe_resident   // MoeFixture, moe_prompt_feeds, moe_perop_heat_cell
 require _cpu_gpu_model   // with_cpu_and_gpu_model, the forms, FeedRows
 require _resident_regions   // the regions cells' collections, REGIONS_RIG_CTX, LogitsBar
 require _model_tier   // models_dir
@@ -60,11 +60,7 @@ let private GPTOSS_HEAT = MoeFixture(file = "gpt-oss-4L-mxfp4-local.gguf", shexp
 [test(description = "With the whole-model route off, the per-op tier places every gpt-oss-4L routed layer's mx4 stacks on the device, and a 40-token window plus six fed steps sit within the 5% logits bar of the CPU chain")]
 def test_gpu_perop_gptoss(t : T?) {
     t |> run("gpt-oss-4L with the whole-model route off: the per-op expert chain takes every routed layer's mx4 stacks under the biased clamped swiglu, the window and steps against the CPU chain") @(t : T?) {
-        if (!family_on(t, "gptoss")) return
-        if (gpu_want_cuda()) {
-            t |> skip("the CUDA home is asked: the per-op tier is the Vulkan home's")
-            return
-        }
+        if (!family_on(t, "gptoss") || !vulkan_home_asked(t, "the per-op tier is the Vulkan home's")) return
         let path = path_join(models_dir(), GPTOSS.file)
         if (!resident_ready(t, path)) return
         let route = gpu_resident_route_lever()
@@ -155,7 +151,7 @@ def private cuda_cells_why() : string {
 //! lengths; the default form beside its CPU form (`main`) - the
 //! default form's census feeds (`FED_STEPS` steps), the CUDA home's
 //! feeds and the CPU form's feeds of the same prompts, their
-//! readings `main_held`; the sink stamp's device and CPU feeds on
+//! readings `carrier`; the sink stamp's device and CPU feeds on
 //! `codec_kv`; the regions rig; the host-layers forms' feeds with the
 //! prompt stream on and off, their readings; the rings at f16 and at
 //! q8_0; each `_ran` says a form collected
@@ -163,7 +159,7 @@ struct GptossRows {
     prompts : array<int64>
     cuda : bool   //! the CUDA home's own cells collect
     main : MainPair
-    main_held : Held
+    carrier : Held
     main_feeds : array<FeedRows>
     cuda_feeds : array<FeedRows>
     cpu_feeds : array<FeedRows>
@@ -182,19 +178,6 @@ struct GptossRows {
     rings : RingRows
 }
 
-//! `resident_feed_rows` on the CUDA home, the driver's counters
-//! `with_cuda_feed_served` reads held into `h`
-def private cuda_feed_rows(var h : Held; m : Model; form : ModelForm; n : int64) : FeedRows {
-    var f : FeedRows
-    static_if (typeinfo builtin_module_exists(cuda)) {
-        with_cuda_feed_served(h, n, prompt_windows(n)) {
-            delete f
-            f <- resident_feed_rows(m, form, n, LONG_FED_STEPS)
-        }
-    }
-    return <- f
-}
-
 //! a host-layers form's 40-token feed; on the CUDA home (`on_cuda`)
 //! the stream's witnesses held into `h` - the streamed feed through
 //! `cuda_feed_rows`, the stream-off feed the control: no window
@@ -204,7 +187,7 @@ def private stream_rows(var h : Held; m : Model; form : ModelForm; on_cuda : boo
         if (on_cuda) {
             let at = stream_at()
             if (form.pf_stream) {
-                var on <- cuda_feed_rows(h, m, form, 40l)
+                var on <- cuda_feed_rows(h, m, form, 40l, prompt_windows(40l))
                 stream_witness(h, GPTOSS.file, at, 0l)
                 return <- on
             }
@@ -214,18 +197,6 @@ def private stream_rows(var h : Held; m : Model; form : ModelForm; on_cuda : boo
         }
     }
     return <- resident_feed_rows(m, form, 40l, LONG_FED_STEPS)
-}
-
-//! `run`, a CPU feed, under the CUDA counters' control where
-//! `on_cuda`: the driver's counters stay
-def private with_cpu_counters_still(var h : Held; on_cuda : bool; run : block<void>) {
-    static_if (typeinfo builtin_module_exists(cuda)) {
-        if (on_cuda) {
-            with_cuda_counters_still(h, run)
-            return
-        }
-    }
-    invoke(run)
 }
 
 //! a device form's sink-stamp feed: 40 tokens on its codec
@@ -240,18 +211,14 @@ def private gptoss_codec_rows(var r : GptossRows; m : Model; form : ModelForm) {
 //! prompt, the CUDA home's feeds of the same prompts, and under
 //! DASLLAMA_VK_KV32=1 the f32 sink stamp's feed
 def private gptoss_main_rows(var r : GptossRows; m : Model; form : ModelForm) {
-    r.main_held |> held_equal(m.arch, "gpt-oss", "the file is a gpt-oss-family model")
-    let host_layers = moe_fixture_admitted(r.main_held, m, GPTOSS)
+    r.carrier |> held_equal(m.arch, "gpt-oss", "the file is a gpt-oss-family model")
+    let host_layers = moe_fixture_admitted(r.carrier, m, GPTOSS)
     return if (host_layers < 0l)
-    r.main_feeds |> reserve(length(r.prompts))
-    for (n in r.prompts) {
-        r.main_feeds |> emplace <| moe_feed_rows(r.main_held, m, form, GPTOSS, n, FED_STEPS,
-            host_layers, empty(r.main_feeds))
-    }
+    moe_prompt_feeds(r.main_feeds, r.carrier, m, form, GPTOSS, r.prompts, host_layers)
     if (r.cuda) {
         r.cuda_feeds |> reserve(length(r.prompts))
         for (n in r.prompts) {
-            r.cuda_feeds |> emplace <| cuda_feed_rows(r.main_held, m, form, n)
+            r.cuda_feeds |> emplace <| cuda_feed_rows(r.carrier, m, form, n, prompt_windows(n))
         }
     }
     if (form.kv == KVDtype.f32) {
@@ -264,7 +231,7 @@ def private gptoss_main_rows(var r : GptossRows; m : Model; form : ModelForm) {
 def private gptoss_cpu_rows(var r : GptossRows; m : Model; form : ModelForm) {
     r.cpu_feeds |> reserve(length(r.prompts))
     for (n, i in r.prompts, count()) {
-        with_cpu_counters_still(r.main_held, r.cuda && i == 0) {
+        with_cpu_counters_still(r.carrier, r.cuda && i == 0) {
             r.cpu_feeds |> emplace <| resident_feed_rows(m, form, n, LONG_FED_STEPS)
         }
     }
@@ -332,19 +299,6 @@ def private gptoss_rows(var r : GptossRows; m : Model; form : ModelForm) {
     }
 }
 
-//! the prompt's row and the first `steps` fed steps of `f`: a longer
-//! CPU feed held against a shorter device feed
-def private feed_prefix(f : FeedRows; steps : int64) : FeedRows {
-    var p = FeedRows(nprompt = f.nprompt, prefills = f.prefills, cuda = f.cuda,
-        toks <- [for (i in range64(steps)); f.toks[i]])
-    p.pieces := f.pieces
-    p.rows |> reserve(steps + 1l)
-    for (i in range64(steps + 1l)) {
-        p.rows |> push_clone(f.rows[i])
-    }
-    return <- p
-}
-
 //! a default-form feed's bar: the fixture's over one window; the
 //! routed block's over two - the two-window prompt's first fed step
 //! lands a router near-tie on the RTX PRO 4500, 0.458 against the 5%
@@ -393,7 +347,7 @@ def private gptoss_host_layers_within(t : T?; r : GptossRows) {
 //! gpt-oss-4L's compares on what its forms collected, each cell
 //! where its forms ran
 def private gptoss_rows_within(t : T?; r : GptossRows) {
-    held_within(t, r.main_held, "gpt-oss-4L: ", false)
+    held_within(t, r.carrier, "gpt-oss-4L: ", false)
     held_within(t, r.regions, "gpt-oss-4L, the regions rig: ", false)
     with_dasllama_jobque_() {
         for (f, i in r.main_feeds, count()) {
@@ -424,7 +378,7 @@ def private gptoss_forms(var r : GptossRows) : array<ModelForm> {
     for (kv in fixed_array(KVDtype.q8_0, KVDtype.f32)) {
         let why = codec_env_why(kv)
         if (!empty(why)) {
-            r.main_held |> held_skip("the {kv} sink stamp: {why}")
+            r.carrier |> held_skip("the {kv} sink stamp: {why}")
         } elif (kv == KVDtype.q8_0) {
             forms |> push(device_form(kv = kv))
         }
@@ -436,7 +390,7 @@ def private gptoss_forms(var r : GptossRows) : array<ModelForm> {
     for (kv in fixed_array(KVDtype.f16, KVDtype.q8_0)) {
         let why = codec_env_why(kv)
         if (!empty(why)) {
-            r.main_held |> held_skip("the rings on a {kv} mirror: {why}")
+            r.carrier |> held_skip("the rings on a {kv} mirror: {why}")
             continue
         }
         for (ring in fixed_array(true, false)) {
@@ -460,7 +414,7 @@ def test_gpu_resident_gptoss(t : T?) {
     let cuda_why = cuda_cells_why()
     r.cuda = empty(cuda_why)
     if (gpu_want_cuda() && !r.cuda) {
-        r.main_held |> held_skip("the CUDA home's own cells: {cuda_why}")
+        r.carrier |> held_skip("the CUDA home's own cells: {cuda_why}")
     }
     var forms <- gptoss_forms(r)
     //! the device claims first: a 32-expert layer at a host-first of

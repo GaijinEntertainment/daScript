@@ -16,6 +16,7 @@ require dasllama/dasllama_moe   // moe_pick_tape: the CPU arm routes as the devi
 require dasllama/dasllama_gguf
 require _model_tier   // models_dir() + model_available() presence/size-tier gate
 require _resident_feed   // feed_logits, feed_steps_within
+require _resident_regions   // adopted_row: the continuation cell's adopted checkpoint
 
 // The whole-model resident driver on the hyper-connection carrier (Qwen3.8-Flash-Next UD-IQ4_XS, three shards, the large tier,
 // DASLLAMA_GPU=1): the wide residual's mixer seams, the n-gram side input and the deltanet sigmoid out-gate on the device, the
@@ -32,7 +33,7 @@ def private allow_cpu_prefill_intent() {
     allow_cpu_prefill()   // the control arm prefills on the CPU by design
 }
 
-//! the routed block's bar (test_gpu_resident_moe's reading); with the routing pinned the arms read 0.37-0.68 against
+//! the routed block's bar (test_gpu_resident_qwen_moe's reading); with the routing pinned the arms read 0.37-0.68 against
 //! bars of 1.7-2.6, the control 5.2-12.0 (PERF_LEDGER.md, the hot expert pool's entry)
 let private LOGIT_BAR_REL = 0.20
 let private HC_PROMPT = 48l   //! past the pool's 32-row window floor: the prompt's routed rows split between the device and the host
@@ -50,8 +51,9 @@ let private FN_TRUNK = "Qwen3.8-Flash-Next-GGUF/UD-IQ4_XS/Qwen3.8-Flash-Next-UD-
 let private FN_HEAD = "Qwen3.8-Flash-Next-GGUF/MTP/mtp-Qwen3.8-Flash-Next-shared-Q8_0.gguf"
 let private DRAFT_TOKEN = 3000l
 
-def private hc_ready(t : T?) : bool {
-    if (!resident_ready(t, path_join(models_dir(), FN_TRUNK)) || !model_available(t, path_join(models_dir(), FN_HEAD))) return false
+//! the trunk ready on the armed tier, and its head file beside it where `head`; false after the loud skip on the f32 mirror
+def private hc_ready(t : T?; head : bool = true) : bool {
+    if (!resident_ready(t, path_join(models_dir(), FN_TRUNK)) || (head && !model_available(t, path_join(models_dir(), FN_HEAD)))) return false
     if (g_env_vulkan.vk_kv32 != 0l) {
         t |> skip("DASLLAMA_VK_KV32=1: the f32 mirror passes every f16 session as codec")
         return false
@@ -256,11 +258,7 @@ def test_gpu_resident_hc_mtp_draft(t : T?) {
 def test_gpu_resident_hc(t : T?) {
     t |> run("Qwen3.8-Flash-Next: the window chain and the split token command (the mixers, the side input and the sigmoid out-gate on device, the routed experts on the host) vs the CPU chain") @(t : T?) {
         let path = path_join(models_dir(), FN_TRUNK)
-        if (!resident_ready(t, path)) return
-        if (g_env_vulkan.vk_kv32 != 0l) {
-            t |> skip("DASLLAMA_VK_KV32=1: the f32 mirror passes every f16 session as codec")
-            return
-        }
+        if (!hc_ready(t, false)) return
         var tr <- load_model_(path, QuantMode.q8)
         t |> success(tr.config.hyper_conn && tr.config.n_expert > 0l && tr.config.dn_z_sigmoid, "the carrier is the hyper-connection MoE with the sigmoid out-gate the chain exists for")
         t |> success(moe_gpu_resident_active(), "the whole-model driver armed on it (the load log names any decline)")
@@ -313,6 +311,74 @@ def test_gpu_resident_hc_short_window(t : T?) {
         t |> success(moe_gpu_resident_active(), "the whole-model driver armed on the trunk (the load log names any decline)")
         with_dasllama_jobque_() {
             assert_short_window_takes_chain(t, tr, "a hyper-connection chain")
+        }
+        delete tr
+    }
+}
+
+// A prompt continued on the whole-model driver: its second half as a continuation window from the first half's position, and
+// the same second half from a checkpoint a fresh session adopts after the first session stepped past it (`adopted_row`: the
+// recurrent state and the n-gram conv ring ride the checkpoint row; the pre-step's id window comes from the tokens) - each
+// against the whole prompt through one window at the wide bar (the pool's fill and the meet's split flip a near-tie expert run
+// to run), its n-gram conv ring after the continuation row for row against the CPU chain's, a zeroed ring the control. Skips: no
+// file, no armed tier, DASLLAMA_VK_KV32=1 (the f32 mirror passes every f16 session as codec).
+
+let private ROUTED_WIDE_BAR_REL = 0.5   //! a routed carrier's device run against itself reads up to 20%: the bar holds the routing flips, the ring compare carries the teeth
+let private RING_BAR_REL = 0.02         //! the device's n-gram ring against the CPU chain's: the window's rows and the side rows rounded once each
+let private HALF = 48l                  //! past the hot pool's 32-row window floor on a routed carrier
+
+[test(description = "On Qwen3.8-Flash-Next under the whole-model driver, continuations in place and from an adopted checkpoint stay within the wide routed bar of the whole prompt, every prefill on the device, and the n-gram conv ring matches the CPU chain's within 2 percent while a zeroed ring misses")]
+def test_gpu_resident_continuation_hc(t : T?) {
+    t |> run("Qwen3.8-Flash-Next: a prompt continued from its position on the device, and from an adopted checkpoint, against one window; the n-gram ring against the CPU chain's") @(t : T?) {
+        return if (!family_on(t, "qwen35"))
+        let path = path_join(models_dir(), FN_TRUNK)
+        if (!hc_ready(t, false)) return
+        var tr <- load_resident_host(path)   //! the CPU ring chain below reads the host's planes
+        t |> success(tr.config.hyper_conn && has_ple_ngram(tr.config), "the carrier is the hyper-connection model with the n-gram side input the continuation hands off")
+        t |> success(moe_gpu_resident_active(), "the whole-model driver armed on it (the load log names any decline)")
+        with_dasllama_jobque_() {
+            var prompt <- resident_prompt(2l * HALF)
+            var first <- [for (i in range64(HALF)); prompt[i]]
+            var rest <- [for (i in range64(HALF, 2l * HALF)); prompt[i]]
+            let served0 = gpu_resident_prefills_()
+            var whole <- prefill_row(tr, prompt, 2l * HALF, mirror_kv_dtype())
+            var sc <- create_session(tr, mirror_kv_dtype())
+            forward_prefill(tr, sc, first, HALF, 0l)
+            sc.n_past = HALF
+            forward_prefill(tr, sc, rest, HALF, HALF)
+            t |> equal(gpu_resident_prefills_(), served0 + 3l, "the window chain served every prefill: the whole prompt, the first half and its continuation (none passed to the CPU rails)")
+            served_every_call(t)
+            var cont <- [for (x in sc.logits); x]
+            var into : DnSnapshot
+            var snap <- gpu_device_kv_snapshot(sc, 2l * HALF, into)
+            t |> equal(snap.pos, 2l * HALF, "the device's snapshot stands at the continuation's end")
+            var ring := snap.ple_hist
+            delete snap
+            delete sc
+            var adopted <- adopted_row(t, tr, prompt, HALF)
+            let wide = row_bar(whole, ROUTED_WIDE_BAR_REL)
+            row_within_say(t, tr, "the continuation from the first half's position against the whole prompt", cont, whole, wide)
+            row_within_say(t, tr, "the continuation from the adopted checkpoint against the whole prompt", adopted, whole, wide)
+            row_within_say(t, tr, "the continuation from the adopted checkpoint against the one continued in place", adopted, cont, wide)
+            //! the ring's teeth: the CPU chain's ring over the same prompt, the device dropped so the chain runs on the host
+            moe_gpu_drop_model()
+            var sh <- create_session(tr, mirror_kv_dtype())
+            forward_prefill(tr, sh, prompt, 2l * HALF, 0l)
+            t |> equal(long_length(ring), long_length(sh.ple_conv_hist), "the device's ring and the host's hold the same rows")
+            let ring_bar = row_bar(sh.ple_conv_hist, RING_BAR_REL)
+            row_within(t, "the n-gram conv ring after the continuation against the CPU chain's", ring, sh.ple_conv_hist, ring_bar)
+            var zeroed : array<float>
+            zeroed |> resize(long_length(ring))
+            control_past(t, "the n-gram conv ring", ring, zeroed, ring_bar)
+            delete zeroed
+            delete sh
+            delete adopted
+            delete ring
+            delete cont
+            delete whole
+            delete rest
+            delete first
+            delete prompt
         }
         delete tr
     }

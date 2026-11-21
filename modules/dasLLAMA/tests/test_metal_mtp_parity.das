@@ -770,7 +770,15 @@ def private restore_knobs(prior_backend : string; prior_wscale : bool) {
     set_wscale_f16(prior_wscale)
 }
 
-def private run_fixture(t : T?; file, tag : string; tol : float = FF_TOL) {   // nolint:LINT012,LINT019 — the body is the das_metal half
+//! whether the arm `stem` of fixture `tag` runs on this load: an arm
+//! of `held` (a comma list of stems) runs on the whole file alone
+//! (`on_whole`), every other arm on the load the fixture names
+def private fixture_arm(t : T?; stem, tag, held : string; on_whole : bool) : bool => list_names(held, stem) == on_whole && arm_on(t, "{stem}-{tag}")
+
+//! `blocks` past 0: the trunk blocks a cut's name claims, asserted on the load; `held` the arms
+//! a cut leaves on its whole file, which `on_whole` runs alone (`fixture_arm`)
+def private run_fixture(t : T?; file, tag : string; tol : float = FF_TOL; blocks : int64 = 0l;
+                        held : string = ""; on_whole : bool = false) {   // nolint:LINT012,LINT019 — the body is the das_metal half
     static_if (typeinfo builtin_module_exists(das_metal)) {
         let path = path_join(models_dir(), file)
         if (!model_available(t, path)) {
@@ -783,6 +791,9 @@ def private run_fixture(t : T?; file, tag : string; tol : float = FF_TOL) {   //
         set_mtp_spec(true)
         var tr <- load_model_(path, QuantMode.q8)
         tr.config.seq_len = min(tr.config.seq_len, 512l)
+        if (blocks > 0l) {
+            cut_within(t, "{file}: ", tr, blocks)
+        }
         if (tr.config.n_layer_nextn <= 0l) {
             t |> failure("{file}: no NextN draft head - wrong fixture")
             delete tr
@@ -799,14 +810,14 @@ def private run_fixture(t : T?; file, tag : string; tol : float = FF_TOL) {   //
             delete trg
             return
         }
-        if (arm_on(t, "mtp-census-{tag}")) {
+        if (fixture_arm(t, "mtp-census", tag, held, on_whole)) {
             var inscope any_sites : array<string>
             census_cell(t, trg, path, "{tag} served twin", any_sites)   //! the file's formats are the ones the rail serves: every site in its own
         }
         var prose_a <- encode(tr, PROSE_A, true, false)
         var prose_b <- encode(tr, PROSE_B, true, false)
         var count <- encode(tr, counting_prompt(1, 40), true, false)
-        run_arms(t, tr, trg, tag, prose_a, prose_b, count, tol)
+        run_arms(t, tr, trg, tag, prose_a, prose_b, count, tol, held, on_whole)
         metal_decode_shutdown()
         metal_prefill_shutdown()   // the pairs prefill on the GPU - its panels release here too
         set_mtp_spec(false)
@@ -823,10 +834,11 @@ def private run_fixture(t : T?; file, tag : string; tol : float = FF_TOL) {   //
 }
 
 // the fixture's arms, one gate each
-def private run_arms(t : T?; tr, trg : Model; tag : string; prose_a, prose_b, count : array<int64>; tol : float = FF_TOL) {   // nolint:LINT012,LINT019 — the body is the das_metal half
+def private run_arms(t : T?; tr, trg : Model; tag : string; prose_a, prose_b, count : array<int64>; tol : float = FF_TOL;
+                     held : string = ""; on_whole : bool = false) {   // nolint:LINT012,LINT019 — the body is the das_metal half
     static_if (typeinfo builtin_module_exists(das_metal)) {
         // control: plain vs plain on the GPU, the SAME feeds - the harness must read exactly zero
-        if (arm_on(t, "mtp-ctrl-{tag}")) {
+        if (fixture_arm(t, "mtp-ctrl", tag, held, on_whole)) {
             let st = ff_pair(tr, trg, prose_a, 16l, false)
             if (st.served == 0l) {
                 t |> failure("{tag} control: the metal decode declined a served carrier's steps")
@@ -836,31 +848,31 @@ def private run_arms(t : T?; tr, trg : Model; tag : string; prose_a, prose_b, co
         }
 
         // forced-feed: the verify's row 0 vs the plain step, identical tokens every round
-        if (arm_on(t, "mtp-ff-{tag}")) {
+        if (fixture_arm(t, "mtp-ff", tag, held, on_whole)) {
             ff_cell(t, tr, trg, tag, "prose-a", prose_a, 1l, tol)
             ff_cell(t, tr, trg, tag, "prose-b", prose_b, 1l, tol)
         }
 
         // the batch-rail same-slab verify (the gemma drafter's verify) vs plain steps, GPU-vs-GPU
         //! a hyper-connection carrier's same-slab rows are one session, which the rail declines as `graph`
-        if (arm_on(t, "mtp-vff-{tag}")) {
+        if (fixture_arm(t, "mtp-vff", tag, held, on_whole)) {
             vff_cell(t, tr, trg, tag, prose_a, FF_TOL, 4l, trg.config.hyper_conn ? "graph" : "")
         }
 
-        if (arm_on(t, "mtp-warm-{tag}")) {
+        if (fixture_arm(t, "mtp-warm", tag, held, on_whole)) {
             warm_cell(t, trg, tag, prose_a)
         }
 
         // depth N under forced reject: every round verifies k+1 rows and replays row 0 from the
         // pre-verify recurrent state - the rollback path exercised on every single round
-        if (arm_on(t, "mtp-ffk-{tag}")) {
+        if (fixture_arm(t, "mtp-ffk", tag, held, on_whole)) {
             ff_cell(t, tr, trg, "{tag} k2", "prose-a", prose_a, 2l, tol)
             ff_cell(t, tr, trg, "{tag} k4", "prose-b", prose_b, 4l, tol)
         }
 
         // counting: free-running speculation == free-running plain, token for token, at depth 1
         // and at depth 4 (full accepts, partial accepts and rejects all land on the counting stream)
-        if (arm_on(t, "mtp-count-{tag}")) {
+        if (fixture_arm(t, "mtp-count", tag, held, on_whole)) {
             count_cell(t, tr, trg, tag, count, 1l)
             count_cell(t, tr, trg, tag, count, 2l)
             count_cell(t, tr, trg, tag, count, 4l)
@@ -868,29 +880,29 @@ def private run_arms(t : T?; tr, trg : Model; tag : string; prose_a, prose_b, co
 
         // the deepest round: depth 8 verifies MTP_MAX_ROWS rows, one past the eight-row GEMV rail
         //! the round on every other mirror codec: the verify's rows store and read the session's codec, drafts accepted
-        if (arm_on(t, "mtp-codec-{tag}")) {
+        if (fixture_arm(t, "mtp-codec", tag, held, on_whole)) {
             for (kdt in [KVDtype.q8_0, KVDtype.tq4, KVDtype.f32]) {
                 let drafted = count_cell(t, tr, trg, "{tag} {kdt}", count, 2l, false, kdt)
                 t |> success(drafted > 0l && g_last_accepted > 0l, "{tag} {kdt}: the verify accepted drafts on the codec's mirror ({g_last_accepted} of {drafted})")
             }
         }
 
-        if (arm_on(t, "mtp-count8-{tag}")) {
+        if (fixture_arm(t, "mtp-count8", tag, held, on_whole)) {
             count_cell(t, tr, trg, tag, count, 8l)
         }
 
         // the half-x crowns over the verify's K-quant sites, the MTP head's among them
-        if (arm_on(t, "mtp-ffh-{tag}")) {
+        if (fixture_arm(t, "mtp-ffh", tag, held, on_whole)) {
             half_crown_cell(t, tr, trg, tag, count)
         }
 
         // the sampled walk: every verify row drawn through the session's sampler, seeded - free-run == plain sampled free-run
-        if (arm_on(t, "mtp-sampled-{tag}")) {
+        if (fixture_arm(t, "mtp-sampled", tag, held, on_whole)) {
             count_cell(t, tr, trg, tag, count, 1l, true)
             count_cell(t, tr, trg, tag, count, 2l, true)
         }
 
-        if (arm_on(t, "mtp-select-{tag}")) {
+        if (fixture_arm(t, "mtp-select", tag, held, on_whole)) {
             select_cell(t, trg, tag, count)
         }
     }
@@ -961,20 +973,40 @@ def test_metal_mtp_parity_27b(t : T?) {
     }
 }
 
-[test(description = "On the Qwen3.6-35B-A3B-MTP UD-Q4_K_M MoE carrier the Metal MTP rail's verify rows stay within 0.5 of the plain GPU step on forced feed, and speculative free-run emits the plain run's tokens exactly.")]
+[test(description = "On Qwen3.6-35B-A3B-4L-MTP UD-Q4_K_M, the MoE carrier's four-block cut with its NextN block, the Metal MTP rail's verify rows stay within 0.5 of the plain GPU step on forced feed, and speculative free-run emits the plain run's tokens exactly.")]
 def test_metal_mtp_parity_35b(t : T?) {
-    t |> run("metal MTP rail vs plain GPU decode - Qwen3.6-35B-A3B-MTP-UD-Q4_K_M (large tier)") <| @(t : T?) {
-        run_fixture(t, "Qwen3.6-35B-A3B-MTP-UD-Q4_K_M.gguf", "35b")
+    t |> run("metal MTP rail vs plain GPU decode - Qwen3.6-35B-A3B-4L-MTP-UD-Q4_K_M") <| @(t : T?) {
+        run_fixture(t, "Qwen3.6-35B-A3B-4L-MTP-UD-Q4_K_M-local.gguf", "35b", FF_TOL, 4l, HELD_35B)
     }
 }
 
-//! the format census's carrier: every big plane IQ4_XS on disk, the routed NextN head's eh_proj and expert stacks among them; the
+//! the arms the 35B cuts leave on their whole files (the qwen35moe-35b category), read on the M5 Max:
+//! the sampled selection - top-p 0.9 over a cut's flat rows reaches past the landing (34 late
+//! landings on the UD-Q4_K_M cut, 37 on the IQ4_XS one) and the streams part; the codec rounds -
+//! the verify accepts none of a cut's 80 drafts on the q8_0, tq4 and f32 mirrors, and the tq4
+//! counting walk at depth 2 parts from plain at token 23; and on the IQ4_XS cut the forced feeds
+//! (`mtp-ff`, `mtp-ffk`) - prose-b's row one step off sits 0.21 from the verify row, inside the
+//! 2.0 MoE bar, so the control cannot separate
+let private HELD_35B = "mtp-select,mtp-codec"
+let private HELD_35B_IQ4XS = "mtp-select,mtp-codec,mtp-ff,mtp-ffk"
+
+[test(description = "On the whole Qwen3.6-35B-A3B-MTP UD-Q4_K_M and IQ4_XS-pure carriers the arms their four-block cuts cannot hold: a seeded sampled speculative stream with the selection landed matching the rows-landed stream, the verify accepting drafts on every other mirror codec with speculative counting equal to plain, and on the IQ4_XS file the forced-feed verify rows within the 2.0 MoE bar of the plain GPU step at depths 1, 2 and 4.")]
+def test_metal_mtp_parity_35b_whole(t : T?) {
+    t |> run("metal MTP rail, the whole file's arms - Qwen3.6-35B-A3B-MTP-UD-Q4_K_M") <| @(t : T?) {
+        run_fixture(t, "Qwen3.6-35B-A3B-MTP-UD-Q4_K_M.gguf", "35b", FF_TOL, 0l, HELD_35B, true)
+    }
+    t |> run("metal MTP rail, the whole file's arms - Qwen3.6-35B-A3B-MTP-IQ4_XS-pure") <| @(t : T?) {
+        run_fixture(t, "Qwen3.6-35B-A3B-MTP-IQ4_XS-pure.gguf", "35b-iq4xs", MOE_FF_TOL, 0l, HELD_35B_IQ4XS, true)
+    }
+}
+
+//! the format census's carrier's four-block cut: every big plane IQ4_XS on disk, the routed NextN head's eh_proj and expert stacks among them; the
 //! MoE bar, since its plain step (the fat chain) and the verify's rows (the routed pair) sum the routed experts in two fused
 //! orders - prose-b reads 0.65 with zero argmax flips
-[test(description = "On the all-IQ4_XS Qwen3.6-35B-A3B-MTP carrier every served site keeps its own format by census, the verify rows hold the plain GPU step within the 2.0 MoE bar, and speculative free-run matches plain exactly.")]
+[test(description = "On Qwen3.6-35B-A3B-4L-MTP IQ4_XS-pure, the all-IQ4_XS carrier's four-block cut with its NextN block, every served site keeps its own format by census, plain-vs-plain forced feed reads zero, and speculative free-run matches plain exactly (the forced-feed verify rows are the whole file's).")]
 def test_metal_mtp_parity_35b_iq4xs(t : T?) {
-    t |> run("metal MTP rail vs plain GPU decode - Qwen3.6-35B-A3B-MTP-IQ4_XS-pure (large tier)") <| @(t : T?) {
-        run_fixture(t, "Qwen3.6-35B-A3B-MTP-IQ4_XS-pure.gguf", "35b-iq4xs", MOE_FF_TOL)
+    t |> run("metal MTP rail vs plain GPU decode - Qwen3.6-35B-A3B-4L-MTP-IQ4_XS-pure") <| @(t : T?) {
+        run_fixture(t, "Qwen3.6-35B-A3B-4L-MTP-IQ4_XS-pure-local.gguf", "35b-iq4xs", MOE_FF_TOL, 4l, HELD_35B_IQ4XS)
     }
 }
 
@@ -1101,7 +1133,8 @@ def private verify_arms(tag : string) : array<string> {
 }
 
 [cold_path]
-def private run_verify_fixture(t : T?; file, tag : string; tol : float; expect_decline : string = ""; count_agree : int64 = COUNT_STEPS) {   // nolint:LINT012,LINT019 — the body is the das_metal half
+def private run_verify_fixture(t : T?; file, tag : string; tol : float; expect_decline : string = ""; count_agree : int64 = COUNT_STEPS;
+                               blocks : int64 = 0l) {    // nolint:LINT012,LINT019 — the body is the das_metal half
     static_if (typeinfo builtin_module_exists(das_metal)) {
         var inscope arms <- verify_arms(tag)
         return if (!arms_on(t, arms))
@@ -1115,6 +1148,9 @@ def private run_verify_fixture(t : T?; file, tag : string; tol : float; expect_d
         pin_kernel_backend("portable")
         var tr <- load_model_(path, QuantMode.q8)
         tr.config.seq_len = min(tr.config.seq_len, 512l)
+        if (blocks > 0l) {
+            cut_within(t, "{file}: ", tr, blocks)
+        }
         var trg <- served_twin(path, 512l)
         if (!trg.metal_blob) {
             t |> failure("{file}: the served image is not the metal-blob flavor - the Metal mode's load declined a carrier the box holds")
@@ -1191,7 +1227,7 @@ def test_metal_verify_gemma26(t : T?) {
 def test_metal_verify_gemma26_cut(t : T?) {
     t |> run("batch-rail same-slab verify vs plain GPU decode - gemma-4-26B-A4B-6L-Q4_K_M-local") <| @(t : T?) {
         return if (!family_on(t, "gemma4moe"))
-        run_verify_fixture(t, "gemma-4-26B-A4B-6L-Q4_K_M-local.gguf", "g26", G26_CUT_TOL)
+        run_verify_fixture(t, "gemma-4-26B-A4B-6L-Q4_K_M-local.gguf", "g26", G26_CUT_TOL, blocks = 6l)
     }
 }
 
@@ -1214,7 +1250,7 @@ let private G26_CUT_TOL = 2.0
 [test(description = "On gemma-4-12B-12L Q4_K_M the batch rail serves the same-slab verify with no decline, its rows and distinct-session steps within 6.0 of the plain GPU step on the cut's thousand-logit rows.")]
 def test_metal_verify_gemma12(t : T?) {
     t |> run("batch-rail same-slab verify vs plain GPU decode - gemma-4-12B-12L-Q4_K_M-local") <| @(t : T?) {
-        run_verify_fixture(t, "gemma-4-12B-12L-Q4_K_M-local.gguf", "g12", G12_CUT_TOL)
+        run_verify_fixture(t, "gemma-4-12B-12L-Q4_K_M-local.gguf", "g12", G12_CUT_TOL, blocks = 12l)
     }
 }
 
@@ -1229,9 +1265,9 @@ def test_metal_verify_qwen38_27b(t : T?) {
 }
 
 // plain-MoE control (qwen3moe: routed experts, no parallel dense branch) for the gemma-MoE cell
-[test(description = "The plain-MoE control Qwen3-30B-A3B Q4_K_M: the batch rail's same-slab verify rows and distinct-session steps hold the plain GPU step within the 2.0 MoE bar, against which the gemma-MoE cell is read.")]
+[test(description = "The plain-MoE control Qwen3-30B-A3B-7L Q4_K_M, the seven-block cut: the batch rail's same-slab verify rows and distinct-session steps hold the plain GPU step within the 2.0 MoE bar, against which the gemma-MoE cell is read.")]
 def test_metal_verify_qwen30a3(t : T?) {
-    t |> run("batch-rail same-slab verify vs plain GPU decode - Qwen3-30B-A3B-Instruct-2507-Q4_K_M (large tier)") <| @(t : T?) {
-        run_verify_fixture(t, "Qwen3-30B-A3B-Instruct-2507-Q4_K_M.gguf", "q30", 2.0)
+    t |> run("batch-rail same-slab verify vs plain GPU decode - Qwen3-30B-A3B-7L-Q4_K_M") <| @(t : T?) {
+        run_verify_fixture(t, "Qwen3-30B-A3B-7L-Q4_K_M-local.gguf", "q30", 2.0, blocks = 7l)
     }
 }

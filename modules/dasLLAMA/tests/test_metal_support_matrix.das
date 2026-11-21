@@ -2380,7 +2380,8 @@ def test_metal_family_matrix(t : T?) {
             gemma4_hetero_row(t, path_join(models_dir(), "gemma-4-31B-it-Q4_K_M.gguf"), "gemma4-31b/k4", 29l)
             // qwen3moe (Wave C): qwen3 attention + GPU MoE routing — router + top-k select +
             // expert-indexed GEMVs (decode/batch) + gathered mul_mm prefill (k4 gate/up, k6
-            // down). All three paths ENGAGE; 18.5GB > the 6GiB tier — DASLLAMA_PARITY_FULL-gated.
+            // down). All three paths ENGAGE; the whole file, the qwen3moe-30b category's: the
+            // row's generate holds token parity, which a seven-block cut's text cannot carry.
             family_cells(t, path_join(models_dir(), "Qwen3-30B-A3B-Instruct-2507-Q4_K_M.gguf"), "qwen3moe",
                 "qwen3moe-30b/k4/f16", uint(MetalNeed.neox | MetalNeed.qk_norm | MetalNeed.qd_neq_dim),
                 "", KVDtype.f16, 6.0)
@@ -2435,13 +2436,16 @@ def test_metal_family_matrix(t : T?) {
                 "qwen35-0.8b/q8/f16", uint(MetalNeed.neox | MetalNeed.qk_norm | MetalNeed.qd_neq_dim |
                     MetalNeed.partial_rope | MetalNeed.q_gated), 4.0)
             // qwen35moe (Wave D stage 3): deltanet + grouped MoE + the sigmoid-gated shared
-            // expert + f32-on-disk β/α — the whole-surface hybrid MoE. 22GB > the 6GiB tier —
-            // DASLLAMA_PARITY_FULL-gated.
+            // expert + f32-on-disk β/α — the whole-surface hybrid MoE. The whole file, the
+            // qwen35moe-35b category's: the row's generate matches the CPU truth token for
+            // token, which a cut's flat rows cannot hold.
             qwen35_row(t, path_join(models_dir(), "Qwen3.6-35B-A3B-UD-Q4_K_M.gguf"), "qwen35moe",
                 "qwen35moe-35b/k4/f16", uint(MetalNeed.neox | MetalNeed.qk_norm | MetalNeed.qd_neq_dim |
                     MetalNeed.partial_rope | MetalNeed.q_gated), 6.0)
             // qwen2moe (Wave D ride-along): softmax-no-renorm select + sigmoid shexp on std
-            // attention; prefill, decode and the batched step serve. 15GB — DASLLAMA_PARITY_FULL-gated.
+            // attention; prefill, decode and the batched step serve. The whole file, the
+            // qwen15-moe category's: on the four-block cut the batch cell's cross-row control
+            // reads inside its compare (5.37 against 5.42), so the cut holds nothing for it.
             qwen2moe_row(t, path_join(models_dir(), "Qwen1.5-MoE-A2.7B-Chat.Q8_0.gguf"))
             // qwen4exp (Qwen3.8-Flash-Next UD-IQ4_XS, three shards and its split head, 97 GB): served-only against the
             // file's frozen counting fixture - DASLLAMA_PARITY_FULL-gated

@@ -503,11 +503,61 @@ def test_model_categories(t : T?) {
     for (cut in fixed_array("gpt-oss-4L-mxfp4-local.gguf", "gemma-4-12B-12L-Q4_K_M-local.gguf",
             "gemma-4-12B-12L-Q8_0-local.gguf", "gemma-4-26B-A4B-6L-Q4_K_M-local.gguf",
             "gemma-4-26B-A4B-6L-Q8_0-local.gguf", "gemma-4-26B-A4B-6L-Q4_0-local.gguf",
-            "gemma-4-26B-A4B-6L-UD-IQ3_XXS-local.gguf", "gemma-4-26B-A4B-6L-MXFP4_MOE-local.gguf")) {
+            "gemma-4-26B-A4B-6L-UD-IQ3_XXS-local.gguf", "gemma-4-26B-A4B-6L-MXFP4_MOE-local.gguf",
+            "Qwen3.8-27B-8L-i1-IQ3_S-local.gguf", "Qwen3.8-27B-8L-UD-Q3_K_XL-local.gguf",
+            "Qwen1.5-MoE-A2.7B-4L-Q8_0-local.gguf", "Qwen1.5-MoE-A2.7B-4L-Q4_K_M-local.gguf",
+            "Qwen1.5-MoE-A2.7B-4L-Q5_1-local.gguf", "Qwen1.5-MoE-A2.7B-4L-Q5_0-pure-local.gguf",
+            "Qwen1.5-MoE-A2.7B-4L-Q4_0-local.gguf", "Qwen3-30B-A3B-7L-Q4_K_M-local.gguf",
+            "Qwen3-30B-A3B-7L-UD-IQ2_XXS-local.gguf", "Qwen3-30B-A3B-7L-UD-Q3_K_XL-local.gguf",
+            "Qwen3-30B-A3B-7L-NVFP4-pure-local.gguf", "Qwen3.6-35B-A3B-4L-UD-Q4_K_M-local.gguf",
+            "Qwen3.6-35B-A3B-4L-MTP-UD-Q4_K_M-local.gguf", "Qwen3.6-35B-A3B-4L-MTP-IQ4_XS-pure-local.gguf",
+            "Qwen3.6-35B-A3B-4L-UD-IQ3_S-local.gguf", "Qwen3.6-35B-A3B-4L-UD-IQ2_XXS-local.gguf")) {
         t |> equal(model_category(cut), "", "{cut}, a cut of a category's file, is no category's: every run opens it")
     }
     t |> equal(model_category("gpt-oss-20b-mxfp4.gguf"), "gptoss-20b", "the file a cut is made from stays its category's")
     t |> equal(model_category("gemma-4-26B_q4_0-it.gguf"), "gemma4-moe", "the 26B's Q4_0 file is the routed category's")
+    for (whole in fixed_array("Qwen1.5-MoE-A2.7B-Chat.Q8_0.gguf", "Qwen1.5-MoE-A2.7B-Chat-Q4_K_M-local.gguf",
+            "moe-formats/Qwen1.5-MoE-A2.7B-Chat-exps-Q4_K.gguf")) {
+        t |> equal(model_category(whole), "qwen15-moe", "{whole}, a whole Qwen1.5-MoE file or one minted off it, is the category's")
+    }
+    for (whole in fixed_array("Qwen3-30B-A3B-Instruct-2507-Q4_K_M.gguf", "Qwen3-30B-A3B-Instruct-2507-UD-IQ2_XXS.gguf")) {
+        t |> equal(model_category(whole), "qwen3moe-30b", "{whole}, a whole 30B file, is the category's")
+    }
+    for (whole in fixed_array("Qwen3.6-35B-A3B-UD-IQ2_XXS.gguf", "Qwen3.6-35B-A3B-UD-Q4_K_M.gguf",
+            "Qwen3.6-35B-A3B-MTP-UD-Q4_K_M.gguf", "Qwen3.6-35B-A3B-MTP-IQ4_XS-pure.gguf", "Qwen3.6-35B-A3B-NVFP4.gguf")) {
+        t |> equal(model_category(whole), "qwen35moe-35b", "{whole}, a whole 35B file, is the category's")
+    }
+    t |> equal(model_family("Qwen3.6-35B-A3B-4L-MTP-IQ4_XS-pure-local.gguf"), "qwen35moe", "the 35B's cut keeps its family")
+    t |> equal(model_category("Qwen3.5-4B-Q8_0.gguf"), "qwen35-4b", "the hybrid's 4B shape is its category's")
+    t |> equal(model_category("Qwen3.5-0.8B-MTP-Q8_0.gguf"), "", "... and the hybrid's 0.8B carrier is in none")
+    t |> equal(model_category("Qwen3.5-9B-MTP-UD-Q5_K_XL.gguf"), "qwen35-9b", "the 9B's K-quant hybrid is its category's")
+    t |> equal(model_category("Qwen3.8-27B.i1-IQ3_S.gguf"), "qwen35-27b", "a 27B hybrid is the 27B category's")
+    t |> equal(model_category("mtp-Qwen3.8-27B-Q8_0.gguf"), "qwen35-27b", "... and so is its NextN head file")
+    for (whole in fixed_array("Qwen3.8-27B.i1-IQ3_S.gguf", "Qwen3.8-27B-UD-Q3_K_XL.gguf", "Qwen3.8-27B-Q4_K_M.gguf",
+            "Qwen3.8-27B-UD-IQ4_XS.gguf", "Qwen3.8-27B-4bit", "Qwen3.8-27B-DFlash2-Q8_0.gguf", "Qwen3.6-27B-MTP-Q4_K_M.gguf")) {
+        t |> equal(model_category(whole), "qwen35-27b", "{whole}, a whole 27B file, stays the 27B category's")
+    }
+    t |> equal(model_category("Qwen3.8-Flash-Next-UD-IQ4_XS-00001-of-00003.gguf"), "", "the Flash-Next trunk, under the same 3.8 prefix, is no category's")
+    t |> equal(model_category("Qwen3-4B-Instruct-2507-Q8_0.gguf"), "qwen3-4b", "the dense qwen3's 4B shape is its category's")
+    //! a format carrier is no category's: its cells claim a format the family's small carrier lacks, so every per-PR run
+    //! opens it - a category holds a larger model on the small carrier's own path
+    t |> equal(model_category("Qwen3-4B-Instruct-2507-Q4_K_M.gguf"), "", "the 4B's K-quant files are format carriers, in no category")
+    t |> equal(model_category("Qwen3-4B-Instruct-2507-Q5_K_M.gguf"), "", "... the Q5_K_M as the Q4_K_M")
+    t |> equal(model_category("Qwen3-4B-Instruct-2507-Q6_K.gguf"), "", "... and every other 4B format past the Q8_0")
+    t |> equal(model_category("Qwen3.5-0.8B-Q4_K_M.gguf"), "", "the hybrid's K-quant twin is in none")
+    t |> equal(model_category("Qwen3-0.6B-Q8_0.gguf"), "", "... and the dense qwen3's 0.6B carrier is in none")
+    for (carrier in fixed_array("Qwen1.5-MoE-A2.7B-4L-Q5_1-local.gguf", "Qwen1.5-MoE-A2.7B-4L-Q5_0-pure-local.gguf",
+            "Qwen1.5-MoE-A2.7B-4L-Q4_0-local.gguf")) {
+        t |> equal(model_category(carrier), "", "{carrier}, a per-32 format carrier's cut, is in none")
+    }
+    for (carrier in fixed_array("Qwen3-30B-A3B-7L-NVFP4-pure-local.gguf", "Qwen3-30B-A3B-7L-UD-IQ2_XXS-local.gguf",
+            "Qwen3-30B-A3B-7L-UD-Q3_K_XL-local.gguf")) {
+        t |> equal(model_category(carrier), "", "{carrier}, the 30B's format carrier cut, is in none")
+    }
+    for (carrier in fixed_array("Qwen3.6-35B-A3B-4L-MTP-IQ4_XS-pure-local.gguf", "Qwen3.6-35B-A3B-4L-UD-IQ3_S-local.gguf",
+            "Qwen3.6-35B-A3B-4L-UD-IQ2_XXS-local.gguf")) {
+        t |> equal(model_category(carrier), "", "{carrier}, the 35B's format carrier cut, is in none")
+    }
     t |> equal(model_family("gemma-4-26B-A4B-6L-Q4_K_M-local.gguf"), "gemma4moe", "a cut keeps its family")
     t |> success(find(category_skip_reason("gemma-4-E4B-it-Q8_0", ""), "--category gemma4-e4b") >= 0, "a run that names none leaves a category's file, the reason naming the flag")
     t |> equal(category_skip_reason("gemma-4-E2B-it-Q8_0", ""), "", "... and opens a model of no category")

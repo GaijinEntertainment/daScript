@@ -50,18 +50,6 @@ def cuda_mmq_name(v : int64) : string {
     return "CUDA_MMQ_UNPINNED"
 }
 
-//! true where the CUDA home is asked for and its card carries the FP4 tensor rung; else the cell has registered the skip
-//! naming why and its caller returns
-def fp4_rung_on(t : T?) : bool {
-    return false if (!cuda_home_asked(t))
-    let why = fp4_rung_why()
-    if (!empty(why)) {
-        t |> skip(why)
-        return false
-    }
-    return true
-}
-
 //! why the card the CUDA home arms carries no FP4 tensor rung; ""
 //! where it does
 def fp4_rung_why() : string {

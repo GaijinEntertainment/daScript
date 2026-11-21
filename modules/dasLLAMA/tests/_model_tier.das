@@ -102,6 +102,10 @@ def llama2c_dir() : string => root_or(g_env_test.llama2c_dir, "/Users/borisbatki
 // modules/dasLLAMA/tests/run.das — see modules/dasLLAMA/tests/CLAUDE.md.
 def arm_on(t : T?; name : string) : bool => filter_on(t, g_env_test.test_arms, "DASLLAMA_TEST_ARMS", "arm", name, false)
 
+//! `arm_on` with no skip registered: why the arm filter leaves the arm `name` out, "" where the arm runs - for a block whose
+//! other cells run whatever the filter says, the arm's cell held as a skip
+def arm_why(name : string) : string => filter_why(g_env_test.test_arms, "DASLLAMA_TEST_ARMS", "arm", name, false)
+
 // Family filter for the model-loading suites: DASLLAMA_TEST_FAMILY = comma-separated family
 // tokens (the list is CLAUDE.md's family filter section) matched EXACTLY — not
 // substrings, so "llama" can never accidentally select a non-llama block. When set, only blocks tagged with a
@@ -123,9 +127,17 @@ def private token_in(filter, name : string) : bool {
 //! true when `filter` (the comma list `env` holds) is empty or one of its stripped tokens matches `name` - equal to it
 //! when `exact`, a substring of it otherwise; else the cell has registered the loud skip naming `what`
 def private filter_on(t : T?; filter, env, what, name : string; exact : bool) : bool {
-    return true if (empty(filter) || (exact ? list_names(filter, name) : token_in(filter, name)))
-    t |> skip("{what} '{name}' filtered out ({env}={filter})")
+    let why = filter_why(filter, env, what, name, exact)
+    return true if (empty(why))
+    t |> skip(why)
     return false
+}
+
+//! why the filter `filter` (the environment's `env`) leaves the `what` `name` out - matched exactly or as a token - "" where
+//! it runs
+def private filter_why(filter, env, what, name : string; exact : bool) : string {
+    return "" if (empty(filter) || (exact ? list_names(filter, name) : token_in(filter, name)))
+    return "{what} '{name}' filtered out ({env}={filter})"
 }
 
 //! `arm_on` over every arm one load serves: true where the arm
@@ -156,6 +168,27 @@ def image_tmp_count(path : string) : int {
 }
 
 //! a model loaded without its tokenizer (`load_gguf`) logs the ids themselves, since there is no vocabulary to decode them through
+//! a cut's claims off its load: the trunk blocks its name states and, where `arch` is named, its family; `cut_within`
+//! asserts them on a cell, `cut_held` (`_resident_feed.das`) collects them into a block's recorder
+def cut_claim(m : Model; blocks : int64; arch : string = "") : tuple<ok : bool; msg : string> {
+    let family = empty(arch) ? "" : ", a {arch}-family model ({m.arch})"
+    return (ok = m.config.n_layers == blocks && (empty(arch) || m.arch == arch),
+        msg = "the cut holds the {blocks} trunk blocks its name claims ({m.config.n_layers} loaded){family}")
+}
+
+//! `cut_claim` asserted on `t`, `tag` opening its message
+def cut_within(t : T?; tag : string; m : Model; blocks : int64; arch : string = "") {
+    let c = cut_claim(m, blocks, arch)
+    t |> success(c.ok, "{tag}{c.msg}")
+}
+
+//! `id` decoded into `pieces` once - the readable side of a compare's log; an id outside the vocabulary keeps nothing
+def keep_piece(var pieces : table<int64; string>; m : Model; id : int64) {
+    if (id >= 0l && id < m.config.vocab_size && !key_exists(pieces, id)) {
+        pieces |> insert(id, decode_(m, [id]))
+    }
+}
+
 def eyeball_text(m : Model; ids : array<int64>) : string => m.tok.kind == TokKind.unset ? "ids {ids}" : eyeball_str(decode_(m, ids))
 
 def log_gen_texts(m : Model; tag : string; cpu_ids, gpu_ids : array<int64>) {

@@ -1574,7 +1574,7 @@ def private hmm_split_dispatches() : int64 => stamp_dispatches("MetalHalfMulMm",
 //! windows with the form off (the tiles) logged beside it, and the control a window whose last token differs landing
 //! outside the bar.
 [cold_path]
-def private short_window_cells(t : T?; path, tag : string; bar : float; form : ShortForm; carrier : Carrier) {   // nolint:STYLE037,STYLE038,LINT019 — one cell: load, the four windows' route/tiles/control legs, the knob restores
+def private short_window_cells(t : T?; path, tag : string; bar : float; form : ShortForm; carrier : Carrier; blocks : int64 = 0l) {   // nolint:STYLE037,STYLE038,LINT019 — one cell: load, the four windows' route/tiles/control legs, the knob restores
     static_if (typeinfo builtin_module_exists(das_metal)) {
         return if (!model_available(t, path))
         let prior_wscale = get_wscale_f16()
@@ -1585,6 +1585,9 @@ def private short_window_cells(t : T?; path, tag : string; bar : float; form : S
         set_wscale_f16(false)
         pin_kernel_backend("portable")
         var tr <- load_model_(path, QuantMode.q8)
+        if (blocks > 0l) {
+            cut_within(t, "{tag}: ", tr, blocks)
+        }
         if (tr.config.seq_len > 2048l) {
             tr.config.seq_len = 2048l
         }
@@ -1786,10 +1789,11 @@ def lastrow_ab(t : T?; var trsg : Model; prompt : array<int64>; tag : string; ba
 [test(description = "On gemma-3, gemma-4 and gemma-4-E2B the Metal prefill narrowed last-layer tail keeps logits within 0.05 of the full panel (1.0 on the gemma-4-12B-12L cut's thousand-logit rows) and the same argmax on the whole files, a changed last token lands outside, and keep_hidden restores the full plane bit for bit"), arch(at="../ARCHITECTURE_GPU_PREFILL.md#prefill-last-row-tail")]
 def test_metal_prefill_lastrow_sandwich(t : T?) {
     static_if (typeinfo builtin_module_exists(das_metal)) {
-        for (fam, file, bar, carrier in fixed_array("gemma3", "gemma4", "gemma4e"),
+        for (fam, file, bar, carrier, blocks in fixed_array("gemma3", "gemma4", "gemma4e"),
                 fixed_array("gemma-3-1b-it-Q8_0.gguf", "gemma-4-12B-12L-Q8_0-local.gguf",
                     "gemma-4-E2B-it-Q8_0.gguf"), fixed_array(0.05, 1.0, 0.05),
-                fixed_array(Carrier.whole_file, Carrier.layer_cut, Carrier.whole_file)) {
+                fixed_array(Carrier.whole_file, Carrier.layer_cut, Carrier.whole_file),
+                fixed_array(0l, 12l, 0l)) {
             t |> run("{file}: the narrowed last-layer tail against the full panel's") @(t : T?) {
                 if (!family_on(t, fam) || !arm_on(t, "lastrow-g")) return
                 let path = path_join(models_dir(), file)
@@ -1799,6 +1803,9 @@ def test_metal_prefill_lastrow_sandwich(t : T?) {
                 set_wscale_f16(false)       // the resident path reads the f32 scale plane (declines on s16)
                 pin_kernel_backend("portable")  // ...and row-major weights
                 var tr <- load_model_(path, QuantMode.q8)
+                if (blocks > 0l) {
+                    cut_within(t, "{file}: ", tr, blocks)
+                }
                 var prompt <- encode(tr, counting_prompt(1, 30), true, false)
                 delete tr
                 var trg <- blob_twin(t, path, 2048l)
@@ -1820,22 +1827,32 @@ def test_metal_prefill_lastrow_sandwich(t : T?) {
     }
 }
 
-[test(description = "On q8, K-quant and mx4 MoE models a short Metal prefill window rides the gathered expert route once, its last-row logits within 0.08 to 0.12 of the CPU peak with the same argmax on the whole files, while a changed last token lands outside")]
+[test(description = "On q8, K-quant and mx4 MoE models a short Metal prefill window rides the gathered expert route once, its last-row logits within 0.08 to 0.12 of the CPU peak while a changed last token lands outside: per PR on the Qwen1.5-MoE 4-block, Qwen3-30B 7-block and gpt-oss 4-block cuts, their blocks asserted and their argmax logged; the same argmax as the CPU chain on the whole Qwen1.5-MoE and Qwen3-30B files, the qwen15-moe and qwen3moe-30b categories' cells")]
 def test_metal_prefill_moe_gemv_route(t : T?) {
-    t |> run("the gathered expert route == CPU control on a q8 MoE (Qwen1.5-MoE-A2.7B Q8_0)") <| @(t : T?) {
+    t |> run("the gathered expert route == CPU control on a q8 MoE (Qwen1.5-MoE-A2.7B-4L Q8_0)") <| @(t : T?) {
         if (!family_on(t, "qwen2moe") || !arm_on(t, "moe-gemv")) return
-        short_window_cells(t, path_join(models_dir(), "Qwen1.5-MoE-A2.7B-Chat.Q8_0.gguf"),
-            "moe-gemv/qwen2moe-q8", 0.08, ShortForm.moe_route, Carrier.whole_file)
+        short_window_cells(t, path_join(models_dir(), "Qwen1.5-MoE-A2.7B-4L-Q8_0-local.gguf"),
+            "moe-gemv/qwen2moe-q8", 0.08, ShortForm.moe_route, Carrier.layer_cut, 4l)
     }
-    t |> run("the gathered expert route == CPU control on a K-quant MoE (Qwen3-30B-A3B Q4_K_M)") <| @(t : T?) {
+    t |> run("the gathered expert route == CPU control on a K-quant MoE (Qwen3-30B-A3B-7L Q4_K_M)") <| @(t : T?) {
         if (!family_on(t, "qwen3moe") || !arm_on(t, "moe-gemv")) return
-        short_window_cells(t, path_join(models_dir(), "Qwen3-30B-A3B-Instruct-2507-Q4_K_M.gguf"),
-            "moe-gemv/qwen3moe-k4", 0.10, ShortForm.moe_route, Carrier.whole_file)
+        short_window_cells(t, path_join(models_dir(), "Qwen3-30B-A3B-7L-Q4_K_M-local.gguf"),
+            "moe-gemv/qwen3moe-k4", 0.10, ShortForm.moe_route, Carrier.layer_cut, 7l)
     }
     t |> run("the gathered expert route == CPU control on the mx4 MoE (gpt-oss-4L mxfp4)") <| @(t : T?) {
         if (!family_on(t, "gptoss") || !arm_on(t, "moe-gemv")) return
         short_window_cells(t, path_join(models_dir(), "gpt-oss-4L-mxfp4-local.gguf"),
-            "moe-gemv/gptoss-mx4", 0.12, ShortForm.moe_route, Carrier.layer_cut)
+            "moe-gemv/gptoss-mx4", 0.12, ShortForm.moe_route, Carrier.layer_cut, 4l)
+    }
+    t |> run("the gathered expert route holds the CPU chain's argmax on the whole q8 MoE (Qwen1.5-MoE-A2.7B Q8_0)") <| @(t : T?) {
+        if (!family_on(t, "qwen2moe") || !arm_on(t, "moe-gemv")) return
+        short_window_cells(t, path_join(models_dir(), "Qwen1.5-MoE-A2.7B-Chat.Q8_0.gguf"),
+            "moe-gemv/qwen2moe-q8-whole", 0.08, ShortForm.moe_route, Carrier.whole_file)
+    }
+    t |> run("the gathered expert route holds the CPU chain's argmax on the whole K-quant MoE (Qwen3-30B-A3B Q4_K_M)") <| @(t : T?) {
+        if (!family_on(t, "qwen3moe") || !arm_on(t, "moe-gemv")) return
+        short_window_cells(t, path_join(models_dir(), "Qwen3-30B-A3B-Instruct-2507-Q4_K_M.gguf"),
+            "moe-gemv/qwen3moe-k4-whole", 0.10, ShortForm.moe_route, Carrier.whole_file)
     }
 }
 
@@ -1846,7 +1863,7 @@ def test_metal_prefill_moe_gemv_route(t : T?) {
 //! last-row logits sit within `bar` of the CPU chain's largest, the base kernel's census count rises on the two base legs
 //! alone, and the control - a window whose last token differs - lands outside the bar
 [cold_path]
-def private moe_base_form_cells(t : T?; path, tag, base_kernel, crown : string; bar : float) {   // nolint:STYLE037,STYLE038,LINT019 — one cell: load, the three legs, the knob restores
+def private moe_base_form_cells(t : T?; path, tag, base_kernel, crown : string; bar : float; blocks : int64 = 0l) {   // nolint:STYLE037,STYLE038,LINT019 — one cell: load, the three legs, the knob restores
     static_if (typeinfo builtin_module_exists(das_metal)) {
         return if (!model_available(t, path))
         let prior_wscale = get_wscale_f16()
@@ -1860,6 +1877,9 @@ def private moe_base_form_cells(t : T?; path, tag, base_kernel, crown : string; 
         set_metal_mode(MetalMode.when_available)   //! the load reads IQ3_S planes as the Metal tier's grid form, as a Metal load does
         pin_metal_tensor_crowns("")   // the load reads no crown; each leg pins its own
         var tr <- load_model_(path, QuantMode.q8)
+        if (blocks > 0l) {
+            cut_within(t, "{tag}: ", tr, blocks)
+        }
         if (tr.config.seq_len > 2048l) {
             tr.config.seq_len = 2048l
         }
@@ -1939,13 +1959,13 @@ def private moe_base_form_cells(t : T?; path, tag, base_kernel, crown : string; 
 
 [test(description = "On Q3_K and IQ2_XXS Qwen3 MoE stacks the routed GEMM keeps last-row logits within 0.10 or 0.15 of the CPU peak on the crowned twins and on the simdgroup base form, the base census zero under the crown and rising without it")]
 def test_metal_prefill_moe_base_form(t : T?) {
-    t |> run("the routed simdgroup base form == CPU control on a Q3_K expert stack (Qwen3-30B-A3B UD-Q3_K_XL)") <| @(t : T?) {
+    t |> run("the routed simdgroup base form == CPU control on a Q3_K expert stack (Qwen3-30B-A3B-7L UD-Q3_K_XL)") <| @(t : T?) {
         if (!family_on(t, "qwen3moe") || !arm_on(t, "moe-base")) return
-        moe_base_form_cells(t, path_join(models_dir(), "Qwen3-30B-A3B-Instruct-2507-UD-Q3_K_XL.gguf"), "moe-base/qwen3moe-k3", "metal_moe_mulmm_k3", "moe_mulmm_k3", 0.10)
+        moe_base_form_cells(t, path_join(models_dir(), "Qwen3-30B-A3B-7L-UD-Q3_K_XL-local.gguf"), "moe-base/qwen3moe-k3", "metal_moe_mulmm_k3", "moe_mulmm_k3", 0.10, 7l)
     }
-    t |> run("the routed simdgroup base form == CPU control on IQ2 expert stacks (Qwen3-30B-A3B UD-IQ2_XXS)") <| @(t : T?) {
+    t |> run("the routed simdgroup base form == CPU control on IQ2 expert stacks (Qwen3-30B-A3B-7L UD-IQ2_XXS)") <| @(t : T?) {
         if (!family_on(t, "qwen3moe") || !arm_on(t, "moe-base")) return
-        moe_base_form_cells(t, path_join(models_dir(), "Qwen3-30B-A3B-Instruct-2507-UD-IQ2_XXS.gguf"), "moe-base/qwen3moe-iq2xxs", "metal_moe_mulmm_iq2xxs", "moe_mulmm_iq2xxs", 0.15)
+        moe_base_form_cells(t, path_join(models_dir(), "Qwen3-30B-A3B-7L-UD-IQ2_XXS-local.gguf"), "moe-base/qwen3moe-iq2xxs", "metal_moe_mulmm_iq2xxs", "moe_mulmm_iq2xxs", 0.15, 7l)
     }
 }
 
