@@ -1,6 +1,7 @@
 options gen2
 options indenting = 4
 options strict_smart_pointers = true
+options no_aliasing = false
 
 //! ast_cursor provides position-based AST queries — given a file, line, and column,
 //! it finds the expression nodes at that cursor position, and on request the variable

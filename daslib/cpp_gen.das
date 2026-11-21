@@ -2,6 +2,7 @@ options gen2
 options indenting = 4
 options strict_smart_pointers = true
 options unsafe_table_lookup = false
+options no_aliasing = false
 
 module cpp_gen public
 

@@ -313,26 +313,59 @@ namespace das {
         }
     }
 
-    static bool readsNoMemory ( Expression * expr ) {
-        if ( expr->rtti_isConstant() ) return true;
-        if ( expr->rtti_isMakeStruct() ) {
-            auto mks = static_cast<ExprMakeStruct *>(expr);
-            if ( mks->block || mks->constructor || mks->useInitializer || mks->isNewHandle ) return false;
-            for ( auto & st : mks->structs ) {
-                for ( auto & fld : *st ) {
-                    if ( !readsNoMemory(fld->value) ) return false;
-                }
+    class ValueReads : public Visitor {
+    protected:
+        virtual bool canVisitStructureFieldInit ( Structure * ) override { return false; }
+        virtual bool canVisitArgumentInit ( Function * , const VariablePtr &, Expression * ) override { return false; }
+        virtual bool canVisitExpr ( ExprTypeInfo *, Expression * ) override { return false; }
+        virtual bool canVisitQuoteSubexpression ( ExprQuote * ) override { return false; }
+        virtual void preVisitExpression ( Expression * expr ) override {
+            Visitor::preVisitExpression(expr);
+            if ( expr->rtti_isVar() ) {
+                auto ev = static_cast<ExprVar *>(expr);
+                auto var = ev->variable;
+                vars.insert(var);
+                bool arg = ev->argument || ev->block;
+                if ( arg ) args.insert(var);
+                bool ptr = var->type->baseType==Type::tPointer;
+                if ( (var->type->ref && !arg) || ptr ) refs = true;
+                if ( var->global || var->type->ref || ptr || (arg && var->type->isRefType()) ) other = true;
+            } else if ( expr->rtti_isPtr2Ref() ) {
+                refs = other = true;
+            } else if ( expr->rtti_isAt() || expr->rtti_isSafeAt() ) {
+                auto sub = expr->rtti_isAt() ? static_cast<ExprAt *>(expr)->subexpr : static_cast<ExprSafeAt *>(expr)->subexpr;
+                if ( !sub->type->isFixedArray() && !sub->type->isVectorType() ) other = true;
+            } else if ( expr->rtti_isCallFunc() ) {
+                if ( !isPureValueCall(static_cast<ExprCallFunc *>(expr)->func) ) other = true;
+            } else if ( expr->rtti_isInvoke() || expr->rtti_isMakeBlock() ) {
+                other = true;
+            } else if ( expr->rtti_isMakeStruct() ) {
+                auto mks = static_cast<ExprMakeStruct *>(expr);
+                bool plainInit = constantInit(mks) && (!mks->constructor || mks->constructor->generated);
+                if ( mks->block || ((mks->constructor || mks->useInitializer) && !plainInit) ) other = true;
+            }
+        }
+        static bool constantInit ( ExprMakeStruct * mks ) {
+            auto st = mks->makeType->baseType==Type::tStructure ? mks->makeType->structType : nullptr;
+            if ( !st ) return false;
+            for ( auto & fld : st->fields ) {
+                if ( fld.init && !fld.init->rtti_isConstant() ) return false;
             }
             return true;
         }
-        if ( expr->rtti_isMakeArray() ) {
-            for ( auto & val : static_cast<ExprMakeArray *>(expr)->values ) {
-                if ( !readsNoMemory(val) ) return false;
+        static bool isPureValueCall ( Function * fn ) {
+            if ( !fn || !fn->builtIn || fn->sideEffectFlags!=0 ) return false;
+            for ( auto & arg : fn->arguments ) {
+                if ( arg->type->ref || arg->type->isRefType() || arg->type->baseType==Type::tPointer ) return false;
             }
             return true;
         }
-        return false;
-    }
+    public:
+        ExpressionSources vars;
+        ExpressionSources args;
+        bool refs = false;
+        bool other = false;
+    };
 
     // src/ast/ARCHITECTURE_ALIASING.md#in-place-build-aliases
     class AliasMarker : public Visitor {
@@ -400,89 +433,42 @@ namespace das {
             return Visitor::visit(fn);
         }
     // make local
-        template <typename TT>
-        void preVisitMakeLocal ( ExprMakeLocal * expr, TT && collectAliasSources ) {
+        void preVisitMakeLocal ( ExprMakeLocal * expr ) {
             auto it = cmresDest.find(expr);
-            if ( it!=cmresDest.end() && !readsNoMemory(expr) ) {
-                // left
-                auto resOut = it->second;
-                ExpressionSources resSrc;
-                if ( collectSources(program, loopSources, resOut, resSrc, false, true) ) {
-                    if ( checkAliasing ) {
-                        program->error("[[" + string(expr->__rtti) + " ]] always aliases",
-                            "some form of ... *ptr ... = [[" + string(expr->__rtti) + " ...]] where we don't know where pointer came from", "",
-                                expr->at, CompilationError::invalid_expression);
-                    } else {
-                        expr->alwaysAlias = true;
-                    }
-                    return;
-                }
-                // check if there are any globals
-                bool anyGlobals = false;
-                for ( auto v : resSrc ) {
-                    if ( v->global ) {
-                        anyGlobals = true;
-                        break;
-                    }
-                }
-                // right
-                ExpressionSources argSrc;
-                if ( collectAliasSources(argSrc,anyGlobals) ) {
-                    if ( checkAliasing ) {
-                        program->error("[[" + string(expr->__rtti) + " ]] always aliases",
-                            "some form of ... = [[" + string(expr->__rtti) + " ... *ptr ... ]] where we don't know where pointer came from", "",
-                                expr->at, CompilationError::invalid_expression);
-                    } else {
-                        expr->alwaysAlias = true;
-                    }
-                } else if ( auto aliasVar = intersectSources ( resSrc, argSrc ) ) {
-                    if ( checkAliasing ) {
-                        program->error("[[" + string(expr->__rtti) + " ]] aliases",
-                            "some form of ... " + aliasVar->name + " ... = [[" + string(expr->__rtti) + " ... " + aliasVar->name + " ... ]]", "",
-                                expr->at, CompilationError::invalid_expression);
-                    } else {
-                        expr->alwaysAlias = true;
-                    }
-                }
+            if ( it==cmresDest.end() ) return;
+            ValueReads dst, val;
+            it->second->visit(dst);
+            expr->visit(val);
+            Variable * local = nullptr;
+            if ( !dst.other && dst.vars.size()==1 ) {
+                auto v = *dst.vars.begin();
+                if ( !v->global && !v->type->ref && dst.args.find(v)==dst.args.end() ) local = v;
+            }
+            bool alias = local ? (val.refs || val.vars.find(local)!=val.vars.end()) : val.other;
+            if ( !alias ) return;
+            if ( checkAliasing ) {
+                program->error("[[" + string(expr->__rtti) + " ]] aliases",
+                    "the value reads memory which can be its destination: a global, a reference, a pointer or a call", "",
+                        expr->at, CompilationError::invalid_expression);
+            } else {
+                expr->alwaysAlias = true;
             }
         }
         virtual void preVisit ( ExprMakeArray * expr ) override {
             Visitor::preVisit(expr);
-            preVisitMakeLocal(expr,[&](ExpressionSources & argSrc, bool anyGlobals) -> bool {
-                for ( auto & arg : expr->values ) {
-                    if ( appendSources(program, loopSources, arg, argSrc, true, anyGlobals) ) return true;
-                }
-                return false;
-            });
+            preVisitMakeLocal(expr);
         }
         virtual void preVisit ( ExprMakeStruct * expr ) override {
             Visitor::preVisit(expr);
-            preVisitMakeLocal(expr,[&](ExpressionSources & argSrc, bool anyGlobals) -> bool {
-                for ( auto & arg : expr->structs ) {
-                    for ( auto & subarg : *arg ) {
-                        if ( appendSources(program, loopSources, subarg->value, argSrc, true, anyGlobals) ) return true;
-                    }
-                }
-                return false;
-            });
+            preVisitMakeLocal(expr);
         }
         virtual void preVisit ( ExprMakeTuple * expr ) override {
             Visitor::preVisit(expr);
-            preVisitMakeLocal(expr,[&](ExpressionSources & argSrc, bool anyGlobals) -> bool {
-                for ( auto & arg : expr->values ) {
-                    if ( appendSources(program, loopSources, arg, argSrc, true, anyGlobals) ) return true;
-                }
-                return false;
-            });
+            preVisitMakeLocal(expr);
         }
         virtual void preVisit ( ExprMakeVariant * expr ) override {
             Visitor::preVisit(expr);
-            preVisitMakeLocal(expr,[&](ExpressionSources & argSrc, bool anyGlobals) -> bool {
-                for ( auto & arg : expr->variants ) {
-                    if ( arg->value && appendSources(program, loopSources, arg->value, argSrc, true, anyGlobals) ) return true;
-                }
-                return false;
-            });
+            preVisitMakeLocal(expr);
         }
     // invoke
         virtual void preVisit ( ExprInvoke * expr ) override {

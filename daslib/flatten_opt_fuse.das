@@ -2,6 +2,7 @@ options gen2
 options indenting = 4
 options strict_smart_pointers = true
 options _comment_hygiene = true
+options no_aliasing = false
 
 module flatten_opt_fuse shared private
 
