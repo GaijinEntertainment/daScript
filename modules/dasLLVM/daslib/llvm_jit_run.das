@@ -38,7 +38,7 @@ var LINK_WHOLE_LIB = false // when true, standalone exe links against the whole 
 
 // Read by tests-cpp/small/test_jit_emitter_pin.cpp: FNV-1a64 of the emitter sources
 // (normalized to LF; file list in the test)
-let LLVM_JIT_EMITTER_HASH : uint64 = 0x6f70d5edecf29776ul
+let LLVM_JIT_EMITTER_HASH : uint64 = 0x80d64c0d35828081ul
 
 [arch(at = "../ARCHITECTURE_FAST_MATH.md#never-fast-math")]
 def private apply_fast_math_to_module(m : LLVMOpaqueModule?) {
@@ -56,9 +56,9 @@ def private apply_fast_math_to_module(m : LLVMOpaqueModule?) {
     }
 }
 
-//! the TBAA class of an access of LLVM type `ty`: float, double;
-//! one class for wider integers, pointers and half; "" (aliases
-//! everything) for bytes, bools, vectors and mixed aggregates
+//! the TBAA class of an access of LLVM type `ty`: float and double
+//! each their own; wider integers, pointers and half one class; ""
+//! (aliases everything) for bytes, bools, vectors and aggregates
 def private tbaa_class_of(ty : LLVMOpaqueType?) : string {
     let kind = LLVMGetTypeKind(ty)
     if (kind == LLVMTypeKind.LLVMIntegerTypeKind) {
@@ -69,17 +69,6 @@ def private tbaa_class_of(ty : LLVMOpaqueType?) : string {
         return "float"
     } elif (kind == LLVMTypeKind.LLVMDoubleTypeKind) {
         return "double"
-    } elif (kind == LLVMTypeKind.LLVMStructTypeKind) {
-        let n = int(LLVMCountStructElementTypes(ty))
-        var cls = ""
-        for (i in range(n)) {
-            let c = tbaa_class_of(LLVMStructGetTypeAtIndex(ty, uint(i)))
-            if (empty(c) || (i > 0 && c != cls)) return ""
-            cls = c
-        }
-        return cls
-    } elif (kind == LLVMTypeKind.LLVMArrayTypeKind) {
-        return tbaa_class_of(LLVMGetElementType(ty))
     }
     return ""
 }
@@ -285,6 +274,32 @@ def private irgen_functions(jit_target : JitTarget; ctx : Context?; var uids : U
         }
     }
     return has_externals
+}
+
+//! the DLL cache exports one table of {name key, aot hash,
+//! wrapper}, not a symbol per function: a PE image holds at
+//! most 65535 exports
+[macro_function]
+def private emit_jit_fn_table(prog : Program?; uids : UidNodes?; funcs : array<FunctionPtr>) {
+    assume t = g_prim_t
+    let entry_t = StructType(t, [t.t_int64, t.t_int64, t.LLVMVoidPtrType()])
+    var entries : array<LLVMOpaqueValue?>
+    entries |> reserve(length(funcs) + 1)
+    for (fn in funcs) {
+        let name = uids.get_dll_fn_name(fn).publ()
+        var wrapper = LLVMGetNamedFunction(g_mod, name)
+        if (wrapper == null) {
+            wrapper = LLVMAddFunctionWithType(g_mod, name, LLVMFunctionType(t.t_void))
+        }
+        var fields = [t.ConstI64(hash(name)), t.ConstI64(get_function_aot_hash(prog, fn)), wrapper]
+        entries |> push(LLVMConstNamedStruct(entry_t, array_data_ptr(fields), 3u))
+    }
+    entries |> push(LLVMConstNull(entry_t))
+    let n = uint(length(entries))
+    let tab = LLVMAddGlobal(g_mod, LLVMArrayType(entry_t, n), JIT_FN_TABLE)
+    LLVMSetInitializer(tab, LLVMConstArray(entry_t, array_data_ptr(entries), n))
+    LLVMSetGlobalConstant(tab, 1)
+    set_public_linkage(tab)
 }
 
 // whole-module verify + the g_failed panic tail (shared by the pre-optimize and post-optimize checks)
@@ -528,6 +543,9 @@ def private run_split_codegen(prog : Program?; ctx : Context?; funcs : array<Fun
         // the has_externals return is meaningful only on the wasm path, unreachable under split - discard
         irgen_functions(jit_target, ctx, uids, attrs, buckets[pname], jit_flags, LlvmJitMode.JIT,
                         prog)
+        if (!target.gen_exe && pi == length(order) - 1) {
+            emit_jit_fn_table(prog, uids, funcs)
+        }
         di_finalize()
         verify_module_or_panic(buckets[pname])
         // fileinfo ctors ride llvm.global_ctors (private; the link appends all, LoadLibrary runs every one)
@@ -838,6 +856,7 @@ def public run_jit(prog : Program?; var ctx : Context?; cli_opts : JitCliOptions
         var jit_flags : LlvmJitFlags
         jit_flags.emit_prologue = emit_prologue
         jit_flags.need_di = debug_info
+        jit_flags.dll_cache = use_dll && !(gen_lib || gen_wasm)
         let jit_mode = emit_aot_object ? LlvmJitMode.LLVM_AOT : (gen_exe ? LlvmJitMode.EXE : LlvmJitMode.JIT)
 
         let attrs = new Attributes(g_ctx)
@@ -935,6 +954,9 @@ def public run_jit(prog : Program?; var ctx : Context?; cli_opts : JitCliOptions
         } elif (recompile_prog) {
             jit_has_externals = irgen_functions(jit_target, ctx, uids, attrs, funcs, jit_flags,
                                                 jit_mode, prog)
+            if (jit_flags.dll_cache) {
+                emit_jit_fn_table(prog, uids, funcs)
+            }
             if (gen_lib) {
                 let export_marked = plan.lib_export_marked
                 let res = inject_lib(jit_target, ctx, g_ctx, prog, g_mod, g_prim_t, uids,
