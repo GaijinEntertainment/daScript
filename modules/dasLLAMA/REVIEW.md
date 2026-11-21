@@ -29,13 +29,13 @@ is a wall or rate it timed on its own clock (not a spawned child's), not a time 
 work it does; a kernel race - a run timing two kernel variants (arms) against each other in one
 process; a file `benchmarks/lcpp_bench.das` requires directly.**
 
-**A diff that writes a measured number down - into `PERF_LEDGER.md`, a checked-in doc outside
-`site*/` (repo root), a code comment, checked-in data a run produced, a commit message, or a PR
-body - or adds a serving path or moves an existing one onto other code, or changes what a
-measured or served run with no flags and no environment variables set computes (a change only to
-when, or in what order, it does the same work does not route), applies `REVIEW_MEASUREMENT.md`.**
-A serving path is the end-to-end route a run takes from prompt to tokens; its compile tier
-(interpreted, JIT, AOT) and its cross target (a build for another platform) are part of it.
+**A diff that writes a measured number (not one file's size or hash) down - into `PERF_LEDGER.md`, a
+checked-in doc outside `site*/` (repo root), a code comment, checked-in data a run produced, a commit
+message, or a PR body - or adds a serving path or moves an existing one onto other code, or changes what
+a measured or served run with no flags and no environment variables set computes (a change only to when,
+or in what order, it does the same work does not route), applies `REVIEW_MEASUREMENT.md`.** A serving
+path is the end-to-end route a run takes from prompt to tokens; its compile tier (interpreted, JIT, AOT)
+and its cross target (a build for another platform) are part of it.
 
 **A diff that does any of these, wherever it puts it, applies `REVIEW_HOT_PATH.md` (beside this
 file) together with this list: adds a kernel, loop or call path the runtime re-enters once per

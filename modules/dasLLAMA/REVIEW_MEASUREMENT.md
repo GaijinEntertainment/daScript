@@ -14,11 +14,12 @@ The terms below are defined here, and a reviewer applies them as written.
 **A diff that adds a term below or changes a term's definition adds or changes that term's bullet in
 `ARCHITECTURE_MEASUREMENT_RELEASE.md#measurement-vocabulary` to match, in the same change.**
 
-A figure is any number a run produced, a ratio of two included, or an error reading that a
-tolerance is set from or that is cited to show a tolerance holds. A test suite's tally, a count of
-identical or different kernels between two kernel-code dumps, and a `provenance` value read in its
+A figure is any number a run produced, a ratio of two included, or an error reading that a tolerance
+is set from or that is cited to show a tolerance holds. A test suite's tally, a count of identical
+or different kernels between two kernel-code dumps, and a `provenance` value read in its
 `performance/defaults/<class>.tune-defaults.json` profile or tune sidecar are not figures; that
-value copied into other text is one.
+value copied into other text is one. A file's identity - its byte size or any hash of its content
+(`sha256`, `file_identity`) - is not a figure; a ratio of two sizes, or a size compared to one, is.
 
 A served turn is one request a serving path answers end to end - a chat or completion turn, or a
 facade `transcribe` / `synthesize` / `translate` call. A served-turn leg is a chat or completion

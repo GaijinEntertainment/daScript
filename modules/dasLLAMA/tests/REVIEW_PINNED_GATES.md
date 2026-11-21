@@ -13,7 +13,7 @@ whose two sides the cell computes is never a value an outside source can change,
 it was measured on. The pinned set, one entry a line, each with what it must keep holding:
 
 - `test_run_suites.das` must hold the per-PR split (`model-free`, `gpu-kernels`, `stocked`), the folder census, the area
-  tables, the `--exclude` and `--only` filters, the `--shard` partition, the `--batch` chunking and defaults (`child_chunks`,
+  tables, the `--exclude` and `--only` filters, the `--batch` chunking and defaults (`child_chunks`,
   `batch_files`: `per` files a child in order; an area run's image file, a `cant_` / `failed_` / `invalid_` file and a tier
   contract file alone, the files around it in one batch), the batch dry run (a batch child's `START` line carrying `--together`,
   `--batch 1` one `--test` child a file), the test wall (`wall_seconds_in`, `log_wall_line`, a walled run's `LOST` stop with no `RETRY`, the `--skip` resume), the reach plan behind `--changed` -

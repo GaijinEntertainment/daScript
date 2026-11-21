@@ -54,6 +54,5 @@ one whose tokens match every file of `run.das`'s `CUDA_WITNESSES`.**
 `DASLLAMA_CUDA=1` cites a run under `DASLLAMA_GPU=1 DASLLAMA_CUDA=1` whose `ONLY` lines name that
 file.**
 
-**A final PR cites every shard of a sharded run (`--shard i/n`) with its `REPORT` line and its box,
-and a `--suite stocked` run with no `--exclude` or `--only`.** A shard is a fraction of the run's
-files; the `--changed` run holds one stocked test a family and backend, the stocked suite every one.
+**A final PR cites a `--suite stocked` run with no `--exclude` or `--only`.** The `--changed` run
+holds one stocked test a family and backend, the stocked suite every one.
