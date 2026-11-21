@@ -26,6 +26,8 @@ struct public DllName {
     def const id() => "{name} hash"
 }
 
+let public JIT_FN_TABLE = "das_jit_fn_table"
+
 // We need unique ids for dll names. Visitor generates this ids.
 class UidGen : AstVisitor {
     uid : uint64
@@ -222,13 +224,26 @@ def public create_uid_nodes(prog : Program?; funcs : array<FunctionPtr>; gen_exe
 }
 
 
+struct JitFnEntry {
+    key : uint64
+    hash : uint64
+    wrapper : void?
+}
+
 // All dll operations pass through this class
 class public DLLHandle {
     handle : void?
     created_fileinfos : table<FileInfo?; FileInfo?>
+    fn_entries : table<uint64; JitFnEntry?>
 
     def DLLHandle(handle_ : void?) {
         handle = handle_
+        let first = handle != null ? handle |> get_function_address(JIT_FN_TABLE) : null
+        var e = unsafe(reinterpret<JitFnEntry?>(first))
+        while (e != null && e.wrapper != null) {
+            fn_entries[e.key] = e
+            e = unsafe(e + 1)
+        }
     }
 
     def reset() {
@@ -236,11 +251,17 @@ class public DLLHandle {
             handle |> close_dynamic_library()
             handle = null
         }
+        fn_entries |> clear()
+    }
+
+    def private find_fn(fn : DllName) : JitFnEntry? {
+        assert(handle != null, "dynamic_lib_handle is null")
+        return fn_entries?[hash(fn.publ())] ?? null
     }
 
     def get_function_address(fn : DllName) : void? {
-        assert(handle != null, "dynamic_lib_handle is null")
-        return handle |> get_function_address(fn.publ());
+        let e = find_fn(fn)
+        return e != null ? e.wrapper : null
     }
 
     def get_function_impl(fn : DllName) {
@@ -248,8 +269,10 @@ class public DLLHandle {
         return handle |> get_function_address(fn.impl());
     }
 
-    def get_function_hash(fn : DllName) =>
-        unsafe(reinterpret<uint64?>(handle |> get_function_address(fn.id())))
+    def get_function_hash(fn : DllName) : uint64? {
+        var e = find_fn(fn)
+        return e != null ? unsafe(addr(e.hash)) : null
+    }
 
     def set_glob_address(fn : DllName, ptr : void?) {
         assert(handle != null, "dynamic_lib_handle is null")
@@ -264,8 +287,8 @@ class public DLLHandle {
     def create_fileinfo(fi : FileInfo?) {
         if (!created_fileinfos |> key_exists(fi)) {
             let fi_ptr = unsafe(reinterpret<void?>(fi))
-            let sym = get_function_address(DllName("fileinfo_at_{fi_ptr}"))
-            let sym_name = get_function_address(DllName("fileinfo_at_{fi_ptr}_name"))
+            let sym = handle |> get_function_address("fileinfo_at_{fi_ptr}")
+            let sym_name = handle |> get_function_address("fileinfo_at_{fi_ptr}_name")
             let name = unsafe(reinterpret<string>(sym_name))
 
             var src_fi = unsafe(reinterpret<FileInfo?>(sym))
@@ -302,4 +325,4 @@ def public artifact_path(path : string; kind : JitArtifact) : string {
 
 
 def public get_dll_by_path(path : string) : DLLHandle? =>
-    new DLLHandle(handle = load_dynamic_library(artifact_path(path, JitArtifact.jit_dll)))
+    new DLLHandle(load_dynamic_library(artifact_path(path, JitArtifact.jit_dll)))

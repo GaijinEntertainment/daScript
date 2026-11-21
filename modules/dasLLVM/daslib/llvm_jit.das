@@ -214,6 +214,7 @@ bitfield public LlvmJitFlags {
     emit_prologue,
     // Is debug info needed. Debug info not fully supported and not tested yet.
     need_di,
+    dll_cache,
 }
 
 // Non-string workhorse key types that get the inline open-addressed find/at (build_workhorse_*):
@@ -773,6 +774,8 @@ class public LlvmJitVisitor : AstVisitor {
             set_private_linkage(wfunc)
         } elif (g_jit_split_exe) {
             LLVMSetLinkage(wfunc, LLVMLinkage.LLVMExternalLinkage)   //! the entry partition calls it across the link; an exe exports nothing
+        } elif (flags.dll_cache) {
+            LLVMSetVisibility(wfunc, LLVMVisibility.LLVMHiddenVisibility)
         } else {
             set_public_linkage(wfunc)
         }
@@ -8142,7 +8145,7 @@ def public generate_llvm(target : JitTarget; prog : Program?; ctx : Context?;
     verify(!(is_in_completion() || is_compiling_macros() || is_folding()))
 
     let dll_name = uids.get_dll_fn_name(fn)
-    if (mode != LlvmJitMode.EXE && !g_jit_split_exe) {
+    if (mode != LlvmJitMode.EXE && !g_jit_split_exe && !flags.dll_cache) {
         // No need in public symbols when generating executable
         let globalVar = LLVMAddGlobal(g_mod, types.t_int64, dll_name.id())
         set_public_linkage(globalVar)
