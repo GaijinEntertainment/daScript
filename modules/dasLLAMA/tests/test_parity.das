@@ -25,6 +25,11 @@ require ../harness/_parity_dump.das
 // Evidence is DATA in model_specs.das — pinned ids (or a text prompt encoded here) + the arms it was
 //   frozen under; regenerate with harness/parity.sh. The board's --parity pregate reads the same rows.
 // Models are gitignored multi-GB files: absent = clean skip (a real local regression, a no-op in CI).
+// Every model cell skips off the JIT, without its file, past the
+// size tier (`model_available`), or where DASLLAMA_PIN_BACKEND names
+// a backend this box cannot pin; the layer-cut cells skip too where
+// the run's family filter leaves their family out, the dump round
+// trip without the armed resident tier.
 
 def private with_parity_backend(t : T?; blk : block<() : void>) {
     let name = g_env_engine.pin_backend
@@ -153,11 +158,30 @@ def private prefix_bar_cell(t : T?; tr : Model; prompt, want : array<int64>; wha
     delete got
 }
 
+//! `path` loaded as the parity row `spec` loads its file: under the
+//! row's K-quant native knob, put back after the load, in its load
+//! mode, the K/V context cut to 2048 - only about prompt plus
+//! generation positions are used, the K/V stride changes no computed
+//! token, and Llama-3's native 131072 would burn ~8GB of K/V RAM
+def private parity_row_load(path : string; spec : ModelSpec) : Model {
+    let prev_kq = get_kquant_native()
+    set_kquant_native(spec.parity.kq_native)
+    var tr <- load_model_(path, spec.parity.quant)
+    set_kquant_native(prev_kq)
+    tr.config.seq_len = min(tr.config.seq_len, 2048l)
+    return <- tr
+}
+
+//! the parity row's prompt: its pinned ids, or its text encoded
+def private parity_prompt(tr : Model; spec : ModelSpec) : array<int64> {
+    return <- (empty(spec.parity.prompt_text) ? clone_to_move(spec.parity.prompt)
+        : encode(tr, spec.parity.prompt_text, true, false))
+}
+
 // One spec's arms off ONE model load. load_model_ (not load_gguf) so the tokenizer rides along:
 // text-form prompts encode here, and every compare logs its decoded-text eyeball lines.
 [cold_path]
 def private parity_spec_arms(t : T?; spec : ModelSpec; path : string) {
-    let prev_kq = get_kquant_native()
     let prev_grouped = get_moe_grouped_prefill()
     let prev_fused = get_moe_fused_expert_gemms()
     defer() {
@@ -167,17 +191,9 @@ def private parity_spec_arms(t : T?; spec : ModelSpec; path : string) {
     // the main arm runs on the levers' defaults, whatever an earlier cell left
     set_moe_grouped_prefill(true)
     set_moe_fused_expert_gemms(true)
-    set_kquant_native(spec.parity.kq_native)
-    var tr <- load_model_(path, spec.parity.quant)
-    set_kquant_native(prev_kq)
-    // Cap the KV context: only ~(prompt + gen) positions are used, and the KV stride doesn't
-    // change the computed tokens — Llama-3's native 131072 would just burn ~8GB of KV RAM.
-    if (tr.config.seq_len > 2048l) {
-        tr.config.seq_len = 2048l
-    }
+    var tr <- parity_row_load(path, spec)
     let be = " [backend {active_kernel_backend()}]"   // read AFTER the load: that is where the pin resolves
-    var prompt <- (empty(spec.parity.prompt_text) ? clone_to_move(spec.parity.prompt)
-        : encode(tr, spec.parity.prompt_text, true, false))
+    var prompt <- parity_prompt(tr, spec)
     if (spec.parity.require_dn_kq) {
         t |> success(dn_kq_engaged(tr.dnqkv_fmt) > 0l && dn_kq_engaged(tr.dngate_fmt) > 0l && dn_kq_engaged(tr.dnout_fmt) > 0l,
             "{spec.file} dn planes kq-native (not demoted)")
@@ -268,6 +284,153 @@ def test_parity_gptoss_20b(t : T?) {
             t |> success(parity_gen_ok(tr, long_prompt, GPTOSS_LONG_GEN, [eyeball = true]), "gpt-oss-20b window-engaged token-for-token{be}")
             delete tr
         }
+    }
+}
+
+//! gpt-oss-4L's greedy streams under the reference: after the 20b fixture's short prompt, and after the 449-token
+//! counting prompt that engages the sliding window
+let private GPTOSS_CUT_REF <- [34380l, 52444l, 47914l, 198854l, 109598l, 15255l, 3386l, 5885l, 28978l, 16286l,
+                               26230l, 175455l, 9355l, 8439l, 40815l, 5436l, 48038l, 21406l, 4186l, 24724l,
+                               6257l, 6257l, 716l, 104735l, 1512l, 104735l, 168333l, 18023l, 43933l, 15255l,
+                               3386l, 471l, 9869l, 103895l, 23532l, 42842l, 150384l, 18269l, 26760l, 16962l]
+let private GPTOSS_CUT_LONG_REF <- [32764l, 65816l, 155519l, 1662l, 20545l, 3055l, 4570l, 6486l, 80677l, 23042l,
+                                    31965l, 44603l, 3817l, 7583l, 2562l, 2562l, 26760l, 7462l, 47914l, 3817l,
+                                    26760l, 105712l, 7462l, 47914l, 80677l, 23042l, 43583l, 7462l, 26760l, 3079l,
+                                    1369l, 35769l, 5325l, 30796l, 26760l, 2881l, 189793l, 12346l, 51718l, 4396l]
+
+//! How far under a row's top logit a reference id may sit, as a
+//! fraction of the row's largest logit: the first blocks of a file
+//! write no confident text, the reference's pick and ours trading
+//! places inside 0.8% of the top logit on gpt-oss-4L (the 26B's cut
+//! picks every reference id), where a path that broke moves a row by
+//! whole logits
+let private CUT_GAP_REL = 0.02
+
+//! `prompt` prefilled and the reference's stream `ids` fed after it:
+//! every id within `bar` (of the row's largest logit) under its row's
+//! top logit, a NaN gap the worst, and the stream one step late - the
+//! control, every gap it reads finite - outside that on most rows;
+//! the reference's text and our picks' logged
+def private forced_stream_within(t : T?; tr : Model; prompt, ids : array<int64>; bar : float;
+                                 what : string) {
+    with_pinned_kernels() {
+        var inscope rows <- feed_alone(tr, KVDtype.f32, prompt, ids)
+        let n = length(ids)
+        var inscope picks <- [for (i in range(n)); argmax_of(rows[i])]
+        to_log(LOG_INFO, "{what}: the reference's text {eyeball_text(tr, ids)}\n")
+        to_log(LOG_INFO, "{what}: our picks' text {eyeball_text(tr, picks)}\n")
+        var worst = 0.0
+        var late = 0
+        var late_unread = 0
+        var nearest_late = INFINITE_DIFF
+        for (i in range(n)) {
+            let top = rows[i][picks[i]]
+            let scale = live_maxabs(rows[i])
+            let gap = (top - rows[i][ids[i]]) / scale
+            worst = is_nan(gap) ? INFINITE_DIFF : max(worst, gap)
+            continue if (i + 1 >= n || ids[i + 1] == ids[i])
+            let late_gap = (top - rows[i][ids[i + 1]]) / scale
+            if (!is_finite(late_gap)) {
+                late_unread++
+                continue
+            }
+            nearest_late = min(nearest_late, late_gap)
+            if (late_gap <= bar) {
+                late++
+            }
+        }
+        to_log(LOG_INFO, "{what}: the worst gap {worst} of the top logit, {late} of {n - 1} late " +
+            "ids inside the bar, the nearest late id {nearest_late}\n")
+        t |> success(worst <= bar,
+            "{what}: every reference id within {bar} of its row's top logit (worst {worst})")
+        t |> equal(late_unread, 0, "{what}: control - every late id's gap reads finite")
+        t |> success(late * 4 < n,
+            "{what}: control - the stream one step late sits inside the bar on {late} of " +
+            "{n - 1} rows")
+    }
+}
+
+//! the parity row `full`'s file cut to its first `blocks` blocks
+//! (`cut`): loaded as that row loads its file, its block count read
+//! off the load, then `body` on it with the row and the row's prompt,
+//! inside the engine's job queue
+def private cut_stream(t : T?; cut, full : string; blocks : int64;
+                       body : block<(tr : Model; spec : ModelSpec; prompt : array<int64>) : void>) {
+    let path = path_join(models_dir(), cut)
+    return if (!model_available(t, path))
+    with_parity_backend(t) {
+        var inscope spec <- spec_by_file(full)
+        var tr <- parity_row_load(path, spec)
+        t |> equal(tr.config.n_layers, blocks, "{cut} holds the {blocks} blocks its name claims")
+        with_dasllama_jobque_() {
+            var inscope prompt <- parity_prompt(tr, spec)
+            invoke(body, tr, spec, prompt)
+        }
+        delete tr
+    }
+}
+
+[test(description = "gpt-oss-4L, the 20b's first four blocks, fed the reference's greedy stream keeps every reference id within 2% of its row's top logit on the short prompt and on the 449-token one that engages the sliding window, the stream one step late outside")]
+def test_parity_gptoss_cut(t : T?) {
+    t |> run("gpt-oss forward on the four-block cut (native-MXFP4 experts, sinks + YaRN + MoE biases; short + window-engaged), the reference's ids fed") @(t : T?) {
+        return if (!family_on(t, "gptoss") || !jit_only(t))
+        let cut = "gpt-oss-4L-mxfp4-local.gguf"
+        cut_stream(t, cut, "gpt-oss-20b-mxfp4.gguf", 4l) $(tr, _spec, prompt) {
+            forced_stream_within(t, tr, prompt, GPTOSS_CUT_REF, CUT_GAP_REL,
+                "gpt-oss-4L, the short prompt")
+            var inscope long_prompt <- encode(tr, counting_prompt(150), true, false)
+            t |> equal(length(long_prompt), 449,
+                "the counting prompt encodes to the reference's 449 ids")
+            forced_stream_within(t, tr, long_prompt, GPTOSS_CUT_LONG_REF, CUT_GAP_REL,
+                "gpt-oss-4L, the window engaged")
+        }
+    }
+}
+
+//! the gemma-4 cuts' greedy streams under the reference after the full files' fixture prompt, the 1..320 count (1492 ids,
+//! past the 12B's and the 26B's sliding windows)
+let private GEMMA4_12B_CUT_REF <- [1132l, 237027l, 102398l, 163234l, 594l, 118731l, 594l, 109397l, 75800l, 3244l,
+                                   255999l, 32424l, 255999l, 32424l, 255999l, 32424l, 255999l, 32424l, 255999l, 32424l,
+                                   255999l, 32424l, 255999l, 32424l, 255999l, 32424l, 255999l, 32424l, 255999l, 32424l,
+                                   255999l, 32424l, 255999l, 32424l, 255999l, 32424l, 255999l, 32424l, 255999l, 103469l]
+let private GEMMA4_26B_CUT_REF <- [233605l, 236963l, 71032l, 237763l, 238031l, 237372l, 26691l, 190786l, 26691l, 28469l,
+                                   1663l, 28469l, 1663l, 237469l, 50727l, 38298l, 224246l, 1363l, 106905l, 61771l,
+                                   50357l, 28469l, 53585l, 3785l, 1852l, 1852l, 233089l, 59475l, 236835l, 7473l,
+                                   238215l, 234358l, 176418l, 237049l, 238215l, 234358l, 237323l, 241075l, 61771l, 36841l]
+let private GEMMA4_CUT_PROMPT_IDS = 1492   //! the reference's count of the fixture prompt's ids
+//! the 12B cut's bar: the reference's ids sit up to 0.017 of the
+//! top logit under ours, the nearest late id 0.50, and the global
+//! layers' p-RoPE applied to every layer reads 0.046
+let private GEMMA4_12B_CUT_GAP_REL = 0.03
+
+//! a gemma-4 cut fed its reference stream after its full file's
+//! fixture prompt
+def private gemma4_cut_stream(t : T?; cut, full : string; blocks : int64; ref : array<int64>;
+                              bar : float) {
+    cut_stream(t, cut, full, blocks) $(tr, _spec, prompt) {
+        t |> equal(length(prompt), GEMMA4_CUT_PROMPT_IDS,
+            "the fixture prompt encodes to the reference's {GEMMA4_CUT_PROMPT_IDS} ids")
+        forced_stream_within(t, tr, prompt, ref, bar, cut)
+    }
+}
+
+[test(description = "gemma-4-12B-12L, the 12B's first twelve blocks, fed the reference's greedy stream after the 1492-id count keeps every reference id within 3% of its row's top logit, the stream one step late outside")]
+def test_parity_gemma4_12b_cut(t : T?) {
+    t |> run("the dense gemma-4 forward on the twelve-block cut (two global layers, the window engaged), the reference's ids fed") @(t : T?) {
+        return if (!family_on(t, "gemma4") || !jit_only(t))
+        gemma4_cut_stream(t, "gemma-4-12B-12L-Q4_K_M-local.gguf",
+            "gemma-4-12B-it-Q4_K_M.gguf", 12l,
+            GEMMA4_12B_CUT_REF, GEMMA4_12B_CUT_GAP_REL)
+    }
+}
+
+[test(description = "gemma-4-26B-A4B-6L, the 26B's first six blocks, fed the reference's greedy stream after the 1492-id count keeps every reference id within 2% of its row's top logit, the stream one step late outside")]
+def test_parity_gemma4_26b_cut(t : T?) {
+    t |> run("the routed gemma-4 forward on the six-block cut (one global layer, the window engaged), the reference's ids fed") @(t : T?) {
+        return if (!family_on(t, "gemma4moe") || !jit_only(t))
+        gemma4_cut_stream(t, "gemma-4-26B-A4B-6L-Q4_K_M-local.gguf",
+            "gemma-4-26B-A4B-it-Q4_K_M.gguf", 6l,
+            GEMMA4_26B_CUT_REF, CUT_GAP_REL)
     }
 }
 

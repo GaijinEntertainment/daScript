@@ -491,12 +491,6 @@ def private bar_rel(bar : LogitsBar) : float {
 
 //! a row's logits against its session alone under `bar`: within the batched-row, split, wide or routed bar with `control` -
 //! the row's previous step - outside it, or the control form alone
-def private hold_bar(t : T?; tr : Model; got, want, control : array<float>; bar : LogitsBar; what : string) {
-    held_on(t) $(var h) {
-        hold_bar(h, tr, got, want, control, bar, what)
-    }
-}
-
 def private hold_bar(var h : Held; tr : Model; got, want, control : array<float>; bar : LogitsBar; what : string) {
     if (bar == LogitsBar.ctrl_bar) {
         log_peaks(tr, what, got, want)
@@ -720,38 +714,6 @@ def private batched_rows_logits(var h : Held; tr : Model) : array<array<float>> 
     return <- rows
 }
 
-//! the batched rows' token rows gathered on the device off their ids (`ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command`): every
-//! batched row counted by `vk_rdec_nrow_embed_gathered`, the host embedding none, and each row's logits at every step bit for bit the
-//! same steps' on a load with the gather off (`set_gpu_resident_embed(0)`, the `DASLLAMA_VK_GPU_EMBED=0` form: every row embedded on
-//! the host and staged up), which moves the counter by nothing, gathers no side row off an id (`vk_rdec_nrow_side_gathered`, the
-//! side-rows cell's counter) and embeds every row on the host - the counters' control
-[cold_path]
-def cell_regions_batched_embed_gather(t : T?; file : string) {
-    t |> run("the batched rows gather their token rows on the device, bit for bit the rows the host embeds") @(t : T?) {
-        static_if (typeinfo builtin_module_exists(vulkan)) {
-            var inscope h : Held
-            var inscope dev, host : array<array<float>>
-            with_gpu_resident_embed(1) {
-                with_regions_rig(t, file) $(tr) {
-                    delete dev
-                    dev <- regions_embed_rows(h, tr, true)
-                }
-            }
-            with_gpu_resident_embed(0) {
-                with_regions_rig(t, file, RegionsLoad(host = true)) $(tr) {
-                    delete host
-                    host <- regions_embed_rows(h, tr, false)
-                    log_gathered_rows(tr, file, dev, host, 2l)
-                }
-            }
-            held_within(t, h)
-            gathered_rows_bit_same(t, file, dev, host, 2l)
-        } else {
-            t |> skip("no dasVulkan module on this build: the batched rows' device gather is the Vulkan driver's")
-        }
-    }
-}
-
 //! one half of the embed-gather cell on a two-region load: the batched rows, and where each token row came from - with the
 //! gather on (`gathered`) every one off its id and none embedded on the host; with it off every one embedded on the host,
 //! none gathered and no side row gathered off an id, the counters' controls
@@ -771,6 +733,52 @@ def regions_embed_rows(var h : Held; tr : Model; gathered : bool) : array<array<
     return <- rows
 }
 
+//! the embed-gather cell's halves
+//! (`ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command`): the
+//! batched rows of a load gathering the token rows on the device off
+//! their ids, and of a load with the gather off
+//! (`set_gpu_resident_embed(0)`, the `DASLLAMA_VK_GPU_EMBED=0` form)
+//! embedding every row on the host; each `_ran` where its form
+//! collected
+struct GatherPair {
+    gathered : array<array<float>>
+    host_embedded : array<array<float>>
+    gathered_ran : bool
+    host_ran : bool
+}
+
+//! one half of the embed-gather cell on the form's two-region load
+//! into `gp`, its readings held into `h` - `gathered` the gather on;
+//! without the dasVulkan module the gathered half holds the skip
+[unused_argument(gp, m, file)]   // without the dasVulkan module only the skip remains
+def gather_half(var gp : GatherPair; var h : Held; m : Model; gathered : bool; file : string) {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        if (gathered) {
+            delete gp.gathered
+            gp.gathered <- regions_embed_rows(h, m, true)
+            gp.gathered_ran = true
+        } else {
+            delete gp.host_embedded
+            gp.host_embedded <- regions_embed_rows(h, m, false)
+            log_gathered_rows(m, file, gp.gathered, gp.host_embedded, 2l)
+            gp.host_ran = true
+        }
+    } else {
+        if (gathered) {
+            h |> held_skip("no dasVulkan module on this build: the batched rows' device gather " +
+                "is the Vulkan driver's")
+        }
+    }
+}
+
+//! the embed-gather cell's compare under `tag`: the two halves' rows
+//! bit for bit, where both ran
+def gather_pair_within(t : T?; tag : string; gp : GatherPair) {
+    if (gp.gathered_ran && gp.host_ran) {
+        gathered_rows_bit_same(t, tag, gp.gathered, gp.host_embedded, 2l)
+    }
+}
+
 //! the coverage census over the per-32 formats' stamps of one GEMV form (`suffix`), summed; NO_CENSUS with no vulkan module
 def private b32_census(suffix : string) : int64 {
     var n = 0l
@@ -782,67 +790,55 @@ def private b32_census(suffix : string) : int64 {
     return n
 }
 
-//! a per-32 routed down on the gemma-4 MoE folded under the routing weights by both commands: the batched steps against the
-//! sessions alone on the one-row command's fused forms within `bar`, the summed down stamps dispatched and no per-slot down leaf
-//! (the census over every per-32 format's stamps) - the rows fold each row's k slots as the one-row command folds its own
-[cold_path]
-def cell_regions_batched_down_fold(t : T?; file : string; bar : LogitsBar) {
-    t |> run("the batched rows fold the routed down under the routing weights as the one-row command does") @(t : T?) {
-        with_regions_rig(t, file) $(tr) {
-            var pa <- prompt_a()
-            var pb <- prompt_b()
-            let sum0 = b32_census("_gemv_sum_cls_spv")
-            let leaf0 = b32_census("_gemv_cls_spv")
-            batched_steps_body(t, tr, pa, pb, bar)
-            if (sum0 != NO_CENSUS) {
-                t |> success(b32_census("_gemv_sum_cls_spv") > sum0, "the summed down stamps served the routed layers ({b32_census("_gemv_sum_cls_spv") - sum0} dispatches)")
-                t |> equal(b32_census("_gemv_cls_spv") - leaf0, 0l, "no command ran the per-slot down leaf: the rows fold the k slots as the one-row command does")
-            }
-            delete pa
-            delete pb
-        }
-    }
+//! what the batched cell's census holds of a per-32 routed down
+//! (`regions_batched_rows`): nothing; that both commands fold it
+//! under the routing weights - the summed down stamps dispatched and
+//! no per-slot down leaf, each row's k slots folded as the one-row
+//! command folds its own (the gemma-4 MoE); or, on the split one-row
+//! forms (the fuse knob off for the load), that no row folds it - the
+//! summed down stamps where they were, the fold cell's control
+enum DownFold {
+    unclaimed
+    folded
+    split_forms
 }
 
-//! `split_forms` pins the fuse knob off for the load: the routed down then folds no row under its weights, so the summed down
-//! stamps stay where they were - the fold cell's control
-def cell_regions_batched_steps(t : T?; file : string; bar : LogitsBar = LogitsBar.bit_exact; split_forms : bool = false) {
-    t |> run("two sessions, a region each: a batched step over both reads what each session reads alone, with no history resync") @(t : T?) {
-        with_regions_rig(t, file, RegionsLoad(split_forms = split_forms)) $(tr) {
-            held_on(t) $(var h) {
-                regions_batched_rows(h, tr, bar, split_forms)
-            }
-        }
-    }
-}
-
-//! the batched cell's collection on a two-region load - `split_forms` the load's fuse knob off
-def regions_batched_rows(var h : Held; tr : Model; bar : LogitsBar = LogitsBar.bit_exact; split_forms : bool = false) {
+//! the batched cell's collection on a two-region load, the routed
+//! down's census as `fold` claims it
+def regions_batched_rows(var h : Held; tr : Model; bar : LogitsBar = LogitsBar.bit_exact;
+                         fold : DownFold = DownFold.unclaimed) {
     var pa <- prompt_a()
     var pb <- prompt_b()
     let sum0 = b32_census("_gemv_sum_cls_spv")
+    let leaf0 = b32_census("_gemv_cls_spv")
     batched_steps_body(h, tr, pa, pb, bar)
-    if (split_forms && sum0 != NO_CENSUS) {
-        h |> held_equal(b32_census("_gemv_sum_cls_spv") - sum0, 0l, "the split forms fold no routed down: no summed down stamp dispatched")
+    let summed = b32_census("_gemv_sum_cls_spv") - sum0
+    if (sum0 != NO_CENSUS && fold == DownFold.folded) {
+        h |> held_fact(summed > 0l,
+            "the summed down stamps served the routed layers ({summed} dispatches)")
+        h |> held_equal(b32_census("_gemv_cls_spv") - leaf0, 0l,
+            "no command ran the per-slot down leaf: the rows fold the k slots as the one-row command does")
+    } elif (sum0 != NO_CENSUS && fold == DownFold.split_forms) {
+        h |> held_equal(summed, 0l,
+            "the split forms fold no routed down: no summed down stamp dispatched")
     }
     delete pa
     delete pb
 }
 
-//! the same past the unsplit position: both prompts run longer than RD_UNSPLIT_POS, so the batched steps take the
-//! N-row command's split attention form - the arrival counters a row apart, the last piece of each row combining
-//! the three batched-step cells on one two-region load of `file`: a batched step over two sessions, the split form past
-//! the unsplit position, and a batched step ahead of any one-row step
-def cell_regions_batched_once(t : T?; file : string; bar : LogitsBar = LogitsBar.bit_exact) {
-    with_regions_rig(t, file) $(tr) {
-        held_on(t) $(var h) {
-            regions_batched_rows(h, tr, bar)
-            regions_split_rows(h, tr, bar)
-            regions_batched_first_rows(h, tr)
+//! the batched cell on `file`'s two-region load
+def cell_regions_batched_steps(t : T?; file : string; bar : LogitsBar = LogitsBar.bit_exact) {
+    t |> run("two sessions, a region each: a batched step over both reads what each session reads alone, with no history resync") @(t : T?) {
+        with_regions_rig(t, file) $(tr) {
+            held_on(t) $(var h) {
+                regions_batched_rows(h, tr, bar)
+            }
         }
     }
 }
 
+//! the same past the unsplit position: both prompts run longer than RD_UNSPLIT_POS, so the batched steps take the
+//! N-row command's split attention form - the arrival counters a row apart, the last piece of each row combining
 def cell_regions_batched_steps_split(t : T?; file : string; bar : LogitsBar = LogitsBar.bit_exact) {
     t |> run("two sessions past the unsplit position: the split N-row command reads what each session reads alone") @(t : T?) {
         with_regions_rig(t, file) $(tr) {
@@ -973,6 +969,15 @@ def regions_batched_first_rows(var h : Held; tr : Model) {
     delete pb
     delete fa
     delete fb
+}
+
+//! the three batched-step cells' collections on one two-region
+//! load: a batched step over two sessions, the split form past the
+//! unsplit position, and a batched step ahead of any one-row step
+def regions_batched_once_rows(var h : Held; tr : Model; bar : LogitsBar = LogitsBar.bit_exact) {
+    regions_batched_rows(h, tr, bar)
+    regions_split_rows(h, tr, bar)
+    regions_batched_first_rows(h, tr)
 }
 
 def private device_session(tr : Model) : Session => <- create_device_session(tr, gpu_device_session_dtype())
@@ -1948,25 +1953,6 @@ def private split_forms_pin(on : bool) {
     }
 }
 
-//! the batched cell over the split one-row forms: the fuse knob pinned off for the load and put back after, so the rows
-//! hold to the split forms where the fused one-row forms round apart (a K-quant MoE's folded down, a PLE carrier's
-//! fused act + proj); without the Vulkan module the knob does not exist and the cell skips
-def cell_regions_batched_steps_split_forms(t : T?; file : string; bar : LogitsBar = LogitsBar.bit_exact) {
-    static_if (typeinfo builtin_module_exists(vulkan)) {
-        if (gpu_want_cuda()) {
-            t |> run("the split one-row forms need the Vulkan driver") @(t : T?) {
-                t |> skip("the CUDA home is asked: the fuse knob is the Vulkan driver's")
-            }
-        } else {
-            cell_regions_batched_steps(t, file, bar, true)
-        }
-    } else {
-        t |> run("the split one-row forms need the Vulkan driver") @(t : T?) {
-            t |> skip("no Vulkan module in this build: the split one-row forms are the Vulkan driver's")
-        }
-    }
-}
-
 //! step `st` of the widening order: the two rows batched, then each alone, then all three batched
 def private widen_step(tr : Model; var ws : BatchWorkspace; var sa, sb : Session; var two, three : array<Session?>; fa, fb, fc : array<int64>; st : int64) {
     if (st == 0l) {
@@ -1983,79 +1969,79 @@ def private widen_step(tr : Model; var ws : BatchWorkspace; var sa, sb : Session
 }
 
 //! a row's stepped logits against its session alone, from the step it joined at
-def private widen_hold(t : T?; tr : Model; got, ref : array<array<float>>; bar : LogitsBar; row : string; first : int64) {
+def private widen_hold(var h : Held; tr : Model; got, ref : array<array<float>>; bar : LogitsBar;
+                       row : string; first : int64) {
     for (st in range64(long_length(got))) {
-        hold_bar(t, tr, got[st], ref[st + 1l], ref[st], bar, "widened step {st + first}, {row}")
+        hold_bar(h, tr, got[st], ref[st + 1l], ref[st], bar, "widened step {st + first}, {row}")
     }
 }
 
-//! three sessions over three regions: a batched step over two, one of them alone, then a batched step over all three -
-//! the command records at a row count it had not recorded, after a one-row step, and every row still reads what its
-//! session reads alone (the N-row sets decide their own forms at the first record, never off the one-row command's);
-//! `split_forms` pins the fuse knob off for the load, as the split-forms cell does
-def cell_regions_batched_widen(t : T?; file : string; bar : LogitsBar = LogitsBar.bit_exact; split_forms : bool = false) {
-    t |> run("a batched step over two rows, one row alone, then a batched step over three: the rows read what each session reads alone") @(t : T?) {
-        with_regions_rig(t, file, RegionsLoad(regions = 3l, split_forms = split_forms)) $(tr) {
-            var pa <- prompt_a()
-            var pb <- prompt_b()
-            var pc <- prompt_c()
-            var fa <- feed_a()
-            var fb <- feed_b()
-            var fc <- feed_c()
-            var sa <- create_session(tr, mirror_kv_dtype())
-            var sb <- create_session(tr, mirror_kv_dtype())
-            var sc <- create_session(tr, mirror_kv_dtype())
-            eval(tr, sa, pa)
-            eval(tr, sb, pb)
-            eval(tr, sc, pc)
-            var ws <- create_batch_workspace(tr)
-            var two <- [unsafe(addr(sa)), unsafe(addr(sb))]
-            var three <- [unsafe(addr(sa)), unsafe(addr(sb)), unsafe(addr(sc))]
-            var got_a, got_b, got_c : array<array<float>>
-            let steps0 = rdec_nrow_steps()
-            for (st in range64(STEPS)) {
-                widen_step(tr, ws, sa, sb, two, three, fa, fb, fc, st)
-                if (st >= 2l) {
-                    got_c |> emplace <| logits_of(sc, tr.config.vocab_size)
-                }
-                got_a |> emplace <| logits_of(sa, tr.config.vocab_size)
-                got_b |> emplace <| logits_of(sb, tr.config.vocab_size)
-            }
-            let stepped = rdec_nrow_steps() - steps0
-            t |> equal(STEPS - 1l, stepped, "the two-row step and every three-row step went through the N-row command")
-            served_every_call(t)
-            var ra <- logits_alone(tr, pa, fa)
-            var rb <- logits_alone(tr, pb, fb)
-            var fc_short <- [for (i in range64(STEPS - 2l)); fc[i]]
-            var rc <- logits_alone(tr, pc, fc_short)
-            widen_hold(t, tr, got_a, ra, bar, "row A", 0l)
-            widen_hold(t, tr, got_b, rb, bar, "row B", 0l)
-            widen_hold(t, tr, got_c, rc, bar, "row C", 2l)
-            two |> clear()
-            three |> clear()
-            unsafe {
-                delete ws
-                delete two
-                delete three
-            }
-            delete sa
-            delete sb
-            delete sc
-            delete got_a
-            delete got_b
-            delete got_c
-            delete ra
-            delete rb
-            delete rc
-            delete pa
-            delete pb
-            delete pc
-            delete fa
-            delete fb
-            delete fc
-            delete fc_short
+//! the widening cell's collection on a three-region load: a batched step over two sessions, one of them alone, then a
+//! batched step over all three - the command records at a row count it had not recorded, after a one-row step, and every
+//! row still reads what its session reads alone (the N-row sets decide their own forms at the first record)
+def regions_widen_rows(var h : Held; tr : Model; bar : LogitsBar = LogitsBar.bit_exact) {
+    var pa <- prompt_a()
+    var pb <- prompt_b()
+    var pc <- prompt_c()
+    var fa <- feed_a()
+    var fb <- feed_b()
+    var fc <- feed_c()
+    var sa <- create_session(tr, mirror_kv_dtype())
+    var sb <- create_session(tr, mirror_kv_dtype())
+    var sc <- create_session(tr, mirror_kv_dtype())
+    eval(tr, sa, pa)
+    eval(tr, sb, pb)
+    eval(tr, sc, pc)
+    var ws <- create_batch_workspace(tr)
+    var two <- [unsafe(addr(sa)), unsafe(addr(sb))]
+    var three <- [unsafe(addr(sa)), unsafe(addr(sb)), unsafe(addr(sc))]
+    var got_a, got_b, got_c : array<array<float>>
+    got_a |> reserve(STEPS)
+    got_b |> reserve(STEPS)
+    got_c |> reserve(STEPS - 2l)
+    let steps0 = rdec_nrow_steps()
+    for (st in range64(STEPS)) {
+        widen_step(tr, ws, sa, sb, two, three, fa, fb, fc, st)
+        if (st >= 2l) {
+            got_c |> emplace <| logits_of(sc, tr.config.vocab_size)
         }
+        got_a |> emplace <| logits_of(sa, tr.config.vocab_size)
+        got_b |> emplace <| logits_of(sb, tr.config.vocab_size)
     }
+    let stepped = rdec_nrow_steps() - steps0
+    h |> held_equal(stepped, STEPS - 1l,
+        "the two-row step and every three-row step went through the N-row command")
+    h |> held_served()
+    var ra <- logits_alone(tr, pa, fa)
+    var rb <- logits_alone(tr, pb, fb)
+    var fc_short <- [for (i in range64(STEPS - 2l)); fc[i]]
+    var rc <- logits_alone(tr, pc, fc_short)
+    widen_hold(h, tr, got_a, ra, bar, "row A", 0l)
+    widen_hold(h, tr, got_b, rb, bar, "row B", 0l)
+    widen_hold(h, tr, got_c, rc, bar, "row C", 2l)
+    two |> clear()
+    three |> clear()
+    unsafe {
+        delete ws
+        delete two
+        delete three
+    }
+    delete sa
+    delete sb
+    delete sc
+    delete got_a
+    delete got_b
+    delete got_c
+    delete ra
+    delete rb
+    delete rc
+    delete pa
+    delete pb
+    delete pc
+    delete fa
+    delete fb
+    delete fc
+    delete fc_short
 }
 
 //! `rows` sessions over `rows` regions - more than the N-column leaves' eight-column tile, or more than the N-row command

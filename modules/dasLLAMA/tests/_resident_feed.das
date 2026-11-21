@@ -45,6 +45,10 @@ def tile_arm_tag() : string {
 
 let PF_WINDOW_ROWS = 2048l   //! the prompt window the cells size their prompts against: `load_resident` pins it where no file pinned one, since the engine's own pick (the wide window where the plan fits) would run a two-window prompt as one
 
+//! the window chains a prompt of `n` rows takes at a `rows`-row
+//! prompt window
+def prompt_windows(n : int64; rows : int64 = PF_WINDOW_ROWS) : int64 => (n + rows - 1l) / rows
+
 //! the engine's prefill window is `rows` (the default `PF_WINDOW_ROWS`, or the window a file pins), where the vulkan module exists: a cell sizing its prompt past the window holds it
 def assert_pf_window(t : T?; rows : int64 = PF_WINDOW_ROWS) : bool {
     static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -114,14 +118,27 @@ def resident_ready(t : T?; path : string) : bool {
     return gpu_tier_armed(t)
 }
 
-//! the CUDA home asked for (`DASLLAMA_CUDA=1` beside `DASLLAMA_GPU=1`); false after the loud skip
+//! why the run arms no CUDA home; "" where it asks for one
+//! (`DASLLAMA_CUDA=1` beside `DASLLAMA_GPU=1`)
+def cuda_home_why() : string {
+    return "" if (gpu_want_cuda())
+    return "the CUDA home is not asked for - needs DASLLAMA_CUDA=1 beside DASLLAMA_GPU=1"
+}
+
+//! the CUDA home asked for (`cuda_home_why`); false after the loud
+//! skip
 def cuda_home_asked(t : T?) : bool {
-    if (!gpu_want_cuda()) {
-        t |> skip("the CUDA home is not asked for - needs DASLLAMA_CUDA=1 beside DASLLAMA_GPU=1")
+    let why = cuda_home_why()
+    if (!empty(why)) {
+        t |> skip(why)
         return false
     }
     return true
 }
+
+//! the home ask's value a red names, where a cell picks its bar or
+//! its expected value by the home
+def cuda_knob() : string => "DASLLAMA_CUDA={gpu_want_cuda() ? 1 : 0}"
 
 //! `file`'s path for a cell on the CUDA home: the home asked for and the model ready (`resident_ready`), else "" after the loud skip
 def cuda_model_path(t : T?; file : string) : string {
@@ -202,6 +219,30 @@ def want_heat(slots : int64) {
     set_gpu_tier_want_(want)
 }
 
+//! the streamed prompt's pins a host-experts cell takes, the levers
+//! as found returned (`restore_stream_pins`): the meet's host share
+//! `host_first`, the prompt stream and the rare rail's arena where
+//! `pf_stream` and `arena` are 0 or 1, and under `plain_steps` the
+//! fed steps on the plain rail - the pool's DMA fill, no decode meet,
+//! no heat slot
+def pin_stream(host_first : int64; pf_stream : int = -1; arena : int = -1;
+               plain_steps : bool = true) : StreamPins {
+    let was = stream_pins()
+    if (pf_stream >= 0) {
+        set_gpu_want_pf_stream(pf_stream)
+    }
+    if (arena >= 0) {
+        set_rare_arena(arena)
+    }
+    set_moe_host_first(host_first)
+    if (plain_steps) {
+        set_gpu_hot_dma(1)
+        set_gpu_dec_meet(0)
+        want_heat(0l)
+    }
+    return was
+}
+
 //! `body` with the K/V mirror asked at `kv`, the ask put back as it was found - the pin for a rig that loads its own model
 //! and makes its sessions on the armed codec; a skip where the environment arms another codec over the ask
 def with_gpu_kv_dtype(t : T?; kv : KVDtype; body : block<void>) {
@@ -217,9 +258,17 @@ def with_gpu_kv_dtype(t : T?; kv : KVDtype; body : block<void>) {
 
 //! where a cell pinned a mirror codec, the armed mirror holds it
 def mirror_codec_held(t : T?) {
+    held_on(t) $(var h) {
+        mirror_codec_held(h)
+    }
+}
+
+//! `mirror_codec_held` read now, held into `h`
+def mirror_codec_held(var h : Held) {
     let asked = gpu_kv_want_pin()
     if (asked.pinned) {
-        t |> equal(mirror_kv_dtype(), asked.value, "the mirror armed at the codec the cell asks")
+        h |> held_equal(mirror_kv_dtype(), asked.value,
+            "the mirror armed at the codec the cell asks")
     }
 }
 
@@ -345,8 +394,10 @@ def load_resident_host(path : string; regions : int64 = 0l; strict_ctx : int64 =
     <- load_resident_by(path, regions, strict_ctx, host_layers, image ? ResidentLoad.image : ResidentLoad.host)
 
 //! `load_resident_host` where `host`, else `load_resident`: a rig whose cells split on whether they read the host's copy
-def load_resident_as(host : bool; path : string; regions : int64 = 0l; strict_ctx : int64 = 0l) : Model =>
-    <- load_resident_by(path, regions, strict_ctx, 0l, host ? ResidentLoad.host : ResidentLoad.served)
+def load_resident_as(host : bool; path : string; regions : int64 = 0l; strict_ctx : int64 = 0l;
+                     host_layers : int64 = 0l) : Model =>
+    <- load_resident_by(path, regions, strict_ctx, host_layers,
+        host ? ResidentLoad.host : ResidentLoad.served)
 
 //! `load_resident`, or `load_resident_host` under `host`, with the K/V mirror asked at `kv` for the load, the ask put back
 def load_resident_at(path : string; kv : KVDtype; regions : int64 = 0l; strict_ctx : int64 = 0l; host : bool = false) : Model {
@@ -638,10 +689,6 @@ def head_k_row_marked(tr : Model; var s : Session; row : int64) : array<uint8> {
     return <- head_k_row_bytes(tr, s, row)
 }
 
-//! the bar a CPU row `cpu` holds a device row to: `rel` of its largest live |logit| - a suppressed id and a NaN scale no bar, so a
-//! NaN in the reference row reads past the bar its finite elements set
-def row_bar(cpu : array<float>; rel : float) : float => rel * live_maxabs(cpu)
-
 //! `got` within `bar` of `want` - its largest difference, a NaN read past the bar - asserted under `what`; the difference back
 def row_within(t : T?; what : string; got, want : array<float>; bar : float) : float {
     let diff = logits_maxdiff(got, want)
@@ -822,7 +869,8 @@ def prose_feed(tr : Model; n, steps : int64) : ProseFeed {
     return <- f
 }
 
-//! one load's run in `ring_vs_flat` (`ring_rows`): the logits rows, the positions and window chains the CUDA driver served for
+//! one ring load's run (`ring_rows`): the logits rows, the positions
+//! and window chains the CUDA driver served for
 //! them (-1 off the CUDA home) at the prompt window `pf_rows`, whether the driver armed the rings, the mirror's bytes on the card
 struct RingRun {
     rows : array<array<float>>
@@ -850,36 +898,18 @@ def ring_rows(tr : Model; kv : KVDtype; n : int64) : RingRun {
     return <- run
 }
 
-//! `path` loaded at mirror codec `kv` under the ring pin `ring` (`with_gpu_kv_ring`) and the session cap `ctx`, the `n` prose ids
-//! and eight fed steps through it; `ok` false after the skip `resident_trunk` names
-def private ring_run(t : T?; path : string; kv : KVDtype; ring : int; n, ctx : int64) : tuple<ok : bool; run : RingRun> {
-    var tr <- resident_trunk(t, path, ctx, "") $() : Model {
-        var m <- Model()
-        with_gpu_kv_ring(ring) {
-            delete m
-            m <- load_resident_at(path, kv)
-        }
-        return <- m
-    }
-    let ok = tr.config.n_layers > 0l
-    var run <- ok ? ring_rows(tr, kv, n) : RingRun()
-    if (ok) {
-        served_every_call(t)
-    }
-    moe_gpu_drop_model()
-    delete tr
-    return <- (ok = ok, run <- run)
-}
-
-//! one load's CUDA witnesses in `ring_vs_flat`: the driver served the `n` prose ids and eight steps, the prompt as the window
-//! chains its rows take at the pinned window
+//! one ring load's CUDA witnesses: the driver served the `n` prose
+//! ids and eight steps, the prompt as the window chains its rows take
+//! at the pinned window
 def private ring_served_within(t : T?; tag, load : string; run : RingRun; n : int64) {
     if (run.cuda >= 0l) {
         cuda_served_within(t, run.cuda, n + 8l, "{tag}{load}")
     }
     if (run.windows >= 0l) {
-        let rows = run.pf_rows
-        t |> equal(run.windows, (n + rows - 1l) / rows, "{tag}{load}: the {n} prose ids ran as {(n + rows - 1l) / rows} window chain(s) of {rows} rows on the CUDA driver")
+        let windows = prompt_windows(n, run.pf_rows)
+        t |> equal(run.windows, windows,
+            "{tag}{load}: the {n} prose ids ran as {windows} window chain(s) of {run.pf_rows} " +
+            "rows on the CUDA driver")
     }
 }
 
@@ -899,17 +929,57 @@ def ring_runs_within(t : T?; tag : string; n : int64; ringed, flat : RingRun) {
     }
 }
 
-//! The sliding layers' rings against the flat mirror on one driver: `n` prose ids past the window and eight fed steps on a ringed load
-//! and a flat one (`set_gpu_kv_ring`), at mirror codec `kv` under the session cap `ctx`, held by `ring_runs_within`
-def ring_vs_flat(t : T?; n : int64; path : string; kv : KVDtype; ctx : int64) {
-    return if (!resident_ready(t, path))
-    with_dasllama_jobque_() {
-        var inscope ringed <- ring_run(t, path, kv, 1, n, ctx)
-        var inscope flat <- ring_run(t, path, kv, 0, n, ctx)
-        if (ringed.ok && flat.ok) {
-            ring_runs_within(t, "", n, ringed.run, flat.run)
-        }
+//! one mirror codec's ring runs (`ring_rows`): the ringed load's
+//! and the flat load's, each `_ran` where its form collected
+struct RingPair {
+    ringed : RingRun
+    flat : RingRun
+    ringed_ran : bool
+    flat_ran : bool
+}
+
+//! a block's ring runs on two mirror codecs: the first (`main`) and
+//! the second (`other`), each ringed and flat
+struct RingRows {
+    main : RingPair
+    other : RingPair
+}
+
+//! one load's run into `p`, its ringed or its flat slot by `ringed`
+def private ring_pair_into(var p : RingPair; m : Model; kv : KVDtype; ringed : bool; ids : int64) {
+    if (ringed) {
+        delete p.ringed
+        p.ringed <- ring_rows(m, kv, ids)
+        p.ringed_ran = true
+    } else {
+        delete p.flat
+        p.flat <- ring_rows(m, kv, ids)
+        p.flat_ran = true
     }
+}
+
+//! one ring form's `ids` prose ids into `r`: the `other` codec's pair
+//! or the main one's, its ringed or its flat run by `ringed`
+def ring_rows_into(var r : RingRows; m : Model; kv : KVDtype; other, ringed : bool; ids : int64) {
+    if (other) {
+        ring_pair_into(r.other, m, kv, ringed, ids)
+    } else {
+        ring_pair_into(r.main, m, kv, ringed, ids)
+    }
+}
+
+def private ring_pair_within(t : T?; tag : string; ids : int64; p : RingPair; kv : KVDtype) {
+    if (p.ringed_ran && p.flat_ran) {
+        ring_runs_within(t, "{tag}, the rings on a {kv} mirror: ", ids, p.ringed, p.flat)
+    }
+}
+
+//! the ring cells' compares under `tag`, each codec's ringed run
+//! against its flat where both ran - `main_kv` then `other_kv`;
+//! inside the job queue
+def rings_within(t : T?; tag : string; ids : int64; r : RingRows; main_kv, other_kv : KVDtype) {
+    ring_pair_within(t, tag, ids, r.main, main_kv)
+    ring_pair_within(t, tag, ids, r.other, other_kv)
 }
 
 //! the two arms' logits rows: the resident driver's, then the CPU chain's

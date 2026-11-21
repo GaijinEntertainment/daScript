@@ -64,8 +64,8 @@ require dasllama/dasllama_env   // nolint:STYLE030,LINT019 — the read sites si
 // dispatched it", never "unreachable" — deleting a kernel additionally needs a reachability
 // audit of its dispatch predicate (models/quants/shapes not stocked here still count). This
 // suite is the gate a kernel deletion must run before ("was it ever dispatched by anything
-// we run?") and the home a NEW kernel's small-model run joins. Expected warnings on the small tier: MoE / mx4 / suppress and other
-// kernels whose carriers sit above the tier (their census rows serve under
+// we run?") and the home a NEW kernel's small-model run joins. Expected warnings on the small tier: the qwen MoE rows' and
+// other kernels whose carriers sit above the tier (their census rows serve under
 // DASLLAMA_PARITY_FULL=1); the report stays honest about what THIS run covered. The vulkan
 // half: arm `coverage` = the device-free rail unit (spec parse + zero table); arm `coverage-vk`
 // = the SERVING census (needs a vulkan device + DASLLAMA_GPU=1 + the local model zoo).
@@ -473,8 +473,8 @@ def private census_zoo(t : T?) {
     cov_model(t, path_join(models_dir(), "gemma-4-E2B-it-Q8_0.gguf"), "gemma4e",
         [KVDtype.f16, KVDtype.q8_0, KVDtype.tq4], none)
     // gemma4: the checkpoint suppress list (suppress_tokens metadata rides the 12B
-    // family, NOT the E-series) + K-quant at 12B shapes; large tier
-    cov_model(t, path_join(models_dir(), "gemma-4-12B-it-Q4_K_M.gguf"), "gemma4",
+    // family, NOT the E-series) + K-quant at 12B shapes, on the 12B's first twelve blocks
+    cov_model(t, path_join(models_dir(), "gemma-4-12B-12L-Q4_K_M-local.gguf"), "gemma4",
         [KVDtype.f16], [2])
     // qwen3moe: the whole-graph GPU MoE family (router/bucket/select/combine +
     // expert GEMV/GEMMs); no batch shapes — MoE batch declines are graph-level and a
@@ -482,16 +482,16 @@ def private census_zoo(t : T?) {
     cov_model(t, path_join(models_dir(), "Qwen3-30B-A3B-Instruct-2507-Q4_K_M.gguf"), "qwen3moe",
         [KVDtype.f16], none)
     // gptoss: the MXFP4 expert stacks + swiglu_oai + attention sinks — the only carrier for the
-    // mx4 expert kernels; no batch shapes for the same reason as the other MoE rows; large tier
-    cov_model(t, path_join(models_dir(), "gpt-oss-20b-mxfp4.gguf"), "gptoss",
+    // mx4 expert kernels; no batch shapes for the same reason as the other MoE rows
+    cov_model(t, path_join(models_dir(), "gpt-oss-4L-mxfp4-local.gguf"), "gptoss",
         [KVDtype.f16], none)
     // qwen2moe: q8 expert stacks + the sigmoid-gated shared expert on std attention; large tier
     cov_model(t, path_join(models_dir(), "Qwen1.5-MoE-A2.7B-Chat.Q8_0.gguf"), "qwen2moe",
         [KVDtype.f16], none)
     // gemma4moe: the only carrier of a Q4_0 routed expert plane - the gemma-4 dense-shared MoE
     // whose fused gate_up stacks are Q4_0 (the 704-wide down stacks serve as q4032, off the 256
-    // lattice). No batch shapes, same reason as the other MoE rows; large tier
-    cov_model(t, path_join(models_dir(), "gemma-4-26B-A4B-it-Q4_0.gguf"), "gemma4moe",
+    // lattice), on the 26B's first six blocks. No batch shapes, same reason as the other MoE rows
+    cov_model(t, path_join(models_dir(), "gemma-4-26B-A4B-6L-Q4_0-local.gguf"), "gemma4moe",
         [KVDtype.f16], none)
     cov_tower(t)
 }
@@ -1363,16 +1363,16 @@ let private VK_CENSUS_NEVER_DISPATCHED <- [
     // the batched windowed decode attention and its f16 twin (a sliding window over the batch rows: the gemma
     // carriers, no zoo row); its coverage is test_vkd_da_attn_bw in test_vulkan_kernels.das
     "da_attn_bw_cls_spv", "da_attn_bw_f16_cls_spv",
-    // the per-32 routed down GEMVs' summing twins serve only the gemma-4 MoE's device experts, and no zoo row loads a 26B-A4B file
-    // (above the zoo's tier). A key a line - its carrier's down stacks, the stocked file that runs it, the model-free cell's summed arm:
-    // q51: gemma-4-26B-A4B-it-Q4_K_M.gguf (Q5_1 down), test_gpu_resident_gemma4_moe.das's test_gpu_resident_gemma4_26b_k
-    //      and test_gpu_resident_regions_gemma4moe.das; test_vkd_q51_gemv
-    // iq4nl32: gemma-4-26B-A4B-it-UD-IQ3_XXS.gguf (IQ4_NL down), test_gpu_resident_gemma4_moe.das's
-    //          test_gpu_resident_gemma4_26b; test_vkd_iq4nl32_gemv
-    // q4032: gemma-4-26B-A4B-it-Q4_0.gguf (Q4_0 down), no stocked Vulkan file (the Metal census's gemma4moe row alone loads it);
-    //        test_vkd_q4032_gemv
+    // the per-32 routed down GEMVs' summing twins serve only the gemma-4 MoE's device experts, and no Vulkan census row
+    // loads a 26B-A4B file (the Metal zoo's gemma4moe row loads the Q4_0 file's cut). A key a line - its carrier's down stacks, the stocked file that runs it, the model-free cell's summed arm:
+    // q51: gemma-4-26B-A4B-6L-Q4_K_M-local.gguf (Q5_1 down), test_gpu_resident_gemma4_moe.das's
+    //      test_gpu_resident_gemma4_26b_k_cut; test_vkd_q51_gemv
+    // iq4nl32: gemma-4-26B-A4B-6L-UD-IQ3_XXS-local.gguf (IQ4_NL down), test_gpu_resident_gemma4_moe.das's
+    //          test_gpu_resident_gemma4_26b_format; test_vkd_iq4nl32_gemv
+    // q4032: gemma-4-26B-A4B-6L-Q4_0-local.gguf (Q4_0 down), no stocked Vulkan file (the Metal census's gemma4moe row alone
+    //        loads it); test_vkd_q4032_gemv
     // q5032: no stocked file carries a Q5_0 down stack; test_vkd_q5032_gemv
-    // mx4: gemma-4-26B-A4B-it-MXFP4_MOE-q4km-local.gguf (MXFP4 down), test_gpu_resident_gemma4_moe.das's 26b_mx4 cells;
+    // mx4: gemma-4-26B-A4B-6L-MXFP4_MOE-local.gguf (MXFP4 down), test_gpu_resident_gemma4_moe.das's 26b_mx4_format cell;
     //      test_vkd_mx4_gemv
     "q51_gemv_sum_cls_spv", "iq4nl32_gemv_sum_cls_spv", "q4032_gemv_sum_cls_spv", "q5032_gemv_sum_cls_spv", "mx4_gemv_sum_cls_spv",
     // the E-series per-layer-embedding pre-step's classes serve only an E-series load, and no Vulkan census row loads one (the

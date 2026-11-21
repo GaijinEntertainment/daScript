@@ -33,22 +33,33 @@ struct ModelForm {
     host : bool       //! a device form keeps the weight planes on the host beside the device's copy (`load_resident_host`)
     split_forms : bool   //! a device form loads with the Vulkan fuse knob off - the split one-row forms; no knob off Vulkan
     ctx : int64       //! a device form's mirror context: 0 the call's
+    host_layers : int64   //! routed layers' experts asked onto the host
+    pf_stream : bool      //! a host-layers form's prompt streams, else keeps the host's sums
+    pf_window_rows : int64   //! the prompt window pinned for the form: 0 the cells'
 }
 
 //! a device form on the environment's mirror codec
 def device_form(ring : bool = true; gather : bool = true; regions : int64 = 0l; host : bool = false; split_forms : bool = false;
-                ctx : int64 = 0l) : ModelForm =>
-    ModelForm(on_gpu = true, kv = KVDtype.f16, kv_asked = false, ring = ring, gather = gather, quant = QuantMode.q8, regions = regions,
-        host = host, split_forms = split_forms, ctx = ctx)
+                ctx : int64 = 0l; host_layers : int64 = 0l; pf_stream : bool = true;
+                pf_window_rows : int64 = 0l) : ModelForm =>
+    ModelForm(on_gpu = true, kv = KVDtype.f16, kv_asked = false, ring = ring, gather = gather,
+        quant = QuantMode.q8, regions = regions, host = host, split_forms = split_forms, ctx = ctx,
+        host_layers = host_layers, pf_stream = pf_stream, pf_window_rows = pf_window_rows)
 
 //! a device form whose mirror asks the codec `kv`
-def device_form(kv : KVDtype; ring : bool = true; gather : bool = true) : ModelForm =>
-    ModelForm(on_gpu = true, kv = kv, kv_asked = true, ring = ring, gather = gather, quant = QuantMode.q8)
+def device_form(kv : KVDtype; ring : bool = true; gather : bool = true; ctx : int64 = 0l;
+                pf_window_rows : int64 = 0l) : ModelForm {
+    var f = device_form(ring = ring, gather = gather, ctx = ctx, pf_window_rows = pf_window_rows)
+    f.kv = kv
+    f.kv_asked = true
+    return f
+}
 
 //! a CPU form loaded in the mode `quant` past the CPU chain's q8: `QuantMode.fp32` the file's f32 chain, `QuantMode.q4_0` the q4
 //! serving mode
 def cpu_quant_form(quant : QuantMode) : ModelForm =>
-    ModelForm(on_gpu = false, kv = KVDtype.f16, kv_asked = false, ring = true, gather = true, quant = quant)
+    ModelForm(on_gpu = false, kv = KVDtype.f16, kv_asked = false, ring = true, gather = true,
+        quant = quant, pf_stream = true)
 
 //! the CPU form on the file's f32 chain
 def f32_form() : ModelForm => cpu_quant_form(QuantMode.fp32)
@@ -58,6 +69,37 @@ def f32_form() : ModelForm => cpu_quant_form(QuantMode.fp32)
 def device_default(f : ModelForm) : bool => (f.on_gpu && !f.kv_asked && f.ring && f.gather && f.regions == 0l && !f.host && !f.split_forms
     && f.ctx == 0l)
 
+//! which side of a block's default pair a form is (`main_side`)
+enum MainSide {
+    device   //! the driver's default form on the device
+    cpu      //! the CPU form on the codec the default form armed
+    neither
+}
+
+//! the driver's default form and the CPU form answering it: whether
+//! the default form ran, and the codec its mirror armed
+struct MainPair {
+    ran : bool
+    kv : KVDtype
+}
+
+//! the side of `p` the form `f` is, the default form marked as run
+//! in `p` (its armed codec the CPU side's)
+def main_side(var p : MainPair; f : ModelForm) : MainSide {
+    if (device_default(f)) {
+        p.ran = true
+        p.kv = f.kv
+        return MainSide.device
+    }
+    return MainSide.cpu if (!f.on_gpu && f.quant == QuantMode.q8 && p.ran && f.kv == p.kv)
+    return MainSide.neither
+}
+
+//! a device form that loads off the file's device lane where the
+//! rail is on: every expert on the device (a lane bakes its
+//! host-layers split) and no host planes
+def private is_lane_form(f : ModelForm) : bool => f.on_gpu && !f.host && f.host_layers == 0l
+
 //! the form as its messages name it
 def form_name(f : ModelForm) : string {
     return "the {f.quant} CPU form" if (!f.on_gpu && f.quant != QuantMode.q8)
@@ -65,7 +107,11 @@ def form_name(f : ModelForm) : string {
     let regions = f.regions > 0l ? ", {f.regions} regions" : ""
     let planes = f.host ? ", host planes" : ""
     let fuse = f.split_forms ? ", split forms" : ""
-    return "the device form ({f.kv} mirror, {f.ring ? "rings" : "flat"}, {f.gather ? "device gather" : "host embed"}{regions}{planes}{fuse})"
+    let stream = f.pf_stream ? "" : ", the prompt stream off"
+    let experts = f.host_layers > 0l ? ", {f.host_layers} routed layers on the host{stream}" : ""
+    let window = f.pf_window_rows > 0l ? ", {f.pf_window_rows}-row prompt windows" : ""
+    let shape = "{f.ring ? "rings" : "flat"}, {f.gather ? "device gather" : "host embed"}"
+    return "the device form ({f.kv} mirror, {shape}{regions}{planes}{fuse}{experts}{window})"
 }
 
 //! where a block's seconds went, a line a form: under `DAS_LOG_LEVEL=info`
@@ -91,6 +137,24 @@ def private remove_minted_lanes(path : string; before : array<string>) : bool {
 //! the return; `ran` false after the loud skip that says why the form did not arm
 def private device_form_run(t : T?; path : string; ctx : int64; form : ModelForm; lane : bool;
                             body : block<(var m : Model; form : ModelForm) : void>) : tuple<ran : bool; kv : KVDtype> {
+    let levers = resident_levers()
+    let pins = stream_pins()
+    if (form.pf_window_rows > 0l) {
+        set_pf_window_rows_pin(form.pf_window_rows)   //! the cells read the window live
+    }
+    if (form.host_layers > 0l) {
+        set_gpu_want_pf_stream(form.pf_stream ? 1 : 0)
+    }
+    let out = device_form_pinned(t, path, ctx, form, lane, body)
+    restore_resident_levers(levers)
+    restore_stream_pins(pins)
+    return out
+}
+
+//! `device_form_run` under the form's prompt pins
+def private device_form_pinned(t : T?; path : string; ctx : int64; form : ModelForm; lane : bool;
+                               body : block<(var m : Model; form : ModelForm) : void>
+                               ) : tuple<ran : bool; kv : KVDtype> {
     var out = (ran = false, kv = form.kv)
     with_gpu_kv_ring(form.ring ? 1 : 0) {
         with_gpu_resident_embed(form.gather ? 1 : 0) {
@@ -121,7 +185,7 @@ def private device_form_load(t : T?; path : string; call_ctx : int64; form : Mod
         if (lane) {
             return <- load_resident_lane(path, form.regions)
         }
-        return <- load_resident_as(form.host, path, form.regions)
+        return <- load_resident_as(form.host, path, form.regions, 0l, form.host_layers)
     }
     restore_resident_levers(levers)
     var out = (ran = false, kv = form.kv)
@@ -188,16 +252,16 @@ def with_cpu_and_gpu_model(t : T?; area, file : string; ctx : int64; forms : arr
     return false if (!resident_ready(t, path))
     to_log(LOG_INFO, "{area}: {file} in {length(forms)} forms and the CPU's, one at a time\n")
     var kvs : array<KVDtype>
-    let streamed_forms = length([for (f in forms); f; where f.on_gpu && !f.host])
-    let rail = streamed_forms >= LANE_FORMS && g_env_engine.image && image_save_enabled()
+    let lane_forms = length([for (f in forms); f; where is_lane_form(f)])
+    let rail = lane_forms >= LANE_FORMS && g_env_engine.image && image_save_enabled()
     var inscope before <- dlim_names_beside(path)
     with_dasllama_jobque_() {
-        var streamed_before = 0
+        var lane_forms_before = 0
         for (form in forms) {
             continue if (!form.on_gpu)
-            let lane = rail && !form.host && streamed_before > 0
-            if (!form.host) {
-                streamed_before++
+            let lane = rail && is_lane_form(form) && lane_forms_before > 0
+            if (is_lane_form(form)) {
+                lane_forms_before++
             }
             let armed_out = device_form_run(t, path, ctx, form, lane, body)
             if (armed_out.ran && !has_value(kvs, armed_out.kv)) {
@@ -236,9 +300,11 @@ struct FeedRows {
     rows : array<array<float>>
     prefills : int64   //! resident window chains the feed's prompt took
     cuda : int64       //! positions the CUDA driver served, -1 off the CUDA home
+    pieces : table<int64; string>   //! every row's argmax decoded, for the compares after the load
 }
 
-//! `prompt` then `toks` through a fresh session of the form's codec
+//! `prompt` then `toks` through a fresh session of the form's
+//! codec, inside the engine's job queue
 def feed_rows(m : Model; form : ModelForm; prompt, toks : array<int64>) : FeedRows {
     var f : FeedRows
     f.nprompt = long_length(prompt)
@@ -248,6 +314,12 @@ def feed_rows(m : Model; form : ModelForm; prompt, toks : array<int64>) : FeedRo
     f.rows <- feed_alone(m, form.kv, prompt, toks)
     f.prefills = gpu_resident_prefills_() - p0
     f.cuda = c0 >= 0l ? cuda_positions_served() - c0 : -1l
+    for (row in f.rows) {
+        let id = argmax_of(row)
+        if (!key_exists(f.pieces, id)) {
+            f.pieces |> insert(id, decode_(m, [id]))
+        }
+    }
     return <- f
 }
 
@@ -256,6 +328,18 @@ def prose_feed_rows(m : Model; form : ModelForm; n : int64; steps : int64 = 8l) 
     var inscope feed <- prose_feed(m, n, steps)
     return <- feed_rows(m, form, feed.prompt, feed.toks)
 }
+
+//! `n` ids of `resident_prompt` prefilled and `steps` of
+//! `resident_feed` fed after them, off one form
+def resident_feed_rows(m : Model; form : ModelForm; n, steps : int64) : FeedRows {
+    var inscope prompt <- resident_prompt(n)
+    var inscope toks <- resident_feed(steps)
+    return <- feed_rows(m, form, prompt, toks)
+}
+
+//! `id` decoded, as one of two feeds' argmax pieces holds it; ""
+//! where neither feed's argmax was `id`
+def feed_piece(a, b : FeedRows; id : int64) : string => a.pieces?[id] ?? (b.pieces?[id] ?? "")
 
 //! the device form's feed against a CPU form's (`cpu_name` the chain it ran): the device served the prompt as one window chain
 //! (and every position on the CUDA home, where that home serves), and every row sits within `bar_rel` of the CPU row's largest
@@ -266,5 +350,8 @@ def feed_rows_within(t : T?; tag : string; gpu, cpu : FeedRows; bar_rel : float;
     if (gpu.cuda >= 0l) {
         t |> equal(gpu.cuda, gpu.nprompt + long_length(gpu.toks), "{tag}the CUDA driver served every position of the feed")
     }
-    feed_steps_within(t, tag, gpu.nprompt, gpu.rows, cpu.rows, gpu.toks, bar_rel, "resident", cpu_name)
+    feed_steps_within(t, tag, gpu.nprompt, gpu.rows, cpu.rows, gpu.toks, bar_rel, "resident",
+            cpu_name) $(id) {
+        return feed_piece(gpu, cpu, id)
+    }
 }

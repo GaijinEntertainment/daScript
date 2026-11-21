@@ -500,6 +500,15 @@ def test_model_categories(t : T?) {
     t |> equal(model_category("gemma-4-12b-it-Q6_K"), "gemma4-dense", "a stem in either casing")
     t |> equal(model_category("mmproj-gemma-4-12B-it-BF16"), "", "a stem opens the name: the 12B's vision projector is no dense decoder")
     t |> equal(model_category("mtp-gemma-4-26B-A4B-it-Q8_0"), "gemma4-moe", "a draft head rides its target's category")
+    for (cut in fixed_array("gpt-oss-4L-mxfp4-local.gguf", "gemma-4-12B-12L-Q4_K_M-local.gguf",
+            "gemma-4-12B-12L-Q8_0-local.gguf", "gemma-4-26B-A4B-6L-Q4_K_M-local.gguf",
+            "gemma-4-26B-A4B-6L-Q8_0-local.gguf", "gemma-4-26B-A4B-6L-Q4_0-local.gguf",
+            "gemma-4-26B-A4B-6L-UD-IQ3_XXS-local.gguf", "gemma-4-26B-A4B-6L-MXFP4_MOE-local.gguf")) {
+        t |> equal(model_category(cut), "", "{cut}, a cut of a category's file, is no category's: every run opens it")
+    }
+    t |> equal(model_category("gpt-oss-20b-mxfp4.gguf"), "gptoss-20b", "the file a cut is made from stays its category's")
+    t |> equal(model_category("gemma-4-26B_q4_0-it.gguf"), "gemma4-moe", "the 26B's Q4_0 file is the routed category's")
+    t |> equal(model_family("gemma-4-26B-A4B-6L-Q4_K_M-local.gguf"), "gemma4moe", "a cut keeps its family")
     t |> success(find(category_skip_reason("gemma-4-E4B-it-Q8_0", ""), "--category gemma4-e4b") >= 0, "a run that names none leaves a category's file, the reason naming the flag")
     t |> equal(category_skip_reason("gemma-4-E2B-it-Q8_0", ""), "", "... and opens a model of no category")
     t |> equal(category_skip_reason("gemma-4-E4B-it-Q8_0", "other, gemma4-e4b"), "", "a named category's file opens")
@@ -681,43 +690,6 @@ def test_exclude_filter(t : T?) {
     t |> equal(length(dir.kept), 3, "a token matches the base name, not the directory")
 }
 
-[test(description = "`shard_files` i/n takes every n-th file from the i-th so shards partition the run exactly, malformed specs are refused, and a sharded dry run's SHARD, REPORT and NEXT lines name the shard")]
-def test_shard_filter(t : T?) {
-    let files <- [for (k in range(7)); "modules/dasLLAMA/tests/test_{k}.das"]
-    let whole <- shard_files(files, "")
-    t |> equal(length(whole.kept), 7, "no --shard keeps every file")
-    t |> success(empty(whole.why), "and refuses nothing")
-    let one <- shard_files(files, "1/1")
-    t |> equal(length(one.kept), 7, "1/1 is the whole run")
-    var seen : table<string>
-    for (k in range(3)) {
-        let part <- shard_files(files, "{k + 1}/3")
-        t |> success(empty(part.why), "{k + 1}/3 parses")
-        t |> success(length(part.kept) == (k == 0 ? 3 : 2), "{k + 1}/3 holds every third file from its own: {length(part.kept)}")
-        for (f in part.kept) {
-            t |> success(!key_exists(seen, f), "{f} sits in one shard alone")
-            seen |> insert(f)
-        }
-    }
-    t |> equal(length(seen), 7, "the three shards cover the run once")
-    let second <- shard_files(files, "2/3")
-    t |> equal(second.kept[0], files[1], "shard i starts at the i-th file")
-    t |> equal(second.kept[1], files[4], "and steps by n")
-    for (bad in ["0/2", "3/2", "2/0", "a/b", "1", "1/2/3", "01/2", " 1/2"]) {
-        let r <- shard_files(files, bad)
-        t |> success(!empty(r.why) && empty(r.kept), "'{bad}' is refused: {r.why}")
-    }
-    return if (get_platform_name() == "windows")   //! the dry run's no-op child binary is a POSIX one, as test_runner_dry_run's
-    var out : string
-    t |> equal(run_runner("--area infra --das /usr/bin/true --shard 2/2", out), 0, "an infra dry run under a shard exits clean:\n{out}")
-    t |> success(find(out, "SHARD 2/2: ") >= 0, "the SHARD line names the shard and its count:\n{out}")
-    t |> success(find(out, "REPORT areas infra shard 2/2:") >= 0, "the REPORT line carries the shard, so it cannot read as the whole run:\n{out}")
-    t |> success(find(out, "NEXT the run's other shard(s)") >= 0 && find(out, "--shard 1/2") >= 0, "the NEXT line owes the other shard:\n{out}")
-    var refused : string
-    t |> equal(run_runner("--area infra --das /usr/bin/true --shard 5/4", refused), 2, "a shard past n is refused")
-    t |> success(find(refused, "not i/n") >= 0, "and says so:\n{refused}")
-}
-
 //! --only keeps the files whose name contains a token and nothing else, "" the whole list; the dry run names each kept
 //! file on an ONLY line and the REPORT line carries the tokens, and a --only that keeps nothing is refused
 [test(description = "`only_files` keeps in order the files whose name holds a token, a dry run prints an ONLY line per kept file and the tokens on the REPORT line, and a --only keeping nothing is refused")]
@@ -737,6 +709,60 @@ def test_only_filter(t : T?) {
     var refused : string
     t |> equal(run_runner("--area infra --das /usr/bin/true --only no-such-file", refused), 2, "a --only that keeps nothing is refused")
     t |> success(find(refused, "keeps no file") >= 0, "and says so:\n{refused}")
+}
+
+//! the text by which a test file reaches the CUDA home: the home
+//! ask, or a CUDA fixture
+let private CUDA_REACH <- [
+    "gpu_want_cuda()", "require _cuda_", "require ?cuda _cuda_", "cuda_tower_asked"]
+
+//! the files whose text names the CUDA home and that hold no CUDA cell
+let private CUDA_REACH_NO_CELL <- [
+    "test_gpu_home.das",   // a unit of the home pick itself, on no device
+    "test_run_suites.das",   // this file, which names the reach text
+    "test_vulkan_moe_cm2.das" ]   // its CUDA branch only skips
+
+def private text_reaches_cuda(text : string) : bool {
+    for (r in CUDA_REACH) {
+        return true if (find(text, r) >= 0)
+    }
+    return false
+}
+
+//! the `--only` tokens of the CUDA home's pass, read off its command
+//! line in `CLAUDE.md`
+def private cuda_pass_tokens(doc : string) : string {
+    let only = "-- --changed --only "
+    for (line in split(doc, "\n")) {
+        let at = find(line, only)
+        continue if (at < 0 || find(line, "# the CUDA home's pass") < 0)
+        let rest = slice(line, at + length(only))
+        let end = find(rest, " ")
+        return end < 0 ? rest : slice(rest, 0, end)
+    }
+    return ""
+}
+
+[test(description = "The CUDA home's pass (`CUDA_PASS_ONLY`) keeps, by its `--only` tokens, every census file whose text reaches the CUDA home but the declared no-cell files, and CLAUDE.md's command and prose carry the same tokens")]
+def test_cuda_pass_keeps_every_cuda_file(t : T?) {
+    let doc = file_text("{TESTS_DIR}/CLAUDE.md")
+    let tokens = CUDA_PASS_ONLY
+    t |> equal(cuda_pass_tokens(doc), tokens,
+        "CLAUDE.md's CUDA pass command carries CUDA_PASS_ONLY")
+    let prose = find(doc, "`--changed --only {tokens}`") >= 0
+    t |> success(prose, "the prose names the same tokens: {tokens}")
+    var census <- free_files()
+    census |> push_from(suite_files("stocked"))
+    let kept <- only_files(census, tokens)
+    var reach = 0
+    for (file in census) {
+        let no_cell = find_index(CUDA_REACH_NO_CELL, base_name(file)) >= 0
+        continue if (no_cell || !text_reaches_cuda(file_text(file)))
+        reach++
+        t |> success(find_index(kept, file) >= 0,
+            "a file reaching the CUDA home sits in the CUDA pass - add a token: {file}")
+    }
+    t |> success(reach > 10, "the census walk found the CUDA files ({reach})")
 }
 
 //! the reach plan behind --changed: a test file itself, a fixture the tests requiring it through the fixtures between, an

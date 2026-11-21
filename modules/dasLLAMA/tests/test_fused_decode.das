@@ -10,14 +10,16 @@ require daslib/jobque_boost
 require daslib/fio
 require math
 require dasllama/dasllama_math  // with_dasllama_jobque_ + target_chunk_work + fused knob
-require dasllama/dasllama_env
 
 // Fused decode chains (team_parallel_stages: qkv→attn→wo and w1/w3→w2 as ONE dispatch each) vs
 // the per-op dispatch path: bit-exact equivalence. The fused path claims bit-identical arithmetic
 // — same backend row dots, same per-head norm/rope/store order, same act/quant/add per element —
 // so greedy ids AND final logits must match EXACTLY, not within tolerance. stories15M sits below
 // the fused size gate, so both sides run with target_chunk_work forced to 1 (identical
-// dispatch decisions per-op path included).
+// dispatch decisions per-op path included). Every cell skips off the
+// JIT or without its model file; the mx4 chain's cell on gpt-oss-4L
+// also past the size tier or outside the run's family filter
+// (`model_available`).
 
 let MODEL_PATH = path_join(llama2c_dir(), "stories15M.bin")
 let N_STEPS = 24
@@ -308,21 +310,14 @@ def test_fused_decode_kquant(t : T?) {
 }
 
 // The fused MoE expert chain (mx4 experts: gate+up rows + bias + act + requant -> down rows +
-// bias + weighted reduce as ONE rendezvous) vs the 3-dispatch groupn sequence. gpt-oss-20b is
-// the mx4 fixture (12GB — the large-tier PARITY_FULL gate, same rule as the fam cells).
-[test(description = "On gpt-oss-20b mxfp4 with an mx4 rows core, the fused MoE expert chain matches the three-dispatch groupn path's greedy ids and final logits bit for bit")]
+// bias + weighted reduce as ONE rendezvous) vs the 3-dispatch groupn sequence. gpt-oss-4L is
+// the mx4 fixture, the 20b's first four blocks.
+[test(description = "On gpt-oss-4L mxfp4 with an mx4 rows core, the fused MoE expert chain matches the three-dispatch groupn path's greedy ids and final logits bit for bit")]
 def test_fused_decode_moe_chain(t : T?) {
-    t |> run("fused MoE expert chain bit-exact on gpt-oss (needs the gguf + DASLLAMA_PARITY_FULL)") @(t : T?) {
+    t |> run("fused MoE expert chain bit-exact on gpt-oss (needs the gguf)") @(t : T?) {
         return if (!jit_only(t))
-        if (!g_env_test.parity_full) {
-            t |> skip("large-tier fixture (set DASLLAMA_PARITY_FULL=1)")
-            return
-        }
-        let path = path_join(models_dir(), "gpt-oss-20b-mxfp4.gguf")
-        if (!stat(path).is_valid) {
-            t |> skip("{path} not present")
-            return
-        }
+        let path = path_join(models_dir(), "gpt-oss-4L-mxfp4-local.gguf")
+        return if (!model_available(t, path))
         let prev_thresh = get_target_chunk_work()
         with_dasllama_jobque_() {
             set_target_chunk_work(1l)

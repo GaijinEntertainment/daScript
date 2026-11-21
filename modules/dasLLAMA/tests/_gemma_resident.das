@@ -142,32 +142,43 @@ def with_gemma_rig(t : T?; gf : GemmaFile; body : block<(tr : Model) : void>) {
 [cold_path]
 def gemma_format_cell(t : T?; gf : GemmaFile; mx4 : bool) {
     with_gemma_rig(t, gf) $(tr) {
-        census_cell(t, tr, path_join(models_dir(), gf.file), gf.file, ["attention q/k/v/o", "routed experts", "token table", "classifier"])
-        t |> equal(tr.experts_mx4, mx4, "{gf.file}: the expert stacks load as the native-MXFP4 planes exactly where the file carries them")
-        var inscope feed <- prose_feed(tr, 40l, 2l)
-        var sg <- create_session(tr, mirror_kv_dtype())
-        let served0 = gpu_resident_prefills_()
-        let gu0 = census("mx4_gemv_gu_cls_spv")
-        let sum0 = census("mx4_gemv_sum_cls_spv")
-        var rows <- feed_logits(tr, sg, feed.prompt, feed.toks) $ {}
-        t |> equal(gpu_resident_prefills_(), served0 + 1l, "{gf.file}: the resident window chain served the prompt")
-        served_every_call(t)
-        if (gu0 != NO_CENSUS) {   //! the fed steps' routed sites on the mx4 stamps: the fused gate + up and the summed down
-            let gu_n = census("mx4_gemv_gu_cls_spv") - gu0
-            let sum_n = census("mx4_gemv_sum_cls_spv") - sum0
-            if (mx4) {
-                t |> success(gu_n > 0l && sum_n > 0l, "{gf.file}: the steps' routed gate + up ({gu_n}) and summed down ({sum_n}) on the mx4 stamps")
-            } else {   //! the control: a file with no MXFP4 stack dispatches neither stamp
-                t |> equal(gu_n + sum_n, 0l, "{gf.file}: no mx4 stack, no mx4 stamp dispatched (gate + up {gu_n}, summed down {sum_n})")
-            }
-        }
-        for (r, i in rows, count()) {
-            let bad = length([for (v in r); v; where !is_finite(v)])
-            t |> equal(bad, 0, "{gf.file}: row {i}'s logits finite")
-        }
-        delete rows
-        delete sg
+        gemma_format_census(t, tr, gf.file, mx4)
     }
+}
+
+//! `gemma_format_cell`'s census and feed on `tr`, the file `file`
+//! armed on the driver by the caller
+def gemma_format_census(t : T?; tr : Model; file : string; mx4 : bool) {
+    census_cell(t, tr, path_join(models_dir(), file), file, ["attention q/k/v/o", "routed experts", "token table", "classifier"])
+    t |> equal(tr.experts_mx4, mx4, "{file}: the expert stacks load as the native-MXFP4 planes exactly where the file carries them")
+    var inscope feed <- prose_feed(tr, 40l, 2l)
+    var sg <- create_session(tr, mirror_kv_dtype())
+    let served0 = gpu_resident_prefills_()
+    //! the routed down's stamp: the Vulkan token command folds the k slots
+    //! in its summed down; the CUDA home's runs the per-slot GEMV, its
+    //! combine summing the slots
+    let down_key = gpu_want_cuda() ? "mx4_gemv_cls_spv" : "mx4_gemv_sum_cls_spv"
+    let down_name = "{gpu_want_cuda() ? "per-slot down" : "summed down"} ({cuda_knob()})"
+    let gu0 = census("mx4_gemv_gu_cls_spv")
+    let sum0 = census(down_key)
+    var rows <- feed_logits(tr, sg, feed.prompt, feed.toks) $ {}
+    t |> equal(gpu_resident_prefills_(), served0 + 1l, "{file}: the resident window chain served the prompt")
+    served_every_call(t)
+    if (gu0 != NO_CENSUS) {   //! the fed steps' routed sites on the mx4 stamps: the fused gate + up and the down
+        let gu_n = census("mx4_gemv_gu_cls_spv") - gu0
+        let sum_n = census(down_key) - sum0
+        if (mx4) {
+            t |> success(gu_n > 0l && sum_n > 0l, "{file}: the steps' routed gate + up ({gu_n}) and {down_name} ({sum_n}) on the mx4 stamps")
+        } else {   //! the control: a file with no MXFP4 stack dispatches neither stamp
+            t |> equal(gu_n + sum_n, 0l, "{file}: no mx4 stack, no mx4 stamp dispatched (gate + up {gu_n}, {down_name} {sum_n})")
+        }
+    }
+    for (r, i in rows, count()) {
+        let bad = length([for (v in r); v; where !is_finite(v)])
+        t |> equal(bad, 0, "{file}: row {i}'s logits finite")
+    }
+    delete rows
+    delete sg
 }
 
 //! prefill `n` tokens + 8 fed steps on the resident driver with every call served, then the same on the all-CPU chain; the
@@ -275,23 +286,6 @@ def path_gaps_within(t : T?; n : int64; res, cpu : PathGap) {
     // the control on the resident route: the window's rows against the token command's first row - the same window read every position off - land outside the bar; a one-position shift cannot (the CPU chain's own paths sit 0.17 to 0.39 apart on the 12B and 31B, and 6x of that is wider than one position moves prose logits, 0.67 to 1.57), so it is logged beside the aligned gap alone
     t |> success(is_finite(res.first) && res.first < INFINITE_DIFF && res.first > bar, "control: on the resident route the window's rows against the token command's first row land outside the bar ({res.first} against {bar})")
     t |> success(res.off > res.gap && cpu.off > cpu.gap, "one position behind, both arms read a wider gap than aligned (resident {res.off} vs {res.gap}, cpu {cpu.off} vs {cpu.gap})")
-}
-
-//! the same tokens through the window chain at once and through the token command one at a time,
-//! on one arm: the two GPU paths' logits at every shared position against each other, then the CPU
-//! arm's own pair as the yardstick of how far a prefill kernel and a decode kernel sit apart on
-//! this model by rounding alone
-[cold_path]
-def prefill_vs_decode(t : T?; n : int64; gf : GemmaFile) {
-    with_gemma_rig(t, gf) $(tr) {
-        let c0 = cuda_positions_served()
-        let res = path_gap(tr, mirror_kv_dtype(), n, "resident")
-        served_every_call(t)
-        cuda_served_since(t, c0, 2l * (n + 4l), "the window chain and the token command over {n + 4l} tokens each")
-        moe_gpu_drop_model()
-        let cpu = path_gap(tr, mirror_kv_dtype(), n, "cpu")
-        path_gaps_within(t, n, res, cpu)
-    }
 }
 
 //! the E-series short window's peel (`../ARCHITECTURE_GPU_VULKAN_WINDOW.md#vk-prefill-peel`), the peel lever on and put back: after
@@ -520,16 +514,17 @@ struct CodecCells {
     tq4_note : string
 }
 
-//! what those cells collect over a file's forms: the q8_0 feed and the tq4 walk, each a CPU side ([0]) and a device side
-//! ([1]), and the rings - the default codec ringed and flat ([0], [1]), the `ring_kv` mirror ringed and flat ([2], [3]);
-//! each `_ran` says a device form collected
+//! what those cells collect over a file's forms: the q8_0 feed and
+//! the tq4 walk, each a CPU side ([0]) and a device side ([1]), each
+//! `_ran` where its device form collected; and the rings - the
+//! default codec's (`main`) and the `ring_kv` mirror's (`other`),
+//! each ringed and flat
 struct CodecRows {
     q8 : GemmaRows[2]
     q8_ran : bool
     tq4 : GemmaRows[2]
     tq4_ran : bool
-    rings : RingRun[4]
-    ring_ran : bool[4]
+    rings : RingRows
 }
 
 //! one form's share of the codec and ring cells: a CPU form its codec's reference side, the default device form the ringed
@@ -544,9 +539,7 @@ def codec_rows(var c : CodecRows; m : Model; form : ModelForm; cells : CodecCell
         }
         return
     }
-    var ring = form.kv_asked ? 3 : 1
     if (form.ring) {
-        ring = form.kv_asked ? (form.kv == cells.ring_kv ? 2 : -1) : 0
         if (form.kv_asked && form.kv == KVDtype.q8_0) {
             c.q8[1] <- gemma_rows(m, form, [cells.q8_feed], array<int64>(), array<GemmaWalk>())
             c.q8_ran = true
@@ -555,9 +548,8 @@ def codec_rows(var c : CodecRows; m : Model; form : ModelForm; cells : CodecCell
             c.tq4_ran = true
         }
     }
-    if (ring >= 0) {
-        c.rings[ring] <- ring_rows(m, form.kv, GEMMA_RING_IDS)
-        c.ring_ran[ring] = true
+    if (!form.ring || !form.kv_asked || form.kv == cells.ring_kv) {
+        ring_rows_into(c.rings, m, form.kv, form.kv_asked, form.ring, GEMMA_RING_IDS)
     }
 }
 
@@ -571,13 +563,3 @@ def codec_rows_within(t : T?; tag : string; c : CodecRows; cells : CodecCells) {
     }
 }
 
-//! the ring cells' compares under `tag` - the default mirror `main_kv` ringed against flat, then `ring_kv`'s - each where
-//! both its forms ran; inside the job queue
-def codec_rings_within(t : T?; tag : string; c : CodecRows; cells : CodecCells; main_kv : KVDtype) {
-    if (c.ring_ran[0] && c.ring_ran[1]) {
-        ring_runs_within(t, "{tag}, the rings on a {main_kv} mirror: ", GEMMA_RING_IDS, c.rings[0], c.rings[1])
-    }
-    if (c.ring_ran[2] && c.ring_ran[3]) {
-        ring_runs_within(t, "{tag}, the rings on a {cells.ring_kv} mirror: ", GEMMA_RING_IDS, c.rings[2], c.rings[3])
-    }
-}

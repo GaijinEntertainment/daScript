@@ -31,6 +31,7 @@ require _model_tier public   // models_dir() + model_available() presence/size-t
 require _resident_feed public   // resident_ready, load_resident, resident_prompt, resident_then_cpu_feed, feed_steps_within, tile_arm_tag
 require _kv_codec_cells   // codec_distance_over: the three-chain form of the block-codec cells
 require _format_census   // census_cell: a census fixture's every site in its own format
+require _cpu_gpu_model   // ModelForm, FeedRows, feed_rows: the forced feed's collector form
 
 [init]
 def private allow_cpu_prefill_intent() {
@@ -113,10 +114,12 @@ def private unsplit_tokens : int64 {
 
 let private UNSPLIT_UNDECIDED = -1l   //! the steps straddle the twin's threshold, or no vulkan module: the witness stands down
 
-//! the steps of a prompt of `nprompt` rows the unsplit twin must serve: every one under RD_UNSPLIT_POS, none past it
-def private unsplit_want(nprompt : int64) : int64 {
+//! the steps of `steps` fed after an `nprompt`-row prompt the
+//! unsplit twin must serve: every one under RD_UNSPLIT_POS, none past
+def private unsplit_want(nprompt, steps : int64) : int64 {
     static_if (typeinfo builtin_module_exists(vulkan)) {
-        return nprompt + FED_STEPS <= RD_UNSPLIT_POS ? FED_STEPS : (nprompt >= RD_UNSPLIT_POS ? 0l : UNSPLIT_UNDECIDED)
+        return steps if (nprompt + steps <= RD_UNSPLIT_POS)
+        return nprompt >= RD_UNSPLIT_POS ? 0l : UNSPLIT_UNDECIDED
     } else {
         return UNSPLIT_UNDECIDED
     }
@@ -172,31 +175,59 @@ def private device_has_expert_tiles() : bool {
 //! the driver's admission of the fixture and the host-layer count it armed, against the fixture's expectation;
 //! -1 where the cell ends here - a skip the box earns, or the red that names the load log
 def moe_fixture_admitted(t : T?; tr : Model; fx : MoeFixture) : int64 {
-    t |> success(tr.config.n_expert > 0l && (tr.config.n_ff_shexp > 0l) == fx.shexp, "the fixture routes experts {fx.shexp ? "beside" : "with no"} shared expert")
+    var host_layers = -1l
+    held_on(t) $(var h) {
+        host_layers = moe_fixture_admitted(h, tr, fx)
+    }
+    return host_layers
+}
+
+//! `moe_fixture_admitted` read now, held into `h`
+def moe_fixture_admitted(var h : Held; tr : Model; fx : MoeFixture) : int64 {
+    h |> held_fact(tr.config.n_expert > 0l && (tr.config.n_ff_shexp > 0l) == fx.shexp,
+        "the fixture routes experts {fx.shexp ? "beside" : "with no"} shared expert")
     if (fx.window > 0l) {
-        t |> equal(tr.config.sliding_window, fx.window, "the fixture's sliding layers attend {fx.window} keys")
+        h |> held_equal(tr.config.sliding_window, fx.window,
+            "the fixture's sliding layers attend {fx.window} keys")
     }
     if ((fx.expect_host_layers || fx.host_layers_ask > 0l) && !moe_gpu_resident_active() && moe_gpu_resident_memory_decline()) {
-        t |> skip("the card holds neither the mirror asked whole ({fx.strict_ctx}) nor the dense planes beside it - the host-layer form needs a larger card (the load log names the room)")
+        h |> held_skip(
+            "the card holds neither the mirror asked whole ({fx.strict_ctx}) nor the dense " +
+            "planes beside it - the host-layer form needs a larger card (the load log names " +
+            "the room)")
         return -1l
     }
-    t |> success(moe_gpu_resident_active(), "the whole-model driver took {fx.file} (a decline names its reason in the load log: the plan, a seat, a plane's format)")
+    h |> held_fact(moe_gpu_resident_active(),
+        "the whole-model driver took {fx.file} (a decline names its reason in the load log: " +
+        "the plan, a seat, a plane's format)")
     return -1l if (!moe_gpu_resident_active())
-    mirror_codec_held(t)
+    mirror_codec_held(h)
     let host_layers = gpu_resident_host_layers()
     if (fx.expect_host_layers && host_layers == 0l) {
-        t |> skip("the card holds every expert stack beside the {fx.strict_ctx}-position mirror - the host-layer form needs a smaller card")
+        h |> held_skip(
+            "the card holds every expert stack beside the {fx.strict_ctx}-position mirror - " +
+            "the host-layer form needs a smaller card")
         return -1l
     }
     if (fx.host_layers_ask > 0l) {   //! the ask is a floor: a card that holds the rest moves exactly that many, one that does not moves more
-        t |> success(host_layers >= fx.host_layers_ask, "at least the first {fx.host_layers_ask} routed layers' experts serve on the host as the fixture asked (set_gpu_host_layers): {host_layers} of {tr.config.n_layers} do")
+        h |> held_fact(host_layers >= fx.host_layers_ask,
+            "at least the first {fx.host_layers_ask} routed layers' experts serve on the host " +
+            "as the fixture asked (set_gpu_host_layers): {host_layers} of {tr.config.n_layers} " +
+            "do")
     } elif (fx.expect_host_layers) {
-        t |> success(host_layers < tr.config.n_layers, "the card does not hold the experts whole: the first {host_layers} of {tr.config.n_layers} routed layers' experts serve on the host, the rest on the device")
+        h |> held_fact(host_layers < tr.config.n_layers,
+            "the card does not hold the experts whole: the first {host_layers} of " +
+            "{tr.config.n_layers} routed layers' experts serve on the host, the rest on the " +
+            "device")
     } else {
-        t |> equal(host_layers, 0l, "every expert on the device (the cell pins ctx_max {fx.strict_ctx} and strict {fx.strict_ctx > 0l}; DASLLAMA_GPU_CTX_MAX / DASLLAMA_GPU_CTX_STRICT in the environment override the pins)")
+        h |> held_equal(host_layers, 0l,
+            "every expert on the device (the cell pins ctx_max {fx.strict_ctx} and strict " +
+            "{fx.strict_ctx > 0l}; DASLLAMA_GPU_CTX_MAX / DASLLAMA_GPU_CTX_STRICT in the " +
+            "environment override the pins)")
     }
     if (fx.strict_ctx > 0l) {
-        t |> equal(gpu_device_session_ctx(), fx.strict_ctx, "the context asked whole is the region's: the experts yielded, not the mirror")
+        h |> held_equal(gpu_device_session_ctx(), fx.strict_ctx,
+            "the context asked whole is the region's: the experts yielded, not the mirror")
     }
     return host_layers
 }
@@ -235,47 +266,134 @@ def private moe_forced_feed_pinned(t : T?; n : int64; fx : MoeFixture) {
         }
         census_cell(t, tr, path, "vulkan load", any_sites, bound)
     }
-    let device_routed_layers = tr.config.n_layers - host_layers   // a host layer runs its router alone
-    let windows = (n + PF_WINDOW_ROWS - 1l) / PF_WINDOW_ROWS
-    let runs_deep_twins = tr.config.n_expert > 256l
-    let sched_key = runs_deep_twins ? "moe_sched2_cls_spv" : "moe_sched_cls_spv"
-    let rows_key = runs_deep_twins ? "topk_rows2_cls_spv" : "topk_rows_cls_spv"
-    let topk_key = runs_deep_twins ? "topk_n2_cls_spv" : "topk_n_cls_spv"
     with_dasllama_jobque_() {
-        let sched0 = census(sched_key)
-        let rows0 = census(rows_key)
-        let topk0 = census(topk_key)
-        let ecol = expert_column()
-        let e0 = column_census(ecol.col)
-        let f0 = fp4_census()
-        let chunk_key = gpu_want_cuda() ? "dn_scan_chunk_cls_cuda" : "dn_scan_chunk_cls_spv"
-        let c0 = census(chunk_key)
-        let un0 = unsplit_tokens()
+        let at = moe_census_at(tr, host_layers)
         forced_feed_over(t, tr, "", n, FED_STEPS, fx.bar_rel) $ {
-            if (attn_nsplit() > 1l && unsplit_want(n) != UNSPLIT_UNDECIDED && host_layers == 0l) {   //! a split device records the unsplit twin: it serves the steps under RD_UNSPLIT_POS and none past it
-                t |> equal(unsplit_tokens() - un0, unsplit_want(n), "the token command's unsplit twin served {unsplit_want(n)} of the {FED_STEPS} steps after {n} rows")
-            }
-            if (sched0 != NO_CENSUS) {
-                t |> equal(census(sched_key) - sched0, device_routed_layers * windows, "the device bucket schedule ({sched_key}) ran once per device-routed layer per window ({device_routed_layers} layers, {windows} windows)")
-                t |> equal(census(rows_key) - rows0, device_routed_layers * windows, "the window's per-row select ({rows_key}) ran once per device-routed layer per window")
-                //! the token command records once and resubmits: the census counts its recording, one top-k per MoE layer per recorded form (a split device records the unsplit twin too)
-                let topk = census(topk_key) - topk0
-                t |> success(topk >= device_routed_layers && topk % device_routed_layers == 0l, "the token command recorded a top-k per device-routed layer ({topk} over {device_routed_layers} layers)")
-                let edelta = column_census(ecol.col) - e0
-                let ewant = 3l * ecol.per_plane * device_routed_layers * windows
-                if (fx.fp4_chain && fp4_chain_served()) {   //! the FP4 chain's own stamps, apart from the cm2 e tiles the column counts beside them
-                    let fdelta = fp4_census() - f0
-                    t |> success(fdelta >= ewant, "the FP4 expert chain's m stamps served the window's routed pieces ({fdelta} over a floor of {ewant}): the stacks on the tensor rung, not the cm2 tiles")
-                }
-                if (fx.dn_chunk && dn_chunk_served()) {
-                    let cdelta = census(chunk_key) - c0
-                    t |> success(cdelta >= windows, "the chunked deltanet scan ({chunk_key}) served the recurrent layers of every window ({cdelta} dispatches over {windows} window(s))")
-                }
-                t |> success(edelta >= ewant, "the expert schedule's pieces dispatched the {ecol.col} column at least {ecol.per_plane} a plane per device-routed layer per window ({edelta} over a floor of {ewant})")
+            held_on(t) $(var h) {
+                moe_census_rows(h, at, fx, n, FED_STEPS)
             }
         }
     }
     delete tr
+}
+
+//! the routed block's counters as a forced feed found them
+//! (`moe_census_rows` reads what moved): the keys of the model's
+//! expert count, the expert pieces' tile column, the routed layers
+//! the admission found on the host and the device-routed rest, and
+//! each count
+struct private MoeCensusAt {
+    sched_key : string
+    rows_key : string
+    topk_key : string
+    col : string
+    per_plane : int64
+    host_layers : int64
+    device_routed_layers : int64   //! a host layer runs its router alone
+    sched : int64
+    rows : int64
+    topk : int64
+    pieces : int64   //! the expert pieces' dispatches on the tile column
+    fp4 : int64
+    chunk : int64
+    unsplit : int64
+}
+
+//! the chunked deltanet scan's stamp; `census` reads the CUDA home's
+//! twin under its own name
+let private DN_CHUNK_KEY = "dn_scan_chunk_cls_spv"
+
+def private moe_census_at(tr : Model; host_layers : int64) : MoeCensusAt {
+    let deep = tr.config.n_expert > 256l   //! the deep twins serve past 256 experts
+    let ecol = expert_column()
+    var at = MoeCensusAt(sched_key = deep ? "moe_sched2_cls_spv" : "moe_sched_cls_spv",
+        rows_key = deep ? "topk_rows2_cls_spv" : "topk_rows_cls_spv",
+        topk_key = deep ? "topk_n2_cls_spv" : "topk_n_cls_spv",
+        col = ecol.col, per_plane = ecol.per_plane, host_layers = host_layers,
+        device_routed_layers = tr.config.n_layers - host_layers)
+    at.sched = census(at.sched_key)
+    at.rows = census(at.rows_key)
+    at.topk = census(at.topk_key)
+    at.pieces = column_census(ecol.col)
+    at.fp4 = fp4_census()
+    at.chunk = census(DN_CHUNK_KEY)
+    at.unsplit = unsplit_tokens()
+    return at
+}
+
+//! the routed block's census over an `n`-row prompt and `steps` fed
+//! steps since `at`, held into `h`: the bucket schedule and the
+//! per-row select once per device-routed layer per window, the
+//! token command's top-k recorded per device-routed layer, the
+//! expert pieces on the tile column (and the FP4 chain's or the
+//! chunked scan's stamps where the fixture claims them), and on a
+//! split device with every expert on the device the unsplit twin's
+//! share of the steps
+def private moe_census_rows(var h : Held; at : MoeCensusAt; fx : MoeFixture; n, steps : int64;
+                            first : bool = true) {
+    let windows = prompt_windows(n)
+    let unsplit = unsplit_want(n, steps)
+    //! a split device records the unsplit twin: it serves the steps
+    //! under RD_UNSPLIT_POS and none past it
+    if (attn_nsplit() > 1l && unsplit != UNSPLIT_UNDECIDED && at.host_layers == 0l) {
+        h |> held_equal(unsplit_tokens() - at.unsplit, unsplit,
+            "the token command's unsplit twin served {unsplit} of the {steps} steps after {n} " +
+            "rows")
+    }
+    return if (at.sched == NO_CENSUS)
+    h |> held_equal(census(at.sched_key) - at.sched, at.device_routed_layers * windows,
+        "the device bucket schedule ({at.sched_key}) ran once per device-routed layer per " +
+        "window ({at.device_routed_layers} layers, {windows} windows)")
+    h |> held_equal(census(at.rows_key) - at.rows, at.device_routed_layers * windows,
+        "the window's per-row select ({at.rows_key}) ran once per device-routed layer per " +
+        "window")
+    //! the token command records once and resubmits: the census counts its recording, one top-k per MoE layer per recorded form (a split device records the unsplit twin too)
+    let topk = census(at.topk_key) - at.topk
+    //! a load's first feed records it; a later feed on the load
+    //! records at most a form the first never reached
+    let recorded = !first || topk >= at.device_routed_layers
+    h |> held_fact(recorded && topk % at.device_routed_layers == 0l,
+        "the token command recorded a top-k per device-routed layer ({topk} over " +
+        "{at.device_routed_layers} layers{first ? "" : ", a later feed of the load"})")
+    let edelta = column_census(at.col) - at.pieces
+    let ewant = 3l * at.per_plane * at.device_routed_layers * windows
+    if (fx.fp4_chain && fp4_chain_served()) {   //! the FP4 chain's own stamps, apart from the cm2 e tiles the column counts beside them
+        let fdelta = fp4_census() - at.fp4
+        h |> held_fact(fdelta >= ewant,
+            "the FP4 expert chain's m stamps served the window's routed pieces ({fdelta} over " +
+            "a floor of {ewant}): the stacks on the tensor rung, not the cm2 tiles")
+    }
+    if (fx.dn_chunk && dn_chunk_served()) {
+        let cdelta = census(DN_CHUNK_KEY) - at.chunk
+        h |> held_fact(cdelta >= windows,
+            "the chunked deltanet scan ({DN_CHUNK_KEY}) served the recurrent layers of every " +
+            "window ({cdelta} dispatches over {windows} window(s))")
+    }
+    h |> held_fact(edelta >= ewant,
+        "the expert schedule's pieces dispatched the {at.col} column at least {at.per_plane} " +
+        "a plane per device-routed layer per window ({edelta} over a floor of {ewant})")
+}
+
+//! the forced feed's device side on a form the caller's block armed:
+//! an `n`-token `resident_prompt` and `steps` fed tokens through a
+//! fresh session of the form's codec (`resident_feed_rows`), the
+//! routed block's census held into `h` as `moe_forced_feed` holds it,
+//! `host_layers` the routed layers the admission found on the host,
+//! `first` whether the feed is the load's first
+def moe_feed_rows(var h : Held; m : Model; form : ModelForm; fx : MoeFixture;
+                  n, steps, host_layers : int64; first : bool) : FeedRows {
+    let at = moe_census_at(m, host_layers)
+    var rows <- resident_feed_rows(m, form, n, steps)
+    moe_census_rows(h, at, fx, n, steps, first)
+    return <- rows
+}
+
+//! where the per-op tier's walk put a fixture's routed layers: the
+//! routed layers, and those whose stacks the device holds; zeros
+//! where the heat cell skipped
+struct HeatPlacement {
+    routed : int64
+    placed : int64
 }
 
 let HEAT_CELL_STEPS = 80l   //! fed steps past the heat pool's re-pin interval (64 tokens a layer), so every pooled layer is pinned and then hit
@@ -284,13 +402,15 @@ let HEAT_CELL_STEPS = 80l   //! fed steps past the heat pool's re-pin interval (
 //! the rest streamed under `slots` hot experts a layer; a 40-token prompt and `HEAT_CELL_STEPS` fed steps against the CPU chain at
 //! the fixture's bar, the pool serving some of the streamed layers' picks, and on a shared-expert fixture every routed layer's
 //! shared expert on the device after the routed chain or the pool's hits - none overlapped, none on the CPU, none on the GEMMs
-def moe_perop_heat_cell(t : T?; fx : MoeFixture; resident, slots : int64) {
+//! - where the walk put the routed layers returned
+def moe_perop_heat_cell(t : T?; fx : MoeFixture; resident, slots : int64) : HeatPlacement {
+    var placement : HeatPlacement
     if (gpu_want_cuda()) {
         t |> skip("the CUDA home is asked: the per-op tier and its heat pool are the Vulkan home's")
-        return
+        return placement
     }
     let path = path_join(models_dir(), fx.file)
-    if (!resident_ready(t, path)) return
+    return placement if (!resident_ready(t, path))
     let route = gpu_resident_route_lever()
     let want0 = g_gpu_want
     set_gpu_resident_route(false)
@@ -312,6 +432,7 @@ def moe_perop_heat_cell(t : T?; fx : MoeFixture; resident, slots : int64) {
         placed += moe_gpu_layer_on_gpu(l) ? 1l : 0l
     }
     t |> success(placed > 0l && placed < routed, "the expert walk placed {placed} of {routed} routed layers, the rest streamed under the heat pool")
+    placement = HeatPlacement(routed = routed, placed = placed)
     with_dasllama_jobque_() {
         var prompt <- resident_prompt(40l)
         var toks <- resident_feed(HEAT_CELL_STEPS)
@@ -344,6 +465,7 @@ def moe_perop_heat_cell(t : T?; fx : MoeFixture; resident, slots : int64) {
     set_gpu_tier_want_(want0)
     moe_gpu_tier_arm_()
     delete tr
+    return placement
 }
 
 //! the K/V codec rig's distance form (`codec_distance_over`) on a MoE fixture the driver admitted, the mirror asked at `kv`

@@ -39,9 +39,7 @@ def test_gpu_resident_gemma2(t : T?) {
                 } else {   //! first on the load: the census counts a token command's dispatches as it records, and a later step replays
                     regions_stamp_rows(regions, m, 2)
                 }
-                regions_batched_rows(regions, m)
-                regions_split_rows(regions, m)
-                regions_batched_first_rows(regions, m)
+                regions_batched_once_rows(regions, m)
             } else {
                 rows[form.on_gpu ? 1 : 0] <- gemma_rows(m, form, feeds, gaps, walks)
             }
@@ -86,13 +84,12 @@ def test_gpu_resident_gemma3(t : T?) {
 }
 
 //! what the gemma-3-1b file's forms collect: the default device form's feeds and path gaps with their CPU side on its codec
-//! (`main_kv`), the q8_0 mirror's forced feed past the sliding window and the tq4 mirror's teacher-forced walk (each a CPU side,
+//! (`main`), the q8_0 mirror's forced feed past the sliding window and the tq4 mirror's teacher-forced walk (each a CPU side,
 //! a device side), the rings (the default codec ringed and flat, the q8_0 mirror ringed and flat), and the rig's cells on the
 //! two-region form; each `_ran` says a form collected
 struct G3Rows {
     feeds : array<int64>
-    main_ran : bool
-    main_kv : KVDtype
+    main : MainPair
     rows : GemmaRows[2]
     codec : CodecRows
     regions : Held
@@ -108,36 +105,31 @@ let private G3_CODEC = CodecCells(q8_feed = PAST_SLIDING_WINDOW, tq4_walk = (n =
 //! one form's collection of the gemma-3-1b file's cells into `r`
 def private g3_rows(var r : G3Rows; m : Model; form : ModelForm) {
     var inscope gaps <- [for (g in G3_GAPS); g]
+    let side = main_side(r.main, form)
     if (form.on_gpu && form.regions == 2l) {
-        regions_batched_rows(r.regions, m)
-        regions_split_rows(r.regions, m)
-        regions_batched_first_rows(r.regions, m)
+        regions_batched_once_rows(r.regions, m)
         regions_ring_floor_rows(r.regions, m)
-    } elif (device_default(form)) {
-        r.main_ran = true
-        r.main_kv = form.kv
-        r.rows[1] <- gemma_rows(m, form, r.feeds, gaps, array<GemmaWalk>())
-        codec_rows(r.codec, m, form, G3_CODEC)
-    } elif (form.on_gpu) {
-        codec_rows(r.codec, m, form, G3_CODEC)
-    } else {
-        if (r.main_ran && form.kv == r.main_kv) {
-            r.rows[0] <- gemma_rows(m, form, r.feeds, gaps, array<GemmaWalk>())
-        }
-        codec_rows(r.codec, m, form, G3_CODEC)
+        return
     }
+    if (side == MainSide.device) {
+        r.rows[1] <- gemma_rows(m, form, r.feeds, gaps, array<GemmaWalk>())
+    } elif (side == MainSide.cpu) {
+        r.rows[0] <- gemma_rows(m, form, r.feeds, gaps, array<GemmaWalk>())
+    }
+    codec_rows(r.codec, m, form, G3_CODEC)
 }
 
 //! the gemma-3-1b file's compares on what its forms collected, each cell where its forms ran
 def private g3_rows_within(t : T?; r : G3Rows) {
     var inscope gaps <- [for (g in G3_GAPS); g]
-    if (r.main_ran) {
+    if (r.main.ran) {
         gemma_rows_within(t, "gemma-3-1b", r.rows[1], r.rows[0], gaps, array<GemmaWalk>())
     }
     codec_rows_within(t, "gemma-3-1b Q8_0", r.codec, G3_CODEC)
     held_within(t, r.regions, "gemma-3-1b Q8_0, two regions: ", false)
     with_dasllama_jobque_() {
-        codec_rings_within(t, "gemma-3-1b Q8_0", r.codec, G3_CODEC, r.main_kv)
+        rings_within(t, "gemma-3-1b Q8_0", GEMMA_RING_IDS, r.codec.rings, r.main.kv,
+            G3_CODEC.ring_kv)
     }
 }
 

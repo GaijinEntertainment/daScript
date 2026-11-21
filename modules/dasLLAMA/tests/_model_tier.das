@@ -56,6 +56,12 @@ def live_maxabs(v : array<float>) : float {
     return m
 }
 
+//! the bar a CPU row `cpu` holds a device row to: `rel` of its
+//! largest live |logit| - a suppressed id and a NaN scale no bar, so
+//! a NaN in the reference row reads past the bar its finite elements
+//! set
+def row_bar(cpu : array<float>; rel : float) : float => rel * live_maxabs(cpu)
+
 //! a machine-local root: `set` (an environment record's field) where it is set, else the default `dflt`
 def root_or(set, dflt : string) : string => empty(set) ? dflt : set
 
@@ -104,21 +110,34 @@ def arm_on(t : T?; name : string) : bool => filter_on(t, g_env_test.test_arms, "
 // profiling cadence gate: a llama-format round re-verifies the llama family only.
 def family_on(t : T?; name : string) : bool => filter_on(t, g_env_test.test_family, "DASLLAMA_TEST_FAMILY", "family", name, true)
 
+//! whether a stripped token of the comma list `filter` is a
+//! substring of `name`
+def private token_in(filter, name : string) : bool {
+    for (tok in split(filter, ",")) {
+        let tk = strip(tok)   // "arm12, batch" — the comma-adjacent space must not defeat the match
+        return true if (!empty(tk) && find(name, tk) >= 0)
+    }
+    return false
+}
+
 //! true when `filter` (the comma list `env` holds) is empty or one of its stripped tokens matches `name` - equal to it
 //! when `exact`, a substring of it otherwise; else the cell has registered the loud skip naming `what`
 def private filter_on(t : T?; filter, env, what, name : string; exact : bool) : bool {
-    if (empty(filter)) {
-        return true
-    }
-    if (exact) {
-        return true if (list_names(filter, name))
-    } else {
-        for (tok in split(filter, ",")) {
-            let tk = strip(tok)   // "arm12, batch" — the comma-adjacent space must not defeat the match
-            return true if (!empty(tk) && find(name, tk) >= 0)
-        }
-    }
+    return true if (empty(filter) || (exact ? list_names(filter, name) : token_in(filter, name)))
     t |> skip("{what} '{name}' filtered out ({env}={filter})")
+    return false
+}
+
+//! `arm_on` over every arm one load serves: true where the arm
+//! filter reaches any of `names`; else the cell has registered the
+//! one loud skip naming them all
+def arms_on(t : T?; names : array<string>) : bool {
+    let filter = g_env_test.test_arms
+    return true if (empty(filter))
+    for (name in names) {
+        return true if (token_in(filter, name))
+    }
+    t |> skip("arms {names} filtered out (DASLLAMA_TEST_ARMS={filter})")
     return false
 }
 

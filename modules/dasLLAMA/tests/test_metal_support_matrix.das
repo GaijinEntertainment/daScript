@@ -1519,6 +1519,11 @@ def private gemma4e_row(t : T?; path, tag : string; bar : float = 8.0;
     }
 }
 
+//! the 26B cuts' bar, a share of the CPU truth row's peak
+//! (`RowBar.peak_share`): the six cuts' rows read 0.012 to 0.029 of a
+//! 270-1140 peak after the prefill and on the forced step, every leg,
+//! the rows one step off 0.89 and past
+let private CUT_ROW_BAR_REL = 0.06
 let private G4_STEP_PF = "metal_moe_comb_g4_pf"   //! the gemma-4 MoE step's window and decode stamps in the dispatch census
 let private G4_STEP_DEC = "metal_moe_comb_g4"
 
@@ -1538,16 +1543,24 @@ def private routed_gemv_counts : string {
     }
 }
 
-[cold_path, unused_argument(t, path, tag, tol_pf, tol_step, gemvs, mx4)]   // off-Apple the gated body is empty
+//! how `gemma4moe_row` reads `tol_pf` and `tol_step`: as whole
+//! logits, or as shares of the CPU truth row's largest live logit -
+//! a cut's logits run to hundreds past its lifted cap, where a bar of
+//! whole logits holds no share of the row
+enum private RowBar {
+    logits
+    peak_share
+}
+
+[cold_path, unused_argument(t, path, tag, tol_pf, tol_step, gemvs, mx4, bars)]   // off-Apple: empty
 def private gemma4moe_row(t : T?; path : string; tag : string; tol_pf : float = 8.0; tol_step : float = 16.0; gemvs : array<string> = array<string>();
-                          mx4 : bool = false) {
+                          mx4 : bool = false; bars : RowBar = RowBar.logits) {
     // gemma4-26B-A4B (Wave C stage 3): the parallel dense-shared + routed MoE graph. TOKEN
     // parity is NOT a valid instrument here (wave ruling): the CPU router's double norm is an
     // inverse TEMPERATURE on the expert softmax and the model amplifies ANY float-class
     // difference to ~2.5 logits/step (the CPU's own f32-router run differs identically) — so
-    // the cells are ENGAGE + shallow logits TOLERANCES (measured noise 2.1 / 5.7; bars ~3x).
-    // Serial two-phase: CPU truths on the planar load, then the blob twin (27GB x2 resident
-    // would flirt with the box) — 26.9GB > the 6GiB tier, DASLLAMA_PARITY_FULL-gated.
+    // the cells are ENGAGE + shallow logits TOLERANCES (the whole files' noise 2.1 / 5.7 logits).
+    // Serial two-phase: CPU truths on the planar load, then the blob twin.
     static_if (typeinfo builtin_module_exists(das_metal)) {
         if (!family_on(t, "gemma4moe") || !arm_on(t, "fam-gemma4moe") || !model_available(t, path)) {
             return
@@ -1648,11 +1661,20 @@ def private gemma4moe_row(t : T?; path : string; tag : string; tol_pf : float = 
                 set_metal_moe_g4_unfused(prior_unfused)
                 delete s
             }
+            let pk_pf = live_maxabs(leg_i == 2 ? lq0 : lg0)
+            let pk1 = live_maxabs(leg_i == 2 ? lq1 : lg1)
+            let share = bars == RowBar.peak_share
+            let bar_pf = share ? row_bar(leg_i == 2 ? lq0 : lg0, tol_pf) : tol_pf
+            let bar_step = share ? row_bar(leg_i == 2 ? lq1 : lg1, tol_step) : tol_step
             t |> success(served == 2l, "{leg}: GPU prefill + forced step both served ({served}/2)")
-            t |> success(mpf <= tol_pf, "{leg}: post-prefill logits within {tol_pf} of the CPU truth (measured {mpf})")
-            t |> success(m1 <= tol_step, "{leg}: one forced step within {tol_step} of the CPU truth (measured {m1})")
-            t |> success(mpf_off > tol_pf, "{leg}: the post-prefill row against the CPU truth one step on lands outside the bar ({mpf_off}) - the control")
-            t |> success(m1_off > tol_step, "{leg}: the forced step against the CPU truth one step back lands outside the bar ({m1_off}) - the control")
+            t |> success(mpf <= bar_pf, "{leg}: post-prefill logits within {bar_pf} of the CPU truth (measured {mpf}, peak {pk_pf})")
+            t |> success(m1 <= bar_step, "{leg}: one forced step within {bar_step} of the CPU truth (measured {m1}, peak {pk1})")
+            t |> success(is_finite(mpf_off) && mpf_off > bar_pf,
+                "{leg}: the post-prefill row against the CPU truth one step on lands outside the " +
+                "bar, finite ({mpf_off}) - the control")
+            t |> success(is_finite(m1_off) && m1_off > bar_step,
+                "{leg}: the forced step against the CPU truth one step back lands outside the " +
+                "bar, finite ({m1_off}) - the control")
             if (unfused) {
                 t |> success(npf == 0l && ndec == 0l, "{leg}: no MoE step dispatched (window {npf}, step {ndec})")
             } else {
@@ -1660,7 +1682,7 @@ def private gemma4moe_row(t : T?; path : string; tag : string; tol_pf : float = 
                 //! the greedy chain encodes the next step beside the forced one, so the count is whole steps' worth
                 t |> success(ndec > 0l && ndec % (nl - 1l) == 0l, "{leg}: the forced step's MoE tail one step a layer past the last ({ndec}, steps of {nl - 1l})")
             }
-            to_log(LOG_INFO, "{leg} tolerance cells: post-prefill maxd={mpf} (tol {tol_pf}), forced step maxd={m1} (tol {tol_step}); MoE steps window {npf} step {ndec}; eyeball CPU '{eyeball_str(piece_(trg, t0))}'/'{eyeball_str(piece_(trg, t1))}' vs GPU '{eyeball_str(piece_(trg, gpk0))}'/'{eyeball_str(piece_(trg, gpk1))}'\n")
+            to_log(LOG_INFO, "{leg} tolerance cells: post-prefill maxd={mpf} (bar {bar_pf}, peak {pk_pf}, control {mpf_off}), forced step maxd={m1} (bar {bar_step}, peak {pk1}, control {m1_off}); MoE steps window {npf} step {ndec}; eyeball CPU '{eyeball_str(piece_(trg, t0))}'/'{eyeball_str(piece_(trg, t1))}' vs GPU '{eyeball_str(piece_(trg, gpk0))}'/'{eyeball_str(piece_(trg, gpk1))}'\n")
         }
         delete lg0
         delete lg1
@@ -2362,29 +2384,35 @@ def test_metal_family_matrix(t : T?) {
             family_cells(t, path_join(models_dir(), "Qwen3-30B-A3B-Instruct-2507-Q4_K_M.gguf"), "qwen3moe",
                 "qwen3moe-30b/k4/f16", uint(MetalNeed.neox | MetalNeed.qk_norm | MetalNeed.qd_neq_dim),
                 "", KVDtype.f16, 6.0)
-            // gemma4-26B-A4B (Wave C stage 3): the parallel dense-shared + routed graph —
-            // ENGAGE cells + shallow logits tolerances (see the row's ruling comment)
-            gemma4moe_row(t, path_join(models_dir(), "gemma-4-26B-A4B-it-Q8_0.gguf"), "gemma4moe-26b", 8.0, 16.0, ["metal_moe_gemv_q8"])
-            // ... and the community Q4_K_M file: k4 gate_up + NATIVE q51 down expert stacks —
-            // the q51 Metal GEMV/mul_mm twins' model-level pin (15.9GB, the gemma4-moe category's);
-            // the down stacks' experts are 2816 rows, so their routed GEMV is the wide q51 stamp.
-            // Wider step bar: the k4/q51 f16-tile paths measure 13.8 under the same double-router
-            // amplifier (post-prefill stays 2.5-class); 24 keeps the ~2x margin discipline
-            gemma4moe_row(t, path_join(models_dir(), "gemma-4-26B-A4B-it-Q4_K_M.gguf"), "gemma4moe-26b-k", 8.0, 24.0, ["metal_moe_gemv_k4", "MetalMoeGemvQ51W_metal_moe_gemv_w"])
-            // ... and the ggml-org Q4_0 file: q40 gate_up expert stacks beside the 704-wide down stacks
-            // in their own per-32 form (q4032) - the q40 routed twins' model-level pin. The prefill bar is the
-            // Q4_K_M row's; the step bar is this file's own: its forced step reads 3.4-5.7 across the legs and the
-            // one-step-off control 15.1, so 10 is the bar both sides clear with margin (24 let the control pass). 14GB, PARITY_FULL-gated
-            gemma4moe_row(t, path_join(models_dir(), "gemma-4-26B-A4B-it-Q4_0.gguf"), "gemma4moe-26b-q40", 8.0, 10.0, ["metal_moe_gemv_q40", "metal_moe_gemv_q4032"])
-            // ... and the two Unsloth dynamic files: grid-format gate_up stacks (IQ2_S / IQ3_S on UD-IQ3_XXS,
-            // IQ3_S / IQ4_XS on UD-IQ4_XS) beside the 704-wide IQ4_NL down stacks (iq4nl32) and a Q8_0 last
-            // layer, the Q6_K / Q8_0 token tables - the iquant routed forms' model-level pin, at the Q4_K_M
-            // row's bars. 11-13GB, PARITY_FULL-gated
-            gemma4moe_row(t, path_join(models_dir(), "gemma-4-26B-A4B-it-UD-IQ3_XXS.gguf"), "gemma4moe-26b-iq3xxs", 8.0, 24.0, ["metal_moe_gemv_iq2s", "metal_moe_gemv_iq4nl32"])
-            gemma4moe_row(t, path_join(models_dir(), "gemma-4-26B-A4B-it-UD-IQ4_XS.gguf"), "gemma4moe-26b-iq4xs", 8.0, 24.0, ["metal_moe_gemv_iq4xs", "metal_moe_gemv_iq4nl32"])
-            // ... and the MXFP4_MOE mint (`../performance/model_specs.das`): the fused gate_up and the down stacks MXFP4 on disk, loaded as the
-            // native-MXFP4 planes under gemma-4's GeGLU and per-expert down scale, every other plane Q8_0
-            gemma4moe_row(t, path_join(models_dir(), "gemma-4-26B-A4B-it-MXFP4_MOE-local.gguf"), "gemma4moe-26b-mx4", 8.0, 24.0, ["metal_moe_gemv_mx4"], true)
+            // gemma4-26B-A4B: the parallel dense-shared + routed graph -
+            // ENGAGE cells + shallow logits
+            // tolerances (see the row's ruling comment), on each file's first six blocks with the cap lifted. The bars are
+            // a share of the CPU truth row's peak (`CUT_ROW_BAR_REL`). The Q8_0 file's q8 stacks first
+            gemma4moe_row(t, path_join(models_dir(), "gemma-4-26B-A4B-6L-Q8_0-local.gguf"), "gemma4moe-26b", CUT_ROW_BAR_REL,
+                CUT_ROW_BAR_REL, ["metal_moe_gemv_q8"], false, RowBar.peak_share)
+            // ... and the community Q4_K_M file: k4 gate_up + NATIVE q51 down expert stacks - the q51 Metal GEMV/mul_mm
+            // twins' model-level pin; the down stacks' experts are 2816 rows, so their routed GEMV is the wide q51 stamp
+            gemma4moe_row(t, path_join(models_dir(), "gemma-4-26B-A4B-6L-Q4_K_M-local.gguf"), "gemma4moe-26b-k", CUT_ROW_BAR_REL,
+                CUT_ROW_BAR_REL, ["metal_moe_gemv_k4", "MetalMoeGemvQ51W_metal_moe_gemv_w"], false,
+                RowBar.peak_share)
+            // ... and the ggml-org Q4_0 file: q40 gate_up expert stacks beside the 704-wide down stacks in their own per-32
+            // form (q4032) - the q40 routed twins' model-level pin
+            gemma4moe_row(t, path_join(models_dir(), "gemma-4-26B-A4B-6L-Q4_0-local.gguf"), "gemma4moe-26b-q40", CUT_ROW_BAR_REL,
+                CUT_ROW_BAR_REL, ["metal_moe_gemv_q40", "metal_moe_gemv_q4032"], false,
+                RowBar.peak_share)
+            // ... and the Unsloth dynamic UD-IQ3_XXS file: grid-format IQ2_S gate_up stacks beside the 704-wide IQ4_NL down
+            // stacks (iq4nl32) and a Q6_K token table - the iquant routed forms' model-level pin
+            gemma4moe_row(t, path_join(models_dir(), "gemma-4-26B-A4B-6L-UD-IQ3_XXS-local.gguf"), "gemma4moe-26b-iq3xxs",
+                CUT_ROW_BAR_REL, CUT_ROW_BAR_REL, ["metal_moe_gemv_iq2s", "metal_moe_gemv_iq4nl32"],
+                false, RowBar.peak_share)
+            // ... and the whole UD-IQ4_XS file, the `gemma4-moe` category's: its IQ4_XS gate_up stack is the last block's alone
+            // (the others IQ3_S), which no cut keeps - the iq4xs routed form's pin, at the Q4_K_M row's bars. 13.6GB
+            gemma4moe_row(t, path_join(models_dir(), "gemma-4-26B-A4B-it-UD-IQ4_XS.gguf"), "gemma4moe-26b-iq4xs", 8.0, 24.0,
+                ["metal_moe_gemv_iq4xs", "metal_moe_gemv_iq4nl32"])
+            // ... and the MXFP4_MOE mint (`../performance/model_specs.das`): the fused gate_up and the down stacks MXFP4 on
+            // disk, loaded as the native-MXFP4 planes under gemma-4's GeGLU and per-expert down scale, every other plane Q8_0
+            gemma4moe_row(t, path_join(models_dir(), "gemma-4-26B-A4B-6L-MXFP4_MOE-local.gguf"), "gemma4moe-26b-mx4",
+                CUT_ROW_BAR_REL, CUT_ROW_BAR_REL, ["metal_moe_gemv_mx4"], true, RowBar.peak_share)
             // gemma-4 E-series (E2B): PLE (MetalNeed.ple) + cross-layer KV sharing — decode +
             // prefill serve, batch declines need_ple; the MatFormer sub-model's two per-layer FFN
             // widths (6144/12288) — the per-layer u_hidden bind's model row. 5GB, small tier.
@@ -2398,8 +2426,8 @@ def test_metal_family_matrix(t : T?) {
             // the file's rows sit closer together (the batch cell's two rows 6.6 apart), so its bar is 4.0 (reads 0.6 to 1.3)
             gemma4e_row(t, path_join(models_dir(), "gemma-4-E2B-it-Q4_0.gguf"), "gemma4e-e2b-q40", 4.0, "fam-gemma4e-q40",
                 ["MetalKqGemvQ40_metal_kq_gemv_iq4", "MetalKqMvB2Q40_metal_kq_mv_iq4", "MetalKqMvB2Q40H_metal_kq_mv_iq4"])
-            // gpt-oss-20b (Wave C stage 4): mx4 experts + sinks + softmax_weight + biases
-            gptoss_row(t, path_join(models_dir(), "gpt-oss-20b-mxfp4.gguf"))
+            // gpt-oss-4L: mx4 experts + sinks + softmax_weight + biases
+            gptoss_row(t, path_join(models_dir(), "gpt-oss-4L-mxfp4-local.gguf"))
             // qwen35 (Wave D): the Gated-DeltaNet hybrid — 3-in-4 recurrent layers (state
             // mirror, fused sequential scan) + gated attention (2x-wide Q, partial rope 64/256,
             // σ out-gate). Decode, prefill and the batched step serve (see qwen35_row).
