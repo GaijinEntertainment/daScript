@@ -6,6 +6,7 @@
 #include <Shobjidl.h>
 #include <Shlwapi.h>
 #include <codecvt>
+#include <locale>
 
 namespace das {
 
