@@ -188,8 +188,10 @@ def test_exe_shared_module_function_address(t : T?) {
 }
 
 // A standalone exe built split (`--jit-split-modules`: one partition a das module, the entry in a
-// partition of its own) and split-plus-LTO (`--jit-lto`: bitcode partitions, the link inlines across
-// them) runs the fixture the way the one-unit exe does, and leaves no partition object beside itself.
+// partition of its own) and split-plus-LTO (the default:
+// bitcode partitions, the link inlines across them) runs the
+// fixture the way the one-unit exe does, and leaves no partition
+// object beside itself.
 // Off Windows the flags build also links the runtime archives in
 // (`--jit-static`), which the link announces as an executable rather
 // than a library.
@@ -232,9 +234,10 @@ def test_exe_split(t : T?) {
     }
     let dir = unsafe(dir_r.value)
     t |> run("a split -exe (one partition a das module, the entry in its own) runs the fixture like the one-unit exe") @(t : T?) {
-        let one = build_and_run(t, dir, "one", SPLIT_LTO_ROOT, [], [])
+        let one = build_and_run(t, dir, "one", SPLIT_LTO_ROOT, ["--jit-no-lto"], [])
         expect_split_lines(t, one, "one unit")
-        let split = build_and_run(t, dir, "split", SPLIT_LTO_ROOT, ["--jit-split-modules=-1"],
+        let split = build_and_run(t, dir, "split", SPLIT_LTO_ROOT,
+            ["--jit-split-modules=-1", "--jit-no-lto"],
             ["split codegen (--jit-split-modules)"])
         expect_split_lines(t, split, "split")
         expect_no_partition_files(t, dir, "split")
@@ -242,7 +245,7 @@ def test_exe_split(t : T?) {
     rmdir_rec_result(dir)
 }
 
-[test(description = "--jit-lto and --jit-obj-cache without the split announce that they are ignored, and the one-unit exe still runs", timeout = 1200)]
+[test(description = "--jit-obj-cache without the split announces that it is ignored, and the one-unit exe still runs", timeout = 1200)]
 def test_exe_flags_outside_their_rail(t : T?) {
     let dir_r = create_temp_directory_result("llvm_exe_flags")
     if (!(dir_r is value)) {
@@ -250,10 +253,10 @@ def test_exe_flags_outside_their_rail(t : T?) {
         return
     }
     let dir = unsafe(dir_r.value)
-    t |> run("--jit-lto and --jit-obj-cache without the split say they are ignored, and the one-unit exe still runs") @(t : T?) {
-        var jit_args <- ["--jit-lto", "--jit-obj-cache=1"]
-        var says <- ["--jit-lto applies to a split -exe",
-                     "--jit-obj-cache applies under --jit-split-modules"]
+    let what = "--jit-obj-cache without the split is ignored, and the one-unit exe runs"
+    t |> run(what) @(t : T?) {
+        var jit_args <- ["--jit-no-lto", "--jit-obj-cache=1"]
+        var says <- ["--jit-obj-cache applies under --jit-split-modules"]
         if (get_platform_name() != "windows") {
             jit_args |> push("--jit-static")
             says |> push("Executable {path_join(dir, "flags")}.exe linked - ok")
@@ -274,7 +277,7 @@ def test_lto_driver_gate_parsing(t : T?) {
     }
 }
 
-[test(description = "a split -exe linked with LTO runs the fixture like the one-unit exe and leaves no partition files beside it", timeout = 1200)]
+[test(description = "a default -exe builds split and links with LTO, runs the fixture like the one-unit exe and leaves no partition files beside it", timeout = 1200)]
 def test_exe_split_lto(t : T?) {
     let why_not = lto_driver_missing()
     if (!empty(why_not)) {
@@ -287,9 +290,9 @@ def test_exe_split_lto(t : T?) {
         return
     }
     let dir = unsafe(dir_r.value)
-    t |> run("a split -exe linked with LTO runs the fixture like the one-unit exe") @(t : T?) {
-        let out = build_and_run(t, dir, "lto", SPLIT_LTO_ROOT,
-            ["--jit-split-modules=-1", "--jit-lto"], ["the link runs LTO"])
+    let what = "a default -exe links split with LTO and runs the fixture like the one-unit exe"
+    t |> run(what) @(t : T?) {
+        let out = build_and_run(t, dir, "lto", SPLIT_LTO_ROOT, [], ["the link runs LTO"])
         expect_split_lines(t, out, "split + LTO")
         expect_no_partition_files(t, dir, "lto")
     }
