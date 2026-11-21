@@ -1,9 +1,9 @@
 //! the aliasing suite recompiled under `options no_aliasing` reports
 //! every potential argument, result and global alias as an error
 //! instead of turning the optimization off
-expect 30104:20, 30105:5, 30151:3
+expect 30104:22, 30105:5, 30151:22
 options gen2
 options no_aliasing
 
-include uncategorized_no_aliasing_false.das
+include in_place_build_aliasing.das
 

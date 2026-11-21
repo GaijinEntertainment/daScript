@@ -79,61 +79,94 @@ namespace das {
         },"*");
     }
 
+    typedef das_hash_map<Variable *,Expression *> LoopSources;
+
+    // src/ast/ARCHITECTURE_ALIASING.md#in-place-build-aliases
     class SourceCollector : public Visitor {
     public:
-        SourceCollector ( const ProgramPtr & prog, bool anyC, bool anyG ) : program(prog), anyCallAliasing(anyC), anyGlobals(anyG) {}
+        SourceCollector ( const ProgramPtr & prog, const LoopSources & loops, bool reads, bool anyG )
+            : program(prog), loopSources(loops), allReads(reads), anyGlobals(anyG) {}
     protected:
         virtual bool canVisitStructureFieldInit ( Structure * ) override { return false; }
         virtual bool canVisitArgumentInit ( Function * , const VariablePtr &, Expression * ) override { return false; }
-    // this speeds up walking
         virtual bool canVisitIfSubexpr ( ExprIfThenElse * ) override {
-            return !disabled;
+            return !skipDepth;
         }
         virtual bool canVisitExpr ( ExprTypeInfo *, Expression * )  override  { return false; }
         virtual bool canVisitMakeStructureBlock ( ExprMakeStruct *, Expression * )  override  { return false; }
         virtual bool canVisitMakeStructureBody ( ExprMakeStruct * )  override {
-            return !disabled;
+            return !skipDepth;
         }
         virtual bool canVisitQuoteSubexpression ( ExprQuote * )  override  { return false; }
         virtual bool canVisitWithAliasSubexpression ( ExprAssume * )  override  { return false; }
-        virtual bool canVisitMakeBlockBody ( ExprMakeBlock * )  override  { return false; }
+        virtual bool canVisitMakeBlockBody ( ExprMakeBlock * )  override  { return everyRead(); }
+        bool everyRead () const { return allReads && !secondNameDepth; }
+        void skipReads () { if ( !everyRead() ) skipDepth ++; }
+        void resumeReads () { if ( !everyRead() ) skipDepth --; }
+        bool passesSources ( const TypeDeclPtr & res ) const {
+            return res->ref || res->isGoodIteratorType();
+        }
+        bool invokePassesSources ( const TypeDeclPtr & argT ) const {
+            return !argT->isGoodBlockType() && passesSources(argT->firstType);
+        }
+        void addSources ( const IndirectSources & vars ) {
+            for ( auto & v : vars ) {
+                sources.insert(v.first);
+            }
+        }
+        void resolveSecondName ( Variable * var, Expression * names ) {
+            if ( resolved.find(var)!=resolved.end() ) return;
+            resolved.insert(var);
+            secondNameDepth ++;
+            names->visit(*this);
+            secondNameDepth --;
+        }
     // we found source
         virtual void preVisit ( ExprVar * expr ) override {
             Visitor::preVisit(expr);
-            if ( !disabled ) sources.insert(expr->variable);
+            if ( skipDepth ) return;
+            auto var = expr->variable;
+            sources.insert(var);
+            if ( !var->type->ref ) return;
+            auto loop = loopSources.find(var);
+            if ( loop!=loopSources.end() ) {
+                resolveSecondName(var, loop->second);
+            } else if ( expr->local && var->init ) {
+                resolveSecondName(var, var->init);
+            }
         }
-    // in [] only value can alias
+    // []
         virtual void preVisit ( ExprAt * expr ) override {
             Visitor::preVisit(expr);
         }
         virtual void preVisitAtIndex ( ExprAt * expr, Expression * index ) override {
             Visitor::preVisitAtIndex(expr,index);
-            disabled ++;
+            skipReads();
         }
         virtual ExpressionPtr visit ( ExprAt * expr ) override {
-            disabled --;
+            resumeReads();
             return Visitor::visit(expr);
         }
-    // in ?[] only value can alias
+    // ?[]
         virtual void preVisit ( ExprSafeAt * expr ) override {
             Visitor::preVisit(expr);
         }
         virtual void preVisitSafeAtIndex ( ExprSafeAt * expr, Expression * index ) override {
             Visitor::preVisitSafeAtIndex(expr,index);
-            disabled ++;
+            skipReads();
         }
         virtual ExpressionPtr visit ( ExprSafeAt * expr ) override {
-            disabled --;
+            resumeReads();
             return Visitor::visit(expr);
         }
-    // in op3 only sources can alias
+    // ?:
         virtual void preVisit ( ExprOp3 * expr ) override {
             Visitor::preVisit(expr);
-            disabled ++;
+            skipReads();
         }
         virtual void preVisitLeft  ( ExprOp3 * expr, Expression * left ) override {
             Visitor::preVisitLeft(expr,left);
-            disabled --;
+            resumeReads();
         }
         virtual ExpressionPtr visit ( ExprOp3 * expr ) override {
             return Visitor::visit(expr);
@@ -141,83 +174,66 @@ namespace das {
     // pointer deref - all bets are off
         virtual void preVisit ( ExprPtr2Ref * expr ) override {
             Visitor::preVisit(expr);
-            if ( !expr->assumeNoAlias ) alwaysAliases = true;
+            if ( !skipDepth && !expr->assumeNoAlias ) alwaysAliases = true;
         }
-    // function call - does not alias when does not return ref
+    // call
         virtual void preVisit ( ExprCall * expr ) override {
             Visitor::preVisit(expr);
-            if ( anyCallAliasing ) {
-                if ( !expr->func->result->isRef() ) disabled ++;
-            } else {
-                if ( !expr->func->result->ref ) disabled ++;
+            if ( !passesSources(expr->func->result) ) skipReads();
+            if ( everyRead() && anyGlobals ) {
+                IndirectSources globSrc;
+                das_hash_set<Function *> accessed;
+                appendIndVariables(expr->func, globSrc, accessed);
+                addSources(globSrc);
             }
         }
         virtual ExpressionPtr visit ( ExprCall * expr ) override {
-            if ( anyCallAliasing ) {
-                if ( !expr->func->result->isRef() ) disabled --;
-            } else {
-                if ( !expr->func->result->ref ) disabled --;
-            }
+            if ( !passesSources(expr->func->result) ) resumeReads();
             return Visitor::visit(expr);
         }
     // invoke
         virtual void preVisit ( ExprInvoke * expr ) override {
             Visitor::preVisit(expr);
             auto argT = expr->arguments[0]->type;
-            if ( argT->isGoodBlockType() ) {
-                disabled ++; // block never aliases
-            } else if ( anyCallAliasing ) {
-                if ( !argT->firstType->isRef() ) disabled ++;
-            } else {
-                if ( !argT->firstType->ref ) disabled ++;
-            }
-            if ( !disabled && anyGlobals ) {
+            if ( !invokePassesSources(argT) ) skipReads();
+            if ( !skipDepth && anyGlobals ) {
+                IndirectSources globSrc;
                 if ( argT->isGoodFunctionType() ) {
-                    IndirectSources globSrc;
-                    collectInvokeIndVariables(program, expr->arguments[0]->type, globSrc);
-                    for ( auto & src : globSrc ) {
-                        sources.insert(src.first);
-                    }
+                    collectInvokeIndVariables(program, argT, globSrc);
                 } else if ( argT->isGoodLambdaType() ) {
-                    IndirectSources globSrc;
-                    collectInvokeIndLambdaVariables(program, expr->arguments[0]->type, globSrc);
-                    for ( auto & src : globSrc ) {
-                        sources.insert(src.first);
-                    }
+                    collectInvokeIndLambdaVariables(program, argT, globSrc);
                 }
+                addSources(globSrc);
             }
         }
         virtual ExpressionPtr visit ( ExprInvoke * expr ) override {
             auto argT = expr->arguments[0]->type;
-            if ( argT->isGoodBlockType() ) {
-                disabled --;
-            } else if ( anyCallAliasing ) {
-                if ( !argT->firstType->isRef() ) disabled --;
-            } else {
-                if ( !argT->firstType->ref ) disabled --;
-            }
+            if ( !invokePassesSources(argT) ) resumeReads();
             return Visitor::visit(expr);
         }
     protected:
-        int disabled = 0;
+        int skipDepth = 0;
+        int secondNameDepth = 0;
+        das_hash_set<Variable *> resolved;
         ProgramPtr program;
+        const LoopSources & loopSources;
         set<Expression *> invokeBlocks;
     public:
         ExpressionSources sources;
         bool alwaysAliases = false;
-        bool anyCallAliasing = false;
+        bool allReads = false;
         bool anyGlobals = false;
     };
 
-    bool collectSources ( const ProgramPtr & prog, Expression * expr, ExpressionSources & src, bool anyC, bool anyG ) {
-        SourceCollector srr(prog, anyC, anyG);
+    bool collectSources ( const ProgramPtr & prog, const LoopSources & loops, Expression * expr, ExpressionSources & src, bool allReads, bool anyG ) {
+        SourceCollector srr(prog, loops, allReads, anyG);
         expr->visit(srr);
         src = das::move(srr.sources);
         return srr.alwaysAliases;
     }
 
-    bool appendSources ( const ProgramPtr & prog, Expression * expr, ExpressionSources & src, bool anyC, bool anyG ) {
-        SourceCollector srr(prog, anyC, anyG);
+    bool appendSources ( const ProgramPtr & prog, const LoopSources & loops, Expression * expr, ExpressionSources & src, bool allReads, bool anyG ) {
+        SourceCollector srr(prog, loops, allReads, anyG);
         expr->visit(srr);
         for ( auto s : srr.sources ) {
             src.insert(s);
@@ -297,6 +313,7 @@ namespace das {
         }
     }
 
+    // src/ast/ARCHITECTURE_ALIASING.md#in-place-build-aliases
     class AliasMarker : public Visitor {
     public:
         AliasMarker ( const ProgramPtr & prog, bool permanent, bool everything, bool report, TextWriter & ls ) : program(prog), logs(ls) {
@@ -308,6 +325,7 @@ namespace das {
     protected:
         ProgramPtr  program;
         das_hash_map<Expression *,Expression *> cmresDest;
+        LoopSources loopSources;
         bool checkAliasing = false;
         bool logAliasing = false;
         TextWriter & logs;
@@ -343,8 +361,15 @@ namespace das {
             Visitor::preVisit(expr);
             cmresDest[expr->right] = expr->left;
         }
+        virtual void preVisit ( ExprFor * expr ) override {
+            Visitor::preVisit(expr);
+            for ( size_t i=0, is=das::min(expr->iteratorVariables.size(), expr->sources.size()); i!=is; ++i ) {
+                loopSources[expr->iteratorVariables[i]] = expr->sources[i];
+            }
+        }
         virtual FunctionPtr visit ( Function * fn ) override {
             cmresDest.clear();
+            loopSources.clear();
             return Visitor::visit(fn);
         }
     // make local
@@ -355,7 +380,7 @@ namespace das {
                 // left
                 auto resOut = it->second;
                 ExpressionSources resSrc;
-                if ( collectSources(program, resOut, resSrc, false, true) ) {
+                if ( collectSources(program, loopSources, resOut, resSrc, false, true) ) {
                     if ( checkAliasing ) {
                         program->error("[[" + string(expr->__rtti) + " ]] always aliases",
                             "some form of ... *ptr ... = [[" + string(expr->__rtti) + " ...]] where we don't know where pointer came from", "",
@@ -398,7 +423,7 @@ namespace das {
             Visitor::preVisit(expr);
             preVisitMakeLocal(expr,[&](ExpressionSources & argSrc, bool anyGlobals) -> bool {
                 for ( auto & arg : expr->values ) {
-                    if ( appendSources(program, arg, argSrc, true, anyGlobals) ) return true;
+                    if ( appendSources(program, loopSources, arg, argSrc, true, anyGlobals) ) return true;
                 }
                 return false;
             });
@@ -408,7 +433,7 @@ namespace das {
             preVisitMakeLocal(expr,[&](ExpressionSources & argSrc, bool anyGlobals) -> bool {
                 for ( auto & arg : expr->structs ) {
                     for ( auto & subarg : *arg ) {
-                        if ( appendSources(program, subarg->value, argSrc, true, anyGlobals) ) return true;
+                        if ( appendSources(program, loopSources, subarg->value, argSrc, true, anyGlobals) ) return true;
                     }
                 }
                 return false;
@@ -418,7 +443,7 @@ namespace das {
             Visitor::preVisit(expr);
             preVisitMakeLocal(expr,[&](ExpressionSources & argSrc, bool anyGlobals) -> bool {
                 for ( auto & arg : expr->values ) {
-                    if ( appendSources(program, arg, argSrc, true, anyGlobals) ) return true;
+                    if ( appendSources(program, loopSources, arg, argSrc, true, anyGlobals) ) return true;
                 }
                 return false;
             });
@@ -427,7 +452,7 @@ namespace das {
             Visitor::preVisit(expr);
             preVisitMakeLocal(expr,[&](ExpressionSources & argSrc, bool anyGlobals) -> bool {
                 for ( auto & arg : expr->variants ) {
-                    if ( arg->value && appendSources(program, arg->value, argSrc, true, anyGlobals) ) return true;
+                    if ( arg->value && appendSources(program, loopSources, arg->value, argSrc, true, anyGlobals) ) return true;
                 }
                 return false;
             });
@@ -447,7 +472,7 @@ namespace das {
                 // everything can alias on the right
                 auto resOut = it->second;
                 ExpressionSources resSrc;
-                if ( collectSources(program, resOut, resSrc, false, true) ) {
+                if ( collectSources(program, loopSources, resOut, resSrc, false, true) ) {
                     if ( checkAliasing ) {
                         program->error("invoke result always aliases",
                             "some form of ... *ptr ... = invoke( ... ) where we don't know where pointer came from", "",
@@ -471,7 +496,7 @@ namespace das {
                         continue;
                     }
                     ExpressionSources argSrc;
-                    if ( collectSources(program, expr->arguments[ai], argSrc, false, anyGlobals) ) {
+                    if ( collectSources(program, loopSources, expr->arguments[ai], argSrc, false, anyGlobals) ) {
                         if ( checkAliasing ) {
                             program->error("invoke result aliases argument " + to_string(ai),
                                 "some form of ... = invoke( ... *ptr ... ) where we don't know where pointer came from", "",
@@ -549,7 +574,7 @@ namespace das {
                 if ( it!=cmresDest.end() ) {
                     auto resOut = it->second;
                     ExpressionSources resSrc;
-                    if ( collectSources(program, resOut, resSrc, false, true) ) {
+                    if ( collectSources(program, loopSources, resOut, resSrc, false, true) ) {
                         if ( checkAliasing ) {
                             program->error("function " + expr->func->describeName() + " result always aliases",
                                 "some form of ... *ptr ... = " + expr->func->name + "( ... ) where we don't know where pointer came from", "",
@@ -570,7 +595,7 @@ namespace das {
                     // now go thorough all arguments, which are potential aliases
                     for ( auto ai : expr->func->resultAliases ) {
                         ExpressionSources argSrc;
-                        if ( collectSources(program, expr->arguments[ai], argSrc, false, anyGlobals) ) {
+                        if ( collectSources(program, loopSources, expr->arguments[ai], argSrc, false, anyGlobals) ) {
                             if ( checkAliasing ) {
                                 program->error("function " + expr->func->describeName() + " result aliases argument " + expr->func->arguments[ai]->name,
                                     "some form of ... = " + expr->func->name + "( ... *ptr ... ) where we don't know where pointer came from", "",

@@ -4939,8 +4939,9 @@ class SpirvEmit : AstVisitor {
             if (is_out_param(pv._type)) {
                 let p = ptr_of(arg)
                 if (p.id == 0u) return
+                let storage = root_storage_of(arg)
                 ctx.local_vars[intptr(pv)] = LocalVar(ptr_id = p.id, value_type = p.pty,
-                                                      storage = root_storage_of(arg))
+                                                      storage = storage)
             } else {
                 let v = value_of(arg)
                 if (v == 0u) return
