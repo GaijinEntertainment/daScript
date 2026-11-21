@@ -266,6 +266,18 @@ diagnostic in any tier.
   tiers - `f(g(x), x)` with `g` writing `x` by reference reads the old `x` on one tier and the
   new one on another. Run the writing call as a statement of its own: `let r = g(x); f(r, x)`.
   LINT030 finds the shape and is on in this tree (`.lint_config`).
+- **A struct, tuple, variant or array literal, or a by-value call result, assigned to existing
+  storage (a variable, a field or an element) is built directly in that storage - copy what
+  the right side reads into locals first when it can reach the target by a route the compiler
+  does not trace.** The compiler builds the value in a temporary when the right side names the
+  target directly, through a reference loop variable, or through a reference local
+  (`let r & = q`). It does not trace a reference parameter the caller bound to the target. A
+  struct parameter is passed by reference even without `&`, so
+  `def f(var dst : P&; src : P) { dst = P(a = 1, c = src.a) }` called as `f(q, q)` writes `q.a`
+  and then reads the new value as `src.a`; a global or a block argument the right side reads
+  does the same when the caller passes that storage as `dst`. It never checks a block call:
+  `g = invoke(blk)` where `blk` reads `g` reads the half-written `g`. It traces nothing that
+  needs `unsafe`: `q = P(a = 1, c = pq.a)` with `pq = addr(q)` reads the half-written `q`.
 
 ### Code style - prefer idiomatic forms
 
