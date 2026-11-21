@@ -945,6 +945,29 @@ sizes like ``resize(int(n) + 1)`` are LINT021's business. The ranged
 its ``int64`` overload is homogeneous, so a mixed call widens the sibling
 argument too.
 
+The same cast in front of a daslang helper is reported when the helper would
+take the 64-bit value as it is. Three shapes count: the parameter is declared
+with a 64-bit alternative (``n : int | int64``); the helper forwards the
+parameter as a size to one of the calls above, or to another helper that does,
+and has an ``int64`` overload of the same signature; the helper is generic in
+the parameter (a bare ``auto``) and reads it as nothing but such a size. A
+helper that takes ``int`` alone is not reported - there the narrowing is its
+signature - and neither is an ``int`` / ``int64`` overload pair whose parameter
+is a value rather than a size, such as a serializer's.
+
+.. das-doc: fragment
+.. code-block:: das
+
+    def grow_to(var a : array<auto(numT)>; n : int | int64) {
+        a |> resize(n)
+    }
+
+    // Bad — grow_to takes the int64 as it is
+    a |> grow_to(int(n64))
+
+    // Good
+    a |> grow_to(n64)
+
 LINT019 — stale ``nolint`` directive
 ====================================
 

@@ -110,6 +110,20 @@ style_lint is `ARCHITECTURE_STYLE_LINT.md`.
   A variable a DISCARDED `static_if` arm names is marked used by the fold (`InferTypes::visit(ExprIfThenElse)`
   walks the dropped arm first), so the module-gated shape - the module arm uses every argument, the `else`
   skips - reads clean on a box without the module; `lint012_static_if_arm.das` pins it.
+- **LINT018 reads a size cast from the callee's side.** For a builtin it is a name list:
+  `lint018_size_slots` names the calls that carry a 64-bit overload - `memcpy`, `memmove`,
+  `memcmp`, and the array and table size family of `daslib/builtin.das` (`resize`,
+  `resize_no_init`, `resize_and_init`, `reserve`, `erase`, `ensure_capacity`, `scratch_reserve`,
+  `scratch_ensure_capacity`, `scratch_resize`). The list and the `int64` overloads of those names
+  in `builtin.das` are a pair: a listed name whose `int64` overload is gone gets a "drop the cast"
+  that no longer compiles. For a das callee the rule reads the callee: `lint018_param_use` scans
+  the body once per (function, parameter) and counts the reads of the parameter and those that
+  sit in a size slot, directly or through another das function that forwards it. A cast is
+  reported only where dropping it is known to compile - the generic declares the parameter with a
+  64-bit alternative, or an `int64` twin of the same signature exists and the parameter reaches a
+  size slot, or the parameter is a bare `auto` whose every read is a size. An `int` / `int64`
+  overload pair whose parameter never reaches a size slot, a serializer's value, is left alone:
+  there the cast picks a width on purpose.
 - **LINT023 reads the store/use stream in order.** A use disqualifies a candidate only
   once a store has been seen, so a read that precedes every store leaves the write dead -
   the shape that hides a cleared-but-not-returned handle. `lint023_deferred_depth` covers
