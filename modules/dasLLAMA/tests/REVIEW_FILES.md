@@ -6,6 +6,10 @@ doc: `../ARCHITECTURE.md`.
 **A diff that adds or moves a `[test]` here applies `tests/REVIEW.md` (repo root) too, with this
 folder's `REVIEW.das` as its gate; a diff that weakens it is a defect.**
 
+**A test or a cell a diff moves to another file, its text unchanged or not, is moved: every rule of
+`REVIEW.md` (beside this file) or a companion beside it that a diff adding or moving a test or a
+cell triggers binds it, whether or not the move reaches the cell.**
+
 **A `[test]` a diff adds or moves into a file that an `--arm` suite lists (every `run.das` suite but
 `model-free`, `gpu-kernels` and `stocked`) gates each model-loading cell on `arm_on(t, name)`
 (`_model_tier.das`) with that suite's arm; a test with no arm goes into a `model-free`,

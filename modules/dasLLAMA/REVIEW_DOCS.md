@@ -37,9 +37,10 @@ citation that names it to the new row's number or drops it, and adds the new pro
 number.** A row rewritten under its number turns every citation of
 that number into a citation of something else.
 
-**A diff that renames an identifier a surviving `followup_*.md` row or item names writes the new
-name into that row or item, under its number, in the same change; a rename does not change the
-problem the row states.**
+**A diff that renames, moves or deletes an identifier or a file a surviving `followup_*.md` row or
+item names writes into that row or item, under its number, in the same change, the new name - for a
+deleted one, the name of what now holds its content, or, when nothing does, the row drops the name
+and keeps its problem; a rename, move or deletion does not change the problem the row states.**
 
 **A diff files planned work in the ledger that owns it: `followup_metal.md` for work that would
 change a Metal kernel, driver or dispatch and no Vulkan or CUDA one, or CPU engine work whose

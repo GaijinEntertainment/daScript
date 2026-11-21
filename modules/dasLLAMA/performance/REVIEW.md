@@ -31,8 +31,8 @@ branch cannot reach that commit.** An empty field names no commit, so it breaks 
 **Weakening any check in `REVIEW.das` is a defect.**
 
 **A diff that adds or hand-edits a commit stamp under this folder - a field, url, or recipe that
-names a git commit by its hash - names, in the PR body, each such stamp, its old value (none for
-an added stamp), and its new value.**
+names a git commit by its hash - names, in the PR body, each such stamp, its value at the merge
+base (none for an added stamp), and its value at the tip.**
 
 **A diff that re-stamps an archived sidecar (`records/<box>.tune.<sha12>.json`) re-hashes and
 renames the file and repoints every `records/<box>.json` row whose `tune_sha` named the old
@@ -176,9 +176,10 @@ interpolates, records in the PR description one unscoped `fetch_models.das --` r
 in which every row or entry it repoints reads `ok`; a row it does not repoint may read `pending`.**
 
 **A diff that changes what `models_provenance()` or `board_provenance()` (`profile_common.das`)
-return, or changes `fetch_models.das` beyond its comments, records in the PR description one
-unscoped `fetch_models.das --` run ending `0 failed` in which every row or entry whose model file
-the box holds reads `ok`.**
+return - the body of either or of `provenance_walk`, or a row a walk emits removed or renamed - or
+changes `fetch_models.das` beyond its comments, records in the PR description one unscoped
+`fetch_models.das --` run ending `0 failed` in which every row or entry whose model file the box
+holds reads `ok`.**
 
 **A diff that adds or changes a `url` on a `model_specs.das` or `profile_common.das` row or on one
 of its `companions` entries, or changes a constant such a `url` interpolates, records in the PR
