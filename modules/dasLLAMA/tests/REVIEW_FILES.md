@@ -62,3 +62,14 @@ its module and JIT caches, so the file compiles that program once instead of onc
 
 **A `standalone` reason here that says the test loads a model is a defect - the test goes to
 its topic's file.** A cell frees its model before it returns.
+
+**A function in a file of this folder that requires a module behind an optional `require ?<mod>`
+never names that module's types in its signature - leave a parameter that would carry one
+untyped, and drop a return type that would name one.** A signature cannot sit inside a
+`static_if`, so a build without the module fails the compile on it.
+
+**A function in a file of this folder that requires a module behind an optional `require ?<mod>`,
+and that has no untyped parameter, names anything that module declares only inside a
+`static_if` branch that compiles only where `<mod>` exists.** In a build without the module a
+fully typed function is inferred anyway; one with an untyped parameter is inferred only at a call
+site, which its caller has already guarded.

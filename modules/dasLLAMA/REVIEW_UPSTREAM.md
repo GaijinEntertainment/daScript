@@ -10,9 +10,9 @@ or a dash.**
 
 The reference build is any third-party engine, library or runtime whose measured numbers any
 checked-in text of this module compares with this module's own (comparing only its outputs, as a
-parity fixture does, does not make it one), whatever copy a box holds - a prebuilt
-release, or a checkout a setup script of this module pins. A library the build's release or
-source tree bundles is part of it; a package an environment installs beside it is not. A model's
+parity fixture does, does not make it one), whatever copy a box holds - a prebuilt release, or a
+checkout a setup script of this module pins. A library the build's release or source tree bundles is
+part of it, whichever copy a box loads; a package the build's tree does not bundle is not. A model's
 name, and a family this module names after its model, name the model, not the reference build.
 
 A sentence does reference-build work when it reports a search through that build, a patch to it, a
@@ -23,6 +23,9 @@ reference-build work. A sentence reporting a run of a library the build bundles 
 own artifact does reference-build work; naming one of the build's symbols is not by itself such
 work. A sentence stating a model file's provenance - which of the build's tools a third party ran
 to make it - does reference-build work.
+
+A sentence in a file under `harness/` (this module) naming a library the build bundles as that
+file's dependency does reference-build work.
 
 **A diff that names the reference build - its organization, project, binary, library, source
 header, symbol, constant, or a label its output prints - outside a sentence doing reference-build

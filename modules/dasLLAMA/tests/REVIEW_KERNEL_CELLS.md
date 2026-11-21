@@ -40,9 +40,11 @@ docs: `../ARCHITECTURE_GPU.md`, `../ARCHITECTURE_CPU_KERNELS.md`. Planned work:
   reach it on some shape that call does not decline, whether or not any model file the box holds
   has that shape.
 - A bound assert is a compare of two computed sides, or a measured quality figure against a
-  tolerance - never a floor on a capacity or a configuration, a compare of entry counts or roster
-  sizes, an index guard, a route counter, or the one-index assert against the input that a cell
-  whose output buffer is its input buffer makes; that assert is not a control either.
+  tolerance; an exact compare - equality of ids, an argmax or an integer count, with no tolerance in
+  either side's computation - is not one; a float compare, bit-exact or not, and a miss count of a
+  tolerant compare are. Nor is a floor on a capacity or a configuration, a compare of entry counts
+  or roster sizes, an index guard or a route counter. Nor is the one-index assert against the input
+  that a cell whose output buffer is its input buffer makes; that assert is not a control either.
 - A sibling stamp is another stamp derived from the same class; it stands in for a stamp only where
   the code a rule asks about is the class's own, neither stamp overrides it - overriding a template
   constant that code reads overrides it - the sibling's cell compiles once the diff is applied, and
@@ -142,11 +144,13 @@ can wrongly satisfy a tolerant compare.
 **A diff that adds or loosens, in a kernel-unit cell, a bound assert ships a control for each such
 assert, in the same change - a control that runs with that assert on every call.**
 
-**A size, depth, row count or block offset that a kernel-unit cell's name, a comment inside the
-cell, or an assert's text claims, and that the cell passes as a literal argument to the kernel it
-dispatches or calls, is asserted in that cell - by an assert that a figure the run produces (the
-count it wrote, the offset it read or wrote at) equals that value, or by comparing against the
-oracle every output element the value sizes or places.**
+**A size, depth, row count or block offset that a kernel-unit cell's name, a `[test]`'s description,
+a comment on or inside the cell or a helper it calls, or an assert's text claims, and that the cell
+passes as a literal argument to the kernel it dispatches or calls, is asserted in that cell - by an
+assert that a figure the run produces (the count it wrote, the offset it read or wrote at) equals
+that value, or by comparing against the oracle every output element the value sizes or places; one
+that a `[test]`'s description claims is asserted so by at least one kernel-unit cell that test
+runs.**
 
 **A kernel-unit cell whose dispatch covers more lanes or rows than the size the cell claims sizes
 its output buffers for every element a lane past that size writes on a failed bounds check,
