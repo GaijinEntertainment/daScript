@@ -724,8 +724,9 @@ if(NOT ${DAS_LLVM_DISABLED})
     list(FILTER LLVM_AOT_TEST_FILES EXCLUDE REGEX "/_")
     # jit_fastpath (is_jit_function/remove_jit semantics) and the rtti/strict-smart-pointer typeinfo
     # tests behave differently under SimNode_Jit binding; llvm_code/compile-only are not object-emitted;
-    # jit_artifacts tests the JIT's own outputs (exe, lib, wasm, the DLL cache). Everything else is covered.
-    list(FILTER LLVM_AOT_TEST_FILES EXCLUDE REGEX "/(failed_|cant_|invalid_|llvm_tune|llvm_code|llvm_compile_only|jit_artifacts|jit_fastpath|uncategorized_rtti_strict_smart_pointers_false)|_solid_context\\.das$")
+    # jit_artifacts, jit_lib, jit_cross and jit_codegen_children test the JIT's own outputs (exe, lib, wasm,
+    # the DLL cache, children's dumps). Everything else is covered.
+    list(FILTER LLVM_AOT_TEST_FILES EXCLUDE REGEX "/(failed_|cant_|invalid_|llvm_tune|llvm_code|llvm_compile_only|jit_artifacts|jit_lib|jit_cross|jit_codegen_children|jit_fastpath|uncategorized_rtti_strict_smart_pointers_false)|_solid_context\\.das$")
     # msl/metal exercise 16/8-bit lattice + simdgroup ops the LLVM JIT declines (lattice_fallback in
     # llvm_jit.das) — they interpret, so they have no emitted object; keep them out of the AOT rail.
     # spirv joins them on the fp16 side: aarch64 lowers the lattice natively (g_lattice_fp16_ops_native),

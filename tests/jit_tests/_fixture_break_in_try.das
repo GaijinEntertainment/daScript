@@ -1,9 +1,9 @@
 options gen2
 options no_aot
 
-//! a child for jit_artifacts.das: a loop whose try arm breaks out and
-//! whose recover arm can panic - the JIT must leave the loop, cold
-//! cache and warm alike
+//! a child for jit_codegen_children.das: a loop whose try arm breaks
+//! out and whose recover arm can panic - the JIT must leave the loop,
+//! cold cache and warm alike
 def f(n : int) : int {
     var s = 0
     for (i in range(n)) {
