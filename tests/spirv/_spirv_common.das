@@ -16,6 +16,7 @@ require spirv/spirv_dis
 require spirv/spirv_builtins public
 require daslib/fio
 require math
+require dastest/check_cache
 
 // ===== Phase-1 fixture: data[i] = i*i, captured into the `square_spv : array<uint>` global =====
 var @ssbo @binding = 0 data : array<uint>
@@ -1482,35 +1483,11 @@ struct SpirvValResult {
     msg : string
 }
 
-def private tool_runs(exe : string) : bool {
-    var out : string
-    return run_and_capture([exe, "--version"], out, 10.0) == 0
-}
-
-def private find_spirv_val : string {
-    var cands : array<string>
-    if (has_env_variable("VULKAN_SDK")) {
-        let sdk = get_env_variable("VULKAN_SDK")
-        cands |> push("{sdk}/Bin/spirv-val")           // Windows SDK layout
-        cands |> push("{sdk}/Bin/spirv-val.exe")
-        cands |> push("{sdk}/bin/spirv-val")           // Linux SDK layout
-    }
-    cands |> push("spirv-val")                          // PATH (CI)
-    cands |> push("spirv-val.exe")
-    var found = ""
-    for (p in cands) {
-        if (tool_runs(p)) {
-            found = p
-            break
-        }
-    }
-    delete cands
-    return found
-}
-
 def public validate_spirv(words : array<uint>; target_env : string = "vulkan1.1") : SpirvValResult {
-    let exe = find_spirv_val()
-    if (empty(exe)) return SpirvValResult(ran = false, ok = false, msg = "spirv-val not found")
+    let tool = vulkan_sdk_tool("spirv-val")
+    if (empty(tool.exe)) return SpirvValResult(ran = false, ok = false, msg = "spirv-val not found")
+    let key = hash("{tool.stamp}|{target_env}|{hash(words)}")
+    if (check_passed("spirv-val", key)) return SpirvValResult(ran = true, ok = true)
     let tf = create_temp_file_result("das_spirv", ".spv")
     if (tf is error) return SpirvValResult(ran = true, ok = false, msg = "temp file: {tf as error}")
     let path = tf as value
@@ -1526,8 +1503,11 @@ def public validate_spirv(words : array<uint>; target_env : string = "vulkan1.1"
         return SpirvValResult(ran = true, ok = false, msg = "write failed: {path}")
     }
     var out : string
-    let rc = run_and_capture([exe, "--target-env", target_env, path], out, 30.0)
+    let rc = run_and_capture([tool.exe, "--target-env", target_env, path], out, 30.0)
     remove_result(path)
+    if (rc == 0) {
+        record_check_passed("spirv-val", key)
+    }
     return SpirvValResult(ran = true, ok = rc == 0, msg = out)
 }
 

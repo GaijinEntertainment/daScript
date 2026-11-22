@@ -219,7 +219,9 @@ real-driver layer, which lives in dasVulkan):
    bit rather than an opcode is invisible to the census and takes the words form.
 2. **`spirv-val` witness.** Every blob the suite produces is validated with the SPIRV-Tools
    `spirv-val` resolved through `VULKAN_SDK` where one is present and knows the blob's
-   extensions - a local witness for structured-CFG and define-before-use bugs. It skips where
+   extensions - a local witness for structured-CFG and define-before-use bugs. A blob that
+   already passed under the same tool and target env is answered from `dastest/check_cache.das`
+   (repo root) with no second run. It skips where
    the tool is absent or predates an extension, and CI carries none, so the words assertions
    are the gate and a spirv-val-only claim checks nothing there.
 3. **Real-driver behavioral regression.** A one-call framework in dasVulkan,

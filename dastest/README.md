@@ -142,6 +142,21 @@ it, so a `new_thread` body or a job - each runs in its own context - gets a diff
 let out = path_join(test_temp_dir(), "out.png")
 ```
 
+## External checks a test asks for
+
+A test that hands generated output to an external validator (`glslangValidator`, `spirv-val`)
+starts a child per check, and the interpreter, JIT and AOT sweeps ask for the same checks.
+`dastest/check_cache` remembers the passes: `check_passed(kind, key)` answers whether the check
+already passed for `key` in this tree, and `record_check_passed(kind, key)` records a pass as
+one empty file under `.cache/daslang/checks`. The key is the caller's hash of everything that
+decides the verdict - the input bytes, the arguments, and the tool's stamp, so a new tool
+checks again. A failure is never recorded, so it runs, and prints, every time.
+`vulkan_sdk_tool(name)` finds a tool once a program and returns its path and stamp: where
+`VULKAN_SDK` holds the file, the stamp is its path, size and modification time and no child
+starts; a name `PATH` resolves is stamped by what its `--version` prints.
+`set_check_cache_dir(dir)` points the cache at another folder, for the cache's own test.
+Deleting the folder makes every check run again.
+
 ## A test's environment
 
 `with_env_variables(pairs, blk)` (`testing_boost`) runs `blk` with each `(name, value)` of

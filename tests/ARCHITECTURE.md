@@ -135,6 +135,13 @@ run and the test removes that directory when it ends. Such a test starts its `-j
 without a module-cache flag for the same reason: the default caches they fill are the subject.
 A test of that file that reads no default cache is not ledgered.
 
+Ledgered: a pass of an external validator. `dastest/check_cache.das` (repo root) records it as an
+empty file under `.cache/daslang/checks/` in the tree, named by a hash of the input, the
+arguments and the tool, so that the interpreter, JIT and AOT sweeps share one record and a later
+run starts no validator for it. Two runs that record the same pass write the same empty file.
+The record is the subject of that write, so it stays; the cache's own test points it at
+`test_temp_dir()`.
+
 ## What `test_aot` compiles and runs {#test-aot}
 
 `test_aot` compiles every file, neither marked `options no_aot` nor named `failed_*`, `cant_*`
