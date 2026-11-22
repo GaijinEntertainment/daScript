@@ -1,10 +1,11 @@
 options gen2
 options no_aot
 
-//! a child for jit_artifacts.das: a guarded load through an odd int?
-//! must not run - the parity test guards it, and a typed pointer
-//! parameter promises no alignment; the address comes from a global
-//! and the callees stay out of line, so nothing folds the test away
+//! a child for jit_codegen_children.das: a guarded load through an
+//! odd int? must not run - the parity test guards it, and a typed
+//! pointer parameter promises no alignment; the address comes from a
+//! global and the callees stay out of line, so nothing folds the test
+//! away
 var g_odd_bits = 0xffffffffu
 
 [hint(noinline)]

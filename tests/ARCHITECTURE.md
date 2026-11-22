@@ -128,7 +128,7 @@ helpers as a path outside the tree, whatever its arguments name. `--root <dir>` 
 at another folder, which the gate's own test in `dastest/review_gate.das` (this folder) uses
 to run it over `dastest/_tests_gate_fixture/` and `dastest/_tests_shape_fixture/`.
 
-Ledgered: a test of `jit_tests/jit_artifacts.das` whose assertions read what a default cache
+Ledgered: a test of `jit_tests/jit_artifacts.das` or `jit_tests/jit_cross.das` whose assertions read what a default cache
 or a default output path holds writes under the tree on purpose. The DLL-cache test names `.cache/daslang/<namespace>/`:
 the default JIT DLL cache names each DLL by a hash of its content and cleans its DLLs only at
 that default home - an explicitly set `jit_output_path` turns both off - and its probe script
