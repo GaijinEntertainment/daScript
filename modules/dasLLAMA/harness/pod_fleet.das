@@ -42,6 +42,7 @@ require daslib/strings_convert
 require strings
 require dasllama/dasllama_env
 require ../tests/_model_categories.das   // CUDA_PASS_ONLY: the CUDA home's pass
+require ../../../utils/common/text_lines.das   // non_empty_lines: a remote read's own line
 require math   // min: the times report's top cut
 
 [CommandLineArgs]
@@ -63,10 +64,12 @@ struct FleetArgs {
     disk : int = 200
     @clarg_doc = "up: the fewest cores a pod's cgroup quota may give it, else remade; 0 = off"
     min_cores : float = 20.0
+    @clarg_doc = "up: the slowest a pod may hand a process fresh memory, in GB a second, else remade; 0 = off"
+    min_gbs : float = 1.0
     @clarg_doc = "the ssh private key the pods admit; its .pub is handed to every pod"
     key : string = "~/.ssh/runpod"
-    @clarg_doc = "run: the children's environment - KEY=VALUE tokens separated by spaces; the models directory is the pod's own folder of links to the volume's models, each model the run opens copied in place of its link, the image rail is off (DASLLAMA_IMAGE=0) and so is the large tier; an image suite's run passes its own --env with the rail on"
-    env : string = "DASLLAMA_MODELS_DIR=/root/models DASLLAMA_GPU=1 DASLLAMA_IMAGE=0 DASLLAMA_ALLOW_UNTUNED=1"
+    @clarg_doc = "run: the children's environment - KEY=VALUE tokens separated by spaces; the models directory is the pod's own folder of links to the volume's models, each model the run opens copied in place of its link, the image rail is off (DASLLAMA_IMAGE=0), allocations take no huge-page hint (DAS_NO_HUGEPAGE_HINT=1: a pod's host stalls on them) and so is the large tier off; an image suite's run passes its own --env with the rail on"
+    env : string = "DASLLAMA_MODELS_DIR=/root/models DASLLAMA_GPU=1 DASLLAMA_IMAGE=0 DAS_NO_HUGEPAGE_HINT=1 DASLLAMA_ALLOW_UNTUNED=1"
     @clarg_doc = "run: the full suite - the children also take DASLLAMA_PARITY_FULL=1, so the models past the size tier run and no test wall stands; an arc's final run"
     full : bool
     @clarg_doc = "run: the run.das arguments, no --only; the CUDA pod adds the CUDA pass's, both pods `--batch 30` where they name no --batch"
@@ -161,9 +164,9 @@ struct PodRecord {
     ssh : PodSsh
 }
 
-//! the pods `up` makes at one index before an allotment under
-//! the floor fails it
-let CPU_TRIES = 3
+//! the pods `up` makes at one index before a reading under a
+//! floor fails it
+let POD_TRIES = 3
 
 //! a pod's CPU allotment as its cgroup's `cpu.max` reads: the
 //! cores its quota buys a period, unlimited (the quota `max`),
@@ -172,6 +175,13 @@ variant CpuMax {
     cores : float
     unlimited : bool
     failure : string
+}
+
+//! the last line of a remote read that is not empty: the ssh call's own warnings come back ahead of the line the
+//! command printed
+def private last_line(text : string) : string {
+    let lines <- non_empty_lines(text)
+    return empty(lines) ? "" : lines[length(lines) - 1]
 }
 
 //! the remote command that reads the pod's cgroup CPU quota.
@@ -183,13 +193,7 @@ def cpu_max_command() : string => "cat /sys/fs/cgroup/cpu.max"
 //! warnings come back ahead of the file's line. Non-private:
 //! the pod-fleet tests read it
 def cpu_max_cores(text : string) : CpuMax {
-    var line = ""
-    for (ln in split(text, "\n")) {
-        let s = strip(ln)
-        if (!empty(s)) {
-            line = s
-        }
-    }
+    let line = last_line(text)
     let words <- split(line, " ")
     return CpuMax(failure = "cpu.max is not `<quota> <period>`: '{line}'") if (length(words) != 2)
     let period = try_to_int64(words[1])
@@ -201,13 +205,51 @@ def cpu_max_cores(text : string) : CpuMax {
     return CpuMax(cores = float(unwrap(quota)) / float(unwrap(period)))
 }
 
+//! whether `value` meets `floor`: every value where the floor is off (0 or under)
+def private meets_floor(floor, value : float) : bool => floor <= 0.0 || value >= floor
+
 //! whether `up` keeps a new pod: every pod with the check off
 //! (`min_cores` 0), an unlimited one, one at the floor or over
 //! it; an unread allotment is replaced. Non-private: the
 //! pod-fleet tests read it
 def keeps_pod(min_cores : float; cpu : CpuMax) : bool {
     return true if (min_cores <= 0.0 || cpu is unlimited)
-    return cpu is cores && (cpu as cores) >= min_cores
+    return cpu is cores && meets_floor(min_cores, cpu as cores)
+}
+
+//! how fast a pod hands a process fresh memory, in GB a second, or why the read gave no rate
+variant MemoryRate {
+    gbs : float
+    failure : string
+}
+
+//! the remote command that reads how fast the pod hands a process fresh memory: one 2 GB buffer of `dd`'s,
+//! filled once, its summary in the C locale's words. Non-private: the pod-fleet tests read it
+def memory_rate_command() : string => "LC_ALL=C dd if=/dev/zero of=/dev/null bs=2000M count=1 2>&1 | tail -1"
+
+//! the rate out of `dd`'s summary line (`<bytes> bytes ... copied, <seconds> s...`), the last line of `text` that
+//! is not empty. Non-private: the pod-fleet tests read it
+def memory_rate(text : string) : MemoryRate {
+    let line = last_line(text)
+    let words <- split(line, " ")
+    let copied = find_index(words, "copied,")
+    let unread = "dd's summary is not `<bytes> bytes ... copied, <seconds> s`: '{line}'"
+    return MemoryRate(failure = unread) if (copied < 0 || copied + 1 >= length(words))
+    let bytes = try_to_int64(words[0])
+    let seconds = try_to_float(words[copied + 1])
+    return MemoryRate(failure = unread) if (bytes is err || seconds is err || unwrap(seconds) <= 0.0)
+    return MemoryRate(gbs = float(double(unwrap(bytes)) / 1000000000.0lf) / unwrap(seconds))
+}
+
+//! whether `up` keeps a new pod by its memory: every pod with the check off (`min_gbs` 0), one at the
+//! floor or over it; an unread rate is replaced. Non-private: the pod-fleet tests read it
+def keeps_memory(min_gbs : float; rate : MemoryRate) : bool =>
+    min_gbs <= 0.0 || rate is gbs && meets_floor(min_gbs, rate as gbs)
+
+//! the rate as `up`'s log line states it
+def memory_reading(rate : MemoryRate) : string {
+    return "{fmt(":.1f", rate as gbs)} GB/s of fresh memory" if (rate is gbs)
+    return "no memory rate read ({rate as failure})"
 }
 
 //! the allotment as `up`'s log line states it
@@ -217,13 +259,30 @@ def cpu_reading(cpu : CpuMax) : string {
     return "no allotment read ({cpu as failure})"
 }
 
+//! what `up` read off a new pod - the CPU allotment `cpu`, and the memory read's exit code `rc` and output `out`
+//! where the memory floor is on - as its log line states it, and whether the pod stays: both floors met. A failed
+//! memory read is an unread rate. Non-private: the pod-fleet tests read it
+def pod_reading(min_cores, min_gbs : float; cpu : CpuMax; rc : int; out : string) : tuple<kept : bool; text : string> {
+    return (kept = keeps_pod(min_cores, cpu), text = cpu_reading(cpu)) if (min_gbs <= 0.0)
+    let rate = rc == 0 ? memory_rate(out) : MemoryRate(failure = "ssh exit {rc}")
+    return (kept = keeps_pod(min_cores, cpu) && keeps_memory(min_gbs, rate), text = "{cpu_reading(cpu)}, {memory_reading(rate)}")
+}
+
 //! the failure of `up` when every try at pod `index` came in
-//! under the floor: the floor and each try's cores.
+//! under a floor: each floor that is on and each try's readings.
 //! Non-private: the pod-fleet tests read it
-def cores_refusal(index : int; min_cores : float; readings : array<string>) : string {
-    let floor = fmt(":.1f", min_cores)
-    return ("pod_fleet: POD {index}: all {length(readings)} tries came in under the {floor}-core"
-        + " floor ({join(readings, ", ")}); `--min-cores 0` keeps such a pod")
+def floor_refusal(index : int; min_cores, min_gbs : float; readings : array<string>) : string {
+    var floors, offs : array<string>
+    if (min_cores > 0.0) {
+        floors |> push("the {fmt(":.1f", min_cores)}-core floor")
+        offs |> push("`--min-cores 0`")
+    }
+    if (min_gbs > 0.0) {
+        floors |> push("the {fmt(":.1f", min_gbs)} GB/s memory floor")
+        offs |> push("`--min-gbs 0`")
+    }
+    return ("pod_fleet: POD {index}: all {length(readings)} tries came in under {join(floors, " or ")}"
+        + " ({join(readings, "; ")}); {join(offs, " and ")} keep{length(offs) == 1 ? "s" : ""} such a pod")
 }
 
 let POD_TREE = "/root/daScript"
@@ -570,18 +629,19 @@ def private drop_pods(cfg : FleetArgs; var fleet : Fleet; ids : array<string>; t
 }
 
 //! pod `index` of `up`, made again while its cgroup allotment
-//! comes in under `--min-cores`, CPU_TRIES pods in all. A short
+//! comes in under `--min-cores` or its fresh memory under
+//! `--min-gbs`, POD_TRIES pods in all. A short
 //! pod stands until the tries end, so the next try is made
 //! beside it and not in the slot it would free. 0 when one is
 //! kept, 1 when none is made (the pods before it stand), 2 when
 //! every try came in short or a short pod outlived its delete
 def private make_pod(cfg : FleetArgs; var fleet : Fleet; index, want : int; pub : string) : int {
     var readings, short_ids : array<string>
-    readings |> reserve(CPU_TRIES)
-    short_ids |> reserve(CPU_TRIES)
+    readings |> reserve(POD_TRIES)
+    short_ids |> reserve(POD_TRIES)
     fleet.pods |> reserve(length(fleet.pods) + 1)
-    for (attempt in range(CPU_TRIES)) {
-        let tried = "POD {index}/{want} (try {attempt + 1}/{CPU_TRIES})"
+    for (attempt in range(POD_TRIES)) {
+        let tried = "POD {index}/{want} (try {attempt + 1}/{POD_TRIES})"
         to_log(LOG_INFO, "{tried}: creating on {cfg.gpu} in {cfg.datacenter}\n")
         let made = run_capture(create_argv(cfg, index, pub), 900.0)
         var rec : PodRecord
@@ -598,17 +658,21 @@ def private make_pod(cfg : FleetArgs; var fleet : Fleet; index, want : int; pub 
         to_log(LOG_INFO, "{tried}: {rec.id} at {rec.ssh.ip}:{rec.ssh.port}\n")
         let read = run_capture(ssh_argv(cfg, pod, cpu_max_command()), 60.0)
         let cpu = read.rc == 0 ? cpu_max_cores(read.out) : CpuMax(failure = "ssh exit {read.rc}")
-        if (keeps_pod(cfg.min_cores, cpu)) {
-            to_log(LOG_INFO, "POD {index} {rec.id}: {cpu_reading(cpu)}\n")
+        var timed = (rc = 0, out = "")
+        if (cfg.min_gbs > 0.0) {
+            timed = run_capture(ssh_argv(cfg, pod, memory_rate_command()), 300.0)
+        }
+        let seen = pod_reading(cfg.min_cores, cfg.min_gbs, cpu, timed.rc, timed.out)
+        if (seen.kept) {
+            to_log(LOG_INFO, "POD {index} {rec.id}: {seen.text}\n")
             return drop_pods(cfg, fleet, short_ids, "POD") ? 0 : 2
         }
-        readings |> push(cpu_reading(cpu))
+        readings |> push(seen.text)
         short_ids |> push(rec.id)
-        let short = "POD {index} {rec.id}: {cpu_reading(cpu)}"
-        to_log(LOG_INFO, "{short}, under the floor - replaced once the tries end\n")
+        to_log(LOG_INFO, "POD {index} {rec.id}: {seen.text}, under a floor - replaced once the tries end\n")
     }
     drop_pods(cfg, fleet, short_ids, "POD")
-    to_log(LOG_ERROR, "{cores_refusal(index, cfg.min_cores, readings)}\n")
+    to_log(LOG_ERROR, "{floor_refusal(index, cfg.min_cores, cfg.min_gbs, readings)}\n")
     return 2
 }
 

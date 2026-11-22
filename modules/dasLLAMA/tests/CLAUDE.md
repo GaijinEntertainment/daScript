@@ -4315,7 +4315,7 @@ Requires `run` by bare same-dir name.
 `uncategorized_persistent_heap_stack_524288.das` - model-free: the tune interrupt gate in a
 spawned child (`test_interrupt_aborts_without_minting`), the Metal lens's FLOAT A refusal (`test_float_a_gate`) and
 the class mint's returned text (`test_class_mint_text`: `../harness/class_mint_text.das`'s two forms, each parsed back).
-`test_pod_fleet.das` - model-free, the same options as the file above: the pod fleet's planners, eleven tests.
+`test_pod_fleet.das` - model-free, the same options as the file above: the pod fleet's planners, twelve tests.
 `test_fleet_create_argv` and `test_fleet_commands` (pod-free): the pod fleet's planners (`../harness/pod_fleet.das`) -
 the `runpodctl pod create` argument list (the models volume and its data center, the GPU, the
 disk, the ssh port, the key in the boot's environment, the boot installing sshd, rsync, git and
@@ -4348,8 +4348,13 @@ after the copy back, the status reading both lines, and the tree's copy leaving 
 (unlimited), a trailing newline, a one-word text, a quota or period that is no number and a zero
 period, each failure named; the reading's one decimal and the read command's text.
 `test_fleet_cpu_floor` (pod-free): `keeps_pod` at, under and over the floor, unlimited, unread and
-with the check off (`--min-cores 0`), the floor's default, and `cores_refusal` naming the pod, the
-floor and each try's cores.
+with the check off (`--min-cores 0`), the floor's default, and `floor_refusal` naming the pod, each
+floor that is on and what each try read.
+`test_fleet_memory_floor` (pod-free): `up`'s memory read - `memory_rate` on the last line of `dd`'s
+output (an ssh warning ahead of it) and on texts that are no summary, each failure naming its line,
+`keeps_memory` at, over and under the floor, unread and with the check off (`--min-gbs 0`), `pod_reading`
+keeping a pod over both floors alone, the floor's default, both readings' text, and
+`DAS_NO_HUGEPAGE_HINT=1` in a run's environment.
 `test_served_bench.das` - model-free: the served-turn instrument (`../harness/served_bench.das`, required
 by relative path; it loads no engine module - its wire is `dasOPENAI`'s `chat_stream`, whose
 reader cells are `modules/dasOPENAI/tests/test_chat_stream_mock.das`'s: the reasoning delta, the

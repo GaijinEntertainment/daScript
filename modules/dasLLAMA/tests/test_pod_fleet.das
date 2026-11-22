@@ -244,11 +244,60 @@ def test_fleet_cpu_floor(t : T?) {
     t |> success(keeps_pod(0.0, CpuMax(cores = 10.2)) && keeps_pod(0.0, CpuMax(failure = "x")),
         "`--min-cores 0` keeps every pod")
     t |> equal(FleetArgs().min_cores, 20.0, "the floor's default")
-    let refused = cores_refusal(2, 20.0, ["10.2 cores", "12.0 cores", "8.5 cores"])
-    t |> success(find(refused, "POD 2: all 3 tries") >= 0 && find(refused, "20.0-core floor") >= 0,
-        "the failure names the pod and the floor: {refused}")
-    t |> success(find(refused, "(10.2 cores, 12.0 cores, 8.5 cores)") >= 0,
-        "and the cores each try got: {refused}")
+    let refused = floor_refusal(2, 20.0, 1.0, ["10.2 cores, 2.0 GB/s of fresh memory", "27.2 cores, 0.3 GB/s of fresh memory"])
+    t |> success(find(refused, "POD 2: all 2 tries") >= 0 && find(refused, "the 20.0-core floor or the 1.0 GB/s memory floor") >= 0,
+        "the failure names the pod and both floors: {refused}")
+    t |> success(find(refused, "(10.2 cores, 2.0 GB/s of fresh memory; 27.2 cores, 0.3 GB/s of fresh memory)") >= 0,
+        "and what each try read: {refused}")
+    t |> success(find(refused, "`--min-cores 0` and `--min-gbs 0` keep such a pod") >= 0, "and the two ways to keep such a pod: {refused}")
+    let cores_only = floor_refusal(1, 20.0, 0.0, ["10.2 cores"])
+    t |> success(find(cores_only, "under the 20.0-core floor (10.2 cores); `--min-cores 0` keeps such a pod") >= 0,
+        "a floor that is off is not named: {cores_only}")
+    let memory_only = floor_refusal(1, 0.0, 1.0, ["27.2 cores, 0.3 GB/s of fresh memory"])
+    t |> success(find(memory_only, "under the 1.0 GB/s memory floor (") >= 0 && find(memory_only, "core floor") < 0,
+        "nor is the core floor where it is off: {memory_only}")
+}
+
+[test(description = "`up`'s memory read: `memory_rate` turns the last line of dd's output into GB a second and any other text into a failure naming it, `keeps_memory` keeps a pod at or over the floor and every pod with the check off and replaces a slower or unread one, `pod_reading` keeps a pod only over both floors and names what it read, the floor defaults to 1 GB/s, and a run's children take DAS_NO_HUGEPAGE_HINT")]
+def test_fleet_memory_floor(t : T?) {
+    t |> equal(memory_rate_command(), "LC_ALL=C dd if=/dev/zero of=/dev/null bs=2000M count=1 2>&1 | tail -1", "the read command")
+    let healthy = memory_rate("2097152000 bytes (2.1 GB, 2.0 GiB) copied, 1.04279 s, 2.0 GB/s\n")
+    t |> success(healthy is gbs && (healthy as gbs) > 2.0 && (healthy as gbs) < 2.02, "two gigabytes in a second and a bit: {healthy}")
+    let warned = memory_rate("Warning: Permanently added '[1.2.3.4]:22' (ED25519) to the list of known hosts.\n"
+        + "2097152000 bytes (2.1 GB, 2.0 GiB) copied, 1.04279 s, 2.0 GB/s\n\n")
+    t |> success(warned is gbs && (warned as gbs) == (healthy as gbs), "the ssh call's own warning ahead of dd's line changes nothing: {warned}")
+    let slow = memory_rate("2097152000 bytes (2.1 GB, 2.0 GiB) copied, 7.5 s, 280 MB/s")
+    t |> success(slow is gbs && (slow as gbs) > 0.27 && (slow as gbs) < 0.29, "the rate is the bytes over the seconds, whatever unit dd prints: {slow}")
+    for (text in ["", "dd: failed to open", "2097152000 bytes copied", "x bytes copied, 1.0 s", "5 bytes copied, 0 s, Infinity B/s",
+            "5 bytes copied,", "5 bytes copied, x s", "5 bytes copied, 1,04 s"]) {
+        let unread = memory_rate(text)
+        t |> success(unread is failure, "no rate out of `{text}`")
+    }
+    let named = memory_rate("sh: 1: dd: not found")
+    t |> success(named is failure && find(named as failure, "'sh: 1: dd: not found'") >= 0, "a failure carries the line it could not read: {named}")
+    t |> success(keeps_memory(1.0, MemoryRate(gbs = 1.0)) && keeps_memory(1.0, MemoryRate(gbs = 2.0)), "a pod at or over the floor stays")
+    t |> success(!keeps_memory(1.0, MemoryRate(gbs = 0.3)), "a pod under the floor is replaced")
+    t |> success(!keeps_memory(1.0, MemoryRate(failure = "ssh exit 255")), "an unread rate is replaced")
+    t |> success(keeps_memory(0.0, MemoryRate(gbs = 0.3)) && keeps_memory(0.0, MemoryRate(failure = "x")), "`--min-gbs 0` keeps every pod")
+    t |> equal(FleetArgs().min_gbs, 1.0, "the floor's default")
+    t |> equal(memory_reading(MemoryRate(gbs = 2.011)), "2.0 GB/s of fresh memory", "the log line's reading")
+    t |> equal(memory_reading(MemoryRate(failure = "ssh exit 255")), "no memory rate read (ssh exit 255)", "an unread rate's reading says why")
+    let dd_line = "2097152000 bytes (2.1 GB, 2.0 GiB) copied, 1.04279 s, 2.0 GB/s"
+    let good = pod_reading(20.0, 1.0, CpuMax(cores = 27.2), 0, dd_line)
+    t |> success(good.kept, "a pod over both floors stays")
+    t |> equal(good.text, "27.2 cores, 2.0 GB/s of fresh memory", "its log line carries both readings")
+    let starved = pod_reading(20.0, 1.0, CpuMax(cores = 27.2), 0, "2097152000 bytes copied, 7.5 s, 280 MB/s")
+    t |> success(!starved.kept, "a pod with the cores and slow memory is replaced: {starved.text}")
+    let short = pod_reading(20.0, 1.0, CpuMax(cores = 10.2), 0, dd_line)
+    t |> success(!short.kept, "a pod with the memory and too few cores is replaced: {short.text}")
+    let lost = pod_reading(20.0, 1.0, CpuMax(cores = 27.2), 255, dd_line)
+    t |> success(!lost.kept, "a memory read that failed is an unread rate, whatever it printed")
+    t |> equal(lost.text, "27.2 cores, no memory rate read (ssh exit 255)", "and its reading says so")
+    let unasked = pod_reading(20.0, 0.0, CpuMax(cores = 27.2), 255, "")
+    t |> success(unasked.kept, "with the memory floor off the cores alone decide")
+    t |> equal(unasked.text, "27.2 cores", "and the log line names no memory")
+    let run = run_command(FleetArgs(), "20261027-000000", "vulkan", true)
+    t |> success(find(run, " DAS_NO_HUGEPAGE_HINT=1 ") >= 0, "the children allocate with no huge-page hint: {run}")
 }
 
 [test(description = "A home's run lists the models with the given command's own arguments, starts the copier on the list ahead of both runs, runs the model-free suite on the home the plan gives it without the CUDA ask or the stop file and then the given command, both under --await-models; a failed list or copy and a red model-free suite reach RUN-EXIT, and an --args that is the model-free suite runs it once")]
