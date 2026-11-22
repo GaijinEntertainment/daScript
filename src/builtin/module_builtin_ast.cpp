@@ -1494,10 +1494,11 @@ namespace das {
         invokeProgramBlock("rtti_compile", program, issues, program && !program->failed(), block, context, at);
     }
 
-    struct ModuleCacheFileInfos : ModuleGroupUserData {
-        ModuleCacheFileInfos ()
-            : ModuleGroupUserData("module_cache_file_infos") {}
+    struct ModuleCacheState : ModuleGroupUserData {
+        ModuleCacheState ()
+            : ModuleGroupUserData("module_cache_state") {}
         vector<FileInfoPtr> fileInfos;
+        const char *        verdict = "none";
     };
 
     static const char * moduleCacheVerdict (
@@ -1528,20 +1529,28 @@ namespace das {
         if ( result.saveFailed ) {
             issues << "ser: cannot write '" << cachePath << "'\n";
         }
-        if ( !fileCache.cache.orphanedFileInfos.empty() ) {
-            auto owner = (ModuleCacheFileInfos *)
-                module_group->getUserData("module_cache_file_infos");
-            if ( !owner ) {
-                owner = new ModuleCacheFileInfos();
-                module_group->setUserData(owner);
-            }
-            for ( auto & fi : fileCache.cache.orphanedFileInfos ) {
-                owner->fileInfos.emplace_back(das::move(fi));
-            }
-            fileCache.cache.orphanedFileInfos.clear();
+        auto state = (ModuleCacheState *)
+            module_group->getUserData("module_cache_state");
+        if ( !state ) {
+            state = new ModuleCacheState();
+            module_group->setUserData(state);
         }
+        state->verdict = verdict;
+        for ( auto & fi : fileCache.cache.orphanedFileInfos ) {
+            state->fileInfos.emplace_back(das::move(fi));
+        }
+        fileCache.cache.orphanedFileInfos.clear();
         invokeProgramBlock("rtti_compile", program, issues,
             program && !program->failed(), block, context, at);
+        return context->allocateString(verdict,
+            uint32_t(strlen(verdict)), at);
+    }
+
+    char * rtti_builtin_module_cache_verdict ( const ModuleGroup & module_group,
+            Context * context, LineInfoArg * at ) {
+        auto state = (ModuleCacheState *)
+            module_group.getUserData("module_cache_state");
+        auto verdict = state ? state->verdict : "none";
         return context->allocateString(verdict,
             uint32_t(strlen(verdict)), at);
     }
@@ -1654,6 +1663,11 @@ namespace das {
     char * rtti_builtin_compile_file_cached ( char *, smart_ptr<FileAccess>,
             ModuleGroup*, const CodeOfPolicies &, char *,
             const TBlock<void, bool, smart_ptr<Program>, const string> &,
+            Context * context, LineInfoArg * at ) {
+        context->throw_error_at(at, "not supported with DAS_NO_FILEIO");
+        return nullptr;
+    }
+    char * rtti_builtin_module_cache_verdict ( const ModuleGroup &,
             Context * context, LineInfoArg * at ) {
         context->throw_error_at(at, "not supported with DAS_NO_FILEIO");
         return nullptr;
@@ -1833,6 +1847,10 @@ namespace das {
             SideEffects::modifyExternal, "rtti_builtin_compile_file_cached")
                 ->args({"module_name","fileAccess","moduleGroup",
                     "codeOfPolicies","moduleCache","block","context","line"});
+        addExtern<DAS_BIND_FUN(rtti_builtin_module_cache_verdict)>(
+            *this, lib, "module_cache_verdict", SideEffects::accessExternal,
+            "rtti_builtin_module_cache_verdict")
+                ->args({"moduleGroup","context","line"});
         addExtern<DAS_BIND_FUN(rtti_builtin_make_program)>(*this, lib, "make_program",
             SideEffects::modifyExternal, "rtti_builtin_make_program")
                 ->args({"codeOfPolicies","block","context","line"});

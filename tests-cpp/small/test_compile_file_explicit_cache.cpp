@@ -33,7 +33,11 @@ struct ExplicitCacheFixture {
             FileAccessPtr access, ModuleGroup & group,
             Callback && callback, bool noopt = false ) {
         das_stack_prologue frame(&context, 256, "explicit_cache_callback");
+        bool invoked = false;
+        string inBlock;
         auto onCompiled = [&](bool ok, ProgramPtr program, string * issues) {
+            invoked = true;
+            inBlock = rtti_builtin_module_cache_verdict(group, &context, nullptr);
             callback(ok, program, *issues);
         };
         das_make_block<void,bool,ProgramPtr,string *> block(
@@ -41,9 +45,11 @@ struct ExplicitCacheFixture {
         CodeOfPolicies policies;
         policies.ignore_shared_modules = true;
         policies.no_optimizations = noopt;
-        return rtti_builtin_compile_file_cached(
+        string verdict = rtti_builtin_compile_file_cached(
             const_cast<char *>(file.c_str()), access, &group, policies,
             const_cast<char *>(cache.c_str()), block, &context, nullptr);
+        if ( invoked ) CHECK(inBlock == verdict);
+        return verdict;
     }
 };
 
@@ -115,6 +121,8 @@ TEST_CASE("explicit compile_file cache: verdicts, failed writes and nested compi
         REQUIRE_MESSAGE(ok, issues);
         REQUIRE(program != nullptr);
     };
+    CHECK(string(rtti_builtin_module_cache_verdict(group,
+        &fixture.context, nullptr)) == "none");
     SUBCASE("an empty explicit path caches nothing") {
         CHECK(fixture.compile(file, "", access, group, callback) == "none");
     }
@@ -209,7 +217,7 @@ TEST_CASE("explicit compile_file cache retains restored source locations") {
             restored = program;
         }) == "clean");
     REQUIRE(restored != nullptr);
-    auto owner = group.getUserData("module_cache_file_infos");
+    auto owner = group.getUserData("module_cache_state");
     REQUIRE(owner != nullptr);
     ProgramPtr second;
     string secondIssues;
@@ -229,7 +237,7 @@ TEST_CASE("explicit compile_file cache retains restored source locations") {
         });
     CHECK_MESSAGE(thirdVerdict == "clean", secondIssues);
     REQUIRE(second != nullptr);
-    CHECK(group.getUserData("module_cache_file_infos") == owner);
+    CHECK(group.getUserData("module_cache_state") == owner);
     REQUIRE(third != nullptr);
     auto firstLocation = checkLocation(restored, *annotation);
     CHECK(checkLocation(third, *annotation) != firstLocation);
@@ -340,6 +348,12 @@ TEST_CASE("explicit compile_file cache reports unavailable file IO") {
         unavailable([&]() {
             rtti_builtin_compile_file_cached(nullptr, nullptr, nullptr,
                 policies, nullptr, block, &context, nullptr);
+        });
+    }
+    SUBCASE("cache verdict") {
+        ModuleGroup group;
+        unavailable([&]() {
+            rtti_builtin_module_cache_verdict(group, &context, nullptr);
         });
     }
 }

@@ -94,9 +94,10 @@ serves every script run under the same flags. `module_cache_path` exposes this p
 dastest keeps its filename in the requested cache directory.
 `ScriptModuleCache` is the guard around that compile: it passes the cache's stream to the
 compile and finishes the cache on every exit, an exception's included. An explicit-path overload uses the same guard, returns
-`none`, `clean`, `partial` or `fallback`, and transfers
-deserialized source files without a module owner to the caller's
-`ModuleGroup`. An empty explicit path disables caching. File-I/O-disabled builds throw before the block.
+`none`, `clean`, `partial` or `fallback`, and transfers deserialized source files without a module owner to the
+caller's `ModuleGroup`. An empty explicit path disables caching. File-I/O-disabled builds throw before the block.
+The verdict is also left on that `ModuleGroup` before the block runs, where `module_cache_verdict` reads it:
+the block is where a caller acts on the program, and the returned verdict arrives after it.
 The finish happens before the block runs, so a require
 the block issues is not this cache's. The writeback's temporary file carries
 the process id and a per-process sequence number, since two subtools compiling
