@@ -28,7 +28,7 @@ Supported syntax:
 - ``(?P<name>...)`` — named capturing group
 - ``(?=...)`` — positive lookahead assertion
 - ``(?!...)`` — negative lookahead assertion
-- ``|`` — alternation
+- ``|`` — alternation; an alternative may be empty (``a|``, ``(b|)``), and so may a group (``()``)
 - ``[abc]``, ``[a-z]``, ``[^abc]`` — character sets (negated with ``^``)
 - ``\w`` ``\W`` — word / non-word characters
 - ``\d`` ``\D`` — digit / non-digit characters

@@ -15,3 +15,4 @@ Matches at a word boundary
 Matches at a non-word boundary
 Positive lookahead assertion (?=...)
 Negative lookahead assertion (?!...)
+Matches the empty string: an empty alternative, group or pattern
