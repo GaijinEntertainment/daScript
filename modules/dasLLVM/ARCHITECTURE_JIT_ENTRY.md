@@ -35,8 +35,9 @@ emitter recomputes the same plan - its inputs are the program and the command li
 the pipeline `ARCHITECTURE.md` sec.1 describes; on a warm run the emitter's ~40 modules are never
 read from the module cache and its macro contexts never simulated, which is the whole of the
 saving. The emitter's load is JIT work and prints its own `LLVM JIT time: emitter load` line; its modules
-are records of the script's own module cache (`src/ast/ARCHITECTURE.md` sec.3), written on the
-first miss and served on the next.
+are records of a module cache of their own, keyed without the script
+(`src/ast/ARCHITECTURE.md#require-after-walk`): the first miss under a set of host flags writes
+them, and every script run under those flags reads them.
 
 ## 2. The key folds the candidate set
 

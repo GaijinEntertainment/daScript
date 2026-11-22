@@ -2167,7 +2167,7 @@ namespace das {
         CompileEnvScope envScope(env);
         ModuleFileCache lateCache;
         if ( policies.module_cache ) {
-            auto path = ModuleFileCache::embeddedPath(info.fileName, policies);
+            auto path = ModuleFileCache::embeddedPath(info.fileName, policies, false);
             lateCache.install(path, path, true);
         }
         ModuleCacheStream stream = lateCache.stream();

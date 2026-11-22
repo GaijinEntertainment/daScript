@@ -539,8 +539,8 @@ namespace das {
         ModuleCacheStream stream () const { return ModuleCacheStream { reader.get(), writer.get() }; }
         Result finish ();
         static string defaultPath ( const string & scriptPath, const string & hostBinary, const string & hostOptions );
-        static string embeddedHostOptions ( const CodeOfPolicies & policies );   // hostOptions for a script's compile_file: argv up to `--` + policies hash
-        static string embeddedPath ( const string & scriptPath, const CodeOfPolicies & policies );
+        static string embeddedHostOptions ( const CodeOfPolicies & policies, bool hostScripts = true );   // hostOptions for a script's compile_file: argv up to `--` (less its .das names when !hostScripts) + policies hash
+        static string embeddedPath ( const string & scriptPath, const CodeOfPolicies & policies, bool hostScripts = true );
         SerializationStorageVector  readStorage, writeStorage;
         unique_ptr<AstSerializer>   reader, writer;
         string                      writePath;

@@ -452,6 +452,14 @@ def test_require_module_now_children(t : T?) {
             && find(out, "compiler took") < 0)
         t |> success(warmServed, "the warm run serves the fixture from its own cache:\n{out}")
         t |> equal(long_length(fread(cacheFile)), coldSize, "the warm run rewrites nothing")
+        let other = path_join(tmp, "use_late_too.das")
+        fwrite(other, late_driver())
+        let otherCached = child_cmd(tmp, "-module-cache \"{cacheFile}\"", other)
+        t |> success(run_child_reported(t, "another script", otherCached, out, "LATE 42"),
+            "another script answers through the late module")
+        t |> success(find(out, "cache read took") >= 0 && find(out, "compiler took") < 0,
+            "another script under the same flags reads the record the first wrote:\n{out}")
+        t |> equal(count_prefix(lateDir, "mc_late_mod-"), 1, "the late module keeps one cache file")
         let uncached = child_cmd(tmp, "-no-module-cache", script)
         t |> success(run_child_reported(t, "no cache", uncached, out, "LATE 42"), "the run with no module cache answers too")
         t |> success(find(out, "compiler took") >= 0 && find(out, "cache read took") < 0, "with no module cache the late walk compiles:\n{out}")
