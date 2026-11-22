@@ -458,3 +458,35 @@ def test_require_name_from_throwaway_record(t : T?) {
     var err : string
     rmdir_rec(tmp, err)
 }
+
+[test(description = "A test's command line runs as a direct spawn when it is a program named by a path with plain or quoted words behind the env and folder prefixes, and through the shell when it redirects, expands a variable, chains a second command or names a bare program")]
+def test_child_command(t : T?) {
+    let trace_line = "set \"A=1\"&& C:/x/daslang.exe -dasroot \"D:/a b\" f.das 2>&1"
+    var inscope traced <- child_command(trace_line)
+    t |> success(traced.direct, "an env prefix and a quoted word need no shell")
+    t |> equal(length(traced.env), 1, "the set prefix is one environment entry")
+    t |> equal(traced.env[0], "A=1", "the entry loses its quotes")
+    t |> equal(length(traced.args), 4, "the merge of stderr is no argument")
+    t |> equal(traced.args[0], "C:/x/daslang.exe", "the program leads the arguments")
+    t |> equal(traced.args[2], "D:/a b", "a quoted word keeps its blank")
+    var inscope entered <- child_command("cd /d D:/tmp && D:/x/daslang.exe \"\" f.das")
+    t |> success(entered.direct, "a folder prefix needs no shell")
+    t |> equal(entered.cwd, "D:/tmp", "the folder is the child's own")
+    t |> equal(length(entered.args), 3, "an empty quoted word is an argument")
+    t |> equal(entered.args[1], "", "and stays empty")
+    var inscope posix <- child_command("cd /tmp/x && A=1 B_2=two /usr/bin/daslang f.das")
+    t |> success(posix.direct, "the POSIX spellings need no shell either")
+    t |> equal(posix.cwd, "/tmp/x", "cd without /d names the folder")
+    t |> equal(length(posix.env), 2, "each leading assignment is an environment entry")
+    t |> equal(posix.args[0], "/usr/bin/daslang", "the program follows the assignments")
+    var inscope expanded <- child_command("set \"PATH=x;%PATH%\"&& C:/x/daslang.exe f.das")
+    t |> success(!expanded.direct, "a variable to expand needs the shell")
+    var inscope bare <- child_command("daslang.exe f.das")
+    t |> success(!bare.direct, "a bare program name is the shell's to find")
+    var inscope redirected <- child_command("C:/x/daslang.exe f.das > out.txt")
+    t |> success(!redirected.direct, "a redirection needs the shell")
+    var inscope chained <- child_command("C:/x/daslang.exe a.das && C:/x/daslang.exe b.das")
+    t |> success(!chained.direct, "a second command needs the shell")
+    var inscope unclosed <- child_command("C:/x/daslang.exe \"a.das")
+    t |> success(!unclosed.direct, "an unclosed quote is not ours to guess")
+}

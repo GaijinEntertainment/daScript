@@ -133,15 +133,11 @@ def test_extern_between_registrars_served(t : T?) {
     rmdir_rec(tmp, err)
 }
 
-//! child env rides the command string (the portable set/prefix split popen_argv cannot carry)
+//! env spelled as `trace_prefix` spells it, so `run_child` parses it
 def env_run(dep, cmd : string; var output : string&) : int {
     let win = get_platform_name() == "windows"
     let full = win ? "set \"MC_DEP_FILE={dep}\"&& {cmd}" : "MC_DEP_FILE='{dep}' {cmd}"
-    return unsafe(popen_timeout(full, 300.0, $(f) {
-        if (f != null) {
-            output = fread(f)
-        }
-    }))
+    return run_child(full, output)
 }
 
 //! the module cache must gate a macro-registered file input by CONTENT, not mtime: a tune

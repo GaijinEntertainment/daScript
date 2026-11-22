@@ -18,24 +18,6 @@ def aot_host_skips(t : T?) : bool {
     return true
 }
 
-//! the child shares dastest's cwd (argv[0] is a cwd-relative interpreter path), so the default
-//! cache lands in this tree's own .cache/daslang/module_cache - the test removes what it wrote.
-//! Commands stay unquoted: a leading quote breaks Windows _popen (cmd /c quote stripping)
-def run(cmd : string; var output : string&) : int {
-    return unsafe(popen_timeout(cmd, 300.0, $(f) {
-        if (f != null) {
-            output = fread(f)
-        }
-    }))
-}
-
-//! run, reported as run_child_reported reports: the run is its own statement, never an
-//! argument beside the `out` it writes
-def run_reported(t : T?; phase : string; cmd : string; var out : string&; marker : string) : bool {
-    let rc = run(cmd, out)
-    return report_child(t, phase, rc, out, marker)
-}
-
 let CACHE_DIR = ".cache/daslang/module_cache"
 
 [arch(at="ARCHITECTURE.md#process-startup")]
@@ -108,10 +90,12 @@ def test_fallback_verdict_names_the_cutoff(t : T?) {
     fwrite(path_join(tmp, "mc_root.das"), "options gen2\nrequire mc_leaf_a\nrequire mc_leaf_b\n[export]\ndef main \{\n    print(\"MARK_verdict \{leaf_a() + leaf_b()\}\\n\")\n\}\n")
     let cmd = "{das_exe()} -dasroot {get_das_root()} -module-cache {path_join(tmp, "explicit.dascache")} {path_join(tmp, "mc_root.das")}"
     var cold : string
-    t |> success(run_reported(t, "verdict cold", cmd, cold, "ser: wrote"), "the cold run writes the explicit cache")
+    t |> success(run_child_reported(t, "verdict cold", cmd, cold, "ser: wrote"),
+        "the cold run writes the explicit cache")
     fwrite(leafB, "options gen2\nmodule mc_leaf_b\ndef leaf_b() : int \{\n    return 20\n\}\n")
     var warm : string
-    t |> success(run_reported(t, "verdict warm", cmd, warm, "MARK_verdict 21"), "the edited leaf is recompiled")
+    t |> success(run_child_reported(t, "verdict warm", cmd, warm, "MARK_verdict 21"),
+        "the edited leaf is recompiled")
     //! two served: daslib/builtin's record and mc_leaf_a's, then the cutoff at mc_leaf_b
     t |> success(find(warm, "deser: FALLBACK - 2 module(s) served from cache") >= 0, "the verdict counts the modules served before the cutoff:\n{warm}")
     t |> success(find(warm, "mc_leaf_b.das") >= 0 && find(warm, "(file changed)") >= 0, "the verdict names the cutoff file and its reason:\n{warm}")
@@ -135,16 +119,22 @@ def test_policy_change_refuses_the_cache(t : T?) {
     let base = "{das_exe()} -dasroot {get_das_root()}"
     let tail = "-module-cache {path_join(tmp, "explicit.dascache")} {path_join(tmp, "mc_pol_root.das")}"
     var cold : string
-    t |> success(run_reported(t, "policy cold", "{base} {tail}", cold, "ser: wrote"), "the cold run writes the explicit cache")
+    t |> success(run_child_reported(t, "policy cold", "{base} {tail}", cold, "ser: wrote"),
+        "the cold run writes the explicit cache")
     var same : string
-    t |> success(run_reported(t, "policy same", "{base} {tail}", same, "deser: clean"), "the same policies serve every module")
+    t |> success(run_child_reported(t, "policy same", "{base} {tail}", same, "deser: clean"),
+        "the same policies serve every module")
     var changed : string
-    t |> success(run_reported(t, "policy changed", "{base} -no-lint {tail}", changed, "MARK_policy 3"), "a -no-lint run over the plain run's cache still executes")
+    t |> success(run_child_reported(t, "policy changed", "{base} -no-lint {tail}", changed,
+            "MARK_policy 3"),
+        "a -no-lint run over the plain run's cache still executes")
     t |> success(find(changed, "compile policies changed at") >= 0 && find(changed, "mc_pol_leaf.das") >= 0, "the leaf's record names the policy change:\n{changed}")
     t |> success(find(changed, "deser: partial") >= 0, "the mismatch reparses in place rather than cutting the stream:\n{changed}")
     t |> success(find(changed, "ser: wrote") >= 0, "the cache is rewritten under the new policies")
     var rewritten : string
-    t |> success(run_reported(t, "policy rewritten", "{base} -no-lint {tail}", rewritten, "deser: clean"), "the rewritten cache serves the -no-lint compile")
+    t |> success(run_child_reported(t, "policy rewritten", "{base} -no-lint {tail}", rewritten,
+            "deser: clean"),
+        "the rewritten cache serves the -no-lint compile")
     var err : string
     rmdir_rec(tmp, err)
 }
@@ -166,15 +156,17 @@ def test_source_stamp_is_content(t : T?) {
     fwrite(path_join(tmp, "mc_stamp_root.das"), "options gen2\nrequire mc_stamp_leaf\n[export]\ndef main \{\n    print(\"MARK_stamp \{leaf()\}\\n\")\n\}\n")
     let cmd = "{das_exe()} -dasroot {get_das_root()} -module-cache {path_join(tmp, "explicit.dascache")} {path_join(tmp, "mc_stamp_root.das")}"
     var cold : string
-    t |> success(run_reported(t, "stamp cold", cmd, cold, "ser: wrote"), "the cold run writes the explicit cache")
+    t |> success(run_child_reported(t, "stamp cold", cmd, cold, "ser: wrote"),
+        "the cold run writes the explicit cache")
     sleep(1100u)    //! past the mtime's one-second grain, so the rewrite below moves the mtime
     fwrite(leaf, leafSrc)
     var touched : string
-    let touched_ok = run_reported(t, "stamp touched", cmd, touched, "deser: clean")
+    let touched_ok = run_child_reported(t, "stamp touched", cmd, touched, "deser: clean")
     t |> success(touched_ok, "a rewrite that leaves the bytes alone still serves every module:\n{touched}")
     fwrite(leaf, "options gen2\nmodule mc_stamp_leaf\ndef leaf() : int \{\n    return 3\n\}\n")
     var edited : string
-    t |> success(run_reported(t, "stamp edited", cmd, edited, "MARK_stamp 3"), "a same-size edit is recompiled")
+    t |> success(run_child_reported(t, "stamp edited", cmd, edited, "MARK_stamp 3"),
+        "a same-size edit is recompiled")
     //! daslib/builtin's record serves first, so the cutoff verdict takes its served-count form
     t |> success(find(edited, "deser: FALLBACK - 1 module(s) served from cache") >= 0 && find(edited, "mc_stamp_leaf.das") >= 0 && find(edited, "(file changed)") >= 0, "the same-size edit is a cutoff at the leaf:\n{edited}")
     t |> success(find(edited, "ser: file content changed") >= 0, "the loud cache names the content change:\n{edited}")
@@ -197,9 +189,10 @@ def test_source_derived_syntax_policy_serves(t : T?) {
     fwrite(path_join(tmp, "mc_gen2_root.das"), "options gen2\nrequire mc_gen2_leaf\n[export]\ndef main \{\n    print(\"MARK_gen2 \{leaf()\}\\n\")\n\}\n")
     let cmd = "{das_exe()} -dasroot {get_das_root()} -v1syntax -module-cache {path_join(tmp, "explicit.dascache")} {path_join(tmp, "mc_gen2_root.das")}"
     var cold : string
-    t |> success(run_reported(t, "gen2 cold", cmd, cold, "MARK_gen2 5"), "a -v1syntax host compiles a module that opts into gen2")
+    t |> success(run_child_reported(t, "gen2 cold", cmd, cold, "MARK_gen2 5"),
+        "a -v1syntax host compiles a module that opts into gen2")
     var warm : string
-    let warm_ok = run_reported(t, "gen2 warm", cmd, warm, "deser: clean")
+    let warm_ok = run_child_reported(t, "gen2 warm", cmd, warm, "deser: clean")
     t |> success(warm_ok, "the warm run serves the gen2 module - no policy mismatch on a source-derived flag:\n{warm}")
     var err : string
     rmdir_rec(tmp, err)
@@ -208,15 +201,15 @@ def test_source_derived_syntax_policy_serves(t : T?) {
 //! the modes that never install the default cache: the opt-out flag, a compile with no run, an AOT-consuming run
 def check_off_modes(t : T?; base, b, c, sb, sc : string) {
     var off : string
-    let offRc = run("{base} -no-module-cache {b}", off)
+    let offRc = run_child("{base} -no-module-cache {b}", off)
     t |> success(report_child(t, "no-module-cache", offRc, off, "MARK_{sb}"), "-no-module-cache still executes")
     t |> equal(cache_files(sb), 0, "-no-module-cache writes no cache")
     var co : string
-    let coRc = run("{base} -compile-only {c}", co)
+    let coRc = run_child("{base} -compile-only {c}", co)
     t |> success(coRc == 0, "-compile-only compiles:\n{co}")
     t |> equal(cache_files(sc), 0, "-compile-only writes no cache")
     var aot : string
-    run("{base} -use-aot {c}", aot)
+    run_child("{base} -use-aot {c}", aot)
     t |> equal(cache_files(sc), 0, "-use-aot writes no cache, whether or not the binary carries AOT stubs")
 }
 
@@ -245,14 +238,14 @@ def test_aot_generation_reads_cached_modules(t : T?) {
     fwrite(fixture, "options gen2\nrequire daslib/strings_boost\n[export]\ndef main \{\n    print(join([\"a\", \"b\"], \",\"))\n\}\n")
     let gen = "{das_exe()} -dasroot {root} {path_join(root, "utils/aot/main.das")} -- -aot {fixture}"
     var cold : string
-    let cold_rc = run("{gen} {path_join(tmp, "cold.cpp")}", cold)
+    let cold_rc = run_child("{gen} {path_join(tmp, "cold.cpp")}", cold)
     t |> equal(cold_rc, 0, "the cold generator run exits clean:\n{cold}")
     let coldCpp = fread(path_join(tmp, "cold.cpp"))
     let coldHashes = count_lines_with(coldCpp, "hash=")
     t |> success(coldHashes > 0, "the cold run emits functions")
     t |> success(find(coldCpp, "AOT disabled due to this module") < 0, "no module reads as AOT-disabled on the cold run")
     var warm : string
-    let warm_rc = run("{gen} {path_join(tmp, "warm.cpp")}", warm)
+    let warm_rc = run_child("{gen} {path_join(tmp, "warm.cpp")}", warm)
     t |> equal(warm_rc, 0, "the warm generator run exits clean:\n{warm}")
     let warmCpp = fread(path_join(tmp, "warm.cpp"))
     t |> success(find(warmCpp, "AOT disabled due to this module") < 0, "no module reads as AOT-disabled when the generator's modules came from the cache")
@@ -297,11 +290,13 @@ def test_source_lines_survive_the_cache(t : T?) {
     remove_cache_files("mc_src_root")
     let cmd = "{das_exe()} -dasroot {get_das_root()} {root}"
     var cold : string
-    t |> success(run_reported(t, "marked cold", cmd, cold, "MARK_src 7"), "the cold run compiles past the marked variable")
+    t |> success(run_child_reported(t, "marked cold", cmd, cold, "MARK_src 7"),
+        "the cold run compiles past the marked variable")
     // the root changes so it re-parses and its lint pass runs, while the marked module is served
     fwrite(root, "options gen2\nrequire daslib/lint\nrequire mc_marked\n[export]\ndef main \{\n    print(\"MARK_src2 \{marked(7)\}\\n\")\n\}\n")
     var warm : string
-    t |> success(run_reported(t, "marked warm", cmd, warm, "MARK_src2 7"), "the warm run still sees the nolint marker on the served module")
+    t |> success(run_child_reported(t, "marked warm", cmd, warm, "MARK_src2 7"),
+        "the warm run still sees the nolint marker on the served module")
     t |> success(find(warm, "LINT003") < 0, "no LINT003 leaks through a served module:\n{warm}")
     remove_cache_files("mc_src_root")
     var err : string
@@ -313,13 +308,13 @@ def test_source_lines_survive_the_cache(t : T?) {
 def check_damaged_cache(t : T?; base, a, sa : string) {
     truncate_file(cache_file_path(sa))
     var damaged : string
-    let damagedRc = run("{base} {a}", damaged)
+    let damagedRc = run_child("{base} {a}", damaged)
     t |> success(report_child(t, "damaged cache", damagedRc, damaged, "MARK_{sa}"), "a run over a truncated cache file executes")
     t |> success(quiet(damaged), "the default cache says nothing over a truncated cache file:\n{damaged}")
     t |> equal(cache_files(sa), 1, "the truncated file is rewritten in place")
     scramble_header(cache_file_path(sa))
     var garbage : string
-    let garbageRc = run("{base} {a}", garbage)
+    let garbageRc = run_child("{base} {a}", garbage)
     t |> success(report_child(t, "garbage header", garbageRc, garbage, "MARK_{sa}"), "a run over a cache file with a garbage header executes")
     t |> success(quiet(garbage) && find(garbage, "das: ") < 0, "the default cache says nothing over a garbage header - no verdict, no serializer warning:\n{garbage}")
     t |> equal(cache_files(sa), 1, "the garbage file is rewritten in place")
@@ -349,49 +344,51 @@ def test_default_module_cache(t : T?) {
     let b = path_join(tmp, "{sb}.das")
     let c = path_join(tmp, "{sc}.das")
     var cold : string
-    let coldRc = run("{base} {a}", cold)
+    let coldRc = run_child("{base} {a}", cold)
     t |> success(report_child(t, "default cold", coldRc, cold, "MARK_{sa}"), "a plain run executes")
     t |> success(quiet(cold), "the default cache says nothing on the cold run:\n{cold}")
     t |> equal(cache_files(sa), 1, "the cold run wrote one cache file for the root")
     var warm : string
-    let warmRc = run("{base} {a}", warm)
+    let warmRc = run_child("{base} {a}", warm)
     t |> success(report_child(t, "default warm", warmRc, warm, "MARK_{sa}"), "the warm run executes")
     t |> success(quiet(warm), "the default cache says nothing on the warm run:\n{warm}")
     t |> equal(cache_files(sa), 1, "the warm run adds no second file")
     check_damaged_cache(t, base, a, sa)
     check_off_modes(t, base, b, c, sb, sc)
     var loud : string
-    let loudRc = run("{base} -module-cache {path_join(tmp, "explicit.bin")} {a}", loud)
+    let loudRc = run_child("{base} -module-cache {path_join(tmp, "explicit.bin")} {a}", loud)
     t |> success(report_child(t, "explicit", loudRc, loud, "ser: wrote"), "an explicit -module-cache keeps the loud verdict")
     let win = get_platform_name() == "windows"
     var envRun : string
-    let envRc = run(win ? "set \"DAS_MC_PROBE=1\"&& {base} {a}" : "DAS_MC_PROBE=1 {base} {a}", envRun)
+    let envRc = run_child(win ? "set \"DAS_MC_PROBE=1\"&& {base} {a}" : "DAS_MC_PROBE=1 {base} {a}",
+        envRun)
     t |> success(report_child(t, "env-keyed", envRc, envRun, "MARK_{sa}"), "a DAS* environment change still executes")
     t |> equal(cache_files(sa), 2, "a DAS* environment change keys a second cache file")
     var flagged : string
-    let flaggedRc = run("{base} -v2syntax {a}", flagged)
+    let flaggedRc = run_child("{base} -v2syntax {a}", flagged)
     t |> success(report_child(t, "flag-keyed", flaggedRc, flagged, "MARK_{sa}"), "a different host flag set still executes")
     t |> equal(cache_files(sa), 3, "a host flag before the script keys a third cache file")
     var userArgs : string
-    let userRc = run("{base} {a} -- --probe", userArgs)
+    let userRc = run_child("{base} {a} -- --probe", userArgs)
     t |> success(report_child(t, "user-args", userRc, userArgs, "MARK_{sa}"), "script arguments after -- still execute")
     t |> equal(cache_files(sa), 3, "script arguments after -- do not key a cache file")
     let ignored = path_join(tmp, "ignored.bin")
     var both : string
-    let bothRc = run("{base} -module-cache {ignored} -no-module-cache {b}", both)
+    let bothRc = run_child("{base} -module-cache {ignored} -no-module-cache {b}", both)
     t |> success(report_child(t, "explicit+off", bothRc, both, "MARK_{sb}"), "-module-cache with -no-module-cache still executes")
     t |> success(quiet(both), "-no-module-cache wins over -module-cache - no verdict line:\n{both}")
     var ignoredStat : FStat
     t |> success(!stat(ignored, ignoredStat), "-no-module-cache wins over -module-cache - the explicit file is not written")
     var serOff : string
-    let serOffRc = run("{base} -no-module-cache -ser {path_join(tmp, "explicit.ser")} {c}", serOff)
+    let serOffRc = run_child("{base} -no-module-cache -ser {path_join(tmp, "explicit.ser")} {c}",
+        serOff)
     t |> success(serOffRc != 0, "-no-module-cache beside -ser is rejected, not silently honoured either way")
     t |> success(find(serOff, "do not combine") >= 0, "the rejection names the conflict:\n{serOff}")
     let binDir = dir_name(das_exe())
     let exeName = base_name(das_exe())
     let viaPath = win ? "set \"PATH={binDir};%PATH%\"&& {exeName} -dasroot {root}" : "PATH={binDir}:$PATH {exeName} -dasroot {root}"
     var pathRun : string
-    let pathRc = run("{viaPath} {a}", pathRun)
+    let pathRc = run_child("{viaPath} {a}", pathRun)
     t |> success(report_child(t, "via PATH", pathRc, pathRun, "MARK_{sa}"), "a PATH launch executes")
     t |> equal(cache_files(sa), 3, "a PATH launch keys the same file as the path launch - the binary is resolved, not read off argv[0]")
     for (stem in stems) {
@@ -444,20 +441,30 @@ def test_default_cache_evicts_to_the_limit(t : T?) {
         fwrite(path_join(tmp, "{stem}.das"), "options gen2\n{sizeBallast}[export]\ndef main \{\n    print(\"MARK_{stem}\\n\")\n\}\n")
     }
     var out : string
-    t |> success(run_reported(t, "evict a", "{base} {path_join(tmp, "ev_a.das")}", out, "MARK_ev_a"), "the first root writes its record")
+    t |> success(run_child_reported(t, "evict a", "{base} {path_join(tmp, "ev_a.das")}", out,
+            "MARK_ev_a"),
+        "the first root writes its record")
     let one = record_size_in(cacheDir, "ev_a")
     t |> success(one > 0ul && 2ul * one <= 1048576ul && 3ul * one > 1048576ul, "a record ({one} bytes) sizes so that two fit the 1 MB limit and three do not - retune the fixture's ballast requires if daslib or the stream format moved")
     sleep(1100u)    //! past the mtime's one-second grain, so the records order by age
-    t |> success(run_reported(t, "evict b", "{base} {path_join(tmp, "ev_b.das")}", out, "MARK_ev_b"), "the second root writes its record")
+    t |> success(run_child_reported(t, "evict b", "{base} {path_join(tmp, "ev_b.das")}", out,
+            "MARK_ev_b"),
+        "the second root writes its record")
     sleep(1100u)
-    t |> success(run_reported(t, "evict c", "{base} {path_join(tmp, "ev_c.das")}", out, "MARK_ev_c"), "the third root writes its record")
+    t |> success(run_child_reported(t, "evict c", "{base} {path_join(tmp, "ev_c.das")}", out,
+            "MARK_ev_c"),
+        "the third root writes its record")
     t |> equal(records_in(cacheDir, "ev_a"), 0, "the oldest record went when the third pushed the directory past the limit")
     t |> equal(records_in(cacheDir, "ev_b"), 1, "the middle record stays")
     t |> equal(records_in(cacheDir, "ev_c"), 1, "the record just written stays")
     sleep(1100u)
-    t |> success(run_reported(t, "evict b warm", "{base} {path_join(tmp, "ev_b.das")}", out, "MARK_ev_b"), "a warm run reads the second record")
+    t |> success(run_child_reported(t, "evict b warm", "{base} {path_join(tmp, "ev_b.das")}", out,
+            "MARK_ev_b"),
+        "a warm run reads the second record")
     sleep(1100u)
-    t |> success(run_reported(t, "evict d", "{base} {path_join(tmp, "ev_d.das")}", out, "MARK_ev_d"), "a fourth root writes its record")
+    t |> success(run_child_reported(t, "evict d", "{base} {path_join(tmp, "ev_d.das")}", out,
+            "MARK_ev_d"),
+        "a fourth root writes its record")
     t |> equal(records_in(cacheDir, "ev_b"), 1, "the record the warm run read counted as fresh and survived")
     t |> equal(records_in(cacheDir, "ev_c"), 0, "the record no run touched since was the oldest and went")
     t |> equal(records_in(cacheDir, "ev_d"), 1, "the record just written stays")
@@ -465,7 +472,9 @@ def test_default_cache_evicts_to_the_limit(t : T?) {
     for (stem in ["ev_a", "ev_b", "ev_c"]) {
         let cachePath = path_join(explicitDir, "{stem}.dascache")
         let script = path_join(tmp, "{stem}.das")
-        t |> success(run_reported(t, "explicit {stem}", "{base} -module-cache {cachePath} {script}", out, "ser: wrote"), "an explicit cache writes under the limit too")
+        t |> success(run_child_reported(t, "explicit {stem}",
+                "{base} -module-cache {cachePath} {script}", out, "ser: wrote"),
+            "an explicit cache writes under the limit too")
     }
     var explicitFiles = 0
     fio::dir(explicitDir) $(name) {
@@ -500,7 +509,7 @@ struct ChildRun {
 
 def expect_key_records(t : T?; child : ChildRun; totalAfter : int; why : string) {
     var out : string
-    let ran = run_reported(t, why, child.cmd, out, "MARK_key_bin")
+    let ran = run_child_reported(t, why, child.cmd, out, "MARK_key_bin")
     t |> success(ran, "the run executes: {why}")
     t |> equal(records_in(child.cacheDir, "key_bin"), totalAfter, why)
 }
