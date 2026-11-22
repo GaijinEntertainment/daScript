@@ -2107,13 +2107,7 @@ def private re_gen2_group(var node : ReNode?; var rnd : ReGenRandom; var str : S
         print("match2 group\n")
     }
     var nsub = node.subexpr
-    if (nsub != null) {
-        invoke(nsub.gen2, nsub, rnd, str)
-    }
-    var node2 = node.next
-    if (node2 != null) {
-        invoke(node2.gen2, node2, rnd, str)
-    }
+    invoke(nsub.gen2, nsub, rnd, str)
 }
 
 def private re_gen2_bos(var node : ReNode?; var rnd : ReGenRandom; var str : StringBuilderWriter) : void {
