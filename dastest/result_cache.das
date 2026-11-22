@@ -24,7 +24,8 @@ def private content_hash(path : string) : string {
 }
 
 let private REPORT_ONLY_FLAGS <- {
-    "--isolated-mode", "--failures-only", "--uri-paths", "--verbose", "--color", "--no-color"
+    "--isolated-mode", "--failures-only", "--uri-paths", "--verbose", "--color", "--no-color",
+    "--skip-fully-cached"
 }
 
 let private REPORT_ONLY_OPTIONS <- {
@@ -88,7 +89,10 @@ def cache_lookup(entry : string) : Option<SuiteResult> {
     return some(unwrap(counts))
 }
 
+//! keeps `res` at `entry` with the content hash of each of
+//! `inputs`; only a pass is kept
 def cache_store(entry : string; res : SuiteResult; inputs : array<string>) {
+    return if (res.failed + res.errors != 0)
     mkdir_rec(dir_name(entry))
     fwrite(entry, build_string() $(var w) {
         w |> write("counts {res.total} {res.passed} {res.skipped}\n")

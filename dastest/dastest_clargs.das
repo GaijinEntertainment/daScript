@@ -70,6 +70,12 @@ struct DastestArgs {
     @clarg_doc = "Folder of the test result cache. A file whose last run passed is not run again while dastest's sources, every module source its compile read, and the arguments that are not report-only all stay the same. The cache does not see the daslang binaries: whoever rebuilds them empties the folder. Empty (default) disables the cache; benchmarks, coverage and --ser/--deser runs never use it"
     cache_dir : string
 
+    @clarg_doc = "Skip a file whose program loaded whole from its AST record under --module-cache-dir and whose last run under the same arguments passed. The record proves the sources, the binaries, the host flags and the DAS* environment unchanged; it does not see a file a test reads at run time. Benchmarks and coverage runs never skip"
+    skip_fully_cached : bool
+
+    @clarg_doc = "Text of the caller's in the key of a pass on record (--skip-fully-cached, --cache-dir): what its tests read at run time that no compile record sees - the data files, the box"
+    pass_stamp : string
+
     @clarg_doc = "Path to serialize compiled test programs to (for use with --deser)"
     ser : string
 

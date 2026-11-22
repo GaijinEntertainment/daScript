@@ -459,3 +459,19 @@ def test_force_tune(t : T?) {
     t |> equal(not_a_file, 2, "a manifest that is a folder refuses the run: {output}")
     remove(manifest)
 }
+
+[test(description = "a file whose `expect` no error of its compile meets fails, the line naming the error code still owed", timeout = 1200)]
+def test_unmet_expect(t : T?) {
+    let file = path_join(test_temp_dir(), "unmet_expect.das")
+    fwrite(file, "options gen2\nexpect 30101\nrequire dastest/testing_boost public\n"
+        + "[test]\ndef test_compiles(t : T?) \{\n    t |> success(true)\n\}\n")
+    let argv <- [get_command_line_arguments()[0], "-dasroot", get_das_root(),
+        "-module-cache", path_join(test_temp_dir(), "unmet_expect_host.bin"),
+        "{dastest_root()}/dastest.das", "--", "--test", file]
+    var output : string
+    let code = run_and_capture(argv, output, 300.0)
+    t |> success(code != 0, "an expect still owed an error fails the file: {output}")
+    t |> success(find(output, "expect 30101:1") >= 0,
+        "the line names the code and the count owed: {output}")
+    remove(file)
+}

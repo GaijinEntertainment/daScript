@@ -528,7 +528,7 @@ def private open_result_cache(test_args : DastestArgs; dastest_root : string;
 
 def private record_pass(cache : ResultCache; file : string implicit; status : SuiteResult implicit;
                         inputs : array<string> implicit) {
-    return if (empty(cache.dir) || empty(inputs) || status.failed + status.errors != 0)
+    return if (empty(cache.dir) || empty(inputs))
     var all := inputs
     all |> push_from(cache.runnerInputs)
     cache_store(cache_entry(cache.dir, file, cache.keyArgs), status, all)
@@ -576,6 +576,11 @@ def main() : int {  // nolint:STYLE037,STYLE038 - CLI dispatch, one arm per mode
             return 1
         }
         test_args.run_env |> push(decoded.text)
+    }
+    if (test_args.skip_fully_cached && empty(test_args.module_cache_dir)) {
+        log::red("command-line args: --skip-fully-cached needs --module-cache-dir, "
+            + "the folder of the records it reads")
+        return 2
     }
     let badRunEnv = find_index_if(test_args.run_env) $(pair) => find(pair, "=") <= 0
     if (badRunEnv >= 0) {
@@ -707,7 +712,7 @@ def main() : int {  // nolint:STYLE037,STYLE038 - CLI dispatch, one arm per mode
             let hit = cache_lookup(cache_entry(cache.dir, f, cache.keyArgs))
             return false if (is_none(hit))
             res += unwrap(hit)
-            log::green("CACHED {ctx.uriPaths ? file_name_to_uri(f) : f}")
+            suite::log_cached(ctx, f)
             return true
         }
         let served = collected - length(files)
@@ -807,12 +812,18 @@ def main() : int {  // nolint:STYLE037,STYLE038 - CLI dispatch, one arm per mode
         let moduleCacheFlag = (empty(test_args.module_cache_dir) ? ""
             : (" --worker-module-cache-dir "
                 + base64_encode(test_args.module_cache_dir)
-                + (test_args.verbose ? " --verbose" : "")))
+                + (test_args.verbose ? " --verbose" : "")
+                + (test_args.skip_fully_cached ? " --skip-fully-cached" : "")))
+        //! a worker keys its passes by its own arguments: the caller's
+        //! stamp crosses as one shell-safe word
+        let passStampFlag = (empty(test_args.pass_stamp) ? ""
+            : " --pass-stamp {base64_encode(test_args.pass_stamp)}")
         let runEnvFlags = join([for (pair in test_args.run_env);
             " --worker-run-env {base64_encode(pair)}"], "")
         let cmdSuffix = (" {benchstr}{log::useTtyColors ? " --color" : ""}"
             + "{headlessFlag}{stackExcFlag}{failuresOnlyFlag}"
-            + "{useAotFlag}{compileOnlyFlag}{jitFlags}{moduleCacheFlag}{runEnvFlags}")
+            + "{useAotFlag}{compileOnlyFlag}{jitFlags}{moduleCacheFlag}{passStampFlag}"
+            + "{runEnvFlags}")
         let batchSize = max(1, test_args.batch)
         // Each batch is run by one worker subprocess (batchCmd); per-file
         // singleCmds are kept so a crash can be re-dispatched
