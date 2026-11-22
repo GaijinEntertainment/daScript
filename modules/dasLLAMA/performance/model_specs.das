@@ -442,7 +442,7 @@ let PARAKEET_GGUF_RECIPE = "fetched: handy-computer/parakeet-tdt-0.6b-v3-gguf, t
 let CANARY_ENC_RECIPE = "convert: modules/dasLLAMA/harness/convert_canary_to_ggml.py over nvidia/canary-qwen-2.5b (nemo venv; encoder is a repack - sha canonical everywhere)"
 let CANARY_DEC_RECIPE = "convert: modules/dasLLAMA/harness/convert_canary_to_ggml.py over nvidia/canary-qwen-2.5b (nemo venv), then llama-quantize Q8_0 (a Q8_0 disk embedding lets the tied classifier serve cls_q8 on the Metal rail); bytes are per-arch (fp16 LoRA merge) - gate via asr_bench --text over jfk/jfk3/gb1 vs benchmarks/asr/canary_transcripts.expected"
 let TTS_HF = "{HF}/borisbat/dasllama-tts/resolve/a62130a44d6f8fef8a5113825c5f15b01e1c8f80"   //! the published set, commit-pinned
-let FORMATS_HF = "{HF}/borisbat/dasllama-formats/resolve/665f993136619923f4a3db5cc7cb6054daf308a4"   //! the format matrix, commit-pinned
+let FORMATS_HF = "{HF}/borisbat/dasllama-formats/resolve/eff177a6d0456c5d269672ccc80c68a0a4a7b122"   //! the format matrix, commit-pinned
 let TTS_KITTEN_RECIPE = "convert: modules/dasLLAMA/performance/build_tts_data.das -- --root <g2p experiment root> --out <models dir> runs harness/convert_kitten.py over KittenML/kitten-tts-nano-0.8 @ 7a1db645b1f3ab9420761d87428e042b9cec3f26 and kitten-tts-mini-0.8 @ c02725660cea441db4c383af69f1f26f5cd00947 (the ONNX weights into GGUF, f32); THIRD_PARTY_NOTICES.md (repo root) carries the attribution"
 let TTS_KOKORO_RECIPE = "convert: modules/dasLLAMA/performance/build_tts_data.das -- --root <g2p experiment root> --out <models dir> runs harness/convert_kokoro.py at 807f0164c3 (a later converter also writes kokoro.voice_langs; the pinned file carries none, its voices named in the pipeline's shape) over hexgrad/Kokoro-82M @ f3ff3571791e39611d31c381e3a41a3af07b4987 (kokoro-v1_0.pth + the voice packs into GGUF, f32); THIRD_PARTY_NOTICES.md (repo root) carries the attribution"
 let TTS_KOKORO_RU_RECIPE = "convert: harness/convert_kokoro.py --checkpoint <pth> --config config.json --voices <dir of .bin packs> --name <stem> --lang ru --source 'zaakirio/kokoro-ru @ d649c57b239b18c4c384378127cbf01dba039bc1' (kokoro-ru-v2-base.pth with sveta and masha into kokoro-ru.gguf, kokoro-ru-v2-dima.pth with dima into kokoro-ru-dima.gguf, f32); THIRD_PARTY_NOTICES.md carries the attribution"
@@ -490,27 +490,36 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
             sha256 = "1a8385fbd5de38704f005ba3d9b881fc0c60431bbbf17ab36c665e0be93ffd32", recipe = STORIES15M_RECIPE),   // llama2.c's TinyStories writer behind examples/dasLLAMA/storyteller; profiled nowhere
         ModelSpec(file = "tinystories-instruct-27M-Q8_0.gguf", url = "{STORIES_HF}/tinystories-instruct-27M-Q8_0.gguf", bytes = 31467200l,
             sha256 = "92c2b775070b76ee31b9921f7f339ec9fc0e08b54be0616418414d4eec65d282", recipe = STORYWISH_RECIPE),   // the request-taking story writer behind examples/dasLLAMA/storywish; profiled nowhere
-        ModelSpec(file = "SmolLM2-135M-Instruct-Q8_0.gguf", display = "SmolLM2-135M"),
+        ModelSpec(file = "SmolLM2-135M-Instruct-Q8_0.gguf", display = "SmolLM2-135M",
+            url = "{HF}/bartowski/SmolLM2-135M-Instruct-GGUF/resolve/09816acd5d99df7be770d85ea30822623dab342c/SmolLM2-135M-Instruct-Q8_0.gguf",
+            bytes = 144811360l, sha256 = "5a1395716f7913741cc51d98581b9b1228d80987a9f7d3664106742eb06bba83"),
         ModelSpec(file = "Qwen2.5-0.5B-Instruct-Q8_0.gguf", display = "Qwen2.5-0.5B",
             url = "{HF}/bartowski/Qwen2.5-0.5B-Instruct-GGUF/resolve/41ba88dbac95fed2528c92514c131d73eb5a174b/Qwen2.5-0.5B-Instruct-Q8_0.gguf",
             bytes = 531068480l, sha256 = "25130a98aa782284a7dabea0c23245b2fd371ed47244e79d78b8ec23245fdf96",
             parity <- ev_qwen_count()),
         // the dense iq4nl32 carrier: 896-wide rows off the superblock lattice, every dense plane on the per-32 planes
         ModelSpec(file = "Qwen2.5-0.5B-Instruct-IQ4_NL-local.gguf",
+            url = "{FORMATS_HF}/Qwen2.5-0.5B-Instruct/Qwen2.5-0.5B-Instruct-IQ4_NL-local.gguf", bytes = 354305600l, sha256 = "06c6fad13a2c209429c4bd2b08cb42dccd16e868999909365b47c050e88ffa57",
             recipe = "llama-quantize --allow-requantize Qwen2.5-0.5B-Instruct-Q8_0.gguf Qwen2.5-0.5B-Instruct-IQ4_NL-local.gguf IQ4_NL"),
         // the per-32 table carriers, every tensor in the file's format (`--pure`): the IQ4_NL token table and
         // classifier gather and serve as iq4nl32 planes, the Q4_0 ones as q4032 (896 is off the 256 lattice), the Q5_0 ones and
         // every Q5_0 plane as q5032
         ModelSpec(file = "Qwen2.5-0.5B-Instruct-IQ4_NL-pure-local.gguf",
+            url = "{FORMATS_HF}/Qwen2.5-0.5B-Instruct/Qwen2.5-0.5B-Instruct-IQ4_NL-pure-local.gguf", bytes = 284087872l, sha256 = "e2dc2fdd822ec3a830eb1c676493fc8360129d1248fdb605d88c8b22c6c92de2",
             recipe = "llama-quantize --allow-requantize --pure --token-embedding-type iq4_nl --output-tensor-type iq4_nl Qwen2.5-0.5B-Instruct-Q8_0.gguf Qwen2.5-0.5B-Instruct-IQ4_NL-pure-local.gguf IQ4_NL"),
         ModelSpec(file = "Qwen2.5-0.5B-Instruct-Q4_0-local.gguf",
+            url = "{FORMATS_HF}/Qwen2.5-0.5B-Instruct/Qwen2.5-0.5B-Instruct-Q4_0-local.gguf", bytes = 284087872l, sha256 = "3e965443daa431864455126645721d93bb145adee757b3a59a3fe6d00833514b",
             recipe = "llama-quantize --allow-requantize --pure --token-embedding-type q4_0 --output-tensor-type q4_0 Qwen2.5-0.5B-Instruct-Q8_0.gguf Qwen2.5-0.5B-Instruct-Q4_0-local.gguf Q4_0"),
-        ModelSpec(file = "Qwen2.5-0.5B-Instruct-Q5_0-pure-local.gguf", bytes = 345833024l,
-            sha256 = "a9d3131babde9926f9513dfe110890416d3f997e9c01aa634a111f281176fe39",
+        ModelSpec(file = "Qwen2.5-0.5B-Instruct-Q5_0-pure-local.gguf",
+            url = "{FORMATS_HF}/Qwen2.5-0.5B-Instruct/Qwen2.5-0.5B-Instruct-Q5_0-pure-local.gguf", bytes = 345833024l, sha256 = "a9d3131babde9926f9513dfe110890416d3f997e9c01aa634a111f281176fe39",
             recipe = "llama-quantize --allow-requantize --pure --token-embedding-type q5_0 --output-tensor-type q5_0 Qwen2.5-0.5B-Instruct-Q8_0.gguf Qwen2.5-0.5B-Instruct-Q5_0-pure-local.gguf Q5_0"),
         ModelSpec(file = "Qwen3-0.6B-Q8_0.gguf", display = "Qwen3-0.6B",
+            url = "{HF}/Qwen/Qwen3-0.6B-GGUF/resolve/23749fefcc72300e3a2ad315e1317431b06b590a/Qwen3-0.6B-Q8_0.gguf",
+            bytes = 639446688l, sha256 = "9465e63a22add5354d9bb4b99e90117043c7124007664907259bd16d043bb031",
             parity <- ev_qwen_count()),   // the QK-norm arch (per-head Q/K RMSNorm before RoPE)
         ModelSpec(file = "Qwen3.5-0.8B-Q8_0.gguf", display = "Qwen3.5-0.8B",
+            url = "{HF}/unsloth/Qwen3.5-0.8B-GGUF/resolve/6ab461498e2023f6e3c1baea90a8f0fe38ab64d0/Qwen3.5-0.8B-Q8_0.gguf",
+            bytes = 811843840l, sha256 = "0ad885ffd4bb022fc4f0d33a3308fa108ef8613159d3b3a67e23abca056b7a6c",
             // the qwen35 hybrid: 18 Gated-DeltaNet recurrent + 6 gated-attention layers
             // (2x-wide Q with sigmoid out-gate, partial NEOX rope 64/256, QK-norm)
             parity <- ev_qwen_count([dn_chunked = true])),
@@ -522,13 +531,15 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
             bytes = 833592736l, sha256 = "c54f8b67069c70085b98440de696b44da8250250ac69a961b41133def876e262"),
         // the NVFP4 hybrid, the nv4 rail's carrier (tests/test_kquant.das): ModelOpt's two-level FP4 (nv4 planes, each with its `.scale` tensor) on the FFN, attention and deltanet projections, Q4_K / Q5_K / BF16 beside them
         ModelSpec(file = "Qwen3.5-0.8B-NVFP4-MTP.gguf",
-            url = "{HF}/michaelw9999/Qwen3.5-0.8B-NVFP4-MTP-GGUF/resolve/main/Qwen3.5-0.8B-NVFP4-MTP-GGUF.gguf",
+            url = "{HF}/michaelw9999/Qwen3.5-0.8B-NVFP4-MTP-GGUF/resolve/d8ac925b9b4e19781e3aa8545c69ca89884fcfe4/Qwen3.5-0.8B-NVFP4-MTP-GGUF.gguf",
             bytes = 578052704l, sha256 = "71a0a29da9481f51d8e301f8ffb67feec1627cd18e92183a1f3918b0a7c35728"),
         // the per-32 hybrid table carrier: the Q5_1 token table, classifier, NextN eh_proj and deltanet planes as q51
         ModelSpec(file = "Qwen3.5-0.8B-MTP-Q5_1-local.gguf",
+            url = "{FORMATS_HF}/Qwen3.5-0.8B/Qwen3.5-0.8B-MTP-Q5_1-local.gguf", bytes = 592235936l, sha256 = "a6092ab8e0039e5e6dfae47cbb1332c0b31c183720c068bdf3290c21912cefe2",
             recipe = "llama-quantize --allow-requantize --pure --token-embedding-type q5_1 --output-tensor-type q5_1 Qwen3.5-0.8B-MTP-Q8_0.gguf Qwen3.5-0.8B-MTP-Q5_1-local.gguf Q5_1"),
         // the nv4 hybrid carrier (tests/test_metal_format_census.das, `census-nv4-hybrid`): every plane NVFP4 - the deltanet planes, the NextN eh_proj, the table and the classifier - with no `.scale`
         ModelSpec(file = "Qwen3.5-0.8B-MTP-NVFP4-pure-local.gguf",
+            url = "{FORMATS_HF}/Qwen3.5-0.8B/Qwen3.5-0.8B-MTP-NVFP4-pure-local.gguf", bytes = 447421856l, sha256 = "c7a61caa76f42ba392616e9750050987cb953e4ff0450558d61de1e5549d52b2",
             recipe = "llama-quantize --allow-requantize --pure --token-embedding-type nvfp4 --output-tensor-type nvfp4 Qwen3.5-0.8B-MTP-Q8_0.gguf Qwen3.5-0.8B-MTP-NVFP4-pure-local.gguf NVFP4"),
         // the embedding model whose file names its read: `qwen3.pooling_type` last, `add_eos_token` on
         // (tests/test_embeddings.das holds its model card's cosine matrix as the oracle)
@@ -561,10 +572,12 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
         // (tests/test_gpu_resident_hybrid.das): qkv q6_K, z q4_K, beta/alpha q4_K, the deltanet
         // out plane q4_K - the step leaves the o row f32 for the superblock out plane's requant
         ModelSpec(file = "Qwen3.5-0.8B-Q4_K_M.gguf",
+            url = "{FORMATS_HF}/Qwen3.5-0.8B/Qwen3.5-0.8B-Q4_K_M.gguf", bytes = 529297664l, sha256 = "de98950ab4327338d3026fa0b9de0a218ddcb3869b8aed1091e8ba730c9ab659",
             recipe = "llama-quantize --allow-requantize Qwen3.5-0.8B-Q8_0.gguf Qwen3.5-0.8B-Q4_K_M.gguf Q4_K_M",
             parity <- ev_qwen_count([kq_native = true, dn_chunked = true, require_dn_kq = true])),
         // the mixed twin: the deltanet out plane at Q8_0 (the unsloth UD shape) - the one carrier whose x and o feeds part ways
         ModelSpec(file = "Qwen3.5-0.8B-Q4_K_M-q8out.gguf",
+            url = "{FORMATS_HF}/Qwen3.5-0.8B/Qwen3.5-0.8B-Q4_K_M-q8out.gguf", bytes = 548172032l, sha256 = "fc384e2da3e605a7e9ad6030421f898e16cab693ac52c87029a4617c85d7e699",
             recipe = "llama-quantize --allow-requantize --tensor-type ssm_out=q8_0 Qwen3.5-0.8B-Q8_0.gguf Qwen3.5-0.8B-Q4_K_M-q8out.gguf Q4_K_M",
             parity <- ev_qwen_count([kq_native = true, dn_chunked = true])),
         // the 4B hybrid with its in-file MTP block - the mid-size dense carrier of the MTP series'
@@ -588,15 +601,23 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
         ModelSpec(file = "tinyllama-1.1b-v0.3-f16.gguf",   // parity-only carrier (F16 -> fp32 load)
             parity <- ev_tinyllama_v03()),
         ModelSpec(file = "gemma-3-1b-it-Q8_0.gguf", display = "gemma-3-1B",
+            url = "{HF}/ggml-org/gemma-3-1b-it-GGUF/resolve/f9c28bcd85737ffc5aef028638d3341d49869c27/gemma-3-1b-it-Q8_0.gguf",
+            bytes = 1069306368l, sha256 = "b205840c5dcef55078e37d344677869a714ffd42a4ae448c48dcfb52e4bb10d5",
             parity <- ev_gemma_count()),
-        ModelSpec(file = "tinyllama-1.1b-chat-v1.0.Q8_0.gguf", display = "TinyLlama-1.1B"),
+        ModelSpec(file = "tinyllama-1.1b-chat-v1.0.Q8_0.gguf", display = "TinyLlama-1.1B",
+            url = "{HF}/TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF/resolve/52e7645ba7c309695bec7ac98f4f005b139cf465/tinyllama-1.1b-chat-v1.0.Q8_0.gguf",
+            bytes = 1170781568l, sha256 = "a4c9bb1dbaa372f6381a035fa5c02ef087aaa1ff1f843a56a22328114f03fc59"),
         ModelSpec(file = "Llama-3.2-1B-Instruct-Q8_0.gguf", display = "Llama-3.2-1B",
             url = "{HF}/bartowski/Llama-3.2-1B-Instruct-GGUF/resolve/main/Llama-3.2-1B-Instruct-Q8_0.gguf",
             bytes = 1321083008l, sha256 = "432f310a77f4650a88d0fd59ecdd7cebed8d684bafea53cbff0473542964f0c3",
             parity <- ev_llama32_1b()),
         ModelSpec(file = "Qwen2.5-1.5B-Instruct-Q8_0.gguf", display = "Qwen2.5-1.5B",
+            url = "{HF}/bartowski/Qwen2.5-1.5B-Instruct-GGUF/resolve/9eadc66189c7641e1ddd226b8267a9119b2ce2d4/Qwen2.5-1.5B-Instruct-Q8_0.gguf",
+            bytes = 1646573312l, sha256 = "7185d306cf45956c8c017cd0d3b05ecc6bc18b3ea8eb5c240dce40e87563db7f",
             parity <- ev_qwen_count()),
         ModelSpec(file = "SmolLM2-1.7B-Instruct-Q8_0.gguf", display = "SmolLM2-1.7B",
+            url = "{HF}/bartowski/SmolLM2-1.7B-Instruct-GGUF/resolve/1f03464768bfcc0319fc50da8ff5fb20b6417ba2/SmolLM2-1.7B-Instruct-Q8_0.gguf",
+            bytes = 1820414944l, sha256 = "0c6e8955788b1253f418c354a4bdc4cf507b8cfe49c48bb10c7c58ae713cfa2a",
             parity <- ev_smollm2()),
         ModelSpec(file = "Phi-3.5-mini-instruct-Q4_K_M.gguf",   // the coverage census's phi3 carrier
             url = "{HF}/bartowski/Phi-3.5-mini-instruct-GGUF/resolve/main/Phi-3.5-mini-instruct-Q4_K_M.gguf",
@@ -608,13 +629,17 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
             url = "{HF}/bartowski/microsoft_Phi-4-mini-instruct-GGUF/resolve/main/microsoft_Phi-4-mini-instruct-Q8_0.gguf",
             bytes = 4084611456l, sha256 = "a12f242c4ee379b9da91673e5d78b30bfacfe4fd86a0b2259d2ecad5d93cb6c7"),
         ModelSpec(file = "gemma-2-2b-it-Q8_0.gguf", display = "gemma-2-2B",
+            url = "{HF}/bartowski/gemma-2-2b-it-GGUF/resolve/855f67caed130e1befc571b52bd181be2e858883/gemma-2-2b-it-Q8_0.gguf",
+            bytes = 2784495456l, sha256 = "2d448a9aab894b8e8e18168cf3f490cb9f65632222f29f93514ac9ecc754debe",
             parity <- ev_gemma2()),
         // the tool-format live-leg carriers (REVIEW recognition-test rule): each family's
         // smallest catalogued GGUF, exercised by utils/dasllama-server/test_openai_server_think.das
         ModelSpec(file = "Llama-3.2-3B-Instruct-Q4_K_M.gguf",
-            url = "{HF}/bartowski/Llama-3.2-3B-Instruct-GGUF/resolve/main/Llama-3.2-3B-Instruct-Q4_K_M.gguf",
+            url = "{HF}/bartowski/Llama-3.2-3B-Instruct-GGUF/resolve/5ab33fa94d1d04e903623ae72c95d1696f09f9e8/Llama-3.2-3B-Instruct-Q4_K_M.gguf",
             bytes = 2019377696l, sha256 = "6c1a2b41161032677be168d354123594c0e6e67d2b9227c84f296ad037c728ff"),
-        ModelSpec(file = "Llama-3.2-3B-Instruct-Q8_0.gguf", display = "Llama-3.2-3B"),
+        ModelSpec(file = "Llama-3.2-3B-Instruct-Q8_0.gguf", display = "Llama-3.2-3B",
+            url = "{HF}/bartowski/Llama-3.2-3B-Instruct-GGUF/resolve/5ab33fa94d1d04e903623ae72c95d1696f09f9e8/Llama-3.2-3B-Instruct-Q8_0.gguf",
+            bytes = 3421899296l, sha256 = "b5607b5090a8280063fff2d706bb3408ca6542341b06aab39c3eca0a28575921"),
         ModelSpec(file = "gemma-4-E2B-it-Q4_K_M.gguf",
             url = "{HF}/unsloth/gemma-4-E2B-it-GGUF/resolve/0314792d7f1f7e229411f620751375812bb9faf2/gemma-4-E2B-it-Q4_K_M.gguf",
             bytes = 3106738272l, sha256 = "740185b21d22ceb83a11c3aa62ad5842ef32c70f6096d756bbee85a1e4ec34b8",
@@ -656,16 +681,36 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
                     bytes = 851251104l, sha256 = "8c0fb064b019a6972856aaae2c7e4792858af3ca4561be2dbf649123ba6c40cb")],
             parity <- ev_gemma3_4b()),
         ModelSpec(file = "Qwen3-4B-Instruct-2507-Q8_0.gguf", display = "Qwen3-4B",
+            url = "{HF}/bartowski/Qwen_Qwen3-4B-Instruct-2507-GGUF/resolve/ae44f08e1392f39c0e474af10c3ff8355c8b6688/Qwen_Qwen3-4B-Instruct-2507-Q8_0.gguf",
+            bytes = 4280405216l, sha256 = "260b5b5b6ad73e44df81a43ea1f5c11c37007b6bac18eb3cd2016e8667c19662",
             parity <- ev_qwen_count()),
         // the native K-quant rail's token-level gate: the same counting fixture over the
         // Q4_K_M / Q5_K_M / Q6_K files of the SAME model, forced through kquant_native planes
         // (grp repack + kq kernels + kq embed gather). Oracles produced per-file by simple_ids.
         ModelSpec(file = "Qwen3-4B-Instruct-2507-Q4_K_M.gguf", display = "Qwen3-4B-q4k", quant_label = "q4_k_m",
+            url = "{HF}/unsloth/Qwen3-4B-Instruct-2507-GGUF/resolve/a06e946bb6b655725eafa393f4a9745d460374c9/Qwen3-4B-Instruct-2507-Q4_K_M.gguf",
+            bytes = 2497281120l, sha256 = "3605803b982cb64aead44f6c1b2ae36e3acdb41d8e46c8a94c6533bc4c67e597",
             parity <- ev_qwen_count([kq_native = true])),
         ModelSpec(file = "Qwen3-4B-Instruct-2507-Q5_K_M.gguf",
+            url = "{HF}/unsloth/Qwen3-4B-Instruct-2507-GGUF/resolve/a06e946bb6b655725eafa393f4a9745d460374c9/Qwen3-4B-Instruct-2507-Q5_K_M.gguf",
+            bytes = 2889514080l, sha256 = "5bde5e9d883622acb02bf77fe7dcbc56a8b9a9ad4be78a72ca23a532658b4ecb",
             parity <- ev_qwen_count([kq_native = true])),
         ModelSpec(file = "Qwen3-4B-Instruct-2507-Q6_K.gguf",
+            url = "{HF}/unsloth/Qwen3-4B-Instruct-2507-GGUF/resolve/a06e946bb6b655725eafa393f4a9745d460374c9/Qwen3-4B-Instruct-2507-Q6_K.gguf",
+            bytes = 3306261600l, sha256 = "cd7b21b38b3e71400587c184b6a9b04d3beb4d13fdae6464d4075dee4f1bc5ad",
             parity <- ev_qwen_count([kq_native = true])),
+        // the base model the Instruct-2507 rows fine-tune: the regular DFlash drafter's Q8_0 and Q4_K_M files ride beside it
+        // for the drafter cells of the qwen3 resident file and the drafter test's Metal arms
+        ModelSpec(file = "Qwen3-4B-Q4_K_M.gguf",
+            url = "{HF}/Qwen/Qwen3-4B-GGUF/resolve/bc640142c66e1fdd12af0bd68f40445458f3869b/Qwen3-4B-Q4_K_M.gguf",
+            bytes = 2497280256l, sha256 = "7485fe6f11af29433bc51cab58009521f205840f5b4ae3a32fa7f92e8534fdf5",
+            companions <- [
+                ProvEntry(name = "drafters/Qwen3-4B-DFlash-b16-GGUF/Qwen3-4B-DFlash-b16-Q8_0.gguf", root = "llm",
+                    url = "{HF}/Anbeeld/Qwen3-4B-DFlash-b16-GGUF/resolve/5cbf9d2073be26ca6ce6ecaf1ec71731e818af11/Qwen3-4B-DFlash-b16-Q8_0.gguf",
+                    bytes = 577047104l, sha256 = "84b096744606212b63a33324eed795bd2c24d4acb242062c3bc696356ec6d0b3"),
+                ProvEntry(name = "drafters/Qwen3-4B-DFlash-b16-GGUF/Qwen3-4B-DFlash-b16-Q4_K_M.gguf", root = "llm",
+                    url = "{HF}/Anbeeld/Qwen3-4B-DFlash-b16-GGUF/resolve/5cbf9d2073be26ca6ce6ecaf1ec71731e818af11/Qwen3-4B-DFlash-b16-Q4_K_M.gguf",
+                    bytes = 322542144l, sha256 = "b70a02fd40bac7ad4edcf72ac8cf19d21c4e0cf7f0f19b1a8bf5c61fd31f9c7c")]),
         // the deltanet arm of the native-kq gate: recurrent-layer projections (attn_qkv /
         // attn_gate / ssm_out) ride kq-native planes on the CPU rail; the trio spans k4/k5/k6
         // dn planes (qkv mixes Q6_K into the Q4/Q5 files)
@@ -690,10 +735,20 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
                 ProvEntry(name = "mmproj-gemma-4-E2B-it-bf16.gguf", root = "llm",
                     url = "{HF}/ggml-org/gemma-4-E2B-it-GGUF/resolve/b4243c156154b6dca9324415f8c7ccc098b4aed1/mmproj-gemma-4-E2B-it-BF16.gguf",
                     bytes = 986833664l, sha256 = "711e1e8f43fa0664adbac493129be1e6c25b81af4b4cdea97c7d798b25c0a3a4"),
-                // the DFlash2 block drafter the drafter test's E2B arms attach: no GGUF is published, the file is a local conversion
+                // the DFlash2 block drafter the drafter test's E2B arms attach: no upstream GGUF is published; the format repo hosts the local conversion
                 ProvEntry(name = "drafters/gemma-4-E2B-it-dflash2-GGUF/gemma-4-E2B-it-dflash2-Q8_0.gguf", root = "llm",
+                    url = "{FORMATS_HF}/gemma-4-E2B-it-dflash2/gemma-4-E2B-it-dflash2-Q8_0.gguf",
                     recipe = "convert_hf_to_gguf.py <rasyosef/gemma-4-E2B-it-dflash2 snapshot> --target-model-dir <google/gemma-4-E2B-it snapshot> --outtype q8_0 (llama.cpp)",
-                    bytes = 359252960l, sha256 = "e90b2224a233be4de4374edde1737a53582048d9845600a1edf7bd03cb0112aa")],
+                    bytes = 359252960l, sha256 = "e90b2224a233be4de4374edde1737a53582048d9845600a1edf7bd03cb0112aa"),
+                // the same drafter in Q4_K_M and NVFP4: the drafter test's per-format legs on the E2B pair
+                ProvEntry(name = "drafters/gemma-4-E2B-it-dflash2-GGUF/gemma-4-E2B-it-dflash2-Q4_K_M-local.gguf", root = "llm",
+                    url = "{FORMATS_HF}/gemma-4-E2B-it-dflash2/gemma-4-E2B-it-dflash2-Q4_K_M-local.gguf",
+                    recipe = "llama-quantize --allow-requantize gemma-4-E2B-it-dflash2-Q8_0.gguf gemma-4-E2B-it-dflash2-Q4_K_M-local.gguf Q4_K_M (llama.cpp with the dflash arch and NVFP4)",
+                    bytes = 203043808l, sha256 = "7a14a7df225d87fb2cf5eced79dca18d7a1cab5e6ca015a7fe2ca4f899791a77"),
+                ProvEntry(name = "drafters/gemma-4-E2B-it-dflash2-GGUF/gemma-4-E2B-it-dflash2-NVFP4-pure-local.gguf", root = "llm",
+                    url = "{FORMATS_HF}/gemma-4-E2B-it-dflash2/gemma-4-E2B-it-dflash2-NVFP4-pure-local.gguf",
+                    recipe = "llama-quantize --allow-requantize --pure gemma-4-E2B-it-dflash2-Q8_0.gguf gemma-4-E2B-it-dflash2-NVFP4-pure-local.gguf NVFP4 (llama.cpp with the dflash arch and NVFP4)",
+                    bytes = 197772256l, sha256 = "06ec31ef1433d78f99288c59064bcdf053bdd2fa2fe08bdb5e425d113f6f5369")],
             // PLE + cross-layer KV sharing as the E4B, plus per-layer FFN width (the elastic
             // MatFormer sub-model); dense, so the full 40 hold
             parity <- ev_gemma4_dense()),
@@ -929,11 +984,14 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
                 ProvEntry(name = "mtp-gemma-4-26B-A4B-it-Q4_0.gguf", root = "llm",
                     url = "{HF}/ggml-org/gemma-4-26B-A4B-it-GGUF/resolve/bb4531cda34d1ea09d9814959ed4d5833cf2a4c8/mtp-gemma-4-26B-A4B-it-Q4_0.gguf",
                     bytes = 251939520l, sha256 = "e00b0ce326d03d8f6f6972ad2320fe90b6ff25a3da5fc51bec15efe283052aa2"),
-                // the DFlash block drafter the drafter test's 26B arms attach: no GGUF is published, the files are local conversions
+                // the DFlash block drafter the drafter test's 26B arms attach: local conversions the format repo hosts; the GGUFs
+                // Anbeeld/gemma-4-26B-A4B-it-DFlash-GGUF publishes of the same drafter read 352 bytes apart from them
                 ProvEntry(name = "drafters/gemma-4-26B-A4B-it-DFlash-GGUF/gemma-4-26B-A4B-it-DFlash-Q8_0.gguf", root = "llm",
+                    url = "{FORMATS_HF}/gemma-4-26B-A4B-it-DFlash/gemma-4-26B-A4B-it-DFlash-Q8_0.gguf",
                     recipe = "llama.cpp's convert_hf_to_gguf.py over the <z-lab/gemma-4-26B-A4B-it-DFlash snapshot> with --target-model-dir <google/gemma-4-26B-A4B-it snapshot>, to Q8_0 (the command line was not kept)",
                     bytes = 472433984l, sha256 = "a416057002fa1984fbf87507fde0dbfb357130bd2201b61e8dbd72ff81a929e0"),
                 ProvEntry(name = "drafters/gemma-4-26B-A4B-it-DFlash-GGUF/gemma-4-26B-A4B-it-DFlash-Q4_K_M.gguf", root = "llm",
+                    url = "{FORMATS_HF}/gemma-4-26B-A4B-it-DFlash/gemma-4-26B-A4B-it-DFlash-Q4_K_M.gguf",
                     recipe = "llama-quantize of the same conversion's BF16 file to Q4_K_M (the converter writes no K-quant; the command line was not kept)",
                     bytes = 267271488l, sha256 = "9276343964d49310065129213d6b3a5819042d88dba13f59bc0b9599548a7765")],
             // the q51 tier gate: this recipe's ffn_down_exps are Q5_1 on 29 layers, riding the
@@ -1066,13 +1124,17 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
                     recipe = "python modules/dasLLAMA/harness/micro_qwen4exp_hcmixer.py micro-qwen4exp-realqsa-mtp.gguf micro-qwen4exp-realqsa-mtp-hcmixer.gguf",
                     bytes = 150002176l, sha256 = "4fd26c949319887f45e4a7a11ae92831ff2515f5b73909f30150d2986b678ade")]),
         // the Metal sweep's Qwen quant matrix - Qwen text files the M5 box stocks beyond the rows
-        // above, not every one; no board row, no provenance, the counting fixture as the
+        // above, not every one; no board row, the counting fixture as the
         // correctness gate
         ModelSpec(file = "Qwen2.5-1.5B-Instruct-IQ3_XS.gguf", display = "Qwen2.5-1.5B-iq3xs", quant_label = "iq3_xs",
+            url = "{HF}/bartowski/Qwen2.5-1.5B-Instruct-GGUF/resolve/9eadc66189c7641e1ddd226b8267a9119b2ce2d4/Qwen2.5-1.5B-Instruct-IQ3_XS.gguf",
+            bytes = 731699296l, sha256 = "9d5bd9c77d11161da7c8c4160913e1592f55c1f75604ede9b856ac7cfee896a6",
             parity <- ev_qwen_count([kq_native = true])),
         ModelSpec(file = "Qwen3-8B-BF16.gguf", display = "Qwen3-8B-bf16", quant_label = "bf16",
             parity <- ev_qwen_count()),
         ModelSpec(file = "Qwen3.5-4B-Q8_0.gguf", display = "Qwen3.5-4B",
+            url = "{HF}/unsloth/Qwen3.5-4B-GGUF/resolve/e87f176479d0855a907a41277aca2f8ee7a09523/Qwen3.5-4B-Q8_0.gguf",
+            bytes = 4482403488l, sha256 = "10cc391b403021dd11c614679d2fd92f611c3681d29e29651b717316965d61e1",
             parity <- ev_qwen_count([dn_chunked = true])),
         ModelSpec(file = "Qwen3.5-9B-Q8_0.gguf", display = "Qwen3.5-9B",
             parity <- ev_qwen_count([dn_chunked = true])),
@@ -1175,6 +1237,8 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
         // fixture is the correctness gate, no board row (the two lowercase-b 12B files match no
         // current upload by size, so they carry no url)
         ModelSpec(file = "gemma-2-2b-it-Q4_K_M.gguf", display = "gemma-2-2B-q4k", quant_label = "q4_k_m",
+            url = "{HF}/bartowski/gemma-2-2b-it-GGUF/resolve/855f67caed130e1befc571b52bd181be2e858883/gemma-2-2b-it-Q4_K_M.gguf",
+            bytes = 1708582752l, sha256 = "e0aee85060f168f0f2d8473d7ea41ce2f3230c1bc1374847505ea599288a7787",
             parity <- ev_gemma2_count([kq_native = true])),
         ModelSpec(file = "gemma-4-12b-it-Q5_K_M.gguf", display = "gemma-4-12B-q5k", quant_label = "q5_k_m",
             parity <- ev_gemma_count([kq_native = true])),

@@ -18,6 +18,10 @@ require ?cuda dasllama/dasllama_cuda_stream   // cud_stream_stats().biased: the 
 require ?cuda _cuda_feed   // the CUDA home's own cells' witnesses
 require _kv_codec_cells   // codec_env_why: the sink stamps' codec arms
 require dasllama/dasllama_kv_dtype   // KVDtype: the codec forms' mirror asks
+require _chat_cells   // chat_gptoss_cells: the uncached CPU form's chat cells
+require _fused_decode_cells   // fused_decode_moe_chain_cell: the q8 CPU form's fused expert chain
+require _parity_cells   // parity_gptoss_cut_cell: the pinned CPU form's parity stream
+require dasllama/dasllama_env   // g_env_engine.pin_backend: the parity form's environment pin
 
 // gpt-oss-4L, the 20b's first four blocks (the native-MXFP4
 // routed stacks on the mx4 expert rail, the biased router's
@@ -47,7 +51,14 @@ require dasllama/dasllama_kv_dtype   // KVDtype: the codec forms' mirror asks
 // own and skip under DASLLAMA_CUDA=1 - the per-op tier is the
 // Vulkan home's. DASLLAMA_VK_KV32=1 arms the f32 mirror on the
 // default form, whose feed then carries the f32 sink stamp in
-// the q8_0 form's place.
+// the q8_0 form's place. On its q8 and uncached CPU forms, on
+// every box, the file's own CPU cells: the fused MoE expert chain
+// (`_fused_decode_cells.das`) on the q8 form, harmony's budget
+// marks (`_chat_cells.das`) on the uncached form; on its CPU form
+// under the environment's backend pin (DASLLAMA_PIN_BACKEND, none
+// where unset) with the K-quant planes requantized to q8, the
+// parity reference's greedy stream (`_parity_cells.das`), a pin
+// the box cannot take skipping that form loudly.
 //! gpt-oss's logits bar: the routed chain's noise reads 0.06-0.15 of a 7-15 max logit on the 5060 Ti (0.9-2.2%) at 40 and 600 tokens and
 //! every step, the argmax agreeing everywhere - the four picks over 32 experts on a biased softmax sit far from a near-tie on
 //! this fixture - while the one-step-off controls read 4.2-18.9, so a 5% bar keeps a 2x margin over the noise and 12x under the control
@@ -110,6 +121,8 @@ def test_gpu_perop_gptoss_heat(t : T?) {
 
 //! the block's mirror context: the q8_0 mirror beside the planes,
 //! the regions rig's cap
+//! the parity row's context: a cut's parity stream runs at the context its full file's parity row loads at
+let private PARITY_CUT_CTX = 2048l
 let private GPTOSS_CTX = 8192l
 let private HOST_LAYERS_GPTOSS = 2l   //! the host-layers forms' ask
 //! the long feeds' steps: the codec, CUDA and stream feeds' and the
@@ -367,20 +380,23 @@ def private gptoss_rows_within(t : T?; r : GptossRows) {
 }
 
 //! the forms the block loads: the default, two and three regions, the
-//! host-layers pair, the q8_0 mirror where the environment arms it,
-//! and the rings for the CUDA home's own cells; a codec the
-//! environment keeps off is held as a skip
+//! host-layers pair, the q8, uncached and parity-pinned CPU forms whose
+//! cells stand alone, the q8_0 mirror where the environment arms it,
+//! and the rings for the CUDA home's own cells; a codec the environment
+//! keeps off is held as a skip
 def private gptoss_forms(var r : GptossRows) : array<ModelForm> {
     var forms <- [device_form(), device_form(regions = 2l, ctx = REGIONS_RIG_CTX),
         device_form(regions = 3l, ctx = REGIONS_RIG_CTX),
         device_form(regions = 1l, host_layers = HOST_LAYERS_GPTOSS),
-        device_form(regions = 1l, host_layers = HOST_LAYERS_GPTOSS, pf_stream = false)]
+        device_form(regions = 1l, host_layers = HOST_LAYERS_GPTOSS, pf_stream = false),
+        cpu_cells_form(), cpu_cells_form(uncached = true),
+        cpu_cells_form(backend = g_env_engine.pin_backend, kq_native = KqNative.off)]
     for (kv in fixed_array(KVDtype.q8_0, KVDtype.f32)) {
         let why = codec_env_why(kv)
         if (!empty(why)) {
             r.carrier |> held_skip("the {kv} sink stamp: {why}")
         } elif (kv == KVDtype.q8_0) {
-            forms |> push(device_form(kv = kv))
+            forms |> push(device_form() |> asking(kv))
         }
     }
     if (!r.cuda) {
@@ -394,14 +410,14 @@ def private gptoss_forms(var r : GptossRows) : array<ModelForm> {
             continue
         }
         for (ring in fixed_array(true, false)) {
-            forms |> push(device_form(kv = kv, ring = ring, ctx = RING_CTX,
-                pf_window_rows = RING_WINDOW))
+            forms |> push(device_form(ring = ring, ctx = RING_CTX,
+                pf_window_rows = RING_WINDOW) |> asking(kv))
         }
     }
     return <- forms
 }
 
-[test(description = "The resident gpt-oss-4L driver - mx4 MoE window, biased router, sinked token command - holds the CPU chain's logits within the bar on one window and across two with the sliding layers masking, the one-step-off control past it, the routed block's census once per routed layer per window; the q8_0 and f32 K/V mirrors' sink stamps hold a 40-token window and eight fed steps within the routed bar of the CPU chain at the same codec; with two routed layers' experts on the host the streamed window and eight steps sit within the stream twin's bar of the stream-off load and the stream chain's acts take the picks' bias rows; over two mirror regions batched steps over two sessions - at one window, past the unsplit position, and before any one-row step - and over three a batched step over two rows, a one-row step, then batched steps over three keep every row within the routed bar of its session alone; on a CUDA card with the FP4 rung the CUDA driver's forced feeds over one and two windows and the host-layers feed hold 20 percent of max logit of the CPU chain with every position served, the meet splitting the experts, and the ringed K/V mirrors match a flat every-row mirror bit for bit over 1300 prose ids in 512-row windows on f16 and q8_0; each form loads once")]
+[test(description = "The resident gpt-oss-4L driver - mx4 MoE window, biased router, sinked token command - holds the CPU chain's logits within the bar on one window and across two with the sliding layers masking, the one-step-off control past it, the routed block's census once per routed layer per window; the q8_0 and f32 K/V mirrors' sink stamps hold a 40-token window and eight fed steps within the routed bar of the CPU chain at the same codec; with two routed layers' experts on the host the streamed window and eight steps sit within the stream twin's bar of the stream-off load and the stream chain's acts take the picks' bias rows; over two mirror regions batched steps over two sessions - at one window, past the unsplit position, and before any one-row step - and over three a batched step over two rows, a one-row step, then batched steps over three keep every row within the routed bar of its session alone; on a CUDA card with the FP4 rung the CUDA driver's forced feeds over one and two windows and the host-layers feed hold 20 percent of max logit of the CPU chain with every position served, the meet splitting the experts, and the ringed K/V mirrors match a flat every-row mirror bit for bit over 1300 prose ids in 512-row windows on f16 and q8_0; on the q8 CPU form, on every box, with an mx4 rows core the fused MoE expert chain matches the three-dispatch groupn path's greedy ids and final logits bit for bit; on the uncached CPU form harmony's reasoning budget opens on the channel mark, analysis and message mark, leaves on the end mark, forces a close into the final channel and ends the turn on a later channel mark; on the parity-pinned CPU form, fed the 20b's reference greedy stream, every reference id keeps within 2% of its row's top logit on the short prompt and on the 449-token one that engages the sliding window, the stream one step late outside; each form loads once")]
 def test_gpu_resident_gptoss(t : T?) {
     return if (!family_on(t, "gptoss"))
     var r : GptossRows
@@ -424,7 +440,20 @@ def test_gpu_resident_gptoss(t : T?) {
     with_cuda_mmq_winners() {
         ran = with_cpu_and_gpu_model(t, "llm", "gpt-oss-4L-mxfp4-local.gguf",
                 GPTOSS_CTX, forms) $(m, form) {
+            if (form.uncached) {
+                chat_gptoss_cells(t, m)
+                return
+            }
+            if (form.kq_native == KqNative.off) {
+                with_ctx_cut(m, PARITY_CUT_CTX) {
+                    parity_gptoss_cut_cell(t, m)
+                }
+                return
+            }
             gptoss_rows(r, m, form)
+            if (!form.on_gpu && form.alone) {
+                fused_decode_moe_chain_cell(t, m)
+            }
         }
     }
     restore_stream_pins(pins)

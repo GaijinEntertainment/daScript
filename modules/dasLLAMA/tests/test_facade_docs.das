@@ -379,3 +379,206 @@ def test_ncol_rr_gate(t : T?) {
         t |> success(find(run.output, "no `let KQ_N_RR` found") >= 0, "the finding says the count is gone\n{run.output}")
     }
 }
+
+//! the tests/ gate's load-once rail over the named fixture files alone, the findings of the files `unfolded` names held
+//! (`-- --load-once <file>... --unfolded <name>...`)
+def private run_load_once_gate(files : array<string>; unfolded : array<string> = array<string>()) : GateRun {
+    var tail <- ["--load-once"]
+    tail |> push_from(files)
+    tail |> push("--unfolded")
+    tail |> push_from(unfolded)
+    return run_tests_gate(tail)
+}
+
+//! the tests/ gate with the command-line tail `tail` after its `--`: one of its fixture rails
+def private run_tests_gate(tail : array<string>) : GateRun {
+    let args <- get_command_line_arguments()
+    let exe = empty(args) ? "" : args[0]
+    var output = ""
+    var argv <- [exe, "-dasroot", get_das_root(), "{get_das_root()}/modules/dasLLAMA/tests/REVIEW.das", "--"]
+    argv |> push_from(tail)
+    let rc = run_and_capture(argv, output)
+    delete argv
+    return GateRun(rc = rc, output = output)
+}
+
+//! a load-once fixture's block of `file`: the area's one load of it, the call's paren spliced so the folder walk reads no call
+def private lo_block(file : string) : string => "def test_owner(t : T?) \{\n    with_cpu_and_gpu_model{OPEN}t, \"llm\", \"{file}\", 64l) $(m, form) \{\n    \}\n\}\n"
+
+//! the gate's one finding on `files` names `want` at `at` (a `file:line`), each part a fragment of the same output
+def private lo_red(t : T?; files : array<string>; at, want : string; count : int = 1) {
+    let run = run_load_once_gate(files)
+    t |> equal(run.rc, 1, "the gate's exit code\n{run.output}")
+    t |> success(find(run.output, at) >= 0, "the finding names its site '{at}'\n{run.output}")
+    t |> success(find(run.output, want) >= 0, "the finding names '{want}'\n{run.output}")
+    t |> success(find(run.output, "{count} finding(s)") >= 0, "the defect is {count} finding(s)\n{run.output}")
+}
+
+let private LO_LOAD = "def test_raw(t : T?) \{\n    var m <- load_model_{OPEN}path_join(dir, \"fx-a.gguf\"), QuantMode.q8)\n\}\n"
+
+[test(description = "The tests/ REVIEW.das load-once gate passes a block alone and a second load of its file whose function declares its own load with a reason, and fails, naming the site's file and line and the model file, a second loader of a blocked file, a load through a listed helper whose name a local or a top-level constant binds, two loads of a file no block loads, an own-load declaration with an empty reason, a function passing its parameter to a loader the list does not name, and a second block of one file; a block in a file whose findings are held owns its model file where no other block does, so a load in another file names it as its block, while a held file's second block of a file an unheld block owns is a held load site; it reads a name bound one local away or by a constant of another file, a load on a one-line function's def line, and no call whose name ends a longer name or follows a dot; a listed loader passing its parameter, or the block's home doing so, is no finding; and it fails a held file it finds clean, a block naming its area or file by a non-literal, an own-load reason that is not a literal, a listed loader no file defines, and an area whose runner lists no file - the area's files the runner's", timeout = 1200)]
+def test_load_once_gate(t : T?) {
+    let owner = fixture("lo_owner.das", lo_block("fx-a.gguf"))
+    t |> run("a block alone passes") @(t : T?) {
+        let run = run_load_once_gate([owner])
+        t |> equal(run.rc, 0, "the gate's exit code\n{run.output}")
+    }
+    t |> run("a second loader of a blocked file is a finding at its line") @(t : T?) {
+        lo_red(t, [owner, fixture("lo_raw.das", LO_LOAD)], "lo_raw.das:2:", "`load_model_` loads fx-a.gguf, its block is lo_owner.das:2")
+    }
+    t |> run("a second load whose function declares its own load with a reason passes") @(t : T?) {
+        let own = fixture("lo_own.das", "def test_own(t : T?) \{\n    own_load{OPEN}\"the cell drops the model and loads it again\")\n    var m <- load_model_{OPEN}path_join(dir, \"fx-a.gguf\"), QuantMode.q8)\n\}\n")
+        let run = run_load_once_gate([owner, own])
+        t |> equal(run.rc, 0, "the gate's exit code\n{run.output}")
+    }
+    t |> run("an own-load declaration with an empty reason is a finding") @(t : T?) {
+        let empty_why = fixture("lo_empty.das", "def test_own(t : T?) \{\n    own_load{OPEN}\"\")\n    var m <- load_model_{OPEN}path_join(dir, \"fx-a.gguf\"), QuantMode.q8)\n\}\n")
+        lo_red(t, [owner, empty_why], "lo_empty.das:2:", "`own_load` names, as a non-empty string literal", 2)
+    }
+    t |> run("a name a local binds, passed through a listed helper, is read") @(t : T?) {
+        let helper = fixture("lo_helper.das", "def test_helper(t : T?) \{\n    let path = path_join(dir, \"fx-a.gguf\")\n    var m <- load_capped{OPEN}path)\n\}\n")
+        lo_red(t, [owner, helper], "lo_helper.das:3:", "`load_capped` loads fx-a.gguf")
+    }
+    t |> run("a name a top-level constant binds, passed through a listed helper, is read") @(t : T?) {
+        let constant = fixture("lo_const.das", "let private FX = \"fx-a.gguf\"\n\ndef test_const(t : T?) \{\n    load_kq_native{OPEN}t, FX, true, false) $(tr; path) \{\n    \}\n\}\n")
+        lo_red(t, [owner, constant], "lo_const.das:4:", "`load_kq_native` loads fx-a.gguf")
+    }
+    t |> run("two loads of a file no block loads are a finding each") @(t : T?) {
+        let twice = fixture("lo_twice.das", "def test_one(t : T?) \{\n    var m <- load_gguf{OPEN}path_join(dir, \"fx-b.gguf\"), QuantMode.q8)\n\}\n\ndef test_two(t : T?) \{\n    var m <- load_gguf{OPEN}path_join(dir, \"fx-b.gguf\"), QuantMode.q8)\n\}\n")
+        lo_red(t, [twice], "lo_twice.das:6:", "loads fx-b.gguf, loaded at 2 sites of the llm area and by no block", 2)
+    }
+    t |> run("a function passing its parameter to a loader the list does not name is a finding") @(t : T?) {
+        let unlisted = fixture("lo_unlisted.das", "def private my_loader(path : string) : Model \{\n    return <- load_model_{OPEN}path, QuantMode.q8)\n\}\n")
+        lo_red(t, [unlisted], "lo_unlisted.das:2:", "`my_loader` passes `path` to `load_model_`")
+    }
+    t |> run("a second block of one file is a finding") @(t : T?) {
+        lo_red(t, [owner, fixture("lo_second.das", lo_block("fx-a.gguf"))], "lo_second.das:2:", "the first call is lo_owner.das:2")
+    }
+    t |> run("a block in a file UNFOLDED lists owns its file where no other block does: a load elsewhere names it") @(t : T?) {
+        let d_twice = "\ndef test_one(t : T?) \{\n    var m <- load_gguf{OPEN}path_join(dir, \"fx-d.gguf\"), QuantMode.q8)\n\}\n\ndef test_two(t : T?) \{\n    var m <- load_gguf{OPEN}path_join(dir, \"fx-d.gguf\"), QuantMode.q8)\n\}\n"
+        let held_owner = fixture("lo_held_owner.das", "{lo_block("fx-c.gguf")}{d_twice}")
+        let raw = fixture("lo_raw_c.das", "def test_raw(t : T?) \{\n    var m <- load_model_{OPEN}path_join(dir, \"fx-c.gguf\"), QuantMode.q8)\n\}\n")
+        let run = run_load_once_gate([held_owner, raw], ["lo_held_owner.das"])
+        t |> equal(run.rc, 1, "the gate's exit code\n{run.output}")
+        t |> success(find(run.output, "lo_raw_c.das:2:") >= 0, "the finding names its site\n{run.output}")
+        t |> success(find(run.output, "`load_model_` loads fx-c.gguf, its block is lo_held_owner.das:2") >= 0, "the held file's block owns the file\n{run.output}")
+        t |> success(find(run.output, "1 finding(s)") >= 0, "the one load is the one finding, the block itself none\n{run.output}")
+        t |> success(find(run.output, "2 finding(s) held") >= 0, "the held file's two loads of a file no block loads are its held findings\n{run.output}")
+    }
+    lo_gate_reads(t, owner)
+    lo_gate_lists(t, owner)
+}
+
+//! the load-once gate's lists on its rail: the loaders it reads (`--loaders`), the area's files off a runner
+//! (`--area-run`), the block's home, and a one-line function's load
+def private lo_gate_lists(t : T?; owner : string) {
+    t |> run("a listed loader no file defines is a finding") @(t : T?) {
+        let defs = fixture("lo_defs.das", "def fx_loader{OPEN}path : string) : Model \{\n    return <- load_model_{OPEN}path, QuantMode.q8)\n\}\n")
+        let run = run_tests_gate(["--load-once", owner, defs, "--loaders", "fx_loader", "fx_stale"])
+        t |> equal(run.rc, 1, "the gate's exit code\n{run.output}")
+        t |> success(find(run.output, "LOADERS lists `fx_stale`, which no file the load-once check reads defines") >= 0, "the finding names the stale loader\n{run.output}")
+        t |> success(find(run.output, "1 finding(s)") >= 0, "the defined loader is no finding\n{run.output}")
+    }
+    let runner = "def area_tests(area : string) : array<string> \{\n    if (area == \"llm\") \{\n        return <- [ \"test_lo_area.das\" ]\n    \}\n    var none : array<string>\n    return <- none\n\}\n"
+    t |> run("an area whose runner lists no file there is a finding") @(t : T?) {
+        let run = run_tests_gate(["--load-once", owner, "--area-run", fixture("lo_run_none.das", runner)])
+        t |> equal(run.rc, 1, "the gate's exit code\n{run.output}")
+        t |> success(find(run.output, "the load-once check read no test file of the area llm off `area_tests`") >= 0, "the finding names the empty area\n{run.output}")
+        t |> success(find(run.output, "1 finding(s)") >= 0, "the empty area is the one finding\n{run.output}")
+    }
+    t |> run("the area's files are the ones its runner lists: a load in a named file it does not list is not read") @(t : T?) {
+        let listed = fixture("test_lo_area.das", LO_LOAD)
+        let off_area = fixture("lo_off_area.das", LO_LOAD)
+        let run = run_tests_gate(["--load-once", owner, listed, off_area, "--area-run", fixture("lo_run.das", runner)])
+        t |> equal(run.rc, 1, "the gate's exit code\n{run.output}")
+        t |> success(find(run.output, "test_lo_area.das:2:") >= 0 && find(run.output, "lo_off_area.das") < 0, "the listed file's load is the finding\n{run.output}")
+        t |> success(find(run.output, "1 finding(s)") >= 0, "the one listed load is the one finding\n{run.output}")
+    }
+    t |> run("the block's home passes its parameter to a loader with no listing") @(t : T?) {
+        let home = fixture("_cpu_gpu_model.das", "def private fx_home_load{OPEN}path : string) : Model \{\n    return <- load_model_{OPEN}path, QuantMode.q8)\n\}\n")
+        let run = run_load_once_gate([owner, home])
+        t |> equal(run.rc, 0, "the gate's exit code\n{run.output}")
+    }
+    t |> run("a one-line function's load on its def line is a load site") @(t : T?) {
+        let one_line = fixture("lo_one_line.das", "def private fx_load() : Model => <- load_model_{OPEN}path_join(dir, \"fx-a.gguf\"), QuantMode.q8)\n")
+        lo_red(t, [owner, one_line], "lo_one_line.das:1:", "`load_model_` loads fx-a.gguf, its block is lo_owner.das:2")
+    }
+}
+
+//! the load-once gate's reading of a source: the held list, the block's literals, the own-load reason, the held file's second
+//! block, a bound name one hop away or in another file, a listed loader's own body, the call-name guards
+def private lo_gate_reads(t : T?; owner : string) {
+    t |> run("a held file the check finds clean is a finding: drop it from the list") @(t : T?) {
+        let run = run_load_once_gate([owner], ["lo_owner.das"])
+        t |> equal(run.rc, 1, "the gate's exit code\n{run.output}")
+        t |> success(find(run.output, "UNFOLDED lists lo_owner.das, whose loads the check finds folded: drop it from the list") >= 0, "the finding names the file\n{run.output}")
+        t |> success(find(run.output, "1 finding(s)") >= 0, "the listed file is the one finding\n{run.output}")
+    }
+    t |> run("a block naming its area or its file by a non-literal is a finding each") @(t : T?) {
+        let blocks = fixture("lo_nonlit.das", "def test_area(t : T?) \{\n    with_cpu_and_gpu_model{OPEN}t, AREA, \"fx-a.gguf\", 64l) $(m, form) \{\n    \}\n\}\n\ndef test_file(t : T?) \{\n    with_cpu_and_gpu_model{OPEN}t, \"llm\", FX, 64l) $(m, form) \{\n    \}\n\}\n")
+        let run = run_load_once_gate([blocks])
+        t |> equal(run.rc, 1, "the gate's exit code\n{run.output}")
+        t |> success(find(run.output, "lo_nonlit.das:2:") >= 0 && find(run.output, "lo_nonlit.das:7:") >= 0, "the findings name both blocks\n{run.output}")
+        t |> success(find(run.output, "takes its run area and its model file as string literals") >= 0, "the finding states the rule\n{run.output}")
+        t |> success(find(run.output, "2 finding(s)") >= 0, "each block is one finding\n{run.output}")
+    }
+    for (why in fixed_array("why", "lead + \"drops the model\"")) {
+        t |> run("an own-load reason that is not a string literal is a finding: {why}") @(t : T?) {
+            let own = fixture("lo_why.das", "def test_own(t : T?) \{\n    own_load{OPEN}{why})\n    var m <- load_model_{OPEN}path_join(dir, \"fx-a.gguf\"), QuantMode.q8)\n\}\n")
+            lo_red(t, [owner, own], "lo_why.das:2:", "`own_load` names, as a non-empty string literal", 2)
+        }
+    }
+    t |> run("a held file's second block of a file an unheld file blocks is a held load site, the unheld block its owner") @(t : T?) {
+        let held = fixture("lo_held_second.das", lo_block("fx-a.gguf"))
+        let run = run_load_once_gate([held, owner], ["lo_held_second.das"])
+        t |> equal(run.rc, 0, "the gate's exit code: the unheld block owns the file, the held one is held, the held file is not clean\n{run.output}")
+        t |> success(find(run.output, "1 finding(s) held") >= 0, "the held block is the one held finding\n{run.output}")
+    }
+    t |> run("a name a local binds one hop away, through another local, is read") @(t : T?) {
+        let hop = fixture("lo_hop.das", "def test_hop(t : T?) \{\n    let NAME = \"fx-a.gguf\"\n    let p = path_join(dir, NAME)\n    var m <- load_capped{OPEN}p)\n\}\n")
+        lo_red(t, [owner, hop], "lo_hop.das:4:", "`load_capped` loads fx-a.gguf")
+    }
+    t |> run("a name a top-level constant of another file binds is read") @(t : T?) {
+        let names = fixture("lo_names.das", "let FX_SHARED = \"fx-a.gguf\"\n")
+        let user = fixture("lo_user.das", "def test_user(t : T?) \{\n    load_kq_native{OPEN}t, FX_SHARED, true, false) $(tr; path) \{\n    \}\n\}\n")
+        lo_red(t, [owner, names, user], "lo_user.das:2:", "`load_kq_native` loads fx-a.gguf")
+    }
+    t |> run("a listed loader passing its own parameter is no finding, nor is its definition a load site") @(t : T?) {
+        let listed = fixture("lo_listed.das", "def load_capped{OPEN}path : string) : Model \{\n    return <- load_model_{OPEN}path, QuantMode.q8)\n\}\n")
+        let run = run_load_once_gate([owner, listed])
+        t |> equal(run.rc, 0, "the gate's exit code\n{run.output}")
+    }
+    t |> run("a call whose name ends a longer name or follows a `.` is no load site") @(t : T?) {
+        let sites = "    var a <- xload_gguf{OPEN}path_join(dir, \"fx-b.gguf\"))\n    var b <- m.load_gguf{OPEN}path_join(dir, \"fx-b.gguf\"))\n"
+        let guards = fixture("lo_guards.das", "def test_one(t : T?) \{\n{sites}\}\n\ndef test_two(t : T?) \{\n{sites}\}\n")
+        let run = run_load_once_gate([guards])
+        t |> equal(run.rc, 0, "the gate's exit code: no two loads of fx-b.gguf\n{run.output}")
+    }
+}
+
+//! a cell-pin fixture's clean cell: it reads the pin and the form's knob, and a commented pin is no call
+let private PIN_CLEAN = "def fx_cell(t : T?; var m : Model; form : ModelForm) \{\n    // pin_kernel_backend{OPEN}\"portable\") on the form, not here\n    t |> equal(kernel_backend_pin{OPEN}), form.backend)\n    t |> success(form.kq_native != KqNative.kept || m.kquant_native)\n\}\n"
+
+[test(description = "The tests/ REVIEW.das cell-pin gate passes a fixture cell module that reads the backend pin and its form's K-quant knob, a commented pin ignored and a call whose name only ends in a pin's or follows a dot no pin, and fails with one named finding each a cell that pins the backend, one that clears the pin and one that sets the K-quant native knob", timeout = 1200)]
+def test_cell_pins_gate(t : T?) {
+    t |> run("a cell that reads the pin and its form's knobs passes") @(t : T?) {
+        let run = run_tests_gate(["--cell-pins", fixture("_fx_clean_cells.das", PIN_CLEAN)])
+        t |> equal(run.rc, 0, "the gate's exit code\n{run.output}")
+    }
+    t |> run("a call whose name ends a longer name or follows a `.` is no pin") @(t : T?) {
+        let near = fixture("_fx_near_cells.das", "{PIN_CLEAN}\ndef fx_near(t : T?) \{\n    my_pin_kernel_backend{OPEN}\"portable\")\n    rig.pin_kernel_backend{OPEN}\"portable\")\n\}\n")
+        let run = run_tests_gate(["--cell-pins", near])
+        t |> equal(run.rc, 0, "the gate's exit code\n{run.output}")
+    }
+    for (bad in fixed_array((name = "_fx_pin_cells.das", call = "pin_kernel_backend{OPEN}\"portable\")", callee = "pin_kernel_backend"),
+            (name = "_fx_clear_cells.das", call = "clear_kernel_backend_pin{OPEN})", callee = "clear_kernel_backend_pin"),
+            (name = "_fx_kq_cells.das", call = "set_kquant_native{OPEN}true)", callee = "set_kquant_native"))) {
+        t |> run("a cell calling `{bad.callee}` is a finding at its line") @(t : T?) {
+            let run = run_tests_gate(["--cell-pins", fixture(bad.name, "{PIN_CLEAN}\ndef fx_bad(t : T?) \{\n    {bad.call}\n\}\n")])
+            t |> equal(run.rc, 1, "the gate's exit code\n{run.output}")
+            t |> success(find(run.output, "{bad.name}:8:") >= 0, "the finding names its site\n{run.output}")
+            t |> success(find(run.output, "never pins, clears or re-pins the kernel backend") >= 0 && find(run.output, "`{bad.callee}`") >= 0, "the finding states the rule and names the call\n{run.output}")
+            t |> success(find(run.output, "1 finding(s)") >= 0, "the one call is the one finding\n{run.output}")
+        }
+    }
+}

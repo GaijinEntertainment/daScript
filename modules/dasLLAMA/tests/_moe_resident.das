@@ -31,7 +31,6 @@ require daslib/enum_trait   // the KqFmt members as a loop
 require daslib/strings_boost   // split: a fixture's census sites
 require _model_tier public   // models_dir() + model_available() presence/size-tier gate
 require _resident_feed public   // resident_ready, load_resident, resident_prompt, resident_then_cpu_feed, feed_steps_within, tile_arm_tag
-require _kv_codec_cells   // codec_distance_over: the three-chain form of the block-codec cells
 require _format_census   // census_cell: a census fixture's every site in its own format
 require _cpu_gpu_model   // ModelForm, FeedRows, feed_rows: the forced feed's collector form
 

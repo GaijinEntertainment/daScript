@@ -1,0 +1,459 @@
+options gen2
+options _dasllama_internal = true
+
+module _mtp_cpu_cells shared public
+
+//! MTP/NextN self-speculative decode's CPU cells on a carrier its caller loaded; no entry loads one
+
+require dastest/testing_boost public
+require dasllama/dasllama   // the public facade - engine + arch registrations (incl. forward_mtp / generate_mtp_greedy)
+require dasllama/dasllama_math   // parallel_argmax (engine-level, not re-exported by the facade)
+require dasllama/dasllama_gpu_resident
+require dasllama/dasllama_gpu_tier   // moe_gpu_tier_installed: the depth cell is the CPU rails' claim
+require dasllama/dasllama_kv_dtype   // kv_row_bytes / kv_layer_kbase: the head's K row the seam writes
+require daslib/jobque_boost
+require daslib/linq
+require daslib/strings_boost
+require _model_tier   // greedy_gen, parity_gen_ok, log_gen_texts
+require _cpu_gpu_model   // with_ctx_cut: the cells' 2048-position context
+require _override_probes   // decode_declines: the fake override's step
+require _resident_feed   // head_k_row_bytes
+
+// MTP/NextN self-speculative decode's CPU cells on the qwen35-family Qwen3.5-0.8B-MTP file, on the CPU forms its block in
+// `test_gpu_resident_hybrid.das` loads (`mtp_cpu_cells` on the q8 form, `mtp_q4_0_cell` on the q4_0 form), the Flash-Next
+// carrier's invariance cell on the head-pinned CPU form of its block in `test_gpu_resident_hc.das`, and the invariance pair
+// `test_dflash_drafter.das`'s large -MTP- carriers run. The -MTP- file ships one extra trunk-shaped draft block at layer index
+// n_layers plus nextn.{eh_proj,enorm,hnorm,...}. Three layers of gate:
+//   1. loader: nextn extras load, and with spec OFF the trunk continues the fixture EXACTLY like
+//      the plain (non-MTP) file - trunk equality was proven with the simple_ids reference decode on both;
+//   2. output-invariance: generate_mtp_greedy() == generate() token-for-token - greedy self-spec
+//      changes wall time, never tokens (accept path reads batch-kernel logits, so this holds only
+//      under the PINNED bit-exact kernels, same reasoning as _model_tier's parity_gen_ok);
+//   3. rollback: a poisoned 2-row verify batch + mtp_state_restore replays plain decode exactly
+//      (the deltanet conv+S state is the only thing a rejected draft leaves behind - KV rows get
+//      overwritten by construction).
+// Beside them the round's seams: the continuation prefill's seam row under a fake seam seat (served, declined on a planar
+// model, declined on a blob), and the CPU round's fail-closed exit under a fake prefill driver that serves the verify window
+// (the verify-window flag read as it runs).
+
+let MTP_CELLS_CTX = 2048l   //! the cells' sessions' context
+
+// Qwen3.5-0.8B word-counting fixture: "Count from one to twenty: one, two, three," and its greedy
+// 40-token continuation (" four, five, ... twenty.\nCount from one to twenty"). Frozen from
+// the simple_ids reference decode on the PLAIN Qwen3.5-0.8B-Q8_0 file; the same run on the -MTP-
+// file produced the identical PROMPT+GEN ids, so this single fixture gates the loader AND trunk
+// equality of the MTP conversion. Confident list momentum — near-tie-free under the pinned kernels.
+let MTP_PROMPT <- [2427l, 494l, 799l, 310l, 16570l, 25l, 799l, 11l, 1330l, 11l, 2250l, 11l]
+let MTP_WANT <- [2943l, 11l, 4097l, 11l, 4590l, 11l, 7840l, 11l, 7810l, 11l, 11292l, 11l, 5600l, 11l,
+                 42744l, 11l, 28279l, 11l, 58614l, 11l, 60163l, 11l, 35442l, 11l, 56091l, 11l, 78592l,
+                 11l, 59942l, 11l, 90600l, 11l, 16570l, 13l, 198l, 2427l, 494l, 799l, 310l, 16570l]
+
+//! depth-1 self-spec greedy over one fresh session; accept telemetry lands in nd/na
+def private gen_spec(tr : Model; prompt : array<int64>; total : int; var nd, na : int64&) : array<int64> {
+    var out : array<int64>
+    with_dasllama_jobque() {
+        var s = make_run_state(tr.config)
+        out <- generate_mtp_greedy( // nolint:PERF030 - fresh; queue runs once
+            tr, s, prompt, int64(total), nd, na)
+        delete s
+    }
+    return <- out
+}
+
+//! the manual reject over the CPU restore: a poisoned 2-row verify (the draft a fixed garbage token) advances the deltanet
+//! state past a wrong row, and the restore plus one plain forward must leave it as if the batch never ran; answers the tokens
+//! decoded after it (first = the prefill argmax) and fills `want` with the plain-decode slice they must equal. Free of T? like
+//! parity_gen_ok: a T? param keeps the helper off the JIT, and the engine chain overflows the interpreter stack
+def private reject_rollback_ids(tr : Model; n_check : int64; var want : array<int64>) : array<int64> {
+    var got : array<int64>
+    let np = long_length(MTP_PROMPT)
+    let ref_ids <- greedy_gen(tr, MTP_PROMPT, int(n_check + 1l))
+    delete want
+    want <- copy_span(ref_ids, np - 1l, n_check + 1l)
+    with_dasllama_jobque() {
+        var s = make_run_state(tr.config)
+        forward_prefill(tr, s, MTP_PROMPT, np, 0l)
+        let tok = parallel_argmax(s.logits, tr.config.vocab_size)
+        got |> push(tok)
+        mtp_state_snapshot(s)
+        var vbatch <- [tok, 42l]   // 42 = arbitrary garbage draft
+        forward_prefill(tr, s, vbatch, 2l, np)
+        mtp_state_restore(s)
+        forward(tr, s, tok, np)   // re-advance through the accepted token alone
+        var tail <- greedy_from(tr, s, np + 1l, n_check)
+        got |> push_from(tail)
+        delete tail
+        delete s
+        delete vbatch
+    }
+    return <- got
+}
+
+//! a forced-reject round's outcome: the tokens decoded after it (first = the prefill argmax), the plain-decode slice they must
+//! equal, and whether the round accepted
+struct private RejectRound {
+    got : array<int64>
+    want : array<int64>
+    hit : bool
+}
+
+//! mtp_spec_eval with every draft rejected, then n_check plain steps that must equal plain decode on either rail; free of T? like reject_rollback_ids
+[cold_path]
+def private reject_round_ids(tr : Model; n_check : int64) : RejectRound {
+    var out : RejectRound
+    let np = long_length(MTP_PROMPT)
+    let ref_ids <- greedy_gen(tr, MTP_PROMPT, int(n_check + 1l))
+    out.want <- copy_span(ref_ids, np - 1l, n_check + 1l)
+    with_dasllama_jobque() {
+        let spec0 = get_mtp_spec()
+        set_mtp_spec(true)   // the prompt's head warm and the round both key off it, as generate_mtp_greedy arms it
+        var s = make_run_state(tr.config)
+        forward_prefill(tr, s, MTP_PROMPT, np, 0l)
+        s.n_past = np
+        let tok = parallel_argmax(s.logits, tr.config.vocab_size)
+        out.got |> push(tok)
+        out.hit = forced_reject_round(tr, s, tok)
+        set_mtp_spec(spec0)
+        var tail <- greedy_from(tr, s, np + 1l, n_check)
+        out.got |> push_from(tail)
+        delete tail
+        delete s
+    }
+    return <- out
+}
+
+//! the plain-vs-spec invariance pair on a loaded model: token-for-token equality and sane accept telemetry, `tag` naming the
+//! arm in the report
+def invariance_ok(t : T?; tr : Model; prompt : array<int64>; n_gen : int; tag : string) : array<int64> {
+    let total = length(prompt) + n_gen
+    var ref_ids <- greedy_gen(tr, prompt, n_gen)
+    var nd = 0l
+    var na = 0l
+    let spec_ids <- gen_spec(tr, prompt, total, nd, na)
+    log_gen_texts(tr, tag, ref_ids, spec_ids)
+    t |> success(ids_equal(ref_ids, spec_ids), "{tag}: spec decode token-for-token vs plain")
+    t |> success(nd > 0l, "{tag}: the draft head actually drafted ({nd} drafts, {nd - na} rejected on its own)")
+    return <- ref_ids
+}
+
+//! the same speculative decode with every third draft forced to reject: still `ref_ids` token for token, a third of its drafts
+//! or more rejected; the reject cadence goes back to what the getter read before
+def forced_invariance_ok(t : T?; tr : Model; prompt : array<int64>; n_gen : int; ref_ids : array<int64>; tag : string) {
+    let cadence_found = get_mtp_force_reject_every()
+    set_mtp_force_reject_every(3l)
+    var nd = 0l
+    var na = 0l
+    let forced_ids <- gen_spec(tr, prompt, length(prompt) + n_gen, nd, na)
+    set_mtp_force_reject_every(cadence_found)
+    log_gen_texts(tr, "{tag} forced", ref_ids, forced_ids)
+    t |> success(ids_equal(ref_ids, forced_ids), "{tag} forced: spec decode through the reject branch token-for-token vs plain")
+    t |> success(nd >= 3l && nd - na >= nd / 3l, "{tag} forced: {nd - na} of {nd} drafts rejected - reject branch covered")
+}
+
+//! The Qwen3.5-0.8B-MTP GGUF loads 24 trunk layers plus one NextN block with its eh_proj, enorm, hnorm and shared head norm, and with speculation off its trunk continues the plain file's frozen counting fixture token for token
+def private mtp_loader_cell(t : T?; tr : Model) {
+    unsafe {
+        t |> run("MTP/NextN loader (Qwen3.5-0.8B-MTP Q8): nextn extras + spec-off trunk parity") @capture(& tr)(t : T ?) {
+            // block_count INCLUDES the draft block: n_layers stays the trunk count, nextn rides extra
+            t |> equal(tr.config.n_layer_nextn, 1l)
+            t |> equal(tr.config.n_layers, 24l)
+            t |> success(tr.mtp_ehproj_off >= 0l && tr.mtp_enorm_off >= 0l && tr.mtp_hnorm_off >= 0l,
+                         "nextn eh_proj/enorm/hnorm loaded")
+            t |> success(tr.mtp_headnorm_off >= 0l, "nextn shared_head_norm loaded (qwen35 MTP files ship it)")
+            // spec OFF: the -MTP- file's trunk must continue the fixture exactly like the plain file
+            t |> success(parity_gen_ok(tr, MTP_PROMPT, MTP_WANT, eyeball = true), "spec-off token-for-token vs the plain-file oracle")
+        }
+    }
+}
+
+//! Under pinned kernels, `generate_mtp_greedy` on Qwen3.5-0.8B-MTP emits plain greedy decode's tokens exactly on the accept-heavy counting prompt and the reject-heavier prose prompt, with the head actually drafting
+def private mtp_output_invariance_cell(t : T?; tr : Model) {
+    unsafe {
+        t |> run("MTP self-spec greedy decode is output-invariant (Qwen3.5-0.8B-MTP Q8)") @capture(& tr)(t : T ?) {
+            with_pinned_kernels() {
+                // the counting fixture is accept-heavy: exercises the 2-row batched accept path + backfill
+                t |> invariance_ok(tr, MTP_PROMPT, 48, "counting")
+                // prose is reject-heavier: exercises rollback + single-token re-advance mid-loop
+                let prose <- encode(tr, "Once upon a time, there was a", true, false)
+                t |> invariance_ok(tr, prose, 40, "prose")
+            }
+        }
+    }
+}
+
+//! On the CPU rails the k-deep MTP round at depths 2, 3 (forced rejects) and 4 decodes the plain stream token for token, and depth 4 drafts and accepts more than depth 1 over the same 48 tokens, a rerun of depth 1 being the control
+def private mtp_kdeep_cell(t : T?; tr : Model) {
+    unsafe {
+        t |> run("the k-deep round on the CPU rails: depths 2 and 4 decode token-for-token the plain stream, depth 4 drafts and accepts more than depth 1 over the same tokens, and the forced reject at depth 3 rolls back to the accepted prefix") @capture(& tr)(t : T ?) {
+            if (moe_gpu_tier_installed()) {   // the CPU rails' claim: a GPU tier takes the classifier, and the CPU round then caps its depth at one
+                t |> skip("a GPU tier is armed (DASLLAMA_GPU): the k-deep CPU round needs the batched CPU classifier")
+                return
+            }
+            let pin = mtp_depth_pin()
+            with_pinned_kernels() {
+                var prose <- encode(tr, "Once upon a time, there was a", true, false)
+                set_mtp_depth(1l)
+                var nd1 = 0l
+                var na1 = 0l
+                let ids1 <- gen_spec(tr, MTP_PROMPT, length(MTP_PROMPT) + 48, nd1, na1)
+                // the control for the accepts-more bound: the same depth again accepts the same count, which lands outside `>`
+                var nd1b = 0l
+                var na1b = 0l
+                let ids1b <- gen_spec(tr, MTP_PROMPT, length(MTP_PROMPT) + 48, nd1b, na1b)
+                set_mtp_depth(2l)
+                let ref2 <- t |> invariance_ok(tr, MTP_PROMPT, 48, "depth 2 counting")
+                t |> invariance_ok(tr, prose, 40, "depth 2 prose")
+                set_mtp_depth(4l)
+                var nd4 = 0l
+                var na4 = 0l
+                let ids4 <- gen_spec(tr, MTP_PROMPT, length(MTP_PROMPT) + 48, nd4, na4)
+                log_gen_texts(tr, "depth 1 counting: plain, speculative", ref2, ids1)
+                log_gen_texts(tr, "depth 4 counting: plain, speculative", ref2, ids4)
+                t |> success(ids_equal(ids4, ref2) && ids_equal(ids1, ref2), "depth 4 and depth 1 counting: token-for-token vs plain")
+                t |> success(nd4 > nd1 && na4 > na1, "depth 4 drafts and accepts more than depth 1 over the same 48 tokens ({nd4} drafts, {na4} accepted vs {nd1}, {na1})")
+                t |> success(ids_equal(ids1b, ids1) && na1b == na1 && !(na1b > na1), "control: depth 1 run again accepts the same count ({na1b} vs {na1}) - the accepts-more bound can fail")
+                t |> invariance_ok(tr, prose, 40, "depth 4 prose")
+                set_mtp_depth(3l)
+                forced_invariance_ok(t, tr, MTP_PROMPT, 48, ref2, "depth 3 counting")
+                delete prose
+            }
+            restore_mtp_depth(pin)
+        }
+    }
+}
+
+//! A poisoned 2-row verify undone by `mtp_state_restore`, and a forced-reject round through the engine seam, both leave the next 6 decoded tokens equal to plain decode, and the device counts a rollback exactly when it served the verify
+def private mtp_reject_rollback_cell(t : T?; tr : Model) {
+    unsafe {
+        t |> run("MTP rollback: poisoned 2-row verify + restore replays plain decode exactly, and a forced-reject round through the engine's seam does too") @capture(& tr)(t : T ?) {
+            with_pinned_kernels() {
+                var want : array<int64>
+                let got <- reject_rollback_ids(tr, 6l, want)
+                to_log(LOG_INFO, "manual reject: plain decode '{decode_(tr, want)}' {want}, post-rollback '{decode_(tr, got)}' {got}\n")
+                t |> success(ids_equal(got, want), "post-rollback decode token-for-token vs plain")
+                let rollbacks0 = moe_gpu_resident_rollbacks()
+                let verifies0 = moe_gpu_resident_verifies()
+                let round <- reject_round_ids(tr, 6l)
+                t |> success(!round.hit, "the forced reject rejected the round's draft")
+                to_log(LOG_INFO, "forced-reject round: plain decode '{decode_(tr, round.want)}' {round.want}, post-reject '{decode_(tr, round.got)}' {round.got}\n")
+                t |> success(ids_equal(round.got, round.want), "forced-reject round: post-reject decode token-for-token vs plain")
+                let served = moe_gpu_resident_verifies() - verifies0
+                let rolled = moe_gpu_resident_rollbacks() - rollbacks0
+                to_log(LOG_INFO, "forced-reject round: {served} device verify served, {rolled} device rollback counted (resident driver active {moe_gpu_resident_active()})\n")
+                t |> equal(rolled, served, "the device rolled the reject back exactly when it served the verify ({served} served, {rolled} rolled back; an f32 session under an f16 mirror passes both as codec)")
+            }
+        }
+    }
+}
+
+let private SEAM_PROMPT = 20l   //! the first window's rows; the continuation window starts here
+var private g_probe_seam_calls = 0l
+var private g_probe_seam_serves = false
+var private g_probe_seam_tok = -1l
+var private g_probe_seam_pos = -1l
+var private g_probe_window_active = false
+var private g_probe_prefill_calls = 0l
+
+[unused_argument(t)]
+def private probe_owner(t : Model) : bool => true
+
+//! the seam probe: records the token and position it was asked for, and serves or declines as `g_probe_seam_serves` says
+[unused_argument(t, s)]
+def private probe_seam(t : Model; var s : Session; token, pos : int64) : bool {
+    g_probe_seam_calls++
+    g_probe_seam_tok = token
+    g_probe_seam_pos = pos
+    return g_probe_seam_serves
+}
+
+//! the prefill probe: claims the whole stack and its logits without computing either, and reads the session's verify window as it runs
+[unused_argument(t, npos, start_pos)]
+def private probe_prefill(t : Model; var s : Session; npos, start_pos : int64) : bool {
+    g_probe_prefill_calls++
+    g_probe_window_active = mtp_verify_window_active(s)
+    prefill_override_logits_done()
+    return true
+}
+
+//! the embed probe: claims the prompt's embed rows without gathering them, so a planar model flagged a blob reads no blob plane before the prefill probe claims the window
+[unused_argument(t, s, npos, start_pos)]
+def private probe_embed(t : Model; s : Session; npos, start_pos : int64) : bool => true
+
+let private PROBE_SEAM = "mtp_seam_probe"   //! a fake decode override whose owner claims every model and whose seam seat is the probe
+let private PROBE_PREFILL = "mtp_prefill_probe"   //! a fake prefill override that serves every window without computing it
+
+//! every byte of the head's K row `row` set to 0xFF: a row the CPU seam rewrites moves off it, a row nothing wrote keeps it
+def private poison_head_k_row(tr : Model; var s : Session; row : int64) {
+    let c = tr.config
+    let rowb = kv_row_bytes(s.kv_dtype_k, layer_kv_dim(c, c.n_layers))
+    var kp = kv_layer_kbase(s, c.n_layers, c.seq_len)
+    for (i in range64(rowb)) {
+        unsafe(kp[row * rowb + i]) = uint8(0xFF)
+    }
+}
+
+//! a continuation window of `tokens` at `SEAM_PROMPT` on a session prefilled over the fixture's first `SEAM_PROMPT` rows with
+//! speculation on, the head's seam row poisoned first, under the seam probe (`serves`) and, under `blob`, the model flagged a
+//! blob with the prefill probe claiming the window: true when the seam row kept its poison (the CPU seam never ran)
+[cold_path]
+def private seam_row_kept(var tr : Model; serves, blob : bool) : bool {
+    var kept = false
+    with_dasllama_jobque() {
+        let spec0 = get_mtp_spec()
+        set_mtp_spec(true)
+        var s = make_run_state(tr.config)
+        var first <- [for (i in range64(SEAM_PROMPT)); MTP_PROMPT[i % long_length(MTP_PROMPT)]]
+        var next <- [for (i in range64(4l)); MTP_PROMPT[(i + 3l) % long_length(MTP_PROMPT)]]
+        forward_prefill(tr, s, first, SEAM_PROMPT, 0l)
+        s.n_past = SEAM_PROMPT
+        poison_head_k_row(tr, s, SEAM_PROMPT - 1l)
+        register_decode_override(PROBE_SEAM, @@decode_declines)
+        register_mtp_seat_owner(PROBE_SEAM, @@probe_owner)
+        register_mtp_seam_override(PROBE_SEAM, @@probe_seam)
+        register_prefill_override(PROBE_PREFILL, @@probe_prefill)
+        let decode0 = active_decode_override()
+        let prefill0 = active_prefill_override()
+        select_decode_override(PROBE_SEAM)
+        let embed_had = embed_gpu_gate_installed()
+        let embed0 = embed_gpu_gate()
+        if (blob) {
+            select_prefill_override(PROBE_PREFILL)
+            register_embed_gpu_gate(@@probe_embed)
+            tr.metal_blob = true
+        }
+        g_probe_seam_serves = serves
+        g_probe_seam_calls = 0l
+        forward_prefill(tr, s, next, long_length(next), SEAM_PROMPT)
+        tr.metal_blob = false
+        if (embed_had) {
+            register_embed_gpu_gate(embed0)
+        } else {
+            unregister_embed_gpu_gate()
+        }
+        select_prefill_override(prefill0)
+        select_decode_override(decode0)
+        set_mtp_spec(spec0)
+        var row <- head_k_row_bytes(tr, s, SEAM_PROMPT - 1l)
+        kept = all(row, $(b) => b == uint8(0xFF))
+        delete row
+        delete s
+        delete first
+        delete next
+    }
+    return kept
+}
+
+//! In a continuation prefill a seam seat that serves leaves the head's poisoned K row untouched after one call for the window's first token and position, a declined seat on a planar model rewrites it on the CPU, and on a blob model nothing writes it
+def private mtp_prefill_seam_cell(t : T?; var tr : Model) {
+    unsafe {
+        t |> run("the continuation prefill's seam row (Qwen3.5-0.8B-MTP Q8): a seam seat that serves skips the CPU seam, a declined seat on a planar model falls to it, and a declined seat on a blob model warns and writes nothing") @capture(& tr)(t : T ?) {
+            t |> success(seam_row_kept(tr, true, false), "a seam seat that serves: the CPU seam never wrote the head's row {SEAM_PROMPT - 1l} (its poison stands)")
+            t |> equal(g_probe_seam_calls, 1l, "the seat was asked once")
+            t |> equal(g_probe_seam_tok, MTP_PROMPT[3], "... for the window's first token")
+            t |> equal(g_probe_seam_pos, SEAM_PROMPT, "... at the window's start")
+            t |> success(!seam_row_kept(tr, false, false), "a declined seat on a planar model: the CPU seam wrote the head's row {SEAM_PROMPT - 1l} (the control - its poison moved)")
+            t |> equal(g_probe_seam_calls, 1l, "the seat was asked once and declined")
+            t |> success(seam_row_kept(tr, false, true), "a declined seat on a blob model (the prefill probe claiming the window): the seam row is left to the driver - nothing wrote it, the warning names the position")
+            t |> equal(g_probe_prefill_calls, 1l, "the prefill probe claimed the window")
+        }
+    }
+}
+
+//! A fake prefill driver that serves the CPU MTP round's speculative verify window makes `mtp_spec_eval` panic naming the driver, with the verify-window flag up only while it runs and down for the prompt prefill and after the round
+def private mtp_verify_window_cell(t : T?; tr : Model) {
+    unsafe {
+        t |> run("the CPU round's fail-closed exit (Qwen3.5-0.8B-MTP Q8): a prefill driver that serves the speculative verify window - the verify-window flag up while it runs, down outside the round - panics naming the driver") @capture(& tr)(t : T ?) {
+            let why = verify_window_panic(tr)
+            to_log(LOG_INFO, "served verify window: {empty(why) ? "no panic" : why}\n")
+            t |> success(contains(why, "served a speculative verify window") && contains(why, PROBE_PREFILL), "the CPU round panics naming the prefill driver that served its verify window: '{why}'")
+            t |> success(g_probe_window_active, "the session's verify window was up while the driver served it")
+            t |> success(!g_probe_window_after, "... and is down on the session outside the round")
+            t |> success(!g_probe_window_outside, "... and was down for the prompt's own prefill under the same driver")
+        }
+    }
+}
+
+var private g_probe_window_outside = false
+var private g_probe_window_after = false
+
+//! the fixture prefilled on the CPU with speculation on, then one round under the prefill probe claiming every window: the
+//! panic's text, "" where none fired; the probe's window reading for the prompt's own prefill lands in `g_probe_window_outside`,
+//! the session's window after the round in `g_probe_window_after`
+[cold_path]
+def private verify_window_panic(tr : Model) : string {
+    var why = ""
+    with_dasllama_jobque() {
+        let np = long_length(MTP_PROMPT)
+        let spec0 = get_mtp_spec()
+        set_mtp_spec(true)
+        var s = make_run_state(tr.config)
+        forward_prefill(tr, s, MTP_PROMPT, np, 0l)
+        s.n_past = np
+        let tok = parallel_argmax(s.logits, tr.config.vocab_size)
+        register_prefill_override(PROBE_PREFILL, @@probe_prefill)
+        let prefill0 = active_prefill_override()
+        select_prefill_override(PROBE_PREFILL)
+        var s2 = make_run_state(tr.config)
+        forward_prefill(tr, s2, MTP_PROMPT, np, 0l)   // the prompt through the probe: the flag must read down here
+        g_probe_window_outside = g_probe_window_active
+        delete s2
+        why = panic_text() $ {
+            var acc = 0l
+            mtp_spec_eval(tr, s, tok, acc)
+        }
+        g_probe_window_after = mtp_verify_window_active(s)
+        select_prefill_override(prefill0)
+        set_mtp_spec(spec0)
+        delete s
+    }
+    return why
+}
+
+//! the q8 CPU form's cells on `tr`, its context cut to MTP_CELLS_CTX for them: the loader, output-invariance, k-deep, rollback,
+//! prefill-seam and verify-window cells in turn, each on its own sessions
+def mtp_cpu_cells(t : T?; var tr : Model) {
+    with_ctx_cut(tr, MTP_CELLS_CTX) {
+        mtp_loader_cell(t, tr)
+        mtp_output_invariance_cell(t, tr)
+        mtp_kdeep_cell(t, tr)
+        mtp_reject_rollback_cell(t, tr)
+        mtp_prefill_seam_cell(t, tr)
+        mtp_verify_window_cell(t, tr)
+    }
+}
+
+//! the q4_0 CPU form's cell on `tr` (the Q8 file requantized to the q4_0 tier), its context cut to MTP_CELLS_CTX: self-spec
+//! greedy decode emits plain decode's tokens exactly on the counting prompt and the head drafts
+def mtp_q4_0_cell(t : T?; var tr : Model) {
+    with_ctx_cut(tr, MTP_CELLS_CTX) {
+        unsafe {
+            t |> run("MTP self-spec greedy decode rides the q4_0 requant tier (Qwen3.5-0.8B-MTP Q8 -> q4_0)") @capture(& tr)(t : T ?) {
+                with_pinned_kernels() {
+                    t |> invariance_ok(tr, MTP_PROMPT, 48, "q4_0 counting")
+                }
+            }
+        }
+    }
+}
+
+//! the hyper-connection carrier Qwen3.8-Flash-Next `tr` (q8, its split shared Q8_0 head pinned at the load), its context cut to
+//! MTP_CELLS_CTX: the draft head's own head mixer loaded, and self-speculative decode of the counting prompt (every Qwen-vocab
+//! carrier continues it identically) emits plain decode's tokens exactly, forced rejects included
+def mtp_flashnext_invariance_cell(t : T?; var tr : Model) {
+    with_ctx_cut(tr, MTP_CELLS_CTX) {
+        unsafe {
+            t |> run("MTP self-spec output-invariance (Qwen3.8-Flash-Next + split shared head, the wide-residual carry)") @capture(& tr)(t : T ?) {
+                t |> equal(tr.config.n_layer_nextn, 1l)
+                t |> equal(tr.config.n_layers, 48l)
+                t |> success(tr.config.hyper_conn, "the carrier is the hyper-connection arch")
+                t |> success(tr.mtp_hc_head_norm_off >= 0l && tr.mtp_hc_head_down_off >= 0l && tr.mtp_hc_head_up_off >= 0l,
+                             "the draft head's own head mixer loaded")
+                let count <- [16l, 11l, 220l, 17l, 11l, 220l, 18l, 11l, 220l, 19l, 11l, 220l, 20l, 11l, 220l, 21l, 11l, 220l, 22l, 11l]
+                with_pinned_kernels() {
+                    let ref_ids <- invariance_ok(t, tr, count, 40, "counting-flashnext")
+                    forced_invariance_ok(t, tr, count, 40, ref_ids, "counting-flashnext")
+                }
+            }
+        }
+    }
+}

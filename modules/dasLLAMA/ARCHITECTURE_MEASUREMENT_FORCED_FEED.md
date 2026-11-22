@@ -8,7 +8,7 @@ are. The benchmark rig, the tune gate and the instrumentation rails stay in
 
 ### The reference build's forced feed on the E2B Q4_K_M {#reference-forced-feed}
 
-The forced-feed cells (`tests/_gemma_resident.das`'s `gemma_forced_feed`, `prose_feed`) feed a
+The forced-feed cells (`tests/_cpu_gpu_model.das`'s `prose_feed_rows` over `prose_feed`) feed a
 prompt of 40 prose ids - the paragraph `prose_tokens` repeats, BOS first - then 8 more ids of the
 same text one step each, and read the logits row of the prompt's last position and of every
 step. The reference figures beside them come from the same 48 ids fed through the reference
@@ -27,7 +27,7 @@ probe's, never parity evidence (`REVIEW_GPU_PARITY.md`):
   UBATCH FA` - `NP 40`, `n_ubatch` 512 or 16, `flash_attn_type` -1 (auto) or 0 (off); every row's
   logits written as raw f32.
 - The compare: each run's rows against the file's f32 chain (this engine at `QuantMode.fp32`,
-  `f32_chain_rows`), the top logit at step 4.
+  the block's fp32 form, `ple_f32_feed_within`), the top logit at step 4.
 
 Step 4's top logit, where the f32 chain reads 19.14: 17.92 at `n_ubatch` 512 or 16 with flash
 attention auto, 20.09 at 16 with it off, 18.67 and 17.83 in one batch (auto, off), 19.32 and

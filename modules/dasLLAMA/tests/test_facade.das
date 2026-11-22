@@ -20,12 +20,15 @@ require daslib/strings_boost
 require strings
 require daslib/env_registry
 require _model_tier   // llama2c_dir
+require _facade_cells   // facade_model_cell: the model facade's cell on a loaded Qwen2.5-0.5B
+require _compares   // full_suite_only: the exe smoke's two builds run in the full suite alone
 require ../../dasLLVM/tests/_exe_test_common.das   // lto_driver_missing - the LTO driver gate the dasLLVM exe tests share
 require ../../dasLLVM/tests/_spawn_common.das      // with_child_log_info - the build announces its form at LOG_INFO
 
 // The unified tokenizer facade (encode/decode/piece over auto-selected SPM/BPE) must produce
 // exactly what a caller writes today against the raw backend — so migrating onto it is a no-op.
 // GGUF models are gitignored multi-GB files; each case skips cleanly when its model is absent.
+// The exe smoke skips outside the full suite (DASLLAMA_PARITY_FULL=1): its two -jit -exe builds run past any test wall.
 
 // Regression (Copilot #3340): SPM encode/decode must use the per-model bos_id/eos_id loaded from
 // GGUF, not the struct defaults 1/2 — Gemma has bos=2 / eos=1. Empty text isolates the BOS/EOS
@@ -107,27 +110,6 @@ def test_facade_bpe(t : T?) {
         t |> success(ok, "bpe dispatch + encode/decode parity")
         delete raw
         delete v
-    }
-}
-
-[test(description = "`load_model_` populates the model's BPE tokenizer, and the model-level encode and piece return exactly what the tokenizer's own calls return")]
-def test_facade_model(t : T?) {
-    t |> run("load_model_ owns the tokenizer; model facade delegates") @(t : T?) {
-        let path = path_join(models_dir(), "Qwen2.5-0.5B-Instruct-Q8_0.gguf")
-        if (!stat(path).is_valid) {
-            t |> skip("{path} not present")
-            return
-        }
-        var m <- load_model_(path, QuantMode.q8)
-        let text = "Hello, world"
-        let via_model <- encode(m, text, true, false)
-        let via_tok <- encode(m.tok, text, true, false)
-        let last = via_model[length(via_model) - 1]
-        let ok = (m.tok.kind == TokKind.bpe &&
-            ids_equal(via_model, via_tok) &&
-            piece(m, last) == piece(m.tok, last))
-        t |> success(ok, "model.tok populated + encode/piece delegate")
-        delete m
     }
 }
 
@@ -301,8 +283,9 @@ def private smoke_build_and_run(t : T?; tag : string; jit_args : array<string>; 
     rmdir_rec_result(dir)
 }
 
-[test(description = "A standalone `-jit -exe` build of the facade root, as one unit and split with LTO, announces its build form and the artifact completes a 4-token SmolLM2 generate on the serialized-globals rail, so every function-typed global is boot-restored", timeout = 1200)]
+[test(description = "In the full suite a standalone `-jit -exe` build of the facade root, as one unit and split with LTO, announces its build form and the artifact completes a 4-token SmolLM2 generate on the serialized-globals rail, so every function-typed global is boot-restored", timeout = 1200)]
 def test_exe_smoke(t : T?) {
+    return if (full_suite_only(t, "two `-jit -exe` builds of the facade root, about 100 s each"))
     t |> run("a -jit -exe build of the facade generates on the serialized-globals rail") @(t : T?) {
         smoke_build_and_run(t, "one unit", [], "standalone exe entry point generated", "split codegen (--jit-split-modules)")
     }

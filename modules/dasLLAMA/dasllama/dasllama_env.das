@@ -650,7 +650,7 @@ struct public VulkanEnv {
 
     @clarg_path
     @clarg_default_doc = ".cache/daslang/cuda under the working directory"
-    @clarg_doc = "The folder of the CUDA home's cubin cache: every kernel text NVRTC compiled, under a key of the toolkit, the driver, the options and the text, which a process's first kernel load prewarms on job workers and every load reads. A fleet keeps it on a shared volume so a fresh pod compiles nothing."
+    @clarg_doc = "The folder of the CUDA home's cubin cache: every kernel text NVRTC compiled, under a key of the toolkit, the driver, the options and the text, which a process's first kernel load prewarms on job workers and every load reads. The fleet's run fills it ahead of the suites (`harness/cuda_prewarm.das`)."
     cuda_cache_dir : string = ""
 
     @clarg_path

@@ -162,6 +162,7 @@ def private try_convert(e : ProvEntry; path : string; var canary_done : bool&) {
 // are the acceptance test — curl's exit status is not (run_capture swallows it anyway)
 def private fetch_one(e : ProvEntry; path : string) {
     to_log(LOG_INFO, "fetch_models: START {e.name} ({e.bytes / 1000000l} MB)\n")
+    mkdir_rec(dir_name(path))
     run_capture("curl -sSL -C - --retry 5 --retry-delay 10 -o \"{path}\" \"{e.url}\"", false)
 }
 

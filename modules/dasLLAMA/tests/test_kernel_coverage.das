@@ -1400,8 +1400,8 @@ let private VK_CENSUS_NEVER_DISPATCHED <- [
     // engage (a batched step here rides f32 sessions on the per-op rails); the q8 row-pair stamps serve only past
     // `g_q8_n2_min_n`, off until a box's token command proves the pair. Their coverage is test_vkd_gemv_ncol in
     // test_vulkan_kernels.das; the stocked carriers are the regions files - test_gpu_resident_qwen3.das and
-    // the gemma files for q8, test_gpu_resident_regions_kquant.das for k4 and k6, test_gpu_resident_regions_hybrid_formats.das
-    // for iq3s (its iq3s cells) and the eight low-bit leaves (its q3kxl cells)
+    // the gemma files for q8, the Llama-3.2-1B Q4_K_M block of test_gpu_resident_llama.das for k4 and k6,
+    // test_gpu_resident_regions_hybrid_formats.das for iq3s (its iq3s cells) and the eight low-bit leaves (its q3kxl cells)
     "q8_gemv_n2_cls_spv", "q8_gemv_n4_cls_spv", "q8_gemv_n8_cls_spv",
     "q8_gemv_n2p_cls_spv", "q8_gemv_n4p_cls_spv", "q8_gemv_n8p_cls_spv",
     "kq_gemv_k4_n_cls_spv", "kq_gemv_k5_n_cls_spv", "kq_gemv_k6_n_cls_spv", "kq_gemv_q40_n_cls_spv", "kq_gemv_iq4xs_n_cls_spv", "kq_gemv_iq3s4_n_cls_spv",
@@ -1412,7 +1412,8 @@ let private VK_CENSUS_NEVER_DISPATCHED <- [
     "kq_gemv_iq4nl_n4_cls_spv", "kq_gemv_nv4_n4_cls_spv", "kq_gemv_iq2s_n4_cls_spv", "kq_gemv_iq2xs_n4_cls_spv", "kq_gemv_iq2xxs_n4_cls_spv",
     // the DFlash2 block drafter's pass, top-k and selector walk serve only a drafter attached beside a target, and no census
     // row loads one; their coverage is test_vkt_dflash_pass_kernels, test_vkt_dflash_topk and test_vkt_dflash_walk in
-    // test_vulkan_tower_kernels.das, the stocked carriers the dflash-e2b-discrete and dflash-27b-discrete arms of test_dflash_drafter.das
+    // test_vulkan_tower_kernels.das, the stocked carriers the E2B block's drafter form in test_gpu_resident_gemma4_e2b.das and
+    // the dflash-27b-discrete arm of test_dflash_drafter.das
     "dflash_conv_cls_spv", "dflash_qkn_cls_spv", "dflash_attn_tile_cls_spv", "dflash_attn_merge_cls_spv", "dflash_topk_slices_cls_spv", "dflash_topk_merge_cls_spv",
     "dflash_walk_cls_spv",
     // the fused gate-up GEMV's N stamps serve only the N-row token command, which the zoo's one-region load never engages

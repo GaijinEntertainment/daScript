@@ -1148,23 +1148,8 @@ def private device_rows_if(tr : Model; prompt, toks : array<int64>; go : bool) :
 //! 0.91 (3.42 against 3.77)
 let F32_DIST_REL = 1.15
 
-//! `prompt` then `toks` through the file at `path` loaded again at `QuantMode.fp32` on the CPU, the device state dropped: the file's
-//! f32 chain, the reference where the CPU q8 chain's activation quantization rounds the device and itself to either side of it
-def f32_chain_rows(path : string; prompt, toks : array<int64>) : array<array<float>> {
-    var f32_model <- load_model_(path, QuantMode.fp32)
-    moe_gpu_drop_model()
-    var rows <- feed_alone(f32_model, mirror_kv_dtype(), prompt, toks)
-    delete f32_model
-    return <- rows
-}
-
-//! the same-or-better witness: the device no further from the f32 chain's rows than `ratio` of the CPU q8 chain's own
-//! summed distance, the f32 rows one step off past that bound; `tr` decodes the logged picks
-def f32_chain_witness(t : T?; tr : Model; what : string; fed : FeedPair; f32_rows : array<array<float>>; ratio : float = F32_DIST_REL) {
-    f32_chain_witness(t, what, fed.gpu, fed.cpu, f32_rows, ratio) $(id) => decode_(tr, [id])
-}
-
-//! `f32_chain_witness` on the device's rows `gpu` and the CPU q8 chain's `cpu`, `piece` decoding the logged picks
+//! the same-or-better witness: the device's rows `gpu` no further from the f32 chain's rows than `ratio` of the CPU q8 chain's
+//! (`cpu`) own summed distance, the f32 rows one step off past that bound; `piece` decodes the logged picks
 def f32_chain_witness(t : T?; what : string; gpu, cpu, f32_rows : array<array<float>>; ratio : float; piece : block<(id : int64) : string>) {
     let dist = chain_distances(t, what, gpu, cpu, f32_rows, 0, "the f32 chain", "the CPU q8 chain", piece)
     t |> success(dist.dev_ref <= ratio * dist.cpu_ref, "{what}: the device sits no further from the f32 chain ({dist.dev_ref}) than {ratio} of the CPU q8 chain's own distance ({dist.cpu_ref})")
@@ -1175,22 +1160,6 @@ def f32_chain_witness(t : T?; what : string; gpu, cpu, f32_rows : array<array<fl
 //! the caller's witnesses), every row held by `feed_steps_within` at `bar_rel` under `tag`
 def forced_feed_over(t : T?; tr : Model; tag : string; n, steps : int64; bar_rel : float; after_gpu : block<void>) {
     forced_feed_over(t, tr, tag, n, steps, bar_rel, 0l, after_gpu)
-}
-
-def forced_feed_f32_witness(t : T?; tr : Model; path, tag : string; n, steps : int64; ratio : float; after_gpu : block<void>) {
-    //! the forced feed held by the f32-chain witness in place of the per-row bar, for a device lane whose activations the CPU
-    //! chain does not quantize the same way (the FP4 tensor leaf's e2m1 rows): the device no further from the file's f32 chain
-    //! than `ratio` of the CPU chain's own distance, the one-step-off rows past that bound; `f32_chain_rows` loads the file at
-    //! `path` again and drops the device model, so `after_gpu`'s counter reads run first
-    var prompt <- resident_prompt(n)
-    var toks <- resident_feed(steps)
-    var fed <- resident_then_cpu_feed(t, tr, prompt, toks, after_gpu)
-    var f32_rows <- f32_chain_rows(path, prompt, toks)
-    f32_chain_witness(t, tr, "{tag}prefill ({n} tokens) and {steps} steps [{tile_arm_tag()}]", fed, f32_rows, ratio)
-    delete f32_rows
-    delete fed
-    delete prompt
-    delete toks
 }
 
 //! the same over the prompt `resident_prompt(n, salt)`
@@ -1394,27 +1363,12 @@ def chain_walk(tr : Model; prompt : array<int64>; steps, off_every : int64; mode
     return <- w
 }
 
-//! the greedy chain (`../ARCHITECTURE_GPU_VULKAN_LANDING.md#vk-greedy-chain`) on the carrier at `path`, on the armed discrete home
-//! (`chain_home`): a walk fed the argmax and
-//! one fed a token off it every third step, each with the chain off and forced on - the chained walk's tokens and every step's
-//! logits bit for bit the plain walk's, every step after the first a hit on the argmax walk, and on the other every off-pick
-//! step a miss (its state put back) and every other step a hit
-//! The adaptive mode (-1) runs both walks too: the same tokens and
-//! logits, each miss but the last backing off the next step's chain.
-[cold_path]
-def greedy_chain_cell(t : T?; path : string) {
-    if (!resident_ready(t, path)) return
-    var tr <- load_resident(path, 1l)
-    t |> success(moe_gpu_resident_active(), "the whole-model driver armed on the model (the load log names any decline)")
-    var inscope h : Held
-    with_dasllama_jobque_() {
-        greedy_chain_rows(h, tr, path)
-    }
-    held_within(t, h)
-    delete tr
-}
-
-//! the greedy chain cell's walks on `tr`, armed at one mirror region, inside the engine's job queue; its asserts held
+//! the greedy chain (`../ARCHITECTURE_GPU_VULKAN_LANDING.md#vk-greedy-chain`) on `tr`, armed at one mirror region, on the armed
+//! discrete home (`chain_home`), inside the engine's job queue: a walk fed the argmax and one fed a token off it every third step,
+//! each with the chain off and forced on - the chained walk's tokens and every step's logits bit for bit the plain walk's, every
+//! step after the first a hit on the argmax walk, and on the other every off-pick step a miss (its state put back) and every
+//! other step a hit. The adaptive mode (-1) runs both walks too: the same tokens and logits, each miss but the last backing off
+//! the next step's chain. Its asserts held
 def greedy_chain_rows(var h : Held; tr : Model; path : string) {
     if (!chain_home()) {
         h |> held_skip("no discrete GPU home on this build: the greedy chain is the Vulkan and CUDA drivers'")
@@ -1559,50 +1513,41 @@ def private home_kernel_skip(frags : string) {
     }
 }
 
-//! the kernel-skip setter drops the commands the home already recorded: on the resident trunk at `path`, a prompt and a step
-//! record the step's commands; a step with no skip is the control (`skip_stem`'s census moves exactly where `other`'s does - both
-//! rise on a home that records each step, neither where it replays); a step under a skip naming `skip_stem` counts no dispatch
-//! of it and dispatches `other` again (the commands recorded anew, never the old ones replayed); the skip cleared, a step
-//! dispatches `skip_stem` again. `skip_stem` and `other` are census stems (`<stem>_spv`, the CUDA home's `<stem>_cuda`)
-def kernel_skip_cell(t : T?; path : string; skip_stem, other : string) {
-    var tr <- resident_trunk(t, path, 512l, "") $() : Model {
-        return <- load_resident(path)
-    }
-    if (tr.config.n_layers == 0l) {
-        delete tr
-        return
-    }
+//! the kernel-skip setter drops the commands the home already recorded, on the resident trunk `tr` loaded off `path`, armed by
+//! the caller, inside the caller's job queue: a prompt and a step record the step's commands; a step with no skip is the control
+//! (`skip_stem`'s census moves exactly where `other`'s does - both rise on a home that records each step, neither where it
+//! replays); a step under a skip naming `skip_stem` counts no dispatch of it and dispatches `other` again (the commands recorded
+//! anew, never the old ones replayed); the skip cleared, a step dispatches `skip_stem` again. `skip_stem` and `other` are census
+//! stems (`<stem>_spv`, the CUDA home's `<stem>_cuda`)
+def kernel_skip_rows(t : T?; var tr : Model; path, skip_stem, other : string) {
     let ks = "{skip_stem}_spv"
     let ko = "{other}_spv"
     t |> success(census(ks) >= 0l && census(ko) >= 0l, "the home stamps both census kernels ({ks}: {census(ks)}, {ko}: {census(ko)})")
-    with_dasllama_jobque_() {
-        var s <- create_session(tr)
-        var prompt <- resident_prompt(40l)
-        eval_(tr, s, prompt)
-        var one <- [3000l]
-        eval_(tr, s, one)
-        let c0k = census(ks)
-        let c0o = census(ko)
-        eval_(tr, s, one)
-        let ctl_k = census(ks) - c0k
-        let ctl_o = census(ko) - c0o
-        to_log(LOG_INFO, "{path} kernel skip: the unskipped step dispatched {ks} {ctl_k} and {ko} {ctl_o} time(s)\n")
-        t |> equal(ctl_k > 0l, ctl_o > 0l, "control: with no skip {ks} dispatches ({ctl_k}) exactly where {ko} does ({ctl_o})")
-        home_kernel_skip(skip_stem)
-        let k0 = census(ks)
-        let o0 = census(ko)
-        eval_(tr, s, one)
-        t |> equal(census(ks) - k0, 0l, "under the skip {ks} is not dispatched")
-        t |> success(census(ko) > o0, "the recorded commands were dropped: the skipped step dispatched {ko} anew ({census(ko) - o0})")
-        home_kernel_skip("")
-        let k1 = census(ks)
-        eval_(tr, s, one)
-        t |> success(census(ks) > k1, "the skip cleared: the next step dispatches {ks} again ({census(ks) - k1})")
-        delete one
-        delete prompt
-        delete s
-    }
-    delete tr
+    var s <- create_session(tr)
+    var prompt <- resident_prompt(40l)
+    eval_(tr, s, prompt)
+    var one <- [3000l]
+    eval_(tr, s, one)
+    let c0k = census(ks)
+    let c0o = census(ko)
+    eval_(tr, s, one)
+    let ctl_k = census(ks) - c0k
+    let ctl_o = census(ko) - c0o
+    to_log(LOG_INFO, "{path} kernel skip: the unskipped step dispatched {ks} {ctl_k} and {ko} {ctl_o} time(s)\n")
+    t |> equal(ctl_k > 0l, ctl_o > 0l, "control: with no skip {ks} dispatches ({ctl_k}) exactly where {ko} does ({ctl_o})")
+    home_kernel_skip(skip_stem)
+    let k0 = census(ks)
+    let o0 = census(ko)
+    eval_(tr, s, one)
+    t |> equal(census(ks) - k0, 0l, "under the skip {ks} is not dispatched")
+    t |> success(census(ko) > o0, "the recorded commands were dropped: the skipped step dispatched {ko} anew ({census(ko) - o0})")
+    home_kernel_skip("")
+    let k1 = census(ks)
+    eval_(tr, s, one)
+    t |> success(census(ks) > k1, "the skip cleared: the next step dispatches {ks} again ({census(ks) - k1})")
+    delete one
+    delete prompt
+    delete s
 }
 
 //! what one check of a cell holds off a loaded model for the asserts after the model's block (`held_within`): a condition read

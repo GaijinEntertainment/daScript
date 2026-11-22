@@ -8,7 +8,7 @@ options _dasllama_internal = true
 //! written once, generic over the rig: a case lays its planes with the rig's verbs, launches the home's stamp through its
 //! rail overload `enc_<cls>(rl, seats(...), ...)` on the rail `cell_launch` seats the planes on, and holds what the stamp
 //! wrote to its CPU oracle, its controls and the lanes past its run. The `[test]` shells, the device skip and the stamps'
-//! build asserts stay each home's.
+//! build asserts stay each home's. No case loads a model.
 module _discrete_cells shared public
 
 require dastest/testing_boost public

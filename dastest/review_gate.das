@@ -49,6 +49,23 @@ def gate_verdict(name : string) : int {
     return 1
 }
 
+//! The command-line arguments after `flag` up to the next `--`
+//! flag: a gate's fixture rail, `-- --<rail> <arg>...`.
+def gate_flag_args(flag : string) : array<string> {
+    var out : array<string>
+    var on = false
+    for (a in get_command_line_arguments()) {
+        if (a == flag) {
+            on = true
+        } elif (a |> starts_with("--")) {
+            on = false
+        } elif (on) {
+            out |> push(a)
+        }
+    }
+    return <- out
+}
+
 //! True for `like-this` names: lowercase [a-z0-9] runs joined by single hyphens.
 def is_kebab_case(name : string) : bool => regex_match(KEBAB, name) >= 0
 

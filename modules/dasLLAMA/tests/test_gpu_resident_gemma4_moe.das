@@ -10,29 +10,16 @@ require _cpu_gpu_model   // with_cpu_and_gpu_model, the forms
 require _resident_feed   // with_cuda_mmq_winners, Held
 require dasllama/dasllama_common   // Model
 require dasllama/dasllama_gpu_tier   // gpu_want_cuda: the CUDA home's arms
+require dasllama/dasllama_env   // g_env_engine.pin_backend: the parity form's environment pin
+require _parity_cells   // parity_gemma4_26b_cut_cell: the Q4_K_M cut's pinned CPU form's parity stream
 
 // gemma-4-26B-A4B UD-IQ3_XXS (the routed MoE with its parallel dense shared expert and the routed branch's own norms):
 // arm `g4m`. Each file's format census runs on its cut, the first six blocks (one global layer, the cap lifted); the
-// perplexity cells read real text and stay on the whole files (the `gemma4-moe` category). Skips off the JIT, without
+// perplexity cells read real text on the whole files (the `gemma4-moe` category) and ride each whole file's block in
+// `test_mtp_gemma_drafter.das`, beside the drafter's served cells on the same trunk. Skips off the JIT, without
 // DASLLAMA_GPU=1 on a device the whole-model driver serves, without the file under models_dir(), or when the residency plan
 // does not fit the card (DASLLAMA_GPU_MIN_CTX shortens the mirror).
-let private GEMMA4_26B_FILE = GemmaFile(file = "gemma-4-26B-A4B-it-UD-IQ3_XXS.gguf", arm = "g4m")
 let private GEMMA4_26B_CUT = GemmaFile(file = "gemma-4-26B-A4B-6L-UD-IQ3_XXS-local.gguf", arm = "g4m")
-//! the routed model's argmax slack: a near-tie at the router flips whole positions between the arms, and the CPU chain
-//! sits farther from the reference exe on this model than the resident does (its own forced-feed logits are no instrument
-//! here); the hits read 126 to 139 against the CPU chain's 133 across kernel recompiles (the readings: CLAUDE.md)
-let private GEMMA4_26B_HITS_SLACK = 12l
-
-[test(description = "On the whole-model driver the routed gemma-4-26B UD-IQ3_XXS scores teacher-forced perplexity within 2x of the CPU chain's over one and two windows, hits within 12")]
-def test_gpu_resident_gemma4_26b(t : T?) {
-    t |> run("gemma-4-26B-A4B IQ3_XXS: 150 prose ids prefilled, 150 teacher-forced, scored as a perplexity against the CPU chain - the routed block's gemma-4 form") @(t : T?) {
-        ppl_compare(t, 150l, 150l, GEMMA4_26B_FILE, GEMMA4_26B_HITS_SLACK, GEMMA_MOE_PPL_RATIO)
-    }
-    t |> run("gemma-4-26B-A4B IQ3_XXS: 520 prose ids prefilled (two windows), 80 teacher-forced, scored as a perplexity against the CPU chain") @(t : T?) {
-        assert_pf_window(t)
-        ppl_compare(t, 520l, 80l, GEMMA4_26B_FILE, GEMMA4_26B_HITS_SLACK, GEMMA_MOE_PPL_RATIO)
-    }
-}
 
 [test(description = "On the whole-model driver the routed gemma-4-26B-A4B-6L UD-IQ3_XXS serves every site in its own format with every call on the device")]
 def test_gpu_resident_gemma4_26b_format(t : T?) {
@@ -44,26 +31,11 @@ def test_gpu_resident_gemma4_26b_format(t : T?) {
 
 // gemma-4-26B-A4B Q4_K_M (the routed MoE in the model table's official quant: k4 gate and up expert stacks beside native
 // Q5_1 down stacks - the q51 expert rail - with the dense triple and the attention head on the K-quant rails): arm `g4mk`.
-// Its cut's cells load each form once (`test_gpu_resident_gemma4_26b_k_cut`, below). Skips off the JIT, without DASLLAMA_GPU=1 on a device the whole-model driver serves, without the
-// file under models_dir(), or when the residency plan does not fit the card (DASLLAMA_GPU_MIN_CTX shortens the mirror).
-let private GEMMA4_26B_K_FILE = GemmaFile(file = "gemma-4-26B-A4B-it-Q4_K_M.gguf", arm = "g4mk")
+// Its cut's cells load each form once (`test_gpu_resident_gemma4_26b_k_cut`, below); the whole file's perplexity cells ride its
+// block in `test_mtp_gemma_drafter.das`. Skips off the JIT, without DASLLAMA_GPU=1 on a device the whole-model driver serves,
+// without the file under models_dir(), or when the residency plan does not fit the card (DASLLAMA_GPU_MIN_CTX shortens the
+// mirror).
 let private GEMMA4_26B_K_CUT = GemmaFile(file = "gemma-4-26B-A4B-6L-Q4_K_M-local.gguf", arm = "g4mk")
-//! the routed model's argmax slack: a router near-tie flips whole positions between the arms, and a kernel recompile alone
-//! moves the hits - 122 to 128 against the CPU chain's 134 over the 150-position cell (the readings: CLAUDE.md)
-let private GEMMA4_26B_K_HITS_SLACK = 16l
-//! the two-window cell's band: a k4 fold's rounding pattern alone moved it 1.70 -> 2.44 against the CPU chain's 1.03 (a router near-tie flips whole positions), the 150 + 150 cell 5.51 -> 5.91 against 3.36
-let private GEMMA4_26B_K_PPL_RATIO_TWO_WINDOWS = 2.5
-
-[test(description = "On the whole-model driver gemma-4-26B Q4_K_M with q51 down experts scores teacher-forced perplexity within 2x of the CPU chain over 150 positions and 2.5x over two windows, hits within 16")]
-def test_gpu_resident_gemma4_26b_k(t : T?) {
-    t |> run("gemma-4-26B-A4B Q4_K_M: 150 prose ids prefilled, 150 teacher-forced, scored as a perplexity against the CPU chain - the q51 down experts on their own rail") @(t : T?) {
-        ppl_compare(t, 150l, 150l, GEMMA4_26B_K_FILE, GEMMA4_26B_K_HITS_SLACK, GEMMA_MOE_PPL_RATIO)
-    }
-    t |> run("gemma-4-26B-A4B Q4_K_M: 520 prose ids prefilled (two windows), 80 teacher-forced, scored as a perplexity against the CPU chain") @(t : T?) {
-        assert_pf_window(t)
-        ppl_compare(t, 520l, 80l, GEMMA4_26B_K_FILE, GEMMA4_26B_K_HITS_SLACK, GEMMA4_26B_K_PPL_RATIO_TWO_WINDOWS)
-    }
-}
 
 // gemma-4-26B-A4B MXFP4_MOE (the Q4_K_M file requantized, `../performance/model_specs.das`: the fused gate_up and the down
 // expert stacks MXFP4 on disk, every other plane the source's): arm `mx26`. The expert stacks load as the native-MXFP4
@@ -86,11 +58,47 @@ def test_gpu_resident_gemma4_26b_mx4_format(t : T?) {
     }
 }
 
-[test(description = "On the whole-model driver gemma-4-26B MXFP4_MOE's native-MXFP4 routed rail scores a 150-position teacher-forced perplexity within 2x of the CPU chain's, hits within 12")]
+//! the whole MXFP4_MOE file's walk: 150 prose ids prefilled and 150 teacher-forced
+let private GEMMA4_26B_MX4_WALKS = fixed_array((n = 150l, steps = 150l))
+let private GEMMA4_26B_MX4_CUDA_ARM = "cuda-g4mx"   //! the CUDA home's arm of the whole file's walk
+
+//! the walk's compare under `tag`: the device served it, its perplexity within 2x of the CPU chain's, its hits within 12
+def private mx4_ppl_within(t : T?; tag : string; r : GemmaWalkRows) {
+    gemma_walk_twin_within(t, tag, r, GEMMA4_26B_MX4_WALKS, 0, GEMMA_MOE_PPL_RATIO, GEMMA4_26B_MX4_HITS_SLACK)
+}
+
+[test(description = "On the whole-model driver gemma-4-26B MXFP4_MOE's native-MXFP4 routed rail scores a 150-position teacher-forced perplexity within 2x of the CPU chain's, hits within 12; on the CUDA driver under the MMQ route pinned the same; each form loads once")]
 def test_gpu_resident_gemma4_26b_mx4_ppl(t : T?) {
-    t |> run("gemma-4-26B-A4B MXFP4_MOE: 150 prose ids prefilled, 150 teacher-forced, scored as a perplexity against the CPU chain - the native-MXFP4 routed rail") @(t : T?) {
-        ppl_compare(t, 150l, 150l, GEMMA4_26B_MX4_FILE, GEMMA4_26B_MX4_HITS_SLACK, GEMMA_MOE_PPL_RATIO)
+    return if (!family_on(t, "gemma4moe"))
+    let vk = empty(arm_why(GEMMA4_26B_MX4_FILE.arm))
+    let cuda = empty(cuda_home_why()) && empty(arm_why(GEMMA4_26B_MX4_CUDA_ARM))
+    var r : GemmaWalkRows
+    var ran = false
+    if (vk || cuda) {
+        with_cuda_mmq_winners() {
+            ran = with_cpu_and_gpu_model(t, "llm", "gemma-4-26B-A4B-it-MXFP4_MOE-q4km-local.gguf", GEMMA_RIG_CTX, [device_form()]) $(m, form) {
+                gemma_walk_rows(r, m, form, GEMMA4_26B_MX4_WALKS)
+            }
+        }
     }
+    if (ran) {
+        held_within(t, r.carrier, "gemma-4-26B-A4B MXFP4_MOE: ", false)
+    }
+    unsafe {   //! the cells read the block's collection by reference
+        t |> run("gemma-4-26B-A4B MXFP4_MOE: 150 prose ids prefilled, 150 teacher-forced, scored as a perplexity against the CPU chain - the native-MXFP4 routed rail") @capture(& r)(t : T ?) {
+            return if (!arm_on(t, GEMMA4_26B_MX4_FILE.arm))
+            if (!ran) {
+                t |> skip("gemma-4-26B-A4B MXFP4_MOE: no device form ran - the block's skip names why")
+                return
+            }
+            mx4_ppl_within(t, "gemma-4-26B-A4B MXFP4_MOE", r)
+        }
+        t |> run("gemma-4-26B-A4B MXFP4_MOE: 150 prose ids prefilled, 150 teacher-forced, scored as a perplexity against the CPU chain - the native-MXFP4 routed rail on the CUDA driver") @capture(& r)(t : T ?) {
+            return if (!cuda_home_asked(t) || !arm_on(t, GEMMA4_26B_MX4_CUDA_ARM) || !ran)
+            mx4_ppl_within(t, "gemma-4-26B-A4B MXFP4_MOE, cuda", r)
+        }
+    }
+    delete r
 }
 
 // gemma-4-26B-A4B-6L Q4_K_M, the Q4_K_M file's first six blocks, its forms loaded once (`with_cpu_and_gpu_model`): two
@@ -104,8 +112,10 @@ def test_gpu_resident_gemma4_26b_mx4_ppl(t : T?) {
 // the parallel dense shared expert as the layer's own FFN triple, the per-expert down scale folded into the routing
 // weights, the combine norming both branches and their sum under the layer's output scale - on K-quant projections and
 // experts, so the wide bar with the one-token-off control (the bar's reading `_resident_regions.das`'s). The embed-gather
-// cell needs the dasVulkan module. Skips off the JIT, without DASLLAMA_GPU=1 on a device the driver serves, or without
-// the file under models_dir().
+// cell needs the dasVulkan module. On its CPU form under the environment's backend pin (DASLLAMA_PIN_BACKEND, none where
+// unset) with the K-quant planes requantized to q8, on every box, the parity reference's greedy stream after the 1492-id
+// count (`_parity_cells.das`). Skips off the JIT, without DASLLAMA_GPU=1 on a device the driver serves, or without the
+// file under models_dir(); the parity form where the box cannot take the pin.
 
 //! what the 26B Q4_K_M cut's forms collect: the regions rig's
 //! readings, the arms the format census's carrier reads (`carrier`),
@@ -139,9 +149,9 @@ def private g4moe_k_rows(t : T?; var r : G4MoeKRows; m : Model; form : ModelForm
 
 //! the cut's forms: the gathering two-region form; where the
 //! dasVulkan module builds the host-embedded one and, unless the CUDA
-//! home is asked, the split one-row forms on two regions; and three
-//! regions on the split forms; a cell the box cannot run is held as
-//! a skip
+//! home is asked, the split one-row forms on two regions; three
+//! regions on the split forms; and the parity-pinned CPU form; a cell
+//! the box cannot run is held as a skip
 def private g4moe_k_forms(var r : G4MoeKRows) : array<ModelForm> {
     var forms <- [device_form(regions = 2l, ctx = REGIONS_RIG_CTX)]
     static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -156,10 +166,14 @@ def private g4moe_k_forms(var r : G4MoeKRows) : array<ModelForm> {
             "the Vulkan driver's")
     }
     forms |> push(device_form(regions = 3l, split_forms = true, ctx = REGIONS_RIG_CTX))
+    forms |> push(cpu_cells_form(backend = g_env_engine.pin_backend, kq_native = KqNative.off))
     return <- forms
 }
 
-[test(description = "On gemma-4-26B-A4B-6L Q4_K_M with q51 down experts every site serves in its own format; the batched rows fold the per-32 routed down under the routing weights as the fused one-row command does, within the wide bar, on the summed down stamps with no per-slot leaf; the batched rows gather their token rows on the device off their ids, logits bit for bit those of a load whose host embeds every row, the gather-off counters the control; with the fused one-row forms off the N-row command's routed block batches two sessions within the wide bar of each alone, the one-token-off control past it, with no routed down folded; a batched step over two rows, a one-row step, then batched steps over three record new row counts on the N-row command, every row within the wide bar of its session alone; each form loads once")]
+//! the parity row's context: a cut's parity stream runs at the context its full file's parity row loads at
+let private PARITY_CUT_CTX = 2048l
+
+[test(description = "On gemma-4-26B-A4B-6L Q4_K_M with q51 down experts every site serves in its own format; the batched rows fold the per-32 routed down under the routing weights as the fused one-row command does, within the wide bar, on the summed down stamps with no per-slot leaf; the batched rows gather their token rows on the device off their ids, logits bit for bit those of a load whose host embeds every row, the gather-off counters the control; with the fused one-row forms off the N-row command's routed block batches two sessions within the wide bar of each alone, the one-token-off control past it, with no routed down folded; a batched step over two rows, a one-row step, then batched steps over three record new row counts on the N-row command, every row within the wide bar of its session alone; on the parity-pinned CPU form, on every box, fed the 26B's reference greedy stream after the 1492-id count every reference id keeps within 2% of its row's top logit, the stream one step late outside; each form loads once")]
 def test_gpu_resident_gemma4_26b_k_cut(t : T?) {
     return if (!family_on(t, "gemma4moe"))
     let format = arm_on(t, GEMMA4_26B_K_CUT.arm)
@@ -167,8 +181,14 @@ def test_gpu_resident_gemma4_26b_k_cut(t : T?) {
     var forms <- g4moe_k_forms(r)
     var ran = false
     with_cuda_mmq_winners() {
-        ran = with_cpu_and_gpu_model(t, "llm", "gemma-4-26B-A4B-6L-Q4_K_M-local.gguf", GEMMA_RIG_CTX, forms) $(m, form) {
-            g4moe_k_rows(t, r, m, form, format)
+        ran = with_cpu_and_gpu_model(t, "llm", "gemma-4-26B-A4B-6L-Q4_K_M-local.gguf", GEMMA_RIG_CTX, forms) $(var m, form) {
+            if (form.kq_native == KqNative.off) {
+                with_ctx_cut(m, PARITY_CUT_CTX) {
+                    parity_gemma4_26b_cut_cell(t, m)
+                }
+            } else {
+                g4moe_k_rows(t, r, m, form, format)
+            }
         }
     }
     if (ran) {

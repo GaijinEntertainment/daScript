@@ -13,9 +13,9 @@ require ../../../utils/common/text_lines.das   // split_trimmed: the comma lists
 //! serves the dense slice alone and reds on its declines. The fleet's
 //! CUDA pod and `tests/CLAUDE.md`'s command read this list, and
 //! `test_run_suites.das` holds every CUDA-reaching file to a token
-let CUDA_PASS_ONLY = ("cuda,segments,regions,resident_moe,embeddings,gptoss,gemma4_dense,"
+let CUDA_PASS_ONLY = ("cuda,regions,resident_moe,embeddings,gptoss,gemma4_dense,"
     + "gemma4_moe,gemma2_3,gemma4_e2b,mtp_gemma_drafter,resident_hybrid,resident_qwen2,"
-    + "resident_qwen3,resident_qwen_moe,resident_format_census")
+    + "resident_qwen3,resident_qwen_moe,resident_format_census,resident_llama")
 
 //! A model category: model files no run opens unless the run names the category. `stems` is a comma list - a file is
 //! the category's when its name starts with one of them; `topics` is what only these files reach
@@ -97,7 +97,7 @@ typedef ModelFamily = tuple<name : string; stems : string>
 //! every family with a row; a file no row holds - a tower, a speech model, a fixture - is open to any family run
 def model_families() : array<ModelFamily> {
     return <- [
-        (name = "llama", stems = "Llama-3.2,tinyllama,SmolLM2"),
+        (name = "llama", stems = "Llama-3.2,Meta-Llama-3.1,tinyllama,SmolLM2"),
         (name = "qwen2", stems = "Qwen2.5-0.5B,Qwen2.5-1.5B"),
         (name = "qwen3", stems = "Qwen3-"),
         (name = "phi3", stems = "Phi-3.5"),

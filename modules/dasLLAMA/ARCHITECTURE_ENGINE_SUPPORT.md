@@ -138,22 +138,55 @@ carries the categories for a reader, a table row a category under `## Categories
 
 ### A model file loads once a form {#test-load-once}
 
-`tests/_cpu_gpu_model.das` owns the load of a model file for the cells of a run area on the
-discrete homes. `with_cpu_and_gpu_model` takes the area, the file and a list of forms - a device
-form is one set of the driver's load-time knobs, a CPU form one load mode - loads each form once,
-one loaded model at a time, and runs the caller's body on it; the body collects what the compares
-across forms read, and those compares follow the call. The first device form streams the file, and
-where the list holds three or more such forms each later one maps the file's device lane
-(`ARCHITECTURE_IMAGE_LEDGER.md#suite-image-mints`). A call names its area and its file by string
-literals, which `tests/REVIEW.das`'s `check_models_load_once` reads to hold one call an area and
-file across the folder.
+`tests/_cpu_gpu_model.das` owns the load of a model file for the cells of a run area, on the
+discrete homes and on the CPU. `with_cpu_and_gpu_model` takes the area, the file and a list of
+forms - a device form is one set of the driver's load-time knobs, a CPU form one load mode and
+loader - loads each form once, one loaded model at a time, and runs the caller's body on it; the
+body collects what the compares across forms read, and those compares follow the call. Where the
+GPU tier is not armed each device form is a skipped cell of its own. The CPU form answering the
+device forms, and a `cpu_quant_form` reference, load only where a device form ran; a CPU form whose
+cells stand alone (`cpu_cells_form`) loads on every box, so a CPU file's cells on a block keep
+running on a box with no discrete home. A CPU form's load knobs - the load mode, the uncached
+loader, the NextN head file pinned for the load (`mtp_head`), the kernel backend pinned for the load
+and its cells (`backend`), the K-quant native switches set for the load (`kq_native`: `kept`, `on`,
+`on_q40` with the native Q4_0 planes, `off`) - make CPU forms differing in any of them separate
+loads, and a pinned or K-quant form answers no device form. The body sees a CPU load once a codec
+the device forms armed, and `form.alone` holds on one pass a load, so a cell that stands alone runs
+once a block. A device form marked `drops_device` holds the driver armed up to its one drop cell
+(`device_drop_cell`), run last. The block accounts for every form it was asked: each form, and the parity row's
+form where the knob is on, reaches the body or skips loudly, else the block fails naming it; a form asked alone that
+never runs is a failure, and a CPU form not asked alone skips loudly where no device form ran (`form_owed`,
+`alone_pass_of`). The forms, their pure parts and `own_load` are `tests/_model_form.das`'s,
+a module free of the fixture root. The first device form streams the file, and where the
+list holds three or more such forms each later one maps the file's device lane
+(`ARCHITECTURE_IMAGE_LEDGER.md#suite-image-mints`). A call's `parity` knob adds the file's model_specs
+parity row's CPU form (`parity_spec_form`, `tests/_parity_cells.das`) and runs the row's cell on it. A
+call names its area and its file by string literals.
+
+`tests/REVIEW.das`'s `check_models_load_once` reads the folder's test files as text. It holds one
+call an area and file, and in each area `LOAD_ONCE_AREAS` names it reads every load site of the
+area's test files (`run.das`'s `area_tests`): a call of an engine loader or of a helper `LOADERS`
+lists, its model file a `.gguf` literal in the call's arguments or one an identifier is bound to in
+the holding function, at the file's top level or in a fixture module. A site of a file a call loads,
+or one of two sites of a file no call loads, is a finding unless the holding function calls
+`own_load("<why>")` with a non-empty literal reason. A function that passes its own parameter to a
+loader is itself a loader, and one `LOADERS` does not list is a finding; a site whose file is built at run time is
+counted, not read. The llama2.c `stories15M.bin` checkpoint loads once a cell through `load_checkpoint`
+(27 loads in 10 test files, under a second in all), outside the blocks: the check reads `.gguf`
+loads alone, and a checkpoint load is not a site. `UNFOLDED` names the test files whose cells load
+their own models; their findings print as held lines, and a listed file with no finding is a
+finding. Its `check_cell_pins` reads the fixture cell modules (`tests/_*_cells.das`): a call there that pins,
+clears or re-pins the kernel backend or the K-quant native knob is a finding, since both are a
+property of the form's load; the check licenses none.
 
 ### The format repository's files {#format-matrix-files}
 
 The format repository holds the files a test or a record reads byte for byte and no box makes for
 itself: a carrier minted to put one weight format at one site (the format matrix), a cut of a large
 model's first blocks (and its NextN draft block, renumbered after them, where the file has one)
-that a per-PR test loads in the whole file's place, and a published file kept beside them. It is one Hugging Face repository, a folder a model: `FORMATS_HF`
+that a per-PR test loads in the whole file's place, a published file kept beside them, and a drafter
+a test fixture attaches, converted locally from its checkpoint. It is one Hugging Face
+repository, a folder a model: `FORMATS_HF`
 (`performance/model_specs.das`) pins its commit, and a row whose `url` opens with it names its file
 there by `url`, `bytes` and `sha256`. Every box downloads such a file by its row: two runs of one
 recipe are not promised the same bytes, so a box that made its own would read another file than the

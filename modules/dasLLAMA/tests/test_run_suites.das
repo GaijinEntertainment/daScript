@@ -4,6 +4,7 @@ options persistent_heap   // a dastest root frees what it deletes only on this h
 
 require dastest/testing_boost public
 require run
+require dastest/kill_switch   // KILL_SWITCH_EXIT_CODE: the exit of a child its test wall ended
 require _model_categories
 require daslib/fio
 require daslib/strings_boost
@@ -17,16 +18,6 @@ require math
 //! the calls through which a test reaches a machine-local fixture root (_model_tier.das)
 let FIXTURE_ROOTS <- ["models_dir()", "model_available(", "llama2c_dir()", "whisper_dir()", "corpus_dir()", "asr_clip(", "asr_oracle_dir("]
 
-def private file_text(path : string) : string {
-    var text = ""
-    fopen(path, "rb") $(f) {
-        if (f != null) {
-            text = fread(f)
-        }
-    }
-    return text
-}
-
 def private text_reaches_fixture_root(text : string) : bool {
     for (root in FIXTURE_ROOTS) {
         if (find(text, root) >= 0) {
@@ -39,14 +30,14 @@ def private text_reaches_fixture_root(text : string) : bool {
 //! a test reaches a fixture root through its own text or through a shared fixture module beside it - a same-folder
 //! `require _<fixture>` (test_gpu_resident_gemma4_26b_host.das reaches `model_available` through `_gemma_resident` alone)
 def private reaches_fixture_root(file : string) : bool {
-    let text = file_text(file)
+    let text = fread(file)
     if (text_reaches_fixture_root(text)) {
         return true
     }
     for (line in split(text, "\n")) {
         continue if (!(line |> starts_with("require _")))
         var inscope name <- split_by_chars(slice(line, length("require ")), " \t/\r")
-        if (text_reaches_fixture_root(file_text(path_join(dir_name(file), "{name[0]}.das")))) {
+        if (text_reaches_fixture_root(fread(path_join(dir_name(file), "{name[0]}.das")))) {
             return true
         }
     }
@@ -58,12 +49,12 @@ def test_suite_split_matches_the_files(t : T?) {
     var seen : table<string; void?>
     for (file in free_files()) {
         continue if (base_name(file) == "test_run_suites.das")   //! this file names the roots as strings and reaches none
-        t |> success(!empty(file_text(file)), "model-free file exists and reads: {file}")
+        t |> success(!empty(fread(file)), "model-free file exists and reads: {file}")
         t |> success(!reaches_fixture_root(file), "a model-free file reaches no fixture root - move it to `stocked`: {file}")
         seen |> insert(file, null)
     }
     for (file in suite_files("stocked")) {
-        let text = file_text(file)
+        let text = fread(file)
         t |> success(!empty(text), "stocked file exists and reads: {file}")
         t |> success(reaches_fixture_root(file), "a stocked file reaches a fixture root - move it to `model-free`: {file}")
         t |> success(!key_exists(seen, file), "a file sits in one per-PR list only: {file}")
@@ -91,7 +82,7 @@ def test_every_file_sits_in_a_suite(t : T?) {
     }
     t |> success(count > 50, "the folder listing walked the test files ({count})")
     // the runner is required by this file and test_run_summary.das: nothing may fire on require
-    t |> success(find(file_text("{TESTS_DIR}/run.das"), "[init]") < 0, "run.das carries no [init] - it runs nothing on require")
+    t |> success(find(fread("{TESTS_DIR}/run.das"), "[init]") < 0, "run.das carries no [init] - it runs nothing on require")
 }
 
 //! the area tables cover the per-PR census exactly: every area file is a model-free or stocked file,
@@ -110,7 +101,7 @@ def test_area_tables_match_the_census(t : T?) {
     for (name in census) {
         t |> success(key_exists(covered, name), "a per-PR file has an area - add it to `area_tests`: {name}")
     }
-    let image = file_text("{TESTS_DIR}/test_model_image.das")
+    let image = fread("{TESTS_DIR}/test_model_image.das")
     var claimed : array<string>
     for (a in AREAS) {
         for (tok in split(area_image_arms(a), ",")) {
@@ -379,6 +370,25 @@ def test_wall_and_batch_defaults(t : T?) {
     t |> equal(length(free), length(suite_files("model-free")) + length(suite_files("gpu-kernels")), "the two lists share no file")
 }
 
+[test(description = "A child the kill switch ended (exit 125) has no summary - a log line carrying the summary's marker is a cell's text - and its DONE verdict is the switch's own line, or says the switch ended it; any other exit reads its dastest summary")]
+def test_child_verdict_of_the_kill_switch(t : T?) {
+    let usage = "[E] --area / --changed take neither --arm, --full nor --suite: an area is the whole set - its tests, its arms"
+    let said = "kill switch: test 'test_x' of a.das (--test-wall) ran past 30s; the process ends here with exit code 125"
+    let killed = "=== RUN 'test_y'\n{usage}\n=== RUN 'test_x'\n{said}\n"
+    t |> equal(child_summary(KILL_SWITCH_EXIT_CODE, killed), "", "a killed child has no summary")
+    t |> equal(child_verdict(KILL_SWITCH_EXIT_CODE, child_summary(KILL_SWITCH_EXIT_CODE, killed), killed), said,
+        "a killed child's verdict is the switch's line, not a cell's usage sentence")
+    let mute = "=== RUN 'test_y'\n{usage}\n"
+    let quiet = child_verdict(KILL_SWITCH_EXIT_CODE, child_summary(KILL_SWITCH_EXIT_CODE, mute), mute)
+    t |> success(find(quiet, "kill switch ended the child, exit 125") >= 0 && find(quiet, "--area") < 0,
+        "a killed child whose log lost the switch's line still reads as the switch's: {quiet}")
+    let clean = "PASS a.das (1s)\n7 tests, 7 passed, 0 failed, 0 errors, 0 skipped\n"
+    t |> equal(child_verdict(0, child_summary(0, clean), clean), "7 tests, 7 passed, 0 failed, 0 errors, 0 skipped",
+        "any other exit reads its summary")
+    t |> equal(child_verdict(1, child_summary(1, "crash\n"), "crash\n"), "no dastest summary - the run died early (read the log)",
+        "no summary on another exit is an early death")
+}
+
 //! the 1-based-free index `K` of the child whose `START` line names `tag`, as its `child K/N` says ("" where none does)
 def private child_index(out, tag : string) : string {
     let head = "START {tag}: child "
@@ -613,6 +623,8 @@ def test_category_run(t : T?) {
     t |> success(empty(category_files("nope")), "a name that is no category's plans nothing")
     t |> equal(length(category_files("gemma4-e4b,")), length(files), "an empty name plans no file of a model in no category")
     t |> success(empty([for (f in files); f; where base_name(f) |> starts_with("_")]), "a helper file that names a model is no test file: {join(files, " ")}")
+    let by_path <- category_files("qwen15-moe")
+    t |> success(find_index(by_path, "{TESTS_DIR}/test_gpu_resident_moe_formats.das") >= 0, "a file naming a category's model by its path under the models directory (`moe-formats/...`) is the category's: {join(by_path, " ")}")
     let named = RunArgs(category = "gemma4-e4b")
     let matrix = "{TESTS_DIR}/test_metal_support_matrix.das"
     let coverage = "{TESTS_DIR}/test_kernel_coverage.das"
@@ -795,7 +807,7 @@ def private cuda_pass_tokens(doc : string) : string {
 
 [test(description = "The CUDA home's pass (`CUDA_PASS_ONLY`) keeps, by its `--only` tokens, every census file whose text reaches the CUDA home but the declared no-cell files, and CLAUDE.md's command and prose carry the same tokens")]
 def test_cuda_pass_keeps_every_cuda_file(t : T?) {
-    let doc = file_text("{TESTS_DIR}/CLAUDE.md")
+    let doc = fread("{TESTS_DIR}/CLAUDE.md")
     let tokens = CUDA_PASS_ONLY
     t |> equal(cuda_pass_tokens(doc), tokens,
         "CLAUDE.md's CUDA pass command carries CUDA_PASS_ONLY")
@@ -807,7 +819,7 @@ def test_cuda_pass_keeps_every_cuda_file(t : T?) {
     var reach = 0
     for (file in census) {
         let no_cell = find_index(CUDA_REACH_NO_CELL, base_name(file)) >= 0
-        continue if (no_cell || !text_reaches_cuda(file_text(file)))
+        continue if (no_cell || !text_reaches_cuda(fread(file)))
         reach++
         t |> success(find_index(kept, file) >= 0,
             "a file reaching the CUDA home sits in the CUDA pass - add a token: {file}")
@@ -927,18 +939,20 @@ def test_child_chunks(t : T?) {
     t |> equal(length(tier[1]), 3, "the files before and after it ride one child")
 }
 
-[test(description = "`model_names` reads every whole quoted .gguf name out of a file's text once and skips interpolated names, paths and patterns, and `missing_models` lists the names a run's files and the fixtures they require ask that the directory lacks, each with its askers, while a directory holding them lists none")]
+[test(description = "`model_names` reads every whole quoted .gguf name out of a file's text once and skips interpolated names, paths and patterns, `model_paths` keeps a path under the models folder and drops a climb, an absolute path and a backslash path, and `missing_models` lists the names a run's files and the fixtures they require ask that the directory lacks, each with its askers, while a directory holding them lists none")]
 def test_missing_models(t : T?) {
     let names <- model_names("let a = \"B-model.gguf\"\nlet b = \"\{stem\}.gguf\"\nlet c = \"dir/C.gguf\"\nlet d = \"*.gguf\"\nrun(\"A-model.gguf\", \"B-model.gguf\", \"note.txt\")\n")
     t |> equal(join(names, ","), "A-model.gguf,B-model.gguf", "whole quoted names once each, in order; an interpolated name, a path and a pattern are not names")
+    let paths <- model_paths("\"../x.gguf\" \"/a/b.gguf\" \"d\\e.gguf\" \"drafters/d/f.gguf\"")
+    t |> equal(join(paths, ","), "drafters/d/f.gguf", "`model_paths` keeps a path under the models folder and drops a climb, an absolute path and a backslash path")
     let dir = path_join(test_temp_dir(), "dasllama_missing_models")
     mkdir_rec(dir)
-    let run <- ["{TESTS_DIR}/test_kv_paged.das"]
+    let run <- ["{TESTS_DIR}/test_gpu_model_swap.das"]
     let missing <- missing_models(run, dir)
     t |> success(!empty(missing), "an empty directory misses what the file names")
     let smol = find_index_if(missing) $(m) => m.name == "SmolLM2-135M-Instruct-Q8_0.gguf"
     t |> success(smol >= 0, "the file's own model is named: {missing}")
-    t |> success(smol >= 0 && find(missing[smol].asked, "test_kv_paged.das") >= 0, "with the file that names it")
+    t |> success(smol >= 0 && find(missing[smol].asked, "test_gpu_model_swap.das") >= 0, "with the file that names it")
     let via <- missing_models(["{TESTS_DIR}/test_gpu_resident_hybrid.das"], dir)
     let fixture = find_index_if(via) $(m) => find(m.asked, "_mtp_resident_cells.das") >= 0
     t |> success(fixture >= 0, "a fixture the file requires is read too: {via}")
@@ -994,4 +1008,152 @@ def test_poison_kv_envs(t : T?) {
     cfg.poison_kv = true
     t |> success(find(child_envs(cfg, false), "DASLLAMA_KV_INIT=poison ") >= 0, "the posix prefix: {child_envs(cfg, false)}")
     t |> success(find(child_envs(cfg, true), "set \"DASLLAMA_KV_INIT=poison\"&& ") >= 0, "the cmd.exe form: {child_envs(cfg, true)}")
+}
+
+//! a models directory under the test's temp folder holding a one-byte file at every model path `files` and the fixtures
+//! they reach name, subfolders made
+def private stocked_models_dir(name : string; files : array<string>) : string {
+    let dir = path_join(test_temp_dir(), name)
+    var why : string
+    rmdir_rec(dir, why)
+    for (stem in keys(reached_names(files))) {
+        for (model in model_paths(fread("{TESTS_DIR}/{stem}"))) {
+            let path = path_join(dir, model)
+            mkdir_rec(dir_name(path))
+            fopen(path, "wb") $(f) {
+                f |> fwrite("x")
+            }
+        }
+    }
+    return dir
+}
+
+//! the path lines of a `--list-models` text, its child lines left out
+def private listed_paths(text : string) : array<string> =>
+    <- [for (ln in split(text, "\n")); ln; where !empty(ln) && !(ln |> starts_with("#"))]
+
+[test(description = "`--list-models` prints the model files a run opens child by child in start order - a `# child <n>` line ahead of each, a file an earlier child listed not repeated, subfolder paths and a NextN head beside its trunk included, no category's file on a run that names none, only the named category's files on a category run - and the runner prints it alone and starts no child")]
+def test_list_models(t : T?) {
+    var cfg = RunArgs()
+    cfg.suite = "stocked"
+    cfg.batch = 1
+    var inscope files <- only_files(suite_files("stocked"), "resident_llama,gemma4_e2b")
+    t |> equal(length(files), 2, "the --only set: {files}")
+    let dir = stocked_models_dir("dasllama_list_models", files)
+    fopen(path_join(dir, "mtp-gemma-4-E2B-it-Q8_0.gguf"), "wb") $(f) {
+        f |> fwrite("x")
+    }
+    var inscope chunks <- run_chunks(cfg, files, false)
+    let text = model_list_text(cfg, chunks, dir, false)
+    var inscope paths <- listed_paths(text)
+    t |> success(find(text, "# child 0: {child_tag(chunks[0])}\n") == 0 && find(text, "# child 1: {child_tag(chunks[1])}\n") > 0, "a child line ahead of each child, in start order:\n{text}")
+    t |> success(has_value(paths, "Llama-3.2-1B-Instruct-Q8_0.gguf") && has_value(paths, "gemma-4-E2B-it-Q8_0.gguf"), "each file's own models are listed:\n{text}")
+    t |> success(has_value(paths, "drafters/gemma-4-E2B-it-dflash2-GGUF/gemma-4-E2B-it-dflash2-Q8_0.gguf"), "a model in a subfolder by its path under the directory:\n{text}")
+    t |> success(has_value(paths, "mtp-gemma-4-E2B-it-Q8_0.gguf"), "the NextN head the trunk's load reads beside it:\n{text}")
+    let unique <- {for (p in paths); p}
+    t |> equal(length(unique), length(paths), "no file is listed twice:\n{text}")
+    var inscope twice <- [[files[0]], [files[0]]]
+    let again = model_list_text(cfg, twice, dir, false)
+    let second = slice(again, find(again, "# child 1: "))
+    t |> success(!empty(listed_paths(again)) && second == "# child 1: {base_name(files[0])}\n", "a model an earlier child listed is not listed again:\n{again}")
+    var named_category = false
+    for (stem in keys(reached_names(files))) {
+        for (model in model_paths(fread("{TESTS_DIR}/{stem}"))) {
+            named_category = named_category || !empty(model_category(model))
+        }
+    }
+    t |> success(named_category, "the files name a category's model (the control the category filter needs)")
+    t |> success(!has_value([for (p in paths); !empty(model_category(p))], true), "a run that names no category lists no category's file:\n{text}")
+    var cat_cfg = RunArgs()
+    cat_cfg.category = "gptoss-20b"
+    var inscope cat_files <- category_files(cat_cfg.category)
+    let cat_dir = stocked_models_dir("dasllama_list_models_category", cat_files)
+    var inscope cat_paths <- listed_paths(model_list_text(cat_cfg, run_chunks(cat_cfg, cat_files, false), cat_dir, false))
+    t |> success(!empty(cat_paths) && !has_value([for (p in cat_paths); model_category(p) == "gptoss-20b"], false), "a category run lists its category's files and no other model: {cat_paths}")
+    if (get_platform_name() != "windows") {
+        var out : string
+        let rc = run_runner("--suite stocked --only resident_llama,gemma4_e2b --batch 1 --list-models --das /usr/bin/false", out, "DASLLAMA_MODELS_DIR={dir} ")
+        t |> equal(rc, 0, "the list exits clean:\n{out}")
+        let cache_line = "deser: clean - all modules from cache\n"   //! the test's own `-module-cache` flag prints it, ahead of the runner
+        out = (out |> starts_with(cache_line)) ? slice(out, length(cache_line)) : out
+        t |> success(find(out, "# child 0: ") == 0 && find(out, "START ") < 0 && find(out, "REPORT") < 0 && find(out, "ONLY ") < 0, "the runner prints the list alone and starts no child:\n{out}")
+        t |> success(has_value(listed_paths(out), "gemma-4-E2B-it-Q8_0.gguf"), "the runner's list is the run's:\n{out}")
+    } else {
+        t |> skip("the end-to-end list runs the runner under a POSIX environment prefix")
+    }
+    var why : string
+    rmdir_rec(dir, why)
+    rmdir_rec(cat_dir, why)
+}
+
+[test(description = "`copy_gate` starts a child whose model files are all local, stops the run when the copier failed while a file is still copying, starts a child over the links once the copier is done, waits while files copy, and stops the run once no file landed for the bound; `pending_models` counts an absent file and a link, never a regular file")]
+def test_copy_gate(t : T?) {
+    t |> success(copy_gate(0, false, "", 0.0, AWAIT_IDLE_SECONDS) is start, "every file local: the child starts")
+    t |> success(copy_gate(0, false, "a.gguf", 0.0, AWAIT_IDLE_SECONDS) is start, "... even after a failed copy - the child needs nothing more of the copier")
+    let failed = copy_gate(2, false, "drafters/x/a.gguf", 0.0, AWAIT_IDLE_SECONDS)
+    t |> success(failed is stop && find(failed as stop, "drafters/x/a.gguf") >= 0, "a failed copier stops the run, naming the file: {failed}")
+    let done = copy_gate(2, true, "", 0.0, AWAIT_IDLE_SECONDS)
+    t |> success(done is start && find(done as start, "2 file(s)") >= 0, "a done copier starts the child over the links it was not given: {done}")
+    let wait = copy_gate(3, false, "", AWAIT_IDLE_SECONDS - 1.0, AWAIT_IDLE_SECONDS)
+    t |> success(wait is wait && (wait as wait) == 3, "files copying under the bound: the child waits on them: {wait}")
+    let idle = copy_gate(3, false, "", AWAIT_IDLE_SECONDS, AWAIT_IDLE_SECONDS)
+    t |> success(idle is stop && find(idle as stop, "1800 s") >= 0, "no file landed for the bound: the run stops red: {idle}")
+    t |> equal(AWAIT_IDLE_SECONDS, 1800.0, "the bound is 30 minutes")
+    let dir = path_join(test_temp_dir(), "dasllama_pending_models")
+    var why : string
+    rmdir_rec(dir, why)
+    mkdir_rec(path_join(dir, "sub"))
+    fopen(path_join(dir, "sub/real.gguf"), "wb") $(f) {
+        f |> fwrite("x")
+    }
+    t |> equal(pending_models(dir, ["sub/real.gguf"]), 0, "a regular file is local")
+    t |> equal(pending_models(dir, ["sub/real.gguf", "absent.gguf"]), 1, "an absent file is pending")
+    if (get_platform_name() != "windows") {
+        unsafe(popen("ln -s {path_join(dir, "sub/real.gguf")} {path_join(dir, "link.gguf")}") $(f) {
+            let _drain = fread(f)
+        })
+        t |> success(stat(path_join(dir, "link.gguf")).is_reg, "the link resolves to the regular file (the control)")
+        t |> equal(pending_models(dir, ["link.gguf", "sub/real.gguf"]), 1, "a link to a regular file is pending: it is not a copy")
+    } else {
+        t |> skip("the link half makes a POSIX symlink")
+    }
+    rmdir_rec(dir, why)
+}
+
+[test(description = "A dry runner run under `--await-models` stops red naming the file when the copier failed and a child's model is not local, starts the child over the links once the copier is done, and puts the seconds waited on the REPORT line")]
+def test_runner_await_models(t : T?) {
+    if (get_platform_name() == "windows") {
+        t |> skip("the dry run stands in a POSIX no-op binary for the child")
+        return
+    }
+    let dir = path_join(test_temp_dir(), "dasllama_await_models")
+    let state = path_join(dir, "copy")
+    var why : string
+    rmdir_rec(dir, why)
+    mkdir_rec(state)
+    fopen(path_join(state, "volume.gguf"), "wb") $(f) {
+        f |> fwrite("x")
+    }
+    for (name in ["Qwen3-0.6B-Q8_0.gguf", "SmolLM2-135M-Instruct-Q8_0.gguf", "tinyllama-1.1b-chat-v1.0.Q8_0.gguf"]) {   //! the child file's models
+        unsafe(popen("ln -s {path_join(state, "volume.gguf")} {path_join(dir, name)}") $(f) {
+            let _drain = fread(f)
+        })
+    }
+    fopen(path_join(state, "failed"), "wb") $(f) {
+        f |> fwrite("SmolLM2-135M-Instruct-Q8_0.gguf\n")
+    }
+    let env = "DASLLAMA_MODELS_DIR={dir} "
+    let args = "--suite stocked --only test_gpu_model_swap --das /usr/bin/true --await-models {state}"
+    var red : string
+    t |> success(run_runner(args, red, env) != 0, "a failed copy with the child's model not local is red:\n{red}")
+    t |> success(find(red, "COPY test_gpu_model_swap.das: the model copy failed: SmolLM2-135M-Instruct-Q8_0.gguf") >= 0 && find(red, "START test_gpu_model_swap.das") < 0, "the stop names the file and starts no child:\n{red}")
+    remove(path_join(state, "failed"))
+    fopen(path_join(state, "done"), "wb") $(f) {
+        f |> fwrite("ok\n")
+    }
+    var green : string
+    t |> equal(run_runner(args, green, env), 0, "a done copier starts the child:\n{green}")
+    t |> success(find(green, "START test_gpu_model_swap.das") >= 0 && find(green, " s waited on the model copy") >= 0, "the child starts and the REPORT carries the wait:\n{green}")
+    t |> success(find(green, "WAIT child 0/1 test_gpu_model_swap.das: started after ") >= 0 && find(green, "3 file(s) it was not given read where they link") >= 0, "a child started over links says so:\n{green}")
+    rmdir_rec(dir, why)
 }

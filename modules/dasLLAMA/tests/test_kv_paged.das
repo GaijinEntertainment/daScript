@@ -6,9 +6,7 @@ options _dasllama_internal = true
 require dastest/testing_boost public
 require dasllama/dasllama_transformer   // umbrella fires each arch [init] registration
 require _model_tier
-require dasllama/dasllama_math   // with_dasllama_jobque_ + target_chunk_work
-require daslib/jobque_boost
-require daslib/fio
+require _kv_paged_cells   // logits_equal, cache_rows_equal, paged_vs_flat_cell
 
 // Paged KV pool (E2) — pool accounting, block-table run math, and the paged/flat storage seam on
 // synthetic Configs (no model files, never skips); then paged == flat BIT-EXACTNESS on stories15M
@@ -253,282 +251,124 @@ def test_kv_paged_store_roundtrip(t : T?) {
 
 // ===== paged == flat bit-exactness on a real model (env-gated, JIT-only) =====
 
-let MODEL_PATH = path_join(llama2c_dir(), "stories15M.bin")
 
 def private mk_prompt(n : int64) : array<int64> => <- [for (i in range64(n)); 2l + i % 40l]
 
-def private logits_equal(a : Session; b : Session; vocab : int64) : bool {
-    for (i in range64(vocab)) {
-        if (a.logits[i] != b.logits[i]) {
-            return false
-        }
-    }
-    return true
-}
-
-// per-(layer, position) cache-row byte compare through the storage seam — flat rows at identity,
-// paged rows through the block table
-def private cache_rows_equal(var sf : Session; var sp : Session; c : Config; npos : int64) : bool {
+//! On stories15M, a 21-token prefill straddling three 8-row pages matches flat prefill bit for bit in logits and cache rows, and eight greedy decode steps on top stay bit-exact
+def test_kv_paged_prefill(t : T?; tr : Model) {
     unsafe {
-        for (l in range64(c.n_layers)) {
-            let kvd = layer_kv_dim(c, l)
-            let krb = kv_row_bytes(sf.kv_dtype_k, kvd)
-            let vrb = kv_row_bytes(sf.kv_dtype_v, kvd)
-            let fk = kv_layer_kbase(sf, l, c.seq_len)
-            let pk = kv_layer_kbase(sp, l, c.seq_len)
-            let fv = kv_layer_vbase(sf, l, c.seq_len)
-            let pv = kv_layer_vbase(sp, l, c.seq_len)
-            for (pos in range64(npos)) {
-                let pr = kv_phys_row(sp, pos)
-                for (b in range64(krb)) {
-                    if (fk[pos * krb + b] != pk[pr * krb + b]) {
-                        return false
-                    }
-                }
-                for (b in range64(vrb)) {
-                    if (fv[pos * vrb + b] != pv[pr * vrb + b]) {
-                        return false
-                    }
-                }
-            }
-        }
-    }
-    return true
-}
-
-[test(description = "On stories15M, two paged f32 sessions interleaved on one pool fragment its pages yet match their flat references bit for bit in logits over 40 decode steps and in every cache row")]
-def test_kv_paged_decode(t : T?) {
-    t |> run("interleaved paged sessions == flat, bit-exact under fragmentation (needs stories15M.bin)") @(t : T?) {
-        return if (!jit_only(t))
-        if (!stat(MODEL_PATH).is_valid) {
-            t |> skip("stories15M.bin not present")
-            return
-        }
-        var tr <- load_checkpoint(MODEL_PATH)
-        let c = tr.config
-        quantize_weights(tr)
-        let prev_thresh = get_target_chunk_work()
-        with_dasllama_jobque_() {
-            set_target_chunk_work(1l)
-            // two paged sessions interleave allocations on ONE pool (P=16), so their pages
-            // FRAGMENT: [0,2,4] vs [1,3,5]. Each decodes a deterministic token stream and must
-            // stay bit-exact against its own flat reference, every step.
-            var pool <- create_kv_pool_(c, 16l, KVDtype.f32, KVDtype.f32)
-            var pa <- make_run_state_paged(c, pool)
-            var pb <- make_run_state_paged(c, pool)
-            var fa <- make_run_state(c)
-            var fb <- make_run_state(c)
-            let nsteps = 40l
-            var bad = 0
-            for (i in range64(nsteps)) {
-                let ta = 2l + (i * 7l) % (c.vocab_size - 2l)
-                let tb = 2l + (i * 11l) % (c.vocab_size - 2l)
-                forward(tr, pa, ta, i)
-                forward(tr, pb, tb, i)
-                forward(tr, fa, ta, i)
-                forward(tr, fb, tb, i)
-                if (!logits_equal(pa, fa, c.vocab_size) || !logits_equal(pb, fb, c.vocab_size)) {
-                    bad ++
-                }
-            }
-            t |> equal(0, bad)
-            t |> equal(3, length(pa.block_table))
-            t |> success(pa.block_table[1] != pa.block_table[0] + 1,
-                "interleaved sessions actually fragment the pool")
-            t |> success(cache_rows_equal(fa, pa, c, nsteps), "session A cache rows byte-equal flat")
-            t |> success(cache_rows_equal(fb, pb, c, nsteps), "session B cache rows byte-equal flat")
-            release_kv_pages_(pa)
-            release_kv_pages_(pb)
-            delete pa
-            delete pb
-            delete fa
-            delete fb
-            delete pool
-        }
-        set_target_chunk_work(prev_thresh)
-        delete tr
-    }
-}
-
-[test(description = "On SmolLM2-135M, two paged q8_0 sessions interleaved on one pool fragment its pages yet match flat q8_0 references bit for bit in logits over 40 decode steps and in every cache row")]
-def test_kv_paged_q8(t : T?) {
-    t |> run("paged q8_0 sessions == flat q8_0, bit-exact under fragmentation (needs SmolLM2-135M)") @(t : T?) {
-        return if (!jit_only(t))
-        // q8_0 needs a head_size-64 carrier (stories15M's 48 is rejected by the 32-block check)
-        let path = path_join(models_dir(), "SmolLM2-135M-Instruct-Q8_0.gguf")
-        if (!stat(path).is_valid) {
-            t |> skip("{path} not present")
-            return
-        }
-        var tr <- load_gguf(path, QuantMode.q8)
-        if (tr.config.seq_len > 64l) {   // cap the KV allocation (no math require here)
-            tr.config.seq_len = 64l
-        }
-        let c = tr.config
-        let prev_thresh = get_target_chunk_work()
-        with_dasllama_jobque_() {
-            set_target_chunk_work(1l)
-            // two q8 paged sessions interleave on ONE pool (P=16): fragmented BYTE-strided runs
-            var pool <- create_kv_pool_(c, 16l, KVDtype.q8_0, KVDtype.q8_0)
-            var pa <- make_run_state_paged(c, pool)
-            var pb <- make_run_state_paged(c, pool)
-            var fa <- make_run_state(c, KVDtype.q8_0, KVDtype.q8_0)
-            var fb <- make_run_state(c, KVDtype.q8_0, KVDtype.q8_0)
-            let nsteps = 40l
-            var bad = 0
-            for (i in range64(nsteps)) {
-                let ta = 2l + (i * 7l) % (c.vocab_size - 2l)
-                let tb = 2l + (i * 11l) % (c.vocab_size - 2l)
-                forward(tr, pa, ta, i)
-                forward(tr, pb, tb, i)
-                forward(tr, fa, ta, i)
-                forward(tr, fb, tb, i)
-                if (!logits_equal(pa, fa, c.vocab_size) || !logits_equal(pb, fb, c.vocab_size)) {
-                    bad ++
-                }
-            }
-            t |> equal(0, bad)
-            t |> success(pa.block_table[1] != pa.block_table[0] + 1,
-                "interleaved sessions actually fragment the pool")
-            t |> success(cache_rows_equal(fa, pa, c, nsteps), "session A q8 cache rows byte-equal flat")
-            t |> success(cache_rows_equal(fb, pb, c, nsteps), "session B q8 cache rows byte-equal flat")
-            release_kv_pages_(pa)
-            release_kv_pages_(pb)
-            delete pa
-            delete pb
-            delete fa
-            delete fb
-            delete pool
-        }
-        set_target_chunk_work(prev_thresh)
-        delete tr
-    }
-}
-
-[test(description = "On stories15M, a 21-token prefill straddling three 8-row pages matches flat prefill bit for bit in logits and cache rows, and eight greedy decode steps on top stay bit-exact")]
-def test_kv_paged_prefill(t : T?) {
-    t |> run("paged prefill == flat prefill: logits and cache rows bit-exact (needs stories15M.bin)") @(t : T?) {
-        return if (!jit_only(t))
-        if (!stat(MODEL_PATH).is_valid) {
-            t |> skip("stories15M.bin not present")
-            return
-        }
-        var tr <- load_checkpoint(MODEL_PATH)
-        let c = tr.config
-        quantize_weights(tr)
-        let prev_thresh = get_target_chunk_work()
-        with_dasllama_jobque_() {
-            set_target_chunk_work(1l)
-            // 21 tokens straddles pages at P=8 (2 full + 1 partial)
-            var prompt <- [for (i in range(21)); int64(i % 50 + 2)]
-            let n = long_length(prompt)
-            var pool <- create_kv_pool_(c, 8l, KVDtype.f32, KVDtype.f32)
-            var sp <- make_run_state_paged(c, pool)
-            forward_batch(tr, sp, prompt, n, 0l)
-            var sf <- make_run_state(c)
-            forward_batch(tr, sf, prompt, n, 0l)
-            t |> success(logits_equal(sp, sf, c.vocab_size), "prefill logits bit-exact")
-            t |> success(cache_rows_equal(sf, sp, c, n), "prefill cache rows byte-equal flat")
-            // decode a few more on top of the paged prefill, against the flat reference
-            var tok = argmax(sf, c.vocab_size)
-            var bad = 0
-            for (i in range64(8l)) {
-                forward(tr, sp, tok, n + i)
-                forward(tr, sf, tok, n + i)
-                if (!logits_equal(sp, sf, c.vocab_size)) {
-                    bad ++
-                }
-                tok = argmax(sf, c.vocab_size)
-            }
-            t |> equal(0, bad)
-            release_kv_pages_(sp)
-            delete sp
-            delete sf
-            delete pool
-            delete prompt
-        }
-        set_target_chunk_work(prev_thresh)
-        delete tr
-    }
-}
-
-[test(description = "On stories15M, `eval_batch` over three paged sessions of ragged depth on one pool, one crossing a page mid-decode, matches flat sessions' logits bit for bit for six steps and the deepest cache rows byte for byte")]
-def test_kv_paged_eval_batch(t : T?) {
-    t |> run("paged eval_batch == flat eval_batch, ragged depths on one pool (needs stories15M.bin)") @(t : T?) {
-        return if (!jit_only(t))
-        if (!stat(MODEL_PATH).is_valid) {
-            t |> skip("stories15M.bin not present")
-            return
-        }
-        var tr <- load_checkpoint(MODEL_PATH)
-        let c = tr.config
-        quantize_weights(tr)
-        let prev_thresh = get_target_chunk_work()
-        with_dasllama_jobque_() {
-            set_target_chunk_work(1l)
-            // ragged depths: 1, 2 and 3 pages at P=8; q0 crosses a page boundary MID-batch-decode
-            // (kv_ensure growth inside eval_batch), and the sequential prefills interleave the
-            // sessions' groups in the pool
-            var p0 <- mk_prompt(5l)
-            var p1 <- mk_prompt(9l)
-            var p2 <- mk_prompt(17l)
-            var pool <- create_kv_pool_(c, 8l, KVDtype.f32, KVDtype.f32)
-            var q0 <- make_run_state_paged(c, pool)
-            var q1 <- make_run_state_paged(c, pool)
-            var q2 <- make_run_state_paged(c, pool)
-            var f0 <- make_run_state(c)
-            var f1 <- make_run_state(c)
-            var f2 <- make_run_state(c)
-            eval_(tr, q0, p0)
-            eval_(tr, q1, p1)
-            eval_(tr, q2, p2)
-            eval_(tr, f0, p0)
-            eval_(tr, f1, p1)
-            eval_(tr, f2, p2)
-            var ws <- create_batch_workspace_(tr)
-            var qsess <- [unsafe(addr(q0)), unsafe(addr(q1)), unsafe(addr(q2))]
-            var fsess <- [unsafe(addr(f0)), unsafe(addr(f1)), unsafe(addr(f2))]
-            var toks : array<int64>
-            toks |> resize(3)
-            var bad = 0
-            for (step in range64(6l)) {
-                for (i in range64(3l)) {
-                    toks[i] = 100l + step * 3l + i
-                }
-                eval_batch_(tr, ws, qsess, toks)
-                eval_batch_(tr, ws, fsess, toks)
-                for (i in range64(3l)) {
-                    if (!logits_equal(*qsess[i], *fsess[i], c.vocab_size)) {
+        t |> run("paged prefill == flat prefill: logits and cache rows bit-exact (needs stories15M.bin)") @capture(& tr)(t : T ?) {
+            let c = tr.config
+            with_threaded_jobque() {
+                // 21 tokens straddles pages at P=8 (2 full + 1 partial)
+                var prompt <- [for (i in range(21)); int64(i % 50 + 2)]
+                let n = long_length(prompt)
+                var pool <- create_kv_pool_(c, 8l, KVDtype.f32, KVDtype.f32)
+                var sp <- make_run_state_paged(c, pool)
+                forward_batch(tr, sp, prompt, n, 0l)
+                var sf <- make_run_state(c)
+                forward_batch(tr, sf, prompt, n, 0l)
+                t |> success(logits_equal(sp, sf, c.vocab_size), "prefill logits bit-exact")
+                t |> success(cache_rows_equal(sf, sp, c, n), "prefill cache rows byte-equal flat")
+                // decode a few more on top of the paged prefill, against the flat reference
+                var tok = argmax(sf, c.vocab_size)
+                var bad = 0
+                for (i in range64(8l)) {
+                    forward(tr, sp, tok, n + i)
+                    forward(tr, sf, tok, n + i)
+                    if (!logits_equal(sp, sf, c.vocab_size)) {
                         bad ++
                     }
+                    tok = argmax(sf, c.vocab_size)
                 }
+                t |> equal(0, bad)
+                release_kv_pages_(sp)
+                delete sp
+                delete sf
+                delete pool
+                delete prompt
             }
-            t |> equal(0, bad)
-            t |> equal(q0.n_past, f0.n_past)
-            t |> success(cache_rows_equal(f2, q2, c, q2.n_past), "deepest row cache rows byte-equal flat")
-            release_kv_pages_(q0)
-            release_kv_pages_(q1)
-            release_kv_pages_(q2)
-            qsess |> clear()   // drop the borrowed handles: delete of array<T?> cascades to the pointees
-            fsess |> clear()
-            unsafe {
-                delete ws
-                delete qsess
-                delete fsess
-            }
-            delete toks
-            delete q0
-            delete q1
-            delete q2
-            delete f0
-            delete f1
-            delete f2
-            delete pool
-            delete p0
-            delete p1
-            delete p2
         }
-        set_target_chunk_work(prev_thresh)
-        delete tr
+    }
+}
+
+//! On stories15M, `eval_batch` over three paged sessions of ragged depth on one pool, one crossing a page mid-decode, matches flat sessions' logits bit for bit for six steps and the deepest cache rows byte for byte
+def test_kv_paged_eval_batch(t : T?; tr : Model) {
+    unsafe {
+        t |> run("paged eval_batch == flat eval_batch, ragged depths on one pool (needs stories15M.bin)") @capture(& tr)(t : T ?) {
+            let c = tr.config
+            with_threaded_jobque() {
+                // ragged depths: 1, 2 and 3 pages at P=8; q0 crosses a page boundary MID-batch-decode
+                // (kv_ensure growth inside eval_batch), and the sequential prefills interleave the
+                // sessions' groups in the pool
+                var p0 <- mk_prompt(5l)
+                var p1 <- mk_prompt(9l)
+                var p2 <- mk_prompt(17l)
+                var pool <- create_kv_pool_(c, 8l, KVDtype.f32, KVDtype.f32)
+                var q0 <- make_run_state_paged(c, pool)
+                var q1 <- make_run_state_paged(c, pool)
+                var q2 <- make_run_state_paged(c, pool)
+                var f0 <- make_run_state(c)
+                var f1 <- make_run_state(c)
+                var f2 <- make_run_state(c)
+                eval_(tr, q0, p0)
+                eval_(tr, q1, p1)
+                eval_(tr, q2, p2)
+                eval_(tr, f0, p0)
+                eval_(tr, f1, p1)
+                eval_(tr, f2, p2)
+                var ws <- create_batch_workspace_(tr)
+                var qsess <- [unsafe(addr(q0)), unsafe(addr(q1)), unsafe(addr(q2))]
+                var fsess <- [unsafe(addr(f0)), unsafe(addr(f1)), unsafe(addr(f2))]
+                var toks : array<int64>
+                toks |> resize(3)
+                var bad = 0
+                for (step in range64(6l)) {
+                    for (i in range64(3l)) {
+                        toks[i] = 100l + step * 3l + i
+                    }
+                    eval_batch_(tr, ws, qsess, toks)
+                    eval_batch_(tr, ws, fsess, toks)
+                    for (i in range64(3l)) {
+                        if (!logits_equal(*qsess[i], *fsess[i], c.vocab_size)) {
+                            bad ++
+                        }
+                    }
+                }
+                t |> equal(0, bad)
+                t |> equal(q0.n_past, f0.n_past)
+                t |> success(cache_rows_equal(f2, q2, c, q2.n_past), "deepest row cache rows byte-equal flat")
+                release_kv_pages_(q0)
+                release_kv_pages_(q1)
+                release_kv_pages_(q2)
+                qsess |> clear()   // drop the borrowed handles: delete of array<T?> cascades to the pointees
+                fsess |> clear()
+                unsafe {
+                    delete ws
+                    delete qsess
+                    delete fsess
+                }
+                delete toks
+                delete q0
+                delete q1
+                delete q2
+                delete f0
+                delete f1
+                delete f2
+                delete pool
+                delete p0
+                delete p1
+                delete p2
+            }
+        }
+    }
+}
+
+[test(description = "stories15M on one load, its weights quantized, runs the paged-decode, paged-prefill and paged eval_batch cells in turn, each on its own pool and sessions")]
+def test_kv_paged_stories_cells(t : T?) {
+    with_stories15m(t) $(var tr) {
+        paged_vs_flat_cell(t, tr, "interleaved paged sessions == flat, bit-exact under fragmentation (needs stories15M.bin)", KVDtype.f32, "")
+        test_kv_paged_prefill(t, tr)
+        test_kv_paged_eval_batch(t, tr)
     }
 }

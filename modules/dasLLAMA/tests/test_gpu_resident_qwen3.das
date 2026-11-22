@@ -10,9 +10,17 @@ require dasllama/dasllama_kv_dtype   // KVDtype: the tq4 forms' mirror ask
 require dasllama/dasllama_math   // with_dasllama_jobque_: the compares after the block decode off the queue
 require ?cuda _cuda_feed   // LOGIT_BAR_REL: the CUDA home's dense bar
 require _cpu_gpu_model   // with_cpu_and_gpu_model, the forms, FeedRows, the CUDA feed collector, the gather cell's halves
+require _parity_cells   // the parity cells the block's parity knob reaches (`_::`): the files' model_specs parity rows on their blocks
 require _resident_regions   // the regions cells' collections, REGIONS_RIG_CTX, the fuse bisect's bits
 require _resident_feed   // Held, held_within, held_pf_window
 require _kv_codec_cells   // the tq4 distance and stored-rows halves, the per-op cells
+require _dflash_cells   // the block drafter's walks: lossless, the planes' tags, the discrete legs
+require _chat_cells   // chat_qwen3_cells: the uncached CPU form's chat cells
+require _kv_codec_cpu_cells   // kv_codec_keeps_tq4_cell: the uncached CPU form's step-down control
+require _embedding_cells   // the Qwen3-Embedding file's cells on its forms
+require dasllama/dasllama_gpu_tier   // reset_gpu_cpu_passes: the passes the by-design cells leave
+require ?vulkan dasllama/dasllama_vulkan_dflash   // nolint:STYLE030,LINT019 - the Vulkan arm registers at init
+require ?cuda dasllama/dasllama_cuda_dflash   // nolint:STYLE030,LINT019 - the CUDA arm registers at init
 
 [init]
 def private allow_cpu_prefill_intent() {
@@ -33,16 +41,31 @@ def private allow_cpu_prefill_intent() {
 //   decode attention's tq4 stamps, the prefill's attention over the f16 shadow, the rows a pass brings down as the CPU
 //   cache's own bytes; the tolerance cells hold the rig's tq4 bars); with the whole-model route off the per-op rails under
 //   tq4 and q8_0 sessions, and the load's decline reason; on the CUDA home the forced feed over one window and two, the
-//   fused CuQknRopeKv pass, with the driver's counters and their control.
-// - Qwen3-4B-Instruct-2507: the Q8_0 file's CUDA forced feed at its 2560-wide rows over 36 layers
-//   (`test_gpu_resident_qwen3_4b`, `--category qwen3-4b`, `../TEST_CATEGORIES.md`), and the Q4_K_M file - a format carrier,
-//   in every run - its tied K-quant table gathered on the device beside its per-op rails under tq4 and q8_0 sessions, the
-//   K-quant format of a codec's parity (`test_gpu_resident_qwen3_4b_kq`).
-// Every test skips off the JIT, without DASLLAMA_GPU=1 on a device the driver serves, without the file under models_dir(),
-// or where the plan does not fit the card. The tq4 forms skip where DASLLAMA_VK_KV32=1 arms an f32 mirror over the codec;
+//   fused CuQknRopeKv pass, with the driver's counters and their control. On its uncached CPU form, on every box, the
+//   file's own CPU cells: the chat renders (`_chat_cells.das`) and the codec step-down rule's control
+//   (`_kv_codec_cpu_cells.das`); on its parity row's CPU form the row's frozen greedy ids (`parity_spec_cell`).
+// - Qwen3-Embedding-0.6B Q8_0 (`test_gpu_resident_qwen3_embedding`, `_embedding_cells.das`): on the driver's default form
+//   the whole-model driver serving the embeddings from the device and every region held by a live session, on a region
+//   capped at EMB_REGION_ROWS the batch windows the region bounds; on its q8, uncached and q4_0 CPU forms, on every box, the
+//   card's matrix, the batch against its singles, the lone forwards, and the device cells' CPU halves.
+// - Qwen3-4B-Instruct-2507: the Q8_0 file's CUDA forced feed at its 2560-wide rows over 36 layers, and on every box its
+//   parity row's frozen greedy ids on the row's CPU form (`test_gpu_resident_qwen3_4b`, `--category qwen3-4b`,
+//   `../TEST_CATEGORIES.md`).
+// - Qwen3-4B Q4_K_M (the base model the Instruct-2507 files fine-tune; a format carrier, in every run,
+//   `test_gpu_resident_qwen3_4b_kq`): on the Vulkan home its tied K-quant table gathered on the device beside its per-op rails
+//   under tq4 and q8_0 sessions, the K-quant format of a codec's parity; with its regular DFlash drafter's Q8_0 and Q4_K_M
+//   files (`drafters/Qwen3-4B-DFlash-b16-GGUF/`) the CPU form's lossless walks over a chat turn and each file's planes tagged by
+//   disk type, and on either discrete home the drafter form (an f16 mirror of DISCRETE_MIRROR_CTX positions asked whole, the
+//   sessions cut to DISCRETE_CTX) each file's walk on the device arm against the plain walk. A drafter cell skips without its
+//   file, the discrete legs on a build with no discrete DFlash arm.
+// Every test skips off the JIT or without the file under models_dir(); each device form skips as a cell of its own without
+// DASLLAMA_GPU=1 on a device the driver serves (the 4B Q4_K_M file's CPU form, the drafter's CPU cells, runs on every box), or
+// where the plan does not fit the card. The tq4 forms skip where DASLLAMA_VK_KV32=1 arms an f32 mirror over the codec;
 // the two-window feeds where the prompt window is not PF_WINDOW_ROWS rows. Under DASLLAMA_CUDA=1 the fuse bisect, the fused
 // q/k norm, the tq4 distance and stored-rows cells, the per-op cells and the 4B Q4_K_M file - the Vulkan home's - give way
-// to the CUDA feeds.
+// to the CUDA feeds. A parity row's form (the row's load mode and K-quant knob under DASLLAMA_PIN_BACKEND's pin) loads on
+// every box and skips where the box cannot take that pin; the 4B Q8_0 file's CUDA feed skips as a cell of its own off the
+// CUDA home.
 
 //! no logit bar holds a 4-bit mirror on a 0.6B, so the codec bars hold ratios of the rows' summed largest differences: the
 //! device's distance from the f16 chain, of the CPU codec chain's own, reads 0.95-1.01 (the tq4 rows 1.17 on the RTX PRO 4500,
@@ -69,13 +92,6 @@ let private QWEN3_4B_PEROP_BARS = PeropBars(rows = 0.05, dist_rel = 1.0)
 //! (`test_vkd_emb_gather_family`); the one-step-off control reads 5.4 and past
 let private QWEN_KQ_BAR_REL = 0.10
 
-
-//! the CUDA home's forced feeds of a qwen3 file, one window and two (`dense_feeds`), the file's family held
-def private qwen3_cuda_rows(var c : DenseFeeds; m : Model; form : ModelForm) {
-    if (dense_feeds_rows(c, m, form) == MainSide.device) {
-        c.carrier |> held_equal(m.arch, "qwen3", "the file is a qwen3-family model")
-    }
-}
 
 //! the CUDA feeds' compares after the block at the CUDA home's dense bar
 [unused_argument(file, c)]   // without the cuda module no feed ran
@@ -119,7 +135,8 @@ def private qwen3_06b_perop_cells() : array<PeropCell> => <- [PeropCell(n = 40l,
 //! fuse bisect's load a bit (no bit first, the base) and the per-op form; under a tq4 mirror (a codec the environment keeps off
 //! held as a skip) on the Vulkan home the plain form (the distance form and the stored rows) and the planes on the host (the
 //! prompt on the CPU rails), on both homes two regions (the rig), the same with the planes on the host (the pin and the gap
-//! pass), at the capped context (the cap pass), and the per-op form asking the codec (the decline reason)
+//! pass), at the capped context (the cap pass), and the per-op form asking the codec (the decline reason); and the uncached
+//! CPU form whose cells stand alone
 def private qwen3_forms(var r : Qwen3Rows) : array<ModelForm> {
     let cuda = gpu_want_cuda()
     var forms <- [device_form(regions = 2l, ctx = REGIONS_RIG_CTX)]
@@ -134,14 +151,15 @@ def private qwen3_forms(var r : Qwen3Rows) : array<ModelForm> {
         r.perop.cells <- qwen3_06b_perop_cells()
         forms |> push_from(perop_forms(r.perop))
     }
+    forms |> push(cpu_cells_form(uncached = true))
     let why = codec_env_why(KVDtype.tq4)
     if (!empty(why)) {
         r.codec.h |> held_skip("the tq4 mirror's cells: {why}")
         return <- forms
     }
     if (!cuda) {
-        forms |> push(device_form(kv = KVDtype.tq4))
-        forms |> push(device_form(kv = KVDtype.tq4, host = true))
+        forms |> push(device_form() |> asking(KVDtype.tq4))
+        forms |> push(device_form(host = true) |> asking(KVDtype.tq4))
     }
     forms |> push_from(regions_rig_forms(KVDtype.tq4))
     return <- forms
@@ -209,7 +227,10 @@ def private qwen3_codec_within(t : T?; c : Qwen3CodecRows) {
 //! one form's collection of the Qwen3-0.6B file's cells into `r`; the per-op forms', the regions forms' and the fuse bisect's
 //! own cells run on their load
 def private qwen3_rows(t : T?; var r : Qwen3Rows; var m : Model; form : ModelForm) {
-    if (form.perop) {
+    if (form.uncached) {
+        chat_qwen3_cells(t, m)
+        kv_codec_keeps_tq4_cell(t, m)
+    } elif (form.perop) {
         if (form.kv_asked) {
             regions_route_off_cell(t, m)
         } else {
@@ -241,14 +262,14 @@ def private qwen3_rows(t : T?; var r : Qwen3Rows; var m : Model; form : ModelFor
     } elif (form.on_gpu && form.kv_asked) {
         qwen3_codec_rows(t, r.codec, m, form)
     } else {
-        qwen3_cuda_rows(r.feeds, m, form)
+        dense_feeds_rows(r.feeds, m, form, "qwen3")
         if (!form.on_gpu) {
             qwen3_codec_rows(t, r.codec, m, form)
         }
     }
 }
 
-[test(description = "On Qwen3-0.6B Q8_0 over two mirror regions two sessions stepped interleaved, past the wide position on the wide twin, batched first, batched at one window and past the unsplit position each read what that session reads alone, and the window's fused q/k norm, rope and store pass reads within the split bar of the split pair; every DASLLAMA_VK_FUSE_BISECT bit serves one-row logits within the split bar of the unsplit load and the split-pair rows batch bit for bit; a tq4 K/V mirror sits within 1.25 times the CPU tq4 chain's distance from the f16 rows over one and two windows and over rows the CPU prefill wrote, its layer 0 stored rows match the CPU cache's within the byte bars, and the rig's cells - interleaved, continued, batched, device-home, parked, guarded, reported, scheduled, the pin and the gap and cap passes - hold the tq4 bars; on the per-op rails tq4 and q8_0 sessions keep layer 0's cache bytes within 5 percent of the CPU chain's and the device no further from f16 than the CPU codec chain, and the route-off load reports never attempted; on the CUDA driver the fused CuQknRopeKv pass keeps forced-feed logits within 6 percent of the CPU chain over one and two windows; each form loads once")]
+[test(description = "On Qwen3-0.6B Q8_0 over two mirror regions two sessions stepped interleaved, past the wide position on the wide twin, batched first, batched at one window and past the unsplit position each read what that session reads alone, and the window's fused q/k norm, rope and store pass reads within the split bar of the split pair; every DASLLAMA_VK_FUSE_BISECT bit serves one-row logits within the split bar of the unsplit load and the split-pair rows batch bit for bit; a tq4 K/V mirror sits within 1.25 times the CPU tq4 chain's distance from the f16 rows over one and two windows and over rows the CPU prefill wrote, its layer 0 stored rows match the CPU cache's within the byte bars, and the rig's cells - interleaved, continued, batched, device-home, parked, guarded, reported, scheduled, the pin and the gap and cap passes - hold the tq4 bars; on the per-op rails tq4 and q8_0 sessions keep layer 0's cache bytes within 5 percent of the CPU chain's and the device no further from f16 than the CPU codec chain, and the route-off load reports never attempted; on the CUDA driver the fused CuQknRopeKv pass keeps forced-feed logits within 6 percent of the CPU chain over one and two windows; on the uncached CPU form, on every box, the thinking-off generation prompt and the preserve_thinking replays render, and bias-free Qwen3-0.6B keeps a tq4 session at tq4; on the parity row's CPU form, on every box, the file's frozen greedy ids token for token; each form loads once")]
 def test_gpu_resident_qwen3(t : T?) {
     return if (!family_on(t, "qwen3"))
     var r : Qwen3Rows
@@ -262,7 +283,7 @@ def test_gpu_resident_qwen3(t : T?) {
     var forms <- qwen3_forms(r)
     var ran = false
     with_cuda_mmq_winners() {
-        ran = with_cpu_and_gpu_model(t, "llm", "Qwen3-0.6B-Q8_0.gguf", REGIONS_RIG_CTX, forms) $(m, form) {
+        ran = with_cpu_and_gpu_model(t, "llm", "Qwen3-0.6B-Q8_0.gguf", REGIONS_RIG_CTX, forms, parity = true) $(var m, form) {
             qwen3_rows(t, r, m, form)
         }
     }
@@ -279,46 +300,123 @@ def test_gpu_resident_qwen3(t : T?) {
     delete forms
 }
 
-[test(description = "On the CUDA whole-model driver Qwen3-4B Q8_0, its 2560-wide rows over 36 layers, keeps forced-feed logits within 6 percent of max logit of the CPU chain over one and two windows with the fused q/k-norm rope pass; each form loads once")]
+let private EMB_FILE_CTX = 32768l   //! Qwen3-Embedding's own context: its cells read at it
+
+//! what the Qwen3-Embedding file's forms collect: the device's mean read of the long text (empty where its cell skipped) and
+//! the q8 CPU form's reads it is held to (`mean_ran` where collected), and whether the window-rows cell ran past its served
+//! gate
+struct Qwen3EmbRows {
+    dev_mean : array<float>
+    cpu_mean : EmbMeanRows
+    mean_ran : bool
+    window_ran : bool
+}
+
+//! one form's cells of the Qwen3-Embedding file: on the driver's default form the resident-driver cell, then the every-region
+//! cell; on the region-capped form the window-rows cell; on the q8 CPU form, once, the lone forwards, the resident-driver
+//! cell's CPU reads and the window-rows cell's CPU half; on the uncached form the card and the batch; on the q4_0 form its lone
+//! forwards
+def private qwen3_emb_rows(t : T?; var r : Qwen3EmbRows; var m : Model; form : ModelForm) {
+    if (form.on_gpu && form.ctx == EMB_REGION_ROWS) {
+        r.window_ran = embeddings_window_rows_cell(t, m)
+        reset_gpu_cpu_passes()   //! the cell's route-off leg passes to the CPU by design
+    } elif (form.on_gpu) {
+        r.dev_mean <- embeddings_on_the_resident_driver_cell(t, m)
+        reset_gpu_cpu_passes()   //! the cell's route-off leg passes to the CPU by design
+        embeddings_every_region_held_cell(t, m)
+        reset_gpu_cpu_passes()   //! the cell's host-cached sessions pass to the CPU by design
+    } elif (form.quant == QuantMode.q4_0) {
+        embeddings_lone_forwards_q4_0_cell(t, m)
+    } elif (form.uncached) {
+        embeddings_card_cell(t, m)
+        embeddings_batch_matches_single_cell(t, m)
+    } elif (form.alone) {
+        embeddings_lone_forwards_cell(t, m)
+        if (!empty(r.dev_mean)) {
+            r.cpu_mean <- embeddings_resident_mean_rows(m)
+            r.mean_ran = true
+        }
+        if (r.window_ran) {
+            embeddings_unserved_window_rows(t, m)
+        }
+    }
+}
+
+[test(description = "Qwen3-Embedding 0.6B Q8_0 on one load a form: on the q8 load exactly the one-row text of a host batch runs `embed_forward` alone while multi-row texts share the window; loaded uncached it reads last-token pooling and an appended EOS off the file, its last-token read lands the model card's 2 x 2 cosine matrix within 0.02 while the mean read cannot separate the passages (control), and `embed_batch` gives each text its single `embed` vector at cosine above 0.9999 in one window, in 40-row split windows and under the 256-dim Matryoshka cut, in input order; loaded as q4_0 every text runs alone; each lone text lands its single vector at cosine above 0.9999 with a shifted-text control missing; the whole-model driver serves it on the device with no CPU-rail pass: the card matrix within 0.02, a batch packed in one scratch window matching its singles, and a long mean read equal to the CPU's; `embed_window_rows` is the armed driver's capped region context, so a batch past 256 rows takes the predicted count of scratch windows and matches its singles, and is EMBED_WINDOW_ROWS for an unserved model; with every device region held by a live session `embed_batch` takes host-cached sessions and no scratch window yet reads the same vectors as with a region free, and parking the streams frees every region; each form loads once")]
+def test_gpu_resident_qwen3_embedding(t : T?) {
+    return if (!family_on(t, "qwen3"))
+    var r : Qwen3EmbRows
+    var forms <- [device_form(host = true), device_form(host = true, ctx = EMB_REGION_ROWS, host_ctx = EMB_FILE_CTX), cpu_cells_form(),
+        cpu_cells_form(uncached = true), cpu_cells_form(QuantMode.q4_0)]
+    with_cpu_and_gpu_model(t, "llm", "Qwen3-Embedding-0.6B-Q8_0.gguf", EMB_FILE_CTX, forms) $(m, form) {
+        qwen3_emb_rows(t, r, m, form)
+    }
+    if (r.mean_ran) {
+        embeddings_resident_mean_within(t, r.dev_mean, r.cpu_mean)
+    } elif (!empty(r.dev_mean)) {
+        t |> failure("Qwen3-Embedding: the device's mean read has no CPU half - the q8 CPU form collected none")
+    }
+    delete r
+    delete forms
+}
+
+[test(description = "On the CUDA whole-model driver Qwen3-4B Q8_0, its 2560-wide rows over 36 layers, keeps forced-feed logits within 6 percent of max logit of the CPU chain over one and two windows with the fused q/k-norm rope pass; on the parity row's CPU form, on every box, the file's frozen greedy ids token for token; each form loads once")]
 def test_gpu_resident_qwen3_4b(t : T?) {
-    return if (!family_on(t, "qwen3") || !cuda_home_asked(t))
+    return if (!family_on(t, "qwen3"))
     var c : DenseFeeds
-    dense_feeds(c, [40l, TWO_WINDOWS])
+    var forms : array<ModelForm>
+    let why = cuda_home_why()
+    if (empty(why)) {
+        dense_feeds(c, [40l, TWO_WINDOWS])
+        forms |> push(device_form())
+    } else {
+        skip_cell(t, "Qwen3-4B-Instruct-2507-Q8_0.gguf: the CUDA forced feed: {why}")
+    }
     var ran = false
     with_cuda_mmq_winners() {
-        ran = with_cpu_and_gpu_model(t, "llm", "Qwen3-4B-Instruct-2507-Q8_0.gguf", REGIONS_RIG_CTX, [device_form()]) $(m, form) {
-            qwen3_cuda_rows(c, m, form)
+        ran = with_cpu_and_gpu_model(t, "llm", "Qwen3-4B-Instruct-2507-Q8_0.gguf", REGIONS_RIG_CTX, forms, parity = true) $(var m, form) {
+            dense_feeds_rows(c, m, form, "qwen3")
         }
     }
     if (ran) {
         qwen3_cuda_within(t, "Qwen3-4B-Instruct-2507-Q8_0.gguf", c)
     }
     delete c
+    delete forms
 }
 
 let private GATHER_CTX = 4096l   //! the gather form's context: the cells' prompts are one window
 
-[test(description = "On the whole-model driver Qwen3-4B Q4_K_M's tied K-quant table is gathered on the device by the window and every fed step off its token id, with forced-feed steps within 10 percent of max logit of the CPU chain; on the per-op rails tq4 and q8_0 sessions keep layer 0's cache bytes within 5 percent of the CPU chain's and the device no further from the f16 chain than the CPU codec chain; each form loads once")]
+[test(description = "On the whole-model driver Qwen3-4B Q4_K_M's tied K-quant table is gathered on the device by the window and every fed step off its token id, with forced-feed steps within 10 percent of max logit of the CPU chain; on the per-op rails tq4 and q8_0 sessions keep layer 0's cache bytes within 5 percent of the CPU chain's and the device no further from the f16 chain than the CPU codec chain; with its Q8_0 and Q4_K_M DFlash drafters every plane is tagged with its disk type's format and on the CPU arm, over a chat turn, the greedy speculative walk emits the plain greedy walk's ids token for token with drafts accepted; on the serving discrete home each drafter file's greedy walk on the device arm is the plain walk's on the same device, every pass ending on the device's top-k, the host's walk and selector drafting the same ids; each form loads once")]
 def test_gpu_resident_qwen3_4b_kq(t : T?) {
-    return if (!family_on(t, "qwen3") || !vulkan_home_asked(t, "the table gather and the per-op cells are the Vulkan home's"))
-    let file = "Qwen3-4B-Instruct-2507-Q4_K_M.gguf"
+    return if (!family_on(t, "qwen3"))
+    let file = "Qwen3-4B-Q4_K_M.gguf"
     var g : EmbGather
-    var run = PeropRun(cells <- [PeropCell(n = 40l, kv = KVDtype.tq4, bars = QWEN3_4B_PEROP_BARS),
-        PeropCell(n = 40l, kv = KVDtype.q8_0, bars = QWEN3_4B_PEROP_BARS)])
-    var forms <- perop_forms(run)
-    let arm = arm_why("vk-gather")
-    if (empty(arm)) {
-        forms |> push(device_form(regions = 1l))
-    } else {
-        g.h |> held_skip("{file}: the tied K-quant table's gather: {arm}")
+    var run : PeropRun
+    let vk_why = vulkan_home_why("the table gather and the per-op cells are the Vulkan home's")
+    var forms <- empty(vk_why) ? qwen3_4b_kq_forms(run, g, file) : array<ModelForm>()
+    if (!empty(vk_why)) {
+        skip_cell(t, "{file}: {vk_why}")
     }
-    let ran = with_cpu_and_gpu_model(t, "llm", "Qwen3-4B-Instruct-2507-Q4_K_M.gguf", GATHER_CTX, forms) $(m, form) {
-        if (form.perop) {
-            perop_next(t, run, m)
-        } elif (form.on_gpu) {
-            emb_gather_rows(g, m, form, file)
-        } elif (g.ran) {
-            g.cpu <- resident_feed_rows(m, form, GATHER_PROMPT, GATHER_STEPS)
+    forms |> push(discrete_drafter_form())
+    forms |> push(cpu_cells_form())
+    var ran = false
+    with_cuda_mmq_winners() {
+        ran = with_cpu_and_gpu_model(t, "llm", "Qwen3-4B-Q4_K_M.gguf", GATHER_CTX, forms) $(m, form) {
+            if (form.strict_ctx) {
+                qwen3_4b_drafter_discrete_cells(t, m)
+            } elif (form.perop) {
+                perop_next(t, run, m)
+            } elif (form.on_gpu) {
+                emb_gather_rows(g, m, form, file)
+            } else {
+                if (g.ran) {
+                    g.cpu <- resident_feed_rows(m, form, GATHER_PROMPT, GATHER_STEPS)
+                }
+                if (form.quant == QuantMode.q8 && form.alone) {
+                    qwen3_4b_drafter_cpu_cells(t, m)
+                }
+            }
         }
     }
     if (ran) {
@@ -332,4 +430,40 @@ def test_gpu_resident_qwen3_4b_kq(t : T?) {
     delete g
     delete forms
     delete run
+}
+
+//! the Vulkan home's K-quant forms of `file`: the per-op forms of `run` (its cells set here), and the table gather's form, or
+//! its filtered arm held as a skip in `g`
+def private qwen3_4b_kq_forms(var run : PeropRun; var g : EmbGather; file : string) : array<ModelForm> {
+    run.cells <- [PeropCell(n = 40l, kv = KVDtype.tq4, bars = QWEN3_4B_PEROP_BARS),
+        PeropCell(n = 40l, kv = KVDtype.q8_0, bars = QWEN3_4B_PEROP_BARS)]
+    var forms <- perop_forms(run)
+    let arm = arm_why("vk-gather")
+    if (empty(arm)) {
+        forms |> push(device_form(regions = 1l))
+    } else {
+        g.h |> held_skip("{file}: the tied K-quant table's gather: {arm}")
+    }
+    return <- forms
+}
+
+//! the regular DFlash drafter's CPU cells on the CPU form `m`, its context cut to HOST_CTX for them and put back, the Metal mode
+//! off (put back): each drafter file's planes tagged with their disk types and its lossless walk over a chat turn
+def private qwen3_4b_drafter_cpu_cells(t : T?; var m : Model) {
+    with_cpu_drafter_scope(m) {
+        unsafe {   //! the cells capture the loaded trunk by reference
+            t |> run("Qwen3-4B, the Q8_0 DFlash drafter: every plane tagged with its disk type's format, and on the CPU arm, over a chat turn, the greedy speculative walk emits the plain greedy walk's ids token for token with drafts accepted") @capture(& m)(t : T ?) {
+                cpu_drafter_lossless(t, m, QWEN3_4B_DRAFTER_FILE, "Qwen3-4B cpu", true, true)
+            }
+            t |> run("Qwen3-4B, the Q4_K_M DFlash drafter: every plane tagged with its disk type's format, and on the CPU arm, over a chat turn, the greedy speculative walk emits the plain greedy walk's ids token for token with drafts accepted") @capture(& m)(t : T ?) {
+                cpu_drafter_lossless(t, m, QWEN3_4B_DRAFTER_K4_FILE, "Qwen3-4B k4 cpu", true, true)
+            }
+        }
+    }
+}
+
+//! the regular DFlash drafter's discrete-home cells on the drafter form `m`: the Q8_0 and Q4_K_M files' legs over a chat turn
+def private qwen3_4b_drafter_discrete_cells(t : T?; m : Model) {
+    discrete_drafter_cell(t, m, "Qwen3-4B's resident trunk on the serving discrete home, the Q8_0 and Q4_K_M DFlash drafters: each greedy walk on the device arm is the plain walk's on the same device, every pass on the device's top-k, the host's walk and selector drafting the same ids",
+        "", [QWEN3_4B_DRAFTER_FILE, QWEN3_4B_DRAFTER_K4_FILE], "Qwen3-4B discrete", false, true, false)
 }

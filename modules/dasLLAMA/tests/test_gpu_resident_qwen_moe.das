@@ -29,6 +29,8 @@ require dasllama/dasllama_cuda_stream   // cud_stream_stats, cud_stream_dma_fill
 require _cuda_feed   // cuda_forced_feed, stream_witness: the CUDA home's own cells
 require dasllama/dasllama_moe   // shexp_gpu_decode_rows: the 35B per-op form's shared-expert rows
 require _segment_cells   // recurrent_segments_cell, SEG_WINDOW: the 35B cut's segmented windows
+require _parity_cells   // parity_qwen2moe_cut_cell, parity_qwen35moe_cut_cell: the cuts' parity streams on their pinned CPU forms; the 30B's parity row
+require _batch_decode_cells   // batch_decode_hybrid_moe_cell: the 35B UD-Q4_K_M cut's portable-pinned CPU form
 
 // The whole-model resident driver on a MoE under DASLLAMA_GPU=1, on the Vulkan home or under DASLLAMA_CUDA=1 on the CUDA home:
 // the expert stacks in the arena beside the attention quads and the shared experts, the window chain's routed block (the
@@ -48,7 +50,8 @@ require _segment_cells   // recurrent_segments_cell, SEG_WINDOW: the 35B cut's s
 //   stream off).
 // - The Q8_0 cut (`test_gpu_resident_moe_q8`): the same two host-layers forms; two mirror regions, the batched-step cells bit
 //   for bit (the N-row command's plain act and the shared expert's Q8_0 requant); under DASLLAMA_CUDA=1 the default form's
-//   one-window feed.
+//   one-window feed; on its CPU form under the environment's backend pin (DASLLAMA_PIN_BACKEND, none where unset), on every
+//   box, the parity reference's greedy stream (`_parity_cells.das`); a pin the box cannot take skips that form loudly.
 // - The per-32 cuts (`test_gpu_resident_moe_per32`, arm `vk-per32-moe`): Q5_1, Q4_0 and Q5_0, each read site by site in its
 //   own format, a 40-token window against the CPU chain.
 // The Qwen3-30B UD-IQ2_XXS, the MoE with no shared expert (the residual step's add partner off), holds the format census
@@ -430,17 +433,8 @@ def private qwen_moe_rows_within(t : T?; tag : string; r : QwenMoeRows) {
     held_within(t, r.pool, "{tag}the pool: ", false)
     held_within(t, r.regions, "{tag}the regions rig: ", false)
     with_dasllama_jobque_() {
-        for (f, i in r.main_feeds, count()) {
-            let what = "{tag}{f.nprompt} tokens: "
-            continue if (!twin_collected(t, i, length(r.cpu_feeds), what))
-            var inscope cpu <- feed_prefix(r.cpu_feeds[i], FED_STEPS)
-            feed_rows_within(t, what, f, cpu, MOE_LOGIT_BAR_REL)
-        }
-        for (f, i in r.cuda_feeds, count()) {
-            let what = "{tag}cuda, {f.nprompt} tokens: "
-            continue if (!twin_collected(t, i, length(r.cpu_feeds), what))
-            feed_rows_within(t, what, f, r.cpu_feeds[i], MOE_LOGIT_BAR_REL)
-        }
+        feeds_within(t, tag, r.main_feeds, r.cpu_feeds, MOE_LOGIT_BAR_REL, "", FED_STEPS)
+        feeds_within(t, "{tag}cuda, ", r.cuda_feeds, r.cpu_feeds, MOE_LOGIT_BAR_REL)
         for (f in r.pool_feeds) {
             let what = "{tag}the pool, {f.nprompt} tokens: "
             continue if (!twin_collected(t, 0, length(r.cpu_feeds), what))
@@ -471,8 +465,8 @@ def private qwen_moe_rows_within(t : T?; tag : string; r : QwenMoeRows) {
 
 //! a Qwen1.5-MoE cut's host-layers pair: the prompt stream on, then off
 def private host_pair(var forms : array<ModelForm>; layers : int64) {
-    forms |> push(device_form(kv = KVDtype.f16, regions = 1l, host_layers = layers))
-    forms |> push(device_form(kv = KVDtype.f16, regions = 1l, host_layers = layers, pf_stream = false))
+    forms |> push(device_form(regions = 1l, host_layers = layers) |> asking(KVDtype.f16))
+    forms |> push(device_form(regions = 1l, host_layers = layers, pf_stream = false) |> asking(KVDtype.f16))
 }
 
 //! the Q4_K_M cut's forms: the default, the q8_0 mirror and the tq4
@@ -518,7 +512,10 @@ def test_gpu_resident_moe(t : T?) {
     delete forms
 }
 
-[test(description = "On Qwen1.5-MoE-A2.7B-4L Q8_0, the four-block cut over Q8_0 expert stacks, two of the four routed layers' experts asked onto the host hold the CPU chain within the routed bar over one and two windows and the streamed windows the stream twin's bar of the host's sums; the N-row command's plain act and shared-expert requant batch two sessions bit for bit what each reads alone, at one window and past the unsplit position; on the CUDA driver under the pinned MMQ winners the one-window feed and the host cells hold 20 percent of max logit of the CPU chain, the meet splitting the experts and the prompt stream off as control; each form loads once")]
+let private PARITY_CUT_CTX = 2048l   //! the parity row's load context (`parity_row_load`)
+
+
+[test(description = "On Qwen1.5-MoE-A2.7B-4L Q8_0, the four-block cut over Q8_0 expert stacks, two of the four routed layers' experts asked onto the host hold the CPU chain within the routed bar over one and two windows and the streamed windows the stream twin's bar of the host's sums; the N-row command's plain act and shared-expert requant batch two sessions bit for bit what each reads alone, at one window and past the unsplit position; on the CUDA driver under the pinned MMQ winners the one-window feed and the host cells hold 20 percent of max logit of the CPU chain, the meet splitting the experts and the prompt stream off as control; on the q8 CPU form, on every box, the cut fed the parity reference's greedy stream after the counting fixture keeps every reference id within 2% of its row's top logit, the stream one step late outside; each form loads once")]
 def test_gpu_resident_moe_q8(t : T?) {
     return if (!family_on(t, "qwen2moe"))
     var r = QwenMoeRows()
@@ -535,11 +532,22 @@ def test_gpu_resident_moe_q8(t : T?) {
     }
     host_pair(forms, QWEN2MOE_HOST_LAYERS)
     forms |> push(device_form(regions = 2l, ctx = REGIONS_RIG_CTX))
+    //! the parity row's environment pin; the row's K-quant native knob reads nothing on a file whose tagged sites are all Q8_0
+    forms |> push(cpu_cells_form(backend = g_env_engine.pin_backend))
     let pins = pin_stream(0l)   //! the device claims first: the meet's share the host cells pin live
     var ran = false
+    var dev_ran = false
     with_cuda_mmq_winners() {
-        ran = with_cpu_and_gpu_model(t, "llm", "Qwen1.5-MoE-A2.7B-4L-Q8_0-local.gguf", MOE_CUT_CTX, forms) $(m, form) {
-            qwen_moe_rows(t, r, m, form, Q8, false)
+        ran = with_cpu_and_gpu_model(t, "llm", "Qwen1.5-MoE-A2.7B-4L-Q8_0-local.gguf", MOE_CUT_CTX, forms) $(var m, form) {
+            dev_ran ||= form.on_gpu
+            if (dev_ran && (form.on_gpu || empty(form.backend))) {
+                qwen_moe_rows(t, r, m, form, Q8, false)
+            }
+            if (!form.on_gpu && form.backend == g_env_engine.pin_backend && form.alone) {
+                with_ctx_cut(m, PARITY_CUT_CTX) {
+                    parity_qwen2moe_cut_cell(t, m)
+                }
+            }
         }
     }
     restore_stream_pins(pins)
@@ -666,6 +674,10 @@ def test_gpu_perop_moe_heat(t : T?) {
 // - The MTP-UD-Q4_K_M cut (`test_gpu_resident_moe_host_35b`, the CUDA home's): the first routed layer's experts
 //   asked onto the host, the split token command and the cut window chain against the CPU chain with the hot pool
 //   and the stream's meet, and six speculative rounds drafted and verified on the device.
+// - The UD-Q4_K_M cut (`test_gpu_resident_moe_35b_cut_cpu`), on two CPU forms on every box: under the portable backend's
+//   pin batched decode against sequential over f32-on-disk beta/alpha rows (`_batch_decode_cells.das`), and under the
+//   environment's backend pin (DASLLAMA_PIN_BACKEND, none where unset) with the K-quant planes requantized to q8 the parity
+//   reference's greedy stream (`_parity_cells.das`); a pin the box cannot take skips its form loudly.
 // The whole UD-IQ2_XXS file's room-forced host split at 131072 positions (`test_gpu_resident_moe_ctx_strict`) stays
 // on it, the `qwen35moe-35b` category's. Skips: the vk-census arms filtered out, the per-op form under the CUDA ask,
 // the rows leaf on a home with none, the pool assert where the plan seats no pool, the two-window feed where the
@@ -733,6 +745,26 @@ def private ba_within(t : T?; b : BaRows; cpu : FeedRows) {
             }
         }
     }
+}
+
+//! the UD-Q4_K_M cut's batched-decode cell's sessions' context
+let private BATCH_CUT_CTX = 64l
+
+[test(description = "On Qwen3.6-35B-A3B-4L UD-Q4_K_M, the 35B's first four blocks, on its CPU forms on every box: under the portable pin every batched step over its f32-on-disk beta/alpha rows runs on the CPU stack and matches sequential logits, KV, deltanet state and conv history within 1e-6 under f16 KV, and decoding below the deltanet position panics; fed the parity reference's greedy stream after the counting fixture every reference id keeps within 3.5% of its row's top logit, the stream one step late outside on all but one row in eight; each form loads once")]
+def test_gpu_resident_moe_35b_cut_cpu(t : T?) {
+    return if (!family_on(t, "qwen35moe"))
+    var forms <- [cpu_cells_form(backend = "portable"),
+        cpu_cells_form(backend = g_env_engine.pin_backend, kq_native = KqNative.off)]
+    with_cpu_and_gpu_model(t, "llm", "Qwen3.6-35B-A3B-4L-UD-Q4_K_M-local.gguf", PARITY_CUT_CTX, forms) $(var m, form) {
+        if (form.kq_native == KqNative.off) {
+            parity_qwen35moe_cut_cell(t, m)
+        } else {
+            with_ctx_cut(m, BATCH_CUT_CTX) {
+                batch_decode_hybrid_moe_cell(t, m)
+            }
+        }
+    }
+    delete forms
 }
 
 [test(description = "On Qwen3.6-35B-A3B-4L UD-IQ2_XXS, the four-block cut of the deltanet hybrid MoE, the recurrent head and routed block hold the CPU chain within the routed bar over one and two windows, every site read in its file format; its F32 beta and alpha rows run through the f32 tile once per recurrent layer and the f32 router-form GEMV each step within 20 percent of max logit of the CPU chain; each form loads once")]
@@ -1300,7 +1332,7 @@ def test_gpu_resident_moe_no_shexp(t : T?) {
     if (!empty(why)) {
         r.codec |> held_skip("the tq4 mirror's distance cell: {why}")
     } else {
-        forms |> push(device_form(kv = KVDtype.tq4))
+        forms |> push(device_form() |> asking(KVDtype.tq4))
     }
     forms |> push(device_form(regions = 1l, host_layers = QWEN3MOE_HOST_LAYERS))
     let ran = with_cpu_and_gpu_model(t, "llm", "Qwen3-30B-A3B-7L-UD-IQ2_XXS-local.gguf", MOE_CUT_CTX, forms) $(m, form) {
@@ -1367,18 +1399,120 @@ def test_gpu_resident_moe_512_experts(t : T?) {
     }
 }
 
-[test(description = "Qwen3-30B Q4_K_M at 32768 context serves the experts the card cannot hold on the host, the split token command and cut window holding the CPU chain over one and two windows; a 30-layer ask raises the host count")]
+// The whole Q4_K_M file's forms, loaded once each (`with_cpu_and_gpu_model`): one region at 32768 positions asked whole,
+// so the first routed layers' experts serve on the host and the window chain is cut at them - the routed feeds over one window
+// and two against the CPU chain and the two-token prompt; the same with 30 routed layers asked onto the host; an f16 mirror
+// asked at the same context - layer 0's stored rows after a 40-token prompt and the fed steps against the CPU cache's, through
+// the codec rig's stored-rows cell, the instrument that says whether the cut window chain and the split token command write
+// the mirror the decode reads.
+
+//! what the whole Q4_K_M file's forms collect: the host-split form's admission and census (`carrier`) and its feeds of the
+//! prompts, the 30-layer ask's admission (`asked_h`) and feed, the CPU form's feeds on the main codec, layer 0's stored rows
+struct private Q30HostRows {
+    prompts : array<int64>
+    carrier : Held
+    feeds : array<FeedRows>
+    asked_h : Held
+    asked : array<FeedRows>
+    cpu : array<FeedRows>
+    rows : CodecSides
+    rows_dev : bool
+    rows_host : bool
+}
+
+//! the host-split form: the admission, the census, each prompt's routed feed (the census bound to the first), then the
+//! two-token prompt's cell on the same load
+def private q30_split_rows(t : T?; var r : Q30HostRows; var m : Model; form : ModelForm) {
+    let host_layers = moe_fixture_admitted(r.carrier, m, Q30_HOST_SPLIT)
+    if (host_layers >= 0l) {
+        var inscope any_sites, bound : array<string>
+        census_cell(t, m, path_join(models_dir(), Q30_HOST_SPLIT.file), "vulkan load", any_sites, bound)
+        moe_prompt_feeds(r.feeds, r.carrier, m, form, Q30_HOST_SPLIT, r.prompts, host_layers)
+    }
+    unsafe {   //! the cell captures the loaded model by reference
+        t |> run("Qwen3-30B-A3B-Q4_K_M with host layers: a two-token prompt takes the window chain, not the token command's peel") @capture(& m)(t : T ?) {
+            if (moe_fixture_admitted(t, m, Q30_HOST_SPLIT) > 0l) {
+                assert_short_window_takes_chain(t, m, "routed experts on the host")
+            }
+        }
+    }
+}
+
+//! the f16-asked form: layer 0's stored rows off the device after the 40-token prompt and the fed steps
+def private q30_stored_rows(t : T?; var r : Q30HostRows; m : Model) {
+    if (mirror_kv_dtype() == KVDtype.f32) {
+        t |> skip("DASLLAMA_VK_KV32=1 arms the f32 mirror over the {KVDtype.f16} asked - a codec cell needs it unset")
+        return
+    }
+    t |> equal(mirror_kv_dtype(), KVDtype.f16, "the mirror armed at the asked codec")
+    codec_stored_device_rows(t, r.rows, m, KVDtype.f16)
+    r.rows_dev = true
+}
+
+//! one form's collection into `r`
+def private q30_host_rows(t : T?; var r : Q30HostRows; var m : Model; form : ModelForm) {
+    if (!form.on_gpu) {
+        if (empty(r.cpu)) {
+            r.cpu |> reserve(length(r.prompts))
+            for (n in r.prompts) {
+                r.cpu |> emplace <| resident_feed_rows(m, form, n, FED_STEPS)
+            }
+        }
+        if (r.rows_dev && form.kv == KVDtype.f16 && !r.rows_host) {
+            r.rows.stored_host <- codec_stored_host(m, KVDtype.f16)
+            r.rows_host = true
+        }
+    } elif (form.kv_asked) {
+        q30_stored_rows(t, r, m)
+    } elif (form.host_layers > 0l) {
+        let host_layers = moe_fixture_admitted(r.asked_h, m, Q30_HOST_SPLIT_ASKED)
+        if (host_layers >= 0l) {
+            r.asked |> emplace <| moe_feed_rows(r.asked_h, m, form, Q30_HOST_SPLIT_ASKED, 40l, FED_STEPS, host_layers, true)
+        }
+    } else {
+        q30_split_rows(t, r, m, form)
+    }
+}
+
+//! the whole file's compares after its block: each form's routed feeds within the routed bar of the CPU form's, layer 0's
+//! stored rows against the CPU cache's
+def private q30_host_rows_within(t : T?; r : Q30HostRows) {
+    held_within(t, r.carrier, "Qwen3-30B-A3B-Q4_K_M, the host split: ", false)
+    held_within(t, r.asked_h, "Qwen3-30B-A3B-Q4_K_M, 30 routed layers asked onto the host: ", false)
+    with_dasllama_jobque_() {
+        feeds_within(t, "Qwen3-30B-A3B-Q4_K_M, the host split, ", r.feeds, r.cpu, Q30_HOST_SPLIT.bar_rel)
+        for (f in r.asked) {
+            let what = "Qwen3-30B-A3B-Q4_K_M, 30 routed layers asked onto the host, {f.nprompt} tokens: "
+            continue if (!twin_collected(t, 0, length(r.cpu), what))
+            feed_rows_within(t, what, f, r.cpu[0], Q30_HOST_SPLIT_ASKED.bar_rel)
+        }
+    }
+    if (r.rows_dev) {
+        t |> success(r.rows_host, "the CPU form read layer 0's stored rows on the f16 sessions the device form's rows answer")
+    }
+    if (r.rows_dev && r.rows_host) {
+        codec_stored_cell(t, "Qwen3-30B-A3B-Q4_K_M at a strict 32768 context with host-layer experts: layer 0's f16 mirror rows against the CPU cache's", KVDtype.f16, r.rows, ROWS_BARS)
+    }
+}
+
+//! the device prefill's f16 K/V rows read 0.006 (K) and 0.013 (V) of the CPU rows' magnitude from them, a row held to the next 0.68
+let private ROWS_BARS = StoredRowsBars(k = 0.02, v_step = 0.05, v_prefill_of_ctrl = 0.6, f16_dist = 0.05)
+
+[test(description = "Qwen3-30B Q4_K_M at 32768 context serves the experts the card cannot hold on the host, the split token command and cut window holding the CPU chain over one and two windows; a 30-layer ask raises the host count; on a MoE whose experts serve on the host a two-token prompt runs through the window chain, because the token command's short-tail peel declines host experts; with host-layer experts at a strict 32768 context layer 0's f16 mirror rows written by the cut window chain and split token command sit within 2% (K) and 5% (V) of the CPU cache's; on the parity row's CPU form, on every box, the file's frozen greedy ids token for token with its reference-prefill arm; each form loads once")]
 def test_gpu_resident_moe_host_layers(t : T?) {
-    t |> run("Qwen3-30B-A3B-Q4_K_M: the experts the card does not hold serve on the host - the split token command and the cut window chain vs the CPU chain, one window") @(t : T?) {
-        moe_forced_feed(t, 40l, Q30_HOST_SPLIT)
+    return if (!family_on(t, "qwen3moe"))
+    var r : Q30HostRows
+    r.prompts <- window_prompts(r.carrier)
+    var forms <- [device_form(regions = 1l, strict_ctx = true), device_form(regions = 1l, host_layers = Q30_HOST_SPLIT_ASKED.host_layers_ask, strict_ctx = true),
+        device_form(strict_ctx = true) |> asking(KVDtype.f16)]
+    let ran = with_cpu_and_gpu_model(t, "llm", "Qwen3-30B-A3B-Instruct-2507-Q4_K_M.gguf", Q30_HOST_SPLIT.strict_ctx, forms, parity = true) $(var m, form) {
+        q30_host_rows(t, r, m, form)
     }
-    t |> run("Qwen3-30B-A3B-Q4_K_M: the same across two windows") @(t : T?) {
-        assert_pf_window(t)
-        moe_forced_feed(t, PF_WINDOW_ROWS + 88l, Q30_HOST_SPLIT)
+    if (ran) {
+        q30_host_rows_within(t, r)
     }
-    t |> run("Qwen3-30B-A3B-Q4_K_M at the same context with 30 routed layers asked onto the host: the ask raises the count the room forces, one window") @(t : T?) {
-        moe_forced_feed(t, 40l, Q30_HOST_SPLIT_ASKED)
-    }
+    delete r
+    delete forms
 }
 
 [test(description = "At a 131072 context asked whole the Qwen3.6-35B hybrid's experts yield to the mirror and serve on the host, and the chain holds the CPU chain within the routed bar over two windows")]
@@ -1386,22 +1520,6 @@ def test_gpu_resident_moe_ctx_strict(t : T?) {
     t |> run("Qwen3.6-35B-A3B-UD-IQ2_XXS at a context asked whole (131072): the experts yield to the mirror and serve on the host, the hybrid chain against the CPU over two windows") @(t : T?) {
         assert_pf_window(t)
         moe_forced_feed(t, PF_WINDOW_ROWS + 88l, Q35_CTX_STRICT)
-    }
-}
-
-//! a two-token prompt on a MoE whose experts serve on the host takes the window chain: the token command's peel declines the host experts
-[test(description = "On a MoE whose experts serve on the host, a two-token prompt runs through the window chain, because the token command's short-tail peel declines host experts")]
-def test_gpu_resident_moe_host_layers_short_window(t : T?) {
-    t |> run("Qwen3-30B-A3B-Q4_K_M with host layers: a two-token prompt takes the window chain, not the token command's peel") @(t : T?) {
-        let path = path_join(models_dir(), Q30_HOST_SPLIT.file)
-        if (!resident_ready(t, path)) return
-        var tr <- load_resident(path, 1l, Q30_HOST_SPLIT.strict_ctx)
-        if (moe_fixture_admitted(t, tr, Q30_HOST_SPLIT) > 0l) {
-            with_dasllama_jobque_() {
-                assert_short_window_takes_chain(t, tr, "routed experts on the host")
-            }
-        }
-        delete tr
     }
 }
 
@@ -1486,24 +1604,6 @@ def test_gpu_moe_shexp_prefill(t : T?) {
     t |> run("Qwen1.5-MoE-A2.7B-Q4_K_M: the same over a 600-token prompt (the chain's chunking)") @(t : T?) {
         shexp_forced_feed(t, 600l)
     }
-}
-
-// The host-layers form's K/V mirror (`DASLLAMA_GPU=1`, Qwen3-30B-A3B Q4_K_M at 32768 positions asked whole, so the first routed
-// layers' experts serve on the host and the window chain is cut at them): layer 0's stored rows after a 40-token prompt and the
-// fed steps against the CPU cache's, through the codec rig's stored-rows cell - the instrument that says whether the cut window
-// chain and the split token command write the mirror the decode reads.
-
-//! the device prefill's f16 K/V rows read 0.006 (K) and 0.013 (V) of the CPU rows' magnitude from them, a row held to the next 0.68
-let private ROWS_BARS = StoredRowsBars(k = 0.02, v_step = 0.05, v_prefill_of_ctrl = 0.6, f16_dist = 0.05)
-
-[test(description = "On Qwen3-30B Q4_K_M with host-layer experts at a strict 32768 context, layer 0's f16 mirror rows written by the cut window chain and split token command sit within 2% (K) and 5% (V) of the CPU cache's")]
-def test_gpu_resident_moe_host_rows(t : T?) {
-    let pins = gpu_ctx_pins()
-    set_gpu_ctx_max(Q30_HOST_SPLIT.strict_ctx)
-    set_gpu_ctx_strict(true)
-    cell_codec_stored_rows(t, Q30_HOST_SPLIT.file, KVDtype.f16, ROWS_BARS)
-    set_gpu_ctx_max(pins.ctx_max)
-    set_gpu_ctx_strict(pins.strict)
 }
 
 // The host-experts form on the CUDA home's whole-model driver (`DASLLAMA_GPU=1 DASLLAMA_CUDA=1`): the split token command - a
