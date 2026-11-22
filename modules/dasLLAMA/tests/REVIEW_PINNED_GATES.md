@@ -26,15 +26,13 @@ it was measured on. The pinned set, one entry a line, each with what it must kee
 - `test_facade_docs.das`'s `test_program_roots` cell must hold the `ROOT_DIRS` sweep,
   `options stack = 524288` and the prefill intent.
 - `test_env_registry.das` must hold the `../ENVIRONMENT.md` knob contract.
-- `test_model_specs.das` must hold `../performance/model_specs.das`'s model-set table,
-  `spec_by_file` answering by the models-dir path and by the gguf's base name (a split-shard row
-  sits in a subfolder), the fixture compare (`prefix_match_len` / `fixture_ok`: a flipped last id
-  red under the strict form and held under the half-span one, a flip inside the first half red
-  under both), `fetch_models --convert`'s route (`convert_route`) and quantize mint steps
-  (`mint_steps`), the board fetch (`board_provenance`) holding every file the board sweeps read
-  and no off-board row and no on-box parity oracle (`tts_oracle*`), and the companion contract: a
-  companion two rows pin (each row's cell consumes it) carries one provenance - url, bytes,
-  sha256 - on both, and the provenance view holds it once.
+- `test_model_specs.das` must hold `../performance/model_specs.das`'s model-set table, `spec_by_file` answering by the
+  models-dir path and by the gguf's base name (a split-shard row sits in a subfolder), the fixture compare
+  (`prefix_match_len` / `fixture_ok`: a flipped last id red under the strict form and held under the half-span one, a
+  flip inside the first half red under both), `fetch_models --convert`'s route (`convert_route`) and quantize mint
+  steps (`mint_steps`), the board fetch (`board_provenance`) holding every file the board sweeps read and no off-board
+  row and no on-box parity oracle (`tts_oracle*`), and the companion contract: a companion two rows pin (each row's
+  cell consumes it) carries one provenance - url, bytes, sha256 - on both, and the provenance view holds it once.
 - `uncategorized_persistent_heap_stack_524288.das`'s `test_float_a_gate` cell must hold the MSL
   emitter's refusal of a float A operand (the activation input) to `tmm2d_q8u_f32` in a kernel
   that lacks `[metal_kernel(float_a_ok=true)]`, the error naming the FLOAT A operand, and the same
@@ -87,17 +85,15 @@ it was measured on. The pinned set, one entry a line, each with what it must kee
 - `test_metal_prefill_kernels.das`'s `test_pf_bf16_tile_pick` cell must hold the window
   projection's tile pick: the bf16 tile only where layers x ple is a multiple of 64 and the dim a
   multiple of 32.
-- `test_metal_misc_kernels.das`'s `test_metal_misc_kernels` cell must hold every kernel gate it
-  calls, at the bar each gate sets; and by name: its token-table gathers bit for bit:
-  `embed_q8_gate`, `embed_b32_gate` on q51, iq4nl32, q4032 and q5032 at 96 wide, at 2048 wide
-  past a whole other table's blocks, and at a lead off a superblock boundary (the bind's block
-  skip), and on the affine members at whole 64-groups (128 and 2048 wide, a lead six blocks past
-  the bind), `embed_kq_gate` on every K-quant format it lists, and `embed_f32_gate` past a lead of
-  foreign floats; the residual seam's `add_rms_gate` on every stamp at every shipped width, 5376
-  and 8192 past the slab among them; and `cls_select_gate` at a wide, a narrow and the served
-  vocab: the ids at or above the row's K-th largest logit and their logits exact against the host
-  oracle, the row's max logit, the overflow flag and the recent ids' logits, the denominator
-  within 2e-5, a poisoned id and a poisoned denominator its controls.
+- `test_metal_misc_kernels.das`'s `test_metal_misc_kernels` cell must hold every kernel gate it calls, at the bar each
+  gate sets; and by name: its token-table gathers bit for bit: `embed_q8_gate`, `embed_b32_gate` on q51, iq4nl32,
+  q4032 and q5032 at 96 wide, at 2048 wide past a whole other table's blocks, and at a lead off a superblock boundary
+  (the bind's block skip), and on the affine members at whole 64-groups (128 and 2048 wide, a lead six blocks past the
+  bind), `embed_kq_gate` on every K-quant format it lists, and `embed_f32_gate` past a lead of foreign floats; the
+  residual seam's `add_rms_gate` on every stamp at every shipped width, 5376 and 8192 past the slab among them; and
+  `cls_select_gate` at a wide, a narrow and the served vocab: the ids at or above the row's K-th largest logit and
+  their logits exact against the host oracle, the row's max logit, the overflow flag and the recent ids' logits, the
+  denominator within 2e-5, a poisoned id and a poisoned denominator its controls.
 - `test_metal_gemm_kernels.das`'s `test_metal_gemm_kernels` cell must hold every kernel gate it
   calls, at the bar each gate sets; and the short window's split-K stamps through the partial-plane reduce,
   NaN-poisoned outputs and planes their controls, each at its derived staging bar against the
@@ -125,14 +121,14 @@ it was measured on. The pinned set, one entry a line, each with what it must kee
   reaching only the run they select; and the committed stores' batched receipts - the cpu legs'
   das child at `--npl-plen 128 --npl-reps 3` and reference at `-npp 128`, `--no-op-offload` on
   the stock cpu arm alone, every GPU leg's reference at `-npp 512` with neither cpu-only flag.
-- `test_scheduler.das`'s `test_scheduler_media_splice` cell must hold a media span's text and rows
-  as one prefill call, and a body cut at the chunk taking the rest a chunk a call; on a paged
-  scheduler, the prefix cache matching across a span by its rows' content - the text ahead of a new
-  span attaching and the hit stopping at it, the media stream donating its pages, the same span
-  asked again attaching past it, a rowless request for it served off the cache, other rows at the
-  same place sharing only the text ahead of them - and a rowless request on a cold cache finishing
-  `media_lost` with nothing donated.
-- `test_vulkan_kernels.das`'s `test_vk_coopmat_default_and_tile_pick` cell must hold which tile
+- `_scheduler_cells.das`'s `test_scheduler_media_splice` cell (on `test_gpu_resident_llama.das`'s
+  SmolLM2 block) must hold a media span's text and rows as one prefill call, and a body cut at the
+  chunk taking the rest a chunk a call; on a paged scheduler, the prefix cache matching across a
+  span by its rows' content - the text ahead of a new span attaching and the hit stopping at it, the
+  media stream donating its pages, the same span asked again attaching past it, a rowless request
+  for it served off the cache, other rows at the same place sharing only the text ahead of them -
+  and a rowless request on a cold cache finishing `media_lost` with nothing donated.
+- `test_vulkan_kernels_gemm.das`'s `test_vk_coopmat_default_and_tile_pick` cell must hold which tile
   the Vulkan matmul picks, and whether that dispatch splits its reduction across partial planes,
   on every input of the prefill's tile-and-split pick.
 - `test_cuda_kernels.das`'s `test_cud_short_window_pick` cell must hold the tile and split that
@@ -173,9 +169,8 @@ it was measured on. The pinned set, one entry a line, each with what it must kee
 - `test_vulkan_kernels.das`'s `test_vkd_router_gemv_cols` cell must hold the router GEMV over x
   rows as columns against the one-row dispatch bit for bit and the CPU dot, the bf16 rows'
   halfword stamp at an odd dim among its arms.
-- `test_vulkan_kernels.das`'s `test_vkd_f32_khr_batch` cell must hold the staged KHR tile over
-  f32 rows against the CPU oracle with each weight rounded to f16, whole and in two k chunks
-  through the reduce.
+- `test_vulkan_kernels_gemm.das`'s `test_vkd_f32_khr_batch` cell must hold the staged KHR tile over f32 rows against
+  the CPU oracle with each weight rounded to f16, whole and in two k chunks through the reduce.
 - `test_vulkan_kernels.das`'s `test_vkd_kq_gemv_k4_gu` cell must hold the fused gate + up + act
   + requant on Q4_K, IQ4_XS, iq3s4 and IQ2_S against the three-kernel path byte for byte and the
   CPU chain.
@@ -184,15 +179,19 @@ it was measured on. The pinned set, one entry a line, each with what it must kee
   format's GEMV against its scalar dot, and its summed twin (`per32_sum_rows_cell`) over one,
   two and four token rows - every row its slots' dots under their weights, a poisoned last row
   the control, a wider dispatch's rows bit for bit the narrower one's.
-- `test_vulkan_kernels.das`'s `test_vkd_q51_cm2_batch`, `test_vkd_mx4_cm2_batch`, `test_vkd_iq4nl32_cm2_batch`,
-  `test_vkd_iq3s4_cm2_batch`, `test_vkd_mx4_gemv_gu`, `test_vkd_gemv_ncol`, `test_vkd_q8_gemv_gu_n`,
+- `test_vulkan_kernels_gemm.das`'s `test_vkd_q51_cm2_batch`, `test_vkd_mx4_cm2_batch`, `test_vkd_iq4nl32_cm2_batch`,
+  `test_vkd_iq3s4_cm2_batch`, `test_vkd_f16_gemm_khr`, `test_vkd_f16_gemm_s`, `test_vkd_kq_batch_family` and
+  `test_vkd_nv4_cm2_batch` cells - the census's evidence for the classes no zoo row dispatches - must hold each class
+  against its CPU oracle at the bar the cell sets, with the cell's poisoned-element control.
+- `test_vulkan_kernels_attn.das`'s `test_vkd_fa_cm2`, `test_vkd_fa_khr`, `test_vkd_fa_khr_h256_softcap`,
+  `test_vkd_fa_khr_h256_gated`, `test_vkd_da_attn`, `test_vkd_da_attn_rqk` and `test_vkd_da_attn_bw` cells - the
+  census's evidence for the classes no zoo row dispatches - must hold each class against its CPU oracle at the bar the
+  cell sets, with the cell's poisoned-element control.
+- `test_vulkan_kernels.das`'s `test_vkd_mx4_gemv_gu`, `test_vkd_gemv_ncol`, `test_vkd_q8_gemv_gu_n`,
   `test_vkd_q8_gemv_pleact`, `test_vkd_act_family`, `test_vkd_moe_routing`, `test_vkd_dn_family`, `test_vkd_hc_seams`,
-  `test_vkd_hc_rows`, `test_vkd_ple_side`, `test_vkd_f16_gemm_khr`, `test_vkd_f16_gemm_s`, `test_vkd_fa_cm2`,
-  `test_vkd_fa_khr`, `test_vkd_fa_khr_h256_softcap`, `test_vkd_fa_khr_h256_gated`, `test_vkd_da_attn`,
-  `test_vkd_da_attn_rqk`, `test_vkd_da_attn_bw`, `test_vkd_moe_gather_row`, `test_vkd_combine_row`,
-  `test_vkd_kq_batch_family`, `test_vkd_emb_gather_family` and `test_vkd_nv4_cm2_batch` cells - the census's evidence
-  for the classes no zoo row dispatches - must hold each class against its CPU oracle at the bar the cell sets, with
-  the cell's poisoned-element control.
+  `test_vkd_hc_rows`, `test_vkd_ple_side`, `test_vkd_moe_gather_row`, `test_vkd_combine_row` and
+  `test_vkd_emb_gather_family` cells - the census's evidence for the classes no zoo row dispatches - must hold each
+  class against its CPU oracle at the bar the cell sets, with the cell's poisoned-element control.
 - `test_vulkan_tower_kernels.das`'s `test_vkt_fa_bidir`, `test_vkt_tower_rows`,
   `test_vkt_tower_ln_rows`, `test_vkt_tower_f16_feeds`, `test_vkt_tower_vision_rows`,
   `test_vkt_tower_win_rows`, `test_vkt_tower_tail_rows`, `test_vkt_tower_front_movers`,
@@ -254,24 +253,22 @@ it was measured on. The pinned set, one entry a line, each with what it must kee
   around two homographs to the context pass's marking of the normalized text, the Latin runs spliced after, the pack's
   marking another string; and with no context model, the pack's marking, the same whether the splice runs first or last.
 
-**A diff that changes the contract a pinned test cell holds fixed - what its entry says it must
-keep holding, an axis gained or lost - updates that cell's entry in the pinned set in the same
-change; a diff adding a cell to a file with a file entry adds to that entry each axis the cell
-asserts that the entry does not name.**
-An axis is one distinct behaviour the cell asserts - an output form, a refusal path, an argument's
-order; a new input row is an axis gained only where it runs a kernel stamp, an output form or a
-branch of the kernel or its router that no earlier row of the cell ran. An assert added inside a
-gate of an entry that holds every kernel gate the cell calls is covered by that clause, and needs
-no item of its own.
+**A diff that changes the contract a pinned test cell holds fixed - what its entry says it must keep
+holding, an axis gained or lost - updates that cell's entry in the pinned set in the same change; a
+diff adding a cell to a file with a file entry adds to that entry each axis the cell asserts that
+the entry does not name.** An axis is one distinct behaviour the cell asserts - an output form, a
+refusal path, an argument's order; a new input row is an axis gained only where it runs a kernel
+stamp, an output form or a branch of the kernel or its router that no earlier row of the cell ran.
+An assert added inside a gate of an entry that holds every kernel gate the cell calls is covered by
+that clause, and needs no item of its own.
 
-**A diff that widens a pinned test cell's tolerance, swaps its comparison for a looser one,
-rewrites an expected value its entry ties to an outside source (a document, a checked-in table, a
-knob list) to a value that source does not state, drops its input, or drops a `run.das` suite
-listing that reaches it is a defect - fix the code that fails the cell instead; a bar shown
-mis-derived is re-derived and ledgered in `../ARCHITECTURE_CELL_BARS.md#rederived-cell-bars`.
-A comparison that changes because the contract it held changed on purpose - a rule document or
-the data model now says so - is not a loosening where the same change rewrites the cell's entry to
-the new contract and names the rule or document that states it.**
+**A diff that widens a pinned test cell's tolerance, swaps its comparison for a looser one, rewrites an
+expected value its entry ties to an outside source (a document, a checked-in table, a knob list) to a
+value that source does not state, drops its input, or drops a `run.das` suite listing that reaches it is a
+defect - fix the code that fails the cell instead; a bar shown mis-derived is re-derived and ledgered in
+`../ARCHITECTURE_CELL_BARS.md#rederived-cell-bars`. A comparison that changes because the contract it held
+changed on purpose - a rule document or the data model now says so - is not a loosening where the same
+change rewrites the cell's entry to the new contract and names the rule or document that states it.**
 
 **A diff that removes a pinned test cell's assert while the code it checks stays adds to the same
 cell, in the same change, an assert that holds the same values to an equal or tighter bound, with
@@ -295,6 +292,9 @@ repository declares, compared by name, is not such a value.
 `../README.md`'s model table, a kernel list whose coverage note names a cell as each kernel's
 evidence - adds the cell to the pinned set in the same change.**
 
-**A diff that adds a cell to the pinned set adds it as a named-cell entry, or, when the new cell
-leaves every cell of its file pinned, replaces the file's named cells with one file entry naming
-what it pins.**
+**A diff that adds a cell to the pinned set adds it as a named-cell entry, or, when the new cell leaves
+every cell of its file pinned, replaces the file's named cells with one file entry naming what it pins.**
+
+**A diff that moves or renames a pinned test cell, in the same change, rewrites the cell's
+named-cell entry to its new file and function, or, when the cell's old file has a file entry, adds a
+named-cell entry for the cell at its new file and function.**
