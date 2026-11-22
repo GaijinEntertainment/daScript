@@ -214,7 +214,8 @@ descriptors - `.das_module.manifest` from the dynamic-module build,
 `.das_module.static.manifest` from `daslang_static` - are the scan's,
 gitignored, and stay; a test names the one its own kind writes
 (`manifest_file_name`), since the static suite runs this folder too, and
-the default-path case keys its stems by kind (`kind_stem`) because the two
-suites run at once in one tree. A child's stdout is echoed on failure,
+the default-path case names its stems after the run's own temp folder
+(`run_stem`), because several suites run that file at once in one tree and
+each counts only the cache files its own children wrote. A child's stdout is echoed on failure,
 because the exit code alone would turn a one-line answer into an exit-code
 hunt.

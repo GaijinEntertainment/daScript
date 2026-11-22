@@ -38,9 +38,8 @@ def run_reported(t : T?; phase : string; cmd : string; var out : string&; marker
 
 let CACHE_DIR = ".cache/daslang/module_cache"
 
-//! the stems carry the binary kind: the dynamic and the static suite run this file at once in
-//! one tree, and each counts only the cache files its own children wrote
-def kind_stem(stem : string) : string => das_is_dll_build() ? stem : "{stem}_static"
+[arch(at="ARCHITECTURE.md#process-startup")]
+def run_stem(stem, tmp : string) : string => "{stem}_{base_name(tmp)}"
 
 //! the cache files written for one root: `<CACHE_DIR>/<stem>-<hash>.dascache`
 def cache_files(stem : string) : int {
@@ -207,9 +206,7 @@ def test_source_derived_syntax_policy_serves(t : T?) {
 }
 
 //! the modes that never install the default cache: the opt-out flag, a compile with no run, an AOT-consuming run
-def check_off_modes(t : T?; base, b, c : string) {
-    let sb = kind_stem("mc_default_b")
-    let sc = kind_stem("mc_default_c")
+def check_off_modes(t : T?; base, b, c, sb, sc : string) {
     var off : string
     let offRc = run("{base} -no-module-cache {b}", off)
     t |> success(report_child(t, "no-module-cache", offRc, off, "MARK_{sb}"), "-no-module-cache still executes")
@@ -313,8 +310,7 @@ def test_source_lines_survive_the_cache(t : T?) {
 
 //! a cache file cut in the middle, or one whose header is garbage, is read as far as it goes,
 //! silently, and rewritten
-def check_damaged_cache(t : T?; base, a : string) {
-    let sa = kind_stem("mc_default_a")
+def check_damaged_cache(t : T?; base, a, sa : string) {
     truncate_file(cache_file_path(sa))
     var damaged : string
     let damagedRc = run("{base} {a}", damaged)
@@ -340,9 +336,9 @@ def test_default_module_cache(t : T?) {
         return
     }
     let root = get_das_root()
-    let sa = kind_stem("mc_default_a")
-    let sb = kind_stem("mc_default_b")
-    let sc = kind_stem("mc_default_c")
+    let sa = run_stem("mc_default_a", tmp)
+    let sb = run_stem("mc_default_b", tmp)
+    let sc = run_stem("mc_default_c", tmp)
     let stems <- [sa, sb, sc]
     for (stem in stems) {
         remove_cache_files(stem)
@@ -362,8 +358,8 @@ def test_default_module_cache(t : T?) {
     t |> success(report_child(t, "default warm", warmRc, warm, "MARK_{sa}"), "the warm run executes")
     t |> success(quiet(warm), "the default cache says nothing on the warm run:\n{warm}")
     t |> equal(cache_files(sa), 1, "the warm run adds no second file")
-    check_damaged_cache(t, base, a)
-    check_off_modes(t, base, b, c)
+    check_damaged_cache(t, base, a, sa)
+    check_off_modes(t, base, b, c, sb, sc)
     var loud : string
     let loudRc = run("{base} -module-cache {path_join(tmp, "explicit.bin")} {a}", loud)
     t |> success(report_child(t, "explicit", loudRc, loud, "ser: wrote"), "an explicit -module-cache keeps the loud verdict")
