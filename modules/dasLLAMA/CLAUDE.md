@@ -24,7 +24,7 @@ After an edit: `./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --changed` 
 the changed files reach, by file: a test file itself, a fixture the tests requiring it, an engine
 module its `MODULE_WITNESSES` row or - a core module - every model-free `llm` file and one
 stocked witness a family and home, and its other areas (`audio | vision | tts | translate | infra`) whole;
-`--area <a,b>` names areas directly. `--category <name>` runs a model category (`TEST_CATEGORIES.md`): when the
+`--area <a,b>` names areas directly; `--area examples` runs the browser examples' smoke tests, which no other run plans. `--category <name>` runs a model category (`TEST_CATEGORIES.md`): when the
 work touches a topic its row names, run it - no other run opens its model files. A changed file in a model suite (decode | mtp | prefill |
 matrix | image) reaches nothing - `--changed` names it; run that suite with `--arm` scoped to the
 change. Before a PR: `skills/internal/dasllama_testing.md` (repo root) says what a PR runs by its

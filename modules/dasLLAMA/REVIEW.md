@@ -66,14 +66,14 @@ that loads a tune sidecar) reaching it, applies `performance/REVIEW.md` and `REV
 **A diff that adds a module under `dasllama/` whose code only some of `tests/run.das`'s areas run
 gives it a `MODULE_AREAS` row naming those areas and, where those areas include `llm`, a
 `MODULE_WITNESSES` row naming every `model-free` or `stocked` `llm` test file that runs its code,
-in the same change.** A module with no row runs every area; one with `llm` and no witness row runs
-every model-free `llm` file and the `LLM_CORE_WITNESSES` list: safe, and slower each PR.
+in the same change.** A module with no row runs every standing area; one with `llm` and no witness
+row runs every model-free `llm` file and the `LLM_CORE_WITNESSES` list: safe, and slower each PR.
 
-**A diff after which a test file runs an existing module's code, where that module's
-`MODULE_AREAS` row reaches the file through none of its areas and its `MODULE_WITNESSES` row does
-not name it - so `tests/run.das -- --changed` does not plan the file for that module - adds one
-area or the file to the row in the same change.** A test file that starts loading an LLM GGUF
-runs the `dasllama/dasllama_arch_*.das` file registering that GGUF's `general.architecture`.
+**A diff after which a test file of a standing area runs an existing module's code, where that
+module's `MODULE_AREAS` row reaches the file through none of its areas and its `MODULE_WITNESSES`
+row does not name it - so `tests/run.das -- --changed` does not plan the file for that module -
+adds one area or the file to the row in the same change.** A test file that starts loading an LLM
+GGUF runs the `dasllama/dasllama_arch_*.das` file registering that GGUF's `general.architecture`.
 
 **A `[test]` file with a `require dasllama/...` line of its own, wherever the diff puts it, and
 every `dasllama/` change answer to this folder's `tests/REVIEW.md`; every PR touching this module
