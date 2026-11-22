@@ -13,6 +13,8 @@ options _dasllama_internal = true
 
 module _mtp_resident_cells shared public
 
+//! the NextN head's cells on the resident driver, on a form its caller loaded; no entry loads a model
+
 require dasllama/dasllama_lint public
 require dastest/testing_boost public
 require dasllama/dasllama_transformer   // nolint:STYLE029,LINT019 — the umbrella's [init] registrations arm the qwen35 arch
@@ -29,10 +31,9 @@ require ?vulkan dasllama/dasllama_vulkan_decode   // vk_rdec_head_embed_gathered
 require _model_tier
 require _resident_feed
 require _compares
+require _deltanet_cells public   // DN_LOGIT_BAR_REL: the deltanet bar the cells hold the device rows to
 
 let MTP_WINDOW = 512l   //! the cells' prompt window (the file pins it before every load): the two-window warm cell reads the seam
-
-let DN_LOGIT_BAR_REL = 0.04   //! of the step's max |logit| - the deltanet bar test_deltanet.das holds too
 
 //! the head's K row is the f16-stored projection of a trunk hidden row that already sits within DN_LOGIT_BAR_REL of the CPU chain's, so the row's own rounding stacks on the trunk's: twice the deltanet bar
 let private HEAD_K_BAR_REL = 0.10

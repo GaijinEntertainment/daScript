@@ -17,6 +17,7 @@ require dastest/fs
 require strings
 require math
 require dasllama/dasllama_env
+require dasllama/dasllama_gguf   // model_tier_skip_reason, gguf_shard_paths: the model files a run opens
 require llvm/daslib/llvm_env   // g_env_tune.tune_force: a tune file the caller forced already
 require _child_run   // child_exe_ensure: the test child's exe, built before the run's first child
 require _model_categories   // the model categories a run names with --category
@@ -47,7 +48,7 @@ struct RunArgs {
     @clarg_doc = "Exclude — comma-separated substrings; a suite file whose name contains one is dropped, each named on an EXCLUDED line (e.g. --suite stocked --exclude test_gpu_resident_gemma4_e2b)"
     exclude : string
 
-    @clarg_doc = "Only — comma-separated substrings; a file of the run whose name contains none is dropped, each kept file named on an ONLY line and the REPORT line carrying the tokens, so a narrowed run cannot read as whole (e.g. --changed --only cuda,segments under DASLLAMA_CUDA=1: the CUDA home's files of the run)"
+    @clarg_doc = "Only — comma-separated substrings; a file of the run whose name contains none is dropped, each kept file named on an ONLY line and the REPORT line carrying the tokens, so a narrowed run cannot read as whole (e.g. --changed --only cuda,regions under DASLLAMA_CUDA=1: the CUDA home's files of the run)"
     only : string
 
     @clarg_doc = "Area — comma-separated: audio | vision | tts | translate | llm | infra; runs every model-free and stocked file of the area plus the image suite's arms of the area (no --suite, no --arm)"
@@ -90,6 +91,12 @@ struct RunArgs {
     @clarg_name = "poison-kv"
     @clarg_doc = "Start every child's K/V slabs as NaN (DASLLAMA_KV_INIT=poison): a read of a row no store wrote reaches the logits as NaN and reds its cell - the run a change to a K/V store or reader cites. Every session then touches its whole slab, so the run's memory is not the product's"
     poison_kv : bool
+    @clarg_name = "list-models"
+    @clarg_doc = "Start no child: print the model files this run opens, a `# child <n>: <files>` line ahead of each child's in start order, then one path a line under the models directory (subfolders and split shards and NextN heads included), a file an earlier child named not repeated - the files a fleet pod copies onto its own disk ahead of the run. The list is the GGUF names the runner can read in the files' text: a name built at run time is not on it, and is read where the models directory has it"
+    list_models : bool
+    @clarg_name = "await-models"
+    @clarg_doc = "The copier's state folder (`done` when it ended well, `failed` naming the file it failed on): before each child starts, wait until every model file the child opens is a regular file under the models directory, not a link - or the copier is done (a file still a link is one the list could not name and resolves where it links) - and stop the run red when the copier failed or no file of the child landed in 30 minutes. WAIT lines name each wait, and the REPORT line its total"
+    await_models : string
 
     @clarg_doc = "daslang binary (default: the binary running this script — a hardcoded ./bin/daslang picked up a STALE top-level exe on the MSVC layout)"
     das : string = ""
@@ -181,6 +188,7 @@ def suite_files(name : string) : array<string> {   // nolint:STYLE038 - a flat s
                     "modules/dasLLAMA/tests/test_rope_apply.das",
                     "modules/dasLLAMA/tests/test_run_suites.das",
                     "modules/dasLLAMA/tests/test_run_summary.das",
+                    "modules/dasLLAMA/tests/test_sampling.das",
                     "modules/dasLLAMA/tests/test_site_records.das",
                     "modules/dasLLAMA/tests/test_sizing_helpers.das",
                     "modules/dasLLAMA/tests/test_think_split.das",
@@ -242,18 +250,11 @@ def suite_files(name : string) : array<string> {   // nolint:STYLE038 - a flat s
                     "modules/dasLLAMA/tests/test_gpu_resident_hc_micro.das",
                     "modules/dasLLAMA/tests/test_gpu_resident_hybrid.das",
                     "modules/dasLLAMA/tests/test_gpu_resident_llama.das",
-                    "modules/dasLLAMA/tests/test_gpu_resident_cuda_llama.das",
-                    "modules/dasLLAMA/tests/test_gpu_resident_cuda_batch.das",
-                    "modules/dasLLAMA/tests/test_gpu_resident_cuda_dense.das",
-                    "modules/dasLLAMA/tests/test_gpu_resident_cuda_gemma4.das",
-                    "modules/dasLLAMA/tests/test_gpu_resident_segments.das",
                     "modules/dasLLAMA/tests/test_gpu_resident_qwen_moe.das",
                     "modules/dasLLAMA/tests/test_gpu_resident_moe_formats.das",
                     "modules/dasLLAMA/tests/test_gpu_resident_format_census.das",
-                    "modules/dasLLAMA/tests/test_gpu_resident_codec_llama.das",
                     "modules/dasLLAMA/tests/test_gpu_resident_qwen2.das",
                     "modules/dasLLAMA/tests/test_gpu_resident_regions_hybrid_formats.das",
-                    "modules/dasLLAMA/tests/test_gpu_resident_regions_kquant.das",
                     "modules/dasLLAMA/tests/test_gpu_resident_qwen3.das",
                     "modules/dasLLAMA/tests/test_kquant.das",
                     "modules/dasLLAMA/tests/test_kv_codec.das",
@@ -261,7 +262,6 @@ def suite_files(name : string) : array<string> {   // nolint:STYLE038 - a flat s
                     "modules/dasLLAMA/tests/test_kv_prefix.das",
                     "modules/dasLLAMA/tests/test_metal_batched_row.das",
                     "modules/dasLLAMA/tests/test_metal_format_census.das",
-                    "modules/dasLLAMA/tests/test_mtp.das",
                     "modules/dasLLAMA/tests/test_mtp_gemma_drafter.das",
                     "modules/dasLLAMA/tests/test_dflash_drafter.das",
                     "modules/dasLLAMA/tests/test_parity.das",
@@ -271,7 +271,6 @@ def suite_files(name : string) : array<string> {   // nolint:STYLE038 - a flat s
                     "modules/dasLLAMA/tests/test_prefill.das",
                     "modules/dasLLAMA/tests/test_qwen3v.das",
                     "modules/dasLLAMA/tests/test_qwen25v.das",
-                    "modules/dasLLAMA/tests/test_sampling.das",
                     "modules/dasLLAMA/tests/test_scheduler.das",
                     "modules/dasLLAMA/tests/test_storyteller_restart.das",
                     "modules/dasLLAMA/tests/test_storywish.das",
@@ -362,11 +361,10 @@ def area_tests(area : string) : array<string> {
         return <- [ "test_arch_registry.das", "test_batch_decode.das", "test_bench_records_schema.das",
                     "test_chat.das", "test_deltanet.das", "test_dispatch_shaping.das", "test_driver_knob_getters.das", "test_facade.das",
                     "test_forward.das", "test_fused_decode.das", "test_gguf_quant.das", "test_gguf_shards.das", "test_mlx_snapshot.das", "test_mlx_qwen4exp.das",
-                    "test_gpu_home.das", "test_gpu_model_swap.das", "test_gpu_resident_codec_llama.das", "test_gpu_resident_gemma2_3.das", "test_gpu_resident_gemma4_dense.das", "test_gpu_resident_gemma4_moe.das", "test_gpu_resident_gemma4_26b_host.das", "test_gpu_resident_gemma4_e2b.das", "test_gpu_resident_gptoss.das", "test_gpu_resident_hc.das", "test_gpu_resident_hc_micro.das", "test_gpu_resident_hybrid.das", "test_gpu_resident_llama.das", "test_gpu_resident_cuda_llama.das", "test_gpu_resident_cuda_dense.das", "test_gpu_resident_cuda_batch.das", "test_gpu_resident_cuda_gemma4.das", "test_gpu_resident_segments.das", "test_gpu_resident_qwen_moe.das", "test_gpu_resident_moe_formats.das", "test_gpu_resident_format_census.das", "test_gpu_resident_qwen2.das", "test_gpu_resident_regions_hybrid_formats.das", "test_gpu_resident_regions_kquant.das", "test_gpu_resident_qwen3.das", "test_gpu_serving_declines.das", "test_gpu_tier.das", "test_groupn.das",
+                    "test_gpu_home.das", "test_gpu_model_swap.das", "test_gpu_resident_gemma2_3.das", "test_gpu_resident_gemma4_dense.das", "test_gpu_resident_gemma4_moe.das", "test_gpu_resident_gemma4_26b_host.das", "test_gpu_resident_gemma4_e2b.das", "test_gpu_resident_gptoss.das", "test_gpu_resident_hc.das", "test_gpu_resident_hc_micro.das", "test_gpu_resident_hybrid.das", "test_gpu_resident_llama.das", "test_gpu_resident_qwen_moe.das", "test_gpu_resident_moe_formats.das", "test_gpu_resident_format_census.das", "test_gpu_resident_qwen2.das", "test_gpu_resident_regions_hybrid_formats.das", "test_gpu_resident_qwen3.das", "test_gpu_serving_declines.das", "test_gpu_tier.das", "test_groupn.das",
                     "test_embeddings.das", "test_jobque_tripwire.das", "test_kernel_backend.das", "test_kqformat.das", "test_kquant.das",
                     "test_kv_codec.das", "test_kv_paged.das", "test_kv_prefix.das", "test_metal_batched_row.das", "test_metal_format_census.das", "test_math_activations.das",
                     "test_math_elementwise.das", "test_matmul_batch.das", "test_f32_batch_tile_perms.das",
-                    "test_mtp.das",
                     "test_mtp_gemma_drafter.das", "test_dflash_drafter.das", "test_mtp_sampled_walk.das", "test_mtp_snapshot.das", "test_mtp_accept_walks.das", "test_mxfp4.das",
                     "test_par_indexed.das", "test_parity.das", "test_parity_pregate.das",
                     "test_plane.das", "test_ple_check.das", "test_prefill.das", "test_prefill_cpu_kernels.das",
@@ -467,15 +465,14 @@ let MODULE_AREAS <- {
 //! set stays the pre-merge gate (`--suite stocked` over the fleet, a pod a GPU home). Non-private: test_run_suites.das pins it
 let LLM_CORE_WITNESSES <- [
     "test_batch_decode.das", "test_deltanet.das", "test_forward.das",
-    "test_gpu_resident_codec_llama.das", "test_gpu_resident_cuda_llama.das",
     "test_gpu_resident_gemma2_3.das", "test_gpu_resident_gemma4_e2b.das",
     "test_gpu_resident_gemma4_moe.das", "test_gpu_resident_gptoss.das", "test_gpu_resident_hybrid.das",
     "test_gpu_resident_llama.das", "test_gpu_resident_qwen_moe.das", "test_gpu_resident_qwen2.das",
-    "test_gpu_resident_regions_kquant.das", "test_gpu_resident_qwen3.das",
-    "test_gpu_resident_segments.das", "test_kv_codec.das", "test_mtp.das", "test_prefill.das", "test_scheduler.das" ]
+    "test_gpu_resident_qwen3.das",
+    "test_kv_codec.das", "test_prefill.das", "test_scheduler.das" ]
 
-let CUDA_WITNESSES = "test_cuda_kernels.das,test_gpu_resident_cuda_llama.das,test_gpu_resident_cuda_batch.das,test_gpu_resident_cuda_dense.das,test_gpu_resident_hybrid.das,test_gpu_resident_qwen3.das,test_gpu_resident_qwen2.das,test_gpu_resident_qwen_moe.das,test_gpu_resident_cuda_gemma4.das,test_gpu_resident_segments.das,test_cuda_mint.das,test_gpu_resident_gptoss.das,test_gpu_resident_gemma4_dense.das,test_gpu_resident_gemma4_moe.das"
-let KV_CODEC_WITNESSES = "test_kv_codec.das,test_vulkan_kv_codec_kernels.das,test_gpu_resident_codec_llama.das,test_gpu_resident_qwen3.das,test_gpu_resident_qwen2.das,test_gpu_resident_cuda_llama.das"
+let CUDA_WITNESSES = "test_cuda_kernels.das,test_gpu_resident_llama.das,test_gpu_resident_hybrid.das,test_gpu_resident_qwen3.das,test_gpu_resident_qwen2.das,test_gpu_resident_qwen_moe.das,test_mtp_gemma_drafter.das,test_cuda_mint.das,test_gpu_resident_gptoss.das,test_gpu_resident_gemma4_dense.das,test_gpu_resident_gemma4_moe.das"
+let KV_CODEC_WITNESSES = "test_kv_codec.das,test_vulkan_kv_codec_kernels.das,test_gpu_resident_llama.das,test_gpu_resident_qwen3.das,test_gpu_resident_qwen2.das"
 let TOKENIZER_WITNESSES = "test_tokenizer.das,test_tts_textnorm.das,test_chat.das,test_tok_seed.das"
 let METAL_WITNESSES = "test_metal_batched_row.das,test_metal_format_census.das,test_matmul_batch.das,uncategorized_no_aot_persistent_heap.das,uncategorized_persistent_heap_stack_524288.das"
 
@@ -487,29 +484,31 @@ let MODULE_WITNESSES <- {
     "dasllama_cuda_common" => CUDA_WITNESSES, "dasllama_cuda_dispatch" => CUDA_WITNESSES, "dasllama_cuda_classes" => CUDA_WITNESSES,
     "dasllama_cuda_decode" => CUDA_WITNESSES, "dasllama_cuda_stream" => CUDA_WITNESSES, "dasllama_math_cuda" => CUDA_WITNESSES,
     "dasllama_cuda_classes_rows" => CUDA_WITNESSES,
-    "dasllama_arch_llama" => "test_gpu_resident_llama.das,test_gpu_resident_cuda_llama.das,test_gpu_resident_regions_kquant.das,test_gpu_resident_codec_llama.das,test_forward.das,test_prefill.das",
+    "dasllama_arch_llama" => "test_gpu_resident_llama.das,test_forward.das,test_prefill.das",
     "dasllama_arch_qwen2" => "test_gpu_resident_qwen2.das",
     "dasllama_arch_qwen3" => "test_gpu_resident_qwen3.das",
-    "dasllama_arch_qwen35" => "test_gpu_resident_hybrid.das,test_gpu_resident_regions_hybrid_formats.das,test_gpu_resident_moe_formats.das,test_deltanet.das,test_mtp.das,test_vulkan_mint.das",
+    "dasllama_arch_qwen35" => "test_gpu_resident_hybrid.das,test_gpu_resident_regions_hybrid_formats.das,test_gpu_resident_moe_formats.das,test_deltanet.das,test_dflash_drafter.das,test_vulkan_mint.das",
     "dasllama_arch_qwen3moe" => "test_gpu_resident_qwen_moe.das,test_gpu_resident_moe_formats.das,test_gpu_resident_format_census.das",
     "dasllama_arch_qwen2moe" => "test_gpu_resident_qwen_moe.das",
     "dasllama_arch_qwen4exp" => "test_qwen4exp.das,test_gpu_resident_hc.das,test_gpu_resident_hc_micro.das",
     "dasllama_arch_gptoss" => "test_gpu_resident_gptoss.das",
-    "dasllama_arch_gemma2" => "test_gpu_resident_gemma2_3.das,test_gpu_resident_cuda_dense.das",
-    "dasllama_arch_gemma3" => "test_gpu_resident_gemma2_3.das,test_gpu_resident_cuda_dense.das",
-    "dasllama_arch_gemma4" => "test_gpu_resident_cuda_gemma4.das,test_gpu_resident_gemma4_e2b.das,test_gpu_resident_gemma4_dense.das,test_gpu_resident_gemma4_moe.das,test_mtp_gemma_drafter.das",
-    "dasllama_arch_phi3" => "test_gpu_resident_cuda_dense.das,test_gpu_resident_regions_kquant.das",
-    "dasllama_arch_glm4moe" => "test_mtp.das", "dasllama_arch_mistral3" => "test_chat.das,test_model_specs.das",
+    "dasllama_arch_gemma2" => "test_gpu_resident_gemma2_3.das",
+    "dasllama_arch_gemma3" => "test_gpu_resident_gemma2_3.das",
+    "dasllama_arch_gemma4" => "test_gpu_resident_gemma4_e2b.das,test_gpu_resident_gemma4_dense.das,test_gpu_resident_gemma4_moe.das,test_mtp_gemma_drafter.das",
+    "dasllama_arch_phi3" => "test_gpu_resident_llama.das",
+    "dasllama_arch_glm4moe" => "test_dflash_drafter.das", "dasllama_arch_mistral3" => "test_chat.das,test_model_specs.das",
     "dasllama_moe" => "test_gpu_resident_qwen_moe.das,test_gpu_resident_moe_formats.das,test_gpu_resident_gptoss.das,test_gpu_resident_gemma4_moe.das,test_vulkan_dec_tail.das,test_vulkan_moe_cm2.das,test_vulkan_host_twin.das",
-    "dasllama_mtp_gemma" => "test_mtp_gemma_drafter.das", "dasllama_vulkan_mtp_gemma" => "test_mtp_gemma_drafter.das",
+    "dasllama_mtp_gemma" => "test_mtp_gemma_drafter.das,test_gpu_resident_gemma4_e2b.das", "dasllama_vulkan_mtp_gemma" => "test_mtp_gemma_drafter.das",
     "dasllama_cuda_mtp_gemma" => "test_mtp_gemma_drafter.das",
-    "dasllama_dflash" => "test_dflash_drafter.das,test_mtp_accept_walks.das,test_cuda_tower_asr.das,test_vulkan_tower_kernels.das", "dasllama_metal_dflash" => "test_dflash_drafter.das",
-    "dasllama_vulkan_dflash" => "test_dflash_drafter.das", "dasllama_cuda_dflash" => "test_dflash_drafter.das",
-    "dasllama_vulkan_classes_dflash" => "test_vulkan_tower_kernels.das,test_dflash_drafter.das", "dasllama_cuda_classes_dflash" => "test_cuda_tower_asr.das,test_dflash_drafter.das",
+    "dasllama_dflash" => "test_dflash_drafter.das,test_mtp_accept_walks.das,test_cuda_tower_asr.das,test_vulkan_tower_kernels.das,test_gpu_resident_gemma4_e2b.das,test_gpu_resident_qwen3.das", "dasllama_metal_dflash" => "test_dflash_drafter.das",
+    "dasllama_vulkan_dflash" => "test_dflash_drafter.das,test_gpu_resident_gemma4_e2b.das,test_gpu_resident_qwen3.das",
+    "dasllama_cuda_dflash" => "test_dflash_drafter.das,test_gpu_resident_gemma4_e2b.das,test_gpu_resident_qwen3.das",
+    "dasllama_vulkan_classes_dflash" => "test_vulkan_tower_kernels.das,test_dflash_drafter.das,test_gpu_resident_gemma4_e2b.das,test_gpu_resident_qwen3.das",
+    "dasllama_cuda_classes_dflash" => "test_cuda_tower_asr.das,test_dflash_drafter.das,test_gpu_resident_gemma4_e2b.das,test_gpu_resident_qwen3.das",
     "dasllama_metal_decode" => METAL_WITNESSES, "dasllama_metal_prefill" => METAL_WITNESSES, "dasllama_metal_mtp_gemma" => METAL_WITNESSES,
     "dasllama_scheduler" => "test_scheduler.das",
-    "dasllama_sampling" => "test_sampling.das,test_mtp_sampled_walk.das,test_mtp_accept_walks.das,test_scheduler.das,test_dflash_drafter.das",
-    "dasllama_batch" => "test_batch_decode.das,test_matmul_batch.das,test_gpu_resident_cuda_batch.das",
+    "dasllama_sampling" => "test_sampling.das,test_mtp_sampled_walk.das,test_mtp_accept_walks.das,test_scheduler.das,test_dflash_drafter.das,test_gpu_resident_gemma4_e2b.das",
+    "dasllama_batch" => "test_batch_decode.das,test_matmul_batch.das,test_gpu_resident_llama.das",
     "dasllama_kv_codec" => KV_CODEC_WITNESSES, "dasllama_kv_dtype" => KV_CODEC_WITNESSES,
     "dasllama_prefix" => "test_kv_prefix.das,test_kv_paged.das",
     "dasllama_ple" => "test_ple_check.das,test_gpu_resident_gemma4_e2b.das",
@@ -518,7 +517,7 @@ let MODULE_WITNESSES <- {
     "dasllama_tokenizer" => TOKENIZER_WITNESSES, "dasllama_bpe" => TOKENIZER_WITNESSES, "dasllama_spm" => TOKENIZER_WITNESSES,
     "dasllama_safetensors" => "test_gguf_shards.das,test_mlx_snapshot.das,test_mlx_qwen4exp.das,test_tokenizer.das",
     "dasllama_pretok" => TOKENIZER_WITNESSES, "dasllama_unicode" => TOKENIZER_WITNESSES,
-    "dasllama_chat" => "test_chat.das,test_tool_formats.das,test_think_split.das,test_scheduler.das,test_dflash_drafter.das",
+    "dasllama_chat" => "test_chat.das,test_tool_formats.das,test_think_split.das,test_scheduler.das,test_dflash_drafter.das,test_gpu_resident_qwen3.das",
     "dasllama_tools" => "test_chat.das,test_tool_formats.das,test_think_split.das,test_scheduler.das",
     "dasllama_attn_prefill" => "test_prefill.das,test_prefill_cpu_kernels.das,test_attn_span.das"
 }
@@ -759,6 +758,22 @@ def only_files(files : array<string>; only : string) : array<string> {
 // a killed run's last bytes are exactly the ones worth reporting.
 // Non-private: test_run_summary.das gates it.
 def log_summary(log_path : string) : string => last_line_with(fread(log_path), " tests, ").line
+
+//! a child's summary line by its exit code and log text: none where the kill switch ended it - the switch writes no
+//! summary, so a line there carrying the marker is a cell's own text. Non-private: test_run_suites.das gates it
+def child_summary(rc : int; log_text : string) : string
+    => rc == KILL_SWITCH_EXIT_CODE ? "" : last_line_with(log_text, " tests, ").line
+
+//! the DONE line's account of a child: its summary, else the kill switch's line where the switch ended it, else that
+//! it died early. Non-private: test_run_suites.das gates it
+def child_verdict(rc : int; summary, log_text : string) : string {
+    return summary if (!empty(summary))
+    if (rc == KILL_SWITCH_EXIT_CODE) {
+        let said = log_wall_line(log_text)
+        return empty(said) ? "the test wall's kill switch ended the child, exit {rc} (read the log)" : said
+    }
+    return "no dastest summary - the run died early (read the log)"
+}
 
 //! the last non-empty line of `text` that holds `needle`, and where in it the needle starts ("" and -1 where none does)
 def private last_line_with(text, needle : string) : tuple<line : string; at : int> {
@@ -1082,12 +1097,13 @@ def check_suite_args(cfg : RunArgs) : int {
     return 0
 }
 
-//! the test files of this folder that name a model file of one of the categories `named` lists
+//! the test files of this folder that name a model file of one of the categories `named` lists - by its name or by its path
+//! under the models directory
 def category_files(named : string) : array<string> {
     var files : array<string>
     dir(TESTS_DIR) $(name) {
         return if (!(name |> ends_with(".das")) || !(name |> starts_with("test_") || name |> starts_with("uncategorized")))
-        for (model in model_names(fread("{TESTS_DIR}/{name}"))) {
+        for (model in model_paths(fread("{TESTS_DIR}/{name}"))) {
             let cat = model_category(model)
             if (!empty(cat) && list_names(named, cat)) {   //! a model of no category is no category's, whatever `named` holds
                 files |> push("{TESTS_DIR}/{name}")
@@ -1166,6 +1182,7 @@ struct RunTally {
     skipped : int
     failed_tags : array<string>
     walled : string   //! why the run stopped short - a test past the wall, a batch without its verdicts ("" = it ran to its end)
+    waited : double   //! the seconds the children waited on the model copy (`--await-models`)
 }
 
 //! the per-test cache folder of the run's binary, and the folders of earlier binaries removed when the run is
@@ -1197,12 +1214,14 @@ def child_cache_dir(das_exe : string; own_binary : bool) : string {
     return dir
 }
 
-//! the model files `text` names: every quoted name ending `.gguf` that is one file name (a name built by interpolation, a
-//! path and a pattern are not). Non-private: test_run_suites.das pins it
-def model_names(text : string) : array<string> {
+//! the model files `text` names under the models directory: every quoted name ending `.gguf` that is one file name or a
+//! relative path to one (`drafters/<dir>/<file>`); a name built by interpolation, an absolute path, a climb out (`..`)
+//! and a pattern are not. Non-private: test_run_suites.das pins it
+def model_paths(text : string) : array<string> {
     var names : table<string>
     for (part in split(text, "\"")) {
-        if (part |> ends_with(".gguf") && find(part, "\{") < 0 && find(part, "/") < 0 && find(part, " ") < 0 && find(part, "*") < 0) {
+        if (part |> ends_with(".gguf") && find(part, "\{") < 0 && !(part |> starts_with("/")) && find(part, "..") < 0
+                && find(part, "\\") < 0 && find(part, " ") < 0 && find(part, "*") < 0) {
             names |> insert(part)
         }
     }
@@ -1210,6 +1229,9 @@ def model_names(text : string) : array<string> {
     sort(out)
     return <- out
 }
+
+//! `model_paths` that are one file name, no folder. Non-private: test_run_suites.das pins it
+def model_names(text : string) : array<string> => <- [for (p in model_paths(text)); p; where find(p, "/") < 0]
 
 //! the names of `files` and of every fixture of this folder they require, at any depth
 def reached_names(files : array<string>) : table<string> {
@@ -1236,13 +1258,7 @@ def missing_models(files : array<string>; dir : string) : array<tuple<name : str
     var reached <- reached_names(files)
     var asked : table<string; array<string>>
     for (name in keys(reached)) {
-        var text = ""
-        fopen("{TESTS_DIR}/{name}", "rb") $(f) {
-            if (f != null) {
-                text = fread(f)
-            }
-        }
-        for (model in model_names(text)) {
+        for (model in model_names(fread("{TESTS_DIR}/{name}"))) {
             if (!stat(path_join(dir, model)).is_valid) {
                 asked[model] |> push(name)
             }
@@ -1255,6 +1271,106 @@ def missing_models(files : array<string>; dir : string) : array<tuple<name : str
     }
     sort(out) <| cmp_by(_.name)
     return <- out
+}
+
+//! the model files under `dir` a child over `files` opens, by their path under it, sorted: each model the files and the
+//! fixtures they reach name (`model_paths`) that `dir` holds and a cell may open - its category named by `categories`
+//! or none (--category), its family by `family` or none (--family), under the size tier unless `full`
+//! (DASLLAMA_PARITY_FULL=1) or its category lifts it - with the split shards and NextN head its load reads beside it.
+//! Non-private: test_run_suites.das pins it
+def opened_models(files : array<string>; dir, categories, family : string; full : bool) : array<string> {
+    var reached <- reached_names(files)
+    var out : table<string>
+    let root = (dir |> ends_with("/")) ? dir : "{dir}/"
+    for (name in keys(reached)) {
+        for (model in model_paths(fread("{TESTS_DIR}/{name}"))) {
+            let path = "{root}{model}"
+            let gate = category_gate(path, categories)
+            continue if (!empty(gate.why) || !empty(family_skip_reason(path, family)) || !empty(model_tier_skip_reason(path, full || gate.lifts_tier)))
+            let folder = slice(model, 0, length(model) - length(base_name(model)))
+            var inscope shards <- gguf_shard_paths(path, [missing_ok = true])
+            for (shard in shards) {
+                if (dir_name(shard) == dir_name(path)) {
+                    out |> insert("{folder}{base_name(shard)}")
+                }
+            }
+        }
+    }
+    var listed <- [for (p in keys(out)); p]
+    sort(listed)
+    return <- listed
+}
+
+//! a child's name in the run's lines: its file, or its first file and how many ride with it
+def child_tag(chunk : array<string>) : string {
+    let n = length(chunk)
+    return n == 1 ? base_name(chunk[0]) : "{base_name(chunk[0])}+{n - 1}"
+}
+
+//! the `--list-models` text of the children `chunks` over the models directory `dir`: a `# child <n>: <tag>` line a
+//! child in start order, then the model files it opens (`opened_models` under the run's --category, --family and
+//! `full`) that no earlier child opened, one path a line. Non-private: test_run_suites.das pins it
+def model_list_text(cfg : RunArgs; chunks : array<array<string>>; dir : string; full : bool) : string {
+    var seen : table<string>
+    return build_string() $(w) {
+        for (chunk, at in chunks, count()) {
+            w |> write("# child {at}: {child_tag(chunk)}\n")
+            for (model in opened_models(chunk, dir, cfg.category, cfg.family, full)) {
+                continue if (key_exists(seen, model))
+                seen |> insert(model)
+                w |> write("{model}\n")
+            }
+        }
+    }
+}
+
+//! the seconds `--await-models` waits for a file of a child to land before the run stops red
+let AWAIT_IDLE_SECONDS = 1800.0
+
+//! what `--await-models` does ahead of a child: start it (and why), wait on the files still copying, or stop the run red
+variant CopyGate {
+    start : string
+    wait : int
+    stop : string
+}
+
+//! the `--await-models` decision ahead of a child with `pending` of its model files not yet local: a child with every
+//! file local starts, the copier's `failed` marker ("" where none) stops the run, the copier `done` starts the child over
+//! the links the list could not name, and a child none of whose files landed for `idle` seconds past `bound` stops the
+//! run; else it waits. Non-private: test_run_suites.das pins it
+def copy_gate(pending : int; done : bool; failed : string; idle, bound : float) : CopyGate {
+    return CopyGate(start = "every model file local") if (pending == 0)
+    return CopyGate(stop = "the model copy failed: {failed}") if (!empty(failed))
+    return CopyGate(start = "the copier is done; {pending} file(s) it was not given read where they link") if (done)
+    return CopyGate(stop = "no model file of the child landed in {int(bound)} s, {pending} still copying") if (idle >= bound)
+    return CopyGate(wait = pending)
+}
+
+//! how many of the model files `models` (paths under `dir`) are not yet local: absent, or a link and not a regular file.
+//! Non-private: test_run_suites.das pins it
+def pending_models(dir : string; models : array<string>) : int {
+    var pending = 0
+    for (model in models) {
+        let path = path_join(dir, model)
+        let link = is_symlink_result(path)
+        if (!stat(path).is_reg || !(link is value) || (link as value)) {
+            pending++
+        }
+    }
+    return pending
+}
+
+//! the copier's `failed` marker under the state folder `state`: the file it failed on, "" where it has not failed
+def copy_failure(state : string) : string {
+    let marker = path_join(state, "failed")
+    return "" if (!fexist(marker))
+    var text = ""
+    fopen(marker, "rb") $(f) {
+        if (f != null) {
+            text = strip(fread(f))
+        }
+    }
+    return empty(text) ? "(the marker names no file)" : text
 }
 
 //! the prepared images and save temp files under `dir` at any depth, by their path under it
@@ -1390,14 +1506,15 @@ def private stopped_by_marker(cfg : RunArgs; tag : string; var tally : RunTally)
 }
 
 //! the run ends at the child `tag`, the run's `at`th, for `why`: the tally takes it, the run's stop marker (`--stop-file`)
-//! is written for the run's other boxes, and the line to resume on is said. `kind` names the stop in the lines
-def private stop_run(cfg : RunArgs; tag, kind, why : string; at : int; var tally : RunTally) {
+//! is written for the run's other boxes where `mark`, and the line to resume on is said. `kind` names the stop in the
+//! lines
+def private stop_run(cfg : RunArgs; tag, kind, why : string; at : int; var tally : RunTally; mark : bool = true) {
     tally.walled = why
     to_log(LOG_ERROR, "{kind} {tag}: {why} - the run stops here, no later file runs\n")
     let marked = !empty(cfg.stop_file)
     let clear = marked ? "remove {cfg.stop_file}, then " : ""
     to_log(LOG_ERROR, "RESUME once it is fixed: {clear}this command with --skip {at}\n")
-    if (marked && !fexist(cfg.stop_file)) {
+    if (mark && marked && !fexist(cfg.stop_file)) {
         fwrite(cfg.stop_file, "{tag}: {why}\n")
     }
     tally.failures++
@@ -1426,6 +1543,46 @@ def private child_exe_ready(cfg : RunArgs; files : array<string>) : bool {
     return true
 }
 
+//! `--await-models` ahead of the child `tag` over `chunk`, the run's `at`th: waits while `copy_gate` says so, a WAIT line
+//! as the wait starts and one as it ends, its seconds in the tally; true where the run stops. A copy that failed on this
+//! box stops this box's run alone: the stop file is the wall's
+def private await_child_models(cfg : RunArgs; models : string; chunk : array<string>; seat, tag : string; at : int;
+                               var tally : RunTally) : bool {
+    return false if (empty(cfg.await_models))
+    var inscope opened <- opened_models(chunk, models, cfg.category, cfg.family, parity_full_mode())
+    let t0 = ref_time_ticks()
+    var landed_at = t0
+    var last = -1
+    while (true) {
+        let pending = pending_models(models, opened)
+        if (pending < last) {
+            landed_at = ref_time_ticks()
+        }
+        let idle = float(double(get_time_nsec(landed_at)) / 1000000000.0lf)
+        let done = fexist(path_join(cfg.await_models, "done"))
+        let gate = copy_gate(pending, done, copy_failure(cfg.await_models), idle, AWAIT_IDLE_SECONDS)
+        if (gate is wait) {
+            if (last < 0) {
+                to_log(LOG_INFO, "WAIT {seat} {tag}: {pending} model file(s) still copying\n")
+            }
+            last = pending
+            sleep(1000u)
+            continue
+        }
+        let secs = double(get_time_nsec(t0)) / 1000000000.0lf
+        tally.waited += secs
+        if (gate is stop) {
+            stop_run(cfg, tag, "COPY", gate as stop, at, tally, false)
+            return true
+        }
+        if (last >= 0 || pending > 0) {
+            to_log(LOG_INFO, "WAIT {seat} {tag}: {pending == 0 ? "landed" : "started"} after {fmt(":.1f", secs)} s ({gate as start})\n")
+        }
+        return false
+    }
+    return false
+}
+
 def private run_files(cfg : RunArgs; files : array<string>; image_arms : string; area_run : bool) : RunTally {
     let tmp = temp_dir()
     let win = get_platform_name() == "windows"
@@ -1449,14 +1606,14 @@ def private run_files(cfg : RunArgs; files : array<string>; image_arms : string;
         for (chunk, at in chunks, count()) {
             let n = length(chunk)
             let seat = "child {at}/{length(chunks)}"
-            let tag = n == 1 ? base_name(chunk[0]) : "{base_name(chunk[0])}+{n - 1}"
+            let tag = child_tag(chunk)
             if (at < cfg.skip) {
                 to_log(LOG_INFO, "SKIP {tag}: {seat}, before --skip {cfg.skip}\n")
                 continue
             }
             let log_path = path_join(tmp, "dasllama_run_{tag}_{rep}_{ref_time_ticks()}.log")
             let file_args = n == 1 ? " --test \"{chunk[0]}\"" : join([for (f in chunk); " --together \"{f}\""], "")
-            return <- tally if (stopped_by_marker(cfg, tag, tally))
+            return <- tally if (stopped_by_marker(cfg, tag, tally) || await_child_models(cfg, models, chunk, seat, tag, at, tally))
             let run_env = child_run_env(cfg, (area_run && tag == "test_model_image.das") ? image_arms : cfg.arm)
             let cmd = "{envs}\"{das_exe}\" -jit -module-cache {MODULE_CACHE} dastest/dastest.das --{file_args} --timeout {tmo * n}{wall_flag}{cache_flag}{run_env} > \"{log_path}\" 2>&1"
             to_log(LOG_INFO, "START {tag}{rep_tag}: {seat}: {cmd}\n")
@@ -1465,8 +1622,9 @@ def private run_files(cfg : RunArgs; files : array<string>; image_arms : string;
                 let _drain = fread(f)   // output is redirected; drain keeps the pipe contract
             })
             let secs = double(get_time_nsec(t0)) / 1000000000.0lf
-            let summary = log_summary(log_path)
-            let verdict = !empty(summary) ? summary : "no dastest summary - the run died early (read the log)"
+            let log_text = fread(log_path)
+            let summary = child_summary(rc, log_text)
+            let verdict = child_verdict(rc, summary, log_text)
             to_log(rc == 0 ? LOG_INFO : LOG_ERROR, "DONE {tag}: {seat} exit={rc} {verdict} elapsed={secs}s log={log_path}\n")
             tally.skipped += skipped_cells(summary)
             reap_after(cfg, models, kept_images, tag)
@@ -1612,6 +1770,7 @@ def operator +=(var a : RunTally; b : RunTally) {
     a.failures += b.failures
     a.skipped += b.skipped
     a.failed_tags |> push_from(b.failed_tags)
+    a.waited += b.waited
     if (empty(a.walled)) {
         a.walled = b.walled
     }
@@ -1690,10 +1849,11 @@ def private print_report(cfg : RunArgs; areas : array<string>; n_files, n_exclud
         + (empty(cfg.only) ? "" : " only {cfg.only}") + scope_relaxed(cfg))
     let failed_list = empty(tally.failed_tags) ? "" : " ({join(tally.failed_tags, ", ")})"
     let excluded = n_excluded == 0 ? "" : ", {n_excluded} file(s) excluded"
+    let waited = empty(cfg.await_models) ? "" : ", {fmt(":.0f", tally.waited)} s waited on the model copy"
     if (!empty(tally.walled)) {
         to_log(LOG_ERROR, "STOPPED, the files after it not run: {tally.walled}\n")
     }
-    to_log(tally.failures == 0 ? LOG_INFO : LOG_ERROR, "REPORT {scope}: {n_files} file(s), {tally.failures} failed{failed_list}, {tally.skipped} cell(s) skipped (a filtered arm, an absent device, or a missing model or fixture - each skips loudly){excluded}\n")
+    to_log(tally.failures == 0 ? LOG_INFO : LOG_ERROR, "REPORT {scope}: {n_files} file(s), {tally.failures} failed{failed_list}, {tally.skipped} cell(s) skipped (a filtered arm, an absent device, or a missing model or fixture - each skips loudly){excluded}{waited}\n")
     if (cfg.changed) {
         if (core) {
             to_log(LOG_INFO, "NEXT the engine core changed: the whole stocked set before the PR - run.das -- --suite stocked over the fleet, a pod a GPU home (harness/pod_fleet.das)\n")
@@ -1763,6 +1923,9 @@ def main() : int {
         return 2
     }
     let cfg <- r |> move_unwrap
+    if (cfg.list_models) {   //! the list is the output: the run's own lines stay out of it
+        set_env_variable("DAS_LOG_LEVEL", "error")
+    }
     if (cfg.help) {
         print_help(get_command_info(type<RunArgs>), "modules/dasLLAMA/tests/run.das")
         return 0
@@ -1802,6 +1965,11 @@ def main() : int {
             to_log(LOG_ERROR, "--only '{cfg.only}' keeps no file of the run's {length(split.kept)}\n")
             return 2
         }
+    }
+    if (cfg.list_models) {
+        var inscope chunks <- run_chunks(cfg, only, !empty(areas) || cfg.changed)
+        fwrite(fstdout(), model_list_text(cfg, chunks, models_dir_resolved(), parity_full_mode()))
+        return 0
     }
     log_missing_models(only)
     let tally <- run_plan(cfg, only, plan.image_arms, !empty(areas) || cfg.changed)

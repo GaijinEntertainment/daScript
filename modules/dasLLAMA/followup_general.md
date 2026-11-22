@@ -1168,7 +1168,8 @@
    ledger entry). Done = the verify's recurrent layers run the per-token core at npos 2 and copy
    each layer's state slice AFTER row 0 into the snapshot buffers (`mtp_snap.pos = pos + 1`), so a
    reject restores that snapshot and takes row 0's logits and hidden the verify already produced -
-   the non-recurrent reject path's shape - with `test_mtp_reject_rollback` as the gate.
+   the non-recurrent reject path's shape - with `mtp_reject_rollback_cell` (`tests/_mtp_cpu_cells.das`)
+   as the gate.
 106. **The server's boot-arming entry points: degrade on bad config everywhere, and a gate.**
    `configure_tts` now degrades on a missing file the way the roster does (2026-09-03), but the
    mirror image stands for vision and audio: `main.das` owns their missing-file check (it drops
@@ -1800,7 +1801,8 @@
     back (`test_mtp_snapshot.das` holds the round trip); the Metal verify takes the prefill's panel
     form and commits the accepted rows alone (`commit_ple_rows`). Done = every reject path of the
     CPU round at depth 2 and past goes through that restore, held by a depth-2 forced-reject leg on
-    the Flash-Next counting fixture in `test_mtp.das` (the depth-1 leg cannot see it).
+    the Flash-Next counting fixture (`mtp_flashnext_invariance_cell`, `tests/_mtp_cpu_cells.das`;
+    the depth-1 leg cannot see it).
 
 178. **A CPU verify of two rows costs two decode steps on Flash-Next.** `ffn_moe_prefill` takes the
     per-position GEMV route under `ATTN_NARROW_NPOS`, which took the verify from 77 to 67 ms, and the
@@ -2478,8 +2480,8 @@
     at every step; the two-window prompt's steps hold the bar at 0.5 to 1.5, and the fixture's one-step-off rows sit 4.8
     of 48 apart at three of the steps, so a wider bar lets the control through; the CUDA kernels built without
     `--use_fast_math` read 2.84 at the same step (`PERF_LEDGER.md`, the host-experts section's "Phi-3.5-mini Q4_K_M
-    one-window readings on both homes" entry of 2026-10-28). `test_gpu_resident_cuda_phi35_mini` in `tests/test_gpu_resident_cuda_dense.das` holds the two-window
-    arm of the Q4_K_M file meanwhile, the Vulkan regions file the same. The site is the shared K-quant one-row decode
+    one-window readings on both homes" entry of 2026-10-28). `test_gpu_resident_phi35_mini` in `tests/test_gpu_resident_llama.das` holds the two-window
+    arm of the Q4_K_M file meanwhile, its regions cells the same. The site is the shared K-quant one-row decode
     chain against the CPU reference, not a home: on the Q8_0 file both homes read 0.21 to 0.73 of bars of 1.9 to 2.9 at
     every step. Done = the K-quant chain's arms (`followup_vulkan.md` item 75's list: the split add+rms and the Q8_K
     requant a site) each pinned to the CPU reference's form on the phi shapes until the step reads under 4 percent, and
@@ -2783,7 +2785,7 @@
     above the count below it up to the card's compute bound, each cap found fixed or ledgered with its
     measurement, and the rows in `PERF_LEDGER.md`.
 297. **The block drafter's discrete arms wait on their first device run in the suites.** `test_dflash_drafter.das`'s
-    `dflash-e2b-discrete` and `dflash-27b-discrete` arms and the discrete homes' top-k and pass-kernel cells
+    `dflash-27b-discrete` arm, `test_gpu_resident_gemma4_e2b.das`'s drafter-form cells, and the discrete homes' top-k and pass-kernel cells
     (`df_topk_case`, `test_vkt_dflash_pass_kernels`) hold the Vulkan and CUDA device arms. Done = both arms and the
     cells green on a CUDA pass and a Vulkan pass, their `REPORT` lines cited.
 298. **The discrete homes join a tick's speculative rounds for the assistant drafter alone.** With several streams
@@ -2896,8 +2898,8 @@
     (`crd_pf_head_setup`) and its prompt cap word are taken at the first window that needs them, none checked where it
     is made. A card filled between the arm and that window hands back a failed allocation the kernels then run over.
     Done = every plane the plan charges taken at the arm on both homes, or checked where it is made and refused by
-    name, each with a cell that holds the refusal through a fault seat as
-    `test_gpu_resident_cuda_window_planes_at_arm` does; the asymmetry entry removed with it.
+    name, each with a cell that holds the refusal through a fault seat as the window-fault form of
+    `test_gpu_resident_llama.das`'s 1B Q8_0 block does; the asymmetry entry removed with it.
 310. **Three Vulkan-home test files fail under the CUDA ask where their headers say they skip.**
     `test_gpu_resident_gptoss.das`, `test_gpu_resident_gemma4_e2b.das` and `test_gpu_resident_format_census.das`
     hold cells that place layers on the per-op tier the CUDA home
@@ -2951,3 +2953,9 @@
     `records/m5.json` (metal/tuned, cpu/tuned, cpu/accel) hold for these two files were measured on the files they
     replace. Done = `gen_bench_records.das -- --workload tts` over the two files on each of the four boxes in the next
     release re-mint, each row's last board figure beside the new one in that re-mint's `PERF_LEDGER.md` entry.
+317. **Six test files still load their models apart from their models' blocks.** `tests/REVIEW.das`'s `UNFOLDED`
+    lists `test_dflash_drafter.das`, `test_embeddings.das`, `test_metal_batched_row.das`,
+    `test_metal_format_census.das`, `test_mlx_snapshot.das` and `test_mtp_gemma_drafter.das`, so the load-once check
+    prints their findings as held lines (`ARCHITECTURE_ENGINE_SUPPORT.md#test-load-once`). Done = each file's cells on
+    a form of their model's `with_cpu_and_gpu_model` call, or an `own_load` reason naming what no form can serve, and
+    `UNFOLDED` empty.

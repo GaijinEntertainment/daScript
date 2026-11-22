@@ -668,7 +668,8 @@ module) is independent and can land any time - it is pure structure.
     state), slow by construction. Lever: N state slots per layer keyed by owner, the
     scheduler's rows mapped to slots, the fused step kernel taking a slot index - the same
     shape the batched deltanet step needs anyway. Done = two streams' tg on the 0.8B within
-    the single-stream rate's band, `test_scheduler_batching_deltanet_gpu` green.
+    the single-stream rate's band, `scheduler_batching_deltanet_gpu_cell`
+    (`test_gpu_resident_hybrid_q8`) green.
 
 39. **CLOSED - `tests/test_scheduler.das` under the armed tier.** Two causes, both landed with
     the session-ownership fix. The order dependence (a model loaded before the deltanet cell
@@ -1440,7 +1441,8 @@ module) is independent and can land any time - it is pure structure.
     taken for them; the kernel cells hold the stamps meanwhile. The arms need the per-32 plane
     builders (the block-32 quant and scale planes) beside their kq ones, then the rows.
 68. **The routed 26B's perplexity cells measure the device compiler's rounding, not the driver.**
-    `test_gpu_resident_gemma4_26b` and `test_gpu_resident_gemma4_26b_k` (`test_gpu_resident_gemma4_moe.das`) hold the resident
+    The perplexity cells of `test_gemma_drafter_26b_iq3_trunk` and `test_gemma_drafter_26b_trunk`
+    (`test_mtp_gemma_drafter.das`, the whole files' blocks) hold the resident
     perplexity to a ratio of the CPU chain's, and a kernel recompile alone - kernels bit-identical
     at the model's width in the kernel cells, no out-of-range access under the validation layer,
     the same readings with a barrier before every dispatch - moves the Q4_K_M file's 150-position
@@ -1498,7 +1500,7 @@ module) is independent and can land any time - it is pure structure.
     `DASLLAMA_VK_FUSE=0`, while the N-column GEMV leaves match the one-column class bit for bit in
     `tests/test_vulkan_kernels.das`; a Q8_0 carrier is exact. The difference sits among the arms
     the K-quant chain alone takes - the split add+rms and Q8_K requant a site, the `a:rq_x` and
-    `t:fin_rq` requants - and the Llama `_k` cells of `test_gpu_resident_regions_kquant.das` hold
+    `t:fin_rq` requants - and the Llama Q4_K_M regions cells of `test_gpu_resident_llama.das` hold
     the split bar with the one-token-off control meanwhile; `test_regions_batched_steps_q30` in
     `test_gpu_resident_qwen_moe.das` (Qwen3-30B-A3B Q4_K_M, its projections and experts
     all Q4_K) hold the same bar for the same reason - its rows
@@ -1594,9 +1596,9 @@ module) is independent and can land any time - it is pure structure.
 87. **The mistral3 family has no batched evidence.** Mistral-Small-3.1-24B-Instruct-2503 Q4_K_M
     (`performance/model_specs.das`, 14 GB) serves through the N-row command like the other dense
     K-quant carriers, but no box of ours stocks it beside its models, so no regions file pins its
-    rows and `PERF_LEDGER.md` carries no row. The work, on a box with the room: a regions file in
-    the shape of `test_gpu_resident_regions_kquant.das`'s `test_regions_batched_steps_k` /
-    `test_regions_batched_steps_split_k` pair (the two batched-step cells on the split bar,
+    rows and `PERF_LEDGER.md` carries no row. The work, on a box with the room: a regions block in
+    the shape of `test_gpu_resident_llama.das`'s Q4_K_M batched-steps
+    pair (the two batched-step cells on the split bar,
     large tier) registered in `tests/run.das`, and the section's row form - `daslang -jit
     benchmarks/lcpp_bench.das --for-debug-purposes -r 3 -p 512 -n 128 -t 16 --npl 4` on the cm2
     arm and under `DASLLAMA_COOPMAT=mm`, beside llama.cpp b10660's `llama-batched-bench -c 4096 -b

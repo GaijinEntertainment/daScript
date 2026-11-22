@@ -13,9 +13,6 @@ require dasllama/dasllama   // create_session, create_batch_workspace, eval_batc
 require _scheduler_rig   // the device-mode scheduler cell: make_req, drain, toks_of, finished_of
 require math
 require daslib/defer
-require daslib/jobque_boost
-require daslib/fio
-require dasllama/dasllama_math   // with_dasllama_jobque_ (the engine-standard jobque config)
 require dasllama/dasllama_gpu_tier   // moe_gpu_tier_installed / gpu_want_auto: is the tier armed; gpu_cpu_passes_
 require dasllama/dasllama_gpu_resident   // set_gpu_resident_regions_, moe_gpu_resident_active
 require dasllama/dasllama_gpu_math   // nolint:STYLE030,LINT019 — the grid helpers, read under the vulkan static_if, unused in the darwin world
@@ -97,65 +94,6 @@ def private hold_within(var h : Held; tr : Model; got, want, control : array<flo
     } else {
         h |> held_row(what, got, want, control, rel)
     }
-}
-
-//! `file` loaded at `regions` regions. A card whose room the plan does not fit registers a skip naming it, any other decline
-//! is a red; either way the driver is left unarmed, which the caller reads off `moe_gpu_resident_active()` before it runs rows.
-def private load_regions(t : T?; file : string; regions : int64; host_ctx : int64 = REGIONS_RIG_CTX; ctx : int64 = REGIONS_RIG_CTX; host : bool = false) : Model {
-    let levers = resident_levers()
-    set_gpu_ctx_max(ctx)   //! the mirror context, read as the driver arms; the levers go back after the load
-    var tr <- load_resident_as(host, path_join(models_dir(), file), regions)   //! the rig measures the resident driver: its route is pinned on for the load whatever the environment says
-    restore_resident_levers(levers)
-    tr.config.seq_len = min(tr.config.seq_len, host_ctx)
-    resident_admitted(t, "the whole-model driver armed at {regions} regions (the load log names any decline)", " at {regions} regions")
-    return <- tr
-}
-
-//! the resident gate, and for a test that asks a mirror codec (a codec pin around its cells) the skip where the
-//! environment arms another over it: DASLLAMA_VK_KV32=1's f32 mirror
-def private regions_ready(t : T?; file : string) : bool {
-    return false if (!resident_ready(t, path_join(models_dir(), file)))
-    let asked = gpu_kv_want_pin()
-    if (asked.pinned && resident_mirror_dtype() != asked.value) {
-        t |> skip("the environment arms a {resident_mirror_dtype()} mirror over the {asked.value} this file asks (DASLLAMA_VK_KV32=1) - its cells need that unset")
-        return false
-    }
-    return true
-}
-
-//! how a regions cell loads its carrier: the region count, the context pinned for the load, and the fuse knob off for the load
-//! (the split one-row forms; a no-op without the Vulkan module)
-struct private RegionsLoad {
-    regions : int64 = 2l
-    ctx : int64 = REGIONS_RIG_CTX
-    host_ctx : int64 = REGIONS_RIG_CTX   //! every host-cached session's K/V cache: the rig's cap, or the mirror's context for a cell whose prompts run past it
-    split_forms : bool
-    ring : int = -1   //! the sliding layers' ring pin for the load (`set_gpu_kv_ring`): -1 the environment's, 0 every row kept
-    host : bool   //! the weight planes kept on the host (`load_resident_host`): the load of a cell that runs the CPU chain on the model
-}
-
-//! the two-region cell's rig: the gate, `file` loaded at two regions, `body` inside the engine's job queue, the model deleted after
-def private with_regions_rig(t : T?; file : string; body : block<(tr : Model) : void>) {
-    with_regions_rig(t, file, RegionsLoad(), body)
-}
-
-//! the rig over the load `load` names, every lever it pins put back after the load
-def private with_regions_rig(t : T?; file : string; load : RegionsLoad; body : block<(tr : Model) : void>) {
-    if (!regions_ready(t, file)) return
-    let levers = resident_levers()
-    split_forms_pin(load.split_forms)
-    var tr <- Model()
-    with_gpu_kv_ring(load.ring) {
-        delete tr
-        tr <- load_regions(t, file, load.regions, load.host_ctx, load.ctx, load.host)
-    }
-    restore_resident_levers(levers)
-    if (moe_gpu_resident_active()) {
-        with_dasllama_jobque_() {
-            invoke(body, tr)
-        }
-    }
-    delete tr
 }
 
 //! the fed tokens of two sessions and each one's logits alone, prefilled over `pa` and `pb`: what a two-region cell holds its rows to
@@ -361,20 +299,9 @@ def continue_at(t : T?; tr : Model; n, cut : int64; rel : float) {
     delete feed
 }
 
-//! `rel`: the bar the continued rows hold against the one-call rows - the split bar, the routed chain's on a routed model (its
-//! windows' expert tiles schedule other row counts, and the router's near-ties part the two)
-[cold_path]
-def cell_prefill_continues_on_the_device(t : T?; file : string) {
-    cell_prefill_continues_on_the_device(t, file, SPLIT_BAR_REL)
-}
-
-def cell_prefill_continues_on_the_device(t : T?; file : string; rel : float) {
-    with_regions_rig(t, file) $(tr) {
-        regions_continues_cell(t, tr, rel)
-    }
-}
-
-//! `cell_prefill_continues_on_the_device`'s two runs on a load the caller made
+//! the continued-prefill cells' two runs on a load the caller made; `rel` the bar the continued rows hold against the one-call
+//! rows - the split bar, the routed chain's on a routed model (its windows' expert tiles schedule other row counts, and the
+//! router's near-ties part the two)
 def regions_continues_cell(t : T?; tr : Model; rel : float) {
     unsafe {
         t |> run("a prefill from a position past zero runs the window chain over the region's rows") @capture(& tr)(t : T ?) {
@@ -677,22 +604,9 @@ def private batched_steps_body(var h : Held; tr : Model; pa, pb : array<int64>; 
     delete feeds
 }
 
-//! the E-series side rows on the device at every decode shape: the sessions alone (the one-row command) and the batched steps (the
-//! N-row command) gather each row's side row off its token id - the host gathers no table row - and the batched rows still read bit for bit what each session reads alone
-[cold_path]
-def cell_regions_batched_side_rows(t : T?; file : string) {
-    t |> run("the side rows of the sessions alone and of the batched steps gather on the device off the rows' ids") @(t : T?) {
-        with_gpu_resident_embed(1) {
-            with_regions_rig(t, file) $(tr) {
-                held_on(t) $(var h) {
-                    regions_side_rows(h, tr)
-                }
-            }
-        }
-    }
-}
-
-//! the side-rows cell's collection on a two-region load gathering its token rows on the device
+//! the side-rows cell's collection on a two-region load gathering its token rows on the device: the E-series side rows at every
+//! decode shape - the sessions alone (the one-row command) and the batched steps (the N-row command) gather each row's side row
+//! off its token id, the host gathers no table row, and the batched rows still read bit for bit what each session reads alone
 def regions_side_rows(var h : Held; tr : Model) {
     h |> held_fact(has_ple(tr.config) && home_side_gather_on(), "the driver gathers the side rows off the ids (the table and the projection on the device)")
     var pa <- prompt_a()
@@ -829,30 +743,25 @@ def regions_batched_rows(var h : Held; tr : Model; bar : LogitsBar = LogitsBar.b
     delete pb
 }
 
-//! the batched cell on `file`'s two-region load
-def cell_regions_batched_steps(t : T?; file : string; bar : LogitsBar = LogitsBar.bit_exact) {
-    t |> run("two sessions, a region each: a batched step over both reads what each session reads alone, with no history resync") @(t : T?) {
-        with_regions_rig(t, file) $(tr) {
+//! the two batched-step cells on a two-region load the caller made, each its own cell held to `bar`: at one window
+//! (`regions_batched_rows`), and past the unsplit position so the split N-row command records (`regions_split_rows`)
+def regions_steps_cells(t : T?; var m : Model; bar : LogitsBar) {
+    unsafe {   //! the cells capture the loaded model by reference
+        t |> run("two sessions, a region each: a batched step over both reads what each session reads alone, with no history resync") @capture(& m)(t : T ?) {
             held_on(t) $(var h) {
-                regions_batched_rows(h, tr, bar)
+                regions_batched_rows(h, m, bar)
+            }
+        }
+        t |> run("two sessions past the unsplit position: the split N-row command reads what each session reads alone") @capture(& m)(t : T ?) {
+            held_on(t) $(var h) {
+                regions_split_rows(h, m, bar)
             }
         }
     }
 }
 
-//! the same past the unsplit position: both prompts run longer than RD_UNSPLIT_POS, so the batched steps take the
+//! the split cell's collection on a two-region load: both prompts run longer than RD_UNSPLIT_POS, so the batched steps take the
 //! N-row command's split attention form - the arrival counters a row apart, the last piece of each row combining
-def cell_regions_batched_steps_split(t : T?; file : string; bar : LogitsBar = LogitsBar.bit_exact) {
-    t |> run("two sessions past the unsplit position: the split N-row command reads what each session reads alone") @(t : T?) {
-        with_regions_rig(t, file) $(tr) {
-            held_on(t) $(var h) {
-                regions_split_rows(h, tr, bar)
-            }
-        }
-    }
-}
-
-//! the split cell's collection on a two-region load
 def regions_split_rows(var h : Held; tr : Model; bar : LogitsBar = LogitsBar.bit_exact) {
     var pa <- resident_prompt(PF_WINDOW_ROWS + 8l)
     var pb <- ramp_ids(PF_WINDOW_ROWS + 25l, 0l, 3000l, 91l, 6000l)
@@ -1579,21 +1488,10 @@ def regions_pool_head_cell(t : T?; tr : Model; file : string) {
     }
 }
 
-//! the session's ring floor over a ringed load (`ARCHITECTURE_GPU_KV_RING.md#kv-ring-floor`): a prompt past the window leaves the
-//! floor at its rows less the ring's slack, a call under it panics, a prompt from 0 resets the region's high-water mark and the floor
-//! with it; a parked claim, an export and an import each refuse a cut under the floor and carry the floor on the rows they move
-[cold_path]
-def cell_ring_floor(t : T?; file : string) {
-    t |> run("a ringed history continues from its ring floor on: under it a call panics and a park, an export and an import refuse") @(t : T?) {
-        with_regions_rig(t, file, RegionsLoad(ring = 1)) $(tr) {
-            held_on(t) $(var h) {
-                regions_ring_floor_rows(h, tr)
-            }
-        }
-    }
-}
-
-//! the ring-floor cell's collection on a ringed two-region load
+//! the ring-floor cell's collection on a ringed two-region load (`ARCHITECTURE_GPU_KV_RING.md#kv-ring-floor`): a prompt past the
+//! window leaves the floor at its rows less the ring's slack, a call under it panics, a prompt from 0 resets the region's
+//! high-water mark and the floor with it; a parked claim, an export and an import each refuse a cut under the floor and carry the
+//! floor on the rows they move
 def regions_ring_floor_rows(var h : Held; tr : Model) {
     let slack = gpu_resident_kv_ring_slack()
     h |> held_fact(slack > 0l, "the ringed load armed its rings (slack {slack})")
@@ -1918,21 +1816,9 @@ def private da_attn_stamp_key(var h : Held; tr : Model; slab_heads : int) : stri
     }
 }
 
-//! a session stepped once through the driver dispatches the decode attention stamp of the armed mirror codec that the
-//! carrier's head shape picks - a slab `slab_heads` q heads wide - the pick a logits compare cannot see, the census can; the
-//! slab pick and the census names are the Vulkan driver's, so the cell skips under the CUDA ask and without a census
-def cell_regions_stamp_served(t : T?; file : string; slab_heads : int) {
-    t |> run("the driver's step dispatches the stamp the carrier's shape picks") @(t : T?) {
-        return if (!vulkan_home_asked(t, "this lever is the Vulkan driver's"))
-        with_regions_rig(t, file) $(tr) {
-            held_on(t) $(var h) {
-                regions_stamp_rows(h, tr, slab_heads)
-            }
-        }
-    }
-}
-
-//! the stamp cell's collection on a two-region load of the Vulkan home; a held skip without a census
+//! the stamp cell's collection on a two-region load of the Vulkan home: a session stepped once through the driver dispatches the
+//! decode attention stamp of the armed mirror codec that the carrier's head shape picks - a slab `slab_heads` q heads wide - the
+//! pick a logits compare cannot see, the census can; a held skip without a census
 def regions_stamp_rows(var h : Held; tr : Model; slab_heads : int) {
     var pa <- prompt_a()
     var fa <- feed_a()
@@ -1950,15 +1836,6 @@ def regions_stamp_rows(var h : Held; tr : Model; slab_heads : int) {
     delete s
     delete pa
     delete fa
-}
-
-//! where `on`, the fuse knob pinned to 0 - the split one-row forms - for the next load
-def private split_forms_pin(on : bool) {
-    static_if (typeinfo builtin_module_exists(vulkan)) {
-        if (on) {
-            g_vk_fuse = 0
-        }
-    }
 }
 
 //! step `st` of the widening order: the two rows batched, then each alone, then all three batched
@@ -2052,22 +1929,11 @@ def regions_widen_rows(var h : Held; tr : Model; bar : LogitsBar = LogitsBar.bit
     delete fc_short
 }
 
-//! `rows` sessions over `rows` regions - more than the N-column leaves' eight-column tile, or more than the N-row command
-//! steps at once - through STEPS batched steps: the two-row cell's body over `rows` rows, each step the fewest commands of
-//! at most the rows the command steps at once (`vk_rdec_token_n_rows`), its GEMVs in tiles of eight columns, never a row at a time.
-//! The CUDA home's rows tensor leaf is off for the steps (`with_rows_leaf`), so the column tiles serve every site there too,
-//! and no leaf stamp launches - the leaf cell's control
-def cell_regions_batched_groups(t : T?; file : string; rows : int64; bar : LogitsBar = LogitsBar.split_bar) {
-    t |> run("{rows} sessions, a region each: a batched step over all of them runs in groups of the command's rows, its GEMVs in column tiles, and every row reads what its session reads alone") @(t : T?) {
-        with_regions_rig(t, file, RegionsLoad(regions = rows)) $(tr) {
-            held_on(t) $(var h) {
-                regions_groups_rows(h, tr, rows, bar)
-            }
-        }
-    }
-}
-
-//! the groups cell's collection on a load of `rows` regions
+//! the groups cell's collection on a load of `rows` regions - more than the N-column leaves' eight-column tile, or more than the
+//! N-row command steps at once - through STEPS batched steps: each step the fewest commands of at most the rows the command steps
+//! at once (`vk_rdec_token_n_rows`), its GEMVs in tiles of eight columns, never a row at a time. The CUDA home's rows tensor leaf
+//! is off for the steps (`with_rows_leaf`), so the column tiles serve every site there too, and no leaf stamp launches - the leaf
+//! cell's control
 def regions_groups_rows(var h : Held; tr : Model; rows : int64; bar : LogitsBar = LogitsBar.split_bar) {
     let at_once = home_token_n_rows()
     h |> held_fact(at_once >= 2l && (at_once < rows || min(rows, at_once) > int64(GEMV_COL_TILE)),
@@ -2083,23 +1949,11 @@ def regions_groups_rows(var h : Held; tr : Model; rows : int64; bar : LogitsBar 
     delete feeds
 }
 
-//! `rows` sessions' batched steps on the CUDA home's rows tensor leaf: a leaf stamp launched, and every row nearer its session
-//! alone than its previous step (`ctrl_bar`). The leaf's sites round apart from the one-row command's GEMVs, and a routed
-//! carrier's router parts the two at a near-tie: the Qwen3.6-35B IQ4_XS rows read to 1.16 of a 9.9 peak on the RTX PRO 4500,
-//! 0.27 of the row one off's distance at the most, where a row one off sits as near as 0.2 of the peak - no share of the peak
-//! holds both. Skips on a home with no rows leaf
-def cell_regions_batched_leaf(t : T?; file : string; rows : int64) {
-    t |> run("{rows} sessions, a region each, on the rows tensor leaf: a leaf stamp launches and every row reads nearer its session alone than its previous step") @(t : T?) {
-        with_regions_rig(t, file, RegionsLoad(regions = rows)) $(tr) {
-            held_on(t) $(var h) {
-                regions_leaf_rows(h, tr, rows)
-            }
-        }
-    }
-}
-
-//! the leaf cell's collection on a load of `rows` regions: a held
-//! skip on a home with no rows leaf
+//! the leaf cell's collection on a load of `rows` regions, the steps on the CUDA home's rows tensor leaf: a leaf stamp launched,
+//! and every row nearer its session alone than its previous step (`ctrl_bar`). The leaf's sites round apart from the one-row
+//! command's GEMVs, and a routed carrier's router parts the two at a near-tie: the Qwen3.6-35B IQ4_XS rows read to 1.16 of a
+//! 9.9 peak on the RTX PRO 4500, 0.27 of the row one off's distance at the most, where a row one off sits as near as 0.2 of the
+//! peak - no share of the peak holds both. A held skip on a home with no rows leaf
 def regions_leaf_rows(var h : Held; tr : Model; rows : int64) {
     let leaf0 = home_rows_leaf_launches()
     if (leaf0 < 0l) {

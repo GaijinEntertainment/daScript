@@ -17,6 +17,9 @@ require dasllama/dasllama_gguf
 require _model_tier   // models_dir() + model_available() presence/size-tier gate
 require _resident_feed   // feed_logits, feed_steps_within
 require _resident_regions   // adopted_row: the continuation cell's adopted checkpoint
+require _cpu_gpu_model   // with_cpu_and_gpu_model, the forms: the trunk's block
+require _parity_cells   // the parity cells the block's parity knob reaches (`_::`): the trunk's model_specs parity row on its block
+require _mtp_cpu_cells   // mtp_flashnext_invariance_cell: the head-pinned CPU form's invariance pair
 
 // The whole-model resident driver on the hyper-connection carrier (Qwen3.8-Flash-Next UD-IQ4_XS, three shards, the large tier,
 // DASLLAMA_GPU=1): the wide residual's mixer seams, the n-gram side input and the deltanet sigmoid out-gate on the device, the
@@ -26,7 +29,11 @@ require _resident_regions   // adopted_row: the continuation cell's adopted chec
 // arm did (the decode pick tape): 512 experts top-10 over 4 mixed streams flip a near-tie on kernel-order noise alone, and
 // one flipped expert moves the whole row past any bar. Every row's logits within the bar, the one-step-off control past it.
 // The NextN cells (the draft, the speculative round) also need the split head shard beside the trunk
-// (Qwen3.8-Flash-Next-GGUF/MTP/mtp-Qwen3.8-Flash-Next-shared-Q8_0.gguf) and skip without it.
+// (Qwen3.8-Flash-Next-GGUF/MTP/mtp-Qwen3.8-Flash-Next-shared-Q8_0.gguf) and skip without it. The NextN draft and the two-token
+// prompt ride one block (`test_gpu_resident_hc_forms`), with the self-speculative decode's invariance pair on its head-pinned
+// CPU form (`_mtp_cpu_cells.das`, on every box under DASLLAMA_PARITY_FULL=1); the cells that
+// drop the device mid-cell to read the CPU chain on the same load - the verify round, the forced feed, the continuation - hold
+// their own loads.
 
 [init]
 def private allow_cpu_prefill_intent() {
@@ -139,6 +146,7 @@ def private lane_steps(tr : Model; var s : Session; tok0, tok1, k : int64; carry
 //! against the split command's one-row steps and the CPU's on the round's pick lanes, the other row as each row's control
 [test(description = "On Qwen3.8-Flash-Next with its NextN head, one device speculative round accepts exactly where row 0's argmax is the draft, and its two verify rows and wide carry rows sit within bar of the split command's and the CPU's one-row steps on the same pick lanes")]
 def test_gpu_resident_hc_mtp_verify(t : T?) {
+    own_load("the cell drops the device model mid-cell and replays the device arm's taped expert picks on the CPU chain over the same load: the tape holds one load's picks")
     t |> run("Qwen3.8-Flash-Next + its split head: one speculative round with the draft and the two-row verify on the device against the CPU chain over the same tokens") @(t : T?) {
         if (!hc_ready(t)) return
         set_mtp_head_path(path_join(models_dir(), FN_HEAD))
@@ -194,68 +202,60 @@ def test_gpu_resident_hc_mtp_verify(t : T?) {
     }
 }
 
-//! the NextN head on the hyper-connection chain: one device draft against the CPU forward_mtp over the same carry and the head rows the chain warmed (hydrated to the host), the CPU draft one row back as the control
-[test(description = "One NextN draft through the resident head on the hyper-connection chain matches the CPU forward_mtp on the same token, carry and replayed pick within the logits and carry bars, its device pick the argmax, the draft one row back the control")]
-def test_gpu_resident_hc_mtp_draft(t : T?) {
-    t |> run("Qwen3.8-Flash-Next + its split head: one NextN draft through the resident head on the chain against the CPU forward_mtp on the same token, wide carry and row") @(t : T?) {
-        if (!hc_ready(t)) return
-        set_mtp_head_path(path_join(models_dir(), FN_HEAD))
-        var tr <- load_model_(path_join(models_dir(), FN_TRUNK), QuantMode.q8)
-        clear_mtp_head_path()
-        t |> success(!mtp_head_path_pin().set, "the head pin is cleared for the process after the load")
-        t |> equal(tr.config.n_layer_nextn, 1l, "the split head attached")
-        t |> success(moe_gpu_resident_active(), "the whole-model driver armed on the trunk and its head (the load log names any decline)")
-        with_dasllama_jobque_() {
-            let tape_before = moe_pick_tape_mode()
-            var prompt <- resident_prompt(HC_PROMPT)
-            var s <- create_session(tr, mirror_kv_dtype())
-            let spec0 = get_mtp_spec()
-            set_mtp_spec(true)
-            forward_prefill(tr, s, prompt, long_length(prompt), 0l)
-            s.n_past = long_length(prompt)
-            set_mtp_spec(spec0)
-            t |> equal(s.mtp_h_pos1, HC_PROMPT, "the window chain landed the wide carry at the prompt's end")
-            var h0 <- [for (x in s.mtp_h); x]
-            t |> equal(long_length(h0), hc_dim(tr.config), "the carry is the wide residual")
-            let row = HC_PROMPT - 1l
-            let drafts0 = moe_gpu_resident_drafts()
-            moe_pick_tape(MoePickTape.record)   // the head's one select: the CPU head routes as the device head did
-            var gpu <- draft_from(tr, s, DRAFT_TOKEN, row, h0)
-            moe_pick_tape(MoePickTape.off)
-            t |> equal(moe_gpu_resident_drafts(), drafts0 + 1l, "the resident head drafted on the chain")
-            t |> equal(s.mtp_h_pos1, 0l, "the draft's carry is the head's own: its watermark stays 0")
-            let pick = moe_gpu_resident_draft_pick()
-            let seat = unset_rdec_draft()
-            moe_pick_tape(MoePickTape.replay)
-            var cpu <- draft_from(tr, s, DRAFT_TOKEN, row, h0)
-            let tape = moe_pick_tape_stats()
-            moe_pick_tape(MoePickTape.off)
-            var one_row_back <- draft_from(tr, s, prompt[row], row - 1l, h0)
-            reinstall_rdec_draft(seat)
-            t |> equal(moe_gpu_resident_drafts(), drafts0 + 1l, "the unset seat left both CPU drafts to forward_mtp")
-            served_every_call(t)
-            let ag = argmax_of(gpu.logits)
-            let ac = argmax_of(cpu.logits)
-            to_log(LOG_INFO, "hc draft (row {row}, token {DRAFT_TOKEN}): argmax cpu {ac} ({cpu.logits[ac]}), resident {ag} ({gpu.logits[ag]}), device pick {pick}; tape: {tape.seen} selects replayed, {tape.miss} of the CPU head's own picks off the device's\n")
-            t |> equal(tape.seen, 1l, "the CPU head replayed the device head's one select")
-            row_within_ctrl(t, "hc draft logits", gpu.logits, cpu.logits, one_row_back.logits, LOGIT_BAR_REL, "(the CPU draft one row back as the control)")
-            row_within_ctrl(t, "hc draft wide carry", gpu.h, cpu.h, one_row_back.h, CARRY_BAR_REL, "(the CPU draft one row back as the control)")
-            t |> equal(pick, ag, "the device pick is the argmax of the logits it landed")
-            pick_agrees(t, tr, "hc draft (row {row}, token {DRAFT_TOKEN})", pick, cpu.logits, LOGIT_BAR_REL)
-            t |> equal(int(moe_pick_tape_mode().mode), int(tape_before.mode), "the pick tape is back at the mode the cell found")
-            delete gpu
-            delete cpu
-            delete one_row_back
-            delete h0
-            delete s
-            delete prompt
-        }
-        delete tr
-    }
+//! the NextN head on the hyper-connection chain, on the head form `tr`: one device draft against the CPU forward_mtp over the
+//! same carry and the head rows the chain warmed (hydrated to the host), the CPU draft one row back as the control
+def private hc_mtp_draft_cell(t : T?; tr : Model) {
+    t |> success(!mtp_head_path_pin().set, "the head pin is cleared for the process after the load")
+    t |> equal(tr.config.n_layer_nextn, 1l, "the split head attached")
+    t |> success(moe_gpu_resident_active(), "the whole-model driver armed on the trunk and its head (the load log names any decline)")
+    let tape_before = moe_pick_tape_mode()
+    var prompt <- resident_prompt(HC_PROMPT)
+    var s <- create_session(tr, mirror_kv_dtype())
+    let spec0 = get_mtp_spec()
+    set_mtp_spec(true)
+    forward_prefill(tr, s, prompt, long_length(prompt), 0l)
+    s.n_past = long_length(prompt)
+    set_mtp_spec(spec0)
+    t |> equal(s.mtp_h_pos1, HC_PROMPT, "the window chain landed the wide carry at the prompt's end")
+    var h0 <- [for (x in s.mtp_h); x]
+    t |> equal(long_length(h0), hc_dim(tr.config), "the carry is the wide residual")
+    let row = HC_PROMPT - 1l
+    let drafts0 = moe_gpu_resident_drafts()
+    moe_pick_tape(MoePickTape.record)   // the head's one select: the CPU head routes as the device head did
+    var gpu <- draft_from(tr, s, DRAFT_TOKEN, row, h0)
+    moe_pick_tape(MoePickTape.off)
+    t |> equal(moe_gpu_resident_drafts(), drafts0 + 1l, "the resident head drafted on the chain")
+    t |> equal(s.mtp_h_pos1, 0l, "the draft's carry is the head's own: its watermark stays 0")
+    let pick = moe_gpu_resident_draft_pick()
+    let seat = unset_rdec_draft()
+    moe_pick_tape(MoePickTape.replay)
+    var cpu <- draft_from(tr, s, DRAFT_TOKEN, row, h0)
+    let tape = moe_pick_tape_stats()
+    moe_pick_tape(MoePickTape.off)
+    var one_row_back <- draft_from(tr, s, prompt[row], row - 1l, h0)
+    reinstall_rdec_draft(seat)
+    t |> equal(moe_gpu_resident_drafts(), drafts0 + 1l, "the unset seat left both CPU drafts to forward_mtp")
+    served_every_call(t)
+    let ag = argmax_of(gpu.logits)
+    let ac = argmax_of(cpu.logits)
+    to_log(LOG_INFO, "hc draft (row {row}, token {DRAFT_TOKEN}): argmax cpu {ac} ({cpu.logits[ac]}), resident {ag} ({gpu.logits[ag]}), device pick {pick}; tape: {tape.seen} selects replayed, {tape.miss} of the CPU head's own picks off the device's\n")
+    t |> equal(tape.seen, 1l, "the CPU head replayed the device head's one select")
+    row_within_ctrl(t, "hc draft logits", gpu.logits, cpu.logits, one_row_back.logits, LOGIT_BAR_REL, "(the CPU draft one row back as the control)")
+    row_within_ctrl(t, "hc draft wide carry", gpu.h, cpu.h, one_row_back.h, CARRY_BAR_REL, "(the CPU draft one row back as the control)")
+    t |> equal(pick, ag, "the device pick is the argmax of the logits it landed")
+    pick_agrees(t, tr, "hc draft (row {row}, token {DRAFT_TOKEN})", pick, cpu.logits, LOGIT_BAR_REL)
+    t |> equal(int(moe_pick_tape_mode().mode), int(tape_before.mode), "the pick tape is back at the mode the cell found")
+    delete gpu
+    delete cpu
+    delete one_row_back
+    delete h0
+    delete s
+    delete prompt
 }
 
 [test(description = "On the Qwen3.8-Flash-Next hyper-connection MoE the window chain and split token command, with the CPU replaying the device's taped expert picks, hold every row within the routed bar of the CPU chain, the hot pool splitting picks between device and host")]
 def test_gpu_resident_hc(t : T?) {
+    own_load("the cell drops the device model mid-cell and replays the device arm's taped expert picks on the CPU chain over the same load: the tape holds one load's picks")
     t |> run("Qwen3.8-Flash-Next: the window chain and the split token command (the mixers, the side input and the sigmoid out-gate on device, the routed experts on the host) vs the CPU chain") @(t : T?) {
         let path = path_join(models_dir(), FN_TRUNK)
         if (!hc_ready(t, false)) return
@@ -302,18 +302,43 @@ def test_gpu_resident_hc(t : T?) {
     }
 }
 
-//! a two-token prompt on the hyper-connection chain takes the window chain: the token command's peel declines the wide residual
-[test(description = "On the hyper-connection chain a two-token prompt runs through the resident window chain, because the token command's short-tail peel declines the wide residual")]
-def test_gpu_resident_hc_short_window(t : T?) {
-    t |> run("Qwen3.8-Flash-Next: a two-token prompt takes the window chain, not the token command's peel") @(t : T?) {
-        if (!hc_ready(t)) return
-        var tr <- load_resident(path_join(models_dir(), FN_TRUNK), 1l)   //! the route pinned on for the load, the levers put back
-        t |> success(moe_gpu_resident_active(), "the whole-model driver armed on the trunk (the load log names any decline)")
-        with_dasllama_jobque_() {
-            assert_short_window_takes_chain(t, tr, "a hyper-connection chain")
-        }
-        delete tr
+//! a two-token prompt on the hyper-connection chain takes the window chain, on the one-region form `tr`: the token command's
+//! peel declines the wide residual
+def private hc_short_window_cell(t : T?; tr : Model) {
+    t |> success(moe_gpu_resident_active(), "the whole-model driver armed on the trunk (the load log names any decline)")
+    assert_short_window_takes_chain(t, tr, "a hyper-connection chain")
+}
+
+//! the trunk's context: the sessions' and the mirror's
+let private HC_CTX = 2048l
+
+[test(description = "On Qwen3.8-Flash-Next with its split head, one NextN draft through the resident head on the hyper-connection chain matches the CPU forward_mtp on the same token, carry and replayed pick within the logits and carry bars, its device pick the argmax, the draft one row back the control; on the hyper-connection chain a two-token prompt runs through the resident window chain, because the token command's short-tail peel declines the wide residual; on the head-pinned CPU form, on every box, the draft head's own head mixer loads and self-speculative decode of the counting prompt emits plain decode's tokens exactly, forced rejects included; on the parity row's CPU form, on every box, the file's frozen greedy ids token for token with its chunked and reference prefill arms; each form loads once")]
+def test_gpu_resident_hc_forms(t : T?) {
+    return if (!family_on(t, "qwen35"))
+    let head = model_available(t, path_join(models_dir(), FN_HEAD))
+    var forms <- [device_form(regions = 1l)]
+    if (head) {
+        forms |> push(device_form(host = true, mtp_head = FN_HEAD))
+        forms |> push(cpu_cells_form(mtp_head = FN_HEAD))
     }
+    with_cpu_and_gpu_model(t, "llm", "Qwen3.8-Flash-Next-GGUF/UD-IQ4_XS/Qwen3.8-Flash-Next-UD-IQ4_XS-00001-of-00003.gguf", HC_CTX, forms, false, parity = true) $(var m, form) {
+        unsafe {   //! the cells capture the loaded model by reference
+            if (!form.on_gpu) {
+                mtp_flashnext_invariance_cell(t, m)
+            } elif (g_env_vulkan.vk_kv32 != 0l) {
+                skip_cell(t, "Qwen3.8-Flash-Next, {form_name(form)}: DASLLAMA_VK_KV32=1: the f32 mirror passes every f16 session as codec")
+            } elif (empty(form.mtp_head)) {
+                t |> run("Qwen3.8-Flash-Next: a two-token prompt takes the window chain, not the token command's peel") @capture(& m)(t : T ?) {
+                    hc_short_window_cell(t, m)
+                }
+            } else {
+                t |> run("Qwen3.8-Flash-Next + its split head: one NextN draft through the resident head on the chain against the CPU forward_mtp on the same token, wide carry and row") @capture(& m)(t : T ?) {
+                    hc_mtp_draft_cell(t, m)
+                }
+            }
+        }
+    }
+    delete forms
 }
 
 // A prompt continued on the whole-model driver: its second half as a continuation window from the first half's position, and
@@ -329,6 +354,7 @@ let private HALF = 48l                  //! past the hot pool's 32-row window fl
 
 [test(description = "On Qwen3.8-Flash-Next under the whole-model driver, continuations in place and from an adopted checkpoint stay within the wide routed bar of the whole prompt, every prefill on the device, and the n-gram conv ring matches the CPU chain's within 2 percent while a zeroed ring misses")]
 def test_gpu_resident_continuation_hc(t : T?) {
+    own_load("the cell drops the device model mid-cell to run the CPU ring chain on the same load's host planes, the device's ring snapshot its other half")
     t |> run("Qwen3.8-Flash-Next: a prompt continued from its position on the device, and from an adopted checkpoint, against one window; the n-gram ring against the CPU chain's") @(t : T?) {
         return if (!family_on(t, "qwen35"))
         let path = path_join(models_dir(), FN_TRUNK)

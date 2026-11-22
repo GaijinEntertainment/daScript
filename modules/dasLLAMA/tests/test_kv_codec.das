@@ -6,14 +6,13 @@ options _dasllama_internal = true
 require dastest/testing_boost public
 require dasllama/dasllama_transformer   // umbrella fires each arch [init] registration
 require _model_tier
-require dasllama/dasllama_math   // with_dasllama_jobque_ + target_chunk_work + fused knob
+require _kv_codec_cpu_cells   // prefill_vs_decode_cell: the f16 cache's classic prefill against per-token decode
+require dasllama/dasllama_math   // with_dasllama_jobque_ + fused knob
 require dasllama/dasllama_kv_codec   // the codec kernel families under unit test
 require dasllama/dasllama_core   // load_model_ / create_session / create_kv_pool: the codec a carrier's session and pool serve
 require dasllama/dasllama_convert    // cvt_f32_to_f16/cvt_f16_to_f32 — the generic f16 rows
-require dasllama/dasllama_image   // load_model_uncached: the product's load with no image
 require daslib/f16_cvt
 require daslib/jobque_boost
-require daslib/fio
 require math
 require strings   // the stamp cell strips a parameter's own const from a typename
 
@@ -609,243 +608,74 @@ def test_kv_codec_f16(t : T?) {
     }
 }
 
-let MODEL_PATH = path_join(llama2c_dir(), "stories15M.bin")
 let N_STEPS = 24
 
-[test(description = "On stories15M, a 24-step greedy decode over an f16 KV cache emits the f32 cache's token ids with final logits within 1.0, and fused and standard decode under f16 agree bit for bit")]
-def test_kv_f16_decode(t : T?) {
-    t |> run("f16 KV: greedy trajectory matches f32, fused==std bit-exact under f16 (needs stories15M.bin)") @(t : T?) {
-        return if (!jit_only(t))
-        if (!stat(MODEL_PATH).is_valid) {
-            t |> skip("stories15M.bin not present")
-            return
-        }
-        var tr <- load_checkpoint(MODEL_PATH)
-        let c = tr.config
-        quantize_weights(tr)
-        let prev_thresh = get_target_chunk_work()
-        with_dasllama_jobque_() {
-            set_target_chunk_work(1l)
-            var ids32, ids16, ids16f : array<int64>
-            var lg32, lg16, lg16f : array<float>
-            set_fused_decode(false)
-            var s32 <- make_run_state(c)
-            greedy_ids(tr, s32, N_STEPS, ids32, lg32)
-            delete s32
-            var s16 <- make_run_state(c, KVDtype.f16, KVDtype.f16)
-            greedy_ids(tr, s16, N_STEPS, ids16, lg16)
-            delete s16
-            set_fused_decode(true)
-            var s16f <- make_run_state(c, KVDtype.f16, KVDtype.f16)
-            greedy_ids(tr, s16f, N_STEPS, ids16f, lg16f)
-            delete s16f
-            // f16 vs f32: same greedy trajectory (the real gate) + a structural logit backstop —
-            // on a Q8 model a ~1e-3 attention diff can cross int8 requant boundaries and amplify
-            // (~0.3 observed at step 24), so the bound only catches gross corruption (O(10))
-            var id_bad = 0
-            for (i in range(N_STEPS)) {
-                if (ids32[i] != ids16[i]) {
-                    id_bad++
-                }
-            }
-            t |> equal(0, id_bad)
-            var worst = 0.0
-            for (i in range64(c.vocab_size)) {
-                worst = max(worst, nan_wide_diff(lg32[i], lg16[i]))
-            }
-            t |> success(worst < 1.0, "f16-vs-f32 final logits within the structural bound (worst |diff| = {worst})")
-            // fused vs std, BOTH under f16: identical rounding both sides -> bit-exact
-            var f_bad = 0
-            for (i in range(N_STEPS)) {
-                if (ids16[i] != ids16f[i]) {
-                    f_bad++
-                }
-            }
-            t |> equal(0, f_bad)
-            var lg_bad = 0
-            for (i in range64(c.vocab_size)) {
-                if (lg16[i] != lg16f[i]) {
-                    lg_bad++
-                }
-            }
-            t |> equal(0, lg_bad)
-            delete ids32
-            delete ids16
-            delete ids16f
-            delete lg32
-            delete lg16
-            delete lg16f
-        }
-        set_target_chunk_work(prev_thresh)
-        delete tr
-    }
-}
-
-[test(description = "On stories15M with an f16 KV cache, a 16-token classic prefill leaves the logits and both cache planes bit-identical to decoding the same tokens one at a time")]
-def test_kv_f16_prefill_vs_decode(t : T?) {
-    t |> run("f16 KV: prefill == per-token decode, logits bit-exact (needs stories15M.bin)") @(t : T?) {
-        return if (!jit_only(t))
-        if (!stat(MODEL_PATH).is_valid) {
-            t |> skip("stories15M.bin not present")
-            return
-        }
-        var tr <- load_checkpoint(MODEL_PATH)
-        let c = tr.config
-        quantize_weights(tr)
-        let prev_thresh = get_target_chunk_work()
-        let prev_mode = get_prefill_attn_mode()
-        with_dasllama_jobque_() {
-            set_target_chunk_work(1l)
-            set_prefill_attn_mode(AttnPrefillMode.classic)
-            var prompt <- [for (i in range(16)); int64(i % 50 + 2)]
-            let n = long_length(prompt)
-            var sp <- make_run_state(c, KVDtype.f16, KVDtype.f16)
-            forward_batch(tr, sp, prompt, n, 0l)
-            var sd <- make_run_state(c, KVDtype.f16, KVDtype.f16)
-            var pos = 0l
-            for (tok in prompt) {
-                forward(tr, sd, tok, pos)
-                pos++
-            }
-            var lg_bad = 0
-            for (i in range64(c.vocab_size)) {
-                if (sp.logits[i] != sd.logits[i]) {
-                    lg_bad++
-                }
-            }
-            t |> equal(0, lg_bad)
-            let kv_bad = kv_rows_differ(sp, sd, c, n)
-            t |> equal(kv_bad.k + kv_bad.v, 0l, "both cache planes bit-exact over the {n} rows written")
-            delete sp
-            delete sd
-            delete prompt
-        }
-        set_prefill_attn_mode(prev_mode)
-        set_target_chunk_work(prev_thresh)
-        delete tr
-    }
-}
-
-// q8_0 model tests run a GGUF carrier (stories15M's head_size 48 is rejected by the create-time
-// 32-block check — by design); SmolLM2-135M is the small head_size-64 carrier, same rail as
-// test_fused_decode. Override the model root with DASLLAMA_MODELS_DIR.
-let GGUF_PATH = path_join(models_dir(), "SmolLM2-135M-Instruct-Q8_0.gguf")
-
-def private gguf_missing(t : T?) : bool {
-    return true if (!jit_only(t))
-    if (!stat(GGUF_PATH).is_valid) {
-        t |> skip("{GGUF_PATH} not present")
-        return true
-    }
-    return false
-}
-
-// teacher-forced per-step logits under one KV config: the SAME deterministic token stream into a
-// fresh session, all N_STEPS logit rows out — trajectory-compounding-free comparisons
-def private forced_logits(tr : Model; kdt, vdt : KVDtype; var out : array<float>) {
-    let c = tr.config
-    out |> resize(int64(N_STEPS) * c.vocab_size)
-    var s <- make_run_state(c, kdt, vdt)
-    var pos = 0l
-    for (st in range(N_STEPS)) {
-        forward(tr, s, int64(st * 37 % 100 + 2), pos)
-        pos++
-        let base = int64(st) * c.vocab_size
-        for (i in range64(c.vocab_size)) {
-            out[base + i] = s.logits[i]
-        }
-    }
-    delete s
-}
-
-[test(description = "On SmolLM2-135M under the portable backend, teacher-forced logits over q8_0 and q8_0-K/f16-V caches stay within 4.0 of the f16 cache's, and fused and standard decode under q8_0 agree bit for bit")]
-def test_kv_q8_decode(t : T?) {
-    t |> run("q8_0 KV: teacher-forced logits track f16, fused==std bit-exact under q8 (needs SmolLM2-135M)") @(t : T?) {
-        if (gguf_missing(t)) {
-            return
-        }
-        let prev_backend = active_kernel_backend()
-        let prev_thresh = get_target_chunk_work()
-        with_dasllama_jobque_() {
-            set_target_chunk_work(1l)
-            pin_kernel_backend("portable")   // the rows core every host shares — the fused gate needs one
-            var tr <- load_gguf(GGUF_PATH, QuantMode.q8)
-            tr.config.seq_len = min(tr.config.seq_len, 128l)
-            var lg16, lg8, lg8m, lg8f : array<float>
-            set_fused_decode(false)
-            forced_logits(tr, KVDtype.f16, KVDtype.f16, lg16)
-            forced_logits(tr, KVDtype.q8_0, KVDtype.q8_0, lg8)
-            forced_logits(tr, KVDtype.q8_0, KVDtype.f16, lg8m)   // K quantized, V half
-            set_fused_decode(true)
-            forced_logits(tr, KVDtype.q8_0, KVDtype.q8_0, lg8f)
-            // q8 vs f16, teacher-forced: per-step logits stay within the structural bound (greedy
-            // trajectories are NOT compared — on a 135M model a near-tie argmax flips under f16
-            // noise too, and one flip compounds the whole stream). Measured here: q8-vs-f32 noise
-            // is the same order as f16-vs-f32 (~0.4-1.8 worst per step).
-            let w8 = logits_maxdiff(lg16, lg8)
-            t |> success(w8 < 4.0, "q8/q8-vs-f16 teacher-forced logits within the structural bound (worst |diff| = {w8})")
-            let w8m = logits_maxdiff(lg16, lg8m)
-            t |> success(w8m < 4.0, "q8-K/f16-V-vs-f16 within the structural bound (worst |diff| = {w8m})")
-            // fused vs std, BOTH under q8: identical kernels + identical query quants -> bit-exact
-            var lg_bad = 0
-            for (i in range(length(lg8))) {
-                if (lg8[i] != lg8f[i]) {
-                    lg_bad++
-                }
-            }
-            t |> equal(0, lg_bad)
-            delete lg16
-            delete lg8
-            delete lg8m
-            delete lg8f
-            delete tr
-            clear_kernel_backend_pin()
-        }
-        set_target_chunk_work(prev_thresh)
-        select_kernel_backend(prev_backend)
-    }
-}
-
-[test(description = "On SmolLM2-135M with a q8_0 KV cache, a 16-token classic prefill leaves the logits and both cache planes bit-identical to decoding the same tokens one at a time")]
-def test_kv_q8_prefill_vs_decode(t : T?) {
-    t |> run("q8_0 KV: classic prefill == per-token decode, logits + cache bit-exact (needs SmolLM2-135M)") @(t : T?) {
-        if (gguf_missing(t)) {
-            return
-        }
-        let prev_thresh = get_target_chunk_work()
-        let prev_mode = get_prefill_attn_mode()
-        with_dasllama_jobque_() {
-            set_target_chunk_work(1l)
-            set_prefill_attn_mode(AttnPrefillMode.classic)
-            var tr <- load_gguf(GGUF_PATH, QuantMode.q8)
-            tr.config.seq_len = min(tr.config.seq_len, 64l)
+//! On stories15M, a 24-step greedy decode over an f16 KV cache emits the f32 cache's token ids with final logits within 1.0, and fused and standard decode under f16 agree bit for bit
+def test_kv_f16_decode(t : T?; tr : Model) {
+    unsafe {
+        t |> run("f16 KV: greedy trajectory matches f32, fused==std bit-exact under f16 (needs stories15M.bin)") @capture(& tr)(t : T ?) {
             let c = tr.config
-            var prompt <- [for (i in range(16)); int64(i % 50 + 2)]
-            let n = long_length(prompt)
-            var sp <- make_run_state(c, KVDtype.q8_0, KVDtype.q8_0)
-            forward_batch(tr, sp, prompt, n, 0l)
-            var sd <- make_run_state(c, KVDtype.q8_0, KVDtype.q8_0)
-            var pos = 0l
-            for (tok in prompt) {
-                forward(tr, sd, tok, pos)
-                pos++
-            }
-            var lg_bad = 0
-            for (i in range64(c.vocab_size)) {
-                if (sp.logits[i] != sd.logits[i]) {
-                    lg_bad++
+            with_threaded_jobque() {
+                var ids32, ids16, ids16f : array<int64>
+                var lg32, lg16, lg16f : array<float>
+                set_fused_decode(false)
+                var s32 <- make_run_state(c)
+                greedy_ids(tr, s32, N_STEPS, ids32, lg32)
+                delete s32
+                var s16 <- make_run_state(c, KVDtype.f16, KVDtype.f16)
+                greedy_ids(tr, s16, N_STEPS, ids16, lg16)
+                delete s16
+                set_fused_decode(true)
+                var s16f <- make_run_state(c, KVDtype.f16, KVDtype.f16)
+                greedy_ids(tr, s16f, N_STEPS, ids16f, lg16f)
+                delete s16f
+                // f16 vs f32: same greedy trajectory (the real gate) + a structural logit backstop —
+                // on a Q8 model a ~1e-3 attention diff can cross int8 requant boundaries and amplify
+                // (~0.3 observed at step 24), so the bound only catches gross corruption (O(10))
+                var id_bad = 0
+                for (i in range(N_STEPS)) {
+                    if (ids32[i] != ids16[i]) {
+                        id_bad++
+                    }
                 }
+                t |> equal(0, id_bad)
+                var worst = 0.0
+                for (i in range64(c.vocab_size)) {
+                    worst = max(worst, nan_wide_diff(lg32[i], lg16[i]))
+                }
+                t |> success(worst < 1.0, "f16-vs-f32 final logits within the structural bound (worst |diff| = {worst})")
+                // fused vs std, BOTH under f16: identical rounding both sides -> bit-exact
+                var f_bad = 0
+                for (i in range(N_STEPS)) {
+                    if (ids16[i] != ids16f[i]) {
+                        f_bad++
+                    }
+                }
+                t |> equal(0, f_bad)
+                var lg_bad = 0
+                for (i in range64(c.vocab_size)) {
+                    if (lg16[i] != lg16f[i]) {
+                        lg_bad++
+                    }
+                }
+                t |> equal(0, lg_bad)
+                delete ids32
+                delete ids16
+                delete ids16f
+                delete lg32
+                delete lg16
+                delete lg16f
             }
-            t |> equal(0, lg_bad)
-            let kv_bad = kv_rows_differ(sp, sd, c, n)
-            t |> equal(kv_bad.k + kv_bad.v, 0l, "both cache planes bit-exact over the {n} rows written")
-            delete sp
-            delete sd
-            delete prompt
-            delete tr
         }
-        set_prefill_attn_mode(prev_mode)
-        set_target_chunk_work(prev_thresh)
+    }
+}
+
+[test(description = "stories15M on one load, its weights quantized, runs the f16 cache's greedy-decode cell, its prefill-vs-decode cell and, on the context cut to 8, the capacity tripwire in turn, each on its own sessions")]
+def test_kv_stories_cells(t : T?) {
+    with_stories15m(t) $(var tr) {
+        test_kv_f16_decode(t, tr)
+        prefill_vs_decode_cell(t, tr, "f16 KV: prefill == per-token decode, logits bit-exact (needs stories15M.bin)", KVDtype.f16)
+        test_kv_capacity_tripwire(t, tr)
     }
 }
 
@@ -883,47 +713,43 @@ def test_kv_store_row_roundtrip(t : T?) {
     }
 }
 
-[test(description = "A capacity tripwire: on stories15M cut to seq_len 8, a 16-token prefill and a decode step at position 8 both panic before any store, while an 8-token eval at capacity runs")]
-def test_kv_capacity_tripwire(t : T?) {
-    t |> run("eval past config seq_len panics - never a silent write past the cache (needs stories15M.bin)") @(t : T?) {
-        return if (!jit_only(t))
-        if (!stat(MODEL_PATH).is_valid) {
-            t |> skip("stories15M.bin not present")
-            return
-        }
-        var tr <- load_checkpoint(MODEL_PATH)
-        // every session buffer (KV planes, att scratch, run tables) is sized by config seq_len,
-        // and the store paths write through unsafe pointers - an oversized eval corrupts the das
-        // heap with no diagnostic, so the tripwire must fire BEFORE the first store
-        tr.config.seq_len = 8l
-        quantize_weights(tr)
-        with_dasllama_jobque_() {
-            var toks <- [for (_i in range(16)); 1l]
-            var s <- make_run_state(tr.config)
-            var tripped = false
-            try {
-                eval_(tr, s, toks)
-            } recover {
-                tripped = true
+//! A capacity tripwire: on stories15M cut to seq_len 8, a 16-token prefill and a decode step at position 8 both panic before any store, while an 8-token eval at capacity runs; the context put back after
+def test_kv_capacity_tripwire(t : T?; var tr : Model) {
+    unsafe {
+        t |> run("eval past config seq_len panics - never a silent write past the cache (needs stories15M.bin)") @capture(& tr)(t : T ?) {
+            // every session buffer (KV planes, att scratch, run tables) is sized by config seq_len,
+            // and the store paths write through unsafe pointers - an oversized eval corrupts the das
+            // heap with no diagnostic, so the tripwire must fire BEFORE the first store
+            let seq = tr.config.seq_len
+            tr.config.seq_len = 8l
+            with_dasllama_jobque_() {
+                var toks <- [for (_i in range(16)); 1l]
+                var s <- make_run_state(tr.config)
+                var tripped = false
+                try {
+                    eval_(tr, s, toks)
+                } recover {
+                    tripped = true
+                }
+                t |> success(tripped, "a 16-token prefill into an 8-row session trips")
+                delete s
+                var s2 <- make_run_state(tr.config)
+                toks |> resize(8)
+                eval_(tr, s2, toks)   // exactly at capacity - legal, must not trip
+                var one <- [1l]
+                var stepped = false
+                try {
+                    eval_(tr, s2, one)   // position 8 in an 8-row session - the decode arm trips too
+                } recover {
+                    stepped = true
+                }
+                t |> success(stepped, "the decode step crossing seq_len trips")
+                delete one
+                delete s2
+                delete toks
             }
-            t |> success(tripped, "a 16-token prefill into an 8-row session trips")
-            delete s
-            var s2 <- make_run_state(tr.config)
-            toks |> resize(8)
-            eval_(tr, s2, toks)   // exactly at capacity - legal, must not trip
-            var one <- [1l]
-            var stepped = false
-            try {
-                eval_(tr, s2, one)   // position 8 in an 8-row session - the decode arm trips too
-            } recover {
-                stepped = true
-            }
-            t |> success(stepped, "the decode step crossing seq_len trips")
-            delete one
-            delete s2
-            delete toks
+            tr.config.seq_len = seq
         }
-        delete tr
     }
 }
 
@@ -969,33 +795,3 @@ def test_kv_codec_side_stamp(t : T?) {
     }
 }
 
-//! The constructors serve a codec the model cannot hold at the step-down codec: Qwen2's Q/K/V bias takes tq4 to q8_0 in a
-//! session and in a pool; a model without the bias keeps tq4; q8_0 asked stays q8_0.
-[test(description = "A tq4 KV ask on Qwen2.5-0.5B, whose attention carries a Q/K/V bias, serves at q8_0 in a session, a pool and a chat, q8_0 asked stays q8_0, and bias-free Qwen3-0.6B keeps tq4")]
-def test_kv_codec_step_down(t : T?) {
-    let path = path_join(models_dir(), "Qwen2.5-0.5B-Instruct-Q8_0.gguf")
-    return if (!model_available(t, path))
-    var m <- load_model_uncached(path, QuantMode.q8)
-    t |> success(m.config.attn_qkv_bias, "Qwen2.5 carries the Q/K/V bias the rule reads")
-    var s <- create_session(m, KVDtype.tq4)
-    t |> equal(s.kv_dtype_k, KVDtype.q8_0, "a tq4 session on Qwen2.5 serves at q8_0")
-    t |> equal(s.kv_dtype_v, KVDtype.q8_0, "both planes")
-    var s8 <- create_session(m, KVDtype.q8_0)
-    t |> equal(s8.kv_dtype_k, KVDtype.q8_0, "q8_0 asked stays q8_0")
-    var pool <- create_kv_pool(m, 64l, KVDtype.tq4)
-    t |> equal(pool.kdt, KVDtype.q8_0, "a tq4 pool on Qwen2.5 pages at q8_0")
-    delete pool
-    var chat <- create_chat(m, "", 8l, KVDtype.tq4)
-    t |> equal(chat.session.kv_dtype_k, KVDtype.q8_0, "a tq4 chat on Qwen2.5 serves at q8_0: the rule sits in the shared constructor every path takes")
-    delete chat
-    delete s8
-    delete s
-    delete m
-    let path3 = path_join(models_dir(), "Qwen3-0.6B-Q8_0.gguf")
-    return if (!model_available(t, path3))
-    var m3 <- load_model_uncached(path3, QuantMode.q8)
-    var s3 <- create_session(m3, KVDtype.tq4)
-    t |> equal(s3.kv_dtype_k, KVDtype.tq4, "control: Qwen3, no bias, keeps tq4")
-    delete s3
-    delete m3
-}

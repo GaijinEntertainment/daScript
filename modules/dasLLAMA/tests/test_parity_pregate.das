@@ -7,15 +7,11 @@ require dastest/testing_boost public
 require ../benchmarks/lcpp_bench.das   // parity_check — the board pregate's verdict, driven with a controlled spec
 require ../performance/model_specs.das   // spec_by_file — the table rows the pregate binds
 require dasllama/dasllama_common       // get_kquant_native — the mode the kq arm must restore
-require dasllama/dasllama_load          // load_model_ — the slice cell loads its own carrier
-require dasllama/dasllama_math          // with_dasllama_jobque_ — the slice cell's queue (engine-level, not re-exported)
-require dasllama/dasllama_gpu_resident  // moe_gpu_resident_active — the slice cell needs the driver armed
 require dasllama/dasllama_image   // load_model_uncached: the product's load with no image
-require ?vulkan dasllama/dasllama_vulkan_prefill   // g_pf_ffn_slice — the slice's A/B arm
-require ?vulkan dasllama/dasllama_vulkan_common    // g_cm2_splitk — both arms under one k order
-require daslib/jobque_boost             // with_job_que — a 512-token prefill dispatches its CPU stages as jobs
 require daslib/fio
 require _model_tier                    // models_dir + model_available (presence/size gate)
+require _pregate_cells                 // fixture_gate_cell: the gate cell on a loaded model
+require _model_form                   // own_load: each cell declares the load it owns
 
 // The board parity pregate (lcpp_bench --parity), fed a controlled spec: the real fixture
 // passes, a deliberately wrong fixture fails, an evidence-less spec is refused, the text-form
@@ -26,6 +22,7 @@ require _model_tier                    // models_dir + model_available (presence
 
 [test(description = "The board pregate `parity_check` passes Qwen3-0.6B's pinned-ids fixture, fails it with the last id flipped, and refuses a spec with no evidence")]
 def test_parity_pregate_ids_form(t : T?) {
+    own_load("the cell loads the model inside lcpp_bench's `parity_check` (the board pregate): a bench the model's block file must not compile")
     t |> run("the pinned-ids fixture passes; one flipped id fails; no evidence refuses") @(t : T?) {
         return if (!jit_only(t))
         var inscope spec <- spec_by_file("Qwen3-0.6B-Q8_0.gguf")
@@ -41,31 +38,16 @@ def test_parity_pregate_ids_form(t : T?) {
     }
 }
 
-// The timed run's fixture gate (the sanity line every lcpp_bench row set opens with): fed the
-// table's own fixture the served model reproduces the opening; an opening that matches nothing
-// refuses; a row with no evidence stands aside and leaves the finiteness gate alone.
 [test(description = "The timed run's `fixture_gate_check` passes the table's fixture on a loaded Qwen3-0.6B, refuses an opening with every id shifted, and passes a row with no evidence")]
 def test_fixture_gate(t : T?) {
-    t |> run("the timed run's fixture gate passes the table's fixture, refuses a wrong opening, stands aside without evidence") @(t : T?) {
-        return if (!jit_only(t))
-        var inscope spec <- spec_by_file("Qwen3-0.6B-Q8_0.gguf")
-        let path = path_join(models_dir(), spec.file)
-        if (!model_available(t, path)) return
-        allow_cpu_prefill()
-        var m <- load_model_uncached(path, spec.parity.quant)
-        with_dasllama_jobque_() {
-            t |> success(fixture_gate_check(m, spec), "the table's own fixture reproduces on the served model")
-            var inscope wrong <- spec_by_file("Qwen3-0.6B-Q8_0.gguf")
-            for (i in range(length(wrong.parity.gen))) {
-                wrong.parity.gen[i] = wrong.parity.gen[i] + 1l
-            }
-            t |> success(!fixture_gate_check(m, wrong), "an opening that matches nothing is refused")
-            var inscope bare <- spec_by_file("Qwen3-0.6B-Q8_0.gguf")
-            bare.parity.gen |> clear()
-            t |> success(fixture_gate_check(m, bare), "a row with no evidence stands aside")
-        }
-        delete m
-    }
+    own_load("the cell's fixture module requires lcpp_bench (`fixture_gate_check`): a bench the model's block file must not compile")
+    return if (!jit_only(t))
+    var inscope spec <- spec_by_file("Qwen3-0.6B-Q8_0.gguf")
+    let path = path_join(models_dir(), spec.file)
+    if (!model_available(t, path)) return
+    var m <- load_model_uncached(path, spec.parity.quant)
+    fixture_gate_cell(t, m)
+    delete m
 }
 
 // The half-span prefix bar of a `prefix_bar` carrier (the gemma-4-26B MoE's form, driven here on a
@@ -73,6 +55,7 @@ def test_fixture_gate(t : T?) {
 // and the strict form reds the same flipped tail - the flag is what admits it.
 [test(description = "With prefix_bar set, a Llama-3.2-1B fixture whose tail half is flipped still passes `parity_check` while a flip inside the first half fails, and the strict form fails the same flipped tail")]
 def test_parity_pregate_prefix_bar(t : T?) {
+    own_load("the cell loads the model inside lcpp_bench's `parity_check` (the board pregate): a bench the model's block file must not compile")
     t |> run("a prefix_bar fixture holds on a flipped tail half, reds on a flip inside the first half and under the strict form") @(t : T?) {
         return if (!jit_only(t))
         var inscope spec <- spec_by_file("Llama-3.2-1B-Instruct-Q4_K_M.gguf")
@@ -100,6 +83,7 @@ def test_parity_pregate_prefix_bar(t : T?) {
 
 [test(description = "The gemma-4-E2B text-form fixture, encoded through the model's tokenizer, reproduces its pinned continuation under `parity_check`")]
 def test_parity_pregate_text_form(t : T?) {
+    own_load("the cell loads the model inside lcpp_bench's `parity_check` (the board pregate): a bench the model's block file must not compile")
     t |> run("a text-form fixture encodes through the model's tokenizer") @(t : T?) {
         return if (!jit_only(t))
         var inscope spec <- spec_by_file("gemma-4-E2B-it-Q8_0.gguf")
@@ -112,6 +96,7 @@ def test_parity_pregate_text_form(t : T?) {
 
 [test(description = "The Qwen3-4B Q4_K_M row's kq-native load reproduces its pinned continuation under `parity_check`, and the pregate restores the kquant-native mode it flipped")]
 def test_parity_pregate_kq_native(t : T?) {
+    own_load("the cell loads the model inside lcpp_bench's `parity_check` (the board pregate): a bench the model's block file must not compile")
     t |> run("a kq_native fixture loads native K-quant planes and reproduces") @(t : T?) {
         return if (!jit_only(t))
         var inscope spec <- spec_by_file("Qwen3-4B-Instruct-2507-Q4_K_M.gguf")
@@ -124,66 +109,3 @@ def test_parity_pregate_kq_native(t : T?) {
     }
 }
 
-// The last layer's FFN slice against the whole window: one 512-token prefill each way on the
-// resident Vulkan driver, logits exact - the frozen fixtures' 5-20-token prompts never reach it.
-// Split-k is pinned off for both arms: the wave model splits the whole arm's GEMMs on a box with
-// SMs to spare (82 on the RTX PRO 4500) where a sliced region never splits, and the two k orders
-// round apart - the claim is the slice's row arithmetic, not the pick's rounding.
-[test(description = "On the resident Vulkan driver, a 512-token Llama-3.2-1B prefill with the last layer's FFN sliced yields logits bit-identical to the whole-window prefill, split-k pinned off for both arms")]
-def test_parity_last_layer_slice(t : T?) {
-    t |> run("the last layer's 32-row FFN slice reproduces the whole window's logits bit for bit") @(t : T?) {
-        static_if (typeinfo builtin_module_exists(vulkan)) {
-            return if (!jit_only(t))
-            var inscope spec <- spec_by_file("Llama-3.2-1B-Instruct-Q8_0.gguf")
-            let path = path_join(models_dir(), spec.file)
-            if (!model_available(t, path)) return
-            var t8 <- load_model_uncached(path, QuantMode.q8)
-            if (!moe_gpu_resident_active()) {
-                t |> skip("the resident Vulkan driver is not armed (DASLLAMA_GPU=1 on a coopmat2 device)")
-                delete t8
-                return
-            }
-            let plen = 512l
-            var prompt : array<int64>
-            prompt |> resize(int(plen))
-            for (i in range(int(plen))) {
-                prompt[i] = 1000l + ((int64(i) * 17l + 999l * 131l) % 5000l)
-            }
-            var want, got : array<float>
-            var served_whole = false
-            var served_slice = false
-            let splitk_before = g_cm2_splitk
-            g_cm2_splitk = 1l
-            with_dasllama_jobque_() {
-                g_pf_ffn_slice = false
-                var s0 <- make_run_state(t8.config, KVDtype.f16, KVDtype.f16)
-                forward_prefill(t8, s0, prompt, plen, 0l)
-                served_whole = s0.rdec_gen != 0l   // the driver stamps the session it served; a declined call leaves 0
-                want := s0.logits
-                delete s0
-                g_pf_ffn_slice = true
-                var s1 <- make_run_state(t8.config, KVDtype.f16, KVDtype.f16)
-                forward_prefill(t8, s1, prompt, plen, 0l)
-                served_slice = s1.rdec_gen != 0l
-                got := s1.logits
-                delete s1
-            }
-            g_cm2_splitk = splitk_before
-            t |> success(served_whole && served_slice, "both arms were served by the resident driver, not the CPU rail")
-            var bad = 0
-            for (w, g in want, got) {
-                if (w != g) {
-                    bad++
-                }
-            }
-            t |> success(length(want) == int(t8.config.vocab_size) && bad == 0,
-                "the sliced last layer reproduces the whole window ({bad} of {length(want)} logits diverge)")
-            delete want
-            delete got
-            delete prompt
-            delete t8
-        } else {
-            t |> skip("dasVulkan not present")
-        }
-    }
-}

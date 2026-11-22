@@ -24,6 +24,7 @@ require dasllama/dasllama_common   // decode_ — the eyeball rail detokenizes t
 require dasllama/dasllama_tokenizer   // TokKind — a model loaded without its tokenizer logs ids
 require dasllama/dasllama_env
 require dasllama/dasllama_math
+require dasllama/dasllama_load   // load_checkpoint, quantize_weights: the stories15M load-once blocks
 require dasllama/dasllama_gpu_resident   // resident_mirror_dtype — the mirror codec the box arms
 require ../performance/model_specs.das   // prefix_match_len / fixture_ok — the fixture compare the board gates read too
 require _compares public
@@ -533,6 +534,43 @@ def snapshot_available(t : T?; snap : string) : bool {
 
 //! true under the JIT with the model at `path` stocked; else the cell has registered the loud skip and its caller returns
 def jit_model_available(t : T?; path : string) : bool => jit_only(t) && model_available(t, path)
+
+//! `blk` inside the engine's job queue with dispatch forced threaded (a chunk threshold of 1: every work count takes the
+//! lanes), the threshold put back after
+def with_threaded_jobque(blk : block<void>) {
+    let prev_thresh = get_target_chunk_work()
+    with_dasllama_jobque_() {
+        set_target_chunk_work(1l)
+        invoke(blk)
+    }
+    set_target_chunk_work(prev_thresh)
+}
+
+//! llama2.c's stories15M.bin, loaded once and quantized to Q8_0 for `blk`'s cells, then deleted; a `backend` pinned for the
+//! load and the cells and cleared after. Skips off the JIT or without the file
+def with_stories15m(t : T?; backend : string; blk : block<(var tr : Model) : void>) {
+    return if (!jit_only(t))
+    let path = path_join(llama2c_dir(), "stories15M.bin")
+    if (!stat(path).is_valid) {
+        t |> skip("stories15M.bin not present")
+        return
+    }
+    if (!empty(backend)) {
+        pin_kernel_backend(backend)
+    }
+    var tr <- load_checkpoint(path)
+    quantize_weights(tr)
+    invoke(blk, tr)
+    if (!empty(backend)) {
+        clear_kernel_backend_pin()
+    }
+    delete tr
+}
+
+//! the same on the box's own backend
+def with_stories15m(t : T?; blk : block<(var tr : Model) : void>) {
+    with_stories15m(t, "", blk)
+}
 
 //! a transcript's lower-cased word tokens, the punctuation and casing a near-tie token can flip left
 //! out - what two rails of the same model must agree on

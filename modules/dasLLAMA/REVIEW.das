@@ -3763,37 +3763,23 @@ def private check_howto_docs {
     }
 }
 
-//! the arguments after `flag` on the command line: `-- --howto <doc>...` reads only the named documents as HOW_TO
-//! documents, `-- --queue-calls <file>...` scans only the named sources for unlocked queue calls, `-- --ncol-rr <kernels>
-//! <home>...` holds the named stamp files' `override RR` literals to the named kernel file's `KQ_N_RR` - the checks' fixture rails
-def private fixture_args(flag : string) : array<string> {
-    var docs : array<string>
-    var on = false
-    for (a in get_command_line_arguments()) {
-        if (a == flag) {
-            on = true
-        } elif (on) {
-            docs |> push(a)
-        }
-    }
-    return <- docs
-}
-
-//! the fixture rails' run: a rail's verdict, or -1 where the command line names none
+//! the fixture rails' run: a rail's verdict, or -1 where the command line names none. `-- --howto <doc>...` reads only the
+//! named documents as HOW_TO documents, `-- --queue-calls <file>...` scans only the named sources for unlocked queue calls,
+//! `-- --ncol-rr <kernels> <home>...` holds the named stamp files' `override RR` literals to the named kernel file's `KQ_N_RR`
 def private fixture_rail_verdict : int {
-    let fixtures <- fixture_args("--howto")
+    let fixtures <- gate_flag_args("--howto")
     if (!empty(fixtures)) {
         for (doc in fixtures) {
             check_howto_doc(doc)
         }
         return gate_verdict("dasllama --howto")
     }
-    let queue_fixtures <- fixture_args("--queue-calls")
+    let queue_fixtures <- gate_flag_args("--queue-calls")
     if (!empty(queue_fixtures)) {
         check_locked_queue_calls(queue_fixtures)
         return gate_verdict("dasllama --queue-calls")
     }
-    let rr_fixtures <- fixture_args("--ncol-rr")
+    let rr_fixtures <- gate_flag_args("--ncol-rr")
     if (length(rr_fixtures) >= 2) {
         check_ncol_rr_literal(rr_fixtures[0], [for (f, i in rr_fixtures, count()); f; where i > 0])
         return gate_verdict("dasllama --ncol-rr")

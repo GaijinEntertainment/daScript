@@ -46,6 +46,7 @@ def private cap_not_in_force(t : T?) : bool {
 
 [test(description = "Under a pinned 8000 MB plan room gemma-4-26B UD-IQ3_XXS moves its first routed layers' experts to the host, scores perplexity within 2x of the CPU chain, and its load log sizes the hot expert pool by room alone, never citing the gemma-4 form", standalone = "the test pins the GPU tier's plan room to 8000 MB and the pin outlives it, which would move the routed experts of any other carrier compiled beside it to the host")]
 def test_gpu_resident_gemma4_26b_host_experts(t : T?) {
+    own_load("the test pins the GPU tier's plan room to 8000 MB, which binds the device's weight budget at the tier's first init: a load-time config past restoring")
     pin_host_cap()
     t |> run("gemma-4-26B-A4B IQ3_XXS under an {HOST_CAP_MB} MB plan room: the first routed layers' experts on the host, 150 prose ids prefilled, 150 teacher-forced, scored as a perplexity against the CPU chain") @(t : T?) {
         return if (!arm_on(t, GEMMA4_26B_HOST_FILE.arm) || cap_not_in_force(t))

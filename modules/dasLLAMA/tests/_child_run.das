@@ -6,6 +6,7 @@ module _child_run shared public
 require daslib/fio
 require daslib/strings_boost
 require strings
+require ../performance/box_ident.das   // probe_cpu_brand: the exe is built for this box's CPU
 
 // a test's child process: this binary on a root fixture of this folder, under named environment
 // settings, its stdout and stderr read whole - the instrument of every once-per-process contract
@@ -76,17 +77,39 @@ let private CHILD_SOURCE_DIRS = fixed_array("daslib", "dastest", "modules/dasLLA
 //! the environment a build bakes into the exe: the tune and JIT settings macros read at compile time
 let private CHILD_BUILD_ENVS = fixed_array("DAS_TUNE_MANIFEST", "DAS_TUNE_FORCE", "DAS_TUNE_POLICY", "DAS_TUNE_MODE", "DAS_JIT_BASELINE")
 
-//! The key of the test child's exe for this tree, binary and build environment: the size and time of the libraries the
-//! binary is built of (the binary's own where the tree has no `lib/`) and of every `.das` the build can read - a tests-folder file counts where it is the child's own (`_child_*.das`) - and the
-//! values of the compile-time variables. A changed key is a stale exe
-def child_exe_key() : string {
-    let root = get_das_root()
-    var h = FNV1A_SEED
+//! the compiler and runtime libraries under the das root's `lib/`, sorted - the binary by what it is built of, whatever
+//! launcher names it. The folder's own `.` and `..` are no library: their times move with every file made in the tree's
+//! root, and a key that took them is a new key a session. Non-private: the runner's tests read it
+def child_lib_names() : array<string> {
     var libs : array<string>
-    dir("{root}/lib") $(name) {   //! the compiler and runtime libraries: the binary by what it is built of, whatever launcher names it
-        libs |> push(clone_string(name))
+    dir("{get_das_root()}/lib") $(name) {
+        if (name != "." && name != "..") {
+            libs |> push(clone_string(name))
+        }
     }
     sort(libs)
+    return <- libs
+}
+
+var private g_child_cpu = ""   //! this box's CPU brand, probed once
+
+//! The key of the test child's exe for this tree, binary, box and build environment (`child_exe_key_for` on this box's CPU)
+def child_exe_key() : string {
+    if (empty(g_child_cpu)) {
+        g_child_cpu = probe_cpu_brand()
+    }
+    return child_exe_key_for(g_child_cpu)
+}
+
+//! The key of the test child's exe built on the CPU `cpu`: the size and time of the libraries the binary is built of (the
+//! binary's own where the tree has no `lib/`) and of every `.das` the build can read - a tests-folder file counts where
+//! it is the child's own (`_child_*.das`) - the values of the compile-time variables, and the CPU, which the exe's
+//! kernels are built for: an exe another CPU built is a stale one. A changed key is a stale exe. Non-private: the
+//! runner's tests read it
+def child_exe_key_for(cpu : string) : string {
+    let root = get_das_root()
+    var h = fnv1a("cpu={cpu}", FNV1A_SEED)
+    var libs <- child_lib_names()
     for (name in libs) {
         let st = stat("{root}/lib/{name}")
         h = fnv1a("lib/{name}:{st.size}:{st.mtime}", h)

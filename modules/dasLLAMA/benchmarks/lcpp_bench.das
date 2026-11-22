@@ -64,7 +64,7 @@ require dasllama/dasllama_env
 // (MetalMode.required — a CPU fallback fails the run, never silently mismeasures).
 // ATTRIBUTION SWEEP: --mtp-ab times its off and on arms (the plain step against the speculative round) without
 // comparing their outputs - the arms attribute the round's draft, verify and acceptance cost, not an adoption; the
-// round's output invariance is tests/test_mtp.das's.
+// round's output invariance is held by tests/_mtp_cpu_cells.das's invariance cells.
 
 enum private OutFmt {
     txt

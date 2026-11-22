@@ -181,20 +181,6 @@ def gemma_format_census(t : T?; tr : Model; file : string; mx4 : bool) {
     delete sg
 }
 
-//! prefill `n` tokens + 8 fed steps on the resident driver with every call served, then the same on the all-CPU chain; the
-//! prefill logits and every step's within the bar, the one-step-off control past it
-[cold_path]
-def gemma_forced_feed(t : T?; n : int64; gf : GemmaFile) {
-    with_gemma_rig(t, gf) $(tr) {
-        var inscope feed <- prose_feed(tr, n, 8l)
-        var fed <- resident_then_cpu_feed(t, tr, feed.prompt, feed.toks) $ {
-            served_every_call(t)
-        }
-        feed_steps_within(t, tr, "", n, fed.gpu, fed.cpu, feed.toks, GEMMA_LOGIT_BAR_REL)
-        delete fed
-    }
-}
-
 let RESIDENT_RING_ON = "dasLLAMA: resident driver - the sliding layers' K/V rows ride rings of their window plus"
 let RESIDENT_RING_OFF = "dasLLAMA: resident driver - the sliding layers' K/V rows keep every position's row, no ring, as asked"
 let RESIDENT_EMBED_OFF = "dasLLAMA: resident driver - the host embeds every token row as asked"
@@ -452,8 +438,10 @@ def gemma_rows(m : Model; form : ModelForm; feeds, gaps : array<int64>; walks : 
 }
 
 //! the device pass's collections against the CPU pass's, cell by cell: every feed's rows within the gemma logit bar, every
-//! length's two paths within the path-gap ratio, every walk's perplexity within `ppl_ratio`; `tag` opens each message
-def gemma_rows_within(t : T?; tag : string; gpu, cpu : GemmaRows; gaps : array<int64>; walks : array<GemmaWalk>; ppl_ratio : float = GEMMA_PPL_RATIO) {
+//! length's two paths within the path-gap ratio, every walk's perplexity within `ppl_ratio` and its argmax hits within
+//! `hits_slack`; `tag` opens each message
+def gemma_rows_within(t : T?; tag : string; gpu, cpu : GemmaRows; gaps : array<int64>; walks : array<GemmaWalk>; ppl_ratio : float = GEMMA_PPL_RATIO;
+                      hits_slack : int64 = 3l) {
     with_dasllama_jobque_() {   //! the compares read each row's argmax, which asks the queue
         for (g, c in gpu.feeds, cpu.feeds) {
             feed_rows_within(t, "{tag}, {g.nprompt} tokens: ", g, c, GEMMA_LOGIT_BAR_REL)
@@ -469,9 +457,44 @@ def gemma_rows_within(t : T?; tag : string; gpu, cpu : GemmaRows; gaps : array<i
             if (cuda >= 0l) {
                 t |> success(cuda >= w.n + w.steps - 1l, "{tag}: the CUDA driver served {cuda} positions of the walk's {w.n}-id prefill and {w.steps - 1l} teacher-forced steps")
             }
-            ppl_within(t, w.n, w.steps, g, c, 3l, ppl_ratio)
+            ppl_within(t, w.n, w.steps, g, c, hits_slack, ppl_ratio)
         }
     }
+}
+
+//! a whole gemma file's teacher-forced walks: the default form beside its CPU form (`main`), the arms the device form's carrier
+//! reads, each walk's readings a side
+struct GemmaWalkRows {
+    main : MainPair
+    carrier : Held
+    gpu : array<GemmaRows>
+    cpu : array<GemmaRows>
+}
+
+//! one form's walks of `walks` (`GemmaWalk`s, a fixed or a dynamic array) into `r`: the default form's and the CPU form's, each walk its own readings, the carrier's arms
+//! held on the device
+def gemma_walk_rows(var r : GemmaWalkRows; m : Model; form : ModelForm; walks) {
+    if (form.on_gpu) {
+        r.carrier |> held_fact(gemma_carrier_arms(m), GEMMA_CARRIER_ARMS)
+    }
+    let side = main_side(r.main, form)
+    return if (side == MainSide.neither)
+    for (w in walks) {
+        var inscope rows <- gemma_rows(m, form, array<int64>(), array<int64>(), [w])
+        if (side == MainSide.device) {
+            r.gpu |> emplace(rows)
+        } else {
+            r.cpu |> emplace(rows)
+        }
+    }
+}
+
+//! walk `i` of `walks` under `tag` (`gemma_rows_within`) against its CPU twin at `ratio`, the hits within `slack`; a walk with
+//! no twin a failure (`twin_collected`)
+def gemma_walk_twin_within(t : T?; tag : string; r : GemmaWalkRows; walks; i : int; ratio : float;
+                           slack : int64 = 3l) {
+    return if (!twin_collected(t, i, length(r.cpu), "{tag}: "))
+    gemma_rows_within(t, tag, r.gpu[i], r.cpu[i], array<int64>(), [walks[i]], ratio, slack)
 }
 
 //! the same prose through the resident driver and the CPU chain, scored as a perplexity over `steps`

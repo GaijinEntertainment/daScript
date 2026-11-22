@@ -174,8 +174,8 @@ that call; it licenses no names. A round of depth k asks k + 1 rows and rejects 
 the rows the driver prepared at the load (`register_mtp_verify_rows_override`, `rdec_verify_rows`), so a depth
 knob set after the load lowers the round instead of passing a deeper verify to the CPU, which a
 planes-trimmed image cannot run. `test_gpu_resident_hybrid_mtp_verify_reject` holds the
-rolled-back slots and the next step bit for bit to a one-row session's, `test_mtp.das`'s
-forced-reject round holds the stream to plain decode on both rails, and the profiler's
+rolled-back slots and the next step bit for bit to a one-row session's, the large carriers'
+forced-reject rounds (`forced_invariance_ok`, `tests/_mtp_cpu_cells.das`) hold the stream to plain decode on both rails, and the profiler's
 `mtp.rollback` section prices the reject where `mtp.snapshot` and `mtp.replay` did.
 
 ### A declined verify seat runs the CPU verify inside a window the resident prefill declines {#resident-verify-window}

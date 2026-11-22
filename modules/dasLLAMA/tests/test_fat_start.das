@@ -15,6 +15,7 @@ require daslib/env_registry
 require strings
 require _compares   // full_suite_only
 require _child_run   // the per-box file's policy stand-down reads the tune policy at context init, so it is a child's to show
+require ../performance/box_ident.das   // probe_cpu_brand: this box's CPU, the exe key's
 require dasllama/dasllama_gpu_knee   // the split rule and the pricing both homes' knee races share
 require ?das_metal dasllama/dasllama_metal_kernels   // metal_knee_tiles: a Metal rung's grid
 require ?das_metal dasllama/dasllama_metal_prefill   // metal_devw_race_grids, METAL_N32_ROWS: the dev-W and one-way races' candidates
@@ -501,4 +502,15 @@ def test_the_shared_knee_rule_and_pricing(t : T?) {
     t |> equal(knee_cut_pick(cuts, true, 1048576l, "TEST_CUT"), 68l, "the cutoff takes the other form from the first grid it wins on")
     var inscope flat <- [CutRung(x = 20l, base = 20.0lf, alt = 20.1lf)]
     t |> equal(knee_cut_pick(flat, true, 1048576l, "TEST_CUT"), 1048576l, "no 1% gain keeps every rung on the current form")
+}
+
+[test(description = "The test child's exe key takes the CPU the exe is built for: two CPU brands give two keys, one brand one key, this box's key is its own brand's, and the libraries it reads leave out the folder's dot entries.")]
+def test_child_exe_key_takes_the_cpu(t : T?) {
+    t |> success(child_exe_key_for("AMD EPYC 7663 56-Core Processor") != child_exe_key_for("AMD EPYC 9654 96-Core Processor"),
+        "an exe another CPU built is a stale one")
+    t |> equal(child_exe_key_for("Apple M5 Max"), child_exe_key_for("Apple M5 Max"), "the control: one CPU, one key")
+    t |> equal(child_exe_key(), child_exe_key_for(probe_cpu_brand()), "this box's key is its CPU brand's")
+    var inscope libs <- child_lib_names()
+    t |> success(find_index(libs, ".") < 0 && find_index(libs, "..") < 0,
+        "the key reads no `.` or `..` of lib/: their times move with the tree's root, a new key a session")
 }

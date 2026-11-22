@@ -1118,12 +1118,20 @@ def private text_image_roundtrip(t : T?; path : string; n_gen : int) {
     delete prompt
 }
 
+//! a model arm's gate beside its presence check: the image rail on, else a loud skip - with it off a facade load reads and
+//! writes no image, so an arm has none to mint or map
+def private image_rail_on(t : T?) : bool {
+    return true if (g_env_engine.image)
+    t |> skip("the image rail is off (DASLLAMA_IMAGE=0) - a model arm has no image to mint or map")
+    return false
+}
+
 [test(description = "SmolLM2-135M and the untied stories15M emit the GGUF load's greedy tokens exactly from cold-built, warm and re-mapped images, with config and tokenizer round-tripping byte-exact and the untied image dropping the f32 table")]
 def test_model_image_roundtrip(t : T?) {
     t |> run("SmolLM2-135M q8: gguf load vs mapped image, token-for-token") @(t : T?) {
         if (!family_on(t, "llama") || !arm_on(t, "smol")) return
         let path = path_join(models_dir(), "SmolLM2-135M-Instruct-Q8_0.gguf")
-        return if (!jit_model_available(t, path))
+        return if (!image_rail_on(t) || !jit_model_available(t, path))
         text_image_roundtrip(t, path, 24)
     }
     // the untied twin: a separate output.weight, so the image carries the classifier plane AND
@@ -1131,7 +1139,7 @@ def test_model_image_roundtrip(t : T?) {
     t |> run("stories15M q8 (untied): gguf load vs mapped image, token-for-token") @(t : T?) {
         if (!family_on(t, "llama") || !arm_on(t, "untied")) return
         let path = path_join(models_dir(), "stories15M-Q8_0.gguf")
-        return if (!jit_model_available(t, path))
+        return if (!image_rail_on(t) || !jit_model_available(t, path))
         text_image_roundtrip(t, path, 24)
         var m <- load_model(path, QuantMode.q8)
         t |> success(m.emb_q8 && !m.cls_q8 && m.tok_emb_off < 0l, "the mapped image serves the untied q8 table with no fp32 copy")
@@ -1192,7 +1200,7 @@ def private forced_logits_maxd(tc, tg : Model; prompt, teach : array<int64>; tag
 def test_metal_flavor_image(tst : T?) {
     tst |> run("Llama-3.2-1B Q4_K_M: a K-quant file's cold metal mint saves its image and a warm load maps it") @(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
-            return if (!family_on(t, "llama") || !arm_on(t, "metal") || !jit_only(t))
+            return if (!family_on(t, "llama") || !arm_on(t, "metal") || !image_rail_on(t) || !jit_only(t))
             let path = path_join(models_dir(), "Llama-3.2-1B-Instruct-Q4_K_M.gguf")
             if (!model_available(t, path)) {
                 return
@@ -1216,7 +1224,7 @@ def test_metal_flavor_image(tst : T?) {
     }
     tst |> run("SmolLM2 q8: metal flavor - blob mint + map + GPU serve + CPU tripwire") @(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
-            return if (!family_on(t, "llama") || !arm_on(t, "metal") || !jit_only(t))
+            return if (!family_on(t, "llama") || !arm_on(t, "metal") || !image_rail_on(t) || !jit_only(t))
             if (!has_decode_override("metal")) {
                 t |> skip("metal overrides not registered")
                 return
@@ -1293,7 +1301,7 @@ def test_metal_flavor_image(tst : T?) {
     // mblob, and embed_row reads it there
     tst |> run("TinyLlama-1.1B q8 (untied): metal flavor - blob mint + map + GPU serve on the emb_q8 table") @(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
-            return if (!family_on(t, "llama") || !arm_on(t, "metal-untied") || !jit_only(t))
+            return if (!family_on(t, "llama") || !arm_on(t, "metal-untied") || !image_rail_on(t) || !jit_only(t))
             if (!has_decode_override("metal")) {
                 t |> skip("metal overrides not registered")
                 return
@@ -1347,7 +1355,7 @@ def test_metal_flavor_image(tst : T?) {
 def test_gemma4e_flavor_image(tst : T?) {
     tst |> run("E2B q8: the metal-flavor image serves the PLE table (mint + map, the go-live tripwire seam)") @(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
-            return if (!family_on(t, "gemma4e") || !arm_on(t, "gemma4e") || !jit_only(t))
+            return if (!family_on(t, "gemma4e") || !arm_on(t, "gemma4e") || !image_rail_on(t) || !jit_only(t))
             if (!has_decode_override("metal")) {
                 t |> skip("metal overrides not registered")
                 return
@@ -1402,7 +1410,7 @@ def test_metal_flavor_derive(tst : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
             if (!family_on(t, "llama") || !arm_on(t, "metal")) return
             let path = path_join(models_dir(), "SmolLM2-135M-Instruct-Q8_0.gguf")
-            return if (!jit_model_available(t, path))
+            return if (!image_rail_on(t) || !jit_model_available(t, path))
             let prior_backend = active_kernel_backend()
             pin_kernel_backend("portable")
             // the control: the in-RAM transform, which is what the writer must reproduce
@@ -1496,7 +1504,7 @@ def test_b32_streamed_mint(t : T?) {
         t |> run("{file} q8: the streamed planar mint serves the eager load's planes and logits") @(t : T?) {
             if (!family_on(t, "qwen2") || !arm_on(t, "b32-stream")) return
             let path = path_join(models_dir(), file)
-            return if (!jit_model_available(t, path))
+            return if (!image_rail_on(t) || !jit_model_available(t, path))
             with_dasllama_jobque_() {
                 b32_streamed_mint(t, path)
             }
@@ -1513,7 +1521,7 @@ def test_mlx_snapshot_mint(t : T?) {
             t |> skip("the 1B snapshot not present")
             return
         }
-        return if (!jit_only(t))
+        return if (!image_rail_on(t) || !jit_only(t))
         with_dasllama_jobque_() {
             t |> success(ends_with(image_path_for(snap, ""), ".dlim") && dir_name(image_path_for(snap, "")) == dir_name(snap), "the lane file lands beside the snapshot directory")
             b32_streamed_mint(t, snap)
@@ -1538,7 +1546,7 @@ def test_mlx_snapshot_metal_image(tst : T?) {
 def private mlx_metal_lane(tst : T?; repo, fam, arm : string; f : KqFmt; bar : float; large, exact_walk : bool) {
     tst |> run("{repo}: the metal lane mints beside it and serves the device steps") @(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
-            return if (!family_on(t, fam) || !arm_on(t, arm) || !jit_only(t))
+            return if (!family_on(t, fam) || !arm_on(t, arm) || !image_rail_on(t) || !jit_only(t))
             var dev = metal_create_system_default_device()
             if (dev == null) {
                 t |> skip("no Metal device on this box")
@@ -1681,7 +1689,7 @@ def test_mx4_streamed_mint(t : T?) {
     t |> run("gemma-4-26B-A4B MXFP4_MOE q8: the cold mint streams the native-MXFP4 expert planes") @(t : T?) {
         if (!family_on(t, "gemma4moe") || !arm_on(t, "mx4-stream")) return
         let path = path_join(models_dir(), "gemma-4-26B-A4B-it-MXFP4_MOE-local.gguf")
-        return if (!jit_model_available(t, path))
+        return if (!image_rail_on(t) || !jit_model_available(t, path))
         with_dasllama_jobque_() {
             mx4_streamed_mint(t, path)
         }
@@ -1689,7 +1697,7 @@ def test_mx4_streamed_mint(t : T?) {
     t |> run("gpt-oss-20b mxfp4 q8: the cold mint streams the native-MXFP4 expert planes") @(t : T?) {
         if (!family_on(t, "gptoss") || !arm_on(t, "mx4-stream")) return
         let path = path_join(models_dir(), "gpt-oss-20b-mxfp4.gguf")
-        return if (!jit_model_available(t, path))
+        return if (!image_rail_on(t) || !jit_model_available(t, path))
         with_dasllama_jobque_() {
             mx4_streamed_mint(t, path)
         }
@@ -1776,7 +1784,7 @@ def private kitten_image_roundtrip(path : string; q8 : bool) : KittenRoundtrip {
 def test_kitten_image(t : T?) {
     let path = path_join(models_dir(), "kitten-nano.gguf")
     t |> run("kitten-nano: the staged read, the mapped image and the in-memory mint agree on both lanes") @(t : T?) {
-        return if (!family_on(t, "kitten") || !arm_on(t, "kitten") || !jit_model_available(t, path))
+        return if (!family_on(t, "kitten") || !arm_on(t, "kitten") || !image_rail_on(t) || !jit_model_available(t, path))
         with_dasllama_jobque_() {
             for (q8 in [false, true]) {
                 let lane = q8 ? "q8" : "f32"
@@ -1793,7 +1801,7 @@ def test_kitten_image(t : T?) {
         }
     }
     t |> run("kitten-nano: the recipe lane mints each weight group in its format, and the mapped image serves the staged planes whole") @(t : T?) {
-        return if (!family_on(t, "kitten") || !arm_on(t, "kitten") || !jit_model_available(t, path))
+        return if (!family_on(t, "kitten") || !arm_on(t, "kitten") || !image_rail_on(t) || !jit_model_available(t, path))
         with_dasllama_jobque_() {
             var inscope st <- stage_styletts2(path, true, true)
             var inscope st8 <- stage_styletts2(path, true)
@@ -1828,7 +1836,7 @@ def test_kitten_image(t : T?) {
         }
     }
     t |> run("kitten-nano: a recipe pin moves the groups it names and no other, mints in memory, and refuses a name it does not know") @(t : T?) {
-        return if (!family_on(t, "kitten") || !arm_on(t, "kitten") || !jit_model_available(t, path))
+        return if (!family_on(t, "kitten") || !arm_on(t, "kitten") || !image_rail_on(t) || !jit_model_available(t, path))
         with_dasllama_jobque_() {
             let asked = styletts2_serves_recipe()
             let spec = styletts2_recipe()
@@ -1887,7 +1895,7 @@ def test_kitten_image(t : T?) {
         t |> success(f32_img != q8_img, "each lane is its own prepared image:\n  {f32_img}\n  {q8_img}")
     }
     t |> run("kitten-nano: the image loads by its own path, the family data riding its meta") @(t : T?) {
-        return if (!family_on(t, "kitten") || !arm_on(t, "kitten") || !jit_model_available(t, path))
+        return if (!family_on(t, "kitten") || !arm_on(t, "kitten") || !image_rail_on(t) || !jit_model_available(t, path))
         with_dasllama_jobque_() {
             let asked = styletts2_serves_recipe()
             let spec = styletts2_recipe()
@@ -1989,7 +1997,7 @@ def private pocket_image_roundtrip(path : string; q8, native : bool) : PocketRou
 def test_pocket_image(t : T?) {
     let path = path_join(models_dir(), "pocket-tts-en-18m-kq.gguf")
     t |> run("pocket 18m-kq: the staged read, the mapped image and the in-memory mint agree on all three lanes") @(t : T?) {
-        return if (!family_on(t, "pocket") || !arm_on(t, "pocket") || !jit_model_available(t, path))
+        return if (!family_on(t, "pocket") || !arm_on(t, "pocket") || !image_rail_on(t) || !jit_model_available(t, path))
         with_dasllama_jobque_() {
             for (lane in [(q8 = true, native = true, name = "native"), (q8 = true, native = false, name = "q8"), (q8 = false, native = false, name = "f32")]) {
                 let r = pocket_image_roundtrip(path, lane.q8, lane.native)
@@ -2008,7 +2016,7 @@ def test_pocket_image(t : T?) {
     }
     t |> run("pocket 18m-q8: the native lane's image carries the F16 text table as the file's halfwords") @(t : T?) {
         let f16_path = path_join(models_dir(), "pocket-tts-en-18m-q8.gguf")   // the published q8 form stores the table F16
-        return if (!family_on(t, "pocket") || !arm_on(t, "pocket") || !jit_model_available(t, f16_path))
+        return if (!family_on(t, "pocket") || !arm_on(t, "pocket") || !image_rail_on(t) || !jit_model_available(t, f16_path))
         with_dasllama_jobque_() {
             let r = pocket_image_roundtrip(f16_path, true, true)
             t |> success(r.cold_backed && r.warm_backed && r.minted_backed, "the cold load, the warm map and the in-memory mint each serve from an image")
@@ -2027,7 +2035,7 @@ def test_pocket_image(t : T?) {
         t |> success(native_img != q8_img && q8_img != f32_img && native_img != f32_img, "each lane is its own prepared image:\n  {native_img}\n  {q8_img}\n  {f32_img}")
     }
     t |> run("pocket 18m-kq: the image loads by its own path with no GGUF beside it, and speaks the GGUF load's samples") @(t : T?) {
-        return if (!family_on(t, "pocket") || !arm_on(t, "pocket") || !jit_model_available(t, path) || !g_env_engine.image)
+        return if (!family_on(t, "pocket") || !arm_on(t, "pocket") || !image_rail_on(t) || !jit_model_available(t, path))
         with_dasllama_jobque_() {
             reset_tts_q8()
             let serves_q8 = pocket_serves_q8()
@@ -2064,7 +2072,7 @@ def test_pocket_image(t : T?) {
         }
     }
     t |> run("pocket 18m-kq: a roster voice cleared on an image-served model frees no mapped plane") @(t : T?) {
-        return if (!family_on(t, "pocket") || !arm_on(t, "pocket") || !jit_model_available(t, path))
+        return if (!family_on(t, "pocket") || !arm_on(t, "pocket") || !image_rail_on(t) || !jit_model_available(t, path))
         with_dasllama_jobque_() {
             var inscope m <- load_tts_model(path)
             var inscope c <- caps(m)
@@ -2089,7 +2097,7 @@ def test_voxtral_mini_image(t : T?) {
     t |> run("voxtral-mini q8: the >2 GiB-plane image round trip") @(t : T?) {
         if (!family_on(t, "voxtral") || !arm_on(t, "voxtral")) return
         let path = path_join(models_dir(), "voxtral-mini-3b-q8_0.gguf")
-        return if (!jit_model_available(t, path))
+        return if (!image_rail_on(t) || !jit_model_available(t, path))
         text_image_roundtrip(t, path, 12)
         // the arm exists for the 64-bit plane IO: the q8 image must actually cross 2 GiB
         t |> success(stat(image_path_for(path, moe_gpu_bake_tag())).size > 0x80000000ul, "image crosses 2 GiB")
@@ -2104,7 +2112,7 @@ def test_gemma4_image_roundtrip(t : T?) {
         // token drift on the mapped E2B while every llama-arch carrier round-tripped clean)
         if (!family_on(t, "gemma4e") || !arm_on(t, "gemma")) return
         let path = path_join(models_dir(), "gemma-4-E2B-it-Q8_0.gguf")
-        return if (!jit_model_available(t, path))
+        return if (!image_rail_on(t) || !jit_model_available(t, path))
         text_image_roundtrip(t, path, 16)
     }
 }
@@ -2114,7 +2122,7 @@ def test_tower_image_roundtrip(t : T?) {
     t |> run("ultravox-1b tower: mapped image planes are element-exact vs gguf") @(t : T?) {
         if (!family_on(t, "ultravox") || !arm_on(t, "tower")) return
         let path = path_join(models_dir(), "mmproj-ultravox-1b-f32.gguf")
-        return if (!jit_model_available(t, path))
+        return if (!image_rail_on(t) || !jit_model_available(t, path))
         tower_cpu_roundtrip(t, path)
         for (q8 in [false, true]) {
             gpu_lane_roundtrip(t, "ultravox-1b {q8 ? "q8" : "exact"} lane", TowerFamily.whisper, path, q8 ? "tower-q8" : exact_lane_tag(TowerFamily.whisper, "tower-f32", "tower-f16"), lane_flavored(TowerFamily.whisper, q8), $ => load_audio_tower(path, q8)) $(dev) {
@@ -2182,7 +2190,7 @@ def test_whisper_image_roundtrip(t : T?) {
     t |> run("whisper tiny: gguf load vs mapped image, transcript-exact") @(t : T?) {
         if (!family_on(t, "whisper") || !arm_on(t, "whisper")) return
         let path = path_join(whisper_dir(), "ggml-tiny.bin")
-        return if (!jit_model_available(t, path))
+        return if (!image_rail_on(t) || !jit_model_available(t, path))
         var samples <- load_audio_16k_mono(asr_clip("jfk.wav"))
         if (empty(samples)) {
             t |> skip("jfk.wav not present")
@@ -2216,10 +2224,7 @@ def private f16_home_up(t : T?; fam : TowerFamily) : bool {
 //! family `fam`'s f16 image by path (`#tower-weight-lane`): `mint` leaves `img` on disk, `serve` maps and serves it; false is a loud
 //! skip (the image rail off) or a failed mint
 def private f16_image_by_path(t : T?; tag : string; fam : TowerFamily; img : string; mint : block<() : bool>; serve : block<() : void>) : bool {
-    if (!g_env_engine.image) {
-        t |> skip("{tag}: the image rail is off (DASLLAMA_IMAGE=0) - no f16 image to load by path")
-        return false
-    }
+    return false if (!image_rail_on(t))
     var minted_image = false
     with_gpu_knobs() {
         set_serving_gpu_tower(true, fam)
@@ -2267,7 +2272,7 @@ def private asr_f16_by_path(t : T?; tag : string; fam : TowerFamily; img, lang :
 [test(description = "`load_asr_model` on whisper tiny's f16-encoder .dlim path maps the GPU home's f16 image, runs the encoder on the device chain, and transcribes jfk above the word floor")]
 def test_whisper_f16_image_by_path(t : T?) {
     t |> run("whisper tiny f16 image: the facade loads the discrete home's f16-encoder .dlim by path and serves it on the device") @(t : T?) {
-        return if (!family_on(t, "whisper") || !arm_on(t, "whisper") || !jit_only(t))
+        return if (!family_on(t, "whisper") || !arm_on(t, "whisper") || !image_rail_on(t) || !jit_only(t))
         let path = path_join(whisper_dir(), "ggml-tiny.bin")
         return if (!model_available(t, path) || !f16_home_up(t, TowerFamily.whisper))
         let dev = serving_tower_dev(TowerFamily.whisper)
@@ -2378,7 +2383,7 @@ def test_whisper_metal_tower(tst : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
             if (!family_on(t, "whisper") || !arm_on(t, "mtower")) return
             let path = path_join(whisper_dir(), "ggml-tiny.bin")
-            return if (!jit_model_available(t, path))
+            return if (!image_rail_on(t) || !jit_model_available(t, path))
             var samples <- load_audio_16k_mono(asr_clip("jfk.wav"))
             if (empty(samples)) {
                 t |> skip("jfk.wav not present")
@@ -2522,7 +2527,7 @@ def test_whisper_metal_cross_kv(tst : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
             if (!family_on(t, "whisper") || !arm_on(t, "mtower")) return
             let path = path_join(whisper_dir(), "ggml-tiny.bin")
-            return if (!jit_model_available(t, path))
+            return if (!image_rail_on(t) || !jit_model_available(t, path))
             var samples <- load_audio_16k_mono(asr_clip("jfk.wav"))
             if (empty(samples)) {
                 t |> skip("jfk.wav not present")
@@ -2650,7 +2655,7 @@ def test_parakeet_tower_metal(tst : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
             if (!family_on(t, "parakeet") || !arm_on(t, "mtower")) return
             let path = path_join(whisper_dir(), "ggml-parakeet-tdt-0.6b-v3-f32.bin")
-            return if (!jit_model_available(t, path))
+            return if (!image_rail_on(t) || !jit_model_available(t, path))
             var samples <- load_audio_16k_mono(asr_clip("jfk.wav"))
             if (empty(samples)) {
                 t |> skip("jfk.wav not present")
@@ -2809,7 +2814,7 @@ def test_parakeet_tower_q8_metal(tst : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
             if (!family_on(t, "parakeet") || !arm_on(t, "mtower")) return
             let path = path_join(whisper_dir(), "ggml-parakeet-tdt-0.6b-v3-f32.bin")
-            return if (!jit_model_available(t, path))
+            return if (!image_rail_on(t) || !jit_model_available(t, path))
             var samples <- load_audio_16k_mono(asr_clip("jfk.wav"))
             if (empty(samples)) {
                 t |> skip("jfk.wav not present")
@@ -2920,7 +2925,7 @@ def test_parakeet_image_roundtrip(t : T?) {
     t |> run("parakeet v3: bin load vs mapped image, transcript-exact") @(t : T?) {
         if (!family_on(t, "parakeet") || !arm_on(t, "parakeet")) return
         let path = path_join(whisper_dir(), "ggml-parakeet-tdt-0.6b-v3-f32.bin")
-        return if (!jit_model_available(t, path))
+        return if (!image_rail_on(t) || !jit_model_available(t, path))
         var samples <- load_audio_16k_mono(asr_clip("jfk.wav"))
         if (empty(samples)) {
             t |> skip("jfk.wav not present")
@@ -2989,7 +2994,7 @@ def test_gigaam_image_roundtrip(t : T?) {
     t |> run("gigaam v3: the GGUF's cold load bakes its image, the .dlim loads back through load_asr_model, transcript-exact") @(t : T?) {
         if (!family_on(t, "gigaam") || !arm_on(t, "gigaam")) return
         let path = path_join(models_dir(), "gigaam-v3-e2e-rnnt-f16.gguf")
-        return if (!jit_model_available(t, path))
+        return if (!image_rail_on(t) || !jit_model_available(t, path))
         let wav = asr_clip("ru_short.wav")
         if (!stat(wav).is_valid) {
             t |> skip("ru_short.wav not present")
@@ -3025,7 +3030,7 @@ def test_gigaam_kq_image_roundtrip(t : T?) {
     t |> run("gigaam v3 q4_k: the kq lane's cold load bakes the gigaam-kq image, the .dlim loads back through load_asr_model, transcript-exact") @(t : T?) {
         if (!family_on(t, "gigaam") || !arm_on(t, "gigaam")) return
         let path = path_join(models_dir(), "gigaam-v3-e2e-rnnt-q4_k.gguf")
-        return if (!jit_model_available(t, path))
+        return if (!image_rail_on(t) || !jit_model_available(t, path))
         let wav = asr_clip("ru_short.wav")
         if (!stat(wav).is_valid) {
             t |> skip("ru_short.wav not present")
@@ -3070,7 +3075,7 @@ def test_bergamot_image_roundtrip(t : T?) {
     t |> run("bergamot ru-en tiny: the .bin's cold load bakes each lane's image, the .dlim loads back, translation-exact") @(t : T?) {
         if (!family_on(t, "bergamot") || !arm_on(t, "bergamot")) return
         let path = path_join(models_dir(), "bergamot/ru-en-tiny/model.ruen.intgemm.alphas.bin")
-        return if (!jit_model_available(t, path))
+        return if (!image_rail_on(t) || !jit_model_available(t, path))
         let lines <- ["Лечи меня, у меня мало здоровья!", "Где ближайшая аптека?", "Сегодня мы идём в горы."]   // nolint:STYLE039
         let seat = nmt_seat_pin(false)
         with_dasllama_jobque_() {
@@ -3106,7 +3111,7 @@ def test_bergamot_image_roundtrip(t : T?) {
 [test(description = "`load_asr_model` with qwen3a's f16 mmproj .dlim path maps the GPU home's halfword tower, encodes on the device chain, and transcribes jfk above the word floor")]
 def test_qwen3a_f16_image_by_path(t : T?) {
     t |> run("qwen3a f16 image: the facade loads the discrete home's halfword mmproj .dlim by path and serves it on the device") @(t : T?) {
-        return if (!family_on(t, "qwen3a") || !arm_on(t, "qwen3a") || !jit_only(t))
+        return if (!family_on(t, "qwen3a") || !arm_on(t, "qwen3a") || !image_rail_on(t) || !jit_only(t))
         let dec_path = path_join(models_dir(), "Qwen3-ASR-0.6B-Q8_0.gguf")
         let mmp_path = path_join(models_dir(), "mmproj-Qwen3-ASR-0.6B-bf16.gguf")
         return if (!model_available(t, dec_path) || !model_available(t, mmp_path) || !f16_home_up(t, TowerFamily.qwen3a))
@@ -3129,7 +3134,7 @@ def test_qwen3a_f16_image_by_path(t : T?) {
 [test(description = "The audio embedder loading ultravox-1b's f16 tower .dlim by path serves it on the GPU home's device chain, emitting finite soft tokens of the projector's width")]
 def test_tower_f16_image_by_path(t : T?) {
     t |> run("ultravox-1b f16 image: the audio embedder loads the discrete home's halfword .dlim by path and serves it on the device") @(t : T?) {
-        return if (!family_on(t, "ultravox") || !arm_on(t, "tower") || !jit_only(t))
+        return if (!family_on(t, "ultravox") || !arm_on(t, "tower") || !image_rail_on(t) || !jit_only(t))
         let path = path_join(models_dir(), "mmproj-ultravox-1b-f32.gguf")
         return if (!model_available(t, path) || !f16_home_up(t, TowerFamily.whisper))
         var samples <- load_audio_16k_mono(asr_clip("jfk.wav"))
@@ -3171,7 +3176,7 @@ def test_tower_f16_image_by_path(t : T?) {
 [test(description = "`load_asr_model` on parakeet v3's f16 .dlim path maps the GPU home's halfword image, encodes on the device chain, and transcribes jfk above the word floor")]
 def test_parakeet_f16_image_by_path(t : T?) {
     t |> run("parakeet v3 f16 image: the facade loads the GPU home's halfword .dlim by path and serves it on the device") @(t : T?) {
-        return if (!family_on(t, "parakeet") || !arm_on(t, "parakeet") || !jit_only(t))
+        return if (!family_on(t, "parakeet") || !arm_on(t, "parakeet") || !image_rail_on(t) || !jit_only(t))
         let path = path_join(whisper_dir(), "ggml-parakeet-tdt-0.6b-v3-f32.bin")
         return if (!model_available(t, path) || !f16_home_up(t, TowerFamily.parakeet))
         let dev = serving_tower_dev(TowerFamily.parakeet)
@@ -3191,7 +3196,7 @@ def test_parakeet_f16_image_by_path(t : T?) {
 [test(description = "`load_asr_model` with canary's f16 encoder .dlim path maps the GPU home's halfword encoder, encodes on the device chain, and transcribes jfk above the word floor")]
 def test_canary_f16_image_by_path(t : T?) {
     t |> run("canary f16 image: the facade loads the GPU home's halfword encoder .dlim by path and serves it on the device") @(t : T?) {
-        return if (!family_on(t, "canary") || !arm_on(t, "canary") || !jit_only(t))
+        return if (!family_on(t, "canary") || !arm_on(t, "canary") || !image_rail_on(t) || !jit_only(t))
         let dec_path = path_join(models_dir(), "canary-qwen-2.5b-decoder-f16.gguf")
         let enc_path = path_join(models_dir(), "canary-qwen-2.5b-encoder-f32.bin")
         return if (!model_available(t, dec_path) || !model_available(t, enc_path) || !f16_home_up(t, TowerFamily.canary))
@@ -3213,7 +3218,7 @@ def test_qwen3a_tower_image_roundtrip(t : T?) {
     t |> run("qwen3a 0.6B tower: mapped image planes are element-exact vs gguf") @(t : T?) {
         if (!family_on(t, "qwen3a") || !arm_on(t, "qwen3a")) return
         let path = path_join(models_dir(), "mmproj-Qwen3-ASR-0.6B-bf16.gguf")
-        return if (!jit_model_available(t, path))
+        return if (!image_rail_on(t) || !jit_model_available(t, path))
         qwen3a_cpu_roundtrip(t, path)
         for (q8 in [true, false]) {
             set_qwen3a_q8(q8)
@@ -3276,7 +3281,7 @@ def test_gemma4uv_embedder_image_roundtrip(t : T?) {
     t |> run("gemma4uv embedder: mapped image planes are element-exact vs mmproj, bf16 lane") @(t : T?) {
         if (!family_on(t, "gemma4v") || !arm_on(t, "gemma4uv")) return
         let path = path_join(models_dir(), "mmproj-gemma-4-12B-it-BF16.gguf")
-        return if (!jit_model_available(t, path))
+        return if (!image_rail_on(t) || !jit_model_available(t, path))
         let img = image_path_for(path, "gemma4uv")
         remove(img)
         // off-rail truth: the staged read — both cached loads are image-backed and cannot check
@@ -3328,7 +3333,7 @@ def test_gemma4v_tower_image_roundtrip(t : T?) {
     t |> run("gemma4v tower: mapped image planes are element-exact vs mmproj, bf16 lane") @(t : T?) {
         if (!family_on(t, "gemma4v") || !arm_on(t, "gemma4v")) return
         let path = path_join(models_dir(), "mmproj-gemma-4-E2B-it-bf16.gguf")
-        return if (!jit_model_available(t, path))
+        return if (!image_rail_on(t) || !jit_model_available(t, path))
         gemma4v_cpu_roundtrip(t, path)
         // the q8 lane's GPU flavor, where the box's driver serves it
         let dev = serving_tower_dev(TowerFamily.vision)
@@ -3415,7 +3420,7 @@ def test_gemma3v_tower_image_roundtrip(t : T?) {
             return
         }
         let path = path_join(models_dir(), "mmproj-gemma-3-4b-it-F16.gguf")
-        return if (!jit_model_available(t, path))
+        return if (!image_rail_on(t) || !jit_model_available(t, path))
         gemma3v_cpu_roundtrip(t, path)
         // the q8 lane's GPU flavor, where the box's driver serves it
         let dev = serving_tower_dev(TowerFamily.vision)
@@ -3511,7 +3516,7 @@ def test_gemma4uv_metal_tower(tst : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
             if (!family_on(t, "gemma4v") || !arm_on(t, "gemma4uv-metal")) return
             let path = path_join(models_dir(), "mmproj-gemma-4-12B-it-BF16.gguf")
-            return if (!jit_model_available(t, path))
+            return if (!image_rail_on(t) || !jit_model_available(t, path))
             var inscope emb <- load_gemma4uv_embedder(path)
             var st = Gemma4uvState()
             // 672x336 is the non-square/orientation gate, 384x384 the no-pad shape (npos % 32 == 0)
@@ -3581,7 +3586,7 @@ def test_canary_encoder_image_roundtrip(t : T?) {
     t |> run("canary encoder: mapped image planes are element-exact vs bin") @(t : T?) {
         if (!family_on(t, "canary") || !arm_on(t, "canary")) return
         let path = path_join(models_dir(), "canary-qwen-2.5b-encoder-f32.bin")
-        return if (!jit_model_available(t, path))
+        return if (!image_rail_on(t) || !jit_model_available(t, path))
         canary_cpu_roundtrip(t, path)
         gpu_lane_roundtrip(t, "canary exact lane", TowerFamily.canary, path, canary_image_tag(path, false, serving_tower_dev(TowerFamily.canary)),
                 lane_flavored(TowerFamily.canary, false), $ => load_canary_encoder(path)) $(dev) {
@@ -3624,7 +3629,7 @@ def test_canary_encoder_q8_image_roundtrip(t : T?) {
     t |> run("canary encoder q8: mapped image planes are element-exact vs bin transcode") @(t : T?) {
         if (!family_on(t, "canary") || !arm_on(t, "canary")) return
         let path = path_join(models_dir(), "canary-qwen-2.5b-encoder-f32.bin")
-        return if (!jit_model_available(t, path))
+        return if (!image_rail_on(t) || !jit_model_available(t, path))
         canary_q8_cpu_roundtrip(t, path)
         gpu_lane_roundtrip(t, "canary q8 lane", TowerFamily.canary, path, "canary-q8", lane_flavored(TowerFamily.canary, true), $ => load_canary_encoder(path, true)) $(dev) {
             var inscope stg <- tower_dev_staged(dev) $ { return <- stage_canary_encoder(path, true) }
@@ -3675,7 +3680,7 @@ def test_gemma4a_encoder_image_roundtrip(t : T?) {
     t |> run("gemma4a encoder q8: mapped image planes are element-exact vs gguf transcode") @(t : T?) {
         if (!family_on(t, "gemma4a") || !arm_on(t, "gemma4a")) return
         let path = path_join(models_dir(), "mmproj-gemma-4-E2B-it-bf16.gguf")
-        return if (!jit_model_available(t, path))
+        return if (!image_rail_on(t) || !jit_model_available(t, path))
         gemma4a_cpu_roundtrip(t, path)
         for (q8 in [true, false]) {
             set_gemma4a_q8(q8)
@@ -3751,7 +3756,7 @@ def same_words(t : T?; who : string; q8_text, f32_text : string) {
 [test(description = "Gemma-4 E2B transcribing jfk through the q8 audio tower yields the same word list as through the f32 tower, punctuation aside, while the q8 list one word short misses (the control)")]
 def test_gemma4a_transcribe_q8_ab(t : T?) {
     t |> run("gemma4a transcribe: the q8 tower vs the f32 rail on jfk, the same words") @(t : T?) {
-        return if (!family_on(t, "gemma4a") || !arm_on(t, "gemma4a") || !jit_only(t))
+        return if (!family_on(t, "gemma4a") || !arm_on(t, "gemma4a") || !image_rail_on(t) || !jit_only(t))
         let dec_path = path_join(models_dir(), "gemma-4-E2B-it-Q8_0.gguf")
         let mmp_path = path_join(models_dir(), "mmproj-gemma-4-E2B-it-bf16.gguf")
         if (!model_available(t, dec_path) || !model_available(t, mmp_path)) return
@@ -3792,7 +3797,7 @@ def test_gemma4a_transcribe_q8_ab(t : T?) {
 [test(description = "`load_asr_model` with the gemma4a E2B f16 encoder .dlim path maps the GPU home's halfword encoder, encodes on the device chain, and transcribes jfk above the word floor")]
 def test_gemma4a_f16_image_by_path(t : T?) {
     t |> run("gemma4a f16 image: the facade loads the discrete home's halfword .dlim by path and serves it on the device") @(t : T?) {
-        return if (!family_on(t, "gemma4a") || !arm_on(t, "gemma4a") || !jit_only(t))
+        return if (!family_on(t, "gemma4a") || !arm_on(t, "gemma4a") || !image_rail_on(t) || !jit_only(t))
         let dec_path = path_join(models_dir(), "gemma-4-E2B-it-Q8_0.gguf")
         let mmp_path = path_join(models_dir(), "mmproj-gemma-4-E2B-it-bf16.gguf")
         return if (!model_available(t, dec_path) || !model_available(t, mmp_path) || !f16_home_up(t, TowerFamily.gemma4a))
@@ -3825,7 +3830,7 @@ def test_gemma4a_tower_metal_e4b(t : T?) {
 def private g4a_tower_metal_cell(tst : T?; tag, dec_file, mmp_file : string; want_proj : int64) {
     tst |> run("gemma4a tower {tag}: the Metal Conformer chain, the projector tail on the device, matches the CPU f32 rail on jfk") @(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
-            return if (!family_on(t, "gemma4a") || !arm_on(t, "mtower") || !jit_only(t))
+            return if (!family_on(t, "gemma4a") || !arm_on(t, "mtower") || !image_rail_on(t) || !jit_only(t))
             let dec_path = path_join(models_dir(), dec_file)
             let mmp_path = path_join(models_dir(), mmp_file)
             if (!model_available(t, dec_path) || !model_available(t, mmp_path)) return
@@ -3951,7 +3956,7 @@ def private g4a_tower_metal_cell(tst : T?; tag, dec_file, mmp_file : string; wan
 def test_canary_tower_metal(t : T?) {
     t |> run("canary tower: the Metal FastConformer block loop matches the CPU f32 rail on jfk") @(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
-            return if (!family_on(t, "canary") || !arm_on(t, "mtower") || !jit_only(t))
+            return if (!family_on(t, "canary") || !arm_on(t, "mtower") || !image_rail_on(t) || !jit_only(t))
             let dec_path = path_join(models_dir(), "canary-qwen-2.5b-decoder-q8_0.gguf")
             let mmp_path = path_join(models_dir(), "canary-qwen-2.5b-encoder-f32.bin")
             if (!model_available(t, dec_path) || !model_available(t, mmp_path)) return
@@ -4080,7 +4085,7 @@ def test_qwen3a_tower_q8_ab(t : T?) {
     t |> run("qwen3a tower: the q8 core tracks the f32 rail on jfk window 0") @(t : T?) {
         if (!family_on(t, "qwen3a") || !arm_on(t, "qwen3a")) return
         let path = path_join(models_dir(), "mmproj-Qwen3-ASR-0.6B-bf16.gguf")
-        return if (!jit_model_available(t, path))
+        return if (!image_rail_on(t) || !jit_model_available(t, path))
         var samples <- load_audio_16k_mono(asr_clip("jfk.wav"))
         if (empty(samples)) {
             t |> skip("jfk.wav not present")
@@ -4120,7 +4125,7 @@ def test_qwen3a_tower_q8_ab(t : T?) {
 [test(description = "Qwen3-ASR 0.6B transcribing jfk through the q8 tower core yields the same word list as through the f32 tower, punctuation aside, while the q8 list one word short misses (the control)")]
 def test_qwen3a_transcribe_q8_ab(t : T?) {
     t |> run("qwen3a transcribe: the q8 tower core vs the f32 rail on jfk, the same words") @(t : T?) {
-        return if (!family_on(t, "qwen3a") || !arm_on(t, "qwen3a") || !jit_only(t))
+        return if (!family_on(t, "qwen3a") || !arm_on(t, "qwen3a") || !image_rail_on(t) || !jit_only(t))
         let dec_path = path_join(models_dir(), "Qwen3-ASR-0.6B-Q8_0.gguf")
         let mmp_path = path_join(models_dir(), "mmproj-Qwen3-ASR-0.6B-bf16.gguf")
         if (!model_available(t, dec_path) || !model_available(t, mmp_path)) return
@@ -4167,7 +4172,7 @@ def test_qwen3a_metal_tower(tst : T?) {
     for (q8 in fixed_array(false, true)) {
         tst |> run("qwen3a {q8 ? "q8" : "exact"} lane: the Metal tower - transcript + counters") @(t : T?) {
             static_if (typeinfo builtin_module_exists(das_metal)) {
-                return if (!family_on(t, "qwen3a") || !arm_on(t, "mtower") || !jit_only(t))
+                return if (!family_on(t, "qwen3a") || !arm_on(t, "mtower") || !image_rail_on(t) || !jit_only(t))
                 let dec_path = path_join(models_dir(), "Qwen3-ASR-0.6B-Q8_0.gguf")
                 let mmp_path = path_join(models_dir(), "mmproj-Qwen3-ASR-0.6B-bf16.gguf")
                 if (!model_available(t, dec_path) || !model_available(t, mmp_path)) return
@@ -4266,7 +4271,7 @@ def test_fp32_decoder_image_roundtrip(t : T?) {
     t |> run("canary decoder fp32: gguf load vs mapped image, token-for-token") @(t : T?) {
         if (!family_on(t, "canary") || !arm_on(t, "canary-dec")) return
         let path = path_join(models_dir(), "canary-qwen-2.5b-decoder-f16.gguf")
-        return if (!jit_model_available(t, path))
+        return if (!image_rail_on(t) || !jit_model_available(t, path))
         // the fp32 rail is opt-in (image_fp32) — the parity-pinned ASR decoders' lane
         let img = image_path_for(path, "", "fp32")
         remove(img)

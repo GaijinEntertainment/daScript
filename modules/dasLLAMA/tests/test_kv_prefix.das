@@ -7,8 +7,7 @@ require dastest/testing_boost public
 require dasllama/dasllama_transformer   // umbrella fires each arch [init] registration
 require _model_tier
 require dasllama/dasllama_prefix
-require dasllama/dasllama_math   // with_dasllama_jobque_ + target_chunk_work
-require daslib/jobque_boost
+require dasllama/dasllama_math   // reserve_resize
 require daslib/fio
 require daslib/linq
 
@@ -1062,10 +1061,8 @@ def test_prefix_warm_equals_cold(t : T?) {   // nolint:STYLE038 — cold/warm/di
         var tr <- load_checkpoint(MODEL_PATH)
         let c = tr.config
         quantize_weights(tr)
-        let prev_thresh = get_target_chunk_work()
         let saved_mode = get_prefill_attn_mode()
-        with_dasllama_jobque_() {
-            set_target_chunk_work(1l)
+        with_threaded_jobque() {
             // classic prefill is bit-exact under ANY chunking (test_prefill's contract), so the
             // warm tail eval must reproduce the cold single-shot prefill byte for byte
             set_prefill_attn_mode(AttnPrefillMode.classic)
@@ -1157,7 +1154,6 @@ def test_prefix_warm_equals_cold(t : T?) {   // nolint:STYLE038 — cold/warm/di
             delete prompt
         }
         set_prefill_attn_mode(saved_mode)
-        set_target_chunk_work(prev_thresh)
         delete tr
     }
 }
@@ -1196,10 +1192,8 @@ def test_prefix_tail_copy(t : T?) {
         var tr <- load_checkpoint(MODEL_PATH)
         let c = tr.config
         quantize_weights(tr)
-        let prev_thresh = get_target_chunk_work()
         let saved_mode = get_prefill_attn_mode()
-        with_dasllama_jobque_() {
-            set_target_chunk_work(1l)
+        with_threaded_jobque() {
             set_prefill_attn_mode(AttnPrefillMode.classic)
             var history <- [for (i in range64(29l)); 2l + i % 40l]
             var pool <- create_kv_pool_(c, 8l, KVDtype.f32, KVDtype.f32)
@@ -1237,7 +1231,6 @@ def test_prefix_tail_copy(t : T?) {
             delete history
         }
         set_prefill_attn_mode(saved_mode)
-        set_target_chunk_work(prev_thresh)
         delete tr
     }
 }

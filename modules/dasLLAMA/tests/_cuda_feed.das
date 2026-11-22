@@ -80,18 +80,6 @@ def cuda_forced_feed(t : T?; file, arch : string; n, windows : int64; bar : floa
     }
 }
 
-//! `cuda_forced_feed` on the FP4 tensor leaf, whose e2m1 activations the CPU chain does not take: the rows held by the f32-chain
-//! witness at `ratio` of the CPU chain's own distance from the file's f32 chain (`forced_feed_f32_witness`) in place of a bar of the
-//! step's max |logit| - one mantissa bit scatters single logits past any bar a one-step-off control still clears
-[cold_path]
-def cuda_forced_feed_f32_witness(t : T?; file, arch : string; n, windows : int64; ratio : float) {
-    cuda_feed_rig(t, file, arch, 0l, false) $(tr : Model; path : string; before : CudRdecStats) {
-        forced_feed_f32_witness(t, tr, path, "{file} cuda ", n, 8l, ratio) $ {
-            cuda_feed_served(t, before, n, windows) $ {}
-        }
-    }
-}
-
 //! the driver's counters after a fed run: every call served on the device, every position counted, `windows` window chains, the
 //! captured graph, the attention's unsplit form where the keys sit under its position; then `witness`, the caller's own reads
 def private cuda_feed_served(t : T?; before : CudRdecStats; n, windows : int64; witness : block<void>) {

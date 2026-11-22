@@ -14,6 +14,7 @@ require daslib/fio
 require math
 require strings
 require _model_tier
+require _model_form   // own_load: the swap's loads are the claim
 
 // Two models through one process on the armed GPU tier: each model, loaded behind the other,
 // decodes its own weights. The witness is the second model's greedy tokens after a swap
@@ -85,6 +86,7 @@ def test_gpu_marks_carry_ple_projection(t : T?) {
 
 [test(description = "On the armed GPU tier, Qwen3-0.6B and SmolLM2-135M loaded alternately in one process each reproduce their own first-in-process 8 greedy token ids exactly, with model A arming the same driver both times")]
 def test_gpu_model_swap(t : T?) {
+    own_load("the test loads two models in turn in one process, each dropped before the other reloads: the drop and the reload are the claim")
     t |> run("a second model loaded after the first is deleted decodes its own weights (needs Qwen3-0.6B + SmolLM2-135M, DASLLAMA_GPU=1)") @(t : T?) {
         return if (!jit_model_available(t, SWAP_MODEL_A) || !model_available(t, SWAP_MODEL_B))
         var a_first <- greedy_turn("A first", SWAP_MODEL_A, 8l)
@@ -195,6 +197,7 @@ def private slot_swap_cycle(path : string) : SwapResult {
 
 [test(description = "On TinyLlama Q8_0 a resident run hydrated and dropped mid-stream continues on the CPU, and two drop and re-arm cycles each emit the straight-through resident control trajectory token for token")]
 def test_gpu_slot_swap(t : T?) {
+    own_load("the cell drops the resident model mid-stream and re-arms it, two cycles on one load: the drop and the re-arm are the claim")
     t |> run("resident drop/re-arm slot swap - IDS parity across two cycles (needs tinyllama q8 + vulkan)") @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             let path = path_join(models_dir(), "tinyllama-1.1b-chat-v1.0.Q8_0.gguf")

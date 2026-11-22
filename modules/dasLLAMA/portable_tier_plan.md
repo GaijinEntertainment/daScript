@@ -152,7 +152,7 @@ fp64 mx4 reference already exists as `ref_dot_f64` in `test_mxfp4.das:35` (priva
 file). Lift it into a shared `_kernel_ref.das` beside the two files and close both cells the
 way (f) closed the q8 one. Lint candidate for a folder-local `tests/REVIEW.das` gate: a
 `t |> run` arm that returns before asserting registers a skip (the guard whitelist is
-`model_available`, `arm_on`, `family_on`, `model_missing`, `gguf_missing`,
+`model_available`, `arm_on`, `family_on`, `model_missing`,
 `facade_data_missing`); the `test_mxfp4.das` silent return was the one raw-capability return
 that did neither.
 

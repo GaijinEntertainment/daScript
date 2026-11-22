@@ -9,7 +9,6 @@ require dasllama/dasllama_transformer
 require dasllama/dasllama_common
 require dasllama/dasllama_gpu_resident
 require dasllama/dasllama_moe
-require daslib/f16_cvt   // f16_to_f32 — the tied-cls arm reads the live scale plane
 require dasllama/dasllama_math   // pin_kernel_backend / kernel_backend_pin_refusal / active_kernel_backend — the facade wraps none of them
 require dasllama/dasllama_env    // g_env_engine.pin_backend
 require daslib/defer   // the backend pin is restored on every path out of a pinned cell
@@ -18,8 +17,10 @@ require daslib/fio
 require strings   // find: the refusals' names
 require _model_tier   // models_dir() + model_available() presence/size-tier gate (see the file's header)
 require _resident_feed
+require _cpu_gpu_model   // with_cpu_and_gpu_model, cpu_cells_form: the untied stories15M block
 require ../performance/model_specs.das   // the model-set table — parity evidence lives there as DATA
 require ../harness/_parity_dump.das
+require _parity_cells   // parity_prompt, embedding_rows
 
 // Frozen parity gates (token for token; a `prefix_bar` carrier as a half-span prefix) for the arches stories15M (test_forward.das) doesn't cover.
 // Evidence is DATA in model_specs.das — pinned ids (or a text prompt encoded here) + the arms it was
@@ -27,9 +28,10 @@ require ../harness/_parity_dump.das
 // Models are gitignored multi-GB files: absent = clean skip (a real local regression, a no-op in CI).
 // Every model cell skips off the JIT, without its file, past the
 // size tier (`model_available`), or where DASLLAMA_PIN_BACKEND names
-// a backend this box cannot pin; the layer-cut cells skip too where
-// the run's family filter leaves their family out, the dump round
-// trip without the armed resident tier.
+// a backend this box cannot pin; the dump round trip without the armed
+// resident tier. The layer cuts' parity streams (`_parity_cells.das`)
+// run on the cuts' blocks, and so do the model_specs rows
+// `PARITY_BLOCK_ROWS` names, each on its file's block.
 
 def private with_parity_backend(t : T?; blk : block<() : void>) {
     let name = g_env_engine.pin_backend
@@ -50,112 +52,76 @@ def private with_parity_backend(t : T?; blk : block<() : void>) {
     invoke(blk)
 }
 
-// cls_q8 invariant: a tied Q8 load of a Q8_0 embedding drops the fp32 table (the classifier
-// matmuls the disk quants; rows dequant on demand from the linear transcode at emb_q8_off) — and
-// those rows must be bit-identical to the fp32 table a fp32 load decodes from the same disk data.
-// SmolLM2-135M is the smallest tied model.
-[test(description = "A tied Q8 load of SmolLM2-135M takes the cls_q8 path, and its dequantized embedding rows for four tokens are bit-identical to the fp32 table an fp32 load decodes")]
-def test_parity_tied_cls_q8_rows(t : T?) {
-    t |> run("tied Q8 load: cls_q8 embedding rows bit-match the fp32 table") @(t : T?) {
-        let path = path_join(models_dir(), "SmolLM2-135M-Instruct-Q8_0.gguf")
-        return if (!jit_model_available(t, path))
-        var t32 <- load_gguf(path, QuantMode.fp32)
-        var t8 <- load_gguf(path, QuantMode.q8)
-        t |> success(!t32.cls_q8, "fp32 load keeps the fblob table")
-        t |> success(t8.cls_q8, "tied Q8_0 load takes the cls_q8 path")
-        let dim = t8.config.dim
-        var bad = 0l
-        for (token in [0l, 1l, 1000l, t8.config.vocab_size - 1l]) {
-            for (i in range64(dim)) {
-                let el = t8.emb_q8_off + token * dim + i
-                let want = t32.fblob[t32.tok_emb_off + token * dim + i]
-                // read whichever scale plane is live (wscale_f16 frees the f32 one; the widen
-                // is the exact disk value, so the bit-match claim is unchanged)
-                let sc = t8.wscale_f16 ? f16_to_f32(uint(t8.qscales16[el / 32l])) : t8.qscales[el / 32l]
-                if (float(t8.qblob[el]) * sc != want) {
-                    bad++
-                }
-            }
-        }
-        t |> success(bad == 0l, "embedding rows bit-identical ({bad} mismatches)")
-        delete t32
-        delete t8
-    }
-}
-
+// The tied half (cls_q8, SmolLM2-135M) runs on the SmolLM2 block of test_gpu_resident_llama.das (`tied_cls_q8_rows_cell`).
 // emb_q8 invariant, the untied half: a Q8 load of a Q8_0 embedding with a SEPARATE output.weight drops the
 // fp32 table too (rows dequant from the linear transcode at emb_q8_off, bit-identical to the fp32 decode);
 // without it an untied model carries vocab x dim floats, 1.5 GB on a 152k-vocab 4B. stories15M is the smallest untied Q8_0 file.
-[test(description = "An untied Q8 load of stories15M drops the fp32 embedding table for the emb_q8 plane, whose rows and `embed_row` output are bit-identical to the fp32 load's table")]
+//! what one stories15M form collects for the untied compare: the load's flags, its `embedding_rows` (the fp32 table's on the
+//! fp32 form, the emb_q8 plane's dequant on the q8 form) and, where the load took the emb_q8 plane, `embed_row`'s
+//! row of token 1000
+struct private UntiedRows {
+    ran : bool
+    emb_q8 : bool
+    table_kept : bool   //! the fp32 table stayed in fblob
+    tied : bool
+    cls_q8 : bool
+    emb_apart : bool   //! the embedding copy is not the classifier plane
+    rows : array<float>
+    row1000 : array<float>
+}
+
+//! the untied compare's collection on the loaded form `m`
+def private untied_rows(m : Model) : UntiedRows {
+    var r = UntiedRows(ran = true, emb_q8 = m.emb_q8, table_kept = m.tok_emb_off >= 0l, tied = m.config.shared_weights,
+        cls_q8 = m.cls_q8, emb_apart = m.emb_q8_off != m.wcls_off, rows <- embedding_rows(m, m.emb_q8))
+    let dim = m.config.dim
+    if (m.emb_q8) {
+        r.row1000 |> resize(dim)
+        embed_row(m, 1000l, unsafe(addr(r.row1000[0])))
+    }
+    return <- r
+}
+
+//! the untied fp32 form's collection `f32` against the q8 form's `q8`
+def private untied_emb_q8_within(t : T?; f32, q8 : UntiedRows) {
+    t |> success(!f32.emb_q8 && f32.table_kept, "fp32 load keeps the fblob table")
+    t |> success(!q8.tied, "the fixture is untied (output.weight on disk)")
+    t |> success(!q8.cls_q8, "untied: the classifier flag stays off")
+    t |> success(q8.emb_q8, "untied Q8_0 load takes the emb_q8 path")
+    t |> success(!q8.table_kept, "no fp32 table in fblob")
+    t |> success(q8.emb_apart, "the embedding copy is not the classifier plane")
+    let bad = mismatch_exact(q8.rows, f32.rows)
+    t |> success(bad == 0, "embedding rows bit-identical ({bad} mismatches)")
+    let dim = long_length(q8.row1000)
+    var inscope want <- [for (i in range64(dim)); i + 2l * dim < long_length(f32.rows) ? f32.rows[i + 2l * dim] : 0.0]
+    let bad_row = mismatch_exact(q8.row1000, want) + (dim == 0l ? 1 : 0)
+    t |> success(bad_row == 0, "embed_row reads the same values ({bad_row} mismatches)")   //! the row reader the forward pass uses agrees with the raw plane arithmetic
+}
+
+[test(description = "An untied Q8 load of stories15M drops the fp32 embedding table for the emb_q8 plane, whose rows and `embed_row` output are bit-identical to the fp32 load's table; each form loads once")]
 def test_parity_untied_emb_q8_rows(t : T?) {
-    t |> run("untied Q8 load: emb_q8 embedding rows bit-match the fp32 table, no fp32 table kept") @(t : T?) {
-        let path = path_join(models_dir(), "stories15M-Q8_0.gguf")
-        return if (!jit_model_available(t, path))
-        var t32 <- load_gguf(path, QuantMode.fp32)
-        var t8 <- load_gguf(path, QuantMode.q8)
-        t |> success(!t32.emb_q8 && t32.tok_emb_off >= 0l, "fp32 load keeps the fblob table")
-        t |> success(!t8.config.shared_weights, "the fixture is untied (output.weight on disk)")
-        t |> success(!t8.cls_q8, "untied: the classifier flag stays off")
-        t |> success(t8.emb_q8, "untied Q8_0 load takes the emb_q8 path")
-        t |> success(t8.tok_emb_off < 0l, "no fp32 table in fblob")
-        t |> success(t8.emb_q8_off != t8.wcls_off, "the embedding copy is not the classifier plane")
-        let dim = t8.config.dim
-        var bad = 0l
-        for (token in [0l, 1l, 1000l, t8.config.vocab_size - 1l]) {
-            for (i in range64(dim)) {
-                let el = t8.emb_q8_off + token * dim + i
-                let want = t32.fblob[t32.tok_emb_off + token * dim + i]
-                let sc = t8.wscale_f16 ? f16_to_f32(uint(t8.qscales16[el / 32l])) : t8.qscales[el / 32l]
-                if (float(t8.qblob[el]) * sc != want) {
-                    bad++
-                }
-            }
-        }
-        t |> success(bad == 0l, "embedding rows bit-identical ({bad} mismatches)")
-        // the row reader the forward pass uses agrees with the raw plane arithmetic
-        var inscope row : array<float>
-        row |> resize(dim)
-        embed_row(t8, 1000l, unsafe(addr(row[0])))
-        var bad_row = 0l
-        for (i in range64(dim)) {
-            if (row[i] != t32.fblob[t32.tok_emb_off + 1000l * dim + i]) {
-                bad_row++
-            }
-        }
-        t |> success(bad_row == 0l, "embed_row reads the same values ({bad_row} mismatches)")
-        delete t32
-        delete t8
-    }
-}
-
-// the deltanet-plane engage count for one plane kind — a silently-demoted tag would otherwise
-// pass the parity green on the q8 fallback rail
-def private dn_kq_engaged(fmts : array<KqFmt>) : int64 {
-    var n = 0l
-    for (f in fmts) {
-        if (f != KqFmt.q8) {
-            n++
+    return if (!family_on(t, "llama"))
+    var f32, q8 : UntiedRows
+    with_cpu_and_gpu_model(t, "llm", "stories15M-Q8_0.gguf", 2048l, [cpu_cells_form(), cpu_cells_form(QuantMode.fp32)]) $(m, form) {
+        if (form.quant == QuantMode.fp32) {
+            delete f32
+            f32 <- untied_rows(m)
+        } else {
+            delete q8
+            q8 <- untied_rows(m)
         }
     }
-    return n
-}
-
-// The half-span prefix bar on one live stream, with the loosened check's control on the same stream: the fixture
-// with an id flipped inside its first half must red the bar.
-def private prefix_bar_cell(t : T?; tr : Model; prompt, want : array<int64>; what : string) {
-    let n = length(want)
-    var got <- parity_gen_ids(tr, prompt, n)
-    to_log(LOG_INFO, "eyeball want: {eyeball_text(tr, want)}\n")
-    to_log(LOG_INFO, "eyeball got:  {eyeball_text(tr, got)}\n")
-    let same = prefix_match_len(got, want)
-    t |> success(length(got) == n && fixture_ok(true, same, int64(n)), "{what} ({same} of {n} ids match)")
-    var flipped := want
-    let k = n / 4
-    flipped[k] ^= 1l
-    t |> success(!fixture_ok(true, prefix_match_len(got, flipped), int64(n)),
-        "{what}: control - the fixture with id {k} of {n} flipped reds the bar")
-    delete flipped
-    delete got
+    if (f32.ran || q8.ran) {
+        unsafe {   //! the cell reads the block's collection by reference
+            t |> run("untied Q8 load: emb_q8 embedding rows bit-match the fp32 table, no fp32 table kept") @capture(& f32, & q8)(t : T ?) {
+                t |> success(f32.ran && q8.ran, "stories15M: both forms collected (fp32 {f32.ran}, q8 {q8.ran})")
+                return if (!f32.ran || !q8.ran)
+                untied_emb_q8_within(t, f32, q8)
+            }
+        }
+    }
+    delete f32
+    delete q8
 }
 
 //! `path` loaded as the parity row `spec` loads its file: under the
@@ -168,71 +134,25 @@ def private parity_row_load(path : string; spec : ModelSpec) : Model {
     set_kquant_native(spec.parity.kq_native)
     var tr <- load_model_(path, spec.parity.quant)
     set_kquant_native(prev_kq)
-    tr.config.seq_len = min(tr.config.seq_len, 2048l)
+    tr.config.seq_len = min(tr.config.seq_len, PARITY_ROW_CTX)
     return <- tr
 }
 
-//! the parity row's prompt: its pinned ids, or its text encoded
-def private parity_prompt(tr : Model; spec : ModelSpec) : array<int64> {
-    return <- (empty(spec.parity.prompt_text) ? clone_to_move(spec.parity.prompt)
-        : encode(tr, spec.parity.prompt_text, true, false))
-}
-
-// One spec's arms off ONE model load. load_model_ (not load_gguf) so the tokenizer rides along:
-// text-form prompts encode here, and every compare logs its decoded-text eyeball lines.
-[cold_path]
+//! one walked row's arms (`parity_row_arms`) off ONE model load of its file at `path`
 def private parity_spec_arms(t : T?; spec : ModelSpec; path : string) {
-    let prev_grouped = get_moe_grouped_prefill()
-    let prev_fused = get_moe_fused_expert_gemms()
-    defer() {
-        set_moe_grouped_prefill(prev_grouped)
-        set_moe_fused_expert_gemms(prev_fused)
-    }
-    // the main arm runs on the levers' defaults, whatever an earlier cell left
-    set_moe_grouped_prefill(true)
-    set_moe_fused_expert_gemms(true)
     var tr <- parity_row_load(path, spec)
-    let be = " [backend {active_kernel_backend()}]"   // read AFTER the load: that is where the pin resolves
-    var prompt <- parity_prompt(tr, spec)
-    if (spec.parity.require_dn_kq) {
-        t |> success(dn_kq_engaged(tr.dnqkv_fmt) > 0l && dn_kq_engaged(tr.dngate_fmt) > 0l && dn_kq_engaged(tr.dnout_fmt) > 0l,
-            "{spec.file} dn planes kq-native (not demoted)")
-    }
-    let pb = spec.parity.prefix_bar
-    let form = pb ? "half-span prefix" : "token-for-token"
-    if (pb) {
-        prefix_bar_cell(t, tr, prompt, spec.parity.gen, "{spec.file} {form}{be}")
-    } else {
-        t |> success(parity_gen_ok(tr, prompt, spec.parity.gen, [eyeball = true]), "{spec.file} {form}{be}")
-    }
-    if (spec.parity.dn_chunked) {
-        t |> success(parity_gen_ok(tr, prompt, spec.parity.gen, [dn_chunked = true, eyeball = true, prefix_bar = pb]),
-            "{spec.file} chunked-prefill {form}{be}")
-    }
-    if (spec.parity.moe_reference) {
-        set_moe_grouped_prefill(false)
-        t |> success(parity_gen_ok(tr, prompt, spec.parity.gen, [eyeball = true, prefix_bar = pb]),
-            "{spec.file} reference-prefill {form}{be}")
-        set_moe_grouped_prefill(true)
-    }
-    if (spec.parity.moe_per_expert) {
-        set_moe_fused_expert_gemms(false)
-        t |> success(parity_gen_ok(tr, prompt, spec.parity.gen, [eyeball = true, prefix_bar = pb]),
-            "{spec.file} per-expert-prefill {form}{be}")
-        set_moe_fused_expert_gemms(true)
-    }
-    delete prompt
+    parity_row_arms(t, spec, tr)
     delete tr
 }
 
-[test(description = "Every model_specs row with a pinned parity fixture generates its frozen greedy ids token for token (or to the half-span prefix bar, with a flipped-id control), including its chunked, reference and per-expert prefill arms")]
+[test(description = "Every model_specs row with a pinned parity fixture whose file has no block of its own (`PARITY_BLOCK_ROWS` names the rows their files' blocks run) generates its frozen greedy ids token for token (or to the half-span prefix bar, with a flipped-id control), including its chunked, reference and per-expert prefill arms")]
 def test_parity_specs(t : T?) {
     var files : array<string>
     var all <- model_specs()
     for (s in all) {
         // gpt-oss runs through its own shared-load arm below (both fixtures on ONE load — the
         // ~13GB native-mx4 resident is the suite's biggest; loading twice OOMs a 64GB box)
-        if (!empty(s.parity.gen) && s.file != "gpt-oss-20b-mxfp4.gguf") {
+        if (!empty(s.parity.gen) && s.file != "gpt-oss-20b-mxfp4.gguf" && !has_value(PARITY_BLOCK_ROWS, s.file)) {
             files |> push(s.file)
         }
     }
@@ -283,211 +203,6 @@ def test_parity_gptoss_20b(t : T?) {
             let long_prompt <- encode(tr, counting_prompt(150), true, false)
             t |> success(parity_gen_ok(tr, long_prompt, GPTOSS_LONG_GEN, [eyeball = true]), "gpt-oss-20b window-engaged token-for-token{be}")
             delete tr
-        }
-    }
-}
-
-//! gpt-oss-4L's greedy streams under the reference: after the 20b fixture's short prompt, and after the 449-token
-//! counting prompt that engages the sliding window
-let private GPTOSS_CUT_REF <- [34380l, 52444l, 47914l, 198854l, 109598l, 15255l, 3386l, 5885l, 28978l, 16286l,
-                               26230l, 175455l, 9355l, 8439l, 40815l, 5436l, 48038l, 21406l, 4186l, 24724l,
-                               6257l, 6257l, 716l, 104735l, 1512l, 104735l, 168333l, 18023l, 43933l, 15255l,
-                               3386l, 471l, 9869l, 103895l, 23532l, 42842l, 150384l, 18269l, 26760l, 16962l]
-let private GPTOSS_CUT_LONG_REF <- [32764l, 65816l, 155519l, 1662l, 20545l, 3055l, 4570l, 6486l, 80677l, 23042l,
-                                    31965l, 44603l, 3817l, 7583l, 2562l, 2562l, 26760l, 7462l, 47914l, 3817l,
-                                    26760l, 105712l, 7462l, 47914l, 80677l, 23042l, 43583l, 7462l, 26760l, 3079l,
-                                    1369l, 35769l, 5325l, 30796l, 26760l, 2881l, 189793l, 12346l, 51718l, 4396l]
-
-//! How far under a row's top logit a reference id may sit, as a
-//! fraction of the row's largest logit: the first blocks of a file
-//! write no confident text, the reference's pick and ours trading
-//! places inside 0.8% of the top logit on gpt-oss-4L (the 26B's cut
-//! picks every reference id), where a path that broke moves a row by
-//! whole logits
-let private CUT_GAP_REL = 0.02
-
-//! `prompt` prefilled and the reference's stream `ids` fed after it:
-//! every id within `bar` (of the row's largest logit) under its row's
-//! top logit, a NaN gap the worst, and the stream one step late - the
-//! control, every gap it reads finite - outside that on all but one
-//! row in `late_per`; the reference's text, our picks', the two worst
-//! gaps and the late stream's gaps sorted logged
-def private forced_stream_within(t : T?; tr : Model; prompt, ids : array<int64>; bar : float;
-                                 what : string; late_per : int = 4) {
-    with_pinned_kernels() {
-        var inscope rows <- feed_alone(tr, KVDtype.f32, prompt, ids)
-        let n = length(ids)
-        var inscope picks <- [for (i in range(n)); argmax_of(rows[i])]
-        to_log(LOG_INFO, "{what}: the reference's text {eyeball_text(tr, ids)}\n")
-        to_log(LOG_INFO, "{what}: our picks' text {eyeball_text(tr, picks)}\n")
-        var worst = 0.0
-        var second = 0.0
-        var lates : array<float>
-        var late = 0
-        var late_unread = 0
-        var nearest_late = INFINITE_DIFF
-        for (i in range(n)) {
-            let top = rows[i][picks[i]]
-            let scale = live_maxabs(rows[i])
-            let gap = (top - rows[i][ids[i]]) / scale
-            let g = is_nan(gap) ? INFINITE_DIFF : gap
-            if (g > worst) {
-                second = worst
-                worst = g
-            } elif (g > second) {
-                second = g
-            }
-            continue if (i + 1 >= n || ids[i + 1] == ids[i])
-            let late_gap = (top - rows[i][ids[i + 1]]) / scale
-            if (!is_finite(late_gap)) {
-                late_unread++
-                continue
-            }
-            nearest_late = min(nearest_late, late_gap)
-            lates |> push(late_gap)
-            if (late_gap <= bar) {
-                late++
-            }
-        }
-        to_log(LOG_INFO, "{what}: the worst gap {worst} of the top logit, {late} of {n - 1} late " +
-            "ids inside the bar, the nearest late id {nearest_late}\n")
-        sort(lates)
-        to_log(LOG_INFO, "{what}: the second-worst gap {second}; the late stream's gaps sorted {lates}\n")
-        t |> success(worst <= bar,
-            "{what}: every reference id within {bar} of its row's top logit (worst {worst})")
-        t |> equal(late_unread, 0, "{what}: control - every late id's gap reads finite")
-        t |> success(late * late_per < n,
-            "{what}: control - the stream one step late sits inside the bar on {late} of " +
-            "{n - 1} rows")
-    }
-}
-
-//! the parity row `full`'s file cut to its first `blocks` blocks
-//! (`cut`): loaded as that row loads its file, its block count read
-//! off the load, then `body` on it with the row and the row's prompt,
-//! inside the engine's job queue
-def private cut_stream(t : T?; cut, full : string; blocks : int64;
-                       body : block<(tr : Model; spec : ModelSpec; prompt : array<int64>) : void>) {
-    let path = path_join(models_dir(), cut)
-    return if (!model_available(t, path))
-    with_parity_backend(t) {
-        var inscope spec <- spec_by_file(full)
-        var tr <- parity_row_load(path, spec)
-        cut_within(t, "{cut}: ", tr, blocks)
-        with_dasllama_jobque_() {
-            var inscope prompt <- parity_prompt(tr, spec)
-            invoke(body, tr, spec, prompt)
-        }
-        delete tr
-    }
-}
-
-[test(description = "gpt-oss-4L, the 20b's first four blocks, fed the reference's greedy stream keeps every reference id within 2% of its row's top logit on the short prompt and on the 449-token one that engages the sliding window, the stream one step late outside")]
-def test_parity_gptoss_cut(t : T?) {
-    t |> run("gpt-oss forward on the four-block cut (native-MXFP4 experts, sinks + YaRN + MoE biases; short + window-engaged), the reference's ids fed") @(t : T?) {
-        return if (!family_on(t, "gptoss") || !jit_only(t))
-        let cut = "gpt-oss-4L-mxfp4-local.gguf"
-        cut_stream(t, cut, "gpt-oss-20b-mxfp4.gguf", 4l) $(tr, _spec, prompt) {
-            forced_stream_within(t, tr, prompt, GPTOSS_CUT_REF, CUT_GAP_REL,
-                "gpt-oss-4L, the short prompt")
-            var inscope long_prompt <- encode(tr, counting_prompt(150), true, false)
-            t |> equal(length(long_prompt), 449,
-                "the counting prompt encodes to the reference's 449 ids")
-            forced_stream_within(t, tr, long_prompt, GPTOSS_CUT_LONG_REF, CUT_GAP_REL,
-                "gpt-oss-4L, the window engaged")
-        }
-    }
-}
-
-//! the gemma-4 cuts' greedy streams under the reference after the full files' fixture prompt, the 1..320 count (1492 ids,
-//! past the 12B's and the 26B's sliding windows)
-let private GEMMA4_12B_CUT_REF <- [1132l, 237027l, 102398l, 163234l, 594l, 118731l, 594l, 109397l, 75800l, 3244l,
-                                   255999l, 32424l, 255999l, 32424l, 255999l, 32424l, 255999l, 32424l, 255999l, 32424l,
-                                   255999l, 32424l, 255999l, 32424l, 255999l, 32424l, 255999l, 32424l, 255999l, 32424l,
-                                   255999l, 32424l, 255999l, 32424l, 255999l, 32424l, 255999l, 32424l, 255999l, 103469l]
-let private GEMMA4_26B_CUT_REF <- [233605l, 236963l, 71032l, 237763l, 238031l, 237372l, 26691l, 190786l, 26691l, 28469l,
-                                   1663l, 28469l, 1663l, 237469l, 50727l, 38298l, 224246l, 1363l, 106905l, 61771l,
-                                   50357l, 28469l, 53585l, 3785l, 1852l, 1852l, 233089l, 59475l, 236835l, 7473l,
-                                   238215l, 234358l, 176418l, 237049l, 238215l, 234358l, 237323l, 241075l, 61771l, 36841l]
-let private GEMMA4_CUT_PROMPT_IDS = 1492   //! the reference's count of the fixture prompt's ids
-//! the 12B cut's bar: the reference's ids sit up to 0.017 of the
-//! top logit under ours, the nearest late id 0.50, and the global
-//! layers' p-RoPE applied to every layer reads 0.046
-let private GEMMA4_12B_CUT_GAP_REL = 0.03
-
-//! a gemma-4 cut fed its reference stream after its full file's
-//! fixture prompt
-def private gemma4_cut_stream(t : T?; cut, full : string; blocks : int64; ref : array<int64>;
-                              bar : float) {
-    cut_stream(t, cut, full, blocks) $(tr, _spec, prompt) {
-        t |> equal(length(prompt), GEMMA4_CUT_PROMPT_IDS,
-            "the fixture prompt encodes to the reference's {GEMMA4_CUT_PROMPT_IDS} ids")
-        forced_stream_within(t, tr, prompt, ref, bar, cut)
-    }
-}
-
-[test(description = "gemma-4-12B-12L, the 12B's first twelve blocks, fed the reference's greedy stream after the 1492-id count keeps every reference id within 3% of its row's top logit, the stream one step late outside")]
-def test_parity_gemma4_12b_cut(t : T?) {
-    t |> run("the dense gemma-4 forward on the twelve-block cut (two global layers, the window engaged), the reference's ids fed") @(t : T?) {
-        return if (!family_on(t, "gemma4") || !jit_only(t))
-        gemma4_cut_stream(t, "gemma-4-12B-12L-Q4_K_M-local.gguf",
-            "gemma-4-12B-it-Q4_K_M.gguf", 12l,
-            GEMMA4_12B_CUT_REF, GEMMA4_12B_CUT_GAP_REL)
-    }
-}
-
-[test(description = "gemma-4-26B-A4B-6L, the 26B's first six blocks, fed the reference's greedy stream after the 1492-id count keeps every reference id within 2% of its row's top logit, the stream one step late outside")]
-def test_parity_gemma4_26b_cut(t : T?) {
-    t |> run("the routed gemma-4 forward on the six-block cut (one global layer, the window engaged), the reference's ids fed") @(t : T?) {
-        return if (!family_on(t, "gemma4moe") || !jit_only(t))
-        gemma4_cut_stream(t, "gemma-4-26B-A4B-6L-Q4_K_M-local.gguf",
-            "gemma-4-26B-A4B-it-Q4_K_M.gguf", 6l,
-            GEMMA4_26B_CUT_REF, CUT_GAP_REL)
-    }
-}
-
-
-//! the Qwen1.5-MoE-A2.7B-4L Q8_0 cut's greedy stream under the
-//! reference after the qwen counting fixture (`1, 2, 3, 4, 5, 6, 7,`):
-//! the worst reference id reads 0.0083 of the top logit under ours on
-//! the M5's CPU chain, the nearest late id 0.31 - the cut's bar `CUT_GAP_REL`
-let private QWEN2MOE_CUT_REF <- [220l, 101371l, 112781l, 108339l, 108339l, 102895l, 99710l, 44851l, 104362l, 101353l,
-                                 9931l, 31628l, 34794l, 141536l, 102423l, 99829l, 58158l, 119519l, 76111l, 122559l,
-                                 56273l, 119261l, 87364l, 52774l, 37160l, 113202l, 111846l, 107698l, 22211l, 117724l,
-                                 103712l, 89831l, 105211l, 28330l, 101175l, 100273l, 96922l, 117166l, 1395l, 93994l]
-
-[test(description = "Qwen1.5-MoE-A2.7B-4L Q8_0, the carrier's first four blocks, fed the reference's greedy stream after the counting fixture keeps every reference id within 2% of its row's top logit, the stream one step late outside")]
-def test_parity_qwen2moe_cut(t : T?) {
-    t |> run("the routed qwen2moe forward on the four-block cut (60 experts, 4 routed, the gated shared expert), the reference's ids fed") @(t : T?) {
-        return if (!family_on(t, "qwen2moe") || !jit_only(t))
-        cut_stream(t, "Qwen1.5-MoE-A2.7B-4L-Q8_0-local.gguf", "Qwen1.5-MoE-A2.7B-Chat.Q8_0.gguf", 4l) $(tr, _spec, prompt) {
-            forced_stream_within(t, tr, prompt, QWEN2MOE_CUT_REF, CUT_GAP_REL, "Qwen1.5-MoE-A2.7B-4L Q8_0")
-        }
-    }
-}
-
-//! the Qwen3.6-35B-A3B-4L UD-Q4_K_M cut's greedy stream under the
-//! reference after the qwen counting fixture
-let private QWEN35MOE_CUT_REF <- [4831l, 150481l, 97148l, 97148l, 97148l, 520l, 78931l, 165676l, 162576l, 45560l,
-                                  138170l, 50831l, 1313l, 72227l, 128702l, 97389l, 10167l, 160370l, 1320l, 174222l,
-                                  7346l, 72l, 39787l, 80151l, 12181l, 38012l, 391l, 391l, 391l, 53206l,
-                                  41669l, 245136l, 5262l, 39231l, 245739l, 74475l, 90496l, 19483l, 4096l, 112516l]
-
-//! the 35B cut's bar, twice its measured worst: the reference's ids
-//! sit up to 0.0171 of the top logit under ours on the M5's CPU chain
-//! (the next 0.0096), and one of the 39 late ids sits inside it (a
-//! repeat of our own pick, gap 0; the next 0.076) - the control holds
-//! at most one late id in eight inside the bar
-let private QWEN35MOE_CUT_GAP_REL = 0.035
-let private QWEN35MOE_CUT_LATE_PER = 8
-
-[test(description = "Qwen3.6-35B-A3B-4L UD-Q4_K_M, the 35B's first four blocks, fed the reference's greedy stream after the counting fixture keeps every reference id within 3.5% of its row's top logit, the stream one step late outside on all but one row in eight")]
-def test_parity_qwen35moe_cut(t : T?) {
-    t |> run("the deltanet hybrid MoE forward on the four-block cut (three recurrent layers, one attention layer, 256 experts, 8 routed, the gated shared expert), the reference's ids fed") @(t : T?) {
-        return if (!family_on(t, "qwen35moe") || !jit_only(t))
-        cut_stream(t, "Qwen3.6-35B-A3B-4L-UD-Q4_K_M-local.gguf", "Qwen3.6-35B-A3B-UD-Q4_K_M.gguf", 4l) $(tr, _spec, prompt) {
-            forced_stream_within(t, tr, prompt, QWEN35MOE_CUT_REF, QWEN35MOE_CUT_GAP_REL,
-                "Qwen3.6-35B-A3B-4L UD-Q4_K_M", QWEN35MOE_CUT_LATE_PER)
         }
     }
 }

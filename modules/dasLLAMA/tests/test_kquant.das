@@ -11,6 +11,9 @@ require _model_tier
 require _format_census   // census_cell - the per-32 table carriers' sites
 require _kq_fixtures   // the synthetic superblocks and plane regions; dot_kq and the kernel stamps on the run-time format
 require _gguf_writer   // half_bits: the affine planes' scale and bias halves
+require _kquant_cells   // dequant_plane_prefix, read_prefix, the kq-native placement cells on this file's loads
+require _cpu_gpu_model   // with_cpu_and_gpu_model, cpu_cells_form: the 26B Q4_0 file's block
+require _parity_cells   // the parity cells the block's parity knob reaches (`_::`): the 26B Q4_0 file's model_specs parity row on its block
 require dasllama/dasllama_gguf
 require dasllama/dasllama_common   // dequant_kq_plane_sb - the carrier-form dispatcher; mm_b_kq - the site-scale epilogue cell's matmul
 require dasllama/dasllama_core   // create_session - the session that matmul takes
@@ -33,7 +36,8 @@ require math
 // proven bit-exact against gguf-py's dequantize (harness/q4k_dequant_probe.das); the real-file
 // arm cross-checks against the Q8_0 twin of the same weights at known quantization-error levels.
 // The repacked-plane cell is JIT-only, needs the large-tier gemma-4-26B_q4_0-it.gguf
-// (DASLLAMA_PARITY_FULL=1) and a backend carrying kq slots - each absence is a loud skip.
+// (DASLLAMA_PARITY_FULL=1) and a backend carrying kq slots - each absence is a loud skip. That file's block also carries its
+// model_specs parity row on the row's CPU form (`parity_spec_cell`), skipped where the box cannot take DASLLAMA_PIN_BACKEND's pin.
 
 //! the superblock format ids the kq gates walk
 let private KQ_IDS = fixed_array(4, 5, 6, 40, 44, 3, 33, 34, 45, 2, 23, 24, 25, 35, 49)
@@ -1430,14 +1434,6 @@ def test_quantize_bs(t : T?) {
     }
 }
 
-// Dequant `n` elements from a Model kq plane starting at plane-local element offset `eloff`.
-def private dequant_plane_prefix(tr : Model; fmt : KqFmt; eloff, n : int64; var dst : array<float>) {
-    for (blk in range64(n / 256l)) {
-        let sb = (eloff + blk * 256l) / 256l
-        dequant_kq_plane_sb(fmt, tr.kq[int(fmt)].q, tr.kq[int(fmt)].s, sb, false, dst, blk * 256l)
-    }
-}
-
 //! `path` loaded in the q8 mode with the native K-quant planes on (and the native Q4_0 ones with `q40`), each flag put back after
 def private kq_native_load(path : string; q40 : bool) : Model {
     let prev_kq = get_kquant_native()
@@ -1506,34 +1502,7 @@ def private mm_b_kq_disk_cell(t : T?; tr : Model) {
     check(t, "{fmt} attn_q rows through mm_b_kq on disk-order planes against the per-position GEMV", y, want, BAR_EXACT, Shape(row_width = int(d)))
 }
 
-//! the per-tensor scale reaches the CPU matmul's epilogue: eight rows of blk.0.ffn_down through `mm_b_kq` against the file
-//! dequant's dot times the site scale, x on the int lattice so the Q8 activation step is exact
-def private check_nv4_site_scale_epilogue(t : T?; tr : Model; fdq : array<float>) {
-    let cols = 3584l
-    var x <- [for (k in range64(cols)); float((k * 37l) % 255l - 127l)]
-    var y : array<float>
-    y |> resize(8l)
-    var s <- create_session(tr, mirror_kv_dtype())
-    forward_prefill_alloc(tr, s, 1l, 0l)
-    mm_b_kq(s, y, tr, KqFmt.nv4, tr.w2_offs[0], x, cols, 8l, 1l)
-    delete s
-    let sc = site_scale(tr, KqFmt.nv4, tr.w2_offs[0])
-    var want : array<float>
-    want |> resize(8l)
-    for (r in range64(8l)) {
-        var acc = 0.0lf
-        for (k in range64(cols)) {
-            acc += double(fdq[r * cols + k]) * double(x[k])
-        }
-        want[r] = float(acc * double(sc))
-    }
-    check(t, "nv4 ffn_down rows through mm_b_kq against the file dequant's dot under the site scale", y, want, BAR_APPROX, FLAT_SHAPE)
-    delete want
-    delete y
-    delete x
-}
-
-[test(description = "A portable-pinned kq-native load of Qwen3-4B Q4_K_M, Qwen3.5 NVFP4 and gemma-4-26B Q4_0 places each tagged tensor at its cursor offset: plane dequant prefixes match the file dequant, and `mm_b_kq` matches the per-position GEMV")]
+[test(description = "A portable-pinned kq-native load of Qwen3-4B Q4_K_M places each tagged tensor at its cursor offset: plane dequant prefixes match the file dequant, and `mm_b_kq` matches the per-position GEMV")]
 def test_kq_load_layout(t : T?) {
     // End-to-end stage-2 oracle: a kquant_native load must place every tagged tensor at its
     // cursor-assigned plane offset. Plane-dequant of tensor prefixes vs the file dequant —
@@ -1568,46 +1537,6 @@ def test_kq_load_layout(t : T?) {
             mm_b_kq_disk_cell(t, tr)
         }
     }
-    t |> run("nv4 load tags the NVFP4 planes, reads their per-tensor scales and places them at their cursor offsets (Qwen3.5-0.8B NVFP4)") @(t : T?) {
-        load_kq_native(t, "Qwen3.5-0.8B-NVFP4-MTP.gguf", true, false) $(tr; path) {
-            t |> success(!tr.kq_repacked, "portable-pinned load keeps the nv4 planes disk-order")
-            t |> success(tr.w2_fmt[0] == KqFmt.nv4, "blk.0.ffn_down tagged nv4")
-            t |> equal(length(tr.site_scale), 108, "every NVFP4 plane's `.scale` tensor lands on the site table")
-            t |> success(abs(site_scale(tr, KqFmt.nv4, tr.w2_offs[0]) - 1.0299681e-4) < 1.0e-9, "blk.0.ffn_down's site scale is the file's")
-            let n = 8l * 3584l   // eight rows of the down plane
-            var have : array<float>
-            have |> resize(n)
-            dequant_plane_prefix(tr, tr.w2_fmt[0], tr.w2_offs[0], n, have)
-            var gt = 0
-            var fdq <- read_prefix(path, "blk.0.ffn_down.weight", n, gt)
-            check(t, "nv4 ffn_down plane against the file dequant", have, fdq, BAR_EXACT, FLAT_SHAPE)
-            check_nv4_site_scale_epilogue(t, tr, fdq)
-            delete fdq
-            delete have
-        }
-    }
-    // the q40 tier's end-to-end placement oracle: the QAT gemma file is 265 x Q4_0 + F32
-    // norms/router + one Q6_K embd — its q40 planes are VERBATIM disk splits, so every
-    // plane-dequant prefix must bit-match the file dequant (the k6 exactness class).
-    t |> run("q40 load places Q4_0 tensors at their cursor offsets (gemma-4-26B QAT q4_0)") @(t : T?) {
-        load_kq_native(t, "gemma-4-26B_q4_0-it.gguf", true, true) $(tr; path) {   // disk-order planes (the placement oracle)
-            t |> success(!tr.kq_repacked, "portable-pinned load keeps the q40 planes disk-order")
-            t |> success(tr.kquant_native, "load detected native Q4_0 tensors")
-            t |> success(tr.wq_fmt[0] == KqFmt.q40, "blk.0.attn_q tagged q40")
-            let n = 262144l
-            var have : array<float>
-            have |> resize(n)
-            var gt = 0
-            // deep-layer q40 tensor: catches cursor drift accumulated across every earlier tensor
-            let l = tr.config.n_layers - 1l
-            dequant_plane_prefix(tr, tr.wq_fmt[l], tr.wq_offs[l], n, have)
-            var fdq <- read_prefix(path, "blk.{l}.attn_q.weight", n, gt)
-            t |> equal(gt, GGML_TYPE_Q4_0)
-            check(t, "deep-layer q40 plane against the file dequant (verbatim split)", have, fdq, BAR_EXACT, FLAT_SHAPE)
-            delete fdq
-            delete have
-        }
-    }
 }
 
 // An activation whose Q8_K image is EXACT: integers in [-127, 127] with a +-127 peak in every
@@ -1634,20 +1563,52 @@ def private rows_dot_dev(w, x, y : array<float>; n, rows : int64) : float {
     return worst
 }
 
-[test(description = "On the box's own backend, gemma-4-26B Q4_0's repacked expert gate and up regions dot the fused tensor's rows exactly on an exact Q8_K row, the tied k6 embedding matches the file, and the region-list dispatch matches per-region GEMVs")]
-def test_kq_q40_repacked_planes(t : T?) {
-    // The REPACKED twin of test_kq_load_layout's q40 arm: that arm pins the portable backend, so
-    // it proves cursor placement over disk-order planes only. This one runs the box's own backend,
-    // so the grp<mr> repack, the per-expert offsets of the fused ffn_gate_up_exps split, the
-    // tied-k6 classifier plane and the region-list expert dispatch are all held to the file's own
-    // dequant at the 26B's production widths (dim 2816, n_ff_exp 704, 128 experts).
-    t |> run("repacked q40 expert planes and the tied k6 classifier serve exactly (gemma-4-26B QAT q4_0)") @(t : T?) {
-        load_kq_native(t, "gemma-4-26B_q4_0-it.gguf", false, true) $(tr; path) {
-            q40_repacked_cell(t, tr, path)
+//! the q40 tier's end-to-end placement oracle on gemma-4-26B Q4_0 QAT `tr`, loaded with the native K-quant and Q4_0 planes
+//! on under the portable pin (the planes stay disk-order): the file is 265 x Q4_0 + F32 norms/router + one Q6_K embd, its q40
+//! planes VERBATIM disk splits, so every plane-dequant prefix bit-matches the file dequant (the k6 exactness class)
+def private q40_placement_cell(t : T?; tr : Model; path : string) {
+    t |> success(!tr.kq_repacked, "portable-pinned load keeps the q40 planes disk-order")
+    t |> success(tr.kquant_native, "load detected native Q4_0 tensors")
+    t |> success(tr.wq_fmt[0] == KqFmt.q40, "blk.0.attn_q tagged q40")
+    let n = 262144l
+    var have : array<float>
+    have |> resize(n)
+    var gt = 0
+    // deep-layer q40 tensor: catches cursor drift accumulated across every earlier tensor
+    let l = tr.config.n_layers - 1l
+    dequant_plane_prefix(tr, tr.wq_fmt[l], tr.wq_offs[l], n, have)
+    var fdq <- read_prefix(path, "blk.{l}.attn_q.weight", n, gt)
+    t |> equal(gt, GGML_TYPE_Q4_0)
+    check(t, "deep-layer q40 plane against the file dequant (verbatim split)", have, fdq, BAR_EXACT, FLAT_SHAPE)
+    delete fdq
+    delete have
+}
+
+let private Q40_CTX = 4096l   //! the 26B Q4_0 forms' context: their cells read planes, no session
+
+[test(description = "gemma-4-26B Q4_0 QAT, loaded once a form with the native K-quant and Q4_0 planes on: under the portable pin every Q4_0 plane-dequant prefix bit-matches the file dequant at its cursor offset; on the box's own backend the repacked expert gate and up regions dot the fused tensor's rows exactly on an exact Q8_K row, the tied k6 embedding matches the file, and the region-list dispatch matches per-region GEMVs; on the parity row's CPU form (the native K-quant planes, the Q4_0 knob as found), the file's frozen greedy ids token for token; each form loads once")]
+def test_kq_q40_planes(t : T?) {
+    return if (!family_on(t, "gemma4moe"))
+    let forms <- [cpu_cells_form(backend = "portable", kq_native = KqNative.on_q40), cpu_cells_form(kq_native = KqNative.on_q40)]
+    with_cpu_and_gpu_model(t, "llm", "gemma-4-26B_q4_0-it.gguf", Q40_CTX, forms, parity = true) $(var m, form) {
+        let path = path_join(models_dir(), "gemma-4-26B_q4_0-it.gguf")
+        unsafe {   //! the cells capture the loaded model by reference
+            if (form.backend == "portable") {
+                t |> run("q40 load places Q4_0 tensors at their cursor offsets (gemma-4-26B QAT q4_0)") @capture(& m)(t : T ?) {
+                    q40_placement_cell(t, m, path)
+                }
+            } else {
+                t |> run("repacked q40 expert planes and the tied k6 classifier serve exactly (gemma-4-26B QAT q4_0)") @capture(& m)(t : T ?) {
+                    q40_repacked_cell(t, m, path)
+                }
+            }
         }
     }
 }
 
+//! the REPACKED twin of the placement cell on `tr` loaded on the box's own backend: the grp<mr> repack, the per-expert offsets
+//! of the fused ffn_gate_up_exps split, the tied-k6 classifier plane and the region-list expert dispatch, each held to the
+//! file's own dequant at the 26B's production widths (dim 2816, n_ff_exp 704, 128 experts)
 def private q40_repacked_cell(t : T?; tr : Model; path : string) {
     let c = tr.config
     let dim = c.dim
@@ -1662,7 +1623,7 @@ def private q40_repacked_cell(t : T?; tr : Model; path : string) {
         "the fused ffn_gate_up_exps split keeps both halves on the q40 plane")
     t |> success(fmt_at(tr.we2_fmt, 0l) == KqFmt.q4032, "the 704-wide down stacks keep their Q4_0 bytes on the q4032 per-32 planes")
     if (!tr.kq_repacked) {
-        t |> skip("this box's backend carries no kq slots - the planes stay disk-order (test_kq_load_layout covers that)")
+        t |> skip("this box's backend carries no kq slots - the planes stay disk-order (the portable-pinned form's placement cell covers that)")
         return
     }
     var gt = 0
@@ -1741,95 +1702,6 @@ def private routed_dispatch_cell(t : T?; tr : Model; x : array<float>; var xq : 
     delete want
     delete gu
     delete offs
-}
-
-[test(description = "Phi-3.5 Q4_K_M's fused attn_qkv splits into k5 q and k slices whose plane dequants match the file dequant within 1e-3 relative L2, the k slice at its dim x qd source offset")]
-def test_kq_fused_qkv_slices(t : T?) {
-    // Fused-projection (Phi3) gate-lift oracle: attn_qkv / ffn_up split at load with dim-multiple
-    // src_offs into the kq planes — a slice landing off by one superblock shows up as noise vs
-    // the file dequant. The K slice (src_off = dim*qd) is the non-trivial placement.
-    t |> run("phi3 fused attn_qkv K-quant slices land at their plane offsets (Phi-3.5 Q4_K_M)") @(t : T?) {
-        load_kq_native(t, "Phi-3.5-mini-instruct-Q4_K_M.gguf", true, false) $(tr; path) {   // disk-order planes (the placement oracle, like test_kq_load_layout)
-            t |> success(tr.kquant_native, "load detected native K-quant tensors")
-            t |> success(tr.wq_fmt[0] == KqFmt.k5 && tr.wk_fmt[0] == KqFmt.k5 && tr.wv_fmt[0] == KqFmt.k5,
-                "fused attn_qkv slices share the Q5_K tag")
-            t |> success(tr.w1_fmt[0] == KqFmt.k4 && tr.w3_fmt[0] == KqFmt.k4, "fused ffn_up gate/up slices tagged k4")
-            t |> success(tr.wcls_fmt == KqFmt.k6 && !cls_kq(tr), "untied Q6_K classifier tagged (no tied-cls path)")
-            let dim = tr.config.dim
-            let qd = layer_qd(tr.config, 0l)
-            let n = 262144l
-            var have : array<float>
-            have |> resize(n)
-            var gt = 0
-            // q slice (src_off 0): the trivial placement
-            dequant_plane_prefix(tr, tr.wq_fmt[0], tr.wq_offs[0], n, have)
-            var fq <- read_prefix(path, "blk.0.attn_qkv.weight", dim * qd + n, gt)
-            var want : array<float>
-            want |> resize(n)
-            for (i in range64(n)) {
-                want[i] = fq[i]
-            }
-            t |> success(rel_l2(have, want) < 1.0e-3, "q slice matches the file dequant (f16-pair rounding only)")
-            // k slice (src_off = dim*qd): the fused-split placement this arm exists for
-            dequant_plane_prefix(tr, tr.wk_fmt[0], tr.wk_offs[0], n, have)
-            for (i in range64(n)) {
-                want[i] = fq[dim * qd + i]
-            }
-            t |> success(rel_l2(have, want) < 1.0e-3, "k slice at src_off dim*qd matches the file dequant")
-            delete fq
-            delete want
-            delete have
-        }
-    }
-}
-
-[test(description = "Loaded Phi-3.5 Q4_K_M, whose context runs past the original 4096, carries the file's 48 `rope_factors_long` values bit for bit as `rope_freqs`, and they differ from the short set")]
-def test_kq_phi3_longrope_factors(t : T?) {
-    t |> run("phi3 LongRoPE: the long set serves a context past the original 4096") @(t : T?) {
-        load_kq_native(t, "Phi-3.5-mini-instruct-Q4_K_M.gguf", true, false) $(tr; path) {
-            var gt = 0
-            var long_f <- read_prefix(path, "rope_factors_long.weight", 48l, gt)
-            var short_f <- read_prefix(path, "rope_factors_short.weight", 48l, gt)
-            t |> success(tr.config.seq_len > 4096l,
-                         "the file's context ({tr.config.seq_len}) runs past the original 4096")
-            t |> equal(48l, long_length(tr.rope_freqs),
-                       "one factor per rotation pair of the 96-wide head")
-            check(t, "the model's factors are the file's long set",
-                  tr.rope_freqs, long_f, BAR_EXACT, FLAT_SHAPE)
-            var apart = 0
-            for (a, b in tr.rope_freqs, short_f) {
-                apart += a != b ? 1 : 0
-            }
-            t |> success(apart > 0, "... which the short set is not ({apart} of 48 pairs differ)")
-            delete short_f
-            delete long_f
-        }
-    }
-}
-
-[test(description = "gemma-4-E2B Q4_K_M's per-layer token table loads on the k5 plane, not a silent q8 fallback, and its first 16 rows dequant within 1e-3 relative L2 of the file dequant")]
-def test_kq_ple_table(t : T?) {
-    // E-series PLE token table (family c): gather-only tensor rides native kq planes — the tag
-    // must take (a silent q8 fallback also passes parity, so pin it here) and whole-row plane
-    // dequant must match the file dequant at its offset.
-    t |> run("E-series PLE token table takes the kq plane path (gemma-4-E2B Q4_K_M)") @(t : T?) {
-        load_kq_native(t, "gemma-4-E2B-it-Q4_K_M.gguf", true, false) $(tr; path) {   // disk-order planes (the placement oracle)
-            t |> success(tr.kquant_native, "load detected native K-quant tensors")
-            t |> success(tr.ple_emb_fmt == KqFmt.k5, "per_layer_token_embd tagged k5")
-            t |> success(tr.emb_fmt == KqFmt.k4 && cls_kq(tr), "tied k4 classifier takes the kq plane path")
-            // whole-row placement: rows 0..R of the table vs the file dequant (f16-pair rounding only)
-            let all = tr.config.n_layers * tr.config.n_embd_per_layer
-            let n = all * 16l
-            var have : array<float>
-            have |> resize(n)
-            dequant_plane_prefix(tr, tr.ple_emb_fmt, tr.ple_emb_off, n, have)
-            var gt = 0
-            var fdq <- read_prefix(path, "per_layer_token_embd.weight", n, gt)
-            t |> success(rel_l2(have, fdq) < 1.0e-3, "PLE table plane rows match the file dequant")
-            delete fdq
-            delete have
-        }
-    }
 }
 
 //! the per-32 table carriers on the CPU rails (the `-local` mints of `../performance/model_specs.das`): every table site native
@@ -1946,26 +1818,6 @@ def private per32_site_rows(t : T?; tr : Model; path, site, name : string; fmt :
     delete xq
     delete xbs
 }
-
-// Dequant `n` elements of `name` from element `first` into fp32; reports the on-disk type via `gt`.
-def private read_prefix(path, name : string; n : int64; var gt : int&; first : int64 = 0l) : array<float> {
-    var dst : array<float>
-    dst |> reserve(n)
-    dst |> resize(n)
-    let f = fopen(path, "rb")
-    if (f == null) {
-        panic("cannot open {path}")
-    }
-    fmap(f) $(var bytes : array<uint8>#) {
-        var m <- parse_gguf_meta(bytes)
-        gt = gguf_tensor_type(m, name)
-        gguf_read_tensor_f32(m, bytes, name, dst, 0l, n, first)
-        delete m
-    }
-    fclose(f)
-    return <- dst
-}
-
 
 [test(description = "The iq3xxs plane pair dequants a hand-packed superblock bit for bit to an independent recomputation off the disk bytes through the grid and ksigns tables")]
 def test_iq3xxs_planes(t : T?) {

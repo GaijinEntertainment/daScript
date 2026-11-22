@@ -1,0 +1,2311 @@
+options gen2
+options _dasllama_internal = true
+
+module _scheduler_cells shared public
+
+//! the continuous-batching scheduler's model cells, on a model its caller loaded; no entry loads one
+
+require dastest/testing_boost public
+require dasllama/dasllama_scheduler   // the scheduler under test
+require _scheduler_rig   // make_req, drain, toks_of, finished_of
+require dasllama/dasllama_batch   // batch_step_census: how the speculative ticks were served
+require dasllama/dasllama                               // facade: load/encode/generate references + engine knobs
+require dasllama/dasllama_blocks   // embed_text_rows: the media arms build rows from the prompt's own tokens
+require dasllama/dasllama_common   // layer_is_recurrent: the deltanet-on-GPU cell finds a recurrent layer to probe; eval_ / forward_prefill: the one-token segment cell's two dispatches
+require _compares   // mismatch_exact
+require dasllama/dasllama_gpu_tier   // moe_gpu_dnd_on_gpu: that cell skips unless the tier serves the decode step
+require dasllama/dasllama_gpu_resident   // moe_gpu_resident_active / moe_gpu_resident_verifies: the resident pick-ask cell's witnesses
+require daslib/jobque_boost
+require daslib/strings_boost   // join: the decoded stream logs beside the token-exact compares
+require math
+require strings
+require _model_tier
+require _cpu_gpu_model   // with_ctx_cut: a cell's context cut on the load it runs on
+require _resident_feed   // census, pass_total: the deltanet-on-GPU cell's device witnesses
+
+// The continuous-batching scheduler's model cells, all through the SchedEvent seam, zero HTTP: each takes a loaded model
+// (`t`, `m`) and runs on its own schedulers and sessions. On SmolLM2-135M: scheduler == generate bit-exact (1 stream),
+// stop ids and strings, the reasoning budget, chunk-size invariance under classic prefill, the tick order, admission,
+// staggered admit + queue overflow, the prefix cache, paged sampling, media splices, mrope grids and spans, stop/budget/
+// context-length finishes, evict mid-run. On Qwen3.5-0.8B the deltanet streams on the GPU tier; on Qwen3.5-0.8B-MTP the
+// speculative scheduler's cells on the CPU rails and under the resident driver.
+
+// One stream's reference: generate() with the wiring's stop protocol (stop token ends the stream
+// unemitted; otherwise the budget runs out) — what the scheduler must reproduce.
+struct private RefStream {
+    toks : array<int64>
+    pieces : array<string>
+    finish : string
+}
+
+def private ref_generate(m : Model; prompt : array<int64>; params : SamplingParams;
+                         max_new : int64; stop_ids : array<int64>; seed : int = 0) : RefStream {
+    var s <- create_session(m)
+    if (seed != 0) {
+        set_seed(s, seed)
+    }
+    var r : RefStream
+    var stops := stop_ids
+    var hit_stop = false
+    generate(m, s, prompt, params, max_new) $(id, pc) {
+        for (sid in stops) {
+            if (id == sid) {
+                hit_stop = true
+                return false
+            }
+        }
+        r.toks |> push(id)
+        r.pieces |> push(pc)
+        return true
+    }
+    r.finish = hit_stop ? "stop" : "length"
+    delete s
+    return <- r
+}
+
+def private pieces_of(events : array<SchedEvent>; id : int64) : array<string> =>
+    <- [for (e in events); e.text; where e.stream == id && e.kind == SchedEventKind.piece]
+
+// both sides of a stream compare, decoded - a near-tie synonym flip and a broken walk read alike as ids
+def private log_streams(la : string; ea : array<SchedEvent>; ida : int64; lb : string; eb : array<SchedEvent>; idb : int64) {
+    to_log(LOG_INFO, "{la}: {join(pieces_of(ea, ida), "")}\n{lb}: {join(pieces_of(eb, idb), "")}\n")
+}
+
+def private has_gpu_dn_layer(c : Config) : bool {
+    for (l in range64(c.n_layers)) {
+        if (layer_is_recurrent(c, l) && moe_gpu_dnd_on_gpu(l)) {
+            return true
+        }
+    }
+    return false
+}
+
+def private text_of(pieces : array<string>) : string {
+    return build_string() $(var w) {
+        for (p in pieces) {
+            w |> write(p)
+        }
+    }
+}
+
+// ===== two deltanet streams turn about on the GPU tier: each reads its own recurrent state =====
+
+//! the fused deltanet step's control: off the tier, the stream's steps
+//! run on the CPU and the step's census count stays
+def private dn_step_cpu_control(t : T?; var m : Model; prompt, want : array<int64>) {
+    moe_gpu_drop_model()
+    let flat0 = census("dn_step_cls_spv")
+    var none : array<int64>
+    var sch <- create_scheduler(m, 1l, 2l, 64l)
+    var events : array<SchedEvent>
+    t |> success(submit(m, sch, make_req(30l, prompt, SamplingParams(), 8l, none)),
+        "CPU stream queued")
+    drain(m, sch, events)
+    var got <- toks_of(events, 30l)
+    t |> success(ids_equal(got, want), "the CPU stream matches generate ({got})")
+    t |> success(census("dn_step_cls_spv") == flat0,
+        "control: dropped from the tier, no fused deltanet step recorded")
+    delete got
+    delete events
+    delete sch
+}
+
+//! On the GPU tier, two Qwen3.5-0.8B deltanet streams decoded turn about match their solo generate references token for token, share decode steps, record fused deltanet steps on device, and pass nothing to the CPU rails, `m`'s context cut to 256 for it
+def scheduler_batching_deltanet_gpu_cell(t : T?; var m : Model) {
+    with_ctx_cut(m, 256l) {
+        unsafe {
+            t |> run("two interleaved deltanet streams on the GPU tier match their solo references, their deltanet steps counted on the device (needs Qwen3.5-0.8B-Q8_0, DASLLAMA_GPU=1)") @capture(& m)(t : T ?) {
+                let prev_dnd_route = moe_gpu_dnd_route()
+                set_moe_gpu_dnd_route(true)   // the claim is about the tier's decode step: pin its route on, whatever an earlier cell left
+                if (!moe_gpu_resident_active() && !has_gpu_dn_layer(m.config)) {
+                    t |> skip("the GPU tier's deltanet decode step is not armed - needs DASLLAMA_GPU=1 on a device that serves it")
+                    set_moe_gpu_dnd_route(prev_dnd_route)
+                    return
+                }
+                let nrec = recurrent_layer_count(m.config)
+                let step0 = census("dn_step_cls_spv")   //! the device's fused deltanet step: recorded per layer by the per-op step and by the driver's token commands
+                let passes0 = pass_total()
+                let greedy = SamplingParams()
+                var none : array<int64>
+                var pa <- encode(m, "Count from one to ten in words.", true, false)
+                var pb <- encode(m, "Name three primary colors.", true, false)
+                var refs <- [ <- ref_generate(m, pa, greedy, 8l, none), <- ref_generate(m, pb, greedy, 8l, none)]
+                var sch1 <- create_scheduler(m, 1l, 2l, 64l)
+                var events1 : array<SchedEvent>
+                t |> success(submit(m, sch1, make_req(10l, pa, greedy, 8l, none)), "stream A queued (one-stream scheduler)")
+                t |> success(submit(m, sch1, make_req(11l, pb, greedy, 8l, none)), "stream B queued (one-stream scheduler)")
+                drain(m, sch1, events1)
+                var sa <- toks_of(events1, 10l)
+                var sb <- toks_of(events1, 11l)
+                to_log(LOG_INFO, "one-stream scheduler A: \"{text_of(pieces_of(events1, 10l))}\" | generate A: \"{text_of(refs[0].pieces)}\"\n")
+                to_log(LOG_INFO, "one-stream scheduler B: \"{text_of(pieces_of(events1, 11l))}\" | generate B: \"{text_of(refs[1].pieces)}\"\n")
+                t |> success(ids_equal(sa, refs[0].toks), "stream A through a one-stream scheduler matches generate ({sa} vs {refs[0].toks})")
+                t |> success(ids_equal(sb, refs[1].toks), "stream B through a one-stream scheduler matches generate ({sb} vs {refs[1].toks})")
+                var sch <- create_scheduler(m, 2l, 2l, 64l)
+                var events : array<SchedEvent>
+                t |> success(submit(m, sch, make_req(20l, pa, greedy, 8l, none)), "stream A queued")
+                t |> success(submit(m, sch, make_req(21l, pb, greedy, 8l, none)), "stream B queued")
+                drain(m, sch, events)   //! two host-cached streams over the load's one region: each takes it from the other, the other's device-only rows saved first
+                var ga <- toks_of(events, 20l)
+                var gb <- toks_of(events, 21l)
+                to_log(LOG_INFO, "two-stream A: \"{text_of(pieces_of(events, 20l))}\" | solo A: \"{text_of(refs[0].pieces)}\"\n")
+                to_log(LOG_INFO, "two-stream B: \"{text_of(pieces_of(events, 21l))}\" | solo B: \"{text_of(refs[1].pieces)}\"\n")
+                t |> success(ids_equal(ga, refs[0].toks), "stream A, decoded turn about with B, matches its solo reference ({ga} vs {refs[0].toks})")
+                t |> success(ids_equal(gb, refs[1].toks), "stream B, decoded turn about with A, matches its solo reference ({gb} vs {refs[1].toks})")
+                t |> success(sch.sum_batch >= 2l * 2l, "the two streams shared decode steps (sum batch {sch.sum_batch})")
+                if (step0 != NO_CENSUS) {
+                    let stepped = census("dn_step_cls_spv") - step0
+                    t |> success(stepped >= nrec, "the streams' deltanet steps ran on the device: {stepped} fused-step dispatches recorded over {nrec} recurrent layers")
+                }
+                t |> equal(pass_total() - passes0, 0l, "no call passed to the CPU rails")
+                if (step0 != NO_CENSUS) {
+                    dn_step_cpu_control(t, m, pa, refs[0].toks)
+                }
+                delete sa
+                delete sb
+                delete events1
+                delete sch1
+                delete ga
+                delete gb
+                delete events
+                delete sch
+                delete refs
+                delete pa
+                delete pb
+                set_moe_gpu_dnd_route(prev_dnd_route)
+            }
+        }
+    }
+}
+
+// ===== scheduler ≡ generate (1 stream): greedy bit-exact, seeded sampling, stop finish =====
+
+//! One SmolLM2 stream through the scheduler reproduces `generate` bit for bit in tokens and pieces under greedy and seeded sampling, ends at a declared stop id unemitted, and records length, TTFT and counters
+def test_scheduler_matches_generate(t : T?; m : Model) {
+    unsafe {
+        t |> run("scheduler == generate: bit-exact stream, seeded sampling, stop/budget (needs SmolLM2-135M)") @capture(& m)(t : T ?) {
+            var prompt <- encode(m, "Once upon a time", true, false)
+            var none : array<int64>
+            // greedy, single-chunk prefill: the eval sequence is identical to generate()'s, so the
+            // emitted stream must be BIT-exact (B==1 eval_batch delegates to the same forward())
+            let greedy = SamplingParams()
+            var ref <- ref_generate(m, prompt, greedy, 10l, none)
+            var sch <- create_scheduler(m, 1l, 4l, 512l)
+            var events : array<SchedEvent>
+            t |> success(submit(m, sch, make_req(1l, prompt, greedy, 10l, none)), "greedy stream queued")
+            drain(m, sch, events)
+            var got <- toks_of(events, 1l)
+            var gotp <- pieces_of(events, 1l)
+            t |> success(ids_equal(got, ref.toks), "greedy tokens == generate() bit-exact")
+            t |> equal(length(gotp), length(ref.pieces))
+            for (i in range(length(gotp))) {
+                t |> equal(gotp[i], ref.pieces[i])
+            }
+            let fin = finished_of(events, 1l)
+            t |> equal(fin.finish, "length")
+            t |> equal(fin.n_gen, 10l)
+            t |> equal(fin.n_prompt, int64(length(prompt)))
+            t |> success(fin.ttft_us > 0l, "TTFT recorded")
+            t |> equal(sch.gen_tokens, 10l)
+            t |> success(sch.decode_steps > 0l, "decode steps counted")
+            // seeded sampling (temp + top-k): the scheduler makes the same sample() calls in the
+            // same order, so a seeded run reproduces generate() exactly
+            let sp = SamplingParams(temp = 0.8, top_k = 40l)
+            var ref2 <- ref_generate(m, prompt, sp, 10l, none, 4242)
+            events |> clear()
+            t |> success(submit(m, sch, make_req(2l, prompt, sp, 10l, none, 4242)), "seeded stream queued")
+            drain(m, sch, events)
+            var got2 <- toks_of(events, 2l)
+            t |> success(ids_equal(got2, ref2.toks), "seeded sampled tokens == generate()")
+            // stop finish: pick the first greedy token that did not occur earlier in the stream,
+            // declare it a stop id — the scheduler must end there, stop token unemitted
+            var kstop = -1
+            for (k in range(1, length(ref.toks))) {
+                var seen = false
+                for (j in range(k)) {
+                    seen ||= ref.toks[j] == ref.toks[k]
+                }
+                if (!seen) {
+                    kstop = k
+                    break
+                }
+            }
+            if (kstop > 0) {
+                var stops <- [ref.toks[kstop]]
+                var ref3 <- ref_generate(m, prompt, greedy, 10l, stops)
+                events |> clear()
+                t |> success(submit(m, sch, make_req(3l, prompt, greedy, 10l, stops)), "stop stream queued")
+                drain(m, sch, events)
+                var got3 <- toks_of(events, 3l)
+                t |> equal(length(got3), kstop)
+                t |> success(ids_equal(got3, ref3.toks), "stop-bounded tokens == generate()")
+                let fin3 = finished_of(events, 3l)
+                t |> equal(fin3.finish, "stop")
+                t |> equal(fin3.n_gen, int64(kstop))
+                delete got3
+                delete ref3
+                delete stops
+            } else {
+                t |> success(true, "no unique stop candidate in 10 greedy tokens - stop arm skipped")
+            }
+            delete got
+            delete gotp
+            delete got2
+            delete ref
+            delete ref2
+            delete events
+            delete sch
+            delete prompt
+        }
+    }
+}
+
+//! A stop string spanning two greedy pieces ends the SmolLM2 stream with exactly the reference text before it, and a held tail no stop completes flushes as its own piece at the length finish
+def test_scheduler_stop_strings(t : T?; m : Model) {
+    unsafe {
+        t |> run("a stop string ends the stream where it begins; text held for a stop that never comes flushes at the budget (needs SmolLM2-135M)") @capture(& m)(t : T ?) {
+            var prompt <- encode(m, "Once upon a time", true, false)
+            var none : array<int64>
+            let greedy = SamplingParams()
+            var ref <- ref_generate(m, prompt, greedy, 10l, none)
+            let full = text_of(ref.pieces)
+            var sch <- create_scheduler(m, 1l, 4l, 512l)
+            var events : array<SchedEvent>
+            // the stop string spans pieces 3 and 4, so it completes only across a hold
+            let k = 3
+            if (length(ref.pieces) > k + 1 && !empty(ref.pieces[k]) && !empty(ref.pieces[k + 1])) {
+                let stop = "{ref.pieces[k]}{ref.pieces[k + 1]}"
+                var req <- make_req(1l, prompt, greedy, 10l, none)
+                req.stop_strs <- [stop]
+                t |> success(submit(m, sch, req), "the stop-string stream is queued")
+                drain(m, sch, events)
+                var got <- pieces_of(events, 1l)
+                let text = text_of(got)
+                // one code path on one CPU lane, greedy: the reference and the stream compute the same logits bit for bit
+                to_log(LOG_INFO, "stop string {escape(stop)}: reference {escape(full)}\n")
+                to_log(LOG_INFO, "stop string {escape(stop)}: stream    {escape(text)}\n")
+                t |> equal(slice(full, 0, find(full, stop)), text, "the text before the stop string, nothing of it")
+                let fin = finished_of(events, 1l)
+                t |> equal("stop", fin.finish)
+                t |> success(fin.n_gen < 10l, "the budget was not what ended it")
+                delete got
+            } else {
+                t |> skip("the reference is too short for a two-piece stop string")
+            }
+            // a stop string the last piece begins and nothing completes: the piece is held, the budget finish flushes it
+            if (!empty(ref.pieces[length(ref.pieces) - 1])) {
+                events |> clear()
+                var req2 <- make_req(2l, prompt, greedy, 10l, none)
+                req2.stop_strs <- ["{ref.pieces[length(ref.pieces) - 1]}\u0007never"]
+                t |> success(submit(m, sch, req2), "the held-tail stream is queued")
+                drain(m, sch, events)
+                var got2 <- pieces_of(events, 2l)
+                var toks2 <- toks_of(events, 2l)
+                to_log(LOG_INFO, "held tail: reference {escape(full)}\n")
+                to_log(LOG_INFO, "held tail: stream    {escape(text_of(got2))}\n")
+                t |> equal(full, text_of(got2), "the whole reference text, the held tail flushed")
+                t |> equal(-1l, toks2[length(toks2) - 1], "the flush rides a piece event of its own")
+                let fin2 = finished_of(events, 2l)
+                t |> equal("length", fin2.finish)
+                delete got2
+                delete toks2
+            }
+            delete ref
+            delete events
+            delete sch
+            delete prompt
+        }
+    }
+}
+
+// ===== the reasoning budget: the forced close lands after the budgeted tokens, the stream continues =====
+
+//! A reasoning budget forces the close tokens right after the budgeted count with the reference elsewhere, stays inert when unopened, markless or self-closed, closes early at the length cap, and a re-open stops the turn
+def test_scheduler_think_budget(t : T?; m : Model) {   // nolint:STYLE038 — one cell: the budget's six streams against one reference on one loaded model
+    unsafe {
+        t |> run("a reasoning budget forces the span's close tokens after that many tokens; a budget with no close is inert (needs SmolLM2-135M)") @capture(& m)(t : T ?) {
+            //! the scheduler and the reference run one CPU code path over one set of weights (the model's GPU state dropped
+            //! by load_capped_cpu), so the exact compares below hold - a GPU rail would round the two apart
+            var prompt <- encode(m, "Once upon a time", true, false)
+            var none : array<int64>
+            let greedy = SamplingParams()
+            var ref <- ref_generate(m, prompt, greedy, 12l, none)
+            var sch <- create_scheduler(m, 1l, 4l, 512l)
+            var events : array<SchedEvent>
+            // the close sequence stands in for a family's: two tokens the reference never emits in a row, read off the vocab
+            var close <- encode(m, " THE END", false, false)
+            t |> success(length(close) >= 2, "the stand-in close is at least two tokens ({length(close)})")
+            // the prompt "opened" the span: the first 3 tokens count, the 4th and 5th are the forced close, the rest the model's again
+            var req <- make_req(1l, prompt, greedy, 12l, none)
+            req.think_budget = 3l
+            req.think_marks.opened = true
+            req.think_marks.close := close
+            t |> success(submit(m, sch, req), "the budgeted stream is queued")
+            drain(m, sch, events)
+            var toks <- toks_of(events, 1l)
+            t |> equal(12, length(toks), "the budget ends nothing: the reply still runs to its length")
+            for (i in range(3)) {
+                t |> equal(ref.toks[i], toks[i], "token {i} is the model's own")
+            }
+            for (i in range(length(close))) {
+                t |> equal(close[i], toks[3 + i], "forced close token {i} lands at position {3 + i}")
+            }
+            t |> equal("length", finished_of(events, 1l).finish)
+            to_log(LOG_INFO, "think budget: reference {escape(text_of(ref.pieces))}\n")
+            to_log(LOG_INFO, "think budget: stream    {escape(text_of(pieces_of(events, 1l)))}\n")
+            // the span never opened (an open token the model does not emit): the budget counts nothing and forces nothing
+            events |> clear()
+            var req2 <- make_req(2l, prompt, greedy, 12l, none)
+            req2.think_budget = 3l
+            req2.think_marks.open <- [close[0]]
+            req2.think_marks.close := close
+            t |> success(submit(m, sch, req2), "the unopened stream is queued")
+            drain(m, sch, events)
+            var toks2 <- toks_of(events, 2l)
+            t |> equal(ref.toks, toks2, "no open token emitted: the stream is the reference, token for token")
+            // a budget with no close marks is inert
+            events |> clear()
+            var req3 <- make_req(3l, prompt, greedy, 12l, none)
+            req3.think_budget = 3l
+            req3.think_marks.opened = true
+            t |> success(submit(m, sch, req3), "the markless stream is queued")
+            drain(m, sch, events)
+            var toks3 <- toks_of(events, 3l)
+            t |> equal(ref.toks, toks3, "no close marks: the budget forces nothing")
+            // the model's own close ends the count: a stream whose close token is the reference's second token leaves
+            // the span there, and the budget of 3 never fires - the close sequence's first token is NOT the close
+            // (a symmetric family's forced close opens with a sentence whose first token the reasoning writes freely)
+            events |> clear()
+            var req4 <- make_req(4l, prompt, greedy, 12l, none)
+            req4.think_budget = 3l
+            req4.think_marks.opened = true
+            req4.think_marks.close := close
+            req4.think_marks.close_tok = ref.toks[1]
+            t |> success(submit(m, sch, req4), "the self-closing stream is queued")
+            drain(m, sch, events)
+            var toks4 <- toks_of(events, 4l)
+            t |> equal(ref.toks, toks4, "the model's own close token ended the span: the budget forced nothing")
+            // a two-token open sequence: the span opens after both, so with a budget of 2 the close lands at 4 and 5
+            events |> clear()
+            var req5 <- make_req(5l, prompt, greedy, 12l, none)
+            req5.think_budget = 2l
+            req5.think_marks.open <- [ref.toks[0], ref.toks[1]]
+            req5.think_marks.close := close
+            t |> success(submit(m, sch, req5), "the sequence-opened stream is queued")
+            drain(m, sch, events)
+            var toks5 <- toks_of(events, 5l)
+            for (i in range(4)) {
+                t |> equal(ref.toks[i], toks5[i], "sequence open: token {i} is the model's own")
+            }
+            for (i in range(length(close))) {
+                t |> equal(close[i], toks5[4 + i], "sequence open: forced close token {i} lands at position {4 + i}")
+            }
+            // the length cap closer than the close is long forces it early: a budget of 20 never fires on 12 tokens,
+            // the close lands at the last positions and the reply still ends for length within its cap
+            events |> clear()
+            var req6 <- make_req(6l, prompt, greedy, 12l, none)
+            req6.think_budget = 20l
+            req6.think_marks.opened = true
+            req6.think_marks.close := close
+            t |> success(submit(m, sch, req6), "the capped stream is queued")
+            drain(m, sch, events)
+            var toks6 <- toks_of(events, 6l)
+            t |> equal(12, length(toks6), "the forced close stays inside max_tokens")
+            for (i in range(length(close))) {
+                t |> equal(close[i], toks6[12 - length(close) + i], "early close: token {i} lands at position {12 - length(close) + i}")
+            }
+            t |> equal(ref.toks[12 - length(close) - 1], toks6[12 - length(close) - 1], "the token before the early close is the model's own")
+            t |> equal("length", finished_of(events, 6l).finish)
+            // a re-opened span past the forced close ends the turn: the stream of the first request names the token it
+            // wrote right after its forced close as the re-open marker, so this stream stops there with the marker unemitted
+            events |> clear()
+            let after_close = 3 + length(close)
+            var req7 <- make_req(7l, prompt, greedy, 12l, none)
+            req7.think_budget = 3l
+            req7.think_marks.opened = true
+            req7.think_marks.close := close
+            req7.think_marks.reopen <- [toks[after_close]]
+            t |> success(submit(m, sch, req7), "the re-open-guarded stream is queued")
+            drain(m, sch, events)
+            var toks7 <- toks_of(events, 7l)
+            t |> equal(after_close, length(toks7), "the re-opened span ends the turn at the marker, which is not emitted")
+            for (i in range(after_close)) {
+                t |> equal(toks[i], toks7[i], "re-open guard: token {i} is the budgeted stream's")
+            }
+            t |> equal("stop", finished_of(events, 7l).finish)
+            to_log(LOG_INFO, "think budget: self-closed {escape(text_of(pieces_of(events, 4l)))}\n")
+            to_log(LOG_INFO, "think budget: early close {escape(text_of(pieces_of(events, 6l)))}\n")
+            to_log(LOG_INFO, "think budget: re-open guard {escape(text_of(pieces_of(events, 7l)))}\n")
+            delete toks
+            delete toks2
+            delete toks3
+            delete toks4
+            delete toks5
+            delete toks6
+            delete toks7
+            delete close
+            delete ref
+            delete events
+            delete sch
+            delete prompt
+        }
+    }
+}
+
+// ===== chunked prefill: {1,3,17,64} produce the identical stream under classic prefill =====
+
+//! Under classic prefill, SmolLM2 streams prefilled in chunks of 1, 3, 17 and 64 tokens emit the identical greedy stream
+def test_scheduler_chunk_sizes(t : T?; m : Model) {
+    unsafe {
+        t |> run("prefill chunk sizes 1/3/17/64 give the same stream - classic mode (needs SmolLM2-135M)") @capture(& m)(t : T ?) {
+            // classic prefill is bit-exact under ANY chunking (test_prefill's contract) — the same
+            // pin as test_chat's render-seam case, so every chunk size must yield ONE stream
+            let saved_mode = get_prefill_attn_mode()
+            set_prefill_attn_mode(AttnPrefillMode.classic)
+            var prompt <- encode(m, "The quick brown fox jumps over the lazy dog while the little robot watches from a small hill near the old village bakery and counts every bird that crosses the evening sky", true, false)
+            t |> success(int64(length(prompt)) > 17l, "prompt spans multiple chunks ({length(prompt)} tokens)")
+            var none : array<int64>
+            let greedy = SamplingParams()
+            var first <- [-1l, -1l, -1l, -1l]
+            var streams : array<array<int64>>
+            streams |> reserve(4)
+            for (ci, K in range(4), [1l, 3l, 17l, 64l]) {
+                var sch <- create_scheduler(m, 1l, 4l, K, [idle_chunk_tokens = 0l])
+                var inscope events : array<SchedEvent>
+                t |> success(submit(m, sch, make_req(int64(ci), prompt, greedy, 6l, none)), "stream queued (K={K})")
+                drain(m, sch, events)
+                var inscope got <- toks_of(events, int64(ci))
+                first[ci] = !empty(got) ? got[0] : -1l
+                to_log(LOG_INFO, "K={K}: \"{text_of(pieces_of(events, int64(ci)))}\" {got}\n")
+                streams |> emplace(got)
+                delete events
+                delete sch
+            }
+            t |> success(first[0] >= 0l, "chunked runs produced tokens")
+            for (ci in range(1, 4)) {
+                t |> equal(first[ci], first[0])
+                t |> success(ids_equal(streams[ci], streams[0]), "K arm {ci}: full stream identical to K=1")
+            }
+            set_prefill_attn_mode(saved_mode)
+            delete first
+            delete streams
+            delete prompt
+        }
+    }
+}
+
+//! A lone stream prefills its whole prompt in the first tick under the idle quantum and emits the chunked run's stream, unset sizes resolve to the backend's defaults, and beside a decoding stream a tick prefills one chunk
+def test_scheduler_idle_quantum(t : T?; m : Model) {
+    unsafe {
+        t |> run("a lone stream prefills in the idle quantum, a stream beside a decoding one in the chunk (needs SmolLM2-135M)") @capture(& m)(t : T ?) {
+            let saved_mode = get_prefill_attn_mode()
+            set_prefill_attn_mode(AttnPrefillMode.classic)   // bit-exact under any chunking: the two quanta must yield one stream
+            var prompt <- encode(m, "The quick brown fox jumps over the lazy dog while the little robot watches from a small hill near the old village bakery and counts every bird that crosses the evening sky", true, false)
+            var short <- encode(m, "Once upon a time", true, false)
+            let np = long_length(prompt)
+            let K = 8l
+            t |> success(np > 3l * K && long_length(short) <= K, "the long prompt spans chunks, the short one fits one ({np} and {length(short)} tokens)")
+            var none : array<int64>
+            let greedy = SamplingParams()
+            var streams : array<array<int64>>
+            streams |> reserve(2)
+            for (idle in [-1l, 0l]) {   // the backend's default, then off
+                var sch <- create_scheduler(m, 1l, 4l, K, [idle_chunk_tokens = idle])
+                var inscope events : array<SchedEvent>
+                t |> success(submit(m, sch, make_req(1l, prompt, greedy, 6l, none)), "lone stream queued (idle quantum {idle})")
+                scheduler_step(m, sch, events)
+                t |> equal(sch.idle_chunk_tokens, idle < 0l ? chunk_defaults(m).idle : idle, "idle quantum {idle} resolves to {sch.idle_chunk_tokens}")
+                t |> equal(sch.prefill_tokens, idle != 0l ? np : K, "idle quantum {idle}: the first tick prefilled {sch.prefill_tokens} of {np} tokens")
+                drain(m, sch, events)
+                streams |> emplace(toks_of(events, 1l))
+                delete events
+                delete sch
+            }
+            log_gen_texts(m, "idle quantum (chunked, then widened)", streams[1], streams[0])
+            t |> success(!empty(streams[0]) && ids_equal(streams[0], streams[1]), "the widened prefill emits the chunked prefill's stream")
+            var dsch <- create_scheduler(m)
+            t |> equal(dsch.chunk_tokens, chunk_defaults(m).chunk, "an unset chunk is the serving backend's ({dsch.chunk_tokens})")
+            t |> equal(dsch.idle_chunk_tokens, chunk_defaults(m).idle, "an unset idle size is the serving backend's ({dsch.idle_chunk_tokens})")
+            t |> equal(chunk_default(true), DEFAULT_CHUNK_TOKENS, "where a GPU prefills an unset chunk is one window")
+            t |> equal(chunk_default(false), CPU_CHUNK_TOKENS, "and the short one on the CPU")
+            delete dsch
+            // a stream decoding: the next prompt's chunk is the stall bound again
+            var sch <- create_scheduler(m, 2l, 4l, K)
+            var events : array<SchedEvent>
+            t |> success(submit(m, sch, make_req(2l, short, greedy, 64l, none)), "decoding stream queued")
+            scheduler_step(m, sch, events)
+            t |> equal(sch.prefill_tokens, long_length(short), "the short prompt prefilled in its first tick")
+            t |> success(submit(m, sch, make_req(3l, prompt, greedy, 6l, none)), "second stream queued beside it")
+            let before = sch.prefill_tokens
+            scheduler_step(m, sch, events)   // decodes 2 - the chunk is owed to the next tick
+            scheduler_step(m, sch, events)
+            t |> equal(sch.prefill_tokens - before, K, "beside a decoding stream the owed tick prefilled one chunk ({sch.prefill_tokens - before} tokens)")
+            drain(m, sch, events)
+            set_prefill_attn_mode(saved_mode)
+            delete events
+            delete sch
+            delete streams
+            delete prompt
+            delete short
+        }
+    }
+}
+
+// ===== the tick's order around a finishing stream, and admission behind a prefilling one =====
+
+//! A tick that finishes a stream at its length prefills and emits nothing for the waiting stream and keeps the finished one's slot, and the next tick reaps it into the poll surface and prefills one chunk
+def test_scheduler_finishing_tick(t : T?; m : Model) {
+    unsafe {
+        t |> run("a tick that finishes a stream ends before its prefill chunk and reaps the stream on the next tick (needs SmolLM2-135M)") @capture(& m)(t : T ?) {
+            var short <- encode(m, "Once upon a time", true, false)
+            var prompt <- encode(m, "The quick brown fox jumps over the lazy dog while the little robot watches from a small hill near the old village bakery", true, false)
+            let K = 8l
+            t |> success(long_length(short) <= K && long_length(prompt) > 2l * K, "the short prompt fits one chunk, the long one spans chunks ({length(short)} and {length(prompt)} tokens)")
+            var none : array<int64>
+            let greedy = SamplingParams()
+            var sch <- create_scheduler(m, 2l, 4l, K, [idle_chunk_tokens = 0l])
+            var events : array<SchedEvent>
+            t |> success(submit(m, sch, make_req(1l, short, greedy, 2l, none)), "a two-token stream queued")
+            scheduler_step(m, sch, events)   // admitted, prefilled whole, its first token sampled inline
+            t |> equal(sch.prefill_tokens, long_length(short), "the short prompt prefilled in its first tick")
+            t |> success(submit(m, sch, make_req(2l, prompt, greedy, 4l, none)), "a long prompt queued beside the decoding stream")
+            let before = sch.prefill_tokens
+            let more = scheduler_step(m, sch, events)   // admits 2, decodes 1 to its length - and ends there
+            t |> equal(finished_of(events, 1l).stream, 1l, "stream 1 finished on this tick")
+            t |> equal(finished_of(events, 1l).finish, "length", "at its length")
+            t |> equal(sch.prefill_tokens, before, "the finishing tick prefilled nothing for stream 2 ({sch.prefill_tokens - before} tokens)")
+            t |> success(empty(toks_of(events, 2l)), "and emitted nothing of stream 2")
+            t |> equal(sch.n_finished, 0l, "the finished stream is not reaped on the tick it finished")
+            t |> equal(n_active(sch), 2l, "it still holds its slot")
+            t |> success(more, "the step asks for another tick")
+            scheduler_step(m, sch, events)   // reaps 1, prefills one chunk of 2
+            t |> equal(sch.n_finished, 1l, "the next tick reaped it")
+            t |> equal(length(sch.recent_done), 1, "into the poll surface")
+            t |> equal(n_active(sch), 1l, "freeing its slot")
+            t |> equal(sch.prefill_tokens - before, K, "and prefilled one chunk of stream 2 ({sch.prefill_tokens - before} tokens)")
+            drain(m, sch, events)
+            t |> equal(finished_of(events, 2l).stream, 2l, "stream 2 ran to its end")
+            delete events
+            delete sch
+            delete prompt
+            delete short
+        }
+    }
+}
+
+//! A tick whose decode step emitted a token runs no prefill chunk, the next tick runs exactly one chunk with no decode, the two alternate until the prompt is done, and then every tick decodes
+def test_scheduler_decode_events_precede_chunk(t : T?; m : Model) {
+    unsafe {
+        t |> run("a tick whose decode step emitted a token ends before its prefill chunk; the next tick runs the chunk alone (needs SmolLM2-135M)") @capture(& m)(t : T ?) {
+            var short <- encode(m, "Once upon a time", true, false)
+            var prompt <- encode(m, "The quick brown fox jumps over the lazy dog while the little robot watches from a small hill near the old village bakery", true, false)
+            let K = 8l
+            t |> success(long_length(short) <= K && long_length(prompt) > 2l * K, "the short prompt fits one chunk, the long one spans chunks ({length(short)} and {length(prompt)} tokens)")
+            var none : array<int64>
+            let greedy = SamplingParams()
+            var sch <- create_scheduler(m, 2l, 4l, K, [idle_chunk_tokens = 0l])
+            var events : array<SchedEvent>
+            t |> success(submit(m, sch, make_req(1l, short, greedy, 8l, none)), "an eight-token stream queued")
+            scheduler_step(m, sch, events)   // admitted, prefilled whole, its first token sampled inline
+            t |> success(submit(m, sch, make_req(2l, prompt, greedy, 4l, none)), "a long prompt queued beside the decoding stream")
+            delete events
+            let before = sch.prefill_tokens
+            let steps = sch.decode_steps
+            scheduler_step(m, sch, events)   // admits stream 2, decodes stream 1 by one token - and ends there
+            t |> equal(long_length(toks_of(events, 1l)), 1l, "the tick emitted stream 1's token")
+            t |> equal(sch.decode_steps - steps, 1l, "one decode step ran")
+            t |> equal(sch.prefill_tokens, before, "the tick prefilled nothing for stream 2 ({sch.prefill_tokens - before} tokens)")
+            delete events
+            scheduler_step(m, sch, events)   // the owed chunk alone
+            t |> equal(sch.prefill_tokens - before, K, "the next tick prefilled one chunk of stream 2 ({sch.prefill_tokens - before} tokens)")
+            t |> equal(sch.decode_steps - steps, 1l, "and ran no decode step")
+            t |> success(empty(toks_of(events, 1l)), "so stream 1 emitted nothing on it")
+            delete events
+            scheduler_step(m, sch, events)   // decode again
+            t |> equal(long_length(toks_of(events, 1l)), 1l, "the tick after decodes stream 1 again")
+            t |> equal(sch.prefill_tokens - before, K, "and puts the next chunk off again")
+            var ticks = 0l
+            while (sch.prefill_tokens - before < long_length(prompt) && ticks < 64l) {   // the chunks and the decodes alternate until stream 2 is off its prompt
+                scheduler_step(m, sch, events)
+                ticks++
+            }
+            t |> success(ticks < 64l, "stream 2 left its prompt within the ticks ({ticks})")
+            let both = sch.decode_steps
+            scheduler_step(m, sch, events)
+            t |> equal(sch.decode_steps - both, 1l, "with no stream on its prompt a tick decodes - nothing is owed to the next one")
+            drain(m, sch, events)
+            t |> equal(finished_of(events, 1l).stream, 1l, "stream 1 ran to its end")
+            t |> equal(finished_of(events, 2l).stream, 2l, "stream 2 ran to its end")
+            delete events
+            delete sch
+            delete prompt
+            delete short
+        }
+    }
+}
+
+//! Admission beside a prefilling stream: nothing holds a request back while no checkpoint stop lies ahead of a prefilling
+//! stream (the wait for one is the Metal prefix-checkpoint cells'), the two prompts prefill as segments of the ticks'
+//! windows inside the quantum - the first stream's chunk whole, the second's rows as the quantum leaves room - and each
+//! stream reads its solo reference token for token.
+//! A short request queued behind a long prefilling one is admitted on the first tick, rides the quantum's windows within the prefill call bound, and both streams match their solo greedy references
+def test_scheduler_admission_beside_prefill(t : T?; m : Model) {
+    unsafe {
+        t |> run("a request is admitted beside a prefilling stream with no checkpoint ahead, and both read their solo references (needs SmolLM2-135M)") @capture(& m)(t : T ?) {
+            let prev_fused = get_fused_decode()
+            set_fused_decode(false)
+            var prompt <- encode(m, "The quick brown fox jumps over the lazy dog while the little robot watches from a small hill near the old village bakery and counts every bird that crosses the evening sky", true, false)
+            var short <- encode(m, "Once upon a time", true, false)
+            let K = 8l
+            let np = long_length(prompt)
+            t |> success(np > 3l * K && long_length(short) <= K, "the long prompt spans chunks, the short one fits one ({np} and {length(short)} tokens)")
+            var none : array<int64>
+            let greedy = SamplingParams()
+            var refs <- [ <- ref_generate(m, prompt, greedy, 4l, none), <- ref_generate(m, short, greedy, 4l, none)]
+            var sch <- create_scheduler(m, 2l, 4l, K, [idle_chunk_tokens = 0l])
+            var events : array<SchedEvent>
+            t |> success(submit(m, sch, make_req(1l, prompt, greedy, 4l, none)), "the long prompt queued")
+            t |> success(submit(m, sch, make_req(2l, short, greedy, 4l, none)), "the short one queued behind it")
+            scheduler_step(m, sch, events)
+            t |> equal(n_active(sch), 2l, "the first tick admits both: the first stream has no checkpoint stop ahead")
+            t |> equal(n_queued(sch), 0l, "the queue is empty")
+            t |> equal(sch.prefill_evals, 1l, "the first tick ran one prefill call")
+            t |> equal(sch.prefill_tokens, K, "the quantum went to the first stream's chunk whole")
+            drain(m, sch, events)
+            t |> equal(finished_of(events, 1l).finish, "length", "stream 1 ran to its length")
+            t |> equal(finished_of(events, 2l).finish, "length", "stream 2 ran to its length")
+            t |> success(sch.prefill_evals <= (np + K - 1l) / K + 1l, "the second prompt rode the first's windows or one of its own ({sch.prefill_evals} calls for {np} + {length(short)} tokens at K={K})")
+            var g1 <- toks_of(events, 1l)
+            var g2 <- toks_of(events, 2l)
+            to_log(LOG_INFO, "beside prefill A: {g1} | solo A: {refs[0].toks}\n")
+            to_log(LOG_INFO, "beside prefill B: {g2} | solo B: {refs[1].toks}\n")
+            t |> success(ids_equal(g1, refs[0].toks), "stream 1 matches its solo reference")
+            t |> success(ids_equal(g2, refs[1].toks), "stream 2 matches its solo reference")
+            set_fused_decode(prev_fused)
+            delete g1
+            delete g2
+            delete refs
+            delete events
+            delete sch
+            delete prompt
+            delete short
+        }
+    }
+}
+
+var private g_probe_prefill_rows : array<int64>   //! the row counts a declining prefill override was offered, in order
+
+[unused_argument(t, s, start_pos)]
+def private probe_prefill_declines(t : Model; var s : Session; npos, start_pos : int64) : bool {
+    g_probe_prefill_rows |> push(npos)
+    return false
+}
+
+//! A one-token chunk beside a longer one keeps eval's dispatch - the decode step, which offers no prefill override its row -
+//! while the longer chunk is offered as a prefill; both chunks' logits are their own eval's, bit for bit.
+//! `eval_segments` gives each segment its own eval's logits bit for bit, offering the prefill override only the longer chunk while the one-token chunk takes the decode step, with a forward_prefill control
+def test_eval_segments_one_token_chunk(t : T?; m : Model) {
+    unsafe {
+        t |> run("a one-token segment runs as eval does, the longer one as its own eval (needs SmolLM2-135M)") @capture(& m)(t : T ?) {
+            var prompt <- encode(m, "The quick brown fox jumps over the lazy dog", true, false)
+            var one <- [prompt[1]]
+            var ra <- make_run_state(m.config)
+            eval_(m, ra, prompt)
+            var rb <- make_run_state(m.config)
+            eval_(m, rb, one)
+            let probe = "test-declining-prefill"
+            register_prefill_override(probe, @@probe_prefill_declines)
+            let prefill0 = active_prefill_override()
+            select_prefill_override(probe)
+            g_probe_prefill_rows |> clear()
+            var sa <- make_run_state(m.config)
+            var sb <- make_run_state(m.config)
+            var sess <- [unsafe(addr(sa)), unsafe(addr(sb))]
+            var toks : array<array<int64>>
+            toks |> resize(2)
+            toks[0] := prompt
+            toks[1] := one
+            eval_segments(m, sess, toks)
+            t |> equal(sa.n_past, long_length(prompt), "the longer segment advanced its session")
+            t |> equal(sb.n_past, 1l, "the one-token segment advanced its session")
+            t |> equal(mismatch_exact(sa.logits, ra.logits), 0, "the longer segment's logits are its own eval's, bit for bit")
+            t |> equal(mismatch_exact(sb.logits, rb.logits), 0, "the one-token segment's logits are the decode step's, bit for bit")
+            t |> equal(g_probe_prefill_rows, [long_length(prompt)], "the override was offered the longer chunk alone: the one-token chunk took the decode step ({g_probe_prefill_rows})")
+            var cb <- make_run_state(m.config)
+            forward_prefill(m, cb, one, 1l, 0l)
+            t |> equal(g_probe_prefill_rows, [long_length(prompt), 1l], "control: the same token through the prefill body is offered to the override ({g_probe_prefill_rows})")
+            select_prefill_override(prefill0)
+            sess |> clear()   //! borrowed pointers: the sessions are deleted below
+            delete toks
+            delete cb
+            delete sa
+            delete sb
+            delete ra
+            delete rb
+            delete one
+            delete prompt
+        }
+    }
+}
+
+// ===== staggered admit, queue overflow, queued eviction, multi-stream token match =====
+
+//! Two-slot batching with staggered admit matches each stream's solo greedy reference, a full queue rejects submit, a queued eviction emits nothing, and no batch row pointer outlives its reaped stream
+def test_scheduler_batching(t : T?; m : Model) {
+    unsafe {
+        t |> run("staggered admit + queue overflow: every stream matches its solo reference (needs SmolLM2-135M)") @capture(& m)(t : T ?) {
+            // the batch worker mirrors the std decode path — pin the fused chain off so the solo
+            // generate() references share its numerics (test_batch_decode's contract)
+            let prev_fused = get_fused_decode()
+            set_fused_decode(false)
+            let greedy = SamplingParams()
+            var none : array<int64>
+            var pa <- encode(m, "Once upon a time", true, false)
+            var pb <- encode(m, "The little robot", true, false)
+            var pc <- encode(m, "In a small village", true, false)
+            var refs <- [ <- ref_generate(m, pa, greedy, 6l, none), <- ref_generate(m, pb, greedy, 6l, none),
+                         <- ref_generate(m, pc, greedy, 6l, none)]
+            var sch <- create_scheduler(m, 2l, 2l, 64l)
+            var events : array<SchedEvent>
+            t |> success(submit(m, sch, make_req(10l, pa, greedy, 6l, none)), "stream A queued")
+            t |> success(submit(m, sch, make_req(11l, pb, greedy, 6l, none)), "stream B queued")
+            // 3 ticks: A and B admit (cap 2) and start decoding; C arrives mid-run — staggered
+            for (_i in range(3)) {
+                scheduler_step(m, sch, events)
+            }
+            t |> equal(n_active(sch), 2l)
+            t |> success(submit(m, sch, make_req(12l, pc, greedy, 6l, none)), "stream C queued mid-run")
+            t |> success(submit(m, sch, make_req(13l, pa, greedy, 6l, none)), "stream D queued (fills the queue)")
+            t |> success(!submit(m, sch, make_req(14l, pb, greedy, 6l, none)), "queue full: submit rejected")
+            t |> success(evict(sch, 13l, events), "queued stream D evicted")
+            t |> equal(finished_of(events, 13l).finish, "evicted")
+            t |> equal(n_queued(sch), 1l)
+            drain(m, sch, events)
+            t |> success(empty(sch.batch_rows), "no row pointer outlives the step that reaped its batched stream (a validating heap collect between steps walks them)")
+            var ga <- toks_of(events, 10l)
+            var gb <- toks_of(events, 11l)
+            var gc <- toks_of(events, 12l)
+            to_log(LOG_INFO, "batched A: \"{text_of(pieces_of(events, 10l))}\" {ga} | solo A: \"{text_of(refs[0].pieces)}\" {refs[0].toks}\n")
+            to_log(LOG_INFO, "batched B: \"{text_of(pieces_of(events, 11l))}\" {gb} | solo B: \"{text_of(refs[1].pieces)}\" {refs[1].toks}\n")
+            to_log(LOG_INFO, "batched C: \"{text_of(pieces_of(events, 12l))}\" {gc} | solo C: \"{text_of(refs[2].pieces)}\" {refs[2].toks}\n")
+            t |> success(ids_equal(ga, refs[0].toks), "stream A (batched) matches its solo reference")
+            t |> success(ids_equal(gb, refs[1].toks), "stream B (batched) matches its solo reference")
+            t |> success(ids_equal(gc, refs[2].toks), "stream C (admitted after a slot freed) matches its solo reference")
+            t |> equal(finished_of(events, 12l).finish, "length")
+            t |> equal(length(toks_of(events, 13l)), 0)
+            t |> equal(sch.peak_active, 2l)
+            t |> equal(sch.n_evicted, 1l)
+            t |> equal(sch.n_finished, 3l)
+            t |> success(sch.sum_batch >= 2l * 2l, "decode steps actually batched (sum batch {sch.sum_batch})")
+            set_fused_decode(prev_fused)
+            delete ga
+            delete gb
+            delete gc
+            delete events
+            delete sch
+            delete refs
+            delete pa
+            delete pb
+            delete pc
+        }
+    }
+}
+
+// ===== paged serving + prefix cache: a repeat request attaches pages and skips their prefill =====
+
+//! A paged scheduler's repeat request attaches the donated pages up to np-1 tokens and emits the cold stream, a no-cache request attaches and donates nothing, and a stop-finished stream donates rows aligned with its close so a continuation attach equals cold
+def test_scheduler_prefix_cache(t : T?; m : Model) {   // nolint:STYLE038 — one cell: every assertion runs against the form's one load
+    unsafe {
+        t |> run("paged scheduler: repeat request attaches cached pages, identical stream (needs SmolLM2-135M)") @capture(& m)(t : T ?) {
+            // classic prefill: the warm run re-chunks the prompt (tail-only), and only classic is
+            // bit-exact under re-chunking — the same pin as the chunk-size arm above
+            let saved_mode = get_prefill_attn_mode()
+            set_prefill_attn_mode(AttnPrefillMode.classic)
+            var prompt <- encode(m, "Once upon a time in a small village near the mountains there lived a very curious little robot who loved counting stars", true, false)
+            let np = int64(length(prompt))
+            t |> success(np > 17l, "prompt spans multiple pages at P=16 ({np} tokens)")
+            var none : array<int64>
+            let greedy = SamplingParams()
+            var sch <- create_scheduler(m, 1l, 4l, 64l, 16l)   // paged, P=16, unbounded prefix cache
+            var events : array<SchedEvent>
+            t |> success(submit(m, sch, make_req(1l, prompt, greedy, 8l, none)), "cold stream queued")
+            drain(m, sch, events)
+            var cold <- toks_of(events, 1l)
+            t |> equal(finished_of(events, 1l).n_cached, 0l)
+            t |> success(prefix_held_groups(sch.prefix) > 0l, "the finished stream donated its pages")
+            t |> equal(sch.cached_tokens, 0l)
+            events |> clear()
+            t |> success(submit(m, sch, make_req(2l, prompt, greedy, 8l, none)), "warm stream queued")
+            drain(m, sch, events)
+            var warm <- toks_of(events, 2l)
+            let fin2 = finished_of(events, 2l)
+            t |> equal(fin2.n_cached, np - 1l)   // the whole pages shared and the rows of the next page copied, capped one token below np
+            t |> success(ids_equal(warm, cold), "warm stream identical to cold")
+            t |> equal(sch.cached_tokens, fin2.n_cached)
+            // idle scheduler: the only live page holds are the cache's
+            t |> equal(int64(length(sch.pool.free_groups)),
+                       sch.pool.capacity_groups - prefix_held_groups(sch.prefix))
+            t |> equal(fin2.n_drafted, 0l, "a plain stream's finish carries no draft count")
+
+            let held = prefix_held_groups(sch.prefix)
+            events |> clear()
+            var off <- make_req(3l, prompt, greedy, 8l, none)
+            off.no_cache = true
+            t |> success(submit(m, sch, off), "no-cache stream queued")
+            drain(m, sch, events)
+            var uncached <- toks_of(events, 3l)
+            t |> equal(finished_of(events, 3l).n_cached, 0l, "a no-cache request attaches nothing off a cache that holds its prompt")
+            t |> success(ids_equal(uncached, cold), "... and emits the cold stream ('{decode(m, uncached)}' against '{decode(m, cold)}')")
+            t |> equal(sch.cached_tokens, fin2.n_cached, "... and counts no cached token")
+            t |> equal(prefix_held_groups(sch.prefix), held, "... and donates no page")
+            t |> equal(int64(length(sch.pool.free_groups)), sch.pool.capacity_groups - held, "... and holds no page once reaped")
+            delete uncached
+            var sch0 <- create_scheduler(m, 1l, 4l, 64l, 16l)
+            events |> clear()
+            var lone <- make_req(4l, prompt, greedy, 8l, none)
+            lone.no_cache = true
+            t |> success(submit(m, sch0, lone), "no-cache stream queued on an empty cache")
+            drain(m, sch0, events)
+            t |> equal(prefix_held_groups(sch0.prefix), 0l, "control: a no-cache request leaves an empty cache empty, where the cold stream above donated")
+            delete sch0
+
+            // ===== stop-finished streams donate an ALIGNED history: continuation attach == cold.
+            // A "stop" finish must donate rows matching prompt + emitted + close exactly — the stop
+            // was sampled from the last emitted token's eval, so only the CLOSE tokens are pending.
+            // Re-evaling the last token would shift every row past the reply boundary against the
+            // page's token list, poisoning multi-turn continuation attaches.
+            var prompt3 <- encode(m, "The little robot climbed the old bakery roof to count the evening birds", true, false)
+            var ref3 <- ref_generate(m, prompt3, greedy, 8l, none)
+            var kstop = -1
+            for (k in range(1, length(ref3.toks))) {   // first token unique so far — a safe stop id
+                var seen = false
+                for (j in range(k)) {
+                    seen ||= ref3.toks[j] == ref3.toks[k]
+                }
+                if (!seen) {
+                    kstop = k
+                    break
+                }
+            }
+            if (kstop >= 1) {
+                var stops <- [ref3.toks[kstop]]
+                var close <- [100l, 200l]   // any valid ids: the donated history must include them
+                var sch2 <- create_scheduler(m, 1l, 4l, 64l, 16l)
+                events |> clear()
+                var req <- make_req(50l, prompt3, greedy, 8l, stops)
+                req.close_toks := close
+                t |> success(submit(m, sch2, req), "stop stream queued")
+                drain(m, sch2, events)
+                t |> equal(finished_of(events, 50l).finish, "stop")
+                var emitted <- toks_of(events, 50l)
+                t |> equal(length(emitted), kstop)
+                // continuation: the next turn's prompt replays prompt + reply + close, then diverges
+                var prompt4 : array<int64>
+                prompt4 |> reserve(length(prompt3) + length(emitted) + length(close) + 16)
+                prompt4 |> push_from(prompt3, emitted, close)
+                for (i in range64(16l)) {
+                    prompt4 |> push(500l + i)
+                }
+                events |> clear()
+                t |> success(submit(m, sch2, make_req(51l, prompt4, greedy, 6l, none)), "warm continuation queued")
+                drain(m, sch2, events)
+                var warm4 <- toks_of(events, 51l)
+                let fin4 = finished_of(events, 51l)
+                t |> success(fin4.n_cached > int64(length(prompt3)),
+                    "continuation attached past the reply boundary (cached {fin4.n_cached})")
+                // cold reference: the same continuation with no cache
+                var sch3 <- create_scheduler(m, 1l, 4l, 64l, 16l)
+                events |> clear()
+                t |> success(submit(m, sch3, make_req(52l, prompt4, greedy, 6l, none)), "cold continuation queued")
+                drain(m, sch3, events)
+                var cold4 <- toks_of(events, 52l)
+                t |> success(ids_equal(warm4, cold4), "continuation attach bit-exact vs cold - donated rows aligned")
+                delete cold4
+                delete sch3
+                delete warm4
+                delete prompt4
+                delete emitted
+                delete sch2
+                delete close
+                delete stops
+            } else {
+                t |> success(true, "no unique stop candidate in 8 greedy tokens - continuation arm skipped")
+            }
+            delete ref3
+            delete prompt3
+            set_prefill_attn_mode(saved_mode)
+            delete cold
+            delete warm
+            delete events
+            delete sch
+            delete prompt
+        }
+    }
+}
+
+// ===== active eviction mid-run + the context-exhaustion length pre-check =====
+
+//! Evicting one of two decoding streams mid-run freezes its tokens and leaves the survivor equal to its solo reference, and a budget past the capped context finishes length at seq_len minus prompt plus one, `m`'s context cut to 64 for it
+def scheduler_evict_and_context_length_cell(t : T?; var m : Model) {
+    with_ctx_cut(m, 64l) {
+        unsafe {
+            t |> run("evict mid-run leaves the survivor exact; context exhaustion finishes 'length' (needs SmolLM2-135M)") @capture(& m)(t : T ?) {
+                let prev_fused = get_fused_decode()
+                set_fused_decode(false)
+                let greedy = SamplingParams()
+                var none : array<int64>
+                var pa <- encode(m, "Once upon a time", true, false)
+                var pb <- encode(m, "The little robot", true, false)
+                var ref_a <- ref_generate(m, pa, greedy, 8l, none)
+                var sch <- create_scheduler(m, 2l, 4l, 64l)
+                var events : array<SchedEvent>
+                t |> success(submit(m, sch, make_req(20l, pa, greedy, 8l, none)), "survivor queued")
+                t |> success(submit(m, sch, make_req(21l, pb, greedy, 8l, none)), "victim queued")
+                for (_i in range(4)) {   // both prefilled + a few decode steps at B=2
+                    scheduler_step(m, sch, events)
+                }
+                let b_before = length(toks_of(events, 21l))
+                t |> success(b_before > 0, "victim generated before eviction")
+                t |> success(evict(sch, 21l, events), "victim evicted mid-run")
+                t |> equal(finished_of(events, 21l).finish, "evicted")
+                drain(m, sch, events)
+                t |> equal(length(toks_of(events, 21l)), b_before)
+                var ga <- toks_of(events, 20l)
+                to_log(LOG_INFO, "survivor: \"{text_of(pieces_of(events, 20l))}\" {ga} | solo: \"{text_of(ref_a.pieces)}\" {ref_a.toks}\n")
+                t |> success(ids_equal(ga, ref_a.toks), "survivor stream unaffected by the eviction")
+                t |> equal(finished_of(events, 20l).finish, "length")
+                // context exhaustion: budget far beyond the capped seq_len — the decode pre-check must
+                // finish "length" (n_gen = seq_len - n_prompt + 1) instead of reaching the engine panic
+                events |> clear()
+                t |> success(submit(m, sch, make_req(22l, pa, greedy, 512l, none)), "exhaustion stream queued")
+                drain(m, sch, events)
+                let fin = finished_of(events, 22l)
+                t |> equal(fin.finish, "length")
+                t |> equal(fin.n_gen, m.config.seq_len - int64(length(pa)) + 1l)
+                set_fused_decode(prev_fused)
+                delete ga
+                delete events
+                delete sch
+                delete ref_a
+                delete pa
+                delete pb
+            }
+        }
+    }
+}
+
+
+// ===== scheduler mtp: greedy self-spec ticks are output-invariant vs the plain scheduler =====
+
+//! On Qwen3.5-0.8B-MTP with bit-exact kernels pinned, MTP self-speculative greedy, seeded top-k 1 and penalized-greedy streams equal the plain scheduler's tokens, draft and accept, and count per-row ticks, `m`'s context cut to 512 for it
+def scheduler_mtp_cell(t : T?; var m : Model) {   // nolint:STYLE038 — one cell: the greedy and the sampled leg run against one model inside the same jobque scope
+    with_ctx_cut(m, 512l) {
+        unsafe {
+            t |> run("scheduler mtp: self-spec greedy and sampled streams == plain scheduler, chunked prefill + paged (needs Qwen3.5-0.8B-MTP)") @capture(& m)(t : T ?) {
+                // pin the bit-exact kernels (same reasoning as test_mtp): the spec arm's verify rides the
+                // BATCH kernels while the plain arm decodes per-token — near-tie flips are not bugs, so the
+                // token-exact gate must not ride them. Both arms run paged/f16 so only spec mechanics differ.
+                let pins = pin_spec_kernels()
+                let prev_spec = pins.spec
+                var prompt <- encode(m, "Count from one to twenty: one, two, three,", true, false)
+                var none : array<int64>
+                let greedy = SamplingParams()
+                // reference: the PLAIN scheduler (mtp off), paged, 8-token prefill quanta
+                var ref_toks <- plain_reply(m, prompt, 24l, 1l)
+                // spec: mtp on — the chunked prefill crosses the warm's seam rows, and the paged
+                // sessions ride the pool's draft-block slab (the server default rail)
+                set_mtp_spec(true)
+                var sch <- create_scheduler(m, 1l, 4l, 8l, 16l, 0l, KVDtype.f16, true, 0l)
+                var events : array<SchedEvent>
+                t |> success(submit(m, sch, make_req(2l, prompt, greedy, 24l, none)), "spec stream queued")
+                let census0 = batch_step_census()
+                drain(m, sch, events)
+                let census1 = batch_step_census()
+                set_mtp_spec(prev_spec)
+                //! the planar carrier has no joint-verify seat: every speculative tick steps its stream alone, and the census says so - the batched row's refusal reads it
+                t |> success(census1.per_row - census0.per_row > 0l, "a speculative tick no joint verify carried counts as per-row ({census1.per_row - census0.per_row} per-row ticks)")
+                t |> equal(census1.device, census0.device, "... and never as a device step")
+                var got <- toks_of(events, 2l)
+                log_gen_texts(m, "greedy (CPU = plain, GPU = spec)", ref_toks, got)
+                t |> success(ids_equal(got, ref_toks), "spec stream tokens == plain scheduler")
+                t |> success(sch.mtp_drafted > 0l, "the spec tick actually drafted ({sch.mtp_drafted} drafts)")
+                t |> success(sch.mtp_accepted > 0l, "some drafts accepted ({sch.mtp_accepted} of {sch.mtp_drafted})")
+                t |> equal(finished_of(events, 2l).n_gen, 24l)
+                t |> equal(finished_of(events, 2l).n_drafted, sch.mtp_drafted, "the lone stream's finish carries the scheduler's whole draft count")
+                t |> equal(finished_of(events, 2l).n_accepted, sch.mtp_accepted, "... and its accepted count")
+                //! top-k 1 makes every draw the penalized argmax, so the seeded sampled stream is deterministic and must equal the plain scheduler's
+                let sp = SamplingParams(temp = 0.7, top_k = 1l, penalty = 1.1)
+                var ref_s <- plain_reply(m, prompt, 24l, 3l, 8l, sp, 4242)
+                set_mtp_spec(true)
+                var sch2 <- create_scheduler(m, 1l, 4l, 8l, 16l, 0l, KVDtype.f16, true, 0l)
+                var events2 : array<SchedEvent>
+                t |> success(submit(m, sch2, make_req(4l, prompt, sp, 24l, none, 4242)), "spec sampled stream queued")
+                drain(m, sch2, events2)
+                set_mtp_spec(prev_spec)
+                var got_s <- toks_of(events2, 4l)
+                log_gen_texts(m, "sampled (CPU = plain, GPU = spec)", ref_s, got_s)
+                t |> success(ids_equal(got_s, ref_s), "sampled spec stream tokens == plain scheduler (temp 0.7, top-k 1, penalty 1.1)")
+                t |> success(sch2.mtp_drafted > 0l, "the sampled tick drafted ({sch2.mtp_drafted} drafts)")
+                t |> success(sch2.mtp_accepted > 0l, "the sampled walk accepted drafts ({sch2.mtp_accepted} of {sch2.mtp_drafted})")
+                t |> equal(finished_of(events2, 4l).n_gen, 24l)
+                // penalized greedy: the plain scheduler picks the PENALIZED argmax every step, so the
+                // spec tick must draw its verify rows through the sampler too - a raw-argmax walk would
+                // accept drafts the penalty rejects
+                let gp = SamplingParams(penalty = 1.3)
+                var ref_p <- plain_reply(m, prompt, 24l, 5l, 8l, gp)
+                set_mtp_spec(true)
+                var sch4 <- create_scheduler(m, 1l, 4l, 8l, 16l, 0l, KVDtype.f16, true, 0l)
+                var events4 : array<SchedEvent>
+                t |> success(submit(m, sch4, make_req(6l, prompt, gp, 24l, none)), "spec penalized-greedy stream queued")
+                drain(m, sch4, events4)
+                set_mtp_spec(prev_spec)
+                var got_p <- toks_of(events4, 6l)
+                log_gen_texts(m, "penalized greedy (CPU = plain, GPU = spec)", ref_p, got_p)
+                t |> success(ids_equal(got_p, ref_p), "penalized-greedy spec stream tokens == plain scheduler (penalty 1.3, temp 0)")
+                t |> success(sch4.mtp_drafted > 0l, "the penalized-greedy tick drafted ({sch4.mtp_drafted} drafts)")
+                delete got_p
+                delete ref_p
+                delete events4
+                delete sch4
+                delete got_s
+                delete ref_s
+                delete events2
+                delete sch2
+                delete got
+                delete events
+                delete sch
+                delete ref_toks
+                delete prompt
+                restore_spec_pins(pins)
+            }
+        }
+    }
+}
+
+//! the pins the speculative scheduler cells run under: the bit-exact kernels, so the spec arm's batch verify and the plain arm's
+//! per-token decode cannot part on a near-tie; put back through `restore_spec_pins`
+struct SpecPins {
+    attn : AttnPrefillMode
+    act : bool
+    dn : DnPrefillMode
+    spec : bool
+}
+
+def private pin_spec_kernels() : SpecPins {
+    let pins = SpecPins(attn = get_prefill_attn_mode(), act = get_act_vec(), dn = get_deltanet_prefill_mode(), spec = get_mtp_spec())
+    set_prefill_attn_mode(AttnPrefillMode.classic)
+    set_act_vec(false)
+    set_deltanet_prefill_mode(DnPrefillMode.recurrent)
+    return pins
+}
+
+def private restore_spec_pins(pins : SpecPins) {
+    set_prefill_attn_mode(pins.attn)
+    set_act_vec(pins.act)
+    set_deltanet_prefill_mode(pins.dn)
+    set_mtp_spec(pins.spec)
+}
+
+//! a fresh plain paged scheduler's reply of `n` tokens to `prompt` under `params` (no cache: a new scheduler each call), its
+//! prefill in windows of `chunk` tokens - under the recurrent (per-token) pin a row's state never depends on the windowing
+def private plain_reply(m : Model; prompt : array<int64>; n : int64; id : int64; chunk : int64 = 8l; params : SamplingParams = SamplingParams(); seed : int = 0) : array<int64> {
+    var sch <- create_scheduler(m, 1l, 4l, chunk, 16l, [idle_chunk_tokens = 0l])
+    var events : array<SchedEvent>
+    var none : array<int64>
+    submit(m, sch, make_req(id, prompt, params, n, none, seed))
+    drain(m, sch, events)
+    var got <- toks_of(events, id)
+    delete events
+    delete sch
+    return <- got
+}
+
+//! `sch` stepped until idle, stream `id`'s rounds counted: the drafts its rounds owe - every speculative tick's round drafts
+//! `depth` rows under the reply's remaining length (`round_depth_cap`), a tick with no round none
+def private drain_owed_drafts(m : Model; var sch : Scheduler; var events : array<SchedEvent>; id, depth, max_new : int64) : int64 {
+    var owed = 0l
+    var steps = 0
+    while (true) {
+        var n_gen = 0l
+        for (e in events) {
+            n_gen += e.stream == id && e.kind == SchedEventKind.piece ? 1l : 0l
+        }
+        let ticks0 = sch.decode_steps
+        let more = scheduler_step(m, sch, events)
+        if (sch.decode_steps > ticks0) {
+            owed += clamp(max_new - n_gen, 1l, depth)
+        }
+        break if (!more)
+        steps++
+        if (steps > 4096) {
+            panic("test_scheduler: the scheduler did not go idle in 4096 steps")
+        }
+    }
+    return owed
+}
+
+//! a speculating stream's run: its tokens, the drafts its rounds made, the ticks they took and the rounds that finished on a stop
+//! draft
+struct SpecRun {
+    toks : array<int64>
+    drafted : int64
+    ticks : int64
+    stop_rows : int64
+}
+
+//! one request through a fresh speculating scheduler at depth `depth` (the knob pinned for the run, put back), every round's
+//! draft count asserted to be the depth's under the length cap
+def private spec_run(t : T?; m : Model; var req : PendingReq; depth : int64; tag : string) : SpecRun {
+    let pin = mtp_depth_pin()
+    set_mtp_depth(depth)
+    var sch <- create_scheduler(m, 1l, 4l, 8l, 16l, 0l, KVDtype.f16, true, 0l)
+    var events : array<SchedEvent>
+    let id = req.id
+    let max_new = req.max_new
+    submit(m, sch, req)
+    let owed = drain_owed_drafts(m, sch, events, id, depth, max_new)
+    t |> equal(sch.mtp_drafted, owed, "{tag}: every round drafted depth {depth} under the length cap ({sch.mtp_drafted} drafts over {sch.decode_steps} ticks)")
+    var run <- SpecRun(toks <- toks_of(events, id), drafted = sch.mtp_drafted, ticks = sch.decode_steps, stop_rows = sch.mtp_stop_rows)
+    delete events
+    delete sch
+    restore_mtp_depth(pin)
+    return <- run
+}
+
+def private next_turn_prompt(prompt, reply, close : array<int64>) : array<int64> {
+    var p2 := prompt
+    p2 |> reserve(length(prompt) + length(reply) + length(close) + 4)
+    p2 |> push_from(reply, close)
+    for (i in range64(4l)) {
+        p2 |> push(prompt[i])
+    }
+    return <- p2
+}
+
+//! The exact compare across window shapes (a 4-row tail off the attached rows against 8-row windows from position 0, a verify's
+//! rows against one-row steps) holds on the CPU forms `pin_spec_kernels` pins: the recurrent state steps a row at a time whatever
+//! the window, the classic attention and the q8 GEMM compute each row's dots in one order at every row count under the 32-row
+//! bf16 tile, which no window here reaches - so the two sides compute bit-identical logits and a near-tie lands alike.
+//! `want_cached` is the rows turn 2 attaches, -1 for the prompt, the reply and the close whole.
+def private check_next_turn(t : T?; m : Model; var sch : Scheduler; id : int64; prompt, reply, close : array<int64>; tag : string; want_cached : int64 = -1l) {
+    var p2 <- next_turn_prompt(prompt, reply, close)
+    var events : array<SchedEvent>
+    var none : array<int64>
+    submit(m, sch, make_req(id, p2, SamplingParams(), 8l, none))
+    drain(m, sch, events)
+    let fin = finished_of(events, id)
+    let whole = long_length(prompt) + long_length(reply) + long_length(close)
+    let want = want_cached < 0l ? whole : want_cached
+    t |> equal(fin.n_cached, want, "{tag}: turn 2 attaches {want} rows (the prompt, the reply and the close are {whole})")
+    var got <- toks_of(events, id)
+    var ref <- plain_reply(m, p2, 8l, id + 1000l)
+    log_gen_texts(m, "{tag}: turn 2 (CPU = plain, GPU = spec)", ref, got)
+    t |> success(ids_equal(got, ref), "{tag}: turn 2 reads the plain scheduler's turn 2 off the attached rows")
+    delete ref
+    delete got
+    delete events
+    delete p2
+}
+
+//! A stop the model writes mid-reply that is not the template's close (`<|im_end|>` and a newline as `close_toks`): where the
+//! verify evaled the stop as an accepted draft its row stands, so the close is not evaled and the finished turn leaves no
+//! checkpoint - turn 2 on the prompt, the reply and the close attaches nothing; where the stop was sampled the close evals
+//! whole and turn 2 attaches it. Either way turn 2 reads the plain scheduler's. A fresh scheduler a cut: the cuts' turn-2
+//! prompts share openings, and an earlier cut's checkpoint would stand under a later cut's turn 2.
+def private non_close_stop_cuts(t : T?; m : Model; prompt, ref : array<int64>) {
+    var close <- [special_id(m, "<|im_end|>")]
+    var nl <- encode(m, "\n", false, false)
+    close |> push_from(nl)
+    t |> success(close[0] >= 0l && length(close) == 2, "the template's close is two tokens ({close})")
+    var drafted_stops = 0l
+    var id = 200l
+    for (cut in [2l, 4l, 8l, 10l]) {
+        var sch <- create_scheduler(m, 1l, 4l, 8l, 16l, 0l, KVDtype.f16, true, 0l)
+        let stop = ref[cut]
+        var stops <- [stop]
+        var req <- make_req(id, prompt, SamplingParams(), 24l, stops)
+        req.close_toks := close
+        var events : array<SchedEvent>
+        let rows0 = sch.mtp_stop_rows
+        submit(m, sch, req)
+        drain(m, sch, events)
+        t |> equal(finished_of(events, id).finish, "stop", "non-close cut {cut}: the stream finishes on the stop")
+        var got <- toks_of(events, id)
+        var want <- [for (i in range64(cut)); ref[i]]
+        t |> success(ids_equal(got, want), "non-close cut {cut}: the tokens before the stop are the plain reply's")
+        let stood = sch.mtp_stop_rows > rows0
+        drafted_stops += stood ? 1l : 0l
+        let tag = "non-close cut {cut} ({stood ? "the stop's row stands" : "the stop sampled"})"
+        check_next_turn(t, m, sch, id + 1l, prompt, got, close, tag, stood ? 0l : -1l)
+        delete want
+        delete got
+        delete events
+        delete stops
+        delete sch
+        id += 2l
+    }
+    t |> success(drafted_stops > 0l, "a non-close stop arrived as an accepted draft on some cut ({drafted_stops} of 4)")
+    delete nl
+    delete close
+}
+
+//! Depth-2 MTP streams ended by a stop at four cuts emit the plain reply before it and turn 2 attaches the finished-turn checkpoint and reads the plain turn 2, including non-close stops; stop-row and draft-rate controls hold
+def test_scheduler_mtp_stop_close(t : T?; m : Model) {
+    unsafe {
+        t |> run("scheduler mtp: a stream finished on a stop the verify evaled leaves the finished-turn checkpoint, the next turn attaches it whole (needs Qwen3.5-0.8B-MTP)") @capture(& m)(t : T ?) {
+            let pins = pin_spec_kernels()
+            let depth = mtp_depth_pin()
+            set_mtp_depth(2l)
+            var prompt <- encode(m, "Count from one to twenty: one, two, three,", true, false)
+            var ref <- plain_reply(m, prompt, 24l, 1l)
+            set_mtp_spec(true)
+            var sch <- create_scheduler(m, 1l, 4l, 8l, 16l, 0l, KVDtype.f16, true, 0l)
+            var id = 10l
+            for (cut in [2l, 4l, 8l, 10l]) {
+                //! even cuts under 12 put the stop on a number word a depth-2 tick drafts (two drafts, then a sample); a comma stop ends at the first comma
+                let stop = ref[cut]
+                var stops <- [stop]
+                var close <- [stop, ref[0]]
+                var req <- make_req(id, prompt, SamplingParams(), 24l, stops)
+                req.close_toks := close
+                var events : array<SchedEvent>
+                submit(m, sch, req)
+                let drafted0 = sch.mtp_drafted
+                let owed = drain_owed_drafts(m, sch, events, id, 2l, 24l)
+                let fin = finished_of(events, id)
+                t |> equal(fin.finish, "stop", "cut {cut}: the stream finishes on the stop")
+                t |> equal(sch.mtp_drafted - drafted0, owed, "cut {cut}: every round drafted depth 2's two rows ({sch.mtp_drafted - drafted0} drafts)")
+                var got <- toks_of(events, id)
+                var want <- [for (i in range64(cut)); ref[i]]
+                t |> success(find_index(want, stop) < 0, "cut {cut}: the stop token is new to the reply")
+                log_gen_texts(m, "cut {cut} (CPU = plain, GPU = spec)", want, got)
+                t |> success(ids_equal(got, want), "cut {cut}: the tokens before the stop are the plain reply's")
+                to_log(LOG_INFO, "cut {cut}: {sch.mtp_drafted} drafted, {sch.mtp_accepted} accepted, {sch.mtp_stop_rows} stops on a draft so far\n")
+                check_next_turn(t, m, sch, id + 1l, prompt, got, close, "cut {cut}")
+                delete want
+                delete got
+                delete events
+                delete close
+                delete stops
+                id += 2l
+            }
+            t |> success(sch.mtp_stop_rows > 0l, "a stop arrived as an accepted draft on some cut ({sch.mtp_stop_rows} of 4): its row stood in the session")
+            non_close_stop_cuts(t, m, prompt, ref)
+            //! the stop counter's control: the same stream with no stop ids finishes on its length, no round on a stop draft
+            var none : array<int64>
+            var nostop <- spec_run(t, m, make_req(100l, prompt, SamplingParams(), 12l, none), 2l, "no stop ids")
+            t |> equal(nostop.stop_rows, 0l, "control: with no stop ids no round finishes on a stop draft")
+            //! the draft-rate floor's control: depth 1 drafts one row a tick, depth 2 more
+            var stops10 <- [ref[10]]
+            var d1 <- spec_run(t, m, make_req(101l, prompt, SamplingParams(), 24l, stops10), 1l, "depth 1 control")
+            t |> equal(d1.drafted, d1.ticks, "depth 1 control: one draft a tick ({d1.drafted} over {d1.ticks})")
+            var d2 <- spec_run(t, m, make_req(102l, prompt, SamplingParams(), 24l, stops10), 2l, "depth 2")
+            t |> success(d2.drafted * d1.ticks > d1.drafted * d2.ticks, "depth 2 drafts more a tick than depth 1 ({d2.drafted}/{d2.ticks} against {d1.drafted}/{d1.ticks})")
+            delete d2
+            delete d1
+            delete stops10
+            delete nostop
+            delete sch
+            delete ref
+            delete prompt
+            restore_mtp_depth(depth)
+            restore_spec_pins(pins)
+        }
+    }
+}
+
+//! one depth-3 speculating stream capped at `max_new` tokens on a fresh scheduler: it finishes on its length reading the
+//! plain reply, every round drafting the depth under the reply's remaining length (`drain_owed_drafts`), and turn 2 attaches
+//! the prompt and the reply whole off the finished-turn checkpoint
+def private length_cap_leg(t : T?; m : Model; prompt, ref : array<int64>; max_new, id : int64) : SpecRun {
+    var sch <- create_scheduler(m, 1l, 4l, 8l, 16l, 0l, KVDtype.f16, true, 0l)
+    var none : array<int64>
+    var events : array<SchedEvent>
+    submit(m, sch, make_req(id, prompt, SamplingParams(), max_new, none))
+    let owed = drain_owed_drafts(m, sch, events, id, 3l, max_new)
+    let fin = finished_of(events, id)
+    t |> equal(fin.finish, "length", "cap {max_new}: the stream finishes on its length")
+    t |> equal(fin.n_gen, max_new, "cap {max_new}: {max_new} tokens")
+    var got <- toks_of(events, id)
+    var want <- [for (i in range64(max_new)); ref[i]]
+    log_gen_texts(m, "length cap {max_new} (CPU = plain, GPU = spec)", want, got)
+    t |> success(ids_equal(got, want), "cap {max_new}: the capped reply is the plain reply's")
+    t |> equal(sch.mtp_drafted, owed, "cap {max_new}: every round drafted depth 3's rows under the length cap, none past it ({sch.mtp_drafted} drafts over {sch.decode_steps} ticks, {sch.mtp_accepted} accepted)")
+    check_next_turn(t, m, sch, id + 1l, prompt, want, none, "length cap {max_new}")
+    var run <- SpecRun(toks <- got, drafted = sch.mtp_drafted, ticks = sch.decode_steps, stop_rows = sch.mtp_stop_rows)
+    delete want
+    delete events
+    delete sch
+    return <- run
+}
+
+//! A depth-3 MTP stream capped at 2 or 7 tokens drafts no row past the cap, emits the plain reply, and its next turn attaches prompt and reply whole; depth 3 drafts more per tick than depth 1
+def test_scheduler_mtp_length_cap(t : T?; m : Model) {
+    unsafe {
+        t |> run("scheduler mtp: a deep round drafts no row past the reply's length cap, the finished turn attaches whole (needs Qwen3.5-0.8B-MTP)") @capture(& m)(t : T ?) {
+            let pins = pin_spec_kernels()
+            let depth = mtp_depth_pin()
+            set_mtp_depth(3l)
+            var prompt <- encode(m, "Count from one to twenty: one, two, three,", true, false)
+            var ref <- plain_reply(m, prompt, 7l, 1l)
+            set_mtp_spec(true)
+            //! two tokens: the first round's one row left past the prefill's token is all it drafts - an uncapped depth-3 round
+            //! accepts rows past the reply's end and the finished turn leaves no checkpoint
+            var short <- length_cap_leg(t, m, prompt, ref, 2l, 10l)
+            delete short
+            var capped <- length_cap_leg(t, m, prompt, ref, 7l, 12l)
+            //! the draft-rate floor's control: depth 1 drafts one row a tick, depth 3 more
+            var none : array<int64>
+            var d1 <- spec_run(t, m, make_req(100l, prompt, SamplingParams(), 7l, none), 1l, "depth 1 control")
+            t |> equal(d1.drafted, d1.ticks, "depth 1 control: one draft a tick ({d1.drafted} over {d1.ticks})")
+            t |> success(capped.drafted * d1.ticks > d1.drafted * capped.ticks, "depth 3 drafts more a tick than depth 1 ({capped.drafted}/{capped.ticks} against {d1.drafted}/{d1.ticks})")
+            delete d1
+            delete capped
+            delete ref
+            delete prompt
+            restore_mtp_depth(depth)
+            restore_spec_pins(pins)
+        }
+    }
+}
+
+//! the four stops' prompt: a count, so every next token is the prompt's own sequence - the exact compares put a capture plus a
+//! 12-row tail against one fresh window of the whole prompt, and a bf16 tile box rounds a window of 32 rows or more apart from
+//! a shorter one, so only a continuation no near-tie reaches holds them token for token on every box
+def counting_prompt(m : Model; numbers : int) : array<int64> {
+    let text = build_string() $(var w) {
+        w |> write("Count from 1 to 200:")
+        for (i in range(1, numbers + 1)) {
+            w |> write(" {i},")
+        }
+    }
+    return <- encode(m, text, true, false)
+}
+
+//! the kind each checkpoint stands as after the window, by its token count: the head and the system opening are shared
+//! openings; the stable stop (the request's own opening, `ckpt_at_tail`), the message end and the finished turn are tails
+def private check_capture_kinds(t : T?; sch : Scheduler; stops : array<int64>; tag : string) {
+    var seen = 0
+    for (ps in sch.prefix.states) {
+        let n = long_length(ps.tokens)
+        let at = find_index(stops, n)
+        let want = at == 0 || at == 1 ? PrefixStateKind.opening : PrefixStateKind.tail
+        let what = at < 0 ? "the finished turn" : "stop {n}"
+        t |> success(ps.kind == want, "{tag}: {what} stands as {want == PrefixStateKind.opening ? "an opening" : "a tail"} (reads {ps.kind == PrefixStateKind.opening ? "opening" : "tail"})")
+        seen += at >= 0 ? 1 : 0
+    }
+    t |> equal(seen, length(stops), "{tag}: every stop stands as a checkpoint")
+}
+
+//! the recurrent state, conv history and n-gram side input a leg's checkpoint at stop `at` holds, copied out of the prefix cache
+struct StopState {
+    state : array<float>
+    conv : array<float>
+    ple_hist : array<float>
+    ple_prev : array<int64>
+}
+
+def private stop_state(sch : Scheduler; at : int64) : StopState {
+    for (ps in sch.prefix.states) {
+        if (long_length(ps.tokens) == at) {
+            return <- StopState(state := ps.snap.state, conv := ps.snap.conv, ple_hist := ps.snap.ple_hist, ple_prev := ps.snap.ple_prev)
+        }
+    }
+    return <- StopState()
+}
+
+//! The server's four stops on one request prefilled in windows of `chunk` rows: with `chunk` past the prompt every stop rides
+//! the one window; with `chunk` at a stop's row the window ends ON that stop - the window's end files it, not a capture - and
+//! the other stops ride their windows. Four checkpoints and the finished turn's stand, each of its kind, the window's reply is
+//! an uncached scheduler's, and a prompt sharing each interior stop's opening attaches that checkpoint whole and continues as an
+//! uncached one-window prefill does. Answers the states the first two stops' checkpoints hold.
+def capture_stops_leg(t : T?; m : Model; prompt, stops : array<int64>; chunk : int64; tag : string) : array<StopState> {
+    let np = long_length(prompt)
+    var sch <- create_scheduler(m, 1l, 4l, chunk, 16l, [idle_chunk_tokens = 0l])
+    var none : array<int64>
+    var req <- make_req(1l, prompt, SamplingParams(), 6l, none)
+    req.system_head_at = stops[0]
+    req.system_at = stops[1]
+    req.stable_at = stops[2]
+    req.messages_end_at = stops[3]
+    var events : array<SchedEvent>
+    submit(m, sch, req)
+    let evals0 = sch.prefill_evals
+    drain(m, sch, events)
+    let windows = (np + chunk - 1l) / chunk
+    t |> equal(sch.prefill_evals - evals0, windows, "{tag}: the prompt prefilled in {windows} window(s) of {chunk} rows")
+    t |> equal(long_length(sch.prefix.states), 5l, "{tag}: four stops captured and the finished turn kept ({length(sch.prefix.states)} checkpoints)")
+    check_capture_kinds(t, sch, stops, tag)
+    var held <- [stop_state(sch, stops[0]), stop_state(sch, stops[1])]
+    var first <- toks_of(events, 1l)
+    var want1 <- plain_reply(m, prompt, 6l, 101l, 1024l)
+    log_gen_texts(m, "{tag}: the window's own reply (CPU = fresh, GPU = captured)", want1, first)
+    t |> success(ids_equal(first, want1), "{tag}: the window's own reply is the fresh prefill's")
+    var id = 2l
+    for (at in stops) {
+        continue if (at == np - 1l)
+        var p2 <- [for (i in range64(at + 12l)); i < at ? prompt[i] : prompt[np - 12l + i - at]]
+        events |> clear()
+        submit(m, sch, make_req(id, p2, SamplingParams(), 6l, none))
+        drain(m, sch, events)
+        let fin = finished_of(events, id)
+        t |> equal(fin.n_cached, at, "{tag}: stop {at}: the checkpoint attaches the shared opening whole")
+        var got <- toks_of(events, id)
+        var want <- plain_reply(m, p2, 6l, id + 100l, 1024l)
+        log_gen_texts(m, "{tag}: stop {at} (CPU = fresh, GPU = attached)", want, got)
+        t |> success(ids_equal(got, want), "{tag}: stop {at}: the continuation off the checkpoint is the fresh prefill's")
+        delete want
+        delete got
+        delete p2
+        id++
+    }
+    delete want1
+    delete first
+    delete events
+    delete sch
+    return <- held
+}
+
+//! Under recurrent and chunked deltanet prefill, four checkpoint stops captured inside one window stand with the right kinds, attach and continue as a fresh prefill does, and the captured state equals a window ending there bit for bit, `m`'s context cut to 1024 for it
+def scheduler_capture_stops_cell(t : T?; var m : Model) {
+    with_ctx_cut(m, 1024l) {
+        unsafe {
+            t |> run("recurrent prefill: three checkpoint stops ride ONE window, each attaches and continues as a fresh prefill does (needs Qwen3.5-0.8B-MTP)") @capture(& m)(t : T ?) {
+                let pins = pin_spec_kernels()
+                var prompt <- counting_prompt(m, 120)
+                let np = long_length(prompt)
+                t |> success(np > 220l, "the prompt holds every stop with room past the last ({np} tokens)")
+                let stops <- [48l, 96l, 160l, np - 1l]
+                //! the per-token scan steps every row alone; the chunked scan ends a scan chunk at each capture's row and copies the
+                //! taps' history there (`dn_capture_rows`)
+                for (mode in [DnPrefillMode.recurrent, DnPrefillMode.chunked]) {
+                    set_deltanet_prefill_mode(mode)
+                    let form = mode == DnPrefillMode.recurrent ? "recurrent" : "chunked"
+                    var cap <- capture_stops_leg(t, m, prompt, stops, 1024l, "{form}, one window")
+                    var live <- capture_stops_leg(t, m, prompt, stops, stops[1], "{form}, a window ending on stop {stops[1]}")
+                    //! the capture at the second stop against the live state a window ending there leaves: both scans cut their
+                    //! chunks at the first stop and at the second alike, so the two compute the same rows and the copy must be bit
+                    //! for bit the live state - a lost or stale copy reads apart. The control: the first stop's state is another.
+                    let at = stops[1]
+                    t |> success(!empty(live[1].state) && !empty(live[1].conv), "{form}: stop {at} stands as a checkpoint")
+                    t |> equal(mismatch_exact(cap[1].state, live[1].state), 0, "{form}: the state captured at stop {at} inside the window is the state a window ending there leaves")
+                    t |> equal(mismatch_exact(cap[1].conv, live[1].conv), 0, "{form}: the conv history captured at stop {at} is the one a window ending there leaves")
+                    t |> success(mismatch_exact(cap[0].state, live[1].state) > 0, "{form}: control - stop {stops[0]}'s state is not stop {at}'s")
+                    t |> success(mismatch_exact(cap[0].conv, live[1].conv) > 0, "{form}: control - stop {stops[0]}'s conv history is not stop {at}'s")
+                    delete live
+                    delete cap
+                }
+                delete prompt
+                restore_spec_pins(pins)
+            }
+        }
+    }
+}
+
+// ===== the speculative tick under the resident driver: a greedy stream asks a pick every tick and consumes it =====
+
+//! Under the resident GPU driver a greedy MTP stream equals the plain scheduler's stream token for token, and every drafted round's verify is served on the device with its pick consumed
+def test_scheduler_mtp_resident_picks(t : T?; m : Model) {
+    unsafe {
+        t |> run("scheduler mtp under the resident driver: every tick of a greedy stream asks a pick - the device verify lands picks alone and sample_ consumes each - the stream token for token the plain scheduler's on the same device rail, every round's verify served on the device (needs Qwen3.5-0.8B-MTP, DASLLAMA_GPU=1)") @capture(& m)(t : T ?) {
+            if (mirror_kv_dtype() != KVDtype.f16) {
+                t |> skip("the scheduler's sessions are f16; under DASLLAMA_VK_KV32=1 the mirror is f32 and every call passes as codec")
+                return
+            }
+            t |> success(moe_gpu_resident_active(), "the whole-model driver armed on the NextN-headed hybrid (the load log names any decline)")
+            var prompt <- encode(m, "Count from one to twenty: one, two, three,", true, false)
+            var none : array<int64>
+            let greedy = SamplingParams()
+            var sch0 <- create_scheduler(m, 1l, 4l, 64l)   // the plain scheduler on unpaged f16 sessions: the device rail, its picks asked a step
+            var events0 : array<SchedEvent>
+            t |> success(submit(m, sch0, make_req(1l, prompt, greedy, 24l, none)), "plain stream queued")
+            drain(m, sch0, events0)
+            var ref_toks <- toks_of(events0, 1l)
+            delete sch0
+            let prev_spec = get_mtp_spec()
+            set_mtp_spec(true)
+            let verifies0 = moe_gpu_resident_verifies()
+            var sch <- create_scheduler(m, 1l, 4l, 64l, 0l, 0l, KVDtype.f16, true)
+            var events : array<SchedEvent>
+            t |> success(submit(m, sch, make_req(2l, prompt, greedy, 24l, none)), "spec stream queued")
+            drain(m, sch, events)
+            set_mtp_spec(prev_spec)
+            var got <- toks_of(events, 2l)
+            log_streams("plain", events0, 1l, "spec (resident)", events, 2l)
+            t |> success(ids_equal(got, ref_toks), "the spec stream under the resident driver == the plain scheduler's stream ({got} vs {ref_toks})")
+            t |> equal(finished_of(events, 2l).n_gen, 24l)
+            t |> success(sch.mtp_drafted > 0l, "the speculative tick drafted ({sch.mtp_drafted} drafts, {sch.mtp_accepted} accepted)")
+            let served = moe_gpu_resident_verifies() - verifies0
+            t |> equal(served, sch.mtp_drafted, "every drafted round's verify served on the device under the tick's pick ask ({served} of {sch.mtp_drafted}); a pick left unconsumed would have refused the next round's opening")
+            delete got
+            delete events
+            delete sch
+            delete ref_toks
+            delete events0
+            delete prompt
+        }
+    }
+}
+
+//! A device-homed MTP stream under the resident driver equals the host-cached speculating stream token for token, with every draft and verify counted on the device and no CPU pass; speculation off counts none
+def test_scheduler_mtp_device_home(t : T?; m : Model) {
+    unsafe {
+        t |> run("scheduler mtp in device mode under the resident driver: a speculating stream homed on the device - its K/V in the driver's region alone - drafts, verifies and rolls back there, token for token the host-cached speculating stream, every drafted round counted by the device's draft and verify counters (needs Qwen3.5-0.8B-MTP, DASLLAMA_GPU=1)") @capture(& m)(t : T ?) {
+            if (mirror_kv_dtype() != KVDtype.f16) {
+                t |> skip("the scheduler's sessions are f16; under DASLLAMA_VK_KV32=1 the mirror is f32 and every call passes as codec")
+                return
+            }
+            t |> success(moe_gpu_resident_active(), "the whole-model driver armed on the NextN-headed hybrid (the load log names any decline)")
+            t |> success(gpu_resident_mtp_device_home(m), "the draft head, its verify and its rollback run on the device: a speculating scheduler may home its streams there")
+            var prompt <- encode(m, "Count from one to twenty: one, two, three,", true, false)
+            var none : array<int64>
+            let greedy = SamplingParams()
+            let prev_spec = get_mtp_spec()
+            set_mtp_spec(true)
+            var sch0 <- create_scheduler(m, 1l, 4l, 64l, 0l, 0l, KVDtype.f16, true)   //! host-cached flat f16 sessions on the same rail: the reference
+            var events0 : array<SchedEvent>
+            t |> success(submit(m, sch0, make_req(1l, prompt, greedy, 24l, none)), "host-cached spec stream queued")
+            drain(m, sch0, events0)
+            var ref_toks <- toks_of(events0, 1l)
+            delete sch0
+            let drafts0 = moe_gpu_resident_drafts()
+            let verifies0 = moe_gpu_resident_verifies()
+            var sch <- create_scheduler(m, 1l, 4l, 64l, 0l, 0l, KVDtype.f16, true)
+            t |> success(gpu_device_sessions() >= sch.max_streams, "the driver homes the scheduler's one stream ({gpu_device_sessions()} regions)")
+            t |> success(set_device_kv(sch, true), "the idle scheduler homes its streams on the device")
+            var events : array<SchedEvent>
+            t |> success(submit(m, sch, make_req(2l, prompt, greedy, 24l, none)), "device-home spec stream queued")
+            drain(m, sch, events)
+            set_mtp_spec(prev_spec)
+            var got <- toks_of(events, 2l)
+            log_streams("spec (host-cached)", events0, 1l, "spec (device-home)", events, 2l)
+            t |> success(ids_equal(got, ref_toks), "the device-home spec stream == the host-cached spec stream ({got} vs {ref_toks})")
+            t |> equal(finished_of(events, 2l).n_gen, 24l)
+            t |> success(sch.mtp_drafted > 0l, "the speculative tick drafted ({sch.mtp_drafted} drafts, {sch.mtp_accepted} accepted)")
+            t |> equal(moe_gpu_resident_drafts() - drafts0, sch.mtp_drafted, "every drafted round's draft ran on the device's NextN head")
+            t |> equal(moe_gpu_resident_verifies() - verifies0, sch.mtp_drafted, "every drafted round's verify ran on the device")
+            var passes <- gpu_cpu_passes_()
+            t |> equal(length(passes), 0, "no call passed to the CPU rails: {passes}")
+            delete passes
+            delete sch
+            //! control: speculation off, the draft and verify counters stay
+            //! flat
+            let drafts1 = moe_gpu_resident_drafts()
+            let verifies1 = moe_gpu_resident_verifies()
+            var plain <- create_scheduler(m, 1l, 4l, 64l, 0l, 0l, KVDtype.f16, false)
+            t |> success(set_device_kv(plain, true), "the plain scheduler homes its stream")
+            var events_plain : array<SchedEvent>
+            t |> success(submit(m, plain, make_req(3l, prompt, greedy, 24l, none)),
+                "plain stream queued")
+            drain(m, plain, events_plain)
+            t |> equal(finished_of(events_plain, 3l).n_gen, 24l)
+            t |> equal(moe_gpu_resident_drafts(), drafts1, "control: no round drafted")
+            t |> equal(moe_gpu_resident_verifies(), verifies1, "control: no round verified")
+            delete events_plain
+            delete plain
+            delete got
+            delete events
+            delete ref_toks
+            delete events0
+            delete prompt
+        }
+    }
+}
+
+// ===== paged + SAMPLED: the combination the server actually serves =====
+
+// A sampled stream consults the RNG once per token, so an extra or missing sample() call in the
+// paged path shows up as a diverged stream, not as a crash.
+//! A paged scheduler's seeded sampled stream equals the seeded `generate` reference both cold and over a warm prefix cache that attached pages
+def test_scheduler_paged_sampled(t : T?; m : Model) {
+    unsafe {
+        t |> run("paged scheduler, seeded sampling: stream == generate() (needs SmolLM2-135M)") @capture(& m)(t : T ?) {
+            let saved_mode = get_prefill_attn_mode()
+            set_prefill_attn_mode(AttnPrefillMode.classic)   // the warm run re-chunks (tail-only)
+            var prompt <- encode(m, "Once upon a time in a small village near the mountains there lived a very curious little robot who loved counting stars", true, false)
+            var none : array<int64>
+            let sp = SamplingParams(temp = 0.8, top_k = 40l)
+            var ref <- ref_generate(m, prompt, sp, 12l, none, 4242)
+            t |> success(!empty(ref.toks), "the sampled reference produced tokens")
+            var sch <- create_scheduler(m, 1l, 4l, 64l, 16l)   // paged, P=16, unbounded prefix cache
+            var events : array<SchedEvent>
+            t |> success(submit(m, sch, make_req(1l, prompt, sp, 12l, none, 4242)), "cold sampled stream queued")
+            drain(m, sch, events)
+            var cold <- toks_of(events, 1l)
+            t |> equal(finished_of(events, 1l).n_cached, 0l)
+            t |> success(ids_equal(cold, ref.toks), "paged cold sampled stream == generate()")
+            // and again over a WARM cache: the attach must not perturb the sampler either
+            events |> clear()
+            t |> success(submit(m, sch, make_req(2l, prompt, sp, 12l, none, 4242)), "warm sampled stream queued")
+            drain(m, sch, events)
+            var warm <- toks_of(events, 2l)
+            t |> success(finished_of(events, 2l).n_cached > 0l, "the warm run attached cached pages")
+            t |> success(ids_equal(warm, ref.toks), "paged WARM sampled stream == generate()")
+            set_prefill_attn_mode(saved_mode)
+            delete cold
+            delete warm
+            delete events
+            delete sch
+            delete ref
+            delete prompt
+        }
+    }
+}
+
+// ===== media splice: soft-token rows prefill between two token spans =====
+
+// Build a media request whose ROWS are the prompt's own embedding rows for [lo, hi): the tokens
+// outside the span stay ids, so the stream must reproduce the all-token reference exactly. Any
+// splice bug — wrong position, a head chunk running past media_at, rows evaled twice or never —
+// changes the KV and diverges.
+def private media_req(m : Model; id : int64; prompt : array<int64>; lo, hi : int64;
+                      non_causal : bool; params : SamplingParams; max_new : int64;
+                      grid : int2 = int2(0)) : PendingReq {
+    let np = long_length(prompt)
+    var r <- PendingReq(id = id, params = params, max_new = max_new,
+                        media_at = lo, n_media = hi - lo, media_non_causal = non_causal,
+                        media_grid = grid)
+    r.prompt <- [for (k in range64(np)); prompt[k]; where k < lo || k >= hi]
+    var mid <- [for (k in range64(lo, hi)); prompt[k]]
+    r.media_embd |> resize((hi - lo) * m.config.dim)
+    embed_text_rows(m, mid, r.media_embd, 0l)
+    delete mid
+    return <- r
+}
+
+// The whole prompt as embedding rows — `generate_embd`'s non-causal-span form is the reference
+// the scheduler's non-causal media arm must reproduce (chat.das's image turn runs on it).
+def private embd_span_generate(m : Model; prompt : array<int64>; lo, hi : int64;
+                               params : SamplingParams; max_new : int64; seed : int = 0) : array<int64> {
+    var s <- create_session(m)
+    if (seed != 0) {
+        set_seed(s, seed)
+    }
+    var e : array<float>
+    e |> reserve(long_length(prompt) * m.config.dim)
+    e |> resize(long_length(prompt) * m.config.dim)
+    embed_text_rows(m, prompt, e, 0l)
+    var out : array<int64>
+    generate_embd(m, s, e, long_length(prompt), params, max_new, lo, hi) $(id, _pc) {
+        out |> push(id)
+        return true
+    }
+    delete e
+    delete s
+    return <- out
+}
+
+let private SPAN_SEED = 4242
+let private SPAN_MOVES_LOGITS = 0.02   //! of the causal row's peak: the whole-prompt span reads 0.10 of it (3.1 at 29.8)
+
+//! the last row's logits after the same embedding prefill: rows [lo, hi) a non-causal span, every row causal where hi <= lo
+def private embd_span_logits(m : Model; prompt : array<int64>; lo, hi : int64) : array<float> {
+    var s <- create_session(m)
+    var e : array<float>
+    e |> reserve(long_length(prompt) * m.config.dim)
+    e |> resize(long_length(prompt) * m.config.dim)
+    embed_text_rows(m, prompt, e, 0l)
+    if (hi > lo) {
+        eval_embd_span_(m, s, e, long_length(prompt), lo, hi)
+    } else {
+        eval_embd_(m, s, e, long_length(prompt))
+    }
+    var out := s.logits
+    delete e
+    delete s
+    return <- out
+}
+
+//! Media rows built from the prompt's own embeddings, spliced at head, middle, tail or past a chunk, reproduce the all-token stream; a non-causal span matches `generate_embd`'s span form; paged spans attach off the cache
+def test_scheduler_media_splice(t : T?; m : Model) {   // nolint:STYLE038 — one cell: every assertion runs against the form's one load
+    unsafe {
+        t |> run("media rows == the same tokens as ids: splice at head/middle/tail (needs SmolLM2-135M)") @capture(& m)(t : T ?) {
+            // classic prefill: the splice necessarily moves the eval boundaries, and only classic
+            // is bit-exact under re-chunking — the same pin as the chunk-size arm above
+            let saved_mode = get_prefill_attn_mode()
+            set_prefill_attn_mode(AttnPrefillMode.classic)
+            var prompt <- encode(m, "The quick brown fox jumps over the lazy dog while the little robot watches from a small hill near the old village bakery and counts every bird that crosses the evening sky", true, false)
+            let np = long_length(prompt)
+            t |> success(np > 12l, "prompt is long enough to splice ({np} tokens)")
+            var none : array<int64>
+            let greedy = SamplingParams()
+            var base <- ref_generate(m, prompt, greedy, 6l, none)
+            t |> success(!empty(base.toks), "the all-token reference produced tokens")
+            // head (no leading tokens), middle (both spans), tail (no trailing tokens)
+            for (arm, lo, hi in ["head", "middle", "tail"], [0l, 4l, np - 5l], [5l, 4l + 6l, np]) {
+                var sch <- create_scheduler(m, 1l, 4l, 64l)
+                var inscope events : array<SchedEvent>
+                var req <- media_req(m, 1l, prompt, lo, hi, false, greedy, 6l)
+                t |> success(submit(m, sch, req), "media stream queued (arm {arm}: rows [{lo},{hi}))")
+                drain(m, sch, events)
+                var inscope got <- toks_of(events, 1l)
+                t |> success(ids_equal(got, base.toks), "arm {arm}: media stream == the all-token stream")
+                t |> equal(finished_of(events, 1l).n_prompt, np)   // usage counts the rows as positions
+                t |> equal(sch.prefill_evals, 1l, "arm {arm}: the span and the text around it are one prefill call")
+                delete got
+                delete events
+                delete sch
+            }
+            // a chunk of text is all a span's call carries: the head rides it, the tail past the chunk evals on its own
+            var sch_cut <- create_scheduler(m, 1l, 4l, 8l, idle_chunk_tokens = 0l)
+            var events_cut : array<SchedEvent>
+            var req_cut <- media_req(m, 2l, prompt, 4l, 10l, false, greedy, 6l)
+            t |> success(submit(m, sch_cut, req_cut), "chunk-bounded media stream queued")
+            drain(m, sch_cut, events_cut)
+            var got_cut <- toks_of(events_cut, 2l)
+            t |> success(ids_equal(got_cut, base.toks), "a body cut at the chunk == the all-token stream")
+            t |> equal(sch_cut.prefill_evals, 1l + (np - 14l + 7l) / 8l, "the body takes the head, the span and four tail tokens; the rest goes a chunk a call")
+            delete got_cut
+            delete events_cut
+            delete sch_cut
+            // a non-causal span with text either side is generate_embd's span form in one call
+            var mid_ref <- embd_span_generate(m, prompt, 4l, 10l, SamplingParams(temp = 0.8, top_k = 40l), 8l, SPAN_SEED)
+            var sch_mid <- create_scheduler(m, 1l, 4l, 64l)
+            var events_mid : array<SchedEvent>
+            var req_mid <- media_req(m, 3l, prompt, 4l, 10l, true, SamplingParams(temp = 0.8, top_k = 40l), 8l)
+            req_mid.seed = SPAN_SEED
+            t |> success(submit(m, sch_mid, req_mid), "non-causal mid-prompt media stream queued")
+            drain(m, sch_mid, events_mid)
+            var got_mid <- toks_of(events_mid, 3l)
+            t |> success(ids_equal(got_mid, mid_ref), "a non-causal span between text == generate_embd's span form")
+            t |> equal(sch_mid.prefill_evals, 1l)
+            delete got_mid
+            delete events_mid
+            delete sch_mid
+            delete mid_ref
+            // the non-causal flag reaches the kernel THROUGH the scheduler: with it set the arm must
+            // match generate_embd's span form, not the causal one. The span is [1, np) — everything
+            // past BOS — and the streams are sampled under one seed: the span moves the prompt's
+            // logits three points at a thirty-point peak, which leaves the greedy top-1 of eight
+            // tokens unmoved on some kernel builds, and the check goes vacuous there
+            let lo = 1l
+            let hi = np
+            let sampled = SamplingParams(temp = 0.8, top_k = 40l)
+            var causal_ref <- embd_span_generate(m, prompt, 0l, 0l, sampled, 8l, SPAN_SEED)
+            var span_ref <- embd_span_generate(m, prompt, lo, hi, sampled, 8l, SPAN_SEED)
+            var causal_logits <- embd_span_logits(m, prompt, 0l, 0l)
+            var span_logits <- embd_span_logits(m, prompt, lo, hi)
+            let moved = logits_maxdiff(span_logits, causal_logits)
+            to_log(LOG_INFO, "the span form's stream: {eyeball_text(m, span_ref)}\n")
+            to_log(LOG_INFO, "the causal form's stream: {eyeball_text(m, causal_ref)}\n")
+            to_log(LOG_INFO, "the prompt's logits: the span form {moved} from the causal form at a {logits_maxabs(causal_logits)} peak\n")
+            t |> success(moved > SPAN_MOVES_LOGITS * logits_maxabs(causal_logits), "the span moves the prompt's logits ({moved} at a {logits_maxabs(causal_logits)} peak)")
+            delete causal_logits
+            delete span_logits
+            t |> success(!ids_equal(span_ref, causal_ref), "the span moves the stream (the flag is load-bearing here)")
+            var sch_nc <- create_scheduler(m, 1l, 4l, 64l)
+            var events_nc : array<SchedEvent>
+            var req_nc <- media_req(m, 7l, prompt, lo, hi, true, sampled, 8l)
+            req_nc.seed = SPAN_SEED
+            t |> success(submit(m, sch_nc, req_nc), "non-causal media stream queued")
+            drain(m, sch_nc, events_nc)
+            var got_nc <- toks_of(events_nc, 7l)
+            t |> success(ids_equal(got_nc, span_ref), "non-causal arm == generate_embd's span form")
+            delete causal_ref
+            delete got_nc
+            delete events_nc
+            delete sch_nc
+            delete span_ref
+
+            // paged: a media span's positions enter the prompt as ids of its rows' content, so the prefix cache
+            // matches across a span as across text. Prime with a plain stream carrying the media stream's text.
+            let mlo = 20l
+            let mhi = 26l
+            var schp <- create_scheduler(m, 1l, 4l, 64l, 16l)
+            var ev : array<SchedEvent>
+            var text_only <- [for (k in range64(np)); prompt[k]; where k < mlo || k >= mhi]
+            t |> success(long_length(text_only) > 16l, "the priming prompt fills a page ({length(text_only)} tokens)")
+            t |> success(submit(m, schp, make_req(9l, text_only, greedy, 4l, none)), "priming text stream queued")
+            drain(m, schp, ev)
+            let primed = prefix_held_groups(schp.prefix)
+            t |> success(primed > 0l, "the priming stream donated its pages")
+            ev |> clear()
+            var r1 <- media_req(m, 10l, prompt, mlo, mhi, false, greedy, 6l)
+            t |> success(submit(m, schp, r1), "paged media stream queued")
+            drain(m, schp, ev)
+            t |> equal(finished_of(ev, 10l).n_cached, mlo)   // the text ahead of the span attaches; the span's ids are no token's, so the hit stops there
+            var paged_toks <- toks_of(ev, 10l)
+            t |> success(ids_equal(paged_toks, base.toks), "paged media stream == the all-token stream")
+            t |> success(prefix_held_groups(schp.prefix) > primed, "the media stream donates its pages")
+            // the same media again: everything but the last position attaches, the span included
+            ev |> clear()
+            var r2 <- media_req(m, 11l, prompt, mlo, mhi, false, greedy, 6l)
+            t |> success(submit(m, schp, r2), "the same media stream queued again")
+            drain(m, schp, ev)
+            t |> success(finished_of(ev, 11l).n_cached > mhi, "asked again, the span attaches off the cache ({finished_of(ev, 11l).n_cached} of {np} positions)")
+            var again_toks <- toks_of(ev, 11l)
+            t |> success(ids_equal(again_toks, base.toks), "the attached span reads the same stream")
+            // ...and with no rows at all: the request counts on the cache for the span
+            ev |> clear()
+            var r3 <- media_req(m, 12l, prompt, mlo, mhi, false, greedy, 6l)
+            splice_to_span(r3)
+            delete r3.spans[0].rows
+            t |> success(submit(m, schp, r3), "a rowless request queued")
+            drain(m, schp, ev)
+            var rowless_toks <- toks_of(ev, 12l)
+            t |> equal(finished_of(ev, 12l).finish, "length")
+            t |> success(ids_equal(rowless_toks, base.toks), "a span the cache holds needs no rows")
+            // other rows at the same place share only the text ahead of them (the control)
+            ev |> clear()
+            var other <- [for (k in range64(np)); k >= mlo && k < mhi ? prompt[np - 1l - (k - mlo)] : prompt[k]]
+            var r4 <- media_req(m, 13l, other, mlo, mhi, false, greedy, 6l)
+            t |> success(submit(m, schp, r4), "a stream with other rows queued")
+            drain(m, schp, ev)
+            t |> equal(finished_of(ev, 13l).n_cached, mlo)
+            // a rowless request on a cache that never saw the span is told so, and donates nothing
+            var schl <- create_scheduler(m, 1l, 4l, 64l, 16l)
+            var evl : array<SchedEvent>
+            var r5 <- media_req(m, 14l, prompt, mlo, mhi, false, greedy, 6l)
+            splice_to_span(r5)
+            delete r5.spans[0].rows
+            t |> success(submit(m, schl, r5), "a rowless request on a cold cache queued")
+            drain(m, schl, evl)
+            t |> equal(finished_of(evl, 14l).finish, "media_lost")
+            t |> equal(prefix_held_groups(schl.prefix), 0l)
+            delete evl
+            delete schl
+            delete other
+            delete rowless_toks
+            delete again_toks
+            delete paged_toks
+            delete text_only
+            delete ev
+            delete schp
+            set_prefill_attn_mode(saved_mode)
+            delete base
+            delete prompt
+        }
+    }
+}
+
+// ===== media validation: submit refuses malformed shapes by panic =====
+
+//! `set_device_kv` refuses to switch a scheduler with a live stream and switches it once idle, and submit panics on a media request in device mode while host-cached mode takes it
+def test_scheduler_device_mode_switch(t : T?; m : Model) {
+    unsafe {
+        t |> run("only an idle scheduler switches its session kind (needs SmolLM2-135M)") @capture(& m)(t : T ?) {
+            var prompt <- encode(m, "The quick brown fox", true, false)
+            var none : array<int64>
+            var sch <- create_scheduler(m, 1l, 4l, 64l)
+            var events : array<SchedEvent>
+            t |> success(submit(m, sch, make_req(1l, prompt, SamplingParams(), 4l, none)), "a request queued")
+            scheduler_step(m, sch, events)
+            t |> success(!set_device_kv(sch, true), "a scheduler with a live stream keeps the session kind it has")
+            drain(m, sch, events)
+            t |> success(set_device_kv(sch, true), "the same scheduler, idle, switches")
+            t |> success(!set_device_kv(sch, false), "and back to host-cached: the answer is the kind it now serves, so it reads false")
+            delete events
+            delete sch
+            delete prompt
+        }
+    }
+    unsafe {
+        t |> run("submit refuses a media request in device mode, and takes it with the mode off (needs SmolLM2-135M)") @capture(& m)(t : T ?) {
+            var prompt <- encode(m, "The quick brown fox", true, false)
+            var sch <- create_scheduler(m, 1l, 4l, 64l)
+            var taken = false
+            var tripped = false
+            for (device in fixed_array(false, true)) {
+                set_device_kv(sch, device)
+                tripped = false
+                try {
+                    var req <- PendingReq(id = device ? 2l : 1l, params = SamplingParams(), max_new = 1l, media_at = 1l, n_media = 2l)
+                    req.prompt := prompt
+                    req.media_embd |> resize(2l * m.config.dim)
+                    taken = submit(m, sch, req)
+                } recover {
+                    tripped = true
+                }
+                if (device) {
+                    t |> success(tripped, "device mode: a device-home session serves no media span, so submit panics")
+                } else {
+                    t |> success(taken && !tripped, "host-cached mode takes the same request (the control)")
+                    var inscope events : array<SchedEvent>
+                    drain(m, sch, events)
+                    delete events
+                }
+            }
+            set_device_kv(sch, false)
+            delete sch
+            delete prompt
+        }
+    }
+}
+
+//! Scheduler submit panics on a negative n_media, media_at outside the prompt, undersized or oversized rows, rows with n_media 0, and narrow image rows on a deepstack decoder
+def test_scheduler_media_validation(t : T?; var m : Model) {
+    unsafe {
+        t |> run("submit panics on malformed media shapes (needs SmolLM2-135M)") @capture(& m)(t : T ?) {
+            var prompt <- encode(m, "The quick brown fox", true, false)
+            let greedy = SamplingParams()
+            var sch <- create_scheduler(m, 1l, 4l, 64l)
+            var tripped = false
+            try {
+                // a negative count clears every guard, lowers the seq_len check, and leaves a
+                // stream whose completion predicate can never hold - an infinite step loop
+                var bad <- PendingReq(id = 9l, params = greedy, max_new = 4l, n_media = -1l)
+                bad.prompt := prompt
+                submit(m, sch, bad)
+            } recover {
+                tripped = true
+            }
+            t |> success(tripped, "negative n_media panics")
+            tripped = false
+            try {
+                var bad <- PendingReq(id = 10l, params = greedy, max_new = 4l, media_at = 99l, n_media = 2l)
+                bad.prompt := prompt
+                bad.media_embd |> resize(2l * m.config.dim)
+                submit(m, sch, bad)
+            } recover {
+                tripped = true
+            }
+            t |> success(tripped, "media_at outside the prompt panics")
+            tripped = false
+            try {
+                var bad <- PendingReq(id = 11l, params = greedy, max_new = 4l, media_at = 1l, n_media = 2l)
+                bad.prompt := prompt
+                bad.media_embd |> resize(4l)   // far short of n_media * dim
+                submit(m, sch, bad)
+            } recover {
+                tripped = true
+            }
+            t |> success(tripped, "undersized media rows panic")
+            tripped = false
+            try {
+                var bad <- PendingReq(id = 12l, params = greedy, max_new = 4l)
+                bad.prompt := prompt
+                bad.media_embd |> resize(2l * m.config.dim)   // rows with n_media == 0
+                submit(m, sch, bad)
+            } recover {
+                tripped = true
+            }
+            t |> success(tripped, "media rows with n_media == 0 panic instead of dropping silently")
+            tripped = false
+            try {
+                var bad <- PendingReq(id = 13l, params = greedy, max_new = 4l, media_at = 1l, n_media = 2l)
+                bad.prompt := prompt
+                bad.media_embd |> resize(3l * m.config.dim)   // oversized: the exact-width guard refuses slop
+                submit(m, sch, bad)
+            } recover {
+                tripped = true
+            }
+            t |> success(tripped, "oversized media rows panic")
+            tripped = false
+            try {
+                m.config.n_deepstack = 3l   // a deepstack decoder: image rows arrive (1+n)·dim-wide
+                var bad <- PendingReq(id = 14l, params = greedy, max_new = 4l, media_at = 1l, n_media = 2l, media_non_causal = true)
+                bad.prompt := prompt
+                bad.media_embd |> resize(2l * m.config.dim)   // narrow feed = the slice adds would silently skip
+                submit(m, sch, bad)
+            } recover {
+                tripped = true
+            }
+            m.config.n_deepstack = 0l
+            t |> success(tripped, "narrow image rows on a deepstack decoder panic")
+            delete sch
+            delete prompt
+        }
+    }
+}
+
+// ===== mrope media: the qwen grid reaches the quantum's angles and the batched decode =====
+
+// embd_span_generate's mrope twin (generate_embd's grid form) — the reference the scheduler's
+// media_grid arm must reproduce, decode included: the session's rope_pos_delta shifts every
+// post-image position, so a decode that ropes at n_past instead diverges.
+def private embd_mrope_generate(m : Model; prompt : array<int64>; lo, hi : int64; grid : int2;
+                                params : SamplingParams; max_new : int64) : array<int64> {
+    var s <- create_session(m)
+    var e : array<float>
+    e |> reserve(long_length(prompt) * m.config.dim)
+    e |> resize(long_length(prompt) * m.config.dim)
+    embed_text_rows(m, prompt, e, 0l)
+    var out : array<int64>
+    generate_embd(m, s, e, long_length(prompt), params, max_new, lo, hi, grid) $(id, _pc) {
+        out |> push(id)
+        return true
+    }
+    delete e
+    delete s
+    return <- out
+}
+
+//! Paged: the grid span donates, and the same request asked again attaches it off the cache - the session's rope advance
+//! comes back with it, or every position past the span ropes that advance off. Both streams run the flat reference's lane
+//! (classic prefill, the std decode, the CPU rails - the caller's pins); the paged K/V layout alone differs.
+def private mrope_paged_leg(t : T?; m : Model; prompt : array<int64>; lo, hi : int64; grid : int2; mref : array<int64>) {
+    var schp <- create_scheduler(m, 1l, 4l, 64l, 16l)
+    var ep : array<SchedEvent>
+    for (id in fixed_array(31l, 32l)) {
+        var rqp <- media_req(m, id, prompt, lo, hi, true, SamplingParams(), 8l, grid)
+        t |> success(submit(m, schp, rqp), "paged mrope stream {id} queued")
+        scheduler_step(m, schp, ep)   // admits the stream and prefills what the cache does not hold
+        t |> success(length(schp.streams) == 1 && schp.streams[0].session.rope_pos_delta == int64(max(grid.x, grid.y)) - (hi - lo),
+            "paged mrope stream {id}: the session ropes past the span by the grid's advance ({max(grid.x, grid.y)} positions for {hi - lo} rows)")
+        drain(m, schp, ep)
+        var inscope gp <- toks_of(ep, id)
+        to_log(LOG_INFO, "paged mrope stream {id} (cached {finished_of(ep, id).n_cached}): {eyeball_text(m, gp)}\nits grid reference: {eyeball_text(m, mref)}\n")
+        t |> success(ids_equal(gp, mref), "paged mrope stream {id} == the grid reference")
+        delete gp
+    }
+    t |> equal(finished_of(ep, 31l).n_cached, 0l, "the first paged stream finds a cold cache")
+    t |> success(finished_of(ep, 32l).n_cached >= hi, "asked again, the grid span attaches off the cache ({finished_of(ep, 32l).n_cached} of {length(prompt)} positions, the span ends at {hi})")
+    delete ep
+    delete schp
+}
+
+//! A media_grid span reproduces `generate_embd`'s mrope grid form solo, in a two-row batched decode beside a text stream, and paged where the repeat attaches the span and restores the rope advance, `m`'s context cut to 128 for it
+def scheduler_mrope_cell(t : T?; var m : Model) {
+    with_ctx_cut(m, 128l) {
+        unsafe {
+            t |> run("media_grid: the mrope walk reaches the quantum and survives the batched decode (needs SmolLM2-135M)") @capture(& m)(t : T ?) {
+                let sections0 = m.config.rope_sections
+                let interleaved0 = m.config.mrope_interleaved
+                m.config.rope_sections = int4(12, 10, 10, 0)   // stamp: the toy is not an mrope arch (rotary 64 -> half 32)
+                m.config.mrope_interleaved = true
+                let saved_mode = get_prefill_attn_mode()
+                set_prefill_attn_mode(AttnPrefillMode.classic)
+                let prev_fused = get_fused_decode()
+                set_fused_decode(false)   // the batch worker mirrors the std decode path (test_scheduler_batching's pin)
+                var prompt <- encode(m, "The quick brown fox jumps over the lazy dog while the little robot watches from a small hill near the old village bakery", true, false)
+                let np = long_length(prompt)
+                let lo = 4l
+                let hi = lo + 12l   // 12 rows = a 4x3 merged grid; position advance 4, so rope_pos_delta lands at -8
+                let grid = int2(4, 3)
+                t |> success(np > hi + 2l, "prompt long enough to leave a tail after the span ({np} tokens)")
+                let greedy = SamplingParams()
+                var none : array<int64>
+                var mref <- embd_mrope_generate(m, prompt, lo, hi, grid, greedy, 8l)
+                var sref <- embd_span_generate(m, prompt, lo, hi, greedy, 8l)
+                t |> success(!ids_equal(mref, sref), "grid angles move the stream (the mrope walk is load-bearing here)")
+                // (1) the grid reaches the quantum: scheduler stream == generate_embd's grid form
+                var sch <- create_scheduler(m, 1l, 4l, 64l)
+                var events : array<SchedEvent>
+                var req <- media_req(m, 1l, prompt, lo, hi, true, greedy, 8l, grid)
+                t |> success(submit(m, sch, req), "mrope media stream queued")
+                drain(m, sch, events)
+                var got <- toks_of(events, 1l)
+                t |> success(ids_equal(got, mref), "scheduler mrope stream == generate_embd's grid form")
+                t |> equal(finished_of(events, 1l).n_prompt, np)
+                t |> equal(sch.mrope_streams, 1l)   // the telemetry counter the server stats surface reads
+                // (2) batched decode: the mrope stream and a text stream decode as one 2-row batch —
+                // the delta'd rope position must survive the gather (ws.rope_positions, not n_past)
+                var tref <- ref_generate(m, prompt, greedy, 8l, none)
+                var schb <- create_scheduler(m, 2l, 4l, 64l)
+                var eb : array<SchedEvent>
+                var rq1 <- media_req(m, 21l, prompt, lo, hi, true, greedy, 8l, grid)
+                t |> success(submit(m, schb, rq1), "mrope stream queued (batch arm)")
+                t |> success(submit(m, schb, make_req(22l, prompt, greedy, 8l, none)), "text stream queued (batch arm)")
+                drain(m, schb, eb)
+                var g1 <- toks_of(eb, 21l)
+                var g2 <- toks_of(eb, 22l)
+                t |> success(ids_equal(g1, mref), "batched mrope stream == its solo grid reference")
+                t |> success(ids_equal(g2, tref.toks), "batched text stream == its solo reference")
+                t |> success(schb.sum_batch >= 4l, "decode steps actually batched (sum batch {schb.sum_batch})")
+                mrope_paged_leg(t, m, prompt, lo, hi, grid, mref)
+                set_fused_decode(prev_fused)
+                set_prefill_attn_mode(saved_mode)
+                delete g1
+                delete g2
+                delete eb
+                delete schb
+                delete tref
+                delete got
+                delete events
+                delete sch
+                delete mref
+                delete sref
+                delete prompt
+                m.config.rope_sections = sections0
+                m.config.mrope_interleaved = interleaved0
+            }
+        }
+    }
+}
+
+// ===== mrope validation: submit refuses malformed grids by panic =====
+
+//! Scheduler submit panics on a media grid shaping more rows than n_media, a grid on causal rows, a one-sided grid, and a grid with n_media 0
+def test_scheduler_mrope_validation(t : T?; m : Model) {
+    unsafe {
+        t |> run("submit panics on malformed media grids (needs SmolLM2-135M)") @capture(& m)(t : T ?) {
+            var prompt <- encode(m, "The quick brown fox", true, false)
+            let greedy = SamplingParams()
+            var sch <- create_scheduler(m, 1l, 4l, 64l)
+            var tripped = false
+            try {
+                var bad <- media_req(m, 30l, prompt, 1l, 3l, true, greedy, 4l, int2(3, 1))   // 3 rows shaped for 2
+                submit(m, sch, bad)
+            } recover {
+                tripped = true
+            }
+            t |> success(tripped, "a grid shaping more rows than n_media panics")
+            tripped = false
+            try {
+                var bad <- media_req(m, 31l, prompt, 1l, 3l, false, greedy, 4l, int2(2, 1))   // causal rows
+                submit(m, sch, bad)
+            } recover {
+                tripped = true
+            }
+            t |> success(tripped, "a grid on causal media rows panics")
+            tripped = false
+            try {
+                var bad <- media_req(m, 32l, prompt, 1l, 3l, true, greedy, 4l, int2(2, 0))   // one-sided grid
+                submit(m, sch, bad)
+            } recover {
+                tripped = true
+            }
+            t |> success(tripped, "a one-sided grid panics")
+            tripped = false
+            try {
+                var bad <- PendingReq(id = 33l, params = greedy, max_new = 4l, media_grid = int2(2, 1))
+                bad.prompt := prompt
+                submit(m, sch, bad)
+            } recover {
+                tripped = true
+            }
+            t |> success(tripped, "a grid with n_media == 0 panics instead of dropping silently")
+            delete sch
+            delete prompt
+        }
+    }
+}
+
+// ===== inline spans: a prefix hit stops short of a span it would cut, and submit refuses malformed spans by panic =====
+
+//! [lo, hi) of `prompt` INLINE as one non-causal span: the rows are the prompt's own embedding rows, the position ids
+//! `key_a`'s for the span's first `split` rows and `key_b`'s past them
+def private inline_span_req(m : Model; id : int64; prompt : array<int64>; lo, hi, split : int64; key_a, key_b : uint64;
+                            params : SamplingParams; max_new : int64) : PendingReq {
+    var r <- PendingReq(id = id, params = params, max_new = max_new)
+    r.prompt <- [for (k in range64(long_length(prompt))); (k < lo || k >= hi) ? prompt[k] : media_position_id(k - lo < split ? key_a : key_b, k - lo)]
+    var mid <- [for (k in range64(lo, hi)); prompt[k]]
+    var sp <- MediaSpan(at = lo, n = hi - lo, non_causal = true)
+    sp.rows |> resize((hi - lo) * m.config.dim)
+    embed_text_rows(m, mid, sp.rows, 0l)
+    r.spans |> emplace(sp)
+    delete mid
+    return <- r
+}
+
+//! A prefix hit that would end inside an inline non-causal span attaches nothing past the span's start, and both span streams match their own `generate_embd` span-form references
+def test_scheduler_span_cut(t : T?; m : Model) {
+    unsafe {
+        t |> run("a prefix hit that ends inside a span is no hit: the span evals whole (needs SmolLM2-135M)") @capture(& m)(t : T ?) {
+            let saved_mode = get_prefill_attn_mode()
+            set_prefill_attn_mode(AttnPrefillMode.classic)   // the span's call moves the eval boundaries: classic alone is bit-exact under them
+            var prompt <- encode(m, "The quick brown fox jumps over the lazy dog while the little robot watches from a small hill near the old village bakery and counts every bird that crosses the evening sky", true, false)
+            let np = long_length(prompt)
+            let lo = 4l
+            let hi = 24l
+            let split = 10l   // the second request shares the text and the span's first 10 ids: its hit would end at 14, inside [4, 24)
+            t |> success(np > hi + 4l, "the prompt leaves a tail past the span ({np} tokens)")
+            var other <- [for (k in range64(np)); (k >= lo + split && k < hi) ? prompt[np - 1l - (k - lo - split)] : prompt[k]]
+            t |> success(!ids_equal(other, prompt), "the second span's rows past the split are other tokens'")
+            let greedy = SamplingParams()
+            var ref_a <- embd_span_generate(m, prompt, lo, hi, greedy, 6l)
+            var ref_b <- embd_span_generate(m, other, lo, hi, greedy, 6l)
+            var sch <- create_scheduler(m, 1l, 4l, 64l, 16l)
+            var ev : array<SchedEvent>
+            var ra <- inline_span_req(m, 1l, prompt, lo, hi, hi - lo, 0xa11ul, 0xa11ul, greedy, 6l)
+            t |> success(submit(m, sch, ra), "the first span stream queued")
+            drain(m, sch, ev)
+            var got_a <- toks_of(ev, 1l)
+            to_log(LOG_INFO, "span stream A: {eyeball_text(m, got_a)}\nits reference: {eyeball_text(m, ref_a)}\n")
+            t |> success(ids_equal(got_a, ref_a), "the first span stream == generate_embd's span form")
+            t |> success(prefix_held_groups(sch.prefix) > 0l, "the first stream donates its pages")
+            var rb <- inline_span_req(m, 2l, other, lo, hi, split, 0xa11ul, 0xb22ul, greedy, 6l)
+            t |> success(submit(m, sch, rb), "the second span stream queued")
+            drain(m, sch, ev)
+            var got_b <- toks_of(ev, 2l)
+            to_log(LOG_INFO, "span stream B (cached {finished_of(ev, 2l).n_cached}): {eyeball_text(m, got_b)}\nits reference: {eyeball_text(m, ref_b)}\n")
+            t |> success(finished_of(ev, 2l).n_cached <= lo, "a hit ending inside the span attaches nothing past the span's start ({finished_of(ev, 2l).n_cached}, the span opens at {lo})")
+            t |> success(ids_equal(got_b, ref_b), "the second span stream == its own generate_embd span form")
+            delete got_b
+            delete rb
+            delete got_a
+            delete ra
+            delete ev
+            delete sch
+            delete ref_b
+            delete ref_a
+            delete other
+            delete prompt
+            set_prefill_attn_mode(saved_mode)
+        }
+    }
+}
+
+//! whether `submit` refuses `req` by panic
+def private submit_panics(m : Model; var sch : Scheduler; var req : PendingReq) : bool {
+    var tripped = false
+    try {
+        submit(m, sch, req)
+    } recover {
+        tripped = true
+    }
+    return tripped
+}
+
+//! a well-formed request: the prompt's [4, 10) inline as one span under one key
+def private span_ok_req(m : Model; id : int64; prompt : array<int64>) : PendingReq =>
+    <- inline_span_req(m, id, prompt, 4l, 10l, 6l, 0x5a5ul, 0x5a5ul, SamplingParams(), 4l)
+
+//! the well-formed request's prompt with its one span replaced by rowless spans at `spans`' (at, n) pairs
+def private spans_req(m : Model; id : int64; prompt : array<int64>; spans : array<int2>) : PendingReq {
+    var r <- span_ok_req(m, id, prompt)
+    delete r.spans
+    r.spans |> reserve(length(spans))
+    for (s in spans) {
+        r.spans |> emplace(MediaSpan(at = int64(s.x), n = int64(s.y), non_causal = true))
+    }
+    return <- r
+}
+
+//! Submit takes a well-formed inline span and panics on empty, out-of-order, overlapping, past-the-end or token-edged spans, rows a float wide or a row short, a splice beside spans, and a span in device mode
+def test_scheduler_span_validation(t : T?; m : Model) {
+    unsafe {
+        t |> run("submit panics on malformed inline spans (needs SmolLM2-135M)") @capture(& m)(t : T ?) {
+            var prompt <- encode(m, "The quick brown fox jumps over the lazy dog while the little robot watches", true, false)
+            let np = long_length(prompt)
+            t |> success(np > 12l, "the prompt holds the span and text past it ({np} tokens)")
+            var sch <- create_scheduler(m, 1l, 64l, 64l)
+            var ok <- span_ok_req(m, 40l, prompt)
+            t |> success(!submit_panics(m, sch, ok), "a well-formed span submits (the control)")
+            var empty_span <- spans_req(m, 41l, prompt, [int2(5, 0)])   // both rows it reads, [4] and [5], are ids
+            t |> success(submit_panics(m, sch, empty_span), "a span of no rows panics")
+            var backward <- spans_req(m, 42l, prompt, [int2(8, 2), int2(4, 2)])
+            t |> success(submit_panics(m, sch, backward), "spans out of prompt order panic")
+            var overlap <- spans_req(m, 43l, prompt, [int2(4, 4), int2(6, 4)])
+            t |> success(submit_panics(m, sch, overlap), "overlapping spans panic")
+            var past <- spans_req(m, 44l, prompt, [int2(int(np) - 2, 3)])
+            t |> success(submit_panics(m, sch, past), "a span past the prompt's end panics")
+            var on_text <- spans_req(m, 45l, prompt, [int2(3, 7)])
+            t |> success(submit_panics(m, sch, on_text), "a span whose first row is a token panics")
+            var off_end <- spans_req(m, 46l, prompt, [int2(4, 7)])
+            t |> success(submit_panics(m, sch, off_end), "a span whose last row is a token panics")
+            var wide <- span_ok_req(m, 47l, prompt)
+            wide.spans[0].rows |> push(0.0)
+            t |> success(submit_panics(m, sch, wide), "rows one float past the span's width panic")
+            var narrow <- span_ok_req(m, 48l, prompt)
+            narrow.spans[0].rows |> resize(length(narrow.spans[0].rows) - int(m.config.dim))
+            t |> success(submit_panics(m, sch, narrow), "rows a row short of the span panic")
+            var both <- span_ok_req(m, 49l, prompt)
+            both.n_media = 2l
+            both.media_at = np   // a splice past the inline span: folded in, the spans would stand in order
+            both.media_embd |> resize(2l * m.config.dim)
+            t |> success(submit_panics(m, sch, both), "a request with both a splice and inline spans panics")
+            var schd <- create_scheduler(m, 1l, 64l, 64l)
+            set_device_kv(schd, true)
+            var dev <- span_ok_req(m, 50l, prompt)
+            t |> success(submit_panics(m, schd, dev), "device mode: a device-home session serves no inline span either")
+            set_device_kv(schd, false)
+            // a panic inside submit's walk over the spans leaves the refused requests' span arrays locked, so they are
+            // not deleted - the heap goes with the context
+            delete schd
+            delete ok
+            delete sch
+            delete prompt
+        }
+    }
+}

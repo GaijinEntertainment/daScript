@@ -34,9 +34,18 @@ require ?cuda _cuda_feed   // fp4_rung_why, cuda_mmq_name: the CUDA home's FP4 c
 require _model_tier   // models_dir() + model_available() presence/size-tier gate
 require _resident_feed
 require _cpu_gpu_model   // with_cpu_and_gpu_model, the forms, FeedRows
+require _parity_cells   // the parity cells the block's parity knob reaches (`_::`): the files' model_specs parity rows on their blocks
 require _resident_regions   // the regions cells, REGIONS_RIG_CTX, short_control, continue_at
 require _kv_codec_cells   // codec_env_why, codec_distances_within: the gated carrier under a block-codec mirror
 require _mtp_resident_cells   // the NextN head's cells, one body for every discrete home
+require _segment_cells   // recurrent_segments_cell, SEG_WINDOW: the segmented window's cells
+require _mtp_cpu_cells   // mtp_cpu_cells, mtp_q4_0_cell: the -MTP- file's CPU forms' own cells
+require _chat_cells   // chat_qwen35_cells: the Q8_0 file's uncached CPU form's cells
+require _deltanet_cells   // deltanet_chunked_prefill_cell: the Q8_0 file's CPU form's chunked-prefill cell
+require _scheduler_cells   // the -MTP- file's speculative scheduler cells, on its CPU form and its scheduler form
+require _batch_decode_cells   // batch_decode_hybrid_cells: the Q8_0 file's portable-pinned CPU form
+require _kquant_cells   // kq_nv4_load_layout_cell: the NVFP4 file's K-quant-native portable form
+require _gpu_tier_armed   // gpu_tier_why: the -MTP- file's plain scheduler cell runs on its device form where the tier arms
 
 // The whole-model resident driver on the deltanet hybrid Qwen3.5-0.8B under DASLLAMA_GPU=1, on the Vulkan home or under
 // DASLLAMA_CUDA=1 on the CUDA home: the resident window chain prefills the prompt (the recurrent layers through the conv +
@@ -55,7 +64,12 @@ require _mtp_resident_cells   // the NextN head's cells, one body for every disc
 //   window's peel and the region a host-cached session loses; at two regions on the 2048-row window the rig's cells - two
 //   sessions' recurrent state slots stepped interleaved and batched, device-home sessions, continuations from the region's
 //   live state, a recurrent parked claim, the device-mode, paged and pooled schedulers - and with the planes on the host the
-//   device-home pin's outsider.
+//   device-home pin's outsider; at two regions on the SEG_WINDOW-row window the segmented window's cells; with the planes on
+//   the host two deltanet streams through the scheduler, the device dropped for the control last (`_scheduler_cells.das`); on
+//   its portable-pinned CPU form, on every box, batched decode against sequential (`_batch_decode_cells.das`).
+// - On each of the Q8_0, Q4_K_M, mixed-twin and 4B files' parity row CPU form (the row's load mode and K-quant knob under
+//   DASLLAMA_PIN_BACKEND's pin), on every box, the row's frozen greedy ids and its chunked-prefill arm (`parity_spec_cell`);
+//   the Q4_K_M row's deltanet planes K-quant native.
 // - Q4_K_M and the mixed twin (`..._kq`, `..._kq_q8out`): the K-quant deltanet planes kept in their file formats, the feed
 //   over one and two windows at the K-quant bar with the routing witness (on the f16 feed the qkv/z pair on the k4 cm2 tiles)
 //   and the f32-chain witness on the Vulkan home, the CUDA home's feeds at its K-quant bar; on the Q4_K_M twin a prompt's
@@ -65,11 +79,17 @@ require _mtp_resident_cells   // the NextN head's cells, one body for every disc
 //   the rejected verify's rollback, the head's prompt warm, six rounds against the CPU round and the gates around the round
 //   (`_mtp_resident_cells.das`), the depth-8 verify and its depth-1 control, the sampled selection at depth 2, the head kept
 //   off the device, the head over q8_0 and tq4 mirrors, the peel with speculation off, the pool's openings under a
-//   speculating scheduler, and on the CUDA home the trunk's forced feed.
-// - On the CUDA home alone: the NVFP4 twin's deltanet sites on the FP4 leaf and pinned off MMQ on the cm2 tiles (`..._nv4`),
-//   and the 4B shape (`..._4b`, the `qwen35-4b` category).
-// Every model test skips interpreted, without its file, or without the armed tier; a form whose plan does not fit the card
-// skips loudly. The K-quant cells skip on the f32 mirrors (`DASLLAMA_VK_KV32=1`), and so do the block-codec forms and the
+//   speculating scheduler, the segmented window's cells first on the two-region form, and on the CUDA home the trunk's
+//   forced feed; on its q8 and q4_0 CPU forms, on every box, the file's CPU cells (`_mtp_cpu_cells.das`) and the speculative
+//   scheduler's; the self-speculative streams against the plain scheduler on the driver's own regions where the tier arms, on
+//   the q8 CPU form where it does not.
+// - The NVFP4 twin (`..._nv4`): on the CUDA home alone its deltanet sites on the FP4 leaf and pinned off MMQ on the cm2 tiles;
+//   on its K-quant-native portable-pinned CPU form, on every box, the planes' load layout (`_kquant_cells.das`).
+// - On the CUDA home alone the 4B shape's forced feed (`..._4b`, the `qwen35-4b` category).
+// Every model test skips interpreted or without its file; without the armed tier each device form skips loudly as a cell of
+// its own while the CPU-cells forms run; a form whose plan does not fit the card skips loudly; the NVFP4 twin's device forms
+// skip as one loud cell without DASLLAMA_CUDA=1 or on a build with no CUDA module, and so does the 4B file's forced feed; a
+// parity row's form where the box cannot take DASLLAMA_PIN_BACKEND's pin. The K-quant cells skip on the f32 mirrors (`DASLLAMA_VK_KV32=1`), and so do the block-codec forms and the
 // codec pass arm; the window cells skip under DASLLAMA_VK_KV32=1 (the f32 mirror passes every f16 session as codec); the
 // two-window K-quant feed and the two-window head warm skip where the prompt window is not the file's 512 rows. Under
 // DASLLAMA_CUDA=1 the Vulkan home's own cells (the four-length and K-quant feeds' census witnesses, the f32-chain witness,
@@ -104,6 +124,7 @@ let private GATED_CODEC_DIST_REL = 1.15
 let private GATED_CODEC_PAIR_REL = 0.8
 
 let private HYBRID_FED_STEPS = 8l   //! every hybrid feed's fed steps: the forced-feed form's, the CUDA home's and the codec cells'
+let private HYBRID_BATCH_CTX = 64l   //! the batched-decode cells' sessions' context
 
 //! the plane formats a fixture's deltanet layers carry: all Q8_0, all K-quant, or K-quant qkv/z beside a Q8_0 out plane
 enum HybridPlanes {
@@ -131,42 +152,39 @@ def private f16_feed_admits_kq() : bool {
     }
 }
 
-//! one forced feed of a hybrid file: its prompt's length, the device's rows, the CPU form's and - for a K-quant carrier on the
-//! Vulkan home - the file's f32 chain's, and on the Vulkan home the Q8_K requants and k4 cm2 tiles the prefill alone dispatched
-struct HybridFeed {
-    n : int64
-    gpu : FeedRows
-    cpu : FeedRows
-    f32 : FeedRows
+//! the Q8_K requants and k4 cm2 tiles one Vulkan feed's prefill alone dispatched, and the counts before it
+struct HybridCensus {
+    rq0 : int64
+    tiles0 : int64
     rq : int64 = -1l
     tiles : int64 = -1l
 }
 
-//! what a hybrid file's feeds collect: the planes the file carries, the CUDA home's ask, the default device form beside its
-//! CPU form (`main`), the K-quant planes and the f16 feed's admission as the device load read them (`carrier`), every feed, and
-//! the CUDA home's counters with their control (`cuda_counters`)
+//! what a hybrid file's feeds collect: the planes the file carries, the K-quant planes and the f16 feed's admission as the device
+//! load read them (`carrier`), the feeds on the file's window - the CUDA home's counters and their control held in theirs - and
+//! each Vulkan feed's prefill census
 struct HybridRows {
     planes : HybridPlanes
-    cuda : bool
-    main : MainPair
     carrier : Held
     f16_feed : bool
     nrec : int64
     nrec_ba_kq : int64
-    feeds : array<HybridFeed>
-    cuda_counters : Held
+    feeds : DenseFeeds
+    census : array<HybridCensus>
 }
 
-//! the feeds a hybrid file runs on the armed home: `vulkan` there, `cuda` under DASLLAMA_CUDA=1; a two-window length past the
-//! window the K-quant feeds gate on is held as a skip where the prompt window is not the file's
+//! the feeds a hybrid file runs on the armed home over the file's window: `vulkan` there, `cuda` under DASLLAMA_CUDA=1; a
+//! two-window length past the window the K-quant feeds gate on is held as a skip where the prompt window is not the file's
 def private hybrid_feeds(var r : HybridRows; planes : HybridPlanes; vulkan, cuda : array<int64>) {
     r.planes = planes
-    r.cuda = gpu_want_cuda()
-    for (n in r.cuda ? cuda : vulkan) {
+    r.feeds.cuda = gpu_want_cuda()
+    r.feeds.window = HYBRID_WINDOW
+    r.feeds.steps = HYBRID_FED_STEPS
+    for (n in r.feeds.cuda ? cuda : vulkan) {
         if (n > HYBRID_WINDOW && planes != HybridPlanes.q8 && !held_pf_window(r.carrier, HYBRID_WINDOW)) {
             continue
         }
-        r.feeds |> emplace(HybridFeed(n = n))
+        r.feeds.prompts |> push(n)
     }
 }
 
@@ -191,52 +209,31 @@ def private hybrid_kq_planes(var r : HybridRows; m : Model) {
     r.f16_feed = f16_feed_admits_kq()
 }
 
-//! one form's share of a hybrid file's feeds: the default device form's rows - on the Vulkan home with the prefill's census
-//! read, on the CUDA home under the driver's counters - the CPU form's on the default form's codec, the first under the CUDA
-//! counters' control, and the f32 form's
-def private hybrid_rows(var r : HybridRows; m : Model; form : ModelForm) {
-    let side = main_side(r.main, form)
-    let kq = r.planes != HybridPlanes.q8
-    if (side == MainSide.device) {
-        if (r.cuda) {
-            r.cuda_counters |> held_equal(m.arch, "qwen35", "the file is a qwen35-family model")
-        } elif (kq) {
-            hybrid_kq_planes(r, m)
-        }
-        for (f in r.feeds) {
-            if (r.cuda) {
-                f.gpu <- cuda_feed_rows(r.cuda_counters, m, form, f.n, prompt_windows(f.n, HYBRID_WINDOW))
-                continue
-            }
-            var inscope prompt <- resident_prompt(f.n)
-            var inscope toks <- resident_feed(HYBRID_FED_STEPS)
+//! one form's share of a hybrid file's feeds (`dense_feeds_rows`), the Vulkan feeds' prefill census read; ahead of the default
+//! device form's feeds the CUDA home's family witness or the K-quant planes; the side the form is
+def private hybrid_rows(var r : HybridRows; m : Model; form : ModelForm) : MainSide {
+    if (device_default(form) && !r.feeds.cuda && r.planes != HybridPlanes.q8) {
+        hybrid_kq_planes(r, m)
+    }
+    return dense_feeds_rows(r.feeds, m, form, r.feeds.cuda ? "qwen35" : "") $(i, after) {
+        if (!after) {
             let rq0 = census("cls_q8k_rq_spv")
             let tiles0 = kq_cm2_tiles_census(KqFmt.k4)
-            f.gpu <- feed_rows(m, form, prompt, toks) $ {
-                f.rq = census_since("cls_q8k_rq_spv", rq0)
-                f.tiles = census_delta(tiles0, kq_cm2_tiles_census(KqFmt.k4))
-            }
-        }
-    } elif (side == MainSide.cpu) {
-        for (f, i in r.feeds, count()) {
-            with_cpu_counters_still(r.cuda_counters, r.cuda && i == 0) {
-                f.cpu <- resident_feed_rows(m, form, f.n, HYBRID_FED_STEPS)
-            }
-        }
-    } elif (!form.on_gpu && form.quant == QuantMode.fp32) {
-        for (f in r.feeds) {
-            f.f32 <- resident_feed_rows(m, form, f.n, HYBRID_FED_STEPS)
+            r.census |> push(HybridCensus(rq0 = rq0, tiles0 = tiles0))
+        } else {
+            r.census[i].rq = census_since("cls_q8k_rq_spv", r.census[i].rq0)
+            r.census[i].tiles = census_delta(r.census[i].tiles0, kq_cm2_tiles_census(KqFmt.k4))
         }
     }
 }
 
-//! the K-quant routing witness on one Vulkan feed: off the f16 feed the x route requants once per recurrent layer per window; on
-//! it only the K-quant beta / alpha planes' GEMMs read a Q8_K row (one a recurrent layer a window), the qkv / z pair the f16 rows
-//! on the K-quant cm2 tiles
-def private hybrid_census_within(t : T?; r : HybridRows; f : HybridFeed) {
+//! the K-quant routing witness on one Vulkan feed of an `n`-token prompt: off the f16 feed the x route requants once per
+//! recurrent layer per window; on it only the K-quant beta / alpha planes' GEMMs read a Q8_K row (one a recurrent layer a
+//! window), the qkv / z pair the f16 rows on the K-quant cm2 tiles
+def private hybrid_census_within(t : T?; r : HybridRows; n : int64; f : HybridCensus) {
     return if (f.rq == NO_CENSUS)
-    let windows = prompt_windows(f.n, HYBRID_WINDOW)
-    to_log(LOG_INFO, "prefill ({f.n} tokens, {windows} windows) [{tile_arm_tag()}]: {f.rq} Q8_K requants over {r.nrec} recurrent layers ({r.nrec_ba_kq} with K-quant beta / alpha planes), {f.tiles} k4 cm2 tiles, f16 feed admits kq {r.f16_feed}\n")
+    let windows = prompt_windows(n, HYBRID_WINDOW)
+    to_log(LOG_INFO, "prefill ({n} tokens, {windows} windows) [{tile_arm_tag()}]: {f.rq} Q8_K requants over {r.nrec} recurrent layers ({r.nrec_ba_kq} with K-quant beta / alpha planes), {f.tiles} k4 cm2 tiles, f16 feed admits kq {r.f16_feed}\n")
     if (r.f16_feed) {
         t |> success(f.tiles > 0l, "on the f16 feed the K-quant qkv/z pair's GEMMs ride the k4 cm2 tiles ({f.tiles} dispatches) [{tile_arm_tag()}]")
         t |> success(f.rq <= windows * r.nrec_ba_kq + 1l, "on the f16 feed the prefill requantized the row to Q8_K for the K-quant beta / alpha planes alone, once a recurrent layer a window, and never for the qkv/z pair ({f.rq} Q8_K requants, {r.nrec_ba_kq} such layers, {windows} windows, the classifier's one) [{tile_arm_tag()}]")
@@ -249,8 +246,8 @@ def private hybrid_census_within(t : T?; r : HybridRows; f : HybridFeed) {
 //! a hybrid feed's bar on the armed home: the deltanet bar on the Q8_0 planes; on the K-quant planes the CUDA home's MMQ feed
 //! bar, else the f16 feed's (the mixed twin's own) or the quant feed's by the driver's admission
 def private hybrid_bar(r : HybridRows) : float {
-    return DN_LOGIT_BAR_REL if (r.planes == HybridPlanes.q8)
-    return DN_LOGIT_BAR_REL_KQ_CUDA if (r.cuda)
+    return _mtp_resident_cells::DN_LOGIT_BAR_REL if (r.planes == HybridPlanes.q8)
+    return DN_LOGIT_BAR_REL_KQ_CUDA if (r.feeds.cuda)
     return DN_LOGIT_BAR_REL_KQ_QUANT_FEED if (!r.f16_feed)
     return r.planes == HybridPlanes.kq_q8out ? DN_LOGIT_BAR_REL_KQ_Q8OUT : DN_LOGIT_BAR_REL_KQ_F16_FEED
 }
@@ -259,24 +256,26 @@ def private hybrid_bar(r : HybridRows) : float {
 //! home the K-quant routing witness and, on a K-quant carrier, the device no further from the file's f32 chain than the CPU
 //! chain; the K-quant planes' and the CUDA counters' reads
 def private hybrid_rows_within(t : T?; tag : string; r : HybridRows) {
-    return if (!r.main.ran)
+    return if (!r.feeds.main.ran)
     let kq = r.planes != HybridPlanes.q8
     held_within(t, r.carrier, "{tag}: ", false)
-    held_within(t, r.cuda_counters, "{tag} cuda: ", false)
+    held_within(t, r.feeds.carrier, "{tag} cuda: ", false)
     with_dasllama_jobque_() {
-        for (f in r.feeds) {
-            let windows = prompt_windows(f.n, HYBRID_WINDOW)
-            let home = r.cuda ? "the CUDA driver" : "the resident driver"
+        for (f, i in r.feeds.gpu, count()) {
+            let n = r.feeds.prompts[i]
+            let windows = prompt_windows(n, HYBRID_WINDOW)
+            let home = r.feeds.cuda ? "the CUDA driver" : "the resident driver"
             unsafe {
-                t |> run("{tag}: a {f.n}-token prompt ({windows} window{windows > 1l ? "s" : ""}) and {HYBRID_FED_STEPS} fed steps on {home} against the CPU chain ({cuda_knob()})") @capture(& r, & f)(t : T ?) {
-                    if (kq && !r.cuda) {
-                        hybrid_census_within(t, r, f)
+                t |> run("{tag}: a {n}-token prompt ({windows} window{windows > 1l ? "s" : ""}) and {HYBRID_FED_STEPS} fed steps on {home} against the CPU chain ({cuda_knob()})") @capture(& r, & f)(t : T ?) {
+                    if (kq && !r.feeds.cuda) {
+                        hybrid_census_within(t, r, n, r.census[i])
                     }
-                    feed_rows_within(t, "", f.gpu, f.cpu, hybrid_bar(r))
-                    if (kq && !r.cuda) {   // the K-quant carriers' same-or-better witness: the device no further from the file's f32 chain than the CPU q8 chain
-                        f32_chain_witness(t, "{f.n} tokens against the f32 chain [{tile_arm_tag()}]", f.gpu.rows, f.cpu.rows, f.f32.rows,
-                                F32_DIST_REL) $(id) {
-                            return feed_piece(f.gpu, f.cpu, id)
+                    return if (!twin_collected(t, i, length(r.feeds.cpu), ""))
+                    feed_rows_within(t, "", f, r.feeds.cpu[i], hybrid_bar(r))
+                    if (kq && !r.feeds.cuda) {   // the K-quant carriers' same-or-better witness: the device no further from the file's f32 chain than the CPU q8 chain
+                        f32_chain_witness(t, "{n} tokens against the f32 chain [{tile_arm_tag()}]", f.rows, r.feeds.cpu[i].rows,
+                                r.feeds.f32[i].rows, F32_DIST_REL) $(id) {
+                            return feed_piece(f, r.feeds.cpu[i], id)
                         }
                     }
                 }
@@ -346,9 +345,28 @@ struct HybridQ8Rows {
     home_pin : Held
 }
 
+//! the segmented window's cells (`recurrent_segments_cell`) on a two-region load on the SEG_WINDOW-row window as their own cell
+def private recurrent_segments_on(t : T?; var m : Model; title : string) {
+    unsafe {
+        t |> run(title) @capture(& m)(t : T ?) {
+            recurrent_segments_cell(t, m)
+        }
+    }
+}
+
 //! one form's collection of the Q8_0 file's cells into `r`; the one- and two-region forms' own cells run on their load
 def private hybrid_q8_rows(t : T?; var r : HybridQ8Rows; var m : Model; form : ModelForm) {
-    if (form.on_gpu && form.regions == 1l) {
+    if (form.drops_device) {
+        device_drop_cell(t, form) {
+            scheduler_batching_deltanet_gpu_cell(t, m)
+        }
+    } elif (!form.on_gpu && form.backend == "portable") {
+        with_ctx_cut(m, HYBRID_BATCH_CTX) {
+            batch_decode_hybrid_cells(t, m)
+        }
+    } elif (form.pf_window_rows == SEG_WINDOW) {
+        recurrent_segments_on(t, m, "On the Qwen3.5-0.8B hybrid segmented windows - a tail under the conv taps, tails past one window - hold the split bar of solo windows, and checkpoint stops captured inside one call adopt and continue at their rows")
+    } elif (form.on_gpu && form.regions == 1l) {
         greedy_chain_rows(r.chain, m, "Qwen3.5-0.8B-Q8_0.gguf")
         unsafe {
             t |> run("Qwen3.5-0.8B: a short tail peels through the token commands, the recurrent rows in order in the region's slot, and reads what the one-row steps read") @capture(& m)(t : T ?) {
@@ -375,26 +393,39 @@ def private hybrid_q8_rows(t : T?; var r : HybridQ8Rows; var m : Model; form : M
         regions_pool_cell(t, m)
     } elif (form.on_gpu && form.kv_asked) {
         hybrid_codec_rows(r.codec, m, form)
+    } elif (!form.on_gpu && form.uncached) {
+        chat_qwen35_cells(t, m)
     } else {
         hybrid_rows(r.feed, m, form)
         if (!form.on_gpu) {
             hybrid_codec_rows(r.codec, m, form)
+        }
+        if (!form.on_gpu && form.alone) {
+            deltanet_chunked_prefill_cell(t, m)
         }
     }
 }
 
 //! the Q8_0 file's forms: the default (the feeds), the q8_0 and tq4 mirrors (a codec the environment keeps off held as a skip),
 //! one region (the greedy chain, the peel, the region taken), two regions on the rig's 2048-row window (its cells read prompts
-//! sized against it) and the same with the planes on the host (the pin cell)
+//! sized against it), the same with the planes on the host (the pin cell), two regions on the SEG_WINDOW-row window (the
+//! segmented window's cells), the planes on the host with the device dropped last (the two deltanet streams' scheduler cell,
+//! its control off the tier), and the q8, uncached and portable-pinned CPU forms whose cells stand alone (the chunked prefill,
+//! the chat cells, batched decode against sequential)
 def private hybrid_q8_forms(var r : HybridQ8Rows) : array<ModelForm> {
     var forms <- [device_form(), device_form(regions = 1l, ctx = REGIONS_RIG_CTX),
         device_form(regions = 2l, ctx = REGIONS_RIG_CTX, pf_window_rows = PF_WINDOW_ROWS),
-        device_form(regions = 2l, host = true, ctx = REGIONS_RIG_CTX, pf_window_rows = PF_WINDOW_ROWS)]
+        device_form(regions = 2l, host = true, ctx = REGIONS_RIG_CTX, pf_window_rows = PF_WINDOW_ROWS),
+        device_form(regions = 2l, ctx = REGIONS_RIG_CTX, pf_window_rows = SEG_WINDOW),
+        device_form(host = true, drops_device = true)]
     codec_forms(forms, r.feed.carrier, [KVDtype.q8_0, KVDtype.tq4], device_form()) $(kv) => "the {kv} mirror under the gated attention"
+    forms |> push(cpu_cells_form())
+    forms |> push(cpu_cells_form(uncached = true))
+    forms |> push(cpu_cells_form(backend = "portable"))
     return <- forms
 }
 
-[test(description = "On Qwen3.5-0.8B Q8_0 the resident driver holds the CPU chain within the deltanet bar on forced feeds over one window, two, one past the window and a two-token prompt on the Vulkan home and over one window and two with every position served on the CUDA home; under the gated attention a q8_0 K/V mirror holds the CPU q8_0 chain within 6 percent and a tq4 mirror sits no further than 1.15 times the CPU tq4 chain's distance from the f16 rows; at one region the greedy chain's steps reproduce the plain steps bit for bit, a short tail peels within the split bar of one-row steps and a host-cached session losing its region keeps its device-only rows; at two regions two sessions' recurrent state slots step interleaved, batched and batched first as each reads alone, device-home sessions step as a host-cached session alone, a prefill continued past zero starts from the region's live state within the split bar, a recurrent parked claim hands its rows and state over, and the device-mode, paged and pooled schedulers emit the host-cached schedulers' tokens; each form loads once")]
+[test(description = "On Qwen3.5-0.8B Q8_0 the resident driver holds the CPU chain within the deltanet bar on forced feeds over one window, two, one past the window and a two-token prompt on the Vulkan home and over one window and two with every position served on the CUDA home; under the gated attention a q8_0 K/V mirror holds the CPU q8_0 chain within 6 percent and a tq4 mirror sits no further than 1.15 times the CPU tq4 chain's distance from the f16 rows; at one region the greedy chain's steps reproduce the plain steps bit for bit, a short tail peels within the split bar of one-row steps and a host-cached session losing its region keeps its device-only rows; at two regions two sessions' recurrent state slots step interleaved, batched and batched first as each reads alone, device-home sessions step as a host-cached session alone, a prefill continued past zero starts from the region's live state within the split bar, a recurrent parked claim hands its rows and state over, and the device-mode, paged and pooled schedulers emit the host-cached schedulers' tokens; on the 512-row window segmented windows - a tail under the conv taps, tails past one window - hold the split bar of solo windows, and checkpoint stops captured inside one call adopt and continue at their rows; on the q8 CPU form, on every box, a 150-token chunked deltanet prefill holds 4 percent of the recurrent one over 8 forced-feed steps, on the uncached CPU form the xml_function template's turns render and the Hermes tool markers are single vocab ids, and on the portable-pinned CPU form, on every box, every batched step runs on the CPU stack and matches sequential logits, KV, deltanet state and conv history within 1e-6 under f32 and f16 KV and decoding below the deltanet position panics; with the planes on the host two deltanet streams decoded turn about match their solo generate references token for token, share decode steps, record fused deltanet steps on the device and pass nothing to the CPU rails; on the parity row's CPU form, on every box, the file's frozen greedy ids token for token with its chunked-prefill arm; each form loads once")]
 def test_gpu_resident_hybrid_q8(t : T?) {
     pin_window_rows()
     return if (!family_on(t, "qwen35"))
@@ -403,7 +434,7 @@ def test_gpu_resident_hybrid_q8(t : T?) {
     var forms <- hybrid_q8_forms(r)
     var ran = false
     with_cuda_mmq_winners() {
-        ran = with_cpu_and_gpu_model(t, "llm", "Qwen3.5-0.8B-Q8_0.gguf", CARRY_RIG_CTX, forms) $(m, form) {
+        ran = with_cpu_and_gpu_model(t, "llm", "Qwen3.5-0.8B-Q8_0.gguf", CARRY_RIG_CTX, forms, parity = true) $(var m, form) {
             hybrid_q8_rows(t, r, m, form)
         }
     }
@@ -511,8 +542,7 @@ def private hybrid_kq_rows(t : T?; var r : HybridKqRows; var m : Model; form : M
         long_row(r.past, m, PAST_WINDOW)
         return
     }
-    let side = main_side(r.feed.main, form)
-    hybrid_rows(r.feed, m, form)
+    let side = hybrid_rows(r.feed, m, form)
     if (side == MainSide.device && empty(window_cells_why())) {
         continuation_cell(t, m)
     } elif (side == MainSide.cpu && (r.wide.ran || r.past.ran)) {
@@ -544,34 +574,20 @@ def private long_row_within(t : T?; r : HybridKqRows; l : LongPromptRow; name : 
     }
 }
 
-[test(description = "Qwen3.5-0.8B-Q4_K_M keeps its deltanet planes K-quant and holds the CPU chain within the K-quant bar over one and two windows - on the Vulkan home the f16 feed riding the k4 cm2 tiles, no further from the f32 chain than the CPU; on the CUDA home within 10 percent with every position served; on the Vulkan home a prompt's second half continued in place and from an adopted checkpoint lands within 5 percent of the whole prompt in one window while the prompt one token short lands past it, and a 5000-token prompt lands its last row within 10 percent of the CPU chain's at the wide window equal to DN_WINDOW and at a 5120-row window the recurrent cut bounds; each form loads once")]
+[test(description = "Qwen3.5-0.8B-Q4_K_M keeps its deltanet planes K-quant and holds the CPU chain within the K-quant bar over one and two windows - on the Vulkan home the f16 feed riding the k4 cm2 tiles, no further from the f32 chain than the CPU; on the CUDA home within 10 percent with every position served; on the Vulkan home a prompt's second half continued in place and from an adopted checkpoint lands within 5 percent of the whole prompt in one window while the prompt one token short lands past it, and a 5000-token prompt lands its last row within 10 percent of the CPU chain's at the wide window equal to DN_WINDOW and at a 5120-row window the recurrent cut bounds; on the parity row's CPU form, on every box, the file's frozen greedy ids token for token with its chunked-prefill arm and its deltanet planes K-quant native; each form loads once")]
 def test_gpu_resident_hybrid_kq(t : T?) {
     pin_window_rows()
     return if (!family_on(t, "qwen35"))
-    if (mirror_kv_dtype() == KVDtype.f32) {
-        t |> skip("the K-quant bar is calibrated on the f16 mirror the tier arms; the f32 A/B mirror (DASLLAMA_VK_KV32=1) is no gate for it")
-        return
-    }
     var r : HybridKqRows
-    hybrid_feeds(r.feed, HybridPlanes.kq, [40l, HYBRID_WINDOW + 88l], [40l, HYBRID_WINDOW + 88l])
-    var forms <- [device_form()]
-    let why = window_cells_why()
-    if (!r.feed.cuda) {
-        forms |> push(f32_form())
-    }
-    if (empty(why)) {
-        static_if (typeinfo builtin_module_exists(vulkan)) {
-            r.feed.carrier |> held_equal(PF_ROWS_WIDE, DN_WINDOW, "the wide window the driver picks first is one deltanet chunk ({PF_ROWS_WIDE} rows, DN_WINDOW {DN_WINDOW}): the window runs uncut")
-            r.feed.carrier |> held_fact(PAST_WINDOW > DN_WINDOW, "the window asked passes DN_WINDOW ({PAST_WINDOW} over {DN_WINDOW}): the cut is what the cell reads")
-        }
-        forms |> push(device_form(pf_window_rows = PF_ROWS_WIDE))
-        forms |> push(device_form(pf_window_rows = PAST_WINDOW))
+    var forms : array<ModelForm>
+    if (mirror_kv_dtype() == KVDtype.f32) {
+        skip_cell(t, "the K-quant bar is calibrated on the f16 mirror the tier arms; the f32 A/B mirror (DASLLAMA_VK_KV32=1) is no gate for it")
     } else {
-        r.feed.carrier |> held_skip("the window cells: {why}")
+        hybrid_kq_forms(forms, r)
     }
     var ran = false
     with_cuda_mmq_winners() {
-        ran = with_cpu_and_gpu_model(t, "llm", "Qwen3.5-0.8B-Q4_K_M.gguf", REGIONS_RIG_CTX, forms) $(m, form) {
+        ran = with_cpu_and_gpu_model(t, "llm", "Qwen3.5-0.8B-Q4_K_M.gguf", REGIONS_RIG_CTX, forms, parity = true) $(var m, form) {
             hybrid_kq_rows(t, r, m, form)
         }
     }
@@ -584,23 +600,45 @@ def test_gpu_resident_hybrid_kq(t : T?) {
     delete forms
 }
 
-[test(description = "The mixed twin with K-quant deltanet qkv/z and a Q8_0 out plane holds the CPU chain within its bar over one and two windows on the Vulkan home, the qkv/z feed on the k4 tiles, no further from the f32 chain than the CPU, and over one window within 10 percent with every position served on the CUDA home; each form loads once")]
+//! the Q4_K_M file's K-quant forms pushed onto `forms`: the default (the feeds), the f32 chain's witness off the CUDA home, the
+//! wide and the past-DN_WINDOW prompt windows where the window cells run (`window_cells_why`, a held skip where they do not)
+def private hybrid_kq_forms(var forms : array<ModelForm>; var r : HybridKqRows) {
+    hybrid_feeds(r.feed, HybridPlanes.kq, [40l, HYBRID_WINDOW + 88l], [40l, HYBRID_WINDOW + 88l])
+    forms |> push(device_form())
+    let why = window_cells_why()
+    if (!r.feed.feeds.cuda) {
+        forms |> push(f32_form())
+    }
+    if (empty(why)) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            r.feed.carrier |> held_equal(PF_ROWS_WIDE, DN_WINDOW, "the wide window the driver picks first is one deltanet chunk ({PF_ROWS_WIDE} rows, DN_WINDOW {DN_WINDOW}): the window runs uncut")
+            r.feed.carrier |> held_fact(PAST_WINDOW > DN_WINDOW, "the window asked passes DN_WINDOW ({PAST_WINDOW} over {DN_WINDOW}): the cut is what the cell reads")
+        }
+        forms |> push(device_form(pf_window_rows = PF_ROWS_WIDE))
+        forms |> push(device_form(pf_window_rows = PAST_WINDOW))
+    } else {
+        r.feed.carrier |> held_skip("the window cells: {why}")
+    }
+}
+
+[test(description = "The mixed twin with K-quant deltanet qkv/z and a Q8_0 out plane holds the CPU chain within its bar over one and two windows on the Vulkan home, the qkv/z feed on the k4 tiles, no further from the f32 chain than the CPU, and over one window within 10 percent with every position served on the CUDA home; on the parity row's CPU form, on every box, the file's frozen greedy ids token for token with its chunked-prefill arm; each form loads once")]
 def test_gpu_resident_hybrid_kq_q8out(t : T?) {
     pin_window_rows()
     return if (!family_on(t, "qwen35"))
-    if (mirror_kv_dtype() == KVDtype.f32) {
-        t |> skip("the K-quant bar is calibrated on the f16 mirror the tier arms; the f32 A/B mirror (DASLLAMA_VK_KV32=1) is no gate for it")
-        return
-    }
     var r : HybridRows
-    hybrid_feeds(r, HybridPlanes.kq_q8out, [40l, HYBRID_WINDOW + 88l], [40l])
-    var forms <- [device_form()]
-    if (!r.cuda) {
-        forms |> push(f32_form())
+    var forms : array<ModelForm>
+    if (mirror_kv_dtype() == KVDtype.f32) {
+        skip_cell(t, "the K-quant bar is calibrated on the f16 mirror the tier arms; the f32 A/B mirror (DASLLAMA_VK_KV32=1) is no gate for it")
+    } else {
+        hybrid_feeds(r, HybridPlanes.kq_q8out, [40l, HYBRID_WINDOW + 88l], [40l])
+        forms |> push(device_form())
+        if (!r.feeds.cuda) {
+            forms |> push(f32_form())
+        }
     }
     var ran = false
     with_cuda_mmq_winners() {
-        ran = with_cpu_and_gpu_model(t, "llm", "Qwen3.5-0.8B-Q4_K_M-q8out.gguf", CARRY_RIG_CTX, forms) $(m, form) {
+        ran = with_cpu_and_gpu_model(t, "llm", "Qwen3.5-0.8B-Q4_K_M-q8out.gguf", CARRY_RIG_CTX, forms, parity = true) $(var m, form) {
             hybrid_rows(r, m, form)
         }
     }
@@ -671,8 +709,28 @@ def private hybrid_mtp_main_rows(t : T?; var r : HybridMtpRows; var m : Model; f
     mtp_nonfinite_cell(t, m)
 }
 
+let private MTP_SCHED_CTX = 512l   //! the speculative scheduler cells' sessions' context: the scheduler form's, the CPU form's cut
+
+//! the speculative scheduler's cells on the q8 CPU form, its device state dropped: the stop close and the length cap at
+//! MTP_SCHED_CTX, the self-speculative streams against the plain scheduler where the GPU tier is not armed (where it is, the
+//! plain device form runs them), the checkpoint stops inside one window
+def private mtp_scheduler_cpu_cells(t : T?; var m : Model) {
+    with_ctx_cut(m, MTP_SCHED_CTX) {
+        test_scheduler_mtp_stop_close(t, m)
+        test_scheduler_mtp_length_cap(t, m)
+    }
+    if (!empty(gpu_tier_why())) {
+        scheduler_mtp_cell(t, m)
+    }
+    scheduler_capture_stops_cell(t, m)
+}
+
 //! one form's collection of the -MTP- file's cells into `r`
 def private hybrid_mtp_rows(t : T?; var r : HybridMtpRows; var m : Model; form : ModelForm) {
+    if (!form.on_gpu && form.quant == QuantMode.q4_0) {
+        mtp_q4_0_cell(t, m)
+        return
+    }
     if (!form.on_gpu) {
         if (r.main_ran && form.kv == r.main_kv) {
             mtp_carry_cpu_rows(r.carry, m, form.kv)
@@ -690,10 +748,19 @@ def private hybrid_mtp_rows(t : T?; var r : HybridMtpRows; var m : Model; form :
             mtp_head_warm_cpu_rows(r.q8_warms, m, form.kv)
             mtp_rounds_cpu_rows(r.q8_rounds, m, form.kv)
         }
+        if (form.alone) {
+            mtp_cpu_cells(t, m)
+            mtp_scheduler_cpu_cells(t, m)
+        }
         return
     }
     mtp_carrier_held(t, m)
-    if (form.head_off) {
+    if (form.regions == 0l) {
+        scheduler_mtp_cell(t, m)
+    } elif (form.ctx == MTP_SCHED_CTX) {
+        test_scheduler_mtp_resident_picks(t, m)
+        test_scheduler_mtp_device_home(t, m)
+    } elif (form.head_off) {
         mtp_head_off_rows(r.head_off, m)
         reset_gpu_cpu_passes()   //! the head-off round passes as verify_rows and verify_window by design
     } elif (form.mtp_depth == 8l) {
@@ -720,6 +787,7 @@ def private hybrid_mtp_rows(t : T?; var r : HybridMtpRows; var m : Model; form :
             }
         }
     } elif (form.regions == 2l) {
+        recurrent_segments_on(t, m, "On the NextN-headed Qwen3.5-0.8B-MTP hybrid segmented windows hold the split bar of solo windows, and checkpoint stops captured inside one call adopt and continue at their rows")
         mtp_carry_batched_rows(r.batched, m)
         mtp_verify_asked_cell(t, m)
         regions_pool_head_cell(t, m, MTP_CARRY_FILE)
@@ -729,18 +797,26 @@ def private hybrid_mtp_rows(t : T?; var r : HybridMtpRows; var m : Model; form :
     }
 }
 
-//! the -MTP- file's forms, every one with the planes on the host (the head cells run the CPU head on the model): one region,
-//! two on the rig's context, the head kept off the device, the depth-8 verify and its depth-1 control, depth 2 for the sampled
-//! selection, and the q8_0 and tq4 mirrors (a codec the environment keeps off held as a skip)
+//! the -MTP- file's forms: the device forms, every one with the planes on the host (the head cells run the CPU head on the
+//! model) - one region, two on the rig's context, the head kept off the device, the depth-8 verify and its depth-1 control,
+//! depth 2 for the sampled selection, the q8_0 and tq4 mirrors (a codec the environment keeps off held as a skip), one region
+//! on MTP_SCHED_CTX for the resident scheduler cells, whose device-home streams leave parked claims and whose pass read is the
+//! form's whole history, and the driver's own regions for the self-speculative streams against the plain scheduler, whose
+//! census reads no tick of theirs a device step with the tier installed - and the q8 and q4_0 CPU forms whose cells stand
+//! alone (`_mtp_cpu_cells.das`, the speculative scheduler's CPU cells)
 def private hybrid_mtp_forms(var r : HybridMtpRows) : array<ModelForm> {
     var forms <- [device_form(regions = 1l, host = true), device_form(regions = 2l, host = true, ctx = REGIONS_RIG_CTX),
         device_form(regions = 1l, host = true, head_off = true), device_form(regions = 1l, host = true, mtp_depth = 8l),
         device_form(regions = 1l, host = true, mtp_depth = 1l), device_form(regions = 1l, host = true, mtp_depth = 2l)]
     codec_forms(forms, r.cuda_counters, [KVDtype.q8_0, KVDtype.tq4], device_form(regions = 1l, host = true)) $(kv) => "the NextN head over a {kv} mirror"
+    forms |> push(device_form(regions = 1l, host = true, ctx = MTP_SCHED_CTX))
+    forms |> push(device_form(host = true))
+    forms |> push(cpu_cells_form())
+    forms |> push(cpu_cells_form(QuantMode.q4_0))
     return <- forms
 }
 
-[test(description = "On Qwen3.5-0.8B-MTP the resident prefill and every step land the post-norm hidden as the speculative carry at its row's watermark within the deltanet bar of the CPU chain's, one row at a time and through the N-row command, and with speculation off no carry lands; a NextN draft through the resident head matches the CPU forward_mtp, uploads past the device's rows, pins a suppressed pick, and is bit-identical despite NaN-poisoned host residual rows; the round's verify rows sit within twice the deltanet bar of one-row steps, a forced reject rolls back on the device, the head's warmed K rows sit within twice the deltanet bar of the CPU warm's over one and two windows, and six rounds match the CPU rounds up to near-ties; the depth-8 knob prepares nine verify rows (depth 1 two) and its walk emits the plain decode, a seeded sampled stream at depth 2 decodes the rows-landed stream; a NaN carry panics the draft by row, the pass arms hand the round to the CPU rails by name, a rewind is refused, a head kept off the device passes the verify as verify_rows; the head holds its bars over q8_0 and tq4 mirrors; the peel with speculation off; pooled openings carry the draft head's rows; on the CUDA home the trunk's forced feed holds 4 percent of the CPU chain with every position served; each form loads once")]
+[test(description = "On Qwen3.5-0.8B-MTP the resident prefill and every step land the post-norm hidden as the speculative carry at its row's watermark within the deltanet bar of the CPU chain's, one row at a time and through the N-row command, and with speculation off no carry lands; a NextN draft through the resident head matches the CPU forward_mtp, uploads past the device's rows, pins a suppressed pick, and is bit-identical despite NaN-poisoned host residual rows; the round's verify rows sit within twice the deltanet bar of one-row steps, a forced reject rolls back on the device, the head's warmed K rows sit within twice the deltanet bar of the CPU warm's over one and two windows, and six rounds match the CPU rounds up to near-ties; the depth-8 knob prepares nine verify rows (depth 1 two) and its walk emits the plain decode, a seeded sampled stream at depth 2 decodes the rows-landed stream; a NaN carry panics the draft by row, the pass arms hand the round to the CPU rails by name, a rewind is refused, a head kept off the device passes the verify as verify_rows; the head holds its bars over q8_0 and tq4 mirrors; the peel with speculation off; pooled openings carry the draft head's rows; on the CUDA home the trunk's forced feed holds 4 percent of the CPU chain with every position served; at two regions segmented windows hold the split bar of solo windows, and checkpoint stops captured inside one call adopt and continue at their rows; on the q8 CPU form, on every box, the NextN extras load and the spec-off trunk continues the plain file's fixture, self-speculative greedy decode emits plain decode's tokens on the counting and prose prompts, the k-deep round at depths 2, 3 and 4 decodes the plain stream with depth 4 accepting more than depth 1, a poisoned verify and a forced-reject round roll back to plain decode, the continuation prefill's seam row is written exactly where no seat serves it, and a prefill driver serving the verify window panics the round naming it; on the q4_0 CPU form self-speculative decode emits plain decode's counting tokens; each form loads once")]
 def test_gpu_resident_hybrid_mtp(t : T?) {
     pin_window_rows()
     return if (!family_on(t, "qwen35"))
@@ -763,7 +839,7 @@ def test_gpu_resident_hybrid_mtp(t : T?) {
             mtp_rounds_within(t, "the NextN head over a q8_0 mirror - ", r.q8_rounds)
             mtp_head_off_within(t, r.head_off)
             if (r.cuda && r.main_ran) {
-                feed_rows_within(t, "{MTP_CARRY_FILE} cuda, the trunk with the head unused, 40 tokens: ", r.trunk, r.trunk_cpu, DN_LOGIT_BAR_REL)
+                feed_rows_within(t, "{MTP_CARRY_FILE} cuda, the trunk with the head unused, 40 tokens: ", r.trunk, r.trunk_cpu, _mtp_resident_cells::DN_LOGIT_BAR_REL)
             }
         }
     }
@@ -781,15 +857,13 @@ struct CudaOnlyRows {
     carrier : Held
     feeds : array<FeedRows>
     cpu : array<FeedRows>
-    off : FeedRows
-    off_ran : bool
+    off : MmqOffFeed
 }
 
 def private cuda_only_rows(var r : CudaOnlyRows; m : Model; form : ModelForm) {
     let side = main_side(r.main, form)
     if (form.on_gpu && form.mmq_off) {
-        r.off <- cuda_feed_rows(r.carrier, m, form, 40l, 1l)
-        r.off_ran = true
+        mmq_off_rows(r.off, r.carrier, m, form)
     } elif (side == MainSide.device) {
         r.carrier |> held_equal(m.arch, "qwen35", "the file is a qwen35-family model")
         r.feeds |> reserve(length(r.prompts))
@@ -805,14 +879,16 @@ def private cuda_only_rows(var r : CudaOnlyRows; m : Model; form : ModelForm) {
     }
 }
 
-[test(description = "On the CUDA driver the NVFP4 Qwen3.5-0.8B twin's deltanet sites on the FP4 tensor leaf keep forced-feed logits within 20 percent of max logit of the CPU chain over one and two windows, and pinned off MMQ the cm2 tiles hold the 10 percent bar; each form loads once")]
-def test_gpu_resident_hybrid_nv4(t : T?) {
-    pin_window_rows()
-    return if (!family_on(t, "qwen35") || !cuda_home_asked(t))
+//! the NVFP4 file's device forms where the CUDA home is asked on a CUDA build - the FP4 leaf's default form on a card past the
+//! FP4 rung (its cells' skip held in `r` otherwise) and the MMQ-off form - else one loud skip naming them
+def private nv4_device_forms(t : T?; var r : CudaOnlyRows; var forms : array<ModelForm>) {
     static_if (typeinfo builtin_module_exists(cuda)) {
-        var r : CudaOnlyRows
+        let why = cuda_home_why()
+        if (!empty(why)) {
+            skip_cell(t, "{NV4_FILE}, the FP4 leaf's and the MMQ-off device forms: {why}")
+            return
+        }
         r.skip = fp4_rung_why()
-        var forms : array<ModelForm>
         if (empty(r.skip)) {
             r.prompts <- [40l, HYBRID_WINDOW + 88l]
             forms |> push(device_form())
@@ -821,40 +897,72 @@ def test_gpu_resident_hybrid_nv4(t : T?) {
             r.prompts |> push(40l)   //! the MMQ-off form's CPU side
         }
         forms |> push(device_form(mmq_off = true))
-        var ran = false
-        with_cuda_mmq_winners() {
-            ran = with_cpu_and_gpu_model(t, "llm", "Qwen3.5-0.8B-NVFP4-MTP.gguf", CARRY_RIG_CTX, forms) $(m, form) {
-                cuda_only_rows(r, m, form)
-            }
-        }
-        if (ran) {
-            held_within(t, r.carrier, "Qwen3.5-0.8B-NVFP4-MTP: ", false)
-            with_dasllama_jobque_() {
-                for (f, i in r.feeds, count()) {
-                    let what = "Qwen3.5-0.8B-NVFP4-MTP.gguf cuda, {f.nprompt} tokens under set_cuda_mmq_pin({cuda_mmq_name(CUDA_MMQ_WINNERS)}), the nv4 deltanet sites on the FP4 tensor leaf under the planes' factors: "
-                    continue if (!twin_collected(t, i, length(r.cpu), what))
-                    feed_rows_within(t, what, f, r.cpu[i], DN_LOGIT_BAR_REL_FP4)
-                }
-                let off = "Qwen3.5-0.8B-NVFP4-MTP.gguf cuda, 40 tokens under set_cuda_mmq_pin({cuda_mmq_name(CUDA_MMQ_OFF)}) - the cm2 tiles over f16 activations hold the K-quant bar (the FP4 arm's control): "
-                if (r.off_ran && twin_collected(t, 0, length(r.cpu), off)) {
-                    feed_rows_within(t, off, r.off, r.cpu[0], DN_LOGIT_BAR_REL_KQ_CUDA)
-                }
-            }
-        }
-        delete r
-        delete forms
+    } else {
+        skip_cell(t, "{NV4_FILE}, the FP4 leaf's and the MMQ-off device forms: no CUDA module on this build")
     }
 }
 
-[test(description = "On the CUDA driver the deltanet hybrid Qwen3.5-4B Q8_0 keeps one-window prefill and eight fed-step logits within 4 percent of max logit of the CPU chain; each form loads once")]
-def test_gpu_resident_hybrid_4b(t : T?) {
+//! the NVFP4 file's feeds held after its block: each FP4-leaf feed at the FP4 bar, the MMQ-off feed at the K-quant bar
+[unused_argument(t, r)]   // without the cuda module no feed ran
+def private nv4_within(t : T?; r : CudaOnlyRows) {
+    static_if (typeinfo builtin_module_exists(cuda)) {
+        held_within(t, r.carrier, "Qwen3.5-0.8B-NVFP4-MTP: ", false)
+        with_dasllama_jobque_() {
+            feeds_within(t, "Qwen3.5-0.8B-NVFP4-MTP.gguf cuda, ", r.feeds, r.cpu, DN_LOGIT_BAR_REL_FP4,
+                " under set_cuda_mmq_pin({cuda_mmq_name(CUDA_MMQ_WINNERS)}), the nv4 deltanet sites on the FP4 tensor leaf under the planes' factors")
+            let off = "Qwen3.5-0.8B-NVFP4-MTP.gguf cuda, 40 tokens under set_cuda_mmq_pin({cuda_mmq_name(CUDA_MMQ_OFF)}) - the cm2 tiles over f16 activations hold the K-quant bar (the FP4 arm's control): "
+            mmq_off_within(t, r.off, r.cpu, off, off, DN_LOGIT_BAR_REL_KQ_CUDA)
+        }
+    }
+}
+
+let private NV4_FILE = "Qwen3.5-0.8B-NVFP4-MTP.gguf"
+
+[test(description = "On the CUDA driver the NVFP4 Qwen3.5-0.8B twin's deltanet sites on the FP4 tensor leaf keep forced-feed logits within 20 percent of max logit of the CPU chain over one and two windows, and pinned off MMQ the cm2 tiles hold the 10 percent bar; on its K-quant-native portable-pinned CPU form, on every box, the load keeps the nv4 planes disk-order, tags blk.0.ffn_down nv4, lands every NVFP4 plane's per-tensor scale on the site table at the file's value, places the down plane bit for bit the file dequant, and the site scale reaches the CPU matmul's epilogue; each form loads once")]
+def test_gpu_resident_hybrid_nv4(t : T?) {
     pin_window_rows()
-    return if (!family_on(t, "qwen35") || !cuda_home_asked(t))
+    return if (!family_on(t, "qwen35"))
     var r : CudaOnlyRows
-    r.prompts |> push(40l)
+    var forms : array<ModelForm>
+    nv4_device_forms(t, r, forms)
+    forms |> push(cpu_cells_form(backend = "portable", kq_native = KqNative.on))
     var ran = false
     with_cuda_mmq_winners() {
-        ran = with_cpu_and_gpu_model(t, "llm", "Qwen3.5-4B-Q8_0.gguf", CARRY_RIG_CTX, [device_form()]) $(m, form) {
+        ran = with_cpu_and_gpu_model(t, "llm", "Qwen3.5-0.8B-NVFP4-MTP.gguf", CARRY_RIG_CTX, forms) $(m, form) {
+            if (form.kq_native == KqNative.on) {
+                unsafe {
+                    t |> run("nv4 load tags the NVFP4 planes, reads their per-tensor scales and places them at their cursor offsets (Qwen3.5-0.8B NVFP4)") @capture(& m)(t : T ?) {
+                        kq_nv4_load_layout_cell(t, m)
+                    }
+                }
+            } else {
+                cuda_only_rows(r, m, form)
+            }
+        }
+    }
+    if (ran) {
+        nv4_within(t, r)
+    }
+    delete r
+    delete forms
+}
+
+[test(description = "On the CUDA driver the deltanet hybrid Qwen3.5-4B Q8_0 keeps one-window prefill and eight fed-step logits within 4 percent of max logit of the CPU chain; on the parity row's CPU form, on every box, the file's frozen greedy ids token for token with its chunked-prefill arm; each form loads once")]
+def test_gpu_resident_hybrid_4b(t : T?) {
+    pin_window_rows()
+    return if (!family_on(t, "qwen35"))
+    var r : CudaOnlyRows
+    var forms : array<ModelForm>
+    let why = cuda_home_why()
+    if (empty(why)) {
+        r.prompts |> push(40l)
+        forms |> push(device_form())
+    } else {
+        skip_cell(t, "Qwen3.5-4B-Q8_0.gguf: the CUDA forced feed: {why}")
+    }
+    var ran = false
+    with_cuda_mmq_winners() {
+        ran = with_cpu_and_gpu_model(t, "llm", "Qwen3.5-4B-Q8_0.gguf", CARRY_RIG_CTX, forms, parity = true) $(var m, form) {
             cuda_only_rows(r, m, form)
         }
     }
@@ -864,11 +972,12 @@ def test_gpu_resident_hybrid_4b(t : T?) {
             let what = "Qwen3.5-4B-Q8_0.gguf cuda, 40 tokens: "
             t |> equal(length(r.feeds), 1, "{what}the default form collected its one feed")
             if (!empty(r.feeds) && twin_collected(t, 0, length(r.cpu), what)) {
-                feed_rows_within(t, what, r.feeds[0], r.cpu[0], DN_LOGIT_BAR_REL)
+                feed_rows_within(t, what, r.feeds[0], r.cpu[0], _mtp_resident_cells::DN_LOGIT_BAR_REL)
             }
         }
     }
     delete r
+    delete forms
 }
 
 [test(description = "The Vulkan kernel census panics on a name no kernel seeded, so a misspelt key cannot read as a zero count, while a seeded class kernel answers by its SPIR-V name")]

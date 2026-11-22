@@ -17,97 +17,12 @@ require dasllama/dasllama_math  // with_dasllama_jobque_ (the engine-standard jo
 require dasllama/dasllama_gpu_tier   // the deltanet chain and decode-step route pins
 require dasllama/dasllama_image   // load_model_uncached: the product's load with no image
 require _model_tier   // models_dir() + model_available() presence/size-tier gate
+require _model_form   // own_load: the yarn cell's loads each take their own override
+require _deltanet_cells   // deltanet_chunked_prefill_cell, DN_LOGIT_BAR_REL: the chunked-prefill cell, its bar
 
-// Chunked-vs-recurrent deltanet prefill equivalence on Qwen3.5-0.8B. The 20-token parity fixture
-// covers only a single partial chunk, so this probe prefills 150 synthetic tokens — two full
-// 64-token chunks plus a partial tail — exercising chunk boundaries, partial-chunk math, and the
-// batched-conv history handoff. The two forms are NOT bit-identical (chunk FP reassociation;
-// upstream accepts the same divergence between its autoregressive and chunking paths), so the
-// gate is the forced-feed logits-tolerance form: the prefill logits within a bar of each other,
-// then the recurrent arm's greedy token fed to BOTH arms for 8 steps with the logits compared
-// within the bar at every step — which also proves the conv/S state the chunked prefill leaves
-// behind feeds the recurrent decode correctly. The claim is the CPU chunk algebra, so the cell
-// pins the GPU tier's deltanet chain and decode step off along with the vector activation forms.
-// The YaRN cell loads the same 0.8B under the override kinds: every model cell here skips off the
+// The chunked-vs-recurrent deltanet prefill cell (`_deltanet_cells.das`) runs on the Qwen3.5-0.8B block of
+// test_gpu_resident_hybrid.das. The YaRN cell loads the 0.8B under the override kinds: every model cell here skips off the
 // interpreter and off a missing Qwen3.5-0.8B-Q8_0.gguf.
-
-let private DN_LOGIT_BAR_REL = 0.04   // of the step's max |logit|; the two forms measure ~0.015 of it apart
-
-[test(description = "On Qwen3.5-0.8B with GPU routes and vector activations pinned off, a 150-token chunked deltanet prefill lands within 4 percent of max logit of the recurrent one, and stays there over 8 forced-feed decode steps, while a one-step-off compare reds the bar")]
-def test_deltanet_chunked_prefill(t : T?) {
-    t |> run("deltanet chunked prefill == recurrent (Qwen3.5-0.8B, multi-chunk)") @(t : T?) {
-        let path = path_join(models_dir(), "Qwen3.5-0.8B-Q8_0.gguf")
-        return if (!jit_model_available(t, path))
-        var tr <- load_gguf(path, QuantMode.q8)
-        if (tr.config.seq_len > 2048l) {   // KV RAM cap, same as the parity fixtures
-            tr.config.seq_len = 2048l
-        }
-        let c = tr.config
-        let prev_dn = get_deltanet_prefill_mode()
-        // pin the scalar activation forms: this gate isolates the CHUNK algebra, and the two forms
-        // are only reassociation-apart — exp4's ~2ulp is enough to flip a near-tie greedy pick and
-        // derail the id lockstep (the exp4 paths are parity-gated by the frozen fixtures instead)
-        let prev_vec = get_act_vec()
-        set_act_vec(false)
-        let prev_dn_route = moe_gpu_dn_route()
-        let prev_dnd_route = moe_gpu_dnd_route()
-        set_moe_gpu_dn_route(false)
-        set_moe_gpu_dnd_route(false)
-        with_dasllama_jobque_() {
-            let n = 150l
-            var prompt <- [for (i in range64(n)); 1000l + (i * 37l) % 5000l]
-
-            set_deltanet_prefill_mode(DnPrefillMode.recurrent)
-            var s1 <- make_run_state(c)
-            forward_prefill(tr, s1, prompt, n, 0l)
-            var ref <- [for (i in range64(c.vocab_size)); s1.logits[i]]
-
-            set_deltanet_prefill_mode(DnPrefillMode.chunked)
-            var s2 <- make_run_state(c)
-            forward_prefill(tr, s2, prompt, n, 0l)
-            var got <- [for (i in range64(c.vocab_size)); s2.logits[i]]
-
-            var tok = argmax_of(ref)
-            let prefill_diff = logits_maxdiff(got, ref)
-            let prefill_bar = DN_LOGIT_BAR_REL * logits_maxabs(ref)
-            to_log(LOG_INFO, "prefill: argmax recurrent {tok} ({ref[tok]}), chunked {argmax_of(got)} ({got[argmax_of(got)]}); logits maxdiff {prefill_diff} (bar {prefill_bar})\n")
-            t |> success(prefill_diff <= prefill_bar, "prefill logits: chunked within {prefill_bar} of recurrent (maxdiff {prefill_diff})")
-            delete ref
-            delete got
-
-            var prev_l1 : array<float>
-            for (st in range64(8l)) {
-                forward(tr, s1, tok, n + st)
-                forward(tr, s2, tok, n + st)
-                var inscope l1 <- [for (i in range64(c.vocab_size)); s1.logits[i]]
-                var inscope l2 <- [for (i in range64(c.vocab_size)); s2.logits[i]]
-                let step_diff = logits_maxdiff(l2, l1)
-                let step_bar = DN_LOGIT_BAR_REL * logits_maxabs(l1)
-                let a1 = argmax_of(l1)
-                let a2 = argmax_of(l2)
-                to_log(LOG_INFO, "step {st}: fed {tok}; argmax recurrent {a1} ({l1[a1]}), chunked {a2} ({l2[a2]}); logits maxdiff {step_diff} (bar {step_bar})\n")
-                t |> success(step_diff <= step_bar, "step {st} logits: chunked within {step_bar} of recurrent (maxdiff {step_diff})")
-                if (st > 0l) {   // the control: the previous step's recurrent logits are a disconnected mechanism the bar must RED
-                    let off_diff = logits_maxdiff(l2, prev_l1)
-                    t |> success(off_diff > step_bar, "step {st} control: the bar discriminates a one-step-off compare (maxdiff {off_diff} vs bar {step_bar})")
-                }
-                tok = a1
-                delete prev_l1
-                prev_l1 <- l1
-                delete l2
-            }
-            delete prev_l1
-            delete prompt
-            delete s1
-            delete s2
-        }
-        set_moe_gpu_dn_route(prev_dn_route)
-        set_moe_gpu_dnd_route(prev_dnd_route)
-        set_act_vec(prev_vec)
-        set_deltanet_prefill_mode(prev_dn)
-        delete tr
-    }
-}
 
 //! llama.cpp's greedy continuations of the prompt on Qwen3.5-0.8B-Q8_0 (-ngl 0, --temp 0), plain and under
 //! `--rope-scaling yarn --rope-scale 4 --yarn-orig-ctx 32768`, logged beside ours; the greedy text is a near-tie
@@ -166,74 +81,77 @@ def private step_logits(tr : Model; tabled : bool) : array<float> {
 
 [test(description = "On Qwen3.5-0.8B the rope-scaling override refuses unknown kinds and factor-less yarn, folds linear and none exactly, and YaRN x4 lands the divisors and mscale in the decode rope row against an fp64 fold, with table and direct paths agreeing and the fold moving the logits")]
 def test_deltanet_yarn_override(t : T?) {
+    own_load("each load takes its own rope-scaling override at the config stage, a load-time config past restoring, and the cell compares the loads' rope rows and logits")
     t |> run("the YaRN override on the partial-rotary 0.8B: the fold lands in the rope row, both rope paths take it, the plain load stays llama.cpp's") @(t : T?) {
         let path = path_join(models_dir(), "Qwen3.5-0.8B-Q8_0.gguf")
         return if (!jit_model_available(t, path))
-        let prev = rope_scaling_override()
-        set_rope_scaling_override(RopeScalingOverride())
-        var plain <- load_model_(path, QuantMode.q8)   // the engine entry with the tokenizer; load_gguf leaves it out
-        plain.config.seq_len = min(plain.config.seq_len, 2048l)
-        t |> success(empty(plain.rope_freqs) && plain.config.rope_freq_scale == 1.0, "the file carries no rope scaling of its own")
-        to_log(LOG_INFO, "plain: ours{greedy_text(plain, 20)} | llama.cpp ...{YARN_PLAIN_HEAD}\n")
-        var plain_step <- step_logits(plain, true)
-        delete plain
-        // the rejections and the other kinds, at the config stage of a load
-        let bogus = load_outcome(path, RopeScalingOverride(kind = "bogus"))
-        t |> success(find(bogus, "is not none | linear | yarn") >= 0, "an unknown kind is refused by name: {bogus}")
-        let unscaled = load_outcome(path, RopeScalingOverride(kind = "yarn"))
-        t |> success(find(unscaled, "YaRN needs a scaling factor") >= 0, "yarn on a file with no factor and no --rope-scale is refused: {unscaled}")
-        let linear = load_outcome(path, RopeScalingOverride(kind = "linear", scale = 2.0))
-        t |> equal(linear, "loaded: freq_scale 0.5 factors 0 mscale 1", "linear x2 halves the position and folds nothing else")
-        let none = load_outcome(path, RopeScalingOverride(kind = "none"))
-        t |> equal(none, "loaded: freq_scale 1 factors 0 mscale 1", "none leaves a key-less file as it is")
-        set_rope_scaling_override(RopeScalingOverride(kind = "yarn", scale = 4.0, orig_ctx = 32768l))
-        var yarn <- load_model_(path, QuantMode.q8)
-        yarn.config.seq_len = min(yarn.config.seq_len, 2048l)
-        let c = yarn.config
-        let rot = c.rope_dim
-        let mscale = 1.0 + 0.1 * log(4.0)
-        t |> equal(long_length(yarn.rope_freqs), rot / 2l, "the YaRN divisors run over the rotated span")
-        t |> success(abs(c.rope_mscale - mscale) < 1.0e-6, "the magnitude correction lands in rope_mscale ({c.rope_mscale})")
-        var want_ff <- yarn_rope_freqs(rot, c.rope_freq_base, 4.0, 32.0, 1.0, 32768l)
-        t |> equal(logits_maxdiff(yarn.rope_freqs, want_ff), 0.0, "the divisors are the band over the OVERRIDE's original context, not the file's")
-        // the row the decode drivers read, against the fold spelled out: cos(pos * theta^(-2j/rot) / ff_j) * mscale
-        var ct, st : array<float>
-        let pos = 777l
-        build_decode_rope_row(yarn, pos, ct, st)
-        var want_c <- [for (j in range64(rot / 2l)); float(cos(fold_angle(pos, rot, j, c.rope_freq_base, yarn.rope_freqs[j])) * double(mscale))]
-        var want_s <- [for (j in range64(rot / 2l)); float(sin(fold_angle(pos, rot, j, c.rope_freq_base, yarn.rope_freqs[j])) * double(mscale))]
-        let row_bar = 2.0e-3
-        let worst = max(logits_maxdiff(ct, want_c), logits_maxdiff(st, want_s))
-        t |> success(worst < row_bar, "the decode rope row folds the divisors and the magnitude (maxdiff {worst})")
-        var ct_poison <- poisoned_copy(want_c, 0, 0.01)
-        t |> success(logits_maxdiff(ct, ct_poison) >= row_bar, "the row bar reds a +0.01 poison on one expected element ({logits_maxdiff(ct, ct_poison)})")
-        var yarn_tab <- step_logits(yarn, true)
-        var yarn_direct <- step_logits(yarn, false)
-        let bar = DN_LOGIT_BAR_REL * logits_maxabs(yarn_tab)
-        let paths_diff = logits_maxdiff(yarn_tab, yarn_direct)
-        let a_tab = argmax_of(yarn_tab)
-        let a_dir = argmax_of(yarn_direct)
-        let a_plain = argmax_of(plain_step)
-        to_log(LOG_INFO, "yarn step: table argmax {a_tab} '{piece_(yarn, a_tab)}' ({yarn_tab[a_tab]}), direct argmax {a_dir} '{piece_(yarn, a_dir)}' ({yarn_direct[a_dir]}), plain argmax {a_plain} '{piece_(yarn, a_plain)}' ({plain_step[a_plain]}); paths maxdiff {paths_diff}, fold maxdiff {logits_maxdiff(yarn_tab, plain_step)}, bar {bar}\n")
-        t |> success(paths_diff <= bar, "the table and the direct rope paths of the attention agree under the fold (maxdiff {paths_diff}, bar {bar})")
-        var step_poison <- poisoned_copy(yarn_direct, 0, 2.0 * bar)
-        t |> success(logits_maxdiff(yarn_tab, step_poison) > bar, "the bar reds a step one element off by twice the bar ({logits_maxdiff(yarn_tab, step_poison)})")
-        let fold_diff = logits_maxdiff(yarn_tab, plain_step)
-        let noise = 10.0 * max(paths_diff, 1.0e-3)   //! a fold that did nothing leaves the two loads apart by the paths' own rounding alone
-        t |> success(fold_diff > noise, "the fold moves the step's logits past the paths' own noise (maxdiff {fold_diff} vs {noise})")
-        to_log(LOG_INFO, "yarn x4 over 32768: ours{greedy_text(yarn, 20)} | llama.cpp ...{YARN_LCPP_HEAD}\n")
-        delete yarn_tab
-        delete yarn_direct
-        delete step_poison
-        delete plain_step
-        delete want_ff
-        delete want_c
-        delete want_s
-        delete ct_poison
-        delete ct
-        delete st
-        delete yarn
-        set_rope_scaling_override(prev)
+        with_dasllama_jobque_() {
+            let prev = rope_scaling_override()
+            set_rope_scaling_override(RopeScalingOverride())
+            var plain <- load_model_(path, QuantMode.q8)   // the engine entry with the tokenizer; load_gguf leaves it out
+            plain.config.seq_len = min(plain.config.seq_len, 2048l)
+            t |> success(empty(plain.rope_freqs) && plain.config.rope_freq_scale == 1.0, "the file carries no rope scaling of its own")
+            to_log(LOG_INFO, "plain: ours{greedy_text(plain, 20)} | llama.cpp ...{YARN_PLAIN_HEAD}\n")
+            var plain_step <- step_logits(plain, true)
+            delete plain
+            // the rejections and the other kinds, at the config stage of a load
+            let bogus = load_outcome(path, RopeScalingOverride(kind = "bogus"))
+            t |> success(find(bogus, "is not none | linear | yarn") >= 0, "an unknown kind is refused by name: {bogus}")
+            let unscaled = load_outcome(path, RopeScalingOverride(kind = "yarn"))
+            t |> success(find(unscaled, "YaRN needs a scaling factor") >= 0, "yarn on a file with no factor and no --rope-scale is refused: {unscaled}")
+            let linear = load_outcome(path, RopeScalingOverride(kind = "linear", scale = 2.0))
+            t |> equal(linear, "loaded: freq_scale 0.5 factors 0 mscale 1", "linear x2 halves the position and folds nothing else")
+            let none = load_outcome(path, RopeScalingOverride(kind = "none"))
+            t |> equal(none, "loaded: freq_scale 1 factors 0 mscale 1", "none leaves a key-less file as it is")
+            set_rope_scaling_override(RopeScalingOverride(kind = "yarn", scale = 4.0, orig_ctx = 32768l))
+            var yarn <- load_model_(path, QuantMode.q8)
+            yarn.config.seq_len = min(yarn.config.seq_len, 2048l)
+            let c = yarn.config
+            let rot = c.rope_dim
+            let mscale = 1.0 + 0.1 * log(4.0)
+            t |> equal(long_length(yarn.rope_freqs), rot / 2l, "the YaRN divisors run over the rotated span")
+            t |> success(abs(c.rope_mscale - mscale) < 1.0e-6, "the magnitude correction lands in rope_mscale ({c.rope_mscale})")
+            var want_ff <- yarn_rope_freqs(rot, c.rope_freq_base, 4.0, 32.0, 1.0, 32768l)
+            t |> equal(logits_maxdiff(yarn.rope_freqs, want_ff), 0.0, "the divisors are the band over the OVERRIDE's original context, not the file's")
+            // the row the decode drivers read, against the fold spelled out: cos(pos * theta^(-2j/rot) / ff_j) * mscale
+            var ct, st : array<float>
+            let pos = 777l
+            build_decode_rope_row(yarn, pos, ct, st)
+            var want_c <- [for (j in range64(rot / 2l)); float(cos(fold_angle(pos, rot, j, c.rope_freq_base, yarn.rope_freqs[j])) * double(mscale))]
+            var want_s <- [for (j in range64(rot / 2l)); float(sin(fold_angle(pos, rot, j, c.rope_freq_base, yarn.rope_freqs[j])) * double(mscale))]
+            let row_bar = 2.0e-3
+            let worst = max(logits_maxdiff(ct, want_c), logits_maxdiff(st, want_s))
+            t |> success(worst < row_bar, "the decode rope row folds the divisors and the magnitude (maxdiff {worst})")
+            var ct_poison <- poisoned_copy(want_c, 0, 0.01)
+            t |> success(logits_maxdiff(ct, ct_poison) >= row_bar, "the row bar reds a +0.01 poison on one expected element ({logits_maxdiff(ct, ct_poison)})")
+            var yarn_tab <- step_logits(yarn, true)
+            var yarn_direct <- step_logits(yarn, false)
+            let bar = DN_LOGIT_BAR_REL * logits_maxabs(yarn_tab)
+            let paths_diff = logits_maxdiff(yarn_tab, yarn_direct)
+            let a_tab = argmax_of(yarn_tab)
+            let a_dir = argmax_of(yarn_direct)
+            let a_plain = argmax_of(plain_step)
+            to_log(LOG_INFO, "yarn step: table argmax {a_tab} '{piece_(yarn, a_tab)}' ({yarn_tab[a_tab]}), direct argmax {a_dir} '{piece_(yarn, a_dir)}' ({yarn_direct[a_dir]}), plain argmax {a_plain} '{piece_(yarn, a_plain)}' ({plain_step[a_plain]}); paths maxdiff {paths_diff}, fold maxdiff {logits_maxdiff(yarn_tab, plain_step)}, bar {bar}\n")
+            t |> success(paths_diff <= bar, "the table and the direct rope paths of the attention agree under the fold (maxdiff {paths_diff}, bar {bar})")
+            var step_poison <- poisoned_copy(yarn_direct, 0, 2.0 * bar)
+            t |> success(logits_maxdiff(yarn_tab, step_poison) > bar, "the bar reds a step one element off by twice the bar ({logits_maxdiff(yarn_tab, step_poison)})")
+            let fold_diff = logits_maxdiff(yarn_tab, plain_step)
+            let noise = 10.0 * max(paths_diff, 1.0e-3)   //! a fold that did nothing leaves the two loads apart by the paths' own rounding alone
+            t |> success(fold_diff > noise, "the fold moves the step's logits past the paths' own noise (maxdiff {fold_diff} vs {noise})")
+            to_log(LOG_INFO, "yarn x4 over 32768: ours{greedy_text(yarn, 20)} | llama.cpp ...{YARN_LCPP_HEAD}\n")
+            delete yarn_tab
+            delete yarn_direct
+            delete step_poison
+            delete plain_step
+            delete want_ff
+            delete want_c
+            delete want_s
+            delete ct_poison
+            delete ct
+            delete st
+            delete yarn
+            set_rope_scaling_override(prev)
+        }
     }
 }
 

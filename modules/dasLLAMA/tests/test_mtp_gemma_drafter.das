@@ -26,6 +26,11 @@ require _scheduler_rig   // make_req / drain / toks_of - the served round rides 
 require _resident_feed   // resident_ready / load_resident_at / served_every_call - the Vulkan home's trunk
 require _metal_blob_twin   // metal_overrides_seat / restore_metal_overrides - the served cells' override pins
 require ../performance/model_specs.das   // counting_prompt - the served cells' tie-proof prompts
+require _cpu_gpu_model   // with_cpu_and_gpu_model, the forms: the trunk's block
+require _parity_cells   // the parity cells the block's parity knob reaches (`_::`): the trunks' model_specs parity rows on their blocks
+require _gemma_resident   // gemma_rows, ppl_within, GEMMA_RIG_CTX: the whole file's walks
+require _dflash_cells   // cpu_drafter_lossless, discrete_drafter_cells: the regular DFlash drafter's legs
+require dasllama/dasllama_env   // g_env_test: the arm filter a block with no cell left names
 
 [init]
 def private allow_cpu_prefill_intent() {
@@ -33,20 +38,25 @@ def private allow_cpu_prefill_intent() {
 }
 
 // The gemma-4 assistant drafter (`dasllama/dasllama_mtp_gemma`): the sidecar resolver and loader's shape and refusal
-// contract, the attach's refusal of a per-layer-embedding trunk, one step of the CPU reference forward against a live target
+// contract, one step of the CPU reference forward against a live target
 // session, and the served rounds on the GPU home - one device step against the oracle, the scheduler's rounds token for token
 // the plain scheduler's at depth 1, at the depth knob's depth, over several streams in one verify, on block-codec sessions
 // and on a trunk whose token table is K-quant. The drafter sidecar is a 440 MiB small-tier file; the 15.8 GiB target is
 // PARITY_FULL-gated. A model cell skips where a file it reads is absent: the sidecar, the target, the Q4_0 head the type
-// decline reads (`mtp-gemma-4-26B-A4B-it-Q4_0.gguf`), and the E2B trunk the per-layer-embedding refusal loads. The GPU cells
+// decline reads (`mtp-gemma-4-26B-A4B-it-Q4_0.gguf`). The attach's refusal of the per-layer-embedding E2B trunk is a cell of
+// `test_gpu_resident_gemma4_e2b.das`'s load-once block. The GPU cells
 // skip on a build with no GPU home and on a box that does not serve the target on it, and the served rounds skip where the
 // card holds the trunk only with routed layers' experts on the host (the drafter's verify rides the N-row command, which has
 // no host-experts form on either discrete home); the Metal attach's gather refusal and the verify-decline cell skip on a build
-// without das_metal, the Vulkan driver check without dasVulkan.
+// without das_metal, the Vulkan driver check without dasVulkan. The discrete homes' served cells ride the trunks' blocks at the
+// file's end - `test_gemma_drafter_26b_trunk` on the Q4_K_M file, with its whole-file perplexity walks, the CPU oracle step
+// and the regular DFlash drafter's legs; `test_gemma_drafter_26b_iq3_trunk` on the UD-IQ3_XXS file, with its walks - each
+// form loaded once; the Metal home's served cells load their own twin (the blocks have no Metal form). Each trunk's parity
+// row CPU form (the row's load mode and K-quant knob under DASLLAMA_PIN_BACKEND's pin, under the trunk's perplexity arm),
+// on every box, its frozen greedy ids (`parity_spec_cell`), skipped where the box cannot take the pin.
 
 let private TARGET_FILE = "gemma-4-26B-A4B-it-Q4_K_M.gguf"
 let private IQ3_FILE = "gemma-4-26B-A4B-it-UD-IQ3_XXS.gguf"   //! its token table is Q6_K: the seed embed gathers a K-quant row
-let private E2B_FILE = "gemma-4-E2B-it-Q8_0.gguf"
 let private Q40_HEAD = "mtp-gemma-4-26B-A4B-it-Q4_0.gguf"
 let private TARGET_LAYERS = 30l
 
@@ -335,109 +345,69 @@ def test_gemma_drafter_load(t : T?) {
     }
 }
 
-// ===== the attach refuses a per-layer-embedding trunk =====
-
-[test(description = "The drafter attach refuses the gemma-4 E2B trunk naming its per-layer embeddings and the E2B cannot speculate, while the same config without per-layer embeddings refuses on another clause")]
-def test_gemma_drafter_ple_refusal(t : T?) {
-    if (!family_on(t, "gemma4e") || !arm_on(t, "mtp-gdraft-ple")) {
-        return
-    }
-    t |> run("the attach refuses an E-series trunk: its verify rows need the per-layer input the draft ids index, and no sidecar exists for one") @(t : T?) {
-        let trunk = path_join(models_dir(), E2B_FILE)
-        let side = path_join(models_dir(), "mtp-gemma-4-26B-A4B-it-Q8_0.gguf")
-        return if (!model_available(t, trunk) || !model_available(t, side))
-        with_dasllama_jobque_() {   //! the load's transcode runs on the engine's pool
-            var tr <- load_model_uncached(trunk, QuantMode.q8)
-            var dr <- load_gemma_drafter(side)
-            t |> success(dr.ok, "the drafter loads (why='{dr.why}')")
-            let why = gemma_drafter_target_why(tr, dr)
-            t |> success(find(why, "per-layer embeddings") >= 0, "the refusal names the per-layer embeddings: '{why}'")
-            t |> success(!attach_mtp_drafter(tr, side), "the facade attaches nothing to the E2B")
-            t |> success(!mtp_capable(tr), "and the E2B cannot speculate")
-            var shell = Model()
-            shell.config := tr.config
-            shell.config.n_embd_per_layer = 0l
-            let why_plain = gemma_drafter_target_why(shell, dr)
-            t |> success(!empty(why_plain) && find(why_plain, "per-layer embeddings") < 0, "the control: the same trunk with no per-layer embeddings refuses on another clause: '{why_plain}'")
-            delete shell
-            delete dr
-            delete tr
-        }
-    }
-}
-
 // ===== the CPU oracle against a live target session =====
 
-[test(description = "One CPU reference drafter step on gemma-4-26B, seeded with the target's argmax and its live K/V and hidden, yields finite vocab-wide logits, an in-range draft token and a finite nonzero h_next")]
-def test_gemma_drafter_cpu_step(t : T?) {
-    if (!family_on(t, "gemma4moe") || !arm_on(t, "mtp-gdraft-cpu")) {
-        return
-    }
-    with_dasllama_jobque_() {
-        t |> run("one CPU drafter step over the target's live K/V produces a finite token and hidden") @(t : T?) {
-            let target = path_join(models_dir(), TARGET_FILE)
-            return if (!jit_model_available(t, target))
-            let side = gemma_drafter_sidecar(target)
-            if (empty(side)) {
-                t |> skip("no mtp-* drafter sidecar beside {TARGET_FILE}")
-                return
-            }
-            var tr <- load_model_(target, QuantMode.q8)
-            tr.config.seq_len = min(tr.config.seq_len, 512l)
-            t |> equal(tr.config.n_layers, TARGET_LAYERS, "the target carries the 30-layer gemma4 trunk")
-            var dr <- load_gemma_drafter(side, tr.config.n_layers)
-            t |> success(dr.ok, "drafter load ok (why='{dr.why}')")
-            if (!dr.ok) {
-                delete dr
-                delete tr
-                return
-            }
-            var prompt <- encode(tr, "The capital of France is", true, false)
-            let npos = long_length(prompt)
-            t |> success(npos >= 4l, "the prompt is {npos} tokens")
-            var s <- make_run_state(tr.config, KVDtype.f16, KVDtype.f16)
-            // prefill everything but the last token, then ONE decode step: the drafter's anchor is a
-            // decode position, and forward() is what leaves the trunk residual the hidden is read from
-            var head <- [for (i in range64(npos - 1l)); prompt[i]]
-            eval_(tr, s, head)
-            forward(tr, s, prompt[npos - 1l], npos - 1l)
-            let anchor = npos   // the seed's own position = n_past: it ropes there and sees keys [0, npos)
-            let tgt_next = argmax_of(s.logits, tr.config.vocab_size)
-            var h : array<float>
-            gemma_target_hidden(tr, s, true, h)
-            t |> success(all_finite(h) && long_length(h) == tr.config.dim, "the target hidden is {long_length(h)} finite floats")
-            moe_gpu_hydrate_session(tr, s)   //! the oracle reads the host cache: a resident driver's device-only rows come down first
-            var out : GemmaDraftOut
-            gemma_draft_step_cpu(tr, s, dr, tgt_next, h, anchor, out)
-            t |> success(all_finite(out.logits) && long_length(out.logits) == dr.vocab,
-                "the draft logits are {long_length(out.logits)} finite floats")
-            t |> success(out.token >= 0l && out.token < dr.vocab, "the draft token {out.token} is in [0, {dr.vocab})")
-            t |> success(long_length(out.h_next) == dr.tdim && all_finite(out.h_next),
-                "h_next is {long_length(out.h_next)} finite floats")
-            var hn_rms = 0.0
-            for (v in out.h_next) {
-                hn_rms += v * v
-            }
-            hn_rms = sqrt(hn_rms / float(dr.tdim))
-            t |> success(hn_rms > 0.0, "h_next carries signal (rms {hn_rms})")
-            to_log(LOG_INFO, "gdraft: anchor {anchor} seed '{eyeball_str(piece(tr, tgt_next))}' ({tgt_next}) -> draft '{eyeball_str(piece(tr, out.token))}' ({out.token}), h_next rms {hn_rms}\n")
-            delete out
-            delete h
-            delete head
-            delete prompt
-            delete s
-            delete dr
-            delete tr
+//! one CPU reference drafter step on the CPU form `tr` (its context cut to 512 for the cell), seeded with the target's argmax
+//! and its live K/V and hidden
+def private gdraft_cpu_step_cell(t : T?; var tr : Model) {
+    with_ctx_cut(tr, 512l) {
+        let target = path_join(models_dir(), TARGET_FILE)
+        let side = gemma_drafter_sidecar(target)
+        if (empty(side)) {
+            t |> skip("no mtp-* drafter sidecar beside {TARGET_FILE}")
+            return
         }
+        t |> equal(tr.config.n_layers, TARGET_LAYERS, "the target carries the 30-layer gemma4 trunk")
+        var dr <- load_gemma_drafter(side, tr.config.n_layers)
+        t |> success(dr.ok, "drafter load ok (why='{dr.why}')")
+        if (!dr.ok) {
+            delete dr
+            return
+        }
+        var prompt <- encode(tr, "The capital of France is", true, false)
+        let npos = long_length(prompt)
+        t |> success(npos >= 4l, "the prompt is {npos} tokens")
+        var s <- make_run_state(tr.config, KVDtype.f16, KVDtype.f16)
+        // prefill everything but the last token, then ONE decode step: the drafter's anchor is a
+        // decode position, and forward() is what leaves the trunk residual the hidden is read from
+        var head <- [for (i in range64(npos - 1l)); prompt[i]]
+        eval_(tr, s, head)
+        forward(tr, s, prompt[npos - 1l], npos - 1l)
+        let anchor = npos   // the seed's own position = n_past: it ropes there and sees keys [0, npos)
+        let tgt_next = argmax_of(s.logits, tr.config.vocab_size)
+        var h : array<float>
+        gemma_target_hidden(tr, s, true, h)
+        t |> success(all_finite(h) && long_length(h) == tr.config.dim, "the target hidden is {long_length(h)} finite floats")
+        moe_gpu_hydrate_session(tr, s)   //! the oracle reads the host cache: a resident driver's device-only rows come down first
+        var out : GemmaDraftOut
+        gemma_draft_step_cpu(tr, s, dr, tgt_next, h, anchor, out)
+        t |> success(all_finite(out.logits) && long_length(out.logits) == dr.vocab,
+            "the draft logits are {long_length(out.logits)} finite floats")
+        t |> success(out.token >= 0l && out.token < dr.vocab, "the draft token {out.token} is in [0, {dr.vocab})")
+        t |> success(long_length(out.h_next) == dr.tdim && all_finite(out.h_next),
+            "h_next is {long_length(out.h_next)} finite floats")
+        var hn_rms = 0.0
+        for (v in out.h_next) {
+            hn_rms += v * v
+        }
+        hn_rms = sqrt(hn_rms / float(dr.tdim))
+        t |> success(hn_rms > 0.0, "h_next carries signal (rms {hn_rms})")
+        to_log(LOG_INFO, "gdraft: anchor {anchor} seed '{eyeball_str(piece(tr, tgt_next))}' ({tgt_next}) -> draft '{eyeball_str(piece(tr, out.token))}' ({out.token}), h_next rms {hn_rms}\n")
+        delete out
+        delete h
+        delete head
+        delete prompt
+        delete s
+        delete dr
     }
 }
 
 // ===== the GPU home: the served target, its drivers, the served rounds =====
 
-//! The served twin of `file` on this build's GPU home - the metal-blob image under the Metal mode required, else the
-//! whole-model resident driver under `DASLLAMA_GPU=1` at `regions` mirror regions in codec `kv` (a Metal session picks its own
-//! codec) - with its context cut to `ctx`; an empty Model (`n_layers` 0) after the skip that says why
-def private gdraft_target(t : T?; file : string; ctx, regions : int64; kv : KVDtype; host : bool) : Model {
+//! The served twin of `file` on the Metal home - the metal-blob image under the Metal mode required - with its context cut to
+//! `ctx`; an empty Model (`n_layers` 0) after the skip that says why. The discrete homes' twin is a form of the trunk's block
+//! (`test_gemma_drafter_26b_trunk`)
+def private gdraft_target(t : T?; file : string; ctx : int64) : Model {
     let target = path_join(models_dir(), file)
     static_if (typeinfo builtin_module_exists(das_metal)) {
         return <- Model() if (!jit_model_available(t, target))
@@ -453,15 +423,8 @@ def private gdraft_target(t : T?; file : string; ctx, regions : int64; kv : KVDt
         trg.config.seq_len = min(trg.config.seq_len, ctx)
         return <- trg
     } else {
-        static_if (typeinfo builtin_module_exists(vulkan)) {
-            var trg <- resident_trunk(t, target, ctx, "") $() : Model {
-                return <- load_resident_at(target, kv, regions, 0l, host)
-            }
-            return <- trg
-        } else {
-            t |> skip("no GPU home on this build for the gemma drafter")
-            return <- Model()
-        }
+        t |> skip("no Metal home on this build: the discrete homes' served cells ride the trunk's block")
+        return <- Model()
     }
 }
 
@@ -576,34 +539,44 @@ def private same_streams(t : T?; trg : Model; tag : string; plain, spec : SchedR
     }
 }
 
-//! `body` with the drafter beside `file` attached to its served twin on the GPU home, the overrides pinned, the drafter
-//! detached and the drivers down after; skips on a box without the twin or the sidecar (the sidecar through `model_available`)
-def private with_served_drafter(t : T?; file : string; regions : int64; kv : KVDtype; body : block<(trg : Model) : void>; ctx : int64 = 512l; host : bool = false) {
+//! `body` with the drafter beside `trg`'s file `file` attached to the served `trg`, detached after; skips where the card holds
+//! the trunk only with routed layers' experts on the host
+def private gdraft_attached(t : T?; var trg : Model; file : string; body : block<(trg : Model) : void>) {
+    if (gpu_resident_host_layers() > 0l) {   // the round's verify rides the N-row command, which has no host-experts form on either discrete home
+        t |> skip("the card holds the trunk only with {gpu_resident_host_layers()} routed layers' experts on the host: the drafter's verify has no host form")
+        return
+    }
+    let side = mtp_drafter_sidecar(path_join(models_dir(), file))
+    t |> success(!mtp_capable(trg), "a gemma-4 target with no drafter attached cannot speculate")
+    t |> success(attach_mtp_drafter(trg, side), "the facade attaches the drafter on the GPU home")
+    t |> success(mtp_capable(trg), "and the target speculates from here on")
+    invoke(body, trg)
+    detach_mtp_drafter(trg)
+    t |> success(!mtp_capable(trg), "detached, the target cannot speculate")
+}
+
+//! the drafter beside `file` present and on the tier: false after the skip that says why
+def private gdraft_sidecar_ready(t : T?; file : string) : bool {
     let side = mtp_drafter_sidecar(path_join(models_dir(), file))
     if (empty(side)) {
         t |> skip("no mtp-* drafter sidecar beside {file}")
-        return
+        return false
     }
-    return if (!model_available(t, side))
+    return model_available(t, side)
+}
+
+//! `body` with the drafter beside `file` attached to its served twin on the Metal home, the overrides pinned, the drafter
+//! detached and the drivers down after; skips on a box without the twin or the sidecar (the sidecar through `model_available`)
+def private with_served_drafter(t : T?; file : string; body : block<(trg : Model) : void>; ctx : int64 = 512l) {
+    return if (!gdraft_sidecar_ready(t, file))
     with_dasllama_jobque_() {
-        var trg <- gdraft_target(t, file, ctx, regions, kv, host)
+        var trg <- gdraft_target(t, file, ctx)
         if (trg.config.n_layers == 0l) {
             delete trg
             return
         }
-        if (gpu_resident_host_layers() > 0l) {   // the round's verify rides the N-row command, which has no host-experts form on either discrete home
-            t |> skip("the card holds the trunk only with {gpu_resident_host_layers()} routed layers' experts on the host: the drafter's verify has no host form")
-            delete trg
-            gdraft_shutdown(t)
-            return
-        }
-        t |> success(!mtp_capable(trg), "a gemma-4 target with no drafter attached cannot speculate")
         let pins = gdraft_pin()
-        t |> success(attach_mtp_drafter(trg, side), "the facade attaches the drafter on the GPU home")
-        t |> success(mtp_capable(trg), "and the target speculates from here on")
-        invoke(body, trg)
-        detach_mtp_drafter(trg)
-        t |> success(!mtp_capable(trg), "detached, the target cannot speculate")
+        gdraft_attached(t, trg, file, body)
         restore_metal_overrides(pins)
         delete trg
         gdraft_shutdown(t)
@@ -805,25 +778,59 @@ def private gpu_step_vs_oracle(t : T?; trg : Model; var dr : GemmaDrafter; promp
     delete s
 }
 
+//! the GPU drafter step against the CPU oracle on the served `trg`, at a short anchor and one past the sliding window
+def private gdraft_gpu_step_cell(t : T?; trg : Model) {
+    var dr <- load_gemma_drafter(mtp_drafter_sidecar(path_join(models_dir(), TARGET_FILE)), trg.config.n_layers)
+    t |> success(dr.ok, "the oracle's drafter copy loads (why='{dr.why}')")
+    var short <- encode(trg, "The capital of France is", true, false)
+    gpu_step_vs_oracle(t, trg, dr, short, "short", false)
+    var long <- encode(trg, counting_prompt(1, 300), true, false)
+    t |> success(long_length(long) > dr.sliding_window + 8l, "the long prompt ({long_length(long)} tokens) passes the sliding window ({dr.sliding_window})")
+    gpu_step_vs_oracle(t, trg, dr, long, "past the window", true)
+    delete long
+    delete short
+    delete dr
+}
+
 [test(description = "The GPU drafter step on the served 26B agrees with the CPU oracle's draft token and sits within the home's logits and h_next bars (0.25 and 0.05 on Metal, 1.0 on a Q8_0 feed) at a short anchor and past the sliding window, an off-by-one seed landing outside")]
 def test_gemma_drafter_gpu_step(t : T?) {
     if (!family_on(t, "gemma4moe") || !arm_on(t, "mtp-gdraft-gpu")) {
         return
     }
-    t |> run("the GPU drafter step matches the CPU oracle (argmax, logits, h_next), at a short anchor and one past the sliding window") @(t : T?) {
-        with_served_drafter(t, TARGET_FILE, 1l, KVDtype.f16, $(trg) {
-            var dr <- load_gemma_drafter(mtp_drafter_sidecar(path_join(models_dir(), TARGET_FILE)), trg.config.n_layers)
-            t |> success(dr.ok, "the oracle's drafter copy loads (why='{dr.why}')")
-            var short <- encode(trg, "The capital of France is", true, false)
-            gpu_step_vs_oracle(t, trg, dr, short, "short", false)
-            var long <- encode(trg, counting_prompt(1, 300), true, false)
-            t |> success(long_length(long) > dr.sliding_window + 8l, "the long prompt ({long_length(long)} tokens) passes the sliding window ({dr.sliding_window})")
-            gpu_step_vs_oracle(t, trg, dr, long, "past the window", true)
-            delete long
-            delete short
-            delete dr
-        }, 2048l, true)
+    static_if (typeinfo builtin_module_exists(das_metal)) {   //! the Metal home's served twin: the discrete homes' cells ride the trunk's block
+        t |> run("the GPU drafter step matches the CPU oracle (argmax, logits, h_next), at a short anchor and one past the sliding window") @(t : T?) {
+            with_served_drafter(t, TARGET_FILE, $(trg) {
+                gdraft_gpu_step_cell(t, trg)
+            }, 2048l)
+        }
     }
+}
+
+//! the scheduler at depth 1 through the drafter attached to `trg` against the plain scheduler, then the drafter detached (the control)
+def private gdraft_served_cell(t : T?; trg : Model) {
+    let depth_pin = mtp_depth_pin()
+    set_mtp_depth(1l)
+    var prompts <- counting_prompts(trg, 1l)
+    var plain <- sched_run(t, trg, prompts, 24l, KVDtype.f16, false)
+    let st0 = mtp_drafter_stats(trg)
+    var spec <- sched_run(t, trg, prompts, 24l, KVDtype.f16, true)
+    let st1 = mtp_drafter_stats(trg)
+    t |> success(spec.mtp, "a scheduler told to speculate keeps it on for the drafter's model")
+    same_streams(t, trg, "gdraft sched", plain, spec, 24l)
+    t |> success(spec.drafted > 0l && spec.accepted > 0l, "the rounds drafted and accepted ({spec.accepted} of {spec.drafted})")
+    t |> equal(st1.drafted - st0.drafted, spec.drafted, "every draft was the device drafter's: its counter rose by the scheduler's drafts")
+    t |> equal(st1.drafted - st0.drafted, st1.rounds - st0.rounds, "depth 1: one draft a round")
+    to_log(LOG_INFO, "gdraft sched: {spec.accepted} of {spec.drafted} drafts accepted over {spec.ticks} ticks for 24 tokens\n")
+    detach_mtp_drafter(trg)   //! the control: the same speculating scheduler with the drafter detached
+    var off <- sched_run(t, trg, prompts, 24l, KVDtype.f16, true)
+    t |> success(!off.mtp, "a scheduler told to speculate stands down with the drafter detached")
+    t |> equal(off.drafted, 0l, "and drafts nothing")
+    same_streams(t, trg, "gdraft sched detached", plain, off, 24l)
+    delete off
+    restore_mtp_depth(depth_pin)
+    delete plain
+    delete spec
+    delete prompts
 }
 
 [test(description = "A scheduler speculating at depth 1 through the attached gemma-4 drafter emits the plain scheduler's counting tokens exactly, every draft counted by the device drafter, and with the drafter detached it stands down, drafts nothing, and still matches")]
@@ -831,31 +838,11 @@ def test_gemma_drafter_served(t : T?) {
     if (!family_on(t, "gemma4moe") || !arm_on(t, "mtp-gdraft-sched")) {
         return
     }
-    t |> run("a scheduler speculates through the attached drafter at depth 1 and matches the plain scheduler") @(t : T?) {
-        with_served_drafter(t, TARGET_FILE, 1l, KVDtype.f16) $(trg) {
-            let depth_pin = mtp_depth_pin()
-            set_mtp_depth(1l)
-            var prompts <- counting_prompts(trg, 1l)
-            var plain <- sched_run(t, trg, prompts, 24l, KVDtype.f16, false)
-            let st0 = mtp_drafter_stats(trg)
-            var spec <- sched_run(t, trg, prompts, 24l, KVDtype.f16, true)
-            let st1 = mtp_drafter_stats(trg)
-            t |> success(spec.mtp, "a scheduler told to speculate keeps it on for the drafter's model")
-            same_streams(t, trg, "gdraft sched", plain, spec, 24l)
-            t |> success(spec.drafted > 0l && spec.accepted > 0l, "the rounds drafted and accepted ({spec.accepted} of {spec.drafted})")
-            t |> equal(st1.drafted - st0.drafted, spec.drafted, "every draft was the device drafter's: its counter rose by the scheduler's drafts")
-            t |> equal(st1.drafted - st0.drafted, st1.rounds - st0.rounds, "depth 1: one draft a round")
-            to_log(LOG_INFO, "gdraft sched: {spec.accepted} of {spec.drafted} drafts accepted over {spec.ticks} ticks for 24 tokens\n")
-            detach_mtp_drafter(trg)   //! the control: the same speculating scheduler with the drafter detached
-            var off <- sched_run(t, trg, prompts, 24l, KVDtype.f16, true)
-            t |> success(!off.mtp, "a scheduler told to speculate stands down with the drafter detached")
-            t |> equal(off.drafted, 0l, "and drafts nothing")
-            same_streams(t, trg, "gdraft sched detached", plain, off, 24l)
-            delete off
-            restore_mtp_depth(depth_pin)
-            delete plain
-            delete spec
-            delete prompts
+    static_if (typeinfo builtin_module_exists(das_metal)) {   //! the Metal home's served twin: the discrete homes' cells ride the trunk's block
+        t |> run("a scheduler speculates through the attached drafter at depth 1 and matches the plain scheduler") @(t : T?) {
+            with_served_drafter(t, TARGET_FILE) $(trg) {
+                gdraft_served_cell(t, trg)
+            }
         }
     }
 }
@@ -876,6 +863,69 @@ def private stepped_session(trg : Model; prompt : array<int64>; kv : KVDtype) : 
     return <- s
 }
 
+//! on the Metal home a joint verify over two streams on two K/V codecs carries no stream; one codec across both carries both
+def private gdraft_verify_decline_cell(t : T?; trg : Model) {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        let depth_pin = mtp_depth_pin()
+        set_mtp_depth(1l)
+        var prompt <- encode(trg, "Count from 1 to 60, separated by commas: {counting_prompt(1, 23)}", true, false)
+        var probe <- make_run_state(trg.config, KVDtype.f16, KVDtype.f16)
+        let slice = mirror_arena_demand(trg, probe, long_length(prompt) + 2l)
+        delete probe
+        //! room for six f16 slices: the tick's two streams beside the dead sessions' slices the LRU keeps - an arena that holds
+        //! fewer evicts a live stream's mirror, and a stream with none steps plain before any verify
+        t |> success(mirror_reserve(6ul * slice, slice), "the mirror arena holds six slices")
+        for (mixed in [false, true]) {
+            var inscope kvs <- [KVDtype.f16, mixed ? KVDtype.q8_0 : KVDtype.f16]
+            var sa <- stepped_session(trg, prompt, kvs[0])
+            var sb <- stepped_session(trg, prompt, kvs[1])
+            var spec <- [unsafe(addr(sa)), unsafe(addr(sb))]
+            var toks <- [for (sp in spec); argmax_of(sp.logits, trg.config.vocab_size)]
+            for (sp in spec) {
+                t |> success(mirror_stands(*sp, sp.n_past, sp.n_past + 2l), "{kvs}: the stream's mirror holds its rows - the round finds it warm")
+            }
+            var acc : array<int64>
+            let st0 = mtp_drafter_stats(trg)
+            let carried = mtp_spec_eval_batch(trg, spec, toks, acc)
+            finish_pending_step()
+            let st1 = mtp_drafter_stats(trg)
+            var pa <- stepped_session(trg, prompt, kvs[0])   //! after the tick: the twins' mirrors take no slot the tick's streams hold
+            var pb <- stepped_session(trg, prompt, kvs[1])
+            var plain <- [unsafe(addr(pa)), unsafe(addr(pb))]
+            to_log(LOG_INFO, "gdraft vdecl {kvs}: carried {carried}, rounds +{st1.rounds - st0.rounds}, draft_us +{st1.draft_us - st0.draft_us}, carry rows {sa.mtp_h_pos1}/{sb.mtp_h_pos1} at {sa.n_past}/{sb.n_past}\n")
+            if (!mixed) {   //! the control: one codec across the streams, the joint verify carries both
+                t |> equal(carried, 2l, "one codec: the joint verify carries both streams")
+                t |> equal(st1.rounds - st0.rounds, 2l, "one codec: both rounds counted")
+            } else {
+                t |> equal(carried, 0l, "two codecs: the verify carries no stream")
+                t |> equal(st1.rounds - st0.rounds, 0l, "two codecs: no round counted")
+                t |> success(st1.verify_us == st0.verify_us, "two codecs: the declined verify's rounds charge no verify time - the streams' chains ride the verify's command buffer and never ran")
+                for (i in range64(2l)) {
+                    t |> equal(acc[i], 0l, "stream {i}: no draft accepted")
+                    var one <- [toks[i]]
+                    eval_(trg, *plain[i], one)
+                    finish_pending_step()
+                    delete one
+                    t |> equal(spec[i].n_past, plain[i].n_past, "stream {i} ({kvs[i]}): one plain step past the prompt")
+                    let dsp = logits_maxdiff(spec[i].logits, plain[i].logits)
+                    log_logits_pair(trg, "gdraft vdecl stream {i} ({kvs[i]}): the declined tick's step against a plain decode step", spec[i].logits, plain[i].logits, dsp)
+                    t |> equal(dsp, 0.0, "stream {i} ({kvs[i]}): the step's logits bit for bit a plain decode step's")
+                }
+            }
+            spec |> clear()   //! borrowed handles - the sessions are the locals'
+            plain |> clear()
+            delete toks
+            delete acc
+            delete sa
+            delete sb
+            delete pa
+            delete pb
+        }
+        restore_mtp_depth(depth_pin)
+        delete prompt
+    }
+}
+
 [test(description = "On Metal a joint drafter verify over two streams on two KV codecs carries no stream and counts no round, each stream's step equal bit for bit to a plain decode step, while one codec across both carries both streams")]
 def test_gemma_drafter_verify_decline(t : T?) {
     if (!family_on(t, "gemma4moe") || !arm_on(t, "mtp-gdraft-vdecl")) {
@@ -883,64 +933,8 @@ def test_gemma_drafter_verify_decline(t : T?) {
     }
     t |> run("a tick whose joint verify the batch rail declines (two streams on two K/V codecs) steps every stream plain, as a plain decode step does") @(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
-            with_served_drafter(t, TARGET_FILE, 1l, KVDtype.f16) $(trg) {
-                let depth_pin = mtp_depth_pin()
-                set_mtp_depth(1l)
-                var prompt <- encode(trg, "Count from 1 to 60, separated by commas: {counting_prompt(1, 23)}", true, false)
-                var probe <- make_run_state(trg.config, KVDtype.f16, KVDtype.f16)
-                let slice = mirror_arena_demand(trg, probe, long_length(prompt) + 2l)
-                delete probe
-                //! room for six f16 slices: the tick's two streams beside the dead sessions' slices the LRU keeps - an arena that holds
-                //! fewer evicts a live stream's mirror, and a stream with none steps plain before any verify
-                t |> success(mirror_reserve(6ul * slice, slice), "the mirror arena holds six slices")
-                for (mixed in [false, true]) {
-                    var inscope kvs <- [KVDtype.f16, mixed ? KVDtype.q8_0 : KVDtype.f16]
-                    var sa <- stepped_session(trg, prompt, kvs[0])
-                    var sb <- stepped_session(trg, prompt, kvs[1])
-                    var spec <- [unsafe(addr(sa)), unsafe(addr(sb))]
-                    var toks <- [for (sp in spec); argmax_of(sp.logits, trg.config.vocab_size)]
-                    for (sp in spec) {
-                        t |> success(mirror_stands(*sp, sp.n_past, sp.n_past + 2l), "{kvs}: the stream's mirror holds its rows - the round finds it warm")
-                    }
-                    var acc : array<int64>
-                    let st0 = mtp_drafter_stats(trg)
-                    let carried = mtp_spec_eval_batch(trg, spec, toks, acc)
-                    finish_pending_step()
-                    let st1 = mtp_drafter_stats(trg)
-                    var pa <- stepped_session(trg, prompt, kvs[0])   //! after the tick: the twins' mirrors take no slot the tick's streams hold
-                    var pb <- stepped_session(trg, prompt, kvs[1])
-                    var plain <- [unsafe(addr(pa)), unsafe(addr(pb))]
-                    to_log(LOG_INFO, "gdraft vdecl {kvs}: carried {carried}, rounds +{st1.rounds - st0.rounds}, draft_us +{st1.draft_us - st0.draft_us}, carry rows {sa.mtp_h_pos1}/{sb.mtp_h_pos1} at {sa.n_past}/{sb.n_past}\n")
-                    if (!mixed) {   //! the control: one codec across the streams, the joint verify carries both
-                        t |> equal(carried, 2l, "one codec: the joint verify carries both streams")
-                        t |> equal(st1.rounds - st0.rounds, 2l, "one codec: both rounds counted")
-                    } else {
-                        t |> equal(carried, 0l, "two codecs: the verify carries no stream")
-                        t |> equal(st1.rounds - st0.rounds, 0l, "two codecs: no round counted")
-                        t |> success(st1.verify_us == st0.verify_us, "two codecs: the declined verify's rounds charge no verify time - the streams' chains ride the verify's command buffer and never ran")
-                        for (i in range64(2l)) {
-                            t |> equal(acc[i], 0l, "stream {i}: no draft accepted")
-                            var one <- [toks[i]]
-                            eval_(trg, *plain[i], one)
-                            finish_pending_step()
-                            delete one
-                            t |> equal(spec[i].n_past, plain[i].n_past, "stream {i} ({kvs[i]}): one plain step past the prompt")
-                            let dsp = logits_maxdiff(spec[i].logits, plain[i].logits)
-                            log_logits_pair(trg, "gdraft vdecl stream {i} ({kvs[i]}): the declined tick's step against a plain decode step", spec[i].logits, plain[i].logits, dsp)
-                            t |> equal(dsp, 0.0, "stream {i} ({kvs[i]}): the step's logits bit for bit a plain decode step's")
-                        }
-                    }
-                    spec |> clear()   //! borrowed handles - the sessions are the locals'
-                    plain |> clear()
-                    delete toks
-                    delete acc
-                    delete sa
-                    delete sb
-                    delete pa
-                    delete pb
-                }
-                restore_mtp_depth(depth_pin)
-                delete prompt
+            with_served_drafter(t, TARGET_FILE) $(trg) {
+                gdraft_verify_decline_cell(t, trg)
             }
         } else {
             t |> skip("the Metal drafter round's verify decline; the Vulkan round binds no stream off the mirror's codec")
@@ -948,69 +942,108 @@ def test_gemma_drafter_verify_decline(t : T?) {
     }
 }
 
+//! the speculating scheduler at drafter depths 3 and 1 on `trg` against the plain one, and a reasoning budget's forced close
+def private gdraft_depth_cell(t : T?; trg : Model) {
+    var prompts <- counting_prompts(trg, 1l)
+    let np = long_length(prompts[0])
+    t |> success(np / 64l < (np + 32l) / 64l, "the walk's rounds cross a 64-row page ({np} prompt rows): the round grows a paged session's pages")
+    var plain <- sched_run(t, trg, prompts, 32l, KVDtype.f16, false)
+    let depth_pin = mtp_depth_pin()
+    for (k in [3l, 1l]) {
+        set_mtp_depth(k)
+        let st0 = mtp_drafter_stats(trg)
+        var spec <- sched_run(t, trg, prompts, 32l, KVDtype.f16, true)
+        let st1 = mtp_drafter_stats(trg)
+        same_streams(t, trg, "gdraft depth {k}", plain, spec, 32l)
+        let rounds = st1.rounds - st0.rounds
+        t |> success(rounds > 0l, "depth {k}: the tick ran device rounds ({rounds})")
+        let drafted = st1.drafted - st0.drafted
+        t |> success(drafted > k * (rounds - 1l) && drafted <= k * rounds, "depth {k}: every round drafted {k} tokens but a last round the 32-token budget clips ({drafted} over {rounds} rounds; the control is depth 1's one a round)")
+        t |> success(spec.accepted > 0l, "depth {k}: drafts were accepted ({spec.accepted} of {spec.drafted})")
+        to_log(LOG_INFO, "gdraft depth {k}: {spec.accepted} of {spec.drafted} drafts over {rounds} rounds, {spec.ticks} ticks for 32 tokens\n")
+        delete spec
+    }
+    //! a reasoning budget that can still force a close holds the stream's rounds at depth 1: a draft past the close would be
+    //! evaled and emitted ahead of it; the stand-in close is two tokens the count never writes. Four budgets in a row put the
+    //! budget inside a depth-3 round whatever the rounds accept
+    set_mtp_depth(3l)
+    var close <- encode(trg, " THE END", false, false)
+    for (budget in range64(5l, 9l)) {
+        var budgeted : array<array<int64>>
+        budgeted |> reserve(2)
+        for (spec in [false, true]) {
+            var ev : array<SchedEvent>
+            var sch <- create_scheduler(trg, 1l, 4l, 0l, 64l, 0l, KVDtype.f16, spec)
+            var req <- make_req(1l, prompts[0], 24l)
+            req.think_budget = budget
+            req.think_marks.opened = true
+            req.think_marks.close := close
+            t |> success(submit(trg, sch, req), "budget {budget}: the stream is queued (speculating {spec})")
+            let m0 = trunk_counts()
+            drain(trg, sch, ev)
+            trunk_served_since(t, m0, "budget {budget} (speculating {spec})")
+            budgeted |> emplace(toks_of(ev, 1l))
+            delete sch
+            delete ev
+        }
+        for (i in range64(long_length(close))) {
+            t |> equal(budgeted[1][budget + i], close[i], "budget {budget}: the forced close's token {i} lands at the budget on the speculating stream")
+        }
+        log_gen_texts(trg, "gdraft budget {budget} (plain, speculating)", budgeted[0], budgeted[1])
+        //! through the forced close: past it the streams free-run off a cut sentence, where a near-tie parts them on a card
+        let through = budget + long_length(close)
+        t |> success(ids_equal(subarray(budgeted[1], range64(0l, through)), subarray(budgeted[0], range64(0l, through))), "budget {budget}: the speculating stream reads as the plain one through the forced close")
+        delete budgeted
+    }
+    delete close
+    restore_mtp_depth(depth_pin)
+    delete plain
+    delete prompts
+}
+
 [test(description = "At drafter depths 3 and 1 the speculating scheduler drafts k tokens a round and emits the plain scheduler's counting tokens exactly across a page boundary, and a reasoning budget lands its forced close at the budget with the plain stream's tokens")]
 def test_gemma_drafter_depth_knob(t : T?) {
     if (!family_on(t, "gemma4moe") || !arm_on(t, "mtp-gdraft-depth")) {
         return
     }
-    t |> run("the scheduler's tick drafts at the depth knob's depth and walks the counting prompt as the plain scheduler does") @(t : T?) {
-        with_served_drafter(t, TARGET_FILE, 1l, KVDtype.f16) $(trg) {
-            var prompts <- counting_prompts(trg, 1l)
-            let np = long_length(prompts[0])
-            t |> success(np / 64l < (np + 32l) / 64l, "the walk's rounds cross a 64-row page ({np} prompt rows): the round grows a paged session's pages")
-            var plain <- sched_run(t, trg, prompts, 32l, KVDtype.f16, false)
-            let depth_pin = mtp_depth_pin()
-            for (k in [3l, 1l]) {
-                set_mtp_depth(k)
-                let st0 = mtp_drafter_stats(trg)
-                var spec <- sched_run(t, trg, prompts, 32l, KVDtype.f16, true)
-                let st1 = mtp_drafter_stats(trg)
-                same_streams(t, trg, "gdraft depth {k}", plain, spec, 32l)
-                let rounds = st1.rounds - st0.rounds
-                t |> success(rounds > 0l, "depth {k}: the tick ran device rounds ({rounds})")
-                let drafted = st1.drafted - st0.drafted
-                t |> success(drafted > k * (rounds - 1l) && drafted <= k * rounds, "depth {k}: every round drafted {k} tokens but a last round the 32-token budget clips ({drafted} over {rounds} rounds; the control is depth 1's one a round)")
-                t |> success(spec.accepted > 0l, "depth {k}: drafts were accepted ({spec.accepted} of {spec.drafted})")
-                to_log(LOG_INFO, "gdraft depth {k}: {spec.accepted} of {spec.drafted} drafts over {rounds} rounds, {spec.ticks} ticks for 32 tokens\n")
-                delete spec
+    static_if (typeinfo builtin_module_exists(das_metal)) {   //! the Metal home's served twin: the discrete homes' cells ride the trunk's block
+        t |> run("the scheduler's tick drafts at the depth knob's depth and walks the counting prompt as the plain scheduler does") @(t : T?) {
+            with_served_drafter(t, TARGET_FILE) $(trg) {
+                gdraft_depth_cell(t, trg)
             }
-            //! a reasoning budget that can still force a close holds the stream's rounds at depth 1: a draft past the close would be
-            //! evaled and emitted ahead of it; the stand-in close is two tokens the count never writes. Four budgets in a row put the
-            //! budget inside a depth-3 round whatever the rounds accept
-            set_mtp_depth(3l)
-            var close <- encode(trg, " THE END", false, false)
-            for (budget in range64(5l, 9l)) {
-                var budgeted : array<array<int64>>
-                for (spec in [false, true]) {
-                    var ev : array<SchedEvent>
-                    var sch <- create_scheduler(trg, 1l, 4l, 0l, 64l, 0l, KVDtype.f16, spec)
-                    var req <- make_req(1l, prompts[0], 24l)
-                    req.think_budget = budget
-                    req.think_marks.opened = true
-                    req.think_marks.close := close
-                    t |> success(submit(trg, sch, req), "budget {budget}: the stream is queued (speculating {spec})")
-                    let m0 = trunk_counts()
-                    drain(trg, sch, ev)
-                    trunk_served_since(t, m0, "budget {budget} (speculating {spec})")
-                    budgeted |> emplace(toks_of(ev, 1l))
-                    delete sch
-                    delete ev
-                }
-                for (i in range64(long_length(close))) {
-                    t |> equal(budgeted[1][budget + i], close[i], "budget {budget}: the forced close's token {i} lands at the budget on the speculating stream")
-                }
-                log_gen_texts(trg, "gdraft budget {budget} (plain, speculating)", budgeted[0], budgeted[1])
-                //! through the forced close: past it the streams free-run off a cut sentence, where a near-tie parts them on a card
-                let through = budget + long_length(close)
-                t |> success(ids_equal(subarray(budgeted[1], range64(0l, through)), subarray(budgeted[0], range64(0l, through))), "budget {budget}: the speculating stream reads as the plain one through the forced close")
-                delete budgeted
-            }
-            delete close
-            restore_mtp_depth(depth_pin)
-            delete plain
-            delete prompts
         }
     }
+}
+
+//! three speculating streams at depths 1 and 2 on `trg` ride one joint verify a tick; a lone stream the control
+def private gdraft_joint_cell(t : T?; trg : Model) {
+    var prompts <- counting_prompts(trg, 3l)
+    var plain <- sched_run(t, trg, prompts, 24l, KVDtype.f16, false)
+    let depth_pin = mtp_depth_pin()
+    for (k in [1l, 2l]) {
+        set_mtp_depth(k)
+        let st0 = mtp_drafter_stats(trg)
+        var spec <- sched_run(t, trg, prompts, 24l, KVDtype.f16, true)
+        let st1 = mtp_drafter_stats(trg)
+        same_streams(t, trg, "gdraft joint depth {k}", plain, spec, 24l)
+        t |> equal(spec.joined_max, 3l, "depth {k}: a tick's verify carried all three streams' rows")
+        t |> success(st1.joint > st0.joint, "depth {k}: the drafter counted joint verifies ({st1.joint - st0.joint})")
+        t |> success(spec.accepted > 0l, "depth {k}: drafts were accepted ({spec.accepted} of {spec.drafted})")
+        delete spec
+    }
+    //! the joint counter's control: one speculating stream at depth 1 verifies its rows alone
+    set_mtp_depth(1l)
+    var inscope solo <- counting_prompts(trg, 1l)
+    let sj0 = mtp_drafter_stats(trg)
+    var lone <- sched_run(t, trg, solo, 24l, KVDtype.f16, true)
+    let sj1 = mtp_drafter_stats(trg)
+    log_gen_texts(trg, "gdraft joint lone stream (plain, speculating)", plain.toks[0], lone.toks[0])
+    t |> success(sj1.rounds > sj0.rounds, "one stream: the drafter ran rounds ({sj1.rounds - sj0.rounds})")
+    t |> equal(sj1.joint - sj0.joint, 0l, "one stream: no joint verify counted - the counter's control")
+    delete lone
+    restore_mtp_depth(depth_pin)
+    delete plain
+    delete prompts
 }
 
 [test(description = "Three speculating streams at depths 1 and 2 ride one joint verify a tick, each emitting the plain scheduler's counting tokens exactly, while a lone stream counts no joint verify (the counter's control)")]
@@ -1018,37 +1051,31 @@ def test_gemma_drafter_joint(t : T?) {
     if (!family_on(t, "gemma4moe") || !arm_on(t, "mtp-gdraft-joint")) {
         return
     }
-    t |> run("three speculating streams ride one verify a tick and each walks its count as the plain scheduler's stream does") @(t : T?) {
-        with_served_drafter(t, TARGET_FILE, 3l, KVDtype.f16) $(trg) {
-            var prompts <- counting_prompts(trg, 3l)
-            var plain <- sched_run(t, trg, prompts, 24l, KVDtype.f16, false)
-            let depth_pin = mtp_depth_pin()
-            for (k in [1l, 2l]) {
-                set_mtp_depth(k)
-                let st0 = mtp_drafter_stats(trg)
-                var spec <- sched_run(t, trg, prompts, 24l, KVDtype.f16, true)
-                let st1 = mtp_drafter_stats(trg)
-                same_streams(t, trg, "gdraft joint depth {k}", plain, spec, 24l)
-                t |> equal(spec.joined_max, 3l, "depth {k}: a tick's verify carried all three streams' rows")
-                t |> success(st1.joint > st0.joint, "depth {k}: the drafter counted joint verifies ({st1.joint - st0.joint})")
-                t |> success(spec.accepted > 0l, "depth {k}: drafts were accepted ({spec.accepted} of {spec.drafted})")
-                delete spec
+    static_if (typeinfo builtin_module_exists(das_metal)) {   //! the Metal home's served twin: the discrete homes' cells ride the trunk's block
+        t |> run("three speculating streams ride one verify a tick and each walks its count as the plain scheduler's stream does") @(t : T?) {
+            with_served_drafter(t, TARGET_FILE) $(trg) {
+                gdraft_joint_cell(t, trg)
             }
-            //! the joint counter's control: one speculating stream at depth 1 verifies its rows alone
-            set_mtp_depth(1l)
-            var inscope solo <- counting_prompts(trg, 1l)
-            let sj0 = mtp_drafter_stats(trg)
-            var lone <- sched_run(t, trg, solo, 24l, KVDtype.f16, true)
-            let sj1 = mtp_drafter_stats(trg)
-            log_gen_texts(trg, "gdraft joint lone stream (plain, speculating)", plain.toks[0], lone.toks[0])
-            t |> success(sj1.rounds > sj0.rounds, "one stream: the drafter ran rounds ({sj1.rounds - sj0.rounds})")
-            t |> equal(sj1.joint - sj0.joint, 0l, "one stream: no joint verify counted - the counter's control")
-            delete lone
-            restore_mtp_depth(depth_pin)
-            delete plain
-            delete prompts
         }
     }
+}
+
+//! the drafter's rounds on `trg`'s `kv` mirror: speculating sessions walk the count as plain ones on the same codec
+def private gdraft_codec_cell(t : T?; trg : Model; kv : KVDtype) {
+    let depth_pin = mtp_depth_pin()
+    set_mtp_depth(2l)
+    var prompts <- counting_prompts(trg, 1l)
+    var plain <- sched_run(t, trg, prompts, 24l, kv, false)
+    let st0 = mtp_drafter_stats(trg)
+    var spec <- sched_run(t, trg, prompts, 24l, kv, true)
+    let st1 = mtp_drafter_stats(trg)
+    same_streams(t, trg, "gdraft {kv}", plain, spec, 24l)
+    t |> success(st1.rounds > st0.rounds, "{kv}: the rounds ran on the device ({st1.rounds - st0.rounds}), none cold for the codec")
+    t |> success(spec.accepted > 0l, "{kv}: drafts were accepted ({spec.accepted} of {spec.drafted})")
+    restore_mtp_depth(depth_pin)
+    delete plain
+    delete spec
+    delete prompts
 }
 
 [test(description = "On q8_0 and tq4 KV mirrors the drafter's rounds run on the device, accept drafts, and the speculating scheduler emits the same codec's plain scheduler tokens exactly")]
@@ -1056,23 +1083,12 @@ def test_gemma_drafter_codecs(t : T?) {
     if (!family_on(t, "gemma4moe") || !arm_on(t, "mtp-gdraft-codec")) {
         return
     }
-    t |> run("the drafter's rounds read a q8_0 and a tq4 mirror: speculating sessions walk the count as plain ones on the same codec") @(t : T?) {
-        for (kv in [KVDtype.q8_0, KVDtype.tq4]) {
-            with_served_drafter(t, TARGET_FILE, 1l, kv) $(trg) {
-                let depth_pin = mtp_depth_pin()
-                set_mtp_depth(2l)
-                var prompts <- counting_prompts(trg, 1l)
-                var plain <- sched_run(t, trg, prompts, 24l, kv, false)
-                let st0 = mtp_drafter_stats(trg)
-                var spec <- sched_run(t, trg, prompts, 24l, kv, true)
-                let st1 = mtp_drafter_stats(trg)
-                same_streams(t, trg, "gdraft {kv}", plain, spec, 24l)
-                t |> success(st1.rounds > st0.rounds, "{kv}: the rounds ran on the device ({st1.rounds - st0.rounds}), none cold for the codec")
-                t |> success(spec.accepted > 0l, "{kv}: drafts were accepted ({spec.accepted} of {spec.drafted})")
-                restore_mtp_depth(depth_pin)
-                delete plain
-                delete spec
-                delete prompts
+    static_if (typeinfo builtin_module_exists(das_metal)) {   //! the Metal home's served twin: the discrete homes' cells ride the trunk's block
+        t |> run("the drafter's rounds read a q8_0 and a tq4 mirror: speculating sessions walk the count as plain ones on the same codec") @(t : T?) {
+            for (kv in [KVDtype.q8_0, KVDtype.tq4]) {
+                with_served_drafter(t, TARGET_FILE) $(trg) {
+                    gdraft_codec_cell(t, trg, kv)
+                }
             }
         }
     }
@@ -1146,51 +1162,85 @@ def private gdraft_capture_ring(trg : Model; dr : GemmaDrafter) : int64 {
     return 0l
 }
 
-//! the served drafter under ring pin `ring` over the long counting prompt: the prompt prefilled in `RING_PF_CHUNK`-row calls, one
-//! one-row step, the drafter's
-//! chain at the position past it, then a speculating scheduler stream over the same prompt; `count0` is the ringed run's
-//! count, which the flat run takes so both pins draft at one anchor (0 sizes the prompt off this load's ring)
+//! the drafter attached to the served `trg` (the caller's ring pin `ring`) over the long counting prompt: the prompt prefilled
+//! in `RING_PF_CHUNK`-row calls, one one-row step, the drafter's chain at the position past it, then a speculating scheduler
+//! stream over the same prompt; `count0` is the ringed run's count, which the flat run takes so both pins draft at one anchor
+//! (0 sizes the prompt off this load's ring)
+def private ring_draft_rows(t : T?; trg : Model; ring : int; budget : int64; count0 : int) : RingDraftRun {
+    var run : RingDraftRun
+    var dr <- load_gemma_drafter(mtp_drafter_sidecar(path_join(models_dir(), TARGET_FILE)), trg.config.n_layers)
+    t |> success(dr.ok, "the drafter's geometry loads (why='{dr.why}')")
+    let ring_rows = gdraft_capture_ring(trg, dr)
+    //! the prompt reaches past the ring's rows on any card (a number is about four tokens) and stays under the rig's context
+    let count = count0 > 0 ? count0 : clamp(int(ring_rows / 4l) + 150, 500, int((trg.config.seq_len - 300l) / 4l))
+    run.count = count
+    var prompt <- encode(trg, "Count from 1 to {count + 100}, separated by commas: {counting_prompt(1, count)}", true, false)
+    let npos = long_length(prompt)
+    var s <- make_run_state(trg.config, KVDtype.f16, KVDtype.f16)
+    eval_chunked(trg, s, prompt, npos - 1l, RING_PF_CHUNK)
+    var one <- [prompt[npos - 1l]]
+    eval_(trg, s, one)   //! the one-row chain's step at the prompt's last position
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        finish_pending_step()
+    }
+    run.ring = ring_rows
+    run.anchor = s.n_past
+    run.trunk := s.logits
+    t |> equal(s.mtp_h_pos1, s.n_past, "ring pin {ring}: the step carried the post-norm hidden for the drafter")
+    run.pick = argmax_of(s.logits, trg.config.vocab_size)
+    gdraft_chain(t, trg, s, run.pick, run.anchor, RING_DRAFT_K, s.mtp_h, run.drafts, run.dlogits)
+    delete s
+    let depth_pin = mtp_depth_pin()
+    set_mtp_depth(RING_DRAFT_K)
+    var prompts : array<array<int64>>
+    prompts |> push_clone(prompt)
+    run.stream <- sched_run(t, trg, prompts, budget, KVDtype.f16, true)
+    restore_mtp_depth(depth_pin)
+    run.text = decode(trg, run.stream.toks[0])
+    run.ok = true
+    delete prompts
+    delete prompt
+    delete one
+    delete dr
+    return <- run
+}
+
+//! `ring_draft_rows` on the Metal home's served twin under ring pin `ring`
 def private ring_draft_run(t : T?; ring : int; budget : int64; count0 : int = 0) : RingDraftRun {
     var run : RingDraftRun
     with_gpu_kv_ring(ring) {
-        with_served_drafter(t, TARGET_FILE, 1l, KVDtype.f16, $(trg) {
-            var dr <- load_gemma_drafter(mtp_drafter_sidecar(path_join(models_dir(), TARGET_FILE)), trg.config.n_layers)
-            t |> success(dr.ok, "the drafter's geometry loads (why='{dr.why}')")
-            let ring_rows = gdraft_capture_ring(trg, dr)
-            //! the prompt reaches past the ring's rows on any card (a number is about four tokens) and stays under the rig's context
-            let count = count0 > 0 ? count0 : clamp(int(ring_rows / 4l) + 150, 500, int((trg.config.seq_len - 300l) / 4l))
-            run.count = count
-            var prompt <- encode(trg, "Count from 1 to {count + 100}, separated by commas: {counting_prompt(1, count)}", true, false)
-            let npos = long_length(prompt)
-            var s <- make_run_state(trg.config, KVDtype.f16, KVDtype.f16)
-            eval_chunked(trg, s, prompt, npos - 1l, RING_PF_CHUNK)
-            var one <- [prompt[npos - 1l]]
-            eval_(trg, s, one)   //! the one-row chain's step at the prompt's last position
-            static_if (typeinfo builtin_module_exists(das_metal)) {
-                finish_pending_step()
-            }
-            run.ring = ring_rows
-            run.anchor = s.n_past
-            run.trunk := s.logits
-            t |> equal(s.mtp_h_pos1, s.n_past, "ring pin {ring}: the step carried the post-norm hidden for the drafter")
-            run.pick = argmax_of(s.logits, trg.config.vocab_size)
-            gdraft_chain(t, trg, s, run.pick, run.anchor, RING_DRAFT_K, s.mtp_h, run.drafts, run.dlogits)
-            delete s
-            let depth_pin = mtp_depth_pin()
-            set_mtp_depth(RING_DRAFT_K)
-            var prompts : array<array<int64>>
-            prompts |> push_clone(prompt)
-            run.stream <- sched_run(t, trg, prompts, budget, KVDtype.f16, true)
-            restore_mtp_depth(depth_pin)
-            run.text = decode(trg, run.stream.toks[0])
-            run.ok = true
-            delete prompts
-            delete prompt
-            delete one
-            delete dr
+        with_served_drafter(t, TARGET_FILE, $(trg) {
+            delete run
+            run <- ring_draft_rows(t, trg, ring, budget, count0)
         }, 8192l)   //! room for a prompt past the ring the card gives (2048 rows of slack on the RTX PRO 4500) with the 32-token walk after it
     }
     return <- run
+}
+
+//! the ringed run against the flat one: the ring's rows and the anchor past them, the trunk's and the drafter's logits at the
+//! anchor (bit for bit off Metal, the pick on Metal), the drafts, and the two speculating streams with their acceptance
+def private past_ring_within(t : T?; ringed, flat : RingDraftRun; budget : int64) {
+    t |> success(ringed.ring > 0l && flat.ring == 0l, "the ringed load rings the sliding capture layer ({ringed.ring} rows), the flat load keeps a row a position ({flat.ring})")
+    t |> success(ringed.anchor > ringed.ring, "the anchor {ringed.anchor} sits past the ring: the capture layer holds more keys than its ring's rows")
+    t |> equal(ringed.anchor, flat.anchor, "both pins draft at one anchor")
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        //! Metal's AV pass splits a ringed layer's key run at the wrap, so the sums part in order: the picks hold, the bits do not
+        t |> equal(ringed.pick, flat.pick, "the one-row chain's pick at the anchor: the ringed mirror's is the flat one's")
+    } else {
+        check_exact(t, "the one-row chain's logits at the anchor: the ringed mirror against the flat one, bit for bit", ringed.trunk, flat.trunk)
+        check_exact(t, "the drafter's first step's logits at the anchor: the ringed mirror against the flat one, bit for bit", ringed.dlogits, flat.dlogits)
+    }
+    t |> success(ids_equal(ringed.drafts, flat.drafts), "the drafter's chain at the anchor drafts the flat mirror's tokens ({ringed.drafts} vs {flat.drafts})")
+    to_log(LOG_INFO, "gdraft ring: anchor {ringed.anchor} past the {ringed.ring}-row ring; trunk logits ringed vs flat maxd {logits_maxdiff(ringed.trunk, flat.trunk)}, draft logits maxd {logits_maxdiff(ringed.dlogits, flat.dlogits)}\n")
+    t |> equal(long_length(ringed.stream.toks[0]), budget, "the ringed stream emits its whole budget")
+    to_log(LOG_INFO, "gdraft ring streams (flat, ringed):\n  {flat.text}\n  {ringed.text}\n")
+    t |> success(ids_equal(ringed.stream.toks[0], flat.stream.toks[0]), "the ringed speculating stream walks the count as the flat one does")
+    let acc_r = ringed.stream.accepted
+    let acc_f = flat.stream.accepted
+    to_log(LOG_INFO, "gdraft ring: accepted {acc_r} of {ringed.stream.drafted} ringed, {acc_f} of {flat.stream.drafted} flat\n")
+    t |> success(acc_f > 0l, "the flat run accepts drafts ({acc_f} of {flat.stream.drafted})")
+    t |> success(float(abs(acc_r - acc_f)) <= RING_ACCEPT_BAND * float(acc_f),
+        "the ringed run accepts within {RING_ACCEPT_BAND} of the flat run's drafts ({acc_r} of {ringed.stream.drafted} vs {acc_f} of {flat.stream.drafted})")
 }
 
 [test(description = "Past a sliding capture layer's KV ring the drafter at the same anchor drafts the flat mirror's tokens - logits bit for bit off Metal, the same pick on Metal - and the ringed stream matches the flat one with acceptance within 10 percent")]
@@ -1198,33 +1248,31 @@ def test_gemma_drafter_past_ring(t : T?) {
     if (!family_on(t, "gemma4moe") || !arm_on(t, "mtp-gdraft-ring")) {
         return
     }
-    t |> run("the drafter past a sliding capture layer's ring reads the rows the flat mirror holds: drafts, acceptance and the trunk's logits") @(t : T?) {
-        let budget = 24l
-        var inscope ringed <- ring_draft_run(t, 1, budget)
-        var inscope flat <- ring_draft_run(t, 0, budget, ringed.count)
-        return if (!ringed.ok || !flat.ok)
-        t |> success(ringed.ring > 0l && flat.ring == 0l, "the ringed load rings the sliding capture layer ({ringed.ring} rows), the flat load keeps a row a position ({flat.ring})")
-        t |> success(ringed.anchor > ringed.ring, "the anchor {ringed.anchor} sits past the ring: the capture layer holds more keys than its ring's rows")
-        t |> equal(ringed.anchor, flat.anchor, "both pins draft at one anchor")
-        static_if (typeinfo builtin_module_exists(das_metal)) {
-            //! Metal's AV pass splits a ringed layer's key run at the wrap, so the sums part in order: the picks hold, the bits do not
-            t |> equal(ringed.pick, flat.pick, "the one-row chain's pick at the anchor: the ringed mirror's is the flat one's")
-        } else {
-            check_exact(t, "the one-row chain's logits at the anchor: the ringed mirror against the flat one, bit for bit", ringed.trunk, flat.trunk)
-            check_exact(t, "the drafter's first step's logits at the anchor: the ringed mirror against the flat one, bit for bit", ringed.dlogits, flat.dlogits)
+    static_if (typeinfo builtin_module_exists(das_metal)) {   //! the Metal home's served twin: the discrete homes' cells ride the trunk's block
+        t |> run("the drafter past a sliding capture layer's ring reads the rows the flat mirror holds: drafts, acceptance and the trunk's logits") @(t : T?) {
+            let budget = 24l
+            var inscope ringed <- ring_draft_run(t, 1, budget)
+            var inscope flat <- ring_draft_run(t, 0, budget, ringed.count)
+            return if (!ringed.ok || !flat.ok)
+            past_ring_within(t, ringed, flat, budget)
         }
-        t |> success(ids_equal(ringed.drafts, flat.drafts), "the drafter's chain at the anchor drafts the flat mirror's tokens ({ringed.drafts} vs {flat.drafts})")
-        to_log(LOG_INFO, "gdraft ring: anchor {ringed.anchor} past the {ringed.ring}-row ring; trunk logits ringed vs flat maxd {logits_maxdiff(ringed.trunk, flat.trunk)}, draft logits maxd {logits_maxdiff(ringed.dlogits, flat.dlogits)}\n")
-        t |> equal(long_length(ringed.stream.toks[0]), budget, "the ringed stream emits its whole budget")
-        to_log(LOG_INFO, "gdraft ring streams (flat, ringed):\n  {flat.text}\n  {ringed.text}\n")
-        t |> success(ids_equal(ringed.stream.toks[0], flat.stream.toks[0]), "the ringed speculating stream walks the count as the flat one does")
-        let acc_r = ringed.stream.accepted
-        let acc_f = flat.stream.accepted
-        to_log(LOG_INFO, "gdraft ring: accepted {acc_r} of {ringed.stream.drafted} ringed, {acc_f} of {flat.stream.drafted} flat\n")
-        t |> success(acc_f > 0l, "the flat run accepts drafts ({acc_f} of {flat.stream.drafted})")
-        t |> success(float(abs(acc_r - acc_f)) <= RING_ACCEPT_BAND * float(acc_f),
-            "the ringed run accepts within {RING_ACCEPT_BAND} of the flat run's drafts ({acc_r} of {ringed.stream.drafted} vs {acc_f} of {flat.stream.drafted})")
     }
+}
+
+//! the drafter on the UD-IQ3_XXS trunk `trg`, whose Q6_K token table the seed embed gathers: drafts accepted at depth 2, the plain stream's tokens
+def private gdraft_kquant_cell(t : T?; trg : Model) {
+    t |> equal(trg.emb_fmt, KqFmt.k6, "the trunk's token table is Q6_K (the K-quant seed gather)")
+    let depth_pin = mtp_depth_pin()
+    set_mtp_depth(2l)
+    var prompts <- counting_prompts(trg, 1l)
+    var plain <- sched_run(t, trg, prompts, 24l, KVDtype.f16, false)
+    var spec <- sched_run(t, trg, prompts, 24l, KVDtype.f16, true)
+    same_streams(t, trg, "gdraft iq3", plain, spec, 24l)
+    t |> success(spec.drafted > 0l && spec.accepted > 0l, "the rounds drafted and accepted ({spec.accepted} of {spec.drafted})")
+    restore_mtp_depth(depth_pin)
+    delete plain
+    delete spec
+    delete prompts
 }
 
 [test(description = "The drafter attaches to the UD-IQ3_XXS 26B trunk whose Q6_K token table the seed embed gathers, accepts drafts at depth 2, and emits the plain scheduler's counting tokens exactly")]
@@ -1232,20 +1280,327 @@ def test_gemma_drafter_kquant_table(t : T?) {
     if (!family_on(t, "gemma4moe") || !arm_on(t, "mtp-gdraft-iq3")) {
         return
     }
-    t |> run("the drafter attaches to the UD-IQ3_XXS trunk, whose Q6_K token table the seed embed gathers, and speculates") @(t : T?) {
-        with_served_drafter(t, IQ3_FILE, 1l, KVDtype.f16) $(trg) {
-            t |> equal(trg.emb_fmt, KqFmt.k6, "the trunk's token table is Q6_K (the K-quant seed gather)")
-            let depth_pin = mtp_depth_pin()
-            set_mtp_depth(2l)
-            var prompts <- counting_prompts(trg, 1l)
-            var plain <- sched_run(t, trg, prompts, 24l, KVDtype.f16, false)
-            var spec <- sched_run(t, trg, prompts, 24l, KVDtype.f16, true)
-            same_streams(t, trg, "gdraft iq3", plain, spec, 24l)
-            t |> success(spec.drafted > 0l && spec.accepted > 0l, "the rounds drafted and accepted ({spec.accepted} of {spec.drafted})")
-            restore_mtp_depth(depth_pin)
-            delete plain
-            delete spec
-            delete prompts
+    static_if (typeinfo builtin_module_exists(das_metal)) {   //! the Metal home's served twin: the discrete homes' cells ride the trunk's block
+        t |> run("the drafter attaches to the UD-IQ3_XXS trunk, whose Q6_K token table the seed embed gathers, and speculates") @(t : T?) {
+            with_served_drafter(t, IQ3_FILE) $(trg) {
+                gdraft_kquant_cell(t, trg)
+            }
         }
     }
+}
+
+// ===== the trunk's block: every form of gemma-4-26B-A4B Q4_K_M loaded once =====
+
+let private G26_PPL_ARM = "g4mk"   //! the whole Q4_K_M file's perplexity walks' arm
+//! the routed model's argmax slack: a router near-tie flips whole positions between the arms, and a kernel recompile alone
+//! moves the hits - 122 to 128 against the CPU chain's 134 over the 150-position cell (the readings: CLAUDE.md)
+let private G26_HITS_SLACK = 16l
+//! the two-window cell's band: a k4 fold's rounding pattern alone moved it 1.70 -> 2.44 against the CPU chain's 1.03 (a router
+//! near-tie flips whole positions), the 150 + 150 cell 5.51 -> 5.91 against 3.36
+let private G26_PPL_RATIO_TWO_WINDOWS = 2.5
+//! a whole file's walks: 150 prose ids prefilled and 150 teacher-forced, then 520 (two windows) and 80
+let private G26_WALKS = fixed_array((n = 150l, steps = 150l), (n = 520l, steps = 80l))
+let private IQ3_PPL_ARM = "g4m"   //! the whole UD-IQ3_XXS file's perplexity walks' arm
+//! the UD-IQ3_XXS file's argmax slack: a near-tie at the router flips whole positions between the arms, and the CPU chain
+//! sits farther from the reference exe on this model than the resident does (its own forced-feed logits are no instrument
+//! here); the hits read 126 to 139 against the CPU chain's 133 across kernel recompiles (the readings: CLAUDE.md)
+let private IQ3_HITS_SLACK = 12l
+let private IQ3_CUDA_ARM = "cuda-g4m"   //! the CUDA home's arm of the whole UD-IQ3_XXS file's walk
+let private G26_HOST_CUDA_ARM = "cuda-g4mk"   //! the CUDA home's arm of the whole Q4_K_M file's host-experts walk
+let private G26_HOST_HITS_SLACK = 12l   //! the host-experts walk's slack: a router near-tie flips whole positions between the arms
+
+//! what a trunk's forms collect for the compares after the block: the walks (`GemmaWalkRows`), the two ring runs
+struct private G26TrunkRows {
+    walks : GemmaWalkRows
+    ringed : RingDraftRun
+    flat : RingDraftRun
+    host : array<GemmaRows>   //! the host-experts form's first walk (`host_ran` where it collected)
+    host_ran : bool
+}
+
+//! the drafter forms' cells, one form each (the `drafter` tag on the form's knobs): each cell under its arm and the drafter
+//! attached; `kv` the form's asked codec
+def private g26_drafter_cells(t : T?; var r : G26TrunkRows; var m : Model; form : ModelForm) {
+    unsafe {   //! the cells capture the loaded trunk and the block's collection by reference
+        if (form.host) {
+            t |> run("the GPU drafter step matches the CPU oracle (argmax, logits, h_next), at a short anchor and one past the sliding window") @capture(& m)(t : T ?) {
+                return if (!arm_on(t, "mtp-gdraft-gpu"))
+                with_ctx_cut(m, 2048l) {
+                    gdraft_attached(t, m, TARGET_FILE) $(trg) {
+                        gdraft_gpu_step_cell(t, trg)
+                    }
+                }
+            }
+        } elif (form.regions == 3l) {
+            t |> run("three speculating streams ride one verify a tick and each walks its count as the plain scheduler's stream does") @capture(& m)(t : T ?) {
+                return if (!arm_on(t, "mtp-gdraft-joint"))
+                gdraft_attached(t, m, TARGET_FILE) $(trg) {
+                    gdraft_joint_cell(t, trg)
+                }
+            }
+        } elif (form.kv != KVDtype.f16) {
+            t |> run("the drafter's rounds read a {form.kv} mirror: speculating sessions walk the count as plain ones on the same codec") @capture(& m)(t : T ?) {
+                return if (!arm_on(t, "mtp-gdraft-codec"))
+                gdraft_attached(t, m, TARGET_FILE) $(trg) {
+                    gdraft_codec_cell(t, trg, form.kv)
+                }
+            }
+        } elif (!form.ring) {
+            if (empty(arm_why("mtp-gdraft-ring"))) {
+                gdraft_attached(t, m, TARGET_FILE) $(trg) {
+                    delete r.flat
+                    r.flat <- ring_draft_rows(t, trg, 0, RING_BUDGET, r.ringed.count)
+                }
+            }
+        } else {
+            t |> run("a scheduler speculates through the attached drafter at depth 1 and matches the plain scheduler") @capture(& m)(t : T ?) {
+                return if (!arm_on(t, "mtp-gdraft-sched"))
+                with_ctx_cut(m, 512l) {
+                    gdraft_attached(t, m, TARGET_FILE) $(trg) {
+                        gdraft_served_cell(t, trg)
+                    }
+                }
+            }
+            t |> run("the scheduler's tick drafts at the depth knob's depth and walks the counting prompt as the plain scheduler does") @capture(& m)(t : T ?) {
+                return if (!arm_on(t, "mtp-gdraft-depth"))
+                with_ctx_cut(m, 512l) {
+                    gdraft_attached(t, m, TARGET_FILE) $(trg) {
+                        gdraft_depth_cell(t, trg)
+                    }
+                }
+            }
+            if (empty(arm_why("mtp-gdraft-ring"))) {
+                gdraft_attached(t, m, TARGET_FILE) $(trg) {
+                    delete r.ringed
+                    r.ringed <- ring_draft_rows(t, trg, 1, RING_BUDGET, 0)
+                }
+            }
+        }
+    }
+}
+
+let private RING_BUDGET = 24l   //! the ring runs' speculating streams' tokens
+
+//! the trunk's CPU cells on the CPU form, its first codec: the drafter's CPU oracle step, the regular DFlash drafter's
+//! lossless walk over a chat turn on the CPU arm (the context cut to HOST_CTX, the Metal mode off)
+def private g26_cpu_cells(t : T?; var m : Model) {
+    unsafe {   //! the cells capture the loaded trunk by reference
+        t |> run("one CPU drafter step over the target's live K/V produces a finite token and hidden") @capture(& m)(t : T ?) {
+            return if (!arm_on(t, "mtp-gdraft-cpu"))
+            gdraft_cpu_step_cell(t, m)
+        }
+        t |> run("On the planar gemma-4-26B Q4_K_M trunk with its Q8_0 DFlash drafter on the CPU arm, over a chat turn, the greedy speculative walk emits the plain greedy walk's ids token for token with drafts accepted") @capture(& m)(t : T ?) {
+            return if (!arm_on(t, "dflash-26b-cpu"))
+            with_cpu_drafter_scope(m) {
+                cpu_drafter_lossless(t, m, G26_DRAFTER_FILE, "26B cpu", false, true)
+            }
+        }
+    }
+}
+
+//! the host-experts form's collection into `r`: the plan moved the first routed layers' experts to the host and kept the rest
+//! on the device, the carrier's arms, then the first walk
+def private g26_host_rows(t : T?; var r : G26TrunkRows; m : Model; form : ModelForm) {
+    t |> success(moe_gpu_resident_active(), "the whole-model driver armed with host experts ({gpu_resident_decline_()})")
+    let host = gpu_resident_host_layers()
+    t |> success(host > 0l && host < m.config.n_layers, "the first {host} of {m.config.n_layers} routed layers' experts serve on the host, the rest on the device")
+    t |> success(gemma_carrier_arms(m), GEMMA_CARRIER_ARMS)
+    r.host |> emplace <| gemma_rows(m, form, array<int64>(), array<int64>(), [G26_WALKS[0]])
+    r.host_ran = true
+}
+
+//! one form's collection and cells: the host-experts form's walk, the default form's and the CPU form's walks, the drafter
+//! forms' cells, the DFlash form's legs, the CPU form's own cells
+def private g26_trunk_rows(t : T?; var r : G26TrunkRows; var m : Model; form : ModelForm; walks : bool) {
+    if (form.host_layers > 0l) {
+        g26_host_rows(t, r, m, form)
+        return
+    }
+    if (form.strict_ctx) {
+        discrete_drafter_cell(t, m, "On the gemma-4-26B's resident trunk on the serving discrete home, the Q8_0 and Q4_K_M DFlash drafters' greedy walks on the device arm are the plain walk's on the same device",
+            "dflash-26b-discrete", [G26_DRAFTER_FILE, G26_DRAFTER_K4_FILE], "26B discrete", false, true, false)
+        return
+    }
+    if (form.kv_asked) {
+        g26_drafter_cells(t, r, m, form)
+        return
+    }
+    if (walks) {
+        gemma_walk_rows(r.walks, m, form, G26_WALKS)
+    }
+    if (!form.on_gpu && form.alone) {
+        g26_cpu_cells(t, m)
+    }
+}
+
+//! walk `i`'s compare on the file `tag` at `ratio`: the device served the prompt as one window chain (and on the CUDA home
+//! every position), its perplexity within `ratio` of the CPU chain's, its hits within `slack` of the CPU chain's
+def private g26_walk_within(t : T?; tag : string; r : G26TrunkRows; i : int; ratio : float; slack : int64) {
+    gemma_walk_twin_within(t, tag, r.walks, G26_WALKS, i, ratio, slack)
+}
+
+//! the drafter forms, where the sidecar stands and a cell's arm is on: the host-planes form at 2048 positions, the one-region
+//! form at 8192 (the depth-1 and depth-knob cells cut to 512, the ringed run), three regions, the q8_0 and tq4 mirrors, the
+//! flat one-region form; the regular DFlash drafter's form; the default form where the walks' arm is on, and beside it on the
+//! CUDA home the host-experts form (the rig's context asked whole, one routed layer's experts asked onto the host); the CPU form
+def private g26_trunk_forms(t : T?; walks, host_walk : bool) : array<ModelForm> {
+    var forms : array<ModelForm>
+    if (walks) {
+        forms |> push(device_form())
+    }
+    if (host_walk) {
+        forms |> push(device_form(host = true, host_layers = 1l, strict_ctx = true))
+    }
+    static_if (!typeinfo builtin_module_exists(das_metal)) {
+        if (gdraft_sidecar_ready(t, TARGET_FILE)) {
+            let on = fixed_array(empty(arm_why("mtp-gdraft-gpu")), empty(arm_why("mtp-gdraft-sched")) || empty(arm_why("mtp-gdraft-depth")) || empty(arm_why("mtp-gdraft-ring")),
+                empty(arm_why("mtp-gdraft-joint")), empty(arm_why("mtp-gdraft-codec")), empty(arm_why("mtp-gdraft-ring")))
+            if (on[0]) {
+                forms |> push(device_form(regions = 1l, host = true, host_ctx = 2048l) |> asking(KVDtype.f16))
+            }
+            if (on[1]) {
+                forms |> push(device_form(regions = 1l, host_ctx = 8192l) |> asking(KVDtype.f16))
+            }
+            if (on[2]) {
+                forms |> push(device_form(regions = 3l, host_ctx = 512l) |> asking(KVDtype.f16))
+            }
+            if (on[3]) {
+                forms |> push(device_form(regions = 1l, host_ctx = 512l) |> asking(KVDtype.q8_0))
+                forms |> push(device_form(regions = 1l, host_ctx = 512l) |> asking(KVDtype.tq4))
+            }
+            if (on[4]) {
+                forms |> push(device_form(ring = false, regions = 1l, host_ctx = 8192l) |> asking(KVDtype.f16))
+            }
+        }
+    }
+    static_if (typeinfo module_exists(dasllama_vulkan_dflash) || typeinfo module_exists(dasllama_cuda_dflash)) {
+        if (empty(arm_why("dflash-26b-discrete"))) {
+            forms |> push(discrete_drafter_form())
+        }
+    } else {
+        t |> skip("26B discrete: no discrete GPU home in this build")
+    }
+    if (empty(arm_why("mtp-gdraft-cpu")) || empty(arm_why("dflash-26b-cpu"))) {
+        forms |> push(cpu_cells_form())
+    }
+    return <- forms
+}
+
+[test(description = "On the whole-model driver gemma-4-26B Q4_K_M with q51 down experts scores teacher-forced perplexity within 2x of the CPU chain over 150 positions and 2.5x over two windows, hits within 16; on the CUDA driver at the full rig context, the first routed layers' experts moved to the host, its 150-position perplexity within 2x through the split command and cut window chain, hits within 12; on the discrete homes' served trunk the GPU drafter step agrees with the CPU oracle within the Q8_0 feed's bars at a short anchor and past the sliding window, a scheduler speculating at depth 1 through the attached drafter emits the plain scheduler's counting tokens and stands down detached, drafter depths 3 and 1 draft k tokens a round across a page boundary with a reasoning budget's forced close in place, three streams ride one joint verify a tick, q8_0 and tq4 mirrors' rounds run on the device, and past a sliding capture layer's KV ring the drafter drafts the flat mirror's tokens bit for bit with the ringed stream within 10 percent of the flat one's acceptance; the Q8_0 and Q4_K_M DFlash drafters' greedy walks on the device arm are the plain walk's; on the CPU one drafter step over the target's live K/V yields a finite token and hidden, and the DFlash drafter's greedy speculative walk over a chat turn emits the plain walk's ids; on the parity row's CPU form, on every box, the file's frozen greedy ids to the half-span prefix bar, with its flipped-id control and its per-expert-prefill arm; each form loads once")]
+def test_gemma_drafter_26b_trunk(t : T?) {
+    return if (!family_on(t, "gemma4moe"))
+    let host_walk = empty(cuda_home_why()) && empty(arm_why(G26_HOST_CUDA_ARM))
+    let walks = empty(arm_why(G26_PPL_ARM)) || host_walk
+    var r : G26TrunkRows
+    var forms <- g26_trunk_forms(t, walks, host_walk)
+    if (empty(forms)) {
+        t |> skip("the arm filter keeps none of the trunk's cells (DASLLAMA_TEST_ARMS={g_env_test.test_arms})")
+        delete forms
+        return
+    }
+    let parity = empty(arm_why(G26_PPL_ARM))
+    var ran = false
+    with_cuda_mmq_winners() {
+        ran = with_cpu_and_gpu_model(t, "llm", "gemma-4-26B-A4B-it-Q4_K_M.gguf", GEMMA_RIG_CTX, forms, walks, parity = parity) $(var m, form) {
+            g26_trunk_rows(t, r, m, form, walks)
+        }
+    }
+    if (ran) {
+        held_within(t, r.walks.carrier, "gemma-4-26B-A4B Q4_K_M: ", false)
+    }
+    unsafe {   //! the cells read the block's collection by reference
+        if (ran && walks) {
+            t |> run("gemma-4-26B-A4B Q4_K_M: 150 prose ids prefilled, 150 teacher-forced, scored as a perplexity against the CPU chain - the q51 down experts on their own rail") @capture(& r)(t : T ?) {
+                return if (!arm_on(t, G26_PPL_ARM))
+                g26_walk_within(t, "gemma-4-26B-A4B Q4_K_M", r, 0, GEMMA_MOE_PPL_RATIO, G26_HITS_SLACK)
+            }
+            t |> run("gemma-4-26B-A4B Q4_K_M: 520 prose ids prefilled (two windows), 80 teacher-forced, scored as a perplexity against the CPU chain") @capture(& r)(t : T ?) {
+                return if (!arm_on(t, G26_PPL_ARM))
+                assert_pf_window(t)
+                g26_walk_within(t, "gemma-4-26B-A4B Q4_K_M", r, 1, G26_PPL_RATIO_TWO_WINDOWS, G26_HITS_SLACK)
+            }
+        }
+        if (ran && host_walk) {
+            t |> run("gemma-4-26B-A4B Q4_K_M with the rig's context asked whole: the first routed layers' experts on the host, 150 prose ids prefilled, 150 teacher-forced, scored as a perplexity against the CPU chain - the split command and the cut window chain under the gemma-4 form") @capture(& r)(t : T ?) {
+                return if (!cuda_home_asked(t))
+                if (!r.host_ran) {
+                    t |> failure("gemma-4-26B-A4B Q4_K_M: the host-experts form did not arm on the CUDA home - the pinned context and the routed layer asked onto the host decide the plan whatever the card")
+                    return
+                }
+                return if (!twin_collected(t, 0, length(r.walks.cpu), "gemma-4-26B-A4B Q4_K_M, host experts: "))
+                gemma_rows_within(t, "gemma-4-26B-A4B Q4_K_M, host experts", r.host[0], r.walks.cpu[0], array<int64>(), [G26_WALKS[0]],
+                    GEMMA_MOE_PPL_RATIO, G26_HOST_HITS_SLACK)
+            }
+        }
+        if (r.ringed.ok || r.flat.ok) {
+            t |> run("the drafter past a sliding capture layer's ring reads the rows the flat mirror holds: drafts, acceptance and the trunk's logits") @capture(& r)(t : T ?) {
+                return if (!arm_on(t, "mtp-gdraft-ring"))
+                t |> success(r.ringed.ok && r.flat.ok, "both ring pins' runs collected (ringed {r.ringed.ok}, flat {r.flat.ok})")
+                return if (!r.ringed.ok || !r.flat.ok)
+                past_ring_within(t, r.ringed, r.flat, RING_BUDGET)
+            }
+        }
+    }
+    delete r
+    delete forms
+}
+
+[test(description = "On the whole-model driver the routed gemma-4-26B UD-IQ3_XXS, held whole on the card, scores teacher-forced perplexity within 2x of the CPU chain's over one and two windows, hits within 12 - on the CUDA driver too over 150 positions; on the discrete homes the drafter attaches to the trunk whose Q6_K token table the seed embed gathers, accepts drafts at depth 2, and emits the plain scheduler's counting tokens exactly; on the parity row's CPU form, on every box, the file's frozen greedy ids token for token; each form loads once")]
+def test_gemma_drafter_26b_iq3_trunk(t : T?) {
+    return if (!family_on(t, "gemma4moe"))
+    let cuda_walk = empty(cuda_home_why()) && empty(arm_why(IQ3_CUDA_ARM))
+    let walks = empty(arm_why(IQ3_PPL_ARM)) || cuda_walk
+    var r : G26TrunkRows
+    var forms : array<ModelForm>
+    if (walks) {
+        forms |> push(device_form())
+    }
+    static_if (!typeinfo builtin_module_exists(das_metal)) {
+        if (empty(arm_why("mtp-gdraft-iq3")) && gdraft_sidecar_ready(t, IQ3_FILE)) {
+            forms |> push(device_form(regions = 1l, host_ctx = 512l) |> asking(KVDtype.f16))
+        }
+    }
+    if (empty(forms)) {
+        t |> skip("the arm filter keeps none of the UD-IQ3_XXS trunk's cells (DASLLAMA_TEST_ARMS={g_env_test.test_arms})")
+        delete forms
+        return
+    }
+    let parity = empty(arm_why(IQ3_PPL_ARM))
+    var ran = false
+    with_cuda_mmq_winners() {
+        ran = with_cpu_and_gpu_model(t, "llm", "gemma-4-26B-A4B-it-UD-IQ3_XXS.gguf", GEMMA_RIG_CTX, forms, walks, parity = parity) $(var m, form) {
+            if (form.kv_asked) {
+                unsafe {   //! the cell captures the loaded trunk by reference
+                    t |> run("the drafter attaches to the UD-IQ3_XXS trunk, whose Q6_K token table the seed embed gathers, and speculates") @capture(& m)(t : T ?) {
+                        return if (!arm_on(t, "mtp-gdraft-iq3"))
+                        gdraft_attached(t, m, IQ3_FILE) $(trg) {
+                            gdraft_kquant_cell(t, trg)
+                        }
+                    }
+                }
+            } elif (walks) {
+                gemma_walk_rows(r.walks, m, form, G26_WALKS)
+            }
+        }
+    }
+    if (ran && walks) {
+        held_within(t, r.walks.carrier, "gemma-4-26B-A4B UD-IQ3_XXS: ", false)
+        unsafe {   //! the cells read the block's collection by reference
+            t |> run("gemma-4-26B-A4B IQ3_XXS: 150 prose ids prefilled, 150 teacher-forced, scored as a perplexity against the CPU chain - the routed block's gemma-4 form") @capture(& r)(t : T ?) {
+                return if (!arm_on(t, IQ3_PPL_ARM))
+                g26_walk_within(t, "gemma-4-26B-A4B UD-IQ3_XXS", r, 0, GEMMA_MOE_PPL_RATIO, IQ3_HITS_SLACK)
+            }
+            t |> run("gemma-4-26B-A4B IQ3_XXS: 520 prose ids prefilled (two windows), 80 teacher-forced, scored as a perplexity against the CPU chain") @capture(& r)(t : T ?) {
+                return if (!arm_on(t, IQ3_PPL_ARM))
+                assert_pf_window(t)
+                g26_walk_within(t, "gemma-4-26B-A4B UD-IQ3_XXS", r, 1, GEMMA_MOE_PPL_RATIO, IQ3_HITS_SLACK)
+            }
+            t |> run("gemma-4-26B-A4B IQ3_XXS: 150 prose ids prefilled, 150 teacher-forced, scored as a perplexity against the CPU chain - the gemma-4 routed form on the CUDA driver") @capture(& r)(t : T ?) {
+                return if (!cuda_home_asked(t) || !arm_on(t, IQ3_CUDA_ARM))
+                g26_walk_within(t, "gemma-4-26B-A4B UD-IQ3_XXS, cuda", r, 0, GEMMA_MOE_PPL_RATIO, IQ3_HITS_SLACK)
+            }
+        }
+    }
+    delete r
+    delete forms
 }
