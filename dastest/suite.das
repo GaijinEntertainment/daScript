@@ -30,6 +30,10 @@ var test_results : array<SuiteTestResult>
 //! and the file its tests are named beside
 var test_wall_seconds : float
 var test_wall_file : string
+//! what the `--timeout` guard prints while the sequential sweep is
+//! on a file; each test and subtest adds its own name to it
+var suite_timeout_says : string
+var private suite_timeout_test : string
 var bench_messages : array<string>
 var test_inputs : array<string>
 
@@ -728,6 +732,23 @@ def private record_test_log(context : FileCtx; var messages : array<string>;
 //! (`[test(timeout = N)]`, 0 for none) where that is longer
 def test_wall_of(run_wall, declared : float) : float => max(run_wall, declared)
 
+//! the `--timeout` guard now names this test or subtest; returns
+//! what it named before
+def private suite_timeout_enters(name : string; top_level : bool) : string {
+    let outer_test = suite_timeout_test
+    return outer_test if (empty(suite_timeout_says))
+    suite_timeout_test = top_level ? "test '{name}'" : "{outer_test}, subtest '{name}'"
+    kill_switch_say(KILL_SWITCH_SUITE, "{suite_timeout_says}, in {suite_timeout_test}")
+    return outer_test
+}
+
+def private suite_timeout_leaves(outer_test : string) {
+    return if (empty(suite_timeout_says))
+    suite_timeout_test = outer_test
+    let back_in = empty(outer_test) ? "" : ", in {outer_test}"
+    kill_switch_say(KILL_SWITCH_SUITE, "{suite_timeout_says}{back_in}")
+}
+
 def private test_any(name : string; func; args_num : int;  // nolint:STYLE038 - one arm per shape
                      var context : FileCtx; var res : SuiteResult&;
                      meta : TestMeta = default<TestMeta>) {
@@ -742,10 +763,12 @@ def private test_any(name : string; func; args_num : int;  // nolint:STYLE038 - 
         let said = "kill switch: test '{name}'{beside} (--test-wall) ran past {wall}s"
         kill_switch_arm(KILL_SWITCH_TEST, wall, said)
     }
+    let outer_test = suite_timeout_enters(name, empty(context.indenting))
     defer() {
         if (walled) {
             kill_switch_disarm(KILL_SWITCH_TEST)
         }
+        suite_timeout_leaves(outer_test)
     }
     let beforeFailed = res.failed
     let beforeErrors = res.errors
