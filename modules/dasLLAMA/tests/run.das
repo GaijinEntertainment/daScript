@@ -73,6 +73,8 @@ struct RunArgs {
     @clarg_short = "b"
     @clarg_doc = "Files per child (default the whole suite in one child on the model-free suite, 10 on any other run): past 1 the child compiles its files as ONE program (dastest --together), so the engine's parse and JIT are paid once a batch and each file still reports as its own; a batch that dies before every file's verdict reruns the files without one, one child each - under a test wall it stops the run instead. The image suite's child always runs alone; 1 = one child a file"
     batch : int = 0
+    @clarg_doc = "Skip a file whose program loaded whole from its compile record and whose last run on this box, over the same model files, passed (dastest --skip-fully-cached). A development loop's flag: the run that signs a change off never takes it"
+    skip_fully_cached : bool
     @clarg_name = "no-tune"
     @clarg_doc = "Short-circuit the [tune] framework in every child (DAS_TUNE_POLICY=reference): the reference bodies run — the portable tier's arm"
     no_tune : bool
@@ -1185,16 +1187,33 @@ struct RunTally {
     waited : double   //! the seconds the children waited on the model copy (`--await-models`)
 }
 
+//! what a child's pass on record rests on and its compile record does not see: the box's `cpu`, and the size and time of
+//! every model file under `dir` the child opens (`opened`, by path under `dir`; an absent one counts as such).
+//! Non-private: test_run_suites.das pins it
+def pass_stamp(dir : string; opened : array<string>; cpu : string) : string {
+    let text = build_string() $(var w) {
+        w |> write(cpu)
+        for (model in opened) {
+            w |> write("\n{model} {file_stamp(path_join(dir, model))}")
+        }
+    }
+    return "{hash(text)}"
+}
+
+//! the dastest flags of `--skip-fully-cached` for the child over `chunk`: the flag and the child's `pass_stamp`
+def private skip_flags(cfg : RunArgs; models : string; chunk : array<string>) : string {
+    return "" if (!cfg.skip_fully_cached)
+    var inscope opened <- opened_models(chunk, models, cfg.category, cfg.family, parity_full_mode())
+    return " --skip-fully-cached --pass-stamp {pass_stamp(models, opened, child_cpu())}"
+}
+
 //! the per-test cache folder of the run's binary, and the folders of earlier binaries removed when the run is
 //! on its own binary (a --das dry run keeps them); "" when the binary cannot be stat'd, and the children get
 //! no cache. A record serves a child's unchanged module prefix: the engine's compile (~90 s a file) becomes a
 //! read of a few seconds, so a re-run pays the test, not the parse. Non-private: test_run_suites.das gates it
 def child_cache_dir(das_exe : string; own_binary : bool) : string {
-    var st : FStat
-    if (!stat(das_exe, st)) {
-        return ""
-    }
-    let id = "{int64(st.size)}-{int64(st.mtime)}"
+    return "" if (!fexist(das_exe))
+    let id = file_stamp(das_exe, "-")
     let dir = "{CHILD_CACHE_ROOT}/{id}"
     mkdir_rec(dir)
     if (own_binary) {
@@ -1615,7 +1634,8 @@ def private run_files(cfg : RunArgs; files : array<string>; image_arms : string;
             let file_args = n == 1 ? " --test \"{chunk[0]}\"" : join([for (f in chunk); " --together \"{f}\""], "")
             return <- tally if (stopped_by_marker(cfg, tag, tally) || await_child_models(cfg, models, chunk, seat, tag, at, tally))
             let run_env = child_run_env(cfg, (area_run && tag == "test_model_image.das") ? image_arms : cfg.arm)
-            let cmd = "{envs}\"{das_exe}\" -jit -module-cache {MODULE_CACHE} dastest/dastest.das --{file_args} --timeout {tmo * n}{wall_flag}{cache_flag}{run_env} > \"{log_path}\" 2>&1"
+            let skip = skip_flags(cfg, models, chunk)
+            let cmd = "{envs}\"{das_exe}\" -jit -module-cache {MODULE_CACHE} dastest/dastest.das --{file_args} --timeout {tmo * n}{wall_flag}{cache_flag}{skip}{run_env} > \"{log_path}\" 2>&1"
             to_log(LOG_INFO, "START {tag}{rep_tag}: {seat}: {cmd}\n")
             let t0 = ref_time_ticks()
             let rc = unsafe(popen(cmd) $(f) {

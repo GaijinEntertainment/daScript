@@ -91,15 +91,25 @@ def child_lib_names() : array<string> {
     return <- libs
 }
 
-var private g_child_cpu = ""   //! this box's CPU brand, probed once
+var private g_child_cpu = ""
 
-//! The key of the test child's exe for this tree, binary, box and build environment (`child_exe_key_for` on this box's CPU)
-def child_exe_key() : string {
+//! this box's CPU brand, probed once a process
+def child_cpu() : string {
     if (empty(g_child_cpu)) {
         g_child_cpu = probe_cpu_brand()
     }
-    return child_exe_key_for(g_child_cpu)
+    return g_child_cpu
 }
+
+//! the size and time of the file at `path` as one word, `sep` between them, zeros for a missing one: what a key that
+//! goes stale with the file folds in
+def file_stamp(path : string; sep : string = ":") : string {
+    let st = stat(path)
+    return "{int64(st.size)}{sep}{int64(st.mtime)}"
+}
+
+//! The key of the test child's exe for this tree, binary, box and build environment (`child_exe_key_for` on this box's CPU)
+def child_exe_key() : string => child_exe_key_for(child_cpu())
 
 //! The key of the test child's exe built on the CPU `cpu`: the size and time of the libraries the binary is built of (the
 //! binary's own where the tree has no `lib/`) and of every `.das` the build can read - a tests-folder file counts where
@@ -111,12 +121,11 @@ def child_exe_key_for(cpu : string) : string {
     var h = fnv1a("cpu={cpu}", FNV1A_SEED)
     var libs <- child_lib_names()
     for (name in libs) {
-        let st = stat("{root}/lib/{name}")
-        h = fnv1a("lib/{name}:{st.size}:{st.mtime}", h)
+        let stamp = file_stamp("{root}/lib/{name}")
+        h = fnv1a("lib/{name}:{stamp}", h)
     }
     if (empty(libs)) {
-        let exe = stat(das_exe())
-        h = fnv1a("{exe.size}:{exe.mtime}", h)
+        h = fnv1a(file_stamp(das_exe()), h)
     }
     for (name in CHILD_BUILD_ENVS) {
         h = fnv1a("{name}={get_env_variable(name)}", h)
@@ -131,8 +140,8 @@ def child_exe_key_for(cpu : string) : string {
         }
         sort(names)
         for (name in names) {
-            let st = stat("{root}/{rel}/{name}")
-            h = fnv1a("{rel}/{name}:{st.size}:{st.mtime}", h)
+            let stamp = file_stamp("{root}/{rel}/{name}")
+            h = fnv1a("{rel}/{name}:{stamp}", h)
         }
     }
     return "{h}"

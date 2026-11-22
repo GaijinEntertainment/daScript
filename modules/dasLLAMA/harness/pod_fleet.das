@@ -405,8 +405,9 @@ def run_command(cfg : FleetArgs; run, home : string; model_free : bool) : string
     let runner = "./bin/daslang -jit -module-cache .cache/daslang/module_cache/dastest.dascache {RUNNER}"
     let given = batched_args("{cfg.args}{only}")
     let given_is_it = runs_model_free(cfg.args)
+    let skip = (split(cfg.args, " ") |> has_value("--skip-fully-cached")) ? " --skip-fully-cached" : ""   //! the caller's rerun flag is the fleet's model-free suite's too
     let mf_run = (given_is_it || !model_free ? " mf=0;"
-        : " {runner} --suite model-free --await-models {state}; mf=$?;")
+        : " {runner} --suite model-free{skip} --await-models {state}; mf=$?;")
     let mf_exit = (given_is_it || model_free ? "echo MODEL-FREE-EXIT=$\{mf:-none\}"
         : "echo \"MODEL-FREE-EXIT=none (the cuda home runs it)\"")
     let inner = ("cd {POD_TREE} && export LD_LIBRARY_PATH={POD_TREE}/lib TMPDIR={tmp}"
