@@ -18,15 +18,21 @@ def with_tls_fixture_mode(t : T?; mode : string; run : block<(root : string; dns
     with_process(arguments) $(var process) {
         let started = ref_time_ticks()
         var diagnostics : string
-        while (!fexist("{root}/ready") && get_time_usec(started) < 15000000) {
+        var record : string
+        while (get_time_usec(started) < 15000000) {
+            record = fread("{root}/ready")
+            if (!empty(record)) { break }
             unsafe(process_drain(process) $(line) { diagnostics += line })
             if (unsafe(process_poll(process)) != process_running) { break }
             sleep(5u)
         }
-        if (!fexist("{root}/ready")) {
+        let ports <- split(record, "\n")
+        if (length(ports) < 2) {
             unsafe(process_drain(process) $(line) { diagnostics += line })
             let status = unsafe(process_poll(process))
-            t |> failure("TLS fixture did not start: {executable}; exit/status={status}; {diagnostics}")
+            let what = (empty(record) ? "TLS fixture did not start"
+                : "invalid TLS fixture ready record [{record}]")
+            t |> failure("{what}: {executable}; exit/status={status}; {diagnostics}")
         } else {
             if (mode == "clients") {
                 // Set trust before either CRT initializes; Debug/Release CRT env caches differ.
@@ -36,9 +42,7 @@ def with_tls_fixture_mode(t : T?; mode : string; run : block<(root : string; dns
                     t |> equal(client_exit, 0, diagnostics)
                 }
             }
-            let ports <- split(fread("{root}/ready"), "\n")
-            if (length(ports) >= 2) { invoke(run, root, to_int(ports[0]), to_int(ports[1])) }
-            else { t |> failure("invalid TLS fixture ready record") }
+            invoke(run, root, to_int(ports[0]), to_int(ports[1]))
             fwrite("{root}/release", "done")
             let exit_code = unsafe(process_wait(process, 10.0))
             unsafe(process_drain(process) $(line) { diagnostics += "{line}\n" })
