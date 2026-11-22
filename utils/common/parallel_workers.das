@@ -23,6 +23,7 @@ struct public ChunkResult {
     index : int
     exit_code : int
     stdout : string
+    seconds : float     //! the child's wall time, start to exit
 }
 
 
@@ -164,6 +165,7 @@ def public run_chunk_workers(argvs : array<array<string>>) : array<ChunkResult> 
                     new_thread <| @ {
                         for_each_clone(inCh) $(input : InternalInput#) {
                             var output : string
+                            let started = ref_time_ticks()
                             let exit_code = unsafe(popen_argv(input.argv, 0.0, $(f) {
                                 if (f != null) {
                                     output := fread(f)
@@ -172,7 +174,8 @@ def public run_chunk_workers(argvs : array<array<string>>) : array<ChunkResult> 
                             outCh |> push_clone(ChunkResult(
                                 index = input.index,
                                 exit_code = exit_code,
-                                stdout = output))
+                                stdout = output,
+                                seconds = float(double(get_time_nsec(started)) / 1000000000.0lf)))
                             outCh |> notify()
                         }
                         inCh |> release()
@@ -189,6 +192,7 @@ def public run_chunk_workers(argvs : array<array<string>>) : array<ChunkResult> 
                         results[r.index].index = r.index
                         results[r.index].exit_code = r.exit_code
                         results[r.index].stdout := r.stdout
+                        results[r.index].seconds = r.seconds
                     }
                 }
                 done |> join()

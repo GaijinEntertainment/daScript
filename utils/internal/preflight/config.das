@@ -131,11 +131,9 @@ def private standalone_module_tree(path : string) : bool {
 def public is_sweep_root_text(text : string) : bool =>
     find(text, "[export]") >= 0 && find(text, "def main") >= 0
 
-//! the require whose roots pay the engine compile (~24 s each on the M5 box) - they run serially
-//! through one shared module cache instead of contending in the pool
-let public SWEEP_HEAVY_REQUIRE = "require dasllama/"
+let public SWEEP_ENGINE_REQUIRE = "require dasllama/"
 
-def public is_heavy_sweep_root(text : string) : bool => find(text, SWEEP_HEAVY_REQUIRE) >= 0
+def public is_engine_sweep_root(text : string) : bool => find(text, SWEEP_ENGINE_REQUIRE) >= 0
 
 //! How many files the lint run's ``--fix`` rewrote: one ``FIXED <file> (<n>)`` line each
 def public count_fixed_files(out : string) : int {
@@ -359,24 +357,42 @@ def lint_gate_files(das, md, cpp, cxx_other : array<string>) : array<string> {
     return <- [for (f in files); f; where !starts_with(f, "tree-sitter-daslang/")]
 }
 
-//! The lanes as the children that run them: a lane that builds
-//! nothing is a child of its own, run at once with the others; the
-//! lanes named in `builds` share ONE child in the order given, so one
-//! `cmake --build` runs in the build dir at a time - two at once
-//! collide on MSBuild's tlog and object files
-def lane_groups(names : array<string>; builds : array<string>) : array<array<string>> {
-    var groups : array<array<string>>
-    var building : array<string>
-    for (name in names) {
-        if (find_index(builds, name) >= 0) {
-            building |> push(name)
-        } else {
-            var one <- [name]
-            groups |> emplace(one)
+[arch(at="README.md#build-turn")]
+def public take_build_lock(lock : string; max_wait : double) : bool {
+    return true if (empty(lock))
+    let t0 = ref_time_ticks()
+    while (!mkdir(lock)) {
+        return false if (double(get_time_nsec(t0)) / 1000000000.0lf > max_wait)
+        sleep(50u)
+    }
+    return true
+}
+
+def public drop_build_lock(lock : string) {
+    if (!empty(lock)) {
+        rmdir(lock)
+    }
+}
+
+[arch(at="README.md#build-turn")]
+def public regenerated_mid_build(out : string) : bool =>
+    find(out, "CMake is re-running because") >= 0
+
+struct UtilsSuite {
+    path : string
+    compile_only : bool
+}
+
+//! run_utils_tests.txt: one `test <path>` or `compile <path>` a line
+def public utils_suites(text : string) : array<UtilsSuite> {
+    var suites : array<UtilsSuite>
+    for (raw in split(text, "\n")) {
+        let ln = strip(raw)
+        if (ln |> starts_with("test ")) {
+            suites |> emplace(UtilsSuite(path = strip(slice(ln, 5))))
+        } elif (ln |> starts_with("compile ")) {
+            suites |> emplace(UtilsSuite(path = strip(slice(ln, 8)), compile_only = true))
         }
     }
-    if (!empty(building)) {
-        groups |> emplace(building)
-    }
-    return <- groups
+    return <- suites
 }

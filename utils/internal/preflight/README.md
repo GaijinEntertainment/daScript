@@ -12,10 +12,14 @@ The budget the tiers serve: a full run fits 20 minutes on the M5 box.
 # program root under utils/, examples/, tutorials/ and the modules' examples and utils, in parallel)
 daslang utils/internal/preflight/main.das
 
-# --full adds the lanes: the run-only ones at once (tests-cpp, tests-interp, tests-jit) beside the
-# lanes that build in the shared build dir, one after another (docs - the seven doc.yml gates -,
-# tests-aot, which builds test_aot first, and utils-tests): two cmake --build in one build dir
-# collide on MSBuild's tlog and object files, so the wall is the longer of the two sides
+# --full adds the lanes, all at once: docs (the seven doc.yml gates), tests-cpp, tests-interp,
+# tests-jit, watchdog-interp / watchdog-jit (tests/watchdog, which no sweep of tests/ runs),
+# tests-aot and utils-tests. What takes turns among them is "Build turns" below, and when the
+# docs lane starts is "The docs lane beside the fast tier". utils-tests builds
+# run_utils_tests_products and runs the suites of
+# run_utils_tests itself, every suite at once, from the list cmake writes to
+# <build>/run_utils_tests.txt - so a suite works only in folders no other suite names.
+# The wall is the longest lane
 daslang utils/internal/preflight/main.das -- --full
 daslang utils/internal/preflight/main.das -- --full --serial     # the lanes one after another, for diagnosis
 
@@ -54,12 +58,12 @@ different file. Command-line flags override the file.
 
 ```toml
 [jit]
-threads = 48
+threads = 12
 max_file_time = 60
 ```
 
 Without a machine setting, JIT isolation uses half the logical CPUs, clamped
-to 4..32 workers. `--jit-jobs=0` requests that automatic rule explicitly.
+to 4..16 workers. `--jit-jobs=0` requests that automatic rule explicitly.
 
 Cross-platform (Windows / macOS / Linux+WSL): subprocesses go through
 `popen_argv` (no shell) - except the sequence gate, which by design runs CI's
@@ -71,12 +75,40 @@ even the full ~200-TU header-change sweep at ~15-30 s. A gate whose host tool
 or module is missing reports `SKIP` with an install/rebuild hint instead of
 passing silently. Exit code is non-zero when any gate fails.
 
+The interpreter, JIT and AOT sweeps run isolated, twenty files a worker
+process. The interpreter and AOT sweeps always take the automatic worker
+count: the wall of a sequential sweep is the sum of a few long files, and a
+batch of twenty keeps the CPU near the sequential run's.
+
+## Build turns {#build-turn}
+
+The lanes of one `--full` run share one build lock: a folder named once per run in the temp
+dir and passed to each lane child as `--build-lock`. A lane starts its turn by creating the
+folder and ends it by removing the folder. A preflight started without `--build-lock` takes
+no turns. A lane that waits past the wait limit fails the step it was waiting for. Every
+`cmake --build` in the shared build dir runs inside a turn, because two builds in one dir
+collide on MSBuild's tlog and object files. A step that takes every core also takes a turn -
+off Windows that is sphinx - so that step and the builds wait for each other. A build re-runs
+cmake part way when a file came or went under a `CONFIGURE_DEPENDS` glob after the build's
+own check. Under MSBuild, whose projects then regenerate all at once, that build fails, and
+configures that race can leave the generated module lists written twice. So when a failed
+build re-ran cmake, `run_build` configures once more and builds a second time, while it still
+has its turn.
+
+## The docs lane beside the fast tier {#docs-early}
+
+On Windows the docs lane of a `--full` run starts with the fast tier, not after it. It reads
+nothing the fast tier checks, and its sphinx step is one process that takes no build turn, so
+its time is hidden behind the fast tier's. A red fast tier stops it. Off Windows sphinx fills
+every core, so the docs lane starts with the other lanes. A run with `--only` or `--serial`
+starts nothing early.
+
 The full interpreter and AOT sweeps pass `--max-file-time` to `dastest`. The
 parallel cold JIT sweep defaults to 60 seconds because healthy files can cross
 30 seconds under worker contention. Any completed test file above its ceiling
-fails preflight even when its assertions pass. The JIT sweep also passes
-`--test-timeout 300`: a worker that never finishes is killed with everything it
-started - at 1200 seconds for a batch of four, under the suite's 1800 - and the
+fails preflight even when its assertions pass. Every sweep also passes
+`--test-timeout 60`: a worker that never finishes is killed with everything it
+started - at 1200 seconds for a batch of twenty, under the suite's 1800 - and the
 files it had not reported run again one by one. The suite-wide timeout remains
 the guard for a dastest that itself stops.
 
@@ -86,4 +118,6 @@ entries - surfaces that pull external daspkg packages belong to the
 `sequence` gate, not the compile sweep. The compile sweep's own exclusions,
 each with its reason, are `SWEEP_EXCLUDED` in `config.das`; the trees whose roots need a
 native module the box may not have built (dasVulkan, off by default on Apple) are
-`SWEEP_NEEDS_MODULE` there, swept only while the module's shared artifact exists.
+`SWEEP_NEEDS_MODULE` there, swept only while the module's shared artifact exists. A root that
+requires `dasllama/` is left out too: each pays the engine compile, a quarter of a minute,
+so CI and the module's own gates compile those.
