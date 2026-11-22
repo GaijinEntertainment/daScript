@@ -68,6 +68,12 @@ config change, and it reverts the moment the variable goes away. Surrounding whi
 and unknown codes are harmless. The `-no-lint` command-line flag turns off
 every lint macro and the compiler's style rules; the compiler's semantic checks still run.
 
+## Memory
+
+| Variable | Type | Effect |
+|---|---|---|
+| `DAS_NO_HUGEPAGE_HINT` | flag | Linux: an allocation of 2 MB or more keeps its 2 MB alignment and drops its `MADV_HUGEPAGE` hint. The hint saves TLB misses on large panels; on a host whose memory is fragmented each hinted page fault waits on compaction, and fresh memory arrives several times slower. Read once, at the first such allocation. |
+
 ## Module cache
 
 | Variable | Type | Effect |

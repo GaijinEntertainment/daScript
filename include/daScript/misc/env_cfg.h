@@ -26,6 +26,9 @@ namespace das {
     // `environ` symbol is private to env_cfg.cpp - PS does not export it at all.
     DAS_API char * const * das_environ ();
 
+    // a flag's value: on when set to anything but an empty text or one starting with 0
+    DAS_API bool das_env_flag ( const char * value );
+
     // every environment variable daslang core reads, one accessor each.
     // documented at https://daslang.io/doc/reference/environment_variables.html
 
@@ -43,6 +46,7 @@ namespace das {
     DAS_API const char * get_dasenv_depfile ();
     DAS_API const char * get_dasenv_depfile_target ();
     DAS_API const char * get_dasenv_depfile_exclude ();
+    DAS_API const char * get_dasenv_no_hugepage_hint ();
 
     // ambient variables daslang reads but does not own
     DAS_API const char * get_columns ();

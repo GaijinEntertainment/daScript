@@ -2,6 +2,7 @@ options gen2
 
 require dastest/testing_boost public
 require daslib/fio
+require strings
 
 // `diagnostics_to_file` points the process-wide diagnostics sink at a file, so a
 // program whose stdout carries a protocol and whose launcher keeps no stderr still
@@ -66,4 +67,40 @@ def test_unset_env_variable(t : T?) {
     set_env_variable("DAS_T_UNSET_ME", "here")
     unset_env_variable("DAS_T_UNSET_ME")
     t |> success(!has_env_variable("DAS_T_UNSET_ME"), "the variable is gone")
+}
+
+//! how many mappings the child `_fixture_hugepage_child.das` reports
+//! as huge-page advised under `env`, -1 where it printed no count
+def private advised_mappings(env : string; var output : string&) : int {
+    let argv <- [get_command_line_arguments()[0], "-dasroot", get_das_root(), "-no-module-cache",
+        "{get_das_root()}/tests/fio/_fixture_hugepage_child.das"]
+    let rc = run_and_capture(argv, "", [env], output, 120.0)
+    let at = find(output, "ADVISED=")
+    return -1 if (rc != 0 || at < 0)
+    return to_int(slice(output, at + length("ADVISED=")))
+}
+
+[test(description = "On Linux an allocation of 2 MB or more carries the huge-page advice with DAS_NO_HUGEPAGE_HINT empty or 0, and any other value of it drops the advice", timeout = 1200)]
+def test_no_hugepage_hint(t : T?) {
+    if (get_platform_name() != "linux") {
+        t |> skip("the huge-page hint is Linux's: {get_platform_name()} allocates without one")
+        return
+    }
+    var modes = ""
+    fopen("/sys/kernel/mm/transparent_hugepage/enabled", "rb") $(f) {
+        if (f != null) {
+            modes = fgets(f)
+        }
+    }
+    if (find(modes, "[always]") < 0 && find(modes, "[madvise]") < 0) {
+        t |> skip("this kernel takes no huge-page advice (its modes: '{strip(modes)}')")
+        return
+    }
+    var output : string
+    for (on in ["DAS_NO_HUGEPAGE_HINT=0", "DAS_NO_HUGEPAGE_HINT="]) {
+        let hinted = advised_mappings(on, output)
+        t |> success(hinted > 0, "under `{on}` the array's mapping carries the advice: {output}")
+    }
+    let plain = advised_mappings("DAS_NO_HUGEPAGE_HINT=1", output)
+    t |> equal(plain, 0, "under the knob no mapping carries the advice: {output}")
 }

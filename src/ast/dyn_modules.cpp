@@ -111,10 +111,7 @@ void ignore_dynamic_module_manifests(bool ignore) {
 }
 
 static bool trace_scan() {
-    static const bool on = []{
-        const char * e = get_dasenv_trace_module_load();
-        return e && e[0] && e[0] != '0';
-    }();
+    static const bool on = das_env_flag(get_dasenv_trace_module_load());
     return on;
 }
 

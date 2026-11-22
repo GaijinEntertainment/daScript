@@ -90,7 +90,8 @@ The three `require $` headers above.
 
 `src/nano_stubs.cpp` - the seams where nano ends, plus the smart-pointer tracking globals that
 `src/misc/globals.cpp` owns upstream (that file also carries the job-queue globals, and
-`job_que.h` is threads).
+`job_que.h` is threads). `hugepage_hint`, which the allocator in `platform.h` asks on Linux, answers
+yes there: the runtime's answer reads the environment (`src/misc/env_cfg.cpp`), and nano has none.
 
 `src/nano_string_writer.cpp` - `daScript/misc/string_writer.h` implemented over `nano_format`
 for integers and `snprintf` for floats, so an image that never prints a float never links printf.

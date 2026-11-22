@@ -111,6 +111,16 @@ namespace das {
     const char * get_dasenv_depfile ()                 { return das_getenv("DAS_DEPFILE"); }
     const char * get_dasenv_depfile_target ()          { return das_getenv("DAS_DEPFILE_TARGET"); }
     const char * get_dasenv_depfile_exclude ()         { return das_getenv("DAS_DEPFILE_EXCLUDE"); }
+    const char * get_dasenv_no_hugepage_hint ()        { return das_getenv("DAS_NO_HUGEPAGE_HINT"); }
+
+    bool das_env_flag ( const char * value ) {
+        return value && value[0] && value[0] != '0';
+    }
+
+    bool hugepage_hint () noexcept {
+        static const bool on = !das_env_flag(get_dasenv_no_hugepage_hint());
+        return on;
+    }
 
     const char * get_columns ()                     { return das_getenv("COLUMNS"); }
 }

@@ -2757,10 +2757,7 @@ namespace das {
     // DAS_TRACE_MODULE_LOAD=1 to surface each dlopen — turns a swallowed
     // 'missing prerequisite' into a visible "FAILED — <dlerror>" line.
     static bool trace_module_load() {
-        static const bool on = []{
-            const char * e = get_dasenv_trace_module_load();
-            return e && e[0] && e[0] != '0';
-        }();
+        static const bool on = das_env_flag(get_dasenv_trace_module_load());
         return on;
     }
 
