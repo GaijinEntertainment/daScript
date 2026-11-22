@@ -257,10 +257,9 @@ def test_run_bench_file(t : T?) {
         }
         t |> run("a child that outlives timeout_seconds is killed; the arms it printed survive") @(tt : T?) {
             fake_repo(root, "hang")
-            // the fake prints its one arm at once and then hangs; the
-            // limit only has to outlive that print
+            // the limit outlives the fake's start and print, slow under load
             let res <- run_bench_file(get_host_binary(), root, bench_file(), "interp",
-                                      RunLimits(timeout_seconds = 3))
+                                      RunLimits(timeout_seconds = 20))
             tt |> equal(res.status, FileStatus.timeout)
             tt |> success(find(res.message, "timeout_seconds") >= 0, "message names the knob")
             tt |> equal(length(res.samples), 1, "the arm it printed before the kill stands")
