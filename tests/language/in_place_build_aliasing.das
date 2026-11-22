@@ -436,7 +436,7 @@ def test_loop_variable_aliasing(t : T?) {
         t |> equal(30, arr[0].c)
     }
     t |> run("loop over an iterator, literal is written through the loop variable") @(t : T?) {
-        var arr <- [Triple(a = 10, b = 20, c = 0)]  // nolint:LINT003 - written through p
+        var arr <- [Triple(a = 10, b = 20, c = 0)]
         for (p in each(arr)) {
             p = Triple(a = 1, b = 2, c = arr[0].a + arr[0].b)
         }

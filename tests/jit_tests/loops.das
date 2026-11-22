@@ -596,7 +596,7 @@ def each_dim_sum(a : int[4]) : int {
     return s
 }
 
-def each_array_bump(var a : array<int>) {   // nolint:LINT014 - writes go through the element reference
+def each_array_bump(var a : array<int>) {
     for (x in each(a)) {
         x++
     }

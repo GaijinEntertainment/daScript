@@ -60,13 +60,34 @@ you can iterate over ``T`` directly — the compiler calls ``each`` automaticall
         data : array<int>
     }
 
-    def each ( f : Foo ) : iterator<int&> {
+    def each ( f : Foo ) : iterator<int const&> {
         return unsafe(each(f.data))   // unsafe: the inner 'each' is not the for-loop source
     }
 
     var f = Foo(data <- [1, 2, 3])
     for ( x in f ) {           // equivalent to: for ( x in each(f) )
         print("{x}\n")
+    }
+
+``each`` over an array follows the constness of the array: a ``var`` array gives
+``iterator<T&>``, whose elements the loop can write, and a constant array - a ``let``, a
+parameter without ``var``, a field of either - gives ``iterator<T const&>``. ``f`` above is
+constant, so the function returns ``iterator<int const&>``. To let a loop write the elements
+of a ``var`` value, define one overload for each constness with the ``==const`` contract:
+
+.. code-block:: das
+
+    def each ( f : Foo ==const ) : iterator<int const&> {
+        return unsafe(each(f.data))
+    }
+
+    def each ( var f : Foo ==const ) : iterator<int&> {
+        return unsafe(each(f.data))
+    }
+
+    var g = Foo(data <- [1, 2, 3])
+    for ( x in g ) {           // g is var, so x is writable
+        x *= 2
     }
 
 This is how built-in types like ranges, arrays, and strings become iterable — each has a corresponding

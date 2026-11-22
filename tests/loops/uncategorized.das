@@ -1,6 +1,7 @@
 options gen2
 
 require dastest/testing_boost public
+require daslib/array_boost
 
 // Per-iteration finally in generator loops.
 // Generators linearize loops to label/goto form (ast_generate.cpp: replaceGeneratorWhile /
@@ -404,4 +405,78 @@ def while_return() : int {
         count ++
     }
     return -1
+}
+
+struct EachHolder {
+    items : array<int>
+}
+
+[unsafe_outside_of_for]
+def each(holder : EachHolder ==const) : iterator<int const&> => unsafe(each(holder.items))
+
+[unsafe_outside_of_for]
+def each(var holder : EachHolder ==const) : iterator<int&> => unsafe(each(holder.items))
+
+def sum_of_const_holder(holder : EachHolder) : int {
+    var sum = 0
+    for (x in holder) {
+        sum += x
+    }
+    return sum
+}
+
+[test(description = "each() over a var dynamic, temp or fixed array yields elements the loop writes through, each() over a const one yields elements it reads, and a user each() pair picks its overload the same way")]
+def test_each_follows_array_constness(t : T?) {
+    t |> run("a var dynamic array is written through each()") @(t : T?) {
+        var arr <- [10, 20, 30]
+        for (x in each(arr)) {
+            x = 7
+        }
+        t |> equal(arr, [7, 7, 7])
+    }
+    t |> run("a var fixed array is written through each()") @(t : T?) {
+        var arr = fixed_array(10, 20, 30)
+        for (x in each(arr)) {
+            x = 7
+        }
+        t |> equal(arr[0] + arr[1] + arr[2], 21)
+    }
+    t |> run("a var temp array is written through each()") @(t : T?) {
+        var arr <- [10, 20, 30]
+        array_view(arr, 1, 2) $(var view) {
+            for (x in each(view)) {
+                x = 7
+            }
+        }
+        t |> equal(arr, [10, 7, 7])
+    }
+    t |> run("the inner arrays of a var array of arrays grow through each()") @(t : T?) {
+        var arr <- [[1, 2], [3]]
+        for (inner in each(arr)) {
+            inner |> push(9)
+        }
+        t |> equal(length(arr[0]) + length(arr[1]), 5)
+    }
+    t |> run("const dynamic, temp and fixed arrays are read through each()") @(t : T?) {
+        let arr <- [10, 20, 30]
+        let fixed = fixed_array(1, 2, 3)
+        var sum = 0
+        for (x, y in each(arr), each(fixed)) {
+            sum += x + y
+        }
+        array_view(arr, 1, 2) $(view) {
+            for (x in each(view)) {
+                sum += x
+            }
+        }
+        t |> equal(sum, 116)
+    }
+    t |> run("a for loop over a user type takes the each() overload of its constness") @(t : T?) {
+        var holder = EachHolder(items <- [1, 2, 3])
+        for (x in holder) {
+            x *= 10
+        }
+        t |> equal(holder.items, [10, 20, 30])
+        t |> equal(sum_of_const_holder(holder), 60)
+    }
 }

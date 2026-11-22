@@ -1736,7 +1736,17 @@ def each(str : string) : iterator<int> {
 }
 
 [unsafe_outside_of_for, nodiscard]
-def each(a : auto(TT)[]) : iterator<TT&> {
+def each(a : auto(TT)[] ==const) : iterator<TT const&> {
+    unsafe {
+        var parr : void? = addr<void?>(a[0])
+        var it : iterator<TT const&>
+        _builtin_make_fixed_array_iterator(it, parr, int64(typeinfo dim(a)), typeinfo sizeof(a[0]))
+        return <- it
+    }
+}
+
+[unsafe_outside_of_for, nodiscard]
+def each(var a : auto(TT)[] ==const) : iterator<TT&> {
     unsafe {
         var parr : void? = addr<void?>(a[0])
         var it : iterator<TT&>
@@ -1746,14 +1756,30 @@ def each(a : auto(TT)[]) : iterator<TT&> {
 }
 
 [unsafe_outside_of_for, nodiscard]
-def each(a : array<auto(TT)>) : iterator<TT&> {
+def each(a : array<auto(TT)> ==const) : iterator<TT const&> {
+    var it : iterator<TT const&>
+    _builtin_make_good_array_iterator(it, a, typeinfo sizeof(a[0]))
+    return <- it
+}
+
+[unsafe_outside_of_for, nodiscard]
+def each(var a : array<auto(TT)> ==const) : iterator<TT&> {
     var it : iterator<TT&>
     _builtin_make_good_array_iterator(it, a, typeinfo sizeof(a[0]))
     return <- it
 }
 
 [unsafe_outside_of_for, nodiscard]
-def each(a : array<auto(TT)>#) : iterator<TT#&> {
+def each(a : array<auto(TT)># ==const) : iterator<TT const#&> {
+    var it : iterator<TT const#&>
+    _builtin_make_good_array_iterator(it, a, typeinfo sizeof(a[0]))
+    unsafe {
+        return <- it
+    }
+}
+
+[unsafe_outside_of_for, nodiscard]
+def each(var a : array<auto(TT)># ==const) : iterator<TT#&> {
     var it : iterator<TT#&>
     _builtin_make_good_array_iterator(it, a, typeinfo sizeof(a[0]))
     unsafe {

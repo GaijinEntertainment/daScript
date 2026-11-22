@@ -1,1 +1,1 @@
-Creates an iterator that yields temporary references to each element of the temporary dynamic array `a`.
+Creates an iterator over a range, the characters of a string, the elements of a fixed, dynamic or temporary array, or the values a lambda produces. An array yields references that follow its constness: the loop can write the elements of a `var` array, and the elements of a constant array are constant.
