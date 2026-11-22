@@ -2,6 +2,7 @@
 
 #include "daScript/ast/ast.h"
 #include "daScript/ast/ast_visitor.h"
+#include "ast_derive_alias.h"
 
 namespace das {
 
@@ -313,59 +314,126 @@ namespace das {
         }
     }
 
-    class ValueReads : public Visitor {
+    class DestinationReads : public Visitor {
+    public:
+        DestinationReads ( Expression * dest ) : destType(dest->type), local(plainLocal(dest)) {}
+        bool readBy ( Expression * value ) {
+            value->visit(*this);
+            return found;
+        }
     protected:
         virtual bool canVisitStructureFieldInit ( Structure * ) override { return false; }
         virtual bool canVisitArgumentInit ( Function * , const VariablePtr &, Expression * ) override { return false; }
         virtual bool canVisitExpr ( ExprTypeInfo *, Expression * ) override { return false; }
         virtual bool canVisitQuoteSubexpression ( ExprQuote * ) override { return false; }
-        virtual void preVisitExpression ( Expression * expr ) override {
-            Visitor::preVisitExpression(expr);
-            if ( expr->rtti_isVar() ) {
-                auto ev = static_cast<ExprVar *>(expr);
-                auto var = ev->variable;
-                vars.insert(var);
-                bool arg = ev->argument || ev->block;
-                if ( arg ) args.insert(var);
-                bool ptr = var->type->baseType==Type::tPointer;
-                if ( (var->type->ref && !arg) || ptr ) refs = true;
-                if ( var->global || var->type->ref || ptr || (arg && var->type->isRefType()) ) other = true;
-            } else if ( expr->rtti_isPtr2Ref() ) {
-                refs = other = true;
-            } else if ( expr->rtti_isAt() || expr->rtti_isSafeAt() ) {
-                auto sub = expr->rtti_isAt() ? static_cast<ExprAt *>(expr)->subexpr : static_cast<ExprSafeAt *>(expr)->subexpr;
-                if ( !sub->type->isFixedArray() && !sub->type->isVectorType() ) other = true;
-            } else if ( expr->rtti_isCallFunc() ) {
-                if ( !isPureValueCall(static_cast<ExprCallFunc *>(expr)->func) ) other = true;
-            } else if ( expr->rtti_isInvoke() || expr->rtti_isMakeBlock() ) {
-                other = true;
-            } else if ( expr->rtti_isMakeStruct() ) {
-                auto mks = static_cast<ExprMakeStruct *>(expr);
-                bool plainInit = constantInit(mks) && (!mks->constructor || mks->constructor->generated);
-                if ( mks->block || ((mks->constructor || mks->useInitializer) && !plainInit) ) other = true;
-            }
+        virtual void preVisit ( ExprVar * expr ) override {
+            Visitor::preVisit(expr);
+            auto vt = expr->variable->type;
+            bool arg = expr->argument || expr->block;
+            if ( expr->variable==local ) found = true;
+            else if ( vt->baseType==Type::tPointer ) read(vt->firstType, true);
+            else if ( vt->ref ) read(vt, !arg);
+            else if ( expr->variable->global || (arg && vt->isRefType()) ) read(vt, false);
         }
-        static bool constantInit ( ExprMakeStruct * mks ) {
-            auto st = mks->makeType->baseType==Type::tStructure ? mks->makeType->structType : nullptr;
-            if ( !st ) return false;
-            for ( auto & fld : st->fields ) {
-                if ( fld.init && !fld.init->rtti_isConstant() ) return false;
-            }
-            return true;
+        virtual void preVisit ( ExprPtr2Ref * expr ) override {
+            Visitor::preVisit(expr);
+            read(expr->subexpr->type ? expr->subexpr->type->firstType : nullptr, true);
         }
-        static bool isPureValueCall ( Function * fn ) {
-            if ( !fn || !fn->builtIn || fn->sideEffectFlags!=0 ) return false;
+        virtual void preVisit ( ExprAt * expr ) override {
+            Visitor::preVisit(expr);
+            readElement(expr->subexpr, expr->type);
+        }
+        virtual void preVisit ( ExprSafeAt * expr ) override {
+            Visitor::preVisit(expr);
+            readElement(expr->subexpr, expr->type);
+        }
+        virtual void preVisit ( ExprCall * expr ) override { Visitor::preVisit(expr); readCall(expr); }
+        virtual void preVisit ( ExprNew * expr ) override { Visitor::preVisit(expr); readCall(expr); }
+        virtual void preVisit ( ExprOp1 * expr ) override { Visitor::preVisit(expr); readCall(expr); }
+        virtual void preVisit ( ExprOp2 * expr ) override { Visitor::preVisit(expr); readCall(expr); }
+        virtual void preVisit ( ExprOp3 * expr ) override { Visitor::preVisit(expr); readCall(expr); }
+        virtual void preVisit ( ExprCopy * expr ) override { Visitor::preVisit(expr); readCall(expr); }
+        virtual void preVisit ( ExprMove * expr ) override { Visitor::preVisit(expr); readCall(expr); }
+        virtual void preVisit ( ExprClone * expr ) override { Visitor::preVisit(expr); readCall(expr); }
+        virtual void preVisit ( ExprInvoke * expr ) override { Visitor::preVisit(expr); read(nullptr, false); }
+        virtual void preVisit ( ExprMakeBlock * expr ) override { Visitor::preVisit(expr); read(nullptr, false); }
+        virtual void preVisit ( ExprMakeStruct * expr ) override {
+            Visitor::preVisit(expr);
+            bool init = expr->constructor || expr->useInitializer;
+            bool userCtor = expr->constructor && !expr->constructor->generated;
+            if ( expr->block || (init && (userCtor || initReads(expr))) ) read(nullptr, false);
+        }
+    private:
+        void readElement ( Expression * container, TypeDecl * element ) {
+            if ( !container->type->isFixedArray() && !container->type->isVectorType() ) read(element, false);
+        }
+        void readCall ( ExprCallFunc * call ) {
+            if ( call->func && !pureValueCall(call->func) ) read(nullptr, false);
+        }
+        void read ( TypeDecl * type, bool through ) {
+            if ( local && !through ) return;
+            if ( mayHold(type) ) found = true;
+        }
+        bool mayHold ( TypeDecl * type ) {
+            if ( !type ) return true;
+            if ( destAliases.empty() ) {
+                das_set<Structure *> dep;
+                destType->collectAliasing(destAliases, dep, false);
+            }
+            TypeAliasMap typeAliases;
+            das_set<Structure *> dep;
+            type->collectAliasing(typeAliases, dep, false);
+            auto same = [](TypeDecl * a, TypeDecl * b) {
+                return a->isSameType(*b,RefMatters::no,ConstMatters::no,TemporaryMatters::no,AllowSubstitute::yes,false,false);
+            };
+            for ( auto & d : destAliases ) if ( same(d.second.first, type) ) return true;
+            for ( auto & t : typeAliases ) if ( same(t.second.first, destType) ) return true;
+            return false;
+        }
+        bool initReads ( ExprMakeStruct * mks ) {
+            if ( mks->makeType->baseType==Type::tHandle ) return false;
+            if ( mks->makeType->baseType!=Type::tStructure || !mks->makeType->structType ) return false;
+            for ( auto & fld : mks->makeType->structType->fields ) {
+                if ( fld.init ) fld.init->visit(*this);
+            }
+            return found;
+        }
+        static bool pureValueCall ( Function * fn ) {
+            if ( !fn ) return false;
+            const uint32_t reads = uint32_t(SideEffects::userScenario) | uint32_t(SideEffects::accessExternal)
+                | uint32_t(SideEffects::modifyArgument) | uint32_t(SideEffects::accessGlobal) | uint32_t(SideEffects::invoke);
+            if ( fn->builtIn ? fn->sideEffectFlags!=0 : (!fn->knownSideEffects || (fn->sideEffectFlags & reads)) ) return false;
             for ( auto & arg : fn->arguments ) {
                 if ( arg->type->ref || arg->type->isRefType() || arg->type->baseType==Type::tPointer ) return false;
             }
             return true;
         }
-    public:
-        ExpressionSources vars;
-        ExpressionSources args;
-        bool refs = false;
-        bool other = false;
+        static Variable * plainLocal ( Expression * dest ) {
+            for ( ;; ) {
+                if ( dest->rtti_isR2V() ) dest = static_cast<ExprRef2Value *>(dest)->subexpr;
+                else if ( dest->rtti_isField() ) dest = static_cast<ExprField *>(dest)->value;
+                else if ( dest->rtti_isSwizzle() ) dest = static_cast<ExprSwizzle *>(dest)->value;
+                else if ( dest->rtti_isAt() ) {
+                    auto at = static_cast<ExprAt *>(dest);
+                    if ( !(at->subexpr->type->isFixedArray() || at->subexpr->type->isVectorType()) || !at->index->rtti_isConstant() ) return nullptr;
+                    dest = at->subexpr;
+                } else break;
+            }
+            if ( !dest->rtti_isVar() ) return nullptr;
+            auto ev = static_cast<ExprVar *>(dest);
+            auto var = ev->variable;
+            if ( var->global || var->type->ref || var->type->baseType==Type::tPointer || ev->argument || ev->block ) return nullptr;
+            return var;
+        }
+        TypeDecl *      destType;
+        TypeAliasMap    destAliases;
+        Variable *      local;
+        bool            found = false;
     };
+
+    bool mayReadDestination ( Expression * value, Expression * dest ) {
+        return DestinationReads(dest).readBy(value);
+    }
 
     // src/ast/ARCHITECTURE_ALIASING.md#in-place-build-aliases
     class AliasMarker : public Visitor {
@@ -436,16 +504,7 @@ namespace das {
         void preVisitMakeLocal ( ExprMakeLocal * expr ) {
             auto it = cmresDest.find(expr);
             if ( it==cmresDest.end() ) return;
-            ValueReads dst, val;
-            it->second->visit(dst);
-            expr->visit(val);
-            Variable * local = nullptr;
-            if ( !dst.other && dst.vars.size()==1 ) {
-                auto v = *dst.vars.begin();
-                if ( !v->global && !v->type->ref && dst.args.find(v)==dst.args.end() ) local = v;
-            }
-            bool alias = local ? (val.refs || val.vars.find(local)!=val.vars.end()) : val.other;
-            if ( !alias ) return;
+            if ( !mayReadDestination(expr, it->second) ) return;
             if ( checkAliasing ) {
                 program->error("[[" + string(expr->__rtti) + " ]] aliases",
                     "the value reads memory which can be its destination: a global, a reference, a pointer or a call", "",
@@ -477,7 +536,10 @@ namespace das {
             if ( it!=cmresDest.end() ) {
                 auto argT = expr->arguments[0]->type;
                 if ( argT->isGoodBlockType() ) {
-                    return; // block never aliases
+                    if ( mayReadDestination(expr, it->second) ) {
+                        expr->cmresAlias = true;
+                    }
+                    return;
                 }
                 if ( !(argT->firstType->isRefType() && !argT->firstType->ref) ) {
                     return; // not a CMRES
