@@ -147,7 +147,7 @@ def tool_available(exe, probe_flag : string) : bool {
 
 def tool_available(exe : string) : bool => tool_available(exe, "--version")
 
-def seconds_since(t0 : int64) : double => double(get_time_usec(t0)) / 1000000.0lf
+def seconds_since(t0 : int64) : double => double(get_time_nsec(t0)) / 1000000000.0lf
 
 def temp_dir_or_cwd() : string {
     var err : string
