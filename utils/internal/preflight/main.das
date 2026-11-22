@@ -736,9 +736,15 @@ def gate_ast_verify(ctx : PreflightCtx) : GateResult {
         output = output)
 }
 
-// One clang argv per group of TUs that share a flag set. Flags come from compile_commands
-// when the build tree has an entry for the TU, else from the hand-rolled include list.
-def private build_sweep_argvs(ctx : PreflightCtx; in_scope : array<string>) : tuple<argvs : array<array<string>>; from_db : int> {
+struct SweepPlan {
+    argvs : array<array<string>>
+    from_build : int
+    origin : string
+    configure_error : string
+}
+
+[arch(at="README.md#cpp-flags")]
+def private plan_sweep(ctx : PreflightCtx; in_scope : array<string>) : SweepPlan {
     // parse + analyze only, warnings off: this gate reports errors, and a -Werror carried in
     // from the real compile line must not promote a warning into one
     var syntax_flags : array<string>
@@ -763,19 +769,23 @@ def private build_sweep_argvs(ctx : PreflightCtx; in_scope : array<string>) : tu
     for (inc in includes) {
         fallback_flags |> push("-I{inc}")
     }
-    var cc <- load_compile_commands(ctx.build_dir, ctx.clang_is_cl)
+    var plan : SweepPlan
+    var inscope built <- load_build_flags(ctx.build_dir, ctx.config, ctx.clang_is_cl) $ {
+        return run_in_turn(ctx, ["cmake", "-S", ".", "-B", ctx.build_dir]).rc
+    }
+    plan.origin = built.origin
+    plan.configure_error = built.configure_error
     let cwd = getcwd()
     // run_chunk_workers spawns one thread per argv, so per-TU flags must not become per-TU
     // argvs: group the sweep by identical flag set first (the whole tree collapses to a
     // handful of sets), then chunk inside each group
     var groups, group_flags : table<string; array<string>>
-    var from_db = 0
     for (f in in_scope) {
-        let abs = cc_key(path_join(cwd, f))
+        let abs = cc_file_key(cwd, f)
         var inscope flags : array<string>
-        if (cc |> key_exists(abs)) {
-            flags := cc[abs]
-            from_db++
+        if (built.flags |> key_exists(abs)) {
+            flags := built.flags[abs]
+            plan.from_build++
         } else {
             flags := fallback_flags
         }
@@ -790,8 +800,7 @@ def private build_sweep_argvs(ctx : PreflightCtx; in_scope : array<string>) : tu
     }
     let workers = compute_worker_count(length(in_scope), ctx.jobs)
     let total = length(in_scope)
-    var argvs : array<array<string>>
-    argvs |> reserve(workers + length(group_flags))
+    plan.argvs |> reserve(workers + length(group_flags))
     for (key, files in keys(groups), values(groups)) {
         let share = max(1, (workers * length(files) + total - 1) / total)
         var inscope chunks <- chunk_files(files, share)
@@ -800,10 +809,10 @@ def private build_sweep_argvs(ctx : PreflightCtx; in_scope : array<string>) : tu
             av |> reserve(1 + length(group_flags[key]) + length(syntax_flags) + length(chunk))
             av |> push(ctx.clang)
             av |> push_from(group_flags[key], syntax_flags, chunk)
-            argvs |> emplace(av)
+            plan.argvs |> emplace(av)
         }
     }
-    return <- (argvs <- argvs, from_db = from_db)
+    return <- plan
 }
 
 
@@ -852,8 +861,7 @@ def gate_cpp_syntax(ctx : PreflightCtx) : GateResult {
         return GateResult(name = "cpp-syntax", status = GateStatus.Skip, seconds = seconds_since(t0),
             detail = "changed C++ is outside src/include/tests-cpp ({join(skipped, ", ")}) — needs module/external deps; no local clang gate compiles it, CI's clang-cl lane does")
     }
-    let sweep <- build_sweep_argvs(ctx, in_scope)
-    let from_db = sweep.from_db
+    var inscope sweep <- plan_sweep(ctx, in_scope)
     var results <- run_chunk_workers(sweep.argvs)
     var failed = false
     for (r in results) {
@@ -870,7 +878,14 @@ def gate_cpp_syntax(ctx : PreflightCtx) : GateResult {
         }
     }
     var detail = "{sweep_note}{length(in_scope)} file(s) via {ctx.clang}"
-    detail = "{detail}; {from_db} from compile_commands, {length(in_scope) - from_db} via the fallback include list"
+    if (!empty(sweep.origin)) {
+        detail = "{detail}; {sweep.from_build} from {sweep.origin}"
+    }
+    let from_fallback = length(in_scope) - sweep.from_build
+    detail = "{detail}; {from_fallback} via the fallback include list"
+    if (!empty(sweep.configure_error)) {
+        detail = "{detail}; {sweep.configure_error}"
+    }
     if (!empty(skipped)) {
         detail = "{detail}; out of scope: {join(skipped, ", ")}"
     }

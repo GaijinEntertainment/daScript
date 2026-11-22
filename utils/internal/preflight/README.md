@@ -80,6 +80,25 @@ process. The interpreter and AOT sweeps always take the automatic worker
 count: the wall of a sequential sweep is the sum of a few long files, and a
 batch of twenty keeps the CPU near the sequential run's.
 
+## Where the C++ pass gets its flags {#cpp-flags}
+
+The C++ pass compiles each file with the flags the configured build tree compiles it with.
+A tree that has `compile_commands.json` (Ninja, Makefiles) is read from that file. Any other
+tree (Visual Studio, Xcode) is read from the CMake file API: the query folder
+`<build>/.cmake/api/v1/query/client-preflight/` asks every configure for the code model and
+the toolchains, and the reply under `<build>/.cmake/api/v1/reply/` names, for each target
+of a configuration, the flag fragments, defines and include dirs of every source. A tree
+with no such reply gets the query and one configure, inside a build turn; the query stays,
+so each later configure writes a fresh reply. The pass reads the configuration the
+`daslang` binary was built in, and the first one when the tree lacks it. A file that
+several targets compile takes the flags of the first target that names it. A source's own
+precompiled-header switches are dropped and the header stays as a forced include, because
+only the compiler that wrote a `.pch` reads it. The flags of a tree are used only when its
+compiler takes the flag spelling of the pass's clang - `cl` or `clang-cl` against
+`clang-cl`. A file the tree does not know, and every file when no build tree is
+configured, gets a short fixed include list, which models neither a module's include dirs
+nor a per-file flag. The verdict line counts the files of each kind.
+
 ## Build turns {#build-turn}
 
 The lanes of one `--full` run share one build lock: a folder named once per run in the temp
