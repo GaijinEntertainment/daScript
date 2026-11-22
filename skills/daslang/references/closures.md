@@ -258,8 +258,10 @@ delete it
 `for` closes and finalizes the iterator automatically; an explicit `delete` is only needed for one
 you stopped driving early, and is always safe on a sequenced-out one.
 
-**The element type says whether the loop variable writes through.** `each(array<T>)` yields
-`iterator<T&>`, so `for (x in it) { x++ }` mutates the array; an iterator comprehension
+**The element type says whether the loop variable writes through.** `each` over a `var` array
+yields `iterator<T&>`, so `for (x in it) { x++ }` mutates the array; over a const array - a `let`,
+a parameter without `var`, a field of either - it yields `iterator<T const&>`, and a loop that
+writes `x` does not compile. An iterator comprehension
 (`[iterator for (...); expr]`) and a plain `generator<T>` yield `iterator<T>` - a value per step,
 not a reference into any source. A generic parameter written `iterator<auto(TT) const>` takes both
 flavors through one instantiation, at the cost of a body that may not move from or mutate the
@@ -279,12 +281,31 @@ struct Foo {
 }
 
 [unsafe_outside_of_for]
-def each(f : Foo) : iterator<int&> {
+def each(f : Foo) : iterator<int const&> {
     return unsafe(each(f.data))
 }
 
 var f = Foo(data <- [1, 2, 3])
 for (x in f) { print("x = {x}\n") }
+```
+
+`f` is const inside that `each`, so `each(f.data)` is an `iterator<int const&>`; declaring the
+result `iterator<int&>` is `error[30343] incompatible return type`. For a loop that writes the
+elements of a `var` value, define one overload per constness:
+
+```das
+[unsafe_outside_of_for]
+def each(f : Foo ==const) : iterator<int const&> {
+    return unsafe(each(f.data))
+}
+
+[unsafe_outside_of_for]
+def each(var f : Foo ==const) : iterator<int&> {
+    return unsafe(each(f.data))
+}
+
+var g = Foo(data <- [1, 2, 3])
+for (x in g) { x *= 2 }          // g.data is [2, 4, 6]
 ```
 
 Only `each` is auto-inserted; any other iterator-returning function is called explicitly:

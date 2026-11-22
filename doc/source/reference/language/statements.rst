@@ -268,7 +268,7 @@ and returns an ``iterator``. When such a function exists, ``for (x in y)`` is eq
         data : array<int>
     }
 
-    def each ( f : Foo ) : iterator<int&> {
+    def each ( f : Foo ) : iterator<int const&> {
         return unsafe(each(f.data))
     }
 

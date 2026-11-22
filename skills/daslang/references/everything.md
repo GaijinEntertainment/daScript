@@ -282,7 +282,7 @@ The BUILTIN module contains core runtime functions available in all daslang prog
 - `capacity` - Returns the current capacity of the `table` — the number of key-value pairs it can hold before triggering a reallocation.
 - `clear` - Removes every element from the array.
 - `copy_to_local` - Copies the value `a` and returns it as a new local value on the stack, which can be used to work around aliasing issues where a reference might be invalidated.
-- `each` - Creates an iterator that yields temporary references to each element of the temporary dynamic array `a`.
+- `each` - Creates an iterator over a range, the characters of a string, the elements of a fixed, dynamic or temporary array, or the values a lambda produces.
 - `each_enum` - Creates an iterator that yields every value of the enumeration type inferred from `tt`, allowing iteration over all members of an enum.
 - `each_kv` - Iterates over a table as `(key, value)` named tuples.
 - `each_ref` - Wraps a lambda `lam` into an iterator that yields references to each value rather than copies.
