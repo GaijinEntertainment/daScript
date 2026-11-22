@@ -139,7 +139,7 @@ def test_nested_quantifiers_over_a_failing_tail_finish(t : T?) {
 [test(description = "strings generated from a quantified pattern are fully matched by it")]
 def test_a_generated_string_matches_its_quantified_pattern(t : T?) {
     var rnd <- each_random_uint(7)
-    for (pat in ["(ab|c)+d", "x(a|bc)*y", "(ab)\{2,4\}"]) {
+    for (pat in ["(ab|c)+d", "x(a|bc)*y", "(ab)\{2,4\}", "x(a)y", "(a)(b)c"]) {
         var re <- regex_compile(pat)
         for (_ in range(20)) {
             let s = re_gen(re, rnd)
