@@ -92,6 +92,62 @@ def test_alternation(t : T?) {
     }
 }
 
+[test(description = "an alternative, a group or a whole pattern may be empty: it compiles and matches the empty string, and the alternatives are still tried in written order")]
+def test_empty_alternative(t : T?) {
+    t |> run("an empty alternative last is the fallback") @(t : T?) {
+        t |> equal(regex_test_match("a|", "a"), 1)
+        t |> equal(regex_test_match("a|", "b"), 0)
+        t |> equal(regex_test_match("a(b|)c", "abc"), 3)
+        t |> equal(regex_test_match("a(b|)c", "ac"), 2)
+        t |> equal(regex_test_match("a(b|)c", "abbc"), -1)
+        t |> equal(regex_test_match("a|b|", "c"), 0)
+    }
+    t |> run("an empty alternative first is tried first") @(t : T?) {
+        t |> equal(regex_test_match("|a", "a"), 0)
+        t |> equal(regex_test_match("(|b)", "b"), 0)
+        t |> equal(regex_test_match("a(|b)c", "abc"), 3,
+            "the rest failing sends it to the next alternative")
+        t |> equal(regex_test_match("(?:|a)b", "ab"), 2)
+    }
+    t |> run("an empty alternative in the middle") @(t : T?) {
+        t |> equal(regex_test_match("a||b", "b"), 0)
+        t |> equal(regex_test_match("(a||b)c", "bc"), 2)
+        t |> equal(regex_test_match("(a||b)c", "c"), 1)
+        t |> equal(regex_test_match("a(|b|bb)c", "abbc"), 4)
+    }
+    t |> run("an empty group and an empty pattern") @(t : T?) {
+        t |> equal(regex_test_match("x()y", "xy"), 2)
+        t |> equal(regex_test_match("x(?:)y", "xy"), 2)
+        t |> equal(regex_test_match("", "a"), 0)
+        t |> equal(regex_test_match("()+a", "a"), 1)
+    }
+    t |> run("under a quantifier an empty pass ends the repetition") @(t : T?) {
+        t |> equal(regex_test_match("(a|)+", "aab"), 2)
+        t |> equal(regex_test_match("(|a)+", "aab"), 0)
+        t |> equal(regex_test_match("(|a)*b", "aab"), 3)
+    }
+    t |> run("an empty alternative captures the empty string") @(t : T?) {
+        var re <- regex_compile("(a|)(b|)(c|)")
+        t |> equal(regex_match(re, "ac"), 2)
+        t |> equal(regex_group(re, 1, "ac"), "a")
+        t |> equal(regex_group(re, 2, "ac"), "")
+        t |> equal(regex_group(re, 3, "ac"), "c")
+        t |> equal(re[2], range(1, 1), "empty where it matched, not where it began")
+    }
+    t |> run("a search still finds a match that starts with an empty alternative") @(t : T?) {
+        var re <- regex_compile("(a|)+b")
+        let found = regex_search(re, "cb")
+        t |> equal(found.x, 1)
+        t |> equal(found.y, 2)
+    }
+    t |> run("a pattern that is still malformed does not compile") @(t : T?) {
+        var open_group, bare_star, star_after_bar : Regex
+        t |> success(!regex_compile(open_group, "(a|"))
+        t |> success(!regex_compile(bare_star, "*a"))
+        t |> success(!regex_compile(star_after_bar, "a|*"))
+    }
+}
+
 // ── groups ──────────────────────────────────────────────────
 
 [test(description = "groups match as a unit and capture their text, sequentially too")]

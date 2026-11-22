@@ -125,6 +125,11 @@ def test_regex_debug(t : T?) {
         regex_debug(re)
         t |> equal(is_valid(re), true)
     }
+    t |> run("debug prints an empty alternative") @(t : T?) {
+        var re <- regex_compile("a(|b)")
+        regex_debug(re)
+        t |> equal(is_valid(re), true)
+    }
 }
 
 // ── regex_boost reader macro ────────────────────────────────

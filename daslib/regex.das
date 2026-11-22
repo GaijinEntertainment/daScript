@@ -43,6 +43,7 @@ enum ReOp {
     NonWordBoundary
     Lookahead
     NegativeLookahead
+    Empty
 }
 
 //! Bit-set representing a set of characters for regex matching.
@@ -505,18 +506,19 @@ def private re_group(expr : string; offset : int) : MaybeReNode {
             }
         }
     }
-    var ore = re_re(expr, group_offset);
-    if (ore is nothing) return nada();
-    if (at(expr, next(ore)) != ')') {
-        delete ore
+    var body = re_re(expr, group_offset)
+    if (at(expr, body.at.y) != ')') {
+        unsafe {
+            delete body
+        }
         return nada()
     }
     if (lookahead_op != ReOp.Group) {
-        var node = new ReNode(op = lookahead_op, subexpr = ore as value, at = range(offset, next(ore) + 1))
+        var node = new ReNode(op = lookahead_op, subexpr = body, at = range(offset, body.at.y + 1))
         node.index = -1
         return maybe(node)
     }
-    var node = new ReNode(op = ReOp.Group, subexpr = ore as value, at = range(offset, next(ore) + 1))
+    var node = new ReNode(op = ReOp.Group, subexpr = body, at = range(offset, body.at.y + 1))
     if (non_capturing) {
         node.index = -1
     }
@@ -591,32 +593,29 @@ def private mk_union(var left, right : ReNode?) : ReNode? {
     }
 }
 
-def private  re_re(expr : string; offset : int) : MaybeReNode {
+def private mk_empty(offset : int) : ReNode? =>
+    new ReNode(op = ReOp.Empty, at = range(offset, offset))
+
+//! an empty pattern, group or alternative parses to an `Empty` node
+def private  re_re(expr : string; offset : int) : ReNode? {
     trace("re_re", offset)
-    if (eos(expr, offset)) return nada()
     var cofs = offset
     var last : ReNode?
     while (!eos(expr, cofs)) {
         if (at(expr, cofs) == '|') {
             if (last == null) {
-                note("syntax error, nada | union", cofs)
-                return nada()
+                last = mk_empty(cofs)
             }
-            var oright = re_re(expr, cofs + 1)
-            if (oright is nothing) {
-                note("syntax error, re | nada", cofs + 1)
-                return nada()
-            }
-            last = mk_union(last, oright as value)
+            last = mk_union(last, re_re(expr, cofs + 1))
             cofs = last.at.y
         } else {
             var onext = re_basic(expr, cofs)
-            if (onext is nothing) return last == null ? nada() : maybe(last)
+            if (onext is nothing) break
             last = mk_concat(last, onext as value)
             cofs = last.at.y
         }
     }
-    return maybe(last)
+    return last != null ? last : mk_empty(cofs)
 }
 
 def private mk_quantifier(op : ReOp; var sub : ReNode?; min_rep, max_rep : int; is_lazy : bool;
@@ -717,14 +716,15 @@ def private re_basic(expr : string; offset : int) : MaybeReNode {  // nolint:STY
 }
 
 def private re_parse(expr : string) : ReNode? {
-    var ore = re_re(expr, 0)
-    if (ore is nothing) return null
-    let at = next(ore)
-    if (at != length(expr)) {
-        note("syntax error", at)
+    var root = re_re(expr, 0)
+    if (root.at.y != length(expr)) {
+        note("syntax error", root.at.y)
+        unsafe {
+            delete root
+        }
         return null
     }
-    return ore as value
+    return root
 }
 
 def public visit_top_down(var node : ReNode?; blk : block<(var n : ReNode?) : void>) {
@@ -811,7 +811,7 @@ def private captures_inside(var sub : ReNode?) : range {
     return first == -1 ? range(0) : range(first, past)
 }
 
-def private re_assign_match_functions(var re : Regex) {
+def private re_assign_match_functions(var re : Regex) {  // nolint:STYLE038 - one arm per node kind
     visit_top_down(re.root) $(var node) {  // nolint:STYLE037 - the ladder IS the node-kind dispatch table
         if (node.sub_end != null) {
             node.sub_end.fun2 = @@re_match2_quantifier_pass_end
@@ -865,6 +865,9 @@ def private re_assign_match_functions(var re : Regex) {
             node.gen2 = @@re_gen2_group
         } elif (node.op == ReOp.Bos) {
             node.fun2 = @@re_match2_bos
+            node.gen2 = @@re_gen2_bos
+        } elif (node.op == ReOp.Empty) {
+            node.fun2 = @@re_match2_empty
             node.gen2 = @@re_gen2_bos
         } elif (node.op == ReOp.Repeat) {
             node.fun2 = @@re_match2_quantifier
@@ -1385,6 +1388,9 @@ def private re_match2_bos(var regex : Regex; var node : ReNode?; str : uint8 con
     }
 }
 
+def private re_match2_empty(var regex : Regex; var node : ReNode?;
+                            str : uint8 const?) : uint8 const? => re_continue(regex, node, str)
+
 [unsafe_deref]
 def private re_match2_word_boundary(var regex : Regex; var node : ReNode?; str : uint8 const?) : uint8 const? {
     if (log_match_enabled) {
@@ -1498,7 +1504,7 @@ def private re_early_out(var cset : CharSet; node : ReNode?) : bool {
             any = re_early_out(cset, sub) || any
         }
         return any
-    } elif (node.op == ReOp.Bos) {
+    } elif (node.op == ReOp.Bos || node.op == ReOp.Empty) {
         return true
     } elif (node.op == ReOp.WordBoundary || node.op == ReOp.NonWordBoundary) {
         return true
@@ -1979,6 +1985,8 @@ def private debug_re(node : ReNode?; tab : int) {  // nolint:STYLE037,STYLE038 -
         print("{repeat("\t",tab-1)})")
     } elif (node.op == ReOp.Bos) {
         print("Bos)")
+    } elif (node.op == ReOp.Empty) {
+        print("Empty)")
     } elif (node.op == ReOp.Repeat) {
         print(node.lazy ? "Repeat? \{{node.min_rep},{node.max_rep}\} " : "Repeat \{{node.min_rep},{node.max_rep}\} ")
         debug_re(node.subexpr, tab)
