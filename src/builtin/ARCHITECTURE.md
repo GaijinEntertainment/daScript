@@ -88,7 +88,9 @@ stamps nothing a compile depends on beside the two libraries - and
 `ModuleFileCache::embeddedHostOptions` standing in for the host's command line: this process's
 arguments up to `--`, a `--jit-target` after it, and a hash of the policies streamed as a record
 stamps them, so two tools compiling one file under different policies keep separate records
-instead of rewriting one. `module_cache_path` exposes this path to scripts;
+instead of rewriting one. A late require (`requireModuleNow`) drops from those arguments every one
+that ends in `.das`, matched by case - the host's scripts, which its target does not depend on - so one record
+serves every script run under the same flags. `module_cache_path` exposes this path to scripts;
 dastest keeps its filename in the requested cache directory.
 `ScriptModuleCache` is the guard around that compile: it passes the cache's stream to the
 compile and finishes the cache on every exit, an exception's included. An explicit-path overload uses the same guard, returns

@@ -146,7 +146,10 @@ come back with it; the symbol state its passes compute lives on its own
 untouched. One recursive mutex serializes every late require in the process. The late walk is
 a compile of its own and never joins another compile's stream: under `CodeOfPolicies::module_cache`
 it reads and writes its own `ModuleFileCache` at the default path keyed by the target's file, as a
-script's `compile_file` does. A module whose parse failed pushes no record.
+script's `compile_file` does - less the host's script arguments
+(`src/builtin/ARCHITECTURE.md#default-module-cache-path`): the target compiles the same whichever
+script requires it, so every script a host runs under one set of flags reads one record. A module
+whose parse failed pushes no record.
 
 The late walk compiles with `ignore_shared_modules` off, whatever its caller set. That policy
 makes the parser read `module X shared` as not shared, and a late require's target must be

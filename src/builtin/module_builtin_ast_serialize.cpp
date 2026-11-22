@@ -3620,7 +3620,12 @@ namespace das {
         return string(".cache/daslang/module_cache/") + stem + "-" + string(hex, 8) + ".dascache";
     }
 
-    string ModuleFileCache::embeddedHostOptions ( const CodeOfPolicies & policies ) {
+    static bool namesDasFile ( const char * arg ) {
+        size_t len = strlen(arg);
+        return arg[0] != '-' && len > 4 && strcmp(arg + len - 4, ".das") == 0;
+    }
+
+    string ModuleFileCache::embeddedHostOptions ( const CodeOfPolicies & policies, bool hostScripts ) {
         string key;
         Array args;
         getCommandLineArguments(args);
@@ -3629,6 +3634,7 @@ namespace das {
             const char * a = argv[i] ? argv[i] : "";
             if ( strcmp(a, "--") == 0 ) break;
             if ( int skip = das_dep_flag_argc(a) ) { i += uint32_t(skip) - 1; continue; }
+            if ( !hostScripts && namesDasFile(a) ) continue;
             key += a;
             key += '\n';
         }
@@ -3649,10 +3655,10 @@ namespace das {
         return key;
     }
 
-    string ModuleFileCache::embeddedPath ( const string & scriptPath, const CodeOfPolicies & policies ) {
+    string ModuleFileCache::embeddedPath ( const string & scriptPath, const CodeOfPolicies & policies, bool hostScripts ) {
         char exePath[4096];
         size_t exeLen = getExecutablePathName(exePath, sizeof(exePath));
-        return defaultPath(scriptPath, exeLen ? string(exePath, exeLen) : string(), embeddedHostOptions(policies));
+        return defaultPath(scriptPath, exeLen ? string(exePath, exeLen) : string(), embeddedHostOptions(policies, hostScripts));
     }
 
     void ModuleFileCache::install ( const string & readFrom, const string & writeTo, bool quiet ) {
