@@ -741,7 +741,8 @@ def main() : int {  // nolint:STYLE037,STYLE038 - CLI dispatch, one arm per mode
             let fileTime = ref_time_ticks()
             fileIndex ++
             let running = "; running {file} (file {fileIndex} of {length(files)})"
-            kill_switch_say(KILL_SWITCH_SUITE, timeout_says(timeout, running))
+            suite::suite_timeout_says = timeout_says(timeout, running)
+            kill_switch_say(KILL_SWITCH_SUITE, suite::suite_timeout_says)
             suite::test_wall_file = uri
             log::started("run {fileIndex}/{length(files)}: {uri}")
             let status = suite::test_file(file, ctx)

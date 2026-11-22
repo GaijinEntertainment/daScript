@@ -54,6 +54,9 @@ def test_timeout(tt : T?) {
             "expected the timeout message, got:\n{output}")
         t |> success(output |> contains("test_sleep.das (file 1 of 1)"),
             "the watchdog names the file the sweep was on:\n{output}")
+        let running = "in test 'test_sleep', subtest 'sleeps past the parent's --timeout'"
+        t |> success(output |> contains(running),
+            "the watchdog names the test and the subtest that was running:\n{output}")
         t |> success(!(output |> contains("should have ended the process")),
             "the fixture's test ran to its end - the timeout did not end the process:\n{output}")
         t |> success(!(output |> contains("CALL STACK")) && !(output |> contains("[daslang atexit]")),
