@@ -75,6 +75,9 @@ struct ReNode {
     @do_not_convert pass_mode : PassMode
     @do_not_convert reach_target : uint8 const?  //! quantifier: the stop a reaching pass must hit
     @do_not_convert pass_stops : array<uint8 const?>  //! quantifier: collected stops, best first
+    @do_not_convert run_stops : array<uint8 const?>  //! quantifier: where each pass of a run ended, a stack of runs
+    @do_not_convert captures : range  //! quantifier: the groups inside the sub, by index
+    @do_not_convert run_captures : array<range>  //! quantifier: those groups as each run found them
     @do_not_convert rest_first : bool  //! quantifier: the rest of the pattern before another pass
     @do_not_convert ends_pass : bool  //! a quantifier's `sub_end`: reaching it ends one pass
     @do_not_convert single_path : bool  //! quantifier: no choice in the sub, so one set of stops
@@ -755,9 +758,7 @@ def private re_assign_next(var re : Regex) {
                 node.sub_end = new ReNode(op = node.op, next = node, at = node.at, ends_pass = true)
             }
             node.subexpr.next = node.sub_end
-            let last_in_pass = is_last_in_pass(node)
-            let greedy_open = node.op == ReOp.Star || node.op == ReOp.Plus
-            node.rest_first = node.lazy || (!last_in_pass && greedy_open)
+            node.rest_first = node.lazy
             node.single_path = !has_choice(node.subexpr)
         } elif (node.op == ReOp.Lookahead || node.op == ReOp.NegativeLookahead) {
             node.subexpr.next = null
@@ -778,8 +779,6 @@ def private has_choice(node : ReNode?) : bool {
     return has_choice(node.subexpr) || has_choice(node.left) || has_choice(node.right)
 }
 
-def private is_last_in_pass(node : ReNode?) : bool => node.next == null || node.next.ends_pass
-
 def private re_assign_groups(var re : Regex) {
     push(re.groups, (range(0), ""))
     visit_top_down(re.root) $(var node) {
@@ -796,11 +795,28 @@ def private re_assign_groups(var re : Regex) {
     }
 }
 
+//! groups are numbered in visiting order, so the ones inside a
+//! subtree are one run of indices
+def private captures_inside(var sub : ReNode?) : range {
+    var first = -1
+    var past = 0
+    visit_top_down(sub) $(var node) {
+        if (node.op == ReOp.Group && node.index >= 0) {
+            if (first == -1) {
+                first = node.index
+            }
+            past = node.index + 1
+        }
+    }
+    return first == -1 ? range(0) : range(first, past)
+}
+
 def private re_assign_match_functions(var re : Regex) {
     visit_top_down(re.root) $(var node) {  // nolint:STYLE037 - the ladder IS the node-kind dispatch table
         if (node.sub_end != null) {
             node.sub_end.fun2 = @@re_match2_quantifier_pass_end
             node.sub_end.gen2 = @@re_gen2_sub_end
+            node.captures = captures_inside(node.subexpr)
         }
         if (node.op == ReOp.Char) {
             if (re.caseInsensitive) {
@@ -1170,26 +1186,56 @@ def private re_committed_rest_first(var regex : Regex; var node : ReNode?; str :
     return null
 }
 
+//! the passes a run gave back wrote captures too: the groups go back
+//! to what the run found, and the passes it keeps, `base` to `kept`
+//! on the stack of stops, run again to write theirs
+def private re_keep_captures(var regex : Regex; var node : ReNode?; base, kept, saved : int) {
+    for (group in node.captures) {
+        regex.groups[group]._0 = node.run_captures[saved + group - node.captures.x]
+    }
+    if (node.captures.x == node.captures.y) return
+    for (stop in range(base, kept)) {
+        let pass_from = node.run_stops[stop]
+        let pass_to = node.run_stops[stop + 1]
+        re_run_pass(regex, node, pass_from, PassMode.reach, pass_to)
+    }
+}
+
 [inline]
 def private re_committed_longest_first(var regex : Regex; var node : ReNode?; str : uint8 const?;
                                        from : uint8 const?; done : int) : uint8 const? {
     var at = from
     var passes = done
     var found_empty = false
-    var stops : array<uint8 const?>
-    stops |> push(at)
+    let base = length(node.run_stops)
+    let saved = length(node.run_captures)
+    node.run_stops |> push(at)
+    node.run_captures |> reserve(saved + node.captures.y - node.captures.x)
+    for (group in node.captures) {
+        node.run_captures |> push(regex.groups[group]._0)
+    }
     while (node.max_rep == -1 || passes < node.max_rep) {
         let further = re_probe_pass(regex, node, at)
         found_empty = further == at
         if (further == null || further == at) break
         at = further
-        stops |> push(at)
+        node.run_stops |> push(at)
         passes++
     }
-    for (i in range(length(stops))) {
-        let rest = re_continue(regex, node, stops[length(stops) - 1 - i])
-        if (rest != null) return rest
+    let taken = length(node.run_stops) - 1
+    var rest : uint8 const?
+    var top = taken + 1
+    while (rest == null && top > base) {
+        top--
+        let stop = node.run_stops[top]
+        rest = re_continue(regex, node, stop)
     }
+    if (top < taken) {
+        re_keep_captures(regex, node, base, rest != null ? top : base, saved)
+    }
+    node.run_stops |> resize(base)
+    node.run_captures |> resize(saved)
+    if (rest != null) return rest
     return re_retry_choices(regex, node, str, passes > 0 || found_empty)
 }
 
