@@ -120,7 +120,7 @@ fails at runtime with `error[50101]` on all its functions.
 **Trap:** `options no_aot` covers the FILE, not what it requires. A test requiring a module
 outside the AOT set (a `utils/` tool's module, say) still fails the link with `error[50101]` on
 that module's functions under `test_aot`; gate its directory off under `--use-aot` in
-`tests/.das_test` (the `watchdog` folder is the precedent).
+`tests/.das_test`.
 
 **Trap - `_`-prefixed fixture MODULES in an existing test dir.** The per-dir AOT globs
 exclude `_*` files (`EXCLUDE REGEX "/_"`), so a new same-dir fixture module (`require`d by a

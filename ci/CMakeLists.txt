@@ -152,7 +152,7 @@ endif()
 das_lane_group(run_build "Running the build lane"
     run_tests_sweeps test-small run_tests_aot_subset ${DAS_BUILD_LANE_APPLE})
 das_lane_group(run_build_nightly "Running the build lane's nightly sweeps"
-    run_tests_slow run_backend_sweeps test_aot_subset)
+    run_tests_slow run_backend_sweeps test_aot_subset run_tests_watchdog)
 das_lane_group(run_build_sanitizers "Running the sanitizer lane"
     run_tests_interpreter test-small)
 das_lane_group(run_build_clangcl "Running the clang-cl lane"
@@ -196,7 +196,7 @@ endforeach()
 foreach(_lane ${DAS_EXTENDED_CORE} ${DAS_EXTENDED_MODULES} ${DAS_EXTENDED_NIGHTLY}
               test-small test-big check_bundle_smoke
               run_tests_interpreter run_tests_interpreter_isolated
-              run_tests_jit run_tests_jit_isolated
+              run_tests_jit run_tests_jit_isolated run_tests_watchdog
               run_tests_aot run_tests_aot_subset run_tests_llvm_aot
               run_tests_slow run_standalone_sweep_aot standalone_sweep_jit
               check_ast_verify_tree check_lint_tree run_examples dry_run_tutorials

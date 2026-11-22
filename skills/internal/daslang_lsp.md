@@ -110,8 +110,9 @@ Byte-exact frame bodies via `fread(f, array<uint8>)` (C fread loops until the
 requested length); headers via `fgets`. AOT-registered in
 `tests/aot/CMakeLists.txt` (glob excludes `/_` fixtures).
 `tests/watchdog/test_stdio_front.das` - the cross-tree guard over throwaway
-git-style trees (requires the front's module, so it sits with the watchdog
-tests and their module gate).
+git-style trees (it requires the front's module, so it sits with the watchdog
+tests, which no sweep of `tests/` runs - their runners: `skills/internal/preflight.md`,
+the Watchdog tests row).
 
 ## Gotchas
 
