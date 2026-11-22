@@ -13,7 +13,9 @@ at the repo root.
   `expect` is a source or a fixture the suite feeds the tool, and a compile-fail fixture keeps
   the tool's own naming.
 - `.das_test` - per-folder gating dastest consults at the `--test` root: module availability and
-  the per-mode skips (`--use-aot`, `-jit`, `--ser`/`--deser`).
+  the per-mode skips (`--use-aot`, `-jit`, `--ser`/`--deser`). It skips `watchdog/` in every
+  mode: those tests wait on supervised children for minutes, so the `run_tests_watchdog` target
+  (`CMakeLists.txt`) runs the folder by name - on the nightly and in preflight's watchdog lanes.
 - `aot/CMakeLists.txt` - what `test_aot` compiles, folder by folder.
 - `<folder>/` - one topic area each; the folder is the first level of categorization, and
   `.das_test` gates on the folder name.

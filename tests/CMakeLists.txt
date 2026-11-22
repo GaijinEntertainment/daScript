@@ -129,6 +129,23 @@ if(NOT DAS_TOOLS_DISABLED)
             COMMENT "Running tests (JIT, isolated retry)"
         )
     endif()
+
+    # tests/watchdog waits on supervised children for minutes, so the sweeps skip the folder
+    # (tests/.das_test) and the nightly runs it through this target.
+    if(TARGET watchdog)
+        set(_DAS_WATCHDOG_TEST --color --failures-only --test ${_DAS_TEST_DIR}/watchdog --timeout ${DAS_TEST_TIMEOUT})
+        set(_watchdog_jit)
+        if(NOT DAS_LLVM_DISABLED AND NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
+            set(_watchdog_jit COMMAND $<TARGET_FILE:daslang> ${_DAS_DASTEST} -jit -- ${_DAS_JIT_FLAGS} ${_DAS_WATCHDOG_TEST})
+        endif()
+        add_das_target(run_tests_watchdog
+            COMMAND $<TARGET_FILE:daslang> ${_DAS_DASTEST} -- ${_DAS_WATCHDOG_TEST}
+            ${_watchdog_jit}
+            DEPENDS daslang watchdog
+            WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+            COMMENT "Running tests/watchdog (interpreter, then JIT)"
+        )
+    endif()
 endif()
 
 # test_aot only exists when tests + AOT examples are enabled (tests/aot/CMakeLists.txt).
