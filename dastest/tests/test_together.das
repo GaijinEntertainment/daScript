@@ -128,3 +128,18 @@ def test_together_refuses_disagreeing_options(tt : T?) {
     tt |> success(find(output, "options stack = 2048") >= 0
         && find(output, "options stack = 1024") >= 0, "both values are named")
 }
+
+[test(description = "--together makes the --module-cache-dir folder its root goes into when the folder is not there yet", timeout = 1200)]
+def test_together_makes_its_cache_folder(t : T?) {
+    let das_root = get_das_root()
+    let fresh = path_join(test_temp_dir(), "together_fresh_records")
+    var why : string
+    rmdir_rec(fresh, why)
+    let args <- [get_command_line_arguments()[0], "-dasroot", das_root,
+        "-module-cache", path_join(test_temp_dir(), "together_fresh_host.bin"),
+        "{das_root}/dastest/dastest.das", "--",
+        "--together", "{das_root}/dastest/tests/_fixture_passing.das", "--module-cache-dir", fresh]
+    var output : string
+    let code = run_and_capture(args, output, 300.0)
+    t |> equal(code, 0, "the root is written into a folder the run made: {output}")
+}
