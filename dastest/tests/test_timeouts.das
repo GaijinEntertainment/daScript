@@ -3,6 +3,7 @@ options no_unused_function_arguments = false
 options no_unused_block_arguments = false
 
 require dastest/testing_boost public
+require dastest/worker_policy
 require daslib/fio
 require daslib/strings_boost
 require strings
@@ -251,4 +252,19 @@ def test_annotation_args(tt : T?) {
         t |> success(unknownOutput |> contains("does not take an argument named 'slow'"),
                      "expected the macro's message, got:\n{unknownOutput}")
     }
+}
+
+def batch_text(batches : array<array<int>>) : string =>
+    join([for (b in batches); join([for (i in b); "{i}"], ",")], " | ")
+
+[test(description = "isolated mode starts every file that declares a test timeout alone and first, the largest budget ahead, and cuts the rest into batches in collection order")]
+def test_isolated_batches(t : T?) {
+    t |> equal(batch_text(isolated_batches([0.0, 0.0, 0.0, 0.0, 0.0], 2)), "0,1 | 2,3 | 4",
+        "no declared budget: collection order, the last batch short")
+    let mixed <- isolated_batches([0.0, 60.0, 0.0, 1200.0, 0.0, 60.0, 0.0], 3)
+    t |> equal(batch_text(mixed), "3 | 1 | 5 | 0,2,4 | 6",
+        "declared files lead one by one, the largest first, equal budgets in collection order")
+    t |> equal(batch_text(isolated_batches([5.0, 0.0], 1)), "0 | 1", "batch 1: one file a worker")
+    let none : array<float>
+    t |> equal(length(isolated_batches(none, 4)), 0, "no files, no batches")
 }

@@ -1,5 +1,5 @@
 options gen2
-options no_aot
+options no_aot   //! requires utils/internal/preflight/config.das, outside the AOT set
 
 require strings
 require dastest/testing_boost
@@ -47,13 +47,13 @@ def test_dasfmt_exclude_mask(t : T?) {
     t |> equal("", rmerr)
 }
 
-[test(description = "preflight's JIT settings: the worker default is conservative and capped, the max-file-time override accepts only its sentinel or non-negative values, the TOML loads, and an invalid TOML fails closed to the defaults")]
+[test(description = "preflight's sweep settings: the worker default is conservative and capped, the max-file-time override accepts only its sentinel or non-negative values, the TOML loads, and an invalid TOML fails closed to the defaults")]
 def test_preflight_config(tt : T?) {
-    tt |> run("JIT worker default is conservative and capped") <| @(t : T?) {
-        t |> equal(default_jit_isolated_threads(2), 4)
-        t |> equal(default_jit_isolated_threads(16), 8)
-        t |> equal(default_jit_isolated_threads(64), 32)
-        t |> equal(default_jit_isolated_threads(128), 32)
+    tt |> run("the worker default is conservative and capped") <| @(t : T?) {
+        t |> equal(default_isolated_threads(2), 4)
+        t |> equal(default_isolated_threads(16), 8)
+        t |> equal(default_isolated_threads(32), 16)
+        t |> equal(default_isolated_threads(128), 16)
     }
 
     tt |> run("JIT max-file-time override accepts only its sentinel or non-negative values") <| @(t : T?) {
