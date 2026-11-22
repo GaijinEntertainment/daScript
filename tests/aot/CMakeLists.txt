@@ -49,7 +49,8 @@ list(FILTER AOT_CUDA_FILES EXCLUDE REGEX "/_")
 
 FILE(GLOB AOT_TESTS_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/aot/*.das")
 list(APPEND AOT_TESTS_FILES tests/REVIEW.das)
-SET(AOT_DASTEST_MODULE_FILES dastest/review_gate.das dastest/file_census.das dastest/test_shape.das)
+SET(AOT_DASTEST_MODULE_FILES dastest/review_gate.das dastest/file_census.das dastest/test_shape.das
+    dastest/worker_policy.das)
 # Exclude _-prefixed helper modules (required transitively, not standalone test entry points)
 list(FILTER AOT_TESTS_FILES EXCLUDE REGEX "/_")
 
@@ -470,7 +471,7 @@ foreach(_s IN LISTS DAS_AOT_SUITES)
     if(_nf GREATER 0)
         if(_s STREQUAL "tests" OR _s STREQUAL "dastest")
             set(DAS_AOT_EXTRA_DEPENDS ${PROJECT_SOURCE_DIR}/dastest/review_gate.das ${PROJECT_SOURCE_DIR}/dastest/file_census.das
-                ${PROJECT_SOURCE_DIR}/dastest/test_shape.das)
+                ${PROJECT_SOURCE_DIR}/dastest/test_shape.das ${PROJECT_SOURCE_DIR}/dastest/worker_policy.das)
         endif()
         DAS_AOT("${AOT_${_u}_FILES}" ${_u}_AOT_GENERATED_SRC test_aot_${_s} daslang)
         set(DAS_AOT_EXTRA_DEPENDS "")

@@ -150,9 +150,6 @@ struct IsoInput {
     deadlines : array<float>
 }
 
-//! a file's deadline: the per-file budget plus every `[test(timeout =
-//! N)]` the file declares, read from its text - a test that raises
-//! its own budget raises the file's by the same amount
 //! the sum of the `[test(timeout = N)]` budgets a file declares
 def private declared_timeouts(file : string implicit) : float {
     let c <- census_text(file, fread(file))
@@ -161,11 +158,6 @@ def private declared_timeouts(file : string implicit) : float {
         total += e.timeoutSec
     }
     return total
-}
-
-def private file_deadline(file : string; perFileTimeout : float) : float {
-    return perFileTimeout if (perFileTimeout <= 0.0)
-    return perFileTimeout + declared_timeouts(file)
 }
 
 def private sum(values : array<float> implicit) : float {
@@ -756,7 +748,7 @@ def main() : int {  // nolint:STYLE037,STYLE038 - CLI dispatch, one arm per mode
         var totalThreads = test_args.isolated_mode_threads
         if (totalThreads == 0) {
             totalThreads = (tests_jit_enabled()
-                ? default_jit_isolated_threads(get_total_hw_threads())
+                ? default_isolated_threads(get_total_hw_threads())
                 : max(1, get_total_hw_threads() * 2))
         }
         let testTimeout = test_args.test_timeout
@@ -822,34 +814,34 @@ def main() : int {  // nolint:STYLE037,STYLE038 - CLI dispatch, one arm per mode
             + "{headlessFlag}{stackExcFlag}{failuresOnlyFlag}"
             + "{useAotFlag}{compileOnlyFlag}{jitFlags}{moduleCacheFlag}{runEnvFlags}")
         let batchSize = max(1, test_args.batch)
-        // Group files into batches of batchSize. Each batch is run by one
-        // worker subprocess (batchCmd); per-file singleCmds are kept so a
-        // crash can be re-dispatched one-process-per-file.
+        // Each batch is run by one worker subprocess (batchCmd); per-file
+        // singleCmds are kept so a crash can be re-dispatched
+        // one-process-per-file.
+        let budgets <- [for (f in files); declared_timeouts(f)]
+        let plan <- isolated_batches(budgets, batchSize)
         var batches : array<IsoInput>
-        var bidx = 0
-        while (bidx < totalFiles) {
-            let hi = min(bidx + batchSize, totalFiles)
-            let bn = hi - bidx
+        batches |> reserve(length(plan))
+        for (members in plan) {
+            let bn = length(members)
             var bUris, bFiles, bSingles : array<string>
             var bDeadlines : array<float>
             bUris |> reserve(bn)
             bFiles |> reserve(bn)
             bSingles |> reserve(bn)
             bDeadlines |> reserve(bn)
-            for (j in range(bidx, hi)) {
+            for (j in members) {
                 let file = files[j]
                 let uri = ctx.uriPaths ? file_name_to_uri(file) : file
                 bUris |> push(clone_string(uri))
                 bFiles |> push(clone_string(file))
                 bSingles |> push(build_iso_cmd([clone_string(file)], cmdPrefix, cmdSuffix))
-                bDeadlines |> push(file_deadline(file, testTimeout))
+                bDeadlines |> push(testTimeout <= 0.0 ? testTimeout : testTimeout + budgets[j])
             }
             let bCmd = build_iso_cmd(bFiles, cmdPrefix, cmdSuffix)
             delete bFiles
             batches |> emplace(
                                IsoInput(uris <- bUris, batchCmd = clone_string(bCmd),
                                         singleCmds <- bSingles, deadlines <- bDeadlines))
-            bidx = hi
         }
         let numBatches = length(batches)
         let workerLimit = max(1, numBatches)

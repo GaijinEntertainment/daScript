@@ -1735,7 +1735,7 @@ def main() : int { // nolint:STYLE037,STYLE038 — the gate loop + CLI surface; 
         to_log(LOG_ERROR, "invalid preflight config {settings_path}: {settings_error}\n")
         return 1
     }
-    let automatic_jit_jobs = default_jit_isolated_threads(get_total_hw_threads())
+    let automatic_jit_jobs = default_isolated_threads(get_total_hw_threads())
     let configured_jit_jobs = settings.jit_threads > 0 ? settings.jit_threads : automatic_jit_jobs
     let jit_jobs = (cfg.jit_jobs < 0
         ? configured_jit_jobs
