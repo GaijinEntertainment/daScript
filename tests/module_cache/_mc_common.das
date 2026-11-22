@@ -43,8 +43,113 @@ def trace_prefix() : string {
     return get_platform_name() == "windows" ? "set \"{trace_env}\"&& " : "{trace_env} "
 }
 
+typedef CommandWords = tuple<words : array<string>; plain : bool>
+
+//! shell-style words, `&&` one alone; `plain`: no shell-only syntax
+def private command_words(cmd : string) : CommandWords {
+    var words : array<string>
+    var word : array<uint8>
+    var plain = true
+    let windows = get_platform_name() == "windows"
+    peek_data(cmd) $(text) {
+        var quote = 0
+        var open = false
+        var i = 0
+        let n = length(text)
+        while (i <= n) {
+            let c = i < n ? int(text[i]) : ' '
+            i++
+            if (quote != 0) {
+                if (c == quote && i <= n) {
+                    quote = 0
+                } else {
+                    plain &&= c != '%' && c != '$' && i <= n
+                    word |> push(uint8(c))
+                }
+                continue
+            }
+            if (c == '"' || (c == '\'' && !windows)) {
+                quote = c
+                open = true
+                continue
+            }
+            let chain = c == '&' && i < n && int(text[i]) == '&'
+            if (c == ' ' || c == '\t' || chain) {
+                if (open) {
+                    words |> push(string(word))
+                    word |> clear()
+                    open = false
+                }
+                if (chain) {
+                    words |> push("&&")
+                    i++
+                }
+                continue
+            }
+            plain &&= find("<>|%$;*?^()`&", to_char(c)) < 0 && (windows || c != '\\')
+            word |> push(uint8(c))
+            open = true
+        }
+    }
+    return (words <- words, plain = plain)
+}
+
+struct ChildCommand {
+    direct : bool           //! false: only a shell runs it
+    args : array<string>
+    cwd : string
+    env : array<string>
+}
+
+def private is_assignment(word : string) : bool {
+    let eq = find(word, "=")
+    return false if (eq <= 0)
+    for (c in slice(word, 0, eq)) {
+        return false if (!is_alpha(c) && !is_number(c) && c != '_')
+    }
+    return true
+}
+
+[arch(at="ARCHITECTURE.md#child-start")]
+def child_command(cmd : string) : ChildCommand {
+    var child : ChildCommand
+    let merged = " 2>&1"
+    let line = cmd |> ends_with(merged) ? slice(cmd, 0, length(cmd) - length(merged)) : cmd
+    var inscope cut <- command_words(line)
+    let n = length(cut.words)
+    var i = 0
+    while (i < n) {
+        if (cut.words[i] == "set" && i + 2 < n && cut.words[i + 2] == "&&") {
+            child.env |> push(cut.words[i + 1])
+            i += 3
+        } elif (cut.words[i] == "cd") {
+            let at = i + 1 < n && cut.words[i + 1] == "/d" ? i + 2 : i + 1
+            break if (at + 1 >= n || cut.words[at + 1] != "&&")
+            child.cwd = cut.words[at]
+            i = at + 2
+        } elif (is_assignment(cut.words[i])) {
+            child.env |> push(cut.words[i])
+            i++
+        } else {
+            break
+        }
+    }
+    var chained = false
+    child.args |> reserve(n - i)
+    for (w in range(i, n)) {
+        chained ||= cut.words[w] == "&&"
+        child.args |> push(cut.words[w])
+    }
+    let named = i < n && (find(cut.words[i], "/") >= 0 || find(cut.words[i], "\\") >= 0)
+    child.direct = cut.plain && named && !chained
+    return <- child
+}
+
 //! stderr joins stdout: the scan trace goes through the logger
+[arch(at="ARCHITECTURE.md#child-start")]
 def run_child(cmd : string; var output : string&) : int {
+    var inscope child <- child_command(cmd)
+    if (child.direct) return run_and_capture(child.args, child.cwd, child.env, output, 300.0)
     return unsafe(popen_timeout("{cmd} 2>&1", 300.0, $(f) {
         if (f != null) {
             output = fread(f)

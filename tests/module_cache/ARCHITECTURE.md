@@ -182,7 +182,8 @@ this document states what the folder is and why its tests take the shape they do
 - `_mc_common.das` - the spawn helpers every test here shares (the name is the folder's, since
   a sweep worker holds every shared module it met under one name and `tests/linq` has a
   `_common` already): the binary to spawn (`das_exe`),
-  the scan-trace command prefix (`trace_prefix`), the stderr-joining child run (`run_child`),
+  the scan-trace command prefix (`trace_prefix`), the stderr-joining child run (`run_child`), which skips the shell when `child_command`
+  can read the command (`ARCHITECTURE.md#child-start`),
   the failure report that echoes the child's output (`report_child`), and the two joined
   (`run_child_reported`): the order a call's arguments are evaluated in is not defined
   (LINT030), and a `run_child(cmd, out)` nested beside `out` in one argument list reads that
@@ -197,10 +198,12 @@ this document states what the folder is and why its tests take the shape they do
 The host installs the cache before `compileDaScript` and finishes it after
 `simulate`; the default path, the quiet flag and the verdict are host
 decisions (`utils/daslang/main.cpp`). A test compiling in-process sees none
-of them. Each case therefore spawns an interpreter. The shared-type-name
+of them. Each case therefore spawns an interpreter - all but `test_child_command`
+(`uncategorized.das`), which checks in-process how `_mc_common.das` reads a
+command line and judges no child. The shared-type-name
 case uses the running executable's absolute path, or the sibling
 interpreter when dastest consumes AOT. The default-path case runs scripts
-it writes to a temp directory, asserting on the child's stdout and on the
+it writes to a temp directory, asserting on the child's stdout and stderr and on the
 files under `.cache/daslang/module_cache/` in the cwd; the explicit-cache
 cases run a driver under `_fixtures/` with `-module-cache` pointed into a
 temp directory, asserting on the child's stdout; the manifest case runs a
@@ -219,3 +222,16 @@ the default-path case names its stems after the run's own temp folder
 each counts only the cache files its own children wrote. A child's stdout is echoed on failure,
 because the exit code alone would turn a one-line answer into an exit-code
 hunt.
+
+## How a test starts its child {#child-start}
+
+`run_child` (`_mc_common.das`) starts a child without a shell when `child_command`
+can read the whole command: the `trace_prefix` and `enter_dir` prefixes and
+`NAME=value` assignments, then a program named by a path, then plain or quoted
+words. A trailing ` 2>&1` is dropped first: a direct spawn joins stderr to stdout
+by itself. That command becomes a program, its arguments, a working folder and an
+environment, and is spawned directly. A command holding anything else only a shell
+reads - a redirection, a variable, a pipe, a later `&&` - or naming a bare program,
+which only the shell finds on `PATH`, runs through the shell. A process start is
+what a loaded Windows box runs out of first, and a shell costs every child one
+start more, so only the commands that need a shell get one.
