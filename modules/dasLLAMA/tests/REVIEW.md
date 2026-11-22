@@ -37,6 +37,10 @@ transcripts, applies `REVIEW_MEDIA_CELLS.md` (beside this file) too.**
 changes such a condition, or changes the body of a function in this folder that such a condition
 calls, applies `REVIEW_SKIPS.md` (beside this file) too.**
 
+**A diff that adds, moves or changes a cell that loads a model file, a `with_cpu_and_gpu_model`
+call or an `own_load` call, or changes `REVIEW.das`'s `check_models_load_once`, `LOAD_ONCE_AREAS`,
+`LOADERS` or `UNFOLDED`, applies `REVIEW_LOAD_ONCE.md` (beside this file) too.**
+
 A cell is one `t |> run` subtest, or a `[test]` function that runs no subtest, and owns the asserts
 of every helper it calls; a test file is a `.das` dastest runs - one holding a `[test]` function, or
 one whose `cant_`, `failed_` or `invalid_` prefix makes its compile the assertion. A gate function
@@ -221,24 +225,6 @@ filter list (a family with no entry adds one in the same change), the checks in 
 loading several families runs only under a filter naming every one of them.** Kitten and kokoro are
 two families of one architecture; an untagged test runs under every `--family` filter, each load
 of another family's decoder file skipping inside it.
-
-**A diff that adds or moves a cell in a test file of this folder any of whose cells loads a model on
-a discrete home - a GPU backend whose device memory is not the host's - or changes which model file a
-cell of such a file loads (directly or through a helper's file constant), never loads a model file,
-through any loader but the `with_cpu_and_gpu_model` call that run area's name makes for that file
-(`_cpu_gpu_model.das`), in a form (a device form, or the CPU form a `with_cpu_and_gpu_model` call
-loads beside its device forms) that call or another test of that run area already loads.** A form is
-one load of the file under one set of load-time knobs and one load mode; a run area is the set of
-cells one `with_cpu_and_gpu_model` area name gathers; a load a child process makes is its own.
-
-**In a test file of this folder any of whose cells loads a model on a discrete home, a cell that
-loads a model file in a form a `with_cpu_and_gpu_model` call or another test of its run area already
-loads joins the `with_cpu_and_gpu_model` call of the run area whose area name the cell's file
-passes, with its form added to the call's forms list, or the one test that loads the form.**
-
-**A diff that compares two forms of a `with_cpu_and_gpu_model` call - two loads of its file under
-different load-time knobs or load mode - makes the compare after the call returns, on what the
-call's body collected.**
 
 **A diff that makes a test load a language-model `.gguf` - not a tower, speech model or fixture -
 whose name no row of `model_families()` (`_model_categories.das`) holds adds the row in the same
