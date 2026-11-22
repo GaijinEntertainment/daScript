@@ -109,6 +109,12 @@ namespace das {
     }
 }
 
+namespace das {
+    bool hugepage_hint () noexcept {
+        return true;
+    }
+}
+
 void os_debug_break() {
 #if defined(_MSC_VER)
     __debugbreak();

@@ -451,6 +451,7 @@ namespace das {
 
 #if defined(__linux__)
 #include <sys/mman.h>       // madvise/MADV_HUGEPAGE for the >=2MB hugepage tier below
+namespace das { DAS_API bool hugepage_hint () noexcept; }
 #endif
 
 #ifndef DAS_ALIGNED_ALLOC
@@ -459,7 +460,8 @@ namespace das {
 // kernels (tileloadd row loads, 512-bit vector loads) pay a line-split on every access
 // to a 16-but-not-64-aligned panel (measured ~260M split-loads/s on SPR AMX GEMM; Intel
 // SDM ch.20 mandates 64B for tile data). Blocks ≥2MB get 2MB alignment + MADV_HUGEPAGE
-// on Linux: the hugepage hint only collapses 2M-aligned VA subranges, so without the
+// on Linux (DAS_NO_HUGEPAGE_HINT turns the hint off, the alignment stays): the
+// hugepage hint only collapses 2M-aligned VA subranges, so without the
 // alignment the hint misses the panel head. Windows stays uniform 64B — _aligned_msize
 // must be called with the exact alignment passed at alloc time, so it cannot be
 // size-tiered there. The name keeps its historical "16" (the minimum caller contract).
@@ -493,7 +495,7 @@ inline void *das_aligned_alloc16(size_t size) {
     }
 #endif
 #if defined(__linux__)
-    if (size >= 2*1024*1024) {
+    if (size >= 2*1024*1024 && das::hugepage_hint()) {
         // interior only (size rounded DOWN to 2MB): hinting the partial tail page would back
         // it with a full 2MB of RSS (a 2.05MB block ballooning to 4MB); the tail stays 4K
         madvise(p, size & ~size_t(2*1024*1024 - 1), MADV_HUGEPAGE);
