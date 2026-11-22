@@ -100,3 +100,8 @@ The supervisor refuses to start on an unknown key.
 front to `ci/smoke_test_bundle.sh` (repo root), in the same change.** A front is a command-line
 mode that makes a program serve a different role or protocol. `ci/smoke_test_bundle.sh` proves
 only the fronts it starts.
+
+**A test the diff adds or changes in a `DAS_UTILS_TO_TEST` suite (`CMakeLists.txt`, beside this
+file) writes no file under a folder another line of that list names - a line naming a single
+`.das` file names no folder.** Preflight's `utils-tests` lane runs every suite at once, so a file
+written there lands in a sweep that is running.

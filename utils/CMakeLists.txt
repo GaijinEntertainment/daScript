@@ -422,7 +422,19 @@ add_das_target(run_utils_tests
     WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     COMMENT "Running utils tests"
 )
-add_dependencies(run_utils_tests das_shipped_exes)
+# what the suites run against. preflight builds this target and runs the suites itself, beside
+# its other lanes, from the list below: a line is `test <path>` or `compile <path>`
+add_custom_target(run_utils_tests_products)
+add_dependencies(run_utils_tests_products daslang tree_sitter_daslang das_shipped_exes)
+add_dependencies(run_utils_tests run_utils_tests_products)
+set(_utils_tests_list "")
+foreach(_das ${DAS_UTILS_TO_TEST})
+    string(APPEND _utils_tests_list "test utils/${_das}\n")
+endforeach()
+foreach(_das ${DAS_UTILS_TO_COMPILE})
+    string(APPEND _utils_tests_list "compile utils/${_das}\n")
+endforeach()
+file(WRITE ${CMAKE_BINARY_DIR}/run_utils_tests.txt "${_utils_tests_list}")
 
 # -exe codegen check: the exes sit in bin/ for the runtime library, never under a shipped tool's name
 add_das_target(check_standalone_exes
@@ -440,7 +452,7 @@ add_custom_target(check_format_exe
 add_dependencies(check_format_exe check_standalone_exes)
 # the lint suites spawn bin/das-lint.exe when a fresh one is there (lint/tests/_lint_cli.das);
 # built first, so a lane never meets a half-written exe or a stale one
-add_dependencies(run_utils_tests check_standalone_exes)
+add_dependencies(run_utils_tests_products check_standalone_exes)
 # the lint_project_* ctests spawn the lint tool some thirty times a file: the exe starts at once,
 # the script form compiles the tool on every spawn and outruns dastest's suite watchdog
 if(TARGET test-small)

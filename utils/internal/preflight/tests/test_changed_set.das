@@ -130,13 +130,15 @@ def test_sweep_excluded(t : T?) {
     }
 }
 
-[test(description = "only text with an exported main is a sweep root, and one requiring the dasllama engine is a heavy root")]
+[test(description = "only text with an exported main is a sweep root, and one requiring the dasllama engine is an engine root, which the sweep leaves out")]
 def test_sweep_root_text(t : T?) {
     t |> success(is_sweep_root_text("options gen2\n[export]\ndef main() \{\n\}\n"), "an exported main is a root")
     t |> success(!is_sweep_root_text("options gen2\ndef helper() \{\n\}\n"), "a module without main is not")
     t |> success(!is_sweep_root_text("def main() \{\n\}\n"), "an unexported main is not a program root")
-    t |> success(is_heavy_sweep_root("require dasllama/dasllama\n[export]\ndef main() \{\}\n"), "an engine require is heavy")
-    t |> success(!is_heavy_sweep_root("require daslib/fio\n[export]\ndef main() \{\}\n"), "a plain root is light")
+    let engine = "require dasllama/dasllama\n[export]\ndef main() \{\}\n"
+    let plain = "require daslib/fio\n[export]\ndef main() \{\}\n"
+    t |> success(is_engine_sweep_root(engine), "a root that requires the engine is an engine root")
+    t |> success(!is_engine_sweep_root(plain), "a plain root is not")
 }
 
 [test(description = "the FAILURES block names the failed files, five at most with the rest counted, and a stated default when the block is absent")]
@@ -205,24 +207,36 @@ def test_count_fixed_files(t : T?) {
     t |> equal(count_fixed_files("  FIXED is prose here\n"), 0, "only a line that starts with FIXED counts")
 }
 
-[test(description = "each run-only lane gets a child of its own in the given order, and the lanes that build in the shared build dir share one child, since two builds in one dir collide")]
-def test_lane_groups(t : T?) {
-    let builds <- ["docs", "tests-aot", "utils-tests"]
-    let lanes <- ["docs", "tests-cpp", "tests-interp", "tests-jit", "tests-aot", "utils-tests"]
-    let groups <- lane_groups(lanes, builds)
-    t |> equal(length(groups), 4, "three run-only lanes a child each, the building lanes one child")
-    t |> equal(groups[0][0], "tests-cpp", "a run-only lane keeps its order")
-    t |> equal(groups[1][0], "tests-interp", "a run-only lane keeps its order")
-    t |> equal(groups[2][0], "tests-jit", "a run-only lane keeps its order")
-    t |> equal(length(groups[3]), 3, "the building lanes share the last child")
-    t |> equal(groups[3][0], "docs", "the building lanes keep the order given")
-    t |> equal(groups[3][1], "tests-aot", "the building lanes keep the order given")
-    t |> equal(groups[3][2], "utils-tests", "the building lanes keep the order given")
-    let run_only <- lane_groups(["tests-interp", "tests-jit"], builds)
-    t |> equal(length(run_only), 2, "no building lane, no building child")
-    let builders <- lane_groups(["tests-aot", "docs"], builds)
-    t |> equal(length(builders), 1, "building lanes alone make one child")
-    t |> equal(length(builders[0]), 2, "building lanes alone make one child")
-    let none : array<string>
-    t |> equal(length(lane_groups(none, builds)), 0, "no lane, no child")
+[test(description = "the utils suite list reads one suite a line, test or compile, and skips what is neither")]
+def test_utils_suites(t : T?) {
+    let list = "test utils/lint\r\ncompile utils/a/b.das\n\nnoise line\ntest  utils/dascov \n"
+    let suites <- utils_suites(list)
+    t |> equal(length(suites), 3, "two test lines and one compile line")
+    t |> equal(suites[0].path, "utils/lint", "the path follows the verb, the line end trimmed")
+    t |> success(!suites[0].compile_only, "a test line runs")
+    t |> equal(suites[1].path, "utils/a/b.das", "a compile line names its path")
+    t |> success(suites[1].compile_only, "a compile line compiles only")
+    t |> equal(suites[2].path, "utils/dascov", "spaces around the path are trimmed")
+    t |> equal(length(utils_suites("")), 0, "an empty list names no suite")
+}
+
+[test(description = "the build lock has one holder at a time: a second take waits out its limit and fails, a drop frees it, and an empty lock path takes no turn")]
+def test_build_lock(t : T?) {
+    let lock = "{test_temp_dir()}/build.lock"
+    t |> success(take_build_lock(lock, 1.0lf), "a free lock is taken at once")
+    t |> success(!take_build_lock(lock, 0.3lf), "a held lock is not taken within the wait")
+    drop_build_lock(lock)
+    t |> success(take_build_lock(lock, 1.0lf), "a dropped lock is free again")
+    drop_build_lock(lock)
+    t |> success(take_build_lock("", 0.0lf), "no lock path, no turn to wait for")
+}
+
+[test(description = "a build output that says cmake re-ran itself part way reads as regenerated, and an ordinary failure does not")]
+def test_regenerated_mid_build(t : T?) {
+    let regen = ("  Building Custom Rule CMakeLists.txt\n"
+        + "  CMake is re-running because build/CMakeFiles/generate.stamp is out-of-date.\n")
+    t |> success(regenerated_mid_build(regen), "the regenerate line marks the build")
+    let compile_error = "error C2065: 'x': undeclared identifier\n"
+    t |> success(!regenerated_mid_build(compile_error), "a compile error does not")
+    t |> success(!regenerated_mid_build(""), "no output, no regenerate")
 }

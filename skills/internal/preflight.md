@@ -8,8 +8,11 @@ and compile-sweep (every program root under `utils/`, `examples/`, `tutorials/`
 and the modules' examples and utils, compile-only, in parallel - the per-PR form
 of CI's examples and tutorial runs), serially, and a red stops the run. `-- --full`
 then runs the **lanes** at once - docs, tests-cpp, tests-interp, tests-jit,
-tests-aot, utils-tests - so the wall is the longest lane (`--serial` for
-diagnosis). **Module gates** never run from a tier: `--only imgui`, `--only
+watchdog-interp, watchdog-jit, tests-aot, utils-tests - so the wall is the longest lane
+(`--serial` for diagnosis). What takes turns among them, and when the docs lane starts, are
+`utils/internal/preflight/README.md#build-turn` and `#docs-early`. The two watchdog lanes
+run `tests/watchdog`, which no sweep of `tests/` runs (`tests/.das_test` skips the folder):
+its tests wait on supervised children for minutes. **Module gates** never run from a tier: `--only imgui`, `--only
 sequence`, `--only dasllama-model-free` when the module is the work. A gate
 with a **reach set** skips, with the reason, when nothing under its paths or the
 core (`src/`, `include/`, `daslib/`, `dastest/`, `CMakeLists.txt`, `cmake/`)
@@ -92,9 +95,10 @@ is the nightly's.
 `run_tests_aot_subset`, and on darwin Release `run_tests_llvm_vector_math`), retried as
 `run_build_isolated` (the same with `run_tests_sweeps_isolated`) when it fails. On the nightly
 lane the per-PR Release cells run `run_build_nightly` (`run_tests_slow`, `run_backend_sweeps`,
-`test_aot_subset`) instead, the fast-math cell runs `run_build`, and a sanitizer cell's `tests`
-job runs `run_build_sanitizers` (`run_tests_interpreter`, `test-small`).** The retry
-is the workflow's `||`, not a cmake target. The sanitizer cells
+`test_aot_subset`, `run_tests_watchdog`) instead, the fast-math cell runs `run_build`, and a
+sanitizer cell's `tests` job runs `run_build_sanitizers` (`run_tests_interpreter`,
+`test-small`).** The members of each group are its `das_lane_group` line in
+`ci/CMakeLists.txt`. The retry is the workflow's `||`, not a cmake target. The sanitizer cells
 configure with raised watchdogs (`SLOW_SWEEP_BUDGETS` in `ci/ci_matrix.py`: 3600 s for a sweep
 and the full AOT suite, 7200 s isolated) - their sweeps run at half speed on their own and the
 default budgets fired on runner variance alone. The windows 64 Debug cell runs the `Compile`
@@ -136,6 +140,7 @@ configure.
 | JIT sweep | `cmake --build build --config Release --target run_tests_jit` (`run_tests_sweeps` runs it first, then the interpreter sweep) | Windows-local `clang-cl` link failures are env noise; the catchable class is LLVM verifier errors, end-to-end JIT needs WSL/mac. 2-test smoke: `skills/internal/make_pr.md` sec.2.5 |
 | Sweep the JIT cache | with `DAS_JIT_MANIFEST` set to an empty directory for the `run_tests_jit` (or `run_tests_sweeps`) run and for this command: `cmake --build build --config Release --target jit_cache_sweep`; to count without deleting, `DAS_LOG_LEVEL=info bin/Release/jit.exe --sweep --sweep-dry-run` from the repo root (`bin/jit.exe` on a single-config generator) | deletes what the recorded run did not use, so on a dev box it removes every other program's cached DLLs too - run the dry form first. With the variable unset, or a manifest that names no DLL, it deletes nothing and fails |
 | Build time by target | on a Ninja build: `python3 ci/ninja_log_report.py build/.ninja_log` | one table per ninja invocation: edge-minutes by target, compiles and links folded into one row each. Prints a note and passes where there is no log |
+| Watchdog tests - **nightly** | `cmake --build build --config Release --target run_tests_watchdog` - `tests/watchdog` under the interpreter, then under `-jit` where dasLLVM is built (not on a single-config Debug build); preflight's `watchdog-interp` and `watchdog-jit` lanes | a member of `run_build_nightly`; the target exists where dasHV, dasStdDlg and dasStbImage are built |
 | Small C++ tests | `cmake --build build --config Release --target test-small` | drop `--build-config` on single-config generators. **Run after touching `tests-cpp/`** - MSVC tolerates C++ clang/gcc reject; `skills/internal/writing_cpp_tests.md` |
 | Compile (windows 64 Debug, nightly) | `cmake --build build --config Debug` | the default build as MSVC Debug; no test runs in this cell |
 | AOT sweep (full) | `cmake --build build --config Release --target run_tests_slow` - the full `test_aot` build, the AOT sweep over tests/, then the big C++ tests | nightly + manual dispatch only, so this is the **only** pre-push gate for AOT regressions outside tests/language - don't skip it; the sweep closes with its 30 slowest files (`--timing-outliers 30`). Under a sanitizer it leaves out `tests/lsp`, `tests/lint`, `tests/module_cache`, `tests/dastest` and `tests/mcp` - compiler and tool tests the cell's interpreter sweep already runs |
@@ -291,7 +296,7 @@ test rather than a check that silently stopped running.
 | Markdown ASCII gate | preflight's `md-ascii` gate (fast tier, runs when the diff touches any `.md`); the CI target is `cmake --build build --config Release --target check_md_ascii`, fix in place with `python3 ci/fix_md_ascii.py` | em-dashes/arrows/ellipses in new markdown are the usual trip |
 | dasgen freshness | `<daslang> utils/internal/dasgen/gen_bind.das` then `git diff --exit-code -- src/builtin/ast_gen.inc src/builtin/debugapi_gen.inc` | regen + commit if dirty; `skills/internal/visitor_gen_bind.md` |
 | Run examples - **nightly** | `cmake --build build --config Release --target run_examples`; per PR, preflight's `compile-sweep` gate compiles every example root | the run form is 5-8 minutes a lane |
-| Utils tests | `cmake --build build --config Release --target run_utils_tests` - preflight's `utils-tests` lane | |
+| Utils tests | `cmake --build build --config Release --target run_utils_tests` - preflight's `utils-tests` lane builds `run_utils_tests_products` and runs the same suites itself, all at once, from `<build>/run_utils_tests.txt` | under MSBuild the target fails on an `error :` line a suite prints by design; the lane reads only each suite's exit code |
 | Tutorial dry-runs - **nightly** | `cmake --build build --config Release --target dry_run_tutorials`; per PR, preflight's `compile-sweep` gate compiles every tutorial root | compile rot in `tutorials/` after daslib API changes; the run form is 8-11 minutes a lane |
 | Standalone exes | `cmake --build build --config Release --target check_standalone_exes` | `-exe` codegen check: needs dasLLVM + lld-link on PATH; das-lint is built, not run - an exe carries the host's module paths without the modules, so its lint world is not one in-tree files answer to. The shipped `lint.exe` is a copy of daslang, exercised by the bundle smoke test on daslib |
 | Sequence smoke | `cmake --build build --config Release --target run_sequence_smoke` | build the runtime modules first: `cmake --build build --config Release --target dasModuleGlfw dasModuleLiveHost dasModuleHV dasModuleAudio dasModulePUGIXML dasModuleStbImage`. **The only pre-merge lane compiling GLFW-gated `.das` like dasOpenGL** - run it for type-system / daslib-generics changes |

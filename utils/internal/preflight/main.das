@@ -37,7 +37,7 @@ require daslib/cmp
 
 [CommandLineArgs]
 struct Config {
-    @clarg_doc = "Fast tier, then the lanes: run-only at once, building in turn; modules: --only"
+    @clarg_doc = "Fast tier, then the lanes at once; modules: --only"
     full : bool
 
     @clarg_doc = "Lanes run serially instead of concurrently (diagnosis; the wall becomes the sum)"
@@ -74,6 +74,9 @@ struct Config {
 
     @clarg_doc = "JIT per-file wall-time guard in seconds; -1 = config/default, 0 = disabled"
     jit_max_file_time : float = -1.0
+
+    @clarg_doc = "Folder a lane holds around its cmake build; the lanes of one run share it"
+    build_lock : string
 
     @clarg_doc = "Stop at the first failing gate"
     fail_fast : bool
@@ -124,6 +127,7 @@ struct PreflightCtx {
     jit_jobs : int
     jit_max_file_time : float
     verbose : bool
+    build_lock : string
 }
 
 // ===== subprocess + small helpers =====
@@ -139,6 +143,41 @@ def run_argv(args : array<string>; timeout : float) : tuple<rc : int; out : stri
 }
 
 def run_argv(args : array<string>) : tuple<rc : int; out : string> => run_argv(args, 0.0)
+
+let private BUILD_LOCK_MAX_WAIT = 7200.0lf
+
+def private lock_wait_ran_out(ctx : PreflightCtx) : tuple<rc : int; out : string> =>
+    (rc = 1, out = "waited {int(BUILD_LOCK_MAX_WAIT)} s for the build lock {ctx.build_lock}")
+
+[arch(at="README.md#build-turn")]
+def run_in_turn(ctx : PreflightCtx; args : array<string>) : tuple<rc : int; out : string> {
+    return lock_wait_ran_out(ctx) if (!take_build_lock(ctx.build_lock, BUILD_LOCK_MAX_WAIT))
+    let r = run_argv(args)
+    drop_build_lock(ctx.build_lock)
+    return r
+}
+
+[arch(at="README.md#build-turn")]
+def run_build(ctx : PreflightCtx; args : array<string>) : tuple<rc : int; out : string> {
+    return lock_wait_ran_out(ctx) if (!take_build_lock(ctx.build_lock, BUILD_LOCK_MAX_WAIT))
+    var r = run_argv(args)
+    if (r.rc != 0 && regenerated_mid_build(r.out)) {
+        let conf = run_argv(["cmake", "-S", ".", "-B", ctx.build_dir])
+        let again = run_argv(args)
+        let note = "cmake regenerated part way; configured again, then the build ran again"
+        r = (rc = again.rc, out = "{r.out}\n{note}\n{conf.out}\n{again.out}")
+    }
+    drop_build_lock(ctx.build_lock)
+    return r
+}
+
+//! a no-such-target failure, in MSBuild's, Ninja's or Make's words
+def unknown_target(out : string) : bool {
+    for (pat in ["MSB1009", "unknown target", "No rule to make target"]) {
+        if (find(out, pat) >= 0) return true
+    }
+    return false
+}
 
 def tool_available(exe, probe_flag : string) : bool {
     let r = run_argv([exe, probe_flag], 30.0)
@@ -874,11 +913,12 @@ def docs_skip_all(reason : string; var results : array<GateResult>&) {
 def gate_docs(ctx : PreflightCtx; var results : array<GateResult>&) { // nolint:STYLE037,STYLE038 — the doc.yml gates in CI order; splitting hides the sequence
     var t0 = ref_time_ticks()
     // gate 1: das2rst runs clean (positional handmade-doc validation)
-    let r1 = (empty(ctx.build_dir)
-        ? run_argv([ctx.daslang, "-documentation", "doc/reflections/das2rst.das",
-            "--", "--digest", unique_temp_path("everything", ".md")])
-        : run_argv(["cmake", "--build", ctx.build_dir, "--config", ctx.config,
-            "--target", "check_docs_generated"]))
+    let digest = (empty(ctx.build_dir)
+        ? unique_temp_path("everything", ".md")
+        : path_join(ctx.build_dir, "doc/everything.md"))
+    mkdir_rec(dir_name(digest))
+    let r1 = run_argv([ctx.daslang, "-documentation", "doc/reflections/das2rst.das",
+        "--", "--digest", digest])
     let missing_at = find(r1.out, "missing prerequisite '")
     if (r1.rc != 0 && missing_at >= 0) {
         let name_at = missing_at + length("missing prerequisite '")
@@ -904,7 +944,7 @@ def gate_docs(ctx : PreflightCtx; var results : array<GateResult>&) { // nolint:
         results |> emplace(GateResult(name = "docs/digest", status = digest_ok ? GateStatus.Pass : GateStatus.Fail,
             seconds = seconds_since(t0),
             detail = digest_ok ? "" : (empty(built)
-                ? "{ctx.build_dir}/doc/everything.md missing — check_docs_generated wrote no digest"
+                ? "{ctx.build_dir}/doc/everything.md missing — das2rst wrote no digest"
                 : "the shipped digest is stale — cmake --build {ctx.build_dir} --target regen_docs_digest")))
     }
 
@@ -1021,8 +1061,11 @@ def gate_docs(ctx : PreflightCtx; var results : array<GateResult>&) { // nolint:
     }
 
     t0 = ref_time_ticks()
-    let r5 = run_argv([sphinx, "-W", "--keep-going", "-j", "auto",
-        "-b", "html", "-d", "doc/sphinx-build", "doc/source", "build/site"])
+    let sphinx_args <- [sphinx, "-W", "--keep-going", "-j", "auto",
+        "-b", "html", "-d", "doc/sphinx-build", "doc/source", "build/site"]
+    let r5 = (get_platform_name() == "windows"
+        ? run_argv(sphinx_args)
+        : run_in_turn(ctx, sphinx_args))
     let html_ok = r5.rc == 0
     // A missing `.. video::` target is a -W warning like any other, so name the
     // unstaged recordings when they are the likely cause rather than leaving the
@@ -1127,9 +1170,7 @@ def private collect_das_files(dir : string; var out : array<string>&) {
     }
 }
 
-//! every program root under the swept trees - utils/, examples/, tutorials/ and the modules' examples,
-//! tutorials and utils folders - split into the light pool and the engine-heavy serial set
-def collect_sweep_roots() : tuple<light : array<string>; heavy : array<string>> {
+def collect_sweep_roots() : tuple<roots : array<string>; engine_left_out : int> {
     var files : array<string>
     for (tree in SWEEP_TREES) {
         collect_das_files(tree, files)
@@ -1144,20 +1185,20 @@ def collect_sweep_roots() : tuple<light : array<string>; heavy : array<string>> 
             }
         }
     }
-    var light, heavy : array<string>
+    var roots : array<string>
+    var engine = 0
     for (f in files) {
         continue if (sweep_excluded(f) || !is_sweep_root_path(f))
         let text = fread(f)
         continue if (!is_sweep_root_text(text))
-        if (is_heavy_sweep_root(text)) {
-            heavy |> push(f)
+        if (is_engine_sweep_root(text)) {
+            engine++
         } else {
-            light |> push(f)
+            roots |> push(f)
         }
     }
-    sort(light)
-    sort(heavy)
-    return <- (light <- light, heavy <- heavy)
+    sort(roots)
+    return <- (roots <- roots, engine_left_out = engine)
 }
 
 struct SweepItem {
@@ -1221,36 +1262,26 @@ def private run_sweep_workers(daslang : string; files : array<string>; workers :
 //! the per-PR form of CI's examples and tutorial runs: does every program root still compile
 def gate_compile_sweep(ctx : PreflightCtx) : GateResult {
     let t0 = ref_time_ticks()
-    let roots <- collect_sweep_roots()
-    let total = length(roots.light) + length(roots.heavy)
+    let sweep <- collect_sweep_roots()
+    let total = length(sweep.roots)
     if (total == 0) {
-        return GateResult(name = "compile-sweep", status = GateStatus.Skip, seconds = seconds_since(t0), detail = "no program roots found under {join(SWEEP_TREES, ", ")}")
+        return GateResult(name = "compile-sweep", status = GateStatus.Skip,
+            seconds = seconds_since(t0),
+            detail = "no program roots found under {join(SWEEP_TREES, ", ")}")
     }
     //! cores, not get_total_hw_threads(): the latter is the jobque's own worker count (5 on an 18-core M5)
-    let workers = compute_worker_count(length(roots.light), ctx.jobs > 0 ? ctx.jobs : get_total_hw_cores())
-    let t_pool = ref_time_ticks()
-    let light <- run_sweep_workers(ctx.daslang, roots.light, workers, 300.0)
-    let pool_s = seconds_since(t_pool)
-    // the engine roots share one module graph: one explicit cache, written by the first, served to the rest
-    let cache = unique_temp_path("preflight_sweep", ".dascache")
-    let t_serial = ref_time_ticks()
+    let workers = compute_worker_count(total, ctx.jobs > 0 ? ctx.jobs : get_total_hw_cores())
+    let runs <- run_sweep_workers(ctx.daslang, sweep.roots, workers, 300.0)
     var red = 0
     let output = build_string() $(w) {
-        for (root, r in roots.light, light) {
-            continue if (r.rc == 0)
-            red ++
-            w |> write("=== {root} (exit {r.rc}) ===\n{r.out}\n")
-        }
-        for (root in roots.heavy) {
-            let r = run_argv([ctx.daslang, "-compile-only", "-dasroot", ".", "-module-cache", cache, root], 600.0)
+        for (root, r in sweep.roots, runs) {
             continue if (r.rc == 0)
             red ++
             w |> write("=== {root} (exit {r.rc}) ===\n{r.out}\n")
         }
     }
-    let serial_s = seconds_since(t_serial)
-    remove(cache)
-    let shape = "{length(roots.light)} in a {workers}-wide pool ({fmt(":.0f", float(pool_s))}s), {length(roots.heavy)} engine roots serial through one module cache ({fmt(":.0f", float(serial_s))}s); {length(SWEEP_EXCLUDED)} trees excluded"
+    let shape = ("a {workers}-wide pool; {sweep.engine_left_out} dasLLAMA root(s) left to CI,"
+        + " {length(SWEEP_EXCLUDED)} trees excluded")
     if (red > 0) {
         return GateResult(name = "compile-sweep", status = GateStatus.Fail, seconds = seconds_since(t0),
             detail = "{red} of {total} program root(s) fail to compile - {shape}", output = output)
@@ -1266,9 +1297,61 @@ def gate_utils_tests(ctx : PreflightCtx) : GateResult {
         return GateResult(name = "utils-tests", status = GateStatus.Skip, seconds = seconds_since(t0),
             detail = "no configured build dir — cmake -B build first")
     }
-    return run_test_gate("utils-tests",
-        ["cmake", "--build", ctx.build_dir, "--config", ctx.config, "--target", "run_utils_tests"],
-        "utils test suites failed (cmake --target run_utils_tests)")
+    let b = run_build(ctx, ["cmake", "--build", ctx.build_dir, "--config", ctx.config,
+        "--target", "run_utils_tests_products", "--parallel", cmake_jobs(ctx)])
+    if (b.rc != 0) {
+        if (unknown_target(b.out)) {
+            return GateResult(name = "utils-tests", status = GateStatus.Skip,
+                seconds = seconds_since(t0), output = b.out,
+                detail = "run_utils_tests is not in this build config (it needs dasLLVM)")
+        }
+        return classify_build_fail("utils-tests", "run_utils_tests_products did not build",
+            b, ctx.daslang, t0)
+    }
+    let build_s = seconds_since(t0)
+    let list_file = path_join(ctx.build_dir, "run_utils_tests.txt")
+    let suites <- utils_suites(fread(list_file))
+    if (empty(suites)) {
+        return GateResult(name = "utils-tests", status = GateStatus.Fail,
+            seconds = seconds_since(t0),
+            detail = "{list_file} names no suite - configure the build again")
+    }
+    var argvs : array<array<string>>
+    argvs |> reserve(length(suites))
+    for (suite in suites) {
+        var inscope argv <- [ctx.daslang, "dastest/dastest.das", "--", "--failures-only"]
+        if (suite.compile_only) {
+            argv |> push("--compile-only")
+        }
+        argv |> push("--test")
+        argv |> push(suite.path)
+        argvs |> emplace(argv)
+    }
+    let runs <- run_chunk_workers(argvs)
+    var outputs, failed : array<string>
+    var timed : array<tuple<secs : float; path : string>>
+    outputs |> reserve(length(suites))
+    timed |> reserve(length(suites))
+    for (suite, r in suites, runs) {
+        timed |> push((secs = r.seconds, path = suite.path))
+        let verb = suite.compile_only ? "Compiling" : "Running"
+        outputs |> push("{verb} tests {suite.path}\n{r.stdout}")
+        if (r.exit_code != 0) {
+            failed |> push(suite.path)
+        }
+    }
+    let total_s = seconds_since(t0)
+    let run_s = total_s - build_s
+    var rows <- ["build {fmt(":.1f", float(build_s))}s + run {fmt(":.1f", float(run_s))}s"]
+    sort(timed) <| cmp_by(-_.secs)
+    for (t, i in timed, count()) {
+        break if (i == 5)
+        rows |> push("{fmt(":8.1f", t.secs)}s  {t.path}")
+    }
+    let all_pass = empty(failed)
+    return GateResult(name = "utils-tests", status = all_pass ? GateStatus.Pass : GateStatus.Fail,
+        seconds = total_s, detail = all_pass ? "" : "utils suites failed: {join(failed, ", ")}",
+        output = join(outputs, "\n"), breakdown = join(rows, "\n"))
 }
 
 // ===== test suites =====
@@ -1330,24 +1413,60 @@ def classify_build_fail(gate, base : string; r : tuple<rc : int; out : string>; 
 }
 
 def gate_tests_interp(ctx : PreflightCtx) : GateResult {
+    let workers = default_isolated_threads(get_total_hw_threads())
     // 2x CI's per-file cap: the chained run executes suites while other gates load the
     // same cores, and CI's 30 measures scheduler pressure there, not the test
     return run_test_gate("tests-interp",
-        [ctx.daslang, "dastest/dastest.das", "--", "--failures-only", "--timing-outliers", "10", "--max-file-time", "60", "--timeout", "1800", "--test", "tests"],
+        [ctx.daslang, "dastest/dastest.das", "--", "--failures-only", "--timing-outliers", "10",
+            "--max-file-time", "60", "--isolated-mode", "--isolated-mode-threads", "{workers}",
+            "--batch", "20", "--test-timeout", "60", "--timeout", "1800", "--test", "tests"],
         "interpreter suite failures")
+}
+
+typedef ProbeResult = tuple<ok : bool; out : string>
+
+//! runs a no-op main after the `requires` lines, -jit when `jit`
+def private probe_program(ctx : PreflightCtx; jit : bool; requires : string) : ProbeResult {
+    let probe_file = unique_temp_path("preflight_probe", ".das")
+    let program = "options gen2\n{requires}[export]\ndef main() \{\n    print(\"ok\\n\")\n\}\n"
+    if (!fwrite(probe_file, program)) {
+        return (ok = false, out = "cannot write the probe file {probe_file}")
+    }
+    var argv <- [ctx.daslang]
+    if (jit) {
+        argv |> push("-jit")
+    }
+    argv |> push(probe_file)
+    let probe = run_argv(argv, 600.0)
+    remove(probe_file)
+    return (ok = probe.rc == 0, out = probe.out)
+}
+
+def gate_watchdog(ctx : PreflightCtx; jit : bool) : GateResult {
+    let t0 = ref_time_ticks()
+    let name = jit ? "watchdog-jit" : "watchdog-interp"
+    let probe = probe_program(ctx, jit, "require dashv\nrequire stddlg\nrequire stbimage\n")
+    if (!probe.ok) {
+        let needs = "{jit ? "dasLLVM, " : ""}dasHV, dasStdDlg and dasStbImage"
+        return GateResult(name = name, status = GateStatus.Skip, seconds = seconds_since(t0),
+            detail = "the probe failed (see output) - tests/watchdog needs a daslang with {needs}",
+            output = probe.out)
+    }
+    var argv <- [ctx.daslang, "dastest/dastest.das"]
+    if (jit) {
+        argv |> push_from(["-jit", "--", "--jit-opt-level=3"])
+    } else {
+        argv |> push("--")
+    }
+    argv |> push_from(["--failures-only", "--timing-outliers", "10", "--timeout", "1800",
+        "--test", "tests/watchdog"])
+    return run_test_gate(name, argv, "tests/watchdog failures")
 }
 
 def gate_tests_jit(ctx : PreflightCtx) : GateResult {
     let t0 = ref_time_ticks()
-    // probe: a JIT no-op run tells us whether dasLLVM is in this binary
-    let probe_file = unique_temp_path("preflight_jit_probe", ".das")
-    if (!fwrite(probe_file, "options gen2\n[export]\ndef main() \{\n    print(\"ok\\n\")\n\}\n")) {
-        return GateResult(name = "tests-jit", status = GateStatus.Skip, seconds = seconds_since(t0),
-            detail = "cannot write JIT probe file {probe_file}")
-    }
-    let probe = run_argv([ctx.daslang, "-jit", probe_file], 600.0)
-    remove(probe_file)
-    if (probe.rc != 0) {
+    let probe = probe_program(ctx, true, "")
+    if (!probe.ok) {
         return GateResult(name = "tests-jit", status = GateStatus.Skip, seconds = seconds_since(t0),
             detail = "JIT probe failed (see output) — most common cause: daslang built without dasLLVM (-DDAS_LLVM_DISABLED=OFF)", output = probe.out)
     }
@@ -1356,8 +1475,8 @@ def gate_tests_jit(ctx : PreflightCtx) : GateResult {
     return run_test_gate("tests-jit",
         [ctx.daslang, "dastest/dastest.das", "-jit", "--", "--jit-opt-level=3", "--failures-only", "--timing-outliers", "10",
             "--max-file-time", "{ctx.jit_max_file_time}", "--isolated-mode",
-            "--isolated-mode-threads", "{ctx.jit_jobs}", "--batch", "4",
-            "--test-timeout", "300", "--timeout", "1800", "--test", "tests"],
+            "--isolated-mode-threads", "{ctx.jit_jobs}", "--batch", "20",
+            "--test-timeout", "60", "--timeout", "1800", "--test", "tests"],
         "JIT suite failures")
 }
 
@@ -1367,7 +1486,7 @@ def gate_tests_cpp(ctx : PreflightCtx) : GateResult {
         return GateResult(name = "tests-cpp", status = GateStatus.Skip, seconds = seconds_since(t0),
             detail = "no configured build dir — cmake -B build first")
     }
-    let b = run_argv(["cmake", "--build", ctx.build_dir, "--config", ctx.config,
+    let b = run_build(ctx, ["cmake", "--build", ctx.build_dir, "--config", ctx.config,
         "--target", "tests-cpp-small", "--parallel", cmake_jobs(ctx)])
     if (b.rc != 0) {
         return classify_build_fail("tests-cpp", "the small C++ test binaries did not build",
@@ -1395,16 +1514,14 @@ def gate_tests_aot(ctx : PreflightCtx) : GateResult {
         return GateResult(name = "tests-aot", status = GateStatus.Skip, seconds = seconds_since(t0),
             detail = "no configured build dir — cmake -B build first")
     }
-    let b = run_argv(["cmake", "--build", ctx.build_dir, "--config", ctx.config, "--target", "test_aot", "--parallel", cmake_jobs(ctx)])
+    let b = run_build(ctx, ["cmake", "--build", ctx.build_dir, "--config", ctx.config,
+        "--target", "test_aot", "--parallel", cmake_jobs(ctx)])
     if (b.rc != 0) {
         // root CMakeLists gates tests/aot out on DAS_AOT_EXAMPLES_DISABLED and
         // 32-bit Windows — an absent target is a config choice, not a failure.
-        // Unknown-target spellings: MSBuild / Ninja / Make.
-        for (pat in ["MSB1009", "unknown target", "No rule to make target"]) {
-            if (find(b.out, pat) >= 0) {
-                return GateResult(name = "tests-aot", status = GateStatus.Skip, seconds = seconds_since(t0),
-                    detail = "test_aot target not in this build config (DAS_AOT_EXAMPLES_DISABLED, or 32-bit Windows) — the AOT suite runs on 64-bit CI lanes", output = b.out)
-            }
+        if (unknown_target(b.out)) {
+            return GateResult(name = "tests-aot", status = GateStatus.Skip, seconds = seconds_since(t0),
+                detail = "test_aot target not in this build config (DAS_AOT_EXAMPLES_DISABLED, or 32-bit Windows) — the AOT suite runs on 64-bit CI lanes", output = b.out)
         }
         return classify_build_fail("tests-aot",
             "test_aot build failed (new test dirs need tests/aot/CMakeLists.txt registration)", b, ctx.daslang, t0)
@@ -1417,9 +1534,13 @@ def gate_tests_aot(ctx : PreflightCtx) : GateResult {
         return GateResult(name = "tests-aot", status = GateStatus.Skip, seconds = seconds_since(t0),
             detail = "test_aot binary not found next to daslang ({test_aot})")
     }
+    let workers = default_isolated_threads(get_total_hw_threads())
     // 2x CI's per-file cap - same chained-load reasoning as gate_tests_interp
     var g <- run_test_gate("tests-aot",
-        [test_aot, "-use-aot", "dastest/dastest.das", "--", "--use-aot", "--failures-only", "--timing-outliers", "10", "--max-file-time", "60", "--timeout", "1800", "--test", "tests"],
+        [test_aot, "-use-aot", "dastest/dastest.das", "--", "--use-aot", "--failures-only",
+            "--timing-outliers", "10", "--max-file-time", "60", "--isolated-mode",
+            "--isolated-mode-threads", "{workers}", "--batch", "20", "--test-timeout", "60",
+            "--timeout", "1800", "--test", "tests"],
         "AOT suite failures", t0)
     if (g.status == GateStatus.Fail) {
         if (find(g.output, "error[50101]") >= 0) {
@@ -1531,7 +1652,9 @@ def gate_dasllama(ctx : PreflightCtx; suite : string) : GateResult {
 // ===== orchestration =====
 
 //! tiers: `fast` runs serially first on every run and a red stops the run; `lane` runs only under --full,
-//! every lane at once, so the wall is the longest lane; `module` never runs from a tier - `--only <gate>`
+//! every lane at once (their `cmake --build` steps in turn), so the
+//! wall is the longest lane; `module` never runs from a tier -
+//! `--only <gate>`
 //! runs it when the module is the work. `reach`: the path prefixes whose change reaches the gate (the core
 //! reaches everything; empty = the gate runs whatever changed)
 struct GateInfo {
@@ -1539,7 +1662,6 @@ struct GateInfo {
     tier : string
     doc : string
     reach : array<string>
-    builds : bool = false   //! runs `cmake --build` in the shared build dir - two at once collide
 }
 
 def gate_table() : array<GateInfo> {
@@ -1563,24 +1685,30 @@ def gate_table() : array<GateInfo> {
         GateInfo(name = "ci-das", tier = "fast", doc = "compile-only sweep of CI-only das surface (ci_only_das.txt)"),
         GateInfo(name = "ci-matrix", tier = "fast", doc = "python3 ci/test_ci_matrix.py - the CI job matrices per event and the extended_checks role conditions (mirrors CI's core-role step)", reach <- [".github/", "ci/"]),
         GateInfo(name = "compile-sweep", tier = "fast", doc = "compile-only of every program root under utils/, examples/, tutorials/ and the modules' examples and utils, in parallel (the per-PR form of CI's examples and tutorial runs)"),
-        GateInfo(name = "docs", tier = "lane", builds = true,
+        GateInfo(name = "docs", tier = "lane",
             doc = "the seven doc.yml gates (das2rst, imgui2rst, vulkan2rst, stubs, " +
                 "uncategorized, docs/untracked, sphinx html)",
             reach <- ["doc/", "daslib/", "src/builtin/", "modules/dasImgui/", "modules/dasVulkan/",
                 "modules/dasLLAMA/dasllama/"]),
-        GateInfo(name = "tests-cpp", tier = "lane", doc = "ctest -L small"),
+        GateInfo(name = "tests-cpp", tier = "lane", doc = "build tests-cpp-small + ctest -L small"),
         GateInfo(name = "tests-interp", tier = "lane", doc = "full interpreter suite"),
         GateInfo(name = "tests-jit", tier = "lane", doc = "full JIT suite (skips when dasLLVM absent)"),
-        GateInfo(name = "tests-aot", tier = "lane", builds = true,
+        GateInfo(name = "watchdog-interp", tier = "lane",
+            doc = "tests/watchdog under the interpreter - the sweeps skip the folder"
+                + " (CI: the nightly's run_tests_watchdog)"),
+        GateInfo(name = "watchdog-jit", tier = "lane",
+            doc = "tests/watchdog under -jit (skips when dasLLVM absent)"),
+        GateInfo(name = "tests-aot", tier = "lane",
             doc = "build test_aot + full AOT suite (per-PR CI compiles only the subset; " +
                 "the sweep is nightly's)"),
-        GateInfo(name = "utils-tests", tier = "lane", builds = true,
-            doc = "run_utils_tests - every utils/*/tests suite (mirrors CI's extended_checks step)",
+        GateInfo(name = "utils-tests", tier = "lane",
+            doc = "the suites of run_utils_tests - every utils/*/tests suite"
+                + " (mirrors CI's extended_checks step)",
             reach <- ["utils/"]),
-        GateInfo(name = "sequence", tier = "module", builds = true,
+        GateInfo(name = "sequence", tier = "module",
             doc = "sequence game release smoke; nightly CI - run it when working on the game",
             reach <- ["examples/games/sequence/"]),
-        GateInfo(name = "imgui", tier = "module", builds = true,
+        GateInfo(name = "imgui", tier = "module",
             doc = "dasImgui playwright suite; nightly CI - run it when working on dasImgui",
             reach <- ["modules/dasImgui/", "modules/dasGlfw/", "modules/dasClipboard/"]),
         GateInfo(name = "dasllama-model-free", tier = "module", doc = "dasLLAMA model-free suite via tests/run.das - the module's every-change gate (run.das -- --changed while working)", reach <- ["modules/dasLLAMA/"]),
@@ -1605,63 +1733,85 @@ def want_gate(cfg : Config; info : GateInfo) : bool {
     return tier_runs(info.tier, cfg.full)
 }
 
-//! one lane = one child preflight running `--only <gate>` with the parent's settings; every lane at once
-//! (one thread per child), so the wall is the longest lane. The child's own verdict lines are the result.
-//! the lanes that build in the shared build dir, in table order
-def private building_gates() => <- [for (g in gate_table()); g.name; where g.builds]
+def private lane_child_argv(ctx : PreflightCtx; cfg : Config;
+                            name, build_lock : string) : array<string> {
+    var av <- [ctx.daslang, "utils/internal/preflight/main.das", "--",
+               "--only", name, "--base", cfg.base,
+               "--daslang", ctx.daslang, "--build-dir", cfg.build_dir,
+               "--build-lock", build_lock]
+    if (cfg.jobs > 0) {
+        av |> push("-j")
+        av |> push("{cfg.jobs}")
+    }
+    if (cfg.jit_jobs >= 0) {
+        av |> push("--jit-jobs")
+        av |> push("{cfg.jit_jobs}")
+    }
+    if (cfg.jit_max_file_time >= 0.0) {
+        av |> push("--jit-max-file-time")
+        av |> push("{cfg.jit_max_file_time}")
+    }
+    if (!empty(cfg.config_file)) {
+        av |> push("--config-file")
+        av |> push(cfg.config_file)
+    }
+    if (cfg.verbose) {
+        av |> push("-v")
+    }
+    return <- av
+}
 
-//! lanes as children: a run-only lane a child each, at once; the
-//! building ones one child, in turn
-def private run_lanes(ctx : PreflightCtx; cfg : Config; names : array<string>) : array<GateResult> {
-    let groups <- lane_groups(names, building_gates())
+//! a lane child's own verdict lines are the lane's result
+def private lane_verdicts(name, out : string; exit_code : int; verbose : bool) : array<GateResult> {
+    var results : array<GateResult>
+    var inscope reports <- parse_gate_reports(out)
+    if (empty(reports)) {
+        results |> emplace(GateResult(name = name, status = GateStatus.Fail,
+            detail = "lane child exited {exit_code} without a verdict", output = out))
+        return <- results
+    }
+    results |> reserve(length(reports))
+    for (rep in reports) {
+        var r = GateResult(name = rep.name, seconds = rep.seconds, detail = rep.detail,
+            breakdown = rep.breakdown)
+        r.status = (rep.tag == "PASS" ? GateStatus.Pass
+            : (rep.tag == "SKIP" ? GateStatus.Skip : GateStatus.Fail))
+        if (r.status == GateStatus.Fail || verbose) {
+            r.output = out
+        }
+        results |> emplace(r)
+    }
+    return <- results
+}
+
+//! every lane at once (one thread per child), so the wall is the
+//! longest lane
+def private run_lanes(ctx : PreflightCtx; cfg : Config; names : array<string>;
+                      build_lock : string) : array<GateResult> {
     var argvs : array<array<string>>
-    argvs |> reserve(length(groups))
-    for (group in groups) {
-        var inscope av <- [ctx.daslang, "utils/internal/preflight/main.das", "--",
-                   "--only", join(group, ","), "--base", cfg.base,
-                   "--daslang", ctx.daslang, "--build-dir", cfg.build_dir]
-        if (cfg.jobs > 0) {
-            av |> push("-j")
-            av |> push("{cfg.jobs}")
-        }
-        if (cfg.jit_jobs >= 0) {
-            av |> push("--jit-jobs")
-            av |> push("{cfg.jit_jobs}")
-        }
-        if (cfg.jit_max_file_time >= 0.0) {
-            av |> push("--jit-max-file-time")
-            av |> push("{cfg.jit_max_file_time}")
-        }
-        if (!empty(cfg.config_file)) {
-            av |> push("--config-file")
-            av |> push(cfg.config_file)
-        }
-        if (cfg.verbose) {
-            av |> push("-v")
-        }
+    argvs |> reserve(length(names))
+    for (name in names) {
+        var inscope av <- lane_child_argv(ctx, cfg, name, build_lock)
         argvs |> emplace(av)
     }
     let children <- run_chunk_workers(argvs)
     var results : array<GateResult>
     results |> reserve(length(names) + 8)   // the docs lane reports its seven gates
-    for (group, child in groups, children) {
-        let name = join(group, ",")
-        var inscope reports <- parse_gate_reports(child.stdout)
-        if (empty(reports)) {
-            results |> emplace(GateResult(name = name, status = GateStatus.Fail,
-                detail = "lane child exited {child.exit_code} without a verdict", output = child.stdout))
-            continue
-        }
-        for (rep in reports) {
-            var r = GateResult(name = rep.name, seconds = rep.seconds, detail = rep.detail, breakdown = rep.breakdown)
-            r.status = rep.tag == "PASS" ? GateStatus.Pass : (rep.tag == "SKIP" ? GateStatus.Skip : GateStatus.Fail)
-            if (r.status == GateStatus.Fail || cfg.verbose) {
-                r.output = child.stdout
-            }
-            results |> emplace(r)
-        }
+    for (name, child in names, children) {
+        results |> push_from(lane_verdicts(name, child.stdout, child.exit_code, cfg.verbose))
     }
     return <- results
+}
+
+[arch(at="README.md#docs-early")]
+def private docs_starts_early(ctx : PreflightCtx; cfg : Config) : bool {
+    let lanes_at_once = cfg.full && empty(cfg.only) && !cfg.serial
+    return false if (!lanes_at_once || get_platform_name() != "windows")
+    for (info in gate_table()) {
+        continue if (info.name != "docs")
+        return want_gate(cfg, info) && reach_hit(ctx.changed_all, info.reach)
+    }
+    return false
 }
 
 def status_tag(s : GateStatus) : string {
@@ -1747,7 +1897,8 @@ def main() : int { // nolint:STYLE037,STYLE038 — the gate loop + CLI surface; 
     var ctx = PreflightCtx(base = cfg.base, jobs = cfg.jobs,
                            jit_jobs = jit_jobs,
                            jit_max_file_time = jit_max_file_time,
-                           verbose = cfg.verbose)
+                           verbose = cfg.verbose,
+                           build_lock = cfg.build_lock)
     ctx.daslang = find_daslang(cfg.daslang_bin)
     if (empty(ctx.daslang)) {
         to_log(LOG_ERROR, "daslang binary not found — build it (cmake --build build --target daslang) or pass --daslang / set DASLANG\n")
@@ -1785,6 +1936,15 @@ def main() : int { // nolint:STYLE037,STYLE038 — the gate loop + CLI surface; 
     var results : array<GateResult>
     let t_all = ref_time_ticks()
     var lanes : array<string>
+    let lanes_build_lock = unique_temp_path("preflight_build", ".lock")
+    var early_docs : process
+    var early_docs_out : array<string>
+    if (docs_starts_early(ctx, cfg)) {
+        to_log(LOG_INFO, "[RUN ] docs, beside the fast tier\n")
+        let noenv : array<string>
+        let docs_argv <- lane_child_argv(ctx, cfg, "docs", lanes_build_lock)
+        early_docs = unsafe(spawn_process(docs_argv, "", noenv))
+    }
     let by_only = !empty(cfg.only)   // a gate named outright runs whatever changed - "working on imgui: run imgui"
     for (info in gate_table()) {
         continue if (!want_gate(cfg, info))
@@ -1796,7 +1956,11 @@ def main() : int { // nolint:STYLE037,STYLE038 — the gate loop + CLI surface; 
             continue
         }
         if (info.tier == "lane" && !by_only && !cfg.serial) {
-            lanes |> push(info.name)   // deferred: every lane runs at once after the fast tier
+            // deferred to run with the lanes; docs may be running already
+            let docs_running = info.name == "docs" && early_docs != null
+            if (!docs_running) {
+                lanes |> push(info.name)
+            }
             continue
         }
         to_log(LOG_INFO, "[RUN ] {info.name}\n")
@@ -1839,6 +2003,10 @@ def main() : int { // nolint:STYLE037,STYLE038 — the gate loop + CLI surface; 
                 r <- gate_tests_interp(ctx)
             } elif (info.name == "tests-jit") {
                 r <- gate_tests_jit(ctx)
+            } elif (info.name == "watchdog-interp") {
+                r <- gate_watchdog(ctx, false)
+            } elif (info.name == "watchdog-jit") {
+                r <- gate_watchdog(ctx, true)
             } elif (info.name == "tests-aot") {
                 r <- gate_tests_aot(ctx)
             } elif (info.name == "sequence") {
@@ -1864,32 +2032,48 @@ def main() : int { // nolint:STYLE037,STYLE038 — the gate loop + CLI surface; 
                 break
             }
         }
+        if (early_docs != null) {
+            unsafe(process_drain(early_docs) $(line) {
+                early_docs_out |> push(line)
+            })
+        }
         break if (cfg.fail_fast && any_fail)
     }
-    if (!empty(lanes)) {
+    if (!empty(lanes) || early_docs != null) {
         var fast_red = false
         for (r in results) {
             fast_red ||= r.status == GateStatus.Fail
         }
         if (fast_red) {
             results |> reserve(length(results) + length(lanes))
+            if (early_docs != null) {
+                unsafe(close_process(early_docs))
+                lanes |> push("docs")
+            }
             for (name in lanes) {   // the expensive lanes wait for a green fast tier
                 var r = GateResult(name = name, status = GateStatus.Skip, detail = "not run: the fast tier is red")
                 report_gate(r, cfg.verbose)
                 results |> emplace(r)
             }
         } else {
-            var at_once, in_turn : array<string>
-            for (group in lane_groups(lanes, building_gates())) {
-                if (length(group) == 1) {
-                    at_once |> push(group[0])
-                } else {
-                    in_turn |> push_from(group)
+            to_log(LOG_INFO, "[RUN ] lanes at once: {join(lanes, ", ")}\n")
+            var lane_results <- run_lanes(ctx, cfg, lanes, lanes_build_lock)
+            rmdir(lanes_build_lock)
+            if (early_docs != null) {
+                var rc = process_running
+                while (rc == process_running) {
+                    unsafe(process_drain(early_docs) $(line) {
+                        early_docs_out |> push(line)
+                    })
+                    rc = unsafe(process_wait(early_docs, 0.5))
                 }
+                unsafe(process_drain(early_docs) $(line) {
+                    early_docs_out |> push(line)
+                })
+                unsafe(close_process(early_docs))
+                let docs_out = join(early_docs_out, "\n")
+                lane_results |> push_from(lane_verdicts("docs", docs_out, rc, cfg.verbose))
             }
-            let turn = empty(in_turn) ? "" : "; building in turn beside them: {join(in_turn, ", ")}"
-            to_log(LOG_INFO, "[RUN ] lanes at once: {join(at_once, ", ")}{turn}\n")
-            let lane_results <- run_lanes(ctx, cfg, lanes)
             for (r in lane_results) {
                 report_gate(r, cfg.verbose)
             }
