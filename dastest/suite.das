@@ -351,6 +351,7 @@ def private together_root(files : array<string>; ctx : SuiteCtx) : TogetherRoot 
         }
     }
     var written = false
+    mkdir_rec(root_dir)
     fopen(root_path, "wb") $(fw) {
         if (fw != null) {
             fwrite(fw, root_text)
