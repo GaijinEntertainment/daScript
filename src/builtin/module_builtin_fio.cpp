@@ -1270,27 +1270,35 @@ namespace das {
         _exit(ec);
     }
 
+    // src/builtin/ARCHITECTURE_FIO.md#spawn-window
+    static mutex g_spawnWindow;
+
     int builtin_popen_impl ( const char * cmd, bool bin, const TBlock<void,const FILE *> & blk, Context * context, LineInfoArg * at ) {
         if ( !cmd ) {
             context->throw_error_at(at, "popen of null");
             return -1;
         }
-#ifdef _WIN32
-        FILE * f = _popen(cmd, bin ? "rb" : "rt");
-#elif defined(__linux__)
-        FILE * f = popen(cmd, "r");
-#elif defined(__APPLE__)
         FILE * f = nullptr;
+#if defined(__APPLE__)
         static mutex mtx;
+#endif
         {
+#if defined(__APPLE__)
             // `popen` sometimes returns 127 on OSX when executed in parallel.
             // Related: https://github.com/microsoft/vcpkg-tool/pull/695#discussion_r973364608
             lock_guard<mutex> lock(mtx);
-            f = popen(cmd, "r+");
-        }
-#else
-        FILE * f = popen(cmd, "r+");
 #endif
+            lock_guard<mutex> window(g_spawnWindow);
+#ifdef _WIN32
+            f = _popen(cmd, bin ? "rb" : "rt");
+#elif defined(__linux__)
+            f = popen(cmd, "r");
+#elif defined(__APPLE__)
+            f = popen(cmd, "r+");
+#else
+            f = popen(cmd, "r+");
+#endif
+        }
         vec4f args[1];
         args[0] = cast<FILE *>::from(f);
         context->invoke(blk, args, nullptr, at);
@@ -1331,7 +1339,9 @@ namespace das {
         sa.bInheritHandle = TRUE;
         sa.lpSecurityDescriptor = NULL;
         HANDLE hReadPipe = NULL, hWritePipe = NULL;
+        unique_lock<mutex> window(g_spawnWindow);
         if ( !CreatePipe(&hReadPipe, &hWritePipe, &sa, 0) ) {
+            window.unlock();
             vec4f args[1]; args[0] = cast<FILE *>::from(nullptr);
             context->invoke(blk, args, nullptr, at);
             return -1;
@@ -1361,6 +1371,7 @@ namespace das {
         BOOL created = !cmdLine.empty() && CreateProcessW(NULL, &cmdLine[0], NULL, NULL, TRUE,
             CREATE_NO_WINDOW | CREATE_SUSPENDED, NULL, NULL, &si, &pi);
         CloseHandle(hWritePipe);
+        window.unlock();
         if ( !created ) {
             CloseHandle(hReadPipe);
             if ( hJob ) CloseHandle(hJob);
@@ -1401,7 +1412,9 @@ namespace das {
 #else
         // Unix: fork/exec with pipe + watchdog thread
         int pipefd[2];
+        unique_lock<mutex> window(g_spawnWindow);
         if ( pipe(pipefd) == -1 ) {
+            window.unlock();
             vec4f args[1]; args[0] = cast<FILE *>::from(nullptr);
             context->invoke(blk, args, nullptr, at);
             return -1;
@@ -1410,6 +1423,7 @@ namespace das {
         if ( pid == -1 ) {
             close(pipefd[0]);
             close(pipefd[1]);
+            window.unlock();
             vec4f args[1]; args[0] = cast<FILE *>::from(nullptr);
             context->invoke(blk, args, nullptr, at);
             return -1;
@@ -1426,6 +1440,7 @@ namespace das {
         }
         // Parent process
         close(pipefd[1]);
+        window.unlock();
         setpgid(pid, pid);
         FILE * f = fdopen(pipefd[0], "r");
         atomic<bool> timedOut{false};
@@ -1522,6 +1537,7 @@ namespace das {
         sa.nLength = sizeof(SECURITY_ATTRIBUTES);
         sa.bInheritHandle = TRUE;
         sa.lpSecurityDescriptor = NULL;
+        lock_guard<mutex> window(g_spawnWindow);
         HANDLE hNullInput = CreateFileA("NUL", GENERIC_READ,
             FILE_SHARE_READ | FILE_SHARE_WRITE, &sa,
             OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
@@ -1591,6 +1607,7 @@ namespace das {
         }
         cargv.push_back(nullptr);
         int execError[2];
+        unique_lock<mutex> window(g_spawnWindow);
         if ( pipe(execError) == -1 ) return false;
         int descriptorFlags = fcntl(execError[1], F_GETFD);
         if ( descriptorFlags == -1
@@ -1636,6 +1653,7 @@ namespace das {
             _exit(127);
         }
         close(execError[1]);
+        window.unlock();
         // Reap only the short-lived launcher. Its grandchild is adopted by
         // init and remains independent of the caller without becoming a
         // zombie in this process.
@@ -1750,7 +1768,9 @@ namespace das {
         sa.bInheritHandle = TRUE;
         sa.lpSecurityDescriptor = NULL;
         HANDLE hReadPipe = NULL, hWritePipe = NULL;
+        unique_lock<mutex> window(g_spawnWindow);
         if ( !CreatePipe(&hReadPipe, &hWritePipe, &sa, 0) ) {
+            window.unlock();
             vec4f cargs[1]; cargs[0] = cast<FILE *>::from(nullptr);
             context->invoke(blk, cargs, nullptr, at);
             return -1;
@@ -1799,6 +1819,7 @@ namespace das {
             createFlags, lpEnv, wcwd.empty() ? NULL : wcwd.c_str(), &si, &pi);
         CloseHandle(hWritePipe);
         if ( hNullInput != INVALID_HANDLE_VALUE ) CloseHandle(hNullInput);
+        window.unlock();
         if ( !created ) {
             CloseHandle(hReadPipe);
             if ( hJob ) CloseHandle(hJob);
@@ -1842,7 +1863,9 @@ namespace das {
         return timedOut ? DAS_POPEN_TIMEOUT : (int)exitCode;
 #else
         int pipefd[2];
+        unique_lock<mutex> window(g_spawnWindow);
         if ( pipe(pipefd) == -1 ) {
+            window.unlock();
             vec4f cargs[1]; cargs[0] = cast<FILE *>::from(nullptr);
             context->invoke(blk, cargs, nullptr, at);
             return -1;
@@ -1860,6 +1883,7 @@ namespace das {
         if ( pid == -1 ) {
             close(pipefd[0]);
             close(pipefd[1]);
+            window.unlock();
             vec4f cargs[1]; cargs[0] = cast<FILE *>::from(nullptr);
             context->invoke(blk, cargs, nullptr, at);
             return -1;
@@ -1885,6 +1909,7 @@ namespace das {
             _exit(127);
         }
         close(pipefd[1]);
+        window.unlock();
         FILE * f = fdopen(pipefd[0], "r");
         atomic<bool> timedOut{false};
         atomic<bool> processDone{false};
@@ -1953,7 +1978,9 @@ namespace das {
         sa.lpSecurityDescriptor = NULL;
         HANDLE hStdinR = NULL, hStdinW = NULL;
         HANDLE hStdoutR = NULL, hStdoutW = NULL;
+        unique_lock<mutex> window(g_spawnWindow);
         if ( !CreatePipe(&hStdinR, &hStdinW, &sa, 0) ) {
+            window.unlock();
             vec4f cargs[2];
             cargs[0] = cast<FILE *>::from(nullptr);
             cargs[1] = cast<FILE *>::from(nullptr);
@@ -1962,6 +1989,7 @@ namespace das {
         }
         if ( !CreatePipe(&hStdoutR, &hStdoutW, &sa, 0) ) {
             CloseHandle(hStdinR); CloseHandle(hStdinW);
+            window.unlock();
             vec4f cargs[2];
             cargs[0] = cast<FILE *>::from(nullptr);
             cargs[1] = cast<FILE *>::from(nullptr);
@@ -1986,6 +2014,7 @@ namespace das {
         // Close child-side pipe ends in parent.
         CloseHandle(hStdinR);
         CloseHandle(hStdoutW);
+        window.unlock();
         if ( !created ) {
             CloseHandle(hStdinW);
             CloseHandle(hStdoutR);
@@ -2035,7 +2064,9 @@ namespace das {
         return (int)exitCode;
 #else
         int inPipe[2], outPipe[2];
+        unique_lock<mutex> window(g_spawnWindow);
         if ( pipe(inPipe) == -1 ) {
+            window.unlock();
             vec4f cargs[2];
             cargs[0] = cast<FILE *>::from(nullptr);
             cargs[1] = cast<FILE *>::from(nullptr);
@@ -2044,6 +2075,7 @@ namespace das {
         }
         if ( pipe(outPipe) == -1 ) {
             close(inPipe[0]); close(inPipe[1]);
+            window.unlock();
             vec4f cargs[2];
             cargs[0] = cast<FILE *>::from(nullptr);
             cargs[1] = cast<FILE *>::from(nullptr);
@@ -2060,6 +2092,7 @@ namespace das {
         if ( pid == -1 ) {
             close(inPipe[0]); close(inPipe[1]);
             close(outPipe[0]); close(outPipe[1]);
+            window.unlock();
             vec4f cargs[2];
             cargs[0] = cast<FILE *>::from(nullptr);
             cargs[1] = cast<FILE *>::from(nullptr);
@@ -2079,6 +2112,8 @@ namespace das {
         }
         close(inPipe[0]);
         close(outPipe[1]);
+        fcntl(inPipe[1], F_SETFD, FD_CLOEXEC);
+        window.unlock();
         // Wrap each pipe end in a FILE*. If fdopen fails, close the raw fd
         // we still own — otherwise the child's stdin write end leaks and
         // waitpid would deadlock (child never sees EOF).
@@ -2153,7 +2188,9 @@ namespace das {
         sa.lpSecurityDescriptor = NULL;
         HANDLE hRead = NULL, hWrite = NULL;
         const DWORD spawnPipeBytes = 64 * 1024;   // src/builtin/ARCHITECTURE.md#spawned-child-stdout-pipe
+        unique_lock<mutex> window(g_spawnWindow);
         if ( !CreatePipe(&hRead, &hWrite, &sa, spawnPipeBytes) ) {
+            window.unlock();
             context->throw_error_at(at, "spawn_process: CreatePipe failed");
             return nullptr;
         }
@@ -2185,6 +2222,7 @@ namespace das {
             CREATE_NO_WINDOW | CREATE_SUSPENDED | CREATE_UNICODE_ENVIRONMENT, lpEnv, wcwd.empty() ? NULL : wcwd.c_str(), &si, &pi);
         CloseHandle(hWrite);
         if ( hNull != INVALID_HANDLE_VALUE ) CloseHandle(hNull);
+        window.unlock();
         if ( !ok ) {
             // src/builtin/ARCHITECTURE.md#child-cannot-start
             CloseHandle(hRead);
@@ -2212,7 +2250,9 @@ namespace das {
         string absExe;
         posixAbsoluteExe(cargv, hasCwd, absExe);
         int pipefd[2];
+        unique_lock<mutex> window(g_spawnWindow);
         if ( pipe(pipefd) == -1 ) {
+            window.unlock();
             context->throw_error_at(at, "spawn_process: pipe failed");
             return nullptr;
         }
@@ -2221,6 +2261,7 @@ namespace das {
         if ( pid == -1 ) {
             close(pipefd[0]);
             close(pipefd[1]);
+            window.unlock();
             context->throw_error_at(at, "spawn_process: fork failed");
             return nullptr;
         }
@@ -2238,6 +2279,7 @@ namespace das {
             _exit(127);
         }
         close(pipefd[1]);
+        window.unlock();
         fcntl(pipefd[0], F_SETFL, O_NONBLOCK);      // drain never blocks the tick
         DasSubProcess * p = new DasSubProcess();
         p->pid = pid;

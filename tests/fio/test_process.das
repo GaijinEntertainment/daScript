@@ -1,9 +1,10 @@
 options gen2
-options no_aot
+options no_aot   //! every test here starts children and waits on them
 
 require dastest/testing_boost public
 require daslib/fio
 require daslib/strings_boost
+require daslib/jobque_boost
 
 // argv[0] is the running interpreter (dastest is launched as `daslang dastest/dastest.das ...`),
 // so it spawns the daslang we want the child to run. Same trick as popen_argv.das.
@@ -272,6 +273,111 @@ def test_exit_carries_its_code(t : T?) {
             let rc = run_and_capture(argv, output, child_deadline(15.0))
             t |> equal(rc, code, "the child's exit code, got:\n{output}")
             t |> success(!(output |> contains("[daslang atexit]")), "the runtime's atexit audit must stay quiet on a deliberate exit, got:\n{output}")
+        }
+    }
+}
+
+//! the round's folder, crossing to a child's thread
+struct SpawnWindowRound {
+    root : string
+}
+
+//! the piped spawns, each with a span the spawn lock covers
+let SPAWN_KINDS = fixed_array("popen_argv", "popen", "popen_timeout", "popen_argv_pipe",
+    "spawn_process")
+
+//! Starts the round's short or long child through spawn kind `kind`
+//! and reads it to end of file; `<name>_done` appears after that.
+def spawn_window_child(root : string; kind : int; long_child : bool) {
+    let name = long_child ? "long" : "short"
+    let fixture = path_join(get_das_root(), "tests/fio/_fixture_process_child.das")
+    let ready = path_join(root, "{name}_ready")
+    let release = path_join(root, long_child ? "release" : "go")
+    let noenv : array<string>
+    let argv <- [das_exe(), "-dasroot", get_das_root(), "-no-module-cache", fixture, "--",
+        ready, release]
+    let line = join(argv, " ")
+    if (kind == 0) {
+        unsafe(popen_argv(argv, root, noenv, 120.0, $(f) {
+            while (f != null && !feof(f)) {
+                fgets(f)
+            }
+        }))
+    } elif (kind == 1) {
+        unsafe(popen(line, $(f) {
+            while (f != null && !feof(f)) {
+                fgets(f)
+            }
+        }))
+    } elif (kind == 2) {
+        unsafe(popen_timeout(line, 120.0, $(f) {
+            while (f != null && !feof(f)) {
+                fgets(f)
+            }
+        }))
+    } elif (kind == 3) {
+        unsafe(popen_argv_pipe(argv) $(_w, r) {
+            while (r != null && !feof(r)) {
+                fgets(r)
+            }
+        })
+    } else {
+        var p = unsafe(spawn_process(argv, root, noenv))
+        while (unsafe(process_drain(p) $(_line) {})) {
+            sleep(5u)
+        }
+        unsafe(close_process(p))
+    }
+    fwrite(path_join(root, "{name}_done"), "done")
+}
+
+//! one round: both children through one spawn kind, from two threads
+def spawn_window_round(t : T?; kind : int) {
+    let root = make_temp_root(t, "das_spawn_window_")
+    return if (empty(root))
+    t |> success(fwrite(path_join(root, "go"), "go"), "the short child's release")
+    with_stream() $(var roots : Stream?) {
+        for (_k in range(2)) {
+            roots |> push_archive(SpawnWindowRound(root = root))
+        }
+        with_job_status(2) $(completion) {
+            for (k in range(2)) {
+                new_thread <| @capture(= k, = kind) {
+                    var mine : string
+                    roots |> try_pop_archive() $(var r : SpawnWindowRound&) {
+                        mine = clone_string(r.root)
+                    }
+                    spawn_window_child(mine, kind, k == 1)
+                    roots |> release
+                    completion |> notify_and_release()
+                }
+            }
+            let shortDone = path_join(root, "short_done")
+            let started = ref_time_ticks()
+            // under the long child's own 30 s guard, which ends it
+            while (!fexist(shortDone) && get_time_usec(started) < 20000000) {
+                sleep(5u)
+            }
+            t |> success(fexist(shortDone),
+                "the short child's pipe closed with its own exit")
+            t |> success(!fexist(path_join(root, "long_done")),
+                "the long child still parked")
+            fwrite(path_join(root, "release"), "go")
+            completion |> join()
+        }
+    }
+    rmdir_rec(root)
+}
+
+// src/builtin/ARCHITECTURE_FIO.md#spawn-window
+[test(description = "Two threads start a child each at once through each piped spawn, and the reader of the child that exits first reaches end of file while the other child still runs", timeout = 1200)]
+def test_spawn_window(t : T?) {
+    for (kind in range(length(SPAWN_KINDS))) {
+        for (round in range(3)) {
+            let what = "{SPAWN_KINDS[kind]}, round {round}"
+            t |> run("{what}: the short reader returns, the long child parked") @(t : T?) {
+                spawn_window_round(t, kind)
+            }
         }
     }
 }
