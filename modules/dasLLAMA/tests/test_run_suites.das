@@ -14,6 +14,7 @@ require math
 // The runner's per-PR suite split, model-free: `model-free` holds only files that reach no
 // machine-local fixture root, `stocked` holds every file that does, the two never share a file,
 // and every listed file exists. Read off the files' own text, so a misfiled test reds here.
+// On Windows a cell that starts the runner over a POSIX no-op child stops after its pure asserts.
 
 //! the calls through which a test reaches a machine-local fixture root (_model_tier.das)
 let FIXTURE_ROOTS <- ["models_dir()", "model_available(", "llama2c_dir()", "whisper_dir()", "corpus_dir()", "asr_clip(", "asr_oracle_dir("]
@@ -904,6 +905,35 @@ def test_child_cache_dir(t : T?) {
     if (find(out, "CACHE none") < 0) {
         t |> success(find(out, " --module-cache-dir {CHILD_CACHE_ROOT}/") >= 0, "every child command carries the cache folder:\n{out}")
     }
+}
+
+[test(description = "`pass_stamp` changes with the box's CPU and with the size, the time or the presence of a model file the child opens, holds while they hold, and a --skip-fully-cached run hands every child the flag with its stamp while a plain run hands none")]
+def test_pass_stamp(t : T?) {
+    let dir = path_join(test_temp_dir(), "pass_stamp_models")
+    mkdir_rec(dir)
+    let model = path_join(dir, "a.gguf")
+    fwrite(model, "one")
+    let names <- ["a.gguf", "absent.gguf"]
+    let base = pass_stamp(dir, names, "cpu one")
+    t |> equal(pass_stamp(dir, names, "cpu one"), base, "the same box and files give the same stamp")
+    t |> success(pass_stamp(dir, names, "cpu two") != base, "another CPU is another stamp")
+    fwrite(path_join(dir, "absent.gguf"), "x")
+    let landed = pass_stamp(dir, names, "cpu one")
+    t |> success(landed != base, "a model file that lands is another stamp")
+    fwrite(model, "longer")
+    let resized = pass_stamp(dir, names, "cpu one")
+    t |> success(resized != landed, "a model file of another size is another stamp")
+    var built : FStat
+    var why : string
+    let retimed = stat(das_exe(), built) && set_mtime(model, built.mtime, why)
+    t |> success(retimed, "the model file takes the binary's time: {why}")
+    t |> success(pass_stamp(dir, names, "cpu one") != resized, "a model file of another time is another stamp")
+    return if (get_platform_name() == "windows")   //! the dry run's no-op child binary is a POSIX one, as test_runner_dry_run's
+    var out : string
+    t |> equal(run_runner("--area infra --das /usr/bin/true --skip-fully-cached", out), 0, "a flagged infra dry run exits clean:\n{out}")
+    t |> success(find(out, " --skip-fully-cached --pass-stamp 0x") >= 0, "a child command carries the flag and its stamp:\n{out}")
+    t |> equal(run_runner("--area infra --das /usr/bin/true", out), 0, "a plain infra dry run exits clean:\n{out}")
+    t |> success(find(out, "--skip-fully-cached") < 0, "a plain run's children get no flag:\n{out}")
 }
 
 [test(description = "`child_chunks` batches files in order by the batch size, and gives the image file on area runs, an expected-failure compile test, and a tier contract file a child of its own that leaves the files around it in one batch")]

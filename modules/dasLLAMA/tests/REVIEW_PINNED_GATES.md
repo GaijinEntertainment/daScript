@@ -22,9 +22,9 @@ it was measured on. The pinned set, one entry a line, each with what it must kee
   `MODULE_AREAS` row that holds `llm` -, the children's module-cache folder, the model files a
   run names that its models directory lacks (the `MISSING` lines), the image reap behind
   `--reap-images` and its gate, the K/V start `--poison-kv` hands the children, the `options persistent_heap` line of the
-  `stocked` files, the model categories and families, the `--category` run, a child's `--run-env` filters, the forced tune file.
-- `test_facade_docs.das`'s `test_program_roots` cell must hold the `ROOT_DIRS` sweep,
-  `options stack = 524288` and the prefill intent.
+  `stocked` files, the model categories and families, the `--category` run, a child's `--run-env` filters, the forced tune file,
+  the `--skip-fully-cached` hand-off (`pass_stamp`'s inputs, the flag and stamp a flagged run's children alone carry).
+- `test_facade_docs.das`'s `test_program_roots` cell must hold the `ROOT_DIRS` sweep, `options stack = 524288` and the prefill intent.
 - `test_env_registry.das` must hold the `../ENVIRONMENT.md` knob contract.
 - `test_model_specs.das` must hold `../performance/model_specs.das`'s model-set table, `spec_by_file` answering by the
   models-dir path and by the gguf's base name (a split-shard row sits in a subfolder), the fixture compare

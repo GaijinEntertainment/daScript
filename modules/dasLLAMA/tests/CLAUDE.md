@@ -23,6 +23,7 @@ DASLLAMA_GPU=1 DASLLAMA_CUDA=1 ./bin/daslang -jit modules/dasLLAMA/tests/run.das
 DASLLAMA_GPU=1 DASLLAMA_CUDA=1 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --area audio --only audio,whisper,gigaam,rnnt,vad   # the CUDA home's audio run: the files holding the audio families' discrete-home cells (each family on the CUDA home by its `CUDA_AUDIO_FAMILIES` row)
 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --changed --poison-kv             # every child's K/V caches start as NaN (DASLLAMA_KV_INIT=poison): a read of a row no store wrote reds its cell; each session touches its whole cache, so the run's memory is not the product's
 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --area audio            # one area: audio | vision | tts | translate | llm | infra (comma list)
+./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --area llm --skip-fully-cached   # the development loop's rerun: a file whose program loaded whole from its compile record and whose last run on this box, over the same model files, passed is reported from that pass, not run
 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --suite model-free --batch 1    # one child a file (the default is the whole suite in one child on this suite and ten a child on any other run, compiled as one program: the engine parsed and JIT'd once a batch)
 ```
 
@@ -160,7 +161,7 @@ file's context, so a batch-mate requiring the engine core brings the Vulkan home
 "unset" seats, a shell's load with no decline) holds only alone. For the same reason no test file or fixture sets a
 knob or a pin at `[init]` - every module's `[init]` runs in every batch-mate's context - and a file's cells pin what
 they need (a codec pin around the cells, `set_pf_window_rows_pin`, `vk_force_coopmat_mode`, a tier want, a
-fixture's context cap beside its load) at the top of each `[test]` (`REVIEW_FILES.md`). A red that appears only under `--batch` names that test, not the batch. On Linux every child runs with `GLIBC_TUNABLES=glibc.rtld.optional_static_tls=16384`: glibc
+fixture's context cap beside its load) at the top of each `[test]` (`REVIEW_FILES.md`). A red that appears only under `--batch` names that test, not the batch. `--skip-fully-cached` hands every child dastest's flag of that name and a `--pass-stamp` (`pass_stamp`: the box's CPU, and the size and time of every model file the child opens - what a pass rests on and the child's compile record does not see): a child whose program loads whole from its record reports each file that passed last time as `CACHED` and runs the others, and where every file is cached it neither links the JIT nor loads a model. The record is one a child, so an edit to any file of a child - or to a module one of them requires - runs every file of that child again. On Linux every child runs with `GLIBC_TUNABLES=glibc.rtld.optional_static_tls=16384`: glibc
 parks each late-loaded module's thread-local block in a 512-byte surplus, and `LLVM.dll`, a shared module (dasHV,
 which the server tests require) and the NVIDIA Vulkan driver's three libraries overrun it together - the driver's
 `vkCreateInstance` then fails for the rest of the process with `ERROR_INCOMPATIBLE_DRIVER`, whatever the order

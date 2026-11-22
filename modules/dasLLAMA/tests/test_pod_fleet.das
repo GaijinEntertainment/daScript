@@ -281,6 +281,11 @@ def test_fleet_model_copy(t : T?) {
     mf_cfg.args = "--suite model-free"
     let once = run_command(mf_cfg, "20261027-000000", "vulkan", true)
     t |> success(find(once, "--suite model-free --await-models") == rfind(once, "--suite model-free --await-models") && find(once, " mf=0;") >= 0, "an --args that is the model-free suite runs it once: {once}")
+    var skip_cfg = FleetArgs()
+    skip_cfg.args = "--area llm --skip-fully-cached"
+    let rerun = run_command(skip_cfg, "20261027-000000", "vulkan", true)
+    t |> success(find(rerun, "/run.das -- --suite model-free --skip-fully-cached --await-models") >= 0, "an --args with --skip-fully-cached hands it to the model-free suite too: {rerun}")
+    t |> success(find(vulkan, "--skip-fully-cached") < 0, "a run that names no such flag skips nothing: {vulkan}")
     t |> success(runs_model_free("--suite model-free") && runs_model_free("-s model-free") && runs_model_free("--suite=model-free"), "the model-free suite's spellings")
     t |> success(!runs_model_free("--changed --base origin/master") && !runs_model_free("--suite stocked --exclude model-free"), "another run is not it")
 }
