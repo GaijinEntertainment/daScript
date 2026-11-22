@@ -7,6 +7,7 @@ require daslib/ast
 require daslib/base64
 require daslib/clargs
 require daslib/fio
+require daslib/strings_boost
 require strings
 
 struct DastestRun {
@@ -54,25 +55,32 @@ def private result_fixture_dir() : string => "{get_das_root()}/dastest/tests/_re
 def private result_fixture_copy(folder : string) : string {
     let dst = path_join(test_temp_dir(), folder)
     mkdir_rec(dst)
-    for (name in ["_helper.das", "test_uses_helper.das", "test_fails.das"]) {
+    for (name in ["_helper.das", "test_uses_helper.das", "test_fails.das", "test_reads_verdict.das",
+            "_gate_macro.das", "_gate_lib.das", "test_gated.das"]) {
         fwrite(path_join(dst, name), fread(path_join(result_fixture_dir(), name)))
     }
+    fwrite(path_join(dst, "verdict.txt"), "pass")
     return dst
 }
 
-def private run_result_cache(test_file, args : string) : DastestRun {
-    let exe = get_command_line_arguments()[0]
-    let cmd = "{exe} {get_das_root()}/dastest/dastest.das -- --test {test_file}{args}"
-    var exit_code = 0
-    let output = build_string() $(var w) {
-        exit_code = unsafe(popen(cmd) $(f) {
-            if (f != null) {
-                while (!feof(f)) {
-                    w |> write(fgets(f))
-                }
-            }
-        })
+def private run_result_cache(test_file, args : string) : DastestRun =>
+    run_dastest("--test {test_file}{args}")
+
+//! a child dastest over `args` (split at spaces), its own module
+//! cache under the test's folder, `env` a NAME=VALUE of its
+//! environment or "", `cwd` its working directory or "" for this
+//! one's
+def private run_dastest(args : string; env : string = ""; cwd : string = "") : DastestRun {
+    var argv <- [get_command_line_arguments()[0], "-dasroot", get_das_root(),
+        "-module-cache", path_join(test_temp_dir(), "result_cache_host.bin"),
+        path_join(get_das_root(), "dastest/dastest.das"), "--"]
+    argv |> push_from([for (word in split(args, " ")); word; where !empty(word)])
+    var envs : array<string>
+    if (!empty(env)) {
+        envs |> push(env)
     }
+    var output : string
+    let exit_code = run_and_capture(argv, cwd, envs, output, 300.0)
     return DastestRun(exit_code = exit_code, output = output)
 }
 
@@ -281,6 +289,253 @@ def test_result_cache(tt : T?) {
         run_result_cache(file, "")
         let rerun = run_result_cache(file, "")
         t |> success(!served_from_cache(rerun), "the cache is opt-in:\n{rerun.output}")
+    }
+}
+
+def private skipped_as_cached(run : DastestRun; file : string) : bool =>
+    find(run.output, "CACHED {file}") >= 0
+
+//! the flags of a `--skip-fully-cached` run whose records go under
+//! `dir`
+def private skip_run(dir : string) : string =>
+    " --module-cache-dir {path_join(dir, "records")} --skip-fully-cached"
+
+//! the folder of pass marks under `cache`, "" where none is
+def private pass_marks_under(cache : string) : string {
+    var found = ""
+    dir(cache) $(name) {
+        if (ends_with(name, ".passed")) {
+            found = path_join(cache, name)
+        }
+    }
+    return found
+}
+
+[test(description = "--skip-fully-cached reports a file from its last pass when its program loaded whole from its record - only under the flag, from a pass a run without the flag left too, and file by file under --together with no simulate where every file is skipped - and without --module-cache-dir stops dastest with exit code 2", timeout = 1200)]
+def test_skip_fully_cached(tt : T?) {
+    tt |> run("a pass is skipped on the next run, and only under the flag") <| @(t : T?) {
+        let dir = result_fixture_copy("skip_warm")
+        let file = path_join(dir, "test_uses_helper.das")
+        let cached = " --module-cache-dir {path_join(dir, "records")}"
+        let cold = run_result_cache(file, "{cached} --skip-fully-cached")
+        t |> equal(cold.exit_code, 0, cold.output)
+        t |> success(!skipped_as_cached(cold, file), "a cold record runs the file:\n{cold.output}")
+        let plain = run_result_cache(file, cached)
+        t |> success(!skipped_as_cached(plain, file),
+            "without the flag the file runs:\n{plain.output}")
+        let warm = run_result_cache(file, "{cached} --skip-fully-cached --verbose")
+        t |> equal(warm.exit_code, 0, warm.output)
+        t |> success(skipped_as_cached(warm, file),
+            "the flagged run skips the pass, under a report-only flag too:\n{warm.output}")
+        t |> success(find(warm.output, "1 tests, 1 passed") >= 0,
+            "a skipped file still counts its tests:\n{warm.output}")
+    }
+
+    tt |> run("a run without the flag keeps the pass a flagged run skips") <| @(t : T?) {
+        let dir = result_fixture_copy("skip_primed")
+        let file = path_join(dir, "test_uses_helper.das")
+        let cached = " --module-cache-dir {path_join(dir, "records")}"
+        run_result_cache(file, cached)
+        let warm = run_result_cache(file, "{cached} --skip-fully-cached")
+        t |> success(skipped_as_cached(warm, file),
+            "the plain run's pass is on record:\n{warm.output}")
+    }
+
+    tt |> run("--together skips file by file, and the whole program when all passed") <| @(t : T?) {
+        let dir = result_fixture_copy("skip_together")
+        let passing = path_join(dir, "test_uses_helper.das")
+        let failing = path_join(dir, "test_fails.das")
+        let twin = path_join(dir, "test_reads_verdict.das")
+        let trace = path_join(dir, "started.txt")
+        let flags = " --module-cache-dir {path_join(dir, "records")} --skip-fully-cached"
+        let mixed = "--together {passing} --together {failing}{flags}"
+        run_dastest(mixed)
+        let rerun = run_dastest(mixed)
+        t |> success(rerun.exit_code != 0, "the failing file fails again:\n{rerun.output}")
+        t |> success(skipped_as_cached(rerun, passing),
+            "the passing file of the program is skipped:\n{rerun.output}")
+        t |> success(!skipped_as_cached(rerun, failing), "the failing one runs:\n{rerun.output}")
+        let green = "--together {passing} --together {twin}{flags}"
+        run_dastest(green)
+        t |> success(fexist(trace) && remove(trace),
+            "control: a program that runs leaves its [init]'s trace")
+        let warm = run_dastest(green)
+        t |> success(!fexist(trace),
+            "a program whose every file is skipped is not simulated: no [init] ran")
+        t |> equal(warm.exit_code, 0, warm.output)
+        t |> success(skipped_as_cached(warm, passing) && skipped_as_cached(warm, twin),
+            "both files are skipped:\n{warm.output}")
+        t |> success(find(warm.output, "2 tests, 2 passed") >= 0, "and counted:\n{warm.output}")
+    }
+
+    tt |> run("the flag without --module-cache-dir is refused") <| @(t : T?) {
+        let dir = result_fixture_copy("skip_alone")
+        let file = path_join(dir, "test_uses_helper.das")
+        let refused = run_result_cache(file, " --skip-fully-cached")
+        t |> equal(refused.exit_code, 2, refused.output)
+        let plain = run_dastest("--test {file}", "", dir)
+        t |> equal(plain.exit_code, 0, plain.output)
+        t |> success(!fexist(path_join(dir, ".passed")), "a run with no record keeps no pass mark")
+        t |> success(find(refused.output,
+            "--skip-fully-cached needs --module-cache-dir") >= 0, refused.output)
+    }
+}
+
+[test(description = "--skip-fully-cached runs a file again on an edited module, after a failure - one with nothing changed too -, and on marks a dead compile left held", timeout = 1200)]
+def test_skip_fully_cached_reruns(tt : T?) {
+    tt |> run("an edited module runs the file again, and a failure leaves no pass") <| @(t : T?) {
+        let dir = result_fixture_copy("skip_edited")
+        let file = path_join(dir, "test_uses_helper.das")
+        let cached = " --module-cache-dir {path_join(dir, "records")}"
+        run_result_cache(file, "{cached} --skip-fully-cached")
+        let helper = path_join(dir, "_helper.das")
+        let good = fread(helper)
+        fwrite(helper, replace(good, "42", "41"))
+        let broken = run_result_cache(file, cached)
+        t |> success(broken.exit_code != 0,
+            "the edit fails the test, in a run without the flag:\n{broken.output}")
+        let again = run_result_cache(file, "{cached} --skip-fully-cached")
+        t |> success(again.exit_code != 0,
+            "the record the failing run rewrote carries no pass:\n{again.output}")
+        t |> success(!skipped_as_cached(again, file), "a failure runs again:\n{again.output}")
+        fwrite(helper, good)
+        let fixed = run_result_cache(file, "{cached} --skip-fully-cached")
+        t |> equal(fixed.exit_code, 0, fixed.output)
+        t |> success(!skipped_as_cached(fixed, file), "the fix runs:\n{fixed.output}")
+        let warm = run_result_cache(file, "{cached} --skip-fully-cached")
+        t |> success(skipped_as_cached(warm, file), "and its pass is skipped after:\n{warm.output}")
+    }
+
+    tt |> run("a failure with nothing changed takes the pass off the record") <| @(t : T?) {
+        let dir = result_fixture_copy("skip_flaky")
+        let file = path_join(dir, "test_reads_verdict.das")
+        let cached = " --module-cache-dir {path_join(dir, "records")}"
+        run_result_cache(file, "{cached} --skip-fully-cached")
+        fwrite(path_join(dir, "verdict.txt"), "fail")
+        let red = run_result_cache(file, cached)
+        t |> success(red.exit_code != 0,
+            "the file a test reads at run time fails it, the record unchanged:\n{red.output}")
+        fwrite(path_join(dir, "verdict.txt"), "pass")
+        let after = run_result_cache(file, "{cached} --skip-fully-cached")
+        t |> equal(after.exit_code, 0, after.output)
+        t |> success(!skipped_as_cached(after, file),
+            "the pass before the failure vouches for nothing:\n{after.output}")
+        let helper = path_join(dir, "test_uses_helper.das")
+        let records = path_join(dir, "together")
+        let together = "--together {file} --together {helper} --module-cache-dir {records}"
+        run_dastest("{together} --skip-fully-cached")
+        fwrite(path_join(dir, "verdict.txt"), "fail")
+        run_dastest(together)
+        fwrite(path_join(dir, "verdict.txt"), "pass")
+        let mixed = run_dastest("{together} --skip-fully-cached")
+        t |> success(!skipped_as_cached(mixed, file) && skipped_as_cached(mixed, helper),
+            "under --together the failed file alone lost its pass:\n{mixed.output}")
+    }
+
+    tt |> run("marks a dead compile left held are not trusted") <| @(t : T?) {
+        let dir = result_fixture_copy("skip_held")
+        let file = path_join(dir, "test_uses_helper.das")
+        let records = path_join(dir, "records")
+        let flags = " --module-cache-dir {records} --skip-fully-cached"
+        run_result_cache(file, flags)
+        let marks = pass_marks_under(records)
+        t |> success(!empty(marks), "the pass left its marks beside the record")
+        t |> success(rename(marks, "{marks}.held"), "stage the state a compile that died leaves")
+        let rerun = run_result_cache(file, flags)
+        t |> equal(rerun.exit_code, 0, rerun.output)
+        t |> success(!skipped_as_cached(rerun, file),
+            "held marks vouch for nothing:\n{rerun.output}")
+    }
+}
+
+[test(description = "--skip-fully-cached skips on a record read as partial - a module that registers at compile time compiles again in place - until that compile fails, never skips under --bench or --cov-path, and a panic leaves no pass", timeout = 1200)]
+def test_skip_fully_cached_partial_and_never(tt : T?) {
+    tt |> run("a record read as partial vouches too, until its compile fails") <| @(t : T?) {
+        let dir = result_fixture_copy("skip_partial")
+        let file = path_join(dir, "test_gated.das")
+        let flags = " --module-cache-dir {path_join(dir, "records")} --skip-fully-cached --verbose"
+        run_result_cache(file, flags)
+        let warm = run_result_cache(file, flags)
+        t |> success(find(warm.output, "module cache partial:") >= 0,
+            "a module that registers at compile time is compiled again in place:\n{warm.output}")
+        t |> success(skipped_as_cached(warm, file),
+            "its unchanged program is skipped all the same:\n{warm.output}")
+        fwrite(path_join(dir, "verdict.txt"), "compile-fail")
+        let broken = run_result_cache(file, flags)
+        t |> success(broken.exit_code != 0,
+            "the module compiled in place fails, every record matched:\n{broken.output}")
+        fwrite(path_join(dir, "verdict.txt"), "pass")
+        let after = run_result_cache(file, flags)
+        t |> equal(after.exit_code, 0, after.output)
+        t |> success(!skipped_as_cached(after, file),
+            "a compile that failed left no pass:\n{after.output}")
+    }
+
+    tt |> run("a benchmark run and a coverage run never skip") <| @(t : T?) {
+        let dir = result_fixture_copy("skip_bench")
+        let file = path_join(dir, "test_uses_helper.das")
+        for (measured in ["--bench", "--cov-path {path_join(dir, "cov.txt")}"]) {
+            let flags = "{skip_run(dir)} {measured}"
+            run_result_cache(file, flags)
+            let rerun = run_result_cache(file, flags)
+            t |> success(!skipped_as_cached(rerun, file),
+                "{measured} runs what it measures:\n{rerun.output}")
+        }
+    }
+
+    tt |> run("a panic leaves no pass") <| @(t : T?) {
+        let dir = result_fixture_copy("skip_panic")
+        let file = path_join(dir, "test_reads_verdict.das")
+        let flags = " --module-cache-dir {path_join(dir, "records")} --skip-fully-cached"
+        fwrite(path_join(dir, "verdict.txt"), "panic")
+        run_result_cache(file, flags)
+        let rerun = run_result_cache(file, flags)
+        t |> success(rerun.exit_code != 0 && !skipped_as_cached(rerun, file),
+            "an error is no pass:\n{rerun.output}")
+    }
+}
+
+[test(description = "a pass --skip-fully-cached trusts is kept by the caller's --pass-stamp, in an isolated worker too, and by the DAS* environment of the compile", timeout = 1200)]
+def test_skip_fully_cached_keys(tt : T?) {
+    tt |> run("another --pass-stamp runs the file") <| @(t : T?) {
+        let dir = result_fixture_copy("skip_stamp")
+        let file = path_join(dir, "test_uses_helper.das")
+        let flags = "{skip_run(dir)} --pass-stamp"
+        run_result_cache(file, "{flags} one")
+        let other = run_result_cache(file, "{flags} two")
+        t |> success(!skipped_as_cached(other, file), "the caller's stamp changed:\n{other.output}")
+        let same = run_result_cache(file, "{flags} one")
+        t |> success(skipped_as_cached(same, file),
+            "the first stamp's pass still holds:\n{same.output}")
+    }
+
+    tt |> run("an isolated worker keeps its pass by the stamp") <| @(t : T?) {
+        let dir = result_fixture_copy("skip_worker_stamp")
+        let file = path_join(dir, "test_reads_verdict.das")
+        let flags = "{skip_run(dir)} --isolated-mode --isolated-mode-threads 1 --pass-stamp"
+        let first = run_result_cache(file, "{flags} one")
+        t |> equal(first.exit_code, 0, first.output)
+        fwrite(path_join(dir, "verdict.txt"), "fail")
+        let same = run_result_cache(file, "{flags} one")
+        t |> equal(same.exit_code, 0,
+            "under the same stamp the worker skips, the failing file unread:\n{same.output}")
+        let other = run_result_cache(file, "{flags} two")
+        t |> success(other.exit_code != 0,
+            "under another stamp the worker runs the file:\n{other.output}")
+    }
+
+    tt |> run("another DAS* environment value runs the file") <| @(t : T?) {
+        let dir = result_fixture_copy("skip_env")
+        let file = path_join(dir, "test_uses_helper.das")
+        let args = "--test {file}{skip_run(dir)}"
+        run_dastest(args, "DAS_CACHE_KEY_PROBE=1111")
+        let same = run_dastest(args, "DAS_CACHE_KEY_PROBE=1111")
+        t |> success(skipped_as_cached(same, file),
+            "the same environment skips the pass:\n{same.output}")
+        let other = run_dastest(args, "DAS_CACHE_KEY_PROBE=2222")
+        t |> equal(other.exit_code, 0, other.output)
+        t |> success(!skipped_as_cached(other, file),
+            "another value names another record, with no pass beside it:\n{other.output}")
     }
 }
 

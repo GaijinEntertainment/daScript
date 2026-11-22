@@ -17,6 +17,8 @@ require math
 require dastest_clargs
 require kill_switch
 require log
+require result_cache
+require uriparser
 require testing
 require testing_support
 require suite_result public
@@ -47,6 +49,12 @@ struct SuiteCtx {
     projectPath : string
     moduleCacheDir : string
     runEnv : array<string>   //! `--run-env` pairs: the environment of a compiled program's run
+    //! `--skip-fully-cached`: a pass mark of an unchanged program
+    //! is trusted
+    skipFullyCached : bool = false
+    //! the arguments a pass mark is kept under, the report-only
+    //! ones left out
+    passKey : string
     uriPaths : bool = false
     verbose : bool = false
     compile_only : bool = false
@@ -112,6 +120,8 @@ def SuiteCtx(args : DastestArgs) : SuiteCtx {
     ctx.projectPath = args.test_project
     ctx.moduleCacheDir = args.module_cache_dir
     ctx.runEnv := args.run_env
+    ctx.skipFullyCached = args.skip_fully_cached && !args.bench && empty(args.cov_path)
+    ctx.passKey = cache_key_args(raw_args)
     ctx.compile_only = args.compile_only
     ctx.use_aot = args.use_aot || is_in_aot()
     ctx.aot_macros = args.aot_macros
@@ -220,6 +230,66 @@ def private test_module_cache_path(ctx : SuiteCtx; file_name : string;
     return "" if (empty(ctx.moduleCacheDir) || !empty(ctx.projectPath))
     let record = module_cache_path(get_full_file_name(file_name), cop)
     return path_join(ctx.moduleCacheDir, base_name(record))
+}
+
+//! the folder of the pass marks kept beside the AST record `cache`
+def private pass_marks(cache : string) : string => "{cache}.passed"
+
+//! the pass mark of `file` in the program of the AST record
+//! `cache`: "" with no record
+def private pass_mark(ctx : SuiteCtx; cache : string; file : string) : string =>
+    empty(cache) ? "" : cache_entry(pass_marks(cache), file, ctx.passKey)
+
+//! Before the compile of the record `cache`: its marks go out of
+//! reach, so a compile that dies after it rewrote the record
+//! leaves no mark for a later run
+def private hold_pass_marks(cache : string) {
+    return if (empty(cache))
+    let held = "{pass_marks(cache)}.held"
+    rmdir_rec(held)
+    rename(pass_marks(cache), held)
+}
+
+//! Inside the compile's block: the held marks come back when the
+//! program compiled (`compiled`) and every module of it matched
+//! its record (`clean`, or `partial` - an unchanged module
+//! compiled again in place; the record's name carries the
+//! policies), and are removed otherwise
+def private settle_pass_marks(cache : string; mg : ModuleGroup; compiled : bool) {
+    return if (empty(cache))
+    let verdict = module_cache_verdict(mg)
+    let held = "{pass_marks(cache)}.held"
+    if (compiled && (verdict == "clean" || verdict == "partial")) {
+        rename(held, pass_marks(cache))
+    } else {
+        rmdir_rec(held)
+    }
+}
+
+//! the counts of the last pass of a file when
+//! `--skip-fully-cached` may skip it: the pass is on record under
+//! `mark`, which `settle_pass_marks` left there
+def private cached_pass(ctx : SuiteCtx; mark : string) : Option<SuiteResult> {
+    return none(type<SuiteResult>) if (!ctx.skipFullyCached || empty(mark))
+    return cache_lookup(mark)
+}
+
+//! the line of a file reported from its last pass
+def log_cached(ctx : SuiteCtx; file : string) {
+    log::green("CACHED {ctx.uriPaths ? file_name_to_uri(file) : file}")
+}
+
+//! Before a file runs: its last pass goes off the record, so a
+//! run that fails or dies leaves none
+def private drop_pass(mark : string) {
+    remove(mark) if (!empty(mark))
+}
+
+//! keeps the pass `status` of a file under `mark`
+def private keep_pass(mark : string; status : SuiteResult) {
+    return if (empty(mark))
+    let no_inputs : array<string>
+    cache_store(mark, status, no_inputs)
 }
 
 def test_file(file_name : string; var ctx : SuiteCtx) : SuiteResult {
@@ -378,6 +448,61 @@ def private run_env_pair(pair : string) : tuple<name : string; value : string> {
     return (name = slice(pair, 0, eq), value = slice(pair, eq + 1))
 }
 
+//! the files of `files` `--skip-fully-cached` may skip, each with
+//! the counts of its last pass
+def private cached_passes(ctx : SuiteCtx; cache : string;
+                          files : array<string>) : table<string; SuiteResult> {
+    var cached : table<string; SuiteResult>
+    for (f in files) {
+        let hit = cached_pass(ctx, pass_mark(ctx, cache, f))
+        if (is_some(hit)) {
+            cached |> insert(f, unwrap(hit))
+        }
+    }
+    return <- cached
+}
+
+//! the module of `file` in the together `program`, run in a clone
+//! of its simulated context `base`
+def private together_file(file : string; program : ProgramPtr; var base : rtti::Context;
+                          var ctx : SuiteCtx; var fileCtx : FileCtx) : SuiteResult {
+    let want = stem(file)
+    var status : SuiteResult
+    ctx.queued_benchmarks |> clear
+    clone_context(base) $(cok; context; cerrors) {
+        if (!cok) {
+            log::error("Failed to start a context for {file}: {cerrors}")
+            status.total++
+            status.errors++
+            return
+        }
+        var found = false
+        program_for_each_module(program) $(m) {
+            if (m.name == want) {
+                found = true
+                let module_result = test_module(*m, *context, ctx, fileCtx)
+                after_module(ctx, fileCtx, *context, module_result, status)
+            }
+        }
+        if (!found) {
+            log::error("no module `{want}` for {file} in the root's program")
+            status.total++
+            status.errors++
+        }
+    }
+    return status
+}
+
+//! reports `file` from `cached`, the counts of its last pass,
+//! without running it
+def private report_cached(ctx : SuiteCtx; file : string; cached : table<string; SuiteResult>;
+                          var res : SuiteResult&; blk : TogetherReport) {
+    let status = cached?[file] ?? SuiteResult()
+    log_cached(ctx, file)
+    res += status
+    invoke(blk, file, status, 0l)
+}
+
 //! runs `files` as one program simulated once, each file's module
 //! in a clone of its context - globals and heaps of its own, its
 //! init run, the code and its JIT link shared; `blk` gets every
@@ -404,7 +529,9 @@ def test_together(files : array<string>; var ctx : SuiteCtx; blk : TogetherRepor
             // file's walk of the program's modules reads
             cop.keep_symbol_tables = true
             let cache = test_module_cache_path(ctx, root_path, cop)
+            hold_pass_marks(cache)
             compile_file(root_path, access, unsafe(addr(mg)), cop, cache) $(ok, program, output) {
+                settle_pass_marks(cache, mg, ok)
                 if (!ok) {
                     log::error("Failed to compile the together root {root_path}\n{output}")
                     fail_together(files, res, blk)
@@ -413,43 +540,35 @@ def test_together(files : array<string>; var ctx : SuiteCtx; blk : TogetherRepor
                 if (!empty(output) && !log::failuresOnly) {
                     log::info("{output}")
                 }
+                let cached <- cached_passes(ctx, cache, files)
+                if (length(cached) == length(files)) {
+                    for (f in files) {
+                        report_cached(ctx, f, cached, res, blk)
+                    }
+                    return
+                }
                 // one simulate: the JIT links the program's code
                 // once, and every file's context is a clone of it
                 with_run_env(ctx) {
                     simulate(program) $(sok; base; serrors) {
                         if (!sok) {
                             log::error("Failed to simulate the together root {root_path}\n{serrors}")
+                            rmdir_rec(pass_marks(cache)) if (!empty(cache))
                             fail_together(files, res, blk)
                             return
                         }
                         for (f in files) {
-                            let want = stem(f)
+                            if (cached |> key_exists(f)) {
+                                report_cached(ctx, f, cached, res, blk)
+                                continue
+                            }
                             let t0 = ref_time_ticks()
                             test_wall_file = f
-                            var status : SuiteResult
-                            ctx.queued_benchmarks |> clear
-                            clone_context(*base) $(cok; context; cerrors) {
-                                if (!cok) {
-                                    log::error("Failed to start a context for {f}: {cerrors}")
-                                    status.total++
-                                    status.errors++
-                                    return
-                                }
-                                var found = false
-                                program_for_each_module(program) $(m) {
-                                    if (m.name == want) {
-                                        found = true
-                                        let module_result = test_module(*m, *context, ctx, fileCtx)
-                                        after_module(ctx, fileCtx, *context, module_result, status)
-                                    }
-                                }
-                                if (!found) {
-                                    log::error("no module `{want}` for {f} in the root's program")
-                                    status.total++
-                                    status.errors++
-                                }
-                            }
+                            let mark = pass_mark(ctx, cache, f)
+                            drop_pass(mark)
+                            let status = together_file(f, program, *base, ctx, fileCtx)
                             res += status
+                            keep_pass(mark, status)
                             invoke(blk, f, status, get_time_nsec(t0) / 1000l)
                         }
                     }
@@ -460,6 +579,14 @@ def test_together(files : array<string>; var ctx : SuiteCtx; blk : TogetherRepor
     return res
 }
 
+
+//! whether an `expect` of `expected` is still owed an error
+def private expects_unmet(expected : table<CompilationError; int>) : bool {
+    for (owed in values(expected)) {
+        return true if (owed > 0)
+    }
+    return false
+}
 
 def test_file(file_name : string; var ctx : SuiteCtx; var file_ctx : FileCtx) : SuiteResult {  // nolint:STYLE038 - the compile-simulate-run pipeline for one file; the phases share policies and context state
     var res : SuiteResult
@@ -472,8 +599,11 @@ def test_file(file_name : string; var ctx : SuiteCtx; var file_ctx : FileCtx) : 
             ctx.queued_benchmarks |> clear
             test_policies(ctx, cop, access)
             let cache = test_module_cache_path(ctx, file_name, cop)
+            let mark = pass_mark(ctx, cache, file_name)
+            hold_pass_marks(cache)
             let verdict = compile_file(file_name, access, unsafe(addr(mg)),
                 cop, cache) $(ok, program, output) {
+                settle_pass_marks(cache, mg, ok)
                 var expectedErrors : table<CompilationError; int>
                 if (program != null) {
                     program_for_each_module(program) $(m) {
@@ -498,14 +628,7 @@ def test_file(file_name : string; var ctx : SuiteCtx; var file_ctx : FileCtx) : 
                     }
                 }
 
-                if (!failed) {
-                    for (_errC, errN in keys(expectedErrors), values(expectedErrors)) {
-                        if (errN > 0) {
-                            failed = true
-                            break
-                        }
-                    }
-                }
+                failed = failed || expects_unmet(expectedErrors)
                 if (!ok || failed) {
                     if (failed) {
                         log::error("Failed to compile {file_name}\n{output}")
@@ -540,6 +663,13 @@ def test_file(file_name : string; var ctx : SuiteCtx; var file_ctx : FileCtx) : 
                     }
                     return
                 }
+                let hit = cached_pass(ctx, mark)
+                if (is_some(hit)) {
+                    res += unwrap(hit)
+                    log_cached(ctx, file_name)
+                    return
+                }
+                drop_pass(mark)
                 with_run_env(ctx) {
                     simulate(program) $(sok; context; serrors) {
                         if (!sok) {
@@ -567,6 +697,7 @@ def test_file(file_name : string; var ctx : SuiteCtx; var file_ctx : FileCtx) : 
                     }
                 }
             }
+            keep_pass(mark, res)
             if (ctx.verbose && !empty(cache)) {
                 log::info("module cache {verdict}: {cache}")
             }
