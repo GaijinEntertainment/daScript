@@ -27,7 +27,7 @@ ENDIF()
 # or runtime) changes dependents' semantic hashes, and a stale generated TU then fails the AOT
 # link (error[50101]). DAS_AOT_EXTRA_DEPENDS wires the module globs into the affected dirs'
 # regen commands (daslib/*.das is already a global dependency inside DAS_AOT_EXT).
-SET(DAS_AOT_DASSPIRV_MODULE_DEPENDS ${DASSPIRV_AOT_DEPENDS})
+SET(DAS_AOT_DASSPIRV_MODULE_DEPENDS ${DASSPIRV_AOT_DEPENDS} ${PROJECT_SOURCE_DIR}/dastest/check_cache.das)
 SET(DAS_AOT_DASMETAL_MODULE_DEPENDS ${DASMETAL_AOT_DEPENDS})
 
 # Module-lib AOT sources are owned by each module (set in modules/<M>/CMakeLists.txt, empty when
@@ -50,7 +50,7 @@ list(FILTER AOT_CUDA_FILES EXCLUDE REGEX "/_")
 FILE(GLOB AOT_TESTS_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/aot/*.das")
 list(APPEND AOT_TESTS_FILES tests/REVIEW.das)
 SET(AOT_DASTEST_MODULE_FILES dastest/review_gate.das dastest/file_census.das dastest/test_shape.das
-    dastest/worker_policy.das)
+    dastest/worker_policy.das dastest/check_cache.das)
 # Exclude _-prefixed helper modules (required transitively, not standalone test entry points)
 list(FILTER AOT_TESTS_FILES EXCLUDE REGEX "/_")
 
@@ -472,6 +472,8 @@ foreach(_s IN LISTS DAS_AOT_SUITES)
         if(_s STREQUAL "tests" OR _s STREQUAL "dastest")
             set(DAS_AOT_EXTRA_DEPENDS ${PROJECT_SOURCE_DIR}/dastest/review_gate.das ${PROJECT_SOURCE_DIR}/dastest/file_census.das
                 ${PROJECT_SOURCE_DIR}/dastest/test_shape.das ${PROJECT_SOURCE_DIR}/dastest/worker_policy.das)
+        elseif(_s STREQUAL "glsl")
+            set(DAS_AOT_EXTRA_DEPENDS ${PROJECT_SOURCE_DIR}/dastest/check_cache.das)
         endif()
         DAS_AOT("${AOT_${_u}_FILES}" ${_u}_AOT_GENERATED_SRC test_aot_${_s} daslang)
         set(DAS_AOT_EXTRA_DEPENDS "")

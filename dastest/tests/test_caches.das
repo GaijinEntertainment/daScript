@@ -2,6 +2,7 @@ options gen2
 options indenting = 4
 
 require dastest/testing_boost public
+require dastest/check_cache
 require daslib/ast
 require daslib/base64
 require daslib/clargs
@@ -335,4 +336,38 @@ def test_run_env(t : T?) {
     var err : string
     rmdir_rec(by_flag, err)
     rmdir_rec(by_env, err)
+}
+
+[test(description = "a recorded pass of an external check is found again under its kind and key and under no other, the marker file is the whole record, and a tool no name answers to has no path and no stamp")]
+def test_check_cache(t : T?) {
+    set_check_cache_dir(path_join(test_temp_dir(), "checks"))
+    let key = hash("test_check_cache")
+    t |> success(!check_passed("selftest", key), "nothing is recorded for a new key")
+    record_check_passed("selftest", key)
+    t |> success(check_passed("selftest", key), "a recorded pass is found again")
+    t |> success(!check_passed("selftest", key + 1ul), "another key did not pass")
+    t |> success(!check_passed("selftest2", key), "another kind did not pass")
+    remove(passed_marker_path("selftest", key))
+    t |> success(!check_passed("selftest", key), "the marker file is the whole record")
+    set_check_cache_dir("")
+    let absent = vulkan_sdk_tool("no-such-tool-for-check-cache")
+    t |> success(empty(absent.exe) && empty(absent.stamp),
+        "an absent tool has no path and no stamp")
+}
+
+[test(description = "a tool the Vulkan SDK folder holds is found there with no child started, and its stamp is its path, size and time")]
+def test_vulkan_sdk_tool(t : T?) {
+    let sdk = path_join(test_temp_dir(), "fake_sdk")
+    mkdir_rec(path_join(sdk, "Bin"))
+    mkdir_rec(path_join(sdk, "bin"))
+    // not a program: the SDK arm must take it without running it
+    fwrite(path_join(sdk, "Bin/check-cache-fake.exe"), "not a program")
+    fwrite(path_join(sdk, "bin/check-cache-fake"), "not a program")
+    with_env_variables([(name = "VULKAN_SDK", value = sdk)]) {
+        let tool = vulkan_sdk_tool("check-cache-fake")
+        t |> success(tool.exe |> starts_with(sdk), "the SDK's file is the tool: {tool.exe}")
+        let sized = (tool.stamp |> starts_with("{tool.exe}|")
+            && length(tool.stamp) > length(tool.exe) + 2)
+        t |> success(sized, "the stamp is the path with the file's size and time: {tool.stamp}")
+    }
 }
