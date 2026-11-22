@@ -210,7 +210,9 @@ preflight's `cpp-syntax` gate mirrors this lane's frontend: clang-cl `/Zs`
 (parse + semantic analysis + template instantiation, no codegen) on changed C++,
 escalating to every tracked `src` + `tests-cpp` TU (~15-30 s) when a core header changed
 (a header edit breaks instantiation in untouched TUs). It catches neither
-link-stage nor codegen-only divergence.
+link-stage nor codegen-only divergence. Each file is compiled with the flags of the
+local build tree (`utils/internal/preflight/README.md#cpp-flags`); a verdict line that
+counts files "via the fallback include list" names files the tree does not build.
 
 A full local mirror is **destructive in the main checkout**: all build dirs of
 one source tree share `bin/`, `lib/`, and `modules/<X>/*.shared_module` (only
