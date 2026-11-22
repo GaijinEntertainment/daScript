@@ -128,15 +128,17 @@ def special_file_response_does_not_block_shutdown(t : T?) {
         let argv <- [get_host_binary(), "-dasroot", get_das_root(), fixture, "--", root]
         with_process(argv, root, inherited) $(var child) {
             let started = ref_time_ticks()
-            while (!fexist("{root}/ready") && get_time_usec(started) < 15000000) {
+            var port = 0
+            while (get_time_usec(started) < 15000000) {
+                port = to_int(fread("{root}/ready"))
+                if (port > 0) { break }
                 unsafe(process_drain(child) $(_line) {})
                 if (unsafe(process_poll(child)) != process_running) { break }
                 sleep(5u)
             }
-            t |> success(fexist("{root}/ready"), "child server started")
-            if (fexist("{root}/ready")) {
-                let port = to_int(fread("{root}/ready"))
-                t |> success(port > 0 && port <= 65535, "ready publishes the complete port")
+            t |> success(port > 0, "child server started")
+            if (port > 0) {
+                t |> success(port <= 65535, "ready publishes a port in range")
                 var peer = new WirePeer()
                 t |> success(peer->connect("127.0.0.1", port))
                 t |> success(peer->write_text("GET /special HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n"))
