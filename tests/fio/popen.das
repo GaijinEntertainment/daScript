@@ -232,6 +232,8 @@ def test_popen_argv_paths_outside_ascii(t : T?) {
         set_env_variable("DAS_T_変数", "値 ünï")
         t |> equal(get_env_variable("DAS_T_変数"), "値 ünï")
         t |> success(has_env_variable("DAS_T_変数"))
+        unset_env_variable("DAS_T_変数")
+        t |> success(!has_env_variable("DAS_T_変数"), "the variable is gone from this process")
     }
     t |> run("a failed spawn still runs the block; feof on its file is safe") @(t : T?) {
         let no_env : array<string>
