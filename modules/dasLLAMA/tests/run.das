@@ -51,7 +51,7 @@ struct RunArgs {
     @clarg_doc = "Only — comma-separated substrings; a file of the run whose name contains none is dropped, each kept file named on an ONLY line and the REPORT line carrying the tokens, so a narrowed run cannot read as whole (e.g. --changed --only cuda,regions under DASLLAMA_CUDA=1: the CUDA home's files of the run)"
     only : string
 
-    @clarg_doc = "Area — comma-separated: audio | vision | tts | translate | llm | infra; runs every model-free and stocked file of the area plus the image suite's arms of the area (no --suite, no --arm)"
+    @clarg_doc = "Area — comma-separated: audio | vision | tts | translate | llm | infra | examples; examples is the browser examples' smoke tests, each spawning its example under a window, and runs only when named here - its files sit in no per-PR suite and no engine change reaches them; a standing area runs every model-free and stocked file of the area plus the image suite's arms of the area (no --suite, no --arm)"
     area : string
 
     @clarg_doc = "Run what the changed files reach: git diff against --base plus untracked files under modules/dasLLAMA/, each path mapped to its areas (printed), then the areas' tests"
@@ -222,6 +222,12 @@ def suite_files(name : string) : array<string> {   // nolint:STYLE038 - a flat s
                     "modules/dasLLAMA/tests/uncategorized__dasllama_internal_persistent_heap_stack_524288.das",
                     "modules/dasLLAMA/tests/uncategorized_persistent_heap_stack_524288.das",
                     "modules/dasLLAMA/tests/uncategorized_no_aot_persistent_heap.das" ]
+    } elif (name == "examples") {   //! the files of the on-demand `examples` area, which `--area examples` runs: each spawns a browser example under a window
+        return <- [
+                    "modules/dasLLAMA/tests/test_interpreter.das",
+                    "modules/dasLLAMA/tests/test_parrot.das",
+                    "modules/dasLLAMA/tests/test_storyteller_restart.das",
+                    "modules/dasLLAMA/tests/test_storywish.das" ]
     } elif (name == "stocked") {
         return <- [
                     "modules/dasLLAMA/tests/test_attn_span.das",
@@ -267,15 +273,11 @@ def suite_files(name : string) : array<string> {   // nolint:STYLE038 - a flat s
                     "modules/dasLLAMA/tests/test_mtp_gemma_drafter.das",
                     "modules/dasLLAMA/tests/test_dflash_drafter.das",
                     "modules/dasLLAMA/tests/test_parity.das",
-                    "modules/dasLLAMA/tests/test_interpreter.das",
                     "modules/dasLLAMA/tests/test_parity_pregate.das",
-                    "modules/dasLLAMA/tests/test_parrot.das",
                     "modules/dasLLAMA/tests/test_prefill.das",
                     "modules/dasLLAMA/tests/test_qwen3v.das",
                     "modules/dasLLAMA/tests/test_qwen25v.das",
                     "modules/dasLLAMA/tests/test_scheduler.das",
-                    "modules/dasLLAMA/tests/test_storyteller_restart.das",
-                    "modules/dasLLAMA/tests/test_storywish.das",
                     "modules/dasLLAMA/tests/test_tokenizer.das",
                     "modules/dasLLAMA/tests/test_tts_postag.das",
                     "modules/dasLLAMA/tests/test_tts_g2p.das",
@@ -328,7 +330,12 @@ def suite_files(name : string) : array<string> {   // nolint:STYLE038 - a flat s
     return <- none
 }
 
-let AREAS <- ["audio", "vision", "tts", "translate", "llm", "infra"]
+let AREAS <- ["audio", "vision", "tts", "translate", "llm", "infra", "examples"]
+//! the areas a run takes only when its --area names them: no engine change reaches one, and no per-PR suite holds its files
+let ON_DEMAND_AREAS <- ["examples"]
+
+//! every area a change reaches when nothing narrows it: all but the on-demand ones
+def standing_areas() : array<string> => <- [for (a in AREAS); a; where find_index(ON_DEMAND_AREAS, a) < 0]
 let TESTS_DIR = "modules/dasLLAMA/tests"
 
 //! the suite-less test files by AREA - what someone working on audio, vision, TTS, the LLM engine or the
@@ -338,19 +345,21 @@ def area_tests(area : string) : array<string> {
     if (area == "audio") {
         return <- [ "test_asr_verbs.das", "test_audio.das", "test_audio_embedder.das", "test_cuda_tower_asr.das", "test_cuda_tower_blocks.das",
                     "test_cuda_tower_front.das", "test_cuda_tower_whisper_chain.das", "test_dasllama_lint_contracts.das", "test_gigaam.das",
-                    "test_interpreter.das", "test_parrot.das", "test_rnnt.das", "test_tower_asr_kernels.das", "test_tower_helpers.das", "test_vad.das",
+                    "test_rnnt.das", "test_tower_asr_kernels.das", "test_tower_helpers.das", "test_vad.das",
                     "test_vulkan_tower_kernels.das", "test_whisper.das" ]
     } elif (area == "vision") {
         return <- [ "test_attn_span.das", "test_cuda_tower_blocks.das", "test_gemma3v.das", "test_gemma4uv.das", "test_gemma4v.das", "test_qwen25v.das",
                     "test_qwen3v.das", "test_tower_helpers.das", "test_vision.das", "test_vision_chat.das",
                     "test_vision_embedder.das", "test_vulkan_tower_kernels.das" ]
     } elif (area == "tts") {
-        return <- [ "test_f32_batch_tile_perms.das", "test_interpreter.das", "test_parrot.das", "test_storyteller_restart.das", "test_storywish.das", "test_tts_blocks.das", "test_tts_facade.das",
+        return <- [ "test_f32_batch_tile_perms.das", "test_tts_blocks.das", "test_tts_facade.das",
                     "test_tts_g2p.das", "test_tts_g2p_ru.das", "test_tts_g2p_ru_pack.das", "test_tts_kitten.das", "test_tts_kokoro.das", "test_tts_pocket.das",
                     "test_tts_postag.das", "test_tts_textnorm.das", "test_tts_textnorm_ru.das", "test_tts_voice_prompts.das", "test_vulkan_tts_conv_kernels.das",
                     "test_vulkan_tts_kernels.das", "test_vulkan_tts_pocket_kernels.das", "test_vulkan_tts_source_kernels.das" ]
     } elif (area == "translate") {
-        return <- [ "test_interpreter.das", "test_nmt.das" ]
+        return <- [ "test_nmt.das" ]
+    } elif (area == "examples") {
+        return <- [ "test_interpreter.das", "test_parrot.das", "test_storyteller_restart.das", "test_storywish.das" ]
     } elif (area == "infra") {
         return <- [ "failed_dasllama_lint_require.das", "failed_dasllama_lint_sidedoor.das", "test_bench_records_schema.das",
                     "test_box_ident.das", "test_box_profile.das", "test_compares.das", "test_dasllama_lint_contracts.das",
@@ -373,7 +382,7 @@ def area_tests(area : string) : array<string> {
                     "test_q8q8_family.das", "test_quant.das", "test_qwen4exp.das",
                     "test_repack.das", "test_rope.das", "test_rope_apply.das",
                     "test_sampling.das", "test_cuda_kernels.das",
-                    "test_scheduler.das", "test_storyteller_restart.das", "test_storywish.das", "test_think_split.das", "test_tokenizer.das",
+                    "test_scheduler.das", "test_think_split.das", "test_tokenizer.das",
                     "test_tool_formats.das", "test_tts_textnorm.das", "test_vulkan_dec_tail.das", "test_vulkan_host_twin.das", "test_vulkan_kernels.das", "test_vulkan_kernels_attn.das", "test_vulkan_kernels_gemm.das", "test_vulkan_kv_codec_kernels.das",
                     "test_vulkan_mint.das", "test_cuda_mint.das", "test_vulkan_moe_cm2.das", "test_vulkan_tier.das", "test_vulkan_shared_device.das",
                     "uncategorized__dasllama_internal_persistent_heap_stack_524288.das", "uncategorized_persistent_heap_stack_524288.das",
@@ -552,7 +561,7 @@ def private fixture_areas(name : string) : array<string> {
     } elif (name == "_kq_fixtures.das" || name == "_f32_tile_pin.das") {
         return <- ["llm", "tts"]   //! test_tts_blocks' K-quant lane cell reads the planes; the TTS parity rail runs under the tile pin
     }
-    return <- clone_to_move(AREAS)
+    return <- standing_areas()
 }
 
 //! a changed path -> the areas it reaches (empty for a path outside the module, and for a model-suite
@@ -580,14 +589,14 @@ def areas_for_path(path : string) : array<string> {
     if (rel |> starts_with("dasllama/")) {
         let stem = name |> ends_with(".das") ? slice(name, 0, length(name) - 4) : name
         let row = MODULE_AREAS?[stem] ?? ""
-        return <- (empty(row) ? clone_to_move(AREAS) : csv_list(row))
+        return <- (empty(row) ? standing_areas() : csv_list(row))
     }
     if (rel |> starts_with("performance/") || rel |> starts_with("harness/")) {
         return <- ["infra"]
     } elif (rel |> starts_with("benchmarks/")) {
         return <- ["llm"]
     }
-    return <- clone_to_move(AREAS)
+    return <- standing_areas()
 }
 
 //! what --changed runs for one changed path
@@ -641,7 +650,7 @@ def private folder_requires() : table<string; array<string>> {
 }
 
 //! the test files of the folder whose `require _<stem>` reaches `stem`, through the fixtures between: a fixture's
-//! change runs the tests that read it. Non-private: test_run_suites.das pins it
+//! change runs the per-PR tests that read it, and no file of an on-demand area. Non-private: test_run_suites.das pins it
 def tests_requiring(stem : string) : array<string> {
     var requires <- folder_requires()
     var reached <- { stem }
@@ -696,7 +705,7 @@ def reach_for_path(path : string) : Reach {
             }
             return <- r
         }
-        if (find_index(free_files(), p) >= 0 || find_index(suite_files("stocked"), p) >= 0) {
+        if (find_index(free_files(), p) >= 0 || find_index(suite_files("stocked"), p) >= 0 || find_index(suite_files("examples"), p) >= 0) {
             r.files |> push(name)
         } else {
             r.note = "a model suite file: run its suite with --arm scoped to the change"
@@ -921,10 +930,11 @@ def private changed_paths(base : string) : array<string> {
 }
 
 //! the files an area list runs, as runner paths: every area file (deduplicated, sorted) that the
-//! model-free or stocked census lists; returns the image-suite arm tokens the areas own too
+//! model-free or stocked census or the examples suite lists; returns the image-suite arm tokens the areas own too
 def area_plan(areas : array<string>) : tuple<files : array<string>; image_arms : string> {
     let free <- free_files()
-    let stocked <- suite_files("stocked")
+    var stocked <- suite_files("stocked")
+    stocked |> push_from(suite_files("examples"))
     var picked : table<string; void?>
     var arms : array<string>
     for (a in areas) {

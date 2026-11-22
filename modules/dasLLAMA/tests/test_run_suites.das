@@ -68,7 +68,7 @@ def test_suite_split_matches_the_files(t : T?) {
 [test(description = "Every test_, failed_ and uncategorized file in the folder sits in some run.das suite except the declared CPU-prefill tripwire, over more than 50 files walked, and run.das carries no [init]")]
 def test_every_file_sits_in_a_suite(t : T?) {
     var listed : table<string; void?>   // nolint:STYLE027 - a nested walk over the suite tables, not one comprehension
-    for (suite in ["decode", "mtp", "prefill", "matrix", "kernels", "gpu-kernels", "image", "image-vulkan", "coverage", "model-free", "stocked"]) {
+    for (suite in ["decode", "mtp", "prefill", "matrix", "kernels", "gpu-kernels", "image", "image-vulkan", "coverage", "model-free", "stocked", "examples"]) {
         for (file in suite_files(suite)) {
             listed |> insert(base_name(file), null)
         }
@@ -86,17 +86,27 @@ def test_every_file_sits_in_a_suite(t : T?) {
     t |> success(find(fread("{TESTS_DIR}/run.das"), "[init]") < 0, "run.das carries no [init] - it runs nothing on require")
 }
 
-//! the area tables cover the per-PR census exactly: every area file is a model-free or stocked file,
-//! every such file has at least one area, and every image-suite arm an area names exists
-[test(description = "The runner's area tables cover the model-free plus stocked census exactly, every image arm an area names exists in test_model_image, and every image arm is reachable from an area or listed unclaimed")]
+//! the area tables cover the per-PR census exactly: every standing area's file is a model-free or stocked file,
+//! every such file has at least one area, an on-demand area's files are the examples suite's and no per-PR file,
+//! and every image-suite arm an area names exists
+[test(description = "The runner's standing area tables cover the model-free plus stocked census exactly, an on-demand area holds the examples suite's files and none of the census, every image arm an area names exists in test_model_image, and every image arm is reachable from an area or listed unclaimed")]
 def test_area_tables_match_the_census(t : T?) {
     var census <- [for (f in free_files()); base_name(f)]
     census |> push_from([for (f in suite_files("stocked")); base_name(f)])
+    let on_demand <- [for (f in suite_files("examples")); base_name(f)]
     var covered : table<string; void?>
-    for (a in AREAS) {
+    for (a in standing_areas()) {
         for (name in area_tests(a)) {
             t |> success(find_index(census, name) >= 0, "an area file sits in the model-free or stocked census: {a}/{name}")
             covered |> insert(name, null)
+        }
+    }
+    t |> equal(join(ON_DEMAND_AREAS, ","), "examples", "the examples area is the one a run must name")
+    t |> success(find_index(standing_areas(), "examples") < 0 && length(standing_areas()) == length(AREAS) - 1, "a standing area is every area but the on-demand one")
+    for (a in ON_DEMAND_AREAS) {
+        t |> equal(join(area_tests(a), ","), join(on_demand, ","), "an on-demand area's files are the examples suite's: {a}")
+        for (name in area_tests(a)) {
+            t |> success(find_index(census, name) < 0 && !key_exists(covered, name), "an on-demand file sits in no per-PR list and no standing area: {name}")
         }
     }
     for (name in census) {
@@ -136,7 +146,9 @@ def test_area_tables_match_the_census(t : T?) {
 //! the change-to-area map behind --changed
 [test(description = "`areas_for_path` maps a pinned table of module, fixture, test and tree paths to their expected areas, unmapped module paths to every area, outside paths to none, and `skipped_cells` reads the summary's skip count")]
 def test_areas_for_path(t : T?) {
-    let every = join(AREAS, ",")
+    let every = join(standing_areas(), ",")
+    t |> success(find(every, "examples") < 0, "no change reaches the on-demand area through an engine module: {every}")
+    t |> equal(join(areas_for_path("modules/dasLLAMA/tests/test_parrot.das"), ","), "examples", "an example's smoke test is its own area's file")
     t |> equal(join(areas_for_path("modules/dasLLAMA/dasllama/dasllama_audio.das"), ","), "audio", "an audio module reaches audio")
     t |> equal(join(areas_for_path("modules/dasLLAMA/dasllama/dasllama_tower.das"), ","), "audio,vision,tts,translate", "the shared tower reaches both towers, the TTS blocks calling its row kernels and the Bergamot chain its GEMMs")
     t |> equal(join(areas_for_path("modules/dasLLAMA/dasllama/dasllama_vulkan_tower.das"), ","), "audio,vision,tts,translate", "the Vulkan tower reaches both towers and the TTS and translation drivers riding its classes")
@@ -192,14 +204,17 @@ def test_areas_for_path(t : T?) {
 [test(description = "`area_plan` returns an area's census files sorted and deduplicated with the image file appended once and last when an area owns image arms, and `plan_files` lets an area override --suite")]
 def test_area_plan(t : T?) {
     let tts <- area_plan(["tts"])
-    t |> equal(length(tts.files), 22, "tts plans its twenty-one files and the image file its kitten arm rides")
+    t |> equal(length(tts.files), 18, "tts plans its seventeen files and the image file its kitten arm rides")
     t |> equal(tts.image_arms, "kitten,pocket", "tts owns the kitten and pocket image arms")
     t |> equal(tts.files[length(tts.files) - 1], "{TESTS_DIR}/test_model_image.das", "the image file rides last")
     for (i in range(1, length(tts.files) - 1)) {
         t |> success(tts.files[i - 1] < tts.files[i], "the plan is sorted: {tts.files[i - 1]} < {tts.files[i]}")
     }
     let translate <- area_plan(["translate"])
-    t |> equal(join(translate.files, ","), "{TESTS_DIR}/test_interpreter.das,{TESTS_DIR}/test_nmt.das,{TESTS_DIR}/test_model_image.das", "translate plans its two files and the image file its bergamot arm rides")
+    t |> equal(join(translate.files, ","), "{TESTS_DIR}/test_nmt.das,{TESTS_DIR}/test_model_image.das", "translate plans its one file and the image file its bergamot arm rides")
+    let examples <- area_plan(["examples"])
+    t |> equal(join(examples.files, ","), "{TESTS_DIR}/test_interpreter.das,{TESTS_DIR}/test_parrot.das,{TESTS_DIR}/test_storyteller_restart.das,{TESTS_DIR}/test_storywish.das", "a run that names examples plans the four smoke tests")
+    t |> equal(examples.image_arms, "", "examples owns no image arm")
     t |> equal(translate.image_arms, "bergamot", "translate owns the bergamot image arm")
     let infra <- area_plan(["infra"])
     t |> equal(infra.image_arms, "", "infra owns no image arms, so no image file")
@@ -217,7 +232,7 @@ def test_area_plan(t : T?) {
     t |> equal(length(suite.files), 1, "a suite run plans the suite table")
     t |> equal(suite.image_arms, "arm12", "a suite run passes --arm through")
     let area <- plan_files(cfg, ["tts"])
-    t |> equal(length(area.files), 22, "an area run plans the area, whatever --suite says")
+    t |> equal(length(area.files), 18, "an area run plans the area, whatever --suite says")
 }
 
 //! the argument contracts: an area run refuses --arm/--full/--suite and an unknown area; a per-PR
@@ -831,7 +846,7 @@ def test_cuda_pass_keeps_every_cuda_file(t : T?) {
 //! the reach plan behind --changed: a test file itself, a fixture the tests requiring it through the fixtures between, an
 //! engine module its witness row or the core set beside its other areas whole, a benchmark the bench rows' files; every
 //! witness row and the core set name census files, and every row's module exists and reaches llm
-[test(description = "`reach_for_path` maps a test to itself, a fixture to its requiring census tests, a leaf module to its witness row, a core module to the core plus every other area, and every witness names census files")]
+[test(description = "`reach_for_path` maps a test to itself - an on-demand one too -, a fixture to its requiring census tests and to no on-demand one, a leaf module to its witness row, a core module to the core plus every other area, and every witness names census files")]
 def test_reach_for_path(t : T?) {
     let own <- reach_for_path("modules/dasLLAMA/tests/test_gemma3v.das")
     t |> equal(join(own.files, ","), "test_gemma3v.das", "a test file reaches itself")
@@ -845,6 +860,14 @@ def test_reach_for_path(t : T?) {
     t |> success(find_index(oracle.files, "test_vulkan_kernels.das") >= 0 && find_index(oracle.files, "test_metal_decode_kernels.das") < 0, "a fixture's reach stops at the census: a model-suite file takes --arm ({join(oracle.files, ", ")})")
     let tier <- reach_for_path("modules/dasLLAMA/tests/_model_tier.das")
     t |> success(length(tier.files) > length(feed.files), "the shared tier fixture reaches more, through the fixtures between ({length(tier.files)})")
+    let example_own <- reach_for_path("modules/dasLLAMA/tests/test_parrot.das")
+    t |> equal(join(example_own.files, ","), "test_parrot.das", "an on-demand test file reaches itself")
+    t |> success(empty(example_own.note), "and is no model-suite file: it takes no --arm ({example_own.note})")
+    let rail <- reach_for_path("modules/dasLLAMA/tests/_example_rail.das")
+    t |> success(find_index(rail.files, "test_gigaam.das") >= 0, "the examples' fixture reaches the per-PR test that requires it ({join(rail.files, ", ")})")
+    for (example in ["test_interpreter.das", "test_parrot.das", "test_storyteller_restart.das", "test_storywish.das"]) {
+        t |> success(find_index(rail.files, example) < 0 && find_index(tier.files, example) < 0, "a fixture's change plans no on-demand file: {example}")
+    }
     let qwen35 <- reach_for_path("modules/dasLLAMA/dasllama/dasllama_arch_qwen35.das")
     t |> success(!qwen35.core && empty(qwen35.areas) && find_index(qwen35.files, "test_gpu_resident_hybrid.das") >= 0, "a leaf module reaches its witness row, not the core")
     let load <- reach_for_path("modules/dasLLAMA/dasllama/dasllama_load.das")

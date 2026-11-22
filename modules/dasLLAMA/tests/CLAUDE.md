@@ -14,7 +14,7 @@ full-suite run turns a one-arm fix into an afternoon.
 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --suite model-free --test-wall 0     # one [test] function's wall in seconds for this run, on any suite; 0 = no wall; the REPORT carries it
 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --changed --stop-file /shared/STOP   # a marker the boxes of one run share (a fleet's two homes): the box that stops at a wall writes it, and a run that finds it starts no further child
 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --changed [--base origin/master]   # the per-PR run on a box with models, and after an edit: the files the changed paths reach
-./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --suite stocked           # every model-gated file, no --arm; a core-module change reaches every one of them through --changed
+./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --suite stocked           # every per-PR model-gated file, no --arm; a core-module change reaches every one of them through --changed
 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --suite stocked --exclude <file>   # the iteration form - drops a file the change does not reach
 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --suite gpu-kernels       # the extended model-free pass - the Vulkan and CUDA device kernel files: no model and no test wall. On a box you keep it costs the tests' own work and no compile, because the GPU driver caches every kernel it compiled, and nothing where no device answers: run it beside model-free. Only a box that never ran it pays the driver's first compile of every kernel. The stocked suite runs these files first
 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --suite wasm              # the kernel files with a wasm seat, as one wasm64 release under node; takes emcc, node and the wasm64 archives
@@ -23,13 +23,16 @@ DASLLAMA_GPU=1 DASLLAMA_CUDA=1 ./bin/daslang -jit modules/dasLLAMA/tests/run.das
 DASLLAMA_GPU=1 DASLLAMA_CUDA=1 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --area audio --only audio,whisper,gigaam,rnnt,vad   # the CUDA home's audio run: the files holding the audio families' discrete-home cells (each family on the CUDA home by its `CUDA_AUDIO_FAMILIES` row)
 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --changed --poison-kv             # every child's K/V caches start as NaN (DASLLAMA_KV_INIT=poison): a read of a row no store wrote reds its cell; each session touches its whole cache, so the run's memory is not the product's
 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --area audio            # one area: audio | vision | tts | translate | llm | infra (comma list)
+./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --area examples         # the browser examples' smoke tests (storyteller, storywish, parrot, interpreter): on demand - no other run takes them
 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --area llm --skip-fully-cached   # the development loop's rerun: a file whose program loaded whole from its compile record and whose last run on this box, over the same model files, passed is reported from that pass, not run
 ./bin/daslang -jit modules/dasLLAMA/tests/run.das -- --suite model-free --batch 1    # one child a file (the default is the whole suite in one child on this suite and ten a child on any other run, compiled as one program: the engine parsed and JIT'd once a batch)
 ```
 
 An AREA is what someone working on audio, vision, TTS, the LLM engine or the tooling runs after an
 edit: every model-free and stocked file of the area (`area_tests` in `run.das`, a file may sit in
-two) plus the `image` suite's arms the area owns (`area_image_arms`; the `gemma` arm - the E2B
+two). The `examples` area is on demand (`ON_DEMAND_AREAS`): its four files - each spawns a browser
+example under a window - are the `examples` suite's and sit in neither per-PR suite, `--changed` plans
+them for no engine module and no fixture (`standing_areas`, `tests_requiring`), and a run takes them when `--area examples` names them, or when `--changed` finds one of the four files itself changed. A standing area takes its files plus the `image` suite's arms the area owns (`area_image_arms`; the `gemma` arm - the E2B
 image round-trip - belongs to no area, because as an `--arm` substring it would drag every other
 `gemma*` arm along; reach it with `--suite image --arm gemma`). `--changed` plans by file from
 `git diff --name-only <base>` (`--base`, default `origin/master`; a base git cannot resolve is
@@ -42,7 +45,7 @@ and the `LLM_CORE_WITNESSES`, one stocked witness a family and home, the codec r
 form, the segmented window, the CPU chains; `benchmarks/`'s `.das` the bench rows' files (`BENCH_WITNESSES`, the
 facade file's `test_pp_rows_capacity` among them); the
 checked-in `models/` weights `audio` whole; any non-`.das` file - `run.das` included -,
-`performance/` and `harness/` `infra` whole; any other path under the module every area, `llm` as
+`performance/` and `harness/` `infra` whole; any other path under the module every standing area, `llm` as
 the core. Each path prints as a `CHANGED path -> ...` line, the `PLAN` line counts the files and
 says when the core changed, and a changed model-suite file prints a hint instead, because its arms
 are the caller's to scope. A core change is the per-edit gate only: the whole stocked set
@@ -3972,7 +3975,7 @@ NaN picking class 0, a poisoned bias the control), the Vulkan one `test_vkt_ctc_
 share (`ctc_leg`, `ctc_cpu_leg`, `ctc_hard_flips`, `CTC_PLOG_BAR`) live in `_ctc_oracle.das`. The cells skip
 without their carrier, the oracle dumps (`asr_oracle/gigaam/` under `models_dir()`) or the corpus clips; the facade, `.dlim` and CTC-head
 cells also when interpreted; the side-file arm without the Qwen3-ASR-0.6B mmproj and decoder.
-`test_interpreter.das` - stocked suite (areas audio, tts, translate): the interpreter example
+`test_interpreter.das` - examples suite (area examples, on demand): the interpreter example
 (`examples/dasLLAMA/interpreter`). Its listen's pure side (`turn.das`) directly - the utterance's window, its cap and its
 idle rule, the turn ledger - then the smoke cell: the example spawned under `--smoke` with a Russian clip standing in for the
 microphone, the witness lines it logs read back - the clip heard, translated, spoken, the turn done. The smoke cell skips
@@ -4291,7 +4294,8 @@ synthetic log files from a per-process temp dir. Requires `run` by bare same-dir
 `model-free` file reaches a fixture root, every `stocked` file does, no file sits in both, every
 listed file exists), the folder census (every test file sits in a `run.das` suite, the
 CPU-prefill tripwire the declared exemption; `run.das` carries no `[init]`), the area tables
-(every area file sits in the census, every census file has an area, every arm an area names
+(every standing area's file sits in the census, every census file has an area, the on-demand `examples` area
+holds the `examples` suite's files and none of the census, every arm an area names
 exists, every image-suite arm is reachable from an area or listed as unclaimed), the pure
 planners behind an area run, the `--batch` chunking (`child_chunks`: `per` files a child in
 order, the tail short, an area run's image file and an expected-failure compile test each alone),

@@ -100,7 +100,8 @@ arms that exercise that purpose, and applies these rules.
    compares, not the rig; and where the output must not move, REVIEW_TTS's PCM-hash
    compare stands in for the rig.
 
-`run.das -- --changed` plans by reach, so a core-module change plans every area. On an
+`run.das -- --changed` plans by reach, so a core-module change plans every standing area (the
+on-demand `examples` area is planned for no engine change). On an
 intermediate PR narrow it with `--changed --only <substr,...>` (the runner names each kept
 file on an `ONLY` line), or run the RUN list's areas alone with `--area <a,b>` in place of
 `--changed`; a RUN entry in a model suite runs as `--suite <name> --arm <arms>`.

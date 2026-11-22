@@ -13,11 +13,11 @@ whose two sides the cell computes is never a value an outside source can change,
 it was measured on. The pinned set, one entry a line, each with what it must keep holding:
 
 - `test_run_suites.das` must hold the per-PR split (`model-free`, `gpu-kernels`, `stocked`), the folder census, the area
-  tables, the `--exclude` and `--only` filters, the `--batch` chunking and defaults (`child_chunks`,
+  tables (each standing area over the per-PR census, the on-demand `examples` area the `examples` suite's files and none of it), the `--exclude` and `--only` filters, the `--batch` chunking and defaults (`child_chunks`,
   `batch_files`: `per` files a child in order; an area run's image file, a `cant_` / `failed_` / `invalid_` file and a tier
   contract file alone, the files around it in one batch), the batch dry run (a batch child's `START` line carrying `--together`,
   `--batch 1` one `--test` child a file), the test wall (`wall_seconds_in`, `log_wall_line`, a walled run's `LOST` stop with no `RETRY`, the `--skip` resume), the reach plan behind `--changed` -
-  which test files each kind of changed path runs, every `MODULE_WITNESSES` row and
+  which test files each kind of changed path runs (an on-demand area's file for its own change alone), every `MODULE_WITNESSES` row and
   `LLM_CORE_WITNESSES` naming only census files, and every witness row's module existing with a
   `MODULE_AREAS` row that holds `llm` -, the children's module-cache folder, the model files a
   run names that its models directory lacks (the `MISSING` lines), the image reap behind
