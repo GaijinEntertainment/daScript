@@ -80,12 +80,81 @@ def test_a_zero_width_subexpression_under_plus_matches_once(t : T?) {
     t |> equal(regex_test_match("(\\b)+a", "a"), 1)
 }
 
-[test(description = "a greedy quantifier that is not last in its pass gives back until the rest of the pattern accepts")]
-def test_a_greedy_quantifier_not_last_in_its_pass_takes_the_shortest_run_the_rest_accepts(t : T?) {
-    t |> equal(regex_test_match("a*a", "aaa"), 1)
-    t |> equal(regex_test_match("x(ab)*ab", "xababab"), 3)
-    t |> equal(regex_test_match("a+a", "aaa"), 2)
+[test(description = "a greedy quantifier takes the longest run and gives back only until the rest of the pattern accepts")]
+def test_a_greedy_quantifier_takes_the_longest_run_the_rest_accepts(t : T?) {
+    t |> equal(regex_test_match("a*a", "aaa"), 3)
+    t |> equal(regex_test_match("x(ab)*ab", "xababab"), 7)
+    t |> equal(regex_test_match("a+a", "aaa"), 3)
+    t |> equal(regex_test_match(".*b", "abab"), 4, "the last b, not the first")
+    t |> equal(regex_test_match("a.+b", "axbxb"), 5)
+    t |> equal(regex_test_match("(ab)+a", "ababab"), 5, "one pass is given back")
+    t |> equal(regex_test_match("a+b", "aaac"), -1, "giving back does not invent a match")
 }
+
+[test(description = "a greedy quantifier before an element that can match empty still takes the longest run")]
+def test_a_greedy_quantifier_before_an_optional_element_takes_the_longest_run(t : T?) {
+    t |> equal(regex_test_match("a+b?", "aaab"), 4)
+    t |> equal(regex_test_match("a+(b)?", "aaab"), 4)
+    t |> equal(regex_test_match("a+b*", "aaab"), 4)
+    t |> equal(regex_test_match("a*b?", "aaab"), 4)
+    t |> equal(regex_test_match("[a-z]+[xy]?", "abcd"), 4)
+    t |> equal(regex_test_match("[a-z]*[xy]?", "abcd"), 4)
+    t |> equal(regex_test_match("[1-9][0-9]*(u|U)?", "2048"), 4)
+    t |> equal(regex_test_match("[0-9]+[uUlL]?", "2048u"), 5,
+        "the optional suffix is taken when it is there")
+    t |> equal(regex_test_match("\\w+\\s*", "abc   d"), 6)
+    var re <- regex_compile("(a+)(b?)")
+    t |> equal(regex_match(re, "aaab"), 4)
+    t |> equal(regex_group(re, 1, "aaab"), "aaa", "the run is captured whole")
+    t |> equal(regex_group(re, 2, "aaab"), "b")
+    var quoted <- regex_compile("\".*\"")
+    let span = regex_search(quoted, "say \"hi\" and \"bye\"")
+    t |> equal(span.x, 4)
+    t |> equal(span.y, 18, "a greedy search runs to the last quote")
+}
+
+[test(description = "a greedy group that gives passes back captures what the passes it keeps captured, and a run that fails leaves the captures as it found them")]
+def test_a_greedy_group_that_gives_back_keeps_the_captures_of_the_kept_passes(t : T?) {
+    t |> run("the last kept pass, not the one given back") @(t : T?) {
+        var re <- regex_compile("(a|b)*a")
+        t |> equal(regex_match(re, "aba"), 3)
+        t |> equal(re[1], range(1, 2))
+        var pairs <- regex_compile("(ab)+a")
+        t |> equal(regex_match(pairs, "ababab"), 5)
+        t |> equal(re_group_text(pairs, 1, "ababab"), "ab")
+        t |> equal(pairs[1], range(2, 4))
+        var counted <- regex_compile("(a|b)\{1,\}a")
+        t |> equal(regex_match(counted, "aba"), 3)
+        t |> equal(counted[1], range(1, 2))
+    }
+    t |> run("a group only an earlier kept pass wrote") @(t : T?) {
+        var re <- regex_compile("((a)|b)*a")
+        t |> equal(regex_match(re, "aba"), 3)
+        t |> equal(re[1], range(1, 2))
+        t |> equal(re[2], range(0, 1), "the pass given back wrote it too")
+    }
+    t |> run("every pass given back leaves the group empty") @(t : T?) {
+        var re <- regex_compile("(a|b)*a")
+        t |> equal(regex_match(re, "a"), 1)
+        t |> equal(re[1], range(0))
+    }
+    t |> run("a run that fails leaves no capture behind") @(t : T?) {
+        var re <- regex_compile("((a)*b|ac)")
+        t |> equal(regex_match(re, "ac"), 2)
+        t |> equal(re[2], range(0))
+    }
+    t |> run("a match leaves the stacks of every quantifier empty") @(t : T?) {
+        var re <- regex_compile("x((ab)*a)+b")
+        t |> equal(regex_match(re, "xabaab"), 6)
+        var held = 0
+        visit_top_down(re.root) $(var node) {
+            held += length(node.run_stops) + length(node.run_captures)
+        }
+        t |> equal(held, 0)
+    }
+}
+
+def re_group_text(re : Regex; index : int; text : string) : string => regex_group(re, index, text)
 
 [test(description = "a lazy quantifier tries the rest of the pattern before taking another pass and still stops at its bound")]
 def test_a_lazy_quantifier_tries_the_rest_before_another_pass(t : T?) {

@@ -21,6 +21,9 @@ Quantifier: the node that closes one pass of its subexpression; its ``next`` poi
 Quantifier: whether the pass now running is probed, collected, or must reach ``reach_target``
 Quantifier: the stop a reaching pass must hit
 Quantifier: every stop a collected pass can end at, best first
+Quantifier: where each pass of a greedy run ended; nested runs of the node stack on it
+Quantifier: the capture groups inside its subexpression, as a range of group indices
+Quantifier: those groups as each greedy run found them, restored when the run gives passes back
 Quantifier: tries the rest of the pattern before another pass
 A quantifier's ``sub_end``: reaching it ends one pass through the subexpression
 Quantifier: its subexpression holds no choice, so one set of stops is all there is
