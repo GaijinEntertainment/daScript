@@ -21,5 +21,5 @@ such a file never runs as a test of its own.
 
 **A diff that adds a test for dastest itself, or changes how one spawns a process or checks an
 exit code, runs it on Windows and Linux before it lands, or the PR body names each of those two
-it was not run on** - the `extended_checks` workflow runs the dastest tests on macOS alone per
-pull request; Windows and Linux see them nightly.
+it was not run on** - the `extended_checks` workflow runs the dastest tests on Linux alone per
+pull request; Windows sees them nightly.
