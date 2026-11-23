@@ -89,9 +89,16 @@ protocol files `deps/` holds - not the upstream docs or tests. When a GLFW relea
 pull requests, the patch goes and the version moves. The download step depends on the patch
 file, so editing the patch re-extracts the release before it is applied again.
 
-The patch is applied with `git apply` under `GIT_CEILING_DIRECTORIES` set to the download
-folder. That folder sits inside the daslang checkout, and without the ceiling `git apply` finds
-the outer repository, reads the patch paths relative to its root, and skips every hunk.
+`patch_glfw.cmake` is the patch step. It applies the patch with `git apply` under a `GIT_DIR`
+that names a path that does not exist, so git works as a plain patch tool. The download folder
+sits inside the daslang checkout, and a `git apply` that finds the outer repository reads the
+patch paths relative to its root, skips every hunk and exits 0; msys2's git finds it past a
+Windows-style `GIT_CEILING_DIRECTORIES`.
+
+The step runs again on a source it already patched: the build system re-runs it when its command
+line changes or its stamp file is lost, and neither re-extracts the release. So the script first
+checks whether the patch reverses cleanly, and a source where it does is left as it is. A source
+where the patch neither applies nor reverses fails the build.
 
 The web build does not use this patch: emscripten supplies its own GLFW, and dasImgui's browser
 bridge handles composition. The generated binding registers the patched header's surface,
