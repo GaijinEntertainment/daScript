@@ -181,7 +181,7 @@ if(NOT DAS_TOOLS_DISABLED)
         JIT_FILES modules/dasLLVM/tests/llvm_jit_aliasing.das modules/dasLLVM/tests/llvm_jit_baseline.das
                   modules/dasLLVM/tests/llvm_jit_cache.das modules/dasLLVM/tests/llvm_jit_debug_info.das
                   modules/dasLLVM/tests/llvm_jit_hints.das modules/dasLLVM/tests/llvm_jit_sanitize.das
-                  modules/dasLLVM/tests/uncategorized.das)
+                  modules/dasLLVM/tests/uncategorized.das modules/dasLLVM/tests/llvm_ir_dsl_loop.das)
     das_lane_dastest_target(run_tests_llvm_tune COMMENT "Testing the llvm_tune framework"
         JIT_FILES modules/dasLLVM/tests/llvm_tune.das modules/dasLLVM/tests/llvm_cpu_class.das
                   modules/dasLLVM/tests/llvm_tune_manifest.das modules/dasLLVM/tests/llvm_tune_progress.das
