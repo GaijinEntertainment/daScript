@@ -1240,10 +1240,19 @@ DAS_API int32_t jit_lib_run_once ( int32_t * guard, void ** env, void (*fn)() ) 
 }
 
 static int32_t jit_lib_run_in_frame ( das::Context * ctx, void (*tramp)(das::Context *, void *), void * frame, uint32_t frameSize ) {
+    if ( ctx->stack.sp()==ctx->stack.top() ) ctx->collectHeapIfMostlyFree();
     char * EP = nullptr, * SP = nullptr;
     const bool pushed = frameSize && ctx->stack.size();
     if ( pushed && !ctx->stack.push(frameSize, EP, SP) ) {
         return ctx->runWithCatch([&]() { ctx->throw_error("stack overflow: the library's frame does not fit the context stack"); }) ? 1 : 0;
+    }
+    if ( pushed ) {
+        das::Prologue * pp = (das::Prologue *) ctx->stack.sp();
+        pp->info = nullptr;
+        pp->fileName = nullptr;
+        pp->functionLine = nullptr;
+        pp->stackSize = int32_t(frameSize);
+        pp->flags = 0;
     }
     const int32_t ok = ctx->runWithCatch([&]() { tramp(ctx, frame); }) ? 1 : 0;
     if ( pushed ) ctx->stack.pop(EP, SP);
