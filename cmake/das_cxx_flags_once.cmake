@@ -1,0 +1,6 @@
+MACRO(DAS_CXX_FLAGS_ONCE _flags)
+	STRING(FIND " ${CMAKE_CXX_FLAGS} " " ${_flags} " _das_cxx_flags_at)
+	IF(_das_cxx_flags_at EQUAL -1)
+		SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${_flags}")
+	ENDIF()
+ENDMACRO()

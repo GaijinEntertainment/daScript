@@ -65,6 +65,10 @@ doctest_discover_tests(tests-cpp-small
     WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     PROPERTIES LABELS "small")
 
+add_test(NAME cmake_cxx_flags_once
+    COMMAND ${CMAKE_COMMAND} -P ${CMAKE_CURRENT_SOURCE_DIR}/small/cxx_flags_once.cmake)
+set_tests_properties(cmake_cxx_flags_once PROPERTIES LABELS "small")
+
 # ── Aggregate run targets (defined BEFORE big-test subdirs so they can register deps) ─
 # `ninja test` (or `ctest`) runs everything by default. These two run subsets.
 # --build-config $<CONFIG> is required for multi-config generators (MSVC, Xcode);
