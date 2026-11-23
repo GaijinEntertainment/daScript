@@ -1959,141 +1959,141 @@ namespace das
                     ->args({"context","function_name"});
             // pinvoke
             addInterop<pinvoke_impl,void,vec4f,const char *>(*this,lib,"invoke_in_context",
-                SideEffects::worstDefault,"pinvoke_impl")->unsafeOperation = true;
+                SideEffects::worstDefault,"pinvoke_impl")->setNestsCompile()->unsafeOperation = true;
             addInterop<pinvoke_impl,void,vec4f,const char *,vec4f>(*this,lib,"invoke_in_context",
-                SideEffects::worstDefault,"pinvoke_impl")->unsafeOperation = true;
+                SideEffects::worstDefault,"pinvoke_impl")->setNestsCompile()->unsafeOperation = true;
             addInterop<pinvoke_impl,void,vec4f,const char *,vec4f,vec4f>(*this,lib,"invoke_in_context",
-                SideEffects::worstDefault,"pinvoke_impl")->unsafeOperation = true;
+                SideEffects::worstDefault,"pinvoke_impl")->setNestsCompile()->unsafeOperation = true;
             addInterop<pinvoke_impl,void,vec4f,const char *,vec4f,vec4f,vec4f>(*this,lib,"invoke_in_context",
-                SideEffects::worstDefault,"pinvoke_impl")->unsafeOperation = true;
+                SideEffects::worstDefault,"pinvoke_impl")->setNestsCompile()->unsafeOperation = true;
             addInterop<pinvoke_impl,void,vec4f,const char *,vec4f,vec4f,vec4f,vec4f>(*this,lib,"invoke_in_context",
-                SideEffects::worstDefault,"pinvoke_impl")->unsafeOperation = true;
+                SideEffects::worstDefault,"pinvoke_impl")->setNestsCompile()->unsafeOperation = true;
             addInterop<pinvoke_impl,void,vec4f,const char *,vec4f,vec4f,vec4f,vec4f,vec4f>(*this,lib,"invoke_in_context",
-                SideEffects::worstDefault,"pinvoke_impl")->unsafeOperation = true;
+                SideEffects::worstDefault,"pinvoke_impl")->setNestsCompile()->unsafeOperation = true;
             addInterop<pinvoke_impl,void,vec4f,const char *,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f>(*this,lib,"invoke_in_context",
-                SideEffects::worstDefault,"pinvoke_impl")->unsafeOperation = true;
+                SideEffects::worstDefault,"pinvoke_impl")->setNestsCompile()->unsafeOperation = true;
             addInterop<pinvoke_impl,void,vec4f,const char *,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f>(*this,lib,"invoke_in_context",
-                SideEffects::worstDefault,"pinvoke_impl")->unsafeOperation = true;
+                SideEffects::worstDefault,"pinvoke_impl")->setNestsCompile()->unsafeOperation = true;
             addInterop<pinvoke_impl,void,vec4f,const char *,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f>(*this,lib,"invoke_in_context",
-                SideEffects::worstDefault,"pinvoke_impl")->unsafeOperation = true;
+                SideEffects::worstDefault,"pinvoke_impl")->setNestsCompile()->unsafeOperation = true;
             addInterop<pinvoke_impl,void,vec4f,const char *,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f>(*this,lib,"invoke_in_context",
-                SideEffects::worstDefault,"pinvoke_impl")->unsafeOperation = true;
+                SideEffects::worstDefault,"pinvoke_impl")->setNestsCompile()->unsafeOperation = true;
             addInterop<pinvoke_impl,void,vec4f,const char *,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f>(*this,lib,"invoke_in_context",
-                SideEffects::worstDefault,"pinvoke_impl")->unsafeOperation = true;
+                SideEffects::worstDefault,"pinvoke_impl")->setNestsCompile()->unsafeOperation = true;
             // pinvoke2
             addInterop<try_pinvoke_impl,bool,vec4f,const char *>(*this,lib,"try_invoke_in_context",
-                SideEffects::worstDefault,"try_pinvoke_impl")->unsafeOperation = true;
+                SideEffects::worstDefault,"try_pinvoke_impl")->setNestsCompile()->unsafeOperation = true;
             addInterop<try_pinvoke_impl,bool,vec4f,const char *,vec4f>(*this,lib,"try_invoke_in_context",
-                SideEffects::worstDefault,"try_pinvoke_impl")->unsafeOperation = true;
+                SideEffects::worstDefault,"try_pinvoke_impl")->setNestsCompile()->unsafeOperation = true;
             addInterop<try_pinvoke_impl,bool,vec4f,const char *,vec4f,vec4f>(*this,lib,"try_invoke_in_context",
-                SideEffects::worstDefault,"try_pinvoke_impl")->unsafeOperation = true;
+                SideEffects::worstDefault,"try_pinvoke_impl")->setNestsCompile()->unsafeOperation = true;
             addInterop<try_pinvoke_impl,bool,vec4f,const char *,vec4f,vec4f,vec4f>(*this,lib,"try_invoke_in_context",
-                SideEffects::worstDefault,"try_pinvoke_impl")->unsafeOperation = true;
+                SideEffects::worstDefault,"try_pinvoke_impl")->setNestsCompile()->unsafeOperation = true;
             addInterop<try_pinvoke_impl,bool,vec4f,const char *,vec4f,vec4f,vec4f,vec4f>(*this,lib,"try_invoke_in_context",
-                SideEffects::worstDefault,"try_pinvoke_impl")->unsafeOperation = true;
+                SideEffects::worstDefault,"try_pinvoke_impl")->setNestsCompile()->unsafeOperation = true;
             addInterop<try_pinvoke_impl,bool,vec4f,const char *,vec4f,vec4f,vec4f,vec4f,vec4f>(*this,lib,"try_invoke_in_context",
-                SideEffects::worstDefault,"try_pinvoke_impl")->unsafeOperation = true;
+                SideEffects::worstDefault,"try_pinvoke_impl")->setNestsCompile()->unsafeOperation = true;
             addInterop<try_pinvoke_impl,bool,vec4f,const char *,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f>(*this,lib,"try_invoke_in_context",
-                SideEffects::worstDefault,"try_pinvoke_impl")->unsafeOperation = true;
+                SideEffects::worstDefault,"try_pinvoke_impl")->setNestsCompile()->unsafeOperation = true;
             addInterop<try_pinvoke_impl,bool,vec4f,const char *,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f>(*this,lib,"try_invoke_in_context",
-                SideEffects::worstDefault,"try_pinvoke_impl")->unsafeOperation = true;
+                SideEffects::worstDefault,"try_pinvoke_impl")->setNestsCompile()->unsafeOperation = true;
             addInterop<try_pinvoke_impl,bool,vec4f,const char *,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f>(*this,lib,"try_invoke_in_context",
-                SideEffects::worstDefault,"try_pinvoke_impl")->unsafeOperation = true;
+                SideEffects::worstDefault,"try_pinvoke_impl")->setNestsCompile()->unsafeOperation = true;
             addInterop<try_pinvoke_impl,bool,vec4f,const char *,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f>(*this,lib,"try_invoke_in_context",
-                SideEffects::worstDefault,"try_pinvoke_impl")->unsafeOperation = true;
+                SideEffects::worstDefault,"try_pinvoke_impl")->setNestsCompile()->unsafeOperation = true;
             addInterop<try_pinvoke_impl,bool,vec4f,const char *,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f>(*this,lib,"try_invoke_in_context",
-                SideEffects::worstDefault,"try_pinvoke_impl")->unsafeOperation = true;
+                SideEffects::worstDefault,"try_pinvoke_impl")->setNestsCompile()->unsafeOperation = true;
             addInterop<pinvoke_impl2,void,vec4f,Func>(*this,lib,"invoke_in_context",
-                SideEffects::worstDefault,"pinvoke_impl2")->unsafeOperation = true;
+                SideEffects::worstDefault,"pinvoke_impl2")->setNestsCompile()->unsafeOperation = true;
             addInterop<pinvoke_impl2,void,vec4f,Func,vec4f>(*this,lib,"invoke_in_context",
-                SideEffects::worstDefault,"pinvoke_impl2")->unsafeOperation = true;
+                SideEffects::worstDefault,"pinvoke_impl2")->setNestsCompile()->unsafeOperation = true;
             addInterop<pinvoke_impl2,void,vec4f,Func,vec4f,vec4f>(*this,lib,"invoke_in_context",
-                SideEffects::worstDefault,"pinvoke_impl2")->unsafeOperation = true;
+                SideEffects::worstDefault,"pinvoke_impl2")->setNestsCompile()->unsafeOperation = true;
             addInterop<pinvoke_impl2,void,vec4f,Func,vec4f,vec4f,vec4f>(*this,lib,"invoke_in_context",
-                SideEffects::worstDefault,"pinvoke_impl2")->unsafeOperation = true;
+                SideEffects::worstDefault,"pinvoke_impl2")->setNestsCompile()->unsafeOperation = true;
             addInterop<pinvoke_impl2,void,vec4f,Func,vec4f,vec4f,vec4f,vec4f>(*this,lib,"invoke_in_context",
-                SideEffects::worstDefault,"pinvoke_impl2")->unsafeOperation = true;
+                SideEffects::worstDefault,"pinvoke_impl2")->setNestsCompile()->unsafeOperation = true;
             addInterop<pinvoke_impl2,void,vec4f,Func,vec4f,vec4f,vec4f,vec4f,vec4f>(*this,lib,"invoke_in_context",
-                SideEffects::worstDefault,"pinvoke_impl2")->unsafeOperation = true;
+                SideEffects::worstDefault,"pinvoke_impl2")->setNestsCompile()->unsafeOperation = true;
             addInterop<pinvoke_impl2,void,vec4f,Func,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f>(*this,lib,"invoke_in_context",
-                SideEffects::worstDefault,"pinvoke_impl2")->unsafeOperation = true;
+                SideEffects::worstDefault,"pinvoke_impl2")->setNestsCompile()->unsafeOperation = true;
             addInterop<pinvoke_impl2,void,vec4f,Func,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f>(*this,lib,"invoke_in_context",
-                SideEffects::worstDefault,"pinvoke_impl2")->unsafeOperation = true;
+                SideEffects::worstDefault,"pinvoke_impl2")->setNestsCompile()->unsafeOperation = true;
             addInterop<pinvoke_impl2,void,vec4f,Func,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f>(*this,lib,"invoke_in_context",
-                SideEffects::worstDefault,"pinvoke_impl2")->unsafeOperation = true;
+                SideEffects::worstDefault,"pinvoke_impl2")->setNestsCompile()->unsafeOperation = true;
             addInterop<pinvoke_impl2,void,vec4f,Func,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f>(*this,lib,"invoke_in_context",
-                SideEffects::worstDefault,"pinvoke_impl2")->unsafeOperation = true;
+                SideEffects::worstDefault,"pinvoke_impl2")->setNestsCompile()->unsafeOperation = true;
             addInterop<pinvoke_impl2,void,vec4f,Func,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f>(*this,lib,"invoke_in_context",
-                SideEffects::worstDefault,"pinvoke_impl2")->unsafeOperation = true;
+                SideEffects::worstDefault,"pinvoke_impl2")->setNestsCompile()->unsafeOperation = true;
             // pinvoke3
             addInterop<pinvoke_impl3,void,vec4f,Lambda>(*this,lib,"invoke_in_context",
-                SideEffects::worstDefault,"pinvoke_impl3")->unsafeOperation = true;
+                SideEffects::worstDefault,"pinvoke_impl3")->setNestsCompile()->unsafeOperation = true;
             addInterop<pinvoke_impl3,void,vec4f,Lambda,vec4f>(*this,lib,"invoke_in_context",
-                SideEffects::worstDefault,"pinvoke_impl3")->unsafeOperation = true;
+                SideEffects::worstDefault,"pinvoke_impl3")->setNestsCompile()->unsafeOperation = true;
             addInterop<pinvoke_impl3,void,vec4f,Lambda,vec4f,vec4f>(*this,lib,"invoke_in_context",
-                SideEffects::worstDefault,"pinvoke_impl3")->unsafeOperation = true;
+                SideEffects::worstDefault,"pinvoke_impl3")->setNestsCompile()->unsafeOperation = true;
             addInterop<pinvoke_impl3,void,vec4f,Lambda,vec4f,vec4f,vec4f>(*this,lib,"invoke_in_context",
-                SideEffects::worstDefault,"pinvoke_impl3")->unsafeOperation = true;
+                SideEffects::worstDefault,"pinvoke_impl3")->setNestsCompile()->unsafeOperation = true;
             addInterop<pinvoke_impl3,void,vec4f,Lambda,vec4f,vec4f,vec4f,vec4f>(*this,lib,"invoke_in_context",
-                SideEffects::worstDefault,"pinvoke_impl3")->unsafeOperation = true;
+                SideEffects::worstDefault,"pinvoke_impl3")->setNestsCompile()->unsafeOperation = true;
             addInterop<pinvoke_impl3,void,vec4f,Lambda,vec4f,vec4f,vec4f,vec4f,vec4f>(*this,lib,"invoke_in_context",
-                SideEffects::worstDefault,"pinvoke_impl3")->unsafeOperation = true;
+                SideEffects::worstDefault,"pinvoke_impl3")->setNestsCompile()->unsafeOperation = true;
             addInterop<pinvoke_impl3,void,vec4f,Lambda,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f>(*this,lib,"invoke_in_context",
-                SideEffects::worstDefault,"pinvoke_impl3")->unsafeOperation = true;
+                SideEffects::worstDefault,"pinvoke_impl3")->setNestsCompile()->unsafeOperation = true;
             addInterop<pinvoke_impl3,void,vec4f,Lambda,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f>(*this,lib,"invoke_in_context",
-                SideEffects::worstDefault,"pinvoke_impl3")->unsafeOperation = true;
+                SideEffects::worstDefault,"pinvoke_impl3")->setNestsCompile()->unsafeOperation = true;
             addInterop<pinvoke_impl3,void,vec4f,Lambda,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f>(*this,lib,"invoke_in_context",
-                SideEffects::worstDefault,"pinvoke_impl3")->unsafeOperation = true;
+                SideEffects::worstDefault,"pinvoke_impl3")->setNestsCompile()->unsafeOperation = true;
             addInterop<pinvoke_impl3,void,vec4f,Lambda,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f>(*this,lib,"invoke_in_context",
-                SideEffects::worstDefault,"pinvoke_impl3")->unsafeOperation = true;
+                SideEffects::worstDefault,"pinvoke_impl3")->setNestsCompile()->unsafeOperation = true;
             addInterop<pinvoke_impl3,void,vec4f,Lambda,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f>(*this,lib,"invoke_in_context",
-                SideEffects::worstDefault,"pinvoke_impl3")->unsafeOperation = true;
+                SideEffects::worstDefault,"pinvoke_impl3")->setNestsCompile()->unsafeOperation = true;
             // invoke debug agent function (local to da context)
             addInterop<invokeInDebugAgent,void,char *,char *>(*this,lib,"invoke_debug_agent_method",
-                SideEffects::worstDefault,"invokeInDebugAgent")->unsafeOperation = true;
+                SideEffects::worstDefault,"invokeInDebugAgent")->setNestsCompile()->unsafeOperation = true;
             addInterop<invokeInDebugAgent,void,char *,char *,vec4f>(*this,lib,"invoke_debug_agent_method",
-                SideEffects::worstDefault,"invokeInDebugAgent")->unsafeOperation = true;
+                SideEffects::worstDefault,"invokeInDebugAgent")->setNestsCompile()->unsafeOperation = true;
             addInterop<invokeInDebugAgent,void,char *,char *,vec4f,vec4f>(*this,lib,"invoke_debug_agent_method",
-                SideEffects::worstDefault,"invokeInDebugAgent")->unsafeOperation = true;
+                SideEffects::worstDefault,"invokeInDebugAgent")->setNestsCompile()->unsafeOperation = true;
             addInterop<invokeInDebugAgent,void,char *,char *,vec4f,vec4f,vec4f>(*this,lib,"invoke_debug_agent_method",
-                SideEffects::worstDefault,"invokeInDebugAgent")->unsafeOperation = true;
+                SideEffects::worstDefault,"invokeInDebugAgent")->setNestsCompile()->unsafeOperation = true;
             addInterop<invokeInDebugAgent,void,char *,char *,vec4f,vec4f,vec4f,vec4f>(*this,lib,"invoke_debug_agent_method",
-                SideEffects::worstDefault,"invokeInDebugAgent")->unsafeOperation = true;
+                SideEffects::worstDefault,"invokeInDebugAgent")->setNestsCompile()->unsafeOperation = true;
             addInterop<invokeInDebugAgent,void,char *,char *,vec4f,vec4f,vec4f,vec4f,vec4f>(*this,lib,"invoke_debug_agent_method",
-                SideEffects::worstDefault,"invokeInDebugAgent")->unsafeOperation = true;
+                SideEffects::worstDefault,"invokeInDebugAgent")->setNestsCompile()->unsafeOperation = true;
             addInterop<invokeInDebugAgent,void,char *,char *,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f>(*this,lib,"invoke_debug_agent_method",
-                SideEffects::worstDefault,"invokeInDebugAgent")->unsafeOperation = true;
+                SideEffects::worstDefault,"invokeInDebugAgent")->setNestsCompile()->unsafeOperation = true;
             addInterop<invokeInDebugAgent,void,char *,char *,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f>(*this,lib,"invoke_debug_agent_method",
-                SideEffects::worstDefault,"invokeInDebugAgent")->unsafeOperation = true;
+                SideEffects::worstDefault,"invokeInDebugAgent")->setNestsCompile()->unsafeOperation = true;
             addInterop<invokeInDebugAgent,void,char *,char *,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f>(*this,lib,"invoke_debug_agent_method",
-                SideEffects::worstDefault,"invokeInDebugAgent")->unsafeOperation = true;
+                SideEffects::worstDefault,"invokeInDebugAgent")->setNestsCompile()->unsafeOperation = true;
             addInterop<invokeInDebugAgent,void,char *,char *,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f>(*this,lib,"invoke_debug_agent_method",
-                SideEffects::worstDefault,"invokeInDebugAgent")->unsafeOperation = true;
+                SideEffects::worstDefault,"invokeInDebugAgent")->setNestsCompile()->unsafeOperation = true;
             addInterop<invokeInDebugAgent,void,char *,char *,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f>(*this,lib,"invoke_debug_agent_method",
-                SideEffects::worstDefault,"invokeInDebugAgent")->unsafeOperation = true;
+                SideEffects::worstDefault,"invokeInDebugAgent")->setNestsCompile()->unsafeOperation = true;
             // invoke debug agent function (local to da context)
             addInterop<invokeInDebugAgent2,void,char *,char *>(*this,lib,"invoke_debug_agent_function",
-                SideEffects::worstDefault,"invokeInDebugAgent2")->unsafeOperation = true;
+                SideEffects::worstDefault,"invokeInDebugAgent2")->setNestsCompile()->unsafeOperation = true;
             addInterop<invokeInDebugAgent2,void,char *,char *,vec4f>(*this,lib,"invoke_debug_agent_function",
-                SideEffects::worstDefault,"invokeInDebugAgent2")->unsafeOperation = true;
+                SideEffects::worstDefault,"invokeInDebugAgent2")->setNestsCompile()->unsafeOperation = true;
             addInterop<invokeInDebugAgent2,void,char *,char *,vec4f,vec4f>(*this,lib,"invoke_debug_agent_function",
-                SideEffects::worstDefault,"invokeInDebugAgent2")->unsafeOperation = true;
+                SideEffects::worstDefault,"invokeInDebugAgent2")->setNestsCompile()->unsafeOperation = true;
             addInterop<invokeInDebugAgent2,void,char *,char *,vec4f,vec4f,vec4f>(*this,lib,"invoke_debug_agent_function",
-                SideEffects::worstDefault,"invokeInDebugAgent2")->unsafeOperation = true;
+                SideEffects::worstDefault,"invokeInDebugAgent2")->setNestsCompile()->unsafeOperation = true;
             addInterop<invokeInDebugAgent2,void,char *,char *,vec4f,vec4f,vec4f,vec4f>(*this,lib,"invoke_debug_agent_function",
-                SideEffects::worstDefault,"invokeInDebugAgent2")->unsafeOperation = true;
+                SideEffects::worstDefault,"invokeInDebugAgent2")->setNestsCompile()->unsafeOperation = true;
             addInterop<invokeInDebugAgent2,void,char *,char *,vec4f,vec4f,vec4f,vec4f,vec4f>(*this,lib,"invoke_debug_agent_function",
-                SideEffects::worstDefault,"invokeInDebugAgent2")->unsafeOperation = true;
+                SideEffects::worstDefault,"invokeInDebugAgent2")->setNestsCompile()->unsafeOperation = true;
             addInterop<invokeInDebugAgent2,void,char *,char *,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f>(*this,lib,"invoke_debug_agent_function",
-                SideEffects::worstDefault,"invokeInDebugAgent2")->unsafeOperation = true;
+                SideEffects::worstDefault,"invokeInDebugAgent2")->setNestsCompile()->unsafeOperation = true;
             addInterop<invokeInDebugAgent2,void,char *,char *,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f>(*this,lib,"invoke_debug_agent_function",
-                SideEffects::worstDefault,"invokeInDebugAgent2")->unsafeOperation = true;
+                SideEffects::worstDefault,"invokeInDebugAgent2")->setNestsCompile()->unsafeOperation = true;
             addInterop<invokeInDebugAgent2,void,char *,char *,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f>(*this,lib,"invoke_debug_agent_function",
-                SideEffects::worstDefault,"invokeInDebugAgent2")->unsafeOperation = true;
+                SideEffects::worstDefault,"invokeInDebugAgent2")->setNestsCompile()->unsafeOperation = true;
             addInterop<invokeInDebugAgent2,void,char *,char *,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f>(*this,lib,"invoke_debug_agent_function",
-                SideEffects::worstDefault,"invokeInDebugAgent2")->unsafeOperation = true;
+                SideEffects::worstDefault,"invokeInDebugAgent2")->setNestsCompile()->unsafeOperation = true;
             addInterop<invokeInDebugAgent2,void,char *,char *,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f>(*this,lib,"invoke_debug_agent_function",
-                SideEffects::worstDefault,"invokeInDebugAgent2")->unsafeOperation = true;
+                SideEffects::worstDefault,"invokeInDebugAgent2")->setNestsCompile()->unsafeOperation = true;
             // lock debug context
             addExtern<DAS_BIND_FUN(lockDebugAgent)>(*this, lib, "lock_debug_agent",
                 SideEffects::modifyExternal, "lockDebugAgent")

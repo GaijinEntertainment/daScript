@@ -1803,16 +1803,16 @@ namespace das {
                 ->args({"project","context","at"});
         addExtern<DAS_BIND_FUN(rtti_builtin_compile)>(*this, lib, "compile",
             SideEffects::modifyExternal, "rtti_builtin_compile")
-                ->args({"module_name","codeText","codeOfPolicies","block","context","line"});
+                ->args({"module_name","codeText","codeOfPolicies","block","context","line"})->setNestsCompile();
         addExtern<DAS_BIND_FUN(rtti_builtin_compile_ex)>(*this, lib, "compile",
             SideEffects::modifyExternal, "rtti_builtin_compile_ex")
-                ->args({"module_name","codeText","codeOfPolicies","exportAll","block","context","line"});
+                ->args({"module_name","codeText","codeOfPolicies","exportAll","block","context","line"})->setNestsCompile();
         addExtern<DAS_BIND_FUN(rtti_builtin_compile_file)>(*this, lib, "compile_file",
             SideEffects::modifyExternal, "rtti_builtin_compile_file")
-                ->args({"module_name","fileAccess","moduleGroup","codeOfPolicies","block","context","line"});
+                ->args({"module_name","fileAccess","moduleGroup","codeOfPolicies","block","context","line"})->setNestsCompile();
         addExtern<DAS_BIND_FUN(ast_simulate)>(*this, lib, "simulate",
             SideEffects::modifyExternal, "ast_simulate")
-                ->args({"program","block","context","line"});
+                ->args({"program","block","context","line"})->setNestsCompile();
         addExtern<DAS_BIND_FUN(ast_clone_context)>(*this, lib, "clone_context",
             SideEffects::modifyExternal, "ast_clone_context")
                 ->args({"source","block","context","line"});
@@ -1853,29 +1853,29 @@ namespace das {
             *this, lib, "compile_file",
             SideEffects::modifyExternal, "rtti_builtin_compile_file_cached")
                 ->args({"module_name","fileAccess","moduleGroup",
-                    "codeOfPolicies","moduleCache","block","context","line"});
+                    "codeOfPolicies","moduleCache","block","context","line"})->setNestsCompile();
         addExtern<DAS_BIND_FUN(rtti_builtin_module_cache_verdict)>(
             *this, lib, "module_cache_verdict", SideEffects::accessExternal,
             "rtti_builtin_module_cache_verdict")
                 ->args({"moduleGroup","context","line"});
         addExtern<DAS_BIND_FUN(rtti_builtin_make_program)>(*this, lib, "make_program",
             SideEffects::modifyExternal, "rtti_builtin_make_program")
-                ->args({"codeOfPolicies","block","context","line"});
+                ->args({"codeOfPolicies","block","context","line"})->setNestsCompile();
         addExtern<DAS_BIND_FUN(rtti_builtin_make_module)>(*this, lib, "make_module",
             SideEffects::modifyExternal, "rtti_builtin_make_module")
-                ->args({"name","block","context","line"});
+                ->args({"name","block","context","line"})->setNestsCompile();
         addExtern<DAS_BIND_FUN(rtti_builtin_make_main_module)>(*this, lib, "make_main_module",
             SideEffects::modifyExternal, "rtti_builtin_make_main_module")
-                ->args({"block","context","line"});
+                ->args({"block","context","line"})->setNestsCompile();
         addExtern<DAS_BIND_FUN(rtti_builtin_parse_file)>(*this, lib, "parse_file",
             SideEffects::modifyExternal, "rtti_builtin_parse_file")
-                ->args({"file_name","fileAccess","moduleGroup","codeOfPolicies","block","context","line"});
+                ->args({"file_name","fileAccess","moduleGroup","codeOfPolicies","block","context","line"})->setNestsCompile();
         addExtern<DAS_BIND_FUN(rtti_builtin_parse_file_no_prerequisites)>(*this, lib, "parse_file_no_prerequisites",
             SideEffects::modifyExternal, "rtti_builtin_parse_file_no_prerequisites")
-                ->args({"file_name","fileAccess","moduleGroup","codeOfPolicies","block","context","line"});
+                ->args({"file_name","fileAccess","moduleGroup","codeOfPolicies","block","context","line"})->setNestsCompile();
         addExtern<DAS_BIND_FUN(rtti_builtin_require_module_now)>(*this, lib, "require_module_now",
             SideEffects::modifyExternal, "rtti_builtin_require_module_now")
-                ->args({"module_name","fileAccess","codeOfPolicies","block","context","line"});
+                ->args({"module_name","fileAccess","codeOfPolicies","block","context","line"})->setNestsCompile();
         addExtern<DAS_BIND_FUN(rtti_has_macro_context)>(*this, lib, "has_macro_context",
             SideEffects::accessExternal, "rtti_has_macro_context")
                 ->arg("module");
@@ -2232,7 +2232,7 @@ namespace das {
                 ->args({"expr","ok"})->unsafeOperation = true;
         addExtern<DAS_BIND_FUN(evalSingleExpressionInContext)>(*this, lib, "eval_single_expression",
             SideEffects::modifyArgumentAndExternal, "evalSingleExpressionInContext")
-                ->args({"expr","ctx","ok"})->unsafeOperation = true;
+                ->args({"expr","ctx","ok"})->setNestsCompile()->unsafeOperation = true;
         addExtern<DAS_BIND_FUN(ast_get_const_expr)>(*this, lib, "get_const_expr",
             SideEffects::modifyArgumentAndExternal, "ast_get_const_expr")
                 ->args({"program","expression","context","line"});
