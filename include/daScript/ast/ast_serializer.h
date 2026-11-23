@@ -361,7 +361,7 @@ namespace das {
         AstSerializer & serializeModule ( Module & module, bool already_exists );
 
         static constexpr uint32_t getVersion () {
-            return 285;   // 285: Module aliasingAllowed
+            return 286;   // 286: a literal adapts before a folded int constant in an operator
         }
 
         void serializeProgram ( ProgramPtr program, ModuleGroup & libGroup ) noexcept;

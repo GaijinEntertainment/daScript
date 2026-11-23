@@ -4,45 +4,58 @@
 
 using namespace das;
 
-TEST_CASE("folded int constants in binary operators require the compatibility policy") {
-    bool promote = false;
+TEST_CASE("folded int constants promote in binary operators unless the policy or the option turns it off") {
+    bool promote = true;
     bool succeeds = false;
     const char * body = nullptr;
-    SUBCASE("default policy rejects a folded int") {
+    const char * option = "";
+    SUBCASE("the default promotes the right operand") {
+        succeeds = true;
         body = "return 2.0 + int(1)";
     }
-    SUBCASE("compatibility promotes the right operand") {
-        promote = succeeds = true;
-        body = "return 2.0 + int(1)";
-    }
-    SUBCASE("compatibility promotes the left operand") {
-        promote = succeeds = true;
+    SUBCASE("the default promotes the left operand") {
+        succeeds = true;
         body = "return int(1) + 2.0";
     }
-    SUBCASE("compatibility preserves compound assignment") {
-        promote = succeeds = true;
+    SUBCASE("the default promotes in a compound assignment") {
+        succeeds = true;
         body = "var velocity = 3.0\nvelocity *= int(1)\nreturn velocity";
     }
-    SUBCASE("default policy rejects folded compound assignment") {
+    SUBCASE("the policy off rejects a folded int") {
+        promote = false;
+        body = "return 2.0 + int(1)";
+    }
+    SUBCASE("the policy off rejects a folded compound assignment") {
+        promote = false;
         body = "var velocity = 3.0\nvelocity *= int(1)\nreturn velocity";
     }
-    SUBCASE("compatibility still rejects a runtime int") {
-        promote = true;
+    SUBCASE("the option off overrides the policy") {
+        option = "options promote_folded_int_constants = false\n";
+        body = "return 2.0 + int(1)";
+    }
+    SUBCASE("the option on overrides the policy") {
+        promote = false;
+        succeeds = true;
+        option = "options promote_folded_int_constants = true\n";
+        body = "return 2.0 + int(1)";
+    }
+    SUBCASE("a runtime int is rejected either way") {
         body = "return 2.0 + value";
     }
-    SUBCASE("a source literal works with the default policy") {
+    SUBCASE("a source literal works with the policy off") {
+        promote = false;
         succeeds = true;
         body = "return 2.0 + 1";
     }
     REQUIRE(body);
-    string source = string("options gen2\n[export]\ndef test(value : int) : float {\n") + body + "\n}\n";
+    string source = string("options gen2\n") + option + "[export]\ndef test(value : int) : float {\n" + body + "\n}\n";
     auto access = make_smart<FsFileAccess>();
     access->setFileInfo("folded_int_policy.das",
         make_unique<TextFileInfo>(source.c_str(), uint32_t(source.size()), false));
     TextWriter logs;
     ModuleGroup group;
     CodeOfPolicies policies;
-    CHECK_FALSE(policies.promote_folded_int_constants);
+    CHECK(policies.promote_folded_int_constants);
     policies.promote_folded_int_constants = promote;
     auto program = compileDaScript("folded_int_policy.das", access, logs, group, policies);
     REQUIRE(program);

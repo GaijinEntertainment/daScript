@@ -36,6 +36,33 @@ accepts an auto-typed container or block pass type while it is still unseeded
 (`isMatchingArgument` with `inferBlock`), so the call and invoke sites type-check in the same
 pass the seed lands.
 
+## An int constant in a numeric operator (`ast_infer_type_op.cpp`) {#op2-int-promotion}
+
+A binary operator or a compound assignment whose sides differ in numeric type gets two
+promotion passes before the operator lookup, right operand first in each.
+
+The first pass moves only a literal: an `ExprConst` the parser marked `isConstLiteral`, or one
+infer-time folding built from such operands (`-1`, `(1 + 1)`). That keeps the type of a computed
+constant where a literal can adapt to it: `31 - clz(0xFF)` is `uint`, as `31 - clz(bits)` is.
+
+The second pass runs under `promote_folded_int_constants` (policy and option, on by default) and
+moves any `int` or `uint` constant. It runs only for a pair of different numeric types that no
+operator accepts as written: `op2LookupMisses` asks the lookup first, without reporting, and a
+match or a pending candidate (`#pending-signature`) leaves the pair to the lookup. A user
+operator on the mixed pair, `operator +(float; int)`, is called as before. A program that
+compiles with the option off compiles to the same types with it on.
+
+A profile that keeps source shapes (`no_infer_time_folding`: lint, the LSP, MCP) has no folded
+constant to move. There the second pass evaluates the operand on a detached copy through
+`foldConstInit`. It does so for a call or an operator only, the shapes folding collapses in
+place. When the value promotes, the pass wraps the operand in a generated cast to the other
+side's type. The operand itself stays in the tree for the lint rules, and the program compiles
+under both profiles.
+
+That evaluation changes nothing in the tree, so it runs under `quietFolding`: a fold reported
+from it would mark the pass as changed, and a pair it cannot promote - a value out of the
+target's range - would restart inference on every pass.
+
 ## Overloads of `=`, `<-` and `:=` (`ast_infer_type_op.cpp`, `ast_infer_type_function.cpp`) {#assign-operator-lookup}
 
 An `ExprCopy` or `ExprMove` whose `no_promotion` flag is clear first looks for a user function

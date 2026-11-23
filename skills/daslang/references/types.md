@@ -51,9 +51,13 @@ Bare *integer literals* promote to a known target type when the value fits: loca
 initializers, struct field declarations, struct-ctor field values, variant-arm and tuple-element
 values, `=`, `:=`, compound assignment, either side of a binary operator, `return`. Call
 arguments, parameter defaults, and `<-` do **not** promote - write `foo(1.0)`, never `foo(1)`.
-In a binary operator only a literal adapts - `-1`, `~1`, `(1 + 1)` count, since they are built
-from literals - while a computed constant keeps its type: `31 - clz(0xFF)` is uint, and a
-`typeinfo` result or a macro-built constant is int. Cast those: `long_length(a) * int64(typeinfo sizeof(T))`.
+In a binary operator a literal adapts first - `-1`, `~1`, `(1 + 1)` count, since they are built
+from literals - so in `31 - clz(0xFF)` the `31` becomes uint and the result is uint.
+When neither side is a literal and no operator accepts the two types as written, an int or uint
+constant the compiler can evaluate - `int(2)`, a `typeinfo` result, a builtin called on
+constants - takes the other operand's type: `f *= int(2)`, `long_length(a) * typeinfo sizeof(T)`.
+A runtime int and a named constant (`let N = 3`) never do. `options promote_folded_int_constants = false`
+turns this off.
 
 Integer and bitfield targets are range-checked (`var d : uint8 = 256` is an error);
 `float`/`double` targets always accept, so a literal above 2^24 silently loses precision in a

@@ -200,6 +200,8 @@ the target type name as a function:
 
 Float-to-integer conversion truncates toward zero (like C).
 
+.. _integer_literal_promotion:
+
 Integer literal promotion
 ^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -227,6 +229,31 @@ It fires in a fixed set of contexts, and nowhere else:
     var d : float ; d += 1            // compound assignment
     var e : float = a + 1             // binary operator (either side)
     def fn() : uint8 { return 200 }   // return statement
+
+Folded integer constants
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+In a binary operator and a compound assignment, a literal adapts first. In
+``31 - clz(0xFF)`` the literal ``31`` becomes ``uint``, and the result is ``uint``, the same
+as ``31 - clz(bits)``.
+
+When neither operand is a literal, an ``int`` or ``uint`` constant the compiler can evaluate
+takes the type of the other operand. Such a constant is a cast of a literal, a ``typeinfo``
+result, or a builtin called on constants:
+
+.. code-block:: das
+
+    var f = 1.5
+    f *= int(2)                              // float *= float
+    let bytes = 4l * typeinfo sizeof(f)      // int64 * int64
+
+This applies only where no operator accepts the two types as written. An operator a program
+declares for the mixed pair, such as ``operator +(a : float; b : int)``, is still the one
+called.
+
+A runtime ``int`` does not promote. A named constant does not promote: with ``let N = 3`` at
+module scope, ``f * N`` is an error. ``options promote_folded_int_constants = false`` turns
+this rule off, and then only a literal adapts.
 
 Where promotion does not apply
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

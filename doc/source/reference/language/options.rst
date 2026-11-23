@@ -386,6 +386,14 @@ Safety and Strictness
      - Allows the ``=`` operator to be silently promoted to ``<-`` when the right-hand side
        is a temporary value or function call result and the type cannot be copied.
        See :ref:`Move, Copy, and Clone <move_copy_clone>`.
+   * - ``promote_folded_int_constants``
+     - bool
+     - true
+     - Lets an ``int`` or ``uint`` constant the compiler can evaluate (``int(1)``,
+       ``typeinfo sizeof(type<int>)``) take the type of the other operand in a numeric
+       operator or a compound assignment, where no operator accepts the two types as
+       written. A literal on the other side still adapts first. When ``false``, only a
+       literal adapts. See :ref:`Integer literal promotion <integer_literal_promotion>`.
    * - ``strict_unsafe_delete``
      - bool
      - true

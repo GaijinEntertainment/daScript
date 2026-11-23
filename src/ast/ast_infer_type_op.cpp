@@ -262,6 +262,34 @@ namespace das {
         }
         return Visitor::visit(expr);
     }
+    // src/ast/ARCHITECTURE_INFER.md#op2-int-promotion
+    ExpressionPtr InferTypes::promoteOp2Operand(const ExpressionPtr & operand, const TypeDeclPtr & targetType, bool & rangeError, bool foldedToo) {
+        if (auto promoted = tryPromoteConstInt(operand, targetType, rangeError, !foldedToo)) return promoted;
+        if (rangeError || !foldedToo || !operand || !operand->type || !targetType) return nullptr;
+        if (!(operand->rtti_isCall() || operand->rtti_isOp1() || operand->rtti_isOp2() || operand->rtti_isOp3())) return nullptr;
+        const auto sourceType = operand->type->baseType;
+        if ((sourceType != Type::tInt && sourceType != Type::tUInt) || sourceType == targetType->baseType || !targetType->isNumeric()) return nullptr;
+        const bool wasQuiet = quietFolding;
+        quietFolding = true;
+        auto value = foldConstInit(operand);
+        quietFolding = wasQuiet;
+        if (!value || !tryPromoteConstInt(value, targetType, rangeError, false)) return nullptr;
+        auto cast = new ExprCall(operand->at, das_to_string(targetType->baseType));
+        cast->generated = true;
+        cast->arguments.push_back(operand);
+        return cast;
+    }
+    // src/ast/ARCHITECTURE_INFER.md#op2-int-promotion
+    bool InferTypes::op2LookupMisses(ExprOp2 *expr) const {
+        const auto &leftType = expr->left->type;
+        const auto &rightType = expr->right->type;
+        if (!leftType->isNumeric() || !rightType->isNumeric() || leftType->baseType == rightType->baseType) return false;
+        vector<TypeDeclPtr> types = {leftType, rightType};
+        MatchingFunctions functions, generics;
+        const auto pendingMark = pendingCandidateCount;
+        findMatchingFunctionsAndGenerics(functions, generics, "_::" + expr->op, types, false, true);
+        return functions.empty() && generics.empty() && !pendingSince(pendingMark);
+    }
     bool InferTypes::isAssignmentOperator(const string &op) {
         return (op == "+=") || (op == "-=") || (op == "*=") || (op == "/=") || (op == "%=") || (op == "&=") || (op == "|=") || (op == "^=") || (op == "||=") || (op == "&&=") || (op == "^^=") || (op == "<<=") || (op == ">>=") || (op == "<<<=") || (op == ">>>=");
     }
@@ -394,6 +422,7 @@ namespace das {
         }
         return nullptr;
     }
+    // src/ast/ARCHITECTURE_INFER.md#op2-int-promotion
     ExpressionPtr InferTypes::visit(ExprOp2 *expr) {
         if (!strictProperties && expr->right->type && isAssignmentOperator(expr->op)) {
             if (auto nExpr = promoteOp2ToProperty(expr)) {
@@ -498,10 +527,11 @@ namespace das {
         // NOTE: mismatched-enum operands are gated AFTER the custom-operator lookup
         // below (see reportOp2Errors) — a user-defined operator |(E1;E2) must win over
         // the "different enumerations" error, so the gate can't run before resolution.
-        // try promoting int literal on either side to match the other side's type
-        {
+        for (int pass = 0, passes = promoteFoldedIntConstants ? 2 : 1; pass != passes; ++pass) {
+            const bool foldedToo = pass != 0;
+            if (foldedToo && !op2LookupMisses(expr)) break;
             bool rangeError = false;
-            if (auto promoted = tryPromoteConstInt(expr->right, expr->left->type, rangeError, !promoteFoldedIntConstants)) {
+            if (auto promoted = promoteOp2Operand(expr->right, expr->left->type, rangeError, foldedToo)) {
                 reportAstChanged();
                 expr->right = promoted;
                 return Visitor::visit(expr);
@@ -510,7 +540,7 @@ namespace das {
                 expr->type = new TypeDecl(); // suppress downstream mismatching_numeric_type
                 return Visitor::visit(expr);
             }
-            if (auto promoted = tryPromoteConstInt(expr->left, expr->right->type, rangeError, !promoteFoldedIntConstants)) {
+            if (auto promoted = promoteOp2Operand(expr->left, expr->right->type, rangeError, foldedToo)) {
                 reportAstChanged();
                 expr->left = promoted;
                 return Visitor::visit(expr);
