@@ -168,6 +168,8 @@ diagnostic in any tier.
 | hand-rolled `is X` / `as X` / null-guard ladders in macro code | `qmatch(...)` for source-syntax shapes; `match (e) { ExprField(...) => ... }` for node-class shapes | division of labor: `skills/das_macros.md` |
 | `unsafe(reinterpret<T?>(unsafe(addr(x))))` (pointer target) | `unsafe(addr<T?>(x))` | STYLE034 |
 | `b == T('(')` where `b` is a non-`int` numeric scalar | make `b : int`, compare `b == '('` | STYLE035: character literals are `int` |
+| `float(2)` / `uint(3)` / `int64(5)` / `double(7)` - a cast of an integer literal | `2.0` / `3u` / `5l` / `7.0lf` | STYLE050 (`--fix` rewrites it); `int(1)` is PERF020 |
+| `uint8(200)` - a `uint8` cast of an integer literal | `200u8` | STYLE051 (`--fix` rewrites it); its own code, so a project can turn it off |
 | `dst := src` / `push_clone(src)` on a plain `string` | `dst = src` / `push(src)`; cross-context copy = `clone_string(src)` | LINT016: the clone spelling copies only the pointer |
 | `int64(length(x))` / `uint64(capacity(x))` (also `count`, `find_index`, `fread`, `fwrite`) | `long_length(x)` / `long_capacity(x)` / ... | LINT017: the inner call returns `int` - 2^31 is hit before the cast |
 | `int64(to_int(s))` / `uint64(to_uint(s))` - a 32-bit string parse under a 64-bit cast | `to_int64(s, false)` / `to_uint64(s, false)` (`strings`) | LINT017: the parse answers 0 for a value past 32 bits, so the cast asks for a range it cannot give |

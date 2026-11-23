@@ -3755,6 +3755,41 @@ without a ``return`` after it, so the statement is dead code::
 Only the first dead statement of a block is reported; ``--fix`` deletes it and every statement
 after it in the block. Silent when the next statement is a label, which a ``goto`` can reach.
 
+STYLE050 — a numeric cast of an integer literal
+===============================================
+
+A cast of a decimal integer literal to a type that has its own literal spelling is that
+literal:
+
+.. das-doc: given var cast_speed = 1.5
+.. code-block:: das
+
+    cast_speed *= float(2)          // STYLE050 - 2.0
+    let cast_mask = uint(3)         // STYLE050 - 3u
+    let cast_big = int64(5)         // STYLE050 - 5l
+    let cast_wide = double(7)       // STYLE050 - 7.0lf
+
+The targets are ``float``, ``double``, ``uint``, ``int64`` and ``uint64``; ``--fix`` writes
+the literal. Silent when the value is not the same in the target type (``uint(-1)``,
+``float(16777217)``, ``float(-0)``), when the source is not a plain decimal literal (a hex
+or character literal, digit separators), when the cast is spelled through a type variable
+of a generic (``TT(2)``), and for ``int8`` / ``int16`` / ``uint16``, which have no literal
+suffix. ``int(1)`` is PERF020 and ``uint8(200)`` is STYLE051.
+
+STYLE051 — a ``uint8`` cast of an integer literal
+=================================================
+
+The ``uint8`` half of STYLE050, under its own code so a project that prefers the cast can
+turn this one off (``STYLE051 = false`` in ``.lint_config``):
+
+.. code-block:: das
+
+    let cast_alpha = uint8(255)                  // STYLE051 - 255u8
+    var cast_pixels <- [uint8(0), uint8(128)]    // STYLE051 twice - [0u8, 128u8]
+
+``--fix`` writes the literal. Silent when the value does not fit (``uint8(300)``,
+``uint8(-1)``) and when the source is not a plain decimal literal.
+
 -----
 Tests
 -----

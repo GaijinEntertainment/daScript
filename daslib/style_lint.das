@@ -61,6 +61,11 @@ module style_lint shared private
 //!     flattened in) whose arms test the same subjects against
 //!     constants, ranges or variant cases — rewrite as a 'match'
 //!     (default off)
+//!   STYLE050 — a numeric cast of a decimal integer literal that
+//!     has a literal spelling ('float(2)' is '2.0', 'uint(3)' is
+//!     '3u')
+//!   STYLE051 — a uint8 cast of a decimal integer literal 0..255
+//!     ('uint8(200)' is '200u8')
 
 require daslib/ast_boost
 require daslib/dupe_detect
@@ -1153,7 +1158,7 @@ class StyleLintVisitor : AstVisitor {
 
     def report_key(at : LineInfo; code : string) : uint64 {
         //! fileInfo is part of the key, where line|column alone collides across files.
-        let pos = uint64(at.line) | (uint64(at.column) << uint64(20))
+        let pos = uint64(at.line) | (uint64(at.column) << 20ul)
         return (pos ^ (intptr(at.fileInfo) * 1099511628211ul)) ^ hash(code)
     }
 
@@ -2194,6 +2199,7 @@ class StyleLintVisitor : AstVisitor {
         check_style019_clamp(expr)
         check_style020_from_jv(expr)
         st047_check_comparator(expr)
+        check_style050_051_literal_cast(expr)
         if (lowered_unsafe_delete(expr)) {
             mark_unsafe_in_stack()
             return
@@ -2458,6 +2464,32 @@ class StyleLintVisitor : AstVisitor {
         }
         if (v == null) return
         style_warning("STYLE035: non-int numeric variable '{v.name}' is compared with a cast character literal; make '{v.name}' int and compare directly with the character literal", v.at)
+    }
+
+    def check_style050_051_literal_cast(var call : ExprCall?) : void {
+        if (call.func == null || length(call.arguments) != 1) return
+        var arg = call.arguments[0]
+        let negative = arg is ExprOp1 && (arg as ExprOp1).op == "-"
+        if (negative) {
+            arg = (arg as ExprOp1).subexpr
+        }
+        if (!(arg is ExprConstInt)) return
+        let magnitude = int64((arg as ExprConstInt).value)
+        if (negative && magnitude == 0l) return
+        let digits = negative ? "-{magnitude}" : "{magnitude}"
+        let spelling = "{call.func.name}({digits})"
+        if (lint_expr_text(call) != spelling) return
+        let value = negative ? -magnitude : magnitude
+        let literal = lint_int_literal_as(string(call.func.name), value, digits)
+        if (empty(literal)) return
+        let fixable = lint_fix_site_ok(call, current_function, true)
+        let fix = fixable ? lint_replace_fix(call, literal) : LintFix()
+        let advice = "{spelling} casts an integer literal; write the literal {literal}"
+        if (call.func.name == "uint8") {
+            style_warning("STYLE051: {advice}", call.at, fix)
+        } else {
+            style_warning("STYLE050: {advice}", call.at, fix)
+        }
     }
 
     def string_has_non_ascii(s : string const implicit; var badOffset : int&; var badByte : int&) : bool {

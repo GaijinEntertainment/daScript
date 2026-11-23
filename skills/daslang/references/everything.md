@@ -6808,6 +6808,7 @@ The lint_fixups module holds the helpers the lint passes build their `--fix` edi
 - `lint_function_names`
 - `lint_has_comment`
 - `lint_indent_of`
+- `lint_int_literal_as`
 - `lint_is_operand`
 - `lint_merge_fixes`
 - `lint_module_visible`
