@@ -951,7 +951,7 @@ def try_insert(db : SqlRunner; rows : array<auto(TT)>) : Result<int64, string> {
     //! Batched INSERT inside a single BEGIN IMMEDIATE / COMMIT transaction.
     //! All rows must agree on PK presence — mixed-PK arrays return ``Err`` without opening a txn.
     //! ``Ok(last_rowid)`` on success, ``Err(errmsg)`` on failure (after ROLLBACK if applicable).
-    if (empty(rows)) return ok(int64(0), type<string>)
+    if (empty(rows)) return ok(0l, type<string>)
     let pk_unset = _::_sql_pk_is_unset(rows[0])
     for (i in 1..length(rows)) {
         if (_::_sql_pk_is_unset(rows[i]) != pk_unset) return err("insert: rows mix PK-set and PK-unset (row 0 vs row {i}); partition the array before calling insert", type<int64>)
@@ -2008,7 +2008,7 @@ class private RegisterFunctionMacro : AstCallMacro {
         }
         // Pad tag slots to 4: C++ side reads nArgs but the binding takes 4 scalar uint8s.
         while (tags |> length < 4) {
-            tags |> push(uint8(0))
+            tags |> push(0u8)
         }
         let retR = sql_fn_tag_for_type(fnExpr._type.firstType)
         if (!retR.ok) {

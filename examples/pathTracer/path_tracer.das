@@ -269,7 +269,7 @@ def trace(r : Ray; var inoutRayCount : int&) {
 
 [hint(unsafe_range_check)]
 def trace(screenWidth, screenHeight, frameCount, ymin, ymax : int; var backbuffer : array<float3>; cam : Camera) {
-    let invWH = float(1) / float2(screenWidth, screenHeight)
+    let invWH = 1.0 / float2(screenWidth, screenHeight)
     let lerpFac = float3(float(frameCount) / float(frameCount + 1))
     var rayCount = 0
     var backbufferIdx = ymin * screenWidth
@@ -296,7 +296,7 @@ def draw_ray(x, y, screenWidth, screenHeight : int) {
     let distToFocus = 3.
     let aperture = 0.1
     let cam = Camera(lookfrom, lookat, float3(0, 1, 0), 60., float(screenWidth) / float(screenHeight), aperture, distToFocus)
-    let invWH = float(1) / float2(screenWidth, screenHeight)
+    let invWH = 1.0 / float2(screenWidth, screenHeight)
     var col = float3(0)
     for (_s in range(DO_SAMPLES_PER_PIXEL)) {
         let uv = (float2(x, y) + random_float4(RAND_SEED).xy) * invWH

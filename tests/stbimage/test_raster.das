@@ -179,7 +179,7 @@ def test_blit_px1(t : T?) {
         var dst <- make_image(8, 8, 1, 1)
         var src <- make_image(3, 3, 1, 1)
         for (i in range(9)) {
-            src.bytes[i] = uint8(200)
+            src.bytes[i] = 200u8
         }
         dst.blit(src, 2, 2)
         // pixel(2,2) of dst = 200
@@ -198,8 +198,8 @@ def test_blit_px2(t : T?) {
         var dst <- make_image(8, 8, 2, 1)
         var src <- make_image(2, 2, 2, 1)
         for (i in range(2 * 2)) {
-            src.bytes[i * 2 + 0] = uint8(100)
-            src.bytes[i * 2 + 1] = uint8(255)
+            src.bytes[i * 2 + 0] = 100u8
+            src.bytes[i * 2 + 1] = 255u8
         }
         dst.blit(src, 3, 3)
         let idx = (3 * 8 + 3) * 2
@@ -218,9 +218,9 @@ def test_blit_px3(t : T?) {
         var dst <- make_image(16, 16, 3, 1)
         var src <- make_image(4, 4, 3, 1)
         for (i in range(4 * 4)) {
-            src.bytes[i * 3 + 0] = uint8(200)
-            src.bytes[i * 3 + 1] = uint8(100)
-            src.bytes[i * 3 + 2] = uint8(50)
+            src.bytes[i * 3 + 0] = 200u8
+            src.bytes[i * 3 + 1] = 100u8
+            src.bytes[i * 3 + 2] = 50u8
         }
         dst.blit(src, 5, 5)
         let idx = (5 * 16 + 5) * 3
@@ -239,8 +239,8 @@ def test_blit_px4(t : T?) {
         var dst <- make_image(32, 32, 4, 1)
         var src <- make_image(4, 4, 4, 1)
         for (i in range(4 * 4)) {
-            src.bytes[i * 4 + 0] = uint8(255)
-            src.bytes[i * 4 + 3] = uint8(255)
+            src.bytes[i * 4 + 0] = 255u8
+            src.bytes[i * 4 + 3] = 255u8
         }
         dst.blit(src, 10, 10)
         let idx = (10 * 32 + 10) * 4
@@ -340,8 +340,8 @@ def test_blit_clipping(t : T?) {
         var dst <- make_image(8, 8, 4, 1)
         var src <- make_image(4, 4, 4, 1)
         for (i in range(4 * 4)) {
-            src.bytes[i * 4 + 0] = uint8(200)
-            src.bytes[i * 4 + 3] = uint8(255)
+            src.bytes[i * 4 + 0] = 200u8
+            src.bytes[i * 4 + 3] = 255u8
         }
         // blit at (6,6) — only 2x2 pixels should land
         dst.blit(src, 6, 6)
@@ -351,7 +351,7 @@ def test_blit_clipping(t : T?) {
         tt |> equal(int(dst.bytes[idx2 + 0]), 200)
         var count = 0
         for (i in range(8 * 8)) {
-            if (dst.bytes[i * 4] != uint8(0)) {
+            if (dst.bytes[i * 4] != 0u8) {
                 count++
             }
         }
@@ -365,8 +365,8 @@ def test_blit_negative_offset(t : T?) {
         var dst <- make_image(8, 8, 4, 1)
         var src <- make_image(4, 4, 4, 1)
         for (i in range(4 * 4)) {
-            src.bytes[i * 4 + 0] = uint8(150)
-            src.bytes[i * 4 + 3] = uint8(255)
+            src.bytes[i * 4 + 0] = 150u8
+            src.bytes[i * 4 + 3] = 255u8
         }
         // blit at (-2,-2) — only bottom-right 2x2 of src should land at dst(0,0)
         dst.blit(src, -2, -2)
@@ -470,7 +470,7 @@ def test_fill_rect_rgba(t : T?) {
     t |> run("fill_rect fills correct region with RGBA color") <| @(tt : T?) {
         var img = make_image(10, 10, 4)
         // zero out
-        for (b in img.bytes) { b = uint8(0); }
+        for (b in img.bytes) { b = 0u8; }
         let color = 0xAABBCCDDu
         img.fill_rect(2, 3, 4, 2, color)
         // check filled region
@@ -491,7 +491,7 @@ def test_fill_rect_rgba(t : T?) {
 def test_fill_rect_clips(t : T?) {
     t |> run("fill_rect clips to image bounds") <| @(tt : T?) {
         var img = make_image(5, 5, 4)
-        for (b in img.bytes) { b = uint8(0); }
+        for (b in img.bytes) { b = 0u8; }
         // fill extending beyond bounds
         img.fill_rect(-1, -1, 3, 3, 0xFFFFFFFFu)
         // pixel at (0,0) should be filled
@@ -509,8 +509,8 @@ def test_fill_rect_clips(t : T?) {
 def test_fill_rect_grey(t : T?) {
     t |> run("fill_rect fills 1-channel image") <| @(tt : T?) {
         var img = make_image(8, 8, 1)
-        for (b in img.bytes) { b = uint8(0); }
-        img.fill_rect(1, 1, 3, 3, uint8(128))
+        for (b in img.bytes) { b = 0u8; }
+        img.fill_rect(1, 1, 3, 3, 128u8)
         tt |> equal(int(img.bytes[1 * 8 + 1]), 128)
         tt |> equal(int(img.bytes[1 * 8 + 4]), 0)
         tt |> equal(int(img.bytes[0 * 8 + 0]), 0)
@@ -523,10 +523,10 @@ def test_fill_rect_grey(t : T?) {
 def test_blit_alpha_full(t : T?) {
     t |> run("blit_alpha with 255 alpha overwrites color") <| @(tt : T?) {
         var dst = make_image(4, 4, 4)
-        for (b in dst.bytes) { b = uint8(0); }
+        for (b in dst.bytes) { b = 0u8; }
         var src = make_image(2, 2, 1)
         // full alpha
-        for (b in src.bytes) { b = uint8(255); }
+        for (b in src.bytes) { b = 255u8; }
         dst.blit_alpha(src, 0, 0, 1, 1, 2, 2, 255, 128, 64)
         // check pixel at (1,1)
         let idx = (1 * 4 + 1) * 4
@@ -544,13 +544,13 @@ def test_blit_alpha_zero(t : T?) {
         // fill with known color
         for (i in range(4 * 4)) {
             let idx = i * 4
-            dst.bytes[idx + 0] = uint8(100)
-            dst.bytes[idx + 1] = uint8(150)
-            dst.bytes[idx + 2] = uint8(200)
-            dst.bytes[idx + 3] = uint8(255)
+            dst.bytes[idx + 0] = 100u8
+            dst.bytes[idx + 1] = 150u8
+            dst.bytes[idx + 2] = 200u8
+            dst.bytes[idx + 3] = 255u8
         }
         var src = make_image(2, 2, 1)
-        for (b in src.bytes) { b = uint8(0); }
+        for (b in src.bytes) { b = 0u8; }
         dst.blit_alpha(src, 0, 0, 1, 1, 2, 2, 255, 0, 0)
         // dest should be unchanged
         let idx = (1 * 4 + 1) * 4
@@ -566,13 +566,13 @@ def test_blit_alpha_blend(t : T?) {
         var dst = make_image(4, 4, 4)
         for (i in range(4 * 4)) {
             let idx = i * 4
-            dst.bytes[idx + 0] = uint8(0)
-            dst.bytes[idx + 1] = uint8(0)
-            dst.bytes[idx + 2] = uint8(0)
-            dst.bytes[idx + 3] = uint8(255)
+            dst.bytes[idx + 0] = 0u8
+            dst.bytes[idx + 1] = 0u8
+            dst.bytes[idx + 2] = 0u8
+            dst.bytes[idx + 3] = 255u8
         }
         var src = make_image(2, 2, 1)
-        for (b in src.bytes) { b = uint8(128); }
+        for (b in src.bytes) { b = 128u8; }
         dst.blit_alpha(src, 0, 0, 0, 0, 2, 2, 255, 255, 255)
         // expected: (128 * 255 + 127 * 0 + 127) / 255 = 128
         let idx = 0
@@ -585,9 +585,9 @@ def test_blit_alpha_blend(t : T?) {
 def test_blit_alpha_clips(t : T?) {
     t |> run("blit_alpha clips to both src and dst bounds") <| @(tt : T?) {
         var dst = make_image(4, 4, 4)
-        for (b in dst.bytes) { b = uint8(0); }
+        for (b in dst.bytes) { b = 0u8; }
         var src = make_image(2, 2, 1)
-        for (b in src.bytes) { b = uint8(255); }
+        for (b in src.bytes) { b = 255u8; }
         // blit with negative dest offset — should clip
         dst.blit_alpha(src, 0, 0, -1, -1, 2, 2, 255, 255, 255)
         // only pixel (0,0) should be affected (from src[1,1])
@@ -614,7 +614,7 @@ def test_blit_alpha_detailed(t : T?) {
             dst.bytes[0] = uint8(dst_r)
             dst.bytes[1] = uint8(dst_g)
             dst.bytes[2] = uint8(dst_b)
-            dst.bytes[3] = uint8(200)
+            dst.bytes[3] = 200u8
             var src = make_image(1, 1, 1)
             src.bytes[0] = uint8(a)
             dst.blit_alpha(src, 0, 0, 0, 0, 1, 1, src_r, src_g, src_b)
@@ -654,14 +654,14 @@ def test_blit_alpha_regions(t : T?) {
     t |> run("blit_alpha sub-rect positions are correct") <| @(tt : T?) {
         // 4x4 dest, 4x4 src alpha — blit a 2x2 sub-rect from src(1,1) to dst(2,2)
         var dst = make_image(4, 4, 4)
-        for (b in dst.bytes) { b = uint8(0); }
+        for (b in dst.bytes) { b = 0u8; }
         var src = make_image(4, 4, 1)
-        for (b in src.bytes) { b = uint8(0); }
+        for (b in src.bytes) { b = 0u8; }
         // set src pixels at (1,1), (2,1), (1,2), (2,2) to 255
-        src.bytes[1 * 4 + 1] = uint8(255)
-        src.bytes[1 * 4 + 2] = uint8(255)
-        src.bytes[2 * 4 + 1] = uint8(255)
-        src.bytes[2 * 4 + 2] = uint8(255)
+        src.bytes[1 * 4 + 1] = 255u8
+        src.bytes[1 * 4 + 2] = 255u8
+        src.bytes[2 * 4 + 1] = 255u8
+        src.bytes[2 * 4 + 2] = 255u8
         dst.blit_alpha(src, 1, 1, 2, 2, 2, 2, 128, 64, 32)
         // dst pixels at (2,2), (3,2), (2,3), (3,3) should be colored
         for (dy in range(4)) {
@@ -682,13 +682,13 @@ def test_blit_alpha_regions(t : T?) {
         // fill entire dest with known color
         for (i in range(4 * 4)) {
             let idx = i * 4
-            dst.bytes[idx + 0] = uint8(11)
-            dst.bytes[idx + 1] = uint8(22)
-            dst.bytes[idx + 2] = uint8(33)
-            dst.bytes[idx + 3] = uint8(44)
+            dst.bytes[idx + 0] = 11u8
+            dst.bytes[idx + 1] = 22u8
+            dst.bytes[idx + 2] = 33u8
+            dst.bytes[idx + 3] = 44u8
         }
         var src = make_image(1, 1, 1)
-        src.bytes[0] = uint8(255)
+        src.bytes[0] = 255u8
         dst.blit_alpha(src, 0, 0, 1, 1, 1, 1, 200, 100, 50)
         // only (1,1) changed
         let idx_changed = (1 * 4 + 1) * 4

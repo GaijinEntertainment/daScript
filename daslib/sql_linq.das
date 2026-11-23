@@ -3933,7 +3933,7 @@ def private next_placeholder(bytes : array<uint8> const implicit; from : int) : 
         }
         i++
     }
-    return (-1, uint8(0))
+    return (-1, 0u8)
 }
 
 [macro_function]

@@ -169,7 +169,7 @@ def test_pack_basic(t : T?) {
         // verify some pixels were written
         var non_zero = 0
         for (px in pixels) {
-            if (px != uint8(0)) {
+            if (px != 0u8) {
                 non_zero++
             }
         }
@@ -259,7 +259,7 @@ def test_codepoint_bitmap(t : T?) {
         // verify some pixels are non-zero
         var non_zero = 0
         for (px in result.image.bytes) {
-            if (px != uint8(0)) {
+            if (px != 0u8) {
                 non_zero++
             }
         }
@@ -297,7 +297,7 @@ def test_make_codepoint_bitmap(t : T?) {
         stbtt_make_codepoint_bitmap(info, buf, bw, bh, bw, scale, scale, 65)
         var non_zero = 0
         for (px in buf) {
-            if (px != uint8(0)) {
+            if (px != 0u8) {
                 non_zero++
             }
         }
@@ -321,7 +321,7 @@ def test_make_codepoint_bitmap_subpixel(t : T?) {
         stbtt_make_codepoint_bitmap_subpixel(info, buf, bw, bh, bw, scale, scale, 0.5, 0.5, 65)
         var non_zero = 0
         for (px in buf) {
-            if (px != uint8(0)) {
+            if (px != 0u8) {
                 non_zero++
             }
         }
@@ -487,7 +487,7 @@ def test_font_codepoint_bitmap(t : T?) {
         tt |> equal(result.image.channels, 1)
         var non_zero = 0
         for (px in result.image.bytes) {
-            if (px != uint8(0)) {
+            if (px != 0u8) {
                 non_zero++
             }
         }

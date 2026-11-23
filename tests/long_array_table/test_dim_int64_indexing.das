@@ -41,8 +41,8 @@ def test_dim_mixed_width_indexing(t : T?) {
     arr[0] = 10
     arr[1_l] = 20
     arr[2_ul] = 30
-    arr[uint(3)] = 40
-    t |> equal(arr[0] + arr[int64(1)] + arr[uint64(2)] + arr[uint(3)], 100)
+    arr[3u] = 40
+    t |> equal(arr[0] + arr[1l] + arr[2ul] + arr[3u], 100)
 }
 
 [test(description = "a constant int64 index into a fixed array is folded and reads the right element")]

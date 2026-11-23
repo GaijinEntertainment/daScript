@@ -339,7 +339,7 @@ def std140_flush(program : uint; blockName : string; bindingPoint : int) {
     if (blockIndex != GL_INVALID_INDEX) {
         let nbytes = long_length(g_std140_staging[key])
         glUniformBlockBinding(program, blockIndex, uint(bindingPoint))
-        glBindBufferRange(GL_UNIFORM_BUFFER, uint(bindingPoint), ubo, int64(0), nbytes)
+        glBindBufferRange(GL_UNIFORM_BUFFER, uint(bindingPoint), ubo, 0l, nbytes)
     }
 }
 

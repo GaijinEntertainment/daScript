@@ -33,8 +33,8 @@ def private put_u32(var b : array<uint8>; v : int) {
 def private pack_header(magic : string; version : int) : array<uint8> {
     var bytes <- to_bytes(magic)
     put_u32(bytes, version)
-    bytes |> push(uint8(0))
-    bytes |> push(uint8(0))
+    bytes |> push(0u8)
+    bytes |> push(0u8)
     return <- bytes
 }
 

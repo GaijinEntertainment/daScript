@@ -61,7 +61,7 @@ def test_walk_int(t : T?) {
     }
     t |> run("uint8") @(t : T?) {
         var walker = new LogWalker()
-        var x = uint8(200)
+        var x = 200u8
         make_data_walker(walker) $(adapter) {
             adapter |> walk_data(unsafe(addr(x)), typeinfo rtti_typeinfo(x))
         }

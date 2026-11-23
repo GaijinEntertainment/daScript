@@ -28,8 +28,8 @@ def make_test_gradient() : Image {
             let y = i / 64
             pixels[i * 4 + 0] = uint8(x * 4)
             pixels[i * 4 + 1] = uint8(y * 4)
-            pixels[i * 4 + 2] = uint8(128)
-            pixels[i * 4 + 3] = uint8(255)
+            pixels[i * 4 + 2] = 128u8
+            pixels[i * 4 + 3] = 255u8
         }
     }
     return <- img

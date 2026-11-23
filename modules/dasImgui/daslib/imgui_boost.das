@@ -61,7 +61,7 @@ def to_string(buf : ImGuiInputTextBuffer) {
 
 def clear(var buf : ImGuiInputTextBuffer) {
     for (t in buf.buffer) {
-        t = uint8(0)
+        t = 0u8
     }
 }
 

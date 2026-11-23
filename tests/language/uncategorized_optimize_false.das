@@ -42,7 +42,7 @@ def test_int_types(t : T?) {
     }
     t |> run("small integer operators") @(t : T?) {
         it_check12(1, 2, int8(0))
-        it_check12(1, 2, uint8(0))
+        it_check12(1, 2, 0u8)
         it_check12(1, 2, int16(0))
         it_check12(1, 2, uint16(0))
         t |> success(true)

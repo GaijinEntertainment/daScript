@@ -84,8 +84,8 @@ def test_speech_live_kokoro(t : T?) {
         if (res.ok) {
             t |> success(length(res.audio) > 1000, "got audio bytes ({length(res.audio)})")
             if (length(res.audio) >= 4) {
-                let riff = (res.audio[0] == uint8(82) && res.audio[1] == uint8(73) &&
-                    res.audio[2] == uint8(70) && res.audio[3] == uint8(70))
+                let riff = (res.audio[0] == 82u8 && res.audio[1] == 73u8 &&
+                    res.audio[2] == 70u8 && res.audio[3] == 70u8)
                 t |> success(riff, "WAV RIFF header present")
             }
         }

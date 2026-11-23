@@ -27,7 +27,8 @@ def clean_mangled_names(s : string) : string {
             while (i < n) {
                 // A mangled symbol always starts with the "__::" introducer
                 // (95 95 58 58 == "__::").
-                let isIntro = i + 4 <= n && data[i] == uint8(95) && data[i + 1] == uint8(95) && data[i + 2] == uint8(58) && data[i + 3] == uint8(58)
+                let isIntro = (i + 4 <= n && data[i] == 95u8 && data[i + 1] == 95u8
+                    && data[i + 2] == 58u8 && data[i + 3] == 58u8)
                 if (isIntro) {
                     // Scope runs up to the first backtick; the name is between the two
                     // backticks; the hash digits follow the second backtick.

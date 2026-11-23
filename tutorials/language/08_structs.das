@@ -26,7 +26,7 @@ struct Color {
     r : uint8
     g : uint8
     b : uint8
-    a : uint8 = uint8(255)
+    a : uint8 = 255u8
 }
 
 // Fields can use type inference when given a default

@@ -65,10 +65,10 @@ def test_to_channels_rgba_to_grey(t : T?) {
 def test_to_channels_grey_to_rgb(t : T?) {
     t |> run("convert 1ch to 3ch") <| @(tt : T?) {
         var img <- make_image(2, 2, 1)
-        img.bytes[0] = uint8(100)
-        img.bytes[1] = uint8(200)
-        img.bytes[2] = uint8(50)
-        img.bytes[3] = uint8(0)
+        img.bytes[0] = 100u8
+        img.bytes[1] = 200u8
+        img.bytes[2] = 50u8
+        img.bytes[3] = 0u8
         let rgb <- img.to_channels(3)
         tt |> equal(rgb.channels, 3)
         // grey=100 → R=100,G=100,B=100
@@ -86,8 +86,8 @@ def test_to_channels_grey_to_rgb(t : T?) {
 def test_to_channels_grey_to_grey_alpha(t : T?) {
     t |> run("convert 1ch to 2ch") <| @(tt : T?) {
         var img <- make_image(2, 1, 1)
-        img.bytes[0] = uint8(42)
-        img.bytes[1] = uint8(200)
+        img.bytes[0] = 42u8
+        img.bytes[1] = 200u8
         let ga <- img.to_channels(2)
         tt |> equal(ga.channels, 2)
         tt |> equal(int(ga.bytes[0]), 42)
@@ -101,10 +101,10 @@ def test_to_channels_grey_to_grey_alpha(t : T?) {
 def test_to_channels_grey_alpha_to_grey(t : T?) {
     t |> run("convert 2ch to 1ch") <| @(tt : T?) {
         var img <- make_image(2, 1, 2)
-        img.bytes[0] = uint8(42)
-        img.bytes[1] = uint8(128)
-        img.bytes[2] = uint8(200)
-        img.bytes[3] = uint8(255)
+        img.bytes[0] = 42u8
+        img.bytes[1] = 128u8
+        img.bytes[2] = 200u8
+        img.bytes[3] = 255u8
         let grey <- img.to_channels(1)
         tt |> equal(grey.channels, 1)
         tt |> equal(int(grey.bytes[0]), 42)
@@ -129,10 +129,10 @@ def test_to_channels_same(t : T?) {
 def test_to_channels_rgba_to_grey_alpha(t : T?) {
     t |> run("convert 4ch to 2ch grey+alpha") <| @(tt : T?) {
         var img <- make_image(1, 1, 4)
-        img.bytes[0] = uint8(100)   // R
-        img.bytes[1] = uint8(100)   // G
-        img.bytes[2] = uint8(100)   // B
-        img.bytes[3] = uint8(200)   // A
+        img.bytes[0] = 100u8   // R
+        img.bytes[1] = 100u8   // G
+        img.bytes[2] = 100u8   // B
+        img.bytes[3] = 200u8   // A
         let ga <- img.to_channels(2)
         tt |> equal(ga.channels, 2)
         // luminance of (100,100,100) = (100*77+100*150+100*29+128)>>8 = (25600+128)>>8 = 100
@@ -240,10 +240,10 @@ def test_to_channels_16bit_grey_to_rgba(t : T?) {
 def test_to_bpc_u8_to_f32(t : T?) {
     t |> run("convert uint8 to float") <| @(tt : T?) {
         var img <- make_image(2, 2, 4)
-        img.bytes[0] = uint8(255)
-        img.bytes[1] = uint8(0)
-        img.bytes[2] = uint8(128)
-        img.bytes[3] = uint8(255)
+        img.bytes[0] = 255u8
+        img.bytes[1] = 0u8
+        img.bytes[2] = 128u8
+        img.bytes[3] = 255u8
         var hdr <- img.to_bpc(4)
         tt |> equal(hdr.bpc, 4)
         tt |> success(hdr.is_hdr(), "is HDR")
@@ -280,10 +280,10 @@ def test_to_bpc_f32_to_u8(t : T?) {
 def test_to_bpc_u8_to_u16(t : T?) {
     t |> run("convert uint8 to uint16") <| @(tt : T?) {
         var img <- make_image(2, 2, 1)
-        img.bytes[0] = uint8(255)
-        img.bytes[1] = uint8(0)
-        img.bytes[2] = uint8(128)
-        img.bytes[3] = uint8(1)
+        img.bytes[0] = 255u8
+        img.bytes[1] = 0u8
+        img.bytes[2] = 128u8
+        img.bytes[3] = 1u8
         var u16img <- img.to_bpc(2)
         tt |> equal(u16img.bpc, 2)
         u16img |> with_pixels_16() $(var pixels : array<uint16>#) {

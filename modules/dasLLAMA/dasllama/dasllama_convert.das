@@ -306,7 +306,7 @@ def private bcopy(var d : uint8?; s : uint8 const?; n : int64) {
 
 def private zero_bytes(var d : uint8?; n : int64) {
     for (i in range64(n)) {
-        unsafe(d[i]) = uint8(0)
+        unsafe(d[i]) = 0u8
     }
 }
 
@@ -314,8 +314,8 @@ def private d_header(var ks : uint8?; src : uint8 const?) {
     unsafe {
         ks[0] = src[0]
         ks[1] = src[1]
-        ks[2] = uint8(0)
-        ks[3] = uint8(0)
+        ks[2] = 0u8
+        ks[3] = 0u8
     }
 }
 
@@ -325,8 +325,8 @@ def private d8_header(var ks : uint8?; src : uint8 const?) {
         let d8 = f16_half_bits(f16_half_bits(f16_half_bits(uint(src[0]) | (uint(src[1]) << 8u))))
         ks[0] = uint8(d8 & 0xFFu)
         ks[1] = uint8(d8 >> 8u)
-        ks[2] = uint8(0)
-        ks[3] = uint8(0)
+        ks[2] = 0u8
+        ks[3] = 0u8
     }
 }
 
@@ -573,7 +573,7 @@ def private quantize_k45_superblock_p(x : float const?; var kq : uint8?; kqo : i
         let inv_scale = max_scale > 0.0 ? 63.0 / max_scale : 0.0
         let inv_min = max_min > 0.0 ? 63.0 / max_min : 0.0
         for (b in range64(16l)) {   // the |= packing below needs a zeroed strip; also clears the 4B pad
-            ks[kso + 4l + b] = uint8(0)
+            ks[kso + 4l + b] = 0u8
         }
         for (j in range64(8l)) {
             let ls = min(63, nearest_int(inv_scale * scales[j]))
@@ -616,7 +616,7 @@ def private quantize_k45_superblock_p(x : float const?; var kq : uint8?; kqo : i
 def private kq45_pack(lq : int const?; var kq : uint8?; kqo : int64; high_bits : bool) {
     unsafe {
         for (l in range64(high_bits ? 32l : 0l)) {
-            kq[kqo + 128l + l] = uint8(0)
+            kq[kqo + 128l + l] = 0u8
         }
         for (js in range64(4l)) {
             for (l in range64(32l)) {
@@ -697,10 +697,10 @@ def private quantize_k6_superblock_p(x : float const?; var kq : uint8?; kqo : in
             }
         }
         for (b in range64(K6_QSB)) {
-            kq[kqo + b] = uint8(0)
+            kq[kqo + b] = 0u8
         }
         for (b in range64(K6_SSB)) {
-            ks[kso + b] = uint8(0)
+            ks[kso + b] = 0u8
         }
         return if (max_abs < 1e-15)
         let iscale = -128.0 / max_scale
@@ -1239,8 +1239,8 @@ def kq_transcode_p(src : uint8 const?; var kq : uint8?; var ks : uint8?; _f : Kq
         let dh = f16_half_bits(uint(src[0]) | (uint(src[1]) << 8u))
         ks[0] = uint8(dh & 0xFFu)
         ks[1] = uint8(dh >> 8u)
-        ks[2] = uint8(0)
-        ks[3] = uint8(0)
+        ks[2] = 0u8
+        ks[3] = 0u8
         for (b in range64(8l)) {
             ks[4l + b] = uint8(1 + 2 * (int(src[66l + b * 4l + 3l]) >> 4))
         }

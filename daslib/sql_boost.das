@@ -2142,14 +2142,14 @@ def public sql_fn_tag_for_type(td : TypeDeclPtr) : tuple<tag : uint8; ok : bool>
     //! Maps a scalar das type to its SqlFnTag wire value; ``ok = false`` for anything a
     //! scalar UDF can't marshal. Shared by the annotation and the providers' direct
     //! ``register_function`` call macros.
-    if (td == null || td.baseType == Type.tFixedArray) return (tag = uint8(0), ok = false)
+    if (td == null || td.baseType == Type.tFixedArray) return (tag = 0u8, ok = false)
     if (td.baseType == Type.tInt) return (tag = uint8(SqlFnTag.Int), ok = true)
     if (td.baseType == Type.tInt64) return (tag = uint8(SqlFnTag.Int64), ok = true)
     if (td.baseType == Type.tFloat) return (tag = uint8(SqlFnTag.Float), ok = true)
     if (td.baseType == Type.tDouble) return (tag = uint8(SqlFnTag.Double), ok = true)
     if (td.baseType == Type.tBool) return (tag = uint8(SqlFnTag.Bool), ok = true)
     if (td.baseType == Type.tString) return (tag = uint8(SqlFnTag.String), ok = true)
-    return (tag = uint8(0), ok = false)
+    return (tag = 0u8, ok = false)
 }
 
 def private _is_valid_sql_function_name(s : string) : bool {
@@ -2199,7 +2199,7 @@ class SqlFunctionMacro : AstFunctionAnnotation {
             tags |> push(r.tag)
         }
         while (tags |> length < 4) {
-            tags |> push(uint8(0))
+            tags |> push(0u8)
         }
         let retR = sql_fn_tag_for_type(func.result)
         if (!retR.ok) {

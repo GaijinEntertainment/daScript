@@ -126,7 +126,7 @@ def sha256_final(var st : Sha256State) : uint[8] {
     let bitLen = st.totalBytes * 8ul
     sha256_update(st, uint8(0x80))
     while (st.bufLen != 56) {
-        sha256_update(st, uint8(0))
+        sha256_update(st, 0u8)
     }
     for (shift in fixed_array<uint64>(56ul, 48ul, 40ul, 32ul, 24ul, 16ul, 8ul, 0ul)) {
         st.buf[st.bufLen] = uint8(bitLen >> shift)

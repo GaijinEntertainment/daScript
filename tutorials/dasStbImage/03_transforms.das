@@ -28,8 +28,8 @@ def make_gradient(w, h : int) : Image {
             let y = i / w
             pixels[i * 4 + 0] = uint8(x * 255 / max(w - 1, 1))
             pixels[i * 4 + 1] = uint8(y * 255 / max(h - 1, 1))
-            pixels[i * 4 + 2] = uint8(128)
-            pixels[i * 4 + 3] = uint8(255)
+            pixels[i * 4 + 2] = 128u8
+            pixels[i * 4 + 3] = 255u8
         }
     }
     return <- img
@@ -126,9 +126,9 @@ def example_crop() {
 
 def example_blit() {
     // Create a dark canvas
-    var inscope canvas <- make_solid(64, 64, uint8(32), uint8(32), uint8(32), uint8(255))
+    var inscope canvas <- make_solid(64, 64, 32u8, 32u8, 32u8, 255u8)
     // Create a bright overlay
-    var inscope overlay <- make_solid(16, 16, uint8(255), uint8(200), uint8(0), uint8(255))
+    var inscope overlay <- make_solid(16, 16, 255u8, 200u8, 0u8, 255u8)
     // Blit the overlay at different positions
     canvas.blit(overlay, 8, 8)
     canvas.blit(overlay, 40, 40)

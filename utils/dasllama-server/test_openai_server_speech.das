@@ -882,7 +882,7 @@ def private write_v1_g2p_pack(path : string) : bool {
     fopen(path, "wb") $(f) {
         if (f != null) {
             var inscope bytes <- [uint8(0x54), uint8(0x47), uint8(0x32), uint8(0x50),
-                uint8(1), uint8(0), uint8(0), uint8(0), uint8(0), uint8(0)]
+                1u8, 0u8, 0u8, 0u8, 0u8, 0u8]
             fwrite(f, bytes)
             ok = true
         }

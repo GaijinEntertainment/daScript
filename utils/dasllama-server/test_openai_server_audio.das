@@ -83,7 +83,7 @@ def private tiny_wav_b64(n_samples : int) : string {
     push_ascii(b, "data")
     push_le32(b, data_bytes)
     for (_i in range(data_bytes)) {
-        b |> push(uint8(0))
+        b |> push(0u8)
     }
     let out = base64_encode(b)
     delete b

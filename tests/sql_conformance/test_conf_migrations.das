@@ -84,7 +84,7 @@ def test_conf_migrate_apply(t : T?) {
             t |> equal(hist |> length, 4)
             t |> equal(hist[0].version, 1)
             t |> equal(hist[0].description, "create conf_m1")
-            t |> success(hist[0].applied_at > int64(0))
+            t |> success(hist[0].applied_at > 0l)
             t |> equal(hist[3].version, 4)
         }
     }

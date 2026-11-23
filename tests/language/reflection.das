@@ -625,7 +625,7 @@ def test_storage_types(t : T?) {
         var st, sq : StStorage
         t |> equal(typeinfo sizeof(type<StStorage>), 6)
         st.i8 = int8(1)
-        st.ui8 = uint8(2)
+        st.ui8 = 2u8
         st.i16 = int16(3)
         st.ui16 = uint16(4)
         t |> success(int(st.i8) == 1 && uint(st.ui8) == 2u && int(st.i16) == 3 && uint(st.ui16) == 4u)

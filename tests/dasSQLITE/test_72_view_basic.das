@@ -140,9 +140,9 @@ struct WriteableOrder {
 def test_view_predicate_with_enum_literal(t : T?) {
     with_sqlite(":memory:") $(db) {
         db |> create_table(type<OrderRec>)
-        db |> insert(OrderRec(Id = 1, StatusVal = int(Status.Pending),   PermBits = uint8(0)))
-        db |> insert(OrderRec(Id = 2, StatusVal = int(Status.Shipped),   PermBits = uint8(0)))
-        db |> insert(OrderRec(Id = 3, StatusVal = int(Status.Delivered), PermBits = uint8(0)))
+        db |> insert(OrderRec(Id = 1, StatusVal = int(Status.Pending),   PermBits = 0u8))
+        db |> insert(OrderRec(Id = 2, StatusVal = int(Status.Shipped),   PermBits = 0u8))
+        db |> insert(OrderRec(Id = 3, StatusVal = int(Status.Delivered), PermBits = 0u8))
         // Status.Shipped == 2 — must inline as the integer 2 inside the
         // CREATE VIEW body since SQLite rejects ? placeholders there.
         db |> _create_view(type<ShippedOrder>,
@@ -158,7 +158,7 @@ def test_view_predicate_with_bitfield_literal(t : T?) {
     with_sqlite(":memory:") $(db) {
         db |> create_table(type<OrderRec>)
         let write_only = Permissions.Write
-        db |> insert(OrderRec(Id = 1, StatusVal = 0, PermBits = uint8(0)))
+        db |> insert(OrderRec(Id = 1, StatusVal = 0, PermBits = 0u8))
         db |> insert(OrderRec(Id = 2, StatusVal = 0, PermBits = uint8(write_only)))
         db |> insert(OrderRec(Id = 3, StatusVal = 0, PermBits = uint8(Permissions.Read | Permissions.Write)))
         // Bitfield literal must inline as its underlying integer value.

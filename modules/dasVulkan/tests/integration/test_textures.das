@@ -69,8 +69,8 @@ def test_texelfetch_copy(t : T?) {
             let p = (y * w + x) * 4
             src[p] = uint8(x)
             src[p + 1] = uint8(y)
-            src[p + 2] = uint8(0)
-            src[p + 3] = uint8(255)
+            src[p + 2] = 0u8
+            src[p + 3] = 255u8
         }
     }
     var pixels <- texelfetch_copy_rgba8(fetch_copy_spv, src, w, h)

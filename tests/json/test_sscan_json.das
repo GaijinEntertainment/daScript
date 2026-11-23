@@ -115,7 +115,7 @@ def test_basic_scalars(t : T?) {
         t |> success(v.d > 2.71lf && v.d < 2.72lf, "double approx")
         t |> equal(v.s, "hello")
         t |> equal(v.i8, int8(-1))
-        t |> equal(v.u8, uint8(255))
+        t |> equal(v.u8, 255u8)
         t |> equal(v.i16, int16(-1000))
         t |> equal(v.u16, uint16(65000))
     }
@@ -781,13 +781,13 @@ def test_table_key_types(t : T?) { // nolint:STYLE038 one flat arm per JIT_TABLE
     }
     t |> run("uint8-keyed table") @(t : T?) {
         var src : WithUInt8Table
-        src.data <- { uint8(0) => "zero", uint8(255) => "max" }
+        src.data <- { 0u8 => "zero", 255u8 => "max" }
         let json = sprint_json(src, false)
         var dst : WithUInt8Table
         let ok = sscan_json(json, dst)
         t |> success(ok)
-        t |> equal(dst.data?[uint8(0)] ?? "", "zero")
-        t |> equal(dst.data?[uint8(255)] ?? "", "max")
+        t |> equal(dst.data?[0u8] ?? "", "zero")
+        t |> equal(dst.data?[255u8] ?? "", "max")
     }
     t |> run("int16-keyed table") @(t : T?) {
         var src : WithInt16Table

@@ -50,7 +50,7 @@ def test_control_changes(t : T?) {
         var state = MidiPlaybackState()
         init_playback(state, unsafe(addr(midi)), "test", 1.0, false)
         process_events(state)
-        t |> success(abs(state.channels[0].volume - float(80) / 127.0) < 0.01)
+        t |> success(abs(state.channels[0].volume - 80.0 / 127.0) < 0.01)
     }
     t |> run("CC10 sets channel pan") <| @(t : T?) {
         var d : array<uint8>
@@ -74,7 +74,7 @@ def test_control_changes(t : T?) {
         var state = MidiPlaybackState()
         init_playback(state, unsafe(addr(midi)), "test", 1.0, false)
         process_events(state)
-        t |> success(abs(state.channels[0].expression - float(64) / 127.0) < 0.01)
+        t |> success(abs(state.channels[0].expression - 64.0 / 127.0) < 0.01)
     }
     t |> run("CC64 sets sustain pedal") <| @(t : T?) {
         var d : array<uint8>

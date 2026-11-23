@@ -78,13 +78,13 @@ def test_file_size_error(t : T?) {
     t |> run("reports error for missing file") @(t : T?) {
         var error : string
         let sz = file_size("_no_such_file_99999.xyz", error)
-        t |> equal(sz, int64(-1))
+        t |> equal(sz, -1l)
         t |> success(!empty(error), "error should be non-empty")
     }
     t |> run("returns valid size for existing file") @(t : T?) {
         var error : string
         let sz = file_size("{get_das_root()}/tests/fio/fio_errors.das", error)
-        t |> success(sz > int64(0), "size should be positive")
+        t |> success(sz > 0l, "size should be positive")
         t |> success(empty(error), "error should be empty, got: {error}")
     }
 }
@@ -258,7 +258,7 @@ def test_file_size_result(t : T?) {
     t |> run("success returns value") @(t : T?) {
         let r = file_size_result("{get_das_root()}/tests/fio/fio_errors.das")
         t |> success(r is value, "expected value variant")
-        t |> success(unsafe(r.value) > int64(0), "size should be positive")
+        t |> success(unsafe(r.value) > 0l, "size should be positive")
     }
     t |> run("failure returns error") @(t : T?) {
         let r = file_size_result("_no_such_file_99999.xyz")

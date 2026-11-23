@@ -238,7 +238,7 @@ var private WIDGETS_DD_TIP_NO : table<int; NarrativeState>
 // edit_drag/slider/input_scalar widgets (ImGuiDataType picked at compile time via
 // typeinfo stripped_typename). Init values hit sign edges (S8 127, U8 255, S32 -1).
 var private WIDGETS_DT_S8 : int8 = int8(127)
-var private WIDGETS_DT_U8 : uint8 = uint8(255)
+var private WIDGETS_DT_U8 : uint8 = 255u8
 var private WIDGETS_DT_S16 : int16 = int16(32767)
 var private WIDGETS_DT_U16 : uint16 = uint16(65535)
 var private WIDGETS_DT_S32 : int = -1
@@ -2678,7 +2678,7 @@ def private DataTypesSection() {
              speed = speed, v_min = int8(0), v_max = int8(cl ? 50 : 0)))
         edit_drag_scalar(safe_addr(WIDGETS_DT_U8),
             (id = "WIDGETS_DT_DRAG_U8", text = "drag u8",
-             speed = speed, v_min = uint8(0), v_max = uint8(cl ? 50 : 0), format = "%u ms"))
+             speed = speed, v_min = 0u8, v_max = uint8(cl ? 50 : 0), format = "%u ms"))
         edit_drag_scalar(safe_addr(WIDGETS_DT_S16),
             (id = "WIDGETS_DT_DRAG_S16", text = "drag s16",
              speed = speed, v_min = int16(0), v_max = int16(cl ? 50 : 0)))
@@ -2724,7 +2724,7 @@ def private DataTypesSection() {
              v_min = int8(-128), v_max = int8(127), format = "%d"))
         edit_slider_scalar(safe_addr(WIDGETS_DT_U8),
             (id = "WIDGETS_DT_SL_U8_F", text = "slider u8 full",
-             v_min = uint8(0), v_max = uint8(255), format = "%u"))
+             v_min = 0u8, v_max = 255u8, format = "%u"))
         edit_slider_scalar(safe_addr(WIDGETS_DT_S16),
             (id = "WIDGETS_DT_SL_S16_F", text = "slider s16 full",
              v_min = int16(-32768), v_max = int16(32767), format = "%d"))
@@ -2811,7 +2811,7 @@ def private DataTypesSection() {
              v_min = int8(127), v_max = int8(-128), format = "%d"))
         edit_slider_scalar(safe_addr(WIDGETS_DT_U8),
             (id = "WIDGETS_DT_SLR_U8", text = "slider u8 reverse",
-             v_min = uint8(255), v_max = uint8(0), format = "%u"))
+             v_min = 255u8, v_max = 0u8, format = "%u"))
         edit_slider_scalar(safe_addr(WIDGETS_DT_S32),
             (id = "WIDGETS_DT_SLR_S32", text = "slider s32 reverse",
              v_min = 50, v_max = 0, format = "%d"))
@@ -2834,7 +2834,7 @@ def private DataTypesSection() {
              step = int8(st ? 1 : 0), step_fast = int8(0), format = "%d"))
         edit_input_scalar(safe_addr(WIDGETS_DT_U8),
             (id = "WIDGETS_DT_IN_U8", text = "input u8",
-             step = uint8(st ? 1 : 0), step_fast = uint8(0), format = "%u"))
+             step = uint8(st ? 1 : 0), step_fast = 0u8, format = "%u"))
         edit_input_scalar(safe_addr(WIDGETS_DT_S16),
             (id = "WIDGETS_DT_IN_S16", text = "input s16",
              step = int16(st ? 1 : 0), step_fast = int16(0), format = "%d"))

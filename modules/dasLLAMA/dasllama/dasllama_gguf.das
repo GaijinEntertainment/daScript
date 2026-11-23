@@ -275,7 +275,7 @@ def gguf_tensor_info(var b : array<uint8>; name : string; dims : array<uint64>; 
 //! `b` zero-padded to the GGUF data alignment, 32 bytes
 def gguf_pad_data(var b : array<uint8>) {
     while (long_length(b) % 32l != 0l) {
-        b |> push(uint8(0))
+        b |> push(0u8)
     }
 }
 

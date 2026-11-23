@@ -202,7 +202,7 @@ def main() {   // nolint:STYLE038 - tutorial walkthrough, the sequence IS the le
     var e = 42
     var pe = unsafe(addr(e))
     let address = intptr(pe)
-    print("  address != 0: {address != uint64(0)}\n")
+    print("  address != 0: {address != 0ul}\n")
     print("  same pointer: {intptr(pe) == address}\n")
 
     // === reinterpret — raw bit cast ===

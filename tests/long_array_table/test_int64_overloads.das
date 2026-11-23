@@ -5,7 +5,7 @@ require daslib/array_boost
 [test(description = "resize accepts an int64 length")]
 def test_resize_int64(t : T?) {
     var arr : array<int>
-    arr |> resize(int64(7))
+    arr |> resize(7l)
     t |> equal(length(arr), 7)
     t |> equal(long_length(arr), 7_l)
 }
@@ -13,18 +13,18 @@ def test_resize_int64(t : T?) {
 [test(description = "reserve accepts an int64 capacity")]
 def test_reserve_int64(t : T?) {
     var arr : array<int>
-    arr |> reserve(int64(16))
+    arr |> reserve(16l)
     t |> success(long_capacity(arr) >= 16_l)
 }
 
 [test(description = "erase accepts an int64 position")]
 def test_erase_int64(t : T?) {
     var arr : array<int>
-    arr |> resize(int64(5))
+    arr |> resize(5l)
     for (i in iter_range(arr)) {
         arr[i] = i + 1
     }
-    arr |> erase(int64(2))
+    arr |> erase(2l)
     t |> equal(length(arr), 4)
     t |> equal(arr[2], 4)
 }
@@ -32,11 +32,11 @@ def test_erase_int64(t : T?) {
 [test(description = "erase accepts an int64 position and count")]
 def test_erase_range_int64(t : T?) {
     var arr : array<int>
-    arr |> resize(int64(5))
+    arr |> resize(5l)
     for (i in iter_range(arr)) {
         arr[i] = i + 1
     }
-    arr |> erase(int64(1), int64(2))
+    arr |> erase(1l, 2l)
     t |> equal(length(arr), 3)
     t |> equal(arr[0], 1)
     t |> equal(arr[1], 4)
@@ -45,7 +45,7 @@ def test_erase_range_int64(t : T?) {
 [test(description = "table reserve accepts an int64 capacity")]
 def test_table_reserve_int64(t : T?) {
     var tab : table<int; int>
-    tab |> reserve(int64(64))
+    tab |> reserve(64l)
     t |> success(long_capacity(tab) >= 64_l)
 }
 
@@ -94,7 +94,7 @@ def test_emplace_at_int64(t : T?) {
 [test(description = "resize_and_init accepts an int64 length and initializes the new elements")]
 def test_resize_and_init_int64(t : T?) {
     var arr : array<int>
-    arr |> resize_and_init(int64(5))
+    arr |> resize_and_init(5l)
     t |> equal(length(arr), 5)
     for (i in iter_range(arr)) {
         t |> equal(arr[i], 0)
@@ -104,7 +104,7 @@ def test_resize_and_init_int64(t : T?) {
 [test(description = "resize_and_init with an int64 length fills new elements with the given value")]
 def test_resize_and_init_initvalue_int64(t : T?) {
     var arr : array<int>
-    arr |> resize_and_init(int64(5), 42)
+    arr |> resize_and_init(5l, 42)
     t |> equal(length(arr), 5)
     for (i in iter_range(arr)) {
         t |> equal(arr[i], 42)
@@ -166,7 +166,7 @@ def test_array_view_borrowed_subview(t : T?) {
 [test(description = "a typed array_view reinterprets bytes as ints and rejects unaligned or out-of-range views")]
 def test_array_view_typed_bytes(t : T?) {
     let bytes <- [
-        uint8(1), uint8(0), uint8(0), uint8(0),
+        1u8, 0u8, 0u8, 0u8,
         uint8(0xFE), uint8(0xFF), uint8(0xFF), uint8(0xFF)
     ]
     array_view(bytes, 0, 2, type<int>) $(values : array<int>#) {

@@ -27,8 +27,8 @@ def make_test_image() : Image {
             let y = i / 8
             pixels[i * 4 + 0] = uint8(x * 32)
             pixels[i * 4 + 1] = uint8(y * 32)
-            pixels[i * 4 + 2] = uint8(128)
-            pixels[i * 4 + 3] = uint8(255)
+            pixels[i * 4 + 2] = 128u8
+            pixels[i * 4 + 3] = 255u8
         }
     }
     return <- img
@@ -109,10 +109,10 @@ def example_modify_pixels() {
     // Modify a single row — draw a red line on row 4
     img |> with_row(4) $(var row : array<uint8>#) {
         for (x in range(8)) {
-            row[x * 4 + 0] = uint8(255)
-            row[x * 4 + 1] = uint8(0)
-            row[x * 4 + 2] = uint8(0)
-            row[x * 4 + 3] = uint8(255)
+            row[x * 4 + 0] = 255u8
+            row[x * 4 + 1] = 0u8
+            row[x * 4 + 2] = 0u8
+            row[x * 4 + 3] = 255u8
         }
     }
     img |> with_row(4) $(var row : array<uint8>#) {

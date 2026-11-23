@@ -1892,7 +1892,7 @@ def test_vkd_act_family(t0 : T?) {
                 let ne = 6
                 let nrow = 3
                 let nb = nrow * brow
-                var rex <- [uint(2), uint(0), uint(5)]
+                var rex <- [2u, 0u, 5u]
                 var gb <- row_fill(ne * brow, 13, 0, 0.3, 4.5, 31)   //! biases past the 7 clamp on some elements: the clamps must engage
                 var ub <- row_fill(ne * brow, 17, 0, 0.4, 5.6, 29)
                 var gh2, uh2 : array<float>

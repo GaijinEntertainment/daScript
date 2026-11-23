@@ -65,7 +65,7 @@ def test_try_exec_failure(t : T?) {
 def test_last_insert_rowid_zero_initially(t : T?) {
     with_sqlite(":memory:") $(db) {
         let id = db |> last_insert_rowid()
-        t |> equal(id, int64(0), "last_insert_rowid is 0 before any insert")
+        t |> equal(id, 0l, "last_insert_rowid is 0 before any insert")
     }
 }
 
@@ -113,7 +113,7 @@ def test_insert_single_row(t : T?) {
     with_sqlite(":memory:") $(db) {
         db |> create_table(type<Car>)
         let id = db |> insert(Car(Id = 42, Name = "Audi", Price = 52642))
-        t |> equal(id, int64(42), "insert returns the explicit PK as rowid")
+        t |> equal(id, 42l, "insert returns the explicit PK as rowid")
         let cnt = db |> query_scalar("SELECT COUNT(*) FROM Cars", type<string>)
         t |> equal(cnt, "1", "row count after one insert")
         let nm = db |> query_scalar("SELECT Name FROM Cars WHERE Id = 42", type<string>)
@@ -135,7 +135,7 @@ def test_insert_array_batched(t : T?) {
             Car(Id=7, Name="Hummer", Price=41400),
             Car(Id=8, Name="Volkswagen", Price=21600)
         ])
-        t |> equal(last_id, int64(8), "last rowid of 8-row insert")
+        t |> equal(last_id, 8l, "last rowid of 8-row insert")
         let cnt = db |> query_scalar("SELECT COUNT(*) FROM Cars", type<string>)
         t |> equal(cnt, "8", "all 8 rows landed")
         let bentley = db |> query_scalar("SELECT Name FROM Cars WHERE Price = 350000", type<string>)
@@ -188,9 +188,9 @@ def test_pk_only_struct_insert_uses_default_values(t : T?) {
     with_sqlite(":memory:") $(db) {
         db |> create_table(type<Tag>)
         let id1 = db |> insert(Tag())
-        t |> equal(id1, int64(1), "first DEFAULT-VALUES insert assigns rowid 1")
+        t |> equal(id1, 1l, "first DEFAULT-VALUES insert assigns rowid 1")
         let id2 = db |> insert(Tag())
-        t |> equal(id2, int64(2), "second DEFAULT-VALUES insert assigns rowid 2")
+        t |> equal(id2, 2l, "second DEFAULT-VALUES insert assigns rowid 2")
         let cnt = db |> query_scalar("SELECT COUNT(*) FROM Tags", type<string>)
         t |> equal(cnt, "2", "two rows landed via DEFAULT VALUES")
     }
@@ -207,7 +207,7 @@ def test_no_pk_insert_assigns_rowid(t : T?) {
     with_sqlite(":memory:") $(db) {
         db |> create_table(type<Friend>)
         let new_id = db |> insert(Friend(Name = "Tom"))
-        t |> equal(new_id, int64(1), "first no-PK insert assigns rowid 1")
+        t |> equal(new_id, 1l, "first no-PK insert assigns rowid 1")
         let nm = db |> query_scalar("SELECT Name FROM Friends WHERE Id = 1", type<string>)
         t |> equal(nm, "Tom", "row stored under assigned rowid")
     }
@@ -218,7 +218,7 @@ def test_explicit_pk_insert_keeps_id(t : T?) {
     with_sqlite(":memory:") $(db) {
         db |> create_table(type<Friend>)
         let new_id = db |> insert(Friend(Id = 42, Name = "Roger"))
-        t |> equal(new_id, int64(42), "explicit PK is preserved")
+        t |> equal(new_id, 42l, "explicit PK is preserved")
         let nm = db |> query_scalar("SELECT Name FROM Friends WHERE Id = 42", type<string>)
         t |> equal(nm, "Roger", "row landed at explicit Id")
     }
@@ -235,7 +235,7 @@ def test_array_insert_returns_last_rowid(t : T?) {
             Friend(Name="Roger"),
             Friend(Name="Robert")
         ])
-        t |> equal(last_id, int64(5), "array insert returns last rowid")
+        t |> equal(last_id, 5l, "array insert returns last rowid")
     }
 }
 
@@ -267,7 +267,7 @@ def test_drop_then_recreate(t : T?) {
         db |> create_table(type<Friend>)
         // After recreate, rowid sequence restarts at 1 for INTEGER PRIMARY KEY.
         let new_id = db |> insert(Friend(Name = "Reset"))
-        t |> equal(new_id, int64(1), "rowid restarts at 1 after drop+create")
+        t |> equal(new_id, 1l, "rowid restarts at 1 after drop+create")
     }
 }
 

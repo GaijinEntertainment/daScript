@@ -119,8 +119,8 @@ def test_wide_component_types(t : T?) {
         cmp.vd   := 3.14lf
         cmp.vr   := range(10, 20)
         cmp.vb   := true
-        cmp.vu8  := uint8(255)
-        cmp.vi64 := int64(987654321)
+        cmp.vu8  := 255u8
+        cmp.vi64 := 987654321l
     }
     commit()
     query(eid) $(vi2 : int2; vi3 : int3; vi4 : int4; vf2 : float2; vd : double; vr : range; vb : bool; vu8 : uint8; vi64 : int64) {
@@ -131,8 +131,8 @@ def test_wide_component_types(t : T?) {
         t |> equal(vd, 3.14lf)
         t |> equal(vr, range(10, 20))
         t |> equal(vb, true)
-        t |> equal(vu8, uint8(255))
-        t |> equal(vi64, int64(987654321))
+        t |> equal(vu8, 255u8)
+        t |> equal(vi64, 987654321l)
     }
 }
 

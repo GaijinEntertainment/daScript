@@ -249,12 +249,12 @@ def private make_raw_pipeline(dev : VkDevice; shader_words : array<uint>; var rl
     for (i in range(12)) {
         entries[i].constantID = uint(i)
         entries[i].offset = uint(i * 4)
-        entries[i].size = uint64(4)
+        entries[i].size = 4ul
     }
     var spec_vals = SPEC
     var spec_info : VkSpecializationInfo
     spec_info.mapEntryCount = 12u
-    spec_info.dataSize = uint64(48)
+    spec_info.dataSize = 48ul
     var stage = VkPipelineShaderStageCreateInfo()
     stage.stage.compute = true
     stage.flags.require_full_subgroups = true

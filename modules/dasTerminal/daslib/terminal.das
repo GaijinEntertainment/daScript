@@ -1273,7 +1273,7 @@ def private append_control_text(var output : array<uint8>; text : string) {
     let value = first_character(text)
     if (value >= 'a' && value <= 'z') output |> push(uint8(value - 'a' + 1))
     elif (value >= 'A' && value <= 'Z') output |> push(uint8(value - 'A' + 1))
-    elif (value == ' ' || value == '@') output |> push(uint8(0))
+    elif (value == ' ' || value == '@') output |> push(0u8)
     elif (value == '[') output |> push(uint8(0x1b))
     elif (value == '\\') output |> push(uint8(0x1c))
     elif (value == ']') output |> push(uint8(0x1d))

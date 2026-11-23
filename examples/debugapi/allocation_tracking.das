@@ -43,7 +43,7 @@ require strings
 class AllocationTracker : DapiDebugAgent {
     heap_allocs : int = 0
     heap_frees : int = 0
-    total_bytes : uint64 = uint64(0)
+    total_bytes : uint64 = 0ul
     string_allocs : int = 0
     string_frees : int = 0
 

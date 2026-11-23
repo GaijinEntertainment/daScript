@@ -151,7 +151,7 @@ def private metal_nmt_context_shutdown {
 def metal_nmt_zero_cls_probe_(m : NmtModel) {
     if (g_nm_mblob != null) {
         unsafe {
-            memset8(reinterpret<uint8?>(metal_buffer_contents(g_nm_mblob)) + int64(g_nm_cls_boff), uint8(0), int(m.n_vocab * (m.d / Q8_BLOCK_ELEMS) * NM_Q8_BLOCK_BYTES))
+            memset8(reinterpret<uint8?>(metal_buffer_contents(g_nm_mblob)) + int64(g_nm_cls_boff), 0u8, int(m.n_vocab * (m.d / Q8_BLOCK_ELEMS) * NM_Q8_BLOCK_BYTES))
         }
     }
 }
@@ -328,7 +328,7 @@ def private metal_nmt_translate(m : NmtModel; var st : NmtState; src : array<int
             ip[r] = r < s ? uint(src[r]) : 0u
         }
         memcpy(metal_buffer_contents(bpos), addr(st.pos[0]), max(s, cap) * d * 4l)
-        memset8(reinterpret<uint8?>(metal_buffer_contents(bcell)), uint8(0), int(m.n_dec * d * 4l))
+        memset8(reinterpret<uint8?>(metal_buffer_contents(bcell)), 0u8, int(m.n_dec * d * 4l))
         var sp = reinterpret<uint?>(metal_buffer_contents(bst))
         sp[NMT_ST_T] = 0u
         sp[NMT_ST_PREV] = NMT_NO_TOKEN

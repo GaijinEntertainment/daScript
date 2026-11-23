@@ -245,7 +245,7 @@ struct private DfWalkBinds {
 }
 
 def private df_walk_binds(var mc; dr : DflashDrafter; tok : int; hsel : array<float>; cid : array<uint>; cval : array<float>) : DfWalkBinds {
-    var b = DfWalkBinds(tok = mc |> in_plain([uint(tok), uint(1), uint(2)]), hsel = mc |> in_(hsel), cid = mc |> in_plain(cid), cval = mc |> in_(cval))
+    var b = DfWalkBinds(tok = mc |> in_plain([uint(tok), 1u, 2u]), hsel = mc |> in_(hsel), cid = mc |> in_plain(cid), cval = mc |> in_(cval))
     for (side in range(2)) {
         var inscope bk <- df_book_planes(dr, side == 0 ? dr.sel_prev : dr.sel_next)
         let pq = mc |> in_plain(bk.q)

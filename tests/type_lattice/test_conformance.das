@@ -73,7 +73,7 @@ def test_float2_conformance(t : T?) {
         t |> equal(a.s0, 9.)
     }
     t |> run("struct field and layout") @(t : T?) {
-        var w = Wrap_float2(pad = uint8(1), v = float2(1., 2.))
+        var w = Wrap_float2(pad = 1u8, v = float2(1., 2.))
         t |> success(w.v == float2(1., 2.), "field read")
         w.v = float2(5., 6.)
         t |> success(w.v == float2(5., 6.), "field write")
@@ -190,7 +190,7 @@ def test_float3_conformance(t : T?) {
         t |> equal(a.s0, 9.)
     }
     t |> run("struct field and layout") @(t : T?) {
-        var w = Wrap_float3(pad = uint8(1), v = float3(1., 2., 3.))
+        var w = Wrap_float3(pad = 1u8, v = float3(1., 2., 3.))
         t |> success(w.v == float3(1., 2., 3.), "field read")
         w.v = float3(5., 6., 7.)
         t |> success(w.v == float3(5., 6., 7.), "field write")
@@ -308,7 +308,7 @@ def test_float4_conformance(t : T?) {
         t |> equal(a.s0, 9.)
     }
     t |> run("struct field and layout") @(t : T?) {
-        var w = Wrap_float4(pad = uint8(1), v = float4(1., 2., 3., 4.))
+        var w = Wrap_float4(pad = 1u8, v = float4(1., 2., 3., 4.))
         t |> success(w.v == float4(1., 2., 3., 4.), "field read")
         w.v = float4(5., 6., 7., 8.)
         t |> success(w.v == float4(5., 6., 7., 8.), "field write")
@@ -419,7 +419,7 @@ def test_int2_conformance(t : T?) {
         t |> equal(a.s0, 9)
     }
     t |> run("struct field and layout") @(t : T?) {
-        var w = Wrap_int2(pad = uint8(1), v = int2(1, 2))
+        var w = Wrap_int2(pad = 1u8, v = int2(1, 2))
         t |> success(w.v == int2(1, 2), "field read")
         w.v = int2(5, 6)
         t |> success(w.v == int2(5, 6), "field write")
@@ -564,7 +564,7 @@ def test_uint4_conformance(t : T?) {
         t |> equal(a.s0, 9u)
     }
     t |> run("struct field and layout") @(t : T?) {
-        var w = Wrap_uint4(pad = uint8(1), v = uint4(1u, 2u, 3u, 4u))
+        var w = Wrap_uint4(pad = 1u8, v = uint4(1u, 2u, 3u, 4u))
         t |> success(w.v == uint4(1u, 2u, 3u, 4u), "field read")
         w.v = uint4(5u, 6u, 7u, 8u)
         t |> success(w.v == uint4(5u, 6u, 7u, 8u), "field write")
@@ -679,7 +679,7 @@ def test_int8_conformance(t : T?) {
         t |> success(roundtrip_int8(a) == a, "roundtrip")
     }
     t |> run("struct field and layout") @(t : T?) {
-        var w = Wrap_int8(pad = uint8(1), v = int8(1))
+        var w = Wrap_int8(pad = 1u8, v = int8(1))
         t |> success(w.v == int8(1), "field read")
         w.v = int8(5)
         t |> success(w.v == int8(5), "field write")
@@ -744,7 +744,7 @@ def test_uint16_conformance(t : T?) {
         t |> success(roundtrip_uint16(a) == a, "roundtrip")
     }
     t |> run("struct field and layout") @(t : T?) {
-        var w = Wrap_uint16(pad = uint8(1), v = uint16(1u))
+        var w = Wrap_uint16(pad = 1u8, v = uint16(1u))
         t |> success(w.v == uint16(1u), "field read")
         w.v = uint16(5u)
         t |> success(w.v == uint16(5u), "field write")
@@ -809,7 +809,7 @@ def test_float16_conformance(t : T?) {
         t |> success(roundtrip_float16(a) == a, "roundtrip")
     }
     t |> run("struct field and layout") @(t : T?) {
-        var w = Wrap_float16(pad = uint8(1), v = float16(1.))
+        var w = Wrap_float16(pad = 1u8, v = float16(1.))
         t |> success(w.v == float16(1.), "field read")
         w.v = float16(5.)
         t |> success(w.v == float16(5.), "field write")
@@ -919,7 +919,7 @@ def test_half2_conformance(t : T?) {
         t |> equal(a.s0, 9h)
     }
     t |> run("struct field and layout") @(t : T?) {
-        var w = Wrap_half2(pad = uint8(1), v = half2(1., 2.))
+        var w = Wrap_half2(pad = 1u8, v = half2(1., 2.))
         t |> success(w.v == half2(1., 2.), "field read")
         w.v = half2(5., 6.)
         t |> success(w.v == half2(5., 6.), "field write")
@@ -1038,7 +1038,7 @@ def test_half3_conformance(t : T?) {
         t |> equal(a.s0, 9h)
     }
     t |> run("struct field and layout") @(t : T?) {
-        var w = Wrap_half3(pad = uint8(1), v = half3(1., 2., 3.))
+        var w = Wrap_half3(pad = 1u8, v = half3(1., 2., 3.))
         t |> success(w.v == half3(1., 2., 3.), "field read")
         w.v = half3(5., 6., 7.)
         t |> success(w.v == half3(5., 6., 7.), "field write")
@@ -1158,7 +1158,7 @@ def test_half4_conformance(t : T?) {
         t |> equal(a.s0, 9h)
     }
     t |> run("struct field and layout") @(t : T?) {
-        var w = Wrap_half4(pad = uint8(1), v = half4(1., 2., 3., 4.))
+        var w = Wrap_half4(pad = 1u8, v = half4(1., 2., 3., 4.))
         t |> success(w.v == half4(1., 2., 3., 4.), "field read")
         w.v = half4(5., 6., 7., 8.)
         t |> success(w.v == half4(5., 6., 7., 8.), "field write")
@@ -1272,7 +1272,7 @@ def test_half8_conformance(t : T?) {
         t |> equal(a.s0, 9h)
     }
     t |> run("struct field and layout") @(t : T?) {
-        var w = Wrap_half8(pad = uint8(1), v = half8(1., 2., 3., 4., 5., 6., 7., 8.))
+        var w = Wrap_half8(pad = 1u8, v = half8(1., 2., 3., 4., 5., 6., 7., 8.))
         t |> success(w.v == half8(1., 2., 3., 4., 5., 6., 7., 8.), "field read")
         w.v = half8(5., 6., 7., 8., 9., 10., 11., 12.)
         t |> success(w.v == half8(5., 6., 7., 8., 9., 10., 11., 12.), "field write")
@@ -1391,7 +1391,7 @@ def test_short2_conformance(t : T?) {
         t |> equal(a.s0, int16(9))
     }
     t |> run("struct field and layout") @(t : T?) {
-        var w = Wrap_short2(pad = uint8(1), v = short2(1, 2))
+        var w = Wrap_short2(pad = 1u8, v = short2(1, 2))
         t |> success(w.v == short2(1, 2), "field read")
         w.v = short2(5, 6)
         t |> success(w.v == short2(5, 6), "field write")
@@ -1525,7 +1525,7 @@ def test_short3_conformance(t : T?) {
         t |> equal(a.s0, int16(9))
     }
     t |> run("struct field and layout") @(t : T?) {
-        var w = Wrap_short3(pad = uint8(1), v = short3(1, 2, 3))
+        var w = Wrap_short3(pad = 1u8, v = short3(1, 2, 3))
         t |> success(w.v == short3(1, 2, 3), "field read")
         w.v = short3(5, 6, 7)
         t |> success(w.v == short3(5, 6, 7), "field write")
@@ -1660,7 +1660,7 @@ def test_short4_conformance(t : T?) {
         t |> equal(a.s0, int16(9))
     }
     t |> run("struct field and layout") @(t : T?) {
-        var w = Wrap_short4(pad = uint8(1), v = short4(1, 2, 3, 4))
+        var w = Wrap_short4(pad = 1u8, v = short4(1, 2, 3, 4))
         t |> success(w.v == short4(1, 2, 3, 4), "field read")
         w.v = short4(5, 6, 7, 8)
         t |> success(w.v == short4(5, 6, 7, 8), "field write")
@@ -1789,7 +1789,7 @@ def test_short8_conformance(t : T?) {
         t |> equal(a.s0, int16(9))
     }
     t |> run("struct field and layout") @(t : T?) {
-        var w = Wrap_short8(pad = uint8(1), v = short8(1, 2, 3, 4, 5, 6, 7, 8))
+        var w = Wrap_short8(pad = 1u8, v = short8(1, 2, 3, 4, 5, 6, 7, 8))
         t |> success(w.v == short8(1, 2, 3, 4, 5, 6, 7, 8), "field read")
         w.v = short8(5, 6, 7, 8, 9, 10, 11, 12)
         t |> success(w.v == short8(5, 6, 7, 8, 9, 10, 11, 12), "field write")
@@ -1916,7 +1916,7 @@ def test_ushort2_conformance(t : T?) {
         t |> equal(a.s0, uint16(9))
     }
     t |> run("struct field and layout") @(t : T?) {
-        var w = Wrap_ushort2(pad = uint8(1), v = ushort2(1u, 2u))
+        var w = Wrap_ushort2(pad = 1u8, v = ushort2(1u, 2u))
         t |> success(w.v == ushort2(1u, 2u), "field read")
         w.v = ushort2(5u, 6u)
         t |> success(w.v == ushort2(5u, 6u), "field write")
@@ -2050,7 +2050,7 @@ def test_ushort3_conformance(t : T?) {
         t |> equal(a.s0, uint16(9))
     }
     t |> run("struct field and layout") @(t : T?) {
-        var w = Wrap_ushort3(pad = uint8(1), v = ushort3(1u, 2u, 3u))
+        var w = Wrap_ushort3(pad = 1u8, v = ushort3(1u, 2u, 3u))
         t |> success(w.v == ushort3(1u, 2u, 3u), "field read")
         w.v = ushort3(5u, 6u, 7u)
         t |> success(w.v == ushort3(5u, 6u, 7u), "field write")
@@ -2185,7 +2185,7 @@ def test_ushort4_conformance(t : T?) {
         t |> equal(a.s0, uint16(9))
     }
     t |> run("struct field and layout") @(t : T?) {
-        var w = Wrap_ushort4(pad = uint8(1), v = ushort4(1u, 2u, 3u, 4u))
+        var w = Wrap_ushort4(pad = 1u8, v = ushort4(1u, 2u, 3u, 4u))
         t |> success(w.v == ushort4(1u, 2u, 3u, 4u), "field read")
         w.v = ushort4(5u, 6u, 7u, 8u)
         t |> success(w.v == ushort4(5u, 6u, 7u, 8u), "field write")
@@ -2314,7 +2314,7 @@ def test_ushort8_conformance(t : T?) {
         t |> equal(a.s0, uint16(9))
     }
     t |> run("struct field and layout") @(t : T?) {
-        var w = Wrap_ushort8(pad = uint8(1), v = ushort8(1u, 2u, 3u, 4u, 5u, 6u, 7u, 8u))
+        var w = Wrap_ushort8(pad = 1u8, v = ushort8(1u, 2u, 3u, 4u, 5u, 6u, 7u, 8u))
         t |> success(w.v == ushort8(1u, 2u, 3u, 4u, 5u, 6u, 7u, 8u), "field read")
         w.v = ushort8(5u, 6u, 7u, 8u, 9u, 10u, 11u, 12u)
         t |> success(w.v == ushort8(5u, 6u, 7u, 8u, 9u, 10u, 11u, 12u), "field write")
@@ -2441,7 +2441,7 @@ def test_byte2_conformance(t : T?) {
         t |> equal(a.s0, int8(9))
     }
     t |> run("struct field and layout") @(t : T?) {
-        var w = Wrap_byte2(pad = uint8(1), v = byte2(1, 2))
+        var w = Wrap_byte2(pad = 1u8, v = byte2(1, 2))
         t |> success(w.v == byte2(1, 2), "field read")
         w.v = byte2(5, 6)
         t |> success(w.v == byte2(5, 6), "field write")
@@ -2575,7 +2575,7 @@ def test_byte3_conformance(t : T?) {
         t |> equal(a.s0, int8(9))
     }
     t |> run("struct field and layout") @(t : T?) {
-        var w = Wrap_byte3(pad = uint8(1), v = byte3(1, 2, 3))
+        var w = Wrap_byte3(pad = 1u8, v = byte3(1, 2, 3))
         t |> success(w.v == byte3(1, 2, 3), "field read")
         w.v = byte3(5, 6, 7)
         t |> success(w.v == byte3(5, 6, 7), "field write")
@@ -2710,7 +2710,7 @@ def test_byte4_conformance(t : T?) {
         t |> equal(a.s0, int8(9))
     }
     t |> run("struct field and layout") @(t : T?) {
-        var w = Wrap_byte4(pad = uint8(1), v = byte4(1, 2, 3, 4))
+        var w = Wrap_byte4(pad = 1u8, v = byte4(1, 2, 3, 4))
         t |> success(w.v == byte4(1, 2, 3, 4), "field read")
         w.v = byte4(5, 6, 7, 8)
         t |> success(w.v == byte4(5, 6, 7, 8), "field write")
@@ -2839,7 +2839,7 @@ def test_byte8_conformance(t : T?) {
         t |> equal(a.s0, int8(9))
     }
     t |> run("struct field and layout") @(t : T?) {
-        var w = Wrap_byte8(pad = uint8(1), v = byte8(1, 2, 3, 4, 5, 6, 7, 8))
+        var w = Wrap_byte8(pad = 1u8, v = byte8(1, 2, 3, 4, 5, 6, 7, 8))
         t |> success(w.v == byte8(1, 2, 3, 4, 5, 6, 7, 8), "field read")
         w.v = byte8(5, 6, 7, 8, 9, 10, 11, 12)
         t |> success(w.v == byte8(5, 6, 7, 8, 9, 10, 11, 12), "field write")
@@ -2976,7 +2976,7 @@ def test_byte16_conformance(t : T?) {
         t |> equal(a.s0, int8(9))
     }
     t |> run("struct field and layout") @(t : T?) {
-        var w = Wrap_byte16(pad = uint8(1), v = byte16(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16))
+        var w = Wrap_byte16(pad = 1u8, v = byte16(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16))
         t |> success(w.v == byte16(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16), "field read")
         w.v = byte16(5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20)
         t |> success(w.v == byte16(5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20), "field write")
@@ -3076,31 +3076,31 @@ def test_ubyte2_conformance(t : T?) {
     }
     t |> run("index read and write") @(t : T?) {
         var a = ubyte2(1u, 2u)
-        t |> equal(a[0], uint8(1))
-        t |> equal(a[1], uint8(2))
-        a[1] = uint8(9)
-        t |> equal(a[1], uint8(9))
+        t |> equal(a[0], 1u8)
+        t |> equal(a[1], 2u8)
+        a[1] = 9u8
+        t |> equal(a[1], 9u8)
     }
     t |> run("swizzle") @(t : T?) {
         var a = ubyte2(1u, 2u)
-        t |> equal(a.x, uint8(1))
-        t |> equal(a.y, uint8(2))
+        t |> equal(a.x, 1u8)
+        t |> equal(a.y, 2u8)
         t |> success(a.yx == ubyte2(2u, 1u), "reverse read")
-        a.y = uint8(9)
-        t |> equal(a.y, uint8(9))
+        a.y = 9u8
+        t |> equal(a.y, 9u8)
         a.xy = ubyte2(7u, 8u)
-        t |> equal(a.x, uint8(7))
-        t |> equal(a.y, uint8(8))
+        t |> equal(a.x, 7u8)
+        t |> equal(a.y, 8u8)
     }
     t |> run("s-namespace swizzle") @(t : T?) {
         var a = ubyte2(1u, 2u)
-        t |> equal(a.s1, uint8(2))
+        t |> equal(a.s1, 2u8)
         t |> success(a.s10 == ubyte2(2u, 1u), "pair reorder")
-        a.s0 = uint8(9)
-        t |> equal(a.s0, uint8(9))
+        a.s0 = 9u8
+        t |> equal(a.s0, 9u8)
     }
     t |> run("struct field and layout") @(t : T?) {
-        var w = Wrap_ubyte2(pad = uint8(1), v = ubyte2(1u, 2u))
+        var w = Wrap_ubyte2(pad = 1u8, v = ubyte2(1u, 2u))
         t |> success(w.v == ubyte2(1u, 2u), "field read")
         w.v = ubyte2(5u, 6u)
         t |> success(w.v == ubyte2(5u, 6u), "field write")
@@ -3208,33 +3208,33 @@ def test_ubyte3_conformance(t : T?) {
     }
     t |> run("index read and write") @(t : T?) {
         var a = ubyte3(1u, 2u, 3u)
-        t |> equal(a[0], uint8(1))
-        t |> equal(a[1], uint8(2))
-        t |> equal(a[2], uint8(3))
-        a[2] = uint8(9)
-        t |> equal(a[2], uint8(9))
+        t |> equal(a[0], 1u8)
+        t |> equal(a[1], 2u8)
+        t |> equal(a[2], 3u8)
+        a[2] = 9u8
+        t |> equal(a[2], 9u8)
     }
     t |> run("swizzle") @(t : T?) {
         var a = ubyte3(1u, 2u, 3u)
-        t |> equal(a.x, uint8(1))
-        t |> equal(a.z, uint8(3))
+        t |> equal(a.x, 1u8)
+        t |> equal(a.z, 3u8)
         t |> success(a.zyx == ubyte3(3u, 2u, 1u), "reverse read")
         t |> success(a.xy == ubyte2(1u, 2u), "pair read")
-        a.z = uint8(9)
-        t |> equal(a.z, uint8(9))
+        a.z = 9u8
+        t |> equal(a.z, 9u8)
         a.xy = ubyte2(7u, 8u)
-        t |> equal(a.x, uint8(7))
-        t |> equal(a.y, uint8(8))
+        t |> equal(a.x, 7u8)
+        t |> equal(a.y, 8u8)
     }
     t |> run("s-namespace swizzle") @(t : T?) {
         var a = ubyte3(1u, 2u, 3u)
-        t |> equal(a.s2, uint8(3))
+        t |> equal(a.s2, 3u8)
         t |> success(a.s20 == ubyte2(3u, 1u), "pair reorder")
-        a.s0 = uint8(9)
-        t |> equal(a.s0, uint8(9))
+        a.s0 = 9u8
+        t |> equal(a.s0, 9u8)
     }
     t |> run("struct field and layout") @(t : T?) {
-        var w = Wrap_ubyte3(pad = uint8(1), v = ubyte3(1u, 2u, 3u))
+        var w = Wrap_ubyte3(pad = 1u8, v = ubyte3(1u, 2u, 3u))
         t |> success(w.v == ubyte3(1u, 2u, 3u), "field read")
         w.v = ubyte3(5u, 6u, 7u)
         t |> success(w.v == ubyte3(5u, 6u, 7u), "field write")
@@ -3342,34 +3342,34 @@ def test_ubyte4_conformance(t : T?) {
     }
     t |> run("index read and write") @(t : T?) {
         var a = ubyte4(1u, 2u, 3u, 4u)
-        t |> equal(a[0], uint8(1))
-        t |> equal(a[1], uint8(2))
-        t |> equal(a[2], uint8(3))
-        t |> equal(a[3], uint8(4))
-        a[3] = uint8(9)
-        t |> equal(a[3], uint8(9))
+        t |> equal(a[0], 1u8)
+        t |> equal(a[1], 2u8)
+        t |> equal(a[2], 3u8)
+        t |> equal(a[3], 4u8)
+        a[3] = 9u8
+        t |> equal(a[3], 9u8)
     }
     t |> run("swizzle") @(t : T?) {
         var a = ubyte4(1u, 2u, 3u, 4u)
-        t |> equal(a.x, uint8(1))
-        t |> equal(a.w, uint8(4))
+        t |> equal(a.x, 1u8)
+        t |> equal(a.w, 4u8)
         t |> success(a.wzyx == ubyte4(4u, 3u, 2u, 1u), "reverse read")
         t |> success(a.xy == ubyte2(1u, 2u), "pair read")
-        a.w = uint8(9)
-        t |> equal(a.w, uint8(9))
+        a.w = 9u8
+        t |> equal(a.w, 9u8)
         a.xy = ubyte2(7u, 8u)
-        t |> equal(a.x, uint8(7))
-        t |> equal(a.y, uint8(8))
+        t |> equal(a.x, 7u8)
+        t |> equal(a.y, 8u8)
     }
     t |> run("s-namespace swizzle") @(t : T?) {
         var a = ubyte4(1u, 2u, 3u, 4u)
-        t |> equal(a.s3, uint8(4))
+        t |> equal(a.s3, 4u8)
         t |> success(a.s30 == ubyte2(4u, 1u), "pair reorder")
-        a.s0 = uint8(9)
-        t |> equal(a.s0, uint8(9))
+        a.s0 = 9u8
+        t |> equal(a.s0, 9u8)
     }
     t |> run("struct field and layout") @(t : T?) {
-        var w = Wrap_ubyte4(pad = uint8(1), v = ubyte4(1u, 2u, 3u, 4u))
+        var w = Wrap_ubyte4(pad = 1u8, v = ubyte4(1u, 2u, 3u, 4u))
         t |> success(w.v == ubyte4(1u, 2u, 3u, 4u), "field read")
         w.v = ubyte4(5u, 6u, 7u, 8u)
         t |> success(w.v == ubyte4(5u, 6u, 7u, 8u), "field write")
@@ -3477,28 +3477,28 @@ def test_ubyte8_conformance(t : T?) {
     }
     t |> run("index read and write") @(t : T?) {
         var a = ubyte8(1u, 2u, 3u, 4u, 5u, 6u, 7u, 8u)
-        t |> equal(a[0], uint8(1))
-        t |> equal(a[1], uint8(2))
-        t |> equal(a[2], uint8(3))
-        t |> equal(a[3], uint8(4))
-        t |> equal(a[4], uint8(5))
-        t |> equal(a[5], uint8(6))
-        t |> equal(a[6], uint8(7))
-        t |> equal(a[7], uint8(8))
-        a[7] = uint8(9)
-        t |> equal(a[7], uint8(9))
+        t |> equal(a[0], 1u8)
+        t |> equal(a[1], 2u8)
+        t |> equal(a[2], 3u8)
+        t |> equal(a[3], 4u8)
+        t |> equal(a[4], 5u8)
+        t |> equal(a[5], 6u8)
+        t |> equal(a[6], 7u8)
+        t |> equal(a[7], 8u8)
+        a[7] = 9u8
+        t |> equal(a[7], 9u8)
     }
     t |> run("s-namespace swizzle") @(t : T?) {
         var a = ubyte8(1u, 2u, 3u, 4u, 5u, 6u, 7u, 8u)
-        t |> equal(a.s7, uint8(8))
+        t |> equal(a.s7, 8u8)
         t |> success(a.s70 == ubyte2(8u, 1u), "pair reorder")
         t |> success(a.lo == ubyte4(1u, 2u, 3u, 4u), ".lo")
         t |> success(a.hi == ubyte4(5u, 6u, 7u, 8u), ".hi")
-        a.s0 = uint8(9)
-        t |> equal(a.s0, uint8(9))
+        a.s0 = 9u8
+        t |> equal(a.s0, 9u8)
     }
     t |> run("struct field and layout") @(t : T?) {
-        var w = Wrap_ubyte8(pad = uint8(1), v = ubyte8(1u, 2u, 3u, 4u, 5u, 6u, 7u, 8u))
+        var w = Wrap_ubyte8(pad = 1u8, v = ubyte8(1u, 2u, 3u, 4u, 5u, 6u, 7u, 8u))
         t |> success(w.v == ubyte8(1u, 2u, 3u, 4u, 5u, 6u, 7u, 8u), "field read")
         w.v = ubyte8(5u, 6u, 7u, 8u, 9u, 10u, 11u, 12u)
         t |> success(w.v == ubyte8(5u, 6u, 7u, 8u, 9u, 10u, 11u, 12u), "field write")
@@ -3606,36 +3606,36 @@ def test_ubyte16_conformance(t : T?) {
     }
     t |> run("index read and write") @(t : T?) {
         var a = ubyte16(1u, 2u, 3u, 4u, 5u, 6u, 7u, 8u, 9u, 10u, 11u, 12u, 13u, 14u, 15u, 16u)
-        t |> equal(a[0], uint8(1))
-        t |> equal(a[1], uint8(2))
-        t |> equal(a[2], uint8(3))
-        t |> equal(a[3], uint8(4))
-        t |> equal(a[4], uint8(5))
-        t |> equal(a[5], uint8(6))
-        t |> equal(a[6], uint8(7))
-        t |> equal(a[7], uint8(8))
-        t |> equal(a[8], uint8(9))
-        t |> equal(a[9], uint8(10))
-        t |> equal(a[10], uint8(11))
-        t |> equal(a[11], uint8(12))
-        t |> equal(a[12], uint8(13))
-        t |> equal(a[13], uint8(14))
-        t |> equal(a[14], uint8(15))
-        t |> equal(a[15], uint8(16))
-        a[15] = uint8(9)
-        t |> equal(a[15], uint8(9))
+        t |> equal(a[0], 1u8)
+        t |> equal(a[1], 2u8)
+        t |> equal(a[2], 3u8)
+        t |> equal(a[3], 4u8)
+        t |> equal(a[4], 5u8)
+        t |> equal(a[5], 6u8)
+        t |> equal(a[6], 7u8)
+        t |> equal(a[7], 8u8)
+        t |> equal(a[8], 9u8)
+        t |> equal(a[9], 10u8)
+        t |> equal(a[10], 11u8)
+        t |> equal(a[11], 12u8)
+        t |> equal(a[12], 13u8)
+        t |> equal(a[13], 14u8)
+        t |> equal(a[14], 15u8)
+        t |> equal(a[15], 16u8)
+        a[15] = 9u8
+        t |> equal(a[15], 9u8)
     }
     t |> run("s-namespace swizzle") @(t : T?) {
         var a = ubyte16(1u, 2u, 3u, 4u, 5u, 6u, 7u, 8u, 9u, 10u, 11u, 12u, 13u, 14u, 15u, 16u)
-        t |> equal(a.sf, uint8(16))
+        t |> equal(a.sf, 16u8)
         t |> success(a.sf0 == ubyte2(16u, 1u), "pair reorder")
         t |> success(a.lo == ubyte8(1u, 2u, 3u, 4u, 5u, 6u, 7u, 8u), ".lo")
         t |> success(a.hi == ubyte8(9u, 10u, 11u, 12u, 13u, 14u, 15u, 16u), ".hi")
-        a.s0 = uint8(9)
-        t |> equal(a.s0, uint8(9))
+        a.s0 = 9u8
+        t |> equal(a.s0, 9u8)
     }
     t |> run("struct field and layout") @(t : T?) {
-        var w = Wrap_ubyte16(pad = uint8(1), v = ubyte16(1u, 2u, 3u, 4u, 5u, 6u, 7u, 8u, 9u, 10u, 11u, 12u, 13u, 14u, 15u, 16u))
+        var w = Wrap_ubyte16(pad = 1u8, v = ubyte16(1u, 2u, 3u, 4u, 5u, 6u, 7u, 8u, 9u, 10u, 11u, 12u, 13u, 14u, 15u, 16u))
         t |> success(w.v == ubyte16(1u, 2u, 3u, 4u, 5u, 6u, 7u, 8u, 9u, 10u, 11u, 12u, 13u, 14u, 15u, 16u), "field read")
         w.v = ubyte16(5u, 6u, 7u, 8u, 9u, 10u, 11u, 12u, 13u, 14u, 15u, 16u, 17u, 18u, 19u, 20u)
         t |> success(w.v == ubyte16(5u, 6u, 7u, 8u, 9u, 10u, 11u, 12u, 13u, 14u, 15u, 16u, 17u, 18u, 19u, 20u), "field write")

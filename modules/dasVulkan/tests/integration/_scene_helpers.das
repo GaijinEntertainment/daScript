@@ -574,7 +574,7 @@ def public render_sampler2darray() : array<uint8> {   // nolint:STYLE038 - flat 
     let lw = 2
     let lh = 2
     let layers = 4
-    var texels <- [for (_i in range(lw * lh * layers * 4)); uint8(0)]
+    var texels <- [for (_i in range(lw * lh * layers * 4)); 0u8]
     let cols = fixed_array(
         fixed_array(255, 0, 0, 255),        // layer 0 red
         fixed_array(0, 255, 0, 255),        // layer 1 green

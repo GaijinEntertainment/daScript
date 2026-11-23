@@ -671,8 +671,8 @@ def private rd_state_init(net : RnntNet; b : RdBufs) {
     unsafe {
         rnnt_dev_state_words(net, reinterpret<uint?>(metal_buffer_contents(b.st)))
         rnnt_dev_first_input(net, reinterpret<float?>(metal_buffer_contents(b.xin)))
-        memset8(reinterpret<uint8?>(metal_buffer_contents(b.hb)), uint8(0), int(b.sizes[1]))
-        memset8(reinterpret<uint8?>(metal_buffer_contents(b.cb)), uint8(0), int(b.sizes[2]))
+        memset8(reinterpret<uint8?>(metal_buffer_contents(b.hb)), 0u8, int(b.sizes[1]))
+        memset8(reinterpret<uint8?>(metal_buffer_contents(b.cb)), 0u8, int(b.sizes[2]))
     }
 }
 

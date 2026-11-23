@@ -4616,10 +4616,10 @@ def private fill_exact_k4(var kq : array<uint8>; var ks : array<uint8>; var gg :
             gg[go + 8l + j] = ks[ko + 8l + j]
             gg[go + 12l + j] = ks[ko + 12l + j]
         }
-        ks[ko + 16l] = uint8(0)   // the transcode zeroes the 4 pad bytes
-        ks[ko + 17l] = uint8(0)
-        ks[ko + 18l] = uint8(0)
-        ks[ko + 19l] = uint8(0)
+        ks[ko + 16l] = 0u8   // the transcode zeroes the 4 pad bytes
+        ks[ko + 17l] = 0u8
+        ks[ko + 18l] = 0u8
+        ks[ko + 19l] = 0u8
         let qo = sb * 128l
         for (b in range64(128l)) {
             let lo = int((b * 7l + sb * 13l + seed) % 16l)

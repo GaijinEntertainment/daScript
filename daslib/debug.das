@@ -161,7 +161,7 @@ def private resolve_path_cache(path : string; paths : array<string>; aliases : t
 
 def private bytes_hr(value : uint64) {
     if (value > uint64(1024 * 1024)) return "{float(value) / (1024f * 1024f)}mb ({int(value)})"
-    if (value > uint64(1024)) return "{float(value) / 1024f}kb ({int(value)})"
+    if (value > 1024ul) return "{float(value) / 1024f}kb ({int(value)})"
     return "{int(value)} b"
 }
 
@@ -1316,12 +1316,12 @@ class private DAgent : DapiDebugAgent {
                 to_log(LOG_DEBUG, "dap: {report}{bytes_hr(alloc)} limit : {bytes_hr(strLimit)}\n")
             }
             if (alloc > strLimit) {
-                strLimit *= uint64(2)
+                strLimit *= 2ul
                 if (logStrMemory) {
                     to_log(LOG_DEBUG, "dap: UP string heap limit: {bytes_hr(strLimit)}\n")
                 }
-            } elif (strLimit > initialStrLimit && alloc < strLimit / uint64(2)) {
-                strLimit = strLimit / uint64(2)
+            } elif (strLimit > initialStrLimit && alloc < strLimit / 2ul) {
+                strLimit = strLimit / 2ul
                 if (logStrMemory) {
                     to_log(LOG_DEBUG, "dap: DOWN string heap limit: {bytes_hr(strLimit)}\n")
                 }

@@ -105,7 +105,7 @@ def test_chatter_guards(suite : T?) {
     suite |> run("a stale packet cannot queue a voice or mutate the game") @(t : T?) {
         reset_ambient_test()
         editing = true
-        var packet = InferenceResponse(code = 200, audio <- [uint8(1), uint8(2)])
+        var packet = InferenceResponse(code = 200, audio <- [1u8, 2u8])
         finish_chatter_packet(packet, 5.0)
         t |> success(empty(queued_voice))
         t |> success(!world.power && !world.archive_open && empty(world.inventory))
@@ -114,7 +114,7 @@ def test_chatter_guards(suite : T?) {
         reset_ambient_test()
         reply_text = "The player's conversation."
         conversation_resident = 0
-        var packet = InferenceResponse(code = 200, audio <- [uint8(1), uint8(2)])
+        var packet = InferenceResponse(code = 200, audio <- [1u8, 2u8])
         finish_chatter_packet(packet, 5.0)
         t |> success(queued_voice_ambient)
         t |> equal(voice_resident, 2)

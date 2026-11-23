@@ -204,7 +204,7 @@ def private write_pack_header(path : string; version : int) {
         panic("cannot write the synthetic g2p pack {path}")
     }
     var inscope bytes <- [uint8(0x54), uint8(0x47), uint8(0x32), uint8(0x50),
-        uint8(version), uint8(0), uint8(0), uint8(0), uint8(0), uint8(0)]
+        uint8(version), 0u8, 0u8, 0u8, 0u8, 0u8]
     fwrite(f, bytes)
     fclose(f)
 }
