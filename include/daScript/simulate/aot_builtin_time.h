@@ -28,8 +28,8 @@ namespace das {
     __forceinline bool time_lt ( Time a, Time b ) { return a.time<b.time; }
     __forceinline double time_sub ( Time a, Time b ) { return difftime(a.time, b.time); }
 
-    static inline int64_t cast_int64(Time t) { return int64_t(t.time); }
-    static inline Time cast_clock(int64_t t) { return Time(t); }
+    inline int64_t cast_int64(Time t) { return int64_t(t.time); }
+    inline Time cast_clock(int64_t t) { return Time(t); }
     DAS_API Time builtin_clock();
     DAS_API char * iso8601_now ( Context * context, LineInfoArg * at );
     DAS_API char * format_time ( Time t, const char * fmt, Context * context, LineInfoArg * at );
