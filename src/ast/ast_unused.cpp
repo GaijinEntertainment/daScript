@@ -7,6 +7,11 @@
 
 namespace das {
 
+    // a global of a frozen (already compiled) module is read-only: module jobs that require it
+    // must not stamp its flags. src/ast/ARCHITECTURE_COMPILE_MODULES.md#compile-workers
+    static inline bool isFrozenGlobal ( const Variable * var ) {
+        return var->module && var->module->frozen;
+    }
 
     class TrackVariableFlags : public Visitor {
     protected:
@@ -68,6 +73,7 @@ namespace das {
         // var
         virtual void preVisit ( ExprVar * expr ) override {
             Visitor::preVisit(expr);
+            if ( isFrozenGlobal(expr->variable) ) return;
             if ( expr->write ) {
                 expr->variable->access_ref = true;
             } else {
@@ -411,7 +417,7 @@ namespace das {
         void propagatePassMutable ( Expression * expr ) {
             if ( expr->rtti_isVar() ) {
                 auto var = (ExprVar *) expr;
-                var->variable->access_info_pass_mutable = true;
+                if ( !isFrozenGlobal(var->variable) ) var->variable->access_info_pass_mutable = true;
                 if ( var->variable->loop_source ) {
                     propagatePassMutable(var->variable->loop_source);
                 }

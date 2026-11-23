@@ -437,6 +437,7 @@ namespace das {
         fillGcFlags(this);
         frozen = true;
         aliasTypes.freeze();
+        for ( auto & st : structures.each() ) st->aliases.freeze();
         structures.freeze();
         enumerations.freeze();
         globals.freeze();

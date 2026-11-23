@@ -177,6 +177,7 @@ namespace das {
         bool promote_shared_unoptimized = false; // src/ast/ARCHITECTURE_SHARED.md#shared-promotion
         /*option*/ uint32_t max_framed_call_depth = 0;  // interpreter only; 0 = unchecked.
         /*option*/ bool promote_folded_int_constants = true;
+        int32_t compile_threads = 1;             // src/ast/ARCHITECTURE_COMPILE_MODULES.md#compile-dag
 
         // the abi_stamp truth (a member so the NSDMI above can call it - complete-class context).
         // Low byte 0 keeps a pre-stamp libDaScript reading this word seeing aot == false -

@@ -66,6 +66,7 @@ namespace das {
                 annotationAllowed = context->findFunction("annotation_allowed");    // note, this one CAN be null
                 podInScopeAllowed = context->findFunction("is_pod_in_scope_allowed"); // note, this one CAN be null
                 dynModulesFolderGet = context->findFunction("dyn_modules_folder");          // note, this one CAN be null
+                if ( !context->contextMutex ) context->contextMutex = new recursive_mutex;  // src/ast/ARCHITECTURE_COMPILE_MODULES.md#compile-workers
                 // get it ready
                 context->restart();
                 context->runInitScript();   // note: we assume sane init stack size here
@@ -95,6 +96,7 @@ namespace das {
 
     bool ModuleFileAccess::canModuleBeUnsafe ( const string & mod, const string & fileName ) const {
         if(failed() || !moduleUnsafe) return FileAccess::canModuleBeUnsafe(mod,fileName);
+        lock_guard<recursive_mutex> guard(*context->contextMutex);
         vec4f args[2];
         args[0] = cast<const char *>::from(mod.c_str());
         args[1] = cast<const char *>::from(fileName.c_str());
@@ -106,6 +108,7 @@ namespace das {
 
     bool ModuleFileAccess::isWithModuleUnsafe ( const string & mod, const string & fileName ) const {
         if(failed() || !withModuleUnsafe) return FileAccess::isWithModuleUnsafe(mod,fileName);
+        lock_guard<recursive_mutex> guard(*context->contextMutex);
         vec4f args[2];
         args[0] = cast<const char *>::from(mod.c_str());
         args[1] = cast<const char *>::from(fileName.c_str());
@@ -117,6 +120,7 @@ namespace das {
 
     bool ModuleFileAccess::canBeRequired ( const string & mod, const string & fileName, bool isPublic ) const {
         if(failed() || !canModuleBeRequired) return FileAccess::canBeRequired(mod,fileName,isPublic);
+        lock_guard<recursive_mutex> guard(*context->contextMutex);
         vec4f args[3];
         args[0] = cast<const char *>::from(mod.c_str());
         args[1] = cast<const char *>::from(fileName.c_str());
@@ -129,6 +133,7 @@ namespace das {
 
     bool ModuleFileAccess::isModuleAllowed ( const string & mod, const string & fileName ) const {
         if(failed() || !moduleAllowed) return FileAccess::isModuleAllowed(mod,fileName);
+        lock_guard<recursive_mutex> guard(*context->contextMutex);
         vec4f args[2];
         args[0] = cast<const char *>::from(mod.c_str());
         args[1] = cast<const char *>::from(fileName.c_str());
@@ -140,6 +145,7 @@ namespace das {
 
     ModuleInfo ModuleFileAccess::getModuleInfo ( const string & req, const string & from ) const {
         if (failed()) return FileAccess::getModuleInfo(req, from);
+        lock_guard<recursive_mutex> guard(*context->contextMutex);
         vec4f args[2];
         args[0] = cast<const char *>::from(req.c_str());
         args[1] = cast<const char *>::from(from.c_str());
@@ -161,6 +167,7 @@ namespace das {
 
     string ModuleFileAccess::getDynModulesFolder() const {
         if(failed() || !dynModulesFolderGet) return FileAccess::getDynModulesFolder();
+        lock_guard<recursive_mutex> guard(*context->contextMutex);
         auto res = context->evalWithCatch(dynModulesFolderGet, nullptr, nullptr);
         auto exc = context->getException(); exc;
         DAS_ASSERTF(!exc, "exception failed in `dyn_modules_folder`: %s", exc);
@@ -169,6 +176,7 @@ namespace das {
 
     string ModuleFileAccess::getIncludeFileName ( const string & fileName, const string & incFileName ) const {
         if (failed() || !includeGet) return FileAccess::getIncludeFileName(fileName,incFileName);
+        lock_guard<recursive_mutex> guard(*context->contextMutex);
         vec4f args[2];
         args[0] = cast<const char *>::from(incFileName.c_str());
         args[1] = cast<const char *>::from(fileName.c_str());
@@ -181,6 +189,7 @@ namespace das {
 
     bool ModuleFileAccess::isSameFileName ( const string & a, const string & b ) const {
         if (failed() || !sameFileName) return FileAccess::isSameFileName(a,b);
+        lock_guard<recursive_mutex> guard(*context->contextMutex);
         vec4f args[2];
         args[0] = cast<const char *>::from(a.c_str());
         args[1] = cast<const char *>::from(b.c_str());
@@ -192,6 +201,7 @@ namespace das {
 
     bool ModuleFileAccess::isOptionAllowed ( const string & opt, const string & from ) const {
         if (failed() || !optionAllowed) return FileAccess::isOptionAllowed(opt,from);
+        lock_guard<recursive_mutex> guard(*context->contextMutex);
         vec4f args[2];
         args[0] = cast<const char *>::from(opt.c_str());
         args[1] = cast<const char *>::from(from.c_str());
@@ -203,6 +213,7 @@ namespace das {
 
     bool ModuleFileAccess::isOptionBlocked ( const string & opt, const string & from ) const {
         if (failed() || !optionBlocked) return FileAccess::isOptionBlocked(opt,from);
+        lock_guard<recursive_mutex> guard(*context->contextMutex);
         vec4f args[2];
         args[0] = cast<const char *>::from(opt.c_str());
         args[1] = cast<const char *>::from(from.c_str());
@@ -214,6 +225,7 @@ namespace das {
 
     bool ModuleFileAccess::isAnnotationAllowed ( const string & ann, const string & from ) const {
         if (failed() || !annotationAllowed) return FileAccess::isAnnotationAllowed(ann,from);
+        lock_guard<recursive_mutex> guard(*context->contextMutex);
         vec4f args[2];
         args[0] = cast<const char *>::from(ann.c_str());
         args[1] = cast<const char *>::from(from.c_str());
@@ -225,6 +237,7 @@ namespace das {
 
     bool ModuleFileAccess::isPodInScopeAllowed ( const string & moduleName, const string & fileName ) const {
         if (failed() || !podInScopeAllowed) return FileAccess::isPodInScopeAllowed(moduleName,fileName);
+        lock_guard<recursive_mutex> guard(*context->contextMutex);
         vec4f args[2];
         args[0] = cast<const char *>::from(moduleName.c_str());
         args[1] = cast<const char *>::from(fileName.c_str());
