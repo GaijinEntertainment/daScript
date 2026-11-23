@@ -1,5 +1,7 @@
 options gen2
 options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
+options persistent_heap
+options gc
 
 require dasllama/dasllama_core
 require dasllama/dasllama_host   // the surfaces' state and their shared steps
