@@ -55,14 +55,14 @@ def private bmp_header_stub(w, h : int) : array<uint8> {
     bytes |> resize(54)
     bytes[0] = uint8('B')
     bytes[1] = uint8('M')
-    bytes[10] = uint8(54)         // pixel-data offset
-    bytes[14] = uint8(40)         // BITMAPINFOHEADER size
+    bytes[10] = 54u8         // pixel-data offset
+    bytes[14] = 40u8         // BITMAPINFOHEADER size
     for (i in range(4)) {
         bytes[18 + i] = uint8((w >> (i * 8)) & 0xFF)
         bytes[22 + i] = uint8((h >> (i * 8)) & 0xFF)
     }
-    bytes[26] = uint8(1)          // planes
-    bytes[28] = uint8(24)         // bits per pixel
+    bytes[26] = 1u8          // planes
+    bytes[28] = 24u8         // bits per pixel
     return <- bytes
 }
 

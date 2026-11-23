@@ -4,6 +4,7 @@ options indenting = 4
 require dastest/testing_boost public
 require daslib/fio
 require strings
+require math
 
 [test(description = "extension returns the last dot suffix of a path and empty when there is none, ignoring dots in directories")]
 def test_extension(t : T?) {
@@ -113,13 +114,13 @@ def test_file_size(t : T?) {
             fwrite(f, "12345")
         }
         var error : string
-        t |> equal(file_size(tmp, error), int64(5))
+        t |> equal(file_size(tmp, error), 5l)
         t |> success(empty(error), "unexpected error: {error}")
         remove(tmp)
     }
     t |> run("missing file") @(t : T?) {
         var error : string
-        t |> equal(file_size("/no/such/file_that_exists", error), int64(-1))
+        t |> equal(file_size("/no/such/file_that_exists", error), -1l)
         t |> success(!empty(error), "expected error for missing file")
     }
 }
@@ -344,13 +345,13 @@ def test_disk_space(t : T?) {
         var info = DiskSpaceInfo()
         var error : string
         t |> success(builtin_disk_space(".", info, error))
-        t |> success(info.capacity > uint64(0))
-        t |> success(info.available > uint64(0))
+        t |> success(info.capacity > 0ul)
+        t |> success(info.available > 0ul)
         t |> success(empty(error), "unexpected error: {error}")
     }
     t |> run("convenience overload") @(t : T?) {
         let info = disk_space(".")
-        t |> success(info.capacity > uint64(0))
+        t |> success(info.capacity > 0ul)
     }
 }
 
@@ -369,8 +370,7 @@ def test_set_mtime(t : T?) {
         let st = stat(tmp)
         t |> success(st.is_valid)
         let diff = int64(st.mtime) - int64(target_time)
-        let abs_diff = diff >= int64(0) ? diff : -diff
-        t |> success(abs_diff < int64(60), "mtime should be close to target")
+        t |> success(abs(diff) < 60l, "mtime should be close to target")
         remove(tmp)
     }
 }

@@ -40,9 +40,9 @@ def test_big_write_read(t : T?) {
         }
         t |> equal(int64(stat(path).size), BIG)   // pre-fix: garbage-padded file, wrong size
         for (k in range64(0l, BIG / PROBE_STEP)) {
-            buf[k * PROBE_STEP] = uint8(0)
+            buf[k * PROBE_STEP] = 0u8
         }
-        buf[BIG - 1l] = uint8(0)
+        buf[BIG - 1l] = 0u8
         fopen(path, "rb") $(f) {
             t |> success(f != null)
             t |> equal(f |> long_fread(buf), BIG)
@@ -88,7 +88,7 @@ def test_big_write_read(t : T?) {
         fopen(path, "wb") $(f) {
             t |> success(f != null)
             fseek(f, pos, seek_set)
-            f |> fwrite(uint8(7))
+            f |> fwrite(7u8)
             t |> equal(ftell(f), pos + 1l)   // pre-fix on Windows: 32-bit ftell truncates
         }
         t |> equal(int64(stat(path).size), pos + 1l)

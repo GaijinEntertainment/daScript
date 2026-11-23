@@ -362,10 +362,10 @@ def metal_q8q8_batch(var yp : float?; wp : int8 const?; sp : float const?; xqp :
     unsafe {
         var pq = reinterpret<uint8?>(metal_buffer_contents(xqbuf))
         memcpy(reinterpret<void?>(pq), reinterpret<void?>(xqp), ntok * n)
-        memset8(reinterpret<void?>(pq + ntok * n), uint8(0), int((mp - ntok) * n))
+        memset8(reinterpret<void?>(pq + ntok * n), 0u8, int((mp - ntok) * n))
         var ps = reinterpret<uint8?>(metal_buffer_contents(xsbuf))
         memcpy(reinterpret<void?>(ps), reinterpret<void?>(xsp), ntok * nb * 4l)
-        memset8(reinterpret<void?>(ps + ntok * nb * 4l), uint8(0), int((mp - ntok) * nb * 4l))
+        memset8(reinterpret<void?>(ps + ntok * nb * 4l), 0u8, int((mp - ntok) * nb * 4l))
     }
     var kdimbuf = uniform_u32(uint(n))
     var ndimbuf = uniform_u32(uint(d))

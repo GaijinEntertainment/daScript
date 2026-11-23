@@ -2358,7 +2358,7 @@ def dn_mirror_prepare(var s : Session; pos : int64) : tuple<ok : bool; buf : Met
         // fresh conversation: zero every region (dn_reset's GPU half). Safe on unified memory —
         // no step of this session is in flight at pos 0 (spec is clipped for recurrent models)
         unsafe {
-            memset8(dn_slot_dev(g_dn_mirrors[s.uid]), uint8(0), int(total))
+            memset8(dn_slot_dev(g_dn_mirrors[s.uid]), 0u8, int(total))
         }
         g_dn_mirrors[s.uid].cur = 0l
         g_dn_mirrors[s.uid].pos = 0l
@@ -3620,7 +3620,7 @@ def race_kq_planes(dev : MetalDevice?; nblk, qu_per_sb : int; sform : KqRaceScal
     splane |> reserve_resize(sbytes)
     if (sform == KqRaceScaleForm.split_d || sform == KqRaceScaleForm.split_dmin) {
         for (i in range(nblk * 16)) {
-            splane[i] = uint8(2)
+            splane[i] = 2u8
         }
         unsafe {
             var ph = addr<float16?>(splane[nblk * 16])
@@ -3650,7 +3650,7 @@ def race_kq_planes(dev : MetalDevice?; nblk, qu_per_sb : int; sform : KqRaceScal
         }
         for (b in range(nblk)) {
             for (kx in range(4, 16)) {
-                splane[b * 16 + kx] = uint8(17)   //! every kmask byte: small scales and mins in both halves - the last four carry sub-blocks 4-7's low nibbles, left zero they decode to nothing and a wrong high-half read passes
+                splane[b * 16 + kx] = 17u8   //! every kmask byte: small scales and mins in both halves - the last four carry sub-blocks 4-7's low nibbles, left zero they decode to nothing and a wrong high-half read passes
             }
         }
     }

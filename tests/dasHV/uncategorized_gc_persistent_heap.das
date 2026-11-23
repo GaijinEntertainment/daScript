@@ -401,7 +401,7 @@ def test_websockets(t : T?) {  // nolint:STYLE038 - one connect/exchange/assert 
             t |> equal(client.binary_frames, 1)
             t |> equal(length(client.binary_received), 3)
             t |> equal(client.binary_received[0], uint8(0x41))
-            t |> equal(client.binary_received[1], uint8(0))
+            t |> equal(client.binary_received[1], 0u8)
             t |> equal(client.binary_received[2], uint8(0x42))
             client->close()
             wait_closed(client)

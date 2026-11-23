@@ -550,7 +550,7 @@ def test_xml_serialize_int8(t : T?) {
 def test_xml_serialize_uint8(t : T?) {
     t |> run("serialize uint8 value") <| @(t : T?) {
         var s : WithInts
-        s.u8 = uint8(200)
+        s.u8 = 200u8
         let xml_str = to_XML(s, "item")
         parse_xml(xml_str) $(doc, ok) {
             t |> success(ok)
@@ -655,7 +655,7 @@ def test_from_xml_int64(t : T?) {
 [test(description = "all integer types survive a to_XML then from_XML roundtrip unchanged")]
 def test_roundtrip_all_int_types(t : T?) {
     t |> run("roundtrip all integer types") <| @(t : T?) {
-        let original = WithInts(i8 = int8(-100), u8 = uint8(200),
+        let original = WithInts(i8 = int8(-100), u8 = 200u8,
             i16 = int16(-30000), u16 = uint16(60000),
             i64 = -1234567890123456789l, u64 = 12345678901234567890ul)
         let xml_str = to_XML(original, "item")

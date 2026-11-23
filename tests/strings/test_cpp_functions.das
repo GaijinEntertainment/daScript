@@ -63,7 +63,7 @@ def test_fmt(t : T?) { // nolint:STYLE038 — flat one-run-per-numeric-type list
 
     t |> run("fmt uint8") @@(t : T?) {
         let s = build_string() $(var writer) {
-            fmt(writer, ":d", uint8(255))
+            fmt(writer, ":d", 255u8)
         }
         t |> equal(s, "255")
     }
@@ -337,9 +337,9 @@ def test_fast_to_small_types(t : T?) {
     }
 
     t |> run("to_uint8") @@(t : T?) {
-        t |> equal(to_uint8("42"), uint8(42))
-        t |> equal(to_uint8("255"), uint8(255))
-        t |> equal(to_uint8("0"), uint8(0))
+        t |> equal(to_uint8("42"), 42u8)
+        t |> equal(to_uint8("255"), 255u8)
+        t |> equal(to_uint8("0"), 0u8)
     }
 
     t |> run("to_uint8 hex") @@(t : T?) {

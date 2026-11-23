@@ -1285,7 +1285,7 @@ def private wrap_tokens(var ctx : FormatterCtx; max_line_length : int) {
 def public wrap_long_lines(source : string; max_line_length : int) : string {
     var inscope ctx : FormatterCtx
     ctx.data <- [for (c in source); uint8(c)]
-    ctx.data |> push(uint8(0))
+    ctx.data |> push(0u8)
     ctx |> parse_all_tokens()
     ctx |> process_formatter_tokens()
     return source if (max_line_length <= 0 || ctx |> have_formatter_token("ignore-file"))
@@ -1299,7 +1299,7 @@ def public format_source_string(file_data : string const& implicit) : string {
     //! Formats a daslang source code string and returns the formatted result.
     var inscope ctx : FormatterCtx
     ctx.data <- [ for (c in file_data); uint8(c) ]
-    ctx.data |> push(uint8(0))
+    ctx.data |> push(0u8)
     ctx |> do_format()
     return generate_source(ctx)
 }
@@ -1307,7 +1307,7 @@ def public format_source_string(file_data : string const& implicit) : string {
 
 def format_source(var ctx : FormatterCtx; file_data : array<uint8> const& implicit) : string {
     ctx.data := file_data
-    ctx.data |> push(uint8(0))
+    ctx.data |> push(0u8)
     ctx |> do_format()
     return generate_source(ctx)
 }
@@ -1393,7 +1393,7 @@ def public format_source(file_data : array<uint8> const& implicit; strip_comment
     //! notices (Copyright / SPDX) — a kept full-line comment keeps its attached `//` continuations.
     var inscope ctx : FormatterCtx
     ctx.data := file_data
-    ctx.data |> push(uint8(0))
+    ctx.data |> push(0u8)
     ctx |> parse_all_tokens()
     ctx |> process_formatter_tokens()
     if (strip_comments && !(ctx |> have_formatter_token("ignore-file"))) {

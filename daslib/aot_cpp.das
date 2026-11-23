@@ -1119,7 +1119,7 @@ def describeVarLocalCppType(var writer : StringBuilderWriter?; vtype : TypeDeclP
 def public aotFuncName(program : ProgramPtr; func : Function?) {
     //! Returns the AOT C++ function name for a daslang function, including its hash suffix.
     let hash = function_hash(program, func)
-    if (hash != uint64(0)) {
+    if (hash != 0ul) {
         return "{aotSuffixNameEx(func.name,"_Func")}_{hash:x}";
     } else {
         return "{aotSuffixNameEx(func.name,"_Func")}";
@@ -1279,7 +1279,7 @@ class public BlockVariableCollector : AstVisitor {
 
     rename : table<Variable?, string>
     moved : table<Variable?>
-    tempCounter : uint64 = uint64(0)
+    tempCounter : uint64 = 0ul
 };
 
 def public describeCppFunc(program : ProgramPtr; fn : FunctionPtr;
@@ -3565,7 +3565,7 @@ class public CppAot : AstVisitor {
             write(*ss, "<{type_str}{maybe_comma}{args}>(__context__,{blk.stackTop:d},");
         }
         if (!blk.blockFlags.aotSkipMakeBlock || blk.blockFlags.aotDoNotSkipAnnotationData) {
-            if (blk.annotationDataSid != uint64(0)) {
+            if (blk.annotationDataSid != 0ul) {
                 write(*ss, "__context__->adBySid({blk.annotationDataSid:d}u)");
             } else {
                 write(*ss, "0");

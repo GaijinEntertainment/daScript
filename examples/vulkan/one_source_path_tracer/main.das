@@ -99,7 +99,7 @@ def cpu_band(var pacc : array<float3>?; var ppix : array<uint8>?; var pepoch : i
             (*ppix)[i * 4 + 0] = uint8(int(clamp(c.x, 0.0, 1.0) * 255.0 + 0.5))
             (*ppix)[i * 4 + 1] = uint8(int(clamp(c.y, 0.0, 1.0) * 255.0 + 0.5))
             (*ppix)[i * 4 + 2] = uint8(int(clamp(c.z, 0.0, 1.0) * 255.0 + 0.5))
-            (*ppix)[i * 4 + 3] = uint8(255)
+            (*ppix)[i * 4 + 3] = 255u8
         }
     }
 }

@@ -242,7 +242,7 @@ def public is_zero_const(e : ExpressionPtr) : bool {   // nolint:STYLE037 — on
     if (e is ExprConstInt16) return (e as ExprConstInt16).value == int16(0)
     if (e is ExprConstInt64) return (e as ExprConstInt64).value == 0l
     if (e is ExprConstUInt) return (e as ExprConstUInt).value == 0u
-    if (e is ExprConstUInt8) return (e as ExprConstUInt8).value == uint8(0)
+    if (e is ExprConstUInt8) return (e as ExprConstUInt8).value == 0u8
     if (e is ExprConstUInt16) return (e as ExprConstUInt16).value == uint16(0)
     if (e is ExprConstUInt64) return (e as ExprConstUInt64).value == 0ul
     if (e is ExprConstFloat) return (e as ExprConstFloat).value == 0.0f

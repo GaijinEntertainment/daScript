@@ -696,7 +696,7 @@ def from_XML(node : xml_node; ent : int8; defV : int8 = int8(0)) : int8 {
 }
 
 [generic, template(ent), unused_argument(ent)]
-def from_XML(node : xml_node; ent : uint8; defV : uint8 = uint8(0)) : uint8 {
+def from_XML(node : xml_node; ent : uint8; defV : uint8 = 0u8) : uint8 {
     //! Reads the text content of *node* as a ``uint8``.
     return uint8(as_uint(node.text, uint(defV)))
 }

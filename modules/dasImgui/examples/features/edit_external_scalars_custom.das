@@ -23,7 +23,7 @@ var private g_drag_i8 : int8 = int8(0)
 var private g_drag_u16 : uint16 = uint16(100)
 var private g_drag_i64 : int64 = 1000l
 var private g_slider_double : double = 0.5lf
-var private g_slider_u8 : uint8 = uint8(128)
+var private g_slider_u8 : uint8 = 128u8
 var private g_input_uint : uint = 0u
 var private g_input_double : double = 1.5lf
 
@@ -61,7 +61,7 @@ def update() {
                                                         format = "%.4f"))
         edit_slider_scalar(safe_addr(g_slider_u8), (id = "SLIDER_U8",
                                                    text = "slider uint8",
-                                                   v_min = uint8(0), v_max = uint8(255)))
+                                                   v_min = 0u8, v_max = 255u8))
         separator(SEP_INPUT)
         text(LEAD_INPUT, (text = "edit_input_scalar across uint and double."))
         edit_input_scalar(safe_addr(g_input_uint), (id = "INPUT_U",

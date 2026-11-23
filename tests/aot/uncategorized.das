@@ -68,15 +68,15 @@ def test_int64_ptr_index(t : T?) {
             buf[k] = float(k)
         }
         var p = unsafe(addr(buf[0]))
-        write_i64(p, int64(3), 30.0)
-        t |> equal(read_i64(p, int64(3)), 30.0)
-        t |> equal(read_u64(p, uint64(2)), 2.0)
-        t |> equal(safe_read_i64(p, int64(1)), 1.0)
-        t |> equal(safe_read_u64(p, uint64(4)), 4.0)
-        t |> equal(read_const_pointee_i64(p, int64(5)), 5.0)
+        write_i64(p, 3l, 30.0)
+        t |> equal(read_i64(p, 3l), 30.0)
+        t |> equal(read_u64(p, 2ul), 2.0)
+        t |> equal(safe_read_i64(p, 1l), 1.0)
+        t |> equal(safe_read_u64(p, 4ul), 4.0)
+        t |> equal(read_const_pointee_i64(p, 5l), 5.0)
         let nullp : float? = null
-        t |> equal(safe_read_i64(nullp, int64(0)), -1.0)
-        t |> equal(safe_read_u64(nullp, uint64(0)), -1.0)
+        t |> equal(safe_read_i64(nullp, 0l), -1.0)
+        t |> equal(safe_read_u64(nullp, 0ul), -1.0)
     }
 }
 

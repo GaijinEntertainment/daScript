@@ -8,7 +8,7 @@ require live_host
 [test(description = "live_store_bytes and live_load_bytes round-trip byte arrays including empty and large ones, miss on unknown keys and overwrite existing ones")]
 def test_store_and_load(t : T?) {
     t |> run("store and load bytes") @(t : T?) {
-        let data <- [uint8(1), uint8(2), uint8(3)]
+        let data <- [1u8, 2u8, 3u8]
         live_store_bytes("test_key", data)
         var loaded : array<uint8>
         let ok = live_load_bytes("test_key", loaded)
@@ -26,9 +26,9 @@ def test_store_and_load(t : T?) {
     }
     t |> run("overwrite existing key") @(t : T?) {
         var data1 : array<uint8>
-        data1 |> push(uint8(10))
+        data1 |> push(10u8)
         live_store_bytes("overwrite_key", data1)
-        let data2 <- [uint8(20), uint8(30)]
+        let data2 <- [20u8, 30u8]
         live_store_bytes("overwrite_key", data2)
         var loaded : array<uint8>
         let ok = live_load_bytes("overwrite_key", loaded)
@@ -63,10 +63,10 @@ def test_store_and_load(t : T?) {
     }
     t |> run("multiple independent keys") @(t : T?) {
         var a : array<uint8>
-        a |> push(uint8(11))
+        a |> push(11u8)
         live_store_bytes("multi_a", a)
         var b : array<uint8>
-        b |> push(uint8(22))
+        b |> push(22u8)
         live_store_bytes("multi_b", b)
         var la, lb : array<uint8>
         live_load_bytes("multi_a", la)
@@ -131,7 +131,7 @@ def test_store_and_load_string(t : T?) {
     t |> run("bytes and strings live in separate stores") @(t : T?) {
         // Same key in both stores — must not collide.
         var data : array<uint8>
-        data |> push(uint8(42))
+        data |> push(42u8)
         live_store_bytes("shared_key", data)
         live_store_string("shared_key", "string_value")
         var loaded_bytes : array<uint8>

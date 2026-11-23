@@ -131,7 +131,7 @@ class SmtLintVisitor : AstVisitor {
     // ===== diagnostics =====
 
     def private location_key(at : LineInfo) : uint64 =>
-        uint64(at.line) | (uint64(at.column) << uint64(20))
+        uint64(at.line) | (uint64(at.column) << 20ul)
 
     def private is_suppressed(text : string; at : LineInfo) : bool {
         let code = extract_lint_code(text)

@@ -179,7 +179,7 @@ def test_intptr(t : T?) {
         var x = 42
         var p = unsafe(addr(x))
         let address = intptr(p)
-        t |> equal(address != uint64(0), true)
+        t |> equal(address != 0ul, true)
     }
     t |> run("intptr same pointer same value") @(t : T?) {
         var x = 42
@@ -815,7 +815,7 @@ def test_memset(t : T?) {
             memset64(addr(a[2]), uint64(0x55), 3)
         }
         for (i in 0..10) {
-            t |> equal((i >= 2 && i < 5) ? uint64(0x55) : uint64(0), a[i])
+            t |> equal((i >= 2 && i < 5) ? uint64(0x55) : 0ul, a[i])
         }
     }
     t |> run("memset128") @(t : T?) {

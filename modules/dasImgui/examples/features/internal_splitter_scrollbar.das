@@ -24,7 +24,7 @@ require imgui/imgui_harness
 
 var g_left = 240.0
 var g_right = 300.0
-var g_scroll = int64(0)
+var g_scroll = 0l
 
 [export]
 def init() {

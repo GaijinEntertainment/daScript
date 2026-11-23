@@ -11,7 +11,7 @@ def test_long_length_empty(t : T?) {
 [test(description = "long_length reports the new size after a resize")]
 def test_long_length_after_resize(t : T?) {
     var arr : array<int>
-    arr |> resize(int64(10))
+    arr |> resize(10l)
     t |> equal(long_length(arr), 10_l)
 }
 

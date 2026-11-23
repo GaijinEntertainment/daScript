@@ -16,9 +16,9 @@ def test_flip_vertically_on_load(t : T?) {
         // Actually use 1x2 with stride=4 (RGBA): row0=[255,0,0,255] row1=[0,0,255,255]
         var pixels : uint8[8]
         // row 0: red
-        pixels[0] = uint8(255); pixels[1] = uint8(0); pixels[2] = uint8(0); pixels[3] = uint8(255)
+        pixels[0] = 255u8; pixels[1] = 0u8; pixels[2] = 0u8; pixels[3] = 255u8
         // row 1: blue
-        pixels[4] = uint8(0); pixels[5] = uint8(0); pixels[6] = uint8(255); pixels[7] = uint8(255)
+        pixels[4] = 0u8; pixels[5] = 0u8; pixels[6] = 255u8; pixels[7] = 255u8
         // encode to PNG
         var png_data : array<uint8>
         stbi_write_png_to_memory(1, 2, 4, safe_addr(pixels[0]), 4) $(data : array<uint8>#) {
@@ -53,9 +53,9 @@ def test_flip_vertically_on_write(t : T?) {
     t |> run("flip on write reverses row order") <| @(tt : T?) {
         var pixels : uint8[8]
         // row 0: red
-        pixels[0] = uint8(255); pixels[1] = uint8(0); pixels[2] = uint8(0); pixels[3] = uint8(255)
+        pixels[0] = 255u8; pixels[1] = 0u8; pixels[2] = 0u8; pixels[3] = 255u8
         // row 1: blue
-        pixels[4] = uint8(0); pixels[5] = uint8(0); pixels[6] = uint8(255); pixels[7] = uint8(255)
+        pixels[4] = 0u8; pixels[5] = 0u8; pixels[6] = 255u8; pixels[7] = 255u8
         // write with flip enabled
         stbi_flip_vertically_on_write(1)
         var flipped_png : array<uint8>

@@ -307,7 +307,7 @@ def from_JV(v : JsonValue const explicit?; ent : int8; defV : int8 = int8(0)) {
 }
 
 [generic, template(ent), unused_argument(ent)]
-def from_JV(v : JsonValue const explicit?; ent : uint8; defV : uint8 = uint8(0)) {
+def from_JV(v : JsonValue const explicit?; ent : uint8; defV : uint8 = 0u8) {
     //! Parse a JSON value and return the corresponding native value.
     return null_coalescing(v, defV)
 }

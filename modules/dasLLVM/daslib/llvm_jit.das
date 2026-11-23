@@ -5966,7 +5966,8 @@ class public LlvmJitVisitor : AstVisitor {
             LLVMBuildStore2(g_builder, types, types.LLVMVoidPtrType(), tptr, mks_ptr)
             // skip 16 bytes in mks_ptr
             var p2int = LLVMBuildPtrToInt(g_builder, mks_ptr, types.LLVMIntPtrType(), "")
-            var add16 = LLVMBuildAdd(g_builder, p2int, LLVMConstInt(types.LLVMIntPtrType(), uint64(16), 0), "")
+            var add16 = LLVMBuildAdd(g_builder, p2int,
+                LLVMConstInt(types.LLVMIntPtrType(), 16ul, 0), "")
             mks_ptr = LLVMBuildIntToPtr(g_builder, add16, types.LLVMVoidPtrType(), "")
             memset_bytes -= 16
         }
@@ -6205,7 +6206,8 @@ class public LlvmJitVisitor : AstVisitor {
                     } elif (isLambda) {
                         structSize += 16
                         var p2int = LLVMBuildPtrToInt(g_builder, ps, types.LLVMIntPtrType(), "")
-                        var sub16 = LLVMBuildSub(g_builder, p2int, LLVMConstInt(types.LLVMIntPtrType(), uint64(16), 0), "")
+                        var sub16 = LLVMBuildSub(g_builder, p2int,
+                            LLVMConstInt(types.LLVMIntPtrType(), 16ul, 0), "")
                         var lmb = LLVMBuildIntToPtr(g_builder, sub16, types.LLVMVoidPtrType(), "")
                         var params = fixed_array(
                             lmb,
@@ -6404,7 +6406,7 @@ class public LlvmJitVisitor : AstVisitor {
             var llvm_zero : LLVMOpaqueValue? = null
             if (value_t.baseType == Type.tBitfield) {
                 llvm_mask = types.ConstI32(uint64(mask))
-                llvm_zero = types.ConstI32(uint64(0))
+                llvm_zero = types.ConstI32(0ul)
             } elif (value_t.baseType == Type.tBitfield8) {
                 llvm_mask = types.ConstI8(mask |> int8)
                 llvm_zero = types.ConstI8(0 |> int8)
@@ -6413,16 +6415,16 @@ class public LlvmJitVisitor : AstVisitor {
                 llvm_zero = types.ConstI16(0 |> int16)
             } elif (value_t.baseType == Type.tBitfield64) {
                 llvm_mask = types.ConstI64(uint64(mask))
-                llvm_zero = types.ConstI64(uint64(0))
+                llvm_zero = types.ConstI64(0ul)
             }
             let mand = LLVMBuildAnd(g_builder, getE(expr.value), llvm_mask, "")
             let if_not_zero = LLVMBuildICmp(g_builder, LLVMIntPredicate.LLVMIntNE, mand, llvm_zero, "")
             var res_type = type_to_llvm_type(expr._type)
             var res = build_select(if_not_zero, res_type) {
-                return LLVMConstInt(types.t_int1, uint64(1), 0)
+                return LLVMConstInt(types.t_int1, 1ul, 0)
             }
             lpipe() {
-                return LLVMConstInt(types.t_int1, uint64(0), 0)
+                return LLVMConstInt(types.t_int1, 0ul, 0)
             }
             field_ptr = res
         } else {

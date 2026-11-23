@@ -89,7 +89,7 @@ def update() {
         // user-data value (read back via the multi-select API / ImGuiItemFlags
         // HasSelectionUserData). Here it tags a plain selectable.
         text("SetNextItemSelectionUserData(data): tag the next item for multi-select.")
-        SetNextItemSelectionUserData(int64(42))
+        SetNextItemSelectionUserData(42l)
         selectable(SEL_ITEM, (text = "selectable tagged with selection user-data 42"))
     }
 

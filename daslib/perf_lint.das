@@ -568,7 +568,7 @@ class PerfLintVisitor : AstVisitor {
     perf019_enum_or_yes : array<uint64>
     def report_key(at : LineInfo; code : string) : uint64 {
         //! fileInfo is part of the key — PERF026-028 report sinks in other files, where line|column alone collides.
-        let pos = uint64(at.line) | (uint64(at.column) << uint64(20))
+        let pos = uint64(at.line) | (uint64(at.column) << 20ul)
         return (pos ^ (intptr(at.fileInfo) * 1099511628211ul)) ^ hash(code)
     }
 

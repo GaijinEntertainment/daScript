@@ -342,16 +342,16 @@ def f_acc_flatname : int {
 // COMPILE. So compiling at all proves the gate relaxed; the differential proves the value.
 
 [flatten]
-def f_cast_float : float => float(7)
+def f_cast_float : float => float(7)    // nolint:STYLE050 -- the cast is under test
 
 [flatten]
 def f_cast_int : int => int(3.9)
 
 [flatten]
-def f_cast_expr : float => float(3) * 2.0 + float(1)
+def f_cast_expr : float => float(3) * 2.0 + float(1)    // nolint:STYLE050 -- the cast is under test
 
 [flatten]
-def f_cast_vec : float2 => float2(float(1), float(2))
+def f_cast_vec : float2 => float2(float(1), float(2))  // nolint:STYLE050 -- the cast is under test
 
 // The motivating case: a const cast inside a loop accumulator (was whitelist-rejected).
 [flatten]

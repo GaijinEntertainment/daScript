@@ -344,7 +344,7 @@ struct AllScalars {
     d : double = 0.0lf
     s : string = ""
     i8 : int8 = int8(0)
-    u8 : uint8 = uint8(0)
+    u8 : uint8 = 0u8
     i16 : int16 = int16(0)
     u16 : uint16 = uint16(0)
     i64 : int64 = 0l

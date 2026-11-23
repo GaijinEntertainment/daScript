@@ -18,11 +18,11 @@ def test_null_ptr_let_fold(t : T?) {
     t |> run("safe-index of a propagated null local") @(t : T?) {
         let nullp : float? = null
         t |> equal(unsafe(nullp?[0]) ?? -1.0, -1.0)
-        t |> equal(unsafe(nullp?[int64(1)]) ?? -2.0, -2.0)
+        t |> equal(unsafe(nullp?[1l]) ?? -2.0, -2.0)
     }
     t |> run("propagated null local through a call") @(t : T?) {
         let nullp : float? = null
-        t |> equal(safe_or_default(nullp, int64(0)), -1.0)
+        t |> equal(safe_or_default(nullp, 0l), -1.0)
     }
     t |> run("live pointer control") @(t : T?) {
         var buf : float[4]
@@ -31,6 +31,6 @@ def test_null_ptr_let_fold(t : T?) {
         }
         var p = unsafe(addr(buf[0]))
         t |> equal(unsafe(p?[2]) ?? -1.0, 20.0)
-        t |> equal(safe_or_default(p, int64(3)), 30.0)
+        t |> equal(safe_or_default(p, 3l), 30.0)
     }
 }

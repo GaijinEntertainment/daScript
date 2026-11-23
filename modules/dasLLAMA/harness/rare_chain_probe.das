@@ -72,7 +72,7 @@ def private make_expert(e : int64) : Expert {
     x.ds |> resize(nblk * IQ4NL32_SB)
     fill_random(x.dq, 0x9876u + uint(e) * 7919u)
     for (b in range64(nblk)) {   //! f16 d = 1.0 a block: no denormal arithmetic in the dot
-        x.ds[b * 2l] = uint8(0)
+        x.ds[b * 2l] = 0u8
         x.ds[b * 2l + 1l] = uint8(0x3C)
     }
     return <- x

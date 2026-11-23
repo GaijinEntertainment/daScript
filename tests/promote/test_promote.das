@@ -130,7 +130,7 @@ def test_array_element_promotion(t : T?) {
     t |> equal(f[1], 2.0f, "array elem 1 (int promoted)")
     t |> equal(f[2], 3.0f, "array elem 2 (int promoted)")
     t |> equal(f[3], 16777216.0f, "array elem 3 (int promoted at 2^24)")
-    let u <- [uint8(10), 0, 200, 255]
+    let u <- [uint8(10), 0, 200, 255]     // nolint:STYLE051 -- the cast anchors the array's type
     t |> equal(int(u[0]), 10, "uint8 array elem 0")
     t |> equal(int(u[1]), 0, "uint8 array elem 1 (in-range int promoted)")
     t |> equal(int(u[2]), 200, "uint8 array elem 2 (in-range int promoted)")

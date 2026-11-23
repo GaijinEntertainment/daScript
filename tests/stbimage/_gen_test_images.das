@@ -20,8 +20,8 @@ def main() {
             let idx = (y * W + x) * 4
             rgba[idx + 0] = uint8(x * 4)       // R
             rgba[idx + 1] = uint8(y * 4)       // G
-            rgba[idx + 2] = uint8(128)          // B
-            rgba[idx + 3] = uint8(255)          // A
+            rgba[idx + 2] = 128u8          // B
+            rgba[idx + 3] = 255u8          // A
         }
     }
 

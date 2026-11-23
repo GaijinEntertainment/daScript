@@ -874,7 +874,7 @@ def test_resize_inits(t : T?) {
     }
     t |> run("resize int64 constructs too") @(t : T?) {
         var inscope arr : array<ResizeFoo>
-        arr |> resize(int64(3))
+        arr |> resize(3l)
         t |> equal(arr[2].x, 7)
     }
     t |> run("shrink then grow re-initializes the regrown range") @(t : T?) {

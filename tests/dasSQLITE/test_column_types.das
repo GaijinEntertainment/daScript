@@ -84,7 +84,7 @@ def test_datetime_round_trip(t : T?) {
         db |> create_table(type<Order>)
         db |> insert(Order(
             Id = 1,
-            ExternalId = make_guid_filled(uint8(0)),
+            ExternalId = make_guid_filled(0u8),
             PlacedAt = DateTime(unix_seconds = 1713000000l),
             Status = OrderStatus.Pending,
             Total = 0.0
@@ -120,7 +120,7 @@ def test_enum_round_trip(t : T?) {
     with_sqlite(":memory:") $(db) {
         db |> create_table(type<Order>)
         db |> insert(Order(
-            Id = 1, ExternalId = make_guid_filled(uint8(0)),
+            Id = 1, ExternalId = make_guid_filled(0u8),
             PlacedAt = DateTime(unix_seconds = 0l),
             Status = OrderStatus.Shipped, Total = 0.0
         ))
@@ -136,12 +136,12 @@ def test_enum_in_where_predicate(t : T?) {
     with_sqlite(":memory:") $(db) {
         db |> create_table(type<Order>)
         db |> insert(Order(
-            Id = 1, ExternalId = make_guid_filled(uint8(0)),
+            Id = 1, ExternalId = make_guid_filled(0u8),
             PlacedAt = DateTime(unix_seconds = 0l),
             Status = OrderStatus.Paid, Total = 0.0
         ))
         db |> insert(Order(
-            Id = 2, ExternalId = make_guid_filled(uint8(0)),
+            Id = 2, ExternalId = make_guid_filled(0u8),
             PlacedAt = DateTime(unix_seconds = 0l),
             Status = OrderStatus.Cancelled, Total = 0.0
         ))
@@ -172,7 +172,7 @@ def test_query_scalar_through_adapter(t : T?) {
     with_sqlite(":memory:") $(db) {
         db |> create_table(type<Order>)
         db |> insert(Order(
-            Id = 42, ExternalId = make_guid_filled(uint8(0)),
+            Id = 42, ExternalId = make_guid_filled(0u8),
             PlacedAt = DateTime(unix_seconds = 1234567890l),
             Status = OrderStatus.Paid, Total = 99.5
         ))

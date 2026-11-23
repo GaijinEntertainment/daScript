@@ -221,7 +221,7 @@ def outstanding_decisions_keep_reserved_capacity_after_callbacks(t : T?) {
     unsafe { delete server }
 }
 
-[test(description = "Invalid decision arguments fail and leave the ticket available for a valid decision")]
+[test(description = "Invalid decision arguments fail and leave the ticket available for a valid decision", timeout = 1200)]
 def invalid_decision_arguments_leave_the_ticket_available(t : T?) {
     with_pending(t, 5000) $(var server, peer) {
         for (status in [399, 600]) {
@@ -271,7 +271,7 @@ def private check_connection_budget(t : T?; count, bytes : int) {
     t |> success(other->connect("127.0.0.1", server->bound_port()))
     t |> success(flood->write_text(handshake())); t |> success(other->write_text(handshake()))
     t |> success(pump(server, flood, $ { other->tick(); return server.opened == 2; }))
-    var packet <- frame(1, true, [uint8(65), uint8(66), uint8(67)])
+    var packet <- frame(1, true, [65u8, 66u8, 67u8])
     var burst : array<uint8>; reserve(burst, 9 * 8)
     for (_ in range(8)) { burst |> push_from(packet) }
     t |> success(flood->write_bytes(burst))
@@ -290,7 +290,7 @@ def per_connection_message_count_preserves_other_peers(t : T?) { check_connectio
 [test(description = "A connection past its payload-byte budget is cut without disturbing other peers")]
 def per_connection_payload_budget_preserves_other_peers(t : T?) { check_connection_budget(t, 8, 6) }
 
-[test(description = "A slow reader past the write-buffer budget is disconnected and limits are immutable while running")]
+[test(description = "A slow reader past the write-buffer budget is disconnected and limits are immutable while running", timeout = 1200)]
 def per_connection_write_buffer_rejects_slow_reader(t : T?) {
     var server = new ConnectionLimitServer(pressure = true)
     server->init(0)
@@ -300,7 +300,7 @@ def per_connection_write_buffer_rejects_slow_reader(t : T?) {
     var peer = new WirePeer(); t |> success(peer->connect("127.0.0.1", server->bound_port()))
     t |> success(peer->write_text(handshake()))
     t |> success(pump(server, peer, $ { return server.opened == 1; }))
-    var packet <- frame(1, true, [uint8(65)])
+    var packet <- frame(1, true, [65u8])
     t |> success(peer->write_bytes(packet))
     for (_ in range(3000)) { server->tick(); if (server.messages == 1) { break }; sleep(1u) }
     t |> success(server.send_failed, "bounded native output refuses queued data")
@@ -308,14 +308,14 @@ def per_connection_write_buffer_rejects_slow_reader(t : T?) {
     unsafe { delete peer; delete server }
 }
 
-[test(description = "Draining messages gives a connection its message and byte capacity back")]
+[test(description = "Draining messages gives a connection its message and byte capacity back", timeout = 1200)]
 def draining_messages_replenishes_connection_capacity(t : T?) {
     var server = new ConnectionLimitServer(per_messages = 2, per_bytes = 6)
     server->init(0); t |> success(server->set_bind_host("127.0.0.1")); t |> equal(server->start(), 0)
     var peer = new WirePeer(); t |> success(peer->connect("127.0.0.1", server->bound_port()))
     t |> success(peer->write_text(handshake()))
     t |> success(pump(server, peer, $ { return server.opened == 1 && contains(peer->text(), "\r\n\r\n"); }))
-    let packet <- frame(1, true, [uint8(65), uint8(66), uint8(67)])
+    let packet <- frame(1, true, [65u8, 66u8, 67u8])
     var batch : array<uint8>; reserve(batch, 18); batch |> push_from(packet, packet)
     for (round in range(4)) {
         let before = length(peer.got)

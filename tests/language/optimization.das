@@ -495,9 +495,9 @@ def test_a_store_through_a_pointer_computed_from_an_address_is_a_side_effect(t :
 [test(description = "a call statement whose only effect is a store through a reinterpreted pointer is kept")]
 def test_a_call_whose_only_effect_is_a_store_through_a_reinterpreted_pointer_is_kept(t : T?) {
     var a : uint8[16]
-    store_byte(unsafe(reinterpret<uint64>(unsafe(addr(a[0])))), uint8(7))
+    store_byte(unsafe(reinterpret<uint64>(unsafe(addr(a[0])))), 7u8)
     t |> equal(int(a[0]), 7, "store_byte called as a statement")
-    store_via(unsafe(addr(a[1])), uint8(9))
+    store_via(unsafe(addr(a[1])), 9u8)
     t |> equal(int(a[1]), 9, "store_via called as a statement under [unsafe_deref]")
 }
 

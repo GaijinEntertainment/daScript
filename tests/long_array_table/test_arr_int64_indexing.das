@@ -4,7 +4,7 @@ require dastest/testing_boost public
 [test(description = "an array can be read with an int64 index")]
 def test_arr_i64_index_read(t : T?) {
     var arr : array<int>
-    arr |> resize(int64(5))
+    arr |> resize(5l)
     for (i in iter_range(arr)) {
         arr[i] = i * 10
     }
@@ -15,7 +15,7 @@ def test_arr_i64_index_read(t : T?) {
 [test(description = "an array can be read with a uint64 index")]
 def test_arr_u64_index_read(t : T?) {
     var arr : array<int>
-    arr |> resize(int64(5))
+    arr |> resize(5l)
     for (i in iter_range(arr)) {
         arr[i] = i * 10
     }
@@ -26,7 +26,7 @@ def test_arr_u64_index_read(t : T?) {
 [test(description = "an array element can be written through an int64 index")]
 def test_arr_i64_index_write(t : T?) {
     var arr : array<int>
-    arr |> resize(int64(3))
+    arr |> resize(3l)
     let i64_idx : int64 = 1_l
     arr[i64_idx] = 42
     t |> equal(arr[1], 42)
@@ -35,11 +35,11 @@ def test_arr_i64_index_write(t : T?) {
 [test(description = "int, int64 and uint64 indices address the same elements")]
 def test_mixed_width_indexing(t : T?) {
     var arr : array<int>
-    arr |> resize(int64(4))
+    arr |> resize(4l)
     arr[0] = 10
     arr[1_l] = 20
     arr[2_ul] = 30
-    arr[uint(3)] = 40
+    arr[3u] = 40
     // spelling every index width explicitly is what this arm checks
-    t |> equal(arr[int(0)] + arr[int64(1)] + arr[uint64(2)] + arr[uint(3)], 100)   // nolint:PERF020
+    t |> equal(arr[int(0)] + arr[1l] + arr[2ul] + arr[3u], 100)   // nolint:PERF020
 }

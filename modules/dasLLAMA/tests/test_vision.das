@@ -57,14 +57,14 @@ def bmp_header_stub(w, h : int) : array<uint8> {
     bytes |> resize(54)
     bytes[0] = uint8('B')
     bytes[1] = uint8('M')
-    bytes[10] = uint8(54)         // pixel-data offset
-    bytes[14] = uint8(40)         // BITMAPINFOHEADER size
+    bytes[10] = 54u8         // pixel-data offset
+    bytes[14] = 40u8         // BITMAPINFOHEADER size
     for (i in range(4)) {
         bytes[18 + i] = uint8((w >> (i * 8)) & 0xFF)
         bytes[22 + i] = uint8((h >> (i * 8)) & 0xFF)
     }
-    bytes[26] = uint8(1)          // planes
-    bytes[28] = uint8(24)         // bits per pixel
+    bytes[26] = 1u8          // planes
+    bytes[28] = 24u8         // bits per pixel
     return <- bytes
 }
 
@@ -227,7 +227,7 @@ def count_byte_diffs(a, b : array<uint8>) : int {
 def test_vision_normalize3_channels(t : T?) {
     t |> run("per-channel CLIP normalize picks mean/std by channel, not by a shared scalar") @(t : T?) {
         var img = VisionImage(width = 2, height = 1)
-        img.rgb <- [uint8(255), uint8(0), uint8(51), uint8(102), uint8(153), uint8(204)]
+        img.rgb <- [255u8, 0u8, 51u8, 102u8, 153u8, 204u8]
         let mean = float3(0.5, 0.25, 0.75)
         let std = float3(0.5, 0.2, 0.4)
         let planes <- vision_normalize3(img, mean, std)
@@ -238,7 +238,7 @@ def test_vision_normalize3_channels(t : T?) {
             t |> success(abs(planes[i] - want) < 1e-6, "channel {c} at {i}: {planes[i]} vs {want}")
         }
         // a channel swap must MOVE the values (the R and B params differ on purpose)
-        t |> success(abs(planes[0] - (float(255) / 255.0 - mean[2]) / std[2]) > 1e-3, "R rides channel 0's params, not channel 2's")
+        t |> success(abs(planes[0] - (255.0 / 255.0 - mean[2]) / std[2]) > 1e-3, "R rides channel 0's params, not channel 2's")
         delete img
     }
 }

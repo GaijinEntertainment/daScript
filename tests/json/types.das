@@ -17,7 +17,7 @@ def basic_types(t : T?) {
     test_equ(t, 1)
     test_equ(t, 2u)
     test_equ(t, int8(1))
-    test_equ(t, uint8(2))
+    test_equ(t, 2u8)
     test_equ(t, int16(1))
     test_equ(t, uint16(2))
     test_equ(t, 1234567890123456789l)

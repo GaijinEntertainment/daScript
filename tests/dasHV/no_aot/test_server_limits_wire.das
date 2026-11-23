@@ -75,7 +75,7 @@ def pending_payload_bytes_close_admission_until_tick(t : T?) {
     check_saturation(t, 8, 12288, repeat("x", 8192))
 }
 
-[test(description = "A binary WebSocket message keeps its embedded zero bytes and length")]
+[test(description = "A binary WebSocket message keeps its embedded zero bytes and length", timeout = 1200)]
 def binary_websocket_message_keeps_zero_bytes(t : T?) {
     var server = new LimitedServer()
     server->init(0)
@@ -85,13 +85,13 @@ def binary_websocket_message_keeps_zero_bytes(t : T?) {
     t |> success(peer->write_text("GET /ws HTTP/1.1\r\nHost: localhost\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n"))
     t |> success(pump(server, peer, $ { return server.opened == 1 && contains(peer->text(), "\r\n\r\n"); }))
     let before = length(peer.got)
-    var packet <- frame(2, true, [uint8(65), uint8(0), uint8(66)])
+    var packet <- frame(2, true, [65u8, 0u8, 66u8])
     t |> success(peer->write_bytes(packet))
     t |> success(pump(server, peer, $ { return length(peer.got) >= before + 5; }))
     t |> equal(server.last_message_size, 3)
     t |> equal(server.handled, 1)
     if (length(peer.got) >= before + 5) {
-        for (expected, index in [uint8(0x82), uint8(3), uint8(65), uint8(0), uint8(66)], count()) {
+        for (expected, index in [uint8(0x82), 3u8, 65u8, 0u8, 66u8], count()) {
             t |> equal(peer.got[before + index], expected)
         }
     }
@@ -102,7 +102,7 @@ def binary_websocket_message_keeps_zero_bytes(t : T?) {
     unsafe { delete peer; delete server }
 }
 
-[test(description = "A fragmented WebSocket message past the limit closes the connection and is never delivered")]
+[test(description = "A fragmented WebSocket message past the limit closes the connection and is never delivered", timeout = 1200)]
 def fragmented_websocket_overflow_closes_without_delivery(t : T?) {
     var server = new LimitedServer()
     server->init(0)
@@ -111,8 +111,8 @@ def fragmented_websocket_overflow_closes_without_delivery(t : T?) {
     t |> success(peer->connect("127.0.0.1", server->bound_port()))
     t |> success(peer->write_text("GET /ws HTTP/1.1\r\nHost: localhost\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n"))
     t |> success(pump(server, peer, $ { return server.opened == 1; }))
-    var first <- frame(1, false, [uint8(65), uint8(65), uint8(65), uint8(65), uint8(65), uint8(65), uint8(65), uint8(65), uint8(65)])
-    var second <- frame(0, true, [uint8(66), uint8(66), uint8(66), uint8(66), uint8(66), uint8(66), uint8(66), uint8(66)])
+    var first <- frame(1, false, [65u8, 65u8, 65u8, 65u8, 65u8, 65u8, 65u8, 65u8, 65u8])
+    var second <- frame(0, true, [66u8, 66u8, 66u8, 66u8, 66u8, 66u8, 66u8, 66u8])
     t |> success(peer->write_bytes(first))
     t |> success(peer->write_bytes(second))
     t |> success(pump(server, peer, $ { return peer.disconnected && server.closed == 1; }))

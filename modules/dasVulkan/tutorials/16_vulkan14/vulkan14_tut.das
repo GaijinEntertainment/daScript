@@ -115,7 +115,7 @@ def gen_cube_texture(pattern : CubePattern) : array<uint8> {
             px[o] = uint8(rgb.x)
             px[o + 1] = uint8(rgb.y)
             px[o + 2] = uint8(rgb.z)
-            px[o + 3] = uint8(255)
+            px[o + 3] = 255u8
         }
     }
     return <- px

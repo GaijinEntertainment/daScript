@@ -27,7 +27,7 @@ def make_test_image() : Image {
             let y = i / 32
             pixels[i * 3 + 0] = uint8(x * 8)
             pixels[i * 3 + 1] = uint8(y * 8)
-            pixels[i * 3 + 2] = uint8(128)
+            pixels[i * 3 + 2] = 128u8
         }
     }
     return <- img

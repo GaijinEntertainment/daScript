@@ -687,7 +687,7 @@ def private syn_items(spec : SynSpec) : array<SynItem> {
     if (!spec.no_yml) {
         var yml = SynItem(name = "special:model.yml", kind = INT8)
         put_text(yml.data, syn_yml(d, spec.swap_key, spec.swap_value))
-        yml.data |> push(uint8(0))
+        yml.data |> push(0u8)
         yml.shape <- [length(yml.data)]
         items |> emplace(yml)
     }
@@ -732,7 +732,7 @@ def private marian_bytes(items : array<SynItem>; version : uint64 = 1ul; claim_e
     b |> reserve(length(b) + length(items) * 64)
     for (it in items) {
         put_text(b, it.name)
-        b |> push(uint8(0))
+        b |> push(0u8)
     }
     for (it in items) {
         for (s in it.shape) {
@@ -743,7 +743,7 @@ def private marian_bytes(items : array<SynItem>; version : uint64 = 1ul; claim_e
     put_u64(b, uint64(pad))
     b |> reserve(length(b) + pad)
     for (_i in range(pad)) {
-        b |> push(uint8(0))
+        b |> push(0u8)
     }
     for (it in items) {
         b |> push_from(it.data)

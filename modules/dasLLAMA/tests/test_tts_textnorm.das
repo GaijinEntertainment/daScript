@@ -224,7 +224,7 @@ def test_codepoint_codec(t : T?) {
         t |> equal(length(truncated), 2)
         t |> equal(truncated[0], 'a')
         t |> equal(truncated[1], 195, "the lead byte itself, not its five payload bits")
-        var inscope stray <- utf8_to_cpts(string([uint8(224), uint8('A')]))   // a three-byte lead, then 'A'
+        var inscope stray <- utf8_to_cpts(string([224u8, uint8('A')]))   // a three-byte lead, then 'A'
         t |> equal(length(stray), 2)
         t |> equal(stray[0], 224)
         t |> equal(stray[1], 'A', "the byte after a malformed lead is still decoded")

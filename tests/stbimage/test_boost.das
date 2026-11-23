@@ -485,7 +485,7 @@ def test_with_pixels_modify(t : T?) {
         var img : Image
         img.load(test_image_path("test.png"))
         img |> with_pixels() $(var pixels : array<uint8>#) {
-            pixels[0] = uint8(42)
+            pixels[0] = 42u8
         }
         // verify change persisted
         img |> with_pixels() $(var pixels : array<uint8>#) {
@@ -564,7 +564,7 @@ def test_with_row_modify(t : T?) {
         var img : Image
         img.load(test_image_path("test.png"))
         img |> with_row(0) $(var row : array<uint8>#) {
-            row[0] = uint8(99)
+            row[0] = 99u8
         }
         img |> with_row(0) $(var row : array<uint8>#) {
             tt |> equal(int(row[0]), 99)
@@ -606,7 +606,7 @@ def test_resize_uniform_color(t : T?) {
         var img = Image(width = 2, height = 2, channels = 4, bpc = 1)
         img.bytes |> resize(2 * 2 * 4)
         for (i in range(16)) {
-            img.bytes[i] = uint8(255)
+            img.bytes[i] = 255u8
         }
         var big <- img.resize(4, 4)
         big |> with_pixels() $(var pixels : array<uint8>#) {
@@ -622,10 +622,10 @@ def test_resize_with_filter(t : T?) {
     t |> run("resize with POINT_SAMPLE filter") <| @(tt : T?) {
         var img = Image(width = 1, height = 1, channels = 4, bpc = 1)
         img.bytes |> resize(4)
-        img.bytes[0] = uint8(255)
-        img.bytes[1] = uint8(0)
-        img.bytes[2] = uint8(0)
-        img.bytes[3] = uint8(255)
+        img.bytes[0] = 255u8
+        img.bytes[1] = 0u8
+        img.bytes[2] = 0u8
+        img.bytes[3] = 255u8
         var big <- img.resize(2, 2, stbir_filter.STBIR_FILTER_POINT_SAMPLE)
         big |> with_pixels() $(var pixels : array<uint8>#) {
             for (p in range(4)) {
@@ -814,7 +814,7 @@ def test_make_image(t : T?) {
         // all bytes should be zero
         var nonzero = 0
         for (i in range(length(img.bytes))) {
-            if (img.bytes[i] != uint8(0)) {
+            if (img.bytes[i] != 0u8) {
                 nonzero++
             }
         }

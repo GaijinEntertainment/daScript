@@ -99,7 +99,7 @@ class LiveVarsPass : AstPassMacro {
             if (g._type.flags.constant) return  // skip let bindings
             let varLive = g.annotation |> find_arg("live") ?as tBool ?? false
             if (varLive) {
-                let initHash = g.init != null ? int64(hash(describe(g.init))) : int64(0)
+                let initHash = g.init != null ? int64(hash(describe(g.init))) : 0l
                 var_targets |> emplace(LiveVarTarget(
                     name = string(g.name),
                     key = "__live_vars_{mod.name}_{g.name}",
@@ -112,11 +112,11 @@ class LiveVarsPass : AstPassMacro {
                 // invalidates the persisted value for the field. Without the global
                 // part, edits to `var s : S = S(x = 100)` wouldn't bust the cache
                 // for `s.x` even though the user-visible source default changed.
-                let gInitPart = g.init != null ? int64(hash(describe(g.init))) : int64(0)
+                let gInitPart = g.init != null ? int64(hash(describe(g.init))) : 0l
                 for (f in st.fields) {
                     if (f.annotation |> find_arg("live") ?as tBool ?? false) {
                         if (f._type.flags.constant) continue  // lint pass already errored
-                        let fInitPart = f.init != null ? int64(hash(describe(f.init))) : int64(0)
+                        let fInitPart = f.init != null ? int64(hash(describe(f.init))) : 0l
                         field_targets |> emplace(LiveFieldTarget(
                             var_name = string(g.name),
                             field_name = string(f.name),

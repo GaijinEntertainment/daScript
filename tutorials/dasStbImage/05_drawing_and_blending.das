@@ -66,9 +66,9 @@ def example_fill_rect_rgba() {
 def example_fill_rect_grey() {
     var img = make_image(32, 32, 1)
     // Fill background with dark grey
-    img.fill_rect(0, 0, 32, 32, uint8(40))
+    img.fill_rect(0, 0, 32, 32, 40u8)
     // Draw a bright square
-    img.fill_rect(4, 4, 24, 24, uint8(200))
+    img.fill_rect(4, 4, 24, 24, 200u8)
     print("  Grey pixel (16,16): {int(img.bytes[16 * 32 + 16])}\n")
     print("  Grey pixel (0,0):   {int(img.bytes[0])}\n")
 }
@@ -136,7 +136,7 @@ def example_compositing() {
             let dy = float(y) - 5.5
             let dist = dx * dx + dy * dy
             if (dist < 25.0) {
-                icon.bytes[y * 12 + x] = uint8(255)
+                icon.bytes[y * 12 + x] = 255u8
             }
         }
     }

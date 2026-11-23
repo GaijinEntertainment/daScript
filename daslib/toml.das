@@ -166,7 +166,7 @@ def private read_basic_string(data : array<uint8>&; var st : LexState&; var err 
             elif (esc == '\\') push(buf, uint8('\\'))
             elif (esc == 'u' || esc == 'U') {
                 let digits = esc == 'u' ? 4 : 8
-                var cp = uint(0)
+                var cp = 0u
                 for (_ in range(digits)) {
                     if (st.pos >= st.n) {
                         err = "incomplete \\{esc == 'u' ? "u" : "U"} escape at {st.line}:{st.row}"
@@ -178,7 +178,7 @@ def private read_basic_string(data : array<uint8>&; var st : LexState&; var err 
                         err = "non-hex character in \\{esc == 'u' ? "u" : "U"} escape at {st.line}:{st.row}"
                         return ""
                     }
-                    cp = (cp << uint(4)) | uint(hv)
+                    cp = (cp << 4u) | uint(hv)
                     advance(data, st)
                 }
                 utf8_encode(buf, cp)
@@ -254,7 +254,7 @@ def private read_ml_basic_string(data : array<uint8>&; var st : LexState&; var e
             elif (esc == '\\') push(buf, uint8('\\'))
             elif (esc == 'u' || esc == 'U') {
                 let digits = esc == 'u' ? 4 : 8
-                var cp = uint(0)
+                var cp = 0u
                 for (_ in range(digits)) {
                     if (st.pos >= st.n) {
                         err = "incomplete \\{esc == 'u' ? "u" : "U"} escape at {st.line}:{st.row}"
@@ -266,7 +266,7 @@ def private read_ml_basic_string(data : array<uint8>&; var st : LexState&; var e
                         err = "non-hex character in \\{esc == 'u' ? "u" : "U"} escape at {st.line}:{st.row}"
                         return ""
                     }
-                    cp = (cp << uint(4)) | uint(hv)
+                    cp = (cp << 4u) | uint(hv)
                     advance(data, st)
                 }
                 utf8_encode(buf, cp)

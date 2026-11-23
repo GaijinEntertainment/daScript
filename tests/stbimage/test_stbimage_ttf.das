@@ -25,11 +25,11 @@ def test_load_ttf_basic(t : T?) {
         tt |> equal(font.char_range.x, 32)
         tt |> equal(font.char_range.y, 96)
         tt |> success(length(font.chardata) == 96, "chardata has 96 entries")
-        tt |> success(font.tex == uint64(0), "tex is 0 by default")
+        tt |> success(font.tex == 0ul, "tex is 0 by default")
         // atlas should have non-zero pixels
         var non_zero = 0
         for (px in font.bitmap.bytes) {
-            if (px != uint8(0)) {
+            if (px != 0u8) {
                 non_zero++
             }
         }
@@ -87,7 +87,7 @@ def test_render_text_basic(t : T?) {
         let npx = 200 * 50
         for (i in range(npx)) {
             let idx = i * 4
-            if (img.bytes[idx] != uint8(0) || img.bytes[idx + 1] != uint8(0) || img.bytes[idx + 2] != uint8(0)) {
+            if (img.bytes[idx] != 0u8 || img.bytes[idx + 1] != 0u8 || img.bytes[idx + 2] != 0u8) {
                 non_black++
             }
         }
@@ -107,7 +107,7 @@ def test_render_text_empty(t : T?) {
         let npx = 100 * 50
         for (i in range(npx)) {
             let idx = i * 4
-            if (img.bytes[idx] != uint8(0) || img.bytes[idx + 1] != uint8(0) || img.bytes[idx + 2] != uint8(0)) {
+            if (img.bytes[idx] != 0u8 || img.bytes[idx + 1] != 0u8 || img.bytes[idx + 2] != 0u8) {
                 non_black++
             }
         }

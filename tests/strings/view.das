@@ -21,7 +21,7 @@ require strings
 // - so the hole is punched between two conversions
 def private with_nul(head, tail : string) : array<uint8> {
     var b <- to_bytes(head)
-    b |> push(uint8(0))
+    b |> push(0u8)
     b |> push_from(to_bytes(tail))
     return <- b
 }

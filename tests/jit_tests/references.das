@@ -363,7 +363,7 @@ def test_memset(t : T?) {
         var a : uint64[10]
         jit_memset64(unsafe(addr(a[2])), uint64(0x55), 3)
         for (i in 0..10) {
-            t |> equal((i >= 2 && i < 5) ? uint64(0x55) : uint64(0), a[i])
+            t |> equal((i >= 2 && i < 5) ? uint64(0x55) : 0ul, a[i])
         }
         test_any_memset(t, 0x12345678abcdef01ul, "jit_memset64")
     }
@@ -480,8 +480,8 @@ struct OddPtrBox {
 def odd_ptr_dummy(var a : int?; var b : OddPtrBox ??) : OddPtrBox? {
     unsafe {
         deref(a) = 1
-        deref(b) = reinterpret<OddPtrBox?>(uint64(7))
-        return reinterpret<OddPtrBox?>(uint64(1))
+        deref(b) = reinterpret<OddPtrBox?>(7ul)
+        return reinterpret<OddPtrBox?>(1ul)
     }
 }
 
@@ -509,6 +509,6 @@ def odd_ptr_compare(var insn : OddPtrBox?; var thread : OddPtrBox?;
 def test_misaligned_pointer_values_compare_by_value(t : T?) {
     var baz : OddPtrBox
     unsafe {
-        t |> equal(0, odd_ptr_compare(addr(baz), reinterpret<OddPtrBox?>(uint64(7)), null))
+        t |> equal(0, odd_ptr_compare(addr(baz), reinterpret<OddPtrBox?>(7ul), null))
     }
 }

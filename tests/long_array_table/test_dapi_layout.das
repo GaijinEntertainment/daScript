@@ -16,16 +16,16 @@ require daslib/debugger
 [test(description = "the DapiArray debug mirror reads the same size and capacity the array reports")]
 def test_dapi_array_size_capacity_match(t : T?) {
     var arr : array<int>
-    arr |> resize(int64(7))
+    arr |> resize(7l)
     let view = unsafe(addr<DapiArray?>(arr))
-    t |> equal(view.size, uint64(7))
+    t |> equal(view.size, 7ul)
     t |> equal(view.capacity, uint64(long_capacity(arr)))
 }
 
 [test(description = "the DapiArray mirror's data pointer is non-null for a filled array")]
 def test_dapi_array_data_pointer_non_null(t : T?) {
     var arr : array<int>
-    arr |> resize(int64(3))
+    arr |> resize(3l)
     let view = unsafe(addr<DapiArray?>(arr))
     t |> success(view.data != null)
 }
@@ -37,8 +37,8 @@ def test_dapi_table_size_tombstones_match(t : T?) {
     tab |> insert(2, 200)
     tab |> insert(3, 300)
     let view = unsafe(addr<DapiTable?>(tab))
-    t |> equal(view.size, uint64(3))
-    t |> equal(view.tombstones, uint64(0))
+    t |> equal(view.size, 3ul)
+    t |> equal(view.tombstones, 0ul)
 }
 
 [test(description = "the DapiTable mirror's keys and hashes pointers are non-null for a filled table")]
@@ -62,8 +62,8 @@ def test_dapi_table_tombstones_after_erase(t : T?) {
     }
     tab |> erase(3)
     let view = unsafe(addr<DapiTable?>(tab))
-    t |> equal(view.size, uint64(9))
-    t |> equal(view.tombstones, uint64(1))
+    t |> equal(view.size, 9ul)
+    t |> equal(view.tombstones, 1ul)
 }
 
 [test(description = "the DapiTable mirror's keys field offset matches the runtime layout")]
@@ -78,6 +78,6 @@ def test_dapi_table_keys_offset_matches_runtime(t : T?) {
     }
     let view = unsafe(addr<DapiTable?>(tab))
     let data_addr = intptr(view.data)
-    let expected_keys_addr = data_addr + view.capacity * uint64(4)   // value type = int = 4 bytes
+    let expected_keys_addr = data_addr + view.capacity * 4ul   // value type = int = 4 bytes
     t |> equal(intptr(view.keys), expected_keys_addr)
 }

@@ -436,7 +436,7 @@ def test_pin_parse_int_widths(t : T?) {
     t |> equal(int8("200", cr, off), int8(0), "int8 overflow value")
     t |> equal(cr, ConversionResult.out_of_range, "int8 overflow result")
     cr = ConversionResult.ok
-    t |> equal(uint8("200", cr, off), uint8(200), "uint8 in range")
+    t |> equal(uint8("200", cr, off), 200u8, "uint8 in range")
     t |> equal(cr, ConversionResult.ok, "uint8 in range result")
     t |> equal(off, 3, "uint8 in range offset")
     cr = ConversionResult.ok
@@ -519,7 +519,7 @@ def test_pin_string_from_array(t : T?) {
     var inscope none : array<uint8>
     t |> success(is_null_str(string(none)), "string(array<uint8>) of an empty buffer is null")
     var inscope holed : array<uint8>
-    holed |> push_from([uint8('a'), uint8(0), uint8('c')])
+    holed |> push_from([uint8('a'), 0u8, uint8('c')])
     let s = string(holed)
     // the whole buffer is copied, but every downstream op is strlen-bounded
     t |> equal(length(s), 1, "an interior NUL truncates length()")

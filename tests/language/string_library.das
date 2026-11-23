@@ -498,8 +498,8 @@ def test_the_remaining_c_escapes_lex(t : T?) {
 def test_escapes_take_the_unsigned_suffixes(t : T?) {
     t |> equal(0u, '\0'u)
     t |> equal(11u, '\v'u)
-    t |> equal(uint8(65), '\x41'u8)
-    t |> equal(uint8(7), '\a'u8)
+    t |> equal(uint8(65), '\x41'u8)    // nolint:STYLE051 -- the cast is the oracle
+    t |> equal(uint8(7), '\a'u8)       // nolint:STYLE051 -- the cast is the oracle
 }
 
 [test(description = "a string literal takes the same C escape set, with octal escapes stopping after three digits")]

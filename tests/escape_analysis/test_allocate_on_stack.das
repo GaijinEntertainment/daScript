@@ -130,7 +130,7 @@ def test_stack_plain_new(t : T?) {
     let s = sum_plain_new()
     let grew = heap_bytes_allocated() - before
     t |> equal(s, 3 * ((N - 1) * N / 2))
-    t |> equal(grew, uint64(0))
+    t |> equal(grew, 0ul)
 }
 
 // `new T(f = v)` (ascend) -> built in the frame -> heap stays EXACTLY flat
@@ -140,7 +140,7 @@ def test_stack_ascend_new(t : T?) {
     let s = sum_ascend_new()
     let grew = heap_bytes_allocated() - before
     t |> equal(s, 3 * ((N - 1) * N / 2))
-    t |> equal(grew, uint64(0))
+    t |> equal(grew, 0ul)
 }
 
 // shell in the frame, owned arrays freed at scope exit -> heap stays flat (a few slots at most)
@@ -171,7 +171,7 @@ def test_stack_multiple_live_objects(t : T?) {
     let grew = heap_bytes_allocated() - before
     // per i: a.x+a.y=3i, b.x+b.y=4i+1, c.x+c.y=5i+2 -> 12i+3
     t |> equal(s, 12 * ((N - 1) * N / 2) + 3 * N)
-    t |> equal(grew, uint64(0))
+    t |> equal(grew, 0ul)
 }
 
 // the two variables of one `let` keep distinct slots: a write through b leaves a alone + heap flat
@@ -182,7 +182,7 @@ def test_stack_multi_variable_let(t : T?) {
     let grew = heap_bytes_allocated() - before
     // per i: a.x=i, b.x=i+1 -> 2i+1 (one shared slot would read 2i+2)
     t |> equal(s, 2 * ((N - 1) * N / 2) + N)
-    t |> equal(grew, uint64(0))
+    t |> equal(grew, 0ul)
 }
 
 // control: an escaping pointer must stay on the heap and the heap must grow by N nodes

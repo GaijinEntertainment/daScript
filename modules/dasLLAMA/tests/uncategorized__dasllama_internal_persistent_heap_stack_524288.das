@@ -28,8 +28,8 @@ def private dump_of(stamps : table<string; array<uint8>>) : table<string; array<
 [test(description = "`diff_dumps` bins stamps into same, moved (byte or length change), appeared and vanished in name order, and `dumps_identical` passes only two non-empty dumps whose every stamp matches")]
 def test_vk_spv_diff_bins(t : T?) {
     t |> run("the differ bins every stamp: identical, moved, appeared, vanished - sorted by name") @(t : T?) {
-        var base <- dump_of({ "b_cls_spv" => [uint8(1), uint8(2), uint8(3)], "a_cls_spv" => [uint8(9)], "gone_cls_spv" => [uint8(4), uint8(4)], "len_cls_spv" => [uint8(7), uint8(7)] })
-        var fresh <- dump_of({ "b_cls_spv" => [uint8(1), uint8(2), uint8(3)], "a_cls_spv" => [uint8(8)], "new_cls_spv" => [uint8(5)], "len_cls_spv" => [uint8(7), uint8(7), uint8(7)] })
+        var base <- dump_of({ "b_cls_spv" => [1u8, 2u8, 3u8], "a_cls_spv" => [9u8], "gone_cls_spv" => [4u8, 4u8], "len_cls_spv" => [7u8, 7u8] })
+        var fresh <- dump_of({ "b_cls_spv" => [1u8, 2u8, 3u8], "a_cls_spv" => [8u8], "new_cls_spv" => [5u8], "len_cls_spv" => [7u8, 7u8, 7u8] })
         let d <- diff_dumps(base, fresh)
         t |> equal(d.same, ["b_cls_spv"], "the byte-identical stamp is the one whose every byte matches")
         t |> equal(d.moved, ["a_cls_spv", "len_cls_spv"], "a changed byte and a changed length both read as moved, in name order")
@@ -38,8 +38,8 @@ def test_vk_spv_diff_bins(t : T?) {
         t |> success(!dumps_identical(d, length(base), length(fresh)), "the verdict fails on any moved, appeared or vanished stamp")
     }
     t |> run("the verdict passes only two non-empty dumps whose every stamp matches") @(t : T?) {
-        var base <- dump_of({ "a_cls_spv" => [uint8(1)], "b_cls_spv" => [uint8(2), uint8(3)] })
-        var fresh <- dump_of({ "b_cls_spv" => [uint8(2), uint8(3)], "a_cls_spv" => [uint8(1)] })
+        var base <- dump_of({ "a_cls_spv" => [1u8], "b_cls_spv" => [2u8, 3u8] })
+        var fresh <- dump_of({ "b_cls_spv" => [2u8, 3u8], "a_cls_spv" => [1u8] })
         let d <- diff_dumps(base, fresh)
         t |> equal(d.same, ["a_cls_spv", "b_cls_spv"], "both stamps match")
         t |> success(dumps_identical(d, length(base), length(fresh)), "two matching dumps pass")

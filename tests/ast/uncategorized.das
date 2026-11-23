@@ -35,14 +35,14 @@ def macro_built_and_copied_annotation_values_keep_all_bits(t : T?) {
 def test_any_array_long_size(t : T?) {
     var arr <- [10, 20, 30, 40, 50]
     let p = unsafe(addr<uint8 const?>(arr))
-    t |> equal(any_array_long_size(p), int64(5))
+    t |> equal(any_array_long_size(p), 5l)
 }
 
 [test(description = "the 64-bit size accessor reports the entry count of a table inside an any value")]
 def test_any_table_long_size(t : T?) {
     var tab <- {1 => 100, 2 => 200, 3 => 300}
     let p = unsafe(addr<uint8 const?>(tab))
-    t |> equal(any_table_long_size(p), int64(3))
+    t |> equal(any_table_long_size(p), 3l)
 }
 
 [test(description = "the AST verifier reports a child expression whose parsed range lies outside its parent or starts before its previous sibling ends")]

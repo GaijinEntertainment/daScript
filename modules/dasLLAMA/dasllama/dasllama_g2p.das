@@ -257,7 +257,7 @@ def private lex_is_dict(g : G2pModel; t : LexTable; i : int; british : bool) : b
     var a = 0l
     var b = 0l
     return false if (!lex_part(g, t, i, british, a, b))
-    return g.data[a] == uint8(1)
+    return g.data[a] == 1u8
 }
 
 //! the phonemes of a value span [a, b): the first byte is the entry kind, the rest the reading

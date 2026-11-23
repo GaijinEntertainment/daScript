@@ -61,7 +61,7 @@ def test_resize_uint8_srgb_upscale(t : T?) {
         // 2x2 RGBA image
         var input : uint8[16]
         for (i in range(16)) {
-            input[i] = uint8(128)
+            input[i] = 128u8
         }
         var output : uint8[64]  // 4x4 RGBA
         var result = stbir_resize_uint8_srgb(
@@ -82,7 +82,7 @@ def test_resize_uint8_srgb_downscale(t : T?) {
     t |> run("resize 4x4 to 2x2 srgb") <| @(tt : T?) {
         var input : uint8[64]  // 4x4 RGBA, all white
         for (i in range(64)) {
-            input[i] = uint8(255)
+            input[i] = 255u8
         }
         var output : uint8[16]  // 2x2 RGBA
         var result = stbir_resize_uint8_srgb(
@@ -105,7 +105,7 @@ def test_resize_uint8_linear(t : T?) {
     t |> run("resize linear mode works") <| @(tt : T?) {
         var input : uint8[12]  // 2x2 RGB
         for (i in range(12)) {
-            input[i] = uint8(200)
+            input[i] = 200u8
         }
         var output : uint8[48]  // 4x4 RGB
         var result = stbir_resize_uint8_linear(
@@ -147,7 +147,7 @@ def test_resize_medium_api(t : T?) {
     t |> run("medium API with explicit filter and edge mode") <| @(tt : T?) {
         var input : uint8[16]  // 2x2 RGBA
         for (i in range(16)) {
-            input[i] = uint8(100)
+            input[i] = 100u8
         }
         var output : uint8[36]  // 3x3 RGBA
         var result = stbir_resize(
@@ -167,10 +167,10 @@ def test_resize_medium_api_point_sample(t : T?) {
     t |> run("point sample filter produces exact copies") <| @(tt : T?) {
         // 1x1 red pixel
         var input : uint8[4]
-        input[0] = uint8(255)
-        input[1] = uint8(0)
-        input[2] = uint8(0)
-        input[3] = uint8(255)
+        input[0] = 255u8
+        input[1] = 0u8
+        input[2] = 0u8
+        input[3] = 255u8
         var output : uint8[16]  // 2x2 RGBA
         var result = stbir_resize(
             safe_addr(input[0]), 1, 1, 0,
@@ -198,7 +198,7 @@ def test_resize_auto_allocate(t : T?) {
     t |> run("resize with null output allocates result") <| @(tt : T?) {
         var input : uint8[16]
         for (i in range(16)) {
-            input[i] = uint8(128)
+            input[i] = 128u8
         }
         var result = stbir_resize_uint8_srgb(
             safe_addr(input[0]), 2, 2, 0,

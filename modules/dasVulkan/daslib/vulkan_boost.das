@@ -3131,7 +3131,7 @@ def private blob_text(var blob : array<uint8>) : string {
     if (empty(blob)) {
         return ""
     }
-    blob[length(blob) - 1] = uint8(0)   // last byte is the caller-reserved NUL slot, never content
+    blob[length(blob) - 1] = 0u8   // last byte is the caller-reserved NUL slot, never content
     unsafe {
         return "{reinterpret<string>(addr(blob[0]))}"
     }

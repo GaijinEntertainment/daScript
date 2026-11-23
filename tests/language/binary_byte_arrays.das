@@ -29,7 +29,7 @@ def test_byte_sizes(t : T?) {
         var source = BytePayload()
         reserve(source.bytes, size); resize(source.bytes, size)
         for (value, i in source.bytes, count()) { value = uint8(i * 37) }
-        var decoded = BytePayload(bytes <- [uint8(99), uint8(100)])
+        var decoded = BytePayload(bytes <- [99u8, 100u8])
         binary_save(source) $(data) { binary_load(decoded, data) }
         t |> equal(length(decoded.bytes), size)
         t |> equal(hash(decoded), hash(source))
@@ -47,11 +47,11 @@ struct ByteContainers {
 def test_byte_containers(t : T?) {
     var source = ByteContainers()
     resize(source.rows, 3)
-    source.rows[0] <- [uint8(0), uint8(255)]
-    source.rows[2] <- [uint8(128)]
+    source.rows[0] <- [0u8, 255u8]
+    source.rows[2] <- [128u8]
     source.fixed_rows <- [
-        fixed_array(uint8(1), uint8(2), uint8(3)),
-        fixed_array(uint8(254), uint8(0), uint8(255))
+        fixed_array(1u8, 2u8, 3u8),
+        fixed_array(254u8, 0u8, 255u8)
     ]
     source.signed_bytes <- [int8(-128), int8(-1), int8(0), int8(127)]
     binary_save(source) $(data) {
@@ -63,7 +63,7 @@ def test_byte_containers(t : T?) {
 
 [test(description = "binary byte arrays reject truncated payloads and mismatched type headers")]
 def test_byte_invalid(t : T?) {
-    let source = BytePayload(bytes <- [uint8(1), uint8(2), uint8(3)])
+    let source = BytePayload(bytes <- [1u8, 2u8, 3u8])
     binary_save(source) $(data) {
         var damaged <- clone(data)
         resize(damaged, length(damaged) - 5)
@@ -81,17 +81,17 @@ def test_byte_invalid(t : T?) {
 
 [test(description = "an invalid byte-array length is rejected before replacing destination bytes")]
 def test_byte_invalid_length(t : T?) {
-    let source = BytePayload(bytes <- [uint8(1), uint8(2), uint8(3)])
+    let source = BytePayload(bytes <- [1u8, 2u8, 3u8])
     binary_save(source) $(data) {
         var damaged <- clone(data)
-        for (i in range(20, 28)) { damaged[i] = uint8(0) }
-        damaged[22] = uint8(16)
-        var decoded = BytePayload(bytes <- [uint8(99), uint8(100)])
+        for (i in range(20, 28)) { damaged[i] = 0u8 }
+        damaged[22] = 16u8
+        var decoded = BytePayload(bytes <- [99u8, 100u8])
         var failed = false
         try { binary_load(decoded, damaged) } recover { failed = true }
         t |> success(failed, "declared payload exceeds available bytes")
         t |> equal(length(decoded.bytes), 2, "invalid length must not resize the destination")
-        t |> equal(decoded.bytes[0], uint8(99))
-        t |> equal(decoded.bytes[1], uint8(100))
+        t |> equal(decoded.bytes[0], 99u8)
+        t |> equal(decoded.bytes[1], 100u8)
     }
 }

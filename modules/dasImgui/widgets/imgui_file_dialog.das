@@ -199,7 +199,7 @@ def private is_valid_filename(name : string) : bool {
     var ok = true
     peek_data(name) $(bytes) {
         for (c in bytes) {
-            if (c == uint8(47) || c == uint8(92)) {     // '/' or '\' — no path separators
+            if (c == 47u8 || c == 92u8) {     // '/' or '\' — no path separators
                 ok = false
             }
         }

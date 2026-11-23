@@ -75,7 +75,7 @@ def section_glyph_bitmap(font : Font) {
     var inked = 0
     bm.image |> with_pixels() $(var px : array<uint8>#) {
         for (p in px) {
-            if (p != uint8(0)) {
+            if (p != 0u8) {
                 inked++
             }
         }
@@ -102,7 +102,7 @@ def section_render_text(font : Font) {
     var inked = 0
     canvas |> with_pixels() $(var px : array<uint8>#) {
         for (i in range(W * H)) {
-            if (px[i * 4] != uint8(255)) {            // R channel no longer white
+            if (px[i * 4] != 255u8) {            // R channel no longer white
                 inked++
             }
         }

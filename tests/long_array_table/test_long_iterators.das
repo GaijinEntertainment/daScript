@@ -5,7 +5,7 @@ require dastest/testing_boost public
 [test(description = "the long iterator range yields int64 indices in order")]
 def test_long_iter_range(t : T?) {
     var arr : array<int>
-    arr |> resize(int64(5))
+    arr |> resize(5l)
     for (i in iter_range(arr)) {
         arr[i] = i + 1
     }
@@ -19,7 +19,7 @@ def test_long_iter_range(t : T?) {
 [test(description = "long_enumerate pairs int64 indices with the elements")]
 def test_long_enumerate(t : T?) {
     var arr : array<int>
-    arr |> resize(int64(4))
+    arr |> resize(4l)
     arr[0] = 10
     arr[1] = 20
     arr[2] = 30
@@ -37,7 +37,7 @@ def test_long_enumerate(t : T?) {
 [test(description = "long_find_index returns the int64 position of a present element")]
 def test_long_find_index_present(t : T?) {
     var arr : array<int>
-    arr |> resize(int64(5))
+    arr |> resize(5l)
     arr[0] = 100
     arr[1] = 200
     arr[2] = 300
@@ -49,7 +49,7 @@ def test_long_find_index_present(t : T?) {
 [test(description = "long_find_index returns -1 for a missing element")]
 def test_long_find_index_missing(t : T?) {
     var arr : array<int>
-    arr |> resize(int64(3))
+    arr |> resize(3l)
     arr[0] = 1
     arr[1] = 2
     arr[2] = 3

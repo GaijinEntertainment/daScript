@@ -1569,7 +1569,7 @@ def public inject_main(program_context : Context?; ctx : LLVMContextRef; // noli
                 fixed_array(global_context, update_ptr, types.ConstI32(uint64(rv)), shutdown_ptr), "")
             // jit_run_web_lifecycle never returns (simulate_infinite_loop); the block
             // still needs a terminator, so ret 0 (unreachable in practice).
-            LLVMBuildRet(builder, types.ConstI32(uint64(0)))
+            LLVMBuildRet(builder, types.ConstI32(0ul))
             to_log(LOG_INFO, "LLVM EXE: wasm browser lifecycle installed (init/update/shutdown); `main` bypassed\n")
             return (fn = main_fn, link_whole_lib = needs_whole_lib)
         }

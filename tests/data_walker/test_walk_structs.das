@@ -101,7 +101,7 @@ def test_walk_all_scalars_in_struct(t : T?) {
             d = 2.718lf,
             s = "test",
             i8 = int8(8),
-            u8 = uint8(16),
+            u8 = 16u8,
             i16 = int16(256),
             u16 = uint16(512),
             i64 = 100l,

@@ -1238,8 +1238,8 @@ def kq_gather_rows_dev(fmt : KqFmt; qp, sp : uint8 const?; n, rows, slice_rows :
                                 }
                                 dsc[16] = gs[16l * mr + 2l * r]
                                 dsc[17] = gs[16l * mr + 2l * r + 1l]
-                                dsc[18] = uint8(0)
-                                dsc[19] = uint8(0)
+                                dsc[18] = 0u8
+                                dsc[19] = 0u8
                             } elif (fmt == KqFmt.q40 || fmt == KqFmt.iq4nl || fmt == KqFmt.nv4) {
                                 for (blk in range64(8l)) {   // 8 per-block f16 d (nv4: UE4M3 byte pairs), mr-interleaved (iq4nl repacks with q40's interleave)
                                     dsc[blk * 2l] = gs[blk * 2l * mr + 2l * r]

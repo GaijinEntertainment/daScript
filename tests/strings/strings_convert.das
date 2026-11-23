@@ -75,7 +75,7 @@ def test_convert_with_errors(t : T?) {
     test_conversions(t, "13", int8(13), "128")
     test_hex_conversions(t, "13", int8(0x13), "0x100")
 
-    test_conversions(t, "13", uint8(13), "256")
+    test_conversions(t, "13", 13u8, "256")
     test_hex_conversions(t, "13", uint8(0x13), "0x100")
 
     test_conversions(t, "13", int16(13), "32768")
@@ -87,13 +87,13 @@ def test_convert_with_errors(t : T?) {
     test_conversions(t, "13", int(13), "2147483648") // nolint:PERF020 the cast names the row's type in this conformance table
     test_hex_conversions(t, "13", int(0x13), "0x100000000")
 
-    test_conversions(t, "13", uint(13), "4294967296")
+    test_conversions(t, "13", 13u, "4294967296")
     test_hex_conversions(t, "13", uint(0x13), "0x100000000") // nolint:PERF020 the cast names the row's type in this conformance table
 
-    test_conversions(t, "13", int64(13), "9223372036854775808")
+    test_conversions(t, "13", 13l, "9223372036854775808")
     test_hex_conversions(t, "13", int64(0x13), "0x10000000000000000")
 
-    test_conversions(t, "13", uint64(13), "18446744073709551616")
+    test_conversions(t, "13", 13ul, "18446744073709551616")
     test_hex_conversions(t, "13", uint64(0x13), "0x10000000000000000")
 
     test_conversions(t, "13", float(13.), "1e39") // nolint:PERF020 the cast names the row's type in this conformance table
@@ -327,8 +327,8 @@ def test_try_to_int8(t : T?) {
 
 [test(description = "try_to_uint8 parses up to 255 and reports out_of_range beyond it")]
 def test_try_to_uint8(t : T?) {
-    expect_ok_value(t, try_to_uint8("13"), uint8(13))
-    expect_ok_value(t, try_to_uint8("255"), uint8(255))
+    expect_ok_value(t, try_to_uint8("13"), 13u8)
+    expect_ok_value(t, try_to_uint8("255"), 255u8)
     expect_err_kind(t, try_to_uint8("256"), ConversionError.out_of_range)
     expect_err_kind(t, try_to_uint8("-1"), ConversionError.invalid_argument)
 }
@@ -398,7 +398,7 @@ def test_try_to_double_basic(t : T?) {
 def test_try_to_round_trip(t : T?) {
     let i8 = int8(-42)
     expect_ok_value(t, try_to_int8(string(i8)), i8)
-    let u8 = uint8(200)
+    let u8 = 200u8
     expect_ok_value(t, try_to_uint8(string(u8)), u8)
     let i16 = int16(-12345)
     expect_ok_value(t, try_to_int16(string(i16)), i16)

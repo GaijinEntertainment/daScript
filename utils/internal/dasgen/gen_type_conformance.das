@@ -394,7 +394,7 @@ def emit_type_block(var writer; spec : TypeSpec) {  // nolint:STYLE038 - one wri
         emit_s_swizzle_section(writer, spec)
     }
     writer |> write("    t |> run(\"struct field and layout\") @(t : T?) \{\n")
-    writer |> write("        var w = Wrap_{spec.name}(pad = uint8(1), v = {ctor(spec, 1)})\n")
+    writer |> write("        var w = Wrap_{spec.name}(pad = 1u8, v = {ctor(spec, 1)})\n")
     writer |> write("        t |> success(w.v == {ctor(spec, 1)}, \"field read\")\n")
     writer |> write("        w.v = {ctor(spec, 5)}\n")
     writer |> write("        t |> success(w.v == {ctor(spec, 5)}, \"field write\")\n")

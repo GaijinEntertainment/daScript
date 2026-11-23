@@ -219,7 +219,7 @@ def test_live_vars_per_key_round_trip(t : T?) {   // nolint:STYLE038 flat list o
     }
     t |> run("no-init var uses hash 0") <| @(t : T?) {
         let key = "__test_per_key_no_init"
-        let no_init_hash = int64(0)
+        let no_init_hash = 0l
         // Save with hash 0
         var value = 55
         var ser = new MemSerializer()
@@ -290,7 +290,7 @@ def test_macro_emits_for_field_targets(t : T?) {
 def test_per_field_archive_round_trip(t : T?) {   // nolint:STYLE038 flat list of independent per-field round-trip arms
     t |> run("preserved_int round-trips via per-field key") <| @(t : T?) {
         let key = "__live_vars__mixed_global__preserved_int"
-        let init_hash = int64(0)  // no init expr → hash 0
+        let init_hash = 0l  // no init expr → hash 0
 
         mixed_global.preserved_int = 12345
 
@@ -324,7 +324,7 @@ def test_per_field_archive_round_trip(t : T?) {   // nolint:STYLE038 flat list o
 
     t |> run("preserved_str round-trips via per-field key") <| @(t : T?) {
         let key = "__live_vars__mixed_global__preserved_str"
-        let init_hash = int64(0)
+        let init_hash = 0l
 
         mixed_global.preserved_str := "kept across reload"
 
