@@ -10,6 +10,8 @@
 #include "ast_escape_analysis.h"
 #include "daScript/ast/ast_cfg.h"
 #include "ast_bound_check_elision.h"
+#include "ast_compile_modules.h"
+#include "ast_parse.h"
 #include "daScript/misc/das_common.h"
 #include "daScript/simulate/simulate.h"
 #include "daScript/simulate/aot_builtin.h"
@@ -1045,8 +1047,32 @@ namespace das {
         return false;
     }
 
-    bool detectOptionLogRequire ( const char * text, uint32_t length ) {
-        // search for `options log_require` outside of comments and strings
+    namespace {
+        enum class PrereqOptions : uint32_t {
+            none            = 0,
+            log_require     = 1u << 0,
+            log_compile_dag = 1u << 1,
+        };
+
+        PrereqOptions operator | ( PrereqOptions a, PrereqOptions b ) { return PrereqOptions(uint32_t(a) | uint32_t(b)); }
+        bool hasOption ( PrereqOptions set, PrereqOptions option ) { return (uint32_t(set) & uint32_t(option)) != 0; }
+
+        PrereqOptions prereqOptionByName ( const char * name, uint32_t length ) {
+            static const pair<const char *, PrereqOptions> known[] = {
+                { "log_require",     PrereqOptions::log_require },
+                { "log_compile_dag", PrereqOptions::log_compile_dag },
+            };
+            for ( auto & option : known ) {
+                if ( strlen(option.first) == length && strncmp(name, option.first, length) == 0 ) return option.second;
+            }
+            return PrereqOptions::none;
+        }
+    }
+
+    // the options the prerequisite walk reads from the file's text, before the file is parsed
+    static PrereqOptions detectPrereqOptions ( const char * text, uint32_t length ) {
+        // search for `options <name>` outside of comments and strings
+        auto found = PrereqOptions::none;
         bool in_single_line_comment = false;
         bool in_multi_line_comment = false;
         bool in_string = false;
@@ -1087,20 +1113,28 @@ namespace das {
                     continue;
                 }
             }
-            // check for options\s+log_require
+            // check for options\s+<name>
             if (text[i] == 'o' && i + 7 < length && text[i + 1] == 'p' && text[i + 2] == 't' && text[i + 3] == 'i' && text[i + 4] == 'o' && text[i + 5] == 'n' && text[i + 6] == 's' && isspace(text[i + 7]) ) {
                 i += 7;
                 while (i < length && isspace(text[i])) {
                     ++i;
                 }
-                if (i + 11 < length && text[i] == 'l' && text[i + 1] == 'o' && text[i + 2] == 'g' && text[i + 3] == '_'
-                    && text[i + 4] == 'r' && text[i + 5] == 'e' && text[i + 6] == 'q' && text[i + 7] == 'u'
-                    && text[i + 8] == 'i' && text[i + 9] == 'r' && text[i + 10] == 'e' && !isalnum(text[i + 11]) && text[i + 11] != '_') {
-                    return true;
+                auto nameStart = i;
+                while (i < length && (isalnum(text[i]) || text[i] == '_')) {
+                    ++i;
                 }
+                found = found | prereqOptionByName(text + nameStart, i - nameStart);
+                --i;
             }
         }
-        return false;
+        return found;
+    }
+
+    static PrereqOptions detectPrereqOptions ( const string & fileName, const FileAccessPtr & access ) {
+        const char * src = nullptr;
+        uint32_t len = 0;
+        if ( auto fi = access->getFileInfo(fileName) ) fi->getSourceAndLength(src, len);
+        return src ? detectPrereqOptions(src, len) : PrereqOptions::none;
     }
 
     // compileDaScript runs its top-level post-parse steps (deriveAliases/allocateStack/...)
@@ -1254,7 +1288,7 @@ namespace das {
             const FileAccessPtr & access, TextWriter & logs, ModuleGroup & libGroup, bool exportAll, bool isDep,
             const CodeOfPolicies & policies, ModuleCompileTimes & times );
 
-    static ProgramPtr parseDaScriptEx ( const string & fileName,
+    ProgramPtr parseDaScriptEx ( const string & fileName,
                                const string & moduleName,
                               const FileAccessPtr & access,
                               TextWriter & logs,
@@ -1263,7 +1297,7 @@ namespace das {
                               bool isDep,
                               CodeOfPolicies policies,
                               bool inferAfterParse,
-                              const ModuleCacheStream & stream = ModuleCacheStream() ) {
+                              const ModuleCacheStream & stream ) {
         verifyCodeOfPoliciesStamp(policies);
         ModuleCompileScope scope(moduleName, fileName, logs, libGroup, policies, isDep);
         auto & program = scope.program;
@@ -2071,46 +2105,18 @@ namespace das {
         return nullptr;
     }
 
+    static ProgramPtr programWithErrors ( const vector<Error> & errors ) {
+        auto res = make_smart<Program>();
+        for ( auto & err : errors ) res->error(err.what, err.extra, err.fixme, err.at, err.cerr);
+        return res;
+    }
+
     static ProgramPtr checkModuleNamesUnique ( const vector<ModuleInfo> & req, TextWriter & logs ) {
         if ( verifyModuleNamesUnique(req, logs) ) return nullptr;
         auto res = make_smart<Program>();
         res->error("Several modules with invalid names", logs.str(), "", LineInfo(),
                    CompilationError::already_declared_module);
         return res;
-    }
-
-    static ProgramPtr parseRequiredModules ( const vector<ModuleInfo> & req, const FileAccessPtr & access, TextWriter & logs,
-            ModuleGroup & libGroup, CodeOfPolicies & policies, bool promoteShared, const ModuleCacheStream & stream = ModuleCacheStream() ) {
-        for ( auto & mod : req ) {
-            auto maybeMod = libGroup.findModule(mod.moduleName);
-            if ( maybeMod ) {
-                maybeMod->fromExtraDependency &= mod.extraDepModule;
-                continue;
-            }
-            auto program = parseDaScriptEx(mod.fileName, mod.moduleName, access, logs, libGroup, true, true, policies, true, stream);
-            policies.threadlock_context |= program->options.getBoolOption("threadlock_context",false);
-            if ( program->failed() ) {
-                return program;
-            }
-            if ( policies.fail_on_lack_of_aot_export && !aotModuleHasName(program, mod) ) {
-                return program;
-            }
-            if ( program->thisModule->name.empty() ) {
-                program->library.renameModule(program->thisModule.get(),mod.moduleName);
-                program->thisModule->wasParsedNameless = true;
-            }
-            program->thisModule->fileName = mod.fileName;
-            program->thisModule->fromExtraDependency = mod.extraDepModule;
-            if ( promoteShared && program->promoteToBuiltin ) {
-                if ( canShareModule(program) ) {
-                    program->thisModule->promoteToBuiltin(access, mod.requireName);
-                } else {
-                    return program;
-                }
-            }
-            addNewModules(libGroup, program);
-        }
-        return nullptr;
     }
 
     ProgramPtr parseDaScriptWithPrerequisits ( const string & fileName,
@@ -2133,16 +2139,15 @@ namespace das {
         if ( auto failed = checkModuleNamesUnique(walk.req, logs) ) {
             return failed;
         }
-        if ( auto failed = parseRequiredModules(walk.req, access, logs, libGroup, policies, false) ) {
-            return failed;
-        }
+        auto errors = compileModules(walk.req, access, logs, libGroup, policies, false);
+        if ( !errors.empty() ) return programWithErrors(errors);
         return parseDaScriptNoInfer(fileName, modName, access, logs, libGroup, policies.export_all, false, policies);
     }
 
     static recursive_mutex g_requireModuleNowMutex;
 
-    static void logProgramErrors ( const ProgramPtr & program, TextWriter & logs ) {
-        for ( auto & err : program->errors ) {
+    static void logErrors ( const vector<Error> & errors, TextWriter & logs ) {
+        for ( auto & err : errors ) {
             logs << err.at.describe() << ": " << err.what << "\n";
             if ( !err.extra.empty() ) logs << err.extra << "\n";
         }
@@ -2183,11 +2188,11 @@ namespace das {
             string fileModName;
             bool ok = true;
             if ( auto failed = addDefaultDependencies(info.fileName, walk, access, logs, libGroup, policies, false) ) {
-                logProgramErrors(failed, logs);
+                logErrors(failed->errors, logs);
                 ok = false;
             } else if ( !getPrerequisits(info.fileName, access, fileModName, walk.req, walk.missing, walk.circular, walk.notAllowed, chain,
                     walk.dependencies, walk.namelessReq, walk.namelessMismatches, libGroup, nullptr, 1, !policies.ignore_shared_modules) ) {
-                logProgramErrors(reportPrerequisitesErrors(info.fileName, walk.missing, walk.circular, walk.notAllowed, walk.namelessMismatches, libGroup, policies), logs);
+                logErrors(reportPrerequisitesErrors(info.fileName, walk.missing, walk.circular, walk.notAllowed, walk.namelessMismatches, libGroup, policies)->errors, logs);
                 ok = false;
             } else if ( !verifyModuleNamesUnique(walk.req, logs) ) {
                 ok = false;
@@ -2197,29 +2202,19 @@ namespace das {
                 ok = false;
             }
             if ( ok ) {
+                auto target = info;
+                target.moduleName = modName;
+                target.requireName = requireName;
+                walk.req.push_back(target);
                 disableSerializationOnDebugger(walk.req, stream);
-                if ( auto failed = parseRequiredModules(walk.req, access, logs, libGroup, policies, true, stream) ) {
-                    logProgramErrors(failed, logs);
-                    ok = false;
-                }
-            }
-            if ( ok ) {
-                auto program = parseDaScriptEx(info.fileName, modName, access, logs, libGroup, true, true, policies, true, stream);
-                if ( program->failed() ) {
-                    logProgramErrors(program, logs);
-                } else if ( !program->promoteToBuiltin ) {
+                auto errors = compileModules(walk.req, access, logs, libGroup, policies, true, false, stream);
+                auto mod = libGroup.findModule(modName);
+                if ( !errors.empty() ) {
+                    logErrors(errors, logs);
+                } else if ( !mod || !mod->promoted ) {
                     logs << "require_module_now: module '" << requireName << "' is not shared - a module required after the walk needs `module " << modName << " shared`\n";
-                } else if ( !canShareModule(program) ) {
-                    logProgramErrors(program, logs);
                 } else {
-                    if ( program->thisModule->name.empty() ) {
-                        program->library.renameModule(program->thisModule.get(), modName);
-                        program->thisModule->wasParsedNameless = true;
-                    }
-                    program->thisModule->fileName = info.fileName;
-                    program->thisModule->promoteToBuiltin(access, requireName);
-                    result = program->thisModule.get();
-                    addNewModules(libGroup, program);
+                    result = mod;
                     if ( stream.write != nullptr
                         && (!stream.read || stream.read->failed || stream.read->resumedCorrupt != 0) ) {
                         writebackModules(libGroup, stream.write);
@@ -2283,7 +2278,8 @@ namespace das {
         if ( auto failed = checkModuleNamesUnique(walk.req, logs) ) {
             return failed;
         }
-        return parseRequiredModules(walk.req, access, logs, libGroup, policies, true);
+        auto errors = compileModules(walk.req, access, logs, libGroup, policies, true);
+        return errors.empty() ? nullptr : programWithErrors(errors);
     }
 
     static const char * refuseBuiltModuleName ( const string & name, ModuleGroup & libGroup ) {
@@ -2351,6 +2347,7 @@ namespace das {
         vector<FileInfo *> chain;
         uint64_t preqT = 0;
         string modName;
+        auto prereqOptions = detectPrereqOptions(fileName, access);
         if ( auto failed = addDefaultDependencies(fileName, walk, access, logs, libGroup, policies, true) ) {
             return failed;
         }
@@ -2372,9 +2369,10 @@ namespace das {
                 }
             }
             // src/ast/ARCHITECTURE_SHARED.md#shared-promotion
-            if ( auto failed = parseRequiredModules(walk.req, access, logs, libGroup, policies, !policies.no_optimizations || policies.promote_shared_unoptimized, stream) ) {
-                return failed;
-            }
+            bool promoteShared = !policies.no_optimizations || policies.promote_shared_unoptimized;
+            bool logDag = hasOption(prereqOptions, PrereqOptions::log_compile_dag);
+            auto errors = compileModules(walk.req, access, logs, libGroup, policies, promoteShared, logDag, stream);
+            if ( !errors.empty() ) return programWithErrors(errors);
             if ( stream.read && !policies.serialize_main_module ) stream.read->seenNewModule = true;
             auto res = parseDaScriptEx(fileName, modName, access, logs, libGroup, exportAll, false, policies, true, stream);
             compile_gc_collect.prog = res.get();
@@ -2410,13 +2408,8 @@ namespace das {
             return res;
         } else {
             auto res = reportPrerequisitesErrors(fileName, walk.missing, walk.circular, walk.notAllowed, walk.namelessMismatches, libGroup, policies);
-            if ( auto fi = access->getFileInfo(fileName) ) {
-                const char * src = nullptr;
-                uint32_t len = 0;
-                fi->getSourceAndLength(src, len);
-                if ( src && detectOptionLogRequire(src, len) ) {
-                    logRequireDependencyGraph(fileName, access, modName, libGroup, logs);
-                }
+            if ( hasOption(prereqOptions, PrereqOptions::log_require) ) {
+                logRequireDependencyGraph(fileName, access, modName, libGroup, logs);
             }
             return res;
         }
