@@ -699,10 +699,8 @@ def private run_split_codegen(prog : Program?; ctx : Context?; funcs : array<Fun
         let lto_triple = triple_owned ? LLVMGetDefaultTargetTriple() : (empty(target_triple) ? host_triple : target_triple)
         let machine = default_target_cpu_features(jit_target, use_host_cpu)
         for (p, i in g_split_parts, count()) {
-            LLVMSetTarget(p.mod, lto_triple)   // lld's LTO backend reads the MODULE triple (normal emission gets it from the TargetMachine)
-            stamp_target_attrs(p.mod, machine.cpu, machine.features)
             let bc = split_part_bitcode_path(p.obj)
-            if (LLVMWriteBitcodeToFile(p.mod, bc) != 0) {
+            if (!write_lto_bitcode(p.mod, lto_triple, machine, bc)) {
                 reset_jit_globals_after_failure()
                 panic("LLVM JIT: LTO probe - can't write bitcode {bc}")
             }
@@ -1031,6 +1029,8 @@ def public run_jit(prog : Program?; var ctx : Context?; cli_opts : JitCliOptions
             phase_tm = ref_time_ticks()
             if (compile_only) {
                 to_log(LOG_INFO, "LLVM JIT: compile-only - module built, optimized and verified; no artifact written, nothing installed\n")
+            } elif (emit_aot_object && g_env_jit.jit_aot_lto) {
+                emit_failed ||= !emit_object_bitcode(jit_target, g_mod, output_path, use_host_cpu)
             } elif (emit_aot_object) {
                 emit_failed ||= !emit_object_only(jit_target, g_mod, output_path, use_host_cpu)
             } elif (gen_lib) {

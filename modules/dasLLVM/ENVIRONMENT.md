@@ -19,6 +19,7 @@ Loaded once at context init into `g_env_jit`. The force-features pair exists to 
 | Variable | Type | Default | Effect |
 |---|---|---|---|
 | `DAS_JIT_PROBE_LTO` | flag | off | Split-JIT LTO probe: partitions emit bitcode and the link runs lld LTO (pass /opt:lldlto=2 plus the CRT /LIBPATHs via --jit-linker-string). Dev instrument for measuring cross-module-inlining recovery; needs --jit-split-modules + --jit-obj-cache=0, announces itself, and folds into the cache keys so a probe artifact never serves a normal run. |
+| `DAS_JIT_AOT_LTO` | flag | off | AOT objects (jit_emit_object) hold LLVM IR instead of machine code, for a host whose link runs LTO; the host linker must read the IR of this LLVM version. |
 | `DAS_JIT_DUMP_HASHES` | flag | off | Split-JIT key forensics: log every (partition, mangled name, aot hash) the obj-cache chain folds. Diff two runs to locate WHERE a key diverged - distinguishes a changed hash from a changed fold order. |
 | `DAS_JIT_X64_FORCE_FEATURES` | text | unset | Comma-separated x64 CPU features to force on (e.g. avx2,f16c), bypassing detection; LLVM target-feature spellings. Also satisfies cpu_supports-based tune eligibility. Executing a forced instruction the host lacks is an illegal instruction, not a diagnostic. |
 | `DAS_JIT_ARM64_FORCE_FEATURES` | text | unset | The arm64 twin (e.g. dotprod,i8mm). |
