@@ -221,6 +221,7 @@ namespace das {
             program->setUsed(f, false);
             func->callCaptureString = false;
             func->hasStringBuilder = false;
+            func->nestsCompile = false;
             DAS_ASSERTF(!func->builtIn, "visitor should never call 'visit' on builtin function at top level.");
         }
         virtual FunctionPtr visit(Function * that) override {
@@ -264,6 +265,7 @@ namespace das {
             Visitor::preVisit(addr);
             if ( !addr->func ) return;
             noteRtti(addr->func);
+            if ( func && addr->func->nestsCompile ) func->nestsCompile = true;
             if (builtInDependencies || !addr->func->builtIn) {
                 useFunction(addr->func);
             }
@@ -292,6 +294,7 @@ namespace das {
             if ( func && call->func->captureString ) {
                 func->callCaptureString = true;
             }
+            if ( func && call->func->nestsCompile ) func->nestsCompile = true;
             if (builtInDependencies || !call->func->builtIn) {
                 useFunction(call->func);
             }
@@ -376,6 +379,10 @@ namespace das {
         visit(vis);
         vis.markUsedFunctions(library, false, true, thisModule.get());
         vis.markVarsUsed(library, false);
+        thisModule->macroNestsCompile = false;
+        for ( auto & st : functionStates ) {
+            if ( st.second.used && st.first->nestsCompile ) thisModule->macroNestsCompile = true;
+        }
     }
 
     void Program::markExecutableSymbolUse(TextWriter * logs) {

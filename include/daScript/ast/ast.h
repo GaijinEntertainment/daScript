@@ -848,6 +848,7 @@ namespace das
         FunctionPtr setCaptureString();
         FunctionPtr setTempStringResult();
         FunctionPtr setNoReturn();
+        FunctionPtr setNestsCompile();
         FunctionPtr setNoDiscard();
         FunctionPtr setNeedRtti();
         FunctionPtr setDeprecated(const string & message);
@@ -984,6 +985,7 @@ namespace das
                 bool    unsafeGenerator : 1;         // src/ast/ARCHITECTURE_INFER.md#generator-unsafe-block
                 bool    noReturn : 1;
                 bool    needRtti : 1;
+                bool    nestsCompile : 1;     // src/ast/ARCHITECTURE_COMPILE_MODULES.md#deadlock-prevention
             };
             uint32_t moreFlags2 = 0;
         };
@@ -1238,6 +1240,7 @@ namespace das
     public:
         smart_ptr<Context>                          macroContext;
         bool                                        frozen = false;
+        bool                                        macroNestsCompile = false;  // src/ast/ARCHITECTURE_COMPILE_MODULES.md#deadlock-prevention
         safebox<TypeDecl, TypeDeclPtr>                           aliasTypes;
         das_insert_only_hash_map<uint64_t, Annotation *>    handleTypes;
         safebox<Structure, StructurePtr>             structures;

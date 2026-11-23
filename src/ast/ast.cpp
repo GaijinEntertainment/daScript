@@ -1031,6 +1031,11 @@ namespace das {
         return this;
     }
 
+    FunctionPtr Function::setNestsCompile() {
+        nestsCompile = true;
+        return this;
+    }
+
     FunctionPtr Function::setNoDiscard() {
         nodiscard = true;
         return this;
