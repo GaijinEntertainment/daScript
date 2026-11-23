@@ -60,7 +60,7 @@ namespace das
             return context.code->makeNode<SimNode_CloneRefValueT<string>>(at, l, r);
         }
         static void jit_clone_string ( void * dst, const void * src ) { *(string*)dst = *(const string*)src; }
-        virtual void * jitGetClone() const override { return (void *) &jit_clone_string; }
+        virtual JitTarget jitGetClone() const override { return jit_target<&jit_clone_string>(); }
     };
 
     template <typename OT>
@@ -147,7 +147,7 @@ namespace das
             return context.code->makeNode<SimNode_CloneRefValueT<TT>>(at, l, r);
         }
         static void jit_clone ( void * dst, const void * src ) { *(TT*)dst = *(const TT*)src; }
-        static void * jitGetClone () { return (void *) &jit_clone; }
+        static JitTarget jitGetClone () { return jit_target<&jit_clone>(); }
     };
 
     template <typename TT>
@@ -155,7 +155,7 @@ namespace das
         static __forceinline SimNode * simulateClone ( Context &, const LineInfo &, SimNode *, SimNode * ) {
             return nullptr;
         }
-        static void * jitGetClone () { return nullptr; }
+        static JitTarget jitGetClone () { return {}; }
     };
 
     template <typename FuncT, FuncT fn> struct CallProperty;
@@ -337,7 +337,7 @@ namespace das
         virtual SimNode * simulateClone ( Context & context, const LineInfo & at, SimNode * l, SimNode * r ) const override {
             return GenCloneNode<OT>::simulateClone(context,at,l,r);
         }
-        virtual void * jitGetClone() const override { return GenCloneNode<OT>::jitGetClone(); }
+        virtual JitTarget jitGetClone() const override { return GenCloneNode<OT>::jitGetClone(); }
     };
 
     template <typename OT, bool is_smart>
@@ -375,7 +375,7 @@ namespace das
         virtual SimNode* simulateGetNew(Context& context, const LineInfo& at) const override {
             return context.code->makeNode<SimNode_NewHandle<ManagedType, is_smart>>(at);
         }
-        virtual void * jitGetNew() const override { return (void *) &JitManagedStructure<ManagedType,is_smart>::jit_new; }
+        virtual JitTarget jitGetNew() const override { return jit_target<&JitManagedStructure<ManagedType,is_smart>::jit_new>(); }
     };
 
     template <typename OT>
@@ -389,7 +389,7 @@ namespace das
             return context.code->makeNode<SimNode_DeleteHandlePtr<ManagedType, is_smart>>(at, sube, count,
                 context.code->allocateName("type<"+this->describe()+">"));
         }
-        virtual void * jitGetDelete() const override { return (void *) &JitManagedStructure<ManagedType,is_smart>::jit_delete; }
+        virtual JitTarget jitGetDelete() const override { return jit_target<&JitManagedStructure<ManagedType,is_smart>::jit_delete>(); }
     };
 
     template <typename OT>
@@ -407,8 +407,8 @@ namespace das
             return context.code->makeNode<SimNode_DeleteHandlePtr<ManagedType,is_smart>>(at,sube,count,
                 context.code->allocateName("type<"+this->describe()+">"));
         }
-        virtual void * jitGetNew() const override { return (void *) &JitManagedStructure<ManagedType,is_smart>::jit_new; }
-        virtual void * jitGetDelete() const override { return (void *) &JitManagedStructure<ManagedType,is_smart>::jit_delete; }
+        virtual JitTarget jitGetNew() const override { return jit_target<&JitManagedStructure<ManagedType,is_smart>::jit_new>(); }
+        virtual JitTarget jitGetDelete() const override { return jit_target<&JitManagedStructure<ManagedType,is_smart>::jit_delete>(); }
     };
 
     template <typename TT, typename = void>
@@ -530,44 +530,44 @@ namespace das
         virtual SimNode * simulateGetIterator ( Context & context, const LineInfo & at, SimNode * rv ) const override {
             return context.code->makeNode<SimNode_AnyIterator<VectorType,StdVectorIterator<VectorType>>>(at, rv);
         }
-        virtual void * jitGetEach () const override {
+        static void jitEach ( Sequence * out, void * pVec, Context * context, LineInfoArg * at ) {
+            using VectorIterator = StdVectorIterator<VectorType>;
+            char * iter = context->allocateIterator(sizeof(VectorIterator), "vector<> iterator", at);
+            new (iter) VectorIterator((VectorType *)pVec, at);
+            out->iter = (Iterator *) iter;
+        }
+        static char * jitAtInt ( void * pVec, int32_t index, Context * context, LineInfoArg * at ) {
+            auto & vec = *(VectorType *)pVec;
+            uint32_t size = uint32_t(vec.size());
+            if ( uint32_t(index)>=size ) {
+                context->throw_error_at(at, "vector index out of range, %d of %u", index, size);
+            }
+            return (char *) &vec[uint32_t(index)];
+        }
+        static char * jitAtUInt ( void * pVec, uint32_t index, Context * context, LineInfoArg * at ) {
+            auto & vec = *(VectorType *)pVec;
+            uint32_t size = uint32_t(vec.size());
+            if ( index>=size ) {
+                context->throw_error_at(at, "vector index out of range, %u of %u", index, size);
+            }
+            return (char *) &vec[index];
+        }
+        virtual JitTarget jitGetEach () const override {
             if constexpr ( hasJitVectorEach<VectorType>::value ) {
-                return (void *) +[] ( Sequence * out, void * pVec, Context * context, LineInfoArg * at ) {
-                    using VectorIterator = StdVectorIterator<VectorType>;
-                    char * iter = context->allocateIterator(sizeof(VectorIterator), "vector<> iterator", at);
-                    new (iter) VectorIterator((VectorType *)pVec, at);
-                    out->iter = (Iterator *) iter;
-                };
+                return jit_target<&jitEach>();
             } else {
-                return nullptr;
+                return {};
             }
         }
-        virtual void * jitGetAt ( Type indexType ) const override {
+        virtual JitTarget jitGetAt ( Type indexType ) const override {
             if constexpr ( hasJitIntIndex<VectorType>::value ) {
                 switch ( indexType ) {
-                case Type::tInt:
-                    return (void *) +[] ( void * pVec, int32_t index, Context * context, LineInfoArg * at ) -> char * {
-                        auto & vec = *(VectorType *)pVec;
-                        uint32_t size = uint32_t(vec.size());
-                        if ( uint32_t(index)>=size ) {
-                            context->throw_error_at(at, "vector index out of range, %d of %u", index, size);
-                        }
-                        return (char *) &vec[uint32_t(index)];
-                    };
-                case Type::tUInt:
-                    return (void *) +[] ( void * pVec, uint32_t index, Context * context, LineInfoArg * at ) -> char * {
-                        auto & vec = *(VectorType *)pVec;
-                        uint32_t size = uint32_t(vec.size());
-                        if ( index>=size ) {
-                            context->throw_error_at(at, "vector index out of range, %u of %u", index, size);
-                        }
-                        return (char *) &vec[index];
-                    };
-                default:
-                    return nullptr;
+                case Type::tInt:    return jit_target<&jitAtInt>();
+                case Type::tUInt:   return jit_target<&jitAtUInt>();
+                default:            return {};
                 }
             } else {
-                return nullptr;
+                return {};
             }
         }
         virtual void walk ( DataWalker & walker, void * vec ) override {
@@ -850,7 +850,7 @@ namespace das
             return context.code->makeNode<SimNode_Set<OT>>(at, l, r);
         }
         static void jit_clone_value ( void * dst, const void * src ) { *(OT*)dst = *(const OT*)src; }
-        virtual void * jitGetClone() const override { return (void *) &jit_clone_value; }
+        virtual JitTarget jitGetClone() const override { return jit_target<&jit_clone_value>(); }
         virtual uint64_t getOwnSemanticHash ( HashBuilder & hb, das_set<Structure *> & dep, das_set<Annotation *> & adep ) const override {
             hb.updateString(getMangledName());
             valueType->getOwnSemanticHash(hb, dep, adep);

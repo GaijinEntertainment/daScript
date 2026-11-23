@@ -244,22 +244,21 @@ namespace das {
         virtual bool isIndexable ( const TypeDeclPtr & decl ) const override {
             return decl->isIndex();
         }
-        virtual void * jitGetAt ( Type indexType ) const override {
+        static char * jitAtInt ( void * pMat, int32_t row, Context * context, LineInfoArg * at ) {
+            auto & mat = *(Matrix<VecT,RowC> *)pMat;
+            if ( uint32_t(row)>=RowC ) context->throw_error_at(at, "matrix index out of range %d", row);
+            return (char *) &mat.m[uint32_t(row)];
+        }
+        static char * jitAtUInt ( void * pMat, uint32_t row, Context * context, LineInfoArg * at ) {
+            auto & mat = *(Matrix<VecT,RowC> *)pMat;
+            if ( row>=RowC ) context->throw_error_at(at, "matrix index out of range %u", row);
+            return (char *) &mat.m[row];
+        }
+        virtual JitTarget jitGetAt ( Type indexType ) const override {
             switch ( indexType ) {
-            case Type::tInt:
-                return (void *) +[] ( void * pMat, int32_t row, Context * context, LineInfoArg * at ) -> char * {
-                    auto & mat = *(Matrix<VecT,RowC> *)pMat;
-                    if ( uint32_t(row)>=RowC ) context->throw_error_at(at, "matrix index out of range %d", row);
-                    return (char *) &mat.m[uint32_t(row)];
-                };
-            case Type::tUInt:
-                return (void *) +[] ( void * pMat, uint32_t row, Context * context, LineInfoArg * at ) -> char * {
-                    auto & mat = *(Matrix<VecT,RowC> *)pMat;
-                    if ( row>=RowC ) context->throw_error_at(at, "matrix index out of range %u", row);
-                    return (char *) &mat.m[row];
-                };
-            default:
-                return nullptr;
+            case Type::tInt:    return jit_target<&jitAtInt>();
+            case Type::tUInt:   return jit_target<&jitAtUInt>();
+            default:            return {};
             }
         }
         virtual TypeDeclPtr makeIndexType ( ExpressionPtr, ExpressionPtr idx ) const override {

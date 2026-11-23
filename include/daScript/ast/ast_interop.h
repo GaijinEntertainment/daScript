@@ -25,8 +25,6 @@ namespace das
         }
     };
 
-    struct JitTarget { void * address; const char * linkName; };
-
     template  <typename FuncT, typename SimNodeT, typename FuncArgT>
     class ExternalFn : public ExternalFnBase {
         static_assert ( is_base_of<SimNode_CallBase, SimNodeT>::value, "only call-based nodes allowed" );
@@ -88,6 +86,7 @@ namespace das
             : BuiltInFunction(name,cppName) {
             this->callBased = true;
             this->interopFn = true;
+            this->builtinLinkName = linker_name_of<func>();
             constructInterop(makeBuiltinArgs<RetT, Args...>(lib));
         }
         virtual SimNode * makeSimNode ( Context & context, const vector<ExpressionPtr> & ) override {
@@ -145,6 +144,7 @@ namespace das
             this->isTypeConstructor = true;
             this->copyOnReturn = true;
             this->moveOnReturn = true;
+            this->builtinLinkName = linker_name_of<&placementNewFunc>();
             construct(makeBuiltinArgs<CType,Args...>(lib));
         }
         virtual SimNode * makeSimNode ( Context & context, const vector<ExpressionPtr> & ) override {
@@ -170,6 +170,7 @@ namespace das
             this->modifyExternal = true;
             this->invoke = true;
             this->jitContextAndLineInfo = true; // we need context and line info for usingFunc
+            this->builtinLinkName = linker_name_of<&usingFunc>();
             vector<TypeDeclPtr> args = makeBuiltinArgs<void,Args...>(lib);
             auto argT = makeType<CType>(lib);
             if ( !argT->canCopy() && !argT->canMove() ) {

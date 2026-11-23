@@ -104,6 +104,14 @@ const char * linker_name_of () {
 #endif
 }
 
+// a JIT-callable function: its address for a call through a slot, its symbol for a call by name
+struct JitTarget { void * address = nullptr; const char * linkName = nullptr; };
+
+template <auto F>
+JitTarget jit_target () {
+    return { (void *) F, linker_name_of<F>() };
+}
+
 template <typename RetT>
 RetT jit_stubbed_call () {
     void * volatile no_fn = nullptr;

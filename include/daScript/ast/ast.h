@@ -552,11 +552,11 @@ namespace das
         // factory
         virtual void * factory () const { return nullptr; }
         // new, delete, and clone, jit versions
-        virtual void * jitGetNew () const { return nullptr; }
-        virtual void * jitGetDelete () const { return nullptr; }
-        virtual void * jitGetClone () const { return nullptr; }
-        virtual void * jitGetEach () const { return nullptr; }
-        virtual void * jitGetAt ( Type /*indexType*/ ) const { return nullptr; }
+        virtual JitTarget jitGetNew () const { return {}; }
+        virtual JitTarget jitGetDelete () const { return {}; }
+        virtual JitTarget jitGetClone () const { return {}; }
+        virtual JitTarget jitGetEach () const { return {}; }
+        virtual JitTarget jitGetAt ( Type /*indexType*/ ) const { return {}; }
         uint64_t ownSemanticHash = 0;
     };
 

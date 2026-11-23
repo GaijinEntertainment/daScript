@@ -379,26 +379,29 @@ class public CollectExternVisitor : AstVisitor {
     }
 
     def register_new_from_annotation(name : DllName; ann : TypeAnnotation?) {
+        let global_var = LLVMGetNamedGlobal(g_mod, name.glob())
+        if (global_var == null) return
         let ann_ptr = get_annotation(ann)
         var call_args = array<LLVMValueRef>(ann_ptr)
         let fn_ptr = LLVMBuildCall2(builder, c_get_jit_new_type, c_get_jit_new, call_args, "")
-        let global_var = LLVMGetNamedGlobal(g_mod, name.glob())
         LLVMBuildStore(builder, fn_ptr, global_var)
     }
 
     def register_delete_from_annotation(name : DllName; ann : TypeAnnotation?) {
+        let global_var = LLVMGetNamedGlobal(g_mod, name.glob())
+        if (global_var == null) return
         let ann_ptr = get_annotation(ann)
         var call_args = array<LLVMValueRef>(ann_ptr)
         let fn_ptr = LLVMBuildCall2(builder, c_get_jit_delete_type, c_get_jit_delete, call_args, "")
-        let global_var = LLVMGetNamedGlobal(g_mod, name.glob())
         LLVMBuildStore(builder, fn_ptr, global_var)
     }
 
     def register_clone_from_annotation(name : DllName; ann : TypeAnnotation?) {
+        let global_var = LLVMGetNamedGlobal(g_mod, name.glob())
+        if (global_var == null) return
         let ann_ptr = get_annotation(ann)
         var call_args = array<LLVMValueRef>(ann_ptr)
         let fn_ptr = LLVMBuildCall2(builder, c_get_jit_clone_type, c_get_jit_clone, call_args, "")
-        let global_var = LLVMGetNamedGlobal(g_mod, name.glob())
         LLVMBuildStore(builder, fn_ptr, global_var)
     }
 
