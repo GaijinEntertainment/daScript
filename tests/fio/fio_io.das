@@ -17,12 +17,7 @@ require daslib/fio
 let BIG = int64(0x80000000) + 65536l   // just past the int32 wrap
 let PROBE_STEP = int64(0x2000000)      // spot-check every 32 MiB — full compare would double the cost
 
-// portable probe path: temp_directory + path_join (cwd as a last resort — never a bare "/name")
-def private big_io_path(name : string) : string {
-    var terr : string
-    let tmp = temp_directory(terr)
-    return path_join(empty(tmp) ? "." : tmp, name)
-}
+def private big_io_path(name : string) : string => path_join(test_temp_dir(), name)
 
 [test(description = "long_fwrite, long_fread and fseek work past 2 GiB, while the int32 fwrite and fread panic there", timeout = 1200)]
 def test_big_write_read(t : T?) {
@@ -33,6 +28,7 @@ def test_big_write_read(t : T?) {
     t |> run("long_fwrite/long_fread past 2 GiB") @@(t : T?) {
         let path = big_io_path("das_big_io_test.bin")
         var buf : array<uint8>
+        buf |> reserve(BIG)
         buf |> resize(BIG)
         for (k in range64(0l, BIG / PROBE_STEP)) {
             buf[k * PROBE_STEP] = uint8(k + 1l)
@@ -61,6 +57,7 @@ def test_big_write_read(t : T?) {
     t |> run("int32 fwrite/fread panic past 2 GiB") @@(t : T?) {
         let path = big_io_path("das_big_io_panic.bin")
         var buf : array<uint8>
+        buf |> reserve(BIG)
         buf |> resize(BIG)
         var wrote_panicked = false
         fopen(path, "wb") $(f) {
