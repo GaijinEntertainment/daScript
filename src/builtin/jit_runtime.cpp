@@ -911,6 +911,10 @@ extern "C" {
         JIT_TABLE_FUNCTION(&jit_table_at);
     }
 
+    const char * das_get_jit_table_at_link_name ( int32_t baseType, Context * context, LineInfoArg * at ) {
+        JIT_TABLE_FUNCTION_EX(&jit_table_at, get_builtin_link_name);
+    }
+
     template <typename KeyType>
     bool jit_table_erase ( Table * tab, KeyType key, int32_t valueTypeSize, Context * context, LineInfoArg * at ) {
         if ( tab->isLocked() ) context->throw_error_at(at, "can't erase from locked table");
@@ -921,6 +925,10 @@ extern "C" {
 
     void * das_get_jit_table_erase ( int32_t baseType, Context * context, LineInfoArg * at ) {
         JIT_TABLE_FUNCTION(&jit_table_erase);
+    }
+
+    const char * das_get_jit_table_erase_link_name ( int32_t baseType, Context * context, LineInfoArg * at ) {
+        JIT_TABLE_FUNCTION_EX(&jit_table_erase, get_builtin_link_name);
     }
 
     template <typename KeyType>
@@ -938,6 +946,10 @@ extern "C" {
         JIT_TABLE_FUNCTION(&jit_table_find);
     }
 
+    const char * das_get_jit_table_find_link_name ( int32_t baseType, Context * context, LineInfoArg * at ) {
+        JIT_TABLE_FUNCTION_EX(&jit_table_find, get_builtin_link_name);
+    }
+
     // String-key at that takes a precomputed hash, so the JIT emits the hash inline (foldable to an
     // immediate for a constant key) instead of recomputing it in C++. String-only — no per-baseType
     // matrix; the grow fallback for the inline large-string at (string find is fully inline).
@@ -953,6 +965,10 @@ extern "C" {
         return (void*)&jit_string_table_at_with_hash;
     }
 
+    const char * das_get_jit_string_table_at_with_hash_link_name ( ) {
+        return linker_name_of<&jit_string_table_at_with_hash>();
+    }
+
     // Insert after the JIT's inline packed find already proved the key absent from a packed
     // table — skips the C++ packed dedup. See TableHash::reserveAfterPackedMiss (which checks
     // the lock itself). String form takes the JIT-computed hash; the non-string template
@@ -966,6 +982,10 @@ extern "C" {
 
     void * das_get_jit_string_table_at_after_packed_miss ( ) {
         return (void*)&jit_string_table_at_after_packed_miss;
+    }
+
+    const char * das_get_jit_string_table_at_after_packed_miss_link_name ( ) {
+        return linker_name_of<&jit_string_table_at_after_packed_miss>();
     }
 
     extern "C" {

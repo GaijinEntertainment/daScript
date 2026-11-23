@@ -315,7 +315,8 @@ def private get_or_create_table_fn(llvm_module : LLVMOpaqueModule?; types : Prim
     return tab_fun
 }
 
-def public get_table_at(g_builder : LLVMOpaqueBuilder?; llvm_module : LLVMOpaqueModule?; t : Type; var types : PrimitiveTypes?) {
+def public get_table_at(g_builder : LLVMOpaqueBuilder?; llvm_module : LLVMOpaqueModule?;
+                        t : Type; var types : PrimitiveTypes?; link_name : string = "") {
     assume fn_ptr = get_jit_table_at(unsafe(reinterpret<int>(t)))
     // int32_t jit_table_at ( Table * tab, KeyType key, int32_t valueTypeSize, Context * context )
     assume at_type = LLVMFunctionType(types.t_int32,   // int32_t result
@@ -326,13 +327,21 @@ def public get_table_at(g_builder : LLVMOpaqueBuilder?; llvm_module : LLVMOpaque
         types.LLVMVoidPtrType(),                          // at
     ))
     let fn_name = DllName(FN_JIT_TABLE_AT(t))
+    if (!empty(link_name)) {
+        var direct = LLVMGetNamedFunction(llvm_module, link_name)
+        if (direct == null) {
+            direct = LLVMAddFunctionWithType(llvm_module, link_name, at_type)
+        }
+        return (direct, at_type)
+    }
     var tab_fun : LLVMOpaqueValue? = get_or_create_table_fn(llvm_module, types, fn_name, at_type, fn_ptr)
     assert(tab_fun != null)
     tab_fun = LLVMBuildLoad2(g_builder, LLVMPointerType(at_type, 0u), tab_fun, "func_at")
     return (tab_fun, at_type)
 }
 
-def public get_table_find(g_builder : LLVMOpaqueBuilder?; llvm_module : LLVMOpaqueModule?; t : Type; var types : PrimitiveTypes?) {
+def public get_table_find(g_builder : LLVMOpaqueBuilder?; llvm_module : LLVMOpaqueModule?;
+                          t : Type; var types : PrimitiveTypes?; link_name : string = "") {
     assume fn_ptr = get_jit_table_find(unsafe(reinterpret<int>(t)))
     // int32_t jit_table_find ( Table * tab, KeyType key, int32_t valueTypeSize, Context * context )
     let find_type = LLVMFunctionType(types.t_int32,   // int32_t result
@@ -342,13 +351,23 @@ def public get_table_find(g_builder : LLVMOpaqueBuilder?; llvm_module : LLVMOpaq
             types.LLVMVoidPtrType()                 // context
             ))
     let fn_name = DllName(FN_JIT_TABLE_FIND(t))
+    if (!empty(link_name)) {
+        var direct = LLVMGetNamedFunction(llvm_module, link_name)
+        if (direct == null) {
+            direct = LLVMAddFunctionWithType(llvm_module, link_name, find_type)
+        }
+        return (direct, find_type)
+    }
     var tab_fun : LLVMOpaqueValue? = get_or_create_table_fn(llvm_module, types, fn_name, find_type, fn_ptr)
     assert(tab_fun != null)
     tab_fun = LLVMBuildLoad2(g_builder, LLVMPointerType(find_type, 0u), tab_fun, "func_find")
     return (tab_fun, find_type)
 }
 
-def public get_string_table_at_with_hash(g_builder : LLVMOpaqueBuilder?; llvm_module : LLVMOpaqueModule?; var types : PrimitiveTypes?) {
+def public get_string_table_at_with_hash(g_builder : LLVMOpaqueBuilder?;
+                                         llvm_module : LLVMOpaqueModule?;
+                                         var types : PrimitiveTypes?;
+                                         link_name : string = "") {
     assume fn_ptr = get_jit_string_table_at_with_hash()
     // int32_t jit_string_table_at_with_hash ( Table * tab, char * key, uint64_t hfn, int32_t valueTypeSize, Context * context, LineInfoArg * at )
     assume at_type = LLVMFunctionType(types.t_int32,   // int32_t result
@@ -360,13 +379,23 @@ def public get_string_table_at_with_hash(g_builder : LLVMOpaqueBuilder?; llvm_mo
         types.LLVMVoidPtrType(),                          // at
     ))
     let fn_name = DllName(FN_JIT_STRING_TABLE_AT_WITH_HASH())
+    if (!empty(link_name)) {
+        var direct = LLVMGetNamedFunction(llvm_module, link_name)
+        if (direct == null) {
+            direct = LLVMAddFunctionWithType(llvm_module, link_name, at_type)
+        }
+        return (direct, at_type)
+    }
     var tab_fun : LLVMOpaqueValue? = get_or_create_table_fn(llvm_module, types, fn_name, at_type, fn_ptr)
     assert(tab_fun != null)
     tab_fun = LLVMBuildLoad2(g_builder, LLVMPointerType(at_type, 0u), tab_fun, "func_at_wh")
     return (tab_fun, at_type)
 }
 
-def public get_string_table_at_after_packed_miss(g_builder : LLVMOpaqueBuilder?; llvm_module : LLVMOpaqueModule?; var types : PrimitiveTypes?) {
+def public get_string_table_at_after_packed_miss(g_builder : LLVMOpaqueBuilder?;
+                                                 llvm_module : LLVMOpaqueModule?;
+                                                 var types : PrimitiveTypes?;
+                                                 link_name : string = "") {
     assume fn_ptr = get_jit_string_table_at_after_packed_miss()
     // int32_t jit_string_table_at_after_packed_miss ( Table*, char* key, uint64_t hfn, int32_t valueTypeSize, Context*, LineInfoArg* )
     assume at_type = LLVMFunctionType(types.t_int32,
@@ -378,6 +407,13 @@ def public get_string_table_at_after_packed_miss(g_builder : LLVMOpaqueBuilder?;
         types.LLVMVoidPtrType(),                          // at
     ))
     let fn_name = DllName(FN_JIT_STRING_TABLE_AT_AFTER_PACKED_MISS())
+    if (!empty(link_name)) {
+        var direct = LLVMGetNamedFunction(llvm_module, link_name)
+        if (direct == null) {
+            direct = LLVMAddFunctionWithType(llvm_module, link_name, at_type)
+        }
+        return (direct, at_type)
+    }
     var tab_fun : LLVMOpaqueValue? = get_or_create_table_fn(llvm_module, types, fn_name, at_type, fn_ptr)
     assert(tab_fun != null)
     tab_fun = LLVMBuildLoad2(g_builder, LLVMPointerType(at_type, 0u), tab_fun, "func_at_apm")
@@ -392,7 +428,8 @@ def public table_header_llvm_type(var _types : PrimitiveTypes?) : LLVMOpaqueType
     return jit_struct_type(type<tuple<data : void?; size : int64; capacity : int64; magic : int; lock : int; flags : int; padAfterFlags : int; keys : void?; hashes : void?; tombstones : int64>>)
 }
 
-def public get_table_erase(g_builder : LLVMOpaqueBuilder?; llvm_module : LLVMOpaqueModule?; t : Type; var types : PrimitiveTypes?) {
+def public get_table_erase(g_builder : LLVMOpaqueBuilder?; llvm_module : LLVMOpaqueModule?;
+                           t : Type; var types : PrimitiveTypes?; link_name : string = "") {
     let fn_name = DllName(FN_JIT_TABLE_ERASE(t))
     assume fn_ptr = get_jit_table_erase(unsafe(reinterpret<int>(t)))
     // bool jit_table_erase ( Table * tab, KeyType key, int32_t valueTypeSize, Context * context, LineInfoArg * at )
@@ -403,6 +440,13 @@ def public get_table_erase(g_builder : LLVMOpaqueBuilder?; llvm_module : LLVMOpa
             types.LLVMVoidPtrType(),                          // context
             types.LLVMVoidPtrType()                           // at
             ))
+    if (!empty(link_name)) {
+        var direct = LLVMGetNamedFunction(llvm_module, link_name)
+        if (direct == null) {
+            direct = LLVMAddFunctionWithType(llvm_module, link_name, erase_type)
+        }
+        return (direct, erase_type)
+    }
     var tab_fun : LLVMOpaqueValue? = get_or_create_table_fn(llvm_module, types, fn_name, erase_type, fn_ptr)
     assert(tab_fun != null)
     tab_fun = LLVMBuildLoad2(g_builder, LLVMPointerType(erase_type, 0u), tab_fun, "func_erase")

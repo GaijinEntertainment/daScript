@@ -179,44 +179,46 @@ namespace detail {
     using TableWrap = ImplWrapCall<false, NeedVectorWrap<decltype(fn)>::value, Fn, fn>;
 }
 
-#define JIT_TABLE_FUNCTION(TAB_FUN) \
+#define JIT_TABLE_FUNCTION_EX(TAB_FUN,GETTER) \
     switch ( baseType ) { \
-        case Type::tBool:           return detail::TableWrap<decltype(TAB_FUN<bool>), TAB_FUN<bool>>::get_builtin_address(); \
-        case Type::tInt8:           return detail::TableWrap<decltype(TAB_FUN<int8_t>), TAB_FUN<int8_t>>::get_builtin_address(); \
-        case Type::tUInt8:          return detail::TableWrap<decltype(TAB_FUN<uint8_t>), TAB_FUN<uint8_t>>::get_builtin_address(); \
-        case Type::tInt16:          return detail::TableWrap<decltype(TAB_FUN<int16_t>), TAB_FUN<int16_t>>::get_builtin_address(); \
-        case Type::tUInt16:         return detail::TableWrap<decltype(TAB_FUN<uint16_t>), TAB_FUN<uint16_t>>::get_builtin_address(); \
-        case Type::tInt64:          return detail::TableWrap<decltype(TAB_FUN<int64_t>), TAB_FUN<int64_t>>::get_builtin_address(); \
-        case Type::tUInt64:         return detail::TableWrap<decltype(TAB_FUN<uint64_t>), TAB_FUN<uint64_t>>::get_builtin_address(); \
-        case Type::tEnumeration:    return detail::TableWrap<decltype(TAB_FUN<int32_t>), TAB_FUN<int32_t>>::get_builtin_address(); \
-        case Type::tEnumeration8:   return detail::TableWrap<decltype(TAB_FUN<int8_t>), TAB_FUN<int8_t>>::get_builtin_address(); \
-        case Type::tEnumeration16:  return detail::TableWrap<decltype(TAB_FUN<int16_t>), TAB_FUN<int16_t>>::get_builtin_address(); \
-        case Type::tEnumeration64:  return detail::TableWrap<decltype(TAB_FUN<int64_t>), TAB_FUN<int64_t>>::get_builtin_address(); \
-        case Type::tInt:            return detail::TableWrap<decltype(TAB_FUN<int32_t>), TAB_FUN<int32_t>>::get_builtin_address(); \
-        case Type::tInt2:           return detail::TableWrap<decltype(TAB_FUN<int2>), TAB_FUN<int2>>::get_builtin_address(); \
-        case Type::tInt3:           return detail::TableWrap<decltype(TAB_FUN<int3>), TAB_FUN<int3>>::get_builtin_address(); \
-        case Type::tInt4:           return detail::TableWrap<decltype(TAB_FUN<int4>), TAB_FUN<int4>>::get_builtin_address(); \
-        case Type::tUInt:           return detail::TableWrap<decltype(TAB_FUN<uint32_t>), TAB_FUN<uint32_t>>::get_builtin_address(); \
-        case Type::tBitfield:       return detail::TableWrap<decltype(TAB_FUN<uint32_t>), TAB_FUN<uint32_t>>::get_builtin_address(); \
-        case Type::tBitfield8:      return detail::TableWrap<decltype(TAB_FUN<uint8_t>), TAB_FUN<uint8_t>>::get_builtin_address(); \
-        case Type::tBitfield16:     return detail::TableWrap<decltype(TAB_FUN<uint16_t>), TAB_FUN<uint16_t>>::get_builtin_address(); \
-        case Type::tBitfield64:     return detail::TableWrap<decltype(TAB_FUN<uint64_t>), TAB_FUN<uint64_t>>::get_builtin_address(); \
-        case Type::tUInt2:          return detail::TableWrap<decltype(TAB_FUN<uint2>), TAB_FUN<uint2>>::get_builtin_address(); \
-        case Type::tUInt3:          return detail::TableWrap<decltype(TAB_FUN<uint3>), TAB_FUN<uint3>>::get_builtin_address(); \
-        case Type::tUInt4:          return detail::TableWrap<decltype(TAB_FUN<uint4>), TAB_FUN<uint4>>::get_builtin_address(); \
-        case Type::tFloat:          return detail::TableWrap<decltype(TAB_FUN<float>), TAB_FUN<float>>::get_builtin_address(); \
-        case Type::tFloat2:         return detail::TableWrap<decltype(TAB_FUN<float2>), TAB_FUN<float2>>::get_builtin_address(); \
-        case Type::tFloat3:         return detail::TableWrap<decltype(TAB_FUN<float3>), TAB_FUN<float3>>::get_builtin_address(); \
-        case Type::tFloat4:         return detail::TableWrap<decltype(TAB_FUN<float4>), TAB_FUN<float4>>::get_builtin_address(); \
-        case Type::tRange:          return detail::TableWrap<decltype(TAB_FUN<range>), TAB_FUN<range>>::get_builtin_address(); \
-        case Type::tURange:         return detail::TableWrap<decltype(TAB_FUN<urange>), TAB_FUN<urange>>::get_builtin_address(); \
-        case Type::tRange64:        return detail::TableWrap<decltype(TAB_FUN<range64>), TAB_FUN<range64>>::get_builtin_address(); \
-        case Type::tURange64:       return detail::TableWrap<decltype(TAB_FUN<urange64>), TAB_FUN<urange64>>::get_builtin_address(); \
-        case Type::tString:         return detail::TableWrap<decltype(TAB_FUN<char *>), TAB_FUN<char *>>::get_builtin_address(); \
-        case Type::tDouble:         return detail::TableWrap<decltype(TAB_FUN<double>), TAB_FUN<double>>::get_builtin_address(); \
-        case Type::tPointer:        return detail::TableWrap<decltype(TAB_FUN<void *>), TAB_FUN<void *>>::get_builtin_address(); \
+        case Type::tBool:           return detail::TableWrap<decltype(TAB_FUN<bool>), TAB_FUN<bool>>::GETTER(); \
+        case Type::tInt8:           return detail::TableWrap<decltype(TAB_FUN<int8_t>), TAB_FUN<int8_t>>::GETTER(); \
+        case Type::tUInt8:          return detail::TableWrap<decltype(TAB_FUN<uint8_t>), TAB_FUN<uint8_t>>::GETTER(); \
+        case Type::tInt16:          return detail::TableWrap<decltype(TAB_FUN<int16_t>), TAB_FUN<int16_t>>::GETTER(); \
+        case Type::tUInt16:         return detail::TableWrap<decltype(TAB_FUN<uint16_t>), TAB_FUN<uint16_t>>::GETTER(); \
+        case Type::tInt64:          return detail::TableWrap<decltype(TAB_FUN<int64_t>), TAB_FUN<int64_t>>::GETTER(); \
+        case Type::tUInt64:         return detail::TableWrap<decltype(TAB_FUN<uint64_t>), TAB_FUN<uint64_t>>::GETTER(); \
+        case Type::tEnumeration:    return detail::TableWrap<decltype(TAB_FUN<int32_t>), TAB_FUN<int32_t>>::GETTER(); \
+        case Type::tEnumeration8:   return detail::TableWrap<decltype(TAB_FUN<int8_t>), TAB_FUN<int8_t>>::GETTER(); \
+        case Type::tEnumeration16:  return detail::TableWrap<decltype(TAB_FUN<int16_t>), TAB_FUN<int16_t>>::GETTER(); \
+        case Type::tEnumeration64:  return detail::TableWrap<decltype(TAB_FUN<int64_t>), TAB_FUN<int64_t>>::GETTER(); \
+        case Type::tInt:            return detail::TableWrap<decltype(TAB_FUN<int32_t>), TAB_FUN<int32_t>>::GETTER(); \
+        case Type::tInt2:           return detail::TableWrap<decltype(TAB_FUN<int2>), TAB_FUN<int2>>::GETTER(); \
+        case Type::tInt3:           return detail::TableWrap<decltype(TAB_FUN<int3>), TAB_FUN<int3>>::GETTER(); \
+        case Type::tInt4:           return detail::TableWrap<decltype(TAB_FUN<int4>), TAB_FUN<int4>>::GETTER(); \
+        case Type::tUInt:           return detail::TableWrap<decltype(TAB_FUN<uint32_t>), TAB_FUN<uint32_t>>::GETTER(); \
+        case Type::tBitfield:       return detail::TableWrap<decltype(TAB_FUN<uint32_t>), TAB_FUN<uint32_t>>::GETTER(); \
+        case Type::tBitfield8:      return detail::TableWrap<decltype(TAB_FUN<uint8_t>), TAB_FUN<uint8_t>>::GETTER(); \
+        case Type::tBitfield16:     return detail::TableWrap<decltype(TAB_FUN<uint16_t>), TAB_FUN<uint16_t>>::GETTER(); \
+        case Type::tBitfield64:     return detail::TableWrap<decltype(TAB_FUN<uint64_t>), TAB_FUN<uint64_t>>::GETTER(); \
+        case Type::tUInt2:          return detail::TableWrap<decltype(TAB_FUN<uint2>), TAB_FUN<uint2>>::GETTER(); \
+        case Type::tUInt3:          return detail::TableWrap<decltype(TAB_FUN<uint3>), TAB_FUN<uint3>>::GETTER(); \
+        case Type::tUInt4:          return detail::TableWrap<decltype(TAB_FUN<uint4>), TAB_FUN<uint4>>::GETTER(); \
+        case Type::tFloat:          return detail::TableWrap<decltype(TAB_FUN<float>), TAB_FUN<float>>::GETTER(); \
+        case Type::tFloat2:         return detail::TableWrap<decltype(TAB_FUN<float2>), TAB_FUN<float2>>::GETTER(); \
+        case Type::tFloat3:         return detail::TableWrap<decltype(TAB_FUN<float3>), TAB_FUN<float3>>::GETTER(); \
+        case Type::tFloat4:         return detail::TableWrap<decltype(TAB_FUN<float4>), TAB_FUN<float4>>::GETTER(); \
+        case Type::tRange:          return detail::TableWrap<decltype(TAB_FUN<range>), TAB_FUN<range>>::GETTER(); \
+        case Type::tURange:         return detail::TableWrap<decltype(TAB_FUN<urange>), TAB_FUN<urange>>::GETTER(); \
+        case Type::tRange64:        return detail::TableWrap<decltype(TAB_FUN<range64>), TAB_FUN<range64>>::GETTER(); \
+        case Type::tURange64:       return detail::TableWrap<decltype(TAB_FUN<urange64>), TAB_FUN<urange64>>::GETTER(); \
+        case Type::tString:         return detail::TableWrap<decltype(TAB_FUN<char *>), TAB_FUN<char *>>::GETTER(); \
+        case Type::tDouble:         return detail::TableWrap<decltype(TAB_FUN<double>), TAB_FUN<double>>::GETTER(); \
+        case Type::tPointer:        return detail::TableWrap<decltype(TAB_FUN<void *>), TAB_FUN<void *>>::GETTER(); \
         default:                    context->throw_error_at(at, "unsupported key type %s", das_to_string(Type(baseType)).c_str() ); \
     } \
     return nullptr;
+
+#define JIT_TABLE_FUNCTION(TAB_FUN) JIT_TABLE_FUNCTION_EX(TAB_FUN,get_builtin_address)
 
 }

@@ -39,6 +39,11 @@ namespace das {
     void * das_get_jit_table_find ( int32_t baseType, Context * context, LineInfoArg * at );
     void * das_get_jit_string_table_at_with_hash ();
     void * das_get_jit_string_table_at_after_packed_miss ();
+    const char * das_get_jit_table_at_link_name ( int32_t baseType, Context * context, LineInfoArg * at );
+    const char * das_get_jit_table_erase_link_name ( int32_t baseType, Context * context, LineInfoArg * at );
+    const char * das_get_jit_table_find_link_name ( int32_t baseType, Context * context, LineInfoArg * at );
+    const char * das_get_jit_string_table_at_with_hash_link_name ();
+    const char * das_get_jit_string_table_at_after_packed_miss_link_name ();
     void * das_get_jit_str_cat ();
     void * das_get_jit_ast_typedecl ();
     void * das_get_jit_make_block ();

@@ -540,11 +540,13 @@ class public CollectExternVisitor : AstVisitor {
             }
             return
         }
+        let tab_method = LLVMGetNamedGlobal(g_mod, DllName(FN_JIT_TABLE_AT(typ)).glob())
+        if (tab_method == null) {
+            return
+        }
         let null_ptr = LLVMConstPointerNull(types.LLVMVoidPtrType())
         var call_args = array<LLVMValueRef>(types.ConstI32(uint64(typ)), null_ptr, null_ptr)
         let tab_ptr = LLVMBuildCall2(builder, reg_extern_tab_type, tab_at_accessor, call_args, "")
-
-        let tab_method = LLVMGetNamedGlobal(g_mod, DllName(FN_JIT_TABLE_AT(typ)).glob())
         LLVMBuildStore(builder, tab_ptr, tab_method)
     }
 
@@ -566,11 +568,13 @@ class public CollectExternVisitor : AstVisitor {
 
     def add_table_erase_call(index_t : TypeDeclPtr) {
         let typ = table_key_storage_base_type(index_t.firstType)
+        let tab_method = LLVMGetNamedGlobal(g_mod, DllName(FN_JIT_TABLE_ERASE(typ)).glob())
+        if (tab_method == null) {
+            return
+        }
         let null_ptr = LLVMConstPointerNull(types.LLVMVoidPtrType())
         var call_args = array<LLVMValueRef>(types.ConstI32(uint64(typ)), null_ptr, null_ptr)
         let tab_ptr = LLVMBuildCall2(builder, reg_extern_tab_type, tab_erase_accessor, call_args, "")
-
-        let tab_method = LLVMGetNamedGlobal(g_mod, DllName(FN_JIT_TABLE_ERASE(typ)).glob())
         LLVMBuildStore(builder, tab_ptr, tab_method)
     }
 
