@@ -6,7 +6,7 @@
 // however in more complex cases you can still use addExtern/addField/addProperty
 // and declare everything manually
 //
-// When DAS_AOT_COMPILER is defined, it will bind stubs instead of functions
+// When DAS_AOT_COMPILER is defined, the bound functions have stub bodies (see das_host_call)
 //
 // ** FUNCTIONS **
 // Simple function binding:
@@ -86,57 +86,6 @@
 
 namespace das::detail
 {
-
-template <typename RetT, typename... ArgsT>
-___noinline RetT the_great_asserting_stub(ArgsT...)
-{
-  DAS_ASSERTF(0, "STUB!");
-  if constexpr (!das::is_same_v<RetT, void>)
-  {
-    void *volatile the_null = nullptr;
-    // this way we avoid invoking constructor in case of returning by value, and just crash on nullptr call
-    return reinterpret_cast<RetT (*)()>(the_null)();
-  }
-}
-
-template <typename RetT, typename... ArgsT>
-RetT the_great_empty_stub(ArgsT...)
-{
-  if constexpr (!das::is_same_v<RetT, void>)
-    return RetT();
-}
-
-#define DAS_STUB_IMPL(ASSERT, RET)                         \
-  if constexpr (!das::is_same_v<RET, void>)                \
-  {                                                        \
-    if constexpr (ASSERT)                                  \
-      return das::detail::the_great_asserting_stub<RET>(); \
-    else                                                   \
-      return das::detail::the_great_empty_stub<RET>();     \
-  }                                                        \
-  DAS_ASSERTF(!(ASSERT), "STUB!");
-
-
-template <bool Assert, typename RetT, typename... ArgsT>
-constexpr auto get_stub(RetT (*)(ArgsT...))
-{
-  if constexpr (Assert)
-    return &the_great_asserting_stub<RetT, ArgsT...>;
-  else
-    return &the_great_empty_stub<RetT, ArgsT...>;
-}
-
-template <bool Assert, typename ThisT, typename RetT, typename... ArgsT>
-constexpr auto get_stub(RetT (ThisT::*)(ArgsT...))
-{
-  return get_stub<Assert>(static_cast<RetT (*)(ThisT &, ArgsT...)>(nullptr));
-}
-
-template <bool Assert, typename ThisT, typename RetT, typename... ArgsT>
-constexpr auto get_stub(RetT (ThisT::*)(ArgsT...) const)
-{
-  return get_stub<Assert>(static_cast<RetT (*)(const ThisT &, ArgsT...)>(nullptr));
-}
 
 template <typename FnT, FnT ptr>
 struct FunOverloadWrap
@@ -218,22 +167,6 @@ constexpr auto get_prop_method(R (T::*ptr)() const)
   return ptr;
 }
 
-#ifdef DAS_AOT_COMPILER
-template <bool Assert, bool IsConst, typename ThisT, typename RetT>
-struct CallPropertyStubImpl
-{
-  typedef RetT RetType;
-  enum
-  {
-    ref = das::is_reference<RetType>::value,
-    isConst = IsConst,
-  };
-  static RetT static_call(das::conditional_t<IsConst, const ThisT &, ThisT &>) { DAS_STUB_IMPL(Assert, RetT); }
-};
-#endif
-
-#undef DAS_STUB_IMPL
-
 template <typename T>
 struct GetInvokeResult
 {};
@@ -277,36 +210,67 @@ static inline void write_module_includes(das::TextWriter &tw, const CharT *...pa
 
 } // namespace das::detail
 
-#ifdef DAS_AOT_COMPILER
-template <typename RetT, typename ThisT, RetT (*Fn)(ThisT &)>
-struct das::CallProperty<RetT (*)(ThisT &), Fn> : das::detail::CallPropertyStubImpl<true, das::is_const_v<ThisT>, ThisT, RetT>
-{};
-template <typename RetT, typename ThisT, typename ClassT, RetT (*Fn)(ClassT &)>
-struct das::CallPropertyForType<ThisT, RetT (*)(ClassT &), Fn>
-  : das::detail::CallPropertyStubImpl<true, das::is_const_v<ClassT>, ThisT, RetT>
-{};
-#endif
+namespace das
+{
 
-#ifdef DAS_AOT_COMPILER
-#define DAS_SHOULD_USE_STUBS 1
-#define DAS_FUN_DECL(...)    decltype(&__VA_ARGS__), das::detail::get_stub<true>(decltype (&__VA_ARGS__)())
-#define DAS_PROP_OR_METHOD_DECL_STUB_IMPL(...) \
-  decltype(das::detail::get_stub<true>(__VA_ARGS__)), das::detail::get_stub<true>(decltype(__VA_ARGS__)())
-#define DAS_METHOD_DECL(...) DAS_PROP_OR_METHOD_DECL_STUB_IMPL(&__VA_ARGS__)
-#define DAS_PROP_DECL(...)   DAS_PROP_OR_METHOD_DECL_STUB_IMPL(das::detail::get_prop_method(&__VA_ARGS__))
-#define DAS_PROP_DECL_CONST(...)                                                           \
-  DAS_PROP_OR_METHOD_DECL_STUB_IMPL(das::detail::get_non_const_prop_method(&__VA_ARGS__)), \
-    DAS_PROP_OR_METHOD_DECL_STUB_IMPL(das::detail::get_const_prop_method(&__VA_ARGS__))
-#else
-#define DAS_SHOULD_USE_STUBS 0
-#define DAS_FUN_DECL(...)    decltype(&__VA_ARGS__), (&__VA_ARGS__)
-#define DAS_METHOD_DECL(...) \
-  decltype(das::detail::get_stub<true>(&__VA_ARGS__)), &das::das_call_member<decltype(&__VA_ARGS__), &__VA_ARGS__>::invoke
-#define DAS_PROP_DECL(...) decltype(das::detail::get_prop_method(&__VA_ARGS__)), &__VA_ARGS__
-#define DAS_PROP_DECL_CONST(...)                                                \
-  decltype(das::detail::get_non_const_prop_method(&__VA_ARGS__)), &__VA_ARGS__, \
-    decltype(das::detail::get_const_prop_method(&__VA_ARGS__)), &__VA_ARGS__
-#endif
+// A host function as das binds it: in the AOT compiler the body is a stub, so the compiler links without the host,
+// and the symbol is the same in both builds, so an AOT object calls the host's function by name.
+template <typename FuncT, FuncT fn>
+struct das_host_call;
+
+template <typename R, typename... Args, R (*fn)(Args...)>
+struct das_host_call<R (*)(Args...), fn>
+{
+  static R invoke(Args... args)
+  {
+    if constexpr (DAS_SHOULD_USE_STUBS)
+      return jit_stubbed_call<R>();
+    else
+      return fn(static_cast<Args &&>(args)...);
+  }
+};
+
+template <typename R, typename CC, typename... Args, R (CC::*fn)(Args...)>
+struct das_host_call<R (CC::*)(Args...), fn>
+{
+  static R invoke(CC &self, Args... args)
+  {
+    if constexpr (DAS_SHOULD_USE_STUBS)
+      return jit_stubbed_call<R>();
+    else
+      return (self.*fn)(static_cast<Args &&>(args)...);
+  }
+};
+
+template <typename R, typename CC, typename... Args, R (CC::*fn)(Args...) const>
+struct das_host_call<R (CC::*)(Args...) const, fn>
+{
+  static R invoke(const CC &self, Args... args)
+  {
+    if constexpr (DAS_SHOULD_USE_STUBS)
+      return jit_stubbed_call<R>();
+    else
+      return (self.*fn)(static_cast<Args &&>(args)...);
+  }
+};
+
+// Binds a host function or method through das_host_call. It never folds: a constant call folded in the AOT compiler
+// would run the stub, and folding in only one of the two builds would give them different AOT hashes.
+template <typename FuncT, FuncT fn, bool ValueRet = false>
+inline auto addExternHost(Module &mod, const ModuleLibrary &lib, const char *name, SideEffects seFlags, const char *cppName)
+{
+  using W = das_host_call<FuncT, fn>;
+  auto fnX = [&] {
+    if constexpr (ValueRet)
+      return addExtern<decltype(&W::invoke), &W::invoke, SimNode_ExtFuncCallAndCopyOrMove>(mod, lib, name, seFlags, cppName);
+    else
+      return detail::addExternAutoSelectSimNode<decltype(&W::invoke), &W::invoke>(mod, lib, name, seFlags, cppName);
+  }();
+  fnX->noFolding = true;
+  return fnX;
+}
+
+} // namespace das
 
 #define DAS_MACRO_STRINGIFY3(...) #__VA_ARGS__
 #define DAS_MACRO_STRINGIFY2(...) DAS_MACRO_STRINGIFY3(__VA_ARGS__)
@@ -320,26 +284,29 @@ struct das::CallPropertyForType<ThisT, RetT (*)(ClassT &), Fn>
 #define DAS_METHOD_OVERLOAD_NON_CONST(...) DAS_OVERLOAD_EX(decltype(das::detail::get_non_const_method(&__VA_ARGS__)), &__VA_ARGS__)
 
 // fields/props
+#define DAS_PROP_DECL(...) decltype(das::detail::get_prop_method(&__VA_ARGS__)), &__VA_ARGS__
+#define DAS_PROP_DECL_CONST(...)                                                \
+  decltype(das::detail::get_non_const_prop_method(&__VA_ARGS__)), &__VA_ARGS__, \
+    decltype(das::detail::get_const_prop_method(&__VA_ARGS__)), &__VA_ARGS__
 #define DAS_ADD_FIELD_BIND_EX(DAS_NAME, NAME) addField<DAS_BIND_MANAGED_FIELD(NAME)>(DAS_NAME, DAS_MACRO_STRINGIFY(NAME))
 #define DAS_ADD_FIELD_BIND(NAME)              DAS_ADD_FIELD_BIND_EX(DAS_MACRO_STRINGIFY(NAME), NAME)
 #define DAS_ADD_PROP_BIND(DAS_NAME, ...) \
-  addPropertyForManagedType<DAS_PROP_DECL(ManagedType::__VA_ARGS__)>(DAS_NAME, DAS_MACRO_STRINGIFY(__VA_ARGS__))
+  addPropertyForManagedType<DAS_PROP_DECL(ManagedType::__VA_ARGS__), true>(DAS_NAME, DAS_MACRO_STRINGIFY(__VA_ARGS__))
 #define DAS_ADD_PROP_BIND_CONST(DAS_NAME, ...) \
-  addPropertyExtConstForManagedType<DAS_PROP_DECL_CONST(ManagedType::__VA_ARGS__)>(DAS_NAME, DAS_MACRO_STRINGIFY(__VA_ARGS__))
+  addPropertyExtConstForManagedType<DAS_PROP_DECL_CONST(ManagedType::__VA_ARGS__), true>(DAS_NAME, DAS_MACRO_STRINGIFY(__VA_ARGS__))
 
 // functions
 #define DAS_ADD_FUN_BIND(NAME, SIDE_EFFECTS, ...)                                                                        \
-  das::detail::addExternAutoSelectSimNode<DAS_FUN_DECL(::__VA_ARGS__)>(*this, lib, NAME, das::SideEffects::SIDE_EFFECTS, \
+  das::addExternHost<decltype(&::__VA_ARGS__), &::__VA_ARGS__>(*this, lib, NAME, das::SideEffects::SIDE_EFFECTS, \
     "::" DAS_MACRO_STRINGIFY(__VA_ARGS__))
-#define DAS_ADD_FUN_BIND_VALUE_RET(NAME, SIDE_EFFECTS, ...)                                            \
-  das::addExtern<DAS_FUN_DECL(::__VA_ARGS__), das::SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, NAME, \
-    das::SideEffects::SIDE_EFFECTS, "::" DAS_MACRO_STRINGIFY(__VA_ARGS__))
-#define DAS_ADD_METHOD_BIND(NAME, SIDE_EFFECTS, ...)                                                                        \
-  das::detail::addExternAutoSelectSimNode<DAS_METHOD_DECL(::__VA_ARGS__)>(*this, lib, NAME, das::SideEffects::SIDE_EFFECTS, \
+#define DAS_ADD_FUN_BIND_VALUE_RET(NAME, SIDE_EFFECTS, ...)                                                            \
+  das::addExternHost<decltype(&::__VA_ARGS__), &::__VA_ARGS__, true>(*this, lib, NAME, das::SideEffects::SIDE_EFFECTS, \
+    "::" DAS_MACRO_STRINGIFY(__VA_ARGS__))
+#define DAS_ADD_METHOD_BIND(NAME, SIDE_EFFECTS, ...)                                                                   \
+  das::addExternHost<decltype(&::__VA_ARGS__), &::__VA_ARGS__>(*this, lib, NAME, das::SideEffects::SIDE_EFFECTS, \
     "::das::das_call_member<decltype(&::" DAS_MACRO_STRINGIFY(__VA_ARGS__) "),&::" DAS_MACRO_STRINGIFY(__VA_ARGS__) ">::invoke")
-#define DAS_ADD_METHOD_BIND_VALUE_RET(NAME, SIDE_EFFECTS, ...)                                            \
-  das::addExtern<DAS_METHOD_DECL(::__VA_ARGS__), das::SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, NAME, \
-    das::SideEffects::SIDE_EFFECTS,                                                                       \
+#define DAS_ADD_METHOD_BIND_VALUE_RET(NAME, SIDE_EFFECTS, ...)                                                               \
+  das::addExternHost<decltype(&::__VA_ARGS__), &::__VA_ARGS__, true>(*this, lib, NAME, das::SideEffects::SIDE_EFFECTS, \
     "::das::das_call_member<decltype(&::" DAS_MACRO_STRINGIFY(__VA_ARGS__) "),&::" DAS_MACRO_STRINGIFY(__VA_ARGS__) ">::invoke")
 #define DAS_ADD_METHOD_BIND_CONST_EX(NAME, SIDE_EFFECTS_CONST, SIDE_EFFECTS_NON_CONST, ...) \
   DAS_ADD_METHOD_BIND(NAME, SIDE_EFFECTS_CONST, DAS_METHOD_OVERLOAD_CONST(__VA_ARGS__));    \

@@ -2,6 +2,14 @@
 
 #include "daScript/simulate/simulate.h"
 
+#ifndef DAS_SHOULD_USE_STUBS
+#ifdef DAS_AOT_COMPILER
+#define DAS_SHOULD_USE_STUBS 1
+#else
+#define DAS_SHOULD_USE_STUBS 0
+#endif
+#endif
+
 namespace das {
 
 template <> struct WrapType<float2> { enum { value = true }; typedef vec4f type; typedef vec4f rettype; };
@@ -96,6 +104,12 @@ const char * linker_name_of () {
 #endif
 }
 
+template <typename RetT>
+RetT jit_stubbed_call () {
+    void * volatile no_fn = nullptr;
+    return reinterpret_cast<RetT (*)()>(no_fn)();
+}
+
 // llvm ir -> c++
 template <int CMRES, int wrap, typename FuncT, FuncT fn> struct ImplWrapCall;
 
@@ -111,7 +125,7 @@ struct ImplWrapCall<false,false,FuncT,fn> {
 #endif
 
 template <int wrap, typename RetT, typename ...Args, RetT(*fn)(Args...)>    // cmres
-struct ImplWrapCall<true,wrap,RetT(*)(Args...),fn> {                        // when cmres, we always wrap
+struct ImplWrapCall<true,wrap,RetT(*)(Args...),fn> {                                // when cmres, we always wrap
     // sanity check
     static_assert(((!JitConstRefByValue<Args>::value || (is_lvalue_reference_v<Args> && is_const_v<remove_reference_t<Args>>)) && ...),
             "JitConstRefByValue can be implemented only for const T&!");
